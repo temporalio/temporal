@@ -20,13 +20,17 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
+// This file is duplicated in temporalio/temporal/components/nexusoperations/link_converter.go
+// Any changes here or there must be replicated. This is temporary until the
+// temporal repo updates to the most recent SDK version.
+
 package nexusoperations
 
 import (
 	"fmt"
 	"net/url"
+	"regexp"
 	"strconv"
-	"strings"
 
 	"github.com/nexus-rpc/sdk-go/nexus"
 	commonpb "go.temporal.io/api/common/v1"
@@ -34,20 +38,41 @@ import (
 )
 
 const (
+	urlSchemeTemporalKey = "temporal"
+	urlPathNamespaceKey  = "namespace"
+	urlPathWorkflowIDKey = "workflowID"
+	urlPathRunIDKey      = "runID"
+	urlPathTemplate      = "/namespaces/%s/workflows/%s/%s/history"
+	urlTemplate          = "temporal://" + urlPathTemplate
+
 	linkWorkflowEventReferenceTypeKey = "referenceType"
 	linkEventReferenceEventIDKey      = "eventID"
 	linkEventReferenceEventTypeKey    = "eventType"
 )
 
-func ConvertLinkWorkflowEventToNexusLink(we *commonpb.Link_WorkflowEvent) (nexus.Link, error) {
-	u, err := url.Parse(fmt.Sprintf(
-		"temporal:///namespaces/%s/workflows/%s/%s/history",
-		url.PathEscape(we.GetNamespace()),
-		url.PathEscape(we.GetWorkflowId()),
-		url.PathEscape(we.GetRunId()),
+var (
+	rePatternNamespace  = fmt.Sprintf(`(?P<%s>[^/]+)`, urlPathNamespaceKey)
+	rePatternWorkflowID = fmt.Sprintf(`(?P<%s>[^/]+)`, urlPathWorkflowIDKey)
+	rePatternRunID      = fmt.Sprintf(`(?P<%s>[^/]+)`, urlPathRunIDKey)
+	urlPathRE           = regexp.MustCompile(fmt.Sprintf(
+		`^/namespaces/%s/workflows/%s/%s/history$`,
+		rePatternNamespace,
+		rePatternWorkflowID,
+		rePatternRunID,
 	))
-	if err != nil {
-		return nexus.Link{}, err
+)
+
+// ConvertLinkWorkflowEventToNexusLink converts a Link_WorkflowEvent type to Nexus Link.
+func ConvertLinkWorkflowEventToNexusLink(we *commonpb.Link_WorkflowEvent) nexus.Link {
+	u := &url.URL{
+		Scheme: urlSchemeTemporalKey,
+		Path:   fmt.Sprintf(urlPathTemplate, we.GetNamespace(), we.GetWorkflowId(), we.GetRunId()),
+		RawPath: fmt.Sprintf(
+			urlPathTemplate,
+			url.PathEscape(we.GetNamespace()),
+			url.PathEscape(we.GetWorkflowId()),
+			url.PathEscape(we.GetRunId()),
+		),
 	}
 
 	switch ref := we.GetReference().(type) {
@@ -57,9 +82,10 @@ func ConvertLinkWorkflowEventToNexusLink(we *commonpb.Link_WorkflowEvent) (nexus
 	return nexus.Link{
 		URL:  u,
 		Type: string(we.ProtoReflect().Descriptor().FullName()),
-	}, nil
+	}
 }
 
+// ConvertNexusLinkToLinkWorkflowEvent converts a Nexus Link to Link_WorkflowEvent.
 func ConvertNexusLinkToLinkWorkflowEvent(link nexus.Link) (*commonpb.Link_WorkflowEvent, error) {
 	we := &commonpb.Link_WorkflowEvent{}
 	if link.Type != string(we.ProtoReflect().Descriptor().FullName()) {
@@ -70,54 +96,76 @@ func ConvertNexusLinkToLinkWorkflowEvent(link nexus.Link) (*commonpb.Link_Workfl
 		)
 	}
 
-	if link.URL.Scheme != "temporal" {
-		return nil, fmt.Errorf("failed to parse link to Link_WorkflowEvent")
+	if link.URL.Scheme != urlSchemeTemporalKey {
+		return nil, fmt.Errorf(
+			"failed to parse link to Link_WorkflowEvent: invalid scheme: %s",
+			link.URL.Scheme,
+		)
 	}
 
-	pathParts := strings.Split(link.URL.Path, "/")
-	if len(pathParts) != 7 {
-		return nil, fmt.Errorf("failed to parse link to Link_WorkflowEvent")
+	matches := urlPathRE.FindStringSubmatch(link.URL.EscapedPath())
+	if len(matches) != 4 {
+		return nil, fmt.Errorf("failed to parse link to Link_WorkflowEvent: malformed URL path")
 	}
-	if pathParts[0] != "" || pathParts[1] != "namespaces" || pathParts[3] != "workflows" || pathParts[6] != "history" {
-		return nil, fmt.Errorf("failed to parse link to Link_WorkflowEvent")
+
+	var err error
+	we.Namespace, err = url.PathUnescape(matches[urlPathRE.SubexpIndex(urlPathNamespaceKey)])
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse link to Link_WorkflowEvent: %w", err)
 	}
-	we.Namespace = pathParts[2]
-	we.WorkflowId = pathParts[4]
-	we.RunId = pathParts[5]
-	switch link.URL.Query().Get(linkWorkflowEventReferenceTypeKey) {
+
+	we.WorkflowId, err = url.PathUnescape(matches[urlPathRE.SubexpIndex(urlPathWorkflowIDKey)])
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse link to Link_WorkflowEvent: %w", err)
+	}
+
+	we.RunId, err = url.PathUnescape(matches[urlPathRE.SubexpIndex(urlPathRunIDKey)])
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse link to Link_WorkflowEvent: %w", err)
+	}
+
+	switch refType := link.URL.Query().Get(linkWorkflowEventReferenceTypeKey); refType {
 	case string((&commonpb.Link_WorkflowEvent_EventReference{}).ProtoReflect().Descriptor().Name()):
 		eventRef, err := convertURLQueryToLinkWorkflowEventEventReference(link.URL.Query())
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("failed to parse link to Link_WorkflowEvent: %w", err)
 		}
 		we.Reference = &commonpb.Link_WorkflowEvent_EventRef{
 			EventRef: eventRef,
 		}
+	default:
+		return nil, fmt.Errorf(
+			"failed to parse link to Link_WorkflowEvent: unknown reference type: %q",
+			refType,
+		)
 	}
 
 	return we, nil
 }
 
 func convertLinkWorkflowEventEventReferenceToURLQuery(eventRef *commonpb.Link_WorkflowEvent_EventReference) string {
-	values := url.Values{
-		linkWorkflowEventReferenceTypeKey: []string{string(eventRef.ProtoReflect().Descriptor().Name())},
-		linkEventReferenceEventIDKey:      []string{strconv.FormatInt(eventRef.GetEventId(), 10)},
-		linkEventReferenceEventTypeKey:    []string{eventRef.GetEventType().String()},
+	values := url.Values{}
+	values.Set(linkWorkflowEventReferenceTypeKey, string(eventRef.ProtoReflect().Descriptor().Name()))
+	if eventRef.GetEventId() > 0 {
+		values.Set(linkEventReferenceEventIDKey, strconv.FormatInt(eventRef.GetEventId(), 10))
 	}
+	values.Set(linkEventReferenceEventTypeKey, eventRef.GetEventType().String())
 	return values.Encode()
 }
 
 func convertURLQueryToLinkWorkflowEventEventReference(queryValues url.Values) (*commonpb.Link_WorkflowEvent_EventReference, error) {
-	eventID, err := strconv.ParseInt(queryValues.Get(linkEventReferenceEventIDKey), 10, 64)
+	var err error
+	eventRef := &commonpb.Link_WorkflowEvent_EventReference{}
+	eventIDValue := queryValues.Get(linkEventReferenceEventIDKey)
+	if eventIDValue != "" {
+		eventRef.EventId, err = strconv.ParseInt(queryValues.Get(linkEventReferenceEventIDKey), 10, 64)
+		if err != nil {
+			return nil, err
+		}
+	}
+	eventRef.EventType, err = enumspb.EventTypeFromString(queryValues.Get(linkEventReferenceEventTypeKey))
 	if err != nil {
 		return nil, err
 	}
-	eventType, err := enumspb.EventTypeFromString(queryValues.Get(linkEventReferenceEventTypeKey))
-	if err != nil {
-		return nil, err
-	}
-	return &commonpb.Link_WorkflowEvent_EventReference{
-		EventId:   eventID,
-		EventType: eventType,
-	}, nil
+	return eventRef, nil
 }

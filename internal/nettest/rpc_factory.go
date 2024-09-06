@@ -36,9 +36,8 @@ import (
 // RPCFactory is a common.RPCFactory implementation that uses a PipeListener to create connections. It is useful for
 // testing gRPC servers.
 type RPCFactory struct {
-	listener       *PipeListener
-	contextFactory func() context.Context
-	dialOptions    []grpc.DialOption
+	listener    *PipeListener
+	dialOptions []grpc.DialOption
 }
 
 var _ common.RPCFactory = (*RPCFactory)(nil)
@@ -46,18 +45,9 @@ var _ common.RPCFactory = (*RPCFactory)(nil)
 // NewRPCFactory creates a new RPCFactory backed by a PipeListener.
 func NewRPCFactory(listener *PipeListener, dialOptions ...grpc.DialOption) *RPCFactory {
 	return &RPCFactory{
-		listener: listener,
-		contextFactory: func() context.Context {
-			return context.Background()
-		},
+		listener:    listener,
 		dialOptions: dialOptions,
 	}
-}
-
-// SetContextFactory sets the context factory used to create contexts for dialing connections. The default returns a
-// background context on each call.
-func (f *RPCFactory) SetContextFactory(factory func() context.Context) {
-	f.contextFactory = factory
 }
 
 func (f *RPCFactory) GetFrontendGRPCServerOptions() ([]grpc.ServerOption, error) {
@@ -95,8 +85,7 @@ func (f *RPCFactory) dial(rpcAddress string) *grpc.ClientConn {
 		}),
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 	)
-	conn, err := grpc.DialContext(
-		f.contextFactory(),
+	conn, err := grpc.NewClient(
 		rpcAddress,
 		dialOptions...,
 	)

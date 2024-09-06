@@ -25,7 +25,6 @@
 package nettest_test
 
 import (
-	"context"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -55,8 +54,8 @@ func TestRPCFactory_GetInternodeGRPCServerOptions(t *testing.T) {
 func TestRPCFactory_CreateInternodeGRPCConnection(t *testing.T) {
 	t.Parallel()
 
-	testDialer(t, "test-addr", func(rpcFactory *nettest.RPCFactory) *grpc.ClientConn {
-		return rpcFactory.CreateInternodeGRPCConnection("test-addr")
+	testDialer(t, "localhost", func(rpcFactory *nettest.RPCFactory) *grpc.ClientConn {
+		return rpcFactory.CreateInternodeGRPCConnection("localhost")
 	})
 }
 
@@ -71,8 +70,8 @@ func TestRPCFactory_CreateLocalFrontendGRPCConnection(t *testing.T) {
 func TestRPCFactory_CreateRemoteFrontendGRPCConnection(t *testing.T) {
 	t.Parallel()
 
-	testDialer(t, "test-addr", func(rpcFactory *nettest.RPCFactory) *grpc.ClientConn {
-		return rpcFactory.CreateRemoteFrontendGRPCConnection("test-addr")
+	testDialer(t, "localhost", func(rpcFactory *nettest.RPCFactory) *grpc.ClientConn {
+		return rpcFactory.CreateRemoteFrontendGRPCConnection("localhost")
 	})
 }
 
@@ -91,27 +90,10 @@ func testDialer(t *testing.T, target string, dial func(rpcFactory *nettest.RPCFa
 		}()
 
 		conn := dial(rpcFactory)
-
+		conn.Connect()
 		require.NoError(t, <-errs)
 		assert.Equal(t, target, conn.Target())
 		assert.NoError(t, conn.Close())
-	})
-
-	t.Run("ContextCanceled", func(t *testing.T) {
-		t.Parallel()
-
-		// NOTE: we need to force the dial to block until the connection is established
-		// or else dial won't see that the context has been cancelled
-		rpcFactory := newRPCFactory(grpc.WithBlock())
-		rpcFactory.SetContextFactory(func() context.Context {
-			ctx, cancel := context.WithCancel(context.Background())
-			cancel()
-
-			return ctx
-		})
-		assert.Panics(t, func() {
-			dial(rpcFactory)
-		})
 	})
 }
 

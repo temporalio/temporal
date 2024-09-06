@@ -176,15 +176,14 @@ func NewWorkflowHandler(
 		tokenSerializer: common.NewProtoTaskTokenSerializer(),
 		versionChecker:  headers.NewDefaultVersionChecker(),
 		namespaceHandler: newNamespaceHandler(
-			config.MaxBadBinaries,
 			logger,
 			persistenceMetadataManager,
 			clusterMetadata,
 			namespace.NewNamespaceReplicator(namespaceReplicationQueue, logger),
 			archivalMetadata,
 			archiverProvider,
-			config.EnableSchedules,
 			timeSource,
+			config,
 		),
 		getDefaultWorkflowRetrySettings: config.DefaultWorkflowRetryPolicy,
 		visibilityMgr:                   visibilityMgr,
@@ -2603,6 +2602,12 @@ func (wh *WorkflowHandler) ResetStickyTaskQueue(ctx context.Context, request *wo
 		return nil, err
 	}
 	return &workflowservice.ResetStickyTaskQueueResponse{}, nil
+}
+
+func (wh *WorkflowHandler) ShutdownWorker(ctx context.Context, request *workflowservice.ShutdownWorkerRequest) (_ *workflowservice.ShutdownWorkerResponse, retError error) {
+	defer log.CapturePanic(wh.logger, &retError)
+
+	return &workflowservice.ShutdownWorkerResponse{}, nil
 }
 
 // QueryWorkflow returns query result for a specified workflow execution

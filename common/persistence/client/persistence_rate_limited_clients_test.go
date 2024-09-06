@@ -45,47 +45,75 @@ func TestRateLimitedPersistenceClients(t *testing.T) {
 	t.Parallel()
 
 	for _, tc := range []struct {
-		name            string
-		err             error
-		numRequests     int
-		namespaceRPS    int
-		systemRPS       int
-		expectRateLimit bool
-		expectedScope   enumspb.ResourceExhaustedScope
+		name              string
+		err               error
+		numRequests       int
+		namespaceRPS      int
+		systemRPS         int
+		namespaceShardRPS int
+		expectRateLimit   bool
+		expectedScope     enumspb.ResourceExhaustedScope
+		expectedMessage   string
 	}{
 		{
-			name:            "Namespace limit allow",
-			err:             nil,
-			numRequests:     10,
-			namespaceRPS:    10,
-			systemRPS:       100,
-			expectRateLimit: false,
+			name:              "Namespace limit allow",
+			err:               nil,
+			numRequests:       10,
+			namespaceRPS:      10,
+			namespaceShardRPS: 100,
+			systemRPS:         100,
+			expectRateLimit:   false,
 		},
 		{
-			name:            "Namespace limit hit",
-			err:             nil,
-			numRequests:     11,
-			namespaceRPS:    10,
-			systemRPS:       100,
-			expectRateLimit: true,
-			expectedScope:   enumspb.RESOURCE_EXHAUSTED_SCOPE_NAMESPACE,
+			name:              "Namespace limit hit",
+			err:               nil,
+			numRequests:       11,
+			namespaceRPS:      10,
+			namespaceShardRPS: 100,
+			systemRPS:         100,
+			expectRateLimit:   true,
+			expectedScope:     enumspb.RESOURCE_EXHAUSTED_SCOPE_NAMESPACE,
+			expectedMessage:   "Namespace Persistence Max QPS Reached.",
 		},
 		{
-			name:            "System limit allow",
-			err:             nil,
-			numRequests:     10,
-			namespaceRPS:    100,
-			systemRPS:       10,
-			expectRateLimit: false,
+			name:              "System limit allow",
+			err:               nil,
+			numRequests:       10,
+			namespaceRPS:      100,
+			namespaceShardRPS: 100,
+			systemRPS:         10,
+			expectRateLimit:   false,
 		},
 		{
-			name:            "System limit hit",
-			err:             nil,
-			numRequests:     11,
-			namespaceRPS:    100,
-			systemRPS:       10,
-			expectRateLimit: true,
-			expectedScope:   enumspb.RESOURCE_EXHAUSTED_SCOPE_SYSTEM,
+			name:              "System limit hit",
+			err:               nil,
+			numRequests:       11,
+			namespaceRPS:      100,
+			namespaceShardRPS: 100,
+			systemRPS:         10,
+			expectRateLimit:   true,
+			expectedScope:     enumspb.RESOURCE_EXHAUSTED_SCOPE_SYSTEM,
+			expectedMessage:   "System Persistence Max QPS Reached.",
+		},
+		{
+			name:              "Shard limit allow",
+			err:               nil,
+			numRequests:       10,
+			namespaceRPS:      100,
+			namespaceShardRPS: 10,
+			systemRPS:         100,
+			expectRateLimit:   false,
+		},
+		{
+			name:              "Shard limit hit",
+			err:               nil,
+			numRequests:       11,
+			namespaceRPS:      100,
+			namespaceShardRPS: 10,
+			systemRPS:         100,
+			expectRateLimit:   true,
+			expectedScope:     enumspb.RESOURCE_EXHAUSTED_SCOPE_NAMESPACE,
+			expectedMessage:   "Namespace Per-Shard Persistence Max QPS Reached.",
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -141,6 +169,12 @@ func TestRateLimitedPersistenceClients(t *testing.T) {
 					burstRatioFn,
 				),
 			)
+			shardRequestRateLimiter := quotas.NewRequestRateLimiterAdapter(
+				quotas.NewDefaultRateLimiter(
+					func() float64 { return float64(tc.namespaceShardRPS) },
+					burstRatioFn,
+				),
+			)
 			factory := client.NewFactory(
 				dataStoreFactory,
 				&config.Persistence{
@@ -148,6 +182,7 @@ func TestRateLimitedPersistenceClients(t *testing.T) {
 				},
 				systemRequestRateLimiter,
 				namespaceRequestRateLimiter,
+				shardRequestRateLimiter,
 				serialization.NewSerializer(),
 				nil,
 				"",
@@ -218,11 +253,11 @@ func TestRateLimitedPersistenceClients(t *testing.T) {
 					}
 					// Check if the rate limit is hit.
 					if tc.expectRateLimit {
-						assert.ErrorContains(t, err, fmt.Sprintf("%s Persistence Max QPS Reached", tc.expectedScope.String()))
 						var resourceExhausted *serviceerror.ResourceExhausted
 						errors.As(err, &resourceExhausted)
 						assert.Equal(t, enumspb.RESOURCE_EXHAUSTED_CAUSE_PERSISTENCE_LIMIT, resourceExhausted.Cause)
 						assert.Equal(t, tc.expectedScope, resourceExhausted.Scope)
+						assert.Equal(t, tc.expectedMessage, resourceExhausted.Message)
 					} else {
 						assert.NoError(t, err)
 					}

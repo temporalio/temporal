@@ -524,17 +524,12 @@ func TestHandleCancelCommand(t *testing.T) {
 		require.NoError(t, err)
 		require.NotNil(t, child)
 
-		require.Equal(t, 3, len(tcx.history.Events))
+		require.Equal(t, 2, len(tcx.history.Events))
 		crAttrs := tcx.history.Events[1].GetNexusOperationCancelRequestedEventAttributes()
 		require.Equal(t, event.EventId, crAttrs.ScheduledEventId)
 		require.Equal(t, int64(1), crAttrs.WorkflowTaskCompletedEventId)
 		savedUserMetadata := tcx.history.Events[1].GetUserMetadata()
 		require.EqualExportedValues(t, userMetadata, savedUserMetadata)
-
-		cAttrs := tcx.history.Events[2].GetNexusOperationCanceledEventAttributes()
-		require.Equal(t, event.EventId, cAttrs.ScheduledEventId)
-		require.Equal(t, "operation canceled before started", cAttrs.Failure.Cause.Message)
-		require.NotNil(t, cAttrs.Failure.Cause.GetCanceledFailureInfo())
 
 		child, err = child.Child([]hsm.Key{nexusoperations.CancelationMachineKey})
 		require.NoError(t, err)
