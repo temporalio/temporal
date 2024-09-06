@@ -27,9 +27,9 @@ package calculator
 import (
 	"testing"
 
-	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/server/common/log"
+	"go.uber.org/mock/gomock"
 )
 
 type (

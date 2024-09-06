@@ -32,7 +32,7 @@ import (
 	context "context"
 	reflect "reflect"
 
-	gomock "github.com/golang/mock/gomock"
+	gomock "go.uber.org/mock/gomock"
 	matchingservice "go.temporal.io/server/api/matchingservice/v1"
 	grpc "google.golang.org/grpc"
 )

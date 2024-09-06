@@ -28,7 +28,6 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common/clock"
@@ -50,6 +49,7 @@ import (
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/workflow"
 	"go.uber.org/fx"
+	"go.uber.org/mock/gomock"
 )
 
 // TestQueueModule_ArchivalQueue tests that the archival queue is created if and only if the task category exists.

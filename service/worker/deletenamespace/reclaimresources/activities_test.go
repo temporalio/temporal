@@ -28,7 +28,6 @@ import (
 	"context"
 	"testing"
 
-	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/sdk/temporal"
@@ -38,6 +37,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/searchattribute"
+	"go.uber.org/mock/gomock"
 )
 
 func Test_EnsureNoExecutionsAdvVisibilityActivity_NoExecutions(t *testing.T) {

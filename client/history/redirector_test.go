@@ -30,7 +30,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"go.temporal.io/api/serviceerror"
@@ -39,6 +38,7 @@ import (
 	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/membership"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
+	"go.uber.org/mock/gomock"
 )
 
 type (

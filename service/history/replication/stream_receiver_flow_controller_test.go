@@ -27,11 +27,11 @@ package replication
 import (
 	"testing"
 
-	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/suite"
 	"go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/tests"
+	"go.uber.org/mock/gomock"
 )
 
 type (

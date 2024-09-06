@@ -31,7 +31,6 @@ import (
 	"time"
 	"unicode"
 
-	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -42,6 +41,7 @@ import (
 	"go.temporal.io/sdk/testsuite"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.uber.org/mock/gomock"
 )
 
 type activitiesSuite struct {

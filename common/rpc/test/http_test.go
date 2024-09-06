@@ -29,11 +29,11 @@ import (
 	"strconv"
 	"testing"
 
-	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/rpc"
+	"go.uber.org/mock/gomock"
 	"google.golang.org/grpc"
 )
 

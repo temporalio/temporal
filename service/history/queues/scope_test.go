@@ -30,13 +30,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/golang/mock/gomock"
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/common/predicates"
 	"go.temporal.io/server/service/history/tasks"
+	"go.uber.org/mock/gomock"
 )
 
 type (
