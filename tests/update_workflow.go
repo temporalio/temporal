@@ -5009,7 +5009,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_WaitAccepted_GotCompleted() {
 	updateResult := <-updateResultCh
 	// but Update was accepted and completed on the same WFT, and outcome was returned.
 	s.Equal(enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED, updateResult.GetStage())
-	s.EqualValues("success-result-of-"+tv.UpdateID("1"), decodeString(s, updateResult.GetOutcome().GetSuccess()))
+	s.EqualValues("success-result-of-"+tv.UpdateID("1"), decodeString(s.T(), updateResult.GetOutcome().GetSuccess()))
 
 	s.EqualHistoryEvents(`
 	1 WorkflowExecutionStarted
