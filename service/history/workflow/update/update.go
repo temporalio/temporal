@@ -495,14 +495,15 @@ func (u *Update) onAcceptanceMsg(
 		}
 		u.request = nil
 
-		// If Update is accepted and completed on the same WFT, then its state transitions
-		// from ProvisionallyAccepted to ProvisionallyCompleted and, on commit of acceptance
-		// message, Update is in ProvisionallyCompleted state.
-		// To prevent race condition with checks in WaitLifecycleStage, accepted future
-		// must be set after outcome future.
-		// Therefore, if Update is in ProvisionallyCompleted state, it skips Accepted state
-		// and setting of accepted future is delayed. Update goes to ProvisionallyCompletedAfterAccepted
-		// state instead, which is handled in onResponseMsg.
+		// If the Update is accepted *and* completed in the same WFT, then its state has transitioned
+		// from ProvisionallyAccepted to ProvisionallyCompleted in onResponseMsg by the
+		// time we get here.
+		// 
+		// Now, to prevent a race condition in WaitLifecycleStage, the accepted future
+		// cannot be set here right now, as it must be set *after* the outcome future.
+		// 
+		// So instead, the state is set to ProvisionallyCompletedAfterAccepted here,  
+		// and onResponseMsg's OnAfterCommit callback will set the futures in the correct order.
 		if u.state == stateProvisionallyCompleted {
 			u.state = stateProvisionallyCompletedAfterAccepted
 			return
@@ -594,12 +595,13 @@ func (u *Update) onResponseMsg(
 		beforeCommitState := u.setState(stateCompleted)
 		u.outcome.(*future.FutureImpl[*updatepb.Outcome]).Set(res.GetOutcome(), nil)
 		if beforeCommitState == stateProvisionallyCompletedAfterAccepted {
-			// If Update is accepted and completed on the same WFT, then it gets to ProvisionallyCompleted
-			// state from ProvisionallyAccepted state. OnAfterCommit handler of acceptance
-			// message changes state to ProvisionallyCompletedAfterAccepted.
-			// In this state accepted future must be set after outcome future to prevent race condition
-			// with checks in WaitLifecycleStage. It wasn't set in onAcceptanceMsg, and now it is time to
-			// do it. Update skips Accepted state and goes directly to Completed state.
+			// If the Update is accepted *and* completed in the same WFT, then its state is ProvisionallyCompletedAfterAccepted here, set by onAcceptance's OnAfterCommit.
+			//
+			// To prevent a race condition in WaitLifecycleStage, the accepted future
+		        // has not been set by OnAcceptance earlier, as it must be set *after* the outcome future.
+		        // Now is the time to set it.
+		        // 
+			// Note that the Accepted state is skipped, and it transitions straight to Completed.
 			u.accepted.(*future.FutureImpl[*failurepb.Failure]).Set(nil, nil)
 		}
 		u.onComplete()
