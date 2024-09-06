@@ -157,7 +157,7 @@ func (tv *TestVars) WithWorkflowID(workflowID string, key ...string) *TestVars {
 }
 
 func (tv *TestVars) RunID(key ...string) string {
-	return tv.getOrCreate("run_id", key, uuid.New()).(string)
+	return tv.getOrCreate("run_id", key, "").(string)
 }
 
 func (tv *TestVars) WithRunID(runID string, key ...string) *TestVars {
