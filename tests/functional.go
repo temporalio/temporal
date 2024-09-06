@@ -102,10 +102,12 @@ func (s *FunctionalSuite) closeShard(wid string) {
 	s.NoError(err)
 }
 
-func decodeString(s *FunctionalSuite, pls *commonpb.Payloads) string {
-	s.T().Helper()
+func decodeString(t require.TestingT, pls *commonpb.Payloads) string {
+	if th, ok := t.(interface{ Helper() }); ok {
+		th.Helper()
+	}
 	var str string
 	err := payloads.Decode(pls, &str)
-	s.NoError(err)
+	require.NoError(t, err)
 	return str
 }
