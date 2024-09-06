@@ -327,6 +327,35 @@ func (s *workflowHandlerSuite) TestStartWorkflowExecution_Failed_BuildIDSearchAt
 
 }
 
+func (s *workflowHandlerSuite) TestSignalWithStartWorkflowExecution_Failed_BuildIDSearchAttribute() {
+	namespaceID := namespace.ID(uuid.New())
+
+	s.mockSearchAttributesMapperProvider.EXPECT().GetMapper(gomock.Any()).Return(nil, nil)
+	s.mockResource.SearchAttributesProvider.EXPECT().GetSearchAttributes(gomock.Any(), false).Return(searchattribute.TestNameTypeMap, nil)
+	s.mockNamespaceCache.EXPECT().GetNamespaceID(gomock.Any()).Return(namespaceID, nil).AnyTimes()
+
+	wh := s.getWorkflowHandler(s.newConfig())
+	req := &workflowservice.SignalWithStartWorkflowExecutionRequest{
+		Namespace:    namespaceID.String(),
+		WorkflowId:   testWorkflowID,
+		WorkflowType: &commonpb.WorkflowType{Name: "WORKFLOW"},
+		TaskQueue:    &taskqueuepb.TaskQueue{Name: "TASK_QUEUE", Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+		SignalName:   "SIGNAL",
+		SearchAttributes: &commonpb.SearchAttributes{
+			IndexedFields: map[string]*commonpb.Payload{
+				"BuildIds": &commonpb.Payload{
+					Metadata: nil,
+					Data:     nil,
+				},
+			},
+		},
+	}
+
+	_, err := wh.SignalWithStartWorkflowExecution(context.Background(), req)
+	s.Error(err)
+	s.Equal(errBuildIDAsSearchAttribute, err)
+}
+
 func (s *workflowHandlerSuite) TestStartWorkflowExecution_Failed_NamespaceNotSet() {
 	config := s.newConfig()
 	config.RPS = dc.GetIntPropertyFn(10)

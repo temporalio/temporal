@@ -134,6 +134,14 @@ func (s *searchAttributesValidatorSuite) TestSearchAttributesValidate() {
 	err = saValidator.Validate(attr, namespace)
 	s.Error(err)
 	s.Equal("StartTime attribute can't be set in SearchAttributes", err.Error())
+
+	fields = map[string]*commonpb.Payload{
+		"BuildIds": payload.EncodeString("1"),
+	}
+	attr.IndexedFields = fields
+	err = saValidator.Validate(attr, namespace)
+	s.Error(err)
+	s.Equal("BuildIds attribute can't be set in SearchAttributes", err.Error())
 }
 
 func (s *searchAttributesValidatorSuite) TestSearchAttributesValidate_SuppressError() {
