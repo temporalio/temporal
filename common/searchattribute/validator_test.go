@@ -138,13 +138,17 @@ func (s *searchAttributesValidatorSuite) TestSearchAttributesValidate() {
 	s.Error(err)
 	s.Equal("StartTime attribute can't be set in SearchAttributes", err.Error())
 
-	mockLogger := saValidator.logger.(*log.MockLogger)
+	mockLogger, ok := saValidator.logger.(*log.MockLogger)
+	s.True(ok)
 	mockLogger.EXPECT().Warn("Setting BuildIDs as a SearchAttribute is invalid and should be avoided.").Times(1)
-	fields = map[string]*commonpb.Payload{
-		"BuildIds": payload.EncodeString("1"),
+
+	saPayload, err := EncodeValue([]string{"a"}, enumspb.INDEXED_VALUE_TYPE_TEXT)
+	s.NoError(err)
+	attr.IndexedFields = map[string]*commonpb.Payload{
+		"BuildIds": saPayload,
 	}
-	attr.IndexedFields = fields
 	err = saValidator.Validate(attr, namespace)
+	s.NoError(err)
 }
 
 func (s *searchAttributesValidatorSuite) TestSearchAttributesValidate_SuppressError() {

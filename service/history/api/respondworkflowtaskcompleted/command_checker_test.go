@@ -239,9 +239,10 @@ func (s *commandAttrValidatorSuite) TestValidateUpsertWorkflowSearchAttributes()
 	attributes.SearchAttributes.IndexedFields = map[string]*commonpb.Payload{
 		"BuildIds": saPayload,
 	}
-	mockedLogger := s.validator.searchAttributesValidator.GetLogger().(*log.MockLogger)
+	mockedLogger, ok := s.validator.searchAttributesValidator.GetLogger().(*log.MockLogger)
+	s.True(ok)
 	mockedLogger.EXPECT().Warn("Setting BuildIDs as a SearchAttribute is invalid and should be avoided.")
-	fc, err = s.validator.validateUpsertWorkflowSearchAttributes(namespace, attributes)
+	_, err = s.validator.validateUpsertWorkflowSearchAttributes(namespace, attributes)
 	s.NoError(err)
 }
 
@@ -286,9 +287,10 @@ func (s *commandAttrValidatorSuite) TestValidateContinueAsNewWorkflowExecutionAt
 		"BuildIds": saPayload,
 	}
 
-	mockedLogger := s.validator.searchAttributesValidator.GetLogger().(*log.MockLogger)
+	mockedLogger, ok := s.validator.searchAttributesValidator.GetLogger().(*log.MockLogger)
+	s.True(ok)
 	mockedLogger.EXPECT().Warn("Setting BuildIDs as a SearchAttribute is invalid and should be avoided.")
-	fc, err = s.validator.validateContinueAsNewWorkflowExecutionAttributes(
+	_, err = s.validator.validateContinueAsNewWorkflowExecutionAttributes(
 		tests.Namespace,
 		attributes,
 		executionInfo,
@@ -329,7 +331,8 @@ func (s *commandAttrValidatorSuite) TestValidateCommandStartChildWorkflowSearchA
 		"BuildIds": saPayload,
 	}
 
-	mockedLogger := s.validator.searchAttributesValidator.GetLogger().(*log.MockLogger)
+	mockedLogger, ok := s.validator.searchAttributesValidator.GetLogger().(*log.MockLogger)
+	s.True(ok)
 	mockedLogger.EXPECT().Warn("Setting BuildIDs as a SearchAttribute is invalid and should be avoided.")
 	_, err = s.validator.validateStartChildExecutionAttributes(
 		s.testNamespaceID,
