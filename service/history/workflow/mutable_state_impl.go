@@ -352,7 +352,9 @@ func NewMutableStateFromDB(
 	dbRecord *persistencespb.WorkflowMutableState,
 	dbRecordVersion int64,
 ) (*MutableStateImpl, error) {
-	startTime := timestamp.TimeValue(dbRecord.ExecutionState.StartTime)
+	// startTime will be overridden by DB record
+	startTime := time.Time{}
+
 	mutableState := NewMutableState(
 		shard,
 		eventsCache,
@@ -423,6 +425,11 @@ func NewMutableStateFromDB(
 	mutableState.executionState = dbRecord.ExecutionState
 	mutableState.approximateSize += dbRecord.ExecutionInfo.Size() - mutableState.executionInfo.Size()
 	mutableState.executionInfo = dbRecord.ExecutionInfo
+
+	// StartTime was moved from ExecutionInfo to executionState
+	if mutableState.executionState.StartTime == nil && dbRecord.ExecutionInfo.StartTime != nil {
+		mutableState.executionState.StartTime = dbRecord.ExecutionInfo.StartTime
+	}
 
 	mutableState.hBuilder = historybuilder.New(
 		mutableState.timeSource,
