@@ -25,6 +25,7 @@
 package searchattribute
 
 import (
+	"go.temporal.io/server/common/log"
 	"testing"
 
 	"github.com/golang/mock/gomock"
@@ -72,6 +73,7 @@ func (s *searchAttributesValidatorSuite) TestSearchAttributesValidate() {
 		s.mockVisibilityManager,
 		dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true),
 		dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false),
+		log.NewTestLogger(),
 	)
 
 	namespace := "namespace"
@@ -158,6 +160,7 @@ func (s *searchAttributesValidatorSuite) TestSearchAttributesValidate_SuppressEr
 		s.mockVisibilityManager,
 		dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false),
 		dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true),
+		log.NewTestLogger(),
 	)
 
 	namespace := "namespace"
@@ -185,6 +188,7 @@ func (s *searchAttributesValidatorSuite) TestSearchAttributesValidate_Mapper() {
 		s.mockVisibilityManager,
 		dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false),
 		dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false),
+		log.NewTestLogger(),
 	)
 
 	namespace := "test-namespace"
@@ -249,6 +253,7 @@ func (s *searchAttributesValidatorSuite) TestSearchAttributesValidateSize() {
 		s.mockVisibilityManager,
 		dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false),
 		dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false),
+		log.NewTestLogger(),
 	)
 
 	namespace := "namespace"
@@ -289,6 +294,7 @@ func (s *searchAttributesValidatorSuite) TestSearchAttributesValidateSize_Mapper
 		s.mockVisibilityManager,
 		dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false),
 		dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false),
+		log.NewTestLogger(),
 	)
 
 	namespace := "test-namespace"
