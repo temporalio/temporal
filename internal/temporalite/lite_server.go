@@ -273,7 +273,7 @@ func NewLiteServer(liteConfig *LiteServerConfig, opts ...temporal.ServerOption) 
 		return nil, fmt.Errorf("error creating namespaces: %w", err)
 	}
 
-	authorizer, err := authorization.GetAuthorizerFromConfig(&liteConfig.BaseConfig.Global.Authorization)
+	authorizer, err := authorization.GetAuthorizerFromConfig(&liteConfig.BaseConfig.Global.Authorization, liteConfig.Logger)
 	if err != nil {
 		return nil, fmt.Errorf("unable to instantiate authorizer: %w", err)
 	}

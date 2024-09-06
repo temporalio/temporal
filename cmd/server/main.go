@@ -197,11 +197,12 @@ func buildCLI() *cli.App {
 
 				authorizer, err := authorization.GetAuthorizerFromConfig(
 					&cfg.Global.Authorization,
+					logger,
 				)
 				if err != nil {
 					return cli.Exit(fmt.Sprintf("Unable to instantiate authorizer. Error: %v", err), 1)
 				}
-				if authorization.IsNoopAuthorizer(authorizer) && !allowNoAuth {
+				if authorization.IsNoopAuthorizer(authorizer, logger) && !allowNoAuth {
 					logger.Warn(
 						"Not using any authorizer and flag `--allow-no-auth` not detected. " +
 							"Future versions will require using the flag `--allow-no-auth` " +

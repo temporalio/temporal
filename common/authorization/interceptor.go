@@ -121,6 +121,7 @@ func NewInterceptor(
 	authHeaderName string,
 	authExtraHeaderName string,
 ) *Interceptor {
+	logger.Debug("Creating new Interceptor")
 	return &Interceptor{
 		claimMapper:         claimMapper,
 		authorizer:          authorizer,
@@ -139,7 +140,9 @@ func (a *Interceptor) Intercept(
 	info *grpc.UnaryServerInfo,
 	handler grpc.UnaryHandler,
 ) (interface{}, error) {
+	a.logger.Debug("Intercepting request", tag.NewAnyTag("request", req), tag.NewAnyTag("method", info.FullMethod))
 	tlsConnection := TLSInfoFromContext(ctx)
+	a.logger.Debug("Extracted TLS info", tag.NewAnyTag("tlsConnection", tlsConnection))
 
 	authInfo := a.GetAuthInfo(tlsConnection, headers.NewGRPCHeaderGetter(ctx), func() string {
 		if a.audienceGetter != nil {
@@ -147,6 +150,7 @@ func (a *Interceptor) Intercept(
 		}
 		return ""
 	})
+	a.logger.Debug("Extracted Auth info", tag.NewAnyTag("authInfo", authInfo))
 
 	var claims *Claims
 	if authInfo != nil {
@@ -158,6 +162,7 @@ func (a *Interceptor) Intercept(
 			return nil, errUnauthorized
 		}
 		ctx = a.EnhanceContext(ctx, authInfo, claims)
+		a.logger.Debug("Enhanced context with claims", tag.NewAnyTag("claims", claims))
 	}
 
 	if a.authorizer != nil {
@@ -171,6 +176,7 @@ func (a *Interceptor) Intercept(
 			APIName:   info.FullMethod,
 			Request:   req,
 		}
+		a.logger.Debug("Authorizing call target", tag.NewAnyTag("callTarget", ct))
 		if err := a.Authorize(ctx, claims, ct); err != nil {
 			return nil, err
 		}
@@ -182,7 +188,9 @@ func (a *Interceptor) Intercept(
 // Returns nil if either the policy's claimMapper or authorizer are nil or when there is no auth information in the
 // provided TLS info or headers.
 func (a *Interceptor) GetAuthInfo(tlsConnection *credentials.TLSInfo, header headers.HeaderGetter, audienceGetter func() string) *AuthInfo {
+	a.logger.Debug("Getting Auth info", tag.NewAnyTag("tlsConnection", tlsConnection), tag.NewAnyTag("header", header))
 	if a.claimMapper == nil || a.authorizer == nil {
+		a.logger.Debug("ClaimMapper or Authorizer is nil")
 		return nil
 	}
 	var tlsSubject *pkix.Name
@@ -205,25 +213,36 @@ func (a *Interceptor) GetAuthInfo(tlsConnection *credentials.TLSInfo, header hea
 
 	// Add auth info to context only if there's some auth info
 	if tlsSubject == nil && authHeader == "" && authInfoRequired {
+		a.logger.Debug("No auth info found")
 		return nil
 	}
 
-	return &AuthInfo{
+	authInfo := &AuthInfo{
 		AuthToken:     authHeader,
 		TLSSubject:    tlsSubject,
 		TLSConnection: tlsConnection,
 		ExtraData:     authExtraHeader,
 		Audience:      audienceGetter(),
 	}
+	a.logger.Debug("Auth info created", tag.NewAnyTag("authInfo", authInfo))
+	return authInfo
 }
 
 // GetClaims uses the policy's claimMapper to map the provided authInfo to claims.
 func (a *Interceptor) GetClaims(authInfo *AuthInfo) (*Claims, error) {
-	return a.claimMapper.GetClaims(authInfo)
+	a.logger.Debug("Getting claims from authInfo", tag.NewAnyTag("authInfo", authInfo))
+	claims, err := a.claimMapper.GetClaims(authInfo)
+	if err != nil {
+		a.logger.Error("Error getting claims", tag.Error(err))
+		return nil, err
+	}
+	a.logger.Debug("Claims obtained", tag.NewAnyTag("claims", claims))
+	return claims, nil
 }
 
 // EnhanceContext returns a new context with [MappedClaims] and [AuthHeader] values.
 func (a *Interceptor) EnhanceContext(ctx context.Context, authInfo *AuthInfo, claims *Claims) context.Context {
+	a.logger.Debug("Enhancing context with claims and authInfo", tag.NewAnyTag("claims", claims), tag.NewAnyTag("authInfo", authInfo))
 	ctx = context.WithValue(ctx, MappedClaims, claims)
 	if authInfo.AuthToken != "" {
 		ctx = context.WithValue(ctx, AuthHeader, authInfo.AuthToken)
@@ -234,7 +253,9 @@ func (a *Interceptor) EnhanceContext(ctx context.Context, authInfo *AuthInfo, cl
 // Authorize uses the policy's authorizer to authorize a request based on provided claims and call target.
 // Logs and emits metrics when unauthorized.
 func (a *Interceptor) Authorize(ctx context.Context, claims *Claims, ct *CallTarget) error {
+	a.logger.Debug("Authorizing request", tag.NewAnyTag("claims", claims), tag.NewAnyTag("callTarget", ct))
 	if a.authorizer == nil {
+		a.logger.Debug("Authorizer is nil")
 		return nil
 	}
 
@@ -252,15 +273,19 @@ func (a *Interceptor) Authorize(ctx context.Context, claims *Claims, ct *CallTar
 		metrics.ServiceErrUnauthorizedCounter.With(mh).Record(1)
 		// if a reason is included in the result, include it in the error message
 		if result.Reason != "" {
+			a.logger.Debug("Authorization denied", tag.NewAnyTag("reason", result.Reason))
 			return serviceerror.NewPermissionDenied(RequestUnauthorized, result.Reason)
 		}
+		a.logger.Debug("Authorization denied with no specific reason")
 		return errUnauthorized // return a generic error to the caller without disclosing details
 	}
+	a.logger.Debug("Authorization allowed")
 	return nil
 }
 
 // getMetricsHandler returns a metrics handler with a namespace tag
 func (a *Interceptor) getMetricsHandler(nsName string) metrics.Handler {
+	a.logger.Debug("Getting metrics handler", tag.NewAnyTag("namespace", nsName))
 	nsTag := metrics.NamespaceUnknownTag()
 	if nsName != "" {
 		// Note that this is before the namespace state validation interceptor, so this

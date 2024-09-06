@@ -33,6 +33,7 @@ import (
 
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
 	"google.golang.org/grpc/credentials"
 )
 
@@ -83,12 +84,17 @@ func (*noopClaimMapper) AuthInfoRequired() bool {
 }
 
 func GetClaimMapperFromConfig(config *config.Authorization, logger log.Logger) (ClaimMapper, error) {
+	logger.Debug("Getting claim mapper from config", tag.NewAnyTag("config", config))
 
 	switch strings.ToLower(config.ClaimMapper) {
 	case "":
+		logger.Debug("No claim mapper specified, using NoopClaimMapper")
 		return NewNoopClaimMapper(), nil
 	case "default":
+		logger.Debug("Default claim mapper specified, using DefaultJWTClaimMapper")
 		return NewDefaultJWTClaimMapper(NewDefaultTokenKeyProvider(config, logger), config, logger), nil
 	}
-	return nil, fmt.Errorf("unknown claim mapper: %s", config.ClaimMapper)
+	err := fmt.Errorf("unknown claim mapper: %s", config.ClaimMapper)
+	logger.Error("Unknown claim mapper", tag.Error(err))
+	return nil, err
 }

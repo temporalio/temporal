@@ -32,6 +32,8 @@ import (
 	"strings"
 
 	"go.temporal.io/server/common/config"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
 )
 
 const (
@@ -41,8 +43,7 @@ const (
 	DecisionAllow
 )
 
-// @@@SNIPSTART temporal-common-authorization-authorizer-calltarget
-// CallTarget is contains information for Authorizer to make a decision.
+// CallTarget contains information for Authorizer to make a decision.
 // It can be extended to include resources like WorkflowType and TaskQueue
 type CallTarget struct {
 	// APIName must be the full API function name.
@@ -56,8 +57,6 @@ type CallTarget struct {
 	Request interface{}
 }
 
-// @@@SNIPEND
-
 type (
 	// Result is result from authority.
 	Result struct {
@@ -70,30 +69,33 @@ type (
 	Decision int
 )
 
-// @@@SNIPSTART temporal-common-authorization-authorizer-interface
 // Authorizer is an interface for implementing authorization logic
 type Authorizer interface {
 	Authorize(ctx context.Context, caller *Claims, target *CallTarget) (Result, error)
 }
 
-// @@@SNIPEND
-
 type hasNamespace interface {
 	GetNamespace() string
 }
 
-func GetAuthorizerFromConfig(config *config.Authorization) (Authorizer, error) {
+func GetAuthorizerFromConfig(config *config.Authorization, logger log.Logger) (Authorizer, error) {
+	logger.Debug("Getting authorizer from config", tag.NewAnyTag("config", config))
 
 	switch strings.ToLower(config.Authorizer) {
 	case "":
+		logger.Debug("No authorizer specified, using NoopAuthorizer")
 		return NewNoopAuthorizer(), nil
 	case "default":
-		return NewDefaultAuthorizer(), nil
+		logger.Debug("Default authorizer specified, using DefaultAuthorizer")
+		return NewDefaultAuthorizer(logger), nil
 	}
-	return nil, fmt.Errorf("unknown authorizer: %s", config.Authorizer)
+	err := fmt.Errorf("unknown authorizer: %s", config.Authorizer)
+	logger.Error("Unknown authorizer", tag.Error(err))
+	return nil, err
 }
 
-func IsNoopAuthorizer(authorizer Authorizer) bool {
+func IsNoopAuthorizer(authorizer Authorizer, logger log.Logger) bool {
 	_, ok := authorizer.(*noopAuthorizer)
+	logger.Debug("Checking if authorizer is NoopAuthorizer", tag.NewAnyTag("isNoop", ok))
 	return ok
 }

@@ -21,7 +21,6 @@
 // LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
-
 package authorization
 
 import (
@@ -33,6 +32,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"go.temporal.io/server/common/config"
+	"go.temporal.io/server/common/log"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 )
 
@@ -104,6 +104,7 @@ type (
 
 		controller *gomock.Controller
 		authorizer Authorizer
+		logger     log.Logger
 	}
 )
 
@@ -115,7 +116,8 @@ func TestDefaultAuthorizerSuite(t *testing.T) {
 func (s *defaultAuthorizerSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 	s.controller = gomock.NewController(s.T())
-	s.authorizer = NewDefaultAuthorizer()
+	s.logger = log.NewTestLogger()
+	s.authorizer = NewDefaultAuthorizer(s.logger)
 }
 
 func (s *defaultAuthorizerSuite) TearDownTest() {
@@ -190,9 +192,8 @@ func (s *defaultAuthorizerSuite) TestGetAuthorizerFromConfigUnknown() {
 }
 
 func (s *defaultAuthorizerSuite) testGetAuthorizerFromConfig(name string, valid bool, authorizerType reflect.Type) {
-
 	cfg := config.Authorization{Authorizer: name}
-	auth, err := GetAuthorizerFromConfig(&cfg)
+	auth, err := GetAuthorizerFromConfig(&cfg, s.logger)
 	if valid {
 		s.NoError(err)
 		s.NotNil(auth)

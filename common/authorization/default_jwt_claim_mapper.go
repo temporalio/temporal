@@ -33,6 +33,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/primitives"
 )
 
@@ -59,32 +60,39 @@ func NewDefaultJWTClaimMapper(provider TokenKeyProvider, cfg *config.Authorizati
 	if claimName == "" {
 		claimName = defaultPermissionsClaimName
 	}
+	logger.Debug("Creating new default JWT claim mapper", tag.NewAnyTag("claimName", claimName))
 	return &defaultJWTClaimMapper{keyProvider: provider, logger: logger, permissionsClaimName: claimName}
 }
 
 var _ ClaimMapper = (*defaultJWTClaimMapper)(nil)
 
 func (a *defaultJWTClaimMapper) GetClaims(authInfo *AuthInfo) (*Claims, error) {
+	a.logger.Debug("Getting claims from authInfo", tag.NewAnyTag("authInfo", authInfo))
 
 	claims := Claims{}
 
 	if authInfo.AuthToken == "" {
+		a.logger.Debug("No auth token provided, returning empty claims")
 		return &claims, nil
 	}
 
 	parts := strings.Split(authInfo.AuthToken, " ")
 	if len(parts) != 2 {
+		a.logger.Error("Unexpected authorization token format", tag.NewAnyTag("authToken", authInfo.AuthToken))
 		return nil, serviceerror.NewPermissionDenied("unexpected authorization token format", "")
 	}
 	if !strings.EqualFold(parts[0], authorizationBearer) {
+		a.logger.Error("Unexpected name in authorization token", tag.NewAnyTag("authToken", authInfo.AuthToken))
 		return nil, serviceerror.NewPermissionDenied("unexpected name in authorization token", "")
 	}
 	jwtClaims, err := parseJWTWithAudience(parts[1], a.keyProvider, authInfo.Audience)
 	if err != nil {
+		a.logger.Error("Error parsing JWT with audience", tag.Error(err))
 		return nil, err
 	}
 	subject, ok := jwtClaims[headerSubject].(string)
 	if !ok {
+		a.logger.Error("Unexpected value type of \"sub\" claim", tag.NewAnyTag("jwtClaims", jwtClaims))
 		return nil, serviceerror.NewPermissionDenied("unexpected value type of \"sub\" claim", "")
 	}
 	claims.Subject = subject
@@ -92,22 +100,26 @@ func (a *defaultJWTClaimMapper) GetClaims(authInfo *AuthInfo) (*Claims, error) {
 	if ok {
 		err := a.extractPermissions(permissions, &claims)
 		if err != nil {
+			a.logger.Error("Error extracting permissions", tag.Error(err))
 			return nil, err
 		}
 	}
+	a.logger.Debug("Claims obtained", tag.NewAnyTag("claims", claims))
 	return &claims, nil
 }
 
 func (a *defaultJWTClaimMapper) extractPermissions(permissions []interface{}, claims *Claims) error {
+	a.logger.Debug("Extracting permissions", tag.NewAnyTag("permissions", permissions))
+
 	for _, permission := range permissions {
 		p, ok := permission.(string)
 		if !ok {
-			a.logger.Warn(fmt.Sprintf("ignoring permission that is not a string: %v", permission))
+			a.logger.Warn(fmt.Sprintf("Ignoring permission that is not a string: %v", permission))
 			continue
 		}
 		parts := strings.Split(p, ":")
 		if len(parts) != 2 {
-			a.logger.Warn(fmt.Sprintf("ignoring permission in unexpected format: %v", permission))
+			a.logger.Warn(fmt.Sprintf("Ignoring permission in unexpected format: %v", permission))
 			continue
 		}
 		namespace := parts[0]
@@ -122,6 +134,7 @@ func (a *defaultJWTClaimMapper) extractPermissions(permissions []interface{}, cl
 			claims.Namespaces[namespace] = role
 		}
 	}
+	a.logger.Debug("Permissions extracted", tag.NewAnyTag("claims", claims))
 	return nil
 }
 
@@ -130,10 +143,9 @@ func parseJWT(tokenString string, keyProvider TokenKeyProvider) (jwt.MapClaims, 
 }
 
 func parseJWTWithAudience(tokenString string, keyProvider TokenKeyProvider, audience string) (jwt.MapClaims, error) {
-
 	parser := jwt.NewParser(jwt.WithValidMethods(keyProvider.SupportedMethods()))
-
 	var keyFunc jwt.Keyfunc
+
 	if provider, _ := keyProvider.(RawTokenKeyProvider); provider != nil {
 		keyFunc = func(token *jwt.Token) (interface{}, error) {
 			// reserve context
@@ -162,7 +174,6 @@ func parseJWTWithAudience(tokenString string, keyProvider TokenKeyProvider, audi
 	}
 
 	token, err := parser.Parse(tokenString, keyFunc)
-
 	if err != nil {
 		return nil, err
 	}
