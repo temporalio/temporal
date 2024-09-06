@@ -202,10 +202,10 @@ func (s *VersioningIntegSuite) TestVersionRuleBuildIdValidation() {
 	s.insertRedirectRule(ctx, tq, longStr, "foo", cT, false)
 	s.insertRedirectRule(ctx, tq, "foo", longStr, cT, false)
 
-	// Not testing failure due to non-UTF-8 build id, because it's hard to generate an invalid UTF-8 string that will be
-	// invalid on all platforms. I realize we pretty much only run functional tests on unix, but still, I don't think
-	// testing this is necessary since the length check is right next to the UTF-8 check, and the UTF-8 validator is
-	// tested separately.
+	// failure due to invalid utf-8
+	s.insertAssignmentRule(ctx, tq, invalidUTF8, 0, cT, false)
+	s.insertRedirectRule(ctx, tq, invalidUTF8, "foo", cT, false)
+	s.insertRedirectRule(ctx, tq, "foo", invalidUTF8, cT, false)
 }
 
 func (s *VersioningIntegSuite) TestAssignmentRuleInsert() {
