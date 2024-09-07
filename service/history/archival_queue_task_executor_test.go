@@ -429,15 +429,15 @@ func TestArchivalQueueTaskExecutor(t *testing.T) {
 				).AnyTimes()
 				executionInfo := &persistence.WorkflowExecutionInfo{
 					NamespaceId:                  tests.NamespaceID.String(),
-					StartTime:                    timestamppb.New(p.StartTime),
 					ExecutionTime:                timestamppb.New(p.ExecutionTime),
 					CloseTime:                    timestamppb.New(p.CloseTime),
 					CloseVisibilityTaskCompleted: p.CloseVisibilityTaskCompleted,
 				}
 				mutableState.EXPECT().GetExecutionInfo().Return(executionInfo).AnyTimes()
 				executionState := &persistence.WorkflowExecutionState{
-					State:  0,
-					Status: 0,
+					State:     0,
+					Status:    0,
+					StartTime: timestamppb.New(p.StartTime),
 				}
 				mutableState.EXPECT().GetExecutionState().Return(executionState).AnyTimes()
 				if p.ExpectAddTask {

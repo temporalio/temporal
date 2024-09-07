@@ -124,7 +124,7 @@ func Invoke(
 				RunId:      executionState.RunId,
 			},
 			Type:          &commonpb.WorkflowType{Name: executionInfo.WorkflowTypeName},
-			StartTime:     executionInfo.StartTime,
+			StartTime:     executionState.StartTime,
 			Status:        executionState.Status,
 			HistoryLength: mutableState.GetNextEventID() - common.FirstEventID,
 			ExecutionTime: executionInfo.ExecutionTime,
