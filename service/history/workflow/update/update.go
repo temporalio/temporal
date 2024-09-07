@@ -498,11 +498,11 @@ func (u *Update) onAcceptanceMsg(
 		// If the Update is accepted *and* completed in the same WFT, then its state has transitioned
 		// from ProvisionallyAccepted to ProvisionallyCompleted in onResponseMsg by the
 		// time we get here.
-		// 
+		//
 		// Now, to prevent a race condition in WaitLifecycleStage, the accepted future
 		// cannot be set here right now, as it must be set *after* the outcome future.
-		// 
-		// So instead, the state is set to ProvisionallyCompletedAfterAccepted here,  
+		//
+		// So instead, the state is set to ProvisionallyCompletedAfterAccepted here,
 		// and onResponseMsg's OnAfterCommit callback will set the futures in the correct order.
 		if u.state == stateProvisionallyCompleted {
 			u.state = stateProvisionallyCompletedAfterAccepted
@@ -598,9 +598,9 @@ func (u *Update) onResponseMsg(
 			// If the Update is accepted *and* completed in the same WFT, then its state is ProvisionallyCompletedAfterAccepted here, set by onAcceptance's OnAfterCommit.
 			//
 			// To prevent a race condition in WaitLifecycleStage, the accepted future
-		        // has not been set by OnAcceptance earlier, as it must be set *after* the outcome future.
-		        // Now is the time to set it.
-		        // 
+			// has not been set by OnAcceptance earlier, as it must be set *after* the outcome future.
+			// Now is the time to set it.
+			//
 			// Note that the Accepted state is skipped, and it transitions straight to Completed.
 			u.accepted.(*future.FutureImpl[*failurepb.Failure]).Set(nil, nil)
 		}
