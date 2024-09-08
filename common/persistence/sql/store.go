@@ -29,13 +29,12 @@ import (
 	"fmt"
 	"slices"
 
-	expmaps "golang.org/x/exp/maps"
-
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
 	"go.temporal.io/server/common/resolver"
+	expmaps "golang.org/x/exp/maps"
 )
 
 var ErrPluginNotSupported = errors.New("plugin not supported")

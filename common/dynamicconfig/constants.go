@@ -31,7 +31,6 @@ import (
 
 	enumspb "go.temporal.io/api/enums/v1"
 	sdkworker "go.temporal.io/sdk/worker"
-
 	"go.temporal.io/server/common/debug"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/retrypolicy"
@@ -409,6 +408,11 @@ If exceeded, failure will be truncated before being stored in mutable state.`,
 		"limit.mutableStateSize.warn",
 		1*1024*1024,
 		`MutableStateSizeLimitWarn is the per workflow execution mutable state size limit in bytes for warning`,
+	)
+	MutableStateTombstoneCountLimit = NewGlobalIntSetting(
+		"limit.mutableStateTombstoneCountLimit",
+		16,
+		`MutableStateTombstoneCountLimit is the maximum number of deleted sub state machines tracked in mutable state.`,
 	)
 	HistoryCountSuggestContinueAsNew = NewNamespaceIntSetting(
 		"limit.historyCount.suggestContinueAsNew",
@@ -1454,6 +1458,15 @@ count is exceeded. But since queue action is async, we need this hard limit.
 NOTE: The outbound queue has a separate configuration: outboundQueuePendingTaskMaxCount.
 `,
 	)
+	QueueMaxPredicateSize = NewGlobalIntSetting(
+		"history.queueMaxPredicateSize",
+		0,
+		`The max size of the multi-cursor predicate structure stored in the shard info record. 0 is considered
+unlimited. When the predicate size is surpassed for a given scope, the predicate is converted to a universal predicate,
+which causes all tasks in the scope's range to eventually be reprocessed without applying any filtering logic.
+NOTE: The outbound queue has a separate configuration: outboundQueueMaxPredicateSize.
+`,
+	)
 
 	TaskSchedulerEnableRateLimiter = NewGlobalBoolSetting(
 		"history.taskSchedulerEnableRateLimiter",
@@ -1658,6 +1671,16 @@ critical count is exceeded. But since queue action is async, we need this hard l
 		9000,
 		`Max number of pending tasks in the outbound queue before triggering slice splitting and unloading.`,
 	)
+	OutboundQueueMaxPredicateSize = NewGlobalIntSetting(
+		"history.outboundQueueMaxPredicateSize",
+		10*1024,
+		`The max size of the multi-cursor predicate structure stored in the shard info record for the outbound queue. 0
+is considered unlimited. When the predicate size is surpassed for a given scope, the predicate is converted to a
+universal predicate, which causes all tasks in the scope's range to eventually be reprocessed without applying any
+filtering logic.
+`,
+	)
+
 	OutboundProcessorMaxPollRPS = NewGlobalIntSetting(
 		"history.outboundProcessorMaxPollRPS",
 		20,
@@ -2222,6 +2245,16 @@ that task will be sent to DLQ.`,
 		"history.ReplicationResendMaxBatchCount",
 		10,
 		`Maximum number of resend events batch for a single replication request`,
+	)
+	ReplicationProgressCacheMaxSize = NewGlobalIntSetting(
+		"history.ReplicationProgressCacheMaxSize",
+		128000,
+		`ReplicationProgressCacheMaxSize is the maximum number of entries in the replication progress cache`,
+	)
+	ReplicationProgressCacheTTL = NewGlobalDurationSetting(
+		"history.ReplicationProgressCacheTTL",
+		time.Hour,
+		`ReplicationProgressCacheTTL is TTL of replication progress cache`,
 	)
 	WorkflowIdReuseMinimalInterval = NewNamespaceDurationSetting(
 		"history.workflowIdReuseMinimalInterval",

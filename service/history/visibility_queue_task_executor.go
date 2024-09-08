@@ -31,7 +31,6 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
-
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -351,7 +350,7 @@ func (t *visibilityQueueTaskExecutor) getVisibilityRequestBase(
 ) *manager.VisibilityRequestBase {
 	var (
 		executionInfo    = mutableState.GetExecutionInfo()
-		startTime        = timestamp.TimeValue(executionInfo.GetStartTime())
+		startTime        = timestamp.TimeValue(mutableState.GetExecutionState().GetStartTime())
 		executionTime    = timestamp.TimeValue(executionInfo.GetExecutionTime())
 		visibilityMemo   = getWorkflowMemo(copyMapPayload(executionInfo.Memo))
 		searchAttributes = getSearchAttributes(copyMapPayload(executionInfo.SearchAttributes))

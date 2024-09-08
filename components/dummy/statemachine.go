@@ -26,7 +26,6 @@ import (
 	"encoding/json"
 
 	"go.temporal.io/api/serviceerror"
-
 	"go.temporal.io/server/service/history/hsm"
 )
 

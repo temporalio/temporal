@@ -35,12 +35,11 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
-	"google.golang.org/protobuf/types/known/durationpb"
-
 	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"google.golang.org/protobuf/types/known/durationpb"
 )
 
 func (s *FunctionalSuite) TestDescribeWorkflowExecution() {

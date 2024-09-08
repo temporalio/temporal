@@ -25,8 +25,6 @@ package history
 import (
 	"fmt"
 
-	"go.uber.org/fx"
-
 	"go.temporal.io/server/common/circuitbreaker"
 	"go.temporal.io/server/common/collection"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -41,6 +39,7 @@ import (
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
+	"go.uber.org/fx"
 )
 
 // outboundQueuePersistenceMaxRPSRatio is meant to ensure queue loading doesn't consume more than 30% of the host's
@@ -55,7 +54,7 @@ type outboundQueueFactoryParams struct {
 }
 
 type groupLimiter struct {
-	key queues.OutboundTaskGroupNamespaceIDAndDestination
+	key tasks.TaskGroupNamespaceIDAndDestination
 
 	namespaceRegistry namespace.Registry
 	metricsHandler    metrics.Handler
@@ -95,8 +94,6 @@ func (l groupLimiter) Concurrency() int {
 type outboundQueueFactory struct {
 	outboundQueueFactoryParams
 	hostReaderRateLimiter quotas.RequestRateLimiter
-	// Shared rate limiter pool for all shards in the host.
-	rateLimiterPool *collection.OnceMap[queues.NamespaceIDAndDestination, quotas.RateLimiter]
 	// Shared scheduler across all shards in the host.
 	hostScheduler queues.Scheduler
 }
@@ -105,7 +102,7 @@ func NewOutboundQueueFactory(params outboundQueueFactoryParams) QueueFactory {
 	metricsHandler := getOutbountQueueProcessorMetricsHandler(params.MetricsHandler)
 
 	rateLimiterPool := collection.NewOnceMap(
-		func(key queues.OutboundTaskGroupNamespaceIDAndDestination) quotas.RateLimiter {
+		func(key tasks.TaskGroupNamespaceIDAndDestination) quotas.RateLimiter {
 			return quotas.NewDefaultOutgoingRateLimiter(func() float64 {
 				// This is intentionally not failing the function in case of error. The task
 				// scheduler doesn't expect errors to happen, and modifying to handle errors
@@ -124,7 +121,7 @@ func NewOutboundQueueFactory(params outboundQueueFactoryParams) QueueFactory {
 	)
 
 	circuitBreakerPool := collection.NewOnceMap(
-		func(key queues.OutboundTaskGroupNamespaceIDAndDestination) circuitbreaker.TwoStepCircuitBreaker {
+		func(key tasks.TaskGroupNamespaceIDAndDestination) circuitbreaker.TwoStepCircuitBreaker {
 			// This is intentionally not failing the function in case of error. The circuit breaker is
 			// agnostic to Task implementation, and thus the settings function is not expected to return
 			// an error. Also, in this case, if the namespace registry fails to get the name, then the
@@ -164,11 +161,11 @@ func NewOutboundQueueFactory(params outboundQueueFactoryParams) QueueFactory {
 		hostScheduler: &queues.CommonSchedulerWrapper{
 			Scheduler: ctasks.NewGroupByScheduler(
 				ctasks.GroupBySchedulerOptions[
-					queues.OutboundTaskGroupNamespaceIDAndDestination,
+					tasks.TaskGroupNamespaceIDAndDestination,
 					queues.Executable,
 				]{
 					Logger: params.Logger,
-					KeyFn: func(e queues.Executable) queues.OutboundTaskGroupNamespaceIDAndDestination {
+					KeyFn: func(e queues.Executable) tasks.TaskGroupNamespaceIDAndDestination {
 						return grouper.KeyTyped(e.GetTask())
 					},
 					RunnableFactory: func(e queues.Executable) ctasks.Runnable {
@@ -196,7 +193,7 @@ func NewOutboundQueueFactory(params outboundQueueFactoryParams) QueueFactory {
 						)
 					},
 					SchedulerFactory: func(
-						key queues.OutboundTaskGroupNamespaceIDAndDestination,
+						key tasks.TaskGroupNamespaceIDAndDestination,
 					) ctasks.RunnableScheduler {
 						nsName := getNamespaceNameOrDefault(
 							params.NamespaceRegistry,
@@ -310,6 +307,7 @@ func (f *outboundQueueFactory) CreateQueue(
 				BatchSize:            f.Config.OutboundTaskBatchSize,
 				MaxPendingTasksCount: f.Config.OutboundQueuePendingTaskMaxCount,
 				PollBackoffInterval:  f.Config.OutboundProcessorPollBackoffInterval,
+				MaxPredicateSize:     f.Config.OutboundQueueMaxPredicateSize,
 			},
 			MonitorOptions: queues.MonitorOptions{
 				PendingTasksCriticalCount: f.Config.OutboundQueuePendingTaskCriticalCount,

@@ -33,7 +33,6 @@ import (
 	"path/filepath"
 
 	"github.com/blang/semver/v4"
-
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/persistence"

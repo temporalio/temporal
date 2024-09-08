@@ -38,7 +38,6 @@ import (
 
 	"go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
-
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/circuitbreaker"
@@ -362,7 +361,7 @@ func (e *executableImpl) isSafeToDropError(err error) bool {
 		// Even though ErrStaleReference is castable to serviceerror.NotFound, we give this error special treatment
 		// because we're interested in the metric.
 		metrics.TaskSkipped.With(e.taggedMetricsHandler).Record(1)
-		e.logger.Info("Skipped task due with stale reference", tag.Error(err))
+		e.logger.Info("Skipped task due to stale reference", tag.Error(err))
 		return true
 	}
 

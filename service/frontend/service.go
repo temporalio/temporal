@@ -31,12 +31,6 @@ import (
 
 	"go.temporal.io/api/operatorservice/v1"
 	"go.temporal.io/api/workflowservice/v1"
-
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/health"
-	healthpb "google.golang.org/grpc/health/grpc_health_v1"
-	"google.golang.org/grpc/reflection"
-
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
@@ -46,6 +40,10 @@ import (
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/retrypolicy"
 	"go.temporal.io/server/components/callbacks"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/health"
+	healthpb "google.golang.org/grpc/health/grpc_health_v1"
+	"google.golang.org/grpc/reflection"
 )
 
 // Config represents configuration for frontend service
@@ -203,6 +201,8 @@ type Config struct {
 	HistoryHostErrorPercentage dynamicconfig.FloatPropertyFn
 
 	LogAllReqErrors dynamicconfig.BoolPropertyFnWithNamespaceFilter
+
+	EnableEagerWorkflowStart dynamicconfig.BoolPropertyFnWithNamespaceFilter
 }
 
 // NewConfig returns new service config with default values
@@ -315,8 +315,8 @@ func NewConfig(
 		MaskInternalErrorDetails: dynamicconfig.FrontendMaskInternalErrorDetails.Get(dc),
 
 		HistoryHostErrorPercentage: dynamicconfig.HistoryHostErrorPercentage.Get(dc),
-
-		LogAllReqErrors: dynamicconfig.LogAllReqErrors.Get(dc),
+		LogAllReqErrors:            dynamicconfig.LogAllReqErrors.Get(dc),
+		EnableEagerWorkflowStart:   dynamicconfig.EnableEagerWorkflowStart.Get(dc),
 	}
 }
 

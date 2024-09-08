@@ -139,6 +139,7 @@ var (
 		"/temporal.api.workflowservice.v1.WorkflowService/PollWorkflowExecutionUpdate":        5,
 		"/temporal.api.workflowservice.v1.WorkflowService/PollNexusTaskQueue":                 5,
 		"/temporal.api.workflowservice.v1.WorkflowService/ResetStickyTaskQueue":               5,
+		"/temporal.api.workflowservice.v1.WorkflowService/ShutdownWorker":                     5,
 		"/temporal.api.workflowservice.v1.WorkflowService/GetWorkflowExecutionHistoryReverse": 5,
 
 		// P6: Informational API that aren't required for the temporal service to function

@@ -34,49 +34,44 @@ import (
 	"testing"
 	"time"
 
-	enumspb "go.temporal.io/api/enums/v1"
-	failurepb "go.temporal.io/api/failure/v1"
-	"go.temporal.io/api/serviceerror"
-	"go.temporal.io/api/update/v1"
-
-	"go.temporal.io/server/api/persistence/v1"
-	"go.temporal.io/server/client/history"
-	"go.temporal.io/server/common/headers"
-	"go.temporal.io/server/common/namespace"
-	"go.temporal.io/server/common/persistence/serialization"
-	"go.temporal.io/server/common/testing/protorequire"
-	"go.temporal.io/server/service/history/ndc"
-
-	enumsspb "go.temporal.io/server/api/enums/v1"
-	historyspb "go.temporal.io/server/api/history/v1"
-	repicationpb "go.temporal.io/server/api/replication/v1"
-	replicationspb "go.temporal.io/server/api/replication/v1"
-	"go.temporal.io/server/common/failure"
-	"go.temporal.io/server/common/payloads"
-	"go.temporal.io/server/common/persistence/versionhistory"
-
 	"github.com/golang/mock/gomock"
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
+	enumspb "go.temporal.io/api/enums/v1"
+	failurepb "go.temporal.io/api/failure/v1"
 	historypb "go.temporal.io/api/history/v1"
+	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
+	"go.temporal.io/api/update/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/server/api/adminservice/v1"
+	"go.temporal.io/server/api/adminservicemock/v1"
+	enumsspb "go.temporal.io/server/api/enums/v1"
+	historyspb "go.temporal.io/server/api/history/v1"
+	"go.temporal.io/server/api/historyservice/v1"
+	"go.temporal.io/server/api/persistence/v1"
+	replicationpb "go.temporal.io/server/api/replication/v1"
+	"go.temporal.io/server/client/history"
+	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/failure"
+	"go.temporal.io/server/common/headers"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/payloads"
+	"go.temporal.io/server/common/persistence/serialization"
+	"go.temporal.io/server/common/persistence/versionhistory"
+	test "go.temporal.io/server/common/testing"
+	"go.temporal.io/server/common/testing/protorequire"
+	"go.temporal.io/server/environment"
+	"go.temporal.io/server/service/history/ndc"
+	"go.temporal.io/server/tests"
 	"google.golang.org/grpc"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 	"gopkg.in/yaml.v3"
-
-	"go.temporal.io/server/api/adminservice/v1"
-	"go.temporal.io/server/api/adminservicemock/v1"
-	"go.temporal.io/server/api/historyservice/v1"
-	"go.temporal.io/server/common"
-	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/log/tag"
-	test "go.temporal.io/server/common/testing"
-	"go.temporal.io/server/environment"
-	"go.temporal.io/server/tests"
 )
 
 type (
@@ -100,7 +95,7 @@ type (
 		version                     int64
 		versionIncrement            int64
 		mockAdminClient             map[string]adminservice.AdminServiceClient
-		standByReplicationTasksChan chan *replicationspb.ReplicationTask
+		standByReplicationTasksChan chan *replicationpb.ReplicationTask
 		standByTaskID               int64
 	}
 )
@@ -135,8 +130,8 @@ func (s *NDCFunctionalTestSuite) SetupSuite() {
 	mockStreamClient.EXPECT().Send(gomock.Any()).Return(nil).AnyTimes()
 	mockStreamClient.EXPECT().Recv().Return(&adminservice.StreamWorkflowReplicationMessagesResponse{
 		Attributes: &adminservice.StreamWorkflowReplicationMessagesResponse_Messages{
-			Messages: &repicationpb.WorkflowReplicationMessages{
-				ReplicationTasks:           []*repicationpb.ReplicationTask{},
+			Messages: &replicationpb.WorkflowReplicationMessages{
+				ReplicationTasks:           []*replicationpb.ReplicationTask{},
 				ExclusiveHighWatermark:     100,
 				ExclusiveHighWatermarkTime: timestamppb.New(time.Unix(0, 100)),
 			},
@@ -144,7 +139,7 @@ func (s *NDCFunctionalTestSuite) SetupSuite() {
 	}, nil).AnyTimes()
 	mockStreamClient.EXPECT().CloseSend().Return(nil).AnyTimes()
 
-	s.standByReplicationTasksChan = make(chan *replicationspb.ReplicationTask, 100)
+	s.standByReplicationTasksChan = make(chan *replicationpb.ReplicationTask, 100)
 
 	s.standByTaskID = 0
 	mockStandbyClient := adminservicemock.NewMockAdminServiceClient(s.controller)
@@ -153,7 +148,7 @@ func (s *NDCFunctionalTestSuite) SetupSuite() {
 	mockOtherClient := adminservicemock.NewMockAdminServiceClient(s.controller)
 	mockOtherClient.EXPECT().GetReplicationMessages(gomock.Any(), gomock.Any()).Return(
 		&adminservice.GetReplicationMessagesResponse{
-			ShardMessages: make(map[int32]*replicationspb.ReplicationMessages),
+			ShardMessages: make(map[int32]*replicationpb.ReplicationMessages),
 		}, nil).AnyTimes()
 	mockOtherClient.EXPECT().StreamWorkflowReplicationMessages(gomock.Any()).Return(mockStreamClient, nil).AnyTimes()
 	s.mockAdminClient = map[string]adminservice.AdminServiceClient{
@@ -182,7 +177,7 @@ func (s *NDCFunctionalTestSuite) GetReplicationMessagesMock(
 	case task := <-s.standByReplicationTasksChan:
 		taskID := atomic.AddInt64(&s.standByTaskID, 1)
 		task.SourceTaskId = taskID
-		tasks := []*replicationspb.ReplicationTask{task}
+		tasks := []*replicationpb.ReplicationTask{task}
 		for len(s.standByReplicationTasksChan) > 0 {
 			task = <-s.standByReplicationTasksChan
 			taskID := atomic.AddInt64(&s.standByTaskID, 1)
@@ -190,18 +185,18 @@ func (s *NDCFunctionalTestSuite) GetReplicationMessagesMock(
 			tasks = append(tasks, task)
 		}
 
-		replicationMessage := &replicationspb.ReplicationMessages{
+		replicationMessage := &replicationpb.ReplicationMessages{
 			ReplicationTasks:       tasks,
 			LastRetrievedMessageId: tasks[len(tasks)-1].SourceTaskId,
 			HasMore:                true,
 		}
 
 		return &adminservice.GetReplicationMessagesResponse{
-			ShardMessages: map[int32]*replicationspb.ReplicationMessages{1: replicationMessage},
+			ShardMessages: map[int32]*replicationpb.ReplicationMessages{1: replicationMessage},
 		}, nil
 	default:
 		return &adminservice.GetReplicationMessagesResponse{
-			ShardMessages: make(map[int32]*replicationspb.ReplicationMessages),
+			ShardMessages: make(map[int32]*replicationpb.ReplicationMessages),
 		}, nil
 	}
 }
@@ -2293,11 +2288,11 @@ func (s *NDCFunctionalTestSuite) applyEventsThroughFetcher(
 		eventBlob, newRunEventBlob, newRunID := s.generateEventBlobs(workflowID, runID, workflowType, taskqueue, batch)
 
 		taskType := enumsspb.REPLICATION_TASK_TYPE_HISTORY_V2_TASK
-		replicationTask := &replicationspb.ReplicationTask{
+		replicationTask := &replicationpb.ReplicationTask{
 			TaskType:     taskType,
 			SourceTaskId: 1,
-			Attributes: &replicationspb.ReplicationTask_HistoryTaskAttributes{
-				HistoryTaskAttributes: &replicationspb.HistoryTaskAttributes{
+			Attributes: &replicationpb.ReplicationTask_HistoryTaskAttributes{
+				HistoryTaskAttributes: &replicationpb.HistoryTaskAttributes{
 					NamespaceId:         s.namespaceID.String(),
 					WorkflowId:          workflowID,
 					RunId:               runID,

@@ -36,9 +36,6 @@ import (
 	"go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
 	"go.temporal.io/server/api/adminservice/v1"
-	"go.uber.org/atomic"
-	"go.uber.org/fx"
-
 	enumspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common/debug"
@@ -47,6 +44,8 @@ import (
 	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
+	"go.uber.org/atomic"
+	"go.uber.org/fx"
 )
 
 // This file tests the HistoryService's AddTasks API. It does this by starting a workflow, skipping its workflow task,

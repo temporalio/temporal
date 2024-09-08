@@ -273,9 +273,9 @@ func TestRateLimitInterceptorProvider(t *testing.T) {
 				return pipe.Connect(ctx.Done())
 			})
 			transportCredentials := grpc.WithTransportCredentials(insecure.NewCredentials())
-			conn, err := grpc.DialContext(context.Background(), "fake", dialer, transportCredentials)
+			conn, err := grpc.NewClient("localhost", dialer, transportCredentials)
 			require.NoError(t, err)
-
+			conn.Connect()
 			defer server.Stop()
 
 			client := workflowservice.NewWorkflowServiceClient(conn)
@@ -629,7 +629,7 @@ func TestNamespaceRateLimitInterceptorProvider(t *testing.T) {
 				return pipe.Connect(ctx.Done())
 			})
 			transportCredentials := grpc.WithTransportCredentials(insecure.NewCredentials())
-			conn, err := grpc.DialContext(context.Background(), "fake", dialer, transportCredentials)
+			conn, err := grpc.NewClient("localhost", dialer, transportCredentials)
 			require.NoError(t, err)
 
 			defer server.Stop()
@@ -816,7 +816,7 @@ func TestNamespaceRateLimitMetrics(t *testing.T) {
 				return pipe.Connect(ctx.Done())
 			})
 			transportCredentials := grpc.WithTransportCredentials(insecure.NewCredentials())
-			conn, err := grpc.DialContext(context.Background(), "fake", dialer, transportCredentials)
+			conn, err := grpc.NewClient("localhost", dialer, transportCredentials)
 			require.NoError(t, err)
 
 			defer server.Stop()

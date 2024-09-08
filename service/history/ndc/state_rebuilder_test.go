@@ -37,8 +37,6 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
-	"google.golang.org/protobuf/types/known/durationpb"
-
 	historyspb "go.temporal.io/server/api/history/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
@@ -59,6 +57,7 @@ import (
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tests"
 	"go.temporal.io/server/service/history/workflow"
+	"google.golang.org/protobuf/types/known/durationpb"
 )
 
 type (
@@ -376,6 +375,6 @@ func (s *stateRebuilderSuite) TestRebuild() {
 			[]*historyspb.VersionHistoryItem{versionhistory.NewVersionHistoryItem(lastEventID, version)},
 		),
 	), rebuildMutableState.GetExecutionInfo().GetVersionHistories())
-	s.Equal(timestamp.TimeValue(rebuildMutableState.GetExecutionInfo().StartTime), s.now)
+	s.Equal(timestamp.TimeValue(rebuildMutableState.GetExecutionState().StartTime), s.now)
 	s.Equal(expectedLastFirstTransactionID, rebuildExecutionInfo.LastFirstEventTxnId)
 }

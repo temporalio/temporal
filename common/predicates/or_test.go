@@ -142,3 +142,11 @@ func (s *orSuite) TestOr_Equals() {
 	s.False(p.Equals(Empty[int]()))
 	s.False(p.Equals(Universal[int]()))
 }
+
+func (s *orSuite) TestOr_Size() {
+	p1 := newTestPredicate(1, 2, 3)
+	p2 := newTestPredicate(2, 3, 4)
+	p := Or(p1, p2)
+
+	s.Equal(52, p.Size()) // 8 bytes per int64 * 6 ints + 4 bytes of overhead.
+}

@@ -37,16 +37,12 @@ import (
 
 	"github.com/nexus-rpc/sdk-go/nexus"
 	"github.com/pborman/uuid"
-	"google.golang.org/protobuf/types/known/durationpb"
-	"google.golang.org/protobuf/types/known/timestamppb"
-
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
-
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
@@ -75,6 +71,8 @@ import (
 	"go.temporal.io/server/common/tqid"
 	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/common/worker_versioning"
+	"google.golang.org/protobuf/types/known/durationpb"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 const (
@@ -1065,7 +1063,7 @@ func (e *matchingEngineImpl) DescribeTaskQueuePartition(
 	if err != nil {
 		return nil, err
 	}
-	return pm.Describe(buildIds, request.GetVersions().GetAllActive(), request.GetReportStats(), request.GetReportPollers())
+	return pm.Describe(ctx, buildIds, request.GetVersions().GetAllActive(), request.GetReportStats(), request.GetReportPollers())
 }
 
 func (e *matchingEngineImpl) getBuildIds(versions *taskqueuepb.TaskQueueVersionSelection) (map[string]bool, error) {

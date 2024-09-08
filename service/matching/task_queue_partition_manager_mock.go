@@ -80,18 +80,18 @@ func (mr *MocktaskQueuePartitionManagerMockRecorder) AddTask(ctx, params interfa
 }
 
 // Describe mocks base method.
-func (m *MocktaskQueuePartitionManager) Describe(buildIds map[string]bool, includeAllActive, reportStats, reportPollers bool) (*matchingservice.DescribeTaskQueuePartitionResponse, error) {
+func (m *MocktaskQueuePartitionManager) Describe(ctx context.Context, buildIds map[string]bool, includeAllActive, reportStats, reportPollers bool) (*matchingservice.DescribeTaskQueuePartitionResponse, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Describe", buildIds, includeAllActive, reportStats, reportPollers)
+	ret := m.ctrl.Call(m, "Describe", ctx, buildIds, includeAllActive, reportStats, reportPollers)
 	ret0, _ := ret[0].(*matchingservice.DescribeTaskQueuePartitionResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // Describe indicates an expected call of Describe.
-func (mr *MocktaskQueuePartitionManagerMockRecorder) Describe(buildIds, includeAllActive, reportStats, reportPollers interface{}) *gomock.Call {
+func (mr *MocktaskQueuePartitionManagerMockRecorder) Describe(ctx, buildIds, includeAllActive, reportStats, reportPollers interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Describe", reflect.TypeOf((*MocktaskQueuePartitionManager)(nil).Describe), buildIds, includeAllActive, reportStats, reportPollers)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Describe", reflect.TypeOf((*MocktaskQueuePartitionManager)(nil).Describe), ctx, buildIds, includeAllActive, reportStats, reportPollers)
 }
 
 // DispatchNexusTask mocks base method.

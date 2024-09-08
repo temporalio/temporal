@@ -27,7 +27,6 @@ package cassandra
 import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
-
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/convert"
 	p "go.temporal.io/server/common/persistence"

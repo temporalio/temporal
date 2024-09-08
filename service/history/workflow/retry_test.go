@@ -32,14 +32,12 @@ import (
 	"github.com/stretchr/testify/assert"
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
-	"google.golang.org/protobuf/types/known/durationpb"
-	"google.golang.org/protobuf/types/known/timestamppb"
-
+	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/failure"
 	"go.temporal.io/server/common/number"
 	"go.temporal.io/server/common/retrypolicy"
-
-	"go.temporal.io/server/common/backoff"
+	"google.golang.org/protobuf/types/known/durationpb"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 func Test_IsRetryable(t *testing.T) {

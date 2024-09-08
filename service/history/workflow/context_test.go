@@ -35,8 +35,6 @@ import (
 	"github.com/stretchr/testify/suite"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
-	"google.golang.org/protobuf/types/known/timestamppb"
-
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -50,6 +48,7 @@ import (
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/tests"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type (
@@ -399,7 +398,6 @@ func (s *contextSuite) TestRefreshTask() {
 			NamespaceId:        tests.NamespaceID.String(),
 			WorkflowId:         tests.WorkflowID,
 			WorkflowRunTimeout: timestamp.DurationFromSeconds(200),
-			StartTime:          timestamppb.New(now),
 			ExecutionTime:      timestamppb.New(now),
 			VersionHistories: &historyspb.VersionHistories{
 				Histories: []*historyspb.VersionHistory{
@@ -422,9 +420,10 @@ func (s *contextSuite) TestRefreshTask() {
 			},
 		},
 		ExecutionState: &persistencespb.WorkflowExecutionState{
-			RunId:  tests.RunID,
-			State:  enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
-			Status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+			RunId:     tests.RunID,
+			State:     enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
+			Status:    enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+			StartTime: timestamppb.New(now),
 		},
 		NextEventId: 2,
 	}

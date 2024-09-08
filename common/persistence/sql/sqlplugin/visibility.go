@@ -36,7 +36,6 @@ import (
 	"time"
 
 	"github.com/iancoleman/strcase"
-
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/common/searchattribute"

@@ -27,8 +27,6 @@ import (
 	"fmt"
 	"net/http"
 
-	"go.uber.org/fx"
-
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
@@ -36,6 +34,7 @@ import (
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/service/history/hsm"
 	"go.temporal.io/server/service/history/queues"
+	"go.uber.org/fx"
 )
 
 // HTTPCaller is a method that can be used to invoke HTTP requests.

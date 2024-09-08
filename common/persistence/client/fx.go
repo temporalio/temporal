@@ -27,8 +27,6 @@ package client
 import (
 	"time"
 
-	"go.uber.org/fx"
-
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -42,6 +40,7 @@ import (
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/resolver"
+	"go.uber.org/fx"
 )
 
 type (
@@ -111,7 +110,7 @@ func EventBlobCacheProvider(
 func FactoryProvider(
 	params NewFactoryParams,
 ) Factory {
-	var systemRequestRateLimiter, namespaceRequestRateLimiter quotas.RequestRateLimiter
+	var systemRequestRateLimiter, namespaceRequestRateLimiter, shardRequestRateLimiter quotas.RequestRateLimiter
 	if params.PersistenceMaxQPS != nil && params.PersistenceMaxQPS() > 0 {
 		systemRequestRateLimiter = NewPriorityRateLimiter(
 			params.PersistenceMaxQPS,
@@ -126,6 +125,12 @@ func FactoryProvider(
 		namespaceRequestRateLimiter = NewPriorityNamespaceRateLimiter(
 			params.PersistenceMaxQPS,
 			params.PersistenceNamespaceMaxQPS,
+			RequestPriorityFn,
+			params.OperatorRPSRatio,
+			params.PersistenceBurstRatio,
+		)
+		shardRequestRateLimiter = NewPriorityNamespaceShardRateLimiter(
+			params.PersistenceMaxQPS,
 			params.PersistencePerShardNamespaceMaxQPS,
 			RequestPriorityFn,
 			params.OperatorRPSRatio,
@@ -138,6 +143,7 @@ func FactoryProvider(
 		params.Cfg,
 		systemRequestRateLimiter,
 		namespaceRequestRateLimiter,
+		shardRequestRateLimiter,
 		serialization.NewSerializer(),
 		params.EventBlobCache,
 		string(params.ClusterName),

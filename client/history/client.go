@@ -34,11 +34,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/metadata"
-
 	"go.temporal.io/api/serviceerror"
-
 	"go.temporal.io/server/api/historyservice/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/common"
@@ -48,6 +44,8 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/membership"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/metadata"
 )
 
 var (
@@ -256,14 +254,19 @@ func (c *clientImpl) StreamWorkflowReplicationMessages(
 	if err != nil {
 		return nil, err
 	}
-	client, err := c.redirector.clientForShardID(targetClusterShardID.ShardID)
-	if err != nil {
+
+	var streamClient historyservice.HistoryService_StreamWorkflowReplicationMessagesClient
+	op := func(ctx context.Context, client historyservice.HistoryServiceClient) error {
+		var err error
+		streamClient, err = client.StreamWorkflowReplicationMessages(
+			metadata.NewOutgoingContext(ctx, ctxMetadata),
+			opts...)
+		return err
+	}
+	if err := c.executeWithRedirect(ctx, targetClusterShardID.ShardID, op); err != nil {
 		return nil, err
 	}
-	return client.StreamWorkflowReplicationMessages(
-		metadata.NewOutgoingContext(ctx, ctxMetadata),
-		opts...,
-	)
+	return streamClient, nil
 }
 
 // GetDLQTasks doesn't need redirects or routing because DLQ tasks are not sharded, so it just picks any available host

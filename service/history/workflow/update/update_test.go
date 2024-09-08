@@ -36,8 +36,6 @@ import (
 	protocolpb "go.temporal.io/api/protocol/v1"
 	"go.temporal.io/api/serviceerror"
 	updatepb "go.temporal.io/api/update/v1"
-	"google.golang.org/protobuf/types/known/anypb"
-
 	"go.temporal.io/server/common/future"
 	"go.temporal.io/server/common/payloads"
 	. "go.temporal.io/server/common/testing/protoutils"
@@ -45,6 +43,7 @@ import (
 	"go.temporal.io/server/internal/effect"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/workflow/update"
+	"google.golang.org/protobuf/types/known/anypb"
 )
 
 const (
@@ -63,13 +62,13 @@ var (
 	immediateCtx, _  = context.WithTimeout(context.Background(), immedateTimeout)
 )
 
-type stateTest struct {
-	title        string
-	apply        func()
-	failOnEffect bool
-}
-
 func TestUpdateState(t *testing.T) {
+	type stateTest struct {
+		title        string
+		apply        func()
+		failOnEffect bool
+	}
+
 	var (
 		tv            = testvars.New(t)
 		completed     bool
@@ -506,8 +505,28 @@ func TestUpdateState(t *testing.T) {
 				// it is possible for the acceptance message and the completion message to
 				// be part of the same message batch, and thus they will be delivered without
 				// an intermediate call to apply pending effects
-				title: "transition to stateCompleted via stateAccepted in one step",
+				title: "transition to stateCompleted via stateAccepted in one WFT",
 				apply: func() {
+					// start waiters
+					accptCh := make(chan any, 1)
+					go func() {
+						status, err := upd.WaitLifecycleStage(context.Background(), UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ACCEPTED, 100*time.Millisecond)
+						if err != nil {
+							accptCh <- err
+							return
+						}
+						accptCh <- status.Outcome
+					}()
+					complCh := make(chan any, 1)
+					go func() {
+						status, err := upd.WaitLifecycleStage(context.Background(), UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED, 100*time.Millisecond)
+						if err != nil {
+							complCh <- err
+							return
+						}
+						complCh <- status.Outcome
+					}()
+
 					err := accept(t, store, upd)
 					require.NoError(t, err)
 
@@ -523,6 +542,12 @@ func TestUpdateState(t *testing.T) {
 					// apply pending effect
 					effects.Apply(context.Background())
 					require.True(t, completed, "update state should now be completed")
+
+					// ensure both waiter received completed response
+					accptWaiterRes := <-accptCh
+					complWaiterRes := <-complCh
+					require.EqualExportedValues(t, successOutcome, accptWaiterRes)
+					require.EqualExportedValues(t, successOutcome, complWaiterRes)
 
 					// new waiter receives same response
 					assertCompleted(t, upd, successOutcome)

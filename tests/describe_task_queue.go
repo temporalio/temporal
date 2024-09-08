@@ -34,9 +34,8 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
-	"google.golang.org/protobuf/types/known/durationpb"
-
 	"go.temporal.io/server/common/dynamicconfig"
+	"google.golang.org/protobuf/types/known/durationpb"
 )
 
 type (
@@ -209,19 +208,6 @@ func (s *DescribeTaskQueueSuite) publishConsumeWorkflowTasksValidateStats(workfl
 	expectedDispatchRate[enumspb.TASK_QUEUE_TYPE_ACTIVITY] = workflows > 0
 
 	s.validateDescribeTaskQueue(tqName, expectedBacklogCount, maxBacklogExtraTasks, expectedAddRate, expectedDispatchRate, isEnhancedMode)
-}
-
-func (s *DescribeTaskQueueSuite) isBacklogHeadCreateTimeCorrect(actualBacklogAge time.Duration, expectEmptyBacklog bool) bool {
-	return expectEmptyBacklog == (actualBacklogAge == time.Duration(0))
-}
-
-func (s *DescribeTaskQueueSuite) isAddDispatchTasksRateCorrect(
-	actualAddTasksRate float32, actualDispatchTasksRate float32, expectAddRate, expectDispatchRate bool) bool {
-	return expectDispatchRate == (actualDispatchTasksRate != 0) && (expectAddRate == (actualAddTasksRate != 0))
-}
-
-func (s *DescribeTaskQueueSuite) isBacklogCountCorrect(actualBacklogCounter int64, expectedBacklogCount int64) bool {
-	return actualBacklogCounter == expectedBacklogCount
 }
 
 func (s *DescribeTaskQueueSuite) validateDescribeTaskQueue(

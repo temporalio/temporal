@@ -25,20 +25,19 @@
 package replication
 
 import (
-	"go.temporal.io/server/common/persistence/serialization"
-	"go.temporal.io/server/service/history/replication/eventhandler"
-	wcache "go.temporal.io/server/service/history/workflow/cache"
-	"go.uber.org/fx"
-
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/persistence/serialization"
 	ctasks "go.temporal.io/server/common/tasks"
 	"go.temporal.io/server/common/xdc"
 	"go.temporal.io/server/service/history/configs"
+	"go.temporal.io/server/service/history/replication/eventhandler"
 	"go.temporal.io/server/service/history/shard"
+	wcache "go.temporal.io/server/service/history/workflow/cache"
+	"go.uber.org/fx"
 )
 
 type (

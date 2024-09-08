@@ -35,7 +35,6 @@ import (
 	"github.com/pborman/uuid"
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
-
 	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/finalizer"
@@ -181,7 +180,7 @@ func newCache(
 				return nil
 			})
 			if err != nil {
-				logger.Warn("cache failed to register callback in finalizer",
+				logger.Debug("cache failed to register callback in finalizer",
 					tag.Error(err), tag.ShardID(item.shardId))
 			}
 		},
@@ -194,7 +193,9 @@ func newCache(
 			wfKey := item.wfContext.GetWorkflowKey()
 			err := item.finalizer.Deregister(wfKey.String())
 			if err != nil {
-				logger.Warn("cache failed to de-register callback in finalizer",
+				// debug level since this is very common: the cache item was registered with a finalizer
+				// that has been finalized since then and is therefore no longer accepting any calls
+				logger.Debug("cache failed to de-register callback in finalizer",
 					tag.Error(err), tag.ShardID(item.shardId))
 			}
 		},

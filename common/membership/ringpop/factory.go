@@ -35,8 +35,6 @@ import (
 
 	"github.com/temporalio/ringpop-go"
 	"github.com/temporalio/tchannel-go"
-	"go.uber.org/fx"
-
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -49,6 +47,7 @@ import (
 	"go.temporal.io/server/common/rpc/encryption"
 	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/environment"
+	"go.uber.org/fx"
 )
 
 const (

@@ -249,7 +249,8 @@ func (r *resendHandlerImpl) replicateRemoteGeneratedEvents(
 	}
 	var eventsBatch [][]*historypb.HistoryEvent
 	var versionHistory []*historyspb.VersionHistoryItem
-	eventsVersion := common.EmptyVersion
+	const EmptyVersion = int64(-1) // 0 is a valid event version when namespace is local
+	eventsVersion := EmptyVersion
 	if headBatch != nil {
 		events, err := r.serializer.DeserializeEvents(headBatch.RawEventBatch)
 		if err != nil {
@@ -283,6 +284,7 @@ func (r *resendHandlerImpl) replicateRemoteGeneratedEvents(
 		}
 		eventsBatch = nil
 		versionHistory = nil
+		eventsVersion = EmptyVersion
 		return nil
 	}
 
@@ -305,7 +307,7 @@ func (r *resendHandlerImpl) replicateRemoteGeneratedEvents(
 		}
 		if len(eventsBatch) != 0 && len(versionHistory) != 0 {
 			if !versionhistory.IsEqualVersionHistoryItems(versionHistory, batch.VersionHistory.Items) ||
-				(eventsVersion != common.EmptyVersion && eventsVersion != events[0].Version) {
+				(eventsVersion != EmptyVersion && eventsVersion != events[0].Version) {
 				err := applyFn()
 				if err != nil {
 					return err
