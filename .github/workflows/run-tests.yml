@@ -33,10 +33,6 @@ on:
         description: "postgres12"
         type: boolean
         default: false
-#      postgres12_pgx:
-#        description: "postgres12_pgx"
-#        type: boolean
-#        default: false
       n_runs:
         description: "[Single Test Only] Number of times to repeat the single test per database type"
         type: number
@@ -55,16 +51,6 @@ on:
         options:
           - "16GB RAM (ubuntu-20.04)"
           - "64GB RAM (ubuntu-22.04)"
-#      db:
-#        description: "[Single Test Only] The DB to use for your tests"
-#        type: choice
-#        default: "sqlite"
-#        options:
-#          - cassandra
-#          - sqlite
-#          - mysql8
-#          - postgres12
-#          - postgres12_pgx
 
 
 concurrency: # Auto-cancel existing runs in the PR when a new commit is pushed
@@ -108,9 +94,9 @@ jobs:
 
       - run: GOOS=darwin GOARCH=arm64 make clean-bins bins
 
-#      - run: make clean-bins ci-build-misc (removed temporarily because ci-build-misc is broken)
-#
-#      - run: make build-tests
+      - run: make clean-bins ci-build-misc (removed temporarily because ci-build-misc is broken)
+
+      - run: make build-tests
 
   unit-test:
     if: ${{ inputs.run_single_functional_test != true }}
@@ -289,7 +275,7 @@ jobs:
       BUILDKITE_MESSAGE: "{\"job\": \"functional-test\", \"db\": \"${{ matrix.persistence_driver }}\"}"
     steps:
       - name: Print functional test
-        run: echo "${{ needs.set-up-functional-test.outputs.dbs }}"
+        run: echo "${{ needs.set-up-functional-test.outputs.dbs }}" && echo "$SINGLE_TEST_ARGS"
       - uses: ScribeMD/docker-cache@0.3.7
         if: ${{ inputs.run_single_functional_test != true || (inputs.run_single_functional_test == true && contains(fromJSON(needs.set-up-functional-test.outputs.dbs), env.PERSISTENCE_DRIVER)) }}
         with:
