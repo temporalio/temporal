@@ -198,6 +198,8 @@ func (s *resetterSuite) TestResetWorkflow_NoError() {
 		NewRunID:        s.newRunID,
 	}).Return(&persistence.ForkHistoryBranchResponse{NewBranchToken: newBranchToken}, nil)
 
+	s.mockRebuiltMutableState.EXPECT().RefreshExpirationTimeoutTask(gomock.Any()).Return(nil)
+
 	rebuiltMutableState, err := s.workflowResetter.resetWorkflow(
 		ctx,
 		now,

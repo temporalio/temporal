@@ -1060,6 +1060,8 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessWorkflowRunTimeout_Pendi
 	workflowType := "some random workflow type"
 	taskQueueName := "some random task queue"
 
+	workflowRunTimeout := 200 * time.Second
+
 	mutableState := workflow.TestGlobalMutableState(s.mockShard, s.mockShard.GetEventsCache(), s.logger, s.version, execution.GetWorkflowId(), execution.GetRunId())
 	_, err := mutableState.AddWorkflowExecutionStartedEvent(
 		execution,
@@ -1069,7 +1071,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessWorkflowRunTimeout_Pendi
 			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
 				WorkflowType:        &commonpb.WorkflowType{Name: workflowType},
 				TaskQueue:           &taskqueuepb.TaskQueue{Name: taskQueueName},
-				WorkflowRunTimeout:  durationpb.New(200 * time.Second),
+				WorkflowRunTimeout:  durationpb.New(workflowRunTimeout),
 				WorkflowTaskTimeout: durationpb.New(1 * time.Second),
 			},
 		},
@@ -1099,6 +1101,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessWorkflowRunTimeout_Pendi
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
 
 	s.mockShard.SetCurrentTime(s.clusterName, s.now)
+	s.timeSource.Advance(workflowRunTimeout + 1*time.Second)
 	resp := s.timerQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(timerTask))
 	s.Equal(consts.ErrTaskRetry, resp.ExecutionErr)
 

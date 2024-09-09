@@ -614,7 +614,7 @@ func (s *visibilityQueueTaskExecutorSuite) createVisibilityRequestBase(
 		Namespace:        namespaceName,
 		Execution:        execution,
 		WorkflowTypeName: executionInfo.WorkflowTypeName,
-		StartTime:        timestamp.TimeValue(executionInfo.GetStartTime()),
+		StartTime:        timestamp.TimeValue(mutableState.GetExecutionState().GetStartTime()),
 		Status:           mutableState.GetExecutionState().GetStatus(),
 		ExecutionTime:    timestamp.TimeValue(executionInfo.GetExecutionTime()),
 		TaskID:           task.GetTaskID(),

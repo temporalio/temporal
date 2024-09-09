@@ -27,7 +27,6 @@ package frontend
 import (
 	"context"
 	"slices"
-	"strings"
 	"testing"
 	"time"
 
@@ -69,6 +68,7 @@ type (
 		archivalMetadata        archiver.ArchivalMetadata
 		mockArchiverProvider    *provider.MockArchiverProvider
 		fakeClock               *clock.EventTimeSource
+		config                  *Config
 
 		handler *namespaceHandler
 	}
@@ -106,16 +106,16 @@ func (s *namespaceHandlerCommonSuite) SetupTest() {
 	)
 	s.mockArchiverProvider = provider.NewMockArchiverProvider(s.controller)
 	s.fakeClock = clock.NewEventTimeSource()
+	s.config = NewConfig(dc.NewNoopCollection(), 1024)
 	s.handler = newNamespaceHandler(
-		dc.GetIntPropertyFnFilteredByNamespace(s.maxBadBinaryCount),
 		logger,
 		s.mockMetadataMgr,
 		s.mockClusterMetadata,
 		s.mockNamespaceReplicator,
 		s.archivalMetadata,
 		s.mockArchiverProvider,
-		func(s string) bool { return strings.HasSuffix(s, "sched") },
 		s.fakeClock,
+		s.config,
 	)
 }
 
@@ -379,6 +379,45 @@ func (s *namespaceHandlerCommonSuite) TestListNamespace() {
 		s.Equal(expectedResult[name].GetReplicationConfig().GetState(), ns.GetReplicationConfig().GetState())
 		s.Equal(expectedResult[name].GetFailoverVersion(), ns.GetFailoverVersion())
 	}
+}
+
+func (s *namespaceHandlerCommonSuite) TestCapabilities() {
+	s.mockMetadataMgr.EXPECT().GetNamespace(gomock.Any(), &persistence.GetNamespaceRequest{
+		Name: "ns",
+	}).Return(
+		&persistence.GetNamespaceResponse{
+			Namespace: &persistencespb.NamespaceDetail{
+				Info: &persistencespb.NamespaceInfo{
+					Id: "id",
+				},
+				Config:            &persistencespb.NamespaceConfig{},
+				ReplicationConfig: &persistencespb.NamespaceReplicationConfig{},
+			},
+		}, nil,
+	).AnyTimes()
+
+	// First call: dynamic configs disabled.
+	resp, err := s.handler.DescribeNamespace(context.Background(), &workflowservice.DescribeNamespaceRequest{
+		Namespace: "ns",
+	})
+	s.NoError(err)
+
+	s.False(resp.NamespaceInfo.Capabilities.EagerWorkflowStart)
+	s.True(resp.NamespaceInfo.Capabilities.SyncUpdate)
+	s.True(resp.NamespaceInfo.Capabilities.AsyncUpdate)
+
+	s.config.EnableEagerWorkflowStart = dc.GetBoolPropertyFnFilteredByNamespace(true)
+	s.config.EnableUpdateWorkflowExecution = dc.GetBoolPropertyFnFilteredByNamespace(false)
+	s.config.EnableUpdateWorkflowExecutionAsyncAccepted = dc.GetBoolPropertyFnFilteredByNamespace(false)
+
+	// Second call: dynamic configs enabled.
+	resp, err = s.handler.DescribeNamespace(context.Background(), &workflowservice.DescribeNamespaceRequest{
+		Namespace: "ns",
+	})
+	s.NoError(err)
+	s.True(resp.NamespaceInfo.Capabilities.EagerWorkflowStart)
+	s.False(resp.NamespaceInfo.Capabilities.SyncUpdate)
+	s.False(resp.NamespaceInfo.Capabilities.AsyncUpdate)
 }
 
 func (s *namespaceHandlerCommonSuite) TestRegisterNamespace_WithOneCluster() {

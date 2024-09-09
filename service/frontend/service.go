@@ -201,6 +201,8 @@ type Config struct {
 	HistoryHostErrorPercentage dynamicconfig.FloatPropertyFn
 
 	LogAllReqErrors dynamicconfig.BoolPropertyFnWithNamespaceFilter
+
+	EnableEagerWorkflowStart dynamicconfig.BoolPropertyFnWithNamespaceFilter
 }
 
 // NewConfig returns new service config with default values
@@ -313,8 +315,8 @@ func NewConfig(
 		MaskInternalErrorDetails: dynamicconfig.FrontendMaskInternalErrorDetails.Get(dc),
 
 		HistoryHostErrorPercentage: dynamicconfig.HistoryHostErrorPercentage.Get(dc),
-
-		LogAllReqErrors: dynamicconfig.LogAllReqErrors.Get(dc),
+		LogAllReqErrors:            dynamicconfig.LogAllReqErrors.Get(dc),
+		EnableEagerWorkflowStart:   dynamicconfig.EnableEagerWorkflowStart.Get(dc),
 	}
 }
 

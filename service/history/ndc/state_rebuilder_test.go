@@ -375,6 +375,6 @@ func (s *stateRebuilderSuite) TestRebuild() {
 			[]*historyspb.VersionHistoryItem{versionhistory.NewVersionHistoryItem(lastEventID, version)},
 		),
 	), rebuildMutableState.GetExecutionInfo().GetVersionHistories())
-	s.Equal(timestamp.TimeValue(rebuildMutableState.GetExecutionInfo().StartTime), s.now)
+	s.Equal(timestamp.TimeValue(rebuildMutableState.GetExecutionState().StartTime), s.now)
 	s.Equal(expectedLastFirstTransactionID, rebuildExecutionInfo.LastFirstEventTxnId)
 }

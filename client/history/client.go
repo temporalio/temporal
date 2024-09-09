@@ -254,14 +254,19 @@ func (c *clientImpl) StreamWorkflowReplicationMessages(
 	if err != nil {
 		return nil, err
 	}
-	client, err := c.redirector.clientForShardID(targetClusterShardID.ShardID)
-	if err != nil {
+
+	var streamClient historyservice.HistoryService_StreamWorkflowReplicationMessagesClient
+	op := func(ctx context.Context, client historyservice.HistoryServiceClient) error {
+		var err error
+		streamClient, err = client.StreamWorkflowReplicationMessages(
+			metadata.NewOutgoingContext(ctx, ctxMetadata),
+			opts...)
+		return err
+	}
+	if err := c.executeWithRedirect(ctx, targetClusterShardID.ShardID, op); err != nil {
 		return nil, err
 	}
-	return client.StreamWorkflowReplicationMessages(
-		metadata.NewOutgoingContext(ctx, ctxMetadata),
-		opts...,
-	)
+	return streamClient, nil
 }
 
 // GetDLQTasks doesn't need redirects or routing because DLQ tasks are not sharded, so it just picks any available host

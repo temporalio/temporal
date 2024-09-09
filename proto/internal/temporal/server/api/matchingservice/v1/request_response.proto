@@ -203,6 +203,7 @@ message DescribeTaskQueuePartitionRequest {
     bool report_stats = 4;
     // Report list of pollers for requested task queue types and versions
     bool report_pollers = 5;
+    bool report_internal_task_queue_status = 6;
 }
 
 message DescribeTaskQueuePartitionResponse {
