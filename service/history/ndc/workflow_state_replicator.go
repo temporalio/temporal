@@ -226,6 +226,9 @@ func (r *WorkflowStateReplicatorImpl) SyncWorkflowState(
 		namespaceID,
 		wid,
 		rid,
+		// TODO: The original run id is in the workflow started history event but not in mutable state.
+		// Use the history tree id to be the original run id.
+		// https://github.com/temporalio/temporal/issues/6501
 		branchInfo.GetTreeId(),
 		lastEventItem.GetEventId(),
 		lastEventItem.GetVersion(),
@@ -280,13 +283,13 @@ func (r *WorkflowStateReplicatorImpl) backfillHistory(
 	namespaceID namespace.ID,
 	workflowID string,
 	runID string,
-	rootRunID string,
+	originalRunID string,
 	lastEventID int64,
 	lastEventVersion int64,
 	branchToken []byte,
 ) (taskID int64, retError error) {
 
-	if runID != rootRunID {
+	if runID != originalRunID {
 		// At this point, it already acquired the workflow lock on the run ID.
 		// Get the lock of root run id to make sure no concurrent backfill history across multiple runs.
 		_, rootRunReleaseFn, err := r.workflowCache.GetOrCreateWorkflowExecution(
@@ -295,7 +298,7 @@ func (r *WorkflowStateReplicatorImpl) backfillHistory(
 			namespaceID,
 			&commonpb.WorkflowExecution{
 				WorkflowId: workflowID,
-				RunId:      rootRunID,
+				RunId:      originalRunID,
 			},
 			locks.PriorityLow,
 		)
