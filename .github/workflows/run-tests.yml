@@ -94,7 +94,7 @@ jobs:
 
       - run: GOOS=darwin GOARCH=arm64 make clean-bins bins
 
-      - run: make clean-bins ci-build-misc (removed temporarily because ci-build-misc is broken)
+      - run: make clean-bins ci-build-misc
 
       - run: make build-tests
 
@@ -199,10 +199,10 @@ jobs:
               runs_on='["ubuntu-latest-16-cores"]'
             fi 
             dbs_arr=()
-            if [[ "${{ inputs.cassandra }}" == "true" ]]; then dbs_arr+="cassandra"; fi
-            if [[ "${{ inputs.sqlite }}" == "true" ]]; then dbs_arr+="sqlite"; fi
-            if [[ "${{ inputs.mysql8 }}" == "true" ]]; then dbs_arr+="mysql8"; fi
-            if [[ "${{ inputs.postgres12 }}" == "true" ]]; then dbs_arr+="postgres12"; fi
+            if [[ "${{ inputs.cassandra }}" == "true" ]]; then dbs_arr+=("cassandra"); fi
+            if [[ "${{ inputs.sqlite }}" == "true" ]]; then dbs_arr+=("sqlite"); fi
+            if [[ "${{ inputs.mysql8 }}" == "true" ]]; then dbs_arr+=("mysql8"); fi
+            if [[ "${{ inputs.postgres12 }}" == "true" ]]; then dbs_arr+=("postgres12"); fi
             if [[ ${#dbs_arr[@]} == 0 ]]; then
               dbs='["sqlite"]'
             else
@@ -220,7 +220,7 @@ jobs:
           } >> "$GITHUB_OUTPUT"
       - id: cat_output
         run: |
-          cat $GITHUB_OUTPUT
+          cat "$GITHUB_OUTPUT"
 
   functional-test:
     name: Functional test
