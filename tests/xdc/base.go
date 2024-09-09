@@ -167,11 +167,11 @@ func (s *xdcBaseSuite) setupSuite(clusterNames []string, opts ...tests.Option) {
 	time.Sleep(time.Millisecond * 200)
 }
 
-func (s *xdcBaseSuite) waitForClusterConnected(cluster *tests.TestCluster, source string, target string) {
+func (s *xdcBaseSuite) waitForClusterConnected(sourceCluster *tests.TestCluster, source string, target string) {
 	s.logger.Debug("wait for clusters to be synced", tag.SourceCluster(source), tag.TargetCluster(target))
 	s.EventuallyWithT(func(c *assert.CollectT) {
 		s.logger.Debug("check if replication tasks are replicated")
-		resp, err := cluster.GetHistoryClient().GetReplicationStatus(context.Background(), &historyservice.GetReplicationStatusRequest{})
+		resp, err := sourceCluster.GetHistoryClient().GetReplicationStatus(context.Background(), &historyservice.GetReplicationStatusRequest{})
 		s.logger.Debug("get replication status response", tag.Error(err))
 		s.logger.Debug("check 1")
 		if !(assert.NoError(c, err) &&
