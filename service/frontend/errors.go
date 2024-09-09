@@ -145,4 +145,5 @@ var (
 	errWorkerVersioningNotAllowed = serviceerror.NewPermissionDenied("Worker versioning is disabled on this namespace.", "")
 
 	errListHistoryTasksNotAllowed = serviceerror.NewPermissionDenied("ListHistoryTasks feature is disabled on this cluster.", "")
+	errBuildIDAsSearchAttribute   = serviceerror.NewInvalidArgument("BuildIds attribute can't be set in SearchAttributes")
 )
