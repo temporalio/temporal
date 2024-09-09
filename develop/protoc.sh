@@ -43,3 +43,11 @@ old=$api.old
 mkdir -p "$api"
 mv -f "$new"/temporal/server/api/* "$api"/
 rm -rf "$new" "$old"
+
+color "Generate external proto mocks..."
+$MOCKGEN -copyright_file LICENSE -package workflowservicemock \
+  -destination "$api"/workflowservicemock/v1/service_grpc.pb.mock.go \
+  go.temporal.io/api/workflowservice/v1 WorkflowServiceClient
+$MOCKGEN -copyright_file LICENSE -package operatorservicemock \
+  -destination "$api"/operatorservicemock/v1/service_grpc.pb.mock.go \
+  go.temporal.io/api/operatorservice/v1 OperatorServiceClient

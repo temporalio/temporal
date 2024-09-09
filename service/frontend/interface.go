@@ -22,9 +22,6 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-//go:generate mockgen -copyright_file ../../LICENSE -package workflowservicemock -destination ../../api/workflowservicemock/v1/service_grpc.pb.mock.go go.temporal.io/api/workflowservice/v1 WorkflowServiceClient
-//go:generate mockgen -copyright_file ../../LICENSE -package operatorservicemock -destination ../../api/operatorservicemock/v1/service_grpc.pb.mock.go go.temporal.io/api/operatorservice/v1 OperatorServiceClient
-
 package frontend
 
 import (

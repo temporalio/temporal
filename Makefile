@@ -9,7 +9,7 @@ bins: temporal-server temporal-cassandra-tool temporal-sql-tool tdbg
 all: clean proto bins check test
 
 # Used in CI
-ci-build-misc: print-go-version proto go-generate buf-breaking bins temporal-server-debug shell-check copyright-check goimports-all gomodtidy ensure-no-changes
+ci-build-misc: print-go-version proto buf-breaking bins temporal-server-debug shell-check copyright-check go-generate goimports-all gomodtidy ensure-no-changes
 
 # Delete all build artifacts
 clean: clean-bins clean-test-results
@@ -18,7 +18,7 @@ clean: clean-bins clean-test-results
 	rm -rf $(LOCALBIN)
 
 # Recompile proto files.
-proto: lint-protos lint-api protoc service-clients
+proto: lint-protos lint-api protoc service-clients go-generate
 ########################################################################
 
 .PHONY: proto protoc install bins ci-build-misc clean

@@ -289,7 +289,7 @@ func (mr *MockAdminServiceClientMockRecorder) DescribeMutableState(ctx, in any, 
 // DescribeTaskQueuePartition mocks base method.
 func (m *MockAdminServiceClient) DescribeTaskQueuePartition(ctx context.Context, in *adminservice.DescribeTaskQueuePartitionRequest, opts ...grpc.CallOption) (*adminservice.DescribeTaskQueuePartitionResponse, error) {
 	m.ctrl.T.Helper()
-	varargs := []interface{}{ctx, in}
+	varargs := []any{ctx, in}
 	for _, a := range opts {
 		varargs = append(varargs, a)
 	}
@@ -300,9 +300,9 @@ func (m *MockAdminServiceClient) DescribeTaskQueuePartition(ctx context.Context,
 }
 
 // DescribeTaskQueuePartition indicates an expected call of DescribeTaskQueuePartition.
-func (mr *MockAdminServiceClientMockRecorder) DescribeTaskQueuePartition(ctx, in interface{}, opts ...interface{}) *gomock.Call {
+func (mr *MockAdminServiceClientMockRecorder) DescribeTaskQueuePartition(ctx, in any, opts ...any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	varargs := append([]interface{}{ctx, in}, opts...)
+	varargs := append([]any{ctx, in}, opts...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DescribeTaskQueuePartition", reflect.TypeOf((*MockAdminServiceClient)(nil).DescribeTaskQueuePartition), varargs...)
 }
 
@@ -1201,7 +1201,7 @@ func (m *MockAdminServiceServer) DescribeTaskQueuePartition(arg0 context.Context
 }
 
 // DescribeTaskQueuePartition indicates an expected call of DescribeTaskQueuePartition.
-func (mr *MockAdminServiceServerMockRecorder) DescribeTaskQueuePartition(arg0, arg1 interface{}) *gomock.Call {
+func (mr *MockAdminServiceServerMockRecorder) DescribeTaskQueuePartition(arg0, arg1 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DescribeTaskQueuePartition", reflect.TypeOf((*MockAdminServiceServer)(nil).DescribeTaskQueuePartition), arg0, arg1)
 }
