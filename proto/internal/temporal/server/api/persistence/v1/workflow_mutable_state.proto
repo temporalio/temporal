@@ -63,25 +63,16 @@ message WorkflowMutableStateMutation{
     map<string, UpdateInfo> updated_update_infos = 6;
     repeated StateMachineNodeMutation updated_sub_state_machines = 7;
 
-    // The following deleted_* fields are computed based on the
-    // sub_state_machine_tombstone_batches field of mutable state.
-    repeated int64 deleted_activities = 8;
-    repeated string deleted_timers = 9;
-    repeated int64 deleted_child_execution_infos = 10;
-    repeated int64 deleted_request_cancel_infos = 11;
-    repeated int64 deleted_signal_infos = 12;
-    repeated string deleted_update_infos = 13;
-    repeated StateMachinePath deleted_sub_state_machines = 14;
-    repeated StateMachineTombstoneBatch sub_state_machine_tombstone_batches = 15;
+    repeated StateMachineTombstoneBatch sub_state_machine_tombstone_batches = 8;
     
-    repeated string signal_requested_ids = 16;
+    repeated string signal_requested_ids = 9;
     // Partial WorkflowExecutionInfo. Some fields, such as
     // update_infos and sub_state_machines_by_type, are not populated here.
     // Instead, only diffs are synced in the sub_state_machine_tombstone_batches and updated_* fields above.
-    WorkflowExecutionInfo execution_info = 17;
-    WorkflowExecutionState execution_state = 18;
+    WorkflowExecutionInfo execution_info = 10;
+    WorkflowExecutionState execution_state = 11;
 
     // TODO: uncomment buffered_events field when we are ready to replicate
     // mutable state as well.
-    // repeated temporal.api.history.v1.HistoryEvent buffered_events = 18;
+    // repeated temporal.api.history.v1.HistoryEvent buffered_events = 12;
 }
