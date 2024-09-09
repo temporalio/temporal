@@ -37,7 +37,7 @@ const (
 	AbortReasonWorkflowCompleted
 )
 
-// Error returns an error which will be set to update futures while aborting waiters.
+// Error returns an error which will be set to Update futures while aborting waiters.
 func (r AbortReason) Error() error {
 	switch r {
 	case AbortReasonRegistryCleared:

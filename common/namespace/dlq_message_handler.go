@@ -30,7 +30,6 @@ import (
 	"context"
 
 	"go.temporal.io/api/serviceerror"
-
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"

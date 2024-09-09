@@ -30,7 +30,6 @@ import (
 
 	"github.com/pborman/uuid"
 	"go.temporal.io/api/serviceerror"
-
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log"
@@ -153,6 +152,10 @@ func (r *resetterImpl) resetWorkflow(
 		return nil, err
 	}
 	rebuildMutableState.AddHistorySize(rebuiltHistorySize)
+
+	if err := rebuildMutableState.RefreshExpirationTimeoutTask(ctx); err != nil {
+		return nil, err
+	}
 
 	r.newContext.Clear()
 	return rebuildMutableState, nil

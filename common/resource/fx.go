@@ -31,12 +31,7 @@ import (
 	"os"
 	"time"
 
-	"go.uber.org/fx"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/health"
-
 	"go.temporal.io/api/workflowservice/v1"
-
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/client"
@@ -56,6 +51,7 @@ import (
 	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/namespace/nsregistry"
 	"go.temporal.io/server/common/persistence"
 	persistenceClient "go.temporal.io/server/common/persistence/client"
 	"go.temporal.io/server/common/persistence/serialization"
@@ -68,6 +64,9 @@ import (
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/telemetry"
 	"go.temporal.io/server/common/utf8validator"
+	"go.uber.org/fx"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/health"
 )
 
 type (
@@ -104,7 +103,7 @@ var Module = fx.Options(
 	fx.Provide(SearchAttributeProviderProvider),
 	fx.Provide(SearchAttributeManagerProvider),
 	fx.Provide(NamespaceRegistryProvider),
-	namespace.RegistryLifetimeHooksModule,
+	nsregistry.RegistryLifetimeHooksModule,
 	fx.Provide(fx.Annotate(
 		func(p namespace.Registry) pingable.Pingable { return p },
 		fx.ResultTags(`group:"deadlockDetectorRoots"`),
@@ -212,7 +211,7 @@ func NamespaceRegistryProvider(
 	metadataManager persistence.MetadataManager,
 	dynamicCollection *dynamicconfig.Collection,
 ) namespace.Registry {
-	return namespace.NewRegistry(
+	return nsregistry.NewRegistry(
 		metadataManager,
 		clusterMetadata.IsGlobalNamespaceEnabled(),
 		dynamicconfig.NamespaceCacheRefreshInterval.Get(dynamicCollection),
@@ -364,7 +363,7 @@ func SdkClientFactoryProvider(
 	tlsConfigProvider encryption.TLSConfigProvider,
 	metricsHandler metrics.Handler,
 	logger log.SnTaggedLogger,
-	resolver membership.GRPCResolver,
+	resolver *membership.GRPCResolver,
 	dc *dynamicconfig.Collection,
 ) (sdk.ClientFactory, error) {
 	frontendURL, _, _, frontendTLSConfig, err := getFrontendConnectionDetails(cfg, tlsConfigProvider, resolver)
@@ -389,7 +388,7 @@ func RPCFactoryProvider(
 	svcName primitives.ServiceName,
 	logger log.Logger,
 	tlsConfigProvider encryption.TLSConfigProvider,
-	resolver membership.GRPCResolver,
+	resolver *membership.GRPCResolver,
 	traceInterceptor telemetry.ClientTraceInterceptor,
 	monitor membership.Monitor,
 ) (common.RPCFactory, error) {
@@ -424,13 +423,11 @@ func FrontendHTTPClientCacheProvider(
 func getFrontendConnectionDetails(
 	cfg *config.Config,
 	tlsConfigProvider encryption.TLSConfigProvider,
-	resolver membership.GRPCResolver,
+	resolver *membership.GRPCResolver,
 ) (string, string, int, *tls.Config, error) {
 	// To simplify the static config, we switch default values based on whether the config
 	// defines an "internal-frontend" service. The default for TLS config can be overridden
-	// with publicClient.forceTLSConfig, and the default for hostPort can be overridden by
-	// explicitly setting hostPort to "membership://internal-frontend" or
-	// "membership://frontend".
+	// with publicClient.forceTLSConfig.
 	_, hasIFE := cfg.Services[string(primitives.InternalFrontendService)]
 
 	forceTLS := cfg.PublicClient.ForceTLSConfig
@@ -459,19 +456,18 @@ func getFrontendConnectionDetails(
 	frontendURL := cfg.PublicClient.HostPort
 	if frontendURL == "" {
 		if hasIFE {
-			frontendURL = membership.MakeResolverURL(primitives.InternalFrontendService)
+			frontendURL = resolver.MakeURL(primitives.InternalFrontendService)
 		} else {
-			frontendURL = membership.MakeResolverURL(primitives.FrontendService)
+			frontendURL = resolver.MakeURL(primitives.FrontendService)
 		}
 	}
 	frontendHTTPURL := cfg.PublicClient.HTTPHostPort
 	if frontendHTTPURL == "" {
 		if hasIFE {
-			frontendHTTPURL = membership.MakeResolverURL(primitives.InternalFrontendService)
+			frontendHTTPURL = resolver.MakeURL(primitives.InternalFrontendService)
 		} else {
-			frontendHTTPURL = membership.MakeResolverURL(primitives.FrontendService)
+			frontendHTTPURL = resolver.MakeURL(primitives.FrontendService)
 		}
-
 	}
 
 	var frontendHTTPPort int

@@ -83,6 +83,16 @@ func (c *clientImpl) CloseShard(
 	return c.client.CloseShard(ctx, request, opts...)
 }
 
+func (c *clientImpl) DeepHealthCheck(
+	ctx context.Context,
+	request *adminservice.DeepHealthCheckRequest,
+	opts ...grpc.CallOption,
+) (*adminservice.DeepHealthCheckResponse, error) {
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return c.client.DeepHealthCheck(ctx, request, opts...)
+}
+
 func (c *clientImpl) DeleteWorkflowExecution(
 	ctx context.Context,
 	request *adminservice.DeleteWorkflowExecutionRequest,
@@ -131,6 +141,16 @@ func (c *clientImpl) DescribeMutableState(
 	ctx, cancel := c.createContext(ctx)
 	defer cancel()
 	return c.client.DescribeMutableState(ctx, request, opts...)
+}
+
+func (c *clientImpl) DescribeTaskQueuePartition(
+	ctx context.Context,
+	request *adminservice.DescribeTaskQueuePartitionRequest,
+	opts ...grpc.CallOption,
+) (*adminservice.DescribeTaskQueuePartitionResponse, error) {
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return c.client.DescribeTaskQueuePartition(ctx, request, opts...)
 }
 
 func (c *clientImpl) GetDLQMessages(

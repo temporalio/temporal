@@ -30,14 +30,13 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
 	"go.temporal.io/api/serviceerror"
-	"google.golang.org/protobuf/proto"
-	"google.golang.org/protobuf/types/known/timestamppb"
-
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/service/history/hsm"
+	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 const (
@@ -96,19 +95,21 @@ func (c Callback) RegenerateTasks(*hsm.Node) ([]hsm.Task, error) {
 	case enumsspb.CALLBACK_STATE_BACKING_OFF:
 		return []hsm.Task{BackoffTask{Deadline: c.NextAttemptScheduleTime.AsTime()}}, nil
 	case enumsspb.CALLBACK_STATE_SCHEDULED:
-		var baseURL string
 		switch v := c.Callback.GetVariant().(type) {
 		case *persistencespb.Callback_Nexus_:
+			var baseURL string
 			u, err := url.Parse(c.Callback.GetNexus().Url)
 			if err != nil {
 				return nil, fmt.Errorf("failed to parse URL: %v: %w", &c, err)
 			}
 			baseURL = u.Scheme + "://" + u.Host
+			return []hsm.Task{InvocationTask{Destination: baseURL}}, nil
+		case *persistencespb.Callback_Hsm:
+			return []hsm.Task{InvocationTask{Destination: ""}}, nil
+
 		default:
 			return nil, fmt.Errorf("unsupported callback variant %v", v) // nolint:goerr113
 		}
-
-		return []hsm.Task{InvocationTask{Destination: baseURL}}, nil
 	}
 	return nil, nil
 }

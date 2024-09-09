@@ -26,6 +26,7 @@ import (
 	"fmt"
 	"time"
 
+	"go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/hsm"
 )
@@ -58,6 +59,9 @@ func (TimeoutTask) Concurrent() bool {
 
 // Validate checks if the timeout task is still valid to execute for the given node state.
 func (t TimeoutTask) Validate(node *hsm.Node) error {
+	if err := node.CheckRunning(); err != nil {
+		return err
+	}
 	op, err := hsm.MachineData[Operation](node)
 	if err != nil {
 		return err
@@ -101,7 +105,25 @@ func (t InvocationTask) Kind() hsm.TaskKind {
 }
 
 func (InvocationTask) Concurrent() bool {
-	return false
+	return true
+}
+
+func (t InvocationTask) Validate(node *hsm.Node) error {
+	if err := node.CheckRunning(); err != nil {
+		return err
+	}
+	op, err := hsm.MachineData[Operation](node)
+	if err != nil {
+		return err
+	}
+	if op.State() != enums.NEXUS_OPERATION_STATE_SCHEDULED {
+		return fmt.Errorf(
+			"%w: operation is not in Scheduled state, current state: %v",
+			consts.ErrStaleReference,
+			op.State(),
+		)
+	}
+	return nil
 }
 
 type InvocationTaskSerializer struct{}
@@ -132,7 +154,25 @@ func (t BackoffTask) Kind() hsm.TaskKind {
 }
 
 func (BackoffTask) Concurrent() bool {
-	return false
+	return true
+}
+
+func (t BackoffTask) Validate(node *hsm.Node) error {
+	if err := node.CheckRunning(); err != nil {
+		return err
+	}
+	op, err := hsm.MachineData[Operation](node)
+	if err != nil {
+		return err
+	}
+	if op.State() != enums.NEXUS_OPERATION_STATE_BACKING_OFF {
+		return fmt.Errorf(
+			"%w: operation is not in BackingOff state, current state: %v",
+			consts.ErrStaleReference,
+			op.State(),
+		)
+	}
+	return nil
 }
 
 type BackoffTaskSerializer struct{}

@@ -26,6 +26,7 @@ package batcher
 
 import (
 	"context"
+	"slices"
 	"testing"
 	"time"
 	"unicode"
@@ -39,8 +40,6 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/api/workflowservicemock/v1"
 	"go.temporal.io/sdk/testsuite"
-	"golang.org/x/exp/slices"
-
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/primitives/timestamp"
 )
@@ -59,6 +58,7 @@ func (s *activitiesSuite) SetupTest() {
 
 	s.mockFrontendClient = workflowservicemock.NewMockWorkflowServiceClient(s.controller)
 }
+
 func TestActivitiesSuite(t *testing.T) {
 	suite.Run(t, new(activitiesSuite))
 }
@@ -208,7 +208,7 @@ func (s *activitiesSuite) TestGetResetPoint() {
 		{
 			name: "not found",
 			points: []*workflowpb.ResetPointInfo{
-				&workflowpb.ResetPointInfo{
+				{
 					BuildId:                      "build1",
 					RunId:                        "run1",
 					FirstWorkflowTaskCompletedId: 123,
@@ -221,7 +221,7 @@ func (s *activitiesSuite) TestGetResetPoint() {
 		{
 			name: "found",
 			points: []*workflowpb.ResetPointInfo{
-				&workflowpb.ResetPointInfo{
+				{
 					BuildId:                      "build1",
 					RunId:                        "run1",
 					FirstWorkflowTaskCompletedId: 123,
@@ -234,7 +234,7 @@ func (s *activitiesSuite) TestGetResetPoint() {
 		{
 			name: "not resettable",
 			points: []*workflowpb.ResetPointInfo{
-				&workflowpb.ResetPointInfo{
+				{
 					BuildId:                      "build1",
 					RunId:                        "run1",
 					FirstWorkflowTaskCompletedId: 123,
@@ -247,7 +247,7 @@ func (s *activitiesSuite) TestGetResetPoint() {
 		{
 			name: "from another run",
 			points: []*workflowpb.ResetPointInfo{
-				&workflowpb.ResetPointInfo{
+				{
 					BuildId:                      "build1",
 					RunId:                        "run0",
 					FirstWorkflowTaskCompletedId: 34,
@@ -261,7 +261,7 @@ func (s *activitiesSuite) TestGetResetPoint() {
 		{
 			name: "from another run but not allowed",
 			points: []*workflowpb.ResetPointInfo{
-				&workflowpb.ResetPointInfo{
+				{
 					BuildId:                      "build1",
 					RunId:                        "run0",
 					FirstWorkflowTaskCompletedId: 34,
@@ -275,7 +275,7 @@ func (s *activitiesSuite) TestGetResetPoint() {
 		{
 			name: "expired",
 			points: []*workflowpb.ResetPointInfo{
-				&workflowpb.ResetPointInfo{
+				{
 					BuildId:                      "build1",
 					RunId:                        "run1",
 					FirstWorkflowTaskCompletedId: 123,

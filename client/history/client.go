@@ -34,19 +34,18 @@ import (
 	"sync/atomic"
 	"time"
 
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/metadata"
-
 	"go.temporal.io/api/serviceerror"
-
 	"go.temporal.io/server/api/historyservice/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/debug"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/membership"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/metadata"
 )
 
 var (
@@ -100,6 +99,10 @@ func NewClient(
 		timeout:         timeout,
 		tokenSerializer: common.NewProtoTaskTokenSerializer(),
 	}
+}
+
+func (c *clientImpl) DeepHealthCheck(ctx context.Context, request *historyservice.DeepHealthCheckRequest, opts ...grpc.CallOption) (*historyservice.DeepHealthCheckResponse, error) {
+	return c.connections.getOrCreateClientConn(rpcAddress(request.GetHostAddress())).historyClient.DeepHealthCheck(ctx, request, opts...)
 }
 
 func (c *clientImpl) DescribeHistoryHost(
@@ -247,18 +250,23 @@ func (c *clientImpl) StreamWorkflowReplicationMessages(
 	if !ok {
 		return nil, serviceerror.NewInvalidArgument("missing cluster & shard ID metadata")
 	}
-	_, targetClusterShardID, err := DecodeClusterShardMD(ctxMetadata)
+	_, targetClusterShardID, err := DecodeClusterShardMD(headers.NewGRPCHeaderGetter(ctx))
 	if err != nil {
 		return nil, err
 	}
-	client, err := c.redirector.clientForShardID(targetClusterShardID.ShardID)
-	if err != nil {
+
+	var streamClient historyservice.HistoryService_StreamWorkflowReplicationMessagesClient
+	op := func(ctx context.Context, client historyservice.HistoryServiceClient) error {
+		var err error
+		streamClient, err = client.StreamWorkflowReplicationMessages(
+			metadata.NewOutgoingContext(ctx, ctxMetadata),
+			opts...)
+		return err
+	}
+	if err := c.executeWithRedirect(ctx, targetClusterShardID.ShardID, op); err != nil {
 		return nil, err
 	}
-	return client.StreamWorkflowReplicationMessages(
-		metadata.NewOutgoingContext(ctx, ctxMetadata),
-		opts...,
-	)
+	return streamClient, nil
 }
 
 // GetDLQTasks doesn't need redirects or routing because DLQ tasks are not sharded, so it just picks any available host

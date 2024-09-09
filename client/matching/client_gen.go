@@ -47,6 +47,7 @@ func (c *clientImpl) ApplyTaskQueueUserDataReplicationEvent(
 	if err != nil {
 		return nil, err
 	}
+
 	client, err := c.getClientForTaskQueuePartition(p)
 	if err != nil {
 		return nil, err
@@ -66,6 +67,7 @@ func (c *clientImpl) CancelOutstandingPoll(
 	if err != nil {
 		return nil, err
 	}
+
 	client, err := c.getClientForTaskQueuePartition(p)
 	if err != nil {
 		return nil, err
@@ -85,6 +87,7 @@ func (c *clientImpl) CreateNexusEndpoint(
 	if err != nil {
 		return nil, err
 	}
+
 	client, err := c.getClientForTaskQueuePartition(p)
 	if err != nil {
 		return nil, err
@@ -104,6 +107,7 @@ func (c *clientImpl) DeleteNexusEndpoint(
 	if err != nil {
 		return nil, err
 	}
+
 	client, err := c.getClientForTaskQueuePartition(p)
 	if err != nil {
 		return nil, err
@@ -123,6 +127,7 @@ func (c *clientImpl) DescribeTaskQueue(
 	if err != nil {
 		return nil, err
 	}
+
 	client, err := c.getClientForTaskQueuePartition(p)
 	if err != nil {
 		return nil, err
@@ -138,10 +143,8 @@ func (c *clientImpl) DescribeTaskQueuePartition(
 	opts ...grpc.CallOption,
 ) (*matchingservice.DescribeTaskQueuePartitionResponse, error) {
 
-	p, err := tqid.NormalPartitionFromRpcName(request.GetTaskQueuePartition().GetTaskQueue(), request.GetNamespaceId(), request.GetTaskQueuePartition().GetTaskQueueType())
-	if err != nil {
-		return nil, err
-	}
+	p := tqid.PartitionFromPartitionProto(request.GetTaskQueuePartition(), request.GetNamespaceId())
+
 	client, err := c.getClientForTaskQueuePartition(p)
 	if err != nil {
 		return nil, err
@@ -161,6 +164,7 @@ func (c *clientImpl) DispatchNexusTask(
 	if err != nil {
 		return nil, err
 	}
+
 	client, err := c.getClientForTaskQueuePartition(p)
 	if err != nil {
 		return nil, err
@@ -168,6 +172,23 @@ func (c *clientImpl) DispatchNexusTask(
 	ctx, cancel := c.createContext(ctx)
 	defer cancel()
 	return client.DispatchNexusTask(ctx, request, opts...)
+}
+
+func (c *clientImpl) ForceLoadTaskQueuePartition(
+	ctx context.Context,
+	request *matchingservice.ForceLoadTaskQueuePartitionRequest,
+	opts ...grpc.CallOption,
+) (*matchingservice.ForceLoadTaskQueuePartitionResponse, error) {
+
+	p := tqid.PartitionFromPartitionProto(request.GetTaskQueuePartition(), request.GetNamespaceId())
+
+	client, err := c.getClientForTaskQueuePartition(p)
+	if err != nil {
+		return nil, err
+	}
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return client.ForceLoadTaskQueuePartition(ctx, request, opts...)
 }
 
 func (c *clientImpl) ForceUnloadTaskQueue(
@@ -180,6 +201,7 @@ func (c *clientImpl) ForceUnloadTaskQueue(
 	if err != nil {
 		return nil, err
 	}
+
 	client, err := c.getClientForTaskQueuePartition(p)
 	if err != nil {
 		return nil, err
@@ -199,6 +221,7 @@ func (c *clientImpl) GetBuildIdTaskQueueMapping(
 	if err != nil {
 		return nil, err
 	}
+
 	client, err := c.getClientForTaskQueuePartition(p)
 	if err != nil {
 		return nil, err
@@ -218,6 +241,7 @@ func (c *clientImpl) GetTaskQueueUserData(
 	if err != nil {
 		return nil, err
 	}
+
 	client, err := c.getClientForTaskQueuePartition(p)
 	if err != nil {
 		return nil, err
@@ -237,6 +261,7 @@ func (c *clientImpl) GetWorkerBuildIdCompatibility(
 	if err != nil {
 		return nil, err
 	}
+
 	client, err := c.getClientForTaskQueuePartition(p)
 	if err != nil {
 		return nil, err
@@ -256,6 +281,7 @@ func (c *clientImpl) GetWorkerVersioningRules(
 	if err != nil {
 		return nil, err
 	}
+
 	client, err := c.getClientForTaskQueuePartition(p)
 	if err != nil {
 		return nil, err
@@ -275,6 +301,7 @@ func (c *clientImpl) ListNexusEndpoints(
 	if err != nil {
 		return nil, err
 	}
+
 	client, err := c.getClientForTaskQueuePartition(p)
 	if err != nil {
 		return nil, err
@@ -294,6 +321,7 @@ func (c *clientImpl) ListTaskQueuePartitions(
 	if err != nil {
 		return nil, err
 	}
+
 	client, err := c.getClientForTaskQueuePartition(p)
 	if err != nil {
 		return nil, err
@@ -313,6 +341,7 @@ func (c *clientImpl) PollNexusTaskQueue(
 	if err != nil {
 		return nil, err
 	}
+
 	client, err := c.getClientForTaskQueuePartition(p)
 	if err != nil {
 		return nil, err
@@ -332,6 +361,7 @@ func (c *clientImpl) ReplicateTaskQueueUserData(
 	if err != nil {
 		return nil, err
 	}
+
 	client, err := c.getClientForTaskQueuePartition(p)
 	if err != nil {
 		return nil, err
@@ -351,6 +381,7 @@ func (c *clientImpl) RespondNexusTaskCompleted(
 	if err != nil {
 		return nil, err
 	}
+
 	client, err := c.getClientForTaskQueuePartition(p)
 	if err != nil {
 		return nil, err
@@ -370,6 +401,7 @@ func (c *clientImpl) RespondNexusTaskFailed(
 	if err != nil {
 		return nil, err
 	}
+
 	client, err := c.getClientForTaskQueuePartition(p)
 	if err != nil {
 		return nil, err
@@ -389,6 +421,7 @@ func (c *clientImpl) RespondQueryTaskCompleted(
 	if err != nil {
 		return nil, err
 	}
+
 	client, err := c.getClientForTaskQueuePartition(p)
 	if err != nil {
 		return nil, err
@@ -408,6 +441,7 @@ func (c *clientImpl) UpdateNexusEndpoint(
 	if err != nil {
 		return nil, err
 	}
+
 	client, err := c.getClientForTaskQueuePartition(p)
 	if err != nil {
 		return nil, err
@@ -427,6 +461,7 @@ func (c *clientImpl) UpdateTaskQueueUserData(
 	if err != nil {
 		return nil, err
 	}
+
 	client, err := c.getClientForTaskQueuePartition(p)
 	if err != nil {
 		return nil, err
@@ -446,6 +481,7 @@ func (c *clientImpl) UpdateWorkerBuildIdCompatibility(
 	if err != nil {
 		return nil, err
 	}
+
 	client, err := c.getClientForTaskQueuePartition(p)
 	if err != nil {
 		return nil, err
@@ -465,6 +501,7 @@ func (c *clientImpl) UpdateWorkerVersioningRules(
 	if err != nil {
 		return nil, err
 	}
+
 	client, err := c.getClientForTaskQueuePartition(p)
 	if err != nil {
 		return nil, err

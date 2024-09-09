@@ -193,7 +193,7 @@ func newQueueBase(
 
 		slices := make([]Slice, 0, len(scopes))
 		for _, scope := range scopes {
-			slices = append(slices, NewSlice(paginationFnProvider, executableFactory, monitor, scope, grouper))
+			slices = append(slices, NewSlice(paginationFnProvider, executableFactory, monitor, scope, grouper, options.ReaderOptions.MaxPredicateSize))
 		}
 		readerGroup.NewReader(readerID, slices...)
 
@@ -281,6 +281,7 @@ func (p *queueBase) processNewRange() {
 			p.monitor,
 			newReadScope,
 			p.grouper,
+			p.options.ReaderOptions.MaxPredicateSize,
 		))
 	}
 

@@ -30,12 +30,10 @@ import (
 	failurepb "go.temporal.io/api/failure/v1"
 )
 
-// Errors.
 var (
 	registryClearedErr = errors.New("update registry was cleared")
 )
 
-// Failures.
 var (
 	unprocessedUpdateFailure = &failurepb.Failure{
 		Message: "Workflow Update is rejected because it wasn't processed by worker. Probably, Workflow Update is not supported by the worker.",

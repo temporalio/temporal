@@ -29,14 +29,13 @@ package ndc
 import (
 	"context"
 	"fmt"
+	"slices"
 	"sort"
 	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
-	"golang.org/x/exp/slices"
-
 	"go.temporal.io/server/api/adminservice/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
@@ -258,8 +257,8 @@ func (r *WorkflowStateReplicatorImpl) SyncWorkflowState(
 		return err
 	}
 
-	taskRefresh := workflow.NewTaskRefresher(r.shardContext, r.logger)
-	err = taskRefresh.RefreshTasks(ctx, mutableState)
+	taskRefresher := workflow.NewTaskRefresher(r.shardContext)
+	err = taskRefresher.Refresh(ctx, mutableState)
 	if err != nil {
 		return err
 	}

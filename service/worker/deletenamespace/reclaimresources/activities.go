@@ -28,7 +28,6 @@ import (
 	"context"
 
 	"go.temporal.io/sdk/activity"
-
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"

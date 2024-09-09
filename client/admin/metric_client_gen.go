@@ -103,6 +103,20 @@ func (c *metricClient) CloseShard(
 	return c.client.CloseShard(ctx, request, opts...)
 }
 
+func (c *metricClient) DeepHealthCheck(
+	ctx context.Context,
+	request *adminservice.DeepHealthCheckRequest,
+	opts ...grpc.CallOption,
+) (_ *adminservice.DeepHealthCheckResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, "AdminClientDeepHealthCheck")
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.DeepHealthCheck(ctx, request, opts...)
+}
+
 func (c *metricClient) DeleteWorkflowExecution(
 	ctx context.Context,
 	request *adminservice.DeleteWorkflowExecutionRequest,
@@ -171,6 +185,20 @@ func (c *metricClient) DescribeMutableState(
 	}()
 
 	return c.client.DescribeMutableState(ctx, request, opts...)
+}
+
+func (c *metricClient) DescribeTaskQueuePartition(
+	ctx context.Context,
+	request *adminservice.DescribeTaskQueuePartitionRequest,
+	opts ...grpc.CallOption,
+) (_ *adminservice.DescribeTaskQueuePartitionResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, "AdminClientDescribeTaskQueuePartition")
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.DescribeTaskQueuePartition(ctx, request, opts...)
 }
 
 func (c *metricClient) GetDLQMessages(

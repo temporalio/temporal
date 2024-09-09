@@ -40,11 +40,6 @@ import (
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/urfave/cli/v2"
-	"go.uber.org/atomic"
-	"go.uber.org/fx"
-	"google.golang.org/protobuf/encoding/protojson"
-	"google.golang.org/protobuf/proto"
-
 	enumspb "go.temporal.io/api/enums/v1"
 	sdkclient "go.temporal.io/sdk/client"
 	sdkworker "go.temporal.io/sdk/worker"
@@ -65,6 +60,10 @@ import (
 	"go.temporal.io/server/tests/testutils"
 	"go.temporal.io/server/tools/tdbg"
 	"go.temporal.io/server/tools/tdbg/tdbgtest"
+	"go.uber.org/atomic"
+	"go.uber.org/fx"
+	"google.golang.org/protobuf/encoding/protojson"
+	"google.golang.org/protobuf/proto"
 )
 
 type (
@@ -272,7 +271,6 @@ func (s *DLQSuite) TestReadArtificialDLQTasks() {
 				"tdbg",
 				"--" + tdbg.FlagYes,
 				"dlq",
-				"--" + tdbg.FlagDLQVersion, "v2",
 				"read",
 				"--" + tdbg.FlagDLQType, strconv.Itoa(tasks.CategoryTransfer.ID()),
 				"--" + tdbg.FlagCluster, sourceCluster,
@@ -525,7 +523,6 @@ func (s *DLQSuite) purgeMessages(ctx context.Context, maxMessageIDToDelete int64
 		"tdbg",
 		"--" + tdbg.FlagYes,
 		"dlq",
-		"--" + tdbg.FlagDLQVersion, "v2",
 		"purge",
 		"--" + tdbg.FlagDLQType, strconv.Itoa(tasks.CategoryTransfer.ID()),
 		"--" + tdbg.FlagLastMessageID, strconv.FormatInt(maxMessageIDToDelete, 10),
@@ -569,7 +566,6 @@ func (s *DLQSuite) mergeMessagesWithoutBlocking(ctx context.Context, maxMessageI
 		"tdbg",
 		"--" + tdbg.FlagYes,
 		"dlq",
-		"--" + tdbg.FlagDLQVersion, "v2",
 		"merge",
 		"--" + tdbg.FlagDLQType, strconv.Itoa(tasks.CategoryTransfer.ID()),
 		"--" + tdbg.FlagLastMessageID, strconv.FormatInt(maxMessageID, 10),
@@ -595,7 +591,6 @@ func (s *DLQSuite) readDLQTasks(ctx context.Context) []tdbgtest.DLQMessage[*pers
 		"tdbg",
 		"--" + tdbg.FlagYes,
 		"dlq",
-		"--" + tdbg.FlagDLQVersion, "v2",
 		"read",
 		"--" + tdbg.FlagDLQType, strconv.Itoa(tasks.CategoryTransfer.ID()),
 		"--" + tdbg.FlagOutputFilename, file.Name(),
@@ -610,7 +605,6 @@ func (s *DLQSuite) describeJob(ctx context.Context, token string) *adminservice.
 	args := []string{
 		"tdbg",
 		"dlq",
-		"--" + tdbg.FlagDLQVersion, "v2",
 		"job",
 		"describe",
 		"--" + tdbg.FlagJobToken, token,
@@ -630,7 +624,6 @@ func (s *DLQSuite) cancelJob(ctx context.Context, token string) *adminservice.Ca
 	args := []string{
 		"tdbg",
 		"dlq",
-		"--" + tdbg.FlagDLQVersion, "v2",
 		"job",
 		"cancel",
 		"--" + tdbg.FlagJobToken, token,
@@ -651,7 +644,6 @@ func (s *DLQSuite) listQueues(ctx context.Context) []*adminservice.ListQueuesRes
 	args := []string{
 		"tdbg",
 		"dlq",
-		"--" + tdbg.FlagDLQVersion, "v2",
 		"list",
 		"--" + tdbg.FlagPrintJSON,
 	}

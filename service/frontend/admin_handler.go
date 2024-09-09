@@ -29,10 +29,13 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"net"
 	"strings"
 	"sync/atomic"
 	"time"
+
+	"go.temporal.io/server/api/matchingservice/v1"
 
 	"github.com/pborman/uuid"
 	commonpb "go.temporal.io/api/common/v1"
@@ -44,12 +47,6 @@ import (
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	sdkclient "go.temporal.io/sdk/client"
-	"golang.org/x/exp/maps"
-	"google.golang.org/grpc/health"
-	healthpb "google.golang.org/grpc/health/grpc_health_v1"
-	"google.golang.org/grpc/metadata"
-	"google.golang.org/protobuf/types/known/timestamppb"
-
 	"go.temporal.io/server/api/adminservice/v1"
 	clusterspb "go.temporal.io/server/api/cluster/v1"
 	commonspb "go.temporal.io/server/api/common/v1"
@@ -88,6 +85,9 @@ import (
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/worker/addsearchattributes"
 	"go.temporal.io/server/service/worker/dlq"
+	"google.golang.org/grpc/health"
+	healthpb "google.golang.org/grpc/health/grpc_health_v1"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 const (
@@ -127,10 +127,12 @@ type (
 		saManager                  searchattribute.Manager
 		clusterMetadata            cluster.Metadata
 		healthServer               *health.Server
+		historyHealthChecker       HealthChecker
 
 		// DEPRECATED: only history service on server side is supposed to
 		// use the following components.
 		taskCategoryRegistry tasks.TaskCategoryRegistry
+		matchingClient       matchingservice.MatchingServiceClient
 	}
 
 	NewAdminHandlerArgs struct {
@@ -163,6 +165,7 @@ type (
 		// DEPRECATED: only history service on server side is supposed to
 		// use the following components.
 		CategoryRegistry tasks.TaskCategoryRegistry
+		matchingClient   matchingservice.MatchingServiceClient
 	}
 )
 
@@ -179,6 +182,20 @@ func NewAdminHandler(
 	namespaceReplicationTaskExecutor := namespace.NewReplicationTaskExecutor(
 		args.ClusterMetadata.GetCurrentClusterName(),
 		args.PersistenceMetadataManager,
+		args.Logger,
+	)
+
+	historyHealthChecker := NewHealthChecker(
+		primitives.HistoryService,
+		args.MembershipMonitor,
+		args.Config.HistoryHostErrorPercentage,
+		func(ctx context.Context, hostAddress string) (enumsspb.HealthState, error) {
+			resp, err := args.HistoryClient.DeepHealthCheck(ctx, &historyservice.DeepHealthCheckRequest{HostAddress: hostAddress})
+			if err != nil {
+				return enumsspb.HEALTH_STATE_UNSPECIFIED, err
+			}
+			return resp.GetState(), nil
+		},
 		args.Logger,
 	)
 
@@ -212,7 +229,9 @@ func NewAdminHandler(
 		saManager:                  args.SaManager,
 		clusterMetadata:            args.ClusterMetadata,
 		healthServer:               args.HealthServer,
+		historyHealthChecker:       historyHealthChecker,
 		taskCategoryRegistry:       args.CategoryRegistry,
+		matchingClient:             args.matchingClient,
 	}
 }
 
@@ -236,6 +255,17 @@ func (adh *AdminHandler) Stop() {
 	) {
 		adh.healthServer.SetServingStatus(AdminServiceName, healthpb.HealthCheckResponse_NOT_SERVING)
 	}
+}
+
+func (adh *AdminHandler) DeepHealthCheck(
+	ctx context.Context,
+	_ *adminservice.DeepHealthCheckRequest,
+) (_ *adminservice.DeepHealthCheckResponse, retError error) {
+	healthStatus, err := adh.historyHealthChecker.Check(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return &adminservice.DeepHealthCheckResponse{State: healthStatus}, nil
 }
 
 // AddSearchAttributes add search attribute to the cluster.
@@ -1580,6 +1610,45 @@ func (adh *AdminHandler) GetTaskQueueTasks(
 	}, nil
 }
 
+// DescribeTaskQueuePartition returns information for a given task queue partition of the task queue
+func (adh *AdminHandler) DescribeTaskQueuePartition(
+	ctx context.Context,
+	request *adminservice.DescribeTaskQueuePartitionRequest,
+) (_ *adminservice.DescribeTaskQueuePartitionResponse, err error) {
+	defer log.CapturePanic(adh.logger, &err)
+
+	// validate request
+	if request == nil {
+		return nil, errRequestNotSet
+	}
+	if len(request.Namespace) == 0 {
+		return nil, errNamespaceNotSet
+	}
+
+	namespaceID, err := adh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
+	if err != nil {
+		return nil, err
+	}
+
+	resp, err := adh.matchingClient.DescribeTaskQueuePartition(ctx, &matchingservice.DescribeTaskQueuePartitionRequest{
+		NamespaceId:                   namespaceID.String(),
+		TaskQueuePartition:            request.GetTaskQueuePartition(),
+		Versions:                      request.GetBuildIds(),
+		ReportStats:                   true,
+		ReportPollers:                 true,
+		ReportInternalTaskQueueStatus: true,
+	})
+
+	if err != nil {
+		return nil, err
+	}
+
+	// The response returned is for multiple build Id's
+	return &adminservice.DescribeTaskQueuePartitionResponse{
+		VersionsInfoInternal: resp.VersionsInfoInternal,
+	}, nil
+}
+
 func (adh *AdminHandler) DeleteWorkflowExecution(
 	ctx context.Context,
 	request *adminservice.DeleteWorkflowExecutionRequest,
@@ -1651,11 +1720,7 @@ func (adh *AdminHandler) StreamWorkflowReplicationMessages(
 ) (retError error) {
 	defer log.CapturePanic(adh.logger, &retError)
 
-	ctxMetadata, ok := metadata.FromIncomingContext(clientCluster.Context())
-	if !ok {
-		return serviceerror.NewInvalidArgument("missing cluster & shard ID metadata")
-	}
-	_, serverClusterShardID, err := history.DecodeClusterShardMD(ctxMetadata)
+	_, serverClusterShardID, err := history.DecodeClusterShardMD(headers.NewGRPCHeaderGetter(clientCluster.Context()))
 	if err != nil {
 		return err
 	}

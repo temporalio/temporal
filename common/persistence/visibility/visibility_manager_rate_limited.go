@@ -94,7 +94,7 @@ func (m *visibilityManagerRateLimited) RecordWorkflowExecutionStarted(
 	request *manager.RecordWorkflowExecutionStartedRequest,
 ) error {
 	if ok := allow(ctx, "RecordWorkflowExecutionStarted", m.writeRateLimiter); !ok {
-		return persistence.ErrPersistenceLimitExceeded
+		return persistence.ErrPersistenceSystemLimitExceeded
 	}
 	return m.delegate.RecordWorkflowExecutionStarted(ctx, request)
 }
@@ -104,7 +104,7 @@ func (m *visibilityManagerRateLimited) RecordWorkflowExecutionClosed(
 	request *manager.RecordWorkflowExecutionClosedRequest,
 ) error {
 	if ok := allow(ctx, "RecordWorkflowExecutionClosed", m.writeRateLimiter); !ok {
-		return persistence.ErrPersistenceLimitExceeded
+		return persistence.ErrPersistenceSystemLimitExceeded
 	}
 	return m.delegate.RecordWorkflowExecutionClosed(ctx, request)
 }
@@ -114,7 +114,7 @@ func (m *visibilityManagerRateLimited) UpsertWorkflowExecution(
 	request *manager.UpsertWorkflowExecutionRequest,
 ) error {
 	if ok := allow(ctx, "UpsertWorkflowExecution", m.writeRateLimiter); !ok {
-		return persistence.ErrPersistenceLimitExceeded
+		return persistence.ErrPersistenceSystemLimitExceeded
 	}
 	return m.delegate.UpsertWorkflowExecution(ctx, request)
 }
@@ -124,7 +124,7 @@ func (m *visibilityManagerRateLimited) DeleteWorkflowExecution(
 	request *manager.VisibilityDeleteWorkflowExecutionRequest,
 ) error {
 	if ok := allow(ctx, "DeleteWorkflowExecution", m.writeRateLimiter); !ok {
-		return persistence.ErrPersistenceLimitExceeded
+		return persistence.ErrPersistenceSystemLimitExceeded
 	}
 	return m.delegate.DeleteWorkflowExecution(ctx, request)
 }
@@ -135,7 +135,7 @@ func (m *visibilityManagerRateLimited) ListWorkflowExecutions(
 	request *manager.ListWorkflowExecutionsRequestV2,
 ) (*manager.ListWorkflowExecutionsResponse, error) {
 	if ok := allow(ctx, "ListWorkflowExecutions", m.readRateLimiter); !ok {
-		return nil, persistence.ErrPersistenceLimitExceeded
+		return nil, persistence.ErrPersistenceSystemLimitExceeded
 	}
 	return m.delegate.ListWorkflowExecutions(ctx, request)
 }
@@ -145,7 +145,7 @@ func (m *visibilityManagerRateLimited) ScanWorkflowExecutions(
 	request *manager.ListWorkflowExecutionsRequestV2,
 ) (*manager.ListWorkflowExecutionsResponse, error) {
 	if ok := allow(ctx, "ScanWorkflowExecutions", m.readRateLimiter); !ok {
-		return nil, persistence.ErrPersistenceLimitExceeded
+		return nil, persistence.ErrPersistenceSystemLimitExceeded
 	}
 	return m.delegate.ScanWorkflowExecutions(ctx, request)
 }
@@ -155,7 +155,7 @@ func (m *visibilityManagerRateLimited) CountWorkflowExecutions(
 	request *manager.CountWorkflowExecutionsRequest,
 ) (*manager.CountWorkflowExecutionsResponse, error) {
 	if ok := allow(ctx, "CountWorkflowExecutions", m.readRateLimiter); !ok {
-		return nil, persistence.ErrPersistenceLimitExceeded
+		return nil, persistence.ErrPersistenceSystemLimitExceeded
 	}
 	return m.delegate.CountWorkflowExecutions(ctx, request)
 }
@@ -165,7 +165,7 @@ func (m *visibilityManagerRateLimited) GetWorkflowExecution(
 	request *manager.GetWorkflowExecutionRequest,
 ) (*manager.GetWorkflowExecutionResponse, error) {
 	if ok := allow(ctx, "GetWorkflowExecution", m.readRateLimiter); !ok {
-		return nil, persistence.ErrPersistenceLimitExceeded
+		return nil, persistence.ErrPersistenceSystemLimitExceeded
 	}
 	return m.delegate.GetWorkflowExecution(ctx, request)
 }

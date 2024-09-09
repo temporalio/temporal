@@ -33,14 +33,13 @@ import (
 
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
-	"google.golang.org/protobuf/types/known/timestamppb"
-
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 const (
@@ -133,7 +132,7 @@ func (db *taskQueueDB) takeOverTaskQueueLocked(
 	ctx context.Context,
 ) error {
 	response, err := db.store.GetTaskQueue(ctx, &persistence.GetTaskQueueRequest{
-		NamespaceID: db.queue.NamespaceId().String(),
+		NamespaceID: db.queue.NamespaceId(),
 		TaskQueue:   db.queue.PersistenceName(),
 		TaskType:    db.queue.TaskType(),
 	})
@@ -208,8 +207,8 @@ func (db *taskQueueDB) UpdateState(
 	})
 	if err == nil {
 		db.ackLevel = ackLevel
-		db.emitBacklogCountAndAge()
 	}
+	db.emitBacklogGauges()
 	return err
 }
 
@@ -223,7 +222,7 @@ func (db *taskQueueDB) updateApproximateBacklogCount(
 	// Prevent under-counting
 	if db.approximateBacklogCount.Load()+delta < 0 {
 		db.logger.Info("ApproximateBacklogCounter could have under-counted.",
-			tag.WorkerBuildId(db.queue.BuildId()), tag.WorkerBuildId(db.queue.Partition().NamespaceId().String()))
+			tag.WorkerBuildId(db.queue.BuildId()), tag.WorkflowNamespace(db.queue.Partition().NamespaceId()))
 		db.approximateBacklogCount.Store(0)
 	} else {
 		db.approximateBacklogCount.Add(delta)
@@ -288,7 +287,7 @@ func (db *taskQueueDB) GetTasks(
 	batchSize int,
 ) (*persistence.GetTasksResponse, error) {
 	return db.store.GetTasks(ctx, &persistence.GetTasksRequest{
-		NamespaceID:        db.queue.NamespaceId().String(),
+		NamespaceID:        db.queue.NamespaceId(),
 		TaskQueue:          db.queue.PersistenceName(),
 		TaskType:           db.queue.TaskType(),
 		PageSize:           batchSize,
@@ -306,7 +305,7 @@ func (db *taskQueueDB) CompleteTasksLessThan(
 	limit int,
 ) (int, error) {
 	n, err := db.store.CompleteTasksLessThan(ctx, &persistence.CompleteTasksLessThanRequest{
-		NamespaceID:        db.queue.NamespaceId().String(),
+		NamespaceID:        db.queue.NamespaceId(),
 		TaskQueueName:      db.queue.PersistenceName(),
 		TaskType:           db.queue.TaskType(),
 		ExclusiveMaxTaskID: exclusiveMaxTaskID,
@@ -337,7 +336,7 @@ func (db *taskQueueDB) expiryTime() *timestamppb.Timestamp {
 
 func (db *taskQueueDB) cachedQueueInfo() *persistencespb.TaskQueueInfo {
 	return &persistencespb.TaskQueueInfo{
-		NamespaceId:             db.queue.NamespaceId().String(),
+		NamespaceId:             db.queue.NamespaceId(),
 		Name:                    db.queue.PersistenceName(),
 		TaskType:                db.queue.TaskType(),
 		Kind:                    db.queue.Partition().Kind(),
@@ -348,12 +347,19 @@ func (db *taskQueueDB) cachedQueueInfo() *persistencespb.TaskQueueInfo {
 	}
 }
 
-// emitBacklogCountAndAge emits the approximateBacklogCount and the BacklogAge to the metrics handler.
-// It is called after persisting the updated BacklogCount in db
-func (db *taskQueueDB) emitBacklogCountAndAge() {
-	approximateBacklogCount := db.getApproximateBacklogCount()
-	backlogHeadAge := db.backlogMgr.taskReader.getBacklogHeadAge()
+// emitBacklogGauges emits the approximate_backlog_count, approximate_backlog_age_seconds, and the legacy
+// task_lag_per_tl gauges. For these gauges to be emitted, BreakdownMetricsByTaskQueue and BreakdownMetricsByPartition
+// should be enabled. Additionally, for versioned queues, BreakdownMetricsByBuildID should also be enabled.
+func (db *taskQueueDB) emitBacklogGauges() {
+	if db.backlogMgr.pqMgr.ShouldEmitGauges() {
+		approximateBacklogCount := db.getApproximateBacklogCount()
+		backlogHeadAge := db.backlogMgr.taskReader.getBacklogHeadAge()
+		metrics.ApproximateBacklogCount.With(db.backlogMgr.metricsHandler).Record(float64(approximateBacklogCount))
+		metrics.ApproximateBacklogAgeSeconds.With(db.backlogMgr.metricsHandler).Record(backlogHeadAge.Seconds())
 
-	db.backlogMgr.metricsHandler.Gauge(metrics.ApproximateBacklogCount.Name()).Record(float64(approximateBacklogCount))
-	db.backlogMgr.metricsHandler.Gauge(metrics.ApproximateBacklogCount.Name()).Record(backlogHeadAge.Seconds())
+		// note: this metric is only an estimation for the lag.
+		// taskID in DB may not be continuous, especially when task list ownership changes.
+		maxReadLevel := db.GetMaxReadLevel()
+		metrics.TaskLagPerTaskQueueGauge.With(db.backlogMgr.metricsHandler).Record(float64(maxReadLevel - db.ackLevel))
+	}
 }

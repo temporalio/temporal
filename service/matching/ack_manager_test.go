@@ -29,7 +29,6 @@ import (
 	"testing"
 
 	"github.com/golang/mock/gomock"
-
 	"github.com/stretchr/testify/require"
 )
 

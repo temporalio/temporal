@@ -36,10 +36,9 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/converter"
+	"go.temporal.io/server/common/dynamicconfig"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/durationpb"
-
-	"go.temporal.io/server/common/dynamicconfig"
 )
 
 func (s *FunctionalSuite) defaultWorkflowID() string {
@@ -202,7 +201,7 @@ func (s *FunctionalSuite) TestEagerWorkflowStart_RetryStartImmediately() {
 func (s *FunctionalSuite) TestEagerWorkflowStart_TerminateDuplicate() {
 
 	// reset reuse minimal interval to allow workflow termination
-	s.testCluster.host.dcClient.OverrideValue(s.T(), dynamicconfig.WorkflowIdReuseMinimalInterval, 0)
+	s.OverrideDynamicConfig(dynamicconfig.WorkflowIdReuseMinimalInterval, 0)
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		WorkflowIdReusePolicy: enumspb.WORKFLOW_ID_REUSE_POLICY_TERMINATE_IF_RUNNING,

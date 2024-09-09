@@ -161,6 +161,26 @@ func (mr *MockAdminServiceClientMockRecorder) CloseShard(ctx, in interface{}, op
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CloseShard", reflect.TypeOf((*MockAdminServiceClient)(nil).CloseShard), varargs...)
 }
 
+// DeepHealthCheck mocks base method.
+func (m *MockAdminServiceClient) DeepHealthCheck(ctx context.Context, in *adminservice.DeepHealthCheckRequest, opts ...grpc.CallOption) (*adminservice.DeepHealthCheckResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []interface{}{ctx, in}
+	for _, a := range opts {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "DeepHealthCheck", varargs...)
+	ret0, _ := ret[0].(*adminservice.DeepHealthCheckResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// DeepHealthCheck indicates an expected call of DeepHealthCheck.
+func (mr *MockAdminServiceClientMockRecorder) DeepHealthCheck(ctx, in interface{}, opts ...interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]interface{}{ctx, in}, opts...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeepHealthCheck", reflect.TypeOf((*MockAdminServiceClient)(nil).DeepHealthCheck), varargs...)
+}
+
 // DeleteWorkflowExecution mocks base method.
 func (m *MockAdminServiceClient) DeleteWorkflowExecution(ctx context.Context, in *adminservice.DeleteWorkflowExecutionRequest, opts ...grpc.CallOption) (*adminservice.DeleteWorkflowExecutionResponse, error) {
 	m.ctrl.T.Helper()
@@ -259,6 +279,26 @@ func (mr *MockAdminServiceClientMockRecorder) DescribeMutableState(ctx, in inter
 	mr.mock.ctrl.T.Helper()
 	varargs := append([]interface{}{ctx, in}, opts...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DescribeMutableState", reflect.TypeOf((*MockAdminServiceClient)(nil).DescribeMutableState), varargs...)
+}
+
+// DescribeTaskQueuePartition mocks base method.
+func (m *MockAdminServiceClient) DescribeTaskQueuePartition(ctx context.Context, in *adminservice.DescribeTaskQueuePartitionRequest, opts ...grpc.CallOption) (*adminservice.DescribeTaskQueuePartitionResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []interface{}{ctx, in}
+	for _, a := range opts {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "DescribeTaskQueuePartition", varargs...)
+	ret0, _ := ret[0].(*adminservice.DescribeTaskQueuePartitionResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// DescribeTaskQueuePartition indicates an expected call of DescribeTaskQueuePartition.
+func (mr *MockAdminServiceClientMockRecorder) DescribeTaskQueuePartition(ctx, in interface{}, opts ...interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]interface{}{ctx, in}, opts...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DescribeTaskQueuePartition", reflect.TypeOf((*MockAdminServiceClient)(nil).DescribeTaskQueuePartition), varargs...)
 }
 
 // GetDLQMessages mocks base method.
@@ -1056,6 +1096,21 @@ func (mr *MockAdminServiceServerMockRecorder) CloseShard(arg0, arg1 interface{})
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CloseShard", reflect.TypeOf((*MockAdminServiceServer)(nil).CloseShard), arg0, arg1)
 }
 
+// DeepHealthCheck mocks base method.
+func (m *MockAdminServiceServer) DeepHealthCheck(arg0 context.Context, arg1 *adminservice.DeepHealthCheckRequest) (*adminservice.DeepHealthCheckResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "DeepHealthCheck", arg0, arg1)
+	ret0, _ := ret[0].(*adminservice.DeepHealthCheckResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// DeepHealthCheck indicates an expected call of DeepHealthCheck.
+func (mr *MockAdminServiceServerMockRecorder) DeepHealthCheck(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeepHealthCheck", reflect.TypeOf((*MockAdminServiceServer)(nil).DeepHealthCheck), arg0, arg1)
+}
+
 // DeleteWorkflowExecution mocks base method.
 func (m *MockAdminServiceServer) DeleteWorkflowExecution(arg0 context.Context, arg1 *adminservice.DeleteWorkflowExecutionRequest) (*adminservice.DeleteWorkflowExecutionResponse, error) {
 	m.ctrl.T.Helper()
@@ -1129,6 +1184,21 @@ func (m *MockAdminServiceServer) DescribeMutableState(arg0 context.Context, arg1
 func (mr *MockAdminServiceServerMockRecorder) DescribeMutableState(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DescribeMutableState", reflect.TypeOf((*MockAdminServiceServer)(nil).DescribeMutableState), arg0, arg1)
+}
+
+// DescribeTaskQueuePartition mocks base method.
+func (m *MockAdminServiceServer) DescribeTaskQueuePartition(arg0 context.Context, arg1 *adminservice.DescribeTaskQueuePartitionRequest) (*adminservice.DescribeTaskQueuePartitionResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "DescribeTaskQueuePartition", arg0, arg1)
+	ret0, _ := ret[0].(*adminservice.DescribeTaskQueuePartitionResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// DescribeTaskQueuePartition indicates an expected call of DescribeTaskQueuePartition.
+func (mr *MockAdminServiceServerMockRecorder) DescribeTaskQueuePartition(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DescribeTaskQueuePartition", reflect.TypeOf((*MockAdminServiceServer)(nil).DescribeTaskQueuePartition), arg0, arg1)
 }
 
 // GetDLQMessages mocks base method.

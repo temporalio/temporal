@@ -16,30 +16,26 @@
 //
 // THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
 // IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EENT SHALL THE
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
 // AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 // LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package metrics
+package nsregistry
 
-import enumspb "go.temporal.io/api/enums/v1"
+import (
+	"go.temporal.io/server/common/namespace"
+	"go.uber.org/fx"
+)
 
-func GetPerTaskQueueScope(
-	handler Handler,
-	namespaceName string,
-	taskQueueName string,
-	taskQueueKind enumspb.TaskQueueKind,
-) Handler {
-	var metricTaskQueueName string
-	switch taskQueueKind {
-	case enumspb.TASK_QUEUE_KIND_NORMAL:
-		metricTaskQueueName = taskQueueName
-	case enumspb.TASK_QUEUE_KIND_STICKY:
-		metricTaskQueueName = "__sticky__"
-	default:
-		metricTaskQueueName = unknownValue
-	}
-	return handler.WithTags(NamespaceTag(namespaceName), TaskQueueTag(metricTaskQueueName))
+var RegistryLifetimeHooksModule = fx.Options(
+	fx.Invoke(RegistryLifetimeHooks),
+)
+
+func RegistryLifetimeHooks(
+	lc fx.Lifecycle,
+	registry namespace.Registry,
+) {
+	lc.Append(fx.StartStopHook(registry.Start, registry.Stop))
 }
