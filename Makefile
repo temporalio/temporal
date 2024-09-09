@@ -18,7 +18,7 @@ clean: clean-bins clean-test-results
 	rm -rf $(LOCALBIN)
 
 # Recompile proto files.
-proto: lint-protos lint-api protoc service-clients go-generate
+proto: lint-protos lint-api protoc service-clients
 ########################################################################
 
 .PHONY: proto protoc install bins ci-build-misc clean
