@@ -256,7 +256,7 @@ func queryWillTimeoutsBeforeFirstWorkflowTaskStart(
 	startAttr := startEvent.GetWorkflowExecutionStartedEventAttributes()
 	workflowTaskBackoffDuration := timestamp.DurationValue(startAttr.GetFirstWorkflowTaskBackoff())
 
-	workflowStart := mutableState.GetExecutionInfo().StartTime.AsTime().UTC()
+	workflowStart := mutableState.GetExecutionState().StartTime.AsTime().UTC()
 	workflowTaskStart := workflowStart.Add(workflowTaskBackoffDuration)
 
 	deadline, ok := ctx.Deadline()

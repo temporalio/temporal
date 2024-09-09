@@ -153,6 +153,10 @@ func (r *resetterImpl) resetWorkflow(
 	}
 	rebuildMutableState.AddHistorySize(rebuiltHistorySize)
 
+	if err := rebuildMutableState.RefreshExpirationTimeoutTask(ctx); err != nil {
+		return nil, err
+	}
+
 	r.newContext.Clear()
 	return rebuildMutableState, nil
 }

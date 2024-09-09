@@ -333,7 +333,7 @@ func (p *visibilityManagerImpl) convertInternalWorkflowExecutionInfo(
 	// Remove this "if" block when ExecutionTime field has actual correct value (added 6/9/21).
 	// Affects only non-advanced visibility.
 	if !executionInfo.ExecutionTime.AsTime().After(time.Unix(0, 0)) {
-		executionInfo.ExecutionTime = executionInfo.StartTime
+		executionInfo.ExecutionTime = timestamppb.New(internalExecution.StartTime)
 	}
 
 	return executionInfo, nil

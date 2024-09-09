@@ -35,6 +35,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"go.temporal.io/server/api/matchingservice/v1"
+
 	"github.com/pborman/uuid"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -130,6 +132,7 @@ type (
 		// DEPRECATED: only history service on server side is supposed to
 		// use the following components.
 		taskCategoryRegistry tasks.TaskCategoryRegistry
+		matchingClient       matchingservice.MatchingServiceClient
 	}
 
 	NewAdminHandlerArgs struct {
@@ -162,6 +165,7 @@ type (
 		// DEPRECATED: only history service on server side is supposed to
 		// use the following components.
 		CategoryRegistry tasks.TaskCategoryRegistry
+		matchingClient   matchingservice.MatchingServiceClient
 	}
 )
 
@@ -227,6 +231,7 @@ func NewAdminHandler(
 		healthServer:               args.HealthServer,
 		historyHealthChecker:       historyHealthChecker,
 		taskCategoryRegistry:       args.CategoryRegistry,
+		matchingClient:             args.matchingClient,
 	}
 }
 
@@ -1602,6 +1607,45 @@ func (adh *AdminHandler) GetTaskQueueTasks(
 	return &adminservice.GetTaskQueueTasksResponse{
 		Tasks:         resp.Tasks,
 		NextPageToken: resp.NextPageToken,
+	}, nil
+}
+
+// DescribeTaskQueuePartition returns information for a given task queue partition of the task queue
+func (adh *AdminHandler) DescribeTaskQueuePartition(
+	ctx context.Context,
+	request *adminservice.DescribeTaskQueuePartitionRequest,
+) (_ *adminservice.DescribeTaskQueuePartitionResponse, err error) {
+	defer log.CapturePanic(adh.logger, &err)
+
+	// validate request
+	if request == nil {
+		return nil, errRequestNotSet
+	}
+	if len(request.Namespace) == 0 {
+		return nil, errNamespaceNotSet
+	}
+
+	namespaceID, err := adh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
+	if err != nil {
+		return nil, err
+	}
+
+	resp, err := adh.matchingClient.DescribeTaskQueuePartition(ctx, &matchingservice.DescribeTaskQueuePartitionRequest{
+		NamespaceId:                   namespaceID.String(),
+		TaskQueuePartition:            request.GetTaskQueuePartition(),
+		Versions:                      request.GetBuildIds(),
+		ReportStats:                   true,
+		ReportPollers:                 true,
+		ReportInternalTaskQueueStatus: true,
+	})
+
+	if err != nil {
+		return nil, err
+	}
+
+	// The response returned is for multiple build Id's
+	return &adminservice.DescribeTaskQueuePartitionResponse{
+		VersionsInfoInternal: resp.VersionsInfoInternal,
 	}, nil
 }
 

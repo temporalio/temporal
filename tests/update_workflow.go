@@ -3263,7 +3263,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_CompleteWorkflow_AbortUpdates() {
 	type testCase struct {
 		name          string
 		description   string
-		updateErr     string
+		updateErr     map[string]string // Update error by completionCommand.Name.
 		updateFailure string
 		commands      func(tv *testvars.TestVars) []*commandpb.Command
 		messages      func(tv *testvars.TestVars, updRequestMsg *protocolpb.Message) []*protocolpb.Message
@@ -3275,9 +3275,13 @@ func (s *FunctionalSuite) TestUpdateWorkflow_CompleteWorkflow_AbortUpdates() {
 	}
 	testCases := []testCase{
 		{
-			name:          "update admitted",
-			description:   "update in stateAdmitted must get an error",
-			updateErr:     "workflow execution already completed",
+			name:        "update admitted",
+			description: "update in stateAdmitted must get an error",
+			updateErr: map[string]string{
+				"workflow completed":        "workflow execution already completed",
+				"workflow continued as new": "workflow operation can not be applied because workflow is closing",
+				"workflow failed":           "workflow execution already completed",
+			},
 			updateFailure: "",
 			commands:      func(_ *testvars.TestVars) []*commandpb.Command { return nil },
 			messages:      func(_ *testvars.TestVars, _ *protocolpb.Message) []*protocolpb.Message { return nil },
@@ -3285,7 +3289,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_CompleteWorkflow_AbortUpdates() {
 		{
 			name:          "update accepted",
 			description:   "update in stateAccepted must get an error",
-			updateErr:     "workflow execution already completed",
+			updateErr:     map[string]string{"*": "workflow execution already completed"},
 			updateFailure: "",
 			commands:      func(tv *testvars.TestVars) []*commandpb.Command { return s.UpdateAcceptCommands(tv, "1") },
 			messages: func(tv *testvars.TestVars, updRequestMsg *protocolpb.Message) []*protocolpb.Message {
@@ -3295,7 +3299,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_CompleteWorkflow_AbortUpdates() {
 		{
 			name:          "update completed",
 			description:   "completed update must not be affected by workflow completion",
-			updateErr:     "",
+			updateErr:     map[string]string{"*": ""},
 			updateFailure: "",
 			commands:      func(tv *testvars.TestVars) []*commandpb.Command { return s.UpdateAcceptCompleteCommands(tv, "1") },
 			messages: func(tv *testvars.TestVars, updRequestMsg *protocolpb.Message) []*protocolpb.Message {
@@ -3305,7 +3309,7 @@ func (s *FunctionalSuite) TestUpdateWorkflow_CompleteWorkflow_AbortUpdates() {
 		{
 			name:          "update rejected",
 			description:   "rejected update must be rejected with rejection from workflow",
-			updateErr:     "",
+			updateErr:     map[string]string{"*": ""},
 			updateFailure: "rejection-of-", // Rejection from workflow.
 			commands:      func(tv *testvars.TestVars) []*commandpb.Command { return nil },
 			messages: func(tv *testvars.TestVars, updRequestMsg *protocolpb.Message) []*protocolpb.Message {
@@ -3411,9 +3415,13 @@ func (s *FunctionalSuite) TestUpdateWorkflow_CompleteWorkflow_AbortUpdates() {
 				s.NoError(err)
 
 				updateResult := <-updateResultCh
-				if tc.updateErr != "" {
+				expectedUpdateErr := tc.updateErr[wfCC.name]
+				if expectedUpdateErr == "" {
+					expectedUpdateErr = tc.updateErr["*"]
+				}
+				if expectedUpdateErr != "" {
 					s.Error(updateResult.err, tc.description)
-					s.Contains(updateResult.err.Error(), tc.updateErr, tc.description)
+					s.Equal(updateResult.err.Error(), expectedUpdateErr)
 				} else {
 					s.NoError(updateResult.err, tc.description)
 				}
@@ -4756,15 +4764,11 @@ func (s *FunctionalSuite) TestUpdateWorkflow_LastWorkflowTask_HasUpdateMessage()
 		T:      s.T(),
 	}
 
-	s.sendUpdateNoErrorWaitPolicyAccepted(tv, tv.UpdateID())
-	pollResponse := make(chan error)
-	go func() {
-		// Blocks until the update request causes a WFT to be dispatched; then sends the update complete message
-		// required for the update request to return.
-		_, err := poller.PollAndProcessWorkflowTask()
-		pollResponse <- err
-	}()
-	s.NoError(<-pollResponse)
+	updateResultCh := s.sendUpdateNoErrorWaitPolicyAccepted(tv, "1")
+	_, err := poller.PollAndProcessWorkflowTask(WithoutRetries)
+	s.NoError(err)
+	updateResult := <-updateResultCh
+	s.Equal(enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ACCEPTED, updateResult.GetStage())
 
 	s.EqualHistoryEvents(`
 	1 WorkflowExecutionStarted
@@ -4985,4 +4989,134 @@ func (s *FunctionalSuite) TestUpdateWorkflow_UpdatesAreSentToWorkerInOrderOfAdmi
 
 	history := s.getHistory(s.namespace, tv.WorkflowExecution())
 	s.EqualHistoryEvents(expectedHistory, history)
+}
+
+func (s *FunctionalSuite) TestUpdateWorkflow_WaitAccepted_GotCompleted() {
+	tv := testvars.New(s.T())
+	tv = s.startWorkflow(tv)
+
+	poller := &TaskPoller{
+		Client:    s.client,
+		Namespace: s.namespace,
+		TaskQueue: tv.TaskQueue(),
+		Identity:  tv.WorkerIdentity(),
+		WorkflowTaskHandler: func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
+			return s.UpdateAcceptCompleteCommands(tv, "1"), nil
+		},
+		MessageHandler: func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*protocolpb.Message, error) {
+			return s.UpdateAcceptCompleteMessages(tv, task.Messages[0], "1"), nil
+		},
+		Logger: s.Logger,
+		T:      s.T(),
+	}
+
+	// Send Update with intent to wait for Accepted stage only,
+	updateResultCh := s.sendUpdateNoErrorWaitPolicyAccepted(tv, "1")
+	_, err := poller.PollAndProcessWorkflowTask(WithoutRetries)
+	s.NoError(err)
+	updateResult := <-updateResultCh
+	// but Update was accepted and completed on the same WFT, and outcome was returned.
+	s.Equal(enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED, updateResult.GetStage())
+	s.EqualValues("success-result-of-"+tv.UpdateID("1"), decodeString(s.T(), updateResult.GetOutcome().GetSuccess()))
+
+	s.EqualHistoryEvents(`
+	1 WorkflowExecutionStarted
+	2 WorkflowTaskScheduled
+	3 WorkflowTaskStarted
+	4 WorkflowTaskCompleted
+	5 WorkflowExecutionUpdateAccepted
+	6 WorkflowExecutionUpdateCompleted
+	`, s.getHistory(s.namespace, tv.WorkflowExecution()))
+}
+
+func (s *FunctionalSuite) TestUpdateWorkflow_ContinueAsNew_UpdateIsNotCarriedOver() {
+	tv := testvars.New(s.T())
+	tv = s.startWorkflow(tv)
+	firstRunID := tv.RunID()
+	tv = tv.WithRunID("")
+
+	/*
+		1st Update goes to the 1st run and accepted (but not completed) by Workflow.
+		While this WFT is running, 2nd Update is sent, and WFT is completing with CAN for the 1st run.
+		There are 2 Updates in the registry of the 1st run: 1st is accepted and 2nd is admitted.
+		Both of them are aborted but with different errors:
+		- Admitted Update is aborted with retryable "workflow is closing" error. SDK should retry this error
+		  and new attempt should land on the new run.
+		- Accepted Update is aborted with non-retryable NotFound ("workflow is completed") error.
+	*/
+
+	var update2ResponseCh <-chan updateResponseErr
+
+	poller1 := &TaskPoller{
+		Client:    s.client,
+		Namespace: s.namespace,
+		TaskQueue: tv.TaskQueue(),
+		Identity:  tv.WorkerIdentity(),
+		WorkflowTaskHandler: func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
+			// Send 2nd Update while WFT is running.
+			update2ResponseCh = s.sendUpdate(context.Background(), tv, "2")
+			canCommand := &commandpb.Command{
+				CommandType: enumspb.COMMAND_TYPE_CONTINUE_AS_NEW_WORKFLOW_EXECUTION,
+				Attributes: &commandpb.Command_ContinueAsNewWorkflowExecutionCommandAttributes{ContinueAsNewWorkflowExecutionCommandAttributes: &commandpb.ContinueAsNewWorkflowExecutionCommandAttributes{
+					WorkflowType: tv.WorkflowType(),
+					TaskQueue:    tv.TaskQueue("2"),
+				}},
+			}
+			return append(s.UpdateAcceptCommands(tv, "1"), canCommand), nil
+		},
+		MessageHandler: func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*protocolpb.Message, error) {
+			return s.UpdateAcceptMessages(tv, task.Messages[0], "1"), nil
+		},
+		Logger: s.Logger,
+		T:      s.T(),
+	}
+
+	poller2 := &TaskPoller{
+		Client:    s.client,
+		Namespace: s.namespace,
+		TaskQueue: tv.TaskQueue("2"),
+		Identity:  tv.WorkerIdentity(),
+		WorkflowTaskHandler: func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
+			return nil, nil
+		},
+		MessageHandler: func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*protocolpb.Message, error) {
+			s.Empty(task.Messages, "no Updates should be carried over to the 2nd run")
+			return nil, nil
+		},
+		Logger: s.Logger,
+		T:      s.T(),
+	}
+
+	update1ResponseCh := s.sendUpdate(context.Background(), tv, "1")
+	_, err := poller1.PollAndProcessWorkflowTask()
+	s.NoError(err)
+
+	_, err = poller2.PollAndProcessWorkflowTask()
+	s.NoError(err)
+
+	update1Response := <-update1ResponseCh
+	s.Error(update1Response.err)
+	var notFound *serviceerror.NotFound
+	s.ErrorAs(update1Response.err, &notFound)
+	s.Equal("workflow execution already completed", update1Response.err.Error())
+
+	update2Response := <-update2ResponseCh
+	s.Error(update2Response.err)
+	var resourceExhausted *serviceerror.ResourceExhausted
+	s.ErrorAs(update2Response.err, &resourceExhausted)
+	s.Equal("workflow operation can not be applied because workflow is closing", update2Response.err.Error())
+
+	s.EqualHistoryEvents(`
+  1 WorkflowExecutionStarted
+  2 WorkflowTaskScheduled
+  3 WorkflowTaskStarted
+  4 WorkflowTaskCompleted
+  5 WorkflowExecutionUpdateAccepted
+  6 WorkflowExecutionContinuedAsNew`, s.getHistory(s.namespace, tv.WithRunID(firstRunID).WorkflowExecution()))
+
+	s.EqualHistoryEvents(`
+  1 WorkflowExecutionStarted
+  2 WorkflowTaskScheduled
+  3 WorkflowTaskStarted
+  4 WorkflowTaskCompleted`, s.getHistory(s.namespace, tv.WorkflowExecution()))
 }

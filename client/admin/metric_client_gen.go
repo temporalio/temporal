@@ -187,6 +187,20 @@ func (c *metricClient) DescribeMutableState(
 	return c.client.DescribeMutableState(ctx, request, opts...)
 }
 
+func (c *metricClient) DescribeTaskQueuePartition(
+	ctx context.Context,
+	request *adminservice.DescribeTaskQueuePartitionRequest,
+	opts ...grpc.CallOption,
+) (_ *adminservice.DescribeTaskQueuePartitionResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, "AdminClientDescribeTaskQueuePartition")
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.DescribeTaskQueuePartition(ctx, request, opts...)
+}
+
 func (c *metricClient) GetDLQMessages(
 	ctx context.Context,
 	request *adminservice.GetDLQMessagesRequest,

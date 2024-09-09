@@ -30,7 +30,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -54,6 +53,7 @@ import (
 	"go.temporal.io/server/service/history/tests"
 	"go.temporal.io/server/service/history/workflow"
 	"go.temporal.io/server/service/history/workflow/cache"
+	"go.uber.org/mock/gomock"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -429,15 +429,15 @@ func TestArchivalQueueTaskExecutor(t *testing.T) {
 				).AnyTimes()
 				executionInfo := &persistence.WorkflowExecutionInfo{
 					NamespaceId:                  tests.NamespaceID.String(),
-					StartTime:                    timestamppb.New(p.StartTime),
 					ExecutionTime:                timestamppb.New(p.ExecutionTime),
 					CloseTime:                    timestamppb.New(p.CloseTime),
 					CloseVisibilityTaskCompleted: p.CloseVisibilityTaskCompleted,
 				}
 				mutableState.EXPECT().GetExecutionInfo().Return(executionInfo).AnyTimes()
 				executionState := &persistence.WorkflowExecutionState{
-					State:  0,
-					Status: 0,
+					State:     0,
+					Status:    0,
+					StartTime: timestamppb.New(p.StartTime),
 				}
 				mutableState.EXPECT().GetExecutionState().Return(executionState).AnyTimes()
 				if p.ExpectAddTask {

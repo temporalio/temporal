@@ -30,7 +30,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/golang/mock/gomock"
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -75,6 +74,7 @@ import (
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/tests"
+	"go.uber.org/mock/gomock"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -628,7 +628,7 @@ func (s *mutableStateSuite) TestContinueAsNewMinBackoff() {
 	s.True(minBackoff == backoff)
 
 	// set start time to be 3s ago
-	s.mutableState.executionInfo.StartTime = timestamppb.New(time.Now().Add(-time.Second * 3))
+	s.mutableState.executionState.StartTime = timestamppb.New(time.Now().Add(-time.Second * 3))
 	// with no backoff, verify min backoff is in [0, 2s]
 	minBackoff = s.mutableState.ContinueAsNewMinBackoff(nil).AsDuration()
 	s.NotNil(minBackoff)
@@ -641,7 +641,7 @@ func (s *mutableStateSuite) TestContinueAsNewMinBackoff() {
 	s.True(minBackoff == backoff)
 
 	// set start time to be 5s ago
-	s.mutableState.executionInfo.StartTime = timestamppb.New(time.Now().Add(-time.Second * 5))
+	s.mutableState.executionState.StartTime = timestamppb.New(time.Now().Add(-time.Second * 5))
 	// with no backoff, verify backoff unchanged (no backoff needed)
 	minBackoff = s.mutableState.ContinueAsNewMinBackoff(nil).AsDuration()
 	s.Zero(minBackoff)
@@ -1056,7 +1056,6 @@ func (s *mutableStateSuite) buildWorkflowMutableState() *persistencespb.Workflow
 		DefaultWorkflowTaskTimeout:              timestamp.DurationFromSeconds(100),
 		LastCompletedWorkflowTaskStartedEventId: int64(99),
 		LastUpdateTime:                          timestamp.TimeNowPtrUtc(),
-		StartTime:                               startTime,
 		ExecutionTime:                           startTime,
 		WorkflowTaskVersion:                     failoverVersion,
 		WorkflowTaskScheduledEventId:            101,
@@ -1085,9 +1084,10 @@ func (s *mutableStateSuite) buildWorkflowMutableState() *persistencespb.Workflow
 	}
 
 	state := &persistencespb.WorkflowExecutionState{
-		RunId:  we.GetRunId(),
-		State:  enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
-		Status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+		RunId:     we.GetRunId(),
+		State:     enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
+		Status:    enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+		StartTime: startTime,
 	}
 
 	activityInfos := map[int64]*persistencespb.ActivityInfo{

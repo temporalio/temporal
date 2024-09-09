@@ -143,6 +143,16 @@ func (c *clientImpl) DescribeMutableState(
 	return c.client.DescribeMutableState(ctx, request, opts...)
 }
 
+func (c *clientImpl) DescribeTaskQueuePartition(
+	ctx context.Context,
+	request *adminservice.DescribeTaskQueuePartitionRequest,
+	opts ...grpc.CallOption,
+) (*adminservice.DescribeTaskQueuePartitionResponse, error) {
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return c.client.DescribeTaskQueuePartition(ctx, request, opts...)
+}
+
 func (c *clientImpl) GetDLQMessages(
 	ctx context.Context,
 	request *adminservice.GetDLQMessagesRequest,

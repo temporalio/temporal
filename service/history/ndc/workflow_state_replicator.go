@@ -226,6 +226,10 @@ func (r *WorkflowStateReplicatorImpl) SyncWorkflowState(
 		namespaceID,
 		wid,
 		rid,
+		// TODO: The original run id is in the workflow started history event but not in mutable state.
+		// Use the history tree id to be the original run id.
+		// https://github.com/temporalio/temporal/issues/6501
+		branchInfo.GetTreeId(),
 		lastEventItem.GetEventId(),
 		lastEventItem.GetVersion(),
 		newHistoryBranchToken,
@@ -279,29 +283,36 @@ func (r *WorkflowStateReplicatorImpl) backfillHistory(
 	namespaceID namespace.ID,
 	workflowID string,
 	runID string,
+	originalRunID string,
 	lastEventID int64,
 	lastEventVersion int64,
 	branchToken []byte,
 ) (taskID int64, retError error) {
 
-	// Get the current run lock to make sure no concurrent backfill history across multiple runs.
-	currentRunReleaseFn, err := r.workflowCache.GetOrCreateCurrentWorkflowExecution(
-		ctx,
-		r.shardContext,
-		namespaceID,
-		workflowID,
-		locks.PriorityLow,
-	)
-	if err != nil {
-		return common.EmptyEventTaskID, err
-	}
-	defer func() {
-		if rec := recover(); rec != nil {
-			currentRunReleaseFn(errPanic)
-			panic(rec)
+	if runID != originalRunID {
+		// At this point, it already acquired the workflow lock on the run ID.
+		// Get the lock of root run id to make sure no concurrent backfill history across multiple runs.
+		_, rootRunReleaseFn, err := r.workflowCache.GetOrCreateWorkflowExecution(
+			ctx,
+			r.shardContext,
+			namespaceID,
+			&commonpb.WorkflowExecution{
+				WorkflowId: workflowID,
+				RunId:      originalRunID,
+			},
+			locks.PriorityLow,
+		)
+		if err != nil {
+			return common.EmptyEventTaskID, err
 		}
-		currentRunReleaseFn(retError)
-	}()
+		defer func() {
+			if rec := recover(); rec != nil {
+				rootRunReleaseFn(errPanic)
+				panic(rec)
+			}
+			rootRunReleaseFn(retError)
+		}()
+	}
 
 	// Get the last batch node id to check if the history data is already in DB.
 	localHistoryIterator := collection.NewPagingIterator(r.getHistoryFromLocalPaginationFn(
