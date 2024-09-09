@@ -139,6 +139,84 @@ func (s *ClientFunctionalSuite) TestUpdateWorkflow_TerminateWorkflowAfterUpdateA
 	s.ErrorAs(wfRun.Get(ctx, nil), &wee)
 }
 
+func (s *ClientFunctionalSuite) TestUpdateWorkflow_ContinueAsNewAfterUpdateAdmitted() {
+	/*
+		Start Workflow and send Update to itself from LA to make sure it is admitted
+		by server while WFT is running. This WFT does CAN. For test simplicity,
+		it used another WF function for 2nd run. This 2nd function has Update handler
+		registered. When server receives CAN it abort all Updates with retryable
+		"workflow is closing" error and SDK retries. In mean time, server process CAN,
+		starts 2nd run, Update is delivered to it, and processed by registered handler.
+	*/
+
+	tv := testvars.New(s.T()).WithTaskQueue(s.taskQueue).WithNamespaceName(namespace.Name(s.namespace))
+
+	rootCtx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	defer cancel()
+
+	sendUpdateActivityFn := func(ctx context.Context) error {
+		s.updateWorkflowWaitAdmitted(rootCtx, tv, "update-arg")
+		return nil
+	}
+
+	workflowFn2 := func(ctx workflow.Context) error {
+		s.NoError(workflow.SetUpdateHandler(ctx, tv.HandlerName(), func(ctx workflow.Context, arg string) (string, error) {
+			return workflow.GetInfo(ctx).WorkflowExecution.RunID, nil
+		}))
+
+		s.NoError(workflow.Await(ctx, func() bool { return false }))
+		return unreachableErr
+	}
+
+	workflowFn1 := func(ctx workflow.Context) error {
+		ctx = workflow.WithLocalActivityOptions(ctx, workflow.LocalActivityOptions{
+			StartToCloseTimeout: 5 * time.Second,
+		})
+		s.NoError(workflow.ExecuteLocalActivity(ctx, sendUpdateActivityFn).Get(ctx, nil))
+
+		return workflow.NewContinueAsNewError(ctx, workflowFn2)
+	}
+
+	s.worker.RegisterWorkflow(workflowFn1)
+	s.worker.RegisterWorkflow(workflowFn2)
+	s.worker.RegisterActivity(sendUpdateActivityFn)
+
+	var firstRun sdkclient.WorkflowRun
+	firstRun = s.startWorkflow(rootCtx, tv, workflowFn1)
+	var secondRunID string
+	s.Eventually(func() bool {
+		resp, err := s.pollUpdate(rootCtx, tv, &updatepb.WaitPolicy{LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED})
+		if err != nil {
+			var notFoundErr *serviceerror.NotFound
+			var resourceExhaustedErr *serviceerror.ResourceExhausted
+			// If poll lands on 1st run, it will get ResourceExhausted.
+			// If poll lands on 2nd run, it will get NotFound error for few attempts.
+			// All other errors are unexpected.
+			s.True(errors.As(err, &notFoundErr) || errors.As(err, &resourceExhaustedErr), "error must be NotFound or ResourceExhausted")
+			return false
+		}
+		secondRunID = decodeString(s.T(), resp.GetOutcome().GetSuccess())
+		return true
+	}, 5*time.Second, 100*time.Millisecond, "update did not reach Completed stage")
+
+	s.NotEqual(firstRun.GetRunID(), secondRunID, "RunId of started WF and WF that received Update should be different")
+
+	s.EqualHistoryEvents(`
+  1 WorkflowExecutionStarted
+  2 WorkflowTaskScheduled
+  3 WorkflowTaskStarted
+  4 WorkflowTaskCompleted
+  5 MarkerRecorded
+  6 WorkflowExecutionContinuedAsNew`, s.getHistory(s.namespace, tv.WithRunID(firstRun.GetRunID()).WorkflowExecution()))
+	s.EqualHistoryEvents(`
+  1 WorkflowExecutionStarted
+  2 WorkflowTaskScheduled
+  3 WorkflowTaskStarted
+  4 WorkflowTaskCompleted
+  5 WorkflowExecutionUpdateAccepted
+  6 WorkflowExecutionUpdateCompleted`, s.getHistory(s.namespace, tv.WithRunID(secondRunID).WorkflowExecution()))
+}
+
 func (s *ClientFunctionalSuite) startWorkflow(ctx context.Context, tv *testvars.TestVars, workflowFn interface{}) sdkclient.WorkflowRun {
 	run, err := s.sdkClient.ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{
 		ID:        tv.WorkflowID(),
