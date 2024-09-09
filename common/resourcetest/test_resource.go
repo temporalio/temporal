@@ -35,7 +35,6 @@ import (
 	"go.temporal.io/server/api/historyservicemock/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/api/matchingservicemock/v1"
-	"go.temporal.io/server/api/workflowservicemock/v1"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/archiver/provider"
@@ -52,6 +51,7 @@ import (
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/testing/mockapi/workflowservicemock/v1"
 	"go.uber.org/mock/gomock"
 )
 

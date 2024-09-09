@@ -38,9 +38,9 @@ import (
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/testsuite"
-	"go.temporal.io/server/api/workflowservicemock/v1"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/common/testing/mockapi/workflowservicemock/v1"
 	"go.uber.org/mock/gomock"
 )
 
