@@ -960,6 +960,21 @@ func (mr *MockEngineMockRecorder) SyncShardStatus(ctx, request interface{}) *gom
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SyncShardStatus", reflect.TypeOf((*MockEngine)(nil).SyncShardStatus), ctx, request)
 }
 
+// SyncWorkflowState mocks base method.
+func (m *MockEngine) SyncWorkflowState(ctx context.Context, request *v12.SyncWorkflowStateRequest) (*v12.SyncWorkflowStateResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "SyncWorkflowState", ctx, request)
+	ret0, _ := ret[0].(*v12.SyncWorkflowStateResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// SyncWorkflowState indicates an expected call of SyncWorkflowState.
+func (mr *MockEngineMockRecorder) SyncWorkflowState(ctx, request interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SyncWorkflowState", reflect.TypeOf((*MockEngine)(nil).SyncWorkflowState), ctx, request)
+}
+
 // TerminateWorkflowExecution mocks base method.
 func (m *MockEngine) TerminateWorkflowExecution(ctx context.Context, request *v12.TerminateWorkflowExecutionRequest) (*v12.TerminateWorkflowExecutionResponse, error) {
 	m.ctrl.T.Helper()

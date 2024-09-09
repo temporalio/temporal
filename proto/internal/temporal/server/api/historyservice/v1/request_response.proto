@@ -960,6 +960,7 @@ message SyncWorkflowStateRequest {
     temporal.api.common.v1.WorkflowExecution execution = 2;
     temporal.server.api.persistence.v1.VersionedTransition versioned_transition = 3;
     temporal.server.api.history.v1.VersionHistories version_histories = 4;
+    int32 target_cluster_id = 5;
 }
 
 message SyncWorkflowStateResponse {

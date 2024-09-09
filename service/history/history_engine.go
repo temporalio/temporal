@@ -148,6 +148,8 @@ type (
 		taskCategoryRegistry       tasks.TaskCategoryRegistry
 		commandHandlerRegistry     *workflow.CommandHandlerRegistry
 		stateMachineEnvironment    *stateMachineEnvironment
+		replicationProgressCache   replication.ProgressCache
+		syncStateRetriever         replication.SyncStateRetriever
 	}
 )
 
@@ -217,6 +219,12 @@ func NewEngineWithShardContext(
 			metricsHandler: shard.GetMetricsHandler(),
 			logger:         logger,
 		},
+		replicationProgressCache: replicationProgressCache,
+		syncStateRetriever: replication.NewSyncStateRetriever(
+			shard,
+			workflowCache,
+			shard.GetLogger(),
+		),
 	}
 
 	historyEngImpl.queueProcessors = make(map[tasks.Category]queues.Queue)
@@ -1026,5 +1034,5 @@ func (e *historyEngineImpl) StateMachineEnvironment() hsm.Environment {
 }
 
 func (e *historyEngineImpl) SyncWorkflowState(ctx context.Context, request *historyservice.SyncWorkflowStateRequest) (_ *historyservice.SyncWorkflowStateResponse, retErr error) {
-	return replicationapi.SyncWorkflowState(ctx, e.shardContext, request, e.workflowConsistencyChecker.GetWorkflowCache())
+	return replicationapi.SyncWorkflowState(ctx, request, e.replicationProgressCache, e.syncStateRetriever, e.logger)
 }
