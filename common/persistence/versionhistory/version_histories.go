@@ -100,8 +100,8 @@ func AddVersionHistory(h *historyspb.VersionHistories, v *historyspb.VersionHist
 	return newVersionHistoryIndex, nil
 }
 
-// AddAndSwitchVersionHistory adds a VersionHistory and switch the whether current branch if necessary
-// based on the VersionHistoryItem Version.
+// AddAndSwitchVersionHistory adds a VersionHistory and switch the current branch if necessary
+// based on the Version of the last VersionHistoryItem.
 // Returns:
 //   - if the current branch has been switched or not
 //   - the index of the newly added VersionHistory
