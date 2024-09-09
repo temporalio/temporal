@@ -413,7 +413,7 @@ func (r *HistoryImporterImpl) commit(
 
 	if cmpResult < 0 {
 		// imported events does not belong to current branch, update DB mutable state with new version history
-		updated, _, err := versionhistory.AddVersionHistory(
+		updated, _, err := versionhistory.AddAndSwitchVersionHistory(
 			dbNDCWorkflow.GetMutableState().GetExecutionInfo().GetVersionHistories(),
 			memCurrentVersionHistory,
 		)
