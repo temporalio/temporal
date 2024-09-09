@@ -2066,10 +2066,10 @@ func (adh *AdminHandler) SyncWorkflowState(ctx context.Context, request *adminse
 			EventBatches: res.EventBatches,
 			NewRunInfo:   res.NewRunInfo,
 		}, nil
-	case *historyservice.SyncWorkflowStateResponse_State:
+	case *historyservice.SyncWorkflowStateResponse_Snapshot:
 		return &adminservice.SyncWorkflowStateResponse{
-			Attributes: &adminservice.SyncWorkflowStateResponse_State{
-				State: res.GetState(),
+			Attributes: &adminservice.SyncWorkflowStateResponse_Snapshot{
+				Snapshot: res.GetSnapshot(),
 			},
 			EventBatches: res.EventBatches,
 			NewRunInfo:   res.NewRunInfo,
