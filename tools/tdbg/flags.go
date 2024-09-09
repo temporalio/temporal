@@ -86,4 +86,9 @@ var (
 	FlagBase64File                 = "base64-file"
 	FlagTaskCategoryID             = "task-category-id"
 	FlagEncoding                   = "encoding"
+	FlagPartitionID                = "partition-id"
+	FlagStickyName                 = "sticky-name"
+	FlagBuildIDs                   = "select-build-id"
+	FlagUnversioned                = "select-unversioned"
+	FlagAllActive                  = "select-all-active"
 )

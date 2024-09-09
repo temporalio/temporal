@@ -2988,3 +2988,114 @@ func (this *DeepHealthCheckResponse) Equal(that interface{}) bool {
 
 	return proto.Equal(this, that1)
 }
+
+// Marshal an object of type DescribeTaskQueuePartitionRequest to the protobuf v3 wire format
+func (val *DescribeTaskQueuePartitionRequest) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type DescribeTaskQueuePartitionRequest from the protobuf v3 wire format
+func (val *DescribeTaskQueuePartitionRequest) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *DescribeTaskQueuePartitionRequest) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two DescribeTaskQueuePartitionRequest values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *DescribeTaskQueuePartitionRequest) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *DescribeTaskQueuePartitionRequest
+	switch t := that.(type) {
+	case *DescribeTaskQueuePartitionRequest:
+		that1 = t
+	case DescribeTaskQueuePartitionRequest:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
+// Marshal an object of type InternalTaskQueueStatus to the protobuf v3 wire format
+func (val *InternalTaskQueueStatus) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type InternalTaskQueueStatus from the protobuf v3 wire format
+func (val *InternalTaskQueueStatus) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *InternalTaskQueueStatus) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two InternalTaskQueueStatus values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *InternalTaskQueueStatus) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *InternalTaskQueueStatus
+	switch t := that.(type) {
+	case *InternalTaskQueueStatus:
+		that1 = t
+	case InternalTaskQueueStatus:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
+// Marshal an object of type DescribeTaskQueuePartitionResponse to the protobuf v3 wire format
+func (val *DescribeTaskQueuePartitionResponse) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type DescribeTaskQueuePartitionResponse from the protobuf v3 wire format
+func (val *DescribeTaskQueuePartitionResponse) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *DescribeTaskQueuePartitionResponse) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two DescribeTaskQueuePartitionResponse values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *DescribeTaskQueuePartitionResponse) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *DescribeTaskQueuePartitionResponse
+	switch t := that.(type) {
+	case *DescribeTaskQueuePartitionResponse:
+		that1 = t
+	case DescribeTaskQueuePartitionResponse:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}

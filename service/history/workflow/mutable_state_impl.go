@@ -6237,6 +6237,14 @@ func (ms *MutableStateImpl) RefreshExpirationTimeoutTask(ctx context.Context) er
 	if weTimeout > 0 {
 		executionInfo.WorkflowExecutionExpirationTime = timestamp.TimeNowPtrUtcAddDuration(weTimeout)
 	}
+	wrTimeout := timestamp.DurationValue(executionInfo.WorkflowRunTimeout)
+	if wrTimeout != 0 {
+		executionInfo.WorkflowRunExpirationTime = timestamp.TimeNowPtrUtcAddDuration(wrTimeout)
+
+		if weTimeout > 0 && executionInfo.WorkflowRunExpirationTime.AsTime().After(executionInfo.WorkflowExecutionExpirationTime.AsTime()) {
+			executionInfo.WorkflowRunExpirationTime = executionInfo.WorkflowExecutionExpirationTime
+		}
+	}
 
 	return RefreshTasksForWorkflowStart(ctx, ms, ms.taskGenerator, EmptyVersionedTransition)
 }

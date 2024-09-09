@@ -506,6 +506,55 @@ func newAdminTaskQueueCommands(clientFactory ClientFactory) []*cli.Command {
 				return AdminListTaskQueueTasks(c, clientFactory)
 			},
 		},
+		{
+			Name:  "describe-task-queue-partition",
+			Usage: "Describe information related to a task queue partition",
+			Flags: []cli.Flag{
+				&cli.StringFlag{
+					Name:  FlagNamespaceID,
+					Usage: "NamespaceId",
+					Value: "default",
+				},
+				&cli.StringFlag{
+					Name:     FlagTaskQueue,
+					Usage:    "Task Queue name",
+					Required: true,
+				},
+				&cli.StringFlag{
+					Name:  FlagTaskQueueType,
+					Value: "TASK_QUEUE_TYPE_WORKFLOW",
+					Usage: "Task Queue type: activity, workflow, nexus (experimental)",
+				},
+				&cli.Int64Flag{
+					Name:  FlagPartitionID,
+					Usage: "Partition ID",
+					Value: 0,
+				},
+				&cli.StringFlag{
+					Name:  FlagStickyName,
+					Usage: "Sticky Name for a task queue partition, if present",
+					Value: "",
+				},
+				&cli.StringSliceFlag{
+					Name:  FlagBuildIDs,
+					Value: &cli.StringSlice{},
+					Usage: "Build IDs",
+				},
+				&cli.BoolFlag{
+					Name:  FlagUnversioned,
+					Usage: "Unversioned task queue partition",
+					Value: true,
+				},
+				&cli.BoolFlag{
+					Name:  FlagAllActive,
+					Usage: "All active task queue versions",
+					Value: true,
+				},
+			},
+			Action: func(c *cli.Context) error {
+				return AdminDescribeTaskQueuePartition(c, clientFactory)
+			},
+		},
 	}
 }
 
