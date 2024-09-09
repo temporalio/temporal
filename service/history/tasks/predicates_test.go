@@ -29,7 +29,6 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/golang/mock/gomock"
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -37,6 +36,7 @@ import (
 	"go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/predicates"
+	"go.uber.org/mock/gomock"
 )
 
 type (

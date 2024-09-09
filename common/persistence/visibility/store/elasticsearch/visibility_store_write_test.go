@@ -30,7 +30,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/golang/mock/gomock"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/server/common/future"
@@ -40,6 +39,7 @@ import (
 	"go.temporal.io/server/common/persistence/visibility/store"
 	"go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
 	"go.temporal.io/server/common/searchattribute"
+	"go.uber.org/mock/gomock"
 )
 
 func (s *ESVisibilitySuite) TestRecordWorkflowExecutionStarted() {

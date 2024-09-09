@@ -29,7 +29,6 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/api/common/v1"
@@ -45,6 +44,7 @@ import (
 	"go.temporal.io/server/common/testing/mocksdk"
 	"go.temporal.io/server/service/history/configs"
 	"go.uber.org/fx"
+	"go.uber.org/mock/gomock"
 	"go.uber.org/multierr"
 )
 

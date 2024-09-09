@@ -31,7 +31,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/golang/mock/gomock"
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/suite"
 	commandpb "go.temporal.io/api/command/v1"
@@ -58,6 +57,7 @@ import (
 	"go.temporal.io/server/service/history/replication/eventhandler"
 	"go.temporal.io/server/tests"
 	"go.uber.org/fx"
+	"go.uber.org/mock/gomock"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 
