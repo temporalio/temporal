@@ -38,10 +38,10 @@ import (
 	reflect "reflect"
 	time "time"
 
-	v1 "go.temporal.io/api/taskqueue/v1"
-	v10 "go.temporal.io/server/api/matchingservice/v1"
-	v11 "go.temporal.io/server/api/persistence/v1"
-	v12 "go.temporal.io/server/api/taskqueue/v1"
+	taskqueue "go.temporal.io/api/taskqueue/v1"
+	matchingservice "go.temporal.io/server/api/matchingservice/v1"
+	persistence "go.temporal.io/server/api/persistence/v1"
+	taskqueue0 "go.temporal.io/server/api/taskqueue/v1"
 	gomock "go.uber.org/mock/gomock"
 )
 
@@ -69,10 +69,10 @@ func (m *MockphysicalTaskQueueManager) EXPECT() *MockphysicalTaskQueueManagerMoc
 }
 
 // DispatchNexusTask mocks base method.
-func (m *MockphysicalTaskQueueManager) DispatchNexusTask(ctx context.Context, taskId string, request *v10.DispatchNexusTaskRequest) (*v10.DispatchNexusTaskResponse, error) {
+func (m *MockphysicalTaskQueueManager) DispatchNexusTask(ctx context.Context, taskId string, request *matchingservice.DispatchNexusTaskRequest) (*matchingservice.DispatchNexusTaskResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "DispatchNexusTask", ctx, taskId, request)
-	ret0, _ := ret[0].(*v10.DispatchNexusTaskResponse)
+	ret0, _ := ret[0].(*matchingservice.DispatchNexusTaskResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -84,10 +84,10 @@ func (mr *MockphysicalTaskQueueManagerMockRecorder) DispatchNexusTask(ctx, taskI
 }
 
 // DispatchQueryTask mocks base method.
-func (m *MockphysicalTaskQueueManager) DispatchQueryTask(ctx context.Context, taskId string, request *v10.QueryWorkflowRequest) (*v10.QueryWorkflowResponse, error) {
+func (m *MockphysicalTaskQueueManager) DispatchQueryTask(ctx context.Context, taskId string, request *matchingservice.QueryWorkflowRequest) (*matchingservice.QueryWorkflowResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "DispatchQueryTask", ctx, taskId, request)
-	ret0, _ := ret[0].(*v10.QueryWorkflowResponse)
+	ret0, _ := ret[0].(*matchingservice.QueryWorkflowResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -113,10 +113,10 @@ func (mr *MockphysicalTaskQueueManagerMockRecorder) DispatchSpooledTask(ctx, tas
 }
 
 // GetAllPollerInfo mocks base method.
-func (m *MockphysicalTaskQueueManager) GetAllPollerInfo() []*v1.PollerInfo {
+func (m *MockphysicalTaskQueueManager) GetAllPollerInfo() []*taskqueue.PollerInfo {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetAllPollerInfo")
-	ret0, _ := ret[0].([]*v1.PollerInfo)
+	ret0, _ := ret[0].([]*taskqueue.PollerInfo)
 	return ret0
 }
 
@@ -127,10 +127,10 @@ func (mr *MockphysicalTaskQueueManagerMockRecorder) GetAllPollerInfo() *gomock.C
 }
 
 // GetInternalTaskQueueStatus mocks base method.
-func (m *MockphysicalTaskQueueManager) GetInternalTaskQueueStatus() *v12.InternalTaskQueueStatus {
+func (m *MockphysicalTaskQueueManager) GetInternalTaskQueueStatus() *taskqueue0.InternalTaskQueueStatus {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetInternalTaskQueueStatus")
-	ret0, _ := ret[0].(*v12.InternalTaskQueueStatus)
+	ret0, _ := ret[0].(*taskqueue0.InternalTaskQueueStatus)
 	return ret0
 }
 
@@ -141,10 +141,10 @@ func (mr *MockphysicalTaskQueueManagerMockRecorder) GetInternalTaskQueueStatus()
 }
 
 // GetStats mocks base method.
-func (m *MockphysicalTaskQueueManager) GetStats() *v1.TaskQueueStats {
+func (m *MockphysicalTaskQueueManager) GetStats() *taskqueue.TaskQueueStats {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetStats")
-	ret0, _ := ret[0].(*v1.TaskQueueStats)
+	ret0, _ := ret[0].(*taskqueue.TaskQueueStats)
 	return ret0
 }
 
@@ -169,10 +169,10 @@ func (mr *MockphysicalTaskQueueManagerMockRecorder) HasPollerAfter(accessTime an
 }
 
 // LegacyDescribeTaskQueue mocks base method.
-func (m *MockphysicalTaskQueueManager) LegacyDescribeTaskQueue(includeTaskQueueStatus bool) *v10.DescribeTaskQueueResponse {
+func (m *MockphysicalTaskQueueManager) LegacyDescribeTaskQueue(includeTaskQueueStatus bool) *matchingservice.DescribeTaskQueueResponse {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "LegacyDescribeTaskQueue", includeTaskQueueStatus)
-	ret0, _ := ret[0].(*v10.DescribeTaskQueueResponse)
+	ret0, _ := ret[0].(*matchingservice.DescribeTaskQueueResponse)
 	return ret0
 }
 
@@ -252,7 +252,7 @@ func (mr *MockphysicalTaskQueueManagerMockRecorder) ShouldEmitGauges() *gomock.C
 }
 
 // SpoolTask mocks base method.
-func (m *MockphysicalTaskQueueManager) SpoolTask(taskInfo *v11.TaskInfo) error {
+func (m *MockphysicalTaskQueueManager) SpoolTask(taskInfo *persistence.TaskInfo) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "SpoolTask", taskInfo)
 	ret0, _ := ret[0].(error)
