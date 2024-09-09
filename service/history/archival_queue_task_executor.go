@@ -228,7 +228,7 @@ func (e *archivalQueueTaskExecutor) getArchiveTaskRequest(
 		HistoryURI:           historyURI,
 		VisibilityURI:        visibilityURI,
 		WorkflowTypeName:     executionInfo.GetWorkflowTypeName(),
-		StartTime:            executionInfo.GetStartTime(),
+		StartTime:            executionState.GetStartTime(),
 		ExecutionTime:        executionInfo.GetExecutionTime(),
 		CloseTime:            timestamppb.New(closeTime),
 		ExecutionDuration:    durationpb.New(executionDuration),

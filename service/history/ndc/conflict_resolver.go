@@ -166,7 +166,7 @@ func (r *ConflictResolverImpl) rebuild(
 
 	rebuildMutableState, _, err := r.stateRebuilder.Rebuild(
 		ctx,
-		timestamp.TimeValue(executionInfo.StartTime),
+		timestamp.TimeValue(executionState.StartTime),
 		workflowKey,
 		replayVersionHistory.GetBranchToken(),
 		lastItem.GetEventId(),

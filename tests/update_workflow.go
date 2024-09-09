@@ -4756,15 +4756,11 @@ func (s *FunctionalSuite) TestUpdateWorkflow_LastWorkflowTask_HasUpdateMessage()
 		T:      s.T(),
 	}
 
-	s.sendUpdateNoErrorWaitPolicyAccepted(tv, tv.UpdateID())
-	pollResponse := make(chan error)
-	go func() {
-		// Blocks until the update request causes a WFT to be dispatched; then sends the update complete message
-		// required for the update request to return.
-		_, err := poller.PollAndProcessWorkflowTask()
-		pollResponse <- err
-	}()
-	s.NoError(<-pollResponse)
+	updateResultCh := s.sendUpdateNoErrorWaitPolicyAccepted(tv, "1")
+	_, err := poller.PollAndProcessWorkflowTask(WithoutRetries)
+	s.NoError(err)
+	updateResult := <-updateResultCh
+	s.Equal(enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ACCEPTED, updateResult.GetStage())
 
 	s.EqualHistoryEvents(`
 	1 WorkflowExecutionStarted
@@ -4985,4 +4981,42 @@ func (s *FunctionalSuite) TestUpdateWorkflow_UpdatesAreSentToWorkerInOrderOfAdmi
 
 	history := s.getHistory(s.namespace, tv.WorkflowExecution())
 	s.EqualHistoryEvents(expectedHistory, history)
+}
+
+func (s *FunctionalSuite) TestUpdateWorkflow_WaitAccepted_GotCompleted() {
+	tv := testvars.New(s.T())
+	tv = s.startWorkflow(tv)
+
+	poller := &TaskPoller{
+		Client:    s.client,
+		Namespace: s.namespace,
+		TaskQueue: tv.TaskQueue(),
+		Identity:  tv.WorkerIdentity(),
+		WorkflowTaskHandler: func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
+			return s.UpdateAcceptCompleteCommands(tv, "1"), nil
+		},
+		MessageHandler: func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*protocolpb.Message, error) {
+			return s.UpdateAcceptCompleteMessages(tv, task.Messages[0], "1"), nil
+		},
+		Logger: s.Logger,
+		T:      s.T(),
+	}
+
+	// Send Update with intent to wait for Accepted stage only,
+	updateResultCh := s.sendUpdateNoErrorWaitPolicyAccepted(tv, "1")
+	_, err := poller.PollAndProcessWorkflowTask(WithoutRetries)
+	s.NoError(err)
+	updateResult := <-updateResultCh
+	// but Update was accepted and completed on the same WFT, and outcome was returned.
+	s.Equal(enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED, updateResult.GetStage())
+	s.EqualValues("success-result-of-"+tv.UpdateID("1"), decodeString(s.T(), updateResult.GetOutcome().GetSuccess()))
+
+	s.EqualHistoryEvents(`
+	1 WorkflowExecutionStarted
+	2 WorkflowTaskScheduled
+	3 WorkflowTaskStarted
+	4 WorkflowTaskCompleted
+	5 WorkflowExecutionUpdateAccepted
+	6 WorkflowExecutionUpdateCompleted
+	`, s.getHistory(s.namespace, tv.WorkflowExecution()))
 }

@@ -54,7 +54,7 @@ func TestLocalMutableState(
 	ms.executionInfo.NamespaceId = string(ns.ID())
 	ms.executionInfo.WorkflowId = workflowID
 	ms.executionState.RunId = runID
-	ms.GetExecutionInfo().ExecutionTime = ms.GetExecutionInfo().StartTime
+	ms.GetExecutionInfo().ExecutionTime = ms.GetExecutionState().StartTime
 	_ = ms.SetHistoryTree(nil, nil, runID)
 
 	return ms
@@ -103,7 +103,7 @@ func TestGlobalMutableState(
 ) *MutableStateImpl {
 
 	ms := NewMutableState(shard, eventsCache, logger, tests.GlobalNamespaceEntry, workflowID, runID, time.Now().UTC())
-	ms.GetExecutionInfo().ExecutionTime = ms.GetExecutionInfo().StartTime
+	ms.GetExecutionInfo().ExecutionTime = ms.GetExecutionState().StartTime
 	_ = ms.UpdateCurrentVersion(version, false)
 	_ = ms.SetHistoryTree(nil, nil, runID)
 
