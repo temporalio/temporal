@@ -32,6 +32,11 @@ import (
 	"sync"
 	"testing"
 
+	taskqueuepb "go.temporal.io/api/taskqueue/v1"
+	"go.temporal.io/server/api/matchingservice/v1"
+	"go.temporal.io/server/api/matchingservicemock/v1"
+	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
+
 	"github.com/golang/mock/gomock"
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/assert"
@@ -90,6 +95,7 @@ type (
 		mockAdminClient            *adminservicemock.MockAdminServiceClient
 		mockMetadata               *cluster.MockMetadata
 		mockProducer               *persistence.MockNamespaceReplicationQueue
+		mockMatchingClient         *matchingservicemock.MockMatchingServiceClient
 
 		namespace      namespace.Name
 		namespaceID    namespace.ID
@@ -131,6 +137,7 @@ func (s *adminHandlerSuite) SetupTest() {
 	s.mockMetadata = s.mockResource.ClusterMetadata
 	s.mockVisibilityMgr = s.mockResource.VisibilityManager
 	s.mockProducer = persistence.NewMockNamespaceReplicationQueue(s.controller)
+	s.mockMatchingClient = s.mockResource.MatchingClient
 
 	persistenceConfig := &config.Persistence{
 		NumHistoryShards: 1,
@@ -166,6 +173,7 @@ func (s *adminHandlerSuite) SetupTest() {
 		serialization.NewSerializer(),
 		clock.NewRealTimeSource(),
 		tasks.NewDefaultTaskCategoryRegistry(),
+		s.mockResource.GetMatchingClient(),
 	}
 	s.mockMetadata.EXPECT().GetCurrentClusterName().Return(uuid.New()).AnyTimes()
 	s.mockExecutionMgr.EXPECT().GetName().Return("mock-execution-manager").AnyTimes()
@@ -1650,4 +1658,129 @@ func (s *adminHandlerSuite) TestListQueues_Err() {
 	s.mockHistoryClient.EXPECT().ListQueues(gomock.Any(), gomock.Any()).Return(nil, assert.AnError)
 	_, err := s.handler.ListQueues(context.Background(), &adminservice.ListQueuesRequest{})
 	s.ErrorIs(err, assert.AnError)
+}
+
+func (s *adminHandlerSuite) TestDescribeTaskQueuePartition() {
+	handler := s.handler
+	ctx := context.Background()
+	unversioned := " "
+	buildID := "blx"
+
+	s.mockNamespaceCache.EXPECT().GetNamespaceID(gomock.Any()).Return(s.namespaceID, nil).AnyTimes()
+
+	type test struct {
+		Name     string
+		Request  *adminservice.DescribeTaskQueuePartitionRequest
+		Expected error
+	}
+	// request validation tests
+	errorCases := []test{
+		{
+			Name:     "nil request",
+			Request:  nil,
+			Expected: &serviceerror.InvalidArgument{Message: "Request is nil."},
+		},
+		{
+			Name:     "empty request",
+			Request:  &adminservice.DescribeTaskQueuePartitionRequest{},
+			Expected: &serviceerror.InvalidArgument{Message: "Namespace is not set on request."},
+		},
+	}
+	for _, test := range errorCases {
+		s.T().Run(test.Name, func(t *testing.T) {
+			resp, err := handler.DescribeTaskQueuePartition(ctx, test.Request)
+			s.Equal(test.Expected, err)
+			s.Nil(resp)
+		})
+	}
+
+	// request on a partition with buildIds
+	tqPartitionRequest := &taskqueuespb.TaskQueuePartition{
+		TaskQueue:     "hello-world",
+		TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+		PartitionId:   &taskqueuespb.TaskQueuePartition_NormalPartitionId{NormalPartitionId: 0},
+	}
+	buildIdRequest := &taskqueuepb.TaskQueueVersionSelection{
+		BuildIds:    []string{unversioned, buildID},
+		Unversioned: true,
+		AllActive:   true,
+	}
+
+	// request-response structures for mocking matching
+	matchingMockRequest := &matchingservice.DescribeTaskQueuePartitionRequest{
+		NamespaceId:                   s.namespaceID.String(),
+		TaskQueuePartition:            tqPartitionRequest,
+		Versions:                      buildIdRequest,
+		ReportStats:                   true,
+		ReportPollers:                 true,
+		ReportInternalTaskQueueStatus: true,
+	}
+	unversionedPhysicalTaskQueueInfo := &taskqueuespb.PhysicalTaskQueueInfo{
+		Pollers: []*taskqueuepb.PollerInfo(nil),
+		TaskQueueStats: &taskqueuepb.TaskQueueStats{
+			ApproximateBacklogCount: 0,
+			ApproximateBacklogAge:   nil,
+			TasksAddRate:            0,
+			TasksDispatchRate:       0,
+		},
+		InternalTaskQueueStatus: &taskqueuespb.InternalTaskQueueStatus{
+			ReadLevel: 0,
+			AckLevel:  0,
+			TaskIdBlock: &taskqueuepb.TaskIdBlock{
+				StartId: 0,
+				EndId:   0,
+			},
+			ReadBufferLength: 0,
+		},
+	}
+	versionedPhysicalTaskQueueInfo := &taskqueuespb.PhysicalTaskQueueInfo{
+		Pollers: []*taskqueuepb.PollerInfo(nil),
+		TaskQueueStats: &taskqueuepb.TaskQueueStats{
+			ApproximateBacklogCount: 100,
+			ApproximateBacklogAge:   nil,
+			TasksAddRate:            10.21,
+			TasksDispatchRate:       10.50,
+		},
+		InternalTaskQueueStatus: &taskqueuespb.InternalTaskQueueStatus{
+			ReadLevel: 1,
+			AckLevel:  1,
+			TaskIdBlock: &taskqueuepb.TaskIdBlock{
+				StartId: 1,
+				EndId:   1000,
+			},
+			ReadBufferLength: 10,
+		},
+	}
+
+	matchingMockResponse := &matchingservice.DescribeTaskQueuePartitionResponse{
+		VersionsInfoInternal: map[string]*taskqueuespb.TaskQueueVersionInfoInternal{
+			unversioned: {
+				PhysicalTaskQueueInfo: unversionedPhysicalTaskQueueInfo,
+			},
+			buildID: {
+				PhysicalTaskQueueInfo: versionedPhysicalTaskQueueInfo,
+			},
+		},
+	}
+	s.mockMatchingClient.EXPECT().DescribeTaskQueuePartition(ctx, matchingMockRequest).Return(matchingMockResponse, nil).Times(1)
+
+	resp, err := handler.DescribeTaskQueuePartition(ctx, &adminservice.DescribeTaskQueuePartitionRequest{
+		Namespace:          s.namespace.String(),
+		TaskQueuePartition: tqPartitionRequest,
+		BuildIds:           buildIdRequest,
+	})
+	s.NoError(err)
+	s.NotNil(resp)
+	s.Equal(2, len(resp.VersionsInfoInternal))
+
+	s.validatePhysicalTaskQueueInfo(unversionedPhysicalTaskQueueInfo, resp.VersionsInfoInternal[unversioned].GetPhysicalTaskQueueInfo())
+	s.validatePhysicalTaskQueueInfo(versionedPhysicalTaskQueueInfo, resp.VersionsInfoInternal[buildID].GetPhysicalTaskQueueInfo())
+}
+
+func (s *adminHandlerSuite) validatePhysicalTaskQueueInfo(expectedPhysicalTaskQueueInfo *taskqueuespb.PhysicalTaskQueueInfo,
+	responsePhysicalTaskQueueInfo *taskqueuespb.PhysicalTaskQueueInfo) {
+
+	s.Equal(expectedPhysicalTaskQueueInfo.GetPollers(), responsePhysicalTaskQueueInfo.GetPollers())
+	s.Equal(expectedPhysicalTaskQueueInfo.GetTaskQueueStats(), responsePhysicalTaskQueueInfo.GetTaskQueueStats())
+	s.Equal(expectedPhysicalTaskQueueInfo.GetInternalTaskQueueStatus(), responsePhysicalTaskQueueInfo.GetInternalTaskQueueStatus())
 }

@@ -200,6 +200,21 @@ func (c *retryableClient) DescribeMutableState(
 	return resp, err
 }
 
+func (c *retryableClient) DescribeTaskQueuePartition(
+	ctx context.Context,
+	request *adminservice.DescribeTaskQueuePartitionRequest,
+	opts ...grpc.CallOption,
+) (*adminservice.DescribeTaskQueuePartitionResponse, error) {
+	var resp *adminservice.DescribeTaskQueuePartitionResponse
+	op := func(ctx context.Context) error {
+		var err error
+		resp, err = c.client.DescribeTaskQueuePartition(ctx, request, opts...)
+		return err
+	}
+	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
+	return resp, err
+}
+
 func (c *retryableClient) GetDLQMessages(
 	ctx context.Context,
 	request *adminservice.GetDLQMessagesRequest,

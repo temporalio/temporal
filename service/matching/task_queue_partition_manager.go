@@ -472,7 +472,7 @@ func (pm *taskQueuePartitionManagerImpl) LegacyDescribeTaskQueue(includeTaskQueu
 func (pm *taskQueuePartitionManagerImpl) Describe(
 	ctx context.Context,
 	buildIds map[string]bool,
-	includeAllActive, reportStats, reportPollers bool) (*matchingservice.DescribeTaskQueuePartitionResponse, error) {
+	includeAllActive, reportStats, reportPollers, internalTaskQueueStatus bool) (*matchingservice.DescribeTaskQueuePartitionResponse, error) {
 	pm.versionedQueuesLock.RLock()
 	// Active means that the physical queue for that version is loaded.
 	// An empty string refers to the unversioned queue, which is always loaded.
@@ -498,6 +498,9 @@ func (pm *taskQueuePartitionManagerImpl) Describe(
 		}
 		if reportStats {
 			vInfo.PhysicalTaskQueueInfo.TaskQueueStats = physicalQueue.GetStats()
+		}
+		if internalTaskQueueStatus {
+			vInfo.PhysicalTaskQueueInfo.InternalTaskQueueStatus = physicalQueue.GetInternalTaskQueueStatus()
 		}
 		versionsInfo[bid] = vInfo
 	}
