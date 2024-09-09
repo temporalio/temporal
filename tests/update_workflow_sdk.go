@@ -189,7 +189,9 @@ func (s *ClientFunctionalSuite) TestUpdateWorkflow_ContinueAsNewAfterUpdateAdmit
 		if err != nil {
 			var notFoundErr *serviceerror.NotFound
 			var resourceExhaustedErr *serviceerror.ResourceExhausted
-			// If poll lands on 1st run, it will get ResourceExhausted if on 2nd, it will get NotFound for few attempts.
+			// If poll lands on 1st run, it will get ResourceExhausted.
+			// If poll lands on 2nd run, it will get NotFound error for few attempts.
+			// All other errors are unexpected.
 			s.True(errors.As(err, &notFoundErr) || errors.As(err, &resourceExhaustedErr), "error must be NotFound or ResourceExhausted")
 			return false
 		}

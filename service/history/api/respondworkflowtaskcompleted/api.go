@@ -634,20 +634,20 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 	effects.Apply(ctx)
 
 	if !ms.IsWorkflowExecutionRunning() {
-		// Because all unprocessed Updates were already rejected, the registry has only:
-		//   - Updates that were received while this WFT was running,
-		//   - Updates that were accepted and still not completed.
-		// If the Workflow completed itself with one of the completion commands without creating new run,
-		// abort all Updates with "workflow completed" error.
-		// If new run was created (ContinueAsNew, Retry, Cron), then Updates that were received while
-		// this WFT was running are aborted with retryable "workflow is closing" error.
-		// SDK will retry API call and it should land on the new run.
+		// NOTE: It is important to call this *after* applying effects to be sure there are no pending effects.
 
-		// It is important to call this after applying effects to be sure there are no pending effects.
-
-		if newMutableState != nil {
+		// Because all unprocessed Updates were already rejected, the registry only has:
+		//   (1) Updates that were received while this WFT was running,
+		//   (2) Updates that were accepted but not yet completed.
+		hasNewRun := newMutableState != nil
+		if hasNewRun {
+			// If a new run was created (e.g. ContinueAsNew, Retry, Cron), then Updates that were
+			// received while this WFT was running are aborted with a retryable error.
+			// Then, the SDK will retry the API call and the Update will land on the new run.
 			updateRegistry.Abort(update.AbortReasonWorkflowContinuing)
 		} else {
+			// If the Workflow completed itself via one of the completion commands without
+			// creating a new run, abort all Updates with a non-retryable error.
 			updateRegistry.Abort(update.AbortReasonWorkflowCompleted)
 		}
 	}
