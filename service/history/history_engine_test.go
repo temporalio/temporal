@@ -6224,7 +6224,7 @@ func (s *engineSuite) Test_SetRequestDefaultValueAndGetTargetVersionHistory_NonC
 	item4 := versionhistory.NewVersionHistoryItem(int64(20), int64(51))
 	versionHistory2 := versionhistory.NewVersionHistory([]byte{}, []*historyspb.VersionHistoryItem{item1, item3, item4})
 	versionHistories := versionhistory.NewVersionHistories(versionHistory1)
-	_, _, err := versionhistory.AddVersionHistory(versionHistories, versionHistory2)
+	_, _, err := versionhistory.AddAndSwitchVersionHistory(versionHistories, versionHistory2)
 	s.NoError(err)
 	namespaceID := namespace.ID(uuid.New())
 	request := &historyservice.GetWorkflowExecutionRawHistoryV2Request{

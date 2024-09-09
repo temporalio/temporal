@@ -63,29 +63,32 @@ func GetVersionHistory(h *historyspb.VersionHistories, index int32) (*historyspb
 	return h.Histories[index], nil
 }
 
-// AddVersionHistory adds a VersionHistory and return the whether current branch is changed.
-func AddVersionHistory(h *historyspb.VersionHistories, v *historyspb.VersionHistory) (bool, int32, error) {
+// AddVersionHistory adds a VersionHistory to VersionHistories.
+// Returns:
+//   - the index of the newly added VersionHistory
+//   - error if any
+func AddVersionHistory(h *historyspb.VersionHistories, v *historyspb.VersionHistory) (int32, error) {
 	if v == nil {
-		return false, 0, serviceerror.NewInternal("version histories is null.")
+		return 0, serviceerror.NewInternal("version histories is null.")
 	}
 
 	// assuming existing version histories inside are valid
 	incomingFirstItem, err := GetFirstVersionHistoryItem(v)
 	if err != nil {
-		return false, 0, err
+		return 0, err
 	}
 
 	currentVersionHistory, err := GetVersionHistory(h, h.CurrentVersionHistoryIndex)
 	if err != nil {
-		return false, 0, err
+		return 0, err
 	}
 	currentFirstItem, err := GetFirstVersionHistoryItem(currentVersionHistory)
 	if err != nil {
-		return false, 0, err
+		return 0, err
 	}
 
 	if incomingFirstItem.Version != currentFirstItem.Version {
-		return false, 0, serviceerror.NewInternal("version history first item does not match.")
+		return 0, serviceerror.NewInternal("version history first item does not match.")
 	}
 
 	// TODO maybe we need more strict validation
@@ -94,8 +97,32 @@ func AddVersionHistory(h *historyspb.VersionHistories, v *historyspb.VersionHist
 	h.Histories = append(h.Histories, newVersionHistory)
 	newVersionHistoryIndex := int32(len(h.Histories)) - 1
 
+	return newVersionHistoryIndex, nil
+}
+
+// AddAndSwitchVersionHistory adds a VersionHistory and switch the whether current branch if necessary
+// based on the VersionHistoryItem Version.
+// Returns:
+//   - if the current branch has been switched or not
+//   - the index of the newly added VersionHistory
+//   - error if any
+//
+// This function should only be invoked in the event-based replication stack.
+// In the state-based replication stack, a version history could be the current even if it has a smaller version
+// compared to other version histories. This is because that version history could be associated with a
+// state transition history with higher version.
+func AddAndSwitchVersionHistory(h *historyspb.VersionHistories, v *historyspb.VersionHistory) (bool, int32, error) {
+	newVersionHistoryIndex, err := AddVersionHistory(h, v)
+	if err != nil {
+		return false, 0, err
+	}
+
 	// check if need to switch current branch
-	newLastItem, err := GetLastVersionHistoryItem(newVersionHistory)
+	newLastItem, err := GetLastVersionHistoryItem(v)
+	if err != nil {
+		return false, 0, err
+	}
+	currentVersionHistory, err := GetVersionHistory(h, h.CurrentVersionHistoryIndex)
 	if err != nil {
 		return false, 0, err
 	}
@@ -147,31 +174,6 @@ func FindFirstVersionHistoryIndexByVersionHistoryItem(h *historyspb.VersionHisto
 		}
 	}
 	return 0, serviceerror.NewInternal("version histories does not contains given item.")
-}
-
-// IsVersionHistoriesRebuilt returns true if the current branch index's last write version is not the largest among all branches' last write version.
-func IsVersionHistoriesRebuilt(h *historyspb.VersionHistories) (bool, error) {
-	currentVersionHistory, err := GetCurrentVersionHistory(h)
-	if err != nil {
-		return false, err
-	}
-
-	currentLastItem, err := GetLastVersionHistoryItem(currentVersionHistory)
-	if err != nil {
-		return false, err
-	}
-
-	for _, versionHistory := range h.Histories {
-		lastItem, err := GetLastVersionHistoryItem(versionHistory)
-		if err != nil {
-			return false, err
-		}
-		if lastItem.GetVersion() > currentLastItem.GetVersion() {
-			return true, nil
-		}
-	}
-
-	return false, nil
 }
 
 // SetCurrentVersionHistoryIndex set the current VersionHistory index.
