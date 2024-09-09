@@ -36,10 +36,10 @@ done
 
 color "Generate external proto mocks..."
 $MOCKGEN -copyright_file LICENSE -package workflowservicemock \
-  -destination "$new"/temporal/api/workflowservicemock/v1/service_grpc.pb.mock.go \
+  -destination "$new"/temporal/server/api/workflowservicemock/v1/service_grpc.pb.mock.go \
   go.temporal.io/api/workflowservice/v1 WorkflowServiceClient
 $MOCKGEN -copyright_file LICENSE -package operatorservicemock \
-  -destination "$new"/temporal/api/operatorservicemock/v1/service_grpc.pb.mock.go \
+  -destination "$new"/temporal/server/api/operatorservicemock/v1/service_grpc.pb.mock.go \
   go.temporal.io/api/operatorservice/v1 OperatorServiceClient
 
 color "Update license headers for proto files..."
@@ -50,5 +50,4 @@ old=$api.old
 [[ -d "$api" ]] && mv -f "$api" "$old"
 mkdir -p "$api"
 mv -f "$new"/temporal/server/api/* "$api"/
-mv -f "$new"/temporal/api/* "$api"/
 rm -rf "$new" "$old"
