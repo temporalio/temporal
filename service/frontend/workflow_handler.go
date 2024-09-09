@@ -4517,10 +4517,7 @@ func (wh *WorkflowHandler) validateVersionRuleBuildId(request *workflowservice.U
 			return serviceerror.NewInvalidArgument(fmt.Sprintf("BuildId must be <= 255 characters, was %d", len(bid)))
 		}
 
-		if err := common.ValidateUTF8String("BuildId", bid); err != nil {
-			return err
-		}
-		return nil
+		return common.ValidateUTF8String("BuildId", bid)
 	}
 	switch request.GetOperation().(type) {
 	case *workflowservice.UpdateWorkerVersioningRulesRequest_InsertAssignmentRule:
