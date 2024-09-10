@@ -42,6 +42,9 @@ import (
 	replicationpb "go.temporal.io/api/replication/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/converter"
+	"google.golang.org/protobuf/types/known/durationpb"
+	"gopkg.in/yaml.v3"
+
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common/cluster"
@@ -53,8 +56,6 @@ import (
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/environment"
 	"go.temporal.io/server/tests"
-	"google.golang.org/protobuf/types/known/durationpb"
-	"gopkg.in/yaml.v3"
 )
 
 type (
@@ -166,33 +167,29 @@ func (s *xdcBaseSuite) setupSuite(clusterNames []string, opts ...tests.Option) {
 }
 
 func (s *xdcBaseSuite) waitForClusterConnected() {
-	s.logger.Debug("wait for cluster to be connected")
+	s.logger.Info("wait for cluster to be connected")
 	s.EventuallyWithT(func(c *assert.CollectT) {
-		s.logger.Debug("check if stream is established")
+		s.logger.Info("check if stream is established")
 		resp, err := s.cluster1.GetHistoryClient().GetReplicationStatus(context.Background(), &historyservice.GetReplicationStatusRequest{})
-		if !(assert.NoError(c, err) &&
-			assert.Equal(c, 1, len(resp.Shards))) { // test cluster has only one history shard
-			return
-		}
+		assert.NoError(c, err)
+		assert.Lenf(c, resp.Shards, 1, "test cluster has only one history shard")
+
 		shard := resp.Shards[0]
-		if !(assert.NotNil(c, shard) &&
-			assert.True(c, shard.MaxReplicationTaskId > 0) &&
-			assert.NotNil(c, shard.ShardLocalTime) &&
-			assert.True(c, shard.ShardLocalTime.AsTime().Before(time.Now())) &&
-			assert.True(c, shard.ShardLocalTime.AsTime().After(s.startTime)) &&
-			assert.NotNil(c, shard.RemoteClusters)) {
-			return
-		}
+		assert.NotNil(c, shard)
+		assert.Greater(c, shard.MaxReplicationTaskId, int64(0))
+		assert.NotNil(c, shard.ShardLocalTime)
+		assert.Less(c, shard.ShardLocalTime.AsTime(), time.Now())
+		assert.Greater(c, shard.ShardLocalTime.AsTime(), s.startTime)
+		assert.NotNil(c, shard.RemoteClusters)
+
 		standbyAckInfo, ok := shard.RemoteClusters[s.clusterNames[1]]
-		if !(assert.True(c, ok) &&
-			assert.NotNil(c, standbyAckInfo) &&
-			assert.NotNil(c, standbyAckInfo.AckedTaskVisibilityTime) &&
-			assert.True(c, standbyAckInfo.AckedTaskVisibilityTime.AsTime().Before(time.Now())) &&
-			assert.True(c, standbyAckInfo.AckedTaskVisibilityTime.AsTime().After(s.startTime))) {
-			return
-		}
-		s.logger.Debug("cluster connected")
+		assert.True(c, ok)
+		assert.NotNil(c, standbyAckInfo)
+		assert.NotNil(c, standbyAckInfo.AckedTaskVisibilityTime)
+		assert.Less(c, standbyAckInfo.AckedTaskVisibilityTime.AsTime(), time.Now())
+		assert.Greater(c, standbyAckInfo.AckedTaskVisibilityTime.AsTime(), s.startTime)
 	}, 60*time.Second, 1*time.Second)
+	s.logger.Info("cluster connected")
 }
 
 func (s *xdcBaseSuite) tearDownSuite() {
