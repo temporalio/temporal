@@ -284,6 +284,7 @@ func (s *SyncStateRetrieverImpl) getMutation(mutableState workflow.MutableState,
 	}
 	mutableStateClone.ExecutionInfo.UpdateInfos = nil
 	mutableStateClone.ExecutionInfo.SubStateMachinesByType = nil
+	mutableStateClone.ExecutionInfo.SubStateMachineTombstoneBatches = nil
 	var signalRequestedIds []string
 	if workflow.CompareVersionedTransition(mutableStateClone.ExecutionInfo.SignalRequestIdsLastUpdateVersionedTransition, versionedTransition) > 0 {
 		signalRequestedIds = mutableStateClone.SignalRequestedIds
