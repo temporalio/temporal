@@ -50,7 +50,7 @@ require (
 	go.opentelemetry.io/otel/sdk v1.27.0
 	go.opentelemetry.io/otel/sdk/metric v1.27.0
 	go.opentelemetry.io/otel/trace v1.27.0
-	go.temporal.io/api v1.39.0
+	go.temporal.io/api v1.39.1-0.20240910163028-b13574e18f3c
 	go.temporal.io/sdk v1.27.0
 	go.temporal.io/version v0.3.0
 	go.uber.org/atomic v1.11.0
@@ -136,8 +136,8 @@ require (
 	golang.org/x/sys v0.24.0 // indirect
 	golang.org/x/text v0.17.0 // indirect
 	google.golang.org/genproto v0.0.0-20240528184218-531527333157 // indirect
-	google.golang.org/genproto/googleapis/api v0.0.0-20240827150818-7e3bb234dfed // indirect
-	google.golang.org/genproto/googleapis/rpc v0.0.0-20240827150818-7e3bb234dfed // indirect
+	google.golang.org/genproto/googleapis/api v0.0.0-20240903143218-8af14fe29dc1 // indirect
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20240903143218-8af14fe29dc1 // indirect
 	gopkg.in/inf.v0 v0.9.1 // indirect
 	modernc.org/gc/v3 v3.0.0-20240304020402-f0dba7c97c2b // indirect
 	modernc.org/libc v1.50.9 // indirect
