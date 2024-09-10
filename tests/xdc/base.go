@@ -182,8 +182,7 @@ func (s *xdcBaseSuite) waitForClusterConnected() {
 		}
 		assert.Greater(c, shard.MaxReplicationTaskId, int64(0))
 		assert.NotNil(c, shard.ShardLocalTime)
-		assert.Less(c, shard.ShardLocalTime.AsTime(), time.Now())
-		assert.Greater(c, shard.ShardLocalTime.AsTime(), s.startTime)
+		assert.WithinRange(c, shard.ShardLocalTime.AsTime(), s.startTime, time.Now())
 		assert.NotNil(c, shard.RemoteClusters)
 
 		standbyAckInfo, ok := shard.RemoteClusters[s.clusterNames[1]]
@@ -191,8 +190,7 @@ func (s *xdcBaseSuite) waitForClusterConnected() {
 			return
 		}
 		assert.NotNil(c, standbyAckInfo.AckedTaskVisibilityTime)
-		assert.Less(c, standbyAckInfo.AckedTaskVisibilityTime.AsTime(), time.Now())
-		assert.Greater(c, standbyAckInfo.AckedTaskVisibilityTime.AsTime(), s.startTime)
+		assert.WithinRange(c, standbyAckInfo.AckedTaskVisibilityTime.AsTime(), s.startTime, time.Now())
 	}, 60*time.Second, 1*time.Second)
 	s.logger.Info("cluster connected")
 }
