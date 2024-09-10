@@ -171,11 +171,15 @@ func (s *xdcBaseSuite) waitForClusterConnected() {
 	s.EventuallyWithT(func(c *assert.CollectT) {
 		s.logger.Info("check if stream is established")
 		resp, err := s.cluster1.GetHistoryClient().GetReplicationStatus(context.Background(), &historyservice.GetReplicationStatusRequest{})
-		assert.NoError(c, err)
+		if !assert.NoError(c, err) {
+			return
+		}
 		assert.Lenf(c, resp.Shards, 1, "test cluster has only one history shard")
 
 		shard := resp.Shards[0]
-		assert.NotNil(c, shard)
+		if !assert.NotNil(c, shard) {
+			return
+		}
 		assert.Greater(c, shard.MaxReplicationTaskId, int64(0))
 		assert.NotNil(c, shard.ShardLocalTime)
 		assert.Less(c, shard.ShardLocalTime.AsTime(), time.Now())
@@ -183,8 +187,9 @@ func (s *xdcBaseSuite) waitForClusterConnected() {
 		assert.NotNil(c, shard.RemoteClusters)
 
 		standbyAckInfo, ok := shard.RemoteClusters[s.clusterNames[1]]
-		assert.True(c, ok)
-		assert.NotNil(c, standbyAckInfo)
+		if !assert.True(c, ok) || !assert.NotNil(c, standbyAckInfo) {
+			return
+		}
 		assert.NotNil(c, standbyAckInfo.AckedTaskVisibilityTime)
 		assert.Less(c, standbyAckInfo.AckedTaskVisibilityTime.AsTime(), time.Now())
 		assert.Greater(c, standbyAckInfo.AckedTaskVisibilityTime.AsTime(), s.startTime)
