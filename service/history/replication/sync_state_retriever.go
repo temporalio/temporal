@@ -43,6 +43,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/versionhistory"
+	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/hsm"
 	"go.temporal.io/server/service/history/shard"
@@ -78,9 +79,10 @@ type (
 	}
 
 	SyncStateRetrieverImpl struct {
-		shardContext  shard.Context
-		workflowCache wcache.Cache
-		logger        log.Logger
+		shardContext               shard.Context
+		workflowCache              wcache.Cache
+		workflowConsistencyChecker api.WorkflowConsistencyChecker
+		logger                     log.Logger
 	}
 	lastUpdatedStateTransitionGetter interface {
 		GetLastUpdateVersionedTransition() *persistencepb.VersionedTransition
@@ -133,7 +135,7 @@ func (s *SyncStateRetrieverImpl) GetSyncWorkflowStateArtifact(
 		case err == nil:
 			isSameBranch = true
 		case errors.Is(err, consts.ErrStaleState):
-			return nil, serviceerror.NewInvalidArgument(fmt.Sprintf(
+			return nil, serviceerror.NewInternal(fmt.Sprintf(
 				"stale version for workflow, request version transition: %v, mutable state transition history: %v",
 				versionedTransition,
 				mu.GetExecutionInfo().TransitionHistory,
