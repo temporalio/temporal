@@ -935,7 +935,6 @@ func (c *retryableClient) UpdateActivityOptionsById(
 	return resp, err
 }
 
-
 func (c *retryableClient) UpdateNamespace(
 	ctx context.Context,
 	request *workflowservice.UpdateNamespaceRequest,

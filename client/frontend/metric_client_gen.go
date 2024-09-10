@@ -873,7 +873,6 @@ func (c *metricClient) UpdateActivityOptionsById(
 	return c.client.UpdateActivityOptionsById(ctx, request, opts...)
 }
 
-
 func (c *metricClient) UpdateNamespace(
 	ctx context.Context,
 	request *workflowservice.UpdateNamespaceRequest,

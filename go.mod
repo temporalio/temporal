@@ -2,8 +2,6 @@ module go.temporal.io/server
 
 go 1.22.6
 
-replace go.temporal.io/api => /Users/yuri/work/activity_api/temporal_api_go
-
 require (
 	cloud.google.com/go/storage v1.41.0
 	github.com/aws/aws-sdk-go v1.53.15
@@ -52,7 +50,7 @@ require (
 	go.opentelemetry.io/otel/sdk v1.27.0
 	go.opentelemetry.io/otel/sdk/metric v1.27.0
 	go.opentelemetry.io/otel/trace v1.27.0
-	go.temporal.io/api v1.39.0
+	go.temporal.io/api v1.39.1-0.20240910163028-b13574e18f3c
 	go.temporal.io/sdk v1.27.0
 	go.temporal.io/version v0.3.0
 	go.uber.org/atomic v1.11.0
