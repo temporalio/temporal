@@ -31,6 +31,7 @@ import (
 	emptypb "google.golang.org/protobuf/types/known/emptypb"
 	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
 	wrapperspb "google.golang.org/protobuf/types/known/wrapperspb"
+	fieldmaskpb "google.golang.org/protobuf/types/known/fieldmaskpb"
 )
 
 func init() {
@@ -40,6 +41,7 @@ func init() {
 	importMap["google/protobuf/empty.proto"] = emptypb.File_google_protobuf_empty_proto
 	importMap["google/protobuf/timestamp.proto"] = timestamppb.File_google_protobuf_timestamp_proto
 	importMap["google/protobuf/wrappers.proto"] = wrapperspb.File_google_protobuf_wrappers_proto
+	importMap["google/protobuf/fieldmaskpb.proto"] = fieldmaskpb.File_google_protobuf_field_mask_proto
 	importMap["temporal/api/batch/v1/message.proto"] = batch.File_temporal_api_batch_v1_message_proto
 	importMap["temporal/api/command/v1/message.proto"] = command.File_temporal_api_command_v1_message_proto
 	importMap["temporal/api/common/v1/message.proto"] = common.File_temporal_api_common_v1_message_proto
