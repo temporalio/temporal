@@ -25,6 +25,7 @@
 package frontend
 
 import (
+	"cmp"
 	"context"
 	"encoding/binary"
 	"errors"
@@ -4527,12 +4528,10 @@ func (wh *WorkflowHandler) validateVersionRuleBuildId(request *workflowservice.U
 	case *workflowservice.UpdateWorkerVersioningRulesRequest_DeleteAssignmentRule:
 		return nil
 	case *workflowservice.UpdateWorkerVersioningRulesRequest_AddCompatibleRedirectRule:
-		if err := validateBuildId(request.GetAddCompatibleRedirectRule().GetRule().GetTargetBuildId()); err != nil {
-			return err
-		}
-		if err := validateBuildId(request.GetAddCompatibleRedirectRule().GetRule().GetSourceBuildId()); err != nil {
-			return err
-		}
+		return cmp.Or(
+			validateBuildId(request.GetAddCompatibleRedirectRule().GetRule().GetTargetBuildId()),
+			validateBuildId(request.GetAddCompatibleRedirectRule().GetRule().GetSourceBuildId()),
+		)
 	case *workflowservice.UpdateWorkerVersioningRulesRequest_ReplaceCompatibleRedirectRule:
 		return validateBuildId(request.GetReplaceCompatibleRedirectRule().GetRule().GetTargetBuildId())
 	case *workflowservice.UpdateWorkerVersioningRulesRequest_DeleteCompatibleRedirectRule:
