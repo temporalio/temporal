@@ -20,6 +20,13 @@ func SyncWorkflowState(
 	logger log.Logger,
 ) (_ *historyservice.SyncWorkflowStateResponse, retError error) {
 	result, err := syncStateRetriever.GetSyncWorkflowStateArtifact(ctx, request.GetNamespaceId(), request.Execution, request.VersionedTransition, request.VersionHistories)
+	if err != nil {
+		logger.Error("SyncWorkflowState failed to retrieve sync state artifact", tag.WorkflowNamespaceID(request.NamespaceId),
+			tag.WorkflowID(request.Execution.WorkflowId),
+			tag.WorkflowRunID(request.Execution.RunId),
+			tag.Error(err))
+		return nil, err
+	}
 	response := &historyservice.SyncWorkflowStateResponse{}
 	switch result.Type {
 	case replication.Mutation:
@@ -44,15 +51,17 @@ func SyncWorkflowState(
 	default:
 		return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("Unknown sync state artifact type: %v", result.Type))
 	}
-	if result.LastVersionHistory != nil && result.VersionedTransitionHistory != nil {
-		err = replicationProgressCache.Update(request.Execution.RunId, request.TargetClusterId, result.VersionedTransitionHistory, result.LastVersionHistory.Items)
-		if err != nil {
-			logger.Error("SyncWorkflowState failed to update progress cache",
-				tag.WorkflowNamespaceID(request.NamespaceId),
-				tag.WorkflowID(request.Execution.WorkflowId),
-				tag.WorkflowRunID(request.Execution.RunId),
-				tag.Error(err))
-		}
+	response.NewRunInfo = result.NewRunInfo
+	response.EventBatches = result.EventBlobs
+
+	err = replicationProgressCache.Update(request.Execution.RunId, request.TargetClusterId, result.VersionedTransitionHistory, result.LastVersionHistory.Items)
+	if err != nil {
+		logger.Error("SyncWorkflowState failed to update progress cache",
+			tag.WorkflowNamespaceID(request.NamespaceId),
+			tag.WorkflowID(request.Execution.WorkflowId),
+			tag.WorkflowRunID(request.Execution.RunId),
+			tag.Error(err))
 	}
+
 	return response, nil
 }

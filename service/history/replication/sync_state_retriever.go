@@ -48,7 +48,6 @@ import (
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/workflow"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
-	"google.golang.org/protobuf/proto"
 )
 
 const (
@@ -146,9 +145,9 @@ func (s *SyncStateRetrieverImpl) GetSyncWorkflowStateArtifact(
 	result := &SyncStateResult{}
 	tombstoneBatch := mu.GetExecutionInfo().SubStateMachineTombstoneBatches
 	if isSameBranch &&
-		len(tombstoneBatch) > 0 &&
-		(workflow.CompareVersionedTransition(tombstoneBatch[0].VersionedTransition, versionedTransition) <= 0 ||
-			versionedTransition.TransitionCount+1 == tombstoneBatch[0].VersionedTransition.TransitionCount) {
+		(len(tombstoneBatch) == 0 ||
+			(workflow.CompareVersionedTransition(tombstoneBatch[0].VersionedTransition, versionedTransition) <= 0 ||
+				versionedTransition.TransitionCount+1 == tombstoneBatch[0].VersionedTransition.TransitionCount)) {
 		mutation, err := s.getMutation(mu, versionedTransition)
 		if err != nil {
 			return nil, err
@@ -165,8 +164,8 @@ func (s *SyncStateRetrieverImpl) GetSyncWorkflowStateArtifact(
 	}
 
 	newRunId := mu.GetExecutionInfo().NewExecutionRunId
-	executionInfoCopy := proto.Clone(mu.GetExecutionInfo()).(*persistencepb.WorkflowExecutionInfo)
-
+	sourceVersionHistories := versionhistory.CopyVersionHistories(mu.GetExecutionInfo().VersionHistories)
+	sourceTransitionHistory := workflow.CopyVersionedTransitions(mu.GetExecutionInfo().TransitionHistory)
 	releaseFunc(nil)
 	releaseFunc = nil
 
@@ -178,13 +177,13 @@ func (s *SyncStateRetrieverImpl) GetSyncWorkflowStateArtifact(
 		result.NewRunInfo = newRunInfo
 	}
 
-	events, err := s.getSyncStateEvents(ctx, versionHistories, executionInfoCopy.VersionHistories)
+	events, err := s.getSyncStateEvents(ctx, versionHistories, sourceVersionHistories)
 	if err != nil {
 		return nil, err
 	}
 	result.EventBlobs = events
-	result.VersionedTransitionHistory = executionInfoCopy.TransitionHistory
-	currentVersionHistory, err := versionhistory.GetCurrentVersionHistory(executionInfoCopy.VersionHistories)
+	result.VersionedTransitionHistory = sourceTransitionHistory
+	currentVersionHistory, err := versionhistory.GetCurrentVersionHistory(sourceVersionHistories)
 	if err != nil {
 		s.logger.Error("SyncWorkflowState failed to get current version history and update progress cache",
 			tag.WorkflowNamespaceID(namespaceID),
@@ -278,7 +277,7 @@ func (s *SyncStateRetrieverImpl) getMutation(mutableState workflow.MutableState,
 	tombstoneBatch := mutableStateClone.GetExecutionInfo().SubStateMachineTombstoneBatches
 	var tombstones []*persistencepb.StateMachineTombstoneBatch
 	for i, tombstone := range tombstoneBatch {
-		if workflow.CompareVersionedTransition(tombstone.VersionedTransition, versionedTransition) >= 0 {
+		if workflow.CompareVersionedTransition(tombstone.VersionedTransition, versionedTransition) > 0 {
 			tombstones = tombstoneBatch[i:]
 			break
 		}

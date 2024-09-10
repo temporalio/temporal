@@ -2097,6 +2097,7 @@ func (adh *AdminHandler) SyncWorkflowState(ctx context.Context, request *adminse
 		Execution:           request.Execution,
 		VersionHistories:    request.VersionHistories,
 		VersionedTransition: request.VersionedTransition,
+		TargetClusterId:     request.TargetClusterId,
 	})
 	if err != nil {
 		return nil, err
