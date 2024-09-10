@@ -6,7 +6,6 @@ package main
 
 import (
 	"google.golang.org/protobuf/reflect/protoreflect"
-	"google.golang.org/protobuf/types/known/fieldmaskpb"
 
 	batch "go.temporal.io/api/batch/v1"
 	command "go.temporal.io/api/command/v1"
