@@ -197,7 +197,7 @@ func (s *NexusRequestForwardingSuite) TestStartOperationForwardedFromStandbyToAc
 		tc := tc
 		s.T().Run(tc.name, func(t *testing.T) {
 			dispatchURL := fmt.Sprintf("http://%s/%s", s.cluster2.GetHost().FrontendHTTPAddress(), cnexus.RouteDispatchNexusTaskByNamespaceAndTaskQueue.Path(cnexus.NamespaceAndTaskQueue{Namespace: ns, TaskQueue: tc.taskQueue}))
-			nexusClient, err := nexus.NewClient(nexus.ClientOptions{BaseURL: dispatchURL, Service: "test_service"})
+			nexusClient, err := nexus.NewClient(nexus.ClientOptions{BaseURL: dispatchURL, Service: "test-service"})
 			s.NoError(err)
 
 			activeMetricsHandler, ok := s.cluster1.GetHost().GetMetricsHandler().(*metricstest.CaptureHandler)
@@ -298,7 +298,7 @@ func (s *NexusRequestForwardingSuite) TestCancelOperationForwardedFromStandbyToA
 		tc := tc
 		s.T().Run(tc.name, func(t *testing.T) {
 			dispatchURL := fmt.Sprintf("http://%s/%s", s.cluster2.GetHost().FrontendHTTPAddress(), cnexus.RouteDispatchNexusTaskByNamespaceAndTaskQueue.Path(cnexus.NamespaceAndTaskQueue{Namespace: ns, TaskQueue: tc.taskQueue}))
-			nexusClient, err := nexus.NewClient(nexus.ClientOptions{BaseURL: dispatchURL, Service: "test_service"})
+			nexusClient, err := nexus.NewClient(nexus.ClientOptions{BaseURL: dispatchURL, Service: "test-service"})
 			s.NoError(err)
 
 			activeMetricsHandler, ok := s.cluster1.GetHost().GetMetricsHandler().(*metricstest.CaptureHandler)
@@ -545,7 +545,9 @@ func (s *NexusRequestForwardingSuite) nexusTaskPoller(ctx context.Context, front
 		})
 	}
 
-	s.NoError(err)
+	if err != nil && ctx.Err() == nil {
+		s.FailNow("received unexpected error responding to Nexus task", err)
+	}
 }
 
 func (s *NexusRequestForwardingSuite) sendNexusCompletionRequest(
