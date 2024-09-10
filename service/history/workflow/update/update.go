@@ -27,6 +27,7 @@ package update
 import (
 	"context"
 	"errors"
+	"fmt"
 	"time"
 
 	enumspb "go.temporal.io/api/enums/v1"
@@ -632,6 +633,7 @@ func (u *Update) checkStateSet(msg proto.Message, allowed stateSet) error {
 
 // setState assigns the current state to a new value returning the original value.
 func (u *Update) setState(newState state) state {
+	fmt.Println("update state change", newState)
 	prevState := u.state
 	u.state = newState
 	u.instrumentation.stateChange(u.id, prevState, newState)

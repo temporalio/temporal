@@ -32,6 +32,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/davecgh/go-spew/spew"
 	"github.com/pborman/uuid"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
@@ -751,6 +752,127 @@ func (s *FunctionalSuite) testResetWorkflowSignalReapplyBuffer(
   3 WorkflowTaskStarted
   4 WorkflowTaskFailed
   5 WorkflowTaskScheduled  // no reapplied Signal
+  6 WorkflowTaskStarted
+  7 WorkflowTaskCompleted
+  8 WorkflowExecutionCompleted
+`, events)
+	default:
+		panic(fmt.Sprintf("unknown reset reapply type: %v", reapplyType))
+	}
+}
+
+func (s *FunctionalSuite) TestResetWorkflow_Update_ReapplyBufferAll() {
+	tv := testvars.New(s.T())
+	s.testResetWorkflowUpdateReapplyBuffer(tv, enumspb.RESET_REAPPLY_TYPE_ALL_ELIGIBLE)
+}
+
+func (s *FunctionalSuite) TestResetWorkflow_Update_ReapplyBufferNone() {
+	tv := testvars.New(s.T())
+	s.testResetWorkflowUpdateReapplyBuffer(tv, enumspb.RESET_REAPPLY_TYPE_NONE)
+}
+
+func (s *FunctionalSuite) testResetWorkflowUpdateReapplyBuffer(
+	tv *testvars.TestVars,
+	reapplyType enumspb.ResetReapplyType,
+) {
+	tv = s.startWorkflow(tv)
+	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(tv.RunID()))
+
+	var resetRunID string
+	var updResult <-chan updateResponseErr
+	wtHandlerCalls := 0
+	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
+		spew.Dump(task.History.Events)
+
+		wtHandlerCalls++
+		switch wtHandlerCalls {
+		case 1:
+			s.EqualHistoryEvents(`
+  1 WorkflowExecutionStarted
+  2 WorkflowTaskScheduled
+  3 WorkflowTaskStarted`, task.History.Events)
+
+			// (1) send Update
+			updResult = s.sendUpdate(NewContext(), tv, "1")
+
+			// (2) send Reset
+			resp, err := s.client.ResetWorkflowExecution(NewContext(),
+				&workflowservice.ResetWorkflowExecutionRequest{
+					Namespace: s.namespace,
+					WorkflowExecution: &commonpb.WorkflowExecution{
+						WorkflowId: tv.WorkflowID(),
+						RunId:      tv.RunID(),
+					},
+					Reason:                    "reset execution from test",
+					WorkflowTaskFinishEventId: 3,
+					RequestId:                 uuid.New(),
+					ResetReapplyType:          reapplyType,
+				})
+			s.NoError(err)
+			resetRunID = resp.RunId
+		case 2:
+			//return s.UpdateAcceptCompleteCommands(tv, "1"), nil
+		}
+
+		return []*commandpb.Command{{
+			CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
+			Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{
+				CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
+					Result: payloads.EncodeString("Done"),
+				},
+			},
+		}}, nil
+	}
+
+	msgHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*protocolpb.Message, error) {
+		if len(task.Messages) > 0 {
+			return s.UpdateAcceptCompleteMessages(tv, task.Messages[0], "1"), nil
+		}
+		return nil, nil
+	}
+
+	poller := &TaskPoller{
+		Client:              s.client,
+		Namespace:           s.namespace,
+		TaskQueue:           tv.TaskQueue(),
+		Identity:            tv.WorkerIdentity(),
+		WorkflowTaskHandler: wtHandler,
+		MessageHandler:      msgHandler,
+		Logger:              s.Logger,
+		T:                   s.T(),
+	}
+
+	_, err := poller.PollAndProcessWorkflowTask()
+	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
+	s.Error(err) // due to workflow termination (reset)
+
+	_, err = poller.PollAndProcessWorkflowTask()
+	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
+	s.NoError(err)
+
+	spew.Dump("update result", <-updResult)
+
+	events := s.getHistory(s.namespace, &commonpb.WorkflowExecution{WorkflowId: tv.WorkflowID(), RunId: resetRunID})
+	switch reapplyType {
+	case enumspb.RESET_REAPPLY_TYPE_ALL_ELIGIBLE:
+		s.EqualHistoryEvents(`
+  1 WorkflowExecutionStarted
+  2 WorkflowTaskScheduled
+  3 WorkflowTaskStarted
+  4 WorkflowTaskFailed
+  5 WorkflowExecutionSignaled  // reapplied Update
+  6 WorkflowTaskScheduled
+  7 WorkflowTaskStarted
+  8 WorkflowTaskCompleted
+  9 WorkflowExecutionCompleted
+`, events)
+	case enumspb.RESET_REAPPLY_TYPE_NONE:
+		s.EqualHistoryEvents(`
+  1 WorkflowExecutionStarted
+  2 WorkflowTaskScheduled
+  3 WorkflowTaskStarted
+  4 WorkflowTaskFailed
+  5 WorkflowTaskScheduled  // no reapplied Update
   6 WorkflowTaskStarted
   7 WorkflowTaskCompleted
   8 WorkflowExecutionCompleted
