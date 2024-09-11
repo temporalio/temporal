@@ -8586,14 +8586,14 @@ type UpdateActivityOptionsRequest struct {
 	sizeCache     protoimpl.SizeCache
 	unknownFields protoimpl.UnknownFields
 
-	// Namespace of the workflow which scheduled this activity
+	// Namespace ID of the workflow which scheduled this activity
 	NamespaceId string `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
-	// Id of the workflow which scheduled this activity
+	// ID of the workflow which scheduled this activity
 	WorkflowId string `protobuf:"bytes,2,opt,name=workflow_id,json=workflowId,proto3" json:"workflow_id,omitempty"`
-	// Run Id of the workflow which scheduled this activity
+	// Run ID of the workflow which scheduled this activity
 	// if empty - latest workflow is used
 	RunId string `protobuf:"bytes,3,opt,name=run_id,json=runId,proto3" json:"run_id,omitempty"`
-	// Id of the activity we're updating
+	// ID of the activity we're updating
 	ActivityId string `protobuf:"bytes,4,opt,name=activity_id,json=activityId,proto3" json:"activity_id,omitempty"`
 	// Activity options. Partial updates are accepted and controlled by update_mask
 	ActivityOptions *v121.ActivityOptions `protobuf:"bytes,6,opt,name=activity_options,json=activityOptions,proto3" json:"activity_options,omitempty"`

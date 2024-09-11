@@ -324,7 +324,6 @@ type HistoryServiceClient interface {
 	DeepHealthCheck(ctx context.Context, in *DeepHealthCheckRequest, opts ...grpc.CallOption) (*DeepHealthCheckResponse, error)
 	SyncWorkflowState(ctx context.Context, in *SyncWorkflowStateRequest, opts ...grpc.CallOption) (*SyncWorkflowStateResponse, error)
 	// UpdateActivityOptions is called by the client to update the options of an activity
-	// rpc UpdateActivityOptions (temporal.api.workflowservice.v1.UpdateActivityOptionsByIdRequest) returns (temporal.api.activity.v1.ActivityOptions)
 	// (-- api-linter: core::0134::method-signature=disabled
 	// (-- api-linter: core::0134::response-message-name=disabled
 	UpdateActivityOptions(ctx context.Context, in *UpdateActivityOptionsRequest, opts ...grpc.CallOption) (*UpdateActivityOptionsResponse, error)
@@ -1176,7 +1175,6 @@ type HistoryServiceServer interface {
 	DeepHealthCheck(context.Context, *DeepHealthCheckRequest) (*DeepHealthCheckResponse, error)
 	SyncWorkflowState(context.Context, *SyncWorkflowStateRequest) (*SyncWorkflowStateResponse, error)
 	// UpdateActivityOptions is called by the client to update the options of an activity
-	// rpc UpdateActivityOptions (temporal.api.workflowservice.v1.UpdateActivityOptionsByIdRequest) returns (temporal.api.activity.v1.ActivityOptions)
 	// (-- api-linter: core::0134::method-signature=disabled
 	// (-- api-linter: core::0134::response-message-name=disabled
 	UpdateActivityOptions(context.Context, *UpdateActivityOptionsRequest) (*UpdateActivityOptionsResponse, error)
