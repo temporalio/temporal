@@ -223,6 +223,7 @@ func NewEngineWithShardContext(
 		syncStateRetriever: replication.NewSyncStateRetriever(
 			shard,
 			workflowCache,
+			workflowConsistencyChecker,
 			shard.GetLogger(),
 		),
 	}
