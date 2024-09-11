@@ -104,6 +104,7 @@ func NewSyncStateRetriever(
 	}
 }
 
+//nolint:revive // cognitive complexity 28 (> max enabled 25)
 func (s *SyncStateRetrieverImpl) GetSyncWorkflowStateArtifact(
 	ctx context.Context,
 	namespaceID string,
