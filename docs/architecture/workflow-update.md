@@ -16,7 +16,7 @@ processed by the Workflow - it is a fire-and-forget mechanism. Conversely, a Que
 the Workflow state, i.e. it can only perform read-only operations.
 
 Workflow Update is a complex feature that can be thought of as "Signal + Query" in a single API call.
-An Update can be rejected by the Workflow and then it does not write any events to the Workflow history.
+An Update can be rejected by the Workflow, and then it does not write any events to the Workflow history.
 But when it is accepted and processed, the API caller can immediately get a result back. Essentially, 
 the Temporal Server acts as a proxy between the caller and the Workflow, exposing APIs of
 the Workflow code.
@@ -39,13 +39,13 @@ Workflow history.
      instead it is shipped as a Message (see [Message protocol](./message-protocol.md)).  
 2. There is no "Update Rejected" event: when an Update is rejected, it just disappears.
    - NOTE: The Update outcome cannot be shipped to server as a Command, 
-     because every Command *must* produce an event. 
+     because every Command *must* produce an event.
 3. The original Update request (with its payload) is stored in the "Update Accepted" event 
 since this is the first event the server is able to record. Until then, it remains in-memory.
-4. The Update outcome is stored in the "Update completed" event. It indicates success or failure. 
-Note that Failure in an Update outcome is different from Update rejection. 
+4. The Update outcome is stored in the "Update completed" event. It indicates success or failure.
+Note that Failure in an Update outcome is different from Update rejection.
 5. The Workflow Task to ship the Update request form the server to the worker must not be
-persisted in mutable state. 
+persisted in mutable state.
 
 ## Update Registry
 Updates are managed through the `update.Registy` interface. A workflow's Update Registry is stored in
@@ -55,10 +55,10 @@ still be accessed through the Registry since it has a reference to the mutable s
 (via the `UpdateStore` interface). When an Update is accepted or completed, a corresponding event
 is written to the Workflow history.
 
-Mutable state itself only stores an `UpdateInfo` map, linking UpdateId to UpdateInfo
+Mutable state itself only stores an `UpdateInfo` map, linking `UpdateId` to `UpdateInfo`
 (one of `UpdateAcceptanceInfo`, `UpdateCompletionInfo`, or `UpdateAdmissionInfo`). They contain
 minimal data (to limit the mutable state size) and are just pointers to corresponding events
-in the Workflow history. 
+in the Workflow history.
 
 When a new Update Registry is created, it is initialized from the mutable state's `UpdateInfo` data.
 However, the "Update Completed" event is only loaded when calling mutable state's `GetUpdateOutcome()`
@@ -70,7 +70,7 @@ time they were admitted.
 > #### TODO
 > Because the Update Registry only exists in-memory, and is built from events, and Updates in the
 > admitted state don't have any events, they are *lost* when the Registry is cleared. In the future,
-> an "Update Admitted" event can be used to persist the Update before delivering it to the worker. 
+> an "Update Admitted" event can be used to persist the Update before delivering it to the worker.
 
 Since rejected Updates are not stored anywhere and, therefore, cannot be deduplicated, they can be
 shipped to the worker twice. For the same reason, if the `PollWorkflowExecutionUpdate` API is called
@@ -79,7 +79,7 @@ for a rejected Update, the caller will not get a rejection failure but a `NotFou
 > #### TODO
 > This is because there is no good place to store rejection failure. There is no history event
 > for "Rejected Update" and it cannot be stored in mutable store due to size limitations.
-> In the future, when there is another store available, it can be used to store rejection failures. 
+> In the future, when there is another store available, it can be used to store rejection failures.
 
 ### Update State Machine
 Update states are defined in `state.go` and are prefixed with `state` (i.e. `Created` is `stateCreated`).
@@ -92,22 +92,25 @@ Transitions are made in three places:
 Usually the Update flow would be:
 ```mermaid
 stateDiagram-v2
-    [*] --> Created: New
-    Created --> ProvisionallyAdmitted: Admit
-    ProvisionallyAdmitted --> Admitted: commit
+    [*] --> Created: New()
+    Created --> ProvisionallyAdmitted: Admit()
+    ProvisionallyAdmitted --> Admitted: OnAfterCommit in Admit()
 
-    Admitted --> Sent: Send
-    Sent --> Sent: Send (includeAlreadySent)
+    Admitted --> Sent: Send()
+    Sent --> Sent: Send(includeAlreadySent=true)
 
-    Sent --> ProvisionallyAccepted: onAcceptanceMsg
-    ProvisionallyAccepted --> Accepted: commit
+    Sent --> ProvisionallyCompleted: onRejectionMsg()
 
-    Sent --> ProvisionallyCompleted: onRejectionMsg
+    Sent --> ProvisionallyAccepted: onAcceptanceMsg()
+    ProvisionallyAccepted --> Accepted: OnAfterCommit in onAcceptanceMsg()
 
-    ProvisionallyAccepted --> ProvisionallyCompleted: onResponse
-    Accepted --> ProvisionallyCompleted: onResponse
+    Accepted --> ProvisionallyCompleted: onResponseMsg()
 
-    ProvisionallyCompleted --> Completed: commit
+    ProvisionallyAccepted --> ProvisionallyCompleted: onResponseMsg()
+    ProvisionallyCompleted --> ProvisionallyCompletedAfterAccepted: OnAfterCommit in onAcceptanceMsg() 
+
+    ProvisionallyCompleted --> Completed: OnAfterCommit in onResponseMsg()
+    ProvisionallyCompletedAfterAccepted --> Completed: OnAfterCommit in onResponseMsg()
 ```
 _NOTE: States which are set by `commit` also have a `rollback` path to revert to the
 previous state (not shown in the diagram for simplicity)_
@@ -125,7 +128,7 @@ When the server receives an Update request, it creates a new Update with state `
 via `New()`. However, when the Update Registry loads all Updates from the `UpdateStore`, it can create
 them directly with state `Admitted` (see "Reapply Update" below) via `newAdmitted()` or `Accepted` 
 via `newAccepted()`. Similarly, when an Update is resurrected (see "Update Resurrection" below) it 
-also has state `Admitted`. But when an Update cannot be found in the Registry yet it exist in
+also has state `Admitted`. But when an Update cannot be found in the Registry, yet it exist in
 `EventStore` because it is already completed, it is created with state `Completed`.
 
 ### Aborting an Update
@@ -222,10 +225,10 @@ stateDiagram-v2
  
 ### Timeouts
 The API caller can specify the time it is willing to wait before the specified stage is reached.
-If the timeout expires and the Update has not reach the desired stage yet, a 
+If the timeout expires and the Update has not reached the desired stage yet, a 
 `context deadline exceeded` error will be returned to the caller.
 
-If the API caller does not specify a timeout or it is too high, the server will enforce a
+If the API caller does not specify a timeout, or it is too high, the server will enforce a
 `LongPollExpirationInterval` (default is 20 seconds). When this timeout expires, the server won't 
 return a `context deadline exceeded` error, but instead will return an empty response with the
 reached stage.
@@ -241,7 +244,7 @@ start polling for the Update result using the `PollWorkflowExecutionUpdate` API.
 > an empty response, the server returns a retryable `Unavailable` error. This error *should* not
 > reach the client, actually, as it is retried internally on the server. But if it does, the client 
 > should behave the same way as for the empty response with `ADMITTED` stage: 
-> retry the `UpdateWorkflowExecution` API call. 
+> retry the `UpdateWorkflowExecution` API call.
 
 ### Thread-safe Methods
 All `update.Update` and `update.Registry` methods and fields *must* be accessed while holding
@@ -290,13 +293,13 @@ flowchart TD
 ```
 
 ### Update Resurrection
-When processing Update Acceptance or Rejection, the Update can be resurrected in the Registry. 
+When processing Update Acceptance or Rejection, the Update can be resurrected in the Registry.
 This can happen when the Update is not found in the Registry and the Acceptance
 or Rejection message contains the original Update request. In this case, the Update is created
 in `Admitted` state, added to the Registry, and processing continues.
 
 > #### NOTE
-> SDKs only started to send the original Update request back around May 2024. 
+> SDKs only started to send the original Update request back around May 2024.
 > Therefore, previous version do not allow for Resurrection.
 
 > #### NOTE
@@ -314,24 +317,35 @@ trying to recreate the Update.
 > #### TODO
 > This might be possible in the future when "Durable Admitted" Update is implemented.
 
-Accepted (but not Completed) Updates remain in this state after the Workflow is completed; since 
-they are already written to the event history. It is the Workflow's responsibility to complete them.
-This behavior is similar to Activities which can also still be completed after the Workflow was
-completed already (the result will be ignored).
+There two Workflow completion scenarios:
+- final completion, when no new run is created (e.g. with `COMPLETE_WORKFLOW_EXECUTION` command),
+- continued completion, when new run is created (e.g. `CONTINUE_AS_NEW_WORKFLOW_EXECUTION` command).
 
-When the Workflow completes, all in-flight Updates are aborted: admitted Updates get 
+When the Workflow performs a final completion, all in-flight Updates are aborted: admitted Updates get
 `ErrWorkflowCompleted` error on both `accepted` and `completed` futures, and accepted Updates get
-the same error on the `completed` future only.
+the same error on the `completed` future only. It is the Workflow's responsibility to complete
+accepted Updates. This behavior is similar to Activities which also can be left abandoned after 
+Workflow completed.
 
-Update results are still available after the Workflow completed. They can be accessed using the
+If Workflow completion command creates a new run, accepted Updates are aborted in the same way:
+with `ErrWorkflowCompleted` error on the `completed` future. Admitted Updates, though, are aborted
+with retryable `ErrWorkflowClosing` error. SDK client retries this error and new attempt should land
+on the new run. This is because Updates that were received while the Workflow Task was running, haven't
+been seen by the Workflow yet, and can be safely retried on the new run. It also provides better
+experience for API callers: they shouldn't notice that the Workflow started a new run.
+
+Aborted accepted (but not completed) Updates remain in the `Aborted` state in the registry even after
+Update registry is reconstructed from the history.
+
+Update results are available after the Workflow completed. They can be accessed using the
 `PollWorkflowExecutionUpdate` API. Note that the `UpdateWorkflowExecution` API will return the
 result, too. This provides a consistent experience for API caller: no matter at what stage the 
 Workflow is, the API caller will always get the `ErrWorkflowCompleted` error, when the Update wasn't
-processed by the Workflow, or the Update outcome when it was. 
+processed by the Workflow, or the Update outcome when it was.
 
 > #### NOTE
-> There is one special case of Workflow completion: `ContinueAsNew`. If the Workflow receives
-> an Update Response message *and* a `ContinueAsNew` command on the same Workflow Task, then there
+> If Workflow receives an Update Response message *and* completion command which creates
+> a new run (e.g. `CONTINUE_AS_NEW_WORKFLOW_EXECUTION`) on the same Workflow Task, then there
 > is a chance that the Update will be delivered to *both* runs - the old and the new.
 > 
 > In one scenario the history node dies *after* the mutable state is persisted, but *before* the 
@@ -366,11 +380,14 @@ state (e.g. `stateAccepted` or `stateCompleted`). A callback mechanism is used t
 rollback - the transition after a successful persistence write. Check the
 [`effect` package doc](./effect-package.md) for more details.
 
-Because a Workflow Update can be accepted and completed in the same Workflow Task, the following
-chain of state transitions is normal:
+If a Workflow Update is accepted and completed in the same Workflow Task, it goes through the
+following chain of state transitions:
 ```
-Sent -> ProvisionalyAccepted -> ProvisionalyCompleted -> Accepted -> Completed
+Sent -> ProvisionalyAccepted -> ProvisionalyCompleted -> ProvisionalyCompletedAfterAccepted -> Completed
 ```
+Extra `ProvisionalyCompletedAfterAccepted` state is needed to unblock `completed` future before
+`accepted`. This allows to return Update results to the API caller even it was waiting for `ACCEPTED`
+stage.
 
 > #### NOTE
 > Because the `Cancel()` method is called in a `defer` block in case of error, the `Apply()` method
