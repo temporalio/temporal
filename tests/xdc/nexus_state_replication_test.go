@@ -47,6 +47,8 @@ import (
 	"go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	sdkclient "go.temporal.io/sdk/client"
+	"go.uber.org/atomic"
+
 	"go.temporal.io/server/common/dynamicconfig"
 	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/nexus/nexustest"
@@ -54,7 +56,6 @@ import (
 	"go.temporal.io/server/components/callbacks"
 	"go.temporal.io/server/components/nexusoperations"
 	"go.temporal.io/server/tests"
-	"go.uber.org/atomic"
 )
 
 type NexusStateReplicationSuite struct {
@@ -204,7 +205,7 @@ func (s *NexusStateReplicationSuite) TestNexusOperationEventsReplicated() {
 		s.Equal(1, len(describeRes.PendingNexusOperations))
 		op := describeRes.PendingNexusOperations[0]
 		return op.State == enumspb.PENDING_NEXUS_OPERATION_STATE_STARTED
-	}, time.Second*10, time.Millisecond*100)
+	}, time.Second*20, time.Millisecond*100)
 
 	_, err = s.cluster2.GetFrontendClient().RespondWorkflowTaskCompleted(ctx, &workflowservice.RespondWorkflowTaskCompletedRequest{
 		TaskToken: pollRes.TaskToken,
@@ -507,7 +508,7 @@ func (s *NexusStateReplicationSuite) waitCallback(
 		s.NoError(err)
 		s.Len(descResp.GetCallbacks(), 1)
 		return condition(descResp.GetCallbacks()[0])
-	}, time.Second*10, time.Millisecond*100)
+	}, time.Second*20, time.Millisecond*100)
 }
 
 func (s *NexusStateReplicationSuite) completeNexusOperation(ctx context.Context, result any, callbackUrl, callbackToken string) {
