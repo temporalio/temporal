@@ -2527,7 +2527,7 @@ WorkerActivitiesPerSecond, MaxConcurrentActivityTaskPollers.
 	)
 
 	ActivityAPIsEnabled = NewNamespaceBoolSetting(
-		"system.activityAPIsEnabled",
+		"frontend.activityAPIsEnabled",
 		false,
 		`ActivityAPIsEnabled is a "feature enable" flag. `,
 	)
