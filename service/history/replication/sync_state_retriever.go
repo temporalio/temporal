@@ -37,6 +37,7 @@ import (
 	persistencepb "go.temporal.io/server/api/persistence/v1"
 	replicationpb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -92,12 +93,14 @@ type (
 func NewSyncStateRetriever(
 	shardContext shard.Context,
 	workflowCache wcache.Cache,
+	workflowConsistencyChecker api.WorkflowConsistencyChecker,
 	logger log.Logger,
 ) *SyncStateRetrieverImpl {
 	return &SyncStateRetrieverImpl{
-		shardContext:  shardContext,
-		workflowCache: workflowCache,
-		logger:        logger,
+		shardContext:               shardContext,
+		workflowCache:              workflowCache,
+		workflowConsistencyChecker: workflowConsistencyChecker,
+		logger:                     logger,
 	}
 }
 
@@ -108,13 +111,28 @@ func (s *SyncStateRetrieverImpl) GetSyncWorkflowStateArtifact(
 	versionedTransition *persistencepb.VersionedTransition,
 	versionHistories *history.VersionHistories,
 ) (_ *SyncStateResult, retError error) {
-	wfCtx, releaseFunc, err := s.workflowCache.GetOrCreateWorkflowExecution(
+	wfLease, err := s.workflowConsistencyChecker.GetWorkflowLeaseWithConsistencyCheck(
 		ctx,
-		s.shardContext,
-		namespace.ID(namespaceID),
-		execution,
+		nil,
+		func(mutableState workflow.MutableState) bool {
+			if versionedTransition == nil {
+				return true
+			}
+			return !errors.Is(workflow.TransitionHistoryStalenessCheck(mutableState.GetExecutionInfo().TransitionHistory, versionedTransition), consts.ErrStaleState)
+		},
+		definition.WorkflowKey{
+			NamespaceID: namespaceID,
+			WorkflowID:  execution.WorkflowId,
+			RunID:       execution.RunId,
+		},
 		locks.PriorityLow,
 	)
+	if err != nil {
+		return nil, err
+	}
+	mu := wfLease.GetMutableState()
+	releaseFunc := wfLease.GetReleaseFn()
+
 	defer func() {
 		if releaseFunc != nil {
 			releaseFunc(retError)
@@ -124,32 +142,32 @@ func (s *SyncStateRetrieverImpl) GetSyncWorkflowStateArtifact(
 	if err != nil {
 		return nil, err
 	}
-	mu, err := wfCtx.LoadMutableState(ctx, s.shardContext)
-	if err != nil {
-		return nil, err
-	}
-	isSameBranch := false
-	if versionedTransition != nil {
-		err = workflow.TransitionHistoryStalenessCheck(mu.GetExecutionInfo().TransitionHistory, versionedTransition)
-		switch {
-		case err == nil:
-			isSameBranch = true
-		case errors.Is(err, consts.ErrStaleState):
-			return nil, serviceerror.NewInternal(fmt.Sprintf(
-				"stale version for workflow, request version transition: %v, mutable state transition history: %v",
-				versionedTransition,
-				mu.GetExecutionInfo().TransitionHistory,
-			))
-		default:
+
+	shouldReturnMutation := func() bool {
+		if versionedTransition == nil {
+			return false
 		}
+		// not on the same branch
+		if workflow.TransitionHistoryStalenessCheck(mu.GetExecutionInfo().TransitionHistory, versionedTransition) != nil {
+			return false
+		}
+		tombstoneBatch := mu.GetExecutionInfo().SubStateMachineTombstoneBatches
+		if tombstoneBatch == nil || len(tombstoneBatch) == 0 {
+			return true
+		}
+		if workflow.CompareVersionedTransition(tombstoneBatch[0].VersionedTransition, versionedTransition) <= 0 {
+			return true
+		}
+
+		if versionedTransition.TransitionCount+1 == tombstoneBatch[0].VersionedTransition.TransitionCount &&
+			versionedTransition.NamespaceFailoverVersion == tombstoneBatch[0].VersionedTransition.NamespaceFailoverVersion {
+			return true
+		}
+		return false
 	}
 
 	result := &SyncStateResult{}
-	tombstoneBatch := mu.GetExecutionInfo().SubStateMachineTombstoneBatches
-	if isSameBranch &&
-		(len(tombstoneBatch) == 0 ||
-			(workflow.CompareVersionedTransition(tombstoneBatch[0].VersionedTransition, versionedTransition) <= 0 ||
-				versionedTransition.TransitionCount+1 == tombstoneBatch[0].VersionedTransition.TransitionCount)) {
+	if shouldReturnMutation() {
 		mutation, err := s.getMutation(mu, versionedTransition)
 		if err != nil {
 			return nil, err

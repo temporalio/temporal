@@ -35,10 +35,12 @@ import (
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/api/history/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/hsm"
 	"go.temporal.io/server/service/history/hsm/hsmtest"
 	"go.temporal.io/server/service/history/shard"
@@ -52,17 +54,18 @@ type (
 	syncWorkflowStateSuite struct {
 		suite.Suite
 		*require.Assertions
-		workflowCache         *wcache.MockCache
-		logger                log.Logger
-		mockShard             *shard.ContextTest
-		controller            *gomock.Controller
-		releaseFunc           func(err error)
-		workflowContext       *workflow.MockContext
-		newRunWorkflowContext *workflow.MockContext
-		namespaceID           string
-		execution             *common.WorkflowExecution
-		newRunId              string
-		syncStateRetriever    *SyncStateRetrieverImpl
+		workflowCache              *wcache.MockCache
+		logger                     log.Logger
+		mockShard                  *shard.ContextTest
+		controller                 *gomock.Controller
+		releaseFunc                func(err error)
+		workflowContext            *workflow.MockContext
+		newRunWorkflowContext      *workflow.MockContext
+		namespaceID                string
+		execution                  *common.WorkflowExecution
+		newRunId                   string
+		syncStateRetriever         *SyncStateRetrieverImpl
+		workflowConsistencyChecker *api.MockWorkflowConsistencyChecker
 	}
 )
 
@@ -94,8 +97,8 @@ func (s *syncWorkflowStateSuite) SetupSuite() {
 		RunId:      uuid.New(),
 	}
 	s.newRunId = uuid.New()
-
-	s.syncStateRetriever = NewSyncStateRetriever(s.mockShard, s.workflowCache, s.logger)
+	s.workflowConsistencyChecker = api.NewMockWorkflowConsistencyChecker(s.controller)
+	s.syncStateRetriever = NewSyncStateRetriever(s.mockShard, s.workflowCache, s.workflowConsistencyChecker, s.logger)
 }
 
 func (s *syncWorkflowStateSuite) TearDownSuite() {
@@ -111,9 +114,13 @@ func (s *syncWorkflowStateSuite) TearDownTest() {
 }
 
 func (s *syncWorkflowStateSuite) TestSyncWorkflowState_ReturnMutation() {
-	s.workflowCache.EXPECT().GetOrCreateWorkflowExecution(gomock.Any(), s.mockShard, namespace.ID(s.namespaceID), s.execution, locks.PriorityLow).
-		Return(s.workflowContext, s.releaseFunc, nil)
 	mu := workflow.NewMockMutableState(s.controller)
+	s.workflowConsistencyChecker.EXPECT().GetWorkflowLeaseWithConsistencyCheck(gomock.Any(), nil, gomock.Any(), definition.WorkflowKey{
+		NamespaceID: s.namespaceID,
+		WorkflowID:  s.execution.WorkflowId,
+		RunID:       s.execution.RunId,
+	}, locks.PriorityLow).Return(
+		api.NewWorkflowLease(nil, func(err error) {}, mu), nil)
 	versionHistories := &history.VersionHistories{
 		CurrentVersionHistoryIndex: 0,
 		Histories: []*history.VersionHistory{
@@ -143,8 +150,6 @@ func (s *syncWorkflowStateSuite) TestSyncWorkflowState_ReturnMutation() {
 		ExecutionInfo: executionInfo,
 	})
 	mu.EXPECT().HSM().Return(nil)
-	s.workflowContext.EXPECT().LoadMutableState(gomock.Any(), s.mockShard).
-		Return(mu, nil).Times(1)
 	result, err := s.syncStateRetriever.GetSyncWorkflowStateArtifact(
 		context.Background(),
 		s.namespaceID,
@@ -164,9 +169,13 @@ func (s *syncWorkflowStateSuite) TestSyncWorkflowState_ReturnMutation() {
 }
 
 func (s *syncWorkflowStateSuite) TestSyncWorkflowState_ReturnSnapshot() {
-	s.workflowCache.EXPECT().GetOrCreateWorkflowExecution(gomock.Any(), s.mockShard, namespace.ID(s.namespaceID), s.execution, locks.PriorityLow).
-		Return(s.workflowContext, s.releaseFunc, nil)
 	mu := workflow.NewMockMutableState(s.controller)
+	s.workflowConsistencyChecker.EXPECT().GetWorkflowLeaseWithConsistencyCheck(gomock.Any(), nil, gomock.Any(), definition.WorkflowKey{
+		NamespaceID: s.namespaceID,
+		WorkflowID:  s.execution.WorkflowId,
+		RunID:       s.execution.RunId,
+	}, locks.PriorityLow).Return(
+		api.NewWorkflowLease(nil, func(err error) {}, mu), nil)
 	versionHistories := &history.VersionHistories{
 		CurrentVersionHistoryIndex: 0,
 		Histories: []*history.VersionHistory{
@@ -195,8 +204,6 @@ func (s *syncWorkflowStateSuite) TestSyncWorkflowState_ReturnSnapshot() {
 	mu.EXPECT().CloneToProto().Return(&persistencespb.WorkflowMutableState{
 		ExecutionInfo: executionInfo,
 	})
-	s.workflowContext.EXPECT().LoadMutableState(gomock.Any(), s.mockShard).
-		Return(mu, nil).Times(1)
 	result, err := s.syncStateRetriever.GetSyncWorkflowStateArtifact(
 		context.Background(),
 		s.namespaceID,
@@ -215,54 +222,14 @@ func (s *syncWorkflowStateSuite) TestSyncWorkflowState_ReturnSnapshot() {
 	s.Nil(result.NewRunInfo)
 }
 
-func (s *syncWorkflowStateSuite) TestSyncWorkflowState_StaleShard_ReturnError() {
-	s.workflowCache.EXPECT().GetOrCreateWorkflowExecution(gomock.Any(), s.mockShard, namespace.ID(s.namespaceID), s.execution, locks.PriorityLow).
-		Return(s.workflowContext, s.releaseFunc, nil)
-	mu := workflow.NewMockMutableState(s.controller)
-	versionHistories := &history.VersionHistories{
-		CurrentVersionHistoryIndex: 0,
-		Histories: []*history.VersionHistory{
-			{
-				BranchToken: []byte("branchToken1"),
-				Items: []*history.VersionHistoryItem{
-					{EventId: 1, Version: 10},
-					{EventId: 2, Version: 13},
-				},
-			},
-		},
-	}
-	executionInfo := &persistencespb.WorkflowExecutionInfo{
-		TransitionHistory: []*persistencespb.VersionedTransition{
-			{NamespaceFailoverVersion: 1, TransitionCount: 12},
-			{NamespaceFailoverVersion: 2, TransitionCount: 15},
-		},
-		SubStateMachineTombstoneBatches: []*persistencespb.StateMachineTombstoneBatch{
-			{
-				VersionedTransition: &persistencespb.VersionedTransition{NamespaceFailoverVersion: 1, TransitionCount: 12},
-			},
-		},
-		VersionHistories: versionHistories,
-	}
-	mu.EXPECT().GetExecutionInfo().Return(executionInfo).AnyTimes()
-	s.workflowContext.EXPECT().LoadMutableState(gomock.Any(), s.mockShard).
-		Return(mu, nil).Times(1)
-	result, err := s.syncStateRetriever.GetSyncWorkflowStateArtifact(
-		context.Background(),
-		s.namespaceID,
-		s.execution,
-		&persistencespb.VersionedTransition{
-			NamespaceFailoverVersion: 2,
-			TransitionCount:          16,
-		},
-		versionHistories)
-	s.Nil(result)
-	s.Error(err)
-}
-
 func (s *syncWorkflowStateSuite) TestSyncWorkflowState_NoVersionTransitionProvided_ReturnSnapshot() {
-	s.workflowCache.EXPECT().GetOrCreateWorkflowExecution(gomock.Any(), s.mockShard, namespace.ID(s.namespaceID), s.execution, locks.PriorityLow).
-		Return(s.workflowContext, s.releaseFunc, nil)
 	mu := workflow.NewMockMutableState(s.controller)
+	s.workflowConsistencyChecker.EXPECT().GetWorkflowLeaseWithConsistencyCheck(gomock.Any(), nil, gomock.Any(), definition.WorkflowKey{
+		NamespaceID: s.namespaceID,
+		WorkflowID:  s.execution.WorkflowId,
+		RunID:       s.execution.RunId,
+	}, locks.PriorityLow).Return(
+		api.NewWorkflowLease(nil, func(err error) {}, mu), nil)
 	versionHistories := &history.VersionHistories{
 		CurrentVersionHistoryIndex: 0,
 		Histories: []*history.VersionHistory{
@@ -291,8 +258,6 @@ func (s *syncWorkflowStateSuite) TestSyncWorkflowState_NoVersionTransitionProvid
 	mu.EXPECT().CloneToProto().Return(&persistencespb.WorkflowMutableState{
 		ExecutionInfo: executionInfo,
 	})
-	s.workflowContext.EXPECT().LoadMutableState(gomock.Any(), s.mockShard).
-		Return(mu, nil).Times(1)
 	result, err := s.syncStateRetriever.GetSyncWorkflowStateArtifact(
 		context.Background(),
 		s.namespaceID,
