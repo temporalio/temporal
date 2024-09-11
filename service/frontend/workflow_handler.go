@@ -5067,10 +5067,11 @@ func (wh *WorkflowHandler) UpdateActivityOptionsById(
 	ctx context.Context,
 	request *workflowservice.UpdateActivityOptionsByIdRequest,
 ) (_ *workflowservice.UpdateActivityOptionsByIdResponse, retError error) {
-	if !wh.config.ActivityAPIsEnabled() {
+	defer log.CapturePanic(wh.logger, &retError)
+
+	if !wh.config.ActivityAPIsEnabled(request.GetNamespace()) {
 		return nil, status.Errorf(codes.Unimplemented, "method UpdateActivityOptionsById not implemented")
 	}
-	defer log.CapturePanic(wh.logger, &retError)
 
 	wh.logger.Debug("Received UpdateActivityOptionsById")
 
@@ -5089,7 +5090,7 @@ func (wh *WorkflowHandler) UpdateActivityOptionsById(
 		return nil, err
 	}
 
-	responce, err := wh.historyClient.UpdateActivityOptions(ctx, &historyservice.UpdateActivityOptionsRequest{
+	response, err := wh.historyClient.UpdateActivityOptions(ctx, &historyservice.UpdateActivityOptionsRequest{
 		NamespaceId:     namespace_id.String(),
 		WorkflowId:      request.WorkflowId,
 		RunId:           request.RunId,
@@ -5103,6 +5104,6 @@ func (wh *WorkflowHandler) UpdateActivityOptionsById(
 	}
 
 	return &workflowservice.UpdateActivityOptionsByIdResponse{
-		ActivityOptions: responce.ActivityOptions,
+		ActivityOptions: response.ActivityOptions,
 	}, nil
 }
