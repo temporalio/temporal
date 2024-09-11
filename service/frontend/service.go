@@ -203,6 +203,8 @@ type Config struct {
 	LogAllReqErrors dynamicconfig.BoolPropertyFnWithNamespaceFilter
 
 	EnableEagerWorkflowStart dynamicconfig.BoolPropertyFnWithNamespaceFilter
+
+	ActivityAPIsEnabled dynamicconfig.BoolPropertyFn
 }
 
 // NewConfig returns new service config with default values
@@ -317,6 +319,7 @@ func NewConfig(
 		HistoryHostErrorPercentage: dynamicconfig.HistoryHostErrorPercentage.Get(dc),
 		LogAllReqErrors:            dynamicconfig.LogAllReqErrors.Get(dc),
 		EnableEagerWorkflowStart:   dynamicconfig.EnableEagerWorkflowStart.Get(dc),
+		ActivityAPIsEnabled:        dynamicconfig.ActivityAPIsEnabled.Get(dc),
 	}
 }
 

@@ -108,6 +108,7 @@ const (
 	HistoryService_InvokeStateMachineMethod_FullMethodName               = "/temporal.server.api.historyservice.v1.HistoryService/InvokeStateMachineMethod"
 	HistoryService_DeepHealthCheck_FullMethodName                        = "/temporal.server.api.historyservice.v1.HistoryService/DeepHealthCheck"
 	HistoryService_SyncWorkflowState_FullMethodName                      = "/temporal.server.api.historyservice.v1.HistoryService/SyncWorkflowState"
+	HistoryService_UpdateActivityOptions_FullMethodName                  = "/temporal.server.api.historyservice.v1.HistoryService/UpdateActivityOptions"
 )
 
 // HistoryServiceClient is the client API for HistoryService service.
@@ -322,6 +323,11 @@ type HistoryServiceClient interface {
 	// Deep health check history service dependencies health status
 	DeepHealthCheck(ctx context.Context, in *DeepHealthCheckRequest, opts ...grpc.CallOption) (*DeepHealthCheckResponse, error)
 	SyncWorkflowState(ctx context.Context, in *SyncWorkflowStateRequest, opts ...grpc.CallOption) (*SyncWorkflowStateResponse, error)
+	// UpdateActivityOptions is called by the client to update the options of an activity
+	// rpc UpdateActivityOptions (temporal.api.workflowservice.v1.UpdateActivityOptionsByIdRequest) returns (temporal.api.activity.v1.ActivityOptions)
+	// (-- api-linter: core::0134::method-signature=disabled
+	// (-- api-linter: core::0134::response-message-name=disabled
+	UpdateActivityOptions(ctx context.Context, in *UpdateActivityOptionsRequest, opts ...grpc.CallOption) (*UpdateActivityOptionsResponse, error)
 }
 
 type historyServiceClient struct {
@@ -948,6 +954,15 @@ func (c *historyServiceClient) SyncWorkflowState(ctx context.Context, in *SyncWo
 	return out, nil
 }
 
+func (c *historyServiceClient) UpdateActivityOptions(ctx context.Context, in *UpdateActivityOptionsRequest, opts ...grpc.CallOption) (*UpdateActivityOptionsResponse, error) {
+	out := new(UpdateActivityOptionsResponse)
+	err := c.cc.Invoke(ctx, HistoryService_UpdateActivityOptions_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // HistoryServiceServer is the server API for HistoryService service.
 // All implementations must embed UnimplementedHistoryServiceServer
 // for forward compatibility
@@ -1160,6 +1175,11 @@ type HistoryServiceServer interface {
 	// Deep health check history service dependencies health status
 	DeepHealthCheck(context.Context, *DeepHealthCheckRequest) (*DeepHealthCheckResponse, error)
 	SyncWorkflowState(context.Context, *SyncWorkflowStateRequest) (*SyncWorkflowStateResponse, error)
+	// UpdateActivityOptions is called by the client to update the options of an activity
+	// rpc UpdateActivityOptions (temporal.api.workflowservice.v1.UpdateActivityOptionsByIdRequest) returns (temporal.api.activity.v1.ActivityOptions)
+	// (-- api-linter: core::0134::method-signature=disabled
+	// (-- api-linter: core::0134::response-message-name=disabled
+	UpdateActivityOptions(context.Context, *UpdateActivityOptionsRequest) (*UpdateActivityOptionsResponse, error)
 	mustEmbedUnimplementedHistoryServiceServer()
 }
 
@@ -1364,6 +1384,9 @@ func (UnimplementedHistoryServiceServer) DeepHealthCheck(context.Context, *DeepH
 }
 func (UnimplementedHistoryServiceServer) SyncWorkflowState(context.Context, *SyncWorkflowStateRequest) (*SyncWorkflowStateResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method SyncWorkflowState not implemented")
+}
+func (UnimplementedHistoryServiceServer) UpdateActivityOptions(context.Context, *UpdateActivityOptionsRequest) (*UpdateActivityOptionsResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method UpdateActivityOptions not implemented")
 }
 func (UnimplementedHistoryServiceServer) mustEmbedUnimplementedHistoryServiceServer() {}
 
@@ -2574,6 +2597,24 @@ func _HistoryService_SyncWorkflowState_Handler(srv interface{}, ctx context.Cont
 	return interceptor(ctx, in, info, handler)
 }
 
+func _HistoryService_UpdateActivityOptions_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(UpdateActivityOptionsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(HistoryServiceServer).UpdateActivityOptions(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: HistoryService_UpdateActivityOptions_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(HistoryServiceServer).UpdateActivityOptions(ctx, req.(*UpdateActivityOptionsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // HistoryService_ServiceDesc is the grpc.ServiceDesc for HistoryService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -2840,6 +2881,10 @@ var HistoryService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "SyncWorkflowState",
 			Handler:    _HistoryService_SyncWorkflowState_Handler,
+		},
+		{
+			MethodName: "UpdateActivityOptions",
+			Handler:    _HistoryService_UpdateActivityOptions_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{

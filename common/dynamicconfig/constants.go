@@ -2525,4 +2525,10 @@ WorkerActivitiesPerSecond, MaxConcurrentActivityTaskPollers.
 		false,
 		`When set to true, logs all RPC/request errors for the namespace, not just unexpected ones.`,
 	)
+
+	ActivityAPIsEnabled = NewGlobalBoolSetting(
+		"admin.activityAPIsEnabled",
+		false,
+		`ActivityAPIsEnabled is a "feature enable" flag. `,
+	)
 )
