@@ -7,6 +7,7 @@ package main
 import (
 	"google.golang.org/protobuf/reflect/protoreflect"
 
+	activity "go.temporal.io/api/activity/v1"
 	batch "go.temporal.io/api/batch/v1"
 	command "go.temporal.io/api/command/v1"
 	common "go.temporal.io/api/common/v1"
@@ -29,6 +30,7 @@ import (
 	anypb "google.golang.org/protobuf/types/known/anypb"
 	durationpb "google.golang.org/protobuf/types/known/durationpb"
 	emptypb "google.golang.org/protobuf/types/known/emptypb"
+	fieldmaskpb "google.golang.org/protobuf/types/known/fieldmaskpb"
 	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
 	wrapperspb "google.golang.org/protobuf/types/known/wrapperspb"
 )
@@ -38,8 +40,10 @@ func init() {
 	importMap["google/protobuf/any.proto"] = anypb.File_google_protobuf_any_proto
 	importMap["google/protobuf/duration.proto"] = durationpb.File_google_protobuf_duration_proto
 	importMap["google/protobuf/empty.proto"] = emptypb.File_google_protobuf_empty_proto
+	importMap["google/protobuf/field_mask.proto"] = fieldmaskpb.File_google_protobuf_field_mask_proto
 	importMap["google/protobuf/timestamp.proto"] = timestamppb.File_google_protobuf_timestamp_proto
 	importMap["google/protobuf/wrappers.proto"] = wrapperspb.File_google_protobuf_wrappers_proto
+	importMap["temporal/api/activity/v1/message.proto"] = activity.File_temporal_api_activity_v1_message_proto
 	importMap["temporal/api/batch/v1/message.proto"] = batch.File_temporal_api_batch_v1_message_proto
 	importMap["temporal/api/command/v1/message.proto"] = command.File_temporal_api_command_v1_message_proto
 	importMap["temporal/api/common/v1/message.proto"] = common.File_temporal_api_common_v1_message_proto
