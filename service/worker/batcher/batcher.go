@@ -31,9 +31,9 @@ import (
 	"go.temporal.io/sdk/workflow"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/headers"
-	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/log/tag"
-	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/observability/log"
+	"go.temporal.io/server/common/observability/log/tag"
+	"go.temporal.io/server/common/observability/metrics"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/sdk"
 )

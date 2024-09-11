@@ -30,7 +30,7 @@ import (
 	"fmt"
 
 	"go.temporal.io/api/serviceerror"
-	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/observability/log"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
 )

@@ -34,7 +34,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/common/dynamicconfig"
-	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/observability/log"
 )
 
 const (

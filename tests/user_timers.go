@@ -37,7 +37,7 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/adminservice/v1"
-	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/observability/log/tag"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/timer"
 	"google.golang.org/protobuf/types/known/durationpb"

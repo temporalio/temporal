@@ -29,7 +29,7 @@ import (
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
-	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/observability/metrics"
 	"google.golang.org/protobuf/proto"
 )
 

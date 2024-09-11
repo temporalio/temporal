@@ -37,9 +37,9 @@ import (
 	context "context"
 	reflect "reflect"
 
-	common "go.temporal.io/api/common/v1"
+	v1 "go.temporal.io/api/common/v1"
 	locks "go.temporal.io/server/common/locks"
-	metrics "go.temporal.io/server/common/metrics"
+	metrics "go.temporal.io/server/common/observability/metrics"
 	namespace "go.temporal.io/server/common/namespace"
 	shard "go.temporal.io/server/service/history/shard"
 	workflow "go.temporal.io/server/service/history/workflow"
@@ -85,7 +85,7 @@ func (mr *MockCacheMockRecorder) GetOrCreateCurrentWorkflowExecution(ctx, shardC
 }
 
 // GetOrCreateWorkflowExecution mocks base method.
-func (m *MockCache) GetOrCreateWorkflowExecution(ctx context.Context, shardContext shard.Context, namespaceID namespace.ID, execution *common.WorkflowExecution, lockPriority locks.Priority) (workflow.Context, ReleaseCacheFunc, error) {
+func (m *MockCache) GetOrCreateWorkflowExecution(ctx context.Context, shardContext shard.Context, namespaceID namespace.ID, execution *v1.WorkflowExecution, lockPriority locks.Priority) (workflow.Context, ReleaseCacheFunc, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetOrCreateWorkflowExecution", ctx, shardContext, namespaceID, execution, lockPriority)
 	ret0, _ := ret[0].(workflow.Context)
@@ -101,7 +101,7 @@ func (mr *MockCacheMockRecorder) GetOrCreateWorkflowExecution(ctx, shardContext,
 }
 
 // Put mocks base method.
-func (m *MockCache) Put(shardContext shard.Context, namespaceID namespace.ID, execution *common.WorkflowExecution, workflowCtx workflow.Context, handler metrics.Handler) (workflow.Context, error) {
+func (m *MockCache) Put(shardContext shard.Context, namespaceID namespace.ID, execution *v1.WorkflowExecution, workflowCtx workflow.Context, handler metrics.Handler) (workflow.Context, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Put", shardContext, namespaceID, execution, workflowCtx, handler)
 	ret0, _ := ret[0].(workflow.Context)

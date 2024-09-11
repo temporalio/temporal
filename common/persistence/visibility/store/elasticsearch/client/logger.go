@@ -27,7 +27,7 @@ package client
 import (
 	"fmt"
 
-	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/observability/log"
 )
 
 type (

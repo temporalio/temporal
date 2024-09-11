@@ -28,7 +28,7 @@ import (
 	"testing"
 
 	"go.temporal.io/server/common/dynamicconfig"
-	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/observability/log"
 )
 
 func BenchmarkCollection(b *testing.B) {

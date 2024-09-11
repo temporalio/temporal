@@ -30,7 +30,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common"
-	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/observability/log/tag"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/shard"

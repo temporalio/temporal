@@ -33,7 +33,7 @@ import (
 	"github.com/stretchr/testify/suite"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/dynamicconfig"
-	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/observability/log"
 	"go.temporal.io/server/common/persistence"
 	"go.uber.org/mock/gomock"
 )

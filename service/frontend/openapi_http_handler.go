@@ -30,8 +30,8 @@ import (
 
 	"github.com/gorilla/mux"
 	"go.temporal.io/api/temporalproto/openapi"
-	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/observability/log"
+	"go.temporal.io/server/common/observability/log/tag"
 	"go.temporal.io/server/common/rpc/interceptor"
 	"go.temporal.io/server/service/frontend/configs"
 )

@@ -41,9 +41,9 @@ import (
 	"go.temporal.io/server/common/debug"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/headers"
-	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/membership"
+	"go.temporal.io/server/common/observability/log"
+	"go.temporal.io/server/common/observability/log/tag"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
 )

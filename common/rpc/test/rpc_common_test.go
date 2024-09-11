@@ -34,7 +34,7 @@ import (
 	"github.com/stretchr/testify/suite"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/convert"
-	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/observability/log"
 	"go.temporal.io/server/common/rpc"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"

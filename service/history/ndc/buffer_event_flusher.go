@@ -30,7 +30,7 @@ import (
 	"context"
 
 	"go.temporal.io/server/common/cluster"
-	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/observability/log"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/workflow"
 	wcache "go.temporal.io/server/service/history/workflow/cache"

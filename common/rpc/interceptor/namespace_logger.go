@@ -31,9 +31,9 @@ import (
 
 	"go.temporal.io/server/common/api"
 	"go.temporal.io/server/common/authorization"
-	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/observability/log"
+	"go.temporal.io/server/common/observability/log/tag"
 	"google.golang.org/grpc"
 )
 

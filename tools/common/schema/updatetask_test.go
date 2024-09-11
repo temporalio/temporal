@@ -31,7 +31,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/observability/log"
 	dbschemas "go.temporal.io/server/schema"
 	"go.temporal.io/server/tests/testutils"
 	"go.uber.org/zap/zaptest"

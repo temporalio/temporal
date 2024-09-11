@@ -27,8 +27,8 @@ package cassandra
 import (
 	"fmt"
 
-	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/observability/log"
+	"go.temporal.io/server/common/observability/log/tag"
 	"go.temporal.io/server/common/persistence/nosql/nosqlplugin/cassandra/gocql"
 )
 

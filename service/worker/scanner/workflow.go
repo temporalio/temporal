@@ -33,7 +33,7 @@ import (
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
-	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/observability/log/tag"
 	"go.temporal.io/server/service/worker/scanner/executions"
 	"go.temporal.io/server/service/worker/scanner/history"
 	"go.temporal.io/server/service/worker/scanner/taskqueue"

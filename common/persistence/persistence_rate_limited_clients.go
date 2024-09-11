@@ -33,7 +33,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	persistencepb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/headers"
-	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/observability/log"
 	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/service/history/tasks"
 )

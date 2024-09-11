@@ -24,7 +24,7 @@ package clustertest
 
 import (
 	"go.temporal.io/server/common/cluster"
-	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/observability/log"
 )
 
 // NewMetadataForTest returns a new [cluster.Metadata] instance for testing.

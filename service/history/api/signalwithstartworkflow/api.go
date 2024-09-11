@@ -33,8 +33,8 @@ import (
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/enums"
 	"go.temporal.io/server/common/locks"
-	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/observability/metrics"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/shard"
 )

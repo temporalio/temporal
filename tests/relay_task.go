@@ -33,7 +33,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
-	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/observability/log/tag"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 

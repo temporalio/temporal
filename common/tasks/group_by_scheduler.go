@@ -28,7 +28,7 @@ import (
 	"time"
 
 	"go.temporal.io/server/common"
-	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/observability/log"
 )
 
 // GroupBySchedulerOptions are options for creating a [GroupByScheduler].

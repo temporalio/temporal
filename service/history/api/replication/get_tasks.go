@@ -34,7 +34,7 @@ import (
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
-	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/observability/log/tag"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/service/history/replication"
 	"go.temporal.io/server/service/history/shard"

@@ -30,7 +30,7 @@ import (
 	"testing"
 
 	"go.temporal.io/server/common/backoff"
-	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/observability/log"
 )
 
 type (

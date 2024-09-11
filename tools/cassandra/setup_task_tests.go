@@ -27,7 +27,7 @@ package cassandra
 import (
 	"os"
 
-	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/observability/log/tag"
 	"go.temporal.io/server/environment"
 	"go.temporal.io/server/tools/common/schema/test"
 )

@@ -41,7 +41,7 @@ import (
 	"go.temporal.io/sdk/workflow"
 	"go.temporal.io/server/common/authorization"
 	"go.temporal.io/server/common/headers"
-	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/observability/metrics"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/protobuf/encoding/protojson"
 	"gopkg.in/yaml.v3"

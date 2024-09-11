@@ -27,7 +27,7 @@ package clitest
 import (
 	"path/filepath"
 
-	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/observability/log/tag"
 	"go.temporal.io/server/tools/common/schema/test"
 	"go.temporal.io/server/tools/sql"
 )

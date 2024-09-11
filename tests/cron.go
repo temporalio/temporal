@@ -43,7 +43,7 @@ import (
 	"go.temporal.io/sdk/workflow"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/failure"
-	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/observability/log/tag"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/payloads"
 	"google.golang.org/protobuf/types/known/durationpb"

@@ -25,7 +25,7 @@
 package queues
 
 import (
-	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/observability/metrics"
 	"go.temporal.io/server/service/history/tasks"
 )
 

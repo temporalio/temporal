@@ -29,8 +29,8 @@ import (
 	"strings"
 	"time"
 
-	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/observability/log"
+	"go.temporal.io/server/common/observability/log/tag"
 )
 
 // AcquireShardFunctionalSuite is the base test suite for testing acquire shard.

@@ -36,8 +36,8 @@ import (
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/historyservicemock/v1"
 	"go.temporal.io/server/common/convert"
-	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/membership"
+	"go.temporal.io/server/common/observability/log"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.uber.org/mock/gomock"
 )

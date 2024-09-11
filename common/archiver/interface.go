@@ -33,8 +33,8 @@ import (
 	workflowpb "go.temporal.io/api/workflow/v1"
 	archiverspb "go.temporal.io/server/api/archiver/v1"
 	"go.temporal.io/server/common/cluster"
-	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/observability/log"
+	"go.temporal.io/server/common/observability/metrics"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/searchattribute"
 )

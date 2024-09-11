@@ -33,7 +33,7 @@ import (
 	"github.com/stretchr/testify/suite"
 	"go.temporal.io/server/api/enums/v1"
 	replicationpb "go.temporal.io/server/api/replication/v1"
-	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/observability/log"
 	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/service/history/configs"
 	"go.uber.org/mock/gomock"

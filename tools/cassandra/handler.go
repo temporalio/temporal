@@ -31,8 +31,8 @@ import (
 	"github.com/urfave/cli"
 	"go.temporal.io/server/common/auth"
 	c "go.temporal.io/server/common/config"
-	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/observability/log"
+	"go.temporal.io/server/common/observability/log/tag"
 	"go.temporal.io/server/environment"
 	"go.temporal.io/server/tools/common/schema"
 )

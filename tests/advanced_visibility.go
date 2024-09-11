@@ -52,7 +52,7 @@ import (
 	"go.temporal.io/sdk/workflow"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"
-	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/observability/log/tag"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/payloads"
 	esclient "go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"

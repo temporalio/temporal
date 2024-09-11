@@ -29,7 +29,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/observability/log/tag"
 	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/service/matching"
 	"go.temporal.io/server/service/worker/scanner/executor"

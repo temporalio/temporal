@@ -43,9 +43,9 @@ import (
 	matchingservice "go.temporal.io/server/api/matchingservice/v1"
 	common "go.temporal.io/server/common"
 	dynamicconfig "go.temporal.io/server/common/dynamicconfig"
-	log "go.temporal.io/server/common/log"
+	log "go.temporal.io/server/common/observability/log"
 	membership "go.temporal.io/server/common/membership"
-	metrics "go.temporal.io/server/common/metrics"
+	metrics "go.temporal.io/server/common/observability/metrics"
 	gomock "go.uber.org/mock/gomock"
 	grpc "google.golang.org/grpc"
 )

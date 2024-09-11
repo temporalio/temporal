@@ -32,9 +32,9 @@ import (
 
 	"github.com/nexus-rpc/sdk-go/nexus"
 	persistencepb "go.temporal.io/server/api/persistence/v1"
-	"go.temporal.io/server/common/log/tag"
-	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/observability/log/tag"
+	"go.temporal.io/server/common/observability/metrics"
 	"go.temporal.io/server/service/history/queues"
 )
 

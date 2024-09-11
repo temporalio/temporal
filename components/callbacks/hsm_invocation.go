@@ -29,9 +29,9 @@ import (
 
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
-	"go.temporal.io/server/common/log/tag"
-	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/observability/log/tag"
+	"go.temporal.io/server/common/observability/metrics"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )

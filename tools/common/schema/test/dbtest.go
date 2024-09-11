@@ -31,8 +31,8 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/observability/log"
+	"go.temporal.io/server/common/observability/log/tag"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/tests/testutils"
 	"go.temporal.io/server/tools/common/schema"

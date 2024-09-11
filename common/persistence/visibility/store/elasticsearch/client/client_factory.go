@@ -28,7 +28,7 @@ import (
 	"fmt"
 	"net/http"
 
-	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/observability/log"
 )
 
 func NewClient(config *Config, httpClient *http.Client, logger log.Logger) (Client, error) {

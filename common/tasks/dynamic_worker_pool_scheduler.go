@@ -28,7 +28,7 @@ import (
 	"sync"
 	"time"
 
-	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/observability/metrics"
 )
 
 // DynamicWorkerPoolLimiter provides dynamic limiters for [DynamicWorkerPoolScheduler].

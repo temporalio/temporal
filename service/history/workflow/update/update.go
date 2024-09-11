@@ -36,7 +36,7 @@ import (
 	updatepb "go.temporal.io/api/update/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/future"
-	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/observability/metrics"
 	"go.temporal.io/server/common/utf8validator"
 	"go.temporal.io/server/internal/effect"
 	"google.golang.org/protobuf/proto"

@@ -22,7 +22,7 @@
 
 package callbacks
 
-import "go.temporal.io/server/common/metrics"
+import "go.temporal.io/server/common/observability/metrics"
 
 var RequestCounter = metrics.NewCounterDef(
 	"callback_outbound_requests",

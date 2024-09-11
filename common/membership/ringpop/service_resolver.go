@@ -42,9 +42,9 @@ import (
 	"github.com/temporalio/ringpop-go/swim"
 	"github.com/temporalio/tchannel-go"
 	"go.temporal.io/server/common"
-	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/membership"
+	"go.temporal.io/server/common/observability/log"
+	"go.temporal.io/server/common/observability/log/tag"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/util"
 )

@@ -28,8 +28,8 @@ import (
 	"sync"
 
 	"go.temporal.io/server/common/collection"
-	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/observability/log"
+	"go.temporal.io/server/common/observability/metrics"
 	ctasks "go.temporal.io/server/common/tasks"
 )
 

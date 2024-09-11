@@ -24,7 +24,7 @@
 
 package dynamicconfig
 
-import "go.temporal.io/server/common/log"
+import "go.temporal.io/server/common/observability/log"
 
 type (
 	// StaticClient is a simple implementation of Client that just looks up in a map.

@@ -28,7 +28,7 @@ import (
 	"time"
 
 	sdkclient "go.temporal.io/sdk/client"
-	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/observability/metrics"
 )
 
 type (

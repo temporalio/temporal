@@ -29,9 +29,9 @@ import (
 	"github.com/nexus-rpc/sdk-go/nexus"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/headers"
-	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/metrics"
 	commonnexus "go.temporal.io/server/common/nexus"
+	"go.temporal.io/server/common/observability/log"
+	"go.temporal.io/server/common/observability/metrics"
 	"go.temporal.io/server/common/rpc"
 	"go.uber.org/fx"
 )

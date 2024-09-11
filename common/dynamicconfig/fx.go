@@ -25,7 +25,7 @@
 package dynamicconfig
 
 import (
-	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/observability/log"
 	"go.temporal.io/server/common/pingable"
 	"go.uber.org/fx"
 )

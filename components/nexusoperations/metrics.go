@@ -22,7 +22,7 @@
 
 package nexusoperations
 
-import "go.temporal.io/server/common/metrics"
+import "go.temporal.io/server/common/observability/metrics"
 
 var OutboundRequestCounter = metrics.NewCounterDef(
 	"nexus_outbound_requests",

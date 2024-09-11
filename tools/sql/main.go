@@ -29,7 +29,7 @@ import (
 	"os"
 
 	"github.com/urfave/cli"
-	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/observability/log"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin/mysql"
 	dbschemas "go.temporal.io/server/schema"
 	"go.temporal.io/server/tools/common/schema"

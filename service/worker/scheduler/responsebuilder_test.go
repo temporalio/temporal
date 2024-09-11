@@ -34,7 +34,7 @@ import (
 	failurepb "go.temporal.io/api/failure/v1"
 	historypb "go.temporal.io/api/history/v1"
 	schedspb "go.temporal.io/server/api/schedule/v1"
-	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/observability/log"
 	"google.golang.org/protobuf/proto"
 )
 

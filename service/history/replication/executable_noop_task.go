@@ -28,7 +28,7 @@ import (
 	"time"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
-	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/observability/metrics"
 	ctasks "go.temporal.io/server/common/tasks"
 )
 
