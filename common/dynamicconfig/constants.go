@@ -2527,7 +2527,7 @@ WorkerActivitiesPerSecond, MaxConcurrentActivityTaskPollers.
 	)
 
 	ActivityAPIsEnabled = NewGlobalBoolSetting(
-		"admin.activityAPIsEnabled",
+		"system.activityAPIsEnabled",
 		false,
 		`ActivityAPIsEnabled is a "feature enable" flag. `,
 	)

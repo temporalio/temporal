@@ -975,14 +975,14 @@ message SyncWorkflowStateResponse {
 }
 
 message UpdateActivityOptionsRequest {
-    // Namespace of the workflow which scheduled this activity
+    // Namespace ID of the workflow which scheduled this activity
     string namespace_id = 1;
-    // Id of the workflow which scheduled this activity
+    // ID of the workflow which scheduled this activity
     string workflow_id = 2;
-    // Run Id of the workflow which scheduled this activity
+    // Run ID of the workflow which scheduled this activity
     // if empty - latest workflow is used
     string run_id = 3;
-    // Id of the activity we're updating
+    // ID of the activity we're updating
     string activity_id = 4;
 
     // Activity options. Partial updates are accepted and controlled by update_mask
