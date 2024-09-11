@@ -2081,6 +2081,49 @@ func (adh *AdminHandler) ListQueues(
 	}, nil
 }
 
+func (adh *AdminHandler) SyncWorkflowState(ctx context.Context, request *adminservice.SyncWorkflowStateRequest) (_ *adminservice.SyncWorkflowStateResponse, retError error) {
+	defer log.CapturePanic(adh.logger, &retError)
+
+	if request == nil {
+		return nil, errRequestNotSet
+	}
+
+	if err := validateExecution(request.Execution); err != nil {
+		return nil, err
+	}
+
+	res, err := adh.historyClient.SyncWorkflowState(ctx, &historyservice.SyncWorkflowStateRequest{
+		NamespaceId:         request.NamespaceId,
+		Execution:           request.Execution,
+		VersionHistories:    request.VersionHistories,
+		VersionedTransition: request.VersionedTransition,
+		TargetClusterId:     request.TargetClusterId,
+	})
+	if err != nil {
+		return nil, err
+	}
+	switch att := res.Attributes.(type) {
+	case *historyservice.SyncWorkflowStateResponse_Mutation:
+		return &adminservice.SyncWorkflowStateResponse{
+			Attributes: &adminservice.SyncWorkflowStateResponse_Mutation{
+				Mutation: res.GetMutation(),
+			},
+			EventBatches: res.EventBatches,
+			NewRunInfo:   res.NewRunInfo,
+		}, nil
+	case *historyservice.SyncWorkflowStateResponse_Snapshot:
+		return &adminservice.SyncWorkflowStateResponse{
+			Attributes: &adminservice.SyncWorkflowStateResponse_Snapshot{
+				Snapshot: res.GetSnapshot(),
+			},
+			EventBatches: res.EventBatches,
+			NewRunInfo:   res.NewRunInfo,
+		}, nil
+	default:
+		return nil, serviceerror.NewInternal(fmt.Sprintf("unknown type in SyncWorkflowStateResponse: %T", att))
+	}
+}
+
 func (adh *AdminHandler) getDLQWorkflowID(
 	key *commonspb.HistoryDLQKey,
 ) string {

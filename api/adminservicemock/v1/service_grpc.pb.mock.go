@@ -866,6 +866,26 @@ func (mr *MockAdminServiceClientMockRecorder) StreamWorkflowReplicationMessages(
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "StreamWorkflowReplicationMessages", reflect.TypeOf((*MockAdminServiceClient)(nil).StreamWorkflowReplicationMessages), varargs...)
 }
 
+// SyncWorkflowState mocks base method.
+func (m *MockAdminServiceClient) SyncWorkflowState(ctx context.Context, in *adminservice.SyncWorkflowStateRequest, opts ...grpc.CallOption) (*adminservice.SyncWorkflowStateResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []any{ctx, in}
+	for _, a := range opts {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "SyncWorkflowState", varargs...)
+	ret0, _ := ret[0].(*adminservice.SyncWorkflowStateResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// SyncWorkflowState indicates an expected call of SyncWorkflowState.
+func (mr *MockAdminServiceClientMockRecorder) SyncWorkflowState(ctx, in any, opts ...any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]any{ctx, in}, opts...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SyncWorkflowState", reflect.TypeOf((*MockAdminServiceClient)(nil).SyncWorkflowState), varargs...)
+}
+
 // MockAdminService_StreamWorkflowReplicationMessagesClient is a mock of AdminService_StreamWorkflowReplicationMessagesClient interface.
 type MockAdminService_StreamWorkflowReplicationMessagesClient struct {
 	ctrl     *gomock.Controller
@@ -1623,6 +1643,21 @@ func (m *MockAdminServiceServer) StreamWorkflowReplicationMessages(arg0 adminser
 func (mr *MockAdminServiceServerMockRecorder) StreamWorkflowReplicationMessages(arg0 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "StreamWorkflowReplicationMessages", reflect.TypeOf((*MockAdminServiceServer)(nil).StreamWorkflowReplicationMessages), arg0)
+}
+
+// SyncWorkflowState mocks base method.
+func (m *MockAdminServiceServer) SyncWorkflowState(arg0 context.Context, arg1 *adminservice.SyncWorkflowStateRequest) (*adminservice.SyncWorkflowStateResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "SyncWorkflowState", arg0, arg1)
+	ret0, _ := ret[0].(*adminservice.SyncWorkflowStateResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// SyncWorkflowState indicates an expected call of SyncWorkflowState.
+func (mr *MockAdminServiceServerMockRecorder) SyncWorkflowState(arg0, arg1 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SyncWorkflowState", reflect.TypeOf((*MockAdminServiceServer)(nil).SyncWorkflowState), arg0, arg1)
 }
 
 // mustEmbedUnimplementedAdminServiceServer mocks base method.

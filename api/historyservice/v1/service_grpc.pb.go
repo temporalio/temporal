@@ -107,6 +107,7 @@ const (
 	HistoryService_CompleteNexusOperation_FullMethodName                 = "/temporal.server.api.historyservice.v1.HistoryService/CompleteNexusOperation"
 	HistoryService_InvokeStateMachineMethod_FullMethodName               = "/temporal.server.api.historyservice.v1.HistoryService/InvokeStateMachineMethod"
 	HistoryService_DeepHealthCheck_FullMethodName                        = "/temporal.server.api.historyservice.v1.HistoryService/DeepHealthCheck"
+	HistoryService_SyncWorkflowState_FullMethodName                      = "/temporal.server.api.historyservice.v1.HistoryService/SyncWorkflowState"
 )
 
 // HistoryServiceClient is the client API for HistoryService service.
@@ -320,6 +321,7 @@ type HistoryServiceClient interface {
 	InvokeStateMachineMethod(ctx context.Context, in *InvokeStateMachineMethodRequest, opts ...grpc.CallOption) (*InvokeStateMachineMethodResponse, error)
 	// Deep health check history service dependencies health status
 	DeepHealthCheck(ctx context.Context, in *DeepHealthCheckRequest, opts ...grpc.CallOption) (*DeepHealthCheckResponse, error)
+	SyncWorkflowState(ctx context.Context, in *SyncWorkflowStateRequest, opts ...grpc.CallOption) (*SyncWorkflowStateResponse, error)
 }
 
 type historyServiceClient struct {
@@ -937,6 +939,15 @@ func (c *historyServiceClient) DeepHealthCheck(ctx context.Context, in *DeepHeal
 	return out, nil
 }
 
+func (c *historyServiceClient) SyncWorkflowState(ctx context.Context, in *SyncWorkflowStateRequest, opts ...grpc.CallOption) (*SyncWorkflowStateResponse, error) {
+	out := new(SyncWorkflowStateResponse)
+	err := c.cc.Invoke(ctx, HistoryService_SyncWorkflowState_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // HistoryServiceServer is the server API for HistoryService service.
 // All implementations must embed UnimplementedHistoryServiceServer
 // for forward compatibility
@@ -1148,6 +1159,7 @@ type HistoryServiceServer interface {
 	InvokeStateMachineMethod(context.Context, *InvokeStateMachineMethodRequest) (*InvokeStateMachineMethodResponse, error)
 	// Deep health check history service dependencies health status
 	DeepHealthCheck(context.Context, *DeepHealthCheckRequest) (*DeepHealthCheckResponse, error)
+	SyncWorkflowState(context.Context, *SyncWorkflowStateRequest) (*SyncWorkflowStateResponse, error)
 	mustEmbedUnimplementedHistoryServiceServer()
 }
 
@@ -1349,6 +1361,9 @@ func (UnimplementedHistoryServiceServer) InvokeStateMachineMethod(context.Contex
 }
 func (UnimplementedHistoryServiceServer) DeepHealthCheck(context.Context, *DeepHealthCheckRequest) (*DeepHealthCheckResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method DeepHealthCheck not implemented")
+}
+func (UnimplementedHistoryServiceServer) SyncWorkflowState(context.Context, *SyncWorkflowStateRequest) (*SyncWorkflowStateResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method SyncWorkflowState not implemented")
 }
 func (UnimplementedHistoryServiceServer) mustEmbedUnimplementedHistoryServiceServer() {}
 
@@ -2541,6 +2556,24 @@ func _HistoryService_DeepHealthCheck_Handler(srv interface{}, ctx context.Contex
 	return interceptor(ctx, in, info, handler)
 }
 
+func _HistoryService_SyncWorkflowState_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SyncWorkflowStateRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(HistoryServiceServer).SyncWorkflowState(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: HistoryService_SyncWorkflowState_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(HistoryServiceServer).SyncWorkflowState(ctx, req.(*SyncWorkflowStateRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // HistoryService_ServiceDesc is the grpc.ServiceDesc for HistoryService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -2803,6 +2836,10 @@ var HistoryService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "DeepHealthCheck",
 			Handler:    _HistoryService_DeepHealthCheck_Handler,
+		},
+		{
+			MethodName: "SyncWorkflowState",
+			Handler:    _HistoryService_SyncWorkflowState_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{

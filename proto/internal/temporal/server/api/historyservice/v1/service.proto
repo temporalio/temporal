@@ -361,4 +361,7 @@ service HistoryService {
     // Deep health check history service dependencies health status
     rpc DeepHealthCheck (DeepHealthCheckRequest) returns (DeepHealthCheckResponse) {
     }
+
+    rpc SyncWorkflowState(SyncWorkflowStateRequest) returns (SyncWorkflowStateResponse) {
+    }
 }

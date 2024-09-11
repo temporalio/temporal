@@ -81,6 +81,7 @@ const (
 	AdminService_AddTasks_FullMethodName                          = "/temporal.server.api.adminservice.v1.AdminService/AddTasks"
 	AdminService_ListQueues_FullMethodName                        = "/temporal.server.api.adminservice.v1.AdminService/ListQueues"
 	AdminService_DeepHealthCheck_FullMethodName                   = "/temporal.server.api.adminservice.v1.AdminService/DeepHealthCheck"
+	AdminService_SyncWorkflowState_FullMethodName                 = "/temporal.server.api.adminservice.v1.AdminService/SyncWorkflowState"
 	AdminService_DescribeTaskQueuePartition_FullMethodName        = "/temporal.server.api.adminservice.v1.AdminService/DescribeTaskQueuePartition"
 )
 
@@ -168,6 +169,7 @@ type AdminServiceClient interface {
 	AddTasks(ctx context.Context, in *AddTasksRequest, opts ...grpc.CallOption) (*AddTasksResponse, error)
 	ListQueues(ctx context.Context, in *ListQueuesRequest, opts ...grpc.CallOption) (*ListQueuesResponse, error)
 	DeepHealthCheck(ctx context.Context, in *DeepHealthCheckRequest, opts ...grpc.CallOption) (*DeepHealthCheckResponse, error)
+	SyncWorkflowState(ctx context.Context, in *SyncWorkflowStateRequest, opts ...grpc.CallOption) (*SyncWorkflowStateResponse, error)
 	DescribeTaskQueuePartition(ctx context.Context, in *DescribeTaskQueuePartitionRequest, opts ...grpc.CallOption) (*DescribeTaskQueuePartitionResponse, error)
 }
 
@@ -552,6 +554,15 @@ func (c *adminServiceClient) DeepHealthCheck(ctx context.Context, in *DeepHealth
 	return out, nil
 }
 
+func (c *adminServiceClient) SyncWorkflowState(ctx context.Context, in *SyncWorkflowStateRequest, opts ...grpc.CallOption) (*SyncWorkflowStateResponse, error) {
+	out := new(SyncWorkflowStateResponse)
+	err := c.cc.Invoke(ctx, AdminService_SyncWorkflowState_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *adminServiceClient) DescribeTaskQueuePartition(ctx context.Context, in *DescribeTaskQueuePartitionRequest, opts ...grpc.CallOption) (*DescribeTaskQueuePartitionResponse, error) {
 	out := new(DescribeTaskQueuePartitionResponse)
 	err := c.cc.Invoke(ctx, AdminService_DescribeTaskQueuePartition_FullMethodName, in, out, opts...)
@@ -645,6 +656,7 @@ type AdminServiceServer interface {
 	AddTasks(context.Context, *AddTasksRequest) (*AddTasksResponse, error)
 	ListQueues(context.Context, *ListQueuesRequest) (*ListQueuesResponse, error)
 	DeepHealthCheck(context.Context, *DeepHealthCheckRequest) (*DeepHealthCheckResponse, error)
+	SyncWorkflowState(context.Context, *SyncWorkflowStateRequest) (*SyncWorkflowStateResponse, error)
 	DescribeTaskQueuePartition(context.Context, *DescribeTaskQueuePartitionRequest) (*DescribeTaskQueuePartitionResponse, error)
 	mustEmbedUnimplementedAdminServiceServer()
 }
@@ -769,6 +781,9 @@ func (UnimplementedAdminServiceServer) ListQueues(context.Context, *ListQueuesRe
 }
 func (UnimplementedAdminServiceServer) DeepHealthCheck(context.Context, *DeepHealthCheckRequest) (*DeepHealthCheckResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method DeepHealthCheck not implemented")
+}
+func (UnimplementedAdminServiceServer) SyncWorkflowState(context.Context, *SyncWorkflowStateRequest) (*SyncWorkflowStateResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method SyncWorkflowState not implemented")
 }
 func (UnimplementedAdminServiceServer) DescribeTaskQueuePartition(context.Context, *DescribeTaskQueuePartitionRequest) (*DescribeTaskQueuePartitionResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method DescribeTaskQueuePartition not implemented")
@@ -1496,6 +1511,24 @@ func _AdminService_DeepHealthCheck_Handler(srv interface{}, ctx context.Context,
 	return interceptor(ctx, in, info, handler)
 }
 
+func _AdminService_SyncWorkflowState_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SyncWorkflowStateRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AdminServiceServer).SyncWorkflowState(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AdminService_SyncWorkflowState_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AdminServiceServer).SyncWorkflowState(ctx, req.(*SyncWorkflowStateRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _AdminService_DescribeTaskQueuePartition_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(DescribeTaskQueuePartitionRequest)
 	if err := dec(in); err != nil {
@@ -1672,6 +1705,10 @@ var AdminService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "DeepHealthCheck",
 			Handler:    _AdminService_DeepHealthCheck_Handler,
+		},
+		{
+			MethodName: "SyncWorkflowState",
+			Handler:    _AdminService_SyncWorkflowState_Handler,
 		},
 		{
 			MethodName: "DescribeTaskQueuePartition",

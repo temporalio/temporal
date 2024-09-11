@@ -2167,6 +2167,20 @@ func (mr *MockMutableStateMockRecorder) GetPendingSignalExternalInfos() *gomock.
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetPendingSignalExternalInfos", reflect.TypeOf((*MockMutableState)(nil).GetPendingSignalExternalInfos))
 }
 
+// GetPendingSignalRequestedIds mocks base method.
+func (m *MockMutableState) GetPendingSignalRequestedIds() []string {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetPendingSignalRequestedIds")
+	ret0, _ := ret[0].([]string)
+	return ret0
+}
+
+// GetPendingSignalRequestedIds indicates an expected call of GetPendingSignalRequestedIds.
+func (mr *MockMutableStateMockRecorder) GetPendingSignalRequestedIds() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetPendingSignalRequestedIds", reflect.TypeOf((*MockMutableState)(nil).GetPendingSignalRequestedIds))
+}
+
 // GetPendingTimerInfos mocks base method.
 func (m *MockMutableState) GetPendingTimerInfos() map[string]*persistence.TimerInfo {
 	m.ctrl.T.Helper()

@@ -873,6 +873,20 @@ func (c *metricClient) SyncShardStatus(
 	return c.client.SyncShardStatus(ctx, request, opts...)
 }
 
+func (c *metricClient) SyncWorkflowState(
+	ctx context.Context,
+	request *historyservice.SyncWorkflowStateRequest,
+	opts ...grpc.CallOption,
+) (_ *historyservice.SyncWorkflowStateResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, "HistoryClientSyncWorkflowState")
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.SyncWorkflowState(ctx, request, opts...)
+}
+
 func (c *metricClient) TerminateWorkflowExecution(
 	ctx context.Context,
 	request *historyservice.TerminateWorkflowExecutionRequest,

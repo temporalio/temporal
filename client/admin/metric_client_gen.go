@@ -578,3 +578,17 @@ func (c *metricClient) ResendReplicationTasks(
 
 	return c.client.ResendReplicationTasks(ctx, request, opts...)
 }
+
+func (c *metricClient) SyncWorkflowState(
+	ctx context.Context,
+	request *adminservice.SyncWorkflowStateRequest,
+	opts ...grpc.CallOption,
+) (_ *adminservice.SyncWorkflowStateResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, "AdminClientSyncWorkflowState")
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.SyncWorkflowState(ctx, request, opts...)
+}

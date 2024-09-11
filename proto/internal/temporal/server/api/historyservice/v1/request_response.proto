@@ -954,3 +954,20 @@ message DeepHealthCheckRequest {
 message DeepHealthCheckResponse {
     temporal.server.api.enums.v1.HealthState state = 1;
 }
+
+message SyncWorkflowStateRequest {
+    string namespace_id = 1;
+    temporal.api.common.v1.WorkflowExecution execution = 2;
+    temporal.server.api.persistence.v1.VersionedTransition versioned_transition = 3;
+    temporal.server.api.history.v1.VersionHistories version_histories = 4;
+    int32 target_cluster_id = 5;
+}
+
+message SyncWorkflowStateResponse {
+    oneof attributes {
+        replication.v1.SyncWorkflowStateMutationAttributes mutation = 1;
+        replication.v1.SyncWorkflowStateSnapshotAttributes snapshot = 2;
+    }
+    repeated temporal.api.common.v1.DataBlob event_batches = 3;
+    replication.v1.NewRunInfo new_run_info = 4;
+}
