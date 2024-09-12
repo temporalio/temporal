@@ -50,6 +50,7 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/historyservicemock/v1"
+	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/api/matchingservicemock/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
@@ -2941,5 +2942,29 @@ func (s *workflowHandlerSuite) TestExecuteMultiOperation() {
 			s.Nil(resp)
 			assertMultiOpsErr([]error{errMultiOpAborted, errUpdateInputNotSet}, err)
 		})
+	})
+}
+
+func (s *workflowHandlerSuite) TestShutdownWorker() {
+	config := s.newConfig()
+	wh := s.getWorkflowHandler(config)
+	ctx := context.Background()
+
+	stickyTaskQueue := "sticky-task-queue"
+
+	expectedMatchingRequest := &matchingservice.ForceUnloadTaskQueueRequest{
+		NamespaceId:   s.testNamespaceID.String(),
+		TaskQueue:     stickyTaskQueue,
+		TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+	}
+
+	s.mockNamespaceCache.EXPECT().GetNamespaceID(gomock.Eq(s.testNamespace)).Return(s.testNamespaceID, nil).AnyTimes()
+	s.mockMatchingClient.EXPECT().ForceUnloadTaskQueue(gomock.Any(), gomock.Eq(expectedMatchingRequest)).Return(&matchingservice.ForceUnloadTaskQueueResponse{}, nil)
+
+	wh.ShutdownWorker(ctx, &workflowservice.ShutdownWorkerRequest{
+		Namespace:       s.testNamespace.String(),
+		StickyTaskQueue: stickyTaskQueue,
+		Identity:        "worker",
+		Reason:          "graceful shutdown",
 	})
 }

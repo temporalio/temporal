@@ -2608,6 +2608,25 @@ func (wh *WorkflowHandler) ResetStickyTaskQueue(ctx context.Context, request *wo
 func (wh *WorkflowHandler) ShutdownWorker(ctx context.Context, request *workflowservice.ShutdownWorkerRequest) (_ *workflowservice.ShutdownWorkerResponse, retError error) {
 	defer log.CapturePanic(wh.logger, &retError)
 
+	if request == nil {
+		return nil, errRequestNotSet
+	}
+
+	namespaceId, err := wh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
+	if err != nil {
+		return nil, err
+	}
+	
+	// TODO: update poller info to indicate poller was shut down (pass identity/reason along)
+	_, err = wh.matchingClient.ForceUnloadTaskQueue(ctx, &matchingservice.ForceUnloadTaskQueueRequest{
+		NamespaceId:   namespaceId.String(),
+		TaskQueue:     request.GetStickyTaskQueue(),
+		TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW, // sticky task queues are always workflow queues
+	})
+	if err != nil {
+		return nil, err
+	}
+
 	return &workflowservice.ShutdownWorkerResponse{}, nil
 }
 
