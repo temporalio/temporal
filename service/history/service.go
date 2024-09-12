@@ -34,6 +34,7 @@ import (
 	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence/visibility/manager"
+	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/service/history/configs"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/health"
@@ -119,22 +120,36 @@ func (s *Service) Start() {
 
 // Stop stops the service
 func (s *Service) Stop() {
-	s.logger.Info("ShutdownHandler: Evicting self from membership ring")
-	_ = s.membershipMonitor.EvictSelf()
-
-	if delay := s.config.ShutdownDrainDuration(); delay > 0 {
-		s.logger.Info("ShutdownHandler: delaying for shutdown drain",
-			tag.NewDurationTag("shutdownDrainDuration", delay))
-		time.Sleep(delay)
+	// remove self from membership ring and wait for traffic to drain
+	var err error
+	var waitTime time.Duration
+	if align := s.config.AlignMembershipChange(); align > 0 {
+		propagation := s.membershipMonitor.ApproximateMaxPropagationTime()
+		asOf := util.NextAlignedTime(time.Now().Add(propagation), align)
+		s.logger.Info("ShutdownHandler: Evicting self from membership ring as of", tag.Timestamp(asOf))
+		waitTime, err = s.membershipMonitor.EvictSelfAt(asOf)
+	} else {
+		s.logger.Info("ShutdownHandler: Evicting self from membership ring immediately")
+		err = s.membershipMonitor.EvictSelf()
 	}
-
+	if err != nil {
+		s.logger.Error("ShutdownHandler: Failed to evict self from membership ring", tag.Error(err))
+	}
 	s.healthServer.SetServingStatus(serviceName, healthpb.HealthCheckResponse_NOT_SERVING)
+
+	s.logger.Info("ShutdownHandler: Waiting for drain")
+	time.Sleep(max(s.config.ShutdownDrainDuration(), waitTime))
 
 	s.logger.Info("ShutdownHandler: Initiating shardController shutdown")
 	s.handler.controller.Stop()
 
-	// TODO: Change this to GracefulStop when integration tests are refactored.
-	s.server.Stop()
+	// All grpc handlers should be cancelled now. Give them a little time to return.
+	t := time.AfterFunc(2*time.Second, func() {
+		s.logger.Info("ShutdownHandler: Drain time expired, stopping all traffic")
+		s.server.Stop()
+	})
+	s.server.GracefulStop()
+	t.Stop()
 
 	s.handler.Stop()
 	s.visibilityManager.Close()
