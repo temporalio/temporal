@@ -843,8 +843,8 @@ func (c *hrsuTestCluster) pollAndAcceptCompleteUpdate(updateId string) error {
 		Namespace:           c.t.tv.NamespaceName().String(),
 		TaskQueue:           c.t.tv.TaskQueue(),
 		Identity:            c.t.tv.WorkerIdentity(),
-		WorkflowTaskHandler: joinResponses(c.t.acceptUpdateWFTHandler, c.t.completeUpdateWFTHandler),
-		MessageHandler:      joinResponses(c.t.acceptUpdateMessageHandler, c.completeUpdateMessageHandler(updateId)),
+		WorkflowTaskHandler: joinHandlers(c.t.acceptUpdateWFTHandler, c.t.completeUpdateWFTHandler),
+		MessageHandler:      joinHandlers(c.t.acceptUpdateMessageHandler, c.completeUpdateMessageHandler(updateId)),
 		Logger:              c.t.s.logger,
 		T:                   c.t.s.T(),
 	}
@@ -1053,16 +1053,16 @@ func (c *hrsuTestCluster) getActiveCluster(ctx context.Context) string {
 	return resp.ReplicationConfig.ActiveClusterName
 }
 
-func joinResponses[T any](fns ...func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*T, error)) func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*T, error) {
+func joinHandlers[T any](handlers ...func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*T, error)) func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*T, error) {
 	return func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*T, error) {
-		var ret []*T
-		for _, fn := range fns {
-			fnRes, err := fn(task)
+		var joinedResult []*T
+		for _, handler := range handlers {
+			handlerResult, err := handler(task)
 			if err != nil {
 				return nil, err
 			}
-			ret = append(ret, fnRes...)
+			joinedResult = append(joinedResult, handlerResult...)
 		}
-		return ret, nil
+		return joinedResult, nil
 	}
 }
