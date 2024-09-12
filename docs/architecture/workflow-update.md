@@ -13,7 +13,7 @@ Historically, Temporal had two basic primitives, which allows users to interact 
 Both have limitations. A Signal cannot be rejected and always records at least one event in
 the Workflow history. Also, there is no way for an API caller to know if a Signal was successfully
 processed by the Workflow - it is a fire-and-forget mechanism. Conversely, a Query cannot modify
-the Workflow state, i.e. it can only perform read-only operations.
+the Workflow state, i.e., it can only perform read-only operations.
 
 Workflow Update is a complex feature that can be thought of as "Signal + Query" in a single API call.
 An Update can be rejected by the Workflow, and then it does not write any events to the Workflow history.
@@ -50,7 +50,7 @@ persisted in mutable state.
 ## Update Registry
 Updates are managed through the `update.Registy` interface. A workflow's Update Registry is stored in
 its `workflow.ContextImpl` struct. Each Registry has an internal map which stores *admitted and
-accepted* Updates, ie in-flight Updates only. Completed Updates are not stored there - but can
+accepted* Updates, i.e., in-flight Updates only. Completed Updates are not stored there - but can
 still be accessed through the Registry since it has a reference to the mutable state
 (via the `UpdateStore` interface). When an Update is accepted or completed, a corresponding event
 is written to the Workflow history.
@@ -64,7 +64,7 @@ When a new Update Registry is created, it is initialized from the mutable state'
 However, the "Update Completed" event is only loaded when calling mutable state's `GetUpdateOutcome()`
 directly.
 
-Because iteration of maps in Go is non-deterministic, before being sent out, Updates are sorted by the
+Because maps enumeration in Go is non-deterministic, before being sent out, Updates are sorted by the
 time they were admitted.
 
 > #### TODO
@@ -128,7 +128,7 @@ When the server receives an Update request, it creates a new Update with state `
 via `New()`. However, when the Update Registry loads all Updates from the `UpdateStore`, it can create
 them directly with state `Admitted` (see "Reapply Update" below) via `newAdmitted()` or `Accepted` 
 via `newAccepted()`. Similarly, when an Update is resurrected (see "Update Resurrection" below) it 
-also has state `Admitted`. But when an Update cannot be found in the Registry, yet it exist in
+also has state `Admitted`. But when an Update cannot be found in the Registry, yet it exists in
 `EventStore` because it is already completed, it is created with state `Completed`.
 
 ### Aborting an Update
@@ -154,11 +154,11 @@ Update Registry intact. But it proved to be too error-prone.
 > There are many more issues that were discovered (and probably more that were not).
 
 Instead, the Workflow Update feature relies on internal retries by the history gRPC handler,
-history gRPC client (on frontend side), and frontend gRPC handler. So if an Update is removed from
+history gRPC client (on the frontend side), and frontend gRPC handler. So if an Update is removed from
 the Registry due to non-related error, a retryable error is returned to the `UpdateWorkflowExecution`
 API caller and subsequent internal retries recreate the Update in the Registry.
 
-Also, it is important to note that Workflow context itself is stored in the Workflow cache
+Also, it is important to note that the Workflow context itself is stored in the Workflow cache
 and might be evicted any time. Therefore, the Workflow Update feature relies on a properly
 configured cache size. If the cache is too small, it will evict Workflow contexts too soon and their
 Update Registry will be lost. Then, the `UpdateWorkflowExecutions` API call will time out.
@@ -184,7 +184,7 @@ API call is returned. Currently, it can only be `ACCEPTED` or `COMPLETED`.
 > #### TODO
 > `ADMITTED` stage will be added later and will require new feature called "Durable Admitted":
 > to support this stage, the Update request must be persisted somewhere on the server. This will
-> also allow to use an Update as a "fire-and-forget" (just like Signal).
+> also allow using an Update as a "fire-and-forget" (just like Signal).
 
 ### Waiters
 When the wait stage is `ACCEPTED`, the API caller waits for the `accepted` future to complete
@@ -255,7 +255,7 @@ to process the Update response from the worker at the same time.
 
 ### Limits
 There are currently two limits: 
-- `history.maxInFlightUpdates`: maximum in-flight Updates (ie not completed Updates)
+- `history.maxInFlightUpdates`: maximum in-flight Updates (i.e., not completed Updates)
 - `history.maxTotalUpdates`: maximum total Updates per Workflow run
 
 There are two exceptions when the `maxInFlightUpdates` limit is ignored and can be exceeded:
@@ -300,7 +300,7 @@ in `Admitted` state, added to the Registry, and processing continues.
 
 > #### NOTE
 > SDKs only started to send the original Update request back around May 2024.
-> Therefore, previous version do not allow for Resurrection.
+> Therefore, previous versions do not allow for Resurrection.
 
 > #### NOTE
 > Resurrection is only possible when a *normal* Workflow Task was used to ship the Update request
@@ -317,34 +317,34 @@ trying to recreate the Update.
 > #### TODO
 > This might be possible in the future when "Durable Admitted" Update is implemented.
 
-There two Workflow completion scenarios:
-- final completion, when no new run is created (e.g. with `COMPLETE_WORKFLOW_EXECUTION` command),
-- continued completion, when new run is created (e.g. `CONTINUE_AS_NEW_WORKFLOW_EXECUTION` command).
+There are two Workflow completion scenarios:
+- final completion, when no new run is created (e.g., with `COMPLETE_WORKFLOW_EXECUTION` command),
+- continued completion, when new run is created (e.g., `CONTINUE_AS_NEW_WORKFLOW_EXECUTION` command).
 
 When the Workflow performs a final completion, all in-flight Updates are aborted: admitted Updates get
 `ErrWorkflowCompleted` error on both `accepted` and `completed` futures, and accepted Updates get
 the same error on the `completed` future only. It is the Workflow's responsibility to complete
 accepted Updates. This behavior is similar to Activities which also can be left abandoned after 
-Workflow completed.
+the Workflow is completed.
 
-If Workflow completion command creates a new run, accepted Updates are aborted in the same way:
-with `ErrWorkflowCompleted` error on the `completed` future. Admitted Updates, though, are aborted
-with retryable `ErrWorkflowClosing` error. SDK client retries this error and new attempt should land
-on the new run. This is because Updates that were received while the Workflow Task was running, haven't
-been seen by the Workflow yet, and can be safely retried on the new run. It also provides better
-experience for API callers: they shouldn't notice that the Workflow started a new run.
+When a Workflow completion command creates a new run, accepted Updates are aborted in the same way:
+with the `ErrWorkflowCompleted` error on the `completed` future. Admitted Updates, though, are aborted
+with the retryable `ErrWorkflowClosing` error. The SDK client retries this error and new attempt should
+land on the new run. Because Updates received while the Workflow Task was running haven't
+been seen by the Workflow yet can be safely retried on the new run. It also provides a better
+experience for API callers since they will not notice that the Workflow started a new run.
 
 Aborted accepted (but not completed) Updates remain in the `Aborted` state in the registry even after
-Update registry is reconstructed from the history.
+the Update registry is reconstructed from the history.
 
-Update results are available after the Workflow completed. They can be accessed using the
+Update results are available after the Workflow is completed. They can be accessed using the
 `PollWorkflowExecutionUpdate` API. Note that the `UpdateWorkflowExecution` API will return the
 result, too. This provides a consistent experience for API caller: no matter at what stage the 
 Workflow is, the API caller will always get the `ErrWorkflowCompleted` error, when the Update wasn't
 processed by the Workflow, or the Update outcome when it was.
 
 > #### NOTE
-> If Workflow receives an Update Response message *and* completion command which creates
+> If a Workflow receives an Update Response message *and* completion command which creates
 > a new run (e.g. `CONTINUE_AS_NEW_WORKFLOW_EXECUTION`) on the same Workflow Task, then there
 > is a chance that the Update will be delivered to *both* runs - the old and the new.
 > 
@@ -375,9 +375,9 @@ which cannot process it.
 
 ### Provisional States
 The Workflow Update state machine uses provisional states (e.g. `stateProvisionallyAccepted`
-or `stateProvisionallyCompleted`) to indicate that an Update has not yet fully transitioned to a new
+or `stateProvisionallyCompleted`) to indicate that an Update hasn't yet fully transitioned to a new
 state (e.g. `stateAccepted` or `stateCompleted`). A callback mechanism is used to complete - or 
-rollback - the transition after a successful persistence write. Check the
+rollback - the transition after successful persistence write. Check the
 [`effect` package doc](./effect-package.md) for more details.
 
 If a Workflow Update is accepted and completed in the same Workflow Task, it goes through the
@@ -385,8 +385,8 @@ following chain of state transitions:
 ```
 Sent -> ProvisionalyAccepted -> ProvisionalyCompleted -> ProvisionalyCompletedAfterAccepted -> Completed
 ```
-Extra `ProvisionalyCompletedAfterAccepted` state is needed to unblock `completed` future before
-`accepted`. This allows to return Update results to the API caller even it was waiting for `ACCEPTED`
+The `ProvisionalyCompletedAfterAccepted` in-between state is necessary to unblock `completed` future before
+`accepted`. This allows returning Update results to the API caller even it was waiting for `ACCEPTED`
 stage.
 
 > #### NOTE
