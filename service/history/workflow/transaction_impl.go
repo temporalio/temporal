@@ -670,9 +670,12 @@ func emitMutationMetrics(
 ) {
 	metricsHandler := shard.GetMetricsHandler()
 	namespaceName := namespace.Name()
+	eventHandler := shard.GetEventsHandler()
+	eventBuilder := eventHandler.CreateEvent("history_mutation")
 	for _, stat := range stats {
 		emitMutableStateStatus(
 			metricsHandler.WithTags(metrics.OperationTag(metrics.SessionStatsScope), metrics.NamespaceTag(namespaceName.String())),
+			eventBuilder,
 			stat,
 		)
 	}
@@ -685,9 +688,12 @@ func emitGetMetrics(
 ) {
 	metricsHandler := shard.GetMetricsHandler()
 	namespaceName := namespace.Name()
+	eventHandler := shard.GetEventsHandler()
+	eventBuilder := eventHandler.CreateEvent("history_mutation")
 	for _, stat := range stats {
 		emitMutableStateStatus(
 			metricsHandler.WithTags(metrics.OperationTag(metrics.ExecutionStatsScope), metrics.NamespaceTag(namespaceName.String())),
+			eventBuilder,
 			stat,
 		)
 	}

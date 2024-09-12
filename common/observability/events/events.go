@@ -20,7 +20,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-//go:generate mockgen -copyright_file ../../LICENSE -package $GOPACKAGE -source $GOFILE -destination events_mock.go
+//go:generate mockgen -copyright_file ../../../LICENSE -package $GOPACKAGE -source $GOFILE -destination events_mock.go
 
 package events
 
@@ -29,11 +29,11 @@ type (
 		WithString(string, string) EventBuilder
 		WithFloat(string, float64) EventBuilder
 		WithInt(string, int64) EventBuilder
+		Emit()
 	}
 
 	EventHandler interface {
 		CreateEvent(string) EventBuilder
-		Emit(EventBuilder)
 	}
 
 	NullEventHandler struct{}
@@ -44,8 +44,7 @@ func (h *NullEventHandler) CreateEvent(_ string) *NullEventBuilder {
 	return &NullEventBuilder{}
 }
 
-func (h *NullEventHandler) Emit(_ EventBuilder) {
-}
+func (b *NullEventBuilder) Emit() {}
 
 func (b *NullEventBuilder) WithString(_ string, _ string) *NullEventBuilder {
 	return b

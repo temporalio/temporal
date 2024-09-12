@@ -60,6 +60,7 @@ import (
 	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/namespace"
+	obsevents "go.temporal.io/server/common/observability/events"
 	"go.temporal.io/server/common/observability/log"
 	"go.temporal.io/server/common/observability/log/tag"
 	"go.temporal.io/server/common/observability/metrics"
@@ -110,6 +111,7 @@ type (
 		stringRepr          string
 		executionManager    persistence.ExecutionManager
 		metricsHandler      metrics.Handler
+		eventsHandler       obsevents.EventHandler
 		eventsCache         events.Cache
 		closeCallback       CloseCallback
 		config              *configs.Config
@@ -2194,6 +2196,10 @@ func (s *ContextImpl) GetHistoryClient() historyservice.HistoryServiceClient {
 
 func (s *ContextImpl) GetMetricsHandler() metrics.Handler {
 	return s.metricsHandler
+}
+
+func (s *ContextImpl) GetEventsHandler() obsevents.EventHandler {
+	return s.eventsHandler
 }
 
 func (s *ContextImpl) GetTimeSource() cclock.TimeSource {

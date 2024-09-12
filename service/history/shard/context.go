@@ -39,6 +39,7 @@ import (
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/finalizer"
 	"go.temporal.io/server/common/namespace"
+	obsevents "go.temporal.io/server/common/observability/events"
 	"go.temporal.io/server/common/observability/log"
 	"go.temporal.io/server/common/observability/metrics"
 	"go.temporal.io/server/common/persistence"
@@ -67,6 +68,7 @@ type (
 		GetLogger() log.Logger
 		GetThrottledLogger() log.Logger
 		GetMetricsHandler() metrics.Handler
+		GetEventsHandler() obsevents.EventHandler
 		GetTimeSource() clock.TimeSource
 
 		GetRemoteAdminClient(string) (adminservice.AdminServiceClient, error)

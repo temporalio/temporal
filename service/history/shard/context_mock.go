@@ -48,15 +48,16 @@ import (
 	cluster "go.temporal.io/server/common/cluster"
 	definition "go.temporal.io/server/common/definition"
 	finalizer "go.temporal.io/server/common/finalizer"
+	namespace "go.temporal.io/server/common/namespace"
+	events "go.temporal.io/server/common/observability/events"
 	log "go.temporal.io/server/common/observability/log"
 	metrics "go.temporal.io/server/common/observability/metrics"
-	namespace "go.temporal.io/server/common/namespace"
 	persistence0 "go.temporal.io/server/common/persistence"
 	serialization "go.temporal.io/server/common/persistence/serialization"
 	pingable "go.temporal.io/server/common/pingable"
 	searchattribute "go.temporal.io/server/common/searchattribute"
 	configs "go.temporal.io/server/service/history/configs"
-	events "go.temporal.io/server/service/history/events"
+	events0 "go.temporal.io/server/service/history/events"
 	hsm "go.temporal.io/server/service/history/hsm"
 	tasks "go.temporal.io/server/service/history/tasks"
 	gomock "go.uber.org/mock/gomock"
@@ -317,10 +318,10 @@ func (mr *MockContextMockRecorder) GetEngine(ctx any) *gomock.Call {
 }
 
 // GetEventsCache mocks base method.
-func (m *MockContext) GetEventsCache() events.Cache {
+func (m *MockContext) GetEventsCache() events0.Cache {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetEventsCache")
-	ret0, _ := ret[0].(events.Cache)
+	ret0, _ := ret[0].(events0.Cache)
 	return ret0
 }
 
@@ -328,6 +329,20 @@ func (m *MockContext) GetEventsCache() events.Cache {
 func (mr *MockContextMockRecorder) GetEventsCache() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetEventsCache", reflect.TypeOf((*MockContext)(nil).GetEventsCache))
+}
+
+// GetEventsHandler mocks base method.
+func (m *MockContext) GetEventsHandler() events.EventHandler {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetEventsHandler")
+	ret0, _ := ret[0].(events.EventHandler)
+	return ret0
+}
+
+// GetEventsHandler indicates an expected call of GetEventsHandler.
+func (mr *MockContextMockRecorder) GetEventsHandler() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetEventsHandler", reflect.TypeOf((*MockContext)(nil).GetEventsHandler))
 }
 
 // GetExecutionManager mocks base method.
@@ -1045,10 +1060,10 @@ func (mr *MockControllableContextMockRecorder) GetEngine(ctx any) *gomock.Call {
 }
 
 // GetEventsCache mocks base method.
-func (m *MockControllableContext) GetEventsCache() events.Cache {
+func (m *MockControllableContext) GetEventsCache() events0.Cache {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetEventsCache")
-	ret0, _ := ret[0].(events.Cache)
+	ret0, _ := ret[0].(events0.Cache)
 	return ret0
 }
 
@@ -1056,6 +1071,20 @@ func (m *MockControllableContext) GetEventsCache() events.Cache {
 func (mr *MockControllableContextMockRecorder) GetEventsCache() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetEventsCache", reflect.TypeOf((*MockControllableContext)(nil).GetEventsCache))
+}
+
+// GetEventsHandler mocks base method.
+func (m *MockControllableContext) GetEventsHandler() events.EventHandler {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetEventsHandler")
+	ret0, _ := ret[0].(events.EventHandler)
+	return ret0
+}
+
+// GetEventsHandler indicates an expected call of GetEventsHandler.
+func (mr *MockControllableContextMockRecorder) GetEventsHandler() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetEventsHandler", reflect.TypeOf((*MockControllableContext)(nil).GetEventsHandler))
 }
 
 // GetExecutionManager mocks base method.

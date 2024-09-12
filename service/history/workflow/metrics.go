@@ -28,6 +28,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/observability/events"
 	"go.temporal.io/server/common/observability/metrics"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/tqid"
@@ -55,44 +56,74 @@ func emitWorkflowHistoryStats(
 
 func emitMutableStateStatus(
 	metricsHandler metrics.Handler,
+	eventBuilder events.EventBuilder,
 	stats *persistence.MutableStateStatistics,
 ) {
 	if stats == nil {
 		return
 	}
 	metrics.MutableStateSize.With(metricsHandler).Record(int64(stats.TotalSize))
+	eventBuilder.WithInt("mutable_state_size", int64(stats.TotalSize))
 	metrics.ExecutionInfoSize.With(metricsHandler).Record(int64(stats.ExecutionInfoSize))
+	eventBuilder.WithInt("execution_info_size", int64(stats.ExecutionInfoSize))
 	metrics.ExecutionStateSize.With(metricsHandler).Record(int64(stats.ExecutionStateSize))
+	eventBuilder.WithInt("execution_state_size", int64(stats.ExecutionStateSize))
 	metrics.ActivityInfoSize.With(metricsHandler).Record(int64(stats.ActivityInfoSize))
+	eventBuilder.WithInt("activity_info_size", int64(stats.ActivityInfoSize))
 	metrics.ActivityInfoCount.With(metricsHandler).Record(int64(stats.ActivityInfoCount))
+	eventBuilder.WithInt("activity_info_count", int64(stats.ActivityInfoCount))
 	metrics.TotalActivityCount.With(metricsHandler).Record(stats.TotalActivityCount)
+	eventBuilder.WithInt("total_activity_count", stats.TotalActivityCount)
 	metrics.TimerInfoSize.With(metricsHandler).Record(int64(stats.TimerInfoSize))
+	eventBuilder.WithInt("timer_info_size", int64(stats.TimerInfoSize))
 	metrics.TimerInfoCount.With(metricsHandler).Record(int64(stats.TimerInfoCount))
+	eventBuilder.WithInt("timer_info_count", int64(stats.TimerInfoCount))
 	metrics.TotalUserTimerCount.With(metricsHandler).Record(stats.TotalUserTimerCount)
+	eventBuilder.WithInt("total_user_timer_count", stats.TotalUserTimerCount)
 	metrics.ChildInfoSize.With(metricsHandler).Record(int64(stats.ChildInfoSize))
+	eventBuilder.WithInt("child_info_size", int64(stats.ChildInfoSize))
 	metrics.ChildInfoCount.With(metricsHandler).Record(int64(stats.ChildInfoCount))
+	eventBuilder.WithInt("child_info_count", int64(stats.ChildInfoCount))
 	metrics.TotalChildExecutionCount.With(metricsHandler).Record(stats.TotalChildExecutionCount)
+	eventBuilder.WithInt("total_child_execution_count", stats.TotalChildExecutionCount)
 	metrics.RequestCancelInfoSize.With(metricsHandler).Record(int64(stats.RequestCancelInfoSize))
+	eventBuilder.WithInt("request_cancel_info_size", int64(stats.RequestCancelInfoSize))
 	metrics.RequestCancelInfoCount.With(metricsHandler).Record(int64(stats.RequestCancelInfoCount))
+	eventBuilder.WithInt("request_cancel_info_count", int64(stats.RequestCancelInfoCount))
 	metrics.TotalRequestCancelExternalCount.With(metricsHandler).Record(stats.TotalRequestCancelExternalCount)
+	eventBuilder.WithInt("total_request_cancel_external_count", stats.TotalRequestCancelExternalCount)
 	metrics.SignalInfoSize.With(metricsHandler).Record(int64(stats.SignalInfoSize))
+	eventBuilder.WithInt("signal_info_size", int64(stats.SignalInfoSize))
 	metrics.SignalInfoCount.With(metricsHandler).Record(int64(stats.SignalInfoCount))
+	eventBuilder.WithInt("signal_info_count", int64(stats.SignalInfoCount))
 	metrics.TotalSignalExternalCount.With(metricsHandler).Record(stats.TotalSignalExternalCount)
+	eventBuilder.WithInt("total_signal_external_count", stats.TotalSignalExternalCount)
 	metrics.SignalRequestIDSize.With(metricsHandler).Record(int64(stats.SignalRequestIDSize))
+	eventBuilder.WithInt("signal_request_id_size", int64(stats.SignalRequestIDSize))
 	metrics.SignalRequestIDCount.With(metricsHandler).Record(int64(stats.SignalRequestIDCount))
+	eventBuilder.WithInt("signal_request_id_count", int64(stats.SignalRequestIDCount))
 	metrics.TotalSignalCount.With(metricsHandler).Record(stats.TotalSignalCount)
+	eventBuilder.WithInt("total_signal_count", stats.TotalSignalCount)
 	metrics.BufferedEventsSize.With(metricsHandler).Record(int64(stats.BufferedEventsSize))
+	eventBuilder.WithInt("buffered_events_size", int64(stats.BufferedEventsSize))
 	metrics.BufferedEventsCount.With(metricsHandler).Record(int64(stats.BufferedEventsCount))
+	eventBuilder.WithInt("buffered_events_count", int64(stats.BufferedEventsCount))
 
 	if stats.HistoryStatistics != nil {
 		metrics.HistorySize.With(metricsHandler).Record(int64(stats.HistoryStatistics.SizeDiff))
+		eventBuilder.WithInt("history_size", int64(stats.HistoryStatistics.SizeDiff))
 		metrics.HistoryCount.With(metricsHandler).Record(int64(stats.HistoryStatistics.CountDiff))
+		eventBuilder.WithInt("history_count", int64(stats.HistoryStatistics.CountDiff))
 	}
 
 	for category, taskCount := range stats.TaskCountByCategory {
 		metrics.TaskCount.With(metricsHandler).
 			Record(int64(taskCount), metrics.TaskCategoryTag(category))
+		eventBuilder.WithString("category", category)
+		eventBuilder.WithInt("task_count", int64(taskCount))
 	}
+
+	eventBuilder.Emit()
 }
 
 func emitWorkflowCompletionStats(
