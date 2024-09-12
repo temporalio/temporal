@@ -81,17 +81,6 @@ func (h HistoryRequire) EqualHistoryEvents(expectedHistory string, actualHistory
 	}
 }
 
-// EqualHistoryEventsAndVersions makes an assertion about the events in history and their failover versions.
-// TODO(dan) instead of passing versions slice, support an optional version field after eventId in the event format?
-// E.g. `3 2 WorkflowExecutionSignaled`
-func (h HistoryRequire) EqualHistoryEventsAndVersions(expectedHistory string, expectedVersions []int, actualHistory []*historypb.HistoryEvent) {
-	h.EqualHistoryEvents(expectedHistory, actualHistory)
-	require.Equal(h.t, len(expectedVersions), len(actualHistory))
-	for i := range expectedVersions {
-		require.Equal(h.t, int64(expectedVersions[i]), actualHistory[i].Version)
-	}
-}
-
 func (h HistoryRequire) EqualHistory(expectedHistory string, actualHistory *historypb.History) {
 	if th, ok := h.t.(helper); ok {
 		th.Helper()
@@ -123,7 +112,11 @@ func (h HistoryRequire) formatHistoryEventsCompact(historyEvents []*historypb.Hi
 
 	var sb strings.Builder
 	for _, event := range historyEvents {
-		_, _ = sb.WriteString(fmt.Sprintf("%3d %s\n", event.GetEventId(), event.GetEventType()))
+		var versionStr string
+		if event.GetVersion() != 0 {
+			versionStr = fmt.Sprintf(" %2d", event.GetVersion())
+		}
+		_, _ = sb.WriteString(fmt.Sprintf("%3d%s %s\n", event.GetEventId(), versionStr, event.GetEventType()))
 	}
 	if sb.Len() > 0 {
 		return sb.String()[:sb.Len()-1]
@@ -289,16 +282,24 @@ func (h HistoryRequire) parseHistory(expectedHistory string) (string, map[int64]
 			require.FailNowf(h.t, "", "Wrong EventID sequence after EventID %d on line %d", prevEventID, lineNum+1)
 		}
 		prevEventID = eventID
-		eventType, err := enumspb.EventTypeFromString(fields[1])
+
+		eventVersion, err := strconv.Atoi(fields[1])
+		eventTypeIndex := 1
+		if err == nil {
+			eventTypeIndex = 2
+		}
+
+		eventType, err := enumspb.EventTypeFromString(fields[eventTypeIndex])
 		if err != nil {
-			require.FailNowf(h.t, "", "Unknown event type %s for EventID=%d", fields[1], lineNum+1)
+			require.FailNowf(h.t, "", "Unknown event type %s for EventID=%d", fields[eventTypeIndex], lineNum+1)
 		}
 		historyEvents = append(historyEvents, &historypb.HistoryEvent{
 			EventId:   int64(eventID),
+			Version:   int64(eventVersion),
 			EventType: eventType,
 		})
 		var jb strings.Builder
-		for i := 2; i < len(fields); i++ {
+		for i := eventTypeIndex + 1; i < len(fields); i++ {
 			if strings.HasPrefix(fields[i], "//") {
 				break
 			}
