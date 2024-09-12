@@ -901,6 +901,20 @@ func (c *metricClient) TerminateWorkflowExecution(
 	return c.client.TerminateWorkflowExecution(ctx, request, opts...)
 }
 
+func (c *metricClient) UpdateActivityOptions(
+	ctx context.Context,
+	request *historyservice.UpdateActivityOptionsRequest,
+	opts ...grpc.CallOption,
+) (_ *historyservice.UpdateActivityOptionsResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, "HistoryClientUpdateActivityOptions")
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.UpdateActivityOptions(ctx, request, opts...)
+}
+
 func (c *metricClient) UpdateWorkflowExecution(
 	ctx context.Context,
 	request *historyservice.UpdateWorkflowExecutionRequest,

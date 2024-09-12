@@ -1326,6 +1326,26 @@ func (mr *MockHistoryServiceClientMockRecorder) TerminateWorkflowExecution(ctx, 
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "TerminateWorkflowExecution", reflect.TypeOf((*MockHistoryServiceClient)(nil).TerminateWorkflowExecution), varargs...)
 }
 
+// UpdateActivityOptions mocks base method.
+func (m *MockHistoryServiceClient) UpdateActivityOptions(ctx context.Context, in *historyservice.UpdateActivityOptionsRequest, opts ...grpc.CallOption) (*historyservice.UpdateActivityOptionsResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []any{ctx, in}
+	for _, a := range opts {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "UpdateActivityOptions", varargs...)
+	ret0, _ := ret[0].(*historyservice.UpdateActivityOptionsResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UpdateActivityOptions indicates an expected call of UpdateActivityOptions.
+func (mr *MockHistoryServiceClientMockRecorder) UpdateActivityOptions(ctx, in any, opts ...any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]any{ctx, in}, opts...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateActivityOptions", reflect.TypeOf((*MockHistoryServiceClient)(nil).UpdateActivityOptions), varargs...)
+}
+
 // UpdateWorkflowExecution mocks base method.
 func (m *MockHistoryServiceClient) UpdateWorkflowExecution(ctx context.Context, in *historyservice.UpdateWorkflowExecutionRequest, opts ...grpc.CallOption) (*historyservice.UpdateWorkflowExecutionResponse, error) {
 	m.ctrl.T.Helper()
@@ -2488,6 +2508,21 @@ func (m *MockHistoryServiceServer) TerminateWorkflowExecution(arg0 context.Conte
 func (mr *MockHistoryServiceServerMockRecorder) TerminateWorkflowExecution(arg0, arg1 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "TerminateWorkflowExecution", reflect.TypeOf((*MockHistoryServiceServer)(nil).TerminateWorkflowExecution), arg0, arg1)
+}
+
+// UpdateActivityOptions mocks base method.
+func (m *MockHistoryServiceServer) UpdateActivityOptions(arg0 context.Context, arg1 *historyservice.UpdateActivityOptionsRequest) (*historyservice.UpdateActivityOptionsResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdateActivityOptions", arg0, arg1)
+	ret0, _ := ret[0].(*historyservice.UpdateActivityOptionsResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UpdateActivityOptions indicates an expected call of UpdateActivityOptions.
+func (mr *MockHistoryServiceServerMockRecorder) UpdateActivityOptions(arg0, arg1 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateActivityOptions", reflect.TypeOf((*MockHistoryServiceServer)(nil).UpdateActivityOptions), arg0, arg1)
 }
 
 // UpdateWorkflowExecution mocks base method.

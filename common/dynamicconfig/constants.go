@@ -2525,4 +2525,10 @@ WorkerActivitiesPerSecond, MaxConcurrentActivityTaskPollers.
 		false,
 		`When set to true, logs all RPC/request errors for the namespace, not just unexpected ones.`,
 	)
+
+	ActivityAPIsEnabled = NewNamespaceBoolSetting(
+		"frontend.activityAPIsEnabled",
+		false,
+		`ActivityAPIsEnabled is a "feature enable" flag. `,
+	)
 )

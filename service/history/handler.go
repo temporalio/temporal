@@ -2439,3 +2439,7 @@ func (h *Handler) SyncWorkflowState(ctx context.Context, request *historyservice
 	}
 	return response, nil
 }
+
+func (h *Handler) UpdateActivityOptions(context.Context, *historyservice.UpdateActivityOptionsRequest) (*historyservice.UpdateActivityOptionsResponse, error) {
+	return nil, serviceerror.NewUnimplemented("UpdateActivityOptions is not supported yet")
+}

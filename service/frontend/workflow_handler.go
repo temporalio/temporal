@@ -5063,6 +5063,47 @@ func getBatchOperationState(workflowState enumspb.WorkflowExecutionStatus) enums
 	return operationState
 }
 
-func (wh *WorkflowHandler) UpdateActivityOptionsById(context.Context, *workflowservice.UpdateActivityOptionsByIdRequest) (*workflowservice.UpdateActivityOptionsByIdResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method UpdateActivityOptionsById not implemented")
+func (wh *WorkflowHandler) UpdateActivityOptionsById(
+	ctx context.Context,
+	request *workflowservice.UpdateActivityOptionsByIdRequest,
+) (_ *workflowservice.UpdateActivityOptionsByIdResponse, retError error) {
+	defer log.CapturePanic(wh.logger, &retError)
+
+	if !wh.config.ActivityAPIsEnabled(request.GetNamespace()) {
+		return nil, status.Errorf(codes.Unimplemented, "method UpdateActivityOptionsById not implemented")
+	}
+
+	wh.logger.Debug("Received UpdateActivityOptionsById")
+
+	if request == nil {
+		return nil, errRequestNotSet
+	}
+	if request.GetWorkflowId() == "" {
+		return nil, errWorkflowIDNotSet
+	}
+	if request.GetActivityId() == "" {
+		return nil, errActivityIDNotSet
+	}
+
+	namespace_id, err := wh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
+	if err != nil {
+		return nil, err
+	}
+
+	response, err := wh.historyClient.UpdateActivityOptions(ctx, &historyservice.UpdateActivityOptionsRequest{
+		NamespaceId:     namespace_id.String(),
+		WorkflowId:      request.WorkflowId,
+		RunId:           request.RunId,
+		ActivityId:      request.ActivityId,
+		ActivityOptions: request.ActivityOptions,
+		UpdateMask:      request.UpdateMask,
+	})
+
+	if err != nil {
+		return nil, err
+	}
+
+	return &workflowservice.UpdateActivityOptionsByIdResponse{
+		ActivityOptions: response.ActivityOptions,
+	}, nil
 }

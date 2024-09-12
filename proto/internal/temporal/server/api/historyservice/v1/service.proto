@@ -364,4 +364,10 @@ service HistoryService {
 
     rpc SyncWorkflowState(SyncWorkflowStateRequest) returns (SyncWorkflowStateResponse) {
     }
+    // UpdateActivityOptions is called by the client to update the options of an activity
+    // (-- api-linter: core::0134::method-signature=disabled
+    // (-- api-linter: core::0134::response-message-name=disabled
+    rpc UpdateActivityOptions (UpdateActivityOptionsRequest) returns (UpdateActivityOptionsResponse)
+    {
+    }
 }
