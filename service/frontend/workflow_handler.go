@@ -2616,7 +2616,7 @@ func (wh *WorkflowHandler) ShutdownWorker(ctx context.Context, request *workflow
 	if err != nil {
 		return nil, err
 	}
-	
+
 	// TODO: update poller info to indicate poller was shut down (pass identity/reason along)
 	_, err = wh.matchingClient.ForceUnloadTaskQueue(ctx, &matchingservice.ForceUnloadTaskQueueRequest{
 		NamespaceId:   namespaceId.String(),

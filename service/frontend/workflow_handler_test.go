@@ -2961,10 +2961,13 @@ func (s *workflowHandlerSuite) TestShutdownWorker() {
 	s.mockNamespaceCache.EXPECT().GetNamespaceID(gomock.Eq(s.testNamespace)).Return(s.testNamespaceID, nil).AnyTimes()
 	s.mockMatchingClient.EXPECT().ForceUnloadTaskQueue(gomock.Any(), gomock.Eq(expectedMatchingRequest)).Return(&matchingservice.ForceUnloadTaskQueueResponse{}, nil)
 
-	wh.ShutdownWorker(ctx, &workflowservice.ShutdownWorkerRequest{
+	err, _ := wh.ShutdownWorker(ctx, &workflowservice.ShutdownWorkerRequest{
 		Namespace:       s.testNamespace.String(),
 		StickyTaskQueue: stickyTaskQueue,
 		Identity:        "worker",
 		Reason:          "graceful shutdown",
 	})
+	if err != nil {
+		s.Fail("ShutdownWorker failed:", err)
+	}
 }
