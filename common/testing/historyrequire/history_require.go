@@ -268,7 +268,7 @@ func (h HistoryRequire) parseHistory(expectedHistory string) (string, map[int64]
 	prevEventID := 0
 	for lineNum, eventLine := range strings.Split(expectedHistory, "\n") {
 		fields := strings.Fields(eventLine)
-		if len(fields) == 0 {
+		if len(fields) == 0 || fields[0] == "//" {
 			continue
 		}
 		if len(fields) < 2 {
