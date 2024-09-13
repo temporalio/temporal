@@ -27,7 +27,6 @@
 package xdc
 
 import (
-	"context"
 	"flag"
 	"fmt"
 	"os"
@@ -36,7 +35,6 @@ import (
 	"time"
 
 	"github.com/pborman/uuid"
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commandpb "go.temporal.io/api/command/v1"
@@ -49,7 +47,6 @@ import (
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/adminservice/v1"
-	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -165,36 +162,6 @@ func (s *AdvVisCrossDCTestSuite) SetupSuite() {
 	s.testSearchAttributeVal = "test value"
 }
 
-func (s *AdvVisCrossDCTestSuite) waitForClusterConnected(sourceCluster *tests.TestCluster, source string, target string) {
-	s.logger.Info("wait for clusters to be synced", tag.SourceCluster(source), tag.TargetCluster(target))
-	s.EventuallyWithT(func(c *assert.CollectT) {
-		s.logger.Info("check if clusters are synced", tag.SourceCluster(source), tag.TargetCluster(target))
-		resp, err := sourceCluster.GetHistoryClient().GetReplicationStatus(context.Background(), &historyservice.GetReplicationStatusRequest{})
-		if !assert.NoError(c, err) {
-			return
-		}
-		assert.Lenf(c, resp.Shards, 1, "test cluster has only one history shard")
-
-		shard := resp.Shards[0]
-		if !assert.NotNil(c, shard) {
-			return
-		}
-		assert.Greater(c, shard.MaxReplicationTaskId, int64(0))
-		assert.NotNil(c, shard.ShardLocalTime)
-		assert.WithinRange(c, shard.ShardLocalTime.AsTime(), s.startTime, time.Now())
-		assert.NotNil(c, shard.RemoteClusters)
-
-		standbyAckInfo, ok := shard.RemoteClusters[target]
-		if !assert.True(c, ok) || !assert.NotNil(c, standbyAckInfo) {
-			return
-		}
-		assert.LessOrEqual(c, shard.MaxReplicationTaskId, standbyAckInfo.AckedTaskId)
-		assert.NotNil(c, standbyAckInfo.AckedTaskVisibilityTime)
-		assert.WithinRange(c, standbyAckInfo.AckedTaskVisibilityTime.AsTime(), s.startTime, time.Now())
-	}, 90*time.Second, 1*time.Second)
-	s.logger.Info("clusters synced", tag.SourceCluster(source), tag.TargetCluster(target))
-}
-
 func (s *AdvVisCrossDCTestSuite) SetupTest() {
 	// Have to define our overridden assertions in the test setup. If we did it earlier, s.T() will return nil
 	s.Assertions = require.New(s.T())
@@ -202,8 +169,8 @@ func (s *AdvVisCrossDCTestSuite) SetupTest() {
 	s.HistoryRequire = historyrequire.New(s.T())
 
 	s.onceClusterConnect.Do(func() {
-		s.waitForClusterConnected(s.cluster1, clusterNameAdvVis[0], clusterNameAdvVis[1])
-		s.waitForClusterConnected(s.cluster2, clusterNameAdvVis[1], clusterNameAdvVis[0])
+		waitForClusterConnected(s.Assertions, s.logger, s.cluster1, clusterNameAdvVis[0], clusterNameAdvVis[1], s.startTime)
+		waitForClusterConnected(s.Assertions, s.logger, s.cluster2, clusterNameAdvVis[1], clusterNameAdvVis[0], s.startTime)
 	})
 }
 

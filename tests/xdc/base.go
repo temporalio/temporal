@@ -169,10 +169,17 @@ func (s *xdcBaseSuite) setupSuite(clusterNames []string, opts ...tests.Option) {
 	time.Sleep(time.Millisecond * 200)
 }
 
-func (s *xdcBaseSuite) waitForClusterConnected(sourceCluster *tests.TestCluster, source string, target string) {
-	s.logger.Info("wait for clusters to be synced", tag.SourceCluster(source), tag.TargetCluster(target))
+func waitForClusterConnected(
+	s *require.Assertions,
+	logger log.Logger,
+	sourceCluster *tests.TestCluster,
+	source string,
+	target string,
+	startTime time.Time,
+) {
+	logger.Info("wait for clusters to be synced", tag.SourceCluster(source), tag.TargetCluster(target))
 	s.EventuallyWithT(func(c *assert.CollectT) {
-		s.logger.Info("check if clusters are synced", tag.SourceCluster(source), tag.TargetCluster(target))
+		logger.Info("check if clusters are synced", tag.SourceCluster(source), tag.TargetCluster(target))
 		resp, err := sourceCluster.GetHistoryClient().GetReplicationStatus(context.Background(), &historyservice.GetReplicationStatusRequest{})
 		if !assert.NoError(c, err) {
 			return
@@ -185,7 +192,7 @@ func (s *xdcBaseSuite) waitForClusterConnected(sourceCluster *tests.TestCluster,
 		}
 		assert.Greater(c, shard.MaxReplicationTaskId, int64(0))
 		assert.NotNil(c, shard.ShardLocalTime)
-		assert.WithinRange(c, shard.ShardLocalTime.AsTime(), s.startTime, time.Now())
+		assert.WithinRange(c, shard.ShardLocalTime.AsTime(), startTime, time.Now())
 		assert.NotNil(c, shard.RemoteClusters)
 
 		standbyAckInfo, ok := shard.RemoteClusters[target]
@@ -194,9 +201,9 @@ func (s *xdcBaseSuite) waitForClusterConnected(sourceCluster *tests.TestCluster,
 		}
 		assert.LessOrEqual(c, shard.MaxReplicationTaskId, standbyAckInfo.AckedTaskId)
 		assert.NotNil(c, standbyAckInfo.AckedTaskVisibilityTime)
-		assert.WithinRange(c, standbyAckInfo.AckedTaskVisibilityTime.AsTime(), s.startTime, time.Now())
+		assert.WithinRange(c, standbyAckInfo.AckedTaskVisibilityTime.AsTime(), startTime, time.Now())
 	}, 90*time.Second, 1*time.Second)
-	s.logger.Info("clusters synced", tag.SourceCluster(source), tag.TargetCluster(target))
+	logger.Info("clusters synced", tag.SourceCluster(source), tag.TargetCluster(target))
 }
 
 func (s *xdcBaseSuite) tearDownSuite() {
@@ -211,8 +218,8 @@ func (s *xdcBaseSuite) setupTest() {
 	s.HistoryRequire = historyrequire.New(s.T())
 
 	s.onceClusterConnect.Do(func() {
-		s.waitForClusterConnected(s.cluster1, s.clusterNames[0], s.clusterNames[1])
-		s.waitForClusterConnected(s.cluster2, s.clusterNames[1], s.clusterNames[0])
+		waitForClusterConnected(s.Assertions, s.logger, s.cluster1, s.clusterNames[0], s.clusterNames[1], s.startTime)
+		waitForClusterConnected(s.Assertions, s.logger, s.cluster2, s.clusterNames[1], s.clusterNames[0], s.startTime)
 	})
 }
 
