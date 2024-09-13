@@ -51,10 +51,6 @@ jobs:
 
       - uses: arduino/setup-protoc@v3
 
-      - run: sudo apt update
-
-      - run: sudo apt install -y shellcheck
-
       - run: GOOS=windows GOARCH=amd64 make clean-bins bins
 
       - run: GOOS=darwin GOARCH=arm64 make clean-bins bins
@@ -235,7 +231,6 @@ jobs:
     env:
       PERSISTENCE_TYPE: ${{ matrix.persistence_type }}
       PERSISTENCE_DRIVER: ${{ matrix.persistence_driver }}
-      TEMPORAL_TEST_LOG_LEVEL: debug
     steps:
       - uses: actions/checkout@v4
         with:
