@@ -23,7 +23,7 @@
 // THE SOFTWARE.
 
 // Generates all three generated files in this package:
-//go:generate go run ../../cmd/tools/rpcwrappers -service history
+//go:generate go run ../../cmd/tools/genrpcwrappers -service history
 
 package history
 
@@ -312,8 +312,8 @@ func (c *clientImpl) ListTasks(
 	in *historyservice.ListTasksRequest,
 	opts ...grpc.CallOption,
 ) (*historyservice.ListTasksResponse, error) {
-	// Depth of the shardId field is 2 which is not supported by the rpcwrapper generator.
-	// Simply changing the maxDepth for ShardId field in the rpcwrapper generator will
+	// Depth of the shardId field is 2 which is not supported by the genrpcwrapper generator.
+	// Simply changing the maxDepth for ShardId field in the genrpcwrapper generator will
 	// cause the generation logic for other methods to find more than one routing fields.
 
 	shardID := in.Request.GetShardId()
