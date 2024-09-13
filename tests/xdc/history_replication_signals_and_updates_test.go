@@ -385,12 +385,12 @@ func (s *hrsuTestSuite) TestConflictResolutionDoesNotReapplyAcceptedUpdateWithCo
 	}
 }
 
-// TestConflictResolutionDoesNotReapplyCompletedUpdateWithConflictingId creates a split-brain scenario in which both
+// TestConflictResolutionDoesNotReapplyCompleteUpdateWithConflictingId creates a split-brain scenario in which both
 // clusters believe they are active. Both clusters then accept and *complete* an update and write it to their own history, but those
 // updates have the same update ID. The test confirms that when the conflict is resolved, we do not reapply the
 // UpdateAccepted and UpdateCompleted event, since it has a conflicting ID.
 // Same as above but for completed Updates.
-func (s *hrsuTestSuite) TestConflictResolutionDoesNotReapplyCompletedUpdateWithConflictingId() {
+func (s *hrsuTestSuite) TestConflictResolutionDoesNotReapplyCompleteUpdateWithConflictingId() {
 	t, ctx, cancel := s.startHrsuTest()
 	defer cancel()
 	t.cluster1.startWorkflow(ctx, func(workflow.Context) error { return nil })
@@ -408,14 +408,14 @@ func (s *hrsuTestSuite) TestConflictResolutionDoesNotReapplyCompletedUpdateWithC
 	// we must not reapply it. The result is that both clusters have the same history; the update accepted in cluster 1
 	// has been dropped.
 	for _, c := range []hrsuTestCluster{t.cluster1, t.cluster2} {
-		t.s.HistoryRequire.EqualHistoryEventsAndVersions(`
-	1 WorkflowExecutionStarted
-	2 WorkflowTaskScheduled
-	3 WorkflowTaskStarted
-	4 WorkflowTaskCompleted
-	5 WorkflowExecutionUpdateAccepted {"ProtocolInstanceId": "update-id", "AcceptedRequest": {"Input": {"Args": {"Payloads": [{"Data": "\"cluster2-update-input\""}]}}}}
-	6 WorkflowExecutionUpdateCompleted
-		`, []int{1, 1, 2, 2, 2, 2}, c.getHistory(ctx))
+		t.s.HistoryRequire.EqualHistoryEvents(`
+	1 1 WorkflowExecutionStarted
+	2 1 WorkflowTaskScheduled
+	3 2 WorkflowTaskStarted
+	4 2 WorkflowTaskCompleted
+	5 2 WorkflowExecutionUpdateAccepted {"ProtocolInstanceId": "update-id", "AcceptedRequest": {"Input": {"Args": {"Payloads": [{"Data": "\"cluster2-update-input\""}]}}}}
+	6 2 WorkflowExecutionUpdateCompleted {"Meta":{"UpdateId":"update-id"}}
+		`, c.getHistory(ctx))
 	}
 }
 
@@ -613,24 +613,24 @@ func (t *hrsuTest) enterSplitBrainStateAndCompletedUpdatesInBothClusters(ctx con
 	t.cluster2.sendUpdateAndWaitUntilStage(ctx, cluster2UpdateId, "cluster2-update-input", sdkclient.WorkflowUpdateStageCompleted)
 
 	// cluster1 has completed an update
-	t.s.HistoryRequire.EqualHistoryEventsAndVersions(fmt.Sprintf(`
-	1 WorkflowExecutionStarted
-	2 WorkflowTaskScheduled
-	3 WorkflowTaskStarted
-	4 WorkflowTaskCompleted
-	5 WorkflowExecutionUpdateAccepted {"ProtocolInstanceId": "%s", "AcceptedRequest": {"Input": {"Args": {"Payloads": [{"Data": "\"cluster1-update-input\""}]}}}}
-	6 WorkflowExecutionUpdateCompleted {"Meta":{"UpdateId":"%[1]s"}}
-	`, cluster1UpdateId), []int{1, 1, 1, 1, 1, 1}, t.cluster1.getHistory(ctx))
+	t.s.HistoryRequire.EqualHistoryEvents(fmt.Sprintf(`
+	1 1 WorkflowExecutionStarted
+	2 1 WorkflowTaskScheduled
+	3 1 WorkflowTaskStarted
+	4 1 WorkflowTaskCompleted
+	5 1 WorkflowExecutionUpdateAccepted {"ProtocolInstanceId": "%s", "AcceptedRequest": {"Input": {"Args": {"Payloads": [{"Data": "\"cluster1-update-input\""}]}}}}
+	6 1 WorkflowExecutionUpdateCompleted {"Meta":{"UpdateId":"%[1]s"}}
+	`, cluster1UpdateId), t.cluster1.getHistory(ctx))
 
 	// cluster2 has also completed an update (events have failover version 2 since they are endogenous to cluster 2)
-	t.s.HistoryRequire.EqualHistoryEventsAndVersions(fmt.Sprintf(`
-	1 WorkflowExecutionStarted
-	2 WorkflowTaskScheduled
-	3 WorkflowTaskStarted
-	4 WorkflowTaskCompleted
-	5 WorkflowExecutionUpdateAccepted {"ProtocolInstanceId": "%s", "AcceptedRequest": {"Input": {"Args": {"Payloads": [{"Data": "\"cluster2-update-input\""}]}}}}
-	6 WorkflowExecutionUpdateCompleted {"Meta":{"UpdateId":"%[1]s"}}
-	`, cluster2UpdateId), []int{1, 1, 2, 2, 2, 2}, t.cluster2.getHistory(ctx))
+	t.s.HistoryRequire.EqualHistoryEvents(fmt.Sprintf(`
+	1 1 WorkflowExecutionStarted
+	2 1 WorkflowTaskScheduled
+	3 2 WorkflowTaskStarted
+	4 2 WorkflowTaskCompleted
+	5 2 WorkflowExecutionUpdateAccepted {"ProtocolInstanceId": "%s", "AcceptedRequest": {"Input": {"Args": {"Payloads": [{"Data": "\"cluster2-update-input\""}]}}}}
+	6 2 WorkflowExecutionUpdateCompleted {"Meta":{"UpdateId":"%[1]s"}}
+	`, cluster2UpdateId), t.cluster2.getHistory(ctx))
 }
 
 func (t *hrsuTest) failover1To2(ctx context.Context) {
