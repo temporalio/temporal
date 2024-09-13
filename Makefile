@@ -245,7 +245,7 @@ protoc: $(PROTOGEN) $(MOCKGEN) $(GOIMPORTS) $(PROTOC_GEN_GO) $(PROTOC_GEN_GO_GRP
 
 service-clients:
 	@printf $(COLOR) "Generate service clients..."
-	@go generate -run rpcwrappers ./client/...
+	@go generate -run genrpcwrappers ./client/...
 
 update-go-api:
 	@printf $(COLOR) "Update go.temporal.io/api@master..."
