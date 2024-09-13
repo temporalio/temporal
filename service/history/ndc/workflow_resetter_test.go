@@ -918,7 +918,7 @@ func (s *workflowResetterSuite) TestReapplyEvents() {
 	s.NoError(err)
 	ms.EXPECT().HSM().Return(root).AnyTimes()
 
-	_, err = reapplyEvents(ms, nil, smReg, events, nil, "")
+	_, err = reapplyEvents(context.Background(), ms, nil, smReg, events, nil, "")
 	s.NoError(err)
 }
 

@@ -98,7 +98,7 @@ const (
 )
 
 var (
-	errVisibilityShutdown = errors.New("visiblity processor was shut down")
+	errVisibilityShutdown = errors.New("visibility processor was shut down")
 )
 
 // NewProcessor create new processorImpl
@@ -175,9 +175,9 @@ func (p *processorImpl) hashFn(key interface{}) uint32 {
 	return hash % p.indexerConcurrency
 }
 
-// Add request to the bulk and return a future object which will receive ack signal when request is processed.
+// Add request to the bulk and return a future object which will receive ack signal when the request is processed.
 func (p *processorImpl) Add(request *client.BulkableRequest, visibilityTaskKey string) *future.FutureImpl[bool] {
-	newFuture := newAckFuture() // Create future first to measure impact of following RWLock on latency
+	newFuture := newAckFuture() // Create future first to measure the impact of following RWLock on latency.
 
 	p.shutdownLock.RLock()
 	defer p.shutdownLock.RUnlock()
@@ -304,7 +304,7 @@ func (p *processorImpl) buildResponseIndex(response *elastic.BulkResponse) map[s
 	for _, operationResponseItemMap := range response.Items {
 		for _, responseItem := range operationResponseItemMap {
 			existingResponseItem, duplicateID := result[responseItem.Id]
-			// In some rare cases there might be duplicate document Ids in the same bulk.
+			// In some rare cases, there might be duplicate document Ids in the same bulk.
 			// (for example, if two sequential upsert search attributes operation for the same workflow run end up being in the same bulk request)
 			// In this case, item with greater status code (error) will overwrite existing item with smaller status code.
 			if !duplicateID || existingResponseItem.Status < responseItem.Status {

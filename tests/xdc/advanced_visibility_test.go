@@ -400,12 +400,12 @@ GetHistoryLoop:
 			continue GetHistoryLoop
 		}
 		s.EqualHistory(`
-  1 WorkflowExecutionStarted
-  2 WorkflowTaskScheduled
-  3 WorkflowTaskStarted
-  4 WorkflowTaskCompleted
-  5 UpsertWorkflowSearchAttributes
-  6 WorkflowExecutionTerminated {"Details":{"Payloads":[{"Data":"\"terminate details\""}]},"Identity":"worker1","Reason":"force terminate to make sure standby process tasks"}`, history)
+  1 1 WorkflowExecutionStarted
+  2 1 WorkflowTaskScheduled
+  3 1 WorkflowTaskStarted
+  4 1 WorkflowTaskCompleted
+  5 1 UpsertWorkflowSearchAttributes
+  6 1 WorkflowExecutionTerminated {"Details":{"Payloads":[{"Data":"\"terminate details\""}]},"Identity":"worker1","Reason":"force terminate to make sure standby process tasks"}`, history)
 		executionTerminated = true
 		break GetHistoryLoop
 	}
@@ -422,12 +422,12 @@ GetHistoryLoop2:
 			lastEvent := history.Events[len(history.Events)-1]
 			if lastEvent.EventType == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TERMINATED {
 				s.EqualHistory(`
-  1 WorkflowExecutionStarted
-  2 WorkflowTaskScheduled
-  3 WorkflowTaskStarted
-  4 WorkflowTaskCompleted
-  5 UpsertWorkflowSearchAttributes
-  6 WorkflowExecutionTerminated {"Details":{"Payloads":[{"Data":"\"terminate details\""}]},"Identity":"worker1","Reason":"force terminate to make sure standby process tasks"}`, history)
+  1 1 WorkflowExecutionStarted
+  2 1 WorkflowTaskScheduled
+  3 1 WorkflowTaskStarted
+  4 1 WorkflowTaskCompleted
+  5 1 UpsertWorkflowSearchAttributes
+  6 1 WorkflowExecutionTerminated {"Details":{"Payloads":[{"Data":"\"terminate details\""}]},"Identity":"worker1","Reason":"force terminate to make sure standby process tasks"}`, history)
 				eventsReplicated = true
 				break GetHistoryLoop2
 			}
