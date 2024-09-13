@@ -32,6 +32,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -75,8 +76,8 @@ type (
 		logger                 log.Logger
 		dynamicConfigOverrides map[dynamicconfig.Key]interface{}
 
-		startTime        time.Time
-		clusterConnected bool
+		startTime          time.Time
+		onceClusterConnect sync.Once
 	}
 )
 
@@ -214,11 +215,10 @@ func (s *xdcBaseSuite) setupTest() {
 	s.ProtoAssertions = protorequire.New(s.T())
 	s.HistoryRequire = historyrequire.New(s.T())
 
-	if !s.clusterConnected {
+	s.onceClusterConnect.Do(func() {
 		s.waitForClusterConnected(s.cluster1, s.clusterNames[0], s.clusterNames[1])
 		s.waitForClusterConnected(s.cluster2, s.clusterNames[1], s.clusterNames[0])
-		s.clusterConnected = true
-	}
+	})
 }
 
 func (s *xdcBaseSuite) createGlobalNamespace() string {
