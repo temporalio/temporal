@@ -34,7 +34,6 @@ import (
 	"encoding/binary"
 	"errors"
 	"flag"
-	"fmt"
 	"strconv"
 	"testing"
 	"time"
@@ -61,7 +60,6 @@ import (
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/convert"
-	"go.temporal.io/server/common/debug"
 	"go.temporal.io/server/common/failure"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/payloads"
@@ -171,20 +169,6 @@ func (s *FunctionalClustersTestSuite) TestNamespaceFailover() {
 	}
 	s.NoError(err)
 	s.NotNil(we.GetRunId())
-
-	// // terminate workflow at cluster 2
-	// terminateReason := "terminate reason"
-	// terminateDetails := payloads.EncodeString("terminate details")
-	// _, err = client2.TerminateWorkflowExecution(tests.NewContext(), &workflowservice.TerminateWorkflowExecutionRequest{
-	// 	Namespace: namespace,
-	// 	WorkflowExecution: &commonpb.WorkflowExecution{
-	// 		WorkflowId: id,
-	// 	},
-	// 	Reason:   terminateReason,
-	// 	Details:  terminateDetails,
-	// 	Identity: identity,
-	// })
-	// s.NoError(err)
 }
 
 func (s *FunctionalClustersTestSuite) TestSimpleWorkflowFailover() {
@@ -946,9 +930,7 @@ func (s *FunctionalClustersTestSuite) TestResetWorkflowFailover() {
 		ActiveClusterName:                s.clusterNames[0],
 		WorkflowExecutionRetentionPeriod: durationpb.New(1 * time.Hour * 24),
 	}
-	s.logger.Debug("RegisterNamespace", tag.WorkflowNamespace(namespace))
 	_, err := client1.RegisterNamespace(tests.NewContext(), regReq)
-	s.logger.Debug("RegisterNamespace response", tag.Error(err))
 	s.NoError(err)
 	// Wait for namespace cache to pick the change
 	time.Sleep(cacheRefreshInterval)
@@ -956,9 +938,7 @@ func (s *FunctionalClustersTestSuite) TestResetWorkflowFailover() {
 	descReq := &workflowservice.DescribeNamespaceRequest{
 		Namespace: namespace,
 	}
-	s.logger.Debug("DescribeNamespace", tag.WorkflowNamespace(namespace))
 	resp, err := client1.DescribeNamespace(tests.NewContext(), descReq)
-	s.logger.Debug("DescribeNamespace response", tag.Error(err))
 	s.NoError(err)
 	s.NotNil(resp)
 
@@ -1055,8 +1035,6 @@ func (s *FunctionalClustersTestSuite) TestResetWorkflowFailover() {
 	//  4. WorkflowTaskStarted
 	//  5. WorkflowTaskCompleted
 
-	s.logger.Debug(fmt.Sprintf("Resetting workflow, debug.TimeoutMultiplier=%v", debug.TimeoutMultiplier))
-
 	// Reset workflow execution
 	resetResp, err := client1.ResetWorkflowExecution(tests.NewContext(), &workflowservice.ResetWorkflowExecutionRequest{
 		Namespace: namespace,
@@ -1069,8 +1047,6 @@ func (s *FunctionalClustersTestSuite) TestResetWorkflowFailover() {
 		RequestId:                 uuid.New(),
 	})
 	s.NoError(err)
-
-	s.logger.Debug("ResetWorkflowExecution: Reset Workflow Execution", tag.WorkflowRunID(resetResp.GetRunId()))
 
 	s.failover(namespace, s.clusterNames[1], int64(2), client1)
 
@@ -1717,14 +1693,11 @@ func (s *FunctionalClustersTestSuite) TestForceWorkflowTaskClose_WithClusterReco
 			},
 		},
 	}
-	s.logger.Debug("UpdateNamespaceRequest", tag.Value(upReq))
 	_, err = client2.UpdateNamespace(tests.NewContext(), upReq)
 	s.NoError(err)
-	s.logger.Debug("UpdateNamespaceResponse", tag.Error(err))
 	// Wait for namespace cache to pick the change
 	time.Sleep(cacheRefreshInterval)
 
-	s.logger.Debug("Send signal to workflow")
 	// Send a signal to cluster 2, namespace contains one cluster
 	signalName := "my signal"
 	signalInput := payloads.EncodeString("my signal input")
@@ -2201,9 +2174,7 @@ func (s *FunctionalClustersTestSuite) TestWorkflowRetryFailAndFailover() {
 		ActiveClusterName:                s.clusterNames[0],
 		WorkflowExecutionRetentionPeriod: durationpb.New(1 * time.Hour * 24),
 	}
-	s.logger.Debug("RegisterNamespaceRequest", tag.Value(regReq))
 	_, err := client1.RegisterNamespace(tests.NewContext(), regReq)
-	s.logger.Debug("RegisterNamespaceResponse", tag.Error(err))
 	s.NoError(err)
 	// Wait for namespace cache to pick the change
 	time.Sleep(cacheRefreshInterval)
@@ -2211,9 +2182,7 @@ func (s *FunctionalClustersTestSuite) TestWorkflowRetryFailAndFailover() {
 	descReq := &workflowservice.DescribeNamespaceRequest{
 		Namespace: namespace,
 	}
-	s.logger.Debug("DescribeNamespaceRequest", tag.Value(descReq))
 	resp, err := client1.DescribeNamespace(tests.NewContext(), descReq)
-	s.logger.Debug("DescribeNamespaceResponse", tag.Error(err))
 	s.NoError(err)
 	s.NotNil(resp)
 
@@ -2350,10 +2319,9 @@ func (s *FunctionalClustersTestSuite) TestActivityHeartbeatFailover() {
 	s.NoError(err)
 	s.NotEmpty(run1.GetRunID())
 
-	s.logger.Debug("StartWorkflowExecution", tag.WorkflowRunID(run1.GetRunID()))
+	s.logger.Info("StartWorkflowExecution", tag.WorkflowRunID(run1.GetRunID()))
 	time.Sleep(time.Second * 4) // wait for heartbeat from activity to be reported and activity timed out on heartbeat
 
-	s.logger.Debug("Stopping worker 1")
 	worker1.Stop() // stop worker1 so cluster 1 won't make any progress
 	s.failover(namespace, s.clusterNames[1], int64(2), s.cluster1.GetFrontendClient())
 

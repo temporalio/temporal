@@ -171,7 +171,6 @@ func (p *ackMgrImpl) NotifyNewTasks(
 	defer p.Unlock()
 	if p.maxTaskID == nil || *p.maxTaskID < maxTaskID {
 		p.maxTaskID = &maxTaskID
-		p.logger.Debug("REMOVEME NotifyNewTasks update maxTaskID", tag.TaskID(maxTaskID))
 	}
 	if p.maxTaskVisibilityTimestamp.IsZero() || p.maxTaskVisibilityTimestamp.Before(maxVisibilityTimestamp) {
 		p.maxTaskVisibilityTimestamp = maxVisibilityTimestamp
@@ -190,9 +189,7 @@ func (p *ackMgrImpl) GetMaxTaskInfo() (int64, time.Time) {
 		// a few seconds) ack to the latest ImmediateTaskMaxReadLevel if there is no replication tasks at all.
 		taskID := p.shardContext.GetQueueExclusiveHighReadWatermark(tasks.CategoryReplication).Prev().TaskID
 		maxTaskID = &taskID
-		p.logger.Debug("REMOVEME GetMaxTaskInfo fallback to ImmediateTaskMaxReadLevel, GetQueueExclusiveHighReadWatermark(tasks.CategoryReplication).TaskID", tag.TaskID(p.shardContext.GetQueueExclusiveHighReadWatermark(tasks.CategoryReplication).TaskID))
 	}
-	p.logger.Debug("REMOVEME GetMaxTaskInfo", tag.TaskID(*maxTaskID))
 	maxVisibilityTimestamp := p.maxTaskVisibilityTimestamp
 	if maxVisibilityTimestamp.IsZero() {
 		maxVisibilityTimestamp = p.shardContext.GetTimeSource().Now()

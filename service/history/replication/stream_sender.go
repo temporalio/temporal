@@ -544,7 +544,6 @@ Loop:
 			if s.isTieredStackEnabled {
 				s.flowController.Wait(priority)
 			}
-			s.logger.Debug(fmt.Sprintf("StreamSender send replication task, priority %v, task: %+v", priority, task), tag.TaskID(task.SourceTaskId))
 			if err := s.sendToStream(&historyservice.StreamWorkflowReplicationMessagesResponse{
 				Attributes: &historyservice.StreamWorkflowReplicationMessagesResponse_Messages{
 					Messages: &replicationspb.WorkflowReplicationMessages{

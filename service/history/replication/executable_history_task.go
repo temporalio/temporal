@@ -26,7 +26,6 @@ package replication
 
 import (
 	"context"
-	"fmt"
 	"sync"
 	"time"
 
@@ -161,7 +160,6 @@ func (e *ExecutableHistoryTask) Execute() error {
 	if err != nil {
 		return err
 	}
-	e.Logger.Debug(fmt.Sprintf("REMOVEME ExecutableHistoryTask.Execute events: %v, newRunEvents: %v", events, newRunEvents), tag.TaskID(e.ExecutableTask.TaskID()))
 
 	if !e.Config.EnableReplicateLocalGeneratedEvent() {
 		return engine.ReplicateHistoryEvents(

@@ -31,6 +31,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"sync"
 	"testing"
 	"time"
 
@@ -84,8 +85,8 @@ type AdvVisCrossDCTestSuite struct {
 	testSearchAttributeKey string
 	testSearchAttributeVal string
 
-	startTime        time.Time
-	clusterConnected bool
+	startTime          time.Time
+	onceClusterConnect sync.Once
 }
 
 func TestAdvVisCrossDCTestSuite(t *testing.T) {
@@ -164,42 +165,34 @@ func (s *AdvVisCrossDCTestSuite) SetupSuite() {
 	s.testSearchAttributeVal = "test value"
 }
 
-func (s *AdvVisCrossDCTestSuite) waitForClusterConnected(cluster *tests.TestCluster, source string, target string) {
-	s.logger.Debug("wait for clusters to be synced", tag.SourceCluster(source), tag.TargetCluster(target))
+func (s *AdvVisCrossDCTestSuite) waitForClusterConnected(sourceCluster *tests.TestCluster, source string, target string) {
+	s.logger.Info("wait for clusters to be synced", tag.SourceCluster(source), tag.TargetCluster(target))
 	s.EventuallyWithT(func(c *assert.CollectT) {
-		s.logger.Debug("check if replication tasks are replicated")
-		resp, err := cluster.GetHistoryClient().GetReplicationStatus(context.Background(), &historyservice.GetReplicationStatusRequest{})
-		s.logger.Debug("get replication status response", tag.Error(err))
-		s.logger.Debug("check 1")
-		if !(assert.NoError(c, err) &&
-			assert.Equal(c, 1, len(resp.Shards))) { // test cluster has only one history shard
-			s.logger.Debug("check failed 1")
+		s.logger.Info("check if clusters are synced", tag.SourceCluster(source), tag.TargetCluster(target))
+		resp, err := sourceCluster.GetHistoryClient().GetReplicationStatus(context.Background(), &historyservice.GetReplicationStatusRequest{})
+		if !assert.NoError(c, err) {
 			return
 		}
-		s.logger.Debug("check 2")
+		assert.Lenf(c, resp.Shards, 1, "test cluster has only one history shard")
+
 		shard := resp.Shards[0]
-		if !(assert.NotNil(c, shard) &&
-			assert.True(c, shard.MaxReplicationTaskId > 0) &&
-			assert.NotNil(c, shard.ShardLocalTime) &&
-			assert.True(c, shard.ShardLocalTime.AsTime().Before(time.Now())) &&
-			assert.True(c, shard.ShardLocalTime.AsTime().After(s.startTime)) &&
-			assert.NotNil(c, shard.RemoteClusters)) {
-			s.logger.Debug("check failed 2")
+		if !assert.NotNil(c, shard) {
 			return
 		}
-		s.logger.Debug("check 3")
+		assert.Greater(c, shard.MaxReplicationTaskId, int64(0))
+		assert.NotNil(c, shard.ShardLocalTime)
+		assert.WithinRange(c, shard.ShardLocalTime.AsTime(), s.startTime, time.Now())
+		assert.NotNil(c, shard.RemoteClusters)
+
 		standbyAckInfo, ok := shard.RemoteClusters[target]
-		if !(assert.True(c, ok) &&
-			assert.NotNil(c, standbyAckInfo) &&
-			assert.LessOrEqual(c, shard.MaxReplicationTaskId, standbyAckInfo.AckedTaskId) &&
-			assert.NotNil(c, standbyAckInfo.AckedTaskVisibilityTime) &&
-			assert.True(c, standbyAckInfo.AckedTaskVisibilityTime.AsTime().Before(time.Now())) &&
-			assert.True(c, standbyAckInfo.AckedTaskVisibilityTime.AsTime().After(s.startTime))) {
-			s.logger.Debug("check failed 3")
+		if !assert.True(c, ok) || !assert.NotNil(c, standbyAckInfo) {
 			return
 		}
-		s.logger.Debug("clusters synced", tag.SourceCluster(source), tag.TargetCluster(target))
+		assert.LessOrEqual(c, shard.MaxReplicationTaskId, standbyAckInfo.AckedTaskId)
+		assert.NotNil(c, standbyAckInfo.AckedTaskVisibilityTime)
+		assert.WithinRange(c, standbyAckInfo.AckedTaskVisibilityTime.AsTime(), s.startTime, time.Now())
 	}, 90*time.Second, 1*time.Second)
+	s.logger.Info("clusters synced", tag.SourceCluster(source), tag.TargetCluster(target))
 }
 
 func (s *AdvVisCrossDCTestSuite) SetupTest() {
@@ -208,11 +201,10 @@ func (s *AdvVisCrossDCTestSuite) SetupTest() {
 	s.ProtoAssertions = protorequire.New(s.T())
 	s.HistoryRequire = historyrequire.New(s.T())
 
-	if !s.clusterConnected {
+	s.onceClusterConnect.Do(func() {
 		s.waitForClusterConnected(s.cluster1, clusterNameAdvVis[0], clusterNameAdvVis[1])
 		s.waitForClusterConnected(s.cluster2, clusterNameAdvVis[1], clusterNameAdvVis[0])
-		s.clusterConnected = true
-	}
+	})
 }
 
 func (s *AdvVisCrossDCTestSuite) TearDownSuite() {

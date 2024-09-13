@@ -172,20 +172,15 @@ func (s *xdcBaseSuite) setupSuite(clusterNames []string, opts ...tests.Option) {
 func (s *xdcBaseSuite) waitForClusterConnected(sourceCluster *tests.TestCluster, source string, target string) {
 	s.logger.Info("wait for clusters to be synced", tag.SourceCluster(source), tag.TargetCluster(target))
 	s.EventuallyWithT(func(c *assert.CollectT) {
-		s.logger.Info("check if replication tasks are replicated")
+		s.logger.Info("check if clusters are synced", tag.SourceCluster(source), tag.TargetCluster(target))
 		resp, err := sourceCluster.GetHistoryClient().GetReplicationStatus(context.Background(), &historyservice.GetReplicationStatusRequest{})
-		s.logger.Debug("get replication status response", tag.Error(err))
-		s.logger.Debug("check 1")
 		if !assert.NoError(c, err) {
-			s.logger.Debug("check failed 1")
 			return
 		}
 		assert.Lenf(c, resp.Shards, 1, "test cluster has only one history shard")
 
-		s.logger.Debug("check 2")
 		shard := resp.Shards[0]
 		if !assert.NotNil(c, shard) {
-			s.logger.Debug("check failed 2")
 			return
 		}
 		assert.Greater(c, shard.MaxReplicationTaskId, int64(0))
@@ -195,11 +190,11 @@ func (s *xdcBaseSuite) waitForClusterConnected(sourceCluster *tests.TestCluster,
 
 		standbyAckInfo, ok := shard.RemoteClusters[target]
 		if !assert.True(c, ok) || !assert.NotNil(c, standbyAckInfo) {
-			s.logger.Debug("check failed 3")
 			return
 		}
 		assert.LessOrEqual(c, shard.MaxReplicationTaskId, standbyAckInfo.AckedTaskId)
-
+		assert.NotNil(c, standbyAckInfo.AckedTaskVisibilityTime)
+		assert.WithinRange(c, standbyAckInfo.AckedTaskVisibilityTime.AsTime(), s.startTime, time.Now())
 	}, 90*time.Second, 1*time.Second)
 	s.logger.Info("clusters synced", tag.SourceCluster(source), tag.TargetCluster(target))
 }

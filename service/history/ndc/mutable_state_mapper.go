@@ -26,7 +26,6 @@ package ndc
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/google/uuid"
 	"go.temporal.io/server/common/log/tag"
@@ -250,6 +249,5 @@ func (m *MutableStateMapperImpl) ApplyEvents(
 		)
 		return nil, nil, err
 	}
-	m.shardContext.GetLogger().Debug(fmt.Sprintf("REMOVEME ApplyEvents events: %v", task.getEvents()))
 	return mutableState, newMutableState, nil
 }

@@ -30,7 +30,6 @@ import (
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
-	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 )
 
@@ -86,8 +85,6 @@ func (e *executableTaskConverterImpl) convertOne(
 	} else {
 		taskCreationTime = time.Now().UTC()
 	}
-
-	e.processToolBox.Logger.Debug(fmt.Sprintf("REMOVEME convertOne replication task, replication task: %+v", replicationTask), tag.TaskID(replicationTask.GetSourceTaskId()))
 
 	switch replicationTask.GetTaskType() {
 	case enumsspb.REPLICATION_TASK_TYPE_SYNC_SHARD_STATUS_TASK: // TODO to be deprecated
