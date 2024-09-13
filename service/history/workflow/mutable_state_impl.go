@@ -6280,8 +6280,7 @@ func (ms *MutableStateImpl) ApplyMutation(
 	ms.syncExecutionInfo(ms.executionInfo, mutation.ExecutionInfo)
 
 	// this must be called after syncExecutionInfo because syncExecutionInfo will update executionInfo.UpdateInfos
-	applyUpdatesToSubStateMachine(ms, nil, ms.executionInfo.UpdateInfos, mutation.UpdatedUpdateInfos, currentVersionedTransition, nil)
-	// ms.executionInfo.UpdateInfoCount?
+	ms.applyUpdatesToUpdateInfos(mutation.UpdatedUpdateInfos, currentVersionedTransition)
 
 	ms.applyUpdatesToSubStateMachines(
 		mutation.UpdatedActivityInfos,
@@ -6345,7 +6344,9 @@ func (ms *MutableStateImpl) applyUpdatesToSubStateMachines(
 	})
 
 	applyUpdatesToSubStateMachine(ms, ms.pendingChildExecutionInfoIDs, ms.updateChildExecutionInfos, updatedChildExecutionInfos, currentVersionedTransition, func(current, incoming *persistencespb.ChildExecutionInfo) {
-		incoming.Clock = current.Clock
+		if current != nil {
+			incoming.Clock = current.Clock
+		}
 		incoming.CreateRequestId = uuid.New()
 	})
 
@@ -6421,22 +6422,36 @@ func applyUpdatesToSubStateMachine[K comparable, V lastUpdatedStateTransitionGet
 			continue
 		}
 		val := updated
-		if pendingInfos != nil {
-			if existing, ok := pendingInfos[key]; ok {
-				ms.approximateSize -= existing.Size()
-				if fn != nil {
-					val = common.CloneProto(updated)
-					fn(existing, val)
-				}
-			}
-			pendingInfos[key] = val
-		} else {
-			if existing, ok := updateInfos[key]; ok {
-				ms.approximateSize -= existing.Size()
-			}
+		var existing V
+		if existing, ok := pendingInfos[key]; ok {
+			ms.approximateSize -= existing.Size() + int64SizeBytes
 		}
+		if fn != nil {
+			val = common.CloneProto(updated)
+			fn(existing, val)
+		}
+		pendingInfos[key] = val
 		updateInfos[key] = val
-		ms.approximateSize += val.Size()
+		ms.approximateSize += val.Size() + int64SizeBytes
+	}
+}
+
+func (ms *MutableStateImpl) applyUpdatesToUpdateInfos(
+	updatedUpdateInfos map[string]*persistencespb.UpdateInfo,
+	versionedTransition *persistencespb.VersionedTransition,
+) {
+	for updateID, ui := range updatedUpdateInfos {
+		if CompareVersionedTransition(ui.GetLastUpdateVersionedTransition(), versionedTransition) <= 0 {
+			continue
+		}
+		if existing, ok := ms.executionInfo.UpdateInfos[updateID]; ok {
+			ms.approximateSize -= existing.Size() + len(updateID)
+		} else {
+			ms.executionInfo.UpdateCount++
+		}
+		ms.executionInfo.UpdateInfos[updateID] = ui
+		ms.approximateSize += ui.Size() + len(updateID)
+		ms.updateInfoUpdated[updateID] = struct{}{}
 	}
 }
 
