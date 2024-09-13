@@ -35,5 +35,10 @@ type (
 		// two predicates are mathmatically equivalent, Equals may still
 		// return false.
 		Equals(Predicate[T]) bool
+
+		// Size gets the estimated size in bytes of this predicate.
+		// Implementation may keep this estimate rough and mostly account for elements that may take up considerable
+		// space such as strings and slices.
+		Size() int
 	}
 )

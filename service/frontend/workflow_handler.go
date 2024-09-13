@@ -25,6 +25,7 @@
 package frontend
 
 import (
+	"cmp"
 	"context"
 	"encoding/binary"
 	"errors"
@@ -176,15 +177,14 @@ func NewWorkflowHandler(
 		tokenSerializer: common.NewProtoTaskTokenSerializer(),
 		versionChecker:  headers.NewDefaultVersionChecker(),
 		namespaceHandler: newNamespaceHandler(
-			config.MaxBadBinaries,
 			logger,
 			persistenceMetadataManager,
 			clusterMetadata,
 			namespace.NewNamespaceReplicator(namespaceReplicationQueue, logger),
 			archivalMetadata,
 			archiverProvider,
-			config.EnableSchedules,
 			timeSource,
+			config,
 		),
 		getDefaultWorkflowRetrySettings: config.DefaultWorkflowRetryPolicy,
 		visibilityMgr:                   visibilityMgr,
@@ -2605,6 +2605,12 @@ func (wh *WorkflowHandler) ResetStickyTaskQueue(ctx context.Context, request *wo
 	return &workflowservice.ResetStickyTaskQueueResponse{}, nil
 }
 
+func (wh *WorkflowHandler) ShutdownWorker(ctx context.Context, request *workflowservice.ShutdownWorkerRequest) (_ *workflowservice.ShutdownWorkerResponse, retError error) {
+	defer log.CapturePanic(wh.logger, &retError)
+
+	return &workflowservice.ShutdownWorkerResponse{}, nil
+}
+
 // QueryWorkflow returns query result for a specified workflow execution
 func (wh *WorkflowHandler) QueryWorkflow(ctx context.Context, request *workflowservice.QueryWorkflowRequest) (_ *workflowservice.QueryWorkflowResponse, retError error) {
 	defer log.CapturePanic(wh.logger, &retError)
@@ -3809,6 +3815,10 @@ func (wh *WorkflowHandler) UpdateWorkerVersioningRules(ctx context.Context, requ
 		return nil, errWorkerVersioningNotAllowed
 	}
 
+	if err := wh.validateVersionRuleBuildId(request); err != nil {
+		return nil, err
+	}
+
 	taskQueue := &taskqueuepb.TaskQueue{Name: request.GetTaskQueue(), Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 	if err := tqid.NormalizeAndValidate(taskQueue, "", wh.config.MaxIDLengthLimit()); err != nil {
 		return nil, err
@@ -4502,6 +4512,36 @@ func (wh *WorkflowHandler) validateSearchAttributes(searchAttributes *commonpb.S
 	return wh.saValidator.ValidateSize(searchAttributes, namespaceName.String())
 }
 
+func (wh *WorkflowHandler) validateVersionRuleBuildId(request *workflowservice.UpdateWorkerVersioningRulesRequest) error {
+	validateBuildId := func(bid string) error {
+		if len(bid) > 255 {
+			return serviceerror.NewInvalidArgument(fmt.Sprintf("BuildId must be <= 255 characters, was %d", len(bid)))
+		}
+
+		return common.ValidateUTF8String("BuildId", bid)
+	}
+	switch request.GetOperation().(type) {
+	case *workflowservice.UpdateWorkerVersioningRulesRequest_InsertAssignmentRule:
+		return validateBuildId(request.GetInsertAssignmentRule().GetRule().GetTargetBuildId())
+	case *workflowservice.UpdateWorkerVersioningRulesRequest_ReplaceAssignmentRule:
+		return validateBuildId(request.GetReplaceAssignmentRule().GetRule().GetTargetBuildId())
+	case *workflowservice.UpdateWorkerVersioningRulesRequest_DeleteAssignmentRule:
+		return nil
+	case *workflowservice.UpdateWorkerVersioningRulesRequest_AddCompatibleRedirectRule:
+		return cmp.Or(
+			validateBuildId(request.GetAddCompatibleRedirectRule().GetRule().GetTargetBuildId()),
+			validateBuildId(request.GetAddCompatibleRedirectRule().GetRule().GetSourceBuildId()),
+		)
+	case *workflowservice.UpdateWorkerVersioningRulesRequest_ReplaceCompatibleRedirectRule:
+		return validateBuildId(request.GetReplaceCompatibleRedirectRule().GetRule().GetTargetBuildId())
+	case *workflowservice.UpdateWorkerVersioningRulesRequest_DeleteCompatibleRedirectRule:
+		return nil
+	case *workflowservice.UpdateWorkerVersioningRulesRequest_CommitBuildId_:
+		return validateBuildId(request.GetCommitBuildId().GetTargetBuildId())
+	}
+	return nil
+}
+
 func (wh *WorkflowHandler) validateWorkflowIdReusePolicy(
 	reusePolicy enumspb.WorkflowIdReusePolicy,
 	conflictPolicy enumspb.WorkflowIdConflictPolicy,
@@ -5021,4 +5061,49 @@ func getBatchOperationState(workflowState enumspb.WorkflowExecutionStatus) enums
 		operationState = enumspb.BATCH_OPERATION_STATE_FAILED
 	}
 	return operationState
+}
+
+func (wh *WorkflowHandler) UpdateActivityOptionsById(
+	ctx context.Context,
+	request *workflowservice.UpdateActivityOptionsByIdRequest,
+) (_ *workflowservice.UpdateActivityOptionsByIdResponse, retError error) {
+	defer log.CapturePanic(wh.logger, &retError)
+
+	if !wh.config.ActivityAPIsEnabled(request.GetNamespace()) {
+		return nil, status.Errorf(codes.Unimplemented, "method UpdateActivityOptionsById not implemented")
+	}
+
+	wh.logger.Debug("Received UpdateActivityOptionsById")
+
+	if request == nil {
+		return nil, errRequestNotSet
+	}
+	if request.GetWorkflowId() == "" {
+		return nil, errWorkflowIDNotSet
+	}
+	if request.GetActivityId() == "" {
+		return nil, errActivityIDNotSet
+	}
+
+	namespace_id, err := wh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
+	if err != nil {
+		return nil, err
+	}
+
+	response, err := wh.historyClient.UpdateActivityOptions(ctx, &historyservice.UpdateActivityOptionsRequest{
+		NamespaceId:     namespace_id.String(),
+		WorkflowId:      request.WorkflowId,
+		RunId:           request.RunId,
+		ActivityId:      request.ActivityId,
+		ActivityOptions: request.ActivityOptions,
+		UpdateMask:      request.UpdateMask,
+	})
+
+	if err != nil {
+		return nil, err
+	}
+
+	return &workflowservice.UpdateActivityOptionsByIdResponse{
+		ActivityOptions: response.ActivityOptions,
+	}, nil
 }

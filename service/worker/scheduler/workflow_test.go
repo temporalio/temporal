@@ -38,6 +38,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
 	schedpb "go.temporal.io/api/schedule/v1"
+	sdkpb "go.temporal.io/api/sdk/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/sdk/testsuite"
@@ -46,6 +47,7 @@ import (
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/testing/protoassert"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -111,7 +113,9 @@ func (s *workflowSuite) run(sched *schedpb.Schedule, iterations int) {
 	s.env.SetStartTime(baseStartTime)
 
 	// fill this in so callers don't need to
-	sched.Action = s.defaultAction("myid")
+	if sched.Action == nil {
+		sched.Action = s.defaultAction("myid")
+	}
 
 	s.env.ExecuteWorkflow(SchedulerWorkflow, &schedspb.StartScheduleArgs{
 		Schedule: sched,
@@ -334,6 +338,19 @@ func (s *workflowSuite) runAcrossContinue(
 func (s *workflowSuite) TestStart() {
 	// written using low-level mocks so we can test all fields in the start request
 
+	userMetadata := &sdkpb.UserMetadata{
+		Summary: &commonpb.Payload{
+			Metadata: map[string][]byte{"test_key": []byte(`test_val`)},
+			Data:     []byte(`Test summary Data`),
+		},
+		Details: &commonpb.Payload{
+			Metadata: map[string][]byte{"test_key": []byte(`test_val`)},
+			Data:     []byte(`Test Details Data`),
+		},
+	}
+	action := s.defaultAction("myid")
+	action.Action.(*schedpb.ScheduleAction_StartWorkflow).StartWorkflow.UserMetadata = userMetadata
+
 	s.expectStart(func(req *schedspb.StartWorkflowRequest) (*schedspb.StartWorkflowResponse, error) {
 		s.True(time.Date(2022, 6, 1, 0, 15, 0, 0, time.UTC).Equal(s.now()))
 		s.Nil(req.Request.LastCompletionResult)
@@ -345,6 +362,7 @@ func (s *workflowSuite) TestStart() {
 		s.Equal(`"value"`, payload.ToString(req.Request.SearchAttributes.IndexedFields["myfield"]))
 		s.Equal(`"myschedule"`, payload.ToString(req.Request.SearchAttributes.IndexedFields[searchattribute.TemporalScheduledById]))
 		s.Equal(`"2022-06-01T00:15:00Z"`, payload.ToString(req.Request.SearchAttributes.IndexedFields[searchattribute.TemporalScheduledStartTime]))
+		protoassert.ProtoEqual(s.T(), userMetadata, req.Request.GetUserMetadata())
 
 		return nil, nil
 	})
@@ -355,6 +373,7 @@ func (s *workflowSuite) TestStart() {
 				Interval: durationpb.New(55 * time.Minute),
 			}},
 		},
+		Action: action,
 	}, 2)
 	// two iterations to start one workflow: first will sleep, second will start and then sleep again
 	s.True(s.env.IsWorkflowCompleted())

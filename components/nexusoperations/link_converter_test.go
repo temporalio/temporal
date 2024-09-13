@@ -38,10 +38,10 @@ import (
 
 func TestConvertLinkWorkflowEventToNexusLink(t *testing.T) {
 	type testcase struct {
-		name   string
-		input  *commonpb.Link_WorkflowEvent
-		output nexus.Link
-		errMsg string
+		name      string
+		input     *commonpb.Link_WorkflowEvent
+		output    nexus.Link
+		outputURL string
 	}
 
 	cases := []testcase{
@@ -62,13 +62,15 @@ func TestConvertLinkWorkflowEventToNexusLink(t *testing.T) {
 				URL: &url.URL{
 					Scheme:   "temporal",
 					Path:     "/namespaces/ns/workflows/wf-id/run-id/history",
+					RawPath:  "/namespaces/ns/workflows/wf-id/run-id/history",
 					RawQuery: "eventID=1&eventType=WorkflowExecutionStarted&referenceType=EventReference",
 				},
 				Type: "temporal.api.common.v1.Link.WorkflowEvent",
 			},
+			outputURL: "temporal:///namespaces/ns/workflows/wf-id/run-id/history?eventID=1&eventType=WorkflowExecutionStarted&referenceType=EventReference",
 		},
 		{
-			name: "valid with percent-encoding",
+			name: "valid with angle bracket",
 			input: &commonpb.Link_WorkflowEvent{
 				Namespace:  "ns",
 				WorkflowId: "wf-id>",
@@ -84,10 +86,12 @@ func TestConvertLinkWorkflowEventToNexusLink(t *testing.T) {
 				URL: &url.URL{
 					Scheme:   "temporal",
 					Path:     "/namespaces/ns/workflows/wf-id>/run-id/history",
+					RawPath:  "/namespaces/ns/workflows/wf-id%3E/run-id/history",
 					RawQuery: "eventID=1&eventType=WorkflowExecutionStarted&referenceType=EventReference",
 				},
 				Type: "temporal.api.common.v1.Link.WorkflowEvent",
 			},
+			outputURL: "temporal:///namespaces/ns/workflows/wf-id%3E/run-id/history?eventID=1&eventType=WorkflowExecutionStarted&referenceType=EventReference",
 		},
 		{
 			name: "valid with slash",
@@ -111,18 +115,38 @@ func TestConvertLinkWorkflowEventToNexusLink(t *testing.T) {
 				},
 				Type: "temporal.api.common.v1.Link.WorkflowEvent",
 			},
+			outputURL: "temporal:///namespaces/ns/workflows/wf-id%2F/run-id/history?eventID=1&eventType=WorkflowExecutionStarted&referenceType=EventReference",
+		},
+		{
+			name: "valid event id missing",
+			input: &commonpb.Link_WorkflowEvent{
+				Namespace:  "ns",
+				WorkflowId: "wf-id",
+				RunId:      "run-id",
+				Reference: &commonpb.Link_WorkflowEvent_EventRef{
+					EventRef: &commonpb.Link_WorkflowEvent_EventReference{
+						EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
+					},
+				},
+			},
+			output: nexus.Link{
+				URL: &url.URL{
+					Scheme:   "temporal",
+					Path:     "/namespaces/ns/workflows/wf-id/run-id/history",
+					RawPath:  "/namespaces/ns/workflows/wf-id/run-id/history",
+					RawQuery: "eventType=WorkflowExecutionStarted&referenceType=EventReference",
+				},
+				Type: "temporal.api.common.v1.Link.WorkflowEvent",
+			},
+			outputURL: "temporal:///namespaces/ns/workflows/wf-id/run-id/history?eventType=WorkflowExecutionStarted&referenceType=EventReference",
 		},
 	}
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			output, err := nexusoperations.ConvertLinkWorkflowEventToNexusLink(tc.input)
-			if tc.errMsg != "" {
-				require.ErrorContains(t, err, tc.errMsg)
-			} else {
-				require.NoError(t, err)
-				require.Equal(t, tc.output, output)
-			}
+			output := nexusoperations.ConvertLinkWorkflowEventToNexusLink(tc.input)
+			require.Equal(t, tc.output, output)
+			require.Equal(t, tc.outputURL, output.URL.String())
 		})
 	}
 }
@@ -159,11 +183,12 @@ func TestConvertNexusLinkToLinkWorkflowEvent(t *testing.T) {
 			},
 		},
 		{
-			name: "valid with percent-encoding",
+			name: "valid with angle bracket",
 			input: nexus.Link{
 				URL: &url.URL{
 					Scheme:   "temporal",
 					Path:     "/namespaces/ns/workflows/wf-id>/run-id/history",
+					RawPath:  "/namespaces/ns/workflows/wf-id%2E/run-id/history",
 					RawQuery: "referenceType=EventReference&eventID=1&eventType=WorkflowExecutionStarted",
 				},
 				Type: "temporal.api.common.v1.Link.WorkflowEvent",
@@ -179,6 +204,103 @@ func TestConvertNexusLinkToLinkWorkflowEvent(t *testing.T) {
 					},
 				},
 			},
+		},
+		{
+			name: "valid with slash",
+			input: nexus.Link{
+				URL: &url.URL{
+					Scheme:   "temporal",
+					Path:     "/namespaces/ns/workflows/wf-id//run-id/history",
+					RawPath:  "/namespaces/ns/workflows/wf-id%2F/run-id/history",
+					RawQuery: "referenceType=EventReference&eventID=1&eventType=WorkflowExecutionStarted",
+				},
+				Type: "temporal.api.common.v1.Link.WorkflowEvent",
+			},
+			output: &commonpb.Link_WorkflowEvent{
+				Namespace:  "ns",
+				WorkflowId: "wf-id/",
+				RunId:      "run-id",
+				Reference: &commonpb.Link_WorkflowEvent_EventRef{
+					EventRef: &commonpb.Link_WorkflowEvent_EventReference{
+						EventId:   1,
+						EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
+					},
+				},
+			},
+		},
+		{
+			name: "valid event id missing",
+			input: nexus.Link{
+				URL: &url.URL{
+					Scheme:   "temporal",
+					Path:     "/namespaces/ns/workflows/wf-id/run-id/history",
+					RawPath:  "/namespaces/ns/workflows/wf-id/run-id/history",
+					RawQuery: "referenceType=EventReference&eventID=&eventType=WorkflowExecutionStarted",
+				},
+				Type: "temporal.api.common.v1.Link.WorkflowEvent",
+			},
+			output: &commonpb.Link_WorkflowEvent{
+				Namespace:  "ns",
+				WorkflowId: "wf-id",
+				RunId:      "run-id",
+				Reference: &commonpb.Link_WorkflowEvent_EventRef{
+					EventRef: &commonpb.Link_WorkflowEvent_EventReference{
+						EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
+					},
+				},
+			},
+		},
+		{
+			name: "invalid scheme",
+			input: nexus.Link{
+				URL: &url.URL{
+					Scheme:   "random",
+					Path:     "/namespaces/ns/workflows/wf-id/run-id/history",
+					RawPath:  "/namespaces/ns/workflows/wf-id/run-id/history",
+					RawQuery: "referenceType=EventReference&eventID=1&eventType=WorkflowExecutionStarted",
+				},
+				Type: "temporal.api.common.v1.Link.WorkflowEvent",
+			},
+			errMsg: "failed to parse link to Link_WorkflowEvent",
+		},
+		{
+			name: "invalid path missing history",
+			input: nexus.Link{
+				URL: &url.URL{
+					Scheme:   "temporal",
+					Path:     "/namespaces/ns/workflows/wf-id/run-id/",
+					RawPath:  "/namespaces/ns/workflows/wf-id/run-id/",
+					RawQuery: "referenceType=EventReference&eventID=1&eventType=WorkflowExecutionStarted",
+				},
+				Type: "temporal.api.common.v1.Link.WorkflowEvent",
+			},
+			errMsg: "failed to parse link to Link_WorkflowEvent",
+		},
+		{
+			name: "invalid path missing namespace",
+			input: nexus.Link{
+				URL: &url.URL{
+					Scheme:   "temporal",
+					Path:     "/namespaces//workflows/wf-id/run-id/history",
+					RawPath:  "/namespaces//workflows/wf-id/run-id/history",
+					RawQuery: "referenceType=EventReference&eventID=1&eventType=WorkflowExecutionStarted",
+				},
+				Type: "temporal.api.common.v1.Link.WorkflowEvent",
+			},
+			errMsg: "failed to parse link to Link_WorkflowEvent",
+		},
+		{
+			name: "invalid event type",
+			input: nexus.Link{
+				URL: &url.URL{
+					Scheme:   "temporal",
+					Path:     "/namespaces/ns/workflows/wf-id/run-id/history",
+					RawPath:  "/namespaces/ns/workflows/wf-id/run-id/history",
+					RawQuery: "referenceType=EventReference&eventID=1&eventType=WorkflowExecution",
+				},
+				Type: "temporal.api.common.v1.Link.WorkflowEvent",
+			},
+			errMsg: "failed to parse link to Link_WorkflowEvent",
 		},
 	}
 

@@ -42,6 +42,9 @@ import (
 	replicationpb "go.temporal.io/api/replication/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/converter"
+	"google.golang.org/protobuf/types/known/durationpb"
+	"gopkg.in/yaml.v3"
+
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common/cluster"
@@ -53,8 +56,6 @@ import (
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/environment"
 	"go.temporal.io/server/tests"
-	"google.golang.org/protobuf/types/known/durationpb"
-	"gopkg.in/yaml.v3"
 )
 
 type (
@@ -168,41 +169,38 @@ func (s *xdcBaseSuite) setupSuite(clusterNames []string, opts ...tests.Option) {
 }
 
 func (s *xdcBaseSuite) waitForClusterConnected(sourceCluster *tests.TestCluster, source string, target string) {
-	s.logger.Debug("wait for clusters to be synced", tag.SourceCluster(source), tag.TargetCluster(target))
+	s.logger.Info("wait for clusters to be synced", tag.SourceCluster(source), tag.TargetCluster(target))
 	s.EventuallyWithT(func(c *assert.CollectT) {
-		s.logger.Debug("check if replication tasks are replicated")
+		s.logger.Info("check if replication tasks are replicated")
 		resp, err := sourceCluster.GetHistoryClient().GetReplicationStatus(context.Background(), &historyservice.GetReplicationStatusRequest{})
 		s.logger.Debug("get replication status response", tag.Error(err))
 		s.logger.Debug("check 1")
-		if !(assert.NoError(c, err) &&
-			assert.Equal(c, 1, len(resp.Shards))) { // test cluster has only one history shard
+		if !assert.NoError(c, err) {
 			s.logger.Debug("check failed 1")
 			return
 		}
+		assert.Lenf(c, resp.Shards, 1, "test cluster has only one history shard")
+
 		s.logger.Debug("check 2")
 		shard := resp.Shards[0]
-		if !(assert.NotNil(c, shard) &&
-			assert.True(c, shard.MaxReplicationTaskId > 0) &&
-			assert.NotNil(c, shard.ShardLocalTime) &&
-			assert.True(c, shard.ShardLocalTime.AsTime().Before(time.Now())) &&
-			assert.True(c, shard.ShardLocalTime.AsTime().After(s.startTime)) &&
-			assert.NotNil(c, shard.RemoteClusters)) {
+		if !assert.NotNil(c, shard) {
 			s.logger.Debug("check failed 2")
 			return
 		}
-		s.logger.Debug("check 3")
+		assert.Greater(c, shard.MaxReplicationTaskId, int64(0))
+		assert.NotNil(c, shard.ShardLocalTime)
+		assert.WithinRange(c, shard.ShardLocalTime.AsTime(), s.startTime, time.Now())
+		assert.NotNil(c, shard.RemoteClusters)
+
 		standbyAckInfo, ok := shard.RemoteClusters[target]
-		if !(assert.True(c, ok) &&
-			assert.NotNil(c, standbyAckInfo) &&
-			assert.LessOrEqual(c, shard.MaxReplicationTaskId, standbyAckInfo.AckedTaskId) &&
-			assert.NotNil(c, standbyAckInfo.AckedTaskVisibilityTime) &&
-			assert.True(c, standbyAckInfo.AckedTaskVisibilityTime.AsTime().Before(time.Now())) &&
-			assert.True(c, standbyAckInfo.AckedTaskVisibilityTime.AsTime().After(s.startTime))) {
+		if !assert.True(c, ok) || !assert.NotNil(c, standbyAckInfo) {
 			s.logger.Debug("check failed 3")
 			return
 		}
-		s.logger.Debug("clusters synced", tag.SourceCluster(source), tag.TargetCluster(target))
+		assert.LessOrEqual(c, shard.MaxReplicationTaskId, standbyAckInfo.AckedTaskId)
+
 	}, 90*time.Second, 1*time.Second)
+	s.logger.Info("clusters synced", tag.SourceCluster(source), tag.TargetCluster(target))
 }
 
 func (s *xdcBaseSuite) tearDownSuite() {

@@ -26,8 +26,10 @@ package temporal.server.api.historyservice.v1;
 option go_package = "go.temporal.io/server/api/historyservice/v1;historyservice";
 
 import "google/protobuf/duration.proto";
+import "google/protobuf/field_mask.proto";
 import "google/protobuf/timestamp.proto";
 
+import "temporal/api/activity/v1/message.proto";
 import "temporal/api/common/v1/message.proto";
 import "temporal/api/history/v1/message.proto";
 import "temporal/api/taskqueue/v1/message.proto";
@@ -953,4 +955,44 @@ message DeepHealthCheckRequest {
 
 message DeepHealthCheckResponse {
     temporal.server.api.enums.v1.HealthState state = 1;
+}
+
+message SyncWorkflowStateRequest {
+    string namespace_id = 1;
+    temporal.api.common.v1.WorkflowExecution execution = 2;
+    temporal.server.api.persistence.v1.VersionedTransition versioned_transition = 3;
+    temporal.server.api.history.v1.VersionHistories version_histories = 4;
+    int32 target_cluster_id = 5;
+}
+
+message SyncWorkflowStateResponse {
+    oneof attributes {
+        replication.v1.SyncWorkflowStateMutationAttributes mutation = 1;
+        replication.v1.SyncWorkflowStateSnapshotAttributes snapshot = 2;
+    }
+    repeated temporal.api.common.v1.DataBlob event_batches = 3;
+    replication.v1.NewRunInfo new_run_info = 4;
+}
+
+message UpdateActivityOptionsRequest {
+    // Namespace ID of the workflow which scheduled this activity
+    string namespace_id = 1;
+    // ID of the workflow which scheduled this activity
+    string workflow_id = 2;
+    // Run ID of the workflow which scheduled this activity
+    // if empty - latest workflow is used
+    string run_id = 3;
+    // ID of the activity we're updating
+    string activity_id = 4;
+
+    // Activity options. Partial updates are accepted and controlled by update_mask
+    temporal.api.activity.v1.ActivityOptions activity_options = 6;
+
+    // Controls which fields from `activity_options` will be applied
+    google.protobuf.FieldMask update_mask = 7;
+}
+
+message UpdateActivityOptionsResponse {
+    // Activity options after an update
+    temporal.api.activity.v1.ActivityOptions activity_options = 1;
 }

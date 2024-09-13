@@ -25,6 +25,7 @@
 package testvars
 
 import (
+	"github.com/pborman/uuid"
 	commonpb "go.temporal.io/api/common/v1"
 	failurepb "go.temporal.io/api/failure/v1"
 	"go.temporal.io/server/common/payload"
@@ -73,4 +74,8 @@ func (a Any) ApplicationFailure() *failurepb.Failure {
 			NonRetryable: false,
 		}},
 	}
+}
+
+func (a Any) RunID() string {
+	return uuid.New()
 }

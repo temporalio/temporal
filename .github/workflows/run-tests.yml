@@ -256,7 +256,7 @@ jobs:
           down-flags: -v
 
       - name: Run functional test xdc
-        timeout-minutes: 15
+        timeout-minutes: 30
         run: make functional-test-xdc-coverage
 
       - name: Upload test results

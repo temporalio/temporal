@@ -29,7 +29,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/api/serviceerror"
@@ -39,6 +38,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/internal/nettest"
+	"go.uber.org/mock/gomock"
 	"google.golang.org/grpc"
 )
 
@@ -129,9 +129,9 @@ func TestShardAgnosticConnectionStrategy(t *testing.T) {
 			// Create a service resolver that just returns 2 hosts for the first 3 requests. We want to send 3 requests
 			// with 2 hosts so that we can verify that we re-use the connection of "test1" on the last request.
 			serviceResolver := membership.NewMockServiceResolver(ctrl)
-			serviceResolver.EXPECT().Lookup("1").Return(membership.NewHostInfoFromAddress("test1"), nil)
-			serviceResolver.EXPECT().Lookup("2").Return(membership.NewHostInfoFromAddress("test2"), nil)
-			serviceResolver.EXPECT().Lookup("1").Return(membership.NewHostInfoFromAddress("test1"), nil)
+			serviceResolver.EXPECT().Lookup("1").Return(membership.NewHostInfoFromAddress("localhost"), nil)
+			serviceResolver.EXPECT().Lookup("2").Return(membership.NewHostInfoFromAddress("127.0.0.1"), nil)
+			serviceResolver.EXPECT().Lookup("1").Return(membership.NewHostInfoFromAddress("localhost"), nil)
 
 			// Create an in-memory gRPC server.
 			listener := nettest.NewListener(nettest.NewPipe())
@@ -167,7 +167,7 @@ func TestShardAgnosticConnectionStrategy(t *testing.T) {
 			// Verify that there are no repeated dialed addresses (indicating that we re-used the connection).
 			assert.Equal(
 				t,
-				[]string{"test1", "test2"},
+				[]string{"localhost", "127.0.0.1"},
 				rpcFactory.dialedAddresses,
 				"Should cache the client connection and reuse it for subsequent requests",
 			)

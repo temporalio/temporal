@@ -29,7 +29,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/golang/mock/gomock"
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -58,6 +57,7 @@ import (
 	"go.temporal.io/server/service/history/tests"
 	"go.temporal.io/server/service/history/workflow"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
+	"go.uber.org/mock/gomock"
 )
 
 type (
@@ -137,7 +137,7 @@ func (s *workflowReplicatorSuite) Test_ApplyWorkflowState_BrandNew() {
 	namespaceID := uuid.New()
 	namespaceName := "namespaceName"
 	branchInfo := &persistencespb.HistoryBranch{
-		TreeId:    uuid.New(),
+		TreeId:    s.runID,
 		BranchId:  uuid.New(),
 		Ancestors: nil,
 	}
@@ -187,14 +187,8 @@ func (s *workflowReplicatorSuite) Test_ApplyWorkflowState_BrandNew() {
 		namespace.ID(namespaceID),
 		we,
 		locks.PriorityLow,
-	).Return(mockWeCtx, wcache.NoopReleaseFn, nil)
-	s.mockWorkflowCache.EXPECT().GetOrCreateCurrentWorkflowExecution(
-		gomock.Any(),
-		s.mockShard,
-		namespace.ID(namespaceID),
-		s.workflowID,
-		locks.PriorityLow,
-	).Return(wcache.NoopReleaseFn, nil)
+	).Return(mockWeCtx, wcache.NoopReleaseFn, nil).Times(1)
+
 	mockWeCtx.EXPECT().LoadMutableState(gomock.Any(), s.mockShard).Return(nil, serviceerror.NewNotFound("ms not found"))
 	mockWeCtx.EXPECT().CreateWorkflowExecution(
 		gomock.Any(),
@@ -300,14 +294,18 @@ func (s *workflowReplicatorSuite) Test_ApplyWorkflowState_Ancestors() {
 		namespace.ID(namespaceID),
 		we,
 		locks.PriorityLow,
-	).Return(mockWeCtx, wcache.NoopReleaseFn, nil)
-	s.mockWorkflowCache.EXPECT().GetOrCreateCurrentWorkflowExecution(
+	).Return(mockWeCtx, wcache.NoopReleaseFn, nil).Times(1)
+	s.mockWorkflowCache.EXPECT().GetOrCreateWorkflowExecution(
 		gomock.Any(),
 		s.mockShard,
 		namespace.ID(namespaceID),
-		s.workflowID,
+		&commonpb.WorkflowExecution{
+			WorkflowId: s.workflowID,
+			RunId:      branchInfo.GetTreeId(),
+		},
 		locks.PriorityLow,
-	).Return(wcache.NoopReleaseFn, nil)
+	).Return(mockWeCtx, wcache.NoopReleaseFn, nil).Times(1)
+
 	mockWeCtx.EXPECT().LoadMutableState(gomock.Any(), s.mockShard).Return(nil, serviceerror.NewNotFound("ms not found"))
 	mockWeCtx.EXPECT().CreateWorkflowExecution(
 		gomock.Any(),

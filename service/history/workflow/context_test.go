@@ -29,7 +29,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/golang/mock/gomock"
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -48,6 +47,7 @@ import (
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/tests"
+	"go.uber.org/mock/gomock"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -398,7 +398,6 @@ func (s *contextSuite) TestRefreshTask() {
 			NamespaceId:        tests.NamespaceID.String(),
 			WorkflowId:         tests.WorkflowID,
 			WorkflowRunTimeout: timestamp.DurationFromSeconds(200),
-			StartTime:          timestamppb.New(now),
 			ExecutionTime:      timestamppb.New(now),
 			VersionHistories: &historyspb.VersionHistories{
 				Histories: []*historyspb.VersionHistory{
@@ -421,9 +420,10 @@ func (s *contextSuite) TestRefreshTask() {
 			},
 		},
 		ExecutionState: &persistencespb.WorkflowExecutionState{
-			RunId:  tests.RunID,
-			State:  enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
-			Status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+			RunId:     tests.RunID,
+			State:     enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
+			Status:    enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+			StartTime: timestamppb.New(now),
 		},
 		NextEventId: 2,
 	}

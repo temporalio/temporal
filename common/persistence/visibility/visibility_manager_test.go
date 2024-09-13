@@ -29,7 +29,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
@@ -42,6 +41,7 @@ import (
 	"go.temporal.io/server/common/persistence/sql/sqlplugin/mysql"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/persistence/visibility/store"
+	"go.uber.org/mock/gomock"
 )
 
 type VisibilityManagerSuite struct {
@@ -136,7 +136,7 @@ func (s *VisibilityManagerSuite) TestRecordWorkflowExecutionStarted() {
 	// no remaining tokens
 	err = s.visibilityManager.RecordWorkflowExecutionStarted(context.Background(), request)
 	s.Error(err)
-	s.ErrorIs(err, persistence.ErrPersistenceLimitExceeded)
+	s.ErrorIs(err, persistence.ErrPersistenceSystemLimitExceeded)
 }
 
 func (s *VisibilityManagerSuite) TestRecordWorkflowExecutionClosed() {
@@ -188,7 +188,7 @@ func (s *VisibilityManagerSuite) TestRecordWorkflowExecutionClosed() {
 
 	err = s.visibilityManager.RecordWorkflowExecutionClosed(context.Background(), request)
 	s.Error(err)
-	s.ErrorIs(err, persistence.ErrPersistenceLimitExceeded)
+	s.ErrorIs(err, persistence.ErrPersistenceSystemLimitExceeded)
 }
 
 func (s *VisibilityManagerSuite) TestGetWorkflowExecution() {
@@ -214,5 +214,5 @@ func (s *VisibilityManagerSuite) TestGetWorkflowExecution() {
 
 	// no remaining tokens
 	_, err = s.visibilityManager.GetWorkflowExecution(context.Background(), request)
-	s.Equal(persistence.ErrPersistenceLimitExceeded, err)
+	s.Equal(persistence.ErrPersistenceSystemLimitExceeded, err)
 }
