@@ -187,7 +187,10 @@ type (
 	httpPort       int
 )
 
-const NamespaceCacheRefreshInterval = time.Second
+const (
+	NamespaceCacheRefreshIntervalDC = time.Second
+	NamespaceCacheRefreshInterval   = time.Second * 5
+)
 
 var (
 	// Override values for dynamic configs
@@ -202,7 +205,7 @@ var (
 		dynamicconfig.ReplicationTaskFetcherErrorRetryWait.Key():                50 * time.Millisecond,
 		dynamicconfig.ReplicationTaskProcessorErrorRetryWait.Key():              time.Millisecond,
 		dynamicconfig.ClusterMetadataRefreshInterval.Key():                      100 * time.Millisecond,
-		dynamicconfig.NamespaceCacheRefreshInterval.Key():                       NamespaceCacheRefreshInterval,
+		dynamicconfig.NamespaceCacheRefreshInterval.Key():                       NamespaceCacheRefreshIntervalDC,
 		dynamicconfig.ReplicationEnableUpdateWithNewTaskMerge.Key():             true,
 		dynamicconfig.ValidateUTF8SampleRPCRequest.Key():                        1.0,
 		dynamicconfig.ValidateUTF8SampleRPCResponse.Key():                       1.0,
