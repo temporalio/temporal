@@ -83,6 +83,7 @@ const (
 	AdminService_DeepHealthCheck_FullMethodName                   = "/temporal.server.api.adminservice.v1.AdminService/DeepHealthCheck"
 	AdminService_SyncWorkflowState_FullMethodName                 = "/temporal.server.api.adminservice.v1.AdminService/SyncWorkflowState"
 	AdminService_DescribeTaskQueuePartition_FullMethodName        = "/temporal.server.api.adminservice.v1.AdminService/DescribeTaskQueuePartition"
+	AdminService_ForceUnloadTaskQueuePartition_FullMethodName     = "/temporal.server.api.adminservice.v1.AdminService/ForceUnloadTaskQueuePartition"
 )
 
 // AdminServiceClient is the client API for AdminService service.
@@ -171,6 +172,7 @@ type AdminServiceClient interface {
 	DeepHealthCheck(ctx context.Context, in *DeepHealthCheckRequest, opts ...grpc.CallOption) (*DeepHealthCheckResponse, error)
 	SyncWorkflowState(ctx context.Context, in *SyncWorkflowStateRequest, opts ...grpc.CallOption) (*SyncWorkflowStateResponse, error)
 	DescribeTaskQueuePartition(ctx context.Context, in *DescribeTaskQueuePartitionRequest, opts ...grpc.CallOption) (*DescribeTaskQueuePartitionResponse, error)
+	ForceUnloadTaskQueuePartition(ctx context.Context, in *ForceUnloadTaskQueuePartitionRequest, opts ...grpc.CallOption) (*ForceUnloadTaskQueuePartitionResponse, error)
 }
 
 type adminServiceClient struct {
@@ -572,6 +574,15 @@ func (c *adminServiceClient) DescribeTaskQueuePartition(ctx context.Context, in 
 	return out, nil
 }
 
+func (c *adminServiceClient) ForceUnloadTaskQueuePartition(ctx context.Context, in *ForceUnloadTaskQueuePartitionRequest, opts ...grpc.CallOption) (*ForceUnloadTaskQueuePartitionResponse, error) {
+	out := new(ForceUnloadTaskQueuePartitionResponse)
+	err := c.cc.Invoke(ctx, AdminService_ForceUnloadTaskQueuePartition_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // AdminServiceServer is the server API for AdminService service.
 // All implementations must embed UnimplementedAdminServiceServer
 // for forward compatibility
@@ -658,6 +669,7 @@ type AdminServiceServer interface {
 	DeepHealthCheck(context.Context, *DeepHealthCheckRequest) (*DeepHealthCheckResponse, error)
 	SyncWorkflowState(context.Context, *SyncWorkflowStateRequest) (*SyncWorkflowStateResponse, error)
 	DescribeTaskQueuePartition(context.Context, *DescribeTaskQueuePartitionRequest) (*DescribeTaskQueuePartitionResponse, error)
+	ForceUnloadTaskQueuePartition(context.Context, *ForceUnloadTaskQueuePartitionRequest) (*ForceUnloadTaskQueuePartitionResponse, error)
 	mustEmbedUnimplementedAdminServiceServer()
 }
 
@@ -787,6 +799,9 @@ func (UnimplementedAdminServiceServer) SyncWorkflowState(context.Context, *SyncW
 }
 func (UnimplementedAdminServiceServer) DescribeTaskQueuePartition(context.Context, *DescribeTaskQueuePartitionRequest) (*DescribeTaskQueuePartitionResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method DescribeTaskQueuePartition not implemented")
+}
+func (UnimplementedAdminServiceServer) ForceUnloadTaskQueuePartition(context.Context, *ForceUnloadTaskQueuePartitionRequest) (*ForceUnloadTaskQueuePartitionResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ForceUnloadTaskQueuePartition not implemented")
 }
 func (UnimplementedAdminServiceServer) mustEmbedUnimplementedAdminServiceServer() {}
 
@@ -1547,6 +1562,24 @@ func _AdminService_DescribeTaskQueuePartition_Handler(srv interface{}, ctx conte
 	return interceptor(ctx, in, info, handler)
 }
 
+func _AdminService_ForceUnloadTaskQueuePartition_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ForceUnloadTaskQueuePartitionRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AdminServiceServer).ForceUnloadTaskQueuePartition(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AdminService_ForceUnloadTaskQueuePartition_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AdminServiceServer).ForceUnloadTaskQueuePartition(ctx, req.(*ForceUnloadTaskQueuePartitionRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // AdminService_ServiceDesc is the grpc.ServiceDesc for AdminService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -1713,6 +1746,10 @@ var AdminService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "DescribeTaskQueuePartition",
 			Handler:    _AdminService_DescribeTaskQueuePartition_Handler,
+		},
+		{
+			MethodName: "ForceUnloadTaskQueuePartition",
+			Handler:    _AdminService_ForceUnloadTaskQueuePartition_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{

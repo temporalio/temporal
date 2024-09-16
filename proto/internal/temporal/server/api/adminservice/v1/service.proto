@@ -179,4 +179,6 @@ service AdminService {
     rpc SyncWorkflowState (SyncWorkflowStateRequest) returns (SyncWorkflowStateResponse) {}
 
     rpc DescribeTaskQueuePartition (DescribeTaskQueuePartitionRequest) returns (DescribeTaskQueuePartitionResponse) {}
+
+    rpc ForceUnloadTaskQueuePartition (ForceUnloadTaskQueuePartitionRequest) returns (ForceUnloadTaskQueuePartitionResponse) {}
 }

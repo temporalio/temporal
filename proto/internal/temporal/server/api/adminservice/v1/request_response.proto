@@ -599,3 +599,12 @@ message DescribeTaskQueuePartitionResponse {
   // contains k-v pairs of the type: buildID -> TaskQueueVersionInfoInternal
   map<string, temporal.server.api.taskqueue.v1.TaskQueueVersionInfoInternal> versions_info_internal = 1;
 }
+
+message ForceUnloadTaskQueuePartitionRequest {
+  string namespace = 1;
+  temporal.server.api.taskqueue.v1.TaskQueuePartition task_queue_partition = 2;
+}
+
+message ForceUnloadTaskQueuePartitionResponse {
+  bool was_loaded = 1;
+}

@@ -215,6 +215,21 @@ func (c *retryableClient) DescribeTaskQueuePartition(
 	return resp, err
 }
 
+func (c *retryableClient) ForceUnloadTaskQueuePartition(
+	ctx context.Context,
+	request *adminservice.ForceUnloadTaskQueuePartitionRequest,
+	opts ...grpc.CallOption,
+) (*adminservice.ForceUnloadTaskQueuePartitionResponse, error) {
+	var resp *adminservice.ForceUnloadTaskQueuePartitionResponse
+	op := func(ctx context.Context) error {
+		var err error
+		resp, err = c.client.ForceUnloadTaskQueuePartition(ctx, request, opts...)
+		return err
+	}
+	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
+	return resp, err
+}
+
 func (c *retryableClient) GetDLQMessages(
 	ctx context.Context,
 	request *adminservice.GetDLQMessagesRequest,
