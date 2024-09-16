@@ -3063,6 +3063,80 @@ func (this *SyncWorkflowStateResponse) Equal(that interface{}) bool {
 	return proto.Equal(this, that1)
 }
 
+// Marshal an object of type GenerateLastHistoryReplicationTasksRequest to the protobuf v3 wire format
+func (val *GenerateLastHistoryReplicationTasksRequest) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type GenerateLastHistoryReplicationTasksRequest from the protobuf v3 wire format
+func (val *GenerateLastHistoryReplicationTasksRequest) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *GenerateLastHistoryReplicationTasksRequest) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two GenerateLastHistoryReplicationTasksRequest values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *GenerateLastHistoryReplicationTasksRequest) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *GenerateLastHistoryReplicationTasksRequest
+	switch t := that.(type) {
+	case *GenerateLastHistoryReplicationTasksRequest:
+		that1 = t
+	case GenerateLastHistoryReplicationTasksRequest:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
+// Marshal an object of type GenerateLastHistoryReplicationTasksResponse to the protobuf v3 wire format
+func (val *GenerateLastHistoryReplicationTasksResponse) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type GenerateLastHistoryReplicationTasksResponse from the protobuf v3 wire format
+func (val *GenerateLastHistoryReplicationTasksResponse) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *GenerateLastHistoryReplicationTasksResponse) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two GenerateLastHistoryReplicationTasksResponse values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *GenerateLastHistoryReplicationTasksResponse) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *GenerateLastHistoryReplicationTasksResponse
+	switch t := that.(type) {
+	case *GenerateLastHistoryReplicationTasksResponse:
+		that1 = t
+	case GenerateLastHistoryReplicationTasksResponse:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
 // Marshal an object of type DescribeTaskQueuePartitionRequest to the protobuf v3 wire format
 func (val *DescribeTaskQueuePartitionRequest) Marshal() ([]byte, error) {
 	return proto.Marshal(val)

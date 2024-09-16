@@ -581,6 +581,16 @@ message SyncWorkflowStateResponse {
   replication.v1.NewRunInfo new_run_info = 4;
 }
 
+message GenerateLastHistoryReplicationTasksRequest {
+  string namespace = 1;
+  temporal.api.common.v1.WorkflowExecution execution = 2;
+}
+
+message GenerateLastHistoryReplicationTasksResponse {
+  int64 state_transition_count = 1;
+  int64 history_length = 2;
+}
+
 message DescribeTaskQueuePartitionRequest {
   string namespace = 1;
   temporal.server.api.taskqueue.v1.TaskQueuePartition task_queue_partition = 2;
