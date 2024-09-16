@@ -29,6 +29,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	"math/rand"
 	"strconv"
 	"strings"
@@ -5009,10 +5010,12 @@ func (s *VersioningIntegSuite) waitForChan(ctx context.Context, ch chan struct{}
 }
 
 func (s *VersioningIntegSuite) unloadTaskQueue(ctx context.Context, tq string) {
-	_, err := s.testCluster.GetMatchingClient().ForceUnloadTaskQueue(ctx, &matchingservice.ForceUnloadTaskQueueRequest{
-		NamespaceId:   s.getNamespaceID(s.namespace),
-		TaskQueue:     tq,
-		TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+	_, err := s.testCluster.GetMatchingClient().ForceUnloadTaskQueuePartition(ctx, &matchingservice.ForceUnloadTaskQueuePartitionRequest{
+		NamespaceId: s.getNamespaceID(s.namespace),
+		TaskQueuePartition: &taskqueuespb.TaskQueuePartition{
+			TaskQueue:     tq,
+			TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+		},
 	})
 	s.Require().NoError(err)
 }
