@@ -2404,10 +2404,12 @@ func (s *matchingEngineSuite) TestGetTaskQueueUserData_LongPoll_Closes() {
 
 	go func() {
 		time.Sleep(200 * time.Millisecond)
-		_, _ = s.matchingEngine.ForceUnloadTaskQueue(context.Background(), &matchingservice.ForceUnloadTaskQueueRequest{
-			NamespaceId:   namespaceID.String(),
-			TaskQueue:     tq,
-			TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+		_, _ = s.matchingEngine.ForceUnloadTaskQueuePartition(context.Background(), &matchingservice.ForceUnloadTaskQueuePartitionRequest{
+			NamespaceId: namespaceID.String(),
+			TaskQueuePartition: &taskqueuespb.TaskQueuePartition{
+				TaskQueue:     tq,
+				TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+			},
 		})
 	}()
 

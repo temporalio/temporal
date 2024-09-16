@@ -1599,17 +1599,14 @@ func (e *matchingEngineImpl) ForceLoadTaskQueuePartition(
 	return &matchingservice.ForceLoadTaskQueuePartitionResponse{WasUnloaded: wasUnloaded}, nil
 }
 
-func (e *matchingEngineImpl) ForceUnloadTaskQueue(
+func (e *matchingEngineImpl) ForceUnloadTaskQueuePartition(
 	ctx context.Context,
-	req *matchingservice.ForceUnloadTaskQueueRequest,
-) (*matchingservice.ForceUnloadTaskQueueResponse, error) {
-	p, err := tqid.NormalPartitionFromRpcName(req.GetTaskQueue(), req.GetNamespaceId(), req.GetTaskQueueType())
-	if err != nil {
-		return nil, err
-	}
+	req *matchingservice.ForceUnloadTaskQueuePartitionRequest,
+) (*matchingservice.ForceUnloadTaskQueuePartitionResponse, error) {
+	partition := tqid.PartitionFromPartitionProto(req.GetTaskQueuePartition(), req.GetNamespaceId())
 
-	wasLoaded := e.unloadTaskQueuePartitionByKey(p, nil, unloadCauseForce)
-	return &matchingservice.ForceUnloadTaskQueueResponse{WasLoaded: wasLoaded}, nil
+	wasLoaded := e.unloadTaskQueuePartitionByKey(partition, nil, unloadCauseForce)
+	return &matchingservice.ForceUnloadTaskQueuePartitionResponse{WasLoaded: wasLoaded}, nil
 }
 
 func (e *matchingEngineImpl) UpdateTaskQueueUserData(ctx context.Context, request *matchingservice.UpdateTaskQueueUserDataRequest) (*matchingservice.UpdateTaskQueueUserDataResponse, error) {

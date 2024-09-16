@@ -405,12 +405,12 @@ func (h *Handler) GetBuildIdTaskQueueMapping(
 	return h.engine.GetBuildIdTaskQueueMapping(ctx, request)
 }
 
-func (h *Handler) ForceUnloadTaskQueue(
+func (h *Handler) ForceUnloadTaskQueuePartition(
 	ctx context.Context,
-	request *matchingservice.ForceUnloadTaskQueueRequest,
-) (_ *matchingservice.ForceUnloadTaskQueueResponse, retError error) {
+	request *matchingservice.ForceUnloadTaskQueuePartitionRequest,
+) (_ *matchingservice.ForceUnloadTaskQueuePartitionResponse, retError error) {
 	defer log.CapturePanic(h.logger, &retError)
-	return h.engine.ForceUnloadTaskQueue(ctx, request)
+	return h.engine.ForceUnloadTaskQueuePartition(ctx, request)
 }
 
 func (h *Handler) ForceLoadTaskQueuePartition(

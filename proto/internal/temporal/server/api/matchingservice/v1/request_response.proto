@@ -341,13 +341,12 @@ message ForceLoadTaskQueuePartitionResponse {
 }
 
 
-message ForceUnloadTaskQueueRequest {
+message ForceUnloadTaskQueuePartitionRequest {
     string namespace_id = 1;
-    string task_queue = 2;
-    temporal.api.enums.v1.TaskQueueType task_queue_type = 3;
+    temporal.server.api.taskqueue.v1.TaskQueuePartition task_queue_partition = 2;
 }
 
-message ForceUnloadTaskQueueResponse {
+message ForceUnloadTaskQueuePartitionResponse {
     bool was_loaded = 1;
 }
 
