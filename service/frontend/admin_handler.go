@@ -261,6 +261,8 @@ func (adh *AdminHandler) DeepHealthCheck(
 	ctx context.Context,
 	_ *adminservice.DeepHealthCheckRequest,
 ) (_ *adminservice.DeepHealthCheckResponse, retError error) {
+	defer log.CapturePanic(adh.logger, &retError)
+
 	healthStatus, err := adh.historyHealthChecker.Check(ctx)
 	if err != nil {
 		return nil, err
