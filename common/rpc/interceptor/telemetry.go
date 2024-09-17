@@ -29,7 +29,6 @@ import (
 	"strings"
 	"time"
 
-	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	updatepb "go.temporal.io/api/update/v1"
@@ -58,18 +57,6 @@ type (
 		logger            log.Logger
 		workflowTags      *logtags.WorkflowTags
 		logAllReqErrors   dynamicconfig.BoolPropertyFnWithNamespaceFilter
-	}
-	ExecutionGetter interface {
-		GetExecution() *commonpb.WorkflowExecution
-	}
-	WorkflowExecutionGetter interface {
-		GetWorkflowExecution() *commonpb.WorkflowExecution
-	}
-	WorkflowIdGetter interface {
-		GetWorkflowId() string
-	}
-	RunIdGetter interface {
-		GetRunId() string
 	}
 )
 
