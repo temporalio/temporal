@@ -123,10 +123,10 @@ func (wt *WorkflowTags) extractFrom{{.Server}}Request(req any) []tag.Tag {
 		return wt.fromTaskToken(r.{{ .TaskTokenGetter}})
 		{{- else}}
 		return []tag.Tag{
-			{{if .WorkflowIdGetter}}tag.WorkflowID(r.{{.WorkflowIdGetter}}),
-			{{- end}}
-			{{if .RunIdGetter}}tag.WorkflowRunID(r.{{.RunIdGetter}}),
-			{{- end}}
+		{{if .WorkflowIdGetter}}	tag.WorkflowID(r.{{.WorkflowIdGetter}}),
+		{{end -}}
+		{{if .RunIdGetter}}	tag.WorkflowRunID(r.{{.RunIdGetter}}),
+		{{end -}}
 		}
 		{{- end}}
 	{{- else}}
