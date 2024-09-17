@@ -154,7 +154,10 @@ func (wt *WorkflowTags) extractFromHistoryServiceServerRequest(req any) []tag.Ta
 			tag.WorkflowRunID(r.GetExecution().GetRunId()),
 		}
 	case *historyservice.PollWorkflowExecutionUpdateRequest:
-		return nil
+		return []tag.Tag{
+			tag.WorkflowID(r.GetRequest().GetUpdateRef().GetWorkflowExecution().GetWorkflowId()),
+			tag.WorkflowRunID(r.GetRequest().GetUpdateRef().GetWorkflowExecution().GetRunId()),
+		}
 	case *historyservice.PurgeDLQMessagesRequest:
 		return nil
 	case *historyservice.QueryWorkflowRequest:
@@ -180,7 +183,10 @@ func (wt *WorkflowTags) extractFromHistoryServiceServerRequest(req any) []tag.Ta
 			tag.WorkflowRunID(r.GetWorkflowExecution().GetRunId()),
 		}
 	case *historyservice.RecordChildExecutionCompletedRequest:
-		return nil
+		return []tag.Tag{
+			tag.WorkflowID(r.GetParentExecution().GetWorkflowId()),
+			tag.WorkflowRunID(r.GetParentExecution().GetRunId()),
+		}
 	case *historyservice.RecordWorkflowTaskStartedRequest:
 		return []tag.Tag{
 			tag.WorkflowID(r.GetWorkflowExecution().GetWorkflowId()),
@@ -204,11 +210,13 @@ func (wt *WorkflowTags) extractFromHistoryServiceServerRequest(req any) []tag.Ta
 			tag.WorkflowRunID(r.GetWorkflowExecution().GetRunId()),
 		}
 	case *historyservice.ReplicateWorkflowStateRequest:
-		return nil
+		return []tag.Tag{
+			tag.WorkflowID(r.GetWorkflowState().GetExecutionInfo().GetWorkflowId()),
+		}
 	case *historyservice.RequestCancelWorkflowExecutionRequest:
 		return []tag.Tag{
-			tag.WorkflowID(r.GetExternalWorkflowExecution().GetWorkflowId()),
-			tag.WorkflowRunID(r.GetExternalWorkflowExecution().GetRunId()),
+			tag.WorkflowID(r.GetCancelRequest().GetWorkflowExecution().GetWorkflowId()),
+			tag.WorkflowRunID(r.GetCancelRequest().GetWorkflowExecution().GetRunId()),
 		}
 	case *historyservice.ResetStickyTaskQueueRequest:
 		return []tag.Tag{
@@ -241,13 +249,12 @@ func (wt *WorkflowTags) extractFromHistoryServiceServerRequest(req any) []tag.Ta
 		}
 	case *historyservice.SignalWorkflowExecutionRequest:
 		return []tag.Tag{
-			tag.WorkflowID(r.GetExternalWorkflowExecution().GetWorkflowId()),
-			tag.WorkflowRunID(r.GetExternalWorkflowExecution().GetRunId()),
+			tag.WorkflowID(r.GetSignalRequest().GetWorkflowExecution().GetWorkflowId()),
+			tag.WorkflowRunID(r.GetSignalRequest().GetWorkflowExecution().GetRunId()),
 		}
 	case *historyservice.StartWorkflowExecutionRequest:
 		return []tag.Tag{
-			tag.WorkflowID(r.GetRootExecutionInfo().GetExecution().GetWorkflowId()),
-			tag.WorkflowRunID(r.GetRootExecutionInfo().GetExecution().GetRunId()),
+			tag.WorkflowID(r.GetStartRequest().GetWorkflowId()),
 		}
 	case *historyservice.SyncActivityRequest:
 		return []tag.Tag{
@@ -263,8 +270,8 @@ func (wt *WorkflowTags) extractFromHistoryServiceServerRequest(req any) []tag.Ta
 		}
 	case *historyservice.TerminateWorkflowExecutionRequest:
 		return []tag.Tag{
-			tag.WorkflowID(r.GetExternalWorkflowExecution().GetWorkflowId()),
-			tag.WorkflowRunID(r.GetExternalWorkflowExecution().GetRunId()),
+			tag.WorkflowID(r.GetTerminateRequest().GetWorkflowExecution().GetWorkflowId()),
+			tag.WorkflowRunID(r.GetTerminateRequest().GetWorkflowExecution().GetRunId()),
 		}
 	case *historyservice.UpdateActivityOptionsRequest:
 		return []tag.Tag{
@@ -277,7 +284,10 @@ func (wt *WorkflowTags) extractFromHistoryServiceServerRequest(req any) []tag.Ta
 			tag.WorkflowRunID(r.GetRequest().GetWorkflowExecution().GetRunId()),
 		}
 	case *historyservice.VerifyChildExecutionCompletionRecordedRequest:
-		return nil
+		return []tag.Tag{
+			tag.WorkflowID(r.GetParentExecution().GetWorkflowId()),
+			tag.WorkflowRunID(r.GetParentExecution().GetRunId()),
+		}
 	case *historyservice.VerifyFirstWorkflowTaskScheduledRequest:
 		return []tag.Tag{
 			tag.WorkflowID(r.GetWorkflowExecution().GetWorkflowId()),

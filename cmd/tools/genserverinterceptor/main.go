@@ -166,7 +166,7 @@ func workflowTagGetters(requestT reflect.Type, depth int) methodData {
 		md.RunIdGetter = "GetWorkflowExecution().GetRunId()"
 	} else if requestT.AssignableTo(taskTokenGetterT) {
 		// Special case to avoid deprecated RespondQueryTaskCompleted API token which does not have WorkflowId.
-		if requestT.AssignableTo(reflect.TypeOf((*workflowservice.RespondQueryTaskCompletedRequest)(nil)).Elem()) {
+		if requestT.AssignableTo(reflect.TypeOf((*workflowservice.RespondQueryTaskCompletedRequest)(nil))) {
 			return md
 		}
 		md.TaskTokenGetter = "GetTaskToken()"
@@ -178,26 +178,27 @@ func workflowTagGetters(requestT reflect.Type, depth int) methodData {
 			md.RunIdGetter = "GetRunId()"
 		}
 	}
-	if md.WorkflowIdGetter == "" && md.RunIdGetter == "" && md.TaskTokenGetter == "" {
-		for fieldNum := 0; fieldNum < requestT.Elem().NumField(); fieldNum++ {
-			nestedRequest := requestT.Elem().Field(fieldNum)
-			if nestedRequest.Type.Kind() != reflect.Ptr {
-				continue
-			}
-			if nestedRequest.Type.Elem().Kind() != reflect.Struct {
-				continue
-			}
+	for fieldNum := 0; fieldNum < requestT.Elem().NumField(); fieldNum++ {
+		if md.WorkflowIdGetter != "" || md.RunIdGetter != "" || md.TaskTokenGetter != "" {
+			break
+		}
+		nestedRequest := requestT.Elem().Field(fieldNum)
+		if nestedRequest.Type.Kind() != reflect.Ptr {
+			continue
+		}
+		if nestedRequest.Type.Elem().Kind() != reflect.Struct {
+			continue
+		}
 
-			md = workflowTagGetters(nestedRequest.Type, depth+1)
-			if md.WorkflowIdGetter != "" {
-				md.WorkflowIdGetter = fmt.Sprintf("Get%s().%s", nestedRequest.Name, md.WorkflowIdGetter)
-			}
-			if md.RunIdGetter != "" {
-				md.RunIdGetter = fmt.Sprintf("Get%s().%s", nestedRequest.Name, md.RunIdGetter)
-			}
-			if md.TaskTokenGetter != "" {
-				md.TaskTokenGetter = fmt.Sprintf("Get%s().%s", nestedRequest.Name, md.TaskTokenGetter)
-			}
+		md = workflowTagGetters(nestedRequest.Type, depth+1)
+		if md.WorkflowIdGetter != "" {
+			md.WorkflowIdGetter = fmt.Sprintf("Get%s().%s", nestedRequest.Name, md.WorkflowIdGetter)
+		}
+		if md.RunIdGetter != "" {
+			md.RunIdGetter = fmt.Sprintf("Get%s().%s", nestedRequest.Name, md.RunIdGetter)
+		}
+		if md.TaskTokenGetter != "" {
+			md.TaskTokenGetter = fmt.Sprintf("Get%s().%s", nestedRequest.Name, md.TaskTokenGetter)
 		}
 	}
 	return md
