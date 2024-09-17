@@ -721,7 +721,7 @@ func AdminReplicateWorkflow(
 		},
 	})
 	if err != nil {
-		return fmt.Errorf("unable to replicate workflow: %s", err)
+		return fmt.Errorf("unable to replicate workflow: %w", err)
 	}
 
 	fmt.Fprintln(c.App.Writer, "Replication tasks generated successfully.")
