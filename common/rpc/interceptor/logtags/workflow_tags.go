@@ -23,7 +23,7 @@
 // THE SOFTWARE.
 
 // Generates all three generated files in this package:
-//go:generate go run ../../../../cmd/tools/genhandlerinterceptor -copyright_file ../../../../LICENSE
+//go:generate go run ../../../../cmd/tools/genserverinterceptor -copyright_file ../../../../LICENSE
 
 package logtags
 
@@ -61,7 +61,8 @@ func (wt *WorkflowTags) Extract(req any, fullMethod string) []tag.Tag {
 	case strings.HasPrefix(fullMethod, api.WorkflowServicePrefix):
 		return wt.extractFromWorkflowServiceServerRequest(req)
 	case strings.HasPrefix(fullMethod, api.OperatorServicePrefix):
-		return wt.extractFromOperatorServiceServerRequest(req)
+		// OperatorService doesn't have a single API with workflow tags.
+		return nil
 	case strings.HasPrefix(fullMethod, api.AdminServicePrefix):
 		return wt.extractFromAdminServiceServerRequest(req)
 	case strings.HasPrefix(fullMethod, api.HistoryServicePrefix):
