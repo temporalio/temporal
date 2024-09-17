@@ -27,11 +27,11 @@
 package logtags
 
 import (
-	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/api/historyservice/v1"
+	"go.temporal.io/server/common/log/tag"
 )
 
-func (wt *WorkflowTags)extractFromHistoryServiceServerRequest(req any) []tag.Tag {
+func (wt *WorkflowTags) extractFromHistoryServiceServerRequest(req any) []tag.Tag {
 	switch r := req.(type) {
 	case *historyservice.AddTasksRequest:
 		return nil

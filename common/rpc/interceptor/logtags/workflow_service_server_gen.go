@@ -27,11 +27,11 @@
 package logtags
 
 import (
-	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/server/common/log/tag"
 )
 
-func (wt *WorkflowTags)extractFromWorkflowServiceServerRequest(req any) []tag.Tag {
+func (wt *WorkflowTags) extractFromWorkflowServiceServerRequest(req any) []tag.Tag {
 	switch r := req.(type) {
 	case *workflowservice.CountWorkflowExecutionsRequest:
 		return nil

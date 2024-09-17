@@ -110,13 +110,13 @@ func generateWorkflowTagGetters(w io.Writer, server reflect.Type) {
 package logtags
 
 import (
-	"go.temporal.io/server/common/log/tag"
 {{- range .Imports}}
 	{{printf "%q" .}}
 {{- end}}
+	"go.temporal.io/server/common/log/tag"
 )
 
-func (wt *WorkflowTags)extractFrom{{.Server}}Request(req any) []tag.Tag {
+func (wt *WorkflowTags) extractFrom{{.Server}}Request(req any) []tag.Tag {
 	switch r := req.(type) {
 	{{- range .Methods}}
 	case {{.RequestType}}:
@@ -136,7 +136,8 @@ func (wt *WorkflowTags)extractFrom{{.Server}}Request(req any) []tag.Tag {
 	default:
 		return nil
 	}
-}`)
+}
+`)
 }
 
 func callWithFile(generator func(io.Writer, reflect.Type), server reflect.Type, outPath string, licenseText string) {

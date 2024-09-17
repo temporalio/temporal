@@ -27,11 +27,11 @@
 package logtags
 
 import (
-	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/api/operatorservice/v1"
+	"go.temporal.io/server/common/log/tag"
 )
 
-func (wt *WorkflowTags)extractFromOperatorServiceServerRequest(req any) []tag.Tag {
+func (wt *WorkflowTags) extractFromOperatorServiceServerRequest(req any) []tag.Tag {
 	switch r := req.(type) {
 	case *operatorservice.AddOrUpdateRemoteClusterRequest:
 		return nil
