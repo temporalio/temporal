@@ -74,7 +74,7 @@ func (wt *WorkflowTags) extractFromHistoryServiceServerRequest(req any) []tag.Ta
 	case *historyservice.ExecuteMultiOperationRequest:
 		return []tag.Tag{
 			tag.WorkflowID(r.GetWorkflowId()),
-			}
+		}
 	case *historyservice.ForceDeleteWorkflowExecutionRequest:
 		return []tag.Tag{
 			tag.WorkflowID(r.GetRequest().GetExecution().GetWorkflowId()),
@@ -238,7 +238,7 @@ func (wt *WorkflowTags) extractFromHistoryServiceServerRequest(req any) []tag.Ta
 	case *historyservice.SignalWithStartWorkflowExecutionRequest:
 		return []tag.Tag{
 			tag.WorkflowID(r.GetSignalWithStartRequest().GetWorkflowId()),
-			}
+		}
 	case *historyservice.SignalWorkflowExecutionRequest:
 		return []tag.Tag{
 			tag.WorkflowID(r.GetExternalWorkflowExecution().GetWorkflowId()),

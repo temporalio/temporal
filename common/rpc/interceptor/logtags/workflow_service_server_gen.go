@@ -178,7 +178,7 @@ func (wt *WorkflowTags) extractFromWorkflowServiceServerRequest(req any) []tag.T
 	case *workflowservice.SignalWithStartWorkflowExecutionRequest:
 		return []tag.Tag{
 			tag.WorkflowID(r.GetWorkflowId()),
-			}
+		}
 	case *workflowservice.SignalWorkflowExecutionRequest:
 		return []tag.Tag{
 			tag.WorkflowID(r.GetWorkflowExecution().GetWorkflowId()),
@@ -189,7 +189,7 @@ func (wt *WorkflowTags) extractFromWorkflowServiceServerRequest(req any) []tag.T
 	case *workflowservice.StartWorkflowExecutionRequest:
 		return []tag.Tag{
 			tag.WorkflowID(r.GetWorkflowId()),
-			}
+		}
 	case *workflowservice.StopBatchOperationRequest:
 		return nil
 	case *workflowservice.TerminateWorkflowExecutionRequest:
