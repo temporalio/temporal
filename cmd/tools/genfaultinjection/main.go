@@ -89,7 +89,7 @@ package faultinjection
 
 import (
 	"context"
-{{range .ExtraImports}}
+{{range .Imports}}
 	{{printf "%q" .}}
 {{- end}}
 	"go.temporal.io/server/common/persistence"
@@ -128,8 +128,8 @@ func (c *faultInjection{{.StoreName}}) {{.MethodName}}({{.InParams}}){{.OutParam
 
 func writeStoreHeader(w io.Writer, store reflect.Type, tmpl string) {
 	fatalIfErr(template.Must(template.New("code").Parse(tmpl)).Execute(w, map[string]any{
-		"StoreName":    store.Name(),
-		"ExtraImports": extraImports[store.Name()],
+		"StoreName": store.Name(),
+		"Imports":   extraImports[store.Name()],
 	}))
 }
 

@@ -186,6 +186,7 @@ func (c *operationContext) interceptRequest(ctx context.Context, request *matchi
 		if retErr != nil {
 			c.telemetryInterceptor.HandleError(
 				request,
+				"",
 				c.metricsHandlerForInterceptors,
 				[]tag.Tag{tag.Operation(c.method), tag.WorkflowNamespace(c.namespaceName)},
 				retErr,

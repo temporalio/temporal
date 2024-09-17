@@ -26,7 +26,6 @@ package interceptor
 
 import (
 	"context"
-	"reflect"
 	"strings"
 	"time"
 
@@ -43,6 +42,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/rpc/interceptor/logtags"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -54,9 +54,9 @@ type (
 
 	TelemetryInterceptor struct {
 		namespaceRegistry namespace.Registry
-		serializer        common.TaskTokenSerializer
 		metricsHandler    metrics.Handler
 		logger            log.Logger
+		workflowTags      *logtags.WorkflowTags
 		logAllReqErrors   dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	}
 	ExecutionGetter interface {
@@ -133,9 +133,9 @@ func NewTelemetryInterceptor(
 ) *TelemetryInterceptor {
 	return &TelemetryInterceptor{
 		namespaceRegistry: namespaceRegistry,
-		serializer:        common.NewProtoTaskTokenSerializer(),
 		metricsHandler:    metricsHandler,
 		logger:            logger,
+		workflowTags:      logtags.NewWorkflowTags(common.NewProtoTaskTokenSerializer(), logger),
 		logAllReqErrors:   logAllReqErrors,
 	}
 }
@@ -206,7 +206,7 @@ func (ti *TelemetryInterceptor) UnaryIntercept(
 	resp, err := handler(ctx, req)
 
 	if err != nil {
-		ti.HandleError(req, metricsHandler, logTags, err, nsName)
+		ti.HandleError(req, info.FullMethod, metricsHandler, logTags, err, nsName)
 	} else {
 		// emit action metrics only after successful calls
 		ti.emitActionMetric(methodName, info.FullMethod, req, metricsHandler, resp)
@@ -244,7 +244,7 @@ func (ti *TelemetryInterceptor) StreamIntercept(
 
 	err := handler(service, serverStream)
 	if err != nil {
-		ti.HandleError(nil, metricsHandler, logTags, err, "")
+		ti.HandleError(nil, info.FullMethod, metricsHandler, logTags, err, "")
 		return err
 	}
 	return nil
@@ -368,6 +368,7 @@ func (ti *TelemetryInterceptor) streamMetricsHandlerLogTags(
 
 func (ti *TelemetryInterceptor) HandleError(
 	req any,
+	fullMethod string,
 	metricsHandler metrics.Handler,
 	logTags []tag.Tag,
 	err error,
@@ -376,15 +377,17 @@ func (ti *TelemetryInterceptor) HandleError(
 
 	recordMetrics(metricsHandler, err, statusCode)
 
-	ti.logErrors(req, nsName, err, statusCode, logTags)
+	ti.logErrors(req, fullMethod, nsName, err, statusCode, logTags)
 }
 
 func (ti *TelemetryInterceptor) logErrors(
-	req interface{},
+	req any,
+	fullMethod string,
 	nsName namespace.Name,
 	err error,
 	statusCode codes.Code,
-	logTags []tag.Tag) {
+	logTags []tag.Tag,
+) {
 	logAllErrors := nsName != "" && ti.logAllReqErrors(nsName.String())
 	if !logAllErrors && (common.IsContextDeadlineExceededErr(err) || common.IsContextCanceledErr(err)) {
 		return
@@ -402,7 +405,7 @@ func (ti *TelemetryInterceptor) logErrors(
 	}
 
 	logTags = append(logTags, tag.NewStringTag("grpc_code", statusCode.String()))
-	logTags = append(logTags, ti.getWorkflowTags(req)...)
+	logTags = append(logTags, ti.workflowTags.Extract(req, fullMethod)...)
 
 	ti.logger.Error("service failures", append(logTags, tag.Error(err))...)
 }
@@ -467,71 +470,6 @@ func recordMetrics(metricsHandler metrics.Handler, err error, statusCode codes.C
 	if !isUserCaused(statusCode) {
 		metrics.ServiceFailures.With(metricsHandler).Record(1)
 	}
-}
-
-func (ti *TelemetryInterceptor) getWorkflowTags(
-	req any,
-) []tag.Tag {
-	if req == nil {
-		return nil
-	}
-
-	if executionGetter, ok := req.(ExecutionGetter); ok {
-		execution := executionGetter.GetExecution()
-		return []tag.Tag{tag.WorkflowID(execution.WorkflowId), tag.WorkflowRunID(execution.RunId)}
-	}
-	if workflowExecutionGetter, ok := req.(WorkflowExecutionGetter); ok {
-		execution := workflowExecutionGetter.GetWorkflowExecution()
-		return []tag.Tag{tag.WorkflowID(execution.WorkflowId), tag.WorkflowRunID(execution.RunId)}
-	}
-	if taskTokenGetter, ok := req.(TaskTokenGetter); ok {
-		taskTokenBytes := taskTokenGetter.GetTaskToken()
-		if len(taskTokenBytes) == 0 {
-			return nil
-		}
-		// Special case for avoiding deprecated RespondQueryTaskCompleted API token which does not have workflow id.
-		if _, ok := req.(*workflowservice.RespondQueryTaskCompletedRequest); ok {
-			return nil
-		}
-		taskToken, err := ti.serializer.Deserialize(taskTokenBytes)
-		if err != nil {
-			ti.logger.Warn("unable to deserialize task token while getting workflow tags", tag.Error(err))
-			return nil
-		}
-		return []tag.Tag{tag.WorkflowID(taskToken.WorkflowId), tag.WorkflowRunID(taskToken.RunId)}
-	}
-	if workflowIdGetter, ok := req.(WorkflowIdGetter); ok {
-		workflowTags := []tag.Tag{tag.WorkflowID(workflowIdGetter.GetWorkflowId())}
-		if runIdGetter, ok := req.(RunIdGetter); ok {
-			workflowTags = append(workflowTags, tag.WorkflowRunID(runIdGetter.GetRunId()))
-		}
-		return workflowTags
-	}
-
-	// Requests to historyservice and matchingservice have original request field.
-	// It varies in name but type name always ends with "Request".
-	reqV := reflect.ValueOf(req)
-	if reqV.Kind() == reflect.Ptr {
-		reqV = reqV.Elem()
-	}
-	for fieldNum := 0; fieldNum < reqV.NumField(); fieldNum++ {
-		f := reqV.Field(fieldNum)
-		if f.Type().Kind() != reflect.Ptr {
-			continue
-		}
-		if f.Type().Elem().Kind() != reflect.Struct {
-			continue
-		}
-		if !strings.HasSuffix(f.Type().Elem().Name(), "Request") {
-			continue
-		}
-		wfTags := ti.getWorkflowTags(f.Interface())
-		if len(wfTags) > 0 {
-			return wfTags
-		}
-	}
-
-	return nil
 }
 
 func GetMetricsHandlerFromContext(

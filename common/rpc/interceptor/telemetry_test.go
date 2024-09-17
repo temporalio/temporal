@@ -286,6 +286,7 @@ func TestHandleError(t *testing.T) {
 			}
 
 			telemetry.HandleError(nil,
+				"",
 				metricsHandler,
 				[]tag.Tag{},
 				tt.err,
