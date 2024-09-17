@@ -43,6 +43,8 @@ type (
 		FirstEventID        int64
 		NextEventID         int64
 		NewRunID            string
+
+		TaskEquivalents []Task
 	}
 )
 
