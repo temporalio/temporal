@@ -29,6 +29,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"math/rand"
 	"slices"
 	"time"
@@ -6276,11 +6277,17 @@ func (ms *MutableStateImpl) ApplyMutation(
 	currentVersionedTransition := ms.currentVersionedTransition()
 
 	ms.applySignalRequestedIds(mutation.SignalRequestedIds, mutation.ExecutionInfo)
-	ms.applyTombstones(mutation.SubStateMachineTombstoneBatches, currentVersionedTransition)
-	ms.syncExecutionInfo(ms.executionInfo, mutation.ExecutionInfo)
+	err := ms.applyTombstones(mutation.SubStateMachineTombstoneBatches, currentVersionedTransition)
+	if err != nil {
+		return err
+	}
+	err = ms.syncExecutionInfo(ms.executionInfo, mutation.ExecutionInfo)
+	if err != nil {
+		return err
+	}
 
 	// this must be called after syncExecutionInfo because syncExecutionInfo will update executionInfo.UpdateInfos
-	ms.applyUpdatesToUpdateInfos(mutation.UpdatedUpdateInfos, currentVersionedTransition)
+	ms.applyUpdatesToUpdateInfos(mutation.UpdatedUpdateInfos)
 
 	ms.applyUpdatesToSubStateMachines(
 		mutation.UpdatedActivityInfos,
@@ -6288,10 +6295,9 @@ func (ms *MutableStateImpl) ApplyMutation(
 		mutation.UpdatedChildExecutionInfos,
 		mutation.UpdatedRequestCancelInfos,
 		mutation.UpdatedSignalInfos,
-		currentVersionedTransition,
 	)
 
-	err := ms.applyUpdatesToStateMachineNodes(mutation.UpdatedSubStateMachines)
+	err = ms.applyUpdatesToStateMachineNodes(mutation.UpdatedSubStateMachines)
 	if err != nil {
 		return err
 	}
@@ -6304,11 +6310,12 @@ func (ms *MutableStateImpl) ApplySnapshot(
 	snapshot *persistencespb.WorkflowMutableState,
 ) error {
 	prevExecutionInfoSize := ms.executionInfo.Size()
-	currentVersionedTransition := ms.currentVersionedTransition()
 
 	ms.applySignalRequestedIds(snapshot.SignalRequestedIds, snapshot.ExecutionInfo)
-	ms.applyTombstones(snapshot.ExecutionInfo.SubStateMachineTombstoneBatches, currentVersionedTransition)
-	ms.syncExecutionInfo(ms.executionInfo, snapshot.ExecutionInfo)
+	err := ms.syncExecutionInfo(ms.executionInfo, snapshot.ExecutionInfo)
+	if err != nil {
+		return err
+	}
 	ms.syncSubStateMachinesByType(snapshot.ExecutionInfo.SubStateMachinesByType)
 
 	ms.approximateSize += snapshot.ExecutionState.Size() - ms.executionState.Size()
@@ -6320,7 +6327,6 @@ func (ms *MutableStateImpl) ApplySnapshot(
 		snapshot.ChildExecutionInfos,
 		snapshot.RequestCancelInfos,
 		snapshot.SignalInfos,
-		currentVersionedTransition,
 	)
 
 	ms.approximateSize += ms.executionInfo.Size() - prevExecutionInfoSize
@@ -6333,25 +6339,24 @@ func (ms *MutableStateImpl) applyUpdatesToSubStateMachines(
 	updatedChildExecutionInfos map[int64]*persistencespb.ChildExecutionInfo,
 	updatedRequestCancelInfos map[int64]*persistencespb.RequestCancelInfo,
 	updatedSignalInfos map[int64]*persistencespb.SignalInfo,
-	currentVersionedTransition *persistencespb.VersionedTransition,
 ) {
-	applyUpdatesToSubStateMachine(ms, ms.pendingActivityInfoIDs, ms.updateActivityInfos, updatedActivityInfos, currentVersionedTransition, func(current, incoming *persistencespb.ActivityInfo) {
+	applyUpdatesToSubStateMachine(ms, ms.pendingActivityInfoIDs, ms.updateActivityInfos, updatedActivityInfos, func(current, incoming *persistencespb.ActivityInfo) {
 		incoming.TimerTaskStatus = TimerTaskStatusNone
 	})
 
-	applyUpdatesToSubStateMachine(ms, ms.pendingTimerInfoIDs, ms.updateTimerInfos, updatedTimerInfos, currentVersionedTransition, func(current, incoming *persistencespb.TimerInfo) {
+	applyUpdatesToSubStateMachine(ms, ms.pendingTimerInfoIDs, ms.updateTimerInfos, updatedTimerInfos, func(current, incoming *persistencespb.TimerInfo) {
 		incoming.TaskStatus = TimerTaskStatusNone
 	})
 
-	applyUpdatesToSubStateMachine(ms, ms.pendingChildExecutionInfoIDs, ms.updateChildExecutionInfos, updatedChildExecutionInfos, currentVersionedTransition, func(current, incoming *persistencespb.ChildExecutionInfo) {
+	applyUpdatesToSubStateMachine(ms, ms.pendingChildExecutionInfoIDs, ms.updateChildExecutionInfos, updatedChildExecutionInfos, func(current, incoming *persistencespb.ChildExecutionInfo) {
 		if current != nil {
 			incoming.Clock = current.Clock
 		}
 		incoming.CreateRequestId = uuid.New()
 	})
 
-	applyUpdatesToSubStateMachine(ms, ms.pendingRequestCancelInfoIDs, ms.updateRequestCancelInfos, updatedRequestCancelInfos, currentVersionedTransition, nil)
-	applyUpdatesToSubStateMachine(ms, ms.pendingSignalInfoIDs, ms.updateSignalInfos, updatedSignalInfos, currentVersionedTransition, nil)
+	applyUpdatesToSubStateMachine(ms, ms.pendingRequestCancelInfoIDs, ms.updateRequestCancelInfos, updatedRequestCancelInfos, nil)
+	applyUpdatesToSubStateMachine(ms, ms.pendingSignalInfoIDs, ms.updateSignalInfos, updatedSignalInfos, nil)
 }
 
 func (ms *MutableStateImpl) applyUpdatesToStateMachineNodes(
@@ -6359,6 +6364,7 @@ func (ms *MutableStateImpl) applyUpdatesToStateMachineNodes(
 ) error {
 	root := ms.HSM()
 	for _, nodeMutation := range nodeMutations {
+		var internalNode *persistencespb.StateMachineNode
 		incomingPath := []hsm.Key{}
 		for _, p := range nodeMutation.Path.Path {
 			incomingPath = append(incomingPath, hsm.Key{Type: p.Type, ID: p.Id})
@@ -6377,14 +6383,16 @@ func (ms *MutableStateImpl) applyUpdatesToStateMachineNodes(
 				// we don't have enough information to recreate all parents
 				return err
 			}
-			currentNode, err = parentNode.AddChild(incomingPath[len(incomingPath)-1], nodeMutation.Data)
+			newNode, err := parentNode.AddChild(incomingPath[len(incomingPath)-1], nodeMutation.Data)
 			if err != nil {
 				return err
 			}
-		}
-		internalNode := currentNode.InternalRepr()
-		if CompareVersionedTransition(nodeMutation.LastUpdateVersionedTransition, internalNode.LastUpdateVersionedTransition) <= 0 {
-			continue
+			internalNode = newNode.InternalRepr()
+		} else {
+			internalNode = currentNode.InternalRepr()
+			if CompareVersionedTransition(nodeMutation.LastUpdateVersionedTransition, internalNode.LastUpdateVersionedTransition) == 0 {
+				continue
+			}
 		}
 		internalNode.Data = nodeMutation.Data
 		internalNode.InitialVersionedTransition = nodeMutation.InitialVersionedTransition
@@ -6396,16 +6404,23 @@ func (ms *MutableStateImpl) applyUpdatesToStateMachineNodes(
 }
 
 func (ms *MutableStateImpl) applySignalRequestedIds(signalRequestedIds []string, incomingExecutionInfo *persistencespb.WorkflowExecutionInfo) {
-	incomingVersionedTransition := incomingExecutionInfo.TransitionHistory[len(incomingExecutionInfo.TransitionHistory)-1]
-	if CompareVersionedTransition(incomingVersionedTransition, ms.executionInfo.SignalRequestIdsLastUpdateVersionedTransition) > 0 {
-		for requestID := range ms.pendingSignalRequestedIDs {
-			ms.approximateSize -= len(requestID)
+	if CompareVersionedTransition(
+		incomingExecutionInfo.SignalRequestIdsLastUpdateVersionedTransition,
+		ms.executionInfo.SignalRequestIdsLastUpdateVersionedTransition,
+	) == 0 {
+		return
+	}
+
+	prev := maps.Clone(ms.pendingSignalRequestedIDs)
+	for _, requestID := range signalRequestedIds {
+		if _, ok := ms.pendingSignalRequestedIDs[requestID]; !ok {
+			ms.AddSignalRequested(requestID)
 		}
-		ms.pendingSignalRequestedIDs = convert.StringSliceToSet(signalRequestedIds)
-		for requestID := range ms.pendingSignalRequestedIDs {
-			ms.approximateSize += len(requestID)
+	}
+	for requestID := range prev {
+		if _, ok := ms.pendingSignalRequestedIDs[requestID]; !ok {
+			ms.DeleteSignalRequested(requestID)
 		}
-		ms.executionInfo.SignalRequestIdsLastUpdateVersionedTransition = incomingVersionedTransition
 	}
 }
 
@@ -6414,18 +6429,17 @@ func applyUpdatesToSubStateMachine[K comparable, V lastUpdatedStateTransitionGet
 	pendingInfos map[K]V,
 	updateInfos map[K]V,
 	updatedSubStateMachine map[K]V,
-	versionedTransition *persistencespb.VersionedTransition,
 	fn func(current, incoming V),
 ) {
 	for key, updated := range updatedSubStateMachine {
-		if CompareVersionedTransition(updated.GetLastUpdateVersionedTransition(), versionedTransition) <= 0 {
-			continue
-		}
-		val := updated
 		var existing V
 		if existing, ok := pendingInfos[key]; ok {
+			if CompareVersionedTransition(existing.GetLastUpdateVersionedTransition(), updated.GetLastUpdateVersionedTransition()) == 0 {
+				continue
+			}
 			ms.approximateSize -= existing.Size() + int64SizeBytes
 		}
+		val := updated
 		if fn != nil {
 			val = common.CloneProto(updated)
 			fn(existing, val)
@@ -6438,31 +6452,55 @@ func applyUpdatesToSubStateMachine[K comparable, V lastUpdatedStateTransitionGet
 
 func (ms *MutableStateImpl) applyUpdatesToUpdateInfos(
 	updatedUpdateInfos map[string]*persistencespb.UpdateInfo,
-	versionedTransition *persistencespb.VersionedTransition,
 ) {
 	for updateID, ui := range updatedUpdateInfos {
-		if CompareVersionedTransition(ui.GetLastUpdateVersionedTransition(), versionedTransition) <= 0 {
-			continue
-		}
 		if existing, ok := ms.executionInfo.UpdateInfos[updateID]; ok {
+			if CompareVersionedTransition(existing.GetLastUpdateVersionedTransition(), ui.GetLastUpdateVersionedTransition()) == 0 {
+				continue
+			}
 			ms.approximateSize -= existing.Size() + len(updateID)
 		} else {
 			ms.executionInfo.UpdateCount++
 		}
 		ms.executionInfo.UpdateInfos[updateID] = ui
 		ms.approximateSize += ui.Size() + len(updateID)
-		ms.updateInfoUpdated[updateID] = struct{}{}
 	}
 }
 
-func (ms *MutableStateImpl) syncExecutionInfo(current *persistencespb.WorkflowExecutionInfo, incoming *persistencespb.WorkflowExecutionInfo) {
+func (ms *MutableStateImpl) syncExecutionInfo(current *persistencespb.WorkflowExecutionInfo, incoming *persistencespb.WorkflowExecutionInfo) error {
+	excludedFields := []string{
+		"WorkflowTaskVersion",
+		"WorkflowTaskScheduledEventId",
+		"WorkflowTaskStartedEventId",
+		"WorkflowTaskRequestId",
+		"WorkflowTaskTimeout",
+		"WorkflowTaskAttempt",
+		"WorkflowTaskStartedTime",
+		"WorkflowTaskScheduledTime",
+		"WorkflowTaskOriginalScheduledTime",
+		"WorkflowTaskType",
+		"WorkflowTaskSuggestContinueAsNew",
+		"WorkflowTaskHistorySizeBytes",
+		"WorkflowTaskBuildId",
+		"WorkflowTaskBuildIdRedirectCounter",
+		"VersionHistories",
+		"ExecutionStats",
+		"LastFirstEventTxnId",
+		"ParentClock",
+		"CloseTransferTaskId",
+		"CloseVisibilityTaskId",
+		"CloseVisibilityTaskCompleted",
+		"WorkflowExecutionTimerTaskStatus",
+		"SubStateMachinesByType",
+		"StateMachineTimers",
+		"TaskGenerationShardClockTimestamp",
+	}
+	err := common.MergeProtoExcludingFields(current, incoming, excludedFields...)
+	if err != nil {
+		return err
+	}
+
 	ms.ClearStickyTaskQueue()
-
-	current.SubStateMachineTombstoneBatches = incoming.SubStateMachineTombstoneBatches
-	current.TransitionHistory = incoming.TransitionHistory
-
-	current.LastEventTaskId = incoming.LastEventTaskId
-	current.StateTransitionCount = incoming.StateTransitionCount
 
 	if ms.executionInfo.WorkflowTaskType == enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE {
 		ms.workflowTaskManager.deleteWorkflowTask()
@@ -6487,6 +6525,8 @@ func (ms *MutableStateImpl) syncExecutionInfo(current *persistencespb.WorkflowEx
 		}
 		ms.workflowTaskManager.UpdateWorkflowTask(taskInfo)
 	}
+
+	return nil
 }
 
 func (ms *MutableStateImpl) syncSubStateMachinesByType(incoming map[string]*persistencespb.StateMachineMap) {
@@ -6494,24 +6534,31 @@ func (ms *MutableStateImpl) syncSubStateMachinesByType(incoming map[string]*pers
 	ms.mustInitHSM()
 }
 
-func (ms *MutableStateImpl) applyTombstones(tombstoneBatches []*persistencespb.StateMachineTombstoneBatch, versionedTransition *persistencespb.VersionedTransition) {
+func (ms *MutableStateImpl) applyTombstones(tombstoneBatches []*persistencespb.StateMachineTombstoneBatch, currentVersionedTransition *persistencespb.VersionedTransition) error {
+	var err error
 	for _, tombstoneBatch := range tombstoneBatches {
-		if CompareVersionedTransition(tombstoneBatch.VersionedTransition, versionedTransition) <= 0 {
+		if CompareVersionedTransition(tombstoneBatch.VersionedTransition, currentVersionedTransition) <= 0 {
 			continue
 		}
 		for _, tombstone := range tombstoneBatch.StateMachineTombstones {
 			switch tombstone.StateMachineKey.(type) {
 			case *persistencespb.StateMachineTombstone_ActivityScheduledEventId:
-				ms.deleteActivityInfos[tombstone.GetActivityScheduledEventId()] = struct{}{}
+				err = ms.DeleteActivity(tombstone.GetActivityScheduledEventId())
 			case *persistencespb.StateMachineTombstone_TimerId:
-				ms.deleteTimerInfos[tombstone.GetTimerId()] = struct{}{}
+				err = ms.DeleteUserTimer(tombstone.GetTimerId())
 			case *persistencespb.StateMachineTombstone_ChildExecutionInitiatedEventId:
-				ms.deleteChildExecutionInfos[tombstone.GetChildExecutionInitiatedEventId()] = struct{}{}
+				err = ms.DeletePendingChildExecution(tombstone.GetChildExecutionInitiatedEventId())
 			case *persistencespb.StateMachineTombstone_RequestCancelInitiatedEventId:
-				ms.deleteRequestCancelInfos[tombstone.GetRequestCancelInitiatedEventId()] = struct{}{}
+				err = ms.DeletePendingRequestCancel(tombstone.GetRequestCancelInitiatedEventId())
 			case *persistencespb.StateMachineTombstone_SignalExternalInitiatedEventId:
-				ms.deleteSignalInfos[tombstone.GetSignalExternalInitiatedEventId()] = struct{}{}
+				err = ms.DeletePendingSignal(tombstone.GetSignalExternalInitiatedEventId())
+			default:
+				// TODO: updateID and stateMachinePath
+			}
+			if err != nil {
+				return err
 			}
 		}
 	}
+	return nil
 }

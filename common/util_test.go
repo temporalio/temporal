@@ -418,3 +418,25 @@ func TestDiscardUnknownProto(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, data, dataWithoutUnknown)
 }
+
+func TestMergeProtoExcludingFields(t *testing.T) {
+	source := &persistencespb.WorkflowExecutionInfo{
+		NamespaceId: uuid.New(),
+		WorkflowId:  uuid.New(),
+	}
+
+	target := &persistencespb.WorkflowExecutionInfo{
+		NamespaceId: source.NamespaceId + "_target",
+		WorkflowId:  source.WorkflowId + "_target",
+	}
+
+	err := MergeProtoExcludingFields(source, target, "NamespaceId")
+	require.NoError(t, err)
+
+	require.NotEqual(t, source.NamespaceId, target.NamespaceId)
+	require.Equal(t, source.WorkflowId, target.WorkflowId)
+
+	msRecord := &persistencespb.WorkflowMutableState{}
+	err = MergeProtoExcludingFields(target, msRecord, "ExecutionInfo")
+	require.Error(t, err)
+}

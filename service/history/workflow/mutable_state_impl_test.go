@@ -27,6 +27,7 @@ package workflow
 import (
 	"context"
 	"fmt"
+	"reflect"
 	"testing"
 	"time"
 
@@ -2971,4 +2972,16 @@ func tombstoneExists(
 		}
 	}
 	return false
+}
+
+func (s *mutableStateSuite) TestExecutionInfoClone() {
+	newInstance := reflect.New(reflect.TypeOf(s.mutableState.executionInfo).Elem()).Interface()
+	clone, ok := newInstance.(*persistencespb.WorkflowExecutionInfo)
+	if !ok {
+		s.T().Fatal("type assertion to *persistencespb.WorkflowExecutionInfo failed")
+	}
+	clone.NamespaceId = "namespace-id"
+	clone.WorkflowId = "workflow-id"
+	err := common.MergeProtoExcludingFields(clone, s.mutableState.executionInfo, "NamespaceId")
+	s.Nil(err)
 }

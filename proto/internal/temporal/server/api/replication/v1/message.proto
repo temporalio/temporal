@@ -237,11 +237,4 @@ message VerifyVersionedTransitionTaskAttributes {
 message SyncVersionedTransitionTaskAttributes {
     repeated temporal.api.common.v1.DataBlob event_batches = 1;
     NewRunInfo new_run_info = 2;
-    oneof sync_attributes {
-        SyncStateSnapshotAttributes sync_state_snapshot_attributes = 3;
-    }
-}
-
-message SyncStateSnapshotAttributes {
-    temporal.server.api.persistence.v1.WorkflowMutableState state = 1;
 }
