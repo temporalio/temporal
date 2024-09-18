@@ -2126,6 +2126,41 @@ func (adh *AdminHandler) SyncWorkflowState(ctx context.Context, request *adminse
 	}
 }
 
+func (adh *AdminHandler) GenerateLastHistoryReplicationTasks(
+	ctx context.Context,
+	request *adminservice.GenerateLastHistoryReplicationTasksRequest,
+) (_ *adminservice.GenerateLastHistoryReplicationTasksResponse, retError error) {
+	defer log.CapturePanic(adh.logger, &retError)
+
+	if request == nil {
+		return nil, errRequestNotSet
+	}
+
+	if err := validateExecution(request.Execution); err != nil {
+		return nil, err
+	}
+
+	namespaceEntry, err := adh.namespaceRegistry.GetNamespace(namespace.Name(request.GetNamespace()))
+	if err != nil {
+		return nil, err
+	}
+
+	resp, err := adh.historyClient.GenerateLastHistoryReplicationTasks(
+		ctx,
+		&historyservice.GenerateLastHistoryReplicationTasksRequest{
+			NamespaceId: namespaceEntry.ID().String(),
+			Execution:   request.Execution,
+		},
+	)
+	if err != nil {
+		return nil, err
+	}
+	return &adminservice.GenerateLastHistoryReplicationTasksResponse{
+		StateTransitionCount: resp.StateTransitionCount,
+		HistoryLength:        resp.HistoryLength,
+	}, nil
+}
+
 func (adh *AdminHandler) getDLQWorkflowID(
 	key *commonspb.HistoryDLQKey,
 ) string {

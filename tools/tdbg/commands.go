@@ -691,3 +691,39 @@ func AdminRebuildMutableState(c *cli.Context, clientFactory ClientFactory) error
 	}
 	return nil
 }
+
+// AdminReplicateWorkflow force replicates a workflow by generating replication tasks
+func AdminReplicateWorkflow(
+	c *cli.Context,
+	clientFactory ClientFactory,
+) error {
+	adminClient := clientFactory.AdminClient(c)
+
+	nsName, err := getRequiredOption(c, FlagNamespace)
+	if err != nil {
+		return err
+	}
+
+	wid, err := getRequiredOption(c, FlagWorkflowID)
+	if err != nil {
+		return err
+	}
+	rid := c.String(FlagRunID)
+
+	ctx, cancel := newContext(c)
+	defer cancel()
+
+	_, err = adminClient.GenerateLastHistoryReplicationTasks(ctx, &adminservice.GenerateLastHistoryReplicationTasksRequest{
+		Namespace: nsName,
+		Execution: &commonpb.WorkflowExecution{
+			WorkflowId: wid,
+			RunId:      rid,
+		},
+	})
+	if err != nil {
+		return fmt.Errorf("unable to replicate workflow: %w", err)
+	}
+
+	fmt.Fprintln(c.App.Writer, "Replication tasks generated successfully.")
+	return nil
+}
