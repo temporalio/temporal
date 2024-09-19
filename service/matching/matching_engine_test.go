@@ -472,7 +472,7 @@ func (s *matchingEngineSuite) TestFailAddTaskWithHistoryExhausted() {
 func (s *matchingEngineSuite) TestFailAddTaskWithHistoryError() {
 	historyError := serviceerror.NewInternal("nothing to start")
 	tqName := "testFailAddTaskWithHistoryError"
-	s.testFailAddTaskWithHistoryError(tqName, true, historyError, historyError)
+	s.testFailAddTaskWithHistoryError(tqName, true, historyError, nil) // expectedError shall be nil since history drops the task
 }
 
 func (s *matchingEngineSuite) testFailAddTaskWithHistoryError(
