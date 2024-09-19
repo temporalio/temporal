@@ -9,7 +9,7 @@ bins: temporal-server temporal-cassandra-tool temporal-sql-tool tdbg
 all: clean proto bins check test
 
 # Used in CI
-ci-build-misc: print-go-version proto go-generate buf-breaking bins temporal-server-debug shell-check copyright-check  goimports-all gomodtidy ensure-no-changes
+ci-build-misc: print-go-version proto go-generate gentestsuites buf-breaking bins temporal-server-debug shell-check copyright-check  goimports-all gomodtidy ensure-no-changes
 
 # Delete all build artifacts
 clean: clean-bins clean-test-results
@@ -565,6 +565,9 @@ update-dependencies:
 go-generate: $(MOCKGEN) $(GOIMPORTS) $(STRINGER)
 	@printf $(COLOR) "Process go:generate directives..."
 	@go generate ./...
+
+gentestsuites:
+	@go run cmd/tools/gentestsuites/main.go tests/
 
 ensure-no-changes:
 	@printf $(COLOR) "Check for local changes..."

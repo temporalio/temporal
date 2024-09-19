@@ -25,36 +25,15 @@
 package tests
 
 import (
-	historypb "go.temporal.io/api/history/v1"
-	historyspb "go.temporal.io/server/api/history/v1"
-	"go.temporal.io/server/common/persistence/versionhistory"
+	"context"
+	"time"
+
+	"go.temporal.io/server/common/debug"
+	"go.temporal.io/server/common/rpc"
 )
 
-// 0x8f01 is invalid UTF-8
-const invalidUTF8 = "\n\x8f\x01\n\x0ejunk\x12data"
-
-func EventBatchesToVersionHistory(
-	versionHistory *historyspb.VersionHistory,
-	eventBatches []*historypb.History,
-) (*historyspb.VersionHistory, error) {
-
-	// TODO temporary code to generate version history
-	//  we should generate version as part of modeled based testing
-	if versionHistory == nil {
-		versionHistory = versionhistory.NewVersionHistory(nil, nil)
-	}
-	for _, batch := range eventBatches {
-		for _, event := range batch.Events {
-			err := versionhistory.AddOrUpdateVersionHistoryItem(versionHistory,
-				versionhistory.NewVersionHistoryItem(
-					event.GetEventId(),
-					event.GetVersion(),
-				))
-			if err != nil {
-				return nil, err
-			}
-		}
-	}
-
-	return versionHistory, nil
+// NewContext create new context with default timeout 90 seconds.
+func NewContext() context.Context {
+	ctx, _ := rpc.NewContextWithTimeoutAndVersionHeaders(90 * time.Second * debug.TimeoutMultiplier)
+	return ctx
 }

@@ -25,36 +25,38 @@
 package tests
 
 import (
-	historypb "go.temporal.io/api/history/v1"
-	historyspb "go.temporal.io/server/api/history/v1"
-	"go.temporal.io/server/common/persistence/versionhistory"
+	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/server/api/adminservice/v1"
+	"go.temporal.io/server/api/historyservice/v1"
+	"google.golang.org/grpc"
 )
 
-// 0x8f01 is invalid UTF-8
-const invalidUTF8 = "\n\x8f\x01\n\x0ejunk\x12data"
+// AdminClient is the interface exposed by admin service client
+type AdminClient interface {
+	adminservice.AdminServiceClient
+}
 
-func EventBatchesToVersionHistory(
-	versionHistory *historyspb.VersionHistory,
-	eventBatches []*historypb.History,
-) (*historyspb.VersionHistory, error) {
+// FrontendClient is the interface exposed by frontend service client
+type FrontendClient interface {
+	workflowservice.WorkflowServiceClient
+}
 
-	// TODO temporary code to generate version history
-	//  we should generate version as part of modeled based testing
-	if versionHistory == nil {
-		versionHistory = versionhistory.NewVersionHistory(nil, nil)
-	}
-	for _, batch := range eventBatches {
-		for _, event := range batch.Events {
-			err := versionhistory.AddOrUpdateVersionHistoryItem(versionHistory,
-				versionhistory.NewVersionHistoryItem(
-					event.GetEventId(),
-					event.GetVersion(),
-				))
-			if err != nil {
-				return nil, err
-			}
-		}
-	}
+// HistoryClient is the interface exposed by history service client
+type HistoryClient interface {
+	historyservice.HistoryServiceClient
+}
 
-	return versionHistory, nil
+// NewAdminClient creates a client to temporal admin client
+func NewAdminClient(connection *grpc.ClientConn) AdminClient {
+	return adminservice.NewAdminServiceClient(connection)
+}
+
+// NewFrontendClient creates a client to temporal frontend client
+func NewFrontendClient(connection *grpc.ClientConn) workflowservice.WorkflowServiceClient {
+	return workflowservice.NewWorkflowServiceClient(connection)
+}
+
+// NewHistoryClient creates a client to temporal history service client
+func NewHistoryClient(connection *grpc.ClientConn) HistoryClient {
+	return historyservice.NewHistoryServiceClient(connection)
 }
