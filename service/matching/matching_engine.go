@@ -615,6 +615,14 @@ pollLoop:
 		resp, err := e.recordWorkflowTaskStarted(ctx, requestClone, task)
 		if err != nil {
 			switch err.(type) {
+			case *serviceerror.Internal:
+				e.nonRetryableErrorsDropTask(task, taskQueueName, err)
+			case *serviceerror.DataLoss:
+				e.nonRetryableErrorsDropTask(task, taskQueueName, err)
+			case *serialization.DeserializationError:
+				e.nonRetryableErrorsDropTask(task, taskQueueName, err)
+			case *serialization.SerializationError:
+				e.nonRetryableErrorsDropTask(task, taskQueueName, err)
 			case *serviceerror.NotFound: // mutable state not found, workflow not running or workflow task not found
 				e.logger.Info("Workflow task not found",
 					tag.WorkflowTaskQueueName(taskQueueName),
@@ -703,6 +711,20 @@ func (e *matchingEngineImpl) getHistoryForQueryTask(
 	return hist, resp.GetResponse().GetNextPageToken(), err
 }
 
+func (e *matchingEngineImpl) nonRetryableErrorsDropTask(task *internalTask, taskQueueName string, err error) {
+	e.logger.Info(err.Error(),
+		tag.WorkflowNamespaceID(task.event.Data.GetNamespaceId()),
+		tag.WorkflowID(task.event.Data.GetWorkflowId()),
+		tag.WorkflowRunID(task.event.Data.GetRunId()),
+		tag.WorkflowTaskQueueName(taskQueueName),
+		tag.TaskID(task.event.GetTaskId()),
+		tag.WorkflowEventID(task.event.Data.GetScheduledEventId()),
+		tag.Error(err),
+	)
+	// drop the task as otherwise task would be stuck in a retry-loop since the errors from within this helper is called are non-retryable
+	task.finish(nil)
+}
+
 // PollActivityTaskQueue takes one task from the task manager, update workflow execution history, mark task as
 // completed and return it to user. If a task from task manager is already started, return an empty response, without
 // error. Timeouts handled by the timer queue.
@@ -760,6 +782,14 @@ pollLoop:
 		resp, err := e.recordActivityTaskStarted(ctx, requestClone, task)
 		if err != nil {
 			switch err.(type) {
+			case *serviceerror.Internal:
+				e.nonRetryableErrorsDropTask(task, taskQueueName, err)
+			case *serviceerror.DataLoss:
+				e.nonRetryableErrorsDropTask(task, taskQueueName, err)
+			case *serialization.DeserializationError:
+				e.nonRetryableErrorsDropTask(task, taskQueueName, err)
+			case *serialization.SerializationError:
+				e.nonRetryableErrorsDropTask(task, taskQueueName, err)
 			case *serviceerror.NotFound: // mutable state not found, workflow not running or activity info not found
 				e.logger.Info("Activity task not found",
 					tag.WorkflowNamespaceID(task.event.Data.GetNamespaceId()),

@@ -33,6 +33,8 @@ import (
 	"testing"
 	"time"
 
+	"go.temporal.io/server/common/persistence/serialization"
+
 	"github.com/emirpasic/gods/maps/treemap"
 	godsutils "github.com/emirpasic/gods/utils"
 	"github.com/pborman/uuid"
@@ -685,6 +687,234 @@ func (s *matchingEngineSuite) TestPollWorkflowTaskQueues_NamespaceHandover() {
 	}, metrics.NoopMetricsHandler)
 	s.Nil(resp)
 	s.Equal(common.ErrNamespaceHandover.Error(), err.Error())
+}
+
+func (s *matchingEngineSuite) TestPollActivityTaskQueues_InternalError() {
+	namespaceId := uuid.New()
+	tl := "queue"
+	taskQueue := &taskqueuepb.TaskQueue{Name: "queue", Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
+
+	addRequest := matchingservice.AddActivityTaskRequest{
+		NamespaceId:            namespaceId,
+		Execution:              &commonpb.WorkflowExecution{WorkflowId: "workflowID", RunId: uuid.NewRandom().String()},
+		ScheduledEventId:       int64(5),
+		TaskQueue:              taskQueue,
+		ScheduleToStartTimeout: timestamp.DurationFromSeconds(0),
+	}
+
+	// add an activity task
+	_, _, err := s.matchingEngine.AddActivityTask(context.Background(), &addRequest)
+	s.NoError(err)
+	s.EqualValues(s.taskManager.getTaskCount(newUnversionedRootQueueKey(namespaceId, tl, enumspb.TASK_QUEUE_TYPE_ACTIVITY)), 1)
+
+	// task is dropped with no retry; RecordActivityTaskStarted should only be called once
+	s.mockHistoryClient.EXPECT().RecordActivityTaskStarted(gomock.Any(), gomock.Any(), gomock.Any()).
+		Return(nil, serviceerror.NewInternal("Internal error")).Times(1)
+	resp, err := s.matchingEngine.PollActivityTaskQueue(context.Background(), &matchingservice.PollActivityTaskQueueRequest{
+		NamespaceId: namespaceId,
+		PollRequest: &workflowservice.PollActivityTaskQueueRequest{
+			TaskQueue: taskQueue,
+			Identity:  "identity",
+		},
+	}, metrics.NoopMetricsHandler)
+	s.EqualValues(emptyPollActivityTaskQueueResponse, resp)
+	s.NoError(err)
+}
+
+func (s *matchingEngineSuite) TestPollActivityTaskQueues_DataLossError() {
+	namespaceId := uuid.New()
+	tl := "queue"
+	taskQueue := &taskqueuepb.TaskQueue{Name: "queue", Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
+
+	addRequest := matchingservice.AddActivityTaskRequest{
+		NamespaceId:            namespaceId,
+		Execution:              &commonpb.WorkflowExecution{WorkflowId: "workflowID", RunId: uuid.NewRandom().String()},
+		ScheduledEventId:       int64(5),
+		TaskQueue:              taskQueue,
+		ScheduleToStartTimeout: timestamp.DurationFromSeconds(0),
+	}
+
+	// add an activity task
+	_, _, err := s.matchingEngine.AddActivityTask(context.Background(), &addRequest)
+	s.NoError(err)
+	s.EqualValues(s.taskManager.getTaskCount(newUnversionedRootQueueKey(namespaceId, tl, enumspb.TASK_QUEUE_TYPE_ACTIVITY)), 1)
+
+	// task is dropped with no retry; RecordActivityTaskStarted should only be called once
+	s.mockHistoryClient.EXPECT().RecordActivityTaskStarted(gomock.Any(), gomock.Any(), gomock.Any()).
+		Return(nil, serviceerror.NewDataLoss("DataLoss Error")).Times(1)
+
+	resp, err := s.matchingEngine.PollActivityTaskQueue(context.Background(), &matchingservice.PollActivityTaskQueueRequest{
+		NamespaceId: namespaceId,
+		PollRequest: &workflowservice.PollActivityTaskQueueRequest{
+			TaskQueue: taskQueue,
+			Identity:  "identity",
+		},
+	}, metrics.NoopMetricsHandler)
+	s.EqualValues(emptyPollActivityTaskQueueResponse, resp)
+	s.NoError(err)
+}
+
+func (s *matchingEngineSuite) TestPollActivityTaskQueues_DeserializationError() {
+	namespaceId := uuid.New()
+	tl := "queue"
+	taskQueue := &taskqueuepb.TaskQueue{Name: "queue", Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
+
+	addRequest := matchingservice.AddActivityTaskRequest{
+		NamespaceId:            namespaceId,
+		Execution:              &commonpb.WorkflowExecution{WorkflowId: "workflowID", RunId: uuid.NewRandom().String()},
+		ScheduledEventId:       int64(5),
+		TaskQueue:              taskQueue,
+		ScheduleToStartTimeout: timestamp.DurationFromSeconds(0),
+	}
+
+	// add an activity task
+	_, _, err := s.matchingEngine.AddActivityTask(context.Background(), &addRequest)
+	s.NoError(err)
+	s.EqualValues(s.taskManager.getTaskCount(newUnversionedRootQueueKey(namespaceId, tl, enumspb.TASK_QUEUE_TYPE_ACTIVITY)), 1)
+
+	// task is dropped with no retry; RecordActivityTaskStarted should only be called once
+	s.mockHistoryClient.EXPECT().RecordActivityTaskStarted(gomock.Any(), gomock.Any(), gomock.Any()).
+		Return(nil, serialization.NewDeserializationError(enumspb.ENCODING_TYPE_PROTO3, errors.New("random error"))).Times(1)
+
+	resp, err := s.matchingEngine.PollActivityTaskQueue(context.Background(), &matchingservice.PollActivityTaskQueueRequest{
+		NamespaceId: namespaceId,
+		PollRequest: &workflowservice.PollActivityTaskQueueRequest{
+			TaskQueue: taskQueue,
+			Identity:  "identity",
+		},
+	}, metrics.NoopMetricsHandler)
+	s.EqualValues(emptyPollActivityTaskQueueResponse, resp)
+	s.NoError(err)
+}
+
+func (s *matchingEngineSuite) TestPollActivityTaskQueues_SerializationError() {
+	namespaceId := uuid.New()
+	tl := "queue"
+	taskQueue := &taskqueuepb.TaskQueue{Name: "queue", Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
+
+	addRequest := matchingservice.AddActivityTaskRequest{
+		NamespaceId:            namespaceId,
+		Execution:              &commonpb.WorkflowExecution{WorkflowId: "workflowID", RunId: uuid.NewRandom().String()},
+		ScheduledEventId:       int64(5),
+		TaskQueue:              taskQueue,
+		ScheduleToStartTimeout: timestamp.DurationFromSeconds(0),
+	}
+
+	// add an activity task
+	_, _, err := s.matchingEngine.AddActivityTask(context.Background(), &addRequest)
+	s.NoError(err)
+	s.EqualValues(s.taskManager.getTaskCount(newUnversionedRootQueueKey(namespaceId, tl, enumspb.TASK_QUEUE_TYPE_ACTIVITY)), 1)
+
+	// task is dropped with no retry; RecordActivityTaskStarted should only be called once
+	s.mockHistoryClient.EXPECT().RecordActivityTaskStarted(gomock.Any(), gomock.Any(), gomock.Any()).
+		Return(nil, serialization.NewSerializationError(enumspb.ENCODING_TYPE_PROTO3, errors.New("random error"))).Times(1)
+
+	// in theory, these tasks should not be added inside matching again but they are being added back
+	resp, err := s.matchingEngine.PollActivityTaskQueue(context.Background(), &matchingservice.PollActivityTaskQueueRequest{
+		NamespaceId: namespaceId,
+		PollRequest: &workflowservice.PollActivityTaskQueueRequest{
+			TaskQueue: taskQueue,
+			Identity:  "identity",
+		},
+	}, metrics.NoopMetricsHandler)
+	s.EqualValues(emptyPollActivityTaskQueueResponse, resp)
+	s.NoError(err)
+}
+
+func (s *matchingEngineSuite) TestPollWorkflowTaskQueues_InternalError() {
+	tqName := "queue"
+	taskQueue := &taskqueuepb.TaskQueue{Name: tqName, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
+	wfExecution := &commonpb.WorkflowExecution{WorkflowId: "workflowID", RunId: uuid.NewRandom().String()}
+
+	// add a wf task
+	s.addWorkflowTask(wfExecution, taskQueue)
+	s.EqualValues(1, s.taskManager.getTaskCount(newUnversionedRootQueueKey(namespaceId, tqName, enumspb.TASK_QUEUE_TYPE_WORKFLOW)))
+
+	// task is dropped with no retry; RecordWorkflowTaskStarted should only be called once
+	s.mockHistoryClient.EXPECT().RecordWorkflowTaskStarted(gomock.Any(), gomock.Any(), gomock.Any()).
+		Return(nil, serviceerror.NewInternal("internal error")).Times(1)
+
+	resp, err := s.matchingEngine.PollWorkflowTaskQueue(context.Background(), &matchingservice.PollWorkflowTaskQueueRequest{
+		NamespaceId: namespaceId,
+		PollRequest: &workflowservice.PollWorkflowTaskQueueRequest{
+			TaskQueue: taskQueue,
+			Identity:  "identity",
+		},
+	}, metrics.NoopMetricsHandler)
+	s.EqualValues(emptyPollWorkflowTaskQueueResponse, resp)
+	s.NoError(err)
+}
+
+func (s *matchingEngineSuite) TestPollWorkflowTaskQueues_DataLossError() {
+	tqName := "queue"
+	taskQueue := &taskqueuepb.TaskQueue{Name: tqName, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
+	wfExecution := &commonpb.WorkflowExecution{WorkflowId: "workflowID", RunId: uuid.NewRandom().String()}
+
+	// add a wf task
+	s.addWorkflowTask(wfExecution, taskQueue)
+	s.EqualValues(1, s.taskManager.getTaskCount(newUnversionedRootQueueKey(namespaceId, tqName, enumspb.TASK_QUEUE_TYPE_WORKFLOW)))
+
+	// task is dropped with no retry; RecordWorkflowTaskStarted should only be called once
+	s.mockHistoryClient.EXPECT().RecordWorkflowTaskStarted(gomock.Any(), gomock.Any(), gomock.Any()).
+		Return(nil, serviceerror.NewDataLoss("DataLoss error")).Times(1)
+
+	resp, err := s.matchingEngine.PollWorkflowTaskQueue(context.Background(), &matchingservice.PollWorkflowTaskQueueRequest{
+		NamespaceId: namespaceId,
+		PollRequest: &workflowservice.PollWorkflowTaskQueueRequest{
+			TaskQueue: taskQueue,
+			Identity:  "identity",
+		},
+	}, metrics.NoopMetricsHandler)
+	s.EqualValues(emptyPollWorkflowTaskQueueResponse, resp)
+	s.NoError(err)
+}
+
+func (s *matchingEngineSuite) TestPollWorkflowTaskQueues_SerializationError() {
+	tqName := "queue"
+	taskQueue := &taskqueuepb.TaskQueue{Name: tqName, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
+	wfExecution := &commonpb.WorkflowExecution{WorkflowId: "workflowID", RunId: uuid.NewRandom().String()}
+
+	// add a wf task
+	s.addWorkflowTask(wfExecution, taskQueue)
+	s.EqualValues(1, s.taskManager.getTaskCount(newUnversionedRootQueueKey(namespaceId, tqName, enumspb.TASK_QUEUE_TYPE_WORKFLOW)))
+
+	// task is dropped with no retry; RecordWorkflowTaskStarted should only be called once
+	s.mockHistoryClient.EXPECT().RecordWorkflowTaskStarted(gomock.Any(), gomock.Any(), gomock.Any()).
+		Return(nil, serialization.NewSerializationError(enumspb.ENCODING_TYPE_PROTO3, errors.New("random error"))).Times(1)
+
+	resp, err := s.matchingEngine.PollWorkflowTaskQueue(context.Background(), &matchingservice.PollWorkflowTaskQueueRequest{
+		NamespaceId: namespaceId,
+		PollRequest: &workflowservice.PollWorkflowTaskQueueRequest{
+			TaskQueue: taskQueue,
+			Identity:  "identity",
+		},
+	}, metrics.NoopMetricsHandler)
+	s.EqualValues(emptyPollWorkflowTaskQueueResponse, resp)
+	s.NoError(err)
+}
+
+func (s *matchingEngineSuite) TestPollWorkflowTaskQueues_DeserializationError() {
+	tqName := "queue"
+	taskQueue := &taskqueuepb.TaskQueue{Name: tqName, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
+	wfExecution := &commonpb.WorkflowExecution{WorkflowId: "workflowID", RunId: uuid.NewRandom().String()}
+
+	// add a wf task
+	s.addWorkflowTask(wfExecution, taskQueue)
+	s.EqualValues(1, s.taskManager.getTaskCount(newUnversionedRootQueueKey(namespaceId, tqName, enumspb.TASK_QUEUE_TYPE_WORKFLOW)))
+
+	// task is dropped with no retry; RecordWorkflowTaskStarted should only be called once
+	s.mockHistoryClient.EXPECT().RecordWorkflowTaskStarted(gomock.Any(), gomock.Any(), gomock.Any()).
+		Return(nil, serialization.NewDeserializationError(enumspb.ENCODING_TYPE_PROTO3, errors.New("random error"))).Times(1)
+
+	resp, err := s.matchingEngine.PollWorkflowTaskQueue(context.Background(), &matchingservice.PollWorkflowTaskQueueRequest{
+		NamespaceId: namespaceId,
+		PollRequest: &workflowservice.PollWorkflowTaskQueueRequest{
+			TaskQueue: taskQueue,
+			Identity:  "identity",
+		},
+	}, metrics.NoopMetricsHandler)
+	s.EqualValues(emptyPollWorkflowTaskQueueResponse, resp)
+	s.NoError(err)
 }
 
 func (s *matchingEngineSuite) TestPollActivityTaskQueues_NamespaceHandover() {
