@@ -298,7 +298,7 @@ func (r *WorkflowStateReplicatorImpl) applyMutation(
 			nil,
 		)
 	}
-	localTransitionHistory := localMutableState.GetExecutionInfo().TransitionHistory
+	localTransitionHistory := workflow.CopyVersionedTransitions(localMutableState.GetExecutionInfo().TransitionHistory)
 	sourceTransitionHistory := request.Mutation.ExecutionInfo.TransitionHistory
 
 	// make sure mutation range is extension of local range
@@ -336,6 +336,13 @@ func (r *WorkflowStateReplicatorImpl) applyMutation(
 			return err
 		}
 	}
+
+	taskRefresher := workflow.NewTaskRefresher(r.shardContext)
+	err = taskRefresher.PartialRefresh(ctx, localMutableState, localTransitionHistory[len(localTransitionHistory)-1])
+	if err != nil {
+		return err
+	}
+
 	targetWorkflow := NewWorkflow(
 		r.clusterMetadata,
 		wfCtx,
@@ -373,7 +380,7 @@ func (r *WorkflowStateReplicatorImpl) applySnapshot(
 		return r.applySnapshotWhenWorkflowNotExist(ctx, namespaceId, workflowId, runId, wfCtx, releaseFn, request.Snapshot, request.SourceClusterName, request.NewRunInfo)
 	}
 	var isBranchSwitched bool
-	localTransitionHistory := localMutableState.GetExecutionInfo().TransitionHistory
+	localTransitionHistory := workflow.CopyVersionedTransitions(localMutableState.GetExecutionInfo().TransitionHistory)
 	sourceTransitionHistory := request.Snapshot.ExecutionInfo.TransitionHistory
 	err := workflow.TransitionHistoryStalenessCheck(sourceTransitionHistory, localTransitionHistory[len(localTransitionHistory)-1])
 	switch err {
@@ -423,6 +430,18 @@ func (r *WorkflowStateReplicatorImpl) applySnapshot(
 		localMutableState,
 		releaseFn,
 	)
+	taskRefresher := workflow.NewTaskRefresher(r.shardContext)
+	if isBranchSwitched {
+		err = taskRefresher.Refresh(ctx, localMutableState)
+		if err != nil {
+			return err
+		}
+	} else {
+		err = taskRefresher.PartialRefresh(ctx, localMutableState, localTransitionHistory[len(localTransitionHistory)-1])
+		if err != nil {
+			return err
+		}
+	}
 
 	return r.transactionMgr.UpdateWorkflow(
 		ctx,
