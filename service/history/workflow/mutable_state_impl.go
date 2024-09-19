@@ -6289,13 +6289,17 @@ func (ms *MutableStateImpl) ApplyMutation(
 	// this must be called after syncExecutionInfo because syncExecutionInfo will update executionInfo.UpdateInfos
 	ms.applyUpdatesToUpdateInfos(mutation.UpdatedUpdateInfos)
 
-	ms.applyUpdatesToSubStateMachines(
+	err = ms.applyUpdatesToSubStateMachines(
 		mutation.UpdatedActivityInfos,
 		mutation.UpdatedTimerInfos,
 		mutation.UpdatedChildExecutionInfos,
 		mutation.UpdatedRequestCancelInfos,
 		mutation.UpdatedSignalInfos,
+		false,
 	)
+	if err != nil {
+		return err
+	}
 
 	err = ms.applyUpdatesToStateMachineNodes(mutation.UpdatedSubStateMachines)
 	if err != nil {
@@ -6321,13 +6325,17 @@ func (ms *MutableStateImpl) ApplySnapshot(
 	ms.approximateSize += snapshot.ExecutionState.Size() - ms.executionState.Size()
 	ms.executionState = snapshot.ExecutionState
 
-	ms.applyUpdatesToSubStateMachines(
+	err = ms.applyUpdatesToSubStateMachines(
 		snapshot.ActivityInfos,
 		snapshot.TimerInfos,
 		snapshot.ChildExecutionInfos,
 		snapshot.RequestCancelInfos,
 		snapshot.SignalInfos,
+		true,
 	)
+	if err != nil {
+		return err
+	}
 
 	ms.approximateSize += ms.executionInfo.Size() - prevExecutionInfoSize
 	return nil
@@ -6339,24 +6347,39 @@ func (ms *MutableStateImpl) applyUpdatesToSubStateMachines(
 	updatedChildExecutionInfos map[int64]*persistencespb.ChildExecutionInfo,
 	updatedRequestCancelInfos map[int64]*persistencespb.RequestCancelInfo,
 	updatedSignalInfos map[int64]*persistencespb.SignalInfo,
-) {
-	applyUpdatesToSubStateMachine(ms, ms.pendingActivityInfoIDs, ms.updateActivityInfos, updatedActivityInfos, func(current, incoming *persistencespb.ActivityInfo) {
+	isSnapshot bool,
+) error {
+	err := applyUpdatesToSubStateMachine(ms, ms.pendingActivityInfoIDs, ms.updateActivityInfos, updatedActivityInfos, isSnapshot, ms.DeleteActivity, func(current, incoming *persistencespb.ActivityInfo) {
 		incoming.TimerTaskStatus = TimerTaskStatusNone
 	})
+	if err != nil {
+		return err
+	}
 
-	applyUpdatesToSubStateMachine(ms, ms.pendingTimerInfoIDs, ms.updateTimerInfos, updatedTimerInfos, func(current, incoming *persistencespb.TimerInfo) {
+	err = applyUpdatesToSubStateMachine(ms, ms.pendingTimerInfoIDs, ms.updateTimerInfos, updatedTimerInfos, isSnapshot, ms.DeleteUserTimer, func(current, incoming *persistencespb.TimerInfo) {
 		incoming.TaskStatus = TimerTaskStatusNone
 	})
+	if err != nil {
+		return err
+	}
 
-	applyUpdatesToSubStateMachine(ms, ms.pendingChildExecutionInfoIDs, ms.updateChildExecutionInfos, updatedChildExecutionInfos, func(current, incoming *persistencespb.ChildExecutionInfo) {
+	err = applyUpdatesToSubStateMachine(ms, ms.pendingChildExecutionInfoIDs, ms.updateChildExecutionInfos, updatedChildExecutionInfos, isSnapshot, ms.DeletePendingChildExecution, func(current, incoming *persistencespb.ChildExecutionInfo) {
 		if current != nil {
 			incoming.Clock = current.Clock
 		}
 		incoming.CreateRequestId = uuid.New()
 	})
+	if err != nil {
+		return err
+	}
 
-	applyUpdatesToSubStateMachine(ms, ms.pendingRequestCancelInfoIDs, ms.updateRequestCancelInfos, updatedRequestCancelInfos, nil)
-	applyUpdatesToSubStateMachine(ms, ms.pendingSignalInfoIDs, ms.updateSignalInfos, updatedSignalInfos, nil)
+	err = applyUpdatesToSubStateMachine(ms, ms.pendingRequestCancelInfoIDs, ms.updateRequestCancelInfos, updatedRequestCancelInfos, isSnapshot, ms.DeletePendingRequestCancel, nil)
+	if err != nil {
+		return err
+	}
+
+	err = applyUpdatesToSubStateMachine(ms, ms.pendingSignalInfoIDs, ms.updateSignalInfos, updatedSignalInfos, isSnapshot, ms.DeletePendingSignal, nil)
+	return err
 }
 
 func (ms *MutableStateImpl) applyUpdatesToStateMachineNodes(
@@ -6429,8 +6452,20 @@ func applyUpdatesToSubStateMachine[K comparable, V lastUpdatedStateTransitionGet
 	pendingInfos map[K]V,
 	updateInfos map[K]V,
 	updatedSubStateMachine map[K]V,
+	isSnapshot bool,
+	deleteFn func(K) error,
 	fn func(current, incoming V),
-) {
+) error {
+	if isSnapshot {
+		for key := range pendingInfos {
+			if _, ok := updatedSubStateMachine[key]; !ok {
+				err := deleteFn(key)
+				if err != nil {
+					return err
+				}
+			}
+		}
+	}
 	for key, updated := range updatedSubStateMachine {
 		var existing V
 		if existing, ok := pendingInfos[key]; ok {
@@ -6448,6 +6483,7 @@ func applyUpdatesToSubStateMachine[K comparable, V lastUpdatedStateTransitionGet
 		updateInfos[key] = val
 		ms.approximateSize += val.Size() + int64SizeBytes
 	}
+	return nil
 }
 
 func (ms *MutableStateImpl) applyUpdatesToUpdateInfos(
