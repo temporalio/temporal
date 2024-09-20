@@ -1003,7 +1003,7 @@ var (
 	ElasticsearchDocumentParseFailuresCount           = NewCounterDef("elasticsearch_document_parse_failures_counter")
 	ElasticsearchDocumentGenerateFailuresCount        = NewCounterDef("elasticsearch_document_generate_failures_counter")
 	ElasticsearchCustomOrderByClauseCount             = NewCounterDef("elasticsearch_custom_order_by_clause_counter")
-	ReplicationRatePerSecondGuage                     = NewGaugeDef("replication_rate_per_second")
+	ReplicationRatePerSecondGauge                     = NewGaugeDef("replication_rate_per_second")
 	CatchUpReadyShardCountGauge                       = NewGaugeDef("catchup_ready_shard_count")
 	HandoverReadyShardCountGauge                      = NewGaugeDef("handover_ready_shard_count")
 	ReplicatorMessages                                = NewCounterDef("replicator_messages")
