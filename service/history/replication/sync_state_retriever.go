@@ -422,6 +422,8 @@ func (s *SyncStateRetrieverImpl) getUpdatedSubStateMachine(n *hsm.Node, versione
 		}
 		return nil
 	}
+	// Source cluster uses Walk() to generate node mutations.
+	// Walk() uses pre-order DFS. Updated parent nodes will be added before children.
 	err := n.Walk(walkFn)
 	if err != nil {
 		return nil, err

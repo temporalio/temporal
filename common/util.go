@@ -716,7 +716,8 @@ func DiscardUnknownProto(m proto.Message) error {
 }
 
 // MergeProtoExcludingFields merges fields from source into target, excluding specific fields.
-func MergeProtoExcludingFields(target, source proto.Message, excludeFields ...string) error {
+// The fields to exclude are specified as pointers to fields in the target struct.
+func MergeProtoExcludingFields(target, source proto.Message, excludeFields ...interface{}) error {
 	if target == nil || source == nil {
 		return serviceerror.NewInvalidArgument("target and source cannot be nil")
 	}
@@ -726,8 +727,12 @@ func MergeProtoExcludingFields(target, source proto.Message, excludeFields ...st
 	}
 
 	excludeSet := make(map[string]struct{}, len(excludeFields))
-	for _, field := range excludeFields {
-		excludeSet[field] = struct{}{}
+	for _, fieldPtr := range excludeFields {
+		fieldName, err := getFieldNameFromStruct(target, fieldPtr)
+		if err != nil {
+			return err
+		}
+		excludeSet[fieldName] = struct{}{}
 	}
 
 	srcVal := reflect.ValueOf(source).Elem()
@@ -744,4 +749,15 @@ func MergeProtoExcludingFields(target, source proto.Message, excludeFields ...st
 	}
 
 	return nil
+}
+
+func getFieldNameFromStruct(structPtr interface{}, fieldPtr interface{}) (string, error) {
+	structVal := reflect.ValueOf(structPtr).Elem()
+	for i := 0; i < structVal.NumField(); i++ {
+		field := structVal.Field(i)
+		if field.CanSet() && field.Addr().Interface() == fieldPtr {
+			return structVal.Type().Field(i).Name, nil
+		}
+	}
+	return "", serviceerror.NewInternal("field not found in the struct")
 }

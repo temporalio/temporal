@@ -430,13 +430,13 @@ func TestMergeProtoExcludingFields(t *testing.T) {
 		WorkflowId:  source.WorkflowId + "_target",
 	}
 
-	err := MergeProtoExcludingFields(source, target, "NamespaceId")
+	err := MergeProtoExcludingFields(target, source, &target.NamespaceId)
 	require.NoError(t, err)
 
 	require.NotEqual(t, source.NamespaceId, target.NamespaceId)
 	require.Equal(t, source.WorkflowId, target.WorkflowId)
 
 	msRecord := &persistencespb.WorkflowMutableState{}
-	err = MergeProtoExcludingFields(target, msRecord, "ExecutionInfo")
+	err = MergeProtoExcludingFields(target, msRecord, &target.NamespaceId)
 	require.Error(t, err)
 }

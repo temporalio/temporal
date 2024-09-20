@@ -2982,6 +2982,6 @@ func (s *mutableStateSuite) TestExecutionInfoClone() {
 	}
 	clone.NamespaceId = "namespace-id"
 	clone.WorkflowId = "workflow-id"
-	err := common.MergeProtoExcludingFields(clone, s.mutableState.executionInfo, "NamespaceId")
+	err := common.MergeProtoExcludingFields(s.mutableState.executionInfo, clone, &s.mutableState.executionInfo.NamespaceId)
 	s.Nil(err)
 }
