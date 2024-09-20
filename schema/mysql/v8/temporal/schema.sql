@@ -53,6 +53,7 @@ CREATE TABLE current_executions(
   state INT NOT NULL,
   status INT NOT NULL,
   start_version BIGINT NOT NULL DEFAULT 0,
+  start_time DATETIME(6),
   last_write_version BIGINT NOT NULL,
   PRIMARY KEY (shard_id, namespace_id, workflow_id)
 );
@@ -312,4 +313,43 @@ CREATE TABLE cluster_membership (
     INDEX (last_heartbeat),
     INDEX (record_expiry),
     PRIMARY KEY (membership_partition, host_id)
+);
+
+CREATE TABLE queues (
+    queue_type INT NOT NULL,
+    queue_name VARCHAR(255) NOT NULL,
+    metadata_payload MEDIUMBLOB NOT NULL,
+    metadata_encoding VARCHAR(16) NOT NULL,
+    PRIMARY KEY (queue_type, queue_name)
+);
+
+CREATE TABLE queue_messages (
+    queue_type INT NOT NULL,
+    queue_name VARCHAR(255) NOT NULL,
+    queue_partition BIGINT NOT NULL,
+    message_id BIGINT NOT NULL,
+    message_payload MEDIUMBLOB NOT NULL,
+    message_encoding VARCHAR(16) NOT NULL,
+    PRIMARY KEY (
+        queue_type,
+        queue_name,
+        queue_partition,
+        message_id
+    )
+);
+
+-- Stores information about Nexus endpoints
+CREATE TABLE nexus_endpoints (
+    id            BINARY(16) NOT NULL,
+    data          MEDIUMBLOB NOT NULL,  -- temporal.server.api.persistence.v1.NexusEndpoint
+    data_encoding VARCHAR(16) NOT NULL, -- Encoding type used for serialization, in practice this should always be proto3
+    version       BIGINT NOT NULL,      -- Version of this row, used for optimistic concurrency
+    PRIMARY KEY (id)
+);
+
+-- Stores the version of Nexus endpoints table as a whole
+CREATE TABLE nexus_endpoints_partition_status (
+    id      INT NOT NULL DEFAULT 0 CHECK (id = 0),  -- Restrict the table to a single row since it will only be used for endpoints
+    version BIGINT NOT NULL,                        -- Version of the nexus_endpoints table
+    PRIMARY KEY (id)
 );

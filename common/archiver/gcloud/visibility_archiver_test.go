@@ -30,22 +30,21 @@ import (
 	"testing"
 	"time"
 
-	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflow/v1"
-
-	"go.temporal.io/server/common/searchattribute"
-
 	archiverspb "go.temporal.io/server/api/archiver/v1"
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/archiver/gcloud/connector"
-	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/testing/protorequire"
+	"go.temporal.io/server/common/util"
+	"go.uber.org/mock/gomock"
 )
 
 const (
@@ -88,6 +87,7 @@ func TestVisibilityArchiverSuiteSuite(t *testing.T) {
 
 type visibilityArchiverSuite struct {
 	*require.Assertions
+	protorequire.ProtoAssertions
 	suite.Suite
 	controller                *gomock.Controller
 	container                 *archiver.VisibilityBootstrapContainer
@@ -269,9 +269,9 @@ func (s *visibilityArchiverSuite) TestQuery_Success_NoNextPageToken() {
 	mockParser.EXPECT().Parse(gomock.Any()).Return(&parsedQuery{
 		closeTime:       closeTime,
 		searchPrecision: &dayPrecision,
-		workflowType:    convert.StringPtr("MobileOnlyWorkflow::processMobileOnly"),
-		workflowID:      convert.StringPtr(testWorkflowID),
-		runID:           convert.StringPtr(testRunID),
+		workflowType:    util.Ptr("MobileOnlyWorkflow::processMobileOnly"),
+		workflowID:      util.Ptr(testWorkflowID),
+		runID:           util.Ptr(testRunID),
 	}, nil)
 	visibilityArchiver.queryParser = mockParser
 	request := &archiver.QueryVisibilityRequest{
@@ -287,11 +287,10 @@ func (s *visibilityArchiverSuite) TestQuery_Success_NoNextPageToken() {
 	s.Len(response.Executions, 1)
 	ei, err := convertToExecutionInfo(s.expectedVisibilityRecords[0], searchattribute.TestNameTypeMap)
 	s.NoError(err)
-	s.Equal(ei, response.Executions[0])
+	s.ProtoEqual(ei, response.Executions[0])
 }
 
 func (s *visibilityArchiverSuite) TestQuery_Success_SmallPageSize() {
-
 	pageSize := 2
 	ctx := context.Background()
 	URI, err := archiver.NewURI("gs://my-bucket-cad/temporal_archival/visibility")
@@ -313,9 +312,9 @@ func (s *visibilityArchiverSuite) TestQuery_Success_SmallPageSize() {
 	mockParser.EXPECT().Parse(gomock.Any()).Return(&parsedQuery{
 		closeTime:       closeTime,
 		searchPrecision: &dayPrecision,
-		workflowType:    convert.StringPtr("MobileOnlyWorkflow::processMobileOnly"),
-		workflowID:      convert.StringPtr(testWorkflowID),
-		runID:           convert.StringPtr(testRunID),
+		workflowType:    util.Ptr("MobileOnlyWorkflow::processMobileOnly"),
+		workflowID:      util.Ptr(testWorkflowID),
+		runID:           util.Ptr(testRunID),
 	}, nil).AnyTimes()
 	visibilityArchiver.queryParser = mockParser
 	request := &archiver.QueryVisibilityRequest{
@@ -331,10 +330,10 @@ func (s *visibilityArchiverSuite) TestQuery_Success_SmallPageSize() {
 	s.Len(response.Executions, 2)
 	ei, err := convertToExecutionInfo(s.expectedVisibilityRecords[0], searchattribute.TestNameTypeMap)
 	s.NoError(err)
-	s.Equal(ei, response.Executions[0])
+	s.ProtoEqual(ei, response.Executions[0])
 	ei, err = convertToExecutionInfo(s.expectedVisibilityRecords[0], searchattribute.TestNameTypeMap)
 	s.NoError(err)
-	s.Equal(ei, response.Executions[1])
+	s.ProtoEqual(ei, response.Executions[1])
 
 	request.NextPageToken = response.NextPageToken
 	response, err = visibilityArchiver.Query(ctx, URI, request, searchattribute.TestNameTypeMap)
@@ -344,7 +343,7 @@ func (s *visibilityArchiverSuite) TestQuery_Success_SmallPageSize() {
 	s.Len(response.Executions, 1)
 	ei, err = convertToExecutionInfo(s.expectedVisibilityRecords[0], searchattribute.TestNameTypeMap)
 	s.NoError(err)
-	s.Equal(ei, response.Executions[0])
+	s.ProtoEqual(ei, response.Executions[0])
 }
 
 func (s *visibilityArchiverSuite) TestQuery_EmptyQuery_InvalidNamespace() {

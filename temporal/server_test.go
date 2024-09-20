@@ -25,6 +25,7 @@
 package temporal_test
 
 import (
+	"context"
 	"fmt"
 	"path"
 	"strings"
@@ -32,15 +33,16 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	_ "go.temporal.io/server/common/persistence/sql/sqlplugin/sqlite" // needed to register the sqlite plugin
+	"go.temporal.io/server/service/frontend"
 	"go.temporal.io/server/temporal"
 	"go.temporal.io/server/tests/testutils"
-
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
+	"google.golang.org/grpc"
 )
 
 // TestNewServer verifies that NewServer doesn't cause any fx errors, and that there are no unexpected error logs after
@@ -56,6 +58,7 @@ func TestNewServer(t *testing.T) {
 		temporal.ForServices(temporal.DefaultServices),
 		temporal.WithConfig(cfg),
 		temporal.WithLogger(logDetector),
+		temporal.WithChainedFrontendGrpcInterceptors(getFrontendInterceptors()),
 	)
 	require.NoError(t, err)
 	t.Cleanup(func() {
@@ -101,6 +104,17 @@ func setTestPorts(cfg *config.Config) {
 	}
 }
 
+func getFrontendInterceptors() func(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (resp any, err error) {
+	return func(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (resp any, err error) {
+		switch info.Server.(type) {
+		case *frontend.Handler, *frontend.OperatorHandler, *frontend.AdminHandler, *frontend.WorkflowHandler:
+			return handler(ctx, req)
+		default:
+			panic("Frontend gRPC interceptor provided to non-frontend handler")
+		}
+	}
+}
+
 type errorLogDetector struct {
 	t      testing.TB
 	on     atomic.Bool
@@ -142,8 +156,13 @@ func (d *errorLogDetector) Stop() {
 }
 
 func (d *errorLogDetector) Warn(msg string, tags ...tag.Tag) {
-	if strings.Contains(msg, "error creating sdk client") {
-		return
+	for _, s := range []string{
+		"error creating sdk client",
+		"Failed to poll for task",
+	} {
+		if strings.Contains(msg, s) {
+			return
+		}
 	}
 
 	d.logUnexpected("Warn", msg, tags)
@@ -195,6 +214,7 @@ func TestErrorLogDetector(t *testing.T) {
 	d.Info("info")
 	d.Warn("error creating sdk client")
 	d.Warn("unexpected warning")
+	d.Warn("Failed to poll for task")
 	d.Error("Unable to process new range")
 	d.Error("Unable to call matching.PollActivityTaskQueue")
 	d.Error("service failures")

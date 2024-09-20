@@ -1,0 +1,17 @@
+enablearchival: true
+enablemetricscapture: true
+clusterno: 0
+historyconfig:
+  numhistoryshards: 4
+  numhistoryhosts: 1
+workerconfig:
+  startworkeranyway: true
+  enablearchiver: true
+  enablereplicator: true
+esconfig:
+  version: "${ES_VERSION}"
+  url:
+    scheme: "http"
+    host: "${ES_SEEDS}:9200"
+  indices:
+    visibility: temporal_visibility_v1_test

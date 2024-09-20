@@ -28,7 +28,7 @@ import "context"
 
 type immediate struct{ context.Context }
 
-// Immediate returns an effects.Set that executes effects immdiately upon
+// Immediate returns an effects.Controller that executes effects immediately upon
 // insertion. Useful in contexts where you don't actually want to delay effect
 // application and in tests.
 func Immediate(ctx context.Context) Controller { return immediate{ctx} }

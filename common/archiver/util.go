@@ -125,10 +125,10 @@ func ValidateVisibilityArchivalRequest(request *archiverspb.VisibilityRecord) er
 	if request.GetWorkflowTypeName() == "" {
 		return errEmptyWorkflowTypeName
 	}
-	if request.GetStartTime() == nil || request.GetStartTime().IsZero() {
+	if request.GetStartTime() == nil || request.GetStartTime().AsTime().IsZero() {
 		return errEmptyStartTime
 	}
-	if request.GetCloseTime() == nil || request.GetCloseTime().IsZero() {
+	if request.GetCloseTime() == nil || request.GetCloseTime().AsTime().IsZero() {
 		return errEmptyCloseTime
 	}
 	return nil

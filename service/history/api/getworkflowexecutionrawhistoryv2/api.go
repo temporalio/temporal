@@ -27,11 +27,8 @@ package getworkflowexecutionrawhistoryv2
 import (
 	"context"
 
-	"github.com/pborman/uuid"
-
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
-
 	"go.temporal.io/server/api/adminservice/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/api/historyservice/v1"
@@ -87,7 +84,7 @@ func Invoke(
 			return nil, err
 		}
 
-		pageToken = api.GeneratePaginationToken(request, response.GetVersionHistories())
+		pageToken = api.GeneratePaginationTokenV2Request(request, response.GetVersionHistories())
 	} else {
 		pageToken, err = api.DeserializeRawHistoryToken(req.NextPageToken)
 		if err != nil {
@@ -106,7 +103,7 @@ func Invoke(
 		}
 	}
 
-	if err := api.ValidatePaginationToken(
+	if err := api.ValidatePaginationTokenV2Request(
 		request,
 		pageToken,
 	); err != nil {
@@ -157,7 +154,7 @@ func Invoke(
 	pageToken.PersistenceToken = rawHistoryResponse.NextPageToken
 	size := rawHistoryResponse.Size
 	metricsHandler := interceptor.GetMetricsHandlerFromContext(ctx, shardContext.GetLogger()).WithTags(metrics.OperationTag(metrics.HistoryGetWorkflowExecutionRawHistoryV2Scope))
-	metricsHandler.Histogram(metrics.HistorySize.GetMetricName(), metrics.HistorySize.GetMetricUnit()).Record(
+	metrics.HistorySize.With(metricsHandler).Record(
 		int64(size),
 		metrics.NamespaceTag(ns.Name().String()),
 		metrics.OperationTag(metrics.AdminGetWorkflowExecutionRawHistoryV2Scope),
@@ -183,37 +180,6 @@ func Invoke(
 	}, nil
 }
 
-func validateGetWorkflowExecutionRawHistoryV2Request(
-	request *historyservice.GetWorkflowExecutionRawHistoryV2Request,
-) error {
-
-	req := request.Request
-	execution := req.Execution
-	if execution.GetWorkflowId() == "" {
-		return consts.ErrWorkflowIDNotSet
-	}
-	// TODO currently, this API is only going to be used by re-send history events
-	// to remote cluster if kafka is lossy again, in the future, this API can be used
-	// by CLI and client, then empty runID (meaning the current workflow) should be allowed
-	if execution.GetRunId() == "" || uuid.Parse(execution.GetRunId()) == nil {
-		return consts.ErrInvalidRunID
-	}
-
-	pageSize := int(req.GetMaximumPageSize())
-	if pageSize <= 0 {
-		return consts.ErrInvalidPageSize
-	}
-
-	if req.GetStartEventId() == common.EmptyEventID &&
-		req.GetStartEventVersion() == common.EmptyVersion &&
-		req.GetEndEventId() == common.EmptyEventID &&
-		req.GetEndEventVersion() == common.EmptyVersion {
-		return consts.ErrInvalidEventQueryRange
-	}
-
-	return nil
-}
-
 func SetRequestDefaultValueAndGetTargetVersionHistory(
 	request *historyservice.GetWorkflowExecutionRawHistoryV2Request,
 	versionHistories *historyspb.VersionHistories,
@@ -234,7 +200,7 @@ func SetRequestDefaultValueAndGetTargetVersionHistory(
 		return nil, err
 	}
 
-	if req.GetStartEventId() == common.EmptyVersion || req.GetStartEventVersion() == common.EmptyVersion {
+	if req.GetStartEventId() == common.EmptyEventID || req.GetStartEventVersion() == common.EmptyVersion {
 		// If start event is not set, get the events from the first event
 		// As the API is exclusive-exclusive, use first event id - 1 here
 		req.StartEventId = common.FirstEventID - 1

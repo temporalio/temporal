@@ -31,12 +31,11 @@ import (
 
 	"github.com/pborman/uuid"
 	"go.temporal.io/api/serviceerror"
-
-	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/workflow"
 )
@@ -167,11 +166,11 @@ func (r *ConflictResolverImpl) rebuild(
 
 	rebuildMutableState, _, err := r.stateRebuilder.Rebuild(
 		ctx,
-		timestamp.TimeValue(executionInfo.StartTime),
+		timestamp.TimeValue(executionState.StartTime),
 		workflowKey,
 		replayVersionHistory.GetBranchToken(),
 		lastItem.GetEventId(),
-		convert.Int64Ptr(lastItem.GetVersion()),
+		util.Ptr(lastItem.GetVersion()),
 		workflowKey,
 		replayVersionHistory.GetBranchToken(),
 		requestID,
@@ -192,10 +191,6 @@ func (r *ConflictResolverImpl) rebuild(
 	}
 
 	// set the current branch index to target branch index
-	// set the version history back
-	//
-	// caller can use the IsVersionHistoriesRebuilt function in VersionHistories
-	// telling whether mutable state is rebuilt, before apply new history events
 	if err := versionhistory.SetCurrentVersionHistoryIndex(versionHistories, branchIndex); err != nil {
 		return nil, err
 	}

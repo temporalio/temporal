@@ -33,6 +33,7 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
+	"go.temporal.io/server/common/primitives"
 )
 
 type (
@@ -62,6 +63,7 @@ type (
 		// Used for verifying workflow executions were replicated successfully on target cluster.
 		EnableVerification      bool
 		TargetClusterEndpoint   string
+		TargetClusterName       string
 		VerifyIntervalInSeconds int `validate:"gte=0"`
 
 		// Used by query handler to indicate overall progress of replication
@@ -87,7 +89,7 @@ type (
 	}
 
 	listWorkflowsResponse struct {
-		Executions    []commonpb.WorkflowExecution
+		Executions    []*commonpb.WorkflowExecution
 		NextPageToken []byte
 		Error         error
 
@@ -98,7 +100,7 @@ type (
 
 	generateReplicationTasksRequest struct {
 		NamespaceID string
-		Executions  []commonpb.WorkflowExecution
+		Executions  []*commonpb.WorkflowExecution
 		RPS         float64
 	}
 
@@ -106,8 +108,9 @@ type (
 		Namespace             string
 		NamespaceID           string
 		TargetClusterEndpoint string
+		TargetClusterName     string
 		VerifyInterval        time.Duration `validate:"gte=0"`
-		Executions            []commonpb.WorkflowExecution
+		Executions            []*commonpb.WorkflowExecution
 	}
 
 	verifyReplicationTasksResponse struct{}
@@ -144,6 +147,8 @@ const (
 )
 
 func ForceReplicationWorkflow(ctx workflow.Context, params ForceReplicationParams) error {
+	ctx = workflow.WithTaskQueue(ctx, primitives.MigrationActivityTQ)
+
 	workflow.SetQueryHandler(ctx, forceReplicationStatusQueryType, func() (ForceReplicationStatus, error) {
 		return ForceReplicationStatus{
 			LastCloseTime:                      params.LastCloseTime,
@@ -248,6 +253,8 @@ func maybeKickoffTaskQueueUserDataReplication(ctx workflow.Context, params Force
 }
 
 func ForceTaskQueueUserDataReplicationWorkflow(ctx workflow.Context, params TaskQueueUserDataReplicationParamsWithNamespace) error {
+	ctx = workflow.WithTaskQueue(ctx, primitives.MigrationActivityTQ) // children do not inherit ActivityOptions
+
 	var a *activities
 	ao := workflow.ActivityOptions{
 		// This shouldn't take "too long", just set an arbitrary long timeout here and rely on heartbeats for liveness detection.
@@ -276,8 +283,8 @@ func validateAndSetForceReplicationParams(params *ForceReplicationParams) error 
 		return temporal.NewNonRetryableApplicationError("InvalidArgument: Namespace is required", "InvalidArgument", nil)
 	}
 
-	if params.EnableVerification && len(params.TargetClusterEndpoint) == 0 {
-		return temporal.NewNonRetryableApplicationError("InvalidArgument: TargetClusterEndpoint is required with verification enabled", "InvalidArgument", nil)
+	if params.EnableVerification && len(params.TargetClusterEndpoint) == 0 && len(params.TargetClusterName) == 0 {
+		return temporal.NewNonRetryableApplicationError("InvalidArgument: TargetClusterEndpoint or TargetClusterName is required with verification enabled", "InvalidArgument", nil)
 	}
 
 	if params.ConcurrentActivityCount <= 0 {
@@ -376,7 +383,7 @@ func enqueueReplicationTasks(ctx workflow.Context, workflowExecutionsCh workflow
 	actx := workflow.WithActivityOptions(ctx, ao)
 	var a *activities
 	var futures []workflow.Future
-	var workflowExecutions []commonpb.WorkflowExecution
+	var workflowExecutions []*commonpb.WorkflowExecution
 	var lastActivityErr error
 
 	for workflowExecutionsCh.Receive(ctx, &workflowExecutions) {
@@ -399,6 +406,7 @@ func enqueueReplicationTasks(ctx workflow.Context, workflowExecutionsCh workflow
 		if params.EnableVerification {
 			verifyTaskFuture := workflow.ExecuteActivity(actx, a.VerifyReplicationTasks, &verifyReplicationTasksRequest{
 				TargetClusterEndpoint: params.TargetClusterEndpoint,
+				TargetClusterName:     params.TargetClusterName,
 				Namespace:             params.Namespace,
 				NamespaceID:           namespaceID,
 				Executions:            workflowExecutions,

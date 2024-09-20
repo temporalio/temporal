@@ -27,15 +27,15 @@ package replication
 import (
 	"context"
 	"fmt"
+	"math/rand"
 	"testing"
+	"time"
 
-	"github.com/golang/mock/gomock"
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
-
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/api/historyservice/v1"
@@ -53,6 +53,8 @@ import (
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tests"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
+	"go.uber.org/mock/gomock"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type (
@@ -197,34 +199,38 @@ func (s *taskExecutorSuite) TestProcessTaskOnce_SyncActivityReplicationTask() {
 		TaskType: enumsspb.REPLICATION_TASK_TYPE_SYNC_ACTIVITY_TASK,
 		Attributes: &replicationspb.ReplicationTask_SyncActivityTaskAttributes{
 			SyncActivityTaskAttributes: &replicationspb.SyncActivityTaskAttributes{
-				NamespaceId:        namespaceID.String(),
-				WorkflowId:         workflowID,
-				RunId:              runID,
-				Version:            1234,
-				ScheduledEventId:   2345,
-				ScheduledTime:      nil,
-				StartedEventId:     2346,
-				StartedTime:        nil,
-				LastHeartbeatTime:  nil,
-				Attempt:            10,
-				LastFailure:        nil,
-				LastWorkerIdentity: "",
+				NamespaceId:                namespaceID.String(),
+				WorkflowId:                 workflowID,
+				RunId:                      runID,
+				Version:                    1234,
+				ScheduledEventId:           2345,
+				ScheduledTime:              nil,
+				StartedEventId:             2346,
+				StartedTime:                nil,
+				LastHeartbeatTime:          nil,
+				Attempt:                    10,
+				LastFailure:                nil,
+				LastWorkerIdentity:         "",
+				LastStartedBuildId:         "ABC",
+				LastStartedRedirectCounter: 8,
 			},
 		},
 	}
 	request := &historyservice.SyncActivityRequest{
-		NamespaceId:        namespaceID.String(),
-		WorkflowId:         workflowID,
-		RunId:              runID,
-		Version:            1234,
-		ScheduledEventId:   2345,
-		ScheduledTime:      nil,
-		StartedEventId:     2346,
-		StartedTime:        nil,
-		LastHeartbeatTime:  nil,
-		Attempt:            10,
-		LastFailure:        nil,
-		LastWorkerIdentity: "",
+		NamespaceId:                namespaceID.String(),
+		WorkflowId:                 workflowID,
+		RunId:                      runID,
+		Version:                    1234,
+		ScheduledEventId:           2345,
+		ScheduledTime:              nil,
+		StartedEventId:             2346,
+		StartedTime:                nil,
+		LastHeartbeatTime:          nil,
+		Attempt:                    10,
+		LastFailure:                nil,
+		LastWorkerIdentity:         "",
+		LastStartedBuildId:         "ABC",
+		LastStartedRedirectCounter: 8,
 	}
 
 	s.historyClient.EXPECT().SyncActivity(gomock.Any(), request).Return(&historyservice.SyncActivityResponse{}, nil)
@@ -404,4 +410,26 @@ func (s *taskExecutorSuite) TestProcessTaskOnce_SyncWorkflowStateTask() {
 
 	err := s.replicationTaskExecutor.Execute(context.Background(), task, true)
 	s.NoError(err)
+}
+
+func (s *taskExecutorSuite) TestProcessTaskOnce_SyncHSMTask() {
+	namespaceID := namespace.ID(uuid.New())
+	workflowID := uuid.New()
+	runID := uuid.New()
+	task := &replicationspb.ReplicationTask{
+		SourceTaskId: rand.Int63(),
+		TaskType:     enumsspb.REPLICATION_TASK_TYPE_SYNC_HSM_TASK,
+		Attributes: &replicationspb.ReplicationTask_SyncHsmAttributes{SyncHsmAttributes: &replicationspb.SyncHSMAttributes{
+			NamespaceId:      namespaceID.String(),
+			WorkflowId:       workflowID,
+			RunId:            runID,
+			VersionHistory:   &historyspb.VersionHistory{},
+			StateMachineNode: &persistencespb.StateMachineNode{},
+		}},
+		VisibilityTime: timestamppb.New(time.Now()),
+	}
+
+	// not handling SyncHSMTask in deprecated replication task processing code path
+	err := s.replicationTaskExecutor.Execute(context.Background(), task, true)
+	s.ErrorIs(err, ErrUnknownReplicationTask)
 }

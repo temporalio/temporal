@@ -41,7 +41,6 @@ import (
 	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/aws/aws-sdk-go/service/s3/s3iface"
 	"go.temporal.io/api/serviceerror"
-
 	archiverspb "go.temporal.io/server/api/archiver/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/archiver"
@@ -109,6 +108,7 @@ func newHistoryArchiver(
 		Endpoint:         config.Endpoint,
 		Region:           aws.String(config.Region),
 		S3ForcePathStyle: aws.Bool(config.S3ForcePathStyle),
+		LogLevel:         (*aws.LogLevelType)(&config.LogLevel),
 	}
 	sess, err := session.NewSession(s3Config)
 	if err != nil {
@@ -131,12 +131,12 @@ func (h *historyArchiver) Archive(
 	featureCatalog := archiver.GetFeatureCatalog(opts...)
 	startTime := time.Now().UTC()
 	defer func() {
-		handler.Timer(metrics.ServiceLatency.GetMetricName()).Record(time.Since(startTime))
+		metrics.ServiceLatency.With(handler).Record(time.Since(startTime))
 		if err != nil {
 			if common.IsPersistenceTransientError(err) || isRetryableError(err) {
-				handler.Counter(metrics.HistoryArchiverArchiveTransientErrorCount.GetMetricName()).Record(1)
+				metrics.HistoryArchiverArchiveTransientErrorCount.With(handler).Record(1)
 			} else {
-				handler.Counter(metrics.HistoryArchiverArchiveNonRetryableErrorCount.GetMetricName()).Record(1)
+				metrics.HistoryArchiverArchiveNonRetryableErrorCount.With(handler).Record(1)
 				if featureCatalog.NonRetryableError != nil {
 					err = featureCatalog.NonRetryableError()
 				}
@@ -169,7 +169,7 @@ func (h *historyArchiver) Archive(
 				// this may happen even in the middle of iterating history as two archival signals
 				// can be processed concurrently.
 				logger.Info(archiver.ArchiveSkippedInfoMsg)
-				handler.Counter(metrics.HistoryArchiverDuplicateArchivalsCount.GetMetricName()).Record(1)
+				metrics.HistoryArchiverDuplicateArchivalsCount.With(handler).Record(1)
 				return nil
 			}
 
@@ -206,7 +206,7 @@ func (h *historyArchiver) Archive(
 		}
 		blobSize := int64(binary.Size(encodedHistoryBlob))
 		if exists {
-			handler.Counter(metrics.HistoryArchiverBlobExistsCount.GetMetricName()).Record(1)
+			metrics.HistoryArchiverBlobExistsCount.With(handler).Record(1)
 		} else {
 			if err := Upload(ctx, h.s3cli, URI, key, encodedHistoryBlob); err != nil {
 				if isRetryableError(err) {
@@ -217,7 +217,7 @@ func (h *historyArchiver) Archive(
 				return err
 			}
 			progress.uploadedSize += blobSize
-			handler.Histogram(metrics.HistoryArchiverBlobSize.GetMetricName(), metrics.HistoryArchiverBlobSize.GetMetricUnit()).Record(blobSize)
+			handler.Histogram(metrics.HistoryArchiverBlobSize.Name(), metrics.HistoryArchiverBlobSize.Unit()).Record(blobSize)
 		}
 
 		progress.historySize += blobSize
@@ -225,9 +225,9 @@ func (h *historyArchiver) Archive(
 		saveHistoryIteratorState(ctx, featureCatalog, historyIterator, &progress)
 	}
 
-	handler.Histogram(metrics.HistoryArchiverTotalUploadSize.GetMetricName(), metrics.HistoryArchiverTotalUploadSize.GetMetricUnit()).Record(progress.uploadedSize)
-	handler.Histogram(metrics.HistoryArchiverHistorySize.GetMetricName(), metrics.HistoryArchiverHistorySize.GetMetricUnit()).Record(progress.historySize)
-	handler.Counter(metrics.HistoryArchiverArchiveSuccessCount.GetMetricName()).Record(1)
+	handler.Histogram(metrics.HistoryArchiverTotalUploadSize.Name(), metrics.HistoryArchiverTotalUploadSize.Unit()).Record(progress.uploadedSize)
+	handler.Histogram(metrics.HistoryArchiverHistorySize.Name(), metrics.HistoryArchiverHistorySize.Unit()).Record(progress.historySize)
+	metrics.HistoryArchiverArchiveSuccessCount.With(handler).Record(1)
 	return nil
 }
 

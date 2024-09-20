@@ -27,10 +27,10 @@ package interceptor
 import (
 	"context"
 
-	"google.golang.org/grpc"
-
+	"go.temporal.io/server/common/api"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/namespace"
+	"google.golang.org/grpc"
 )
 
 type (
@@ -55,11 +55,27 @@ func (i *CallerInfoInterceptor) Intercept(
 	info *grpc.UnaryServerInfo,
 	handler grpc.UnaryHandler,
 ) (interface{}, error) {
+	ctx = PopulateCallerInfo(
+		ctx,
+		func() string { return string(MustGetNamespaceName(i.namespaceRegistry, req)) },
+		func() string { return api.MethodName(info.FullMethod) },
+	)
+
+	return handler(ctx, req)
+}
+
+// PopulateCallerInfo gets current caller info value from the context and updates any that are missing.
+// Namespace name and method are passed as functions to avoid expensive lookups if those values are already set.
+func PopulateCallerInfo(
+	ctx context.Context,
+	nsNameGetter func() string,
+	methodGetter func() string,
+) context.Context {
 	callerInfo := headers.GetCallerInfo(ctx)
 
 	updateInfo := false
 	if callerInfo.CallerName == "" {
-		callerInfo.CallerName = string(MustGetNamespaceName(i.namespaceRegistry, req))
+		callerInfo.CallerName = nsNameGetter()
 		updateInfo = callerInfo.CallerName != ""
 	}
 	if callerInfo.CallerType == "" {
@@ -68,8 +84,7 @@ func (i *CallerInfoInterceptor) Intercept(
 	}
 	if (callerInfo.CallerType == headers.CallerTypeAPI || callerInfo.CallerType == headers.CallerTypeOperator) &&
 		callerInfo.CallOrigin == "" {
-		_, method := SplitMethodName(info.FullMethod)
-		callerInfo.CallOrigin = method
+		callerInfo.CallOrigin = methodGetter()
 		updateInfo = true
 	}
 
@@ -77,5 +92,5 @@ func (i *CallerInfoInterceptor) Intercept(
 		ctx = headers.SetCallerInfo(ctx, callerInfo)
 	}
 
-	return handler(ctx, req)
+	return ctx
 }

@@ -111,11 +111,12 @@ func (o *ownership) eventLoop(ctx context.Context) {
 		case <-acquireTicker.C:
 			o.scheduleAcquire()
 		case changedEvent := <-o.membershipUpdateCh:
-			o.metricsHandler.Counter(metrics.MembershipChangedCounter.GetMetricName()).Record(1)
+			metrics.MembershipChangedCounter.With(o.metricsHandler).Record(1)
 
 			o.logger.Info("", tag.ValueRingMembershipChangedEvent,
 				tag.NumberProcessed(len(changedEvent.HostsAdded)),
 				tag.NumberDeleted(len(changedEvent.HostsRemoved)),
+				tag.NumberChanged(len(changedEvent.HostsChanged)),
 			)
 
 			o.scheduleAcquire()

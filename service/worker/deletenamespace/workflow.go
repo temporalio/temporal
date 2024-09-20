@@ -31,9 +31,9 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
-
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/service/worker/deletenamespace/deleteexecutions"
 	"go.temporal.io/server/service/worker/deletenamespace/errors"
 	"go.temporal.io/server/service/worker/deletenamespace/reclaimresources"
@@ -86,6 +86,8 @@ var (
 		RetryPolicy: reclaimResourcesWorkflowRetryPolicy,
 		// Important: this is required to make sure the child workflow is not terminated when delete namespace workflow is completed.
 		ParentClosePolicy: enumspb.PARENT_CLOSE_POLICY_ABANDON,
+		// If the client is calling DeleteNamespace API again while ReclaimResourcesWorkflow is running, it might want to terminate existing run and start a new run.
+		WorkflowIDReusePolicy: enumspb.WORKFLOW_ID_REUSE_POLICY_TERMINATE_IF_RUNNING,
 	}
 )
 
@@ -113,12 +115,14 @@ func DeleteNamespaceWorkflow(ctx workflow.Context, params DeleteNamespaceWorkflo
 		return result, err
 	}
 
-	var a *activities
+	ctx = workflow.WithTaskQueue(ctx, primitives.DeleteNamespaceActivityTQ)
+
+	var la *localActivities
 
 	// Step 1. Get namespace info.
 	ctx1 := workflow.WithLocalActivityOptions(ctx, localActivityOptions)
 	var namespaceInfo getNamespaceInfoResult
-	err := workflow.ExecuteLocalActivity(ctx1, a.GetNamespaceInfoActivity, params.NamespaceID, params.Namespace).Get(ctx, &namespaceInfo)
+	err := workflow.ExecuteLocalActivity(ctx1, la.GetNamespaceInfoActivity, params.NamespaceID, params.Namespace).Get(ctx, &namespaceInfo)
 	if err != nil {
 		return result, temporal.NewNonRetryableApplicationError(fmt.Sprintf("namespace %s is not found", params.Namespace), "", err)
 	}
@@ -127,7 +131,7 @@ func DeleteNamespaceWorkflow(ctx workflow.Context, params DeleteNamespaceWorkflo
 
 	// Step 2. Mark namespace as deleted.
 	ctx2 := workflow.WithLocalActivityOptions(ctx, localActivityOptions)
-	err = workflow.ExecuteLocalActivity(ctx2, a.MarkNamespaceDeletedActivity, params.Namespace).Get(ctx, nil)
+	err = workflow.ExecuteLocalActivity(ctx2, la.MarkNamespaceDeletedActivity, params.Namespace).Get(ctx, nil)
 	if err != nil {
 		return result, fmt.Errorf("%w: MarkNamespaceDeletedActivity: %v", errors.ErrUnableToExecuteActivity, err)
 	}
@@ -136,13 +140,13 @@ func DeleteNamespaceWorkflow(ctx workflow.Context, params DeleteNamespaceWorkflo
 
 	// Step 3. Rename namespace.
 	ctx3 := workflow.WithLocalActivityOptions(ctx, localActivityOptions)
-	err = workflow.ExecuteLocalActivity(ctx3, a.GenerateDeletedNamespaceNameActivity, params.NamespaceID, params.Namespace).Get(ctx, &result.DeletedNamespace)
+	err = workflow.ExecuteLocalActivity(ctx3, la.GenerateDeletedNamespaceNameActivity, params.NamespaceID, params.Namespace).Get(ctx, &result.DeletedNamespace)
 	if err != nil {
 		return result, fmt.Errorf("%w: GenerateDeletedNamespaceNameActivity: %v", errors.ErrUnableToExecuteActivity, err)
 	}
 
 	ctx31 := workflow.WithLocalActivityOptions(ctx, localActivityOptions)
-	err = workflow.ExecuteLocalActivity(ctx31, a.RenameNamespaceActivity, params.Namespace, result.DeletedNamespace).Get(ctx, nil)
+	err = workflow.ExecuteLocalActivity(ctx31, la.RenameNamespaceActivity, params.Namespace, result.DeletedNamespace).Get(ctx, nil)
 	if err != nil {
 		return result, fmt.Errorf("%w: RenameNamespaceActivity: %v", errors.ErrUnableToExecuteActivity, err)
 	}
@@ -150,6 +154,7 @@ func DeleteNamespaceWorkflow(ctx workflow.Context, params DeleteNamespaceWorkflo
 	// Step 4. Reclaim workflow resources asynchronously.
 	ctx4 := workflow.WithChildOptions(ctx, reclaimResourcesWorkflowOptions)
 	ctx4 = workflow.WithWorkflowID(ctx4, fmt.Sprintf("%s/%s", reclaimresources.WorkflowName, result.DeletedNamespace))
+
 	reclaimResourcesFuture := workflow.ExecuteChildWorkflow(ctx4, reclaimresources.ReclaimResourcesWorkflow, reclaimresources.ReclaimResourcesParams{
 		DeleteExecutionsParams: deleteexecutions.DeleteExecutionsParams{
 			Namespace:   result.DeletedNamespace,

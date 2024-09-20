@@ -31,7 +31,6 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
-
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -44,6 +43,7 @@ import (
 	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
+	"go.temporal.io/server/service/history/workflow"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
 )
 
@@ -86,7 +86,7 @@ func newVisibilityQueueTaskExecutor(
 func (t *visibilityQueueTaskExecutor) Execute(
 	ctx context.Context,
 	executable queues.Executable,
-) ([]metrics.Tag, bool, error) {
+) queues.ExecuteResponse {
 	task := executable.GetTask()
 	taskType := queues.GetVisibilityTaskTypeTagValue(task)
 	namespaceTag, replicationState := getNamespaceTagAndReplicationStateByID(
@@ -107,7 +107,11 @@ func (t *visibilityQueueTaskExecutor) Execute(
 		// will be blocked by shard context during ns handover
 		// TODO: move this logic to queues.Executable when metrics tag doesn't need to
 		// be returned from task executor
-		return metricsTags, true, consts.ErrNamespaceHandover
+		return queues.ExecuteResponse{
+			ExecutionMetricTags: metricsTags,
+			ExecutedAsActive:    true,
+			ExecutionErr:        consts.ErrNamespaceHandover,
+		}
 	}
 
 	var err error
@@ -124,7 +128,11 @@ func (t *visibilityQueueTaskExecutor) Execute(
 		err = errUnknownVisibilityTask
 	}
 
-	return metricsTags, true, err
+	return queues.ExecuteResponse{
+		ExecutionMetricTags: metricsTags,
+		ExecutedAsActive:    true,
+		ExecutionErr:        err,
+	}
 }
 
 func (t *visibilityQueueTaskExecutor) processStartExecution(
@@ -133,6 +141,12 @@ func (t *visibilityQueueTaskExecutor) processStartExecution(
 ) (retError error) {
 	ctx, cancel := context.WithTimeout(ctx, taskTimeout)
 	defer cancel()
+
+	namespaceEntry, err := t.shardContext.GetNamespaceRegistry().
+		GetNamespaceByID(namespace.ID(task.GetNamespaceID()))
+	if err != nil {
+		return err
+	}
 
 	weContext, release, err := getWorkflowExecutionContextForTask(ctx, t.shardContext, t.cache, task)
 	if err != nil {
@@ -159,37 +173,18 @@ func (t *visibilityQueueTaskExecutor) processStartExecution(
 		return err
 	}
 
-	executionInfo := mutableState.GetExecutionInfo()
-	executionState := mutableState.GetExecutionState()
-	wfTypeName := executionInfo.WorkflowTypeName
-
-	workflowStartTime := timestamp.TimeValue(mutableState.GetExecutionInfo().GetStartTime())
-	workflowExecutionTime := timestamp.TimeValue(mutableState.GetExecutionInfo().GetExecutionTime())
-	visibilityMemo := getWorkflowMemo(copyMemo(executionInfo.Memo))
-	searchAttr := getSearchAttributes(copySearchAttributes(executionInfo.SearchAttributes))
-	executionStatus := executionState.GetStatus()
-	taskQueue := executionInfo.TaskQueue
-	stateTransitionCount := executionInfo.GetStateTransitionCount()
+	requestBase := t.getVisibilityRequestBase(task, namespaceEntry, mutableState)
 
 	// NOTE: do not access anything related mutable state after this lock release
 	// release the context lock since we no longer need mutable state and
 	// the rest of logic is making RPC call, which takes time.
 	release(nil)
 
-	return t.recordStartExecution(
+	return t.visibilityMgr.RecordWorkflowExecutionStarted(
 		ctx,
-		namespace.ID(task.GetNamespaceID()),
-		task.GetWorkflowID(),
-		task.GetRunID(),
-		wfTypeName,
-		workflowStartTime,
-		workflowExecutionTime,
-		stateTransitionCount,
-		task.GetTaskID(),
-		executionStatus,
-		taskQueue,
-		visibilityMemo,
-		searchAttr,
+		&manager.RecordWorkflowExecutionStartedRequest{
+			VisibilityRequestBase: requestBase,
+		},
 	)
 }
 
@@ -199,6 +194,12 @@ func (t *visibilityQueueTaskExecutor) processUpsertExecution(
 ) (retError error) {
 	ctx, cancel := context.WithTimeout(ctx, taskTimeout)
 	defer cancel()
+
+	namespaceEntry, err := t.shardContext.GetNamespaceRegistry().
+		GetNamespaceByID(namespace.ID(task.GetNamespaceID()))
+	if err != nil {
+		return err
+	}
 
 	weContext, release, err := getWorkflowExecutionContextForTask(ctx, t.shardContext, t.cache, task)
 	if err != nil {
@@ -214,123 +215,19 @@ func (t *visibilityQueueTaskExecutor) processUpsertExecution(
 		return nil
 	}
 
-	executionInfo := mutableState.GetExecutionInfo()
-	executionState := mutableState.GetExecutionState()
-	wfTypeName := executionInfo.WorkflowTypeName
-
-	workflowStartTime := timestamp.TimeValue(mutableState.GetExecutionInfo().GetStartTime())
-	workflowExecutionTime := timestamp.TimeValue(mutableState.GetExecutionInfo().GetExecutionTime())
-	visibilityMemo := getWorkflowMemo(copyMemo(executionInfo.Memo))
-	searchAttr := getSearchAttributes(copySearchAttributes(executionInfo.SearchAttributes))
-	executionStatus := executionState.GetStatus()
-	taskQueue := executionInfo.TaskQueue
-	stateTransitionCount := executionInfo.GetStateTransitionCount()
+	requestBase := t.getVisibilityRequestBase(task, namespaceEntry, mutableState)
 
 	// NOTE: do not access anything related mutable state after this lock release
 	// release the context lock since we no longer need mutable state and
 	// the rest of logic is making RPC call, which takes time.
 	release(nil)
 
-	return t.upsertExecution(
+	return t.visibilityMgr.UpsertWorkflowExecution(
 		ctx,
-		namespace.ID(task.GetNamespaceID()),
-		task.GetWorkflowID(),
-		task.GetRunID(),
-		wfTypeName,
-		workflowStartTime,
-		workflowExecutionTime,
-		stateTransitionCount,
-		task.GetTaskID(),
-		executionStatus,
-		taskQueue,
-		visibilityMemo,
-		searchAttr,
+		&manager.UpsertWorkflowExecutionRequest{
+			VisibilityRequestBase: requestBase,
+		},
 	)
-}
-
-func (t *visibilityQueueTaskExecutor) recordStartExecution(
-	ctx context.Context,
-	namespaceID namespace.ID,
-	workflowID string,
-	runID string,
-	workflowTypeName string,
-	startTime time.Time,
-	executionTime time.Time,
-	stateTransitionCount int64,
-	taskID int64,
-	status enumspb.WorkflowExecutionStatus,
-	taskQueue string,
-	visibilityMemo *commonpb.Memo,
-	searchAttributes *commonpb.SearchAttributes,
-) error {
-	namespaceEntry, err := t.shardContext.GetNamespaceRegistry().GetNamespaceByID(namespaceID)
-	if err != nil {
-		return err
-	}
-
-	request := &manager.RecordWorkflowExecutionStartedRequest{
-		VisibilityRequestBase: &manager.VisibilityRequestBase{
-			NamespaceID: namespaceID,
-			Namespace:   namespaceEntry.Name(),
-			Execution: commonpb.WorkflowExecution{
-				WorkflowId: workflowID,
-				RunId:      runID,
-			},
-			WorkflowTypeName:     workflowTypeName,
-			StartTime:            startTime,
-			ExecutionTime:        executionTime,
-			StateTransitionCount: stateTransitionCount, TaskID: taskID,
-			Status:           status,
-			ShardID:          t.shardContext.GetShardID(),
-			Memo:             visibilityMemo,
-			TaskQueue:        taskQueue,
-			SearchAttributes: searchAttributes,
-		},
-	}
-	return t.visibilityMgr.RecordWorkflowExecutionStarted(ctx, request)
-}
-
-func (t *visibilityQueueTaskExecutor) upsertExecution(
-	ctx context.Context,
-	namespaceID namespace.ID,
-	workflowID string,
-	runID string,
-	workflowTypeName string,
-	startTime time.Time,
-	executionTime time.Time,
-	stateTransitionCount int64,
-	taskID int64,
-	status enumspb.WorkflowExecutionStatus,
-	taskQueue string,
-	visibilityMemo *commonpb.Memo,
-	searchAttributes *commonpb.SearchAttributes,
-) error {
-	namespaceEntry, err := t.shardContext.GetNamespaceRegistry().GetNamespaceByID(namespaceID)
-	if err != nil {
-		return err
-	}
-
-	request := &manager.UpsertWorkflowExecutionRequest{
-		VisibilityRequestBase: &manager.VisibilityRequestBase{
-			NamespaceID: namespaceID,
-			Namespace:   namespaceEntry.Name(),
-			Execution: commonpb.WorkflowExecution{
-				WorkflowId: workflowID,
-				RunId:      runID,
-			},
-			WorkflowTypeName:     workflowTypeName,
-			StartTime:            startTime,
-			ExecutionTime:        executionTime,
-			StateTransitionCount: stateTransitionCount, TaskID: taskID,
-			ShardID:          t.shardContext.GetShardID(),
-			Status:           status,
-			Memo:             visibilityMemo,
-			TaskQueue:        taskQueue,
-			SearchAttributes: searchAttributes,
-		},
-	}
-
-	return t.visibilityMgr.UpsertWorkflowExecution(ctx, request)
 }
 
 func (t *visibilityQueueTaskExecutor) processCloseExecution(
@@ -340,7 +237,8 @@ func (t *visibilityQueueTaskExecutor) processCloseExecution(
 	ctx, cancel := context.WithTimeout(parentCtx, taskTimeout)
 	defer cancel()
 
-	namespaceEntry, err := t.shardContext.GetNamespaceRegistry().GetNamespaceByID(namespace.ID(task.GetNamespaceID()))
+	namespaceEntry, err := t.shardContext.GetNamespaceRegistry().
+		GetNamespaceByID(namespace.ID(task.GetNamespaceID()))
 	if err != nil {
 		return err
 	}
@@ -359,53 +257,44 @@ func (t *visibilityQueueTaskExecutor) processCloseExecution(
 		return nil
 	}
 
-	lastWriteVersion, err := mutableState.GetLastWriteVersion()
+	closeVersion, err := mutableState.GetCloseVersion()
 	if err != nil {
 		return err
 	}
-	err = CheckTaskVersion(t.shardContext, t.logger, mutableState.GetNamespaceEntry(), lastWriteVersion, task.Version, task)
+	err = CheckTaskVersion(t.shardContext, t.logger, mutableState.GetNamespaceEntry(), closeVersion, task.Version, task)
 	if err != nil {
 		return err
 	}
 
-	executionInfo := mutableState.GetExecutionInfo()
-	executionState := mutableState.GetExecutionState()
 	wfCloseTime, err := mutableState.GetWorkflowCloseTime(ctx)
 	if err != nil {
 		return err
 	}
-	workflowTypeName := executionInfo.WorkflowTypeName
-	workflowStatus := executionState.Status
-	workflowHistoryLength := mutableState.GetNextEventID() - 1
-	workflowStartTime := timestamp.TimeValue(mutableState.GetExecutionInfo().GetStartTime())
-	workflowExecutionTime := timestamp.TimeValue(mutableState.GetExecutionInfo().GetExecutionTime())
-	visibilityMemo := getWorkflowMemo(copyMemo(executionInfo.Memo))
-	searchAttr := getSearchAttributes(copySearchAttributes(executionInfo.SearchAttributes))
-	taskQueue := executionInfo.TaskQueue
+	wfExecutionDuration, err := mutableState.GetWorkflowExecutionDuration(ctx)
+	if err != nil {
+		return err
+	}
+	historyLength := mutableState.GetNextEventID() - 1
+	executionInfo := mutableState.GetExecutionInfo()
 	stateTransitionCount := executionInfo.GetStateTransitionCount()
 	historySizeBytes := executionInfo.GetExecutionStats().GetHistorySize()
+	requestBase := t.getVisibilityRequestBase(task, namespaceEntry, mutableState)
 
 	// NOTE: do not access anything related mutable state after this lock release
 	// release the context lock since we no longer need mutable state and
 	// the rest of logic is making RPC call, which takes time.
 	release(nil)
-	err = t.recordCloseExecution(
+
+	err = t.visibilityMgr.RecordWorkflowExecutionClosed(
 		ctx,
-		namespaceEntry,
-		task.GetWorkflowID(),
-		task.GetRunID(),
-		workflowTypeName,
-		workflowStartTime,
-		workflowExecutionTime,
-		timestamp.TimeValue(wfCloseTime),
-		workflowStatus,
-		stateTransitionCount,
-		workflowHistoryLength,
-		task.GetTaskID(),
-		visibilityMemo,
-		taskQueue,
-		searchAttr,
-		historySizeBytes,
+		&manager.RecordWorkflowExecutionClosedRequest{
+			VisibilityRequestBase: requestBase,
+			CloseTime:             wfCloseTime,
+			ExecutionDuration:     wfExecutionDuration,
+			HistoryLength:         historyLength,
+			HistorySizeBytes:      historySizeBytes,
+			StateTransitionCount:  stateTransitionCount,
+		},
 	)
 	if err != nil {
 		return err
@@ -422,49 +311,6 @@ func (t *visibilityQueueTaskExecutor) processCloseExecution(
 	return nil
 }
 
-func (t *visibilityQueueTaskExecutor) recordCloseExecution(
-	ctx context.Context,
-	namespaceEntry *namespace.Namespace,
-	workflowID string,
-	runID string,
-	workflowTypeName string,
-	startTime time.Time,
-	executionTime time.Time,
-	endTime time.Time,
-	status enumspb.WorkflowExecutionStatus,
-	stateTransitionCount int64,
-	historyLength int64,
-	taskID int64,
-	visibilityMemo *commonpb.Memo,
-	taskQueue string,
-	searchAttributes *commonpb.SearchAttributes,
-	historySizeBytes int64,
-) error {
-	return t.visibilityMgr.RecordWorkflowExecutionClosed(ctx, &manager.RecordWorkflowExecutionClosedRequest{
-		VisibilityRequestBase: &manager.VisibilityRequestBase{
-			NamespaceID: namespaceEntry.ID(),
-			Namespace:   namespaceEntry.Name(),
-			Execution: commonpb.WorkflowExecution{
-				WorkflowId: workflowID,
-				RunId:      runID,
-			},
-			WorkflowTypeName:     workflowTypeName,
-			StartTime:            startTime,
-			ExecutionTime:        executionTime,
-			StateTransitionCount: stateTransitionCount,
-			Status:               status,
-			TaskID:               taskID,
-			ShardID:              t.shardContext.GetShardID(),
-			Memo:                 visibilityMemo,
-			TaskQueue:            taskQueue,
-			SearchAttributes:     searchAttributes,
-		},
-		CloseTime:        endTime,
-		HistoryLength:    historyLength,
-		HistorySizeBytes: historySizeBytes,
-	})
-}
-
 func (t *visibilityQueueTaskExecutor) processDeleteExecution(
 	ctx context.Context,
 	task *tasks.DeleteExecutionVisibilityTask,
@@ -477,9 +323,12 @@ func (t *visibilityQueueTaskExecutor) processDeleteExecution(
 		WorkflowID:  task.WorkflowID,
 		RunID:       task.RunID,
 		TaskID:      task.TaskID,
-		StartTime:   task.StartTime,
-		CloseTime:   task.CloseTime,
 	}
+
+	if task.CloseTime.After(time.Unix(0, 0)) {
+		request.CloseTime = &task.CloseTime
+	}
+
 	if t.ensureCloseBeforeDelete() {
 		// If visibility delete task is executed before visibility close task then visibility close task
 		// (which change workflow execution status by uploading new visibility record) will resurrect visibility record.
@@ -492,6 +341,54 @@ func (t *visibilityQueueTaskExecutor) processDeleteExecution(
 		}
 	}
 	return t.visibilityMgr.DeleteWorkflowExecution(ctx, request)
+}
+
+func (t *visibilityQueueTaskExecutor) getVisibilityRequestBase(
+	task tasks.Task,
+	namespaceEntry *namespace.Namespace,
+	mutableState workflow.MutableState,
+) *manager.VisibilityRequestBase {
+	var (
+		executionInfo    = mutableState.GetExecutionInfo()
+		startTime        = timestamp.TimeValue(mutableState.GetExecutionState().GetStartTime())
+		executionTime    = timestamp.TimeValue(executionInfo.GetExecutionTime())
+		visibilityMemo   = getWorkflowMemo(copyMapPayload(executionInfo.Memo))
+		searchAttributes = getSearchAttributes(copyMapPayload(executionInfo.SearchAttributes))
+	)
+
+	var parentExecution *commonpb.WorkflowExecution
+	if executionInfo.ParentWorkflowId != "" && executionInfo.ParentRunId != "" {
+		parentExecution = &commonpb.WorkflowExecution{
+			WorkflowId: executionInfo.ParentWorkflowId,
+			RunId:      executionInfo.ParentRunId,
+		}
+	}
+
+	// Data from mutable state used to build VisibilityRequestBase must be deep
+	// copied to ensure that the mutable state is not accessed after the workflow
+	// lock is released and that there is no data race.
+	return &manager.VisibilityRequestBase{
+		NamespaceID: namespaceEntry.ID(),
+		Namespace:   namespaceEntry.Name(),
+		Execution: &commonpb.WorkflowExecution{
+			WorkflowId: task.GetWorkflowID(),
+			RunId:      task.GetRunID(),
+		},
+		WorkflowTypeName: executionInfo.WorkflowTypeName,
+		StartTime:        startTime,
+		Status:           mutableState.GetExecutionState().GetStatus(),
+		ExecutionTime:    executionTime,
+		TaskID:           task.GetTaskID(),
+		ShardID:          t.shardContext.GetShardID(),
+		Memo:             visibilityMemo,
+		TaskQueue:        executionInfo.TaskQueue,
+		SearchAttributes: searchAttributes,
+		ParentExecution:  parentExecution,
+		RootExecution: &commonpb.WorkflowExecution{
+			WorkflowId: executionInfo.RootWorkflowId,
+			RunId:      executionInfo.RootRunId,
+		},
+	}
 }
 
 func (t *visibilityQueueTaskExecutor) isCloseExecutionVisibilityTaskPending(task *tasks.DeleteExecutionVisibilityTask) bool {
@@ -535,11 +432,11 @@ func (t *visibilityQueueTaskExecutor) cleanupExecutionInfo(
 		return nil
 	}
 
-	lastWriteVersion, err := mutableState.GetLastWriteVersion()
+	closeVersion, err := mutableState.GetCloseVersion()
 	if err != nil {
 		return err
 	}
-	err = CheckTaskVersion(t.shardContext, t.logger, mutableState.GetNamespaceEntry(), lastWriteVersion, task.Version, task)
+	err = CheckTaskVersion(t.shardContext, t.logger, mutableState.GetNamespaceEntry(), closeVersion, task.Version, task)
 	if err != nil {
 		return err
 	}
@@ -560,20 +457,6 @@ func getWorkflowMemo(
 	return &commonpb.Memo{Fields: memoFields}
 }
 
-func copyMemo(
-	memoFields map[string]*commonpb.Payload,
-) map[string]*commonpb.Payload {
-	if memoFields == nil {
-		return nil
-	}
-
-	result := make(map[string]*commonpb.Payload)
-	for k, v := range memoFields {
-		result[k] = common.CloneProto(v)
-	}
-	return result
-}
-
 func getSearchAttributes(
 	indexedFields map[string]*commonpb.Payload,
 ) *commonpb.SearchAttributes {
@@ -583,14 +466,11 @@ func getSearchAttributes(
 	return &commonpb.SearchAttributes{IndexedFields: indexedFields}
 }
 
-func copySearchAttributes(
-	input map[string]*commonpb.Payload,
-) map[string]*commonpb.Payload {
+func copyMapPayload(input map[string]*commonpb.Payload) map[string]*commonpb.Payload {
 	if input == nil {
 		return nil
 	}
-
-	result := make(map[string]*commonpb.Payload)
+	result := make(map[string]*commonpb.Payload, len(input))
 	for k, v := range input {
 		result[k] = common.CloneProto(v)
 	}

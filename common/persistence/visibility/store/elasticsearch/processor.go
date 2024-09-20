@@ -22,8 +22,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-// TODO: enable this after https://github.com/golang/mock/issues/621
-// mockgen -copyright_file ../../../../../LICENSE -package $GOPACKAGE -source $GOFILE -destination processor_mock.go
+//go:generate mockgen -copyright_file ../../../../../LICENSE -package $GOPACKAGE -source $GOFILE -destination processor_mock.go
 
 package elasticsearch
 
@@ -39,7 +38,6 @@ import (
 
 	"github.com/dgryski/go-farm"
 	"github.com/olivere/elastic/v7"
-
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/collection"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -100,7 +98,7 @@ const (
 )
 
 var (
-	errVisibilityShutdown = errors.New("visiblity processor was shut down")
+	errVisibilityShutdown = errors.New("visibility processor was shut down")
 )
 
 // NewProcessor create new processorImpl
@@ -177,9 +175,9 @@ func (p *processorImpl) hashFn(key interface{}) uint32 {
 	return hash % p.indexerConcurrency
 }
 
-// Add request to the bulk and return a future object which will receive ack signal when request is processed.
+// Add request to the bulk and return a future object which will receive ack signal when the request is processed.
 func (p *processorImpl) Add(request *client.BulkableRequest, visibilityTaskKey string) *future.FutureImpl[bool] {
-	newFuture := newAckFuture() // Create future first to measure impact of following RWLock on latency
+	newFuture := newAckFuture() // Create future first to measure the impact of following RWLock on latency.
 
 	p.shutdownLock.RLock()
 	defer p.shutdownLock.RUnlock()
@@ -197,7 +195,7 @@ func (p *processorImpl) Add(request *client.BulkableRequest, visibilityTaskKey s
 		}
 
 		p.logger.Warn("Skipping duplicate ES request for visibility task key.", tag.Key(visibilityTaskKey), tag.ESDocID(request.ID), tag.Value(request.Doc), tag.NewDurationTag("interval-between-duplicates", newFuture.createdAt.Sub(existingFuture.createdAt)))
-		p.metricsHandler.Counter(metrics.ElasticsearchBulkProcessorDuplicateRequest.GetMetricName()).Record(1)
+		metrics.ElasticsearchBulkProcessorDuplicateRequest.With(p.metricsHandler).Record(1)
 		newFuture = existingFuture
 		return nil
 	})
@@ -210,8 +208,8 @@ func (p *processorImpl) Add(request *client.BulkableRequest, visibilityTaskKey s
 
 // bulkBeforeAction is triggered before bulk processor commit
 func (p *processorImpl) bulkBeforeAction(_ int64, requests []elastic.BulkableRequest) {
-	p.metricsHandler.Counter(metrics.ElasticsearchBulkProcessorRequests.GetMetricName()).Record(int64(len(requests)))
-	p.metricsHandler.Histogram(metrics.ElasticsearchBulkProcessorBulkSize.GetMetricName(), metrics.ElasticsearchBulkProcessorBulkSize.GetMetricUnit()).
+	metrics.ElasticsearchBulkProcessorRequests.With(p.metricsHandler).Record(int64(len(requests)))
+	p.metricsHandler.Histogram(metrics.ElasticsearchBulkProcessorBulkSize.Name(), metrics.ElasticsearchBulkProcessorBulkSize.Unit()).
 		Record(int64(len(requests)))
 
 	for _, request := range requests {
@@ -246,7 +244,7 @@ func (p *processorImpl) bulkAfterAction(_ int64, requests []elastic.BulkableRequ
 				logRequests.WriteString(request.String())
 				logRequests.WriteRune('\n')
 			}
-			p.metricsHandler.Counter(metrics.ElasticsearchBulkProcessorFailures.GetMetricName()).Record(1, metrics.HttpStatusTag(httpStatus))
+			metrics.ElasticsearchBulkProcessorFailures.With(p.metricsHandler).Record(1, metrics.HttpStatusTag(httpStatus))
 			visibilityTaskKey := p.extractVisibilityTaskKey(request)
 			if visibilityTaskKey == "" {
 				continue
@@ -258,7 +256,7 @@ func (p *processorImpl) bulkAfterAction(_ int64, requests []elastic.BulkableRequ
 	}
 
 	// Record how long the Elasticsearch took to process the bulk request.
-	p.metricsHandler.Timer(metrics.ElasticsearchBulkProcessorBulkResquestTookLatency.GetMetricName()).
+	metrics.ElasticsearchBulkProcessorBulkResquestTookLatency.With(p.metricsHandler).
 		Record(time.Duration(response.Took) * time.Millisecond)
 
 	responseIndex := p.buildResponseIndex(response)
@@ -276,7 +274,7 @@ func (p *processorImpl) bulkAfterAction(_ int64, requests []elastic.BulkableRequ
 				tag.Key(visibilityTaskKey),
 				tag.ESDocID(docID),
 				tag.ESRequest(request.String()))
-			p.metricsHandler.Counter(metrics.ElasticsearchBulkProcessorCorruptedData.GetMetricName()).Record(1)
+			metrics.ElasticsearchBulkProcessorCorruptedData.With(p.metricsHandler).Record(1)
 			p.notifyResult(visibilityTaskKey, false)
 			continue
 		}
@@ -288,7 +286,7 @@ func (p *processorImpl) bulkAfterAction(_ int64, requests []elastic.BulkableRequ
 				tag.Key(visibilityTaskKey),
 				tag.ESDocID(docID),
 				tag.ESRequest(request.String()))
-			p.metricsHandler.Counter(metrics.ElasticsearchBulkProcessorFailures.GetMetricName()).Record(1, metrics.HttpStatusTag(responseItem.Status))
+			metrics.ElasticsearchBulkProcessorFailures.With(p.metricsHandler).Record(1, metrics.HttpStatusTag(responseItem.Status))
 			p.notifyResult(visibilityTaskKey, false)
 			continue
 		}
@@ -297,7 +295,7 @@ func (p *processorImpl) bulkAfterAction(_ int64, requests []elastic.BulkableRequ
 	}
 
 	// Record how many documents are waiting to be flushed to Elasticsearch after this bulk is committed.
-	p.metricsHandler.Histogram(metrics.ElasticsearchBulkProcessorQueuedRequests.GetMetricName(), metrics.ElasticsearchBulkProcessorBulkSize.GetMetricUnit()).
+	p.metricsHandler.Histogram(metrics.ElasticsearchBulkProcessorQueuedRequests.Name(), metrics.ElasticsearchBulkProcessorBulkSize.Unit()).
 		Record(int64(p.mapToAckFuture.Len()))
 }
 
@@ -306,7 +304,7 @@ func (p *processorImpl) buildResponseIndex(response *elastic.BulkResponse) map[s
 	for _, operationResponseItemMap := range response.Items {
 		for _, responseItem := range operationResponseItemMap {
 			existingResponseItem, duplicateID := result[responseItem.Id]
-			// In some rare cases there might be duplicate document Ids in the same bulk.
+			// In some rare cases, there might be duplicate document Ids in the same bulk.
 			// (for example, if two sequential upsert search attributes operation for the same workflow run end up being in the same bulk request)
 			// In this case, item with greater status code (error) will overwrite existing item with smaller status code.
 			if !duplicateID || existingResponseItem.Status < responseItem.Status {
@@ -334,7 +332,7 @@ func (p *processorImpl) extractVisibilityTaskKey(request elastic.BulkableRequest
 	req, err := request.Source()
 	if err != nil {
 		p.logger.Error("Unable to get ES request source.", tag.Error(err), tag.ESRequest(request.String()))
-		p.metricsHandler.Counter(metrics.ElasticsearchBulkProcessorCorruptedData.GetMetricName()).Record(1)
+		metrics.ElasticsearchBulkProcessorCorruptedData.With(p.metricsHandler).Record(1)
 		return ""
 	}
 
@@ -342,14 +340,14 @@ func (p *processorImpl) extractVisibilityTaskKey(request elastic.BulkableRequest
 		var body map[string]interface{}
 		if err = json.Unmarshal([]byte(req[1]), &body); err != nil {
 			p.logger.Error("Unable to unmarshal ES request body.", tag.Error(err))
-			p.metricsHandler.Counter(metrics.ElasticsearchBulkProcessorCorruptedData.GetMetricName()).Record(1)
+			metrics.ElasticsearchBulkProcessorCorruptedData.With(p.metricsHandler).Record(1)
 			return ""
 		}
 
 		k, ok := body[searchattribute.VisibilityTaskKey]
 		if !ok {
 			p.logger.Error("Unable to extract VisibilityTaskKey from ES request.", tag.ESRequest(request.String()))
-			p.metricsHandler.Counter(metrics.ElasticsearchBulkProcessorCorruptedData.GetMetricName()).Record(1)
+			metrics.ElasticsearchBulkProcessorCorruptedData.With(p.metricsHandler).Record(1)
 			return ""
 		}
 		return k.(string)
@@ -362,7 +360,7 @@ func (p *processorImpl) extractDocID(request elastic.BulkableRequest) string {
 	req, err := request.Source()
 	if err != nil {
 		p.logger.Error("Unable to get ES request source.", tag.Error(err), tag.ESRequest(request.String()))
-		p.metricsHandler.Counter(metrics.ElasticsearchBulkProcessorCorruptedData.GetMetricName()).Record(1)
+		metrics.ElasticsearchBulkProcessorCorruptedData.With(p.metricsHandler).Record(1)
 
 		return ""
 	}
@@ -370,7 +368,7 @@ func (p *processorImpl) extractDocID(request elastic.BulkableRequest) string {
 	var body map[string]map[string]interface{}
 	if err = json.Unmarshal([]byte(req[0]), &body); err != nil {
 		p.logger.Error("Unable to unmarshal ES request body.", tag.Error(err), tag.ESRequest(request.String()))
-		p.metricsHandler.Counter(metrics.ElasticsearchBulkProcessorCorruptedData.GetMetricName()).Record(1)
+		metrics.ElasticsearchBulkProcessorCorruptedData.With(p.metricsHandler).Record(1)
 		return ""
 	}
 
@@ -383,7 +381,7 @@ func (p *processorImpl) extractDocID(request elastic.BulkableRequest) string {
 	}
 
 	p.logger.Error("Unable to extract _id from ES request.", tag.ESRequest(request.String()))
-	p.metricsHandler.Counter(metrics.ElasticsearchBulkProcessorCorruptedData.GetMetricName()).Record(1)
+	metrics.ElasticsearchBulkProcessorCorruptedData.With(p.metricsHandler).Record(1)
 	return ""
 }
 
@@ -429,14 +427,14 @@ func newAckFuture() *ackFuture {
 func (a *ackFuture) recordAdd(metricsHandler metrics.Handler) {
 	addedAt := time.Now().UTC()
 	a.addedAt.Store(addedAt)
-	metricsHandler.Timer(metrics.ElasticsearchBulkProcessorWaitAddLatency.GetMetricName()).Record(addedAt.Sub(a.createdAt))
+	metrics.ElasticsearchBulkProcessorWaitAddLatency.With(metricsHandler).Record(addedAt.Sub(a.createdAt))
 }
 
 func (a *ackFuture) recordStart(metricsHandler metrics.Handler) {
 	a.startedAt = time.Now().UTC()
 	addedAt := a.addedAt.Load().(time.Time)
 	if !addedAt.IsZero() {
-		metricsHandler.Timer(metrics.ElasticsearchBulkProcessorWaitStartLatency.GetMetricName()).Record(a.startedAt.Sub(addedAt))
+		metrics.ElasticsearchBulkProcessorWaitStartLatency.With(metricsHandler).Record(a.startedAt.Sub(addedAt))
 	}
 }
 
@@ -444,9 +442,9 @@ func (a *ackFuture) done(ack bool, metricsHandler metrics.Handler) {
 	a.future.Set(ack, nil)
 	doneAt := time.Now().UTC()
 	if !a.createdAt.IsZero() {
-		metricsHandler.Timer(metrics.ElasticsearchBulkProcessorRequestLatency.GetMetricName()).Record(doneAt.Sub(a.createdAt))
+		metrics.ElasticsearchBulkProcessorRequestLatency.With(metricsHandler).Record(doneAt.Sub(a.createdAt))
 	}
 	if !a.startedAt.IsZero() {
-		metricsHandler.Timer(metrics.ElasticsearchBulkProcessorCommitLatency.GetMetricName()).Record(doneAt.Sub(a.startedAt))
+		metrics.ElasticsearchBulkProcessorCommitLatency.With(metricsHandler).Record(doneAt.Sub(a.startedAt))
 	}
 }

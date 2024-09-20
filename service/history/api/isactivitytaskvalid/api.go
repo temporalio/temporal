@@ -45,14 +45,13 @@ func Invoke(
 	err := api.GetAndUpdateWorkflowWithNew(
 		ctx,
 		req.Clock,
-		api.BypassMutableStateConsistencyPredicate,
 		definition.NewWorkflowKey(
 			req.NamespaceId,
 			req.Execution.WorkflowId,
 			req.Execution.RunId,
 		),
-		func(workflowContext api.WorkflowContext) (*api.UpdateWorkflowAction, error) {
-			isTaskValid, err := isActivityTaskValid(workflowContext, req.ScheduledEventId)
+		func(workflowLease api.WorkflowLease) (*api.UpdateWorkflowAction, error) {
+			isTaskValid, err := isActivityTaskValid(workflowLease, req.ScheduledEventId)
 			if err != nil {
 				return nil, err
 			}
@@ -72,10 +71,10 @@ func Invoke(
 }
 
 func isActivityTaskValid(
-	workflowContext api.WorkflowContext,
+	workflowLease api.WorkflowLease,
 	scheduledEventID int64,
 ) (bool, error) {
-	mutableState := workflowContext.GetMutableState()
+	mutableState := workflowLease.GetMutableState()
 	if !mutableState.IsWorkflowExecutionRunning() {
 		return false, consts.ErrWorkflowCompleted
 	}

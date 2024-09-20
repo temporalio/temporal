@@ -26,11 +26,8 @@ package queues
 
 import (
 	"context"
-	"fmt"
 	"sync"
 	"time"
-
-	"golang.org/x/exp/slices"
 
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
@@ -91,11 +88,12 @@ type (
 		timeSource     clock.TimeSource
 		monitor        *monitorImpl
 		mitigator      *mitigatorImpl
+		grouper        Grouper
 		logger         log.Logger
 		metricsHandler metrics.Handler
 
-		paginationFnProvider  PaginationFnProvider
-		executableInitializer ExecutableInitializer
+		paginationFnProvider PaginationFnProvider
+		executableFactory    ExecutableFactory
 
 		lastRangeID                    int64
 		exclusiveDeletionHighWatermark tasks.Key
@@ -129,11 +127,11 @@ func newQueueBase(
 	paginationFnProvider PaginationFnProvider,
 	scheduler Scheduler,
 	rescheduler Rescheduler,
-	priorityAssigner PriorityAssigner,
-	executor Executor,
+	executableFactory ExecutableFactory,
 	options *Options,
 	hostReaderRateLimiter quotas.RequestRateLimiter,
 	completionFn ReaderCompletionFn,
+	grouper Grouper,
 	logger log.Logger,
 	metricsHandler metrics.Handler,
 ) *queueBase {
@@ -154,24 +152,7 @@ func newQueueBase(
 		exclusiveReaderHighWatermark = ackLevel
 	}
 
-	timeSource := shard.GetTimeSource()
-	executableInitializer := func(readerID int64, t tasks.Task) Executable {
-		return NewExecutable(
-			readerID,
-			t,
-			executor,
-			scheduler,
-			rescheduler,
-			priorityAssigner,
-			timeSource,
-			shard.GetNamespaceRegistry(),
-			shard.GetClusterMetadata(),
-			logger,
-			metricsHandler,
-		)
-	}
-
-	monitor := newMonitor(category.Type(), timeSource, &options.MonitorOptions)
+	monitor := newMonitor(category.Type(), shard.GetTimeSource(), &options.MonitorOptions)
 	readerRateLimiter := newShardReaderRateLimiter(
 		options.MaxPollRPS,
 		hostReaderRateLimiter,
@@ -194,7 +175,7 @@ func newQueueBase(
 			&readerOptions,
 			scheduler,
 			rescheduler,
-			timeSource,
+			shard.GetTimeSource(),
 			readerRateLimiter,
 			monitor,
 			completionFn,
@@ -203,9 +184,8 @@ func newQueueBase(
 		)
 	}
 
-	resetReaderScope := false
 	exclusiveDeletionHighWatermark := exclusiveReaderHighWatermark
-	readerGroup := NewReaderGroup(shard.GetShardID(), shard.GetOwner(), category, readerInitializer, shard.GetExecutionManager())
+	readerGroup := NewReaderGroup(readerInitializer)
 	for readerID, scopes := range readerScopes {
 		if len(scopes) == 0 {
 			continue
@@ -213,32 +193,14 @@ func newQueueBase(
 
 		slices := make([]Slice, 0, len(scopes))
 		for _, scope := range scopes {
-			slices = append(slices, NewSlice(paginationFnProvider, executableInitializer, monitor, scope))
+			slices = append(slices, NewSlice(paginationFnProvider, executableFactory, monitor, scope, grouper, options.ReaderOptions.MaxPredicateSize))
 		}
-		if _, err := readerGroup.NewReader(readerID, slices...); err != nil {
-			// we are not able to re-create the scopes & readers we previously have
-			// but we may still be able to run with only one reader.
-			// Pick the lowest key among all scopes and start from there
-			logger.Error("Failed to create history queue reader on initialization", tag.QueueReaderID(readerID), tag.Error(err))
-
-			resetReaderScope = true
-
-			// don't break here, still need to update exclusiveDeletionHighWatermark
-		}
+		readerGroup.NewReader(readerID, slices...)
 
 		exclusiveDeletionHighWatermark = tasks.MinKey(exclusiveDeletionHighWatermark, scopes[0].Range.InclusiveMin)
 	}
-	if resetReaderScope {
-		// start from the lowest key of all reader scopes
-		exclusiveReaderHighWatermark = exclusiveDeletionHighWatermark
 
-		// some readers may already be created
-		// stop them and create a new empty reader group
-		readerGroup.Stop()
-		readerGroup = NewReaderGroup(shard.GetShardID(), shard.GetOwner(), category, readerInitializer, shard.GetExecutionManager())
-	}
-
-	mitigator := newMitigator(readerGroup, monitor, logger, metricsHandler, options.MaxReaderCount)
+	mitigator := newMitigator(readerGroup, monitor, logger, metricsHandler, options.MaxReaderCount, grouper)
 
 	return &queueBase{
 		shard: shard,
@@ -253,11 +215,12 @@ func newQueueBase(
 		timeSource:     shard.GetTimeSource(),
 		monitor:        monitor,
 		mitigator:      mitigator,
+		grouper:        grouper,
 		logger:         logger,
 		metricsHandler: metricsHandler,
 
-		paginationFnProvider:  paginationFnProvider,
-		executableInitializer: executableInitializer,
+		paginationFnProvider: paginationFnProvider,
+		executableFactory:    executableFactory,
 
 		lastRangeID:                    -1, // start from an invalid rangeID
 		exclusiveDeletionHighWatermark: exclusiveDeletionHighWatermark,
@@ -271,7 +234,7 @@ func newQueueBase(
 		// pollTimer and checkpointTimer are initialized on Start()
 		checkpointRetrier: backoff.NewRetrier(
 			createCheckpointRetryPolicy(),
-			backoff.SystemClock,
+			clock.NewRealTimeSource(),
 		),
 
 		alertCh: monitor.AlertCh(),
@@ -306,25 +269,7 @@ func (p *queueBase) FailoverNamespace(
 }
 
 func (p *queueBase) processNewRange() {
-	var newMaxKey tasks.Key
-	switch categoryType := p.category.Type(); categoryType {
-	case tasks.CategoryTypeImmediate:
-		newMaxKey = p.shard.GetImmediateQueueExclusiveHighReadWatermark()
-	case tasks.CategoryTypeScheduled:
-		var err error
-		if newMaxKey, err = p.shard.UpdateScheduledQueueExclusiveHighReadWatermark(); err != nil {
-			p.logger.Error("Unable to process new range", tag.Error(err))
-			return
-		}
-	default:
-		panic(fmt.Sprintf("Unknown task category type: %v", categoryType.String()))
-	}
-
-	reader, err := p.readerGroup.GetOrCreateReader(DefaultReaderId)
-	if err != nil {
-		p.logger.Error("Unable to create default reader", tag.Error(err), tag.QueueReaderID(DefaultReaderId))
-		return
-	}
+	newMaxKey := p.shard.GetQueueExclusiveHighReadWatermark(p.category)
 
 	slices := make([]Slice, 0, 1)
 	if p.nonReadableScope.CanSplitByRange(newMaxKey) {
@@ -332,10 +277,18 @@ func (p *queueBase) processNewRange() {
 		newReadScope, p.nonReadableScope = p.nonReadableScope.SplitByRange(newMaxKey)
 		slices = append(slices, NewSlice(
 			p.paginationFnProvider,
-			p.executableInitializer,
+			p.executableFactory,
 			p.monitor,
 			newReadScope,
+			p.grouper,
+			p.options.ReaderOptions.MaxPredicateSize,
 		))
+	}
+
+	reader, ok := p.readerGroup.ReaderByID(DefaultReaderId)
+	if !ok {
+		p.readerGroup.NewReader(DefaultReaderId, slices...)
+		return
 	}
 
 	if now := p.timeSource.Now(); now.After(p.nextForceNewSliceTime) {
@@ -347,13 +300,14 @@ func (p *queueBase) processNewRange() {
 }
 
 func (p *queueBase) checkpoint() {
+	var tasksCompleted int
 	p.readerGroup.ForEach(func(_ int64, r Reader) {
-		r.ShrinkSlices()
+		tasksCompleted += r.ShrinkSlices()
 	})
 
 	// Run slicePredicateAction to move slices with non-universal predicate to non-default reader
 	// so that upon shard reload, task loading for those slices won't block other slices in the default reader.
-	_ = runAction(
+	runAction(
 		newSlicePredicateAction(p.monitor, p.mitigator.maxReaderCount()),
 		p.readerGroup,
 		p.metricsHandler,
@@ -375,26 +329,21 @@ func (p *queueBase) checkpoint() {
 			newExclusiveDeletionHighWatermark = tasks.MinKey(newExclusiveDeletionHighWatermark, scopes[0].Range.InclusiveMin)
 		}
 	}
-	p.metricsHandler.Histogram(metrics.QueueReaderCountHistogram.GetMetricName(), metrics.QueueReaderCountHistogram.GetMetricUnit()).
-		Record(int64(len(readerScopes)))
-	p.metricsHandler.Histogram(metrics.QueueSliceCountHistogram.GetMetricName(), metrics.QueueSliceCountHistogram.GetMetricUnit()).
-		Record(int64(p.monitor.GetTotalSliceCount()))
-	p.metricsHandler.Histogram(metrics.PendingTasksCounter.GetMetricName(), metrics.PendingTasksCounter.GetMetricUnit()).
-		Record(int64(p.monitor.GetTotalPendingTaskCount()))
+	metrics.QueueReaderCountHistogram.With(p.metricsHandler).Record(int64(len(readerScopes)))
+	metrics.QueueSliceCountHistogram.With(p.metricsHandler).Record(int64(p.monitor.GetTotalSliceCount()))
+	metrics.PendingTasksCounter.With(p.metricsHandler).Record(int64(p.monitor.GetTotalPendingTaskCount()))
 
-	p.updateReaderProgress(readerScopes)
-
-	// NOTE: Must range complete task first.
-	// Otherwise, if state is updated first, later deletion fails and shard get reloaded
-	// some tasks will never be deleted.
+	// NOTE: Must range-complete task first.
+	// Otherwise, if state is updated first, later deletion fails and the shard gets reloaded.
+	// Some tasks will never be deleted.
 	//
-	// Emit metric before the deletion watermark comparsion so we have the emit even if there's no task
-	// for the queue
-	p.metricsHandler.Counter(metrics.TaskBatchCompleteCounter.GetMetricName()).Record(1)
+	// Emit metric before the deletion watermark comparison so we have the emit even if there's no task
+	// for the queue.
+	metrics.TaskBatchCompleteCounter.With(p.metricsHandler).Record(1)
 	if newExclusiveDeletionHighWatermark.CompareTo(p.exclusiveDeletionHighWatermark) > 0 ||
 		(p.updateShardRangeID() && newExclusiveDeletionHighWatermark.CompareTo(tasks.MinimumKey) > 0) {
-		// when shard rangeID is updated, perform range completion again in case the underlying persistence implementation
-		// serves traffic based on the persisted shardInfo
+		// When shard rangeID is updated, perform range completion again in case the underlying persistence implementation
+		// serves traffic based on the persisted shardInfo.
 		err := p.rangeCompleteTasks(p.exclusiveDeletionHighWatermark, newExclusiveDeletionHighWatermark)
 		if err != nil {
 			p.resetCheckpointTimer(err)
@@ -404,54 +353,8 @@ func (p *queueBase) checkpoint() {
 		p.exclusiveDeletionHighWatermark = newExclusiveDeletionHighWatermark
 	}
 
-	err := p.updateQueueState(readerScopes)
+	err := p.updateQueueState(tasksCompleted, readerScopes)
 	p.resetCheckpointTimer(err)
-}
-
-func (p *queueBase) updateReaderProgress(
-	readerScopes map[int64][]Scope,
-) {
-	// NOTE: A reader has progress = X means that reader will
-	// never try to load/process tasks with key < X.
-	// If a reader's first slice has scope start from Y,
-	// it's possible that later a slice contains key < Y get moved into it.
-	// In general, the minKey of a reader's first slice's scope is not it's progress.
-
-	// However, since slices only move from reader with lower ID to higher ID,
-	// progress of reader with ID X = min(
-	//     progress of reader with ID < X if exists,
-	//     minKey of the first slice's scope,
-	// )
-	ctx, cancel := newQueueIOContext()
-	defer cancel()
-
-	readerIDs := make([]int64, 0, len(readerScopes))
-	for readerID := range readerScopes {
-		readerIDs = append(readerIDs, readerID)
-	}
-	slices.Sort(readerIDs)
-
-	progress := tasks.MaximumKey
-	for _, readerID := range readerIDs {
-		scopes := readerScopes[readerID]
-
-		var minKey tasks.Key
-		if len(scopes) == 0 {
-			// this should only happen to default reader
-			minKey = p.nonReadableScope.Range.InclusiveMin
-		} else {
-			minKey = scopes[0].Range.InclusiveMin
-		}
-
-		progress = tasks.MinKey(progress, minKey)
-		p.shard.GetExecutionManager().UpdateHistoryTaskReaderProgress(ctx, &persistence.UpdateHistoryTaskReaderProgressRequest{
-			ShardID:                    p.shard.GetShardID(),
-			ShardOwner:                 p.shard.GetOwner(),
-			TaskCategory:               p.category,
-			ReaderID:                   readerID,
-			InclusiveMinPendingTaskKey: progress,
-		})
-	}
 }
 
 func (p *queueBase) updateShardRangeID() bool {
@@ -488,21 +391,22 @@ func (p *queueBase) rangeCompleteTasks(
 }
 
 func (p *queueBase) updateQueueState(
+	tasksCompleted int,
 	readerScopes map[int64][]Scope,
 ) error {
-	p.metricsHandler.Counter(metrics.AckLevelUpdateCounter.GetMetricName()).Record(1)
+	metrics.AckLevelUpdateCounter.With(p.metricsHandler).Record(1)
 	for readerID, scopes := range readerScopes {
 		if len(scopes) == 0 {
 			delete(readerScopes, readerID)
 		}
 	}
 
-	err := p.shard.SetQueueState(p.category, ToPersistenceQueueState(&queueState{
+	err := p.shard.SetQueueState(p.category, tasksCompleted, ToPersistenceQueueState(&queueState{
 		readerScopes:                 readerScopes,
 		exclusiveReaderHighWatermark: p.nonReadableScope.Range.InclusiveMin,
 	}))
 	if err != nil {
-		p.metricsHandler.Counter(metrics.AckLevelUpdateFailedCounter.GetMetricName()).Record(1)
+		metrics.AckLevelUpdateFailedCounter.With(p.metricsHandler).Record(1)
 		p.logger.Error("Error updating queue state", tag.Error(err), tag.OperationFailed)
 	}
 	return err
@@ -510,8 +414,8 @@ func (p *queueBase) updateQueueState(
 
 func (p *queueBase) resetCheckpointTimer(checkPointErr error) {
 	if checkPointErr != nil {
-		backoff := p.checkpointRetrier.NextBackOff()
-		p.checkpointTimer.Reset(backoff)
+		delay := p.checkpointRetrier.NextBackOff(checkPointErr)
+		p.checkpointTimer.Reset(delay)
 		return
 	}
 

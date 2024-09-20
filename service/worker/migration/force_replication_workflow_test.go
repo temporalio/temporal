@@ -30,7 +30,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/golang/mock/gomock"
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -38,7 +37,6 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/namespace/v1"
 	"go.temporal.io/api/workflowservice/v1"
-	"go.temporal.io/api/workflowservicemock/v1"
 	"go.temporal.io/sdk/interceptor"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/testsuite"
@@ -46,6 +44,8 @@ import (
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/testing/mockapi/workflowservicemock/v1"
+	"go.uber.org/mock/gomock"
 )
 
 func TestForceReplicationWorkflow(t *testing.T) {
@@ -69,7 +69,7 @@ func TestForceReplicationWorkflow(t *testing.T) {
 		currentPageCount++
 		if currentPageCount < totalPageCount {
 			return &listWorkflowsResponse{
-				Executions:    []commonpb.WorkflowExecution{},
+				Executions:    []*commonpb.WorkflowExecution{},
 				NextPageToken: []byte("fake-page-token"),
 				LastStartTime: startTime,
 				LastCloseTime: closeTime,
@@ -77,7 +77,7 @@ func TestForceReplicationWorkflow(t *testing.T) {
 		}
 		// your mock function implementation
 		return &listWorkflowsResponse{
-			Executions:    []commonpb.WorkflowExecution{},
+			Executions:    []*commonpb.WorkflowExecution{},
 			NextPageToken: nil, // last page
 			LastStartTime: startTime,
 			LastCloseTime: closeTime,
@@ -139,7 +139,7 @@ func TestForceReplicationWorkflow_ContinueAsNew(t *testing.T) {
 		currentPageCount++
 		if currentPageCount < totalPageCount {
 			return &listWorkflowsResponse{
-				Executions:    []commonpb.WorkflowExecution{},
+				Executions:    []*commonpb.WorkflowExecution{},
 				NextPageToken: []byte("fake-page-token"),
 				LastStartTime: startTime,
 				LastCloseTime: closeTime,
@@ -147,7 +147,7 @@ func TestForceReplicationWorkflow_ContinueAsNew(t *testing.T) {
 		}
 		// your mock function implementation
 		return &listWorkflowsResponse{
-			Executions:    []commonpb.WorkflowExecution{},
+			Executions:    []*commonpb.WorkflowExecution{},
 			NextPageToken: nil, // last page
 		}, nil
 	}).Times(maxPageCountPerExecution)
@@ -257,13 +257,13 @@ func TestForceReplicationWorkflow_GenerateReplicationTaskRetryableError(t *testi
 		currentPageCount++
 		if currentPageCount < totalPageCount {
 			return &listWorkflowsResponse{
-				Executions:    []commonpb.WorkflowExecution{},
+				Executions:    []*commonpb.WorkflowExecution{},
 				NextPageToken: []byte("fake-page-token"),
 			}, nil
 		}
 		// your mock function implementation
 		return &listWorkflowsResponse{
-			Executions:    []commonpb.WorkflowExecution{},
+			Executions:    []*commonpb.WorkflowExecution{},
 			NextPageToken: nil, // last page
 		}, nil
 	}).Times(totalPageCount)
@@ -305,13 +305,13 @@ func TestForceReplicationWorkflow_GenerateReplicationTaskNonRetryableError(t *te
 		currentPageCount++
 		if currentPageCount < totalPageCount {
 			return &listWorkflowsResponse{
-				Executions:    []commonpb.WorkflowExecution{},
+				Executions:    []*commonpb.WorkflowExecution{},
 				NextPageToken: []byte("fake-page-token"),
 			}, nil
 		}
 		// your mock function implementation
 		return &listWorkflowsResponse{
-			Executions:    []commonpb.WorkflowExecution{},
+			Executions:    []*commonpb.WorkflowExecution{},
 			NextPageToken: nil, // last page
 		}, nil
 	})
@@ -360,13 +360,13 @@ func TestForceReplicationWorkflow_VerifyReplicationTaskNonRetryableError(t *test
 		currentPageCount++
 		if currentPageCount < totalPageCount {
 			return &listWorkflowsResponse{
-				Executions:    []commonpb.WorkflowExecution{},
+				Executions:    []*commonpb.WorkflowExecution{},
 				NextPageToken: []byte("fake-page-token"),
 			}, nil
 		}
 		// your mock function implementation
 		return &listWorkflowsResponse{
-			Executions:    []commonpb.WorkflowExecution{},
+			Executions:    []*commonpb.WorkflowExecution{},
 			NextPageToken: nil, // last page
 		}, nil
 	})
@@ -410,7 +410,7 @@ func TestForceReplicationWorkflow_TaskQueueReplicationFailure(t *testing.T) {
 	env.OnActivity(a.GetMetadata, mock.Anything, metadataRequest{Namespace: "test-ns"}).Return(&metadataResponse{ShardCount: 4, NamespaceID: namespaceID}, nil)
 
 	env.OnActivity(a.ListWorkflows, mock.Anything, mock.Anything).Return(&listWorkflowsResponse{
-		Executions:    []commonpb.WorkflowExecution{},
+		Executions:    []*commonpb.WorkflowExecution{},
 		NextPageToken: nil, // last page
 	}, nil)
 	env.OnActivity(a.GenerateReplicationTasks, mock.Anything, mock.Anything).Return(nil)

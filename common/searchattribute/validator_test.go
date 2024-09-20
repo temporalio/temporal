@@ -27,13 +27,12 @@ package searchattribute
 import (
 	"testing"
 
-	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
-
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/persistence/visibility/manager"
+	"go.uber.org/mock/gomock"
 )
 
 type searchAttributesValidatorSuite struct {
@@ -67,11 +66,12 @@ func (s *searchAttributesValidatorSuite) TestSearchAttributesValidate() {
 	saValidator := NewValidator(
 		NewTestProvider(),
 		NewTestMapperProvider(nil),
-		dynamicconfig.GetIntPropertyFilteredByNamespace(numOfKeysLimit),
-		dynamicconfig.GetIntPropertyFilteredByNamespace(sizeOfValueLimit),
-		dynamicconfig.GetIntPropertyFilteredByNamespace(sizeOfTotalLimit),
+		dynamicconfig.GetIntPropertyFnFilteredByNamespace(numOfKeysLimit),
+		dynamicconfig.GetIntPropertyFnFilteredByNamespace(sizeOfValueLimit),
+		dynamicconfig.GetIntPropertyFnFilteredByNamespace(sizeOfTotalLimit),
 		s.mockVisibilityManager,
-		true,
+		dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true),
+		dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false),
 	)
 
 	namespace := "namespace"
@@ -136,6 +136,33 @@ func (s *searchAttributesValidatorSuite) TestSearchAttributesValidate() {
 	s.Equal("StartTime attribute can't be set in SearchAttributes", err.Error())
 }
 
+func (s *searchAttributesValidatorSuite) TestSearchAttributesValidate_SuppressError() {
+	numOfKeysLimit := 2
+	sizeOfValueLimit := 5
+	sizeOfTotalLimit := 20
+
+	saValidator := NewValidator(
+		NewTestProvider(),
+		NewTestMapperProvider(nil),
+		dynamicconfig.GetIntPropertyFnFilteredByNamespace(numOfKeysLimit),
+		dynamicconfig.GetIntPropertyFnFilteredByNamespace(sizeOfValueLimit),
+		dynamicconfig.GetIntPropertyFnFilteredByNamespace(sizeOfTotalLimit),
+		s.mockVisibilityManager,
+		dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false),
+		dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true),
+	)
+
+	namespace := "namespace"
+	attr := &commonpb.SearchAttributes{
+		IndexedFields: map[string]*commonpb.Payload{
+			"ParentWorkflowId": payload.EncodeString("foo"),
+		},
+	}
+
+	err := saValidator.Validate(attr, namespace)
+	s.NoError(err)
+}
+
 func (s *searchAttributesValidatorSuite) TestSearchAttributesValidate_Mapper() {
 	numOfKeysLimit := 2
 	sizeOfValueLimit := 5
@@ -144,11 +171,12 @@ func (s *searchAttributesValidatorSuite) TestSearchAttributesValidate_Mapper() {
 	saValidator := NewValidator(
 		NewTestProvider(),
 		NewTestMapperProvider(&TestMapper{}),
-		dynamicconfig.GetIntPropertyFilteredByNamespace(numOfKeysLimit),
-		dynamicconfig.GetIntPropertyFilteredByNamespace(sizeOfValueLimit),
-		dynamicconfig.GetIntPropertyFilteredByNamespace(sizeOfTotalLimit),
+		dynamicconfig.GetIntPropertyFnFilteredByNamespace(numOfKeysLimit),
+		dynamicconfig.GetIntPropertyFnFilteredByNamespace(sizeOfValueLimit),
+		dynamicconfig.GetIntPropertyFnFilteredByNamespace(sizeOfTotalLimit),
 		s.mockVisibilityManager,
-		false,
+		dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false),
+		dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false),
 	)
 
 	namespace := "test-namespace"
@@ -207,11 +235,12 @@ func (s *searchAttributesValidatorSuite) TestSearchAttributesValidateSize() {
 	saValidator := NewValidator(
 		NewTestProvider(),
 		NewTestMapperProvider(nil),
-		dynamicconfig.GetIntPropertyFilteredByNamespace(numOfKeysLimit),
-		dynamicconfig.GetIntPropertyFilteredByNamespace(sizeOfValueLimit),
-		dynamicconfig.GetIntPropertyFilteredByNamespace(sizeOfTotalLimit),
+		dynamicconfig.GetIntPropertyFnFilteredByNamespace(numOfKeysLimit),
+		dynamicconfig.GetIntPropertyFnFilteredByNamespace(sizeOfValueLimit),
+		dynamicconfig.GetIntPropertyFnFilteredByNamespace(sizeOfTotalLimit),
 		s.mockVisibilityManager,
-		false,
+		dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false),
+		dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false),
 	)
 
 	namespace := "namespace"
@@ -246,11 +275,12 @@ func (s *searchAttributesValidatorSuite) TestSearchAttributesValidateSize_Mapper
 	saValidator := NewValidator(
 		NewTestProvider(),
 		NewTestMapperProvider(&TestMapper{}),
-		dynamicconfig.GetIntPropertyFilteredByNamespace(numOfKeysLimit),
-		dynamicconfig.GetIntPropertyFilteredByNamespace(sizeOfValueLimit),
-		dynamicconfig.GetIntPropertyFilteredByNamespace(sizeOfTotalLimit),
+		dynamicconfig.GetIntPropertyFnFilteredByNamespace(numOfKeysLimit),
+		dynamicconfig.GetIntPropertyFnFilteredByNamespace(sizeOfValueLimit),
+		dynamicconfig.GetIntPropertyFnFilteredByNamespace(sizeOfTotalLimit),
 		s.mockVisibilityManager,
-		false,
+		dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false),
+		dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false),
 	)
 
 	namespace := "test-namespace"

@@ -34,14 +34,9 @@ import (
 	"testing"
 	"time"
 
-	"go.temporal.io/server/api/adminservice/v1"
-
-	"github.com/golang/mock/gomock"
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	"google.golang.org/grpc"
-
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -51,7 +46,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
-
+	"go.temporal.io/server/api/adminservice/v1"
 	clockspb "go.temporal.io/server/api/clock/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
@@ -65,9 +60,12 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/failure"
 	"go.temporal.io/server/common/headers"
+	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/payloads"
@@ -77,11 +75,13 @@ import (
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/rpc/interceptor"
 	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/api/getworkflowexecutionrawhistoryv2"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/events"
+	"go.temporal.io/server/service/history/hsm"
 	"go.temporal.io/server/service/history/ndc"
 	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/shard"
@@ -89,6 +89,10 @@ import (
 	"go.temporal.io/server/service/history/tests"
 	"go.temporal.io/server/service/history/workflow"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
+	"go.uber.org/mock/gomock"
+	"google.golang.org/grpc"
+	"google.golang.org/protobuf/types/known/durationpb"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 const (
@@ -99,6 +103,7 @@ type (
 	engineSuite struct {
 		suite.Suite
 		*require.Assertions
+		protorequire.ProtoAssertions
 
 		controller               *gomock.Controller
 		mockShard                *shard.ContextTest
@@ -107,6 +112,7 @@ type (
 		mockVisibilityProcessor  *queues.MockQueue
 		mockArchivalProcessor    *queues.MockQueue
 		mockMemoryScheduledQueue *queues.MockQueue
+		mockOutboundProcessor    *queues.MockQueue
 		mockNamespaceCache       *namespace.MockRegistry
 		mockMatchingClient       *matchingservicemock.MockMatchingServiceClient
 		mockHistoryClient        *historyservicemock.MockHistoryServiceClient
@@ -142,6 +148,7 @@ func (s *engineSuite) TearDownSuite() {
 
 func (s *engineSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
+	s.ProtoAssertions = protorequire.New(s.T())
 
 	s.controller = gomock.NewController(s.T())
 	s.mockEventsReapplier = ndc.NewMockEventsReapplier(s.controller)
@@ -151,16 +158,19 @@ func (s *engineSuite) SetupTest() {
 	s.mockVisibilityProcessor = queues.NewMockQueue(s.controller)
 	s.mockArchivalProcessor = queues.NewMockQueue(s.controller)
 	s.mockMemoryScheduledQueue = queues.NewMockQueue(s.controller)
+	s.mockOutboundProcessor = queues.NewMockQueue(s.controller)
 	s.mockTxProcessor.EXPECT().Category().Return(tasks.CategoryTransfer).AnyTimes()
 	s.mockTimerProcessor.EXPECT().Category().Return(tasks.CategoryTimer).AnyTimes()
 	s.mockVisibilityProcessor.EXPECT().Category().Return(tasks.CategoryVisibility).AnyTimes()
 	s.mockArchivalProcessor.EXPECT().Category().Return(tasks.CategoryArchival).AnyTimes()
 	s.mockMemoryScheduledQueue.EXPECT().Category().Return(tasks.CategoryMemoryTimer).AnyTimes()
+	s.mockOutboundProcessor.EXPECT().Category().Return(tasks.CategoryOutbound).AnyTimes()
 	s.mockTxProcessor.EXPECT().NotifyNewTasks(gomock.Any()).AnyTimes()
 	s.mockTimerProcessor.EXPECT().NotifyNewTasks(gomock.Any()).AnyTimes()
 	s.mockVisibilityProcessor.EXPECT().NotifyNewTasks(gomock.Any()).AnyTimes()
 	s.mockArchivalProcessor.EXPECT().NotifyNewTasks(gomock.Any()).AnyTimes()
 	s.mockMemoryScheduledQueue.EXPECT().NotifyNewTasks(gomock.Any()).AnyTimes()
+	s.mockOutboundProcessor.EXPECT().NotifyNewTasks(gomock.Any()).AnyTimes()
 
 	s.config = tests.NewDynamicConfig()
 	s.mockShard = shard.NewTestContext(
@@ -171,19 +181,21 @@ func (s *engineSuite) SetupTest() {
 		},
 		s.config,
 	)
-	s.workflowCache = wcache.NewHostLevelCache(s.mockShard.GetConfig())
-	s.mockShard.Resource.ShardMgr.EXPECT().AssertShardOwnership(gomock.Any(), gomock.Any()).AnyTimes()
+	s.workflowCache = wcache.NewHostLevelCache(s.mockShard.GetConfig(), s.mockShard.GetLogger(), metrics.NoopMetricsHandler)
 
-	s.eventsCache = events.NewEventsCache(
-		s.mockShard.GetShardID(),
-		s.mockShard.GetConfig().EventsCacheMaxSizeBytes(),
-		s.mockShard.GetConfig().EventsCacheTTL(),
+	s.eventsCache = events.NewHostLevelEventsCache(
 		s.mockShard.GetExecutionManager(),
-		false,
-		s.mockShard.GetLogger(),
+		s.mockShard.GetConfig(),
 		s.mockShard.GetMetricsHandler(),
+		s.mockShard.GetLogger(),
+		false,
 	)
 	s.mockShard.SetEventsCacheForTesting(s.eventsCache)
+
+	reg := hsm.NewRegistry()
+	err := workflow.RegisterStateMachine(reg)
+	s.NoError(err)
+	s.mockShard.SetStateMachineRegistry(reg)
 
 	s.mockMatchingClient = s.mockShard.Resource.MatchingClient
 	s.mockHistoryClient = s.mockShard.Resource.HistoryClient
@@ -227,6 +239,7 @@ func (s *engineSuite) SetupTest() {
 			s.mockVisibilityProcessor.Category():  s.mockVisibilityProcessor,
 			s.mockArchivalProcessor.Category():    s.mockArchivalProcessor,
 			s.mockMemoryScheduledQueue.Category(): s.mockMemoryScheduledQueue,
+			s.mockOutboundProcessor.Category():    s.mockOutboundProcessor,
 		},
 		eventsReapplier:            s.mockEventsReapplier,
 		workflowResetter:           s.mockWorkflowResetter,
@@ -236,7 +249,6 @@ func (s *engineSuite) SetupTest() {
 		versionChecker:             headers.NewDefaultVersionChecker(),
 	}
 	s.mockShard.SetEngineForTesting(h)
-	h.workflowTaskHandler = newWorkflowTaskHandlerCallback(h)
 
 	h.eventNotifier.Start()
 
@@ -260,8 +272,8 @@ func (s *engineSuite) TestGetMutableStateSync() {
 	identity := "testIdentity"
 
 	ms := workflow.TestLocalMutableState(s.mockHistoryEngine.shardContext, s.eventsCache, tests.LocalNamespaceEntry,
-		log.NewTestLogger(), execution.GetRunId())
-	addWorkflowExecutionStartedEvent(ms, execution, "wType", taskqueue, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, identity)
+		execution.GetWorkflowId(), execution.GetRunId(), log.NewTestLogger())
+	addWorkflowExecutionStartedEvent(ms, &execution, "wType", taskqueue, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, identity)
 	wt := addWorkflowTaskScheduledEvent(ms)
 	addWorkflowTaskStartedEvent(ms, wt.ScheduledEventID, taskqueue, identity)
 	wfMs := workflow.TestCloneToProto(ms)
@@ -322,8 +334,8 @@ func (s *engineSuite) TestGetMutableStateLongPoll() {
 	identity := "testIdentity"
 
 	ms := workflow.TestLocalMutableState(s.mockHistoryEngine.shardContext, s.eventsCache, tests.LocalNamespaceEntry,
-		log.NewTestLogger(), execution.GetRunId())
-	addWorkflowExecutionStartedEvent(ms, execution, "wType", taskqueue, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, identity)
+		execution.GetWorkflowId(), execution.GetRunId(), log.NewTestLogger())
+	addWorkflowExecutionStartedEvent(ms, &execution, "wType", taskqueue, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, identity)
 	wt := addWorkflowTaskScheduledEvent(ms)
 	addWorkflowTaskStartedEvent(ms, wt.ScheduledEventID, taskqueue, identity)
 	wfMs := workflow.TestCloneToProto(ms)
@@ -370,14 +382,14 @@ func (s *engineSuite) TestGetMutableStateLongPoll() {
 	s.Equal(int64(4), response.NextEventId)
 
 	// long poll, new event happen before long poll timeout
-	go asycWorkflowUpdate(time.Second * 2)
+	go asycWorkflowUpdate(time.Second)
 	start := time.Now().UTC()
 	pollResponse, err := s.mockHistoryEngine.PollMutableState(ctx, &historyservice.PollMutableStateRequest{
 		NamespaceId:         tests.NamespaceID.String(),
 		Execution:           &execution,
 		ExpectedNextEventId: 4,
 	})
-	s.True(time.Now().UTC().After(start.Add(time.Second * 1)))
+	s.True(time.Now().UTC().After(start.Add(time.Second)))
 	s.Nil(err)
 	s.Equal(int64(5), pollResponse.GetNextEventId())
 	waitGroup.Wait()
@@ -386,7 +398,7 @@ func (s *engineSuite) TestGetMutableStateLongPoll() {
 func (s *engineSuite) TestGetMutableStateLongPoll_CurrentBranchChanged() {
 	ctx := context.Background()
 
-	execution := commonpb.WorkflowExecution{
+	execution := &commonpb.WorkflowExecution{
 		WorkflowId: "test-get-workflow-execution-event-id",
 		RunId:      tests.RunID,
 	}
@@ -397,8 +409,10 @@ func (s *engineSuite) TestGetMutableStateLongPoll_CurrentBranchChanged() {
 		s.mockHistoryEngine.shardContext,
 		s.eventsCache,
 		tests.LocalNamespaceEntry,
+		execution.GetWorkflowId(),
+		execution.GetRunId(),
 		log.NewTestLogger(),
-		execution.GetRunId())
+	)
 	addWorkflowExecutionStartedEvent(ms, execution, "wType", taskqueue, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, identity)
 	wt := addWorkflowTaskScheduledEvent(ms)
 	addWorkflowTaskStartedEvent(ms, wt.ScheduledEventID, taskqueue, identity)
@@ -411,40 +425,37 @@ func (s *engineSuite) TestGetMutableStateLongPoll_CurrentBranchChanged() {
 	asyncBranchTokenUpdate := func(delay time.Duration) {
 		timer := time.NewTimer(delay)
 		<-timer.C
-		newExecution := &commonpb.WorkflowExecution{
-			WorkflowId: execution.WorkflowId,
-			RunId:      execution.RunId,
-		}
 		s.mockHistoryEngine.eventNotifier.NotifyNewHistoryEvent(events.NewNotification(
-			"tests.NamespaceID",
-			newExecution,
+			ms.GetWorkflowKey().NamespaceID,
+			execution,
 			int64(1),
 			int64(0),
-			int64(4),
+			int64(12),
 			int64(1),
-			[]byte{1},
 			enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
-			enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING))
+			enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+			ms.GetExecutionInfo().GetVersionHistories()),
+		)
 	}
 
 	// return immediately, since the expected next event ID appears
 	response0, err := s.mockHistoryEngine.GetMutableState(ctx, &historyservice.GetMutableStateRequest{
 		NamespaceId:         tests.NamespaceID.String(),
-		Execution:           &execution,
+		Execution:           execution,
 		ExpectedNextEventId: 3,
 	})
 	s.Nil(err)
 	s.Equal(int64(4), response0.GetNextEventId())
 
 	// long poll, new event happen before long poll timeout
-	go asyncBranchTokenUpdate(time.Second * 2)
+	go asyncBranchTokenUpdate(time.Second)
 	start := time.Now().UTC()
 	response1, err := s.mockHistoryEngine.GetMutableState(ctx, &historyservice.GetMutableStateRequest{
 		NamespaceId:         tests.NamespaceID.String(),
-		Execution:           &execution,
+		Execution:           execution,
 		ExpectedNextEventId: 10,
 	})
-	s.True(time.Now().UTC().After(start.Add(time.Second * 1)))
+	s.True(time.Now().UTC().After(start.Add(time.Second)))
 	s.Nil(err)
 	s.Equal(response0.GetCurrentBranchToken(), response1.GetCurrentBranchToken())
 }
@@ -460,14 +471,16 @@ func (s *engineSuite) TestGetMutableStateLongPollTimeout() {
 	identity := "testIdentity"
 
 	ms := workflow.TestLocalMutableState(s.mockHistoryEngine.shardContext, s.eventsCache,
-		tests.LocalNamespaceEntry, log.NewTestLogger(), execution.GetRunId())
-	addWorkflowExecutionStartedEvent(ms, execution, "wType", taskqueue, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, identity)
+		tests.LocalNamespaceEntry, execution.GetWorkflowId(), execution.GetRunId(), log.NewTestLogger())
+	addWorkflowExecutionStartedEvent(ms, &execution, "wType", taskqueue, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, identity)
 	wt := addWorkflowTaskScheduledEvent(ms)
 	addWorkflowTaskStartedEvent(ms, wt.ScheduledEventID, taskqueue, identity)
 	wfMs := workflow.TestCloneToProto(ms)
 	gweResponse := &persistence.GetWorkflowExecutionResponse{State: wfMs}
 	// right now the next event ID is 4
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(gweResponse, nil)
+
+	s.mockShard.GetConfig().LongPollExpirationInterval = dynamicconfig.GetDurationPropertyFnFilteredByNamespace(time.Second)
 
 	// long poll, no event happen after long poll timeout
 	response, err := s.mockHistoryEngine.GetMutableState(ctx, &historyservice.GetMutableStateRequest{
@@ -487,8 +500,8 @@ func (s *engineSuite) TestQueryWorkflow_RejectBasedOnCompleted() {
 	taskqueue := "testTaskQueue"
 	identity := "testIdentity"
 
-	ms := workflow.TestLocalMutableState(s.mockHistoryEngine.shardContext, s.eventsCache, tests.LocalNamespaceEntry, log.NewTestLogger(), execution.GetRunId())
-	addWorkflowExecutionStartedEvent(ms, execution, "wType", taskqueue, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, identity)
+	ms := workflow.TestLocalMutableState(s.mockHistoryEngine.shardContext, s.eventsCache, tests.LocalNamespaceEntry, execution.GetWorkflowId(), execution.GetRunId(), log.NewTestLogger())
+	addWorkflowExecutionStartedEvent(ms, &execution, "wType", taskqueue, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, identity)
 	wt := addWorkflowTaskScheduledEvent(ms)
 	event := addWorkflowTaskStartedEvent(ms, wt.ScheduledEventID, taskqueue, identity)
 	wt.StartedEventID = event.GetEventId()
@@ -521,8 +534,8 @@ func (s *engineSuite) TestQueryWorkflow_RejectBasedOnFailed() {
 	taskqueue := "testTaskQueue"
 	identity := "testIdentity"
 
-	ms := workflow.TestLocalMutableState(s.mockHistoryEngine.shardContext, s.eventsCache, tests.LocalNamespaceEntry, log.NewTestLogger(), execution.GetRunId())
-	addWorkflowExecutionStartedEvent(ms, execution, "wType", taskqueue, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, identity)
+	ms := workflow.TestLocalMutableState(s.mockHistoryEngine.shardContext, s.eventsCache, tests.LocalNamespaceEntry, execution.GetWorkflowId(), execution.GetRunId(), log.NewTestLogger())
+	addWorkflowExecutionStartedEvent(ms, &execution, "wType", taskqueue, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, identity)
 	wt := addWorkflowTaskScheduledEvent(ms)
 	event := addWorkflowTaskStartedEvent(ms, wt.ScheduledEventID, taskqueue, identity)
 	wt.StartedEventID = event.GetEventId()
@@ -569,8 +582,8 @@ func (s *engineSuite) TestQueryWorkflow_DirectlyThroughMatching() {
 	taskqueue := "testTaskQueue"
 	identity := "testIdentity"
 
-	ms := workflow.TestLocalMutableState(s.mockHistoryEngine.shardContext, s.eventsCache, tests.LocalNamespaceEntry, log.NewTestLogger(), execution.GetRunId())
-	addWorkflowExecutionStartedEvent(ms, execution, "wType", taskqueue, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, identity)
+	ms := workflow.TestLocalMutableState(s.mockHistoryEngine.shardContext, s.eventsCache, tests.LocalNamespaceEntry, execution.GetWorkflowId(), execution.GetRunId(), log.NewTestLogger())
+	addWorkflowExecutionStartedEvent(ms, &execution, "wType", taskqueue, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, identity)
 	wt := addWorkflowTaskScheduledEvent(ms)
 	startedEvent := addWorkflowTaskStartedEvent(ms, wt.ScheduledEventID, taskqueue, identity)
 	addWorkflowTaskCompletedEvent(&s.Suite, ms, wt.ScheduledEventID, startedEvent.EventId, identity)
@@ -607,8 +620,8 @@ func (s *engineSuite) TestQueryWorkflow_WorkflowTaskDispatch_Timeout() {
 	}
 	taskqueue := "testTaskQueue"
 	identity := "testIdentity"
-	ms := workflow.TestLocalMutableState(s.mockHistoryEngine.shardContext, s.eventsCache, tests.LocalNamespaceEntry, log.NewTestLogger(), execution.GetRunId())
-	addWorkflowExecutionStartedEvent(ms, execution, "wType", taskqueue, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, identity)
+	ms := workflow.TestLocalMutableState(s.mockHistoryEngine.shardContext, s.eventsCache, tests.LocalNamespaceEntry, execution.GetWorkflowId(), execution.GetRunId(), log.NewTestLogger())
+	addWorkflowExecutionStartedEvent(ms, &execution, "wType", taskqueue, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, identity)
 	wt := addWorkflowTaskScheduledEvent(ms)
 	startedEvent := addWorkflowTaskStartedEvent(ms, wt.ScheduledEventID, taskqueue, identity)
 	addWorkflowTaskCompletedEvent(&s.Suite, ms, wt.ScheduledEventID, startedEvent.EventId, identity)
@@ -640,7 +653,7 @@ func (s *engineSuite) TestQueryWorkflow_WorkflowTaskDispatch_Timeout() {
 	}()
 
 	time.Sleep(time.Second)
-	ms1 := s.getMutableState(tests.NamespaceID, execution)
+	ms1 := s.getMutableState(tests.NamespaceID, &execution)
 	s.NotNil(ms1)
 	qr := ms1.GetQueryRegistry()
 	s.True(qr.HasBufferedQuery())
@@ -661,8 +674,8 @@ func (s *engineSuite) TestQueryWorkflow_ConsistentQueryBufferFull() {
 	}
 	taskqueue := "testTaskQueue"
 	identity := "testIdentity"
-	ms := workflow.TestLocalMutableState(s.mockHistoryEngine.shardContext, s.eventsCache, tests.LocalNamespaceEntry, log.NewTestLogger(), execution.GetRunId())
-	addWorkflowExecutionStartedEvent(ms, execution, "wType", taskqueue, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, identity)
+	ms := workflow.TestLocalMutableState(s.mockHistoryEngine.shardContext, s.eventsCache, tests.LocalNamespaceEntry, execution.GetWorkflowId(), execution.GetRunId(), log.NewTestLogger())
+	addWorkflowExecutionStartedEvent(ms, &execution, "wType", taskqueue, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, identity)
 	wt := addWorkflowTaskScheduledEvent(ms)
 	startedEvent := addWorkflowTaskStartedEvent(ms, wt.ScheduledEventID, taskqueue, identity)
 	addWorkflowTaskCompletedEvent(&s.Suite, ms, wt.ScheduledEventID, startedEvent.EventId, identity)
@@ -678,8 +691,8 @@ func (s *engineSuite) TestQueryWorkflow_ConsistentQueryBufferFull() {
 		context.Background(),
 		s.mockShard,
 		tests.NamespaceID,
-		execution,
-		workflow.LockPriorityHigh,
+		&execution,
+		locks.PriorityHigh,
 	)
 	s.NoError(err)
 	loadedMS, err := ctx.LoadMutableState(context.Background(), s.mockShard)
@@ -708,8 +721,8 @@ func (s *engineSuite) TestQueryWorkflow_WorkflowTaskDispatch_Complete() {
 	}
 	taskqueue := "testTaskQueue"
 	identity := "testIdentity"
-	ms := workflow.TestLocalMutableState(s.mockHistoryEngine.shardContext, s.eventsCache, tests.LocalNamespaceEntry, log.NewTestLogger(), execution.GetRunId())
-	addWorkflowExecutionStartedEvent(ms, execution, "wType", taskqueue, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, identity)
+	ms := workflow.TestLocalMutableState(s.mockHistoryEngine.shardContext, s.eventsCache, tests.LocalNamespaceEntry, execution.GetWorkflowId(), execution.GetRunId(), log.NewTestLogger())
+	addWorkflowExecutionStartedEvent(ms, &execution, "wType", taskqueue, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, identity)
 	wt := addWorkflowTaskScheduledEvent(ms)
 	startedEvent := addWorkflowTaskStartedEvent(ms, wt.ScheduledEventID, taskqueue, identity)
 	addWorkflowTaskCompletedEvent(&s.Suite, ms, wt.ScheduledEventID, startedEvent.EventId, identity)
@@ -725,7 +738,7 @@ func (s *engineSuite) TestQueryWorkflow_WorkflowTaskDispatch_Complete() {
 	asyncQueryUpdate := func(delay time.Duration, answer []byte) {
 		defer waitGroup.Done()
 		time.Sleep(delay)
-		ms1 := s.getMutableState(tests.NamespaceID, execution)
+		ms1 := s.getMutableState(tests.NamespaceID, &execution)
 		s.NotNil(ms1)
 		qr := ms1.GetQueryRegistry()
 		buffered := qr.GetBufferedIDs()
@@ -764,7 +777,7 @@ func (s *engineSuite) TestQueryWorkflow_WorkflowTaskDispatch_Complete() {
 	s.NoError(err)
 	s.Equal([]byte{1, 2, 3}, queryResult)
 
-	ms1 := s.getMutableState(tests.NamespaceID, execution)
+	ms1 := s.getMutableState(tests.NamespaceID, &execution)
 	s.NotNil(ms1)
 	qr := ms1.GetQueryRegistry()
 	s.False(qr.HasBufferedQuery())
@@ -779,8 +792,8 @@ func (s *engineSuite) TestQueryWorkflow_WorkflowTaskDispatch_Unblocked() {
 	}
 	taskqueue := "testTaskQueue"
 	identity := "testIdentity"
-	ms := workflow.TestLocalMutableState(s.mockHistoryEngine.shardContext, s.eventsCache, tests.LocalNamespaceEntry, log.NewTestLogger(), execution.GetRunId())
-	addWorkflowExecutionStartedEvent(ms, execution, "wType", taskqueue, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, identity)
+	ms := workflow.TestLocalMutableState(s.mockHistoryEngine.shardContext, s.eventsCache, tests.LocalNamespaceEntry, execution.GetWorkflowId(), execution.GetRunId(), log.NewTestLogger())
+	addWorkflowExecutionStartedEvent(ms, &execution, "wType", taskqueue, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, identity)
 	wt := addWorkflowTaskScheduledEvent(ms)
 	startedEvent := addWorkflowTaskStartedEvent(ms, wt.ScheduledEventID, taskqueue, identity)
 	addWorkflowTaskCompletedEvent(&s.Suite, ms, wt.ScheduledEventID, startedEvent.EventId, identity)
@@ -797,7 +810,7 @@ func (s *engineSuite) TestQueryWorkflow_WorkflowTaskDispatch_Unblocked() {
 	asyncQueryUpdate := func(delay time.Duration, answer []byte) {
 		defer waitGroup.Done()
 		time.Sleep(delay)
-		ms1 := s.getMutableState(tests.NamespaceID, execution)
+		ms1 := s.getMutableState(tests.NamespaceID, &execution)
 		s.NotNil(ms1)
 		qr := ms1.GetQueryRegistry()
 		buffered := qr.GetBufferedIDs()
@@ -827,7 +840,7 @@ func (s *engineSuite) TestQueryWorkflow_WorkflowTaskDispatch_Unblocked() {
 	s.NoError(err)
 	s.Equal([]byte{1, 2, 3}, queryResult)
 
-	ms1 := s.getMutableState(tests.NamespaceID, execution)
+	ms1 := s.getMutableState(tests.NamespaceID, &execution)
 	s.NotNil(ms1)
 	qr := ms1.GetQueryRegistry()
 	s.False(qr.HasBufferedQuery())
@@ -922,8 +935,8 @@ func (s *engineSuite) TestRespondWorkflowTaskCompletedUpdateExecutionFailed() {
 	identity := "testIdentity"
 
 	ms := workflow.TestLocalMutableState(s.mockHistoryEngine.shardContext, s.eventsCache,
-		tests.LocalNamespaceEntry, log.NewTestLogger(), we.GetRunId())
-	addWorkflowExecutionStartedEvent(ms, we, "wType", tq, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, identity)
+		tests.LocalNamespaceEntry, we.GetWorkflowId(), we.GetRunId(), log.NewTestLogger())
+	addWorkflowExecutionStartedEvent(ms, &we, "wType", tq, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, identity)
 	wt := addWorkflowTaskScheduledEvent(ms)
 	addWorkflowTaskStartedEvent(ms, wt.ScheduledEventID, tq, identity)
 
@@ -963,8 +976,8 @@ func (s *engineSuite) TestRespondWorkflowTaskCompletedIfTaskCompleted() {
 	identity := "testIdentity"
 
 	ms := workflow.TestLocalMutableState(s.mockHistoryEngine.shardContext, s.eventsCache,
-		tests.LocalNamespaceEntry, log.NewTestLogger(), we.GetRunId())
-	addWorkflowExecutionStartedEvent(ms, we, "wType", tq, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, identity)
+		tests.LocalNamespaceEntry, we.GetWorkflowId(), we.GetRunId(), log.NewTestLogger())
+	addWorkflowExecutionStartedEvent(ms, &we, "wType", tq, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, identity)
 	wt := addWorkflowTaskScheduledEvent(ms)
 	startedEvent := addWorkflowTaskStartedEvent(ms, wt.ScheduledEventID, tq, identity)
 	addWorkflowTaskCompletedEvent(&s.Suite, ms, wt.ScheduledEventID, startedEvent.EventId, identity)
@@ -1003,8 +1016,8 @@ func (s *engineSuite) TestRespondWorkflowTaskCompletedIfTaskNotStarted() {
 	identity := "testIdentity"
 
 	ms := workflow.TestLocalMutableState(s.mockHistoryEngine.shardContext, s.eventsCache,
-		tests.LocalNamespaceEntry, log.NewTestLogger(), we.GetRunId())
-	addWorkflowExecutionStartedEvent(ms, we, "wType", tq, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, identity)
+		tests.LocalNamespaceEntry, we.GetWorkflowId(), we.GetRunId(), log.NewTestLogger())
+	addWorkflowExecutionStartedEvent(ms, &we, "wType", tq, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, identity)
 	addWorkflowTaskScheduledEvent(ms)
 
 	wfMs := workflow.TestCloneToProto(ms)
@@ -1043,8 +1056,8 @@ func (s *engineSuite) TestRespondWorkflowTaskCompletedConflictOnUpdate() {
 	activity3Input := payloads.EncodeString("input3")
 
 	ms := workflow.TestLocalMutableState(s.mockHistoryEngine.shardContext, s.eventsCache,
-		tests.LocalNamespaceEntry, log.NewTestLogger(), we.GetRunId())
-	addWorkflowExecutionStartedEvent(ms, we, "wType", tq, payloads.EncodeString("input"), 100*time.Second, 100*time.Second, 100*time.Second, identity)
+		tests.LocalNamespaceEntry, we.GetWorkflowId(), we.GetRunId(), log.NewTestLogger())
+	addWorkflowExecutionStartedEvent(ms, &we, "wType", tq, payloads.EncodeString("input"), 100*time.Second, 100*time.Second, 100*time.Second, identity)
 	wt1 := addWorkflowTaskScheduledEvent(ms)
 	workflowTaskStartedEvent1 := addWorkflowTaskStartedEvent(ms, wt1.ScheduledEventID, tq, identity)
 	workflowTaskCompletedEvent1 := addWorkflowTaskCompletedEvent(&s.Suite, ms, wt1.ScheduledEventID, workflowTaskStartedEvent1.EventId, identity)
@@ -1073,10 +1086,10 @@ func (s *engineSuite) TestRespondWorkflowTaskCompletedConflictOnUpdate() {
 			ActivityType:           &commonpb.ActivityType{Name: activity3Type},
 			TaskQueue:              &taskqueuepb.TaskQueue{Name: tq},
 			Input:                  activity3Input,
-			ScheduleToCloseTimeout: timestamp.DurationPtr(100 * time.Second),
-			ScheduleToStartTimeout: timestamp.DurationPtr(10 * time.Second),
-			StartToCloseTimeout:    timestamp.DurationPtr(50 * time.Second),
-			HeartbeatTimeout:       timestamp.DurationPtr(5 * time.Second),
+			ScheduleToCloseTimeout: durationpb.New(100 * time.Second),
+			ScheduleToStartTimeout: durationpb.New(10 * time.Second),
+			StartToCloseTimeout:    durationpb.New(50 * time.Second),
+			HeartbeatTimeout:       durationpb.New(5 * time.Second),
 		}},
 	}}
 
@@ -1109,9 +1122,9 @@ func (s *engineSuite) TestValidateSignalRequest() {
 		WorkflowType:             &commonpb.WorkflowType{Name: workflowType},
 		TaskQueue:                &taskqueuepb.TaskQueue{Name: "taskptr"},
 		Input:                    input,
-		WorkflowExecutionTimeout: timestamp.DurationPtr(20 * time.Second),
-		WorkflowRunTimeout:       timestamp.DurationPtr(10 * time.Second),
-		WorkflowTaskTimeout:      timestamp.DurationPtr(10 * time.Second),
+		WorkflowExecutionTimeout: durationpb.New(20 * time.Second),
+		WorkflowRunTimeout:       durationpb.New(10 * time.Second),
+		WorkflowTaskTimeout:      durationpb.New(10 * time.Second),
 		Identity:                 "identity",
 	}
 	err := api.ValidateStartWorkflowExecutionRequest(
@@ -1148,8 +1161,8 @@ func (s *engineSuite) TestRespondWorkflowTaskCompleted_StaleCache() {
 	input := payloads.EncodeString("input")
 
 	ms := workflow.TestLocalMutableState(s.mockHistoryEngine.shardContext, s.eventsCache,
-		tests.LocalNamespaceEntry, log.NewTestLogger(), we.GetRunId())
-	addWorkflowExecutionStartedEvent(ms, we, "wType", tl, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, identity)
+		tests.LocalNamespaceEntry, we.GetWorkflowId(), we.GetRunId(), log.NewTestLogger())
+	addWorkflowExecutionStartedEvent(ms, &we, "wType", tl, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, identity)
 	wt := addWorkflowTaskScheduledEvent(ms)
 	addWorkflowTaskStartedEvent(ms, wt.ScheduledEventID, tl, identity)
 
@@ -1160,10 +1173,10 @@ func (s *engineSuite) TestRespondWorkflowTaskCompleted_StaleCache() {
 			ActivityType:           &commonpb.ActivityType{Name: "activity_type1"},
 			TaskQueue:              &taskqueuepb.TaskQueue{Name: tl},
 			Input:                  input,
-			ScheduleToCloseTimeout: timestamp.DurationPtr(100 * time.Second),
-			ScheduleToStartTimeout: timestamp.DurationPtr(10 * time.Second),
-			StartToCloseTimeout:    timestamp.DurationPtr(50 * time.Second),
-			HeartbeatTimeout:       timestamp.DurationPtr(5 * time.Second),
+			ScheduleToCloseTimeout: durationpb.New(100 * time.Second),
+			ScheduleToStartTimeout: durationpb.New(10 * time.Second),
+			StartToCloseTimeout:    durationpb.New(50 * time.Second),
+			HeartbeatTimeout:       durationpb.New(5 * time.Second),
 		}},
 	}}
 
@@ -1201,8 +1214,8 @@ func (s *engineSuite) TestRespondWorkflowTaskCompletedCompleteWorkflowFailed() {
 	workflowResult := payloads.EncodeString("workflow result")
 
 	ms := workflow.TestLocalMutableState(s.mockHistoryEngine.shardContext, s.eventsCache,
-		tests.LocalNamespaceEntry, log.NewTestLogger(), we.GetRunId())
-	addWorkflowExecutionStartedEvent(ms, we, "wType", tl, payloads.EncodeString("input"), 25*time.Second, 20*time.Second, 200*time.Second, identity)
+		tests.LocalNamespaceEntry, we.GetWorkflowId(), we.GetRunId(), log.NewTestLogger())
+	addWorkflowExecutionStartedEvent(ms, &we, "wType", tl, payloads.EncodeString("input"), 25*time.Second, 20*time.Second, 200*time.Second, identity)
 	wt1 := addWorkflowTaskScheduledEvent(ms)
 	workflowTaskStartedEvent1 := addWorkflowTaskStartedEvent(ms, wt1.ScheduledEventID, tl, identity)
 	workflowTaskCompletedEvent1 := addWorkflowTaskCompletedEvent(&s.Suite, ms, wt1.ScheduledEventID, workflowTaskStartedEvent1.EventId, identity)
@@ -1261,7 +1274,7 @@ func (s *engineSuite) TestRespondWorkflowTaskCompletedCompleteWorkflowFailed() {
 
 	s.NotNil(updatedWorkflowMutation)
 	s.Equal(int64(15), updatedWorkflowMutation.NextEventID)
-	s.Equal(workflowTaskStartedEvent1.EventId, updatedWorkflowMutation.ExecutionInfo.LastWorkflowTaskStartedEventId)
+	s.Equal(workflowTaskStartedEvent1.EventId, updatedWorkflowMutation.ExecutionInfo.LastCompletedWorkflowTaskStartedEventId)
 	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, updatedWorkflowMutation.ExecutionState.State)
 	s.Equal(updatedWorkflowMutation.NextEventID-1, updatedWorkflowMutation.ExecutionInfo.WorkflowTaskScheduledEventId)
 	s.Equal(int32(1), updatedWorkflowMutation.ExecutionInfo.Attempt)
@@ -1286,8 +1299,8 @@ func (s *engineSuite) TestRespondWorkflowTaskCompletedFailWorkflowFailed() {
 	reason := "workflow fail reason"
 
 	ms := workflow.TestLocalMutableState(s.mockHistoryEngine.shardContext, s.eventsCache,
-		tests.LocalNamespaceEntry, log.NewTestLogger(), we.GetRunId())
-	addWorkflowExecutionStartedEvent(ms, we, "wType", tl, payloads.EncodeString("input"), 25*time.Second, 20*time.Second, 200*time.Second, identity)
+		tests.LocalNamespaceEntry, we.GetWorkflowId(), we.GetRunId(), log.NewTestLogger())
+	addWorkflowExecutionStartedEvent(ms, &we, "wType", tl, payloads.EncodeString("input"), 25*time.Second, 20*time.Second, 200*time.Second, identity)
 	wt1 := addWorkflowTaskScheduledEvent(ms)
 	workflowTaskStartedEvent1 := addWorkflowTaskStartedEvent(ms, wt1.ScheduledEventID, tl, identity)
 	workflowTaskCompletedEvent1 := addWorkflowTaskCompletedEvent(&s.Suite, ms, wt1.ScheduledEventID, workflowTaskStartedEvent1.EventId, identity)
@@ -1346,7 +1359,7 @@ func (s *engineSuite) TestRespondWorkflowTaskCompletedFailWorkflowFailed() {
 
 	s.NotNil(updatedWorkflowMutation)
 	s.Equal(int64(15), updatedWorkflowMutation.NextEventID)
-	s.Equal(workflowTaskStartedEvent1.EventId, updatedWorkflowMutation.ExecutionInfo.LastWorkflowTaskStartedEventId)
+	s.Equal(workflowTaskStartedEvent1.EventId, updatedWorkflowMutation.ExecutionInfo.LastCompletedWorkflowTaskStartedEventId)
 	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, updatedWorkflowMutation.ExecutionState.State)
 	s.Equal(updatedWorkflowMutation.NextEventID-1, updatedWorkflowMutation.ExecutionInfo.WorkflowTaskScheduledEventId)
 	s.Equal(int32(1), updatedWorkflowMutation.ExecutionInfo.Attempt)
@@ -1366,8 +1379,8 @@ func (s *engineSuite) TestRespondWorkflowTaskCompletedBadCommandAttributes() {
 	activity1Result := payloads.EncodeString("activity1_result")
 
 	ms := workflow.TestLocalMutableState(s.mockHistoryEngine.shardContext, s.eventsCache,
-		tests.LocalNamespaceEntry, log.NewTestLogger(), we.GetRunId())
-	addWorkflowExecutionStartedEvent(ms, we, "wType", tl, payloads.EncodeString("input"), 25*time.Second, 20*time.Second, 200*time.Second, identity)
+		tests.LocalNamespaceEntry, we.GetWorkflowId(), we.GetRunId(), log.NewTestLogger())
+	addWorkflowExecutionStartedEvent(ms, &we, "wType", tl, payloads.EncodeString("input"), 25*time.Second, 20*time.Second, 200*time.Second, identity)
 	wt1 := addWorkflowTaskScheduledEvent(ms)
 	workflowTaskStartedEvent1 := addWorkflowTaskStartedEvent(ms, wt1.ScheduledEventID, tl, identity)
 	workflowTaskCompletedEvent1 := addWorkflowTaskCompletedEvent(&s.Suite, ms, wt1.ScheduledEventID, workflowTaskStartedEvent1.EventId, identity)
@@ -1408,7 +1421,7 @@ func (s *engineSuite) TestRespondWorkflowTaskCompletedBadCommandAttributes() {
 	})
 	s.Error(err)
 	s.IsType(&serviceerror.InvalidArgument{}, err)
-	s.Equal("BadCompleteWorkflowExecutionAttributes: CompleteWorkflowExecutionCommandAttributes is not set on command.", err.Error())
+	s.Equal("BadCompleteWorkflowExecutionAttributes: CompleteWorkflowExecutionCommandAttributes is not set on CompleteWorkflowExecutionCommand.", err.Error())
 }
 
 // This test unit tests the activity schedule timeout validation logic of HistoryEngine's RespondWorkflowTaskComplete function.
@@ -1489,8 +1502,8 @@ func (s *engineSuite) TestRespondWorkflowTaskCompletedSingleActivityScheduledAtt
 		input := payloads.EncodeString("input")
 
 		ms := workflow.TestLocalMutableState(s.mockHistoryEngine.shardContext, s.eventsCache,
-			tests.LocalNamespaceEntry, log.NewTestLogger(), we.GetRunId())
-		addWorkflowExecutionStartedEvent(ms, we, "wType", tl, payloads.EncodeString("input"), time.Duration(runTimeout*10)*time.Second, time.Duration(runTimeout)*time.Second, 200*time.Second, identity)
+			tests.LocalNamespaceEntry, we.GetWorkflowId(), we.GetRunId(), log.NewTestLogger())
+		addWorkflowExecutionStartedEvent(ms, &we, "wType", tl, payloads.EncodeString("input"), time.Duration(runTimeout*10)*time.Second, time.Duration(runTimeout)*time.Second, 200*time.Second, identity)
 		wt := addWorkflowTaskScheduledEvent(ms)
 		addWorkflowTaskStartedEvent(ms, wt.ScheduledEventID, tl, identity)
 
@@ -1501,10 +1514,10 @@ func (s *engineSuite) TestRespondWorkflowTaskCompletedSingleActivityScheduledAtt
 				ActivityType:           &commonpb.ActivityType{Name: "activity_type1"},
 				TaskQueue:              &taskqueuepb.TaskQueue{Name: tl},
 				Input:                  input,
-				ScheduleToCloseTimeout: timestamp.DurationPtr(time.Duration(iVar.scheduleToClose) * time.Second),
-				ScheduleToStartTimeout: timestamp.DurationPtr(time.Duration(iVar.scheduleToStart) * time.Second),
-				StartToCloseTimeout:    timestamp.DurationPtr(time.Duration(iVar.startToClose) * time.Second),
-				HeartbeatTimeout:       timestamp.DurationPtr(time.Duration(iVar.heartbeat) * time.Second),
+				ScheduleToCloseTimeout: durationpb.New(time.Duration(iVar.scheduleToClose) * time.Second),
+				ScheduleToStartTimeout: durationpb.New(time.Duration(iVar.scheduleToStart) * time.Second),
+				StartToCloseTimeout:    durationpb.New(time.Duration(iVar.startToClose) * time.Second),
+				HeartbeatTimeout:       durationpb.New(time.Duration(iVar.heartbeat) * time.Second),
 			}},
 		}}
 
@@ -1533,9 +1546,9 @@ func (s *engineSuite) TestRespondWorkflowTaskCompletedSingleActivityScheduledAtt
 
 		if !iVar.expectWorkflowTaskFail {
 			s.NoError(err)
-			ms := s.getMutableState(tests.NamespaceID, we)
+			ms := s.getMutableState(tests.NamespaceID, &we)
 			s.Equal(int64(6), ms.GetNextEventID())
-			s.Equal(int64(3), ms.GetExecutionInfo().LastWorkflowTaskStartedEventId)
+			s.Equal(int64(3), ms.GetExecutionInfo().LastCompletedWorkflowTaskStartedEventId)
 			s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, ms.GetExecutionState().State)
 			s.False(ms.HasPendingWorkflowTask())
 
@@ -1549,7 +1562,7 @@ func (s *engineSuite) TestRespondWorkflowTaskCompletedSingleActivityScheduledAtt
 			s.True(strings.HasPrefix(err.Error(), "BadScheduleActivityAttributes"), err.Error())
 			s.NotNil(updatedWorkflowMutation)
 			s.Equal(int64(5), updatedWorkflowMutation.NextEventID, iVar)
-			s.Equal(common.EmptyEventID, updatedWorkflowMutation.ExecutionInfo.LastWorkflowTaskStartedEventId, iVar)
+			s.Equal(common.EmptyEventID, updatedWorkflowMutation.ExecutionInfo.LastCompletedWorkflowTaskStartedEventId, iVar)
 			s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, updatedWorkflowMutation.ExecutionState.State, iVar)
 			s.True(updatedWorkflowMutation.ExecutionInfo.WorkflowTaskScheduledEventId != common.EmptyEventID, iVar)
 		}
@@ -1582,8 +1595,8 @@ func (s *engineSuite) TestRespondWorkflowTaskCompletedBadBinary() {
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(ns.ID()).Return(ns, nil).AnyTimes()
 	s.mockNamespaceCache.EXPECT().GetNamespace(ns.ID()).Return(ns, nil).AnyTimes()
 	ms := workflow.TestLocalMutableState(s.mockHistoryEngine.shardContext, s.eventsCache,
-		ns, log.NewTestLogger(), we.GetRunId())
-	addWorkflowExecutionStartedEvent(ms, we, "wType", tl, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, identity)
+		ns, we.GetWorkflowId(), we.GetRunId(), log.NewTestLogger())
+	addWorkflowExecutionStartedEvent(ms, &we, "wType", tl, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, identity)
 	wt := addWorkflowTaskScheduledEvent(ms)
 	addWorkflowTaskStartedEvent(ms, wt.ScheduledEventID, tl, identity)
 
@@ -1616,7 +1629,7 @@ func (s *engineSuite) TestRespondWorkflowTaskCompletedBadBinary() {
 
 	s.NotNil(updatedWorkflowMutation)
 	s.Equal(int64(5), updatedWorkflowMutation.NextEventID)
-	s.Equal(common.EmptyEventID, updatedWorkflowMutation.ExecutionInfo.LastWorkflowTaskStartedEventId)
+	s.Equal(common.EmptyEventID, updatedWorkflowMutation.ExecutionInfo.LastCompletedWorkflowTaskStartedEventId)
 	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, updatedWorkflowMutation.ExecutionState.State)
 	s.True(updatedWorkflowMutation.ExecutionInfo.WorkflowTaskScheduledEventId != common.EmptyEventID)
 }
@@ -1640,8 +1653,8 @@ func (s *engineSuite) TestRespondWorkflowTaskCompletedSingleActivityScheduledWor
 	input := payloads.EncodeString("input")
 
 	ms := workflow.TestLocalMutableState(s.mockHistoryEngine.shardContext, s.eventsCache,
-		tests.LocalNamespaceEntry, log.NewTestLogger(), we.GetRunId())
-	addWorkflowExecutionStartedEvent(ms, we, "wType", tl, payloads.EncodeString("input"), 100*time.Second, 90*time.Second, 200*time.Second, identity)
+		tests.LocalNamespaceEntry, we.GetWorkflowId(), we.GetRunId(), log.NewTestLogger())
+	addWorkflowExecutionStartedEvent(ms, &we, "wType", tl, payloads.EncodeString("input"), 100*time.Second, 90*time.Second, 200*time.Second, identity)
 	wt := addWorkflowTaskScheduledEvent(ms)
 	addWorkflowTaskStartedEvent(ms, wt.ScheduledEventID, tl, identity)
 
@@ -1652,10 +1665,10 @@ func (s *engineSuite) TestRespondWorkflowTaskCompletedSingleActivityScheduledWor
 			ActivityType:           &commonpb.ActivityType{Name: "activity_type1"},
 			TaskQueue:              &taskqueuepb.TaskQueue{Name: tl},
 			Input:                  input,
-			ScheduleToCloseTimeout: timestamp.DurationPtr(100 * time.Second),
-			ScheduleToStartTimeout: timestamp.DurationPtr(10 * time.Second),
-			StartToCloseTimeout:    timestamp.DurationPtr(50 * time.Second),
-			HeartbeatTimeout:       timestamp.DurationPtr(5 * time.Second),
+			ScheduleToCloseTimeout: durationpb.New(100 * time.Second),
+			ScheduleToStartTimeout: durationpb.New(10 * time.Second),
+			StartToCloseTimeout:    durationpb.New(50 * time.Second),
+			HeartbeatTimeout:       durationpb.New(5 * time.Second),
 		}},
 	}}
 
@@ -1674,9 +1687,9 @@ func (s *engineSuite) TestRespondWorkflowTaskCompletedSingleActivityScheduledWor
 		},
 	})
 	s.NoError(err)
-	ms2 := s.getMutableState(tests.NamespaceID, we)
+	ms2 := s.getMutableState(tests.NamespaceID, &we)
 	s.Equal(int64(6), ms2.GetNextEventID())
-	s.Equal(int64(3), ms2.GetExecutionInfo().LastWorkflowTaskStartedEventId)
+	s.Equal(int64(3), ms2.GetExecutionInfo().LastCompletedWorkflowTaskStartedEventId)
 	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, ms2.GetExecutionState().State)
 	s.False(ms2.HasPendingWorkflowTask())
 
@@ -1733,8 +1746,8 @@ func (s *engineSuite) testRespondWorkflowTaskCompletedSignalGeneration(skipGener
 	}
 
 	ms := workflow.TestLocalMutableState(s.mockHistoryEngine.shardContext, s.eventsCache,
-		tests.LocalNamespaceEntry, log.NewTestLogger(), we.GetRunId())
-	addWorkflowExecutionStartedEvent(ms, we, "wType", tl, payloads.EncodeString("input"), 100*time.Second, 90*time.Second, 200*time.Second, identity)
+		tests.LocalNamespaceEntry, we.GetWorkflowId(), we.GetRunId(), log.NewTestLogger())
+	addWorkflowExecutionStartedEvent(ms, &we, "wType", tl, payloads.EncodeString("input"), 100*time.Second, 90*time.Second, 200*time.Second, identity)
 	wt := addWorkflowTaskScheduledEvent(ms)
 	addWorkflowTaskStartedEvent(ms, wt.ScheduledEventID, tl, identity)
 
@@ -1791,15 +1804,15 @@ func (s *engineSuite) TestRespondWorkflowTaskCompleted_ActivityEagerExecution_No
 	input := payloads.EncodeString("input")
 
 	ms := workflow.TestLocalMutableState(s.mockHistoryEngine.shardContext, s.eventsCache,
-		tests.LocalNamespaceEntry, log.NewTestLogger(), we.GetRunId())
-	addWorkflowExecutionStartedEvent(ms, we, "wType", tl, payloads.EncodeString("input"), 100*time.Second, 90*time.Second, 200*time.Second, identity)
+		tests.LocalNamespaceEntry, we.GetWorkflowId(), we.GetRunId(), log.NewTestLogger())
+	addWorkflowExecutionStartedEvent(ms, &we, "wType", tl, payloads.EncodeString("input"), 100*time.Second, 90*time.Second, 200*time.Second, identity)
 	wt := addWorkflowTaskScheduledEvent(ms)
 	addWorkflowTaskStartedEvent(ms, wt.ScheduledEventID, tl, identity)
 
-	scheduleToCloseTimeout := timestamp.DurationPtr(90 * time.Second)
-	scheduleToStartTimeout := timestamp.DurationPtr(10 * time.Second)
-	startToCloseTimeout := timestamp.DurationPtr(50 * time.Second)
-	heartbeatTimeout := timestamp.DurationPtr(5 * time.Second)
+	scheduleToCloseTimeout := durationpb.New(90 * time.Second)
+	scheduleToStartTimeout := durationpb.New(10 * time.Second)
+	startToCloseTimeout := durationpb.New(50 * time.Second)
+	heartbeatTimeout := durationpb.New(5 * time.Second)
 	commands := []*commandpb.Command{
 		{
 			CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
@@ -1846,9 +1859,9 @@ func (s *engineSuite) TestRespondWorkflowTaskCompleted_ActivityEagerExecution_No
 		},
 	})
 	s.NoError(err)
-	ms2 := s.getMutableState(tests.NamespaceID, we)
+	ms2 := s.getMutableState(tests.NamespaceID, &we)
 	s.Equal(int64(7), ms2.GetNextEventID())
-	s.Equal(int64(3), ms2.GetExecutionInfo().LastWorkflowTaskStartedEventId)
+	s.Equal(int64(3), ms2.GetExecutionInfo().LastCompletedWorkflowTaskStartedEventId)
 	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, ms2.GetExecutionState().State)
 	s.False(ms2.HasPendingWorkflowTask())
 
@@ -1868,12 +1881,12 @@ func (s *engineSuite) TestRespondWorkflowTaskCompleted_ActivityEagerExecution_No
 	s.Equal("activity2", activityTask.ActivityId)
 	s.Equal("activity_type2", activityTask.ActivityType.GetName())
 	s.Equal(input, activityTask.Input)
-	s.Equal(we, *activityTask.WorkflowExecution)
+	protorequire.ProtoEqual(s.T(), &we, activityTask.WorkflowExecution)
 	s.Equal(scheduledEvent.EventTime, activityTask.CurrentAttemptScheduledTime)
 	s.Equal(scheduledEvent.EventTime, activityTask.ScheduledTime)
-	s.Equal(*scheduleToCloseTimeout, *activityTask.ScheduleToCloseTimeout)
-	s.Equal(startToCloseTimeout, activityTask.StartToCloseTimeout)
-	s.Equal(heartbeatTimeout, activityTask.HeartbeatTimeout)
+	s.Equal(scheduleToCloseTimeout.AsDuration(), activityTask.ScheduleToCloseTimeout.AsDuration())
+	s.ProtoEqual(startToCloseTimeout, activityTask.StartToCloseTimeout)
+	s.ProtoEqual(heartbeatTimeout, activityTask.HeartbeatTimeout)
 	s.Equal(int32(1), activityTask.Attempt)
 	s.Nil(activityTask.HeartbeatDetails)
 	s.Equal(tests.LocalNamespaceEntry.Name().String(), activityTask.WorkflowNamespace)
@@ -1898,15 +1911,15 @@ func (s *engineSuite) TestRespondWorkflowTaskCompleted_ActivityEagerExecution_Ca
 	input := payloads.EncodeString("input")
 
 	ms := workflow.TestLocalMutableState(s.mockHistoryEngine.shardContext, s.eventsCache,
-		tests.LocalNamespaceEntry, log.NewTestLogger(), we.GetRunId())
-	addWorkflowExecutionStartedEvent(ms, we, "wType", tl, payloads.EncodeString("input"), 100*time.Second, 90*time.Second, 200*time.Second, identity)
+		tests.LocalNamespaceEntry, we.GetWorkflowId(), we.GetRunId(), log.NewTestLogger())
+	addWorkflowExecutionStartedEvent(ms, &we, "wType", tl, payloads.EncodeString("input"), 100*time.Second, 90*time.Second, 200*time.Second, identity)
 	wt := addWorkflowTaskScheduledEvent(ms)
 	addWorkflowTaskStartedEvent(ms, wt.ScheduledEventID, tl, identity)
 
-	scheduleToCloseTimeout := timestamp.DurationPtr(90 * time.Second)
-	scheduleToStartTimeout := timestamp.DurationPtr(10 * time.Second)
-	startToCloseTimeout := timestamp.DurationPtr(50 * time.Second)
-	heartbeatTimeout := timestamp.DurationPtr(5 * time.Second)
+	scheduleToCloseTimeout := durationpb.New(90 * time.Second)
+	scheduleToStartTimeout := durationpb.New(10 * time.Second)
+	startToCloseTimeout := durationpb.New(50 * time.Second)
+	heartbeatTimeout := durationpb.New(5 * time.Second)
 	commands := []*commandpb.Command{
 		{
 			CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
@@ -1952,9 +1965,9 @@ func (s *engineSuite) TestRespondWorkflowTaskCompleted_ActivityEagerExecution_Ca
 		},
 	})
 	s.NoError(err)
-	ms2 := s.getMutableState(tests.NamespaceID, we)
+	ms2 := s.getMutableState(tests.NamespaceID, &we)
 	s.Equal(int64(10), ms2.GetNextEventID()) // activity scheduled, request cancel, cancelled, workflow task scheduled, started
-	s.Equal(int64(3), ms2.GetExecutionInfo().LastWorkflowTaskStartedEventId)
+	s.Equal(int64(3), ms2.GetExecutionInfo().LastCompletedWorkflowTaskStartedEventId)
 	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, ms2.GetExecutionState().State)
 	s.True(ms2.HasPendingWorkflowTask())
 
@@ -1986,15 +1999,15 @@ func (s *engineSuite) TestRespondWorkflowTaskCompleted_ActivityEagerExecution_Wo
 	input := payloads.EncodeString("input")
 
 	ms := workflow.TestLocalMutableState(s.mockHistoryEngine.shardContext, s.eventsCache,
-		tests.LocalNamespaceEntry, log.NewTestLogger(), we.GetRunId())
-	addWorkflowExecutionStartedEvent(ms, we, "wType", tl, payloads.EncodeString("input"), 100*time.Second, 90*time.Second, 200*time.Second, identity)
+		tests.LocalNamespaceEntry, we.GetWorkflowId(), we.GetRunId(), log.NewTestLogger())
+	addWorkflowExecutionStartedEvent(ms, &we, "wType", tl, payloads.EncodeString("input"), 100*time.Second, 90*time.Second, 200*time.Second, identity)
 	wt := addWorkflowTaskScheduledEvent(ms)
 	addWorkflowTaskStartedEvent(ms, wt.ScheduledEventID, tl, identity)
 
-	scheduleToCloseTimeout := timestamp.DurationPtr(90 * time.Second)
-	scheduleToStartTimeout := timestamp.DurationPtr(10 * time.Second)
-	startToCloseTimeout := timestamp.DurationPtr(50 * time.Second)
-	heartbeatTimeout := timestamp.DurationPtr(5 * time.Second)
+	scheduleToCloseTimeout := durationpb.New(90 * time.Second)
+	scheduleToStartTimeout := durationpb.New(10 * time.Second)
+	startToCloseTimeout := durationpb.New(50 * time.Second)
+	heartbeatTimeout := durationpb.New(5 * time.Second)
 	commands := []*commandpb.Command{
 		{
 			CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
@@ -2034,9 +2047,9 @@ func (s *engineSuite) TestRespondWorkflowTaskCompleted_ActivityEagerExecution_Wo
 		},
 	})
 	s.NoError(err)
-	ms2 := s.getMutableState(tests.NamespaceID, we)
+	ms2 := s.getMutableState(tests.NamespaceID, &we)
 	s.Equal(int64(7), ms2.GetNextEventID()) // activity scheduled, workflow completed
-	s.Equal(int64(3), ms2.GetExecutionInfo().LastWorkflowTaskStartedEventId)
+	s.Equal(int64(3), ms2.GetExecutionInfo().LastCompletedWorkflowTaskStartedEventId)
 	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED, ms2.GetExecutionState().State)
 	s.False(ms2.HasPendingWorkflowTask())
 
@@ -2067,11 +2080,11 @@ func (s *engineSuite) TestRespondWorkflowTaskCompleted_WorkflowTaskHeartbeatTime
 	identity := "testIdentity"
 
 	ms := workflow.TestLocalMutableState(s.mockHistoryEngine.shardContext, s.eventsCache,
-		tests.LocalNamespaceEntry, log.NewTestLogger(), we.GetRunId())
-	addWorkflowExecutionStartedEvent(ms, we, "wType", tl, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, identity)
+		tests.LocalNamespaceEntry, we.GetWorkflowId(), we.GetRunId(), log.NewTestLogger())
+	addWorkflowExecutionStartedEvent(ms, &we, "wType", tl, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, identity)
 	wt := addWorkflowTaskScheduledEvent(ms)
 	addWorkflowTaskStartedEvent(ms, wt.ScheduledEventID, tl, identity)
-	ms.GetExecutionInfo().WorkflowTaskOriginalScheduledTime = timestamp.TimePtr(time.Now().UTC().Add(-time.Hour))
+	ms.GetExecutionInfo().WorkflowTaskOriginalScheduledTime = timestamppb.New(time.Now().UTC().Add(-time.Hour))
 
 	var commands []*commandpb.Command
 
@@ -2111,11 +2124,11 @@ func (s *engineSuite) TestRespondWorkflowTaskCompleted_WorkflowTaskHeartbeatNotT
 	identity := "testIdentity"
 
 	ms := workflow.TestLocalMutableState(s.mockHistoryEngine.shardContext, s.eventsCache,
-		tests.LocalNamespaceEntry, log.NewTestLogger(), we.GetRunId())
-	addWorkflowExecutionStartedEvent(ms, we, "wType", tl, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, identity)
+		tests.LocalNamespaceEntry, we.GetWorkflowId(), we.GetRunId(), log.NewTestLogger())
+	addWorkflowExecutionStartedEvent(ms, &we, "wType", tl, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, identity)
 	wt := addWorkflowTaskScheduledEvent(ms)
 	addWorkflowTaskStartedEvent(ms, wt.ScheduledEventID, tl, identity)
-	ms.GetExecutionInfo().WorkflowTaskOriginalScheduledTime = timestamp.TimePtr(time.Now().UTC().Add(-time.Minute))
+	ms.GetExecutionInfo().WorkflowTaskOriginalScheduledTime = timestamppb.New(time.Now().UTC().Add(-time.Minute))
 
 	var commands []*commandpb.Command
 
@@ -2155,8 +2168,8 @@ func (s *engineSuite) TestRespondWorkflowTaskCompleted_WorkflowTaskHeartbeatNotT
 	identity := "testIdentity"
 
 	ms := workflow.TestLocalMutableState(s.mockHistoryEngine.shardContext, s.eventsCache,
-		tests.LocalNamespaceEntry, log.NewTestLogger(), we.GetRunId())
-	addWorkflowExecutionStartedEvent(ms, we, "wType", tl, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, identity)
+		tests.LocalNamespaceEntry, we.GetWorkflowId(), we.GetRunId(), log.NewTestLogger())
+	addWorkflowExecutionStartedEvent(ms, &we, "wType", tl, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, identity)
 	wt := addWorkflowTaskScheduledEvent(ms)
 	addWorkflowTaskStartedEvent(ms, wt.ScheduledEventID, tl, identity)
 	ms.GetExecutionInfo().WorkflowTaskOriginalScheduledTime = nil
@@ -2200,8 +2213,8 @@ func (s *engineSuite) TestRespondWorkflowTaskCompletedCompleteWorkflowSuccess() 
 	workflowResult := payloads.EncodeString("success")
 
 	ms := workflow.TestLocalMutableState(s.mockHistoryEngine.shardContext, s.eventsCache,
-		tests.LocalNamespaceEntry, log.NewTestLogger(), we.GetRunId())
-	addWorkflowExecutionStartedEvent(ms, we, "wType", tl, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, identity)
+		tests.LocalNamespaceEntry, we.GetWorkflowId(), we.GetRunId(), log.NewTestLogger())
+	addWorkflowExecutionStartedEvent(ms, &we, "wType", tl, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, identity)
 	wt := addWorkflowTaskScheduledEvent(ms)
 	addWorkflowTaskStartedEvent(ms, wt.ScheduledEventID, tl, identity)
 
@@ -2227,9 +2240,9 @@ func (s *engineSuite) TestRespondWorkflowTaskCompletedCompleteWorkflowSuccess() 
 		},
 	})
 	s.NoError(err)
-	ms2 := s.getMutableState(tests.NamespaceID, we)
+	ms2 := s.getMutableState(tests.NamespaceID, &we)
 	s.Equal(int64(6), ms2.GetNextEventID())
-	s.Equal(int64(3), ms2.GetExecutionInfo().LastWorkflowTaskStartedEventId)
+	s.Equal(int64(3), ms2.GetExecutionInfo().LastCompletedWorkflowTaskStartedEventId)
 	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED, ms2.GetExecutionState().State)
 	s.False(ms2.HasPendingWorkflowTask())
 }
@@ -2253,8 +2266,8 @@ func (s *engineSuite) TestRespondWorkflowTaskCompletedFailWorkflowSuccess() {
 	reason := "fail workflow reason"
 
 	ms := workflow.TestLocalMutableState(s.mockHistoryEngine.shardContext, s.eventsCache,
-		tests.LocalNamespaceEntry, log.NewTestLogger(), we.GetRunId())
-	addWorkflowExecutionStartedEvent(ms, we, "wType", tl, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, identity)
+		tests.LocalNamespaceEntry, we.GetWorkflowId(), we.GetRunId(), log.NewTestLogger())
+	addWorkflowExecutionStartedEvent(ms, &we, "wType", tl, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, identity)
 	wt := addWorkflowTaskScheduledEvent(ms)
 	addWorkflowTaskStartedEvent(ms, wt.ScheduledEventID, tl, identity)
 
@@ -2280,9 +2293,9 @@ func (s *engineSuite) TestRespondWorkflowTaskCompletedFailWorkflowSuccess() {
 		},
 	})
 	s.NoError(err)
-	ms2 := s.getMutableState(tests.NamespaceID, we)
+	ms2 := s.getMutableState(tests.NamespaceID, &we)
 	s.Equal(int64(6), ms2.GetNextEventID())
-	s.Equal(int64(3), ms2.GetExecutionInfo().LastWorkflowTaskStartedEventId)
+	s.Equal(int64(3), ms2.GetExecutionInfo().LastCompletedWorkflowTaskStartedEventId)
 	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED, ms2.GetExecutionState().State)
 	s.False(ms2.HasPendingWorkflowTask())
 }
@@ -2305,8 +2318,8 @@ func (s *engineSuite) TestRespondWorkflowTaskCompletedSignalExternalWorkflowSucc
 	identity := "testIdentity"
 
 	ms := workflow.TestLocalMutableState(s.mockHistoryEngine.shardContext, s.eventsCache,
-		tests.LocalNamespaceEntry, log.NewTestLogger(), we.GetRunId())
-	addWorkflowExecutionStartedEvent(ms, we, "wType", tl, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, identity)
+		tests.LocalNamespaceEntry, we.GetWorkflowId(), we.GetRunId(), log.NewTestLogger())
+	addWorkflowExecutionStartedEvent(ms, &we, "wType", tl, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, identity)
 	wt := addWorkflowTaskScheduledEvent(ms)
 	addWorkflowTaskStartedEvent(ms, wt.ScheduledEventID, tl, identity)
 
@@ -2338,9 +2351,9 @@ func (s *engineSuite) TestRespondWorkflowTaskCompletedSignalExternalWorkflowSucc
 		},
 	})
 	s.NoError(err)
-	ms2 := s.getMutableState(tests.NamespaceID, we)
+	ms2 := s.getMutableState(tests.NamespaceID, &we)
 	s.Equal(int64(6), ms2.GetNextEventID())
-	s.Equal(int64(3), ms2.GetExecutionInfo().LastWorkflowTaskStartedEventId)
+	s.Equal(int64(3), ms2.GetExecutionInfo().LastCompletedWorkflowTaskStartedEventId)
 }
 
 func (s *engineSuite) TestRespondWorkflowTaskCompletedStartChildWorkflowWithAbandonPolicy() {
@@ -2361,8 +2374,8 @@ func (s *engineSuite) TestRespondWorkflowTaskCompletedStartChildWorkflowWithAban
 	identity := "testIdentity"
 
 	ms := workflow.TestLocalMutableState(s.mockHistoryEngine.shardContext, s.eventsCache,
-		tests.LocalNamespaceEntry, log.NewTestLogger(), we.GetRunId())
-	addWorkflowExecutionStartedEvent(ms, we, "wType", tl, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, identity)
+		tests.LocalNamespaceEntry, we.GetWorkflowId(), we.GetRunId(), log.NewTestLogger())
+	addWorkflowExecutionStartedEvent(ms, &we, "wType", tl, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, identity)
 	wt := addWorkflowTaskScheduledEvent(ms)
 	addWorkflowTaskStartedEvent(ms, wt.ScheduledEventID, tl, identity)
 
@@ -2397,9 +2410,9 @@ func (s *engineSuite) TestRespondWorkflowTaskCompletedStartChildWorkflowWithAban
 		},
 	})
 	s.NoError(err)
-	ms2 := s.getMutableState(tests.NamespaceID, we)
+	ms2 := s.getMutableState(tests.NamespaceID, &we)
 	s.Equal(int64(6), ms2.GetNextEventID())
-	s.Equal(int64(3), ms2.GetExecutionInfo().LastWorkflowTaskStartedEventId)
+	s.Equal(int64(3), ms2.GetExecutionInfo().LastCompletedWorkflowTaskStartedEventId)
 	s.Equal(1, len(ms2.GetPendingChildExecutionInfos()))
 	var childID int64
 	for c := range ms2.GetPendingChildExecutionInfos() {
@@ -2428,8 +2441,8 @@ func (s *engineSuite) TestRespondWorkflowTaskCompletedStartChildWorkflowWithTerm
 	identity := "testIdentity"
 
 	ms := workflow.TestLocalMutableState(s.mockHistoryEngine.shardContext, s.eventsCache,
-		tests.LocalNamespaceEntry, log.NewTestLogger(), we.GetRunId())
-	addWorkflowExecutionStartedEvent(ms, we, "wType", tl, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, identity)
+		tests.LocalNamespaceEntry, we.GetWorkflowId(), we.GetRunId(), log.NewTestLogger())
+	addWorkflowExecutionStartedEvent(ms, &we, "wType", tl, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, identity)
 	wt := addWorkflowTaskScheduledEvent(ms)
 	addWorkflowTaskStartedEvent(ms, wt.ScheduledEventID, tl, identity)
 
@@ -2464,9 +2477,9 @@ func (s *engineSuite) TestRespondWorkflowTaskCompletedStartChildWorkflowWithTerm
 		},
 	})
 	s.NoError(err)
-	ms2 := s.getMutableState(tests.NamespaceID, we)
+	ms2 := s.getMutableState(tests.NamespaceID, &we)
 	s.Equal(int64(6), ms2.GetNextEventID())
-	s.Equal(int64(3), ms2.GetExecutionInfo().LastWorkflowTaskStartedEventId)
+	s.Equal(int64(3), ms2.GetExecutionInfo().LastCompletedWorkflowTaskStartedEventId)
 	s.Equal(1, len(ms2.GetPendingChildExecutionInfos()))
 	var childID int64
 	for c := range ms2.GetPendingChildExecutionInfos() {
@@ -2496,8 +2509,8 @@ func (s *engineSuite) TestRespondWorkflowTaskCompletedSignalExternalWorkflowFail
 	foreignNamespace := namespace.Name("unknown namespace")
 
 	ms := workflow.TestLocalMutableState(s.mockHistoryEngine.shardContext, s.eventsCache,
-		tests.LocalNamespaceEntry, log.NewTestLogger(), we.GetRunId())
-	addWorkflowExecutionStartedEvent(ms, we, "wType", tl, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, identity)
+		tests.LocalNamespaceEntry, we.GetWorkflowId(), we.GetRunId(), log.NewTestLogger())
+	addWorkflowExecutionStartedEvent(ms, &we, "wType", tl, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, identity)
 	wt := addWorkflowTaskScheduledEvent(ms)
 	addWorkflowTaskStartedEvent(ms, wt.ScheduledEventID, tl, identity)
 
@@ -2642,8 +2655,8 @@ func (s *engineSuite) TestRespondActivityTaskCompletedIfNoAIdProvided() {
 	taskToken, _ := tt.Marshal()
 
 	ms := workflow.TestLocalMutableState(s.mockHistoryEngine.shardContext, s.eventsCache,
-		tests.LocalNamespaceEntry, log.NewTestLogger(), tests.RunID)
-	addWorkflowExecutionStartedEvent(ms, execution, "wType", taskqueue, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, identity)
+		tests.LocalNamespaceEntry, tests.WorkflowID, tests.RunID, log.NewTestLogger())
+	addWorkflowExecutionStartedEvent(ms, &execution, "wType", taskqueue, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, identity)
 	addWorkflowTaskScheduledEvent(ms)
 	wfMs := workflow.TestCloneToProto(ms)
 	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: wfMs}
@@ -2680,8 +2693,8 @@ func (s *engineSuite) TestRespondActivityTaskCompletedIfNotFound() {
 	identity := "testIdentity"
 
 	ms := workflow.TestLocalMutableState(s.mockHistoryEngine.shardContext, s.eventsCache,
-		tests.LocalNamespaceEntry, log.NewTestLogger(), tests.RunID)
-	addWorkflowExecutionStartedEvent(ms, execution, "wType", taskqueue, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, identity)
+		tests.LocalNamespaceEntry, tests.WorkflowID, tests.RunID, log.NewTestLogger())
+	addWorkflowExecutionStartedEvent(ms, &execution, "wType", taskqueue, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, identity)
 	addWorkflowTaskScheduledEvent(ms)
 	wfMs := workflow.TestCloneToProto(ms)
 	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: wfMs}
@@ -2722,8 +2735,8 @@ func (s *engineSuite) TestRespondActivityTaskCompletedUpdateExecutionFailed() {
 	activityResult := payloads.EncodeString("activity result")
 
 	ms := workflow.TestLocalMutableState(s.mockHistoryEngine.shardContext, s.eventsCache,
-		tests.LocalNamespaceEntry, log.NewTestLogger(), we.GetRunId())
-	addWorkflowExecutionStartedEvent(ms, we, "wType", tl, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, identity)
+		tests.LocalNamespaceEntry, tests.WorkflowID, tests.RunID, log.NewTestLogger())
+	addWorkflowExecutionStartedEvent(ms, &we, "wType", tl, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, identity)
 	wt := addWorkflowTaskScheduledEvent(ms)
 	workflowTaskStartedEvent := addWorkflowTaskStartedEvent(ms, wt.ScheduledEventID, tl, identity)
 	workflowTaskCompletedEvent := addWorkflowTaskCompletedEvent(&s.Suite, ms, wt.ScheduledEventID, workflowTaskStartedEvent.EventId, identity)
@@ -2770,8 +2783,8 @@ func (s *engineSuite) TestRespondActivityTaskCompletedIfTaskCompleted() {
 	activityResult := payloads.EncodeString("activity result")
 
 	ms := workflow.TestLocalMutableState(s.mockHistoryEngine.shardContext, s.eventsCache,
-		tests.LocalNamespaceEntry, log.NewTestLogger(), we.GetRunId())
-	addWorkflowExecutionStartedEvent(ms, we, "wType", tl, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, identity)
+		tests.LocalNamespaceEntry, we.GetWorkflowId(), we.GetRunId(), log.NewTestLogger())
+	addWorkflowExecutionStartedEvent(ms, &we, "wType", tl, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, identity)
 	wt := addWorkflowTaskScheduledEvent(ms)
 	workflowTaskStartedEvent := addWorkflowTaskStartedEvent(ms, wt.ScheduledEventID, tl, identity)
 	workflowTaskCompletedEvent := addWorkflowTaskCompletedEvent(&s.Suite, ms, wt.ScheduledEventID, workflowTaskStartedEvent.EventId, identity)
@@ -2820,8 +2833,8 @@ func (s *engineSuite) TestRespondActivityTaskCompletedIfTaskNotStarted() {
 	activityResult := payloads.EncodeString("activity result")
 
 	ms := workflow.TestLocalMutableState(s.mockHistoryEngine.shardContext, s.eventsCache,
-		tests.LocalNamespaceEntry, log.NewTestLogger(), we.GetRunId())
-	addWorkflowExecutionStartedEvent(ms, we, "wType", tl, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, identity)
+		tests.LocalNamespaceEntry, we.GetWorkflowId(), we.GetRunId(), log.NewTestLogger())
+	addWorkflowExecutionStartedEvent(ms, &we, "wType", tl, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, identity)
 	wt := addWorkflowTaskScheduledEvent(ms)
 	workflowTaskStartedEvent := addWorkflowTaskStartedEvent(ms, wt.ScheduledEventID, tl, identity)
 	workflowTaskCompletedEvent := addWorkflowTaskCompletedEvent(&s.Suite, ms, wt.ScheduledEventID, workflowTaskStartedEvent.EventId, identity)
@@ -2866,8 +2879,8 @@ func (s *engineSuite) TestRespondActivityTaskCompletedConflictOnUpdate() {
 	activityResult := payloads.EncodeString("activity result")
 
 	ms := workflow.TestLocalMutableState(s.mockHistoryEngine.shardContext, s.eventsCache,
-		tests.LocalNamespaceEntry, log.NewTestLogger(), we.GetRunId())
-	addWorkflowExecutionStartedEvent(ms, we, "wType", tl, payloads.EncodeString("input"), 100*time.Second, 100*time.Second, 100*time.Second, identity)
+		tests.LocalNamespaceEntry, we.GetWorkflowId(), we.GetRunId(), log.NewTestLogger())
+	addWorkflowExecutionStartedEvent(ms, &we, "wType", tl, payloads.EncodeString("input"), 100*time.Second, 100*time.Second, 100*time.Second, identity)
 	wt := addWorkflowTaskScheduledEvent(ms)
 	workflowTaskStartedEvent := addWorkflowTaskStartedEvent(ms, wt.ScheduledEventID, tl, identity)
 	workflowTaskCompletedEvent := addWorkflowTaskCompletedEvent(&s.Suite, ms, wt.ScheduledEventID, workflowTaskStartedEvent.EventId, identity)
@@ -2913,8 +2926,8 @@ func (s *engineSuite) TestRespondActivityTaskCompletedSuccess() {
 	activityResult := payloads.EncodeString("activity result")
 
 	ms := workflow.TestLocalMutableState(s.mockHistoryEngine.shardContext, s.eventsCache,
-		tests.LocalNamespaceEntry, log.NewTestLogger(), we.GetRunId())
-	addWorkflowExecutionStartedEvent(ms, we, "wType", tl, payloads.EncodeString("input"), 100*time.Second, 100*time.Second, 100*time.Second, identity)
+		tests.LocalNamespaceEntry, we.GetWorkflowId(), we.GetRunId(), log.NewTestLogger())
+	addWorkflowExecutionStartedEvent(ms, &we, "wType", tl, payloads.EncodeString("input"), 100*time.Second, 100*time.Second, 100*time.Second, identity)
 	wt := addWorkflowTaskScheduledEvent(ms)
 	workflowTaskStartedEvent := addWorkflowTaskStartedEvent(ms, wt.ScheduledEventID, tl, identity)
 	workflowTaskCompletedEvent := addWorkflowTaskCompletedEvent(&s.Suite, ms, wt.ScheduledEventID, workflowTaskStartedEvent.EventId, identity)
@@ -2936,9 +2949,9 @@ func (s *engineSuite) TestRespondActivityTaskCompletedSuccess() {
 		},
 	})
 	s.NoError(err)
-	ms2 := s.getMutableState(tests.NamespaceID, we)
+	ms2 := s.getMutableState(tests.NamespaceID, &we)
 	s.Equal(int64(9), ms2.GetNextEventID())
-	s.Equal(int64(3), ms2.GetExecutionInfo().LastWorkflowTaskStartedEventId)
+	s.Equal(int64(3), ms2.GetExecutionInfo().LastCompletedWorkflowTaskStartedEventId)
 	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, ms2.GetExecutionState().State)
 
 	s.True(ms2.HasPendingWorkflowTask())
@@ -2972,8 +2985,8 @@ func (s *engineSuite) TestRespondActivityTaskCompletedByIdSuccess() {
 	taskToken, _ := tt.Marshal()
 
 	ms := workflow.TestLocalMutableState(s.mockHistoryEngine.shardContext, s.eventsCache,
-		tests.LocalNamespaceEntry, log.NewTestLogger(), we.GetRunId())
-	addWorkflowExecutionStartedEvent(ms, we, "wType", tl, payloads.EncodeString("input"), 100*time.Second, 100*time.Second, 100*time.Second, identity)
+		tests.LocalNamespaceEntry, we.GetWorkflowId(), we.GetRunId(), log.NewTestLogger())
+	addWorkflowExecutionStartedEvent(ms, &we, "wType", tl, payloads.EncodeString("input"), 100*time.Second, 100*time.Second, 100*time.Second, identity)
 	workflowTaskScheduledEvent := addWorkflowTaskScheduledEvent(ms)
 	workflowTaskStartedEvent := addWorkflowTaskStartedEvent(ms, workflowTaskScheduledEvent.ScheduledEventID, tl, identity)
 	workflowTaskCompletedEvent := addWorkflowTaskCompletedEvent(&s.Suite, ms, workflowTaskScheduledEvent.ScheduledEventID, workflowTaskStartedEvent.EventId, identity)
@@ -2997,9 +3010,9 @@ func (s *engineSuite) TestRespondActivityTaskCompletedByIdSuccess() {
 		},
 	})
 	s.NoError(err)
-	ms2 := s.getMutableState(tests.NamespaceID, we)
+	ms2 := s.getMutableState(tests.NamespaceID, &we)
 	s.Equal(int64(9), ms2.GetNextEventID())
-	s.Equal(int64(3), ms2.GetExecutionInfo().LastWorkflowTaskStartedEventId)
+	s.Equal(int64(3), ms2.GetExecutionInfo().LastCompletedWorkflowTaskStartedEventId)
 	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, ms2.GetExecutionState().State)
 
 	s.True(ms2.HasPendingWorkflowTask())
@@ -3120,8 +3133,8 @@ func (s *engineSuite) TestRespondActivityTaskFailededIfNoAIdProvided() {
 	identity := "testIdentity"
 
 	ms := workflow.TestLocalMutableState(s.mockHistoryEngine.shardContext, s.eventsCache,
-		tests.LocalNamespaceEntry, log.NewTestLogger(), tests.RunID)
-	addWorkflowExecutionStartedEvent(ms, execution, "wType", taskqueue, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, identity)
+		tests.LocalNamespaceEntry, tests.WorkflowID, tests.RunID, log.NewTestLogger())
+	addWorkflowExecutionStartedEvent(ms, &execution, "wType", taskqueue, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, identity)
 	addWorkflowTaskScheduledEvent(ms)
 	wfMs := workflow.TestCloneToProto(ms)
 	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: wfMs}
@@ -3158,8 +3171,8 @@ func (s *engineSuite) TestRespondActivityTaskFailededIfNotFound() {
 	identity := "testIdentity"
 
 	ms := workflow.TestLocalMutableState(s.mockHistoryEngine.shardContext, s.eventsCache,
-		tests.LocalNamespaceEntry, log.NewTestLogger(), tests.RunID)
-	addWorkflowExecutionStartedEvent(ms, execution, "wType", taskqueue, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, identity)
+		tests.LocalNamespaceEntry, tests.WorkflowID, tests.RunID, log.NewTestLogger())
+	addWorkflowExecutionStartedEvent(ms, &execution, "wType", taskqueue, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, identity)
 	addWorkflowTaskScheduledEvent(ms)
 	wfMs := workflow.TestCloneToProto(ms)
 	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: wfMs}
@@ -3199,8 +3212,8 @@ func (s *engineSuite) TestRespondActivityTaskFailedUpdateExecutionFailed() {
 	activityInput := payloads.EncodeString("input1")
 
 	ms := workflow.TestLocalMutableState(s.mockHistoryEngine.shardContext, s.eventsCache,
-		tests.LocalNamespaceEntry, log.NewTestLogger(), we.GetRunId())
-	addWorkflowExecutionStartedEvent(ms, we, "wType", tl, payloads.EncodeString("input"), 100*time.Second, 100*time.Second, 100*time.Second, identity)
+		tests.LocalNamespaceEntry, we.GetWorkflowId(), we.GetRunId(), log.NewTestLogger())
+	addWorkflowExecutionStartedEvent(ms, &we, "wType", tl, payloads.EncodeString("input"), 100*time.Second, 100*time.Second, 100*time.Second, identity)
 	wt := addWorkflowTaskScheduledEvent(ms)
 	workflowTaskStartedEvent := addWorkflowTaskStartedEvent(ms, wt.ScheduledEventID, tl, identity)
 	workflowTaskCompletedEvent := addWorkflowTaskCompletedEvent(&s.Suite, ms, wt.ScheduledEventID, workflowTaskStartedEvent.EventId, identity)
@@ -3246,8 +3259,8 @@ func (s *engineSuite) TestRespondActivityTaskFailedIfTaskCompleted() {
 	failure := failure.NewServerFailure("fail reason", true)
 
 	ms := workflow.TestLocalMutableState(s.mockHistoryEngine.shardContext, s.eventsCache,
-		tests.LocalNamespaceEntry, log.NewTestLogger(), we.GetRunId())
-	addWorkflowExecutionStartedEvent(ms, we, "wType", tl, payloads.EncodeString("input"), 100*time.Second, 100*time.Second, 100*time.Second, identity)
+		tests.LocalNamespaceEntry, we.GetWorkflowId(), we.GetRunId(), log.NewTestLogger())
+	addWorkflowExecutionStartedEvent(ms, &we, "wType", tl, payloads.EncodeString("input"), 100*time.Second, 100*time.Second, 100*time.Second, identity)
 	wt := addWorkflowTaskScheduledEvent(ms)
 	workflowTaskStartedEvent := addWorkflowTaskStartedEvent(ms, wt.ScheduledEventID, tl, identity)
 	workflowTaskCompletedEvent := addWorkflowTaskCompletedEvent(&s.Suite, ms, wt.ScheduledEventID, workflowTaskStartedEvent.EventId, identity)
@@ -3294,8 +3307,8 @@ func (s *engineSuite) TestRespondActivityTaskFailedIfTaskNotStarted() {
 	activityInput := payloads.EncodeString("input1")
 
 	ms := workflow.TestLocalMutableState(s.mockHistoryEngine.shardContext, s.eventsCache,
-		tests.LocalNamespaceEntry, log.NewTestLogger(), we.GetRunId())
-	addWorkflowExecutionStartedEvent(ms, we, "wType", tl, payloads.EncodeString("input"), 100*time.Second, 100*time.Second, 100*time.Second, identity)
+		tests.LocalNamespaceEntry, we.GetWorkflowId(), we.GetRunId(), log.NewTestLogger())
+	addWorkflowExecutionStartedEvent(ms, &we, "wType", tl, payloads.EncodeString("input"), 100*time.Second, 100*time.Second, 100*time.Second, identity)
 	wt := addWorkflowTaskScheduledEvent(ms)
 	workflowTaskStartedEvent := addWorkflowTaskStartedEvent(ms, wt.ScheduledEventID, tl, identity)
 	workflowTaskCompletedEvent := addWorkflowTaskCompletedEvent(&s.Suite, ms, wt.ScheduledEventID, workflowTaskStartedEvent.EventId, identity)
@@ -3338,8 +3351,8 @@ func (s *engineSuite) TestRespondActivityTaskFailedConflictOnUpdate() {
 	activityInput := payloads.EncodeString("input1")
 
 	ms := workflow.TestLocalMutableState(s.mockHistoryEngine.shardContext, s.eventsCache,
-		tests.LocalNamespaceEntry, log.NewTestLogger(), we.GetRunId())
-	addWorkflowExecutionStartedEvent(ms, we, "wType", tl, payloads.EncodeString("input"), 100*time.Second, 100*time.Second, 100*time.Second, identity)
+		tests.LocalNamespaceEntry, we.GetWorkflowId(), we.GetRunId(), log.NewTestLogger())
+	addWorkflowExecutionStartedEvent(ms, &we, "wType", tl, payloads.EncodeString("input"), 100*time.Second, 100*time.Second, 100*time.Second, identity)
 	wt := addWorkflowTaskScheduledEvent(ms)
 	workflowTaskStartedEvent := addWorkflowTaskStartedEvent(ms, wt.ScheduledEventID, tl, identity)
 	workflowTaskCompletedEvent := addWorkflowTaskCompletedEvent(&s.Suite, ms, wt.ScheduledEventID, workflowTaskStartedEvent.EventId, identity)
@@ -3384,8 +3397,8 @@ func (s *engineSuite) TestRespondActivityTaskFailedSuccess() {
 	failure := failure.NewServerFailure("failed", false)
 
 	ms := workflow.TestLocalMutableState(s.mockHistoryEngine.shardContext, s.eventsCache,
-		tests.LocalNamespaceEntry, log.NewTestLogger(), we.GetRunId())
-	addWorkflowExecutionStartedEvent(ms, we, "wType", tl, payloads.EncodeString("input"), 100*time.Second, 100*time.Second, 100*time.Second, identity)
+		tests.LocalNamespaceEntry, we.GetWorkflowId(), we.GetRunId(), log.NewTestLogger())
+	addWorkflowExecutionStartedEvent(ms, &we, "wType", tl, payloads.EncodeString("input"), 100*time.Second, 100*time.Second, 100*time.Second, identity)
 	wt := addWorkflowTaskScheduledEvent(ms)
 	workflowTaskStartedEvent := addWorkflowTaskStartedEvent(ms, wt.ScheduledEventID, tl, identity)
 	workflowTaskCompletedEvent := addWorkflowTaskCompletedEvent(&s.Suite, ms, wt.ScheduledEventID, workflowTaskStartedEvent.EventId, identity)
@@ -3407,9 +3420,9 @@ func (s *engineSuite) TestRespondActivityTaskFailedSuccess() {
 		},
 	})
 	s.Nil(err)
-	ms2 := s.getMutableState(tests.NamespaceID, we)
+	ms2 := s.getMutableState(tests.NamespaceID, &we)
 	s.Equal(int64(9), ms2.GetNextEventID())
-	s.Equal(int64(3), ms2.GetExecutionInfo().LastWorkflowTaskStartedEventId)
+	s.Equal(int64(3), ms2.GetExecutionInfo().LastCompletedWorkflowTaskStartedEventId)
 	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, ms2.GetExecutionState().State)
 
 	s.True(ms2.HasPendingWorkflowTask())
@@ -3442,8 +3455,8 @@ func (s *engineSuite) TestRespondActivityTaskFailedWithHeartbeatSuccess() {
 	failure := failure.NewServerFailure("failed", false)
 
 	ms := workflow.TestLocalMutableState(s.mockHistoryEngine.shardContext, s.eventsCache,
-		tests.LocalNamespaceEntry, log.NewTestLogger(), we.GetRunId())
-	addWorkflowExecutionStartedEvent(ms, we, "wType", tl, payloads.EncodeString("input"), 100*time.Second, 100*time.Second, 100*time.Second, identity)
+		tests.LocalNamespaceEntry, we.GetWorkflowId(), we.GetRunId(), log.NewTestLogger())
+	addWorkflowExecutionStartedEvent(ms, &we, "wType", tl, payloads.EncodeString("input"), 100*time.Second, 100*time.Second, 100*time.Second, identity)
 	wt := addWorkflowTaskScheduledEvent(ms)
 	workflowTaskStartedEvent := addWorkflowTaskStartedEvent(ms, wt.ScheduledEventID, tl, identity)
 	workflowTaskCompletedEvent := addWorkflowTaskCompletedEvent(&s.Suite, ms, wt.ScheduledEventID, workflowTaskStartedEvent.EventId, identity)
@@ -3471,9 +3484,9 @@ func (s *engineSuite) TestRespondActivityTaskFailedWithHeartbeatSuccess() {
 		},
 	})
 	s.Nil(err)
-	ms2 := s.getMutableState(tests.NamespaceID, we)
+	ms2 := s.getMutableState(tests.NamespaceID, &we)
 	s.Equal(int64(9), ms2.GetNextEventID())
-	s.Equal(int64(3), ms2.GetExecutionInfo().LastWorkflowTaskStartedEventId)
+	s.Equal(int64(3), ms2.GetExecutionInfo().LastCompletedWorkflowTaskStartedEventId)
 	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, ms2.GetExecutionState().State)
 
 	s.True(ms2.HasPendingWorkflowTask())
@@ -3509,8 +3522,8 @@ func (s *engineSuite) TestRespondActivityTaskFailedByIdSuccess() {
 	taskToken, _ := tt.Marshal()
 
 	ms := workflow.TestLocalMutableState(s.mockHistoryEngine.shardContext, s.eventsCache,
-		tests.LocalNamespaceEntry, log.NewTestLogger(), we.GetRunId())
-	addWorkflowExecutionStartedEvent(ms, we, "wType", tl, payloads.EncodeString("input"), 100*time.Second, 100*time.Second, 100*time.Second, identity)
+		tests.LocalNamespaceEntry, we.GetWorkflowId(), we.GetRunId(), log.NewTestLogger())
+	addWorkflowExecutionStartedEvent(ms, &we, "wType", tl, payloads.EncodeString("input"), 100*time.Second, 100*time.Second, 100*time.Second, identity)
 	workflowTaskScheduledEvent := addWorkflowTaskScheduledEvent(ms)
 	workflowTaskStartedEvent := addWorkflowTaskStartedEvent(ms, workflowTaskScheduledEvent.ScheduledEventID, tl, identity)
 	workflowTaskCompletedEvent := addWorkflowTaskCompletedEvent(&s.Suite, ms, workflowTaskScheduledEvent.ScheduledEventID, workflowTaskStartedEvent.EventId, identity)
@@ -3534,9 +3547,9 @@ func (s *engineSuite) TestRespondActivityTaskFailedByIdSuccess() {
 		},
 	})
 	s.Nil(err)
-	ms2 := s.getMutableState(tests.NamespaceID, we)
+	ms2 := s.getMutableState(tests.NamespaceID, &we)
 	s.Equal(int64(9), ms2.GetNextEventID())
-	s.Equal(int64(3), ms2.GetExecutionInfo().LastWorkflowTaskStartedEventId)
+	s.Equal(int64(3), ms2.GetExecutionInfo().LastCompletedWorkflowTaskStartedEventId)
 	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, ms2.GetExecutionState().State)
 
 	s.True(ms2.HasPendingWorkflowTask())
@@ -3568,8 +3581,8 @@ func (s *engineSuite) TestRecordActivityTaskHeartBeatSuccess_NoTimer() {
 	activityInput := payloads.EncodeString("input1")
 
 	ms := workflow.TestLocalMutableState(s.mockHistoryEngine.shardContext, s.eventsCache,
-		tests.LocalNamespaceEntry, log.NewTestLogger(), we.GetRunId())
-	addWorkflowExecutionStartedEvent(ms, we, "wType", tl, payloads.EncodeString("input"), 100*time.Second, 100*time.Second, 100*time.Second, identity)
+		tests.LocalNamespaceEntry, we.GetWorkflowId(), we.GetRunId(), log.NewTestLogger())
+	addWorkflowExecutionStartedEvent(ms, &we, "wType", tl, payloads.EncodeString("input"), 100*time.Second, 100*time.Second, 100*time.Second, identity)
 	wt := addWorkflowTaskScheduledEvent(ms)
 	workflowTaskStartedEvent := addWorkflowTaskStartedEvent(ms, wt.ScheduledEventID, tl, identity)
 	workflowTaskCompletedEvent := addWorkflowTaskCompletedEvent(&s.Suite, ms, wt.ScheduledEventID, workflowTaskStartedEvent.EventId, identity)
@@ -3616,8 +3629,8 @@ func (s *engineSuite) TestRecordActivityTaskHeartBeatSuccess_TimerRunning() {
 	activityInput := payloads.EncodeString("input1")
 
 	ms := workflow.TestLocalMutableState(s.mockHistoryEngine.shardContext, s.eventsCache,
-		tests.LocalNamespaceEntry, log.NewTestLogger(), we.GetRunId())
-	addWorkflowExecutionStartedEvent(ms, we, "wType", tl, payloads.EncodeString("input"), 100*time.Second, 100*time.Second, 100*time.Second, identity)
+		tests.LocalNamespaceEntry, we.GetWorkflowId(), we.GetRunId(), log.NewTestLogger())
+	addWorkflowExecutionStartedEvent(ms, &we, "wType", tl, payloads.EncodeString("input"), 100*time.Second, 100*time.Second, 100*time.Second, identity)
 	wt := addWorkflowTaskScheduledEvent(ms)
 	workflowTaskStartedEvent := addWorkflowTaskStartedEvent(ms, wt.ScheduledEventID, tl, identity)
 	workflowTaskCompletedEvent := addWorkflowTaskCompletedEvent(&s.Suite, ms, wt.ScheduledEventID, workflowTaskStartedEvent.EventId, identity)
@@ -3642,9 +3655,9 @@ func (s *engineSuite) TestRecordActivityTaskHeartBeatSuccess_TimerRunning() {
 		},
 	})
 	s.Nil(err)
-	ms2 := s.getMutableState(tests.NamespaceID, we)
+	ms2 := s.getMutableState(tests.NamespaceID, &we)
 	s.Equal(int64(7), ms2.GetNextEventID())
-	s.Equal(int64(3), ms2.GetExecutionInfo().LastWorkflowTaskStartedEventId)
+	s.Equal(int64(3), ms2.GetExecutionInfo().LastCompletedWorkflowTaskStartedEventId)
 	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, ms2.GetExecutionState().State)
 	s.False(ms2.HasPendingWorkflowTask())
 }
@@ -3671,8 +3684,8 @@ func (s *engineSuite) TestRecordActivityTaskHeartBeatByIDSuccess() {
 	taskToken, _ := tt.Marshal()
 
 	ms := workflow.TestLocalMutableState(s.mockHistoryEngine.shardContext, s.eventsCache,
-		tests.LocalNamespaceEntry, log.NewTestLogger(), we.GetRunId())
-	addWorkflowExecutionStartedEvent(ms, we, "wType", tl, payloads.EncodeString("input"), 100*time.Second, 100*time.Second, 100*time.Second, identity)
+		tests.LocalNamespaceEntry, we.GetWorkflowId(), we.GetRunId(), log.NewTestLogger())
+	addWorkflowExecutionStartedEvent(ms, &we, "wType", tl, payloads.EncodeString("input"), 100*time.Second, 100*time.Second, 100*time.Second, identity)
 	wt := addWorkflowTaskScheduledEvent(ms)
 	workflowTaskStartedEvent := addWorkflowTaskStartedEvent(ms, wt.ScheduledEventID, tl, identity)
 	workflowTaskCompletedEvent := addWorkflowTaskCompletedEvent(&s.Suite, ms, wt.ScheduledEventID, workflowTaskStartedEvent.EventId, identity)
@@ -3719,8 +3732,8 @@ func (s *engineSuite) TestRespondActivityTaskCanceled_Scheduled() {
 	activityInput := payloads.EncodeString("input1")
 
 	ms := workflow.TestLocalMutableState(s.mockHistoryEngine.shardContext, s.eventsCache,
-		tests.LocalNamespaceEntry, log.NewTestLogger(), we.GetRunId())
-	addWorkflowExecutionStartedEvent(ms, we, "wType", tl, payloads.EncodeString("input"), 100*time.Second, 100*time.Second, 100*time.Second, identity)
+		tests.LocalNamespaceEntry, we.GetWorkflowId(), we.GetRunId(), log.NewTestLogger())
+	addWorkflowExecutionStartedEvent(ms, &we, "wType", tl, payloads.EncodeString("input"), 100*time.Second, 100*time.Second, 100*time.Second, identity)
 	wt := addWorkflowTaskScheduledEvent(ms)
 	workflowTaskStartedEvent := addWorkflowTaskStartedEvent(ms, wt.ScheduledEventID, tl, identity)
 	workflowTaskCompletedEvent := addWorkflowTaskCompletedEvent(&s.Suite, ms, wt.ScheduledEventID, workflowTaskStartedEvent.EventId, identity)
@@ -3764,8 +3777,8 @@ func (s *engineSuite) TestRespondActivityTaskCanceled_Started() {
 	activityInput := payloads.EncodeString("input1")
 
 	ms := workflow.TestLocalMutableState(s.mockHistoryEngine.shardContext, s.eventsCache,
-		tests.LocalNamespaceEntry, log.NewTestLogger(), we.GetRunId())
-	addWorkflowExecutionStartedEvent(ms, we, "wType", tl, payloads.EncodeString("input"), 100*time.Second, 100*time.Second, 100*time.Second, identity)
+		tests.LocalNamespaceEntry, we.GetWorkflowId(), we.GetRunId(), log.NewTestLogger())
+	addWorkflowExecutionStartedEvent(ms, &we, "wType", tl, payloads.EncodeString("input"), 100*time.Second, 100*time.Second, 100*time.Second, identity)
 	wt := addWorkflowTaskScheduledEvent(ms)
 	workflowTaskStartedEvent := addWorkflowTaskStartedEvent(ms, wt.ScheduledEventID, tl, identity)
 	workflowTaskCompletedEvent := addWorkflowTaskCompletedEvent(&s.Suite, ms, wt.ScheduledEventID, workflowTaskStartedEvent.EventId, identity)
@@ -3789,9 +3802,9 @@ func (s *engineSuite) TestRespondActivityTaskCanceled_Started() {
 		},
 	})
 	s.Nil(err)
-	ms2 := s.getMutableState(tests.NamespaceID, we)
+	ms2 := s.getMutableState(tests.NamespaceID, &we)
 	s.Equal(int64(10), ms2.GetNextEventID())
-	s.Equal(int64(3), ms2.GetExecutionInfo().LastWorkflowTaskStartedEventId)
+	s.Equal(int64(3), ms2.GetExecutionInfo().LastCompletedWorkflowTaskStartedEventId)
 	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, ms2.GetExecutionState().State)
 
 	s.True(ms2.HasPendingWorkflowTask())
@@ -3823,8 +3836,8 @@ func (s *engineSuite) TestRespondActivityTaskCanceledById_Started() {
 	taskToken, _ := tt.Marshal()
 
 	ms := workflow.TestLocalMutableState(s.mockHistoryEngine.shardContext, s.eventsCache,
-		tests.LocalNamespaceEntry, log.NewTestLogger(), we.GetRunId())
-	addWorkflowExecutionStartedEvent(ms, we, "wType", tl, payloads.EncodeString("input"), 100*time.Second, 100*time.Second, 100*time.Second, identity)
+		tests.LocalNamespaceEntry, we.GetWorkflowId(), we.GetRunId(), log.NewTestLogger())
+	addWorkflowExecutionStartedEvent(ms, &we, "wType", tl, payloads.EncodeString("input"), 100*time.Second, 100*time.Second, 100*time.Second, identity)
 	workflowTaskScheduledEvent := addWorkflowTaskScheduledEvent(ms)
 	workflowTaskStartedEvent := addWorkflowTaskStartedEvent(ms, workflowTaskScheduledEvent.ScheduledEventID, tl, identity)
 	workflowTaskCompletedEvent := addWorkflowTaskCompletedEvent(&s.Suite, ms, workflowTaskScheduledEvent.ScheduledEventID, workflowTaskStartedEvent.EventId, identity)
@@ -3850,9 +3863,9 @@ func (s *engineSuite) TestRespondActivityTaskCanceledById_Started() {
 		},
 	})
 	s.Nil(err)
-	ms2 := s.getMutableState(tests.NamespaceID, we)
+	ms2 := s.getMutableState(tests.NamespaceID, &we)
 	s.Equal(int64(10), ms2.GetNextEventID())
-	s.Equal(int64(3), ms2.GetExecutionInfo().LastWorkflowTaskStartedEventId)
+	s.Equal(int64(3), ms2.GetExecutionInfo().LastCompletedWorkflowTaskStartedEventId)
 	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, ms2.GetExecutionState().State)
 
 	s.True(ms2.HasPendingWorkflowTask())
@@ -3905,9 +3918,9 @@ func (s *engineSuite) TestRespondActivityTaskCanceledIfNoAIdProvided() {
 	identity := "testIdentity"
 
 	ms := workflow.TestLocalMutableState(s.mockHistoryEngine.shardContext, s.eventsCache,
-		tests.LocalNamespaceEntry, log.NewTestLogger(), tests.RunID)
+		tests.LocalNamespaceEntry, workflowExecution.WorkflowId, workflowExecution.RunId, log.NewTestLogger())
 	// Add dummy event
-	addWorkflowExecutionStartedEvent(ms, workflowExecution, "wType", taskqueue, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, identity)
+	addWorkflowExecutionStartedEvent(ms, &workflowExecution, "wType", taskqueue, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, identity)
 	wfMs := workflow.TestCloneToProto(ms)
 	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: wfMs}
 	gceResponse := &persistence.GetCurrentExecutionResponse{RunID: tests.RunID}
@@ -3944,9 +3957,9 @@ func (s *engineSuite) TestRespondActivityTaskCanceledIfNotFound() {
 	identity := "testIdentity"
 
 	ms := workflow.TestLocalMutableState(s.mockHistoryEngine.shardContext, s.eventsCache,
-		tests.LocalNamespaceEntry, log.NewTestLogger(), tests.RunID)
+		tests.LocalNamespaceEntry, workflowExecution.WorkflowId, workflowExecution.RunId, log.NewTestLogger())
 	// Add dummy event
-	addWorkflowExecutionStartedEvent(ms, workflowExecution, "wType", taskqueue, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, identity)
+	addWorkflowExecutionStartedEvent(ms, &workflowExecution, "wType", taskqueue, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, identity)
 	wfMs := workflow.TestCloneToProto(ms)
 	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: wfMs}
 	gceResponse := &persistence.GetCurrentExecutionResponse{RunID: tests.RunID}
@@ -3983,8 +3996,8 @@ func (s *engineSuite) TestRequestCancel_RespondWorkflowTaskCompleted_NotSchedule
 	activityScheduledEventID := int64(99)
 
 	ms := workflow.TestLocalMutableState(s.mockHistoryEngine.shardContext, s.eventsCache,
-		tests.LocalNamespaceEntry, log.NewTestLogger(), we.GetRunId())
-	addWorkflowExecutionStartedEvent(ms, we, "wType", tl, payloads.EncodeString("input"), 100*time.Second, 100*time.Second, 100*time.Second, identity)
+		tests.LocalNamespaceEntry, we.GetWorkflowId(), we.GetRunId(), log.NewTestLogger())
+	addWorkflowExecutionStartedEvent(ms, &we, "wType", tl, payloads.EncodeString("input"), 100*time.Second, 100*time.Second, 100*time.Second, identity)
 	wt := addWorkflowTaskScheduledEvent(ms)
 	addWorkflowTaskStartedEvent(ms, wt.ScheduledEventID, tl, identity)
 
@@ -4021,7 +4034,7 @@ func (s *engineSuite) TestRequestCancel_RespondWorkflowTaskCompleted_NotSchedule
 	s.Equal("BadRequestCancelActivityAttributes: invalid history builder state for action: add-activitytask-cancel-requested-event, ScheduledEventID: 99", err.Error())
 	s.NotNil(updatedWorkflowMutation)
 	s.Equal(int64(5), updatedWorkflowMutation.NextEventID)
-	s.Equal(common.EmptyEventID, updatedWorkflowMutation.ExecutionInfo.LastWorkflowTaskStartedEventId)
+	s.Equal(common.EmptyEventID, updatedWorkflowMutation.ExecutionInfo.LastCompletedWorkflowTaskStartedEventId)
 	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, updatedWorkflowMutation.ExecutionState.State)
 	s.True(updatedWorkflowMutation.ExecutionInfo.WorkflowTaskScheduledEventId != common.EmptyEventID)
 }
@@ -4047,8 +4060,8 @@ func (s *engineSuite) TestRequestCancel_RespondWorkflowTaskCompleted_Scheduled()
 	activityInput := payloads.EncodeString("input1")
 
 	ms := workflow.TestLocalMutableState(s.mockHistoryEngine.shardContext, s.eventsCache,
-		tests.LocalNamespaceEntry, log.NewTestLogger(), we.GetRunId())
-	addWorkflowExecutionStartedEvent(ms, we, "wType", tl, payloads.EncodeString("input"), 100*time.Second, 100*time.Second, 100*time.Second, identity)
+		tests.LocalNamespaceEntry, we.GetWorkflowId(), we.GetRunId(), log.NewTestLogger())
+	addWorkflowExecutionStartedEvent(ms, &we, "wType", tl, payloads.EncodeString("input"), 100*time.Second, 100*time.Second, 100*time.Second, identity)
 	wt := addWorkflowTaskScheduledEvent(ms)
 	workflowTaskStartedEvent := addWorkflowTaskStartedEvent(ms, wt.ScheduledEventID, tl, identity)
 	workflowTaskCompletedEvent := addWorkflowTaskCompletedEvent(&s.Suite, ms, wt.ScheduledEventID, workflowTaskStartedEvent.EventId, identity)
@@ -4079,9 +4092,9 @@ func (s *engineSuite) TestRequestCancel_RespondWorkflowTaskCompleted_Scheduled()
 	})
 	s.Nil(err)
 
-	ms2 := s.getMutableState(tests.NamespaceID, we)
+	ms2 := s.getMutableState(tests.NamespaceID, &we)
 	s.Equal(int64(12), ms2.GetNextEventID())
-	s.Equal(int64(7), ms2.GetExecutionInfo().LastWorkflowTaskStartedEventId)
+	s.Equal(int64(7), ms2.GetExecutionInfo().LastCompletedWorkflowTaskStartedEventId)
 	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, ms2.GetExecutionState().State)
 	s.True(ms2.HasPendingWorkflowTask())
 	wt2 = ms2.GetWorkflowTaskByID(ms2.GetNextEventID() - 1)
@@ -4111,8 +4124,8 @@ func (s *engineSuite) TestRequestCancel_RespondWorkflowTaskCompleted_Started() {
 	activityInput := payloads.EncodeString("input1")
 
 	ms := workflow.TestLocalMutableState(s.mockHistoryEngine.shardContext, s.eventsCache,
-		tests.LocalNamespaceEntry, log.NewTestLogger(), we.GetRunId())
-	addWorkflowExecutionStartedEvent(ms, we, "wType", tl, payloads.EncodeString("input"), 100*time.Second, 100*time.Second, 100*time.Second, identity)
+		tests.LocalNamespaceEntry, we.GetWorkflowId(), we.GetRunId(), log.NewTestLogger())
+	addWorkflowExecutionStartedEvent(ms, &we, "wType", tl, payloads.EncodeString("input"), 100*time.Second, 100*time.Second, 100*time.Second, identity)
 	wt := addWorkflowTaskScheduledEvent(ms)
 	workflowTaskStartedEvent := addWorkflowTaskStartedEvent(ms, wt.ScheduledEventID, tl, identity)
 	workflowTaskCompletedEvent := addWorkflowTaskCompletedEvent(&s.Suite, ms, wt.ScheduledEventID, workflowTaskStartedEvent.EventId, identity)
@@ -4144,9 +4157,9 @@ func (s *engineSuite) TestRequestCancel_RespondWorkflowTaskCompleted_Started() {
 	})
 	s.Nil(err)
 
-	ms2 := s.getMutableState(tests.NamespaceID, we)
+	ms2 := s.getMutableState(tests.NamespaceID, &we)
 	s.Equal(int64(11), ms2.GetNextEventID())
-	s.Equal(int64(8), ms2.GetExecutionInfo().LastWorkflowTaskStartedEventId)
+	s.Equal(int64(8), ms2.GetExecutionInfo().LastCompletedWorkflowTaskStartedEventId)
 	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, ms2.GetExecutionState().State)
 	s.False(ms2.HasPendingWorkflowTask())
 }
@@ -4173,8 +4186,8 @@ func (s *engineSuite) TestRequestCancel_RespondWorkflowTaskCompleted_Completed()
 	workflowResult := payloads.EncodeString("workflow result")
 
 	ms := workflow.TestLocalMutableState(s.mockHistoryEngine.shardContext, s.eventsCache,
-		tests.LocalNamespaceEntry, log.NewTestLogger(), we.GetRunId())
-	addWorkflowExecutionStartedEvent(ms, we, "wType", tl, payloads.EncodeString("input"), 100*time.Second, 100*time.Second, 100*time.Second, identity)
+		tests.LocalNamespaceEntry, we.GetWorkflowId(), we.GetRunId(), log.NewTestLogger())
+	addWorkflowExecutionStartedEvent(ms, &we, "wType", tl, payloads.EncodeString("input"), 100*time.Second, 100*time.Second, 100*time.Second, identity)
 	wt := addWorkflowTaskScheduledEvent(ms)
 	workflowTaskStartedEvent := addWorkflowTaskStartedEvent(ms, wt.ScheduledEventID, tl, identity)
 	workflowTaskCompletedEvent := addWorkflowTaskCompletedEvent(&s.Suite, ms, wt.ScheduledEventID, workflowTaskStartedEvent.EventId, identity)
@@ -4212,9 +4225,9 @@ func (s *engineSuite) TestRequestCancel_RespondWorkflowTaskCompleted_Completed()
 	})
 	s.Nil(err)
 
-	ms2 := s.getMutableState(tests.NamespaceID, we)
+	ms2 := s.getMutableState(tests.NamespaceID, &we)
 	s.Equal(int64(11), ms2.GetNextEventID())
-	s.Equal(int64(7), ms2.GetExecutionInfo().LastWorkflowTaskStartedEventId)
+	s.Equal(int64(7), ms2.GetExecutionInfo().LastCompletedWorkflowTaskStartedEventId)
 	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED, ms2.GetExecutionState().State)
 	s.False(ms2.HasPendingWorkflowTask())
 }
@@ -4240,8 +4253,8 @@ func (s *engineSuite) TestRequestCancel_RespondWorkflowTaskCompleted_NoHeartBeat
 	activityInput := payloads.EncodeString("input1")
 
 	ms := workflow.TestLocalMutableState(s.mockHistoryEngine.shardContext, s.eventsCache,
-		tests.LocalNamespaceEntry, log.NewTestLogger(), we.GetRunId())
-	addWorkflowExecutionStartedEvent(ms, we, "wType", tl, payloads.EncodeString("input"), 100*time.Second, 100*time.Second, 100*time.Second, identity)
+		tests.LocalNamespaceEntry, we.GetWorkflowId(), we.GetRunId(), log.NewTestLogger())
+	addWorkflowExecutionStartedEvent(ms, &we, "wType", tl, payloads.EncodeString("input"), 100*time.Second, 100*time.Second, 100*time.Second, identity)
 	wt := addWorkflowTaskScheduledEvent(ms)
 	workflowTaskStartedEvent := addWorkflowTaskStartedEvent(ms, wt.ScheduledEventID, tl, identity)
 	workflowTaskCompletedEvent := addWorkflowTaskCompletedEvent(&s.Suite, ms, wt.ScheduledEventID, workflowTaskStartedEvent.EventId, identity)
@@ -4273,9 +4286,9 @@ func (s *engineSuite) TestRequestCancel_RespondWorkflowTaskCompleted_NoHeartBeat
 	})
 	s.Nil(err)
 
-	ms2 := s.getMutableState(tests.NamespaceID, we)
+	ms2 := s.getMutableState(tests.NamespaceID, &we)
 	s.Equal(int64(11), ms2.GetNextEventID())
-	s.Equal(int64(8), ms2.GetExecutionInfo().LastWorkflowTaskStartedEventId)
+	s.Equal(int64(8), ms2.GetExecutionInfo().LastCompletedWorkflowTaskStartedEventId)
 	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, ms2.GetExecutionState().State)
 	s.False(ms2.HasPendingWorkflowTask())
 
@@ -4316,9 +4329,9 @@ func (s *engineSuite) TestRequestCancel_RespondWorkflowTaskCompleted_NoHeartBeat
 	})
 	s.Nil(err)
 
-	ms2 = s.getMutableState(tests.NamespaceID, we)
+	ms2 = s.getMutableState(tests.NamespaceID, &we)
 	s.Equal(int64(13), ms2.GetNextEventID())
-	s.Equal(int64(8), ms2.GetExecutionInfo().LastWorkflowTaskStartedEventId)
+	s.Equal(int64(8), ms2.GetExecutionInfo().LastCompletedWorkflowTaskStartedEventId)
 	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, ms2.GetExecutionState().State)
 	s.True(ms2.HasPendingWorkflowTask())
 }
@@ -4344,8 +4357,8 @@ func (s *engineSuite) TestRequestCancel_RespondWorkflowTaskCompleted_Success() {
 	activityInput := payloads.EncodeString("input1")
 
 	ms := workflow.TestLocalMutableState(s.mockHistoryEngine.shardContext, s.eventsCache,
-		tests.LocalNamespaceEntry, log.NewTestLogger(), we.GetRunId())
-	addWorkflowExecutionStartedEvent(ms, we, "wType", tl, payloads.EncodeString("input"), 100*time.Second, 100*time.Second, 100*time.Second, identity)
+		tests.LocalNamespaceEntry, we.GetWorkflowId(), we.GetRunId(), log.NewTestLogger())
+	addWorkflowExecutionStartedEvent(ms, &we, "wType", tl, payloads.EncodeString("input"), 100*time.Second, 100*time.Second, 100*time.Second, identity)
 	wt := addWorkflowTaskScheduledEvent(ms)
 	workflowTaskStartedEvent := addWorkflowTaskStartedEvent(ms, wt.ScheduledEventID, tl, identity)
 	workflowTaskCompletedEvent := addWorkflowTaskCompletedEvent(&s.Suite, ms, wt.ScheduledEventID, workflowTaskStartedEvent.EventId, identity)
@@ -4377,9 +4390,9 @@ func (s *engineSuite) TestRequestCancel_RespondWorkflowTaskCompleted_Success() {
 	})
 	s.Nil(err)
 
-	ms2 := s.getMutableState(tests.NamespaceID, we)
+	ms2 := s.getMutableState(tests.NamespaceID, &we)
 	s.Equal(int64(11), ms2.GetNextEventID())
-	s.Equal(int64(8), ms2.GetExecutionInfo().LastWorkflowTaskStartedEventId)
+	s.Equal(int64(8), ms2.GetExecutionInfo().LastCompletedWorkflowTaskStartedEventId)
 	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, ms2.GetExecutionState().State)
 	s.False(ms2.HasPendingWorkflowTask())
 
@@ -4420,9 +4433,9 @@ func (s *engineSuite) TestRequestCancel_RespondWorkflowTaskCompleted_Success() {
 	})
 	s.Nil(err)
 
-	ms2 = s.getMutableState(tests.NamespaceID, we)
+	ms2 = s.getMutableState(tests.NamespaceID, &we)
 	s.Equal(int64(13), ms2.GetNextEventID())
-	s.Equal(int64(8), ms2.GetExecutionInfo().LastWorkflowTaskStartedEventId)
+	s.Equal(int64(8), ms2.GetExecutionInfo().LastCompletedWorkflowTaskStartedEventId)
 	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, ms2.GetExecutionState().State)
 	s.True(ms2.HasPendingWorkflowTask())
 }
@@ -4448,8 +4461,8 @@ func (s *engineSuite) TestRequestCancel_RespondWorkflowTaskCompleted_SuccessWith
 	activityInput := payloads.EncodeString("input1")
 
 	ms := workflow.TestLocalMutableState(s.mockHistoryEngine.shardContext, s.eventsCache,
-		tests.LocalNamespaceEntry, log.NewTestLogger(), we.GetRunId())
-	addWorkflowExecutionStartedEvent(ms, we, "wType", tl, payloads.EncodeString("input"), 100*time.Second, 100*time.Second, 100*time.Second, identity)
+		tests.LocalNamespaceEntry, we.GetWorkflowId(), we.GetRunId(), log.NewTestLogger())
+	addWorkflowExecutionStartedEvent(ms, &we, "wType", tl, payloads.EncodeString("input"), 100*time.Second, 100*time.Second, 100*time.Second, identity)
 	wt := addWorkflowTaskScheduledEvent(ms)
 	workflowTaskStartedEvent := addWorkflowTaskStartedEvent(ms, wt.ScheduledEventID, tl, identity)
 	workflowTaskCompletedEvent := addWorkflowTaskCompletedEvent(&s.Suite, ms, wt.ScheduledEventID, workflowTaskStartedEvent.EventId, identity)
@@ -4477,8 +4490,8 @@ func (s *engineSuite) TestRequestCancel_RespondWorkflowTaskCompleted_SuccessWith
 		context.Background(),
 		s.mockShard,
 		tests.NamespaceID,
-		we,
-		workflow.LockPriorityHigh,
+		&we,
+		locks.PriorityHigh,
 	)
 	s.NoError(err)
 	loadedMS, err := ctx.LoadMutableState(context.Background(), s.mockShard)
@@ -4512,9 +4525,9 @@ func (s *engineSuite) TestRequestCancel_RespondWorkflowTaskCompleted_SuccessWith
 	})
 	s.Nil(err)
 
-	ms2 := s.getMutableState(tests.NamespaceID, we)
+	ms2 := s.getMutableState(tests.NamespaceID, &we)
 	s.Equal(int64(11), ms2.GetNextEventID())
-	s.Equal(int64(8), ms2.GetExecutionInfo().LastWorkflowTaskStartedEventId)
+	s.Equal(int64(8), ms2.GetExecutionInfo().LastCompletedWorkflowTaskStartedEventId)
 	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, ms2.GetExecutionState().State)
 	s.False(ms2.HasPendingWorkflowTask())
 	s.Len(qr.GetCompletedIDs(), 2)
@@ -4571,9 +4584,9 @@ func (s *engineSuite) TestRequestCancel_RespondWorkflowTaskCompleted_SuccessWith
 	})
 	s.Nil(err)
 
-	ms2 = s.getMutableState(tests.NamespaceID, we)
+	ms2 = s.getMutableState(tests.NamespaceID, &we)
 	s.Equal(int64(13), ms2.GetNextEventID())
-	s.Equal(int64(8), ms2.GetExecutionInfo().LastWorkflowTaskStartedEventId)
+	s.Equal(int64(8), ms2.GetExecutionInfo().LastCompletedWorkflowTaskStartedEventId)
 	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, ms2.GetExecutionState().State)
 	s.True(ms2.HasPendingWorkflowTask())
 }
@@ -4597,9 +4610,9 @@ func (s *engineSuite) TestStarTimer_DuplicateTimerID() {
 	timerID := "t1"
 
 	ms := workflow.TestLocalMutableState(s.mockHistoryEngine.shardContext, s.eventsCache,
-		tests.LocalNamespaceEntry, log.NewTestLogger(), we.GetRunId())
+		tests.LocalNamespaceEntry, we.GetWorkflowId(), we.GetRunId(), log.NewTestLogger())
 
-	addWorkflowExecutionStartedEvent(ms, we, "wType", tl, payloads.EncodeString("input"), 100*time.Second, 100*time.Second, 100*time.Second, identity)
+	addWorkflowExecutionStartedEvent(ms, &we, "wType", tl, payloads.EncodeString("input"), 100*time.Second, 100*time.Second, 100*time.Second, identity)
 	wt := addWorkflowTaskScheduledEvent(ms)
 	addWorkflowTaskStartedEvent(ms, wt.ScheduledEventID, tl, identity)
 
@@ -4610,7 +4623,7 @@ func (s *engineSuite) TestStarTimer_DuplicateTimerID() {
 		CommandType: enumspb.COMMAND_TYPE_START_TIMER,
 		Attributes: &commandpb.Command_StartTimerCommandAttributes{StartTimerCommandAttributes: &commandpb.StartTimerCommandAttributes{
 			TimerId:            timerID,
-			StartToFireTimeout: timestamp.DurationPtr(1 * time.Second),
+			StartToFireTimeout: durationpb.New(1 * time.Second),
 		}},
 	}}
 
@@ -4627,7 +4640,7 @@ func (s *engineSuite) TestStarTimer_DuplicateTimerID() {
 	})
 	s.Nil(err)
 
-	ms2 := s.getMutableState(tests.NamespaceID, we)
+	ms2 := s.getMutableState(tests.NamespaceID, &we)
 	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, ms2.GetExecutionState().State)
 
 	// Try to add the same timer ID again.
@@ -4699,9 +4712,9 @@ func (s *engineSuite) TestUserTimer_RespondWorkflowTaskCompleted() {
 	timerID := "t1"
 
 	ms := workflow.TestLocalMutableState(s.mockHistoryEngine.shardContext, s.eventsCache,
-		tests.LocalNamespaceEntry, log.NewTestLogger(), we.GetRunId())
+		tests.LocalNamespaceEntry, we.GetWorkflowId(), we.GetRunId(), log.NewTestLogger())
 	// Verify cancel timer with a start event.
-	addWorkflowExecutionStartedEvent(ms, we, "wType", tl, payloads.EncodeString("input"), 100*time.Second, 100*time.Second, 100*time.Second, identity)
+	addWorkflowExecutionStartedEvent(ms, &we, "wType", tl, payloads.EncodeString("input"), 100*time.Second, 100*time.Second, 100*time.Second, identity)
 	wt := addWorkflowTaskScheduledEvent(ms)
 	workflowTaskStartedEvent := addWorkflowTaskStartedEvent(ms, wt.ScheduledEventID, tl, identity)
 	workflowTaskCompletedEvent := addWorkflowTaskCompletedEvent(&s.Suite, ms, wt.ScheduledEventID, workflowTaskStartedEvent.EventId, identity)
@@ -4732,9 +4745,9 @@ func (s *engineSuite) TestUserTimer_RespondWorkflowTaskCompleted() {
 	})
 	s.Nil(err)
 
-	ms2 := s.getMutableState(tests.NamespaceID, we)
+	ms2 := s.getMutableState(tests.NamespaceID, &we)
 	s.Equal(int64(10), ms2.GetNextEventID())
-	s.Equal(int64(7), ms2.GetExecutionInfo().LastWorkflowTaskStartedEventId)
+	s.Equal(int64(7), ms2.GetExecutionInfo().LastCompletedWorkflowTaskStartedEventId)
 	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, ms2.GetExecutionState().State)
 	s.False(ms2.HasPendingWorkflowTask())
 }
@@ -4758,9 +4771,9 @@ func (s *engineSuite) TestCancelTimer_RespondWorkflowTaskCompleted_NoStartTimer(
 	timerID := "t1"
 
 	ms := workflow.TestLocalMutableState(s.mockHistoryEngine.shardContext, s.eventsCache,
-		tests.LocalNamespaceEntry, log.NewTestLogger(), we.GetRunId())
+		tests.LocalNamespaceEntry, we.GetWorkflowId(), we.GetRunId(), log.NewTestLogger())
 	// Verify cancel timer with a start event.
-	addWorkflowExecutionStartedEvent(ms, we, "wType", tl, payloads.EncodeString("input"), 100*time.Second, 100*time.Second, 100*time.Second, identity)
+	addWorkflowExecutionStartedEvent(ms, &we, "wType", tl, payloads.EncodeString("input"), 100*time.Second, 100*time.Second, 100*time.Second, identity)
 	wt := addWorkflowTaskScheduledEvent(ms)
 	addWorkflowTaskStartedEvent(ms, wt.ScheduledEventID, tl, identity)
 
@@ -4799,7 +4812,7 @@ func (s *engineSuite) TestCancelTimer_RespondWorkflowTaskCompleted_NoStartTimer(
 
 	s.NotNil(updatedWorkflowMutation)
 	s.Equal(int64(5), updatedWorkflowMutation.NextEventID)
-	s.Equal(common.EmptyEventID, updatedWorkflowMutation.ExecutionInfo.LastWorkflowTaskStartedEventId)
+	s.Equal(common.EmptyEventID, updatedWorkflowMutation.ExecutionInfo.LastCompletedWorkflowTaskStartedEventId)
 	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, updatedWorkflowMutation.ExecutionState.State)
 	s.True(updatedWorkflowMutation.ExecutionInfo.WorkflowTaskScheduledEventId != common.EmptyEventID)
 }
@@ -4823,9 +4836,9 @@ func (s *engineSuite) TestCancelTimer_RespondWorkflowTaskCompleted_TimerFired() 
 	timerID := "t1"
 
 	ms := workflow.TestLocalMutableState(s.mockHistoryEngine.shardContext, s.eventsCache,
-		tests.LocalNamespaceEntry, log.NewTestLogger(), we.GetRunId())
+		tests.LocalNamespaceEntry, we.GetWorkflowId(), we.GetRunId(), log.NewTestLogger())
 	// Verify cancel timer with a start event.
-	addWorkflowExecutionStartedEvent(ms, we, "wType", tl, payloads.EncodeString("input"), 100*time.Second, 100*time.Second, 100*time.Second, identity)
+	addWorkflowExecutionStartedEvent(ms, &we, "wType", tl, payloads.EncodeString("input"), 100*time.Second, 100*time.Second, 100*time.Second, identity)
 	wt := addWorkflowTaskScheduledEvent(ms)
 	workflowTaskStartedEvent := addWorkflowTaskStartedEvent(ms, wt.ScheduledEventID, tl, identity)
 	workflowTaskCompletedEvent := addWorkflowTaskCompletedEvent(&s.Suite, ms, wt.ScheduledEventID, workflowTaskStartedEvent.EventId, identity)
@@ -4864,9 +4877,9 @@ func (s *engineSuite) TestCancelTimer_RespondWorkflowTaskCompleted_TimerFired() 
 	})
 	s.Nil(err)
 
-	ms2 := s.getMutableState(tests.NamespaceID, we)
+	ms2 := s.getMutableState(tests.NamespaceID, &we)
 	s.Equal(int64(10), ms2.GetNextEventID())
-	s.Equal(int64(7), ms2.GetExecutionInfo().LastWorkflowTaskStartedEventId)
+	s.Equal(int64(7), ms2.GetExecutionInfo().LastCompletedWorkflowTaskStartedEventId)
 	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, ms2.GetExecutionState().State)
 	s.False(ms2.HasPendingWorkflowTask())
 	s.False(ms2.HasBufferedEvents())
@@ -4897,8 +4910,8 @@ func (s *engineSuite) TestSignalWorkflowExecution() {
 	}
 
 	ms := workflow.TestLocalMutableState(s.mockHistoryEngine.shardContext, s.eventsCache,
-		tests.LocalNamespaceEntry, log.NewTestLogger(), we.GetRunId())
-	addWorkflowExecutionStartedEvent(ms, we, "wType", taskqueue, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, identity)
+		tests.LocalNamespaceEntry, we.GetWorkflowId(), we.GetRunId(), log.NewTestLogger())
+	addWorkflowExecutionStartedEvent(ms, &we, "wType", taskqueue, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, identity)
 	addWorkflowTaskScheduledEvent(ms)
 	wfMs := workflow.TestCloneToProto(ms)
 	wfMs.ExecutionInfo.NamespaceId = tests.NamespaceID.String()
@@ -4939,8 +4952,8 @@ func (s *engineSuite) TestSignalWorkflowExecution_DuplicateRequest() {
 	}
 
 	ms := workflow.TestLocalMutableState(s.mockHistoryEngine.shardContext, s.eventsCache,
-		tests.LocalNamespaceEntry, log.NewTestLogger(), we.GetRunId())
-	addWorkflowExecutionStartedEvent(ms, we, "wType", taskqueue, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, identity)
+		tests.LocalNamespaceEntry, we.GetWorkflowId(), we.GetRunId(), log.NewTestLogger())
+	addWorkflowExecutionStartedEvent(ms, &we, "wType", taskqueue, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, identity)
 	addWorkflowTaskScheduledEvent(ms)
 	wfMs := workflow.TestCloneToProto(ms)
 	// assume duplicate request id
@@ -4982,8 +4995,8 @@ func (s *engineSuite) TestSignalWorkflowExecution_DuplicateRequest_Completed() {
 	}
 
 	ms := workflow.TestLocalMutableState(s.mockHistoryEngine.shardContext, s.eventsCache,
-		tests.LocalNamespaceEntry, log.NewTestLogger(), we.GetRunId())
-	addWorkflowExecutionStartedEvent(ms, we, "wType", taskqueue, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, identity)
+		tests.LocalNamespaceEntry, we.GetWorkflowId(), we.GetRunId(), log.NewTestLogger())
+	addWorkflowExecutionStartedEvent(ms, &we, "wType", taskqueue, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, identity)
 	addWorkflowTaskScheduledEvent(ms)
 	wfMs := workflow.TestCloneToProto(ms)
 	// assume duplicate request id
@@ -5023,8 +5036,8 @@ func (s *engineSuite) TestSignalWorkflowExecution_Failed() {
 	}
 
 	ms := workflow.TestLocalMutableState(s.mockHistoryEngine.shardContext, s.eventsCache,
-		tests.LocalNamespaceEntry, log.NewTestLogger(), we.GetRunId())
-	addWorkflowExecutionStartedEvent(ms, *we, "wType", taskqueue, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, identity)
+		tests.LocalNamespaceEntry, we.GetWorkflowId(), we.GetRunId(), log.NewTestLogger())
+	addWorkflowExecutionStartedEvent(ms, we, "wType", taskqueue, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, identity)
 	addWorkflowTaskScheduledEvent(ms)
 	wfMs := workflow.TestCloneToProto(ms)
 	wfMs.ExecutionState.State = enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED
@@ -5061,26 +5074,26 @@ func (s *engineSuite) TestSignalWorkflowExecution_WorkflowTaskBackoff() {
 	}
 
 	ms := workflow.TestLocalMutableState(s.mockHistoryEngine.shardContext, s.eventsCache,
-		tests.LocalNamespaceEntry, log.NewTestLogger(), we.GetRunId())
+		tests.LocalNamespaceEntry, we.GetWorkflowId(), we.GetRunId(), log.NewTestLogger())
 	startRequest := &workflowservice.StartWorkflowExecutionRequest{
 		WorkflowId:               we.WorkflowId,
 		WorkflowType:             &commonpb.WorkflowType{Name: "wType"},
 		TaskQueue:                &taskqueuepb.TaskQueue{Name: taskqueue},
 		Input:                    payloads.EncodeString("input"),
-		WorkflowExecutionTimeout: timestamp.DurationPtr(100 * time.Second),
-		WorkflowRunTimeout:       timestamp.DurationPtr(50 * time.Second),
-		WorkflowTaskTimeout:      timestamp.DurationPtr(200 * time.Second),
+		WorkflowExecutionTimeout: durationpb.New(100 * time.Second),
+		WorkflowRunTimeout:       durationpb.New(50 * time.Second),
+		WorkflowTaskTimeout:      durationpb.New(200 * time.Second),
 		Identity:                 identity,
 	}
 
 	_, err = ms.AddWorkflowExecutionStartedEvent(
-		we,
+		&we,
 		&historyservice.StartWorkflowExecutionRequest{
 			Attempt:                  1,
 			NamespaceId:              tests.NamespaceID.String(),
 			StartRequest:             startRequest,
 			ContinueAsNewInitiator:   enumspb.CONTINUE_AS_NEW_INITIATOR_RETRY,
-			FirstWorkflowTaskBackoff: timestamp.DurationPtr(time.Second * 10),
+			FirstWorkflowTaskBackoff: durationpb.New(time.Second * 10),
 		},
 	)
 	s.NoError(err)
@@ -5119,8 +5132,8 @@ func (s *engineSuite) TestRemoveSignalMutableState() {
 	}
 
 	ms := workflow.TestLocalMutableState(s.mockHistoryEngine.shardContext, s.eventsCache,
-		tests.LocalNamespaceEntry, log.NewTestLogger(), tests.RunID)
-	addWorkflowExecutionStartedEvent(ms, execution, "wType", taskqueue, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, identity)
+		tests.LocalNamespaceEntry, tests.WorkflowID, tests.RunID, log.NewTestLogger())
+	addWorkflowExecutionStartedEvent(ms, &execution, "wType", taskqueue, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, identity)
 	addWorkflowTaskScheduledEvent(ms)
 	wfMs := workflow.TestCloneToProto(ms)
 	wfMs.ExecutionInfo.NamespaceId = tests.NamespaceID.String()
@@ -5141,32 +5154,53 @@ func (s *engineSuite) TestReapplyEvents_ReturnSuccess() {
 	taskqueue := "testTaskQueue"
 	identity := "testIdentity"
 
+	eventVersion := int64(100)
 	history := []*historypb.HistoryEvent{
 		{
 			EventId:   1,
 			EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED,
-			Version:   1,
+			Version:   eventVersion,
 		},
 	}
-	ms := workflow.TestLocalMutableState(
+	globalNamespaceID := uuid.New()
+	globalNamespaceName := "global-namespace-name"
+	namespaceEntry := namespace.NewGlobalNamespaceForTest(
+		&persistencespb.NamespaceInfo{Id: globalNamespaceID, Name: globalNamespaceName},
+		&persistencespb.NamespaceConfig{},
+		&persistencespb.NamespaceReplicationConfig{
+			ActiveClusterName: cluster.TestCurrentClusterName,
+			Clusters: []string{
+				cluster.TestCurrentClusterName,
+				cluster.TestAlternativeClusterName,
+			},
+		},
+		tests.Version,
+	)
+	s.mockNamespaceCache.EXPECT().GetNamespaceByID(namespaceEntry.ID()).Return(namespaceEntry, nil).AnyTimes()
+	s.mockNamespaceCache.EXPECT().GetNamespace(namespaceEntry.Name()).Return(namespaceEntry, nil).AnyTimes()
+	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(true, eventVersion).Return(cluster.TestAlternativeClusterName).AnyTimes()
+	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(true, namespaceEntry.FailoverVersion()).Return(cluster.TestCurrentClusterName).AnyTimes()
+
+	ms := workflow.TestGlobalMutableState(
 		s.mockHistoryEngine.shardContext,
 		s.eventsCache,
-		tests.LocalNamespaceEntry,
 		log.NewTestLogger(),
+		namespaceEntry.FailoverVersion(),
+		workflowExecution.GetWorkflowId(),
 		workflowExecution.GetRunId(),
 	)
 	// Add dummy event
-	addWorkflowExecutionStartedEvent(ms, workflowExecution, "wType", taskqueue, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, identity)
+	addWorkflowExecutionStartedEvent(ms, &workflowExecution, "wType", taskqueue, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, identity)
 	wfMs := workflow.TestCloneToProto(ms)
 	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: wfMs}
 	gceResponse := &persistence.GetCurrentExecutionResponse{RunID: tests.RunID}
 	s.mockExecutionMgr.EXPECT().GetCurrentExecution(gomock.Any(), gomock.Any()).Return(gceResponse, nil)
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(gwmsResponse, nil)
-	s.mockEventsReapplier.EXPECT().ReapplyEvents(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any())
+	s.mockEventsReapplier.EXPECT().ReapplyEvents(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any())
 
 	err := s.mockHistoryEngine.ReapplyEvents(
 		context.Background(),
-		tests.NamespaceID,
+		namespaceEntry.ID(),
 		workflowExecution.GetWorkflowId(),
 		workflowExecution.GetRunId(),
 		history,
@@ -5174,9 +5208,9 @@ func (s *engineSuite) TestReapplyEvents_ReturnSuccess() {
 	s.NoError(err)
 }
 
-func (s *engineSuite) TestReapplyEvents_IgnoreSameVersionEvents() {
+func (s *engineSuite) TestReapplyEvents_IgnoreSameClusterEvents() {
 	workflowExecution := commonpb.WorkflowExecution{
-		WorkflowId: "test-reapply-same-version",
+		WorkflowId: "test-reapply-same-cluster",
 		RunId:      tests.RunID,
 	}
 	taskqueue := "testTaskQueue"
@@ -5194,18 +5228,19 @@ func (s *engineSuite) TestReapplyEvents_IgnoreSameVersionEvents() {
 		s.mockHistoryEngine.shardContext,
 		s.eventsCache,
 		tests.LocalNamespaceEntry,
-		log.NewTestLogger(),
+		workflowExecution.GetWorkflowId(),
 		workflowExecution.GetRunId(),
+		log.NewTestLogger(),
 	)
 	// Add dummy event
-	addWorkflowExecutionStartedEvent(ms, workflowExecution, "wType", taskqueue, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, identity)
+	addWorkflowExecutionStartedEvent(ms, &workflowExecution, "wType", taskqueue, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, identity)
 
 	wfMs := workflow.TestCloneToProto(ms)
 	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: wfMs}
 	gceResponse := &persistence.GetCurrentExecutionResponse{RunID: tests.RunID}
 	s.mockExecutionMgr.EXPECT().GetCurrentExecution(gomock.Any(), gomock.Any()).Return(gceResponse, nil)
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(gwmsResponse, nil)
-	s.mockEventsReapplier.EXPECT().ReapplyEvents(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Times(0)
+	s.mockEventsReapplier.EXPECT().ReapplyEvents(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Times(0)
 
 	err := s.mockHistoryEngine.ReapplyEvents(
 		context.Background(),
@@ -5224,26 +5259,47 @@ func (s *engineSuite) TestReapplyEvents_ResetWorkflow() {
 	}
 	taskqueue := "testTaskQueue"
 	identity := "testIdentity"
+	eventVersion := int64(100)
 	history := []*historypb.HistoryEvent{
 		{
 			EventId:   1,
 			EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED,
-			Version:   100,
+			Version:   eventVersion,
 		},
 	}
-	ms := workflow.TestLocalMutableState(
+	globalNamespaceID := uuid.New()
+	globalNamespaceName := "global-namespace-name"
+	namespaceEntry := namespace.NewGlobalNamespaceForTest(
+		&persistencespb.NamespaceInfo{Id: globalNamespaceID, Name: globalNamespaceName},
+		&persistencespb.NamespaceConfig{},
+		&persistencespb.NamespaceReplicationConfig{
+			ActiveClusterName: cluster.TestCurrentClusterName,
+			Clusters: []string{
+				cluster.TestCurrentClusterName,
+				cluster.TestAlternativeClusterName,
+			},
+		},
+		tests.Version,
+	)
+	s.mockNamespaceCache.EXPECT().GetNamespaceByID(namespaceEntry.ID()).Return(namespaceEntry, nil).AnyTimes()
+	s.mockNamespaceCache.EXPECT().GetNamespace(namespaceEntry.Name()).Return(namespaceEntry, nil).AnyTimes()
+	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(true, eventVersion).Return(cluster.TestAlternativeClusterName).AnyTimes()
+	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(true, namespaceEntry.FailoverVersion()).Return(cluster.TestCurrentClusterName).AnyTimes()
+
+	ms := workflow.TestGlobalMutableState(
 		s.mockHistoryEngine.shardContext,
 		s.eventsCache,
-		tests.LocalNamespaceEntry,
 		log.NewTestLogger(),
+		namespaceEntry.FailoverVersion(),
+		workflowExecution.GetWorkflowId(),
 		workflowExecution.GetRunId(),
 	)
 	// Add dummy event
-	addWorkflowExecutionStartedEvent(ms, workflowExecution, "wType", taskqueue, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, identity)
+	addWorkflowExecutionStartedEvent(ms, &workflowExecution, "wType", taskqueue, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, identity)
 
 	wfMs := workflow.TestCloneToProto(ms)
 	wfMs.ExecutionState.State = enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED
-	wfMs.ExecutionInfo.LastWorkflowTaskStartedEventId = 1
+	wfMs.ExecutionInfo.LastCompletedWorkflowTaskStartedEventId = 1
 	token, err := ms.GetCurrentBranchToken()
 	s.NoError(err)
 	item := versionhistory.NewVersionHistoryItem(1, 1)
@@ -5253,15 +5309,16 @@ func (s *engineSuite) TestReapplyEvents_ResetWorkflow() {
 	gceResponse := &persistence.GetCurrentExecutionResponse{RunID: tests.RunID}
 	s.mockExecutionMgr.EXPECT().GetCurrentExecution(gomock.Any(), gomock.Any()).Return(gceResponse, nil).AnyTimes()
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(gwmsResponse, nil)
-	s.mockEventsReapplier.EXPECT().ReapplyEvents(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Times(0)
+	s.mockEventsReapplier.EXPECT().ReapplyEvents(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Times(0)
 	s.mockWorkflowResetter.EXPECT().ResetWorkflow(
 		gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(),
 		gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(),
 		gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(),
 	).Return(nil)
+
 	err = s.mockHistoryEngine.ReapplyEvents(
 		context.Background(),
-		tests.NamespaceID,
+		namespaceEntry.ID(),
 		workflowExecution.GetWorkflowId(),
 		workflowExecution.GetRunId(),
 		history,
@@ -5272,13 +5329,19 @@ func (s *engineSuite) TestReapplyEvents_ResetWorkflow() {
 func (s *engineSuite) TestEagerWorkflowStart_DoesNotCreateTransferTask() {
 	var recordedTasks []tasks.Task
 
+	s.mockNamespaceCache.EXPECT().GetNamespaceName(gomock.Any()).Return(tests.Namespace, nil)
+	s.mockVisibilityMgr.EXPECT().GetIndexName().Return("mock")
+	s.mockSearchAttributesProvider.EXPECT().GetSearchAttributes("mock", false).Return(searchattribute.NameTypeMap{}, nil)
 	s.mockExecutionMgr.EXPECT().CreateWorkflowExecution(gomock.Any(), gomock.Any()).DoAndReturn(func(ctx context.Context, request *persistence.CreateWorkflowExecutionRequest) (*persistence.CreateWorkflowExecutionResponse, error) {
 		recordedTasks = request.NewWorkflowSnapshot.Tasks[tasks.CategoryTransfer]
 		persistenceResponse := persistence.CreateWorkflowExecutionResponse{NewMutableStateStats: tests.CreateWorkflowExecutionResponse.NewMutableStateStats}
 		return &persistenceResponse, nil
 	})
 
-	i := interceptor.NewTelemetryInterceptor(s.mockShard.GetNamespaceRegistry(), s.mockShard.GetMetricsHandler(), s.mockShard.Resource.Logger)
+	i := interceptor.NewTelemetryInterceptor(s.mockShard.GetNamespaceRegistry(),
+		s.mockShard.GetMetricsHandler(),
+		s.mockShard.Resource.Logger,
+		s.config.LogAllReqErrors)
 	response, err := i.UnaryIntercept(context.Background(), nil, &grpc.UnaryServerInfo{FullMethod: "StartWorkflowExecution"}, func(ctx context.Context, req interface{}) (interface{}, error) {
 		response, err := s.mockHistoryEngine.StartWorkflowExecution(ctx, &historyservice.StartWorkflowExecutionRequest{
 			NamespaceId: tests.NamespaceID.String(),
@@ -5312,14 +5375,17 @@ func (s *engineSuite) TestEagerWorkflowStart_FromCron_SkipsEager() {
 		return &persistenceResponse, nil
 	})
 
-	i := interceptor.NewTelemetryInterceptor(s.mockShard.GetNamespaceRegistry(), s.mockShard.GetMetricsHandler(), s.mockShard.Resource.Logger)
+	i := interceptor.NewTelemetryInterceptor(s.mockShard.GetNamespaceRegistry(),
+		s.mockShard.GetMetricsHandler(),
+		s.mockShard.Resource.Logger,
+		s.config.LogAllReqErrors)
 	response, err := i.UnaryIntercept(context.Background(), nil, &grpc.UnaryServerInfo{FullMethod: "StartWorkflowExecution"}, func(ctx context.Context, req interface{}) (interface{}, error) {
 		firstWorkflowTaskBackoff := time.Second
 		response, err := s.mockHistoryEngine.StartWorkflowExecution(ctx, &historyservice.StartWorkflowExecutionRequest{
 			NamespaceId:              tests.NamespaceID.String(),
 			Attempt:                  1,
 			ContinueAsNewInitiator:   enumspb.CONTINUE_AS_NEW_INITIATOR_CRON_SCHEDULE,
-			FirstWorkflowTaskBackoff: &firstWorkflowTaskBackoff,
+			FirstWorkflowTaskBackoff: durationpb.New(firstWorkflowTaskBackoff),
 			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
 				WorkflowId:            "test",
 				Namespace:             tests.Namespace.String(),
@@ -5389,7 +5455,7 @@ func (s *engineSuite) TestGetHistory() {
 		context.Background(),
 		s.mockShard,
 		tests.NamespaceID,
-		commonpb.WorkflowExecution{
+		&commonpb.WorkflowExecution{
 			WorkflowId: we.WorkflowId,
 			RunId:      we.RunId,
 		},
@@ -5818,6 +5884,223 @@ func (s *engineSuite) Test_GetWorkflowExecutionRawHistoryV2_SameStartIDAndEndID(
 	s.NoError(err)
 }
 
+func (s *engineSuite) Test_GetWorkflowExecutionRawHistory_FailedOnInvalidWorkflowID() {
+	engine, err := s.mockHistoryEngine.shardContext.GetEngine(context.Background())
+	s.NoError(err)
+
+	ctx := context.Background()
+	namespaceID := namespace.ID(uuid.New())
+	namespaceEntry := namespace.NewNamespaceForTest(
+		&persistencespb.NamespaceInfo{
+			Id: namespaceID.String(),
+		},
+		nil,
+		false,
+		nil,
+		int64(100),
+	)
+	s.mockNamespaceCache.EXPECT().GetNamespaceByID(namespaceID).Return(namespaceEntry, nil).AnyTimes()
+	_, err = engine.GetWorkflowExecutionRawHistory(ctx,
+		&historyservice.GetWorkflowExecutionRawHistoryRequest{
+			NamespaceId: namespaceID.String(),
+			Request: &adminservice.GetWorkflowExecutionRawHistoryRequest{
+				NamespaceId: namespaceID.String(),
+				Execution: &commonpb.WorkflowExecution{
+					WorkflowId: "",
+					RunId:      uuid.New(),
+				},
+				StartEventId:      1,
+				StartEventVersion: 100,
+				EndEventId:        10,
+				EndEventVersion:   100,
+				MaximumPageSize:   1,
+				NextPageToken:     nil,
+			},
+		})
+	s.Error(err)
+}
+
+func (s *engineSuite) Test_GetWorkflowExecutionRawHistory_FailedOnInvalidRunID() {
+	engine, err := s.mockHistoryEngine.shardContext.GetEngine(context.Background())
+	s.NoError(err)
+
+	ctx := context.Background()
+	namespaceID := namespace.ID(uuid.New())
+	namespaceEntry := namespace.NewNamespaceForTest(
+		&persistencespb.NamespaceInfo{
+			Id: namespaceID.String(),
+		},
+		nil,
+		false,
+		nil,
+		int64(100),
+	)
+	s.mockNamespaceCache.EXPECT().GetNamespaceByID(namespaceID).Return(namespaceEntry, nil).AnyTimes()
+	_, err = engine.GetWorkflowExecutionRawHistory(ctx,
+		&historyservice.GetWorkflowExecutionRawHistoryRequest{
+			NamespaceId: namespaceID.String(),
+			Request: &adminservice.GetWorkflowExecutionRawHistoryRequest{
+				NamespaceId: namespaceID.String(),
+				Execution: &commonpb.WorkflowExecution{
+					WorkflowId: "workflowID",
+					RunId:      "runID",
+				},
+				StartEventId:      1,
+				StartEventVersion: 100,
+				EndEventId:        10,
+				EndEventVersion:   100,
+				MaximumPageSize:   1,
+				NextPageToken:     nil,
+			},
+		})
+	s.Error(err)
+}
+
+func (s *engineSuite) Test_GetWorkflowExecutionRawHistory_FailedOnNamespaceCache() {
+	engine, err := s.mockHistoryEngine.shardContext.GetEngine(context.Background())
+	s.NoError(err)
+
+	ctx := context.Background()
+	namespaceID := namespace.ID(uuid.New())
+	s.mockNamespaceCache.EXPECT().GetNamespaceByID(namespaceID).Return(nil, fmt.Errorf("test"))
+	_, err = engine.GetWorkflowExecutionRawHistory(ctx,
+		&historyservice.GetWorkflowExecutionRawHistoryRequest{
+			NamespaceId: namespaceID.String(),
+			Request: &adminservice.GetWorkflowExecutionRawHistoryRequest{
+				NamespaceId: namespaceID.String(),
+				Execution: &commonpb.WorkflowExecution{
+					WorkflowId: "workflowID",
+					RunId:      uuid.New(),
+				},
+				StartEventId:      1,
+				StartEventVersion: 100,
+				EndEventId:        10,
+				EndEventVersion:   100,
+				MaximumPageSize:   1,
+				NextPageToken:     nil,
+			},
+		})
+	s.Error(err)
+}
+
+func (s *engineSuite) Test_GetWorkflowExecutionRawHistory() {
+	engine, err := s.mockHistoryEngine.shardContext.GetEngine(context.Background())
+	s.NoError(err)
+
+	ctx := context.Background()
+	namespaceEntry := namespace.NewNamespaceForTest(
+		&persistencespb.NamespaceInfo{
+			Name: tests.Namespace.String(),
+			Id:   tests.NamespaceID.String(),
+		},
+		nil,
+		false,
+		nil,
+		int64(100),
+	)
+	s.mockNamespaceCache.EXPECT().GetNamespaceByID(tests.NamespaceID).Return(namespaceEntry, nil).AnyTimes()
+	branchToken := []byte{1}
+	versionHistory := versionhistory.NewVersionHistory(branchToken, []*historyspb.VersionHistoryItem{
+		versionhistory.NewVersionHistoryItem(int64(10), int64(100)),
+	})
+	versionHistories := versionhistory.NewVersionHistories(versionHistory)
+	mState := &persistencespb.WorkflowMutableState{
+		ExecutionState: &persistencespb.WorkflowExecutionState{
+			State:  enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
+			Status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+		},
+		NextEventId: 11,
+		ExecutionInfo: &persistencespb.WorkflowExecutionInfo{
+			NamespaceId:      tests.NamespaceID.String(),
+			VersionHistories: versionHistories,
+		},
+	}
+	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(&persistence.GetWorkflowExecutionResponse{State: mState}, nil).AnyTimes()
+
+	s.mockExecutionMgr.EXPECT().ReadRawHistoryBranch(gomock.Any(), gomock.Any()).Return(&persistence.ReadRawHistoryBranchResponse{
+		HistoryEventBlobs: []*commonpb.DataBlob{},
+		NextPageToken:     []byte{},
+		Size:              0,
+	}, nil)
+	_, err = engine.GetWorkflowExecutionRawHistory(ctx,
+		&historyservice.GetWorkflowExecutionRawHistoryRequest{
+			NamespaceId: tests.NamespaceID.String(),
+			Request: &adminservice.GetWorkflowExecutionRawHistoryRequest{
+				NamespaceId: tests.NamespaceID.String(),
+				Execution: &commonpb.WorkflowExecution{
+					WorkflowId: "workflowID",
+					RunId:      uuid.New(),
+				},
+				StartEventId:      1,
+				StartEventVersion: 100,
+				EndEventId:        10,
+				EndEventVersion:   100,
+				MaximumPageSize:   10,
+				NextPageToken:     nil,
+			},
+		})
+	s.NoError(err)
+}
+
+func (s *engineSuite) Test_GetWorkflowExecutionRawHistory_SameStartIDAndEndID() {
+	engine, err := s.mockHistoryEngine.shardContext.GetEngine(context.Background())
+	s.NoError(err)
+
+	ctx := context.Background()
+	namespaceEntry := namespace.NewNamespaceForTest(
+		&persistencespb.NamespaceInfo{
+			Name: tests.Namespace.String(),
+			Id:   tests.NamespaceID.String(),
+		},
+		nil,
+		false,
+		nil,
+		int64(100),
+	)
+	s.mockNamespaceCache.EXPECT().GetNamespaceByID(tests.NamespaceID).Return(namespaceEntry, nil).AnyTimes()
+	branchToken := []byte{1}
+	versionHistory := versionhistory.NewVersionHistory(branchToken, []*historyspb.VersionHistoryItem{
+		versionhistory.NewVersionHistoryItem(int64(10), int64(100)),
+	})
+	versionHistories := versionhistory.NewVersionHistories(versionHistory)
+	mState := &persistencespb.WorkflowMutableState{
+		ExecutionState: &persistencespb.WorkflowExecutionState{
+			State:  enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
+			Status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+		},
+		NextEventId: 11,
+		ExecutionInfo: &persistencespb.WorkflowExecutionInfo{
+			NamespaceId:      tests.NamespaceID.String(),
+			VersionHistories: versionHistories,
+		},
+	}
+	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(&persistence.GetWorkflowExecutionResponse{State: mState}, nil).AnyTimes()
+	s.mockExecutionMgr.EXPECT().ReadRawHistoryBranch(gomock.Any(), gomock.Any()).Return(&persistence.ReadRawHistoryBranchResponse{
+		HistoryEventBlobs: []*commonpb.DataBlob{},
+		NextPageToken:     []byte{},
+		Size:              0,
+	}, nil)
+	resp, err := engine.GetWorkflowExecutionRawHistory(ctx,
+		&historyservice.GetWorkflowExecutionRawHistoryRequest{
+			NamespaceId: tests.NamespaceID.String(),
+			Request: &adminservice.GetWorkflowExecutionRawHistoryRequest{
+				NamespaceId: tests.NamespaceID.String(),
+				Execution: &commonpb.WorkflowExecution{
+					WorkflowId: "workflowID",
+					RunId:      uuid.New(),
+				},
+				StartEventId:      10,
+				StartEventVersion: 100,
+				EndEventId:        common.EmptyEventID,
+				EndEventVersion:   common.EmptyVersion,
+				MaximumPageSize:   1,
+				NextPageToken:     nil,
+			},
+		})
+	s.Nil(resp.Response.NextPageToken)
+	s.NoError(err)
+}
+
 func (s *engineSuite) Test_SetRequestDefaultValueAndGetTargetVersionHistory_DefinedStartAndEnd() {
 	inputStartEventID := int64(1)
 	inputStartVersion := int64(10)
@@ -5941,7 +6224,7 @@ func (s *engineSuite) Test_SetRequestDefaultValueAndGetTargetVersionHistory_NonC
 	item4 := versionhistory.NewVersionHistoryItem(int64(20), int64(51))
 	versionHistory2 := versionhistory.NewVersionHistory([]byte{}, []*historyspb.VersionHistoryItem{item1, item3, item4})
 	versionHistories := versionhistory.NewVersionHistories(versionHistory1)
-	_, _, err := versionhistory.AddVersionHistory(versionHistories, versionHistory2)
+	_, _, err := versionhistory.AddAndSwitchVersionHistory(versionHistories, versionHistory2)
 	s.NoError(err)
 	namespaceID := namespace.ID(uuid.New())
 	request := &historyservice.GetWorkflowExecutionRawHistoryV2Request{
@@ -5971,13 +6254,13 @@ func (s *engineSuite) Test_SetRequestDefaultValueAndGetTargetVersionHistory_NonC
 	s.NoError(err)
 }
 
-func (s *engineSuite) getMutableState(testNamespaceID namespace.ID, we commonpb.WorkflowExecution) workflow.MutableState {
+func (s *engineSuite) getMutableState(testNamespaceID namespace.ID, we *commonpb.WorkflowExecution) workflow.MutableState {
 	context, release, err := s.workflowCache.GetOrCreateWorkflowExecution(
 		context.Background(),
 		s.mockShard,
 		tests.NamespaceID,
 		we,
-		workflow.LockPriorityHigh,
+		locks.PriorityHigh,
 	)
 	if err != nil {
 		return nil
@@ -5995,7 +6278,7 @@ func (s *engineSuite) getActivityScheduledEvent(
 	return event
 }
 
-func addWorkflowExecutionStartedEventWithParent(ms workflow.MutableState, workflowExecution commonpb.WorkflowExecution,
+func addWorkflowExecutionStartedEventWithParent(ms workflow.MutableState, workflowExecution *commonpb.WorkflowExecution,
 	workflowType, taskQueue string, input *commonpb.Payloads, executionTimeout, runTimeout, taskTimeout time.Duration,
 	parentInfo *workflowspb.ParentExecutionInfo, identity string) *historypb.HistoryEvent {
 
@@ -6004,9 +6287,9 @@ func addWorkflowExecutionStartedEventWithParent(ms workflow.MutableState, workfl
 		WorkflowType:             &commonpb.WorkflowType{Name: workflowType},
 		TaskQueue:                &taskqueuepb.TaskQueue{Name: taskQueue},
 		Input:                    input,
-		WorkflowExecutionTimeout: &executionTimeout,
-		WorkflowRunTimeout:       &runTimeout,
-		WorkflowTaskTimeout:      &taskTimeout,
+		WorkflowExecutionTimeout: durationpb.New(executionTimeout),
+		WorkflowRunTimeout:       durationpb.New(runTimeout),
+		WorkflowTaskTimeout:      durationpb.New(taskTimeout),
 		Identity:                 identity,
 	}
 
@@ -6023,7 +6306,7 @@ func addWorkflowExecutionStartedEventWithParent(ms workflow.MutableState, workfl
 	return event
 }
 
-func addWorkflowExecutionStartedEvent(ms workflow.MutableState, workflowExecution commonpb.WorkflowExecution,
+func addWorkflowExecutionStartedEvent(ms workflow.MutableState, workflowExecution *commonpb.WorkflowExecution,
 	workflowType, taskQueue string, input *commonpb.Payloads, executionTimeout, runTimeout, taskTimeout time.Duration,
 	identity string) *historypb.HistoryEvent {
 	return addWorkflowExecutionStartedEventWithParent(ms, workflowExecution, workflowType, taskQueue, input,
@@ -6047,6 +6330,9 @@ func addWorkflowTaskStartedEventWithRequestID(ms workflow.MutableState, schedule
 		requestID,
 		&taskqueuepb.TaskQueue{Name: taskQueue},
 		identity,
+		nil,
+		nil,
+		false,
 	)
 
 	return event
@@ -6084,10 +6370,10 @@ func addActivityTaskScheduledEvent(
 		ActivityType:           &commonpb.ActivityType{Name: activityType},
 		TaskQueue:              &taskqueuepb.TaskQueue{Name: taskQueue},
 		Input:                  input,
-		ScheduleToCloseTimeout: &scheduleToCloseTimeout,
-		ScheduleToStartTimeout: &scheduleToStartTimeout,
-		StartToCloseTimeout:    &startToCloseTimeout,
-		HeartbeatTimeout:       &heartbeatTimeout,
+		ScheduleToCloseTimeout: durationpb.New(scheduleToCloseTimeout),
+		ScheduleToStartTimeout: durationpb.New(scheduleToStartTimeout),
+		StartToCloseTimeout:    durationpb.New(startToCloseTimeout),
+		HeartbeatTimeout:       durationpb.New(heartbeatTimeout),
 	}, false)
 
 	return event, ai
@@ -6111,10 +6397,10 @@ func addActivityTaskScheduledEventWithRetry(
 		ActivityType:           &commonpb.ActivityType{Name: activityType},
 		TaskQueue:              &taskqueuepb.TaskQueue{Name: taskQueue},
 		Input:                  input,
-		ScheduleToCloseTimeout: &scheduleToCloseTimeout,
-		ScheduleToStartTimeout: &scheduleToStartTimeout,
-		StartToCloseTimeout:    &startToCloseTimeout,
-		HeartbeatTimeout:       &heartbeatTimeout,
+		ScheduleToCloseTimeout: durationpb.New(scheduleToCloseTimeout),
+		ScheduleToStartTimeout: durationpb.New(scheduleToStartTimeout),
+		StartToCloseTimeout:    durationpb.New(startToCloseTimeout),
+		HeartbeatTimeout:       durationpb.New(heartbeatTimeout),
 		RetryPolicy:            retryPolicy,
 	}, false)
 
@@ -6123,7 +6409,7 @@ func addActivityTaskScheduledEventWithRetry(
 
 func addActivityTaskStartedEvent(ms workflow.MutableState, scheduledEventID int64, identity string) *historypb.HistoryEvent {
 	ai, _ := ms.GetActivityInfo(scheduledEventID)
-	event, _ := ms.AddActivityTaskStartedEvent(ai, scheduledEventID, tests.RunID, identity)
+	event, _ := ms.AddActivityTaskStartedEvent(ai, scheduledEventID, tests.RunID, identity, nil, nil)
 	return event
 }
 
@@ -6138,7 +6424,7 @@ func addActivityTaskCompletedEvent(ms workflow.MutableState, scheduledEventID, s
 }
 
 func addActivityTaskFailedEvent(ms workflow.MutableState, scheduledEventID, startedEventID int64, failure *failurepb.Failure, retryState enumspb.RetryState, identity string) *historypb.HistoryEvent {
-	event, _ := ms.AddActivityTaskFailedEvent(scheduledEventID, startedEventID, failure, retryState, identity)
+	event, _ := ms.AddActivityTaskFailedEvent(scheduledEventID, startedEventID, failure, retryState, identity, nil)
 	return event
 }
 
@@ -6147,7 +6433,7 @@ func addTimerStartedEvent(ms workflow.MutableState, workflowTaskCompletedEventID
 	event, ti, _ := ms.AddTimerStartedEvent(workflowTaskCompletedEventID,
 		&commandpb.StartTimerCommandAttributes{
 			TimerId:            timerID,
-			StartToFireTimeout: &timeout,
+			StartToFireTimeout: durationpb.New(timeout),
 		})
 	return event, ti
 }
@@ -6219,9 +6505,9 @@ func addStartChildWorkflowExecutionInitiatedEvent(
 			WorkflowType:             &commonpb.WorkflowType{Name: workflowType},
 			TaskQueue:                &taskqueuepb.TaskQueue{Name: taskQueue},
 			Input:                    input,
-			WorkflowExecutionTimeout: &executionTimeout,
-			WorkflowRunTimeout:       &runTimeout,
-			WorkflowTaskTimeout:      &taskTimeout,
+			WorkflowExecutionTimeout: durationpb.New(executionTimeout),
+			WorkflowRunTimeout:       durationpb.New(runTimeout),
+			WorkflowTaskTimeout:      durationpb.New(taskTimeout),
 			Control:                  "",
 			ParentClosePolicy:        parentClosePolicy,
 		}, namespaceID)

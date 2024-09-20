@@ -29,10 +29,8 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/suite"
 	"go.temporal.io/sdk/client"
-
 	"go.temporal.io/server/api/adminservicemock/v1"
 	"go.temporal.io/server/api/historyservicemock/v1"
 	"go.temporal.io/server/common/config"
@@ -44,6 +42,7 @@ import (
 	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/testing/mocksdk"
 	"go.temporal.io/server/service/worker/scanner/build_ids"
+	"go.uber.org/mock/gomock"
 )
 
 type scannerTestSuite struct {
@@ -218,7 +217,7 @@ func (s *scannerTestSuite) TestScannerEnabled() {
 				mockSdkClientFactory,
 				metrics.NoopMetricsHandler,
 				p.NewMockExecutionManager(ctrl),
-				// These nils are irrelevant since they're only used by the build id scavenger which is not tested here.
+				// These nils are irrelevant since they're only used by the build ID scavenger which is not tested here.
 				nil,
 				nil,
 				p.NewMockTaskManager(ctrl),
@@ -293,7 +292,7 @@ func (s *scannerTestSuite) TestScannerShutdown() {
 		mockSdkClientFactory,
 		metrics.NoopMetricsHandler,
 		p.NewMockExecutionManager(ctrl),
-		// These nils are irrelevant since they're only used by the build id scavenger which is not tested here.
+		// These nils are irrelevant since they're only used by the build ID scavenger which is not tested here.
 		nil,
 		nil,
 		p.NewMockTaskManager(ctrl),

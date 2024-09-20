@@ -28,11 +28,11 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
+	"go.uber.org/mock/gomock"
 )
 
 type (
@@ -49,6 +49,7 @@ func (s *batchedTaskSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 	s.controller = gomock.NewController(s.T())
 	s.logger = log.NewTestLogger()
+	s.metricsHandler = metrics.NoopMetricsHandler
 }
 
 func TestBatchedTaskSuite(t *testing.T) {
@@ -156,7 +157,7 @@ func (s *batchedTaskSuite) TestAddTask_TasksAreBatchableAndCanBatch_ReturnTrue()
 	incoming.EXPECT().CanBatch().Return(true).Times(1)
 
 	batchResult := NewMockTrackableExecutableTask(s.controller)
-	existing.EXPECT().BatchWith(incoming).Return(batchResult, nil).Times(1)
+	existing.EXPECT().BatchWith(incoming).Return(batchResult, true).Times(1)
 	result := batchedTestTask.AddTask(incoming)
 
 	s.True(result)
@@ -199,6 +200,7 @@ func (s *batchedTaskSuite) TestAck_AckIndividualTasks() {
 		individualTaskHandler: func(task TrackableExecutableTask) {
 			handlerCallCount++
 		},
+		metricsHandler: s.metricsHandler,
 	}
 	existing.EXPECT().Ack().Times(1)
 	add1.EXPECT().Ack().Times(1)
@@ -310,6 +312,23 @@ func (s *batchedTaskSuite) TestMarkPoisonPill_SingleItem_MarkTheTask() {
 
 	result := batchedTestTask.MarkPoisonPill()
 	s.Nil(result)
+}
+
+func (s *batchedTaskSuite) TestReschedule_SingleItem_RescheduleTheTask() {
+	existing := NewMockBatchableTask(s.controller)
+	handlerCallCount := 0
+	batchedTestTask := &batchedTask{
+		batchedTask:     existing,
+		individualTasks: append([]TrackableExecutableTask{}, existing),
+		state:           batchStateOpen,
+		individualTaskHandler: func(task TrackableExecutableTask) {
+			handlerCallCount++
+		},
+	}
+	existing.EXPECT().Reschedule().Times(1)
+
+	batchedTestTask.Reschedule()
+	s.Equal(0, handlerCallCount)
 }
 
 func (s *batchedTaskSuite) TestMarkPoisonPill_MultipleItems_CallIndividualHandler() {

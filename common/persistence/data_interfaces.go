@@ -37,10 +37,11 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
-
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/service/history/tasks"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 // CreateWorkflowMode workflow creation mode
@@ -127,6 +128,7 @@ type (
 		State            enumsspb.WorkflowExecutionState
 		Status           enumspb.WorkflowExecutionStatus
 		LastWriteVersion int64
+		StartTime        *time.Time
 	}
 
 	// WorkflowConditionFailedError represents a failed conditional update for workflow record
@@ -201,7 +203,6 @@ type (
 
 		NamespaceID string
 		WorkflowID  string
-		RunID       string
 
 		Tasks map[tasks.Category][]tasks.Task
 	}
@@ -404,37 +405,12 @@ type (
 		RunID       string
 	}
 
-	// RegisterHistoryTaskReaderRequest is a hint for underlying persistence implementation
-	// that a new queue reader is created by queue processing logic
-	RegisterHistoryTaskReaderRequest struct {
-		ShardID      int32
-		ShardOwner   string
-		TaskCategory tasks.Category
-		ReaderID     int64
-	}
-
-	// UnregisterHistoryTaskReaderRequest is a hint for underlying persistence implementation
-	// that queue processing logic is done using an existing queue reader
-	UnregisterHistoryTaskReaderRequest RegisterHistoryTaskReaderRequest
-
-	// UpdateHistoryTaskReaderProgressRequest is a hint for underlying persistence implementation
-	// that a certain queue reader's process and the fact that it won't try to load tasks with
-	// key less than InclusiveMinPendingTaskKey
-	UpdateHistoryTaskReaderProgressRequest struct {
-		ShardID                    int32
-		ShardOwner                 string
-		TaskCategory               tasks.Category
-		ReaderID                   int64
-		InclusiveMinPendingTaskKey tasks.Key
-	}
-
 	// GetHistoryTasksRequest is used to get a range of history tasks
 	// Either max TaskID or FireTime is required depending on the
 	// task category type. Min TaskID or FireTime is optional.
 	GetHistoryTasksRequest struct {
 		ShardID             int32
 		TaskCategory        tasks.Category
-		ReaderID            int64
 		InclusiveMinTaskKey tasks.Key
 		ExclusiveMaxTaskKey tasks.Key
 		BatchSize           int
@@ -900,6 +876,8 @@ type (
 		ForkNodeID int64
 		// the info for clean up data in background
 		Info string
+		// the new run ID
+		NewRunID string
 	}
 
 	// ForkHistoryBranchResponse is the response to ForkHistoryBranchRequest
@@ -942,25 +920,11 @@ type (
 	TrimHistoryBranchResponse struct {
 	}
 
-	// GetHistoryTreeRequest is used to retrieve branch info of a history tree
-	GetHistoryTreeRequest struct {
-		// A UUID of a tree
-		TreeID string
-		// Get data from this shard
-		ShardID int32
-	}
-
 	// HistoryBranchDetail contains detailed information of a branch
 	HistoryBranchDetail struct {
-		BranchToken []byte
-		ForkTime    *time.Time
-		Info        string
-	}
-
-	// GetHistoryTreeResponse is a response to GetHistoryTreeRequest
-	GetHistoryTreeResponse struct {
-		// all branches of a tree
-		BranchTokens [][]byte
+		BranchInfo *persistencespb.HistoryBranch
+		ForkTime   *timestamppb.Timestamp
+		Info       string
 	}
 
 	// GetAllHistoryTreeBranchesRequest is a request of GetAllHistoryTreeBranches
@@ -998,13 +962,13 @@ type (
 
 	// GetClusterMetadataResponse is the response to GetClusterMetadata
 	GetClusterMetadataResponse struct {
-		persistencespb.ClusterMetadata
+		*persistencespb.ClusterMetadata
 		Version int64
 	}
 
 	// SaveClusterMetadataRequest is the request to SaveClusterMetadata
 	SaveClusterMetadataRequest struct {
-		persistencespb.ClusterMetadata
+		*persistencespb.ClusterMetadata
 		Version int64
 	}
 
@@ -1056,6 +1020,36 @@ type (
 		MaxRecordsPruned int
 	}
 
+	GetNexusEndpointRequest struct {
+		ID string
+	}
+
+	ListNexusEndpointsRequest struct {
+		LastKnownTableVersion int64
+		NextPageToken         []byte
+		PageSize              int
+	}
+
+	ListNexusEndpointsResponse struct {
+		TableVersion  int64
+		NextPageToken []byte
+		Entries       []*persistencespb.NexusEndpointEntry
+	}
+
+	CreateOrUpdateNexusEndpointRequest struct {
+		LastKnownTableVersion int64
+		Entry                 *persistencespb.NexusEndpointEntry
+	}
+
+	CreateOrUpdateNexusEndpointResponse struct {
+		Version int64
+	}
+
+	DeleteNexusEndpointRequest struct {
+		LastKnownTableVersion int64
+		ID                    string
+	}
+
 	// Closeable is an interface for any entity that supports a close operation to release resources
 	// TODO: allow this method to return errors
 	Closeable interface {
@@ -1093,11 +1087,6 @@ type (
 
 		// Tasks related APIs
 
-		// Hints for persistence implementaion regarding hisotry task readers
-		RegisterHistoryTaskReader(ctx context.Context, request *RegisterHistoryTaskReaderRequest) error
-		UnregisterHistoryTaskReader(ctx context.Context, request *UnregisterHistoryTaskReaderRequest)
-		UpdateHistoryTaskReaderProgress(ctx context.Context, request *UpdateHistoryTaskReaderProgressRequest)
-
 		AddHistoryTasks(ctx context.Context, request *AddHistoryTasksRequest) error
 		GetHistoryTasks(ctx context.Context, request *GetHistoryTasksRequest) (*GetHistoryTasksResponse, error)
 		CompleteHistoryTask(ctx context.Context, request *CompleteHistoryTaskRequest) error
@@ -1133,8 +1122,6 @@ type (
 		DeleteHistoryBranch(ctx context.Context, request *DeleteHistoryBranchRequest) error
 		// TrimHistoryBranch validate & trim a history branch
 		TrimHistoryBranch(ctx context.Context, request *TrimHistoryBranchRequest) (*TrimHistoryBranchResponse, error)
-		// GetHistoryTree returns all branch information of a tree
-		GetHistoryTree(ctx context.Context, request *GetHistoryTreeRequest) (*GetHistoryTreeResponse, error)
 		// GetAllHistoryTreeBranches returns all branches of all trees
 		GetAllHistoryTreeBranches(ctx context.Context, request *GetAllHistoryTreeBranchesRequest) (*GetAllHistoryTreeBranchesResponse, error)
 	}
@@ -1150,7 +1137,6 @@ type (
 		DeleteTaskQueue(ctx context.Context, request *DeleteTaskQueueRequest) error
 		CreateTasks(ctx context.Context, request *CreateTasksRequest) (*CreateTasksResponse, error)
 		GetTasks(ctx context.Context, request *GetTasksRequest) (*GetTasksResponse, error)
-		CompleteTask(ctx context.Context, request *CompleteTaskRequest) error
 		// CompleteTasksLessThan completes tasks less than or equal to the given task id
 		// This API takes a limit parameter which specifies the count of maxRows that
 		// can be deleted. This parameter may be ignored by the underlying storage, but
@@ -1203,6 +1189,118 @@ type (
 		GetClusterMetadata(ctx context.Context, request *GetClusterMetadataRequest) (*GetClusterMetadataResponse, error)
 		SaveClusterMetadata(ctx context.Context, request *SaveClusterMetadataRequest) (bool, error)
 		DeleteClusterMetadata(ctx context.Context, request *DeleteClusterMetadataRequest) error
+	}
+
+	// NexusEndpointManager is used to manage CRUD for Nexus endpoints.
+	NexusEndpointManager interface {
+		Closeable
+		GetName() string
+		GetNexusEndpoint(ctx context.Context, request *GetNexusEndpointRequest) (*persistencespb.NexusEndpointEntry, error)
+		ListNexusEndpoints(ctx context.Context, request *ListNexusEndpointsRequest) (*ListNexusEndpointsResponse, error)
+		CreateOrUpdateNexusEndpoint(ctx context.Context, request *CreateOrUpdateNexusEndpointRequest) (*CreateOrUpdateNexusEndpointResponse, error)
+		DeleteNexusEndpoint(ctx context.Context, request *DeleteNexusEndpointRequest) error
+	}
+
+	// HistoryTaskQueueManager is responsible for managing a queue of internal history tasks. This is called a history
+	// task queue manager, but the actual history task queues are not managed by this object. Instead, this object is
+	// responsible for managing a generic queue of history tasks (which is what the history task DLQ is).
+	HistoryTaskQueueManager interface {
+		Closeable
+		EnqueueTask(ctx context.Context, request *EnqueueTaskRequest) (*EnqueueTaskResponse, error)
+		ReadRawTasks(
+			ctx context.Context,
+			request *ReadRawTasksRequest,
+		) (*ReadRawTasksResponse, error)
+		ReadTasks(ctx context.Context, request *ReadTasksRequest) (*ReadTasksResponse, error)
+		// CreateQueue must return an ErrQueueAlreadyExists if the queue already exists.
+		CreateQueue(ctx context.Context, request *CreateQueueRequest) (*CreateQueueResponse, error)
+		DeleteTasks(ctx context.Context, request *DeleteTasksRequest) (*DeleteTasksResponse, error)
+		ListQueues(ctx context.Context, request *ListQueuesRequest) (*ListQueuesResponse, error)
+	}
+
+	HistoryTaskQueueManagerImpl struct {
+		queue      QueueV2
+		serializer serialization.Serializer
+	}
+
+	// QueueKey identifies a history task queue. It is converted to a queue name using the GetQueueName method.
+	QueueKey struct {
+		QueueType     QueueV2Type
+		Category      tasks.Category
+		SourceCluster string
+		// TargetCluster is only used for cross-cluster replication tasks.
+		TargetCluster string
+	}
+
+	// EnqueueTaskRequest does not include a QueueKey because it does not need the QueueKey.Category field, as that can
+	// already be inferred from the Task field.
+	EnqueueTaskRequest struct {
+		QueueType     QueueV2Type
+		SourceCluster string
+		TargetCluster string
+		Task          tasks.Task
+		// SourceShardID of the task in its original cluster. Note that tasks may move between clusters, so this shard
+		// id may not be the same as the shard id of the task in the current cluster.
+		SourceShardID int
+	}
+
+	EnqueueTaskResponse struct {
+		Metadata MessageMetadata
+	}
+
+	ReadTasksRequest struct {
+		QueueKey      QueueKey
+		PageSize      int
+		NextPageToken []byte
+	}
+
+	HistoryTask struct {
+		MessageMetadata MessageMetadata
+		Task            tasks.Task
+	}
+
+	ReadTasksResponse struct {
+		Tasks         []HistoryTask
+		NextPageToken []byte
+	}
+
+	ReadRawTasksRequest = ReadTasksRequest
+
+	RawHistoryTask struct {
+		MessageMetadata MessageMetadata
+		Payload         *persistencespb.HistoryTask
+	}
+
+	ReadRawTasksResponse struct {
+		Tasks         []RawHistoryTask
+		NextPageToken []byte
+	}
+
+	CreateQueueRequest struct {
+		QueueKey QueueKey
+	}
+
+	CreateQueueResponse struct {
+	}
+
+	DeleteTasksRequest struct {
+		QueueKey                    QueueKey
+		InclusiveMaxMessageMetadata MessageMetadata
+	}
+
+	DeleteTasksResponse struct {
+		MessagesDeleted int64
+	}
+
+	ListQueuesRequest struct {
+		QueueType     QueueV2Type
+		PageSize      int
+		NextPageToken []byte
+	}
+
+	ListQueuesResponse struct {
+		Queues        []QueueInfo
+		NextPageToken []byte
 	}
 )
 

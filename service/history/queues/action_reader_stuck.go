@@ -53,11 +53,11 @@ func (a *actionReaderStuck) Name() string {
 	return "reader-stuck"
 }
 
-func (a *actionReaderStuck) Run(readerGroup *ReaderGroup) error {
+func (a *actionReaderStuck) Run(readerGroup *ReaderGroup) {
 	reader, ok := readerGroup.ReaderByID(a.attributes.ReaderID)
 	if !ok {
 		a.logger.Info("Failed to get queue with readerID for reader stuck action", tag.QueueReaderID(a.attributes.ReaderID))
-		return nil
+		return
 	}
 
 	stuckRange := NewRange(
@@ -101,16 +101,9 @@ func (a *actionReaderStuck) Run(readerGroup *ReaderGroup) error {
 	})
 
 	if len(splitSlices) == 0 {
-		return nil
+		return
 	}
 
-	nextReader, err := readerGroup.GetOrCreateReader(a.attributes.ReaderID + 1)
-	if err != nil {
-		// unable to create new reader, merge split slices back to the original reader
-		reader.MergeSlices(splitSlices...)
-		return err
-	}
-
+	nextReader := readerGroup.GetOrCreateReader(a.attributes.ReaderID + 1)
 	nextReader.MergeSlices(splitSlices...)
-	return nil
 }

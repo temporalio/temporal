@@ -1,3 +1,5 @@
+// The MIT License
+//
 // Copyright (c) 2019 Temporal Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -24,10 +26,10 @@ package temporal.server.api.historyservice.v1;
 option go_package = "go.temporal.io/server/api/historyservice/v1;historyservice";
 
 import "google/protobuf/duration.proto";
+import "google/protobuf/field_mask.proto";
 import "google/protobuf/timestamp.proto";
 
-import "dependencies/gogoproto/gogo.proto";
-
+import "temporal/api/activity/v1/message.proto";
 import "temporal/api/common/v1/message.proto";
 import "temporal/api/history/v1/message.proto";
 import "temporal/api/taskqueue/v1/message.proto";
@@ -36,36 +38,47 @@ import "temporal/api/workflow/v1/message.proto";
 import "temporal/api/query/v1/message.proto";
 import "temporal/api/protocol/v1/message.proto";
 import "temporal/api/failure/v1/message.proto";
+import "temporal/api/nexus/v1/message.proto";
 
 import "temporal/server/api/clock/v1/message.proto";
 import "temporal/server/api/history/v1/message.proto";
+import "temporal/server/api/enums/v1/cluster.proto";
 import "temporal/server/api/enums/v1/common.proto";
 import "temporal/server/api/enums/v1/workflow.proto";
-import "temporal/server/api/enums/v1/task.proto";
 import "temporal/server/api/workflow/v1/message.proto";
 import "temporal/server/api/namespace/v1/message.proto";
 import "temporal/server/api/replication/v1/message.proto";
 import "temporal/server/api/persistence/v1/executions.proto";
+import "temporal/server/api/persistence/v1/hsm.proto";
 import "temporal/server/api/persistence/v1/workflow_mutable_state.proto";
+import "temporal/server/api/taskqueue/v1/message.proto";
+import "temporal/server/api/token/v1/message.proto";
 
 import "temporal/api/workflowservice/v1/request_response.proto";
 import "temporal/server/api/adminservice/v1/request_response.proto";
+import "temporal/server/api/common/v1/dlq.proto";
 
 message StartWorkflowExecutionRequest {
     string namespace_id = 1;
     temporal.api.workflowservice.v1.StartWorkflowExecutionRequest start_request = 2;
     temporal.server.api.workflow.v1.ParentExecutionInfo parent_execution_info = 3;
     int32 attempt = 4;
-    google.protobuf.Timestamp workflow_execution_expiration_time = 5 [(gogoproto.stdtime) = true];
+    google.protobuf.Timestamp workflow_execution_expiration_time = 5;
     temporal.api.enums.v1.ContinueAsNewInitiator continue_as_new_initiator = 6;
     // History service should use the values of continued_failure and last_completion_result
     // here, not the ones in start_request (those are moved into here in the frontend).
     temporal.api.failure.v1.Failure continued_failure = 7;
     temporal.api.common.v1.Payloads last_completion_result = 8;
-    google.protobuf.Duration first_workflow_task_backoff = 9 [(gogoproto.stdduration) = true];
+    google.protobuf.Duration first_workflow_task_backoff = 9;
     // For child or continued-as-new workflows, including a version here from the source
     // (parent/previous) will set the initial version stamp of this workflow.
+    // Deprecated. use `inherited_build_id`
     temporal.api.common.v1.WorkerVersionStamp source_version_stamp = 10;
+    // The root execution info of the new workflow.
+    // For top-level workflows (ie., without parent), this field must be nil.
+    temporal.server.api.workflow.v1.RootExecutionInfo root_execution_info = 11;
+    // inherited build ID from parent/previous execution
+    string inherited_build_id = 12;
 }
 
 message StartWorkflowExecutionResponse {
@@ -73,6 +86,7 @@ message StartWorkflowExecutionResponse {
     temporal.server.api.clock.v1.VectorClock clock = 2;
     // Set if request_eager_execution is set on the start request 
     temporal.api.workflowservice.v1.PollWorkflowTaskQueueResponse eager_workflow_task = 3;
+    bool started = 4;
 }
 
 message GetMutableStateRequest {
@@ -80,6 +94,7 @@ message GetMutableStateRequest {
     temporal.api.common.v1.WorkflowExecution execution = 2;
     int64 expected_next_event_id = 3;
     bytes current_branch_token = 4;
+    temporal.server.api.history.v1.VersionHistoryItem version_history_item = 5;
 }
 
 message GetMutableStateResponse {
@@ -95,7 +110,7 @@ message GetMutableStateResponse {
     reserved 10;
     // (-- api-linter: core::0140::prepositions=disabled
     //     aip.dev/not-precedent: "to" is used to indicate interval. --)
-    google.protobuf.Duration sticky_task_queue_schedule_to_start_timeout = 11 [(gogoproto.stdduration) = true];
+    google.protobuf.Duration sticky_task_queue_schedule_to_start_timeout = 11;
     reserved 12;
     bytes current_branch_token = 13;
     reserved 14;
@@ -107,7 +122,12 @@ message GetMutableStateResponse {
     string first_execution_run_id = 20;
     // If using build-id based versioning: version stamp of last worker to complete a workflow
     // task for this workflow.
-    temporal.api.common.v1.WorkerVersionStamp worker_version_stamp = 21;
+    temporal.api.common.v1.WorkerVersionStamp most_recent_worker_version_stamp = 21;
+    // The currently assigned build ID for this execution. Presence of this value means worker versioning is used
+    // for this execution.
+    string assigned_build_id = 22;
+    string inherited_build_id = 23;
+    repeated temporal.server.api.persistence.v1.VersionedTransition transition_history = 24;
 }
 
 message PollMutableStateRequest {
@@ -115,6 +135,7 @@ message PollMutableStateRequest {
     temporal.api.common.v1.WorkflowExecution execution = 2;
     int64 expected_next_event_id = 3;
     bytes current_branch_token = 4;
+    temporal.server.api.history.v1.VersionHistoryItem version_history_item = 5;
 }
 
 message PollMutableStateResponse {
@@ -130,7 +151,7 @@ message PollMutableStateResponse {
     reserved 10;
     // (-- api-linter: core::0140::prepositions=disabled
     //     aip.dev/not-precedent: "to" is used to indicate interval. --)
-    google.protobuf.Duration sticky_task_queue_schedule_to_start_timeout = 11 [(gogoproto.stdduration) = true];
+    google.protobuf.Duration sticky_task_queue_schedule_to_start_timeout = 11;
     bytes current_branch_token = 12;
     reserved 13;
     temporal.server.api.history.v1.VersionHistories version_histories = 14;
@@ -148,15 +169,40 @@ message ResetStickyTaskQueueRequest {
 message ResetStickyTaskQueueResponse {
 }
 
+message ExecuteMultiOperationRequest {
+    string namespace_id = 1;
+    string workflow_id = 2;
+    repeated Operation operations = 3;
+
+    message Operation {
+        oneof operation {
+            StartWorkflowExecutionRequest start_workflow = 1;
+            UpdateWorkflowExecutionRequest update_workflow = 2;
+        }
+    }
+}
+
+message ExecuteMultiOperationResponse {
+    repeated Response responses = 1;
+
+    message Response {
+        oneof response {
+            StartWorkflowExecutionResponse start_workflow = 1;
+            UpdateWorkflowExecutionResponse update_workflow = 2;
+        }
+    }
+}
+
 message RecordWorkflowTaskStartedRequest {
     string namespace_id = 1;
     temporal.api.common.v1.WorkflowExecution workflow_execution = 2;
     int64 scheduled_event_id = 3;
-    int64 task_id = 4;
+    reserved 4;
     // Unique id of each poll request. Used to ensure at most once delivery of tasks.
     string request_id = 5;
     temporal.api.workflowservice.v1.PollWorkflowTaskQueueRequest poll_request = 6;
     temporal.server.api.clock.v1.VectorClock clock = 7;
+    temporal.server.api.taskqueue.v1.BuildIdRedirectInfo build_id_redirect_info = 8;
 }
 
 message RecordWorkflowTaskStartedResponse {
@@ -171,30 +217,33 @@ message RecordWorkflowTaskStartedResponse {
     temporal.api.taskqueue.v1.TaskQueue workflow_execution_task_queue = 9;
     reserved 10;
     bytes branch_token = 11;
-    google.protobuf.Timestamp scheduled_time = 12 [(gogoproto.stdtime) = true];
-    google.protobuf.Timestamp started_time = 13 [(gogoproto.stdtime) = true];
+    google.protobuf.Timestamp scheduled_time = 12;
+    google.protobuf.Timestamp started_time = 13;
     map<string, temporal.api.query.v1.WorkflowQuery> queries = 14;
     temporal.server.api.clock.v1.VectorClock clock = 15;
     repeated temporal.api.protocol.v1.Message messages = 16;
     int64 version = 17;
+    temporal.api.history.v1.History history = 18;
+    bytes next_page_token = 19;
 }
 
 message RecordActivityTaskStartedRequest {
     string namespace_id = 1;
     temporal.api.common.v1.WorkflowExecution workflow_execution = 2;
     int64 scheduled_event_id = 3;
-    int64 task_id = 4;
+    reserved 4;
     // Unique id of each poll request. Used to ensure at most once delivery of tasks.
     string request_id = 5;
     temporal.api.workflowservice.v1.PollActivityTaskQueueRequest poll_request = 6;
     temporal.server.api.clock.v1.VectorClock clock = 7;
+    temporal.server.api.taskqueue.v1.BuildIdRedirectInfo build_id_redirect_info = 8;
 }
 
 message RecordActivityTaskStartedResponse {
     temporal.api.history.v1.HistoryEvent scheduled_event = 1;
-    google.protobuf.Timestamp started_time = 2 [(gogoproto.stdtime) = true];
+    google.protobuf.Timestamp started_time = 2;
     int32 attempt = 3;
-    google.protobuf.Timestamp current_attempt_scheduled_time = 4 [(gogoproto.stdtime) = true];
+    google.protobuf.Timestamp current_attempt_scheduled_time = 4;
     temporal.api.common.v1.Payloads heartbeat_details = 5;
     temporal.api.common.v1.WorkflowType workflow_type = 6;
     string workflow_namespace = 7;
@@ -298,6 +347,7 @@ message SignalWithStartWorkflowExecutionRequest {
 
 message SignalWithStartWorkflowExecutionResponse {
     string run_id = 1;
+    bool started = 2;
 }
 
 message RemoveSignalMutableStateRequest {
@@ -322,7 +372,7 @@ message TerminateWorkflowExecutionResponse {
 message DeleteWorkflowExecutionRequest {
     string namespace_id = 1;
     temporal.api.common.v1.WorkflowExecution workflow_execution = 2;
-    int64 workflow_version = 3;
+    reserved 3;
     bool closed_workflow_only = 4;
 }
 
@@ -412,6 +462,8 @@ message DescribeWorkflowExecutionResponse {
     repeated temporal.api.workflow.v1.PendingActivityInfo pending_activities = 3;
     repeated temporal.api.workflow.v1.PendingChildExecutionInfo pending_children = 4;
     temporal.api.workflow.v1.PendingWorkflowTaskInfo pending_workflow_task = 5;
+    repeated temporal.api.workflow.v1.CallbackInfo callbacks = 6;
+    repeated temporal.api.workflow.v1.PendingNexusOperationInfo pending_nexus_operations = 7;
 }
 
 message ReplicateEventsV2Request {
@@ -422,6 +474,7 @@ message ReplicateEventsV2Request {
     // New run events does not need version history since there is no prior events.
     temporal.api.common.v1.DataBlob new_run_events = 5;
     temporal.server.api.workflow.v1.BaseExecutionInfo base_execution_info = 6;
+    string new_run_id = 7;
 }
 
 message ReplicateEventsV2Response {
@@ -439,7 +492,7 @@ message ReplicateWorkflowStateResponse {
 message SyncShardStatusRequest {
     string source_cluster = 1;
     int32 shard_id = 2;
-    google.protobuf.Timestamp status_time = 3 [(gogoproto.stdtime) = true];
+    google.protobuf.Timestamp status_time = 3;
 }
 
 message SyncShardStatusResponse {
@@ -451,17 +504,44 @@ message SyncActivityRequest {
     string run_id = 3;
     int64 version = 4;
     int64 scheduled_event_id = 5;
-    google.protobuf.Timestamp scheduled_time = 6 [(gogoproto.stdtime) = true];
+    google.protobuf.Timestamp scheduled_time = 6;
     int64 started_event_id = 7;
-    google.protobuf.Timestamp started_time = 8 [(gogoproto.stdtime) = true];
-    google.protobuf.Timestamp last_heartbeat_time = 9 [(gogoproto.stdtime) = true];
+    google.protobuf.Timestamp started_time = 8;
+    google.protobuf.Timestamp last_heartbeat_time = 9;
     temporal.api.common.v1.Payloads details = 10;
     int32 attempt = 11;
     temporal.api.failure.v1.Failure last_failure = 12;
     string last_worker_identity = 13;
     temporal.server.api.history.v1.VersionHistory version_history = 14;
     temporal.server.api.workflow.v1.BaseExecutionInfo base_execution_info = 15;
+    // build ID of the worker who received this activity last time
+    string last_started_build_id = 16;
+    // workflows redirect_counter value when this activity started last time
+    int64 last_started_redirect_counter = 17;
+}
 
+message SyncActivitiesRequest {
+    string namespace_id = 1;
+    string workflow_id = 2;
+    string run_id = 3;
+    repeated ActivitySyncInfo activities_info = 4;
+}
+message ActivitySyncInfo {
+    int64 version = 1;
+    int64 scheduled_event_id = 2;
+    google.protobuf.Timestamp scheduled_time = 3;
+    int64 started_event_id = 4;
+    google.protobuf.Timestamp started_time = 5 ;
+    google.protobuf.Timestamp last_heartbeat_time = 6;
+    temporal.api.common.v1.Payloads details = 7;
+    int32 attempt = 8;
+    temporal.api.failure.v1.Failure last_failure = 9;
+    string last_worker_identity = 10;
+    temporal.server.api.history.v1.VersionHistory version_history = 11;
+    // build ID of the worker who received this activity last time
+    string last_started_build_id = 12;
+    // workflows redirect_counter value when this activity started last time
+    int64 last_started_redirect_counter = 13;
 }
 
 message SyncActivityResponse {
@@ -512,9 +592,10 @@ message GetShardResponse {
 
 message RemoveTaskRequest {
     int32 shard_id = 1;
-    temporal.server.api.enums.v1.TaskCategory category = 2;
+    // The task category. See tasks.TaskCategoryRegistry for more.
+    int32 category = 2;
     int64 task_id = 3;
-    google.protobuf.Timestamp visibility_time = 4 [(gogoproto.stdtime) = true];
+    google.protobuf.Timestamp visibility_time = 4;
 }
 
 message RemoveTaskResponse {
@@ -608,6 +689,7 @@ message GenerateLastHistoryReplicationTasksRequest {
 
 message GenerateLastHistoryReplicationTasksResponse {
     int64 state_transition_count = 1;
+    int64 history_length = 2;
 }
 
 message GetReplicationStatusRequest {
@@ -624,11 +706,11 @@ message ShardReplicationStatus {
     // Max replication task id of current cluster
     int64 max_replication_task_id = 2;
     // Local time on this shard
-    google.protobuf.Timestamp shard_local_time = 3 [(gogoproto.stdtime) = true, deprecated = true];
+    google.protobuf.Timestamp shard_local_time = 3;
     map<string, ShardReplicationStatusPerCluster> remote_clusters = 4;
     map<string, HandoverNamespaceInfo> handover_namespaces = 5;
 
-    google.protobuf.Timestamp max_replication_task_visibility_time = 6 [(gogoproto.stdtime) = true];
+    google.protobuf.Timestamp max_replication_task_visibility_time = 6;
 }
 
 message HandoverNamespaceInfo {
@@ -640,7 +722,7 @@ message ShardReplicationStatusPerCluster {
     // Acked replication task id
     int64 acked_task_id = 1;
     // Acked replication task creation time
-    google.protobuf.Timestamp acked_task_visibility_time = 2 [(gogoproto.stdtime) = true];
+    google.protobuf.Timestamp acked_task_visibility_time = 2;
 }
 
 message RebuildMutableStateRequest {
@@ -661,13 +743,14 @@ message ImportWorkflowExecutionRequest {
 
 message ImportWorkflowExecutionResponse {
     bytes token = 1;
+    bool events_applied = 2;
 }
 
 message DeleteWorkflowVisibilityRecordRequest {
     string namespace_id = 1;
     temporal.api.common.v1.WorkflowExecution execution = 2;
-    google.protobuf.Timestamp workflow_start_time = 3 [(gogoproto.stdtime) = true];
-    google.protobuf.Timestamp workflow_close_time = 4 [(gogoproto.stdtime) = true];
+    google.protobuf.Timestamp workflow_start_time = 3;
+    google.protobuf.Timestamp workflow_close_time = 4;
 }
 
 message DeleteWorkflowVisibilityRecordResponse {
@@ -736,6 +819,15 @@ message GetWorkflowExecutionRawHistoryV2Response {
     temporal.server.api.adminservice.v1.GetWorkflowExecutionRawHistoryV2Response response = 1;
 }
 
+message GetWorkflowExecutionRawHistoryRequest {
+    string namespace_id = 1;
+    temporal.server.api.adminservice.v1.GetWorkflowExecutionRawHistoryRequest request = 2;
+}
+
+message GetWorkflowExecutionRawHistoryResponse {
+    temporal.server.api.adminservice.v1.GetWorkflowExecutionRawHistoryResponse response = 1;
+}
+
 message ForceDeleteWorkflowExecutionRequest {
     string namespace_id = 1;
     temporal.server.api.adminservice.v1.DeleteWorkflowExecutionRequest request = 2;
@@ -743,4 +835,164 @@ message ForceDeleteWorkflowExecutionRequest {
 
 message ForceDeleteWorkflowExecutionResponse {
     temporal.server.api.adminservice.v1.DeleteWorkflowExecutionResponse response = 1;
+}
+
+message GetDLQTasksRequest {
+    temporal.server.api.common.v1.HistoryDLQKey dlq_key = 1;
+    // page_size must be positive. Up to this many tasks will be returned.
+    int32 page_size = 2;
+    bytes next_page_token = 3;
+}
+
+message GetDLQTasksResponse {
+    repeated temporal.server.api.common.v1.HistoryDLQTask dlq_tasks = 1;
+    // next_page_token is empty if there are no more results. However, the converse is not true. If there are no more
+    // results, this field may still be non-empty. This is to avoid having to do a count query to determine whether
+    // there are more results.
+    bytes next_page_token = 2;
+}
+
+message DeleteDLQTasksRequest {
+    temporal.server.api.common.v1.HistoryDLQKey dlq_key = 1;
+    temporal.server.api.common.v1.HistoryDLQTaskMetadata inclusive_max_task_metadata = 2;
+}
+
+message DeleteDLQTasksResponse {
+    // messages_deleted is the total number of messages deleted in DeleteDLQTasks operation.
+    int64 messages_deleted = 1;
+}
+
+message ListQueuesRequest {
+    int32 queue_type = 1;
+    int32 page_size = 2;
+    bytes next_page_token = 3;
+}
+
+message ListQueuesResponse {
+    message QueueInfo {
+        string queue_name = 1;
+        int64 message_count = 2;
+    }
+    repeated QueueInfo queues = 1;
+    bytes next_page_token = 2;
+}
+
+message AddTasksRequest {
+  // Even though we can obtain the shard ID from the tasks, we still need the shard_id in the request for routing. If
+  // not, it would be possible to include tasks for shards that belong to different hosts, and we'd need to fan-out the
+  // request, which would be more complicated.
+  int32 shard_id = 1;
+
+  message Task {
+    // category_id is needed to deserialize the tasks. See TaskCategory for a list of options here. However, keep in mind
+    // that the list of valid options is registered dynamically with the server in the history/tasks package, so that
+    // enum is not comprehensive.
+    int32 category_id = 1;
+    // blob is the serialized task.
+    temporal.api.common.v1.DataBlob blob = 2;
+  }
+
+  // A list of tasks to enqueue or re-enqueue.
+  repeated Task tasks = 2;
+}
+
+message AddTasksResponse {}
+
+message ListTasksRequest {
+    temporal.server.api.adminservice.v1.ListHistoryTasksRequest request = 1;
+}
+
+message ListTasksResponse {
+    temporal.server.api.adminservice.v1.ListHistoryTasksResponse response = 1;
+}
+
+message CompleteNexusOperationRequest {
+    // Completion token - holds information for locating a run and the corresponding operation state machine.
+    temporal.server.api.token.v1.NexusOperationCompletion completion = 1;
+    // Operation state - may only be successful / failed / canceled.
+    string state = 2;
+    oneof outcome {
+        // Result of a successful operation, only set if state == successful.
+        temporal.api.common.v1.Payload success = 3;
+        // Operation failure, only set if state != successful.
+        temporal.api.nexus.v1.Failure failure = 4;
+    }
+}
+
+message CompleteNexusOperationResponse {
+}
+
+message InvokeStateMachineMethodRequest {
+    // TODO(Tianyu): This is the same as NexusOperationsCompletion but obviously is not about Nexus. This is because
+    // State machine signaling is a generalization of the Nexus mechanisms. Perhaps eventually they should be merged.
+    // Namespace UUID.
+    string namespace_id = 1;
+    // Workflow ID.
+    string workflow_id = 2;
+    // Run ID at the time this token was generated.
+    string run_id = 3;
+    // Reference including the path to the backing Operation state machine and a version + transition count for
+    // staleness checks.
+    temporal.server.api.persistence.v1.StateMachineRef ref = 4;
+
+    // The method name to invoke. Methods must be explicitly registered for the target state machine in the state
+    // machine registry, and accept an argument type of HistoryEvent that is the completion event of the completed
+    // workflow.
+    string method_name = 5;
+
+    // Input, in serialized bytes, to the method. Users specify a deserializer during method registration for each state machine.
+    bytes input = 6;
+}
+
+message InvokeStateMachineMethodResponse {
+    // Output, in serialized bytes, of the method. Users specify a serializer during method registration for each state machine.
+    bytes output = 1;
+}
+
+message DeepHealthCheckRequest {
+    string host_address = 1;
+}
+
+message DeepHealthCheckResponse {
+    temporal.server.api.enums.v1.HealthState state = 1;
+}
+
+message SyncWorkflowStateRequest {
+    string namespace_id = 1;
+    temporal.api.common.v1.WorkflowExecution execution = 2;
+    temporal.server.api.persistence.v1.VersionedTransition versioned_transition = 3;
+    temporal.server.api.history.v1.VersionHistories version_histories = 4;
+    int32 target_cluster_id = 5;
+}
+
+message SyncWorkflowStateResponse {
+    oneof attributes {
+        replication.v1.SyncWorkflowStateMutationAttributes mutation = 1;
+        replication.v1.SyncWorkflowStateSnapshotAttributes snapshot = 2;
+    }
+    repeated temporal.api.common.v1.DataBlob event_batches = 3;
+    replication.v1.NewRunInfo new_run_info = 4;
+}
+
+message UpdateActivityOptionsRequest {
+    // Namespace ID of the workflow which scheduled this activity
+    string namespace_id = 1;
+    // ID of the workflow which scheduled this activity
+    string workflow_id = 2;
+    // Run ID of the workflow which scheduled this activity
+    // if empty - latest workflow is used
+    string run_id = 3;
+    // ID of the activity we're updating
+    string activity_id = 4;
+
+    // Activity options. Partial updates are accepted and controlled by update_mask
+    temporal.api.activity.v1.ActivityOptions activity_options = 6;
+
+    // Controls which fields from `activity_options` will be applied
+    google.protobuf.FieldMask update_mask = 7;
+}
+
+message UpdateActivityOptionsResponse {
+    // Activity options after an update
+    temporal.api.activity.v1.ActivityOptions activity_options = 1;
 }

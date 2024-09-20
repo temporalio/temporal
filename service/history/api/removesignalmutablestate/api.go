@@ -49,14 +49,13 @@ func Invoke(
 	err = api.GetAndUpdateWorkflowWithNew(
 		ctx,
 		nil,
-		api.BypassMutableStateConsistencyPredicate,
 		definition.NewWorkflowKey(
 			req.NamespaceId,
 			req.WorkflowExecution.WorkflowId,
 			req.WorkflowExecution.RunId,
 		),
-		func(workflowContext api.WorkflowContext) (*api.UpdateWorkflowAction, error) {
-			mutableState := workflowContext.GetMutableState()
+		func(workflowLease api.WorkflowLease) (*api.UpdateWorkflowAction, error) {
+			mutableState := workflowLease.GetMutableState()
 			if !mutableState.IsWorkflowExecutionRunning() {
 				return nil, consts.ErrWorkflowCompleted
 			}

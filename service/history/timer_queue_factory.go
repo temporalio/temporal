@@ -27,21 +27,24 @@ package history
 import (
 	"context"
 
-	"go.uber.org/fx"
-
-	"go.temporal.io/server/api/historyservice/v1"
+	historypb "go.temporal.io/api/history/v1"
+	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/client"
+	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/xdc"
 	deletemanager "go.temporal.io/server/service/history/deletemanager"
 	"go.temporal.io/server/service/history/queues"
+	"go.temporal.io/server/service/history/replication/eventhandler"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
+	"go.uber.org/fx"
 )
 
 const (
@@ -53,7 +56,6 @@ type (
 		fx.In
 
 		QueueFactoryBaseParams
-
 		ClientBean        client.Bean
 		MatchingRawClient resource.MatchingRawClient
 		VisibilityManager manager.VisibilityManager
@@ -71,20 +73,14 @@ func NewTimerQueueFactory(
 	return &timerQueueFactory{
 		timerQueueFactoryParams: params,
 		QueueFactoryBase: QueueFactoryBase{
-			HostScheduler: queues.NewNamespacePriorityScheduler(
+			HostScheduler: queues.NewScheduler(
 				params.ClusterMetadata.GetCurrentClusterName(),
-				queues.NamespacePrioritySchedulerOptions{
-					WorkerCount:                 params.Config.TimerProcessorSchedulerWorkerCount,
-					ActiveNamespaceWeights:      params.Config.TimerProcessorSchedulerActiveRoundRobinWeights,
-					StandbyNamespaceWeights:     params.Config.TimerProcessorSchedulerStandbyRoundRobinWeights,
-					EnableRateLimiter:           params.Config.TaskSchedulerEnableRateLimiter,
-					EnableRateLimiterShadowMode: params.Config.TaskSchedulerEnableRateLimiterShadowMode,
-					DispatchThrottleDuration:    params.Config.TaskSchedulerThrottleDuration,
+				queues.SchedulerOptions{
+					WorkerCount:             params.Config.TimerProcessorSchedulerWorkerCount,
+					ActiveNamespaceWeights:  params.Config.TimerProcessorSchedulerActiveRoundRobinWeights,
+					StandbyNamespaceWeights: params.Config.TimerProcessorSchedulerStandbyRoundRobinWeights,
 				},
 				params.NamespaceRegistry,
-				params.SchedulerRateLimiter,
-				params.TimeSource,
-				params.MetricsHandler.WithTags(metrics.OperationTag(metrics.OperationTimerQueueProcessorScope)),
 				params.Logger,
 			),
 			HostPriorityAssigner: queues.NewPriorityAssigner(),
@@ -94,37 +90,54 @@ func NewTimerQueueFactory(
 					params.Config.PersistenceMaxQPS,
 					timerQueuePersistenceMaxRPSRatio,
 				),
-				int64(params.Config.QueueMaxReaderCount()),
+				int64(params.Config.TimerQueueMaxReaderCount()),
 			),
 		},
 	}
 }
 
 func (f *timerQueueFactory) CreateQueue(
-	shard shard.Context,
+	shardContext shard.Context,
 	workflowCache wcache.Cache,
 ) queues.Queue {
-	logger := log.With(shard.GetLogger(), tag.ComponentTimerQueue)
+	logger := log.With(shardContext.GetLogger(), tag.ComponentTimerQueue)
 	metricsHandler := f.MetricsHandler.WithTags(metrics.OperationTag(metrics.OperationTimerQueueProcessorScope))
 
 	currentClusterName := f.ClusterMetadata.GetCurrentClusterName()
 	workflowDeleteManager := deletemanager.NewDeleteManager(
-		shard,
+		shardContext,
 		workflowCache,
 		f.Config,
-		shard.GetTimeSource(),
+		shardContext.GetTimeSource(),
 		f.VisibilityManager,
 	)
 
+	var shardScheduler = f.HostScheduler
+	if f.Config.TaskSchedulerEnableRateLimiter() {
+		shardScheduler = queues.NewRateLimitedScheduler(
+			f.HostScheduler,
+			queues.RateLimitedSchedulerOptions{
+				EnableShadowMode: f.Config.TaskSchedulerEnableRateLimiterShadowMode,
+				StartupDelay:     f.Config.TaskSchedulerRateLimiterStartupDelay,
+			},
+			currentClusterName,
+			f.NamespaceRegistry,
+			f.SchedulerRateLimiter,
+			f.TimeSource,
+			logger,
+			metricsHandler,
+		)
+	}
+
 	rescheduler := queues.NewRescheduler(
-		f.HostScheduler,
-		shard.GetTimeSource(),
+		shardScheduler,
+		shardContext.GetTimeSource(),
 		logger,
 		metricsHandler,
 	)
 
 	activeExecutor := newTimerQueueActiveTaskExecutor(
-		shard,
+		shardContext,
 		workflowCache,
 		workflowDeleteManager,
 		logger,
@@ -132,25 +145,68 @@ func (f *timerQueueFactory) CreateQueue(
 		f.Config,
 		f.MatchingRawClient,
 	)
+	eventImporter := eventhandler.NewEventImporter(
+		f.RemoteHistoryFetcher,
+		func(ctx context.Context, namespaceID namespace.ID, workflowID string) (shard.Engine, error) {
+			return shardContext.GetEngine(ctx)
+		},
+		f.Serializer,
+		logger,
+	)
+	resendHandler := eventhandler.NewResendHandler(
+		f.NamespaceRegistry,
+		f.ClientBean,
+		f.Serializer,
+		f.ClusterMetadata,
+		func(ctx context.Context, namespaceID namespace.ID, workflowID string) (shard.Engine, error) {
+			return shardContext.GetEngine(ctx)
+		},
+		f.RemoteHistoryFetcher,
+		eventImporter,
+		logger,
+		f.Config,
+	)
 
 	standbyExecutor := newTimerQueueStandbyTaskExecutor(
-		shard,
+		shardContext,
 		workflowCache,
 		workflowDeleteManager,
 		xdc.NewNDCHistoryResender(
-			shard.GetNamespaceRegistry(),
+			shardContext.GetNamespaceRegistry(),
 			f.ClientBean,
-			func(ctx context.Context, request *historyservice.ReplicateEventsV2Request) error {
-				engine, err := shard.GetEngine(ctx)
+			func(
+				ctx context.Context,
+				sourceClusterName string,
+				namespaceId namespace.ID,
+				workflowId string,
+				runId string,
+				events [][]*historypb.HistoryEvent,
+				versionHistory []*historyspb.VersionHistoryItem,
+			) error {
+				engine, err := shardContext.GetEngine(ctx)
 				if err != nil {
 					return err
 				}
-				return engine.ReplicateEventsV2(ctx, request)
+				return engine.ReplicateHistoryEvents(
+					ctx,
+					definition.WorkflowKey{
+						NamespaceID: namespaceId.String(),
+						WorkflowID:  workflowId,
+						RunID:       runId,
+					},
+					nil,
+					versionHistory,
+					events,
+					nil,
+					"",
+				)
 			},
-			shard.GetPayloadSerializer(),
+			shardContext.GetPayloadSerializer(),
 			f.Config.StandbyTaskReReplicationContextTimeout,
 			logger,
+			f.Config,
 		),
+		resendHandler,
 		f.MatchingRawClient,
 		logger,
 		f.MetricsHandler,
@@ -173,18 +229,34 @@ func (f *timerQueueFactory) CreateQueue(
 		executor = f.ExecutorWrapper.Wrap(executor)
 	}
 
-	return queues.NewScheduledQueue(
-		shard,
-		tasks.CategoryTimer,
-		f.HostScheduler,
+	factory := queues.NewExecutableFactory(
+		executor,
+		shardScheduler,
 		rescheduler,
 		f.HostPriorityAssigner,
-		executor,
+		shardContext.GetTimeSource(),
+		shardContext.GetNamespaceRegistry(),
+		shardContext.GetClusterMetadata(),
+		logger,
+		metricsHandler,
+		f.DLQWriter,
+		f.Config.TaskDLQEnabled,
+		f.Config.TaskDLQUnexpectedErrorAttempts,
+		f.Config.TaskDLQInternalErrors,
+		f.Config.TaskDLQErrorPattern,
+	)
+	return queues.NewScheduledQueue(
+		shardContext,
+		tasks.CategoryTimer,
+		shardScheduler,
+		rescheduler,
+		factory,
 		&queues.Options{
 			ReaderOptions: queues.ReaderOptions{
 				BatchSize:            f.Config.TimerTaskBatchSize,
 				MaxPendingTasksCount: f.Config.QueuePendingTaskMaxCount,
 				PollBackoffInterval:  f.Config.TimerProcessorPollBackoffInterval,
+				MaxPredicateSize:     f.Config.QueueMaxPredicateSize,
 			},
 			MonitorOptions: queues.MonitorOptions{
 				PendingTasksCriticalCount:   f.Config.QueuePendingTaskCriticalCount,
@@ -196,7 +268,7 @@ func (f *timerQueueFactory) CreateQueue(
 			MaxPollIntervalJitterCoefficient:    f.Config.TimerProcessorMaxPollIntervalJitterCoefficient,
 			CheckpointInterval:                  f.Config.TimerProcessorUpdateAckInterval,
 			CheckpointIntervalJitterCoefficient: f.Config.TimerProcessorUpdateAckIntervalJitterCoefficient,
-			MaxReaderCount:                      f.Config.QueueMaxReaderCount,
+			MaxReaderCount:                      f.Config.TimerQueueMaxReaderCount,
 		},
 		f.HostReaderRateLimiter,
 		logger,

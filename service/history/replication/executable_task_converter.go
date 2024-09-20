@@ -64,7 +64,7 @@ func (e *executableTaskConverterImpl) Convert(
 ) []TrackableExecutableTask {
 	tasks := make([]TrackableExecutableTask, len(replicationTasks))
 	for index, replicationTask := range replicationTasks {
-		e.processToolBox.MetricsHandler.Counter(metrics.ReplicationTasksRecv.GetMetricName()).Record(
+		metrics.ReplicationTasksRecv.With(e.processToolBox.MetricsHandler).Record(
 			int64(1),
 			metrics.FromClusterIDTag(serverShardKey.ClusterID),
 			metrics.ToClusterIDTag(clientShardKey.ClusterID),
@@ -81,7 +81,7 @@ func (e *executableTaskConverterImpl) convertOne(
 ) TrackableExecutableTask {
 	var taskCreationTime time.Time
 	if replicationTask.VisibilityTime != nil {
-		taskCreationTime = *replicationTask.VisibilityTime
+		taskCreationTime = replicationTask.VisibilityTime.AsTime()
 	} else {
 		taskCreationTime = time.Now().UTC()
 	}
@@ -108,6 +108,8 @@ func (e *executableTaskConverterImpl) convertOne(
 			taskCreationTime,
 			replicationTask.GetSyncActivityTaskAttributes(),
 			taskClusterName,
+			replicationTask.GetPriority(),
+			replicationTask,
 		)
 	case enumsspb.REPLICATION_TASK_TYPE_SYNC_WORKFLOW_STATE_TASK:
 		return NewExecutableWorkflowStateTask(
@@ -116,6 +118,8 @@ func (e *executableTaskConverterImpl) convertOne(
 			taskCreationTime,
 			replicationTask.GetSyncWorkflowStateTaskAttributes(),
 			taskClusterName,
+			replicationTask.GetPriority(),
+			replicationTask,
 		)
 	case enumsspb.REPLICATION_TASK_TYPE_HISTORY_V2_TASK:
 		return NewExecutableHistoryTask(
@@ -124,6 +128,34 @@ func (e *executableTaskConverterImpl) convertOne(
 			taskCreationTime,
 			replicationTask.GetHistoryTaskAttributes(),
 			taskClusterName,
+			replicationTask.GetPriority(),
+			replicationTask,
+		)
+	case enumsspb.REPLICATION_TASK_TYPE_SYNC_HSM_TASK:
+		return NewExecutableSyncHSMTask(
+			e.processToolBox,
+			replicationTask.SourceTaskId,
+			taskCreationTime,
+			replicationTask.GetSyncHsmAttributes(),
+			taskClusterName,
+			replicationTask.GetPriority(),
+			replicationTask,
+		)
+	case enumsspb.REPLICATION_TASK_TYPE_BACKFILL_HISTORY_TASK:
+		return NewExecutableBackfillHistoryEventsTask(
+			e.processToolBox,
+			replicationTask.SourceTaskId,
+			taskCreationTime,
+			taskClusterName,
+			replicationTask,
+		)
+	case enumsspb.REPLICATION_TASK_TYPE_VERIFY_VERSIONED_TRANSITION_TASK:
+		return NewExecutableVerifyVersionedTransitionTask(
+			e.processToolBox,
+			replicationTask.SourceTaskId,
+			taskCreationTime,
+			taskClusterName,
+			replicationTask,
 		)
 	default:
 		e.processToolBox.Logger.Error(fmt.Sprintf("unknown replication task: %v", replicationTask))

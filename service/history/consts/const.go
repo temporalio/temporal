@@ -26,11 +26,10 @@ package consts
 
 import (
 	"errors"
+	"fmt"
 
-	"go.temporal.io/api/enums/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
-
 	"go.temporal.io/server/common"
 )
 
@@ -53,14 +52,24 @@ var (
 	ErrDuplicate = errors.New("duplicate task, completing it")
 	// ErrLocateCurrentWorkflowExecution is the error returned when current workflow execution can't be located
 	ErrLocateCurrentWorkflowExecution = serviceerror.NewUnavailable("unable to locate current workflow execution")
-	// ErrStaleState is the error returned during state update indicating that cached mutable state could be stale
-	ErrStaleState = errors.New("cache mutable state could potentially be stale")
+	// ErrStaleReference is an indicator that a task or an API request cannot be executed because it contains a stale reference.
+	// This is expected in certain situations and it is safe to drop the task or fail a request with a non-retryable error.
+	// An example of a stale reference is when the task is pointing to a state machine in mutable state that has a newer
+	// version than the version that task was created from, that is the state machine has already transitioned and the
+	// task is no longer needed.
+	// It is also a NotFoundError to indicate to API callers that the object they're targeting is not found.
+	ErrStaleReference = serviceerror.NewNotFound("stale reference")
+	// ErrStaleState is the error returned during state update indicating that cached mutable state could be stale after
+	// a reload attempt.
+	ErrStaleState = staleStateError{}
 	// ErrActivityTaskNotFound is the error to indicate activity task could be duplicate and activity already completed
 	ErrActivityTaskNotFound = serviceerror.NewNotFound("invalid activityID or activity already timed out or invoking workflow is completed")
 	// ErrActivityTaskNotCancelRequested is the error to indicate activity to be canceled is not cancel requested
 	ErrActivityTaskNotCancelRequested = serviceerror.NewInvalidArgument("unable to mark activity as canceled without activity being request canceled first")
 	// ErrWorkflowCompleted is the error to indicate workflow execution already completed
 	ErrWorkflowCompleted = serviceerror.NewNotFound("workflow execution already completed")
+	// ErrWorkflowZombie is the error to indicate workflow execution is in zombie state and cannot be updated
+	ErrWorkflowZombie = fmt.Errorf("%w: zombie workflow cannot be updated", ErrStaleReference)
 	// ErrWorkflowExecutionNotFound is the error to indicate workflow execution does not exist
 	ErrWorkflowExecutionNotFound = serviceerror.NewNotFound("workflow execution not found")
 	// ErrWorkflowParent is the error to parent execution is given and mismatch
@@ -70,13 +79,21 @@ var (
 	// ErrSignalsLimitExceeded is the error indicating limit reached for maximum number of signal events
 	ErrSignalsLimitExceeded = serviceerror.NewInvalidArgument("exceeded workflow execution limit for signal events")
 	// ErrWorkflowClosing is the error indicating requests to workflow can not be applied as workflow is closing
-	ErrWorkflowClosing = serviceerror.NewResourceExhausted(enumspb.RESOURCE_EXHAUSTED_CAUSE_BUSY_WORKFLOW, "workflow operation can not be applied because workflow is closing")
+	ErrWorkflowClosing = &serviceerror.ResourceExhausted{
+		Cause:   enumspb.RESOURCE_EXHAUSTED_CAUSE_BUSY_WORKFLOW,
+		Scope:   enumspb.RESOURCE_EXHAUSTED_SCOPE_NAMESPACE,
+		Message: "workflow operation can not be applied because workflow is closing",
+	}
 	// ErrEventsAterWorkflowFinish is the error indicating server error trying to write events after workflow finish event
 	ErrEventsAterWorkflowFinish = serviceerror.NewInternal("error validating last event being workflow finish event")
 	// ErrQueryEnteredInvalidState is error indicating query entered invalid state
 	ErrQueryEnteredInvalidState = serviceerror.NewInvalidArgument("query entered invalid state, this should be impossible")
 	// ErrConsistentQueryBufferExceeded is error indicating that too many consistent queries have been buffered and until buffered queries are finished new consistent queries cannot be buffered
-	ErrConsistentQueryBufferExceeded = serviceerror.NewResourceExhausted(enumspb.RESOURCE_EXHAUSTED_CAUSE_BUSY_WORKFLOW, "consistent query buffer is full, this may be caused by too many queries and workflow not able to process query fast enough")
+	ErrConsistentQueryBufferExceeded = &serviceerror.ResourceExhausted{
+		Cause:   enumspb.RESOURCE_EXHAUSTED_CAUSE_BUSY_WORKFLOW,
+		Scope:   enumspb.RESOURCE_EXHAUSTED_SCOPE_NAMESPACE,
+		Message: "consistent query buffer is full, this may be caused by too many queries and workflow not able to process query fast enough",
+	}
 	// ErrEmptyHistoryRawEventBatch indicate that one single batch of history raw events is of size 0
 	ErrEmptyHistoryRawEventBatch = serviceerror.NewInvalidArgument("encountered empty history batch")
 	// ErrHistorySizeExceedsLimit is error indicating workflow execution has exceeded system defined history size limit
@@ -100,9 +117,19 @@ var (
 	// ErrWorkflowTaskStateInconsistent is error indicating workflow task state is inconsistent, for example there was no workflow task scheduled but buffered events are present.
 	ErrWorkflowTaskStateInconsistent = serviceerror.NewUnavailable("Workflow task state is inconsistent.")
 	// ErrResourceExhaustedBusyWorkflow is an error indicating workflow resource is exhausted and should not be retried by service handler and client
-	ErrResourceExhaustedBusyWorkflow = serviceerror.NewResourceExhausted(enums.RESOURCE_EXHAUSTED_CAUSE_BUSY_WORKFLOW, "Workflow is busy.")
+	ErrResourceExhaustedBusyWorkflow = &serviceerror.ResourceExhausted{
+		Cause:   enumspb.RESOURCE_EXHAUSTED_CAUSE_BUSY_WORKFLOW,
+		Scope:   enumspb.RESOURCE_EXHAUSTED_SCOPE_NAMESPACE,
+		Message: "Workflow is busy.",
+	}
 	// ErrResourceExhaustedAPSLimit is an error indicating user has reached their action per second limit
-	ErrResourceExhaustedAPSLimit = serviceerror.NewResourceExhausted(enums.RESOURCE_EXHAUSTED_CAUSE_APS_LIMIT, "Action per second limit exceeded.")
+	ErrResourceExhaustedAPSLimit = &serviceerror.ResourceExhausted{
+		Cause:   enumspb.RESOURCE_EXHAUSTED_CAUSE_APS_LIMIT,
+		Scope:   enumspb.RESOURCE_EXHAUSTED_SCOPE_NAMESPACE,
+		Message: "Action per second limit exceeded.",
+	}
+	// ErrWorkflowClosedBeforeWorkflowTaskStarted is an error indicating workflow execution was closed before WorkflowTaskStarted event
+	ErrWorkflowClosedBeforeWorkflowTaskStarted = serviceerror.NewWorkflowNotReady("Workflow execution closed before WorkflowTaskStarted event")
 
 	ErrWorkflowIDNotSet                 = serviceerror.NewInvalidArgument("WorkflowId is not set on request.")
 	ErrInvalidRunID                     = serviceerror.NewInvalidArgument("Invalid RunId.")
@@ -125,3 +152,18 @@ var (
 		enumspb.WORKFLOW_EXECUTION_STATUS_TIMED_OUT:  {},
 	}
 )
+
+// StaleStateError is an indicator that after loading the state for a task it was detected as stale. It's possible that
+// state reload solves this issue but otherwise it is unexpected and considered terminal.
+type staleStateError struct {
+	Message string
+}
+
+func (staleStateError) Error() string {
+	return "cached mutable state could potentially be stale"
+}
+
+// IsTerminalTaskError marks this error as terminal to be handled appropriately.
+func (staleStateError) IsTerminalTaskError() bool {
+	return true
+}

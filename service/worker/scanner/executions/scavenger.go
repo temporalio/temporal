@@ -32,15 +32,14 @@ import (
 
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
-	"go.temporal.io/server/common/dynamicconfig"
-	"go.temporal.io/server/common/log/tag"
-	"go.temporal.io/server/common/namespace"
-	"go.temporal.io/server/common/quotas"
-
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/service/worker/scanner/executor"
 )
 
@@ -137,7 +136,7 @@ func (s *Scavenger) Start() {
 	s.stopWG.Add(1)
 	s.executor.Start()
 	go s.run()
-	s.metricsHandler.Counter(metrics.StartedCount.GetMetricName()).Record(1)
+	metrics.StartedCount.With(s.metricsHandler).Record(1)
 	s.logger.Info("Executions scavenger started")
 }
 
@@ -150,7 +149,7 @@ func (s *Scavenger) Stop() {
 	) {
 		return
 	}
-	s.metricsHandler.Counter(metrics.StoppedCount.GetMetricName()).Record(1)
+	metrics.StoppedCount.With(s.metricsHandler).Record(1)
 	s.logger.Info("Executions scavenger stopping")
 	close(s.stopC)
 	s.executor.Stop()
@@ -200,7 +199,7 @@ func (s *Scavenger) run() {
 
 func (s *Scavenger) awaitExecutor() {
 	// gauge value persists, so we want to reset it to 0
-	defer s.metricsHandler.Gauge(metrics.ExecutionsOutstandingCount.GetMetricName()).Record(float64(0))
+	defer metrics.ExecutionsOutstandingCount.With(s.metricsHandler).Record(float64(0))
 
 	outstanding := s.executor.TaskCount()
 	for outstanding > 0 {
@@ -208,7 +207,7 @@ func (s *Scavenger) awaitExecutor() {
 		select {
 		case <-timer.C:
 			outstanding = s.executor.TaskCount()
-			s.metricsHandler.Gauge(metrics.ExecutionsOutstandingCount.GetMetricName()).Record(float64(outstanding))
+			metrics.ExecutionsOutstandingCount.With(s.metricsHandler).Record(float64(outstanding))
 		case <-s.stopC:
 			timer.Stop()
 			return

@@ -28,13 +28,11 @@ import (
 	"context"
 	"testing"
 
-	"github.com/golang/mock/gomock"
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
-
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -45,6 +43,7 @@ import (
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tests"
 	"go.temporal.io/server/service/history/workflow"
+	"go.uber.org/mock/gomock"
 )
 
 type (
@@ -108,7 +107,6 @@ func (s *bufferEventFlusherSuite) TearDownTest() {
 
 func (s *bufferEventFlusherSuite) TestClearTransientWorkflowTask() {
 
-	lastWriteVersion := int64(300)
 	versionHistory := versionhistory.NewVersionHistory([]byte("some random base branch token"), []*historyspb.VersionHistoryItem{
 		versionhistory.NewVersionHistoryItem(10, 0),
 		versionhistory.NewVersionHistoryItem(50, 100),
@@ -124,7 +122,6 @@ func (s *bufferEventFlusherSuite) TestClearTransientWorkflowTask() {
 	)
 	s.NoError(err)
 
-	s.mockMutableState.EXPECT().GetLastWriteVersion().Return(lastWriteVersion, nil).AnyTimes()
 	s.mockMutableState.EXPECT().HasBufferedEvents().Return(false).AnyTimes()
 	s.mockMutableState.EXPECT().HasStartedWorkflowTask().Return(true).AnyTimes()
 	s.mockMutableState.EXPECT().IsTransientWorkflowTask().Return(true).AnyTimes()
@@ -178,6 +175,7 @@ func (s *bufferEventFlusherSuite) TestFlushBufferedEvents() {
 		enumspb.WORKFLOW_TASK_FAILED_CAUSE_FAILOVER_CLOSE_COMMAND,
 		nil,
 		consts.IdentityHistoryService,
+		nil,
 		"",
 		"",
 		"",

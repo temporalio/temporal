@@ -149,7 +149,7 @@ func AliasFields(
 	}
 
 	if len(searchAttributes.GetIndexedFields()) == 0 || mapper == nil {
-		return nil, nil
+		return searchAttributes, nil
 	}
 
 	newIndexedFields := make(map[string]*commonpb.Payload, len(searchAttributes.GetIndexedFields()))
@@ -178,13 +178,12 @@ func AliasFields(
 
 	// If no field name was mapped, return nil to save on clone operation on caller side.
 	if !mapped {
-		return nil, nil
+		return searchAttributes, nil
 	}
 	return &commonpb.SearchAttributes{IndexedFields: newIndexedFields}, nil
 }
 
 // UnaliasFields returns SearchAttributes struct where each search attribute alias is replaced with field name.
-// If no replacement where made, it returns nil which means that original SearchAttributes struct should be used.
 func UnaliasFields(
 	mapperProvider MapperProvider,
 	searchAttributes *commonpb.SearchAttributes,
@@ -196,7 +195,7 @@ func UnaliasFields(
 	}
 
 	if len(searchAttributes.GetIndexedFields()) == 0 || mapper == nil {
-		return nil, nil
+		return searchAttributes, nil
 	}
 
 	newIndexedFields := make(map[string]*commonpb.Payload, len(searchAttributes.GetIndexedFields()))
@@ -217,9 +216,8 @@ func UnaliasFields(
 		newIndexedFields[fieldName] = saPayload
 	}
 
-	// If no alias was mapped, return nil to save on clone operation on caller side.
 	if !mapped {
-		return nil, nil
+		return searchAttributes, nil
 	}
 
 	return &commonpb.SearchAttributes{IndexedFields: newIndexedFields}, nil

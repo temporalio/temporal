@@ -29,12 +29,12 @@ import (
 
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
-	"go.temporal.io/server/service/history/workflow"
 )
 
 func GenerateTask(
@@ -49,24 +49,23 @@ func GenerateTask(
 	}
 	namespaceID := namespaceEntry.ID()
 
-	wfContext, err := workflowConsistencyChecker.GetWorkflowContext(
+	workflowLease, err := workflowConsistencyChecker.GetWorkflowLease(
 		ctx,
 		nil,
-		api.BypassMutableStateConsistencyPredicate,
 		definition.NewWorkflowKey(
 			namespaceID.String(),
 			request.Execution.WorkflowId,
 			request.Execution.RunId,
 		),
-		workflow.LockPriorityHigh,
+		locks.PriorityHigh,
 	)
 	if err != nil {
 		return nil, err
 	}
-	defer func() { wfContext.GetReleaseFn()(retError) }()
+	defer func() { workflowLease.GetReleaseFn()(retError) }()
 
-	mutableState := wfContext.GetMutableState()
-	task, stateTransitionCount, err := mutableState.GenerateMigrationTasks()
+	mutableState := workflowLease.GetMutableState()
+	replicationTasks, stateTransitionCount, err := mutableState.GenerateMigrationTasks()
 	if err != nil {
 		return nil, err
 	}
@@ -76,15 +75,17 @@ func GenerateTask(
 		// RangeID is set by shard
 		NamespaceID: string(namespaceID),
 		WorkflowID:  request.Execution.WorkflowId,
-		RunID:       request.Execution.RunId,
 		Tasks: map[tasks.Category][]tasks.Task{
-			tasks.CategoryReplication: {task},
+			tasks.CategoryReplication: replicationTasks,
 		},
 	})
 	if err != nil {
 		return nil, err
 	}
+
+	historyLength := max(mutableState.GetNextEventID()-1, 0)
 	return &historyservice.GenerateLastHistoryReplicationTasksResponse{
 		StateTransitionCount: stateTransitionCount,
+		HistoryLength:        historyLength,
 	}, nil
 }

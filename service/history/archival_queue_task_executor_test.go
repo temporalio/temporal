@@ -22,7 +22,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package history
+package history_test
 
 import (
 	"context"
@@ -30,13 +30,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	workflowpb "go.temporal.io/api/workflow/v1"
-
 	"go.temporal.io/server/api/persistence/v1"
 	carchiver "go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/clock"
@@ -47,7 +45,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	cpersistence "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/visibility/manager"
-	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/service/history"
 	"go.temporal.io/server/service/history/archival"
 	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/shard"
@@ -55,6 +53,9 @@ import (
 	"go.temporal.io/server/service/history/tests"
 	"go.temporal.io/server/service/history/workflow"
 	"go.temporal.io/server/service/history/workflow/cache"
+	"go.uber.org/mock/gomock"
+	"google.golang.org/protobuf/types/known/durationpb"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 func TestArchivalQueueTaskExecutor(t *testing.T) {
@@ -157,10 +158,8 @@ func TestArchivalQueueTaskExecutor(t *testing.T) {
 		{
 			Name: "wrong task type",
 			Configure: func(p *params) {
-				version := p.Task.GetVersion()
 				p.Task = &tasks.DeleteExecutionTask{
 					WorkflowKey: p.WorkflowKey,
-					Version:     version,
 				}
 				p.ExpectArchive = false
 				p.ExpectAddTask = false
@@ -217,6 +216,15 @@ func TestArchivalQueueTaskExecutor(t *testing.T) {
 			},
 		},
 		{
+			Name: "get workflow execution duration error",
+			Configure: func(p *params) {
+				p.GetWorkflowExecutionDurationError = errors.New("get workflow execution duration error")
+				p.ExpectedErrorSubstrings = []string{"get workflow execution duration error"}
+				p.ExpectArchive = false
+				p.ExpectAddTask = false
+			},
+		},
+		{
 			Name: "get current branch token error",
 			Configure: func(p *params) {
 				p.GetCurrentBranchTokenError = errors.New("get current branch token error")
@@ -244,19 +252,19 @@ func TestArchivalQueueTaskExecutor(t *testing.T) {
 			},
 		},
 		{
-			Name: "get last write version error before archiving",
+			Name: "get close version error before archiving",
 			Configure: func(p *params) {
-				p.GetLastWriteVersionBeforeArchivalError = errors.New("get last write version error")
-				p.ExpectedErrorSubstrings = []string{"get last write version error"}
+				p.GetCloseVersionBeforeArchivalError = errors.New("get close version error")
+				p.ExpectedErrorSubstrings = []string{"get close version error"}
 				p.ExpectArchive = false
 				p.ExpectAddTask = false
 			},
 		},
 		{
-			Name: "get last write version error after archiving",
+			Name: "get close version error after archiving",
 			Configure: func(p *params) {
-				p.GetLastWriteVersionAfterArchivalError = errors.New("get last write version error")
-				p.ExpectedErrorSubstrings = []string{"get last write version error"}
+				p.GetCloseVersionAfterArchivalError = errors.New("get close version error")
+				p.ExpectedErrorSubstrings = []string{"get close version error"}
 				p.ExpectArchive = true
 				p.ExpectAddTask = false
 			},
@@ -264,7 +272,7 @@ func TestArchivalQueueTaskExecutor(t *testing.T) {
 		{
 			Name: "mutable state version does not match task version",
 			Configure: func(p *params) {
-				p.LastWriteVersionBeforeArchival = 1
+				p.CloseVersionBeforeArchival = 1
 				p.Task.(*tasks.ArchiveExecutionTask).Version = 2
 				p.ExpectedErrorSubstrings = []string{"version mismatch"}
 				p.ExpectArchive = false
@@ -272,9 +280,9 @@ func TestArchivalQueueTaskExecutor(t *testing.T) {
 			},
 		},
 		{
-			Name: "last write version changed during archival",
+			Name: "close version changed during archival",
 			Configure: func(p *params) {
-				p.LastWriteVersionAfterArchival = p.LastWriteVersionBeforeArchival + 1
+				p.CloseVersionAfterArchival = p.CloseVersionBeforeArchival + 1
 				p.ExpectedErrorSubstrings = []string{"version mismatch"}
 				p.ExpectArchive = true
 				p.ExpectAddTask = false
@@ -311,15 +319,16 @@ func TestArchivalQueueTaskExecutor(t *testing.T) {
 				tests.WorkflowID,
 				tests.RunID,
 			)
-			p.StartTime = time.Unix(0, 0)
-			p.ExecutionTime = time.Unix(0, 0)
-			p.CloseTime = time.Unix(0, 0).Add(time.Minute * 2)
-			p.Retention = timestamp.DurationPtr(time.Hour)
+			p.StartTime = time.Unix(0, 0).UTC()
+			p.ExecutionTime = time.Unix(0, 0).UTC()
+			p.CloseTime = time.Unix(0, 0).UTC().Add(time.Minute * 2)
+			p.ExecutionDuration = p.CloseTime.Sub(p.ExecutionTime)
+			p.Retention = durationpb.New(time.Hour)
 			// delete time = close time + retention
 			// delete time = 2 minutes + 1 hour = 1 hour 2 minutes
-			p.ExpectedDeleteTime = time.Unix(0, 0).Add(time.Minute * 2).Add(time.Hour)
-			p.LastWriteVersionBeforeArchival = 1
-			p.LastWriteVersionAfterArchival = 1
+			p.ExpectedDeleteTime = time.Unix(0, 0).UTC().Add(time.Minute * 2).Add(time.Hour)
+			p.CloseVersionBeforeArchival = 1
+			p.CloseVersionAfterArchival = 1
 			p.Task = &tasks.ArchiveExecutionTask{
 				WorkflowKey: p.WorkflowKey,
 				Version:     1,
@@ -388,7 +397,6 @@ func TestArchivalQueueTaskExecutor(t *testing.T) {
 			if p.MutableStateExists {
 				mutableState := workflow.NewMockMutableState(p.Controller)
 				mutableState.EXPECT().IsWorkflowExecutionRunning().Return(p.IsWorkflowExecutionRunning).AnyTimes()
-				mutableState.EXPECT().GetCurrentVersion().Return(p.LastWriteVersionBeforeArchival).AnyTimes()
 				mutableState.EXPECT().GetWorkflowKey().Return(p.WorkflowKey).AnyTimes()
 				workflowContext.EXPECT().LoadMutableState(gomock.Any(), shardContext).Return(
 					mutableState,
@@ -400,29 +408,36 @@ func TestArchivalQueueTaskExecutor(t *testing.T) {
 				).AnyTimes()
 				mutableState.EXPECT().GetNamespaceEntry().Return(namespaceEntry).AnyTimes()
 				mutableState.EXPECT().GetNextEventID().Return(int64(100)).AnyTimes()
-				mutableState.EXPECT().GetLastWriteVersion().Return(
-					p.LastWriteVersionBeforeArchival,
-					p.GetLastWriteVersionBeforeArchivalError,
+				mutableState.EXPECT().GetCloseVersion().Return(
+					p.CloseVersionBeforeArchival,
+					p.GetCloseVersionBeforeArchivalError,
 				).MaxTimes(1)
-				mutableState.EXPECT().GetLastWriteVersion().Return(
-					p.LastWriteVersionAfterArchival,
-					p.GetLastWriteVersionAfterArchivalError,
+				mutableState.EXPECT().GetCloseVersion().Return(
+					p.CloseVersionAfterArchival,
+					p.GetCloseVersionAfterArchivalError,
 				).MaxTimes(1)
+				if p.ExpectAddTask {
+					mutableState.EXPECT().GetCloseVersion().Return(p.CloseVersionBeforeArchival, nil).Times(1)
+				}
 				mutableState.EXPECT().GetWorkflowCloseTime(gomock.Any()).Return(
-					&p.CloseTime,
+					p.CloseTime,
 					p.GetWorkflowCloseTimeError,
+				).AnyTimes()
+				mutableState.EXPECT().GetWorkflowExecutionDuration(gomock.Any()).Return(
+					p.ExecutionDuration,
+					p.GetWorkflowExecutionDurationError,
 				).AnyTimes()
 				executionInfo := &persistence.WorkflowExecutionInfo{
 					NamespaceId:                  tests.NamespaceID.String(),
-					StartTime:                    &p.StartTime,
-					ExecutionTime:                &p.ExecutionTime,
-					CloseTime:                    &p.CloseTime,
+					ExecutionTime:                timestamppb.New(p.ExecutionTime),
+					CloseTime:                    timestamppb.New(p.CloseTime),
 					CloseVisibilityTaskCompleted: p.CloseVisibilityTaskCompleted,
 				}
 				mutableState.EXPECT().GetExecutionInfo().Return(executionInfo).AnyTimes()
 				executionState := &persistence.WorkflowExecutionState{
-					State:  0,
-					Status: 0,
+					State:     0,
+					Status:    0,
+					StartTime: timestamppb.New(p.StartTime),
 				}
 				mutableState.EXPECT().GetExecutionState().Return(executionState).AnyTimes()
 				if p.ExpectAddTask {
@@ -431,7 +446,7 @@ func TestArchivalQueueTaskExecutor(t *testing.T) {
 						task := ts[0]
 						assert.Equal(t, p.WorkflowKey, task.WorkflowKey)
 						assert.Zero(t, task.TaskID)
-						assert.Equal(t, p.LastWriteVersionBeforeArchival, task.Version)
+						assert.Equal(t, p.CloseVersionBeforeArchival, task.Version)
 						assert.Equal(t, branchToken, task.BranchToken)
 						assert.Equal(t, p.ExpectedDeleteTime, task.VisibilityTimestamp)
 						popTasks := map[tasks.Category][]tasks.Task{
@@ -444,7 +459,6 @@ func TestArchivalQueueTaskExecutor(t *testing.T) {
 							ShardID:     shardID,
 							NamespaceID: tests.NamespaceID.String(),
 							WorkflowID:  task.WorkflowID,
-							RunID:       task.RunID,
 							Tasks:       popTasks,
 						})
 					})
@@ -480,9 +494,10 @@ func TestArchivalQueueTaskExecutor(t *testing.T) {
 			if p.ExpectArchive {
 				a.EXPECT().Archive(gomock.Any(), gomock.Any()).DoAndReturn(func(ctx context.Context,
 					request *archival.Request) (*archival.Response, error) {
-					assert.Equal(t, p.StartTime, *request.StartTime)
-					assert.Equal(t, p.ExecutionTime, *request.ExecutionTime)
-					assert.Equal(t, p.CloseTime, *request.CloseTime)
+					assert.Equal(t, p.StartTime, request.StartTime.AsTime())
+					assert.Equal(t, p.ExecutionTime, request.ExecutionTime.AsTime())
+					assert.Equal(t, p.CloseTime, request.CloseTime.AsTime())
+					assert.Equal(t, p.ExecutionDuration, request.ExecutionDuration.AsDuration())
 					assert.ElementsMatch(t, p.ExpectedTargets, request.Targets)
 
 					return &archival.Response{}, p.ArchiveError
@@ -500,7 +515,7 @@ func TestArchivalQueueTaskExecutor(t *testing.T) {
 				)
 			}
 
-			executor := NewArchivalQueueTaskExecutor(
+			executor := history.NewArchivalQueueTaskExecutor(
 				a,
 				shardContext,
 				workflowCache,
@@ -518,7 +533,7 @@ func TestArchivalQueueTaskExecutor(t *testing.T) {
 				timeSource,
 				namespaceRegistry,
 				mockMetadata,
-				nil,
+				logger,
 				metrics.NoopMetricsHandler,
 			)
 			err := executable.Execute()
@@ -544,38 +559,40 @@ type testCase struct {
 
 // params represents the parameters for a test within TestArchivalQueueTaskExecutor
 type params struct {
-	Controller                             *gomock.Controller
-	IsWorkflowExecutionRunning             bool
-	Retention                              *time.Duration
-	Task                                   tasks.Task
-	ExpectedDeleteTime                     time.Time
-	ExpectedErrorSubstrings                []string
-	ExpectArchive                          bool
-	ExpectAddTask                          bool
-	ExpectedTargets                        []archival.Target
-	HistoryConfig                          archivalConfig
-	VisibilityConfig                       archivalConfig
-	WorkflowKey                            definition.WorkflowKey
-	StartTime                              time.Time
-	ExecutionTime                          time.Time
-	CloseTime                              time.Time
-	GetNamespaceByIDError                  error
-	HistoryURI                             string
-	VisibilityURI                          string
-	MetricsHandler                         *metrics.MockHandler
-	MutableStateExists                     bool
-	ArchiveError                           error
-	GetWorkflowCloseTimeError              error
-	GetCurrentBranchTokenError             error
-	CloseVisibilityTaskCompleted           bool
-	ExpectGetWorkflowExecution             bool
-	GetWorkflowExecutionError              error
-	LoadMutableStateError                  error
-	GetOrCreateWorkflowExecutionError      error
-	LastWriteVersionBeforeArchival         int64
-	GetLastWriteVersionBeforeArchivalError error
-	LastWriteVersionAfterArchival          int64
-	GetLastWriteVersionAfterArchivalError  error
+	Controller                         *gomock.Controller
+	IsWorkflowExecutionRunning         bool
+	Retention                          *durationpb.Duration
+	Task                               tasks.Task
+	ExpectedDeleteTime                 time.Time
+	ExpectedErrorSubstrings            []string
+	ExpectArchive                      bool
+	ExpectAddTask                      bool
+	ExpectedTargets                    []archival.Target
+	HistoryConfig                      archivalConfig
+	VisibilityConfig                   archivalConfig
+	WorkflowKey                        definition.WorkflowKey
+	StartTime                          time.Time
+	ExecutionTime                      time.Time
+	CloseTime                          time.Time
+	ExecutionDuration                  time.Duration
+	GetNamespaceByIDError              error
+	HistoryURI                         string
+	VisibilityURI                      string
+	MetricsHandler                     *metrics.MockHandler
+	MutableStateExists                 bool
+	ArchiveError                       error
+	GetWorkflowCloseTimeError          error
+	GetWorkflowExecutionDurationError  error
+	GetCurrentBranchTokenError         error
+	CloseVisibilityTaskCompleted       bool
+	ExpectGetWorkflowExecution         bool
+	GetWorkflowExecutionError          error
+	LoadMutableStateError              error
+	GetOrCreateWorkflowExecutionError  error
+	CloseVersionBeforeArchival         int64
+	GetCloseVersionBeforeArchivalError error
+	CloseVersionAfterArchival          int64
+	GetCloseVersionAfterArchivalError  error
 }
 
 // archivalConfig represents the user configuration of archival for the cluster and namespace

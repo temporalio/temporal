@@ -30,8 +30,6 @@ global:
     port: 9936
   metrics:
     prometheus:
-#      # specify framework to use new approach for initializing metrics and/or use opentelemetry
-#      framework: "opentelemetry"
       framework: "opentelemetry"
       timerType: "histogram"
       listenAddress: "127.0.0.1:8002"
@@ -77,13 +75,13 @@ clusterMetadata:
       initialFailoverVersion: 3
       rpcName: "frontend"
       rpcAddress: "localhost:9233"
-# Use tctl --ad 127.0.0.1:9233 adm cl upsert-remote-cluster --frontend_address "localhost:7233"
+# Use tctl --ad 127.0.0.1:9233 adm cl upsert-remote-cluster --frontend_address "127.0.0.1:7233"
 #    active:
 #      enabled: true
 #      initialFailoverVersion: 1
 #      rpcName: "frontend"
 #      rpcAddress: "localhost:7233"
-# Use tctl --ad 127.0.0.1:9233 adm cl upsert-remote-cluster --frontend_address "localhost:8233"
+# Use tctl --ad 127.0.0.1:9233 adm cl upsert-remote-cluster --frontend_address "127.0.0.1:8233"
 #    standby:
 #      enabled: true
 #      initialFailoverVersion: 2
@@ -91,7 +89,7 @@ clusterMetadata:
 #      rpcAddress: "localhost:8233"
 
 dcRedirectionPolicy:
-  policy: "selected-apis-forwarding"
+  policy: "all-apis-forwarding"
 
 archival:
   history:
@@ -121,5 +119,5 @@ namespaceDefaults:
       URI: "file:///tmp/temporal_vis_archival/development"
 
 dynamicConfigClient:
-  filepath: "config/dynamicconfig/development-cass.yaml"
+  filepath: "config/dynamicconfig/development-xdc.yaml"
   pollInterval: "10s"

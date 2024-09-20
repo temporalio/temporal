@@ -25,10 +25,9 @@
 package serviceerror
 
 import (
-	"github.com/gogo/status"
-	"google.golang.org/grpc/codes"
-
 	"go.temporal.io/server/api/errordetails/v1"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 type (
@@ -92,6 +91,16 @@ func (e *RetryReplication) Status() *status.Status {
 		},
 	)
 	return st
+}
+
+func (e *RetryReplication) Equal(err *RetryReplication) bool {
+	return e.NamespaceId == err.NamespaceId &&
+		e.WorkflowId == err.WorkflowId &&
+		e.RunId == err.RunId &&
+		e.StartEventId == err.StartEventId &&
+		e.StartEventVersion == err.StartEventVersion &&
+		e.EndEventId == err.EndEventId &&
+		e.EndEventVersion == err.EndEventVersion
 }
 
 func newRetryReplication(

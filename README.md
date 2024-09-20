@@ -1,4 +1,4 @@
-[![Build status](https://badge.buildkite.com/98c157ed502d55722ef7f28e6470aa20702c76d6989a0a5a89.svg?branch=main)](https://buildkite.com/temporal/temporal-public)
+[![Build status](https://github.com/temporalio/temporal/actions/workflows/run-tests.yml/badge.svg?branch=main)](https://github.com/temporalio/temporal/commits/main/)
 [![Coverage Status](https://coveralls.io/repos/github/temporalio/temporal/badge.svg?branch=main)](https://coveralls.io/github/temporalio/temporal?branch=main)
 [![Discourse](https://img.shields.io/static/v1?label=Discourse&message=Get%20Help&color=informational)](https://community.temporal.io)
 [![Go Report Card][go-report-image]][go-report-url]
@@ -6,17 +6,21 @@
 [go-report-image]: https://goreportcard.com/badge/github.com/temporalio/temporal
 [go-report-url]: https://goreportcard.com/report/github.com/temporalio/temporal
 
-# Temporal  
+# Temporal
 
-Temporal is a microservice orchestration platform which enables developers to build scalable applications without sacrificing productivity or reliability.
-Temporal server executes units of application logic, Workflows, in a resilient manner that automatically handles intermittent failures, and retries failed operations.
+Temporal is a durable execution platform that enables developers to build scalable applications without sacrificing productivity or reliability.
+The Temporal server executes units of application logic called Workflows in a resilient manner that automatically handles intermittent failures, and retries failed operations.
 
-Temporal is a mature technology, a fork of Uber's Cadence.
-Temporal is being developed by [Temporal Technologies](https://temporal.io/), a startup by the creators of Cadence.
+Temporal is a mature technology that originated as a fork of Uber's Cadence.
+It is developed by [Temporal Technologies](https://temporal.io/), a startup by the creators of Cadence.
 
-[![image](https://user-images.githubusercontent.com/12602502/136433917-98abe0d7-4f81-4f97-9b11-62b331c76608.png)](http://www.youtube.com/watch?v=f-18XztyN6c "Temporal")
+[![image](https://github.com/temporalio/temporal/assets/251288/693d18b5-01de-4a3b-b47b-96347b84f610)](https://youtu.be/wIpz4ioK0gI 'Getting to know Temporal')
 
-Learn more about Temporal at [docs.temporal.io](https://docs.temporal.io).
+Learn more:
+
+- [Courses](https://learn.temporal.io/courses/temporal_101/)
+- [Docs](https://docs.temporal.io)
+- Internal architecture: [docs/](./docs/architecture/README.md)
 
 ## Getting Started
 
@@ -55,11 +59,13 @@ This repository contains the source code of the Temporal server. To implement Wo
 
 ## Contributing
 
-We'd love your help in making Temporal great. Please review our [contribution guide](CONTRIBUTING.md).
+We'd love your help in making Temporal great. Please review the [internal architecture docs](./docs/architecture/README.md).
+
+See [CONTRIBUTING.md](./CONTRIBUTING.md) for how to build and run the server locally, run tests, etc.
 
 If you'd like to work on or propose a new feature, first peruse [feature requests](https://community.temporal.io/c/feature-requests/6) and our [proposals repo](https://github.com/temporalio/proposals) to discover existing active and accepted proposals.
 
-Feel free to join the Temporal communty [forum](https://community.temporal.io) or [Slack](https://t.mp/slack) to start a discussion or check if a feature has already been discussed.
+Feel free to join the Temporal community [forum](https://community.temporal.io) or [Slack](https://t.mp/slack) to start a discussion or check if a feature has already been discussed.
 Once you're sure the proposal is not covered elsewhere, please follow our [proposal instructions](https://github.com/temporalio/proposals#creating-a-new-proposal) or submit a [feature request](https://community.temporal.io/c/feature-requests/6).
 
 ## License

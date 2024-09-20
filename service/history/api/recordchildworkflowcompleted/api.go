@@ -28,7 +28,6 @@ import (
 	"context"
 
 	enumspb "go.temporal.io/api/enums/v1"
-
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
@@ -53,7 +52,7 @@ func Invoke(
 	parentInitiatedID := request.ParentInitiatedId
 	parentInitiatedVersion := request.ParentInitiatedVersion
 
-	err = api.GetAndUpdateWorkflowWithNew(
+	err = api.GetAndUpdateWorkflowWithConsistencyCheck(
 		ctx,
 		request.Clock,
 		func(mutableState workflow.MutableState) bool {
@@ -72,16 +71,16 @@ func Invoke(
 				return true
 			}
 
-			ci, isRunning := mutableState.GetChildExecutionInfo(parentInitiatedID)
-			return !(isRunning && ci.StartedEventId == common.EmptyEventID) // !(potential stale)
+			_, childInitEventFound := mutableState.GetChildExecutionInfo(parentInitiatedID)
+			return childInitEventFound
 		},
 		definition.NewWorkflowKey(
 			request.NamespaceId,
 			request.GetParentExecution().WorkflowId,
 			request.GetParentExecution().RunId,
 		),
-		func(workflowContext api.WorkflowContext) (*api.UpdateWorkflowAction, error) {
-			mutableState := workflowContext.GetMutableState()
+		func(workflowLease api.WorkflowLease) (*api.UpdateWorkflowAction, error) {
+			mutableState := workflowLease.GetMutableState()
 			if !mutableState.IsWorkflowExecutionRunning() {
 				return nil, consts.ErrWorkflowCompleted
 			}
@@ -93,10 +92,30 @@ func Invoke(
 
 			// Check mutable state to make sure child execution is in pending child executions
 			ci, isRunning := mutableState.GetChildExecutionInfo(parentInitiatedID)
-			if !isRunning || ci.StartedEventId == common.EmptyEventID {
-				// note we already checked if startedEventID is empty (in consistency predicate)
-				// and reloaded mutable state
+			if !isRunning {
 				return nil, consts.ErrChildExecutionNotFound
+			}
+			if ci.StartedEventId == common.EmptyEventID {
+				// note we already checked if startedEventID is empty (in consistency predicate)
+				// and reloaded mutable state, so if startedEventID is still missing, we need to
+				// record a started event before recording completion event.
+				initiatedEvent, err := mutableState.GetChildExecutionInitiatedEvent(ctx, parentInitiatedID)
+				if err != nil {
+					return nil, consts.ErrChildExecutionNotFound
+				}
+				initiatedAttr := initiatedEvent.GetStartChildWorkflowExecutionInitiatedEventAttributes()
+				// note values used here should not matter because the child info will be deleted
+				// when the response is recorded, so it should be fine e.g. that ci.Clock is nil
+				_, err = mutableState.AddChildWorkflowExecutionStartedEvent(
+					request.GetChildExecution(),
+					initiatedAttr.WorkflowType,
+					initiatedEvent.EventId,
+					initiatedAttr.Header,
+					ci.Clock,
+				)
+				if err != nil {
+					return nil, err
+				}
 			}
 
 			childExecution := request.GetChildExecution()

@@ -32,13 +32,13 @@ import (
 
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
-
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/namespace"
@@ -63,6 +63,10 @@ type (
 			ctx context.Context,
 			request *historyservice.SyncActivityRequest,
 		) error
+		SyncActivitiesState(
+			ctx context.Context,
+			request *historyservice.SyncActivitiesRequest,
+		) error
 	}
 
 	ActivityStateReplicatorImpl struct {
@@ -81,7 +85,7 @@ func NewActivityStateReplicator(
 	return &ActivityStateReplicatorImpl{
 		shardContext:  shardContext,
 		workflowCache: workflowCache,
-		logger:        log.With(logger, tag.ComponentHistoryReplicator),
+		logger:        log.With(logger, tag.ComponentActivityStateReplicator),
 	}
 }
 
@@ -105,8 +109,8 @@ func (r *ActivityStateReplicatorImpl) SyncActivityState(
 		ctx,
 		r.shardContext,
 		namespaceID,
-		execution,
-		workflow.LockPriorityHigh,
+		&execution,
+		locks.PriorityHigh,
 	)
 	if err != nil {
 		// for get workflow execution context, with valid run id
@@ -126,69 +130,34 @@ func (r *ActivityStateReplicatorImpl) SyncActivityState(
 		}
 		return err
 	}
-
-	scheduledEventID := request.GetScheduledEventId()
-	shouldApply, err := r.testVersionHistory(
-		namespaceID,
-		execution.GetWorkflowId(),
-		execution.GetRunId(),
-		scheduledEventID,
+	applied, err := r.syncSingleActivityState(
+		&definition.WorkflowKey{
+			NamespaceID: request.NamespaceId,
+			WorkflowID:  request.WorkflowId,
+			RunID:       request.RunId,
+		},
 		mutableState,
-		request.GetVersionHistory(),
+		&historyservice.ActivitySyncInfo{
+			Version:                    request.Version,
+			ScheduledEventId:           request.ScheduledEventId,
+			ScheduledTime:              request.ScheduledTime,
+			StartedEventId:             request.StartedEventId,
+			StartedTime:                request.StartedTime,
+			LastHeartbeatTime:          request.LastHeartbeatTime,
+			Details:                    request.Details,
+			Attempt:                    request.Attempt,
+			LastFailure:                request.LastFailure,
+			LastWorkerIdentity:         request.LastWorkerIdentity,
+			LastStartedBuildId:         request.LastStartedBuildId,
+			LastStartedRedirectCounter: request.LastStartedRedirectCounter,
+			VersionHistory:             request.VersionHistory,
+		},
 	)
-	if err != nil || !shouldApply {
-		return err
-	}
-
-	activityInfo, ok := mutableState.GetActivityInfo(scheduledEventID)
-	if !ok {
-		// this should not retry, can be caused by out of order delivery
-		// since the activity is already finished
-		return nil
-	}
-	if shouldApply := r.testActivity(
-		request.GetVersion(),
-		request.GetAttempt(),
-		timestamp.TimeValue(request.GetLastHeartbeatTime()),
-		activityInfo,
-	); !shouldApply {
-		return nil
-	}
-
-	// sync activity with empty started ID means activity retry
-	eventTime := timestamp.TimeValue(request.GetScheduledTime())
-	if request.StartedEventId == common.EmptyEventID && request.Attempt > activityInfo.GetAttempt() {
-		mutableState.AddTasks(&tasks.ActivityRetryTimerTask{
-			WorkflowKey: definition.WorkflowKey{
-				NamespaceID: request.GetNamespaceId(),
-				WorkflowID:  request.GetWorkflowId(),
-				RunID:       request.GetRunId(),
-			},
-			VisibilityTimestamp: eventTime,
-			EventID:             request.GetScheduledEventId(),
-			Version:             request.GetVersion(),
-			Attempt:             request.GetAttempt(),
-		})
-	}
-
-	refreshTask := r.testRefreshActivityTimerTaskMask(
-		request.GetVersion(),
-		request.GetAttempt(),
-		activityInfo,
-	)
-	err = mutableState.ReplicateActivityInfo(request, refreshTask)
 	if err != nil {
 		return err
 	}
-
-	// see whether we need to refresh the activity timer
-	startedTime := timestamp.TimeValue(request.GetStartedTime())
-	lastHeartbeatTime := timestamp.TimeValue(request.GetLastHeartbeatTime())
-	if eventTime.Before(startedTime) {
-		eventTime = startedTime
-	}
-	if eventTime.Before(lastHeartbeatTime) {
-		eventTime = lastHeartbeatTime
+	if !applied {
+		return nil
 	}
 
 	// passive logic need to explicitly call create timer
@@ -214,7 +183,152 @@ func (r *ActivityStateReplicatorImpl) SyncActivityState(
 	)
 }
 
-func (r *ActivityStateReplicatorImpl) testRefreshActivityTimerTaskMask(
+func (r *ActivityStateReplicatorImpl) SyncActivitiesState(
+	ctx context.Context,
+	request *historyservice.SyncActivitiesRequest,
+) (retError error) {
+	// sync activity info will only be sent from active side, when
+	// 1. activity retry
+	// 2. activity start
+	// 3. activity heart beat
+	// no sync activity task will be sent when active side fail / timeout activity,
+	namespaceID := namespace.ID(request.GetNamespaceId())
+	execution := &commonpb.WorkflowExecution{
+		WorkflowId: request.WorkflowId,
+		RunId:      request.RunId,
+	}
+
+	executionContext, release, err := r.workflowCache.GetOrCreateWorkflowExecution(
+		ctx,
+		r.shardContext,
+		namespaceID,
+		execution,
+		locks.PriorityHigh,
+	)
+	if err != nil {
+		// for get workflow execution context, with valid run id
+		// err will not be of type EntityNotExistsError
+		return err
+	}
+	defer func() { release(retError) }()
+
+	mutableState, err := executionContext.LoadMutableState(ctx, r.shardContext)
+	if err != nil {
+		if _, isNotFound := err.(*serviceerror.NotFound); isNotFound {
+			// this can happen if the workflow start event and this sync activity task are out of order
+			// or the target workflow is long gone
+			// the safe solution to this is to throw away the sync activity task
+			// or otherwise, worker attempt will exceed limit and put this message to DLQ
+
+			// TODO: this should return serviceerrors.NewRetryReplication to trigger a resend
+			// resend logic will handle not found case and drop the task.
+			return nil
+		}
+		return err
+	}
+	anyEventApplied := false
+	for _, syncActivityInfo := range request.ActivitiesInfo {
+		applied, err := r.syncSingleActivityState(
+			&definition.WorkflowKey{
+				NamespaceID: request.NamespaceId,
+				WorkflowID:  request.WorkflowId,
+				RunID:       request.RunId,
+			},
+			mutableState,
+			syncActivityInfo,
+		)
+		if err != nil {
+			return err
+		}
+		anyEventApplied = anyEventApplied || applied
+	}
+	if !anyEventApplied {
+		return nil
+	}
+
+	// passive logic need to explicitly call create timer
+	if _, err := workflow.NewTimerSequence(
+		mutableState,
+	).CreateNextActivityTimer(); err != nil {
+		return err
+	}
+
+	updateMode := persistence.UpdateWorkflowModeUpdateCurrent
+	if state, _ := mutableState.GetWorkflowStateStatus(); state == enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE {
+		updateMode = persistence.UpdateWorkflowModeBypassCurrent
+	}
+
+	return executionContext.UpdateWorkflowExecutionWithNew(
+		ctx,
+		r.shardContext,
+		updateMode,
+		nil, // no new workflow
+		nil, // no new workflow
+		workflow.TransactionPolicyPassive,
+		nil,
+	)
+}
+
+func (r *ActivityStateReplicatorImpl) syncSingleActivityState(
+	workflowKey *definition.WorkflowKey,
+	mutableState workflow.MutableState,
+	activitySyncInfo *historyservice.ActivitySyncInfo,
+) (applied bool, retError error) {
+	scheduledEventID := activitySyncInfo.GetScheduledEventId()
+	shouldApply, err := r.compareVersionHistory(
+		namespace.ID(workflowKey.NamespaceID),
+		workflowKey.WorkflowID,
+		workflowKey.RunID,
+		scheduledEventID,
+		mutableState,
+		activitySyncInfo.GetVersionHistory(),
+	)
+	if err != nil || !shouldApply {
+		return false, err
+	}
+
+	activityInfo, ok := mutableState.GetActivityInfo(scheduledEventID)
+	if !ok {
+		// this should not retry, can be caused by out of order delivery
+		// since the activity is already finished
+		return false, nil
+	}
+	if shouldApply := r.compareActivity(
+		activitySyncInfo.GetVersion(),
+		activitySyncInfo.GetAttempt(),
+		timestamp.TimeValue(activitySyncInfo.GetLastHeartbeatTime()),
+		activityInfo,
+	); !shouldApply {
+		return false, nil
+	}
+
+	// sync activity with empty started ID means activity retry
+	eventTime := timestamp.TimeValue(activitySyncInfo.GetScheduledTime())
+	if activitySyncInfo.StartedEventId == common.EmptyEventID && activitySyncInfo.Attempt > activityInfo.GetAttempt() {
+		mutableState.AddTasks(&tasks.ActivityRetryTimerTask{
+			WorkflowKey:         *workflowKey,
+			VisibilityTimestamp: eventTime,
+			EventID:             activitySyncInfo.GetScheduledEventId(),
+			Version:             activitySyncInfo.GetVersion(),
+			Attempt:             activitySyncInfo.GetAttempt(),
+		})
+	}
+
+	if err := mutableState.UpdateActivityInfo(
+		activitySyncInfo,
+		r.shouldResetActivityTimerTaskMask(
+			activitySyncInfo.GetVersion(),
+			activitySyncInfo.GetAttempt(),
+			activityInfo,
+		),
+	); err != nil {
+		return false, err
+	}
+
+	return true, nil
+}
+
+func (r *ActivityStateReplicatorImpl) shouldResetActivityTimerTaskMask(
 	version int64,
 	attempt int32,
 	activityInfo *persistencespb.ActivityInfo,
@@ -232,7 +346,7 @@ func (r *ActivityStateReplicatorImpl) testRefreshActivityTimerTaskMask(
 	return false
 }
 
-func (r *ActivityStateReplicatorImpl) testActivity(
+func (r *ActivityStateReplicatorImpl) compareActivity(
 	version int64,
 	attempt int32,
 	lastHeartbeatTime time.Time,
@@ -264,15 +378,16 @@ func (r *ActivityStateReplicatorImpl) testActivity(
 	// activityInfo.Version == version & activityInfo.Attempt == attempt
 
 	// last heartbeat after existing heartbeat & should update activity
-	if !timestamp.TimeValue(activityInfo.LastHeartbeatUpdateTime).IsZero() &&
-		activityInfo.LastHeartbeatUpdateTime.After(lastHeartbeatTime) {
+	if activityInfo.LastHeartbeatUpdateTime != nil &&
+		!activityInfo.LastHeartbeatUpdateTime.AsTime().IsZero() &&
+		activityInfo.LastHeartbeatUpdateTime.AsTime().After(lastHeartbeatTime) {
 		// this should not retry, can be caused by out of order delivery
 		return false
 	}
 	return true
 }
 
-func (r *ActivityStateReplicatorImpl) testVersionHistory(
+func (r *ActivityStateReplicatorImpl) compareVersionHistory(
 	namespaceID namespace.ID,
 	workflowID string,
 	runID string,

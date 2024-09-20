@@ -25,7 +25,6 @@
 package persistence
 
 import (
-	"reflect"
 	"sync"
 	"testing"
 	"time"
@@ -34,12 +33,12 @@ import (
 	"github.com/stretchr/testify/suite"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
-
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/persistence/serialization"
-	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/common/testing/protorequire"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type (
@@ -48,6 +47,7 @@ type (
 		// override suite.Suite.Assertions with require.Assertions; this means that s.NotNil(nil) will stop the test,
 		// not merely log an error
 		*require.Assertions
+		protorequire.ProtoAssertions
 		logger log.Logger
 	}
 )
@@ -61,6 +61,7 @@ func (s *temporalSerializerSuite) SetupTest() {
 	s.logger = log.NewTestLogger()
 	// Have to define our overridden assertions in the test setup. If we did it earlier, s.T() will return nil
 	s.Assertions = require.New(s.T())
+	s.ProtoAssertions = protorequire.New(s.T())
 }
 
 func (s *temporalSerializerSuite) TestSerializer() {
@@ -77,7 +78,7 @@ func (s *temporalSerializerSuite) TestSerializer() {
 	eventType := enumspb.EVENT_TYPE_ACTIVITY_TASK_COMPLETED
 	event0 := &historypb.HistoryEvent{
 		EventId:   999,
-		EventTime: timestamp.TimePtr(time.Date(2020, 8, 22, 0, 0, 0, 0, time.UTC)),
+		EventTime: timestamppb.New(time.Date(2020, 8, 22, 0, 0, 0, 0, time.UTC)),
 		EventType: eventType,
 		Attributes: &historypb.HistoryEvent_ActivityTaskCompletedEventAttributes{
 			ActivityTaskCompletedEventAttributes: &historypb.ActivityTaskCompletedEventAttributes{
@@ -136,7 +137,7 @@ func (s *temporalSerializerSuite) TestSerializer() {
 
 			event2, err := serializer.DeserializeEvent(dProto)
 			s.Nil(err)
-			s.True(reflect.DeepEqual(event0, event2))
+			s.ProtoEqual(event0, event2)
 
 			// deserialize events
 
@@ -147,7 +148,7 @@ func (s *temporalSerializerSuite) TestSerializer() {
 			events, err := serializer.DeserializeEvents(dsProto)
 			history2 := &historypb.History{Events: events}
 			s.Nil(err)
-			s.True(reflect.DeepEqual(history0, history2))
+			s.ProtoEqual(history0, history2)
 		}()
 	}
 

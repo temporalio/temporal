@@ -31,10 +31,14 @@ import (
 	"time"
 
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/metrics"
 	ctasks "go.temporal.io/server/common/tasks"
 )
 
 //go:generate mockgen -copyright_file ../../../LICENSE -package $GOPACKAGE -source $GOFILE -destination executable_task_tracker_mock.go
+
+const MarkPoisonPillMaxAttempts = 3
 
 type (
 	TrackableExecutableTask interface {
@@ -43,6 +47,7 @@ type (
 		TaskID() int64
 		TaskCreationTime() time.Time
 		MarkPoisonPill() error
+		SourceClusterName() string
 	}
 	WatermarkInfo struct {
 		Watermark int64
@@ -55,13 +60,13 @@ type (
 		Cancel()
 	}
 	ExecutableTaskTrackerImpl struct {
-		logger log.Logger
+		logger         log.Logger
+		metricsHandler metrics.Handler
 
 		sync.Mutex
 		cancelled                  bool
 		exclusiveHighWatermarkInfo *WatermarkInfo // this is exclusive, i.e. source need to resend with this watermark / task ID
 		taskQueue                  *list.List     // sorted by task ID
-		taskIDs                    map[int64]struct{}
 	}
 )
 
@@ -69,13 +74,14 @@ var _ ExecutableTaskTracker = (*ExecutableTaskTrackerImpl)(nil)
 
 func NewExecutableTaskTracker(
 	logger log.Logger,
+	metricsHandler metrics.Handler,
 ) *ExecutableTaskTrackerImpl {
 	return &ExecutableTaskTrackerImpl{
-		logger: logger,
+		logger:         logger,
+		metricsHandler: metricsHandler,
 
 		exclusiveHighWatermarkInfo: nil,
 		taskQueue:                  list.New(),
-		taskIDs:                    make(map[int64]struct{}),
 	}
 }
 
@@ -107,7 +113,6 @@ Loop:
 			continue Loop
 		}
 		t.taskQueue.PushBack(task)
-		t.taskIDs[task.TaskID()] = struct{}{}
 		filteredTasks = append(filteredTasks, task)
 		lastTaskID = task.TaskID()
 	}
@@ -139,17 +144,20 @@ Loop:
 		switch taskState {
 		case ctasks.TaskStateAcked:
 			nextElement := element.Next()
-			delete(t.taskIDs, task.TaskID())
 			t.taskQueue.Remove(element)
 			element = nextElement
 		case ctasks.TaskStateNacked:
 			if err := task.MarkPoisonPill(); err != nil {
+				t.logger.Error("unable to save poison pill", tag.Error(err), tag.TaskID(task.TaskID()))
+				metrics.ReplicationDLQFailed.With(t.metricsHandler).Record(
+					1,
+					metrics.OperationTag(metrics.ReplicationTaskTrackerScope),
+				)
 				// unable to save poison pill, retry later
 				element = element.Next()
 				continue Loop
 			}
 			nextElement := element.Next()
-			delete(t.taskIDs, task.TaskID())
 			t.taskQueue.Remove(element)
 			element = nextElement
 		case ctasks.TaskStateAborted:

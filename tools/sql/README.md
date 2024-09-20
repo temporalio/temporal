@@ -17,27 +17,27 @@ SQL_USER=$USERNAME SQL_PASSWORD=$PASSWD make install-schema-mysql
 - For other SQL database, you can add it easily as we do for MySQL/Postgres following our code in sql-extensions  
 
 ### Do one time database creation and schema setup for a new cluster
-- All command below are taking MySQL as example. For postgres, simply use with "--plugin postgres"
+- All command below are taking MySQL as example. For postgres, simply use with "--plugin postgres12"
 
 ```
-./temporal-sql-tool --ep $SQL_HOST -p $port --db temporal --plugin mysql create
-./temporal-sql-tool --ep $SQL_HOST -p $port --db temporal_visibility --plugin mysql create
+./temporal-sql-tool --ep $SQL_HOST -p $port --db temporal --plugin mysql8 create
+./temporal-sql-tool --ep $SQL_HOST -p $port --db temporal_visibility --plugin mysql8 create
 ```
 
 ```
-./temporal-sql-tool --ep $SQL_HOST -p $port --plugin mysql --db temporal setup-schema -v 0.0 -- this sets up just the schema version tables with initial version of 0.0
-./temporal-sql-tool --ep $SQL_HOST -p $port --plugin mysql --db temporal update-schema -d ./schema/mysql/v57/temporal/versioned -- upgrades your schema to the latest version
+./temporal-sql-tool --ep $SQL_HOST -p $port --plugin mysql8 --db temporal setup-schema -v 0.0 -- this sets up just the schema version tables with initial version of 0.0
+./temporal-sql-tool --ep $SQL_HOST -p $port --plugin mysql8 --db temporal update-schema -d ./schema/mysql/v8/temporal/versioned -- upgrades your schema to the latest version
 
-./temporal-sql-tool --ep $SQL_HOST -p $port --plugin mysql --db temporal_visibility setup-schema -v 0.0 -- this sets up just the schema version tables with initial version of 0.0 for visibility
-./temporal-sql-tool --ep $SQL_HOST -p $port --plugin mysql --db temporal_visibility update-schema -d ./schema/mysql/v57/visibility/versioned  -- upgrades your schema to the latest version for visibility
+./temporal-sql-tool --ep $SQL_HOST -p $port --plugin mysql8 --db temporal_visibility setup-schema -v 0.0 -- this sets up just the schema version tables with initial version of 0.0 for visibility
+./temporal-sql-tool --ep $SQL_HOST -p $port --plugin mysql8 --db temporal_visibility update-schema -d ./schema/mysql/v8/visibility/versioned  -- upgrades your schema to the latest version for visibility
 ```
 
 ### Update schema as part of a release
 You can only upgrade to a new version after the initial setup done above.
 
 ```
-./temporal-sql-tool --ep $SQL_HOST -p $port --plugin mysql --db temporal update-schema -d ./schema/mysql/v57/temporal/versioned -v x.x    -- executes the upgrade to version x.x
+./temporal-sql-tool --ep $SQL_HOST -p $port --plugin mysql8 --db temporal update-schema -d ./schema/mysql/v8/temporal/versioned -v x.x    -- executes the upgrade to version x.x
 
-./temporal-sql-tool --ep $SQL_HOST -p $port --plugin mysql --db temporal_visibility update-schema -d ./schema/mysql/v57/visibility/versioned -v x.x    -- executes the upgrade to version x.x
+./temporal-sql-tool --ep $SQL_HOST -p $port --plugin mysql8 --db temporal_visibility update-schema -d ./schema/mysql/v8/visibility/versioned -v x.x    -- executes the upgrade to version x.x
 ```
 

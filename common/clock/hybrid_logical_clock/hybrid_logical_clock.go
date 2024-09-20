@@ -29,6 +29,7 @@ import (
 
 	clockpb "go.temporal.io/server/api/clock/v1"
 	commonclock "go.temporal.io/server/common/clock"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type Clock = clockpb.HybridLogicalClock
@@ -36,26 +37,24 @@ type Clock = clockpb.HybridLogicalClock
 // Next generates the next clock timestamp given the current clock.
 // HybridLogicalClock requires the previous clock to ensure that time doesn't move backwards and the next clock is
 // monotonically increasing.
-func Next(clock Clock, source commonclock.TimeSource) Clock {
+func Next(prior *Clock, source commonclock.TimeSource) *Clock {
 	wallclock := source.Now().UnixMilli()
 	// Ensure time does not move backwards
-	if wallclock < clock.GetWallClock() {
-		wallclock = clock.GetWallClock()
+	if wallclock < prior.GetWallClock() {
+		wallclock = prior.GetWallClock()
 	}
 	// Ensure timestamp is monotonically increasing
-	if wallclock == clock.GetWallClock() {
-		clock.Version = clock.GetVersion() + 1
-	} else {
-		clock.Version = 0
-		clock.WallClock = wallclock
+	var version int32
+	if wallclock == prior.GetWallClock() {
+		version = prior.GetVersion() + 1
 	}
 
-	return Clock{WallClock: wallclock, Version: clock.Version, ClusterId: clock.ClusterId}
+	return &Clock{WallClock: wallclock, Version: version, ClusterId: prior.ClusterId}
 }
 
 // Zero generates a zeroed logical clock for the cluster ID.
-func Zero(clusterID int64) Clock {
-	return Clock{WallClock: 0, Version: 0, ClusterId: clusterID}
+func Zero(clusterID int64) *Clock {
+	return &Clock{WallClock: 0, Version: 0, ClusterId: clusterID}
 }
 
 func sign[T int64 | int32](x T) int {
@@ -69,7 +68,7 @@ func sign[T int64 | int32](x T) int {
 }
 
 // Compare 2 Clocks, returns 0 if a == b, -1 if a > b, 1 if a < b
-func Compare(a Clock, b Clock) int {
+func Compare(a *Clock, b *Clock) int {
 	if a.WallClock == b.WallClock {
 		if a.Version == b.Version {
 			return sign(b.ClusterId - a.ClusterId)
@@ -80,17 +79,17 @@ func Compare(a Clock, b Clock) int {
 }
 
 // Greater returns true if a is greater than b
-func Greater(a Clock, b Clock) bool {
+func Greater(a *Clock, b *Clock) bool {
 	return Compare(b, a) > 0
 }
 
 // Greater returns true if a is greater than b
-func Less(a Clock, b Clock) bool {
+func Less(a *Clock, b *Clock) bool {
 	return Compare(a, b) > 0
 }
 
 // Max returns the maximum of two Clocks
-func Max(a Clock, b Clock) Clock {
+func Max(a *Clock, b *Clock) *Clock {
 	if Compare(a, b) > 0 {
 		return b
 	}
@@ -98,7 +97,7 @@ func Max(a Clock, b Clock) Clock {
 }
 
 // Min returns the minimum of two Clocks
-func Min(a Clock, b Clock) Clock {
+func Min(a *Clock, b *Clock) *Clock {
 	if Compare(a, b) > 0 {
 		return a
 	}
@@ -106,35 +105,24 @@ func Min(a Clock, b Clock) Clock {
 }
 
 // Equal returns whether two Clocks are equal
-func Equal(a Clock, b Clock) bool {
+func Equal(a *Clock, b *Clock) bool {
 	return Compare(a, b) == 0
 }
 
-// Ptr returns a pointer to a Clock (to ease inlining the APIs in this package).
-func Ptr(c Clock) *Clock {
-	return &c
-}
-
 // UTC returns a Time from a Clock in millisecond resolution. The Time's Location is set to UTC.
-func UTC(c Clock) time.Time {
+func UTC(c *Clock) time.Time {
+	if c == nil {
+		return time.Unix(0, 0).UTC()
+	}
 	return time.Unix(c.WallClock/1000, c.WallClock%1000*1000000).UTC()
 }
 
-// UTC returns a Time from a *Clock in millisecond resolution. The Time's Location is set to UTC.
-// If the argument is nil, it returns the Unix epoch.
-func UTCPtr(c *Clock) time.Time {
-	if c == nil {
-		return UTC(Clock{})
-	}
-	return UTC(*c)
-}
-
 // Since returns time.Since(UTC(c))
-func Since(c Clock) time.Duration {
+func Since(c *Clock) time.Duration {
 	return time.Since(UTC(c))
 }
 
-// SincePtr returns time.Since(UTCFromPtr(c))
-func SincePtr(c *Clock) time.Duration {
-	return time.Since(UTCPtr(c))
+// ProtoTimestamp returns timestamppb.New(UTC(c))
+func ProtoTimestamp(c *Clock) *timestamppb.Timestamp {
+	return timestamppb.New(UTC(c))
 }

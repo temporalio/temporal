@@ -31,7 +31,6 @@ import (
 	"time"
 
 	enumspb "go.temporal.io/api/enums/v1"
-
 	carchiver "go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -44,6 +43,8 @@ import (
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/workflow"
 	"go.temporal.io/server/service/history/workflow/cache"
+	"google.golang.org/protobuf/types/known/durationpb"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 // NewArchivalQueueTaskExecutor creates a new queue task executor for the archival queue.
@@ -82,16 +83,18 @@ type archivalQueueTaskExecutor struct {
 func (e *archivalQueueTaskExecutor) Execute(
 	ctx context.Context,
 	executable queues.Executable,
-) (tags []metrics.Tag, isActive bool, err error) {
+) queues.ExecuteResponse {
 	task := executable.GetTask()
 	taskType := queues.GetArchivalTaskTypeTagValue(task)
-	tags = []metrics.Tag{
+	tags := []metrics.Tag{
 		getNamespaceTagByID(e.shardContext.GetNamespaceRegistry(), task.GetNamespaceID()),
 		metrics.TaskTypeTag(taskType),
 		// OperationTag is for consistency on tags with other executors,
 		// since those tags will be used to emit a common set of metrics.
 		metrics.OperationTag(taskType),
 	}
+
+	var err error
 	switch task := task.(type) {
 	case *tasks.ArchiveExecutionTask:
 		err = e.processArchiveExecutionTask(ctx, task)
@@ -102,7 +105,11 @@ func (e *archivalQueueTaskExecutor) Execute(
 	default:
 		err = fmt.Errorf("task with invalid type sent to archival queue: %+v", task)
 	}
-	return tags, true, err
+	return queues.ExecuteResponse{
+		ExecutionMetricTags: tags,
+		ExecutedAsActive:    true,
+		ExecutionErr:        err,
+	}
 }
 
 // processArchiveExecutionTask processes a tasks.ArchiveExecutionTask
@@ -121,7 +128,7 @@ func (e *archivalQueueTaskExecutor) processArchiveExecutionTask(ctx context.Cont
 			return err
 		}
 	}
-	return e.addDeletionTask(ctx, logger, task, request.CloseTime)
+	return e.addDeletionTask(ctx, logger, task, request.CloseTime.AsTime())
 }
 
 // getArchiveTaskRequest returns an archival request for the given archive execution task.
@@ -154,6 +161,10 @@ func (e *archivalQueueTaskExecutor) getArchiveTaskRequest(
 	if err != nil {
 		return nil, err
 	}
+	executionDuration, err := mutableState.GetWorkflowExecutionDuration(ctx)
+	if err != nil {
+		return nil, err
+	}
 	branchToken, err := mutableState.GetCurrentBranchToken()
 	if err != nil {
 		return nil, err
@@ -167,7 +178,7 @@ func (e *archivalQueueTaskExecutor) getArchiveTaskRequest(
 		visibilityURIString := namespaceEntry.VisibilityArchivalState().URI
 		visibilityURI, err = carchiver.NewURI(visibilityURIString)
 		if err != nil {
-			e.metricsHandler.Counter(metrics.ArchivalTaskInvalidURI.GetMetricName()).Record(
+			metrics.ArchivalTaskInvalidURI.With(e.metricsHandler).Record(
 				1,
 				metrics.NamespaceTag(namespaceName.String()),
 				metrics.FailureTag(metrics.InvalidVisibilityURITagValue),
@@ -185,7 +196,7 @@ func (e *archivalQueueTaskExecutor) getArchiveTaskRequest(
 		historyURIString := namespaceEntry.HistoryArchivalState().URI
 		historyURI, err = carchiver.NewURI(historyURIString)
 		if err != nil {
-			e.metricsHandler.Counter(metrics.ArchivalTaskInvalidURI.GetMetricName()).Record(
+			metrics.ArchivalTaskInvalidURI.With(e.metricsHandler).Record(
 				1,
 				metrics.NamespaceTag(namespaceName.String()),
 				metrics.FailureTag(metrics.InvalidHistoryURITagValue),
@@ -213,13 +224,14 @@ func (e *archivalQueueTaskExecutor) getArchiveTaskRequest(
 		RunID:                task.RunID,
 		BranchToken:          branchToken,
 		NextEventID:          nextEventID,
-		CloseFailoverVersion: mutableState.LastWriteVersion,
+		CloseFailoverVersion: mutableState.CloseVersion,
 		HistoryURI:           historyURI,
 		VisibilityURI:        visibilityURI,
 		WorkflowTypeName:     executionInfo.GetWorkflowTypeName(),
-		StartTime:            executionInfo.GetStartTime(),
+		StartTime:            executionState.GetStartTime(),
 		ExecutionTime:        executionInfo.GetExecutionTime(),
-		CloseTime:            closeTime,
+		CloseTime:            timestamppb.New(closeTime),
+		ExecutionDuration:    durationpb.New(executionDuration),
 		Status:               executionState.Status,
 		HistoryLength:        nextEventID - 1,
 		Memo:                 workflowAttributes.Memo,
@@ -235,7 +247,7 @@ func (e *archivalQueueTaskExecutor) addDeletionTask(
 	ctx context.Context,
 	logger log.Logger,
 	task *tasks.ArchiveExecutionTask,
-	closeTime *time.Time,
+	closeTime time.Time,
 ) error {
 	mutableState, err := e.loadAndVersionCheckMutableState(ctx, logger, task)
 	if err != nil {
@@ -251,7 +263,7 @@ func (e *archivalQueueTaskExecutor) addDeletionTask(
 		e.shardContext.GetConfig(),
 		e.shardContext.GetArchivalMetadata(),
 	)
-	err = taskGenerator.GenerateDeleteHistoryEventTask(*closeTime)
+	err = taskGenerator.GenerateDeleteHistoryEventTask(closeTime)
 	if err != nil {
 		return err
 	}
@@ -259,7 +271,6 @@ func (e *archivalQueueTaskExecutor) addDeletionTask(
 		ShardID:     e.shardContext.GetShardID(),
 		NamespaceID: task.GetNamespaceID(),
 		WorkflowID:  task.WorkflowID,
-		RunID:       task.RunID,
 		Tasks:       mutableState.PopTasks(),
 	})
 	return err
@@ -271,9 +282,9 @@ type lockedMutableState struct {
 	// MutableState is the mutable state that is being wrapped. You may call any method on this object safely since
 	// the state is locked.
 	workflow.MutableState
-	// LastWriteVersion is the last write version of the mutable state. We store this here so that we don't have to
-	// call GetLastWriteVersion() on the mutable state object again.
-	LastWriteVersion int64
+	// CloseVersion is the namespace failover when the workflow is closed. We store this here so that we don't have to
+	// call GetCloseVersion() on the mutable state object again.
+	CloseVersion int64
 	// Release is a function that releases the context of the mutable state. This function should be called when
 	// you are done with the mutable state.
 	Release cache.ReleaseCacheFunc
@@ -283,13 +294,13 @@ type lockedMutableState struct {
 // last write version and release function
 func newLockedMutableState(
 	mutableState workflow.MutableState,
-	version int64,
+	closeVersion int64,
 	releaseFunc cache.ReleaseCacheFunc,
 ) *lockedMutableState {
 	return &lockedMutableState{
-		MutableState:     mutableState,
-		LastWriteVersion: version,
-		Release:          releaseFunc,
+		MutableState: mutableState,
+		CloseVersion: closeVersion,
+		Release:      releaseFunc,
 	}
 }
 
@@ -306,7 +317,7 @@ var (
 func (e *archivalQueueTaskExecutor) loadAndVersionCheckMutableState(
 	ctx context.Context,
 	logger log.Logger,
-	task tasks.Task,
+	task *tasks.ArchiveExecutionTask,
 ) (lockedMutableState *lockedMutableState, err error) {
 	weContext, release, err := getWorkflowExecutionContextForTask(ctx, e.shardContext, e.workflowCache, task)
 	if err != nil {
@@ -332,7 +343,7 @@ func (e *archivalQueueTaskExecutor) loadAndVersionCheckMutableState(
 		logger.Warn("Dropping archival task because workflow is still running.")
 		return nil, ErrWorkflowExecutionIsStillRunning
 	}
-	lastWriteVersion, err := mutableState.GetLastWriteVersion()
+	closeVersion, err := mutableState.GetCloseVersion()
 	if err != nil {
 		return nil, err
 	}
@@ -341,12 +352,12 @@ func (e *archivalQueueTaskExecutor) loadAndVersionCheckMutableState(
 		e.shardContext,
 		logger,
 		namespaceEntry,
-		lastWriteVersion,
+		closeVersion,
 		task.GetVersion(),
 		task,
 	)
 	if err != nil {
 		return nil, err
 	}
-	return newLockedMutableState(mutableState, lastWriteVersion, release), nil
+	return newLockedMutableState(mutableState, closeVersion, release), nil
 }

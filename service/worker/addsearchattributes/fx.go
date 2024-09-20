@@ -25,15 +25,18 @@
 package addsearchattributes
 
 import (
+	"context"
+
 	sdkworker "go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
-	"go.uber.org/fx"
-
+	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	esclient "go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
+	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/searchattribute"
 	workercommon "go.temporal.io/server/service/worker/common"
+	"go.uber.org/fx"
 )
 
 type (
@@ -49,34 +52,34 @@ type (
 		MetricsHandler metrics.Handler
 		Logger         log.Logger
 	}
-
-	fxResult struct {
-		fx.Out
-		Component workercommon.WorkerComponent `group:"workerComponent"`
-	}
 )
 
-var Module = fx.Options(
-	fx.Provide(NewResult),
-)
+var Module = workercommon.AnnotateWorkerComponentProvider(newComponent)
 
-func NewResult(params initParams) fxResult {
-	component := &addSearchAttributes{
-		initParams: params,
-	}
-	return fxResult{
-		Component: component,
-	}
+func newComponent(params initParams) workercommon.WorkerComponent {
+	return &addSearchAttributes{initParams: params}
 }
 
-func (wc *addSearchAttributes) Register(worker sdkworker.Worker) {
-	worker.RegisterWorkflowWithOptions(AddSearchAttributesWorkflow, workflow.RegisterOptions{Name: WorkflowName})
-	worker.RegisterActivity(wc.activities())
+func (wc *addSearchAttributes) RegisterWorkflow(registry sdkworker.Registry) {
+	registry.RegisterWorkflowWithOptions(AddSearchAttributesWorkflow, workflow.RegisterOptions{Name: WorkflowName})
 }
 
-func (wc *addSearchAttributes) DedicatedWorkerOptions() *workercommon.DedicatedWorkerOptions {
+func (wc *addSearchAttributes) DedicatedWorkflowWorkerOptions() *workercommon.DedicatedWorkerOptions {
 	// use default worker
 	return nil
+}
+
+func (wc *addSearchAttributes) RegisterActivities(registry sdkworker.Registry) {
+	registry.RegisterActivity(wc.activities())
+}
+
+func (wc *addSearchAttributes) DedicatedActivityWorkerOptions() *workercommon.DedicatedWorkerOptions {
+	return &workercommon.DedicatedWorkerOptions{
+		TaskQueue: primitives.AddSearchAttributesActivityTQ,
+		Options: sdkworker.Options{
+			BackgroundActivityContext: headers.SetCallerType(context.Background(), headers.CallerTypeAPI),
+		},
+	}
 }
 
 func (wc *addSearchAttributes) activities() *activities {

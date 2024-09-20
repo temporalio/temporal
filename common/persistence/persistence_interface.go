@@ -24,6 +24,9 @@
 
 //go:generate mockgen -copyright_file ../../LICENSE -package mock -source $GOFILE -destination mock/store_mock.go -aux_files go.temporal.io/server/common/persistence=data_interfaces.go
 
+// Generates fault injection stores.
+//go:generate go run ../../cmd/tools/genfaultinjection -copyright_file ../../LICENSE -out faultinjection
+
 package persistence
 
 import (
@@ -33,9 +36,9 @@ import (
 
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
-
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/service/history/tasks"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 const (
@@ -49,6 +52,27 @@ type (
 	// The intention is to let different persistence implementation(SQL,Cassandra/etc) share some common logic
 	// Right now the only common part is serialization/deserialization.
 	// ////////////////////////////////////////////////////////////////////
+
+	// DataStoreFactory is a low level interface to be implemented by a datastore
+	// Examples of datastores are cassandra, mysql etc
+	DataStoreFactory interface {
+		// Close closes the factory
+		Close()
+		// NewTaskStore returns a new task store
+		NewTaskStore() (TaskStore, error)
+		// NewShardStore returns a new shard store
+		NewShardStore() (ShardStore, error)
+		// NewMetadataStore returns a new metadata store
+		NewMetadataStore() (MetadataStore, error)
+		// NewExecutionStore returns a new execution store
+		NewExecutionStore() (ExecutionStore, error)
+		NewQueue(queueType QueueType) (Queue, error)
+		NewQueueV2() (QueueV2, error)
+		// NewClusterMetadataStore returns a new metadata store
+		NewClusterMetadataStore() (ClusterMetadataStore, error)
+		// NewNexusEndpointStore returns a new nexus service store
+		NewNexusEndpointStore() (NexusEndpointStore, error)
+	}
 
 	// ShardStore is a lower level of ShardManager
 	ShardStore interface {
@@ -71,7 +95,6 @@ type (
 		DeleteTaskQueue(ctx context.Context, request *DeleteTaskQueueRequest) error
 		CreateTasks(ctx context.Context, request *InternalCreateTasksRequest) (*CreateTasksResponse, error)
 		GetTasks(ctx context.Context, request *GetTasksRequest) (*InternalGetTasksResponse, error)
-		CompleteTask(ctx context.Context, request *CompleteTaskRequest) error
 		CompleteTasksLessThan(ctx context.Context, request *CompleteTasksLessThanRequest) (int, error)
 		GetTaskQueueUserData(ctx context.Context, request *GetTaskQueueUserDataRequest) (*InternalGetTaskQueueUserDataResponse, error)
 		UpdateTaskQueueUserData(ctx context.Context, request *InternalUpdateTaskQueueUserDataRequest) error
@@ -131,11 +154,6 @@ type (
 
 		// Tasks related APIs
 
-		// Hints for persistence implementaion regarding hisotry task readers
-		RegisterHistoryTaskReader(ctx context.Context, request *RegisterHistoryTaskReaderRequest) error
-		UnregisterHistoryTaskReader(ctx context.Context, request *UnregisterHistoryTaskReaderRequest)
-		UpdateHistoryTaskReaderProgress(ctx context.Context, request *UpdateHistoryTaskReaderProgressRequest)
-
 		AddHistoryTasks(ctx context.Context, request *InternalAddHistoryTasksRequest) error
 		GetHistoryTasks(ctx context.Context, request *GetHistoryTasksRequest) (*InternalGetHistoryTasksResponse, error)
 		CompleteHistoryTask(ctx context.Context, request *CompleteHistoryTaskRequest) error
@@ -160,8 +178,8 @@ type (
 		ForkHistoryBranch(ctx context.Context, request *InternalForkHistoryBranchRequest) error
 		// DeleteHistoryBranch removes a branch
 		DeleteHistoryBranch(ctx context.Context, request *InternalDeleteHistoryBranchRequest) error
-		// GetHistoryTree returns all branch information of a tree
-		GetHistoryTree(ctx context.Context, request *GetHistoryTreeRequest) (*InternalGetHistoryTreeResponse, error)
+		// GetHistoryTreeContainingBranch returns all branch information of the tree containing the specified branch
+		GetHistoryTreeContainingBranch(ctx context.Context, request *InternalGetHistoryTreeContainingBranchRequest) (*InternalGetHistoryTreeContainingBranchResponse, error)
 		// GetAllHistoryTreeBranches returns all branches of all trees.
 		// Note that branches may be skipped or duplicated across pages if there are branches created or deleted while
 		// paginating through results.
@@ -172,18 +190,28 @@ type (
 	Queue interface {
 		Closeable
 		Init(ctx context.Context, blob *commonpb.DataBlob) error
-		EnqueueMessage(ctx context.Context, blob commonpb.DataBlob) error
+		EnqueueMessage(ctx context.Context, blob *commonpb.DataBlob) error
 		ReadMessages(ctx context.Context, lastMessageID int64, maxCount int) ([]*QueueMessage, error)
 		DeleteMessagesBefore(ctx context.Context, messageID int64) error
 		UpdateAckLevel(ctx context.Context, metadata *InternalQueueMetadata) error
 		GetAckLevels(ctx context.Context) (*InternalQueueMetadata, error)
 
-		EnqueueMessageToDLQ(ctx context.Context, blob commonpb.DataBlob) (int64, error)
+		EnqueueMessageToDLQ(ctx context.Context, blob *commonpb.DataBlob) (int64, error)
 		ReadMessagesFromDLQ(ctx context.Context, firstMessageID int64, lastMessageID int64, pageSize int, pageToken []byte) ([]*QueueMessage, []byte, error)
 		DeleteMessageFromDLQ(ctx context.Context, messageID int64) error
 		RangeDeleteMessagesFromDLQ(ctx context.Context, firstMessageID int64, lastMessageID int64) error
 		UpdateDLQAckLevel(ctx context.Context, metadata *InternalQueueMetadata) error
 		GetDLQAckLevels(ctx context.Context) (*InternalQueueMetadata, error)
+	}
+
+	// NexusEndpointStore is a store for managing Nexus endpoints
+	NexusEndpointStore interface {
+		Closeable
+		GetName() string
+		CreateOrUpdateNexusEndpoint(ctx context.Context, request *InternalCreateOrUpdateNexusEndpointRequest) error
+		DeleteNexusEndpoint(ctx context.Context, request *DeleteNexusEndpointRequest) error
+		GetNexusEndpoint(ctx context.Context, request *GetNexusEndpointRequest) (*InternalNexusEndpoint, error)
+		ListNexusEndpoints(ctx context.Context, request *ListNexusEndpointsRequest) (*InternalListNexusEndpointsResponse, error)
 	}
 
 	// QueueMessage is the message that stores in the queue
@@ -230,7 +258,7 @@ type (
 		TaskQueueInfo *commonpb.DataBlob
 
 		TaskQueueKind enumspb.TaskQueueKind
-		ExpiryTime    *time.Time
+		ExpiryTime    *timestamppb.Timestamp
 	}
 
 	InternalGetTaskQueueRequest struct {
@@ -257,7 +285,7 @@ type (
 		TaskQueueInfo *commonpb.DataBlob
 
 		TaskQueueKind enumspb.TaskQueueKind
-		ExpiryTime    *time.Time
+		ExpiryTime    *timestamppb.Timestamp
 
 		PrevRangeID int64
 	}
@@ -294,7 +322,7 @@ type (
 
 	InternalCreateTask struct {
 		TaskId     int64
-		ExpiryTime *time.Time
+		ExpiryTime *timestamppb.Timestamp
 		Task       *commonpb.DataBlob
 	}
 
@@ -391,7 +419,7 @@ type (
 
 	InternalHistoryTask struct {
 		Key  tasks.Key
-		Blob commonpb.DataBlob
+		Blob *commonpb.DataBlob
 	}
 
 	// InternalAddHistoryTasksRequest is used to write new tasks
@@ -401,7 +429,6 @@ type (
 
 		NamespaceID string
 		WorkflowID  string
-		RunID       string
 
 		Tasks map[tasks.Category][]InternalHistoryTask
 	}
@@ -534,6 +561,8 @@ type (
 
 	// InternalForkHistoryBranchRequest is used to fork a history branch
 	InternalForkHistoryBranchRequest struct {
+		// The new branch token to fork to
+		NewBranchToken []byte
 		// The base branch to fork from
 		ForkBranchInfo *persistencespb.HistoryBranch
 		// Serialized TreeInfo
@@ -637,9 +666,17 @@ type (
 		Data     []byte // HistoryTreeInfo blob
 	}
 
-	// InternalGetHistoryTreeResponse is response to GetHistoryTree
+	// InternalGetHistoryTreeContainingBranchRequest is used to retrieve branch info of a history tree
+	InternalGetHistoryTreeContainingBranchRequest struct {
+		// The raw branch token
+		BranchToken []byte
+		// Get data from this shard
+		ShardID int32
+	}
+
+	// InternalGetHistoryTreeContainingBranchResponse is response to GetHistoryTreeContainingBranch
 	// Only used by persistence layer
-	InternalGetHistoryTreeResponse struct {
+	InternalGetHistoryTreeContainingBranchResponse struct {
 		// TreeInfos
 		TreeInfos []*commonpb.DataBlob
 	}
@@ -725,5 +762,130 @@ type (
 	InternalUpsertClusterMembershipRequest struct {
 		ClusterMember
 		RecordExpiry time.Time
+	}
+
+	InternalNexusEndpoint struct {
+		ID      string
+		Version int64
+		Data    *commonpb.DataBlob
+	}
+
+	InternalCreateOrUpdateNexusEndpointRequest struct {
+		LastKnownTableVersion int64
+		Endpoint              InternalNexusEndpoint
+	}
+
+	InternalListNexusEndpointsResponse struct {
+		TableVersion  int64
+		NextPageToken []byte
+		Endpoints     []InternalNexusEndpoint
+	}
+
+	// QueueV2 is an interface for a generic FIFO queue. It should eventually replace the Queue interface. Why do we
+	// need this migration? The main problem is very simple. The `queue_metadata` table in Cassandra has a primary key
+	// of (queue_type). This means that we can only have one queue of each type. This is a problem because we want to
+	// have multiple queues of the same type, but with different names. For example, we want to have a DLQ for
+	// replication tasks from one cluster to another, and cluster names are dynamic, so we can't create separate static
+	// queue types for each cluster. The solution is to add a queue_name column to the table, and make the primary key
+	// (queue_type, queue_name). This allows us to have multiple queues of the same type, but with different names.
+	// Since the new table (which is called `queues` in Cassandra), supports dynamic names, the interface built around
+	// it should also support dynamic names. This is why we need a new interface. There are other types built on top of
+	// this up the stack, like HistoryTaskQueueManager, for which the same principle of needing a new type because we
+	// now support dynamic names applies.
+	QueueV2 interface {
+		// EnqueueMessage adds a message to the back of the queue.
+		EnqueueMessage(
+			ctx context.Context,
+			request *InternalEnqueueMessageRequest,
+		) (*InternalEnqueueMessageResponse, error)
+		// ReadMessages returns messages in order of increasing message ID.
+		ReadMessages(
+			ctx context.Context,
+			request *InternalReadMessagesRequest,
+		) (*InternalReadMessagesResponse, error)
+		// CreateQueue creates a new queue. An error will be returned if the queue already exists. In addition, an error
+		// will be returned if you attempt to operate on a queue with something like EnqueueMessage or ReadMessages
+		// before the queue is created.
+		CreateQueue(
+			ctx context.Context,
+			request *InternalCreateQueueRequest,
+		) (*InternalCreateQueueResponse, error)
+		RangeDeleteMessages(
+			ctx context.Context,
+			request *InternalRangeDeleteMessagesRequest,
+		) (*InternalRangeDeleteMessagesResponse, error)
+		ListQueues(
+			ctx context.Context,
+			request *InternalListQueuesRequest,
+		) (*InternalListQueuesResponse, error)
+	}
+
+	QueueV2Type int
+
+	MessageMetadata struct {
+		ID int64
+	}
+
+	QueueV2Message struct {
+		MetaData MessageMetadata
+		Data     *commonpb.DataBlob
+	}
+
+	InternalEnqueueMessageRequest struct {
+		QueueType QueueV2Type
+		QueueName string
+		Blob      *commonpb.DataBlob
+	}
+
+	InternalEnqueueMessageResponse struct {
+		Metadata MessageMetadata
+	}
+
+	InternalReadMessagesRequest struct {
+		QueueType     QueueV2Type
+		QueueName     string
+		PageSize      int
+		NextPageToken []byte
+	}
+
+	InternalReadMessagesResponse struct {
+		Messages      []QueueV2Message
+		NextPageToken []byte
+	}
+
+	InternalCreateQueueRequest struct {
+		QueueType QueueV2Type
+		QueueName string
+	}
+
+	InternalCreateQueueResponse struct {
+		// empty
+	}
+
+	// InternalRangeDeleteMessagesRequest deletes all messages with ID <= given messageID
+	InternalRangeDeleteMessagesRequest struct {
+		QueueType                   QueueV2Type
+		QueueName                   string
+		InclusiveMaxMessageMetadata MessageMetadata
+	}
+
+	InternalRangeDeleteMessagesResponse struct {
+		MessagesDeleted int64
+	}
+
+	InternalListQueuesRequest struct {
+		QueueType     QueueV2Type
+		PageSize      int
+		NextPageToken []byte
+	}
+
+	QueueInfo struct {
+		QueueName    string
+		MessageCount int64
+	}
+
+	InternalListQueuesResponse struct {
+		Queues        []QueueInfo
+		NextPageToken []byte
 	}
 )

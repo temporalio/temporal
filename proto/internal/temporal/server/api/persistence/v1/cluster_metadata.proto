@@ -1,3 +1,5 @@
+// The MIT License
+//
 // Copyright (c) 2020 Temporal Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -34,6 +36,7 @@ message ClusterMetadata {
     temporal.api.version.v1.VersionInfo version_info = 4;
     map<string,temporal.server.api.persistence.v1.IndexSearchAttributes> index_search_attributes = 5;
     string cluster_address = 6;
+    string http_address = 13;
     int64 failover_version_increment = 7;
     int64 initial_failover_version = 8;
     bool is_global_namespace_enabled = 9;

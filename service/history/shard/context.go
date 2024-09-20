@@ -29,24 +29,25 @@ import (
 	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
-
 	"go.temporal.io/server/api/adminservice/v1"
 	clockspb "go.temporal.io/server/api/clock/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
-	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/finalizer"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
+	"go.temporal.io/server/common/pingable"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/events"
+	"go.temporal.io/server/service/history/hsm"
 	"go.temporal.io/server/service/history/tasks"
 )
 
@@ -85,10 +86,9 @@ type (
 		GenerateTaskID() (int64, error)
 		GenerateTaskIDs(number int) ([]int64, error)
 
-		GetImmediateQueueExclusiveHighReadWatermark() tasks.Key
-		UpdateScheduledQueueExclusiveHighReadWatermark() (tasks.Key, error)
+		GetQueueExclusiveHighReadWatermark(category tasks.Category) tasks.Key
 		GetQueueState(category tasks.Category) (*persistencespb.QueueState, bool)
-		SetQueueState(category tasks.Category, state *persistencespb.QueueState) error
+		SetQueueState(category tasks.Category, tasksCompleted int, state *persistencespb.QueueState) error
 		UpdateReplicationQueueReaderState(readerID int64, readerState *persistencespb.QueueReaderState) error
 
 		GetReplicatorDLQAckLevel(sourceCluster string) int64
@@ -104,7 +104,7 @@ type (
 
 		UpdateHandoverNamespace(ns *namespace.Namespace, deletedFromDb bool)
 
-		AppendHistoryEvents(ctx context.Context, request *persistence.AppendHistoryNodesRequest, namespaceID namespace.ID, execution commonpb.WorkflowExecution) (int, error)
+		AppendHistoryEvents(ctx context.Context, request *persistence.AppendHistoryNodesRequest, namespaceID namespace.ID, execution *commonpb.WorkflowExecution) (int, error)
 
 		AddTasks(ctx context.Context, request *persistence.AddHistoryTasksRequest) error
 		AddSpeculativeWorkflowTaskTimeoutTask(task *tasks.WorkflowTaskTimeoutTask) error
@@ -116,16 +116,19 @@ type (
 		GetWorkflowExecution(ctx context.Context, request *persistence.GetWorkflowExecutionRequest) (*persistence.GetWorkflowExecutionResponse, error)
 		// DeleteWorkflowExecution add task to delete visibility, current workflow execution, and deletes workflow execution.
 		// If branchToken != nil, then delete history also, otherwise leave history.
-		DeleteWorkflowExecution(ctx context.Context, workflowKey definition.WorkflowKey, branchToken []byte, startTime *time.Time, closeTime *time.Time, closeExecutionVisibilityTaskID int64, stage *tasks.DeleteWorkflowExecutionStage) error
+		DeleteWorkflowExecution(ctx context.Context, workflowKey definition.WorkflowKey, branchToken []byte, closeExecutionVisibilityTaskID int64, workflowCloseTime time.Time, stage *tasks.DeleteWorkflowExecutionStage) error
 
 		UnloadForOwnershipLost()
+
+		StateMachineRegistry() *hsm.Registry
+		GetFinalizer() *finalizer.Finalizer
 	}
 
 	// A ControllableContext is a Context plus other methods needed by
 	// the Controller.
 	ControllableContext interface {
 		Context
-		common.Pingable
+		pingable.Pingable
 
 		IsValid() bool
 		FinishStop()

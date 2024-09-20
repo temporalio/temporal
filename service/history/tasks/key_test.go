@@ -35,10 +35,6 @@ import (
 	"github.com/stretchr/testify/suite"
 )
 
-func init() {
-	rand.Seed(time.Now().UnixNano())
-}
-
 type (
 	taskKeySuite struct {
 		suite.Suite
@@ -155,17 +151,17 @@ func (s *taskKeySuite) TestNext() {
 
 func (s *taskKeySuite) TestSub() {
 	s.Equal(
-		NewKey(time.Unix(0, math.MaxInt64), 1),
-		MaximumKey.Sub(NewKey(time.Unix(0, 0), math.MaxInt64-1)),
+		NewKey(time.Unix(0, math.MaxInt64).UTC(), 1),
+		MaximumKey.Sub(NewKey(time.Unix(0, 0).UTC(), math.MaxInt64-1)),
 	)
 
 	s.Equal(
-		NewKey(time.Unix(0, math.MaxInt64), 0),
-		MaximumKey.Sub(NewKey(time.Unix(0, 0), math.MaxInt64)),
+		NewKey(time.Unix(0, math.MaxInt64).UTC(), 0),
+		MaximumKey.Sub(NewKey(time.Unix(0, 0).UTC(), math.MaxInt64)),
 	)
 
 	s.Equal(
-		NewKey(time.Unix(0, 0), 1),
-		NewKey(time.Unix(0, math.MaxInt64), 1).Sub(NewKey(time.Unix(0, math.MaxInt64), 0)),
+		NewKey(time.Unix(0, 0).UTC(), 1),
+		NewKey(time.Unix(0, math.MaxInt64).UTC(), 1).Sub(NewKey(time.Unix(0, math.MaxInt64), 0)),
 	)
 }

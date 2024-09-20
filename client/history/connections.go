@@ -29,11 +29,9 @@ package history
 import (
 	"sync"
 
-	"google.golang.org/grpc"
-
 	"go.temporal.io/server/api/historyservice/v1"
-	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/membership"
+	"google.golang.org/grpc"
 )
 
 type (
@@ -51,7 +49,12 @@ type (
 		}
 
 		historyServiceResolver membership.ServiceResolver
-		rpcFactory             common.RPCFactory
+		rpcFactory             RPCFactory
+	}
+
+	// RPCFactory is a subset of the [go.temporal.io/server/common/rpc.RPCFactory] interface to make testing easier.
+	RPCFactory interface {
+		CreateInternodeGRPCConnection(rpcAddress string) *grpc.ClientConn
 	}
 
 	connectionPool interface {
@@ -63,7 +66,7 @@ type (
 
 func newConnectionPool(
 	historyServiceResolver membership.ServiceResolver,
-	rpcFactory common.RPCFactory,
+	rpcFactory RPCFactory,
 ) *connectionPoolImpl {
 	c := &connectionPoolImpl{
 		historyServiceResolver: historyServiceResolver,

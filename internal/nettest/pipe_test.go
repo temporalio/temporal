@@ -22,19 +22,20 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package nettest
+package nettest_test
 
 import (
 	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"go.temporal.io/server/internal/nettest"
 )
 
 func TestPipe_Accept(t *testing.T) {
 	t.Parallel()
 
-	pipe := NewPipe()
+	pipe := nettest.NewPipe()
 
 	var wg sync.WaitGroup
 	defer wg.Wait()
@@ -62,19 +63,19 @@ func TestPipe_Accept(t *testing.T) {
 func TestPipe_ClientCanceled(t *testing.T) {
 	t.Parallel()
 
-	pipe := NewPipe()
+	pipe := nettest.NewPipe()
 	done := make(chan struct{})
 	close(done) // hi efe
 	_, err := pipe.Connect(done)
-	assert.ErrorIs(t, err, ErrCanceled)
+	assert.ErrorIs(t, err, nettest.ErrCanceled)
 }
 
 func TestPipe_ServerCanceled(t *testing.T) {
 	t.Parallel()
 
-	pipe := NewPipe()
+	pipe := nettest.NewPipe()
 	done := make(chan struct{})
 	close(done)
 	_, err := pipe.Accept(done)
-	assert.ErrorIs(t, err, ErrCanceled)
+	assert.ErrorIs(t, err, nettest.ErrCanceled)
 }

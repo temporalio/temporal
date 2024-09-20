@@ -1,0 +1,23 @@
+enablearchival: false
+clusterno: 0
+historyconfig:
+  numhistoryshards: 4
+  numhistoryhosts: 1
+  historycountlimiterror: 20
+  historycountlimitwarn: 10
+  historysizelimiterror: 9000
+  historysizelimitwarn: 5000
+  blobsizelimiterror: 1000
+  blobsizelimitwarn: 1
+  mutablestatesizelimiterror: 1100
+  mutablestatesizelimitwarn: 200
+workerconfig:
+  enablearchiver: false
+  enablereplicator: false
+esconfig:
+  version: "${ES_VERSION}"
+  url:
+    scheme: "http"
+    host: "${ES_SEEDS}:9200"
+  indices:
+    visibility: temporal_visibility_v1_test

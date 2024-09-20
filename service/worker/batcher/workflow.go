@@ -28,29 +28,24 @@ import (
 	"fmt"
 	"time"
 
-	enumspb "go.temporal.io/api/enums/v1"
-
-	"go.temporal.io/server/common/searchattribute"
-
 	commonpb "go.temporal.io/api/common/v1"
+	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
+	"go.temporal.io/server/common/searchattribute"
 )
 
 const (
-	// InfiniteDuration is a long duration(20 yrs) we used for infinite workflow running
-	InfiniteDuration = 20 * 365 * 24 * time.Hour
-	pageSize         = 1000
-	// DefaultAttemptsOnRetryableError is the default value for AttemptsOnRetryableError
-	DefaultAttemptsOnRetryableError = 50
-	// DefaultActivityHeartBeatTimeout is the default value for ActivityHeartBeatTimeout
-	DefaultActivityHeartBeatTimeout = time.Second * 10
+	// InfiniteDuration is a long duration (20 yrs) we use for "infinite" workflows
+	infiniteDuration                = 20 * 365 * 24 * time.Hour
+	defaultAttemptsOnRetryableError = 50
+	defaultActivityHeartBeatTimeout = time.Second * 10
 )
 
 const (
-	//BatchOperationTypeMemo stores batch operation type in memo
+	// BatchOperationTypeMemo stores batch operation type in memo
 	BatchOperationTypeMemo = "batch_operation_type"
-	//BatchReasonMemo stores batch operation reason in memo
+	// BatchReasonMemo stores batch operation reason in memo
 	BatchReasonMemo = "batch_operation_reason"
 	// BatchOperationStatsMemo stores batch operation stats in memo
 	BatchOperationStatsMemo = "batch_operation_stats"
@@ -96,6 +91,12 @@ type (
 
 	// ResetParams is the parameters for reseting workflow
 	ResetParams struct {
+		// This is a serialized commonpb.ResetOptions. We can't include it with the
+		// correct type because workflow/activity arguments are going to be serialized with the
+		// json dataconverter, which doesn't support the "oneof" field in ResetOptions.
+		ResetOptions []byte
+		resetOptions *commonpb.ResetOptions // deserialized version
+		// Deprecated fields:
 		ResetType        enumspb.ResetType
 		ResetReapplyType enumspb.ResetReapplyType
 	}
@@ -124,10 +125,9 @@ type (
 		DeleteParams DeleteParams
 		// ResetParams is params only for BatchTypeReset
 		ResetParams ResetParams
-		// RPS of processing. Default to DefaultRPS
-		// This is moving to dynamic config.
-		// TODO: Remove it from BatchParams after 1.19+
-		RPS int
+		// RPS sets the requests-per-second limit for the batch.
+		// The default (and max) is defined by `worker.BatcherRPS` in the dynamic config.
+		RPS float64
 		// Number of goroutines running in parallel to process
 		// This is moving to dynamic config.
 		// TODO: Remove it from BatchParams after 1.19+
@@ -155,7 +155,7 @@ type (
 	}
 
 	taskDetail struct {
-		execution commonpb.WorkflowExecution
+		execution *commonpb.WorkflowExecution
 		attempts  int
 		// passing along the current heartbeat details to make heartbeat within a task so that it won't timeout
 		hbd HeartBeatDetails
@@ -171,18 +171,19 @@ var (
 
 	batchActivityOptions = workflow.ActivityOptions{
 		ScheduleToStartTimeout: 5 * time.Minute,
-		StartToCloseTimeout:    InfiniteDuration,
+		StartToCloseTimeout:    infiniteDuration,
 		RetryPolicy:            &batchActivityRetryPolicy,
 	}
 )
 
-// BatchWorkflow is the workflow that runs a batch job of resetting workflows
+// BatchWorkflow is the workflow that runs a batch job of resetting workflows.
 func BatchWorkflow(ctx workflow.Context, batchParams BatchParams) (HeartBeatDetails, error) {
 	batchParams = setDefaultParams(batchParams)
 	err := validateParams(batchParams)
 	if err != nil {
 		return HeartBeatDetails{}, err
 	}
+
 	batchActivityOptions.HeartbeatTimeout = batchParams.ActivityHeartBeatTimeout
 	opt := workflow.WithActivityOptions(ctx, batchActivityOptions)
 	var result HeartBeatDetails
@@ -191,6 +192,7 @@ func BatchWorkflow(ctx workflow.Context, batchParams BatchParams) (HeartBeatDeta
 	if err != nil {
 		return HeartBeatDetails{}, err
 	}
+
 	err = attachBatchOperationStats(ctx, result)
 	if err != nil {
 		return HeartBeatDetails{}, err
@@ -203,8 +205,8 @@ type BatchOperationStats struct {
 	NumFailure int
 }
 
-// attachBatchOperationStats attaches statistics on the number of individual successes and failures to the memo of
-// this workflow.
+// attachBatchOperationStats attaches statistics on the number of
+// individual successes and failures to the memo of this workflow.
 func attachBatchOperationStats(ctx workflow.Context, result HeartBeatDetails) error {
 	memo := map[string]interface{}{
 		BatchOperationStatsMemo: BatchOperationStats{
@@ -222,9 +224,11 @@ func validateParams(params BatchParams) error {
 		(params.Query == "" && len(params.Executions) == 0) {
 		return fmt.Errorf("must provide required parameters: BatchType/Reason/Namespace/Query/Executions")
 	}
+
 	if len(params.Query) > 0 && len(params.Executions) > 0 {
 		return fmt.Errorf("batch query and executions are mutually exclusive")
 	}
+
 	switch params.BatchType {
 	case BatchTypeSignal:
 		if params.SignalParams.SignalName == "" {
@@ -240,10 +244,10 @@ func validateParams(params BatchParams) error {
 
 func setDefaultParams(params BatchParams) BatchParams {
 	if params.AttemptsOnRetryableError <= 1 {
-		params.AttemptsOnRetryableError = DefaultAttemptsOnRetryableError
+		params.AttemptsOnRetryableError = defaultAttemptsOnRetryableError
 	}
 	if params.ActivityHeartBeatTimeout <= 0 {
-		params.ActivityHeartBeatTimeout = DefaultActivityHeartBeatTimeout
+		params.ActivityHeartBeatTimeout = defaultActivityHeartBeatTimeout
 	}
 	if len(params.NonRetryableErrors) > 0 {
 		params._nonRetryableErrors = make(map[string]struct{}, len(params.NonRetryableErrors))

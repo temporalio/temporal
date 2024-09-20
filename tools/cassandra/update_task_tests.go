@@ -60,11 +60,3 @@ func (s *UpdateSchemaTestSuite) TestDryrun() {
 	dir := "../../schema/cassandra/temporal/versioned"
 	s.RunDryrunTest(buildCLIOptions(), client, "-k", dir, cassandra.Version)
 }
-
-func (s *UpdateSchemaTestSuite) TestVisibilityDryrun() {
-	client, err := newTestCQLClient(s.DBName)
-	s.Nil(err)
-	defer client.Close()
-	dir := "../../schema/cassandra/visibility/versioned"
-	s.RunDryrunTest(buildCLIOptions(), client, "-k", dir, cassandra.VisibilityVersion)
-}

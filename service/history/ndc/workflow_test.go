@@ -29,19 +29,18 @@ import (
 	"runtime"
 	"testing"
 
-	"github.com/golang/mock/gomock"
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
-
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/workflow"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
+	"go.uber.org/mock/gomock"
 )
 
 type (
@@ -86,6 +85,7 @@ func (s *workflowSuite) TearDownTest() {
 func (s *workflowSuite) TestGetMethods() {
 	lastEventTaskID := int64(144)
 	lastEventVersion := int64(12)
+	s.mockMutableState.EXPECT().IsWorkflowExecutionRunning().Return(true).AnyTimes()
 	s.mockMutableState.EXPECT().GetLastWriteVersion().Return(lastEventVersion, nil).AnyTimes()
 	s.mockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
 		NamespaceId:     s.namespaceID,
@@ -193,6 +193,7 @@ func (s *workflowSuite) TestSuppressWorkflowBy_Error() {
 	// cannot suppress by older workflow
 	lastEventTaskID := int64(144)
 	lastEventVersion := int64(12)
+	s.mockMutableState.EXPECT().IsWorkflowExecutionRunning().Return(true).AnyTimes()
 	s.mockMutableState.EXPECT().GetLastWriteVersion().Return(lastEventVersion, nil).AnyTimes()
 	s.mockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
 		NamespaceId:     s.namespaceID,
@@ -206,6 +207,7 @@ func (s *workflowSuite) TestSuppressWorkflowBy_Error() {
 	incomingRunID := uuid.New()
 	incomingLastEventTaskID := int64(144)
 	incomingLastEventVersion := lastEventVersion - 1
+	incomingMockMutableState.EXPECT().IsWorkflowExecutionRunning().Return(true).AnyTimes()
 	incomingMockMutableState.EXPECT().GetLastWriteVersion().Return(incomingLastEventVersion, nil).AnyTimes()
 	incomingMockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
 		NamespaceId:     s.namespaceID,
@@ -226,7 +228,6 @@ func (s *workflowSuite) TestSuppressWorkflowBy_Terminate() {
 	lastEventTaskID := int64(144)
 	lastEventVersion := int64(12)
 	s.mockMutableState.EXPECT().GetNextEventID().Return(randomEventID).AnyTimes() // This doesn't matter, GetNextEventID is not used if there is started WT.
-	s.mockMutableState.EXPECT().GetLastWriteVersion().Return(lastEventVersion, nil).AnyTimes()
 	s.mockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
 		NamespaceId:     s.namespaceID,
 		WorkflowId:      s.workflowID,
@@ -253,6 +254,7 @@ func (s *workflowSuite) TestSuppressWorkflowBy_Terminate() {
 		incomingMockMutableState,
 		wcache.NoopReleaseFn,
 	)
+	incomingMockMutableState.EXPECT().IsWorkflowExecutionRunning().Return(true).AnyTimes()
 	incomingMockMutableState.EXPECT().GetLastWriteVersion().Return(incomingLastEventVersion, nil).AnyTimes()
 	incomingMockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
 		NamespaceId:     s.namespaceID,
@@ -277,6 +279,7 @@ func (s *workflowSuite) TestSuppressWorkflowBy_Terminate() {
 		enumspb.WORKFLOW_TASK_FAILED_CAUSE_FAILOVER_CLOSE_COMMAND,
 		nil,
 		consts.IdentityHistoryService,
+		nil,
 		"",
 		"",
 		"",
@@ -289,12 +292,14 @@ func (s *workflowSuite) TestSuppressWorkflowBy_Terminate() {
 	).Return(&historypb.HistoryEvent{}, nil)
 
 	// if workflow is in zombie or finished state, keep as is
-	s.mockMutableState.EXPECT().IsWorkflowExecutionRunning().Return(false)
+	s.mockMutableState.EXPECT().IsWorkflowExecutionRunning().Return(false).Times(2)
+	s.mockMutableState.EXPECT().GetCloseVersion().Return(lastEventVersion, nil)
 	policy, err := nDCWorkflow.SuppressBy(incomingNDCWorkflow)
 	s.NoError(err)
 	s.Equal(workflow.TransactionPolicyPassive, policy)
 
-	s.mockMutableState.EXPECT().IsWorkflowExecutionRunning().Return(true)
+	s.mockMutableState.EXPECT().IsWorkflowExecutionRunning().Return(true).Times(2)
+	s.mockMutableState.EXPECT().GetLastWriteVersion().Return(lastEventVersion, nil)
 	policy, err = nDCWorkflow.SuppressBy(incomingNDCWorkflow)
 	s.NoError(err)
 	s.Equal(workflow.TransactionPolicyActive, policy)
@@ -303,7 +308,6 @@ func (s *workflowSuite) TestSuppressWorkflowBy_Terminate() {
 func (s *workflowSuite) TestSuppressWorkflowBy_Zombiefy() {
 	lastEventTaskID := int64(144)
 	lastEventVersion := int64(12)
-	s.mockMutableState.EXPECT().GetLastWriteVersion().Return(lastEventVersion, nil).AnyTimes()
 	executionInfo := &persistencespb.WorkflowExecutionInfo{
 		NamespaceId:     s.namespaceID,
 		WorkflowId:      s.workflowID,
@@ -337,6 +341,7 @@ func (s *workflowSuite) TestSuppressWorkflowBy_Zombiefy() {
 		incomingMockMutableState,
 		wcache.NoopReleaseFn,
 	)
+	incomingMockMutableState.EXPECT().IsWorkflowExecutionRunning().Return(true).AnyTimes()
 	incomingMockMutableState.EXPECT().GetLastWriteVersion().Return(incomingLastEventVersion, nil).AnyTimes()
 	incomingMockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
 		NamespaceId:     s.namespaceID,
@@ -351,12 +356,14 @@ func (s *workflowSuite) TestSuppressWorkflowBy_Zombiefy() {
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 
 	// if workflow is in zombie or finished state, keep as is
-	s.mockMutableState.EXPECT().IsWorkflowExecutionRunning().Return(false)
+	s.mockMutableState.EXPECT().IsWorkflowExecutionRunning().Return(false).Times(2)
+	s.mockMutableState.EXPECT().GetCloseVersion().Return(lastEventVersion, nil).AnyTimes()
 	policy, err := nDCWorkflow.SuppressBy(incomingNDCWorkflow)
 	s.NoError(err)
 	s.Equal(workflow.TransactionPolicyPassive, policy)
 
-	s.mockMutableState.EXPECT().IsWorkflowExecutionRunning().Return(true)
+	s.mockMutableState.EXPECT().IsWorkflowExecutionRunning().Return(true).Times(2)
+	s.mockMutableState.EXPECT().GetLastWriteVersion().Return(lastEventVersion, nil).AnyTimes()
 	policy, err = nDCWorkflow.SuppressBy(incomingNDCWorkflow)
 	s.NoError(err)
 	s.Equal(workflow.TransactionPolicyPassive, policy)

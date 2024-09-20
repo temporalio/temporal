@@ -34,8 +34,6 @@ import (
 	exporters "go.opentelemetry.io/otel/exporters/prometheus"
 	"go.opentelemetry.io/otel/metric"
 	sdkmetrics "go.opentelemetry.io/otel/sdk/metric"
-	"go.opentelemetry.io/otel/sdk/metric/aggregation"
-
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 )
@@ -75,7 +73,7 @@ func NewOpenTelemetryProvider(
 				Unit: u,
 			},
 			sdkmetrics.Stream{
-				Aggregation: aggregation.ExplicitBucketHistogram{
+				Aggregation: sdkmetrics.AggregationExplicitBucketHistogram{
 					Boundaries: clientConfig.PerUnitHistogramBoundaries[u],
 				},
 			},

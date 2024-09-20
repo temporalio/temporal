@@ -1,3 +1,5 @@
+// The MIT License
+//
 // Copyright (c) 2019 Temporal Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -59,6 +61,22 @@ service MatchingService {
     rpc RespondQueryTaskCompleted (RespondQueryTaskCompletedRequest) returns (RespondQueryTaskCompletedResponse) {
     }
 
+    // Request from frontend to synchronously dispatch a nexus task to a worker.
+    rpc DispatchNexusTask (DispatchNexusTaskRequest) returns (DispatchNexusTaskResponse) {
+    }
+
+    // Request from worker (via frontend) to long poll on nexus tasks.
+    rpc PollNexusTaskQueue (PollNexusTaskQueueRequest) returns (PollNexusTaskQueueResponse) {
+    }
+
+    // Response from a worker (via frontend) to a Nexus task, unblocks the corresponding DispatchNexusTask request.
+    rpc RespondNexusTaskCompleted (RespondNexusTaskCompletedRequest) returns (RespondNexusTaskCompletedResponse) {
+    }
+
+    // Response from a worker (via frontend) to a Nexus task, unblocks the corresponding DispatchNexusTask request.
+    rpc RespondNexusTaskFailed (RespondNexusTaskFailedRequest) returns (RespondNexusTaskFailedResponse) {
+    }
+
     // CancelOutstandingPoll is called by frontend to unblock long polls on matching for zombie pollers.
     // Our rpc stack does not support context propagation, so when a client connection goes away frontend sees
     // cancellation of context for that handler, but any corresponding calls (long-poll) to matching service does not
@@ -74,6 +92,10 @@ service MatchingService {
     rpc DescribeTaskQueue (DescribeTaskQueueRequest) returns (DescribeTaskQueueResponse) {
     }
 
+    // DescribeTaskQueuePartition returns information about the target task queue partition.
+    rpc DescribeTaskQueuePartition (DescribeTaskQueuePartitionRequest) returns (DescribeTaskQueuePartitionResponse) {
+    }
+
     // ListTaskQueuePartitions returns a map of partitionKey and hostAddress for a task queue.
     rpc  ListTaskQueuePartitions(ListTaskQueuePartitionsRequest) returns (ListTaskQueuePartitionsResponse){
     }
@@ -87,11 +109,33 @@ service MatchingService {
     // Fetch user data for a task queue, this request should always be routed to the node holding the root partition of the workflow task queue.
     rpc GetTaskQueueUserData (GetTaskQueueUserDataRequest) returns (GetTaskQueueUserDataResponse) {}
 
+    // Allows updating the Build ID assignment and redirect rules for a given Task Queue.
+    // (-- api-linter: core::0134::method-signature=disabled
+    //     aip.dev/not-precedent: UpdateWorkerVersioningRulesRequest RPC doesn't follow Google API format. --)
+    // (-- api-linter: core::0134::response-message-name=disabled
+    //     aip.dev/not-precedent: UpdateWorkerVersioningRulesRequest RPC doesn't follow Google API format. --)
+    rpc UpdateWorkerVersioningRules (UpdateWorkerVersioningRulesRequest) returns (UpdateWorkerVersioningRulesResponse) {}
+
+    // Fetches the Build ID assignment and redirect rules for a Task Queue
+    // (-- api-linter: core::0127::resource-name-extraction=disabled
+    //     aip.dev/not-precedent: GetWorkerVersioningRulesRequest RPC doesn't follow Google API format. --)
+    // (-- api-linter: core::0131::http-uri-name=disabled
+    //     aip.dev/not-precedent: GetWorkerVersioningRulesRequest RPC doesn't follow Google API format. --)
+    rpc GetWorkerVersioningRules (GetWorkerVersioningRulesRequest) returns (GetWorkerVersioningRulesResponse) {
+    }
+
     // Apply a user data replication event.
     rpc ApplyTaskQueueUserDataReplicationEvent (ApplyTaskQueueUserDataReplicationEventRequest) returns (ApplyTaskQueueUserDataReplicationEventResponse) {}
 
     // Gets all task queue names mapped to a given build ID
     rpc GetBuildIdTaskQueueMapping (GetBuildIdTaskQueueMappingRequest) returns (GetBuildIdTaskQueueMappingResponse) {}
+    // Force loading a task queue partition. Used by matching node owning root partition.
+    // When root partition is loaded this is called for all child partitions.
+    // This addresses the posibility of unloaded child partitions having backlog,
+    // but not being forwarded/synced to the root partition to find the polling
+    // worker which triggered the root partition being loaded in the first place.
+    rpc ForceLoadTaskQueuePartition (ForceLoadTaskQueuePartitionRequest) returns (ForceLoadTaskQueuePartitionResponse) {}
+    
 
     // Force unloading a task queue. Used for testing only.
     rpc ForceUnloadTaskQueue (ForceUnloadTaskQueueRequest) returns (ForceUnloadTaskQueueResponse) {}
@@ -107,4 +151,27 @@ service MatchingService {
 
     // Replicate task queue user data across clusters, must be done via the owning node for updates in namespace.
     rpc ReplicateTaskQueueUserData(ReplicateTaskQueueUserDataRequest) returns (ReplicateTaskQueueUserDataResponse) {}
+
+    // Create a Nexus endpoint.
+    // (-- api-linter: core::0133::method-signature=disabled
+    //     aip.dev/not-precedent: CreateNexusEndpoint RPC doesn't follow Google API format. --)
+    // (-- api-linter: core::0133::response-message-name=disabled
+    //     aip.dev/not-precedent: CreateNexusEndpoint RPC doesn't follow Google API format. --)
+    // (-- api-linter: core::0133::http-uri-parent=disabled
+    //     aip.dev/not-precedent: CreateNexusEndpoint RPC doesn't follow Google API format. --)
+    rpc	CreateNexusEndpoint(CreateNexusEndpointRequest) returns (CreateNexusEndpointResponse) {}
+    // Optimistically update a Nexus endpoint based on provided version.
+    // If this request is accepted, the input is considered the "current" state of this service at the time it was
+    // persisted and the updated version is returned.
+    // (-- api-linter: core::0134::method-signature=disabled
+    //     aip.dev/not-precedent: UpdateNexusEndpoint RPC doesn't follow Google API format. --)
+    // (-- api-linter: core::0134::response-message-name=disabled
+    //     aip.dev/not-precedent: UpdateNexusEndpoint RPC doesn't follow Google API format. --)
+    // (-- api-linter: core::0134::request-resource-required=disabled
+    //     aip.dev/not-precedent: UpdateNexusEndpoint RPC doesn't follow Google API format. --)
+    rpc	UpdateNexusEndpoint(UpdateNexusEndpointRequest) returns (UpdateNexusEndpointResponse) {}
+    // Delete a service by its name.
+    rpc	DeleteNexusEndpoint(DeleteNexusEndpointRequest) returns (DeleteNexusEndpointResponse) {}
+    // List all registered services.
+    rpc	ListNexusEndpoints(ListNexusEndpointsRequest) returns (ListNexusEndpointsResponse) {}
 }

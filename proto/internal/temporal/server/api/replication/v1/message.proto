@@ -1,3 +1,5 @@
+// The MIT License
+//
 // Copyright (c) 2020 Temporal Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -26,13 +28,13 @@ option go_package = "go.temporal.io/server/api/replication/v1;repication";
 
 import "google/protobuf/timestamp.proto";
 
-import "dependencies/gogoproto/gogo.proto";
-
 import "temporal/server/api/enums/v1/replication.proto";
 import "temporal/server/api/enums/v1/task.proto";
 import "temporal/server/api/history/v1/message.proto";
-import "temporal/server/api/persistence/v1/workflow_mutable_state.proto";
+import "temporal/server/api/persistence/v1/executions.proto";
+import "temporal/server/api/persistence/v1/hsm.proto";
 import "temporal/server/api/persistence/v1/task_queues.proto";
+import "temporal/server/api/persistence/v1/workflow_mutable_state.proto";
 
 import "temporal/api/common/v1/message.proto";
 import "temporal/api/namespace/v1/message.proto";
@@ -52,11 +54,18 @@ message ReplicationTask {
         HistoryTaskAttributes history_task_attributes = 8;
         SyncWorkflowStateTaskAttributes sync_workflow_state_task_attributes = 10;
         TaskQueueUserDataAttributes task_queue_user_data_attributes = 11;
+        SyncHSMAttributes sync_hsm_attributes = 14;
+        BackfillHistoryTaskAttributes backfill_history_task_attributes = 16;
+        VerifyVersionedTransitionTaskAttributes verify_versioned_transition_task_attributes = 18;
+        SyncVersionedTransitionTaskAttributes sync_versioned_transition_task_attributes = 19;
     }
     // All attributes should be deprecated and replaced by this field.
     // The task_type + data provide more flexibility in future use cases.
     temporal.api.common.v1.DataBlob data = 12;
-    google.protobuf.Timestamp visibility_time = 9 [(gogoproto.stdtime) = true];
+    google.protobuf.Timestamp visibility_time = 9;
+    temporal.server.api.enums.v1.TaskPriority priority = 13;
+    temporal.server.api.persistence.v1.VersionedTransition versioned_transition = 15;
+    temporal.server.api.persistence.v1.ReplicationTaskInfo raw_task_info = 17;
 }
 
 message ReplicationToken {
@@ -67,16 +76,25 @@ message ReplicationToken {
     // This can be different than lastRetrievedMessageId if passive side supports prefetching messages.
     int64 last_processed_message_id = 3;
     // The VisibilityTime of last processed ReplicationTask
-    google.protobuf.Timestamp last_processed_visibility_time = 4 [(gogoproto.stdtime) = true];
+    google.protobuf.Timestamp last_processed_visibility_time = 4;
 }
 
 message SyncShardStatus {
-    google.protobuf.Timestamp status_time = 1 [(gogoproto.stdtime) = true];
+    google.protobuf.Timestamp status_time = 1;
 }
 
 message SyncReplicationState {
+    // deprecated in favor of using ReplicationState object
     int64 inclusive_low_watermark = 1;
-    google.protobuf.Timestamp  inclusive_low_watermark_time = 2 [(gogoproto.stdtime) = true];
+    // deprecated in favor of using ReplicationState object
+    google.protobuf.Timestamp  inclusive_low_watermark_time = 2;
+    ReplicationState high_priority_state = 3;
+    ReplicationState low_priority_state = 4;
+}
+message ReplicationState {
+    int64 inclusive_low_watermark = 1;
+    google.protobuf.Timestamp inclusive_low_watermark_time = 2;
+    temporal.server.api.enums.v1.ReplicationFlowControlCommand flow_control_command = 3;
 }
 
 message ReplicationMessages {
@@ -92,9 +110,11 @@ message WorkflowReplicationMessages {
     repeated ReplicationTask replication_tasks = 1;
     // This can be different than the last taskId in the above list, because sender can decide to skip tasks (e.g. for completed workflows).
     int64 exclusive_high_watermark = 2;
-    google.protobuf.Timestamp  exclusive_high_watermark_time = 3 [(gogoproto.stdtime) = true];
+    google.protobuf.Timestamp  exclusive_high_watermark_time = 3;
+    temporal.server.api.enums.v1.TaskPriority priority = 4;
 }
 
+// TODO: Deprecate this definition, it only used by the deprecated replication DLQ v1 logic
 message ReplicationTaskInfo {
     string namespace_id = 1;
     string workflow_id = 2;
@@ -105,6 +125,7 @@ message ReplicationTaskInfo {
     int64 first_event_id = 7;
     int64 next_event_id = 8;
     int64 scheduled_event_id = 9;
+    temporal.server.api.enums.v1.TaskPriority priority = 10;
 }
 
 message NamespaceTaskAttributes {
@@ -121,7 +142,7 @@ message NamespaceTaskAttributes {
 message SyncShardStatusTaskAttributes {
     string source_cluster = 1;
     int32 shard_id = 2;
-    google.protobuf.Timestamp status_time = 3 [(gogoproto.stdtime) = true];
+    google.protobuf.Timestamp status_time = 3;
 }
 
 message SyncActivityTaskAttributes {
@@ -130,16 +151,20 @@ message SyncActivityTaskAttributes {
     string run_id = 3;
     int64 version = 4;
     int64 scheduled_event_id = 5;
-    google.protobuf.Timestamp scheduled_time = 6 [(gogoproto.stdtime) = true];
+    google.protobuf.Timestamp scheduled_time = 6;
     int64 started_event_id = 7;
-    google.protobuf.Timestamp started_time = 8 [(gogoproto.stdtime) = true];
-    google.protobuf.Timestamp last_heartbeat_time = 9 [(gogoproto.stdtime) = true];
+    google.protobuf.Timestamp started_time = 8;
+    google.protobuf.Timestamp last_heartbeat_time = 9;
     temporal.api.common.v1.Payloads details = 10;
     int32 attempt = 11;
     temporal.api.failure.v1.Failure last_failure = 12;
     string last_worker_identity = 13;
     temporal.server.api.history.v1.VersionHistory version_history = 14;
     temporal.server.api.workflow.v1.BaseExecutionInfo base_execution_info = 15;
+    // build ID of the worker who received this activity last time
+    string last_started_build_id = 16;
+    // workflows redirect_counter value when this activity started last time
+    int64 last_started_redirect_counter = 17;
 }
 
 message HistoryTaskAttributes {
@@ -148,11 +173,14 @@ message HistoryTaskAttributes {
     string workflow_id = 3;
     string run_id = 4;
     repeated temporal.server.api.history.v1.VersionHistoryItem version_history_items = 5;
+
+    // to be deprecated in favor of using events_batches
     temporal.api.common.v1.DataBlob events = 6;
     // New run events does not need version history since there is no prior events.
     temporal.api.common.v1.DataBlob new_run_events = 7;
     temporal.server.api.workflow.v1.BaseExecutionInfo base_execution_info = 8;
-
+    string new_run_id = 9;
+    repeated temporal.api.common.v1.DataBlob events_batches = 10;
 }
 
 message SyncWorkflowStateTaskAttributes {
@@ -163,4 +191,50 @@ message TaskQueueUserDataAttributes {
     string namespace_id = 1;
     string task_queue_name = 2;
     temporal.server.api.persistence.v1.TaskQueueUserData user_data = 3;
+}
+
+message SyncHSMAttributes {
+    string namespace_id = 1;
+    string workflow_id = 2;
+    string run_id = 3;
+    temporal.server.api.history.v1.VersionHistory version_history = 4;
+    temporal.server.api.persistence.v1.StateMachineNode state_machine_node = 5;
+}
+
+message BackfillHistoryTaskAttributes {
+    string namespace_id = 1;
+    string workflow_id = 2;
+    string run_id = 3;
+
+    repeated temporal.server.api.history.v1.VersionHistoryItem event_version_history = 5;
+    repeated temporal.api.common.v1.DataBlob event_batches = 6;
+    NewRunInfo new_run_info = 7;
+}
+
+message NewRunInfo {
+    string run_id = 1;
+    temporal.api.common.v1.DataBlob event_batch = 2;
+}
+
+message SyncWorkflowStateMutationAttributes {
+    temporal.server.api.persistence.v1.VersionedTransition exclusive_start_versioned_transition = 1;
+    temporal.server.api.persistence.v1.WorkflowMutableStateMutation state_mutation = 2;
+}
+
+message SyncWorkflowStateSnapshotAttributes {
+    temporal.server.api.persistence.v1.WorkflowMutableState state = 1;
+}
+
+message VerifyVersionedTransitionTaskAttributes {
+    string namespace_id = 1;
+    string workflow_id = 2;
+    string run_id = 3;
+    int64 next_event_id = 4;
+    repeated temporal.server.api.history.v1.VersionHistoryItem event_version_history = 5;
+    string new_run_id = 6;
+}
+
+message SyncVersionedTransitionTaskAttributes {
+    repeated temporal.api.common.v1.DataBlob event_batches = 1;
+    NewRunInfo new_run_info = 2;
 }

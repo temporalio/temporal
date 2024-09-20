@@ -27,6 +27,7 @@ package metricstest
 import (
 	"errors"
 	"fmt"
+	"maps"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -38,9 +39,6 @@ import (
 	exporters "go.opentelemetry.io/otel/exporters/prometheus"
 	"go.opentelemetry.io/otel/metric"
 	sdkmetrics "go.opentelemetry.io/otel/sdk/metric"
-	"go.opentelemetry.io/otel/sdk/metric/aggregation"
-	"golang.org/x/exp/maps"
-
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 )
@@ -97,7 +95,7 @@ func NewHandler(logger log.Logger, clientConfig metrics.ClientConfig) (*Handler,
 				Unit: u,
 			},
 			sdkmetrics.Stream{
-				Aggregation: aggregation.ExplicitBucketHistogram{
+				Aggregation: sdkmetrics.AggregationExplicitBucketHistogram{
 					Boundaries: clientConfig.PerUnitHistogramBoundaries[u],
 				},
 			},

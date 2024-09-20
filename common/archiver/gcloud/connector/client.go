@@ -34,11 +34,10 @@ import (
 	"os"
 
 	"cloud.google.com/go/storage"
-	"go.uber.org/multierr"
-	"google.golang.org/api/iterator"
-
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/config"
+	"go.uber.org/multierr"
+	"google.golang.org/api/iterator"
 )
 
 var (
@@ -157,7 +156,7 @@ func (s *storageWrapper) Query(ctx context.Context, URI archiver.URI, fileNamePr
 
 }
 
-// QueryWithFilter, retieves filenames that match filter parameters. PageSize is optional, 0 means all records.
+// QueryWithFilters, retieves filenames that match filter parameters. PageSize is optional, 0 means all records.
 func (s *storageWrapper) QueryWithFilters(ctx context.Context, URI archiver.URI, fileNamePrefix string, pageSize, offset int, filters []Precondition) ([]string, bool, int, error) {
 	var err error
 	currentPos := offset

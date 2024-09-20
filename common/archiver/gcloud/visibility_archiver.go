@@ -33,14 +33,12 @@ import (
 	"time"
 
 	"go.temporal.io/api/serviceerror"
-
 	archiverspb "go.temporal.io/server/api/archiver/v1"
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/archiver/gcloud/connector"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
-	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/searchattribute"
 )
 
@@ -98,12 +96,12 @@ func (v *visibilityArchiver) Archive(ctx context.Context, URI archiver.URI, requ
 	featureCatalog := archiver.GetFeatureCatalog(opts...)
 	startTime := time.Now().UTC()
 	defer func() {
-		handler.Timer(metrics.ServiceLatency.GetMetricName()).Record(time.Since(startTime))
+		metrics.ServiceLatency.With(handler).Record(time.Since(startTime))
 		if err != nil {
 			if isRetryableError(err) {
-				handler.Counter(metrics.VisibilityArchiverArchiveTransientErrorCount.GetMetricName()).Record(1)
+				metrics.VisibilityArchiverArchiveTransientErrorCount.With(handler).Record(1)
 			} else {
-				handler.Counter(metrics.VisibilityArchiverArchiveNonRetryableErrorCount.GetMetricName()).Record(1)
+				metrics.VisibilityArchiverArchiveNonRetryableErrorCount.With(handler).Record(1)
 				if featureCatalog.NonRetryableError != nil {
 					err = featureCatalog.NonRetryableError()
 				}
@@ -135,19 +133,19 @@ func (v *visibilityArchiver) Archive(ctx context.Context, URI archiver.URI, requ
 
 	// The filename has the format: closeTimestamp_hash(runID).visibility
 	// This format allows the archiver to sort all records without reading the file contents
-	filename := constructVisibilityFilename(request.GetNamespaceId(), request.WorkflowTypeName, request.GetWorkflowId(), request.GetRunId(), indexKeyCloseTimeout, timestamp.TimeValue(request.CloseTime))
+	filename := constructVisibilityFilename(request.GetNamespaceId(), request.WorkflowTypeName, request.GetWorkflowId(), request.GetRunId(), indexKeyCloseTimeout, request.CloseTime.AsTime())
 	if err := v.gcloudStorage.Upload(ctx, URI, filename, encodedVisibilityRecord); err != nil {
 		logger.Error(archiver.ArchiveTransientErrorMsg, tag.ArchivalArchiveFailReason(errWriteFile), tag.Error(err))
 		return errRetryable
 	}
 
-	filename = constructVisibilityFilename(request.GetNamespaceId(), request.WorkflowTypeName, request.GetWorkflowId(), request.GetRunId(), indexKeyStartTimeout, timestamp.TimeValue(request.StartTime))
+	filename = constructVisibilityFilename(request.GetNamespaceId(), request.WorkflowTypeName, request.GetWorkflowId(), request.GetRunId(), indexKeyStartTimeout, request.StartTime.AsTime())
 	if err := v.gcloudStorage.Upload(ctx, URI, filename, encodedVisibilityRecord); err != nil {
 		logger.Error(archiver.ArchiveTransientErrorMsg, tag.ArchivalArchiveFailReason(errWriteFile), tag.Error(err))
 		return errRetryable
 	}
 
-	handler.Counter(metrics.VisibilityArchiveSuccessCount.GetMetricName()).Record(1)
+	metrics.VisibilityArchiveSuccessCount.With(handler).Record(1)
 	return nil
 }
 

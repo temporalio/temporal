@@ -27,23 +27,28 @@ package metrics
 
 // Common tags for all services
 const (
-	OperationTagName           = "operation"
-	ServiceRoleTagName         = "service_role"
-	CacheTypeTagName           = "cache_type"
-	FailureTagName             = "failure"
-	TaskCategoryTagName        = "task_category"
-	TaskTypeTagName            = "task_type"
-	TaskPriorityTagName        = "task_priority"
-	QueueReaderIDTagName       = "queue_reader_id"
-	QueueActionTagName         = "queue_action"
-	QueueTypeTagName           = "queue_type"
-	visibilityTypeTagName      = "visibility_type"
-	ErrorTypeTagName           = "error_type"
-	httpStatusTagName          = "http_status"
-	versionedTagName           = "versioned"
-	resourceExhaustedTag       = "resource_exhausted_cause"
-	standardVisibilityTagValue = "standard_visibility"
-	advancedVisibilityTagValue = "advanced_visibility"
+	OperationTagName            = "operation"
+	ServiceRoleTagName          = "service_role"
+	CacheTypeTagName            = "cache_type"
+	FailureTagName              = "failure"
+	TaskCategoryTagName         = "task_category"
+	TaskTypeTagName             = "task_type"
+	TaskPriorityTagName         = "task_priority"
+	QueueReaderIDTagName        = "queue_reader_id"
+	QueueActionTagName          = "queue_action"
+	QueueTypeTagName            = "queue_type"
+	visibilityPluginNameTagName = "visibility_plugin_name"
+	visibilityIndexNameTagName  = "visibility_index_name"
+	ErrorTypeTagName            = "error_type"
+	httpStatusTagName           = "http_status"
+	nexusMethodTagName          = "method"
+	nexusEndpointTagName        = "nexus_endpoint"
+	outcomeTagName              = "outcome"
+	versionedTagName            = "versioned"
+	resourceExhaustedTag        = "resource_exhausted_cause"
+	resourceExhaustedScopeTag   = "resource_exhausted_scope"
+	PartitionTagName            = "partition"
+	PriorityTagName             = "priority"
 )
 
 // This package should hold all the metrics and tags for temporal
@@ -55,25 +60,12 @@ const (
 	DCRedirectionRoleTagValue = "dc_redirection"
 	BlobstoreRoleTagValue     = "blobstore"
 
-	MutableStateCacheTypeTagValue = "mutablestate"
-	EventsCacheTypeTagValue       = "events"
+	MutableStateCacheTypeTagValue                     = "mutablestate"
+	EventsCacheTypeTagValue                           = "events"
+	NexusEndpointRegistryReadThroughCacheTypeTagValue = "nexus_endpoint_registry_readthrough"
 
 	InvalidHistoryURITagValue    = "invalid_history_uri"
 	InvalidVisibilityURITagValue = "invalid_visibility_uri"
-)
-
-// Common service base metrics
-const (
-	RestartCount         = "restarts"
-	NumGoRoutinesGauge   = "num_goroutines"
-	GoMaxProcsGauge      = "gomaxprocs"
-	MemoryAllocatedGauge = "memory_allocated"
-	MemoryHeapGauge      = "memory_heap"
-	MemoryHeapIdleGauge  = "memory_heapidle"
-	MemoryHeapInuseGauge = "memory_heapinuse"
-	MemoryStackGauge     = "memory_stack"
-	NumGCCounter         = "memory_num_gc"
-	GcPauseMsTimer       = "memory_gc_pause_ms"
 )
 
 // Admin Client Operations
@@ -81,8 +73,6 @@ const (
 	// AdminClientStreamWorkflowReplicationMessagesScope tracks RPC calls to admin service
 	AdminClientStreamWorkflowReplicationMessagesScope = "AdminClientStreamWorkflowReplicationMessages"
 )
-
-// Frontend Client Operations
 
 // History Client Operations
 const (
@@ -129,9 +119,7 @@ const (
 	PersistenceDeleteHistoryBranchScope = "DeleteHistoryBranch"
 	// PersistenceTrimHistoryBranchScope tracks TrimHistoryBranch calls made by service to persistence layer
 	PersistenceTrimHistoryBranchScope = "TrimHistoryBranch"
-	// PersistenceGetHistoryTreeScope tracks GetHistoryTree calls made by service to persistence layer
-	PersistenceGetHistoryTreeScope = "GetHistoryTree"
-	// PersistenceGetAllHistoryTreeBranchesScope tracks GetHistoryTree calls made by service to persistence layer
+	// PersistenceGetAllHistoryTreeBranchesScope tracks GetAllHistoryTreeBranches calls made by service to persistence layer
 	PersistenceGetAllHistoryTreeBranchesScope = "GetAllHistoryTreeBranches"
 	// PersistenceNamespaceReplicationQueueScope is the metrics scope for namespace replication queue
 	PersistenceNamespaceReplicationQueueScope = "NamespaceReplicationQueue"
@@ -213,6 +201,12 @@ const (
 	PersistenceRangeCompleteVisibilityTasksScope = "RangeCompleteVisibilityTasks"
 	// PersistenceGetReplicationTaskScope tracks GetReplicationTask calls made by service to persistence layer
 	PersistenceGetArchivalTasksScope = "GetArchivalTasks"
+	// PersistenceGetOutboundTasksScope tracks GetOutboundTasks calls made by service to persistence layer
+	PersistenceGetOutboundTasksScope = "GetOutboundTasks"
+	// PersistenceCompleteOutboundTasksScope tracks CompleteOutboundTasks calls made by service to persistence layer
+	PersistenceCompleteOutboundTasksScope = "CompleteOutboundTasks"
+	// PersistenceRangeCompleteOutboundTasksScope tracks RangeCompleteOutboundTasks calls made by service to persistence layer
+	PersistenceRangeCompleteOutboundTasksScope = "RangeCompleteOutboundTasks"
 	// PersistenceCompleteArchivalTaskScope tracks CompleteArchivalTasks calls made by service to persistence layer
 	PersistenceCompleteArchivalTaskScope = "CompleteArchivalTask"
 	// PersistenceRangeCompleteArchivalTasksScope tracks CompleteArchivalTasks calls made by service to persistence layer
@@ -283,6 +277,14 @@ const (
 	PersistenceListNamespacesScope = "ListNamespaces"
 	// PersistenceGetMetadataScope tracks DeleteNamespaceByName calls made by service to persistence layer
 	PersistenceGetMetadataScope = "GetMetadata"
+	// PersistenceGetNexusEndpointScope tracks GetNexusEndpoint calls made by service to persistence layer
+	PersistenceGetNexusEndpointScope = "GetNexusEndpoint"
+	// PersistenceListNexusEndpointsScope tracks ListNexusEndpoint calls made by service to persistence layer
+	PersistenceListNexusEndpointsScope = "ListNexusEndpoints"
+	// PersistenceCreateOrUpdateNexusEndpointScope tracks CreateOrUpdateNexusEndpoint calls made by service to persistence layer
+	PersistenceCreateOrUpdateNexusEndpointScope = "CreateOrUpdateNexusEndpoint"
+	// PersistenceDeleteNexusEndpointScope tracks DeleteNexusEndpoint calls made by service to persistence layer
+	PersistenceDeleteNexusEndpointScope = "DeleteNexusEndpoint"
 
 	// VisibilityPersistenceRecordWorkflowExecutionStartedScope tracks RecordWorkflowExecutionStarted calls made by service to visibility persistence layer
 	VisibilityPersistenceRecordWorkflowExecutionStartedScope = "RecordWorkflowExecutionStarted"
@@ -290,20 +292,6 @@ const (
 	VisibilityPersistenceRecordWorkflowExecutionClosedScope = "RecordWorkflowExecutionClosed"
 	// VisibilityPersistenceUpsertWorkflowExecutionScope tracks UpsertWorkflowExecution calls made by service to persistence visibility layer
 	VisibilityPersistenceUpsertWorkflowExecutionScope = "UpsertWorkflowExecution"
-	// VisibilityPersistenceListOpenWorkflowExecutionsScope tracks ListOpenWorkflowExecutions calls made by service to visibility persistence layer
-	VisibilityPersistenceListOpenWorkflowExecutionsScope = "ListOpenWorkflowExecutions"
-	// VisibilityPersistenceListClosedWorkflowExecutionsScope tracks ListClosedWorkflowExecutions calls made by service to visibility persistence layer
-	VisibilityPersistenceListClosedWorkflowExecutionsScope = "ListClosedWorkflowExecutions"
-	// VisibilityPersistenceListOpenWorkflowExecutionsByTypeScope tracks ListOpenWorkflowExecutionsByType calls made by service to visibility persistence layer
-	VisibilityPersistenceListOpenWorkflowExecutionsByTypeScope = "ListOpenWorkflowExecutionsByType"
-	// VisibilityPersistenceListClosedWorkflowExecutionsByTypeScope tracks ListClosedWorkflowExecutionsByType calls made by service to visibility persistence layer
-	VisibilityPersistenceListClosedWorkflowExecutionsByTypeScope = "ListClosedWorkflowExecutionsByType"
-	// VisibilityPersistenceListOpenWorkflowExecutionsByWorkflowIDScope tracks ListOpenWorkflowExecutionsByWorkflowID calls made by service to visibility persistence layer
-	VisibilityPersistenceListOpenWorkflowExecutionsByWorkflowIDScope = "ListOpenWorkflowExecutionsByWorkflowID"
-	// VisibilityPersistenceListClosedWorkflowExecutionsByWorkflowIDScope tracks ListClosedWorkflowExecutionsByWorkflowID calls made by service to visibility persistence layer
-	VisibilityPersistenceListClosedWorkflowExecutionsByWorkflowIDScope = "ListClosedWorkflowExecutionsByWorkflowID"
-	// VisibilityPersistenceListClosedWorkflowExecutionsByStatusScope tracks ListClosedWorkflowExecutionsByStatus calls made by service to visibility persistence layer
-	VisibilityPersistenceListClosedWorkflowExecutionsByStatusScope = "ListClosedWorkflowExecutionsByStatus"
 	// VisibilityPersistenceDeleteWorkflowExecutionScope tracks DeleteWorkflowExecutions calls made by service to visibility persistence layer
 	VisibilityPersistenceDeleteWorkflowExecutionScope = "DeleteWorkflowExecution"
 	// VisibilityPersistenceListWorkflowExecutionsScope tracks ListWorkflowExecutions calls made by service to visibility persistence layer
@@ -329,34 +317,17 @@ const (
 const (
 	// AdminGetWorkflowExecutionRawHistoryV2Scope is the metric scope for admin.GetWorkflowExecutionRawHistoryScope
 	AdminGetWorkflowExecutionRawHistoryV2Scope = "AdminGetWorkflowExecutionRawHistoryV2"
-
+	// AdminGetWorkflowExecutionRawHistoryScope is the metric scope for admin.GetWorkflowExecutionRawHistoryScope
+	AdminGetWorkflowExecutionRawHistoryScope = "AdminGetWorkflowExecutionRawHistory"
 	// OperatorAddSearchAttributesScope is the metric scope for operator.AddSearchAttributes
 	OperatorAddSearchAttributesScope = "OperatorAddSearchAttributes"
 	// OperatorDeleteNamespaceScope is the metric scope for operator.OperatorDeleteNamespace
 	OperatorDeleteNamespaceScope = "OperatorDeleteNamespace"
 
-	// FrontendStartWorkflowExecutionScope is the metric scope for frontend.StartWorkflowExecution
-	FrontendStartWorkflowExecutionScope = "StartWorkflowExecution"
-	// FrontendPollActivityTaskQueueScope is the metric scope for frontend.PollActivityTaskQueue
-	FrontendPollActivityTaskQueueScope = "PollActivityTaskQueue"
-	// FrontendRecordActivityTaskHeartbeatScope is the metric scope for frontend.RecordActivityTaskHeartbeat
-	FrontendRecordActivityTaskHeartbeatScope = "RecordActivityTaskHeartbeat"
-	// FrontendRecordActivityTaskHeartbeatByIdScope is the metric scope for frontend.RecordActivityTaskHeartbeatById
-	FrontendRecordActivityTaskHeartbeatByIdScope = "RecordActivityTaskHeartbeatById"
-	// FrontendRespondWorkflowTaskCompletedScope is the metric scope for frontend.RespondWorkflowTaskCompleted
-	FrontendRespondWorkflowTaskCompletedScope = "RespondWorkflowTaskCompleted"
 	// FrontendGetWorkflowExecutionHistoryScope is the metric scope for non-long-poll frontend.GetWorkflowExecutionHistory
 	FrontendGetWorkflowExecutionHistoryScope = "GetWorkflowExecutionHistory"
 	// FrontendPollWorkflowExecutionHistoryScope is the metric scope for long poll case of frontend.GetWorkflowExecutionHistory
 	FrontendPollWorkflowExecutionHistoryScope = "PollWorkflowExecutionHistory"
-	// FrontendSignalWorkflowExecutionScope is the metric scope for frontend.SignalWorkflowExecution
-	FrontendSignalWorkflowExecutionScope = "SignalWorkflowExecution"
-	// FrontendSignalWithStartWorkflowExecutionScope is the metric scope for frontend.SignalWithStartWorkflowExecution
-	FrontendSignalWithStartWorkflowExecutionScope = "SignalWithStartWorkflowExecution"
-	// FrontendQueryWorkflowScope is the metric scope for frontend.QueryWorkflow
-	FrontendQueryWorkflowScope = "QueryWorkflow"
-	// FrontendResetWorkflowExecutionScope is the metric scope for frontend.ResetWorkflowExecution
-	FrontendResetWorkflowExecutionScope = "ResetWorkflowExecution"
 
 	// VersionCheckScope is scope used by version checker
 	VersionCheckScope = "VersionCheck"
@@ -376,6 +347,12 @@ const (
 	HistoryRespondActivityTaskFailedScope = "RespondActivityTaskFailed"
 	// HistoryRespondActivityTaskCanceledScope tracks RespondActivityTaskCanceled API calls received by service
 	HistoryRespondActivityTaskCanceledScope = "RespondActivityTaskCanceled"
+	// HistoryGetWorkflowExecutionHistoryScope is the metric scope for non-long-poll frontend.GetWorkflowExecutionHistory
+	HistoryGetWorkflowExecutionHistoryScope = "GetWorkflowExecutionHistory"
+	// HistoryPollWorkflowExecutionHistoryScope is the metric scope for long poll case of frontend.GetWorkflowExecutionHistory
+	HistoryPollWorkflowExecutionHistoryScope = "PollWorkflowExecutionHistory"
+	// HistoryGetWorkflowExecutionRawHistoryScope tracks GetWorkflowExecutionRawHistoryV2Scope API calls received by service
+	HistoryGetWorkflowExecutionRawHistoryScope = "GetWorkflowExecutionRawHistory"
 	// HistoryGetWorkflowExecutionRawHistoryV2Scope tracks GetWorkflowExecutionRawHistoryV2Scope API calls received by service
 	HistoryGetWorkflowExecutionRawHistoryV2Scope = "GetWorkflowExecutionRawHistoryV2"
 	// HistoryGetHistoryScope tracks GetHistoryScope API calls received by service
@@ -405,15 +382,11 @@ const (
 	// HistoryCacheGetOrCreateScope is the scope used by history cache
 	HistoryCacheGetOrCreateScope = "HistoryCacheGetOrCreate"
 	// HistoryCacheGetOrCreateCurrentScope is the scope used by history cache
-	HistoryCacheGetOrCreateCurrentScope = "CacheGetOrCreateCurrent"
+	HistoryCacheGetOrCreateCurrentScope = "HistoryCacheGetOrCreateCurrent"
 
-	// TransferQueueProcessorScope is the scope used by all metric emitted by transfer queue processor
-	TransferQueueProcessorScope = "TransferQueueProcessor"
 	// TransferActiveTaskCloseExecutionScope is the scope used for close execution task processing by transfer queue processor
 	TransferActiveTaskCloseExecutionScope = "TransferActiveTaskCloseExecution"
 
-	// TimerQueueProcessorScope is the scope used by all metric emitted by timer queue processor
-	TimerQueueProcessorScope = "TimerQueueProcessor"
 	// TimerActiveTaskActivityTimeoutScope is the scope used by metric emitted by timer queue processor for processing activity timeouts
 	TimerActiveTaskActivityTimeoutScope = "TimerActiveTaskActivityTimeout"
 	// TimerActiveTaskWorkflowTaskTimeoutScope is the scope used by metric emitted by timer queue processor for processing workflow task timeouts
@@ -446,6 +419,8 @@ const (
 	WorkflowCompletionStatsScope = "CompletionStats"
 	// ReplicationTaskFetcherScope is scope used by all metrics emitted by ReplicationTaskFetcher
 	ReplicationTaskFetcherScope = "ReplicationTaskFetcher"
+	// ReplicationTaskTrackerScope is scope used by all metrics emitted by ExecutableTaskTracker
+	ReplicationTaskTrackerScope = "ReplicationTaskTracker"
 	// ReplicationTaskCleanupScope is scope used by all metrics emitted by ReplicationTaskProcessor cleanup
 	ReplicationTaskCleanupScope = "ReplicationTaskCleanup"
 	// ReplicationDLQStatsScope is scope used by all metrics emitted related to replication DLQ
@@ -474,6 +449,8 @@ const (
 	OperationArchivalQueueProcessorScope = "ArchivalQueueProcessor"
 	// OperationMemoryScheduledQueueProcessorScope is a scope for memory scheduled queue processor.
 	OperationMemoryScheduledQueueProcessorScope = "MemoryScheduledQueueProcessor"
+	// OperationOutboundQueueProcessorScope is a scope for the outbound queue processor.
+	OperationOutboundQueueProcessorScope = "OutboundQueueProcessor"
 )
 
 // Matching Scope
@@ -482,18 +459,26 @@ const (
 	MatchingPollWorkflowTaskQueueScope = "PollWorkflowTaskQueue"
 	// MatchingPollActivityTaskQueueScope tracks PollActivityTaskQueue API calls received by service
 	MatchingPollActivityTaskQueueScope = "PollActivityTaskQueue"
+	// MatchingPollNexusTaskQueueScope tracks PollNexusTaskQueue API calls received by service
+	MatchingPollNexusTaskQueueScope = "PollNexusTaskQueue"
 	// MatchingAddActivityTaskScope tracks AddActivityTask API calls received by service
 	MatchingAddActivityTaskScope = "AddActivityTask"
 	// MatchingAddWorkflowTaskScope tracks AddWorkflowTask API calls received by service
 	MatchingAddWorkflowTaskScope = "AddWorkflowTask"
 	// MatchingTaskQueueMgrScope is the metrics scope for matching.TaskQueueManager component
 	MatchingTaskQueueMgrScope = "TaskQueueMgr"
+	// MatchingTaskQueuePartitionManagerScope is the metrics scope for matching.TaskQueuePartitionManager component
+	MatchingTaskQueuePartitionManagerScope = "TaskQueuePartitionManager"
 	// MatchingEngineScope is the metrics scope for matchingEngine component
 	MatchingEngineScope = "MatchingEngine"
 	// MatchingQueryWorkflowScope tracks AddWorkflowTask API calls received by service
 	MatchingQueryWorkflowScope = "QueryWorkflow"
-	// MatchingRespondQueryTaskCompletedScope tracks AddWorkflowTask API calls received by service
+	// MatchingRespondQueryTaskCompletedScope tracks RespondQueryTaskCompleted API calls received by service
 	MatchingRespondQueryTaskCompletedScope = "RespondQueryTaskCompleted"
+	// MatchingRespondNexusTaskCompletedScope tracks RespondNexusTaskCompleted API calls received by service
+	MatchingRespondNexusTaskCompletedScope = "RespondNexusTaskCompleted"
+	// MatchingRespondNexusTaskFailedScope tracks RespondNexusTaskFailed API calls received by service
+	MatchingRespondNexusTaskFailedScope = "RespondNexusTaskFailed"
 )
 
 // Worker Scope
@@ -540,6 +525,12 @@ const (
 	SyncActivityTaskScope = "SyncActivityTask"
 	// SyncWorkflowStateTaskScope is the scope used by closed workflow task replication processing
 	SyncWorkflowStateTaskScope = "SyncWorkflowStateTask"
+	// SyncHSMTaskScope is the scope used by sync HSM replication task
+	SyncHSMTaskScope = "SyncHSMTask"
+	// BackfillHistoryEventsTaskScope is the scope used by backfill history events replication processing
+	BackfillHistoryEventsTaskScope = "BackfillHistoryEventsTask"
+	// VerifyVersionedTransitionTaskScope is the scope used by verify versioned transition task processing
+	VerifyVersionedTransitionTaskScope = "VerifyVersionedTransitionTask"
 	// SyncWatermarkScope is the scope used by closed workflow task replication processing
 	SyncWatermarkScope = "SyncWatermark"
 	// NoopTaskScope is the scope used by noop task
@@ -555,42 +546,44 @@ const (
 
 // History task type
 const (
-	TaskTypeTransferActiveTaskActivity             = "TransferActiveTaskActivity"
-	TaskTypeTransferActiveTaskWorkflowTask         = "TransferActiveTaskWorkflowTask"
-	TaskTypeTransferActiveTaskCloseExecution       = "TransferActiveTaskCloseExecution"
-	TaskTypeTransferActiveTaskCancelExecution      = "TransferActiveTaskCancelExecution"
-	TaskTypeTransferActiveTaskSignalExecution      = "TransferActiveTaskSignalExecution"
-	TaskTypeTransferActiveTaskStartChildExecution  = "TransferActiveTaskStartChildExecution"
-	TaskTypeTransferActiveTaskResetWorkflow        = "TransferActiveTaskResetWorkflow"
-	TaskTypeTransferActiveTaskDeleteExecution      = "TransferActiveTaskDeleteExecution"
-	TaskTypeTransferStandbyTaskActivity            = "TransferStandbyTaskActivity"
-	TaskTypeTransferStandbyTaskWorkflowTask        = "TransferStandbyTaskWorkflowTask"
-	TaskTypeTransferStandbyTaskCloseExecution      = "TransferStandbyTaskCloseExecution"
-	TaskTypeTransferStandbyTaskCancelExecution     = "TransferStandbyTaskCancelExecution"
-	TaskTypeTransferStandbyTaskSignalExecution     = "TransferStandbyTaskSignalExecution"
-	TaskTypeTransferStandbyTaskStartChildExecution = "TransferStandbyTaskStartChildExecution"
-	TaskTypeTransferStandbyTaskResetWorkflow       = "TransferStandbyTaskResetWorkflow"
-	TaskTypeTransferStandbyTaskDeleteExecution     = "TransferStandbyTaskDeleteExecution"
-	TaskTypeVisibilityTaskStartExecution           = "VisibilityTaskStartExecution"
-	TaskTypeVisibilityTaskUpsertExecution          = "VisibilityTaskUpsertExecution"
-	TaskTypeVisibilityTaskCloseExecution           = "VisibilityTaskCloseExecution"
-	TaskTypeVisibilityTaskDeleteExecution          = "VisibilityTaskDeleteExecution"
-	TaskTypeArchivalTaskArchiveExecution           = "ArchivalTaskArchiveExecution"
-	TaskTypeTimerActiveTaskActivityTimeout         = "TimerActiveTaskActivityTimeout"
-	TaskTypeTimerActiveTaskWorkflowTaskTimeout     = "TimerActiveTaskWorkflowTaskTimeout"
-	TaskTypeTimerActiveTaskUserTimer               = "TimerActiveTaskUserTimer"
-	TaskTypeTimerActiveTaskWorkflowTimeout         = "TimerActiveTaskWorkflowTimeout"
-	TaskTypeTimerActiveTaskActivityRetryTimer      = "TimerActiveTaskActivityRetryTimer"
-	TaskTypeTimerActiveTaskWorkflowBackoffTimer    = "TimerActiveTaskWorkflowBackoffTimer"
-	TaskTypeTimerActiveTaskDeleteHistoryEvent      = "TimerActiveTaskDeleteHistoryEvent"
-	TaskTypeTimerStandbyTaskActivityTimeout        = "TimerStandbyTaskActivityTimeout"
-	TaskTypeTimerStandbyTaskWorkflowTaskTimeout    = "TimerStandbyTaskWorkflowTaskTimeout"
-	TaskTypeTimerStandbyTaskUserTimer              = "TimerStandbyTaskUserTimer"
-	TaskTypeTimerStandbyTaskWorkflowTimeout        = "TimerStandbyTaskWorkflowTimeout"
-	TaskTypeTimerStandbyTaskActivityRetryTimer     = "TimerStandbyTaskActivityRetryTimer"
-	TaskTypeTimerStandbyTaskWorkflowBackoffTimer   = "TimerStandbyTaskWorkflowBackoffTimer"
-	TaskTypeTimerStandbyTaskDeleteHistoryEvent     = "TimerStandbyTaskDeleteHistoryEvent"
-	TaskTypeMemoryScheduledTaskWorkflowTaskTimeout = "MemoryScheduledTaskWorkflowTaskTimeout"
+	TaskTypeTransferActiveTaskActivity                    = "TransferActiveTaskActivity"
+	TaskTypeTransferActiveTaskWorkflowTask                = "TransferActiveTaskWorkflowTask"
+	TaskTypeTransferActiveTaskCloseExecution              = "TransferActiveTaskCloseExecution"
+	TaskTypeTransferActiveTaskCancelExecution             = "TransferActiveTaskCancelExecution"
+	TaskTypeTransferActiveTaskSignalExecution             = "TransferActiveTaskSignalExecution"
+	TaskTypeTransferActiveTaskStartChildExecution         = "TransferActiveTaskStartChildExecution"
+	TaskTypeTransferActiveTaskResetWorkflow               = "TransferActiveTaskResetWorkflow"
+	TaskTypeTransferActiveTaskDeleteExecution             = "TransferActiveTaskDeleteExecution"
+	TaskTypeTransferStandbyTaskActivity                   = "TransferStandbyTaskActivity"
+	TaskTypeTransferStandbyTaskWorkflowTask               = "TransferStandbyTaskWorkflowTask"
+	TaskTypeTransferStandbyTaskCloseExecution             = "TransferStandbyTaskCloseExecution"
+	TaskTypeTransferStandbyTaskCancelExecution            = "TransferStandbyTaskCancelExecution"
+	TaskTypeTransferStandbyTaskSignalExecution            = "TransferStandbyTaskSignalExecution"
+	TaskTypeTransferStandbyTaskStartChildExecution        = "TransferStandbyTaskStartChildExecution"
+	TaskTypeTransferStandbyTaskResetWorkflow              = "TransferStandbyTaskResetWorkflow"
+	TaskTypeTransferStandbyTaskDeleteExecution            = "TransferStandbyTaskDeleteExecution"
+	TaskTypeVisibilityTaskStartExecution                  = "VisibilityTaskStartExecution"
+	TaskTypeVisibilityTaskUpsertExecution                 = "VisibilityTaskUpsertExecution"
+	TaskTypeVisibilityTaskCloseExecution                  = "VisibilityTaskCloseExecution"
+	TaskTypeVisibilityTaskDeleteExecution                 = "VisibilityTaskDeleteExecution"
+	TaskTypeArchivalTaskArchiveExecution                  = "ArchivalTaskArchiveExecution"
+	TaskTypeTimerActiveTaskActivityTimeout                = "TimerActiveTaskActivityTimeout"
+	TaskTypeTimerActiveTaskWorkflowTaskTimeout            = "TimerActiveTaskWorkflowTaskTimeout"
+	TaskTypeTimerActiveTaskUserTimer                      = "TimerActiveTaskUserTimer"
+	TaskTypeTimerActiveTaskWorkflowRunTimeout             = "TimerActiveTaskWorkflowRunTimeout"
+	TaskTypeTimerActiveTaskWorkflowExecutionTimeout       = "TimerActiveTaskWorkflowExecutionTimeout"
+	TaskTypeTimerActiveTaskActivityRetryTimer             = "TimerActiveTaskActivityRetryTimer"
+	TaskTypeTimerActiveTaskWorkflowBackoffTimer           = "TimerActiveTaskWorkflowBackoffTimer"
+	TaskTypeTimerActiveTaskDeleteHistoryEvent             = "TimerActiveTaskDeleteHistoryEvent"
+	TaskTypeTimerActiveTaskSpeculativeWorkflowTaskTimeout = "TimerActiveTaskSpeculativeWorkflowTaskTimeout"
+	TaskTypeTimerStandbyTaskActivityTimeout               = "TimerStandbyTaskActivityTimeout"
+	TaskTypeTimerStandbyTaskWorkflowTaskTimeout           = "TimerStandbyTaskWorkflowTaskTimeout"
+	TaskTypeTimerStandbyTaskUserTimer                     = "TimerStandbyTaskUserTimer"
+	TaskTypeTimerStandbyTaskWorkflowRunTimeout            = "TimerStandbyTaskWorkflowRunTimeout"
+	TaskTypeTimerStandbyTaskWorkflowExecutionTimeout      = "TimerStandbyTaskWorkflowExecutionTimeout"
+	TaskTypeTimerStandbyTaskActivityRetryTimer            = "TimerStandbyTaskActivityRetryTimer"
+	TaskTypeTimerStandbyTaskWorkflowBackoffTimer          = "TimerStandbyTaskWorkflowBackoffTimer"
+	TaskTypeTimerStandbyTaskDeleteHistoryEvent            = "TimerStandbyTaskDeleteHistoryEvent"
 )
 
 // Schedule action types
@@ -628,23 +621,27 @@ var (
 	ServiceAuthorizationLatency              = NewTimerDef("service_authorization_latency")
 	EventBlobSize                            = NewBytesHistogramDef("event_blob_size")
 	LockRequests                             = NewCounterDef("lock_requests")
-	LockFailures                             = NewCounterDef("lock_failures")
 	LockLatency                              = NewTimerDef("lock_latency")
+	SemaphoreRequests                        = NewCounterDef("semaphore_requests")
+	SemaphoreFailures                        = NewCounterDef("semaphore_failures")
+	SemaphoreLatency                         = NewTimerDef("semaphore_latency")
 	ClientRequests                           = NewCounterDef(
 		"client_requests",
 		WithDescription("The number of requests sent by the client to an individual service, keyed by `service_role` and `operation`."),
 	)
-	ClientFailures               = NewCounterDef("client_errors")
-	ClientLatency                = NewTimerDef("client_latency")
-	ClientRedirectionRequests    = NewCounterDef("client_redirection_requests")
-	ClientRedirectionFailures    = NewCounterDef("client_redirection_errors")
-	ClientRedirectionLatency     = NewTimerDef("client_redirection_latency")
-	StateTransitionCount         = NewDimensionlessHistogramDef("state_transition_count")
-	HistorySize                  = NewBytesHistogramDef("history_size")
-	HistoryCount                 = NewDimensionlessHistogramDef("history_count")
-	SearchAttributesSize         = NewBytesHistogramDef("search_attributes_size")
-	MemoSize                     = NewBytesHistogramDef("memo_size")
-	TooManyPendingChildWorkflows = NewCounterDef(
+	ClientFailures                   = NewCounterDef("client_errors")
+	ClientLatency                    = NewTimerDef("client_latency")
+	ClientRedirectionRequests        = NewCounterDef("client_redirection_requests")
+	ClientRedirectionFailures        = NewCounterDef("client_redirection_errors")
+	ClientRedirectionLatency         = NewTimerDef("client_redirection_latency")
+	StateTransitionCount             = NewDimensionlessHistogramDef("state_transition_count")
+	HistorySize                      = NewBytesHistogramDef("history_size")
+	HistoryCount                     = NewDimensionlessHistogramDef("history_count")
+	TasksCompletedPerShardInfoUpdate = NewDimensionlessHistogramDef("tasks_per_shardinfo_update")
+	TimeBetweenShardInfoUpdates      = NewTimerDef("time_between_shardinfo_update")
+	SearchAttributesSize             = NewBytesHistogramDef("search_attributes_size")
+	MemoSize                         = NewBytesHistogramDef("memo_size")
+	TooManyPendingChildWorkflows     = NewCounterDef(
 		"wf_too_many_pending_child_workflows",
 		WithDescription("The number of Workflow Tasks failed because they would cause the limit on the number of pending child workflows to be exceeded. See https://t.mp/limits for more information."),
 	)
@@ -660,6 +657,10 @@ var (
 		"wf_too_many_pending_external_workflow_signals",
 		WithDescription("The number of Workflow Tasks failed because they would cause the limit on the number of pending signals to external workflows to be exceeded. See https://t.mp/limits for more information."),
 	)
+	UTF8ValidationErrors = NewCounterDef(
+		"utf8_validation_errors",
+		WithDescription("Number of times the service encountered a proto message with invalid UTF-8 in a string field"),
+	)
 
 	// Frontend
 	AddSearchAttributesWorkflowSuccessCount  = NewCounterDef("add_search_attributes_workflow_success")
@@ -674,12 +675,44 @@ var (
 		"http_service_requests",
 		WithDescription("The number of HTTP requests received by the service."),
 	)
+	NexusRequests = NewCounterDef(
+		"nexus_requests",
+		WithDescription("The number of Nexus requests received by the service."),
+	)
+	NexusRequestPreProcessErrors = NewCounterDef(
+		"nexus_request_preprocess_errors",
+		WithDescription("The number of Nexus requests for which pre-processing failed."),
+	)
+	NexusLatency = NewTimerDef(
+		"nexus_latency",
+		WithDescription("Latency of Nexus requests."),
+	)
+	NexusCompletionRequests = NewCounterDef(
+		"nexus_completion_requests",
+		WithDescription("The number of Nexus completion (callback) requests received by the service."),
+	)
+	NexusCompletionLatencyHistogram = NewTimerDef(
+		"nexus_completion_latency",
+		WithDescription("Latency histogram of Nexus completion (callback) requests."),
+	)
+	NexusCompletionRequestPreProcessErrors = NewCounterDef(
+		"nexus_completion_request_preprocess_errors",
+		WithDescription("The number of Nexus completion requests for which pre-processing failed."),
+	)
+	HostRPSLimit          = NewGaugeDef("host_rps_limit")
+	NamespaceHostRPSLimit = NewGaugeDef("namespace_host_rps_limit")
 
 	// History
 	CacheRequests                                = NewCounterDef("cache_requests")
 	CacheFailures                                = NewCounterDef("cache_errors")
 	CacheLatency                                 = NewTimerDef("cache_latency")
 	CacheMissCounter                             = NewCounterDef("cache_miss")
+	CacheSize                                    = NewGaugeDef("cache_size")
+	CacheUsage                                   = NewGaugeDef("cache_usage")
+	CachePinnedUsage                             = NewGaugeDef("cache_pinned_usage")
+	CacheTtl                                     = NewTimerDef("cache_ttl")
+	CacheEntryAgeOnGet                           = NewTimerDef("cache_entry_age_on_get")
+	CacheEntryAgeOnEviction                      = NewTimerDef("cache_entry_age_on_eviction")
 	HistoryEventNotificationQueueingLatency      = NewTimerDef("history_event_notification_queueing_latency")
 	HistoryEventNotificationFanoutLatency        = NewTimerDef("history_event_notification_fanout_latency")
 	HistoryEventNotificationInFlightMessageGauge = NewGaugeDef("history_event_notification_inflight_message_gauge")
@@ -704,6 +737,9 @@ var (
 	)
 	SyncShardFromRemoteCounter = NewCounterDef("syncshard_remote_count")
 	SyncShardFromRemoteFailure = NewCounterDef("syncshard_remote_failed")
+	FinalizerItemsCompleted    = NewCounterDef("finalizer_items_completed")
+	FinalizerItemsUnfinished   = NewCounterDef("finalizer_items_unfinished")
+	FinalizerLatency           = NewTimerDef("finalizer_latency")
 	TaskRequests               = NewCounterDef(
 		"task_requests",
 		WithDescription("The number of history tasks processed."),
@@ -736,6 +772,19 @@ var (
 		"task_errors",
 		WithDescription("The number of unexpected history task processing errors."),
 	)
+	TaskTerminalFailures = NewCounterDef(
+		"task_terminal_failures",
+		WithDescription("The number of times a history task failed with a terminal failure, causing it to be sent to the DLQ."),
+	)
+	TaskDLQFailures = NewCounterDef(
+		"task_dlq_failures",
+		WithDescription("The number of times we failed to send a history task to the DLQ."),
+	)
+	TaskDLQSendLatency = NewTimerDef(
+		"task_dlq_latency",
+		WithDescription("The amount of time it took to successfully send a task to the DLQ. This only records the"+
+			" latency of the final attempt to send the task to the DLQ, not the cumulative latency of all attempts."),
+	)
 	TaskDiscarded                   = NewCounterDef("task_errors_discarded")
 	TaskSkipped                     = NewCounterDef("task_skipped")
 	TaskVersionMisMatch             = NewCounterDef("task_errors_version_mismatch")
@@ -747,6 +796,7 @@ var (
 	)
 	TaskNotActiveCounter         = NewCounterDef("task_errors_not_active_counter")
 	TaskNamespaceHandoverCounter = NewCounterDef("task_errors_namespace_handover")
+	TaskInternalErrorCounter     = NewCounterDef("task_errors_internal")
 	TaskThrottledCounter         = NewCounterDef(
 		"task_errors_throttled",
 		WithDescription("The number of history task processing errors caused by resource exhausted errors, excluding workflow busy case."),
@@ -764,30 +814,27 @@ var (
 	QueueReaderCountHistogram                            = NewDimensionlessHistogramDef("queue_reader_count")
 	QueueSliceCountHistogram                             = NewDimensionlessHistogramDef("queue_slice_count")
 	QueueActionCounter                                   = NewCounterDef("queue_actions")
-	QueueActionFailures                                  = NewCounterDef("queue_action_errors")
 	ActivityE2ELatency                                   = NewTimerDef("activity_end_to_end_latency")
 	AckLevelUpdateCounter                                = NewCounterDef("ack_level_update")
 	AckLevelUpdateFailedCounter                          = NewCounterDef("ack_level_update_failed")
-	CommandTypeScheduleActivityCounter                   = NewCounterDef("schedule_activity_command")
-	CommandTypeCompleteWorkflowCounter                   = NewCounterDef("complete_workflow_command")
-	CommandTypeFailWorkflowCounter                       = NewCounterDef("fail_workflow_command")
-	CommandTypeCancelWorkflowCounter                     = NewCounterDef("cancel_workflow_command")
-	CommandTypeStartTimerCounter                         = NewCounterDef("start_timer_command")
-	CommandTypeCancelActivityCounter                     = NewCounterDef("cancel_activity_command")
-	CommandTypeCancelTimerCounter                        = NewCounterDef("cancel_timer_command")
-	CommandTypeRecordMarkerCounter                       = NewCounterDef("record_marker_command")
-	CommandTypeCancelExternalWorkflowCounter             = NewCounterDef("cancel_external_workflow_command")
-	CommandTypeContinueAsNewCounter                      = NewCounterDef("continue_as_new_command")
-	CommandTypeSignalExternalWorkflowCounter             = NewCounterDef("signal_external_workflow_command")
-	CommandTypeUpsertWorkflowSearchAttributesCounter     = NewCounterDef("upsert_workflow_search_attributes_command")
-	CommandTypeModifyWorkflowPropertiesCounter           = NewCounterDef("modify_workflow_properties_command")
-	CommandTypeChildWorkflowCounter                      = NewCounterDef("child_workflow_command")
-	CommandTypeProtocolMessage                           = NewCounterDef("protocol_message_command")
+	CommandCounter                                       = NewCounterDef("command")
 	MessageTypeRequestWorkflowExecutionUpdateCounter     = NewCounterDef("request_workflow_update_message")
 	MessageTypeAcceptWorkflowExecutionUpdateCounter      = NewCounterDef("accept_workflow_update_message")
 	MessageTypeRespondWorkflowExecutionUpdateCounter     = NewCounterDef("respond_workflow_update_message")
 	MessageTypeRejectWorkflowExecutionUpdateCounter      = NewCounterDef("reject_workflow_update_message")
 	InvalidStateTransitionWorkflowExecutionUpdateCounter = NewCounterDef("invalid_state_transition_workflow_update_message")
+	WorkflowExecutionUpdateRegistrySize                  = NewBytesHistogramDef("workflow_update_registry_size")
+	WorkflowExecutionUpdateRequestRateLimited            = NewCounterDef("workflow_update_request_rate_limited")
+	WorkflowExecutionUpdateTooMany                       = NewCounterDef("workflow_update_request_too_many")
+	WorkflowExecutionUpdateAborted                       = NewCounterDef("workflow_update_aborted")
+	WorkflowExecutionUpdateSentToWorker                  = NewCounterDef("workflow_update_sent_to_worker")
+	WorkflowExecutionUpdateSentToWorkerAgain             = NewCounterDef("workflow_update_sent_to_worker_again")
+	WorkflowExecutionUpdateWaitStageAccepted             = NewCounterDef("workflow_update_wait_stage_accepted")
+	WorkflowExecutionUpdateWaitStageCompleted            = NewCounterDef("workflow_update_wait_stage_completed")
+	WorkflowExecutionUpdateClientTimeout                 = NewCounterDef("workflow_update_client_timeout")
+	WorkflowExecutionUpdateServerTimeout                 = NewCounterDef("workflow_update_server_timeout")
+	SpeculativeWorkflowTaskCommits                       = NewCounterDef("speculative_workflow_task_commits")
+	SpeculativeWorkflowTaskRollbacks                     = NewCounterDef("speculative_workflow_task_rollbacks")
 
 	ActivityEagerExecutionCounter = NewCounterDef("activity_eager_execution")
 	// WorkflowEagerExecutionCounter is emitted any time eager workflow start is requested.
@@ -804,6 +851,7 @@ var (
 	StaleMutableStateCounter                      = NewCounterDef("stale_mutable_state")
 	AutoResetPointsLimitExceededCounter           = NewCounterDef("auto_reset_points_exceed_limit")
 	AutoResetPointCorruptionCounter               = NewCounterDef("auto_reset_point_corruption")
+	BatchableTaskBatchCount                       = NewGaugeDef("batchable_task_batch_count")
 	ConcurrencyUpdateFailureCounter               = NewCounterDef("concurrency_update_failure")
 	ServiceErrShardOwnershipLostCounter           = NewCounterDef("service_errors_shard_ownership_lost")
 	HeartbeatTimeoutCounter                       = NewCounterDef("heartbeat_timeout")
@@ -811,6 +859,8 @@ var (
 	StartToCloseTimeoutCounter                    = NewCounterDef("start_to_close_timeout")
 	ScheduleToCloseTimeoutCounter                 = NewCounterDef("schedule_to_close_timeout")
 	NewTimerNotifyCounter                         = NewCounterDef("new_timer_notifications")
+	StateMachineTimerProcessingFailuresCounter    = NewCounterDef("state_machine_timer_processing_failures")
+	StateMachineTimerSkipsCounter                 = NewCounterDef("state_machine_timer_skips")
 	AcquireShardsCounter                          = NewCounterDef("acquire_shards_count")
 	AcquireShardsLatency                          = NewTimerDef("acquire_shards_latency")
 	MembershipChangedCounter                      = NewCounterDef("membership_changed_count")
@@ -821,12 +871,17 @@ var (
 	CompleteWorkflowTaskWithStickyEnabledCounter  = NewCounterDef("complete_workflow_task_sticky_enabled_count")
 	CompleteWorkflowTaskWithStickyDisabledCounter = NewCounterDef("complete_workflow_task_sticky_disabled_count")
 	WorkflowTaskHeartbeatTimeoutCounter           = NewCounterDef("workflow_task_heartbeat_timeout_count")
+	SignalWithStartSkipDelayCounter               = NewCounterDef("signal_with_start_skip_delay_count")
 	DuplicateReplicationEventsCounter             = NewCounterDef("duplicate_replication_events")
 	AcquireLockFailedCounter                      = NewCounterDef("acquire_lock_failed")
 	WorkflowContextCleared                        = NewCounterDef("workflow_context_cleared")
 	MutableStateSize                              = NewBytesHistogramDef(
 		"mutable_state_size",
 		WithDescription("The size of an individual Workflow Execution's state, emitted each time a workflow execution is retrieved or updated."),
+	)
+	PersistedMutableStateSize = NewBytesHistogramDef(
+		"persisted_mutable_state_size",
+		WithDescription("Size of the persisted Workflow Execution's state in DB, emitted each time a workflow execution is updated."),
 	)
 	ExecutionInfoSize                     = NewBytesHistogramDef("execution_info_size")
 	ExecutionStateSize                    = NewBytesHistogramDef("execution_state_size")
@@ -851,6 +906,7 @@ var (
 	TotalRequestCancelExternalCount       = NewDimensionlessHistogramDef("total_request_cancel_external_count")
 	TotalSignalExternalCount              = NewDimensionlessHistogramDef("total_signal_external_count")
 	TotalSignalCount                      = NewDimensionlessHistogramDef("total_signal_count")
+	WorkflowBackoffCount                  = NewCounterDef("workflow_backoff_timer")
 	WorkflowRetryBackoffTimerCount        = NewCounterDef("workflow_retry_backoff_timer")
 	WorkflowCronBackoffTimerCount         = NewCounterDef("workflow_cron_backoff_timer")
 	WorkflowDelayedStartBackoffTimerCount = NewCounterDef("workflow_delayed_start_backoff_timer")
@@ -861,6 +917,10 @@ var (
 	WorkflowTimeoutCount                  = NewCounterDef("workflow_timeout")
 	WorkflowTerminateCount                = NewCounterDef("workflow_terminate")
 	WorkflowContinuedAsNewCount           = NewCounterDef("workflow_continued_as_new")
+	ReplicationStreamPanic                = NewCounterDef("replication_stream_panic")
+	ReplicationStreamError                = NewCounterDef("replication_stream_error")
+	ReplicationServiceError               = NewCounterDef("replication_service_error")
+	ReplicationStreamStuck                = NewCounterDef("replication_stream_stuck")
 	ReplicationTasksSend                  = NewCounterDef("replication_tasks_send")
 	ReplicationTasksRecv                  = NewCounterDef("replication_tasks_recv")
 	ReplicationTasksRecvBacklog           = NewDimensionlessHistogramDef("replication_tasks_recv_backlog")
@@ -873,6 +933,7 @@ var (
 	// ReplicationTasksFetched records the number of tasks fetched by the poller.
 	ReplicationTasksFetched                        = NewDimensionlessHistogramDef("replication_tasks_fetched")
 	ReplicationLatency                             = NewTimerDef("replication_latency")
+	ReplicationTaskTransmissionLatency             = NewTimerDef("replication_task_transmission_latency")
 	ReplicationDLQFailed                           = NewCounterDef("replication_dlq_enqueue_failed")
 	ReplicationDLQMaxLevelGauge                    = NewGaugeDef("replication_dlq_max_level")
 	ReplicationDLQAckLevelGauge                    = NewGaugeDef("replication_dlq_ack_level")
@@ -898,68 +959,104 @@ var (
 	MutableStateDirty                              = NewCounterDef("mutable_state_dirty")
 	MutableStateChecksumMismatch                   = NewCounterDef("mutable_state_checksum_mismatch")
 	MutableStateChecksumInvalidated                = NewCounterDef("mutable_state_checksum_invalidated")
-	ClusterMetadataLockLatency                     = NewTimerDef("cluster_metadata_lock_latency")
-	ClusterMetadataCallbackLockLatency             = NewTimerDef("cluster_metadata_callback_lock_latency")
-	ShardControllerLockLatency                     = NewTimerDef("shard_controller_lock_latency")
-	ShardLockLatency                               = NewTimerDef("shard_lock_latency")
-	NamespaceRegistryLockLatency                   = NewTimerDef("namespace_registry_lock_latency")
 	ClosedWorkflowBufferEventCount                 = NewCounterDef("closed_workflow_buffer_event_counter")
-	InorderBufferedEventsCounter                   = NewCounterDef("inordered_buffered_events")
+	OutOfOrderBufferedEventsCounter                = NewCounterDef("out_of_order_buffered_events")
 	ShardLingerSuccess                             = NewTimerDef("shard_linger_success")
 	ShardLingerTimeouts                            = NewCounterDef("shard_linger_timeouts")
+	DynamicRateLimiterMultiplier                   = NewGaugeDef("dynamic_rate_limit_multiplier")
+	DLQWrites                                      = NewCounterDef(
+		"dlq_writes",
+		WithDescription("The number of times a message is enqueued to DLQ. DLQ can be inspected using tdbg dlq command."),
+	)
+	DLQMessageCount = NewGaugeDef(
+		"dlq_message_count",
+		WithDescription("The number of messages currently in DLQ."),
+	)
+	ReadNamespaceErrors                     = NewCounterDef("read_namespace_errors")
+	RateLimitedTaskRunnableWaitTime         = NewTimerDef("rate_limited_task_runnable_wait_time")
+	CircuitBreakerExecutableBlocked         = NewCounterDef("circuit_breaker_executable_blocked")
+	DynamicWorkerPoolSchedulerBufferSize    = NewGaugeDef("dynamic_worker_pool_scheduler_buffer_size")
+	DynamicWorkerPoolSchedulerActiveWorkers = NewGaugeDef("dynamic_worker_pool_scheduler_active_workers")
+	DynamicWorkerPoolSchedulerEnqueuedTasks = NewCounterDef("dynamic_worker_pool_scheduler_enqueued_tasks")
+	DynamicWorkerPoolSchedulerDequeuedTasks = NewCounterDef("dynamic_worker_pool_scheduler_dequeued_tasks")
+	DynamicWorkerPoolSchedulerRejectedTasks = NewCounterDef("dynamic_worker_pool_scheduler_rejected_tasks")
+
+	// Deadlock detector latency metrics
+	DDClusterMetadataLockLatency         = NewTimerDef("dd_cluster_metadata_lock_latency")
+	DDClusterMetadataCallbackLockLatency = NewTimerDef("dd_cluster_metadata_callback_lock_latency")
+	DDShardControllerLockLatency         = NewTimerDef("dd_shard_controller_lock_latency")
+	DDShardLockLatency                   = NewTimerDef("dd_shard_lock_latency")
+	DDShardIOSemaphoreLatency            = NewTimerDef("dd_shard_io_semaphore_latency")
+	DDNamespaceRegistryLockLatency       = NewTimerDef("dd_namespace_registry_lock_latency")
 
 	// Matching
-	MatchingClientForwardedCounter            = NewCounterDef("forwarded")
-	MatchingClientInvalidTaskQueueName        = NewCounterDef("invalid_task_queue_name")
-	SyncMatchLatencyPerTaskQueue              = NewTimerDef("syncmatch_latency")
-	AsyncMatchLatencyPerTaskQueue             = NewTimerDef("asyncmatch_latency")
-	PollSuccessPerTaskQueueCounter            = NewCounterDef("poll_success")
-	PollTimeoutPerTaskQueueCounter            = NewCounterDef("poll_timeouts")
-	PollSuccessWithSyncPerTaskQueueCounter    = NewCounterDef("poll_success_sync")
-	LeaseRequestPerTaskQueueCounter           = NewCounterDef("lease_requests")
-	LeaseFailurePerTaskQueueCounter           = NewCounterDef("lease_failures")
-	ConditionFailedErrorPerTaskQueueCounter   = NewCounterDef("condition_failed_errors")
-	RespondQueryTaskFailedPerTaskQueueCounter = NewCounterDef("respond_query_failed")
-	SyncThrottlePerTaskQueueCounter           = NewCounterDef("sync_throttle_count")
-	BufferThrottlePerTaskQueueCounter         = NewCounterDef("buffer_throttle_count")
-	ExpiredTasksPerTaskQueueCounter           = NewCounterDef("tasks_expired")
-	ForwardedPerTaskQueueCounter              = NewCounterDef("forwarded_per_tl")
-	ForwardTaskErrorsPerTaskQueue             = NewCounterDef("forward_task_errors")
-	LocalToLocalMatchPerTaskQueueCounter      = NewCounterDef("local_to_local_matches")
-	LocalToRemoteMatchPerTaskQueueCounter     = NewCounterDef("local_to_remote_matches")
-	RemoteToLocalMatchPerTaskQueueCounter     = NewCounterDef("remote_to_local_matches")
-	RemoteToRemoteMatchPerTaskQueueCounter    = NewCounterDef("remote_to_remote_matches")
-	LoadedTaskQueueGauge                      = NewGaugeDef("loaded_task_queue_count")
-	TaskQueueStartedCounter                   = NewCounterDef("task_queue_started")
-	TaskQueueStoppedCounter                   = NewCounterDef("task_queue_stopped")
-	TaskWriteThrottlePerTaskQueueCounter      = NewCounterDef("task_write_throttle_count")
-	TaskWriteLatencyPerTaskQueue              = NewTimerDef("task_write_latency")
-	TaskLagPerTaskQueueGauge                  = NewGaugeDef("task_lag_per_tl")
-	NoRecentPollerTasksPerTaskQueueCounter    = NewCounterDef("no_poller_tasks")
-	UnknownBuildPollsCounter                  = NewCounterDef("unknown_build_polls")
-	UnknownBuildTasksCounter                  = NewCounterDef("unknown_build_tasks")
+	MatchingClientForwardedCounter                    = NewCounterDef("forwarded")
+	MatchingClientInvalidTaskQueueName                = NewCounterDef("invalid_task_queue_name")
+	MatchingClientInvalidTaskQueuePartition           = NewCounterDef("invalid_task_queue_partition")
+	SyncMatchLatencyPerTaskQueue                      = NewTimerDef("syncmatch_latency")
+	AsyncMatchLatencyPerTaskQueue                     = NewTimerDef("asyncmatch_latency")
+	PollSuccessPerTaskQueueCounter                    = NewCounterDef("poll_success")
+	PollTimeoutPerTaskQueueCounter                    = NewCounterDef("poll_timeouts")
+	PollSuccessWithSyncPerTaskQueueCounter            = NewCounterDef("poll_success_sync")
+	PollLatencyPerTaskQueue                           = NewTimerDef("poll_latency")
+	LeaseRequestPerTaskQueueCounter                   = NewCounterDef("lease_requests")
+	LeaseFailurePerTaskQueueCounter                   = NewCounterDef("lease_failures")
+	ConditionFailedErrorPerTaskQueueCounter           = NewCounterDef("condition_failed_errors")
+	RespondQueryTaskFailedPerTaskQueueCounter         = NewCounterDef("respond_query_failed")
+	RespondNexusTaskFailedPerTaskQueueCounter         = NewCounterDef("respond_nexus_failed")
+	SyncThrottlePerTaskQueueCounter                   = NewCounterDef("sync_throttle_count")
+	BufferThrottlePerTaskQueueCounter                 = NewCounterDef("buffer_throttle_count")
+	ExpiredTasksPerTaskQueueCounter                   = NewCounterDef("tasks_expired")
+	ForwardedPerTaskQueueCounter                      = NewCounterDef("forwarded_per_tl")
+	ForwardTaskErrorsPerTaskQueue                     = NewCounterDef("forward_task_errors")
+	LocalToLocalMatchPerTaskQueueCounter              = NewCounterDef("local_to_local_matches")
+	LocalToRemoteMatchPerTaskQueueCounter             = NewCounterDef("local_to_remote_matches")
+	RemoteToLocalMatchPerTaskQueueCounter             = NewCounterDef("remote_to_local_matches")
+	RemoteToRemoteMatchPerTaskQueueCounter            = NewCounterDef("remote_to_remote_matches")
+	LoadedTaskQueueFamilyGauge                        = NewGaugeDef("loaded_task_queue_family_count")
+	LoadedTaskQueueGauge                              = NewGaugeDef("loaded_task_queue_count")
+	LoadedTaskQueuePartitionGauge                     = NewGaugeDef("loaded_task_queue_partition_count")
+	ForceLoadedTaskQueuePartitions                    = NewCounterDef("force_loaded_task_queue_partitions_count")
+	ForceLoadedTaskQueuePartitionUnnecessarilyCounter = NewCounterDef("force_loaded_task_queue_partition_unnecessarily_count")
+	LoadedPhysicalTaskQueueGauge                      = NewGaugeDef("loaded_physical_task_queue_count")
+	TaskQueueStartedCounter                           = NewCounterDef("task_queue_started")
+	TaskQueueStoppedCounter                           = NewCounterDef("task_queue_stopped")
+	TaskWriteThrottlePerTaskQueueCounter              = NewCounterDef("task_write_throttle_count")
+	TaskWriteLatencyPerTaskQueue                      = NewTimerDef("task_write_latency")
+	TaskLagPerTaskQueueGauge                          = NewGaugeDef("task_lag_per_tl")
+	NoRecentPollerTasksPerTaskQueueCounter            = NewCounterDef("no_poller_tasks")
+	UnknownBuildPollsCounter                          = NewCounterDef("unknown_build_polls")
+	UnknownBuildTasksCounter                          = NewCounterDef("unknown_build_tasks")
+	TaskDispatchLatencyPerTaskQueue                   = NewTimerDef("task_dispatch_latency")
+	ApproximateBacklogCount                           = NewGaugeDef("approximate_backlog_count")
+	ApproximateBacklogAgeSeconds                      = NewGaugeDef("approximate_backlog_age_seconds")
+
+	// Versioning and Reachability
+	ReachabilityExitPointCounter = NewCounterDef("reachability_exit_point_count")
 
 	// Worker
-	ExecutorTasksDoneCount                          = NewCounterDef("executor_done")
-	ExecutorTasksErrCount                           = NewCounterDef("executor_err")
-	ExecutorTasksDeferredCount                      = NewCounterDef("executor_deferred")
-	ExecutorTasksDroppedCount                       = NewCounterDef("executor_dropped")
-	StartedCount                                    = NewCounterDef("started")
-	StoppedCount                                    = NewCounterDef("stopped")
-	TaskProcessedCount                              = NewGaugeDef("task_processed")
-	TaskDeletedCount                                = NewGaugeDef("task_deleted")
-	TaskQueueProcessedCount                         = NewGaugeDef("taskqueue_processed")
-	TaskQueueDeletedCount                           = NewGaugeDef("taskqueue_deleted")
-	TaskQueueOutstandingCount                       = NewGaugeDef("taskqueue_outstanding")
-	HistoryArchiverArchiveNonRetryableErrorCount    = NewCounterDef("history_archiver_archive_non_retryable_error")
-	HistoryArchiverArchiveTransientErrorCount       = NewCounterDef("history_archiver_archive_transient_error")
-	HistoryArchiverArchiveSuccessCount              = NewCounterDef("history_archiver_archive_success")
-	HistoryArchiverTotalUploadSize                  = NewBytesHistogramDef("history_archiver_total_upload_size")
-	HistoryArchiverHistorySize                      = NewBytesHistogramDef("history_archiver_history_size")
-	HistoryArchiverDuplicateArchivalsCount          = NewCounterDef("history_archiver_duplicate_archivals")
-	HistoryArchiverBlobExistsCount                  = NewCounterDef("history_archiver_blob_exists")
-	HistoryArchiverBlobSize                         = NewBytesHistogramDef("history_archiver_blob_size")
-	HistoryWorkflowExecutionCacheLatency            = NewTimerDef("history_workflow_execution_cache_latency")
+	ExecutorTasksDoneCount                        = NewCounterDef("executor_done")
+	ExecutorTasksErrCount                         = NewCounterDef("executor_err")
+	ExecutorTasksDeferredCount                    = NewCounterDef("executor_deferred")
+	ExecutorTasksDroppedCount                     = NewCounterDef("executor_dropped")
+	StartedCount                                  = NewCounterDef("started")
+	StoppedCount                                  = NewCounterDef("stopped")
+	TaskProcessedCount                            = NewGaugeDef("task_processed")
+	TaskDeletedCount                              = NewGaugeDef("task_deleted")
+	TaskQueueProcessedCount                       = NewGaugeDef("taskqueue_processed")
+	TaskQueueDeletedCount                         = NewGaugeDef("taskqueue_deleted")
+	TaskQueueOutstandingCount                     = NewGaugeDef("taskqueue_outstanding")
+	HistoryArchiverArchiveNonRetryableErrorCount  = NewCounterDef("history_archiver_archive_non_retryable_error")
+	HistoryArchiverArchiveTransientErrorCount     = NewCounterDef("history_archiver_archive_transient_error")
+	HistoryArchiverArchiveSuccessCount            = NewCounterDef("history_archiver_archive_success")
+	HistoryArchiverTotalUploadSize                = NewBytesHistogramDef("history_archiver_total_upload_size")
+	HistoryArchiverHistorySize                    = NewBytesHistogramDef("history_archiver_history_size")
+	HistoryArchiverDuplicateArchivalsCount        = NewCounterDef("history_archiver_duplicate_archivals")
+	HistoryArchiverBlobExistsCount                = NewCounterDef("history_archiver_blob_exists")
+	HistoryArchiverBlobSize                       = NewBytesHistogramDef("history_archiver_blob_size")
+	HistoryWorkflowExecutionCacheLatency          = NewTimerDef("history_workflow_execution_cache_latency")
+	HistoryWorkflowExecutionCacheLockHoldDuration = NewTimerDef("history_workflow_execution_cache_lock_hold_duration")
+
 	VisibilityArchiverArchiveNonRetryableErrorCount = NewCounterDef("visibility_archiver_archive_non_retryable_error")
 	VisibilityArchiverArchiveTransientErrorCount    = NewCounterDef("visibility_archiver_archive_transient_error")
 	VisibilityArchiveSuccessCount                   = NewCounterDef("visibility_archiver_archive_success")
@@ -1029,6 +1126,10 @@ var (
 		"schedule_action_success",
 		WithDescription("The number of schedule actions that were successfully taken by a schedule"),
 	)
+	ScheduleActionAttempt = NewCounterDef(
+		"schedule_action_attempt",
+		WithDescription("The number of schedule actions attempts"),
+	)
 	ScheduleActionErrors = NewCounterDef(
 		"schedule_action_errors",
 		WithDescription("The number of schedule actions that failed to start"),
@@ -1040,6 +1141,10 @@ var (
 	ScheduleTerminateWorkflowErrors = NewCounterDef(
 		"schedule_terminate_workflow_errors",
 		WithDescription("The number of times a schedule got an error trying to terminate a previous run"),
+	)
+	ScheduleActionDelay = NewTimerDef(
+		"schedule_action_delay",
+		WithDescription("Delay between when scheduled actions should/actually happen"),
 	)
 
 	// Force replication
@@ -1081,16 +1186,18 @@ var (
 	VisibilityPersistenceLatency           = NewTimerDef("visibility_persistence_latency")
 	CassandraInitSessionLatency            = NewTimerDef("cassandra_init_session_latency")
 	CassandraSessionRefreshFailures        = NewCounterDef("cassandra_session_refresh_failures")
-)
+	PersistenceSessionRefreshFailures      = NewCounterDef("persistence_session_refresh_failures")
+	PersistenceSessionRefreshAttempts      = NewCounterDef("persistence_session_refresh_attempts")
 
-// DEPRECATED: remove interim metric names for tracking fraction of FE->History calls during migration
-const (
-	AccessHistoryOld = "AccessHistoryOld"
-	AccessHistoryNew = "AccessHistoryNew"
-
-	AdminGetWorkflowExecutionRawHistoryV2Tag      = "GetWorkflowExecutionRawHistoryV2"
-	AdminDeleteWorkflowExecutionTag               = "DeleteWorkflowExecution"
-	FrontendGetWorkflowExecutionHistoryTag        = "GetWorkflowExecutionHistory"
-	FrontendGetWorkflowExecutionHistoryReverseTag = "GetWorkflowExecutionHistoryReverse"
-	FrontendRespondWorkflowTaskCompletedTag       = "RespondWorkflowTaskCompleted"
+	// Common service base metrics
+	RestartCount         = NewCounterDef("restarts")
+	NumGoRoutinesGauge   = NewGaugeDef("num_goroutines")
+	GoMaxProcsGauge      = NewGaugeDef("gomaxprocs")
+	MemoryAllocatedGauge = NewGaugeDef("memory_allocated")
+	MemoryHeapGauge      = NewGaugeDef("memory_heap")
+	MemoryHeapIdleGauge  = NewGaugeDef("memory_heapidle")
+	MemoryHeapInuseGauge = NewGaugeDef("memory_heapinuse")
+	MemoryStackGauge     = NewGaugeDef("memory_stack")
+	NumGCCounter         = NewBytesHistogramDef("memory_num_gc")
+	GcPauseMsTimer       = NewTimerDef("memory_gc_pause_ms")
 )

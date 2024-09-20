@@ -29,148 +29,184 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"strings"
 
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
-	"go.temporal.io/server/common/persistence/visibility/store"
 )
 
-const (
-	templateCreateWorkflowExecutionStarted = `INSERT INTO executions_visibility (` +
-		`namespace_id, workflow_id, run_id, start_time, execution_time, workflow_type_name, status, memo, encoding, task_queue) ` +
-		`VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ` +
-		`ON DUPLICATE KEY UPDATE ` +
-		`run_id=VALUES(run_id)`
+var (
+	templateInsertWorkflowExecution = fmt.Sprintf(
+		`INSERT INTO executions_visibility (%s)
+		VALUES (%s)
+		ON DUPLICATE KEY UPDATE run_id = VALUES(run_id)`,
+		strings.Join(sqlplugin.DbFields, ", "),
+		sqlplugin.BuildNamedPlaceholder(sqlplugin.DbFields...),
+	)
 
-	templateCreateWorkflowExecutionClosed = `INSERT INTO executions_visibility (` +
-		`namespace_id, workflow_id, run_id, start_time, execution_time, workflow_type_name, close_time, status, history_length, memo, encoding, task_queue) ` +
-		`VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ` +
-		`ON DUPLICATE KEY UPDATE workflow_id = VALUES(workflow_id), start_time = VALUES(start_time), execution_time = VALUES(execution_time), workflow_type_name = VALUES(workflow_type_name), ` +
-		`close_time = VALUES(close_time), status = VALUES(status), history_length = VALUES(history_length), memo = VALUES(memo), encoding = VALUES(encoding), task_queue = VALUES(task_queue)`
+	templateInsertCustomSearchAttributes = `
+		INSERT INTO custom_search_attributes (
+			namespace_id, run_id, search_attributes
+		) VALUES (:namespace_id, :run_id, :search_attributes)
+		ON DUPLICATE KEY UPDATE run_id = VALUES(run_id)`
 
-	// RunID condition is needed for correct pagination
-	templateConditions = ` AND namespace_id = ?
-		 AND start_time >= ?
-		 AND start_time <= ?
- 		 AND ((run_id > ? and start_time = ?) OR (start_time < ?))
-         ORDER BY start_time DESC, run_id
-		 LIMIT ?`
+	templateUpsertWorkflowExecution = fmt.Sprintf(
+		`INSERT INTO executions_visibility (%s)
+		VALUES (%s)
+		%s`,
+		strings.Join(sqlplugin.DbFields, ", "),
+		sqlplugin.BuildNamedPlaceholder(sqlplugin.DbFields...),
+		buildOnDuplicateKeyUpdate(sqlplugin.DbFields...),
+	)
 
-	templateConditionsClosedWorkflows = ` AND namespace_id = ?
-	AND close_time >= ?
-	AND close_time <= ?
-	 AND ((run_id > ? and close_time = ?) OR (close_time < ?))
-	ORDER BY close_time DESC, run_id
-	LIMIT ?`
+	templateUpsertCustomSearchAttributes = `
+		INSERT INTO custom_search_attributes (
+			namespace_id, run_id, search_attributes
+		) VALUES (:namespace_id, :run_id, :search_attributes)
+		ON DUPLICATE KEY UPDATE search_attributes = VALUES(search_attributes)`
 
-	templateOpenFieldNames = `workflow_id, run_id, start_time, execution_time, workflow_type_name, status, memo, encoding, task_queue`
-	templateOpenSelect     = `SELECT ` + templateOpenFieldNames + ` FROM executions_visibility WHERE status = 1 `
+	templateDeleteWorkflowExecution_v8 = `
+		DELETE FROM executions_visibility
+		WHERE namespace_id = :namespace_id AND run_id = :run_id`
 
-	templateClosedSelect = `SELECT ` + templateOpenFieldNames + `, close_time, history_length
-		 FROM executions_visibility WHERE status != 1 `
+	templateDeleteCustomSearchAttributes = `
+		DELETE FROM custom_search_attributes
+		WHERE namespace_id = :namespace_id AND run_id = :run_id`
 
-	templateGetOpenWorkflowExecutions = templateOpenSelect + templateConditions
-
-	templateGetClosedWorkflowExecutions = templateClosedSelect + templateConditionsClosedWorkflows
-
-	templateGetOpenWorkflowExecutionsByType = templateOpenSelect + `AND workflow_type_name = ?` + templateConditions
-
-	templateGetClosedWorkflowExecutionsByType = templateClosedSelect + `AND workflow_type_name = ?` + templateConditionsClosedWorkflows
-
-	templateGetOpenWorkflowExecutionsByID = templateOpenSelect + `AND workflow_id = ?` + templateConditions
-
-	templateGetClosedWorkflowExecutionsByID = templateClosedSelect + `AND workflow_id = ?` + templateConditionsClosedWorkflows
-
-	templateGetClosedWorkflowExecutionsByStatus = templateClosedSelect + `AND status = ?` + templateConditionsClosedWorkflows
-
-	templateGetClosedWorkflowExecution = `SELECT workflow_id, run_id, start_time, execution_time, memo, encoding, close_time, workflow_type_name, status, history_length, task_queue 
-		 FROM executions_visibility
-		 WHERE namespace_id = ? AND status != 1
-		 AND run_id = ?`
-
-	templateGetWorkflowExecution = `
-		SELECT
-			workflow_id,
-			run_id,
-			start_time,
-			execution_time,
-			memo,
-			encoding,
-			close_time,
-			workflow_type_name,
-			status,
-			history_length,
-			task_queue 
-		FROM executions_visibility
-		WHERE namespace_id = ? AND run_id = ?`
-
-	templateDeleteWorkflowExecution = "DELETE FROM executions_visibility WHERE namespace_id = ? AND run_id = ?"
+	templateGetWorkflowExecution_v8 = fmt.Sprintf(
+		`SELECT %s FROM executions_visibility
+		WHERE namespace_id = :namespace_id AND run_id = :run_id`,
+		strings.Join(sqlplugin.DbFields, ", "),
+	)
 )
 
-var errCloseParams = errors.New("missing one of {CloseTime, HistoryLength} params")
+func buildOnDuplicateKeyUpdate(fields ...string) string {
+	items := make([]string, len(fields))
+	for i, field := range fields {
+		items[i] = fmt.Sprintf("%s = VALUES(%s)", field, field)
+	}
+	return fmt.Sprintf("ON DUPLICATE KEY UPDATE %s", strings.Join(items, ", "))
+}
 
 // InsertIntoVisibility inserts a row into visibility table. If an row already exist,
 // its left as such and no update will be made
 func (mdb *db) InsertIntoVisibility(
 	ctx context.Context,
 	row *sqlplugin.VisibilityRow,
-) (sql.Result, error) {
-	row.StartTime = mdb.converter.ToMySQLDateTime(row.StartTime)
-	row.ExecutionTime = mdb.converter.ToMySQLDateTime(row.ExecutionTime)
-	return mdb.conn.ExecContext(ctx,
-		templateCreateWorkflowExecutionStarted,
-		row.NamespaceID,
-		row.WorkflowID,
-		row.RunID,
-		row.StartTime,
-		row.ExecutionTime,
-		row.WorkflowTypeName,
-		row.Status,
-		row.Memo,
-		row.Encoding,
-		row.TaskQueue,
-	)
+) (result sql.Result, retError error) {
+	finalRow := mdb.prepareRowForDB(row)
+	defer func() {
+		retError = mdb.handle.ConvertError(retError)
+	}()
+	db, err := mdb.handle.DB()
+	if err != nil {
+		return nil, err
+	}
+
+	tx, err := db.BeginTxx(ctx, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		err := tx.Rollback()
+		// If the error is sql.ErrTxDone, it means the transaction already closed, so ignore error.
+		if err != nil && !errors.Is(err, sql.ErrTxDone) {
+			// Transaction rollback error should never happen, unless db connection was lost.
+			retError = fmt.Errorf("transaction rollback failed: %w", retError)
+		}
+	}()
+	result, err = tx.NamedExecContext(ctx, templateInsertWorkflowExecution, finalRow)
+	if err != nil {
+		return nil, fmt.Errorf("unable to insert workflow execution: %w", err)
+	}
+	_, err = tx.NamedExecContext(ctx, templateInsertCustomSearchAttributes, finalRow)
+	if err != nil {
+		return nil, fmt.Errorf("unable to insert custom search attributes: %w", err)
+	}
+	err = tx.Commit()
+	if err != nil {
+		return nil, err
+	}
+	return result, nil
 }
 
 // ReplaceIntoVisibility replaces an existing row if it exist or creates a new row in visibility table
 func (mdb *db) ReplaceIntoVisibility(
 	ctx context.Context,
 	row *sqlplugin.VisibilityRow,
-) (sql.Result, error) {
-	switch {
-	case row.CloseTime != nil && row.HistoryLength != nil:
-		row.StartTime = mdb.converter.ToMySQLDateTime(row.StartTime)
-		row.ExecutionTime = mdb.converter.ToMySQLDateTime(row.ExecutionTime)
-		closeTime := mdb.converter.ToMySQLDateTime(*row.CloseTime)
-		return mdb.conn.ExecContext(ctx,
-			templateCreateWorkflowExecutionClosed,
-			row.NamespaceID,
-			row.WorkflowID,
-			row.RunID,
-			row.StartTime,
-			row.ExecutionTime,
-			row.WorkflowTypeName,
-			closeTime,
-			row.Status,
-			*row.HistoryLength,
-			row.Memo,
-			row.Encoding,
-			row.TaskQueue,
-		)
-	default:
-		return nil, errCloseParams
+) (result sql.Result, retError error) {
+	defer func() {
+		retError = mdb.handle.ConvertError(retError)
+	}()
+	finalRow := mdb.prepareRowForDB(row)
+	db, err := mdb.handle.DB()
+	if err != nil {
+		return nil, err
 	}
+	tx, err := db.BeginTxx(ctx, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		err := tx.Rollback()
+		// If the error is sql.ErrTxDone, it means the transaction already closed, so ignore error.
+		if err != nil && !errors.Is(err, sql.ErrTxDone) {
+			// Transaction rollback error should never happen, unless db connection was lost.
+			retError = fmt.Errorf("transaction rollback failed: %w", retError)
+		}
+	}()
+	result, err = tx.NamedExecContext(ctx, templateUpsertWorkflowExecution, finalRow)
+	if err != nil {
+		return nil, fmt.Errorf("unable to upsert workflow execution: %w", err)
+	}
+	_, err = tx.NamedExecContext(ctx, templateUpsertCustomSearchAttributes, finalRow)
+	if err != nil {
+		return nil, fmt.Errorf("unable to upsert custom search attributes: %w", err)
+	}
+	err = tx.Commit()
+	if err != nil {
+		return nil, err
+	}
+	return result, nil
 }
 
 // DeleteFromVisibility deletes a row from visibility table if it exist
 func (mdb *db) DeleteFromVisibility(
 	ctx context.Context,
 	filter sqlplugin.VisibilityDeleteFilter,
-) (sql.Result, error) {
-	return mdb.conn.ExecContext(ctx,
-		templateDeleteWorkflowExecution,
-		filter.NamespaceID,
-		filter.RunID,
-	)
+) (result sql.Result, retError error) {
+	defer func() {
+		retError = mdb.handle.ConvertError(retError)
+	}()
+	db, err := mdb.handle.DB()
+	if err != nil {
+		return nil, err
+	}
+
+	tx, err := db.BeginTxx(ctx, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		err := tx.Rollback()
+		// If the error is sql.ErrTxDone, it means the transaction already closed, so ignore error.
+		if err != nil && !errors.Is(err, sql.ErrTxDone) {
+			// Transaction rollback error should never happen, unless db connection was lost.
+			retError = fmt.Errorf("transaction rollback failed: %w", retError)
+		}
+	}()
+	_, err = mdb.NamedExecContext(ctx, templateDeleteCustomSearchAttributes, filter)
+	if err != nil {
+		return nil, fmt.Errorf("unable to delete custom search attributes: %w", err)
+	}
+	result, err = mdb.NamedExecContext(ctx, templateDeleteWorkflowExecution_v8, filter)
+	if err != nil {
+		return nil, fmt.Errorf("unable to delete workflow execution: %w", err)
+	}
+	err = tx.Commit()
+	if err != nil {
+		return nil, err
+	}
+	return result, nil
 }
 
 // SelectFromVisibility reads one or more rows from visibility table
@@ -178,103 +214,24 @@ func (mdb *db) SelectFromVisibility(
 	ctx context.Context,
 	filter sqlplugin.VisibilitySelectFilter,
 ) ([]sqlplugin.VisibilityRow, error) {
-	var err error
+	if len(filter.Query) == 0 {
+		// backward compatibility for existing tests
+		err := sqlplugin.GenerateSelectQuery(&filter, mdb.converter.ToMySQLDateTime)
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	var rows []sqlplugin.VisibilityRow
-	if filter.MinTime != nil {
-		*filter.MinTime = mdb.converter.ToMySQLDateTime(*filter.MinTime)
-	}
-	if filter.MaxTime != nil {
-		*filter.MaxTime = mdb.converter.ToMySQLDateTime(*filter.MaxTime)
-	}
-	// If filter.Status == 0 (UNSPECIFIED) then only closed workflows will be returned (all excluding 1 (RUNNING)).
-	switch {
-	case filter.MinTime == nil && filter.RunID != nil && filter.Status != 1:
-		var row sqlplugin.VisibilityRow
-		err = mdb.conn.GetContext(ctx,
-			&row,
-			templateGetClosedWorkflowExecution,
-			filter.NamespaceID,
-			*filter.RunID,
-		)
-		if err == nil {
-			rows = append(rows, row)
-		}
-	case filter.MinTime != nil && filter.MaxTime != nil &&
-		filter.WorkflowID != nil && filter.RunID != nil && filter.PageSize != nil:
-		qry := templateGetOpenWorkflowExecutionsByID
-		if filter.Status != 1 {
-			qry = templateGetClosedWorkflowExecutionsByID
-		}
-		err = mdb.conn.SelectContext(ctx,
-			&rows,
-			qry,
-			*filter.WorkflowID,
-			filter.NamespaceID,
-			*filter.MinTime,
-			*filter.MaxTime,
-			*filter.RunID,
-			*filter.MaxTime,
-			*filter.MaxTime,
-			*filter.PageSize,
-		)
-	case filter.MinTime != nil && filter.MaxTime != nil &&
-		filter.WorkflowTypeName != nil && filter.RunID != nil && filter.PageSize != nil:
-		qry := templateGetOpenWorkflowExecutionsByType
-		if filter.Status != 1 {
-			qry = templateGetClosedWorkflowExecutionsByType
-		}
-		err = mdb.conn.SelectContext(ctx,
-			&rows,
-			qry,
-			*filter.WorkflowTypeName,
-			filter.NamespaceID,
-			*filter.MinTime,
-			*filter.MaxTime,
-			*filter.RunID,
-			*filter.MaxTime,
-			*filter.MaxTime,
-			*filter.PageSize,
-		)
-	case filter.MinTime != nil && filter.MaxTime != nil &&
-		filter.RunID != nil && filter.PageSize != nil &&
-		filter.Status != 0 && filter.Status != 1: // 0 is UNSPECIFIED, 1 is RUNNING
-		err = mdb.conn.SelectContext(ctx,
-			&rows,
-			templateGetClosedWorkflowExecutionsByStatus,
-			filter.Status,
-			filter.NamespaceID,
-			*filter.MinTime,
-			*filter.MaxTime,
-			*filter.RunID,
-			*filter.MaxTime,
-			*filter.MaxTime,
-			*filter.PageSize,
-		)
-	case filter.MinTime != nil && filter.MaxTime != nil &&
-		filter.RunID != nil && filter.PageSize != nil:
-		qry := templateGetOpenWorkflowExecutions
-		if filter.Status != 1 {
-			qry = templateGetClosedWorkflowExecutions
-		}
-		err = mdb.conn.SelectContext(ctx,
-			&rows,
-			qry,
-			filter.NamespaceID,
-			*filter.MinTime,
-			*filter.MaxTime,
-			*filter.RunID,
-			*filter.MaxTime,
-			*filter.MaxTime,
-			*filter.PageSize,
-		)
-	default:
-		return nil, fmt.Errorf("invalid query filter")
-	}
+	err := mdb.SelectContext(ctx, &rows, filter.Query, filter.QueryArgs...)
 	if err != nil {
 		return nil, err
 	}
 	for i := range rows {
-		mdb.processRowFromDB(&rows[i])
+		err = mdb.processRowFromDB(&rows[i])
+		if err != nil {
+			return nil, err
+		}
 	}
 	return rows, nil
 }
@@ -285,16 +242,18 @@ func (mdb *db) GetFromVisibility(
 	filter sqlplugin.VisibilityGetFilter,
 ) (*sqlplugin.VisibilityRow, error) {
 	var row sqlplugin.VisibilityRow
-	err := mdb.conn.GetContext(ctx,
-		&row,
-		templateGetWorkflowExecution,
-		filter.NamespaceID,
-		filter.RunID,
-	)
+	stmt, err := mdb.PrepareNamedContext(ctx, templateGetWorkflowExecution_v8)
 	if err != nil {
 		return nil, err
 	}
-	mdb.processRowFromDB(&row)
+	err = stmt.GetContext(ctx, &row, filter)
+	if err != nil {
+		return nil, err
+	}
+	err = mdb.processRowFromDB(&row)
+	if err != nil {
+		return nil, err
+	}
 	return &row, nil
 }
 
@@ -302,21 +261,75 @@ func (mdb *db) CountFromVisibility(
 	ctx context.Context,
 	filter sqlplugin.VisibilitySelectFilter,
 ) (int64, error) {
-	return 0, store.OperationNotSupportedErr
+	var count int64
+	err := mdb.GetContext(ctx, &count, filter.Query, filter.QueryArgs...)
+	if err != nil {
+		return 0, err
+	}
+	return count, nil
 }
 
 func (mdb *db) CountGroupByFromVisibility(
 	ctx context.Context,
 	filter sqlplugin.VisibilitySelectFilter,
-) ([]sqlplugin.VisibilityCountRow, error) {
-	return nil, store.OperationNotSupportedErr
+) (_ []sqlplugin.VisibilityCountRow, retError error) {
+	defer func() {
+		retError = mdb.handle.ConvertError(retError)
+	}()
+	db, err := mdb.handle.DB()
+	if err != nil {
+		return nil, err
+	}
+	rows, err := db.QueryContext(ctx, filter.Query, filter.QueryArgs...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	return sqlplugin.ParseCountGroupByRows(rows, filter.GroupBy)
 }
 
-func (mdb *db) processRowFromDB(row *sqlplugin.VisibilityRow) {
+func (mdb *db) prepareRowForDB(row *sqlplugin.VisibilityRow) *sqlplugin.VisibilityRow {
+	if row == nil {
+		return nil
+	}
+	finalRow := *row
+	finalRow.StartTime = mdb.converter.ToMySQLDateTime(finalRow.StartTime)
+	finalRow.ExecutionTime = mdb.converter.ToMySQLDateTime(finalRow.ExecutionTime)
+	if finalRow.CloseTime != nil {
+		*finalRow.CloseTime = mdb.converter.ToMySQLDateTime(*finalRow.CloseTime)
+	}
+	return &finalRow
+}
+
+func (mdb *db) processRowFromDB(row *sqlplugin.VisibilityRow) error {
+	if row == nil {
+		return nil
+	}
 	row.StartTime = mdb.converter.FromMySQLDateTime(row.StartTime)
 	row.ExecutionTime = mdb.converter.FromMySQLDateTime(row.ExecutionTime)
 	if row.CloseTime != nil {
 		closeTime := mdb.converter.FromMySQLDateTime(*row.CloseTime)
 		row.CloseTime = &closeTime
 	}
+	if row.SearchAttributes != nil {
+		for saName, saValue := range *row.SearchAttributes {
+			switch typedSaValue := saValue.(type) {
+			case []interface{}:
+				// the only valid type is slice of strings
+				strSlice := make([]string, len(typedSaValue))
+				for i, item := range typedSaValue {
+					switch v := item.(type) {
+					case string:
+						strSlice[i] = v
+					default:
+						return fmt.Errorf("%w: %T (expected string)", sqlplugin.ErrInvalidKeywordListDataType, v)
+					}
+				}
+				(*row.SearchAttributes)[saName] = strSlice
+			default:
+				// no-op
+			}
+		}
+	}
+	return nil
 }

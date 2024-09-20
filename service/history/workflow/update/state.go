@@ -30,23 +30,28 @@ type (
 )
 
 const (
-	stateAdmitted state = (1 << iota)
-	stateProvisionallyRequested
-	stateRequested
+	stateCreated state = 1 << iota
+	stateProvisionallyAdmitted
+	stateAdmitted
+	stateSent
 	stateProvisionallyAccepted
 	stateAccepted
 	stateProvisionallyCompleted
 	stateCompleted
+	stateAborted
+	stateProvisionallyCompletedAfterAccepted
 )
 
 func (s state) String() string {
 	switch s {
+	case stateCreated:
+		return "Created"
+	case stateProvisionallyAdmitted:
+		return "ProvisionallyAdmitted"
 	case stateAdmitted:
 		return "Admitted"
-	case stateProvisionallyRequested:
-		return "ProvisionallyRequested"
-	case stateRequested:
-		return "Requested"
+	case stateSent:
+		return "Sent"
 	case stateProvisionallyAccepted:
 		return "ProvisionallyAccepted"
 	case stateAccepted:
@@ -55,6 +60,10 @@ func (s state) String() string {
 		return "ProvisionallyCompleted"
 	case stateCompleted:
 		return "Completed"
+	case stateAborted:
+		return "Aborted"
+	case stateProvisionallyCompletedAfterAccepted:
+		return "ProvisionallyCompletedAfterAccepted"
 	}
 	return "unrecognized state"
 }

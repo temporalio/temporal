@@ -30,7 +30,6 @@ import (
 	"strings"
 
 	p "go.temporal.io/server/common/persistence"
-
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
 )
 
@@ -83,7 +82,7 @@ func (mdb *db) SaveClusterMetadata(
 	row *sqlplugin.ClusterMetadataRow,
 ) (sql.Result, error) {
 	if row.Version == 0 {
-		return mdb.conn.ExecContext(ctx,
+		return mdb.ExecContext(ctx,
 			insertClusterMetadataQry,
 			constMetadataPartition,
 			row.ClusterName,
@@ -92,7 +91,7 @@ func (mdb *db) SaveClusterMetadata(
 			1,
 		)
 	}
-	return mdb.conn.ExecContext(ctx,
+	return mdb.ExecContext(ctx,
 		updateClusterMetadataQry,
 		row.Data,
 		row.DataEncoding,
@@ -110,7 +109,7 @@ func (mdb *db) ListClusterMetadata(
 	var rows []sqlplugin.ClusterMetadataRow
 	switch {
 	case len(filter.ClusterName) != 0:
-		err = mdb.conn.SelectContext(ctx,
+		err = mdb.SelectContext(ctx,
 			&rows,
 			listClusterMetadataRangeQry,
 			constMetadataPartition,
@@ -118,7 +117,7 @@ func (mdb *db) ListClusterMetadata(
 			filter.PageSize,
 		)
 	default:
-		err = mdb.conn.SelectContext(ctx,
+		err = mdb.SelectContext(ctx,
 			&rows,
 			listClusterMetadataQry,
 			constMetadataPartition,
@@ -133,7 +132,7 @@ func (mdb *db) GetClusterMetadata(
 	filter *sqlplugin.ClusterMetadataFilter,
 ) (*sqlplugin.ClusterMetadataRow, error) {
 	var row sqlplugin.ClusterMetadataRow
-	err := mdb.conn.GetContext(ctx,
+	err := mdb.GetContext(ctx,
 		&row,
 		getClusterMetadataQry,
 		constMetadataPartition,
@@ -150,7 +149,7 @@ func (mdb *db) DeleteClusterMetadata(
 	filter *sqlplugin.ClusterMetadataFilter,
 ) (sql.Result, error) {
 
-	return mdb.conn.ExecContext(ctx,
+	return mdb.ExecContext(ctx,
 		deleteClusterMetadataQry,
 		constMetadataPartition,
 		filter.ClusterName,
@@ -162,7 +161,7 @@ func (mdb *db) WriteLockGetClusterMetadata(
 	filter *sqlplugin.ClusterMetadataFilter,
 ) (*sqlplugin.ClusterMetadataRow, error) {
 	var row sqlplugin.ClusterMetadataRow
-	err := mdb.conn.GetContext(ctx,
+	err := mdb.GetContext(ctx,
 		&row,
 		writeLockGetClusterMetadataQry,
 		constMetadataPartition,
@@ -178,7 +177,7 @@ func (mdb *db) UpsertClusterMembership(
 	ctx context.Context,
 	row *sqlplugin.ClusterMembershipRow,
 ) (sql.Result, error) {
-	return mdb.conn.ExecContext(ctx,
+	return mdb.ExecContext(ctx,
 		templateUpsertActiveClusterMembership,
 		constMembershipPartition,
 		row.HostID,
@@ -244,7 +243,7 @@ func (mdb *db) GetClusterMembers(
 	compiledQryString := queryString.String()
 
 	var rows []sqlplugin.ClusterMembershipRow
-	if err := mdb.conn.SelectContext(ctx,
+	if err := mdb.SelectContext(ctx,
 		&rows,
 		compiledQryString,
 		operands...,
@@ -263,7 +262,7 @@ func (mdb *db) PruneClusterMembership(
 	ctx context.Context,
 	filter *sqlplugin.PruneClusterMembershipFilter,
 ) (sql.Result, error) {
-	return mdb.conn.ExecContext(ctx,
+	return mdb.ExecContext(ctx,
 		templatePruneStaleClusterMembership,
 		constMembershipPartition,
 		mdb.converter.ToMySQLDateTime(filter.PruneRecordsBefore),

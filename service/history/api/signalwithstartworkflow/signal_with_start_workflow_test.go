@@ -26,28 +26,25 @@ package signalwithstartworkflow
 
 import (
 	"context"
-	"math/rand"
 	"testing"
-	"time"
 
-	"github.com/brianvoe/gofakeit/v6"
-	"github.com/golang/mock/gomock"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"go.temporal.io/api/history/v1"
 	"go.temporal.io/api/workflowservice/v1"
-
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/testing/fakedata"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tests"
 	"go.temporal.io/server/service/history/workflow"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
+	"go.uber.org/mock/gomock"
 )
 
 type (
@@ -73,7 +70,6 @@ func TestSignalWithStartWorkflowSuite(t *testing.T) {
 }
 
 func (s *signalWithStartWorkflowSuite) SetupSuite() {
-	rand.Seed(time.Now().UnixNano())
 }
 
 func (s *signalWithStartWorkflowSuite) TearDownSuite() {
@@ -112,7 +108,7 @@ func (s *signalWithStartWorkflowSuite) TearDownTest() {
 
 func (s *signalWithStartWorkflowSuite) TestSignalWorkflow_WorkflowCloseAttempted() {
 	ctx := context.Background()
-	currentWorkflowContext := api.NewWorkflowContext(
+	currentWorkflowLease := api.NewWorkflowLease(
 		s.currentContext,
 		wcache.NoopReleaseFn,
 		s.currentMutableState,
@@ -125,7 +121,7 @@ func (s *signalWithStartWorkflowSuite) TestSignalWorkflow_WorkflowCloseAttempted
 	err := signalWorkflow(
 		ctx,
 		s.shardContext,
-		currentWorkflowContext,
+		currentWorkflowLease,
 		request,
 	)
 	s.Error(consts.ErrWorkflowClosing, err)
@@ -133,7 +129,7 @@ func (s *signalWithStartWorkflowSuite) TestSignalWorkflow_WorkflowCloseAttempted
 
 func (s *signalWithStartWorkflowSuite) TestSignalWorkflow_Dedup() {
 	ctx := context.Background()
-	currentWorkflowContext := api.NewWorkflowContext(
+	currentWorkflowLease := api.NewWorkflowLease(
 		s.currentContext,
 		wcache.NoopReleaseFn,
 		s.currentMutableState,
@@ -146,7 +142,7 @@ func (s *signalWithStartWorkflowSuite) TestSignalWorkflow_Dedup() {
 	err := signalWorkflow(
 		ctx,
 		s.shardContext,
-		currentWorkflowContext,
+		currentWorkflowLease,
 		request,
 	)
 	s.NoError(err)
@@ -154,7 +150,7 @@ func (s *signalWithStartWorkflowSuite) TestSignalWorkflow_Dedup() {
 
 func (s *signalWithStartWorkflowSuite) TestSignalWorkflow_NewWorkflowTask() {
 	ctx := context.Background()
-	currentWorkflowContext := api.NewWorkflowContext(
+	currentWorkflowLease := api.NewWorkflowLease(
 		s.currentContext,
 		wcache.NoopReleaseFn,
 		s.currentMutableState,
@@ -173,13 +169,14 @@ func (s *signalWithStartWorkflowSuite) TestSignalWorkflow_NewWorkflowTask() {
 		request.GetSkipGenerateWorkflowTask(),
 	).Return(&history.HistoryEvent{}, nil)
 	s.currentMutableState.EXPECT().HasPendingWorkflowTask().Return(false)
+	s.currentMutableState.EXPECT().HadOrHasWorkflowTask().Return(true)
 	s.currentMutableState.EXPECT().AddWorkflowTaskScheduledEvent(false, enumsspb.WORKFLOW_TASK_TYPE_NORMAL).Return(&workflow.WorkflowTaskInfo{}, nil)
 	s.currentContext.EXPECT().UpdateWorkflowExecutionAsActive(ctx, s.shardContext).Return(nil)
 
 	err := signalWorkflow(
 		ctx,
 		s.shardContext,
-		currentWorkflowContext,
+		currentWorkflowLease,
 		request,
 	)
 	s.NoError(err)
@@ -187,7 +184,7 @@ func (s *signalWithStartWorkflowSuite) TestSignalWorkflow_NewWorkflowTask() {
 
 func (s *signalWithStartWorkflowSuite) TestSignalWorkflow_NoNewWorkflowTask() {
 	ctx := context.Background()
-	currentWorkflowContext := api.NewWorkflowContext(
+	currentWorkflowLease := api.NewWorkflowLease(
 		s.currentContext,
 		wcache.NoopReleaseFn,
 		s.currentMutableState,
@@ -210,7 +207,7 @@ func (s *signalWithStartWorkflowSuite) TestSignalWorkflow_NoNewWorkflowTask() {
 	err := signalWorkflow(
 		ctx,
 		s.shardContext,
-		currentWorkflowContext,
+		currentWorkflowLease,
 		request,
 	)
 	s.NoError(err)
@@ -218,6 +215,6 @@ func (s *signalWithStartWorkflowSuite) TestSignalWorkflow_NoNewWorkflowTask() {
 
 func (s *signalWithStartWorkflowSuite) randomRequest() *workflowservice.SignalWithStartWorkflowExecutionRequest {
 	var request workflowservice.SignalWithStartWorkflowExecutionRequest
-	_ = gofakeit.Struct(&request)
+	_ = fakedata.FakeStruct(&request)
 	return &request
 }

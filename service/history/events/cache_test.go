@@ -30,17 +30,16 @@ import (
 	"testing"
 	"time"
 
-	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
-
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
+	"go.uber.org/mock/gomock"
 )
 
 type (
@@ -86,16 +85,12 @@ func (s *eventsCacheSuite) TearDownTest() {
 }
 
 func (s *eventsCacheSuite) newTestEventsCache() *CacheImpl {
-	shardId := int32(10)
-	return NewEventsCache(
-		shardId,
+	return newEventsCache(s.mockExecutionManager,
+		metrics.NoopMetricsHandler,
+		s.logger,
 		32,
 		time.Minute,
-		s.mockExecutionManager,
-		false,
-		s.logger,
-		metrics.NoopMetricsHandler,
-	)
+		false)
 }
 
 func (s *eventsCacheSuite) TestEventsCacheHitSuccess() {
@@ -103,6 +98,7 @@ func (s *eventsCacheSuite) TestEventsCacheHitSuccess() {
 	workflowID := "events-cache-hit-success-workflow-id"
 	runID := "events-cache-hit-success-run-id"
 	eventID := int64(23)
+	shardID := int32(10)
 	event := &historypb.HistoryEvent{
 		EventId:    eventID,
 		EventType:  enumspb.EVENT_TYPE_ACTIVITY_TASK_STARTED,
@@ -114,6 +110,7 @@ func (s *eventsCacheSuite) TestEventsCacheHitSuccess() {
 		event)
 	actualEvent, err := s.cache.GetEvent(
 		context.Background(),
+		shardID,
 		EventKey{namespaceID, workflowID, runID, eventID, common.EmptyVersion},
 		eventID, nil)
 	s.Nil(err)
@@ -173,6 +170,7 @@ func (s *eventsCacheSuite) TestEventsCacheMissMultiEventsBatchV2Success() {
 		event2)
 	actualEvent, err := s.cache.GetEvent(
 		context.Background(),
+		shardID,
 		EventKey{namespaceID, workflowID, runID, event6.GetEventId(), common.EmptyVersion},
 		event1.GetEventId(), []byte("store_token"))
 	s.Nil(err)
@@ -197,6 +195,7 @@ func (s *eventsCacheSuite) TestEventsCacheMissV2Failure() {
 
 	actualEvent, err := s.cache.GetEvent(
 		context.Background(),
+		shardID,
 		EventKey{namespaceID, workflowID, runID, int64(14), common.EmptyVersion},
 		int64(11), []byte("store_token"))
 	s.Nil(actualEvent)
@@ -240,6 +239,7 @@ func (s *eventsCacheSuite) TestEventsCacheDisableSuccess() {
 	s.cache.disabled = true
 	actualEvent, err := s.cache.GetEvent(
 		context.Background(),
+		shardID,
 		EventKey{namespaceID, workflowID, runID, event2.GetEventId(), common.EmptyVersion},
 		event2.GetEventId(), []byte("store_token"))
 	s.Nil(err)
@@ -271,11 +271,13 @@ func (s *eventsCacheSuite) TestEventsCacheGetCachesResult() {
 
 	gotEvent1, _ := s.cache.GetEvent(
 		context.Background(),
+		shardID,
 		EventKey{namespaceID, workflowID, runID, int64(14), common.EmptyVersion},
 		int64(11), branchToken)
 	s.Equal(gotEvent1, event1)
 	gotEvent2, _ := s.cache.GetEvent(
 		context.Background(),
+		shardID,
 		EventKey{namespaceID, workflowID, runID, int64(14), common.EmptyVersion},
 		int64(11), branchToken)
 	s.Equal(gotEvent2, event1)
@@ -310,11 +312,13 @@ func (s *eventsCacheSuite) TestEventsCacheInvalidKey() {
 
 	gotEvent1, _ := s.cache.GetEvent(
 		context.Background(),
+		shardID,
 		EventKey{namespaceID, workflowID, runID, int64(14), common.EmptyVersion},
 		int64(11), branchToken)
 	s.Equal(gotEvent1, event1)
 	gotEvent2, _ := s.cache.GetEvent(
 		context.Background(),
+		shardID,
 		EventKey{namespaceID, workflowID, runID, int64(14), common.EmptyVersion},
 		int64(11), branchToken)
 	s.Equal(gotEvent2, event1)

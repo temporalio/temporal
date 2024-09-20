@@ -25,15 +25,16 @@
 package history
 
 import (
+	"context"
 	"math/rand"
 	"strconv"
 	"testing"
-	"time"
 
-	"github.com/golang/mock/gomock"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	"go.temporal.io/server/common/headers"
+	"go.uber.org/mock/gomock"
 	"google.golang.org/grpc/metadata"
 )
 
@@ -52,11 +53,9 @@ func TestMetadataSuite(t *testing.T) {
 }
 
 func (s *metadataSuite) SetupSuite() {
-	rand.Seed(time.Now().UnixNano())
 }
 
 func (s *metadataSuite) TearDownSuite() {
-
 }
 
 func (s *metadataSuite) SetupTest() {
@@ -84,7 +83,9 @@ func (s *metadataSuite) TestClusterShardMD_Encode_Decode() {
 		clientClusterShardID,
 		serverClusterShardID,
 	)
-	actualClientClusterShardID, actualServerClusterShardID, err := DecodeClusterShardMD(clusterShardMD)
+	ctx := metadata.NewIncomingContext(context.Background(), clusterShardMD)
+	getter := headers.NewGRPCHeaderGetter(ctx)
+	actualClientClusterShardID, actualServerClusterShardID, err := DecodeClusterShardMD(getter)
 	s.NoError(err)
 	s.Equal(clientClusterShardID, actualClientClusterShardID)
 	s.Equal(serverClusterShardID, actualServerClusterShardID)
@@ -96,7 +97,9 @@ func (s *metadataSuite) TestClusterShardMD_Decode_Error() {
 		MetadataKeyServerClusterID, uuid.NewString(),
 		MetadataKeyServerShardID, strconv.Itoa(int(rand.Int31())),
 	)
-	_, _, err := DecodeClusterShardMD(clusterShardMD)
+	ctx := metadata.NewIncomingContext(context.Background(), clusterShardMD)
+	getter := headers.NewGRPCHeaderGetter(ctx)
+	_, _, err := DecodeClusterShardMD(getter)
 	s.Error(err)
 
 	clusterShardMD = metadata.Pairs(
@@ -104,7 +107,9 @@ func (s *metadataSuite) TestClusterShardMD_Decode_Error() {
 		MetadataKeyServerClusterID, uuid.NewString(),
 		MetadataKeyServerShardID, strconv.Itoa(int(rand.Int31())),
 	)
-	_, _, err = DecodeClusterShardMD(clusterShardMD)
+	ctx = metadata.NewIncomingContext(context.Background(), clusterShardMD)
+	getter = headers.NewGRPCHeaderGetter(ctx)
+	_, _, err = DecodeClusterShardMD(getter)
 	s.Error(err)
 
 	clusterShardMD = metadata.Pairs(
@@ -112,7 +117,9 @@ func (s *metadataSuite) TestClusterShardMD_Decode_Error() {
 		MetadataKeyClientShardID, strconv.Itoa(int(rand.Int31())),
 		MetadataKeyServerShardID, strconv.Itoa(int(rand.Int31())),
 	)
-	_, _, err = DecodeClusterShardMD(clusterShardMD)
+	ctx = metadata.NewIncomingContext(context.Background(), clusterShardMD)
+	getter = headers.NewGRPCHeaderGetter(ctx)
+	_, _, err = DecodeClusterShardMD(getter)
 	s.Error(err)
 
 	clusterShardMD = metadata.Pairs(
@@ -120,7 +127,9 @@ func (s *metadataSuite) TestClusterShardMD_Decode_Error() {
 		MetadataKeyClientShardID, strconv.Itoa(int(rand.Int31())),
 		MetadataKeyServerClusterID, uuid.NewString(),
 	)
-	_, _, err = DecodeClusterShardMD(clusterShardMD)
+	ctx = metadata.NewIncomingContext(context.Background(), clusterShardMD)
+	getter = headers.NewGRPCHeaderGetter(ctx)
+	_, _, err = DecodeClusterShardMD(getter)
 	s.Error(err)
 
 	clusterShardMD = metadata.Pairs(
@@ -129,6 +138,8 @@ func (s *metadataSuite) TestClusterShardMD_Decode_Error() {
 		MetadataKeyServerClusterID, uuid.NewString(),
 		MetadataKeyServerShardID, uuid.NewString(),
 	)
-	_, _, err = DecodeClusterShardMD(clusterShardMD)
+	ctx = metadata.NewIncomingContext(context.Background(), clusterShardMD)
+	getter = headers.NewGRPCHeaderGetter(ctx)
+	_, _, err = DecodeClusterShardMD(getter)
 	s.Error(err)
 }

@@ -25,8 +25,6 @@
 package history
 
 import (
-	"go.uber.org/fx"
-
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -39,6 +37,7 @@ import (
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/workflow"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
+	"go.uber.org/fx"
 )
 
 const (
@@ -82,36 +81,31 @@ type (
 func NewArchivalQueueFactory(
 	params ArchivalQueueFactoryParams,
 ) QueueFactory {
-	hostScheduler := newScheduler(params)
-	queueFactoryBase := newQueueFactoryBase(params, hostScheduler)
 	return &archivalQueueFactory{
 		ArchivalQueueFactoryParams: params,
-		QueueFactoryBase:           queueFactoryBase,
+		QueueFactoryBase:           newQueueFactoryBase(params),
 	}
 }
 
-// newScheduler creates a new task scheduler for tasks on the archival queue.
-func newScheduler(params ArchivalQueueFactoryParams) queues.Scheduler {
-	return queues.NewPriorityScheduler(
-		queues.PrioritySchedulerOptions{
-			WorkerCount:                 params.Config.ArchivalProcessorSchedulerWorkerCount,
-			EnableRateLimiter:           params.Config.TaskSchedulerEnableRateLimiter,
-			EnableRateLimiterShadowMode: params.Config.TaskSchedulerEnableRateLimiterShadowMode,
-			DispatchThrottleDuration:    params.Config.TaskSchedulerThrottleDuration,
-			Weight:                      dynamicconfig.GetMapPropertyFn(ArchivalTaskPriorities),
+// newHostScheduler creates a new task scheduler for tasks on the archival queue.
+func newHostScheduler(params ArchivalQueueFactoryParams) queues.Scheduler {
+	return queues.NewScheduler(
+		params.ClusterMetadata.GetCurrentClusterName(),
+		queues.SchedulerOptions{
+			WorkerCount:             params.Config.ArchivalProcessorSchedulerWorkerCount,
+			ActiveNamespaceWeights:  dynamicconfig.GetMapPropertyFnFilteredByNamespace(ArchivalTaskPriorities),
+			StandbyNamespaceWeights: dynamicconfig.GetMapPropertyFnFilteredByNamespace(ArchivalTaskPriorities),
 		},
-		params.SchedulerRateLimiter,
-		params.TimeSource,
+		params.NamespaceRegistry,
 		params.Logger,
-		params.MetricsHandler.WithTags(metrics.OperationTag(metrics.OperationArchivalQueueProcessorScope)),
 	)
 }
 
 // newQueueFactoryBase creates a new QueueFactoryBase for the archival queue, which contains common configurations
 // like the task scheduler, task priority assigner, and rate limiters.
-func newQueueFactoryBase(params ArchivalQueueFactoryParams, hostScheduler queues.Scheduler) QueueFactoryBase {
+func newQueueFactoryBase(params ArchivalQueueFactoryParams) QueueFactoryBase {
 	return QueueFactoryBase{
-		HostScheduler:        hostScheduler,
+		HostScheduler:        newHostScheduler(params),
 		HostPriorityAssigner: queues.NewPriorityAssigner(),
 		HostReaderRateLimiter: queues.NewReaderPriorityRateLimiter(
 			NewHostRateLimiterRateFn(
@@ -119,7 +113,7 @@ func newQueueFactoryBase(params ArchivalQueueFactoryParams, hostScheduler queues
 				params.Config.PersistenceMaxQPS,
 				archivalQueuePersistenceMaxRPSRatio,
 			),
-			int64(params.Config.QueueMaxReaderCount()),
+			int64(params.Config.ArchivalQueueMaxReaderCount()),
 		),
 	}
 }
@@ -153,25 +147,58 @@ func (f *archivalQueueFactory) newScheduledQueue(shard shard.Context, executor q
 	logger := log.With(shard.GetLogger(), tag.ComponentArchivalQueue)
 	metricsHandler := f.MetricsHandler.WithTags(metrics.OperationTag(metrics.OperationArchivalQueueProcessorScope))
 
+	var shardScheduler = f.HostScheduler
+	if f.Config.TaskSchedulerEnableRateLimiter() {
+		shardScheduler = queues.NewRateLimitedScheduler(
+			f.HostScheduler,
+			queues.RateLimitedSchedulerOptions{
+				EnableShadowMode: f.Config.TaskSchedulerEnableRateLimiterShadowMode,
+				StartupDelay:     f.Config.TaskSchedulerRateLimiterStartupDelay,
+			},
+			f.ClusterMetadata.GetCurrentClusterName(),
+			f.NamespaceRegistry,
+			f.SchedulerRateLimiter,
+			f.TimeSource,
+			logger,
+			metricsHandler,
+		)
+	}
+
 	rescheduler := queues.NewRescheduler(
-		f.HostScheduler,
+		shardScheduler,
 		shard.GetTimeSource(),
 		logger,
 		metricsHandler,
 	)
 
+	factory := queues.NewExecutableFactory(
+		executor,
+		shardScheduler,
+		rescheduler,
+		f.HostPriorityAssigner,
+		shard.GetTimeSource(),
+		shard.GetNamespaceRegistry(),
+		shard.GetClusterMetadata(),
+		logger,
+		metricsHandler,
+		f.DLQWriter,
+		f.Config.TaskDLQEnabled,
+		f.Config.TaskDLQUnexpectedErrorAttempts,
+		f.Config.TaskDLQInternalErrors,
+		f.Config.TaskDLQErrorPattern,
+	)
 	return queues.NewScheduledQueue(
 		shard,
 		tasks.CategoryArchival,
-		f.HostScheduler,
+		shardScheduler,
 		rescheduler,
-		f.HostPriorityAssigner,
-		executor,
+		factory,
 		&queues.Options{
 			ReaderOptions: queues.ReaderOptions{
 				BatchSize:            f.Config.ArchivalTaskBatchSize,
 				MaxPendingTasksCount: f.Config.QueuePendingTaskMaxCount,
 				PollBackoffInterval:  f.Config.ArchivalProcessorPollBackoffInterval,
+				MaxPredicateSize:     f.Config.QueueMaxPredicateSize,
 			},
 			MonitorOptions: queues.MonitorOptions{
 				PendingTasksCriticalCount:   f.Config.QueuePendingTaskCriticalCount,
@@ -183,7 +210,7 @@ func (f *archivalQueueFactory) newScheduledQueue(shard shard.Context, executor q
 			MaxPollIntervalJitterCoefficient:    f.Config.ArchivalProcessorMaxPollIntervalJitterCoefficient,
 			CheckpointInterval:                  f.Config.ArchivalProcessorUpdateAckInterval,
 			CheckpointIntervalJitterCoefficient: f.Config.ArchivalProcessorUpdateAckIntervalJitterCoefficient,
-			MaxReaderCount:                      f.Config.QueueMaxReaderCount,
+			MaxReaderCount:                      f.Config.ArchivalQueueMaxReaderCount,
 		},
 		f.HostReaderRateLimiter,
 		logger,

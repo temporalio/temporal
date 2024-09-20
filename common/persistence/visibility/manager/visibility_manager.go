@@ -35,7 +35,6 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
-
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 )
@@ -57,13 +56,6 @@ type (
 		DeleteWorkflowExecution(ctx context.Context, request *VisibilityDeleteWorkflowExecutionRequest) error
 
 		// Read APIs.
-		ListOpenWorkflowExecutions(ctx context.Context, request *ListWorkflowExecutionsRequest) (*ListWorkflowExecutionsResponse, error)
-		ListClosedWorkflowExecutions(ctx context.Context, request *ListWorkflowExecutionsRequest) (*ListWorkflowExecutionsResponse, error)
-		ListOpenWorkflowExecutionsByType(ctx context.Context, request *ListWorkflowExecutionsByTypeRequest) (*ListWorkflowExecutionsResponse, error)
-		ListClosedWorkflowExecutionsByType(ctx context.Context, request *ListWorkflowExecutionsByTypeRequest) (*ListWorkflowExecutionsResponse, error)
-		ListOpenWorkflowExecutionsByWorkflowID(ctx context.Context, request *ListWorkflowExecutionsByWorkflowIDRequest) (*ListWorkflowExecutionsResponse, error)
-		ListClosedWorkflowExecutionsByWorkflowID(ctx context.Context, request *ListWorkflowExecutionsByWorkflowIDRequest) (*ListWorkflowExecutionsResponse, error)
-		ListClosedWorkflowExecutionsByStatus(ctx context.Context, request *ListClosedWorkflowExecutionsByStatusRequest) (*ListWorkflowExecutionsResponse, error)
 		ListWorkflowExecutions(ctx context.Context, request *ListWorkflowExecutionsRequestV2) (*ListWorkflowExecutionsResponse, error)
 		ScanWorkflowExecutions(ctx context.Context, request *ListWorkflowExecutionsRequestV2) (*ListWorkflowExecutionsResponse, error)
 		CountWorkflowExecutions(ctx context.Context, request *CountWorkflowExecutionsRequest) (*CountWorkflowExecutionsResponse, error)
@@ -71,19 +63,20 @@ type (
 	}
 
 	VisibilityRequestBase struct {
-		NamespaceID          namespace.ID
-		Namespace            namespace.Name // namespace.Name is not persisted.
-		Execution            commonpb.WorkflowExecution
-		WorkflowTypeName     string
-		StartTime            time.Time
-		Status               enumspb.WorkflowExecutionStatus
-		ExecutionTime        time.Time
-		StateTransitionCount int64
-		TaskID               int64 // not persisted, used as condition update version for ES
-		ShardID              int32 // not persisted
-		Memo                 *commonpb.Memo
-		TaskQueue            string
-		SearchAttributes     *commonpb.SearchAttributes
+		NamespaceID      namespace.ID
+		Namespace        namespace.Name // namespace.Name is not persisted.
+		Execution        *commonpb.WorkflowExecution
+		WorkflowTypeName string
+		StartTime        time.Time
+		Status           enumspb.WorkflowExecutionStatus
+		ExecutionTime    time.Time
+		TaskID           int64 // not persisted, used as condition update version for ES
+		ShardID          int32 // not persisted
+		Memo             *commonpb.Memo
+		TaskQueue        string
+		SearchAttributes *commonpb.SearchAttributes
+		ParentExecution  *commonpb.WorkflowExecution
+		RootExecution    *commonpb.WorkflowExecution
 	}
 
 	// RecordWorkflowExecutionStartedRequest is used to add a record of a newly started execution
@@ -94,9 +87,11 @@ type (
 	// RecordWorkflowExecutionClosedRequest is used to add a record of a closed execution
 	RecordWorkflowExecutionClosedRequest struct {
 		*VisibilityRequestBase
-		CloseTime        time.Time
-		HistoryLength    int64
-		HistorySizeBytes int64
+		CloseTime            time.Time
+		ExecutionDuration    time.Duration
+		HistoryLength        int64
+		HistorySizeBytes     int64
+		StateTransitionCount int64
 	}
 
 	// UpsertWorkflowExecutionRequest is used to upsert workflow execution
@@ -150,35 +145,13 @@ type (
 		Groups []*workflowservice.CountWorkflowExecutionsResponse_AggregationGroup
 	}
 
-	// ListWorkflowExecutionsByTypeRequest is used to list executions of
-	// a specific type in a namespace
-	ListWorkflowExecutionsByTypeRequest struct {
-		*ListWorkflowExecutionsRequest
-		WorkflowTypeName string
-	}
-
-	// ListWorkflowExecutionsByWorkflowIDRequest is used to list executions that
-	// have specific WorkflowID in a namespace
-	ListWorkflowExecutionsByWorkflowIDRequest struct {
-		*ListWorkflowExecutionsRequest
-		WorkflowID string
-	}
-
-	// ListClosedWorkflowExecutionsByStatusRequest is used to list executions that
-	// have specific close status
-	ListClosedWorkflowExecutionsByStatusRequest struct {
-		*ListWorkflowExecutionsRequest
-		Status enumspb.WorkflowExecutionStatus
-	}
-
 	// VisibilityDeleteWorkflowExecutionRequest contains the request params for DeleteWorkflowExecution call
 	VisibilityDeleteWorkflowExecutionRequest struct {
 		NamespaceID namespace.ID
 		RunID       string
 		WorkflowID  string
 		TaskID      int64
-		StartTime   *time.Time // if start time is not empty, delete record from open_execution for cassandra db
-		CloseTime   *time.Time // if end time is not empty, delete record from closed_execution for cassandra db
+		CloseTime   *time.Time
 	}
 
 	// GetWorkflowExecutionRequest is request from GetWorkflowExecution
@@ -187,8 +160,6 @@ type (
 		Namespace   namespace.Name // namespace.Name is not persisted
 		RunID       string
 		WorkflowID  string
-		StartTime   *time.Time // if start time is not empty, search record from open_execution for cassandra db
-		CloseTime   *time.Time // if end time is not empty, search record from closed_execution for cassandra db
 	}
 
 	// GetWorkflowExecutionResponse is response to GetWorkflowExecution

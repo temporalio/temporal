@@ -26,7 +26,6 @@ package tasks
 
 import (
 	"go.temporal.io/api/serviceerror"
-
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -37,12 +36,12 @@ func Tags(
 ) []tag.Tag {
 	// TODO: convert this to a method GetEventID on task interface
 	// or remove this tag as the value is visible in the Task tag value.
-	taskEventID := int64(0)
+	taskEventID := common.EmptyEventID
 	taskCategory := task.GetCategory()
 	switch taskCategory.ID() {
 	case CategoryIDTransfer:
 		taskEventID = GetTransferTaskEventID(task)
-	case CategoryIDTimer:
+	case CategoryIDTimer, CategoryIDMemoryTimer:
 		taskEventID = GetTimerTaskEventID(task)
 	default:
 		// no-op, other task categories don't have task eventID
@@ -52,8 +51,7 @@ func Tags(
 		tag.WorkflowNamespaceID(task.GetNamespaceID()),
 		tag.WorkflowID(task.GetWorkflowID()),
 		tag.WorkflowRunID(task.GetRunID()),
-		tag.TaskID(task.GetTaskID()),
-		tag.TaskVisibilityTimestamp(task.GetVisibilityTime()),
+		tag.TaskKey(task.GetKey()),
 		tag.TaskType(task.GetType()),
 		tag.Task(task),
 		tag.WorkflowEventID(taskEventID),
@@ -116,9 +114,13 @@ func GetTimerTaskEventID(
 		eventID = common.FirstEventID
 	case *ActivityRetryTimerTask:
 		eventID = task.EventID
-	case *WorkflowTimeoutTask:
+	case *WorkflowRunTimeoutTask:
+		eventID = common.FirstEventID
+	case *WorkflowExecutionTimeoutTask:
 		eventID = common.FirstEventID
 	case *DeleteHistoryEventTask:
+		eventID = common.FirstEventID
+	case *StateMachineTimerTask:
 		eventID = common.FirstEventID
 	case *FakeTask:
 		// no-op

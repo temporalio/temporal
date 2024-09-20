@@ -31,6 +31,8 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	"go.temporal.io/server/service/history/tests"
+	"go.uber.org/mock/gomock"
 )
 
 type (
@@ -84,4 +86,12 @@ func (s *contextUtilSuite) TestReplicationReaderIDConversion_Int32Max() {
 	)
 	s.Equal(expectedClusterID, actualClusterID)
 	s.Equal(expectedShardID, actualShardID)
+}
+
+func (s *contextUtilSuite) newMockContext() *MockContext {
+	controller := gomock.NewController(s.T())
+	mockContext := NewMockContext(controller)
+	mockContext.EXPECT().GetShardID().Return(int32(1)).AnyTimes()
+	mockContext.EXPECT().GetConfig().Return(tests.NewDynamicConfig()).AnyTimes()
+	return mockContext
 }

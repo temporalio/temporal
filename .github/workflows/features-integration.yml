@@ -6,6 +6,8 @@ on: # rebuild any PRs and main branch changes
     branches:
       - main
 
+permissions: read-all
+
 concurrency: # Auto-cancel existing runs in the PR when a new commit is pushed
   group: ${{ github.head_ref || github.run_id }}
   cancel-in-progress: true
@@ -21,7 +23,9 @@ jobs:
     needs: build-docker-image
     uses: temporalio/features/.github/workflows/typescript.yaml@main
     with:
-      version: 1.5.2
+      # This field is not actually used by these workflow if docker-image-artifact-name
+      # is set, but it's marked as required, so supply some string.
+      version: __latest_features_docker_image__
       version-is-repo-ref: false
       docker-image-artifact-name: temporal-server-docker
 
@@ -29,7 +33,7 @@ jobs:
     needs: build-docker-image
     uses: temporalio/features/.github/workflows/go.yaml@main
     with:
-      version: v1.19.0
+      version: __latest_features_docker_image__
       version-is-repo-ref: false
       docker-image-artifact-name: temporal-server-docker
 
@@ -37,7 +41,7 @@ jobs:
     needs: build-docker-image
     uses: temporalio/features/.github/workflows/python.yaml@main
     with:
-      version: 0.1b4
+      version: __latest_features_docker_image__
       version-is-repo-ref: false
       docker-image-artifact-name: temporal-server-docker
 
@@ -45,6 +49,33 @@ jobs:
     needs: build-docker-image
     uses: temporalio/features/.github/workflows/java.yaml@main
     with:
-      version: v1.17.0
+      version: __latest_features_docker_image__
       version-is-repo-ref: false
       docker-image-artifact-name: temporal-server-docker
+
+  feature-tests-dotnet:
+    needs: build-docker-image
+    uses: temporalio/features/.github/workflows/dotnet.yaml@main
+    with:
+      version: __latest_features_docker_image__
+      version-is-repo-ref: false
+      docker-image-artifact-name: temporal-server-docker
+
+  feature-tests-status:
+    name: Tests Status
+    needs:
+      - feature-tests-ts
+      - feature-tests-go
+      - feature-tests-python
+      - feature-tests-java
+      - feature-tests-dotnet
+    runs-on: ubuntu-latest
+    if: always()
+    env:
+      RESULTS: ${{ toJSON(needs.*.result) }}
+    steps:
+      - name: Check results
+        run: |
+          if [[ -n $(echo "$RESULTS" | jq '.[] | select (. != "success")') ]]; then
+            exit 1
+          fi

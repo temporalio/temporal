@@ -1,4 +1,6 @@
 .tmp/
+.bin/
+.stamp/
 
 .idea/
 .vscode/settings.json
@@ -6,6 +8,7 @@
 *.code-workspace
 .DS_Store
 .coverage
+.testoutput
 
 *.out
 *.test
@@ -21,8 +24,10 @@
 /tctl*
 /tdbg
 
-# Buf proto image
+# proto image
 /proto/image.bin
+# api+google proto dependencies
+/proto/api.binpb
 
 # Goreleaser
 /dist

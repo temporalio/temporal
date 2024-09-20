@@ -30,28 +30,28 @@ import (
 	"testing"
 	"time"
 
-	"github.com/golang/mock/gomock"
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
-
 	historyspb "go.temporal.io/server/api/history/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
-	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cluster"
-	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/service/history/events"
+	"go.temporal.io/server/service/history/hsm"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/tests"
 	"go.temporal.io/server/service/history/workflow"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
+	"go.uber.org/mock/gomock"
 )
 
 type (
@@ -102,27 +102,28 @@ func (s *ackManagerSuite) SetupTest() {
 		tests.NewDynamicConfig(),
 	)
 
+	reg := hsm.NewRegistry()
+	err := workflow.RegisterStateMachine(reg)
+	s.NoError(err)
+	s.mockShard.SetStateMachineRegistry(reg)
+
 	s.mockNamespaceRegistry = s.mockShard.Resource.NamespaceCache
 	s.mockNamespaceRegistry.EXPECT().GetNamespaceByID(tests.NamespaceID).Return(tests.GlobalNamespaceEntry, nil).AnyTimes()
 
 	s.mockExecutionMgr = s.mockShard.Resource.ExecutionMgr
-	s.mockExecutionMgr.EXPECT().RegisterHistoryTaskReader(gomock.Any(), &persistence.RegisterHistoryTaskReaderRequest{
-		ShardID:      s.mockShard.GetShardID(),
-		ShardOwner:   s.mockShard.GetOwner(),
-		TaskCategory: tasks.CategoryReplication,
-		ReaderID:     common.DefaultQueueReaderID,
-	}).Return(nil).MaxTimes(1)
 
 	s.mockClusterMetadata = s.mockShard.Resource.ClusterMetadata
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
+	s.mockClusterMetadata.EXPECT().GetClusterID().Return(int64(1)).AnyTimes()
 	s.mockClusterMetadata.EXPECT().IsGlobalNamespaceEnabled().Return(true).AnyTimes()
 	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(true, gomock.Any()).Return(cluster.TestCurrentClusterName).AnyTimes()
 
 	s.logger = s.mockShard.GetLogger()
-	workflowCache := wcache.NewHostLevelCache(s.mockShard.GetConfig())
+	workflowCache := wcache.NewHostLevelCache(s.mockShard.GetConfig(), s.mockShard.GetLogger(), metrics.NoopMetricsHandler)
+	replicationProgressCache := NewProgressCache(s.mockShard.GetConfig(), s.mockShard.GetLogger(), metrics.NoopMetricsHandler)
 
 	s.replicationAckManager = NewAckManager(
-		s.mockShard, workflowCache, nil, s.mockExecutionMgr, s.logger,
+		s.mockShard, workflowCache, nil, replicationProgressCache, s.mockExecutionMgr, s.logger,
 	).(*ackMgrImpl)
 }
 
@@ -143,7 +144,7 @@ func (s *ackManagerSuite) TestNotifyNewTasks_NotInitialized() {
 }
 
 func (s *ackManagerSuite) TestNotifyNewTasks_Initialized() {
-	s.replicationAckManager.maxTaskID = convert.Int64Ptr(123)
+	s.replicationAckManager.maxTaskID = util.Ptr(int64(123))
 
 	s.replicationAckManager.NotifyNewTasks([]tasks.Task{
 		&tasks.HistoryReplicationTask{TaskID: 100},
@@ -158,9 +159,9 @@ func (s *ackManagerSuite) TestNotifyNewTasks_Initialized() {
 
 func (s *ackManagerSuite) TestTaskIDRange_NotInitialized() {
 	s.replicationAckManager.sanityCheckTime = time.Time{}
-	expectMaxTaskID := s.mockShard.GetImmediateQueueExclusiveHighReadWatermark().Prev().TaskID
+	expectMaxTaskID := s.mockShard.GetQueueExclusiveHighReadWatermark(tasks.CategoryReplication).Prev().TaskID
 	expectMinTaskID := expectMaxTaskID - 100
-	s.replicationAckManager.maxTaskID = convert.Int64Ptr(expectMinTaskID - 100)
+	s.replicationAckManager.maxTaskID = util.Ptr(expectMinTaskID - 100)
 
 	minTaskID, maxTaskID := s.replicationAckManager.taskIDsRange(expectMinTaskID)
 	s.Equal(expectMinTaskID, minTaskID)
@@ -173,9 +174,9 @@ func (s *ackManagerSuite) TestTaskIDRange_Initialized_UseHighestReplicationTaskI
 	now := time.Now().UTC()
 	sanityCheckTime := now.Add(2 * time.Minute)
 	s.replicationAckManager.sanityCheckTime = sanityCheckTime
-	expectMinTaskID := s.mockShard.GetImmediateQueueExclusiveHighReadWatermark().TaskID - 100
-	expectMaxTaskID := s.mockShard.GetImmediateQueueExclusiveHighReadWatermark().TaskID - 50
-	s.replicationAckManager.maxTaskID = convert.Int64Ptr(expectMaxTaskID)
+	expectMinTaskID := s.mockShard.GetQueueExclusiveHighReadWatermark(tasks.CategoryReplication).TaskID - 100
+	expectMaxTaskID := s.mockShard.GetQueueExclusiveHighReadWatermark(tasks.CategoryReplication).TaskID - 50
+	s.replicationAckManager.maxTaskID = util.Ptr(expectMaxTaskID)
 
 	minTaskID, maxTaskID := s.replicationAckManager.taskIDsRange(expectMinTaskID)
 	s.Equal(expectMinTaskID, minTaskID)
@@ -188,8 +189,8 @@ func (s *ackManagerSuite) TestTaskIDRange_Initialized_NoHighestReplicationTaskID
 	now := time.Now().UTC()
 	sanityCheckTime := now.Add(2 * time.Minute)
 	s.replicationAckManager.sanityCheckTime = sanityCheckTime
-	expectMinTaskID := s.mockShard.GetImmediateQueueExclusiveHighReadWatermark().Prev().TaskID - 100
-	expectMaxTaskID := s.mockShard.GetImmediateQueueExclusiveHighReadWatermark().Prev().TaskID
+	expectMinTaskID := s.mockShard.GetQueueExclusiveHighReadWatermark(tasks.CategoryReplication).Prev().TaskID - 100
+	expectMaxTaskID := s.mockShard.GetQueueExclusiveHighReadWatermark(tasks.CategoryReplication).Prev().TaskID
 	s.replicationAckManager.maxTaskID = nil
 
 	minTaskID, maxTaskID := s.replicationAckManager.taskIDsRange(expectMinTaskID)
@@ -203,9 +204,9 @@ func (s *ackManagerSuite) TestTaskIDRange_Initialized_UseHighestTransferTaskID()
 	now := time.Now().UTC()
 	sanityCheckTime := now.Add(-2 * time.Minute)
 	s.replicationAckManager.sanityCheckTime = sanityCheckTime
-	expectMinTaskID := s.mockShard.GetImmediateQueueExclusiveHighReadWatermark().Prev().TaskID - 100
-	expectMaxTaskID := s.mockShard.GetImmediateQueueExclusiveHighReadWatermark().Prev().TaskID
-	s.replicationAckManager.maxTaskID = convert.Int64Ptr(s.mockShard.GetImmediateQueueExclusiveHighReadWatermark().TaskID - 50)
+	expectMinTaskID := s.mockShard.GetQueueExclusiveHighReadWatermark(tasks.CategoryReplication).Prev().TaskID - 100
+	expectMaxTaskID := s.mockShard.GetQueueExclusiveHighReadWatermark(tasks.CategoryReplication).Prev().TaskID
+	s.replicationAckManager.maxTaskID = util.Ptr(s.mockShard.GetQueueExclusiveHighReadWatermark(tasks.CategoryReplication).TaskID - 50)
 
 	minTaskID, maxTaskID := s.replicationAckManager.taskIDsRange(expectMinTaskID)
 	s.Equal(expectMinTaskID, minTaskID)
@@ -245,7 +246,6 @@ func (s *ackManagerSuite) TestGetTasks_NoTasksInDB() {
 	s.mockExecutionMgr.EXPECT().GetHistoryTasks(ctx, &persistence.GetHistoryTasksRequest{
 		ShardID:             s.mockShard.GetShardID(),
 		TaskCategory:        tasks.CategoryReplication,
-		ReaderID:            common.DefaultQueueReaderID,
 		InclusiveMinTaskKey: tasks.NewImmediateKey(minTaskID + 1),
 		ExclusiveMaxTaskKey: tasks.NewImmediateKey(maxTaskID + 1),
 		BatchSize:           s.replicationAckManager.pageSize(),
@@ -267,7 +267,6 @@ func (s *ackManagerSuite) TestGetTasks_FirstPersistenceErrorReturnsErrorAndEmpty
 	s.mockExecutionMgr.EXPECT().GetHistoryTasks(ctx, &persistence.GetHistoryTasksRequest{
 		ShardID:             s.mockShard.GetShardID(),
 		TaskCategory:        tasks.CategoryReplication,
-		ReaderID:            common.DefaultQueueReaderID,
 		InclusiveMinTaskKey: tasks.NewImmediateKey(minTaskID + 1),
 		ExclusiveMaxTaskKey: tasks.NewImmediateKey(maxTaskID + 1),
 		BatchSize:           s.replicationAckManager.pageSize(),
@@ -298,23 +297,20 @@ func (s *ackManagerSuite) TestGetTasks_SecondPersistenceErrorReturnsPartialResul
 	s.mockExecutionMgr.EXPECT().GetHistoryTasks(ctx, &persistence.GetHistoryTasksRequest{
 		ShardID:             s.mockShard.GetShardID(),
 		TaskCategory:        tasks.CategoryReplication,
-		ReaderID:            common.DefaultQueueReaderID,
 		InclusiveMinTaskKey: tasks.NewImmediateKey(minTaskID + 1),
 		ExclusiveMaxTaskKey: tasks.NewImmediateKey(maxTaskID + 1),
 		BatchSize:           s.replicationAckManager.pageSize(),
 		NextPageToken:       nil,
 	}).Return(tasksResponse, nil)
 
-	eventsCache := events.NewEventsCache(
-		s.mockShard.GetShardID(),
-		s.mockShard.GetConfig().EventsCacheMaxSizeBytes(),
-		s.mockShard.GetConfig().EventsCacheTTL(),
+	eventsCache := events.NewHostLevelEventsCache(
 		s.mockShard.GetExecutionManager(),
-		false,
-		s.mockShard.GetLogger(),
+		s.mockShard.GetConfig(),
 		s.mockShard.GetMetricsHandler(),
+		s.mockShard.GetLogger(),
+		false,
 	)
-	ms := workflow.TestLocalMutableState(s.mockShard, eventsCache, tests.GlobalNamespaceEntry, log.NewTestLogger(), tests.RunID)
+	ms := workflow.TestLocalMutableState(s.mockShard, eventsCache, tests.GlobalNamespaceEntry, tests.WorkflowID, tests.RunID, log.NewTestLogger())
 	ei := ms.GetExecutionInfo()
 	ei.NamespaceId = tests.NamespaceID.String()
 	ei.VersionHistories = &historyspb.VersionHistories{
@@ -349,23 +345,20 @@ func (s *ackManagerSuite) TestGetTasks_FullPage() {
 	s.mockExecutionMgr.EXPECT().GetHistoryTasks(gomock.Any(), &persistence.GetHistoryTasksRequest{
 		ShardID:             s.mockShard.GetShardID(),
 		TaskCategory:        tasks.CategoryReplication,
-		ReaderID:            common.DefaultQueueReaderID,
 		InclusiveMinTaskKey: tasks.NewImmediateKey(minTaskID + 1),
 		ExclusiveMaxTaskKey: tasks.NewImmediateKey(maxTaskID + 1),
 		BatchSize:           s.replicationAckManager.pageSize(),
 		NextPageToken:       nil,
 	}).Return(tasksResponse, nil)
 
-	eventsCache := events.NewEventsCache(
-		s.mockShard.GetShardID(),
-		s.mockShard.GetConfig().EventsCacheMaxSizeBytes(),
-		s.mockShard.GetConfig().EventsCacheTTL(),
+	eventsCache := events.NewHostLevelEventsCache(
 		s.mockShard.GetExecutionManager(),
-		false,
-		s.mockShard.GetLogger(),
+		s.mockShard.GetConfig(),
 		s.mockShard.GetMetricsHandler(),
+		s.mockShard.GetLogger(),
+		false,
 	)
-	ms := workflow.TestLocalMutableState(s.mockShard, eventsCache, tests.GlobalNamespaceEntry, log.NewTestLogger(), tests.RunID)
+	ms := workflow.TestLocalMutableState(s.mockShard, eventsCache, tests.GlobalNamespaceEntry, tests.WorkflowID, tests.RunID, log.NewTestLogger())
 	ei := ms.GetExecutionInfo()
 	ei.NamespaceId = tests.NamespaceID.String()
 	ei.VersionHistories = &historyspb.VersionHistories{
@@ -400,23 +393,20 @@ func (s *ackManagerSuite) TestGetTasks_PartialPage() {
 	s.mockExecutionMgr.EXPECT().GetHistoryTasks(gomock.Any(), &persistence.GetHistoryTasksRequest{
 		ShardID:             s.mockShard.GetShardID(),
 		TaskCategory:        tasks.CategoryReplication,
-		ReaderID:            common.DefaultQueueReaderID,
 		InclusiveMinTaskKey: tasks.NewImmediateKey(minTaskID + 1),
 		ExclusiveMaxTaskKey: tasks.NewImmediateKey(maxTaskID + 1),
 		BatchSize:           s.replicationAckManager.pageSize(),
 		NextPageToken:       nil,
 	}).Return(tasksResponse, nil)
 
-	eventsCache := events.NewEventsCache(
-		s.mockShard.GetShardID(),
-		s.mockShard.GetConfig().EventsCacheMaxSizeBytes(),
-		s.mockShard.GetConfig().EventsCacheTTL(),
+	eventsCache := events.NewHostLevelEventsCache(
 		s.mockShard.GetExecutionManager(),
-		false,
-		s.mockShard.GetLogger(),
+		s.mockShard.GetConfig(),
 		s.mockShard.GetMetricsHandler(),
+		s.mockShard.GetLogger(),
+		false,
 	)
-	ms := workflow.TestLocalMutableState(s.mockShard, eventsCache, tests.GlobalNamespaceEntry, log.NewTestLogger(), tests.RunID)
+	ms := workflow.TestLocalMutableState(s.mockShard, eventsCache, tests.GlobalNamespaceEntry, tests.WorkflowID, tests.RunID, log.NewTestLogger())
 	ei := ms.GetExecutionInfo()
 	ei.NamespaceId = tests.NamespaceID.String()
 	ei.VersionHistories = &historyspb.VersionHistories{
@@ -463,7 +453,6 @@ func (s *ackManagerSuite) TestGetTasks_FilterNamespace() {
 	s.mockExecutionMgr.EXPECT().GetHistoryTasks(gomock.Any(), &persistence.GetHistoryTasksRequest{
 		ShardID:             s.mockShard.GetShardID(),
 		TaskCategory:        tasks.CategoryReplication,
-		ReaderID:            common.DefaultQueueReaderID,
 		InclusiveMinTaskKey: tasks.NewImmediateKey(minTaskID + 1),
 		ExclusiveMaxTaskKey: tasks.NewImmediateKey(maxTaskID + 1),
 		BatchSize:           s.replicationAckManager.pageSize(),
@@ -477,7 +466,6 @@ func (s *ackManagerSuite) TestGetTasks_FilterNamespace() {
 	s.mockExecutionMgr.EXPECT().GetHistoryTasks(gomock.Any(), &persistence.GetHistoryTasksRequest{
 		ShardID:             s.mockShard.GetShardID(),
 		TaskCategory:        tasks.CategoryReplication,
-		ReaderID:            common.DefaultQueueReaderID,
 		InclusiveMinTaskKey: tasks.NewImmediateKey(minTaskID + 1),
 		ExclusiveMaxTaskKey: tasks.NewImmediateKey(maxTaskID + 1),
 		BatchSize:           s.replicationAckManager.pageSize(),
@@ -488,23 +476,20 @@ func (s *ackManagerSuite) TestGetTasks_FilterNamespace() {
 	s.mockExecutionMgr.EXPECT().GetHistoryTasks(gomock.Any(), &persistence.GetHistoryTasksRequest{
 		ShardID:             s.mockShard.GetShardID(),
 		TaskCategory:        tasks.CategoryReplication,
-		ReaderID:            common.DefaultQueueReaderID,
 		InclusiveMinTaskKey: tasks.NewImmediateKey(minTaskID + 1),
 		ExclusiveMaxTaskKey: tasks.NewImmediateKey(maxTaskID + 1),
 		BatchSize:           s.replicationAckManager.pageSize(),
 		NextPageToken:       []byte{22, 8, 78}, // previous token
 	}).Return(tasksResponse3, nil)
 
-	eventsCache := events.NewEventsCache(
-		s.mockShard.GetShardID(),
-		s.mockShard.GetConfig().EventsCacheMaxSizeBytes(),
-		s.mockShard.GetConfig().EventsCacheTTL(),
+	eventsCache := events.NewHostLevelEventsCache(
 		s.mockShard.GetExecutionManager(),
-		false,
-		s.mockShard.GetLogger(),
+		s.mockShard.GetConfig(),
 		s.mockShard.GetMetricsHandler(),
+		s.mockShard.GetLogger(),
+		false,
 	)
-	ms := workflow.TestLocalMutableState(s.mockShard, eventsCache, tests.GlobalNamespaceEntry, log.NewTestLogger(), tests.RunID)
+	ms := workflow.TestLocalMutableState(s.mockShard, eventsCache, tests.GlobalNamespaceEntry, tests.WorkflowID, tests.RunID, log.NewTestLogger())
 	ei := ms.GetExecutionInfo()
 	ei.NamespaceId = tests.NamespaceID.String()
 	ei.VersionHistories = &historyspb.VersionHistories{
@@ -530,30 +515,6 @@ func (s *ackManagerSuite) TestGetTasks_FilterNamespace() {
 	s.NotNil(replicationMessages)
 	s.Len(replicationMessages.ReplicationTasks, s.replicationAckManager.pageSize())
 	s.Equal(tasksResponse3.Tasks[len(tasksResponse3.Tasks)-1].GetTaskID(), replicationMessages.LastRetrievedMessageId)
-}
-
-func (s *ackManagerSuite) TestClose() {
-	readerIDs := []int64{0, 2, 3}
-
-	s.replicationAckManager.Lock()
-	s.replicationAckManager.registeredQueueReaders = make(map[int64]struct{})
-
-	for _, readerID := range readerIDs {
-		s.replicationAckManager.registeredQueueReaders[readerID] = struct{}{}
-		s.mockExecutionMgr.EXPECT().UnregisterHistoryTaskReader(gomock.Any(), &persistence.UnregisterHistoryTaskReaderRequest{
-			ShardID:      s.mockShard.GetShardID(),
-			ShardOwner:   s.mockShard.GetOwner(),
-			TaskCategory: tasks.CategoryReplication,
-			ReaderID:     readerID,
-		}).Times(1)
-	}
-	s.replicationAckManager.Unlock()
-
-	s.replicationAckManager.Close()
-
-	s.replicationAckManager.Lock()
-	s.Nil(s.replicationAckManager.registeredQueueReaders)
-	s.replicationAckManager.Unlock()
 }
 
 func (s *ackManagerSuite) getHistoryTasksResponse(size int) *persistence.GetHistoryTasksResponse {

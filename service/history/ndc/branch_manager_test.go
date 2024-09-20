@@ -28,11 +28,9 @@ import (
 	"context"
 	"testing"
 
-	"github.com/golang/mock/gomock"
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-
 	historyspb "go.temporal.io/server/api/history/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/cluster"
@@ -43,6 +41,7 @@ import (
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tests"
 	"go.temporal.io/server/service/history/workflow"
+	"go.uber.org/mock/gomock"
 )
 
 type (
@@ -141,13 +140,13 @@ func (s *branchMgrSuite) TestCreateNewBranch() {
 	shardID := s.mockShard.GetShardID()
 	s.mockExecutionManager.EXPECT().ForkHistoryBranch(gomock.Any(), gomock.Any()).DoAndReturn(
 		func(_ context.Context, input *persistence.ForkHistoryBranchRequest) (*persistence.ForkHistoryBranchResponse, error) {
-			input.Info = ""
 			s.Equal(&persistence.ForkHistoryBranchRequest{
 				ForkBranchToken: baseBranchToken,
 				ForkNodeID:      baseBranchLCAEventID + 1,
-				Info:            "",
+				Info:            input.Info,
 				ShardID:         shardID,
 				NamespaceID:     s.namespaceID,
+				NewRunID:        input.NewRunID,
 			}, input)
 			return &persistence.ForkHistoryBranchResponse{
 				NewBranchToken: newBranchToken,
@@ -270,13 +269,13 @@ func (s *branchMgrSuite) TestGetOrCreate_BranchNotAppendable_NoMissingEventInBet
 	shardID := s.mockShard.GetShardID()
 	s.mockExecutionManager.EXPECT().ForkHistoryBranch(gomock.Any(), gomock.Any()).DoAndReturn(
 		func(_ context.Context, input *persistence.ForkHistoryBranchRequest) (*persistence.ForkHistoryBranchResponse, error) {
-			input.Info = ""
 			s.Equal(&persistence.ForkHistoryBranchRequest{
 				ForkBranchToken: baseBranchToken,
 				ForkNodeID:      baseBranchLCAEventID + 1,
-				Info:            "",
+				Info:            input.Info,
 				ShardID:         shardID,
 				NamespaceID:     s.namespaceID,
+				NewRunID:        input.NewRunID,
 			}, input)
 			return &persistence.ForkHistoryBranchResponse{
 				NewBranchToken: newBranchToken,
@@ -366,13 +365,13 @@ func (s *branchMgrSuite) TestCreate_NoMissingEventInBetween() {
 	shardID := s.mockShard.GetShardID()
 	s.mockExecutionManager.EXPECT().ForkHistoryBranch(gomock.Any(), gomock.Any()).DoAndReturn(
 		func(_ context.Context, input *persistence.ForkHistoryBranchRequest) (*persistence.ForkHistoryBranchResponse, error) {
-			input.Info = ""
 			s.Equal(&persistence.ForkHistoryBranchRequest{
 				ForkBranchToken: baseBranchToken,
 				ForkNodeID:      baseBranchLCAEventID + 1,
-				Info:            "",
+				Info:            input.Info,
 				ShardID:         shardID,
 				NamespaceID:     s.namespaceID,
+				NewRunID:        input.NewRunID,
 			}, input)
 			return &persistence.ForkHistoryBranchResponse{
 				NewBranchToken: newBranchToken,

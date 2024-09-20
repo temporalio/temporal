@@ -29,13 +29,12 @@ import (
 	"time"
 
 	"go.temporal.io/api/serviceerror"
-	"google.golang.org/grpc"
-
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
+	"google.golang.org/grpc"
 )
 
 var _ historyservice.HistoryServiceClient = (*metricClient)(nil)
@@ -81,7 +80,7 @@ func (c *metricClient) startMetricsRecording(
 ) (metrics.Handler, time.Time) {
 	caller := headers.GetCallerInfo(ctx).CallerName
 	metricsHandler := c.metricsHandler.WithTags(metrics.OperationTag(operation), metrics.NamespaceTag(caller), metrics.ServiceRoleTag(metrics.HistoryRoleTagValue))
-	metricsHandler.Counter(metrics.ClientRequests.GetMetricName()).Record(1)
+	metrics.ClientRequests.With(metricsHandler).Record(1)
 	return metricsHandler, time.Now().UTC()
 }
 
@@ -101,9 +100,9 @@ func (c *metricClient) finishMetricsRecording(
 			*serviceerror.WorkflowExecutionAlreadyStarted:
 			// noop - not interest and too many logs
 		default:
-			c.throttledLogger.Info("history client encountered error", tag.Error(err), tag.ErrorType(err))
+			c.throttledLogger.Info("history client encountered error", tag.Error(err), tag.ServiceErrorType(err))
 		}
-		metricsHandler.Counter(metrics.ClientFailures.GetMetricName()).Record(1, metrics.ServiceErrorTypeTag(err))
+		metrics.ClientFailures.With(metricsHandler).Record(1, metrics.ServiceErrorTypeTag(err))
 	}
-	metricsHandler.Timer(metrics.ClientLatency.GetMetricName()).Record(time.Since(startTime))
+	metrics.ClientLatency.With(metricsHandler).Record(time.Since(startTime))
 }

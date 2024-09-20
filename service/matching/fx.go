@@ -25,8 +25,6 @@
 package matching
 
 import (
-	"go.uber.org/fx"
-
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/config"
@@ -38,7 +36,6 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/visibility"
 	"go.temporal.io/server/common/persistence/visibility/manager"
-	esclient "go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/resolver"
 	"go.temporal.io/server/common/resource"
@@ -46,11 +43,14 @@ import (
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/service"
 	"go.temporal.io/server/service/matching/configs"
+	"go.uber.org/fx"
+	"google.golang.org/grpc"
+	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 )
 
 var Module = fx.Options(
 	resource.Module,
-	fx.Provide(dynamicconfig.NewCollection),
+	dynamicconfig.Module,
 	fx.Provide(ConfigProvider),
 	fx.Provide(PersistenceRateLimitingParamsProvider),
 	service.PersistenceLazyLoadedServiceResolverModule,
@@ -59,23 +59,24 @@ var Module = fx.Options(
 	fx.Provide(TelemetryInterceptorProvider),
 	fx.Provide(RateLimitInterceptorProvider),
 	fx.Provide(VisibilityManagerProvider),
-	fx.Provide(HandlerProvider),
+	fx.Provide(NewHandler),
 	fx.Provide(service.GrpcServerOptionsProvider),
 	fx.Provide(NamespaceReplicationQueueProvider),
 	fx.Provide(ServiceResolverProvider),
+	fx.Provide(ServerProvider),
 	fx.Provide(NewService),
 	fx.Invoke(ServiceLifetimeHooks),
 )
+
+func ServerProvider(grpcServerOptions []grpc.ServerOption) *grpc.Server {
+	return grpc.NewServer(grpcServerOptions...)
+}
 
 func ConfigProvider(
 	dc *dynamicconfig.Collection,
 	persistenceConfig config.Persistence,
 ) *Config {
-	return NewConfig(
-		dc,
-		persistenceConfig.StandardVisibilityConfigExist(),
-		persistenceConfig.AdvancedVisibilityConfigExist(),
-	)
+	return NewConfig(dc)
 }
 
 func RetryableInterceptorProvider() *interceptor.RetryableInterceptor {
@@ -89,11 +90,13 @@ func TelemetryInterceptorProvider(
 	logger log.Logger,
 	namespaceRegistry namespace.Registry,
 	metricsHandler metrics.Handler,
+	serviceConfig *Config,
 ) *interceptor.TelemetryInterceptor {
 	return interceptor.NewTelemetryInterceptor(
 		namespaceRegistry,
 		metricsHandler,
 		logger,
+		serviceConfig.LogAllReqErrors,
 	)
 }
 
@@ -106,7 +109,9 @@ func RateLimitInterceptorProvider(
 ) *interceptor.RateLimitInterceptor {
 	return interceptor.NewRateLimitInterceptor(
 		configs.NewPriorityRateLimiter(func() float64 { return float64(serviceConfig.RPS()) }, serviceConfig.OperatorRPSRatio),
-		map[string]int{},
+		map[string]int{
+			healthpb.Health_Check_FullMethodName: 0, // exclude health check requests from rate limiting.
+		},
 	)
 }
 
@@ -115,6 +120,7 @@ func RateLimitInterceptorProvider(
 func PersistenceRateLimitingParamsProvider(
 	serviceConfig *Config,
 	persistenceLazyLoadedServiceResolver service.PersistenceLazyLoadedServiceResolver,
+	logger log.SnTaggedLogger,
 ) service.PersistenceRateLimitingParams {
 	return service.NewPersistenceRateLimitingParams(
 		serviceConfig.PersistenceMaxQPS,
@@ -122,10 +128,11 @@ func PersistenceRateLimitingParamsProvider(
 		serviceConfig.PersistenceNamespaceMaxQPS,
 		serviceConfig.PersistenceGlobalNamespaceMaxQPS,
 		serviceConfig.PersistencePerShardNamespaceMaxQPS,
-		serviceConfig.EnablePersistencePriorityRateLimiting,
 		serviceConfig.OperatorRPSRatio,
+		serviceConfig.PersistenceQPSBurstRatio,
 		serviceConfig.PersistenceDynamicRateLimitingParams,
 		persistenceLazyLoadedServiceResolver,
+		logger,
 	)
 }
 
@@ -153,59 +160,32 @@ func NamespaceReplicationQueueProvider(
 func VisibilityManagerProvider(
 	logger log.Logger,
 	persistenceConfig *config.Persistence,
+	customVisibilityStoreFactory visibility.VisibilityStoreFactory,
 	metricsHandler metrics.Handler,
 	serviceConfig *Config,
-	esClient esclient.Client,
 	persistenceServiceResolver resolver.ServiceResolver,
 	searchAttributesMapperProvider searchattribute.MapperProvider,
 	saProvider searchattribute.Provider,
+	namespaceRegistry namespace.Registry,
 ) (manager.VisibilityManager, error) {
 	return visibility.NewManager(
 		*persistenceConfig,
 		persistenceServiceResolver,
-		esClient,
+		customVisibilityStoreFactory,
 		nil, // matching visibility never writes
 		saProvider,
 		searchAttributesMapperProvider,
+		namespaceRegistry,
 		serviceConfig.VisibilityPersistenceMaxReadQPS,
 		serviceConfig.VisibilityPersistenceMaxWriteQPS,
 		serviceConfig.OperatorRPSRatio,
 		serviceConfig.EnableReadFromSecondaryVisibility,
+		serviceConfig.VisibilityEnableShadowReadMode,
 		dynamicconfig.GetStringPropertyFn(visibility.SecondaryVisibilityWritingModeOff), // matching visibility never writes
 		serviceConfig.VisibilityDisableOrderByClause,
 		serviceConfig.VisibilityEnableManualPagination,
 		metricsHandler,
 		logger,
-	)
-}
-
-func HandlerProvider(
-	config *Config,
-	logger log.SnTaggedLogger,
-	throttledLogger log.ThrottledLogger,
-	taskManager persistence.TaskManager,
-	historyClient resource.HistoryClient,
-	matchingRawClient resource.MatchingRawClient,
-	matchingServiceResolver membership.ServiceResolver,
-	metricsHandler metrics.Handler,
-	namespaceRegistry namespace.Registry,
-	clusterMetadata cluster.Metadata,
-	namespaceReplicationQueue TaskQueueReplicatorNamespaceReplicationQueue,
-	visibilityManager manager.VisibilityManager,
-) *Handler {
-	return NewHandler(
-		config,
-		logger,
-		throttledLogger,
-		taskManager,
-		historyClient,
-		matchingRawClient,
-		matchingServiceResolver,
-		metricsHandler,
-		namespaceRegistry,
-		clusterMetadata,
-		namespaceReplicationQueue,
-		visibilityManager,
 	)
 }
 

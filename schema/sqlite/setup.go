@@ -32,10 +32,11 @@ import (
 	"io"
 
 	enumspb "go.temporal.io/api/enums/v1"
-
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/config"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/metrics"
 	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/sql"
@@ -43,6 +44,7 @@ import (
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/resolver"
+	"go.temporal.io/server/common/searchattribute"
 )
 
 var (
@@ -56,7 +58,7 @@ var (
 //
 // Note: this function may receive breaking changes or be removed in the future.
 func SetupSchema(cfg *config.SQL) error {
-	db, err := sql.NewSQLAdminDB(sqlplugin.DbKindUnknown, cfg, resolver.NewNoopResolver())
+	db, err := sql.NewSQLAdminDB(sqlplugin.DbKindUnknown, cfg, resolver.NewNoopResolver(), log.NewNoopLogger(), metrics.NoopMetricsHandler)
 	if err != nil {
 		return fmt.Errorf("unable to create SQLite admin DB: %w", err)
 	}
@@ -113,7 +115,7 @@ type NamespaceConfig struct {
 //
 // Note: this function may receive breaking changes or be removed in the future.
 func CreateNamespaces(cfg *config.SQL, namespaces ...*NamespaceConfig) error {
-	db, err := sql.NewSQLDB(sqlplugin.DbKindUnknown, cfg, resolver.NewNoopResolver())
+	db, err := sql.NewSQLDB(sqlplugin.DbKindUnknown, cfg, resolver.NewNoopResolver(), log.NewNoopLogger(), metrics.NoopMetricsHandler)
 	if err != nil {
 		return fmt.Errorf("unable to create SQLite admin DB: %w", err)
 	}
@@ -132,7 +134,37 @@ func CreateNamespaces(cfg *config.SQL, namespaces ...*NamespaceConfig) error {
 // the namespace via the CreateNamespaces function.
 //
 // Note: this function may receive breaking changes or be removed in the future.
-func NewNamespaceConfig(activeClusterName, namespace string, global bool) *NamespaceConfig {
+func NewNamespaceConfig(
+	activeClusterName string,
+	namespace string,
+	global bool,
+	customSearchAttributes map[string]enumspb.IndexedValueType,
+) (*NamespaceConfig, error) {
+	dbCustomSearchAttributes := searchattribute.GetSqlDbIndexSearchAttributes().CustomSearchAttributes
+	fieldToAliasMap := map[string]string{}
+	for saName, saType := range customSearchAttributes {
+		var targetFieldName string
+		var cntUsed int
+		for fieldName, fieldType := range dbCustomSearchAttributes {
+			if fieldType != saType {
+				continue
+			}
+			if _, ok := fieldToAliasMap[fieldName]; !ok {
+				targetFieldName = fieldName
+				break
+			}
+			cntUsed++
+		}
+		if targetFieldName == "" {
+			return nil, fmt.Errorf(
+				"cannot have more than %d search attributes of type %s",
+				cntUsed,
+				saType,
+			)
+		}
+		fieldToAliasMap[targetFieldName] = saName
+	}
+
 	detail := persistencespb.NamespaceDetail{
 		Info: &persistencespb.NamespaceInfo{
 			Id:    primitives.NewUUID().String(),
@@ -140,9 +172,10 @@ func NewNamespaceConfig(activeClusterName, namespace string, global bool) *Names
 			Name:  namespace,
 		},
 		Config: &persistencespb.NamespaceConfig{
-			Retention:               timestamp.DurationFromHours(24),
-			HistoryArchivalState:    enumspb.ARCHIVAL_STATE_DISABLED,
-			VisibilityArchivalState: enumspb.ARCHIVAL_STATE_DISABLED,
+			Retention:                    timestamp.DurationFromHours(24),
+			HistoryArchivalState:         enumspb.ARCHIVAL_STATE_DISABLED,
+			VisibilityArchivalState:      enumspb.ARCHIVAL_STATE_DISABLED,
+			CustomSearchAttributeAliases: fieldToAliasMap,
 		},
 		ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
 			ActiveClusterName: activeClusterName,
@@ -154,7 +187,7 @@ func NewNamespaceConfig(activeClusterName, namespace string, global bool) *Names
 	return &NamespaceConfig{
 		Detail:   &detail,
 		IsGlobal: global,
-	}
+	}, nil
 }
 
 func createNamespaceIfNotExists(db sqlplugin.DB, namespace *NamespaceConfig) error {

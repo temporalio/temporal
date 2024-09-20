@@ -1,0 +1,75 @@
+// The MIT License
+//
+// Copyright (c) 2020 Temporal Technologies, Inc.
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+// THE SOFTWARE.
+
+syntax = "proto3";
+
+package temporal.server.api.persistence.v1;
+option go_package = "go.temporal.io/server/api/persistence/v1;persistence";
+
+import "temporal/server/api/persistence/v1/hsm.proto";
+
+// UpdateAdmissionInfo contains information about a durably admitted update. Note that updates in Admitted state are typically
+// non-durable (i.e. do not have a corresponding event in history). Durably admitted updates arise as a result of
+// workflow reset or history event replication conflict: in these cases a WorkflowExecutionUpdateAdmittedEvent event is
+// created when an accepted update (on one branch of workflow history) is converted into an admitted update (on another
+// branch).
+message UpdateAdmissionInfo {
+    message HistoryPointer {
+        // the event ID of the WorkflowExecutionUpdateAdmittedEvent
+        int64 event_id = 1;
+        // the ID of the event batch containing the event_id
+        int64 event_batch_id = 2;
+    }
+
+    oneof location {
+        HistoryPointer history_pointer = 1;
+    }
+}
+
+// UpdateAcceptanceInfo contains information about an accepted update
+message UpdateAcceptanceInfo {
+    // the event ID of the WorkflowExecutionUpdateAcceptedEvent
+    int64 event_id = 1;
+}
+
+// UpdateCompletionInfo contains information about a completed update
+message UpdateCompletionInfo {
+    // the event ID of the WorkflowExecutionUpdateCompletedEvent
+    int64 event_id = 1;
+
+    // the ID of the event batch containing the event_id above
+    int64 event_batch_id = 2;
+}
+
+// UpdateInfo is the persistent state of a single update
+message UpdateInfo {
+    oneof value {
+        // update has been accepted and this is the acceptance metadata
+        UpdateAcceptanceInfo acceptance = 1;
+        // update has been completed and this is the completion metadata
+        UpdateCompletionInfo completion = 2;
+        // update has been admitted and this is the admission metadata
+        UpdateAdmissionInfo admission = 3;
+    }
+
+    VersionedTransition last_update_versioned_transition = 4;
+}

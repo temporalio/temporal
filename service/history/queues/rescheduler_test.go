@@ -30,14 +30,14 @@ import (
 	"testing"
 	"time"
 
-	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	ctasks "go.temporal.io/server/common/tasks"
+	"go.temporal.io/server/service/history/tasks"
+	"go.uber.org/mock/gomock"
 )
 
 type (
@@ -221,7 +221,7 @@ func (s *rescheudulerSuite) TestReschedule_DropCancelled() {
 	s.Equal(0, s.rescheduler.Len())
 }
 
-func (s *rescheudulerSuite) TestImmdiateReschedule() {
+func (s *rescheudulerSuite) TestForceReschedule_ImmediateTask() {
 	now := time.Now()
 	s.timeSource.Update(now)
 	namespaceID := s.mockScheduler.TaskChannelKeyFn()(nil).NamespaceID
@@ -234,8 +234,9 @@ func (s *rescheudulerSuite) TestImmdiateReschedule() {
 	taskWG.Add(numTask)
 	for i := 0; i != numTask; i++ {
 		mockTask := NewMockExecutable(s.controller)
-		mockTask.EXPECT().State().Return(ctasks.TaskStatePending).Times(1)
+		mockTask.EXPECT().State().Return(ctasks.TaskStatePending).AnyTimes()
 		mockTask.EXPECT().SetScheduledTime(gomock.Any()).AnyTimes()
+		mockTask.EXPECT().GetKey().Return(tasks.NewImmediateKey(int64(i))).AnyTimes()
 		s.rescheduler.Add(
 			mockTask,
 			now.Add(time.Minute+time.Duration(rand.Int63n(time.Minute.Nanoseconds()))),
@@ -250,4 +251,45 @@ func (s *rescheudulerSuite) TestImmdiateReschedule() {
 	s.rescheduler.Reschedule(namespaceID)
 	taskWG.Wait()
 	s.Equal(0, s.rescheduler.Len())
+}
+
+func (s *rescheudulerSuite) TestForceReschedule_ScheduledTask() {
+	now := time.Now()
+	s.timeSource.Update(now)
+	namespaceID := s.mockScheduler.TaskChannelKeyFn()(nil).NamespaceID
+
+	s.rescheduler.Start()
+	defer s.rescheduler.Stop()
+
+	taskWG := &sync.WaitGroup{}
+	taskWG.Add(1)
+
+	retryingTask := NewMockExecutable(s.controller)
+	retryingTask.EXPECT().State().Return(ctasks.TaskStatePending).AnyTimes()
+	retryingTask.EXPECT().SetScheduledTime(gomock.Any()).AnyTimes()
+	retryingTask.EXPECT().GetKey().Return(tasks.NewKey(now.Add(-time.Minute), int64(1))).AnyTimes()
+	s.rescheduler.Add(
+		retryingTask,
+		now.Add(time.Minute),
+	)
+
+	// schedule queue pre-fetches tasks
+	futureTaskTimestamp := now.Add(time.Second)
+	futureTask := NewMockExecutable(s.controller)
+	futureTask.EXPECT().State().Return(ctasks.TaskStatePending).AnyTimes()
+	futureTask.EXPECT().SetScheduledTime(gomock.Any()).AnyTimes()
+	futureTask.EXPECT().GetKey().Return(tasks.NewKey(futureTaskTimestamp, int64(2))).AnyTimes()
+	s.rescheduler.Add(
+		futureTask,
+		futureTaskTimestamp,
+	)
+
+	s.mockScheduler.EXPECT().TrySubmit(gomock.Any()).DoAndReturn(func(_ Executable) bool {
+		taskWG.Done()
+		return true
+	}).Times(1)
+
+	s.rescheduler.Reschedule(namespaceID)
+	taskWG.Wait()
+	s.Equal(1, s.rescheduler.Len())
 }

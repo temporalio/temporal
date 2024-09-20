@@ -28,10 +28,8 @@ import (
 	"context"
 
 	"github.com/google/uuid"
-	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
-
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log/tag"
@@ -64,28 +62,30 @@ func Invoke(
 		return err
 	}
 	namespaceID := namespaceEntry.ID()
+	isGlobalNamespace := namespaceEntry.IsGlobalNamespace()
 
 	return api.GetAndUpdateWorkflowWithNew(
 		ctx,
 		nil,
-		api.BypassMutableStateConsistencyPredicate,
 		definition.NewWorkflowKey(
 			namespaceID.String(),
 			workflowID,
 			"",
 		),
-		func(workflowContext api.WorkflowContext) (*api.UpdateWorkflowAction, error) {
-			context := workflowContext.GetContext()
-			mutableState := workflowContext.GetMutableState()
+		func(workflowLease api.WorkflowLease) (*api.UpdateWorkflowAction, error) {
+			context := workflowLease.GetContext()
+			mutableState := workflowLease.GetMutableState()
 			// Filter out reapply event from the same cluster
 			toReapplyEvents := make([]*historypb.HistoryEvent, 0, len(reapplyEvents))
-			lastWriteVersion, err := mutableState.GetLastWriteVersion()
-			if err != nil {
-				return nil, err
-			}
+
+			clusterMetadata := shard.GetClusterMetadata()
+			currentCluster := clusterMetadata.GetCurrentClusterName()
 
 			for _, event := range reapplyEvents {
-				if event.GetVersion() == lastWriteVersion {
+				if clusterMetadata.ClusterNameForFailoverVersion(
+					isGlobalNamespace,
+					event.GetVersion(),
+				) == currentCluster {
 					// The reapply is from the same cluster. Ignoring.
 					continue
 				}
@@ -109,7 +109,7 @@ func Invoke(
 				// to accept events to be reapplied
 				baseRunID := mutableState.GetExecutionState().GetRunId()
 				resetRunID := uuid.New()
-				baseRebuildLastEventID := mutableState.GetLastWorkflowTaskStartedEventID()
+				baseRebuildLastEventID := mutableState.GetLastCompletedWorkflowTaskStartedEventId()
 
 				// TODO when https://github.com/uber/cadence/issues/2420 is finished, remove this block,
 				//  since cannot reapply event to a finished workflow which had no workflow tasks started
@@ -118,7 +118,7 @@ func Invoke(
 						tag.WorkflowNamespaceID(namespaceID.String()),
 						tag.WorkflowID(workflowID),
 					)
-					shard.GetMetricsHandler().Counter(metrics.EventReapplySkippedCount.GetMetricName()).Record(
+					metrics.EventReapplySkippedCount.With(shard.GetMetricsHandler()).Record(
 						1,
 						metrics.OperationTag(metrics.HistoryReapplyEventsScope))
 					return &api.UpdateWorkflowAction{
@@ -158,7 +158,7 @@ func Invoke(
 					),
 					ndc.EventsReapplicationResetWorkflowReason,
 					toReapplyEvents,
-					enumspb.RESET_REAPPLY_TYPE_SIGNAL,
+					nil,
 				)
 				switch err.(type) {
 				case *serviceerror.InvalidArgument:
@@ -178,6 +178,7 @@ func Invoke(
 			reappliedEvents, err := eventsReapplier.ReapplyEvents(
 				ctx,
 				mutableState,
+				context.UpdateRegistry(ctx, nil),
 				toReapplyEvents,
 				runID,
 			)

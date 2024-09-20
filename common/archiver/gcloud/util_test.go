@@ -31,9 +31,9 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	historypb "go.temporal.io/api/history/v1"
-
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/codec"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 func (s *utilSuite) SetupTest() {
@@ -63,7 +63,7 @@ func (s *utilSuite) TestEncodeDecodeHistoryBatches() {
 			Events: []*historypb.HistoryEvent{
 				{
 					EventId:   common.FirstEventID + 1,
-					EventTime: &now,
+					EventTime: timestamppb.New(now),
 					Version:   1,
 				},
 				{

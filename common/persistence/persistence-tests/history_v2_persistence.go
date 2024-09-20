@@ -27,33 +27,31 @@ package persistencetests
 import (
 	"context"
 	"math/rand"
-	"reflect"
 	"sync"
 	"sync/atomic"
 	"time"
 
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
-	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
-
-	"go.temporal.io/server/common/debug"
-	"go.temporal.io/server/common/persistence/serialization"
-
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/backoff"
+	"go.temporal.io/server/common/debug"
 	p "go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/testing/protorequire"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type (
 	// HistoryV2PersistenceSuite contains history persistence tests
 	HistoryV2PersistenceSuite struct {
 		// suite.Suite
-		TestBase
+		*TestBase
 		// override suite.Suite.Assertions with require.Assertions; this means that s.NotNil(nil) will stop the test,
 		// not merely log an error
 		*require.Assertions
+		protorequire.ProtoAssertions
 
 		ctx    context.Context
 		cancel context.CancelFunc
@@ -90,6 +88,7 @@ func (s *HistoryV2PersistenceSuite) TearDownSuite() {
 func (s *HistoryV2PersistenceSuite) SetupTest() {
 	// Have to define our overridden assertions in the test setup. If we did it earlier, s.T() will return nil
 	s.Assertions = require.New(s.T())
+	s.ProtoAssertions = protorequire.New(s.T())
 
 	s.ctx, s.cancel = context.WithTimeout(context.Background(), 30*time.Second*debug.TimeoutMultiplier)
 }
@@ -152,17 +151,15 @@ func (s *HistoryV2PersistenceSuite) TestScanAllTrees() {
 		})
 		s.Nil(err)
 		for _, br := range resp.Branches {
-			branch, err := serialization.HistoryBranchFromBlob(br.BranchToken, enumspb.ENCODING_TYPE_PROTO3.String())
-			s.NoError(err)
-			uuidTreeId := branch.TreeId
+			uuidTreeId := br.BranchInfo.TreeId
 			if trees[uuidTreeId] {
 				delete(trees, uuidTreeId)
 
-				s.True(br.ForkTime.UnixNano() > 0)
-				s.True(len(branch.BranchId) > 0)
+				s.True(br.ForkTime.AsTime().UnixNano() > 0)
+				s.True(len(br.BranchInfo.BranchId) > 0)
 				s.Equal("branchInfo", br.Info)
 			} else {
-				s.Fail("treeID not found", branch.TreeId)
+				s.Fail("treeID not found", br.BranchInfo.TreeId)
 			}
 		}
 
@@ -346,7 +343,7 @@ func (s *HistoryV2PersistenceSuite) TestReadBranchByPagination() {
 		s.Equal(0, len(resp.HistoryEvents))
 	}
 
-	s.True(reflect.DeepEqual(historyW, historyR))
+	s.ProtoEqual(historyW, historyR)
 	s.Equal(0, len(resp.NextPageToken))
 
 	// MinEventID is in the middle of the last batch and this is the first request (NextPageToken
@@ -369,7 +366,7 @@ func (s *HistoryV2PersistenceSuite) TestConcurrentlyCreateAndAppendBranches() {
 	treeID := uuid.NewRandom().String()
 	wg := sync.WaitGroup{}
 	concurrency := 1
-	m := sync.Map{}
+	m := &sync.Map{}
 
 	// test create new branch along with appending new nodes
 	for i := 0; i < concurrency; i++ {
@@ -407,7 +404,7 @@ func (s *HistoryV2PersistenceSuite) TestConcurrentlyCreateAndAppendBranches() {
 			s.Equal(20, len(events))
 			historyR.Events = events
 
-			s.True(reflect.DeepEqual(historyW, historyR))
+			s.ProtoEqual(historyW, historyR)
 		}(i)
 	}
 
@@ -530,8 +527,8 @@ func (s *HistoryV2PersistenceSuite) TestConcurrentlyForkAndAppendBranches() {
 	s.Nil(err)
 	s.Equal((concurrency)+1, len(events))
 
-	level1ID := sync.Map{}
-	level1Br := sync.Map{}
+	level1ID := new(sync.Map)
+	level1Br := new(sync.Map)
 	// test forking from master branch and append nodes
 	for i := 0; i < concurrency; i++ {
 		wg.Add(1)
@@ -580,7 +577,7 @@ func (s *HistoryV2PersistenceSuite) TestConcurrentlyForkAndAppendBranches() {
 	branches = s.descTree(treeID)
 	s.Equal(concurrency, len(branches))
 	forkOnLevel1 := int32(0)
-	level2Br := sync.Map{}
+	level2Br := new(sync.Map)
 	wg = sync.WaitGroup{}
 
 	// test forking for second level of branch
@@ -679,55 +676,14 @@ func (s *HistoryV2PersistenceSuite) TestConcurrentlyForkAndAppendBranches() {
 
 }
 
-// TestTreeInfoCompatibility test
-func (s *HistoryV2PersistenceSuite) TestTreeInfoCompatibility() {
-	serializer := serialization.NewSerializer()
-	treeID := uuid.NewRandom().String()
-	branchID := uuid.NewRandom().String()
-	originalBranch := &persistencespb.HistoryBranch{
-		TreeId:   treeID,
-		BranchId: branchID,
-	}
-	originalToken, err := serializer.HistoryBranchToBlob(originalBranch, enumspb.ENCODING_TYPE_PROTO3)
-	s.NoError(err)
-
-	// Forward compatibility -> infer missing branch token
-	blob, err := serializer.HistoryTreeInfoToBlob(
-		&persistencespb.HistoryTreeInfo{
-			BranchInfo: originalBranch,
-			// NOTE: Intentionally missing BranchToken
-		},
-		enumspb.ENCODING_TYPE_PROTO3,
-	)
-	s.NoError(err)
-	info, err := p.ToHistoryTreeInfo(serializer, blob)
-	s.NoError(err)
-	s.Equal(originalToken.Data, info.BranchToken)
-	s.Equal(originalBranch, info.BranchInfo)
-
-	// Backward compatibility -> infer missing branch info
-	blob, err = serializer.HistoryTreeInfoToBlob(
-		&persistencespb.HistoryTreeInfo{
-			BranchToken: originalToken.Data,
-			// NOTE: Intentionally missing BranchInfo
-		},
-		enumspb.ENCODING_TYPE_PROTO3,
-	)
-	s.NoError(err)
-	info, err = p.ToHistoryTreeInfo(serializer, blob)
-	s.NoError(err)
-	s.Equal(originalToken.Data, info.BranchToken)
-	s.Equal(originalBranch, info.BranchInfo)
-}
-
-func (s *HistoryV2PersistenceSuite) getBranchByKey(m sync.Map, k int) []byte {
+func (s *HistoryV2PersistenceSuite) getBranchByKey(m *sync.Map, k int) []byte {
 	v, ok := m.Load(k)
 	s.Equal(true, ok)
 	br := v.([]byte)
 	return br
 }
 
-func (s *HistoryV2PersistenceSuite) getIDByKey(m sync.Map, k int) int64 {
+func (s *HistoryV2PersistenceSuite) getIDByKey(m *sync.Map, k int) int64 {
 	v, ok := m.Load(k)
 	s.Equal(true, ok)
 	id := v.(int64)
@@ -739,7 +695,7 @@ func (s *HistoryV2PersistenceSuite) genRandomEvents(eventIDs []int64, version in
 
 	now := time.Date(2020, 8, 22, 0, 0, 0, 0, time.UTC)
 	for _, eid := range eventIDs {
-		e := &historypb.HistoryEvent{EventId: eid, Version: version, EventTime: &now}
+		e := &historypb.HistoryEvent{EventId: eid, Version: version, EventTime: timestamppb.New(now)}
 		events = append(events, e)
 	}
 
@@ -750,12 +706,14 @@ func (s *HistoryV2PersistenceSuite) genRandomEvents(eventIDs []int64, version in
 func (s *HistoryV2PersistenceSuite) newHistoryBranch(treeID string) ([]byte, error) {
 	return s.ExecutionManager.GetHistoryBranchUtil().NewHistoryBranch(
 		uuid.New(),
+		uuid.New(),
+		uuid.New(),
 		treeID,
 		nil,
 		[]*persistencespb.HistoryBranchRange{},
-		nil,
-		nil,
-		nil,
+		0,
+		0,
+		0,
 	)
 }
 
@@ -774,26 +732,29 @@ func (s *HistoryV2PersistenceSuite) deleteHistoryBranch(branch []byte) error {
 
 // persistence helper
 func (s *HistoryV2PersistenceSuite) descTree(treeID string) []*persistencespb.HistoryBranch {
-	resp, err := s.ExecutionManager.GetHistoryTree(s.ctx, &p.GetHistoryTreeRequest{
-		TreeID:  treeID,
-		ShardID: s.ShardInfo.GetShardId(),
-	})
-	s.Nil(err)
-	branches, err := s.toHistoryBranches(resp.BranchTokens)
-	s.NoError(err)
-	return branches
-}
+	var branches []*persistencespb.HistoryBranch
 
-func (s *HistoryV2PersistenceSuite) toHistoryBranches(branchTokens [][]byte) ([]*persistencespb.HistoryBranch, error) {
-	branches := make([]*persistencespb.HistoryBranch, len(branchTokens))
-	for i, b := range branchTokens {
-		branch, err := serialization.HistoryBranchFromBlob(b, enumspb.ENCODING_TYPE_PROTO3.String())
-		if err != nil {
-			return nil, err
+	var nextPageToken []byte
+	for {
+		resp, err := s.ExecutionManager.GetAllHistoryTreeBranches(s.ctx, &p.GetAllHistoryTreeBranchesRequest{
+			NextPageToken: nextPageToken,
+			PageSize:      100,
+		})
+		s.NoError(err)
+
+		for _, branch := range resp.Branches {
+			if branch.BranchInfo.TreeId == treeID {
+				branches = append(branches, branch.BranchInfo)
+			}
 		}
-		branches[i] = branch
+
+		nextPageToken = resp.NextPageToken
+		if len(nextPageToken) == 0 {
+			break
+		}
 	}
-	return branches, nil
+
+	return branches
 }
 
 // persistence helper
@@ -892,6 +853,7 @@ func (s *HistoryV2PersistenceSuite) fork(forkBranch []byte, forkNodeID int64) ([
 			Info:            testForkRunID,
 			ShardID:         s.ShardInfo.GetShardId(),
 			NamespaceID:     uuid.New(),
+			NewRunID:        uuid.New(),
 		})
 		if resp != nil {
 			bi = resp.NewBranchToken

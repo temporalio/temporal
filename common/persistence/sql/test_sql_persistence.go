@@ -29,14 +29,17 @@ import (
 	"os"
 	"path"
 	"strings"
+	"time"
 
-	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/metrics"
 	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
+	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/resolver"
 	"go.temporal.io/server/tests/testutils"
 )
@@ -115,7 +118,7 @@ func (s *TestCluster) Config() config.Persistence {
 		DataStores: map[string]config.DataStore{
 			"test": {SQL: &cfg, FaultInjection: s.faultInjection},
 		},
-		TransactionSizeLimit: dynamicconfig.GetIntPropertyFn(common.DefaultTransactionSizeLimit),
+		TransactionSizeLimit: dynamicconfig.GetIntPropertyFn(primitives.DefaultTransactionSizeLimit),
 	}
 }
 
@@ -132,7 +135,16 @@ func (s *TestCluster) CreateDatabase() {
 		cfg2.DatabaseName = ""
 	}
 
-	db, err := NewSQLAdminDB(sqlplugin.DbKindUnknown, &cfg2, resolver.NewNoopResolver())
+	var db sqlplugin.AdminDB
+	var err error
+	err = backoff.ThrottleRetry(
+		func() error {
+			db, err = NewSQLAdminDB(sqlplugin.DbKindUnknown, &cfg2, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
+			return err
+		},
+		backoff.NewExponentialRetryPolicy(time.Second).WithExpirationInterval(time.Minute),
+		nil,
+	)
 	if err != nil {
 		panic(err)
 	}
@@ -146,6 +158,7 @@ func (s *TestCluster) CreateDatabase() {
 	if err != nil {
 		panic(err)
 	}
+	s.logger.Info("created database", tag.NewStringTag("database", s.cfg.DatabaseName))
 }
 
 // DropDatabase from PersistenceTestCluster interface
@@ -164,7 +177,7 @@ func (s *TestCluster) DropDatabase() {
 
 	// NOTE need to connect with empty name to drop the database
 	cfg2.DatabaseName = ""
-	db, err := NewSQLAdminDB(sqlplugin.DbKindUnknown, &cfg2, resolver.NewNoopResolver())
+	db, err := NewSQLAdminDB(sqlplugin.DbKindUnknown, &cfg2, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
 	if err != nil {
 		panic(err)
 	}
@@ -178,6 +191,7 @@ func (s *TestCluster) DropDatabase() {
 	if err != nil {
 		panic(err)
 	}
+	s.logger.Info("dropped database", tag.NewStringTag("database", s.cfg.DatabaseName))
 }
 
 // LoadSchema from PersistenceTestCluster interface
@@ -187,7 +201,15 @@ func (s *TestCluster) LoadSchema(schemaFile string) {
 		s.logger.Fatal("LoadSchema", tag.Error(err))
 	}
 
-	db, err := NewSQLAdminDB(sqlplugin.DbKindUnknown, &s.cfg, resolver.NewNoopResolver())
+	var db sqlplugin.AdminDB
+	err = backoff.ThrottleRetry(
+		func() error {
+			db, err = NewSQLAdminDB(sqlplugin.DbKindUnknown, &s.cfg, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
+			return err
+		},
+		backoff.NewExponentialRetryPolicy(time.Second).WithExpirationInterval(time.Minute),
+		nil,
+	)
 	if err != nil {
 		panic(err)
 	}
@@ -203,4 +225,5 @@ func (s *TestCluster) LoadSchema(schemaFile string) {
 			s.logger.Fatal("LoadSchema", tag.Error(err))
 		}
 	}
+	s.logger.Info("loaded schema")
 }

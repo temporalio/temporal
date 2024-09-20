@@ -30,6 +30,8 @@ import (
 
 	"github.com/jmoiron/sqlx"
 	"go.temporal.io/server/common/config"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/resolver"
 )
 
@@ -43,11 +45,17 @@ const (
 	DbKindVisibility
 )
 
+type VersionedBlob struct {
+	Version      int64
+	Data         []byte
+	DataEncoding string
+}
+
 type (
 	// Plugin defines the interface for any SQL database that needs to implement
 	Plugin interface {
-		CreateDB(dbKind DbKind, cfg *config.SQL, r resolver.ServiceResolver) (DB, error)
-		CreateAdminDB(dbKind DbKind, cfg *config.SQL, r resolver.ServiceResolver) (AdminDB, error)
+		CreateDB(dbKind DbKind, cfg *config.SQL, r resolver.ServiceResolver, l log.Logger, mh metrics.Handler) (DB, error)
+		CreateAdminDB(dbKind DbKind, cfg *config.SQL, r resolver.ServiceResolver, l log.Logger, mh metrics.Handler) (AdminDB, error)
 	}
 
 	// TableCRUD defines the API for interacting with the database tables
@@ -57,9 +65,13 @@ type (
 		Visibility
 		QueueMessage
 		QueueMetadata
+		QueueV2Message
+		QueueV2Metadata
 
 		MatchingTask
 		MatchingTaskQueue
+
+		NexusEndpoints
 
 		HistoryNode
 		HistoryTree
@@ -135,3 +147,14 @@ type (
 		PrepareNamedContext(ctx context.Context, query string) (*sqlx.NamedStmt, error)
 	}
 )
+
+func (k DbKind) String() string {
+	switch k {
+	case DbKindMain:
+		return "main"
+	case DbKindVisibility:
+		return "visibility"
+	default:
+		return "unknown"
+	}
+}

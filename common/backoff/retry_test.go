@@ -26,7 +26,6 @@ package backoff
 
 import (
 	"context"
-	"fmt"
 	"testing"
 	"time"
 
@@ -144,51 +143,6 @@ func (s *RetrySuite) TestIsRetryableFailure() {
 	s.Equal(1, i)
 }
 
-func (s *RetrySuite) TestConcurrentRetrier() {
-	policy := NewExponentialRetryPolicy(1 * time.Millisecond).
-		WithMaximumInterval(10 * time.Millisecond).
-		WithMaximumAttempts(4)
-
-	// Basic checks
-	retrier := NewConcurrentRetrier(policy)
-	retrier.Failed()
-	s.Equal(int64(1), retrier.failureCount)
-	retrier.Succeeded()
-	s.Equal(int64(0), retrier.failureCount)
-	sleepDuration := retrier.throttleInternal()
-	s.Equal(done, sleepDuration)
-
-	// Multiple count check.
-	retrier.Failed()
-	retrier.Failed()
-	s.Equal(int64(2), retrier.failureCount)
-	// Verify valid sleep times.
-	ch := make(chan time.Duration, 3)
-	go func() {
-		for i := 0; i < 3; i++ {
-			ch <- retrier.throttleInternal()
-		}
-	}()
-	for i := 0; i < 3; i++ {
-		val := <-ch
-		fmt.Printf("Duration: %d\n", val)
-		s.True(val > 0)
-	}
-	retrier.Succeeded()
-	s.Equal(int64(0), retrier.failureCount)
-	// Verify we don't have any sleep times.
-	go func() {
-		for i := 0; i < 3; i++ {
-			ch <- retrier.throttleInternal()
-		}
-	}()
-	for i := 0; i < 3; i++ {
-		val := <-ch
-		fmt.Printf("Duration: %d\n", val)
-		s.Equal(done, val)
-	}
-}
-
 func (s *RetrySuite) TestRetryContextCancel() {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
@@ -247,7 +201,7 @@ func (s *RetrySuite) TestThrottleRetryContext() {
 		return &someError{}
 	}
 
-	start := SystemClock.Now()
+	start := time.Now()
 	err := ThrottleRetryContext(context.Background(), op, policy, retryEverything)
 	s.Equal(&someError{}, err)
 	s.GreaterOrEqual(
@@ -257,7 +211,7 @@ func (s *RetrySuite) TestThrottleRetryContext() {
 	)
 
 	// test if context timeout is respected
-	start = SystemClock.Now()
+	start = time.Now()
 	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
 	err = ThrottleRetryContext(ctx, func(_ context.Context) error { return &serviceerror.ResourceExhausted{} }, policy, retryEverything)
 	s.Equal(&serviceerror.ResourceExhausted{}, err)

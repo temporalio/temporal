@@ -28,18 +28,18 @@ import (
 	"context"
 
 	"github.com/google/uuid"
+	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
-
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/ndc"
 	"go.temporal.io/server/service/history/shard"
-	"go.temporal.io/server/service/history/workflow"
 )
 
 func Invoke(
@@ -58,23 +58,22 @@ func Invoke(
 	workflowID := request.WorkflowExecution.GetWorkflowId()
 	baseRunID := request.WorkflowExecution.GetRunId()
 
-	baseWFContext, err := workflowConsistencyChecker.GetWorkflowContext(
+	baseWorkflowLease, err := workflowConsistencyChecker.GetWorkflowLease(
 		ctx,
 		nil,
-		api.BypassMutableStateConsistencyPredicate,
 		definition.NewWorkflowKey(
 			namespaceID.String(),
 			workflowID,
 			baseRunID,
 		),
-		workflow.LockPriorityHigh,
+		locks.PriorityHigh,
 	)
 	if err != nil {
 		return nil, err
 	}
-	defer func() { baseWFContext.GetReleaseFn()(retError) }()
+	defer func() { baseWorkflowLease.GetReleaseFn()(retError) }()
 
-	baseMutableState := baseWFContext.GetMutableState()
+	baseMutableState := baseWorkflowLease.GetMutableState()
 	if request.GetWorkflowTaskFinishEventId() <= common.FirstEventID ||
 		request.GetWorkflowTaskFinishEventId() >= baseMutableState.GetNextEventID() {
 		return nil, serviceerror.NewInvalidArgument("Workflow task finish ID must be > 1 && <= workflow last event ID.")
@@ -85,6 +84,7 @@ func Invoke(
 		ctx,
 		namespaceID.String(),
 		request.WorkflowExecution.GetWorkflowId(),
+		locks.PriorityHigh,
 	)
 	if err != nil {
 		return nil, err
@@ -93,29 +93,28 @@ func Invoke(
 		baseRunID = currentRunID
 	}
 
-	var currentWFContext api.WorkflowContext
+	var currentWorkflowLease api.WorkflowLease
 	if currentRunID == baseRunID {
-		currentWFContext = baseWFContext
+		currentWorkflowLease = baseWorkflowLease
 	} else {
-		currentWFContext, err = workflowConsistencyChecker.GetWorkflowContext(
+		currentWorkflowLease, err = workflowConsistencyChecker.GetWorkflowLease(
 			ctx,
 			nil,
-			api.BypassMutableStateConsistencyPredicate,
 			definition.NewWorkflowKey(
 				namespaceID.String(),
 				workflowID,
 				currentRunID,
 			),
-			workflow.LockPriorityHigh,
+			locks.PriorityHigh,
 		)
 		if err != nil {
 			return nil, err
 		}
-		defer func() { currentWFContext.GetReleaseFn()(retError) }()
+		defer func() { currentWorkflowLease.GetReleaseFn()(retError) }()
 	}
 
 	// dedup by requestID
-	if currentWFContext.GetMutableState().GetExecutionState().CreateRequestId == request.GetRequestId() {
+	if currentWorkflowLease.GetMutableState().GetExecutionState().CreateRequestId == request.GetRequestId() {
 		shard.GetLogger().Info("Duplicated reset request",
 			tag.WorkflowID(workflowID),
 			tag.WorkflowRunID(currentRunID),
@@ -156,17 +155,45 @@ func Invoke(
 		request.GetRequestId(),
 		ndc.NewWorkflow(
 			shard.GetClusterMetadata(),
-			currentWFContext.GetContext(),
-			currentWFContext.GetMutableState(),
-			currentWFContext.GetReleaseFn(),
+			currentWorkflowLease.GetContext(),
+			currentWorkflowLease.GetMutableState(),
+			currentWorkflowLease.GetReleaseFn(),
 		),
 		request.GetReason(),
 		nil,
-		request.GetResetReapplyType(),
+		GetResetReapplyExcludeTypes(request.GetResetReapplyExcludeTypes(), request.GetResetReapplyType()),
 	); err != nil {
 		return nil, err
 	}
 	return &historyservice.ResetWorkflowExecutionResponse{
 		RunId: resetRunID,
 	}, nil
+}
+
+// GetResetReapplyExcludeTypes computes the set of requested exclude types. It
+// uses the reset_reapply_exclude_types request field (a set of event types to
+// exclude from reapply), as well as the deprecated reset_reapply_type request
+// field (a specification of what to include).
+func GetResetReapplyExcludeTypes(
+	excludeTypes []enumspb.ResetReapplyExcludeType,
+	includeType enumspb.ResetReapplyType,
+) map[enumspb.ResetReapplyExcludeType]bool {
+	// A client who wishes to have reapplication of all supported event types should omit the deprecated
+	// reset_reapply_type field (since its default value is RESET_REAPPLY_TYPE_ALL_ELIGIBLE).
+	exclude := map[enumspb.ResetReapplyExcludeType]bool{}
+	switch includeType {
+	case enumspb.RESET_REAPPLY_TYPE_SIGNAL:
+		// A client sending this value of the deprecated reset_reapply_type field will not have any events other than
+		// signal reapplied.
+		exclude[enumspb.RESET_REAPPLY_EXCLUDE_TYPE_UPDATE] = true
+	case enumspb.RESET_REAPPLY_TYPE_NONE:
+		exclude[enumspb.RESET_REAPPLY_EXCLUDE_TYPE_SIGNAL] = true
+		exclude[enumspb.RESET_REAPPLY_EXCLUDE_TYPE_UPDATE] = true
+	case enumspb.RESET_REAPPLY_TYPE_UNSPECIFIED, enumspb.RESET_REAPPLY_TYPE_ALL_ELIGIBLE:
+		// Do nothing.
+	}
+	for _, e := range excludeTypes {
+		exclude[e] = true
+	}
+	return exclude
 }

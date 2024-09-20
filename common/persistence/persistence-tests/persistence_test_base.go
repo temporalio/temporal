@@ -52,6 +52,7 @@ import (
 	"go.temporal.io/server/common/persistence/sql/sqlplugin/mysql"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin/postgresql"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin/sqlite"
+	"go.temporal.io/server/common/persistence/visibility"
 	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/resolver"
 	"go.temporal.io/server/common/searchattribute"
@@ -77,9 +78,10 @@ type (
 		DBHost            string
 		DBPort            int `yaml:"-"`
 		ConnectAttributes map[string]string
-		StoreType         string                 `yaml:"-"`
-		SchemaDir         string                 `yaml:"-"`
-		FaultInjection    *config.FaultInjection `yaml:"faultinjection"`
+		StoreType         string `yaml:"-"`
+		SchemaDir         string `yaml:"-"`
+		FaultInjection    *config.FaultInjection
+		Logger            log.Logger `yaml:"-"`
 	}
 
 	// TestBase wraps the base setup needed to create workflows over persistence layer.
@@ -87,13 +89,14 @@ type (
 		suite.Suite
 		ShardMgr                  persistence.ShardManager
 		AbstractDataStoreFactory  client.AbstractDataStoreFactory
-		FaultInjection            *client.FaultInjectionDataStoreFactory
+		VisibilityStoreFactory    visibility.VisibilityStoreFactory
 		Factory                   client.Factory
 		ExecutionManager          persistence.ExecutionManager
 		TaskMgr                   persistence.TaskManager
 		ClusterMetadataManager    persistence.ClusterMetadataManager
 		MetadataManager           persistence.MetadataManager
 		NamespaceReplicationQueue persistence.NamespaceReplicationQueue
+		NexusEndpointManager      persistence.NexusEndpointManager
 		ShardInfo                 *persistencespb.ShardInfo
 		TaskIDGenerator           TransferTaskIDGenerator
 		ClusterMetadata           cluster.Metadata
@@ -120,27 +123,35 @@ type (
 )
 
 // NewTestBaseWithCassandra returns a persistence test base backed by cassandra datastore
-func NewTestBaseWithCassandra(options *TestBaseOptions) TestBase {
-	if options.DBName == "" {
-		options.DBName = "test_" + GenerateRandomDBName(3)
-	}
+func NewTestBaseWithCassandra(options *TestBaseOptions) *TestBase {
 	logger := log.NewTestLogger()
-	testCluster := cassandra.NewTestCluster(options.DBName, options.DBUsername, options.DBPassword, options.DBHost, options.DBPort, options.SchemaDir, options.FaultInjection, logger)
+	testCluster := NewTestClusterForCassandra(options, logger)
 	return NewTestBaseForCluster(testCluster, logger)
 }
 
-// NewTestBaseWithSQL returns a new persistence test base backed by SQL
-func NewTestBaseWithSQL(options *TestBaseOptions) TestBase {
+func NewTestClusterForCassandra(options *TestBaseOptions, logger log.Logger) *cassandra.TestCluster {
 	if options.DBName == "" {
 		options.DBName = "test_" + GenerateRandomDBName(3)
 	}
-	logger := log.NewTestLogger()
+	testCluster := cassandra.NewTestCluster(options.DBName, options.DBUsername, options.DBPassword, options.DBHost, options.DBPort, options.SchemaDir, options.FaultInjection, logger)
+	return testCluster
+}
+
+// NewTestBaseWithSQL returns a new persistence test base backed by SQL
+func NewTestBaseWithSQL(options *TestBaseOptions) *TestBase {
+	if options.DBName == "" {
+		options.DBName = "test_" + GenerateRandomDBName(3)
+	}
+	logger := options.Logger
+	if logger == nil {
+		logger = log.NewTestLogger()
+	}
 
 	if options.DBPort == 0 {
 		switch options.SQLDBPluginName {
-		case mysql.PluginName, mysql.PluginNameV8:
+		case mysql.PluginName:
 			options.DBPort = environment.GetMySQLPort()
-		case postgresql.PluginName, postgresql.PluginNameV12:
+		case postgresql.PluginName, postgresql.PluginNamePGX:
 			options.DBPort = environment.GetPostgreSQLPort()
 		case sqlite.PluginName:
 			options.DBPort = 0
@@ -150,9 +161,9 @@ func NewTestBaseWithSQL(options *TestBaseOptions) TestBase {
 	}
 	if options.DBHost == "" {
 		switch options.SQLDBPluginName {
-		case mysql.PluginName, mysql.PluginNameV8:
+		case mysql.PluginName:
 			options.DBHost = environment.GetMySQLAddress()
-		case postgresql.PluginName:
+		case postgresql.PluginName, postgresql.PluginNamePGX:
 			options.DBHost = environment.GetPostgreSQLAddress()
 		case sqlite.PluginName:
 			options.DBHost = environment.GetLocalhostIP()
@@ -165,7 +176,7 @@ func NewTestBaseWithSQL(options *TestBaseOptions) TestBase {
 }
 
 // NewTestBase returns a persistence test base backed by either cassandra or sql
-func NewTestBase(options *TestBaseOptions) TestBase {
+func NewTestBase(options *TestBaseOptions) *TestBase {
 	switch options.StoreType {
 	case config.StoreTypeSQL:
 		return NewTestBaseWithSQL(options)
@@ -176,8 +187,8 @@ func NewTestBase(options *TestBaseOptions) TestBase {
 	}
 }
 
-func NewTestBaseForCluster(testCluster PersistenceTestCluster, logger log.Logger) TestBase {
-	return TestBase{
+func NewTestBaseForCluster(testCluster PersistenceTestCluster, logger log.Logger) *TestBase {
+	return &TestBase{
 		DefaultTestCluster: testCluster,
 		Logger:             logger,
 	}
@@ -199,7 +210,7 @@ func (s *TestBase) Setup(clusterMetadataConfig *cluster.Config) {
 	s.DefaultTestCluster.SetupTestDatabase()
 
 	cfg := s.DefaultTestCluster.Config()
-	dataStoreFactory, faultInjection := client.DataStoreFactoryProvider(
+	dataStoreFactory := client.DataStoreFactoryProvider(
 		client.ClusterName(clusterName),
 		resolver.NewNoopResolver(),
 		&cfg,
@@ -207,7 +218,19 @@ func (s *TestBase) Setup(clusterMetadataConfig *cluster.Config) {
 		s.Logger,
 		metrics.NoopMetricsHandler,
 	)
-	factory := client.NewFactory(dataStoreFactory, &cfg, s.PersistenceRateLimiter, serialization.NewSerializer(), nil, clusterName, metrics.NoopMetricsHandler, s.Logger, s.PersistenceHealthSignals)
+	factory := client.NewFactory(
+		dataStoreFactory,
+		&cfg,
+		s.PersistenceRateLimiter,
+		quotas.NoopRequestRateLimiter,
+		quotas.NoopRequestRateLimiter,
+		serialization.NewSerializer(),
+		nil,
+		clusterName,
+		metrics.NoopMetricsHandler,
+		s.Logger,
+		s.PersistenceHealthSignals,
+	)
 
 	s.TaskMgr, err = factory.NewTaskManager()
 	s.fatalOnError("NewTaskManager", err)
@@ -227,8 +250,10 @@ func (s *TestBase) Setup(clusterMetadataConfig *cluster.Config) {
 	s.ExecutionManager, err = factory.NewExecutionManager()
 	s.fatalOnError("NewExecutionManager", err)
 
+	s.NexusEndpointManager, err = factory.NewNexusEndpointManager()
+	s.fatalOnError("NewNexusEndpointManager", err)
+
 	s.Factory = factory
-	s.FaultInjection = faultInjection
 
 	s.ReadLevel = 0
 	s.ReplicationReadLevel = 0
@@ -263,7 +288,8 @@ func (s *TestBase) TearDownWorkflowStore() {
 	s.ExecutionManager.Close()
 	s.ShardMgr.Close()
 	s.ExecutionManager.Close()
-	s.NamespaceReplicationQueue.Stop()
+	s.NexusEndpointManager.Close()
+	s.NamespaceReplicationQueue.Close()
 	s.Factory.Close()
 	s.DefaultTestCluster.TearDownTestDatabase()
 }
@@ -291,7 +317,7 @@ func (g *TestTransferTaskIDGenerator) GenerateTransferTaskID() (int64, error) {
 func (s *TestBase) Publish(ctx context.Context, task *replicationspb.ReplicationTask) error {
 	retryPolicy := backoff.NewExponentialRetryPolicy(100 * time.Millisecond).
 		WithBackoffCoefficient(1.5).
-		WithMaximumAttempts(5)
+		WithMaximumAttempts(20)
 
 	return backoff.ThrottleRetry(
 		func() error {
@@ -411,10 +437,8 @@ func randString(length int) string {
 // GenerateRandomDBName helper
 // Format: MMDDHHMMSS_abc
 func GenerateRandomDBName(n int) string {
-	now := time.Now().UTC()
-	rand.Seed(now.UnixNano())
 	var prefix strings.Builder
-	prefix.WriteString(now.Format("0102150405"))
+	prefix.WriteString(time.Now().UTC().Format("0102150405"))
 	prefix.WriteRune('_')
 	prefix.WriteString(randString(n))
 	return prefix.String()

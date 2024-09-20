@@ -28,7 +28,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/xwb1989/sqlparser"
+	"github.com/temporalio/sqlparser"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
 	"go.temporal.io/server/common/persistence/visibility/store/query"
@@ -75,7 +75,6 @@ func (c *sqliteQueryConverter) getCoalesceCloseTimeExpr() sqlparser.Expr {
 	)
 }
 
-//nolint:revive // cyclomatic complexity 17 (> 15)
 func (c *sqliteQueryConverter) convertKeywordListComparisonExpr(
 	expr *sqlparser.ComparisonExpr,
 ) (sqlparser.Expr, error) {

@@ -25,19 +25,23 @@
 package scheduler
 
 import (
-	"go.uber.org/fx"
+	"fmt"
+	"time"
 
+	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	sdkworker "go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
-
+	schedspb "go.temporal.io/server/api/schedule/v1"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/resource"
+	"go.temporal.io/server/common/searchattribute"
 	workercommon "go.temporal.io/server/service/worker/common"
+	"go.uber.org/fx"
 )
 
 const (
@@ -45,11 +49,26 @@ const (
 	NamespaceDivision = "TemporalScheduler"
 )
 
+var (
+	VisibilityBaseListQuery = fmt.Sprintf(
+		"%s = '%s' AND %s = '%s' AND %s = '%s'",
+		searchattribute.WorkflowType,
+		WorkflowType,
+		searchattribute.TemporalNamespaceDivision,
+		NamespaceDivision,
+		searchattribute.ExecutionStatus,
+		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING.String(),
+	)
+)
+
 type (
 	workerComponent struct {
+		specBuilder              *SpecBuilder // workflow dep
 		activityDeps             activityDeps
 		enabledForNs             dynamicconfig.BoolPropertyFnWithNamespaceFilter
 		globalNSStartWorkflowRPS dynamicconfig.FloatPropertyFnWithNamespaceFilter
+		maxBlobSize              dynamicconfig.IntPropertyFnWithNamespaceFilter
+		localActivitySleepLimit  dynamicconfig.DurationPropertyFnWithNamespaceFilter
 	}
 
 	activityDeps struct {
@@ -68,19 +87,22 @@ type (
 
 var Module = fx.Options(
 	fx.Provide(NewResult),
+	fx.Provide(NewSpecBuilder),
 )
 
 func NewResult(
-	dcCollection *dynamicconfig.Collection,
+	dc *dynamicconfig.Collection,
+	specBuilder *SpecBuilder,
 	params activityDeps,
 ) fxResult {
 	return fxResult{
 		Component: &workerComponent{
-			activityDeps: params,
-			enabledForNs: dcCollection.GetBoolPropertyFnWithNamespaceFilter(
-				dynamicconfig.WorkerEnableScheduler, true),
-			globalNSStartWorkflowRPS: dcCollection.GetFloatPropertyFilteredByNamespace(
-				dynamicconfig.SchedulerNamespaceStartWorkflowRPS, 30.0),
+			specBuilder:              specBuilder,
+			activityDeps:             params,
+			enabledForNs:             dynamicconfig.WorkerEnableScheduler.Get(dc),
+			globalNSStartWorkflowRPS: dynamicconfig.SchedulerNamespaceStartWorkflowRPS.Get(dc),
+			maxBlobSize:              dynamicconfig.BlobSizeLimitError.Get(dc),
+			localActivitySleepLimit:  dynamicconfig.SchedulerLocalActivitySleepLimit.Get(dc),
 		},
 	}
 }
@@ -91,9 +113,12 @@ func (s *workerComponent) DedicatedWorkerOptions(ns *namespace.Namespace) *worke
 	}
 }
 
-func (s *workerComponent) Register(worker sdkworker.Worker, ns *namespace.Namespace, details workercommon.RegistrationDetails) {
-	worker.RegisterWorkflowWithOptions(SchedulerWorkflow, workflow.RegisterOptions{Name: WorkflowType})
-	worker.RegisterActivity(s.activities(ns.Name(), ns.ID(), details))
+func (s *workerComponent) Register(registry sdkworker.Registry, ns *namespace.Namespace, details workercommon.RegistrationDetails) {
+	wfFunc := func(ctx workflow.Context, args *schedspb.StartScheduleArgs) error {
+		return schedulerWorkflowWithSpecBuilder(ctx, args, s.specBuilder)
+	}
+	registry.RegisterWorkflowWithOptions(wfFunc, workflow.RegisterOptions{Name: WorkflowType})
+	registry.RegisterActivity(s.activities(ns.Name(), ns.ID(), details))
 }
 
 func (s *workerComponent) activities(name namespace.Name, id namespace.ID, details workercommon.RegistrationDetails) *activities {
@@ -105,5 +130,7 @@ func (s *workerComponent) activities(name namespace.Name, id namespace.ID, detai
 		namespace:                name,
 		namespaceID:              id,
 		startWorkflowRateLimiter: quotas.NewDefaultOutgoingRateLimiter(localRPS),
+		maxBlobSize:              func() int { return s.maxBlobSize(name.String()) },
+		localActivitySleepLimit:  func() time.Duration { return s.localActivitySleepLimit(name.String()) },
 	}
 }

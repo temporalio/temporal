@@ -30,12 +30,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/golang/mock/gomock"
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
-
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/api/adminservicemock/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
@@ -50,6 +48,10 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/common/testing/protomock"
+	"go.uber.org/mock/gomock"
+	"google.golang.org/protobuf/types/known/durationpb"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type (
@@ -67,6 +69,7 @@ type (
 		mockAdminClient      *adminservicemock.MockAdminServiceClient
 		mockRegistry         *namespace.MockRegistry
 		scavenger            *Scavenger
+		historyBranchUtil    persistence.HistoryBranchUtilImpl
 	}
 )
 
@@ -127,45 +130,51 @@ func (s *ScavengerTestSuite) createTestScavenger(
 	s.scavenger.isInTest = true
 }
 
-func (s *ScavengerTestSuite) toBranchToken(treeID string, branchID string) []byte {
-	data, err := persistence.NewHistoryBranch(treeID, &branchID, []*persistencepb.HistoryBranchRange{})
-	s.NoError(err)
-	return data
-}
-
 func (s *ScavengerTestSuite) TestAllSkipTasksTwoPages() {
-	s.mockExecutionManager.EXPECT().GetAllHistoryTreeBranches(gomock.Any(), &persistence.GetAllHistoryTreeBranchesRequest{
+	s.mockExecutionManager.EXPECT().GetAllHistoryTreeBranches(gomock.Any(), protomock.Eq(&persistence.GetAllHistoryTreeBranchesRequest{
 		PageSize: pageSize,
-	}).Return(&persistence.GetAllHistoryTreeBranchesResponse{
+	})).Return(&persistence.GetAllHistoryTreeBranchesResponse{
 		NextPageToken: []byte("page1"),
 		Branches: []persistence.HistoryBranchDetail{
 			{
-				BranchToken: s.toBranchToken("treeID1", "branchID1"),
-				ForkTime:    timestamp.TimeNowPtrUtc(),
-				Info:        persistence.BuildHistoryGarbageCleanupInfo("namespaceID1", "workflowID1", "runID1"),
+				BranchInfo: &persistencepb.HistoryBranch{
+					TreeId:   treeID1,
+					BranchId: branchID1,
+				},
+				ForkTime: timestamp.TimeNowPtrUtc(),
+				Info:     persistence.BuildHistoryGarbageCleanupInfo("namespaceID1", "workflowID1", "runID1"),
 			},
 			{
-				BranchToken: s.toBranchToken("treeID2", "branchID2"),
-				ForkTime:    timestamp.TimeNowPtrUtc(),
-				Info:        persistence.BuildHistoryGarbageCleanupInfo("namespaceID2", "workflowID2", "runID2"),
+				BranchInfo: &persistencepb.HistoryBranch{
+					TreeId:   treeID2,
+					BranchId: branchID2,
+				},
+				ForkTime: timestamp.TimeNowPtrUtc(),
+				Info:     persistence.BuildHistoryGarbageCleanupInfo("namespaceID2", "workflowID2", "runID2"),
 			},
 		},
 	}, nil)
 
-	s.mockExecutionManager.EXPECT().GetAllHistoryTreeBranches(gomock.Any(), &persistence.GetAllHistoryTreeBranchesRequest{
+	s.mockExecutionManager.EXPECT().GetAllHistoryTreeBranches(gomock.Any(), protomock.Eq(&persistence.GetAllHistoryTreeBranchesRequest{
 		PageSize:      pageSize,
 		NextPageToken: []byte("page1"),
-	}).Return(&persistence.GetAllHistoryTreeBranchesResponse{
+	})).Return(&persistence.GetAllHistoryTreeBranchesResponse{
 		Branches: []persistence.HistoryBranchDetail{
 			{
-				BranchToken: s.toBranchToken("treeID3", "branchID3"),
-				ForkTime:    timestamp.TimeNowPtrUtc(),
-				Info:        persistence.BuildHistoryGarbageCleanupInfo("namespaceID3", "workflowID3", "runID3"),
+				BranchInfo: &persistencepb.HistoryBranch{
+					TreeId:   treeID3,
+					BranchId: branchID3,
+				},
+				ForkTime: timestamp.TimeNowPtrUtc(),
+				Info:     persistence.BuildHistoryGarbageCleanupInfo("namespaceID3", "workflowID3", "runID3"),
 			},
 			{
-				BranchToken: s.toBranchToken("treeID4", "branchID4"),
-				ForkTime:    timestamp.TimeNowPtrUtc(),
-				Info:        persistence.BuildHistoryGarbageCleanupInfo("namespaceID4", "workflowID4", "runID4"),
+				BranchInfo: &persistencepb.HistoryBranch{
+					TreeId:   treeID4,
+					BranchId: branchID4,
+				},
+				ForkTime: timestamp.TimeNowPtrUtc(),
+				Info:     persistence.BuildHistoryGarbageCleanupInfo("namespaceID4", "workflowID4", "runID4"),
 			},
 		},
 	}, nil)
@@ -180,38 +189,50 @@ func (s *ScavengerTestSuite) TestAllSkipTasksTwoPages() {
 }
 
 func (s *ScavengerTestSuite) TestAllErrorSplittingTasksTwoPages() {
-	s.mockExecutionManager.EXPECT().GetAllHistoryTreeBranches(gomock.Any(), &persistence.GetAllHistoryTreeBranchesRequest{
+	s.mockExecutionManager.EXPECT().GetAllHistoryTreeBranches(gomock.Any(), protomock.Eq(&persistence.GetAllHistoryTreeBranchesRequest{
 		PageSize: pageSize,
-	}).Return(&persistence.GetAllHistoryTreeBranchesResponse{
+	})).Return(&persistence.GetAllHistoryTreeBranchesResponse{
 		NextPageToken: []byte("page1"),
 		Branches: []persistence.HistoryBranchDetail{
 			{
-				BranchToken: s.toBranchToken("treeID1", "branchID1"),
-				ForkTime:    timestamp.TimeNowPtrUtcAddDuration(-s.scavenger.historyDataMinAge() * 2),
-				Info:        "error-info",
+				BranchInfo: &persistencepb.HistoryBranch{
+					TreeId:   treeID1,
+					BranchId: branchID1,
+				},
+				ForkTime: timestamp.TimeNowPtrUtcAddDuration(-s.scavenger.historyDataMinAge() * 2),
+				Info:     "error-info",
 			},
 			{
-				BranchToken: s.toBranchToken("treeID2", "branchID2"),
-				ForkTime:    timestamp.TimeNowPtrUtcAddDuration(-s.scavenger.historyDataMinAge() * 2),
-				Info:        "error-info",
+				BranchInfo: &persistencepb.HistoryBranch{
+					TreeId:   treeID2,
+					BranchId: branchID2,
+				},
+				ForkTime: timestamp.TimeNowPtrUtcAddDuration(-s.scavenger.historyDataMinAge() * 2),
+				Info:     "error-info",
 			},
 		},
 	}, nil)
 
-	s.mockExecutionManager.EXPECT().GetAllHistoryTreeBranches(gomock.Any(), &persistence.GetAllHistoryTreeBranchesRequest{
+	s.mockExecutionManager.EXPECT().GetAllHistoryTreeBranches(gomock.Any(), protomock.Eq(&persistence.GetAllHistoryTreeBranchesRequest{
 		PageSize:      pageSize,
 		NextPageToken: []byte("page1"),
-	}).Return(&persistence.GetAllHistoryTreeBranchesResponse{
+	})).Return(&persistence.GetAllHistoryTreeBranchesResponse{
 		Branches: []persistence.HistoryBranchDetail{
 			{
-				BranchToken: s.toBranchToken("treeID3", "branchID3"),
-				ForkTime:    timestamp.TimeNowPtrUtcAddDuration(-s.scavenger.historyDataMinAge() * 2),
-				Info:        "error-info",
+				BranchInfo: &persistencepb.HistoryBranch{
+					TreeId:   treeID3,
+					BranchId: branchID3,
+				},
+				ForkTime: timestamp.TimeNowPtrUtcAddDuration(-s.scavenger.historyDataMinAge() * 2),
+				Info:     "error-info",
 			},
 			{
-				BranchToken: s.toBranchToken("treeID4", "branchID4"),
-				ForkTime:    timestamp.TimeNowPtrUtcAddDuration(-s.scavenger.historyDataMinAge() * 2),
-				Info:        "error-info",
+				BranchInfo: &persistencepb.HistoryBranch{
+					TreeId:   treeID4,
+					BranchId: branchID4,
+				},
+				ForkTime: timestamp.TimeNowPtrUtcAddDuration(-s.scavenger.historyDataMinAge() * 2),
+				Info:     "error-info",
 			},
 		},
 	}, nil)
@@ -226,20 +247,26 @@ func (s *ScavengerTestSuite) TestAllErrorSplittingTasksTwoPages() {
 }
 
 func (s *ScavengerTestSuite) TestNoGarbageTwoPages() {
-	s.mockExecutionManager.EXPECT().GetAllHistoryTreeBranches(gomock.Any(), &persistence.GetAllHistoryTreeBranchesRequest{
+	s.mockExecutionManager.EXPECT().GetAllHistoryTreeBranches(gomock.Any(), protomock.Eq(&persistence.GetAllHistoryTreeBranchesRequest{
 		PageSize: pageSize,
-	}).Return(&persistence.GetAllHistoryTreeBranchesResponse{
+	})).Return(&persistence.GetAllHistoryTreeBranchesResponse{
 		NextPageToken: []byte("page1"),
 		Branches: []persistence.HistoryBranchDetail{
 			{
-				BranchToken: s.toBranchToken("treeID1", "branchID1"),
-				ForkTime:    timestamp.TimeNowPtrUtcAddDuration(-s.scavenger.historyDataMinAge() * 2),
-				Info:        persistence.BuildHistoryGarbageCleanupInfo("namespaceID1", "workflowID1", "runID1"),
+				BranchInfo: &persistencepb.HistoryBranch{
+					TreeId:   treeID1,
+					BranchId: branchID1,
+				},
+				ForkTime: timestamp.TimeNowPtrUtcAddDuration(-s.scavenger.historyDataMinAge() * 2),
+				Info:     persistence.BuildHistoryGarbageCleanupInfo("namespaceID1", "workflowID1", "runID1"),
 			},
 			{
-				BranchToken: s.toBranchToken("treeID2", "branchID2"),
-				ForkTime:    timestamp.TimeNowPtrUtcAddDuration(-s.scavenger.historyDataMinAge() * 2),
-				Info:        persistence.BuildHistoryGarbageCleanupInfo("namespaceID2", "workflowID2", "runID2"),
+				BranchInfo: &persistencepb.HistoryBranch{
+					TreeId:   treeID2,
+					BranchId: branchID2,
+				},
+				ForkTime: timestamp.TimeNowPtrUtcAddDuration(-s.scavenger.historyDataMinAge() * 2),
+				Info:     persistence.BuildHistoryGarbageCleanupInfo("namespaceID2", "workflowID2", "runID2"),
 			},
 		},
 	}, nil)
@@ -250,20 +277,26 @@ func (s *ScavengerTestSuite) TestNoGarbageTwoPages() {
 	}).Return(&persistence.GetAllHistoryTreeBranchesResponse{
 		Branches: []persistence.HistoryBranchDetail{
 			{
-				BranchToken: s.toBranchToken("treeID3", "branchID3"),
-				ForkTime:    timestamp.TimeNowPtrUtcAddDuration(-s.scavenger.historyDataMinAge() * 2),
-				Info:        persistence.BuildHistoryGarbageCleanupInfo("namespaceID3", "workflowID3", "runID3"),
+				BranchInfo: &persistencepb.HistoryBranch{
+					TreeId:   treeID3,
+					BranchId: branchID3,
+				},
+				ForkTime: timestamp.TimeNowPtrUtcAddDuration(-s.scavenger.historyDataMinAge() * 2),
+				Info:     persistence.BuildHistoryGarbageCleanupInfo("namespaceID3", "workflowID3", "runID3"),
 			},
 			{
-				BranchToken: s.toBranchToken("treeID4", "branchID4"),
-				ForkTime:    timestamp.TimeNowPtrUtcAddDuration(-s.scavenger.historyDataMinAge() * 2),
-				Info:        persistence.BuildHistoryGarbageCleanupInfo("namespaceID4", "workflowID4", "runID4"),
+				BranchInfo: &persistencepb.HistoryBranch{
+					TreeId:   treeID4,
+					BranchId: branchID4,
+				},
+				ForkTime: timestamp.TimeNowPtrUtcAddDuration(-s.scavenger.historyDataMinAge() * 2),
+				Info:     persistence.BuildHistoryGarbageCleanupInfo("namespaceID4", "workflowID4", "runID4"),
 			},
 		},
 	}, nil)
 	mockedNamespace := namespace.NewNamespaceForTest(
 		nil,
-		&persistencepb.NamespaceConfig{Retention: timestamp.DurationPtr(time.Hour)},
+		&persistencepb.NamespaceConfig{Retention: durationpb.New(time.Hour)},
 		false,
 		nil,
 		0,
@@ -271,39 +304,39 @@ func (s *ScavengerTestSuite) TestNoGarbageTwoPages() {
 	ms := &historyservice.DescribeMutableStateResponse{
 		DatabaseMutableState: &persistencepb.WorkflowMutableState{
 			ExecutionInfo: &persistencepb.WorkflowExecutionInfo{
-				LastUpdateTime: timestamp.TimePtr(time.Now()),
+				LastUpdateTime: timestamppb.New(time.Now()),
 			},
 		},
 	}
 	s.mockRegistry.EXPECT().GetNamespaceByID(gomock.Any()).Return(mockedNamespace, nil).AnyTimes()
-	s.mockHistoryClient.EXPECT().DescribeMutableState(gomock.Any(), &historyservice.DescribeMutableStateRequest{
+	s.mockHistoryClient.EXPECT().DescribeMutableState(gomock.Any(), protomock.Eq(&historyservice.DescribeMutableStateRequest{
 		NamespaceId: "namespaceID1",
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: "workflowID1",
 			RunId:      "runID1",
 		},
-	}).Return(ms, nil)
-	s.mockHistoryClient.EXPECT().DescribeMutableState(gomock.Any(), &historyservice.DescribeMutableStateRequest{
+	})).Return(ms, nil)
+	s.mockHistoryClient.EXPECT().DescribeMutableState(gomock.Any(), protomock.Eq(&historyservice.DescribeMutableStateRequest{
 		NamespaceId: "namespaceID2",
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: "workflowID2",
 			RunId:      "runID2",
 		},
-	}).Return(ms, nil)
-	s.mockHistoryClient.EXPECT().DescribeMutableState(gomock.Any(), &historyservice.DescribeMutableStateRequest{
+	})).Return(ms, nil)
+	s.mockHistoryClient.EXPECT().DescribeMutableState(gomock.Any(), protomock.Eq(&historyservice.DescribeMutableStateRequest{
 		NamespaceId: "namespaceID3",
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: "workflowID3",
 			RunId:      "runID3",
 		},
-	}).Return(ms, nil)
-	s.mockHistoryClient.EXPECT().DescribeMutableState(gomock.Any(), &historyservice.DescribeMutableStateRequest{
+	})).Return(ms, nil)
+	s.mockHistoryClient.EXPECT().DescribeMutableState(gomock.Any(), protomock.Eq(&historyservice.DescribeMutableStateRequest{
 		NamespaceId: "namespaceID4",
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: "workflowID4",
 			RunId:      "runID4",
 		},
-	}).Return(ms, nil)
+	})).Return(ms, nil)
 
 	hbd, err := s.scavenger.Run(context.Background())
 	s.Nil(err)
@@ -315,94 +348,105 @@ func (s *ScavengerTestSuite) TestNoGarbageTwoPages() {
 }
 
 func (s *ScavengerTestSuite) TestDeletingBranchesTwoPages() {
-	s.mockExecutionManager.EXPECT().GetAllHistoryTreeBranches(gomock.Any(), &persistence.GetAllHistoryTreeBranchesRequest{
+	s.mockExecutionManager.EXPECT().GetAllHistoryTreeBranches(gomock.Any(), protomock.Eq(&persistence.GetAllHistoryTreeBranchesRequest{
 		PageSize: pageSize,
-	}).Return(&persistence.GetAllHistoryTreeBranchesResponse{
+	})).Return(&persistence.GetAllHistoryTreeBranchesResponse{
 		NextPageToken: []byte("page1"),
 		Branches: []persistence.HistoryBranchDetail{
 			{
-				BranchToken: s.toBranchToken(treeID1, branchID1),
-				ForkTime:    timestamp.TimeNowPtrUtcAddDuration(-s.scavenger.historyDataMinAge() * 2),
-				Info:        persistence.BuildHistoryGarbageCleanupInfo("namespaceID1", "workflowID1", "runID1"),
+				BranchInfo: &persistencepb.HistoryBranch{
+					TreeId:   treeID1,
+					BranchId: branchID1,
+				},
+				ForkTime: timestamp.TimeNowPtrUtcAddDuration(-s.scavenger.historyDataMinAge() * 2),
+				Info:     persistence.BuildHistoryGarbageCleanupInfo("namespaceID1", "workflowID1", "runID1"),
 			},
 			{
-				BranchToken: s.toBranchToken(treeID2, branchID2),
-				ForkTime:    timestamp.TimeNowPtrUtcAddDuration(-s.scavenger.historyDataMinAge() * 2),
-				Info:        persistence.BuildHistoryGarbageCleanupInfo("namespaceID2", "workflowID2", "runID2"),
+				BranchInfo: &persistencepb.HistoryBranch{
+					TreeId:   treeID2,
+					BranchId: branchID2,
+				},
+				ForkTime: timestamp.TimeNowPtrUtcAddDuration(-s.scavenger.historyDataMinAge() * 2),
+				Info:     persistence.BuildHistoryGarbageCleanupInfo("namespaceID2", "workflowID2", "runID2"),
 			},
 		},
 	}, nil)
-	s.mockExecutionManager.EXPECT().GetAllHistoryTreeBranches(gomock.Any(), &persistence.GetAllHistoryTreeBranchesRequest{
+	s.mockExecutionManager.EXPECT().GetAllHistoryTreeBranches(gomock.Any(), protomock.Eq(&persistence.GetAllHistoryTreeBranchesRequest{
 		PageSize:      pageSize,
 		NextPageToken: []byte("page1"),
-	}).Return(&persistence.GetAllHistoryTreeBranchesResponse{
+	})).Return(&persistence.GetAllHistoryTreeBranchesResponse{
 		Branches: []persistence.HistoryBranchDetail{
 			{
-				BranchToken: s.toBranchToken(treeID3, branchID3),
-				ForkTime:    timestamp.TimeNowPtrUtcAddDuration(-s.scavenger.historyDataMinAge() * 2),
-				Info:        persistence.BuildHistoryGarbageCleanupInfo("namespaceID3", "workflowID3", "runID3"),
+				BranchInfo: &persistencepb.HistoryBranch{
+					TreeId:   treeID3,
+					BranchId: branchID3,
+				},
+				ForkTime: timestamp.TimeNowPtrUtcAddDuration(-s.scavenger.historyDataMinAge() * 2),
+				Info:     persistence.BuildHistoryGarbageCleanupInfo("namespaceID3", "workflowID3", "runID3"),
 			},
 			{
-				BranchToken: s.toBranchToken(treeID4, branchID4),
-				ForkTime:    timestamp.TimeNowPtrUtcAddDuration(-s.scavenger.historyDataMinAge() * 2),
-				Info:        persistence.BuildHistoryGarbageCleanupInfo("namespaceID4", "workflowID4", "runID4"),
+				BranchInfo: &persistencepb.HistoryBranch{
+					TreeId:   treeID4,
+					BranchId: branchID4,
+				},
+				ForkTime: timestamp.TimeNowPtrUtcAddDuration(-s.scavenger.historyDataMinAge() * 2),
+				Info:     persistence.BuildHistoryGarbageCleanupInfo("namespaceID4", "workflowID4", "runID4"),
 			},
 		},
 	}, nil)
 
-	s.mockHistoryClient.EXPECT().DescribeMutableState(gomock.Any(), &historyservice.DescribeMutableStateRequest{
+	s.mockHistoryClient.EXPECT().DescribeMutableState(gomock.Any(), protomock.Eq(&historyservice.DescribeMutableStateRequest{
 		NamespaceId: "namespaceID1",
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: "workflowID1",
 			RunId:      "runID1",
 		},
-	}).Return(nil, serviceerror.NewNotFound(""))
-	s.mockHistoryClient.EXPECT().DescribeMutableState(gomock.Any(), &historyservice.DescribeMutableStateRequest{
+	})).Return(nil, serviceerror.NewNotFound(""))
+	s.mockHistoryClient.EXPECT().DescribeMutableState(gomock.Any(), protomock.Eq(&historyservice.DescribeMutableStateRequest{
 		NamespaceId: "namespaceID2",
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: "workflowID2",
 			RunId:      "runID2",
 		},
-	}).Return(nil, serviceerror.NewNotFound(""))
-	s.mockHistoryClient.EXPECT().DescribeMutableState(gomock.Any(), &historyservice.DescribeMutableStateRequest{
+	})).Return(nil, serviceerror.NewNotFound(""))
+	s.mockHistoryClient.EXPECT().DescribeMutableState(gomock.Any(), protomock.Eq(&historyservice.DescribeMutableStateRequest{
 		NamespaceId: "namespaceID3",
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: "workflowID3",
 			RunId:      "runID3",
 		},
-	}).Return(nil, serviceerror.NewNotFound(""))
-	s.mockHistoryClient.EXPECT().DescribeMutableState(gomock.Any(), &historyservice.DescribeMutableStateRequest{
+	})).Return(nil, serviceerror.NewNotFound(""))
+	s.mockHistoryClient.EXPECT().DescribeMutableState(gomock.Any(), protomock.Eq(&historyservice.DescribeMutableStateRequest{
 		NamespaceId: "namespaceID4",
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: "workflowID4",
 			RunId:      "runID4",
 		},
-	}).Return(nil, serviceerror.NewNotFound(""))
-
-	branchToken1, err := persistence.NewHistoryBranch(treeID1, &branchID1, []*persistencepb.HistoryBranchRange{})
+	})).Return(nil, serviceerror.NewNotFound(""))
+	branchToken1, err := s.historyBranchUtil.NewHistoryBranch(uuid.New(), uuid.New(), uuid.New(), treeID1, &branchID1, []*persistencepb.HistoryBranchRange{}, 0, 0, 0)
 	s.Nil(err)
-	s.mockExecutionManager.EXPECT().DeleteHistoryBranch(gomock.Any(), &persistence.DeleteHistoryBranchRequest{
+	s.mockExecutionManager.EXPECT().DeleteHistoryBranch(gomock.Any(), protomock.Eq(&persistence.DeleteHistoryBranchRequest{
 		BranchToken: branchToken1,
 		ShardID:     common.WorkflowIDToHistoryShard("namespaceID1", "workflowID1", s.numShards),
-	}).Return(nil)
-	branchToken2, err := persistence.NewHistoryBranch(treeID2, &branchID2, []*persistencepb.HistoryBranchRange{})
+	})).Return(nil)
+	branchToken2, err := s.historyBranchUtil.NewHistoryBranch(uuid.New(), uuid.New(), uuid.New(), treeID2, &branchID2, []*persistencepb.HistoryBranchRange{}, 0, 0, 0)
 	s.Nil(err)
-	s.mockExecutionManager.EXPECT().DeleteHistoryBranch(gomock.Any(), &persistence.DeleteHistoryBranchRequest{
+	s.mockExecutionManager.EXPECT().DeleteHistoryBranch(gomock.Any(), protomock.Eq(&persistence.DeleteHistoryBranchRequest{
 		BranchToken: branchToken2,
 		ShardID:     common.WorkflowIDToHistoryShard("namespaceID2", "workflowID2", s.numShards),
-	}).Return(nil)
-	branchToken3, err := persistence.NewHistoryBranch(treeID3, &branchID3, []*persistencepb.HistoryBranchRange{})
+	})).Return(nil)
+	branchToken3, err := s.historyBranchUtil.NewHistoryBranch(uuid.New(), uuid.New(), uuid.New(), treeID3, &branchID3, []*persistencepb.HistoryBranchRange{}, 0, 0, 0)
 	s.Nil(err)
-	s.mockExecutionManager.EXPECT().DeleteHistoryBranch(gomock.Any(), &persistence.DeleteHistoryBranchRequest{
+	s.mockExecutionManager.EXPECT().DeleteHistoryBranch(gomock.Any(), protomock.Eq(&persistence.DeleteHistoryBranchRequest{
 		BranchToken: branchToken3,
 		ShardID:     common.WorkflowIDToHistoryShard("namespaceID3", "workflowID3", s.numShards),
-	}).Return(nil)
-	branchToken4, err := persistence.NewHistoryBranch(treeID4, &branchID4, []*persistencepb.HistoryBranchRange{})
+	})).Return(nil)
+	branchToken4, err := s.historyBranchUtil.NewHistoryBranch(uuid.New(), uuid.New(), uuid.New(), treeID4, &branchID4, []*persistencepb.HistoryBranchRange{}, 0, 0, 0)
 	s.Nil(err)
-	s.mockExecutionManager.EXPECT().DeleteHistoryBranch(gomock.Any(), &persistence.DeleteHistoryBranchRequest{
+	s.mockExecutionManager.EXPECT().DeleteHistoryBranch(gomock.Any(), protomock.Eq(&persistence.DeleteHistoryBranchRequest{
 		BranchToken: branchToken4,
 		ShardID:     common.WorkflowIDToHistoryShard("namespaceID4", "workflowID4", s.numShards),
-	}).Return(nil)
+	})).Return(nil)
 
 	hbd, err := s.scavenger.Run(context.Background())
 	s.Nil(err)
@@ -414,54 +458,69 @@ func (s *ScavengerTestSuite) TestDeletingBranchesTwoPages() {
 }
 
 func (s *ScavengerTestSuite) TestMixesTwoPages() {
-	s.mockExecutionManager.EXPECT().GetAllHistoryTreeBranches(gomock.Any(), &persistence.GetAllHistoryTreeBranchesRequest{
+	s.mockExecutionManager.EXPECT().GetAllHistoryTreeBranches(gomock.Any(), protomock.Eq(&persistence.GetAllHistoryTreeBranchesRequest{
 		PageSize: pageSize,
-	}).Return(&persistence.GetAllHistoryTreeBranchesResponse{
+	})).Return(&persistence.GetAllHistoryTreeBranchesResponse{
 		NextPageToken: []byte("page1"),
 		Branches: []persistence.HistoryBranchDetail{
 			{
 				// skip
-				BranchToken: s.toBranchToken(treeID1, branchID1),
-				ForkTime:    timestamp.TimeNowPtrUtc(),
-				Info:        persistence.BuildHistoryGarbageCleanupInfo("namespaceID1", "workflowID1", "runID1"),
+				BranchInfo: &persistencepb.HistoryBranch{
+					TreeId:   treeID1,
+					BranchId: branchID1,
+				},
+				ForkTime: timestamp.TimeNowPtrUtc(),
+				Info:     persistence.BuildHistoryGarbageCleanupInfo("namespaceID1", "workflowID1", "runID1"),
 			},
 			{
 				// split error
-				BranchToken: s.toBranchToken(treeID2, branchID2),
-				ForkTime:    timestamp.TimeNowPtrUtcAddDuration(-s.scavenger.historyDataMinAge() * 2),
-				Info:        "error-info",
+				BranchInfo: &persistencepb.HistoryBranch{
+					TreeId:   treeID2,
+					BranchId: branchID2,
+				},
+				ForkTime: timestamp.TimeNowPtrUtcAddDuration(-s.scavenger.historyDataMinAge() * 2),
+				Info:     "error-info",
 			},
 		},
 	}, nil)
-	s.mockExecutionManager.EXPECT().GetAllHistoryTreeBranches(gomock.Any(), &persistence.GetAllHistoryTreeBranchesRequest{
+	s.mockExecutionManager.EXPECT().GetAllHistoryTreeBranches(gomock.Any(), protomock.Eq(&persistence.GetAllHistoryTreeBranchesRequest{
 		PageSize:      pageSize,
 		NextPageToken: []byte("page1"),
-	}).Return(&persistence.GetAllHistoryTreeBranchesResponse{
+	})).Return(&persistence.GetAllHistoryTreeBranchesResponse{
 		Branches: []persistence.HistoryBranchDetail{
 			{
 				// delete succ
-				BranchToken: s.toBranchToken(treeID3, branchID3),
-				ForkTime:    timestamp.TimeNowPtrUtcAddDuration(-s.scavenger.historyDataMinAge() * 2),
-				Info:        persistence.BuildHistoryGarbageCleanupInfo("namespaceID3", "workflowID3", "runID3"),
+				BranchInfo: &persistencepb.HistoryBranch{
+					TreeId:   treeID3,
+					BranchId: branchID3,
+				},
+				ForkTime: timestamp.TimeNowPtrUtcAddDuration(-s.scavenger.historyDataMinAge() * 2),
+				Info:     persistence.BuildHistoryGarbageCleanupInfo("namespaceID3", "workflowID3", "runID3"),
 			},
 			{
 				// delete fail
-				BranchToken: s.toBranchToken(treeID4, branchID4),
-				ForkTime:    timestamp.TimeNowPtrUtcAddDuration(-s.scavenger.historyDataMinAge() * 2),
-				Info:        persistence.BuildHistoryGarbageCleanupInfo("namespaceID4", "workflowID4", "runID4"),
+				BranchInfo: &persistencepb.HistoryBranch{
+					TreeId:   treeID4,
+					BranchId: branchID4,
+				},
+				ForkTime: timestamp.TimeNowPtrUtcAddDuration(-s.scavenger.historyDataMinAge() * 2),
+				Info:     persistence.BuildHistoryGarbageCleanupInfo("namespaceID4", "workflowID4", "runID4"),
 			},
 			{
 				// not delete
-				BranchToken: s.toBranchToken(treeID5, branchID5),
-				ForkTime:    timestamp.TimeNowPtrUtcAddDuration(-s.scavenger.historyDataMinAge() * 2),
-				Info:        persistence.BuildHistoryGarbageCleanupInfo("namespaceID5", "workflowID5", "runID5"),
+				BranchInfo: &persistencepb.HistoryBranch{
+					TreeId:   treeID5,
+					BranchId: branchID5,
+				},
+				ForkTime: timestamp.TimeNowPtrUtcAddDuration(-s.scavenger.historyDataMinAge() * 2),
+				Info:     persistence.BuildHistoryGarbageCleanupInfo("namespaceID5", "workflowID5", "runID5"),
 			},
 		},
 	}, nil)
 
 	mockedNamespace := namespace.NewNamespaceForTest(
 		nil,
-		&persistencepb.NamespaceConfig{Retention: timestamp.DurationPtr(time.Hour)},
+		&persistencepb.NamespaceConfig{Retention: durationpb.New(time.Hour)},
 		false,
 		nil,
 		0,
@@ -469,47 +528,47 @@ func (s *ScavengerTestSuite) TestMixesTwoPages() {
 	ms := &historyservice.DescribeMutableStateResponse{
 		DatabaseMutableState: &persistencepb.WorkflowMutableState{
 			ExecutionInfo: &persistencepb.WorkflowExecutionInfo{
-				LastUpdateTime: timestamp.TimePtr(time.Now()),
+				LastUpdateTime: timestamppb.New(time.Now()),
 			},
 		},
 	}
 	s.mockRegistry.EXPECT().GetNamespaceByID(gomock.Any()).Return(mockedNamespace, nil).AnyTimes()
-	s.mockHistoryClient.EXPECT().DescribeMutableState(gomock.Any(), &historyservice.DescribeMutableStateRequest{
+	s.mockHistoryClient.EXPECT().DescribeMutableState(gomock.Any(), protomock.Eq(&historyservice.DescribeMutableStateRequest{
 		NamespaceId: "namespaceID3",
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: "workflowID3",
 			RunId:      "runID3",
 		},
-	}).Return(nil, serviceerror.NewNotFound(""))
+	})).Return(nil, serviceerror.NewNotFound(""))
 
-	s.mockHistoryClient.EXPECT().DescribeMutableState(gomock.Any(), &historyservice.DescribeMutableStateRequest{
+	s.mockHistoryClient.EXPECT().DescribeMutableState(gomock.Any(), protomock.Eq(&historyservice.DescribeMutableStateRequest{
 		NamespaceId: "namespaceID4",
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: "workflowID4",
 			RunId:      "runID4",
 		},
-	}).Return(nil, serviceerror.NewNotFound(""))
-	s.mockHistoryClient.EXPECT().DescribeMutableState(gomock.Any(), &historyservice.DescribeMutableStateRequest{
+	})).Return(nil, serviceerror.NewNotFound(""))
+	s.mockHistoryClient.EXPECT().DescribeMutableState(gomock.Any(), protomock.Eq(&historyservice.DescribeMutableStateRequest{
 		NamespaceId: "namespaceID5",
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: "workflowID5",
 			RunId:      "runID5",
 		},
-	}).Return(ms, nil)
+	})).Return(ms, nil)
 
-	branchToken3, err := persistence.NewHistoryBranch(treeID3, &branchID3, []*persistencepb.HistoryBranchRange{})
+	branchToken3, err := s.historyBranchUtil.NewHistoryBranch(uuid.New(), uuid.New(), uuid.New(), treeID3, &branchID3, []*persistencepb.HistoryBranchRange{}, 0, 0, 0)
 	s.Nil(err)
-	s.mockExecutionManager.EXPECT().DeleteHistoryBranch(gomock.Any(), &persistence.DeleteHistoryBranchRequest{
+	s.mockExecutionManager.EXPECT().DeleteHistoryBranch(gomock.Any(), protomock.Eq(&persistence.DeleteHistoryBranchRequest{
 		BranchToken: branchToken3,
 		ShardID:     common.WorkflowIDToHistoryShard("namespaceID3", "workflowID3", s.numShards),
-	}).Return(nil)
+	})).Return(nil)
 
-	branchToken4, err := persistence.NewHistoryBranch(treeID4, &branchID4, []*persistencepb.HistoryBranchRange{})
+	branchToken4, err := s.historyBranchUtil.NewHistoryBranch(uuid.New(), uuid.New(), uuid.New(), treeID4, &branchID4, []*persistencepb.HistoryBranchRange{}, 0, 0, 0)
 	s.Nil(err)
-	s.mockExecutionManager.EXPECT().DeleteHistoryBranch(gomock.Any(), &persistence.DeleteHistoryBranchRequest{
+	s.mockExecutionManager.EXPECT().DeleteHistoryBranch(gomock.Any(), protomock.Eq(&persistence.DeleteHistoryBranchRequest{
 		BranchToken: branchToken4,
 		ShardID:     common.WorkflowIDToHistoryShard("namespaceID4", "workflowID4", s.numShards),
-	}).Return(fmt.Errorf("failed to delete history"))
+	})).Return(fmt.Errorf("failed to delete history"))
 
 	hbd, err := s.scavenger.Run(context.Background())
 	s.Nil(err)
@@ -522,49 +581,64 @@ func (s *ScavengerTestSuite) TestMixesTwoPages() {
 
 func (s *ScavengerTestSuite) TestDeleteWorkflowAfterRetention() {
 	retention := time.Hour
-	s.mockExecutionManager.EXPECT().GetAllHistoryTreeBranches(gomock.Any(), &persistence.GetAllHistoryTreeBranchesRequest{
+	s.mockExecutionManager.EXPECT().GetAllHistoryTreeBranches(gomock.Any(), protomock.Eq(&persistence.GetAllHistoryTreeBranchesRequest{
 		PageSize: pageSize,
-	}).Return(&persistence.GetAllHistoryTreeBranchesResponse{
+	})).Return(&persistence.GetAllHistoryTreeBranchesResponse{
 		NextPageToken: []byte("page1"),
 		Branches: []persistence.HistoryBranchDetail{
 			{
-				BranchToken: s.toBranchToken("treeID1", "branchID1"),
-				ForkTime:    timestamp.TimeNowPtrUtcAddDuration(-retention * 2),
-				Info:        persistence.BuildHistoryGarbageCleanupInfo("namespaceID1", "workflowID1", "runID1"),
+				BranchInfo: &persistencepb.HistoryBranch{
+					TreeId:   treeID1,
+					BranchId: branchID1,
+				},
+				ForkTime: timestamp.TimeNowPtrUtcAddDuration(-retention * 2),
+				Info:     persistence.BuildHistoryGarbageCleanupInfo("namespaceID1", "workflowID1", "runID1"),
 			},
 			{
-				BranchToken: s.toBranchToken("treeID2", "branchID2"),
-				ForkTime:    timestamp.TimeNowPtrUtcAddDuration(-retention * 2),
-				Info:        persistence.BuildHistoryGarbageCleanupInfo("namespaceID2", "workflowID2", "runID2"),
+				BranchInfo: &persistencepb.HistoryBranch{
+					TreeId:   treeID2,
+					BranchId: branchID2,
+				},
+				ForkTime: timestamp.TimeNowPtrUtcAddDuration(-retention * 2),
+				Info:     persistence.BuildHistoryGarbageCleanupInfo("namespaceID2", "workflowID2", "runID2"),
 			},
 		},
 	}, nil)
 
-	s.mockExecutionManager.EXPECT().GetAllHistoryTreeBranches(gomock.Any(), &persistence.GetAllHistoryTreeBranchesRequest{
+	s.mockExecutionManager.EXPECT().GetAllHistoryTreeBranches(gomock.Any(), protomock.Eq(&persistence.GetAllHistoryTreeBranchesRequest{
 		PageSize:      pageSize,
 		NextPageToken: []byte("page1"),
-	}).Return(&persistence.GetAllHistoryTreeBranchesResponse{
+	})).Return(&persistence.GetAllHistoryTreeBranchesResponse{
 		Branches: []persistence.HistoryBranchDetail{
 			{
-				BranchToken: s.toBranchToken("treeID3", "branchID3"),
-				ForkTime:    timestamp.TimeNowPtrUtcAddDuration(-retention * 2),
-				Info:        persistence.BuildHistoryGarbageCleanupInfo("namespaceID3", "workflowID3", "runID3"),
+				BranchInfo: &persistencepb.HistoryBranch{
+					TreeId:   treeID3,
+					BranchId: branchID3,
+				},
+				ForkTime: timestamp.TimeNowPtrUtcAddDuration(-retention * 2),
+				Info:     persistence.BuildHistoryGarbageCleanupInfo("namespaceID3", "workflowID3", "runID3"),
 			},
 			{
-				BranchToken: s.toBranchToken("treeID4", "branchID4"),
-				ForkTime:    timestamp.TimeNowPtrUtcAddDuration(-retention * 2),
-				Info:        persistence.BuildHistoryGarbageCleanupInfo("namespaceID4", "workflowID4", "runID4"),
+				BranchInfo: &persistencepb.HistoryBranch{
+					TreeId:   treeID4,
+					BranchId: branchID4,
+				},
+				ForkTime: timestamp.TimeNowPtrUtcAddDuration(-retention * 2),
+				Info:     persistence.BuildHistoryGarbageCleanupInfo("namespaceID4", "workflowID4", "runID4"),
 			},
 			{
-				BranchToken: s.toBranchToken("treeID5", "branchID5"),
-				ForkTime:    timestamp.TimeNowPtrUtcAddDuration(-retention * 2),
-				Info:        persistence.BuildHistoryGarbageCleanupInfo("namespaceID5", "workflowID5", "runID5"),
+				BranchInfo: &persistencepb.HistoryBranch{
+					TreeId:   treeID5,
+					BranchId: branchID5,
+				},
+				ForkTime: timestamp.TimeNowPtrUtcAddDuration(-retention * 2),
+				Info:     persistence.BuildHistoryGarbageCleanupInfo("namespaceID5", "workflowID5", "runID5"),
 			},
 		},
 	}, nil)
 	mockedNamespace := namespace.NewNamespaceForTest(
 		nil,
-		&persistencepb.NamespaceConfig{Retention: timestamp.DurationPtr(retention)},
+		&persistencepb.NamespaceConfig{Retention: durationpb.New(retention)},
 		false,
 		nil,
 		0,
@@ -572,7 +646,7 @@ func (s *ScavengerTestSuite) TestDeleteWorkflowAfterRetention() {
 	workflowInRetention := &historyservice.DescribeMutableStateResponse{
 		DatabaseMutableState: &persistencepb.WorkflowMutableState{
 			ExecutionInfo: &persistencepb.WorkflowExecutionInfo{
-				LastUpdateTime: timestamp.TimePtr(time.Now()),
+				LastUpdateTime: timestamppb.New(time.Now()),
 			},
 		},
 	}
@@ -581,7 +655,7 @@ func (s *ScavengerTestSuite) TestDeleteWorkflowAfterRetention() {
 			ExecutionInfo: &persistencepb.WorkflowExecutionInfo{
 				WorkflowId:     "workflowID2",
 				NamespaceId:    "namespaceID2",
-				LastUpdateTime: timestamp.TimePtr(time.Now().UTC().Add(-time.Hour * 24)),
+				LastUpdateTime: timestamppb.New(time.Now().UTC().Add(-time.Hour * 24)),
 			},
 			ExecutionState: &persistencepb.WorkflowExecutionState{
 				RunId: "runID2",
@@ -594,7 +668,7 @@ func (s *ScavengerTestSuite) TestDeleteWorkflowAfterRetention() {
 			ExecutionInfo: &persistencepb.WorkflowExecutionInfo{
 				WorkflowId:     "workflowID4",
 				NamespaceId:    "namespaceID4",
-				LastUpdateTime: timestamp.TimePtr(time.Now().UTC().Add(-time.Hour * 24)),
+				LastUpdateTime: timestamppb.New(time.Now().UTC().Add(-time.Hour * 24)),
 			},
 			ExecutionState: &persistencepb.WorkflowExecutionState{
 				RunId: "runID4",
@@ -607,7 +681,7 @@ func (s *ScavengerTestSuite) TestDeleteWorkflowAfterRetention() {
 			ExecutionInfo: &persistencepb.WorkflowExecutionInfo{
 				WorkflowId:     "workflowID5",
 				NamespaceId:    "namespaceID5",
-				LastUpdateTime: timestamp.TimePtr(time.Now().UTC().Add(-time.Hour * 24)),
+				LastUpdateTime: timestamppb.New(time.Now().UTC().Add(-time.Hour * 24)),
 			},
 			ExecutionState: &persistencepb.WorkflowExecutionState{
 				RunId: "runID5",
@@ -616,53 +690,53 @@ func (s *ScavengerTestSuite) TestDeleteWorkflowAfterRetention() {
 		},
 	}
 	s.mockRegistry.EXPECT().GetNamespaceByID(gomock.Any()).Return(mockedNamespace, nil).AnyTimes()
-	s.mockHistoryClient.EXPECT().DescribeMutableState(gomock.Any(), &historyservice.DescribeMutableStateRequest{
+	s.mockHistoryClient.EXPECT().DescribeMutableState(gomock.Any(), protomock.Eq(&historyservice.DescribeMutableStateRequest{
 		NamespaceId: "namespaceID1",
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: "workflowID1",
 			RunId:      "runID1",
 		},
-	}).Return(workflowInRetention, nil)
-	s.mockHistoryClient.EXPECT().DescribeMutableState(gomock.Any(), &historyservice.DescribeMutableStateRequest{
+	})).Return(workflowInRetention, nil)
+	s.mockHistoryClient.EXPECT().DescribeMutableState(gomock.Any(), protomock.Eq(&historyservice.DescribeMutableStateRequest{
 		NamespaceId: "namespaceID2",
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: "workflowID2",
 			RunId:      "runID2",
 		},
-	}).Return(workflowPastRetention2, nil)
-	s.mockHistoryClient.EXPECT().DescribeMutableState(gomock.Any(), &historyservice.DescribeMutableStateRequest{
+	})).Return(workflowPastRetention2, nil)
+	s.mockHistoryClient.EXPECT().DescribeMutableState(gomock.Any(), protomock.Eq(&historyservice.DescribeMutableStateRequest{
 		NamespaceId: "namespaceID3",
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: "workflowID3",
 			RunId:      "runID3",
 		},
-	}).Return(workflowInRetention, nil)
-	s.mockHistoryClient.EXPECT().DescribeMutableState(gomock.Any(), &historyservice.DescribeMutableStateRequest{
+	})).Return(workflowInRetention, nil)
+	s.mockHistoryClient.EXPECT().DescribeMutableState(gomock.Any(), protomock.Eq(&historyservice.DescribeMutableStateRequest{
 		NamespaceId: "namespaceID4",
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: "workflowID4",
 			RunId:      "runID4",
 		},
-	}).Return(workflowPastRetention4, nil)
-	s.mockHistoryClient.EXPECT().DescribeMutableState(gomock.Any(), &historyservice.DescribeMutableStateRequest{
+	})).Return(workflowPastRetention4, nil)
+	s.mockHistoryClient.EXPECT().DescribeMutableState(gomock.Any(), protomock.Eq(&historyservice.DescribeMutableStateRequest{
 		NamespaceId: "namespaceID5",
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: "workflowID5",
 			RunId:      "runID5",
 		},
-	}).Return(runningWorkflow5, nil)
-	s.mockAdminClient.EXPECT().DeleteWorkflowExecution(gomock.Any(), &adminservice.DeleteWorkflowExecutionRequest{
+	})).Return(runningWorkflow5, nil)
+	s.mockAdminClient.EXPECT().DeleteWorkflowExecution(gomock.Any(), protomock.Eq(&adminservice.DeleteWorkflowExecutionRequest{
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: "workflowID2",
 			RunId:      "runID2",
 		},
-	}).Return(nil, nil).Times(1)
-	s.mockAdminClient.EXPECT().DeleteWorkflowExecution(gomock.Any(), &adminservice.DeleteWorkflowExecutionRequest{
+	})).Return(nil, nil).Times(1)
+	s.mockAdminClient.EXPECT().DeleteWorkflowExecution(gomock.Any(), protomock.Eq(&adminservice.DeleteWorkflowExecutionRequest{
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: "workflowID4",
 			RunId:      "runID4",
 		},
-	}).Return(nil, nil).Times(1)
+	})).Return(nil, nil).Times(1)
 
 	hbd, err := s.scavenger.Run(context.Background())
 	s.Nil(err)

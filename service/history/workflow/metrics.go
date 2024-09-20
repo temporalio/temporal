@@ -26,22 +26,31 @@ package workflow
 
 import (
 	enumspb "go.temporal.io/api/enums/v1"
-
+	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/tqid"
+	"go.temporal.io/server/service/history/configs"
 )
 
 func emitWorkflowHistoryStats(
 	metricsHandler metrics.Handler,
 	namespace namespace.Name,
+	state enumsspb.WorkflowExecutionState,
 	historySize int,
 	historyCount int,
 ) {
+	handler := metricsHandler.WithTags(metrics.NamespaceTag(namespace.String()))
+	executionScope := handler.WithTags(metrics.OperationTag(metrics.ExecutionStatsScope))
+	metrics.HistorySize.With(executionScope).Record(int64(historySize))
+	metrics.HistoryCount.With(executionScope).Record(int64(historyCount))
 
-	executionScope := metricsHandler.WithTags(metrics.OperationTag(metrics.ExecutionStatsScope), metrics.NamespaceTag(namespace.String()))
-	executionScope.Histogram(metrics.HistorySize.GetMetricName(), metrics.HistorySize.GetMetricUnit()).Record(int64(historySize))
-	executionScope.Histogram(metrics.HistoryCount.GetMetricName(), metrics.HistoryCount.GetMetricUnit()).Record(int64(historyCount))
+	if state == enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED {
+		completionScope := handler.WithTags(metrics.OperationTag(metrics.WorkflowCompletionStatsScope))
+		metrics.HistorySize.With(completionScope).Record(int64(historySize))
+		metrics.HistoryCount.With(completionScope).Record(int64(historyCount))
+	}
 }
 
 func emitMutableStateStatus(
@@ -51,39 +60,37 @@ func emitMutableStateStatus(
 	if stats == nil {
 		return
 	}
-
-	metricsHandler.Histogram(metrics.MutableStateSize.GetMetricName(), metrics.MutableStateSize.GetMetricUnit()).Record(int64(stats.TotalSize))
-	metricsHandler.Histogram(metrics.ExecutionInfoSize.GetMetricName(), metrics.ExecutionInfoSize.GetMetricUnit()).Record(int64(stats.ExecutionInfoSize))
-	metricsHandler.Histogram(metrics.ExecutionStateSize.GetMetricName(), metrics.ExecutionStateSize.GetMetricUnit()).Record(int64(stats.ExecutionStateSize))
-	metricsHandler.Histogram(metrics.ActivityInfoSize.GetMetricName(), metrics.ActivityInfoSize.GetMetricUnit()).Record(int64(stats.ActivityInfoSize))
-	metricsHandler.Histogram(metrics.ActivityInfoCount.GetMetricName(), metrics.ActivityInfoCount.GetMetricUnit()).Record(int64(stats.ActivityInfoCount))
-	metricsHandler.Histogram(metrics.TotalActivityCount.GetMetricName(), metrics.TotalActivityCount.GetMetricUnit()).Record(stats.TotalActivityCount)
-	metricsHandler.Histogram(metrics.TimerInfoSize.GetMetricName(), metrics.TimerInfoSize.GetMetricUnit()).Record(int64(stats.TimerInfoSize))
-	metricsHandler.Histogram(metrics.TimerInfoCount.GetMetricName(), metrics.TimerInfoCount.GetMetricUnit()).Record(int64(stats.TimerInfoCount))
-	metricsHandler.Histogram(metrics.TotalUserTimerCount.GetMetricName(), metrics.TotalUserTimerCount.GetMetricUnit()).Record(stats.TotalUserTimerCount)
-	metricsHandler.Histogram(metrics.ChildInfoSize.GetMetricName(), metrics.ChildInfoSize.GetMetricUnit()).Record(int64(stats.ChildInfoSize))
-	metricsHandler.Histogram(metrics.ChildInfoCount.GetMetricName(), metrics.ChildInfoCount.GetMetricUnit()).Record(int64(stats.ChildInfoCount))
-	metricsHandler.Histogram(metrics.TotalChildExecutionCount.GetMetricName(), metrics.TotalChildExecutionCount.GetMetricUnit()).Record(stats.TotalChildExecutionCount)
-	metricsHandler.Histogram(metrics.RequestCancelInfoSize.GetMetricName(), metrics.RequestCancelInfoSize.GetMetricUnit()).Record(int64(stats.RequestCancelInfoSize))
-	metricsHandler.Histogram(metrics.RequestCancelInfoCount.GetMetricName(), metrics.RequestCancelInfoCount.GetMetricUnit()).Record(int64(stats.RequestCancelInfoCount))
-	metricsHandler.Histogram(metrics.TotalRequestCancelExternalCount.GetMetricName(), metrics.TotalRequestCancelExternalCount.GetMetricUnit()).Record(stats.TotalRequestCancelExternalCount)
-	metricsHandler.Histogram(metrics.SignalInfoSize.GetMetricName(), metrics.SignalInfoSize.GetMetricUnit()).Record(int64(stats.SignalInfoSize))
-	metricsHandler.Histogram(metrics.SignalInfoCount.GetMetricName(), metrics.SignalInfoCount.GetMetricUnit()).Record(int64(stats.SignalInfoCount))
-	metricsHandler.Histogram(metrics.TotalSignalExternalCount.GetMetricName(), metrics.TotalSignalExternalCount.GetMetricUnit()).Record(stats.TotalSignalExternalCount)
-	metricsHandler.Histogram(metrics.SignalRequestIDSize.GetMetricName(), metrics.SignalRequestIDSize.GetMetricUnit()).Record(int64(stats.SignalRequestIDSize))
-	metricsHandler.Histogram(metrics.SignalRequestIDCount.GetMetricName(), metrics.SignalRequestIDCount.GetMetricUnit()).Record(int64(stats.SignalRequestIDCount))
-	metricsHandler.Histogram(metrics.TotalSignalCount.GetMetricName(), metrics.TotalSignalCount.GetMetricUnit()).Record(stats.TotalSignalCount)
-	metricsHandler.Histogram(metrics.BufferedEventsSize.GetMetricName(), metrics.BufferedEventsSize.GetMetricUnit()).Record(int64(stats.BufferedEventsSize))
-	metricsHandler.Histogram(metrics.BufferedEventsCount.GetMetricName(), metrics.BufferedEventsCount.GetMetricUnit()).Record(int64(stats.BufferedEventsCount))
+	metrics.MutableStateSize.With(metricsHandler).Record(int64(stats.TotalSize))
+	metrics.ExecutionInfoSize.With(metricsHandler).Record(int64(stats.ExecutionInfoSize))
+	metrics.ExecutionStateSize.With(metricsHandler).Record(int64(stats.ExecutionStateSize))
+	metrics.ActivityInfoSize.With(metricsHandler).Record(int64(stats.ActivityInfoSize))
+	metrics.ActivityInfoCount.With(metricsHandler).Record(int64(stats.ActivityInfoCount))
+	metrics.TotalActivityCount.With(metricsHandler).Record(stats.TotalActivityCount)
+	metrics.TimerInfoSize.With(metricsHandler).Record(int64(stats.TimerInfoSize))
+	metrics.TimerInfoCount.With(metricsHandler).Record(int64(stats.TimerInfoCount))
+	metrics.TotalUserTimerCount.With(metricsHandler).Record(stats.TotalUserTimerCount)
+	metrics.ChildInfoSize.With(metricsHandler).Record(int64(stats.ChildInfoSize))
+	metrics.ChildInfoCount.With(metricsHandler).Record(int64(stats.ChildInfoCount))
+	metrics.TotalChildExecutionCount.With(metricsHandler).Record(stats.TotalChildExecutionCount)
+	metrics.RequestCancelInfoSize.With(metricsHandler).Record(int64(stats.RequestCancelInfoSize))
+	metrics.RequestCancelInfoCount.With(metricsHandler).Record(int64(stats.RequestCancelInfoCount))
+	metrics.TotalRequestCancelExternalCount.With(metricsHandler).Record(stats.TotalRequestCancelExternalCount)
+	metrics.SignalInfoSize.With(metricsHandler).Record(int64(stats.SignalInfoSize))
+	metrics.SignalInfoCount.With(metricsHandler).Record(int64(stats.SignalInfoCount))
+	metrics.TotalSignalExternalCount.With(metricsHandler).Record(stats.TotalSignalExternalCount)
+	metrics.SignalRequestIDSize.With(metricsHandler).Record(int64(stats.SignalRequestIDSize))
+	metrics.SignalRequestIDCount.With(metricsHandler).Record(int64(stats.SignalRequestIDCount))
+	metrics.TotalSignalCount.With(metricsHandler).Record(stats.TotalSignalCount)
+	metrics.BufferedEventsSize.With(metricsHandler).Record(int64(stats.BufferedEventsSize))
+	metrics.BufferedEventsCount.With(metricsHandler).Record(int64(stats.BufferedEventsCount))
 
 	if stats.HistoryStatistics != nil {
-		metricsHandler.Histogram(metrics.HistorySize.GetMetricName(), metrics.HistorySize.GetMetricUnit()).Record(int64(stats.HistoryStatistics.SizeDiff))
-		metricsHandler.Histogram(metrics.HistoryCount.GetMetricName(), metrics.HistoryCount.GetMetricUnit()).Record(int64(stats.HistoryStatistics.CountDiff))
-
+		metrics.HistorySize.With(metricsHandler).Record(int64(stats.HistoryStatistics.SizeDiff))
+		metrics.HistoryCount.With(metricsHandler).Record(int64(stats.HistoryStatistics.CountDiff))
 	}
 
 	for category, taskCount := range stats.TaskCountByCategory {
-		metricsHandler.Histogram(metrics.TaskCount.GetMetricName(), metrics.TaskCount.GetMetricUnit()).
+		metrics.TaskCount.With(metricsHandler).
 			Record(int64(taskCount), metrics.TaskCategoryTag(category))
 	}
 }
@@ -94,26 +101,40 @@ func emitWorkflowCompletionStats(
 	namespaceState string,
 	taskQueue string,
 	status enumspb.WorkflowExecutionStatus,
+	config *configs.Config,
 ) {
-	handler := metricsHandler.WithTags(
+	handler := GetPerTaskQueueFamilyScope(metricsHandler, namespace, taskQueue, config,
 		metrics.OperationTag(metrics.WorkflowCompletionStatsScope),
-		metrics.NamespaceTag(namespace.String()),
 		metrics.NamespaceStateTag(namespaceState),
-		metrics.TaskQueueTag(taskQueue),
 	)
 
 	switch status {
 	case enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED:
-		handler.Counter(metrics.WorkflowSuccessCount.GetMetricName()).Record(1)
+		metrics.WorkflowSuccessCount.With(handler).Record(1)
 	case enumspb.WORKFLOW_EXECUTION_STATUS_CANCELED:
-		handler.Counter(metrics.WorkflowCancelCount.GetMetricName()).Record(1)
+		metrics.WorkflowCancelCount.With(handler).Record(1)
 	case enumspb.WORKFLOW_EXECUTION_STATUS_FAILED:
-		handler.Counter(metrics.WorkflowFailedCount.GetMetricName()).Record(1)
+		metrics.WorkflowFailedCount.With(handler).Record(1)
 	case enumspb.WORKFLOW_EXECUTION_STATUS_TIMED_OUT:
-		handler.Counter(metrics.WorkflowTimeoutCount.GetMetricName()).Record(1)
+		metrics.WorkflowTimeoutCount.With(handler).Record(1)
 	case enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED:
-		handler.Counter(metrics.WorkflowTerminateCount.GetMetricName()).Record(1)
+		metrics.WorkflowTerminateCount.With(handler).Record(1)
 	case enumspb.WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW:
-		handler.Counter(metrics.WorkflowContinuedAsNewCount.GetMetricName()).Record(1)
+		metrics.WorkflowContinuedAsNewCount.With(handler).Record(1)
 	}
+}
+
+func GetPerTaskQueueFamilyScope(
+	handler metrics.Handler,
+	namespaceName namespace.Name,
+	taskQueueFamily string,
+	config *configs.Config,
+	tags ...metrics.Tag,
+) metrics.Handler {
+	return metrics.GetPerTaskQueueFamilyScope(handler,
+		namespaceName.String(),
+		tqid.UnsafeTaskQueueFamily(namespaceName.String(), taskQueueFamily),
+		config.BreakdownMetricsByTaskQueue(namespaceName.String(), taskQueueFamily, enumspb.TASK_QUEUE_TYPE_WORKFLOW),
+		tags...,
+	)
 }

@@ -30,45 +30,70 @@ import (
 	clockspb "go.temporal.io/server/api/clock/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/workflow"
+	"go.temporal.io/server/service/history/workflow/update"
 )
 
 func GetAndUpdateWorkflowWithNew(
 	ctx context.Context,
 	reqClock *clockspb.VectorClock,
-	consistencyCheckFn MutableStateConsistencyPredicate,
 	workflowKey definition.WorkflowKey,
 	action UpdateWorkflowActionFunc,
 	newWorkflowFn func() (workflow.Context, workflow.MutableState, error),
 	shard shard.Context,
 	workflowConsistencyChecker WorkflowConsistencyChecker,
 ) (retError error) {
-	workflowContext, err := workflowConsistencyChecker.GetWorkflowContext(
+	workflowLease, err := workflowConsistencyChecker.GetWorkflowLease(
 		ctx,
 		reqClock,
-		consistencyCheckFn,
 		workflowKey,
-		workflow.LockPriorityHigh,
+		locks.PriorityHigh,
 	)
 	if err != nil {
 		return err
 	}
-	defer func() { workflowContext.GetReleaseFn()(retError) }()
+	defer func() { workflowLease.GetReleaseFn()(retError) }()
 
-	return UpdateWorkflowWithNew(shard, ctx, workflowContext, action, newWorkflowFn)
+	return UpdateWorkflowWithNew(shard, ctx, workflowLease, action, newWorkflowFn)
+}
+
+func GetAndUpdateWorkflowWithConsistencyCheck(
+	ctx context.Context,
+	reqClock *clockspb.VectorClock,
+	consistencyCheckFn MutableStateConsistencyPredicate,
+	workflowKey definition.WorkflowKey,
+	action UpdateWorkflowActionFunc,
+	newWorkflowFn func() (workflow.Context, workflow.MutableState, error),
+	shardContext shard.Context,
+	workflowConsistencyChecker WorkflowConsistencyChecker,
+) (retError error) {
+	workflowLease, err := workflowConsistencyChecker.GetWorkflowLeaseWithConsistencyCheck(
+		ctx,
+		reqClock,
+		consistencyCheckFn,
+		workflowKey,
+		locks.PriorityHigh,
+	)
+	if err != nil {
+		return err
+	}
+	defer func() { workflowLease.GetReleaseFn()(retError) }()
+
+	return UpdateWorkflowWithNew(shardContext, ctx, workflowLease, action, newWorkflowFn)
 }
 
 func UpdateWorkflowWithNew(
 	shardContext shard.Context,
 	ctx context.Context,
-	workflowContext WorkflowContext,
+	workflowLease WorkflowLease,
 	action UpdateWorkflowActionFunc,
 	newWorkflowFn func() (workflow.Context, workflow.MutableState, error),
 ) (retError error) {
 
 	// conduct caller action
-	postActions, err := action(workflowContext)
+	postActions, err := action(workflowLease)
 	if err != nil {
 		return err
 	}
@@ -76,7 +101,7 @@ func UpdateWorkflowWithNew(
 		return nil
 	}
 
-	mutableState := workflowContext.GetMutableState()
+	mutableState := workflowLease.GetMutableState()
 	if postActions.CreateWorkflowTask {
 		// Create a transfer task to schedule a workflow task
 		if !mutableState.HasPendingWorkflowTask() {
@@ -103,15 +128,23 @@ func UpdateWorkflowWithNew(
 			return err
 		}
 
-		updateErr = workflowContext.GetContext().UpdateWorkflowExecutionWithNewAsActive(
+		updateErr = workflowLease.GetContext().UpdateWorkflowExecutionWithNewAsActive(
 			ctx,
 			shardContext,
 			newContext,
 			newMutableState,
 		)
 	} else {
-		updateErr = workflowContext.GetContext().UpdateWorkflowExecutionAsActive(ctx, shardContext)
+		updateErr = workflowLease.GetContext().UpdateWorkflowExecutionAsActive(ctx, shardContext)
 	}
 
-	return updateErr
+	if updateErr != nil {
+		return updateErr
+	}
+
+	if postActions.AbortUpdates {
+		workflowLease.GetContext().UpdateRegistry(ctx, nil).Abort(update.AbortReasonWorkflowCompleted)
+	}
+
+	return nil
 }

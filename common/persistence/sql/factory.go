@@ -30,6 +30,7 @@ import (
 
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/metrics"
 	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
 	"go.temporal.io/server/common/resolver"
@@ -51,6 +52,8 @@ type (
 		dbKind   sqlplugin.DbKind
 		cfg      *config.SQL
 		resolver resolver.ServiceResolver
+		logger   log.Logger
+		metrics  metrics.Handler
 
 		sqlplugin.DB
 
@@ -66,13 +69,23 @@ func NewFactory(
 	r resolver.ServiceResolver,
 	clusterName string,
 	logger log.Logger,
+	metricsHandler metrics.Handler,
 ) *Factory {
 	return &Factory{
 		cfg:         cfg,
 		clusterName: clusterName,
 		logger:      logger,
-		mainDBConn:  NewRefCountedDBConn(sqlplugin.DbKindMain, &cfg, r),
+		mainDBConn:  NewRefCountedDBConn(sqlplugin.DbKindMain, &cfg, r, logger, metricsHandler),
 	}
+}
+
+// GetDB return a new SQL DB connection
+func (f *Factory) GetDB() (sqlplugin.DB, error) {
+	conn, err := f.mainDBConn.Get()
+	if err != nil {
+		return nil, err
+	}
+	return conn, err
 }
 
 // NewTaskStore returns a new task store
@@ -130,6 +143,24 @@ func (f *Factory) NewQueue(queueType p.QueueType) (p.Queue, error) {
 	return newQueue(conn, f.logger, queueType)
 }
 
+// NewQueueV2 returns a new data-access object for queues and messages.
+func (f *Factory) NewQueueV2() (p.QueueV2, error) {
+	conn, err := f.mainDBConn.Get()
+	if err != nil {
+		return nil, err
+	}
+	return NewQueueV2(conn, f.logger), nil
+}
+
+// NewNexusEndpointStore returns a new NexusEndpointStore
+func (f *Factory) NewNexusEndpointStore() (p.NexusEndpointStore, error) {
+	conn, err := f.mainDBConn.Get()
+	if err != nil {
+		return nil, err
+	}
+	return NewSqlNexusEndpointStore(conn, f.logger)
+}
+
 // Close closes the factory
 func (f *Factory) Close() {
 	f.mainDBConn.ForceClose()
@@ -143,11 +174,15 @@ func NewRefCountedDBConn(
 	dbKind sqlplugin.DbKind,
 	cfg *config.SQL,
 	r resolver.ServiceResolver,
+	logger log.Logger,
+	metricsHandler metrics.Handler,
 ) DbConn {
 	return DbConn{
 		dbKind:   dbKind,
 		cfg:      cfg,
 		resolver: r,
+		metrics:  metricsHandler,
+		logger:   logger,
 	}
 }
 
@@ -158,7 +193,7 @@ func (c *DbConn) Get() (sqlplugin.DB, error) {
 	c.Lock()
 	defer c.Unlock()
 	if c.refCnt == 0 {
-		conn, err := NewSQLDB(c.dbKind, c.cfg, c.resolver)
+		conn, err := NewSQLDB(c.dbKind, c.cfg, c.resolver, c.logger, c.metrics)
 		if err != nil {
 			return nil, err
 		}

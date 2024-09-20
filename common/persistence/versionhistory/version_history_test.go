@@ -29,7 +29,6 @@ import (
 
 	"github.com/stretchr/testify/suite"
 	"go.temporal.io/api/serviceerror"
-
 	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/common"
 )
@@ -523,7 +522,7 @@ func (s *versionHistoriesSuite) TestAddGetVersionHistory() {
 	histories := NewVersionHistories(versionHistory1)
 	s.Equal(int32(0), histories.CurrentVersionHistoryIndex)
 
-	currentBranchChanged, newVersionHistoryIndex, err := AddVersionHistory(histories, versionHistory2)
+	currentBranchChanged, newVersionHistoryIndex, err := AddAndSwitchVersionHistory(histories, versionHistory2)
 	s.Nil(err)
 	s.True(currentBranchChanged)
 	s.Equal(int32(1), newVersionHistoryIndex)
@@ -553,7 +552,7 @@ func (s *versionHistoriesSuite) TestFindLCAVersionHistoryIndexAndItem_LargerEven
 	})
 
 	histories := NewVersionHistories(versionHistory1)
-	_, _, err := AddVersionHistory(histories, versionHistory2)
+	_, _, err := AddAndSwitchVersionHistory(histories, versionHistory2)
 	s.Nil(err)
 
 	versionHistoryIncoming := NewVersionHistory([]byte("branch token incoming"), []*historyspb.VersionHistoryItem{
@@ -583,7 +582,7 @@ func (s *versionHistoriesSuite) TestFindLCAVersionHistoryIndexAndItem_SameEventI
 	})
 
 	histories := NewVersionHistories(versionHistory1)
-	_, _, err := AddVersionHistory(histories, versionHistory2)
+	_, _, err := AddAndSwitchVersionHistory(histories, versionHistory2)
 	s.Nil(err)
 
 	versionHistoryIncoming := NewVersionHistory([]byte("branch token incoming"), []*historyspb.VersionHistoryItem{
@@ -613,7 +612,7 @@ func (s *versionHistoriesSuite) TestFindFirstVersionHistoryIndexByItem() {
 	})
 
 	histories := NewVersionHistories(versionHistory1)
-	_, _, err := AddVersionHistory(histories, versionHistory2)
+	_, _, err := AddAndSwitchVersionHistory(histories, versionHistory2)
 	s.Nil(err)
 
 	index, err := FindFirstVersionHistoryIndexByVersionHistoryItem(histories, NewVersionHistoryItem(8, 10))
@@ -628,42 +627,125 @@ func (s *versionHistoriesSuite) TestFindFirstVersionHistoryIndexByItem() {
 	s.Error(err)
 }
 
-func (s *versionHistoriesSuite) TestCurrentVersionHistoryIndexIsInReplay() {
-	versionHistory1 := NewVersionHistory([]byte("branch token 1"), []*historyspb.VersionHistoryItem{
+func (s *versionHistoriesSuite) TestIsVersionHistoryItemsInSameBranch_Same_VersionItems_Return_True() {
+	versionHistoryItemsA := []*historyspb.VersionHistoryItem{
 		{EventId: 3, Version: 0},
 		{EventId: 5, Version: 4},
 		{EventId: 7, Version: 6},
 		{EventId: 9, Version: 10},
-	})
-	versionHistory2 := NewVersionHistory([]byte("branch token 2"), []*historyspb.VersionHistoryItem{
+	}
+	versionHistoryItemsB := []*historyspb.VersionHistoryItem{
+		{EventId: 3, Version: 0},
+		{EventId: 5, Version: 4},
+		{EventId: 7, Version: 6},
+		{EventId: 9, Version: 10},
+	}
+	s.True(IsVersionHistoryItemsInSameBranch(versionHistoryItemsA, versionHistoryItemsB))
+	s.True(IsVersionHistoryItemsInSameBranch(versionHistoryItemsB, versionHistoryItemsA))
+}
+
+func (s *versionHistoriesSuite) TestIsVersionHistoryItemsInSameBranch_SameBranch1_Return_True() {
+	versionHistoryItemsA := []*historyspb.VersionHistoryItem{
+		{EventId: 3, Version: 0},
+		{EventId: 5, Version: 4},
+		{EventId: 7, Version: 6},
+	}
+	versionHistoryItemsB := []*historyspb.VersionHistoryItem{
+		{EventId: 3, Version: 0},
+		{EventId: 5, Version: 4},
+		{EventId: 7, Version: 6},
+		{EventId: 9, Version: 10},
+	}
+	s.True(IsVersionHistoryItemsInSameBranch(versionHistoryItemsA, versionHistoryItemsB))
+	s.True(IsVersionHistoryItemsInSameBranch(versionHistoryItemsB, versionHistoryItemsA))
+}
+
+func (s *versionHistoriesSuite) TestIsVersionHistoryItemsInSameBranch_SameBranch2_Return_True() {
+	versionHistoryItemsA := []*historyspb.VersionHistoryItem{
 		{EventId: 3, Version: 0},
 		{EventId: 5, Version: 4},
 		{EventId: 6, Version: 6},
-		{EventId: 11, Version: 12},
-	})
+	}
+	versionHistoryItemsB := []*historyspb.VersionHistoryItem{
+		{EventId: 3, Version: 0},
+		{EventId: 5, Version: 4},
+		{EventId: 7, Version: 6},
+		{EventId: 9, Version: 10},
+	}
+	s.True(IsVersionHistoryItemsInSameBranch(versionHistoryItemsA, versionHistoryItemsB))
+	s.True(IsVersionHistoryItemsInSameBranch(versionHistoryItemsB, versionHistoryItemsA))
+}
 
-	histories := NewVersionHistories(versionHistory1)
-	s.Equal(int32(0), histories.CurrentVersionHistoryIndex)
+func (s *versionHistoriesSuite) TestIsVersionHistoryItemsInSameBranch_DifferentBranch1_Return_False() {
+	versionHistoryItemsA := []*historyspb.VersionHistoryItem{
+		{EventId: 1, Version: 1},
+		{EventId: 2, Version: 2},
+		{EventId: 3, Version: 3},
+	}
+	versionHistoryItemsB := []*historyspb.VersionHistoryItem{
+		{EventId: 1, Version: 1},
+		{EventId: 2, Version: 2},
+		{EventId: 3, Version: 4},
+	}
+	s.False(IsVersionHistoryItemsInSameBranch(versionHistoryItemsA, versionHistoryItemsB))
+	s.False(IsVersionHistoryItemsInSameBranch(versionHistoryItemsB, versionHistoryItemsA))
+}
 
-	currentBranchChanged, newVersionHistoryIndex, err := AddVersionHistory(histories, versionHistory2)
-	s.Nil(err)
-	s.True(currentBranchChanged)
-	s.Equal(int32(1), newVersionHistoryIndex)
-	s.Equal(int32(1), histories.CurrentVersionHistoryIndex)
+func (s *versionHistoriesSuite) TestIsVersionHistoryItemsInSameBranch_DifferentBranch2_Return_False() {
+	versionHistoryItemsA := []*historyspb.VersionHistoryItem{
+		{EventId: 1, Version: 1},
+		{EventId: 2, Version: 2},
+		{EventId: 7, Version: 3},
+	}
+	versionHistoryItemsB := []*historyspb.VersionHistoryItem{
+		{EventId: 1, Version: 1},
+		{EventId: 2, Version: 2},
+		{EventId: 6, Version: 3},
+		{EventId: 7, Version: 4},
+	}
+	s.False(IsVersionHistoryItemsInSameBranch(versionHistoryItemsA, versionHistoryItemsB))
+	s.False(IsVersionHistoryItemsInSameBranch(versionHistoryItemsB, versionHistoryItemsA))
+}
 
-	isInReplay, err := IsVersionHistoriesRebuilt(histories)
-	s.NoError(err)
-	s.False(isInReplay)
+func (s *versionHistoriesSuite) TestSplitVersionHistoryToLocalGeneratedAndRemoteGenerated_RemoteOnly() {
+	versionHistoryItems := []*historyspb.VersionHistoryItem{
+		{EventId: 5, Version: 2},
+		{EventId: 10, Version: 3},
+		{EventId: 13, Version: 4},
+		{EventId: 15, Version: 5},
+	}
 
-	err = SetCurrentVersionHistoryIndex(histories, 0)
-	s.NoError(err)
-	isInReplay, err = IsVersionHistoriesRebuilt(histories)
-	s.NoError(err)
-	s.True(isInReplay)
+	local, remote := SplitVersionHistoryByLastLocalGeneratedItem(versionHistoryItems, 1, 1000)
+	s.Empty(local)
+	s.Equal(versionHistoryItems, remote)
+}
 
-	err = SetCurrentVersionHistoryIndex(histories, 1)
-	s.NoError(err)
-	isInReplay, err = IsVersionHistoriesRebuilt(histories)
-	s.NoError(err)
-	s.False(isInReplay)
+func (s *versionHistoriesSuite) TestSplitVersionHistoryToLocalGeneratedAndRemoteGenerated_LocalOnly() {
+	versionHistoryItems := []*historyspb.VersionHistoryItem{
+		{EventId: 5, Version: 1},
+		{EventId: 10, Version: 2},
+		{EventId: 13, Version: 3},
+		{EventId: 15, Version: 1001},
+	}
+
+	local, remote := SplitVersionHistoryByLastLocalGeneratedItem(versionHistoryItems, 1, 1000)
+	s.Empty(remote)
+	s.Equal(versionHistoryItems, local)
+}
+
+func (s *versionHistoriesSuite) TestSplitVersionHistoryToLocalGeneratedAndRemoteGenerated_LocalAndRemote() {
+	localItems := []*historyspb.VersionHistoryItem{
+		{EventId: 5, Version: 1},
+		{EventId: 10, Version: 2},
+		{EventId: 13, Version: 3},
+		{EventId: 15, Version: 1001},
+	}
+	remoteItems := []*historyspb.VersionHistoryItem{
+		{EventId: 20, Version: 1004},
+		{EventId: 25, Version: 1005},
+	}
+
+	past, future := SplitVersionHistoryByLastLocalGeneratedItem(append(localItems, remoteItems...), 1, 1000)
+	s.Equal(localItems, past)
+	s.Equal(remoteItems, future)
 }

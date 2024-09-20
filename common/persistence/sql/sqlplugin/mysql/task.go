@@ -27,11 +27,9 @@ package mysql
 import (
 	"context"
 	"database/sql"
-	"fmt"
 	"strings"
 
 	"go.temporal.io/api/serviceerror"
-
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
 )
@@ -118,7 +116,7 @@ func (mdb *db) InsertIntoTasks(
 	ctx context.Context,
 	rows []sqlplugin.TasksRow,
 ) (sql.Result, error) {
-	return mdb.conn.NamedExecContext(ctx,
+	return mdb.NamedExecContext(ctx,
 		createTaskQry,
 		rows,
 	)
@@ -133,7 +131,7 @@ func (mdb *db) SelectFromTasks(
 	var rows []sqlplugin.TasksRow
 	switch {
 	case filter.ExclusiveMaxTaskID != nil:
-		err = mdb.conn.SelectContext(ctx,
+		err = mdb.SelectContext(ctx,
 			&rows, getTaskMinMaxQry,
 			filter.RangeHash,
 			filter.TaskQueueID,
@@ -142,7 +140,7 @@ func (mdb *db) SelectFromTasks(
 			*filter.PageSize,
 		)
 	default:
-		err = mdb.conn.SelectContext(ctx,
+		err = mdb.SelectContext(ctx,
 			&rows, getTaskMinQry,
 			filter.RangeHash,
 			filter.TaskQueueID,
@@ -161,23 +159,18 @@ func (mdb *db) DeleteFromTasks(
 	ctx context.Context,
 	filter sqlplugin.TasksFilter,
 ) (sql.Result, error) {
-	if filter.ExclusiveMaxTaskID != nil {
-		if filter.Limit == nil || *filter.Limit == 0 {
-			return nil, fmt.Errorf("missing limit parameter")
-		}
-		return mdb.conn.ExecContext(ctx,
-			rangeDeleteTaskQry,
-			filter.RangeHash,
-			filter.TaskQueueID,
-			*filter.ExclusiveMaxTaskID,
-			*filter.Limit,
-		)
+	if filter.ExclusiveMaxTaskID == nil {
+		return nil, serviceerror.NewInternal("missing ExclusiveMaxTaskID parameter")
 	}
-	return mdb.conn.ExecContext(ctx,
-		deleteTaskQry,
+	if filter.Limit == nil || *filter.Limit == 0 {
+		return nil, serviceerror.NewInternal("missing limit parameter")
+	}
+	return mdb.ExecContext(ctx,
+		rangeDeleteTaskQry,
 		filter.RangeHash,
 		filter.TaskQueueID,
-		*filter.TaskID,
+		*filter.ExclusiveMaxTaskID,
+		*filter.Limit,
 	)
 }
 
@@ -186,7 +179,7 @@ func (mdb *db) InsertIntoTaskQueues(
 	ctx context.Context,
 	row *sqlplugin.TaskQueuesRow,
 ) (sql.Result, error) {
-	return mdb.conn.NamedExecContext(ctx,
+	return mdb.NamedExecContext(ctx,
 		createTaskQueueQry,
 		row,
 	)
@@ -197,7 +190,7 @@ func (mdb *db) UpdateTaskQueues(
 	ctx context.Context,
 	row *sqlplugin.TaskQueuesRow,
 ) (sql.Result, error) {
-	return mdb.conn.NamedExecContext(ctx,
+	return mdb.NamedExecContext(ctx,
 		updateTaskQueueQry,
 		row,
 	)
@@ -232,7 +225,7 @@ func (mdb *db) selectFromTaskQueues(
 ) ([]sqlplugin.TaskQueuesRow, error) {
 	var err error
 	var row sqlplugin.TaskQueuesRow
-	err = mdb.conn.GetContext(ctx,
+	err = mdb.GetContext(ctx,
 		&row,
 		getTaskQueueQry,
 		filter.RangeHash,
@@ -252,7 +245,7 @@ func (mdb *db) rangeSelectFromTaskQueues(
 	var rows []sqlplugin.TaskQueuesRow
 
 	if filter.RangeHashLessThanEqualTo != 0 {
-		err = mdb.conn.SelectContext(ctx,
+		err = mdb.SelectContext(ctx,
 			&rows,
 			listTaskQueueWithHashRangeQry,
 			filter.RangeHashGreaterThanEqualTo,
@@ -261,7 +254,7 @@ func (mdb *db) rangeSelectFromTaskQueues(
 			*filter.PageSize,
 		)
 	} else {
-		err = mdb.conn.SelectContext(ctx,
+		err = mdb.SelectContext(ctx,
 			&rows,
 			listTaskQueueQry,
 			filter.RangeHash,
@@ -280,7 +273,7 @@ func (mdb *db) DeleteFromTaskQueues(
 	ctx context.Context,
 	filter sqlplugin.TaskQueuesFilter,
 ) (sql.Result, error) {
-	return mdb.conn.ExecContext(ctx,
+	return mdb.ExecContext(ctx,
 		deleteTaskQueueQry,
 		filter.RangeHash,
 		filter.TaskQueueID,
@@ -294,7 +287,7 @@ func (mdb *db) LockTaskQueues(
 	filter sqlplugin.TaskQueuesFilter,
 ) (int64, error) {
 	var rangeID int64
-	err := mdb.conn.GetContext(ctx,
+	err := mdb.GetContext(ctx,
 		&rangeID,
 		lockTaskQueueQry,
 		filter.RangeHash,
@@ -305,13 +298,13 @@ func (mdb *db) LockTaskQueues(
 
 func (mdb *db) GetTaskQueueUserData(ctx context.Context, request *sqlplugin.GetTaskQueueUserDataRequest) (*sqlplugin.VersionedBlob, error) {
 	var row sqlplugin.VersionedBlob
-	err := mdb.conn.GetContext(ctx, &row, getTaskQueueUserDataQry, request.NamespaceID, request.TaskQueueName)
+	err := mdb.GetContext(ctx, &row, getTaskQueueUserDataQry, request.NamespaceID, request.TaskQueueName)
 	return &row, err
 }
 
 func (mdb *db) UpdateTaskQueueUserData(ctx context.Context, request *sqlplugin.UpdateTaskQueueDataRequest) error {
 	if request.Version == 0 {
-		_, err := mdb.conn.ExecContext(
+		_, err := mdb.ExecContext(
 			ctx,
 			insertTaskQueueUserDataQry,
 			request.NamespaceID,
@@ -320,7 +313,7 @@ func (mdb *db) UpdateTaskQueueUserData(ctx context.Context, request *sqlplugin.U
 			request.DataEncoding)
 		return err
 	}
-	result, err := mdb.conn.ExecContext(
+	result, err := mdb.ExecContext(
 		ctx,
 		updateTaskQueueUserDataQry,
 		request.Data,
@@ -354,7 +347,7 @@ func (mdb *db) AddToBuildIdToTaskQueueMapping(ctx context.Context, request sqlpl
 		params = append(params, request.NamespaceID, buildId, request.TaskQueueName)
 	}
 
-	_, err := mdb.conn.ExecContext(ctx, query, params...)
+	_, err := mdb.ExecContext(ctx, query, params...)
 	return err
 }
 
@@ -368,13 +361,13 @@ func (mdb *db) RemoveFromBuildIdToTaskQueueMapping(ctx context.Context, request 
 		params[i+2] = buildId
 	}
 
-	_, err := mdb.conn.ExecContext(ctx, query, params...)
+	_, err := mdb.ExecContext(ctx, query, params...)
 	return err
 }
 
 func (mdb *db) ListTaskQueueUserDataEntries(ctx context.Context, request *sqlplugin.ListTaskQueueUserDataEntriesRequest) ([]sqlplugin.TaskQueueUserDataEntry, error) {
 	var rows []sqlplugin.TaskQueueUserDataEntry
-	err := mdb.conn.SelectContext(ctx, &rows, listTaskQueueUserDataQry, request.NamespaceID, request.LastTaskQueueName, request.Limit)
+	err := mdb.SelectContext(ctx, &rows, listTaskQueueUserDataQry, request.NamespaceID, request.LastTaskQueueName, request.Limit)
 	return rows, err
 }
 
@@ -383,7 +376,7 @@ func (mdb *db) GetTaskQueuesByBuildId(ctx context.Context, request *sqlplugin.Ge
 		TaskQueueName string
 	}
 
-	err := mdb.conn.SelectContext(ctx, &rows, listTaskQueuesByBuildIdQry, request.NamespaceID, request.BuildID)
+	err := mdb.SelectContext(ctx, &rows, listTaskQueuesByBuildIdQry, request.NamespaceID, request.BuildID)
 	taskQueues := make([]string, len(rows))
 	for i, row := range rows {
 		taskQueues[i] = row.TaskQueueName
@@ -393,6 +386,6 @@ func (mdb *db) GetTaskQueuesByBuildId(ctx context.Context, request *sqlplugin.Ge
 
 func (mdb *db) CountTaskQueuesByBuildId(ctx context.Context, request *sqlplugin.CountTaskQueuesByBuildIdRequest) (int, error) {
 	var count int
-	err := mdb.conn.GetContext(ctx, &count, countTaskQueuesByBuildIdQry, request.NamespaceID, request.BuildID)
+	err := mdb.GetContext(ctx, &count, countTaskQueuesByBuildIdQry, request.NamespaceID, request.BuildID)
 	return count, err
 }

@@ -61,14 +61,13 @@ func Invoke(
 	err = api.GetAndUpdateWorkflowWithNew(
 		ctx,
 		nil,
-		api.BypassMutableStateConsistencyPredicate,
 		definition.NewWorkflowKey(
 			namespaceID.String(),
 			workflowID,
 			runID,
 		),
-		func(workflowContext api.WorkflowContext) (*api.UpdateWorkflowAction, error) {
-			mutableState := workflowContext.GetMutableState()
+		func(workflowLease api.WorkflowLease) (*api.UpdateWorkflowAction, error) {
+			mutableState := workflowLease.GetMutableState()
 			if !mutableState.IsWorkflowExecutionRunning() {
 				return nil, consts.ErrWorkflowCompleted
 			}
@@ -89,7 +88,7 @@ func Invoke(
 				}
 			}
 
-			return api.UpdateWorkflowWithoutWorkflowTask, workflow.TerminateWorkflow(
+			return api.UpdateWorkflowTerminate, workflow.TerminateWorkflow(
 				mutableState,
 				request.GetReason(),
 				request.GetDetails(),

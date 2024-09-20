@@ -32,7 +32,6 @@ import (
 
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
-
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/log"
@@ -40,6 +39,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/service/history/configs"
 )
 
 type (
@@ -52,18 +52,17 @@ type (
 	}
 
 	Cache interface {
-		GetEvent(ctx context.Context, key EventKey, firstEventID int64, branchToken []byte) (*historypb.HistoryEvent, error)
+		GetEvent(ctx context.Context, shardID int32, key EventKey, firstEventID int64, branchToken []byte) (*historypb.HistoryEvent, error)
 		PutEvent(key EventKey, event *historypb.HistoryEvent)
 		DeleteEvent(key EventKey)
 	}
 
 	CacheImpl struct {
 		cache.Cache
-		eventsMgr      persistence.ExecutionManager
-		disabled       bool
-		logger         log.Logger
-		metricsHandler metrics.Handler
-		shardID        int32
+		executionManager persistence.ExecutionManager
+		metricsHandler   metrics.Handler
+		logger           log.Logger
+		disabled         bool
 	}
 
 	historyEventCacheItemImpl struct {
@@ -77,25 +76,44 @@ var (
 
 var _ Cache = (*CacheImpl)(nil)
 
-func NewEventsCache(
-	shardID int32,
-	maxCount int,
-	ttl time.Duration,
-	eventsMgr persistence.ExecutionManager,
-	disabled bool,
+func NewHostLevelEventsCache(
+	executionManager persistence.ExecutionManager,
+	config *configs.Config,
+	handler metrics.Handler,
 	logger log.Logger,
+	disabled bool,
+) Cache {
+	return newEventsCache(executionManager, handler, logger, config.EventsHostLevelCacheMaxSizeBytes(), config.EventsCacheTTL(), disabled)
+}
+
+func NewShardLevelEventsCache(
+	executionManager persistence.ExecutionManager,
+	config *configs.Config,
+	handler metrics.Handler,
+	logger log.Logger,
+	disabled bool,
+) Cache {
+	return newEventsCache(executionManager, handler, logger, config.EventsShardLevelCacheMaxSizeBytes(), config.EventsCacheTTL(), disabled)
+}
+
+func newEventsCache(
+	executionManager persistence.ExecutionManager,
 	metricsHandler metrics.Handler,
+	logger log.Logger,
+	maxSize int,
+	ttl time.Duration,
+	disabled bool,
 ) *CacheImpl {
 	opts := &cache.Options{}
 	opts.TTL = ttl
 
+	taggedMetricHandler := metricsHandler.WithTags(metrics.CacheTypeTag(metrics.EventsCacheTypeTagValue))
 	return &CacheImpl{
-		Cache:          cache.New(maxCount, opts),
-		eventsMgr:      eventsMgr,
-		disabled:       disabled,
-		logger:         log.With(logger, tag.ComponentEventsCache),
-		metricsHandler: metricsHandler.WithTags(metrics.StringTag(metrics.CacheTypeTagName, metrics.EventsCacheTypeTagValue)),
-		shardID:        shardID,
+		Cache:            cache.NewWithMetrics(maxSize, opts, taggedMetricHandler),
+		executionManager: executionManager,
+		metricsHandler:   taggedMetricHandler,
+		logger:           logger,
+		disabled:         disabled,
 	}
 }
 
@@ -112,11 +130,11 @@ func (e *CacheImpl) validateKey(key EventKey) bool {
 	return true
 }
 
-func (e *CacheImpl) GetEvent(ctx context.Context, key EventKey, firstEventID int64, branchToken []byte) (*historypb.HistoryEvent, error) {
-	handler := e.metricsHandler.WithTags(metrics.OperationTag(metrics.EventsCacheGetEventScope))
-	handler.Counter(metrics.CacheRequests.GetMetricName()).Record(1)
+func (e *CacheImpl) GetEvent(ctx context.Context, shardID int32, key EventKey, firstEventID int64, branchToken []byte) (*historypb.HistoryEvent, error) {
+	handler := e.metricsHandler.WithTags(metrics.OperationTag(metrics.EventsCacheGetEventScope), metrics.NamespaceIDTag(key.NamespaceID.String()))
+	metrics.CacheRequests.With(handler).Record(1)
 	startTime := time.Now().UTC()
-	defer func() { handler.Timer(metrics.CacheLatency.GetMetricName()).Record(time.Since(startTime)) }()
+	defer func() { metrics.CacheLatency.With(handler).Record(time.Since(startTime)) }()
 
 	validKey := e.validateKey(key)
 
@@ -128,10 +146,10 @@ func (e *CacheImpl) GetEvent(ctx context.Context, key EventKey, firstEventID int
 		}
 	}
 
-	handler.Counter(metrics.CacheMissCounter.GetMetricName()).Record(1)
-	event, err := e.getHistoryEventFromStore(ctx, key, firstEventID, branchToken)
+	metrics.CacheMissCounter.With(handler).Record(1)
+	event, err := e.getHistoryEventFromStore(ctx, shardID, key, firstEventID, branchToken)
 	if err != nil {
-		handler.Counter(metrics.CacheFailures.GetMetricName()).Record(1)
+		metrics.CacheFailures.With(handler).Record(1)
 		e.logger.Error("Cache unable to retrieve event from store",
 			tag.Error(err),
 			tag.WorkflowID(key.WorkflowID),
@@ -149,10 +167,10 @@ func (e *CacheImpl) GetEvent(ctx context.Context, key EventKey, firstEventID int
 }
 
 func (e *CacheImpl) PutEvent(key EventKey, event *historypb.HistoryEvent) {
-	handler := e.metricsHandler.WithTags(metrics.OperationTag(metrics.EventsCachePutEventScope))
-	handler.Counter(metrics.CacheRequests.GetMetricName()).Record(1)
+	handler := e.metricsHandler.WithTags(metrics.OperationTag(metrics.EventsCachePutEventScope), metrics.NamespaceIDTag(key.NamespaceID.String()))
+	metrics.CacheRequests.With(handler).Record(1)
 	startTime := time.Now().UTC()
-	defer func() { handler.Timer(metrics.CacheLatency.GetMetricName()).Record(time.Since(startTime)) }()
+	defer func() { metrics.CacheLatency.With(handler).Record(time.Since(startTime)) }()
 
 	if !e.validateKey(key) {
 		return
@@ -161,10 +179,10 @@ func (e *CacheImpl) PutEvent(key EventKey, event *historypb.HistoryEvent) {
 }
 
 func (e *CacheImpl) DeleteEvent(key EventKey) {
-	handler := e.metricsHandler.WithTags(metrics.OperationTag(metrics.EventsCacheDeleteEventScope))
-	handler.Counter(metrics.CacheRequests.GetMetricName()).Record(1)
+	handler := e.metricsHandler.WithTags(metrics.OperationTag(metrics.EventsCacheDeleteEventScope), metrics.NamespaceIDTag(key.NamespaceID.String()))
+	metrics.CacheRequests.With(handler).Record(1)
 	startTime := time.Now().UTC()
-	defer func() { handler.Timer(metrics.CacheLatency.GetMetricName()).Record(time.Since(startTime)) }()
+	defer func() { metrics.CacheLatency.With(handler).Record(time.Since(startTime)) }()
 
 	e.validateKey(key) // just for log message, delete anyway
 	e.Delete(key)
@@ -172,34 +190,38 @@ func (e *CacheImpl) DeleteEvent(key EventKey) {
 
 func (e *CacheImpl) getHistoryEventFromStore(
 	ctx context.Context,
+	shardID int32,
 	key EventKey,
 	firstEventID int64,
 	branchToken []byte,
 ) (*historypb.HistoryEvent, error) {
 
-	handler := e.metricsHandler.WithTags(metrics.OperationTag(metrics.EventsCacheGetFromStoreScope))
-	handler.Counter(metrics.CacheRequests.GetMetricName()).Record(1)
+	handler := e.metricsHandler.WithTags(metrics.OperationTag(metrics.EventsCacheGetFromStoreScope), metrics.NamespaceIDTag(key.NamespaceID.String()))
+	metrics.CacheRequests.With(handler).Record(1)
 	startTime := time.Now().UTC()
-	defer func() { handler.Timer(metrics.CacheLatency.GetMetricName()).Record(time.Since(startTime)) }()
+	defer func() { metrics.CacheLatency.With(handler).Record(time.Since(startTime)) }()
 
-	response, err := e.eventsMgr.ReadHistoryBranch(ctx, &persistence.ReadHistoryBranchRequest{
+	response, err := e.executionManager.ReadHistoryBranch(ctx, &persistence.ReadHistoryBranchRequest{
 		BranchToken:   branchToken,
 		MinEventID:    firstEventID,
 		MaxEventID:    key.EventID + 1,
 		PageSize:      1,
 		NextPageToken: nil,
-		ShardID:       e.shardID,
+		ShardID:       shardID,
 	})
 	switch err.(type) {
 	case nil:
 		// noop
 	case *serviceerror.DataLoss:
 		// log event
-		e.logger.Error("encounter data loss event", tag.WorkflowNamespaceID(key.NamespaceID.String()), tag.WorkflowID(key.WorkflowID), tag.WorkflowRunID(key.RunID))
-		handler.Counter(metrics.CacheFailures.GetMetricName()).Record(1)
+		e.logger.Error("encounter data loss event",
+			tag.WorkflowNamespaceID(key.NamespaceID.String()),
+			tag.WorkflowID(key.WorkflowID),
+			tag.WorkflowRunID(key.RunID))
+		metrics.CacheFailures.With(handler).Record(1)
 		return nil, err
 	default:
-		handler.Counter(metrics.CacheFailures.GetMetricName()).Record(1)
+		metrics.CacheFailures.With(handler).Record(1)
 		return nil, err
 	}
 

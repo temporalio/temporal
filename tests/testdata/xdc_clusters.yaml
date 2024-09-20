@@ -1,0 +1,37 @@
+- clustermetadata:
+    enableGlobalNamespace: true
+    failoverVersionIncrement: 10
+  enablearchival: false
+  workerconfig:
+    enablearchiver: false
+    enablereplicator: true
+  clusterno: 0
+  historyconfig:
+    numhistoryshards: 1
+    numhistoryhosts: 1
+  esconfig:
+    version: "${ES_VERSION}"
+    url:
+      scheme: "http"
+      host: "${ES_SEEDS}:9200"
+    indices:
+      visibility: temporal_visibility_v1_xdc_test_active
+
+- clustermetadata:
+    enableGlobalNamespace: true
+    failoverVersionIncrement: 10
+  enablearchival: false
+  workerconfig:
+    enablearchiver: false
+    enablereplicator: true
+  clusterno: 1
+  historyconfig:
+    numhistoryshards: 1
+    numhistoryhosts: 1
+  esconfig:
+    version: "${ES_VERSION}"
+    url:
+      scheme: "http"
+      host: "${ES_SEEDS}:9200"
+    indices:
+      visibility: temporal_visibility_v1_xdc_test_standby

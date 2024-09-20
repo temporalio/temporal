@@ -22,8 +22,6 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-//go:generate mockgen -copyright_file ../../../LICENSE -package $GOPACKAGE -source $GOFILE -destination workflow_resetter_mock.go
-
 package ndc
 
 import (
@@ -32,15 +30,14 @@ import (
 
 	"github.com/pborman/uuid"
 	"go.temporal.io/api/serviceerror"
-
 	"go.temporal.io/server/common"
-	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
+	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/workflow"
 )
@@ -63,7 +60,7 @@ type (
 
 	resetterImpl struct {
 		shard          shard.Context
-		transactionMgr transactionMgr
+		transactionMgr TransactionManager
 		executionMgr   persistence.ExecutionManager
 		stateRebuilder StateRebuilder
 
@@ -81,7 +78,7 @@ var _ resetter = (*resetterImpl)(nil)
 
 func NewResetter(
 	shard shard.Context,
-	transactionMgr transactionMgr,
+	transactionMgr TransactionManager,
 	namespaceID namespace.ID,
 	workflowID string,
 	baseRunID string,
@@ -142,7 +139,7 @@ func (r *resetterImpl) resetWorkflow(
 		),
 		baseBranchToken,
 		baseLastEventID,
-		convert.Int64Ptr(baseLastEventVersion),
+		util.Ptr(baseLastEventVersion),
 		definition.NewWorkflowKey(
 			r.namespaceID.String(),
 			r.workflowID,
@@ -156,6 +153,10 @@ func (r *resetterImpl) resetWorkflow(
 	}
 	rebuildMutableState.AddHistorySize(rebuiltHistorySize)
 
+	if err := rebuildMutableState.RefreshExpirationTimeoutTask(ctx); err != nil {
+		return nil, err
+	}
+
 	r.newContext.Clear()
 	return rebuildMutableState, nil
 }
@@ -168,7 +169,7 @@ func (r *resetterImpl) getBaseBranchToken(
 	incomingFirstEventVersion int64,
 ) (baseBranchToken []byte, retError error) {
 
-	baseWorkflow, err := r.transactionMgr.loadWorkflow(
+	baseWorkflow, err := r.transactionMgr.LoadWorkflow(
 		ctx,
 		r.namespaceID,
 		r.workflowID,
@@ -236,6 +237,7 @@ func (r *resetterImpl) getResetBranchToken(
 		Info:            persistence.BuildHistoryGarbageCleanupInfo(r.namespaceID.String(), r.workflowID, r.newRunID),
 		ShardID:         shardID,
 		NamespaceID:     r.namespaceID.String(),
+		NewRunID:        r.newRunID,
 	})
 	if err != nil {
 		return nil, err

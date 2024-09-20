@@ -1,3 +1,5 @@
+// The MIT License
+//
 // Copyright (c) 2020 Temporal Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -26,21 +28,24 @@ option go_package = "go.temporal.io/server/api/persistence/v1;persistence";
 import "google/protobuf/duration.proto";
 import "google/protobuf/timestamp.proto";
 
-import "dependencies/gogoproto/gogo.proto";
-
 import "temporal/api/common/v1/message.proto";
+import "temporal/api/enums/v1/common.proto";
 import "temporal/api/enums/v1/workflow.proto";
 import "temporal/api/failure/v1/message.proto";
 import "temporal/api/workflow/v1/message.proto";
+import "temporal/api/history/v1/message.proto";
+
 
 import "temporal/server/api/clock/v1/message.proto";
 import "temporal/server/api/enums/v1/common.proto";
+import "temporal/server/api/enums/v1/nexus.proto";
 import "temporal/server/api/enums/v1/workflow.proto";
 import "temporal/server/api/enums/v1/task.proto";
 import "temporal/server/api/enums/v1/workflow_task_type.proto";
 import "temporal/server/api/history/v1/message.proto";
 import "temporal/server/api/persistence/v1/queues.proto";
-import "temporal/server/api/update/v1/message.proto";
+import "temporal/server/api/persistence/v1/hsm.proto";
+import "temporal/server/api/persistence/v1/update.proto";
 import "temporal/server/api/workflow/v1/message.proto";
 
 // shard column
@@ -53,7 +58,7 @@ message ShardInfo {
     // (-- api-linter: core::0140::prepositions=disabled
     //     aip.dev/not-precedent: "since" is needed here. --)
     int32 stolen_since_renew = 6;
-    google.protobuf.Timestamp update_time = 7 [(gogoproto.stdtime) = true];
+    google.protobuf.Timestamp update_time = 7;
     reserved 8;
     reserved 9;
     reserved 10;
@@ -78,44 +83,53 @@ message WorkflowExecutionInfo {
     reserved 8;
     string task_queue = 9;
     string workflow_type_name = 10;
-    google.protobuf.Duration workflow_execution_timeout = 11 [(gogoproto.stdduration) = true];
-    google.protobuf.Duration workflow_run_timeout = 12 [(gogoproto.stdduration) = true];
-    google.protobuf.Duration default_workflow_task_timeout = 13 [(gogoproto.stdduration) = true];
+    google.protobuf.Duration workflow_execution_timeout = 11;
+    google.protobuf.Duration workflow_run_timeout = 12;
+    google.protobuf.Duration default_workflow_task_timeout = 13;
     reserved 14;
     reserved 15;
     reserved 16;
     int64 last_event_task_id = 17;
     int64 last_first_event_id = 18;
-    int64 last_workflow_task_started_event_id = 19;
-    google.protobuf.Timestamp start_time = 20 [(gogoproto.stdtime) = true];
-    google.protobuf.Timestamp last_update_time = 21 [(gogoproto.stdtime) = true];
+    int64 last_completed_workflow_task_started_event_id = 19;
+    // Deprecated. use `WorkflowExecutionState.start_time`
+    google.protobuf.Timestamp start_time = 20;
+    google.protobuf.Timestamp last_update_time = 21;
 
     // Workflow task fields.
     int64 workflow_task_version = 22;
     int64 workflow_task_scheduled_event_id = 23;
     int64 workflow_task_started_event_id = 24;
-    google.protobuf.Duration workflow_task_timeout = 25 [(gogoproto.stdduration) = true];
+    google.protobuf.Duration workflow_task_timeout = 25;
     int32 workflow_task_attempt = 26;
-    google.protobuf.Timestamp workflow_task_started_time = 27 [(gogoproto.stdtime) = true];
-    google.protobuf.Timestamp workflow_task_scheduled_time = 28 [(gogoproto.stdtime) = true];
-    google.protobuf.Timestamp workflow_task_original_scheduled_time = 30 [(gogoproto.stdtime) = true];
+    google.protobuf.Timestamp workflow_task_started_time = 27;
+    google.protobuf.Timestamp workflow_task_scheduled_time = 28;
+    google.protobuf.Timestamp workflow_task_original_scheduled_time = 30;
     string workflow_task_request_id = 31;
     temporal.server.api.enums.v1.WorkflowTaskType workflow_task_type = 68;
     bool workflow_task_suggest_continue_as_new = 69;
     int64 workflow_task_history_size_bytes = 70;
+    // tracks the started build ID for transient/speculative WFT. This info is used for two purposes:
+    // - verify WFT completes by the same Build ID that started in the latest attempt
+    // - when persisting transient/speculative WFT, the right Build ID is used in the WFT started event
+    string workflow_task_build_id = 88;
+    // tracks the started build ID redirect counter for transient/speculative WFT. This info is to
+    // ensure the right redirect counter is used in the WFT started event created later
+    // for a transient/speculative WFT.
+    int64 workflow_task_build_id_redirect_counter = 89;
 
     bool cancel_requested = 29;
     string cancel_request_id = 32;
     string sticky_task_queue = 33;
     // (-- api-linter: core::0140::prepositions=disabled
     //     aip.dev/not-precedent: "to" is used to indicate interval. --)
-    google.protobuf.Duration sticky_schedule_to_start_timeout = 34 [(gogoproto.stdduration) = true];
+    google.protobuf.Duration sticky_schedule_to_start_timeout = 34;
     int32 attempt = 35;
-    google.protobuf.Duration retry_initial_interval = 36 [(gogoproto.stdduration) = true];
-    google.protobuf.Duration retry_maximum_interval = 37 [(gogoproto.stdduration) = true];
+    google.protobuf.Duration retry_initial_interval = 36;
+    google.protobuf.Duration retry_maximum_interval = 37;
     int32 retry_maximum_attempts = 38;
     double retry_backoff_coefficient = 39;
-    google.protobuf.Timestamp workflow_execution_expiration_time = 40 [(gogoproto.stdtime) = true];
+    google.protobuf.Timestamp workflow_execution_expiration_time = 40;
     repeated string retry_non_retryable_error_types = 41;
     bool has_retry_policy = 42;
     string cron_schedule = 43;
@@ -138,11 +152,11 @@ message WorkflowExecutionInfo {
     temporal.server.api.history.v1.VersionHistories version_histories = 54;
     string first_execution_run_id = 55;
     ExecutionStats execution_stats = 56;
-    google.protobuf.Timestamp workflow_run_expiration_time = 57 [(gogoproto.stdtime) = true];
+    google.protobuf.Timestamp workflow_run_expiration_time = 57;
     // Transaction Id of the first event in the last batch of events.
     int64 last_first_event_txn_id = 58;
     int64 state_transition_count = 59;
-    google.protobuf.Timestamp execution_time = 60 [(gogoproto.stdtime) = true];
+    google.protobuf.Timestamp execution_time = 60;
     // If continued-as-new, or retried, or cron, holds the new run id.
     string new_execution_run_id = 61;
     temporal.server.api.clock.v1.VectorClock parent_clock = 62;
@@ -152,15 +166,89 @@ message WorkflowExecutionInfo {
     int64 close_transfer_task_id = 64;
     // Used to check if visibility close task is processed before deleting the workflow execution.
     int64 close_visibility_task_id = 65;
-    google.protobuf.Timestamp close_time = 66 [(gogoproto.stdtime) = true];
+    google.protobuf.Timestamp close_time = 66;
     bool close_visibility_task_completed = 67;
     temporal.server.api.workflow.v1.BaseExecutionInfo base_execution_info = 76;
-    // If using build-id based versioning: version stamp of the last worker to process a
-    // workflow taks for this workflow.
-    temporal.api.common.v1.WorkerVersionStamp worker_version_stamp = 78;
+    // If using build-id based versioning: version stamp of the last worker to complete a
+    // workflow tasks for this workflow.
+    temporal.api.common.v1.WorkerVersionStamp most_recent_worker_version_stamp = 78;
+    // The currently assigned build ID for this execution. Presence of this value means worker versioning is used
+    // for this execution. Assigned build ID is selected by matching based on Worker Versioning Assignment Rules
+    // when the first workflow task of the execution is scheduled. If the first workflow task fails and is scheduled
+    // again, the assigned build ID may change according to the latest versioning rules.
+    // Assigned build ID can also change in the middle of a execution if Compatible Redirect Rules are applied to
+    // this execution.
+    string assigned_build_id = 85;
+    // Build ID inherited from a previous/parent execution. If present, assigned_build_id will be set to this, instead
+    // of using the assignment rules.
+    string inherited_build_id = 86;
+    // Tracks the number of times a redirect rule is applied to this workflow. Used to apply redirects in the right
+    // order when mutable state is rebuilt from history events.
+    int64 build_id_redirect_counter = 87;
 
     // index of update IDs and pointers to associated history events.
-    map<string, temporal.server.api.update.v1.UpdateInfo> update_infos = 79;
+    map<string, UpdateInfo> update_infos = 79;
+
+    // Transition history encodes all transitions a mutable state object has gone through in a compact way.
+    // Here the transition_count field of VersionedTransition represents the maximum transition count the mutable state object
+    // has gone through for the corresponding namespace failover version.
+    // For example, if the transition history is `[{v: 1, t: 3}, {v: 2, t: 5}]`, it means transition 1-3 have failover version 1,
+    // and transition 4-5 have failover version 2.
+    //
+    // Each task generated by the HSM framework is imprinted with the current VersionedTransition at the end of the transaction.
+    // When a task is being processed, the transition history is compared with the imprinted task information to
+    // verify that a task is not referencing a stale state or that the task itself is not stale.
+    // For example, with the same transition history above, task A `{v: 2, t: 4}` **is not**
+    // referencing stale state because for version `2` transitions `4-5` are valid, while task B `{v: 2, t: 6}` **is**
+    // referencing stale state because the transition count is out of range for version `2`.
+    // Furthermore, task C `{v: 1, t: 4}` itself is stale because it is referencing an impossible state, likely due to post
+    // split-brain reconciliation.
+    repeated VersionedTransition transition_history = 80;
+    // Map of state machine type to map of machine by ID.
+    // (-- api-linter: core::0140::prepositions=disabled
+    //     aip.dev/not-precedent: "by" is used to clarify the keys and values. --)
+    map<string, StateMachineMap> sub_state_machines_by_type = 81;
+
+    // This field is for tracking if the workflow execution timer task is created or not.
+    // We don't need this field if we always create the execution timer task when the first
+    // workflow in a workflow chain starts. However, this execution timer logic is later added.
+    // To maintain backward compatibility, we need to track if the execution timer task is created
+    // for a workflow chain since later workflows in the chain also need to create the execution
+    // timer task if it is not created yet.
+    // NOTE: Task status is clsuter specific information, so when replicating mutable state, this
+    // field need to be sanitized.
+    int32 workflow_execution_timer_task_status = 82;
+
+    // The root workflow execution is defined as follows:
+    // 1. A workflow without parent workflow is its own root workflow.
+    // 2. A workflow that has a parent workflow has the same root workflow as its parent workflow.
+    string root_workflow_id = 83;
+    string root_run_id = 84;
+
+    // Timer tasks emitted from state machines are stored in this array, grouped and sorted by their deadline. Only the
+    // next state machine timer task is generated at a time per mutable state. When that task is processed it iterates
+    // this array and triggers timers that are ready.
+    // NOTE: Task status is cluster specific information, so when replicating mutable state, this field needs to be
+    // sanitized.
+    repeated StateMachineTimerGroup state_machine_timers = 90;
+
+    // The shard clock's timestamp at the time the first valid task was created for this mutable state (either for a new
+    // mutable state or when rebuilding from events). The field should be updated whenever we refresh tasks, marking
+    // older generation tasks obsolete.
+    // This field is used for task staleness checks when mutable state is rebuilt.
+    // NOTE: Task status is cluster specific information, so when replicating mutable state, this field needs to be
+    // sanitized.
+    // (-- api-linter: core::0140::prepositions=disabled
+    //     aip.dev/not-precedent: Ignoring api-linter rules for clarity --)
+    // (-- api-linter: core::0142::time-field-type=disabled
+    //     aip.dev/not-precedent: This is a vector clock, not a timestamp --)
+    int64 task_generation_shard_clock_timestamp = 91;
+
+    VersionedTransition workflow_task_last_update_versioned_transition = 92;
+    VersionedTransition visibility_last_update_versioned_transition = 93;
+    VersionedTransition signal_request_ids_last_update_versioned_transition = 94;
+
+    repeated StateMachineTombstoneBatch sub_state_machine_tombstone_batches = 95;
 }
 
 message ExecutionStats {
@@ -173,6 +261,8 @@ message WorkflowExecutionState {
     string run_id = 2;
     temporal.server.api.enums.v1.WorkflowExecutionState state = 3;
     temporal.api.enums.v1.WorkflowExecutionStatus status = 4;
+    VersionedTransition last_update_versioned_transition = 5;
+    google.protobuf.Timestamp start_time = 6;
 }
 
 // transfer column
@@ -189,7 +279,7 @@ message TransferTaskInfo {
     int64 scheduled_event_id = 10;
     int64 version = 11;
     int64 task_id = 12;
-    google.protobuf.Timestamp visibility_time = 13 [(gogoproto.stdtime) = true];
+    google.protobuf.Timestamp visibility_time = 13;
     reserved 14;
     // (-- api-linter: core::0140::prepositions=disabled
     //     aip.dev/not-precedent: "after" is used to indicate sequence of actions. --)
@@ -221,8 +311,10 @@ message ReplicationTaskInfo {
     bytes new_run_branch_token = 13;
     reserved 14;
     int64 task_id = 15;
-    google.protobuf.Timestamp visibility_time = 16 [(gogoproto.stdtime) = true];
+    google.protobuf.Timestamp visibility_time = 16;
     string new_run_id = 17;
+    temporal.server.api.enums.v1.TaskPriority priority = 18;
+    VersionedTransition versioned_transition = 19;
 }
 
 // visibility_task_data column
@@ -233,10 +325,11 @@ message VisibilityTaskInfo {
     temporal.server.api.enums.v1.TaskType task_type = 4;
     int64 version = 5;
     int64 task_id = 6;
-    google.protobuf.Timestamp visibility_time = 7 [(gogoproto.stdtime) = true];
-    google.protobuf.Timestamp close_time = 8 [(gogoproto.stdtime) = true];
-    google.protobuf.Timestamp start_time = 9 [(gogoproto.stdtime) = true];
+    google.protobuf.Timestamp visibility_time = 7;
+    reserved 8;
+    reserved 9;
     int64 close_visibility_task_id = 10;
+    google.protobuf.Timestamp close_time = 11;
 }
 
 // timer column
@@ -251,12 +344,20 @@ message TimerTaskInfo {
     int32 schedule_attempt = 8;
     int64 event_id = 9;
     int64 task_id = 10;
-    google.protobuf.Timestamp visibility_time = 11 [(gogoproto.stdtime) = true];
+    google.protobuf.Timestamp visibility_time = 11;
     bytes branch_token = 12;
     // If this is true, we can bypass archival before deleting. Only defined for DeleteHistoryEventTasks.
     bool already_archived = 13;
-}
 
+    // Number of transitions on the corresponding mutable state object. Used to verify that a task is not referencing a
+    // stale state or, in some situations, that the task itself is not stale.
+    // If task addresses a sub-statemachine (e.g. callback), this field will be set.
+    int64 mutable_state_transition_count = 14;
+
+    // If specified, the task is a for a workflow chain instead of a specific workflow run.
+    // A workflow chain is identified by the run_id of the first workflow in the chain.
+    string first_run_id = 15;
+}
 
 message ArchivalTaskInfo {
     int64 task_id = 1;
@@ -265,7 +366,23 @@ message ArchivalTaskInfo {
     string run_id = 4;
     temporal.server.api.enums.v1.TaskType task_type = 5;
     int64 version = 6;
-    google.protobuf.Timestamp visibility_time = 7 [(gogoproto.stdtime) = true];
+    google.protobuf.Timestamp visibility_time = 7;
+}
+
+message OutboundTaskInfo {
+    string namespace_id = 1;
+    string workflow_id = 2;
+    string run_id = 3;
+
+    temporal.server.api.enums.v1.TaskType task_type = 4;
+    int64 task_id = 5;
+    google.protobuf.Timestamp visibility_time = 6;
+
+    // Destination of this task (e.g. protocol+host+port for callbacks).
+    // Outbound tasks are grouped by this field (and the namespace ID) when scheduling.
+    string destination = 7;
+    // If task addresses a sub-statemachine (e.g. callback), this field will be set.
+    StateMachineTaskInfo state_machine_info = 8;
 }
 
 // activity_map column
@@ -273,22 +390,22 @@ message ActivityInfo {
     int64 version = 1;
     int64 scheduled_event_batch_id = 2;
     reserved 3;
-    google.protobuf.Timestamp scheduled_time = 4 [(gogoproto.stdtime) = true];
+    google.protobuf.Timestamp scheduled_time = 4;
     int64 started_event_id = 5;
     reserved 6;
-    google.protobuf.Timestamp started_time = 7 [(gogoproto.stdtime) = true];
+    google.protobuf.Timestamp started_time = 7;
     string activity_id = 8;
     string request_id = 9;
     // (-- api-linter: core::0140::prepositions=disabled
     //     aip.dev/not-precedent: "to" is used to indicate interval. --)
-    google.protobuf.Duration schedule_to_start_timeout = 10 [(gogoproto.stdduration) = true];
+    google.protobuf.Duration schedule_to_start_timeout = 10;
     // (-- api-linter: core::0140::prepositions=disabled
     //     aip.dev/not-precedent: "to" is used to indicate interval. --)
-    google.protobuf.Duration schedule_to_close_timeout = 11 [(gogoproto.stdduration) = true];
+    google.protobuf.Duration schedule_to_close_timeout = 11;
     // (-- api-linter: core::0140::prepositions=disabled
     //     aip.dev/not-precedent: "to" is used to indicate interval. --)
-    google.protobuf.Duration start_to_close_timeout = 12 [(gogoproto.stdduration) = true];
-    google.protobuf.Duration heartbeat_timeout = 13 [(gogoproto.stdduration) = true];
+    google.protobuf.Duration start_to_close_timeout = 12;
+    google.protobuf.Duration heartbeat_timeout = 13;
     bool cancel_requested = 14;
     int64 cancel_request_id = 15;
     int32 timer_task_status = 16;
@@ -296,10 +413,10 @@ message ActivityInfo {
     string task_queue = 18;
     string started_identity = 19;
     bool has_retry_policy = 20;
-    google.protobuf.Duration retry_initial_interval = 21 [(gogoproto.stdduration) = true];
-    google.protobuf.Duration retry_maximum_interval = 22 [(gogoproto.stdduration) = true];
+    google.protobuf.Duration retry_initial_interval = 21;
+    google.protobuf.Duration retry_maximum_interval = 22;
     int32 retry_maximum_attempts = 23;
-    google.protobuf.Timestamp retry_expiration_time = 24 [(gogoproto.stdtime) = true];
+    google.protobuf.Timestamp retry_expiration_time = 24;
     double retry_backoff_coefficient = 25;
     repeated string retry_non_retryable_error_types = 26;
     temporal.api.failure.v1.Failure retry_last_failure = 27;
@@ -307,19 +424,45 @@ message ActivityInfo {
     reserved 29;
     int64 scheduled_event_id = 30;
     temporal.api.common.v1.Payloads last_heartbeat_details = 31;
-    google.protobuf.Timestamp last_heartbeat_update_time = 32 [(gogoproto.stdtime) = true];
+    google.protobuf.Timestamp last_heartbeat_update_time = 32;
+    // When true, it means the activity is assigned to the build ID of its workflow (only set for old versioning)
+    // Deprecated. use `use_workflow_build_id`
     bool use_compatible_version = 33;
     temporal.api.common.v1.ActivityType activity_type = 34;
+    // Absence of `assigned_build_id` generally means this task is on an "unversioned" task queue.
+    // In rare cases, it can also mean that the task queue is versioned but we failed to write activity's
+    // independently-assigned build ID to the database. This case heals automatically once the task is dispatched.
+    oneof build_id_info {
+        // When present, it means this activity is assigned to the build ID of its workflow.
+        UseWorkflowBuildIdInfo use_workflow_build_id_info = 35;
+        // This means the activity is independently versioned and not bound to the build ID of its workflow.
+        // If the task fails and is scheduled again, the assigned build ID may change according to the latest versioning
+        // rules. This value also updates if a redirect rule is applied to the activity task to reflect the build ID
+        // of the worker who received the task.
+        string last_independently_assigned_build_id = 36;
+    }
+    // The version stamp of the worker to whom this activity was most-recently dispatched
+    temporal.api.common.v1.WorkerVersionStamp last_worker_version_stamp = 37;
+    VersionedTransition last_update_versioned_transition = 38;
+
+    message UseWorkflowBuildIdInfo {
+        // build ID of the wf when this activity started last time (which is the build ID of
+        // the worker who received this activity)
+        string last_used_build_id = 1;
+        // workflows redirect_counter value when this activity started last time
+        int64 last_redirect_counter = 2;
+    }
 }
 
 // timer_map column
 message TimerInfo {
     int64 version = 1;
     int64 started_event_id = 2;
-    google.protobuf.Timestamp expiry_time = 3 [(gogoproto.stdtime) = true];
+    google.protobuf.Timestamp expiry_time = 3;
     int64 task_status = 4;
     // timerId serves the purpose of indicating whether a timer task is generated for this timer info.
     string timer_id = 5;
+    VersionedTransition last_update_versioned_transition = 6;
 }
 
 // child_executions_map column
@@ -338,6 +481,7 @@ message ChildExecutionInfo {
     int64 initiated_event_id = 12;
     temporal.server.api.clock.v1.VectorClock clock = 13;
     string namespace_id = 14;
+    VersionedTransition last_update_versioned_transition = 15;
 }
 
 // request_cancel_map column
@@ -346,6 +490,7 @@ message RequestCancelInfo {
     int64 initiated_event_batch_id = 2;
     string cancel_request_id = 3;
     int64 initiated_event_id = 4;
+    VersionedTransition last_update_versioned_transition = 5;
 }
 
 // signal_map column
@@ -358,6 +503,7 @@ message SignalInfo {
     reserved 6;
     int64 initiated_event_id = 7;
     reserved 8;
+    VersionedTransition last_update_versioned_transition = 9;
 }
 
 // checksum column
@@ -367,3 +513,144 @@ message Checksum {
     bytes value = 3;
 }
 
+message Callback {
+    message Nexus {
+        // Callback URL.
+        // (-- api-linter: core::0140::uri=disabled
+        //     aip.dev/not-precedent: Not respecting aip here. --)
+        string url = 1;
+        // Header to attach to callback request.
+        map<string, string> header = 2;
+    }
+
+    message HSM {
+        // namespace id of the target state machine.
+        string namespace_id = 1;
+        // ID of the workflow that the target state machine is attached to.
+        string workflow_id = 2;
+        // Run id of said workflow.
+        string run_id = 3;
+        // A reference to the state machine.
+        temporal.server.api.persistence.v1.StateMachineRef ref = 4;
+        // The method name to invoke. Methods must be explicitly registered for the target state machine in the state
+        // machine registry, and accept an argument type of HistoryEvent that is the completion event of the completed
+        // workflow.
+        string method = 5;
+    }
+
+    reserved 1; // For a generic callback mechanism to be added later.
+    oneof variant {
+        Nexus nexus = 2;
+        HSM hsm = 3;
+    }
+}
+
+message HSMCompletionCallbackArg {
+    // namespace ID of the workflow that just completed.
+    string namespace_id = 1;
+    // ID of the workflow that just completed.
+    string workflow_id = 2;
+    // run ID of the workflow that just completed.
+    string run_id = 3;
+    // Last event of the completed workflow.
+    temporal.api.history.v1.HistoryEvent last_event = 4;
+}
+
+message CallbackInfo {
+    // Trigger for when the workflow is closed.
+    message WorkflowClosed {}
+
+    message Trigger {
+        oneof variant {
+            WorkflowClosed workflow_closed = 1;
+        }
+    }
+
+    // Information on how this callback should be invoked (e.g. its URL and type).
+    Callback callback = 1;
+    // Trigger for this callback.
+    Trigger trigger = 2;
+    // The time when the callback was registered.
+    google.protobuf.Timestamp registration_time = 3;
+
+    temporal.server.api.enums.v1.CallbackState state = 4;
+    // The number of attempts made to deliver the callback.
+    // This number represents a minimum bound since the attempt is incremented after the callback request completes.
+    int32 attempt = 5;
+
+    // The time when the last attempt completed.
+    google.protobuf.Timestamp last_attempt_complete_time = 6;
+    // The last attempt's failure, if any.
+    temporal.api.failure.v1.Failure last_attempt_failure = 7;
+    // The time when the next attempt is scheduled.
+    google.protobuf.Timestamp next_attempt_schedule_time = 8;
+}
+
+// NexusOperationInfo contains the state of a nexus operation.
+message NexusOperationInfo {
+    // Endpoint name. 
+    // Resolved the endpoint registry for this workflow's namespace.
+    string endpoint = 1;
+
+    // Service name.
+    string service = 2;
+    // Operation name.
+    string operation = 3;
+
+    // If set the state machine will remove itself from the HSM tree on completion.
+    bool delete_on_completion = 4;
+
+    // Token for fetching the scheduled event.
+    bytes scheduled_event_token = 5;
+
+    // Operation ID. Only set for asynchronous operations after a successful StartOperation call.
+    string operation_id = 6;
+
+    // Schedule-to-close timeout for this operation.
+    // This is the only timeout settable by a workflow.
+    // (-- api-linter: core::0140::prepositions=disabled
+    //     aip.dev/not-precedent: "since" is needed here. --)
+    google.protobuf.Duration schedule_to_close_timeout = 7;
+
+    // The time when the operation was scheduled.
+    google.protobuf.Timestamp scheduled_time = 8;
+
+    // Unique request ID allocated for all retry attempts of the StartOperation request.
+    string request_id = 9;
+
+    temporal.server.api.enums.v1.NexusOperationState state = 10;
+
+    // The number of attempts made to deliver the start operation request.
+    // This number represents a minimum bound since the attempt is incremented after the request completes.
+    int32 attempt = 11;
+
+    // The time when the last attempt completed.
+    google.protobuf.Timestamp last_attempt_complete_time = 12;
+    // The last attempt's failure, if any.
+    temporal.api.failure.v1.Failure last_attempt_failure = 13;
+    // The time when the next attempt is scheduled.
+    google.protobuf.Timestamp next_attempt_schedule_time = 14;
+
+    // Endpoint ID, the name is also stored here (field 1) but we use the ID internally to avoid failing operation
+    // requests when an endpoint is renamed.
+    string endpoint_id = 15;
+}
+
+// NexusOperationCancellationInfo contains the state of a nexus operation cancelation.
+message NexusOperationCancellationInfo {
+    // The time when cancelation was requested.
+    google.protobuf.Timestamp requested_time = 1;
+
+    temporal.api.enums.v1.NexusOperationCancellationState state = 2;
+
+    // The number of attempts made to deliver the cancel operation request.
+    // This number represents a minimum bound since the attempt is incremented after the request completes.
+    int32 attempt = 3;
+
+    // The time when the last attempt completed.
+    google.protobuf.Timestamp last_attempt_complete_time = 4;
+    // The last attempt's failure, if any.
+    temporal.api.failure.v1.Failure last_attempt_failure = 5;
+    // The time when the next attempt is scheduled.
+    google.protobuf.Timestamp next_attempt_schedule_time = 6;
+}

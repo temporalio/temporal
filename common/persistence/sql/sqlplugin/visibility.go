@@ -29,16 +29,20 @@ import (
 	"database/sql"
 	"database/sql/driver"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"reflect"
 	"strings"
 	"time"
 
 	"github.com/iancoleman/strcase"
-
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/common/searchattribute"
+)
+
+var (
+	ErrInvalidKeywordListDataType = errors.New("Unexpected data type in keyword list")
 )
 
 type (
@@ -48,20 +52,26 @@ type (
 
 	// VisibilityRow represents a row in executions_visibility table
 	VisibilityRow struct {
-		NamespaceID      string
-		RunID            string
-		WorkflowTypeName string
-		WorkflowID       string
-		StartTime        time.Time
-		ExecutionTime    time.Time
-		Status           int32
-		CloseTime        *time.Time
-		HistoryLength    *int64
-		HistorySizeBytes *int64
-		Memo             []byte
-		Encoding         string
-		TaskQueue        string
-		SearchAttributes *VisibilitySearchAttributes
+		NamespaceID          string
+		RunID                string
+		WorkflowTypeName     string
+		WorkflowID           string
+		StartTime            time.Time
+		ExecutionTime        time.Time
+		Status               int32
+		CloseTime            *time.Time
+		HistoryLength        *int64
+		HistorySizeBytes     *int64
+		ExecutionDuration    *time.Duration
+		StateTransitionCount *int64
+		Memo                 []byte
+		Encoding             string
+		TaskQueue            string
+		SearchAttributes     *VisibilitySearchAttributes
+		ParentWorkflowID     *string
+		ParentRunID          *string
+		RootWorkflowID       string
+		RootRunID            string
 	}
 
 	// VisibilitySelectFilter contains the column names within executions_visibility table that
@@ -141,7 +151,11 @@ func (vsa VisibilitySearchAttributes) Value() (driver.Value, error) {
 	if vsa == nil {
 		return nil, nil
 	}
-	return json.Marshal(vsa)
+	bs, err := json.Marshal(vsa)
+	if err != nil {
+		return nil, err
+	}
+	return string(bs), nil
 }
 
 func ParseCountGroupByRows(rows *sql.Rows, groupBy []string) ([]VisibilityCountRow, error) {

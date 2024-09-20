@@ -26,6 +26,7 @@ package persistence
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	commonpb "go.temporal.io/api/common/v1"
@@ -33,7 +34,6 @@ import (
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 	workflowpb "go.temporal.io/api/workflow/v1"
-
 	historyspb "go.temporal.io/server/api/history/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
@@ -395,9 +395,17 @@ func (m *executionManagerImpl) GetWorkflowExecution(
 	ctx context.Context,
 	request *GetWorkflowExecutionRequest,
 ) (*GetWorkflowExecutionResponse, error) {
-	response, err := m.persistence.GetWorkflowExecution(ctx, request)
-	if err != nil {
-		return nil, err
+	response, respErr := m.persistence.GetWorkflowExecution(ctx, request)
+
+	var notFound *serviceerror.NotFound
+	if errors.As(respErr, &notFound) {
+		// strip persistence-specific error message
+		respErr = serviceerror.NewNotFound(fmt.Sprintf(
+			"workflow execution not found for workflow ID %q and run ID %q", request.WorkflowID, request.RunID))
+	}
+	if respErr != nil && response == nil {
+		// try to utilize resp as much as possible, for RebuildMutableState API
+		return nil, respErr
 	}
 	state, err := m.toWorkflowMutableState(response.State)
 	if err != nil {
@@ -414,7 +422,7 @@ func (m *executionManagerImpl) GetWorkflowExecution(
 		DBRecordVersion:   response.DBRecordVersion,
 		MutableStateStats: *statusOfInternalWorkflow(response.State, state, nil),
 	}
-	return newResponse, nil
+	return newResponse, respErr
 }
 
 func (m *executionManagerImpl) SetWorkflowExecution(
@@ -454,7 +462,7 @@ func (m *executionManagerImpl) serializeWorkflowEventBatches(
 	xdcKVs := make(map[XDCCacheKey]XDCCacheValue, len(eventBatches))
 	workflowNewEvents := make([]*InternalAppendHistoryNodesRequest, 0, len(eventBatches))
 	for _, workflowEvents := range eventBatches {
-		newEvents, err := m.serializeWorkflowEvents(ctx, shardID, workflowEvents)
+		newEvents, err := m.serializeWorkflowEvents(shardID, workflowEvents)
 		if err != nil {
 			return nil, nil, nil, err
 		}
@@ -474,7 +482,7 @@ func (m *executionManagerImpl) serializeWorkflowEventBatches(
 		)] = NewXDCCacheValue(
 			baseWorkflowInfo,
 			versionHistoryItems,
-			newEvents.Node.Events,
+			[]*commonpb.DataBlob{newEvents.Node.Events},
 		)
 		newEvents.ShardID = shardID
 		workflowNewEvents = append(workflowNewEvents, newEvents)
@@ -517,7 +525,6 @@ func (m *executionManagerImpl) DeserializeBufferedEvents( // unexport
 }
 
 func (m *executionManagerImpl) serializeWorkflowEvents(
-	ctx context.Context,
 	shardID int32,
 	workflowEvents *WorkflowEvents,
 ) (*InternalAppendHistoryNodesRequest, error) {
@@ -538,7 +545,7 @@ func (m *executionManagerImpl) serializeWorkflowEvents(
 		request.Info = BuildHistoryGarbageCleanupInfo(workflowEvents.NamespaceID, workflowEvents.WorkflowID, workflowEvents.RunID)
 	}
 
-	return m.serializeAppendHistoryNodesRequest(ctx, request)
+	return m.serializeAppendHistoryNodesRequest(request)
 }
 
 func (m *executionManagerImpl) SerializeWorkflowMutation( // unexport
@@ -763,17 +770,24 @@ func (m *executionManagerImpl) GetCurrentExecution(
 	ctx context.Context,
 	request *GetCurrentExecutionRequest,
 ) (*GetCurrentExecutionResponse, error) {
-	internalResp, err := m.persistence.GetCurrentExecution(ctx, request)
-	if err != nil {
-		return nil, err
+	response, respErr := m.persistence.GetCurrentExecution(ctx, request)
+
+	var notFound *serviceerror.NotFound
+	if errors.As(respErr, &notFound) {
+		// strip persistence-specific error message
+		respErr = serviceerror.NewNotFound(fmt.Sprintf("workflow not found for ID: %v", request.WorkflowID))
+	}
+	if respErr != nil && response == nil {
+		// try to utilize resp as much as possible, for RebuildMutableState API
+		return nil, respErr
 	}
 
 	return &GetCurrentExecutionResponse{
-		RunID:          internalResp.RunID,
-		StartRequestID: internalResp.ExecutionState.CreateRequestId,
-		State:          internalResp.ExecutionState.State,
-		Status:         internalResp.ExecutionState.Status,
-	}, nil
+		RunID:          response.RunID,
+		StartRequestID: response.ExecutionState.CreateRequestId,
+		State:          response.ExecutionState.State,
+		Status:         response.ExecutionState.Status,
+	}, respErr
 }
 
 func (m *executionManagerImpl) ListConcreteExecutions(
@@ -798,27 +812,6 @@ func (m *executionManagerImpl) ListConcreteExecutions(
 	return newResponse, nil
 }
 
-func (m *executionManagerImpl) RegisterHistoryTaskReader(
-	ctx context.Context,
-	request *RegisterHistoryTaskReaderRequest,
-) error {
-	return m.persistence.RegisterHistoryTaskReader(ctx, request)
-}
-
-func (m *executionManagerImpl) UnregisterHistoryTaskReader(
-	ctx context.Context,
-	request *UnregisterHistoryTaskReaderRequest,
-) {
-	m.persistence.UnregisterHistoryTaskReader(ctx, request)
-}
-
-func (m *executionManagerImpl) UpdateHistoryTaskReaderProgress(
-	ctx context.Context,
-	request *UpdateHistoryTaskReaderProgressRequest,
-) {
-	m.persistence.UpdateHistoryTaskReaderProgress(ctx, request)
-}
-
 func (m *executionManagerImpl) AddHistoryTasks(
 	ctx context.Context,
 	input *AddHistoryTasksRequest,
@@ -834,7 +827,6 @@ func (m *executionManagerImpl) AddHistoryTasks(
 
 		NamespaceID: input.NamespaceID,
 		WorkflowID:  input.WorkflowID,
-		RunID:       input.RunID,
 
 		Tasks: tasks,
 	})
@@ -918,7 +910,8 @@ func (m *executionManagerImpl) GetReplicationTasksFromDLQ(
 
 	category := tasks.CategoryReplication
 	dlqTasks := make([]tasks.Task, 0, len(resp.Tasks))
-	for _, internalTask := range resp.Tasks {
+	for i := range resp.Tasks {
+		internalTask := resp.Tasks[i]
 		task, err := m.serializer.DeserializeTask(category, internalTask.Blob)
 		if err != nil {
 			return nil, err

@@ -62,14 +62,13 @@ func Invoke(
 	err = api.GetAndUpdateWorkflowWithNew(
 		ctx,
 		token.Clock,
-		api.BypassMutableStateConsistencyPredicate,
 		definition.NewWorkflowKey(
 			token.NamespaceId,
 			token.WorkflowId,
 			token.RunId,
 		),
-		func(workflowContext api.WorkflowContext) (*api.UpdateWorkflowAction, error) {
-			mutableState := workflowContext.GetMutableState()
+		func(workflowLease api.WorkflowLease) (*api.UpdateWorkflowAction, error) {
+			mutableState := workflowLease.GetMutableState()
 			if !mutableState.IsWorkflowExecutionRunning() {
 				return nil, consts.ErrWorkflowCompleted
 			}
@@ -86,7 +85,7 @@ func Invoke(
 			// First check to see if cache needs to be refreshed as we could potentially have stale workflow execution in
 			// some extreme cassandra failure cases.
 			if !isRunning && scheduledEventID >= mutableState.GetNextEventID() {
-				shard.GetMetricsHandler().Counter(metrics.StaleMutableStateCounter.GetMetricName()).Record(
+				metrics.StaleMutableStateCounter.With(shard.GetMetricsHandler()).Record(
 					1,
 					metrics.OperationTag(metrics.HistoryRecordActivityTaskHeartbeatScope))
 				return nil, consts.ErrStaleState
@@ -97,6 +96,11 @@ func Invoke(
 				(token.GetScheduledEventId() != common.EmptyEventID && token.Attempt != ai.Attempt) ||
 				(token.GetVersion() != common.EmptyVersion && token.Version != ai.Version) {
 				return nil, consts.ErrActivityTaskNotFound
+			}
+
+			// update worker identity if available
+			if req.HeartbeatRequest.Identity != "" {
+				ai.RetryLastWorkerIdentity = req.HeartbeatRequest.Identity
 			}
 
 			cancelRequested = ai.CancelRequested

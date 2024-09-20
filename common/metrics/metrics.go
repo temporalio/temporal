@@ -36,10 +36,13 @@ import (
 // https://github.com/temporalio/sdk-go/blob/master/internal/common/metrics/handler.go
 // and adapted to depend on golang.org/x/exp/event
 type (
-	// Handler is a wrapper around a metrics client
+	// Handler is a wrapper around a metrics client.
+	// If you are interacting with metrics registered with New*Def functions, e.g. NewCounterDef, please use the With
+	// method of those definitions instead of calling Counter directly on the Handler. This will ensure that you don't
+	// accidentally use the wrong metric type, and you don't need to re-specify metric types or units.
 	Handler interface {
-		// WithTags creates a new MetricProvder with provided []Tag
-		// Tags are merged with registered Tags from the source MetricsHandler
+		// WithTags creates a new Handler with provided Tag list.
+		// Tags are merged with registered Tags from the source Handler.
 		WithTags(...Tag) Handler
 
 		// Counter obtains a counter for the given name.

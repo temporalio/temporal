@@ -32,7 +32,7 @@ import (
 
 func TestToString(t *testing.T) {
 	var cfg Config
-	err := Load("", "../../config", "cass", &cfg)
+	err := Load("", "../../config", "", &cfg)
 	assert.NoError(t, err)
 	assert.NotEmpty(t, cfg.String())
 }

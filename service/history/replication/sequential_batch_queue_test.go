@@ -27,11 +27,11 @@ package replication
 import (
 	"testing"
 
-	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
+	"go.uber.org/mock/gomock"
 )
 
 type (
@@ -100,9 +100,9 @@ func (s *sequentialBatchQueueSuite) TestAdd_NewTaskBatched() {
 	task2.EXPECT().CanBatch().Return(true).Times(1)
 	task3.EXPECT().CanBatch().Return(true).Times(1)
 	combinedTask := NewMockBatchableTask(s.controller)
-	task1.EXPECT().BatchWith(task2).Return(combinedTask, nil).Times(1)
+	task1.EXPECT().BatchWith(task2).Return(combinedTask, true).Times(1)
 	combinedTask.EXPECT().CanBatch().Return(true).Times(1)
-	combinedTask.EXPECT().BatchWith(task3).Return(NewMockBatchableTask(s.controller), nil).Times(1)
+	combinedTask.EXPECT().BatchWith(task3).Return(NewMockBatchableTask(s.controller), true).Times(1)
 	queue.Add(task1)
 	queue.Add(task2)
 	queue.Add(task3)
@@ -155,7 +155,7 @@ func (s *sequentialBatchQueueSuite) TestAdd_NewTaskIsAddedToQueueWhenBatchFailed
 	task1.EXPECT().CanBatch().Return(false).Times(1)
 	task2.EXPECT().CanBatch().Return(true).Times(2)
 	task3.EXPECT().CanBatch().Return(true).Times(1)
-	task2.EXPECT().BatchWith(task3).Return(NewMockBatchableTask(s.controller), nil).Times(1)
+	task2.EXPECT().BatchWith(task3).Return(NewMockBatchableTask(s.controller), true).Times(1)
 	queue.Add(task1)
 	queue.Add(task2)
 	queue.Add(task3)

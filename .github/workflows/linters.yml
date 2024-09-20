@@ -1,0 +1,77 @@
+name: linters
+on:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  lint-actions:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: 'go.mod'
+          check-latest: true
+
+      - name: lint actions
+        run: |
+          echo "::add-matcher::.github/actionlint-matcher.json"
+          bash <(curl https://raw.githubusercontent.com/rhysd/actionlint/main/scripts/download-actionlint.bash)
+          make lint-actions
+        shell: bash
+
+  lint-protos:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: 'go.mod'
+          check-latest: true
+
+      - uses: arduino/setup-protoc@v3
+
+      - name: lint protobuf definitions
+        run: |
+          make lint-protos
+
+  lint-api:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: 'go.mod'
+          check-latest: true
+
+      - uses: arduino/setup-protoc@v3
+
+      - name: lint protobuf API definitions
+        run: |
+          make lint-api
+
+  linters-succeed:
+    name: All Linters Succeed
+    needs:
+      - lint-api
+      - lint-protos
+      - lint-actions
+    runs-on: ubuntu-latest
+    if: always()
+    env:
+      RESULTS: ${{ toJSON(needs.*.result) }}
+    steps:
+      - name: Check results
+        run: |
+          if [[ -n $(echo "$RESULTS" | jq '.[] | select (. != "success")') ]]; then
+            exit 1
+          fi

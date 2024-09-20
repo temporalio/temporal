@@ -25,15 +25,15 @@
 package serialization
 
 import (
-	"github.com/gogo/protobuf/proto"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
-
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/codec"
+	"go.temporal.io/server/common/utf8validator"
+	"google.golang.org/protobuf/proto"
 )
 
-func HistoryBranchToBlob(info *persistencespb.HistoryBranch) (commonpb.DataBlob, error) {
+func HistoryBranchToBlob(info *persistencespb.HistoryBranch) (*commonpb.DataBlob, error) {
 	return proto3Encode(info)
 }
 
@@ -47,7 +47,7 @@ func WorkflowExecutionInfoFromBlob(blob []byte, encoding string) (*persistencesp
 	return result, proto3Decode(blob, encoding, result)
 }
 
-func WorkflowExecutionStateToBlob(info *persistencespb.WorkflowExecutionState) (commonpb.DataBlob, error) {
+func WorkflowExecutionStateToBlob(info *persistencespb.WorkflowExecutionState) (*commonpb.DataBlob, error) {
 	return proto3Encode(info)
 }
 
@@ -56,7 +56,7 @@ func WorkflowExecutionStateFromBlob(blob []byte, encoding string) (*persistences
 	return result, proto3Decode(blob, encoding, result)
 }
 
-func TransferTaskInfoToBlob(info *persistencespb.TransferTaskInfo) (commonpb.DataBlob, error) {
+func TransferTaskInfoToBlob(info *persistencespb.TransferTaskInfo) (*commonpb.DataBlob, error) {
 	return proto3Encode(info)
 }
 
@@ -65,7 +65,7 @@ func TransferTaskInfoFromBlob(blob []byte, encoding string) (*persistencespb.Tra
 	return result, proto3Decode(blob, encoding, result)
 }
 
-func TimerTaskInfoToBlob(info *persistencespb.TimerTaskInfo) (commonpb.DataBlob, error) {
+func TimerTaskInfoToBlob(info *persistencespb.TimerTaskInfo) (*commonpb.DataBlob, error) {
 	return proto3Encode(info)
 }
 
@@ -74,7 +74,7 @@ func TimerTaskInfoFromBlob(blob []byte, encoding string) (*persistencespb.TimerT
 	return result, proto3Decode(blob, encoding, result)
 }
 
-func ReplicationTaskInfoToBlob(info *persistencespb.ReplicationTaskInfo) (commonpb.DataBlob, error) {
+func ReplicationTaskInfoToBlob(info *persistencespb.ReplicationTaskInfo) (*commonpb.DataBlob, error) {
 	return proto3Encode(info)
 }
 
@@ -83,7 +83,7 @@ func ReplicationTaskInfoFromBlob(blob []byte, encoding string) (*persistencespb.
 	return result, proto3Decode(blob, encoding, result)
 }
 
-func VisibilityTaskInfoToBlob(info *persistencespb.VisibilityTaskInfo) (commonpb.DataBlob, error) {
+func VisibilityTaskInfoToBlob(info *persistencespb.VisibilityTaskInfo) (*commonpb.DataBlob, error) {
 	return proto3Encode(info)
 }
 
@@ -92,7 +92,7 @@ func VisibilityTaskInfoFromBlob(blob []byte, encoding string) (*persistencespb.V
 	return result, proto3Decode(blob, encoding, result)
 }
 
-func ArchivalTaskInfoToBlob(info *persistencespb.ArchivalTaskInfo) (commonpb.DataBlob, error) {
+func ArchivalTaskInfoToBlob(info *persistencespb.ArchivalTaskInfo) (*commonpb.DataBlob, error) {
 	return proto3Encode(info)
 }
 
@@ -101,7 +101,12 @@ func ArchivalTaskInfoFromBlob(blob []byte, encoding string) (*persistencespb.Arc
 	return result, proto3Decode(blob, encoding, result)
 }
 
-func QueueMetadataToBlob(metadata *persistencespb.QueueMetadata) (commonpb.DataBlob, error) {
+func OutboundTaskInfoFromBlob(blob []byte, encoding string) (*persistencespb.OutboundTaskInfo, error) {
+	result := &persistencespb.OutboundTaskInfo{}
+	return result, proto3Decode(blob, encoding, result)
+}
+
+func QueueMetadataToBlob(metadata *persistencespb.QueueMetadata) (*commonpb.DataBlob, error) {
 	// TODO change ENCODING_TYPE_JSON to ENCODING_TYPE_PROTO3
 	return encode(metadata, enumspb.ENCODING_TYPE_JSON)
 }
@@ -111,7 +116,7 @@ func QueueMetadataFromBlob(blob []byte, encoding string) (*persistencespb.QueueM
 	return result, decode(blob, encoding, result)
 }
 
-func QueueStateToBlob(info *persistencespb.QueueState) (commonpb.DataBlob, error) {
+func QueueStateToBlob(info *persistencespb.QueueState) (*commonpb.DataBlob, error) {
 	return proto3Encode(info)
 }
 
@@ -123,9 +128,9 @@ func QueueStateFromBlob(blob []byte, encoding string) (*persistencespb.QueueStat
 func encode(
 	object proto.Message,
 	encoding enumspb.EncodingType,
-) (commonpb.DataBlob, error) {
+) (*commonpb.DataBlob, error) {
 	if object == nil {
-		return commonpb.DataBlob{
+		return &commonpb.DataBlob{
 			Data:         nil,
 			EncodingType: encoding,
 		}, nil
@@ -135,16 +140,16 @@ func encode(
 	case enumspb.ENCODING_TYPE_JSON:
 		blob, err := codec.NewJSONPBEncoder().Encode(object)
 		if err != nil {
-			return commonpb.DataBlob{}, err
+			return nil, err
 		}
-		return commonpb.DataBlob{
+		return &commonpb.DataBlob{
 			Data:         blob,
 			EncodingType: enumspb.ENCODING_TYPE_JSON,
 		}, nil
 	case enumspb.ENCODING_TYPE_PROTO3:
 		return proto3Encode(object)
 	default:
-		return commonpb.DataBlob{}, NewUnknownEncodingTypeError(encoding.String(), enumspb.ENCODING_TYPE_JSON, enumspb.ENCODING_TYPE_PROTO3)
+		return nil, NewUnknownEncodingTypeError(encoding.String(), enumspb.ENCODING_TYPE_JSON, enumspb.ENCODING_TYPE_PROTO3)
 	}
 }
 
@@ -157,7 +162,8 @@ func decode(
 		return nil
 	}
 
-	switch enumspb.EncodingType(enumspb.EncodingType_value[encoding]) {
+	enc, _ := enumspb.EncodingTypeFromString(encoding)
+	switch enc {
 	case enumspb.ENCODING_TYPE_JSON:
 		return codec.NewJSONPBEncoder().Decode(blob, result)
 	case enumspb.ENCODING_TYPE_PROTO3:
@@ -167,22 +173,36 @@ func decode(
 	}
 }
 
-func proto3Encode(m proto.Message) (commonpb.DataBlob, error) {
+func proto3Encode(m proto.Message) (*commonpb.DataBlob, error) {
+	if err := utf8validator.Validate(m, utf8validator.SourcePersistence); err != nil {
+		return nil, NewSerializationError(enumspb.ENCODING_TYPE_PROTO3, err)
+	}
 	blob := commonpb.DataBlob{EncodingType: enumspb.ENCODING_TYPE_PROTO3}
 	data, err := proto.Marshal(m)
 	if err != nil {
-		return blob, NewSerializationError(enumspb.ENCODING_TYPE_PROTO3, err)
+		return nil, NewSerializationError(enumspb.ENCODING_TYPE_PROTO3, err)
 	}
 	blob.Data = data
-	return blob, nil
+	return &blob, nil
 }
 
 func proto3Decode(blob []byte, encoding string, result proto.Message) error {
-	if e, ok := enumspb.EncodingType_value[encoding]; !ok || enumspb.EncodingType(e) != enumspb.ENCODING_TYPE_PROTO3 {
+	e, _ := enumspb.EncodingTypeFromString(encoding)
+	if e != enumspb.ENCODING_TYPE_PROTO3 {
 		return NewUnknownEncodingTypeError(encoding, enumspb.ENCODING_TYPE_PROTO3)
 	}
+	return Proto3Decode(blob, e, result)
+}
 
-	if err := proto.Unmarshal(blob, result); err != nil {
+func Proto3Decode(blob []byte, e enumspb.EncodingType, result proto.Message) error {
+	if e != enumspb.ENCODING_TYPE_PROTO3 {
+		return NewUnknownEncodingTypeError(e.String(), enumspb.ENCODING_TYPE_PROTO3)
+	}
+	err := proto.Unmarshal(blob, result)
+	if err == nil {
+		err = utf8validator.Validate(result, utf8validator.SourcePersistence)
+	}
+	if err != nil {
 		return NewDeserializationError(enumspb.ENCODING_TYPE_PROTO3, err)
 	}
 	return nil

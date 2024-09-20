@@ -1,0 +1,32 @@
+faultInjection:
+  targets:
+    dataStores:
+      ExecutionStore:
+        methods:
+          CreateWorkflowExecution:
+            errors:
+              ResourceExhausted: 0.01
+              Timeout: 0.01
+              ExecuteAndTimeout: 0.01
+          UpdateWorkflowExecution:
+            errors:
+              ResourceExhausted: 0.01
+              Timeout: 0.01
+              ExecuteAndTimeout: 0.01
+          GetWorkflowExecution:
+            errors:
+              ResourceExhausted: 0.01
+              Timeout: 0.01
+          GetCurrentExecution:
+            errors:
+              ResourceExhausted: 0.01
+              Timeout: 0.01
+          AppendHistoryNodes:
+            errors:
+              ResourceExhausted: 0.01
+              Timeout: 0.01
+              ExecuteAndTimeout: 0.01
+          ReadHistoryBranch:
+            errors:
+              ResourceExhausted: 0.01
+              Timeout: 0.01

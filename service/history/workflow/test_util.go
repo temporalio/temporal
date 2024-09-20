@@ -30,7 +30,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/golang/mock/gomock"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -39,19 +38,24 @@ import (
 	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tests"
+	"go.uber.org/mock/gomock"
 )
 
 func TestLocalMutableState(
 	shard shard.Context,
 	eventsCache events.Cache,
 	ns *namespace.Namespace,
-	logger log.Logger,
+	workflowID string,
 	runID string,
+	logger log.Logger,
 ) *MutableStateImpl {
 
-	ms := NewMutableState(shard, eventsCache, logger, ns, time.Now().UTC())
-	ms.GetExecutionInfo().ExecutionTime = ms.GetExecutionInfo().StartTime
-	_ = ms.SetHistoryTree(context.Background(), nil, nil, runID)
+	ms := NewMutableState(shard, eventsCache, logger, ns, workflowID, runID, time.Now().UTC())
+	ms.executionInfo.NamespaceId = string(ns.ID())
+	ms.executionInfo.WorkflowId = workflowID
+	ms.executionState.RunId = runID
+	ms.GetExecutionInfo().ExecutionTime = ms.GetExecutionState().StartTime
+	_ = ms.SetHistoryTree(nil, nil, runID)
 
 	return ms
 }
@@ -70,11 +74,12 @@ func NewMapEventCache(
 			m[k] = event
 		},
 	)
-	cache.EXPECT().GetEvent(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+	cache.EXPECT().GetEvent(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
 		AnyTimes().
 		DoAndReturn(
 			func(
 				_ context.Context,
+				_ int32,
 				key events.EventKey,
 				_ int64,
 				_ []byte,
@@ -93,13 +98,14 @@ func TestGlobalMutableState(
 	eventsCache events.Cache,
 	logger log.Logger,
 	version int64,
+	workflowID string,
 	runID string,
 ) *MutableStateImpl {
 
-	ms := NewMutableState(shard, eventsCache, logger, tests.GlobalNamespaceEntry, time.Now().UTC())
-	ms.GetExecutionInfo().ExecutionTime = ms.GetExecutionInfo().StartTime
+	ms := NewMutableState(shard, eventsCache, logger, tests.GlobalNamespaceEntry, workflowID, runID, time.Now().UTC())
+	ms.GetExecutionInfo().ExecutionTime = ms.GetExecutionState().StartTime
 	_ = ms.UpdateCurrentVersion(version, false)
-	_ = ms.SetHistoryTree(context.Background(), nil, nil, runID)
+	_ = ms.SetHistoryTree(nil, nil, runID)
 
 	return ms
 }

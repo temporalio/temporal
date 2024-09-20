@@ -96,11 +96,11 @@ CREATE TABLE tasks (
 
 -- Stores task queue information such as user provided versioning data
 -- OR
--- Used as a mapping from build id to task queue
+-- Used as a mapping from build ID to task queue
 CREATE TABLE task_queue_user_data (
   namespace_id     uuid,
   task_queue_name  text,
-  build_id         text,   -- If this row is used as a mapping of build id to task queue, this will not be empty
+  build_id         text,   -- If this row is used as a mapping of build ID to task queue, this will not be empty
   data             blob,   -- temporal.server.api.persistence.v1.TaskQueueUserData
   data_encoding    text,   -- Encoding type used for serialization, in practice this should always be proto3
   version          bigint, -- Version of this row, used for optimistic concurrency
@@ -184,3 +184,44 @@ CREATE TABLE cluster_membership
 
 CREATE INDEX cm_lastheartbeat_idx on cluster_membership (last_heartbeat);
 CREATE INDEX cm_sessionstart_idx on cluster_membership (session_start);
+
+CREATE TABLE queues
+(
+    queue_type        int,
+    queue_name        text,
+    metadata_payload  blob,
+    metadata_encoding text,
+    version           bigint,
+    PRIMARY KEY ((queue_type, queue_name))
+) WITH COMPACTION = {
+    'class': 'org.apache.cassandra.db.compaction.LeveledCompactionStrategy'
+    };
+
+CREATE TABLE queue_messages
+(
+    queue_type       int,
+    queue_name       text,
+    queue_partition  int,
+    message_id       bigint,
+    message_payload  blob,
+    message_encoding text,
+    PRIMARY KEY ((queue_type, queue_name, queue_partition), message_id)
+) WITH COMPACTION = {
+    'class': 'org.apache.cassandra.db.compaction.LeveledCompactionStrategy'
+    };
+
+CREATE TABLE nexus_endpoints
+(
+    partition       int, -- constant for all rows (using a single partition for efficient list queries)
+    type            int, -- enum RowType { PartitionStatus, NexusEndpoint }
+    id              uuid,
+    data            blob,
+    data_encoding   text,
+    -- When type=PartitionStatus contains the partition version.
+    --      Partition version is used to guarantee latest versions when listing all endpoints.
+    -- When type=NexusEndpoint contains the endpoint version used for optimistic concurrency.
+    version         bigint,
+    PRIMARY KEY ((partition), type, id)
+) WITH COMPACTION = {
+    'class': 'org.apache.cassandra.db.compaction.LeveledCompactionStrategy'
+    };

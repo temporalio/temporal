@@ -71,6 +71,13 @@ testGetMapPropertyKey:
 - value: "1"
   constraints:
     namespace: random-namespace
+testGetTypedPropertyKey:
+- value:
+    number: 23.2  # note field is int
+    days: "6d"
+    inner:
+      key1: 12345  # note field is float
+      key2: true
 testGetStringPropertyKey:
 - value: some random string
   constraints: {}
@@ -84,3 +91,19 @@ testGetDurationPropertyFilteredByTaskTypeKey:
   - value: 10s
     constraints:
       historytasktype: 1
+testGetIntPropertyFilteredByDestinationKey:
+  - value: 10
+    constraints: {}
+  - value: 20
+    constraints:
+      namespace: test-namespace
+      destination: test-destination-1
+  - value: 30
+    constraints:
+      namespace: test-namespace
+  - value: 40
+    constraints:
+      destination: test-destination-1
+  - value: 50
+    constraints:
+      destination: test-destination-2

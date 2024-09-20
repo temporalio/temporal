@@ -31,7 +31,6 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
-
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/persistence"
@@ -85,7 +84,7 @@ func (q *QueueStore) Init(
 
 func (q *QueueStore) EnqueueMessage(
 	ctx context.Context,
-	blob commonpb.DataBlob,
+	blob *commonpb.DataBlob,
 ) error {
 	lastMessageID, err := q.getLastMessageID(ctx, q.queueType)
 	if err != nil {
@@ -98,7 +97,7 @@ func (q *QueueStore) EnqueueMessage(
 
 func (q *QueueStore) EnqueueMessageToDLQ(
 	ctx context.Context,
-	blob commonpb.DataBlob,
+	blob *commonpb.DataBlob,
 ) (int64, error) {
 	// Use negative queue type as the dlq type
 	lastMessageID, err := q.getLastMessageID(ctx, q.getDLQTypeFromQueueType())
@@ -114,7 +113,7 @@ func (q *QueueStore) tryEnqueue(
 	ctx context.Context,
 	queueType persistence.QueueType,
 	messageID int64,
-	blob commonpb.DataBlob,
+	blob *commonpb.DataBlob,
 ) (int64, error) {
 	query := q.session.Query(templateEnqueueMessageQuery, queueType, messageID, blob.Data, blob.EncodingType.String()).WithContext(ctx)
 	previous := make(map[string]interface{})
@@ -423,7 +422,7 @@ func convertQueueMetadata(
 		if err != nil {
 			return nil, err
 		}
-		metadata.Blob = &blob
+		metadata.Blob = blob
 	} else {
 		data := message["data"].([]byte)
 		encoding := message["data_encoding"].(string)

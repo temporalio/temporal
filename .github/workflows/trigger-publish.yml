@@ -5,6 +5,7 @@ on:
     branches:
       - main
       - release/*
+      - cloud/*
 
 jobs:
   trigger:
@@ -19,8 +20,8 @@ jobs:
       - name: Get git branch name
         id: get_branch
         run: |
-          echo "::set-output name=branch::${GITHUB_REF#refs/heads/}"
-      
+          echo branch="${GITHUB_REF#refs/heads/}" >> "$GITHUB_OUTPUT"
+
       - name: Generate a token
         id: generate_token
         uses: tibdex/github-app-token@b62528385c34dbc9f38e5f4225ac829252d1ea92

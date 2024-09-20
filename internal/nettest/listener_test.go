@@ -22,7 +22,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package nettest
+package nettest_test
 
 import (
 	"context"
@@ -30,19 +30,23 @@ import (
 	"io"
 	"net"
 	"net/http"
+
+	"go.temporal.io/server/internal/nettest"
 )
 
 func ExampleListener() {
-	pipe := NewPipe()
-	listener := NewListener(pipe)
+	pipe := nettest.NewPipe()
+	listener := nettest.NewListener(pipe)
 	server := http.Server{
 		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			_, _ = w.Write([]byte("hello"))
 		}),
 	}
+
 	go func() {
 		_ = server.Serve(listener)
 	}()
+
 	client := http.Client{
 		Transport: &http.Transport{
 			DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
@@ -51,11 +55,14 @@ func ExampleListener() {
 		},
 	}
 	resp, _ := client.Get("http://fake")
+
 	defer func() {
 		_ = resp.Body.Close()
 	}()
+
 	buf, _ := io.ReadAll(resp.Body)
 	_ = server.Close()
+
 	fmt.Println(string(buf[:]))
 	// Output: hello
 }

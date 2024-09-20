@@ -29,12 +29,8 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"go.uber.org/fx"
-	"go.uber.org/multierr"
-
 	"go.temporal.io/api/common/v1"
 	carchiver "go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/archiver/provider"
@@ -47,6 +43,9 @@ import (
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/testing/mocksdk"
 	"go.temporal.io/server/service/history/configs"
+	"go.uber.org/fx"
+	"go.uber.org/mock/gomock"
+	"go.uber.org/multierr"
 )
 
 func TestArchiver(t *testing.T) {
@@ -60,6 +59,7 @@ func TestArchiver(t *testing.T) {
 		SearchAttributesErr  error
 		NameTypeMap          searchattribute.NameTypeMap
 		NameTypeMapErr       error
+		NilHistoryUri        bool
 
 		ExpectArchiveHistory    bool
 		ExpectArchiveVisibility bool
@@ -95,6 +95,13 @@ func TestArchiver(t *testing.T) {
 		{
 			Name:    "Visibility archival succeeds",
 			Targets: []Target{TargetVisibility},
+
+			ExpectArchiveVisibility: true,
+		},
+		{
+			Name:          "Visibility archival succeeds with nil HistoryURI",
+			Targets:       []Target{TargetVisibility},
+			NilHistoryUri: true,
 
 			ExpectArchiveVisibility: true,
 		},
@@ -181,7 +188,11 @@ func TestArchiver(t *testing.T) {
 			sdkClientFactory := sdk.NewMockClientFactory(controller)
 			sdkClientFactory.EXPECT().GetSystemClient().Return(sdkClient).AnyTimes()
 
-			historyURI, err := carchiver.NewURI("test:///history/archival")
+			var historyURI carchiver.URI
+			var err error
+			if !c.NilHistoryUri {
+				historyURI, err = carchiver.NewURI("test:///history/archival")
+			}
 			require.NoError(t, err)
 
 			if c.ExpectArchiveHistory {

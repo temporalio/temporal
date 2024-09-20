@@ -25,13 +25,10 @@
 package queues
 
 import (
+	"slices"
 	"time"
 
-	"golang.org/x/exp/slices"
-
 	"go.temporal.io/server/common/collection"
-	"go.temporal.io/server/common/namespace"
-	"go.temporal.io/server/service/history/tasks"
 )
 
 const (
@@ -46,12 +43,14 @@ type (
 		attributes     *AlertAttributesQueuePendingTaskCount
 		monitor        Monitor
 		maxReaderCount int64
+		grouper        Grouper
 
-		// state of the action, used when running the action
-		tasksPerNamespace               map[namespace.ID]int
-		pendingTaskPerNamespacePerSlice map[Slice]map[namespace.ID]int
-		slicesPerNamespace              map[namespace.ID][]Slice
-		namespaceToClearPerSlice        map[Slice][]namespace.ID
+		// Fields below this line make up the state of the action. Used when running the action.
+		// Key type is "any" to support grouping tasks by arbitrary keys.
+		tasksPerKey                map[any]int
+		pendingTasksPerKeyPerSlice map[Slice]map[any]int
+		slicesPerKey               map[any][]Slice
+		keysToClearPerSlice        map[Slice][]any
 	}
 )
 
@@ -59,11 +58,13 @@ func newQueuePendingTaskAction(
 	attributes *AlertAttributesQueuePendingTaskCount,
 	monitor Monitor,
 	maxReaderCount int,
+	grouper Grouper,
 ) *actionQueuePendingTask {
 	return &actionQueuePendingTask{
 		attributes:     attributes,
 		monitor:        monitor,
 		maxReaderCount: int64(maxReaderCount),
+		grouper:        grouper,
 	}
 }
 
@@ -71,16 +72,16 @@ func (a *actionQueuePendingTask) Name() string {
 	return "queue-pending-task"
 }
 
-func (a *actionQueuePendingTask) Run(readerGroup *ReaderGroup) error {
+func (a *actionQueuePendingTask) Run(readerGroup *ReaderGroup) {
 	// first check if the alert is still valid
 	if a.monitor.GetTotalPendingTaskCount() <= a.attributes.CiriticalPendingTaskCount {
-		return nil
+		return
 	}
 
 	// then try to shrink existing slices, which may reduce pending task count
 	readers := readerGroup.Readers()
 	if a.tryShrinkSlice(readers) {
-		return nil
+		return
 	}
 
 	// have to unload pending tasks to reduce pending task count
@@ -89,7 +90,7 @@ func (a *actionQueuePendingTask) Run(readerGroup *ReaderGroup) error {
 	a.findSliceToClear(
 		int(float64(a.attributes.CiriticalPendingTaskCount) * targetLoadFactor),
 	)
-	return a.splitAndClearSlice(readers, readerGroup)
+	a.splitAndClearSlice(readers, readerGroup)
 }
 
 func (a *actionQueuePendingTask) tryShrinkSlice(
@@ -102,30 +103,31 @@ func (a *actionQueuePendingTask) tryShrinkSlice(
 }
 
 func (a *actionQueuePendingTask) init() {
-	a.tasksPerNamespace = make(map[namespace.ID]int)
-	a.pendingTaskPerNamespacePerSlice = make(map[Slice]map[namespace.ID]int)
-	a.slicesPerNamespace = make(map[namespace.ID][]Slice)
-	a.namespaceToClearPerSlice = make(map[Slice][]namespace.ID)
+	a.tasksPerKey = make(map[any]int)
+	a.pendingTasksPerKeyPerSlice = make(map[Slice]map[any]int)
+	a.slicesPerKey = make(map[any][]Slice)
+	a.keysToClearPerSlice = make(map[Slice][]any)
 }
 
 func (a *actionQueuePendingTask) gatherStatistics(
 	readers map[int64]Reader,
 ) {
 	// gather statistic for
-	// 1. total # of pending tasks per namespace
-	// 2. for each slice, # of pending taks per namespace
-	// 3. for each namespace, a list of slices that contains pending tasks from that namespace,
+	// 1. total # of pending tasks per key
+	// 2. for each slice, # of pending taks per key
+	// 3. for each key, a list of slices that contains pending tasks from that key,
 	//    reversely ordered by slice range. Upon unloading, first unload newer slices.
 	for _, reader := range readers {
 		reader.WalkSlices(func(s Slice) {
-			a.pendingTaskPerNamespacePerSlice[s] = s.TaskStats().PendingPerNamespace
-			for namespaceID, pendingTaskCount := range a.pendingTaskPerNamespacePerSlice[s] {
-				a.tasksPerNamespace[namespaceID] += pendingTaskCount
-				a.slicesPerNamespace[namespaceID] = append(a.slicesPerNamespace[namespaceID], s)
+			pendingPerKey := s.TaskStats().PendingPerKey
+			a.pendingTasksPerKeyPerSlice[s] = pendingPerKey
+			for key, pendingTaskCount := range pendingPerKey {
+				a.tasksPerKey[key] += pendingTaskCount
+				a.slicesPerKey[key] = append(a.slicesPerKey[key], s)
 			}
 		})
 	}
-	for _, sliceList := range a.slicesPerNamespace {
+	for _, sliceList := range a.slicesPerKey {
 		slices.SortFunc(sliceList, func(this, that Slice) int {
 			thisMin := this.Scope().Range.InclusiveMin
 			thatMin := that.Scope().Range.InclusiveMin
@@ -139,57 +141,53 @@ func (a *actionQueuePendingTask) findSliceToClear(
 	targetPendingTasks int,
 ) {
 	currentPendingTasks := 0
-	// order namespace by # of pending tasks
-	namespaceIDs := make([]namespace.ID, 0, len(a.tasksPerNamespace))
-	for namespaceID, namespacePendingTasks := range a.tasksPerNamespace {
-		currentPendingTasks += namespacePendingTasks
-		namespaceIDs = append(namespaceIDs, namespaceID)
+	// order key by # of pending tasks
+	keys := make([]any, 0, len(a.tasksPerKey))
+	for key, keyPendingTasks := range a.tasksPerKey {
+		currentPendingTasks += keyPendingTasks
+		keys = append(keys, key)
 	}
 	pq := collection.NewPriorityQueueWithItems(
-		func(this, that namespace.ID) bool {
-			return a.tasksPerNamespace[this] > a.tasksPerNamespace[that]
+		func(this, that any) bool {
+			return a.tasksPerKey[this] > a.tasksPerKey[that]
 		},
-		namespaceIDs,
+		keys,
 	)
 
 	for currentPendingTasks > targetPendingTasks && !pq.IsEmpty() {
-		namespaceID := pq.Remove()
+		key := pq.Remove()
 
-		sliceList := a.slicesPerNamespace[namespaceID]
+		sliceList := a.slicesPerKey[key]
 		if len(sliceList) == 0 {
-			panic("Found namespace with non-zero pending task count but has no correspoding Slice")
+			panic("Found key with non-zero pending task count but has no correspoding Slice")
 		}
 
 		// pop the first slice in the list
 		sliceToClear := sliceList[0]
 		sliceList = sliceList[1:]
-		a.slicesPerNamespace[namespaceID] = sliceList
+		a.slicesPerKey[key] = sliceList
 
-		tasksCleared := a.pendingTaskPerNamespacePerSlice[sliceToClear][namespaceID]
-		a.tasksPerNamespace[namespaceID] -= tasksCleared
+		tasksCleared := a.pendingTasksPerKeyPerSlice[sliceToClear][key]
+		a.tasksPerKey[key] -= tasksCleared
 		currentPendingTasks -= tasksCleared
-		if a.tasksPerNamespace[namespaceID] > 0 {
-			pq.Add(namespaceID)
+		if a.tasksPerKey[key] > 0 {
+			pq.Add(key)
 		}
 
-		a.namespaceToClearPerSlice[sliceToClear] = append(a.namespaceToClearPerSlice[sliceToClear], namespaceID)
+		a.keysToClearPerSlice[sliceToClear] = append(a.keysToClearPerSlice[sliceToClear], key)
 	}
 }
 
 func (a *actionQueuePendingTask) splitAndClearSlice(
 	readers map[int64]Reader,
 	readerGroup *ReaderGroup,
-) error {
-	if err := a.ensureNewReaders(readers, readerGroup); err != nil {
-		return err
-	}
-
+) {
 	for readerID, reader := range readers {
 		if readerID == int64(a.maxReaderCount)-1 {
 			// we can't do further split, have to clear entire slice
 			cleared := false
 			reader.ClearSlices(func(s Slice) bool {
-				_, ok := a.namespaceToClearPerSlice[s]
+				_, ok := a.keysToClearPerSlice[s]
 				cleared = cleared || ok
 				return ok
 			})
@@ -201,17 +199,12 @@ func (a *actionQueuePendingTask) splitAndClearSlice(
 
 		var splitSlices []Slice
 		reader.SplitSlices(func(s Slice) ([]Slice, bool) {
-			namespaceIDs, ok := a.namespaceToClearPerSlice[s]
+			keys, ok := a.keysToClearPerSlice[s]
 			if !ok {
 				return nil, false
 			}
 
-			namespaceIDStrings := make([]string, 0, len(namespaceIDs))
-			for _, namespaceID := range namespaceIDs {
-				namespaceIDStrings = append(namespaceIDStrings, namespaceID.String())
-			}
-
-			split, remain := s.SplitByPredicate(tasks.NewNamespacePredicate(namespaceIDStrings))
+			split, remain := s.SplitByPredicate(a.grouper.Predicate(keys))
 			split.Clear()
 			splitSlices = append(splitSlices, split)
 			return []Slice{remain}, true
@@ -221,50 +214,11 @@ func (a *actionQueuePendingTask) splitAndClearSlice(
 			continue
 		}
 
-		nextReader, ok := readerGroup.ReaderByID(readerID + 1)
-		if !ok {
-			// this should never happen, we already ensured all readers are created.
-			// we have no choice but to put those slices back
-			reader.MergeSlices(splitSlices...)
-			continue
-		}
-
+		nextReader := readerGroup.GetOrCreateReader(readerID + 1)
 		nextReader.MergeSlices(splitSlices...)
 		nextReader.Pause(clearSliceThrottleDuration)
 	}
 
 	// ShrinkSlices will be triggered as part of checkpointing process
 	// see queueBase.handleAlert() and queueBase.checkpoint()
-	return nil
-}
-
-func (a *actionQueuePendingTask) ensureNewReaders(
-	readers map[int64]Reader,
-	readerGroup *ReaderGroup,
-) error {
-	for readerID, reader := range readers {
-		if readerID == a.maxReaderCount-1 {
-			// we won't perform split
-			continue
-		}
-
-		needNewReader := false
-		reader.WalkSlices(func(s Slice) {
-			// namespaceToClearPerSlice contains all the slices
-			// that needs to be split & cleared
-			_, ok := a.namespaceToClearPerSlice[s]
-			needNewReader = needNewReader || ok
-		})
-
-		if !needNewReader {
-			continue
-		}
-
-		_, err := readerGroup.GetOrCreateReader(readerID + 1)
-		if err != nil {
-			return err
-		}
-	}
-
-	return nil
 }

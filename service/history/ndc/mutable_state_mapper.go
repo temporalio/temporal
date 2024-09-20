@@ -28,7 +28,6 @@ import (
 	"context"
 
 	"github.com/google/uuid"
-
 	"go.temporal.io/server/common/log/tag"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/service/history/shard"
@@ -44,16 +43,17 @@ type (
 	) (workflow.MutableState, Output, error)
 
 	MutableStateMapperImpl struct {
-		shardContext          shard.Context
-		newBufferEventFlusher bufferEventFlusherProvider
-		newBranchMgr          branchMgrProvider
-		newConflictResolver   conflictResolverProvider
-		newStateBuilder       stateBuilderProvider
+		shardContext             shard.Context
+		newBufferEventFlusher    bufferEventFlusherProvider
+		newBranchMgr             branchMgrProvider
+		newConflictResolver      conflictResolverProvider
+		newMutableStateRebuilder mutableStateRebuilderProvider
 	}
 
 	PrepareHistoryBranchOut struct {
-		DoContinue  bool
-		BranchIndex int32
+		DoContinue       bool  // whether to continue applying events
+		BranchIndex      int32 // branch index on version histories
+		EventsApplyIndex int   // index of events that should start applying from
 	}
 
 	GetOrRebuildMutableStateIn struct {
@@ -73,14 +73,14 @@ func NewMutableStateMapping(
 	newBufferEventFlusher bufferEventFlusherProvider,
 	newBranchMgr branchMgrProvider,
 	newConflictResolver conflictResolverProvider,
-	newStateBuilder stateBuilderProvider,
+	newMutableStateRebuilder mutableStateRebuilderProvider,
 ) *MutableStateMapperImpl {
 	return &MutableStateMapperImpl{
-		shardContext:          shardContext,
-		newBufferEventFlusher: newBufferEventFlusher,
-		newBranchMgr:          newBranchMgr,
-		newConflictResolver:   newConflictResolver,
-		newStateBuilder:       newStateBuilder,
+		shardContext:             shardContext,
+		newBufferEventFlusher:    newBufferEventFlusher,
+		newBranchMgr:             newBranchMgr,
+		newConflictResolver:      newConflictResolver,
+		newMutableStateRebuilder: newMutableStateRebuilder,
 	}
 }
 
@@ -110,17 +110,33 @@ func (m *MutableStateMapperImpl) GetOrCreateHistoryBranch(
 ) (workflow.MutableState, PrepareHistoryBranchOut, error) {
 	branchMgr := m.newBranchMgr(wfContext, mutableState, task.getLogger())
 	incomingVersionHistory := task.getVersionHistory()
-	doContinue, versionHistoryIndex, err := branchMgr.GetOrCreate(
-		ctx,
-		incomingVersionHistory,
-		task.getFirstEvent().GetEventId(),
-		task.getFirstEvent().GetVersion(),
-	)
+	eventBatches := task.getEvents()
+	eventBatchApplyIndex := 0
+	doContinue := false
+	var versionHistoryIndex int32
+	var err error
+	for index, eventBatch := range eventBatches {
+		doContinueCurrentBatch, versionHistoryIndexCurrentBatch, errCurrentBatch := branchMgr.GetOrCreate(
+			ctx,
+			incomingVersionHistory,
+			eventBatch[0].GetEventId(),
+			eventBatch[0].GetVersion(),
+		)
+		if doContinueCurrentBatch || errCurrentBatch != nil {
+			eventBatchApplyIndex = index
+			doContinue = doContinueCurrentBatch
+			err = errCurrentBatch
+			versionHistoryIndex = versionHistoryIndexCurrentBatch
+			break
+		}
+	}
+
 	switch err.(type) {
 	case nil:
 		return mutableState, PrepareHistoryBranchOut{
-			DoContinue:  doContinue,
-			BranchIndex: versionHistoryIndex,
+			DoContinue:       doContinue,
+			BranchIndex:      versionHistoryIndex,
+			EventsApplyIndex: eventBatchApplyIndex,
 		}, nil
 	case *serviceerrors.RetryReplication:
 		// replication message can arrive out of order
@@ -216,14 +232,15 @@ func (m *MutableStateMapperImpl) ApplyEvents(
 	mutableState workflow.MutableState,
 	task replicationTask,
 ) (workflow.MutableState, workflow.MutableState, error) {
-	stateBuilder := m.newStateBuilder(mutableState, task.getLogger())
-	newMutableState, err := stateBuilder.ApplyEvents(
+	mutableStateRebuilder := m.newMutableStateRebuilder(mutableState, task.getLogger())
+	newMutableState, err := mutableStateRebuilder.ApplyEvents(
 		ctx,
 		task.getNamespaceID(),
 		uuid.New().String(),
-		*task.getExecution(),
+		task.getExecution(),
 		task.getEvents(),
 		task.getNewEvents(),
+		task.getNewRunID(),
 	)
 	if err != nil {
 		task.getLogger().Error(

@@ -25,18 +25,12 @@
 package tasks
 
 import (
-	"fmt"
 	"strconv"
-	"sync"
-
-	"golang.org/x/exp/maps"
-
-	enumsspb "go.temporal.io/server/api/enums/v1"
 )
 
 type (
 	Category struct {
-		id    int32
+		id    int
 		cType CategoryType
 		name  string
 	}
@@ -44,142 +38,95 @@ type (
 	CategoryType int
 )
 
+// WARNING: These IDS are persisted in the database. Do not change them.
+
 const (
-	CategoryIDUnspecified = int32(enumsspb.TASK_CATEGORY_UNSPECIFIED)
-	CategoryIDTransfer    = int32(enumsspb.TASK_CATEGORY_TRANSFER)
-	CategoryIDTimer       = int32(enumsspb.TASK_CATEGORY_TIMER)
-	CategoryIDReplication = int32(enumsspb.TASK_CATEGORY_REPLICATION)
-	CategoryIDVisibility  = int32(enumsspb.TASK_CATEGORY_VISIBILITY)
-	CategoryIDArchival    = int32(enumsspb.TASK_CATEGORY_ARCHIVAL)
-	CategoryIDMemoryTimer = int32(enumsspb.TASK_CATEGORY_MEMORY_TIMER)
+	CategoryIDTransfer    = 1
+	CategoryIDTimer       = 2
+	CategoryIDReplication = 3
+	CategoryIDVisibility  = 4
+	CategoryIDArchival    = 5
+	CategoryIDMemoryTimer = 6
+	CategoryIDOutbound    = 7
 )
 
 const (
-	CategoryTypeUnspecified CategoryType = iota
+	_ CategoryType = iota // Reserved for unknown type
 	CategoryTypeImmediate
 	CategoryTypeScheduled
 )
 
 const (
-	CategoryNameTransfer    = "transfer"
-	CategoryNameTimer       = "timer"
-	CategoryNameReplication = "replication"
-	CategoryNameVisibility  = "visibility"
-	CategoryNameArchival    = "archival"
-	CategoryNameMemoryTimer = "memory-timer"
+	categoryNameTransfer    = "transfer"
+	categoryNameTimer       = "timer"
+	categoryNameReplication = "replication"
+	categoryNameVisibility  = "visibility"
+	categoryNameArchival    = "archival"
+	categoryNameMemoryTimer = "memory-timer"
+	categoryNameOutbound    = "outbound"
 )
 
 var (
 	CategoryTransfer = Category{
 		id:    CategoryIDTransfer,
 		cType: CategoryTypeImmediate,
-		name:  CategoryNameTransfer,
+		name:  categoryNameTransfer,
 	}
 
 	CategoryTimer = Category{
 		id:    CategoryIDTimer,
 		cType: CategoryTypeScheduled,
-		name:  CategoryNameTimer,
+		name:  categoryNameTimer,
 	}
 
 	CategoryReplication = Category{
 		id:    CategoryIDReplication,
 		cType: CategoryTypeImmediate,
-		name:  CategoryNameReplication,
+		name:  categoryNameReplication,
 	}
 
 	CategoryVisibility = Category{
 		id:    CategoryIDVisibility,
 		cType: CategoryTypeImmediate,
-		name:  CategoryNameVisibility,
+		name:  categoryNameVisibility,
 	}
 
 	CategoryArchival = Category{
 		id:    CategoryIDArchival,
 		cType: CategoryTypeScheduled,
-		name:  CategoryNameArchival,
+		name:  categoryNameArchival,
 	}
 
 	CategoryMemoryTimer = Category{
 		id:    CategoryIDMemoryTimer,
 		cType: CategoryTypeScheduled,
-		name:  CategoryNameMemoryTimer,
+		name:  categoryNameMemoryTimer,
+	}
+
+	CategoryOutbound = Category{
+		id:    CategoryIDOutbound,
+		cType: CategoryTypeImmediate,
+		name:  categoryNameOutbound,
 	}
 )
 
-var (
-	categories = struct {
-		sync.RWMutex
-		m map[int32]Category
-	}{
-		m: map[int32]Category{
-			CategoryTransfer.ID():    CategoryTransfer,
-			CategoryTimer.ID():       CategoryTimer,
-			CategoryVisibility.ID():  CategoryVisibility,
-			CategoryReplication.ID(): CategoryReplication,
-			CategoryMemoryTimer.ID(): CategoryMemoryTimer,
-		},
-	}
-)
-
-// NewCategory creates a new Category and register the created Category
-// Registered Categories can be retrieved via GetCategories() or GetCategoryByID()
-// NewCategory panics when a Category with the same ID has already been registered
-func NewCategory(
-	id int32,
-	categoryType CategoryType,
-	name string,
-) Category {
-	categories.Lock()
-	defer categories.Unlock()
-
-	if category, ok := categories.m[id]; ok {
-		panic(fmt.Sprintf("category id: %v has already been defined as type %v and name %v", id, category.cType, category.name))
-	}
-
-	newCategory := Category{
+func NewCategory(id int, cType CategoryType, name string) Category {
+	return Category{
 		id:    id,
-		cType: categoryType,
+		cType: cType,
 		name:  name,
 	}
-	categories.m[id] = newCategory
-
-	return newCategory
 }
 
-// GetCategories returns a deep copy of all registered Categories
-func GetCategories() map[int32]Category {
-	categories.RLock()
-	defer categories.RUnlock()
-	return maps.Clone(categories.m)
-}
-
-// RemoveCategory removes a registered Category.
-// This should only be used for testing.
-func RemoveCategory(id int32) {
-	categories.Lock()
-	defer categories.Unlock()
-	delete(categories.m, id)
-}
-
-// GetCategoryByID returns a registered Category with the same ID
-func GetCategoryByID(id int32) (Category, bool) {
-	categories.RLock()
-	defer categories.RUnlock()
-
-	category, ok := categories.m[id]
-	return category, ok
-}
-
-func (c *Category) ID() int32 {
+func (c Category) ID() int {
 	return c.id
 }
 
-func (c *Category) Name() string {
+func (c Category) Name() string {
 	return c.name
 }
 
-func (c *Category) Type() CategoryType {
+func (c Category) Type() CategoryType {
 	return c.cType
 }
 

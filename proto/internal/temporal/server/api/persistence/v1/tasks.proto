@@ -1,3 +1,5 @@
+// The MIT License
+//
 // Copyright (c) 2020 Temporal Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -25,8 +27,6 @@ option go_package = "go.temporal.io/server/api/persistence/v1;persistence";
 
 import "google/protobuf/timestamp.proto";
 
-import "dependencies/gogoproto/gogo.proto";
-
 import "temporal/api/enums/v1/task_queue.proto";
 
 import "temporal/server/api/clock/v1/message.proto";
@@ -43,11 +43,12 @@ message TaskInfo {
     string workflow_id = 2;
     string run_id = 3;
     int64 scheduled_event_id = 4;
-    google.protobuf.Timestamp create_time = 5 [(gogoproto.stdtime) = true];
-    google.protobuf.Timestamp expiry_time = 6 [(gogoproto.stdtime) = true];
+    google.protobuf.Timestamp create_time = 5;
+    google.protobuf.Timestamp expiry_time = 6;
     temporal.server.api.clock.v1.VectorClock clock = 7;
     // How this task should be directed. (Missing means the default for
     // TaskVersionDirective, which is unversioned.)
+    // Deprecated. No need to store this for new versioning [cleanup-old-wv]
     temporal.server.api.taskqueue.v1.TaskVersionDirective version_directive = 8;
 }
 
@@ -58,11 +59,12 @@ message TaskQueueInfo {
     temporal.api.enums.v1.TaskQueueType task_type = 3;
     temporal.api.enums.v1.TaskQueueKind kind = 4;
     int64 ack_level = 5;
-    google.protobuf.Timestamp expiry_time = 6 [(gogoproto.stdtime) = true];
-    google.protobuf.Timestamp last_update_time = 7 [(gogoproto.stdtime) = true];
+    google.protobuf.Timestamp expiry_time = 6;
+    google.protobuf.Timestamp last_update_time = 7;
+    int64 approximate_backlog_count = 8;
 }
 
 message TaskKey {
-    google.protobuf.Timestamp fire_time = 1 [(gogoproto.stdtime) = true];
+    google.protobuf.Timestamp fire_time = 1;
     int64 task_id = 2;
 }

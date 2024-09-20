@@ -28,7 +28,6 @@ import (
 	"time"
 
 	"go.temporal.io/api/workflowservice/v1"
-
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/namespace"
@@ -51,13 +50,15 @@ func ConvertToStartRequest(
 		Identity:                 request.GetIdentity(),
 		RequestId:                request.GetRequestId(),
 		WorkflowIdReusePolicy:    request.GetWorkflowIdReusePolicy(),
+		WorkflowIdConflictPolicy: request.GetWorkflowIdConflictPolicy(),
 		RetryPolicy:              request.GetRetryPolicy(),
 		CronSchedule:             request.GetCronSchedule(),
 		Memo:                     request.GetMemo(),
 		SearchAttributes:         request.GetSearchAttributes(),
 		Header:                   request.GetHeader(),
 		WorkflowStartDelay:       request.GetWorkflowStartDelay(),
+		UserMetadata:             request.UserMetadata,
 	}
 
-	return common.CreateHistoryStartWorkflowRequest(namespaceID.String(), req, nil, now)
+	return common.CreateHistoryStartWorkflowRequest(namespaceID.String(), req, nil, nil, now)
 }

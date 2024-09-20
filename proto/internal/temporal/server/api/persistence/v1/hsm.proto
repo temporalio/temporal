@@ -1,0 +1,163 @@
+// The MIT License
+//
+// Copyright (c) 2024 Temporal Technologies, Inc.
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+// THE SOFTWARE.
+
+syntax = "proto3";
+
+package temporal.server.api.persistence.v1;
+option go_package = "go.temporal.io/server/api/persistence/v1;persistence";
+
+import "google/protobuf/timestamp.proto";
+
+// A node in a hierarchical state machine tree.
+message StateMachineNode {
+    // Serialized data of the underlying state machine.
+    bytes data = 1;
+    // Map of state machine type to a map of machines by ID.
+    map<string, StateMachineMap> children = 2;
+
+    // Versioned transition when the node was instantiated.
+    // This field, plus node path uniquely identifies a state machine node in a mutable state instance.
+    // This field will always be set even when transition history is disabled.
+    // NOTE: If transition history is disabled, the transition_count field will be 0 and 
+    // cannot be used to uniquely identify a node.
+    // NOTE: Node deletion is not yet implemented at the time of writing so we can still uniquely identify a node just
+    // with the initial namespace failover version.
+    VersionedTransition initial_versioned_transition = 3;
+
+    // Versioned transition when the node was last updated.
+    // This field will always be set even when transition history is disabled.
+    // NOTE: If transition history is disabled, the transition_count field will be 0 and 
+    // cannot be used for non-concurrent task staleness check or to determine whether this node should be synced
+    // during state replication.
+    VersionedTransition last_update_versioned_transition = 4;
+
+    // Number of transitions on this state machine object.
+    // Used to verify that a task is not stale if the state machine does not allow concurrent task execution.
+    // The transition count monotonically increases with each state transition and only resets when the entire 
+    // mutable state was rebuilt. This case is handled by the task_generation_shard_clock_timestamp field in 
+    // WorkflowExecutionInfo.
+    // NOTE: This field is cluster specific and cannot be replicated.
+    // NOTE: This field will be made obsolete when transition history is enabled in favor of
+    // last_update_versioned_transition.
+    int64 transition_count = 100;
+}
+
+// Map of state machine ID to StateMachineNode.
+message StateMachineMap {
+    // (-- api-linter: core::0140::prepositions=disabled
+    //     aip.dev/not-precedent: "by" is used to clarify the keys and values. --)
+    map<string, StateMachineNode> machines_by_id = 1;
+}
+
+message StateMachineKey {
+    // Addressable type of the corresponding state machine in a single tree level.
+    string type = 1;
+    // Addressable ID of the corresponding state machine in a single tree level.
+    string id = 2;
+}
+
+// A reference to a state machine at a point in time.
+message StateMachineRef {
+    // Nested path to a state machine.
+    repeated StateMachineKey path = 1;
+
+    // Versioned transition of the ref was instantiated.
+    // Used to verify that the ref is not referencing a stale state or, in some situations, 
+    // that the ref itself is not stale.
+    // NOTE: If transition history is disabled, the field will not be specified and
+    // cannot be used for staleness check.
+    VersionedTransition mutable_state_versioned_transition = 2;
+
+    // Versioned transition when the state machine node was instantiated.
+    // This field, plus node path uniquely identifies a state machine node in a mutable state instance.
+    // This field will always be set even when transition history is disabled.
+    // NOTE: If transition history is disabled, the transition_count field will be 0 and 
+    // cannot be used to uniquely identify a node.
+    // NOTE: Node deletion is not yet implemented at the time of writing so we can still uniquely identify a node just
+    // with the initial namespace failover version.
+    VersionedTransition machine_initial_versioned_transition = 3;
+
+    // Versioned transition when the state machine node was last updated.
+    // If not specified, this reference is considered non-concurrent, 
+    // and should match the last_update_versioned_transition on the corresponding state machine node.
+    // NOTE: If transition history is disabled, the transition_count field will be 0 and 
+    // cannot be used for non-concurrent task staleness check.
+    VersionedTransition machine_last_update_versioned_transition = 4;
+
+    // Number of transitions executed on the referenced state machine node at the time this Ref is instantiated.
+    // If non-zero, this reference is considered non-concurrent and this number should match the number of state
+    // transitions on the corresponding state machine node.
+    // This field will be obsolete once mutable state transition history is productionized.
+    int64 machine_transition_count = 100;
+}
+
+message StateMachineTaskInfo {
+    // Reference to a state machine.
+    StateMachineRef ref = 1;
+    // Task type. Not to be confused with the state machine's type in the `ref` field.
+    string type = 2;
+    // Opaque data attached to this task. May be nil. Deserialized by a registered TaskSerializer for this type.
+    bytes data = 3;
+}
+
+// A group of state machine timer tasks for a given deadline, used for collapsing state machine timer tasks.
+message StateMachineTimerGroup {
+    // Task information.
+    repeated StateMachineTaskInfo infos = 1;
+    // When this timer should be fired.
+    // (-- api-linter: core::0142::time-field-names=disabled
+    //     aip.dev/not-precedent: Ignoring lint rules. --)
+    google.protobuf.Timestamp deadline = 2;
+    // Whether or not a task was put in the queue for this group's deadline.
+    bool scheduled = 3;
+}
+
+// VersionedTransition is a unique identifier for a specific mutable state transition.
+message VersionedTransition {
+    // The namespace failover version at transition time.
+    int64 namespace_failover_version = 1;
+    // State transition count perceived during the specified namespace_failover_version.
+    int64 transition_count = 2;
+}
+
+message StateMachineTombstoneBatch {
+    // The versioned transition in which the tombstones were created.
+    VersionedTransition versioned_transition = 1;
+    repeated StateMachineTombstone state_machine_tombstones = 2; 
+}
+
+message StateMachineTombstone {
+    oneof state_machine_key {
+        int64 activity_scheduled_event_id = 1;
+        string timer_id = 2;
+        int64 child_execution_initiated_event_id = 3;
+        int64 request_cancel_initiated_event_id = 4;
+        int64 signal_external_initiated_event_id = 5;
+        string update_id = 6;
+        StateMachinePath state_machine_path = 7;
+    }
+}
+
+message StateMachinePath {
+    repeated StateMachineKey path = 1;
+}
+

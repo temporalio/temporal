@@ -30,7 +30,6 @@ import (
 	"errors"
 
 	"go.temporal.io/api/serviceerror"
-
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
 )
 
@@ -70,7 +69,7 @@ func (mdb *db) InsertIntoNamespace(
 	ctx context.Context,
 	row *sqlplugin.NamespaceRow,
 ) (sql.Result, error) {
-	return mdb.conn.ExecContext(ctx,
+	return mdb.ExecContext(ctx,
 		createNamespaceQuery,
 		partitionID,
 		row.ID,
@@ -87,7 +86,7 @@ func (mdb *db) UpdateNamespace(
 	ctx context.Context,
 	row *sqlplugin.NamespaceRow,
 ) (sql.Result, error) {
-	return mdb.conn.ExecContext(ctx,
+	return mdb.ExecContext(ctx,
 		updateNamespaceQuery,
 		row.Name,
 		row.Data,
@@ -124,14 +123,14 @@ func (mdb *db) selectFromNamespace(
 	var row sqlplugin.NamespaceRow
 	switch {
 	case filter.ID != nil:
-		err = mdb.conn.GetContext(ctx,
+		err = mdb.GetContext(ctx,
 			&row,
 			getNamespaceByIDQuery,
 			partitionID,
 			*filter.ID,
 		)
 	case filter.Name != nil:
-		err = mdb.conn.GetContext(ctx,
+		err = mdb.GetContext(ctx,
 			&row,
 			getNamespaceByNameQuery,
 			partitionID,
@@ -152,7 +151,7 @@ func (mdb *db) selectAllFromNamespace(
 	var rows []sqlplugin.NamespaceRow
 	switch {
 	case filter.GreaterThanID != nil:
-		err = mdb.conn.SelectContext(ctx,
+		err = mdb.SelectContext(ctx,
 			&rows,
 			listNamespacesRangeQuery,
 			partitionID,
@@ -160,7 +159,7 @@ func (mdb *db) selectAllFromNamespace(
 			*filter.PageSize,
 		)
 	default:
-		err = mdb.conn.SelectContext(ctx,
+		err = mdb.SelectContext(ctx,
 			&rows,
 			listNamespacesQuery,
 			partitionID,
@@ -179,13 +178,13 @@ func (mdb *db) DeleteFromNamespace(
 	var result sql.Result
 	switch {
 	case filter.ID != nil:
-		result, err = mdb.conn.ExecContext(ctx,
+		result, err = mdb.ExecContext(ctx,
 			deleteNamespaceByIDQuery,
 			partitionID,
 			filter.ID,
 		)
 	default:
-		result, err = mdb.conn.ExecContext(ctx,
+		result, err = mdb.ExecContext(ctx,
 			deleteNamespaceByNameQuery,
 			partitionID,
 			filter.Name,
@@ -199,7 +198,7 @@ func (mdb *db) LockNamespaceMetadata(
 	ctx context.Context,
 ) (*sqlplugin.NamespaceMetadataRow, error) {
 	var row sqlplugin.NamespaceMetadataRow
-	err := mdb.conn.GetContext(ctx,
+	err := mdb.GetContext(ctx,
 		&row.NotificationVersion,
 		lockNamespaceMetadataQuery,
 	)
@@ -214,7 +213,7 @@ func (mdb *db) SelectFromNamespaceMetadata(
 	ctx context.Context,
 ) (*sqlplugin.NamespaceMetadataRow, error) {
 	var row sqlplugin.NamespaceMetadataRow
-	err := mdb.conn.GetContext(ctx,
+	err := mdb.GetContext(ctx,
 		&row.NotificationVersion,
 		getNamespaceMetadataQuery,
 	)
@@ -226,7 +225,7 @@ func (mdb *db) UpdateNamespaceMetadata(
 	ctx context.Context,
 	row *sqlplugin.NamespaceMetadataRow,
 ) (sql.Result, error) {
-	return mdb.conn.ExecContext(ctx,
+	return mdb.ExecContext(ctx,
 		updateNamespaceMetadataQuery,
 		row.NotificationVersion+1,
 		row.NotificationVersion,

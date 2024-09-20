@@ -28,11 +28,8 @@ import (
 	"fmt"
 	"net"
 
-	"go.uber.org/fx"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/health"
-	"google.golang.org/grpc/keepalive"
-
+	"github.com/gorilla/mux"
+	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/archiver"
@@ -47,14 +44,15 @@ import (
 	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/persistence"
-	persistenceClient "go.temporal.io/server/common/persistence/client"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/visibility"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	esclient "go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/quotas"
+	"go.temporal.io/server/common/quotas/calculator"
 	"go.temporal.io/server/common/resolver"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/rpc"
@@ -63,41 +61,75 @@ import (
 	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/telemetry"
+	"go.temporal.io/server/common/utf8validator"
+	nexusfrontend "go.temporal.io/server/components/nexusoperations/frontend"
 	"go.temporal.io/server/service"
 	"go.temporal.io/server/service/frontend/configs"
+	"go.temporal.io/server/service/history/tasks"
+	"go.temporal.io/server/service/worker/scheduler"
+	"go.uber.org/fx"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/health"
+	healthpb "google.golang.org/grpc/health/grpc_health_v1"
+	"google.golang.org/grpc/keepalive"
 )
 
-type FEReplicatorNamespaceReplicationQueue persistence.NamespaceReplicationQueue
+type (
+	FEReplicatorNamespaceReplicationQueue persistence.NamespaceReplicationQueue
+
+	namespaceChecker struct {
+		r namespace.Registry
+	}
+)
 
 var Module = fx.Options(
 	resource.Module,
-	fx.Provide(dynamicconfig.NewCollection),
+	scheduler.Module,
+	dynamicconfig.Module,
+	// Note that with this approach routes may be registered in arbitrary order.
+	// This is okay because our routes don't have overlapping matches.
+	// The only important detail is that the PathPrefix("/") route registered in the HTTPAPIServerProvider comes last.
+	// Coincidentally, this is the case today, likely because it has more dependencies that the other dependencies.
+	// This approach isn't perfect but at it allows the router to be pluggable and we have enough functional test
+	// coverage to catch misconfiguration.
+	// A more robust approach would require using fx groups but we shouldn't overcomplicate until this becomes an issue.
+	fx.Provide(MuxRouterProvider),
 	fx.Provide(ConfigProvider),
 	fx.Provide(NamespaceLogInterceptorProvider),
 	fx.Provide(RedirectionInterceptorProvider),
 	fx.Provide(TelemetryInterceptorProvider),
 	fx.Provide(RetryableInterceptorProvider),
 	fx.Provide(RateLimitInterceptorProvider),
+	fx.Provide(interceptor.NewHealthInterceptor),
 	fx.Provide(NamespaceCountLimitInterceptorProvider),
 	fx.Provide(NamespaceValidatorInterceptorProvider),
 	fx.Provide(NamespaceRateLimitInterceptorProvider),
 	fx.Provide(SDKVersionInterceptorProvider),
 	fx.Provide(CallerInfoInterceptorProvider),
+	fx.Provide(MaskInternalErrorDetailsInterceptorProvider),
 	fx.Provide(GrpcServerOptionsProvider),
 	fx.Provide(VisibilityManagerProvider),
 	fx.Provide(ThrottledLoggerRpsFnProvider),
 	fx.Provide(PersistenceRateLimitingParamsProvider),
 	service.PersistenceLazyLoadedServiceResolverModule,
 	fx.Provide(FEReplicatorNamespaceReplicationQueueProvider),
+	fx.Provide(AuthorizationInterceptorProvider),
+	fx.Provide(NamespaceCheckerProvider),
 	fx.Provide(func(so GrpcServerOptions) *grpc.Server { return grpc.NewServer(so.Options...) }),
 	fx.Provide(HandlerProvider),
 	fx.Provide(AdminHandlerProvider),
 	fx.Provide(OperatorHandlerProvider),
 	fx.Provide(NewVersionChecker),
 	fx.Provide(ServiceResolverProvider),
+	fx.Invoke(RegisterNexusHTTPHandler),
+	fx.Invoke(RegisterOpenAPIHTTPHandler),
 	fx.Provide(HTTPAPIServerProvider),
 	fx.Provide(NewServiceProvider),
+	fx.Provide(NexusEndpointClientProvider),
+	fx.Provide(NexusEndpointRegistryProvider),
 	fx.Invoke(ServiceLifetimeHooks),
+	fx.Invoke(EndpointRegistryLifetimeHooks),
+	nexusfrontend.Module,
 )
 
 func NewServiceProvider(
@@ -113,7 +145,6 @@ func NewServiceProvider(
 	logger log.SnTaggedLogger,
 	grpcListener net.Listener,
 	metricsHandler metrics.Handler,
-	faultInjectionDataStoreFactory *persistenceClient.FaultInjectionDataStoreFactory,
 	membershipMonitor membership.Monitor,
 ) *Service {
 	return NewService(
@@ -129,7 +160,6 @@ func NewServiceProvider(
 		logger,
 		grpcListener,
 		metricsHandler,
-		faultInjectionDataStoreFactory,
 		membershipMonitor,
 	)
 }
@@ -141,8 +171,43 @@ type GrpcServerOptions struct {
 	UnaryInterceptors []grpc.UnaryServerInterceptor
 }
 
+func AuthorizationInterceptorProvider(
+	cfg *config.Config,
+	logger log.Logger,
+	namespaceChecker authorization.NamespaceChecker,
+	metricsHandler metrics.Handler,
+	authorizer authorization.Authorizer,
+	claimMapper authorization.ClaimMapper,
+	audienceGetter authorization.JWTAudienceMapper,
+) *authorization.Interceptor {
+	return authorization.NewInterceptor(
+		claimMapper,
+		authorizer,
+		metricsHandler,
+		logger,
+		namespaceChecker,
+		audienceGetter,
+		cfg.Global.Authorization.AuthHeaderName,
+		cfg.Global.Authorization.AuthExtraHeaderName,
+	)
+}
+
+func NamespaceCheckerProvider(registry namespace.Registry) authorization.NamespaceChecker {
+	return &namespaceChecker{r: registry}
+}
+
+func (n *namespaceChecker) Exists(name namespace.Name) error {
+	// This will get called before the namespace state validation interceptor. We want to
+	// disable readthrough to avoid polluting the negative lookup cache, e.g. if this call is
+	// for RegisterNamespace and the namespace doesn't exist yet.
+	opts := namespace.GetNamespaceOptions{DisableReadthrough: true}
+	_, err := n.r.GetNamespaceWithOptions(name, opts)
+	return err
+}
+
 func GrpcServerOptionsProvider(
 	logger log.Logger,
+	cfg *config.Config,
 	serviceConfig *Config,
 	serviceName primitives.ServiceName,
 	rpcFactory common.RPCFactory,
@@ -150,16 +215,17 @@ func GrpcServerOptionsProvider(
 	namespaceRateLimiterInterceptor *interceptor.NamespaceRateLimitInterceptor,
 	namespaceCountLimiterInterceptor *interceptor.ConcurrentRequestLimitInterceptor,
 	namespaceValidatorInterceptor *interceptor.NamespaceValidatorInterceptor,
-	redirectionInterceptor *RedirectionInterceptor,
+	redirectionInterceptor *interceptor.Redirection,
 	telemetryInterceptor *interceptor.TelemetryInterceptor,
 	retryableInterceptor *interceptor.RetryableInterceptor,
+	healthInterceptor *interceptor.HealthInterceptor,
 	rateLimitInterceptor *interceptor.RateLimitInterceptor,
 	traceInterceptor telemetry.ServerTraceInterceptor,
 	sdkVersionInterceptor *interceptor.SDKVersionInterceptor,
 	callerInfoInterceptor *interceptor.CallerInfoInterceptor,
-	authorizer authorization.Authorizer,
-	claimMapper authorization.ClaimMapper,
-	audienceGetter authorization.JWTAudienceMapper,
+	authInterceptor *authorization.Interceptor,
+	maskInternalErrorDetailsInterceptor *interceptor.MaskInternalErrorDetailsInterceptor,
+	utf8Validator *utf8validator.Validator,
 	customInterceptors []grpc.UnaryServerInterceptor,
 	metricsHandler metrics.Handler,
 ) GrpcServerOptions {
@@ -188,21 +254,21 @@ func GrpcServerOptionsProvider(
 		logger.Fatal("creating gRPC server options failed", tag.Error(err))
 	}
 	unaryInterceptors := []grpc.UnaryServerInterceptor{
-		// Service Error Interceptor should be the most outer interceptor on error handling
+		// Order or interceptors is important
+		// Mask error interceptor should be the most outer interceptor since it handle the errors format
+		// Service Error Interceptor should be the next most outer interceptor on error handling
+		maskInternalErrorDetailsInterceptor.Intercept,
 		rpc.ServiceErrorInterceptor,
+		rpc.NewFrontendServiceErrorInterceptor(logger),
+		utf8Validator.Intercept,
 		namespaceValidatorInterceptor.NamespaceValidateIntercept,
 		namespaceLogInterceptor.Intercept, // TODO: Deprecate this with a outer custom interceptor
 		grpc.UnaryServerInterceptor(traceInterceptor),
 		metrics.NewServerMetricsContextInjectorInterceptor(),
+		authInterceptor.Intercept,
 		redirectionInterceptor.Intercept,
 		telemetryInterceptor.UnaryIntercept,
-		authorization.NewAuthorizationInterceptor(
-			claimMapper,
-			authorizer,
-			metricsHandler,
-			logger,
-			audienceGetter,
-		),
+		healthInterceptor.Intercept,
 		namespaceValidatorInterceptor.StateValidationIntercept,
 		namespaceCountLimiterInterceptor.Intercept,
 		namespaceRateLimiterInterceptor.Intercept,
@@ -238,8 +304,6 @@ func ConfigProvider(
 	return NewConfig(
 		dc,
 		persistenceConfig.NumHistoryShards,
-		persistenceConfig.StandardVisibilityConfigExist(),
-		persistenceConfig.AdvancedVisibilityConfigExist(),
 	)
 }
 
@@ -272,9 +336,9 @@ func RedirectionInterceptorProvider(
 	metricsHandler metrics.Handler,
 	timeSource clock.TimeSource,
 	clusterMetadata cluster.Metadata,
-) *RedirectionInterceptor {
-	return NewRedirectionInterceptor(
-		configuration,
+) *interceptor.Redirection {
+	return interceptor.NewRedirection(
+		configuration.EnableNamespaceNotActiveAutoForwarding,
 		namespaceCache,
 		policy,
 		logger,
@@ -289,36 +353,64 @@ func TelemetryInterceptorProvider(
 	logger log.Logger,
 	metricsHandler metrics.Handler,
 	namespaceRegistry namespace.Registry,
+	serviceConfig *Config,
 ) *interceptor.TelemetryInterceptor {
 	return interceptor.NewTelemetryInterceptor(
 		namespaceRegistry,
 		metricsHandler,
 		logger,
+		serviceConfig.LogAllReqErrors,
 	)
+}
+
+func getRateFnWithMetrics(rateFn quotas.RateFn, handler metrics.Handler) quotas.RateFn {
+	return func() float64 {
+		rate := rateFn()
+		metrics.HostRPSLimit.With(handler).Record(rate)
+		return rate
+	}
 }
 
 func RateLimitInterceptorProvider(
 	serviceConfig *Config,
 	frontendServiceResolver membership.ServiceResolver,
+	handler metrics.Handler,
+	logger log.SnTaggedLogger,
 ) *interceptor.RateLimitInterceptor {
-	rateFn := quotas.ClusterAwareQuotaCalculator{
-		MemberCounter:    frontendServiceResolver,
-		PerInstanceQuota: serviceConfig.RPS,
-		GlobalQuota:      serviceConfig.GlobalRPS,
-	}.GetQuota
+	rateFn := calculator.NewLoggedCalculator(
+		calculator.ClusterAwareQuotaCalculator{
+			MemberCounter:    frontendServiceResolver,
+			PerInstanceQuota: serviceConfig.RPS,
+			GlobalQuota:      serviceConfig.GlobalRPS,
+		},
+		log.With(logger, tag.ComponentRPCHandler, tag.ScopeHost),
+	).GetQuota
+	rateFnWithMetrics := getRateFnWithMetrics(rateFn, handler)
+
 	namespaceReplicationInducingRateFn := func() float64 {
 		return float64(serviceConfig.NamespaceReplicationInducingAPIsRPS())
 	}
 
 	return interceptor.NewRateLimitInterceptor(
 		configs.NewRequestToRateLimiter(
-			quotas.NewDefaultIncomingRateLimiter(rateFn),
-			quotas.NewDefaultIncomingRateLimiter(rateFn),
-			quotas.NewDefaultIncomingRateLimiter(namespaceReplicationInducingRateFn),
-			quotas.NewDefaultIncomingRateLimiter(rateFn),
+			quotas.NewDefaultIncomingRateBurst(rateFnWithMetrics),
+			quotas.NewDefaultIncomingRateBurst(rateFn),
+			quotas.NewDefaultIncomingRateBurst(namespaceReplicationInducingRateFn),
 			serviceConfig.OperatorRPSRatio,
 		),
-		map[string]int{},
+		map[string]int{
+			healthpb.Health_Check_FullMethodName:                     0, // exclude health check requests from rate limiting.
+			adminservice.AdminService_DeepHealthCheck_FullMethodName: 0, // exclude deep health check requests from rate limiting.
+		},
+	)
+}
+
+func MaskInternalErrorDetailsInterceptorProvider(
+	serviceConfig *Config,
+	namespaceRegistry namespace.Registry,
+) *interceptor.MaskInternalErrorDetailsInterceptor {
+	return interceptor.NewMaskInternalErrorDetailsInterceptor(
+		serviceConfig.MaskInternalErrorDetails, namespaceRegistry,
 	)
 }
 
@@ -327,6 +419,7 @@ func NamespaceRateLimitInterceptorProvider(
 	serviceConfig *Config,
 	namespaceRegistry namespace.Registry,
 	frontendServiceResolver membership.ServiceResolver,
+	logger log.SnTaggedLogger,
 ) *interceptor.NamespaceRateLimitInterceptor {
 	var globalNamespaceRPS, globalNamespaceVisibilityRPS, globalNamespaceNamespaceReplicationInducingAPIsRPS dynamicconfig.IntPropertyFnWithNamespaceFilter
 
@@ -344,28 +437,36 @@ func NamespaceRateLimitInterceptorProvider(
 		panic("invalid service name")
 	}
 
-	rateFn := quotas.ClusterAwareNamespaceSpecificQuotaCalculator{
-		MemberCounter:    frontendServiceResolver,
-		PerInstanceQuota: serviceConfig.MaxNamespaceRPSPerInstance,
-		GlobalQuota:      globalNamespaceRPS,
-	}.GetQuota
-	visibilityRateFn := quotas.ClusterAwareNamespaceSpecificQuotaCalculator{
-		MemberCounter:    frontendServiceResolver,
-		PerInstanceQuota: serviceConfig.MaxNamespaceVisibilityRPSPerInstance,
-		GlobalQuota:      globalNamespaceVisibilityRPS,
-	}.GetQuota
-	namespaceReplicationInducingRateFn := quotas.ClusterAwareNamespaceSpecificQuotaCalculator{
-		MemberCounter:    frontendServiceResolver,
-		PerInstanceQuota: serviceConfig.MaxNamespaceNamespaceReplicationInducingAPIsRPSPerInstance,
-		GlobalQuota:      globalNamespaceNamespaceReplicationInducingAPIsRPS,
-	}.GetQuota
+	namespaceRateFn := calculator.NewLoggedNamespaceCalculator(
+		calculator.ClusterAwareNamespaceQuotaCalculator{
+			MemberCounter:    frontendServiceResolver,
+			PerInstanceQuota: serviceConfig.MaxNamespaceRPSPerInstance,
+			GlobalQuota:      globalNamespaceRPS,
+		},
+		log.With(logger, tag.ComponentRPCHandler, tag.ScopeNamespace),
+	).GetQuota
+	visibilityRateFn := calculator.NewLoggedNamespaceCalculator(
+		calculator.ClusterAwareNamespaceQuotaCalculator{
+			MemberCounter:    frontendServiceResolver,
+			PerInstanceQuota: serviceConfig.MaxNamespaceVisibilityRPSPerInstance,
+			GlobalQuota:      globalNamespaceVisibilityRPS,
+		},
+		log.With(logger, tag.ComponentVisibilityHandler, tag.ScopeNamespace),
+	).GetQuota
+	namespaceReplicationInducingRateFn := calculator.NewLoggedNamespaceCalculator(
+		calculator.ClusterAwareNamespaceQuotaCalculator{
+			MemberCounter:    frontendServiceResolver,
+			PerInstanceQuota: serviceConfig.MaxNamespaceNamespaceReplicationInducingAPIsRPSPerInstance,
+			GlobalQuota:      globalNamespaceNamespaceReplicationInducingAPIsRPS,
+		},
+		log.With(logger, tag.ComponentNamespaceReplication, tag.ScopeNamespace),
+	).GetQuota
 	namespaceRateLimiter := quotas.NewNamespaceRequestRateLimiter(
 		func(req quotas.Request) quotas.RequestRateLimiter {
 			return configs.NewRequestToRateLimiter(
-				configs.NewNamespaceRateBurst(req.Caller, rateFn, serviceConfig.MaxNamespaceBurstPerInstance),
-				configs.NewNamespaceRateBurst(req.Caller, visibilityRateFn, serviceConfig.MaxNamespaceVisibilityBurstPerInstance),
-				configs.NewNamespaceRateBurst(req.Caller, namespaceReplicationInducingRateFn, serviceConfig.MaxNamespaceNamespaceReplicationInducingAPIsBurstPerInstance),
-				configs.NewNamespaceRateBurst(req.Caller, rateFn, serviceConfig.MaxNamespaceBurstPerInstance),
+				configs.NewNamespaceRateBurst(req.Caller, namespaceRateFn, serviceConfig.MaxNamespaceBurstRatioPerInstance),
+				configs.NewNamespaceRateBurst(req.Caller, visibilityRateFn, serviceConfig.MaxNamespaceVisibilityBurstRatioPerInstance),
+				configs.NewNamespaceRateBurst(req.Caller, namespaceReplicationInducingRateFn, serviceConfig.MaxNamespaceNamespaceReplicationInducingAPIsBurstRatioPerInstance),
 				serviceConfig.OperatorRPSRatio,
 			)
 		},
@@ -413,6 +514,7 @@ func CallerInfoInterceptorProvider(
 func PersistenceRateLimitingParamsProvider(
 	serviceConfig *Config,
 	persistenceLazyLoadedServiceResolver service.PersistenceLazyLoadedServiceResolver,
+	logger log.SnTaggedLogger,
 ) service.PersistenceRateLimitingParams {
 	return service.NewPersistenceRateLimitingParams(
 		serviceConfig.PersistenceMaxQPS,
@@ -420,34 +522,38 @@ func PersistenceRateLimitingParamsProvider(
 		serviceConfig.PersistenceNamespaceMaxQPS,
 		serviceConfig.PersistenceGlobalNamespaceMaxQPS,
 		serviceConfig.PersistencePerShardNamespaceMaxQPS,
-		serviceConfig.EnablePersistencePriorityRateLimiting,
 		serviceConfig.OperatorRPSRatio,
+		serviceConfig.PersistenceQPSBurstRatio,
 		serviceConfig.PersistenceDynamicRateLimitingParams,
 		persistenceLazyLoadedServiceResolver,
+		logger,
 	)
 }
 
 func VisibilityManagerProvider(
 	logger log.Logger,
 	persistenceConfig *config.Persistence,
+	customVisibilityStoreFactory visibility.VisibilityStoreFactory,
 	metricsHandler metrics.Handler,
 	serviceConfig *Config,
-	esClient esclient.Client,
 	persistenceServiceResolver resolver.ServiceResolver,
 	searchAttributesMapperProvider searchattribute.MapperProvider,
 	saProvider searchattribute.Provider,
+	namespaceRegistry namespace.Registry,
 ) (manager.VisibilityManager, error) {
 	return visibility.NewManager(
 		*persistenceConfig,
 		persistenceServiceResolver,
-		esClient,
+		customVisibilityStoreFactory,
 		nil, // frontend visibility never write
 		saProvider,
 		searchAttributesMapperProvider,
+		namespaceRegistry,
 		serviceConfig.VisibilityPersistenceMaxReadQPS,
 		serviceConfig.VisibilityPersistenceMaxWriteQPS,
 		serviceConfig.OperatorRPSRatio,
 		serviceConfig.EnableReadFromSecondaryVisibility,
+		serviceConfig.VisibilityEnableShadowReadMode,
 		dynamicconfig.GetStringPropertyFn(visibility.SecondaryVisibilityWritingModeOff), // frontend visibility never write
 		serviceConfig.VisibilityDisableOrderByClause,
 		serviceConfig.VisibilityEnableManualPagination,
@@ -479,11 +585,11 @@ func AdminHandlerProvider(
 	configuration *Config,
 	replicatorNamespaceReplicationQueue FEReplicatorNamespaceReplicationQueue,
 	esClient esclient.Client,
-	visibilityMrg manager.VisibilityManager,
+	visibilityMgr manager.VisibilityManager,
 	logger log.SnTaggedLogger,
-	persistenceExecutionManager persistence.ExecutionManager,
 	namespaceReplicationQueue persistence.NamespaceReplicationQueue,
 	taskManager persistence.TaskManager,
+	persistenceExecutionManager persistence.ExecutionManager,
 	clusterMetadataManager persistence.ClusterMetadataManager,
 	persistenceMetadataManager persistence.MetadataManager,
 	clientFactory client.Factory,
@@ -500,6 +606,8 @@ func AdminHandlerProvider(
 	healthServer *health.Server,
 	eventSerializer serialization.Serializer,
 	timeSource clock.TimeSource,
+	taskCategoryRegistry tasks.TaskCategoryRegistry,
+	matchingClient resource.MatchingClient,
 ) *AdminHandler {
 	args := NewAdminHandlerArgs{
 		persistenceConfig,
@@ -507,9 +615,10 @@ func AdminHandlerProvider(
 		namespaceReplicationQueue,
 		replicatorNamespaceReplicationQueue,
 		esClient,
-		visibilityMrg,
+		visibilityMgr,
 		logger,
 		taskManager,
+		persistenceExecutionManager,
 		clusterMetadataManager,
 		persistenceMetadataManager,
 		clientFactory,
@@ -526,7 +635,8 @@ func AdminHandlerProvider(
 		healthServer,
 		eventSerializer,
 		timeSource,
-		persistenceExecutionManager,
+		taskCategoryRegistry,
+		matchingClient,
 	}
 	return NewAdminHandler(args)
 }
@@ -538,13 +648,13 @@ func OperatorHandlerProvider(
 	sdkClientFactory sdk.ClientFactory,
 	metricsHandler metrics.Handler,
 	visibilityMgr manager.VisibilityManager,
-	saProvider searchattribute.Provider,
 	saManager searchattribute.Manager,
 	healthServer *health.Server,
 	historyClient resource.HistoryClient,
 	clusterMetadataManager persistence.ClusterMetadataManager,
 	clusterMetadata cluster.Metadata,
 	clientFactory client.Factory,
+	nexusEndpointClient *NexusEndpointClient,
 ) *OperatorHandlerImpl {
 	args := NewOperatorHandlerImplArgs{
 		configuration,
@@ -553,13 +663,13 @@ func OperatorHandlerProvider(
 		sdkClientFactory,
 		metricsHandler,
 		visibilityMgr,
-		saProvider,
 		saManager,
 		healthServer,
 		historyClient,
 		clusterMetadataManager,
 		clusterMetadata,
 		clientFactory,
+		nexusEndpointClient,
 	}
 	return NewOperatorHandlerImpl(args)
 }
@@ -589,6 +699,8 @@ func HandlerProvider(
 	archivalMetadata archiver.ArchivalMetadata,
 	healthServer *health.Server,
 	membershipMonitor membership.Monitor,
+	healthInterceptor *interceptor.HealthInterceptor,
+	scheduleSpecBuilder *scheduler.SpecBuilder,
 ) Handler {
 	wfHandler := NewWorkflowHandler(
 		serviceConfig,
@@ -596,7 +708,7 @@ func HandlerProvider(
 		visibilityMgr,
 		logger,
 		throttledLogger,
-		persistenceExecutionManager,
+		persistenceExecutionManager.GetName(),
 		clusterMetadataManager,
 		persistenceMetadataManager,
 		historyClient,
@@ -611,8 +723,67 @@ func HandlerProvider(
 		healthServer,
 		timeSource,
 		membershipMonitor,
+		healthInterceptor,
+		scheduleSpecBuilder,
 	)
 	return wfHandler
+}
+
+func RegisterNexusHTTPHandler(
+	serviceConfig *Config,
+	serviceName primitives.ServiceName,
+	matchingClient resource.MatchingClient,
+	metricsHandler metrics.Handler,
+	clusterMetadata cluster.Metadata,
+	clientCache *cluster.FrontendHTTPClientCache,
+	namespaceRegistry namespace.Registry,
+	endpointRegistry nexus.EndpointRegistry,
+	authInterceptor *authorization.Interceptor,
+	telemetryInterceptor *interceptor.TelemetryInterceptor,
+	redirectionInterceptor *interceptor.Redirection,
+	namespaceRateLimiterInterceptor *interceptor.NamespaceRateLimitInterceptor,
+	namespaceCountLimiterInterceptor *interceptor.ConcurrentRequestLimitInterceptor,
+	namespaceValidatorInterceptor *interceptor.NamespaceValidatorInterceptor,
+	rateLimitInterceptor *interceptor.RateLimitInterceptor,
+	logger log.Logger,
+	router *mux.Router,
+) {
+	h := NewNexusHTTPHandler(
+		serviceConfig,
+		matchingClient,
+		metricsHandler,
+		clusterMetadata,
+		clientCache,
+		namespaceRegistry,
+		endpointRegistry,
+		authInterceptor,
+		telemetryInterceptor,
+		redirectionInterceptor,
+		namespaceValidatorInterceptor,
+		namespaceRateLimiterInterceptor,
+		namespaceCountLimiterInterceptor,
+		rateLimitInterceptor,
+		logger,
+	)
+	h.RegisterRoutes(router)
+}
+
+func RegisterOpenAPIHTTPHandler(
+	rateLimitInterceptor *interceptor.RateLimitInterceptor,
+	logger log.Logger,
+	router *mux.Router,
+) *OpenAPIHTTPHandler {
+	h := NewOpenAPIHTTPHandler(
+		rateLimitInterceptor,
+		logger,
+	)
+	h.RegisterRoutes(router)
+	return h
+}
+
+func MuxRouterProvider() *mux.Router {
+	// Instantiate a router to support additional route prefixes.
+	return mux.NewRouter().UseEncodedPath()
 }
 
 // HTTPAPIServerProvider provides an HTTP API server if enabled or nil
@@ -624,10 +795,12 @@ func HTTPAPIServerProvider(
 	grpcListener net.Listener,
 	tlsConfigProvider encryption.TLSConfigProvider,
 	handler Handler,
+	operatorHandler *OperatorHandlerImpl,
 	grpcServerOptions GrpcServerOptions,
 	metricsHandler metrics.Handler,
 	namespaceRegistry namespace.Registry,
 	logger log.Logger,
+	router *mux.Router,
 ) (*HTTPAPIServer, error) {
 	// If the service is not the frontend service, HTTP API is disabled
 	if serviceName != primitives.FrontendService {
@@ -644,11 +817,51 @@ func HTTPAPIServerProvider(
 		grpcListener,
 		tlsConfigProvider,
 		handler,
+		operatorHandler,
 		grpcServerOptions.UnaryInterceptors,
 		metricsHandler,
+		router,
 		namespaceRegistry,
 		logger,
 	)
+}
+
+func NexusEndpointClientProvider(
+	dc *dynamicconfig.Collection,
+	namespaceRegistry namespace.Registry,
+	matchingClient resource.MatchingClient,
+	nexusEndpointManager persistence.NexusEndpointManager,
+	logger log.Logger,
+) *NexusEndpointClient {
+	clientConfig := newNexusEndpointClientConfig(dc)
+	return newNexusEndpointClient(
+		clientConfig,
+		namespaceRegistry,
+		matchingClient,
+		nexusEndpointManager,
+		logger,
+	)
+}
+
+func NexusEndpointRegistryProvider(
+	matchingClient resource.MatchingClient,
+	nexusEndpointManager persistence.NexusEndpointManager,
+	dc *dynamicconfig.Collection,
+	logger log.Logger,
+	metricsHandler metrics.Handler,
+) nexus.EndpointRegistry {
+	registryConfig := nexus.NewEndpointRegistryConfig(dc)
+	return nexus.NewEndpointRegistry(
+		registryConfig,
+		matchingClient,
+		nexusEndpointManager,
+		logger,
+		metricsHandler,
+	)
+}
+
+func EndpointRegistryLifetimeHooks(lc fx.Lifecycle, registry nexus.EndpointRegistry) {
+	lc.Append(fx.StartStopHook(registry.StartLifecycle, registry.StopLifecycle))
 }
 
 func ServiceLifetimeHooks(lc fx.Lifecycle, svc *Service) {

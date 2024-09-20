@@ -27,18 +27,16 @@ package queues
 import (
 	"context"
 	"errors"
+	"math"
 	"math/rand"
+	"slices"
 	"testing"
 	"time"
 
-	gomock "github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	"golang.org/x/exp/slices"
-
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/cluster"
-	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
@@ -47,6 +45,7 @@ import (
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/tests"
+	"go.uber.org/mock/gomock"
 )
 
 type (
@@ -83,7 +82,7 @@ func (s *scheduledQueueSuite) SetupTest() {
 	s.mockExecutionManager = s.mockShard.Resource.ExecutionMgr
 	s.mockShard.Resource.ClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 
-	rateLimiter, _ := NewSchedulerRateLimiter(
+	rateLimiter, _ := NewPrioritySchedulerRateLimiter(
 		func(namespace string) float64 {
 			return float64(s.mockShard.GetConfig().TaskSchedulerNamespaceMaxQPS(namespace))
 		},
@@ -96,21 +95,34 @@ func (s *scheduledQueueSuite) SetupTest() {
 		func() float64 {
 			return float64(s.mockShard.GetConfig().PersistenceMaxQPS())
 		},
-		s.mockShard.GetConfig().TaskSchedulerRateLimiterStartupDelay,
-		s.mockShard.GetTimeSource(),
 	)
 
-	scheduler := NewPriorityScheduler(
-		PrioritySchedulerOptions{
-			WorkerCount:                 dynamicconfig.GetIntPropertyFn(10),
-			EnableRateLimiter:           dynamicconfig.GetBoolPropertyFn(true),
-			EnableRateLimiterShadowMode: dynamicconfig.GetBoolPropertyFn(true),
+	logger := log.NewTestLogger()
+
+	scheduler := NewScheduler(
+		s.mockShard.Resource.ClusterMetadata.GetCurrentClusterName(),
+		SchedulerOptions{
+			WorkerCount:             s.mockShard.GetConfig().TimerProcessorSchedulerWorkerCount,
+			ActiveNamespaceWeights:  s.mockShard.GetConfig().TimerProcessorSchedulerActiveRoundRobinWeights,
+			StandbyNamespaceWeights: s.mockShard.GetConfig().TimerProcessorSchedulerStandbyRoundRobinWeights,
 		},
+		s.mockShard.GetNamespaceRegistry(),
+		logger,
+	)
+	scheduler = NewRateLimitedScheduler(
+		scheduler,
+		RateLimitedSchedulerOptions{
+			EnableShadowMode: s.mockShard.GetConfig().TaskSchedulerEnableRateLimiterShadowMode,
+			StartupDelay:     s.mockShard.GetConfig().TaskSchedulerRateLimiterStartupDelay,
+		},
+		s.mockShard.Resource.ClusterMetadata.GetCurrentClusterName(),
+		s.mockShard.GetNamespaceRegistry(),
 		rateLimiter,
 		s.mockShard.GetTimeSource(),
-		log.NewTestLogger(),
+		logger,
 		metrics.NoopMetricsHandler,
 	)
+
 	rescheduler := NewRescheduler(
 		scheduler,
 		s.mockShard.GetTimeSource(),
@@ -118,19 +130,41 @@ func (s *scheduledQueueSuite) SetupTest() {
 		metrics.NoopMetricsHandler,
 	)
 
+	factory := NewExecutableFactory(nil,
+		scheduler,
+		rescheduler,
+		nil,
+		s.mockShard.GetTimeSource(),
+		s.mockShard.GetNamespaceRegistry(),
+		s.mockShard.GetClusterMetadata(),
+		logger,
+		metrics.NoopMetricsHandler,
+		nil,
+		func() bool {
+			return false
+		},
+		func() int {
+			return math.MaxInt
+		},
+		func() bool {
+			return false
+		},
+		func() string {
+			return ""
+		},
+	)
 	s.scheduledQueue = NewScheduledQueue(
 		s.mockShard,
 		tasks.CategoryTimer,
 		scheduler,
 		rescheduler,
-		nil,
-		nil,
+		factory,
 		testQueueOptions,
 		NewReaderPriorityRateLimiter(
 			func() float64 { return 10 },
 			1,
 		),
-		log.NewTestLogger(),
+		logger,
 		metrics.NoopMetricsHandler,
 	)
 }
@@ -181,7 +215,6 @@ func (s *scheduledQueueSuite) TestPaginationFnProvider() {
 	s.mockExecutionManager.EXPECT().GetHistoryTasks(gomock.Any(), &persistence.GetHistoryTasksRequest{
 		ShardID:             s.mockShard.GetShardID(),
 		TaskCategory:        tasks.CategoryTimer,
-		ReaderID:            DefaultReaderId,
 		InclusiveMinTaskKey: tasks.NewKey(r.InclusiveMin.FireTime, 0),
 		ExclusiveMaxTaskKey: tasks.NewKey(r.ExclusiveMax.FireTime.Add(persistence.ScheduledTaskMinPrecision), 0),
 		BatchSize:           testQueueOptions.BatchSize(),
@@ -191,7 +224,7 @@ func (s *scheduledQueueSuite) TestPaginationFnProvider() {
 		NextPageToken: nextPageToken,
 	}, nil).Times(1)
 
-	paginationFn := paginationFnProvider(DefaultReaderId, r)
+	paginationFn := paginationFnProvider(r)
 	loadedTasks, actualNextPageToken, err := paginationFn(currentPageToken)
 	s.NoError(err)
 	for _, task := range loadedTasks {
@@ -247,12 +280,6 @@ func (s *scheduledQueueSuite) TestLookAheadTask_ErrorLookAhead() {
 		predicates.Universal[tasks.Task](),
 	)
 
-	s.mockExecutionManager.EXPECT().RegisterHistoryTaskReader(gomock.Any(), &persistence.RegisterHistoryTaskReaderRequest{
-		ShardID:      s.mockShard.GetShardID(),
-		ShardOwner:   s.mockShard.GetOwner(),
-		TaskCategory: tasks.CategoryTimer,
-		ReaderID:     lookAheadReaderID,
-	}).Return(nil).Times(1)
 	s.mockExecutionManager.EXPECT().GetHistoryTasks(gomock.Any(), gomock.Any()).
 		Return(nil, errors.New("some random error")).Times(1)
 	s.scheduledQueue.lookAheadTask()
@@ -282,16 +309,9 @@ func (s *scheduledQueueSuite) setupLookAheadMock(
 		loadedTasks = append(loadedTasks, lookAheadTask)
 	}
 
-	s.mockExecutionManager.EXPECT().RegisterHistoryTaskReader(gomock.Any(), &persistence.RegisterHistoryTaskReaderRequest{
-		ShardID:      s.mockShard.GetShardID(),
-		ShardOwner:   s.mockShard.GetOwner(),
-		TaskCategory: tasks.CategoryTimer,
-		ReaderID:     lookAheadReaderID,
-	}).Return(nil).Times(1)
 	s.mockExecutionManager.EXPECT().GetHistoryTasks(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, request *persistence.GetHistoryTasksRequest) (*persistence.GetHistoryTasksResponse, error) {
 		s.Equal(s.mockShard.GetShardID(), request.ShardID)
 		s.Equal(tasks.CategoryTimer, request.TaskCategory)
-		s.Equal(DefaultReaderId, request.ReaderID)
 		s.Equal(lookAheadRange.InclusiveMin, request.InclusiveMinTaskKey)
 		s.Equal(1, request.BatchSize)
 		s.Nil(request.NextPageToken)

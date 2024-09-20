@@ -1,3 +1,5 @@
+// The MIT License
+//
 // Copyright (c) 2019 Temporal Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -62,6 +64,11 @@ service AdminService {
     // StartEventId defines the beginning of the event to fetch. The first event is inclusive.
     // EndEventId and EndEventVersion defines the end of the event to fetch. The end event is exclusive.
     rpc GetWorkflowExecutionRawHistoryV2 (GetWorkflowExecutionRawHistoryV2Request) returns (GetWorkflowExecutionRawHistoryV2Response) {
+    }
+
+    // StartEventId defines the beginning of the event to fetch. The first event is inclusive.
+    // EndEventId and EndEventVersion defines the end of the event to fetch. The end event is inclusive.
+    rpc GetWorkflowExecutionRawHistory (GetWorkflowExecutionRawHistoryRequest) returns (GetWorkflowExecutionRawHistoryResponse) {
     }
 
     // GetReplicationMessages returns new replication tasks since the read level provided in the token.
@@ -150,5 +157,28 @@ service AdminService {
 
     rpc GetNamespace(GetNamespaceRequest) returns (GetNamespaceResponse) {
     }
-}
 
+    rpc GetDLQTasks (GetDLQTasksRequest) returns (GetDLQTasksResponse) {
+    }
+    // (-- api-linter: core::0165::response-message-name=disabled
+    //     aip.dev/not-precedent:  --)
+    rpc PurgeDLQTasks (PurgeDLQTasksRequest) returns (PurgeDLQTasksResponse) {}
+
+    rpc MergeDLQTasks (MergeDLQTasksRequest) returns (MergeDLQTasksResponse) {}
+
+    rpc DescribeDLQJob (DescribeDLQJobRequest) returns (DescribeDLQJobResponse) {}
+
+    rpc CancelDLQJob (CancelDLQJobRequest) returns (CancelDLQJobResponse) {}
+
+    rpc AddTasks (AddTasksRequest) returns (AddTasksResponse) {}
+
+    rpc ListQueues (ListQueuesRequest) returns (ListQueuesResponse) {}
+
+    rpc DeepHealthCheck (DeepHealthCheckRequest) returns (DeepHealthCheckResponse) {}
+
+    rpc SyncWorkflowState (SyncWorkflowStateRequest) returns (SyncWorkflowStateResponse) {}
+
+    rpc GenerateLastHistoryReplicationTasks(GenerateLastHistoryReplicationTasksRequest) returns (GenerateLastHistoryReplicationTasksResponse) {}
+
+    rpc DescribeTaskQueuePartition (DescribeTaskQueuePartitionRequest) returns (DescribeTaskQueuePartitionResponse) {}
+}

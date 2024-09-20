@@ -22,6 +22,8 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
+//go:generate mockgen -copyright_file ../../../LICENSE -package $GOPACKAGE -source $GOFILE -destination consistency_checker_mock.go
+
 package api
 
 import (
@@ -29,14 +31,11 @@ import (
 	"fmt"
 
 	commonpb "go.temporal.io/api/common/v1"
-	"go.temporal.io/api/serviceerror"
-
 	clockspb "go.temporal.io/server/api/clock/v1"
-
 	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
-	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/vclock"
@@ -53,14 +52,22 @@ type (
 			ctx context.Context,
 			namespaceID string,
 			workflowID string,
+			lockPriority locks.Priority,
 		) (string, error)
-		GetWorkflowContext(
+		GetWorkflowLease(
+			ctx context.Context,
+			reqClock *clockspb.VectorClock,
+			workflowKey definition.WorkflowKey,
+			lockPriority locks.Priority,
+		) (WorkflowLease, error)
+
+		GetWorkflowLeaseWithConsistencyCheck(
 			ctx context.Context,
 			reqClock *clockspb.VectorClock,
 			consistencyPredicate MutableStateConsistencyPredicate,
 			workflowKey definition.WorkflowKey,
-			lockPriority workflow.LockPriority,
-		) (WorkflowContext, error)
+			lockPriority locks.Priority,
+		) (WorkflowLease, error)
 	}
 
 	WorkflowConsistencyCheckerImpl struct {
@@ -87,61 +94,58 @@ func (c *WorkflowConsistencyCheckerImpl) GetCurrentRunID(
 	ctx context.Context,
 	namespaceID string,
 	workflowID string,
-) (string, error) {
-	// to achieve read after write consistency,
-	// logic need to assert shard ownership *at most once* per read API call
-	// shard ownership asserted boolean keep tracks whether AssertOwnership is already caller
-	shardOwnershipAsserted := false
-	runID, err := c.getCurrentRunID(
+	lockPriority locks.Priority,
+) (runID string, retErr error) {
+	return wcache.GetCurrentRunID(
 		ctx,
-		&shardOwnershipAsserted,
+		c.shardContext,
+		c.workflowCache,
 		namespaceID,
 		workflowID,
+		lockPriority,
 	)
-	if err != nil {
-		return "", err
-	}
-	return runID, nil
 }
 
-func (c *WorkflowConsistencyCheckerImpl) GetWorkflowContext(
+func (c *WorkflowConsistencyCheckerImpl) GetWorkflowLease(
+	ctx context.Context,
+	reqClock *clockspb.VectorClock,
+	workflowKey definition.WorkflowKey,
+	lockPriority locks.Priority,
+) (WorkflowLease, error) {
+	return c.getWorkflowLeaseImpl(ctx, reqClock, nil, workflowKey, lockPriority)
+}
+
+// The code below should be used when custom workflow state validation is required.
+// If consistencyPredicate failed (thus detecting a stale workflow state)
+// workflow state will be cleared, and mutable state will be reloaded.
+func (c *WorkflowConsistencyCheckerImpl) GetWorkflowLeaseWithConsistencyCheck(
 	ctx context.Context,
 	reqClock *clockspb.VectorClock,
 	consistencyPredicate MutableStateConsistencyPredicate,
 	workflowKey definition.WorkflowKey,
-	lockPriority workflow.LockPriority,
-) (WorkflowContext, error) {
-	if reqClock != nil {
-		currentClock := c.shardContext.CurrentVectorClock()
-		if vclock.Comparable(reqClock, currentClock) {
-			return c.getWorkflowContextValidatedByClock(
-				ctx,
-				reqClock,
-				currentClock,
-				workflowKey,
-				lockPriority,
-			)
-		}
-		// request vector clock cannot is not comparable with current shard vector clock
-		// use methods below
+	lockPriority locks.Priority,
+) (WorkflowLease, error) {
+
+	return c.getWorkflowLeaseImpl(ctx, reqClock, consistencyPredicate, workflowKey, lockPriority)
+}
+
+func (c *WorkflowConsistencyCheckerImpl) getWorkflowLeaseImpl(
+	ctx context.Context,
+	reqClock *clockspb.VectorClock,
+	consistencyPredicate MutableStateConsistencyPredicate,
+	workflowKey definition.WorkflowKey,
+	lockPriority locks.Priority,
+) (WorkflowLease, error) {
+	if err := c.clockConsistencyCheck(reqClock); err != nil {
+		return nil, err
 	}
 
-	// to achieve read after write consistency,
-	// logic need to assert shard ownership *at most once* per read API call
-	// shard ownership asserted boolean keep tracks whether AssertOwnership is already caller
-	shardOwnershipAsserted := false
 	if len(workflowKey.RunID) != 0 {
-		return c.getWorkflowContextValidatedByCheck(
-			ctx,
-			&shardOwnershipAsserted,
-			consistencyPredicate,
-			workflowKey,
-			lockPriority,
-		)
+		return c.getWorkflowLease(ctx, consistencyPredicate, workflowKey, lockPriority)
 	}
-	return c.getCurrentWorkflowContext(
+
+	return c.getCurrentWorkflowLease(
 		ctx,
-		&shardOwnershipAsserted,
 		consistencyPredicate,
 		workflowKey.NamespaceID,
 		workflowKey.WorkflowID,
@@ -149,224 +153,114 @@ func (c *WorkflowConsistencyCheckerImpl) GetWorkflowContext(
 	)
 }
 
-func (c *WorkflowConsistencyCheckerImpl) getWorkflowContextValidatedByClock(
-	ctx context.Context,
+func (c *WorkflowConsistencyCheckerImpl) clockConsistencyCheck(
 	reqClock *clockspb.VectorClock,
-	currentClock *clockspb.VectorClock,
-	workflowKey definition.WorkflowKey,
-	lockPriority workflow.LockPriority,
-) (WorkflowContext, error) {
+) error {
+	if reqClock == nil {
+		return nil
+	}
+	currentClock := c.shardContext.CurrentVectorClock()
+	if !vclock.Comparable(reqClock, currentClock) {
+		// request vector clock is not comparable with current shard vector clock
+		return nil
+	}
+
 	cmpResult, err := vclock.Compare(reqClock, currentClock)
 	if err != nil {
-		return nil, err
+		return err
 	}
-	if cmpResult > 0 {
-		shardID := c.shardContext.GetShardID()
-		c.shardContext.UnloadForOwnershipLost()
-		return nil, &persistence.ShardOwnershipLostError{
-			ShardID: shardID,
-			Msg:     fmt.Sprintf("Shard: %v consistency check failed, reloading", shardID),
-		}
+	if cmpResult <= 0 {
+		return nil
 	}
-
-	wfContext, release, err := c.workflowCache.GetOrCreateWorkflowExecution(
-		ctx,
-		c.shardContext,
-		namespace.ID(workflowKey.NamespaceID),
-		commonpb.WorkflowExecution{
-			WorkflowId: workflowKey.WorkflowID,
-			RunId:      workflowKey.RunID,
-		},
-		lockPriority,
-	)
-	if err != nil {
-		return nil, err
-	}
-
-	mutableState, err := wfContext.LoadMutableState(ctx, c.shardContext)
-	if err != nil {
-		release(err)
-		return nil, err
-	}
-	return NewWorkflowContext(wfContext, release, mutableState), nil
-}
-
-func (c *WorkflowConsistencyCheckerImpl) getWorkflowContextValidatedByCheck(
-	ctx context.Context,
-	shardOwnershipAsserted *bool,
-	consistencyPredicate MutableStateConsistencyPredicate,
-	workflowKey definition.WorkflowKey,
-	lockPriority workflow.LockPriority,
-) (WorkflowContext, error) {
-	if len(workflowKey.RunID) == 0 {
-		return nil, serviceerror.NewInternal(fmt.Sprintf(
-			"loadWorkflowContext encountered empty run ID: %v", workflowKey,
-		))
-	}
-
-	wfContext, release, err := c.workflowCache.GetOrCreateWorkflowExecution(
-		ctx,
-		c.shardContext,
-		namespace.ID(workflowKey.NamespaceID),
-		commonpb.WorkflowExecution{
-			WorkflowId: workflowKey.WorkflowID,
-			RunId:      workflowKey.RunID,
-		},
-		lockPriority,
-	)
-	if err != nil {
-		return nil, err
-	}
-
-	mutableState, err := wfContext.LoadMutableState(ctx, c.shardContext)
-	switch err.(type) {
-	case nil:
-		if consistencyPredicate(mutableState) {
-			return NewWorkflowContext(wfContext, release, mutableState), nil
-		}
-		wfContext.Clear()
-
-		mutableState, err := wfContext.LoadMutableState(ctx, c.shardContext)
-		if err != nil {
-			release(err)
-			return nil, err
-		}
-		return NewWorkflowContext(wfContext, release, mutableState), nil
-	case *serviceerror.NotFound, *serviceerror.NamespaceNotFound:
-		release(err)
-		if err := assertShardOwnership(
-			ctx,
-			c.shardContext,
-			shardOwnershipAsserted,
-		); err != nil {
-			return nil, err
-		}
-		return nil, err
-	default:
-		release(err)
-		return nil, err
+	shardID := c.shardContext.GetShardID()
+	c.shardContext.UnloadForOwnershipLost()
+	return &persistence.ShardOwnershipLostError{
+		ShardID: shardID,
+		Msg:     fmt.Sprintf("Shard: %v consistency check failed, reloading", shardID),
 	}
 }
 
-func (c *WorkflowConsistencyCheckerImpl) getCurrentWorkflowContext(
+func (c *WorkflowConsistencyCheckerImpl) getCurrentWorkflowLease(
 	ctx context.Context,
-	shardOwnershipAsserted *bool,
 	consistencyPredicate MutableStateConsistencyPredicate,
 	namespaceID string,
 	workflowID string,
-	lockPriority workflow.LockPriority,
-) (WorkflowContext, error) {
-	runID, err := c.getCurrentRunID(
+	lockPriority locks.Priority,
+) (WorkflowLease, error) {
+	runID, err := c.GetCurrentRunID(
 		ctx,
-		shardOwnershipAsserted,
 		namespaceID,
 		workflowID,
+		lockPriority,
 	)
 	if err != nil {
 		return nil, err
 	}
-	wfContext, err := c.getWorkflowContextValidatedByCheck(
+	workflowLease, err := c.getWorkflowLease(
 		ctx,
-		shardOwnershipAsserted,
 		consistencyPredicate,
 		definition.NewWorkflowKey(namespaceID, workflowID, runID),
 		lockPriority,
 	)
+
 	if err != nil {
 		return nil, err
 	}
-	if wfContext.GetMutableState().IsWorkflowExecutionRunning() {
-		return wfContext, nil
+	if workflowLease.GetMutableState().IsWorkflowExecutionRunning() {
+		return workflowLease, nil
 	}
 
-	currentRunID, err := c.getCurrentRunID(
-		ctx,
-		shardOwnershipAsserted,
-		namespaceID,
-		workflowID,
-	)
+	currentRunID, err := c.GetCurrentRunID(ctx, namespaceID, workflowID, lockPriority)
+
 	if err != nil {
-		wfContext.GetReleaseFn()(err)
+		workflowLease.GetReleaseFn()(err)
 		return nil, err
 	}
-	if currentRunID == wfContext.GetWorkflowKey().RunID {
-		return wfContext, nil
+	if currentRunID == workflowLease.GetContext().GetWorkflowKey().RunID {
+		return workflowLease, nil
 	}
 
-	wfContext.GetReleaseFn()(nil)
+	workflowLease.GetReleaseFn()(nil)
 	return nil, consts.ErrLocateCurrentWorkflowExecution
 }
 
-func (c *WorkflowConsistencyCheckerImpl) getCurrentRunID(
+func (c *WorkflowConsistencyCheckerImpl) getWorkflowLease(
 	ctx context.Context,
-	shardOwnershipAsserted *bool,
-	namespaceID string,
-	workflowID string,
-) (string, error) {
-	resp, err := c.shardContext.GetCurrentExecution(
+	consistencyPredicate MutableStateConsistencyPredicate,
+	workflowKey definition.WorkflowKey,
+	lockPriority locks.Priority,
+) (WorkflowLease, error) {
+
+	wfContext, release, err := c.workflowCache.GetOrCreateWorkflowExecution(
 		ctx,
-		&persistence.GetCurrentExecutionRequest{
-			ShardID:     c.shardContext.GetShardID(),
-			NamespaceID: namespaceID,
-			WorkflowID:  workflowID,
+		c.shardContext,
+		namespace.ID(workflowKey.NamespaceID),
+		&commonpb.WorkflowExecution{
+			WorkflowId: workflowKey.WorkflowID,
+			RunId:      workflowKey.RunID,
 		},
+		lockPriority,
 	)
-	switch err.(type) {
-	case nil:
-		return resp.RunID, nil
-	case *serviceerror.NotFound:
-		if err := assertShardOwnership(
-			ctx,
-			c.shardContext,
-			shardOwnershipAsserted,
-		); err != nil {
-			return "", err
-		}
-		return "", err
-	default:
-		return "", err
+	if err != nil {
+		return nil, err
 	}
-}
 
-func assertShardOwnership(
-	ctx context.Context,
-	shardContext shard.Context,
-	shardOwnershipAsserted *bool,
-) error {
-	if !*shardOwnershipAsserted {
-		*shardOwnershipAsserted = true
-		return shardContext.AssertOwnership(ctx)
+	mutableState, err := wfContext.LoadMutableState(ctx, c.shardContext)
+	if err != nil {
+		release(err)
+		return nil, err
 	}
-	return nil
-}
 
-func BypassMutableStateConsistencyPredicate(
-	mutableState workflow.MutableState,
-) bool {
-	return true
-}
-
-func FailMutableStateConsistencyPredicate(
-	mutableState workflow.MutableState,
-) bool {
-	return false
-}
-
-func HistoryEventConsistencyPredicate(
-	eventID int64,
-	eventVersion int64,
-) MutableStateConsistencyPredicate {
-	return func(mutableState workflow.MutableState) bool {
-		if eventVersion != 0 {
-			_, err := versionhistory.FindFirstVersionHistoryIndexByVersionHistoryItem(
-				mutableState.GetExecutionInfo().GetVersionHistories(),
-				versionhistory.NewVersionHistoryItem(eventID, eventVersion),
-			)
-			return err == nil
-		}
-		// if initiated version is 0, it means the namespace is local or
-		// the caller has old version and does not sent the info.
-		// in either case, fallback to comparing next eventID
-		return eventID < mutableState.GetNextEventID()
+	// if consistencyPredicate is nill we assume it is not needed
+	if consistencyPredicate == nil || consistencyPredicate(mutableState) {
+		return NewWorkflowLease(wfContext, release, mutableState), nil
 	}
+	wfContext.Clear()
+
+	mutableState, err = wfContext.LoadMutableState(ctx, c.shardContext)
+	if err != nil {
+		release(err)
+		return nil, err
+	}
+	return NewWorkflowLease(wfContext, release, mutableState), nil
 }

@@ -27,13 +27,13 @@ package history
 import (
 	"context"
 	"errors"
+	"fmt"
 	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
-
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
@@ -46,10 +46,16 @@ import (
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/ndc"
 	"go.temporal.io/server/service/history/queues"
+	"go.temporal.io/server/service/history/replication/eventhandler"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/workflow"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
+)
+
+const (
+	recordChildCompletionVerificationFailedMsg = "Failed to verify child execution completion recoreded"
+	firstWorkflowTaskVerificationFailedMsg     = "Failed to verify first workflow task scheduled"
 )
 
 type (
@@ -57,18 +63,21 @@ type (
 		*transferQueueTaskExecutorBase
 
 		clusterName        string
-		nDCHistoryResender xdc.NDCHistoryResender
+		nDCHistoryResender xdc.NDCHistoryResender // Deprecated, will delete once eventhandler.ResendHandler feature is fully launched
+		resendHandler      eventhandler.ResendHandler
 	}
-)
 
-var (
-	errVerificationFailed = errors.New("failed to verify target workflow state")
+	verificationErr struct {
+		msg string
+		err error
+	}
 )
 
 func newTransferQueueStandbyTaskExecutor(
 	shard shard.Context,
 	workflowCache wcache.Cache,
 	nDCHistoryResender xdc.NDCHistoryResender,
+	resendHandler eventhandler.ResendHandler,
 	logger log.Logger,
 	metricProvider metrics.Handler,
 	clusterName string,
@@ -88,13 +97,14 @@ func newTransferQueueStandbyTaskExecutor(
 		),
 		clusterName:        clusterName,
 		nDCHistoryResender: nDCHistoryResender,
+		resendHandler:      resendHandler,
 	}
 }
 
 func (t *transferQueueStandbyTaskExecutor) Execute(
 	ctx context.Context,
 	executable queues.Executable,
-) ([]metrics.Tag, bool, error) {
+) queues.ExecuteResponse {
 	task := executable.GetTask()
 	taskType := queues.GetStandbyTransferTaskTypeTagValue(task)
 	metricsTags := []metrics.Tag{
@@ -127,7 +137,11 @@ func (t *transferQueueStandbyTaskExecutor) Execute(
 		err = errUnknownTransferTask
 	}
 
-	return metricsTags, false, err
+	return queues.ExecuteResponse{
+		ExecutionMetricTags: metricsTags,
+		ExecutedAsActive:    false,
+		ExecutionErr:        err,
+	}
 }
 
 func (t *transferQueueStandbyTaskExecutor) processActivityTask(
@@ -147,7 +161,7 @@ func (t *transferQueueStandbyTaskExecutor) processActivityTask(
 		}
 
 		if activityInfo.StartedEventId == common.EmptyEventID {
-			return newActivityTaskPostActionInfo(mutableState, *activityInfo.ScheduleToStartTimeout, activityInfo.UseCompatibleVersion)
+			return newActivityTaskPostActionInfo(mutableState, activityInfo)
 		}
 
 		return nil, nil
@@ -198,8 +212,8 @@ func (t *transferQueueStandbyTaskExecutor) processWorkflowTask(
 		if wtInfo.StartedEventID == common.EmptyEventID {
 			return newWorkflowTaskPostActionInfo(
 				mutableState,
-				scheduleToStartTimeout,
-				*taskQueue,
+				scheduleToStartTimeout.AsDuration(),
+				taskQueue,
 			)
 		}
 
@@ -235,11 +249,11 @@ func (t *transferQueueStandbyTaskExecutor) processCloseExecution(
 
 		executionInfo := mutableState.GetExecutionInfo()
 
-		lastWriteVersion, err := mutableState.GetLastWriteVersion()
+		closeVersion, err := mutableState.GetCloseVersion()
 		if err != nil {
 			return nil, err
 		}
-		err = CheckTaskVersion(t.shardContext, t.logger, mutableState.GetNamespaceEntry(), lastWriteVersion, transferTask.Version, transferTask)
+		err = CheckTaskVersion(t.shardContext, t.logger, mutableState.GetNamespaceEntry(), closeVersion, transferTask.Version, transferTask)
 		if err != nil {
 			return nil, err
 		}
@@ -273,20 +287,22 @@ func (t *transferQueueStandbyTaskExecutor) processCloseExecution(
 			})
 			switch err.(type) {
 			case nil, *serviceerror.NamespaceNotFound, *serviceerror.Unimplemented:
+				// Case 1: Target workflow is in the desired state.
 				return nil, nil
 			case *serviceerror.NotFound, *serviceerror.WorkflowNotReady:
-				return verifyChildCompletionRecordedInfo, nil
+				// Case 2: Target workflow is not in the desired state.
+				// Returning a non-nil pointer as postActionInfo here to indicate that verification is not done yet.
+				return &struct{}{}, nil
 			default:
-				t.logger.Error("Failed to verify child execution completion recoreded",
-					tag.WorkflowNamespaceID(transferTask.GetNamespaceID()),
-					tag.WorkflowID(transferTask.GetWorkflowID()),
-					tag.WorkflowRunID(transferTask.GetRunID()),
-					tag.Error(err),
-				)
-
-				// NOTE: we do not return the error here which will cause the mutable state to be cleared and reloaded upon retry
-				// it's unnecessary as the error is in the target workflow, not this workflow.
-				return nil, errVerificationFailed
+				// Case 3: Verification itself failed.
+				// NOTE: Returning an error as postActionInfo here so that post action can decide whether to retry or not.
+				// Post action will propagate the error to upper layer to backoff and emit metrics properly if retry is needed.
+				// NOTE: Wrapping the error as a verification error to prevent mutable state from being cleared and reloaded upon retry.
+				// That's unnecessary as the error is in the target workflow, not this workflow.
+				return &verificationErr{
+					msg: recordChildCompletionVerificationFailedMsg,
+					err: err,
+				}, nil
 			}
 		}
 		return nil, nil
@@ -412,9 +428,7 @@ func (t *transferQueueStandbyTaskExecutor) processStartChildExecution(
 			if err != nil {
 				return nil, err
 			}
-			return &startChildExecutionPostActionInfo{
-				historyResendInfo: historyResendInfo,
-			}, nil
+			return historyResendInfo, nil
 		}
 
 		_, err = t.historyRawClient.VerifyFirstWorkflowTaskScheduled(ctx, &historyservice.VerifyFirstWorkflowTaskScheduledRequest{
@@ -427,20 +441,22 @@ func (t *transferQueueStandbyTaskExecutor) processStartChildExecution(
 		})
 		switch err.(type) {
 		case nil, *serviceerror.NamespaceNotFound, *serviceerror.Unimplemented:
+			// Case 1: Target workflow is in the desired state.
 			return nil, nil
 		case *serviceerror.NotFound, *serviceerror.WorkflowNotReady:
-			return &startChildExecutionPostActionInfo{}, nil
+			// Case 2:Ttarget workflow is not in the desired state.
+			// Return a non-nil pointer as postActionInfo here to indicate that verification is not done yet.
+			return &struct{}{}, nil
 		default:
-			t.logger.Error("Failed to verify first workflow task scheduled",
-				tag.WorkflowNamespaceID(transferTask.GetNamespaceID()),
-				tag.WorkflowID(transferTask.GetWorkflowID()),
-				tag.WorkflowRunID(transferTask.GetRunID()),
-				tag.Error(err),
-			)
-
-			// NOTE: we do not return the error here which will cause the mutable state to be cleared and reloaded upon retry
-			// it's unnecessary as the error is in the target workflow, not this workflow.
-			return nil, errVerificationFailed
+			// Case 3: Verification itself failed.
+			// NOTE: Returning an error as postActionInfo here so that post action can decide whether to retry or not.
+			// Post action will propagate the error to upper layer to backoff and emit metrics properly if retry is needed.
+			// NOTE: Wrapping the error as a verification error to prevent mutable state from being cleared and reloaded upon retry.
+			// That's unnecessary as the error is in the target workflow, not this workflow.
+			return &verificationErr{
+				msg: recordChildCompletionVerificationFailedMsg,
+				err: err,
+			}, nil
 		}
 	}
 
@@ -484,7 +500,8 @@ func (t *transferQueueStandbyTaskExecutor) processTransfer(
 		return err
 	}
 	defer func() {
-		if retError == consts.ErrTaskRetry || retError == errVerificationFailed {
+		var verificationErr *verificationErr
+		if retError == consts.ErrTaskRetry || errors.As(retError, &verificationErr) {
 			release(nil)
 		} else {
 			release(retError)
@@ -501,14 +518,14 @@ func (t *transferQueueStandbyTaskExecutor) processTransfer(
 		return nil
 	}
 
-	historyResendInfo, err := actionFn(ctx, weContext, mutableState)
+	postActionInfo, err := actionFn(ctx, weContext, mutableState)
 	if err != nil {
 		return err
 	}
 
 	// NOTE: do not access anything related mutable state after this lock release
 	release(nil)
-	return postActionFn(ctx, taskInfo, historyResendInfo, t.logger)
+	return postActionFn(ctx, taskInfo, postActionInfo, t.logger)
 }
 
 func (t *transferQueueStandbyTaskExecutor) pushActivity(
@@ -526,8 +543,9 @@ func (t *transferQueueStandbyTaskExecutor) pushActivity(
 	return t.transferQueueTaskExecutorBase.pushActivity(
 		ctx,
 		task.(*tasks.ActivityTask),
-		&timeout,
+		timeout,
 		pushActivityInfo.versionDirective,
+		workflow.TransactionPolicyPassive,
 	)
 }
 
@@ -545,9 +563,10 @@ func (t *transferQueueStandbyTaskExecutor) pushWorkflowTask(
 	return t.transferQueueTaskExecutorBase.pushWorkflowTask(
 		ctx,
 		task.(*tasks.WorkflowTask),
-		&pushwtInfo.taskqueue,
+		pushwtInfo.taskqueue,
 		pushwtInfo.workflowTaskScheduleToStartTimeout,
 		pushwtInfo.versionDirective,
+		workflow.TransactionPolicyPassive,
 	)
 }
 
@@ -561,8 +580,7 @@ func (t *transferQueueStandbyTaskExecutor) startChildExecutionResendPostAction(
 		return nil
 	}
 
-	historyResendInfo := postActionInfo.(*startChildExecutionPostActionInfo).historyResendInfo
-	if historyResendInfo != nil {
+	if historyResendInfo, ok := postActionInfo.(*historyResendInfo); ok {
 		return t.fetchHistoryFromRemote(ctx, taskInfo, historyResendInfo, log)
 	}
 
@@ -599,9 +617,9 @@ func (t *transferQueueStandbyTaskExecutor) fetchHistoryFromRemote(
 	}
 
 	scope := t.metricHandler.WithTags(metrics.OperationTag(metrics.HistoryRereplicationByTransferTaskScope))
-	scope.Counter(metrics.ClientRequests.GetMetricName()).Record(1)
+	metrics.ClientRequests.With(scope).Record(1)
 	startTime := time.Now().UTC()
-	defer func() { scope.Timer(metrics.ClientLatency.GetMetricName()).Record(time.Since(startTime)) }()
+	defer func() { metrics.ClientLatency.With(scope).Record(time.Since(startTime)) }()
 
 	if resendInfo.lastEventID == common.EmptyEventID || resendInfo.lastEventVersion == common.EmptyVersion {
 		t.logger.Error("Error re-replicating history from remote: transferQueueStandbyProcessor encountered empty historyResendInfo.",
@@ -616,17 +634,32 @@ func (t *transferQueueStandbyTaskExecutor) fetchHistoryFromRemote(
 
 	// NOTE: history resend may take long time and its timeout is currently
 	// controlled by a separate dynamicconfig config: StandbyTaskReReplicationContextTimeout
-	if err = t.nDCHistoryResender.SendSingleWorkflowHistory(
-		ctx,
-		remoteClusterName,
-		namespace.ID(taskInfo.GetNamespaceID()),
-		taskInfo.GetWorkflowID(),
-		taskInfo.GetRunID(),
-		resendInfo.lastEventID,
-		resendInfo.lastEventVersion,
-		0,
-		0,
-	); err != nil {
+	if t.config.EnableReplicateLocalGeneratedEvent() {
+		err = t.resendHandler.ResendHistoryEvents(
+			ctx,
+			remoteClusterName,
+			namespace.ID(taskInfo.GetNamespaceID()),
+			taskInfo.GetWorkflowID(),
+			taskInfo.GetRunID(),
+			resendInfo.lastEventID,
+			resendInfo.lastEventVersion,
+			common.EmptyEventID,
+			common.EmptyVersion,
+		)
+	} else {
+		err = t.nDCHistoryResender.SendSingleWorkflowHistory(
+			ctx,
+			remoteClusterName,
+			namespace.ID(taskInfo.GetNamespaceID()),
+			taskInfo.GetWorkflowID(),
+			taskInfo.GetRunID(),
+			resendInfo.lastEventID,
+			resendInfo.lastEventVersion,
+			0,
+			0,
+		)
+	}
+	if err != nil {
 		if _, isNotFound := err.(*serviceerror.NamespaceNotFound); isNotFound {
 			// Don't log NamespaceNotFound error because it is valid case, and return error to stop retrying.
 			return err
@@ -646,4 +679,12 @@ func (t *transferQueueStandbyTaskExecutor) fetchHistoryFromRemote(
 
 func (t *transferQueueStandbyTaskExecutor) getCurrentTime() time.Time {
 	return t.shardContext.GetCurrentTime(t.clusterName)
+}
+
+func (e *verificationErr) Error() string {
+	return fmt.Sprintf("%v: %v", e.msg, e.err.Error())
+}
+
+func (e *verificationErr) Unwrap() error {
+	return e.err
 }

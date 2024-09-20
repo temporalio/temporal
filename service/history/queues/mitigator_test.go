@@ -25,12 +25,10 @@
 package queues
 
 import (
-	"errors"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
@@ -52,7 +50,6 @@ type (
 		Monitor
 
 		resolvedAlertType AlertType
-		silencedAlertType AlertType
 	}
 )
 
@@ -75,6 +72,7 @@ func (s *mitigatorSuite) SetupTest() {
 		log.NewTestLogger(),
 		metrics.NoopMetricsHandler,
 		dynamicconfig.GetIntPropertyFn(3),
+		GrouperNamespaceID{},
 	)
 }
 
@@ -121,9 +119,8 @@ func (s *mitigatorSuite) TestMitigate_ActionMatchAlert() {
 		_ *ReaderGroup,
 		_ metrics.Handler,
 		_ log.Logger,
-	) error {
+	) {
 		actualAction = action
-		return nil
 	}
 
 	for _, tc := range testCases {
@@ -134,12 +131,11 @@ func (s *mitigatorSuite) TestMitigate_ActionMatchAlert() {
 
 func (s *mitigatorSuite) TestMitigate_ResolveAlert() {
 	s.mitigator.actionRunner = func(
-		action Action,
+		_ Action,
 		_ *ReaderGroup,
 		_ metrics.Handler,
 		_ log.Logger,
-	) error {
-		return nil
+	) {
 	}
 
 	alert := Alert{
@@ -152,36 +148,8 @@ func (s *mitigatorSuite) TestMitigate_ResolveAlert() {
 	s.mitigator.Mitigate(alert)
 
 	s.Equal(alert.AlertType, s.monitor.resolvedAlertType)
-	s.Equal(AlertTypeUnspecified, s.monitor.silencedAlertType)
-}
-
-func (s *mitigatorSuite) TestMitigate_SilenceAlert() {
-	s.mitigator.actionRunner = func(
-		action Action,
-		_ *ReaderGroup,
-		_ metrics.Handler,
-		_ log.Logger,
-	) error {
-		return errors.New("some random error")
-	}
-
-	alert := Alert{
-		AlertType: AlertTypeQueuePendingTaskCount,
-		AlertAttributesQueuePendingTaskCount: &AlertAttributesQueuePendingTaskCount{
-			CurrentPendingTaskCount:   1000,
-			CiriticalPendingTaskCount: 500,
-		},
-	}
-	s.mitigator.Mitigate(alert)
-
-	s.Equal(alert.AlertType, s.monitor.silencedAlertType)
-	s.Equal(AlertTypeUnspecified, s.monitor.resolvedAlertType)
 }
 
 func (m *testMonitor) ResolveAlert(alertType AlertType) {
 	m.resolvedAlertType = alertType
-}
-
-func (m *testMonitor) SilenceAlert(alertType AlertType) {
-	m.silencedAlertType = alertType
 }

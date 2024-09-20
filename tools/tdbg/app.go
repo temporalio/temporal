@@ -26,22 +26,46 @@ package tdbg
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"runtime/debug"
 
+	"github.com/temporalio/tctl-kit/pkg/color"
 	"github.com/urfave/cli/v2"
 	"go.temporal.io/server/common/headers"
-
-	"github.com/temporalio/tctl-kit/pkg/color"
+	"go.temporal.io/server/service/history/tasks"
 )
 
-// SetFactory is used to set the ClientFactory global
-func SetFactory(factory ClientFactory) {
-	cFactory = factory
-}
+type (
+	// Params which are customizable for the CLI application.
+	Params struct {
+		// ClientFactory creates Temporal service clients for tdbg to use.
+		ClientFactory ClientFactory
+		// TaskCategoryRegistry is used to determine which task categories are available for tdbg to use.
+		TaskCategoryRegistry tasks.TaskCategoryRegistry
+		// Writer is used to write output from tdbg. The default is os.Stdout.
+		Writer io.Writer
+		// ErrWriter is used to write errors from tdbg. The default is os.Stderr.
+		ErrWriter io.Writer
+		// TaskBlobEncoder is needed for custom task serialization. The default uses PredefinedTaskBlobDeserializer.
+		TaskBlobEncoder TaskBlobEncoder
+	}
+	// Option modifies the Params for tdbg.
+	Option func(params *Params)
+)
 
 // NewCliApp instantiates a new instance of the CLI application.
-func NewCliApp() *cli.App {
+func NewCliApp(opts ...Option) *cli.App {
+	params := Params{
+		ClientFactory:        NewClientFactory(),
+		TaskCategoryRegistry: tasks.NewDefaultTaskCategoryRegistry(),
+		Writer:               os.Stdout,
+		ErrWriter:            os.Stderr,
+		TaskBlobEncoder:      NewProtoTaskBlobEncoder(NewPredefinedTaskBlobDeserializer()),
+	}
+	for _, opt := range opts {
+		opt(&params)
+	}
 	app := cli.NewApp()
 	app.Name = "tdbg"
 	app.Usage = "A command-line tool for Temporal server debugging"
@@ -106,13 +130,23 @@ func NewCliApp() *cli.App {
 			Value: string(color.Auto),
 		},
 	}
-	app.Commands = commands
+	prompterFactory := NewPrompterFactory()
+	app.Commands = getCommands(
+		params.ClientFactory,
+		NewDLQServiceProvider(
+			params.ClientFactory,
+			params.TaskBlobEncoder,
+			params.TaskCategoryRegistry,
+			params.Writer,
+			prompterFactory,
+		),
+		params.TaskCategoryRegistry,
+		prompterFactory,
+		params.TaskBlobEncoder,
+	)
 	app.ExitErrHandler = handleError
-
-	// set builder if not customized
-	if cFactory == nil {
-		SetFactory(NewClientFactory())
-	}
+	app.Writer = params.Writer
+	app.ErrWriter = params.ErrWriter
 
 	return app
 }
@@ -122,12 +156,12 @@ func handleError(c *cli.Context, err error) {
 		return
 	}
 
-	fmt.Fprintf(os.Stderr, "%s %+v\n", color.Red(c, "Error:"), err)
+	_, _ = fmt.Fprintf(c.App.ErrWriter, "%s %+v\n", color.Red(c, "Error:"), err)
 	if os.Getenv(showErrorStackEnv) != `` {
-		fmt.Fprintln(os.Stderr, color.Magenta(c, "Stack trace:"))
+		_, _ = fmt.Fprintln(c.App.ErrWriter, color.Magenta(c, "Stack trace:"))
 		debug.PrintStack()
 	} else {
-		fmt.Fprintf(os.Stderr, "('export %s=1' to see stack traces)\n", showErrorStackEnv)
+		_, _ = fmt.Fprintf(c.App.ErrWriter, "('export %s=1' to see stack traces)\n", showErrorStackEnv)
 	}
 
 	cli.OsExiter(1)

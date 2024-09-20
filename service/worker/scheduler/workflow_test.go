@@ -38,17 +38,18 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
 	schedpb "go.temporal.io/api/schedule/v1"
+	sdkpb "go.temporal.io/api/sdk/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/sdk/testsuite"
 	"go.temporal.io/sdk/workflow"
-
 	schedspb "go.temporal.io/server/api/schedule/v1"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/payloads"
-	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/searchattribute"
-	"go.temporal.io/server/common/util"
+	"go.temporal.io/server/common/testing/protoassert"
+	"google.golang.org/protobuf/types/known/durationpb"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type (
@@ -106,13 +107,15 @@ func (s *workflowSuite) defaultAction(id string) *schedpb.ScheduleAction {
 func (s *workflowSuite) run(sched *schedpb.Schedule, iterations int) {
 	// test workflows will run until "completion", in our case that means until
 	// continue-as-new. we only need a small number of iterations to test, though.
-	currentTweakablePolicies.IterationsBeforeContinueAsNew = iterations
+	CurrentTweakablePolicies.IterationsBeforeContinueAsNew = iterations
 
 	// fixed start time
 	s.env.SetStartTime(baseStartTime)
 
 	// fill this in so callers don't need to
-	sched.Action = s.defaultAction("myid")
+	if sched.Action == nil {
+		sched.Action = s.defaultAction("myid")
+	}
 
 	s.env.ExecuteWorkflow(SchedulerWorkflow, &schedspb.StartScheduleArgs{
 		Schedule: sched,
@@ -151,7 +154,7 @@ func (s *workflowSuite) expectStart(f func(req *schedspb.StartWorkflowRequest) (
 			if resp == nil && err == nil { // fill in defaults so callers can be more concise
 				resp = &schedspb.StartWorkflowResponse{
 					RunId:         uuid.NewString(),
-					RealStartTime: timestamp.TimePtr(s.env.Now()),
+					RealStartTime: timestamppb.New(s.env.Now()),
 				}
 			}
 
@@ -187,12 +190,21 @@ func (s *workflowSuite) expectTerminate(f func(req *schedspb.TerminateWorkflowRe
 // and delayed executions, which means they have to be supplied to runAcrossContinue as data.
 
 type workflowRun struct {
-	id         string
-	start, end time.Time
-	result     enumspb.WorkflowExecutionStatus
+	id             string
+	start, end     time.Time
+	startTolerance time.Duration
+	result         enumspb.WorkflowExecutionStatus
 }
 
-func (s *workflowSuite) setupMocksForWorkflows(runs []workflowRun, started map[string]time.Time) {
+type runAcrossContinueState struct {
+	started  map[string]time.Time
+	finished bool
+}
+
+func (s *workflowSuite) setupMocksForWorkflows(runs []workflowRun, state *runAcrossContinueState) {
+	// capture this to avoid races between end of one test and start of next
+	env := s.env
+
 	for _, run := range runs {
 		run := run // capture fresh value
 		// set up start
@@ -201,13 +213,14 @@ func (s *workflowSuite) setupMocksForWorkflows(runs []workflowRun, started map[s
 		})
 		s.env.OnActivity(new(activities).StartWorkflow, mock.Anything, matchStart).Times(0).Maybe().Return(
 			func(_ context.Context, req *schedspb.StartWorkflowRequest) (*schedspb.StartWorkflowResponse, error) {
-				if _, ok := started[req.Request.WorkflowId]; ok {
-					s.Failf("multiple starts for %s", req.Request.WorkflowId)
+				if prev, ok := state.started[req.Request.WorkflowId]; ok {
+					s.Failf("multiple starts", "for %s at %s (prev %s)", req.Request.WorkflowId, s.now(), prev)
 				}
-				started[req.Request.WorkflowId] = s.now()
+				state.started[req.Request.WorkflowId] = s.now()
+				overhead := time.Duration(100+rand.Intn(100)) * time.Millisecond
 				return &schedspb.StartWorkflowResponse{
 					RunId:         uuid.NewString(),
-					RealStartTime: timestamp.TimePtr(time.Now()),
+					RealStartTime: timestamppb.New(s.now().Add(overhead)),
 				}, nil
 			})
 		// set up short-poll watchers
@@ -226,21 +239,35 @@ func (s *workflowSuite) setupMocksForWorkflows(runs []workflowRun, started map[s
 			return req.Execution.WorkflowId == run.id && req.LongPoll
 		})
 		s.env.OnActivity(new(activities).WatchWorkflow, mock.Anything, matchLongPoll).Times(0).Maybe().AfterFn(func() time.Duration {
-			return run.end.Sub(s.now())
+			// this can be called after end of workflow, use captured env
+			return run.end.Sub(env.Now().UTC())
 		}).Return(func(_ context.Context, req *schedspb.WatchWorkflowRequest) (*schedspb.WatchWorkflowResponse, error) {
 			return &schedspb.WatchWorkflowResponse{Status: run.result}, nil
 		})
 	}
+	// catch unexpected starts
+	s.env.OnActivity(new(activities).StartWorkflow, mock.Anything, mock.Anything).Times(0).Maybe().Return(
+		func(_ context.Context, req *schedspb.StartWorkflowRequest) (*schedspb.StartWorkflowResponse, error) {
+			s.Failf("unexpected start", "for %s at %s", req.Request.WorkflowId, s.now())
+			return nil, nil
+		})
 }
 
 type delayedCallback struct {
-	at time.Time
-	f  func()
+	at         time.Time
+	f          func()
+	finishTest bool
 }
 
-func (s *workflowSuite) setupDelayedCallbacks(start time.Time, cbs []delayedCallback) {
+func (s *workflowSuite) setupDelayedCallbacks(start time.Time, cbs []delayedCallback, state *runAcrossContinueState) {
 	for _, cb := range cbs {
 		if delay := cb.at.Sub(start); delay > 0 {
+			if cb.finishTest {
+				cb.f = func() {
+					s.env.SetCurrentHistoryLength(impossibleHistorySize) // signals workflow loop to exit
+					state.finished = true                                // signals test to exit
+				}
+			}
 			s.env.RegisterDelayedCallback(cb.f, delay)
 		}
 	}
@@ -250,7 +277,6 @@ func (s *workflowSuite) runAcrossContinue(
 	runs []workflowRun,
 	cbs []delayedCallback,
 	sched *schedpb.Schedule,
-	maxIterations int,
 ) {
 	// fill this in so callers don't need to
 	sched.Action = s.defaultAction("myid")
@@ -268,21 +294,21 @@ func (s *workflowSuite) runAcrossContinue(
 				ConflictToken: InitialConflictToken,
 			},
 		}
-		iterations := maxIterations
-		gotRuns := make(map[string]time.Time)
+		CurrentTweakablePolicies.IterationsBeforeContinueAsNew = every
+		state := runAcrossContinueState{
+			started: make(map[string]time.Time),
+		}
 		for {
 			s.env = s.NewTestWorkflowEnvironment()
 			s.env.SetStartTime(startTime)
 
-			s.setupMocksForWorkflows(runs, gotRuns)
-			s.setupDelayedCallbacks(startTime, cbs)
+			s.setupMocksForWorkflows(runs, &state)
+			s.setupDelayedCallbacks(startTime, cbs, &state)
 
-			currentTweakablePolicies.IterationsBeforeContinueAsNew = util.Min(iterations, every)
-
-			s.T().Logf("starting workflow for %d iterations out of %d remaining, %d total, start time %s",
-				currentTweakablePolicies.IterationsBeforeContinueAsNew, iterations, maxIterations, startTime)
+			s.T().Logf("starting workflow with CAN every %d iterations, start time %s",
+				CurrentTweakablePolicies.IterationsBeforeContinueAsNew, startTime)
 			s.env.ExecuteWorkflow(SchedulerWorkflow, startArgs)
-			s.T().Logf("finished workflow, time is now %s", s.now())
+			s.T().Logf("finished workflow, time is now %s, finished is %v", s.now(), state.finished)
 
 			s.True(s.env.IsWorkflowCompleted())
 			result := s.env.GetWorkflowError()
@@ -291,25 +317,39 @@ func (s *workflowSuite) runAcrossContinue(
 
 			s.env.AssertExpectations(s.T())
 
-			iterations -= currentTweakablePolicies.IterationsBeforeContinueAsNew
-			if iterations == 0 {
+			if state.finished {
 				break
 			}
 
 			startTime = s.now()
 			startArgs = nil
-			s.NoError(payloads.Decode(canErr.Input, &startArgs))
+			s.Require().NoError(payloads.Decode(canErr.Input, &startArgs))
 		}
 		// check starts that we actually got
-		s.Require().Equal(len(runs), len(gotRuns))
+		s.Require().Equalf(len(runs), len(state.started), "started %#v", state.started)
 		for _, run := range runs {
-			s.Truef(run.start.Equal(gotRuns[run.id]), "%v != %v", run.start, gotRuns[run.id])
+			actual := state.started[run.id]
+			inRange := !actual.Before(run.start.Add(-run.startTolerance)) && !actual.After(run.start.Add(run.startTolerance))
+			s.Truef(inRange, "%v != %v for %s", run.start, state.started[run.id], run.id)
 		}
 	}
 }
 
 func (s *workflowSuite) TestStart() {
 	// written using low-level mocks so we can test all fields in the start request
+
+	userMetadata := &sdkpb.UserMetadata{
+		Summary: &commonpb.Payload{
+			Metadata: map[string][]byte{"test_key": []byte(`test_val`)},
+			Data:     []byte(`Test summary Data`),
+		},
+		Details: &commonpb.Payload{
+			Metadata: map[string][]byte{"test_key": []byte(`test_val`)},
+			Data:     []byte(`Test Details Data`),
+		},
+	}
+	action := s.defaultAction("myid")
+	action.Action.(*schedpb.ScheduleAction_StartWorkflow).StartWorkflow.UserMetadata = userMetadata
 
 	s.expectStart(func(req *schedspb.StartWorkflowRequest) (*schedspb.StartWorkflowResponse, error) {
 		s.True(time.Date(2022, 6, 1, 0, 15, 0, 0, time.UTC).Equal(s.now()))
@@ -322,6 +362,7 @@ func (s *workflowSuite) TestStart() {
 		s.Equal(`"value"`, payload.ToString(req.Request.SearchAttributes.IndexedFields["myfield"]))
 		s.Equal(`"myschedule"`, payload.ToString(req.Request.SearchAttributes.IndexedFields[searchattribute.TemporalScheduledById]))
 		s.Equal(`"2022-06-01T00:15:00Z"`, payload.ToString(req.Request.SearchAttributes.IndexedFields[searchattribute.TemporalScheduledStartTime]))
+		protoassert.ProtoEqual(s.T(), userMetadata, req.Request.GetUserMetadata())
 
 		return nil, nil
 	})
@@ -329,9 +370,10 @@ func (s *workflowSuite) TestStart() {
 	s.run(&schedpb.Schedule{
 		Spec: &schedpb.ScheduleSpec{
 			Interval: []*schedpb.IntervalSpec{{
-				Interval: timestamp.DurationPtr(55 * time.Minute),
+				Interval: durationpb.New(55 * time.Minute),
 			}},
 		},
+		Action: action,
 	}, 2)
 	// two iterations to start one workflow: first will sleep, second will start and then sleep again
 	s.True(s.env.IsWorkflowCompleted())
@@ -358,13 +400,13 @@ func (s *workflowSuite) TestInitialPatch() {
 		return nil, nil
 	})
 
-	currentTweakablePolicies.IterationsBeforeContinueAsNew = 2
+	CurrentTweakablePolicies.IterationsBeforeContinueAsNew = 2
 	s.env.SetStartTime(baseStartTime)
 	s.env.ExecuteWorkflow(SchedulerWorkflow, &schedspb.StartScheduleArgs{
 		Schedule: &schedpb.Schedule{
 			Spec: &schedpb.ScheduleSpec{
 				Interval: []*schedpb.IntervalSpec{{
-					Interval: timestamp.DurationPtr(55 * time.Minute),
+					Interval: durationpb.New(55 * time.Minute),
 				}},
 			},
 			Action: s.defaultAction("myid"),
@@ -408,7 +450,7 @@ func (s *workflowSuite) TestCatchupWindow() {
 		s.Equal(int64(5), s.describe().Info.MissedCatchupWindow)
 	}, 18*time.Minute)
 
-	currentTweakablePolicies.IterationsBeforeContinueAsNew = 2
+	CurrentTweakablePolicies.IterationsBeforeContinueAsNew = 2
 	s.env.SetStartTime(baseStartTime)
 	s.env.ExecuteWorkflow(SchedulerWorkflow, &schedspb.StartScheduleArgs{
 		Schedule: &schedpb.Schedule{
@@ -420,7 +462,7 @@ func (s *workflowSuite) TestCatchupWindow() {
 			},
 			Action: s.defaultAction("myid"),
 			Policies: &schedpb.SchedulePolicies{
-				CatchupWindow: timestamp.DurationPtr(1 * time.Hour),
+				CatchupWindow: durationpb.New(1 * time.Hour),
 			},
 		},
 		State: &schedspb.InternalState{
@@ -429,7 +471,7 @@ func (s *workflowSuite) TestCatchupWindow() {
 			ScheduleId:    "myschedule",
 			ConflictToken: InitialConflictToken,
 			// workflow "woke up" after 6 hours
-			LastProcessedTime: timestamp.TimePtr(time.Date(2022, 5, 31, 18, 0, 0, 0, time.UTC)),
+			LastProcessedTime: timestamppb.New(time.Date(2022, 5, 31, 18, 0, 0, 0, time.UTC)),
 		},
 	})
 	s.True(s.env.IsWorkflowCompleted())
@@ -451,7 +493,7 @@ func (s *workflowSuite) TestCatchupWindowWhilePaused() {
 		return nil, nil
 	})
 
-	currentTweakablePolicies.IterationsBeforeContinueAsNew = 3
+	CurrentTweakablePolicies.IterationsBeforeContinueAsNew = 3
 	s.env.SetStartTime(baseStartTime)
 	s.env.ExecuteWorkflow(SchedulerWorkflow, &schedspb.StartScheduleArgs{
 		Schedule: &schedpb.Schedule{
@@ -463,7 +505,7 @@ func (s *workflowSuite) TestCatchupWindowWhilePaused() {
 			},
 			Action: s.defaultAction("myid"),
 			Policies: &schedpb.SchedulePolicies{
-				CatchupWindow: timestamp.DurationPtr(1 * time.Hour),
+				CatchupWindow: durationpb.New(1 * time.Hour),
 			},
 			State: &schedpb.ScheduleState{
 				Paused: true,
@@ -475,7 +517,7 @@ func (s *workflowSuite) TestCatchupWindowWhilePaused() {
 			ScheduleId:    "myschedule",
 			ConflictToken: InitialConflictToken,
 			// workflow "woke up" after 6 hours
-			LastProcessedTime: timestamp.TimePtr(time.Date(2022, 5, 31, 18, 0, 0, 0, time.UTC)),
+			LastProcessedTime: timestamppb.New(time.Date(2022, 5, 31, 18, 0, 0, 0, time.UTC)),
 		},
 	})
 	s.True(s.env.IsWorkflowCompleted())
@@ -513,18 +555,21 @@ func (s *workflowSuite) TestOverlapSkip() {
 					s.Equal([]string{"myid-2022-06-01T00:15:00Z"}, s.runningWorkflows())
 				},
 			},
+			{
+				at:         time.Date(2022, 6, 1, 0, 18, 0, 0, time.UTC),
+				finishTest: true,
+			},
 		},
 		&schedpb.Schedule{
 			Spec: &schedpb.ScheduleSpec{
 				Interval: []*schedpb.IntervalSpec{{
-					Interval: timestamp.DurationPtr(5 * time.Minute),
+					Interval: durationpb.New(5 * time.Minute),
 				}},
 			},
 			Policies: &schedpb.SchedulePolicies{
 				OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_SKIP,
 			},
 		},
-		4,
 	)
 }
 
@@ -557,19 +602,22 @@ func (s *workflowSuite) TestOverlapBufferOne() {
 				at: time.Date(2022, 6, 1, 0, 6, 0, 0, time.UTC),
 				f:  func() { s.Equal([]string{"myid-2022-06-01T00:05:00Z"}, s.runningWorkflows()) },
 			},
-			{at: time.Date(2022, 6, 1, 0, 11, 0, 0, time.UTC),
+			{
+				at: time.Date(2022, 6, 1, 0, 11, 0, 0, time.UTC),
 				f: func() {
 					s.Equal(int64(1), s.describe().Info.BufferSize)
 					s.Equal(int64(0), s.describe().Info.OverlapSkipped)
 				},
 			},
-			{at: time.Date(2022, 6, 1, 0, 16, 0, 0, time.UTC),
+			{
+				at: time.Date(2022, 6, 1, 0, 16, 0, 0, time.UTC),
 				f: func() {
 					s.Equal(int64(1), s.describe().Info.BufferSize)
 					s.Equal(int64(1), s.describe().Info.OverlapSkipped)
 				},
 			},
-			{at: time.Date(2022, 6, 1, 0, 26, 0, 0, time.UTC),
+			{
+				at: time.Date(2022, 6, 1, 0, 26, 0, 0, time.UTC),
 				f: func() {
 					s.Equal(int64(1), s.describe().Info.BufferSize)
 					s.Equal(int64(3), s.describe().Info.OverlapSkipped)
@@ -579,24 +627,28 @@ func (s *workflowSuite) TestOverlapBufferOne() {
 				at: time.Date(2022, 6, 1, 0, 31, 0, 0, time.UTC),
 				f:  func() { s.Equal([]string{"myid-2022-06-01T00:30:00Z"}, s.runningWorkflows()) },
 			},
-			{at: time.Date(2022, 6, 1, 0, 32, 0, 0, time.UTC),
+			{
+				at: time.Date(2022, 6, 1, 0, 32, 0, 0, time.UTC),
 				f: func() {
 					s.Equal(int64(0), s.describe().Info.BufferSize)
 					s.Equal(int64(3), s.describe().Info.OverlapSkipped)
 				},
 			},
+			{
+				at:         time.Date(2022, 6, 1, 0, 34, 59, 0, time.UTC),
+				finishTest: true,
+			},
 		},
 		&schedpb.Schedule{
 			Spec: &schedpb.ScheduleSpec{
 				Interval: []*schedpb.IntervalSpec{{
-					Interval: timestamp.DurationPtr(5 * time.Minute),
+					Interval: durationpb.New(5 * time.Minute),
 				}},
 			},
 			Policies: &schedpb.SchedulePolicies{
 				OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_BUFFER_ONE,
 			},
 		},
-		8,
 	)
 }
 
@@ -647,25 +699,28 @@ func (s *workflowSuite) TestOverlapBufferAll() {
 				at: time.Date(2022, 6, 1, 0, 22, 30, 0, time.UTC),
 				f:  func() { s.Equal([]string{"myid-2022-06-01T00:20:00Z"}, s.runningWorkflows()) },
 			},
+			{
+				at:         time.Date(2022, 6, 1, 0, 29, 30, 0, time.UTC),
+				finishTest: true,
+			},
 		},
 		&schedpb.Schedule{
 			Spec: &schedpb.ScheduleSpec{
 				Interval: []*schedpb.IntervalSpec{{
-					Interval: timestamp.DurationPtr(5 * time.Minute),
+					Interval: durationpb.New(5 * time.Minute),
 				}},
 			},
 			Policies: &schedpb.SchedulePolicies{
 				OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_BUFFER_ALL,
 			},
 		},
-		9,
 	)
 }
 
 func (s *workflowSuite) TestBufferLimit() {
-	originalMaxBufferSize := currentTweakablePolicies.MaxBufferSize
-	currentTweakablePolicies.MaxBufferSize = 2
-	defer func() { currentTweakablePolicies.MaxBufferSize = originalMaxBufferSize }()
+	originalMaxBufferSize := CurrentTweakablePolicies.MaxBufferSize
+	CurrentTweakablePolicies.MaxBufferSize = 2
+	defer func() { CurrentTweakablePolicies.MaxBufferSize = originalMaxBufferSize }()
 
 	s.runAcrossContinue(
 		[]workflowRun{
@@ -722,18 +777,21 @@ func (s *workflowSuite) TestBufferLimit() {
 					s.Equal(int64(1), s.describe().Info.BufferDropped)
 				},
 			},
+			{
+				at:         time.Date(2022, 6, 1, 0, 29, 30, 0, time.UTC),
+				finishTest: true,
+			},
 		},
 		&schedpb.Schedule{
 			Spec: &schedpb.ScheduleSpec{
 				Interval: []*schedpb.IntervalSpec{{
-					Interval: timestamp.DurationPtr(5 * time.Minute),
+					Interval: durationpb.New(5 * time.Minute),
 				}},
 			},
 			Policies: &schedpb.SchedulePolicies{
 				OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_BUFFER_ALL,
 			},
 		},
-		8,
 	)
 }
 
@@ -774,7 +832,7 @@ func (s *workflowSuite) TestOverlapCancel() {
 	s.run(&schedpb.Schedule{
 		Spec: &schedpb.ScheduleSpec{
 			Interval: []*schedpb.IntervalSpec{{
-				Interval: timestamp.DurationPtr(55 * time.Minute),
+				Interval: durationpb.New(55 * time.Minute),
 			}},
 		},
 		Policies: &schedpb.SchedulePolicies{
@@ -825,7 +883,7 @@ func (s *workflowSuite) TestOverlapTerminate() {
 	s.run(&schedpb.Schedule{
 		Spec: &schedpb.ScheduleSpec{
 			Interval: []*schedpb.IntervalSpec{{
-				Interval: timestamp.DurationPtr(55 * time.Minute),
+				Interval: durationpb.New(55 * time.Minute),
 			}},
 		},
 		Policies: &schedpb.SchedulePolicies{
@@ -837,7 +895,6 @@ func (s *workflowSuite) TestOverlapTerminate() {
 }
 
 func (s *workflowSuite) TestOverlapAllowAll() {
-	// also contains tests for RunningWorkflows and refresh, since it's convenient to do here
 	s.runAcrossContinue(
 		[]workflowRun{
 			{
@@ -867,79 +924,20 @@ func (s *workflowSuite) TestOverlapAllowAll() {
 		},
 		[]delayedCallback{
 			{
-				at: time.Date(2022, 6, 1, 0, 6, 0, 0, time.UTC),
-				f:  func() { s.Equal([]string{"myid-2022-06-01T00:05:00Z"}, s.runningWorkflows()) },
-			},
-			{
-				at: time.Date(2022, 6, 1, 0, 11, 0, 0, time.UTC),
-				f: func() {
-					s.Equal([]string{"myid-2022-06-01T00:05:00Z", "myid-2022-06-01T00:10:00Z"}, s.runningWorkflows())
-				},
-			},
-			{
-				at: time.Date(2022, 6, 1, 0, 15, 30, 0, time.UTC),
-				f: func() {
-					s.Equal([]string{"myid-2022-06-01T00:05:00Z", "myid-2022-06-01T00:10:00Z", "myid-2022-06-01T00:15:00Z"}, s.runningWorkflows())
-				},
-			},
-			{
-				at: time.Date(2022, 6, 1, 0, 16, 30, 0, time.UTC),
-				f: func() {
-					// :15 has ended here, but we won't know until we refresh since we don't have a long-poll watcher
-					s.Equal([]string{"myid-2022-06-01T00:05:00Z", "myid-2022-06-01T00:10:00Z", "myid-2022-06-01T00:15:00Z"}, s.runningWorkflows())
-					// poke it to refresh
-					s.env.SignalWorkflow(SignalNameRefresh, nil)
-				},
-			},
-			{
-				at: time.Date(2022, 6, 1, 0, 16, 31, 0, time.UTC),
-				f: func() {
-					// now we'll see it end
-					s.Equal([]string{"myid-2022-06-01T00:05:00Z", "myid-2022-06-01T00:10:00Z"}, s.runningWorkflows())
-				},
-			},
-			{
-				at: time.Date(2022, 6, 1, 0, 18, 0, 0, time.UTC),
-				f: func() {
-					// :05 has ended, but we won't see it yet
-					s.Equal([]string{"myid-2022-06-01T00:05:00Z", "myid-2022-06-01T00:10:00Z"}, s.runningWorkflows())
-				},
-			},
-			{
-				at: time.Date(2022, 6, 1, 0, 21, 0, 0, time.UTC),
-				f: func() {
-					// we'll see :05 ended because :20 started and did an implicit refresh
-					s.Equal([]string{"myid-2022-06-01T00:10:00Z", "myid-2022-06-01T00:20:00Z"}, s.runningWorkflows())
-				},
-			},
-			{
-				at: time.Date(2022, 6, 1, 0, 23, 0, 0, time.UTC),
-				f: func() {
-					// we won't see these ended yet
-					s.Equal([]string{"myid-2022-06-01T00:10:00Z", "myid-2022-06-01T00:20:00Z"}, s.runningWorkflows())
-					// poke it to refresh
-					s.env.SignalWorkflow(SignalNameRefresh, nil)
-				},
-			},
-			{
-				at: time.Date(2022, 6, 1, 0, 23, 1, 0, time.UTC),
-				f: func() {
-					// now we will
-					s.Equal([]string(nil), s.runningWorkflows())
-				},
+				at:         time.Date(2022, 6, 1, 0, 24, 30, 0, time.UTC),
+				finishTest: true,
 			},
 		},
 		&schedpb.Schedule{
 			Spec: &schedpb.ScheduleSpec{
 				Interval: []*schedpb.IntervalSpec{{
-					Interval: timestamp.DurationPtr(5 * time.Minute),
+					Interval: durationpb.New(5 * time.Minute),
 				}},
 			},
 			Policies: &schedpb.SchedulePolicies{
 				OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL,
 			},
 		},
-		7,
 	)
 }
 
@@ -976,7 +974,7 @@ func (s *workflowSuite) TestFailedStart() {
 	s.run(&schedpb.Schedule{
 		Spec: &schedpb.ScheduleSpec{
 			Interval: []*schedpb.IntervalSpec{{
-				Interval: timestamp.DurationPtr(5 * time.Minute),
+				Interval: durationpb.New(5 * time.Minute),
 			}},
 		},
 	}, 4)
@@ -1046,13 +1044,49 @@ func (s *workflowSuite) TestLastCompletionResultAndContinuedFailure() {
 	s.run(&schedpb.Schedule{
 		Spec: &schedpb.ScheduleSpec{
 			Interval: []*schedpb.IntervalSpec{{
-				Interval: timestamp.DurationPtr(5 * time.Minute),
+				Interval: durationpb.New(5 * time.Minute),
 			}},
 		},
 		Policies: &schedpb.SchedulePolicies{
 			OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_SKIP,
 		},
 	}, 5)
+	s.True(s.env.IsWorkflowCompleted())
+	s.True(workflow.IsContinueAsNewError(s.env.GetWorkflowError()))
+}
+
+func (s *workflowSuite) TestOnlyStartForAllowAll() {
+	// written using low-level mocks so we can check fields of start workflow requests
+
+	s.expectStart(func(req *schedspb.StartWorkflowRequest) (*schedspb.StartWorkflowResponse, error) {
+		s.Equal("myid-2022-06-01T00:05:00Z", req.Request.WorkflowId)
+		s.Nil(req.Request.LastCompletionResult)
+		s.Nil(req.Request.ContinuedFailure)
+		return nil, nil
+	})
+	s.expectStart(func(req *schedspb.StartWorkflowRequest) (*schedspb.StartWorkflowResponse, error) {
+		s.Equal("myid-2022-06-01T00:10:00Z", req.Request.WorkflowId)
+		s.Nil(req.Request.LastCompletionResult)
+		s.Nil(req.Request.ContinuedFailure)
+		return nil, nil
+	})
+	s.expectStart(func(req *schedspb.StartWorkflowRequest) (*schedspb.StartWorkflowResponse, error) {
+		s.Equal("myid-2022-06-01T00:15:00Z", req.Request.WorkflowId)
+		s.Nil(req.Request.LastCompletionResult)
+		s.Nil(req.Request.ContinuedFailure)
+		return nil, nil
+	})
+
+	s.run(&schedpb.Schedule{
+		Spec: &schedpb.ScheduleSpec{
+			Interval: []*schedpb.IntervalSpec{{
+				Interval: durationpb.New(5 * time.Minute),
+			}},
+		},
+		Policies: &schedpb.SchedulePolicies{
+			OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL,
+		},
+	}, 4)
 	s.True(s.env.IsWorkflowCompleted())
 	s.True(workflow.IsContinueAsNewError(s.env.GetWorkflowError()))
 }
@@ -1091,7 +1125,7 @@ func (s *workflowSuite) TestPauseOnFailure() {
 	s.run(&schedpb.Schedule{
 		Spec: &schedpb.ScheduleSpec{
 			Interval: []*schedpb.IntervalSpec{{
-				Interval: timestamp.DurationPtr(5 * time.Minute),
+				Interval: durationpb.New(5 * time.Minute),
 			}},
 		},
 		Policies: &schedpb.SchedulePolicies{
@@ -1156,18 +1190,21 @@ func (s *workflowSuite) TestTriggerImmediate() {
 					})
 				},
 			},
+			{
+				at:         time.Date(2022, 6, 1, 0, 54, 0, 0, time.UTC),
+				finishTest: true,
+			},
 		},
 		&schedpb.Schedule{
 			Spec: &schedpb.ScheduleSpec{
 				Interval: []*schedpb.IntervalSpec{{
-					Interval: timestamp.DurationPtr(55 * time.Minute),
+					Interval: durationpb.New(55 * time.Minute),
 				}},
 			},
 			Policies: &schedpb.SchedulePolicies{
 				OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_SKIP,
 			},
 		},
-		4,
 	)
 }
 
@@ -1212,12 +1249,16 @@ func (s *workflowSuite) TestBackfill() {
 				f: func() {
 					s.env.SignalWorkflow(SignalNamePatch, &schedpb.SchedulePatch{
 						BackfillRequest: []*schedpb.BackfillRequest{{
-							StartTime:     timestamp.TimePtr(time.Date(2022, 5, 31, 0, 0, 0, 0, time.UTC)),
-							EndTime:       timestamp.TimePtr(time.Date(2022, 6, 1, 0, 0, 0, 0, time.UTC)),
+							StartTime:     timestamppb.New(time.Date(2022, 5, 31, 0, 0, 0, 0, time.UTC)),
+							EndTime:       timestamppb.New(time.Date(2022, 6, 1, 0, 0, 0, 0, time.UTC)),
 							OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_BUFFER_ALL,
 						}},
 					})
 				},
+			},
+			{
+				at:         time.Date(2022, 7, 31, 19, 6, 0, 0, time.UTC),
+				finishTest: true,
 			},
 		},
 		&schedpb.Schedule{
@@ -1232,7 +1273,199 @@ func (s *workflowSuite) TestBackfill() {
 				OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_SKIP,
 			},
 		},
-		6,
+	)
+}
+
+func (s *workflowSuite) TestBackfillInclusiveStartEnd() {
+	s.runAcrossContinue(
+		[]workflowRun{
+			// if start and end time were not inclusive, this backfill run would not exist
+			{
+				id:     "myid-2022-05-31T19:17:00Z",
+				start:  time.Date(2022, 6, 1, 0, 5, 0, 0, time.UTC),
+				end:    time.Date(2022, 6, 1, 0, 9, 0, 0, time.UTC),
+				result: enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+			},
+			// this is the scheduled one
+			{
+				id:     "myid-2022-07-31T19:00:00Z",
+				start:  time.Date(2022, 7, 31, 19, 0, 0, 0, time.UTC),
+				end:    time.Date(2022, 7, 31, 19, 5, 0, 0, time.UTC),
+				result: enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+			},
+		},
+		[]delayedCallback{
+			{
+				at: time.Date(2022, 6, 1, 0, 5, 0, 0, time.UTC),
+				f: func() {
+					triggerBackfillTime := time.Date(2022, 5, 31, 19, 17, 0, 0, time.UTC)
+					triggerBackfill := &schedpb.BackfillRequest{
+						StartTime:     timestamppb.New(triggerBackfillTime),
+						EndTime:       timestamppb.New(triggerBackfillTime),
+						OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_BUFFER_ALL,
+					}
+
+					ignoreBackfillTime := triggerBackfillTime.Add(500 * time.Millisecond)
+					ignoreBackfill := &schedpb.BackfillRequest{
+						StartTime:     timestamppb.New(ignoreBackfillTime),
+						EndTime:       timestamppb.New(ignoreBackfillTime),
+						OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_BUFFER_ALL,
+					}
+
+					s.env.SignalWorkflow(SignalNamePatch, &schedpb.SchedulePatch{
+						BackfillRequest: []*schedpb.BackfillRequest{triggerBackfill, ignoreBackfill},
+					})
+				},
+			},
+			{
+				at:         time.Date(2022, 7, 31, 19, 6, 0, 0, time.UTC),
+				finishTest: true,
+			},
+		},
+		&schedpb.Schedule{
+			Spec: &schedpb.ScheduleSpec{
+				Calendar: []*schedpb.CalendarSpec{{
+					Minute:     "*/17",
+					Hour:       "19",
+					DayOfMonth: "31",
+				}},
+			},
+			Policies: &schedpb.SchedulePolicies{
+				OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_SKIP,
+			},
+		},
+	)
+}
+
+func (s *workflowSuite) TestHugeBackfillAllowAll() {
+	prevTweakables := CurrentTweakablePolicies
+	CurrentTweakablePolicies.MaxBufferSize = 30 // make smaller for testing
+	defer func() { CurrentTweakablePolicies = prevTweakables }()
+
+	// This has been run for up to 5000, but it takes a very long time. Run only 100 normally.
+	const backfillRuns = 100
+	const backfills = 4
+	// The number that we process per iteration, with a 1s sleep per iteration, makes an
+	// effective "rate limit" for processing allow-all backfills. This is different from the
+	// explicit rate limit.
+	rateLimit := CurrentTweakablePolicies.BackfillsPerIteration
+
+	base := time.Date(2001, 8, 6, 0, 0, 0, 0, time.UTC)
+	runs := make([]workflowRun, backfillRuns)
+	for i := range runs {
+		t := base.Add(time.Duration(i) * time.Hour)
+		actual := baseStartTime.Add(time.Minute).Add(time.Duration(i/rateLimit) * time.Second)
+		runs[i] = workflowRun{
+			id:    "myid-" + t.Format(time.RFC3339),
+			start: actual,
+			// increase this number if this test fails for no reason:
+			startTolerance: 8 * time.Second, // the "rate limit" isn't exact
+			end:            actual.Add(time.Minute),
+			result:         enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+		}
+	}
+
+	delayedCallbacks := make([]delayedCallback, backfills)
+	for i := range delayedCallbacks {
+		i := i
+		delayedCallbacks[i] = delayedCallback{
+			// test environment seems to get confused if the callback falls on the same instant
+			// as a workflow timer, so use an odd interval to force it to be different.
+			at: baseStartTime.Add(time.Minute).Add(time.Duration(i) * 1113 * time.Millisecond),
+			f: func() {
+				s.env.SignalWorkflow(SignalNamePatch, &schedpb.SchedulePatch{
+					BackfillRequest: []*schedpb.BackfillRequest{{
+						StartTime:     timestamppb.New(base.Add(time.Duration(i*backfillRuns/backfills) * time.Hour)),
+						EndTime:       timestamppb.New(base.Add(time.Duration((i+1)*backfillRuns/backfills-1) * time.Hour)),
+						OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL,
+					}},
+				})
+			},
+		}
+	}
+
+	delayedCallbacks = append(delayedCallbacks, delayedCallback{
+		at:         baseStartTime.Add(50 * time.Minute),
+		finishTest: true,
+	})
+
+	s.runAcrossContinue(
+		runs,
+		delayedCallbacks,
+		&schedpb.Schedule{
+			Spec: &schedpb.ScheduleSpec{
+				Interval: []*schedpb.IntervalSpec{{Interval: durationpb.New(time.Hour)}},
+			},
+		},
+	)
+}
+
+func (s *workflowSuite) TestHugeBackfillBuffer() {
+	prevTweakables := CurrentTweakablePolicies
+	CurrentTweakablePolicies.MaxBufferSize = 30 // make smaller for testing
+	defer func() { CurrentTweakablePolicies = prevTweakables }()
+
+	// This has been run for up to 3000, but it takes a very long time. Run only 100 normally.
+	const backfillRuns = 100
+	const backfills = 4
+
+	base := time.Date(2001, 8, 6, 0, 0, 0, 0, time.UTC)
+	runs := make([]workflowRun, backfillRuns)
+	duration := 56 * time.Second
+	for i := range runs {
+		t := base.Add(time.Duration(i) * time.Hour)
+		actual := baseStartTime.Add(time.Minute).Add(time.Duration(i) * duration)
+		runs[i] = workflowRun{
+			id:     "myid-" + t.Format(time.RFC3339),
+			start:  actual,
+			end:    actual.Add(duration),
+			result: enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+		}
+	}
+	testEnd := baseStartTime.Add(time.Minute).Add(time.Duration(backfillRuns) * duration)
+	// also add normal runs during the time it takes them all to run
+	for t := baseStartTime.Add(time.Hour); t.Before(testEnd); t = t.Add(time.Hour) {
+		runs = append(runs, workflowRun{
+			id:     "myid-" + t.Format(time.RFC3339),
+			start:  t,
+			end:    t.Add(duration),
+			result: enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+		})
+	}
+
+	delayedCallbacks := make([]delayedCallback, backfills)
+	for i := range delayedCallbacks {
+		i := i
+		delayedCallbacks[i] = delayedCallback{
+			at: baseStartTime.Add(time.Minute).Add(time.Duration(i) * 1113 * time.Millisecond),
+			f: func() {
+				s.env.SignalWorkflow(SignalNamePatch, &schedpb.SchedulePatch{
+					BackfillRequest: []*schedpb.BackfillRequest{{
+						StartTime:     timestamppb.New(base.Add(time.Duration(i*backfillRuns/backfills) * time.Hour)),
+						EndTime:       timestamppb.New(base.Add(time.Duration((i+1)*backfillRuns/backfills-1) * time.Hour)),
+						OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_BUFFER_ALL,
+					}},
+				})
+			},
+		}
+	}
+
+	delayedCallbacks = append(delayedCallbacks, delayedCallback{
+		at:         testEnd,
+		finishTest: true,
+	})
+
+	s.runAcrossContinue(
+		runs,
+		delayedCallbacks,
+		&schedpb.Schedule{
+			Spec: &schedpb.ScheduleSpec{
+				Interval: []*schedpb.IntervalSpec{{Interval: durationpb.New(time.Hour)}},
+			},
+			Policies: &schedpb.SchedulePolicies{
+				OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL,
+			},
+		},
 	)
 }
 
@@ -1292,18 +1525,21 @@ func (s *workflowSuite) TestPause() {
 					s.Equal("go ahead", desc.Schedule.State.Notes)
 				},
 			},
+			{
+				at:         time.Date(2022, 6, 1, 0, 28, 8, 0, time.UTC),
+				finishTest: true,
+			},
 		},
 		&schedpb.Schedule{
 			Spec: &schedpb.ScheduleSpec{
 				Interval: []*schedpb.IntervalSpec{{
-					Interval: timestamp.DurationPtr(3 * time.Minute),
+					Interval: durationpb.New(3 * time.Minute),
 				}},
 			},
 			Policies: &schedpb.SchedulePolicies{
 				OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL,
 			},
 		},
-		12,
 	)
 }
 
@@ -1355,13 +1591,18 @@ func (s *workflowSuite) TestUpdate() {
 						Schedule: &schedpb.Schedule{
 							Spec: &schedpb.ScheduleSpec{
 								Interval: []*schedpb.IntervalSpec{{
-									Interval: timestamp.DurationPtr(5 * time.Minute),
+									Interval: durationpb.New(5 * time.Minute),
 								}},
 							},
 							Policies: &schedpb.SchedulePolicies{
 								OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL,
 							},
 							Action: s.defaultAction("newid"),
+						},
+						SearchAttributes: &commonpb.SearchAttributes{
+							IndexedFields: map[string]*commonpb.Payload{
+								"myfield": payload.EncodeString("another value"),
+							},
 						},
 					})
 				},
@@ -1376,22 +1617,30 @@ func (s *workflowSuite) TestUpdate() {
 					})
 				},
 			},
+			{
+				at:         time.Date(2022, 6, 1, 0, 19, 30, 0, time.UTC),
+				finishTest: true,
+			},
 		},
 		&schedpb.Schedule{
 			Spec: &schedpb.ScheduleSpec{
 				Interval: []*schedpb.IntervalSpec{{
-					Interval: timestamp.DurationPtr(3 * time.Minute),
+					Interval: durationpb.New(3 * time.Minute),
 				}},
 			},
 			Policies: &schedpb.SchedulePolicies{
 				OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_SKIP,
 			},
 		},
-		10,
 	)
 }
 
 func (s *workflowSuite) TestUpdateNotRetroactive() {
+	// TODO - remove when AccurateFutureActionTimes becomes the active version
+	prevTweakables := CurrentTweakablePolicies
+	CurrentTweakablePolicies.Version = AccurateFutureActionTimes
+	defer func() { CurrentTweakablePolicies = prevTweakables }()
+
 	s.runAcrossContinue(
 		[]workflowRun{
 			{
@@ -1421,7 +1670,7 @@ func (s *workflowSuite) TestUpdateNotRetroactive() {
 						Schedule: &schedpb.Schedule{
 							Spec: &schedpb.ScheduleSpec{
 								Interval: []*schedpb.IntervalSpec{{
-									Interval: timestamp.DurationPtr(20 * time.Second),
+									Interval: durationpb.New(20 * time.Second),
 								}},
 							},
 							Action: s.defaultAction("newid"),
@@ -1429,19 +1678,209 @@ func (s *workflowSuite) TestUpdateNotRetroactive() {
 					})
 				},
 			},
+			// After the update above modifies the schedule, we should discard any newly
+			// scheduled times that are scheduled prior to the update time.
+			{
+				at: time.Date(2022, 6, 1, 1, 7, 12, 0, time.UTC),
+				f: func() {
+					desc := s.describe()
+					times := desc.Info.FutureActionTimes
+					s.True(times[0].AsTime().After(desc.Info.UpdateTime.AsTime()), "getFutureActionTimes returned an action preceding the update time after a schedule change")
+				},
+			},
+			{
+				at:         time.Date(2022, 6, 1, 1, 7, 55, 0, time.UTC),
+				finishTest: true,
+			},
 		},
 		&schedpb.Schedule{
 			Spec: &schedpb.ScheduleSpec{
 				Interval: []*schedpb.IntervalSpec{{
-					Interval: timestamp.DurationPtr(1 * time.Hour),
+					Interval: durationpb.New(1 * time.Hour),
 				}},
 			},
 		},
-		5,
+	)
+}
+
+// Tests that an update between a nominal time and jittered time for a start, that doesn't
+// modify that start, will still start it.
+func (s *workflowSuite) TestUpdateBetweenNominalAndJitter() {
+	spec := &schedpb.ScheduleSpec{
+		Interval: []*schedpb.IntervalSpec{{
+			Interval: durationpb.New(1 * time.Hour),
+		}},
+		Jitter: durationpb.New(1 * time.Hour),
+	}
+	s.runAcrossContinue(
+		[]workflowRun{
+			{
+				id:     "myid-2022-06-01T01:00:00Z",
+				start:  time.Date(2022, 6, 1, 1, 49, 22, 594000000, time.UTC),
+				end:    time.Date(2022, 6, 1, 1, 53, 0, 0, time.UTC),
+				result: enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+			},
+			{
+				id:     "myid-2022-06-01T02:00:00Z",
+				start:  time.Date(2022, 6, 1, 2, 2, 39, 204000000, time.UTC),
+				end:    time.Date(2022, 6, 1, 2, 11, 0, 0, time.UTC),
+				result: enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+			},
+			{
+				id:     "newid-2022-06-01T03:00:00Z",
+				start:  time.Date(2022, 6, 1, 3, 37, 29, 538000000, time.UTC),
+				end:    time.Date(2022, 6, 1, 3, 41, 0, 0, time.UTC),
+				result: enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+			},
+			{
+				id:     "newid-2022-06-01T04:00:00Z",
+				start:  time.Date(2022, 6, 1, 4, 23, 34, 755000000, time.UTC),
+				end:    time.Date(2022, 6, 1, 4, 27, 0, 0, time.UTC),
+				result: enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+			},
+		},
+		[]delayedCallback{
+			{
+				// update after nominal time 03:00:00 but before jittered time 03:37:29
+				at: time.Date(2022, 6, 1, 3, 22, 10, 0, time.UTC),
+				f: func() {
+					s.env.SignalWorkflow(SignalNameUpdate, &schedspb.FullUpdateRequest{
+						Schedule: &schedpb.Schedule{
+							Spec:   spec,
+							Action: s.defaultAction("newid"),
+						},
+					})
+				},
+			},
+			{
+				at:         time.Date(2022, 6, 1, 5, 0, 0, 0, time.UTC),
+				finishTest: true,
+			},
+		},
+		&schedpb.Schedule{
+			Spec: spec,
+		},
+	)
+}
+
+// Tests that a signal between a nominal time and jittered time for a start won't interrupt the start.
+func (s *workflowSuite) TestSignalBetweenNominalAndJittered() {
+	s.runAcrossContinue(
+		[]workflowRun{
+			{
+				id:     "myid-2022-06-01T01:00:00Z",
+				start:  time.Date(2022, 6, 1, 1, 49, 22, 594000000, time.UTC),
+				end:    time.Date(2022, 6, 1, 1, 53, 0, 0, time.UTC),
+				result: enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+			},
+			{
+				id:     "myid-2022-06-01T02:00:00Z",
+				start:  time.Date(2022, 6, 1, 2, 2, 39, 204000000, time.UTC),
+				end:    time.Date(2022, 6, 1, 2, 11, 0, 0, time.UTC),
+				result: enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+			},
+			{
+				id:     "myid-2022-06-01T03:00:00Z",
+				start:  time.Date(2022, 6, 1, 3, 37, 29, 538000000, time.UTC),
+				end:    time.Date(2022, 6, 1, 3, 41, 0, 0, time.UTC),
+				result: enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+			},
+			{
+				id:     "myid-2022-06-01T04:00:00Z",
+				start:  time.Date(2022, 6, 1, 4, 23, 34, 755000000, time.UTC),
+				end:    time.Date(2022, 6, 1, 4, 27, 0, 0, time.UTC),
+				result: enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+			},
+		},
+		[]delayedCallback{
+			{
+				// signal between nominal and jittered time
+				at: time.Date(2022, 6, 1, 3, 22, 10, 0, time.UTC),
+				f: func() {
+					s.env.SignalWorkflow(SignalNameRefresh, nil)
+				},
+			},
+			{
+				at:         time.Date(2022, 6, 1, 5, 0, 0, 0, time.UTC),
+				finishTest: true,
+			},
+		},
+		&schedpb.Schedule{
+			Spec: &schedpb.ScheduleSpec{
+				Interval: []*schedpb.IntervalSpec{{
+					Interval: durationpb.New(1 * time.Hour),
+				}},
+				Jitter: durationpb.New(1 * time.Hour),
+			},
+		},
+	)
+}
+
+func (s *workflowSuite) TestPauseUnpauseBetweenNominalAndJittered() {
+	s.T().Skip("this illustrates an existing bug")
+
+	s.runAcrossContinue(
+		[]workflowRun{
+			{
+				id:     "myid-2022-06-01T01:00:00Z",
+				start:  time.Date(2022, 6, 1, 1, 49, 22, 594000000, time.UTC),
+				end:    time.Date(2022, 6, 1, 1, 53, 0, 0, time.UTC),
+				result: enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+			},
+			{
+				id:     "myid-2022-06-01T02:00:00Z",
+				start:  time.Date(2022, 6, 1, 2, 2, 39, 204000000, time.UTC),
+				end:    time.Date(2022, 6, 1, 2, 11, 0, 0, time.UTC),
+				result: enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+			},
+			{
+				id:     "myid-2022-06-01T03:00:00Z",
+				start:  time.Date(2022, 6, 1, 3, 37, 29, 538000000, time.UTC),
+				end:    time.Date(2022, 6, 1, 3, 41, 0, 0, time.UTC),
+				result: enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+			},
+			{
+				id:     "myid-2022-06-01T04:00:00Z",
+				start:  time.Date(2022, 6, 1, 4, 23, 34, 755000000, time.UTC),
+				end:    time.Date(2022, 6, 1, 4, 27, 0, 0, time.UTC),
+				result: enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+			},
+		},
+		[]delayedCallback{
+			{
+				at: time.Date(2022, 6, 1, 3, 20, 0, 0, time.UTC),
+				f: func() {
+					s.env.SignalWorkflow(SignalNamePatch, &schedpb.SchedulePatch{Pause: "paused"})
+				},
+			},
+			{
+				at: time.Date(2022, 6, 1, 3, 30, 0, 0, time.UTC),
+				f: func() {
+					s.env.SignalWorkflow(SignalNamePatch, &schedpb.SchedulePatch{Unpause: "go ahead"})
+				},
+			},
+			{
+				at:         time.Date(2022, 6, 1, 5, 0, 0, 0, time.UTC),
+				finishTest: true,
+			},
+		},
+		&schedpb.Schedule{
+			Spec: &schedpb.ScheduleSpec{
+				Interval: []*schedpb.IntervalSpec{{
+					Interval: durationpb.New(1 * time.Hour),
+				}},
+				Jitter: durationpb.New(1 * time.Hour),
+			},
+		},
 	)
 }
 
 func (s *workflowSuite) TestLimitedActions() {
+	// TODO - remove when AccurateFutureActionTimes becomes the active version
+	prevTweakables := CurrentTweakablePolicies
+	CurrentTweakablePolicies.Version = AccurateFutureActionTimes
+	defer func() { CurrentTweakablePolicies = prevTweakables }()
+
 	// written using low-level mocks so we can sleep forever
 
 	// limited to 2
@@ -1468,13 +1907,19 @@ func (s *workflowSuite) TestLimitedActions() {
 	})
 
 	s.env.RegisterDelayedCallback(func() {
-		s.Equal(int64(2), s.describe().Schedule.State.RemainingActions)
+		desc := s.describe()
+		s.Equal(int64(2), desc.Schedule.State.RemainingActions)
+		s.Equal(2, len(desc.Info.FutureActionTimes))
 	}, 1*time.Minute)
 	s.env.RegisterDelayedCallback(func() {
-		s.Equal(int64(1), s.describe().Schedule.State.RemainingActions)
+		desc := s.describe()
+		s.Equal(int64(1), desc.Schedule.State.RemainingActions)
+		s.Equal(1, len(desc.Info.FutureActionTimes))
 	}, 5*time.Minute)
 	s.env.RegisterDelayedCallback(func() {
-		s.Equal(int64(0), s.describe().Schedule.State.RemainingActions)
+		desc := s.describe()
+		s.Equal(int64(0), desc.Schedule.State.RemainingActions)
+		s.Equal(0, len(desc.Info.FutureActionTimes))
 		s.Equal(1, len(s.runningWorkflows()))
 	}, 7*time.Minute)
 	s.env.RegisterDelayedCallback(func() {
@@ -1489,7 +1934,7 @@ func (s *workflowSuite) TestLimitedActions() {
 	s.run(&schedpb.Schedule{
 		Spec: &schedpb.ScheduleSpec{
 			Interval: []*schedpb.IntervalSpec{{
-				Interval: timestamp.DurationPtr(3 * time.Minute),
+				Interval: durationpb.New(3 * time.Minute),
 			}},
 		},
 		State: &schedpb.ScheduleState{
@@ -1497,7 +1942,7 @@ func (s *workflowSuite) TestLimitedActions() {
 			RemainingActions: 2,
 		},
 		Policies: &schedpb.SchedulePolicies{
-			OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL,
+			OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_SKIP,
 		},
 	}, 4)
 	s.True(s.env.IsWorkflowCompleted())
@@ -1505,7 +1950,7 @@ func (s *workflowSuite) TestLimitedActions() {
 }
 
 func (s *workflowSuite) TestLotsOfIterations() {
-	// This is mostly testing getNextTime caching logic.
+	// This is mostly testing GetNextTime caching logic.
 	const runIterations = 30
 	const backfillIterations = 3
 
@@ -1519,16 +1964,15 @@ func (s *workflowSuite) TestLotsOfIterations() {
 			result: enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
 		}
 	}
+	testEnd := runs[len(runs)-1].end.Add(time.Second)
 
 	delayedCallbacks := make([]delayedCallback, backfillIterations)
 
-	expected := runIterations
 	// schedule some callbacks to spray backfills among scheduled runs
 	// each call back adds random number of backfills in [10, 20) range
 	for i := range delayedCallbacks {
 
 		maxRuns := rand.Intn(10) + 10
-		expected += maxRuns
 		// a point in time to send the callback request
 		offset := i * runIterations / backfillIterations
 		callbackTime := time.Date(2022, 6, 1, offset, 2, 0, 0, time.UTC)
@@ -1551,14 +1995,19 @@ func (s *workflowSuite) TestLotsOfIterations() {
 			f: func() {
 				s.env.SignalWorkflow(SignalNamePatch, &schedpb.SchedulePatch{
 					BackfillRequest: []*schedpb.BackfillRequest{{
-						StartTime:     timestamp.TimePtr(callBackRangeStartTime),
-						EndTime:       timestamp.TimePtr(callBackRangeStartTime.Add(time.Duration(maxRuns) * time.Hour)),
+						StartTime:     timestamppb.New(callBackRangeStartTime),
+						EndTime:       timestamppb.New(callBackRangeStartTime.Add(time.Duration(maxRuns) * time.Hour)),
 						OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_BUFFER_ALL,
 					}},
 				})
 			},
 		}
 	}
+
+	delayedCallbacks = append(delayedCallbacks, delayedCallback{
+		at:         testEnd,
+		finishTest: true,
+	})
 
 	s.runAcrossContinue(
 		runs,
@@ -1571,7 +2020,6 @@ func (s *workflowSuite) TestLotsOfIterations() {
 				},
 			},
 		},
-		expected+1,
 	)
 }
 
@@ -1594,13 +2042,13 @@ func (s *workflowSuite) TestExitScheduleWorkflowWhenNoActions() {
 		return nil, nil
 	})
 
-	currentTweakablePolicies.IterationsBeforeContinueAsNew = 5
+	CurrentTweakablePolicies.IterationsBeforeContinueAsNew = 5
 	s.env.SetStartTime(baseStartTime)
 	s.env.ExecuteWorkflow(SchedulerWorkflow, &schedspb.StartScheduleArgs{
 		Schedule: &schedpb.Schedule{
 			Spec: &schedpb.ScheduleSpec{
 				Interval: []*schedpb.IntervalSpec{{
-					Interval: timestamp.DurationPtr(15 * time.Minute),
+					Interval: durationpb.New(15 * time.Minute),
 				}},
 			},
 			State: &schedpb.ScheduleState{
@@ -1618,7 +2066,7 @@ func (s *workflowSuite) TestExitScheduleWorkflowWhenNoActions() {
 	})
 	s.True(s.env.IsWorkflowCompleted())
 	s.False(workflow.IsContinueAsNewError(s.env.GetWorkflowError()))
-	s.True(s.env.Now().Sub(time.Date(2022, 6, 1, 0, 30, 0, 0, time.UTC)) == currentTweakablePolicies.RetentionTime)
+	s.True(s.env.Now().Sub(time.Date(2022, 6, 1, 0, 30, 0, 0, time.UTC)) == CurrentTweakablePolicies.RetentionTime)
 }
 
 func (s *workflowSuite) TestExitScheduleWorkflowWhenNoNextTime() {
@@ -1629,7 +2077,7 @@ func (s *workflowSuite) TestExitScheduleWorkflowWhenNoNextTime() {
 		return nil, nil
 	})
 
-	currentTweakablePolicies.IterationsBeforeContinueAsNew = 3
+	CurrentTweakablePolicies.IterationsBeforeContinueAsNew = 3
 	s.env.SetStartTime(baseStartTime)
 	s.env.ExecuteWorkflow(SchedulerWorkflow, &schedspb.StartScheduleArgs{
 		Schedule: &schedpb.Schedule{
@@ -1654,13 +2102,13 @@ func (s *workflowSuite) TestExitScheduleWorkflowWhenNoNextTime() {
 	})
 	s.True(s.env.IsWorkflowCompleted())
 	s.False(workflow.IsContinueAsNewError(s.env.GetWorkflowError()))
-	s.True(s.env.Now().Sub(time.Date(2022, 6, 1, 1, 0, 0, 0, time.UTC)) == currentTweakablePolicies.RetentionTime)
+	s.True(s.env.Now().Sub(time.Date(2022, 6, 1, 1, 0, 0, 0, time.UTC)) == CurrentTweakablePolicies.RetentionTime)
 }
 
 func (s *workflowSuite) TestExitScheduleWorkflowWhenEmpty() {
 	scheduleId := "myschedule"
 
-	currentTweakablePolicies.IterationsBeforeContinueAsNew = 3
+	CurrentTweakablePolicies.IterationsBeforeContinueAsNew = 3
 	s.env.SetStartTime(baseStartTime)
 	s.env.ExecuteWorkflow(SchedulerWorkflow, &schedspb.StartScheduleArgs{
 		Schedule: &schedpb.Schedule{
@@ -1676,5 +2124,170 @@ func (s *workflowSuite) TestExitScheduleWorkflowWhenEmpty() {
 
 	s.True(s.env.IsWorkflowCompleted())
 	s.False(workflow.IsContinueAsNewError(s.env.GetWorkflowError()))
-	s.True(s.env.Now().Sub(baseStartTime) == currentTweakablePolicies.RetentionTime)
+	s.True(s.env.Now().Sub(baseStartTime) == CurrentTweakablePolicies.RetentionTime)
+}
+
+func (s *workflowSuite) TestCANByIterations() {
+	// written using low-level mocks so we can control iteration count
+
+	const iters = 30
+	// note: one fewer run than iters since the first doesn't start anything
+	for i := 1; i < iters; i++ {
+		t := baseStartTime.Add(5 * time.Minute * time.Duration(i))
+		s.expectStart(func(req *schedspb.StartWorkflowRequest) (*schedspb.StartWorkflowResponse, error) {
+			s.Equal("myid-"+t.Format(time.RFC3339), req.Request.WorkflowId)
+			return nil, nil
+		})
+	}
+	// this one catches and fails if we go over
+	s.expectStart(func(req *schedspb.StartWorkflowRequest) (*schedspb.StartWorkflowResponse, error) {
+		s.Fail("too many starts")
+		return nil, nil
+	}).Times(0).Maybe()
+
+	// this is ignored because we set iters explicitly
+	s.env.RegisterDelayedCallback(func() {
+		s.env.SetContinueAsNewSuggested(true)
+	}, 5*time.Minute*iters/2-time.Second)
+
+	s.run(&schedpb.Schedule{
+		Spec: &schedpb.ScheduleSpec{
+			Interval: []*schedpb.IntervalSpec{{
+				Interval: durationpb.New(5 * time.Minute),
+			}},
+		},
+		Policies: &schedpb.SchedulePolicies{
+			OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL,
+		},
+	}, iters)
+	s.True(s.env.IsWorkflowCompleted())
+	s.True(workflow.IsContinueAsNewError(s.env.GetWorkflowError()))
+}
+
+func (s *workflowSuite) TestCANBySuggested() {
+	// written using low-level mocks so we can control iteration count
+
+	const iters = 30
+	// note: one fewer run than iters since the first doesn't start anything
+	for i := 1; i < iters; i++ {
+		t := baseStartTime.Add(5 * time.Minute * time.Duration(i))
+		s.expectStart(func(req *schedspb.StartWorkflowRequest) (*schedspb.StartWorkflowResponse, error) {
+			s.Equal("myid-"+t.Format(time.RFC3339), req.Request.WorkflowId)
+			return nil, nil
+		})
+	}
+	// this one catches and fails if we go over
+	s.expectStart(func(req *schedspb.StartWorkflowRequest) (*schedspb.StartWorkflowResponse, error) {
+		s.Fail("too many starts", req.Request.WorkflowId)
+		return nil, nil
+	}).Times(0).Maybe()
+
+	s.env.RegisterDelayedCallback(func() {
+		s.env.SetContinueAsNewSuggested(true)
+	}, 5*time.Minute*iters-time.Second)
+
+	s.run(&schedpb.Schedule{
+		Spec: &schedpb.ScheduleSpec{
+			Interval: []*schedpb.IntervalSpec{{
+				Interval: durationpb.New(5 * time.Minute),
+			}},
+		},
+		Policies: &schedpb.SchedulePolicies{
+			OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL,
+		},
+	}, 0) // 0 means use suggested
+	s.True(s.env.IsWorkflowCompleted())
+	s.True(workflow.IsContinueAsNewError(s.env.GetWorkflowError()))
+}
+
+func (s *workflowSuite) TestCANBySuggestedWithSignals() {
+	// written using low-level mocks so we can control iteration count
+
+	runs := []time.Duration{
+		1 * time.Minute,
+		2 * time.Minute,
+		3 * time.Minute,
+		5 * time.Minute, // suggestCAN will be true for this signal
+		8 * time.Minute, // this one won't be reached
+	}
+	suggestCANAt := 4 * time.Minute
+	for _, d := range runs {
+		t := baseStartTime.Add(d)
+		s.expectStart(func(req *schedspb.StartWorkflowRequest) (*schedspb.StartWorkflowResponse, error) {
+			s.Equal("myid-"+t.Format(time.RFC3339), req.Request.WorkflowId)
+			return nil, nil
+		})
+		if d > suggestCANAt {
+			// the first one after the CAN flag is flipped will run, further ones will not
+			break
+		}
+	}
+	s.expectStart(func(req *schedspb.StartWorkflowRequest) (*schedspb.StartWorkflowResponse, error) {
+		s.Fail("too many starts", req.Request.WorkflowId)
+		return nil, nil
+	}).Times(0).Maybe()
+
+	s.env.RegisterDelayedCallback(func() {
+		s.env.SetContinueAsNewSuggested(true)
+	}, suggestCANAt)
+
+	for _, d := range runs {
+		s.env.RegisterDelayedCallback(func() {
+			s.env.SignalWorkflow(SignalNamePatch, &schedpb.SchedulePatch{
+				TriggerImmediately: &schedpb.TriggerImmediatelyRequest{},
+			})
+		}, d)
+	}
+
+	s.run(&schedpb.Schedule{
+		Spec: &schedpb.ScheduleSpec{
+			Interval: []*schedpb.IntervalSpec{{
+				Interval: durationpb.New(100 * time.Minute),
+			}},
+		},
+		Policies: &schedpb.SchedulePolicies{
+			OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL,
+		},
+		State: &schedpb.ScheduleState{
+			Paused: true,
+		},
+	}, 0) // 0 means use suggested
+	s.True(s.env.IsWorkflowCompleted())
+	s.True(workflow.IsContinueAsNewError(s.env.GetWorkflowError()))
+}
+
+func (s *workflowSuite) TestCANBySignal() {
+	// written using low-level mocks so we can control iteration count
+
+	const iters = 30
+	// note: one fewer run than iters since the first doesn't start anything
+	for i := 1; i < iters; i++ {
+		t := baseStartTime.Add(5 * time.Minute * time.Duration(i))
+		s.expectStart(func(req *schedspb.StartWorkflowRequest) (*schedspb.StartWorkflowResponse, error) {
+			s.Equal("myid-"+t.Format(time.RFC3339), req.Request.WorkflowId)
+			return nil, nil
+		})
+	}
+	// this one catches and fails if we go over
+	s.expectStart(func(req *schedspb.StartWorkflowRequest) (*schedspb.StartWorkflowResponse, error) {
+		s.Fail("too many starts", req.Request.WorkflowId)
+		return nil, nil
+	}).Times(0).Maybe()
+
+	s.env.RegisterDelayedCallback(func() {
+		s.env.SignalWorkflow(SignalNameForceCAN, nil)
+	}, 5*time.Minute*iters-time.Second)
+
+	s.run(&schedpb.Schedule{
+		Spec: &schedpb.ScheduleSpec{
+			Interval: []*schedpb.IntervalSpec{{
+				Interval: durationpb.New(5 * time.Minute),
+			}},
+		},
+		Policies: &schedpb.SchedulePolicies{
+			OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL,
+		},
+	}, 0) // 0 means use suggested
+	s.True(s.env.IsWorkflowCompleted())
+	s.True(workflow.IsContinueAsNewError(s.env.GetWorkflowError()))
 }

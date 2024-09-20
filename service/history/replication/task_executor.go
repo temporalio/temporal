@@ -32,11 +32,11 @@ import (
 
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
-
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/common/headers"
+	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
@@ -45,7 +45,6 @@ import (
 	"go.temporal.io/server/common/xdc"
 	"go.temporal.io/server/service/history/deletemanager"
 	"go.temporal.io/server/service/history/shard"
-	"go.temporal.io/server/service/history/workflow"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
 )
 
@@ -117,7 +116,8 @@ func (e *taskExecutorImpl) Execute(
 	case enumsspb.REPLICATION_TASK_TYPE_SYNC_WORKFLOW_STATE_TASK:
 		err = e.handleSyncWorkflowStateTask(ctx, replicationTask, forceApply)
 	default:
-		e.logger.Error("Unknown task type.")
+		// NOTE: not handling SyncHSMTask in this deprecated code path, task will go to DLQ
+		e.logger.Error("Unknown replication task type.", tag.ReplicationTask(replicationTask))
 		err = ErrUnknownReplicationTask
 	}
 
@@ -138,27 +138,29 @@ func (e *taskExecutorImpl) handleActivityTask(
 
 	startTime := time.Now().UTC()
 	defer func() {
-		e.metricsHandler.Timer(metrics.ServiceLatency.GetMetricName()).Record(
+		metrics.ServiceLatency.With(e.metricsHandler).Record(
 			time.Since(startTime),
 			metrics.OperationTag(metrics.SyncActivityTaskScope),
 		)
 	}()
 
 	request := &historyservice.SyncActivityRequest{
-		NamespaceId:        attr.NamespaceId,
-		WorkflowId:         attr.WorkflowId,
-		RunId:              attr.RunId,
-		Version:            attr.Version,
-		ScheduledEventId:   attr.ScheduledEventId,
-		ScheduledTime:      attr.ScheduledTime,
-		StartedEventId:     attr.StartedEventId,
-		StartedTime:        attr.StartedTime,
-		LastHeartbeatTime:  attr.LastHeartbeatTime,
-		Details:            attr.Details,
-		Attempt:            attr.Attempt,
-		LastFailure:        attr.LastFailure,
-		LastWorkerIdentity: attr.LastWorkerIdentity,
-		VersionHistory:     attr.GetVersionHistory(),
+		NamespaceId:                attr.NamespaceId,
+		WorkflowId:                 attr.WorkflowId,
+		RunId:                      attr.RunId,
+		Version:                    attr.Version,
+		ScheduledEventId:           attr.ScheduledEventId,
+		ScheduledTime:              attr.ScheduledTime,
+		StartedEventId:             attr.StartedEventId,
+		StartedTime:                attr.StartedTime,
+		LastHeartbeatTime:          attr.LastHeartbeatTime,
+		Details:                    attr.Details,
+		Attempt:                    attr.Attempt,
+		LastFailure:                attr.LastFailure,
+		LastWorkerIdentity:         attr.LastWorkerIdentity,
+		LastStartedBuildId:         attr.LastStartedBuildId,
+		LastStartedRedirectCounter: attr.LastStartedRedirectCounter,
+		VersionHistory:             attr.GetVersionHistory(),
 	}
 	ctx, cancel := e.newTaskContext(ctx, attr.NamespaceId)
 	defer cancel()
@@ -171,13 +173,13 @@ func (e *taskExecutorImpl) handleActivityTask(
 		return nil
 
 	case *serviceerrors.RetryReplication:
-		e.metricsHandler.Counter(metrics.ClientRequests.GetMetricName()).Record(
+		metrics.ClientRequests.With(e.metricsHandler).Record(
 			1,
 			metrics.OperationTag(metrics.HistoryRereplicationByActivityReplicationScope),
 		)
 		startTime := time.Now().UTC()
 		defer func() {
-			e.metricsHandler.Timer(metrics.ClientLatency.GetMetricName()).Record(
+			metrics.ClientLatency.With(e.metricsHandler).Record(
 				time.Since(startTime),
 				metrics.OperationTag(metrics.HistoryRereplicationByActivityReplicationScope),
 			)
@@ -228,7 +230,7 @@ func (e *taskExecutorImpl) handleHistoryReplicationTask(
 
 	startTime := time.Now().UTC()
 	defer func() {
-		e.metricsHandler.Timer(metrics.ServiceLatency.GetMetricName()).Record(
+		metrics.ServiceLatency.With(e.metricsHandler).Record(
 			time.Since(startTime),
 			metrics.OperationTag(metrics.HistoryReplicationTaskScope),
 		)
@@ -244,6 +246,7 @@ func (e *taskExecutorImpl) handleHistoryReplicationTask(
 		Events:              attr.Events,
 		// new run events does not need version history since there is no prior events
 		NewRunEvents: attr.NewRunEvents,
+		NewRunId:     attr.NewRunId,
 	}
 	ctx, cancel := e.newTaskContext(ctx, attr.NamespaceId)
 	defer cancel()
@@ -256,13 +259,13 @@ func (e *taskExecutorImpl) handleHistoryReplicationTask(
 		return nil
 
 	case *serviceerrors.RetryReplication:
-		e.metricsHandler.Counter(metrics.ClientRequests.GetMetricName()).Record(
+		metrics.ClientRequests.With(e.metricsHandler).Record(
 			1,
 			metrics.OperationTag(metrics.HistoryRereplicationByHistoryReplicationScope),
 		)
 		startTime := time.Now().UTC()
 		defer func() {
-			e.metricsHandler.Timer(metrics.ClientLatency.GetMetricName()).Record(
+			metrics.ClientLatency.With(e.metricsHandler).Record(
 				time.Since(startTime),
 				metrics.OperationTag(metrics.HistoryRereplicationByHistoryReplicationScope),
 			)
@@ -392,7 +395,7 @@ func (e *taskExecutorImpl) cleanupWorkflowExecution(ctx context.Context, namespa
 		WorkflowId: workflowID,
 		RunId:      runID,
 	}
-	wfCtx, releaseFn, err := e.workflowCache.GetOrCreateWorkflowExecution(ctx, e.shardContext, nsID, ex, workflow.LockPriorityLow)
+	wfCtx, releaseFn, err := e.workflowCache.GetOrCreateWorkflowExecution(ctx, e.shardContext, nsID, &ex, locks.PriorityLow)
 	if err != nil {
 		return err
 	}
@@ -405,7 +408,7 @@ func (e *taskExecutorImpl) cleanupWorkflowExecution(ctx context.Context, namespa
 	return e.deleteManager.DeleteWorkflowExecution(
 		ctx,
 		nsID,
-		ex,
+		&ex,
 		wfCtx,
 		mutableState,
 		false,
