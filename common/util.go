@@ -28,6 +28,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"go.temporal.io/server/common/persistence/serialization"
 	"math/rand"
 	"strings"
 	"sync"
@@ -370,6 +371,24 @@ func IsResourceExhausted(err error) bool {
 // IsInternalError checks if the error is an internal error.
 func IsInternalError(err error) bool {
 	var internalErr *serviceerror.Internal
+	return errors.As(err, &internalErr)
+}
+
+// IsDataLossError checks if the error is a data loss error.
+func IsDataLossError(err error) bool {
+	var internalErr *serviceerror.DataLoss
+	return errors.As(err, &internalErr)
+}
+
+// IsDeserializationError checks if the error is a deserialization error.
+func IsDeserializationError(err error) bool {
+	var internalErr *serialization.DeserializationError
+	return errors.As(err, &internalErr)
+}
+
+// IsSerializationError checks if the error is an serialization error.
+func IsSerializationError(err error) bool {
+	var internalErr *serialization.SerializationError
 	return errors.As(err, &internalErr)
 }
 

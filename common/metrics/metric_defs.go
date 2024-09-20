@@ -794,10 +794,13 @@ var (
 		"task_errors_workflow_busy",
 		WithDescription("The number of history task processing errors caused by failing to acquire workflow lock within the configured timeout (history.cacheNonUserContextLockTimeout)."),
 	)
-	TaskNotActiveCounter         = NewCounterDef("task_errors_not_active_counter")
-	TaskNamespaceHandoverCounter = NewCounterDef("task_errors_namespace_handover")
-	TaskInternalErrorCounter     = NewCounterDef("task_errors_internal")
-	TaskThrottledCounter         = NewCounterDef(
+	TaskNotActiveCounter            = NewCounterDef("task_errors_not_active_counter")
+	TaskNamespaceHandoverCounter    = NewCounterDef("task_errors_namespace_handover")
+	TaskInternalErrorCounter        = NewCounterDef("task_errors_internal")
+	TaskDataLossErrorCounter        = NewCounterDef("task_errors_data_loss_error", WithDescription("The number of non-retryable tasks, dropped in matching, due to a dataloss error"))
+	TaskDeserializationErrorCounter = NewCounterDef("task_errors_deserialization_error", WithDescription("The number of non-retryable tasks, dropped in matching, due to a deserialization error"))
+	TaskSerializationErrorCounter   = NewCounterDef("task_errors_serialization_error", WithDescription("The number of non-retryable tasks, dropped in matching, due to a serialization error"))
+	TaskThrottledCounter            = NewCounterDef(
 		"task_errors_throttled",
 		WithDescription("The number of history task processing errors caused by resource exhausted errors, excluding workflow busy case."),
 	)
@@ -1145,6 +1148,9 @@ var (
 		"schedule_action_delay",
 		WithDescription("Delay between when scheduled actions should/actually happen"),
 	)
+	NonRetryableTasks = NewCounterDef(
+		"non_retryable_tasks",
+		WithDescription("The number of non-retryable tasks which are dropped due to specific errors"))
 
 	// Force replication
 	EncounterZombieWorkflowCount        = NewCounterDef("encounter_zombie_workflow_count")
