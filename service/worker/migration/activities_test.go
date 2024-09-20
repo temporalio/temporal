@@ -714,3 +714,30 @@ func (s *activitiesSuite) TestGenerateReplicationTasks_Failed() {
 	// Only the generation of 1st execution suceeded.
 	s.Equal(0, lastHeartBeat)
 }
+
+func (s *activitiesSuite) TestReportReplicationRate() {
+	env, _ := s.initEnv()
+
+	request := reportReplicationRateRequest{
+		Namespace: mockedNamespaceID,
+		RPS:       10.0,
+		Cluster:   "test-cluster",
+	}
+
+	// Create a mock GaugeIface object
+	mockGauge := metrics.NewMockGaugeIface(s.controller)
+
+	mockGauge.EXPECT().Record(
+		gomock.Eq(10.0),
+		gomock.Any(),
+		gomock.Any(),
+		gomock.Any(),
+	).Times(1)
+
+	// Mock the Gauge method to return the mockGauge object
+	s.mockMetricsHandler.EXPECT().Gauge(gomock.Any()).Return(mockGauge).AnyTimes()
+
+	// Execute the activity
+	_, err := env.ExecuteActivity(s.a.ReportReplicationRate, request)
+	s.NoError(err)
+}

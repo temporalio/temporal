@@ -101,6 +101,12 @@ type (
 		Namespace     string
 		RemoteCluster string // remote cluster name
 	}
+
+	reportReplicationRateRequest struct {
+		RPS       float64
+		Namespace string
+		Cluster   string
+	}
 )
 
 func NamespaceHandoverWorkflow(ctx workflow.Context, params NamespaceHandoverParams) (retErr error) {

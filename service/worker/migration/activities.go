@@ -791,3 +791,16 @@ func (a *activities) VerifyReplicationTasks(ctx context.Context, request *verify
 		}
 	}
 }
+
+// reportReplicationRate reports replication rate per second for an ongoing replication.
+func (a *activities) ReportReplicationRate(ctx context.Context, replicationInfo reportReplicationRateRequest) error {
+
+	a.metricsHandler.Gauge(metrics.ReplicationRatePerSecondGuage.GetMetricName()).Record(
+		replicationInfo.RPS,
+		metrics.OperationTag(metrics.MigrationWorkflowScope),
+		metrics.TargetClusterTag(replicationInfo.Cluster),
+		metrics.NamespaceTag(replicationInfo.Namespace),
+	)
+
+	return nil
+}
