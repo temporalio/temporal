@@ -111,7 +111,6 @@ func (h *DatabaseHandle) reconnect(force bool) *sqlx.DB {
 
 	now := time.Now()
 	lastRefresh := h.lastRefresh
-	h.lastRefresh = now
 	if now.Sub(lastRefresh) < sessionRefreshMinInternal {
 		h.logger.Warn("sql handle: did not refresh database connection pool because the last refresh was too close",
 			tag.NewDurationTag("min_refresh_interval_seconds", sessionRefreshMinInternal))
@@ -120,6 +119,7 @@ func (h *DatabaseHandle) reconnect(force bool) *sqlx.DB {
 		return nil
 	}
 
+	h.lastRefresh = now
 	newConn, err := h.connect()
 	if err != nil {
 		h.logger.Error("sql handle: unable to refresh database connection pool", tag.Error(err))
