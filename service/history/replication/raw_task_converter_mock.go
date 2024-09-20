@@ -36,7 +36,7 @@ package replication
 import (
 	reflect "reflect"
 
-	repication "go.temporal.io/server/api/replication/v1"
+	v1 "go.temporal.io/server/api/replication/v1"
 	tasks "go.temporal.io/server/service/history/tasks"
 	gomock "go.uber.org/mock/gomock"
 )
@@ -65,10 +65,10 @@ func (m *MockSourceTaskConverter) EXPECT() *MockSourceTaskConverterMockRecorder 
 }
 
 // Convert mocks base method.
-func (m *MockSourceTaskConverter) Convert(task tasks.Task, targetClusterID int32) (*repication.ReplicationTask, error) {
+func (m *MockSourceTaskConverter) Convert(task tasks.Task, targetClusterID int32) (*v1.ReplicationTask, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Convert", task, targetClusterID)
-	ret0, _ := ret[0].(*repication.ReplicationTask)
+	ret0, _ := ret[0].(*v1.ReplicationTask)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }

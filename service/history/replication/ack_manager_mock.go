@@ -38,7 +38,7 @@ import (
 	reflect "reflect"
 	time "time"
 
-	repication "go.temporal.io/server/api/replication/v1"
+	v1 "go.temporal.io/server/api/replication/v1"
 	collection "go.temporal.io/server/common/collection"
 	tasks "go.temporal.io/server/service/history/tasks"
 	gomock "go.uber.org/mock/gomock"
@@ -68,10 +68,10 @@ func (m *MockAckManager) EXPECT() *MockAckManagerMockRecorder {
 }
 
 // ConvertTask mocks base method.
-func (m *MockAckManager) ConvertTask(ctx context.Context, task tasks.Task) (*repication.ReplicationTask, error) {
+func (m *MockAckManager) ConvertTask(ctx context.Context, task tasks.Task) (*v1.ReplicationTask, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ConvertTask", ctx, task)
-	ret0, _ := ret[0].(*repication.ReplicationTask)
+	ret0, _ := ret[0].(*v1.ReplicationTask)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -83,10 +83,10 @@ func (mr *MockAckManagerMockRecorder) ConvertTask(ctx, task any) *gomock.Call {
 }
 
 // ConvertTaskByCluster mocks base method.
-func (m *MockAckManager) ConvertTaskByCluster(ctx context.Context, task tasks.Task, targetClusterID int32) (*repication.ReplicationTask, error) {
+func (m *MockAckManager) ConvertTaskByCluster(ctx context.Context, task tasks.Task, targetClusterID int32) (*v1.ReplicationTask, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ConvertTaskByCluster", ctx, task, targetClusterID)
-	ret0, _ := ret[0].(*repication.ReplicationTask)
+	ret0, _ := ret[0].(*v1.ReplicationTask)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -128,10 +128,10 @@ func (mr *MockAckManagerMockRecorder) GetReplicationTasksIter(ctx, pollingCluste
 }
 
 // GetTask mocks base method.
-func (m *MockAckManager) GetTask(ctx context.Context, taskInfo *repication.ReplicationTaskInfo) (*repication.ReplicationTask, error) {
+func (m *MockAckManager) GetTask(ctx context.Context, taskInfo *v1.ReplicationTaskInfo) (*v1.ReplicationTask, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetTask", ctx, taskInfo)
-	ret0, _ := ret[0].(*repication.ReplicationTask)
+	ret0, _ := ret[0].(*v1.ReplicationTask)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -143,10 +143,10 @@ func (mr *MockAckManagerMockRecorder) GetTask(ctx, taskInfo any) *gomock.Call {
 }
 
 // GetTasks mocks base method.
-func (m *MockAckManager) GetTasks(ctx context.Context, pollingCluster string, queryMessageID int64) (*repication.ReplicationMessages, error) {
+func (m *MockAckManager) GetTasks(ctx context.Context, pollingCluster string, queryMessageID int64) (*v1.ReplicationMessages, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetTasks", ctx, pollingCluster, queryMessageID)
-	ret0, _ := ret[0].(*repication.ReplicationMessages)
+	ret0, _ := ret[0].(*v1.ReplicationMessages)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }

@@ -28,12 +28,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"go.temporal.io/server/common/persistence/serialization"
 	"math/rand"
 	"strings"
 	"sync"
 	"time"
 	"unicode/utf8"
+
+	"go.temporal.io/server/common/persistence/serialization"
 
 	"github.com/dgryski/go-farm"
 	commonpb "go.temporal.io/api/common/v1"
