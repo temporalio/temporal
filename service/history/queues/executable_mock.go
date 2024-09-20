@@ -38,7 +38,7 @@ import (
 	reflect "reflect"
 	time "time"
 
-	v1 "go.temporal.io/server/api/enums/v1"
+	enums "go.temporal.io/server/api/enums/v1"
 	backoff "go.temporal.io/server/common/backoff"
 	tasks "go.temporal.io/server/common/tasks"
 	tasks0 "go.temporal.io/server/service/history/tasks"
@@ -245,10 +245,10 @@ func (mr *MockExecutableMockRecorder) GetTaskID() *gomock.Call {
 }
 
 // GetType mocks base method.
-func (m *MockExecutable) GetType() v1.TaskType {
+func (m *MockExecutable) GetType() enums.TaskType {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetType")
-	ret0, _ := ret[0].(v1.TaskType)
+	ret0, _ := ret[0].(enums.TaskType)
 	return ret0
 }
 

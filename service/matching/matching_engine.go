@@ -722,9 +722,9 @@ func (e *matchingEngineImpl) nonRetryableErrorsDropTask(task *internalTask, task
 		metrics.TaskInternalErrorCounter.With(e.metricsHandler).Record(1, metrics.NamespaceTag(namespaceID))
 	} else if common.IsDataLossError(err) {
 		metrics.TaskDataLossErrorCounter.With(e.metricsHandler).Record(1, metrics.NamespaceTag(namespaceID))
-	} else if common.IsDeserializationError(err) {
+	} else if serialization.IsDeserializationError(err) {
 		metrics.TaskDeserializationErrorCounter.With(e.metricsHandler).Record(1, metrics.NamespaceTag(namespaceID))
-	} else if common.IsSerializationError(err) {
+	} else if serialization.IsSerializationError(err) {
 		metrics.TaskSerializationErrorCounter.With(e.metricsHandler).Record(1, metrics.NamespaceTag(namespaceID))
 	}
 

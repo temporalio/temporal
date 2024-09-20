@@ -34,8 +34,6 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"go.temporal.io/server/common/persistence/serialization"
-
 	"github.com/dgryski/go-farm"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -378,18 +376,6 @@ func IsInternalError(err error) bool {
 // IsDataLossError checks if the error is a data loss error.
 func IsDataLossError(err error) bool {
 	var internalErr *serviceerror.DataLoss
-	return errors.As(err, &internalErr)
-}
-
-// IsDeserializationError checks if the error is a deserialization error.
-func IsDeserializationError(err error) bool {
-	var internalErr *serialization.DeserializationError
-	return errors.As(err, &internalErr)
-}
-
-// IsSerializationError checks if the error is an serialization error.
-func IsSerializationError(err error) bool {
-	var internalErr *serialization.SerializationError
 	return errors.As(err, &internalErr)
 }
 

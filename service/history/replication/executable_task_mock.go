@@ -38,7 +38,7 @@ import (
 	reflect "reflect"
 	time "time"
 
-	v1 "go.temporal.io/server/api/replication/v1"
+	repication "go.temporal.io/server/api/replication/v1"
 	backoff "go.temporal.io/server/common/backoff"
 	definition "go.temporal.io/server/common/definition"
 	serviceerror "go.temporal.io/server/common/serviceerror"
@@ -190,10 +190,10 @@ func (mr *MockExecutableTaskMockRecorder) Nack(err any) *gomock.Call {
 }
 
 // ReplicationTask mocks base method.
-func (m *MockExecutableTask) ReplicationTask() *v1.ReplicationTask {
+func (m *MockExecutableTask) ReplicationTask() *repication.ReplicationTask {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ReplicationTask")
-	ret0, _ := ret[0].(*v1.ReplicationTask)
+	ret0, _ := ret[0].(*repication.ReplicationTask)
 	return ret0
 }
 

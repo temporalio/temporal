@@ -328,6 +328,12 @@ func NewSerializationError(
 	}
 }
 
+// IsSerializationError checks if the error is a serialization error.
+func IsSerializationError(err error) bool {
+	var internalErr *SerializationError
+	return errors.As(err, &internalErr)
+}
+
 func (e *SerializationError) Error() string {
 	return fmt.Sprintf("error serializing using %v encoding: %v", e.encodingType, e.wrappedErr)
 }
@@ -345,6 +351,12 @@ func NewDeserializationError(
 		encodingType: encodingType,
 		wrappedErr:   deserializationErr,
 	}
+}
+
+// IsDeserializationError checks if the error is a deserialization error.
+func IsDeserializationError(err error) bool {
+	var internalErr *DeserializationError
+	return errors.As(err, &internalErr)
 }
 
 func (e *DeserializationError) Error() string {
