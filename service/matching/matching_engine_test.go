@@ -88,6 +88,9 @@ import (
 	"google.golang.org/protobuf/types/known/wrapperspb"
 )
 
+// static error used in tests
+var randomTestError = errors.New("random error")
+
 type (
 	matchingEngineSuite struct {
 		suite.Suite
@@ -774,7 +777,7 @@ func (s *matchingEngineSuite) TestPollActivityTaskQueues_DeserializationError() 
 
 	// task is dropped with no retry; RecordActivityTaskStarted should only be called once
 	s.mockHistoryClient.EXPECT().RecordActivityTaskStarted(gomock.Any(), gomock.Any(), gomock.Any()).
-		Return(nil, serialization.NewDeserializationError(enumspb.ENCODING_TYPE_PROTO3, errors.New("random error"))).Times(1)
+		Return(nil, serialization.NewDeserializationError(enumspb.ENCODING_TYPE_PROTO3, randomTestError)).Times(1)
 
 	resp, err := s.matchingEngine.PollActivityTaskQueue(context.Background(), &matchingservice.PollActivityTaskQueueRequest{
 		NamespaceId: namespaceId,
@@ -807,7 +810,7 @@ func (s *matchingEngineSuite) TestPollActivityTaskQueues_SerializationError() {
 
 	// task is dropped with no retry; RecordActivityTaskStarted should only be called once
 	s.mockHistoryClient.EXPECT().RecordActivityTaskStarted(gomock.Any(), gomock.Any(), gomock.Any()).
-		Return(nil, serialization.NewSerializationError(enumspb.ENCODING_TYPE_PROTO3, errors.New("random error"))).Times(1)
+		Return(nil, serialization.NewSerializationError(enumspb.ENCODING_TYPE_PROTO3, randomTestError)).Times(1)
 
 	// in theory, these tasks should not be added inside matching again but they are being added back
 	resp, err := s.matchingEngine.PollActivityTaskQueue(context.Background(), &matchingservice.PollActivityTaskQueueRequest{
@@ -880,7 +883,7 @@ func (s *matchingEngineSuite) TestPollWorkflowTaskQueues_SerializationError() {
 
 	// task is dropped with no retry; RecordWorkflowTaskStarted should only be called once
 	s.mockHistoryClient.EXPECT().RecordWorkflowTaskStarted(gomock.Any(), gomock.Any(), gomock.Any()).
-		Return(nil, serialization.NewSerializationError(enumspb.ENCODING_TYPE_PROTO3, errors.New("random error"))).Times(1)
+		Return(nil, serialization.NewSerializationError(enumspb.ENCODING_TYPE_PROTO3, randomTestError)).Times(1)
 
 	resp, err := s.matchingEngine.PollWorkflowTaskQueue(context.Background(), &matchingservice.PollWorkflowTaskQueueRequest{
 		NamespaceId: namespaceId,
