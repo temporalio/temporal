@@ -1,3 +1,5 @@
+// The MIT License
+//
 // Copyright (c) 2019 Temporal Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -26,8 +28,6 @@ option go_package = "go.temporal.io/server/api/adminservice/v1;adminservice";
 import "google/protobuf/timestamp.proto";
 import "google/protobuf/duration.proto";
 
-import "dependencies/gogoproto/gogo.proto";
-
 import "temporal/api/enums/v1/common.proto";
 import "temporal/api/enums/v1/task_queue.proto";
 import "temporal/api/common/v1/message.proto";
@@ -35,11 +35,14 @@ import "temporal/api/version/v1/message.proto";
 import "temporal/api/workflow/v1/message.proto";
 import "temporal/api/namespace/v1/message.proto";
 import "temporal/api/replication/v1/message.proto";
+import "temporal/api/taskqueue/v1/message.proto";
 
 import "temporal/server/api/cluster/v1/message.proto";
+import "temporal/server/api/common/v1/dlq.proto";
 import "temporal/server/api/enums/v1/common.proto";
 import "temporal/server/api/enums/v1/cluster.proto";
 import "temporal/server/api/enums/v1/task.proto";
+import "temporal/server/api/enums/v1/dlq.proto";
 import "temporal/server/api/history/v1/message.proto";
 import "temporal/server/api/namespace/v1/message.proto";
 import "temporal/server/api/replication/v1/message.proto";
@@ -47,99 +50,103 @@ import "temporal/server/api/persistence/v1/cluster_metadata.proto";
 import "temporal/server/api/persistence/v1/executions.proto";
 import "temporal/server/api/persistence/v1/workflow_mutable_state.proto";
 import "temporal/server/api/persistence/v1/tasks.proto";
+import "temporal/server/api/persistence/v1/hsm.proto";
+import "temporal/server/api/taskqueue/v1/message.proto";
 
 message RebuildMutableStateRequest {
-    string namespace = 1;
-    temporal.api.common.v1.WorkflowExecution execution = 2;
+  string namespace = 1;
+  temporal.api.common.v1.WorkflowExecution execution = 2;
 }
 
 message RebuildMutableStateResponse {
 }
 
 message ImportWorkflowExecutionRequest {
-    string namespace = 1;
-    temporal.api.common.v1.WorkflowExecution execution = 2;
-    repeated temporal.api.common.v1.DataBlob history_batches = 3;
-    temporal.server.api.history.v1.VersionHistory version_history = 4;
-    bytes token = 5;
+  string namespace = 1;
+  temporal.api.common.v1.WorkflowExecution execution = 2;
+  repeated temporal.api.common.v1.DataBlob history_batches = 3;
+  temporal.server.api.history.v1.VersionHistory version_history = 4;
+  bytes token = 5;
 }
 
 message ImportWorkflowExecutionResponse {
-    bytes token = 1;
+  bytes token = 1;
 }
 
 message DescribeMutableStateRequest {
-    string namespace = 1;
-    temporal.api.common.v1.WorkflowExecution execution = 2;
+  string namespace = 1;
+  temporal.api.common.v1.WorkflowExecution execution = 2;
 }
 
 message DescribeMutableStateResponse {
-    string shard_id = 1;
-    string history_addr = 2;
-    temporal.server.api.persistence.v1.WorkflowMutableState cache_mutable_state = 3;
-    temporal.server.api.persistence.v1.WorkflowMutableState database_mutable_state = 4;
+  string shard_id = 1;
+  string history_addr = 2;
+  temporal.server.api.persistence.v1.WorkflowMutableState cache_mutable_state = 3;
+  temporal.server.api.persistence.v1.WorkflowMutableState database_mutable_state = 4;
 }
 
 // At least one of the parameters needs to be provided.
 message DescribeHistoryHostRequest {
-    //ip:port
-    string host_address = 1;
-    int32 shard_id = 2;
-    string namespace = 3;
-    temporal.api.common.v1.WorkflowExecution workflow_execution = 4;
+  //ip:port
+  string host_address = 1;
+  int32 shard_id = 2;
+  string namespace = 3;
+  temporal.api.common.v1.WorkflowExecution workflow_execution = 4;
 }
 
 message DescribeHistoryHostResponse {
-    int32 shards_number = 1;
-    repeated int32 shard_ids = 2;
-    temporal.server.api.namespace.v1.NamespaceCacheInfo namespace_cache = 3;
-    reserved 4;
-    string address = 5;
+  int32 shards_number = 1;
+  repeated int32 shard_ids = 2;
+  temporal.server.api.namespace.v1.NamespaceCacheInfo namespace_cache = 3;
+  reserved 4;
+  string address = 5;
 }
 
 message CloseShardRequest {
-    int32 shard_id = 1;
+  int32 shard_id = 1;
 }
 
 message CloseShardResponse {
 }
 
 message GetShardRequest {
-    int32 shard_id = 1;
+  int32 shard_id = 1;
 }
 
 message GetShardResponse {
-    temporal.server.api.persistence.v1.ShardInfo shard_info = 1;
+  temporal.server.api.persistence.v1.ShardInfo shard_info = 1;
 }
 
 message ListHistoryTasksRequest {
-    int32 shard_id = 1;
-    temporal.server.api.enums.v1.TaskCategory category = 2;
-    temporal.server.api.history.v1.TaskRange task_range = 3;
-    int32 batch_size = 4;
-    bytes next_page_token = 5;
+  int32 shard_id = 1;
+  // The task category. See tasks.TaskCategoryRegistry for more.
+  int32 category = 2;
+  temporal.server.api.history.v1.TaskRange task_range = 3;
+  int32 batch_size = 4;
+  bytes next_page_token = 5;
 }
 
 message ListHistoryTasksResponse {
-    repeated Task tasks = 1;
-    bytes next_page_token = 2;
+  repeated Task tasks = 1;
+  bytes next_page_token = 2;
 }
 
 message Task {
-    string namespace_id = 1;
-    string workflow_id = 2;
-    string run_id = 3;
-    int64 task_id = 4;
-    temporal.server.api.enums.v1.TaskType task_type = 5;
-    google.protobuf.Timestamp fire_time = 6 [(gogoproto.stdtime) = true];
-    int64 version = 7;
+  string namespace_id = 1;
+  string workflow_id = 2;
+  string run_id = 3;
+  int64 task_id = 4;
+  temporal.server.api.enums.v1.TaskType task_type = 5;
+  google.protobuf.Timestamp fire_time = 6;
+  int64 version = 7;
 }
 
 message RemoveTaskRequest {
-    int32 shard_id = 1;
-    temporal.server.api.enums.v1.TaskCategory category = 2;
-    int64 task_id = 3;
-    google.protobuf.Timestamp visibility_time = 4 [(gogoproto.stdtime) = true];
+  int32 shard_id = 1;
+  // The task category. See tasks.TaskCategoryRegistry for more.
+  int32 category = 2;
+  int64 task_id = 3;
+  google.protobuf.Timestamp visibility_time = 4;
 }
 
 message RemoveTaskResponse {
@@ -150,273 +157,455 @@ message RemoveTaskResponse {
   * EndEventId and EndEventVersion defines the end of the event to fetch. The end event is exclusive.
   **/
 message GetWorkflowExecutionRawHistoryV2Request {
-    reserved 1;
-    string namespace_id = 9;
-    temporal.api.common.v1.WorkflowExecution execution = 2;
-    int64 start_event_id = 3;
-    int64 start_event_version = 4;
-    int64 end_event_id = 5;
-    int64 end_event_version = 6;
-    int32 maximum_page_size = 7;
-    bytes next_page_token = 8;
+  reserved 1;
+  string namespace_id = 9;
+  temporal.api.common.v1.WorkflowExecution execution = 2;
+  int64 start_event_id = 3;
+  int64 start_event_version = 4;
+  int64 end_event_id = 5;
+  int64 end_event_version = 6;
+  int32 maximum_page_size = 7;
+  bytes next_page_token = 8;
 }
 
 message GetWorkflowExecutionRawHistoryV2Response {
-    bytes next_page_token = 1;
-    repeated temporal.api.common.v1.DataBlob history_batches = 2;
-    temporal.server.api.history.v1.VersionHistory version_history = 3;
-    repeated int64 history_node_ids = 4;
+  bytes next_page_token = 1;
+  repeated temporal.api.common.v1.DataBlob history_batches = 2;
+  temporal.server.api.history.v1.VersionHistory version_history = 3;
+  repeated int64 history_node_ids = 4;
+}
+
+message GetWorkflowExecutionRawHistoryRequest {
+  string namespace_id = 1;
+  temporal.api.common.v1.WorkflowExecution execution = 2;
+  int64 start_event_id = 3;
+  int64 start_event_version = 4;
+  int64 end_event_id = 5;
+  int64 end_event_version = 6;
+  int32 maximum_page_size = 7;
+  bytes next_page_token = 8;
+}
+
+message GetWorkflowExecutionRawHistoryResponse {
+  bytes next_page_token = 1;
+  repeated temporal.api.common.v1.DataBlob history_batches = 2;
+  temporal.server.api.history.v1.VersionHistory version_history = 3;
+  repeated int64 history_node_ids = 4;
 }
 
 message GetReplicationMessagesRequest {
-    repeated temporal.server.api.replication.v1.ReplicationToken tokens = 1;
-    string cluster_name = 2;
+  repeated temporal.server.api.replication.v1.ReplicationToken tokens = 1;
+  string cluster_name = 2;
 }
 
 message GetReplicationMessagesResponse {
-    map<int32, temporal.server.api.replication.v1.ReplicationMessages> shard_messages = 1;
+  map<int32, temporal.server.api.replication.v1.ReplicationMessages> shard_messages = 1;
 }
 
 message GetNamespaceReplicationMessagesRequest {
-    // lastRetrievedMessageId is where the next fetch should begin with.
-    int64 last_retrieved_message_id = 1;
-    // lastProcessedMessageId is the last messageId that is processed on the passive side.
-    // This can be different than lastRetrievedMessageId if passive side supports prefetching messages.
-    int64 last_processed_message_id = 2;
-    // clusterName is the name of the pulling cluster.
-    string cluster_name = 3;
+  // lastRetrievedMessageId is where the next fetch should begin with.
+  int64 last_retrieved_message_id = 1;
+  // lastProcessedMessageId is the last messageId that is processed on the passive side.
+  // This can be different than lastRetrievedMessageId if passive side supports prefetching messages.
+  int64 last_processed_message_id = 2;
+  // clusterName is the name of the pulling cluster.
+  string cluster_name = 3;
 }
 
 message GetNamespaceReplicationMessagesResponse {
-    temporal.server.api.replication.v1.ReplicationMessages messages = 1;
+  temporal.server.api.replication.v1.ReplicationMessages messages = 1;
 }
 
 message GetDLQReplicationMessagesRequest {
-    repeated temporal.server.api.replication.v1.ReplicationTaskInfo task_infos = 1;
+  repeated temporal.server.api.replication.v1.ReplicationTaskInfo task_infos = 1;
 }
 
 message GetDLQReplicationMessagesResponse {
-    repeated temporal.server.api.replication.v1.ReplicationTask replication_tasks = 1;
+  repeated temporal.server.api.replication.v1.ReplicationTask replication_tasks = 1;
 }
 
 // ReapplyEventsRequest is the request for reapply events API.
 message ReapplyEventsRequest {
-    reserved 1;
-    string namespace_id = 4;
-    temporal.api.common.v1.WorkflowExecution workflow_execution = 2;
-    temporal.api.common.v1.DataBlob events = 3;
+  reserved 1;
+  string namespace_id = 4;
+  temporal.api.common.v1.WorkflowExecution workflow_execution = 2;
+  temporal.api.common.v1.DataBlob events = 3;
 }
 
 message ReapplyEventsResponse {
 }
 
 message AddSearchAttributesRequest {
-    map<string, temporal.api.enums.v1.IndexedValueType> search_attributes = 1;
-    string index_name = 2;
-    bool skip_schema_update = 3;
-    string namespace = 4;
+  map<string, temporal.api.enums.v1.IndexedValueType> search_attributes = 1;
+  string index_name = 2;
+  bool skip_schema_update = 3;
+  string namespace = 4;
 }
 
 message AddSearchAttributesResponse {
 }
 
 message RemoveSearchAttributesRequest {
-    repeated string search_attributes = 1;
-    string index_name = 2;
-    string namespace = 3;
+  repeated string search_attributes = 1;
+  string index_name = 2;
+  string namespace = 3;
 }
 
 message RemoveSearchAttributesResponse {
 }
 
 message GetSearchAttributesRequest {
-    string index_name = 1;
-    string namespace = 2;
+  string index_name = 1;
+  string namespace = 2;
 }
 
 message GetSearchAttributesResponse {
-    map<string, temporal.api.enums.v1.IndexedValueType> custom_attributes = 1;
-    map<string, temporal.api.enums.v1.IndexedValueType> system_attributes = 2;
-    map<string, string> mapping = 3;
-    // State of the workflow that adds search attributes to the system.
-    temporal.api.workflow.v1.WorkflowExecutionInfo add_workflow_execution_info = 4;
+  map<string, temporal.api.enums.v1.IndexedValueType> custom_attributes = 1;
+  map<string, temporal.api.enums.v1.IndexedValueType> system_attributes = 2;
+  map<string, string> mapping = 3;
+  // State of the workflow that adds search attributes to the system.
+  temporal.api.workflow.v1.WorkflowExecutionInfo add_workflow_execution_info = 4;
 }
 
 message DescribeClusterRequest {
-    string cluster_name = 1;
+  string cluster_name = 1;
 }
 
 message DescribeClusterResponse {
-    map<string,string> supported_clients = 1;
-    string server_version = 2;
-    temporal.server.api.cluster.v1.MembershipInfo membership_info = 3;
-    string cluster_id = 4;
-    string cluster_name = 5;
-    int32 history_shard_count = 6;
-    string persistence_store = 7;
-    string visibility_store = 8;
-    temporal.api.version.v1.VersionInfo version_info = 9;
-    int64 failover_version_increment = 10;
-    int64 initial_failover_version = 11;
-    bool is_global_namespace_enabled = 12;
-    map<string,string> tags = 13;
+  map<string, string> supported_clients = 1;
+  string server_version = 2;
+  temporal.server.api.cluster.v1.MembershipInfo membership_info = 3;
+  string cluster_id = 4;
+  string cluster_name = 5;
+  int32 history_shard_count = 6;
+  string persistence_store = 7;
+  string visibility_store = 8;
+  temporal.api.version.v1.VersionInfo version_info = 9;
+  int64 failover_version_increment = 10;
+  int64 initial_failover_version = 11;
+  bool is_global_namespace_enabled = 12;
+  map<string, string> tags = 13;
+  string http_address = 14;
 }
 
 message ListClustersRequest {
-    int32 page_size = 1;
-    bytes next_page_token = 2;
+  int32 page_size = 1;
+  bytes next_page_token = 2;
 }
 
 message ListClustersResponse {
-    repeated temporal.server.api.persistence.v1.ClusterMetadata clusters = 1;
-    bytes next_page_token = 2;
+  repeated temporal.server.api.persistence.v1.ClusterMetadata clusters = 1;
+  bytes next_page_token = 2;
 }
 
 message AddOrUpdateRemoteClusterRequest {
-    string frontend_address = 1;
-    bool enable_remote_cluster_connection = 2;
+  string frontend_address = 1;
+  bool enable_remote_cluster_connection = 2;
+  string frontend_http_address = 3 [deprecated = true];
 }
 
 message AddOrUpdateRemoteClusterResponse {
 }
 
 message RemoveRemoteClusterRequest {
-    string cluster_name = 1;
+  string cluster_name = 1;
 }
 
 message RemoveRemoteClusterResponse {
 }
 
 message ListClusterMembersRequest {
-    // (-- api-linter: core::0140::prepositions=disabled
-    //     aip.dev/not-precedent: "within" is used to indicate a time range. --)
-    google.protobuf.Duration last_heartbeat_within = 1 [(gogoproto.stdduration) = true];
-    string rpc_address = 2;
-    string host_id = 3;
-    temporal.server.api.enums.v1.ClusterMemberRole role = 4;
-    // (-- api-linter: core::0140::prepositions=disabled
-    //     aip.dev/not-precedent: "after" is used to indicate a time range. --)
-    google.protobuf.Timestamp session_started_after_time = 5 [(gogoproto.stdtime) = true];
-    int32 page_size = 6;
-    bytes next_page_token = 7;
+  // (-- api-linter: core::0140::prepositions=disabled
+  //     aip.dev/not-precedent: "within" is used to indicate a time range. --)
+  google.protobuf.Duration last_heartbeat_within = 1;
+  string rpc_address = 2;
+  string host_id = 3;
+  temporal.server.api.enums.v1.ClusterMemberRole role = 4;
+  // (-- api-linter: core::0140::prepositions=disabled
+  //     aip.dev/not-precedent: "after" is used to indicate a time range. --)
+  google.protobuf.Timestamp session_started_after_time = 5;
+  int32 page_size = 6;
+  bytes next_page_token = 7;
 }
 
 message ListClusterMembersResponse {
-    repeated temporal.server.api.cluster.v1.ClusterMember active_members = 1;
-    bytes next_page_token = 2;
+  repeated temporal.server.api.cluster.v1.ClusterMember active_members = 1;
+  bytes next_page_token = 2;
 }
 
 message GetDLQMessagesRequest {
-    temporal.server.api.enums.v1.DeadLetterQueueType type = 1;
-    int32 shard_id = 2;
-    string source_cluster = 3;
-    int64 inclusive_end_message_id = 4;
-    int32 maximum_page_size = 5;
-    bytes next_page_token = 6;
+  temporal.server.api.enums.v1.DeadLetterQueueType type = 1;
+  int32 shard_id = 2;
+  string source_cluster = 3;
+  int64 inclusive_end_message_id = 4;
+  int32 maximum_page_size = 5;
+  bytes next_page_token = 6;
 }
 
 message GetDLQMessagesResponse {
-    temporal.server.api.enums.v1.DeadLetterQueueType type = 1;
-    repeated temporal.server.api.replication.v1.ReplicationTask replication_tasks = 2;
-    bytes next_page_token = 3;
-    repeated temporal.server.api.replication.v1.ReplicationTaskInfo replication_tasks_info = 4;
+  temporal.server.api.enums.v1.DeadLetterQueueType type = 1;
+  repeated temporal.server.api.replication.v1.ReplicationTask replication_tasks = 2;
+  bytes next_page_token = 3;
+  repeated temporal.server.api.replication.v1.ReplicationTaskInfo replication_tasks_info = 4;
 }
 
 message PurgeDLQMessagesRequest {
-    temporal.server.api.enums.v1.DeadLetterQueueType type = 1;
-    int32 shard_id = 2;
-    string source_cluster = 3;
-    int64 inclusive_end_message_id = 4;
+  temporal.server.api.enums.v1.DeadLetterQueueType type = 1;
+  int32 shard_id = 2;
+  string source_cluster = 3;
+  int64 inclusive_end_message_id = 4;
 }
 
 message PurgeDLQMessagesResponse {
 }
 
 message MergeDLQMessagesRequest {
-    temporal.server.api.enums.v1.DeadLetterQueueType type = 1;
-    int32 shard_id = 2;
-    string source_cluster = 3;
-    int64 inclusive_end_message_id = 4;
-    int32 maximum_page_size = 5;
-    bytes next_page_token = 6;
+  temporal.server.api.enums.v1.DeadLetterQueueType type = 1;
+  int32 shard_id = 2;
+  string source_cluster = 3;
+  int64 inclusive_end_message_id = 4;
+  int32 maximum_page_size = 5;
+  bytes next_page_token = 6;
 }
 
 message MergeDLQMessagesResponse {
-    bytes next_page_token = 1;
+  bytes next_page_token = 1;
 }
 
 message RefreshWorkflowTasksRequest {
-    reserved 1;
-    string namespace_id = 3;
-    temporal.api.common.v1.WorkflowExecution execution = 2;
+  reserved 1;
+  string namespace_id = 3;
+  temporal.api.common.v1.WorkflowExecution execution = 2;
 }
 
 message RefreshWorkflowTasksResponse {
 }
 
 message ResendReplicationTasksRequest {
-    string namespace_id = 1;
-    string workflow_id = 2;
-    string run_id = 3;
-    string remote_cluster = 4;
-    int64 start_event_id = 5;
-    int64 start_version = 6;
-    int64 end_event_id = 7;
-    int64 end_version = 8;
+  string namespace_id = 1;
+  string workflow_id = 2;
+  string run_id = 3;
+  string remote_cluster = 4;
+  int64 start_event_id = 5;
+  int64 start_version = 6;
+  int64 end_event_id = 7;
+  int64 end_version = 8;
 }
 
 message ResendReplicationTasksResponse {
 }
 
 message GetTaskQueueTasksRequest {
-    string namespace = 1;
-    string task_queue = 2;
-    temporal.api.enums.v1.TaskQueueType task_queue_type = 3;
-    int64 min_task_id = 4;
-    int64 max_task_id = 5;
-    int32 batch_size = 6;
-    bytes next_page_token = 7;
+  string namespace = 1;
+  string task_queue = 2;
+  temporal.api.enums.v1.TaskQueueType task_queue_type = 3;
+  int64 min_task_id = 4;
+  int64 max_task_id = 5;
+  int32 batch_size = 6;
+  bytes next_page_token = 7;
 }
 
 message GetTaskQueueTasksResponse {
-    repeated temporal.server.api.persistence.v1.AllocatedTaskInfo tasks = 1;
-    bytes next_page_token = 2;
+  repeated temporal.server.api.persistence.v1.AllocatedTaskInfo tasks = 1;
+  bytes next_page_token = 2;
 }
 
 message DeleteWorkflowExecutionRequest {
-    string namespace = 1;
-    temporal.api.common.v1.WorkflowExecution execution = 2;
+  string namespace = 1;
+  temporal.api.common.v1.WorkflowExecution execution = 2;
 }
 
 message DeleteWorkflowExecutionResponse {
-    repeated string warnings = 1;
+  repeated string warnings = 1;
 }
 
 message StreamWorkflowReplicationMessagesRequest {
-    oneof attributes {
-        temporal.server.api.replication.v1.SyncReplicationState sync_replication_state = 1;
-    }
+  oneof attributes {
+    temporal.server.api.replication.v1.SyncReplicationState sync_replication_state = 1;
+  }
 }
 
 message StreamWorkflowReplicationMessagesResponse {
-    oneof attributes {
-        temporal.server.api.replication.v1.WorkflowReplicationMessages messages = 1;
-    }
+  oneof attributes {
+    temporal.server.api.replication.v1.WorkflowReplicationMessages messages = 1;
+  }
 }
 
 message GetNamespaceRequest {
-    oneof attributes {
-        string namespace = 1;
-        string id = 2;
-    }
+  oneof attributes {
+    string namespace = 1;
+    string id = 2;
+  }
 }
 
 message GetNamespaceResponse {
-    temporal.api.namespace.v1.NamespaceInfo info = 3;
-    temporal.api.namespace.v1.NamespaceConfig config = 4;
-    temporal.api.replication.v1.NamespaceReplicationConfig replication_config = 5;
-    int64 config_version = 6;
-    int64 failover_version = 7;
-    repeated temporal.api.replication.v1.FailoverStatus failover_history = 8;
-    bool is_global_namespace = 9;
+  temporal.api.namespace.v1.NamespaceInfo info = 3;
+  temporal.api.namespace.v1.NamespaceConfig config = 4;
+  temporal.api.replication.v1.NamespaceReplicationConfig replication_config = 5;
+  int64 config_version = 6;
+  int64 failover_version = 7;
+  repeated temporal.api.replication.v1.FailoverStatus failover_history = 8;
+  bool is_global_namespace = 9;
+}
+
+message GetDLQTasksRequest {
+  temporal.server.api.common.v1.HistoryDLQKey dlq_key = 1;
+  // page_size must be positive. Up to this many tasks will be returned.
+  int32 page_size = 2;
+  bytes next_page_token = 3;
+}
+
+message GetDLQTasksResponse {
+  repeated temporal.server.api.common.v1.HistoryDLQTask dlq_tasks = 1;
+  // next_page_token is empty if there are no more results. However, the converse is not true. If there are no more
+  // results, this field may still be non-empty. This is to avoid having to do a count query to determine whether
+  // there are more results.
+  bytes next_page_token = 2;
+}
+
+message PurgeDLQTasksRequest {
+  temporal.server.api.common.v1.HistoryDLQKey dlq_key = 1;
+  temporal.server.api.common.v1. HistoryDLQTaskMetadata inclusive_max_task_metadata = 2;
+}
+
+message PurgeDLQTasksResponse {
+  // job_token is a token that can be used to query the status of the purge operation.
+  bytes job_token = 1;
+}
+
+// DLQJobToken identifies a DLQ job. This proto is for internal use only and clients should not use it.
+message DLQJobToken {
+  string workflow_id = 1;
+  string run_id = 2;
+}
+
+message MergeDLQTasksRequest {
+  temporal.server.api.common.v1.HistoryDLQKey dlq_key = 1;
+  temporal.server.api.common.v1.HistoryDLQTaskMetadata inclusive_max_task_metadata = 2;
+  // batch_size controls how many tasks to merge at a time. The default can be found in the dlq package of the server.
+  // - If this is negative, an error will be returned.
+  // - If this is 0, the default will be used.
+  // - If this is greater than the maximum allowed batch size, an error will be returned.
+  // - Otherwise, the specified batch size will be used.
+  int32 batch_size = 3;
+}
+
+message MergeDLQTasksResponse {
+  bytes job_token = 1;
+}
+
+message DescribeDLQJobRequest {
+  // Job token of MergeDLQTasks or PurgeDLQTasks job.
+  bytes job_token = 1;
+}
+
+message DescribeDLQJobResponse {
+  temporal.server.api.common.v1.HistoryDLQKey dlq_key = 1;
+  temporal.server.api.enums.v1.DLQOperationType operation_type = 2;
+  temporal.server.api.enums.v1.DLQOperationState operation_state = 3;
+  google.protobuf.Timestamp start_time = 4;
+  google.protobuf.Timestamp end_time = 5;
+  // max_message_id is the ID of the last message(inclusive) to be processed as part of this job.
+  int64 max_message_id = 6;
+  // last_processed_message_id is the ID of the last message that has been processed.
+  // For PurgeDLQTasks job, it the ID of the last message that was purged.
+  // For MergeDLQTasks job, it is the ID of the last message that was re-enqueued and removed from the DLQ.
+  int64 last_processed_message_id = 7;
+  // messages_processed is the total number of messages that are re-enqueued and deleted from the DLQ so far by the DLQ job.
+  int64 messages_processed = 8;
+}
+
+message CancelDLQJobRequest {
+  // Job token of MergeDLQTasks or PurgeDLQTasks job to cancel.
+  bytes job_token = 1;
+  // The reason for cancellation.
+  string reason = 2;
+}
+
+message CancelDLQJobResponse {
+  // This is true if the workflow was successfully terminated by this request and false if
+  // the workflow was already completed or terminated.
+  bool canceled = 1;
+}
+
+// This is a direct copy of the same proto in the history service. We can't import it, though because of a circular
+// dependency. In addition, we can't extract a common request proto because the shard_id needs to be present in the top
+// proto layer, so we duplicate it. It shouldn't be a big deal because this proto is not very big.
+message AddTasksRequest {
+  int32 shard_id = 1;
+  message Task {
+    int32 category_id = 1;
+    temporal.api.common.v1.DataBlob blob = 2;
+  }
+  repeated Task tasks = 2;
+}
+
+message AddTasksResponse {}
+
+message ListQueuesRequest {
+  int32 queue_type = 1;
+  int32 page_size = 2;
+  bytes next_page_token = 3;
+}
+
+message ListQueuesResponse {
+  message QueueInfo {
+    string queue_name = 1;
+    int64 message_count = 2;
+  }
+  repeated QueueInfo queues = 1;
+  bytes next_page_token = 2;
+}
+
+message DeepHealthCheckRequest {
+}
+
+message DeepHealthCheckResponse {
+  temporal.server.api.enums.v1.HealthState state = 1;
+}
+
+message SyncWorkflowStateRequest {
+  string namespace_id = 1;
+  temporal.api.common.v1.WorkflowExecution execution = 2;
+  temporal.server.api.persistence.v1.VersionedTransition versioned_transition = 3;
+  temporal.server.api.history.v1.VersionHistories version_histories = 4;
+  int32 target_cluster_id = 5;
+}
+
+message SyncWorkflowStateResponse {
+  oneof attributes {
+    replication.v1.SyncWorkflowStateMutationAttributes mutation = 1;
+    replication.v1.SyncWorkflowStateSnapshotAttributes snapshot = 2;
+  }
+  repeated temporal.api.common.v1.DataBlob event_batches = 3;
+  replication.v1.NewRunInfo new_run_info = 4;
+}
+
+message GenerateLastHistoryReplicationTasksRequest {
+  string namespace = 1;
+  temporal.api.common.v1.WorkflowExecution execution = 2;
+}
+
+message GenerateLastHistoryReplicationTasksResponse {
+  int64 state_transition_count = 1;
+  int64 history_length = 2;
+}
+
+message DescribeTaskQueuePartitionRequest {
+  string namespace = 1;
+  temporal.server.api.taskqueue.v1.TaskQueuePartition task_queue_partition = 2;
+  // Absent means unversioned queue. Ignored for sticky partitions.
+  temporal.api.taskqueue.v1.TaskQueueVersionSelection build_ids = 3;
+}
+
+message InternalTaskQueueStatus {
+  int64 read_level = 1;
+  int64 ack_level = 2;
+  temporal.api.taskqueue.v1.TaskIdBlock task_id_block = 3;
+  int64 read_buffer_length = 4;
+}
+
+message DescribeTaskQueuePartitionResponse {
+  // contains k-v pairs of the type: buildID -> TaskQueueVersionInfoInternal
+  map<string, temporal.server.api.taskqueue.v1.TaskQueueVersionInfoInternal> versions_info_internal = 1;
 }

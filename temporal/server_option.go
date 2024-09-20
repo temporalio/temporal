@@ -27,19 +27,20 @@ package temporal
 import (
 	"net/http"
 
-	"google.golang.org/grpc"
-
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common/authorization"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/membership/static"
 	"go.temporal.io/server/common/metrics"
 	persistenceclient "go.temporal.io/server/common/persistence/client"
+	"go.temporal.io/server/common/persistence/visibility"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/resolver"
 	"go.temporal.io/server/common/rpc/encryption"
 	"go.temporal.io/server/common/searchattribute"
+	"google.golang.org/grpc"
 )
 
 type (
@@ -73,6 +74,15 @@ func ForServices(names []string) ServerOption {
 		for _, name := range names {
 			s.serviceNames[primitives.ServiceName(name)] = struct{}{}
 		}
+	})
+}
+
+// WithStaticHosts disables dynamic service membership and resolves service hosts statically.
+// At least one host must be provided for all required services (frontend, history, matching, worker).
+// And a self-address must be provided for all services passed to ForServices.
+func WithStaticHosts(hostsByService map[primitives.ServiceName]static.Hosts) ServerOption {
+	return applyFunc(func(s *serverOptions) {
+		s.hostsByService = hostsByService
 	})
 }
 
@@ -155,6 +165,12 @@ func WithCustomDataStoreFactory(customFactory persistenceclient.AbstractDataStor
 	})
 }
 
+func WithCustomVisibilityStoreFactory(customFactory visibility.VisibilityStoreFactory) ServerOption {
+	return applyFunc(func(s *serverOptions) {
+		s.customVisibilityStoreFactory = customFactory
+	})
+}
+
 // WithClientFactoryProvider sets a custom ClientFactoryProvider
 // NOTE: this option is experimental and may be changed or removed in future release.
 func WithClientFactoryProvider(clientFactoryProvider client.FactoryProvider) ServerOption {
@@ -178,7 +194,7 @@ func WithChainedFrontendGrpcInterceptors(
 	interceptors ...grpc.UnaryServerInterceptor,
 ) ServerOption {
 	return applyFunc(func(s *serverOptions) {
-		s.customInterceptors = interceptors
+		s.customFrontendInterceptors = interceptors
 	})
 }
 

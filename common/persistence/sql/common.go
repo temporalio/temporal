@@ -30,10 +30,10 @@ import (
 	"database/sql"
 	"encoding/binary"
 	"encoding/gob"
+	"encoding/json"
 	"fmt"
 
 	"go.temporal.io/api/serviceerror"
-
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/persistence"
@@ -88,7 +88,8 @@ func (m *SqlStore) txExecute(ctx context.Context, operation string, f func(tx sq
 			*persistence.WorkflowConditionFailedError,
 			*serviceerror.NamespaceAlreadyExists,
 			*persistence.ShardOwnershipLostError,
-			*serviceerror.Unavailable:
+			*serviceerror.Unavailable,
+			*serviceerror.NotFound:
 			return err
 		default:
 			return serviceerror.NewUnavailable(fmt.Sprintf("%v: %v", operation, err))
@@ -131,6 +132,18 @@ func deserializePageToken(payload []byte) (int64, error) {
 		return 0, fmt.Errorf("invalid token of %v length", len(payload))
 	}
 	return int64(binary.LittleEndian.Uint64(payload)), nil
+}
+
+func serializePageTokenJson[T any](token *T) ([]byte, error) {
+	return json.Marshal(token)
+}
+
+func deserializePageTokenJson[T any](payload []byte) (*T, error) {
+	var token T
+	if err := json.Unmarshal(payload, &token); err != nil {
+		return nil, err
+	}
+	return &token, nil
 }
 
 func convertCommonErrors(

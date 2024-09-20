@@ -1,3 +1,5 @@
+// The MIT License
+//
 // Copyright (c) 2019 Temporal Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -26,21 +28,21 @@ option go_package = "go.temporal.io/server/api/matchingservice/v1;matchingservic
 import "google/protobuf/duration.proto";
 import "google/protobuf/timestamp.proto";
 
-import "dependencies/gogoproto/gogo.proto";
-
 import "temporal/api/common/v1/message.proto";
 import "temporal/api/enums/v1/task_queue.proto";
+import "temporal/api/history/v1/message.proto";
 import "temporal/api/taskqueue/v1/message.proto";
 import "temporal/api/query/v1/message.proto";
 import "temporal/api/protocol/v1/message.proto";
 
 import "temporal/server/api/clock/v1/message.proto";
-import "temporal/server/api/enums/v1/task.proto";
 import "temporal/server/api/history/v1/message.proto";
+import "temporal/server/api/persistence/v1/nexus.proto";
 import "temporal/server/api/persistence/v1/task_queues.proto";
 import "temporal/server/api/taskqueue/v1/message.proto";
 
 import "temporal/api/workflowservice/v1/request_response.proto";
+import "temporal/api/nexus/v1/message.proto";
 
 message PollWorkflowTaskQueueRequest {
     string namespace_id = 1;
@@ -64,10 +66,15 @@ message PollWorkflowTaskQueueResponse {
     temporal.api.taskqueue.v1.TaskQueue workflow_execution_task_queue = 12;
     reserved 13;
     bytes branch_token = 14;
-    google.protobuf.Timestamp scheduled_time = 15 [(gogoproto.stdtime) = true];
-    google.protobuf.Timestamp started_time = 16 [(gogoproto.stdtime) = true];
+    google.protobuf.Timestamp scheduled_time = 15;
+    google.protobuf.Timestamp started_time = 16;
     map<string, temporal.api.query.v1.WorkflowQuery> queries = 17;
     repeated temporal.api.protocol.v1.Message messages = 18;
+    // The history for this workflow, which will either be complete or partial. Partial histories
+    // are sent to workers who have signaled that they are using a sticky queue when completing
+    // a workflow task. Sticky query tasks will not include any history.
+    temporal.api.history.v1.History history = 19;
+    bytes next_page_token = 20;
 }
 
 message PollActivityTaskQueueRequest {
@@ -83,17 +90,17 @@ message PollActivityTaskQueueResponse {
     string activity_id = 3;
     temporal.api.common.v1.ActivityType activity_type = 4;
     temporal.api.common.v1.Payloads input = 5;
-    google.protobuf.Timestamp scheduled_time = 6 [(gogoproto.stdtime) = true];
+    google.protobuf.Timestamp scheduled_time = 6;
     // (-- api-linter: core::0140::prepositions=disabled
     //     aip.dev/not-precedent: "to" is used to indicate interval. --)
-    google.protobuf.Duration schedule_to_close_timeout = 7 [(gogoproto.stdduration) = true];
-    google.protobuf.Timestamp started_time = 8 [(gogoproto.stdtime) = true];
+    google.protobuf.Duration schedule_to_close_timeout = 7;
+    google.protobuf.Timestamp started_time = 8;
     // (-- api-linter: core::0140::prepositions=disabled
     //     aip.dev/not-precedent: "to" is used to indicate interval. --)
-    google.protobuf.Duration start_to_close_timeout = 9 [(gogoproto.stdduration) = true];
-    google.protobuf.Duration heartbeat_timeout = 10 [(gogoproto.stdduration) = true];
+    google.protobuf.Duration start_to_close_timeout = 9;
+    google.protobuf.Duration heartbeat_timeout = 10;
     int32 attempt = 11;
-    google.protobuf.Timestamp current_attempt_scheduled_time = 12 [(gogoproto.stdtime) = true];
+    google.protobuf.Timestamp current_attempt_scheduled_time = 12;
     temporal.api.common.v1.Payloads heartbeat_details = 13;
     temporal.api.common.v1.WorkflowType workflow_type = 14;
     string workflow_namespace = 15;
@@ -107,16 +114,17 @@ message AddWorkflowTaskRequest {
     int64 scheduled_event_id = 4;
     // (-- api-linter: core::0140::prepositions=disabled
     //     aip.dev/not-precedent: "to" is used to indicate interval. --)
-    google.protobuf.Duration schedule_to_start_timeout = 5 [(gogoproto.stdduration) = true];
-    string forwarded_source = 6;
-    temporal.server.api.enums.v1.TaskSource source = 7;
+    google.protobuf.Duration schedule_to_start_timeout = 5;
     temporal.server.api.clock.v1.VectorClock clock = 9;
     // How this task should be directed by matching. (Missing means the default
     // for TaskVersionDirective, which is unversioned.)
     temporal.server.api.taskqueue.v1.TaskVersionDirective version_directive = 10;
+    temporal.server.api.taskqueue.v1.TaskForwardInfo forward_info = 11;
 }
 
 message AddWorkflowTaskResponse {
+    // When present, it means that the task is spooled to a versioned queue of this build ID
+    string assigned_build_id = 1;
 }
 
 message AddActivityTaskRequest {
@@ -127,26 +135,27 @@ message AddActivityTaskRequest {
     int64 scheduled_event_id = 5;
     // (-- api-linter: core::0140::prepositions=disabled
     //     aip.dev/not-precedent: "to" is used to indicate interval. --)
-    google.protobuf.Duration schedule_to_start_timeout = 6 [(gogoproto.stdduration) = true];
-    string forwarded_source = 7;
-    temporal.server.api.enums.v1.TaskSource source = 8;
+    google.protobuf.Duration schedule_to_start_timeout = 6;
     temporal.server.api.clock.v1.VectorClock clock = 9;
     // How this task should be directed by matching. (Missing means the default
     // for TaskVersionDirective, which is unversioned.)
     temporal.server.api.taskqueue.v1.TaskVersionDirective version_directive = 10;
+    temporal.server.api.taskqueue.v1.TaskForwardInfo forward_info = 11;
 }
 
 message AddActivityTaskResponse {
+    // When present, it means that the task is spooled to a versioned queue of this build ID
+    string assigned_build_id = 1;
 }
 
 message QueryWorkflowRequest {
     string namespace_id = 1;
     temporal.api.taskqueue.v1.TaskQueue task_queue = 2;
     temporal.api.workflowservice.v1.QueryWorkflowRequest query_request = 3;
-    string forwarded_source = 4;
     // How this task should be directed by matching. (Missing means the default
     // for TaskVersionDirective, which is unversioned.)
     temporal.server.api.taskqueue.v1.TaskVersionDirective version_directive = 5;
+    temporal.server.api.taskqueue.v1.TaskForwardInfo forward_info = 6;
 }
 
 message QueryWorkflowResponse {
@@ -180,8 +189,25 @@ message DescribeTaskQueueRequest {
 }
 
 message DescribeTaskQueueResponse {
-    repeated temporal.api.taskqueue.v1.PollerInfo pollers = 1;
-    temporal.api.taskqueue.v1.TaskQueueStatus task_queue_status = 2;
+    reserved 1 to 2;
+    temporal.api.workflowservice.v1.DescribeTaskQueueResponse desc_response = 3;
+}
+
+message DescribeTaskQueuePartitionRequest {
+    string namespace_id = 1;
+    temporal.server.api.taskqueue.v1.TaskQueuePartition task_queue_partition = 2;
+
+    temporal.api.taskqueue.v1.TaskQueueVersionSelection versions = 3;
+
+    // Report task queue stats for the requested task queue types and versions
+    bool report_stats = 4;
+    // Report list of pollers for requested task queue types and versions
+    bool report_pollers = 5;
+    bool report_internal_task_queue_status = 6;
+}
+
+message DescribeTaskQueuePartitionResponse {
+    map<string, temporal.server.api.taskqueue.v1.TaskQueueVersionInfoInternal> versions_info_internal = 1;
 }
 
 message ListTaskQueuePartitionsRequest {
@@ -222,7 +248,38 @@ message UpdateWorkerBuildIdCompatibilityRequest {
         string persist_unknown_build_id = 5;
     }
 }
+
 message UpdateWorkerBuildIdCompatibilityResponse {}
+
+message GetWorkerVersioningRulesRequest {
+    string namespace_id = 1;
+    string task_queue = 2;
+
+    oneof command {
+        temporal.api.workflowservice.v1.GetWorkerVersioningRulesRequest request = 3;
+    }
+}
+
+message GetWorkerVersioningRulesResponse {
+    temporal.api.workflowservice.v1.GetWorkerVersioningRulesResponse response = 1;
+}
+
+// (-- api-linter: core::0134::request-mask-required=disabled
+//     aip.dev/not-precedent: UpdateWorkerVersioningRulesRequest doesn't follow Google API format --)
+// (-- api-linter: core::0134::request-resource-required=disabled
+//     aip.dev/not-precedent: UpdateWorkerVersioningRulesRequest RPC doesn't follow Google API format. --)
+message UpdateWorkerVersioningRulesRequest {
+    string namespace_id = 1;
+    string task_queue = 2;
+
+    oneof command {
+        temporal.api.workflowservice.v1.UpdateWorkerVersioningRulesRequest request = 3;
+    }
+}
+
+message UpdateWorkerVersioningRulesResponse {
+    temporal.api.workflowservice.v1.UpdateWorkerVersioningRulesResponse response = 1;
+}
 
 message GetWorkerBuildIdCompatibilityRequest {
     string namespace_id = 1;
@@ -249,8 +306,7 @@ message GetTaskQueueUserDataRequest {
     bool wait_new_data = 4;
 }
 message GetTaskQueueUserDataResponse {
-    // Whether this task queue has any stored user data
-    bool task_queue_has_user_data = 1;
+    reserved 1;
     // Versioned user data, set if the task queue has user data and the request's last_known_user_data_version is less
     // than the version cached in the root partition.
     temporal.server.api.persistence.v1.VersionedTaskQueueUserData user_data = 2;
@@ -273,6 +329,17 @@ message GetBuildIdTaskQueueMappingRequest {
 message GetBuildIdTaskQueueMappingResponse {
     repeated string task_queues = 1;
 }
+
+message ForceLoadTaskQueuePartitionRequest {
+    string namespace_id = 1;
+
+    temporal.server.api.taskqueue.v1.TaskQueuePartition task_queue_partition = 2;
+}
+
+message ForceLoadTaskQueuePartitionResponse {
+    bool was_unloaded = 1;
+}
+
 
 message ForceUnloadTaskQueueRequest {
     string namespace_id = 1;
@@ -312,3 +379,126 @@ message ReplicateTaskQueueUserDataRequest {
 message ReplicateTaskQueueUserDataResponse {
 }
 
+message DispatchNexusTaskRequest {
+    string namespace_id = 1;
+    temporal.api.taskqueue.v1.TaskQueue task_queue = 2;
+    // Nexus request extracted by the frontend and translated into Temporal API format.
+    temporal.api.nexus.v1.Request request = 3;
+    temporal.server.api.taskqueue.v1.TaskForwardInfo forward_info = 4;
+}
+
+message DispatchNexusTaskResponse {
+    oneof outcome {
+        // Set if the worker's handler failed the nexus task.
+        temporal.api.nexus.v1.HandlerError handler_error = 1;
+        // Set if the worker's handler responded successfully to the nexus task.
+        temporal.api.nexus.v1.Response response = 2;
+    }
+}
+
+message PollNexusTaskQueueRequest {
+    string namespace_id = 1;
+    // A unique ID generated by the frontend for this request.
+    string poller_id = 2;
+    // Original WorkflowService poll request as received by the frontend.
+    temporal.api.workflowservice.v1.PollNexusTaskQueueRequest request = 3;
+    // Non-empty if this poll was forwarded from a child partition.
+    string forwarded_source = 4;
+}
+
+message PollNexusTaskQueueResponse {
+    // Response that should be delivered to the worker containing a request from DispatchNexusTaskRequest.
+    temporal.api.workflowservice.v1.PollNexusTaskQueueResponse response = 1;
+}
+
+message RespondNexusTaskCompletedRequest {
+    string namespace_id = 1;
+    temporal.api.taskqueue.v1.TaskQueue task_queue = 2;
+    // A unique ID for this task generated by the matching engine. Decoded from the incoming request's task token.
+    string task_id = 3;
+    // Original completion as received by the frontend.
+    temporal.api.workflowservice.v1.RespondNexusTaskCompletedRequest request = 4;
+}
+
+message RespondNexusTaskCompletedResponse {
+}
+
+message RespondNexusTaskFailedRequest {
+    string namespace_id = 1;
+    temporal.api.taskqueue.v1.TaskQueue task_queue = 2;
+    // A unique ID for this task generated by the matching engine. Decoded from the incoming request's task token.
+    string task_id = 3;
+    // Original failure as received by the frontend.
+    temporal.api.workflowservice.v1.RespondNexusTaskFailedRequest request = 4;
+}
+
+message RespondNexusTaskFailedResponse {
+}
+
+// (-- api-linter: core::0133::request-unknown-fields=disabled
+//     aip.dev/not-precedent: CreateNexusEndpoint RPC doesn't follow Google API format. --)
+// (-- api-linter: core::0133::request-resource-field=disabled
+//     aip.dev/not-precedent: CreateNexusEndpoint RPC doesn't follow Google API format. --)
+// (-- api-linter: core::0133::request-parent-required=disabled
+//     aip.dev/not-precedent: CreateNexusEndpoint RPC doesn't follow Google API format. --)
+message CreateNexusEndpointRequest {
+    temporal.server.api.persistence.v1.NexusEndpointSpec spec = 1;
+}
+
+message CreateNexusEndpointResponse {
+    temporal.server.api.persistence.v1.NexusEndpointEntry entry = 1;
+}
+
+// (-- api-linter: core::0134::request-resource-required=disabled
+//     aip.dev/not-precedent: UpdateNexusEndpoint RPC doesn't follow Google API format. --)
+// (-- api-linter: core::0134::request-mask-required=disabled
+//     aip.dev/not-precedent: UpdateNexusEndpoint RPC doesn't follow Google API format. --)
+message UpdateNexusEndpointRequest {
+    // ID of the endpoint to update.
+    string id = 1;
+    // Version of the endpoint, used for optimistic concurrency. Must match current version in persistence or the
+    // request will fail a FAILED_PRECONDITION error.
+    int64 version = 2; 
+    temporal.server.api.persistence.v1.NexusEndpointSpec spec = 3;
+}
+
+message UpdateNexusEndpointResponse {
+    temporal.server.api.persistence.v1.NexusEndpointEntry entry = 1;
+}
+
+// (-- api-linter: core::0135::request-name-behavior=disabled
+//     aip.dev/not-precedent: DeleteNexusEndpointRequest RPC doesn't follow Google API format. --)
+// (-- api-linter: core::0135::request-name-reference=disabled
+//     aip.dev/not-precedent: DeleteNexusEndpointRequest RPC doesn't follow Google API format. --)
+message DeleteNexusEndpointRequest {
+    // ID of the endpoint to delete.
+    string id = 1;
+}
+
+message DeleteNexusEndpointResponse {
+}
+
+message ListNexusEndpointsRequest {
+    // To get the next page, pass in `ListNexusEndpointsResponse.next_page_token` from the previous page's response. The
+    // token will be empty if there's no other page.
+    // Note: the last page may be empty if the total number of services registered is a multiple of the page size.
+    // Mutually exclusive with wait. Specifying both will result in an invalid argument error.
+    bytes next_page_token = 1;
+    int32 page_size = 2;
+    // The nexus_endpoints table has a monotonically increasing version number that is incremented on every change to
+    // the table. This field can be used to provide the last known table version in conjuction with the `wait` field to
+    // long poll on changes to the table.
+    // If next_page_token is not empty and the current table version does not match this field, this request will fail
+    // with a failed precondition error.
+    int64 last_known_table_version = 3;
+    // If true, this request becomes a long poll and will be unblocked once the DB version is incremented.
+    // Mutually exclusive with next_page_token. Specifying both will result in an invalid argument error.
+    bool wait = 4;
+}
+
+message ListNexusEndpointsResponse {
+    // Token for getting the next page.
+    bytes next_page_token = 1;
+    int64 table_version = 2;
+    repeated temporal.server.api.persistence.v1.NexusEndpointEntry entries = 3;
+}

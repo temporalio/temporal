@@ -28,7 +28,6 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	commonclock "go.temporal.io/server/common/clock"
 	hlc "go.temporal.io/server/common/clock/hybrid_logical_clock"
@@ -208,7 +207,7 @@ func TestPersistUnknownBuildId_Merge(t *testing.T) {
 					mkBuildId("1", clock),
 					mkBuildId("1.1", nextClock),
 				},
-				BecameDefaultTimestamp: &nextClock,
+				BecameDefaultTimestamp: nextClock,
 			},
 		},
 	}

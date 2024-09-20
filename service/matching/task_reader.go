@@ -31,13 +31,15 @@ import (
 	"sync/atomic"
 	"time"
 
-	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
+	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/internal/goro"
 )
 
@@ -48,33 +50,34 @@ const (
 
 type (
 	taskReader struct {
-		status        int32
-		taskBuffer    chan *persistencespb.AllocatedTaskInfo // tasks loaded from persistence
-		notifyC       chan struct{}                          // Used as signal to notify pump of new tasks
-		tlMgr         *taskQueueManagerImpl
-		taskValidator taskValidator
-		gorogrp       goro.Group
+		status     int32
+		taskBuffer chan *persistencespb.AllocatedTaskInfo // tasks loaded from persistence
+		notifyC    chan struct{}                          // Used as signal to notify pump of new tasks
+		backlogMgr *backlogManagerImpl
+		gorogrp    goro.Group
 
-		backoffTimerLock sync.Mutex
-		backoffTimer     *time.Timer
-		retrier          backoff.Retrier
+		backoffTimerLock      sync.Mutex
+		backoffTimer          *time.Timer
+		retrier               backoff.Retrier
+		backlogHeadCreateTime atomic.Int64
 	}
 )
 
-func newTaskReader(tlMgr *taskQueueManagerImpl) *taskReader {
-	return &taskReader{
-		status:        common.DaemonStatusInitialized,
-		tlMgr:         tlMgr,
-		taskValidator: newTaskValidator(tlMgr.newIOContext, tlMgr.clusterMeta, tlMgr.namespaceRegistry, tlMgr.engine.historyClient),
-		notifyC:       make(chan struct{}, 1),
+func newTaskReader(backlogMgr *backlogManagerImpl) *taskReader {
+	tr := &taskReader{
+		status:     common.DaemonStatusInitialized,
+		backlogMgr: backlogMgr,
+		notifyC:    make(chan struct{}, 1),
 		// we always dequeue the head of the buffer and try to dispatch it to a poller
 		// so allocate one less than desired target buffer size
-		taskBuffer: make(chan *persistencespb.AllocatedTaskInfo, tlMgr.config.GetTasksBatchSize()-1),
+		taskBuffer: make(chan *persistencespb.AllocatedTaskInfo, backlogMgr.config.GetTasksBatchSize()-1),
 		retrier: backoff.NewRetrier(
 			common.CreateReadTaskRetryPolicy(),
-			backoff.SystemClock,
+			clock.NewRealTimeSource(),
 		),
 	}
+	tr.backlogHeadCreateTime.Store(-1)
+	return tr
 }
 
 // Start reading pump for the given task queue.
@@ -113,39 +116,52 @@ func (tr *taskReader) Signal() {
 	}
 }
 
+func (tr *taskReader) updateBacklogAge(task *internalTask) {
+	if task.event.Data.CreateTime == nil {
+		return // should not happen but for safety
+	}
+	ts := timestamp.TimeValue(task.event.Data.CreateTime).UnixNano()
+	tr.backlogHeadCreateTime.Store(ts)
+}
+
+func (tr *taskReader) getBacklogHeadAge() time.Duration {
+	if tr.backlogHeadCreateTime.Load() == -1 {
+		return time.Duration(0)
+	}
+	return time.Since(time.Unix(0, tr.backlogHeadCreateTime.Load()))
+}
+
 func (tr *taskReader) dispatchBufferedTasks(ctx context.Context) error {
-	ctx = tr.tlMgr.callerInfoContext(ctx)
+	ctx = tr.backlogMgr.contextInfoProvider(ctx)
 
 dispatchLoop:
 	for ctx.Err() == nil {
+		if len(tr.taskBuffer) == 0 {
+			// reset the atomic since we have no tasks from the backlog
+			tr.backlogHeadCreateTime.Store(-1)
+		}
 		select {
 		case taskInfo, ok := <-tr.taskBuffer:
 			if !ok { // Task queue getTasks pump is shutdown
 				break dispatchLoop
 			}
-			task := newInternalTask(taskInfo, tr.tlMgr.completeTask, enumsspb.TASK_SOURCE_DB_BACKLOG, "", false)
+			task := newInternalTaskFromBacklog(taskInfo, tr.backlogMgr.completeTask)
 			for ctx.Err() == nil {
-				if !tr.taskValidator.maybeValidate(taskInfo, tr.tlMgr.taskQueueID.taskType) {
-					task.finish(nil)
-					tr.taggedMetricsHandler().Counter(metrics.ExpiredTasksPerTaskQueueCounter.GetMetricName()).Record(1)
-					// Don't try to set read level here because it may have been advanced already.
-					continue dispatchLoop
-				}
-
+				tr.updateBacklogAge(task)
 				taskCtx, cancel := context.WithTimeout(ctx, taskReaderOfferTimeout)
-				err := tr.tlMgr.engine.DispatchSpooledTask(taskCtx, task, tr.tlMgr.taskQueueID, tr.tlMgr.stickyInfo)
+				err := tr.backlogMgr.processSpooledTask(taskCtx, task)
 				cancel()
 				if err == nil {
 					continue dispatchLoop
 				}
 
 				// if task is still valid (truly valid or unable to verify if task is valid)
-				tr.taggedMetricsHandler().Counter(metrics.BufferThrottlePerTaskQueueCounter.GetMetricName()).Record(1)
-				if !errors.Is(err, errUserDataDisabled) && !errors.Is(err, context.DeadlineExceeded) && !errors.Is(err, context.Canceled) {
+				metrics.BufferThrottlePerTaskQueueCounter.With(tr.taggedMetricsHandler()).Record(1)
+				if !errors.Is(err, context.DeadlineExceeded) && !errors.Is(err, context.Canceled) {
 					// Don't log here if encounters missing user data error when dispatch a versioned task.
 					tr.throttledLogger().Error("taskReader: unexpected error dispatching task", tag.Error(err))
 				}
-				common.InterruptibleSleep(ctx, taskReaderOfferThrottleWait)
+				util.InterruptibleSleep(ctx, taskReaderOfferThrottleWait)
 			}
 			return ctx.Err()
 		case <-ctx.Done():
@@ -156,13 +172,13 @@ dispatchLoop:
 }
 
 func (tr *taskReader) getTasksPump(ctx context.Context) error {
-	ctx = tr.tlMgr.callerInfoContext(ctx)
+	ctx = tr.backlogMgr.contextInfoProvider(ctx)
 
-	if err := tr.tlMgr.WaitUntilInitialized(ctx); err != nil {
+	if err := tr.backlogMgr.WaitUntilInitialized(ctx); err != nil {
 		return err
 	}
 
-	updateAckTimer := time.NewTimer(tr.tlMgr.config.UpdateAckInterval())
+	updateAckTimer := time.NewTimer(tr.backlogMgr.config.UpdateAckInterval())
 	defer updateAckTimer.Stop()
 
 	tr.Signal() // prime pump
@@ -181,20 +197,20 @@ Loop:
 
 		case <-tr.notifyC:
 			batch, err := tr.getTaskBatch(ctx)
-			tr.tlMgr.signalIfFatal(err)
+			tr.backlogMgr.signalIfFatal(err)
 			if err != nil {
 				// TODO: Should we ever stop retrying on db errors?
 				if common.IsResourceExhausted(err) {
 					tr.reEnqueueAfterDelay(taskReaderThrottleRetryDelay)
 				} else {
-					tr.reEnqueueAfterDelay(tr.retrier.NextBackOff())
+					tr.reEnqueueAfterDelay(tr.retrier.NextBackOff(err))
 				}
 				continue Loop
 			}
 			tr.retrier.Reset()
 
 			if len(batch.tasks) == 0 {
-				tr.tlMgr.taskAckManager.setReadLevelAfterGap(batch.readLevel)
+				tr.backlogMgr.taskAckManager.setReadLevelAfterGap(batch.readLevel)
 				if !batch.isReadBatchDone {
 					tr.Signal()
 				}
@@ -208,8 +224,8 @@ Loop:
 			tr.Signal()
 
 		case <-updateAckTimer.C:
-			err := tr.persistAckLevel(ctx)
-			isConditionFailed := tr.tlMgr.signalIfFatal(err)
+			err := tr.persistAckBacklogCountLevel(ctx)
+			isConditionFailed := tr.backlogMgr.signalIfFatal(err)
 			if err != nil && !isConditionFailed {
 				tr.logger().Error("Persistent store operation failure",
 					tag.StoreOperationUpdateTaskQueue,
@@ -217,7 +233,7 @@ Loop:
 				// keep going as saving ack is not critical
 			}
 			tr.Signal() // periodically signal pump to check persistence for tasks
-			updateAckTimer = time.NewTimer(tr.tlMgr.config.UpdateAckInterval())
+			updateAckTimer = time.NewTimer(tr.backlogMgr.config.UpdateAckInterval())
 		}
 	}
 }
@@ -227,7 +243,7 @@ func (tr *taskReader) getTaskBatchWithRange(
 	readLevel int64,
 	maxReadLevel int64,
 ) ([]*persistencespb.AllocatedTaskInfo, error) {
-	response, err := tr.tlMgr.db.GetTasks(ctx, readLevel+1, maxReadLevel+1, tr.tlMgr.config.GetTasksBatchSize())
+	response, err := tr.backlogMgr.db.GetTasks(ctx, readLevel+1, maxReadLevel+1, tr.backlogMgr.config.GetTasksBatchSize())
 	if err != nil {
 		return nil, err
 	}
@@ -245,12 +261,12 @@ type getTasksBatchResponse struct {
 // Also return a bool to indicate whether read is finished
 func (tr *taskReader) getTaskBatch(ctx context.Context) (*getTasksBatchResponse, error) {
 	var tasks []*persistencespb.AllocatedTaskInfo
-	readLevel := tr.tlMgr.taskAckManager.getReadLevel()
-	maxReadLevel := tr.tlMgr.taskWriter.GetMaxReadLevel()
+	readLevel := tr.backlogMgr.taskAckManager.getReadLevel()
+	maxReadLevel := tr.backlogMgr.db.GetMaxReadLevel()
 
-	// counter i is used to break and let caller check whether taskqueue is still alive and need resume read.
+	// counter i is used to break and let caller check whether taskqueue is still alive and needs to resume read.
 	for i := 0; i < 10 && readLevel < maxReadLevel; i++ {
-		upper := readLevel + tr.tlMgr.config.RangeSize
+		upper := readLevel + tr.backlogMgr.config.RangeSize
 		if upper > maxReadLevel {
 			upper = maxReadLevel
 		}
@@ -281,10 +297,10 @@ func (tr *taskReader) addTasksToBuffer(
 ) error {
 	for _, t := range tasks {
 		if IsTaskExpired(t) {
-			tr.taggedMetricsHandler().Counter(metrics.ExpiredTasksPerTaskQueueCounter.GetMetricName()).Record(1)
+			metrics.ExpiredTasksPerTaskQueueCounter.With(tr.taggedMetricsHandler()).Record(1)
 			// Also increment readLevel for expired tasks otherwise it could result in
 			// looping over the same tasks if all tasks read in the batch are expired
-			tr.tlMgr.taskAckManager.setReadLevel(t.GetTaskId())
+			tr.backlogMgr.taskAckManager.setReadLevel(t.GetTaskId())
 			continue
 		}
 		if err := tr.addSingleTaskToBuffer(ctx, t); err != nil {
@@ -298,7 +314,7 @@ func (tr *taskReader) addSingleTaskToBuffer(
 	ctx context.Context,
 	task *persistencespb.AllocatedTaskInfo,
 ) error {
-	tr.tlMgr.taskAckManager.addTask(task.GetTaskId())
+	tr.backlogMgr.taskAckManager.addTask(task.GetTaskId())
 	select {
 	case tr.taskBuffer <- task:
 		return nil
@@ -307,29 +323,21 @@ func (tr *taskReader) addSingleTaskToBuffer(
 	}
 }
 
-func (tr *taskReader) persistAckLevel(ctx context.Context) error {
-	ackLevel := tr.tlMgr.taskAckManager.getAckLevel()
-	tr.emitTaskLagMetric(ackLevel)
-	return tr.tlMgr.db.UpdateState(ctx, ackLevel)
+func (tr *taskReader) persistAckBacklogCountLevel(ctx context.Context) error {
+	ackLevel := tr.backlogMgr.taskAckManager.getAckLevel()
+	return tr.backlogMgr.db.UpdateState(ctx, ackLevel)
 }
 
 func (tr *taskReader) logger() log.Logger {
-	return tr.tlMgr.logger
+	return tr.backlogMgr.logger
 }
 
 func (tr *taskReader) throttledLogger() log.ThrottledLogger {
-	return tr.tlMgr.throttledLogger
+	return tr.backlogMgr.throttledLogger
 }
 
 func (tr *taskReader) taggedMetricsHandler() metrics.Handler {
-	return tr.tlMgr.metricsHandler
-}
-
-func (tr *taskReader) emitTaskLagMetric(ackLevel int64) {
-	// note: this metric is only an estimation for the lag.
-	// taskID in DB may not be continuous, especially when task list ownership changes.
-	maxReadLevel := tr.tlMgr.taskWriter.GetMaxReadLevel()
-	tr.taggedMetricsHandler().Gauge(metrics.TaskLagPerTaskQueueGauge.GetMetricName()).Record(float64(maxReadLevel - ackLevel))
+	return tr.backlogMgr.metricsHandler
 }
 
 func (tr *taskReader) reEnqueueAfterDelay(duration time.Duration) {

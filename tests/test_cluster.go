@@ -32,17 +32,18 @@ import (
 	"fmt"
 	"os"
 	"path"
+	"testing"
+	"time"
 
 	"github.com/pborman/uuid"
 	"go.temporal.io/api/operatorservice/v1"
-	"go.uber.org/multierr"
-
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/archiver/filestore"
 	"go.temporal.io/server/common/archiver/provider"
+	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -57,20 +58,24 @@ import (
 	"go.temporal.io/server/common/persistence/sql/sqlplugin/sqlite"
 	esclient "go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
 	"go.temporal.io/server/common/pprof"
+	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/rpc/encryption"
 	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/temporal"
 	"go.temporal.io/server/tests/testutils"
+	"go.uber.org/fx"
+	"go.uber.org/multierr"
 )
 
 type (
-	// TestCluster is a base struct for integration tests
+	// TestCluster is a base struct for functional tests
 	TestCluster struct {
-		testBase     persistencetests.TestBase
+		testBase     *persistencetests.TestBase
 		archiverBase *ArchiverBase
 		host         *temporalImpl
 	}
 
-	// ArchiverBase is a base struct for archiver provider being used in integration tests
+	// ArchiverBase is a base struct for archiver provider being used in functional tests
 	ArchiverBase struct {
 		metadata                 archiver.ArchivalMetadata
 		provider                 provider.ArchiverProvider
@@ -92,10 +97,12 @@ type (
 		ESConfig               *esclient.Config
 		WorkerConfig           *WorkerConfig
 		MockAdminClient        map[string]adminservice.AdminServiceClient
-		FaultInjection         config.FaultInjection `yaml:"faultinjection"`
+		FaultInjection         config.FaultInjection `yaml:"faultInjection"`
 		DynamicConfigOverrides map[dynamicconfig.Key]interface{}
 		GenerateMTLS           bool
 		EnableMetricsCapture   bool
+		// ServiceFxOptions can be populated using WithFxOptionsForService.
+		ServiceFxOptions map[primitives.ServiceName][]fx.Option
 	}
 
 	// WorkerConfig is the config for enabling/disabling Temporal worker
@@ -112,8 +119,69 @@ const (
 	tlsCertCommonName = "my-common-name"
 )
 
-// NewCluster creates and sets up the test cluster
-func NewCluster(options *TestClusterConfig, logger log.Logger) (*TestCluster, error) {
+type TestClusterFactory interface {
+	NewCluster(t *testing.T, options *TestClusterConfig, logger log.Logger) (*TestCluster, error)
+}
+
+type defaultTestClusterFactory struct {
+	tbFactory PersistenceTestBaseFactory
+}
+
+func (f *defaultTestClusterFactory) NewCluster(t *testing.T, options *TestClusterConfig, logger log.Logger) (*TestCluster, error) {
+	return NewClusterWithPersistenceTestBaseFactory(t, options, logger, f.tbFactory)
+}
+
+func NewTestClusterFactory() TestClusterFactory {
+	tbFactory := &defaultPersistenceTestBaseFactory{}
+	return NewTestClusterFactoryWithCustomTestBaseFactory(tbFactory)
+}
+
+func NewTestClusterFactoryWithCustomTestBaseFactory(tbFactory PersistenceTestBaseFactory) TestClusterFactory {
+	return &defaultTestClusterFactory{
+		tbFactory: tbFactory,
+	}
+}
+
+type PersistenceTestBaseFactory interface {
+	NewTestBase(options *persistencetests.TestBaseOptions) *persistencetests.TestBase
+}
+
+type defaultPersistenceTestBaseFactory struct{}
+
+func (f *defaultPersistenceTestBaseFactory) NewTestBase(options *persistencetests.TestBaseOptions) *persistencetests.TestBase {
+	options.StoreType = TestFlags.PersistenceType
+	switch TestFlags.PersistenceType {
+	case config.StoreTypeSQL:
+		var ops *persistencetests.TestBaseOptions
+		switch TestFlags.PersistenceDriver {
+		case mysql.PluginName:
+			ops = persistencetests.GetMySQLTestClusterOption()
+		case postgresql.PluginName:
+			ops = persistencetests.GetPostgreSQLTestClusterOption()
+		case postgresql.PluginNamePGX:
+			ops = persistencetests.GetPostgreSQLPGXTestClusterOption()
+		case sqlite.PluginName:
+			ops = persistencetests.GetSQLiteMemoryTestClusterOption()
+		default:
+			panic(fmt.Sprintf("unknown sql store driver: %v", TestFlags.PersistenceDriver))
+		}
+		options.SQLDBPluginName = TestFlags.PersistenceDriver
+		options.DBUsername = ops.DBUsername
+		options.DBPassword = ops.DBPassword
+		options.DBHost = ops.DBHost
+		options.DBPort = ops.DBPort
+		options.SchemaDir = ops.SchemaDir
+		options.ConnectAttributes = ops.ConnectAttributes
+	case config.StoreTypeNoSQL:
+		// noop for now
+	default:
+		panic(fmt.Sprintf("unknown store type: %v", options.StoreType))
+	}
+
+	return persistencetests.NewTestBase(options)
+}
+
+func NewClusterWithPersistenceTestBaseFactory(t *testing.T, options *TestClusterConfig, logger log.Logger, tbFactory PersistenceTestBaseFactory) (*TestCluster, error) {
 	clusterMetadataConfig := cluster.NewTestClusterMetadataConfig(
 		options.ClusterMetadata.EnableGlobalNamespace,
 		options.IsMasterCluster,
@@ -127,45 +195,11 @@ func NewCluster(options *TestClusterConfig, logger log.Logger) (*TestCluster, er
 			ClusterInformation:       options.ClusterMetadata.ClusterInformation,
 		}
 	}
-
-	options.Persistence.StoreType = TestFlags.PersistenceType
-	switch TestFlags.PersistenceType {
-	case config.StoreTypeSQL:
-		var ops *persistencetests.TestBaseOptions
-		switch TestFlags.PersistenceDriver {
-		case mysql.PluginName:
-			ops = persistencetests.GetMySQLTestClusterOption()
-		case mysql.PluginNameV8:
-			ops = persistencetests.GetMySQL8TestClusterOption()
-		case postgresql.PluginName:
-			ops = persistencetests.GetPostgreSQLTestClusterOption()
-		case postgresql.PluginNameV12:
-			ops = persistencetests.GetPostgreSQL12TestClusterOption()
-		case sqlite.PluginName:
-			ops = persistencetests.GetSQLiteMemoryTestClusterOption()
-		default:
-			panic(fmt.Sprintf("unknown sql store drier: %v", TestFlags.PersistenceDriver))
-		}
-		options.Persistence.SQLDBPluginName = TestFlags.PersistenceDriver
-		options.Persistence.DBUsername = ops.DBUsername
-		options.Persistence.DBPassword = ops.DBPassword
-		options.Persistence.DBHost = ops.DBHost
-		options.Persistence.DBPort = ops.DBPort
-		options.Persistence.SchemaDir = ops.SchemaDir
-		options.Persistence.ConnectAttributes = ops.ConnectAttributes
-	case config.StoreTypeNoSQL:
-		// noop for now
-	default:
-		panic(fmt.Sprintf("unknown store type: %v", options.Persistence.StoreType))
-	}
-
+	options.Persistence.Logger = logger
 	options.Persistence.FaultInjection = &options.FaultInjection
-	// If the fault injection rate command line flag is set, override the fault injection rate in the config.
-	if TestFlags.PersistenceFaultInjectionRate > 0 {
-		options.Persistence.FaultInjection.Rate = TestFlags.PersistenceFaultInjectionRate
-	}
 
-	testBase := persistencetests.NewTestBase(&options.Persistence)
+	testBase := tbFactory.NewTestBase(&options.Persistence)
+
 	testBase.Setup(clusterMetadataConfig)
 	archiverBase := newArchiverBase(options.EnableArchival, logger)
 
@@ -176,42 +210,49 @@ func NewCluster(options *TestClusterConfig, logger log.Logger) (*TestCluster, er
 		indexName string
 		esClient  esclient.Client
 	)
-	if options.ESConfig != nil {
+	if !UsingSQLAdvancedVisibility() && options.ESConfig != nil {
+		// Randomize index name to avoid cross tests interference.
+		for k, v := range options.ESConfig.Indices {
+			options.ESConfig.Indices[k] = fmt.Sprintf("%v-%v", v, uuid.New())
+		}
+
 		err := setupIndex(options.ESConfig, logger)
 		if err != nil {
 			return nil, err
 		}
 
-		// Disable standard to elasticsearch dual visibility
-		pConfig.VisibilityStore = ""
+		pConfig.VisibilityStore = "test-es-visibility"
+		pConfig.DataStores[pConfig.VisibilityStore] = config.DataStore{
+			Elasticsearch: options.ESConfig,
+		}
 		indexName = options.ESConfig.GetVisibilityIndex()
 		esClient, err = esclient.NewClient(options.ESConfig, nil, logger)
 		if err != nil {
 			return nil, err
 		}
 	} else {
+		options.ESConfig = nil
 		storeConfig := pConfig.DataStores[pConfig.VisibilityStore]
 		if storeConfig.SQL != nil {
-			switch storeConfig.SQL.PluginName {
-			case mysql.PluginNameV8, postgresql.PluginNameV12, sqlite.PluginName:
-				indexName = storeConfig.SQL.DatabaseName
-			}
+			indexName = storeConfig.SQL.DatabaseName
 		}
 	}
 
 	clusterInfoMap := make(map[string]cluster.ClusterInformation)
 	for clusterName, clusterInfo := range clusterMetadataConfig.ClusterInformation {
 		clusterInfo.ShardCount = options.HistoryConfig.NumHistoryShards
+		clusterInfo.ClusterID = uuid.New()
 		clusterInfoMap[clusterName] = clusterInfo
 		_, err := testBase.ClusterMetadataManager.SaveClusterMetadata(context.Background(), &persistence.SaveClusterMetadataRequest{
-			ClusterMetadata: persistencespb.ClusterMetadata{
+			ClusterMetadata: &persistencespb.ClusterMetadata{
 				HistoryShardCount:        options.HistoryConfig.NumHistoryShards,
 				ClusterName:              clusterName,
-				ClusterId:                uuid.New(),
+				ClusterId:                clusterInfo.ClusterID,
 				IsConnectionEnabled:      clusterInfo.Enabled,
 				IsGlobalNamespaceEnabled: clusterMetadataConfig.EnableGlobalNamespace,
 				FailoverVersionIncrement: clusterMetadataConfig.FailoverVersionIncrement,
 				ClusterAddress:           clusterInfo.RPCAddress,
+				HttpAddress:              clusterInfo.HTTPAddress,
 				InitialFailoverVersion:   clusterInfo.InitialFailoverVersion,
 			}})
 		if err != nil {
@@ -238,6 +279,8 @@ func NewCluster(options *TestClusterConfig, logger log.Logger) (*TestCluster, er
 		}
 	}
 
+	taskCategoryRegistry := temporal.TaskCategoryRegistryProvider(archiverBase.metadata)
+
 	temporalParams := &TemporalParams{
 		ClusterMetadataConfig:            clusterMetadataConfig,
 		PersistenceConfig:                pConfig,
@@ -246,6 +289,8 @@ func NewCluster(options *TestClusterConfig, logger log.Logger) (*TestCluster, er
 		ShardMgr:                         testBase.ShardMgr,
 		ExecutionManager:                 testBase.ExecutionManager,
 		NamespaceReplicationQueue:        testBase.NamespaceReplicationQueue,
+		AbstractDataStoreFactory:         testBase.AbstractDataStoreFactory,
+		VisibilityStoreFactory:           testBase.VisibilityStoreFactory,
 		TaskMgr:                          testBase.TaskMgr,
 		Logger:                           logger,
 		ClusterNo:                        options.ClusterNo,
@@ -259,6 +304,8 @@ func NewCluster(options *TestClusterConfig, logger log.Logger) (*TestCluster, er
 		NamespaceReplicationTaskExecutor: namespace.NewReplicationTaskExecutor(options.ClusterMetadata.CurrentClusterName, testBase.MetadataManager, logger),
 		DynamicConfigOverrides:           options.DynamicConfigOverrides,
 		TLSConfigProvider:                tlsConfigProvider,
+		ServiceFxOptions:                 options.ServiceFxOptions,
+		TaskCategoryRegistry:             taskCategoryRegistry,
 	}
 
 	if options.EnableMetricsCapture {
@@ -270,7 +317,7 @@ func NewCluster(options *TestClusterConfig, logger log.Logger) (*TestCluster, er
 		logger.Fatal("Failed to start pprof", tag.Error(err))
 	}
 
-	cluster := newTemporal(temporalParams)
+	cluster := newTemporal(t, temporalParams)
 	if err := cluster.Start(); err != nil {
 		return nil, err
 	}
@@ -279,12 +326,28 @@ func NewCluster(options *TestClusterConfig, logger log.Logger) (*TestCluster, er
 }
 
 func setupIndex(esConfig *esclient.Config, logger log.Logger) error {
-	esClient, err := esclient.NewIntegrationTestsClient(esConfig, logger)
-	if err != nil {
-		return err
+	ctx := context.Background()
+	var esClient esclient.IntegrationTestsClient
+	op := func() error {
+		var err error
+		esClient, err = esclient.NewFunctionalTestsClient(esConfig, logger)
+		if err != nil {
+			return err
+		}
+
+		return esClient.Ping(ctx)
 	}
 
-	exists, err := esClient.IndexExists(context.Background(), esConfig.GetVisibilityIndex())
+	err := backoff.ThrottleRetry(
+		op,
+		backoff.NewExponentialRetryPolicy(time.Second).WithExpirationInterval(time.Minute),
+		nil,
+	)
+	if err != nil {
+		logger.Fatal("Failed to connect to elasticsearch", tag.Error(err))
+	}
+
+	exists, err := esClient.IndexExists(ctx, esConfig.GetVisibilityIndex())
 	if err != nil {
 		return err
 	}
@@ -304,22 +367,38 @@ func setupIndex(esConfig *esclient.Config, logger log.Logger) error {
 	}
 	// Template name doesn't matter.
 	// This operation is idempotent and won't return an error even if template already exists.
-	_, err = esClient.IndexPutTemplate(context.Background(), "temporal_visibility_v1_template", string(template))
+	_, err = esClient.IndexPutTemplate(ctx, "temporal_visibility_v1_template", string(template))
 	if err != nil {
 		return err
 	}
 	logger.Info("Index template created.")
 
 	logger.Info("Creating index.", tag.ESIndex(esConfig.GetVisibilityIndex()))
-	_, err = esClient.CreateIndex(context.Background(), esConfig.GetVisibilityIndex())
+	_, err = esClient.CreateIndex(
+		ctx,
+		esConfig.GetVisibilityIndex(),
+		map[string]any{
+			"settings": map[string]any{
+				"index": map[string]any{
+					"number_of_replicas": 0,
+				},
+			},
+		},
+	)
 	if err != nil {
+		return err
+	}
+	if err := waitForYellowStatus(esClient, esConfig.GetVisibilityIndex()); err != nil {
 		return err
 	}
 	logger.Info("Index created.", tag.ESIndex(esConfig.GetVisibilityIndex()))
 
 	logger.Info("Add custom search attributes for tests.")
-	_, err = esClient.PutMapping(context.Background(), esConfig.GetVisibilityIndex(), searchattribute.TestNameTypeMap.Custom())
+	_, err = esClient.PutMapping(ctx, esConfig.GetVisibilityIndex(), searchattribute.TestNameTypeMap.Custom())
 	if err != nil {
+		return err
+	}
+	if err := waitForYellowStatus(esClient, esConfig.GetVisibilityIndex()); err != nil {
 		return err
 	}
 	logger.Info("Index setup complete.", tag.ESIndex(esConfig.GetVisibilityIndex()))
@@ -327,8 +406,19 @@ func setupIndex(esConfig *esclient.Config, logger log.Logger) error {
 	return nil
 }
 
+func waitForYellowStatus(esClient esclient.IntegrationTestsClient, index string) error {
+	status, err := esClient.WaitForYellowStatus(context.Background(), index)
+	if err != nil {
+		return err
+	}
+	if status == "red" {
+		return fmt.Errorf("Elasticsearch index status for %s is red", index)
+	}
+	return nil
+}
+
 func deleteIndex(esConfig *esclient.Config, logger log.Logger) error {
-	esClient, err := esclient.NewIntegrationTestsClient(esConfig, logger)
+	esClient, err := esclient.NewFunctionalTestsClient(esConfig, logger)
 	if err != nil {
 		return err
 	}
@@ -399,29 +489,11 @@ func newArchiverBase(enabled bool, logger log.Logger) *ArchiverBase {
 	}
 }
 
-func (tc *TestCluster) SetFaultInjectionRate(rate float64) {
-	if tc.testBase.FaultInjection != nil {
-		tc.testBase.FaultInjection.UpdateRate(rate)
-	}
-	if tc.host.matchingService.GetFaultInjection() != nil {
-		tc.host.matchingService.GetFaultInjection().UpdateRate(rate)
-	}
-	if tc.host.frontendService.GetFaultInjection() != nil {
-		tc.host.frontendService.GetFaultInjection().UpdateRate(rate)
-	}
-
-	for _, s := range tc.host.historyServices {
-		if s.GetFaultInjection() != nil {
-			s.GetFaultInjection().UpdateRate(rate)
-		}
-	}
-}
-
 // TearDownCluster tears down the test cluster
 func (tc *TestCluster) TearDownCluster() error {
 	errs := tc.host.Stop()
 	tc.testBase.TearDownWorkflowStore()
-	if tc.host.esConfig != nil {
+	if !UsingSQLAdvancedVisibility() && tc.host.esConfig != nil {
 		if err := deleteIndex(tc.host.esConfig, tc.host.logger); err != nil {
 			errs = multierr.Combine(errs, err)
 		}
@@ -466,6 +538,10 @@ func (tc *TestCluster) GetExecutionManager() persistence.ExecutionManager {
 
 func (tc *TestCluster) GetHost() *temporalImpl {
 	return tc.host
+}
+
+func (tc *TestCluster) OverrideDynamicConfig(t *testing.T, key dynamicconfig.GenericSetting, value any) {
+	tc.host.OverrideDCValue(t, key, value)
 }
 
 var errCannotAddCACertToPool = errors.New("failed adding CA to pool")

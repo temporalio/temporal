@@ -28,12 +28,9 @@ import (
 	"math"
 	"math/rand"
 	"testing"
-	"time"
 
-	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservicemock/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -49,6 +46,7 @@ import (
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/tests"
+	"go.uber.org/mock/gomock"
 )
 
 type (
@@ -82,11 +80,9 @@ func TestTaskProcessorManagerSuite(t *testing.T) {
 }
 
 func (s *taskProcessorManagerSuite) SetupSuite() {
-	rand.Seed(time.Now().UnixNano())
 }
 
 func (s *taskProcessorManagerSuite) TearDownSuite() {
-
 }
 
 func (s *taskProcessorManagerSuite) SetupTest() {
@@ -133,6 +129,7 @@ func (s *taskProcessorManagerSuite) SetupTest() {
 		func(params TaskExecutorParams) TaskExecutor {
 			return s.mockReplicationTaskExecutor
 		},
+		NewExecutionManagerDLQWriter(s.mockExecutionManager),
 	)
 }
 
@@ -142,7 +139,7 @@ func (s *taskProcessorManagerSuite) TearDownTest() {
 
 func (s *taskProcessorManagerSuite) TestCleanupReplicationTask_Noop() {
 	ackedTaskID := int64(12345)
-	s.mockShard.EXPECT().GetImmediateQueueExclusiveHighReadWatermark().Return(tasks.NewImmediateKey(ackedTaskID + 2)).AnyTimes()
+	s.mockShard.EXPECT().GetQueueExclusiveHighReadWatermark(tasks.CategoryReplication).Return(tasks.NewImmediateKey(ackedTaskID + 2)).AnyTimes()
 	s.mockShard.EXPECT().GetQueueState(tasks.CategoryReplication).Return(&persistencespb.QueueState{
 		ExclusiveReaderHighWatermark: nil,
 		ReaderStates: map[int64]*persistencespb.QueueReaderState{
@@ -172,7 +169,7 @@ func (s *taskProcessorManagerSuite) TestCleanupReplicationTask_Noop() {
 
 func (s *taskProcessorManagerSuite) TestCleanupReplicationTask_Cleanup() {
 	ackedTaskID := int64(12345)
-	s.mockShard.EXPECT().GetImmediateQueueExclusiveHighReadWatermark().Return(tasks.NewImmediateKey(ackedTaskID + 2)).AnyTimes()
+	s.mockShard.EXPECT().GetQueueExclusiveHighReadWatermark(tasks.CategoryReplication).Return(tasks.NewImmediateKey(ackedTaskID + 2)).AnyTimes()
 	s.mockShard.EXPECT().GetQueueState(tasks.CategoryReplication).Return(&persistencespb.QueueState{
 		ExclusiveReaderHighWatermark: nil,
 		ReaderStates: map[int64]*persistencespb.QueueReaderState{
@@ -199,16 +196,6 @@ func (s *taskProcessorManagerSuite) TestCleanupReplicationTask_Cleanup() {
 		},
 	}, true)
 	s.taskProcessorManager.minTxAckedTaskID = ackedTaskID - 1
-	s.mockExecutionManager.EXPECT().UpdateHistoryTaskReaderProgress(
-		gomock.Any(),
-		&persistence.UpdateHistoryTaskReaderProgressRequest{
-			ShardID:                    s.shardID,
-			ShardOwner:                 s.shardOwner,
-			TaskCategory:               tasks.CategoryReplication,
-			ReaderID:                   common.DefaultQueueReaderID,
-			InclusiveMinPendingTaskKey: tasks.NewImmediateKey(ackedTaskID + 1),
-		},
-	).Times(1)
 	s.mockExecutionManager.EXPECT().RangeCompleteHistoryTasks(
 		gomock.Any(),
 		&persistence.RangeCompleteHistoryTasksRequest{

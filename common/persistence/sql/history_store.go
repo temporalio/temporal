@@ -33,7 +33,6 @@ import (
 
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
-
 	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
 	"go.temporal.io/server/common/primitives"
@@ -172,6 +171,11 @@ func (m *sqlExecutionStore) DeleteHistoryNodes(
 	return nil
 }
 
+type historyNodePaginationToken struct {
+	LastNodeID int64
+	LastTxnID  int64
+}
+
 // ReadHistoryBranch returns history node data for a branch
 func (m *sqlExecutionStore) ReadHistoryBranch(
 	ctx context.Context,
@@ -190,15 +194,15 @@ func (m *sqlExecutionStore) ReadHistoryBranch(
 		return nil, err
 	}
 
-	var token historyNodePaginationToken
+	var token *historyNodePaginationToken
 	if len(request.NextPageToken) == 0 {
 		if request.ReverseOrder {
-			token = newHistoryNodePaginationToken(request.MaxNodeID, MaxTxnID)
+			token = &historyNodePaginationToken{LastNodeID: request.MaxNodeID, LastTxnID: MaxTxnID}
 		} else {
-			token = newHistoryNodePaginationToken(request.MinNodeID, MinTxnID)
+			token = &historyNodePaginationToken{LastNodeID: request.MinNodeID, LastTxnID: MinTxnID}
 		}
 	} else {
-		token, err = deserializeHistoryNodePaginationToken(request.NextPageToken)
+		token, err = deserializePageTokenJson[historyNodePaginationToken](request.NextPageToken)
 		if err != nil {
 			return nil, err
 		}
@@ -250,9 +254,10 @@ func (m *sqlExecutionStore) ReadHistoryBranch(
 		pagingToken = nil
 	} else {
 		lastRow := rows[len(rows)-1]
-		pagingToken, err = serializeHistoryNodePaginationToken(
-			newHistoryNodePaginationToken(lastRow.NodeID, lastRow.TxnID),
-		)
+		pagingToken, err = serializePageTokenJson(&historyNodePaginationToken{
+			LastNodeID: lastRow.NodeID,
+			LastTxnID:  lastRow.TxnID,
+		})
 		if err != nil {
 			return nil, err
 		}
@@ -463,12 +468,17 @@ func (m *sqlExecutionStore) GetAllHistoryTreeBranches(
 	return response, nil
 }
 
-// GetHistoryTree returns all branch information of a tree
-func (m *sqlExecutionStore) GetHistoryTree(
+// GetHistoryTreeContainingBranch returns all branch information of a tree
+func (m *sqlExecutionStore) GetHistoryTreeContainingBranch(
 	ctx context.Context,
-	request *p.GetHistoryTreeRequest,
-) (*p.InternalGetHistoryTreeResponse, error) {
-	treeID, err := primitives.ParseUUID(request.TreeID)
+	request *p.InternalGetHistoryTreeContainingBranchRequest,
+) (*p.InternalGetHistoryTreeContainingBranchResponse, error) {
+	branch, err := m.GetHistoryBranchUtil().ParseHistoryBranchInfo(request.BranchToken)
+	if err != nil {
+		return nil, err
+	}
+
+	treeID, err := primitives.ParseUUID(branch.TreeId)
 	if err != nil {
 		return nil, err
 	}
@@ -478,14 +488,14 @@ func (m *sqlExecutionStore) GetHistoryTree(
 		ShardID: request.ShardID,
 	})
 	if err == sql.ErrNoRows || (err == nil && len(rows) == 0) {
-		return &p.InternalGetHistoryTreeResponse{}, nil
+		return &p.InternalGetHistoryTreeContainingBranchResponse{}, nil
 	}
 	treeInfos := make([]*commonpb.DataBlob, 0, len(rows))
 	for _, row := range rows {
 		treeInfos = append(treeInfos, p.NewDataBlob(row.Data, row.DataEncoding))
 	}
 
-	return &p.InternalGetHistoryTreeResponse{
+	return &p.InternalGetHistoryTreeContainingBranchResponse{
 		TreeInfos: treeInfos,
 	}, nil
 }

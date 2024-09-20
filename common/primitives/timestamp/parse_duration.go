@@ -23,6 +23,7 @@
 package timestamp
 
 import (
+	"errors"
 	"fmt"
 	"regexp"
 	"strconv"
@@ -33,6 +34,11 @@ import (
 var (
 	reUnitless = regexp.MustCompile(`^(\d+(\.\d*)?|(\.\d+))$`)
 	reDays     = regexp.MustCompile(`(\d+(\.\d*)?|(\.\d+))d`)
+
+	errInvalidDuration        = errors.New("invalid duration")
+	errInvalidDurationHours   = errors.New("invalid duration: hours must be a positive number")
+	errInvalidDurationMinutes = errors.New("invalid duration: minutes must be from 0 to 59")
+	errInvalidDurationSeconds = errors.New("invalid duration: seconds must be from 0 to 59")
 )
 
 // ParseDuration is like time.ParseDuration, but supports unit "d" for days
@@ -66,4 +72,23 @@ func ParseDurationDefaultSeconds(s string) (time.Duration, error) {
 		s += "s"
 	}
 	return ParseDuration(s)
+}
+
+func ParseHHMMSSDuration(d string) (time.Duration, error) {
+	var hours, minutes, seconds time.Duration
+	_, err := fmt.Sscanf(d, "%d:%d:%d", &hours, &minutes, &seconds)
+	if err != nil {
+		return 0, errInvalidDuration
+	}
+	if hours < 0 {
+		return 0, errInvalidDurationHours
+	}
+	if minutes < 0 || minutes > 59 {
+		return 0, errInvalidDurationMinutes
+	}
+	if seconds < 0 || seconds > 59 {
+		return 0, errInvalidDurationSeconds
+	}
+
+	return hours*time.Hour + minutes*time.Minute + seconds*time.Second, nil
 }

@@ -33,15 +33,13 @@ import (
 )
 
 const (
-	testMySQLUser       = "temporal"
-	testMySQLPassword   = "temporal"
-	testMySQLSchemaDir  = "schema/mysql/v57"
-	testMySQL8SchemaDir = "schema/mysql/v8"
+	testMySQLUser      = "temporal"
+	testMySQLPassword  = "temporal"
+	testMySQLSchemaDir = "schema/mysql/v8"
 
-	testPostgreSQLUser        = "temporal"
-	testPostgreSQLPassword    = "temporal"
-	testPostgreSQLSchemaDir   = "schema/postgresql/v96"
-	testPostgreSQL12SchemaDir = "schema/postgresql/v12"
+	testPostgreSQLUser      = "temporal"
+	testPostgreSQLPassword  = "temporal"
+	testPostgreSQLSchemaDir = "schema/postgresql/v12"
 
 	testSQLiteUser      = ""
 	testSQLitePassword  = ""
@@ -63,19 +61,6 @@ func GetMySQLTestClusterOption() *TestBaseOptions {
 	}
 }
 
-// GetMySQL8TestClusterOption return test options
-func GetMySQL8TestClusterOption() *TestBaseOptions {
-	return &TestBaseOptions{
-		SQLDBPluginName: mysql.PluginNameV8,
-		DBUsername:      testMySQLUser,
-		DBPassword:      testMySQLPassword,
-		DBHost:          environment.GetMySQLAddress(),
-		DBPort:          environment.GetMySQLPort(),
-		SchemaDir:       testMySQL8SchemaDir,
-		StoreType:       config.StoreTypeSQL,
-	}
-}
-
 // GetPostgreSQLTestClusterOption return test options
 func GetPostgreSQLTestClusterOption() *TestBaseOptions {
 	return &TestBaseOptions{
@@ -89,15 +74,15 @@ func GetPostgreSQLTestClusterOption() *TestBaseOptions {
 	}
 }
 
-// GetPostgreSQL12TestClusterOption return test options
-func GetPostgreSQL12TestClusterOption() *TestBaseOptions {
+// GetPostgreSQLPGXTestClusterOption return test options
+func GetPostgreSQLPGXTestClusterOption() *TestBaseOptions {
 	return &TestBaseOptions{
-		SQLDBPluginName: postgresql.PluginNameV12,
+		SQLDBPluginName: postgresql.PluginNamePGX,
 		DBUsername:      testPostgreSQLUser,
 		DBPassword:      testPostgreSQLPassword,
 		DBHost:          environment.GetPostgreSQLAddress(),
 		DBPort:          environment.GetPostgreSQLPort(),
-		SchemaDir:       testPostgreSQL12SchemaDir,
+		SchemaDir:       testPostgreSQLSchemaDir,
 		StoreType:       config.StoreTypeSQL,
 	}
 }

@@ -30,11 +30,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/golang/mock/gomock"
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/collection"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -43,6 +41,7 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/predicates"
 	"go.temporal.io/server/service/history/tasks"
+	"go.uber.org/mock/gomock"
 )
 
 type (
@@ -54,10 +53,10 @@ type (
 		mockScheduler   *MockScheduler
 		mockRescheduler *MockRescheduler
 
-		logger                log.Logger
-		metricsHandler        metrics.Handler
-		executableInitializer ExecutableInitializer
-		monitor               *monitorImpl
+		logger            log.Logger
+		metricsHandler    metrics.Handler
+		executableFactory ExecutableFactory
+		monitor           *monitorImpl
 	}
 )
 
@@ -76,9 +75,21 @@ func (s *readerSuite) SetupTest() {
 	s.logger = log.NewTestLogger()
 	s.metricsHandler = metrics.NoopMetricsHandler
 
-	s.executableInitializer = func(readerID int64, t tasks.Task) Executable {
-		return NewExecutable(readerID, t, nil, nil, nil, NewNoopPriorityAssigner(), clock.NewRealTimeSource(), nil, nil, nil, metrics.NoopMetricsHandler)
-	}
+	s.executableFactory = ExecutableFactoryFn(func(readerID int64, t tasks.Task) Executable {
+		return NewExecutable(
+			readerID,
+			t,
+			nil,
+			nil,
+			nil,
+			NewNoopPriorityAssigner(),
+			clock.NewRealTimeSource(),
+			nil,
+			nil,
+			nil,
+			metrics.NoopMetricsHandler,
+		)
+	})
 	s.monitor = newMonitor(tasks.CategoryTypeScheduled, clock.NewRealTimeSource(), &MonitorOptions{
 		PendingTasksCriticalCount:   dynamicconfig.GetIntPropertyFn(1000),
 		ReaderStuckCriticalAttempts: dynamicconfig.GetIntPropertyFn(5),
@@ -94,7 +105,7 @@ func (s *readerSuite) TestStartLoadStop() {
 	r := NewRandomRange()
 	scopes := []Scope{NewScope(r, predicates.Universal[tasks.Task]())}
 
-	paginationFnProvider := func(_ int64, paginationRange Range) collection.PaginationFn[tasks.Task] {
+	paginationFnProvider := func(paginationRange Range) collection.PaginationFn[tasks.Task] {
 		s.Equal(r, paginationRange)
 		return func(paginationToken []byte) ([]tasks.Task, []byte, error) {
 			mockTask := tasks.NewMockTask(s.controller)
@@ -179,7 +190,7 @@ func (s *readerSuite) TestMergeSlices() {
 	incomingScopes := NewRandomScopes(rand.Intn(10))
 	incomingSlices := make([]Slice, 0, len(incomingScopes))
 	for _, incomingScope := range incomingScopes {
-		incomingSlices = append(incomingSlices, NewSlice(nil, s.executableInitializer, s.monitor, incomingScope))
+		incomingSlices = append(incomingSlices, NewSlice(nil, s.executableFactory, s.monitor, incomingScope, GrouperNamespaceID{}, noPredicateSizeLimit))
 	}
 
 	reader.MergeSlices(incomingSlices...)
@@ -206,7 +217,7 @@ func (s *readerSuite) TestAppendSlices() {
 	incomingScopes := scopes[totalScopes/2:]
 	incomingSlices := make([]Slice, 0, len(incomingScopes))
 	for _, incomingScope := range incomingScopes {
-		incomingSlices = append(incomingSlices, NewSlice(nil, s.executableInitializer, s.monitor, incomingScope))
+		incomingSlices = append(incomingSlices, NewSlice(nil, s.executableFactory, s.monitor, incomingScope, GrouperNamespaceID{}, noPredicateSizeLimit))
 	}
 
 	reader.AppendSlices(incomingSlices...)
@@ -236,7 +247,8 @@ func (s *readerSuite) TestShrinkSlices() {
 	}
 
 	reader := s.newTestReader(scopes, nil, NoopReaderCompletionFn)
-	reader.ShrinkSlices()
+	completed := reader.ShrinkSlices()
+	s.Equal(0, completed)
 
 	actualScopes := reader.Scopes()
 	s.Len(actualScopes, numScopes-len(emptyIdx))
@@ -274,7 +286,7 @@ func (s *readerSuite) TestNotify() {
 func (s *readerSuite) TestPause() {
 	scopes := NewRandomScopes(1)
 
-	paginationFnProvider := func(_ int64, _ Range) collection.PaginationFn[tasks.Task] {
+	paginationFnProvider := func(_ Range) collection.PaginationFn[tasks.Task] {
 		return func(paginationToken []byte) ([]tasks.Task, []byte, error) {
 			mockTask := tasks.NewMockTask(s.controller)
 			mockTask.EXPECT().GetKey().Return(NewRandomKeyInRange(scopes[0].Range)).AnyTimes()
@@ -341,7 +353,7 @@ func (s *readerSuite) TestLoadAndSubmitTasks_TooManyPendingTasks() {
 func (s *readerSuite) TestLoadAndSubmitTasks_MoreTasks() {
 	scopes := NewRandomScopes(1)
 
-	paginationFnProvider := func(_ int64, _ Range) collection.PaginationFn[tasks.Task] {
+	paginationFnProvider := func(_ Range) collection.PaginationFn[tasks.Task] {
 		return func(paginationToken []byte) ([]tasks.Task, []byte, error) {
 			result := make([]tasks.Task, 0, 100)
 			for i := 0; i != 100; i++ {
@@ -378,7 +390,7 @@ func (s *readerSuite) TestLoadAndSubmitTasks_MoreTasks() {
 func (s *readerSuite) TestLoadAndSubmitTasks_NoMoreTasks_HasNextSlice() {
 	scopes := NewRandomScopes(2)
 
-	paginationFnProvider := func(_ int64, _ Range) collection.PaginationFn[tasks.Task] {
+	paginationFnProvider := func(_ Range) collection.PaginationFn[tasks.Task] {
 		return func(paginationToken []byte) ([]tasks.Task, []byte, error) {
 			mockTask := tasks.NewMockTask(s.controller)
 			mockTask.EXPECT().GetKey().Return(NewRandomKeyInRange(scopes[0].Range)).AnyTimes()
@@ -410,7 +422,7 @@ func (s *readerSuite) TestLoadAndSubmitTasks_NoMoreTasks_HasNextSlice() {
 func (s *readerSuite) TestLoadAndSubmitTasks_NoMoreTasks_NoNextSlice() {
 	scopes := NewRandomScopes(1)
 
-	paginationFnProvider := func(_ int64, _ Range) collection.PaginationFn[tasks.Task] {
+	paginationFnProvider := func(_ Range) collection.PaginationFn[tasks.Task] {
 		return func(paginationToken []byte) ([]tasks.Task, []byte, error) {
 			mockTask := tasks.NewMockTask(s.controller)
 			mockTask.EXPECT().GetKey().Return(NewRandomKeyInRange(scopes[0].Range)).AnyTimes()
@@ -489,7 +501,7 @@ func (s *readerSuite) newTestReader(
 ) *ReaderImpl {
 	slices := make([]Slice, 0, len(scopes))
 	for _, scope := range scopes {
-		slice := NewSlice(paginationFnProvider, s.executableInitializer, s.monitor, scope)
+		slice := NewSlice(paginationFnProvider, s.executableFactory, s.monitor, scope, GrouperNamespaceID{}, noPredicateSizeLimit)
 		slices = append(slices, slice)
 	}
 
@@ -500,6 +512,7 @@ func (s *readerSuite) newTestReader(
 			BatchSize:            dynamicconfig.GetIntPropertyFn(10),
 			MaxPendingTasksCount: dynamicconfig.GetIntPropertyFn(100),
 			PollBackoffInterval:  dynamicconfig.GetDurationPropertyFn(200 * time.Millisecond),
+			MaxPredicateSize:     dynamicconfig.GetIntPropertyFn(10),
 		},
 		s.mockScheduler,
 		s.mockRescheduler,

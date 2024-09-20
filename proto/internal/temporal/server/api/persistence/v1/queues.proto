@@ -1,3 +1,5 @@
+// The MIT License
+//
 // Copyright (c) 2020 Temporal Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -23,6 +25,7 @@ syntax = "proto3";
 package temporal.server.api.persistence.v1;
 option go_package = "go.temporal.io/server/api/persistence/v1;persistence";
 
+import "temporal/api/common/v1/message.proto";
 import "temporal/server/api/persistence/v1/predicates.proto";
 import "temporal/server/api/persistence/v1/tasks.proto";
 
@@ -43,4 +46,45 @@ message QueueSliceScope {
 message QueueSliceRange {
     TaskKey inclusive_min = 1;
     TaskKey exclusive_max = 2;
+}
+
+message ReadQueueMessagesNextPageToken {
+    int64 last_read_message_id = 1;
+}
+
+message ListQueuesNextPageToken {
+    int64 last_read_queue_number = 1;
+}
+
+// HistoryTask represents an internal history service task for a particular shard. We use a blob because there is no
+// common proto for all task proto types.
+message HistoryTask {
+    // shard_id that this task belonged to when it was created. Technically, you can derive this from the task data
+    // blob, but it's useful to have it here for quick access and to avoid deserializing the blob. Note that this may be
+    // different from the shard id of this task in the current cluster because it could have come from a cluster with a
+    // different shard id. This will always be the shard id of the task in its original cluster.
+    int32 shard_id = 1;
+    // blob that contains the history task proto. There is a GoLang-specific generic deserializer for this blob, but
+    // there is no common proto for all task proto types, so deserializing in other languages will require a custom
+    // switch on the task category, which should be available from the metadata for the queue that this task came from.
+    temporal.api.common.v1.DataBlob blob = 2;
+}
+
+
+message QueuePartition {
+  // min_message_id is less than or equal to the id of every message in the queue. The min_message_id is mainly used to
+  // skip over tombstones in Cassandra: let's say we deleted the first 1K messages from a queue with 1.1K messages. If
+  //  an operator asked for the first 100 messages, without the min_message_id, we would have to scan over the 1K
+  // tombstone rows before we could return the 100 messages. With the min_message_id, we can skip over all of the
+  // tombstones by specifying message_id >= queue.min_message_id. Note: it is possible for this to be less than the id
+  // of the lowest message in the queue temporarily because we delete messages before we update the queue metadata.
+  // However, such errors surface to clients with an "Unavailable" code, so clients retry, and the id should be updated
+  // soon. Additionally, we only use min_message_id to skip over tombstones, so it will only affect read performance,
+  // not correctness.
+  int64 min_message_id = 1;
+}
+
+message Queue {
+  // A map from partition index (0-based) to the partition metadata.
+  map<int32, QueuePartition> partitions = 1;
 }

@@ -29,611 +29,966 @@ import (
 	"testing"
 	"time"
 
-	"github.com/gogo/protobuf/types"
 	"github.com/stretchr/testify/require"
+	. "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
 	historypb "go.temporal.io/api/history/v1"
 	protocolpb "go.temporal.io/api/protocol/v1"
 	"go.temporal.io/api/serviceerror"
 	updatepb "go.temporal.io/api/update/v1"
-
+	"go.temporal.io/server/common/future"
 	"go.temporal.io/server/common/payloads"
+	. "go.temporal.io/server/common/testing/protoutils"
+	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/internal/effect"
+	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/workflow/update"
+	"google.golang.org/protobuf/types/known/anypb"
 )
 
 const (
 	testAcceptedEventID   int64 = 1234
 	testSequencingEventID int64 = 2203
+	includeAlreadySent          = true
+	skipAlreadySent             = false
 )
 
-func successOutcome(t *testing.T, s string) *updatepb.Outcome {
-	return &updatepb.Outcome{
-		Value: &updatepb.Outcome_Success{
-			Success: payloads.EncodeString(t.Name() + s),
-		},
+var (
+	rejectionFailure = &failurepb.Failure{Message: "rejection failure"}
+	rejectionOutcome = &updatepb.Outcome{Value: &updatepb.Outcome_Failure{Failure: rejectionFailure}}
+	failureOutcome   = &updatepb.Outcome{Value: &updatepb.Outcome_Failure{Failure: &failurepb.Failure{Message: "outcome failure"}}}
+	successOutcome   = &updatepb.Outcome{Value: &updatepb.Outcome_Success{Success: payloads.EncodeString("success")}}
+	immedateTimeout  = time.Duration(0)
+	immediateCtx, _  = context.WithTimeout(context.Background(), immedateTimeout)
+)
+
+func TestUpdateState(t *testing.T) {
+	type stateTest struct {
+		title        string
+		apply        func()
+		failOnEffect bool
 	}
-}
 
-var eventStoreUnused update.EventStore
-
-type mockEventStore struct {
-	effect.Controller
-	AddWorkflowExecutionUpdateAcceptedEventFunc func(
-		updateID string,
-		acceptedRequestMessageId string,
-		acceptedRequestSequencingEventId int64,
-		acceptedRequest *updatepb.Request,
-	) (*historypb.HistoryEvent, error)
-
-	AddWorkflowExecutionUpdateCompletedEventFunc func(
-		acceptedEventID int64,
-		resp *updatepb.Response,
-	) (*historypb.HistoryEvent, error)
-}
-
-func (m mockEventStore) AddWorkflowExecutionUpdateAcceptedEvent(
-	updateID string,
-	acceptedRequestMessageId string,
-	acceptedRequestSequencingEventId int64,
-	acceptedRequest *updatepb.Request,
-) (*historypb.HistoryEvent, error) {
-	if m.AddWorkflowExecutionUpdateAcceptedEventFunc != nil {
-		return m.AddWorkflowExecutionUpdateAcceptedEventFunc(updateID, acceptedRequestMessageId, acceptedRequestSequencingEventId, acceptedRequest)
-	}
-	return &historypb.HistoryEvent{EventId: testAcceptedEventID}, nil
-}
-
-func (m mockEventStore) AddWorkflowExecutionUpdateCompletedEvent(
-	acceptedEventID int64,
-	resp *updatepb.Response,
-) (*historypb.HistoryEvent, error) {
-	if m.AddWorkflowExecutionUpdateCompletedEventFunc != nil {
-		return m.AddWorkflowExecutionUpdateCompletedEventFunc(acceptedEventID, resp)
-	}
-	return &historypb.HistoryEvent{}, nil
-}
-
-func TestNilMessage(t *testing.T) {
-	t.Parallel()
-	ctx := context.Background()
-	upd := update.New(t.Name() + "update-id")
-	err := upd.OnMessage(ctx, nil, mockEventStore{})
-	var invalidArg *serviceerror.InvalidArgument
-	require.ErrorAs(t, err, &invalidArg)
-}
-
-func TestUnsupportedMessageType(t *testing.T) {
-	t.Parallel()
-	ctx := context.Background()
-	upd := update.New(t.Name() + "update-id")
-	notAMessageType := historypb.HistoryEvent{}
-	err := upd.OnMessage(ctx, &notAMessageType, mockEventStore{})
-	var invalidArg *serviceerror.InvalidArgument
-	require.ErrorAs(t, err, &invalidArg)
-}
-
-func TestRequestAcceptComplete(t *testing.T) {
-	// this is the most common happy path - an update is created, requested,
-	// accepted, and finally completed
-	t.Parallel()
 	var (
-		ctx        = context.Background()
-		completed  = false
-		effects    = effect.Buffer{}
-		invalidArg *serviceerror.InvalidArgument
-		meta       = updatepb.Meta{UpdateId: t.Name() + "-update-id"}
-		req        = updatepb.Request{Meta: &meta, Input: &updatepb.Input{Name: t.Name()}}
-		acpt       = updatepb.Acceptance{AcceptedRequestSequencingEventId: 2208}
-		resp       = updatepb.Response{Meta: &meta, Outcome: successOutcome(t, "success!")}
-
-		completedEventData updatepb.Response
-		acceptedEventData  = struct {
-			updateID                         string
-			acceptedRequestMessageId         string
-			acceptedRequestSequencingEventId int64
-			acceptedRequest                  *updatepb.Request
-		}{}
-		store = mockEventStore{
-			Controller: &effects,
-			AddWorkflowExecutionUpdateAcceptedEventFunc: func(
-				updateID string,
-				acceptedRequestMessageId string,
-				acceptedRequestSequencingEventId int64,
-				acceptedRequest *updatepb.Request,
-			) (*historypb.HistoryEvent, error) {
-				acceptedEventData.updateID = updateID
-				acceptedEventData.acceptedRequestMessageId = acceptedRequestMessageId
-				acceptedEventData.acceptedRequestSequencingEventId = acceptedRequestSequencingEventId
-				acceptedEventData.acceptedRequest = acceptedRequest
-				return &historypb.HistoryEvent{EventId: testAcceptedEventID}, nil
-			},
-			AddWorkflowExecutionUpdateCompletedEventFunc: func(
-				acceptedEventID int64,
-				res *updatepb.Response,
-			) (*historypb.HistoryEvent, error) {
-				completedEventData = *res
-				return &historypb.HistoryEvent{}, nil
-			},
-		}
-		upd = update.New(meta.UpdateId, update.ObserveCompletion(&completed))
+		tv            = testvars.New(t)
+		completed     bool
+		upd           *update.Update
+		effects       *effect.Buffer
+		store         mockEventStore
+		readonlyStore mockEventStore
 	)
 
-	t.Run("request", func(t *testing.T) {
-		err := upd.OnMessage(ctx, &acpt, store)
-		require.ErrorAs(t, err, &invalidArg,
-			"expected InvalidArgument from %T while in Admitted state", &acpt)
-
-		err = upd.OnMessage(ctx, &resp, store)
-		require.ErrorAsf(t, err, &invalidArg,
-			"expected InvalidArgument from %T while in Admitted state", &resp)
-
-		err = upd.OnMessage(ctx, &req, store)
-		require.NoError(t, err)
-		require.False(t, completed)
-
-		err = upd.OnMessage(ctx, &acpt, store)
-		require.ErrorAsf(t, err, &invalidArg,
-			"expected InvalidArgument from %T while in ProvisionallyRequested state", &resp)
-
-		effects.Apply(ctx)
-		t.Log("update state should now be Requested")
-	})
-
-	t.Run("accept", func(t *testing.T) {
-		err := upd.OnMessage(ctx, &acpt, store)
-		require.NoError(t, err)
-		require.False(t, completed)
-
-		err = upd.OnMessage(ctx, &acpt, store)
-		require.ErrorAsf(t, err, &invalidArg,
-			"expected InvalidArgument from %T in while ProvisionallyAccepted state", &resp)
-		require.False(t, completed)
-
-		ctx, cncl := context.WithTimeout(ctx, 5*time.Millisecond)
-		t.Cleanup(cncl)
-		_, err = upd.WaitAccepted(ctx)
-		require.ErrorIs(t, err, context.DeadlineExceeded,
-			"update acceptance should not be observable until effects are applied")
-
-		effects.Apply(ctx)
-		t.Log("update state should now be Accepted")
-
-		outcome, err := upd.WaitAccepted(ctx)
-		require.NoError(t, err)
-		require.Nil(t, outcome,
-			"update is accepted but not completed so outcome should be nil")
-	})
-
-	t.Run("respond", func(t *testing.T) {
-		err := upd.OnMessage(ctx, &resp, store)
-		require.NoError(t, err)
-		require.False(t, completed)
-
-		ctx, cncl := context.WithTimeout(ctx, 5*time.Millisecond)
-		t.Cleanup(cncl)
-		_, err = upd.WaitOutcome(ctx)
-		require.ErrorIs(t, err, context.DeadlineExceeded,
-			"update outcome should not be observable until effects are applied")
-
-		effects.Apply(ctx)
-		t.Log("update state should now be Completed")
-
-		gotOutcome, err := upd.WaitOutcome(ctx)
-		require.NoError(t, err)
-		require.Equal(t, resp.Outcome, gotOutcome)
-		require.True(t, completed)
-	})
-
-	require.Equal(t, meta.UpdateId, acceptedEventData.updateID)
-	require.Equal(t, acpt.AcceptedRequestSequencingEventId, acceptedEventData.acceptedRequestSequencingEventId)
-	require.Equal(t, resp, completedEventData)
-}
-
-func TestRequestReject(t *testing.T) {
-	t.Parallel()
-	var (
-		ctx       = context.Background()
+	initTest := func() {
+		t.Helper()
+		upd = nil // test will initialize it
 		completed = false
-		effects   = effect.Buffer{}
-		store     = mockEventStore{Controller: &effects}
-		updateID  = t.Name() + "-update-id"
-		upd       = update.New(updateID, update.ObserveCompletion(&completed))
-		req       = updatepb.Request{
-			Meta:  &updatepb.Meta{UpdateId: updateID},
-			Input: &updatepb.Input{Name: t.Name()},
+		effects = &effect.Buffer{}
+		store = mockEventStore{Controller: effects}
+		readonlyStore = mockEventStore{
+			Controller:      effects,
+			CanAddEventFunc: func() bool { return false }, // ie workflow is already complete
 		}
-	)
+	}
 
-	t.Run("request", func(t *testing.T) {
-		err := upd.OnMessage(ctx, &req, store)
-		require.NoError(t, err)
-		require.False(t, completed)
-		effects.Apply(ctx)
-		t.Log("update state should now be Requested")
+	runTests := func(t *testing.T, initState func(), tests []*stateTest) {
+		t.Helper()
+		for _, tc := range tests {
+			t.Run(tc.title, func(t *testing.T) {
+				initTest()
+				initState()
+				if tc.failOnEffect == true {
+					// any state transition would fail now
+					store.Controller = nil
+				}
+				tc.apply()
+			})
+		}
+	}
+
+	t.Run("in stateCreated", func(t *testing.T) {
+		runTests(t,
+			func() {
+				upd = update.New(tv.UpdateID(), update.ObserveCompletion(&completed))
+			},
+			[]*stateTest{{
+				title: "send back status admitted to waiters requesting any pre-accepted stage",
+				apply: func() {
+					assertAdmitted(t, upd)
+				},
+			}, {
+				title: "time out waiters requesting any stage post-admitted",
+				apply: func() {
+					assertNotAcceptedYet(t, upd)
+					assertNotCompletedYet(t, upd)
+				},
+			}, {
+				title: "transition to stateAdmitted",
+				apply: func() {
+					err := admit(t, store, upd)
+					require.NoError(t, err)
+					effects.Apply(context.Background())
+
+					err = respondSuccess(t, store, upd)
+					require.ErrorContains(t, err, "received *update.Response message while in state Admitted")
+				},
+			}, {
+				title:        "fail to transition to stateAdmitted on invalid request",
+				failOnEffect: true,
+				apply: func() {
+					var invalidArg *serviceerror.InvalidArgument
+
+					err := upd.Admit(nil, nil)
+					require.ErrorAs(t, err, &invalidArg)
+					require.ErrorContains(t, err, "body is not set")
+
+					err = upd.Admit(&updatepb.Request{}, nil)
+					require.ErrorAs(t, err, &invalidArg)
+					require.ErrorContains(t, err, "meta is not set")
+
+					err = upd.Admit(&updatepb.Request{Meta: &updatepb.Meta{}}, nil)
+					require.ErrorAs(t, err, &invalidArg)
+					require.ErrorContains(t, err, "meta.update_id is not set")
+
+					err = upd.Admit(&updatepb.Request{Meta: &updatepb.Meta{UpdateId: tv.UpdateID()}}, nil)
+					require.ErrorAs(t, err, &invalidArg)
+					require.ErrorContains(t, err, "input is not set")
+
+					err = upd.Admit(&updatepb.Request{Meta: &updatepb.Meta{UpdateId: tv.UpdateID()}, Input: &updatepb.Input{}}, nil)
+					require.ErrorAs(t, err, &invalidArg)
+					require.ErrorContains(t, err, "input.name is not set")
+				},
+			}, {
+				title: "fail to transition to stateAdmitted on store write failure",
+				apply: func() {
+					err := admit(t, store, upd)
+					require.NoError(t, err)
+
+					err = accept(t, store, upd)
+					require.ErrorContains(t, err, "received *update.Acceptance message while in state ProvisionallyAdmitted")
+
+					// rollback (ie store write failure)
+					effects.Cancel(context.Background())
+
+					err = accept(t, store, upd)
+					require.ErrorContains(t, err, "received *update.Acceptance message while in state Created")
+				},
+			}, {
+				title:        "fail to transition to stateAdmitted when workflow is already complete",
+				failOnEffect: true,
+				apply: func() {
+					// start waiter
+					ch := make(chan any, 1)
+					go func() {
+						status, err := upd.WaitLifecycleStage(context.Background(), UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ACCEPTED, 100*time.Millisecond)
+						if err != nil {
+							ch <- err
+							return
+						}
+						ch <- status.Outcome
+					}()
+
+					err := admit(t, readonlyStore, upd) // NOTE the store!
+					require.ErrorIs(t, consts.ErrWorkflowCompleted, err)
+
+					// ensure waiter received response
+					waiterRes := <-ch
+					require.EqualExportedValues(t, consts.ErrWorkflowCompleted, waiterRes)
+
+					// new waiter receives same response
+					_, err = upd.WaitLifecycleStage(context.Background(), UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_UNSPECIFIED, 100*time.Millisecond)
+					require.ErrorIs(t, err, consts.ErrWorkflowCompleted)
+				},
+			}, {
+				title:        "fail to transition to stateSent",
+				failOnEffect: true,
+				apply: func() {
+					require.Nil(t, send(t, upd, includeAlreadySent), "update should not be sent")
+				},
+			}, {
+				title:        "fail to transition to stateAccepted",
+				failOnEffect: true,
+				apply: func() {
+					err := accept(t, store, upd)
+					require.ErrorContains(t, err, "received *update.Acceptance message while in state Created")
+				},
+			}, {
+				title:        "fail to transition to stateRejected",
+				failOnEffect: true,
+				apply: func() {
+					err := reject(t, store, upd)
+					require.ErrorContains(t, err, "received *update.Rejection message while in state Created")
+				},
+			}, {
+				title:        "fail to transition to stateCompleted",
+				failOnEffect: true,
+				apply: func() {
+					err := respondSuccess(t, store, upd)
+					require.ErrorContains(t, err, "received *update.Response message while in state Created")
+				},
+			},
+			})
 	})
 
-	t.Run("reject", func(t *testing.T) {
-		rej := updatepb.Rejection{
-			RejectedRequest: &req,
-			Failure:         &failurepb.Failure{Message: "An intentional failure"},
-		}
-		err := upd.OnMessage(ctx, &rej, store)
-		require.NoError(t, err)
-		require.False(t, completed)
+	t.Run("in stateAdmitted", func(t *testing.T) {
+		runTests(t,
+			func() {
+				t.Helper()
+				upd = update.New(tv.UpdateID(), update.ObserveCompletion(&completed))
+				require.NoError(t, admit(t, store, upd))
+				effects.Apply(context.Background())
+			},
+			[]*stateTest{{
+				title: "send back status admitted to waiters requesting any pre-accepted stage",
+				apply: func() {
+					assertAdmitted(t, upd)
+				},
+			}, {
+				title: "time out waiters requesting any stage post-admitted",
+				apply: func() {
+					assertNotAcceptedYet(t, upd)
+					assertNotCompletedYet(t, upd)
+				},
+			}, {
+				title:        "transition to stateSent",
+				failOnEffect: true,
+				apply: func() {
+					require.NotNil(t, send(t, upd, skipAlreadySent), "update should be sent")
 
-		{
-			ctx, cncl := context.WithTimeout(ctx, 5*time.Millisecond)
-			t.Cleanup(cncl)
-			_, err := upd.WaitAccepted(ctx)
-			require.ErrorIs(t, err, context.DeadlineExceeded,
-				"update acceptance failure should not be observable until effects are applied")
-		}
-		{
-			ctx, cncl := context.WithTimeout(ctx, 5*time.Millisecond)
-			t.Cleanup(cncl)
-			_, err := upd.WaitOutcome(ctx)
-			require.ErrorIs(t, err, context.DeadlineExceeded,
-				"update acceptance failure should not be observable until effects are applied")
-		}
+					err := respondSuccess(t, store, upd)
+					require.ErrorContains(t, err, "received *update.Response message while in state Sent")
+				},
+			}, {
+				// See comment in onAcceptanceMsg about stateAdmitted.
+				// This test is to ensure that transition from stateAdmitted to stateAccepted.
+				title: "transition to stateAccepted",
+				apply: func() {
+					// NOTE: skipping transition to stateSent!
+					err := accept(t, store, upd)
+					require.NoError(t, err)
 
-		effects.Apply(ctx)
-		t.Log("update state should now be Completed")
+					assertAdmitted(t, upd)
 
-		acptOutcome, err := upd.WaitAccepted(ctx)
-		require.NoError(t, err)
-		require.Equal(t, rej.Failure, acptOutcome.GetFailure())
+					// apply pending effect
+					effects.Apply(context.Background())
 
-		outcome, err := upd.WaitOutcome(ctx)
-		require.NoError(t, err)
-		require.Equal(t, rej.Failure, outcome.GetFailure())
+					assertAccepted(t, upd)
+					assertNotCompletedYet(t, upd)
+				},
+			}, {
+				// See comment in onAcceptanceMsg about stateAdmitted.
+				// This test is to ensure that transition from stateAdmitted to stateCompleted (rejected) is valid.
+				title: "transition to stateRejected",
+				apply: func() {
+					// NOTE: skipping transition to stateSent!
+					err := reject(t, store, upd)
+					require.NoError(t, err)
 
-		require.True(t, completed)
+					assertNotAcceptedYet(t, upd)
+
+					// apply pending effect
+					effects.Apply(context.Background())
+					require.True(t, completed, "update state should now be completed")
+
+					assertCompleted(t, upd, rejectionOutcome)
+				},
+			}, {
+				title:        "fail to transition to stateCompleted",
+				failOnEffect: true,
+				apply: func() {
+					err := respondSuccess(t, store, upd)
+					require.ErrorContains(t, err, "received *update.Response message while in state Admitted")
+				},
+			}, {
+				title:        "ignore another admit request",
+				failOnEffect: true,
+				apply: func() {
+					require.NoError(t, admit(t, store, upd))
+				},
+			},
+			})
+	})
+
+	t.Run("in stateSent", func(t *testing.T) {
+		runTests(t,
+			func() {
+				t.Helper()
+				upd = update.New(tv.UpdateID(), update.ObserveCompletion(&completed))
+				require.NoError(t, admit(t, store, upd))
+				effects.Apply(context.Background())
+				require.NotNil(t, send(t, upd, includeAlreadySent), "update should be sent")
+			},
+			[]*stateTest{{
+				title: "send back status admitted to waiters requesting any pre-accepted stage",
+				apply: func() {
+					assertAdmitted(t, upd)
+				},
+			}, {
+				title: "time out waiters requesting any stage post-admitted",
+				apply: func() {
+					assertNotAcceptedYet(t, upd)
+					assertNotCompletedYet(t, upd)
+				},
+			}, {
+				title: "transition to stateAccepted",
+				apply: func() {
+					// start waiter
+					ch := make(chan any, 1)
+					go func() {
+						status, err := upd.WaitLifecycleStage(context.Background(), UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ACCEPTED, 100*time.Millisecond)
+						if err != nil {
+							ch <- err
+							return
+						}
+						ch <- status
+					}()
+
+					var gotAcceptedRequestSequencingEventId int64
+					store.AddWorkflowExecutionUpdateAcceptedEventFunc = func(
+						updateID string,
+						acceptedRequestMessageId string,
+						acceptedRequestSequencingEventId int64,
+						acceptedRequest *updatepb.Request,
+					) (*historypb.HistoryEvent, error) {
+						gotAcceptedRequestSequencingEventId = acceptedRequestSequencingEventId
+						return &historypb.HistoryEvent{}, nil
+					}
+
+					err := accept(t, store, upd)
+					require.NoError(t, err)
+					require.Equal(t, testSequencingEventID, gotAcceptedRequestSequencingEventId)
+					assertNotAcceptedYet(t, upd)
+
+					// apply pending effect
+					effects.Apply(context.Background())
+
+					// ensure waiter received response
+					waiterRes := <-ch
+					require.EqualExportedValues(t, &update.Status{Stage: UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ACCEPTED}, waiterRes)
+				},
+			}, {
+				title: "fail to transition to stateAccepted/stateCompleted on store write failure",
+				apply: func() {
+					// acceptance and response message arrived *together*
+					err := accept(t, store, upd)
+					require.NoError(t, err)
+					err = respondSuccess(t, store, upd)
+					require.NoError(t, err)
+
+					// rollback (ie store write failure)
+					effects.Cancel(context.Background())
+
+					assertAdmitted(t, upd)
+				},
+			}, {
+				title:        "fail to transition to stateAccepted on invalid request",
+				failOnEffect: true,
+				apply: func() {
+					var invalidArg *serviceerror.InvalidArgument
+
+					err := upd.OnProtocolMessage(&protocolpb.Message{
+						Body: MarshalAny(t, &updatepb.Acceptance{
+							AcceptedRequestSequencingEventId: testSequencingEventID,
+						}),
+					}, store)
+					require.ErrorAs(t, err, &invalidArg)
+					require.ErrorContains(t, err, "accepted_request_message_id is not set")
+
+					err = upd.OnProtocolMessage(&protocolpb.Message{
+						Body: MarshalAny(t, &updatepb.Acceptance{
+							AcceptedRequestMessageId: tv.MessageID(),
+						}),
+					}, store)
+					require.ErrorAs(t, err, &invalidArg)
+					require.ErrorContains(t, err, "accepted_request_sequencing_event_id is not set")
+				},
+			}, {
+				title: "fail to transition to stateAccepted when workflow is already complete",
+				apply: func() {
+					// start waiter
+					ch := make(chan any, 1)
+					go func() {
+						status, err := upd.WaitLifecycleStage(context.Background(), UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED, 100*time.Millisecond)
+						if err != nil {
+							ch <- err
+							return
+						}
+						ch <- status.Outcome
+					}()
+
+					// accept update
+					err := accept(t, readonlyStore, upd) // NOTE the store!
+					require.NoError(t, err)
+
+					status, err := upd.WaitLifecycleStage(context.Background(), UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ACCEPTED, 100*time.Millisecond)
+					require.ErrorIs(t, err, consts.ErrWorkflowCompleted)
+					require.Nil(t, status)
+
+					// ensure waiter received response
+					waiterRes := <-ch
+					require.EqualExportedValues(t, consts.ErrWorkflowCompleted, waiterRes)
+
+					// new waiter still sees same result
+					_, err = upd.WaitLifecycleStage(context.Background(), UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_UNSPECIFIED, 100*time.Millisecond)
+					require.EqualExportedValues(t, consts.ErrWorkflowCompleted, err)
+				},
+			}, {
+				title: "transition to stateRejected",
+				apply: func() {
+					// start waiter
+					ch := make(chan any, 1)
+					go func() {
+						status, err := upd.WaitLifecycleStage(context.Background(), UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED, 100*time.Millisecond)
+						if err != nil {
+							ch <- err
+							return
+						}
+						ch <- status.Outcome
+					}()
+
+					// reject update
+					err := reject(t, store, upd)
+					require.NoError(t, err)
+					assertNotCompletedYet(t, upd)
+
+					// apply pending effect
+					effects.Apply(context.Background())
+					require.True(t, completed, "update state should now be completed")
+
+					// ensure waiter received response
+					waiterRes := <-ch
+					require.EqualExportedValues(t, rejectionOutcome, waiterRes)
+
+					// new waiter receives same response
+					assertCompleted(t, upd, rejectionOutcome)
+				},
+			}, {
+				title: "fail to transition to stateRejected on store write failure",
+				apply: func() {
+					err := reject(t, store, upd)
+					require.NoError(t, err)
+
+					// rollback (ie store write failure)
+					effects.Cancel(context.Background())
+
+					assertAdmitted(t, upd)
+				},
+			}, {
+				title: "fail to transition to stateRejected when workflow is already complete",
+				apply: func() {
+					// start waiter
+					ch := make(chan any, 1)
+					go func() {
+						status, err := upd.WaitLifecycleStage(context.Background(), UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED, 100*time.Millisecond)
+						if err != nil {
+							ch <- err
+							return
+						}
+						ch <- status.Outcome
+					}()
+
+					// reject update
+					err := reject(t, readonlyStore, upd) // NOTE the store!
+					require.NoError(t, err)
+
+					// apply pending effect
+					effects.Apply(context.Background())
+					require.True(t, completed, "update state should now be completed")
+
+					// ensure waiter received response
+					waiterRes := <-ch
+					require.EqualExportedValues(t, rejectionOutcome, waiterRes)
+
+					// new waiter receives same response
+					assertCompleted(t, upd, rejectionOutcome)
+				},
+			}, {
+				// it is possible for the acceptance message and the completion message to
+				// be part of the same message batch, and thus they will be delivered without
+				// an intermediate call to apply pending effects
+				title: "transition to stateCompleted via stateAccepted in one WFT",
+				apply: func() {
+					// start waiters
+					accptCh := make(chan any, 1)
+					go func() {
+						status, err := upd.WaitLifecycleStage(context.Background(), UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ACCEPTED, 100*time.Millisecond)
+						if err != nil {
+							accptCh <- err
+							return
+						}
+						accptCh <- status.Outcome
+					}()
+					complCh := make(chan any, 1)
+					go func() {
+						status, err := upd.WaitLifecycleStage(context.Background(), UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED, 100*time.Millisecond)
+						if err != nil {
+							complCh <- err
+							return
+						}
+						complCh <- status.Outcome
+					}()
+
+					err := accept(t, store, upd)
+					require.NoError(t, err)
+
+					// NOTE: no call to apply pending effects between these messages!
+
+					err = respondSuccess(t, store, upd)
+					require.NoError(t, err)
+					require.False(t, completed, "update state should not be completed yet")
+
+					assertNotAcceptedYet(t, upd)
+					assertNotCompletedYet(t, upd)
+
+					// apply pending effect
+					effects.Apply(context.Background())
+					require.True(t, completed, "update state should now be completed")
+
+					// ensure both waiter received completed response
+					accptWaiterRes := <-accptCh
+					complWaiterRes := <-complCh
+					require.EqualExportedValues(t, successOutcome, accptWaiterRes)
+					require.EqualExportedValues(t, successOutcome, complWaiterRes)
+
+					// new waiter receives same response
+					assertCompleted(t, upd, successOutcome)
+				},
+			}, {
+				title:        "ignore another send request; unless explicitly requested",
+				failOnEffect: true,
+				apply: func() {
+					require.Nil(t, send(t, upd, skipAlreadySent), "update should not be sent")
+					require.NotNil(t, send(t, upd, includeAlreadySent), "update should be sent")
+				},
+			},
+			})
+	})
+
+	t.Run("in stateAccepted", func(t *testing.T) {
+		runTests(t,
+			func() {
+				t.Helper()
+				upd = update.NewAccepted(tv.UpdateID(), testAcceptedEventID, update.ObserveCompletion(&completed))
+			},
+			[]*stateTest{{
+				title: "send back status accepted to waiters requesting any pre-completed stage",
+				apply: func() {
+					assertAccepted(t, upd)
+				},
+			}, {
+				title: "time out waiters requesting stage completed",
+				apply: func() {
+					assertNotCompletedYet(t, upd)
+				},
+			}, {
+				title: "transition to stateCompleted with success response",
+				apply: func() {
+					// start waiter
+					ch := make(chan any, 1)
+					go func() {
+						status, err := upd.WaitLifecycleStage(context.Background(), UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED, 100*time.Millisecond)
+						if err != nil {
+							ch <- err
+							return
+						}
+						ch <- status.Outcome
+					}()
+
+					var gotAcceptedEventID int64
+					store.AddWorkflowExecutionUpdateCompletedEventFunc = func(
+						acceptedEventID int64,
+						resp *updatepb.Response,
+					) (*historypb.HistoryEvent, error) {
+						gotAcceptedEventID = acceptedEventID
+						return &historypb.HistoryEvent{}, nil
+					}
+
+					// receive update response
+					err := respondSuccess(t, store, upd)
+					require.NoError(t, err)
+					require.False(t, completed, "update state should not be completed yet")
+					require.Equal(t, testAcceptedEventID, gotAcceptedEventID)
+
+					assertNotCompletedYet(t, upd)
+
+					// apply pending effect
+					effects.Apply(context.Background())
+					require.True(t, completed, "update state should now be completed")
+
+					// ensure waiter received response
+					waiterRes := <-ch
+					require.EqualExportedValues(t, successOutcome, waiterRes)
+
+					// new waiter receives same response
+					assertCompleted(t, upd, successOutcome)
+				},
+			}, {
+				title: "transition to stateCompleted with failure response",
+				apply: func() {
+					// start waiter
+					ch := make(chan any, 1)
+					go func() {
+						status, err := upd.WaitLifecycleStage(context.Background(), UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED, 100*time.Millisecond)
+						if err != nil {
+							ch <- err
+							return
+						}
+						ch <- status.Outcome
+					}()
+
+					// receive update response
+					err := respondFailure(t, store, upd)
+					require.NoError(t, err)
+					require.False(t, completed, "update state should not be completed yet")
+
+					assertNotCompletedYet(t, upd)
+
+					// apply pending effect
+					effects.Apply(context.Background())
+					require.True(t, completed, "update state should now be completed")
+
+					// ensure waiter received response
+					waiterRes := <-ch
+					require.EqualExportedValues(t, failureOutcome, waiterRes)
+
+					// new waiter receives same response
+					assertCompleted(t, upd, failureOutcome)
+				},
+			}, {
+				title:        "fail to transition to stateComplete on invalid request",
+				failOnEffect: true,
+				apply: func() {
+					var invalidArg *serviceerror.InvalidArgument
+
+					err := upd.OnProtocolMessage(&protocolpb.Message{
+						Body: MarshalAny(t, &updatepb.Response{}),
+					}, store)
+					require.ErrorAs(t, err, &invalidArg)
+					require.ErrorContains(t, err, "meta is not set")
+
+					err = upd.OnProtocolMessage(&protocolpb.Message{
+						Body: MarshalAny(t, &updatepb.Response{
+							Outcome: failureOutcome,
+						}),
+					}, store)
+					require.ErrorAs(t, err, &invalidArg)
+					require.ErrorContains(t, err, "meta is not set")
+
+					err = upd.OnProtocolMessage(&protocolpb.Message{
+						Body: MarshalAny(t, &updatepb.Response{
+							Meta: &updatepb.Meta{},
+						}),
+					}, store)
+					require.ErrorAs(t, err, &invalidArg)
+					require.ErrorContains(t, err, "update_id is not set")
+
+					err = upd.OnProtocolMessage(&protocolpb.Message{
+						Body: MarshalAny(t, &updatepb.Response{
+							Meta: &updatepb.Meta{UpdateId: upd.ID()},
+						}),
+					}, store)
+					require.ErrorAs(t, err, &invalidArg)
+					require.ErrorContains(t, err, "outcome is not set")
+				},
+			}, {
+				title:        "fail to transition to stateRejected",
+				failOnEffect: true,
+				apply: func() {
+					err := reject(t, store, upd)
+
+					var invalidArg *serviceerror.InvalidArgument
+					require.ErrorAs(t, err, &invalidArg)
+					require.ErrorContains(t, err, "received *update.Rejection message while in state Accepted")
+				},
+			}, {
+				title:        "fail to transition to stateCompleted when workflow is already complete",
+				failOnEffect: true,
+				apply: func() {
+					err := respondSuccess(t, readonlyStore, upd) // NOTE the store!
+					require.NoError(t, err)
+
+					status, err := upd.WaitLifecycleStage(context.Background(), UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED, 100*time.Millisecond)
+					require.ErrorIs(t, err, consts.ErrWorkflowCompleted)
+					require.Nil(t, status)
+				},
+			}, {
+				title: "fail to transition to stateCompleted on store write failure",
+				apply: func() {
+					err := respondSuccess(t, store, upd)
+					require.NoError(t, err)
+
+					assertAccepted(t, upd)
+					assertNotCompletedYet(t, upd)
+
+					// rollback (ie store write failure)
+					effects.Cancel(context.Background())
+
+					assertAccepted(t, upd)
+					assertNotCompletedYet(t, upd)
+				},
+			}, {
+				title:        "ignore another admit request",
+				failOnEffect: true,
+				apply: func() {
+					require.NoError(t, admit(t, store, upd))
+				},
+			}, {
+				title:        "ignore another send request; even when explicitly requested",
+				failOnEffect: true,
+				apply: func() {
+					require.Nil(t, send(t, upd, skipAlreadySent), "update should not be sent")
+					require.Nil(t, send(t, upd, includeAlreadySent), "update should not be sent")
+				},
+			},
+			})
+	})
+
+	t.Run("in stateRejected", func(t *testing.T) {
+		runTests(t,
+			func() {
+				t.Helper()
+				upd = update.New(tv.UpdateID(), update.ObserveCompletion(&completed))
+				require.NoError(t, admit(t, store, upd))
+				effects.Apply(context.Background())
+				require.NotNil(t, send(t, upd, includeAlreadySent), "update should be sent")
+				require.NoError(t, reject(t, store, upd))
+				effects.Apply(context.Background())
+			},
+			[]*stateTest{{
+				title: "send back status completed to waiters immediately for any stage",
+				apply: func() {
+					assertCompleted(t, upd, rejectionOutcome)
+				},
+			},
+			})
+	})
+
+	t.Run("in stateCompleted", func(t *testing.T) {
+		runTests(t,
+			func() {
+				t.Helper()
+				upd = update.NewCompleted(tv.UpdateID(), future.NewReadyFuture(successOutcome, nil))
+				assertCompleted(t, upd, successOutcome)
+			},
+			[]*stateTest{{
+				title: "send back status completed to waiters immediately for any stage",
+				apply: func() {
+					for _, stage := range []UpdateWorkflowExecutionLifecycleStage{
+						UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_UNSPECIFIED,
+						UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ADMITTED,
+						UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ACCEPTED,
+						UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED,
+					} {
+						t.Logf("testing stage %v", UpdateWorkflowExecutionLifecycleStage.String(stage))
+						status, err := upd.WaitLifecycleStage(immediateCtx, stage, immedateTimeout)
+						require.NoError(t, err)
+						require.Equal(t, UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED, status.Stage)
+						require.EqualExportedValues(t, successOutcome, status.Outcome)
+					}
+				},
+			}, {
+				title:        "ignore another admit request",
+				failOnEffect: true,
+				apply: func() {
+					require.NoError(t, admit(t, store, upd))
+				},
+			}, {
+				title:        "ignore another send request; even when explicitly requested",
+				failOnEffect: true,
+				apply: func() {
+					require.Nil(t, send(t, upd, skipAlreadySent), "update should not be sent")
+					require.Nil(t, send(t, upd, includeAlreadySent), "update should not be sent")
+				},
+			},
+			})
 	})
 }
 
-func TestWithProtocolMessage(t *testing.T) {
+func TestOnProtocolMessage(t *testing.T) {
 	t.Parallel()
-	var (
-		ctx      = context.Background()
-		store    = mockEventStore{Controller: &effect.Buffer{}}
-		updateID = t.Name() + "-update-id"
-		upd      = update.New(updateID)
-		req      = updatepb.Request{
-			Meta:  &updatepb.Meta{UpdateId: updateID},
-			Input: &updatepb.Input{Name: t.Name()},
-		}
-	)
 
-	t.Run("good message", func(t *testing.T) {
-		protocolMsg := &protocolpb.Message{Body: mustMarshalAny(t, &req)}
-		err := upd.OnMessage(ctx, protocolMsg, store)
-		require.NoError(t, err)
-	})
+	var tv = testvars.New(t)
+
+	// various state transitions are already tested above, this only tests special edge cases
+
 	t.Run("junk message", func(t *testing.T) {
-		protocolMsg := &protocolpb.Message{
-			Body: &types.Any{
+		upd := update.New(tv.UpdateID())
+		err := upd.OnProtocolMessage(&protocolpb.Message{
+			Body: &anypb.Any{
 				TypeUrl: "nonsense",
 				Value:   []byte("even more nonsense"),
 			},
-		}
-		err := upd.OnMessage(ctx, protocolMsg, store)
+		}, nil)
 		require.Error(t, err)
 	})
-}
 
-func TestMessageOutput(t *testing.T) {
-	t.Parallel()
-	var (
-		ctx      = context.Background()
-		effects  effect.Buffer
-		store    = mockEventStore{Controller: &effects}
-		updateID = t.Name() + "-update-id"
-		upd      = update.New(updateID)
-		req      = updatepb.Request{
-			Meta:  &updatepb.Meta{UpdateId: updateID},
-			Input: &updatepb.Input{Name: t.Name()},
-		}
-		sequencingID = &protocolpb.Message_EventId{EventId: testSequencingEventID}
-	)
+	t.Run("nil message", func(t *testing.T) {
+		upd := update.New(tv.UpdateID())
+		err := upd.OnProtocolMessage(nil, mockEventStore{})
 
-	t.Run("before request received", func(t *testing.T) {
-		msgs := make([]*protocolpb.Message, 0)
-		upd.ReadOutgoingMessages(&msgs, sequencingID)
-		require.Empty(t, msgs)
-	})
-	t.Run("requested", func(t *testing.T) {
-		require.NoError(t, upd.OnMessage(ctx, &req, store))
-		effects.Apply(ctx)
-		msgs := make([]*protocolpb.Message, 0)
-		upd.ReadOutgoingMessages(&msgs, sequencingID)
-		require.Len(t, msgs, 1)
-		require.Equal(t, msgs[0].GetEventId(), testSequencingEventID)
-	})
-	t.Run("after requested", func(t *testing.T) {
-		upd := update.NewAccepted(updateID, testAcceptedEventID)
-		msgs := make([]*protocolpb.Message, 0)
-		upd.ReadOutgoingMessages(&msgs, sequencingID)
-		require.Empty(t, msgs)
-	})
-}
-
-func TestRejectAfterAcceptFails(t *testing.T) {
-	t.Parallel()
-	ctx := context.Background()
-	updateID := t.Name() + "-update-id"
-	upd := update.NewAccepted(updateID, testAcceptedEventID)
-	err := upd.OnMessage(ctx, &updatepb.Rejection{}, eventStoreUnused)
-	var invalidArg *serviceerror.InvalidArgument
-	require.ErrorAs(t, err, &invalidArg)
-	require.ErrorContains(t, err, "state")
-}
-
-func TestAcceptanceAndResponseInSameMessageBatch(t *testing.T) {
-	// it is possible for the acceptance message and the completion message to
-	// be part of the same message batch and thus they will be delivered without
-	// an intermediate call to apply pending effects
-	t.Parallel()
-	var (
-		ctx       = context.Background()
-		completed = false
-		effects   = effect.Buffer{}
-		store     = mockEventStore{Controller: &effects}
-		meta      = updatepb.Meta{UpdateId: t.Name() + "-update-id"}
-		req       = updatepb.Request{Meta: &meta, Input: &updatepb.Input{Name: t.Name()}}
-		acpt      = updatepb.Acceptance{AcceptedRequest: &req, AcceptedRequestMessageId: "x"}
-		resp      = updatepb.Response{Meta: &meta, Outcome: successOutcome(t, "success!")}
-		upd       = update.New(meta.UpdateId, update.ObserveCompletion(&completed))
-	)
-
-	require.NoError(t, upd.OnMessage(ctx, &req, store))
-	effects.Apply(ctx)
-
-	require.NoError(t, upd.OnMessage(ctx, &acpt, store))
-	// no call to effects.Apply between these messages
-	require.NoError(t, upd.OnMessage(ctx, &resp, store))
-	require.False(t, completed)
-	effects.Apply(ctx)
-	require.True(t, completed)
-}
-
-func TestDuplicateRequestNoError(t *testing.T) {
-	t.Parallel()
-	ctx := context.Background()
-	updateID := t.Name() + "-update-id"
-	sequencingID := &protocolpb.Message_EventId{EventId: testSequencingEventID}
-	upd := update.NewAccepted(updateID, testAcceptedEventID)
-	err := upd.OnMessage(ctx, &updatepb.Request{}, eventStoreUnused)
-	require.NoError(t, err,
-		"a second request message should be ignored, not cause an error")
-
-	msgs := make([]*protocolpb.Message, 0)
-	upd.ReadOutgoingMessages(&msgs, sequencingID)
-	require.Empty(t, msgs)
-}
-
-func TestMessageValidation(t *testing.T) {
-	t.Parallel()
-	ctx := context.Background()
-	var invalidArg *serviceerror.InvalidArgument
-	updateID := t.Name() + "-update-id"
-	t.Run("invalid request msg", func(t *testing.T) {
-		upd := update.New("")
-		err := upd.OnMessage(ctx, &updatepb.Request{}, eventStoreUnused)
-		require.ErrorAs(t, err, &invalidArg)
-		require.ErrorContains(t, err, "invalid")
-	})
-	t.Run("invalid acceptance msg", func(t *testing.T) {
-		upd := update.New(updateID)
-		store := mockEventStore{Controller: effect.Immediate(ctx)}
-		validReq := updatepb.Request{
-			Meta:  &updatepb.Meta{UpdateId: updateID},
-			Input: &updatepb.Input{Name: "not empty"},
-		}
-		err := upd.OnMessage(ctx, &validReq, store)
-		require.NoError(t, err)
-		err = upd.OnMessage(ctx, nil, store)
+		var invalidArg *serviceerror.InvalidArgument
 		require.ErrorAs(t, err, &invalidArg)
 		require.ErrorContains(t, err, "received nil message")
 	})
-	t.Run("invalid rejection msg", func(t *testing.T) {
-		upd := update.New(updateID)
-		store := mockEventStore{
-			Controller: effect.Immediate(ctx),
-		}
-		validReq := updatepb.Request{
-			Meta:  &updatepb.Meta{UpdateId: updateID},
-			Input: &updatepb.Input{Name: "not empty"},
-		}
-		err := upd.OnMessage(ctx, &validReq, store)
-		require.NoError(t, err)
-		err = upd.OnMessage(ctx, nil, store)
+
+	t.Run("nil message body", func(t *testing.T) {
+		upd := update.New(tv.UpdateID())
+		emptyMsg := &protocolpb.Message{}
+		err := upd.OnProtocolMessage(emptyMsg, mockEventStore{})
+
+		var invalidArg *serviceerror.InvalidArgument
 		require.ErrorAs(t, err, &invalidArg)
-		require.ErrorContains(t, err, "received nil message")
+		require.ErrorContains(t, err, "nil body")
 	})
-	t.Run("invalid response msg", func(t *testing.T) {
-		upd := update.NewAccepted("", testAcceptedEventID)
-		err := upd.OnMessage(
-			ctx,
-			&updatepb.Response{},
-			eventStoreUnused,
-		)
+
+	t.Run("unsupported message type", func(t *testing.T) {
+		upd := update.New(tv.UpdateID())
+		msg := protocolpb.Message{}
+		msg.Body = MarshalAny(t, &historypb.HistoryEvent{})
+		err := upd.OnProtocolMessage(&msg, mockEventStore{})
+
+		var invalidArg *serviceerror.InvalidArgument
 		require.ErrorAs(t, err, &invalidArg)
-		require.ErrorContains(t, err, "invalid")
+		require.ErrorContains(t, err, "not supported")
 	})
 }
 
-func TestDoubleRollback(t *testing.T) {
-	// Test that an Update that receives both an Acceptance and a Response in
-	// the same message batch but is then rolled back ends up in the proper
-	// state.
-	t.Parallel()
-	var (
-		ctx       = context.Background()
-		completed = false
-		effects   = effect.Buffer{}
-		store     = mockEventStore{Controller: &effects}
-		reqMsgID  = t.Name() + "-req-msg-id"
-		meta      = updatepb.Meta{UpdateId: t.Name() + "-update-id"}
-		req       = updatepb.Request{Meta: &meta, Input: &updatepb.Input{Name: t.Name()}}
-		acpt      = updatepb.Acceptance{AcceptedRequest: &req, AcceptedRequestMessageId: reqMsgID}
-		resp      = updatepb.Response{Meta: &meta, Outcome: successOutcome(t, "success!")}
-	)
-
-	upd := update.New(meta.UpdateId, update.ObserveCompletion(&completed))
-	require.NoError(t, upd.OnMessage(ctx, &req, store))
-	effects.Apply(ctx)
-
-	require.NoError(t, upd.OnMessage(ctx, &acpt, store))
-	require.NoError(t, upd.OnMessage(ctx, &resp, store))
-	require.False(t, completed)
-
-	t.Log("pretend MutableState write to DB fails - unwind effects")
-	effects.Cancel(ctx)
-
-	t.Run("not accepted", func(t *testing.T) {
-		ctx, cncl := context.WithTimeout(ctx, 5*time.Millisecond)
-		t.Cleanup(cncl)
-		_, err := upd.WaitAccepted(ctx)
-		require.ErrorIs(t, err, context.DeadlineExceeded)
-	})
-	t.Run("not completed", func(t *testing.T) {
-		ctx, cncl := context.WithTimeout(ctx, 5*time.Millisecond)
-		t.Cleanup(cncl)
-		_, err := upd.WaitOutcome(ctx)
-		require.ErrorIs(t, err, context.DeadlineExceeded)
-	})
-	t.Run("back to requested state", func(t *testing.T) {
-		err := upd.OnMessage(ctx, &acpt, store)
-		require.NoError(t, err, "update should be back in Requested state")
-	})
+func mustAdmit(t *testing.T, store mockEventStore, upd *update.Update) {
+	t.Helper()
+	require.NoError(t, admit(t, store, upd))
+	assertAdmitted(t, upd)
 }
 
-func TestRollbackCompletion(t *testing.T) {
-	t.Parallel()
-	var (
-		ctx       = context.Background()
-		completed = false
-		effects   = effect.Buffer{}
-		store     = mockEventStore{Controller: &effects}
-		updateID  = t.Name() + "-update-id"
-		upd       = update.NewAccepted(
-			updateID,
-			testAcceptedEventID,
-			update.ObserveCompletion(&completed),
-		)
-		resp = updatepb.Response{
-			Meta:    &updatepb.Meta{UpdateId: updateID},
-			Outcome: successOutcome(t, "success!"),
-		}
-	)
+func assertAdmitted(t *testing.T, upd *update.Update) {
+	t.Helper()
 
-	require.NoError(t, upd.OnMessage(ctx, &resp, store))
-	require.False(t, completed)
+	status, err := upd.WaitLifecycleStage(context.Background(), UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_UNSPECIFIED, immedateTimeout)
+	require.NoError(t, err)
+	require.Equal(t, UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ADMITTED, status.Stage)
+	require.Nil(t, status.Outcome, "outcome should not be available yet")
 
-	t.Log("pretend MutableState write to DB fails - unwind effects")
-	effects.Cancel(ctx)
-
-	t.Run("not completed", func(t *testing.T) {
-		ctx, cncl := context.WithTimeout(ctx, 5*time.Millisecond)
-		t.Cleanup(cncl)
-		_, err := upd.WaitOutcome(ctx)
-		require.ErrorIs(t, err, context.DeadlineExceeded)
-		require.False(t, completed)
-	})
-	t.Run("back to accepted state", func(t *testing.T) {
-		err := upd.OnMessage(ctx, &resp, store)
-		require.NoError(t, err, "update should be back in Accepted state")
-	})
+	status, err = upd.WaitLifecycleStage(context.Background(), UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ADMITTED, immedateTimeout)
+	require.NoError(t, err)
+	require.Equal(t, UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ADMITTED, status.Stage)
+	require.Nil(t, status.Outcome, "outcome should not be available yet")
 }
 
-func TestRejectionWithAcceptanceWaiter(t *testing.T) {
-	t.Parallel()
-	var (
-		ctx      = context.Background()
-		store    = mockEventStore{Controller: effect.Immediate(ctx)}
-		updateID = t.Name() + "-update-id"
-		upd      = update.New(updateID)
-		req      = updatepb.Request{
-			Meta:  &updatepb.Meta{UpdateId: updateID},
-			Input: &updatepb.Input{Name: "not_empty"},
-		}
-		rej = updatepb.Rejection{
-			RejectedRequestMessageId: "not_empty",
-			RejectedRequest:          &req,
-			Failure: &failurepb.Failure{
-				Message: "intentional falure from " + t.Name(),
+func admit(t *testing.T, store mockEventStore, upd *update.Update) error {
+	return upd.Admit(&updatepb.Request{
+		Meta:  &updatepb.Meta{UpdateId: upd.ID()},
+		Input: &updatepb.Input{Name: "not_empty"},
+	}, store)
+}
+
+func send(t *testing.T, upd *update.Update, includeAlreadySent bool) *protocolpb.Message {
+	t.Helper()
+	return upd.Send(includeAlreadySent, &protocolpb.Message_EventId{EventId: testSequencingEventID})
+}
+
+func reject(t *testing.T, store mockEventStore, upd *update.Update) error {
+	return upd.OnProtocolMessage(&protocolpb.Message{
+		Body: MarshalAny(t, &updatepb.Rejection{
+			RejectedRequestMessageId: "update1/request",
+			RejectedRequest: &updatepb.Request{
+				Meta:  &updatepb.Meta{UpdateId: upd.ID()},
+				Input: &updatepb.Input{Name: "not_empty"},
 			},
-		}
-	)
-	ch := make(chan any, 1)
-	go func() {
-		fail, err := upd.WaitAccepted(ctx)
-		if err != nil {
-			ch <- err
-			return
-		}
-		ch <- fail
-	}()
-	t.Log("give 5ms for the goro to get to the Future.Get call in WaitAccepted")
-	time.Sleep(5 * time.Millisecond)
-
-	t.Log("deliver request and rejection messages")
-	require.NoError(t, upd.OnMessage(ctx, &req, store))
-	require.NoError(t, upd.OnMessage(ctx, &rej, store))
-
-	retVal := <-ch
-	outcome, ok := retVal.(*updatepb.Outcome)
-	require.Truef(t, ok, "WaitAccepted returned an unexpected type: %T", retVal)
-	require.Equal(t, rej.Failure, outcome.GetFailure())
+			Failure: rejectionFailure,
+		})}, store)
 }
 
-func TestAcceptEventIDInCompletedEvent(t *testing.T) {
-	t.Parallel()
-	var (
-		ctx      = context.Background()
-		effects  = effect.Buffer{}
-		store    = mockEventStore{Controller: &effects}
-		updateID = t.Name() + "-update-id"
-		upd      = update.New(updateID)
-		req      = updatepb.Request{
-			Meta:  &updatepb.Meta{UpdateId: updateID},
-			Input: &updatepb.Input{Name: "not_empty"},
-		}
-		acpt = updatepb.Acceptance{
-			AcceptedRequestMessageId: "not empty",
-			AcceptedRequest:          &req,
-		}
-		resp = updatepb.Response{
-			Meta:    &updatepb.Meta{UpdateId: updateID},
-			Outcome: successOutcome(t, "success!"),
-		}
-		wantAcceptedEventID int64 = 8675309
-	)
+func mustAccept(t *testing.T, store mockEventStore, upd *update.Update) {
+	t.Helper()
+	require.NoError(t, accept(t, store, upd), "update should be accepted")
+	assertAccepted(t, upd)
+}
 
-	var gotAcceptedEventID int64
-	store.AddWorkflowExecutionUpdateAcceptedEventFunc = func(
-		updateID string,
-		acceptedRequestMessageId string,
-		acceptedRequestSequencingEventId int64,
-		acceptedRequest *updatepb.Request,
-	) (*historypb.HistoryEvent, error) {
-		t.Log("creating accepted event with the desired event ID")
-		return &historypb.HistoryEvent{EventId: wantAcceptedEventID}, nil
-	}
-	store.AddWorkflowExecutionUpdateCompletedEventFunc = func(
-		acceptedEventID int64,
-		resp *updatepb.Response,
-	) (*historypb.HistoryEvent, error) {
-		t.Log("capturing acceptedEventID written in completed event")
-		gotAcceptedEventID = acceptedEventID
-		return &historypb.HistoryEvent{}, nil
-	}
+func accept(t *testing.T, store mockEventStore, upd *update.Update) error {
+	tv := testvars.New(t)
+	return upd.OnProtocolMessage(&protocolpb.Message{
+		Body: MarshalAny(t, &updatepb.Acceptance{
+			AcceptedRequestMessageId:         tv.MessageID(),
+			AcceptedRequestSequencingEventId: testSequencingEventID,
+		})}, store)
+}
 
-	require.NoError(t, upd.OnMessage(ctx, &req, store))
-	effects.Apply(ctx)
-	require.NoError(t, upd.OnMessage(ctx, &acpt, store))
-	require.NoError(t, upd.OnMessage(ctx, &resp, store))
-	effects.Apply(ctx)
-	require.Equal(t, wantAcceptedEventID, gotAcceptedEventID)
+func assertAccepted(t *testing.T, upd *update.Update) {
+	t.Helper()
+
+	for _, stage := range []UpdateWorkflowExecutionLifecycleStage{
+		UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_UNSPECIFIED,
+		UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ADMITTED,
+		UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ACCEPTED,
+	} {
+		t.Logf("testing stage %v", UpdateWorkflowExecutionLifecycleStage.String(stage))
+		status, err := upd.WaitLifecycleStage(immediateCtx, stage, immedateTimeout)
+		require.NoError(t, err)
+		require.Equal(t, UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ACCEPTED, status.Stage)
+		require.Nil(t, status.Outcome, "outcome should not be available yet")
+	}
+}
+
+func assertNotAcceptedYet(t *testing.T, upd *update.Update) {
+	t.Helper()
+
+	// on client timeout
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Millisecond)
+	t.Cleanup(cancel)
+	_, err := upd.WaitLifecycleStage(ctx, UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ACCEPTED, 100*time.Millisecond)
+	require.ErrorIs(t, err, context.DeadlineExceeded)
+
+	// on server timeout
+	status, err := upd.WaitLifecycleStage(context.Background(), UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ACCEPTED, immedateTimeout)
+	require.NoError(t, err)
+	require.Equal(t, UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ADMITTED, status.Stage)
+	require.Nil(t, status.Outcome, "outcome should not be available yet")
+
+}
+
+func respondSuccess(t *testing.T, store mockEventStore, upd *update.Update) error {
+	return upd.OnProtocolMessage(&protocolpb.Message{
+		Body: MarshalAny(t, &updatepb.Response{
+			Meta:    &updatepb.Meta{UpdateId: upd.ID()},
+			Outcome: successOutcome,
+		})}, store)
+}
+
+func respondFailure(t *testing.T, store mockEventStore, upd *update.Update) error {
+	return upd.OnProtocolMessage(&protocolpb.Message{
+		Body: MarshalAny(t, &updatepb.Response{
+			Meta:    &updatepb.Meta{UpdateId: upd.ID()},
+			Outcome: failureOutcome,
+		})}, store)
+}
+
+func assertCompleted(t *testing.T, upd *update.Update, outcome *updatepb.Outcome) {
+	t.Helper()
+
+	for _, stage := range []UpdateWorkflowExecutionLifecycleStage{
+		UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_UNSPECIFIED,
+		UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ADMITTED,
+		UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ACCEPTED,
+		UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED,
+	} {
+		t.Logf("testing stage %v", UpdateWorkflowExecutionLifecycleStage.String(stage))
+		status, err := upd.WaitLifecycleStage(immediateCtx, stage, immedateTimeout)
+		require.NoError(t, err)
+		require.Equal(t, UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED, status.Stage)
+		require.EqualExportedValues(t, outcome, status.Outcome)
+	}
+}
+
+func assertNotCompletedYet(t *testing.T, upd *update.Update) {
+	t.Helper()
+
+	// on client timeout
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Millisecond)
+	t.Cleanup(cancel)
+	_, err := upd.WaitLifecycleStage(ctx, UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED, 100*time.Millisecond)
+	require.ErrorIs(t, err, context.DeadlineExceeded)
+
+	// on server timeout
+	status, err := upd.WaitLifecycleStage(context.Background(), UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED, immedateTimeout)
+	require.NoError(t, err)
+	require.NotEqual(t, UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED, status.Stage)
+	require.Nil(t, status.Outcome, "outcome should not be available yet")
 }

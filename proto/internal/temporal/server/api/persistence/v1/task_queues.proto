@@ -1,3 +1,5 @@
+// The MIT License
+//
 // Copyright (c) 2020 Temporal Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -24,6 +26,7 @@ package temporal.server.api.persistence.v1;
 option go_package = "go.temporal.io/server/api/persistence/v1;persistence";
 
 import "temporal/server/api/clock/v1/message.proto";
+import "temporal/api/taskqueue/v1/message.proto";
 
 // BuildId is an identifier with a timestamped status used to identify workers for task queue versioning purposes.
 message BuildId {
@@ -39,7 +42,7 @@ message BuildId {
     // (-- api-linter: core::0142::time-field-type=disabled
     //     aip.dev/not-precedent: Using HLC instead of wall clock. --)
     temporal.server.api.clock.v1.HybridLogicalClock state_update_timestamp = 3;
-    // HLC timestamp representing when this build id was last made default in its version set.
+    // HLC timestamp representing when this build ID was last made default in its version set.
     // (-- api-linter: core::0142::time-field-type=disabled
     //     aip.dev/not-precedent: Using HLC instead of wall clock. --)
     temporal.server.api.clock.v1.HybridLogicalClock became_default_timestamp = 4;
@@ -55,7 +58,7 @@ message CompatibleVersionSet {
     // - Delayed user data propagation between partitions
     // - Cross-task-queue activities/child workflows/CAN where the user has not set up parallel
     //   versioning data
-    // we have to guess the set id for a build id. If that happens, and then the build id is
+    // we have to guess the set id for a build ID. If that happens, and then the build ID is
     // discovered to be in a different set, then the sets will be merged and both (or more)
     // build ids will be preserved, so that we don't lose tasks.
     // The first set id is considered the "primary", and the others are "demoted". Once a build
@@ -69,11 +72,37 @@ message CompatibleVersionSet {
     temporal.server.api.clock.v1.HybridLogicalClock became_default_timestamp = 4;
 }
 
+message AssignmentRule {
+    temporal.api.taskqueue.v1.BuildIdAssignmentRule rule = 1;
+    // (-- api-linter: core::0142::time-field-type=disabled
+    //     aip.dev/not-precedent: Using HLC instead of wall clock. --)
+    temporal.server.api.clock.v1.HybridLogicalClock create_timestamp = 2;
+    //  when delete_timestamp is present the rule should be treated as deleted
+    // (-- api-linter: core::0142::time-field-type=disabled
+    //     aip.dev/not-precedent: Using HLC instead of wall clock. --)
+    temporal.server.api.clock.v1.HybridLogicalClock delete_timestamp = 3;
+}
+
+message RedirectRule {
+    temporal.api.taskqueue.v1.CompatibleBuildIdRedirectRule rule = 1;
+    // (-- api-linter: core::0142::time-field-type=disabled
+    //     aip.dev/not-precedent: Using HLC instead of wall clock. --)
+    temporal.server.api.clock.v1.HybridLogicalClock create_timestamp = 2;
+    //  when delete_timestamp is present the rule should be treated as deleted
+    // (-- api-linter: core::0142::time-field-type=disabled
+    //     aip.dev/not-precedent: Using HLC instead of wall clock. --)
+    temporal.server.api.clock.v1.HybridLogicalClock delete_timestamp = 3;
+}
+
 // Holds all the data related to worker versioning for a task queue.
 // Backwards-incompatible changes cannot be made, as this would make existing stored data unreadable.
 message VersioningData {
     // All the incompatible version sets, unordered except for the last element, which is considered the set "default".
     repeated CompatibleVersionSet version_sets = 1;
+    // Ordered list of assignment rules. Also contains recently-deleted rules.
+    repeated AssignmentRule assignment_rules = 2;
+    // Unordered list of redirect rules. Also contains recently-deleted rules.
+    repeated RedirectRule redirect_rules = 3;
 }
 
 // Container for all persistent user provided data for a task queue.

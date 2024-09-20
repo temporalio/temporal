@@ -31,12 +31,11 @@ import (
 	"sync"
 	"time"
 
-	"go.temporal.io/server/common/log/tag"
-	"go.temporal.io/server/common/metrics"
-
 	"go.temporal.io/server/common/auth"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/metrics"
 )
 
 type CertProviderFactory func(
@@ -457,8 +456,8 @@ func (s *localStoreTlsProvider) checkCertExpiration() {
 			return
 		}
 		if s.metricsHandler != nil {
-			s.metricsHandler.Gauge(metrics.TlsCertsExpired.GetMetricName()).Record(float64(len(expired)))
-			s.metricsHandler.Gauge(metrics.TlsCertsExpiring.GetMetricName()).Record(float64(len(expiring)))
+			metrics.TlsCertsExpired.With(s.metricsHandler).Record(float64(len(expired)))
+			metrics.TlsCertsExpiring.With(s.metricsHandler).Record(float64(len(expiring)))
 		}
 		s.logCerts(expired, true, errorTime)
 		s.logCerts(expiring, false, errorTime)

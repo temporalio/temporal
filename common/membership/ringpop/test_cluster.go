@@ -29,17 +29,16 @@ import (
 	"testing"
 	"time"
 
-	"github.com/golang/mock/gomock"
 	"github.com/pborman/uuid"
 	"github.com/temporalio/ringpop-go"
 	"github.com/temporalio/tchannel-go"
-
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives"
+	"go.uber.org/mock/gomock"
 )
 
 // testCluster is a type that represents a test ringpop cluster
@@ -63,6 +62,8 @@ func newTestCluster(
 	seed string,
 	serviceName primitives.ServiceName,
 	broadcastAddress string,
+	joinTimes []time.Time,
+	testInitialBootstrapFailure bool,
 ) *testCluster {
 	logger := log.NewTestLogger()
 	ctrl := gomock.NewController(t)
@@ -122,7 +123,7 @@ func newTestCluster(
 		LastHeartbeat: time.Now().UTC(),
 	}
 
-	firstGetClusterMemberCall := true
+	firstGetClusterMemberCall := testInitialBootstrapFailure
 	mockMgr.EXPECT().GetClusterMembers(gomock.Any(), gomock.Any()).DoAndReturn(
 		func(_ context.Context, _ *persistence.GetClusterMembersRequest) (*persistence.GetClusterMembersResponse, error) {
 			res := &persistence.GetClusterMembersResponse{ActiveMembers: []*persistence.ClusterMember{seedMember}}
@@ -156,15 +157,21 @@ func newTestCluster(
 			logger.Error("failed to create ringpop instance", tag.Error(err))
 			return nil
 		}
-		rpWrapper := newService(ringPop, time.Second*2, logger)
 		_, port, _ := splitHostPortTyped(cluster.hostAddrs[i])
+		var joinTime time.Time
+		if i < len(joinTimes) {
+			joinTime = joinTimes[i]
+		}
 		cluster.rings[i] = newMonitor(
 			serviceName,
 			config.ServicePortMap{serviceName: int(port)}, // use same port for "grpc" port
-			rpWrapper,
+			ringPop,
 			logger,
 			mockMgr,
 			resolver,
+			2*time.Second,
+			3*time.Second,
+			joinTime,
 		)
 		cluster.rings[i].Start()
 	}
@@ -174,6 +181,15 @@ func newTestCluster(
 // GetSeedNode returns the seedNode for this cluster
 func (c *testCluster) GetSeedNode() string {
 	return c.seedNode
+}
+
+// DrainHost marks the given host draining
+func (c *testCluster) DrainHost(hostID string) {
+	for i, uuid := range c.hostUUIDs {
+		if uuid == hostID {
+			c.rings[i].SetDraining(true)
+		}
+	}
 }
 
 // KillHost kills the given host within the cluster

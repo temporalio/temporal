@@ -34,6 +34,15 @@ func SetDefaultWorkflowIdReusePolicy(f *enumspb.WorkflowIdReusePolicy) {
 	}
 }
 
+func SetDefaultWorkflowIdConflictPolicy(
+	conflictPolicy *enumspb.WorkflowIdConflictPolicy,
+	defaultPolicy enumspb.WorkflowIdConflictPolicy,
+) {
+	if *conflictPolicy == enumspb.WORKFLOW_ID_CONFLICT_POLICY_UNSPECIFIED {
+		*conflictPolicy = defaultPolicy
+	}
+}
+
 func SetDefaultHistoryEventFilterType(f *enumspb.HistoryEventFilterType) {
 	if *f == enumspb.HISTORY_EVENT_FILTER_TYPE_UNSPECIFIED {
 		*f = enumspb.HISTORY_EVENT_FILTER_TYPE_ALL_EVENT

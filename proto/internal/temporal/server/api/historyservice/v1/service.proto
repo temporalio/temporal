@@ -1,3 +1,5 @@
+// The MIT License
+//
 // Copyright (c) 2019 Temporal Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -135,6 +137,10 @@ service HistoryService {
     // and record WorkflowExecutionStarted and WorkflowExecutionSignaled event in case of success.
     // It will return `WorkflowExecutionAlreadyStartedError` if start workflow failed with given policy.
     rpc SignalWithStartWorkflowExecution (SignalWithStartWorkflowExecutionRequest) returns (SignalWithStartWorkflowExecutionResponse) {
+    }
+
+    // ExecuteMultiOperation executes multiple operations within a single workflow.
+    rpc ExecuteMultiOperation (ExecuteMultiOperationRequest) returns (ExecuteMultiOperationResponse) {
     }
 
     // RemoveSignalMutableState is used to remove a signal request Id that was previously recorded.  This is currently
@@ -315,6 +321,53 @@ service HistoryService {
     rpc GetWorkflowExecutionRawHistoryV2(GetWorkflowExecutionRawHistoryV2Request) returns (GetWorkflowExecutionRawHistoryV2Response) {
     }
 
+    rpc GetWorkflowExecutionRawHistory(GetWorkflowExecutionRawHistoryRequest) returns (GetWorkflowExecutionRawHistoryResponse) {
+    }
+
     rpc ForceDeleteWorkflowExecution(ForceDeleteWorkflowExecutionRequest) returns (ForceDeleteWorkflowExecutionResponse) {
+    }
+
+    rpc GetDLQTasks (GetDLQTasksRequest) returns (GetDLQTasksResponse) {
+    }
+
+    rpc DeleteDLQTasks (DeleteDLQTasksRequest) returns (DeleteDLQTasksResponse) {
+    }
+
+    rpc ListQueues (ListQueuesRequest) returns (ListQueuesResponse) {
+    }
+
+    // The AddTasks API is used to add history tasks to a shard. The first use-case for this API is the DLQ. When we are
+    // unable to process history tasks, we add them to a DLQ. When they need to be retried, we take them out of the DLQ
+    // and add them back using this API. We expose this via an API instead of doing this in the history engine because
+    // replication tasks, which are DLQ'd on the target cluster need to be added back to the queue on the source
+    // cluster, so there is already a network boundary. There is a maximum of 1000 tasks per request. There must be at
+    // least one task per request. If any task in the list does not have the same shard ID as the request, the request
+    // will fail with an InvalidArgument error. It is ok to have tasks for different workflow runs as long as they are
+    // in the same shard. Calls to the persistence API will be batched by workflow run.
+    rpc AddTasks (AddTasksRequest) returns (AddTasksResponse) {
+    }
+
+    rpc ListTasks (ListTasksRequest) returns (ListTasksResponse) {     
+    }
+
+    // Complete an async Nexus Operation using a completion token. The completion state could be successful, failed, or
+    // canceled.
+    rpc CompleteNexusOperation (CompleteNexusOperationRequest) returns (CompleteNexusOperationResponse) {
+    }
+
+    rpc InvokeStateMachineMethod (InvokeStateMachineMethodRequest) returns (InvokeStateMachineMethodResponse) {
+    }
+
+    // Deep health check history service dependencies health status
+    rpc DeepHealthCheck (DeepHealthCheckRequest) returns (DeepHealthCheckResponse) {
+    }
+
+    rpc SyncWorkflowState(SyncWorkflowStateRequest) returns (SyncWorkflowStateResponse) {
+    }
+    // UpdateActivityOptions is called by the client to update the options of an activity
+    // (-- api-linter: core::0134::method-signature=disabled
+    // (-- api-linter: core::0134::response-message-name=disabled
+    rpc UpdateActivityOptions (UpdateActivityOptionsRequest) returns (UpdateActivityOptionsResponse)
+    {
     }
 }

@@ -25,14 +25,11 @@
 package shard
 
 import (
-	"sync"
 	"testing"
 	"time"
 
-	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-
 	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/primitives"
@@ -40,6 +37,7 @@ import (
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/tests"
+	"go.uber.org/mock/gomock"
 )
 
 type (
@@ -87,15 +85,13 @@ func (s *ownershipSuite) TestAcquireViaMembershipUpdate() {
 	shardID := int32(1)
 
 	shard := NewMockControllableContext(s.controller)
-	shard.EXPECT().GetEngine(gomock.Any()).Return(nil, nil)
-	shard.EXPECT().AssertOwnership(gomock.Any()).Return(nil)
-	shard.EXPECT().IsValid().Return(true)
+	shard.EXPECT().GetEngine(gomock.Any()).Return(nil, nil).AnyTimes()
+	shard.EXPECT().AssertOwnership(gomock.Any()).Return(nil).AnyTimes()
+	shard.EXPECT().IsValid().Return(true).AnyTimes()
 
-	var ready sync.WaitGroup
 	cf := NewMockContextFactory(s.controller)
 	cf.EXPECT().CreateContext(shardID, gomock.Any()).
 		DoAndReturn(func(_ int32, _ CloseCallback) (ControllableContext, error) {
-			ready.Done()
 			return shard, nil
 		})
 
@@ -110,12 +106,14 @@ func (s *ownershipSuite) TestAcquireViaMembershipUpdate() {
 	shardController := s.newController(cf)
 	shardController.Start()
 
-	ready.Add(1)
-	shardController.ownership.membershipUpdateCh <- &membership.ChangedEvent{}
-	ready.Wait()
+	s.Zero(len(shardController.ShardIDs()))
 
-	_, err := shardController.GetShardByID(shardID)
-	s.NoError(err)
+	shardController.ownership.membershipUpdateCh <- &membership.ChangedEvent{}
+
+	s.Eventually(func() bool {
+		shardIDs := shardController.ShardIDs()
+		return len(shardIDs) == 1 && shardIDs[0] == shardID
+	}, 5*time.Second, 100*time.Millisecond)
 
 	s.resource.HistoryServiceResolver.EXPECT().
 		RemoveListener(shardControllerMembershipUpdateListenerName).

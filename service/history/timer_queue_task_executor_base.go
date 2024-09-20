@@ -26,13 +26,19 @@ package history
 
 import (
 	"context"
+	"errors"
+	"fmt"
+	"time"
+
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
-
 	enumsspb "go.temporal.io/server/api/enums/v1"
-	"go.temporal.io/server/common"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
@@ -40,6 +46,8 @@ import (
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/deletemanager"
+	"go.temporal.io/server/service/history/hsm"
+	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/workflow"
@@ -47,21 +55,19 @@ import (
 )
 
 var (
-	errUnknownTimerTask = serviceerror.NewInternal("unknown timer task")
-	errNoTimerFired     = serviceerror.NewNotFound("no expired timer to fire found")
+	errNoTimerFired = serviceerror.NewNotFound("no expired timer to fire found")
 )
 
 type (
 	timerQueueTaskExecutorBase struct {
+		stateMachineEnvironment
 		currentClusterName string
-		shardContext       shard.Context
 		registry           namespace.Registry
 		deleteManager      deletemanager.DeleteManager
-		cache              wcache.Cache
-		logger             log.Logger
 		matchingRawClient  resource.MatchingRawClient
-		metricHandler      metrics.Handler
 		config             *configs.Config
+		metricHandler      metrics.Handler
+		isActive           bool
 	}
 )
 
@@ -71,19 +77,24 @@ func newTimerQueueTaskExecutorBase(
 	deleteManager deletemanager.DeleteManager,
 	matchingRawClient resource.MatchingRawClient,
 	logger log.Logger,
-	metricHandler metrics.Handler,
+	metricsHandler metrics.Handler,
 	config *configs.Config,
+	isActive bool,
 ) *timerQueueTaskExecutorBase {
 	return &timerQueueTaskExecutorBase{
+		stateMachineEnvironment: stateMachineEnvironment{
+			shardContext:   shardContext,
+			cache:          workflowCache,
+			logger:         logger,
+			metricsHandler: metricsHandler,
+		},
 		currentClusterName: shardContext.GetClusterMetadata().GetCurrentClusterName(),
-		shardContext:       shardContext,
 		registry:           shardContext.GetNamespaceRegistry(),
-		cache:              workflowCache,
 		deleteManager:      deleteManager,
-		logger:             logger,
 		matchingRawClient:  matchingRawClient,
-		metricHandler:      metricHandler,
 		config:             config,
+		metricHandler:      metricsHandler,
+		isActive:           isActive,
 	}
 }
 
@@ -94,7 +105,7 @@ func (t *timerQueueTaskExecutorBase) executeDeleteHistoryEventTask(
 	ctx, cancel := context.WithTimeout(ctx, taskTimeout)
 	defer cancel()
 
-	workflowExecution := commonpb.WorkflowExecution{
+	workflowExecution := &commonpb.WorkflowExecution{
 		WorkflowId: task.GetWorkflowID(),
 		RunId:      task.GetRunID(),
 	}
@@ -104,14 +115,14 @@ func (t *timerQueueTaskExecutorBase) executeDeleteHistoryEventTask(
 		t.shardContext,
 		namespace.ID(task.GetNamespaceID()),
 		workflowExecution,
-		workflow.LockPriorityLow,
+		locks.PriorityLow,
 	)
 	if err != nil {
 		return err
 	}
 	defer func() { release(retError) }()
 
-	mutableState, err := loadMutableStateForTimerTask(ctx, t.shardContext, weContext, task, t.metricHandler, t.logger)
+	mutableState, err := loadMutableStateForTimerTask(ctx, t.shardContext, weContext, task, t.metricsHandler, t.logger)
 	switch err.(type) {
 	case nil:
 		if mutableState == nil {
@@ -132,11 +143,11 @@ func (t *timerQueueTaskExecutorBase) executeDeleteHistoryEventTask(
 		return nil
 	}
 
-	lastWriteVersion, err := mutableState.GetLastWriteVersion()
+	closeVersion, err := mutableState.GetCloseVersion()
 	if err != nil {
 		return err
 	}
-	if err := CheckTaskVersion(t.shardContext, t.logger, mutableState.GetNamespaceEntry(), lastWriteVersion, task.Version, task); err != nil {
+	if err := CheckTaskVersion(t.shardContext, t.logger, mutableState.GetNamespaceEntry(), closeVersion, task.Version, task); err != nil {
 		return err
 	}
 
@@ -150,53 +161,6 @@ func (t *timerQueueTaskExecutorBase) executeDeleteHistoryEventTask(
 	)
 }
 
-func getWorkflowExecutionContextForTask(
-	ctx context.Context,
-	shardContext shard.Context,
-	workflowCache wcache.Cache,
-	task tasks.Task,
-) (workflow.Context, wcache.ReleaseCacheFunc, error) {
-	namespaceID, execution := getTaskNamespaceIDAndWorkflowExecution(task)
-	return getWorkflowExecutionContext(
-		ctx,
-		shardContext,
-		workflowCache,
-		namespaceID,
-		execution,
-	)
-}
-
-func getWorkflowExecutionContext(
-	ctx context.Context,
-	shardContext shard.Context,
-	workflowCache wcache.Cache,
-	namespaceID namespace.ID,
-	execution commonpb.WorkflowExecution,
-) (workflow.Context, wcache.ReleaseCacheFunc, error) {
-	// workflowCache will automatically use short context timeout when
-	// locking workflow for all background calls, we don't need a separate context here
-	weContext, release, err := workflowCache.GetOrCreateWorkflowExecution(
-		ctx,
-		shardContext,
-		namespaceID,
-		execution,
-		workflow.LockPriorityLow,
-	)
-	if common.IsContextDeadlineExceededErr(err) {
-		err = consts.ErrResourceExhaustedBusyWorkflow
-	}
-	return weContext, release, err
-}
-
-func getTaskNamespaceIDAndWorkflowExecution(
-	task tasks.Task,
-) (namespace.ID, commonpb.WorkflowExecution) {
-	return namespace.ID(task.GetNamespaceID()), commonpb.WorkflowExecution{
-		WorkflowId: task.GetWorkflowID(),
-		RunId:      task.GetRunID(),
-	}
-}
-
 func (t *timerQueueTaskExecutorBase) deleteHistoryBranch(
 	ctx context.Context,
 	branchToken []byte,
@@ -208,4 +172,148 @@ func (t *timerQueueTaskExecutorBase) deleteHistoryBranch(
 		})
 	}
 	return nil
+}
+
+func (t *timerQueueTaskExecutorBase) isValidExpirationTime(
+	mutableState workflow.MutableState,
+	expirationTime *timestamppb.Timestamp,
+) bool {
+	if !mutableState.IsWorkflowExecutionRunning() {
+		return false
+	}
+
+	now := t.shardContext.GetTimeSource().Now()
+	taskShouldTriggerAt := expirationTime.AsTime()
+	expired := queues.IsTimeExpired(now, taskShouldTriggerAt)
+	return expired
+
+}
+
+func (t *timerQueueTaskExecutorBase) isValidWorkflowRunTimeoutTask(
+	mutableState workflow.MutableState,
+) bool {
+	executionInfo := mutableState.GetExecutionInfo()
+
+	// Check if workflow execution timeout is not expired
+	// This can happen if the workflow is reset but old timer task is still fired.
+	return t.isValidExpirationTime(mutableState, executionInfo.WorkflowRunExpirationTime)
+}
+
+func (t *timerQueueTaskExecutorBase) isValidWorkflowExecutionTimeoutTask(
+	mutableState workflow.MutableState,
+	task *tasks.WorkflowExecutionTimeoutTask,
+) bool {
+
+	executionInfo := mutableState.GetExecutionInfo()
+	if executionInfo.FirstExecutionRunId != task.FirstRunID {
+		// current run does not belong to workflow chain the task is generated for
+		return false
+	}
+
+	// Check if workflow execution timeout is not expired
+	// This can happen if the workflow is reset since reset re-calculates
+	// the execution timeout but shares the same firstRunID as the base run
+	return t.isValidExpirationTime(mutableState, executionInfo.WorkflowExecutionExpirationTime)
+
+	// NOTE: we don't need to do version check here because if we were to do it, we need to compare the task version
+	// and the start version in the first run. However, failover & conflict resolution will never change
+	// the first event of a workflowID (the history tree model we are using always share at least one node),
+	// meaning start version check will always pass.
+	// Also there's no way we can perform version check before first run may already be deleted due to retention
+}
+
+func (t *timerQueueTaskExecutorBase) executeSingleStateMachineTimer(
+	ctx context.Context,
+	workflowContext workflow.Context,
+	ms workflow.MutableState,
+	deadline time.Time,
+	timer *persistencespb.StateMachineTaskInfo,
+	execute func(node *hsm.Node, task hsm.Task) error,
+) error {
+	def, ok := t.shardContext.StateMachineRegistry().TaskSerializer(timer.Type)
+	if !ok {
+		return queues.NewUnprocessableTaskError(fmt.Sprintf("deserializer not registered for task type %v", timer.Type))
+	}
+	smt, err := def.Deserialize(timer.Data, hsm.TaskKindTimer{Deadline: deadline})
+	if err != nil {
+		return fmt.Errorf(
+			"%w: %w",
+			queues.NewUnprocessableTaskError(fmt.Sprintf("cannot deserialize task %v", timer.Type)),
+			err,
+		)
+	}
+	ref := hsm.Ref{
+		WorkflowKey:     ms.GetWorkflowKey(),
+		StateMachineRef: timer.Ref,
+	}
+	if err := t.validateStateMachineRef(ctx, workflowContext, ms, ref, false); err != nil {
+		return err
+	}
+	node, err := ms.HSM().Child(ref.StateMachinePath())
+	if err != nil {
+		return err
+	}
+
+	if err := execute(node, smt); err != nil {
+		return fmt.Errorf("failed to execute task: %w", err)
+	}
+	return nil
+}
+
+// executeStateMachineTimers gets the state machine timers, processed the expired timers,
+// and return a slice of unprocessed timers.
+func (t *timerQueueTaskExecutorBase) executeStateMachineTimers(
+	ctx context.Context,
+	workflowContext workflow.Context,
+	ms workflow.MutableState,
+	execute func(node *hsm.Node, task hsm.Task) error,
+) (int, error) {
+
+	// need to specifically check for zombie workflows here instead of workflow running
+	// or not since zombie workflows are considered as not running but state machine timers
+	// can target closed workflows.
+	if ms.GetExecutionState().State == enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE {
+		return 0, consts.ErrWorkflowZombie
+	}
+
+	timers := ms.GetExecutionInfo().StateMachineTimers
+	processedTimers := 0
+	// StateMachineTimers are sorted by Deadline, iterate through them as long as the deadline is expired.
+	for len(timers) > 0 {
+		group := timers[0]
+		if !queues.IsTimeExpired(t.Now(), group.Deadline.AsTime()) {
+			break
+		}
+
+		for _, timer := range group.Infos {
+			err := t.executeSingleStateMachineTimer(ctx, workflowContext, ms, group.Deadline.AsTime(), timer, execute)
+			if err != nil {
+				if !errors.As(err, new(*serviceerror.NotFound)) {
+					metrics.StateMachineTimerProcessingFailuresCounter.With(t.metricHandler).Record(
+						1,
+						metrics.OperationTag(queues.GetTimerStateMachineTaskTypeTagValue(timer.GetType(), t.isActive)),
+						metrics.ServiceErrorTypeTag(err),
+					)
+					// Return on first error as we don't want to duplicate the Executable's error handling logic.
+					// This implies that a single bad task in the mutable state timer sequence will cause all other
+					// tasks to be stuck. We'll accept this limitation for now.
+					return 0, err
+				}
+				metrics.StateMachineTimerSkipsCounter.With(t.metricHandler).Record(
+					1,
+					metrics.OperationTag(queues.GetTimerStateMachineTaskTypeTagValue(timer.GetType(), t.isActive)),
+				)
+				t.logger.Warn("Skipped state machine timer", tag.Error(err))
+			}
+		}
+		// Remove the processed timer group.
+		timers = timers[1:]
+		processedTimers++
+	}
+
+	if processedTimers > 0 {
+		// Update processed timers.
+		ms.GetExecutionInfo().StateMachineTimers = timers
+	}
+	return processedTimers, nil
 }

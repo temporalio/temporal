@@ -28,13 +28,12 @@ import (
 	"context"
 	"testing"
 
-	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-
 	persistencepb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/namespace"
+	"go.uber.org/mock/gomock"
 )
 
 const (
@@ -85,10 +84,14 @@ func (s *executorSuite) TestExecute_Active() {
 		Clusters:          []string{currentCluster},
 	}, 1)
 	s.registry.EXPECT().GetNamespaceByID(gomock.Any()).Return(ns, nil)
-	s.activeExecutor.EXPECT().Execute(gomock.Any(), gomock.Any()).Return(nil, true, nil).Times(1)
-	_, isActive, err := s.executor.Execute(context.Background(), executable)
-	s.NoError(err)
-	s.True(isActive)
+	s.activeExecutor.EXPECT().Execute(gomock.Any(), gomock.Any()).Return(ExecuteResponse{
+		ExecutionMetricTags: nil,
+		ExecutedAsActive:    true,
+		ExecutionErr:        nil,
+	}).Times(1)
+	resp := s.executor.Execute(context.Background(), executable)
+	s.NoError(resp.ExecutionErr)
+	s.True(resp.ExecutedAsActive)
 }
 
 func (s *executorSuite) TestExecute_Standby() {
@@ -100,8 +103,12 @@ func (s *executorSuite) TestExecute_Standby() {
 		Clusters:          []string{currentCluster, nonCurrentCluster},
 	}, 1)
 	s.registry.EXPECT().GetNamespaceByID(gomock.Any()).Return(ns, nil)
-	s.standbyExecutor.EXPECT().Execute(gomock.Any(), gomock.Any()).Return(nil, false, nil).Times(1)
-	_, isActive, err := s.executor.Execute(context.Background(), executable)
-	s.NoError(err)
-	s.False(isActive)
+	s.standbyExecutor.EXPECT().Execute(gomock.Any(), gomock.Any()).Return(ExecuteResponse{
+		ExecutionMetricTags: nil,
+		ExecutedAsActive:    false,
+		ExecutionErr:        nil,
+	}).Times(1)
+	resp := s.executor.Execute(context.Background(), executable)
+	s.NoError(resp.ExecutionErr)
+	s.False(resp.ExecutedAsActive)
 }

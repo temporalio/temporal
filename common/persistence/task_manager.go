@@ -30,7 +30,6 @@ import (
 
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
-
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/primitives/timestamp"
@@ -233,13 +232,6 @@ func (m *taskManagerImpl) GetTasks(
 		tasks[i] = task
 	}
 	return &GetTasksResponse{Tasks: tasks, NextPageToken: internalResp.NextPageToken}, nil
-}
-
-func (m *taskManagerImpl) CompleteTask(
-	ctx context.Context,
-	request *CompleteTaskRequest,
-) error {
-	return m.taskStore.CompleteTask(ctx, request)
 }
 
 func (m *taskManagerImpl) CompleteTasksLessThan(

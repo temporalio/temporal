@@ -28,24 +28,19 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	sdkworker "go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
-	"go.uber.org/fx"
-
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/sdk"
 	workercommon "go.temporal.io/server/service/worker/common"
+	"go.uber.org/fx"
 )
 
 const (
 	// BatchWFTypeName is the workflow type
 	BatchWFTypeName   = "temporal-sys-batch-workflow"
 	NamespaceDivision = "TemporalBatcher"
-	// DefaultRPS is the default RPS
-	DefaultRPS = 50
-	// DefaultConcurrency is the default concurrency
-	DefaultConcurrency = 5
 )
 
 type (
@@ -81,7 +76,7 @@ func NewResult(
 		Component: &workerComponent{
 			activityDeps:   params,
 			dc:             dc,
-			enabledFeature: dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.EnableBatcher, true),
+			enabledFeature: dynamicconfig.EnableBatcherNamespace.Get(dc),
 		},
 	}
 }
@@ -94,9 +89,9 @@ func (s *workerComponent) DedicatedWorkerOptions(ns *namespace.Namespace) *worke
 	}
 }
 
-func (s *workerComponent) Register(worker sdkworker.Worker, ns *namespace.Namespace, _ workercommon.RegistrationDetails) {
-	worker.RegisterWorkflowWithOptions(BatchWorkflow, workflow.RegisterOptions{Name: BatchWFTypeName})
-	worker.RegisterActivity(s.activities(ns.Name(), ns.ID()))
+func (s *workerComponent) Register(registry sdkworker.Registry, ns *namespace.Namespace, _ workercommon.RegistrationDetails) {
+	registry.RegisterWorkflowWithOptions(BatchWorkflow, workflow.RegisterOptions{Name: BatchWFTypeName})
+	registry.RegisterActivity(s.activities(ns.Name(), ns.ID()))
 }
 
 func (s *workerComponent) activities(name namespace.Name, id namespace.ID) *activities {
@@ -104,7 +99,7 @@ func (s *workerComponent) activities(name namespace.Name, id namespace.ID) *acti
 		activityDeps: s.activityDeps,
 		namespace:    name,
 		namespaceID:  id,
-		rps:          s.dc.GetIntPropertyFilteredByNamespace(dynamicconfig.BatcherRPS, DefaultRPS),
-		concurrency:  s.dc.GetIntPropertyFilteredByNamespace(dynamicconfig.BatcherConcurrency, DefaultConcurrency),
+		rps:          dynamicconfig.BatcherRPS.Get(s.dc),
+		concurrency:  dynamicconfig.BatcherConcurrency.Get(s.dc),
 	}
 }

@@ -33,7 +33,6 @@ import (
 
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
-
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/archiver/gcloud/connector"
@@ -111,15 +110,15 @@ func (h *historyArchiver) Archive(ctx context.Context, URI archiver.URI, request
 	featureCatalog := archiver.GetFeatureCatalog(opts...)
 	startTime := time.Now().UTC()
 	defer func() {
-		handler.Timer(metrics.ServiceLatency.GetMetricName()).Record(time.Since(startTime))
+		metrics.ServiceLatency.With(handler).Record(time.Since(startTime))
 		if err != nil {
 
 			if err.Error() != errUploadNonRetryable.Error() {
-				handler.Counter(metrics.HistoryArchiverArchiveTransientErrorCount.GetMetricName()).Record(1)
+				metrics.HistoryArchiverArchiveTransientErrorCount.With(handler).Record(1)
 				return
 			}
 
-			handler.Counter(metrics.HistoryArchiverArchiveNonRetryableErrorCount.GetMetricName()).Record(1)
+			metrics.HistoryArchiverArchiveNonRetryableErrorCount.With(handler).Record(1)
 			if featureCatalog.NonRetryableError != nil {
 				err = featureCatalog.NonRetryableError()
 			}
@@ -157,7 +156,7 @@ func (h *historyArchiver) Archive(ctx context.Context, URI archiver.URI, request
 				// this may happen even in the middle of iterating history as two archival signals
 				// can be processed concurrently.
 				logger.Info(archiver.ArchiveSkippedInfoMsg)
-				handler.Counter(metrics.HistoryArchiverDuplicateArchivalsCount.GetMetricName()).Record(1)
+				metrics.HistoryArchiverDuplicateArchivalsCount.With(handler).Record(1)
 				return nil
 			}
 
@@ -185,7 +184,7 @@ func (h *historyArchiver) Archive(ctx context.Context, URI archiver.URI, request
 		if exist, _ := h.gcloudStorage.Exist(ctx, URI, filename); !exist {
 			if err := h.gcloudStorage.Upload(ctx, URI, filename, encodedHistoryPart); err != nil {
 				logger.Error(archiver.ArchiveTransientErrorMsg, tag.ArchivalArchiveFailReason(errWriteFile), tag.Error(err))
-				handler.Counter(metrics.HistoryArchiverArchiveTransientErrorCount.GetMetricName()).Record(1)
+				metrics.HistoryArchiverArchiveTransientErrorCount.With(handler).Record(1)
 				return err
 			}
 
@@ -197,9 +196,9 @@ func (h *historyArchiver) Archive(ctx context.Context, URI archiver.URI, request
 		}
 	}
 
-	handler.Counter(metrics.HistoryArchiverTotalUploadSize.GetMetricName()).Record(totalUploadSize)
-	handler.Counter(metrics.HistoryArchiverHistorySize.GetMetricName()).Record(totalUploadSize)
-	handler.Counter(metrics.HistoryArchiverArchiveSuccessCount.GetMetricName()).Record(1)
+	metrics.HistoryArchiverTotalUploadSize.With(handler).Record(totalUploadSize)
+	metrics.HistoryArchiverHistorySize.With(handler).Record(totalUploadSize)
+	metrics.HistoryArchiverArchiveSuccessCount.With(handler).Record(1)
 	return
 }
 

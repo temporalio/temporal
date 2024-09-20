@@ -1,3 +1,5 @@
+// The MIT License
+//
 // Copyright (c) 2020 Temporal Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -35,6 +37,10 @@ message ParentExecutionInfo {
     int64 initiated_id = 4;
     temporal.server.api.clock.v1.VectorClock clock = 5;
     int64 initiated_version = 6;
+}
+
+message RootExecutionInfo {
+    temporal.api.common.v1.WorkflowExecution execution = 1;
 }
 
 message BaseExecutionInfo {

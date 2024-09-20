@@ -31,8 +31,8 @@ import (
 	"sync"
 
 	"go.temporal.io/api/serviceerror"
-
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 )
 
@@ -58,6 +58,7 @@ type (
 	BiDirectionStreamClient[Req any, Resp any] interface {
 		Send(Req) error
 		Recv() (Resp, error)
+		CloseSend() error
 	}
 	BiDirectionStream[Req any, Resp any] interface {
 		Send(Req) error
@@ -71,7 +72,6 @@ type (
 	}
 	BiDirectionStreamImpl[Req any, Resp any] struct {
 		ctx            context.Context
-		cancel         context.CancelFunc
 		clientProvider BiDirectionStreamClientProvider[Req, Resp]
 		metricsHandler metrics.Handler
 		logger         log.Logger
@@ -81,6 +81,11 @@ type (
 		channel         chan StreamResp[Resp]
 		streamingClient BiDirectionStreamClient[Req, Resp]
 	}
+
+	StreamError struct {
+		Message string
+		cause   error
+	}
 )
 
 func NewBiDirectionStream[Req any, Resp any](
@@ -88,10 +93,8 @@ func NewBiDirectionStream[Req any, Resp any](
 	metricsHandler metrics.Handler,
 	logger log.Logger,
 ) *BiDirectionStreamImpl[Req, Resp] {
-	ctx, cancel := context.WithCancel(context.Background())
 	return &BiDirectionStreamImpl[Req, Resp]{
-		ctx:            ctx,
-		cancel:         cancel,
+		ctx:            context.Background(),
 		clientProvider: clientProvider,
 		metricsHandler: metricsHandler,
 		logger:         logger,
@@ -109,11 +112,11 @@ func (s *BiDirectionStreamImpl[Req, Resp]) Send(
 	defer s.Unlock()
 
 	if err := s.lazyInitLocked(); err != nil {
-		return err
+		return NewStreamError("BiDirectionStream send initialize error", err)
 	}
 	if err := s.streamingClient.Send(request); err != nil {
 		s.closeLocked()
-		return err
+		return NewStreamError("BiDirectionStream send error", err)
 	}
 	return nil
 }
@@ -123,7 +126,7 @@ func (s *BiDirectionStreamImpl[Req, Resp]) Recv() (<-chan StreamResp[Resp], erro
 	defer s.Unlock()
 
 	if err := s.lazyInitLocked(); err != nil {
-		return nil, err
+		return nil, NewStreamError("BiDirectionStream recv initialize error", err)
 	}
 	return s.channel, nil
 
@@ -147,7 +150,12 @@ func (s *BiDirectionStreamImpl[Req, Resp]) closeLocked() {
 		return
 	}
 	s.status = streamStatusClosed
-	s.cancel()
+	if s.streamingClient != nil {
+		err := s.streamingClient.CloseSend() // if there is error, the stream is also closed
+		if err != nil {
+			s.logger.Error("BiDirectionStream close error", tag.Error(err))
+		}
+	}
 }
 
 func (s *BiDirectionStreamImpl[Req, Resp]) lazyInitLocked() error {
@@ -186,15 +194,26 @@ func (s *BiDirectionStreamImpl[Req, Resp]) recvLoop() {
 			return
 		default:
 			s.logger.Error(fmt.Sprintf(
-				"BiDirectionStreamImpl encountered unexpected error, closing: %T %s",
+				"BiDirectionStream encountered unexpected error, closing: %T %s",
 				err, err,
 			))
 			var errResp Resp
 			s.channel <- StreamResp[Resp]{
 				Resp: errResp,
-				Err:  err,
+				Err:  NewStreamError("BiDirectionStream recv error", err),
 			}
 			return
 		}
+	}
+}
+
+func (e *StreamError) Error() string {
+	return fmt.Sprintf("StreamError: %s | GRPC Error: %v", e.Message, e.cause)
+}
+
+func NewStreamError(message string, err error) *StreamError {
+	return &StreamError{
+		Message: message,
+		cause:   err,
 	}
 }

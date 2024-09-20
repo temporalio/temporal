@@ -30,7 +30,6 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
-
 	historyspb "go.temporal.io/server/api/history/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/convert"
@@ -52,7 +51,7 @@ type (
 			versionHistoryItems []*historyspb.VersionHistoryItem,
 			events [][]*historypb.HistoryEvent,
 			token []byte,
-		) ([]byte, error)
+		) ([]byte, bool, error)
 	}
 
 	HistoryImporterImpl struct {
@@ -60,7 +59,7 @@ type (
 		namespaceCache namespace.Registry
 		workflowCache  wcache.Cache
 		taskRefresher  workflow.TaskRefresher
-		transactionMgr transactionMgr
+		transactionMgr TransactionManager
 		logger         log.Logger
 
 		mutableStateInitializer *MutableStateInitializerImpl
@@ -73,17 +72,13 @@ func NewHistoryImporter(
 	workflowCache wcache.Cache,
 	logger log.Logger,
 ) *HistoryImporterImpl {
+	logger = log.With(logger, tag.ComponentHistoryImporter)
 	backfiller := &HistoryImporterImpl{
 		shardContext:   shardContext,
 		namespaceCache: shardContext.GetNamespaceRegistry(),
 		workflowCache:  workflowCache,
-		taskRefresher: workflow.NewTaskRefresher(
-			shardContext,
-			shardContext.GetConfig(),
-			shardContext.GetNamespaceRegistry(),
-			logger,
-		),
-		transactionMgr: newTransactionMgr(shardContext, workflowCache, nil, logger, true),
+		taskRefresher:  workflow.NewTaskRefresher(shardContext),
+		transactionMgr: NewTransactionManager(shardContext, workflowCache, nil, logger, true),
 		logger:         logger,
 
 		mutableStateInitializer: NewMutableStateInitializer(
@@ -135,22 +130,21 @@ func (r *HistoryImporterImpl) ImportWorkflow(
 	versionHistoryItems []*historyspb.VersionHistoryItem,
 	eventsSlice [][]*historypb.HistoryEvent,
 	token []byte,
-) (_ []byte, retError error) {
+) (_ []byte, _ bool, retError error) {
 	if len(eventsSlice) == 0 && len(token) == 0 {
-		return nil, serviceerror.NewInvalidArgument("ImportWorkflowExecution cannot import empty history events")
+		return nil, false, serviceerror.NewInvalidArgument("ImportWorkflowExecution cannot import empty history events")
 	}
 
 	ndcWorkflow, mutableStateSpec, err := r.mutableStateInitializer.Initialize(ctx, workflowKey, token)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	defer func() {
-		if rec := recover(); rec != nil {
-			ndcWorkflow.GetReleaseFn()(errPanic)
-			panic(rec)
-		} else {
-			ndcWorkflow.GetReleaseFn()(retError)
-		}
+		// it is ok to clear everytime this function is invoked
+		// mutable state will be at most initialized once from shard mutable state cache
+		// mutable state will be usually initialized from input token
+		ndcWorkflow.GetContext().Clear()
+		ndcWorkflow.GetReleaseFn()(retError)
 	}()
 
 	if len(eventsSlice) != 0 {
@@ -169,9 +163,9 @@ func (r *HistoryImporterImpl) ImportWorkflow(
 		ndcWorkflow,
 		mutableStateSpec,
 	); err != nil {
-		return nil, err
+		return nil, false, err
 	}
-	return nil, nil
+	return nil, false, nil
 }
 
 func (r *HistoryImporterImpl) applyEvents(
@@ -181,7 +175,7 @@ func (r *HistoryImporterImpl) applyEvents(
 	versionHistoryItems []*historyspb.VersionHistoryItem,
 	eventsSlice [][]*historypb.HistoryEvent,
 	createNewBranch bool,
-) (_ []byte, retError error) {
+) (_ []byte, _ bool, retError error) {
 
 	wfContext := ndcWorkflow.GetContext()
 	mutableState := ndcWorkflow.GetMutableState()
@@ -193,16 +187,18 @@ func (r *HistoryImporterImpl) applyEvents(
 		versionHistoryItems,
 		eventsSlice,
 		nil,
+		"",
+		nil,
 	)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 
 	if mutableStateSpec.IsBrandNew {
 		if task.getFirstEvent().GetEventType() != enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED {
 			err := serviceerror.NewInternal("mutable state is brand new, but events are not imported from beginning")
 			task.getLogger().Error("HistoryImporter::applyEvents encountered mutable state vs events mismatch", tag.Error(err))
-			return nil, err
+			return nil, false, err
 		}
 		return r.applyStartEventsAndSerialize(
 			ctx,
@@ -228,7 +224,7 @@ func (r *HistoryImporterImpl) applyStartEventsAndSerialize(
 	mutableState workflow.MutableState,
 	mutableStateSpec MutableStateInitializationSpec,
 	task replicationTask,
-) ([]byte, error) {
+) ([]byte, bool, error) {
 	mutableState, newMutableState, err := r.mutableStateMapper.ApplyEvents(
 		ctx,
 		wfContext,
@@ -236,7 +232,7 @@ func (r *HistoryImporterImpl) applyStartEventsAndSerialize(
 		task,
 	)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	if newMutableState != nil {
 		task.getLogger().Error(
@@ -244,7 +240,8 @@ func (r *HistoryImporterImpl) applyStartEventsAndSerialize(
 			tag.Error(err),
 		)
 	}
-	return r.persistHistoryAndSerializeMutableState(ctx, mutableState, mutableStateSpec)
+	token, err := r.persistHistoryAndSerializeMutableState(ctx, mutableState, mutableStateSpec)
+	return token, err == nil, err
 }
 
 func (r *HistoryImporterImpl) applyNonStartEventsAndSerialize(
@@ -254,19 +251,21 @@ func (r *HistoryImporterImpl) applyNonStartEventsAndSerialize(
 	mutableStateSpec MutableStateInitializationSpec,
 	task replicationTask,
 	createNewBranch bool,
-) ([]byte, error) {
+) ([]byte, bool, error) {
 	prepareBranchFn := r.mutableStateMapper.GetOrCreateHistoryBranch
 	if createNewBranch {
 		prepareBranchFn = r.mutableStateMapper.CreateHistoryBranch
 	}
+
 	mutableState, prepareHistoryBranchOut, err := prepareBranchFn(ctx, wfContext, mutableState, task)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	} else if !prepareHistoryBranchOut.DoContinue {
-		return r.persistHistoryAndSerializeMutableState(ctx, mutableState, mutableStateSpec)
+		token, err := r.persistHistoryAndSerializeMutableState(ctx, mutableState, mutableStateSpec)
+		return token, false, err
 	} else if createNewBranch && prepareHistoryBranchOut.BranchIndex == 0 {
 		// sanity check
-		return nil, serviceerror.NewInternal("HistoryImporter unable to correctly create new branch")
+		return nil, false, serviceerror.NewInternal("HistoryImporter unable to correctly create new branch")
 	}
 
 	mutableState, _, err = r.mutableStateMapper.GetOrRebuildMutableState(
@@ -276,7 +275,7 @@ func (r *HistoryImporterImpl) applyNonStartEventsAndSerialize(
 		GetOrRebuildMutableStateIn{replicationTask: task, BranchIndex: prepareHistoryBranchOut.BranchIndex},
 	)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	mutableState, newMutableState, err := r.mutableStateMapper.ApplyEvents(
 		ctx,
@@ -285,15 +284,17 @@ func (r *HistoryImporterImpl) applyNonStartEventsAndSerialize(
 		task,
 	)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
+
 	if newMutableState != nil {
 		task.getLogger().Error(
 			"HistoryImporter::applyNonStartEventsAndSerialize encountered create workflow with continue as new case",
 			tag.Error(err),
 		)
 	}
-	return r.persistHistoryAndSerializeMutableState(ctx, mutableState, mutableStateSpec)
+	token, err := r.persistHistoryAndSerializeMutableState(ctx, mutableState, mutableStateSpec)
+	return token, err == nil, err
 }
 
 func (r *HistoryImporterImpl) persistHistoryAndSerializeMutableState(
@@ -346,7 +347,7 @@ func (r *HistoryImporterImpl) commit(
 
 	if !mutableStateSpec.ExistsInDB {
 		// refresh tasks to be generated
-		if err := r.taskRefresher.RefreshTasks(
+		if err := r.taskRefresher.Refresh(
 			ctx,
 			memNDCWorkflow.GetMutableState(),
 		); err != nil {
@@ -355,7 +356,7 @@ func (r *HistoryImporterImpl) commit(
 		memMutableState := memNDCWorkflow.GetMutableState()
 		nextEventID, _ := memMutableState.GetUpdateCondition()
 		memMutableState.SetUpdateCondition(nextEventID, mutableStateSpec.DBRecordVersion)
-		if err := r.transactionMgr.createWorkflow(
+		if err := r.transactionMgr.CreateWorkflow(
 			ctx,
 			memNDCWorkflow,
 		); err != nil {
@@ -366,7 +367,7 @@ func (r *HistoryImporterImpl) commit(
 	}
 
 	workflowKey := memNDCWorkflow.GetContext().GetWorkflowKey()
-	dbNDCWorkflow, err := r.transactionMgr.loadWorkflow(
+	dbNDCWorkflow, err := r.transactionMgr.LoadWorkflow(
 		ctx,
 		namespace.ID(workflowKey.NamespaceID),
 		workflowKey.WorkflowID,
@@ -412,7 +413,7 @@ func (r *HistoryImporterImpl) commit(
 
 	if cmpResult < 0 {
 		// imported events does not belong to current branch, update DB mutable state with new version history
-		updated, _, err := versionhistory.AddVersionHistory(
+		updated, _, err := versionhistory.AddAndSwitchVersionHistory(
 			dbNDCWorkflow.GetMutableState().GetExecutionInfo().GetVersionHistories(),
 			memCurrentVersionHistory,
 		)
@@ -437,7 +438,7 @@ func (r *HistoryImporterImpl) commit(
 	dbNDCWorkflow.GetContext().Clear()
 	// imported events is the new current branch, update write to DB
 	// refresh tasks to be generated
-	if err := r.taskRefresher.RefreshTasks(
+	if err := r.taskRefresher.Refresh(
 		ctx,
 		memNDCWorkflow.GetMutableState(),
 	); err != nil {
@@ -446,7 +447,7 @@ func (r *HistoryImporterImpl) commit(
 	memMutableState := memNDCWorkflow.GetMutableState()
 	nextEventID, _ := memMutableState.GetUpdateCondition()
 	memMutableState.SetUpdateCondition(nextEventID, mutableStateSpec.DBRecordVersion)
-	if err := r.transactionMgr.updateWorkflow(
+	if err := r.transactionMgr.UpdateWorkflow(
 		ctx,
 		true,
 		memNDCWorkflow,

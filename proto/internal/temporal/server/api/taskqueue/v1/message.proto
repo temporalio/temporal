@@ -1,3 +1,5 @@
+// The MIT License
+//
 // Copyright (c) 2020 Temporal Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -26,19 +28,79 @@ option go_package = "go.temporal.io/server/api/taskqueue/v1;taskqueue";
 
 import "google/protobuf/empty.proto";
 
+import "temporal/api/taskqueue/v1/message.proto";
+import "temporal/api/enums/v1/task_queue.proto";
+import "temporal/server/api/enums/v1/task.proto";
+
 // TaskVersionDirective controls how matching should direct a task.
 message TaskVersionDirective {
-    // Default (if value is not present) is "unversioned":
+    // Default (if build_id is not present) is "unversioned":
     // Use the unversioned task queue, even if the task queue has versioning data.
-    oneof value {
-        // If use_default is present, the task should be assigned the default
-        // version for the task queue. This will typically be set for the first
-        // workflow task in a workflow.
-        google.protobuf.Empty use_default = 1;
+    // Absent value means the task is the non-starting task of an unversioned execution so it should remain unversioned.
+    oneof build_id {
+        // If use_assignment_rules is present, matching should use the assignment rules
+        // to determine the build ID.
+        // WV1: the task should be assigned the default version for the task queue. [cleanup-old-wv]
+        google.protobuf.Empty use_assignment_rules = 1;
 
-        // If build_id is present, use the default version in the compatible set
-        // containing this build id.
-        string build_id = 2;
+        // This means the task is already assigned to `build_id`
+        // WV1: If assigned_build_id is present, use the default version in the compatible set
+        // containing this build ID. [cleanup-old-wv]
+        string assigned_build_id = 2;
     }
 }
 
+message InternalTaskQueueStatus {
+    int64 read_level = 1;
+    int64 ack_level = 2;
+    temporal.api.taskqueue.v1.TaskIdBlock task_id_block = 3;
+    int64 read_buffer_length = 4;
+}
+
+message TaskQueueVersionInfoInternal {
+    PhysicalTaskQueueInfo physical_task_queue_info = 2;
+}
+
+message PhysicalTaskQueueInfo {
+    // Unversioned workers (with `useVersioning=false`) are reported in unversioned result even if they set a Build ID.
+    repeated temporal.api.taskqueue.v1.PollerInfo pollers = 1;
+    temporal.api.taskqueue.v1.TaskQueueStats task_queue_stats = 2;
+    InternalTaskQueueStatus internal_task_queue_status = 3;
+}
+
+// Represents a normal or sticky partition of a task queue.
+message TaskQueuePartition {
+    // This is the user-facing name for this task queue
+    string task_queue = 1;
+    temporal.api.enums.v1.TaskQueueType task_queue_type = 2;
+    // Absent means normal root partition (normal_partition_id=0)
+    oneof partition_id {
+        int32 normal_partition_id = 3;
+        string sticky_name = 4;
+    }
+}
+
+// Information about redirect intention sent by Matching to History in Record*TaskStarted calls
+message BuildIdRedirectInfo {
+    // build ID asked by History in the directive or the one calculated based on the assignment rules.
+    // this is the source of the redirect rule chain applied. (the target of the redirect rule chain is
+    // the poller's build ID reported in WorkerVersionCapabilities)
+    string assigned_build_id = 1;
+}
+
+// Information about task forwarding from one partition to its parent. Versioning decisions for activity/workflow
+// tasks are made at the source partition and sent to the parent partition in this message so that parent partition
+// does not have to make versioning decision again. For Query/Nexus tasks, this works differently as the child's
+// versioning decision is ignored and the parent partition makes a fresh decision.
+message TaskForwardInfo {
+    // RPC name of the partition forwarded the task.
+    // In case of multiple hops, this is the source partition of the last hop.
+    string source_partition = 1;
+    temporal.server.api.enums.v1.TaskSource task_source = 2;
+    // Redirect info is not present for Query and Nexus tasks.
+    BuildIdRedirectInfo redirect_info = 3;
+    // Build ID that should be used to dispatch the task to. Ignored in Query and Nexus tasks.
+    string dispatch_build_id = 4;
+    // Only used for old versioning. [cleanup-old-wv]
+    string dispatch_version_set = 5;
+}

@@ -26,25 +26,27 @@ package ringpop
 
 import (
 	"errors"
+	"math"
 	"net"
+	"slices"
 	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
 
-	"github.com/temporalio/ringpop-go"
-	"github.com/temporalio/tchannel-go"
-
 	"github.com/dgryski/go-farm"
+	"github.com/temporalio/ringpop-go"
 	"github.com/temporalio/ringpop-go/events"
 	"github.com/temporalio/ringpop-go/hashring"
+	rpmembership "github.com/temporalio/ringpop-go/membership"
 	"github.com/temporalio/ringpop-go/swim"
-
+	"github.com/temporalio/tchannel-go"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/primitives"
+	"go.temporal.io/server/common/util"
 )
 
 const (
@@ -52,56 +54,86 @@ const (
 	// ringpop instance. The data for this key is the service name
 	roleKey = "serviceName"
 
-	// rolePort label is set by every single service as soon as it bootstraps its
+	// portKey label is set by every single service as soon as it bootstraps its
 	// ringpop instance. The data for this key represents the TCP port through which
 	// the service can be accessed.
-	rolePort = "servicePort"
+	portKey = "servicePort"
+
+	// draining label is set by frontend when it starts shutting down (the same period where it
+	// would return "not serving" to grpc health checks). Data is `true` or `false` (missing
+	// means false).
+	drainingKey = "draining"
+
+	// These labels control the visibility time of hosts in membership rings.
+	// Value is unix seconds in decimal.
+	startAtKey = "startAt"
+	stopAtKey  = "stopAt"
 
 	minRefreshInternal     = time.Second * 4
 	defaultRefreshInterval = time.Second * 10
 	replicaPoints          = 100
+
+	// refreshModeAlways means always do a refresh right now.
+	refreshModeAlways refreshMode = iota
+	// refreshModeLazy means only do a refresh if it's been minRefreshInternal since the last one.
+	refreshModeLazy
 )
 
-type serviceResolver struct {
-	status      int32
-	service     primitives.ServiceName
-	port        int
-	rp          *service
-	refreshChan chan struct{}
-	shutdownCh  chan struct{}
-	shutdownWG  sync.WaitGroup
-	logger      log.Logger
+type (
+	serviceResolver struct {
+		service     primitives.ServiceName
+		port        int
+		rp          *ringpop.Ringpop
+		refreshChan chan struct{}
+		shutdownCh  chan struct{}
+		shutdownWG  sync.WaitGroup
+		logger      log.Logger
 
-	ringValue atomic.Value // this stores the current hashring
+		ringAndHosts atomic.Value // holds a ringAndHosts
 
-	refreshLock     sync.Mutex
-	lastRefreshTime time.Time
-	membersMap      map[string]struct{} // for de-duping change notifications
+		refreshLock         sync.Mutex
+		lastRefreshTime     time.Time
+		scheduledRefreshMap map[int64]*time.Timer
 
-	listenerLock sync.RWMutex
-	listeners    map[string]chan<- *membership.ChangedEvent
-}
+		listenerLock sync.RWMutex
+		listeners    map[string]chan<- *membership.ChangedEvent
+	}
+
+	ringAndHosts struct {
+		// We need to store a separate map from address to hostInfo because HashRing doesn't
+		// return the rpmembership.Member that was passed to it, it only returns the address.
+		ring  *hashring.HashRing
+		hosts map[string]*hostInfo
+	}
+
+	refreshMode int
+)
 
 var _ membership.ServiceResolver = (*serviceResolver)(nil)
+
+// errMissingLabel is not a real error, just a sentinel value
+var errMissingLabel = errors.New("missing label")
 
 func newServiceResolver(
 	service primitives.ServiceName,
 	port int,
-	rp *service,
+	rp *ringpop.Ringpop,
 	logger log.Logger,
 ) *serviceResolver {
 	resolver := &serviceResolver{
-		status:      common.DaemonStatusInitialized,
-		service:     service,
-		port:        port,
-		rp:          rp,
-		refreshChan: make(chan struct{}),
-		shutdownCh:  make(chan struct{}),
-		logger:      log.With(logger, tag.ComponentServiceResolver, tag.Service(service)),
-		membersMap:  make(map[string]struct{}),
-		listeners:   make(map[string]chan<- *membership.ChangedEvent),
+		service:             service,
+		port:                port,
+		rp:                  rp,
+		refreshChan:         make(chan struct{}),
+		shutdownCh:          make(chan struct{}),
+		logger:              log.With(logger, tag.ComponentServiceResolver, tag.Service(service)),
+		scheduledRefreshMap: make(map[int64]*time.Timer),
+		listeners:           make(map[string]chan<- *membership.ChangedEvent),
 	}
-	resolver.ringValue.Store(newHashRing())
+	resolver.ringAndHosts.Store(ringAndHosts{
+		ring:  newHashRing(),
+		hosts: make(map[string]*hostInfo),
+	})
 	return resolver
 }
 
@@ -111,16 +143,8 @@ func newHashRing() *hashring.HashRing {
 
 // Start starts the oracle
 func (r *serviceResolver) Start() {
-	if !atomic.CompareAndSwapInt32(
-		&r.status,
-		common.DaemonStatusInitialized,
-		common.DaemonStatusStarted,
-	) {
-		return
-	}
-
 	r.rp.AddListener(r)
-	if err := r.refresh(); err != nil {
+	if err := r.refresh(refreshModeAlways); err != nil {
 		r.logger.Fatal("unable to start ring pop service resolver", tag.Error(err))
 	}
 
@@ -130,18 +154,13 @@ func (r *serviceResolver) Start() {
 
 // Stop stops the resolver
 func (r *serviceResolver) Stop() {
-	if !atomic.CompareAndSwapInt32(
-		&r.status,
-		common.DaemonStatusStarted,
-		common.DaemonStatusStopped,
-	) {
-		return
-	}
-
 	r.listenerLock.Lock()
 	defer r.listenerLock.Unlock()
 	r.rp.RemoveListener(r)
-	r.ringValue.Store(newHashRing())
+	r.ringAndHosts.Store(ringAndHosts{
+		ring:  newHashRing(),
+		hosts: nil,
+	})
 	r.listeners = make(map[string]chan<- *membership.ChangedEvent)
 	close(r.shutdownCh)
 
@@ -159,13 +178,26 @@ func (r *serviceResolver) RequestRefresh() {
 
 // Lookup finds the host in the ring responsible for serving the given key
 func (r *serviceResolver) Lookup(key string) (membership.HostInfo, error) {
-	addr, found := r.ring().Lookup(key)
+	ring, hosts := r.ring()
+	addr, found := ring.Lookup(key)
 	if !found {
 		r.RequestRefresh()
 		return nil, membership.ErrInsufficientHosts
 	}
+	return hosts[addr], nil
+}
 
-	return newHostInfo(addr, r.getLabelsMap()), nil
+func (r *serviceResolver) LookupN(key string, n int) []membership.HostInfo {
+	if n <= 0 {
+		return nil
+	}
+	ring, hosts := r.ring()
+	addrs := ring.LookupN(key, n)
+	if len(addrs) == 0 {
+		r.RequestRefresh()
+		return nil
+	}
+	return util.MapSlice(addrs, func(addr string) membership.HostInfo { return hosts[addr] })
 }
 
 func (r *serviceResolver) AddListener(
@@ -196,15 +228,38 @@ func (r *serviceResolver) RemoveListener(
 }
 
 func (r *serviceResolver) MemberCount() int {
-	return r.ring().ServerCount()
+	_, hosts := r.ring()
+	return len(hosts)
+}
+
+func (r *serviceResolver) AvailableMemberCount() int {
+	_, hosts := r.ring()
+	n := 0
+	for _, host := range hosts {
+		if !isDraining(host) {
+			n++
+		}
+	}
+	return n
 }
 
 func (r *serviceResolver) Members() []membership.HostInfo {
-	var servers []membership.HostInfo
-	for _, s := range r.ring().Servers() {
-		servers = append(servers, newHostInfo(s, r.getLabelsMap()))
+	_, hosts := r.ring()
+	servers := make([]membership.HostInfo, 0, len(hosts))
+	for _, host := range hosts {
+		servers = append(servers, host)
 	}
+	return servers
+}
 
+func (r *serviceResolver) AvailableMembers() []membership.HostInfo {
+	_, hosts := r.ring()
+	var servers []membership.HostInfo
+	for _, host := range hosts {
+		if !isDraining(host) {
+			servers = append(servers, host)
+		}
+	}
 	return servers
 }
 
@@ -212,19 +267,21 @@ func (r *serviceResolver) Members() []membership.HostInfo {
 func (r *serviceResolver) HandleEvent(
 	event events.Event,
 ) {
-	// We only care about RingChangedEvent
-	if _, ok := event.(events.RingChangedEvent); ok {
+	// We only about membership.ChangeEvent. Normally ringpop converts membership.ChangeEvent
+	// into events.RingChangedEvent when its internal hash ring changes, but since we construct
+	// our own hash rings with filtering, we have to handle the lower-level event ourselves.
+	if _, ok := event.(rpmembership.ChangeEvent); ok {
 		r.logger.Debug("Received a ring changed event")
 		// Note that we receive events asynchronously, possibly out of order.
 		// We cannot rely on the content of the event, rather we load everything
 		// from ringpop when we get a notification that something changed.
-		if err := r.refresh(); err != nil {
+		if err := r.refresh(refreshModeAlways); err != nil {
 			r.logger.Error("error refreshing ring when receiving a ring changed event", tag.Error(err))
 		}
 	}
 }
 
-func (r *serviceResolver) refresh() error {
+func (r *serviceResolver) refresh(mode refreshMode) error {
 	var event *membership.ChangedEvent
 	var err error
 	defer func() {
@@ -232,73 +289,120 @@ func (r *serviceResolver) refresh() error {
 			r.emitEvent(event)
 		}
 	}()
-	r.refreshLock.Lock()
-	defer r.refreshLock.Unlock()
-	event, err = r.refreshNoLock()
-	return err
-}
 
-func (r *serviceResolver) refreshWithBackoff() error {
-	var event *membership.ChangedEvent
-	var err error
-	defer func() {
-		if event != nil {
-			r.emitEvent(event)
-		}
-	}()
 	r.refreshLock.Lock()
 	defer r.refreshLock.Unlock()
-	if r.lastRefreshTime.After(time.Now().UTC().Add(-minRefreshInternal)) {
-		// refresh too frequently
-		return nil
+
+	if mode == refreshModeLazy && r.lastRefreshTime.After(time.Now().UTC().Add(-minRefreshInternal)) {
+		return nil // refreshed too recently
 	}
-	event, err = r.refreshNoLock()
+
+	event, err = r.refreshLocked()
 	return err
 }
 
-func (r *serviceResolver) refreshNoLock() (*membership.ChangedEvent, error) {
-	addrs, err := r.getReachableMembers()
+func (r *serviceResolver) refreshLocked() (*membership.ChangedEvent, error) {
+	hosts, nextEvent, err := r.getReachableMembers()
 	if err != nil {
 		return nil, err
 	}
 
-	newMembersMap, changedEvent := r.compareMembers(addrs)
+	// if we found an add/remove event, schedule another refresh right at that time
+	r.scheduleRefresh(nextEvent)
+
+	newMembersMap, changedEvent := r.compareMembers(hosts)
 	if changedEvent == nil {
 		return nil, nil
 	}
 
 	ring := newHashRing()
-	for _, addr := range addrs {
-		host := newHostInfo(addr, r.getLabelsMap())
-		ring.AddMembers(host)
-	}
+	ring.AddMembers(util.MapSlice(hosts, func(h *hostInfo) rpmembership.Member { return h })...)
 
-	r.membersMap = newMembersMap
 	r.lastRefreshTime = time.Now().UTC()
-	r.ringValue.Store(ring)
+	r.ringAndHosts.Store(ringAndHosts{
+		ring:  ring,
+		hosts: newMembersMap,
+	})
+
+	addrs := util.MapSlice(hosts, func(h *hostInfo) string { return h.summary() })
+	slices.Sort(addrs)
 	r.logger.Info("Current reachable members", tag.Addresses(addrs))
 
 	return changedEvent, nil
 }
 
-func (r *serviceResolver) getReachableMembers() ([]string, error) {
+func (r *serviceResolver) scheduleRefresh(nextEvent int64) {
+	if nextEvent == 0 {
+		return
+	}
+	if _, ok := r.scheduledRefreshMap[nextEvent]; ok {
+		return // already have a timer scheduled for this time
+	}
+	nextEventTime := time.Unix(nextEvent, 0)
+	r.scheduledRefreshMap[nextEvent] = time.AfterFunc(time.Until(nextEventTime), func() {
+		// force refresh asap
+		if err := r.refresh(refreshModeAlways); err != nil {
+			r.logger.Error("error refreshing ring on scheduled event", tag.Error(err))
+		}
+		// clean up map
+		r.refreshLock.Lock()
+		defer r.refreshLock.Unlock()
+		delete(r.scheduledRefreshMap, nextEvent)
+	})
+	r.logger.Debug("Membership will refresh at scheduled event", tag.Timestamp(nextEventTime))
+}
+
+func (r *serviceResolver) getReachableMembers() ([]*hostInfo, int64, error) {
 	members, err := r.rp.GetReachableMemberObjects(swim.MemberWithLabelAndValue(roleKey, string(r.service)))
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 
-	var hostPorts []string
-	for _, member := range members {
+	// Filter members by startAt/stopAt times and extract next scheduled event time. We only
+	// need to keep track of one event since we'll refresh at that time and find the next one.
+	// Note that nextEvent is mutated by the filter functions below.
+	nowUnix := time.Now().Unix()
+	nextEvent := int64(math.MaxInt64)
+
+	// Filter by startAt
+	members = slices.DeleteFunc(members, func(member swim.Member) bool {
+		startAt, err := parseIntLabel(member, startAtKey)
+		if err != nil {
+			return false // ignore label if missing or can't parse
+		} else if startAt <= nowUnix {
+			return false // start time is in the past
+		}
+		// start time is in the future: schedule refresh at that time
+		nextEvent = min(nextEvent, startAt)
+		return true
+	})
+
+	// Filter by stopAt
+	members = slices.DeleteFunc(members, func(member swim.Member) bool {
+		stopAt, err := parseIntLabel(member, stopAtKey)
+		if err != nil {
+			return false // ignore label if missing or can't parse
+		} else if stopAt > nowUnix {
+			// stop time is in the future: schedule refresh at that time
+			nextEvent = min(nextEvent, stopAt)
+			return false
+		}
+		return true // stop time is in the past
+	})
+
+	// Turn swim.Members into hostInfo
+	hosts := make([]*hostInfo, len(members))
+	for i, member := range members {
 		servicePort := r.port
 
 		// Each temporal service in the ring should advertise which port it has its gRPC listener
 		// on via a service label. If we cannot find the label, we will assume that the
 		// temporal service is listening on the same port that this node is listening on.
-		servicePortLabel, ok := member.Label(rolePort)
+		servicePortLabel, ok := member.Label(portKey)
 		if ok {
 			servicePort, err = strconv.Atoi(servicePortLabel)
 			if err != nil {
-				return nil, err
+				return nil, 0, err
 			}
 		} else {
 			r.logger.Debug("unable to find roleport label for ringpop member. using local service's port", tag.Service(r.service))
@@ -306,13 +410,17 @@ func (r *serviceResolver) getReachableMembers() ([]string, error) {
 
 		hostPort, err := replaceServicePort(member.Address, servicePort)
 		if err != nil {
-			return nil, err
+			return nil, 0, err
 		}
 
-		hostPorts = append(hostPorts, hostPort)
+		// We can share member.Labels without copying since we never modify it.
+		hosts[i] = newHostInfo(hostPort, member.Labels)
 	}
 
-	return hostPorts, nil
+	if nextEvent == math.MaxInt64 {
+		nextEvent = 0
+	}
+	return hosts, nextEvent, nil
 }
 
 func (r *serviceResolver) emitEvent(event *membership.ChangedEvent) {
@@ -340,41 +448,40 @@ func (r *serviceResolver) refreshRingWorker() {
 		case <-r.shutdownCh:
 			return
 		case <-r.refreshChan:
-			if err := r.refreshWithBackoff(); err != nil {
+			if err := r.refresh(refreshModeLazy); err != nil {
 				r.logger.Error("error refreshing ring by request", tag.Error(err))
 			}
 		case <-refreshTicker.C:
-			if err := r.refreshWithBackoff(); err != nil {
+			if err := r.refresh(refreshModeLazy); err != nil {
 				r.logger.Error("error periodically refreshing ring", tag.Error(err))
 			}
 		}
 	}
 }
 
-func (r *serviceResolver) ring() *hashring.HashRing {
-	return r.ringValue.Load().(*hashring.HashRing)
+func (r *serviceResolver) ring() (*hashring.HashRing, map[string]*hostInfo) {
+	ring := r.ringAndHosts.Load().(ringAndHosts)
+	return ring.ring, ring.hosts
 }
 
-func (r *serviceResolver) getLabelsMap() map[string]string {
-	labels := make(map[string]string)
-	labels[roleKey] = string(r.service)
-	return labels
-}
-
-func (r *serviceResolver) compareMembers(addrs []string) (map[string]struct{}, *membership.ChangedEvent) {
+func (r *serviceResolver) compareMembers(hosts []*hostInfo) (map[string]*hostInfo, *membership.ChangedEvent) {
 	event := &membership.ChangedEvent{}
 	changed := false
-	newMembersMap := make(map[string]struct{}, len(addrs))
-	for _, addr := range addrs {
-		newMembersMap[addr] = struct{}{}
-		if _, ok := r.membersMap[addr]; !ok {
-			event.HostsAdded = append(event.HostsAdded, newHostInfo(addr, r.getLabelsMap()))
+	_, prevHosts := r.ring() // note that this is always called with refreshLock so we can't miss an update here
+	newMembersMap := make(map[string]*hostInfo, len(hosts))
+	for _, host := range hosts {
+		newMembersMap[host.GetAddress()] = host
+		if prev, ok := prevHosts[host.GetAddress()]; !ok {
+			event.HostsAdded = append(event.HostsAdded, host)
+			changed = true
+		} else if prev.labelsChecksum != host.labelsChecksum {
+			event.HostsChanged = append(event.HostsChanged, host)
 			changed = true
 		}
 	}
-	for addr := range r.membersMap {
+	for addr, prev := range prevHosts {
 		if _, ok := newMembersMap[addr]; !ok {
-			event.HostsRemoved = append(event.HostsRemoved, newHostInfo(addr, r.getLabelsMap()))
+			event.HostsRemoved = append(event.HostsRemoved, prev)
 			changed = true
 		}
 	}
@@ -425,4 +532,22 @@ func buildBroadcastHostPort(listenerPeerInfo tchannel.LocalPeerInfo, broadcastAd
 	}
 
 	return listenerPeerInfo.HostPort, nil
+}
+
+// parseIntLabel returns the value of the given label as an integer.
+func parseIntLabel(member swim.Member, label string) (int64, error) {
+	str, ok := member.Label(label)
+	if !ok {
+		return 0, errMissingLabel
+	}
+	return strconv.ParseInt(str, 10, 64)
+}
+
+func isDraining(host *hostInfo) bool {
+	if drainingStr, ok := host.Label(drainingKey); ok {
+		if draining, err := strconv.ParseBool(drainingStr); err == nil {
+			return draining
+		}
+	}
+	return false
 }

@@ -20,6 +20,11 @@ persistence:
                 keyspace: "{{ default .Env.KEYSPACE "temporal" }}"
                 user: "{{ default .Env.CASSANDRA_USER "" }}"
                 password: "{{ default .Env.CASSANDRA_PASSWORD "" }}"
+                {{- if .Env.CASSANDRA_ALLOWED_AUTHENTICATORS }}
+                allowedAuthenticators: {{ range split .Env.CASSANDRA_ALLOWED_AUTHENTICATORS "," }}
+                    - {{trim .}}
+                  {{- end }}
+                {{- end }}
                 port: {{ default .Env.CASSANDRA_PORT "9042" }}
                 maxConns: {{ default .Env.CASSANDRA_MAX_CONNS "20" }}
                 tls:
@@ -40,41 +45,7 @@ persistence:
                         advertised-hostname: {{ default .Env.CASSANDRA_ADDRESS_TRANSLATOR_OPTIONS "" }}
                     {{- end }}
                 {{- end }}
-        visibility:
-            cassandra:
-                {{ $visibility_seeds_default := default .Env.CASSANDRA_SEEDS "" }}
-                {{ $visibility_seeds := default .Env.VISIBILITY_CASSANDRA_SEEDS $visibility_seeds_default }}
-                {{ $visibility_port_default := default .Env.CASSANDRA_PORT "9042" }}
-                {{ $visibility_port := default .Env.VISIBILITY_CASSANDRA_PORT $visibility_port_default }}
-                {{ $visibility_user_default := default .Env.CASSANDRA_USER "" }}
-                {{ $visibility_user := default .Env.VISIBILITY_CASSANDRA_USER $visibility_user_default }}
-                {{ $visibility_pwd_default := default .Env.CASSANDRA_PASSWORD "" }}
-                {{ $visibility_pwd := default .Env.VISIBILITY_CASSANDRA_PASSWORD $visibility_pwd_default }}
-                hosts: "{{ $visibility_seeds }}"
-                keyspace: "{{ default .Env.VISIBILITY_KEYSPACE "temporal_visibility" }}"
-                user: "{{ $visibility_user }}"
-                password: "{{ $visibility_pwd }}"
-                port: {{ $visibility_port }}
-                maxConns: {{ default .Env.CASSANDRA_MAX_CONNS "10" }}
-                tls:
-                    enabled: {{ default .Env.CASSANDRA_TLS_ENABLED "false" }}
-                    caFile: {{ default .Env.CASSANDRA_CA "" }}
-                    certFile: {{ default .Env.CASSANDRA_CERT "" }}
-                    keyFile: {{ default .Env.CASSANDRA_CERT_KEY "" }}
-                    caData: {{ default .Env.CASSANDRA_CA_DATA "" }}
-                    certData: {{ default .Env.CASSANDRA_CERT_DATA "" }}
-                    keyData: {{ default .Env.CASSANDRA_CERT_KEY_DATA "" }}
-                    enableHostVerification: {{ default .Env.CASSANDRA_HOST_VERIFICATION "false" }}
-                    serverName: {{ default .Env.CASSANDRA_HOST_NAME "" }}
-                {{- if .Env.CASSANDRA_ADDRESS_TRANSLATOR }}
-                addressTranslator:
-                    translator: {{ default .Env.CASSANDRA_ADDRESS_TRANSLATOR "" }}
-                    {{- if .Env.CASSANDRA_ADDRESS_TRANSLATOR_OPTIONS }}
-                    options:
-                        advertised-hostname: {{ default .Env.CASSANDRA_ADDRESS_TRANSLATOR_OPTIONS "" }}
-                    {{- end }}
-                {{- end }}
-        {{- else if eq $db "mysql" "mysql8" }}
+        {{- else if eq $db "mysql8" }}
         default:
             sql:
                 pluginName: "{{ $db }}"
@@ -127,8 +98,7 @@ persistence:
                     keyFile: {{ default .Env.SQL_CERT_KEY "" }}
                     enableHostVerification: {{ default .Env.SQL_HOST_VERIFICATION "false" }}
                     serverName: {{ default .Env.SQL_HOST_NAME "" }}
-        {{- else if eq $db "postgresql" "postgres" "postgres12" }}
-        {{- $db := replace $db "postgresql" "postgres" 1 }}
+        {{- else if eq $db "postgres12" "postgres12_pgx" }}
         default:
             sql:
                 pluginName: "{{ $db }}"
@@ -298,39 +268,40 @@ global:
         claimMapper: {{ default .Env.TEMPORAL_AUTH_CLAIM_MAPPER "" }}
 
 {{- $temporalGrpcPort := default .Env.FRONTEND_GRPC_PORT "7233" }}
+{{- $temporalHTTPPort := default .Env.FRONTEND_HTTP_PORT "7243" }}
 services:
     frontend:
         rpc:
             grpcPort: {{ $temporalGrpcPort }}
             membershipPort: {{ default .Env.FRONTEND_MEMBERSHIP_PORT "6933" }}
-            bindOnIP: {{ default .Env.BIND_ON_IP "127.0.0.1" }}
-            httpPort: {{ default .Env.FRONTEND_HTTP_PORT "7243" }}
+            bindOnIP: "{{ default .Env.BIND_ON_IP "127.0.0.1" }}"
+            httpPort: {{ $temporalHTTPPort }}
 
     {{- if .Env.USE_INTERNAL_FRONTEND }}
     internal-frontend:
         rpc:
             grpcPort: {{ default .Env.INTERNAL_FRONTEND_GRPC_PORT "7236" }}
             membershipPort: {{ default .Env.INTERNAL_FRONTEND_MEMBERSHIP_PORT "6936" }}
-            bindOnIP: {{ default .Env.BIND_ON_IP "127.0.0.1" }}
+            bindOnIP: "{{ default .Env.BIND_ON_IP "127.0.0.1" }}"
     {{- end }}
 
     matching:
         rpc:
             grpcPort: {{ default .Env.MATCHING_GRPC_PORT "7235" }}
             membershipPort: {{ default .Env.MATCHING_MEMBERSHIP_PORT "6935" }}
-            bindOnIP: {{ default .Env.BIND_ON_IP "127.0.0.1" }}
+            bindOnIP: "{{ default .Env.BIND_ON_IP "127.0.0.1" }}"
 
     history:
         rpc:
             grpcPort: {{ default .Env.HISTORY_GRPC_PORT "7234" }}
             membershipPort: {{ default .Env.HISTORY_MEMBERSHIP_PORT "6934" }}
-            bindOnIP: {{ default .Env.BIND_ON_IP "127.0.0.1" }}
+            bindOnIP: "{{ default .Env.BIND_ON_IP "127.0.0.1" }}"
 
     worker:
         rpc:
             grpcPort: {{ default .Env.WORKER_GRPC_PORT "7239" }}
             membershipPort: {{ default .Env.WORKER_MEMBERSHIP_PORT "6939" }}
-            bindOnIP: {{ default .Env.BIND_ON_IP "127.0.0.1" }}
+            bindOnIP: "{{ default .Env.BIND_ON_IP "127.0.0.1" }}"
 
 clusterMetadata:
     enableGlobalNamespace: false
@@ -343,6 +314,7 @@ clusterMetadata:
             initialFailoverVersion: 1
             rpcName: "frontend"
             rpcAddress: {{ (print "127.0.0.1:" $temporalGrpcPort) }}
+            httpAddress: {{ (print "127.0.0.1:" $temporalHTTPPort) }}
 
 dcRedirectionPolicy:
     policy: "noop"

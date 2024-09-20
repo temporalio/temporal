@@ -29,7 +29,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
-	"go.temporal.io/server/common/primitives/timestamp"
+	"google.golang.org/protobuf/types/known/durationpb"
 )
 
 func TestValidateAndCapTimer(t *testing.T) {
@@ -37,9 +37,9 @@ func TestValidateAndCapTimer(t *testing.T) {
 
 	testCases := []struct {
 		name                  string
-		timerDuration         *time.Duration
+		timerDuration         *durationpb.Duration
 		expectedErr           error
-		expectedTimerDuration *time.Duration
+		expectedTimerDuration *durationpb.Duration
 	}{
 		{
 			name:                  "nil timer duration",
@@ -49,34 +49,32 @@ func TestValidateAndCapTimer(t *testing.T) {
 		},
 		{
 			name:                  "negative timer duration",
-			timerDuration:         timestamp.DurationPtr(-time.Minute),
+			timerDuration:         durationpb.New(-time.Minute),
 			expectedErr:           errNegativeDuration,
 			expectedTimerDuration: nil,
 		},
 		{
 			name:                  "zero timer duration",
-			timerDuration:         timestamp.DurationPtr(0),
+			timerDuration:         durationpb.New(0),
 			expectedErr:           nil,
-			expectedTimerDuration: timestamp.DurationPtr(0),
+			expectedTimerDuration: durationpb.New(0),
 		},
 		{
-			name: "cap timer duration",
-			timerDuration: timestamp.DurationPtr(
-				200 * 365 * 24 * time.Hour,
-			),
+			name:          "cap timer duration",
+			timerDuration: durationpb.New(200 * 365 * 24 * time.Hour),
+
 			expectedErr:           nil,
-			expectedTimerDuration: timestamp.DurationPtr(MaxAllowedTimer),
+			expectedTimerDuration: durationpb.New(MaxAllowedTimer),
 		},
 		{
 			name:                  "valid timer duration",
-			timerDuration:         timestamp.DurationPtr(time.Hour),
+			timerDuration:         durationpb.New(time.Hour),
 			expectedErr:           nil,
-			expectedTimerDuration: timestamp.DurationPtr(time.Hour),
+			expectedTimerDuration: durationpb.New(time.Hour),
 		},
 	}
 
 	for _, tc := range testCases {
-		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 

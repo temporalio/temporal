@@ -34,11 +34,18 @@ import (
 type (
 	// WorkerComponent represents a type of work needed for worker role
 	WorkerComponent interface {
-		// Register registers Workflow and Activity types provided by this worker component.
-		Register(sdkworker.Worker)
-		// DedicatedWorkerOptions returns a DedicatedWorkerOptions for this worker component.
+		// RegisterWorkflow registers Workflow types provided by this worker component.
+		// Local Activities should also be registered here because they are executed on the workflow worker.
+		RegisterWorkflow(registry sdkworker.Registry)
+		// DedicatedWorkflowWorkerOptions returns a DedicatedWorkerOptions for this worker component.
 		// Return nil to use default worker instance.
-		DedicatedWorkerOptions() *DedicatedWorkerOptions
+		DedicatedWorkflowWorkerOptions() *DedicatedWorkerOptions
+		// RegisterActivities registers remote Activity types provided by this worker component.
+		// Local Activities should be registered in RegisterWorkflow
+		RegisterActivities(registry sdkworker.Registry)
+		// DedicatedActivityWorkerOptions returns a DedicatedWorkerOptions for this worker component.
+		// Return nil to use default worker instance.
+		DedicatedActivityWorkerOptions() *DedicatedWorkerOptions
 	}
 
 	DedicatedWorkerOptions struct {
@@ -54,7 +61,7 @@ type (
 	PerNSWorkerComponent interface {
 		// Register registers Workflow and Activity types provided by this worker component.
 		// The namespace that this worker is running in is also provided.
-		Register(sdkworker.Worker, *namespace.Namespace, RegistrationDetails)
+		Register(sdkworker.Registry, *namespace.Namespace, RegistrationDetails)
 		// DedicatedWorkerOptions returns a PerNSDedicatedWorkerOptions for this worker component.
 		DedicatedWorkerOptions(*namespace.Namespace) *PerNSDedicatedWorkerOptions
 	}

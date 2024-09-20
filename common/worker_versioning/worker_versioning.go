@@ -27,20 +27,20 @@ package worker_versioning
 import (
 	"context"
 	"fmt"
+	"strings"
 
-	"github.com/gogo/protobuf/types"
-	"github.com/xwb1989/sqlparser"
+	"github.com/temporalio/sqlparser"
 	commonpb "go.temporal.io/api/common/v1"
-
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
-	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/searchattribute"
+	"google.golang.org/protobuf/types/known/emptypb"
 )
 
 const (
+	buildIdSearchAttributePrefixAssigned    = "assigned"
 	buildIdSearchAttributePrefixVersioned   = "versioned"
 	buildIdSearchAttributePrefixUnversioned = "unversioned"
 	BuildIdSearchAttributeDelimiter         = ":"
@@ -48,12 +48,23 @@ const (
 	UnversionedSearchAttribute = buildIdSearchAttributePrefixUnversioned
 )
 
-// VersionedBuildIdSearchAttribute returns the search attribute value for an unversioned build id
+// AssignedBuildIdSearchAttribute returns the search attribute value for the currently assigned build ID
+func AssignedBuildIdSearchAttribute(buildId string) string {
+	return buildIdSearchAttributePrefixAssigned + BuildIdSearchAttributeDelimiter + buildId
+}
+
+// IsUnversionedOrAssignedBuildIdSearchAttribute returns the value is "unversioned" or "assigned:<bld>"
+func IsUnversionedOrAssignedBuildIdSearchAttribute(buildId string) bool {
+	return buildId == UnversionedSearchAttribute ||
+		strings.HasPrefix(buildId, buildIdSearchAttributePrefixAssigned+BuildIdSearchAttributeDelimiter)
+}
+
+// VersionedBuildIdSearchAttribute returns the search attribute value for a versioned build ID
 func VersionedBuildIdSearchAttribute(buildId string) string {
 	return buildIdSearchAttributePrefixVersioned + BuildIdSearchAttributeDelimiter + buildId
 }
 
-// VersionedBuildIdSearchAttribute returns the search attribute value for an versioned build id
+// UnversionedBuildIdSearchAttribute returns the search attribute value for an unversioned build ID
 func UnversionedBuildIdSearchAttribute(buildId string) string {
 	return buildIdSearchAttributePrefixUnversioned + BuildIdSearchAttributeDelimiter + buildId
 }
@@ -69,7 +80,7 @@ func VersionStampToBuildIdSearchAttribute(stamp *commonpb.WorkerVersionStamp) st
 	return UnversionedBuildIdSearchAttribute(stamp.BuildId)
 }
 
-// FindBuildId finds a build id in the version data's sets, returning (set index, index within that set).
+// FindBuildId finds a build ID in the version data's sets, returning (set index, index within that set).
 // Returns -1, -1 if not found.
 func FindBuildId(versioningData *persistencespb.VersioningData, buildId string) (setIndex, indexInSet int) {
 	versionSets := versioningData.GetVersionSets()
@@ -108,31 +119,53 @@ func StampIfUsingVersioning(stamp *commonpb.WorkerVersionStamp) *commonpb.Worker
 	return nil
 }
 
-func MakeDirectiveForWorkflowTask(
-	stamp *commonpb.WorkerVersionStamp,
-	lastWorkflowTaskStartedEventID int64,
-) *taskqueuespb.TaskVersionDirective {
-	var directive taskqueuespb.TaskVersionDirective
-	if id := StampIfUsingVersioning(stamp).GetBuildId(); id != "" {
-		directive.Value = &taskqueuespb.TaskVersionDirective_BuildId{BuildId: id}
-	} else if lastWorkflowTaskStartedEventID == common.EmptyEventID {
-		// first workflow task
-		directive.Value = &taskqueuespb.TaskVersionDirective_UseDefault{UseDefault: &types.Empty{}}
+// BuildIdIfUsingVersioning returns the given WorkerVersionStamp if it is using versioning,
+// otherwise returns nil.
+func BuildIdIfUsingVersioning(stamp *commonpb.WorkerVersionStamp) string {
+	if stamp.GetUseVersioning() {
+		return stamp.GetBuildId()
 	}
-	// else: unversioned queue
-	return &directive
+	return ""
 }
 
-func MakeDirectiveForActivityTask(
-	stamp *commonpb.WorkerVersionStamp,
-	useCompatibleVersion bool,
-) *taskqueuespb.TaskVersionDirective {
-	var directive taskqueuespb.TaskVersionDirective
-	if !useCompatibleVersion {
-		directive.Value = &taskqueuespb.TaskVersionDirective_UseDefault{UseDefault: &types.Empty{}}
-	} else if id := StampIfUsingVersioning(stamp).GetBuildId(); id != "" {
-		directive.Value = &taskqueuespb.TaskVersionDirective_BuildId{BuildId: id}
+// MakeDirectiveForWorkflowTask returns a versioning directive based on the following parameters:
+// - inheritedBuildId: build ID inherited from a past/previous wf execution (for Child WF or CaN)
+// - assignedBuildId: the build ID to which the WF is currently assigned (i.e. mutable state's AssginedBuildId)
+// - stamp: the latest versioning stamp of the execution (only needed for old versioning)
+// - hasCompletedWorkflowTask: if the wf has completed any WFT
+func MakeDirectiveForWorkflowTask(inheritedBuildId string, assignedBuildId string, stamp *commonpb.WorkerVersionStamp, hasCompletedWorkflowTask bool) *taskqueuespb.TaskVersionDirective {
+	if id := BuildIdIfUsingVersioning(stamp); id != "" && assignedBuildId == "" {
+		// TODO: old versioning only [cleanup-old-wv]
+		return MakeBuildIdDirective(id)
+	} else if !hasCompletedWorkflowTask && inheritedBuildId == "" {
+		// first workflow task (or a retry of) and build ID not inherited. if this is retry we reassign build ID
+		// if WF has an inherited build ID, we do not allow usage of assignment rules
+		return MakeUseAssignmentRulesDirective()
+	} else if assignedBuildId != "" {
+		return MakeBuildIdDirective(assignedBuildId)
 	}
 	// else: unversioned queue
-	return &directive
+	return nil
+}
+
+func MakeUseAssignmentRulesDirective() *taskqueuespb.TaskVersionDirective {
+	return &taskqueuespb.TaskVersionDirective{BuildId: &taskqueuespb.TaskVersionDirective_UseAssignmentRules{UseAssignmentRules: &emptypb.Empty{}}}
+}
+
+func MakeBuildIdDirective(buildId string) *taskqueuespb.TaskVersionDirective {
+	return &taskqueuespb.TaskVersionDirective{BuildId: &taskqueuespb.TaskVersionDirective_AssignedBuildId{AssignedBuildId: buildId}}
+}
+
+func StampFromCapabilities(cap *commonpb.WorkerVersionCapabilities) *commonpb.WorkerVersionStamp {
+	// TODO: remove `cap.BuildId != ""` condition after old versioning cleanup. this condition is used to differentiate
+	// between old and new versioning in Record*TaskStart calls. [cleanup-old-wv]
+	// we don't want to add stamp for task started events in old versioning
+	if cap != nil && cap.BuildId != "" {
+		return &commonpb.WorkerVersionStamp{UseVersioning: cap.UseVersioning, BuildId: cap.BuildId}
+	}
+	return nil
+}
+
+func StampForBuildId(buildId string) *commonpb.WorkerVersionStamp {
+	return &commonpb.WorkerVersionStamp{UseVersioning: true, BuildId: buildId}
 }

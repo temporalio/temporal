@@ -35,7 +35,6 @@ import (
 	"time"
 
 	"github.com/gocql/gocql"
-
 	"go.temporal.io/server/common/auth"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/debug"
@@ -70,8 +69,9 @@ func ConfigureCassandraCluster(cfg config.Cassandra, cluster *gocql.ClusterConfi
 	}
 	if cfg.User != "" && cfg.Password != "" {
 		cluster.Authenticator = gocql.PasswordAuthenticator{
-			Username: cfg.User,
-			Password: cfg.Password,
+			Username:              cfg.User,
+			Password:              cfg.Password,
+			AllowedAuthenticators: cfg.AllowedAuthenticators,
 		}
 	}
 	if cfg.Keyspace != "" {
@@ -152,12 +152,19 @@ func ConfigureCassandraCluster(cfg config.Cassandra, cluster *gocql.ClusterConfi
 		cluster.NumConns = cfg.MaxConns
 	}
 
+	cluster.ConnectTimeout = 10 * time.Second * debug.TimeoutMultiplier
 	if cfg.ConnectTimeout > 0 {
-		cluster.Timeout = cfg.ConnectTimeout
 		cluster.ConnectTimeout = cfg.ConnectTimeout
-	} else {
-		cluster.Timeout = 10 * time.Second * debug.TimeoutMultiplier
-		cluster.ConnectTimeout = 10 * time.Second * debug.TimeoutMultiplier
+	}
+
+	cluster.Timeout = cluster.ConnectTimeout
+	if cfg.Timeout > 0 {
+		cluster.Timeout = cfg.Timeout
+	}
+
+	cluster.WriteTimeout = cluster.Timeout
+	if cfg.WriteTimeout > 0 {
+		cluster.WriteTimeout = cfg.WriteTimeout
 	}
 
 	cluster.ProtoVersion = 4

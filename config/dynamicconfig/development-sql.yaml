@@ -39,9 +39,19 @@ frontend.workerVersioningDataAPIs:
   - value: true
 frontend.workerVersioningWorkflowAPIs:
   - value: true
-frontend.enableUpdateWorkflowExecution:
+system.enableNexus:
   - value: true
-frontend.enableUpdateWorkflowExecutionAsyncAccepted:
-  - value: true
-frontend.accessHistoryFraction:
+component.nexusoperations.callback.endpoint.template:
+  - value: http://localhost:7243/namespaces/{{.NamespaceName}}/nexus/callback
+component.callbacks.allowedAddresses:
+  - value:
+      - Pattern: "*"
+        AllowInsecure: true
+matching.queryWorkflowTaskTimeoutLogRate:
   - value: 1.0
+history.ReplicationEnableUpdateWithNewTaskMerge:
+  - value: true
+history.enableWorkflowExecutionTimeoutTimer:
+  - value: true
+history.hostLevelCacheMaxSize:
+  - value: 8192

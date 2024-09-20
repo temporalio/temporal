@@ -28,56 +28,80 @@ import (
 	"context"
 	"fmt"
 
+	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
+	updatepb "go.temporal.io/api/update/v1"
 	"go.temporal.io/api/workflowservice/v1"
-
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/locks"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/service/history/api"
-	"go.temporal.io/server/service/history/workflow"
+	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/workflow/update"
 )
 
 func Invoke(
 	ctx context.Context,
 	req *historyservice.PollWorkflowExecutionUpdateRequest,
+	shardContext shard.Context,
 	ctxLookup api.WorkflowConsistencyChecker,
 ) (*historyservice.PollWorkflowExecutionUpdateResponse, error) {
+	waitStage := req.GetRequest().GetWaitPolicy().GetLifecycleStage()
 	updateRef := req.GetRequest().GetUpdateRef()
 	wfexec := updateRef.GetWorkflowExecution()
-	upd, ok, err := func() (*update.Update, bool, error) {
-		wfctx, err := ctxLookup.GetWorkflowContext(
+	wfKey, upd, err := func() (*definition.WorkflowKey, *update.Update, error) {
+		workflowLease, err := ctxLookup.GetWorkflowLease(
 			ctx,
 			nil,
-			api.BypassMutableStateConsistencyPredicate,
 			definition.NewWorkflowKey(
 				req.GetNamespaceId(),
 				wfexec.GetWorkflowId(),
 				wfexec.GetRunId(),
 			),
-			workflow.LockPriorityHigh,
+			locks.PriorityHigh,
 		)
 		if err != nil {
-			return nil, false, err
+			return nil, nil, err
 		}
-		release := wfctx.GetReleaseFn()
+		release := workflowLease.GetReleaseFn()
 		defer release(nil)
-		upd, found := wfctx.GetUpdateRegistry(ctx).Find(ctx, updateRef.UpdateId)
-		return upd, found, nil
+		wfCtx := workflowLease.GetContext()
+		upd := wfCtx.UpdateRegistry(ctx, nil).Find(ctx, updateRef.UpdateId)
+		wfKey := wfCtx.GetWorkflowKey()
+		return &wfKey, upd, nil
 	}()
 	if err != nil {
 		return nil, err
 	}
-	if !ok {
+	if upd == nil {
 		return nil, serviceerror.NewNotFound(fmt.Sprintf("update %q not found", updateRef.GetUpdateId()))
 	}
-	outcome, err := upd.WaitOutcome(ctx)
+
+	namespaceID := namespace.ID(req.GetNamespaceId())
+	ns, err := shardContext.GetNamespaceRegistry().GetNamespaceByID(namespaceID)
 	if err != nil {
 		return nil, err
 	}
+	softTimeout := shardContext.GetConfig().LongPollExpirationInterval(ns.Name().String())
+	// If the long-poll times out due to softTimeout
+	// then return a non-error empty response with actual reached stage.
+	status, err := upd.WaitLifecycleStage(ctx, waitStage, softTimeout)
+	if err != nil {
+		return nil, err
+	}
+
 	return &historyservice.PollWorkflowExecutionUpdateResponse{
 		Response: &workflowservice.PollWorkflowExecutionUpdateResponse{
-			Outcome: outcome,
+			Outcome: status.Outcome,
+			Stage:   status.Stage,
+			UpdateRef: &updatepb.UpdateRef{
+				WorkflowExecution: &commonpb.WorkflowExecution{
+					WorkflowId: wfKey.WorkflowID,
+					RunId:      wfKey.RunID,
+				},
+				UpdateId: updateRef.UpdateId,
+			},
 		},
 	}, nil
 }

@@ -29,22 +29,31 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/suite"
-
 	schedpb "go.temporal.io/api/schedule/v1"
-	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/common/testing/protorequire"
+	"google.golang.org/protobuf/types/known/durationpb"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type specSuite struct {
 	suite.Suite
+	protorequire.ProtoAssertions
+
+	specBuilder *SpecBuilder
 }
 
 func TestSpec(t *testing.T) {
 	suite.Run(t, new(specSuite))
 }
 
+func (s *specSuite) SetupTest() {
+	s.ProtoAssertions = protorequire.New(s.T())
+	s.specBuilder = NewSpecBuilder()
+}
+
 func (s *specSuite) checkSequenceRaw(spec *schedpb.ScheduleSpec, start time.Time, seq ...time.Time) {
 	s.T().Helper()
-	cs, err := NewCompiledSpec(spec)
+	cs, err := s.specBuilder.NewCompiledSpec(spec)
 	s.NoError(err)
 	for _, exp := range seq {
 		next := cs.rawNextTime(start)
@@ -55,13 +64,16 @@ func (s *specSuite) checkSequenceRaw(spec *schedpb.ScheduleSpec, start time.Time
 
 func (s *specSuite) checkSequenceFull(jitterSeed string, spec *schedpb.ScheduleSpec, start time.Time, seq ...time.Time) {
 	s.T().Helper()
-	cs, err := NewCompiledSpec(spec)
+	cs, err := s.specBuilder.NewCompiledSpec(spec)
 	s.NoError(err)
 	for _, exp := range seq {
-		result := cs.getNextTime(jitterSeed, start)
+		result := cs.GetNextTime(jitterSeed, start)
 		if exp.IsZero() {
-			s.Require().True(result.Nominal.IsZero())
-			s.Require().True(result.Next.IsZero())
+			s.Require().True(
+				result.Nominal.IsZero(),
+				"exp %v nominal should be zero, got %v", exp, result.Nominal,
+			)
+			s.Require().True(result.Next.IsZero(), "next should be zero")
 			break
 		}
 		s.Require().False(result.Nominal.IsZero())
@@ -74,7 +86,7 @@ func (s *specSuite) checkSequenceFull(jitterSeed string, spec *schedpb.ScheduleS
 func (s *specSuite) TestCanonicalize() {
 	canonical, err := canonicalizeSpec(&schedpb.ScheduleSpec{})
 	s.NoError(err)
-	s.Equal(&schedpb.ScheduleSpec{}, canonical)
+	s.ProtoEqual(&schedpb.ScheduleSpec{}, canonical)
 
 	canonical, err = canonicalizeSpec(&schedpb.ScheduleSpec{
 		CronString: []string{
@@ -82,16 +94,16 @@ func (s *specSuite) TestCanonicalize() {
 		},
 	})
 	s.NoError(err)
-	s.Equal(&schedpb.ScheduleSpec{
+	s.ProtoEqual(&schedpb.ScheduleSpec{
 		Interval: []*schedpb.IntervalSpec{{
-			Interval: timestamp.DurationPtr(43 * time.Hour),
+			Interval: durationpb.New(43 * time.Hour),
 		}},
 	}, canonical)
 
 	// negative interval
 	_, err = canonicalizeSpec(&schedpb.ScheduleSpec{
 		Interval: []*schedpb.IntervalSpec{{
-			Interval: timestamp.DurationPtr(-43 * time.Hour),
+			Interval: durationpb.New(-43 * time.Hour),
 		}},
 	})
 	s.Error(err)
@@ -99,8 +111,8 @@ func (s *specSuite) TestCanonicalize() {
 	// phase exceeds interval
 	_, err = canonicalizeSpec(&schedpb.ScheduleSpec{
 		Interval: []*schedpb.IntervalSpec{{
-			Interval: timestamp.DurationPtr(3 * time.Hour),
-			Phase:    timestamp.DurationPtr(4 * time.Hour),
+			Interval: durationpb.New(3 * time.Hour),
+			Phase:    durationpb.New(4 * time.Hour),
 		}},
 	})
 	s.Error(err)
@@ -145,7 +157,7 @@ func (s *specSuite) TestCanonicalize() {
 		Month:      []*schedpb.Range{{Start: 1, End: 12}},
 		DayOfWeek:  []*schedpb.Range{{Start: 0, End: 6}},
 	}}
-	s.Equal(&schedpb.ScheduleSpec{
+	s.ProtoEqual(&schedpb.ScheduleSpec{
 		StructuredCalendar: structured,
 	}, canonical)
 
@@ -154,15 +166,15 @@ func (s *specSuite) TestCanonicalize() {
 		CronString: []string{
 			"23 5,7 * * *",
 		},
-		Jitter:       timestamp.DurationPtr(5 * time.Minute),
-		StartTime:    timestamp.TimePtr(time.Date(2022, 3, 23, 0, 0, 0, 0, time.UTC)),
+		Jitter:       durationpb.New(5 * time.Minute),
+		StartTime:    timestamppb.New(time.Date(2022, 3, 23, 0, 0, 0, 0, time.UTC)),
 		TimezoneName: "Europe/London",
 	})
 	s.NoError(err)
-	s.Equal(&schedpb.ScheduleSpec{
+	s.ProtoEqual(&schedpb.ScheduleSpec{
 		StructuredCalendar: structured,
-		Jitter:             timestamp.DurationPtr(5 * time.Minute),
-		StartTime:          timestamp.TimePtr(time.Date(2022, 3, 23, 0, 0, 0, 0, time.UTC)),
+		Jitter:             durationpb.New(5 * time.Minute),
+		StartTime:          timestamppb.New(time.Date(2022, 3, 23, 0, 0, 0, 0, time.UTC)),
 		TimezoneName:       "Europe/London",
 	}, canonical)
 
@@ -174,7 +186,7 @@ func (s *specSuite) TestCanonicalize() {
 		TimezoneName: "Europe/London",
 	})
 	s.NoError(err)
-	s.Equal(&schedpb.ScheduleSpec{
+	s.ProtoEqual(&schedpb.ScheduleSpec{
 		StructuredCalendar: structured,
 		TimezoneName:       "Europe/London",
 	}, canonical)
@@ -220,7 +232,7 @@ func (s *specSuite) TestSpecIntervalBasic() {
 	s.checkSequenceRaw(
 		&schedpb.ScheduleSpec{
 			Interval: []*schedpb.IntervalSpec{
-				{Interval: timestamp.DurationPtr(90 * time.Minute)},
+				{Interval: durationpb.New(90 * time.Minute)},
 			},
 		},
 		time.Date(2022, 3, 23, 12, 53, 2, 9, time.UTC),
@@ -236,8 +248,8 @@ func (s *specSuite) TestSpecIntervalPhase() {
 		&schedpb.ScheduleSpec{
 			Interval: []*schedpb.IntervalSpec{
 				{
-					Interval: timestamp.DurationPtr(90 * time.Minute),
-					Phase:    timestamp.DurationPtr(5*time.Minute + 44*time.Second),
+					Interval: durationpb.New(90 * time.Minute),
+					Phase:    durationpb.New(5*time.Minute + 44*time.Second),
 				},
 			},
 		},
@@ -254,12 +266,12 @@ func (s *specSuite) TestSpecIntervalMultiple() {
 		&schedpb.ScheduleSpec{
 			Interval: []*schedpb.IntervalSpec{
 				{
-					Interval: timestamp.DurationPtr(90 * time.Minute),
-					Phase:    timestamp.DurationPtr(5*time.Minute + 44*time.Second),
+					Interval: durationpb.New(90 * time.Minute),
+					Phase:    durationpb.New(5*time.Minute + 44*time.Second),
 				},
 				{
-					Interval: timestamp.DurationPtr(157 * time.Minute),
-					Phase:    timestamp.DurationPtr(22*time.Minute + 11*time.Second),
+					Interval: durationpb.New(157 * time.Minute),
+					Phase:    durationpb.New(22*time.Minute + 11*time.Second),
 				},
 			},
 		},
@@ -339,8 +351,8 @@ func (s *specSuite) TestSpecMixedCalendarInterval() {
 			},
 			Interval: []*schedpb.IntervalSpec{
 				{
-					Interval: timestamp.DurationPtr(90 * time.Minute),
-					Phase:    timestamp.DurationPtr(7 * time.Minute),
+					Interval: durationpb.New(90 * time.Minute),
+					Phase:    durationpb.New(7 * time.Minute),
 				},
 			},
 		},
@@ -359,7 +371,7 @@ func (s *specSuite) TestSpecExclude() {
 		"",
 		&schedpb.ScheduleSpec{
 			Interval: []*schedpb.IntervalSpec{
-				{Interval: timestamp.DurationPtr(90 * time.Minute)},
+				{Interval: durationpb.New(90 * time.Minute)},
 			},
 			ExcludeCalendar: []*schedpb.CalendarSpec{
 				{
@@ -368,7 +380,7 @@ func (s *specSuite) TestSpecExclude() {
 					Second: "*",
 				},
 			},
-			Jitter: timestamp.DurationPtr(1 * time.Second),
+			Jitter: durationpb.New(1 * time.Second),
 		},
 		time.Date(2022, 3, 23, 8, 00, 0, 0, time.UTC),
 		time.Date(2022, 3, 23, 9, 00, 0, 235000000, time.UTC),
@@ -383,10 +395,10 @@ func (s *specSuite) TestSpecStartTime() {
 		"",
 		&schedpb.ScheduleSpec{
 			Interval: []*schedpb.IntervalSpec{
-				{Interval: timestamp.DurationPtr(90 * time.Minute)},
+				{Interval: durationpb.New(90 * time.Minute)},
 			},
-			StartTime: timestamp.TimePtr(time.Date(2022, 3, 23, 12, 0, 0, 0, time.UTC)),
-			Jitter:    timestamp.DurationPtr(1 * time.Second),
+			StartTime: timestamppb.New(time.Date(2022, 3, 23, 12, 0, 0, 0, time.UTC)),
+			Jitter:    durationpb.New(1 * time.Second),
 		},
 		time.Date(2022, 3, 23, 8, 00, 0, 0, time.UTC),
 		time.Date(2022, 3, 23, 12, 00, 0, 162000000, time.UTC),
@@ -400,10 +412,10 @@ func (s *specSuite) TestSpecEndTime() {
 		"",
 		&schedpb.ScheduleSpec{
 			Interval: []*schedpb.IntervalSpec{
-				{Interval: timestamp.DurationPtr(90 * time.Minute)},
+				{Interval: durationpb.New(90 * time.Minute)},
 			},
-			EndTime: timestamp.TimePtr(time.Date(2022, 3, 23, 14, 0, 0, 0, time.UTC)),
-			Jitter:  timestamp.DurationPtr(1 * time.Second),
+			EndTime: timestamppb.New(time.Date(2022, 3, 23, 14, 0, 0, 0, time.UTC)),
+			Jitter:  durationpb.New(1 * time.Second),
 		},
 		time.Date(2022, 3, 23, 11, 00, 0, 0, time.UTC),
 		time.Date(2022, 3, 23, 12, 00, 0, 162000000, time.UTC),
@@ -417,9 +429,9 @@ func (s *specSuite) TestSpecBoundedJitter() {
 		"",
 		&schedpb.ScheduleSpec{
 			Interval: []*schedpb.IntervalSpec{
-				{Interval: timestamp.DurationPtr(90 * time.Minute)},
+				{Interval: durationpb.New(90 * time.Minute)},
 			},
-			Jitter: timestamp.DurationPtr(24 * time.Hour),
+			Jitter: durationpb.New(24 * time.Hour),
 		},
 		time.Date(2022, 3, 23, 11, 00, 0, 0, time.UTC),
 		time.Date(2022, 3, 23, 12, 14, 36, 524000000, time.UTC),
@@ -445,7 +457,7 @@ func (s *specSuite) TestSpecJitterSingleRun() {
 			Calendar: []*schedpb.CalendarSpec{
 				{Hour: "13", Minute: "55", DayOfMonth: "7", Month: "4", Year: "2022"},
 			},
-			Jitter: timestamp.DurationPtr(1 * time.Hour),
+			Jitter: durationpb.New(1 * time.Hour),
 		},
 		time.Date(2022, 3, 23, 11, 00, 0, 0, time.UTC),
 		time.Date(2022, 4, 7, 13, 57, 26, 927000000, time.UTC),
@@ -455,9 +467,9 @@ func (s *specSuite) TestSpecJitterSingleRun() {
 func (s *specSuite) TestSpecJitterSeed() {
 	spec := &schedpb.ScheduleSpec{
 		Interval: []*schedpb.IntervalSpec{
-			{Interval: timestamp.DurationPtr(24 * time.Hour)},
+			{Interval: durationpb.New(24 * time.Hour)},
 		},
-		Jitter: timestamp.DurationPtr(1 * time.Hour),
+		Jitter: durationpb.New(1 * time.Hour),
 	}
 	s.checkSequenceFull(
 		"",

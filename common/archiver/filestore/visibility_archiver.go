@@ -37,7 +37,6 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
 	workflowpb "go.temporal.io/api/workflow/v1"
-
 	archiverspb "go.temporal.io/server/api/archiver/v1"
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/config"
@@ -131,7 +130,7 @@ func (v *visibilityArchiver) Archive(
 
 	// The filename has the format: closeTimestamp_hash(runID).visibility
 	// This format allows the archiver to sort all records without reading the file contents
-	filename := constructVisibilityFilename(request.CloseTime, request.GetRunId())
+	filename := constructVisibilityFilename(request.CloseTime.AsTime(), request.GetRunId())
 	if err := writeFile(path.Join(dirPath, filename), encodedVisibilityRecord, v.fileMode); err != nil {
 		logger.Error(archiver.ArchiveNonRetryableErrorMsg, tag.ArchivalArchiveFailReason(errWriteFile), tag.Error(err))
 		return err
@@ -225,7 +224,7 @@ func (v *visibilityArchiver) query(
 			return nil, serviceerror.NewInternal(err.Error())
 		}
 
-		if record.CloseTime.Before(request.parsedQuery.earliestCloseTime) {
+		if record.CloseTime.AsTime().Before(request.parsedQuery.earliestCloseTime) {
 			break
 		}
 
@@ -323,7 +322,8 @@ func sortAndFilterFiles(filenames []string, token *queryVisibilityToken) ([]stri
 }
 
 func matchQuery(record *archiverspb.VisibilityRecord, query *parsedQuery) bool {
-	if record.CloseTime.Before(query.earliestCloseTime) || record.CloseTime.After(query.latestCloseTime) {
+	closeTime := record.CloseTime.AsTime()
+	if closeTime.Before(query.earliestCloseTime) || closeTime.After(query.latestCloseTime) {
 		return false
 	}
 	if query.workflowID != nil && record.GetWorkflowId() != *query.workflowID {
@@ -355,12 +355,13 @@ func convertToExecutionInfo(record *archiverspb.VisibilityRecord, saTypeMap sear
 		Type: &commonpb.WorkflowType{
 			Name: record.WorkflowTypeName,
 		},
-		StartTime:        record.StartTime,
-		ExecutionTime:    record.ExecutionTime,
-		CloseTime:        record.CloseTime,
-		Status:           record.Status,
-		HistoryLength:    record.HistoryLength,
-		Memo:             record.Memo,
-		SearchAttributes: searchAttributes,
+		StartTime:         record.StartTime,
+		ExecutionTime:     record.ExecutionTime,
+		CloseTime:         record.CloseTime,
+		ExecutionDuration: record.ExecutionDuration,
+		Status:            record.Status,
+		HistoryLength:     record.HistoryLength,
+		Memo:              record.Memo,
+		SearchAttributes:  searchAttributes,
 	}, nil
 }

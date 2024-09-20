@@ -1,1 +1,0 @@
-ALTER TABLE current_executions ALTER COLUMN start_version SET DEFAULT 0;

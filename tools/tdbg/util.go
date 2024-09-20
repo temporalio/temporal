@@ -25,11 +25,10 @@
 package tdbg
 
 import (
-	"bufio"
 	"context"
 	"encoding/json"
 	"fmt"
-	"os"
+	"io"
 	"reflect"
 	"regexp"
 	"strconv"
@@ -37,17 +36,16 @@ import (
 	"time"
 
 	"github.com/fatih/color"
-	"github.com/gogo/protobuf/proto"
 	"github.com/olekukonko/tablewriter"
 	"github.com/urfave/cli/v2"
 	"go.temporal.io/api/workflowservice/v1"
-
 	"go.temporal.io/server/common/codec"
 	"go.temporal.io/server/common/collection"
 	"go.temporal.io/server/common/namespace"
+	"google.golang.org/protobuf/proto"
 )
 
-func prettyPrintJSONObject(o interface{}) {
+func prettyPrintJSONObject(c *cli.Context, o interface{}) {
 	var b []byte
 	var err error
 	if pb, ok := o.(proto.Message); ok {
@@ -58,11 +56,12 @@ func prettyPrintJSONObject(o interface{}) {
 	}
 
 	if err != nil {
-		fmt.Printf("Error when try to print pretty: %v\n", err)
-		fmt.Println(o)
+		fmt.Fprintf(c.App.ErrWriter, "Error when trying to pretty-print: %v\n%v\n", err, o)
+		return
 	}
-	_, _ = os.Stdout.Write(b)
-	fmt.Println()
+
+	_, _ = c.App.Writer.Write(b)
+	_, _ = c.App.Writer.Write([]byte("\n"))
 }
 
 func getRequiredOption(c *cli.Context, optionName string) (string, error) {
@@ -196,10 +195,10 @@ func newContextWithTimeout(c *cli.Context, timeout time.Duration) (context.Conte
 		timeout = time.Duration(c.Int(FlagContextTimeout)) * time.Second
 	}
 
-	return context.WithTimeout(context.Background(), timeout)
+	return context.WithTimeout(c.Context, timeout)
 }
 
-func stringToEnum(search string, candidates map[string]int32) (int32, error) {
+func StringToEnum(search string, candidates map[string]int32) (int32, error) {
 	if search == "" {
 		return 0, nil
 	}
@@ -213,25 +212,6 @@ func stringToEnum(search string, candidates map[string]int32) (int32, error) {
 	}
 
 	return 0, fmt.Errorf("could not find corresponding candidate for %s. Possible candidates: %q", search, candidateNames)
-}
-
-// prompt will show input msg, then waiting user input y/yes to continue
-func prompt(msg string, autoConfirm bool) {
-	reader := bufio.NewReader(os.Stdin)
-	fmt.Print(msg, " ")
-	var text string
-	if autoConfirm {
-		text = "y"
-		fmt.Print("y")
-	} else {
-		text, _ = reader.ReadString('\n')
-	}
-	fmt.Println()
-
-	textLower := strings.ToLower(strings.TrimRight(text, "\n"))
-	if textLower != "y" && textLower != "yes" {
-		os.Exit(1)
-	}
 }
 
 // paginate creates an interactive CLI mode to control the printing of items
@@ -250,14 +230,14 @@ func paginate[V any](c *cli.Context, paginationFn collection.PaginationFn[V], pa
 		pageItems = append(pageItems, item)
 		if len(pageItems) == pageSize || !iter.HasNext() {
 			if isTableView {
-				if err := printTable(pageItems); err != nil {
+				if err := printTable(pageItems, c.App.Writer); err != nil {
 					return err
 				}
 			} else {
-				prettyPrintJSONObject(pageItems)
+				prettyPrintJSONObject(c, pageItems)
 			}
 
-			if !more || !showNextPage() {
+			if !more || !showNextPage(c.App.Writer) {
 				break
 			}
 			pageItems = pageItems[:0]
@@ -267,7 +247,9 @@ func paginate[V any](c *cli.Context, paginationFn collection.PaginationFn[V], pa
 	return nil
 }
 
-func printTable(items []interface{}) error {
+var exportRgx = regexp.MustCompile("^[A-Z]")
+
+func printTable(items []interface{}, writer io.Writer) error {
 	if len(items) == 0 {
 		return nil
 	}
@@ -278,12 +260,16 @@ func printTable(items []interface{}) error {
 	}
 
 	var fields []string
+	var exportedFields []int
 	t := e.Type()
 	for i := 0; i < e.NumField(); i++ {
-		fields = append(fields, t.Field(i).Name)
+		if exportRgx.MatchString(t.Field(i).Name) {
+			fields = append(fields, t.Field(i).Name)
+			exportedFields = append(exportedFields, i)
+		}
 	}
 
-	table := tablewriter.NewWriter(os.Stdout)
+	table := tablewriter.NewWriter(writer)
 	table.SetBorder(false)
 	table.SetColumnSeparator("|")
 	table.SetHeader(fields)
@@ -294,7 +280,7 @@ func printTable(items []interface{}) error {
 			item = item.Elem()
 		}
 		var columns []string
-		for j := 0; j < len(fields); j++ {
+		for _, j := range exportedFields {
 			col := item.Field(j)
 			columns = append(columns, fmt.Sprintf("%v", col.Interface()))
 		}
@@ -306,16 +292,16 @@ func printTable(items []interface{}) error {
 	return nil
 }
 
-func showNextPage() bool {
-	fmt.Printf("Press %s to show next page, press %s to quit: ",
+func showNextPage(wr io.Writer) bool {
+	fmt.Fprintf(wr, "Press %s to show next page, press %s to quit: ",
 		color.GreenString("Enter"), color.RedString("any other key then Enter"))
 	var input string
 	_, _ = fmt.Scanln(&input)
 	return strings.Trim(input, " ") == ""
 }
 
-func getNamespaceID(c *cli.Context, nsName namespace.Name) (namespace.ID, error) {
-	wfClient := cFactory.WorkflowClient(c)
+func getNamespaceID(c *cli.Context, clientFactory ClientFactory, nsName namespace.Name) (namespace.ID, error) {
+	wfClient := clientFactory.WorkflowClient(c)
 
 	ctx, cancel := newContext(c)
 	defer cancel()

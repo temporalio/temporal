@@ -27,11 +27,8 @@ package frontend
 import (
 	"context"
 	"fmt"
+	"maps"
 	"sync/atomic"
-
-	"golang.org/x/exp/maps"
-	"google.golang.org/grpc/health"
-	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -40,7 +37,6 @@ import (
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 	sdkclient "go.temporal.io/sdk/client"
-
 	"go.temporal.io/server/api/adminservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	svc "go.temporal.io/server/client"
@@ -49,9 +45,11 @@ import (
 	"go.temporal.io/server/common"
 	clustermetadata "go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/persistence/visibility"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/persistence/visibility/store/elasticsearch"
 	esclient "go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
@@ -60,10 +58,13 @@ import (
 	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/util"
-	"go.temporal.io/server/service/worker"
 	"go.temporal.io/server/service/worker/addsearchattributes"
 	"go.temporal.io/server/service/worker/deletenamespace"
 	"go.temporal.io/server/service/worker/deletenamespace/deleteexecutions"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/health"
+	healthpb "google.golang.org/grpc/health/grpc_health_v1"
+	"google.golang.org/grpc/status"
 )
 
 var _ OperatorHandler = (*OperatorHandlerImpl)(nil)
@@ -71,6 +72,8 @@ var _ OperatorHandler = (*OperatorHandlerImpl)(nil)
 type (
 	// OperatorHandlerImpl - gRPC handler interface for operator service
 	OperatorHandlerImpl struct {
+		operatorservice.UnsafeOperatorServiceServer
+
 		status int32
 
 		logger                 log.Logger
@@ -79,13 +82,13 @@ type (
 		sdkClientFactory       sdk.ClientFactory
 		metricsHandler         metrics.Handler
 		visibilityMgr          manager.VisibilityManager
-		saProvider             searchattribute.Provider
 		saManager              searchattribute.Manager
 		healthServer           *health.Server
 		historyClient          resource.HistoryClient
 		clusterMetadataManager persistence.ClusterMetadataManager
 		clusterMetadata        clustermetadata.Metadata
 		clientFactory          svc.Factory
+		nexusEndpointClient    *NexusEndpointClient
 	}
 
 	NewOperatorHandlerImplArgs struct {
@@ -95,14 +98,20 @@ type (
 		sdkClientFactory       sdk.ClientFactory
 		MetricsHandler         metrics.Handler
 		VisibilityMgr          manager.VisibilityManager
-		SaProvider             searchattribute.Provider
 		SaManager              searchattribute.Manager
 		healthServer           *health.Server
 		historyClient          resource.HistoryClient
 		clusterMetadataManager persistence.ClusterMetadataManager
 		clusterMetadata        clustermetadata.Metadata
 		clientFactory          svc.Factory
+		nexusEndpointClient    *NexusEndpointClient
 	}
+)
+
+const (
+	namespaceTagName                 = "namespace"
+	visibilityIndexNameTagName       = "visibility-index-name"
+	visibilitySearchAttributeTagName = "visibility-search-attribute"
 )
 
 // NewOperatorHandlerImpl creates a gRPC handler for operatorservice
@@ -118,13 +127,13 @@ func NewOperatorHandlerImpl(
 		sdkClientFactory:       args.sdkClientFactory,
 		metricsHandler:         args.MetricsHandler,
 		visibilityMgr:          args.VisibilityMgr,
-		saProvider:             args.SaProvider,
 		saManager:              args.SaManager,
 		healthServer:           args.healthServer,
 		historyClient:          args.historyClient,
 		clusterMetadataManager: args.clusterMetadataManager,
 		clusterMetadata:        args.clusterMetadata,
 		clientFactory:          args.clientFactory,
+		nexusEndpointClient:    args.nexusEndpointClient,
 	}
 
 	return handler
@@ -167,12 +176,6 @@ func (h *OperatorHandlerImpl) AddSearchAttributes(
 		return nil, errSearchAttributesNotSet
 	}
 
-	indexName := h.visibilityMgr.GetIndexName()
-	currentSearchAttributes, err := h.saProvider.GetSearchAttributes(indexName, true)
-	if err != nil {
-		return nil, serviceerror.NewUnavailable(fmt.Sprintf(errUnableToGetSearchAttributesMessage, err))
-	}
-
 	for saName, saType := range request.GetSearchAttributes() {
 		if searchattribute.IsReserved(saName) {
 			return nil, serviceerror.NewInvalidArgument(fmt.Sprintf(errSearchAttributeIsReservedMessage, saName))
@@ -182,29 +185,60 @@ func (h *OperatorHandlerImpl) AddSearchAttributes(
 		}
 	}
 
-	// TODO (rodrigozhou): Remove condition `indexName == ""`.
-	// If indexName == "", then calling addSearchAttributesElasticsearch will
-	// register the search attributes in the cluster metadata if ES is up or if
-	// `skip-schema-update` is set. This is for backward compatibility using
-	// standard visibility.
-	if h.visibilityMgr.HasStoreName(elasticsearch.PersistenceName) || indexName == "" {
+	var visManagers []manager.VisibilityManager
+	if visManagerDual, ok := h.visibilityMgr.(*visibility.VisibilityManagerDual); ok {
+		visManagers = append(
+			visManagers,
+			visManagerDual.GetPrimaryVisibility(),
+			visManagerDual.GetSecondaryVisibility(),
+		)
+	} else {
+		visManagers = append(visManagers, h.visibilityMgr)
+	}
+
+	for _, visManager := range visManagers {
+		var (
+			storeName = visManager.GetStoreNames()[0]
+			indexName = visManager.GetIndexName()
+		)
+		if err := h.addSearchAttributesInternal(ctx, request, storeName, indexName); err != nil {
+			return nil, fmt.Errorf("Failed to add search attributes to store %s: %w", storeName, err)
+		}
+	}
+
+	return &operatorservice.AddSearchAttributesResponse{}, nil
+}
+
+func (h *OperatorHandlerImpl) addSearchAttributesInternal(
+	ctx context.Context,
+	request *operatorservice.AddSearchAttributesRequest,
+	storeName string,
+	indexName string,
+) error {
+	currentSearchAttributes, err := h.saManager.GetSearchAttributes(indexName, true)
+	if err != nil {
+		return serviceerror.NewUnavailable(fmt.Sprintf(errUnableToGetSearchAttributesMessage, err))
+	}
+
+	if indexName == "" {
+		h.logger.Error(
+			"Cannot add search attributes in standard visibility.",
+			tag.NewStringTag("pluginName", storeName),
+		)
+	} else if storeName == elasticsearch.PersistenceName {
 		scope := h.metricsHandler.WithTags(metrics.OperationTag(metrics.OperatorAddSearchAttributesScope))
 		err = h.addSearchAttributesElasticsearch(ctx, request, indexName, currentSearchAttributes)
 		if err != nil {
 			if _, isWorkflowErr := err.(*serviceerror.SystemWorkflow); isWorkflowErr {
-				scope.Counter(metrics.AddSearchAttributesWorkflowFailuresCount.GetMetricName()).Record(1)
+				metrics.AddSearchAttributesWorkflowFailuresCount.With(scope).Record(1)
 			}
 		} else {
-			scope.Counter(metrics.AddSearchAttributesWorkflowSuccessCount.GetMetricName()).Record(1)
+			metrics.AddSearchAttributesWorkflowSuccessCount.With(scope).Record(1)
 		}
 	} else {
 		err = h.addSearchAttributesSQL(ctx, request, currentSearchAttributes)
 	}
-
-	if err != nil {
-		return nil, err
-	}
-	return &operatorservice.AddSearchAttributesResponse{}, nil
+	return err
 }
 
 func (h *OperatorHandlerImpl) addSearchAttributesElasticsearch(
@@ -214,17 +248,29 @@ func (h *OperatorHandlerImpl) addSearchAttributesElasticsearch(
 	currentSearchAttributes searchattribute.NameTypeMap,
 ) error {
 	// Check if custom search attribute already exists in cluster metadata.
-	// This check is not needed in SQL DB because no custom search attributes
+	// This check is not needed in SQL DB because all custom search attributes
 	// are pre-allocated, and only aliases are created.
-	for saName := range request.GetSearchAttributes() {
-		if currentSearchAttributes.IsDefined(saName) {
-			return serviceerror.NewAlreadyExist(fmt.Sprintf(errSearchAttributeAlreadyExistsMessage, saName))
+	customAttributesToAdd := map[string]enumspb.IndexedValueType{}
+	for saName, saType := range request.GetSearchAttributes() {
+		if !currentSearchAttributes.IsDefined(saName) {
+			customAttributesToAdd[saName] = saType
+		} else {
+			h.logger.Warn(
+				fmt.Sprintf(errSearchAttributeAlreadyExistsMessage, saName),
+				tag.NewStringTag(visibilityIndexNameTagName, indexName),
+				tag.NewStringTag(visibilitySearchAttributeTagName, saName),
+			)
 		}
+	}
+
+	// If the map is empty, then all custom search attributes already exists.
+	if len(customAttributesToAdd) == 0 {
+		return nil
 	}
 
 	// Execute workflow.
 	wfParams := addsearchattributes.WorkflowParams{
-		CustomAttributesToAdd: request.GetSearchAttributes(),
+		CustomAttributesToAdd: customAttributesToAdd,
 		IndexName:             indexName,
 		SkipSchemaUpdate:      false,
 	}
@@ -233,7 +279,7 @@ func (h *OperatorHandlerImpl) addSearchAttributesElasticsearch(
 	run, err := sdkClient.ExecuteWorkflow(
 		ctx,
 		sdkclient.StartWorkflowOptions{
-			TaskQueue: worker.DefaultWorkerTaskQueue,
+			TaskQueue: primitives.DefaultWorkerTaskQueue,
 			ID:        addsearchattributes.WorkflowName,
 		},
 		addsearchattributes.WorkflowName,
@@ -279,7 +325,7 @@ func (h *OperatorHandlerImpl) addSearchAttributesSQL(
 		&workflowservice.DescribeNamespaceRequest{Namespace: nsName},
 	)
 	if err != nil {
-		return serviceerror.NewUnavailable(fmt.Sprintf(errUnableToGetNamespaceInfoMessage, nsName))
+		return serviceerror.NewUnavailable(fmt.Sprintf(errUnableToGetNamespaceInfoMessage, nsName, err))
 	}
 
 	dbCustomSearchAttributes := searchattribute.GetSqlDbIndexSearchAttributes().CustomSearchAttributes
@@ -290,9 +336,12 @@ func (h *OperatorHandlerImpl) addSearchAttributesSQL(
 	for saName, saType := range request.GetSearchAttributes() {
 		// check if alias is already in use
 		if _, ok := aliasToFieldMap[saName]; ok {
-			return serviceerror.NewAlreadyExist(
+			h.logger.Warn(
 				fmt.Sprintf(errSearchAttributeAlreadyExistsMessage, saName),
+				tag.NewStringTag(namespaceTagName, nsName),
+				tag.NewStringTag(visibilitySearchAttributeTagName, saName),
 			)
+			continue
 		}
 		// find the first available field for the given type
 		targetFieldName := ""
@@ -316,10 +365,15 @@ func (h *OperatorHandlerImpl) addSearchAttributesSQL(
 		}
 		if targetFieldName == "" {
 			return serviceerror.NewInvalidArgument(
-				fmt.Sprintf(errTooManySearchAttributesMessage, cntUsed, saType.String()),
+				fmt.Sprintf(errTooManySearchAttributesMessage, cntUsed, saType),
 			)
 		}
 		upsertFieldToAliasMap[targetFieldName] = saName
+	}
+
+	// If the map is empty, then all custom search attributes already exists.
+	if len(upsertFieldToAliasMap) == 0 {
+		return nil
 	}
 
 	_, err = client.UpdateNamespace(ctx, &workflowservice.UpdateNamespaceRequest{
@@ -328,10 +382,13 @@ func (h *OperatorHandlerImpl) addSearchAttributesSQL(
 			CustomSearchAttributeAliases: upsertFieldToAliasMap,
 		},
 	})
-	if err != nil && err.Error() == errCustomSearchAttributeFieldAlreadyAllocated.Error() {
-		return errRaceConditionAddingSearchAttributes
+	if err != nil {
+		if err.Error() == errCustomSearchAttributeFieldAlreadyAllocated.Error() {
+			return errRaceConditionAddingSearchAttributes
+		}
+		return serviceerror.NewUnavailable(fmt.Sprintf(errUnableToSaveSearchAttributesMessage, err))
 	}
-	return err
+	return nil
 }
 
 func (h *OperatorHandlerImpl) RemoveSearchAttributes(
@@ -350,7 +407,7 @@ func (h *OperatorHandlerImpl) RemoveSearchAttributes(
 	}
 
 	indexName := h.visibilityMgr.GetIndexName()
-	currentSearchAttributes, err := h.saProvider.GetSearchAttributes(indexName, true)
+	currentSearchAttributes, err := h.saManager.GetSearchAttributes(indexName, true)
 	if err != nil {
 		return nil, serviceerror.NewUnavailable(fmt.Sprintf(errUnableToGetSearchAttributesMessage, err))
 	}
@@ -420,7 +477,7 @@ func (h *OperatorHandlerImpl) removeSearchAttributesSQL(
 		&workflowservice.DescribeNamespaceRequest{Namespace: nsName},
 	)
 	if err != nil {
-		return serviceerror.NewUnavailable(fmt.Sprintf(errUnableToGetNamespaceInfoMessage, nsName))
+		return serviceerror.NewUnavailable(fmt.Sprintf(errUnableToGetNamespaceInfoMessage, nsName, err))
 	}
 
 	upsertFieldToAliasMap := make(map[string]string)
@@ -458,7 +515,7 @@ func (h *OperatorHandlerImpl) ListSearchAttributes(
 	}
 
 	indexName := h.visibilityMgr.GetIndexName()
-	searchAttributes, err := h.saProvider.GetSearchAttributes(indexName, true)
+	searchAttributes, err := h.saManager.GetSearchAttributes(indexName, true)
 	if err != nil {
 		return nil, serviceerror.NewUnavailable(
 			fmt.Sprintf("unable to read custom search attributes: %v", err),
@@ -521,7 +578,7 @@ func (h *OperatorHandlerImpl) listSearchAttributesSQL(
 	)
 	if err != nil {
 		return nil, serviceerror.NewUnavailable(
-			fmt.Sprintf(errUnableToGetNamespaceInfoMessage, nsName),
+			fmt.Sprintf(errUnableToGetNamespaceInfoMessage, nsName, err),
 		)
 	}
 
@@ -550,27 +607,33 @@ func (h *OperatorHandlerImpl) DeleteNamespace(
 		return nil, errRequestNotSet
 	}
 
-	if request.GetNamespace() == primitives.SystemLocalNamespace {
+	if request.GetNamespace() == primitives.SystemLocalNamespace || request.GetNamespaceId() == primitives.SystemNamespaceID {
 		return nil, errUnableDeleteSystemNamespace
+	}
+
+	namespaceDeleteDelay := h.config.DeleteNamespaceNamespaceDeleteDelay()
+	if request.NamespaceDeleteDelay != nil {
+		namespaceDeleteDelay = request.NamespaceDeleteDelay.AsDuration()
 	}
 
 	// Execute workflow.
 	wfParams := deletenamespace.DeleteNamespaceWorkflowParams{
-		Namespace: namespace.Name(request.GetNamespace()),
+		Namespace:   namespace.Name(request.GetNamespace()),
+		NamespaceID: namespace.ID(request.GetNamespaceId()),
 		DeleteExecutionsConfig: deleteexecutions.DeleteExecutionsConfig{
 			DeleteActivityRPS:                    h.config.DeleteNamespaceDeleteActivityRPS(),
 			PageSize:                             h.config.DeleteNamespacePageSize(),
 			PagesPerExecution:                    h.config.DeleteNamespacePagesPerExecution(),
 			ConcurrentDeleteExecutionsActivities: h.config.DeleteNamespaceConcurrentDeleteExecutionsActivities(),
 		},
-		NamespaceDeleteDelay: h.config.DeleteNamespaceNamespaceDeleteDelay(),
+		NamespaceDeleteDelay: namespaceDeleteDelay,
 	}
 
 	sdkClient := h.sdkClientFactory.GetSystemClient()
 	run, err := sdkClient.ExecuteWorkflow(
 		ctx,
 		sdkclient.StartWorkflowOptions{
-			TaskQueue: worker.DefaultWorkerTaskQueue,
+			TaskQueue: primitives.DefaultWorkerTaskQueue,
 			ID:        fmt.Sprintf("%s/%s", deletenamespace.WorkflowName, request.GetNamespace()),
 		},
 		deletenamespace.WorkflowName,
@@ -586,11 +649,11 @@ func (h *OperatorHandlerImpl) DeleteNamespace(
 	var wfResult deletenamespace.DeleteNamespaceWorkflowResult
 	err = run.Get(ctx, &wfResult)
 	if err != nil {
-		scope.Counter(metrics.DeleteNamespaceWorkflowFailuresCount.GetMetricName()).Record(1)
+		metrics.DeleteNamespaceWorkflowFailuresCount.With(scope).Record(1)
 		execution := &commonpb.WorkflowExecution{WorkflowId: deletenamespace.WorkflowName, RunId: run.GetRunID()}
 		return nil, serviceerror.NewSystemWorkflow(execution, err)
 	}
-	scope.Counter(metrics.DeleteNamespaceWorkflowSuccessCount.GetMetricName()).Record(1)
+	metrics.DeleteNamespaceWorkflowSuccessCount.With(scope).Record(1)
 
 	return &operatorservice.DeleteNamespaceResponse{
 		DeletedNamespace: wfResult.DeletedNamespace.String(),
@@ -640,11 +703,12 @@ func (h *OperatorHandlerImpl) AddOrUpdateRemoteCluster(
 	}
 
 	applied, err := h.clusterMetadataManager.SaveClusterMetadata(ctx, &persistence.SaveClusterMetadataRequest{
-		ClusterMetadata: persistencespb.ClusterMetadata{
+		ClusterMetadata: &persistencespb.ClusterMetadata{
 			ClusterName:              resp.GetClusterName(),
 			HistoryShardCount:        resp.GetHistoryShardCount(),
 			ClusterId:                resp.GetClusterId(),
 			ClusterAddress:           request.GetFrontendAddress(),
+			HttpAddress:              resp.GetHttpAddress(),
 			FailoverVersionIncrement: resp.GetFailoverVersionIncrement(),
 			InitialFailoverVersion:   resp.GetInitialFailoverVersion(),
 			IsGlobalNamespaceEnabled: resp.GetIsGlobalNamespaceEnabled(),
@@ -693,7 +757,6 @@ func (h *OperatorHandlerImpl) ListClusters(
 	request *operatorservice.ListClustersRequest,
 ) (_ *operatorservice.ListClustersResponse, retError error) {
 	defer log.CapturePanic(h.logger, &retError)
-
 	if request == nil {
 		return nil, errRequestNotSet
 	}
@@ -715,6 +778,7 @@ func (h *OperatorHandlerImpl) ListClusters(
 			ClusterName:            clusterResp.GetClusterName(),
 			ClusterId:              clusterResp.GetClusterId(),
 			Address:                clusterResp.GetClusterAddress(),
+			HttpAddress:            clusterResp.GetHttpAddress(),
 			InitialFailoverVersion: clusterResp.GetInitialFailoverVersion(),
 			HistoryShardCount:      clusterResp.GetHistoryShardCount(),
 			IsConnectionEnabled:    clusterResp.GetIsConnectionEnabled(),
@@ -760,4 +824,59 @@ func (h *OperatorHandlerImpl) validateRemoteClusterMetadata(metadata *adminservi
 		}
 	}
 	return nil
+}
+
+func (h *OperatorHandlerImpl) CreateNexusEndpoint(
+	ctx context.Context,
+	request *operatorservice.CreateNexusEndpointRequest,
+) (_ *operatorservice.CreateNexusEndpointResponse, retErr error) {
+	defer log.CapturePanic(h.logger, &retErr)
+	if !h.config.EnableNexusAPIs() {
+		return nil, status.Error(codes.NotFound, "Nexus APIs are disabled")
+	}
+	return h.nexusEndpointClient.Create(ctx, request)
+}
+
+func (h *OperatorHandlerImpl) UpdateNexusEndpoint(
+	ctx context.Context,
+	request *operatorservice.UpdateNexusEndpointRequest,
+) (_ *operatorservice.UpdateNexusEndpointResponse, retErr error) {
+	defer log.CapturePanic(h.logger, &retErr)
+	if !h.config.EnableNexusAPIs() {
+		return nil, status.Error(codes.NotFound, "Nexus APIs are disabled")
+	}
+	return h.nexusEndpointClient.Update(ctx, request)
+}
+
+func (h *OperatorHandlerImpl) DeleteNexusEndpoint(
+	ctx context.Context,
+	request *operatorservice.DeleteNexusEndpointRequest,
+) (_ *operatorservice.DeleteNexusEndpointResponse, retErr error) {
+	defer log.CapturePanic(h.logger, &retErr)
+	if !h.config.EnableNexusAPIs() {
+		return nil, status.Error(codes.NotFound, "Nexus APIs are disabled")
+	}
+	return h.nexusEndpointClient.Delete(ctx, request)
+}
+
+func (h *OperatorHandlerImpl) GetNexusEndpoint(
+	ctx context.Context,
+	request *operatorservice.GetNexusEndpointRequest,
+) (_ *operatorservice.GetNexusEndpointResponse, retErr error) {
+	defer log.CapturePanic(h.logger, &retErr)
+	if !h.config.EnableNexusAPIs() {
+		return nil, status.Error(codes.NotFound, "Nexus APIs are disabled")
+	}
+	return h.nexusEndpointClient.Get(ctx, request)
+}
+
+func (h *OperatorHandlerImpl) ListNexusEndpoints(
+	ctx context.Context,
+	request *operatorservice.ListNexusEndpointsRequest,
+) (_ *operatorservice.ListNexusEndpointsResponse, retErr error) {
+	defer log.CapturePanic(h.logger, &retErr)
+	if !h.config.EnableNexusAPIs() {
+		return nil, status.Error(codes.NotFound, "Nexus APIs are disabled")
+	}
+	return h.nexusEndpointClient.List(ctx, request)
 }

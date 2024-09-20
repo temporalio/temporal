@@ -30,7 +30,6 @@ import (
 
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/workflowservice/v1"
-
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
@@ -39,6 +38,7 @@ import (
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/shard"
+	"go.temporal.io/server/service/history/workflow"
 )
 
 func Invoke(
@@ -69,14 +69,13 @@ func Invoke(
 	err = api.GetAndUpdateWorkflowWithNew(
 		ctx,
 		token.Clock,
-		api.BypassMutableStateConsistencyPredicate,
 		definition.NewWorkflowKey(
 			token.NamespaceId,
 			token.WorkflowId,
 			token.RunId,
 		),
-		func(workflowContext api.WorkflowContext) (*api.UpdateWorkflowAction, error) {
-			mutableState := workflowContext.GetMutableState()
+		func(workflowLease api.WorkflowLease) (*api.UpdateWorkflowAction, error) {
+			mutableState := workflowLease.GetMutableState()
 			workflowTypeName = mutableState.GetWorkflowType().GetName()
 			if !mutableState.IsWorkflowExecutionRunning() {
 				return nil, consts.ErrWorkflowCompleted
@@ -89,18 +88,18 @@ func Invoke(
 					return nil, err0
 				}
 			}
-			ai, isRunning := mutableState.GetActivityInfo(scheduledEventID)
+			ai, activityRunning := mutableState.GetActivityInfo(scheduledEventID)
 
 			// First check to see if cache needs to be refreshed as we could potentially have stale workflow execution in
 			// some extreme cassandra failure cases.
-			if !isRunning && scheduledEventID >= mutableState.GetNextEventID() {
-				shard.GetMetricsHandler().Counter(metrics.StaleMutableStateCounter.GetMetricName()).Record(
+			if !activityRunning && scheduledEventID >= mutableState.GetNextEventID() {
+				metrics.StaleMutableStateCounter.With(shard.GetMetricsHandler()).Record(
 					1,
 					metrics.OperationTag(metrics.HistoryRespondActivityTaskFailedScope))
 				return nil, consts.ErrStaleState
 			}
 
-			if !isRunning ||
+			if !activityRunning ||
 				ai.StartedEventId == common.EmptyEventID ||
 				(token.GetScheduledEventId() != common.EmptyEventID && token.Attempt != ai.Attempt) ||
 				(token.GetVersion() != common.EmptyVersion && token.Version != ai.Version) {
@@ -125,14 +124,14 @@ func Invoke(
 			}
 			if retryState != enumspb.RETRY_STATE_IN_PROGRESS {
 				// no more retry, and we want to record the failure event
-				if _, err := mutableState.AddActivityTaskFailedEvent(scheduledEventID, ai.StartedEventId, failure, retryState, request.GetIdentity()); err != nil {
+				if _, err := mutableState.AddActivityTaskFailedEvent(scheduledEventID, ai.StartedEventId, failure, retryState, request.GetIdentity(), request.GetWorkerVersion()); err != nil {
 					// Unable to add ActivityTaskFailed event to history
 					return nil, err
 				}
 				postActions.CreateWorkflowTask = true
 			}
 
-			activityStartedTime = *ai.StartedTime
+			activityStartedTime = ai.StartedTime.AsTime()
 			taskQueue = ai.TaskQueue
 			return postActions, nil
 		},
@@ -141,14 +140,14 @@ func Invoke(
 		workflowConsistencyChecker,
 	)
 	if err == nil && !activityStartedTime.IsZero() {
-		shard.GetMetricsHandler().Timer(metrics.ActivityE2ELatency.GetMetricName()).Record(
-			time.Since(activityStartedTime),
-			metrics.OperationTag(metrics.HistoryRespondActivityTaskFailedScope),
-			metrics.NamespaceTag(namespace.String()),
-			metrics.WorkflowTypeTag(workflowTypeName),
-			metrics.ActivityTypeTag(token.ActivityType),
-			metrics.TaskQueueTag(taskQueue),
-		)
+		metrics.ActivityE2ELatency.With(
+			workflow.GetPerTaskQueueFamilyScope(
+				shard.GetMetricsHandler(), namespace, taskQueue, shard.GetConfig(),
+				metrics.OperationTag(metrics.HistoryRespondActivityTaskFailedScope),
+				metrics.WorkflowTypeTag(workflowTypeName),
+				metrics.ActivityTypeTag(token.ActivityType),
+			),
+		).Record(time.Since(activityStartedTime))
 	}
 	return &historyservice.RespondActivityTaskFailedResponse{}, err
 }

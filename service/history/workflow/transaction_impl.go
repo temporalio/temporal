@@ -30,14 +30,12 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
-
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
-	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/shard"
 )
@@ -287,7 +285,7 @@ func persistFirstWorkflowEvents(
 	namespaceID := namespace.ID(workflowEvents.NamespaceID)
 	workflowID := workflowEvents.WorkflowID
 	runID := workflowEvents.RunID
-	execution := commonpb.WorkflowExecution{
+	execution := &commonpb.WorkflowExecution{
 		WorkflowId: workflowEvents.WorkflowID,
 		RunId:      workflowEvents.RunID,
 	}
@@ -337,7 +335,7 @@ func persistNonFirstWorkflowEvents(
 		ctx,
 		shard,
 		namespaceID,
-		execution,
+		&execution,
 		&persistence.AppendHistoryNodesRequest{
 			IsNewBranch:       false,
 			BranchToken:       branchToken,
@@ -353,7 +351,7 @@ func appendHistoryEvents(
 	ctx context.Context,
 	shard shard.Context,
 	namespaceID namespace.ID,
-	execution commonpb.WorkflowExecution,
+	execution *commonpb.WorkflowExecution,
 	request *persistence.AppendHistoryNodesRequest,
 ) (int64, error) {
 
@@ -472,7 +470,7 @@ func getWorkflowExecution(
 	if err != nil {
 		switch err.(type) {
 		case *serviceerror.NotFound:
-			// it is possible that workflow does not exists
+			// It is possible that workflow does not exist.
 			return nil, err
 		default:
 			shard.GetLogger().Error(
@@ -602,16 +600,11 @@ func NotifyNewHistorySnapshotEvent(
 	namespaceID := executionInfo.NamespaceId
 	workflowID := executionInfo.WorkflowId
 	runID := executionState.RunId
-	currentVersionHistory, err := versionhistory.GetCurrentVersionHistory(executionInfo.VersionHistories)
-	if err != nil {
-		return err
-	}
-	currentBranchToken := currentVersionHistory.BranchToken
 	workflowState := executionState.State
 	workflowStatus := executionState.Status
 	lastFirstEventID := executionInfo.LastFirstEventId
 	lastFirstEventTxnID := executionInfo.LastFirstEventTxnId
-	lastWorkflowTaskStartEventID := executionInfo.LastWorkflowTaskStartedEventId
+	lastWorkflowTaskStartEventID := executionInfo.LastCompletedWorkflowTaskStartedEventId
 	nextEventID := workflowSnapshot.NextEventID
 
 	engine.NotifyNewHistoryEvent(events.NewNotification(
@@ -624,9 +617,9 @@ func NotifyNewHistorySnapshotEvent(
 		lastFirstEventTxnID,
 		nextEventID,
 		lastWorkflowTaskStartEventID,
-		currentBranchToken,
 		workflowState,
 		workflowStatus,
+		executionInfo.VersionHistories,
 	))
 	return nil
 }
@@ -646,16 +639,11 @@ func NotifyNewHistoryMutationEvent(
 	namespaceID := executionInfo.NamespaceId
 	workflowID := executionInfo.WorkflowId
 	runID := executionState.RunId
-	currentVersionHistory, err := versionhistory.GetCurrentVersionHistory(executionInfo.VersionHistories)
-	if err != nil {
-		return err
-	}
-	currentBranchToken := currentVersionHistory.BranchToken
 	workflowState := executionState.State
 	workflowStatus := executionState.Status
 	lastFirstEventID := executionInfo.LastFirstEventId
 	lastFirstEventTxnID := executionInfo.LastFirstEventTxnId
-	lastWorkflowTaskStartEventID := executionInfo.LastWorkflowTaskStartedEventId
+	lastWorkflowTaskStartEventID := executionInfo.LastCompletedWorkflowTaskStartedEventId
 	nextEventID := workflowMutation.NextEventID
 
 	engine.NotifyNewHistoryEvent(events.NewNotification(
@@ -668,9 +656,9 @@ func NotifyNewHistoryMutationEvent(
 		lastFirstEventTxnID,
 		nextEventID,
 		lastWorkflowTaskStartEventID,
-		currentBranchToken,
 		workflowState,
 		workflowStatus,
+		executionInfo.VersionHistories,
 	))
 	return nil
 }
@@ -753,6 +741,7 @@ func emitCompletionMetrics(
 			completionMetric.namespaceState,
 			completionMetric.taskQueue,
 			completionMetric.status,
+			shard.GetConfig(),
 		)
 	}
 }

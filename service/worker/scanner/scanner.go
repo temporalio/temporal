@@ -34,24 +34,22 @@ import (
 	sdkclient "go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
-
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/config"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/service/worker/scanner/build_ids"
-
-	"go.temporal.io/server/common/backoff"
-	"go.temporal.io/server/common/dynamicconfig"
-	"go.temporal.io/server/common/log/tag"
 )
 
 type (
@@ -68,7 +66,7 @@ type (
 		Persistence *config.Persistence
 		// TaskQueueScannerEnabled indicates if taskQueue scanner should be started as part of scanner
 		TaskQueueScannerEnabled dynamicconfig.BoolPropertyFn
-		// BuildIdScavengerEnabled indicates if the build id scavenger should be started as part of scanner
+		// BuildIdScavengerEnabled indicates if the build ID scavenger should be started as part of scanner
 		BuildIdScavengerEnabled dynamicconfig.BoolPropertyFn
 		// HistoryScannerEnabled indicates if history scanner should be started as part of scanner
 		HistoryScannerEnabled dynamicconfig.BoolPropertyFn
@@ -90,10 +88,10 @@ type (
 		// ExecutionScannerHistoryEventIdValidator indicates if the execution scavenger to validate history event id.
 		ExecutionScannerHistoryEventIdValidator dynamicconfig.BoolPropertyFn
 
-		// RemovableBuildIdDurationSinceDefault is the minimum duration since a build id was last default in its
+		// RemovableBuildIdDurationSinceDefault is the minimum duration since a build ID was last default in its
 		// containing set for it to be considered for removal.
 		RemovableBuildIdDurationSinceDefault dynamicconfig.DurationPropertyFn
-		// BuildIdScavengerVisibilityRPS is the rate limit for visibility calls from the build id scavenger
+		// BuildIdScavengerVisibilityRPS is the rate limit for visibility calls from the build ID scavenger
 		BuildIdScavengerVisibilityRPS dynamicconfig.FloatPropertyFn
 	}
 

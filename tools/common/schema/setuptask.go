@@ -25,14 +25,18 @@
 package schema
 
 import (
+	"bytes"
 	"fmt"
+	"io"
+	"io/fs"
+	"os"
 	"path/filepath"
 
 	"github.com/blang/semver/v4"
-
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/persistence"
+	dbschemas "go.temporal.io/server/schema"
 )
 
 // SetupTask represents a task
@@ -44,7 +48,8 @@ type SetupTask struct {
 	logger log.Logger
 }
 
-func newSetupSchemaTask(db DB, config *SetupConfig, logger log.Logger) *SetupTask {
+// NewSetupSchemaTask returns a new instance of SetupTask
+func NewSetupSchemaTask(db DB, config *SetupConfig, logger log.Logger) *SetupTask {
 	return &SetupTask{
 		db:     db,
 		config: config,
@@ -71,16 +76,28 @@ func (task *SetupTask) Run() error {
 		}
 	}
 
-	if len(config.SchemaFilePath) > 0 {
-		filePath, err := filepath.Abs(config.SchemaFilePath)
-		if err != nil {
-			return err
+	if len(config.SchemaFilePath) > 0 || len(config.SchemaName) > 0 {
+		var schemaBuf []byte
+		var err error
+		var schemaFilePath string
+		if len(config.SchemaName) > 0 {
+			fsys := dbschemas.Assets()
+			schemaFilePath = filepath.Join(config.SchemaName, "schema"+schemaFileEnding(config.SchemaName))
+			schemaBuf, err = fs.ReadFile(fsys, schemaFilePath)
+		} else {
+			schemaFilePath, err = filepath.Abs(config.SchemaFilePath)
+			if err != nil {
+				return err
+			}
+			schemaBuf, err = os.ReadFile(schemaFilePath)
 		}
-		stmts, err := persistence.LoadAndSplitQuery([]string{filePath})
 		if err != nil {
-			return err
+			return fmt.Errorf("error reading file %s: %w", schemaFilePath, err)
 		}
-
+		stmts, err := persistence.LoadAndSplitQueryFromReaders([]io.Reader{bytes.NewBuffer(schemaBuf)})
+		if err != nil {
+			return fmt.Errorf("error parsing query: %v", err)
+		}
 		task.logger.Debug("----- Creating types and tables -----")
 		for _, stmt := range stmts {
 			task.logger.Debug(rmspaceRegex.ReplaceAllString(stmt, " "))

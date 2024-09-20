@@ -25,8 +25,6 @@
 package history
 
 import (
-	"go.uber.org/fx"
-
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
@@ -35,6 +33,7 @@ import (
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
+	"go.uber.org/fx"
 )
 
 const (
@@ -62,20 +61,14 @@ func NewVisibilityQueueFactory(
 	return &visibilityQueueFactory{
 		visibilityQueueFactoryParams: params,
 		QueueFactoryBase: QueueFactoryBase{
-			HostScheduler: queues.NewNamespacePriorityScheduler(
+			HostScheduler: queues.NewScheduler(
 				params.ClusterMetadata.GetCurrentClusterName(),
-				queues.NamespacePrioritySchedulerOptions{
-					WorkerCount:                 params.Config.VisibilityProcessorSchedulerWorkerCount,
-					ActiveNamespaceWeights:      params.Config.VisibilityProcessorSchedulerActiveRoundRobinWeights,
-					StandbyNamespaceWeights:     params.Config.VisibilityProcessorSchedulerStandbyRoundRobinWeights,
-					EnableRateLimiter:           params.Config.TaskSchedulerEnableRateLimiter,
-					EnableRateLimiterShadowMode: params.Config.TaskSchedulerEnableRateLimiterShadowMode,
-					DispatchThrottleDuration:    params.Config.TaskSchedulerThrottleDuration,
+				queues.SchedulerOptions{
+					WorkerCount:             params.Config.VisibilityProcessorSchedulerWorkerCount,
+					ActiveNamespaceWeights:  params.Config.VisibilityProcessorSchedulerActiveRoundRobinWeights,
+					StandbyNamespaceWeights: params.Config.VisibilityProcessorSchedulerStandbyRoundRobinWeights,
 				},
 				params.NamespaceRegistry,
-				params.SchedulerRateLimiter,
-				params.TimeSource,
-				params.MetricsHandler.WithTags(metrics.OperationTag(metrics.OperationVisibilityQueueProcessorScope)),
 				params.Logger,
 			),
 			HostPriorityAssigner: queues.NewPriorityAssigner(),
@@ -85,7 +78,7 @@ func NewVisibilityQueueFactory(
 					params.Config.PersistenceMaxQPS,
 					visibilityQueuePersistenceMaxRPSRatio,
 				),
-				int64(params.Config.QueueMaxReaderCount()),
+				int64(params.Config.VisibilityQueueMaxReaderCount()),
 			),
 		},
 	}
@@ -98,8 +91,25 @@ func (f *visibilityQueueFactory) CreateQueue(
 	logger := log.With(shard.GetLogger(), tag.ComponentVisibilityQueue)
 	metricsHandler := f.MetricsHandler.WithTags(metrics.OperationTag(metrics.OperationVisibilityQueueProcessorScope))
 
+	var shardScheduler = f.HostScheduler
+	if f.Config.TaskSchedulerEnableRateLimiter() {
+		shardScheduler = queues.NewRateLimitedScheduler(
+			f.HostScheduler,
+			queues.RateLimitedSchedulerOptions{
+				EnableShadowMode: f.Config.TaskSchedulerEnableRateLimiterShadowMode,
+				StartupDelay:     f.Config.TaskSchedulerRateLimiterStartupDelay,
+			},
+			f.ClusterMetadata.GetCurrentClusterName(),
+			f.NamespaceRegistry,
+			f.SchedulerRateLimiter,
+			f.TimeSource,
+			logger,
+			metricsHandler,
+		)
+	}
+
 	rescheduler := queues.NewRescheduler(
-		f.HostScheduler,
+		shardScheduler,
 		shard.GetTimeSource(),
 		logger,
 		metricsHandler,
@@ -118,18 +128,33 @@ func (f *visibilityQueueFactory) CreateQueue(
 		executor = f.ExecutorWrapper.Wrap(executor)
 	}
 
+	factory := queues.NewExecutableFactory(
+		executor,
+		shardScheduler,
+		rescheduler,
+		f.HostPriorityAssigner,
+		shard.GetTimeSource(),
+		shard.GetNamespaceRegistry(),
+		shard.GetClusterMetadata(),
+		logger,
+		metricsHandler,
+		f.DLQWriter,
+		f.Config.TaskDLQEnabled,
+		f.Config.TaskDLQUnexpectedErrorAttempts,
+		f.Config.TaskDLQInternalErrors,
+		f.Config.TaskDLQErrorPattern,
+	)
 	return queues.NewImmediateQueue(
 		shard,
 		tasks.CategoryVisibility,
-		f.HostScheduler,
+		shardScheduler,
 		rescheduler,
-		f.HostPriorityAssigner,
-		executor,
 		&queues.Options{
 			ReaderOptions: queues.ReaderOptions{
 				BatchSize:            f.Config.VisibilityTaskBatchSize,
 				MaxPendingTasksCount: f.Config.QueuePendingTaskMaxCount,
 				PollBackoffInterval:  f.Config.VisibilityProcessorPollBackoffInterval,
+				MaxPredicateSize:     f.Config.QueueMaxPredicateSize,
 			},
 			MonitorOptions: queues.MonitorOptions{
 				PendingTasksCriticalCount:   f.Config.QueuePendingTaskCriticalCount,
@@ -141,10 +166,12 @@ func (f *visibilityQueueFactory) CreateQueue(
 			MaxPollIntervalJitterCoefficient:    f.Config.VisibilityProcessorMaxPollIntervalJitterCoefficient,
 			CheckpointInterval:                  f.Config.VisibilityProcessorUpdateAckInterval,
 			CheckpointIntervalJitterCoefficient: f.Config.VisibilityProcessorUpdateAckIntervalJitterCoefficient,
-			MaxReaderCount:                      f.Config.QueueMaxReaderCount,
+			MaxReaderCount:                      f.Config.VisibilityQueueMaxReaderCount,
 		},
 		f.HostReaderRateLimiter,
+		queues.GrouperNamespaceID{},
 		logger,
 		metricsHandler,
+		factory,
 	)
 }

@@ -30,19 +30,19 @@ import (
 	"testing"
 	"time"
 
-	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/testsuite"
-
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/visibility/manager"
+	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/service/worker/deletenamespace/deleteexecutions"
 	"go.temporal.io/server/service/worker/deletenamespace/errors"
+	"go.uber.org/mock/gomock"
 )
 
 func Test_ReclaimResourcesWorkflow_Success(t *testing.T) {
@@ -50,6 +50,7 @@ func Test_ReclaimResourcesWorkflow_Success(t *testing.T) {
 	env := testSuite.NewTestWorkflowEnvironment()
 
 	var a *Activities
+	var la *LocalActivities
 
 	env.RegisterWorkflow(deleteexecutions.DeleteExecutionsWorkflow)
 	env.OnWorkflow(deleteexecutions.DeleteExecutionsWorkflow, mock.Anything, deleteexecutions.DeleteExecutionsParams{
@@ -68,11 +69,11 @@ func Test_ReclaimResourcesWorkflow_Success(t *testing.T) {
 		ErrorCount:   0,
 	}, nil).Once()
 
-	env.OnActivity(a.IsAdvancedVisibilityActivity, mock.Anything, namespace.Name("namespace")).Return(true, nil).Once()
-	env.OnActivity(a.CountExecutionsAdvVisibilityActivity, mock.Anything, namespace.ID("namespace-id"), namespace.Name("namespace")).Return(int64(10), nil).Once()
+	env.OnActivity(la.IsAdvancedVisibilityActivity, mock.Anything, namespace.Name("namespace")).Return(true, nil).Once()
+	env.OnActivity(la.CountExecutionsAdvVisibilityActivity, mock.Anything, namespace.ID("namespace-id"), namespace.Name("namespace")).Return(int64(10), nil).Once()
 	env.OnActivity(a.EnsureNoExecutionsAdvVisibilityActivity, mock.Anything, namespace.ID("namespace-id"), namespace.Name("namespace"), 0).Return(nil).Once()
 
-	env.OnActivity(a.DeleteNamespaceActivity, mock.Anything, namespace.ID("namespace-id"), namespace.Name("namespace")).Return(nil).Once()
+	env.OnActivity(la.DeleteNamespaceActivity, mock.Anything, namespace.ID("namespace-id"), namespace.Name("namespace")).Return(nil).Once()
 
 	env.ExecuteWorkflow(ReclaimResourcesWorkflow, ReclaimResourcesParams{
 		DeleteExecutionsParams: deleteexecutions.DeleteExecutionsParams{
@@ -99,6 +100,7 @@ func Test_ReclaimResourcesWorkflow_EnsureNoExecutionsActivity_Error(t *testing.T
 	env := testSuite.NewTestWorkflowEnvironment()
 
 	var a *Activities
+	var la *LocalActivities
 
 	env.RegisterWorkflow(deleteexecutions.DeleteExecutionsWorkflow)
 	env.OnWorkflow(deleteexecutions.DeleteExecutionsWorkflow, mock.Anything, deleteexecutions.DeleteExecutionsParams{
@@ -117,8 +119,8 @@ func Test_ReclaimResourcesWorkflow_EnsureNoExecutionsActivity_Error(t *testing.T
 		ErrorCount:   0,
 	}, nil).Once()
 
-	env.OnActivity(a.IsAdvancedVisibilityActivity, mock.Anything, namespace.Name("namespace")).Return(true, nil).Once()
-	env.OnActivity(a.CountExecutionsAdvVisibilityActivity, mock.Anything, namespace.ID("namespace-id"), namespace.Name("namespace")).Return(int64(10), nil).Once()
+	env.OnActivity(la.IsAdvancedVisibilityActivity, mock.Anything, namespace.Name("namespace")).Return(true, nil).Once()
+	env.OnActivity(la.CountExecutionsAdvVisibilityActivity, mock.Anything, namespace.ID("namespace-id"), namespace.Name("namespace")).Return(int64(10), nil).Once()
 	env.OnActivity(a.EnsureNoExecutionsAdvVisibilityActivity, mock.Anything, namespace.ID("namespace-id"), namespace.Name("namespace"), 0).
 		Return(stderrors.New("specific_error_from_activity")).
 		Times(10) // GoSDK defaultMaximumAttemptsForUnitTest value.
@@ -145,6 +147,7 @@ func Test_ReclaimResourcesWorkflow_EnsureNoExecutionsActivity_ExecutionsStillExi
 	env := testSuite.NewTestWorkflowEnvironment()
 
 	var a *Activities
+	var la *LocalActivities
 
 	env.RegisterWorkflow(deleteexecutions.DeleteExecutionsWorkflow)
 	env.OnWorkflow(deleteexecutions.DeleteExecutionsWorkflow, mock.Anything, deleteexecutions.DeleteExecutionsParams{
@@ -163,8 +166,8 @@ func Test_ReclaimResourcesWorkflow_EnsureNoExecutionsActivity_ExecutionsStillExi
 		ErrorCount:   0,
 	}, nil).Once()
 
-	env.OnActivity(a.IsAdvancedVisibilityActivity, mock.Anything, namespace.Name("namespace")).Return(true, nil).Once()
-	env.OnActivity(a.CountExecutionsAdvVisibilityActivity, mock.Anything, namespace.ID("namespace-id"), namespace.Name("namespace")).Return(int64(10), nil).Once()
+	env.OnActivity(la.IsAdvancedVisibilityActivity, mock.Anything, namespace.Name("namespace")).Return(true, nil).Once()
+	env.OnActivity(la.CountExecutionsAdvVisibilityActivity, mock.Anything, namespace.ID("namespace-id"), namespace.Name("namespace")).Return(int64(10), nil).Once()
 	env.OnActivity(a.EnsureNoExecutionsAdvVisibilityActivity, mock.Anything, namespace.ID("namespace-id"), namespace.Name("namespace"), 0).
 		Return(errors.NewExecutionsStillExistError(1)).
 		Times(10) // GoSDK defaultMaximumAttemptsForUnitTest value.
@@ -198,6 +201,7 @@ func Test_ReclaimResourcesWorkflow_NoActivityMocks_Success(t *testing.T) {
 	visibilityManager.EXPECT().CountWorkflowExecutions(gomock.Any(), &manager.CountWorkflowExecutionsRequest{
 		NamespaceID: "namespace-id",
 		Namespace:   "namespace",
+		Query:       searchattribute.QueryWithAnyNamespaceDivision(""),
 	}).Return(&manager.CountWorkflowExecutionsResponse{
 		Count: 1,
 	}, nil)
@@ -207,6 +211,7 @@ func Test_ReclaimResourcesWorkflow_NoActivityMocks_Success(t *testing.T) {
 	visibilityManager.EXPECT().CountWorkflowExecutions(gomock.Any(), &manager.CountWorkflowExecutionsRequest{
 		NamespaceID: "namespace-id",
 		Namespace:   "namespace",
+		Query:       searchattribute.QueryWithAnyNamespaceDivision(""),
 	}).DoAndReturn(func(_ context.Context, request *manager.CountWorkflowExecutionsRequest) (*manager.CountWorkflowExecutionsResponse, error) {
 		if countWorkflowExecutionsCallTimes == 8 {
 			return &manager.CountWorkflowExecutionsResponse{
@@ -227,15 +232,20 @@ func Test_ReclaimResourcesWorkflow_NoActivityMocks_Success(t *testing.T) {
 
 	a := &Activities{
 		visibilityManager: visibilityManager,
+		metricsHandler:    metrics.NoopMetricsHandler,
+		logger:            log.NewNoopLogger(),
+	}
+	la := &LocalActivities{
+		visibilityManager: visibilityManager,
 		metadataManager:   metadataManager,
 		metricsHandler:    metrics.NoopMetricsHandler,
 		logger:            log.NewNoopLogger(),
 	}
 
-	env.RegisterActivity(a.IsAdvancedVisibilityActivity)
-	env.RegisterActivity(a.CountExecutionsAdvVisibilityActivity)
+	env.RegisterActivity(la.IsAdvancedVisibilityActivity)
+	env.RegisterActivity(la.CountExecutionsAdvVisibilityActivity)
 	env.RegisterActivity(a.EnsureNoExecutionsAdvVisibilityActivity)
-	env.RegisterActivity(a.DeleteNamespaceActivity)
+	env.RegisterActivity(la.DeleteNamespaceActivity)
 
 	env.RegisterWorkflow(deleteexecutions.DeleteExecutionsWorkflow)
 	env.OnWorkflow(deleteexecutions.DeleteExecutionsWorkflow, mock.Anything, deleteexecutions.DeleteExecutionsParams{
@@ -285,6 +295,7 @@ func Test_ReclaimResourcesWorkflow_NoActivityMocks_NoProgressMade(t *testing.T) 
 	visibilityManager.EXPECT().CountWorkflowExecutions(gomock.Any(), &manager.CountWorkflowExecutionsRequest{
 		NamespaceID: "namespace-id",
 		Namespace:   "namespace",
+		Query:       searchattribute.QueryWithAnyNamespaceDivision(""),
 	}).Return(&manager.CountWorkflowExecutionsResponse{
 		Count: 1,
 	}, nil)
@@ -293,6 +304,7 @@ func Test_ReclaimResourcesWorkflow_NoActivityMocks_NoProgressMade(t *testing.T) 
 	visibilityManager.EXPECT().CountWorkflowExecutions(gomock.Any(), &manager.CountWorkflowExecutionsRequest{
 		NamespaceID: "namespace-id",
 		Namespace:   "namespace",
+		Query:       searchattribute.QueryWithAnyNamespaceDivision(""),
 	}).Return(&manager.CountWorkflowExecutionsResponse{
 		Count: 1,
 	}, nil).
@@ -303,9 +315,14 @@ func Test_ReclaimResourcesWorkflow_NoActivityMocks_NoProgressMade(t *testing.T) 
 		metricsHandler:    metrics.NoopMetricsHandler,
 		logger:            log.NewNoopLogger(),
 	}
+	la := &LocalActivities{
+		visibilityManager: visibilityManager,
+		metricsHandler:    metrics.NoopMetricsHandler,
+		logger:            log.NewNoopLogger(),
+	}
 
-	env.RegisterActivity(a.IsAdvancedVisibilityActivity)
-	env.RegisterActivity(a.CountExecutionsAdvVisibilityActivity)
+	env.RegisterActivity(la.IsAdvancedVisibilityActivity)
+	env.RegisterActivity(la.CountExecutionsAdvVisibilityActivity)
 	env.RegisterActivity(a.EnsureNoExecutionsAdvVisibilityActivity)
 
 	env.RegisterWorkflow(deleteexecutions.DeleteExecutionsWorkflow)

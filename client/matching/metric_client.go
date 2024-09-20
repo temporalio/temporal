@@ -30,15 +30,14 @@ import (
 
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
-	"google.golang.org/grpc"
-
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
-	"go.temporal.io/server/common/tqname"
+	"go.temporal.io/server/common/tqid"
+	"google.golang.org/grpc"
 )
 
 var _ matchingservice.MatchingServiceClient = (*metricClient)(nil)
@@ -78,7 +77,7 @@ func (c *metricClient) AddActivityTask(
 
 	c.emitForwardedSourceStats(
 		scope,
-		request.GetForwardedSource(),
+		request.GetForwardInfo().GetSourcePartition(),
 		request.TaskQueue,
 	)
 
@@ -98,7 +97,7 @@ func (c *metricClient) AddWorkflowTask(
 
 	c.emitForwardedSourceStats(
 		scope,
-		request.GetForwardedSource(),
+		request.GetForwardInfo().GetSourcePartition(),
 		request.TaskQueue,
 	)
 
@@ -162,7 +161,7 @@ func (c *metricClient) QueryWorkflow(
 
 	c.emitForwardedSourceStats(
 		scope,
-		request.GetForwardedSource(),
+		request.GetForwardInfo().GetSourcePartition(),
 		request.TaskQueue,
 	)
 
@@ -180,11 +179,14 @@ func (c *metricClient) emitForwardedSourceStats(
 
 	switch {
 	case forwardedFrom != "":
-		metricsHandler.Counter(metrics.MatchingClientForwardedCounter.GetMetricName()).Record(1)
+		metrics.MatchingClientForwardedCounter.With(metricsHandler).Record(1)
 	default:
-		_, err := tqname.FromBaseName(taskQueue.GetName())
+		// TODO: confirmed from metrics, it seems this error does happen at the moment...
+		// it means some mangled name come here; need to check why
+		_, err := tqid.NewTaskQueueFamily("", taskQueue.GetName())
 		if err != nil {
-			metricsHandler.Counter(metrics.MatchingClientInvalidTaskQueueName.GetMetricName()).Record(1)
+			c.logger.Info("invalid tq name", tag.Error(err), tag.NewStringsTag("proto", []string{taskQueue.GetName()}))
+			metrics.MatchingClientInvalidTaskQueueName.With(metricsHandler).Record(1)
 		}
 	}
 }
@@ -195,7 +197,7 @@ func (c *metricClient) startMetricsRecording(
 ) (metrics.Handler, time.Time) {
 	caller := headers.GetCallerInfo(ctx).CallerName
 	handler := c.metricsHandler.WithTags(metrics.OperationTag(operation), metrics.NamespaceTag(caller), metrics.ServiceRoleTag(metrics.MatchingRoleTagValue))
-	handler.Counter(metrics.ClientRequests.GetMetricName()).Record(1)
+	metrics.ClientRequests.With(handler).Record(1)
 	return handler, time.Now().UTC()
 }
 
@@ -216,9 +218,9 @@ func (c *metricClient) finishMetricsRecording(
 			*serviceerror.WorkflowExecutionAlreadyStarted:
 			// noop - not interest and too many logs
 		default:
-			c.throttledLogger.Info("matching client encountered error", tag.Error(err), tag.ErrorType(err))
+			c.throttledLogger.Info("matching client encountered error", tag.Error(err), tag.ServiceErrorType(err))
 		}
-		metricsHandler.Counter(metrics.ClientFailures.GetMetricName()).Record(1, metrics.ServiceErrorTypeTag(err))
+		metrics.ClientFailures.With(metricsHandler).Record(1, metrics.ServiceErrorTypeTag(err))
 	}
-	metricsHandler.Timer(metrics.ClientLatency.GetMetricName()).Record(time.Since(startTime))
+	metrics.ClientLatency.With(metricsHandler).Record(time.Since(startTime))
 }

@@ -27,10 +27,9 @@ package serviceerror
 import (
 	"fmt"
 
-	"github.com/gogo/status"
-	"google.golang.org/grpc/codes"
-
 	"go.temporal.io/server/api/errordetails/v1"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 type (

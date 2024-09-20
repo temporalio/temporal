@@ -34,9 +34,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	commonpb "go.temporal.io/api/common/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
-
 	"go.temporal.io/server/common"
-	"go.temporal.io/server/common/primitives/timestamp"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 func TestCRC32OverProto(t *testing.T) {
@@ -49,7 +48,7 @@ func TestCRC32OverProto(t *testing.T) {
 			WorkflowId: uuid.New(),
 			RunId:      uuid.New(),
 		},
-		StartTime:     timestamp.TimePtr(time.Now().UTC()),
+		StartTime:     timestamppb.New(time.Now().UTC()),
 		HistoryLength: 550,
 	}
 

@@ -44,7 +44,6 @@ type (
 	TasksFilter struct {
 		RangeHash          uint32
 		TaskQueueID        []byte
-		TaskID             *int64
 		InclusiveMinTaskID *int64
 		ExclusiveMaxTaskID *int64
 		Limit              *int
@@ -57,11 +56,8 @@ type (
 		// SelectFromTasks retrieves one or more rows from the tasks table
 		// Required filter params - {namespaceID, taskqueueName, taskType, inclusiveMinTaskID, exclusiveMaxTaskID, pageSize}
 		SelectFromTasks(ctx context.Context, filter TasksFilter) ([]TasksRow, error)
-		// DeleteFromTasks deletes a row from tasks table
+		// DeleteFromTasks deletes multiple rows from tasks table
 		// Required filter params:
-		//  to delete single row
-		//     - {namespaceID, taskqueueName, taskType, taskID}
-		//  to delete multiple rows
 		//    - {namespaceID, taskqueueName, taskType, exclusiveMaxTaskID, limit }
 		//    - this will delete upto limit number of tasks less than the given max task id
 		DeleteFromTasks(ctx context.Context, filter TasksFilter) (sql.Result, error)

@@ -28,14 +28,13 @@ import (
 	"math/rand"
 	"testing"
 
-	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"go.temporal.io/api/serviceerror"
-
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/workflow"
+	"go.uber.org/mock/gomock"
 )
 
 type (
@@ -44,7 +43,7 @@ type (
 		*require.Assertions
 
 		controller      *gomock.Controller
-		apiContext      api.WorkflowContext
+		workflowLease   api.WorkflowLease
 		workflowContext *workflow.MockContext
 		mutableState    *workflow.MockMutableState
 	}
@@ -61,7 +60,7 @@ func (s *apiSuite) SetupTest() {
 	s.controller = gomock.NewController(s.T())
 	s.workflowContext = workflow.NewMockContext(s.controller)
 	s.mutableState = workflow.NewMockMutableState(s.controller)
-	s.apiContext = api.NewWorkflowContext(
+	s.workflowLease = api.NewWorkflowLease(
 		s.workflowContext,
 		func(err error) {},
 		s.mutableState,
@@ -75,7 +74,7 @@ func (s *apiSuite) TeardownTest() {
 func (s *apiSuite) TestWorkflowCompleted() {
 	s.mutableState.EXPECT().IsWorkflowExecutionRunning().Return(false)
 
-	_, err := isWorkflowTaskValid(s.apiContext, rand.Int63())
+	_, err := isWorkflowTaskValid(s.workflowLease, rand.Int63())
 	s.Error(err)
 	s.IsType(&serviceerror.NotFound{}, err)
 }
@@ -88,7 +87,7 @@ func (s *apiSuite) TestWorkflowRunning_WorkflowTaskNotStarted() {
 		StartedEventID:   common.EmptyEventID,
 	})
 
-	valid, err := isWorkflowTaskValid(s.apiContext, workflowTaskScheduleEventID)
+	valid, err := isWorkflowTaskValid(s.workflowLease, workflowTaskScheduleEventID)
 	s.NoError(err)
 	s.True(valid)
 }
@@ -101,7 +100,7 @@ func (s *apiSuite) TestWorkflowRunning_WorkflowTaskStarted() {
 		StartedEventID:   workflowTaskScheduleEventID + 10,
 	})
 
-	valid, err := isWorkflowTaskValid(s.apiContext, workflowTaskScheduleEventID)
+	valid, err := isWorkflowTaskValid(s.workflowLease, workflowTaskScheduleEventID)
 	s.NoError(err)
 	s.False(valid)
 }
@@ -111,7 +110,7 @@ func (s *apiSuite) TestWorkflowRunning_WorkflowTaskMissing() {
 	workflowTaskScheduleEventID := rand.Int63()
 	s.mutableState.EXPECT().GetWorkflowTaskByID(workflowTaskScheduleEventID).Return(nil)
 
-	valid, err := isWorkflowTaskValid(s.apiContext, workflowTaskScheduleEventID)
+	valid, err := isWorkflowTaskValid(s.workflowLease, workflowTaskScheduleEventID)
 	s.NoError(err)
 	s.False(valid)
 }

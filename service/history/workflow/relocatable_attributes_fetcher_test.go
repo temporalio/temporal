@@ -30,15 +30,15 @@ import (
 	"testing"
 	"time"
 
-	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/api/common/v1"
 	"go.temporal.io/api/workflow/v1"
-
 	"go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/service/history/tests"
+	"go.uber.org/mock/gomock"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 func TestRelocatableAttributesFetcher_Fetch(t *testing.T) {
@@ -92,12 +92,12 @@ func TestRelocatableAttributesFetcher_Fetch(t *testing.T) {
 		c := c
 		t.Run(c.Name, func(t *testing.T) {
 			t.Parallel()
-			closeTime := time.Unix(100, 0)
+			closeTime := time.Unix(100, 0).UTC()
 			executionInfo := &persistence.WorkflowExecutionInfo{
 				Memo:                         mutableStateAttributes.Memo.Fields,
 				SearchAttributes:             mutableStateAttributes.SearchAttributes.IndexedFields,
 				CloseVisibilityTaskCompleted: c.CloseVisibilityTaskCompleted,
-				CloseTime:                    &closeTime,
+				CloseTime:                    timestamppb.New(closeTime),
 				WorkflowId:                   tests.WorkflowID,
 			}
 			executionState := &persistence.WorkflowExecutionState{
@@ -116,7 +116,6 @@ func TestRelocatableAttributesFetcher_Fetch(t *testing.T) {
 					Namespace:   namespaceEntry.Name(),
 					RunID:       tests.RunID,
 					WorkflowID:  tests.WorkflowID,
-					CloseTime:   &closeTime,
 				}).Return(&manager.GetWorkflowExecutionResponse{
 					Execution: &workflow.WorkflowExecutionInfo{
 						Memo:             persistenceAttributes.Memo,

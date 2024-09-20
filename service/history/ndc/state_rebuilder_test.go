@@ -29,7 +29,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/golang/mock/gomock"
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -37,13 +36,11 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
-
 	historyspb "go.temporal.io/server/api/history/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/collection"
-	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/namespace"
@@ -51,16 +48,23 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/common/testing/protomock"
+	"go.temporal.io/server/common/testing/protorequire"
+	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/service/history/events"
+	"go.temporal.io/server/service/history/hsm"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tests"
 	"go.temporal.io/server/service/history/workflow"
+	"go.uber.org/mock/gomock"
+	"google.golang.org/protobuf/types/known/durationpb"
 )
 
 type (
 	stateRebuilderSuite struct {
 		suite.Suite
 		*require.Assertions
+		protorequire.ProtoAssertions
 
 		controller          *gomock.Controller
 		mockShard           *shard.ContextTest
@@ -88,6 +92,7 @@ func TestStateRebuilderSuite(t *testing.T) {
 
 func (s *stateRebuilderSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
+	s.ProtoAssertions = protorequire.New(s.T())
 
 	s.controller = gomock.NewController(s.T())
 	s.mockTaskRefresher = workflow.NewMockTaskRefresher(s.controller)
@@ -101,11 +106,17 @@ func (s *stateRebuilderSuite) SetupTest() {
 		tests.NewDynamicConfig(),
 	)
 
+	reg := hsm.NewRegistry()
+	err := workflow.RegisterStateMachine(reg)
+	s.NoError(err)
+	s.mockShard.SetStateMachineRegistry(reg)
+
 	s.mockExecutionManager = s.mockShard.Resource.ExecutionMgr
 	s.mockNamespaceCache = s.mockShard.Resource.NamespaceCache
 	s.mockClusterMetadata = s.mockShard.Resource.ClusterMetadata
 	s.mockEventsCache = s.mockShard.MockEventsCache
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
+	s.mockClusterMetadata.EXPECT().GetClusterID().Return(int64(1)).AnyTimes()
 	s.mockEventsCache.EXPECT().PutEvent(gomock.Any(), gomock.Any()).AnyTimes()
 
 	s.logger = s.mockShard.GetLogger()
@@ -125,7 +136,7 @@ func (s *stateRebuilderSuite) TearDownTest() {
 }
 
 func (s *stateRebuilderSuite) TestInitializeBuilders() {
-	mutableState, stateBuilder := s.nDCStateRebuilder.initializeBuilders(tests.GlobalNamespaceEntry, s.now)
+	mutableState, stateBuilder := s.nDCStateRebuilder.initializeBuilders(tests.GlobalNamespaceEntry, tests.WorkflowKey, s.now)
 	s.NotNil(mutableState)
 	s.NotNil(stateBuilder)
 	s.NotNil(mutableState.GetExecutionInfo().GetVersionHistories())
@@ -149,20 +160,21 @@ func (s *stateRebuilderSuite) TestApplyEvents() {
 
 	workflowKey := definition.NewWorkflowKey(s.namespaceID.String(), s.workflowID, s.runID)
 
-	mockStateBuilder := workflow.NewMockMutableStateRebuilder(s.controller)
-	mockStateBuilder.EXPECT().ApplyEvents(
+	mockStateRebuilder := workflow.NewMockMutableStateRebuilder(s.controller)
+	mockStateRebuilder.EXPECT().ApplyEvents(
 		gomock.Any(),
 		s.namespaceID,
 		requestID,
-		commonpb.WorkflowExecution{
+		protomock.Eq(&commonpb.WorkflowExecution{
 			WorkflowId: s.workflowID,
 			RunId:      s.runID,
-		},
+		}),
 		[][]*historypb.HistoryEvent{events},
 		[]*historypb.HistoryEvent(nil),
+		"",
 	).Return(nil, nil)
 
-	err := s.nDCStateRebuilder.applyEvents(context.Background(), workflowKey, mockStateBuilder, events, requestID)
+	err := s.nDCStateRebuilder.applyEvents(context.Background(), workflowKey, mockStateRebuilder, events, requestID)
 	s.NoError(err)
 }
 
@@ -274,9 +286,9 @@ func (s *stateRebuilderSuite) TestRebuild() {
 			WorkflowType:             &commonpb.WorkflowType{Name: "some random workflow type"},
 			TaskQueue:                &taskqueuepb.TaskQueue{Name: "some random workflow type"},
 			Input:                    payloads.EncodeString("some random input"),
-			WorkflowExecutionTimeout: timestamp.DurationPtr(123 * time.Second),
-			WorkflowRunTimeout:       timestamp.DurationPtr(233 * time.Second),
-			WorkflowTaskTimeout:      timestamp.DurationPtr(45 * time.Second),
+			WorkflowExecutionTimeout: durationpb.New(123 * time.Second),
+			WorkflowRunTimeout:       durationpb.New(233 * time.Second),
+			WorkflowTaskTimeout:      durationpb.New(45 * time.Second),
 			Identity:                 "some random identity",
 		}},
 	}}
@@ -337,7 +349,7 @@ func (s *stateRebuilderSuite) TestRebuild() {
 		},
 		1234,
 	), nil).AnyTimes()
-	s.mockTaskRefresher.EXPECT().RefreshTasks(gomock.Any(), gomock.Any()).Return(nil)
+	s.mockTaskRefresher.EXPECT().Refresh(gomock.Any(), gomock.Any()).Return(nil)
 
 	rebuildMutableState, rebuiltHistorySize, err := s.nDCStateRebuilder.Rebuild(
 		context.Background(),
@@ -345,7 +357,7 @@ func (s *stateRebuilderSuite) TestRebuild() {
 		definition.NewWorkflowKey(s.namespaceID.String(), s.workflowID, s.runID),
 		branchToken,
 		lastEventID,
-		convert.Int64Ptr(version),
+		util.Ptr(version),
 		definition.NewWorkflowKey(targetNamespaceID.String(), targetWorkflowID, targetRunID),
 		targetBranchToken,
 		requestID,
@@ -357,12 +369,12 @@ func (s *stateRebuilderSuite) TestRebuild() {
 	s.Equal(targetWorkflowID, rebuildExecutionInfo.WorkflowId)
 	s.Equal(targetRunID, rebuildMutableState.GetExecutionState().RunId)
 	s.Equal(int64(historySize1+historySize2), rebuiltHistorySize)
-	s.Equal(versionhistory.NewVersionHistories(
+	s.ProtoEqual(versionhistory.NewVersionHistories(
 		versionhistory.NewVersionHistory(
 			targetBranchToken,
 			[]*historyspb.VersionHistoryItem{versionhistory.NewVersionHistoryItem(lastEventID, version)},
 		),
 	), rebuildMutableState.GetExecutionInfo().GetVersionHistories())
-	s.Equal(timestamp.TimeValue(rebuildMutableState.GetExecutionInfo().StartTime), s.now)
+	s.Equal(timestamp.TimeValue(rebuildMutableState.GetExecutionState().StartTime), s.now)
 	s.Equal(expectedLastFirstTransactionID, rebuildExecutionInfo.LastFirstEventTxnId)
 }

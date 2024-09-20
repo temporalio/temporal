@@ -26,6 +26,8 @@ package sql
 
 import (
 	"go.temporal.io/server/common/config"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence/sql"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
 	"go.temporal.io/server/common/resolver"
@@ -40,11 +42,13 @@ type (
 	}
 )
 
+const dbType = "sql"
+
 var _ schema.DB = (*Connection)(nil)
 
 // NewConnection creates a new connection to database
-func NewConnection(cfg *config.SQL) (*Connection, error) {
-	db, err := sql.NewSQLAdminDB(sqlplugin.DbKindUnknown, cfg, resolver.NewNoopResolver())
+func NewConnection(cfg *config.SQL, logger log.Logger) (*Connection, error) {
+	db, err := sql.NewSQLAdminDB(sqlplugin.DbKindUnknown, cfg, resolver.NewNoopResolver(), logger, metrics.NoopMetricsHandler)
 	if err != nil {
 		return nil, err
 	}
@@ -122,4 +126,9 @@ func (c *Connection) Close() {
 			panic("cannot close connection")
 		}
 	}
+}
+
+// Type gives the type of db
+func (c *Connection) Type() string {
+	return dbType
 }

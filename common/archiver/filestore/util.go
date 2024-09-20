@@ -34,14 +34,12 @@ import (
 	"time"
 
 	"github.com/dgryski/go-farm"
-	"github.com/gogo/protobuf/proto"
 	historypb "go.temporal.io/api/history/v1"
-	"go.uber.org/multierr"
-
 	archiverspb "go.temporal.io/server/api/archiver/v1"
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/codec"
-	"go.temporal.io/server/common/primitives/timestamp"
+	"go.uber.org/multierr"
+	"google.golang.org/protobuf/proto"
 )
 
 var (
@@ -195,8 +193,8 @@ func constructHistoryFilenamePrefix(namespaceID, workflowID, runID string) strin
 	return strings.Join([]string{hash(namespaceID), hash(workflowID), hash(runID)}, "")
 }
 
-func constructVisibilityFilename(closeTimestamp *time.Time, runID string) string {
-	return fmt.Sprintf("%v_%s.visibility", timestamp.TimeValue(closeTimestamp).UnixNano(), hash(runID))
+func constructVisibilityFilename(closeTimestamp time.Time, runID string) string {
+	return fmt.Sprintf("%v_%s.visibility", closeTimestamp.UnixNano(), hash(runID))
 }
 
 func hash(s string) string {

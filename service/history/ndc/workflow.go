@@ -32,7 +32,6 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
-
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/payloads"
@@ -52,7 +51,6 @@ type (
 		GetMutableState() workflow.MutableState
 		GetReleaseFn() wcache.ReleaseCacheFunc
 		GetVectorClock() (int64, int64, error)
-		LastWriteByLocalCluster() (bool, error)
 
 		HappensAfter(that Workflow) (bool, error)
 		Revive() error
@@ -99,23 +97,22 @@ func (r *WorkflowImpl) GetReleaseFn() wcache.ReleaseCacheFunc {
 
 func (r *WorkflowImpl) GetVectorClock() (int64, int64, error) {
 
-	lastWriteVersion, err := r.mutableState.GetLastWriteVersion()
-	if err != nil {
-		return 0, 0, err
+	var version int64
+	var err error
+	if r.mutableState.IsWorkflowExecutionRunning() {
+		version, err = r.mutableState.GetLastWriteVersion()
+		if err != nil {
+			return 0, 0, err
+		}
+	} else {
+		version, err = r.mutableState.GetCloseVersion()
+		if err != nil {
+			return 0, 0, err
+		}
 	}
 
 	lastEventTaskID := r.mutableState.GetExecutionInfo().LastEventTaskId
-	return lastWriteVersion, lastEventTaskID, nil
-}
-
-func (r *WorkflowImpl) LastWriteByLocalCluster() (bool, error) {
-	lastWriteVersion, err := r.mutableState.GetLastWriteVersion()
-	if err != nil {
-		return false, err
-	}
-	lastWriteCluster := r.clusterMetadata.ClusterNameForFailoverVersion(true, lastWriteVersion)
-	currentCluster := r.clusterMetadata.GetCurrentClusterName()
-	return lastWriteCluster == currentCluster, nil
+	return version, lastEventTaskID, nil
 }
 
 func (r *WorkflowImpl) HappensAfter(
@@ -216,7 +213,11 @@ func (r *WorkflowImpl) FlushBufferedEvents() error {
 		return nil
 	}
 
-	lastWriteVersion, _, err := r.GetVectorClock()
+	// TODO: Same as the reasoning in mutableState.startTransactionHandleWorkflowTaskFailover()
+	// LastWriteVersion is only correct when replication task processing logic flush buffered
+	// events for state only changes as well.
+	// Transition history is not enabled today so LastWriteVersion == LastEventVersion
+	lastWriteVersion, err := r.mutableState.GetLastWriteVersion()
 	if err != nil {
 		return err
 	}
@@ -259,6 +260,7 @@ func (r *WorkflowImpl) failWorkflowTask(
 		enumspb.WORKFLOW_TASK_FAILED_CAUSE_FAILOVER_CLOSE_COMMAND,
 		nil,
 		consts.IdentityHistoryService,
+		nil,
 		"",
 		"",
 		"",
@@ -299,6 +301,12 @@ func (r *WorkflowImpl) terminateWorkflow(
 		WorkflowTerminationIdentity,
 		false,
 	)
+
+	// Don't abort updates here for a few reasons:
+	//   1. There probably no update waiters for Wf which is about to be terminated,
+	//   2. MS is not persisted yet, and updates should be aborted after MS is persisted, which is not trivial in this case,
+	//   3. New replication version will force update registry reload and waiters will get errors.
+	// r.GetContext().UpdateRegistry(context.Background(), nil).Abort(update.AbortReasonWorkflowTerminated)
 
 	return err
 }

@@ -27,17 +27,17 @@ package recordactivitytaskstarted
 import (
 	"context"
 
-	enumspb "go.temporal.io/api/enums/v1"
-
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
+	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/shard"
+	"go.temporal.io/server/service/history/workflow"
 )
 
 func Invoke(
@@ -56,14 +56,13 @@ func Invoke(
 	err = api.GetAndUpdateWorkflowWithNew(
 		ctx,
 		request.Clock,
-		api.BypassMutableStateConsistencyPredicate,
 		definition.NewWorkflowKey(
 			request.NamespaceId,
 			request.WorkflowExecution.WorkflowId,
 			request.WorkflowExecution.RunId,
 		),
-		func(workflowContext api.WorkflowContext) (*api.UpdateWorkflowAction, error) {
-			mutableState := workflowContext.GetMutableState()
+		func(workflowLease api.WorkflowLease) (*api.UpdateWorkflowAction, error) {
+			mutableState := workflowLease.GetMutableState()
 			if !mutableState.IsWorkflowExecutionRunning() {
 				return nil, consts.ErrWorkflowCompleted
 			}
@@ -77,7 +76,7 @@ func Invoke(
 			// First check to see if cache needs to be refreshed as we could potentially have stale workflow execution in
 			// some extreme cassandra failure cases.
 			if !isRunning && scheduledEventID >= mutableState.GetNextEventID() {
-				taggedMetrics.Counter(metrics.StaleMutableStateCounter.GetMetricName()).Record(1)
+				metrics.StaleMutableStateCounter.With(taggedMetrics).Record(1)
 				return nil, consts.ErrStaleState
 			}
 
@@ -112,25 +111,24 @@ func Invoke(
 				return nil, serviceerrors.NewTaskAlreadyStarted("Activity")
 			}
 
+			versioningStamp := worker_versioning.StampFromCapabilities(request.PollRequest.WorkerVersionCapabilities)
 			if _, err := mutableState.AddActivityTaskStartedEvent(
 				ai, scheduledEventID, requestID, request.PollRequest.GetIdentity(),
+				versioningStamp, request.GetBuildIdRedirectInfo(),
 			); err != nil {
 				return nil, err
 			}
 
-			scheduleToStartLatency := ai.GetStartedTime().Sub(*ai.GetScheduledTime())
+			scheduleToStartLatency := ai.GetStartedTime().AsTime().Sub(ai.GetScheduledTime().AsTime())
 			namespaceName := namespaceEntry.Name()
-			taskQueueName := ai.GetTaskQueue()
-
-			metrics.GetPerTaskQueueScope(
-				taggedMetrics,
-				namespaceName.String(),
-				taskQueueName,
-				enumspb.TASK_QUEUE_KIND_NORMAL,
-			).Timer(metrics.TaskScheduleToStartLatency.GetMetricName()).Record(
-				scheduleToStartLatency,
-				metrics.TaskQueueTypeTag(enumspb.TASK_QUEUE_TYPE_ACTIVITY),
-			)
+			metrics.TaskScheduleToStartLatency.With(
+				workflow.GetPerTaskQueueFamilyScope(
+					taggedMetrics,
+					namespaceName,
+					ai.GetTaskQueue(),
+					shard.GetConfig(),
+				),
+			).Record(scheduleToStartLatency)
 
 			response.StartedTime = ai.StartedTime
 			response.Attempt = ai.Attempt

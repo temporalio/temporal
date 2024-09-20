@@ -37,65 +37,64 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/suite"
 	commandpb "go.temporal.io/api/command/v1"
+	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	sdkclient "go.temporal.io/sdk/client"
-	replicationspb "go.temporal.io/server/api/replication/v1"
-	sw "go.temporal.io/server/service/worker"
-	"go.temporal.io/server/service/worker/migration"
-	"go.temporal.io/server/service/worker/scanner/build_ids"
+	"google.golang.org/protobuf/types/known/durationpb"
 
-	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock/hybrid_logical_clock"
 	"go.temporal.io/server/common/dynamicconfig"
-	"go.temporal.io/server/common/persistence/sql/sqlplugin/sqlite"
 	"go.temporal.io/server/common/primitives"
-	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/worker_versioning"
+	"go.temporal.io/server/service/worker/migration"
+	"go.temporal.io/server/service/worker/scanner/build_ids"
 	"go.temporal.io/server/tests"
 )
 
 type (
-	userDataReplicationTestSuite struct {
+	UserDataReplicationTestSuite struct {
 		xdcBaseSuite
 	}
 )
 
 func TestUserDataReplicationTestSuite(t *testing.T) {
 	flag.Parse()
-	suite.Run(t, new(userDataReplicationTestSuite))
+	suite.Run(t, new(UserDataReplicationTestSuite))
 }
 
-func (s *userDataReplicationTestSuite) SetupSuite() {
-	s.dynamicConfigOverrides = map[dynamicconfig.Key]interface{}{
+func (s *UserDataReplicationTestSuite) SetupSuite() {
+	s.dynamicConfigOverrides = map[dynamicconfig.Key]any{
 		// Make sure we don't hit the rate limiter in tests
-		dynamicconfig.FrontendMaxNamespaceNamespaceReplicationInducingAPIsRPSPerInstance:   1000,
-		dynamicconfig.FrontendMaxNamespaceNamespaceReplicationInducingAPIsBurstPerInstance: 1000,
-		dynamicconfig.FrontendNamespaceReplicationInducingAPIsRPS:                          1000,
-		dynamicconfig.FrontendEnableWorkerVersioningDataAPIs:                               true,
-		dynamicconfig.FrontendEnableWorkerVersioningWorkflowAPIs:                           true,
-		dynamicconfig.BuildIdScavengerEnabled:                                              true,
+		dynamicconfig.FrontendGlobalNamespaceNamespaceReplicationInducingAPIsRPS.Key():                1000,
+		dynamicconfig.FrontendMaxNamespaceNamespaceReplicationInducingAPIsBurstRatioPerInstance.Key(): 1,
+		dynamicconfig.FrontendNamespaceReplicationInducingAPIsRPS.Key():                               1000,
+		dynamicconfig.FrontendEnableWorkerVersioningDataAPIs.Key():                                    true,
+		dynamicconfig.FrontendEnableWorkerVersioningWorkflowAPIs.Key():                                true,
+		dynamicconfig.FrontendEnableWorkerVersioningRuleAPIs.Key():                                    true,
+		dynamicconfig.BuildIdScavengerEnabled.Key():                                                   true,
 		// Ensure the scavenger can immediately delete build ids that are not in use.
-		dynamicconfig.RemovableBuildIdDurationSinceDefault: time.Microsecond,
+		dynamicconfig.RemovableBuildIdDurationSinceDefault.Key(): time.Microsecond,
 	}
 	s.setupSuite([]string{"task_queue_repl_active", "task_queue_repl_standby"})
 }
 
-func (s *userDataReplicationTestSuite) SetupTest() {
+func (s *UserDataReplicationTestSuite) SetupTest() {
 	s.setupTest()
 }
 
-func (s *userDataReplicationTestSuite) TearDownSuite() {
+func (s *UserDataReplicationTestSuite) TearDownSuite() {
 	s.tearDownSuite()
 }
 
-func (s *userDataReplicationTestSuite) TestUserDataIsReplicatedFromActiveToPassive() {
+func (s *UserDataReplicationTestSuite) TestUserDataIsReplicatedFromActiveToPassive() {
 	namespace := s.T().Name() + "-" + common.GenerateRandomString(5)
 	taskQueue := "versioned"
 	activeFrontendClient := s.cluster1.GetFrontendClient()
@@ -104,7 +103,7 @@ func (s *userDataReplicationTestSuite) TestUserDataIsReplicatedFromActiveToPassi
 		IsGlobalNamespace:                true,
 		Clusters:                         s.clusterReplicationConfig(),
 		ActiveClusterName:                s.clusterNames[0],
-		WorkflowExecutionRetentionPeriod: timestamp.DurationPtr(7 * time.Hour * 24),
+		WorkflowExecutionRetentionPeriod: durationpb.New(7 * time.Hour * 24),
 	}
 	_, err := activeFrontendClient.RegisterNamespace(tests.NewContext(), regReq)
 	s.NoError(err)
@@ -137,7 +136,7 @@ func (s *userDataReplicationTestSuite) TestUserDataIsReplicatedFromActiveToPassi
 	}, 15*time.Second, 500*time.Millisecond)
 }
 
-func (s *userDataReplicationTestSuite) TestUserDataIsReplicatedFromPassiveToActive() {
+func (s *UserDataReplicationTestSuite) TestUserDataIsReplicatedFromPassiveToActive() {
 	namespace := s.T().Name() + "-" + common.GenerateRandomString(5)
 	taskQueue := "versioned"
 	activeFrontendClient := s.cluster1.GetFrontendClient()
@@ -146,7 +145,7 @@ func (s *userDataReplicationTestSuite) TestUserDataIsReplicatedFromPassiveToActi
 		IsGlobalNamespace:                true,
 		Clusters:                         s.clusterReplicationConfig(),
 		ActiveClusterName:                s.clusterNames[0],
-		WorkflowExecutionRetentionPeriod: timestamp.DurationPtr(7 * time.Hour * 24),
+		WorkflowExecutionRetentionPeriod: durationpb.New(7 * time.Hour * 24),
 	}
 	_, err := activeFrontendClient.RegisterNamespace(tests.NewContext(), regReq)
 	s.NoError(err)
@@ -176,7 +175,7 @@ func (s *userDataReplicationTestSuite) TestUserDataIsReplicatedFromPassiveToActi
 	}, 15*time.Second, 500*time.Millisecond)
 }
 
-func (s *userDataReplicationTestSuite) TestUserDataEntriesAreReplicatedOnDemand() {
+func (s *UserDataReplicationTestSuite) TestUserDataEntriesAreReplicatedOnDemand() {
 	ctx := tests.NewContext()
 	namespace := s.T().Name() + "-" + common.GenerateRandomString(5)
 	activeFrontendClient := s.cluster1.GetFrontendClient()
@@ -186,7 +185,7 @@ func (s *userDataReplicationTestSuite) TestUserDataEntriesAreReplicatedOnDemand(
 		IsGlobalNamespace:                true,
 		Clusters:                         s.clusterReplicationConfig(),
 		ActiveClusterName:                s.clusterNames[0],
-		WorkflowExecutionRetentionPeriod: timestamp.DurationPtr(7 * time.Hour * 24),
+		WorkflowExecutionRetentionPeriod: durationpb.New(7 * time.Hour * 24),
 	}
 	_, err := activeFrontendClient.RegisterNamespace(tests.NewContext(), regReq)
 	s.NoError(err)
@@ -219,7 +218,7 @@ func (s *userDataReplicationTestSuite) TestUserDataEntriesAreReplicatedOnDemand(
 	s.NoError(err)
 	run, err := sysClient.ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{
 		ID:                 "force-replication-wf",
-		TaskQueue:          sw.DefaultWorkerTaskQueue,
+		TaskQueue:          primitives.DefaultWorkerTaskQueue,
 		WorkflowRunTimeout: time.Second * 30,
 	}, "force-replication", migration.ForceReplicationParams{
 		Namespace:  namespace,
@@ -257,11 +256,7 @@ func (s *userDataReplicationTestSuite) TestUserDataEntriesAreReplicatedOnDemand(
 	s.Equal(exectedReplicatedTaskQueues, seenTaskQueues)
 }
 
-func (s *userDataReplicationTestSuite) TestUserDataTombstonesAreReplicated() {
-	// Advanced visibility only enabled by default in SQLite
-	if tests.TestFlags.PersistenceDriver != sqlite.PluginName {
-		s.T().Skip("Test requires advanced visibility")
-	}
+func (s *UserDataReplicationTestSuite) TestUserDataTombstonesAreReplicated() {
 	ctx := tests.NewContext()
 	namespace := s.T().Name() + "-" + common.GenerateRandomString(5)
 	activeFrontendClient := s.cluster1.GetFrontendClient()
@@ -271,7 +266,7 @@ func (s *userDataReplicationTestSuite) TestUserDataTombstonesAreReplicated() {
 		IsGlobalNamespace:                true,
 		Clusters:                         s.clusterReplicationConfig(),
 		ActiveClusterName:                s.clusterNames[0],
-		WorkflowExecutionRetentionPeriod: timestamp.DurationPtr(7 * time.Hour * 24),
+		WorkflowExecutionRetentionPeriod: durationpb.New(7 * time.Hour * 24),
 	}
 	_, err := activeFrontendClient.RegisterNamespace(tests.NewContext(), regReq)
 	s.NoError(err)
@@ -293,7 +288,7 @@ func (s *userDataReplicationTestSuite) TestUserDataTombstonesAreReplicated() {
 	}
 	activeAdminClient := s.cluster1.GetAdminClient()
 
-	// start build id scavenger workflow
+	// start build ID scavenger workflow
 	sysClient, err := sdkclient.Dial(sdkclient.Options{
 		HostPort:  s.cluster1.GetHost().FrontendGRPCAddress(),
 		Namespace: primitives.SystemLocalNamespace,
@@ -304,7 +299,9 @@ func (s *userDataReplicationTestSuite) TestUserDataTombstonesAreReplicated() {
 		ID:                 workflowID,
 		TaskQueue:          build_ids.BuildIdScavengerTaskQueueName,
 		WorkflowRunTimeout: time.Second * 30,
-	}, build_ids.BuildIdScavangerWorkflowName)
+	}, build_ids.BuildIdScavangerWorkflowName, build_ids.BuildIdScavangerInput{
+		IgnoreRetentionTime: true,
+	})
 	s.NoError(err)
 	err = run.Get(ctx, nil)
 	s.NoError(err)
@@ -330,7 +327,7 @@ func (s *userDataReplicationTestSuite) TestUserDataTombstonesAreReplicated() {
 	s.Equal("v2", attrs.UserData.VersioningData.VersionSets[2].BuildIds[0].Id)
 	s.Equal(persistencespb.STATE_ACTIVE, attrs.UserData.VersioningData.VersionSets[2].BuildIds[0].State)
 
-	// Add another build id to verify that tombstones were deleted after the first scavenger run
+	// Add another build ID to verify that tombstones were deleted after the first scavenger run
 	_, err = activeFrontendClient.UpdateWorkerBuildIdCompatibility(ctx, &workflowservice.UpdateWorkerBuildIdCompatibilityRequest{
 		Namespace: namespace,
 		TaskQueue: taskQueue,
@@ -359,7 +356,7 @@ func (s *userDataReplicationTestSuite) TestUserDataTombstonesAreReplicated() {
 	s.Equal("v3", attrs.UserData.VersioningData.VersionSets[1].BuildIds[0].Id)
 	s.Equal(persistencespb.STATE_ACTIVE, attrs.UserData.VersioningData.VersionSets[1].BuildIds[0].State)
 
-	// Add a new build id in standby cluster to verify it did not persist the replicated tombstones
+	// Add a new build ID in standby cluster to verify it did not persist the replicated tombstones
 	standbyFrontendClient := s.cluster2.GetFrontendClient()
 
 	s.Eventually(func() bool {
@@ -406,11 +403,7 @@ func (s *userDataReplicationTestSuite) TestUserDataTombstonesAreReplicated() {
 	s.Equal(persistencespb.STATE_ACTIVE, attrs.UserData.VersioningData.VersionSets[2].BuildIds[0].State)
 }
 
-func (s *userDataReplicationTestSuite) TestApplyReplicationEventRevivesInUseTombstones() {
-	// Advanced visibility only enabled by default in SQLite
-	if tests.TestFlags.PersistenceDriver != sqlite.PluginName {
-		s.T().Skip("Test requires advanced visibility")
-	}
+func (s *UserDataReplicationTestSuite) TestApplyReplicationEventRevivesInUseTombstones() {
 	ctx := tests.NewContext()
 	namespace := s.T().Name() + "-" + common.GenerateRandomString(5)
 	taskQueue := "test-task-queue"
@@ -421,7 +414,7 @@ func (s *userDataReplicationTestSuite) TestApplyReplicationEventRevivesInUseTomb
 		IsGlobalNamespace:                true,
 		Clusters:                         s.clusterReplicationConfig(),
 		ActiveClusterName:                s.clusterNames[0],
-		WorkflowExecutionRetentionPeriod: timestamp.DurationPtr(7 * time.Hour * 24),
+		WorkflowExecutionRetentionPeriod: durationpb.New(7 * time.Hour * 24),
 	})
 	s.Require().NoError(err)
 
@@ -436,25 +429,17 @@ func (s *userDataReplicationTestSuite) TestApplyReplicationEventRevivesInUseTomb
 	s.Require().NoError(err)
 
 	_, err = activeFrontendClient.StartWorkflowExecution(ctx, &workflowservice.StartWorkflowExecutionRequest{
-		Namespace:  namespace,
-		WorkflowId: "test",
-		RequestId:  uuid.NewString(),
-		WorkflowType: &commonpb.WorkflowType{
-			Name: "workflow",
-		},
-		TaskQueue: &taskqueuepb.TaskQueue{
-			Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
-			Name: taskQueue,
-		},
+		Namespace:    namespace,
+		WorkflowId:   "test",
+		RequestId:    uuid.NewString(),
+		WorkflowType: &commonpb.WorkflowType{Name: "workflow"},
+		TaskQueue:    &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 	})
 	s.Require().NoError(err)
 	task, err := activeFrontendClient.PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
 		Namespace: namespace,
-		TaskQueue: &taskqueuepb.TaskQueue{
-			Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
-			Name: taskQueue,
-		},
-		Identity: "test",
+		TaskQueue: &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+		Identity:  "test",
 		WorkerVersionCapabilities: &commonpb.WorkerVersionCapabilities{
 			BuildId:       "v0",
 			UseVersioning: true,
@@ -532,7 +517,7 @@ func (s *userDataReplicationTestSuite) TestApplyReplicationEventRevivesInUseTomb
 	})
 	s.Require().NoError(err)
 	attrsPreApply := replicationResponse.Messages.ReplicationTasks[len(replicationResponse.Messages.ReplicationTasks)-1].GetTaskQueueUserDataAttributes()
-	preApplyClock := *attrsPreApply.UserData.Clock
+	preApplyClock := common.CloneProto(attrsPreApply.UserData.Clock)
 
 	attrsPreApply.UserData.Clock.WallClock = time.Now().UnixMilli()
 	attrsPreApply.UserData.Clock.Version++
@@ -573,17 +558,17 @@ func (s *userDataReplicationTestSuite) TestApplyReplicationEventRevivesInUseTomb
 
 	attrsPostApply := replicationResponse.Messages.ReplicationTasks[len(replicationResponse.Messages.ReplicationTasks)-1].GetTaskQueueUserDataAttributes()
 
-	s.Require().True(hybrid_logical_clock.Greater(*attrsPostApply.UserData.Clock, preApplyClock))
+	s.Require().True(hybrid_logical_clock.Greater(attrsPostApply.UserData.Clock, preApplyClock))
 
 	s.Require().Equal("v0", attrsPostApply.UserData.VersioningData.VersionSets[0].BuildIds[0].Id)
 	s.Require().Equal(persistencespb.STATE_ACTIVE, attrsPostApply.UserData.VersioningData.VersionSets[0].BuildIds[0].State)
-	s.Require().True(hybrid_logical_clock.Greater(*attrsPostApply.UserData.VersioningData.VersionSets[0].BuildIds[0].StateUpdateTimestamp, preApplyClock))
+	s.Require().True(hybrid_logical_clock.Greater(attrsPostApply.UserData.VersioningData.VersionSets[0].BuildIds[0].StateUpdateTimestamp, preApplyClock))
 
 	s.Require().Equal("v0.2", attrsPostApply.UserData.VersioningData.VersionSets[0].BuildIds[1].Id)
 	s.Require().Equal(persistencespb.STATE_ACTIVE, attrsPostApply.UserData.VersioningData.VersionSets[0].BuildIds[1].State)
-	s.Require().True(hybrid_logical_clock.Greater(*attrsPostApply.UserData.VersioningData.VersionSets[0].BuildIds[1].StateUpdateTimestamp, preApplyClock))
+	s.Require().True(hybrid_logical_clock.Greater(attrsPostApply.UserData.VersioningData.VersionSets[0].BuildIds[1].StateUpdateTimestamp, preApplyClock))
 
 	s.Require().Equal("v1", attrsPostApply.UserData.VersioningData.VersionSets[1].BuildIds[0].Id)
 	s.Require().Equal(persistencespb.STATE_ACTIVE, attrsPostApply.UserData.VersioningData.VersionSets[1].BuildIds[0].State)
-	s.Require().True(hybrid_logical_clock.Equal(*attrsPostApply.UserData.VersioningData.VersionSets[1].BuildIds[0].StateUpdateTimestamp, preApplyClock))
+	s.Require().True(hybrid_logical_clock.Equal(attrsPostApply.UserData.VersioningData.VersionSets[1].BuildIds[0].StateUpdateTimestamp, preApplyClock))
 }

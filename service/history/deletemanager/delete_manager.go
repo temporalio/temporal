@@ -28,18 +28,14 @@ package deletemanager
 
 import (
 	"context"
-	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
-
-	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/visibility/manager"
-	"go.temporal.io/server/common/persistence/visibility/store/standard/cassandra"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
@@ -52,14 +48,13 @@ type (
 		AddDeleteWorkflowExecutionTask(
 			ctx context.Context,
 			nsID namespace.ID,
-			we commonpb.WorkflowExecution,
+			we *commonpb.WorkflowExecution,
 			ms workflow.MutableState,
-			workflowClosedVersion int64,
 		) error
 		DeleteWorkflowExecution(
 			ctx context.Context,
 			nsID namespace.ID,
-			we commonpb.WorkflowExecution,
+			we *commonpb.WorkflowExecution,
 			weCtx workflow.Context,
 			ms workflow.MutableState,
 			forceDeleteFromOpenVisibility bool,
@@ -68,7 +63,7 @@ type (
 		DeleteWorkflowExecutionByRetention(
 			ctx context.Context,
 			nsID namespace.ID,
-			we commonpb.WorkflowExecution,
+			we *commonpb.WorkflowExecution,
 			weCtx workflow.Context,
 			ms workflow.MutableState,
 			stage *tasks.DeleteWorkflowExecutionStage,
@@ -109,9 +104,8 @@ func NewDeleteManager(
 func (m *DeleteManagerImpl) AddDeleteWorkflowExecutionTask(
 	ctx context.Context,
 	nsID namespace.ID,
-	we commonpb.WorkflowExecution,
+	we *commonpb.WorkflowExecution,
 	ms workflow.MutableState,
-	workflowClosedVersion int64,
 ) error {
 
 	taskGenerator := workflow.NewTaskGeneratorProvider().NewTaskGenerator(m.shardContext, ms)
@@ -123,13 +117,11 @@ func (m *DeleteManagerImpl) AddDeleteWorkflowExecutionTask(
 		return err
 	}
 
-	deleteTask.Version = workflowClosedVersion
 	return m.shardContext.AddTasks(ctx, &persistence.AddHistoryTasksRequest{
 		ShardID: m.shardContext.GetShardID(),
 		// RangeID is set by shardContext
 		NamespaceID: nsID.String(),
 		WorkflowID:  we.GetWorkflowId(),
-		RunID:       we.GetRunId(),
 		Tasks: map[tasks.Category][]tasks.Task{
 			tasks.CategoryTransfer: {deleteTask},
 		},
@@ -139,7 +131,7 @@ func (m *DeleteManagerImpl) AddDeleteWorkflowExecutionTask(
 func (m *DeleteManagerImpl) DeleteWorkflowExecution(
 	ctx context.Context,
 	nsID namespace.ID,
-	we commonpb.WorkflowExecution,
+	we *commonpb.WorkflowExecution,
 	weCtx workflow.Context,
 	ms workflow.MutableState,
 	forceDeleteFromOpenVisibility bool,
@@ -152,7 +144,7 @@ func (m *DeleteManagerImpl) DeleteWorkflowExecution(
 func (m *DeleteManagerImpl) DeleteWorkflowExecutionByRetention(
 	ctx context.Context,
 	nsID namespace.ID,
-	we commonpb.WorkflowExecution,
+	we *commonpb.WorkflowExecution,
 	weCtx workflow.Context,
 	ms workflow.MutableState,
 	stage *tasks.DeleteWorkflowExecutionStage,
@@ -164,7 +156,7 @@ func (m *DeleteManagerImpl) DeleteWorkflowExecutionByRetention(
 func (m *DeleteManagerImpl) deleteWorkflowExecutionInternal(
 	ctx context.Context,
 	namespaceID namespace.ID,
-	we commonpb.WorkflowExecution,
+	we *commonpb.WorkflowExecution,
 	weCtx workflow.Context,
 	ms workflow.MutableState,
 	forceDeleteFromOpenVisibility bool, //revive:disable-line:flag-parameter
@@ -177,24 +169,7 @@ func (m *DeleteManagerImpl) deleteWorkflowExecutionInternal(
 		return err
 	}
 
-	// These two fields are needed for cassandra standard visibility.
-	// TODO (alex): Remove them when cassandra standard visibility is removed.
-	var startTime *time.Time
-	var closeTime *time.Time
-	if m.visibilityManager.HasStoreName(cassandra.CassandraPersistenceName) {
-		// There are cases when workflow execution is closed but visibility is not updated and still open.
-		// This happens, for example, when workflow execution is deleted right from CloseExecutionTask.
-		// Therefore, force to delete from open visibility regardless of execution state.
-		if forceDeleteFromOpenVisibility || ms.GetExecutionState().State != enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED {
-			startTime = ms.GetExecutionInfo().GetStartTime()
-		} else {
-			closeTime, err = ms.GetWorkflowCloseTime(ctx)
-			if err != nil {
-				return err
-			}
-		}
-	}
-
+	executionInfo := ms.GetExecutionInfo()
 	if err := m.shardContext.DeleteWorkflowExecution(
 		ctx,
 		definition.WorkflowKey{
@@ -203,9 +178,8 @@ func (m *DeleteManagerImpl) deleteWorkflowExecutionInternal(
 			RunID:       we.GetRunId(),
 		},
 		currentBranchToken,
-		startTime,
-		closeTime,
-		ms.GetExecutionInfo().GetCloseVisibilityTaskId(),
+		executionInfo.GetCloseVisibilityTaskId(),
+		executionInfo.GetCloseTime().AsTime(),
 		stage,
 	); err != nil {
 		return err
@@ -214,6 +188,6 @@ func (m *DeleteManagerImpl) deleteWorkflowExecutionInternal(
 	// Clear workflow execution context here to prevent further readers to get stale copy of non-exiting workflow execution.
 	weCtx.Clear()
 
-	metricsHandler.Counter(metrics.WorkflowCleanupDeleteCount.GetMetricName()).Record(1)
+	metrics.WorkflowCleanupDeleteCount.With(metricsHandler).Record(1)
 	return nil
 }

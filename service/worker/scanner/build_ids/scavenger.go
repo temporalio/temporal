@@ -33,7 +33,6 @@ import (
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
-
 	"go.temporal.io/server/api/matchingservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
@@ -80,8 +79,8 @@ type (
 		namespaceRegistry  namespace.Registry
 		matchingClient     matchingservice.MatchingServiceClient
 		currentClusterName string
-		// Minimum duration since a build id was last default in its containing set for it to be considered for removal.
-		// If a build id was still default recently, there may be:
+		// Minimum duration since a build ID was last default in its containing set for it to be considered for removal.
+		// If a build ID was still default recently, there may be:
 		// 1. workers with that identifier processing tasks
 		// 2. workflows with that identifier that have yet to be indexed in visibility
 		// The scavenger should allow enough time to pass before cleaning these build ids.
@@ -265,7 +264,7 @@ func (a *Activities) processUserDataEntry(
 	return err
 }
 
-// Queries visibility for each build id in versioning data and returns a list of those that are safe for removal.
+// Queries visibility for each build ID in versioning data and returns a list of those that are safe for removal.
 func (a *Activities) findBuildIdsToRemove(
 	ctx context.Context,
 	rateLimiter quotas.RateLimiter,
@@ -275,7 +274,7 @@ func (a *Activities) findBuildIdsToRemove(
 	entry *persistence.TaskQueueUserDataEntry,
 ) ([]string, error) {
 	// Only consider build ids that have been active at least as long as the retention time.
-	// This assumes that when a build id is added, it's used soon afterwards.
+	// This assumes that when a build ID is added, it's used soon afterwards.
 	// This lets us avoid making visibility queries that would probably find some workflows.
 	retention := ns.Retention()
 	// Don't consider build ids that were recently the default, since there may be workers
@@ -286,7 +285,7 @@ func (a *Activities) findBuildIdsToRemove(
 	var buildIdsToRemove []string
 	for setIdx, set := range versioningData.GetVersionSets() {
 		// Note that setActive counts build ids that may have associated workflows, i.e. not
-		// just all with STATE_ACTIVE. Also note that we always examine the default build id
+		// just all with STATE_ACTIVE. Also note that we always examine the default build ID
 		// for a set last, so setActive will be 1 + the number of active non-default build ids.
 		setActive := len(set.BuildIds)
 		for buildIdIdx, buildId := range set.BuildIds {
@@ -296,16 +295,16 @@ func (a *Activities) findBuildIdsToRemove(
 			}
 			buildIdIsSetDefault := buildIdIdx == len(set.BuildIds)-1
 			setIsQueueDefault := setIdx == len(versioningData.VersionSets)-1
-			// Don't remove if build id is the queue default or there's another active build id in
+			// Don't remove if build ID is the queue default or there's another active build ID in
 			// this set, since we might need to dispatch new tasks to this set. But if no build ids
 			// are active for the whole set, we can remove them all.
 			if buildIdIsSetDefault && (setIsQueueDefault || setActive > 1) {
 				continue
 			}
-			if hlc.SincePtr(buildId.BecameDefaultTimestamp) < removableBuildIdDurationSinceDefault {
+			if hlc.Since(buildId.BecameDefaultTimestamp) < removableBuildIdDurationSinceDefault {
 				continue
 			}
-			if !input.IgnoreRetentionTime && hlc.SincePtr(buildId.StateUpdateTimestamp) < retention {
+			if !input.IgnoreRetentionTime && hlc.Since(buildId.StateUpdateTimestamp) < retention {
 				continue
 			}
 
@@ -318,7 +317,7 @@ func (a *Activities) findBuildIdsToRemove(
 			}
 			a.recordHeartbeat(ctx, heartbeat)
 			if !exists {
-				a.logger.Info("Found build id to remove",
+				a.logger.Info("Found build ID to remove",
 					tag.WorkflowNamespace(ns.Name().String()),
 					tag.WorkflowTaskQueueName(entry.TaskQueue),
 					tag.BuildId(buildId.Id),

@@ -27,13 +27,12 @@ package headers
 import (
 	"context"
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/blang/semver/v4"
-	"golang.org/x/exp/slices"
-	"google.golang.org/grpc/metadata"
-
 	"go.temporal.io/api/serviceerror"
+	"google.golang.org/grpc/metadata"
 )
 
 const (
@@ -46,8 +45,11 @@ const (
 	ClientNamePythonSDK     = "temporal-python"
 	ClientNameCLI           = "temporal-cli"
 	ClientNameUI            = "temporal-ui"
+	ClientNameNexusGoSDK    = "Nexus-go-sdk"
 
-	ServerVersion = "1.22.0"
+	// ServerVersion value can be changed by the create-tag Github workflow.
+	// If you change the var name or move it, be sure to update the workflow.
+	ServerVersion = "1.26.0"
 
 	// SupportedServerVersions is used by CLI and inter role communication.
 	SupportedServerVersions = ">=1.0.0 <2.0.0"
@@ -73,6 +75,7 @@ var (
 		ClientNameCLI:           "<2.0.0",
 		ClientNameServer:        "<2.0.0",
 		ClientNameUI:            "<3.0.0",
+		ClientNameNexusGoSDK:    "<2.0.0",
 	}
 
 	internalVersionHeaderPairs = []string{

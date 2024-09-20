@@ -27,8 +27,11 @@ package client
 import (
 	"errors"
 	"fmt"
+	"net/http"
 	"net/url"
 	"time"
+
+	"go.temporal.io/server/common/auth"
 )
 
 const (
@@ -42,6 +45,7 @@ type (
 	Config struct {
 		Version                      string                    `yaml:"version"`
 		URL                          url.URL                   `yaml:"url"`
+		URLs                         []url.URL                 `yaml:"urls"`
 		Username                     string                    `yaml:"username"`
 		Password                     string                    `yaml:"password"`
 		Indices                      map[string]string         `yaml:"indices"`
@@ -50,6 +54,9 @@ type (
 		CloseIdleConnectionsInterval time.Duration             `yaml:"closeIdleConnectionsInterval"`
 		EnableSniff                  bool                      `yaml:"enableSniff"`
 		EnableHealthcheck            bool                      `yaml:"enableHealthcheck"`
+		TLS                          *auth.TLS                 `yaml:"tls"`
+		// httpClient is the awsHttpClient to be used for creating esClient
+		httpClient *http.Client
 	}
 
 	// ESAWSRequestSigningConfig represents configuration for signing ES requests to AWS
@@ -93,6 +100,17 @@ func (cfg *Config) GetSecondaryVisibilityIndex() string {
 		return ""
 	}
 	return cfg.Indices[SecondaryVisibilityAppName]
+}
+
+func (cfg *Config) SetHttpClient(httpClient *http.Client) {
+	cfg.httpClient = httpClient
+}
+
+func (cfg *Config) GetHttpClient() *http.Client {
+	if cfg == nil {
+		return nil
+	}
+	return cfg.httpClient
 }
 
 func (cfg *Config) Validate() error {

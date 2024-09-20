@@ -28,11 +28,10 @@ import (
 	"time"
 
 	enumspb "go.temporal.io/api/enums/v1"
-
 	namespacepb "go.temporal.io/api/namespace/v1"
-
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/cluster"
+	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
@@ -58,13 +57,15 @@ var (
 	MissedNamespaceID                        = namespace.ID("missed-namespace-id")
 	WorkflowID                               = "mock-workflow-id"
 	RunID                                    = "0d00698f-08e1-4d36-a3e2-3bf109f5d2d6"
+	WorkflowKey                              = definition.NewWorkflowKey(NamespaceID.String(), WorkflowID, RunID)
 
 	LocalNamespaceEntry = namespace.NewLocalNamespaceForTest(
 		&persistencespb.NamespaceInfo{Id: NamespaceID.String(), Name: Namespace.String()},
 		&persistencespb.NamespaceConfig{
 			Retention: timestamp.DurationFromDays(1),
 			BadBinaries: &namespacepb.BadBinaries{
-				Binaries: map[string]*namespacepb.BadBinaryInfo{},
+				Binaries: map[string]*namespacepb.BadBinaryInfo{
+					"lololol": nil},
 			},
 		},
 		cluster.TestCurrentClusterName,
@@ -179,11 +180,13 @@ var (
 
 func NewDynamicConfig() *configs.Config {
 	dc := dynamicconfig.NewNoopCollection()
-	config := configs.NewConfig(dc, 1, true, false)
-	// reduce the duration of long poll to increase test speed
-	config.LongPollExpirationInterval = dc.GetDurationPropertyFilteredByNamespace(dynamicconfig.HistoryLongPollExpirationInterval, 10*time.Second)
+	config := configs.NewConfig(dc, 1)
 	config.EnableActivityEagerExecution = dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true)
 	config.EnableEagerWorkflowStart = dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true)
 	config.NamespaceCacheRefreshInterval = dynamicconfig.GetDurationPropertyFn(time.Second)
+	config.EnableNexus = dynamicconfig.GetBoolPropertyFn(true)
+	config.ReplicationEnableUpdateWithNewTaskMerge = dynamicconfig.GetBoolPropertyFn(true)
+	config.EnableWorkflowExecutionTimeoutTimer = dynamicconfig.GetBoolPropertyFn(true)
+	config.EnableWorkflowIdReuseStartTimeValidation = dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true)
 	return config
 }

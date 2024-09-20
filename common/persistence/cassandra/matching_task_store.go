@@ -32,12 +32,12 @@ import (
 
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
-
 	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/log"
 	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/nosql/nosqlplugin/cassandra/gocql"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 const (
@@ -57,13 +57,6 @@ const (
 		`and type = ? ` +
 		`and task_id >= ? ` +
 		`and task_id < ?`
-
-	templateCompleteTaskQuery = `DELETE FROM tasks ` +
-		`WHERE namespace_id = ? ` +
-		`and task_queue_name = ? ` +
-		`and task_queue_type = ? ` +
-		`and type = ? ` +
-		`and task_id = ?`
 
 	templateCompleteTasksLessThanQuery = `DELETE FROM tasks ` +
 		`WHERE namespace_id = ? ` +
@@ -406,10 +399,10 @@ func (d *MatchingTaskStore) CreateTasks(
 	return &p.CreateTasksResponse{}, nil
 }
 
-func GetTaskTTL(expireTime *time.Time) int64 {
+func GetTaskTTL(expireTime *timestamppb.Timestamp) int64 {
 	var ttl int64 = 0
-	if expireTime != nil {
-		expiryTtl := convert.Int64Ceil(time.Until(timestamp.TimeValue(expireTime)).Seconds())
+	if expireTime != nil && !expireTime.AsTime().IsZero() {
+		expiryTtl := convert.Int64Ceil(time.Until(expireTime.AsTime()).Seconds())
 
 		// 0 means no ttl, we dont want that.
 		// Todo: Come back and correctly ignore expired in-memory tasks before persisting
@@ -478,28 +471,6 @@ func (d *MatchingTaskStore) GetTasks(
 		return nil, serviceerror.NewUnavailable(fmt.Sprintf("GetTasks operation failed. Error: %v", err))
 	}
 	return response, nil
-}
-
-// CompleteTask delete a task
-func (d *MatchingTaskStore) CompleteTask(
-	ctx context.Context,
-	request *p.CompleteTaskRequest,
-) error {
-	tli := request.TaskQueue
-	query := d.Session.Query(templateCompleteTaskQuery,
-		tli.NamespaceID,
-		tli.TaskQueueName,
-		tli.TaskQueueType,
-		rowTypeTask,
-		request.TaskID,
-	).WithContext(ctx)
-
-	err := query.Exec()
-	if err != nil {
-		return gocql.ConvertError("CompleteTask", err)
-	}
-
-	return nil
 }
 
 // CompleteTasksLessThan deletes all tasks less than the given task id. This API ignores the
@@ -610,40 +581,21 @@ func (d *MatchingTaskStore) ListTaskQueueUserDataEntries(ctx context.Context, re
 	response := &p.InternalListTaskQueueUserDataEntriesResponse{}
 	row := make(map[string]interface{})
 	for iter.MapScan(row) {
-		taskQueueRaw, ok := row["task_queue_name"]
-		if !ok {
-			return nil, newFieldNotFoundError("task_queue_name", row)
+		taskQueue, err := getTypedFieldFromRow[string]("task_queue_name", row)
+		if err != nil {
+			return nil, err
 		}
-		taskQueue, ok := taskQueueRaw.(string)
-		if !ok {
-			return nil, newPersistedTypeMismatchError("task_queue_name", taskQueue, taskQueueRaw, row)
+		data, err := getTypedFieldFromRow[[]byte]("data", row)
+		if err != nil {
+			return nil, err
 		}
-
-		dataRaw, ok := row["data"]
-		if !ok {
-			return nil, newFieldNotFoundError("data", row)
+		dataEncoding, err := getTypedFieldFromRow[string]("data_encoding", row)
+		if err != nil {
+			return nil, err
 		}
-		data, ok := dataRaw.([]byte)
-		if !ok {
-			return nil, newPersistedTypeMismatchError("data", data, dataRaw, row)
-		}
-
-		dataEncodingRaw, ok := row["data_encoding"]
-		if !ok {
-			return nil, newFieldNotFoundError("data_encoding", row)
-		}
-		dataEncoding, ok := dataEncodingRaw.(string)
-		if !ok {
-			return nil, newPersistedTypeMismatchError("data_encoding", dataEncoding, dataEncodingRaw, row)
-		}
-
-		versionRaw, ok := row["version"]
-		if !ok {
-			return nil, newFieldNotFoundError("version", row)
-		}
-		version, ok := versionRaw.(int64)
-		if !ok {
-			return nil, newPersistedTypeMismatchError("version", version, versionRaw, row)
+		version, err := getTypedFieldFromRow[int64]("version", row)
+		if err != nil {
+			return nil, err
 		}
 
 		response.Entries = append(response.Entries, p.InternalTaskQueueUserDataEntry{TaskQueue: taskQueue, Data: p.NewDataBlob(data, dataEncoding), Version: version})

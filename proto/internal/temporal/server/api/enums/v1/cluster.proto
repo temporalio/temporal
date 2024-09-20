@@ -1,3 +1,5 @@
+// The MIT License
+//
 // Copyright (c) 2021 Temporal Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -30,4 +32,10 @@ enum ClusterMemberRole {
     CLUSTER_MEMBER_ROLE_HISTORY = 2;
     CLUSTER_MEMBER_ROLE_MATCHING = 3;
     CLUSTER_MEMBER_ROLE_WORKER = 4;
+}
+
+enum HealthState {
+    HEALTH_STATE_UNSPECIFIED = 0;
+    HEALTH_STATE_SERVING = 1;
+    HEALTH_STATE_NOT_SERVING = 2;
 }

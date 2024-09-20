@@ -1,0 +1,116 @@
+- persistence:
+    dbname: test_cluster_a
+  clustermetadata:
+    enableGlobalNamespace: true
+    failoverVersionIncrement: 10
+    masterClusterName: "cluster-a"
+    currentClusterName: "cluster-a"
+    clusterInformation:
+      cluster-a:
+        enabled: true
+        initialFailoverVersion: 1
+        rpcName: "frontend"
+        rpcAddress: "127.0.0.1:7134"
+      cluster-b:
+        enabled: true
+        initialFailoverVersion: 2
+        rpcName: "frontend"
+        rpcAddress: "127.0.0.1:8134"
+      cluster-c:
+        enabled: true
+        initialFailoverVersion: 3
+        rpcName: "frontend"
+        rpcAddress: "127.0.0.1:9134"
+  enablearchival: false
+  workerconfig:
+    enablearchiver: false
+    enablereplicator: true
+  clusterno: 0
+  historyconfig:
+    numhistoryshards: 1
+    numhistoryhosts: 1
+  esconfig:
+    version: "${ES_VERSION}"
+    url:
+      scheme: "http"
+      host: "${ES_SEEDS}:9200"
+    indices:
+      visibility: temporal_visibility_v1_ndc_test_a
+
+- persistence:
+    dbname: cluster_b
+  clustermetadata:
+    enableGlobalNamespace: true
+    failoverVersionIncrement: 10
+    masterClusterName: "cluster-a"
+    currentClusterName: "cluster-b"
+    clusterInformation:
+      cluster-a:
+        enabled: true
+        initialFailoverVersion: 1
+        rpcName: "frontend"
+        rpcAddress: "127.0.0.1:7134"
+      cluster-b:
+        enabled: true
+        initialFailoverVersion: 2
+        rpcName: "frontend"
+        rpcAddress: "127.0.0.1:8134"
+      cluster-c:
+        enabled: true
+        initialFailoverVersion: 3
+        rpcName: "frontend"
+        rpcAddress: "127.0.0.1:9134"
+  enablearchival: false
+  workerconfig:
+    enablearchiver: false
+    enablereplicator: true
+  clusterno: 1
+  historyconfig:
+    numhistoryshards: 1
+    numhistoryhosts: 1
+  esconfig:
+    version: "${ES_VERSION}"
+    url:
+      scheme: "http"
+      host: "${ES_SEEDS}:9200"
+    indices:
+      visibility: temporal_visibility_v1_ndc_test_b
+
+- persistence:
+    dbname: other
+  clustermetadata:
+    enableGlobalNamespace: true
+    failoverVersionIncrement: 10
+    masterClusterName: "cluster-a"
+    currentClusterName: "cluster-c"
+    clusterInformation:
+      cluster-a:
+        enabled: true
+        initialFailoverVersion: 1
+        rpcName: "frontend"
+        rpcAddress: "127.0.0.1:7134"
+      cluster-b:
+        enabled: true
+        initialFailoverVersion: 2
+        rpcName: "frontend"
+        rpcAddress: "127.0.0.1:8134"
+      cluster-c:
+        enabled: true
+        initialFailoverVersion: 3
+        rpcName: "frontend"
+        rpcAddress: "127.0.0.1:9134"
+  enablearchival: false
+  workerconfig:
+    enablearchiver: false
+    enablereplicator: true
+  clusterno: 2
+  historyconfig:
+    numhistoryshards: 1
+    numhistoryhosts: 1
+  esconfig:
+    version: "${ES_VERSION}"
+    url:
+      scheme: "http"
+      host: "${ES_SEEDS}:9200"
+    indices:
+      visibility: temporal_visibility_v1_ndc_test_c

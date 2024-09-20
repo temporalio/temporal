@@ -30,13 +30,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"go.temporal.io/api/serviceerror"
-
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/metrics"
 	ctasks "go.temporal.io/server/common/tasks"
+	"go.uber.org/mock/gomock"
 )
 
 type (
@@ -67,7 +67,7 @@ func (s *executableTaskTrackerSuite) TearDownSuite() {
 func (s *executableTaskTrackerSuite) SetupTest() {
 	s.controller = gomock.NewController(s.T())
 
-	s.taskTracker = NewExecutableTaskTracker(log.NewTestLogger())
+	s.taskTracker = NewExecutableTaskTracker(log.NewTestLogger(), metrics.NoopMetricsHandler)
 }
 
 func (s *executableTaskTrackerSuite) TearDownTest() {

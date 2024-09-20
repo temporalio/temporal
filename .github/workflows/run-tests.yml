@@ -1,0 +1,342 @@
+name: All Tests
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+      - release/**
+      - cloud/**
+
+  workflow_dispatch:
+    inputs:
+      commit:
+        description: "Commit SHA"
+        required: true
+
+concurrency: # Auto-cancel existing runs in the PR when a new commit is pushed
+  group: run-tests-${{ github.head_ref || github.run_id }}
+  cancel-in-progress: true
+
+env:
+  # For workflow_dispatch: use the given commit.
+  # For pull_request: use the head of the PR branch (not the merge branch which is the default!)
+  # For push: use the pushed commit.
+  COMMIT: ${{ github.event.inputs.commit || github.event.pull_request.head.sha || github.sha }}
+  PR_BASE_COMMIT: ${{ github.event.pull_request.base.sha }}
+  DOCKER_COMPOSE_FILE: ./develop/github/docker-compose.yml
+  TEMPORAL_VERSION_CHECK_DISABLED: 1
+  BUILDKITE_ANALYTICS_TOKEN: ${{ secrets.BUILDKITE_ANALYTICS_TOKEN }}
+
+jobs:
+  misc-checks:
+    name: Misc checks
+    strategy:
+      fail-fast: false
+      matrix:
+        runs-on: [ubuntu-20.04]
+    runs-on: ${{ matrix.runs-on }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          ref: ${{ env.COMMIT }}
+          # buf-breaking tries to compare HEAD against merge base so we need to be able to find it
+          fetch-depth: 100
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: 'go.mod'
+          check-latest: true
+
+      - uses: arduino/setup-protoc@v3
+
+      - run: GOOS=windows GOARCH=amd64 make clean-bins bins
+
+      - run: GOOS=darwin GOARCH=arm64 make clean-bins bins
+
+      - run: make clean-bins ci-build-misc
+
+      - run: make build-tests
+
+  unit-test:
+    name: Unit test
+    needs: misc-checks
+    strategy:
+      fail-fast: false
+      matrix:
+        runs-on: [ubuntu-20.04]
+    runs-on: ${{ matrix.runs-on }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          ref: ${{ env.COMMIT }}
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: 'go.mod'
+          check-latest: true
+
+      - name: Run unit test
+        timeout-minutes: 15
+        run: make unit-test-coverage
+
+      - name: Upload test results
+        if: ${{ !cancelled() }}
+        run: make upload-test-results
+
+  integration-test:
+    name: Integration test
+    needs: misc-checks
+    strategy:
+      fail-fast: false
+      matrix:
+        runs-on: [ubuntu-20.04]
+    runs-on: ${{ matrix.runs-on }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          ref: ${{ env.COMMIT }}
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: 'go.mod'
+          check-latest: true
+
+      - name: Start containerized dependencies
+        uses: hoverkraft-tech/compose-action@v2.0.1
+        with:
+          compose-file: ${{ env.DOCKER_COMPOSE_FILE }}
+          services: |
+            cassandra
+            mysql
+            postgresql
+          down-flags: -v
+
+      - name: Run integration test
+        timeout-minutes: 15
+        run: make integration-test-coverage
+
+      - name: Upload test results
+        if: ${{ !cancelled() }}
+        run: make upload-test-results
+
+  functional-test:
+    name: Functional test
+    needs: misc-checks
+    strategy:
+      fail-fast: false
+      matrix:
+        runs-on: [ubuntu-20.04]
+        name:
+          - cass_es
+          - cass_es8
+          - sqlite
+          - mysql8
+          - postgres12
+          - postgres12_pgx
+        shard_index: [0, 1, 2]
+        include:
+          - name: cass_es
+            persistence_type: nosql
+            persistence_driver: cassandra
+            containers: [cassandra, elasticsearch]
+            es_version: v7
+          - name: cass_es8
+            persistence_type: nosql
+            persistence_driver: cassandra
+            containers: [cassandra, elasticsearch8]
+            es_version: v8
+          - name: sqlite
+            persistence_type: sql
+            persistence_driver: sqlite
+            containers: []
+          - name: mysql8
+            persistence_type: sql
+            persistence_driver: mysql8
+            containers: [mysql]
+          - name: postgres12
+            persistence_type: sql
+            persistence_driver: postgres12
+            containers: [postgresql]
+          - name: postgres12_pgx
+            persistence_type: sql
+            persistence_driver: postgres12_pgx
+            containers: [postgresql]
+    runs-on: ${{ matrix.runs-on }}
+    env:
+      TEST_TOTAL_SHARDS: 3
+      TEST_SHARD_INDEX: ${{ matrix.shard_index }}
+      PERSISTENCE_TYPE: ${{ matrix.persistence_type }}
+      PERSISTENCE_DRIVER: ${{ matrix.persistence_driver }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          ref: ${{ env.COMMIT }}
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: 'go.mod'
+          check-latest: true
+
+      - name: Start containerized dependencies
+        if: ${{ toJson(matrix.containers) != '[]' }}
+        uses: hoverkraft-tech/compose-action@v2.0.1
+        with:
+          compose-file: ${{ env.DOCKER_COMPOSE_FILE }}
+          services: "${{ join(matrix.containers, '\n') }}"
+          down-flags: -v
+
+      - name: Run functional test
+        timeout-minutes: 30 # make sure this is larger than the test timeout in the Makefile
+        run: make functional-test-coverage
+
+      - name: Upload test results
+        if: ${{ !cancelled() }}
+        run: make upload-test-results
+
+  functional-test-xdc:
+    name: Functional test xdc
+    needs: misc-checks
+    strategy:
+      fail-fast: false
+      matrix:
+        runs-on: [ubuntu-20.04]
+        name: [cass_es, cass_es8, mysql8, postgres12, postgres12_pgx]
+        include:
+          - name: cass_es
+            persistence_type: nosql
+            persistence_driver: elasticsearch
+            containers: [cassandra, elasticsearch]
+          - name: cass_es8
+            persistence_type: nosql
+            persistence_driver: elasticsearch
+            containers: [cassandra, elasticsearch8]
+          - name: mysql8
+            persistence_type: sql
+            persistence_driver: mysql8
+            containers: [mysql]
+          - name: postgres12
+            persistence_type: sql
+            persistence_driver: postgres12
+            containers: [postgresql]
+          - name: postgres12_pgx
+            persistence_type: sql
+            persistence_driver: postgres12_pgx
+            containers: [postgresql]
+    runs-on: ${{ matrix.runs-on }}
+    env:
+      PERSISTENCE_TYPE: ${{ matrix.persistence_type }}
+      PERSISTENCE_DRIVER: ${{ matrix.persistence_driver }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          ref: ${{ env.COMMIT }}
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: 'go.mod'
+          check-latest: true
+
+      - name: Start containerized dependencies
+        if: ${{ toJson(matrix.containers) != '[]' }}
+        uses: hoverkraft-tech/compose-action@v2.0.1
+        with:
+          compose-file: ${{ env.DOCKER_COMPOSE_FILE }}
+          services: "${{ join(matrix.containers, '\n') }}"
+          down-flags: -v
+
+      - name: Run functional test xdc
+        timeout-minutes: 30
+        run: make functional-test-xdc-coverage
+
+      - name: Upload test results
+        if: ${{ !cancelled() }}
+        run: make upload-test-results
+
+  functional-test-ndc:
+    name: Functional test ndc
+    needs: misc-checks
+    strategy:
+      fail-fast: false
+      matrix:
+        runs-on: [ubuntu-20.04]
+        name: 
+          - cass_es
+          - cass_es8
+          - mysql8
+          - postgres12
+          - postgres12_pgx
+        include:
+          - name: cass_es
+            persistence_type: nosql
+            persistence_driver: elasticsearch
+            containers: [cassandra, elasticsearch]
+            es_version: v7
+          - name: cass_es8
+            persistence_type: nosql
+            persistence_driver: elasticsearch
+            containers: [cassandra, elasticsearch8]
+            es_version: v8
+          - name: mysql8
+            persistence_type: sql
+            persistence_driver: mysql8
+            containers: [mysql]
+          - name: postgres12
+            persistence_type: sql
+            persistence_driver: postgres12
+            containers: [postgresql]
+          - name: postgres12_pgx
+            persistence_type: sql
+            persistence_driver: postgres12_pgx
+            containers: [postgresql]
+    runs-on: ${{ matrix.runs-on }}
+    env:
+      PERSISTENCE_TYPE: ${{ matrix.persistence_type }}
+      PERSISTENCE_DRIVER: ${{ matrix.persistence_driver }}
+      ES_VERSION: ${{ matrix.es_version }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          ref: ${{ env.COMMIT }}
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: 'go.mod'
+          check-latest: true
+
+      - name: Start containerized dependencies
+        if: ${{ toJson(matrix.containers) != '[]' }}
+        uses: hoverkraft-tech/compose-action@v2.0.1
+        with:
+          compose-file: ${{ env.DOCKER_COMPOSE_FILE }}
+          services: "${{ join(matrix.containers, '\n') }}"
+          down-flags: -v
+
+      - name: Run functional test ndc
+        timeout-minutes: 15
+        run: make functional-test-ndc-coverage
+
+  test-status:
+    name: Test Status
+    needs:
+      - unit-test
+      - integration-test
+      - functional-test
+      - functional-test-xdc
+      - functional-test-ndc
+    runs-on: ubuntu-20.04
+    if: always()
+    env:
+      RESULTS: ${{ toJSON(needs.*.result) }}
+    steps:
+      - name: Check results
+        run: |
+          if [[ -n $(echo "$RESULTS" | jq '.[] | select (. != "success")') ]]; then
+            exit 1
+          fi

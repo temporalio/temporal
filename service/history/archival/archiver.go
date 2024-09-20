@@ -36,17 +36,18 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
-	"go.temporal.io/server/common/persistence/visibility/manager"
-	"go.uber.org/multierr"
-
 	archiverspb "go.temporal.io/server/api/archiver/v1"
 	carchiver "go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/archiver/provider"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/searchattribute"
+	"go.uber.org/multierr"
+	"google.golang.org/protobuf/types/known/durationpb"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type (
@@ -65,14 +66,15 @@ type (
 		HistoryURI carchiver.URI
 
 		// visibility archival
-		WorkflowTypeName string
-		StartTime        *time.Time
-		ExecutionTime    *time.Time
-		CloseTime        *time.Time
-		Status           enumspb.WorkflowExecutionStatus
-		HistoryLength    int64
-		Memo             *commonpb.Memo
-		SearchAttributes *commonpb.SearchAttributes
+		WorkflowTypeName  string
+		StartTime         *timestamppb.Timestamp
+		ExecutionTime     *timestamppb.Timestamp
+		CloseTime         *timestamppb.Timestamp
+		ExecutionDuration *durationpb.Duration
+		Status            enumspb.WorkflowExecutionStatus
+		HistoryLength     int64
+		Memo              *commonpb.Memo
+		SearchAttributes  *commonpb.SearchAttributes
 		// VisibilityURI is the URI of the visibility archival backend.
 		VisibilityURI carchiver.URI
 
@@ -153,7 +155,7 @@ func (a *archiver) Archive(ctx context.Context, request *Request) (res *Response
 			logger.Warn("failed to archive workflow", tag.Error(err))
 		}
 
-		metricsScope.Timer(metrics.ArchiverArchiveLatency.GetMetricName()).
+		metrics.ArchiverArchiveLatency.With(metricsScope).
 			Record(time.Since(start), metrics.StringTag("status", status))
 	}(time.Now())
 
@@ -247,6 +249,11 @@ func (a *archiver) archiveVisibility(ctx context.Context, request *Request, logg
 		return err
 	}
 
+	var historyArchivalUri string
+	if request.HistoryURI != nil {
+		historyArchivalUri = request.HistoryURI.String()
+	}
+
 	return visibilityArchiver.Archive(ctx, request.VisibilityURI, &archiverspb.VisibilityRecord{
 		NamespaceId:        request.NamespaceID,
 		Namespace:          request.Namespace,
@@ -256,11 +263,12 @@ func (a *archiver) archiveVisibility(ctx context.Context, request *Request, logg
 		StartTime:          request.StartTime,
 		ExecutionTime:      request.ExecutionTime,
 		CloseTime:          request.CloseTime,
+		ExecutionDuration:  request.ExecutionDuration,
 		Status:             request.Status,
 		HistoryLength:      request.HistoryLength,
 		Memo:               request.Memo,
 		SearchAttributes:   searchAttributes,
-		HistoryArchivalUri: request.HistoryURI.String(),
+		HistoryArchivalUri: historyArchivalUri,
 	})
 }
 
@@ -280,6 +288,6 @@ func (a *archiver) recordArchiveTargetResult(logger log.Logger, startTime time.T
 		metrics.StringTag("target", string(target)),
 		metrics.StringTag("status", status),
 	}
-	latency := metrics.ArchiverArchiveTargetLatency.GetMetricName()
-	a.metricsHandler.Timer(latency).Record(duration, tags...)
+
+	metrics.ArchiverArchiveTargetLatency.With(a.metricsHandler).Record(duration, tags...)
 }

@@ -50,7 +50,7 @@ func CapturePanic(logger log.Logger, metricHandler Handler, retError *error) {
 
 		logger.Error("Panic is captured", tag.SysStackTrace(st), tag.Error(err))
 
-		metricHandler.Counter(ServicePanic.GetMetricName()).Record(1)
+		ServicePanic.With(metricHandler).Record(1)
 		*retError = serviceerror.NewInternal(err.Error())
 	}
 }

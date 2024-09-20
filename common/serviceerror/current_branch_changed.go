@@ -25,10 +25,9 @@
 package serviceerror
 
 import (
-	"github.com/gogo/status"
-	"google.golang.org/grpc/codes"
-
 	"go.temporal.io/server/api/errordetails/v1"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 type (
@@ -42,6 +41,7 @@ type (
 )
 
 // NewCurrentBranchChanged returns new CurrentBranchChanged error.
+// TODO: Update CurrentBranchChanged with event id and event version. Do not use branch token bytes as branch identity.
 func NewCurrentBranchChanged(currentBranchToken, requestBranchToken []byte) error {
 	return &CurrentBranchChanged{
 		Message:            "Current branch token and request branch token doesn't match.",

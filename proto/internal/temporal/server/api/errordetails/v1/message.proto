@@ -28,6 +28,8 @@ package temporal.server.api.errordetails.v1;
 
 option go_package = "go.temporal.io/server/api/errordetails/v1;errordetails";
 
+import "temporal/server/api/persistence/v1/hsm.proto";
+
 message TaskAlreadyStartedFailure {
 }
 
@@ -51,5 +53,15 @@ message RetryReplicationFailure {
     int64 end_event_version = 7;
 }
 
+message SyncStateFailure {
+    string namespace_id = 1;
+    string workflow_id = 2;
+    string run_id = 3;
+    temporal.server.api.persistence.v1.VersionedTransition versioned_transition = 4;
+}
+
 message StickyWorkerUnavailableFailure {
+}
+
+message ObsoleteDispatchBuildIdFailure {
 }

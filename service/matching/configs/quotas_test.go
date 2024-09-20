@@ -26,16 +26,16 @@ package configs
 
 import (
 	"reflect"
+	"slices"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	"golang.org/x/exp/slices"
-
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/quotas"
+	"go.temporal.io/server/common/testing/temporalapi"
 )
 
 type (
@@ -78,12 +78,11 @@ func (s *quotasSuite) TestAPIPrioritiesOrdered() {
 
 func (s *quotasSuite) TestAPIs() {
 	var service matchingservice.MatchingServiceServer
-	t := reflect.TypeOf(&service).Elem()
-	apiToPriority := make(map[string]int, t.NumMethod())
-	for i := 0; i < t.NumMethod(); i++ {
-		apiName := t.Method(i).Name
-		apiToPriority[apiName] = APIToPriority[apiName]
-	}
+	apiToPriority := make(map[string]int)
+	temporalapi.WalkExportedMethods(&service, func(m reflect.Method) {
+		fullName := "/temporal.server.api.matchingservice.v1.MatchingService/" + m.Name
+		apiToPriority[fullName] = APIToPriority[fullName]
+	})
 	s.Equal(apiToPriority, APIToPriority)
 }
 
@@ -93,7 +92,7 @@ func (s *quotasSuite) TestOperatorPrioritized() {
 	limiter := NewPriorityRateLimiter(rateFn, operatorRPSRatioFn)
 
 	operatorRequest := quotas.NewRequest(
-		"QueryWorkflow",
+		"/temporal.server.api.matchingservice.v1.MatchingService/QueryWorkflow",
 		1,
 		"",
 		headers.CallerTypeOperator,
@@ -101,7 +100,7 @@ func (s *quotasSuite) TestOperatorPrioritized() {
 		"")
 
 	apiRequest := quotas.NewRequest(
-		"QueryWorkflow",
+		"/temporal.server.api.matchingservice.v1.MatchingService/QueryWorkflow",
 		1,
 		"",
 		headers.CallerTypeAPI,

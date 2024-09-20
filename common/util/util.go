@@ -27,28 +27,13 @@
 package util
 
 import (
+	"context"
+	"maps"
 	"sort"
 	"time"
 
-	"golang.org/x/exp/constraints"
-	"golang.org/x/exp/maps"
+	expconstraints "golang.org/x/exp/constraints"
 )
-
-// Min returns the minimum of two comparable values.
-func Min[T constraints.Ordered](a, b T) T {
-	if a < b {
-		return a
-	}
-	return b
-}
-
-// Min returns the maximum of two comparable values.
-func Max[T constraints.Ordered](a, b T) T {
-	if a > b {
-		return a
-	}
-	return b
-}
 
 // MinTime returns the earlier of two given time.Time
 func MinTime(a, b time.Time) time.Time {
@@ -58,7 +43,7 @@ func MinTime(a, b time.Time) time.Time {
 	return b
 }
 
-// MinTime returns the later of two given time.Time
+// MaxTime returns the later of two given time.Time
 func MaxTime(a, b time.Time) time.Time {
 	if a.After(b) {
 		return a
@@ -66,9 +51,15 @@ func MaxTime(a, b time.Time) time.Time {
 	return b
 }
 
+// NextAlignedTime returns the earliest time after `t` that is aligned to an integer multiple
+// of `align` since the unix epoch.
+func NextAlignedTime(t time.Time, align time.Duration) time.Time {
+	return time.Unix(0, (t.UnixNano()/int64(align)+1)*int64(align))
+}
+
 // SortSlice sorts the given slice of an ordered type.
 // Sort is not guaranteed to be stable.
-func SortSlice[S ~[]E, E constraints.Ordered](slice S) {
+func SortSlice[S ~[]E, E expconstraints.Ordered](slice S) {
 	sort.Slice(slice, func(i, j int) bool {
 		return slice[i] < slice[j]
 	})
@@ -133,6 +124,18 @@ func MapConcurrent[IN any, OUT any](input []IN, mapper func(IN) (OUT, error)) ([
 	return results, nil
 }
 
+// MapSlice given slice xs []T and f(T) S produces slice []S by applying f to every element of xs
+func MapSlice[T, S any](xs []T, f func(T) S) []S {
+	if xs == nil {
+		return nil
+	}
+	result := make([]S, len(xs))
+	for i, s := range xs {
+		result[i] = f(s)
+	}
+	return result
+}
+
 // FilterSlice iterates over elements of a slice, returning a new slice of all elements predicate returns true for.
 func FilterSlice[T any](in []T, predicate func(T) bool) []T {
 	var out []T
@@ -144,11 +147,39 @@ func FilterSlice[T any](in []T, predicate func(T) bool) []T {
 	return out
 }
 
-// ReduceSlice reduces a slice using given reducer function and initial value.
-func ReduceSlice[T any, A any](in []T, initializer A, reducer func(A, T) A) A {
+// FoldSlice folds left a slice using given reducer function and initial value.
+func FoldSlice[T any, A any](in []T, initializer A, reducer func(A, T) A) A {
 	acc := initializer
 	for _, val := range in {
 		acc = reducer(acc, val)
 	}
 	return acc
+}
+
+// RepeatSlice given slice and a number (n) produces a new slice containing original slice n times
+// if n is non-positive will produce nil
+func RepeatSlice[T any](xs []T, n int) []T {
+	if xs == nil || n <= 0 {
+		return nil
+	}
+	ys := make([]T, n*len(xs))
+	for i := 0; i < n; i++ {
+		copy(ys[i*len(xs):], xs)
+	}
+	return ys
+}
+
+// Ptr returns a pointer to a copy of v.
+func Ptr[T any](v T) *T {
+	return &v
+}
+
+// InterruptibleSleep is like time.Sleep but can be interrupted by a context.
+func InterruptibleSleep(ctx context.Context, timeout time.Duration) {
+	timer := time.NewTimer(timeout)
+	defer timer.Stop()
+	select {
+	case <-timer.C:
+	case <-ctx.Done():
+	}
 }

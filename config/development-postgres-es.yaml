@@ -9,7 +9,7 @@ persistence:
   datastores:
     postgres-default:
       sql:
-        pluginName: "postgres"
+        pluginName: "postgres12"
         databaseName: "temporal"
         connectAddr: "127.0.0.1:5432"
         connectProtocol: "tcp"

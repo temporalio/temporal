@@ -92,11 +92,11 @@ type (
 	}
 
 	readerStats struct {
-		progress   readerProgess
+		progress   readerProgress
 		sliceCount int
 	}
 
-	readerProgess struct {
+	readerProgress struct {
 		watermark tasks.Key
 		attempts  int
 	}
@@ -189,7 +189,7 @@ func (m *monitorImpl) SetReaderWatermark(readerID int64, watermark tasks.Key) {
 
 	stats := m.readerStats[readerID]
 	if stats.progress.watermark.CompareTo(watermark) != 0 {
-		stats.progress = readerProgess{
+		stats.progress = readerProgress{
 			watermark: watermark,
 			attempts:  1,
 		}
@@ -200,8 +200,8 @@ func (m *monitorImpl) SetReaderWatermark(readerID int64, watermark tasks.Key) {
 	stats.progress.attempts++
 	m.readerStats[readerID] = stats
 
-	ciriticalAttempts := m.options.ReaderStuckCriticalAttempts()
-	if ciriticalAttempts > 0 && stats.progress.attempts >= ciriticalAttempts {
+	criticalAttempts := m.options.ReaderStuckCriticalAttempts()
+	if criticalAttempts > 0 && stats.progress.attempts >= criticalAttempts {
 		m.sendAlertLocked(&Alert{
 			AlertType: AlertTypeReaderStuck,
 			AlertAttributesReaderStuck: &AlertAttributesReaderStuck{

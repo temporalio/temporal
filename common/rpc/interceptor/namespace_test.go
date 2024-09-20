@@ -30,14 +30,13 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"go.temporal.io/api/workflowservice/v1"
-
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/common/namespace"
+	"go.uber.org/mock/gomock"
 )
 
 type (
@@ -57,6 +56,11 @@ var (
 
 	matchingAPIExcluded = map[string]struct{}{
 		"ListTaskQueuePartitions": {},
+		// Nexus endpoint APIs operate on a cluster scope, not a namespace scope.
+		"CreateNexusEndpoint": {},
+		"UpdateNexusEndpoint": {},
+		"ListNexusEndpoints":  {},
+		"DeleteNexusEndpoint": {},
 	}
 
 	historyAPIExcluded = map[string]struct{}{
@@ -70,6 +74,13 @@ var (
 		"RemoveTask":                {},
 		"SyncShardStatus":           {},
 		"GetReplicationStatus":      {},
+		"GetDLQTasks":               {},
+		"DeleteDLQTasks":            {},
+		"AddTasks":                  {},
+		"ListQueues":                {},
+		"ListTasks":                 {},
+		"CompleteNexusOperation":    {}, // NamespaceId is in the completion token for this request.
+		"DeepHealthCheck":           {},
 	}
 )
 

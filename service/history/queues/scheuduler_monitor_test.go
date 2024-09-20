@@ -28,15 +28,14 @@ import (
 	"testing"
 	"time"
 
-	gomock "github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/tasks"
 	"go.temporal.io/server/service/history/tests"
+	"go.uber.org/mock/gomock"
 )
 
 var (
@@ -77,7 +76,7 @@ func (s *schedulerMonitorSuite) SetupTest() {
 
 	s.mockNamespaceRegistry.EXPECT().GetNamespaceName(gomock.Any()).Return(tests.Namespace, nil).AnyTimes()
 	s.mockMetricsHandler.EXPECT().WithTags(gomock.Any()).Return(s.mockMetricsHandler).AnyTimes()
-	s.mockMetricsHandler.EXPECT().Timer(metrics.QueueScheduleLatency.GetMetricName()).Return(s.mockTimerMetric).AnyTimes()
+	s.mockMetricsHandler.EXPECT().Timer(metrics.QueueScheduleLatency.Name()).Return(s.mockTimerMetric).AnyTimes()
 
 	s.schedulerMonitor = newSchedulerMonitor(
 		func(e Executable) TaskChannelKey {

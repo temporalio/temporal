@@ -1,8 +1,0 @@
-{
-  "CurrVersion": "1.1",
-  "MinCompatibleVersion": "0.1",
-  "Description": "add close time & status index",
-  "SchemaUpdateCqlFiles": [
-    "index.sql"
-  ]
-}

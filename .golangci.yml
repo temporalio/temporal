@@ -10,16 +10,18 @@ linters:
     - staticcheck
     - vet
     - forbidigo
-run:
-  skip-dirs:
-    - ^api
-    - ^proto
-    - ^.git
+    - exhaustive
+    - godox
 linters-settings:
+  godox:
+    keywords:
+      - FIXME # marks TODOs that must be fixed before merging
   govet:
     fieldalignment: 0
   forbidigo:
     forbid:
+      - p: time.Sleep
+        msg: "Please use require.Eventually or assert.Eventually instead unless you've no other option"
       - p: ^time\.After$
         msg: "time.After may leak resources. Use time.NewTimer instead."
   revive:
@@ -82,6 +84,10 @@ linters-settings:
         disabled: true
       - name: flag-parameter
         disabled: true
+      - name: unnecessary-stmt
+        disabled: true
+      - name: range-val-in-closure
+        disabled: true
 
       # Rule tuning
       - name: cognitive-complexity
@@ -89,7 +95,7 @@ linters-settings:
           - 25
       - name: cyclomatic
         arguments:
-          - 18
+          - 25
       - name: function-result-limit
         arguments:
           - 5
@@ -99,15 +105,26 @@ linters-settings:
           - "bytes.Buffer.*"
           - "strings.Builder.*"
 issues:
-  # Exclude cyclomatic and cognitive complexity rules for functional tests in the `tests` root directory.
+  exclude-dirs:
+    - ^api
+    - ^proto
+    - ^.git
   exclude-rules:
-    - path: ^tests\/.+\.go
-      text: "(cyclomatic|cognitive)"
+    - path-except: _test\.go|tests/.+\.go
+      text: "time.Sleep"
+      linters:
+        - forbidigo
+    - path: _test\.go|tests/.+\.go
+      text: "(cyclomatic|cognitive)"  # false positives when using subtests
       linters:
         - revive
-    - path: _test\.go
+    - path: _test\.go|tests/.+\.go
+      text: "dot-imports"  # helpful in tests
       linters:
-        - goerr113
+        - revive
+    - path: _test\.go|tests/.+\.go
+      linters:
+        - goerr113  # like err = errors.New("test error")
     - path: ^tools\/.+\.go
       linters:
         - goerr113

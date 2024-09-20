@@ -49,7 +49,7 @@ func NewCLIClient(config *Config, logger log.Logger) (CLIClient, error) {
 	}
 }
 
-func NewIntegrationTestsClient(config *Config, logger log.Logger) (IntegrationTestsClient, error) {
+func NewFunctionalTestsClient(config *Config, logger log.Logger) (IntegrationTestsClient, error) {
 	switch config.Version {
 	case "v8", "v7", "":
 		return newClient(config, nil, logger)

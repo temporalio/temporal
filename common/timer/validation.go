@@ -29,6 +29,7 @@ import (
 	"time"
 
 	"go.temporal.io/server/common/primitives/timestamp"
+	"google.golang.org/protobuf/types/known/durationpb"
 )
 
 const (
@@ -39,9 +40,13 @@ const (
 
 var (
 	errNegativeDuration = errors.New("negative timer duration")
+	// Pre-extracted for ease of use later
+	maxSeconds = MaxAllowedTimer.Nanoseconds() / 1e9
+	maxNanos   = int32(MaxAllowedTimer.Nanoseconds() - maxSeconds*1e9)
 )
 
-func ValidateAndCapTimer(delay *time.Duration) error {
+// TODO: remove this logic, rely on scheduled task dropping logic in mutableState for long duration timers
+func ValidateAndCapTimer(delay *durationpb.Duration) error {
 	duration := timestamp.DurationValue(delay)
 	if duration < 0 {
 		return errNegativeDuration
@@ -54,7 +59,8 @@ func ValidateAndCapTimer(delay *time.Duration) error {
 	// existing workflows implementation using higher than allowed timer
 	// can continue to run.
 	if duration > MaxAllowedTimer {
-		*delay = MaxAllowedTimer
+		delay.Nanos = maxNanos
+		delay.Seconds = maxSeconds
 	}
 	return nil
 }

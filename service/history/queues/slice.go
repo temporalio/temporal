@@ -27,12 +27,13 @@ package queues
 import (
 	"fmt"
 
-	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/predicates"
 	"go.temporal.io/server/service/history/tasks"
+	expmaps "golang.org/x/exp/maps"
 )
 
 const (
-	shrinkPredicateMaxPendingNamespaces = 3
+	shrinkPredicateMaxPendingKeys = 3
 )
 
 type (
@@ -47,9 +48,9 @@ type (
 		SplitByRange(tasks.Key) (left Slice, right Slice)
 		SplitByPredicate(tasks.Predicate) (pass Slice, fail Slice)
 		CanMergeWithSlice(Slice) bool
-		MergeWithSlice(Slice) []Slice
-		CompactWithSlice(Slice) Slice
-		ShrinkScope()
+		MergeWithSlice(slice Slice) []Slice
+		CompactWithSlice(slice Slice) Slice
+		ShrinkScope() int
 		SelectTasks(readerID int64, batchSize int) ([]Executable, error)
 		MoreTasks() bool
 		TaskStats() TaskStats
@@ -57,14 +58,12 @@ type (
 	}
 
 	TaskStats struct {
-		PendingPerNamespace map[namespace.ID]int
+		PendingPerKey map[any]int
 	}
 
-	ExecutableInitializer func(readerID int64, t tasks.Task) Executable
-
 	SliceImpl struct {
-		paginationFnProvider  PaginationFnProvider
-		executableInitializer ExecutableInitializer
+		paginationFnProvider PaginationFnProvider
+		executableFactory    ExecutableFactory
 
 		destroyed bool
 
@@ -73,25 +72,32 @@ type (
 
 		*executableTracker
 		monitor Monitor
+
+		maxPredicateSizeFn func() int
 	}
 )
 
 func NewSlice(
 	paginationFnProvider PaginationFnProvider,
-	executableInitializer ExecutableInitializer,
+	executableFactory ExecutableFactory,
 	monitor Monitor,
 	scope Scope,
+	grouper Grouper,
+	maxPredicateSizeFn func() int,
 ) *SliceImpl {
-	return &SliceImpl{
-		paginationFnProvider:  paginationFnProvider,
-		executableInitializer: executableInitializer,
-		scope:                 scope,
+	s := &SliceImpl{
+		paginationFnProvider: paginationFnProvider,
+		executableFactory:    executableFactory,
+		scope:                scope,
 		iterators: []Iterator{
 			NewIterator(paginationFnProvider, scope.Range),
 		},
-		executableTracker: newExecutableTracker(),
-		monitor:           monitor,
+		executableTracker:  newExecutableTracker(grouper),
+		monitor:            monitor,
+		maxPredicateSizeFn: maxPredicateSizeFn,
 	}
+	s.ensurePredicateSizeLimit()
+	return s
 }
 
 func (s *SliceImpl) Scope() Scope {
@@ -310,17 +316,21 @@ func (s *SliceImpl) CompactWithSlice(slice Slice) Slice {
 	)
 }
 
-func (s *SliceImpl) ShrinkScope() {
+func (s *SliceImpl) ShrinkScope() int {
 	s.stateSanityCheck()
 
-	s.shrinkRange()
+	tasksCompleted := s.shrinkRange()
 	s.shrinkPredicate()
 
+	// shrinkRange shrinks the executableTracker, which may remove tracked pending executables. Set the
+	// pending task count to reflect that.
 	s.monitor.SetSlicePendingTaskCount(s, len(s.executableTracker.pendingExecutables))
+
+	return tasksCompleted
 }
 
-func (s *SliceImpl) shrinkRange() {
-	minPendingTaskKey := s.executableTracker.shrink()
+func (s *SliceImpl) shrinkRange() int {
+	minPendingTaskKey, tasksCompleted := s.executableTracker.shrink()
 
 	minIteratorKey := tasks.MaximumKey
 	if len(s.iterators) != 0 {
@@ -336,6 +346,8 @@ func (s *SliceImpl) shrinkRange() {
 	}
 
 	s.scope.Range.InclusiveMin = newRangeMin
+
+	return tasksCompleted
 }
 
 func (s *SliceImpl) shrinkPredicate() {
@@ -346,17 +358,15 @@ func (s *SliceImpl) shrinkPredicate() {
 		return
 	}
 
-	if len(s.executableTracker.pendingPerNamesapce) > shrinkPredicateMaxPendingNamespaces {
-		// only shrink predicate if there're few namespaces left
+	// TODO: this should be generic enough to shrink any predicate type, probably doesn't belong here.
+	pendingPerKey := s.executableTracker.pendingPerKey
+	if len(pendingPerKey) > shrinkPredicateMaxPendingKeys {
+		// only shrink predicate if there're few keys left
 		return
 	}
 
-	pendingNamespaceIDs := make([]string, 0, len(s.executableTracker.pendingPerNamesapce))
-	for namespaceID := range s.executableTracker.pendingPerNamesapce {
-		pendingNamespaceIDs = append(pendingNamespaceIDs, namespaceID.String())
-	}
-	namespacePredicate := tasks.NewNamespacePredicate(pendingNamespaceIDs)
-	s.scope.Predicate = tasks.AndPredicates(s.scope.Predicate, namespacePredicate)
+	s.scope.Predicate = s.grouper.Predicate(expmaps.Keys(pendingPerKey))
+	s.ensurePredicateSizeLimit()
 }
 
 func (s *SliceImpl) SelectTasks(readerID int64, batchSize int) ([]Executable, error) {
@@ -372,8 +382,8 @@ func (s *SliceImpl) SelectTasks(readerID int64, batchSize int) ([]Executable, er
 
 	executables := make([]Executable, 0, batchSize)
 	for len(executables) < batchSize && len(s.iterators) != 0 {
-		if s.iterators[0].HasNext(readerID) {
-			task, err := s.iterators[0].Next(readerID)
+		if s.iterators[0].HasNext() {
+			task, err := s.iterators[0].Next()
 			if err != nil {
 				s.iterators[0] = s.iterators[0].Remaining()
 				if len(executables) != 0 {
@@ -394,7 +404,7 @@ func (s *SliceImpl) SelectTasks(readerID int64, batchSize int) ([]Executable, er
 				continue
 			}
 
-			executable := s.executableInitializer(readerID, task)
+			executable := s.executableFactory.NewExecutable(task, readerID)
 			s.executableTracker.add(executable)
 			executables = append(executables, executable)
 		} else {
@@ -415,7 +425,7 @@ func (s *SliceImpl) TaskStats() TaskStats {
 	s.stateSanityCheck()
 
 	return TaskStats{
-		PendingPerNamespace: s.executableTracker.pendingPerNamesapce,
+		PendingPerKey: s.executableTracker.pendingPerKey,
 	}
 }
 
@@ -451,16 +461,28 @@ func (s *SliceImpl) newSlice(
 	tracker *executableTracker,
 ) *SliceImpl {
 	slice := &SliceImpl{
-		paginationFnProvider:  s.paginationFnProvider,
-		executableInitializer: s.executableInitializer,
-		scope:                 scope,
-		iterators:             iterators,
-		executableTracker:     tracker,
-		monitor:               s.monitor,
+		paginationFnProvider: s.paginationFnProvider,
+		executableFactory:    s.executableFactory,
+		scope:                scope,
+		iterators:            iterators,
+		executableTracker:    tracker,
+		monitor:              s.monitor,
+		maxPredicateSizeFn:   s.maxPredicateSizeFn,
 	}
+	slice.ensurePredicateSizeLimit()
 	slice.monitor.SetSlicePendingTaskCount(slice, len(slice.executableTracker.pendingExecutables))
 
 	return slice
+}
+
+func (s *SliceImpl) ensurePredicateSizeLimit() {
+	maxPredicateSize := s.maxPredicateSizeFn()
+	// 0 == unlimited
+	if maxPredicateSize > 0 && s.scope.Predicate.Size() > maxPredicateSize {
+		// Due to the limitations in predicate merging logic, the predicate size can easily grow unbounded.
+		// The simplest mitigation is to stop merging and replace with the univeral predicate.
+		s.scope.Predicate = predicates.Universal[tasks.Task]()
+	}
 }
 
 func appendMergedSlice(

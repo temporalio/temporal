@@ -1,3 +1,5 @@
+// The MIT License
+//
 // Copyright (c) 2020 Temporal Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -30,15 +32,18 @@ import "temporal/api/enums/v1/schedule.proto";
 import "temporal/api/enums/v1/workflow.proto";
 import "temporal/api/schedule/v1/message.proto";
 import "temporal/api/workflowservice/v1/request_response.proto";
+import "temporal/server/api/enums/v1/common.proto";
 
 import "google/protobuf/timestamp.proto";
 
-import "dependencies/gogoproto/gogo.proto";
-
 message BufferedStart {
     // Nominal (pre-jitter) and Actual (post-jitter) time of action
-    google.protobuf.Timestamp nominal_time = 1 [(gogoproto.stdtime) = true];
-    google.protobuf.Timestamp actual_time = 2 [(gogoproto.stdtime) = true];
+    google.protobuf.Timestamp nominal_time = 1;
+    google.protobuf.Timestamp actual_time = 2;
+    // Desired time is usually nil, which should be interpreted as == actual time, but for starts
+    // that are blocked behind another action, it is set to the close time of the previous action
+    // for more meaningful metrics.
+    google.protobuf.Timestamp desired_time = 5;
     // Overridden overlap policy
     temporal.api.enums.v1.ScheduleOverlapPolicy overlap_policy = 3;
     // Trigger-immediately or backfill
@@ -48,12 +53,11 @@ message BufferedStart {
 message InternalState {
     string namespace = 1;
     string namespace_id = 2;
-    // this is just the workflow id of the scheduler, but accessing that from the workflow is
-    // currently not available during replay, so we just pass it in here.
     string schedule_id = 8;
 
-    google.protobuf.Timestamp last_processed_time = 3 [(gogoproto.stdtime) = true];
+    google.protobuf.Timestamp last_processed_time = 3;
     repeated BufferedStart buffered_starts = 4;
+    repeated temporal.api.schedule.v1.BackfillRequest ongoing_backfills = 10;
 
     // last completion/failure
     temporal.api.common.v1.Payloads last_completion_result = 5;
@@ -75,6 +79,7 @@ message StartScheduleArgs {
 message FullUpdateRequest {
     temporal.api.schedule.v1.Schedule schedule = 1;
     int64 conflict_token = 2;
+    temporal.api.common.v1.SearchAttributes search_attributes = 3;
 }
 
 message DescribeResponse {
@@ -97,6 +102,8 @@ message WatchWorkflowResponse {
         temporal.api.common.v1.Payloads result = 2;
         temporal.api.failure.v1.Failure failure = 3;
     }
+    // Timestamp of close event
+    google.protobuf.Timestamp close_time = 4;
 }
 
 message StartWorkflowRequest {
@@ -107,7 +114,7 @@ message StartWorkflowRequest {
 
 message StartWorkflowResponse {
     string run_id = 1;
-    google.protobuf.Timestamp real_start_time = 2 [(gogoproto.stdtime) = true];
+    google.protobuf.Timestamp real_start_time = 2;
 }
 
 message CancelWorkflowRequest {
@@ -124,4 +131,27 @@ message TerminateWorkflowRequest {
     // Note: run id in execution is first execution run id
     temporal.api.common.v1.WorkflowExecution execution = 5;
     string reason = 6;
+}
+
+message NextTimeCache {
+    // workflow logic version (invalidate when changed)
+    int64 version = 1;
+    // start time that the results were calculated from
+    google.protobuf.Timestamp start_time = 2;
+    // next_times and nominal_times are a series of timestamp pairs, encoded as a nanosecond
+    // offset from start_time. next_times has one value for each time in the cache.
+    // nominal_times may have up to the same number of values, but it may also be shorter (or
+    // empty), if the corresponding nominal time is equal to the next time.
+    repeated int64 next_times = 3;
+    repeated int64 nominal_times = 4;
+    bool completed = 5;
+}
+
+
+// State of a scheduler using hierarchical state machines.
+message HsmSchedulerState {
+    StartScheduleArgs args = 1;
+    temporal.server.api.enums.v1.SchedulerState hsm_state = 2;
+    google.protobuf.Timestamp next_invocation_time = 3;
+
 }

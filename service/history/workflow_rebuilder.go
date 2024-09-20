@@ -30,10 +30,13 @@ import (
 	"context"
 	"math"
 
+	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
-
 	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/ndc"
@@ -43,6 +46,12 @@ import (
 )
 
 type (
+	rebuildSpec struct {
+		branchToken          []byte
+		stateTransitionCount int64
+		dbRecordVersion      int64
+		requestID            string
+	}
 	workflowRebuilder interface {
 		// rebuild rebuilds a workflow, in case of any kind of corruption
 		rebuild(
@@ -79,45 +88,86 @@ func (r *workflowRebuilderImpl) rebuild(
 	workflowKey definition.WorkflowKey,
 ) (retError error) {
 
-	wfContext, err := r.workflowConsistencyChecker.GetWorkflowContext(
+	wfCache := r.workflowConsistencyChecker.GetWorkflowCache()
+	rebuildSpec, err := r.getRebuildSpecFromMutableState(ctx, &workflowKey)
+	if err != nil {
+		return err
+	}
+	wfContext, releaseFn, err := wfCache.GetOrCreateWorkflowExecution(
 		ctx,
-		nil,
-		api.BypassMutableStateConsistencyPredicate,
-		workflowKey,
-		workflow.LockPriorityHigh,
+		r.shard,
+		namespace.ID(workflowKey.NamespaceID),
+		&commonpb.WorkflowExecution{
+			WorkflowId: workflowKey.WorkflowID,
+			RunId:      workflowKey.RunID,
+		},
+		locks.PriorityHigh,
 	)
 	if err != nil {
 		return err
 	}
 	defer func() {
-		wfContext.GetReleaseFn()(retError)
-		wfContext.GetContext().Clear()
+		releaseFn(retError)
+		wfContext.Clear()
 	}()
-
-	mutableState := wfContext.GetMutableState()
-	_, dbRecordVersion := mutableState.GetUpdateCondition()
-
-	requestID := mutableState.GetExecutionState().CreateRequestId
-	versionHistories := mutableState.GetExecutionInfo().VersionHistories
-	currentVersionHistory, err := versionhistory.GetCurrentVersionHistory(versionHistories)
-	if err != nil {
-		return err
-	}
-	branchToken := currentVersionHistory.BranchToken
-	stateTransitionCount := mutableState.GetExecutionInfo().StateTransitionCount
 
 	rebuildMutableState, err := r.replayResetWorkflow(
 		ctx,
 		workflowKey,
-		branchToken,
-		stateTransitionCount,
-		dbRecordVersion,
-		requestID,
+		rebuildSpec.branchToken,
+		rebuildSpec.stateTransitionCount,
+		rebuildSpec.dbRecordVersion,
+		rebuildSpec.requestID,
 	)
 	if err != nil {
 		return err
 	}
-	return r.persistToDB(ctx, rebuildMutableState)
+	return r.overwriteToDB(ctx, rebuildMutableState)
+}
+
+func (r *workflowRebuilderImpl) getRebuildSpecFromMutableState(
+	ctx context.Context,
+	workflowKey *definition.WorkflowKey,
+) (*rebuildSpec, error) {
+	if workflowKey.RunID == "" {
+		resp, err := r.shard.GetCurrentExecution(
+			ctx,
+			&persistence.GetCurrentExecutionRequest{
+				ShardID:     r.shard.GetShardID(),
+				NamespaceID: workflowKey.NamespaceID,
+				WorkflowID:  workflowKey.WorkflowID,
+			},
+		)
+		if err != nil && resp == nil {
+			return nil, err
+		}
+		workflowKey.RunID = resp.RunID
+	}
+	resp, err := r.shard.GetWorkflowExecution(
+		ctx,
+		&persistence.GetWorkflowExecutionRequest{
+			ShardID:     r.shard.GetShardID(),
+			NamespaceID: workflowKey.NamespaceID,
+			WorkflowID:  workflowKey.WorkflowID,
+			RunID:       workflowKey.RunID,
+		},
+	)
+	if err != nil && resp == nil {
+		return nil, err
+	}
+
+	mutableState := resp.State
+	versionHistories := mutableState.ExecutionInfo.VersionHistories
+	currentVersionHistory, err := versionhistory.GetCurrentVersionHistory(versionHistories)
+	if err != nil {
+		return nil, err
+	}
+	return &rebuildSpec{
+		branchToken:          currentVersionHistory.BranchToken,
+		stateTransitionCount: mutableState.ExecutionInfo.StateTransitionCount,
+		dbRecordVersion:      resp.DBRecordVersion,
+		requestID:            mutableState.ExecutionState.CreateRequestId,
+	}, nil
 }
 
 func (r *workflowRebuilderImpl) replayResetWorkflow(
@@ -152,7 +202,7 @@ func (r *workflowRebuilderImpl) replayResetWorkflow(
 	return rebuildMutableState, nil
 }
 
-func (r *workflowRebuilderImpl) persistToDB(
+func (r *workflowRebuilderImpl) overwriteToDB(
 	ctx context.Context,
 	mutableState workflow.MutableState,
 ) error {

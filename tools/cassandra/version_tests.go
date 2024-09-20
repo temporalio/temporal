@@ -30,13 +30,11 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-
 	"go.temporal.io/server/common/config"
-	"go.temporal.io/server/common/log"
-
-	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/persistence/cassandra"
+	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/resolver"
 	"go.temporal.io/server/environment"
 )
@@ -54,20 +52,14 @@ func (s *VersionTestSuite) SetupTest() {
 
 func (s *VersionTestSuite) TestVerifyCompatibleVersion() {
 	keyspace := "temporal_ver_test_"
-	visKeyspace := "temporal_vis_ver_test_"
 	_, filename, _, ok := runtime.Caller(0)
 	s.True(ok)
 	root := path.Dir(path.Dir(path.Dir(filename)))
 	cqlFile := path.Join(root, "schema/cassandra/temporal/schema.cql")
-	visCqlFile := path.Join(root, "schema/cassandra/visibility/schema.cql")
 
 	defer s.createKeyspace(keyspace)()
-	defer s.createKeyspace(visKeyspace)()
 	s.Nil(RunTool([]string{
 		"./tool", "-k", keyspace, "-q", "setup-schema", "-f", cqlFile, "-version", "10.0", "-o",
-	}))
-	s.Nil(RunTool([]string{
-		"./tool", "-k", visKeyspace, "-q", "setup-schema", "-f", visCqlFile, "-version", "10.0", "-o",
 	}))
 
 	defaultCfg := config.Cassandra{
@@ -77,16 +69,12 @@ func (s *VersionTestSuite) TestVerifyCompatibleVersion() {
 		Password: "",
 		Keyspace: keyspace,
 	}
-	visibilityCfg := defaultCfg
-	visibilityCfg.Keyspace = visKeyspace
 	cfg := config.Persistence{
-		DefaultStore:    "default",
-		VisibilityStore: "visibility",
+		DefaultStore: "default",
 		DataStores: map[string]config.DataStore{
-			"default":    {Cassandra: &defaultCfg},
-			"visibility": {Cassandra: &visibilityCfg},
+			"default": {Cassandra: &defaultCfg},
 		},
-		TransactionSizeLimit: dynamicconfig.GetIntPropertyFn(common.DefaultTransactionSizeLimit),
+		TransactionSizeLimit: dynamicconfig.GetIntPropertyFn(primitives.DefaultTransactionSizeLimit),
 	}
 	s.NoError(cassandra.VerifyCompatibleVersion(cfg, resolver.NewNoopResolver()))
 }

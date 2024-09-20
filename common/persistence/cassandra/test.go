@@ -30,7 +30,7 @@ import (
 	"time"
 
 	"github.com/gocql/gocql"
-	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/debug"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -39,6 +39,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	p "go.temporal.io/server/common/persistence"
 	commongocql "go.temporal.io/server/common/persistence/nosql/nosqlplugin/cassandra/gocql"
+	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/resolver"
 	"go.temporal.io/server/environment"
 	"go.temporal.io/server/tests/testutils"
@@ -90,12 +91,11 @@ func NewTestCluster(keyspace, username, password, host string, port int, schemaD
 func (s *TestCluster) Config() config.Persistence {
 	cfg := s.cfg
 	return config.Persistence{
-		DefaultStore:    "test",
-		VisibilityStore: "test",
+		DefaultStore: "test",
 		DataStores: map[string]config.DataStore{
 			"test": {Cassandra: &cfg, FaultInjection: s.faultInjection},
 		},
-		TransactionSizeLimit: dynamicconfig.GetIntPropertyFn(common.DefaultTransactionSizeLimit),
+		TransactionSizeLimit: dynamicconfig.GetIntPropertyFn(primitives.DefaultTransactionSizeLimit),
 	}
 }
 
@@ -117,7 +117,6 @@ func (s *TestCluster) SetupTestDatabase() {
 	}
 
 	s.LoadSchema(path.Join(schemaDir, "temporal", "schema.cql"))
-	s.LoadSchema(path.Join(schemaDir, "visibility", "schema.cql"))
 }
 
 // TearDownTestDatabase from PersistenceTestCluster interface
@@ -135,31 +134,43 @@ func (s *TestCluster) CreateSession(
 	}
 
 	var err error
-	s.session, err = commongocql.NewSession(
-		func() (*gocql.ClusterConfig, error) {
-			return commongocql.NewCassandraCluster(
-				config.Cassandra{
-					Hosts:    s.cfg.Hosts,
-					Port:     s.cfg.Port,
-					User:     s.cfg.User,
-					Password: s.cfg.Password,
-					Keyspace: keyspace,
-					Consistency: &config.CassandraStoreConsistency{
-						Default: &config.CassandraConsistencySettings{
-							Consistency: "ONE",
+	op := func() error {
+		session, err := commongocql.NewSession(
+			func() (*gocql.ClusterConfig, error) {
+				return commongocql.NewCassandraCluster(
+					config.Cassandra{
+						Hosts:    s.cfg.Hosts,
+						Port:     s.cfg.Port,
+						User:     s.cfg.User,
+						Password: s.cfg.Password,
+						Keyspace: keyspace,
+						Consistency: &config.CassandraStoreConsistency{
+							Default: &config.CassandraConsistencySettings{
+								Consistency: "ONE",
+							},
 						},
+						ConnectTimeout: s.cfg.ConnectTimeout,
 					},
-					ConnectTimeout: s.cfg.ConnectTimeout,
-				},
-				resolver.NewNoopResolver(),
-			)
-		},
-		log.NewNoopLogger(),
-		metrics.NoopMetricsHandler,
+					resolver.NewNoopResolver(),
+				)
+			},
+			log.NewNoopLogger(),
+			metrics.NoopMetricsHandler,
+		)
+		if err == nil {
+			s.session = session
+		}
+		return err
+	}
+	err = backoff.ThrottleRetry(
+		op,
+		backoff.NewExponentialRetryPolicy(time.Second).WithExpirationInterval(time.Minute),
+		nil,
 	)
 	if err != nil {
 		s.logger.Fatal("CreateSession", tag.Error(err))
 	}
+	s.logger.Debug("created session", tag.NewStringTag("keyspace", keyspace))
 }
 
 // CreateDatabase from PersistenceTestCluster interface
@@ -168,6 +179,7 @@ func (s *TestCluster) CreateDatabase() {
 	if err != nil {
 		s.logger.Fatal("CreateCassandraKeyspace", tag.Error(err))
 	}
+	s.logger.Info("created database", tag.NewStringTag("database", s.DatabaseName()))
 }
 
 // DropDatabase from PersistenceTestCluster interface
@@ -176,6 +188,7 @@ func (s *TestCluster) DropDatabase() {
 	if err != nil && !strings.Contains(err.Error(), "AlreadyExists") {
 		s.logger.Fatal("DropCassandraKeyspace", tag.Error(err))
 	}
+	s.logger.Info("dropped database", tag.NewStringTag("database", s.DatabaseName()))
 }
 
 // LoadSchema from PersistenceTestCluster interface
@@ -189,6 +202,7 @@ func (s *TestCluster) LoadSchema(schemaFile string) {
 			s.logger.Fatal("LoadSchema", tag.Error(err))
 		}
 	}
+	s.logger.Info("loaded schema")
 }
 
 func (s *TestCluster) GetSession() commongocql.Session {

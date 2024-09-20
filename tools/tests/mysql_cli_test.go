@@ -29,10 +29,8 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/suite"
-
 	"go.temporal.io/server/common/persistence/sql/sqlplugin/mysql"
 	"go.temporal.io/server/environment"
-	mysqlversionV57 "go.temporal.io/server/schema/mysql/v57"
 	mysqlversionV8 "go.temporal.io/server/schema/mysql/v8"
 	"go.temporal.io/server/tools/sql/clitest"
 )
@@ -78,9 +76,9 @@ func TestMySQLUpdateSchemaTestSuite(t *testing.T) {
 		mysql.PluginName,
 		testMySQLQuery,
 		testMySQLExecutionSchemaVersionDir,
-		mysqlversionV57.Version,
+		mysqlversionV8.Version,
 		testMySQLVisibilitySchemaVersionDir,
-		mysqlversionV57.VisibilityVersion,
+		mysqlversionV8.VisibilityVersion,
 	))
 }
 
@@ -93,64 +91,5 @@ func TestMySQLVersionTestSuite(t *testing.T) {
 		mysql.PluginName,
 		testMySQLExecutionSchemaFile,
 		testMySQLVisibilitySchemaFile,
-	))
-}
-
-func TestMySQL8ConnTestSuite(t *testing.T) {
-	suite.Run(t, clitest.NewSQLConnTestSuite(
-		environment.GetMySQLAddress(),
-		strconv.Itoa(environment.GetMySQLPort()),
-		mysql.PluginNameV8,
-		testMySQLQuery,
-	))
-}
-
-func TestMySQL8HandlerTestSuite(t *testing.T) {
-	suite.Run(t, clitest.NewHandlerTestSuite(
-		environment.GetMySQLAddress(),
-		strconv.Itoa(environment.GetMySQLPort()),
-		mysql.PluginNameV8,
-	))
-}
-
-func TestMySQL8SetupSchemaTestSuite(t *testing.T) {
-	t.Setenv("SQL_HOST", environment.GetMySQLAddress())
-	t.Setenv("SQL_PORT", strconv.Itoa(environment.GetMySQLPort()))
-	t.Setenv("SQL_USER", testUser)
-	t.Setenv("SQL_PASSWORD", testPassword)
-	suite.Run(t, clitest.NewSetupSchemaTestSuite(
-		environment.GetMySQLAddress(),
-		strconv.Itoa(environment.GetMySQLPort()),
-		mysql.PluginNameV8,
-		testMySQLQuery,
-	))
-}
-
-func TestMySQL8UpdateSchemaTestSuite(t *testing.T) {
-	t.Setenv("SQL_HOST", environment.GetMySQLAddress())
-	t.Setenv("SQL_PORT", strconv.Itoa(environment.GetMySQLPort()))
-	t.Setenv("SQL_USER", testUser)
-	t.Setenv("SQL_PASSWORD", testPassword)
-	suite.Run(t, clitest.NewUpdateSchemaTestSuite(
-		environment.GetMySQLAddress(),
-		strconv.Itoa(environment.GetMySQLPort()),
-		mysql.PluginNameV8,
-		testMySQLQuery,
-		testMySQL8ExecutionSchemaVersionDir,
-		mysqlversionV8.Version,
-		testMySQL8VisibilitySchemaVersionDir,
-		mysqlversionV8.VisibilityVersion,
-	))
-}
-
-func TestMySQL8VersionTestSuite(t *testing.T) {
-	t.Setenv("SQL_USER", testUser)
-	t.Setenv("SQL_PASSWORD", testPassword)
-	suite.Run(t, clitest.NewVersionTestSuite(
-		environment.GetMySQLAddress(),
-		strconv.Itoa(environment.GetMySQLPort()),
-		mysql.PluginNameV8,
-		testMySQL8ExecutionSchemaFile,
-		testMySQL8VisibilitySchemaFile,
 	))
 }

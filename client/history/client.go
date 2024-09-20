@@ -23,7 +23,7 @@
 // THE SOFTWARE.
 
 // Generates all three generated files in this package:
-//go:generate go run ../../cmd/tools/rpcwrappers -service history
+//go:generate go run ../../cmd/tools/genrpcwrappers -service history
 
 package history
 
@@ -31,23 +31,26 @@ import (
 	"context"
 	"fmt"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"go.temporal.io/api/serviceerror"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/metadata"
-
 	"go.temporal.io/server/api/historyservice/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/debug"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/membership"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/metadata"
 )
 
-var _ historyservice.HistoryServiceClient = (*clientImpl)(nil)
+var (
+	_ historyservice.HistoryServiceClient = (*clientImpl)(nil)
+)
 
 const (
 	// DefaultTimeout is the default timeout used to make calls
@@ -61,6 +64,11 @@ type clientImpl struct {
 	redirector      redirector
 	timeout         time.Duration
 	tokenSerializer common.TaskTokenSerializer
+	// shardIndex is incremented every time a shard-agnostic API is invoked. It is used to load balance requests
+	// across hosts by picking an essentially random host. We use an index here so that we don't need to inject any
+	// random number generator in order to make tests deterministic. We use a uint instead of an int because we
+	// don't want this to become negative if we ever overflow.
+	shardIndex atomic.Uint32
 }
 
 // NewClient creates a new history service gRPC client
@@ -69,13 +77,13 @@ func NewClient(
 	historyServiceResolver membership.ServiceResolver,
 	logger log.Logger,
 	numberOfShards int32,
-	rpcFactory common.RPCFactory,
+	rpcFactory RPCFactory,
 	timeout time.Duration,
 ) historyservice.HistoryServiceClient {
 	connections := newConnectionPool(historyServiceResolver, rpcFactory)
 
 	var redirector redirector
-	if dc.GetBoolProperty(dynamicconfig.HistoryClientOwnershipCachingEnabled, false)() {
+	if dynamicconfig.HistoryClientOwnershipCachingEnabled.Get(dc)() {
 		logger.Info("historyClient: ownership caching enabled")
 		redirector = newCachingRedirector(connections, historyServiceResolver, logger)
 	} else {
@@ -91,6 +99,10 @@ func NewClient(
 		timeout:         timeout,
 		tokenSerializer: common.NewProtoTaskTokenSerializer(),
 	}
+}
+
+func (c *clientImpl) DeepHealthCheck(ctx context.Context, request *historyservice.DeepHealthCheckRequest, opts ...grpc.CallOption) (*historyservice.DeepHealthCheckResponse, error) {
+	return c.connections.getOrCreateClientConn(rpcAddress(request.GetHostAddress())).historyClient.DeepHealthCheck(ctx, request, opts...)
 }
 
 func (c *clientImpl) DescribeHistoryHost(
@@ -238,18 +250,100 @@ func (c *clientImpl) StreamWorkflowReplicationMessages(
 	if !ok {
 		return nil, serviceerror.NewInvalidArgument("missing cluster & shard ID metadata")
 	}
-	_, targetClusterShardID, err := DecodeClusterShardMD(ctxMetadata)
+	_, targetClusterShardID, err := DecodeClusterShardMD(headers.NewGRPCHeaderGetter(ctx))
 	if err != nil {
 		return nil, err
 	}
-	client, err := c.redirector.clientForShardID(targetClusterShardID.ShardID)
+
+	var streamClient historyservice.HistoryService_StreamWorkflowReplicationMessagesClient
+	op := func(ctx context.Context, client historyservice.HistoryServiceClient) error {
+		var err error
+		streamClient, err = client.StreamWorkflowReplicationMessages(
+			metadata.NewOutgoingContext(ctx, ctxMetadata),
+			opts...)
+		return err
+	}
+	if err := c.executeWithRedirect(ctx, targetClusterShardID.ShardID, op); err != nil {
+		return nil, err
+	}
+	return streamClient, nil
+}
+
+// GetDLQTasks doesn't need redirects or routing because DLQ tasks are not sharded, so it just picks any available host
+// in the connection pool (or creates one) and forwards the request to it.
+func (c *clientImpl) GetDLQTasks(
+	ctx context.Context,
+	in *historyservice.GetDLQTasksRequest,
+	opts ...grpc.CallOption,
+) (*historyservice.GetDLQTasksResponse, error) {
+	historyClient, err := c.getAnyClient("GetDLQTasks")
 	if err != nil {
 		return nil, err
 	}
-	return client.StreamWorkflowReplicationMessages(
-		metadata.NewOutgoingContext(ctx, ctxMetadata),
-		opts...,
-	)
+	return historyClient.GetDLQTasks(ctx, in, opts...)
+}
+
+func (c *clientImpl) DeleteDLQTasks(
+	ctx context.Context,
+	in *historyservice.DeleteDLQTasksRequest,
+	opts ...grpc.CallOption,
+) (*historyservice.DeleteDLQTasksResponse, error) {
+	historyClient, err := c.getAnyClient("DeleteDLQTasks")
+	if err != nil {
+		return nil, err
+	}
+	return historyClient.DeleteDLQTasks(ctx, in, opts...)
+}
+
+func (c *clientImpl) ListQueues(
+	ctx context.Context,
+	in *historyservice.ListQueuesRequest,
+	opts ...grpc.CallOption,
+) (*historyservice.ListQueuesResponse, error) {
+	historyClient, err := c.getAnyClient("ListQueues")
+	if err != nil {
+		return nil, err
+	}
+	return historyClient.ListQueues(ctx, in, opts...)
+}
+
+func (c *clientImpl) ListTasks(
+	ctx context.Context,
+	in *historyservice.ListTasksRequest,
+	opts ...grpc.CallOption,
+) (*historyservice.ListTasksResponse, error) {
+	// Depth of the shardId field is 2 which is not supported by the genrpcwrapper generator.
+	// Simply changing the maxDepth for ShardId field in the genrpcwrapper generator will
+	// cause the generation logic for other methods to find more than one routing fields.
+
+	shardID := in.Request.GetShardId()
+	var response *historyservice.ListTasksResponse
+	op := func(ctx context.Context, client historyservice.HistoryServiceClient) error {
+		var err error
+		ctx, cancel := c.createContext(ctx)
+		defer cancel()
+		response, err = client.ListTasks(ctx, in, opts...)
+		return err
+	}
+	if err := c.executeWithRedirect(ctx, shardID, op); err != nil {
+		return nil, err
+	}
+	return response, nil
+}
+
+// getAnyClient returns an arbitrary client by looking up a client by a sequentially increasing shard ID. This is useful
+// for history APIs that are shard-agnostic (e.g. namespace or DLQ v2 APIs).
+func (c *clientImpl) getAnyClient(apiName string) (historyservice.HistoryServiceClient, error) {
+	// Subtract 1 so that the first index is 0 because Add returns the new value.
+	shardIndex := c.shardIndex.Add(1) - 1
+	// Add 1 at the end because shard IDs are 1-indexed.
+	shardID := shardIndex%uint32(c.numberOfShards) + 1
+	client, err := c.redirector.clientForShardID(int32(shardID))
+	if err != nil {
+		msg := fmt.Sprintf("can't find history host to serve API: %q, err: %v", apiName, err)
+		return nil, serviceerror.NewUnavailable(msg)
+	}
+	return client, nil
 }
 
 func (c *clientImpl) createContext(parent context.Context) (context.Context, context.CancelFunc) {

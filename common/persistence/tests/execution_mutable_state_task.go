@@ -31,15 +31,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/gogo/protobuf/proto"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
-
 	persistencespb "go.temporal.io/server/api/persistence/v1"
-	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/debug"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -47,8 +44,9 @@ import (
 	"go.temporal.io/server/common/persistence"
 	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
-	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/service/history/tasks"
+	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type (
@@ -142,16 +140,6 @@ func (s *ExecutionMutableStateTaskSuite) SetupTest() {
 		uuid.New().String(),
 		uuid.New().String(),
 	)
-
-	for _, category := range taskCategories {
-		err := s.ExecutionManager.RegisterHistoryTaskReader(s.Ctx, &p.RegisterHistoryTaskReaderRequest{
-			ShardID:      s.ShardID,
-			ShardOwner:   s.Owner,
-			TaskCategory: category,
-			ReaderID:     common.DefaultQueueReaderID,
-		})
-		s.NoError(err)
-	}
 }
 
 func (s *ExecutionMutableStateTaskSuite) TearDownTest() {
@@ -171,15 +159,6 @@ func (s *ExecutionMutableStateTaskSuite) TearDownTest() {
 		ExclusiveMaxTaskKey: tasks.NewKey(time.Unix(0, math.MaxInt64), 0),
 	})
 	s.NoError(err)
-
-	for _, category := range taskCategories {
-		s.ExecutionManager.UnregisterHistoryTaskReader(s.Ctx, &p.UnregisterHistoryTaskReaderRequest{
-			ShardID:      s.ShardID,
-			ShardOwner:   s.Owner,
-			TaskCategory: category,
-			ReaderID:     common.DefaultQueueReaderID,
-		})
-	}
 
 	s.Cancel()
 }
@@ -508,7 +487,6 @@ func (s *ExecutionMutableStateTaskSuite) TestGetTimerTasksOrdered() {
 		RangeID:     s.RangeID,
 		NamespaceID: s.WorkflowKey.NamespaceID,
 		WorkflowID:  s.WorkflowKey.WorkflowID,
-		RunID:       s.WorkflowKey.RunID,
 		Tasks: map[tasks.Category][]tasks.Task{
 			tasks.CategoryTimer: timerTasks,
 		},
@@ -550,7 +528,6 @@ func (s *ExecutionMutableStateTaskSuite) TestGetScheduledTasksOrdered() {
 		RangeID:     s.RangeID,
 		NamespaceID: s.WorkflowKey.NamespaceID,
 		WorkflowID:  s.WorkflowKey.WorkflowID,
-		RunID:       s.WorkflowKey.RunID,
 		Tasks: map[tasks.Category][]tasks.Task{
 			fakeScheduledTaskCategory: scheduledTasks,
 		},
@@ -580,7 +557,6 @@ func (s *ExecutionMutableStateTaskSuite) TestGetScheduledTasksOrdered() {
 	response, err := s.ExecutionManager.GetHistoryTasks(s.Ctx, &p.GetHistoryTasksRequest{
 		ShardID:             s.ShardID,
 		TaskCategory:        fakeScheduledTaskCategory,
-		ReaderID:            common.DefaultQueueReaderID,
 		InclusiveMinTaskKey: tasks.NewKey(now, 0),
 		ExclusiveMaxTaskKey: tasks.NewKey(now.Add(time.Second), 0),
 		BatchSize:           10,
@@ -609,7 +585,6 @@ func (s *ExecutionMutableStateTaskSuite) AddRandomTasks(
 		RangeID:     s.RangeID,
 		NamespaceID: s.WorkflowKey.NamespaceID,
 		WorkflowID:  s.WorkflowKey.WorkflowID,
-		RunID:       s.WorkflowKey.RunID,
 		Tasks: map[tasks.Category][]tasks.Task{
 			category: randomTasks,
 		},
@@ -628,7 +603,6 @@ func (s *ExecutionMutableStateTaskSuite) PaginateTasks(
 	request := &p.GetHistoryTasksRequest{
 		ShardID:             s.ShardID,
 		TaskCategory:        category,
-		ReaderID:            common.DefaultQueueReaderID,
 		InclusiveMinTaskKey: inclusiveMinTaskKey,
 		ExclusiveMaxTaskKey: exclusiveMaxTaskKey,
 		BatchSize:           batchSize,
@@ -717,7 +691,7 @@ func newTestSerializer(
 
 func (s *testSerializer) SerializeTask(
 	task tasks.Task,
-) (commonpb.DataBlob, error) {
+) (*commonpb.DataBlob, error) {
 	if fakeTask, ok := task.(*tasks.FakeTask); ok {
 		data, err := proto.Marshal(&persistencespb.TransferTaskInfo{
 			NamespaceId:    fakeTask.WorkflowKey.NamespaceID,
@@ -726,12 +700,12 @@ func (s *testSerializer) SerializeTask(
 			TaskType:       fakeTask.GetType(),
 			Version:        fakeTask.Version,
 			TaskId:         fakeTask.TaskID,
-			VisibilityTime: timestamp.TimePtr(fakeTask.VisibilityTimestamp),
+			VisibilityTime: timestamppb.New(fakeTask.VisibilityTimestamp),
 		})
 		if err != nil {
-			return commonpb.DataBlob{}, err
+			return nil, err
 		}
-		return commonpb.DataBlob{
+		return &commonpb.DataBlob{
 			Data:         data,
 			EncodingType: enumspb.ENCODING_TYPE_PROTO3,
 		}, nil
@@ -742,7 +716,7 @@ func (s *testSerializer) SerializeTask(
 
 func (s *testSerializer) DeserializeTask(
 	category tasks.Category,
-	blob commonpb.DataBlob,
+	blob *commonpb.DataBlob,
 ) (tasks.Task, error) {
 	categoryID := category.ID()
 	if categoryID != fakeImmediateTaskCategory.ID() &&
@@ -752,7 +726,7 @@ func (s *testSerializer) DeserializeTask(
 
 	taskInfo := &persistencespb.TransferTaskInfo{}
 	if err := proto.Unmarshal(blob.Data, taskInfo); err != nil {
-		return nil, err
+		return nil, serialization.NewDeserializationError(enumspb.ENCODING_TYPE_PROTO3, err)
 	}
 
 	fakeTask := tasks.NewFakeTask(
@@ -762,7 +736,7 @@ func (s *testSerializer) DeserializeTask(
 			taskInfo.RunId,
 		),
 		category,
-		*taskInfo.VisibilityTime,
+		taskInfo.VisibilityTime.AsTime(),
 	)
 	fakeTask.SetTaskID(taskInfo.TaskId)
 

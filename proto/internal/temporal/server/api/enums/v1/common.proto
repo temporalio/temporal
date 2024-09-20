@@ -1,3 +1,5 @@
+// The MIT License
+//
 // Copyright (c) 2020 Temporal Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -33,4 +35,30 @@ enum DeadLetterQueueType {
 enum ChecksumFlavor {
     CHECKSUM_FLAVOR_UNSPECIFIED = 0;
     CHECKSUM_FLAVOR_IEEE_CRC32_OVER_PROTO3_BINARY = 1;
+}
+
+// State of a scheduler.
+enum SchedulerState {
+    // Default value, unspecified state.
+    SCHEDULER_STATE_UNSPECIFIED = 0;
+    // Scheduler is waiting to be activated after the specified amount of time.
+    SCHEDULER_STATE_WAITING = 1;
+    // Scheduler is actively executing logic.
+    SCHEDULER_STATE_EXECUTING = 2;
+}
+
+// State of a callback.
+enum CallbackState {
+    // Default value, unspecified state.
+    CALLBACK_STATE_UNSPECIFIED = 0;
+    // Callback is standing by, waiting to be triggered.
+    CALLBACK_STATE_STANDBY = 1;
+    // Callback is in the queue waiting to be executed or is currently executing.
+    CALLBACK_STATE_SCHEDULED = 2;
+    // Callback has failed with a retryable error and is backing off before the next attempt.
+    CALLBACK_STATE_BACKING_OFF = 3;
+    // Callback has failed.
+    CALLBACK_STATE_FAILED = 4;
+    // Callback has succeeded.
+    CALLBACK_STATE_SUCCEEDED = 5;
 }

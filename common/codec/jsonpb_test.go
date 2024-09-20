@@ -33,34 +33,39 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
-
-	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/common/testing/protoassert"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type (
 	jsonpbEncoderSuite struct {
 		suite.Suite
-		encoder *JSONPBEncoder
+		encoder JSONPBEncoder
 	}
 )
 
 var (
-	historyEvent = &historypb.HistoryEvent{
-		Version:   1234,
-		EventId:   130,
-		EventTime: timestamp.TimePtr(time.Date(1978, 8, 22, 0, 0, 0, 0, time.UTC)),
-		EventType: enumspb.EVENT_TYPE_REQUEST_CANCEL_EXTERNAL_WORKFLOW_EXECUTION_INITIATED,
-		Attributes: &historypb.HistoryEvent_RequestCancelExternalWorkflowExecutionInitiatedEventAttributes{RequestCancelExternalWorkflowExecutionInitiatedEventAttributes: &historypb.RequestCancelExternalWorkflowExecutionInitiatedEventAttributes{
-			Namespace: "some random target namespace",
-			WorkflowExecution: &commonpb.WorkflowExecution{
-				WorkflowId: "some random target workflow ID",
-				RunId:      "some random target run ID",
+	history = &historypb.History{
+		Events: []*historypb.HistoryEvent{
+			{
+				Version:   1234,
+				EventId:   130,
+				EventTime: timestamppb.New(time.Date(1978, 8, 22, 0, 0, 0, 0, time.UTC)),
+				EventType: enumspb.EVENT_TYPE_REQUEST_CANCEL_EXTERNAL_WORKFLOW_EXECUTION_INITIATED,
+				Attributes: &historypb.HistoryEvent_RequestCancelExternalWorkflowExecutionInitiatedEventAttributes{RequestCancelExternalWorkflowExecutionInitiatedEventAttributes: &historypb.RequestCancelExternalWorkflowExecutionInitiatedEventAttributes{
+					Namespace: "some random target namespace",
+					WorkflowExecution: &commonpb.WorkflowExecution{
+						WorkflowId: "some random target workflow ID",
+						RunId:      "some random target run ID",
+					},
+					ChildWorkflowOnly: true,
+					Control:           "some random control",
+				}},
 			},
-			ChildWorkflowOnly: true,
-			Control:           "some random control",
-		}},
+		},
 	}
-	encodedHistoryEvent = `{"eventId":"130","eventTime":"1978-08-22T00:00:00Z","eventType":"RequestCancelExternalWorkflowExecutionInitiated","version":"1234","requestCancelExternalWorkflowExecutionInitiatedEventAttributes":{"namespace":"some random target namespace","workflowExecution":{"workflowId":"some random target workflow ID","runId":"some random target run ID"},"control":"some random control","childWorkflowOnly":true}}`
+	encodedHistory    = `{"events": [{"eventId":"130","eventTime":"1978-08-22T00:00:00Z","eventType":"EVENT_TYPE_REQUEST_CANCEL_EXTERNAL_WORKFLOW_EXECUTION_INITIATED","version":"1234","requestCancelExternalWorkflowExecutionInitiatedEventAttributes":{"namespace":"some random target namespace","workflowExecution":{"workflowId":"some random target workflow ID","runId":"some random target run ID"},"control":"some random control","childWorkflowOnly":true}}]}`
+	oldEncodedHistory = `{"events": [{"eventId":"130","eventTime":"1978-08-22T00:00:00Z","eventType":"RequestCancelExternalWorkflowExecutionInitiated","version":"1234","requestCancelExternalWorkflowExecutionInitiatedEventAttributes":{"namespace":"some random target namespace","workflowExecution":{"workflowId":"some random target workflow ID","runId":"some random target run ID"},"control":"some random control","childWorkflowOnly":true}}]}`
 )
 
 func TestJSONPBEncoderSuite(t *testing.T) {
@@ -73,39 +78,53 @@ func (s *jsonpbEncoderSuite) SetupSuite() {
 }
 
 func (s *jsonpbEncoderSuite) TestEncode() {
-	json, err := s.encoder.Encode(historyEvent)
+	json, err := s.encoder.Encode(history)
 	s.Nil(err)
-	s.Equal(encodedHistoryEvent, string(json))
+	s.JSONEq(encodedHistory, string(json))
 }
 
 func (s *jsonpbEncoderSuite) TestDecode() {
-	var val historypb.HistoryEvent
-	err := s.encoder.Decode([]byte(encodedHistoryEvent), &val)
+	var val historypb.History
+	err := s.encoder.Decode([]byte(encodedHistory), &val)
 	s.Nil(err)
-	s.EqualValues(val, *historyEvent)
+	protoassert.ProtoEqual(s.T(), &val, history)
 }
 
-func (s *jsonpbEncoderSuite) TestEncodeSlice() {
-	var historyEvents []*historypb.HistoryEvent
-	historyEvents = append(historyEvents, historyEvent)
-	historyEvents = append(historyEvents, historyEvent)
-	historyEvents = append(historyEvents, historyEvent)
+func (s *jsonpbEncoderSuite) TestEncodeHistories() {
+	var histories []*historypb.History
+	histories = append(histories, history)
+	histories = append(histories, history)
+	histories = append(histories, history)
 
-	json, err := s.encoder.EncodeHistoryEvents(historyEvents)
+	json, err := s.encoder.EncodeHistories(histories)
 	s.Nil(err)
-	s.Equal(fmt.Sprintf("[%[1]s,%[1]s,%[1]s]", encodedHistoryEvent), string(json))
+	s.JSONEq(fmt.Sprintf("[%[1]s,%[1]s,%[1]s]", encodedHistory), string(json))
 }
 
-func (s *jsonpbEncoderSuite) TestDecodeSlice() {
-	historyEventsJSON := fmt.Sprintf("[%[1]s,%[1]s,%[1]s]", encodedHistoryEvent)
+func (s *jsonpbEncoderSuite) TestDecodeHistories() {
+	historyJSON := fmt.Sprintf("[%[1]s,%[1]s,%[1]s]", encodedHistory)
 
-	var historyEvents []*historypb.HistoryEvent
-	historyEvents = append(historyEvents, historyEvent)
-	historyEvents = append(historyEvents, historyEvent)
-	historyEvents = append(historyEvents, historyEvent)
+	var histories []*historypb.History
+	histories = append(histories, history)
+	histories = append(histories, history)
+	histories = append(histories, history)
 
-	decodedHistoryEvents, err := s.encoder.DecodeHistoryEvents([]byte(historyEventsJSON))
+	decodedHistories, err := s.encoder.DecodeHistories([]byte(historyJSON))
 
 	s.Nil(err)
-	s.Equal(historyEvents, decodedHistoryEvents)
+	protoassert.ProtoSliceEqual(s.T(), histories, decodedHistories)
+}
+
+func (s *jsonpbEncoderSuite) TestDecodeOldHistories() {
+	historyJSON := fmt.Sprintf("[%[1]s,%[1]s,%[1]s]", oldEncodedHistory)
+
+	var historyEvents []*historypb.History
+	historyEvents = append(historyEvents, history)
+	historyEvents = append(historyEvents, history)
+	historyEvents = append(historyEvents, history)
+
+	decodedHistories, err := s.encoder.DecodeHistories([]byte(historyJSON))
+
+	s.Nil(err)
+	protoassert.ProtoSliceEqual(s.T(), historyEvents, decodedHistories)
 }

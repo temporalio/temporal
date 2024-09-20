@@ -41,27 +41,23 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/temporal"
-
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/service/history/consts"
+	"google.golang.org/protobuf/types/known/durationpb"
 )
 
 type (
-	workflowTaskHandler func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error)
-	activityTaskHandler func(execution *commonpb.WorkflowExecution, activityType *commonpb.ActivityType,
-		activityID string, input *commonpb.Payloads, takeToken []byte) (*commonpb.Payloads, bool, error)
+	workflowTaskHandler func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error)
+	activityTaskHandler func(task *workflowservice.PollActivityTaskQueueResponse) (*commonpb.Payloads, bool, error)
+	queryHandler        func(task *workflowservice.PollWorkflowTaskQueueResponse) (*commonpb.Payloads, error)
+	messageHandler      func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*protocolpb.Message, error)
 
-	queryHandler func(task *workflowservice.PollWorkflowTaskQueueResponse) (*commonpb.Payloads, error)
-
-	messageHandler func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*protocolpb.Message, error)
-
-	// TaskPoller is used in integration tests to poll workflow or activity task queues.
+	// TaskPoller is used in functional tests to poll workflow or activity task queues.
 	TaskPoller struct {
-		Engine                       FrontendClient
+		Client                       FrontendClient
 		Namespace                    string
 		TaskQueue                    *taskqueuepb.TaskQueue
 		StickyTaskQueue              *taskqueuepb.TaskQueue
@@ -74,94 +70,85 @@ type (
 		Logger                       log.Logger
 		T                            *testing.T
 	}
+
+	PollAndProcessWorkflowTaskOptions struct {
+		DumpHistory          bool
+		DumpCommands         bool
+		DropTask             bool
+		PollSticky           bool
+		RespondSticky        bool
+		ExpectedAttemptCount int
+		Retries              int
+		ForceNewWorkflowTask bool
+		QueryResult          *querypb.WorkflowQueryResult
+	}
+
+	PollAndProcessWorkflowTaskOptionFunc func(*PollAndProcessWorkflowTaskOptions)
+
+	PollAndProcessWorkflowTaskResponse struct {
+		IsQueryTask bool
+		NewTask     *workflowservice.RespondWorkflowTaskCompletedResponse
+	}
 )
 
 var (
 	errNoTasks = errors.New("no tasks")
+
+	defaultPollAndProcessWorkflowTaskOptions = PollAndProcessWorkflowTaskOptions{
+		DumpHistory:          false,
+		DumpCommands:         true,
+		DropTask:             false,
+		PollSticky:           false,
+		RespondSticky:        false,
+		ExpectedAttemptCount: 1,
+		Retries:              5,
+		ForceNewWorkflowTask: false,
+		QueryResult:          nil,
+	}
 )
 
-// PollAndProcessWorkflowTask for workflow tasks
-func (p *TaskPoller) PollAndProcessWorkflowTask(dumpHistory bool, dropTask bool) (isQueryTask bool, err error) {
-	return p.PollAndProcessWorkflowTaskWithAttempt(dumpHistory, dropTask, false, false, 1)
+func WithDumpHistory(o *PollAndProcessWorkflowTaskOptions)    { o.DumpHistory = true }
+func WithNoDumpCommands(o *PollAndProcessWorkflowTaskOptions) { o.DumpCommands = false }
+func WithDropTask(o *PollAndProcessWorkflowTaskOptions)       { o.DropTask = true }
+func WithPollSticky(o *PollAndProcessWorkflowTaskOptions)     { o.PollSticky = true }
+func WithRespondSticky(o *PollAndProcessWorkflowTaskOptions)  { o.RespondSticky = true }
+func WithExpectedAttemptCount(c int) PollAndProcessWorkflowTaskOptionFunc {
+	return func(o *PollAndProcessWorkflowTaskOptions) { o.ExpectedAttemptCount = c }
+}
+func WithRetries(c int) PollAndProcessWorkflowTaskOptionFunc {
+	return func(o *PollAndProcessWorkflowTaskOptions) { o.Retries = c }
+}
+func WithoutRetries(o *PollAndProcessWorkflowTaskOptions)           { o.Retries = 1 }
+func WithForceNewWorkflowTask(o *PollAndProcessWorkflowTaskOptions) { o.ForceNewWorkflowTask = true }
+func WithQueryResult(r *querypb.WorkflowQueryResult) PollAndProcessWorkflowTaskOptionFunc {
+	return func(o *PollAndProcessWorkflowTaskOptions) { o.QueryResult = r }
 }
 
-// PollAndProcessWorkflowTaskWithSticky for workflow tasks
-func (p *TaskPoller) PollAndProcessWorkflowTaskWithSticky(dumpHistory bool, dropTask bool) (isQueryTask bool, err error) {
-	return p.PollAndProcessWorkflowTaskWithAttempt(dumpHistory, dropTask, true, true, 1)
+func (p *TaskPoller) PollAndProcessWorkflowTask(funcs ...PollAndProcessWorkflowTaskOptionFunc) (res PollAndProcessWorkflowTaskResponse, err error) {
+	opts := defaultPollAndProcessWorkflowTaskOptions
+	for _, f := range funcs {
+		f(&opts)
+	}
+	return p.PollAndProcessWorkflowTaskWithOptions(&opts)
 }
 
-// PollAndProcessWorkflowTaskWithoutRetry for workflow tasks
-func (p *TaskPoller) PollAndProcessWorkflowTaskWithoutRetry(dumpHistory bool, dropTask bool) (isQueryTask bool, err error) {
-	return p.PollAndProcessWorkflowTaskWithAttemptAndRetry(dumpHistory, dropTask, false, false, 1, 1)
-}
-
-// PollAndProcessWorkflowTaskWithAttempt for workflow tasks
-func (p *TaskPoller) PollAndProcessWorkflowTaskWithAttempt(
-	dumpHistory bool,
-	dropTask bool,
-	pollStickyTaskQueue bool,
-	respondStickyTaskQueue bool,
-	workflowTaskAttempt int32,
-) (isQueryTask bool, err error) {
-
-	return p.PollAndProcessWorkflowTaskWithAttemptAndRetry(
-		dumpHistory,
-		dropTask,
-		pollStickyTaskQueue,
-		respondStickyTaskQueue,
-		workflowTaskAttempt,
-		5)
-}
-
-// PollAndProcessWorkflowTaskWithAttemptAndRetry for workflow tasks
-func (p *TaskPoller) PollAndProcessWorkflowTaskWithAttemptAndRetry(
-	dumpHistory bool,
-	dropTask bool,
-	pollStickyTaskQueue bool,
-	respondStickyTaskQueue bool,
-	workflowTaskAttempt int32,
-	retryCount int,
-) (isQueryTask bool, err error) {
-
-	isQueryTask, _, err = p.PollAndProcessWorkflowTaskWithAttemptAndRetryAndForceNewWorkflowTask(
-		dumpHistory,
-		dropTask,
-		pollStickyTaskQueue,
-		respondStickyTaskQueue,
-		workflowTaskAttempt,
-		retryCount,
-		false,
-		nil)
-	return isQueryTask, err
-}
-
-// PollAndProcessWorkflowTaskWithAttemptAndRetryAndForceNewWorkflowTask for workflow tasks
-func (p *TaskPoller) PollAndProcessWorkflowTaskWithAttemptAndRetryAndForceNewWorkflowTask(
-	dumpHistory bool,
-	dropTask bool,
-	pollStickyTaskQueue bool,
-	respondStickyTaskQueue bool,
-	workflowTaskAttempt int32,
-	retryCount int,
-	forceCreateNewWorkflowTask bool,
-	queryResult *querypb.WorkflowQueryResult,
-) (isQueryTask bool, newTask *workflowservice.RespondWorkflowTaskCompletedResponse, err error) {
+func (p *TaskPoller) PollAndProcessWorkflowTaskWithOptions(opts *PollAndProcessWorkflowTaskOptions) (res PollAndProcessWorkflowTaskResponse, err error) {
 Loop:
-	for attempt := 1; attempt <= retryCount; attempt++ {
+	for attempt := 1; attempt <= opts.Retries; attempt++ {
 
 		taskQueue := p.TaskQueue
-		if pollStickyTaskQueue {
+		if opts.PollSticky {
 			taskQueue = p.StickyTaskQueue
 		}
 
-		response, err1 := p.Engine.PollWorkflowTaskQueue(NewContext(), &workflowservice.PollWorkflowTaskQueueRequest{
+		response, err1 := p.Client.PollWorkflowTaskQueue(NewContext(), &workflowservice.PollWorkflowTaskQueueRequest{
 			Namespace: p.Namespace,
 			TaskQueue: taskQueue,
 			Identity:  p.Identity,
 		})
 
 		if !common.IsServiceTransientError(err1) {
-			return false, nil, err1
+			return PollAndProcessWorkflowTaskResponse{}, err1
 		}
 
 		if err1 == consts.ErrDuplicate {
@@ -170,7 +157,7 @@ Loop:
 		}
 
 		if err1 != nil {
-			return false, nil, err1
+			return PollAndProcessWorkflowTaskResponse{}, err1
 		}
 
 		if response == nil || len(response.TaskToken) == 0 {
@@ -179,31 +166,31 @@ Loop:
 		}
 
 		var events []*historypb.HistoryEvent
-		if response.Query == nil || !pollStickyTaskQueue {
+		if response.Query == nil || !opts.PollSticky {
 			// if not query task, should have some history events
 			// for non sticky query, there should be events returned
 			history := response.History
 			if history == nil {
 				p.Logger.Fatal("History is nil")
-				return false, nil, errors.New("history is nil")
+				return PollAndProcessWorkflowTaskResponse{}, errors.New("history is nil")
 			}
 
 			events = history.Events
 			if len(events) == 0 {
 				p.Logger.Fatal("History Events are empty")
-				return false, nil, errors.New("history events are empty")
+				return PollAndProcessWorkflowTaskResponse{}, errors.New("history events are empty")
 			}
 
 			nextPageToken := response.NextPageToken
 			for nextPageToken != nil {
-				resp, err2 := p.Engine.GetWorkflowExecutionHistory(NewContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
+				resp, err2 := p.Client.GetWorkflowExecutionHistory(NewContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
 					Namespace:     p.Namespace,
 					Execution:     response.WorkflowExecution,
 					NextPageToken: nextPageToken,
 				})
 
 				if err2 != nil {
-					return false, nil, err2
+					return PollAndProcessWorkflowTaskResponse{}, err2
 				}
 
 				events = append(events, resp.History.Events...)
@@ -220,12 +207,12 @@ Loop:
 			}
 		}
 
-		if dropTask {
+		if opts.DropTask {
 			p.Logger.Info("Dropping Workflow task: ")
-			return false, nil, nil
+			return PollAndProcessWorkflowTaskResponse{}, nil
 		}
 
-		if dumpHistory {
+		if opts.DumpHistory {
 			common.PrettyPrint(response.History.Events)
 		}
 
@@ -247,8 +234,8 @@ Loop:
 				completeRequest.QueryResult = blob
 			}
 
-			_, err = p.Engine.RespondQueryTaskCompleted(NewContext(), completeRequest)
-			return true, nil, err
+			_, err = p.Client.RespondQueryTaskCompleted(NewContext(), completeRequest)
+			return PollAndProcessWorkflowTaskResponse{IsQueryTask: true}, err
 		}
 
 		// Handle messages.
@@ -257,14 +244,14 @@ Loop:
 			workerToServerMessages, err = p.MessageHandler(response)
 			if err != nil {
 				p.Logger.Error("Failing workflow task. Workflow messages handler failed with error", tag.Error(err))
-				_, err = p.Engine.RespondWorkflowTaskFailed(NewContext(), &workflowservice.RespondWorkflowTaskFailedRequest{
+				_, err = p.Client.RespondWorkflowTaskFailed(NewContext(), &workflowservice.RespondWorkflowTaskFailedRequest{
 					Namespace: p.Namespace,
 					TaskToken: response.TaskToken,
 					Cause:     enumspb.WORKFLOW_TASK_FAILED_CAUSE_WORKFLOW_WORKER_UNHANDLED_FAILURE,
 					Failure:   newApplicationFailure(err, false, nil),
 					Identity:  p.Identity,
 				})
-				return false, nil, err
+				return PollAndProcessWorkflowTaskResponse{}, err
 			}
 		}
 
@@ -275,45 +262,47 @@ Loop:
 				lastWorkflowTaskScheduleEvent = e
 			}
 		}
-		if lastWorkflowTaskScheduleEvent != nil && workflowTaskAttempt > 1 {
-			require.Equal(p.T, workflowTaskAttempt, lastWorkflowTaskScheduleEvent.GetWorkflowTaskScheduledEventAttributes().GetAttempt())
+		if lastWorkflowTaskScheduleEvent != nil && opts.ExpectedAttemptCount > 1 {
+			require.Equal(p.T, opts.ExpectedAttemptCount, int(lastWorkflowTaskScheduleEvent.GetWorkflowTaskScheduledEventAttributes().GetAttempt()))
 		}
 
-		commands, err := p.WorkflowTaskHandler(response.WorkflowExecution, response.WorkflowType, response.PreviousStartedEventId, response.StartedEventId, response.History)
+		commands, err := p.WorkflowTaskHandler(response)
 		if err != nil {
 			p.Logger.Error("Failing workflow task. Workflow task handler failed with error", tag.Error(err))
-			_, err = p.Engine.RespondWorkflowTaskFailed(NewContext(), &workflowservice.RespondWorkflowTaskFailedRequest{
+			_, err = p.Client.RespondWorkflowTaskFailed(NewContext(), &workflowservice.RespondWorkflowTaskFailedRequest{
 				Namespace: p.Namespace,
 				TaskToken: response.TaskToken,
 				Cause:     enumspb.WORKFLOW_TASK_FAILED_CAUSE_WORKFLOW_WORKER_UNHANDLED_FAILURE,
 				Failure:   newApplicationFailure(err, false, nil),
 				Identity:  p.Identity,
 			})
-			return false, nil, err
+			return PollAndProcessWorkflowTaskResponse{}, err
 		}
-		if len(commands) > 0 {
-			common.PrettyPrint(commands, "Send commands to server using RespondWorkflowTaskCompleted:")
-		}
-		if len(workerToServerMessages) > 0 {
-			common.PrettyPrint(workerToServerMessages, "Send messages to server using RespondWorkflowTaskCompleted:")
+		if opts.DumpCommands {
+			if len(commands) > 0 {
+				common.PrettyPrint(commands, "Send commands to server using RespondWorkflowTaskCompleted:")
+			}
+			if len(workerToServerMessages) > 0 {
+				common.PrettyPrint(workerToServerMessages, "Send messages to server using RespondWorkflowTaskCompleted:")
+			}
 		}
 
-		if !respondStickyTaskQueue {
+		if !opts.RespondSticky {
 			// non sticky taskqueue
-			newTask, err := p.Engine.RespondWorkflowTaskCompleted(NewContext(), &workflowservice.RespondWorkflowTaskCompletedRequest{
+			newTask, err := p.Client.RespondWorkflowTaskCompleted(NewContext(), &workflowservice.RespondWorkflowTaskCompletedRequest{
 				Namespace:                  p.Namespace,
 				TaskToken:                  response.TaskToken,
 				Identity:                   p.Identity,
 				Commands:                   commands,
 				Messages:                   workerToServerMessages,
 				ReturnNewWorkflowTask:      true,
-				ForceCreateNewWorkflowTask: forceCreateNewWorkflowTask,
-				QueryResults:               getQueryResults(response.GetQueries(), queryResult),
+				ForceCreateNewWorkflowTask: opts.ForceNewWorkflowTask,
+				QueryResults:               getQueryResults(response.GetQueries(), opts.QueryResult),
 			})
-			return false, newTask, err
+			return PollAndProcessWorkflowTaskResponse{NewTask: newTask}, err
 		}
 		// sticky taskqueue
-		newTask, err := p.Engine.RespondWorkflowTaskCompleted(
+		newTask, err := p.Client.RespondWorkflowTaskCompleted(
 			NewContext(),
 			&workflowservice.RespondWorkflowTaskCompletedRequest{
 				Namespace: p.Namespace,
@@ -322,18 +311,18 @@ Loop:
 				Commands:  commands,
 				StickyAttributes: &taskqueuepb.StickyExecutionAttributes{
 					WorkerTaskQueue:        p.StickyTaskQueue,
-					ScheduleToStartTimeout: &p.StickyScheduleToStartTimeout,
+					ScheduleToStartTimeout: durationpb.New(p.StickyScheduleToStartTimeout),
 				},
 				ReturnNewWorkflowTask:      true,
-				ForceCreateNewWorkflowTask: forceCreateNewWorkflowTask,
-				QueryResults:               getQueryResults(response.GetQueries(), queryResult),
+				ForceCreateNewWorkflowTask: opts.ForceNewWorkflowTask,
+				QueryResults:               getQueryResults(response.GetQueries(), opts.QueryResult),
 			},
 		)
 
-		return false, newTask, err
+		return PollAndProcessWorkflowTaskResponse{NewTask: newTask}, err
 	}
 
-	return false, nil, errNoTasks
+	return PollAndProcessWorkflowTaskResponse{}, errNoTasks
 }
 
 // HandlePartialWorkflowTask for workflow task
@@ -363,7 +352,7 @@ func (p *TaskPoller) HandlePartialWorkflowTask(response *workflowservice.PollWor
 		workerToServerMessages, err = p.MessageHandler(response)
 		if err != nil {
 			p.Logger.Error("Failing workflow task. Workflow messages handler failed with error", tag.Error(err))
-			_, err = p.Engine.RespondWorkflowTaskFailed(NewContext(), &workflowservice.RespondWorkflowTaskFailedRequest{
+			_, err = p.Client.RespondWorkflowTaskFailed(NewContext(), &workflowservice.RespondWorkflowTaskFailedRequest{
 				Namespace: p.Namespace,
 				TaskToken: response.TaskToken,
 				Cause:     enumspb.WORKFLOW_TASK_FAILED_CAUSE_WORKFLOW_WORKER_UNHANDLED_FAILURE,
@@ -374,11 +363,10 @@ func (p *TaskPoller) HandlePartialWorkflowTask(response *workflowservice.PollWor
 		}
 	}
 
-	commands, err := p.WorkflowTaskHandler(response.WorkflowExecution, response.WorkflowType,
-		response.PreviousStartedEventId, response.StartedEventId, response.History)
+	commands, err := p.WorkflowTaskHandler(response)
 	if err != nil {
 		p.Logger.Error("Failing workflow task. Workflow task handler failed with error", tag.Error(err))
-		_, err = p.Engine.RespondWorkflowTaskFailed(NewContext(), &workflowservice.RespondWorkflowTaskFailedRequest{
+		_, err = p.Client.RespondWorkflowTaskFailed(NewContext(), &workflowservice.RespondWorkflowTaskFailedRequest{
 			Namespace: p.Namespace,
 			TaskToken: response.TaskToken,
 			Cause:     enumspb.WORKFLOW_TASK_FAILED_CAUSE_WORKFLOW_WORKER_UNHANDLED_FAILURE,
@@ -395,7 +383,7 @@ func (p *TaskPoller) HandlePartialWorkflowTask(response *workflowservice.PollWor
 	}
 
 	// sticky taskqueue
-	newTask, err := p.Engine.RespondWorkflowTaskCompleted(
+	newTask, err := p.Client.RespondWorkflowTaskCompleted(
 		NewContext(),
 		&workflowservice.RespondWorkflowTaskCompletedRequest{
 			Namespace: p.Namespace,
@@ -405,7 +393,7 @@ func (p *TaskPoller) HandlePartialWorkflowTask(response *workflowservice.PollWor
 			Messages:  workerToServerMessages,
 			StickyAttributes: &taskqueuepb.StickyExecutionAttributes{
 				WorkerTaskQueue:        p.StickyTaskQueue,
-				ScheduleToStartTimeout: &p.StickyScheduleToStartTimeout,
+				ScheduleToStartTimeout: durationpb.New(p.StickyScheduleToStartTimeout),
 			},
 			ReturnNewWorkflowTask:      true,
 			ForceCreateNewWorkflowTask: forceCreateNewWorkflowTask,
@@ -419,7 +407,7 @@ func (p *TaskPoller) HandlePartialWorkflowTask(response *workflowservice.PollWor
 func (p *TaskPoller) PollAndProcessActivityTask(dropTask bool) error {
 retry:
 	for attempt := 1; attempt <= 5; attempt++ {
-		response, err := p.Engine.PollActivityTaskQueue(NewContext(), &workflowservice.PollActivityTaskQueueRequest{
+		response, err := p.Client.PollActivityTaskQueue(NewContext(), &workflowservice.PollActivityTaskQueueRequest{
 			Namespace: p.Namespace,
 			TaskQueue: p.TaskQueue,
 			Identity:  p.Identity,
@@ -445,11 +433,10 @@ retry:
 		}
 		p.Logger.Debug("Received Activity task", tag.Value(response))
 
-		result, cancel, err2 := p.ActivityTaskHandler(response.WorkflowExecution, response.ActivityType, response.ActivityId,
-			response.Input, response.TaskToken)
+		result, cancel, err2 := p.ActivityTaskHandler(response)
 		if cancel {
 			p.Logger.Info("Executing RespondActivityTaskCanceled")
-			_, err := p.Engine.RespondActivityTaskCanceled(NewContext(), &workflowservice.RespondActivityTaskCanceledRequest{
+			_, err := p.Client.RespondActivityTaskCanceled(NewContext(), &workflowservice.RespondActivityTaskCanceledRequest{
 				Namespace: p.Namespace,
 				TaskToken: response.TaskToken,
 				Details:   payloads.EncodeString("details"),
@@ -459,7 +446,7 @@ retry:
 		}
 
 		if err2 != nil {
-			_, err := p.Engine.RespondActivityTaskFailed(NewContext(), &workflowservice.RespondActivityTaskFailedRequest{
+			_, err := p.Client.RespondActivityTaskFailed(NewContext(), &workflowservice.RespondActivityTaskFailedRequest{
 				Namespace: p.Namespace,
 				TaskToken: response.TaskToken,
 				Failure:   newApplicationFailure(err2, false, nil),
@@ -468,7 +455,7 @@ retry:
 			return err
 		}
 
-		_, err = p.Engine.RespondActivityTaskCompleted(NewContext(), &workflowservice.RespondActivityTaskCompletedRequest{
+		_, err = p.Client.RespondActivityTaskCompleted(NewContext(), &workflowservice.RespondActivityTaskCompletedRequest{
 			Namespace: p.Namespace,
 			TaskToken: response.TaskToken,
 			Identity:  p.Identity,
@@ -484,7 +471,7 @@ retry:
 func (p *TaskPoller) PollAndProcessActivityTaskWithID(dropTask bool) error {
 retry:
 	for attempt := 1; attempt <= 5; attempt++ {
-		response, err1 := p.Engine.PollActivityTaskQueue(NewContext(), &workflowservice.PollActivityTaskQueueRequest{
+		response, err1 := p.Client.PollActivityTaskQueue(NewContext(), &workflowservice.PollActivityTaskQueueRequest{
 			Namespace: p.Namespace,
 			TaskQueue: p.TaskQueue,
 			Identity:  p.Identity,
@@ -515,11 +502,10 @@ retry:
 		}
 		p.Logger.Debug("Received Activity task", tag.Value(response))
 
-		result, cancel, err2 := p.ActivityTaskHandler(response.WorkflowExecution, response.ActivityType, response.ActivityId,
-			response.Input, response.TaskToken)
+		result, cancel, err2 := p.ActivityTaskHandler(response)
 		if cancel {
 			p.Logger.Info("Executing RespondActivityTaskCanceled")
-			_, err := p.Engine.RespondActivityTaskCanceledById(NewContext(), &workflowservice.RespondActivityTaskCanceledByIdRequest{
+			_, err := p.Client.RespondActivityTaskCanceledById(NewContext(), &workflowservice.RespondActivityTaskCanceledByIdRequest{
 				Namespace:  p.Namespace,
 				WorkflowId: response.WorkflowExecution.GetWorkflowId(),
 				RunId:      response.WorkflowExecution.GetRunId(),
@@ -531,7 +517,7 @@ retry:
 		}
 
 		if err2 != nil {
-			_, err := p.Engine.RespondActivityTaskFailedById(NewContext(), &workflowservice.RespondActivityTaskFailedByIdRequest{
+			_, err := p.Client.RespondActivityTaskFailedById(NewContext(), &workflowservice.RespondActivityTaskFailedByIdRequest{
 				Namespace:  p.Namespace,
 				WorkflowId: response.WorkflowExecution.GetWorkflowId(),
 				RunId:      response.WorkflowExecution.GetRunId(),
@@ -542,7 +528,7 @@ retry:
 			return err
 		}
 
-		_, err := p.Engine.RespondActivityTaskCompletedById(NewContext(), &workflowservice.RespondActivityTaskCompletedByIdRequest{
+		_, err := p.Client.RespondActivityTaskCompletedById(NewContext(), &workflowservice.RespondActivityTaskCompletedByIdRequest{
 			Namespace:  p.Namespace,
 			WorkflowId: response.WorkflowExecution.GetWorkflowId(),
 			RunId:      response.WorkflowExecution.GetRunId(),
@@ -572,7 +558,7 @@ func newApplicationFailure(err error, nonRetryable bool, details *commonpb.Paylo
 
 	f := &failurepb.Failure{
 		Message: err.Error(),
-		Source:  "IntegrationTests",
+		Source:  "Functional Tests",
 		FailureInfo: &failurepb.Failure_ApplicationFailureInfo{ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{
 			Type:         getErrorType(err),
 			NonRetryable: nonRetryable,

@@ -32,11 +32,12 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	"github.com/xwb1989/sqlparser"
-
+	"github.com/temporalio/sqlparser"
 	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/visibility/store/query"
+	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/searchattribute"
 )
 
@@ -56,6 +57,7 @@ type (
 		output   any
 		retValue any
 		err      error
+		setup    func()
 	}
 )
 
@@ -329,6 +331,38 @@ func (s *queryConverterSuite) TestConvertComparisonExpr() {
 			err:    nil,
 		},
 		{
+			name:   "starts_with expression",
+			input:  "AliasForKeyword01 starts_with 'foo_bar%'",
+			output: `Keyword01 like 'foo!_bar!%%' escape '!'`,
+			err:    nil,
+		},
+		{
+			name:   "not starts_with expression",
+			input:  "AliasForKeyword01 not starts_with 'foo_bar%'",
+			output: `Keyword01 not like 'foo!_bar!%%' escape '!'`,
+			err:    nil,
+		},
+		{
+			name:   "starts_with expression error",
+			input:  "AliasForKeyword01 starts_with 123",
+			output: "",
+			err: query.NewConverterError(
+				"%s: right-hand side of '%s' must be a literal string (got: 123)",
+				query.InvalidExpressionErrMessage,
+				sqlparser.StartsWithStr,
+			),
+		},
+		{
+			name:   "not starts_with expression error",
+			input:  "AliasForKeyword01 not starts_with 123",
+			output: "",
+			err: query.NewConverterError(
+				"%s: right-hand side of '%s' must be a literal string (got: 123)",
+				query.InvalidExpressionErrMessage,
+				sqlparser.NotStartsWithStr,
+			),
+		},
+		{
 			name:   "like expression",
 			input:  "AliasForKeyword01 like 'foo%'",
 			output: "",
@@ -478,6 +512,8 @@ func (s *queryConverterSuite) TestConvertIsExpr() {
 }
 
 func (s *queryConverterSuite) TestConvertColName() {
+	originalSaTypeMap := s.queryConverter.saTypeMap
+	originalSaMapper := s.queryConverter.saMapper
 	var tests = []testCase{
 		{
 			name:     "invalid: column name expression",
@@ -572,12 +608,69 @@ func (s *queryConverterSuite) TestConvertColName() {
 			),
 			err: nil,
 		},
+		{
+			name:   "ScheduleId when there is a ScheduleId custom SA",
+			input:  searchattribute.ScheduleID,
+			output: searchattribute.ScheduleID,
+			retValue: newSAColName(
+				searchattribute.ScheduleID,
+				searchattribute.ScheduleID,
+				searchattribute.ScheduleID,
+				enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+			),
+			err: nil,
+			setup: func() {
+				s.queryConverter.saTypeMap = searchattribute.TestNameTypeMapWithScheduleId
+				s.queryConverter.saMapper = newMapper(
+					func(alias, namespace string) (string, error) {
+						return alias, nil
+					},
+					func(fieldName, namespace string) (string, error) {
+						return searchattribute.ScheduleID, nil
+					},
+				)
+			},
+		},
+		{
+			name:   "ScheduleId when there is no ScheduleId custom SA",
+			input:  searchattribute.ScheduleID,
+			output: "workflow_id",
+			retValue: newSAColName(
+				"workflow_id",
+				searchattribute.ScheduleID,
+				searchattribute.WorkflowID,
+				enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+			),
+			err: nil,
+			setup: func() {
+				s.queryConverter.saMapper = newMapper(
+					func(alias, namespace string) (string, error) {
+						return alias, nil
+					},
+					func(fieldName, namespace string) (string, error) {
+						return "", serviceerror.NewInvalidArgument(
+							fmt.Sprintf("Namespace %s has no mapping defined for field name %s", namespace, fieldName),
+						)
+					},
+				)
+			},
+		},
 	}
 
 	for _, tc := range tests {
 		s.Run(tc.name, func() {
+			// Reset to original state
+			s.queryConverter.saMapper = originalSaMapper
+			s.queryConverter.saTypeMap = originalSaTypeMap
+
 			// reset internal state of seenNamespaceDivision
 			s.queryConverter.seenNamespaceDivision = false
+
+			// Run setup function if provided
+			if tc.setup != nil {
+				tc.setup()
+			}
+
 			sql := fmt.Sprintf("select * from table1 where %s", tc.input)
 			stmt, err := sqlparser.Parse(sql)
 			s.NoError(err)
@@ -608,9 +701,13 @@ func (s *queryConverterSuite) TestConvertValueExpr() {
 	dt, _ := time.Parse(time.RFC3339Nano, "2020-02-15T20:30:40.123456789Z")
 	var tests = []testCase{
 		{
-			name:   "invalid: column name expression",
-			input:  "ExecutionStatus",
-			args:   map[string]any{"saName": "ExecutionStatus", "saType": enumspb.INDEXED_VALUE_TYPE_KEYWORD},
+			name:  "invalid: column name expression",
+			input: "ExecutionStatus",
+			args: map[string]any{
+				"saName":      "ExecutionStatus",
+				"saFieldName": "ExecutionStatus",
+				"saType":      enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+			},
 			output: "",
 			err: query.NewConverterError(
 				"%s: column name on the right side of comparison expression (did you forget to quote '%s'?)",
@@ -622,8 +719,9 @@ func (s *queryConverterSuite) TestConvertValueExpr() {
 			name:  "valid string",
 			input: "'foo'",
 			args: map[string]any{
-				"saName": "AliasForKeyword01",
-				"saType": enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+				"saName":      "AliasForKeyword01",
+				"saFieldName": "Keyword01",
+				"saType":      enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 			},
 			output: "'foo'",
 			err:    nil,
@@ -632,8 +730,9 @@ func (s *queryConverterSuite) TestConvertValueExpr() {
 			name:  "valid string escape char",
 			input: "'\"foo'",
 			args: map[string]any{
-				"saName": "AliasForKeyword01",
-				"saType": enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+				"saName":      "AliasForKeyword01",
+				"saFieldName": "Keyword01",
+				"saType":      enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 			},
 			output: "'\\\"foo'",
 			err:    nil,
@@ -642,8 +741,9 @@ func (s *queryConverterSuite) TestConvertValueExpr() {
 			name:  "valid integer",
 			input: "123",
 			args: map[string]any{
-				"saName": "AliasForInt01",
-				"saType": enumspb.INDEXED_VALUE_TYPE_INT,
+				"saName":      "AliasForInt01",
+				"saFieldName": "Int01",
+				"saType":      enumspb.INDEXED_VALUE_TYPE_INT,
 			},
 			output: "123",
 			err:    nil,
@@ -652,8 +752,9 @@ func (s *queryConverterSuite) TestConvertValueExpr() {
 			name:  "valid float",
 			input: "1.230",
 			args: map[string]any{
-				"saName": "AliasForDouble01",
-				"saType": enumspb.INDEXED_VALUE_TYPE_DOUBLE,
+				"saName":      "AliasForDouble01",
+				"saFieldName": "Double01",
+				"saType":      enumspb.INDEXED_VALUE_TYPE_DOUBLE,
 			},
 			output: "1.23",
 			err:    nil,
@@ -662,8 +763,9 @@ func (s *queryConverterSuite) TestConvertValueExpr() {
 			name:  "valid bool",
 			input: "true",
 			args: map[string]any{
-				"saName": "AliasForBool01",
-				"saType": enumspb.INDEXED_VALUE_TYPE_BOOL,
+				"saName":      "AliasForBool01",
+				"saFieldName": "Bool01",
+				"saType":      enumspb.INDEXED_VALUE_TYPE_BOOL,
 			},
 			output: "true",
 			err:    nil,
@@ -672,8 +774,9 @@ func (s *queryConverterSuite) TestConvertValueExpr() {
 			name:  "valid datetime",
 			input: fmt.Sprintf("'%s'", dt.Format(time.RFC3339Nano)),
 			args: map[string]any{
-				"saName": "AliasForDatetime01",
-				"saType": enumspb.INDEXED_VALUE_TYPE_DATETIME,
+				"saName":      "AliasForDatetime01",
+				"saFieldName": "Datetime01",
+				"saType":      enumspb.INDEXED_VALUE_TYPE_DATETIME,
 			},
 			output: fmt.Sprintf("'%s'", dt.Format(s.queryConverter.getDatetimeFormat())),
 			err:    nil,
@@ -682,16 +785,33 @@ func (s *queryConverterSuite) TestConvertValueExpr() {
 			name:  "valid tuple",
 			input: "('foo', 'bar')",
 			args: map[string]any{
-				"saName": "AliasForKeywordList01",
-				"saType": enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST,
+				"saName":      "AliasForKeywordList01",
+				"saFieldName": "KeywordList01",
+				"saType":      enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST,
 			},
 			output: "('foo', 'bar')",
+			err:    nil,
+		},
+		{
+			name:  "ScheduleId transformation",
+			input: "'test-schedule'",
+			args: map[string]any{
+				"saName":      searchattribute.ScheduleID,
+				"saFieldName": searchattribute.WorkflowID,
+				"saType":      enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+			},
+			output: fmt.Sprintf("'%stest-schedule'", primitives.ScheduleWorkflowIDPrefix),
 			err:    nil,
 		},
 	}
 
 	for _, tc := range tests {
 		s.Run(tc.name, func() {
+			// Run setup function if provided
+			if tc.setup != nil {
+				tc.setup()
+			}
+
 			sql := fmt.Sprintf("select * from table1 where %s", tc.input)
 			stmt, err := sqlparser.Parse(sql)
 			s.NoError(err)
@@ -699,6 +819,7 @@ func (s *queryConverterSuite) TestConvertValueExpr() {
 			err = s.queryConverter.convertValueExpr(
 				&expr,
 				tc.args["saName"].(string),
+				tc.args["saFieldName"].(string),
 				tc.args["saType"].(enumspb.IndexedValueType),
 			)
 			if tc.err == nil {
@@ -802,10 +923,72 @@ func (s *queryConverterSuite) TestParseSQLVal() {
 			},
 			retValue: nil,
 			err: query.NewConverterError(
-				"%s: invalid execution status value '%s'",
+				"%s: invalid ExecutionStatus value '%s'",
 				query.InvalidExpressionErrMessage,
 				"Foo",
 			),
+		},
+		{
+			name:  "valid ExecutionDuration day suffix",
+			input: "'10d'",
+			args: map[string]any{
+				"saName": "ExecutionDuration",
+				"saType": enumspb.INDEXED_VALUE_TYPE_INT,
+			},
+			retValue: int64(10 * 24 * time.Hour),
+			err:      nil,
+		},
+		{
+			name:  "valid ExecutionDuration hour suffix",
+			input: "'10h'",
+			args: map[string]any{
+				"saName": "ExecutionDuration",
+				"saType": enumspb.INDEXED_VALUE_TYPE_INT,
+			},
+			retValue: int64(10 * time.Hour),
+			err:      nil,
+		},
+		{
+			name:  "valid ExecutionDuration string nanos",
+			input: "'100'",
+			args: map[string]any{
+				"saName": "ExecutionDuration",
+				"saType": enumspb.INDEXED_VALUE_TYPE_INT,
+			},
+			retValue: int64(100),
+			err:      nil,
+		},
+		{
+			name:  "valid ExecutionDuration int nanos",
+			input: "100",
+			args: map[string]any{
+				"saName": "ExecutionDuration",
+				"saType": enumspb.INDEXED_VALUE_TYPE_INT,
+			},
+			retValue: int64(100),
+			err:      nil,
+		},
+		{
+			name:  "invalid ExecutionDuration",
+			input: "'100q'",
+			args: map[string]any{
+				"saName": "ExecutionDuration",
+				"saType": enumspb.INDEXED_VALUE_TYPE_INT,
+			},
+			retValue: nil,
+			err: query.NewConverterError(
+				"invalid value for search attribute ExecutionDuration: 100q (invalid duration)"),
+		},
+		{
+			name:  "invalid ExecutionDuration out of bounds",
+			input: "'10000000h'",
+			args: map[string]any{
+				"saName": "ExecutionDuration",
+				"saType": enumspb.INDEXED_VALUE_TYPE_INT,
+			},
+			retValue: nil,
+			err: query.NewConverterError(
+				"invalid value for search attribute ExecutionDuration: 10000000h (invalid duration)"),
 		},
 	}
 
@@ -902,4 +1085,27 @@ func TestSupportedTypeRangeCond(t *testing.T) {
 			s.False(isSupportedTypeRangeCond(tp), msg)
 		}
 	}
+}
+
+func newMapper(
+	getAlias func(fieldName, ns string) (string, error),
+	getFieldName func(alias, ns string) (string, error),
+) searchattribute.Mapper {
+	return &FlexibleMapper{
+		GetAliasFunc:     getAlias,
+		GetFieldNameFunc: getFieldName,
+	}
+}
+
+type FlexibleMapper struct {
+	GetAliasFunc     func(fieldName, namespace string) (string, error)
+	GetFieldNameFunc func(alias, namespace string) (string, error)
+}
+
+func (m *FlexibleMapper) GetAlias(fieldName, ns string) (string, error) {
+	return m.GetAliasFunc(fieldName, ns)
+}
+
+func (m *FlexibleMapper) GetFieldName(alias, ns string) (string, error) {
+	return m.GetFieldNameFunc(alias, ns)
 }

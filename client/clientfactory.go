@@ -30,8 +30,6 @@ import (
 	"time"
 
 	"go.temporal.io/api/workflowservice/v1"
-	"google.golang.org/grpc"
-
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
@@ -46,6 +44,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/primitives"
+	"google.golang.org/grpc"
 )
 
 type (
@@ -158,6 +157,8 @@ func (cf *rpcClientFactory) NewMatchingClientWithTimeout(
 		timeout,
 		longPollTimeout,
 		common.NewClientCache(keyResolver, clientProvider),
+		cf.metricsHandler,
+		cf.logger,
 		matching.NewLoadBalancer(namespaceIDToName, cf.dynConfig),
 	)
 

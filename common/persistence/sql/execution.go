@@ -29,9 +29,9 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"time"
 
 	"go.temporal.io/api/serviceerror"
-
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/log"
@@ -197,18 +197,19 @@ func (m *sqlExecutionStore) createWorkflowExecutionTx(
 		return nil, serviceerror.NewInternal(fmt.Sprintf("CreteWorkflowExecution: unknown mode: %v", request.Mode))
 	}
 
-	if err := createOrUpdateCurrentExecution(ctx,
-		tx,
-		request.Mode,
-		request.ShardID,
-		namespaceID,
-		workflowID,
-		runID,
-		newWorkflow.ExecutionState.State,
-		newWorkflow.ExecutionState.Status,
-		newWorkflow.ExecutionState.CreateRequestId,
-		lastWriteVersion,
-	); err != nil {
+	row := sqlplugin.CurrentExecutionsRow{
+		ShardID:          shardID,
+		NamespaceID:      namespaceID,
+		WorkflowID:       workflowID,
+		RunID:            runID,
+		CreateRequestID:  newWorkflow.ExecutionState.CreateRequestId,
+		State:            newWorkflow.ExecutionState.State,
+		Status:           newWorkflow.ExecutionState.Status,
+		LastWriteVersion: lastWriteVersion,
+		StartTime:        getStartTimeFromState(newWorkflow.ExecutionState),
+	}
+
+	if err := createOrUpdateCurrentExecution(ctx, tx, row, request.Mode); err != nil {
 		return nil, err
 	}
 
@@ -374,6 +375,7 @@ func (m *sqlExecutionStore) updateWorkflowExecutionTx(
 	namespaceID := primitives.MustParseUUID(updateWorkflow.NamespaceID)
 	workflowID := updateWorkflow.WorkflowID
 	runID := primitives.MustParseUUID(updateWorkflow.ExecutionState.RunId)
+
 	shardID := request.ShardID
 
 	switch request.Mode {
@@ -389,66 +391,48 @@ func (m *sqlExecutionStore) updateWorkflowExecutionTx(
 		}
 
 	case p.UpdateWorkflowModeUpdateCurrent:
-		if newWorkflow != nil {
-			lastWriteVersion := newWorkflow.LastWriteVersion
-			newNamespaceID := primitives.MustParseUUID(newWorkflow.NamespaceID)
-			newRunID := primitives.MustParseUUID(newWorkflow.ExecutionState.RunId)
+		row := sqlplugin.CurrentExecutionsRow{
+			ShardID:     shardID,
+			NamespaceID: namespaceID,
+			WorkflowID:  workflowID,
+			StartTime:   nil,
+		}
 
-			if !bytes.Equal(namespaceID, newNamespaceID) {
+		if newWorkflow != nil {
+			row.CreateRequestID = newWorkflow.ExecutionState.CreateRequestId
+			row.State = newWorkflow.ExecutionState.State
+			row.Status = newWorkflow.ExecutionState.Status
+			row.LastWriteVersion = newWorkflow.LastWriteVersion
+			row.NamespaceID = primitives.MustParseUUID(newWorkflow.NamespaceID)
+			row.RunID = primitives.MustParseUUID(newWorkflow.ExecutionState.RunId)
+			row.StartTime = getStartTimeFromState(newWorkflow.ExecutionState)
+
+			if !bytes.Equal(namespaceID, row.NamespaceID) {
 				return serviceerror.NewUnavailable("UpdateWorkflowExecution: cannot continue as new to another namespace")
 			}
-
-			if err := assertRunIDAndUpdateCurrentExecution(ctx,
-				tx,
-				shardID,
-				namespaceID,
-				workflowID,
-				newRunID,
-				runID,
-				newWorkflow.ExecutionState.CreateRequestId,
-				newWorkflow.ExecutionState.State,
-				newWorkflow.ExecutionState.Status,
-				lastWriteVersion,
-			); err != nil {
-				return err
-			}
 		} else {
-			lastWriteVersion := updateWorkflow.LastWriteVersion
-			// this is only to update the current record
-			if err := assertRunIDAndUpdateCurrentExecution(ctx,
-				tx,
-				shardID,
-				namespaceID,
-				workflowID,
-				runID,
-				runID,
-				updateWorkflow.ExecutionState.CreateRequestId,
-				updateWorkflow.ExecutionState.State,
-				updateWorkflow.ExecutionState.Status,
-				lastWriteVersion,
-			); err != nil {
-				return err
-			}
+			row.CreateRequestID = updateWorkflow.ExecutionState.CreateRequestId
+			row.State = updateWorkflow.ExecutionState.State
+			row.Status = updateWorkflow.ExecutionState.Status
+			row.LastWriteVersion = updateWorkflow.LastWriteVersion
+			row.RunID = runID
+			row.StartTime = getStartTimeFromState(updateWorkflow.ExecutionState)
+			// we still call update only to update the current record
+		}
+		if err := assertRunIDAndUpdateCurrentExecution(ctx, tx, row, runID); err != nil {
+			return err
 		}
 
 	default:
 		return serviceerror.NewUnavailable(fmt.Sprintf("UpdateWorkflowExecution: unknown mode: %v", request.Mode))
 	}
 
-	if err := applyWorkflowMutationTx(ctx,
-		tx,
-		shardID,
-		&updateWorkflow,
-	); err != nil {
+	if err := applyWorkflowMutationTx(ctx, tx, shardID, &updateWorkflow); err != nil {
 		return err
 	}
 
 	if newWorkflow != nil {
-		if err := m.applyWorkflowSnapshotTxAsNew(ctx,
-			tx,
-			shardID,
-			newWorkflow,
-		); err != nil {
+		if err := m.applyWorkflowSnapshotTxAsNew(ctx, tx, shardID, newWorkflow); err != nil {
 			return err
 		}
 	}
@@ -524,41 +508,27 @@ func (m *sqlExecutionStore) conflictResolveWorkflowExecutionTx(
 		state := executionState.State
 		status := executionState.Status
 
+		row := sqlplugin.CurrentExecutionsRow{
+			ShardID:          shardID,
+			NamespaceID:      namespaceID,
+			WorkflowID:       workflowID,
+			RunID:            runID,
+			CreateRequestID:  createRequestID,
+			State:            state,
+			Status:           status,
+			LastWriteVersion: lastWriteVersion,
+			StartTime:        getStartTimeFromState(executionState),
+		}
+		var prevRunID primitives.UUID
 		if currentWorkflow != nil {
-			prevRunID := primitives.MustParseUUID(currentWorkflow.ExecutionState.RunId)
+			prevRunID = primitives.MustParseUUID(currentWorkflow.ExecutionState.RunId)
 
-			if err := assertRunIDAndUpdateCurrentExecution(ctx,
-				tx,
-				shardID,
-				namespaceID,
-				workflowID,
-				runID,
-				prevRunID,
-				createRequestID,
-				state,
-				status,
-				lastWriteVersion,
-			); err != nil {
-				return err
-			}
 		} else {
 			// reset workflow is current
-			prevRunID := primitives.MustParseUUID(resetWorkflow.ExecutionState.RunId)
-
-			if err := assertRunIDAndUpdateCurrentExecution(ctx,
-				tx,
-				shardID,
-				namespaceID,
-				workflowID,
-				runID,
-				prevRunID,
-				createRequestID,
-				state,
-				status,
-				lastWriteVersion,
-			); err != nil {
-				return err
-			}
+			prevRunID = primitives.MustParseUUID(resetWorkflow.ExecutionState.RunId)
+		}
+		if err := assertRunIDAndUpdateCurrentExecution(ctx, tx, row, prevRunID); err != nil {
+			return err
 		}
 
 	default:
@@ -601,13 +571,81 @@ func (m *sqlExecutionStore) DeleteWorkflowExecution(
 ) error {
 	namespaceID := primitives.MustParseUUID(request.NamespaceID)
 	runID := primitives.MustParseUUID(request.RunID)
-	_, err := m.Db.DeleteFromExecutions(ctx, sqlplugin.ExecutionsFilter{
-		ShardID:     request.ShardID,
-		NamespaceID: namespaceID,
-		WorkflowID:  request.WorkflowID,
-		RunID:       runID,
+	return m.txExecute(ctx, "DeleteWorkflowExecution", func(tx sqlplugin.Tx) error {
+		_, err := tx.DeleteAllFromChildExecutionInfoMaps(ctx, sqlplugin.ChildExecutionInfoMapsAllFilter{
+			ShardID:     request.ShardID,
+			NamespaceID: namespaceID,
+			WorkflowID:  request.WorkflowID,
+			RunID:       runID,
+		})
+		if err != nil {
+			return fmt.Errorf("failed to execute DeleteAllFromChildExecutionInfoMaps: %w", err)
+		}
+		_, err = tx.DeleteAllFromActivityInfoMaps(ctx, sqlplugin.ActivityInfoMapsAllFilter{
+			ShardID:     request.ShardID,
+			NamespaceID: namespaceID,
+			WorkflowID:  request.WorkflowID,
+			RunID:       runID,
+		})
+		if err != nil {
+			return fmt.Errorf("failed to execute DeleteAllFromActivityInfoMaps: %w", err)
+		}
+		_, err = tx.DeleteAllFromRequestCancelInfoMaps(ctx, sqlplugin.RequestCancelInfoMapsAllFilter{
+			ShardID:     request.ShardID,
+			NamespaceID: namespaceID,
+			WorkflowID:  request.WorkflowID,
+			RunID:       runID,
+		})
+		if err != nil {
+			return fmt.Errorf("failed to execute DeleteAllFromRequestCancelInfoMaps: %w", err)
+		}
+		_, err = tx.DeleteAllFromSignalInfoMaps(ctx, sqlplugin.SignalInfoMapsAllFilter{
+			ShardID:     request.ShardID,
+			NamespaceID: namespaceID,
+			WorkflowID:  request.WorkflowID,
+			RunID:       runID,
+		})
+		if err != nil {
+			return fmt.Errorf("failed to execute DeleteAllFromSignalInfoMaps: %w", err)
+		}
+		_, err = tx.DeleteAllFromTimerInfoMaps(ctx, sqlplugin.TimerInfoMapsAllFilter{
+			ShardID:     request.ShardID,
+			NamespaceID: namespaceID,
+			WorkflowID:  request.WorkflowID,
+			RunID:       runID,
+		})
+		if err != nil {
+			return fmt.Errorf("failed to execute DeleteAllFromTimerInfoMaps: %w", err)
+		}
+		_, err = tx.DeleteAllFromSignalsRequestedSets(ctx, sqlplugin.SignalsRequestedSetsAllFilter{
+			ShardID:     request.ShardID,
+			NamespaceID: namespaceID,
+			WorkflowID:  request.WorkflowID,
+			RunID:       runID,
+		})
+		if err != nil {
+			return fmt.Errorf("failed to execute DeleteAllFromSignalsRequestedSets: %w", err)
+		}
+		_, err = tx.DeleteFromBufferedEvents(ctx, sqlplugin.BufferedEventsFilter{
+			ShardID:     request.ShardID,
+			NamespaceID: namespaceID,
+			WorkflowID:  request.WorkflowID,
+			RunID:       runID,
+		})
+		if err != nil {
+			return fmt.Errorf("failed to execute DeleteFromBufferedEvents: %w", err)
+		}
+		_, err = tx.DeleteFromExecutions(ctx, sqlplugin.ExecutionsFilter{
+			ShardID:     request.ShardID,
+			NamespaceID: namespaceID,
+			WorkflowID:  request.WorkflowID,
+			RunID:       runID,
+		})
+		if err != nil {
+			return fmt.Errorf("failed to execute DeleteFromExecutions: %w", err)
+		}
+		return nil
 	})
-	return err
 }
 
 // its possible for a new run of the same workflow to have started after the run we are deleting
@@ -688,4 +726,12 @@ func (m *sqlExecutionStore) ListConcreteExecutions(
 	_ *p.ListConcreteExecutionsRequest,
 ) (*p.InternalListConcreteExecutionsResponse, error) {
 	return nil, serviceerror.NewUnimplemented("ListConcreteExecutions is not implemented")
+}
+
+func getStartTimeFromState(state *persistence.WorkflowExecutionState) *time.Time {
+	if state == nil || state.StartTime == nil {
+		return nil
+	}
+	startTime := state.StartTime.AsTime()
+	return &startTime
 }

@@ -27,8 +27,6 @@ package common
 import (
 	"math"
 	"time"
-
-	"go.temporal.io/server/common/debug"
 )
 
 const (
@@ -57,13 +55,6 @@ const (
 )
 
 const (
-	// GetHistoryMaxPageSize is the max page size for get history
-	GetHistoryMaxPageSize = 256
-	// ReadDLQMessagesPageSize is the max page size for read DLQ messages
-	ReadDLQMessagesPageSize = 1000
-)
-
-const (
 	// MinLongPollTimeout is the minimum context timeout for long poll API, below which
 	// the request won't be processed
 	MinLongPollTimeout = time.Second * 2
@@ -73,24 +64,8 @@ const (
 )
 
 const (
-	// DefaultWorkflowTaskTimeout sets the Default Workflow Task timeout for a Workflow
-	DefaultWorkflowTaskTimeout = 10 * time.Second * debug.TimeoutMultiplier
-
 	// MaxWorkflowTaskStartToCloseTimeout sets the Max Workflow Task start to close timeout for a Workflow
 	MaxWorkflowTaskStartToCloseTimeout = 120 * time.Second
-)
-
-const (
-	// DefaultTransactionSizeLimit is the largest allowed transaction size to persistence
-	DefaultTransactionSizeLimit = 4 * 1024 * 1024
-)
-
-const (
-	// TimeoutFailureTypePrefix is the prefix for timeout failure types
-	// used in retry policy
-	// the actual failure type will be prefix + enums.TimeoutType.String()
-	// e.g. "TemporalTimeout:StartToClose" or "TemporalTimeout:Heartbeat"
-	TimeoutFailureTypePrefix = "TemporalTimeout:"
 )
 
 const (

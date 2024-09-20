@@ -31,11 +31,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	"gopkg.in/yaml.v3"
-
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
@@ -43,6 +40,8 @@ import (
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/rpc/encryption"
 	"go.temporal.io/server/tests/testutils"
+	"go.uber.org/mock/gomock"
+	"gopkg.in/yaml.v3"
 )
 
 type (
@@ -88,6 +87,7 @@ var (
 )
 
 func TestRingpopSuite(t *testing.T) {
+	t.Parallel()
 	suite.Run(t, new(RingpopSuite))
 }
 
@@ -250,7 +250,7 @@ func (s *RingpopSuite) setupInternodeRingpop() {
 	rpcCfgB := &config.RPC{GRPCPort: 0, MembershipPort: 7601, BindOnIP: localhostIPv4}
 
 	dc := dynamicconfig.NewCollection(dynamicconfig.StaticClient(map[dynamicconfig.Key]any{
-		dynamicconfig.EnableRingpopTLS: true,
+		dynamicconfig.EnableRingpopTLS.Key(): true,
 	}), s.logger)
 
 	provider, err = encryption.NewTLSConfigProviderFromConfig(mutualTLS.TLS, metrics.NoopMetricsHandler, s.logger, nil)

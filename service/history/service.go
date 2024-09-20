@@ -25,22 +25,20 @@
 package history
 
 import (
-	"math/rand"
 	"net"
 	"time"
-
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/health"
-	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/metrics"
-	"go.temporal.io/server/common/persistence/client"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/service/history/configs"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/health"
+	healthpb "google.golang.org/grpc/health/grpc_health_v1"
+	"google.golang.org/grpc/reflection"
 )
 
 // Service represents the history service
@@ -50,18 +48,17 @@ type (
 		visibilityManager manager.VisibilityManager
 		config            *configs.Config
 
-		server                         *grpc.Server
-		logger                         log.Logger
-		grpcListener                   net.Listener
-		membershipMonitor              membership.Monitor
-		faultInjectionDataStoreFactory *client.FaultInjectionDataStoreFactory
-		metricsHandler                 metrics.Handler
-		healthServer                   *health.Server
+		server            *grpc.Server
+		logger            log.Logger
+		grpcListener      net.Listener
+		membershipMonitor membership.Monitor
+		metricsHandler    metrics.Handler
+		healthServer      *health.Server
 	}
 )
 
 func NewService(
-	grpcServerOptions []grpc.ServerOption,
+	server *grpc.Server,
 	serviceConfig *configs.Config,
 	visibilityMgr manager.VisibilityManager,
 	handler *Handler,
@@ -69,20 +66,18 @@ func NewService(
 	grpcListener net.Listener,
 	membershipMonitor membership.Monitor,
 	metricsHandler metrics.Handler,
-	faultInjectionDataStoreFactory *client.FaultInjectionDataStoreFactory,
 	healthServer *health.Server,
 ) *Service {
 	return &Service{
-		server:                         grpc.NewServer(grpcServerOptions...),
-		handler:                        handler,
-		visibilityManager:              visibilityMgr,
-		config:                         serviceConfig,
-		logger:                         logger,
-		grpcListener:                   grpcListener,
-		membershipMonitor:              membershipMonitor,
-		metricsHandler:                 metricsHandler,
-		faultInjectionDataStoreFactory: faultInjectionDataStoreFactory,
-		healthServer:                   healthServer,
+		server:            server,
+		handler:           handler,
+		visibilityManager: visibilityMgr,
+		config:            serviceConfig,
+		logger:            logger,
+		grpcListener:      grpcListener,
+		membershipMonitor: membershipMonitor,
+		metricsHandler:    metricsHandler,
+		healthServer:      healthServer,
 	}
 }
 
@@ -90,14 +85,15 @@ func NewService(
 func (s *Service) Start() {
 	s.logger.Info("history starting")
 
-	s.metricsHandler.Counter(metrics.RestartCount).Record(1)
-	rand.Seed(time.Now().UnixNano())
+	metrics.RestartCount.With(s.metricsHandler).Record(1)
 
 	s.handler.Start()
 
 	historyservice.RegisterHistoryServiceServer(s.server, s.handler)
 	healthpb.RegisterHealthServer(s.server, s.healthServer)
 	s.healthServer.SetServingStatus(serviceName, healthpb.HealthCheckResponse_SERVING)
+
+	reflection.Register(s.server)
 
 	go func() {
 		s.logger.Info("Starting to serve on history listener")
@@ -144,8 +140,4 @@ func (s *Service) Stop() {
 	s.visibilityManager.Close()
 
 	s.logger.Info("history stopped")
-}
-
-func (s *Service) GetFaultInjection() *client.FaultInjectionDataStoreFactory {
-	return s.faultInjectionDataStoreFactory
 }

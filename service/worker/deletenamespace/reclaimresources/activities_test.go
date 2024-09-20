@@ -28,16 +28,16 @@ import (
 	"context"
 	"testing"
 
-	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/testsuite"
-
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/visibility/manager"
+	"go.temporal.io/server/common/searchattribute"
+	"go.uber.org/mock/gomock"
 )
 
 func Test_EnsureNoExecutionsAdvVisibilityActivity_NoExecutions(t *testing.T) {
@@ -47,13 +47,13 @@ func Test_EnsureNoExecutionsAdvVisibilityActivity_NoExecutions(t *testing.T) {
 	visibilityManager.EXPECT().CountWorkflowExecutions(gomock.Any(), &manager.CountWorkflowExecutionsRequest{
 		NamespaceID: "namespace-id",
 		Namespace:   "namespace",
+		Query:       searchattribute.QueryWithAnyNamespaceDivision(""),
 	}).Return(&manager.CountWorkflowExecutionsResponse{
 		Count: 0,
 	}, nil)
 
 	a := &Activities{
 		visibilityManager: visibilityManager,
-		metadataManager:   nil,
 		metricsHandler:    metrics.NoopMetricsHandler,
 		logger:            log.NewNoopLogger(),
 	}
@@ -72,13 +72,13 @@ func Test_EnsureNoExecutionsAdvVisibilityActivity_ExecutionsExist(t *testing.T) 
 	visibilityManager.EXPECT().CountWorkflowExecutions(gomock.Any(), &manager.CountWorkflowExecutionsRequest{
 		NamespaceID: "namespace-id",
 		Namespace:   "namespace",
+		Query:       searchattribute.QueryWithAnyNamespaceDivision(""),
 	}).Return(&manager.CountWorkflowExecutionsResponse{
 		Count: 1,
 	}, nil)
 
 	a := &Activities{
 		visibilityManager: visibilityManager,
-		metadataManager:   nil,
 		metricsHandler:    metrics.NoopMetricsHandler,
 		logger:            log.NewNoopLogger(),
 	}
@@ -101,13 +101,13 @@ func Test_EnsureNoExecutionsAdvVisibilityActivity_NotDeletedExecutionsExist(t *t
 	visibilityManager.EXPECT().CountWorkflowExecutions(gomock.Any(), &manager.CountWorkflowExecutionsRequest{
 		NamespaceID: "namespace-id",
 		Namespace:   "namespace",
+		Query:       searchattribute.QueryWithAnyNamespaceDivision(""),
 	}).Return(&manager.CountWorkflowExecutionsResponse{
 		Count: 10,
 	}, nil)
 
 	a := &Activities{
 		visibilityManager: visibilityManager,
-		metadataManager:   nil,
 		metricsHandler:    metrics.NoopMetricsHandler,
 		logger:            log.NewNoopLogger(),
 	}
@@ -128,13 +128,13 @@ func Test_EnsureNoExecutionsStdVisibilityActivity_NoExecutions(t *testing.T) {
 		NamespaceID: "namespace-id",
 		Namespace:   "namespace",
 		PageSize:    1,
+		Query:       searchattribute.QueryWithAnyNamespaceDivision(""),
 	}).Return(&manager.ListWorkflowExecutionsResponse{
 		Executions: []*workflowpb.WorkflowExecutionInfo{},
 	}, nil)
 
 	a := &Activities{
 		visibilityManager: visibilityManager,
-		metadataManager:   nil,
 		metricsHandler:    metrics.NoopMetricsHandler,
 		logger:            log.NewNoopLogger(),
 	}
@@ -151,13 +151,13 @@ func Test_EnsureNoExecutionsStdVisibilityActivity_ExecutionsExist(t *testing.T) 
 		NamespaceID: "namespace-id",
 		Namespace:   "namespace",
 		PageSize:    1,
+		Query:       searchattribute.QueryWithAnyNamespaceDivision(""),
 	}).Return(&manager.ListWorkflowExecutionsResponse{
 		Executions: []*workflowpb.WorkflowExecutionInfo{{}},
 	}, nil)
 
 	a := &Activities{
 		visibilityManager: visibilityManager,
-		metadataManager:   nil,
 		metricsHandler:    metrics.NoopMetricsHandler,
 		logger:            log.NewNoopLogger(),
 	}

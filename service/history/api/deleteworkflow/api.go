@@ -28,9 +28,9 @@ import (
 	"context"
 
 	commonpb "go.temporal.io/api/common/v1"
-
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/consts"
@@ -46,21 +46,20 @@ func Invoke(
 	workflowConsistencyChecker api.WorkflowConsistencyChecker,
 	workflowDeleteManager deletemanager.DeleteManager,
 ) (_ *historyservice.DeleteWorkflowExecutionResponse, retError error) {
-	weCtx, err := workflowConsistencyChecker.GetWorkflowContext(
+	workflowLease, err := workflowConsistencyChecker.GetWorkflowLease(
 		ctx,
 		nil,
-		api.BypassMutableStateConsistencyPredicate,
 		definition.NewWorkflowKey(
 			request.NamespaceId,
 			request.WorkflowExecution.WorkflowId,
 			request.WorkflowExecution.RunId,
 		),
-		workflow.LockPriorityLow,
+		locks.PriorityLow,
 	)
 	if err != nil {
 		return nil, err
 	}
-	defer func() { weCtx.GetReleaseFn()(retError) }()
+	defer func() { workflowLease.GetReleaseFn()(retError) }()
 
 	// Open and Close workflow executions are deleted differently.
 	// Open workflow execution is deleted by terminating with special flag `deleteAfterTerminate` set to true.
@@ -72,7 +71,7 @@ func Invoke(
 	// Although running workflows in active cluster are terminated first and the termination event might be replicated.
 	// In passive cluster, workflow executions are just deleted in regardless of its state.
 
-	if weCtx.GetMutableState().IsWorkflowExecutionRunning() {
+	if workflowLease.GetMutableState().IsWorkflowExecutionRunning() {
 		if request.GetClosedWorkflowOnly() {
 			// skip delete open workflow
 			return &historyservice.DeleteWorkflowExecutionResponse{}, nil
@@ -86,11 +85,11 @@ func Invoke(
 			if err := api.UpdateWorkflowWithNew(
 				shard,
 				ctx,
-				weCtx,
-				func(workflowContext api.WorkflowContext) (*api.UpdateWorkflowAction, error) {
-					mutableState := workflowContext.GetMutableState()
+				workflowLease,
+				func(workflowLease api.WorkflowLease) (*api.UpdateWorkflowAction, error) {
+					mutableState := workflowLease.GetMutableState()
 
-					return api.UpdateWorkflowWithoutWorkflowTask, workflow.TerminateWorkflow(
+					return api.UpdateWorkflowTerminate, workflow.TerminateWorkflow(
 						mutableState,
 						"Delete workflow execution",
 						nil,
@@ -110,12 +109,11 @@ func Invoke(
 	if err := workflowDeleteManager.AddDeleteWorkflowExecutionTask(
 		ctx,
 		namespace.ID(request.GetNamespaceId()),
-		commonpb.WorkflowExecution{
+		&commonpb.WorkflowExecution{
 			WorkflowId: request.GetWorkflowExecution().GetWorkflowId(),
 			RunId:      request.GetWorkflowExecution().GetRunId(),
 		},
-		weCtx.GetMutableState(),
-		request.GetWorkflowVersion(),
+		workflowLease.GetMutableState(),
 	); err != nil {
 		return nil, err
 	}

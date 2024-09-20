@@ -28,8 +28,8 @@ import (
 	"time"
 
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
-
 	"go.temporal.io/server/common/cache"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 const (
@@ -79,7 +79,7 @@ func (pollers *pollerHistory) getPollerInfo(earliestAccessTime time.Time) []*tas
 		if earliestAccessTime.Before(lastAccessTime) {
 			result = append(result, &taskqueuepb.PollerInfo{
 				Identity:                  string(key),
-				LastAccessTime:            &lastAccessTime,
+				LastAccessTime:            timestamppb.New(lastAccessTime),
 				RatePerSecond:             defaultValue(value.ratePerSecond, defaultTaskDispatchRPS),
 				WorkerVersionCapabilities: value.workerVersionCapabilities,
 			})

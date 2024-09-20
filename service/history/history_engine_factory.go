@@ -26,8 +26,6 @@ package history
 
 import (
 	"go.opentelemetry.io/otel/trace"
-	"go.uber.org/fx"
-
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
@@ -39,7 +37,10 @@ import (
 	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/replication"
 	"go.temporal.io/server/service/history/shard"
+	"go.temporal.io/server/service/history/tasks"
+	"go.temporal.io/server/service/history/workflow"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
+	"go.uber.org/fx"
 )
 
 type (
@@ -53,6 +54,7 @@ type (
 		Config                          *configs.Config
 		RawMatchingClient               resource.MatchingRawClient
 		WorkflowCache                   wcache.Cache
+		ReplicationProgressCache        replication.ProgressCache
 		NewCacheFn                      wcache.NewCacheFn
 		EventSerializer                 serialization.Serializer
 		QueueFactories                  []QueueFactory `group:"queueFactory"`
@@ -61,6 +63,9 @@ type (
 		TracerProvider                  trace.TracerProvider
 		PersistenceVisibilityMgr        manager.VisibilityManager
 		EventBlobCache                  persistence.XDCCache
+		TaskCategoryRegistry            tasks.TaskCategoryRegistry
+		ReplicationDLQWriter            replication.DLQWriter
+		CommandHandlerRegistry          *workflow.CommandHandlerRegistry
 	}
 
 	historyEngineFactory struct {
@@ -75,7 +80,7 @@ func (f *historyEngineFactory) CreateEngine(
 	if shard.GetConfig().EnableHostLevelHistoryCache() {
 		wfCache = f.WorkflowCache
 	} else {
-		wfCache = f.NewCacheFn(shard.GetConfig())
+		wfCache = f.NewCacheFn(shard.GetConfig(), shard.GetLogger(), shard.GetMetricsHandler())
 	}
 
 	workflowConsistencyChecker := api.NewWorkflowConsistencyChecker(shard, wfCache)
@@ -88,6 +93,7 @@ func (f *historyEngineFactory) CreateEngine(
 		f.Config,
 		f.RawMatchingClient,
 		wfCache,
+		f.ReplicationProgressCache,
 		f.EventSerializer,
 		f.QueueFactories,
 		f.ReplicationTaskFetcherFactory,
@@ -96,5 +102,8 @@ func (f *historyEngineFactory) CreateEngine(
 		f.TracerProvider,
 		f.PersistenceVisibilityMgr,
 		f.EventBlobCache,
+		f.TaskCategoryRegistry,
+		f.ReplicationDLQWriter,
+		f.CommandHandlerRegistry,
 	)
 }

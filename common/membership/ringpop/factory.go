@@ -35,8 +35,6 @@ import (
 
 	"github.com/temporalio/ringpop-go"
 	"github.com/temporalio/tchannel-go"
-	"go.uber.org/fx"
-
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -47,7 +45,9 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/rpc/encryption"
+	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/environment"
+	"go.uber.org/fx"
 )
 
 const (
@@ -115,33 +115,52 @@ func (factory *factory) getMonitor() *monitor {
 	factory.monOnce.Do(func() {
 		ctx, cancel := context.WithTimeout(context.Background(), persistenceOperationTimeout)
 		defer cancel()
-		ctx = headers.SetCallerInfo(ctx, headers.SystemBackgroundCallerInfo)
 
+		ctx = headers.SetCallerInfo(ctx, headers.SystemBackgroundCallerInfo)
 		currentClusterMetadata, err := factory.MetadataManager.GetCurrentClusterMetadata(ctx)
 		if err != nil {
 			factory.Logger.Fatal("Failed to get current cluster ID", tag.Error(err))
 		}
+
 		appName := "temporal"
 		if currentClusterMetadata.UseClusterIdMembership {
 			appName = fmt.Sprintf("temporal-%s", currentClusterMetadata.GetClusterId())
 		}
-		if rp, err := ringpop.New(appName, ringpop.Channel(factory.getTChannel()), ringpop.AddressResolverFunc(factory.broadcastAddressResolver)); err != nil {
+		rp, err := ringpop.New(appName, ringpop.Channel(factory.getTChannel()), ringpop.AddressResolverFunc(factory.broadcastAddressResolver))
+		if err != nil {
 			factory.Logger.Fatal("Failed to get new ringpop", tag.Error(err))
-		} else {
-			mrp := newService(rp, factory.Config.MaxJoinDuration, factory.Logger)
-
-			factory.monitor = newMonitor(
-				factory.ServiceName,
-				factory.ServicePortMap,
-				mrp,
-				factory.Logger,
-				factory.MetadataManager,
-				factory.broadcastAddressResolver,
-			)
 		}
+
+		// Empirically, ringpop updates usually propagate in under a second even in relatively large clusters.
+		// 3 seconds is an over-estimate to be safer.
+		maxPropagationTime := dynamicconfig.RingpopApproximateMaxPropagationTime.Get(factory.DC)()
+
+		factory.monitor = newMonitor(
+			factory.ServiceName,
+			factory.ServicePortMap,
+			rp,
+			factory.Logger,
+			factory.MetadataManager,
+			factory.broadcastAddressResolver,
+			factory.Config.MaxJoinDuration,
+			maxPropagationTime,
+			factory.getJoinTime(maxPropagationTime),
+		)
 	})
 
 	return factory.monitor
+}
+
+func (factory *factory) getJoinTime(maxPropagationTime time.Duration) time.Time {
+	var alignTime time.Duration
+	switch factory.ServiceName {
+	case primitives.MatchingService:
+		alignTime = dynamicconfig.MatchingAlignMembershipChange.Get(factory.DC)()
+	}
+	if alignTime == 0 {
+		return time.Time{}
+	}
+	return util.NextAlignedTime(time.Now().Add(maxPropagationTime), alignTime)
 }
 
 func (factory *factory) broadcastAddressResolver() (string, error) {
@@ -152,7 +171,7 @@ func (factory *factory) getTChannel() *tchannel.Channel {
 	factory.chOnce.Do(func() {
 		ringpopServiceName := fmt.Sprintf("%v-ringpop", factory.ServiceName)
 		ringpopHostAddress := net.JoinHostPort(factory.getListenIP().String(), convert.IntToString(factory.RPCConfig.MembershipPort))
-		enableTLS := factory.DC.GetBoolProperty(dynamicconfig.EnableRingpopTLS, false)()
+		enableTLS := dynamicconfig.EnableRingpopTLS.Get(factory.DC)()
 
 		var tChannel *tchannel.Channel
 		if enableTLS {

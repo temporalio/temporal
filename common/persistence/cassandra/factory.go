@@ -28,7 +28,6 @@ import (
 	"sync"
 
 	"github.com/gocql/gocql"
-
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -108,12 +107,23 @@ func (f *Factory) NewClusterMetadataStore() (p.ClusterMetadataStore, error) {
 
 // NewExecutionStore returns a new ExecutionStore.
 func (f *Factory) NewExecutionStore() (p.ExecutionStore, error) {
-	return NewExecutionStore(f.session, f.logger), nil
+	return NewExecutionStore(f.session), nil
 }
 
 // NewQueue returns a new queue backed by cassandra
 func (f *Factory) NewQueue(queueType p.QueueType) (p.Queue, error) {
 	return NewQueueStore(queueType, f.session, f.logger)
+}
+
+// NewQueueV2 returns a new data-access object for queues and messages stored in Cassandra. It will never return an
+// error.
+func (f *Factory) NewQueueV2() (p.QueueV2, error) {
+	return NewQueueV2Store(f.session, f.logger), nil
+}
+
+// NewNexusEndpointStore returns a new NexusEndpointStore
+func (f *Factory) NewNexusEndpointStore() (p.NexusEndpointStore, error) {
+	return NewNexusEndpointStore(f.session, f.logger), nil
 }
 
 // Close closes the factory

@@ -30,7 +30,6 @@ import (
 	"net/url"
 
 	"github.com/urfave/cli"
-
 	"go.temporal.io/server/common/auth"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/log"
@@ -47,7 +46,7 @@ func setupSchema(cli *cli.Context, logger log.Logger) error {
 		logger.Error("Unable to read config.", tag.Error(schema.NewConfigError(err.Error())))
 		return err
 	}
-	conn, err := NewConnection(cfg)
+	conn, err := NewConnection(cfg, logger)
 	if err != nil {
 		logger.Error("Unable to connect to SQL database.", tag.Error(err))
 		return err
@@ -61,14 +60,14 @@ func setupSchema(cli *cli.Context, logger log.Logger) error {
 }
 
 // updateSchema executes the updateSchemaTask
-// using the given command lien args as input
+// using the given command line args as input
 func updateSchema(cli *cli.Context, logger log.Logger) error {
 	cfg, err := parseConnectConfig(cli)
 	if err != nil {
 		logger.Error("Unable to read config.", tag.Error(schema.NewConfigError(err.Error())))
 		return err
 	}
-	conn, err := NewConnection(cfg)
+	conn, err := NewConnection(cfg, logger)
 	if err != nil {
 		logger.Error("Unable to connect to SQL database.", tag.Error(err))
 		return err
@@ -89,7 +88,7 @@ func createDatabase(cli *cli.Context, logger log.Logger) error {
 		return err
 	}
 	defaultDb := cli.String(schema.CLIOptDefaultDb)
-	err = DoCreateDatabase(cfg, defaultDb)
+	err = DoCreateDatabase(cfg, defaultDb, logger)
 	if err != nil {
 		logger.Error("Unable to create SQL database.", tag.Error(err))
 		return err
@@ -97,10 +96,10 @@ func createDatabase(cli *cli.Context, logger log.Logger) error {
 	return nil
 }
 
-func DoCreateDatabase(cfg *config.SQL, defaultDb string) error {
+func DoCreateDatabase(cfg *config.SQL, defaultDb string, logger log.Logger) error {
 	dbToCreate := cfg.DatabaseName
 	cfg.DatabaseName = defaultDb
-	conn, err := NewConnection(cfg)
+	conn, err := NewConnection(cfg, logger)
 	if err != nil {
 		return err
 	}
@@ -116,7 +115,7 @@ func dropDatabase(cli *cli.Context, logger log.Logger) error {
 		return err
 	}
 	defaultDb := cli.String(schema.CLIOptDefaultDb)
-	err = DoDropDatabase(cfg, defaultDb)
+	err = DoDropDatabase(cfg, defaultDb, logger)
 	if err != nil {
 		logger.Error("Unable to drop SQL database.", tag.Error(err))
 		return err
@@ -124,10 +123,10 @@ func dropDatabase(cli *cli.Context, logger log.Logger) error {
 	return nil
 }
 
-func DoDropDatabase(cfg *config.SQL, defaultDb string) error {
+func DoDropDatabase(cfg *config.SQL, defaultDb string, logger log.Logger) error {
 	dbToDrop := cfg.DatabaseName
 	cfg.DatabaseName = defaultDb
-	conn, err := NewConnection(cfg)
+	conn, err := NewConnection(cfg, logger)
 	if err != nil {
 		return err
 	}

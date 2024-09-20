@@ -27,22 +27,21 @@ package queues
 import (
 	"math"
 	"math/rand"
+	"slices"
 	"time"
-
-	"golang.org/x/exp/slices"
 
 	"go.temporal.io/server/common/predicates"
 	"go.temporal.io/server/service/history/tasks"
 )
 
 func NewRandomKey() tasks.Key {
-	return tasks.NewKey(time.Unix(0, rand.Int63()), rand.Int63())
+	return tasks.NewKey(time.Unix(0, rand.Int63()).UTC(), rand.Int63())
 }
 
 func NewRandomRange() Range {
 	maxKey := NewRandomKey()
 	minKey := tasks.NewKey(
-		time.Unix(0, rand.Int63n(maxKey.FireTime.UnixNano())),
+		time.Unix(0, rand.Int63n(maxKey.FireTime.UnixNano())).UTC(),
 		rand.Int63n(maxKey.TaskID),
 	)
 	return NewRange(minKey, maxKey)

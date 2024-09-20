@@ -27,22 +27,25 @@ package history
 import (
 	"context"
 
-	"go.uber.org/fx"
-
-	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/quotas"
+	"go.temporal.io/server/common/quotas/calculator"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/queues"
+	"go.temporal.io/server/service/history/replication/eventhandler"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
+	"go.uber.org/fx"
 )
 
 const QueueFactoryFxGroup = "queueFactory"
@@ -72,8 +75,10 @@ type (
 		MetricsHandler       metrics.Handler
 		Logger               log.SnTaggedLogger
 		SchedulerRateLimiter queues.SchedulerRateLimiter
-
-		ExecutorWrapper queues.ExecutorWrapper `optional:"true"`
+		DLQWriter            *queues.DLQWriter
+		ExecutorWrapper      queues.ExecutorWrapper `optional:"true"`
+		Serializer           serialization.Serializer
+		RemoteHistoryFetcher eventhandler.HistoryPaginatedFetcher
 	}
 
 	QueueFactoryBase struct {
@@ -91,8 +96,12 @@ type (
 )
 
 var QueueModule = fx.Options(
-	fx.Provide(QueueSchedulerRateLimiterProvider),
 	fx.Provide(
+		QueueSchedulerRateLimiterProvider,
+		func(tqm persistence.HistoryTaskQueueManager) queues.QueueWriter {
+			return tqm
+		},
+		queues.NewDLQWriter,
 		fx.Annotated{
 			Group:  QueueFactoryFxGroup,
 			Target: NewTransferQueueFactory,
@@ -135,54 +144,62 @@ type additionalQueueFactories struct {
 // added to the `group:"queueFactory"` group. The factories are added to the group only if they are enabled, which
 // is why we must return a list here.
 func getOptionalQueueFactories(
-	archivalMetadata archiver.ArchivalMetadata,
-	params ArchivalQueueFactoryParams,
+	registry tasks.TaskCategoryRegistry,
+	archivalParams ArchivalQueueFactoryParams,
+	outboundParams outboundQueueFactoryParams,
+	config *configs.Config,
 ) additionalQueueFactories {
-
-	c := tasks.CategoryArchival
-	// Removing this category will only affect tests because this method is only called once in production,
-	// but it may be called many times across test runs, which would leave the archival queue as a dangling category
-	tasks.RemoveCategory(c.ID())
-	if archivalMetadata.GetHistoryConfig().StaticClusterState() != archiver.ArchivalEnabled &&
-		archivalMetadata.GetVisibilityConfig().StaticClusterState() != archiver.ArchivalEnabled {
-		return additionalQueueFactories{}
+	factories := []QueueFactory{}
+	if _, ok := registry.GetCategoryByID(tasks.CategoryIDArchival); ok {
+		factories = append(factories, NewArchivalQueueFactory(archivalParams))
 	}
-	tasks.NewCategory(c.ID(), c.Type(), c.Name())
+	if config.EnableNexus() {
+		factories = append(factories, NewOutboundQueueFactory(outboundParams))
+	}
 	return additionalQueueFactories{
-		Factories: []QueueFactory{
-			NewArchivalQueueFactory(params),
-		},
+		Factories: factories,
 	}
 }
 
 func QueueSchedulerRateLimiterProvider(
+	ownershipBasedQuotaScaler shard.LazyLoadedOwnershipBasedQuotaScaler,
 	serviceResolver membership.ServiceResolver,
 	config *configs.Config,
 	timeSource clock.TimeSource,
+	logger log.SnTaggedLogger,
 ) (queues.SchedulerRateLimiter, error) {
-	return queues.NewSchedulerRateLimiter(
-		quotas.ClusterAwareNamespaceSpecificQuotaCalculator{
-			MemberCounter:    serviceResolver,
-			PerInstanceQuota: config.TaskSchedulerNamespaceMaxQPS,
-			GlobalQuota:      config.TaskSchedulerGlobalNamespaceMaxQPS,
-		}.GetQuota,
-		quotas.ClusterAwareQuotaCalculator{
-			MemberCounter:    serviceResolver,
-			PerInstanceQuota: config.TaskSchedulerMaxQPS,
-			GlobalQuota:      config.TaskSchedulerGlobalMaxQPS,
-		}.GetQuota,
-		quotas.ClusterAwareNamespaceSpecificQuotaCalculator{
-			MemberCounter:    serviceResolver,
-			PerInstanceQuota: config.PersistenceNamespaceMaxQPS,
-			GlobalQuota:      config.PersistenceGlobalNamespaceMaxQPS,
-		}.GetQuota,
-		quotas.ClusterAwareQuotaCalculator{
-			MemberCounter:    serviceResolver,
-			PerInstanceQuota: config.PersistenceMaxQPS,
-			GlobalQuota:      config.PersistenceGlobalMaxQPS,
-		}.GetQuota,
-		config.TaskSchedulerRateLimiterStartupDelay,
-		timeSource,
+	return queues.NewPrioritySchedulerRateLimiter(
+		calculator.NewLoggedNamespaceCalculator(
+			shard.NewOwnershipAwareNamespaceQuotaCalculator(
+				ownershipBasedQuotaScaler,
+				serviceResolver,
+				config.TaskSchedulerNamespaceMaxQPS,
+				config.TaskSchedulerGlobalNamespaceMaxQPS,
+			),
+			log.With(logger, tag.ComponentTaskScheduler, tag.ScopeNamespace),
+		).GetQuota,
+		calculator.NewLoggedCalculator(
+			shard.NewOwnershipAwareQuotaCalculator(
+				ownershipBasedQuotaScaler,
+				serviceResolver,
+				config.TaskSchedulerMaxQPS,
+				config.TaskSchedulerGlobalMaxQPS,
+			),
+			log.With(logger, tag.ComponentTaskScheduler, tag.ScopeHost),
+		).GetQuota,
+		// TODO: reuse persistence rate limit calculator in PersistenceRateLimitingParamsProvider
+		shard.NewOwnershipAwareNamespaceQuotaCalculator(
+			ownershipBasedQuotaScaler,
+			serviceResolver,
+			config.PersistenceNamespaceMaxQPS,
+			config.PersistenceGlobalNamespaceMaxQPS,
+		).GetQuota,
+		shard.NewOwnershipAwareQuotaCalculator(
+			ownershipBasedQuotaScaler,
+			serviceResolver,
+			config.PersistenceMaxQPS,
+			config.PersistenceGlobalMaxQPS,
+		).GetQuota,
 	)
 }
 
@@ -219,25 +236,13 @@ func (f *QueueFactoryBase) Stop() {
 	}
 }
 
-func NewQueueHostRateLimiter(
-	hostRPS dynamicconfig.IntPropertyFn,
-	persistenceMaxRPS dynamicconfig.IntPropertyFn,
-	persistenceMaxRPSRatio float64,
-) quotas.RateLimiter {
-	return quotas.NewDefaultOutgoingRateLimiter(
-		NewHostRateLimiterRateFn(
-			hostRPS,
-			persistenceMaxRPS,
-			persistenceMaxRPSRatio,
-		),
-	)
-}
-
 func NewHostRateLimiterRateFn(
 	hostRPS dynamicconfig.IntPropertyFn,
 	persistenceMaxRPS dynamicconfig.IntPropertyFn,
 	persistenceMaxRPSRatio float64,
 ) quotas.RateFn {
+	// TODO: reuse persistence rate limit calculator in PersistenceRateLimitingParamsProvider
+
 	return func() float64 {
 		if maxPollHostRps := hostRPS(); maxPollHostRps > 0 {
 			return float64(maxPollHostRps)

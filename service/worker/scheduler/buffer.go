@@ -29,32 +29,32 @@ import (
 )
 
 type (
-	overlappable interface {
+	Overlappable interface {
 		comparable
 		GetOverlapPolicy() enumspb.ScheduleOverlapPolicy
 	}
 
-	processBufferResult[T overlappable] struct {
+	ProcessBufferResult[T Overlappable] struct {
 		// We can start allow-all all at once
-		overlappingStarts []T
+		OverlappingStarts []T
 		// Ignoring allow-all, we can start either zero or one now.
 		// This is the one that we want to start, or nil.
-		nonOverlappingStart T
+		NonOverlappingStart T
 		// The remaining buffer
-		newBuffer []T
+		NewBuffer []T
 		// Whether to cancel/terminate the currently-running one
-		needCancel    bool
-		needTerminate bool
+		NeedCancel    bool
+		NeedTerminate bool
 		// Stats
-		overlapSkipped int64
+		OverlapSkipped int64
 	}
 )
 
-func processBuffer[T overlappable](
+func ProcessBuffer[T Overlappable](
 	buffer []T,
 	isRunning bool,
 	resolve func(enumspb.ScheduleOverlapPolicy) enumspb.ScheduleOverlapPolicy,
-) processBufferResult[T] {
+) ProcessBufferResult[T] {
 	// We should try to do something reasonable with any combination of overlap
 	// policies in the buffer, although some combinations don't make much sense
 	// and would require a convoluted series of calls to set up.
@@ -63,7 +63,7 @@ func processBuffer[T overlappable](
 	// current policy here, not earlier, so that updates to the policy can
 	// affect them.
 
-	var action processBufferResult[T]
+	var action ProcessBufferResult[T]
 	var zeroVal T
 
 	for _, start := range buffer {
@@ -71,15 +71,15 @@ func processBuffer[T overlappable](
 
 		// For allow-all, just collect and start all at once
 		if overlapPolicy == enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL {
-			action.overlappingStarts = append(action.overlappingStarts, start)
+			action.OverlappingStarts = append(action.OverlappingStarts, start)
 			continue
 		}
 
 		// Now handle non-overlapping.
 
 		// If there's nothing running, we can start this one no matter what the policy is
-		if !isRunning && action.nonOverlappingStart == zeroVal {
-			action.nonOverlappingStart = start
+		if !isRunning && action.NonOverlappingStart == zeroVal {
+			action.NonOverlappingStart = start
 			continue
 		}
 
@@ -87,46 +87,46 @@ func processBuffer[T overlappable](
 		switch overlapPolicy {
 		case enumspb.SCHEDULE_OVERLAP_POLICY_SKIP:
 			// just skip
-			action.overlapSkipped++
+			action.OverlapSkipped++
 		case enumspb.SCHEDULE_OVERLAP_POLICY_BUFFER_ONE:
 			// allow one (the first one) in the buffer
-			if len(action.newBuffer) == 0 {
-				action.newBuffer = append(action.newBuffer, start)
+			if len(action.NewBuffer) == 0 {
+				action.NewBuffer = append(action.NewBuffer, start)
 			} else {
-				action.overlapSkipped++
+				action.OverlapSkipped++
 			}
 		case enumspb.SCHEDULE_OVERLAP_POLICY_BUFFER_ALL:
 			// always add to buffer
-			action.newBuffer = append(action.newBuffer, start)
+			action.NewBuffer = append(action.NewBuffer, start)
 		case enumspb.SCHEDULE_OVERLAP_POLICY_CANCEL_OTHER:
 			if isRunning {
 				// an actual workflow is running, cancel it (asynchronously)
-				action.needCancel = true
+				action.NeedCancel = true
 				// keep in buffer so it will get started once cancel completes
-				action.newBuffer = append(action.newBuffer, start)
+				action.NewBuffer = append(action.NewBuffer, start)
 			} else {
 				// it's not running yet, it's just the one we were going to start. replace it
-				action.nonOverlappingStart = start
+				action.NonOverlappingStart = start
 			}
 		case enumspb.SCHEDULE_OVERLAP_POLICY_TERMINATE_OTHER:
 			if isRunning {
 				// an actual workflow is running, terminate it
-				action.needTerminate = true
+				action.NeedTerminate = true
 				// keep in buffer so it will get started once terminate completes
-				action.newBuffer = append(action.newBuffer, start)
+				action.NewBuffer = append(action.NewBuffer, start)
 			} else {
 				// it's not running yet, it's just the one we were going to start. replace it
-				action.nonOverlappingStart = start
+				action.NonOverlappingStart = start
 			}
 		}
 	}
 
-	if action.needCancel || action.needTerminate {
+	if action.NeedCancel || action.NeedTerminate {
 		// In a very contrived situation, we could end up with overlapping starts at the same
 		// time as a non-overlapping start tries to cancel/terminate a running workflow. But
 		// then it will immediately cancel/terminate the overlapping ones too (either on this
 		// iteration or the next one). So we shouldn't even bother starting them.
-		action.overlappingStarts = nil
+		action.OverlappingStarts = nil
 	}
 
 	return action

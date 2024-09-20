@@ -33,9 +33,6 @@ import (
 	"time"
 
 	"go.temporal.io/api/serviceerror"
-	"golang.org/x/sync/semaphore"
-	"golang.org/x/time/rate"
-
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
@@ -44,9 +41,11 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/pingable"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
-	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/service/history/configs"
+	"golang.org/x/sync/semaphore"
+	"golang.org/x/time/rate"
 )
 
 const (
@@ -152,21 +151,21 @@ func (c *ControllerImpl) Stop() {
 	c.contextTaggedLogger.Info("", tag.LifeCycleStopped)
 }
 
-func (c *ControllerImpl) GetPingChecks() []common.PingCheck {
-	return []common.PingCheck{{
+func (c *ControllerImpl) GetPingChecks() []pingable.Check {
+	return []pingable.Check{{
 		Name:    "shard controller",
 		Timeout: 10 * time.Second,
-		Ping: func() []common.Pingable {
+		Ping: func() []pingable.Pingable {
 			// we only need to read but get write lock to make sure we can
 			c.Lock()
 			defer c.Unlock()
-			out := make([]common.Pingable, 0, len(c.historyShards))
+			out := make([]pingable.Pingable, 0, len(c.historyShards))
 			for _, shard := range c.historyShards {
 				out = append(out, shard)
 			}
 			return out
 		},
-		MetricsName: metrics.ShardControllerLockLatency.GetMetricName(),
+		MetricsName: metrics.DDShardControllerLockLatency.Name(),
 	}}
 }
 
@@ -193,7 +192,7 @@ func (c *ControllerImpl) GetShardByID(
 ) (Context, error) {
 	startTime := time.Now().UTC()
 	defer func() {
-		c.taggedMetricsHandler.Timer(metrics.GetEngineForShardLatency.GetMetricName()).Record(time.Since(startTime))
+		metrics.GetEngineForShardLatency.With(c.taggedMetricsHandler).Record(time.Since(startTime))
 	}()
 
 	return c.getOrCreateShardContext(shardID)
@@ -202,7 +201,7 @@ func (c *ControllerImpl) GetShardByID(
 func (c *ControllerImpl) CloseShardByID(shardID int32) {
 	startTime := time.Now().UTC()
 	defer func() {
-		c.taggedMetricsHandler.Timer(metrics.RemoveEngineForShardLatency.GetMetricName()).Record(time.Since(startTime))
+		metrics.RemoveEngineForShardLatency.With(c.taggedMetricsHandler).Record(time.Since(startTime))
 	}()
 
 	shard := c.removeShard(shardID, nil)
@@ -227,10 +226,10 @@ func (c *ControllerImpl) ShardIDs() []int32 {
 func (c *ControllerImpl) shardRemoveAndStop(shard ControllableContext) {
 	startTime := time.Now().UTC()
 	defer func() {
-		c.taggedMetricsHandler.Timer(metrics.RemoveEngineForShardLatency.GetMetricName()).Record(time.Since(startTime))
+		metrics.RemoveEngineForShardLatency.With(c.taggedMetricsHandler).Record(time.Since(startTime))
 	}()
 
-	c.taggedMetricsHandler.Counter(metrics.ShardContextClosedCounter.GetMetricName()).Record(1)
+	metrics.ShardContextClosedCounter.With(c.taggedMetricsHandler).Record(1)
 	_ = c.removeShard(shard.GetShardID(), shard)
 
 	// Whether shard was in the shards map or not, in both cases we should stop it.
@@ -282,7 +281,7 @@ func (c *ControllerImpl) getOrCreateShardContext(shardID int32) (ControllableCon
 		return nil, err
 	}
 	c.historyShards[shardID] = shard
-	c.taggedMetricsHandler.Counter(metrics.ShardContextCreatedCounter.GetMetricName()).Record(1)
+	metrics.ShardContextCreatedCounter.With(c.taggedMetricsHandler).Record(1)
 	c.contextTaggedLogger.Info("", numShardsTag(len(c.historyShards)))
 
 	return shard, nil
@@ -307,7 +306,7 @@ func (c *ControllerImpl) removeShardLocked(shardID int32, expected ControllableC
 
 	delete(c.historyShards, shardID)
 	c.contextTaggedLogger.Info("", numShardsTag(len(c.historyShards)))
-	c.taggedMetricsHandler.Counter(metrics.ShardContextRemovedCounter.GetMetricName()).Record(1)
+	metrics.ShardContextRemovedCounter.With(c.taggedMetricsHandler).Record(1)
 
 	return current
 }
@@ -361,7 +360,7 @@ func (c *ControllerImpl) doLinger(ctx context.Context, shard ControllableContext
 	startTime := time.Now()
 	// Enforce a max limit to ensure we close the shard in a reasonable time,
 	// and to indirectly limit the number of lingering shards.
-	timeLimit := util.Min(c.config.ShardLingerTimeLimit(), shardLingerMaxTimeLimit)
+	timeLimit := min(c.config.ShardLingerTimeLimit(), shardLingerMaxTimeLimit)
 	ctx, cancel := context.WithTimeout(ctx, timeLimit)
 	defer cancel()
 
@@ -372,7 +371,7 @@ func (c *ControllerImpl) doLinger(ctx context.Context, shard ControllableContext
 
 	for {
 		if !shard.IsValid() {
-			c.taggedMetricsHandler.Timer(metrics.ShardLingerSuccess.GetMetricName()).Record(time.Since(startTime))
+			metrics.ShardLingerSuccess.With(c.taggedMetricsHandler).Record(time.Since(startTime))
 			break
 		}
 
@@ -381,7 +380,7 @@ func (c *ControllerImpl) doLinger(ctx context.Context, shard ControllableContext
 				tag.ShardID(shard.GetShardID()),
 				tag.NewDurationTag("duration", time.Now().Sub(startTime)),
 			)
-			c.taggedMetricsHandler.Counter(metrics.ShardLingerTimeouts.GetMetricName()).Record(1)
+			metrics.ShardLingerTimeouts.With(c.taggedMetricsHandler).Record(1)
 			break
 		}
 
@@ -394,10 +393,10 @@ func (c *ControllerImpl) doLinger(ctx context.Context, shard ControllableContext
 }
 
 func (c *ControllerImpl) acquireShards(ctx context.Context) {
-	c.taggedMetricsHandler.Counter(metrics.AcquireShardsCounter.GetMetricName()).Record(1)
+	metrics.AcquireShardsCounter.With(c.taggedMetricsHandler).Record(1)
 	startTime := time.Now().UTC()
 	defer func() {
-		c.taggedMetricsHandler.Timer(metrics.AcquireShardsLatency.GetMetricName()).Record(time.Since(startTime))
+		metrics.AcquireShardsLatency.With(c.taggedMetricsHandler).Record(time.Since(startTime))
 	}()
 
 	ctx = headers.SetCallerInfo(ctx, headers.SystemBackgroundCallerInfo)
@@ -417,7 +416,7 @@ func (c *ControllerImpl) acquireShards(ctx context.Context) {
 
 		shard, err := c.GetShardByID(shardID)
 		if err != nil {
-			c.taggedMetricsHandler.Counter(metrics.GetEngineForShardErrorCounter.GetMetricName()).Record(1)
+			metrics.GetEngineForShardErrorCounter.With(c.taggedMetricsHandler).Record(1)
 			c.contextTaggedLogger.Error("Unable to create history shard context", tag.Error(err), tag.OperationFailed, tag.ShardID(shardID))
 			return
 		}
@@ -427,14 +426,9 @@ func (c *ControllerImpl) acquireShards(ctx context.Context) {
 		engineCtx, engineCancel := context.WithTimeout(ctx, 1*time.Second)
 		defer engineCancel()
 		_, _ = shard.GetEngine(engineCtx)
-
-		assertCtx, assertCancel := context.WithTimeout(ctx, shardIOTimeout)
-		defer assertCancel()
-		// trust the AssertOwnership will handle shard ownership lost
-		_ = shard.AssertOwnership(assertCtx)
 	}
 
-	concurrency := int64(util.Max(c.config.AcquireShardConcurrency(), 1))
+	concurrency := int64(max(c.config.AcquireShardConcurrency(), 1))
 	sem := semaphore.NewWeighted(concurrency)
 	numShards := c.config.NumberOfShards
 	randomStartOffset := rand.Int31n(numShards)
@@ -453,8 +447,7 @@ func (c *ControllerImpl) acquireShards(ctx context.Context) {
 	c.RLock()
 	numOfOwnedShards := len(c.historyShards)
 	c.RUnlock()
-
-	c.taggedMetricsHandler.Gauge(metrics.NumShardsGauge.GetMetricName()).Record(float64(numOfOwnedShards))
+	metrics.NumShardsGauge.With(c.taggedMetricsHandler).Record(float64(numOfOwnedShards))
 	c.publishShardCountUpdate(numOfOwnedShards)
 }
 

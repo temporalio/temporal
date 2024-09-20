@@ -30,17 +30,20 @@ import (
 
 	"github.com/jmoiron/sqlx"
 	"go.temporal.io/api/serviceerror"
-
 	"go.temporal.io/server/common/config"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence/sql"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
+	"go.temporal.io/server/common/persistence/sql/sqlplugin/postgresql/driver"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin/postgresql/session"
 	"go.temporal.io/server/common/resolver"
 )
 
 const (
 	// PluginName is the name of the plugin
-	PluginName = "postgres"
+	PluginName    = "postgres12"
+	PluginNamePGX = "postgres12_pgx"
 )
 
 var (
@@ -50,12 +53,16 @@ var (
 	}
 )
 
-type plugin struct{}
+type plugin struct {
+	d driver.Driver
+}
 
 var _ sqlplugin.Plugin = (*plugin)(nil)
 
 func init() {
-	sql.RegisterPlugin(PluginName, &plugin{})
+	sql.RegisterPlugin(PluginName, &plugin{&driver.PQDriver{}})
+	sql.RegisterPlugin(PluginNamePGX, &plugin{&driver.PGXDriver{}})
+
 }
 
 // CreateDB initialize the db object
@@ -63,12 +70,18 @@ func (d *plugin) CreateDB(
 	dbKind sqlplugin.DbKind,
 	cfg *config.SQL,
 	r resolver.ServiceResolver,
+	logger log.Logger,
+	metricsHandler metrics.Handler,
 ) (sqlplugin.DB, error) {
-	conn, err := d.createDBConnection(cfg, r)
-	if err != nil {
-		return nil, err
+	connect := func() (*sqlx.DB, error) {
+		if cfg.Connect != nil {
+			return cfg.Connect(cfg)
+		}
+		return d.createDBConnection(cfg, r)
 	}
-	db := newDB(dbKind, cfg.DatabaseName, conn, nil)
+	needsRefresh := d.d.IsConnNeedsRefreshError
+	handle := sqlplugin.NewDatabaseHandle(connect, needsRefresh, logger, metricsHandler)
+	db := newDB(dbKind, cfg.DatabaseName, d.d, handle, nil)
 	return db, nil
 }
 
@@ -77,12 +90,18 @@ func (d *plugin) CreateAdminDB(
 	dbKind sqlplugin.DbKind,
 	cfg *config.SQL,
 	r resolver.ServiceResolver,
+	logger log.Logger,
+	metricsHandler metrics.Handler,
 ) (sqlplugin.AdminDB, error) {
-	conn, err := d.createDBConnection(cfg, r)
-	if err != nil {
-		return nil, err
+	connect := func() (*sqlx.DB, error) {
+		if cfg.Connect != nil {
+			return cfg.Connect(cfg)
+		}
+		return d.createDBConnection(cfg, r)
 	}
-	db := newDB(dbKind, cfg.DatabaseName, conn, nil)
+	needsRefresh := d.d.IsConnNeedsRefreshError
+	handle := sqlplugin.NewDatabaseHandle(connect, needsRefresh, logger, metricsHandler)
+	db := newDB(dbKind, cfg.DatabaseName, d.d, handle, nil)
 	return db, nil
 }
 
@@ -95,7 +114,7 @@ func (d *plugin) createDBConnection(
 	resolver resolver.ServiceResolver,
 ) (*sqlx.DB, error) {
 	if cfg.DatabaseName != "" {
-		postgresqlSession, err := session.NewSession(cfg, resolver)
+		postgresqlSession, err := session.NewSession(cfg, d.d, resolver)
 		if err != nil {
 			return nil, err
 		}
@@ -111,6 +130,7 @@ func (d *plugin) createDBConnection(
 		cfg.DatabaseName = databaseName
 		if postgresqlSession, err := session.NewSession(
 			cfg,
+			d.d,
 			resolver,
 		); err == nil {
 			return postgresqlSession.DB, nil

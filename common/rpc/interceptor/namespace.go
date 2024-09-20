@@ -45,7 +45,7 @@ type (
 )
 
 // MustGetNamespaceName returns request namespace name
-// or EmptyName if there's error when retriving namespace name,
+// or EmptyName if there's error when retrieving namespace name,
 // e.g. unable to find namespace
 func MustGetNamespaceName(
 	namespaceRegistry namespace.Registry,
@@ -84,6 +84,6 @@ func GetNamespaceName(
 		return namespaceName, nil
 
 	default:
-		return namespace.EmptyName, serviceerror.NewInternal(fmt.Sprintf("unable to extract namespace info from request: %+v", req))
+		return namespace.EmptyName, serviceerror.NewInternal(fmt.Sprintf("unable to extract namespace info from request of type %T", req))
 	}
 }

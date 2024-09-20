@@ -30,13 +30,12 @@ import (
 	"time"
 
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
-
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/versionhistory"
-	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/workflow"
@@ -58,6 +57,10 @@ func standbyTaskPostActionNoOp(
 
 	if postActionInfo == nil {
 		return nil
+	}
+
+	if err, ok := postActionInfo.(error); ok {
+		return err
 	}
 
 	// return error so task processing logic will retry
@@ -102,6 +105,12 @@ type (
 		lastEventVersion int64
 	}
 
+	executionTimerPostActionInfo struct {
+		*historyResendInfo
+
+		currentRunID string
+	}
+
 	activityTaskPostActionInfo struct {
 		*historyResendInfo
 
@@ -113,22 +122,10 @@ type (
 	workflowTaskPostActionInfo struct {
 		*historyResendInfo
 
-		workflowTaskScheduleToStartTimeout *time.Duration
-		taskqueue                          taskqueuepb.TaskQueue
+		workflowTaskScheduleToStartTimeout time.Duration
+		taskqueue                          *taskqueuepb.TaskQueue
 		versionDirective                   *taskqueuespb.TaskVersionDirective
 	}
-
-	startChildExecutionPostActionInfo struct {
-		*historyResendInfo
-	}
-)
-
-var (
-	// verifyChildCompletionRecordedInfo is the post action info returned by
-	// standby close execution task action func. The actual content of the
-	// struct doesn't matter. We just need a non-nil pointer to to indicate
-	// that the verification has failed.
-	verifyChildCompletionRecordedInfo = &struct{}{}
 )
 
 func newHistoryResendInfo(
@@ -141,21 +138,34 @@ func newHistoryResendInfo(
 	}
 }
 
+func newExecutionTimerPostActionInfo(
+	mutableState workflow.MutableState,
+) (*executionTimerPostActionInfo, error) {
+	resendInfo, err := getHistoryResendInfo(mutableState)
+	if err != nil {
+		return nil, err
+	}
+
+	return &executionTimerPostActionInfo{
+		historyResendInfo: resendInfo,
+		currentRunID:      mutableState.GetExecutionState().RunId,
+	}, nil
+}
+
 func newActivityTaskPostActionInfo(
 	mutableState workflow.MutableState,
-	activityScheduleToStartTimeout time.Duration,
-	useCompatibleVersion bool,
+	activityInfo *persistencespb.ActivityInfo,
 ) (*activityTaskPostActionInfo, error) {
 	resendInfo, err := getHistoryResendInfo(mutableState)
 	if err != nil {
 		return nil, err
 	}
 
-	directive := worker_versioning.MakeDirectiveForActivityTask(mutableState.GetWorkerVersionStamp(), useCompatibleVersion)
+	directive := MakeDirectiveForActivityTask(mutableState, activityInfo)
 
 	return &activityTaskPostActionInfo{
 		historyResendInfo:                  resendInfo,
-		activityTaskScheduleToStartTimeout: activityScheduleToStartTimeout,
+		activityTaskScheduleToStartTimeout: activityInfo.ScheduleToStartTimeout.AsDuration(),
 		versionDirective:                   directive,
 	}, nil
 }
@@ -164,14 +174,14 @@ func newActivityRetryTimePostActionInfo(
 	mutableState workflow.MutableState,
 	taskQueue string,
 	activityScheduleToStartTimeout time.Duration,
-	useCompatibleVersion bool,
+	activityInfo *persistencespb.ActivityInfo,
 ) (*activityTaskPostActionInfo, error) {
 	resendInfo, err := getHistoryResendInfo(mutableState)
 	if err != nil {
 		return nil, err
 	}
 
-	directive := worker_versioning.MakeDirectiveForActivityTask(mutableState.GetWorkerVersionStamp(), useCompatibleVersion)
+	directive := MakeDirectiveForActivityTask(mutableState, activityInfo)
 
 	return &activityTaskPostActionInfo{
 		historyResendInfo:                  resendInfo,
@@ -183,18 +193,15 @@ func newActivityRetryTimePostActionInfo(
 
 func newWorkflowTaskPostActionInfo(
 	mutableState workflow.MutableState,
-	workflowTaskScheduleToStartTimeout *time.Duration,
-	taskqueue taskqueuepb.TaskQueue,
+	workflowTaskScheduleToStartTimeout time.Duration,
+	taskqueue *taskqueuepb.TaskQueue,
 ) (*workflowTaskPostActionInfo, error) {
 	resendInfo, err := getHistoryResendInfo(mutableState)
 	if err != nil {
 		return nil, err
 	}
 
-	directive := worker_versioning.MakeDirectiveForWorkflowTask(
-		mutableState.GetWorkerVersionStamp(),
-		mutableState.GetLastWorkflowTaskStartedEventID(),
-	)
+	directive := MakeDirectiveForWorkflowTask(mutableState)
 
 	return &workflowTaskPostActionInfo{
 		historyResendInfo:                  resendInfo,

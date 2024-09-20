@@ -31,14 +31,16 @@ import (
 	"fmt"
 	"sync"
 
+	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/server/api/adminservice/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
-	"go.temporal.io/server/api/historyservice/v1"
+	historyspb "go.temporal.io/server/api/history/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/client"
-	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/xdc"
 	deletemanager "go.temporal.io/server/service/history/deletemanager"
@@ -120,13 +122,38 @@ func newDLQHandler(
 		resender: xdc.NewNDCHistoryResender(
 			shard.GetNamespaceRegistry(),
 			clientBean,
-			func(ctx context.Context, request *historyservice.ReplicateEventsV2Request) error {
-				_, err := clientBean.GetHistoryClient().ReplicateEventsV2(ctx, request)
-				return err
+			func(
+				ctx context.Context,
+				sourceClusterName string,
+				namespaceId namespace.ID,
+				workflowId string,
+				runId string,
+				events [][]*historypb.HistoryEvent,
+				versionHistory []*historyspb.VersionHistoryItem,
+			) error {
+				engine, err := shard.GetEngine(ctx)
+				if err != nil {
+					return err
+				}
+				return engine.ReplicateHistoryEvents(
+					ctx,
+					definition.WorkflowKey{
+						NamespaceID: namespaceId.String(),
+						WorkflowID:  workflowId,
+						RunID:       runId,
+					},
+					nil,
+					versionHistory,
+					events,
+					nil,
+					"",
+				)
+
 			},
 			shard.GetPayloadSerializer(),
 			shard.GetConfig().StandbyTaskReReplicationContextTimeout,
 			shard.GetLogger(),
+			nil,
 		),
 		taskExecutors:        taskExecutors,
 		taskExecutorProvider: taskExecutorProvider,
@@ -204,7 +231,7 @@ func (r *dlqHandlerImpl) MergeMessages(
 		return nil, err
 	}
 
-	taskExecutor, err := r.getOrCreateTaskExecutor(ctx, sourceCluster)
+	taskExecutor, err := r.getOrCreateTaskExecutor(sourceCluster)
 	if err != nil {
 		return nil, err
 	}
@@ -258,7 +285,6 @@ func (r *dlqHandlerImpl) readMessagesWithAckLevel(
 		GetHistoryTasksRequest: persistence.GetHistoryTasksRequest{
 			ShardID:             r.shard.GetShardID(),
 			TaskCategory:        tasks.CategoryReplication,
-			ReaderID:            common.DefaultQueueReaderID,
 			InclusiveMinTaskKey: tasks.NewImmediateKey(ackLevel + 1),
 			ExclusiveMaxTaskKey: tasks.NewImmediateKey(lastMessageID + 1),
 			BatchSize:           pageSize,
@@ -314,6 +340,14 @@ func (r *dlqHandlerImpl) readMessagesWithAckLevel(
 				NextEventId:      0,
 				ScheduledEventId: 0,
 			})
+		case *tasks.SyncHSMTask:
+			taskInfo = append(taskInfo, &replicationspb.ReplicationTaskInfo{
+				NamespaceId: task.NamespaceID,
+				WorkflowId:  task.WorkflowID,
+				RunId:       task.RunID,
+				TaskType:    enumsspb.TASK_TYPE_REPLICATION_SYNC_HSM,
+				TaskId:      task.TaskID,
+			})
 		default:
 			panic(fmt.Sprintf("Unknown repication task type: %v", task))
 		}
@@ -336,7 +370,7 @@ func (r *dlqHandlerImpl) readMessagesWithAckLevel(
 	return dlqResponse.ReplicationTasks, taskInfo, ackLevel, pageToken, nil
 }
 
-func (r *dlqHandlerImpl) getOrCreateTaskExecutor(ctx context.Context, clusterName string) (TaskExecutor, error) {
+func (r *dlqHandlerImpl) getOrCreateTaskExecutor(clusterName string) (TaskExecutor, error) {
 	r.taskExecutorsLock.Lock()
 	defer r.taskExecutorsLock.Unlock()
 	if executor, ok := r.taskExecutors[clusterName]; ok {

@@ -30,14 +30,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/golang/mock/gomock"
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
-
 	"go.temporal.io/server/api/adminservicemock/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
@@ -55,15 +53,19 @@ import (
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/resourcetest"
+	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tests"
+	"go.uber.org/mock/gomock"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type (
 	taskProcessorSuite struct {
 		suite.Suite
 		*require.Assertions
+		protorequire.ProtoAssertions
 
 		controller                  *gomock.Controller
 		mockResource                *resourcetest.Test
@@ -93,15 +95,14 @@ func TestTaskProcessorSuite(t *testing.T) {
 }
 
 func (s *taskProcessorSuite) SetupSuite() {
-	rand.Seed(time.Now().UnixNano())
 }
 
 func (s *taskProcessorSuite) TearDownSuite() {
-
 }
 
 func (s *taskProcessorSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
+	s.ProtoAssertions = protorequire.New(s.T())
 	s.controller = gomock.NewController(s.T())
 
 	s.config = tests.NewDynamicConfig()
@@ -146,6 +147,7 @@ func (s *taskProcessorSuite) SetupTest() {
 		s.mockReplicationTaskFetcher,
 		s.mockReplicationTaskExecutor,
 		serialization.NewSerializer(),
+		NewExecutionManagerDLQWriter(s.mockExecutionManager),
 	).(*taskProcessorImpl)
 }
 
@@ -155,7 +157,7 @@ func (s *taskProcessorSuite) TearDownTest() {
 }
 
 func (s *taskProcessorSuite) TestHandleSyncShardStatus_Stale() {
-	now := timestamp.TimePtr(time.Now().Add(-2 * dropSyncShardTaskTimeThreshold))
+	now := timestamppb.New(time.Now().Add(-2 * dropSyncShardTaskTimeThreshold))
 	err := s.replicationTaskProcessor.handleSyncShardStatus(&replicationspb.SyncShardStatus{
 		StatusTime: now,
 	})
@@ -192,7 +194,7 @@ func (s *taskProcessorSuite) TestHandleReplicationTask_SyncActivity() {
 				Attempt:     attempt,
 			},
 		},
-		VisibilityTime: &now,
+		VisibilityTime: timestamppb.New(now),
 	}
 
 	s.mockReplicationTaskExecutor.EXPECT().Execute(gomock.Any(), task, false).Return(nil)
@@ -231,7 +233,7 @@ func (s *taskProcessorSuite) TestHandleReplicationTask_History() {
 				VersionHistoryItems: versionHistory,
 			},
 		},
-		VisibilityTime: &now,
+		VisibilityTime: timestamppb.New(now),
 	}
 
 	s.mockReplicationTaskExecutor.EXPECT().Execute(gomock.Any(), task, false).Return(nil)
@@ -384,6 +386,48 @@ func (s *taskProcessorSuite) TestConvertTaskToDLQTask_SyncWorkflowState() {
 	s.Equal(request, dlqTask)
 }
 
+func (s *taskProcessorSuite) TestConvertTaskToDLQTask_SyncHSM() {
+	namespaceID := uuid.NewRandom().String()
+	workflowID := uuid.New()
+	runID := uuid.NewRandom().String()
+	task := &replicationspb.ReplicationTask{
+		SourceTaskId: rand.Int63(),
+		TaskType:     enumsspb.REPLICATION_TASK_TYPE_SYNC_HSM_TASK,
+		Attributes: &replicationspb.ReplicationTask_SyncHsmAttributes{SyncHsmAttributes: &replicationspb.SyncHSMAttributes{
+			NamespaceId: namespaceID,
+			WorkflowId:  workflowID,
+			RunId:       runID,
+			VersionHistory: &historyspb.VersionHistory{
+				BranchToken: []byte("branchToken"),
+				Items: []*historyspb.VersionHistoryItem{{
+					EventId: 10,
+					Version: 20,
+				}},
+			},
+			StateMachineNode: &persistencespb.StateMachineNode{
+				Data: []byte("stateMachineData"),
+			},
+		}},
+		VisibilityTime: timestamppb.New(time.Now()),
+	}
+	request := &persistence.PutReplicationTaskToDLQRequest{
+		ShardID:           s.shardID,
+		SourceClusterName: cluster.TestAlternativeClusterName,
+		TaskInfo: &persistencespb.ReplicationTaskInfo{
+			NamespaceId:    namespaceID,
+			WorkflowId:     workflowID,
+			RunId:          runID,
+			TaskId:         task.GetSourceTaskId(),
+			TaskType:       enumsspb.TASK_TYPE_REPLICATION_SYNC_HSM,
+			VisibilityTime: task.GetVisibilityTime(),
+		},
+	}
+
+	dlqTask, err := s.replicationTaskProcessor.convertTaskToDLQTask(task)
+	s.NoError(err)
+	s.Equal(request, dlqTask)
+}
+
 func (s *taskProcessorSuite) TestConvertTaskToDLQTask_History() {
 	namespaceID := uuid.NewRandom().String()
 	workflowID := uuid.New()
@@ -482,7 +526,7 @@ func (s *taskProcessorSuite) TestPaginationFn_Success_More() {
 	requestToken := &replicationspb.ReplicationToken{
 		ShardId:                     s.shardID,
 		LastProcessedMessageId:      maxRxProcessedTaskID,
-		LastProcessedVisibilityTime: &time.Time{},
+		LastProcessedVisibilityTime: nil,
 		LastRetrievedMessageId:      maxRxReceivedTaskID,
 	}
 
@@ -555,7 +599,7 @@ func (s *taskProcessorSuite) TestPaginationFn_Success_NoMore() {
 	requestToken := &replicationspb.ReplicationToken{
 		ShardId:                     s.shardID,
 		LastProcessedMessageId:      maxRxProcessedTaskID,
-		LastProcessedVisibilityTime: &time.Time{},
+		LastProcessedVisibilityTime: nil,
 		LastRetrievedMessageId:      maxRxReceivedTaskID,
 	}
 
@@ -581,7 +625,6 @@ func (s *taskProcessorSuite) TestPaginationFn_Success_NoMore() {
 }
 
 func (s *taskProcessorSuite) TestPaginationFn_Error() {
-
 	maxRxProcessedTaskID := rand.Int63()
 	maxRxReceivedTaskID := rand.Int63()
 	rxTaskBackoff := time.Duration(rand.Int63())
@@ -592,14 +635,14 @@ func (s *taskProcessorSuite) TestPaginationFn_Error() {
 	requestToken := &replicationspb.ReplicationToken{
 		ShardId:                     s.shardID,
 		LastProcessedMessageId:      maxRxProcessedTaskID,
-		LastProcessedVisibilityTime: &time.Time{},
+		LastProcessedVisibilityTime: nil,
 		LastRetrievedMessageId:      maxRxReceivedTaskID,
 	}
 
 	go func() {
 		request := <-s.requestChan
 		defer close(request.respChan)
-		s.Equal(requestToken, request.token)
+		s.ProtoEqual(requestToken, request.token)
 	}()
 
 	tasks, _, err := s.replicationTaskProcessor.paginationFn(nil)

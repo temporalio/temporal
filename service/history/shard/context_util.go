@@ -25,68 +25,11 @@
 package shard
 
 import (
-	"time"
-
 	persistencespb "go.temporal.io/server/api/persistence/v1"
-	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/log/tag"
-	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/service/history/tasks"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
-
-func emitShardInfoMetricsLogsLocked(
-	metricsHandler metrics.Handler,
-	logger log.Logger,
-	queueStates map[int32]*persistencespb.QueueState,
-	immediateTaskExclusiveMaxReadLevel int64,
-	scheduledTaskMaxReadLevel time.Time,
-) {
-Loop:
-	for categoryID, queueState := range queueStates {
-		category, ok := tasks.GetCategoryByID(categoryID)
-		if !ok {
-			continue Loop
-		}
-
-		switch category.Type() {
-		case tasks.CategoryTypeImmediate:
-			minTaskKey := getMinTaskKey(queueState)
-			if minTaskKey == nil {
-				continue Loop
-			}
-			lag := immediateTaskExclusiveMaxReadLevel - minTaskKey.TaskID
-			if lag > logWarnImmediateTaskLag {
-				logger.Warn(
-					"Shard queue lag exceeds warn threshold.",
-					tag.ShardQueueAcks(category.Name(), minTaskKey.TaskID),
-				)
-			}
-			metricsHandler.Histogram(
-				metrics.ShardInfoImmediateQueueLagHistogram.GetMetricName(),
-				metrics.ShardInfoImmediateQueueLagHistogram.GetMetricUnit(),
-			).Record(lag, metrics.TaskCategoryTag(category.Name()))
-
-		case tasks.CategoryTypeScheduled:
-			minTaskKey := getMinTaskKey(queueState)
-			if minTaskKey == nil {
-				continue Loop
-			}
-			lag := scheduledTaskMaxReadLevel.Sub(minTaskKey.FireTime)
-			if lag > logWarnScheduledTaskLag {
-				logger.Warn(
-					"Shard queue lag exceeds warn threshold.",
-					tag.ShardQueueAcks(category.Name(), minTaskKey.FireTime),
-				)
-			}
-			metricsHandler.Timer(
-				metrics.ShardInfoScheduledQueueLagTimer.GetMetricName(),
-			).Record(lag, metrics.TaskCategoryTag(category.Name()))
-		default:
-			logger.Error("Unknown task category type", tag.NewStringTag("task-category", category.Type().String()))
-		}
-	}
-}
 
 func convertPersistenceAckLevelToTaskKey(
 	categoryType tasks.CategoryType,
@@ -121,7 +64,7 @@ func ConvertToPersistenceTaskKey(
 	key tasks.Key,
 ) *persistencespb.TaskKey {
 	return &persistencespb.TaskKey{
-		FireTime: timestamp.TimePtr(key.FireTime),
+		FireTime: timestamppb.New(key.FireTime),
 		TaskId:   key.TaskID,
 	}
 }

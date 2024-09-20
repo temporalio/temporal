@@ -31,243 +31,15 @@ import (
 	"time"
 
 	"github.com/pborman/uuid"
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
-
+	enumsspb "go.temporal.io/server/api/enums/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/dynamicconfig"
-	"go.temporal.io/server/common/primitives/timestamp"
+	"google.golang.org/protobuf/testing/protopack"
 )
-
-func TestValidateRetryPolicy(t *testing.T) {
-	testCases := []struct {
-		name          string
-		input         *commonpb.RetryPolicy
-		wantErr       bool
-		wantErrString string
-	}{
-		{
-			name:          "nil policy is okay",
-			input:         nil,
-			wantErr:       false,
-			wantErrString: "",
-		},
-		{
-			name: "maxAttempts is 1, coefficient < 1",
-			input: &commonpb.RetryPolicy{
-				BackoffCoefficient: 0.5,
-				MaximumAttempts:    1,
-			},
-			wantErr:       false,
-			wantErrString: "",
-		},
-		{
-			name: "initial interval negative",
-			input: &commonpb.RetryPolicy{
-				InitialInterval: timestamp.DurationPtr(-22 * time.Second),
-			},
-			wantErr:       true,
-			wantErrString: "InitialInterval cannot be negative on retry policy.",
-		},
-		{
-			name: "coefficient < 1",
-			input: &commonpb.RetryPolicy{
-				BackoffCoefficient: 0.8,
-			},
-			wantErr:       true,
-			wantErrString: "BackoffCoefficient cannot be less than 1 on retry policy.",
-		},
-		{
-			name: "maximum interval in seconds is negative",
-			input: &commonpb.RetryPolicy{
-				BackoffCoefficient: 2.0,
-				MaximumInterval:    timestamp.DurationPtr(-2 * time.Second),
-			},
-			wantErr:       true,
-			wantErrString: "MaximumInterval cannot be negative on retry policy.",
-		},
-		{
-			name: "maximum interval in less than initial interval",
-			input: &commonpb.RetryPolicy{
-				BackoffCoefficient: 2.0,
-				MaximumInterval:    timestamp.DurationPtr(5 * time.Second),
-				InitialInterval:    timestamp.DurationPtr(10 * time.Second),
-			},
-			wantErr:       true,
-			wantErrString: "MaximumInterval cannot be less than InitialInterval on retry policy.",
-		},
-		{
-			name: "maximum attempts negative",
-			input: &commonpb.RetryPolicy{
-				BackoffCoefficient: 2.0,
-				MaximumAttempts:    -3,
-			},
-			wantErr:       true,
-			wantErrString: "MaximumAttempts cannot be negative on retry policy.",
-		},
-		{
-			name: "timeout nonretryable error - valid type",
-			input: &commonpb.RetryPolicy{
-				BackoffCoefficient: 1,
-				NonRetryableErrorTypes: []string{
-					TimeoutFailureTypePrefix + enumspb.TIMEOUT_TYPE_START_TO_CLOSE.String(),
-					TimeoutFailureTypePrefix + enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START.String(),
-					TimeoutFailureTypePrefix + enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE.String(),
-					TimeoutFailureTypePrefix + enumspb.TIMEOUT_TYPE_HEARTBEAT.String(),
-				},
-			},
-			wantErr:       false,
-			wantErrString: "",
-		},
-		{
-			name: "timeout nonretryable error - unspecified type",
-			input: &commonpb.RetryPolicy{
-				BackoffCoefficient: 1,
-				NonRetryableErrorTypes: []string{
-					TimeoutFailureTypePrefix + enumspb.TIMEOUT_TYPE_UNSPECIFIED.String(),
-				},
-			},
-			wantErr:       true,
-			wantErrString: "Invalid timeout type value: Unspecified.",
-		},
-		{
-			name: "timeout nonretryable error - unknown type",
-			input: &commonpb.RetryPolicy{
-				BackoffCoefficient: 1,
-				NonRetryableErrorTypes: []string{
-					TimeoutFailureTypePrefix + "unknown",
-				},
-			},
-			wantErr:       true,
-			wantErrString: "Invalid timeout type value: unknown.",
-		},
-	}
-
-	for _, tt := range testCases {
-		t.Run(tt.name, func(t *testing.T) {
-			err := ValidateRetryPolicy(tt.input)
-			if tt.wantErr {
-				assert.NotNil(t, err, "expected error - did not get one")
-				assert.Equal(t, err.Error(), tt.wantErrString, "unexpected error message")
-			} else {
-				assert.Nil(t, err, "unexpected error")
-			}
-		})
-	}
-}
-
-func TestEnsureRetryPolicyDefaults(t *testing.T) {
-	defaultRetrySettings := DefaultRetrySettings{
-		InitialInterval:            time.Second,
-		MaximumIntervalCoefficient: 100,
-		BackoffCoefficient:         2.0,
-		MaximumAttempts:            120,
-	}
-
-	defaultRetryPolicy := &commonpb.RetryPolicy{
-		InitialInterval:    timestamp.DurationPtr(1 * time.Second),
-		MaximumInterval:    timestamp.DurationPtr(100 * time.Second),
-		BackoffCoefficient: 2.0,
-		MaximumAttempts:    120,
-	}
-
-	testCases := []struct {
-		name  string
-		input *commonpb.RetryPolicy
-		want  *commonpb.RetryPolicy
-	}{
-		{
-			name:  "default fields are set ",
-			input: &commonpb.RetryPolicy{},
-			want:  defaultRetryPolicy,
-		},
-		{
-			name: "non-default InitialIntervalInSeconds is not set",
-			input: &commonpb.RetryPolicy{
-				InitialInterval: timestamp.DurationPtr(2 * time.Second),
-			},
-			want: &commonpb.RetryPolicy{
-				InitialInterval:    timestamp.DurationPtr(2 * time.Second),
-				MaximumInterval:    timestamp.DurationPtr(200 * time.Second),
-				BackoffCoefficient: 2,
-				MaximumAttempts:    120,
-			},
-		},
-		{
-			name: "non-default MaximumIntervalInSeconds is not set",
-			input: &commonpb.RetryPolicy{
-				MaximumInterval: timestamp.DurationPtr(1000 * time.Second),
-			},
-			want: &commonpb.RetryPolicy{
-				InitialInterval:    timestamp.DurationPtr(1 * time.Second),
-				MaximumInterval:    timestamp.DurationPtr(1000 * time.Second),
-				BackoffCoefficient: 2,
-				MaximumAttempts:    120,
-			},
-		},
-		{
-			name: "non-default BackoffCoefficient is not set",
-			input: &commonpb.RetryPolicy{
-				BackoffCoefficient: 1.5,
-			},
-			want: &commonpb.RetryPolicy{
-				InitialInterval:    timestamp.DurationPtr(1 * time.Second),
-				MaximumInterval:    timestamp.DurationPtr(100 * time.Second),
-				BackoffCoefficient: 1.5,
-				MaximumAttempts:    120,
-			},
-		},
-		{
-			name: "non-default Maximum attempts is not set",
-			input: &commonpb.RetryPolicy{
-				MaximumAttempts: 49,
-			},
-			want: &commonpb.RetryPolicy{
-				InitialInterval:    timestamp.DurationPtr(1 * time.Second),
-				MaximumInterval:    timestamp.DurationPtr(100 * time.Second),
-				BackoffCoefficient: 2,
-				MaximumAttempts:    49,
-			},
-		},
-		{
-			name: "non-retryable errors are set",
-			input: &commonpb.RetryPolicy{
-				NonRetryableErrorTypes: []string{"testFailureType"},
-			},
-			want: &commonpb.RetryPolicy{
-				InitialInterval:        timestamp.DurationPtr(1 * time.Second),
-				MaximumInterval:        timestamp.DurationPtr(100 * time.Second),
-				BackoffCoefficient:     2.0,
-				MaximumAttempts:        120,
-				NonRetryableErrorTypes: []string{"testFailureType"},
-			},
-		},
-	}
-
-	for _, tt := range testCases {
-		t.Run(tt.name, func(t *testing.T) {
-			EnsureRetryPolicyDefaults(tt.input, defaultRetrySettings)
-			assert.Equal(t, tt.want, tt.input)
-		})
-	}
-}
-
-func Test_FromConfigToRetryPolicy(t *testing.T) {
-	options := map[string]interface{}{
-		initialIntervalInSecondsConfigKey:   2,
-		maximumIntervalCoefficientConfigKey: 100.0,
-		backoffCoefficientConfigKey:         4.0,
-		maximumAttemptsConfigKey:            5,
-	}
-
-	defaultSettings := FromConfigToDefaultRetrySettings(options)
-	assert.Equal(t, 2*time.Second, defaultSettings.InitialInterval)
-	assert.Equal(t, 100.0, defaultSettings.MaximumIntervalCoefficient)
-	assert.Equal(t, 4.0, defaultSettings.BackoffCoefficient)
-	assert.Equal(t, int32(5), defaultSettings.MaximumAttempts)
-}
 
 func TestIsContextDeadlineExceededErr(t *testing.T) {
 	ctx, cancel := context.WithDeadline(context.Background(), time.Now().Add(-time.Millisecond))
@@ -515,4 +287,134 @@ func TestVerifyShardIDMapping_2VS4(t *testing.T) {
 	require.NoError(t, VerifyShardIDMapping(2, 4, 2, 2))
 	require.Error(t, VerifyShardIDMapping(2, 4, 2, 3))
 	require.NoError(t, VerifyShardIDMapping(2, 4, 2, 4))
+}
+
+func TestIsServiceClientTransientError_ResourceExhausted(t *testing.T) {
+	require.False(t, IsServiceClientTransientError(
+		&serviceerror.ResourceExhausted{
+			Cause:   enumspb.RESOURCE_EXHAUSTED_CAUSE_RPS_LIMIT,
+			Scope:   enumspb.RESOURCE_EXHAUSTED_SCOPE_NAMESPACE,
+			Message: "Namespace RPS limit exceeded",
+		},
+	))
+	require.False(t, IsServiceClientTransientError(
+		&serviceerror.ResourceExhausted{
+			Cause:   enumspb.RESOURCE_EXHAUSTED_CAUSE_CONCURRENT_LIMIT,
+			Scope:   enumspb.RESOURCE_EXHAUSTED_SCOPE_NAMESPACE,
+			Message: "Max number of conconcurrent pollers/updates/batch operation reached.",
+		},
+	))
+	require.False(t, IsServiceClientTransientError(
+		&serviceerror.ResourceExhausted{
+			Cause:   enumspb.RESOURCE_EXHAUSTED_CAUSE_PERSISTENCE_LIMIT,
+			Scope:   enumspb.RESOURCE_EXHAUSTED_SCOPE_NAMESPACE,
+			Message: "Namespace persistence RPS reached.",
+		},
+	))
+	require.False(t, IsServiceClientTransientError(
+		&serviceerror.ResourceExhausted{
+			Cause:   enumspb.RESOURCE_EXHAUSTED_CAUSE_BUSY_WORKFLOW,
+			Scope:   enumspb.RESOURCE_EXHAUSTED_SCOPE_NAMESPACE,
+			Message: "Workflow is busy.",
+		},
+	))
+	require.False(t, IsServiceClientTransientError(
+		&serviceerror.ResourceExhausted{
+			Cause:   enumspb.RESOURCE_EXHAUSTED_CAUSE_APS_LIMIT,
+			Scope:   enumspb.RESOURCE_EXHAUSTED_SCOPE_NAMESPACE,
+			Message: "APS limit exceeded",
+		},
+	))
+
+	require.True(t, IsServiceClientTransientError(
+		&serviceerror.ResourceExhausted{
+			Cause:   enumspb.RESOURCE_EXHAUSTED_CAUSE_RPS_LIMIT,
+			Scope:   enumspb.RESOURCE_EXHAUSTED_SCOPE_SYSTEM,
+			Message: "System level RPS limit exceeded",
+		},
+	))
+	require.True(t, IsServiceClientTransientError(
+		&serviceerror.ResourceExhausted{
+			Cause:   enumspb.RESOURCE_EXHAUSTED_CAUSE_PERSISTENCE_LIMIT,
+			Scope:   enumspb.RESOURCE_EXHAUSTED_SCOPE_SYSTEM,
+			Message: "System level persistence RPS reached.",
+		},
+	))
+	require.True(t, IsServiceClientTransientError(
+		&serviceerror.ResourceExhausted{
+			Cause:   enumspb.RESOURCE_EXHAUSTED_CAUSE_SYSTEM_OVERLOADED,
+			Scope:   enumspb.RESOURCE_EXHAUSTED_SCOPE_SYSTEM,
+			Message: "Mutable state cache is full",
+		},
+	))
+
+}
+
+func TestDiscardUnknownProto(t *testing.T) {
+	msRecord := &persistencespb.WorkflowMutableState{
+		ExecutionInfo: &persistencespb.WorkflowExecutionInfo{
+			NamespaceId: uuid.New(),
+			WorkflowId:  uuid.New(),
+		},
+		ExecutionState: &persistencespb.WorkflowExecutionState{
+			RunId: uuid.New(),
+			State: enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
+		},
+		TimerInfos: map[string]*persistencespb.TimerInfo{
+			"timer1": {
+				Version:        123,
+				StartedEventId: 10,
+			},
+		},
+		BufferedEvents: []*historypb.HistoryEvent{
+			{
+				EventId: -123,
+				Version: 123,
+				Attributes: &historypb.HistoryEvent_ActivityTaskCompletedEventAttributes{
+					ActivityTaskCompletedEventAttributes: &historypb.ActivityTaskCompletedEventAttributes{
+						ScheduledEventId: 14,
+						StartedEventId:   15,
+					},
+				},
+			},
+		},
+		NextEventId: 101,
+	}
+
+	data, err := msRecord.Marshal()
+	require.NoError(t, err)
+
+	// now add some unknown fields to the record
+	msRecord.ProtoReflect().SetUnknown(
+		protopack.Message{
+			protopack.Tag{Number: 1000, Type: protopack.BytesType},
+		}.Marshal(),
+	)
+	msRecord.ExecutionInfo.ProtoReflect().SetUnknown(
+		protopack.Message{
+			protopack.Int32(-1),
+		}.Marshal(),
+	)
+	msRecord.TimerInfos["timer1"].ProtoReflect().SetUnknown(
+		protopack.Message{
+			protopack.String("unknown string"),
+		}.Marshal(),
+	)
+	msRecord.BufferedEvents[0].ProtoReflect().SetUnknown(
+		protopack.Message{
+			protopack.Bool(true),
+		}.Marshal(),
+	)
+
+	dataWithUnknown, err := msRecord.Marshal()
+	require.NoError(t, err)
+	require.NotEqual(t, data, dataWithUnknown)
+
+	// discard unknown fields
+	err = DiscardUnknownProto(msRecord)
+	require.NoError(t, err)
+
+	dataWithoutUnknown, err := msRecord.Marshal()
+	require.NoError(t, err)
+	require.Equal(t, data, dataWithoutUnknown)
 }

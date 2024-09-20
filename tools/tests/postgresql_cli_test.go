@@ -29,127 +29,82 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/suite"
-
 	"go.temporal.io/server/common/persistence/sql/sqlplugin/postgresql"
 	"go.temporal.io/server/environment"
 	postgresqlversionV12 "go.temporal.io/server/schema/postgresql/v12"
-	postgresqlversionV96 "go.temporal.io/server/schema/postgresql/v96"
 	"go.temporal.io/server/tools/sql/clitest"
 )
 
-func TestPostgreSQLConnTestSuite(t *testing.T) {
-	suite.Run(t, clitest.NewSQLConnTestSuite(
-		environment.GetPostgreSQLAddress(),
-		strconv.Itoa(environment.GetPostgreSQLPort()),
-		postgresql.PluginName, testPostgreSQLQuery,
-	))
+type PostgresqlSuite struct {
+	suite.Suite
+	pluginName string
 }
 
-func TestPostgreSQLHandlerTestSuite(t *testing.T) {
-	suite.Run(t, clitest.NewHandlerTestSuite(
+func (p *PostgresqlSuite) TestPostgreSQLConnTestSuite() {
+	suite.Run(p.T(), clitest.NewSQLConnTestSuite(
 		environment.GetPostgreSQLAddress(),
 		strconv.Itoa(environment.GetPostgreSQLPort()),
-		postgresql.PluginName,
-	))
-}
-
-func TestPostgreSQLSetupSchemaTestSuite(t *testing.T) {
-	t.Setenv("SQL_HOST", environment.GetPostgreSQLAddress())
-	t.Setenv("SQL_PORT", strconv.Itoa(environment.GetPostgreSQLPort()))
-	t.Setenv("SQL_USER", testUser)
-	t.Setenv("SQL_PASSWORD", testPassword)
-	suite.Run(t, clitest.NewSetupSchemaTestSuite(
-		environment.GetPostgreSQLAddress(),
-		strconv.Itoa(environment.GetPostgreSQLPort()),
-		postgresql.PluginName,
+		p.pluginName,
 		testPostgreSQLQuery,
 	))
 }
 
-func TestPostgreSQLUpdateSchemaTestSuite(t *testing.T) {
-	t.Setenv("SQL_HOST", environment.GetPostgreSQLAddress())
-	t.Setenv("SQL_PORT", strconv.Itoa(environment.GetPostgreSQLPort()))
-	t.Setenv("SQL_USER", testUser)
-	t.Setenv("SQL_PASSWORD", testPassword)
-	suite.Run(t, clitest.NewUpdateSchemaTestSuite(
+func (p *PostgresqlSuite) TestPostgreSQLHandlerTestSuite() {
+	suite.Run(p.T(), clitest.NewHandlerTestSuite(
 		environment.GetPostgreSQLAddress(),
 		strconv.Itoa(environment.GetPostgreSQLPort()),
-		postgresql.PluginName,
+		p.pluginName,
+	))
+}
+
+func (p *PostgresqlSuite) TestPostgreSQLSetupSchemaTestSuite() {
+	p.T().Setenv("SQL_HOST", environment.GetPostgreSQLAddress())
+	p.T().Setenv("SQL_PORT", strconv.Itoa(environment.GetPostgreSQLPort()))
+	p.T().Setenv("SQL_USER", testUser)
+	p.T().Setenv("SQL_PASSWORD", testPassword)
+	suite.Run(p.T(), clitest.NewSetupSchemaTestSuite(
+		environment.GetPostgreSQLAddress(),
+		strconv.Itoa(environment.GetPostgreSQLPort()),
+		p.pluginName,
+		testPostgreSQLQuery,
+	))
+}
+
+func (p *PostgresqlSuite) TestPostgreSQLUpdateSchemaTestSuite() {
+	p.T().Setenv("SQL_HOST", environment.GetPostgreSQLAddress())
+	p.T().Setenv("SQL_PORT", strconv.Itoa(environment.GetPostgreSQLPort()))
+	p.T().Setenv("SQL_USER", testUser)
+	p.T().Setenv("SQL_PASSWORD", testPassword)
+	suite.Run(p.T(), clitest.NewUpdateSchemaTestSuite(
+		environment.GetPostgreSQLAddress(),
+		strconv.Itoa(environment.GetPostgreSQLPort()),
+		p.pluginName,
 		testPostgreSQLQuery,
 		testPostgreSQLExecutionSchemaVersionDir,
-		postgresqlversionV96.Version,
+		postgresqlversionV12.Version,
 		testPostgreSQLVisibilitySchemaVersionDir,
-		postgresqlversionV96.VisibilityVersion,
+		postgresqlversionV12.VisibilityVersion,
 	))
 }
 
-func TestPostgreSQLVersionTestSuite(t *testing.T) {
-	t.Setenv("SQL_USER", testUser)
-	t.Setenv("SQL_PASSWORD", testPassword)
-	suite.Run(t, clitest.NewVersionTestSuite(
+func (p *PostgresqlSuite) TestPostgreSQLVersionTestSuite() {
+	p.T().Setenv("SQL_USER", testUser)
+	p.T().Setenv("SQL_PASSWORD", testPassword)
+	suite.Run(p.T(), clitest.NewVersionTestSuite(
 		environment.GetPostgreSQLAddress(),
 		strconv.Itoa(environment.GetPostgreSQLPort()),
-		postgresql.PluginName,
+		p.pluginName,
 		testPostgreSQLExecutionSchemaFile,
 		testPostgreSQLVisibilitySchemaFile,
 	))
 }
 
-func TestPostgreSQL12ConnTestSuite(t *testing.T) {
-	suite.Run(t, clitest.NewSQLConnTestSuite(
-		environment.GetPostgreSQLAddress(),
-		strconv.Itoa(environment.GetPostgreSQLPort()),
-		postgresql.PluginNameV12,
-		testPostgreSQLQuery,
-	))
+func TestPostgres(t *testing.T) {
+	s := &PostgresqlSuite{pluginName: postgresql.PluginName}
+	suite.Run(t, s)
 }
 
-func TestPostgreSQL12HandlerTestSuite(t *testing.T) {
-	suite.Run(t, clitest.NewHandlerTestSuite(
-		environment.GetPostgreSQLAddress(),
-		strconv.Itoa(environment.GetPostgreSQLPort()),
-		postgresql.PluginNameV12,
-	))
-}
-
-func TestPostgreSQL12SetupSchemaTestSuite(t *testing.T) {
-	t.Setenv("SQL_HOST", environment.GetPostgreSQLAddress())
-	t.Setenv("SQL_PORT", strconv.Itoa(environment.GetPostgreSQLPort()))
-	t.Setenv("SQL_USER", testUser)
-	t.Setenv("SQL_PASSWORD", testPassword)
-	suite.Run(t, clitest.NewSetupSchemaTestSuite(
-		environment.GetPostgreSQLAddress(),
-		strconv.Itoa(environment.GetPostgreSQLPort()),
-		postgresql.PluginNameV12,
-		testPostgreSQLQuery,
-	))
-}
-
-func TestPostgreSQL12UpdateSchemaTestSuite(t *testing.T) {
-	t.Setenv("SQL_HOST", environment.GetPostgreSQLAddress())
-	t.Setenv("SQL_PORT", strconv.Itoa(environment.GetPostgreSQLPort()))
-	t.Setenv("SQL_USER", testUser)
-	t.Setenv("SQL_PASSWORD", testPassword)
-	suite.Run(t, clitest.NewUpdateSchemaTestSuite(
-		environment.GetPostgreSQLAddress(),
-		strconv.Itoa(environment.GetPostgreSQLPort()),
-		postgresql.PluginNameV12,
-		testPostgreSQLQuery,
-		testPostgreSQL12ExecutionSchemaVersionDir,
-		postgresqlversionV12.Version,
-		testPostgreSQL12VisibilitySchemaVersionDir,
-		postgresqlversionV12.VisibilityVersion,
-	))
-}
-
-func TestPostgreSQL12VersionTestSuite(t *testing.T) {
-	t.Setenv("SQL_USER", testUser)
-	t.Setenv("SQL_PASSWORD", testPassword)
-	suite.Run(t, clitest.NewVersionTestSuite(
-		environment.GetPostgreSQLAddress(),
-		strconv.Itoa(environment.GetPostgreSQLPort()),
-		postgresql.PluginNameV12,
-		testPostgreSQL12ExecutionSchemaFile,
-		testPostgreSQL12VisibilitySchemaFile,
-	))
+func TestPostgresPGX(t *testing.T) {
+	s := &PostgresqlSuite{pluginName: postgresql.PluginNamePGX}
+	suite.Run(t, s)
 }

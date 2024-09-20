@@ -1,3 +1,5 @@
+// The MIT License
+//
 // Copyright (c) 2020 Temporal Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -25,9 +27,9 @@ package temporal.server.api.token.v1;
 option go_package = "go.temporal.io/server/api/token/v1;token";
 
 import "google/protobuf/timestamp.proto";
-import "dependencies/gogoproto/gogo.proto";
 import "temporal/server/api/clock/v1/message.proto";
 import "temporal/server/api/history/v1/message.proto";
+import "temporal/server/api/persistence/v1/hsm.proto";
 
 message HistoryContinuation {
     string run_id = 1;
@@ -38,6 +40,7 @@ message HistoryContinuation {
     temporal.server.api.history.v1.TransientWorkflowTaskInfo transient_workflow_task = 7;
     bytes branch_token = 8;
     reserved 9;
+    temporal.server.api.history.v1.VersionHistoryItem version_history_item = 10;
 }
 
 message RawHistoryContinuation{
@@ -65,11 +68,41 @@ message Task {
     temporal.server.api.clock.v1.VectorClock clock = 9;
     int64 started_event_id = 10;
     int64 version = 11;
-    google.protobuf.Timestamp started_time = 12 [(gogoproto.stdtime) = true];
+    google.protobuf.Timestamp started_time = 12;
 }
 
 message QueryTask {
     string namespace_id = 1;
     string task_queue = 2;
     string task_id = 3;
+}
+
+message NexusTask {
+    string namespace_id = 1;
+    string task_queue = 2;
+    string task_id = 3;
+}
+
+// A reference for loading a history event.
+message HistoryEventRef {
+    // Event ID.
+    int64 event_id = 1;
+    // Event batch ID - the first event ID in the batch the event was stored in.
+    int64 event_batch_id = 2;
+}
+
+// A completion token for a Nexus operation started from a workflow.
+message NexusOperationCompletion {
+    // Namespace UUID.
+    string namespace_id = 1;
+    // Workflow ID.
+    string workflow_id = 2;
+    // Run ID at the time this token was generated.
+    string run_id = 3;
+    // Reference including the path to the backing Operation state machine and a version + transition count for
+    // staleness checks.
+    temporal.server.api.persistence.v1.StateMachineRef ref = 4;
+    // Request ID embedded in the NexusOperationScheduledEvent.
+    // Allows completing a started operation after a workflow has been reset.
+    string request_id = 5;
 }

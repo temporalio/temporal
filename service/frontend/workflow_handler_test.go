@@ -31,9 +31,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/golang/mock/gomock"
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	batchpb "go.temporal.io/api/batch/v1"
@@ -45,11 +45,9 @@ import (
 	replicationpb "go.temporal.io/api/replication/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
+	updatepb "go.temporal.io/api/update/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/health"
-
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/historyservicemock/v1"
 	"go.temporal.io/server/api/matchingservicemock/v1"
@@ -71,8 +69,16 @@ import (
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/resourcetest"
+	"go.temporal.io/server/common/rpc/interceptor"
 	"go.temporal.io/server/common/searchattribute"
+	e "go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/worker/batcher"
+	"go.temporal.io/server/service/worker/scheduler"
+	"go.uber.org/mock/gomock"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/health"
+	"google.golang.org/protobuf/types/known/durationpb"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 const (
@@ -154,7 +160,8 @@ func (s *workflowHandlerSuite) SetupTest() {
 
 	s.tokenSerializer = common.NewProtoTaskTokenSerializer()
 
-	s.mockVisibilityMgr.EXPECT().GetStoreNames().Return([]string{elasticsearch.PersistenceName})
+	s.mockVisibilityMgr.EXPECT().GetStoreNames().Return([]string{elasticsearch.PersistenceName}).AnyTimes()
+	s.mockExecutionManager.EXPECT().GetName().Return("mock-execution-manager").AnyTimes()
 }
 
 func (s *workflowHandlerSuite) TearDownTest() {
@@ -163,13 +170,15 @@ func (s *workflowHandlerSuite) TearDownTest() {
 
 func (s *workflowHandlerSuite) getWorkflowHandler(config *Config) *WorkflowHandler {
 	s.mockVisibilityMgr.EXPECT().GetIndexName().Return(esIndexName).AnyTimes()
+	healthInterceptor := interceptor.NewHealthInterceptor()
+	healthInterceptor.SetHealthy(true)
 	return NewWorkflowHandler(
 		config,
 		s.mockProducer,
 		s.mockResource.GetVisibilityManager(),
 		s.mockResource.GetLogger(),
 		s.mockResource.GetThrottledLogger(),
-		s.mockResource.GetExecutionManager(),
+		s.mockResource.GetExecutionManager().GetName(),
 		s.mockResource.GetClusterMetadataManager(),
 		s.mockResource.GetMetadataManager(),
 		s.mockResource.GetHistoryClient(),
@@ -184,6 +193,8 @@ func (s *workflowHandlerSuite) getWorkflowHandler(config *Config) *WorkflowHandl
 		health.NewServer(),
 		clock.NewRealTimeSource(),
 		s.mockResource.GetMembershipMonitor(),
+		healthInterceptor,
+		scheduler.NewSpecBuilder(),
 	)
 }
 
@@ -202,8 +213,8 @@ func (s *workflowHandlerSuite) TestDisableListVisibilityByFilter() {
 	listRequest := &workflowservice.ListOpenWorkflowExecutionsRequest{
 		Namespace: testNamespace.String(),
 		StartTimeFilter: &filterpb.StartTimeFilter{
-			EarliestTime: timestamp.TimePtr(time.Time{}),
-			LatestTime:   timestamp.TimePtr(time.Now().UTC()),
+			EarliestTime: nil,
+			LatestTime:   timestamppb.New(time.Now().UTC()),
 		},
 		Filters: &workflowservice.ListOpenWorkflowExecutionsRequest_ExecutionFilter{ExecutionFilter: &filterpb.WorkflowExecutionFilter{
 			WorkflowId: "wid",
@@ -225,8 +236,8 @@ func (s *workflowHandlerSuite) TestDisableListVisibilityByFilter() {
 	listRequest2 := &workflowservice.ListClosedWorkflowExecutionsRequest{
 		Namespace: testNamespace.String(),
 		StartTimeFilter: &filterpb.StartTimeFilter{
-			EarliestTime: timestamp.TimePtr(time.Time{}),
-			LatestTime:   timestamp.TimePtr(time.Now().UTC()),
+			EarliestTime: nil,
+			LatestTime:   timestamppb.New(time.Now().UTC()),
 		},
 		Filters: &workflowservice.ListClosedWorkflowExecutionsRequest_ExecutionFilter{ExecutionFilter: &filterpb.WorkflowExecutionFilter{
 			WorkflowId: "wid",
@@ -304,13 +315,13 @@ func (s *workflowHandlerSuite) TestStartWorkflowExecution_Failed_NamespaceNotSet
 		TaskQueue: &taskqueuepb.TaskQueue{
 			Name: "task-queue",
 		},
-		WorkflowExecutionTimeout: timestamp.DurationPtr(1 * time.Second),
-		WorkflowRunTimeout:       timestamp.DurationPtr(1 * time.Second),
-		WorkflowTaskTimeout:      timestamp.DurationPtr(1 * time.Second),
+		WorkflowExecutionTimeout: durationpb.New(1 * time.Second),
+		WorkflowRunTimeout:       durationpb.New(1 * time.Second),
+		WorkflowTaskTimeout:      durationpb.New(1 * time.Second),
 		RetryPolicy: &commonpb.RetryPolicy{
-			InitialInterval:    timestamp.DurationPtr(1 * time.Second),
+			InitialInterval:    durationpb.New(1 * time.Second),
 			BackoffCoefficient: 2,
-			MaximumInterval:    timestamp.DurationPtr(2 * time.Second),
+			MaximumInterval:    durationpb.New(2 * time.Second),
 			MaximumAttempts:    1,
 		},
 		RequestId: uuid.New(),
@@ -334,13 +345,13 @@ func (s *workflowHandlerSuite) TestStartWorkflowExecution_Failed_WorkflowIdNotSe
 		TaskQueue: &taskqueuepb.TaskQueue{
 			Name: "task-queue",
 		},
-		WorkflowExecutionTimeout: timestamp.DurationPtr(1 * time.Second),
-		WorkflowRunTimeout:       timestamp.DurationPtr(1 * time.Second),
-		WorkflowTaskTimeout:      timestamp.DurationPtr(1 * time.Second),
+		WorkflowExecutionTimeout: durationpb.New(1 * time.Second),
+		WorkflowRunTimeout:       durationpb.New(1 * time.Second),
+		WorkflowTaskTimeout:      durationpb.New(1 * time.Second),
 		RetryPolicy: &commonpb.RetryPolicy{
-			InitialInterval:    timestamp.DurationPtr(1 * time.Second),
+			InitialInterval:    durationpb.New(1 * time.Second),
 			BackoffCoefficient: 2,
-			MaximumInterval:    timestamp.DurationPtr(2 * time.Second),
+			MaximumInterval:    durationpb.New(2 * time.Second),
 			MaximumAttempts:    1,
 		},
 		RequestId: uuid.New(),
@@ -364,13 +375,13 @@ func (s *workflowHandlerSuite) TestStartWorkflowExecution_Failed_WorkflowTypeNot
 		TaskQueue: &taskqueuepb.TaskQueue{
 			Name: "task-queue",
 		},
-		WorkflowExecutionTimeout: timestamp.DurationPtr(1 * time.Second),
-		WorkflowRunTimeout:       timestamp.DurationPtr(1 * time.Second),
-		WorkflowTaskTimeout:      timestamp.DurationPtr(1 * time.Second),
+		WorkflowExecutionTimeout: durationpb.New(1 * time.Second),
+		WorkflowRunTimeout:       durationpb.New(1 * time.Second),
+		WorkflowTaskTimeout:      durationpb.New(1 * time.Second),
 		RetryPolicy: &commonpb.RetryPolicy{
-			InitialInterval:    timestamp.DurationPtr(1 * time.Second),
+			InitialInterval:    durationpb.New(1 * time.Second),
 			BackoffCoefficient: 2,
-			MaximumInterval:    timestamp.DurationPtr(2 * time.Second),
+			MaximumInterval:    durationpb.New(2 * time.Second),
 			MaximumAttempts:    1,
 		},
 		RequestId: uuid.New(),
@@ -395,16 +406,16 @@ func (s *workflowHandlerSuite) TestStartWorkflowExecution_Failed_TaskQueueNotSet
 			Name: "",
 		},
 		RetryPolicy: &commonpb.RetryPolicy{
-			InitialInterval:    timestamp.DurationPtr(1 * time.Second),
+			InitialInterval:    durationpb.New(1 * time.Second),
 			BackoffCoefficient: 2,
-			MaximumInterval:    timestamp.DurationPtr(2 * time.Second),
+			MaximumInterval:    durationpb.New(2 * time.Second),
 			MaximumAttempts:    1,
 		},
 		RequestId: uuid.New(),
 	}
 	_, err := wh.StartWorkflowExecution(context.Background(), startWorkflowExecutionRequest)
 	s.Error(err)
-	s.Equal(errTaskQueueNotSet, err)
+	s.Equal(serviceerror.NewInvalidArgument("missing task queue name"), err)
 }
 
 func (s *workflowHandlerSuite) TestStartWorkflowExecution_Failed_InvalidExecutionTimeout() {
@@ -421,12 +432,12 @@ func (s *workflowHandlerSuite) TestStartWorkflowExecution_Failed_InvalidExecutio
 		TaskQueue: &taskqueuepb.TaskQueue{
 			Name: "task-queue",
 		},
-		WorkflowExecutionTimeout: timestamp.DurationPtr(time.Duration(-1) * time.Second),
-		WorkflowRunTimeout:       timestamp.DurationPtr(1 * time.Second),
+		WorkflowExecutionTimeout: durationpb.New(time.Duration(-1) * time.Second),
+		WorkflowRunTimeout:       durationpb.New(1 * time.Second),
 		RetryPolicy: &commonpb.RetryPolicy{
-			InitialInterval:    timestamp.DurationPtr(1 * time.Second),
+			InitialInterval:    durationpb.New(1 * time.Second),
 			BackoffCoefficient: 2,
-			MaximumInterval:    timestamp.DurationPtr(2 * time.Second),
+			MaximumInterval:    durationpb.New(2 * time.Second),
 			MaximumAttempts:    1,
 		},
 		RequestId: uuid.New(),
@@ -450,12 +461,12 @@ func (s *workflowHandlerSuite) TestStartWorkflowExecution_Failed_InvalidRunTimeo
 		TaskQueue: &taskqueuepb.TaskQueue{
 			Name: "task-queue",
 		},
-		WorkflowExecutionTimeout: timestamp.DurationPtr(1 * time.Second),
-		WorkflowRunTimeout:       timestamp.DurationPtr(time.Duration(-1) * time.Second),
+		WorkflowExecutionTimeout: durationpb.New(1 * time.Second),
+		WorkflowRunTimeout:       durationpb.New(time.Duration(-1) * time.Second),
 		RetryPolicy: &commonpb.RetryPolicy{
-			InitialInterval:    timestamp.DurationPtr(1 * time.Second),
+			InitialInterval:    durationpb.New(1 * time.Second),
 			BackoffCoefficient: 2,
-			MaximumInterval:    timestamp.DurationPtr(2 * time.Second),
+			MaximumInterval:    durationpb.New(2 * time.Second),
 			MaximumAttempts:    1,
 		},
 		RequestId: uuid.New(),
@@ -479,8 +490,8 @@ func (s *workflowHandlerSuite) TestStartWorkflowExecution_EnsureNonNilRetryPolic
 		TaskQueue: &taskqueuepb.TaskQueue{
 			Name: "task-queue",
 		},
-		WorkflowExecutionTimeout: timestamp.DurationPtr(1 * time.Second),
-		WorkflowRunTimeout:       timestamp.DurationPtr(time.Duration(-1) * time.Second),
+		WorkflowExecutionTimeout: durationpb.New(1 * time.Second),
+		WorkflowRunTimeout:       durationpb.New(time.Duration(-1) * time.Second),
 		RetryPolicy:              &commonpb.RetryPolicy{},
 		RequestId:                uuid.New(),
 	}
@@ -488,8 +499,8 @@ func (s *workflowHandlerSuite) TestStartWorkflowExecution_EnsureNonNilRetryPolic
 	s.Error(err)
 	s.Equal(&commonpb.RetryPolicy{
 		BackoffCoefficient: 2.0,
-		InitialInterval:    timestamp.DurationPtr(time.Second),
-		MaximumInterval:    timestamp.DurationPtr(100 * time.Second),
+		InitialInterval:    durationpb.New(time.Second),
+		MaximumInterval:    durationpb.New(100 * time.Second),
 	}, startWorkflowExecutionRequest.RetryPolicy)
 }
 
@@ -507,8 +518,8 @@ func (s *workflowHandlerSuite) TestStartWorkflowExecution_EnsureNilRetryPolicyNo
 		TaskQueue: &taskqueuepb.TaskQueue{
 			Name: "task-queue",
 		},
-		WorkflowExecutionTimeout: timestamp.DurationPtr(1 * time.Second),
-		WorkflowRunTimeout:       timestamp.DurationPtr(time.Duration(-1) * time.Second),
+		WorkflowExecutionTimeout: durationpb.New(1 * time.Second),
+		WorkflowRunTimeout:       durationpb.New(time.Duration(-1) * time.Second),
 		RequestId:                uuid.New(),
 	}
 	_, err := wh.StartWorkflowExecution(context.Background(), startWorkflowExecutionRequest)
@@ -530,13 +541,13 @@ func (s *workflowHandlerSuite) TestStartWorkflowExecution_Failed_InvalidTaskTime
 		TaskQueue: &taskqueuepb.TaskQueue{
 			Name: "task-queue",
 		},
-		WorkflowExecutionTimeout: timestamp.DurationPtr(1 * time.Second),
-		WorkflowRunTimeout:       timestamp.DurationPtr(1 * time.Second),
-		WorkflowTaskTimeout:      timestamp.DurationPtr(time.Duration(-1) * time.Second),
+		WorkflowExecutionTimeout: durationpb.New(1 * time.Second),
+		WorkflowRunTimeout:       durationpb.New(1 * time.Second),
+		WorkflowTaskTimeout:      durationpb.New(time.Duration(-1) * time.Second),
 		RetryPolicy: &commonpb.RetryPolicy{
-			InitialInterval:    timestamp.DurationPtr(1 * time.Second),
+			InitialInterval:    durationpb.New(1 * time.Second),
 			BackoffCoefficient: 2,
-			MaximumInterval:    timestamp.DurationPtr(2 * time.Second),
+			MaximumInterval:    durationpb.New(2 * time.Second),
 			MaximumAttempts:    1,
 		},
 		RequestId: uuid.New(),
@@ -560,18 +571,18 @@ func (s *workflowHandlerSuite) TestStartWorkflowExecution_Failed_CronAndStartDel
 		TaskQueue: &taskqueuepb.TaskQueue{
 			Name: "task-queue",
 		},
-		WorkflowExecutionTimeout: timestamp.DurationPtr(1 * time.Second),
-		WorkflowRunTimeout:       timestamp.DurationPtr(1 * time.Second),
-		WorkflowTaskTimeout:      timestamp.DurationPtr(time.Duration(-1) * time.Second),
+		WorkflowExecutionTimeout: durationpb.New(1 * time.Second),
+		WorkflowRunTimeout:       durationpb.New(1 * time.Second),
+		WorkflowTaskTimeout:      durationpb.New(time.Duration(-1) * time.Second),
 		RetryPolicy: &commonpb.RetryPolicy{
-			InitialInterval:    timestamp.DurationPtr(1 * time.Second),
+			InitialInterval:    durationpb.New(1 * time.Second),
 			BackoffCoefficient: 2,
-			MaximumInterval:    timestamp.DurationPtr(2 * time.Second),
+			MaximumInterval:    durationpb.New(2 * time.Second),
 			MaximumAttempts:    1,
 		},
 		RequestId:          uuid.New(),
 		CronSchedule:       "dummy-cron-schedule",
-		WorkflowStartDelay: timestamp.DurationPtr(10 * time.Second),
+		WorkflowStartDelay: durationpb.New(10 * time.Second),
 	}
 	_, err := wh.StartWorkflowExecution(context.Background(), startWorkflowExecutionRequest)
 	s.ErrorIs(err, errCronAndStartDelaySet)
@@ -591,20 +602,124 @@ func (s *workflowHandlerSuite) TestStartWorkflowExecution_Failed_InvalidStartDel
 		TaskQueue: &taskqueuepb.TaskQueue{
 			Name: "task-queue",
 		},
-		WorkflowExecutionTimeout: timestamp.DurationPtr(1 * time.Second),
-		WorkflowRunTimeout:       timestamp.DurationPtr(1 * time.Second),
-		WorkflowTaskTimeout:      timestamp.DurationPtr(time.Duration(-1) * time.Second),
+		WorkflowExecutionTimeout: durationpb.New(1 * time.Second),
+		WorkflowRunTimeout:       durationpb.New(1 * time.Second),
+		WorkflowTaskTimeout:      durationpb.New(time.Duration(-1) * time.Second),
 		RetryPolicy: &commonpb.RetryPolicy{
-			InitialInterval:    timestamp.DurationPtr(1 * time.Second),
+			InitialInterval:    durationpb.New(1 * time.Second),
 			BackoffCoefficient: 2,
-			MaximumInterval:    timestamp.DurationPtr(2 * time.Second),
+			MaximumInterval:    durationpb.New(2 * time.Second),
 			MaximumAttempts:    1,
 		},
 		RequestId:          uuid.New(),
-		WorkflowStartDelay: timestamp.DurationPtr(-10 * time.Second),
+		WorkflowStartDelay: durationpb.New(-10 * time.Second),
 	}
+
 	_, err := wh.StartWorkflowExecution(context.Background(), startWorkflowExecutionRequest)
+
 	s.ErrorIs(err, errInvalidWorkflowStartDelaySeconds)
+}
+
+func (s *workflowHandlerSuite) TestStartWorkflowExecution_InvalidWorkflowIdReusePolicy_TerminateIfRunning() {
+	config := s.newConfig()
+	wh := s.getWorkflowHandler(config)
+	req := &workflowservice.StartWorkflowExecutionRequest{
+		WorkflowId:               testWorkflowID,
+		WorkflowType:             &commonpb.WorkflowType{Name: "WORKFLOW"},
+		TaskQueue:                &taskqueuepb.TaskQueue{Name: "TASK_QUEUE", Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+		WorkflowIdReusePolicy:    enumspb.WORKFLOW_ID_REUSE_POLICY_TERMINATE_IF_RUNNING,
+		WorkflowIdConflictPolicy: enumspb.WORKFLOW_ID_CONFLICT_POLICY_FAIL,
+	}
+
+	resp, err := wh.StartWorkflowExecution(context.Background(), req)
+
+	s.Nil(resp)
+	s.Equal(err, serviceerror.NewInvalidArgument(
+		"Invalid WorkflowIDReusePolicy: WORKFLOW_ID_REUSE_POLICY_TERMINATE_IF_RUNNING cannot be used together with a WorkflowIDConflictPolicy."))
+}
+
+func (s *workflowHandlerSuite) TestStartWorkflowExecution_DefaultWorkflowIdDuplicationPolicies() {
+	s.mockSearchAttributesMapperProvider.EXPECT().GetMapper(gomock.Any()).Return(nil, nil)
+	s.mockNamespaceCache.EXPECT().GetNamespaceID(gomock.Any()).Return(namespace.NewID(), nil)
+	s.mockHistoryClient.EXPECT().StartWorkflowExecution(gomock.Any(), mock.MatchedBy(
+		func(request *historyservice.StartWorkflowExecutionRequest) bool {
+			return request.StartRequest.WorkflowIdReusePolicy == enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE &&
+				request.StartRequest.WorkflowIdConflictPolicy == enumspb.WORKFLOW_ID_CONFLICT_POLICY_FAIL
+		},
+	)).Return(&historyservice.StartWorkflowExecutionResponse{Started: true}, nil)
+
+	wh := s.getWorkflowHandler(s.newConfig())
+	req := &workflowservice.StartWorkflowExecutionRequest{
+		WorkflowId:   testWorkflowID,
+		WorkflowType: &commonpb.WorkflowType{Name: "WORKFLOW"},
+		TaskQueue:    &taskqueuepb.TaskQueue{Name: "TASK_QUEUE", Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+		// both policies are not specified
+	}
+
+	resp, err := wh.StartWorkflowExecution(context.Background(), req)
+	s.NoError(err)
+	s.True(resp.Started)
+}
+
+func (s *workflowHandlerSuite) TestSignalWithStartWorkflowExecution_InvalidWorkflowIdConflictPolicy() {
+	config := s.newConfig()
+	wh := s.getWorkflowHandler(config)
+	req := &workflowservice.SignalWithStartWorkflowExecutionRequest{
+		WorkflowId:               testWorkflowID,
+		WorkflowType:             &commonpb.WorkflowType{Name: "WORKFLOW"},
+		TaskQueue:                &taskqueuepb.TaskQueue{Name: "TASK_QUEUE", Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+		SignalName:               "SIGNAL",
+		WorkflowIdConflictPolicy: enumspb.WORKFLOW_ID_CONFLICT_POLICY_FAIL,
+	}
+
+	resp, err := wh.SignalWithStartWorkflowExecution(context.Background(), req)
+
+	s.Nil(resp)
+	s.Equal(err, serviceerror.NewInvalidArgument(
+		"Invalid WorkflowIDConflictPolicy: WORKFLOW_ID_CONFLICT_POLICY_FAIL is not supported for this operation."))
+}
+
+func (s *workflowHandlerSuite) TestSignalWithStartWorkflowExecution_InvalidWorkflowIdReusePolicy_TerminateIfRunning() {
+	config := s.newConfig()
+	wh := s.getWorkflowHandler(config)
+	req := &workflowservice.SignalWithStartWorkflowExecutionRequest{
+		WorkflowId:               testWorkflowID,
+		WorkflowType:             &commonpb.WorkflowType{Name: "WORKFLOW"},
+		TaskQueue:                &taskqueuepb.TaskQueue{Name: "TASK_QUEUE", Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+		SignalName:               "SIGNAL",
+		WorkflowIdReusePolicy:    enumspb.WORKFLOW_ID_REUSE_POLICY_TERMINATE_IF_RUNNING,
+		WorkflowIdConflictPolicy: enumspb.WORKFLOW_ID_CONFLICT_POLICY_FAIL,
+	}
+
+	resp, err := wh.SignalWithStartWorkflowExecution(context.Background(), req)
+
+	s.Nil(resp)
+	s.Equal(err, serviceerror.NewInvalidArgument(
+		"Invalid WorkflowIDReusePolicy: WORKFLOW_ID_REUSE_POLICY_TERMINATE_IF_RUNNING cannot be used together with a WorkflowIDConflictPolicy."))
+}
+
+func (s *workflowHandlerSuite) TestSignalWithStartWorkflowExecution_DefaultWorkflowIdDuplicationPolicies() {
+	s.mockSearchAttributesMapperProvider.EXPECT().GetMapper(gomock.Any()).Return(nil, nil)
+	s.mockNamespaceCache.EXPECT().GetNamespaceID(gomock.Any()).Return(namespace.NewID(), nil)
+	s.mockHistoryClient.EXPECT().SignalWithStartWorkflowExecution(gomock.Any(), mock.MatchedBy(
+		func(request *historyservice.SignalWithStartWorkflowExecutionRequest) bool {
+			return request.SignalWithStartRequest.WorkflowIdReusePolicy == enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE &&
+				request.SignalWithStartRequest.WorkflowIdConflictPolicy == enumspb.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING
+		},
+	)).Return(&historyservice.SignalWithStartWorkflowExecutionResponse{Started: true}, nil)
+
+	wh := s.getWorkflowHandler(s.newConfig())
+	req := &workflowservice.SignalWithStartWorkflowExecutionRequest{
+		WorkflowId:   testWorkflowID,
+		WorkflowType: &commonpb.WorkflowType{Name: "WORKFLOW"},
+		TaskQueue:    &taskqueuepb.TaskQueue{Name: "TASK_QUEUE", Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+		SignalName:   "SIGNAL",
+		// both policies are not specified
+	}
+
+	resp, err := wh.SignalWithStartWorkflowExecution(context.Background(), req)
+	s.NoError(err)
+	s.True(resp.Started)
 }
 
 func (s *workflowHandlerSuite) TestRegisterNamespace_Failure_InvalidArchivalURI() {
@@ -1414,7 +1529,7 @@ func (s *workflowHandlerSuite) TestGetSearchAttributes() {
 
 func (s *workflowHandlerSuite) TestDescribeWorkflowExecution_RunningStatus() {
 	wh := s.getWorkflowHandler(s.newConfig())
-	now := timestamp.TimePtr(time.Now())
+	now := timestamppb.New(time.Now())
 
 	s.mockNamespaceCache.EXPECT().GetNamespaceID(gomock.Any()).Return(
 		s.testNamespaceID,
@@ -1450,7 +1565,7 @@ func (s *workflowHandlerSuite) TestDescribeWorkflowExecution_RunningStatus() {
 
 func (s *workflowHandlerSuite) TestDescribeWorkflowExecution_CompletedStatus() {
 	wh := s.getWorkflowHandler(s.newConfig())
-	now := timestamp.TimePtr(time.Now())
+	now := timestamppb.New(time.Now())
 
 	s.mockNamespaceCache.EXPECT().GetNamespaceID(gomock.Any()).Return(
 		s.testNamespaceID,
@@ -1627,8 +1742,6 @@ func (s *workflowHandlerSuite) TestCountWorkflowExecutions() {
 }
 
 func (s *workflowHandlerSuite) TestVerifyHistoryIsComplete() {
-	wh := s.getWorkflowHandler(s.newConfig())
-
 	events := make([]*historypb.HistoryEvent, 50)
 	for i := 0; i < len(events); i++ {
 		events[i] = &historypb.HistoryEvent{EventId: int64(i + 1)}
@@ -1672,7 +1785,7 @@ func (s *workflowHandlerSuite) TestVerifyHistoryIsComplete() {
 	}
 
 	for i, tc := range testCases {
-		err := wh.verifyHistoryIsComplete(tc.events, tc.firstEventID, tc.lastEventID, tc.isFirstPage, tc.isLastPage, tc.pageSize)
+		err := e.VerifyHistoryIsComplete(tc.events, tc.firstEventID, tc.lastEventID, tc.isFirstPage, tc.isLastPage, tc.pageSize)
 		if tc.isResultErr {
 			s.Error(err, "testcase %v failed", i)
 		} else {
@@ -1693,6 +1806,8 @@ func (s *workflowHandlerSuite) TestGetSystemInfo() {
 	s.True(resp.Capabilities.SupportsSchedules)
 	s.True(resp.Capabilities.EncodedFailureAttributes)
 	s.True(resp.Capabilities.UpsertMemo)
+	// Nexus is enabled by a dynamic config feature flag which defaults to false.
+	s.False(resp.Capabilities.Nexus)
 }
 
 func (s *workflowHandlerSuite) TestStartBatchOperation_Terminate() {
@@ -1999,16 +2114,16 @@ func (s *workflowHandlerSuite) TestStartBatchOperation_WorkflowExecutions_TooMan
 	// Simulate std visibility, which does not support CountWorkflowExecutions
 	// TODO: remove this once every visibility implementation supports CountWorkflowExecutions
 	s.mockVisibilityMgr.EXPECT().CountWorkflowExecutions(gomock.Any(), gomock.Any()).Return(nil, store.OperationNotSupportedErr)
-	s.mockVisibilityMgr.EXPECT().ListOpenWorkflowExecutionsByType(
+	s.mockVisibilityMgr.EXPECT().ListWorkflowExecutions(
 		gomock.Any(),
 		gomock.Any(),
 	).DoAndReturn(
 		func(
 			_ context.Context,
-			request *manager.ListWorkflowExecutionsByTypeRequest,
+			request *manager.ListWorkflowExecutionsRequestV2,
 		) (*manager.ListWorkflowExecutionsResponse, error) {
 			s.Equal(testNamespace, request.Namespace)
-			s.Equal(batcher.BatchWFTypeName, request.WorkflowTypeName)
+			s.True(strings.Contains(request.Query, searchattribute.WorkflowType))
 			s.Equal(int(config.MaxConcurrentBatchOperation(testNamespace.String())), request.PageSize)
 			s.Equal([]byte{}, request.NextPageToken)
 			return &manager.ListWorkflowExecutionsResponse{
@@ -2147,7 +2262,7 @@ func (s *workflowHandlerSuite) TestDescribeBatchOperation_CompletedStatus() {
 	jobID := uuid.New()
 	config := s.newConfig()
 	wh := s.getWorkflowHandler(config)
-	now := timestamp.TimePtr(time.Now())
+	now := timestamppb.New(time.Now())
 	s.mockNamespaceCache.EXPECT().GetNamespaceID(gomock.Any()).Return(namespaceID, nil).AnyTimes()
 	s.Run("StatsNotInMemo", func() {
 		s.mockHistoryClient.EXPECT().DescribeWorkflowExecution(gomock.Any(), gomock.Any()).DoAndReturn(
@@ -2167,7 +2282,7 @@ func (s *workflowHandlerSuite) TestDescribeBatchOperation_CompletedStatus() {
 						ExecutionTime: now,
 						Memo: &commonpb.Memo{
 							Fields: map[string]*commonpb.Payload{
-								batcher.BatchOperationTypeMemo: payload.EncodeString(batcher.BatchTypeTerminate),
+								batcher.BatchOperationTypeMemo: payload.EncodeString(batcher.BatchTypeReset),
 							},
 						},
 						SearchAttributes: nil,
@@ -2241,7 +2356,7 @@ func (s *workflowHandlerSuite) TestDescribeBatchOperation_RunningStatus() {
 	jobID := uuid.New()
 	config := s.newConfig()
 	wh := s.getWorkflowHandler(config)
-	now := timestamp.TimePtr(time.Now())
+	now := timestamppb.New(time.Now())
 	s.mockNamespaceCache.EXPECT().GetNamespaceID(gomock.Any()).Return(namespaceID, nil).AnyTimes()
 	s.mockHistoryClient.EXPECT().DescribeWorkflowExecution(gomock.Any(), gomock.Any()).DoAndReturn(
 		func(
@@ -2302,7 +2417,7 @@ func (s *workflowHandlerSuite) TestDescribeBatchOperation_FailedStatus() {
 	jobID := uuid.New()
 	config := s.newConfig()
 	wh := s.getWorkflowHandler(config)
-	now := timestamp.TimePtr(time.Now())
+	now := timestamppb.New(time.Now())
 	s.mockNamespaceCache.EXPECT().GetNamespaceID(gomock.Any()).Return(namespaceID, nil).AnyTimes()
 	s.mockHistoryClient.EXPECT().DescribeWorkflowExecution(gomock.Any(), gomock.Any()).DoAndReturn(
 		func(
@@ -2367,7 +2482,7 @@ func (s *workflowHandlerSuite) TestListBatchOperations() {
 	jobID := uuid.New()
 	config := s.newConfig()
 	wh := s.getWorkflowHandler(config)
-	now := timestamp.TimePtr(time.Now())
+	now := timestamppb.New(time.Now())
 	s.mockNamespaceCache.EXPECT().GetNamespaceID(gomock.Any()).Return(namespaceID, nil).AnyTimes()
 	s.mockVisibilityMgr.EXPECT().GetReadStoreName(testNamespace).Return("").AnyTimes()
 	s.mockVisibilityMgr.EXPECT().ListWorkflowExecutions(gomock.Any(), gomock.Any()).DoAndReturn(
@@ -2421,7 +2536,7 @@ func (s *workflowHandlerSuite) TestListBatchOperations_InvalidRerquest() {
 }
 
 func (s *workflowHandlerSuite) newConfig() *Config {
-	return NewConfig(dc.NewCollection(dc.NewNoopClient(), s.mockResource.GetLogger()), numHistoryShards, true, false)
+	return NewConfig(dc.NewNoopCollection(), numHistoryShards)
 }
 
 func updateRequest(
@@ -2484,7 +2599,7 @@ func registerNamespaceRequest(
 		Namespace:                        "test-namespace",
 		Description:                      "test-description",
 		OwnerEmail:                       "test-owner-email",
-		WorkflowExecutionRetentionPeriod: timestamp.DurationPtr(10 * time.Hour * 24),
+		WorkflowExecutionRetentionPeriod: durationpb.New(10 * time.Hour * 24),
 		Clusters: []*replicationpb.ClusterReplicationConfig{
 			{
 				ClusterName: cluster.TestCurrentClusterName,
@@ -2525,6 +2640,18 @@ func TestContextNearDeadline(t *testing.T) {
 	defer cancel()
 	assert.True(t, contextNearDeadline(ctx, longPollTailRoom))
 	assert.False(t, contextNearDeadline(ctx, time.Millisecond))
+}
+
+func TestValidateRequestId(t *testing.T) {
+	req := workflowservice.StartWorkflowExecutionRequest{RequestId: ""}
+	err := validateRequestId(&req.RequestId, 100)
+	assert.Nil(t, err)
+	assert.Len(t, req.RequestId, 36) // new UUID length
+
+	req.RequestId = "\x87\x01"
+	err = validateRequestId(&req.RequestId, 100)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "not a valid UTF-8 string")
 }
 
 func (s *workflowHandlerSuite) Test_DeleteWorkflowExecution() {
@@ -2594,4 +2721,225 @@ func (s *workflowHandlerSuite) Test_DeleteWorkflowExecution() {
 	})
 	s.NoError(err)
 	s.NotNil(resp)
+}
+
+func (s *workflowHandlerSuite) TestExecuteMultiOperation() {
+	ctx := context.Background()
+	config := s.newConfig()
+	config.EnableExecuteMultiOperation = func(string) bool { return true }
+	wh := s.getWorkflowHandler(config)
+
+	s.mockResource.NamespaceCache.EXPECT().
+		GetNamespaceID(namespace.Name(s.testNamespace.String())).Return(s.testNamespaceID, nil).AnyTimes()
+	s.mockSearchAttributesMapperProvider.EXPECT().
+		GetMapper(gomock.Any()).Return(nil, nil).AnyTimes()
+
+	newStartOp := func(op *workflowservice.StartWorkflowExecutionRequest) *workflowservice.ExecuteMultiOperationRequest_Operation {
+		return &workflowservice.ExecuteMultiOperationRequest_Operation{
+			Operation: &workflowservice.ExecuteMultiOperationRequest_Operation_StartWorkflow{
+				StartWorkflow: op,
+			},
+		}
+	}
+	validStartReq := func() *workflowservice.StartWorkflowExecutionRequest {
+		return &workflowservice.StartWorkflowExecutionRequest{
+			Namespace:    s.testNamespace.String(),
+			WorkflowId:   "WORKFLOW_ID",
+			WorkflowType: &commonpb.WorkflowType{Name: "workflow-type"},
+			TaskQueue:    &taskqueuepb.TaskQueue{Name: "task-queue"},
+		}
+	}
+	newUpdateOp := func(op *workflowservice.UpdateWorkflowExecutionRequest) *workflowservice.ExecuteMultiOperationRequest_Operation {
+		return &workflowservice.ExecuteMultiOperationRequest_Operation{
+			Operation: &workflowservice.ExecuteMultiOperationRequest_Operation_UpdateWorkflow{
+				UpdateWorkflow: op,
+			},
+		}
+	}
+	validUpdateReq := func() *workflowservice.UpdateWorkflowExecutionRequest {
+		return &workflowservice.UpdateWorkflowExecutionRequest{
+			Namespace:         s.testNamespace.String(),
+			WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: "WORKFLOW_ID"},
+			Request: &updatepb.Request{
+				Meta:  &updatepb.Meta{UpdateId: "UPDATE_ID"},
+				Input: &updatepb.Input{Name: "NAME"},
+			},
+		}
+	}
+
+	// NOTE: functional tests are testing the happy case
+
+	s.Run("operations list that is not [Start, Update] is invalid", func() {
+		// empty list
+		resp, err := wh.ExecuteMultiOperation(ctx, &workflowservice.ExecuteMultiOperationRequest{
+			Namespace: s.testNamespace.String(),
+		})
+
+		s.Nil(resp)
+		s.Equal(errMultiOpNotStartAndUpdate, err)
+
+		// 1 item
+		resp, err = wh.ExecuteMultiOperation(ctx, &workflowservice.ExecuteMultiOperationRequest{
+			Namespace:  s.testNamespace.String(),
+			Operations: []*workflowservice.ExecuteMultiOperationRequest_Operation{newStartOp(nil)},
+		})
+
+		s.Nil(resp)
+		s.Equal(errMultiOpNotStartAndUpdate, err)
+
+		// 3 items
+		resp, err = wh.ExecuteMultiOperation(ctx, &workflowservice.ExecuteMultiOperationRequest{
+			Namespace: s.testNamespace.String(),
+			Operations: []*workflowservice.ExecuteMultiOperationRequest_Operation{
+				newStartOp(nil), newStartOp(nil), newStartOp(nil),
+			},
+		})
+
+		s.Nil(resp)
+		s.Equal(errMultiOpNotStartAndUpdate, err)
+
+		// 2 undefined operations
+		resp, err = wh.ExecuteMultiOperation(ctx, &workflowservice.ExecuteMultiOperationRequest{
+			Namespace: s.testNamespace.String(),
+			Operations: []*workflowservice.ExecuteMultiOperationRequest_Operation{
+				{},
+				{},
+			},
+		})
+
+		s.Nil(resp)
+		s.Equal(errMultiOpNotStartAndUpdate, err)
+
+		// 2 Starts
+		resp, err = wh.ExecuteMultiOperation(ctx, &workflowservice.ExecuteMultiOperationRequest{
+			Namespace: s.testNamespace.String(),
+			Operations: []*workflowservice.ExecuteMultiOperationRequest_Operation{
+				newStartOp(validStartReq()), newStartOp(validStartReq()),
+			},
+		})
+
+		s.Nil(resp)
+		s.Equal(errMultiOpNotStartAndUpdate, err)
+
+		// 2 Updates
+		resp, err = wh.ExecuteMultiOperation(ctx, &workflowservice.ExecuteMultiOperationRequest{
+			Namespace: s.testNamespace.String(),
+			Operations: []*workflowservice.ExecuteMultiOperationRequest_Operation{
+				newUpdateOp(validUpdateReq()), newUpdateOp(validUpdateReq()),
+			},
+		})
+
+		s.Nil(resp)
+		s.Equal(errMultiOpNotStartAndUpdate, err)
+	})
+
+	assertMultiOpsErr := func(expectedErrs []error, actual error) {
+		s.Equal("MultiOperation could not be executed.", actual.Error())
+		s.EqualValues(expectedErrs, actual.(*serviceerror.MultiOperationExecution).OperationErrors())
+	}
+
+	s.Run("operation with different workflow ID as previous operation is invalid", func() {
+		updateReq := validUpdateReq()
+		updateReq.WorkflowExecution.WorkflowId = "foo"
+
+		resp, err := wh.ExecuteMultiOperation(ctx, &workflowservice.ExecuteMultiOperationRequest{
+			Namespace: s.testNamespace.String(),
+			Operations: []*workflowservice.ExecuteMultiOperationRequest_Operation{
+				newStartOp(validStartReq()),
+				newUpdateOp(updateReq),
+			},
+		})
+
+		s.Nil(resp)
+		assertMultiOpsErr([]error{errMultiOpAborted, errMultiOpWorkflowIdInconsistent}, err)
+	})
+
+	s.Run("Start operation is validated", func() {
+		// expecting the same validation as for standalone Start operation; only testing one here:
+		s.Run("requires workflow id", func() {
+			startReq := validStartReq()
+			startReq.WorkflowId = ""
+
+			resp, err := wh.ExecuteMultiOperation(ctx, &workflowservice.ExecuteMultiOperationRequest{
+				Namespace: s.testNamespace.String(),
+				Operations: []*workflowservice.ExecuteMultiOperationRequest_Operation{
+					newStartOp(startReq),
+					newUpdateOp(validUpdateReq()),
+				},
+			})
+
+			s.Nil(resp)
+			assertMultiOpsErr([]error{errWorkflowIDNotSet, errMultiOpAborted}, err)
+		})
+
+		// unique to MultiOperation:
+		s.Run("`cron_schedule` is invalid", func() {
+			startReq := validStartReq()
+			startReq.CronSchedule = "0 */12 * * *"
+
+			resp, err := wh.ExecuteMultiOperation(ctx, &workflowservice.ExecuteMultiOperationRequest{
+				Namespace: s.testNamespace.String(),
+				Operations: []*workflowservice.ExecuteMultiOperationRequest_Operation{
+					newStartOp(startReq),
+					newUpdateOp(validUpdateReq()),
+				},
+			})
+
+			s.Nil(resp)
+			assertMultiOpsErr([]error{errMultiOpStartCronSchedule, errMultiOpAborted}, err)
+		})
+
+		// unique to MultiOperation:
+		s.Run("`request_eager_execution` is invalid", func() {
+			startReq := validStartReq()
+			startReq.RequestEagerExecution = true
+
+			resp, err := wh.ExecuteMultiOperation(ctx, &workflowservice.ExecuteMultiOperationRequest{
+				Namespace: s.testNamespace.String(),
+				Operations: []*workflowservice.ExecuteMultiOperationRequest_Operation{
+					newStartOp(startReq),
+					newUpdateOp(validUpdateReq()),
+				},
+			})
+
+			s.Nil(resp)
+			assertMultiOpsErr([]error{errMultiOpEagerWorkflow, errMultiOpAborted}, err)
+		})
+
+		// unique to MultiOperation:
+		s.Run("`workflow_start_delay` is invalid", func() {
+			startReq := validStartReq()
+			startReq.WorkflowStartDelay = durationpb.New(1 * time.Second)
+
+			resp, err := wh.ExecuteMultiOperation(ctx, &workflowservice.ExecuteMultiOperationRequest{
+				Namespace: s.testNamespace.String(),
+				Operations: []*workflowservice.ExecuteMultiOperationRequest_Operation{
+					newStartOp(startReq),
+					newUpdateOp(validUpdateReq()),
+				},
+			})
+
+			s.Nil(resp)
+			assertMultiOpsErr([]error{errMultiOpStartDelay, errMultiOpAborted}, err)
+		})
+	})
+
+	s.Run("Update operation is validated", func() {
+		// expecting the same validation as for standalone Update operation; only testing a few of the validations here
+		s.Run("requires workflow id", func() {
+			updateReq := validUpdateReq()
+			updateReq.Request.Input = nil
+
+			resp, err := wh.ExecuteMultiOperation(ctx, &workflowservice.ExecuteMultiOperationRequest{
+				Namespace: s.testNamespace.String(),
+				Operations: []*workflowservice.ExecuteMultiOperationRequest_Operation{
+					newStartOp(validStartReq()),
+					newUpdateOp(updateReq),
+				},
+			})
+
+			s.Nil(resp)
+			assertMultiOpsErr([]error{errMultiOpAborted, errUpdateInputNotSet}, err)
+		})
+	})
 }

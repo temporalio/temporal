@@ -25,15 +25,11 @@
 package history
 
 import (
+	"sync/atomic"
 	"testing"
 
-	"github.com/golang/mock/gomock"
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"go.uber.org/fx"
-
 	"go.temporal.io/server/client"
-	carchiver "go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -41,41 +37,32 @@ import (
 	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/service/history/archival"
 	"go.temporal.io/server/service/history/configs"
+	"go.temporal.io/server/service/history/replication/eventhandler"
+	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/workflow"
+	"go.uber.org/fx"
+	"go.uber.org/mock/gomock"
 )
 
-// TestQueueModule_ArchivalQueueCreated tests that the archival queue is created if and only if the static config for
-// either history or visibility archival is enabled.
+// TestQueueModule_ArchivalQueue tests that the archival queue is created if and only if the task category exists.
 func TestQueueModule_ArchivalQueue(t *testing.T) {
 	for _, c := range []moduleTestCase{
 		{
-			Name:                "Archival completely disabled",
-			HistoryState:        carchiver.ArchivalDisabled,
-			VisibilityState:     carchiver.ArchivalDisabled,
+			Name:                "Archival disabled",
+			CategoryExists:      false,
 			ExpectArchivalQueue: false,
 		},
 		{
-			Name:                "History archival enabled",
-			HistoryState:        carchiver.ArchivalEnabled,
-			VisibilityState:     carchiver.ArchivalDisabled,
-			ExpectArchivalQueue: true,
-		},
-		{
-			Name:                "Visibility archival enabled",
-			HistoryState:        carchiver.ArchivalDisabled,
-			VisibilityState:     carchiver.ArchivalEnabled,
-			ExpectArchivalQueue: true,
-		},
-		{
-			Name:                "Both history and visibility archival enabled",
-			HistoryState:        carchiver.ArchivalEnabled,
-			VisibilityState:     carchiver.ArchivalEnabled,
+			Name:                "Archival enabled",
+			CategoryExists:      true,
 			ExpectArchivalQueue: true,
 		},
 	} {
@@ -87,9 +74,8 @@ func TestQueueModule_ArchivalQueue(t *testing.T) {
 // moduleTestCase is a test case for the QueueModule.
 type moduleTestCase struct {
 	Name                string
-	HistoryState        carchiver.ArchivalState
-	VisibilityState     carchiver.ArchivalState
 	ExpectArchivalQueue bool
+	CategoryExists      bool
 }
 
 // Run runs the test case.
@@ -136,10 +122,8 @@ func (c *moduleTestCase) Run(t *testing.T) {
 	require.NotNil(t, viq)
 	if c.ExpectArchivalQueue {
 		require.NotNil(t, aq)
-		assert.Contains(t, tasks.GetCategories(), tasks.CategoryIDArchival)
 	} else {
 		require.Nil(t, aq)
-		assert.NotContains(t, tasks.GetCategories(), tasks.CategoryIDArchival)
 	}
 }
 
@@ -148,32 +132,39 @@ func getModuleDependencies(controller *gomock.Controller, c *moduleTestCase) fx.
 	cfg := configs.NewConfig(
 		dynamicconfig.NewNoopCollection(),
 		1,
-		true,
-		false,
 	)
-	archivalMetadata := getArchivalMetadata(controller, c)
 	clusterMetadata := cluster.NewMockMetadata(controller)
 	clusterMetadata.EXPECT().GetCurrentClusterName().Return("module-test-cluster-name").AnyTimes()
-	serviceResolver := membership.NewMockServiceResolver(controller)
-	serviceResolver.EXPECT().MemberCount().Return(1).AnyTimes()
+	lazyLoadedOwnershipBasedQuotaScaler := shard.LazyLoadedOwnershipBasedQuotaScaler{
+		Value: &atomic.Value{},
+	}
+	registry := tasks.NewDefaultTaskCategoryRegistry()
+	if c.CategoryExists {
+		registry.AddCategory(tasks.CategoryArchival)
+	}
+	serializer := serialization.NewSerializer()
+	historyFetcher := eventhandler.NewMockHistoryPaginatedFetcher(controller)
 	return fx.Supply(
-		compileTimeDependencies{},
+		unusedDependencies{},
 		cfg,
-		fx.Annotate(archivalMetadata, fx.As(new(carchiver.ArchivalMetadata))),
+		fx.Annotate(registry, fx.As(new(tasks.TaskCategoryRegistry))),
 		fx.Annotate(metrics.NoopMetricsHandler, fx.As(new(metrics.Handler))),
+		fx.Annotate(log.NewTestLogger(), fx.As(new(log.SnTaggedLogger))),
 		fx.Annotate(clusterMetadata, fx.As(new(cluster.Metadata))),
-		fx.Annotate(serviceResolver, fx.As(new(membership.ServiceResolver))),
-		fx.Annotate(clock.NewEventTimeSource(), fx.As(new(clock.TimeSource))),
+		lazyLoadedOwnershipBasedQuotaScaler,
+		fx.Annotate(serializer, fx.As(new(serialization.Serializer))),
+		fx.Annotate(historyFetcher, fx.As(new(eventhandler.HistoryPaginatedFetcher))),
 	)
 }
 
-// compileTimeDependencies is a struct that provides nil implementations of all the dependencies needed for the queue
-// module that are not required for the test at runtime.
-type compileTimeDependencies struct {
+// This is a struct that provides nil implementations of all the dependencies needed for the queue module that are not
+// actually used.
+type unusedDependencies struct {
 	fx.Out
 
+	clock.TimeSource
+	membership.ServiceResolver
 	namespace.Registry
-	log.SnTaggedLogger
 	client.Bean
 	sdk.ClientFactory
 	resource.MatchingRawClient
@@ -181,17 +172,5 @@ type compileTimeDependencies struct {
 	manager.VisibilityManager
 	archival.Archiver
 	workflow.RelocatableAttributesFetcher
-}
-
-// getArchivalMetadata returns a mock ArchivalMetadata that contains the static archival config specified in the given
-// test case.
-func getArchivalMetadata(controller *gomock.Controller, c *moduleTestCase) *carchiver.MockArchivalMetadata {
-	archivalMetadata := carchiver.NewMockArchivalMetadata(controller)
-	historyConfig := carchiver.NewMockArchivalConfig(controller)
-	visibilityConfig := carchiver.NewMockArchivalConfig(controller)
-	historyConfig.EXPECT().StaticClusterState().Return(c.HistoryState).AnyTimes()
-	visibilityConfig.EXPECT().StaticClusterState().Return(c.VisibilityState).AnyTimes()
-	archivalMetadata.EXPECT().GetHistoryConfig().Return(historyConfig).AnyTimes()
-	archivalMetadata.EXPECT().GetVisibilityConfig().Return(visibilityConfig).AnyTimes()
-	return archivalMetadata
+	persistence.HistoryTaskQueueManager
 }

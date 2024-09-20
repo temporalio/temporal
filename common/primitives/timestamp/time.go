@@ -27,163 +27,39 @@ package timestamp
 import (
 	"time"
 
-	"github.com/gogo/protobuf/types"
-
-	"go.temporal.io/server/common/util"
+	"google.golang.org/protobuf/types/known/durationpb"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-// Timestamp provides easy conversions and utility comparison functions
-// making go to proto time comparison straightforward
-type Timestamp struct {
-	// one of
-	protoTime *types.Timestamp
-	goTime    *time.Time
+func TimePtr(t time.Time) *timestamppb.Timestamp {
+	return timestamppb.New(t)
 }
 
-// TimestampFromProto returns a Timestamp from proto time
-// noinspection GoNameStartsWithPackageName
-func TimestampFromProto(ts *types.Timestamp) *Timestamp {
-	// todo: should we validate against proto min/max time here?
-	return &Timestamp{
-		protoTime: &types.Timestamp{
-			Seconds: ts.Seconds,
-			Nanos:   ts.Nanos,
-		},
-	}
-}
-
-// TimestampFromTimePtr returns a Timestamp from a time.time
-// noinspection GoNameStartsWithPackageName
-func TimestampFromTime(t time.Time) *Timestamp {
-	// todo: should we validate against proto min/max time here?
-	c := time.Unix(0, t.UnixNano()).UTC()
-	return &Timestamp{
-		goTime: &c,
-	}
-}
-
-// TimestampFromTimePtr returns a Timestamp from a time.time
-// noinspection GoNameStartsWithPackageName
-func TimestampFromTimePtr(t *time.Time) *Timestamp {
-	// todo: should we validate against proto min/max time here?
-	c := time.Unix(0, t.UnixNano()).UTC()
-	return &Timestamp{
-		goTime: &c,
-	}
-}
-
-// TimestampNow returns a timestamp that represents Now()
-// noinspection GoNameStartsWithPackageName
-func TimestampNow() *Timestamp {
-	return &Timestamp{
-		protoTime: types.TimestampNow(),
-	}
-}
-
-// TimestampNowAddSeconds returns a timestamp that represents Now() + some number of seconds
-// noinspection GoNameStartsWithPackageName
-func TimestampNowAddSeconds(seconds int64) *Timestamp {
-	t := TimestampNow()
-	t.protoTime.Seconds += seconds
-	return t
-}
-
-// TimestampEpoch returns the unix epoch -TimestampFromTime(time.Unix(0, 0)).UTC()
-// noinspection GoNameStartsWithPackageName
-func TimestampEpoch() *Timestamp {
-	epoch := time.Unix(0, 0).UTC()
-	return TimestampFromTimePtr(&epoch)
-}
-
-// ToProto returns the proto representation
-// noinspection GoReceiverNames
-func (t *Timestamp) ToProto() *types.Timestamp {
-	if t.protoTime != nil {
-		return t.protoTime
-	}
-
-	proto, _ := types.TimestampProto(*t.goTime)
-	return proto
-}
-
-// ToTime returns the time.time representation
-// noinspection GoReceiverNames
-func (t *Timestamp) ToTime() *time.Time {
-	if t.goTime != nil {
-		return t.goTime
-	}
-
-	goTime, _ := types.TimestampFromProto(t.protoTime)
-	return &goTime
-}
-
-// Before returns true when t1 is after t2, false otherwise
-// noinspection GoReceiverNames
-func (t1 *Timestamp) After(t2 *Timestamp) bool {
-	if t1.goTime != nil && t2.goTime != nil {
-		// both go time
-		return t1.goTime.After(*t2.goTime)
-
-	}
-
-	return t1.UnixNano() > t2.UnixNano()
-}
-
-// Before returns true when t1 is before t2, false otherwise
-// noinspection GoReceiverNames
-func (t1 *Timestamp) Before(t2 *Timestamp) bool {
-	if t1.goTime != nil && t2.goTime != nil {
-		// both go time
-		return t1.goTime.Before(*t2.goTime)
-
-	}
-
-	return t1.UnixNano() < t2.UnixNano()
-}
-
-// SamesAs returns true when t1 is the same time as t2, false otherwise
-// noinspection GoReceiverNames
-func (t1 *Timestamp) SameAs(t2 *Timestamp) bool {
-	if t1.goTime != nil && t2.goTime != nil {
-		// both go time
-		return t1.goTime.Equal(*t2.goTime)
-
-	}
-
-	return t1.UnixNano() == t2.UnixNano()
-}
-
-// UnixNano returns the int64 representation of nanoseconds since 1970 (see time.UnixNano)
-// noinspection GoReceiverNames
-func (t *Timestamp) UnixNano() int64 {
-	if t.goTime != nil {
-		return t.goTime.UnixNano()
-	}
-
-	return t.protoTime.Seconds*time.Second.Nanoseconds() + int64(t.protoTime.Nanos)
-}
-
-func TimePtr(t time.Time) *time.Time {
-	return &t
-}
-
-func TimeValue(t *time.Time) time.Time {
+func TimeValue(t *timestamppb.Timestamp) time.Time {
 	if t == nil {
 		return time.Time{}
 	}
-	return *t
+	return t.AsTime()
 }
 
-func DurationValue(d *time.Duration) time.Duration {
+func TimeValuePtr(t *timestamppb.Timestamp) *time.Time {
+	if t == nil {
+		return nil
+	}
+	result := t.AsTime()
+	return &result
+}
+
+func DurationValue(d *durationpb.Duration) time.Duration {
 	if d == nil {
 		return 0
 	}
-	return *d
+	return d.AsDuration()
 }
 
-func MinDurationPtr(d1 *time.Duration, d2 *time.Duration) *time.Duration {
-	res := util.Min(DurationValue(d1), DurationValue(d2))
-	return &res
+func MinDurationPtr(d1 *durationpb.Duration, d2 *durationpb.Duration) *durationpb.Duration {
+	res := min(DurationValue(d1), DurationValue(d2))
+	return durationpb.New(res)
 }
 
 func RoundUp(d time.Duration) time.Duration {
@@ -202,18 +78,18 @@ func UnixOrZeroTime(nanos int64) time.Time {
 	return time.Unix(0, nanos).UTC()
 }
 
-func UnixOrZeroTimePtr(nanos int64) *time.Time {
+func UnixOrZeroTimePtr(nanos int64) *timestamppb.Timestamp {
 	return TimePtr(UnixOrZeroTime(nanos))
 }
 
-func TimeNowPtrUtcAddDuration(t time.Duration) *time.Time {
+func TimeNowPtrUtcAddDuration(t time.Duration) *timestamppb.Timestamp {
 	return TimePtr(time.Now().UTC().Add(t))
 }
 
-func TimeNowPtrUtcAddSeconds(seconds int) *time.Time {
+func TimeNowPtrUtcAddSeconds(seconds int) *timestamppb.Timestamp {
 	return TimePtr(time.Now().UTC().Add(time.Second * time.Duration(seconds)))
 }
 
-func TimeNowPtrUtc() *time.Time {
+func TimeNowPtrUtc() *timestamppb.Timestamp {
 	return TimePtr(time.Now().UTC())
 }

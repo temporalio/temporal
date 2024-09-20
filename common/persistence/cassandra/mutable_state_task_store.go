@@ -30,8 +30,6 @@ import (
 	"time"
 
 	"go.temporal.io/api/serviceerror"
-
-	"go.temporal.io/server/common/log"
 	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/nosql/nosqlplugin/cassandra/gocql"
 	"go.temporal.io/server/common/persistence/serialization"
@@ -189,40 +187,13 @@ const (
 type (
 	MutableStateTaskStore struct {
 		Session gocql.Session
-		Logger  log.Logger
 	}
 )
 
-func NewMutableStateTaskStore(
-	session gocql.Session,
-	logger log.Logger,
-) *MutableStateTaskStore {
+func NewMutableStateTaskStore(session gocql.Session) *MutableStateTaskStore {
 	return &MutableStateTaskStore{
 		Session: session,
-		Logger:  logger,
 	}
-}
-
-func (d *MutableStateTaskStore) RegisterHistoryTaskReader(
-	_ context.Context,
-	_ *p.RegisterHistoryTaskReaderRequest,
-) error {
-	// no-op
-	return nil
-}
-
-func (d *MutableStateTaskStore) UnregisterHistoryTaskReader(
-	_ context.Context,
-	_ *p.UnregisterHistoryTaskReaderRequest,
-) {
-	// no-op
-}
-
-func (d *MutableStateTaskStore) UpdateHistoryTaskReaderProgress(
-	_ context.Context,
-	_ *p.UpdateHistoryTaskReaderProgressRequest,
-) {
-	// no-op
 }
 
 func (d *MutableStateTaskStore) AddHistoryTasks(
@@ -354,7 +325,7 @@ func (d *MutableStateTaskStore) getTransferTasks(
 	for iter.Scan(&taskID, &data, &encoding) {
 		response.Tasks = append(response.Tasks, p.InternalHistoryTask{
 			Key:  tasks.NewImmediateKey(taskID),
-			Blob: *p.NewDataBlob(data, encoding),
+			Blob: p.NewDataBlob(data, encoding),
 		})
 
 		taskID = 0
@@ -436,7 +407,7 @@ func (d *MutableStateTaskStore) getTimerTasks(
 	for iter.Scan(&timestamp, &taskID, &data, &encoding) {
 		response.Tasks = append(response.Tasks, p.InternalHistoryTask{
 			Key:  tasks.NewKey(timestamp, taskID),
-			Blob: *p.NewDataBlob(data, encoding),
+			Blob: p.NewDataBlob(data, encoding),
 		})
 
 		timestamp = time.Time{}
@@ -690,7 +661,7 @@ func (d *MutableStateTaskStore) getVisibilityTasks(
 	for iter.Scan(&taskID, &data, &encoding) {
 		response.Tasks = append(response.Tasks, p.InternalHistoryTask{
 			Key:  tasks.NewImmediateKey(taskID),
-			Blob: *p.NewDataBlob(data, encoding),
+			Blob: p.NewDataBlob(data, encoding),
 		})
 
 		taskID = 0
@@ -759,7 +730,7 @@ func (d *MutableStateTaskStore) populateGetReplicationTasksResponse(
 	for iter.Scan(&taskID, &data, &encoding) {
 		response.Tasks = append(response.Tasks, p.InternalHistoryTask{
 			Key:  tasks.NewImmediateKey(taskID),
-			Blob: *p.NewDataBlob(data, encoding),
+			Blob: p.NewDataBlob(data, encoding),
 		})
 
 		taskID = 0
@@ -819,7 +790,7 @@ func (d *MutableStateTaskStore) getHistoryImmedidateTasks(
 	for iter.Scan(&taskID, &data, &encoding) {
 		response.Tasks = append(response.Tasks, p.InternalHistoryTask{
 			Key:  tasks.NewImmediateKey(taskID),
-			Blob: *p.NewDataBlob(data, encoding),
+			Blob: p.NewDataBlob(data, encoding),
 		})
 
 		taskID = 0
@@ -867,7 +838,7 @@ func (d *MutableStateTaskStore) getHistoryScheduledTasks(
 	for iter.Scan(&timestamp, &taskID, &data, &encoding) {
 		response.Tasks = append(response.Tasks, p.InternalHistoryTask{
 			Key:  tasks.NewKey(timestamp, taskID),
-			Blob: *p.NewDataBlob(data, encoding),
+			Blob: p.NewDataBlob(data, encoding),
 		})
 
 		timestamp = time.Time{}

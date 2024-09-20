@@ -28,12 +28,12 @@ package replication
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sync/atomic"
 	"time"
 
 	"go.temporal.io/api/serviceerror"
-
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -54,6 +54,7 @@ import (
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/shard"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 const (
@@ -63,7 +64,8 @@ const (
 
 var (
 	// ErrUnknownReplicationTask is the error to indicate unknown replication task type
-	ErrUnknownReplicationTask = serviceerror.NewInvalidArgument("unknown replication task")
+	ErrUnknownReplicationTask     = serviceerror.NewInvalidArgument("unknown replication task")
+	ErrCorruptedHistoryEventBatch = errors.New("corrupted history event batch, empty events")
 )
 
 type (
@@ -86,6 +88,7 @@ type (
 		metricsHandler          metrics.Handler
 		logger                  log.Logger
 		replicationTaskExecutor TaskExecutor
+		dlqWriter               DLQWriter
 
 		rateLimiter quotas.RateLimiter
 
@@ -119,6 +122,7 @@ func NewTaskProcessor(
 	replicationTaskFetcher taskFetcher,
 	replicationTaskExecutor TaskExecutor,
 	eventSerializer serialization.Serializer,
+	dlqWriter DLQWriter,
 ) TaskProcessor {
 	shardID := shard.GetShardID()
 	taskRetryPolicy := backoff.NewExponentialRetryPolicy(config.ReplicationTaskProcessorErrorRetryWait(shardID)).
@@ -145,6 +149,7 @@ func NewTaskProcessor(
 		metricsHandler:          metricsHandler,
 		logger:                  shard.GetLogger(),
 		replicationTaskExecutor: replicationTaskExecutor,
+		dlqWriter:               dlqWriter,
 		rateLimiter: quotas.NewMultiRateLimiter([]quotas.RateLimiter{
 			quotas.NewDefaultOutgoingRateLimiter(
 				func() float64 { return config.ReplicationTaskProcessorShardQPS() },
@@ -209,7 +214,7 @@ func (p *taskProcessorImpl) eventLoop() {
 		case <-syncShardTimer.C:
 			if err := p.handleSyncShardStatus(syncShardTask); err != nil {
 				p.logger.Error("unable to sync shard status", tag.Error(err))
-				p.metricsHandler.Counter(metrics.SyncShardFromRemoteFailure.GetMetricName()).Record(
+				metrics.SyncShardFromRemoteFailure.With(p.metricsHandler).Record(
 					1,
 					metrics.OperationTag(metrics.HistorySyncShardStatusScope))
 			}
@@ -249,9 +254,11 @@ func (p *taskProcessorImpl) pollProcessReplicationTasks() (retError error) {
 		taskCreationTime := replicationTask.GetVisibilityTime()
 		if taskCreationTime != nil {
 			now := p.shard.GetTimeSource().Now()
-			p.metricsHandler.Timer(metrics.ReplicationLatency.GetMetricName()).Record(
-				now.Sub(*taskCreationTime),
-				metrics.OperationTag(metrics.ReplicationTaskFetcherScope))
+			metrics.ReplicationLatency.With(p.metricsHandler).Record(
+				now.Sub(taskCreationTime.AsTime()),
+				metrics.OperationTag(metrics.ReplicationTaskFetcherScope),
+				metrics.SourceClusterTag(p.sourceCluster),
+			)
 		}
 		if err = p.applyReplicationTask(replicationTask); err != nil {
 			return err
@@ -306,8 +313,7 @@ func (p *taskProcessorImpl) handleSyncShardStatus(
 	} else if now.Sub(timestamp.TimeValue(status.GetStatusTime())) > dropSyncShardTaskTimeThreshold {
 		return nil
 	}
-
-	p.metricsHandler.Counter(metrics.SyncShardFromRemoteCounter.GetMetricName()).Record(
+	metrics.SyncShardFromRemoteCounter.With(p.metricsHandler).Record(
 		1,
 		metrics.OperationTag(metrics.HistorySyncShardStatusScope))
 	ctx, cancel := context.WithTimeout(context.Background(), replicationTimeout)
@@ -361,17 +367,20 @@ func (p *taskProcessorImpl) handleReplicationDLQTask(
 		tag.WorkflowRunID(request.TaskInfo.GetRunId()),
 		tag.TaskID(request.TaskInfo.GetTaskId()),
 	)
-	p.metricsHandler.Gauge(metrics.ReplicationDLQMaxLevelGauge.GetMetricName()).Record(
+	metrics.ReplicationDLQMaxLevelGauge.With(p.metricsHandler).Record(
 		float64(request.TaskInfo.GetTaskId()),
 		metrics.OperationTag(metrics.ReplicationDLQStatsScope),
 		metrics.TargetClusterTag(p.sourceCluster),
 		metrics.InstanceTag(convert.Int32ToString(p.shard.GetShardID())))
 	// The following is guaranteed to success or retry forever until processor is shutdown.
 	return backoff.ThrottleRetry(func() error {
-		err := p.shard.GetExecutionManager().PutReplicationTaskToDLQ(ctx, request)
+		err := writeTaskToDLQ(ctx, p.dlqWriter, p.shard, request.SourceClusterName, request.TaskInfo)
 		if err != nil {
 			p.logger.Error("failed to enqueue replication task to DLQ", tag.Error(err))
-			p.metricsHandler.Counter(metrics.ReplicationDLQFailed.GetMetricName()).Record(1, metrics.OperationTag(metrics.ReplicationTaskFetcherScope))
+			metrics.ReplicationDLQFailed.With(p.metricsHandler).Record(
+				1,
+				metrics.OperationTag(metrics.ReplicationTaskFetcherScope),
+			)
 		}
 		return err
 	}, p.dlqRetryPolicy, p.isRetryableError)
@@ -395,6 +404,7 @@ func (p *taskProcessorImpl) convertTaskToDLQTask(
 				TaskType:         enumsspb.TASK_TYPE_REPLICATION_SYNC_ACTIVITY,
 				ScheduledEventId: taskAttributes.GetScheduledEventId(),
 				Version:          taskAttributes.GetVersion(),
+				VisibilityTime:   replicationTask.GetVisibilityTime(),
 			},
 		}, nil
 
@@ -408,7 +418,7 @@ func (p *taskProcessorImpl) convertTaskToDLQTask(
 
 		if len(events) == 0 {
 			p.logger.Error("Empty events in a batch")
-			return nil, fmt.Errorf("corrupted history event batch, empty events")
+			return nil, ErrCorruptedHistoryEventBatch
 		}
 		firstEvent := events[0]
 		lastEvent := events[len(events)-1]
@@ -420,14 +430,17 @@ func (p *taskProcessorImpl) convertTaskToDLQTask(
 			ShardID:           p.shard.GetShardID(),
 			SourceClusterName: p.sourceCluster,
 			TaskInfo: &persistencespb.ReplicationTaskInfo{
-				NamespaceId:  taskAttributes.GetNamespaceId(),
-				WorkflowId:   taskAttributes.GetWorkflowId(),
-				RunId:        taskAttributes.GetRunId(),
-				TaskId:       replicationTask.GetSourceTaskId(),
-				TaskType:     enumsspb.TASK_TYPE_REPLICATION_HISTORY,
-				FirstEventId: firstEvent.GetEventId(),
-				NextEventId:  nextEventID,
-				Version:      firstEvent.GetVersion(),
+				NamespaceId:    taskAttributes.GetNamespaceId(),
+				WorkflowId:     taskAttributes.GetWorkflowId(),
+				RunId:          taskAttributes.GetRunId(),
+				TaskId:         replicationTask.GetSourceTaskId(),
+				TaskType:       enumsspb.TASK_TYPE_REPLICATION_HISTORY,
+				FirstEventId:   firstEvent.GetEventId(),
+				NextEventId:    nextEventID,
+				Version:        firstEvent.GetVersion(),
+				VisibilityTime: replicationTask.GetVisibilityTime(),
+				NewRunId:       taskAttributes.GetNewRunId(),
+				// BranchToken & NewRunBranchToken should also be populated but are deprecated
 			},
 		}, nil
 
@@ -449,12 +462,30 @@ func (p *taskProcessorImpl) convertTaskToDLQTask(
 			ShardID:           p.shard.GetShardID(),
 			SourceClusterName: p.sourceCluster,
 			TaskInfo: &persistencespb.ReplicationTaskInfo{
-				NamespaceId: executionInfo.GetNamespaceId(),
-				WorkflowId:  executionInfo.GetWorkflowId(),
-				RunId:       executionState.GetRunId(),
-				TaskId:      replicationTask.GetSourceTaskId(),
-				TaskType:    enumsspb.TASK_TYPE_REPLICATION_SYNC_WORKFLOW_STATE,
-				Version:     lastItem.GetVersion(),
+				NamespaceId:    executionInfo.GetNamespaceId(),
+				WorkflowId:     executionInfo.GetWorkflowId(),
+				RunId:          executionState.GetRunId(),
+				TaskId:         replicationTask.GetSourceTaskId(),
+				TaskType:       enumsspb.TASK_TYPE_REPLICATION_SYNC_WORKFLOW_STATE,
+				Version:        lastItem.GetVersion(),
+				VisibilityTime: replicationTask.GetVisibilityTime(),
+			},
+		}, nil
+
+	case enumsspb.REPLICATION_TASK_TYPE_SYNC_HSM_TASK:
+		taskAttributes := replicationTask.GetSyncHsmAttributes()
+
+		// TODO: GetShardID will break GetDLQReplicationMessages we need to handle DLQ for cross shard replication.
+		return &persistence.PutReplicationTaskToDLQRequest{
+			ShardID:           p.shard.GetShardID(),
+			SourceClusterName: p.sourceCluster,
+			TaskInfo: &persistencespb.ReplicationTaskInfo{
+				NamespaceId:    taskAttributes.GetNamespaceId(),
+				WorkflowId:     taskAttributes.GetWorkflowId(),
+				RunId:          taskAttributes.GetRunId(),
+				TaskId:         replicationTask.GetSourceTaskId(),
+				TaskType:       enumsspb.TASK_TYPE_REPLICATION_SYNC_HSM,
+				VisibilityTime: replicationTask.GetVisibilityTime(),
 			},
 		}, nil
 
@@ -465,11 +496,15 @@ func (p *taskProcessorImpl) convertTaskToDLQTask(
 
 func (p *taskProcessorImpl) paginationFn(_ []byte) ([]interface{}, []byte, error) {
 	respChan := make(chan *replicationspb.ReplicationMessages, 1)
+	var lastProcessedVisTime *timestamppb.Timestamp
+	if !p.maxRxProcessedTimestamp.IsZero() {
+		lastProcessedVisTime = timestamppb.New(p.maxRxProcessedTimestamp)
+	}
 	p.requestChan <- &replicationTaskRequest{
 		token: &replicationspb.ReplicationToken{
 			ShardId:                     p.sourceShardID,
 			LastProcessedMessageId:      p.maxRxProcessedTaskID,
-			LastProcessedVisibilityTime: &p.maxRxProcessedTimestamp,
+			LastProcessedVisibilityTime: lastProcessedVisTime,
 			LastRetrievedMessageId:      p.maxRxReceivedTaskID,
 		},
 		respChan: respChan,
@@ -514,32 +549,33 @@ func (p *taskProcessorImpl) paginationFn(_ []byte) ([]interface{}, []byte, error
 func (p *taskProcessorImpl) emitTaskMetrics(operation string, err error) {
 	metricsScope := p.metricsHandler.WithTags(metrics.OperationTag(operation))
 	if common.IsContextDeadlineExceededErr(err) || common.IsContextCanceledErr(err) {
-		metricsScope.Counter(metrics.ServiceErrContextTimeoutCounter.GetMetricName()).Record(1)
+		metrics.ServiceErrContextTimeoutCounter.With(metricsScope).Record(1)
 		return
 	}
 
 	// Also update counter to distinguish between type of failures
 	switch err := err.(type) {
 	case nil:
-		metricsScope.Counter(metrics.ReplicationTasksApplied.GetMetricName()).Record(1)
+		metrics.ReplicationTasksApplied.With(metricsScope).Record(1)
 		return
 	case *serviceerrors.ShardOwnershipLost:
-		metricsScope.Counter(metrics.ServiceErrShardOwnershipLostCounter.GetMetricName()).Record(1)
+		metrics.ServiceErrShardOwnershipLostCounter.With(metricsScope).Record(1)
 	case *serviceerror.InvalidArgument:
-		metricsScope.Counter(metrics.ServiceErrInvalidArgumentCounter.GetMetricName()).Record(1)
+		metrics.ServiceErrInvalidArgumentCounter.With(metricsScope).Record(1)
 	case *serviceerror.NamespaceNotActive:
-		metricsScope.Counter(metrics.ServiceErrNamespaceNotActiveCounter.GetMetricName()).Record(1)
+		metrics.ServiceErrNamespaceNotActiveCounter.With(metricsScope).Record(1)
 	case *serviceerror.WorkflowExecutionAlreadyStarted:
-		metricsScope.Counter(metrics.ServiceErrExecutionAlreadyStartedCounter.GetMetricName()).Record(1)
+		metrics.ServiceErrExecutionAlreadyStartedCounter.With(metricsScope).Record(1)
 	case *serviceerror.NotFound, *serviceerror.NamespaceNotFound:
-		metricsScope.Counter(metrics.ServiceErrNotFoundCounter.GetMetricName()).Record(1)
+		metrics.ServiceErrNotFoundCounter.With(metricsScope).Record(1)
 	case *serviceerror.ResourceExhausted:
-		metricsScope.Counter(metrics.ServiceErrResourceExhaustedCounter.GetMetricName()).Record(1, metrics.ResourceExhaustedCauseTag(err.Cause))
+		metrics.ServiceErrResourceExhaustedCounter.With(metricsScope).Record(
+			1, metrics.ResourceExhaustedCauseTag(err.Cause), metrics.ResourceExhaustedScopeTag(err.Scope))
 	case *serviceerrors.RetryReplication:
-		metricsScope.Counter(metrics.ServiceErrRetryTaskCounter.GetMetricName()).Record(1)
+		metrics.ServiceErrRetryTaskCounter.With(metricsScope).Record(1)
 	default:
 	}
-	metricsScope.Counter(metrics.ReplicationTasksFailed.GetMetricName()).Record(1)
+	metrics.ReplicationTasksFailed.With(metricsScope).Record(1)
 }
 
 func (p *taskProcessorImpl) getOperationTagValue(

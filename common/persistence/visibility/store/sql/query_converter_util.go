@@ -28,8 +28,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/xwb1989/sqlparser"
-
+	"github.com/temporalio/sqlparser"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/server/common/persistence/visibility/store/query"
 	"go.temporal.io/server/common/searchattribute"

@@ -1,3 +1,5 @@
+// The MIT License
+//
 // Copyright (c) 2020 Temporal Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -24,9 +26,8 @@ package temporal.server.api.archiver.v1;
 
 option go_package = "go.temporal.io/server/api/archiver/v1;archiver";
 
+import "google/protobuf/duration.proto";
 import "google/protobuf/timestamp.proto";
-
-import "dependencies/gogoproto/gogo.proto";
 
 import "temporal/api/common/v1/message.proto";
 import "temporal/api/history/v1/message.proto";
@@ -57,12 +58,13 @@ message VisibilityRecord {
     string workflow_id = 3;
     string run_id = 4;
     string workflow_type_name = 5;
-    google.protobuf.Timestamp start_time = 6 [(gogoproto.stdtime) = true];
-    google.protobuf.Timestamp execution_time = 7 [(gogoproto.stdtime) = true];
-    google.protobuf.Timestamp close_time = 8 [(gogoproto.stdtime) = true];
+    google.protobuf.Timestamp start_time = 6;
+    google.protobuf.Timestamp execution_time = 7;
+    google.protobuf.Timestamp close_time = 8;
     temporal.api.enums.v1.WorkflowExecutionStatus status = 9;
     int64 history_length = 10;
     temporal.api.common.v1.Memo memo = 11;
     map<string, string> search_attributes = 12;
     string history_archival_uri = 13;
+    google.protobuf.Duration execution_duration = 14;
 }

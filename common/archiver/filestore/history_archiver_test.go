@@ -32,22 +32,19 @@ import (
 	"testing"
 	"time"
 
-	enumspb "go.temporal.io/api/enums/v1"
-
-	"go.temporal.io/server/tests/testutils"
-
-	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
-
 	archiverspb "go.temporal.io/server/api/archiver/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/tests/testutils"
+	"go.uber.org/mock/gomock"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 const (
@@ -192,7 +189,14 @@ func (s *historyArchiverSuite) TestArchive_Fail_TimeoutWhenReadingHistory() {
 	historyIterator := archiver.NewMockHistoryIterator(mockCtrl)
 	gomock.InOrder(
 		historyIterator.EXPECT().HasNext().Return(true),
-		historyIterator.EXPECT().Next(gomock.Any()).Return(nil, serviceerror.NewResourceExhausted(enumspb.RESOURCE_EXHAUSTED_CAUSE_RPS_LIMIT, "")),
+		historyIterator.EXPECT().Next(gomock.Any()).Return(
+			nil,
+			&serviceerror.ResourceExhausted{
+				Cause:   enumspb.RESOURCE_EXHAUSTED_CAUSE_RPS_LIMIT,
+				Scope:   enumspb.RESOURCE_EXHAUSTED_SCOPE_NAMESPACE,
+				Message: "",
+			},
+		),
 	)
 
 	historyArchiver := s.newTestHistoryArchiver(historyIterator)
@@ -218,7 +222,7 @@ func (s *historyArchiverSuite) TestArchive_Fail_HistoryMutated() {
 			Events: []*historypb.HistoryEvent{
 				{
 					EventId:   common.FirstEventID + 1,
-					EventTime: timestamp.TimePtr(time.Now().UTC()),
+					EventTime: timestamppb.New(time.Now().UTC()),
 					Version:   testCloseFailoverVersion + 1,
 				},
 			},
@@ -286,7 +290,7 @@ func (s *historyArchiverSuite) TestArchive_Skip() {
 				Events: []*historypb.HistoryEvent{
 					{
 						EventId:   common.FirstEventID,
-						EventTime: timestamp.TimePtr(time.Now().UTC()),
+						EventTime: timestamppb.New(time.Now().UTC()),
 						Version:   testCloseFailoverVersion,
 					},
 				},
@@ -323,12 +327,12 @@ func (s *historyArchiverSuite) TestArchive_Success() {
 			Events: []*historypb.HistoryEvent{
 				{
 					EventId:   common.FirstEventID + 1,
-					EventTime: timestamp.TimePtr(time.Now().UTC()),
+					EventTime: timestamppb.New(time.Now().UTC()),
 					Version:   testCloseFailoverVersion,
 				},
 				{
 					EventId:   common.FirstEventID + 2,
-					EventTime: timestamp.TimePtr(time.Now().UTC()),
+					EventTime: timestamppb.New(time.Now().UTC()),
 					Version:   testCloseFailoverVersion,
 				},
 			},
@@ -337,7 +341,7 @@ func (s *historyArchiverSuite) TestArchive_Success() {
 			Events: []*historypb.HistoryEvent{
 				{
 					EventId:   testNextEventID - 1,
-					EventTime: timestamp.TimePtr(time.Now().UTC()),
+					EventTime: timestamppb.New(time.Now().UTC()),
 					Version:   testCloseFailoverVersion,
 				},
 			},
@@ -582,13 +586,13 @@ func (s *historyArchiverSuite) newTestHistoryArchiver(historyIterator archiver.H
 }
 
 func (s *historyArchiverSuite) setupHistoryDirectory() {
-	now := time.Date(2020, 8, 22, 1, 2, 3, 4, time.UTC)
+	now := timestamppb.New(time.Date(2020, 8, 22, 1, 2, 3, 4, time.UTC))
 	s.historyBatchesV1 = []*historypb.History{
 		{
 			Events: []*historypb.HistoryEvent{
 				{
 					EventId:   testNextEventID - 1,
-					EventTime: &now,
+					EventTime: now,
 					Version:   1,
 				},
 			},
@@ -600,12 +604,12 @@ func (s *historyArchiverSuite) setupHistoryDirectory() {
 			Events: []*historypb.HistoryEvent{
 				{
 					EventId:   common.FirstEventID + 1,
-					EventTime: &now,
+					EventTime: now,
 					Version:   testCloseFailoverVersion,
 				},
 				{
 					EventId:   common.FirstEventID + 1,
-					EventTime: &now,
+					EventTime: now,
 					Version:   testCloseFailoverVersion,
 				},
 			},
@@ -614,7 +618,7 @@ func (s *historyArchiverSuite) setupHistoryDirectory() {
 			Events: []*historypb.HistoryEvent{
 				{
 					EventId:   testNextEventID - 1,
-					EventTime: &now,
+					EventTime: now,
 					Version:   testCloseFailoverVersion,
 				},
 			},

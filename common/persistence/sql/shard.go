@@ -30,7 +30,6 @@ import (
 	"fmt"
 
 	"go.temporal.io/api/serviceerror"
-
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
@@ -138,7 +137,7 @@ func (m *sqlShardStore) AssertShardOwnership(
 	ctx context.Context,
 	request *persistence.AssertShardOwnershipRequest,
 ) error {
-	return nil
+	return serviceerror.NewUnimplemented("AssertShardOwnership is not implemented for sql shard store")
 }
 
 // initiated by the owning shard

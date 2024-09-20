@@ -30,10 +30,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/golang/mock/gomock"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
-
 	"go.temporal.io/server/common/future"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/persistence"
@@ -41,6 +39,7 @@ import (
 	"go.temporal.io/server/common/persistence/visibility/store"
 	"go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
 	"go.temporal.io/server/common/searchattribute"
+	"go.uber.org/mock/gomock"
 )
 
 func (s *ESVisibilitySuite) TestRecordWorkflowExecutionStarted() {
@@ -273,27 +272,27 @@ func (s *ESVisibilitySuite) TestDeleteExecution_EmptyRequest() {
 	s.NoError(err)
 }
 
-func (s *ESVisibilitySuite) Test_getDocID() {
-	s.Equal("wid~rid", getDocID("wid", "rid"))
+func (s *ESVisibilitySuite) Test_GetDocID() {
+	s.Equal("wid~rid", GetDocID("wid", "rid"))
 
-	s.Equal(strings.Repeat("a", 512), getDocID("wid", strings.Repeat("a", 1000)))
-	s.Equal(strings.Repeat("a", 512), getDocID("wid", strings.Repeat("a", 513)))
-	s.Equal(strings.Repeat("a", 512), getDocID("wid", strings.Repeat("a", 512)))
-	s.Equal(strings.Repeat("a", 511), getDocID("wid", strings.Repeat("a", 511)))
-	s.Equal("w~"+strings.Repeat("a", 510), getDocID("wid", strings.Repeat("a", 510)))
-	s.Equal("wi~"+strings.Repeat("a", 509), getDocID("wid", strings.Repeat("a", 509)))
-	s.Equal("wid~"+strings.Repeat("a", 508), getDocID("wid", strings.Repeat("a", 508)))
-	s.Equal("wid~"+strings.Repeat("a", 507), getDocID("wid", strings.Repeat("a", 507)))
+	s.Equal(strings.Repeat("a", 512), GetDocID("wid", strings.Repeat("a", 1000)))
+	s.Equal(strings.Repeat("a", 512), GetDocID("wid", strings.Repeat("a", 513)))
+	s.Equal(strings.Repeat("a", 512), GetDocID("wid", strings.Repeat("a", 512)))
+	s.Equal(strings.Repeat("a", 511), GetDocID("wid", strings.Repeat("a", 511)))
+	s.Equal("w~"+strings.Repeat("a", 510), GetDocID("wid", strings.Repeat("a", 510)))
+	s.Equal("wi~"+strings.Repeat("a", 509), GetDocID("wid", strings.Repeat("a", 509)))
+	s.Equal("wid~"+strings.Repeat("a", 508), GetDocID("wid", strings.Repeat("a", 508)))
+	s.Equal("wid~"+strings.Repeat("a", 507), GetDocID("wid", strings.Repeat("a", 507)))
 
-	s.Equal(strings.Repeat("a", 512-1-36)+"~fd86a520-741e-4fd3-a788-165c445ea6f3", getDocID(strings.Repeat("a", 1000), "fd86a520-741e-4fd3-a788-165c445ea6f3"))
-	s.Equal(strings.Repeat("a", 512-1-36)+"~fd86a520-741e-4fd3-a788-165c445ea6f3", getDocID(strings.Repeat("a", 477), "fd86a520-741e-4fd3-a788-165c445ea6f3"))
-	s.Equal(strings.Repeat("a", 512-1-36)+"~fd86a520-741e-4fd3-a788-165c445ea6f3", getDocID(strings.Repeat("a", 476), "fd86a520-741e-4fd3-a788-165c445ea6f3"))
-	s.Equal(strings.Repeat("a", 475)+"~fd86a520-741e-4fd3-a788-165c445ea6f3", getDocID(strings.Repeat("a", 475), "fd86a520-741e-4fd3-a788-165c445ea6f3"))
-	s.Equal(strings.Repeat("a", 474)+"~fd86a520-741e-4fd3-a788-165c445ea6f3", getDocID(strings.Repeat("a", 474), "fd86a520-741e-4fd3-a788-165c445ea6f3"))
-	s.Equal(strings.Repeat("a", 400)+"~fd86a520-741e-4fd3-a788-165c445ea6f3", getDocID(strings.Repeat("a", 400), "fd86a520-741e-4fd3-a788-165c445ea6f3"))
+	s.Equal(strings.Repeat("a", 512-1-36)+"~fd86a520-741e-4fd3-a788-165c445ea6f3", GetDocID(strings.Repeat("a", 1000), "fd86a520-741e-4fd3-a788-165c445ea6f3"))
+	s.Equal(strings.Repeat("a", 512-1-36)+"~fd86a520-741e-4fd3-a788-165c445ea6f3", GetDocID(strings.Repeat("a", 477), "fd86a520-741e-4fd3-a788-165c445ea6f3"))
+	s.Equal(strings.Repeat("a", 512-1-36)+"~fd86a520-741e-4fd3-a788-165c445ea6f3", GetDocID(strings.Repeat("a", 476), "fd86a520-741e-4fd3-a788-165c445ea6f3"))
+	s.Equal(strings.Repeat("a", 475)+"~fd86a520-741e-4fd3-a788-165c445ea6f3", GetDocID(strings.Repeat("a", 475), "fd86a520-741e-4fd3-a788-165c445ea6f3"))
+	s.Equal(strings.Repeat("a", 474)+"~fd86a520-741e-4fd3-a788-165c445ea6f3", GetDocID(strings.Repeat("a", 474), "fd86a520-741e-4fd3-a788-165c445ea6f3"))
+	s.Equal(strings.Repeat("a", 400)+"~fd86a520-741e-4fd3-a788-165c445ea6f3", GetDocID(strings.Repeat("a", 400), "fd86a520-741e-4fd3-a788-165c445ea6f3"))
 }
 
-func (s *ESVisibilitySuite) Test_getVisibilityTaskKey() {
-	s.Equal("22~8", getVisibilityTaskKey(22, 8))
-	s.Equal("228~1978", getVisibilityTaskKey(228, 1978))
+func (s *ESVisibilitySuite) Test_GetVisibilityTaskKey() {
+	s.Equal("22~8", GetVisibilityTaskKey(22, 8))
+	s.Equal("228~1978", GetVisibilityTaskKey(228, 1978))
 }

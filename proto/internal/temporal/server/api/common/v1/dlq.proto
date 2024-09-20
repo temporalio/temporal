@@ -1,0 +1,62 @@
+// The MIT License
+//
+// Copyright (c) 2023 Temporal Technologies, Inc.
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+// THE SOFTWARE.
+
+syntax = "proto3";
+
+package temporal.server.api.common.v1;
+option go_package = "go.temporal.io/server/api/common/v1;commonspb";
+
+import "temporal/api/common/v1/message.proto";
+
+message HistoryTask {
+  // shard_id is included to avoid having to deserialize the task blob.
+  int32 shard_id = 1;
+  temporal.api.common.v1.DataBlob blob = 2;
+}
+
+message HistoryDLQTaskMetadata {
+  // message_id is the zero-indexed sequence number of the message in the queue that contains this history task.
+  int64 message_id = 1;
+}
+
+// HistoryDLQTask is a history task that has been moved to the DLQ, so it also has a message ID (index within that
+// queue).
+message HistoryDLQTask {
+  HistoryDLQTaskMetadata metadata = 1;
+  // This is named payload to prevent stuttering (e.g. task.Task).
+  HistoryTask payload = 2;
+}
+
+// HistoryDLQKey is a compound key that identifies a history DLQ.
+message HistoryDLQKey {
+  // task_category is the category of the task. The default values are defined in the TaskCategory enum. However, there
+  // may also be other categories registered at runtime with the history/tasks package. As a result, the category here
+  // is an integer instead of an enum to support both the default values and custom values.
+  int32 task_category = 1;
+  // source_cluster and target_cluster must both be non-empty. For non-cross DC tasks, i.e. non-replication tasks,
+  // they should be the same. The reason for this is that we may support wildcard clusters in the future, and we want
+  // to differentiate between queues which go from one cluster to all other clusters, and queues which don't leave the
+  // current cluster.
+  string source_cluster = 2;
+  string target_cluster = 3;
+}
+

@@ -33,12 +33,13 @@ import (
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
-
 	enumsspb "go.temporal.io/server/api/enums/v1"
+	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/persistence/versionhistory"
 )
 
 type (
@@ -94,7 +95,10 @@ func (s *notifierSuite) TestSingleSubscriberWatchingEvents() {
 	workflowState := enumsspb.WORKFLOW_EXECUTION_STATE_CREATED
 	workflowStatus := enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING
 	branchToken := make([]byte, 0)
-	historyEvent := NewNotification(namespaceID, execution, lastFirstEventID, lastFirstEventTxnID, nextEventID, previousStartedEventID, branchToken, workflowState, workflowStatus)
+	versionHistoryItem := versionhistory.NewVersionHistoryItem(nextEventID-1, 1)
+	currentVersionHistory := versionhistory.NewVersionHistory(branchToken, []*historyspb.VersionHistoryItem{versionHistoryItem})
+	versionHistories := versionhistory.NewVersionHistories(currentVersionHistory)
+	historyEvent := NewNotification(namespaceID, execution, lastFirstEventID, lastFirstEventTxnID, nextEventID, previousStartedEventID, workflowState, workflowStatus, versionHistories)
 	timerChan := time.NewTimer(time.Second * 2).C
 
 	subscriberID, channel, err := s.notifier.WatchHistoryEvent(definition.NewWorkflowKey(namespaceID, execution.GetWorkflowId(), execution.GetRunId()))
@@ -126,7 +130,10 @@ func (s *notifierSuite) TestMultipleSubscriberWatchingEvents() {
 	workflowState := enumsspb.WORKFLOW_EXECUTION_STATE_CREATED
 	workflowStatus := enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING
 	branchToken := make([]byte, 0)
-	historyEvent := NewNotification(namespaceID, execution, lastFirstEventID, lastFirstEventTxnID, nextEventID, previousStartedEventID, branchToken, workflowState, workflowStatus)
+	versionHistoryItem := versionhistory.NewVersionHistoryItem(nextEventID-1, 1)
+	currentVersionHistory := versionhistory.NewVersionHistory(branchToken, []*historyspb.VersionHistoryItem{versionHistoryItem})
+	versionHistories := versionhistory.NewVersionHistories(currentVersionHistory)
+	historyEvent := NewNotification(namespaceID, execution, lastFirstEventID, lastFirstEventTxnID, nextEventID, previousStartedEventID, workflowState, workflowStatus, versionHistories)
 	timerChan := time.NewTimer(time.Second * 5).C
 
 	subscriberCount := 100

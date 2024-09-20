@@ -57,7 +57,7 @@ type (
 
 	taskQueueState struct {
 		rangeID     int64
-		lastUpdated *time.Time
+		lastUpdated time.Time
 	}
 
 	stats struct {
@@ -131,7 +131,7 @@ func (s *Scavenger) Start() {
 	s.stopWG.Add(1)
 	s.executor.Start()
 	go s.run()
-	s.metricsHandler.Counter(metrics.StartedCount.GetMetricName()).Record(1)
+	metrics.StartedCount.With(s.metricsHandler).Record(1)
 	s.logger.Info("Taskqueue scavenger started")
 }
 
@@ -140,7 +140,7 @@ func (s *Scavenger) Stop() {
 	if !atomic.CompareAndSwapInt32(&s.status, common.DaemonStatusStarted, common.DaemonStatusStopped) {
 		return
 	}
-	s.metricsHandler.Counter(metrics.StoppedCount.GetMetricName()).Record(1)
+	metrics.StoppedCount.With(s.metricsHandler).Record(1)
 	s.logger.Info("Taskqueue scavenger stopping")
 	s.lifecycleCancel()
 	close(s.stopC)
@@ -198,7 +198,7 @@ func (s *Scavenger) awaitExecutor() {
 		select {
 		case <-timer.C:
 			outstanding = s.executor.TaskCount()
-			s.metricsHandler.Gauge(metrics.TaskQueueOutstandingCount.GetMetricName()).Record(float64(outstanding))
+			metrics.TaskQueueOutstandingCount.With(s.metricsHandler).Record(float64(outstanding))
 		case <-s.stopC:
 			timer.Stop()
 			return
@@ -207,10 +207,10 @@ func (s *Scavenger) awaitExecutor() {
 }
 
 func (s *Scavenger) emitStats() {
-	s.metricsHandler.Gauge(metrics.TaskProcessedCount.GetMetricName()).Record(float64(s.stats.task.nProcessed))
-	s.metricsHandler.Gauge(metrics.TaskDeletedCount.GetMetricName()).Record(float64(s.stats.task.nDeleted))
-	s.metricsHandler.Gauge(metrics.TaskQueueProcessedCount.GetMetricName()).Record(float64(s.stats.taskqueue.nProcessed))
-	s.metricsHandler.Gauge(metrics.TaskQueueDeletedCount.GetMetricName()).Record(float64(s.stats.taskqueue.nDeleted))
+	metrics.TaskProcessedCount.With(s.metricsHandler).Record(float64(s.stats.task.nProcessed))
+	metrics.TaskDeletedCount.With(s.metricsHandler).Record(float64(s.stats.task.nDeleted))
+	metrics.TaskQueueProcessedCount.With(s.metricsHandler).Record(float64(s.stats.taskqueue.nProcessed))
+	metrics.TaskQueueDeletedCount.With(s.metricsHandler).Record(float64(s.stats.taskqueue.nDeleted))
 }
 
 // newTask returns a new instance of an executable task which will process a single task queue
@@ -223,7 +223,7 @@ func (s *Scavenger) newTask(info *p.PersistedTaskQueueInfo) executor.Task {
 		},
 		taskQueueState: taskQueueState{
 			rangeID:     info.RangeID,
-			lastUpdated: info.Data.LastUpdateTime,
+			lastUpdated: info.Data.LastUpdateTime.AsTime(),
 		},
 		scvg: s,
 	}

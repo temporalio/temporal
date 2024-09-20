@@ -29,16 +29,20 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/gogo/protobuf/proto"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	workflowpb "go.temporal.io/api/workflow/v1"
-
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/persistence/visibility/store"
+	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/utf8validator"
+	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/durationpb"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type (
@@ -122,6 +126,8 @@ func (p *visibilityManagerImpl) RecordWorkflowExecutionClosed(
 		CloseTime:                     request.CloseTime,
 		HistoryLength:                 request.HistoryLength,
 		HistorySizeBytes:              request.HistorySizeBytes,
+		ExecutionDuration:             request.ExecutionDuration,
+		StateTransitionCount:          request.StateTransitionCount,
 	}
 	return p.store.RecordWorkflowExecutionClosed(ctx, req)
 }
@@ -145,89 +151,6 @@ func (p *visibilityManagerImpl) DeleteWorkflowExecution(
 	request *manager.VisibilityDeleteWorkflowExecutionRequest,
 ) error {
 	return p.store.DeleteWorkflowExecution(ctx, request)
-}
-
-func (p *visibilityManagerImpl) ListOpenWorkflowExecutions(
-	ctx context.Context,
-	request *manager.ListWorkflowExecutionsRequest,
-) (*manager.ListWorkflowExecutionsResponse, error) {
-	response, err := p.store.ListOpenWorkflowExecutions(ctx, request)
-	if err != nil {
-		return nil, err
-	}
-	return p.convertInternalListResponse(response)
-}
-
-func (p *visibilityManagerImpl) ListClosedWorkflowExecutions(
-	ctx context.Context,
-	request *manager.ListWorkflowExecutionsRequest,
-) (*manager.ListWorkflowExecutionsResponse, error) {
-	response, err := p.store.ListClosedWorkflowExecutions(ctx, request)
-	if err != nil {
-		return nil, err
-	}
-
-	return p.convertInternalListResponse(response)
-}
-
-func (p *visibilityManagerImpl) ListOpenWorkflowExecutionsByType(
-	ctx context.Context,
-	request *manager.ListWorkflowExecutionsByTypeRequest,
-) (*manager.ListWorkflowExecutionsResponse, error) {
-	response, err := p.store.ListOpenWorkflowExecutionsByType(ctx, request)
-	if err != nil {
-		return nil, err
-	}
-
-	return p.convertInternalListResponse(response)
-}
-
-func (p *visibilityManagerImpl) ListClosedWorkflowExecutionsByType(
-	ctx context.Context,
-	request *manager.ListWorkflowExecutionsByTypeRequest,
-) (*manager.ListWorkflowExecutionsResponse, error) {
-	response, err := p.store.ListClosedWorkflowExecutionsByType(ctx, request)
-	if err != nil {
-		return nil, err
-	}
-
-	return p.convertInternalListResponse(response)
-}
-
-func (p *visibilityManagerImpl) ListOpenWorkflowExecutionsByWorkflowID(
-	ctx context.Context,
-	request *manager.ListWorkflowExecutionsByWorkflowIDRequest,
-) (*manager.ListWorkflowExecutionsResponse, error) {
-	response, err := p.store.ListOpenWorkflowExecutionsByWorkflowID(ctx, request)
-	if err != nil {
-		return nil, err
-	}
-
-	return p.convertInternalListResponse(response)
-}
-
-func (p *visibilityManagerImpl) ListClosedWorkflowExecutionsByWorkflowID(
-	ctx context.Context,
-	request *manager.ListWorkflowExecutionsByWorkflowIDRequest,
-) (*manager.ListWorkflowExecutionsResponse, error) {
-	response, err := p.store.ListClosedWorkflowExecutionsByWorkflowID(ctx, request)
-	if err != nil {
-		return nil, err
-	}
-
-	return p.convertInternalListResponse(response)
-}
-
-func (p *visibilityManagerImpl) ListClosedWorkflowExecutionsByStatus(
-	ctx context.Context,
-	request *manager.ListClosedWorkflowExecutionsByStatusRequest,
-) (*manager.ListWorkflowExecutionsResponse, error) {
-	response, err := p.store.ListClosedWorkflowExecutionsByStatus(ctx, request)
-	if err != nil {
-		return nil, err
-	}
-
-	return p.convertInternalListResponse(response)
 }
 
 func (p *visibilityManagerImpl) ListWorkflowExecutions(
@@ -281,33 +204,64 @@ func (p *visibilityManagerImpl) GetWorkflowExecution(
 	return &manager.GetWorkflowExecutionResponse{Execution: execution}, err
 }
 
-func (p *visibilityManagerImpl) newInternalVisibilityRequestBase(request *manager.VisibilityRequestBase) (*store.InternalVisibilityRequestBase, error) {
+func (p *visibilityManagerImpl) newInternalVisibilityRequestBase(
+	request *manager.VisibilityRequestBase,
+) (*store.InternalVisibilityRequestBase, error) {
 	if request == nil {
 		return nil, nil
 	}
-	memoBlob, err := p.serializeMemo(request.Memo)
+	memoBlob, err := serializeMemo(request.Memo)
 	if err != nil {
 		return nil, err
 	}
 
+	var searchAttrs *commonpb.SearchAttributes
+	if len(request.SearchAttributes.GetIndexedFields()) > 0 {
+		// Remove any system search attribute from the map.
+		// This is necessary because the validation can supress errors when trying
+		// to set a value on a system search attribute.
+		searchAttrs = &commonpb.SearchAttributes{
+			IndexedFields: make(map[string]*commonpb.Payload),
+		}
+		for key, value := range request.SearchAttributes.IndexedFields {
+			if !searchattribute.IsSystem(key) {
+				searchAttrs.IndexedFields[key] = value
+			}
+		}
+	}
+
+	var (
+		parentWorkflowID *string
+		parentRunID      *string
+	)
+	if request.ParentExecution != nil {
+		parentWorkflowID = &request.ParentExecution.WorkflowId
+		parentRunID = &request.ParentExecution.RunId
+	}
+
 	return &store.InternalVisibilityRequestBase{
-		NamespaceID:          request.NamespaceID.String(),
-		WorkflowID:           request.Execution.GetWorkflowId(),
-		RunID:                request.Execution.GetRunId(),
-		WorkflowTypeName:     request.WorkflowTypeName,
-		StartTime:            request.StartTime,
-		Status:               request.Status,
-		ExecutionTime:        request.ExecutionTime,
-		StateTransitionCount: request.StateTransitionCount,
-		TaskID:               request.TaskID,
-		ShardID:              request.ShardID,
-		TaskQueue:            request.TaskQueue,
-		Memo:                 memoBlob,
-		SearchAttributes:     request.SearchAttributes,
+		NamespaceID:      request.NamespaceID.String(),
+		WorkflowID:       request.Execution.GetWorkflowId(),
+		RunID:            request.Execution.GetRunId(),
+		WorkflowTypeName: request.WorkflowTypeName,
+		StartTime:        request.StartTime,
+		Status:           request.Status,
+		ExecutionTime:    request.ExecutionTime,
+		TaskID:           request.TaskID,
+		ShardID:          request.ShardID,
+		TaskQueue:        request.TaskQueue,
+		Memo:             memoBlob,
+		SearchAttributes: searchAttrs,
+		ParentWorkflowID: parentWorkflowID,
+		ParentRunID:      parentRunID,
+		RootWorkflowID:   request.RootExecution.GetWorkflowId(),
+		RootRunID:        request.RootExecution.GetRunId(),
 	}, nil
 }
 
-func (p *visibilityManagerImpl) convertInternalListResponse(internalResponse *store.InternalListWorkflowExecutionsResponse) (*manager.ListWorkflowExecutionsResponse, error) {
+func (p *visibilityManagerImpl) convertInternalListResponse(
+	internalResponse *store.InternalListWorkflowExecutionsResponse,
+) (*manager.ListWorkflowExecutionsResponse, error) {
 	if internalResponse == nil {
 		return nil, nil
 	}
@@ -326,11 +280,13 @@ func (p *visibilityManagerImpl) convertInternalListResponse(internalResponse *st
 	return resp, nil
 }
 
-func (p *visibilityManagerImpl) convertInternalWorkflowExecutionInfo(internalExecution *store.InternalWorkflowExecutionInfo) (*workflowpb.WorkflowExecutionInfo, error) {
+func (p *visibilityManagerImpl) convertInternalWorkflowExecutionInfo(
+	internalExecution *store.InternalWorkflowExecutionInfo,
+) (*workflowpb.WorkflowExecutionInfo, error) {
 	if internalExecution == nil {
 		return nil, nil
 	}
-	memo, err := p.deserializeMemo(internalExecution.Memo)
+	memo, err := deserializeMemo(internalExecution.Memo)
 	if err != nil {
 		return nil, err
 	}
@@ -343,33 +299,47 @@ func (p *visibilityManagerImpl) convertInternalWorkflowExecutionInfo(internalExe
 		Type: &commonpb.WorkflowType{
 			Name: internalExecution.TypeName,
 		},
-		StartTime:            &internalExecution.StartTime,
-		ExecutionTime:        &internalExecution.ExecutionTime,
-		Memo:                 memo,
-		SearchAttributes:     internalExecution.SearchAttributes,
-		TaskQueue:            internalExecution.TaskQueue,
-		Status:               internalExecution.Status,
-		StateTransitionCount: internalExecution.StateTransitionCount,
+		StartTime:        timestamppb.New(internalExecution.StartTime),
+		ExecutionTime:    timestamppb.New(internalExecution.ExecutionTime),
+		Memo:             memo,
+		SearchAttributes: internalExecution.SearchAttributes,
+		TaskQueue:        internalExecution.TaskQueue,
+		Status:           internalExecution.Status,
+		RootExecution: &commonpb.WorkflowExecution{
+			WorkflowId: internalExecution.RootWorkflowID,
+			RunId:      internalExecution.RootRunID,
+		},
+		// TODO: poplulate FirstRunId once it has been added as a system search attribute.
+	}
+
+	if internalExecution.ParentWorkflowID != "" {
+		executionInfo.ParentExecution = &commonpb.WorkflowExecution{
+			WorkflowId: internalExecution.ParentWorkflowID,
+			RunId:      internalExecution.ParentRunID,
+		}
 	}
 
 	// for close records
 	if internalExecution.Status != enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
-		executionInfo.CloseTime = &internalExecution.CloseTime
+		executionInfo.CloseTime = timestamppb.New(internalExecution.CloseTime)
+		executionInfo.ExecutionDuration = durationpb.New(internalExecution.ExecutionDuration)
 		executionInfo.HistoryLength = internalExecution.HistoryLength
 		executionInfo.HistorySizeBytes = internalExecution.HistorySizeBytes
+		executionInfo.StateTransitionCount = internalExecution.StateTransitionCount
 	}
 
 	// Workflows created before 1.11 have ExecutionTime set to Unix epoch zero time (1/1/1970) for non-cron/non-retry case.
 	// Use StartTime as ExecutionTime for this case (if there was a backoff it must be set).
 	// Remove this "if" block when ExecutionTime field has actual correct value (added 6/9/21).
 	// Affects only non-advanced visibility.
-	if !executionInfo.ExecutionTime.After(time.Unix(0, 0)) {
-		executionInfo.ExecutionTime = executionInfo.StartTime
+	if !executionInfo.ExecutionTime.AsTime().After(time.Unix(0, 0)) {
+		executionInfo.ExecutionTime = timestamppb.New(internalExecution.StartTime)
 	}
 
 	return executionInfo, nil
 }
-func (p *visibilityManagerImpl) deserializeMemo(data *commonpb.DataBlob) (*commonpb.Memo, error) {
+
+func deserializeMemo(data *commonpb.DataBlob) (*commonpb.Memo, error) {
 	if data == nil || len(data.Data) == 0 {
 		return &commonpb.Memo{}, nil
 	}
@@ -379,16 +349,20 @@ func (p *visibilityManagerImpl) deserializeMemo(data *commonpb.DataBlob) (*commo
 	case enumspb.ENCODING_TYPE_PROTO3:
 		memo := &commonpb.Memo{}
 		err := proto.Unmarshal(data.Data, memo)
+		if err == nil {
+			err = utf8validator.Validate(memo, utf8validator.SourcePersistence)
+		}
 		if err != nil {
-			return nil, serviceerror.NewInternal(fmt.Sprintf("Unable to deserialize memo from data blob: %v", err))
+			return nil, serialization.NewDeserializationError(
+				enumspb.ENCODING_TYPE_PROTO3, fmt.Errorf("unable to deserialize memo from data blob: %w", err))
 		}
 		return memo, nil
 	default:
-		return nil, serviceerror.NewInternal(fmt.Sprintf("Invalid memo encoding in database: %s", data.GetEncodingType().String()))
+		return nil, serialization.NewUnknownEncodingTypeError(data.GetEncodingType().String(), enumspb.ENCODING_TYPE_PROTO3)
 	}
 }
 
-func (p *visibilityManagerImpl) serializeMemo(memo *commonpb.Memo) (*commonpb.DataBlob, error) {
+func serializeMemo(memo *commonpb.Memo) (*commonpb.DataBlob, error) {
 	if memo == nil {
 		memo = &commonpb.Memo{}
 	}

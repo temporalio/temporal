@@ -57,7 +57,7 @@ type (
 		AppendSlices(...Slice)
 		ClearSlices(SlicePredicate)
 		CompactSlices(SlicePredicate)
-		ShrinkSlices()
+		ShrinkSlices() int
 
 		Notify()
 		Pause(time.Duration)
@@ -69,6 +69,7 @@ type (
 		BatchSize            dynamicconfig.IntPropertyFn
 		MaxPendingTasksCount dynamicconfig.IntPropertyFn
 		PollBackoffInterval  dynamicconfig.DurationPropertyFn
+		MaxPredicateSize     dynamicconfig.IntPropertyFn
 	}
 
 	SliceIterator func(s Slice)
@@ -156,7 +157,7 @@ func NewReader(
 
 		retrier: backoff.NewRetrier(
 			common.CreateReadTaskRetryPolicy(),
-			backoff.SystemClock,
+			clock.NewRealTimeSource(),
 		),
 
 		rateLimitContext:       rateLimitContext,
@@ -364,16 +365,18 @@ func (r *ReaderImpl) CompactSlices(predicate SlicePredicate) {
 	r.monitor.SetSliceCount(r.readerID, r.slices.Len())
 }
 
-func (r *ReaderImpl) ShrinkSlices() {
+// Shrink all queue slices, returning the number of tasks removed (completed)
+func (r *ReaderImpl) ShrinkSlices() int {
 	r.Lock()
 	defer r.Unlock()
 
+	var tasksCompleted int
 	var next *list.Element
 	for element := r.slices.Front(); element != nil; element = next {
 		next = element.Next()
 
 		slice := element.Value.(Slice)
-		slice.ShrinkScope()
+		tasksCompleted += slice.ShrinkScope()
 		if scope := slice.Scope(); scope.IsEmpty() {
 			r.monitor.RemoveSlice(slice)
 			r.slices.Remove(element)
@@ -381,6 +384,7 @@ func (r *ReaderImpl) ShrinkSlices() {
 	}
 
 	r.monitor.SetSliceCount(r.readerID, r.slices.Len())
+	return tasksCompleted
 }
 
 func (r *ReaderImpl) Notify() {
@@ -471,7 +475,7 @@ func (r *ReaderImpl) loadAndSubmitTasks() {
 		if common.IsResourceExhausted(err) {
 			r.pauseLocked(throttleRetryDelay)
 		} else {
-			r.pauseLocked(r.retrier.NextBackOff())
+			r.pauseLocked(r.retrier.NextBackOff(err))
 		}
 		return
 	}
@@ -494,7 +498,7 @@ func (r *ReaderImpl) loadAndSubmitTasks() {
 		return
 	}
 
-	// no more task to load, trigger completion callback
+	// No more tasks to load, trigger completion callback.
 	r.completionFn(r.readerID)
 }
 
@@ -512,7 +516,7 @@ func (r *ReaderImpl) resetNextReadSliceLocked() {
 		return
 	}
 
-	// no more task to load, trigger completion callback
+	// No more tasks to load, trigger completion callback.
 	r.completionFn(r.readerID)
 }
 
@@ -527,9 +531,10 @@ func (r *ReaderImpl) submit(
 	executable Executable,
 ) {
 	now := r.timeSource.Now()
-	// Persistence layer may lose precision when persisting the task, which essentially move
-	// task fire time forward. Need to account for that when submitting the task.
-	if fireTime := executable.GetKey().FireTime.Add(persistence.ScheduledTaskMinPrecision); now.Before(fireTime) {
+	// Persistence layer may lose precision when persisting the task, which essentially moves
+	// task fire time backward. Need to account for that when submitting the task.
+	fireTime := executable.GetKey().FireTime.Add(persistence.ScheduledTaskMinPrecision)
+	if now.Before(fireTime) {
 		r.rescheduler.Add(executable, fireTime)
 		return
 	}

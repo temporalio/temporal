@@ -26,22 +26,21 @@ package serialization
 
 import (
 	"math/rand"
-	"reflect"
 	"sync"
 	"testing"
 	"time"
 
-	"github.com/brianvoe/gofakeit/v6"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
-
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/payloads"
-	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/common/testing/fakedata"
+	"go.temporal.io/server/common/testing/protorequire"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type (
@@ -50,6 +49,7 @@ type (
 		// override suite.Suite.Assertions with require.Assertions; this means that s.NotNil(nil) will stop the test,
 		// not merely log an error
 		*require.Assertions
+		protorequire.ProtoAssertions
 		logger log.Logger
 
 		serializer Serializer
@@ -65,12 +65,12 @@ func (s *temporalSerializerSuite) SetupTest() {
 	s.logger = log.NewTestLogger()
 	// Have to define our overridden assertions in the test setup. If we did it earlier, s.T() will return nil
 	s.Assertions = require.New(s.T())
+	s.ProtoAssertions = protorequire.New(s.T())
 
 	s.serializer = NewSerializer()
 }
 
 func (s *temporalSerializerSuite) TestSerializer() {
-
 	concurrency := 1
 	startWG := sync.WaitGroup{}
 	doneWG := sync.WaitGroup{}
@@ -81,7 +81,7 @@ func (s *temporalSerializerSuite) TestSerializer() {
 	eventType := enumspb.EVENT_TYPE_ACTIVITY_TASK_COMPLETED
 	event0 := &historypb.HistoryEvent{
 		EventId:   999,
-		EventTime: timestamp.TimePtr(time.Date(2020, 8, 22, 0, 0, 0, 0, time.UTC)),
+		EventTime: timestamppb.New(time.Date(2020, 8, 22, 0, 0, 0, 0, time.UTC)),
 		EventType: eventType,
 		Attributes: &historypb.HistoryEvent_ActivityTaskCompletedEventAttributes{
 			ActivityTaskCompletedEventAttributes: &historypb.ActivityTaskCompletedEventAttributes{
@@ -98,12 +98,10 @@ func (s *temporalSerializerSuite) TestSerializer() {
 	for i := 0; i < concurrency; i++ {
 
 		go func() {
-
 			startWG.Wait()
 			defer doneWG.Done()
 
 			// serialize event
-
 			nilEvent, err := s.serializer.SerializeEvent(nil, enumspb.ENCODING_TYPE_PROTO3)
 			s.Nil(err)
 			s.Nil(nilEvent)
@@ -118,7 +116,6 @@ func (s *temporalSerializerSuite) TestSerializer() {
 			s.NotNil(dProto)
 
 			// serialize batch events
-
 			nilEvents, err := s.serializer.SerializeEvents(nil, enumspb.ENCODING_TYPE_PROTO3)
 			s.Nil(err)
 			s.NotNil(nilEvents)
@@ -133,17 +130,15 @@ func (s *temporalSerializerSuite) TestSerializer() {
 			s.NotNil(dsProto)
 
 			// deserialize event
-
 			dNilEvent, err := s.serializer.DeserializeEvent(nilEvent)
 			s.Nil(err)
 			s.Nil(dNilEvent)
 
 			event2, err := s.serializer.DeserializeEvent(dProto)
 			s.Nil(err)
-			s.True(reflect.DeepEqual(event0, event2))
+			s.ProtoEqual(event0, event2)
 
 			// deserialize events
-
 			dNilEvents, err := s.serializer.DeserializeEvents(nilEvents)
 			s.Nil(err)
 			s.Nil(dNilEvents)
@@ -151,7 +146,7 @@ func (s *temporalSerializerSuite) TestSerializer() {
 			events, err := s.serializer.DeserializeEvents(dsProto)
 			history2 := &historypb.History{Events: events}
 			s.Nil(err)
-			s.True(reflect.DeepEqual(history0, history2))
+			s.ProtoEqual(history0, history2)
 		}()
 	}
 
@@ -181,13 +176,14 @@ func (s *temporalSerializerSuite) TestSerializeShardInfo_EmptyMapSlice() {
 
 	deserializedShardInfo, err := s.serializer.ShardInfoFromBlob(blob)
 	s.NoError(err)
+	s.NotNil(deserializedShardInfo)
 
-	s.Equal(&shardInfo, deserializedShardInfo)
+	s.ProtoEqual(&shardInfo, deserializedShardInfo)
 }
 
 func (s *temporalSerializerSuite) TestSerializeShardInfo_Random() {
 	var shardInfo persistencespb.ShardInfo
-	err := gofakeit.Struct(&shardInfo)
+	err := fakedata.FakeStruct(&shardInfo)
 	s.NoError(err)
 
 	blob, err := s.serializer.ShardInfoToBlob(&shardInfo, enumspb.ENCODING_TYPE_PROTO3)
@@ -195,6 +191,7 @@ func (s *temporalSerializerSuite) TestSerializeShardInfo_Random() {
 
 	deserializedShardInfo, err := s.serializer.ShardInfoFromBlob(blob)
 	s.NoError(err)
+	s.NotNil(deserializedShardInfo)
 
-	s.Equal(&shardInfo, deserializedShardInfo)
+	s.ProtoEqual(&shardInfo, deserializedShardInfo)
 }

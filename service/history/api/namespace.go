@@ -27,7 +27,6 @@ package api
 import (
 	"github.com/pborman/uuid"
 	"go.temporal.io/api/serviceerror"
-
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/service/history/shard"
 )

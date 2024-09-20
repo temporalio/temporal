@@ -40,22 +40,21 @@ import (
 	"github.com/aws/aws-sdk-go/aws/awserr"
 	"github.com/aws/aws-sdk-go/aws/request"
 	"github.com/aws/aws-sdk-go/service/s3"
-	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
-
 	archiverspb "go.temporal.io/server/api/archiver/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/archiver/s3store/mocks"
 	"go.temporal.io/server/common/codec"
-	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
-	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/common/util"
+	"go.uber.org/mock/gomock"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 const (
@@ -170,7 +169,7 @@ func setupFsEmulation(s3cli *mocks.MockS3API) {
 			var nextContinuationToken *string
 			if len(objects) > start+maxKeys {
 				isTruncated = true
-				nextContinuationToken = convert.StringPtr(fmt.Sprintf("%d", start+maxKeys))
+				nextContinuationToken = util.Ptr(fmt.Sprintf("%d", start+maxKeys))
 				objects = objects[start : start+maxKeys]
 			} else {
 				objects = objects[start:]
@@ -186,7 +185,7 @@ func setupFsEmulation(s3cli *mocks.MockS3API) {
 
 			if len(commonPrefixes) > start+maxKeys {
 				isTruncated = true
-				nextContinuationToken = convert.StringPtr(fmt.Sprintf("%d", start+maxKeys))
+				nextContinuationToken = util.Ptr(fmt.Sprintf("%d", start+maxKeys))
 				commonPrefixes = commonPrefixes[start : start+maxKeys]
 			} else if len(commonPrefixes) > 0 {
 				commonPrefixes = commonPrefixes[start:]
@@ -321,7 +320,14 @@ func (s *historyArchiverSuite) TestArchive_Fail_TimeoutWhenReadingHistory() {
 	historyIterator := archiver.NewMockHistoryIterator(s.controller)
 	gomock.InOrder(
 		historyIterator.EXPECT().HasNext().Return(true),
-		historyIterator.EXPECT().Next(gomock.Any()).Return(nil, serviceerror.NewResourceExhausted(enumspb.RESOURCE_EXHAUSTED_CAUSE_RPS_LIMIT, "")),
+		historyIterator.EXPECT().Next(gomock.Any()).Return(
+			nil,
+			&serviceerror.ResourceExhausted{
+				Cause:   enumspb.RESOURCE_EXHAUSTED_CAUSE_RPS_LIMIT,
+				Scope:   enumspb.RESOURCE_EXHAUSTED_SCOPE_NAMESPACE,
+				Message: "",
+			},
+		),
 	)
 
 	historyArchiver := s.newTestHistoryArchiver(historyIterator)
@@ -345,7 +351,7 @@ func (s *historyArchiverSuite) TestArchive_Fail_HistoryMutated() {
 			Events: []*historypb.HistoryEvent{
 				{
 					EventId:   common.FirstEventID + 1,
-					EventTime: timestamp.TimePtr(time.Now().UTC()),
+					EventTime: timestamppb.New(time.Now().UTC()),
 					Version:   testCloseFailoverVersion + 1,
 				},
 			},
@@ -409,7 +415,7 @@ func (s *historyArchiverSuite) TestArchive_Skip() {
 				Events: []*historypb.HistoryEvent{
 					{
 						EventId:   common.FirstEventID,
-						EventTime: timestamp.TimePtr(time.Now().UTC()),
+						EventTime: timestamppb.New(time.Now().UTC()),
 						Version:   testCloseFailoverVersion,
 					},
 				},
@@ -449,12 +455,12 @@ func (s *historyArchiverSuite) TestArchive_Success() {
 			Events: []*historypb.HistoryEvent{
 				{
 					EventId:   common.FirstEventID + 1,
-					EventTime: timestamp.TimePtr(time.Now().UTC()),
+					EventTime: timestamppb.New(time.Now().UTC()),
 					Version:   testCloseFailoverVersion,
 				},
 				{
 					EventId:   common.FirstEventID + 2,
-					EventTime: timestamp.TimePtr(time.Now().UTC()),
+					EventTime: timestamppb.New(time.Now().UTC()),
 					Version:   testCloseFailoverVersion,
 				},
 			},
@@ -463,7 +469,7 @@ func (s *historyArchiverSuite) TestArchive_Success() {
 			Events: []*historypb.HistoryEvent{
 				{
 					EventId:   testNextEventID - 1,
-					EventTime: timestamp.TimePtr(time.Now().UTC()),
+					EventTime: timestamppb.New(time.Now().UTC()),
 					Version:   testCloseFailoverVersion,
 				},
 			},
@@ -711,7 +717,7 @@ func (s *historyArchiverSuite) setupHistoryDirectory() {
 					Events: []*historypb.HistoryEvent{
 						{
 							EventId:   testNextEventID - 1,
-							EventTime: &now,
+							EventTime: timestamppb.New(now),
 							Version:   1,
 						},
 					},
@@ -730,12 +736,12 @@ func (s *historyArchiverSuite) setupHistoryDirectory() {
 					Events: []*historypb.HistoryEvent{
 						{
 							EventId:   common.FirstEventID + 1,
-							EventTime: &now,
+							EventTime: timestamppb.New(now),
 							Version:   testCloseFailoverVersion,
 						},
 						{
 							EventId:   common.FirstEventID + 1,
-							EventTime: &now,
+							EventTime: timestamppb.New(now),
 							Version:   testCloseFailoverVersion,
 						},
 					},
@@ -751,7 +757,7 @@ func (s *historyArchiverSuite) setupHistoryDirectory() {
 					Events: []*historypb.HistoryEvent{
 						{
 							EventId:   testNextEventID - 1,
-							EventTime: &now,
+							EventTime: timestamppb.New(now),
 							Version:   testCloseFailoverVersion,
 						},
 					},

@@ -29,10 +29,10 @@ import (
 
 	"go.opentelemetry.io/otel/trace"
 	"go.temporal.io/api/serviceerror"
-
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
+	"google.golang.org/protobuf/proto"
 )
 
 const libraryName = "go.temporal.io/service/history/workflow/update"
@@ -61,37 +61,59 @@ func internalErrorf(tmpl string, args ...any) error {
 	return serviceerror.NewInternal(fmt.Sprintf(tmpl, args...))
 }
 
-// CountRequestMsg adds 1 to the update request message counter
-func (i *instrumentation) CountRequestMsg() {
-	i.countMessage(metrics.MessageTypeRequestWorkflowExecutionUpdateCounter.GetMetricName())
+func (i *instrumentation) countRequestMsg() {
+	i.oneOf(metrics.MessageTypeRequestWorkflowExecutionUpdateCounter.Name())
 }
 
-// CountAcceptanceMsg adds 1 to the update acceptance message counter
-func (i *instrumentation) CountAcceptanceMsg() {
-	i.countMessage(metrics.MessageTypeAcceptWorkflowExecutionUpdateCounter.GetMetricName())
+func (i *instrumentation) countAcceptanceMsg() {
+	i.oneOf(metrics.MessageTypeAcceptWorkflowExecutionUpdateCounter.Name())
 }
 
-// CountRejectionMsg counter adds 1 to the update rejection message counter
-func (i *instrumentation) CountRejectionMsg() {
-	i.countMessage(metrics.MessageTypeRejectWorkflowExecutionUpdateCounter.GetMetricName())
+func (i *instrumentation) countRejectionMsg() {
+	i.oneOf(metrics.MessageTypeRejectWorkflowExecutionUpdateCounter.Name())
 }
 
-// CountResponseMsg counter adds 1 to the update response message counter
-func (i *instrumentation) CountResponseMsg() {
-	i.countMessage(metrics.MessageTypeRespondWorkflowExecutionUpdateCounter.GetMetricName())
+func (i *instrumentation) countResponseMsg() {
+	i.oneOf(metrics.MessageTypeRespondWorkflowExecutionUpdateCounter.Name())
 }
 
-// CountInvalidStateTransition counter adds 1 to invalid update state machine transition counter
-func (i *instrumentation) CountInvalidStateTransition() {
-	i.countMessage(metrics.InvalidStateTransitionWorkflowExecutionUpdateCounter.GetMetricName())
+func (i *instrumentation) countRateLimited() {
+	i.oneOf(metrics.WorkflowExecutionUpdateRequestRateLimited.Name())
 }
 
-func (i *instrumentation) countMessage(ctrName string) {
-	i.metrics.Counter(ctrName).Record(1)
+func (i *instrumentation) countTooMany() {
+	i.oneOf(metrics.WorkflowExecutionUpdateTooMany.Name())
 }
 
-// StateChange records instrumentation info about an Update state change
-func (i *instrumentation) StateChange(updateID string, from, to state) {
+func (i *instrumentation) countAborted() {
+	i.oneOf(metrics.WorkflowExecutionUpdateAborted.Name())
+}
+
+func (i *instrumentation) countSent() {
+	i.oneOf(metrics.WorkflowExecutionUpdateSentToWorker.Name())
+}
+
+func (i *instrumentation) countSentAgain() {
+	i.oneOf(metrics.WorkflowExecutionUpdateSentToWorkerAgain.Name())
+}
+
+func (i *instrumentation) invalidStateTransition(updateID string, msg proto.Message, state state) {
+	i.oneOf(metrics.InvalidStateTransitionWorkflowExecutionUpdateCounter.Name())
+	i.log.Error("invalid state transition attempted",
+		tag.NewStringTag("update-id", updateID),
+		tag.NewStringTag("message", fmt.Sprintf("%T", msg)),
+		tag.NewStringTag("state", state.String()))
+}
+
+func (i *instrumentation) updateRegistrySize(size int) {
+	i.metrics.Histogram(metrics.WorkflowExecutionUpdateRegistrySize.Name(), metrics.Bytes).Record(int64(size))
+}
+
+func (i *instrumentation) oneOf(counterName string) {
+	i.metrics.Counter(counterName).Record(1)
+}
+
+func (i *instrumentation) stateChange(updateID string, from, to state) {
 	i.log.Debug("update state change",
 		tag.NewStringTag("update-id", updateID),
 		tag.NewStringTag("from-state", from.String()),

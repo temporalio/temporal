@@ -29,7 +29,7 @@ import (
 )
 
 const (
-	localHostPort = "127.0.0.1:7233"
+	DefaultFrontendAddress = "127.0.0.1:7233"
 
 	// regex expression for parsing time durations, shorter, longer notations and numeric value respectively
 	defaultDateTimeRangeShortRE = "^[1-9][0-9]*[smhdwMy]$"                                // eg. 1s, 20m, 300h etc.
@@ -48,8 +48,4 @@ const (
 	defaultContextTimeout          = defaultContextTimeoutInSeconds * time.Second
 
 	showErrorStackEnv = `TEMPORAL_CLI_SHOW_STACKS`
-)
-
-var (
-	cFactory ClientFactory
 )
