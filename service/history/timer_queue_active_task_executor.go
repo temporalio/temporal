@@ -27,6 +27,7 @@ package history
 import (
 	"context"
 	"fmt"
+
 	"github.com/pborman/uuid"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
