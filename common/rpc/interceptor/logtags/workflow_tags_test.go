@@ -37,6 +37,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/rpc/interceptor/logtags"
+	"go.temporal.io/server/common/testing/testvars"
 )
 
 func TestExtract(t *testing.T) {
@@ -47,11 +48,11 @@ func TestExtract(t *testing.T) {
 		log.NewTestLogger(),
 	)
 
-	wid := "test_workflow_id"
-	rid := "test_run_id"
+	tv := testvars.New(t)
+	tv = tv.WithRunID(tv.Any().RunID())
 	taskToken := token.Task{
-		WorkflowId: wid,
-		RunId:      rid,
+		WorkflowId: tv.WorkflowID(),
+		RunId:      tv.RunID(),
 	}
 	taskTokenBytes, err := serializer.Serialize(&taskToken)
 	assert.NoError(t, err)
@@ -65,40 +66,40 @@ func TestExtract(t *testing.T) {
 	}{
 		{
 			name:       "Frontend StartWorkflowExecutionRequest with only workflowID",
-			req:        &workflowservice.StartWorkflowExecutionRequest{WorkflowId: wid},
+			req:        &workflowservice.StartWorkflowExecutionRequest{WorkflowId: tv.WorkflowID()},
 			fullMethod: "/temporal.api.workflowservice.v1.WorkflowService/StartWorkflowExecution",
-			workflowID: wid,
+			workflowID: tv.WorkflowID(),
 		},
 		{
 			name:       "Frontend RecordActivityTaskHeartbeatByIdRequest with workflowID and runID",
-			req:        &workflowservice.RecordActivityTaskHeartbeatByIdRequest{WorkflowId: wid, RunId: rid},
+			req:        &workflowservice.RecordActivityTaskHeartbeatByIdRequest{WorkflowId: tv.WorkflowID(), RunId: tv.RunID()},
 			fullMethod: "/temporal.api.workflowservice.v1.WorkflowService/RecordActivityTaskHeartbeatById",
-			workflowID: wid,
-			runID:      rid,
+			workflowID: tv.WorkflowID(),
+			runID:      tv.RunID(),
 		},
 		{
 			name: "Frontend GetWorkflowExecutionHistoryRequest with execution",
 			req: &workflowservice.GetWorkflowExecutionHistoryRequest{
 				Execution: &commonpb.WorkflowExecution{
-					WorkflowId: wid,
-					RunId:      rid,
+					WorkflowId: tv.WorkflowID(),
+					RunId:      tv.RunID(),
 				},
 			},
 			fullMethod: "/temporal.api.workflowservice.v1.WorkflowService/GetWorkflowExecutionHistory",
-			workflowID: wid,
-			runID:      rid,
+			workflowID: tv.WorkflowID(),
+			runID:      tv.RunID(),
 		},
 		{
 			name: "Frontend RequestCancelWorkflowExecutionRequest with workflow_execution",
 			req: &workflowservice.RequestCancelWorkflowExecutionRequest{
 				WorkflowExecution: &commonpb.WorkflowExecution{
-					WorkflowId: wid,
-					RunId:      rid,
+					WorkflowId: tv.WorkflowID(),
+					RunId:      tv.RunID(),
 				},
 			},
 			fullMethod: "/temporal.api.workflowservice.v1.WorkflowService/RequestCancelWorkflowExecution",
-			workflowID: wid,
-			runID:      rid,
+			workflowID: tv.WorkflowID(),
+			runID:      tv.RunID(),
 		},
 		{
 			name: "Frontend RespondActivityTaskCompletedRequest with task_token",
@@ -106,8 +107,8 @@ func TestExtract(t *testing.T) {
 				TaskToken: taskTokenBytes,
 			},
 			fullMethod: "/temporal.api.workflowservice.v1.WorkflowService/RespondActivityTaskCompleted",
-			workflowID: wid,
-			runID:      rid,
+			workflowID: tv.WorkflowID(),
+			runID:      tv.RunID(),
 		},
 		{
 			name: "Frontend RespondQueryTaskCompletedRequest (task_token is ignored)",
@@ -121,14 +122,14 @@ func TestExtract(t *testing.T) {
 			req: &historyservice.DescribeWorkflowExecutionRequest{
 				Request: &workflowservice.DescribeWorkflowExecutionRequest{
 					Execution: &commonpb.WorkflowExecution{
-						WorkflowId: wid,
-						RunId:      rid,
+						WorkflowId: tv.WorkflowID(),
+						RunId:      tv.RunID(),
 					},
 				},
 			},
 			fullMethod: "/temporal.server.api.historyservice.v1.HistoryService/DescribeWorkflowExecution",
-			workflowID: wid,
-			runID:      rid,
+			workflowID: tv.WorkflowID(),
+			runID:      tv.RunID(),
 		},
 		{
 			name: "History RespondWorkflowTaskCompletedRequest",
@@ -138,22 +139,22 @@ func TestExtract(t *testing.T) {
 				},
 			},
 			fullMethod: "/temporal.server.api.historyservice.v1.HistoryService/RespondWorkflowTaskCompleted",
-			workflowID: wid,
-			runID:      rid,
+			workflowID: tv.WorkflowID(),
+			runID:      tv.RunID(),
 		},
 		{
 			name: "Matching QueryWorkflowRequest",
 			req: &matchingservice.QueryWorkflowRequest{
 				QueryRequest: &workflowservice.QueryWorkflowRequest{
 					Execution: &commonpb.WorkflowExecution{
-						WorkflowId: wid,
-						RunId:      rid,
+						WorkflowId: tv.WorkflowID(),
+						RunId:      tv.RunID(),
 					},
 				},
 			},
 			fullMethod: "/temporal.server.api.matchingservice.v1.MatchingService/QueryWorkflow",
-			workflowID: wid,
-			runID:      rid,
+			workflowID: tv.WorkflowID(),
+			runID:      tv.RunID(),
 		},
 		{
 			name: "Matching RespondWorkflowTaskCompletedRequest",
