@@ -29,6 +29,7 @@ import (
 	"context"
 	"encoding/binary"
 	"errors"
+	"fmt"
 	"math/rand"
 	"time"
 
@@ -53,6 +54,135 @@ import (
 	"go.temporal.io/server/service/history/consts"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
+
+func (s *ActivityTestSuite) TestActivityScheduleToClose_FiredDuringBackoff() {
+	// We have activity that always fails.
+	// We have backoff timers and schedule_to_close activity timeout happens during that backoff timer.
+	// activity will be scheduled twice. After second failure (that should happen at ~4.2 sec) next retry will not
+	// be scheduled because "schedule_to_close" will happen before retry happens
+	initialRetryInterval := time.Second * 2
+	workingInterval := time.Millisecond * 100
+	scheduleToCloseTimeout := 3 * time.Second
+	startToCloseTimeout := 1 * time.Second
+
+	activityRetryPolicy := &temporal.RetryPolicy{
+		InitialInterval:    initialRetryInterval,
+		BackoffCoefficient: 1,
+		MaximumInterval:    time.Second * 10,
+		MaximumAttempts:    10,
+	}
+
+	actionCalled := 0
+	activityFunction := func() (string, error) {
+		actionCalled += 1
+		time.Sleep(workingInterval)
+		activityErr := errors.New("bad-luck-please-retry")
+		return "", activityErr
+	}
+
+	workflowFn := func(ctx workflow.Context) (string, error) {
+		var ret string
+		err := workflow.ExecuteActivity(workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
+			DisableEagerExecution:  true,
+			StartToCloseTimeout:    startToCloseTimeout,
+			ScheduleToCloseTimeout: scheduleToCloseTimeout,
+			RetryPolicy:            activityRetryPolicy,
+		}), activityFunction).Get(ctx, &ret)
+		s.Error(err)
+		return "done!", nil
+	}
+
+	s.worker.RegisterWorkflow(workflowFn)
+	s.worker.RegisterActivity(activityFunction)
+
+	wfId := "functional-test-gethistoryreverse"
+	workflowOptions := sdkclient.StartWorkflowOptions{
+		ID:                 wfId,
+		TaskQueue:          s.taskQueue,
+		WorkflowRunTimeout: 10 * time.Second,
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	workflowRun, err := s.sdkClient.ExecuteWorkflow(ctx, workflowOptions, workflowFn)
+	s.NoError(err)
+
+	var out string
+	err = workflowRun.Get(ctx, &out)
+	s.Equal(2, actionCalled)
+	s.NoError(err)
+}
+
+func (s *ActivityTestSuite) TestActivityScheduleToClose_FiredDuringActivityRun() {
+	// We have activity that always fails.
+	// We have backoff timers and schedule_to_close activity timeout happens while activity is running.
+	// activity will be scheduled twice.
+	// "schedule_to_close" timer should fire while activity is running for a second time
+	initialRetryInterval := time.Second * 1
+	workingInterval := time.Second * 2
+	scheduleToCloseTimeout := 7 * time.Second
+	startToCloseTimeout := 3 * time.Second
+
+	activityRetryPolicy := &temporal.RetryPolicy{
+		InitialInterval:    initialRetryInterval,
+		BackoffCoefficient: 1,
+		MaximumInterval:    time.Second * 20,
+		MaximumAttempts:    10,
+	}
+	var lastActivityRun time.Time
+	var workflowCompleteRun time.Time
+
+	activityCompleted := 0
+	activityFunction := func() (string, error) {
+		println(fmt.Sprintf("Activity #%d", activityCompleted+1))
+		time.Sleep(workingInterval)
+		activityErr := errors.New("bad-luck-please-retry")
+		lastActivityRun = time.Now().UTC()
+		activityCompleted += 1
+		return "", activityErr
+	}
+
+	workflowFn := func(ctx workflow.Context) (string, error) {
+		var ret string
+		err := workflow.ExecuteActivity(workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
+			DisableEagerExecution:  true,
+			StartToCloseTimeout:    startToCloseTimeout,
+			ScheduleToCloseTimeout: scheduleToCloseTimeout,
+			RetryPolicy:            activityRetryPolicy,
+		}), activityFunction).Get(ctx, &ret)
+		var activityError *temporal.ActivityError
+		s.True(errors.As(err, &activityError))
+		s.Equal(enumspb.RETRY_STATE_NON_RETRYABLE_FAILURE, activityError.RetryState())
+		var timeoutError *temporal.TimeoutError
+		s.True(errors.As(activityError.Unwrap(), &timeoutError))
+		s.Equal(enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE, timeoutError.TimeoutType())
+
+		workflowCompleteRun = time.Now().UTC()
+		// schedule to close timeout should fire while last activity is still running.
+		s.Equal(2, activityCompleted)
+		return "done!", nil
+	}
+
+	s.worker.RegisterWorkflow(workflowFn)
+	s.worker.RegisterActivity(activityFunction)
+
+	workflowOptions := sdkclient.StartWorkflowOptions{
+		ID:                 "functional-test-schedule_to_close_failed_while_running",
+		TaskQueue:          s.taskQueue,
+		WorkflowRunTimeout: 10 * time.Second,
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	workflowRun, err := s.sdkClient.ExecuteWorkflow(ctx, workflowOptions, workflowFn)
+	s.NoError(err)
+
+	var out string
+	err = workflowRun.Get(ctx, &out)
+	workflowCompleteRun = time.Now().UTC()
+	// we expect activities to be executed 3 times
+	s.Eventually(func() bool { return activityCompleted == 3 }, time.Second*10, time.Millisecond*500)
+	s.True(lastActivityRun.After(workflowCompleteRun))
+	s.NoError(err)
+}
 
 func (s *FunctionalSuite) TestActivityHeartBeatWorkflow_Success() {
 	id := "functional-heartbeat-test"

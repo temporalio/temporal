@@ -1605,6 +1605,7 @@ func (ms *MutableStateImpl) UpdateActivityInfo(
 
 	ai.Version = incomingActivityInfo.GetVersion()
 	ai.ScheduledTime = incomingActivityInfo.GetScheduledTime()
+	ai.FirstScheduledTime = incomingActivityInfo.GetScheduledTime()
 	ai.StartedEventId = incomingActivityInfo.GetStartedEventId()
 	ai.LastHeartbeatUpdateTime = incomingActivityInfo.GetLastHeartbeatTime()
 	if ai.StartedEventId == common.EmptyEventID {
@@ -2863,6 +2864,7 @@ func (ms *MutableStateImpl) ApplyActivityTaskScheduledEvent(
 		ScheduledEventId:        scheduledEventID,
 		ScheduledEventBatchId:   firstEventID,
 		ScheduledTime:           event.GetEventTime(),
+		FirstScheduledTime:      event.GetEventTime(),
 		StartedEventId:          common.EmptyEventID,
 		StartedTime:             nil,
 		ActivityId:              attributes.ActivityId,

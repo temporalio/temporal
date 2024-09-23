@@ -73,5 +73,10 @@ func updateActivityInfoForRetries(
 	ai.TimerTaskStatus = TimerTaskStatusNone
 	ai.RetryLastWorkerIdentity = ai.StartedIdentity
 	ai.RetryLastFailure = failure
+
+	if ai.FirstScheduledTime == nil {
+		ai.FirstScheduledTime = ai.ScheduledTime
+	}
+
 	return ai
 }

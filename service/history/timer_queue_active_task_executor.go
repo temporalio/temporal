@@ -27,6 +27,7 @@ package history
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/pborman/uuid"
 	commonpb "go.temporal.io/api/common/v1"
@@ -214,6 +215,11 @@ func (t *timerQueueActiveTaskExecutor) executeActivityTimeoutTask(
 ) (retError error) {
 	ctx, cancel := context.WithTimeout(ctx, taskTimeout)
 	defer cancel()
+
+	// QQQQQQQ
+	println(fmt.Sprintf("In executeActivityTimeoutTask - %v - %v",
+		task.TimeoutType.String(),
+		time.Now().In(time.UTC)))
 
 	weContext, release, err := getWorkflowExecutionContextForTask(ctx, t.shardContext, t.cache, task)
 	if err != nil {
