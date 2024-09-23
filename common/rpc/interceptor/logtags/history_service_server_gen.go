@@ -275,8 +275,8 @@ func (wt *WorkflowTags) extractFromHistoryServiceServerRequest(req any) []tag.Ta
 		}
 	case *historyservice.UpdateActivityOptionsRequest:
 		return []tag.Tag{
-			tag.WorkflowID(r.GetWorkflowId()),
-			tag.WorkflowRunID(r.GetRunId()),
+			tag.WorkflowID(r.GetUpdateRequest().GetWorkflowId()),
+			tag.WorkflowRunID(r.GetUpdateRequest().GetRunId()),
 		}
 	case *historyservice.UpdateWorkflowExecutionRequest:
 		return []tag.Tag{
