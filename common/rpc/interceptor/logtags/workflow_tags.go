@@ -23,7 +23,7 @@
 // THE SOFTWARE.
 
 // Generates all generated files in this package:
-//go:generate go run ../../../../cmd/tools/genserverinterceptor -copyright_file ../../../../LICENSE
+//go:generate go run ../../../../cmd/tools/genrpcserverinterceptors -copyright_file ../../../../LICENSE
 
 package logtags
 
