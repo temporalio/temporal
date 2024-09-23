@@ -67,15 +67,15 @@ type (
 		EventBlobs                 []*commonpb.DataBlob
 		NewRunInfo                 *replicationpb.NewRunInfo
 		VersionedTransitionHistory []*persistencepb.VersionedTransition
-		LastVersionHistory         *history.VersionHistory
+		SyncedVersionHistory       *history.VersionHistory
 	}
 	SyncStateRetriever interface {
 		GetSyncWorkflowStateArtifact(
 			ctx context.Context,
 			namespaceID string,
 			execution *commonpb.WorkflowExecution,
-			versionedTransition *persistencepb.VersionedTransition,
-			versionHistories *history.VersionHistories,
+			targetVersionedTransition *persistencepb.VersionedTransition,
+			targetVersionHistories *history.VersionHistories,
 		) (*SyncStateResult, error)
 	}
 
@@ -109,17 +109,17 @@ func (s *SyncStateRetrieverImpl) GetSyncWorkflowStateArtifact(
 	ctx context.Context,
 	namespaceID string,
 	execution *commonpb.WorkflowExecution,
-	versionedTransition *persistencepb.VersionedTransition,
-	versionHistories *history.VersionHistories,
+	targetCurrentVersionedTransition *persistencepb.VersionedTransition,
+	targetVersionHistories *history.VersionHistories,
 ) (_ *SyncStateResult, retError error) {
 	wfLease, err := s.workflowConsistencyChecker.GetWorkflowLeaseWithConsistencyCheck(
 		ctx,
 		nil,
 		func(mutableState workflow.MutableState) bool {
-			if versionedTransition == nil {
+			if targetCurrentVersionedTransition == nil {
 				return true
 			}
-			return !errors.Is(workflow.TransitionHistoryStalenessCheck(mutableState.GetExecutionInfo().TransitionHistory, versionedTransition), consts.ErrStaleState)
+			return !errors.Is(workflow.TransitionHistoryStalenessCheck(mutableState.GetExecutionInfo().TransitionHistory, targetCurrentVersionedTransition), consts.ErrStaleState)
 		},
 		definition.WorkflowKey{
 			NamespaceID: namespaceID,
@@ -145,23 +145,23 @@ func (s *SyncStateRetrieverImpl) GetSyncWorkflowStateArtifact(
 	}
 
 	shouldReturnMutation := func() bool {
-		if versionedTransition == nil {
+		if targetCurrentVersionedTransition == nil {
 			return false
 		}
 		// not on the same branch
-		if workflow.TransitionHistoryStalenessCheck(mu.GetExecutionInfo().TransitionHistory, versionedTransition) != nil {
+		if workflow.TransitionHistoryStalenessCheck(mu.GetExecutionInfo().TransitionHistory, targetCurrentVersionedTransition) != nil {
 			return false
 		}
 		tombstoneBatch := mu.GetExecutionInfo().SubStateMachineTombstoneBatches
 		if tombstoneBatch == nil || len(tombstoneBatch) == 0 {
 			return true
 		}
-		if workflow.CompareVersionedTransition(tombstoneBatch[0].VersionedTransition, versionedTransition) <= 0 {
+		if workflow.CompareVersionedTransition(tombstoneBatch[0].VersionedTransition, targetCurrentVersionedTransition) <= 0 {
 			return true
 		}
 
-		if versionedTransition.TransitionCount+1 == tombstoneBatch[0].VersionedTransition.TransitionCount &&
-			versionedTransition.NamespaceFailoverVersion == tombstoneBatch[0].VersionedTransition.NamespaceFailoverVersion {
+		if targetCurrentVersionedTransition.TransitionCount+1 == tombstoneBatch[0].VersionedTransition.TransitionCount &&
+			targetCurrentVersionedTransition.NamespaceFailoverVersion == tombstoneBatch[0].VersionedTransition.NamespaceFailoverVersion {
 			return true
 		}
 		return false
@@ -169,7 +169,7 @@ func (s *SyncStateRetrieverImpl) GetSyncWorkflowStateArtifact(
 
 	result := &SyncStateResult{}
 	if shouldReturnMutation() {
-		mutation, err := s.getMutation(mu, versionedTransition)
+		mutation, err := s.getMutation(mu, targetCurrentVersionedTransition)
 		if err != nil {
 			return nil, err
 		}
@@ -198,7 +198,7 @@ func (s *SyncStateRetrieverImpl) GetSyncWorkflowStateArtifact(
 		result.NewRunInfo = newRunInfo
 	}
 
-	events, err := s.getSyncStateEvents(ctx, versionHistories, sourceVersionHistories)
+	events, err := s.getSyncStateEvents(ctx, targetVersionHistories, sourceVersionHistories)
 	if err != nil {
 		return nil, err
 	}
@@ -213,7 +213,7 @@ func (s *SyncStateRetrieverImpl) GetSyncWorkflowStateArtifact(
 			tag.Error(err))
 		return result, nil
 	}
-	result.LastVersionHistory = currentVersionHistory
+	result.SyncedVersionHistory = currentVersionHistory
 	return result, nil
 }
 

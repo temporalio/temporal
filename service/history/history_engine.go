@@ -188,6 +188,12 @@ func NewEngineWithShardContext(
 		shard.GetTimeSource(),
 		persistenceVisibilityMgr,
 	)
+	syncStateRetriever := replication.NewSyncStateRetriever(
+		shard,
+		workflowCache,
+		workflowConsistencyChecker,
+		shard.GetLogger(),
+	)
 
 	historyEngImpl := &historyEngineImpl{
 		status:                     common.DaemonStatusInitialized,
@@ -220,12 +226,7 @@ func NewEngineWithShardContext(
 			logger:         logger,
 		},
 		replicationProgressCache: replicationProgressCache,
-		syncStateRetriever: replication.NewSyncStateRetriever(
-			shard,
-			workflowCache,
-			workflowConsistencyChecker,
-			shard.GetLogger(),
-		),
+		syncStateRetriever:       syncStateRetriever,
 	}
 
 	historyEngImpl.queueProcessors = make(map[tasks.Category]queues.Queue)
