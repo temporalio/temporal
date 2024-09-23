@@ -640,6 +640,9 @@ func (r *WorkflowStateReplicatorImpl) getNewRunMutableState(
 }
 
 // this function does not handle reset case, so it should only be used for the case where workflow run is found at local cluster
+// TODO: Future improvement:
+// we may need to some checkpoint mechanism for backfilling to handle large histories.
+// One idea can be: create a temp branch in version histories and use that to record how many events have been backfilled.
 func (r *WorkflowStateReplicatorImpl) bringLocalEventsUpToSourceCurrentBranch(
 	ctx context.Context,
 	namespaceID namespace.ID,
