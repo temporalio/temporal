@@ -165,9 +165,9 @@ func (wt *WorkflowTags) extractFromWorkflowServiceServerRequest(req any) []tag.T
 			tag.WorkflowRunID(r.GetRunId()),
 		}
 	case *workflowservice.RespondNexusTaskCompletedRequest:
-		return wt.fromTaskToken(r.GetTaskToken())
+		return nil
 	case *workflowservice.RespondNexusTaskFailedRequest:
-		return wt.fromTaskToken(r.GetTaskToken())
+		return nil
 	case *workflowservice.RespondQueryTaskCompletedRequest:
 		return nil
 	case *workflowservice.RespondWorkflowTaskCompletedRequest:

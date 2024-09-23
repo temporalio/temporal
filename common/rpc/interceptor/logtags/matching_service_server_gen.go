@@ -87,9 +87,9 @@ func (wt *WorkflowTags) extractFromMatchingServiceServerRequest(req any) []tag.T
 	case *matchingservice.ReplicateTaskQueueUserDataRequest:
 		return nil
 	case *matchingservice.RespondNexusTaskCompletedRequest:
-		return wt.fromTaskToken(r.GetRequest().GetTaskToken())
+		return nil
 	case *matchingservice.RespondNexusTaskFailedRequest:
-		return wt.fromTaskToken(r.GetRequest().GetTaskToken())
+		return nil
 	case *matchingservice.RespondQueryTaskCompletedRequest:
 		return nil
 	case *matchingservice.UpdateNexusEndpointRequest:

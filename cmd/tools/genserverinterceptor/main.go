@@ -60,6 +60,22 @@ type (
 )
 
 var (
+	// Only fields that end with these suffixes are eligible for deeper inspection.
+	rootLevelFieldNameSuffixes = []string{
+		"Request",
+		"Completion",
+		"Ref",
+		"ParentExecution",
+		"WorkflowState", // for ReplicateWorkflowStateRequest
+	}
+
+	// These types have task_token field, but it is not of type *tokenspb.Task and doesn't have Workflow tags.
+	excludeTaskTokenTypes = []reflect.Type{
+		reflect.TypeOf((*workflowservice.RespondQueryTaskCompletedRequest)(nil)),
+		reflect.TypeOf((*workflowservice.RespondNexusTaskCompletedRequest)(nil)),
+		reflect.TypeOf((*workflowservice.RespondNexusTaskFailedRequest)(nil)),
+	}
+
 	executionGetterT = reflect.TypeOf((*interface {
 		GetExecution() *commonpb.WorkflowExecution
 	})(nil)).Elem()
@@ -165,9 +181,10 @@ func workflowTagGetters(requestT reflect.Type, depth int) methodData {
 		md.WorkflowIdGetter = "GetWorkflowExecution().GetWorkflowId()"
 		md.RunIdGetter = "GetWorkflowExecution().GetRunId()"
 	} else if requestT.AssignableTo(taskTokenGetterT) {
-		// Special case to avoid deprecated RespondQueryTaskCompleted API token which does not have WorkflowId.
-		if requestT.AssignableTo(reflect.TypeOf((*workflowservice.RespondQueryTaskCompletedRequest)(nil))) {
-			return md
+		for _, ert := range excludeTaskTokenTypes {
+			if requestT.AssignableTo(ert) {
+				return md
+			}
 		}
 		md.TaskTokenGetter = "GetTaskToken()"
 	} else {
@@ -179,6 +196,7 @@ func workflowTagGetters(requestT reflect.Type, depth int) methodData {
 		}
 	}
 	for fieldNum := 0; fieldNum < requestT.Elem().NumField(); fieldNum++ {
+		// First wins: of one of these fields is set, stop iterating.
 		if md.WorkflowIdGetter != "" || md.RunIdGetter != "" || md.TaskTokenGetter != "" {
 			break
 		}
@@ -188,6 +206,18 @@ func workflowTagGetters(requestT reflect.Type, depth int) methodData {
 		}
 		if nestedRequest.Type.Elem().Kind() != reflect.Struct {
 			continue
+		}
+		if depth == 0 {
+			hasAllowedSuffix := false
+			for _, suffix := range rootLevelFieldNameSuffixes {
+				if strings.HasSuffix(nestedRequest.Name, suffix) {
+					hasAllowedSuffix = true
+					break
+				}
+			}
+			if !hasAllowedSuffix {
+				continue
+			}
 		}
 
 		md = workflowTagGetters(nestedRequest.Type, depth+1)
