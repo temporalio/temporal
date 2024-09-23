@@ -28,6 +28,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"go.temporal.io/server/tests/base"
 	"math/rand"
 	"os"
 	"sync/atomic"
@@ -82,10 +83,10 @@ type (
 		protorequire.ProtoAssertions
 		suite.Suite
 
-		testClusterFactory tests.TestClusterFactory
+		testClusterFactory base.TestClusterFactory
 
 		controller *gomock.Controller
-		cluster    *tests.TestCluster
+		cluster    *base.TestCluster
 		generator  test.Generator
 		serializer serialization.Serializer
 		logger     log.Logger
@@ -108,7 +109,7 @@ func TestNDCFuncTestSuite(t *testing.T) {
 func (s *NDCFunctionalTestSuite) SetupSuite() {
 	s.logger = log.NewTestLogger()
 	s.serializer = serialization.NewSerializer()
-	s.testClusterFactory = tests.NewTestClusterFactory()
+	s.testClusterFactory = base.NewTestClusterFactory()
 
 	fileName := "../testdata/ndc_clusters.yaml"
 	if tests.TestFlags.TestClusterConfigFile != "" {
@@ -120,7 +121,7 @@ func (s *NDCFunctionalTestSuite) SetupSuite() {
 	s.Require().NoError(err)
 	confContent = []byte(os.ExpandEnv(string(confContent)))
 
-	var clusterConfigs []*tests.TestClusterConfig
+	var clusterConfigs []*base.TestClusterConfig
 	s.Require().NoError(yaml.Unmarshal(confContent, &clusterConfigs))
 	clusterConfigs[0].WorkerConfig = tests.WorkerConfig{DisableWorker: true}
 	clusterConfigs[1].WorkerConfig = tests.WorkerConfig{DisableWorker: true}
@@ -225,7 +226,7 @@ func (s *NDCFunctionalTestSuite) TestSingleBranch() {
 	taskqueue := "event-generator-taskQueue"
 
 	// cluster has initial version 1
-	historyClient := s.cluster.GetHistoryClient()
+	historyClient := s.cluster.HistoryClient()
 
 	versions := []int64{3, 13, 2, 202, 302, 402, 602, 502, 802, 1002, 902, 702, 1102}
 	for _, version := range versions {
@@ -269,7 +270,7 @@ func (s *NDCFunctionalTestSuite) TestMultipleBranches() {
 	taskqueue := "event-generator-taskQueue"
 
 	// cluster has initial version 1
-	historyClient := s.cluster.GetHistoryClient()
+	historyClient := s.cluster.HistoryClient()
 
 	versions := []int64{102, 2, 202}
 	versionIncs := [][]int64{{1, 10}, {11, 10}}
@@ -399,7 +400,7 @@ func (s *NDCFunctionalTestSuite) TestEmptyVersionAndNonEmptyVersion() {
 	taskqueue := "event-generator-taskQueue"
 
 	// cluster has initial version 1
-	historyClient := s.cluster.GetHistoryClient()
+	historyClient := s.cluster.HistoryClient()
 
 	runID := uuid.New()
 
@@ -461,7 +462,7 @@ func (s *NDCFunctionalTestSuite) TestReplicateWorkflowState_PartialReplicated() 
 	taskqueue := "event-generator-taskQueue"
 
 	// cluster has initial version 1
-	historyClient := s.cluster.GetHistoryClient()
+	historyClient := s.cluster.HistoryClient()
 	var historyBatch []*historypb.History
 	// standby initial failover version 2
 	s.generator = test.InitializeHistoryEventGenerator(s.namespace, s.namespaceID, 12)
@@ -538,7 +539,7 @@ func (s *NDCFunctionalTestSuite) TestHandcraftedMultipleBranches() {
 	identity := "worker-identity"
 
 	// cluster has initial version 1
-	historyClient := s.cluster.GetHistoryClient()
+	historyClient := s.cluster.HistoryClient()
 
 	eventsBatch1 := []*historypb.History{
 		{Events: []*historypb.HistoryEvent{
@@ -881,7 +882,7 @@ func (s *NDCFunctionalTestSuite) TestHandcraftedMultipleBranchesWithZombieContin
 	identity := "worker-identity"
 
 	// cluster has initial version 1
-	historyClient := s.cluster.GetHistoryClient()
+	historyClient := s.cluster.HistoryClient()
 
 	eventsBatch1 := []*historypb.History{
 		{Events: []*historypb.HistoryEvent{
@@ -1178,7 +1179,7 @@ func (s *NDCFunctionalTestSuite) TestImportSingleBranch() {
 	taskqueue := "event-generator-taskQueue"
 
 	// cluster has initial version 1
-	historyClient := s.cluster.GetHistoryClient()
+	historyClient := s.cluster.HistoryClient()
 
 	versions := []int64{3, 13, 2, 202, 301, 401, 602, 502, 803, 1002, 902, 701, 1103}
 	for _, version := range versions {
@@ -1222,7 +1223,7 @@ func (s *NDCFunctionalTestSuite) TestImportMultipleBranches() {
 	taskqueue := "event-generator-taskQueue"
 
 	// cluster has initial version 1
-	historyClient := s.cluster.GetHistoryClient()
+	historyClient := s.cluster.HistoryClient()
 
 	versions := []int64{102, 2, 202}
 	versionIncs := [][]int64{
@@ -1363,7 +1364,7 @@ func (s *NDCFunctionalTestSuite) TestEventsReapply_ZombieWorkflow() {
 	taskqueue := "event-generator-taskQueue"
 
 	// cluster has initial version 1
-	historyClient := s.cluster.GetHistoryClient()
+	historyClient := s.cluster.HistoryClient()
 
 	version := int64(102)
 	runID := uuid.New()
@@ -1460,7 +1461,7 @@ func (s *NDCFunctionalTestSuite) testEventsReapplyNonCurrentBranch(staleEventTyp
 	version := int64(102)
 	isWorkflowFinished := false
 
-	historyClient := s.cluster.GetHistoryClient()
+	historyClient := s.cluster.HistoryClient()
 
 	s.generator = test.InitializeHistoryEventGenerator(s.namespace, s.namespaceID, version)
 	baseBranch := []*historypb.History{}
@@ -1584,8 +1585,8 @@ func (s *NDCFunctionalTestSuite) TestResend() {
 	taskqueue := "event-generator-taskQueue"
 	identity := "ndc-re-send-test"
 
-	historyClient := s.cluster.GetHistoryClient()
-	adminClient := s.cluster.GetAdminClient()
+	historyClient := s.cluster.HistoryClient()
+	adminClient := s.cluster.AdminClient()
 	getHistory := func(
 		nsName namespace.Name,
 		nsID namespace.ID,
@@ -2076,7 +2077,7 @@ func (s *NDCFunctionalTestSuite) TestResend() {
 
 func (s *NDCFunctionalTestSuite) registerNamespace() {
 	s.namespace = namespace.Name("test-simple-workflow-ndc-" + common.GenerateRandomString(5))
-	client1 := s.cluster.GetFrontendClient() // cluster
+	client1 := s.cluster.FrontendClient() // cluster
 	_, err := client1.RegisterNamespace(s.newContext(), &workflowservice.RegisterNamespaceRequest{
 		Namespace:         s.namespace.String(),
 		IsGlobalNamespace: true,
@@ -2087,7 +2088,7 @@ func (s *NDCFunctionalTestSuite) registerNamespace() {
 	})
 	s.Require().NoError(err)
 	// Wait for namespace cache to pick the change
-	time.Sleep(2 * tests.NamespaceCacheRefreshInterval)
+	time.Sleep(2 * base.NamespaceCacheRefreshInterval)
 
 	descReq := &workflowservice.DescribeNamespaceRequest{
 		Namespace: s.namespace.String(),
@@ -2339,7 +2340,7 @@ func (s *NDCFunctionalTestSuite) verifyEventHistorySize(
 	historySize int64,
 ) {
 	// get replicated history events from passive side
-	describeWorkflow, err := s.cluster.GetFrontendClient().DescribeWorkflowExecution(
+	describeWorkflow, err := s.cluster.FrontendClient().DescribeWorkflowExecution(
 		s.newContext(),
 		&workflowservice.DescribeWorkflowExecutionRequest{
 			Namespace: s.namespace.String(),
@@ -2361,7 +2362,7 @@ func (s *NDCFunctionalTestSuite) verifyVersionHistory(
 	expectedVersionHistory *historyspb.VersionHistory,
 ) {
 	// get replicated history events from passive side
-	resp, err := s.cluster.GetHistoryClient().GetMutableState(
+	resp, err := s.cluster.HistoryClient().GetMutableState(
 		s.newContext(),
 		&historyservice.GetMutableStateRequest{
 			NamespaceId: string(s.namespaceID),
@@ -2407,7 +2408,7 @@ func (s *NDCFunctionalTestSuite) verifyEventHistory(
 	historyBatch []*historypb.History,
 ) {
 	// get replicated history events from passive side
-	replicatedHistory, err := s.cluster.GetFrontendClient().GetWorkflowExecutionHistory(
+	replicatedHistory, err := s.cluster.FrontendClient().GetWorkflowExecutionHistory(
 		s.newContext(),
 		&workflowservice.GetWorkflowExecutionHistoryRequest{
 			Namespace: s.namespace.String(),
@@ -2453,7 +2454,7 @@ func (s *NDCFunctionalTestSuite) sizeOfHistoryEvents(
 }
 
 func (s *NDCFunctionalTestSuite) newContext() context.Context {
-	ctx := tests.NewContext()
+	ctx := base.NewContext()
 	return headers.SetCallerInfo(
 		ctx,
 		headers.NewCallerInfo(s.namespace.String(), headers.CallerTypeAPI, ""),
@@ -2467,7 +2468,7 @@ func (s *NDCFunctionalTestSuite) IsForceTerminated(
 	var token []byte
 	var lastEvent *historypb.HistoryEvent
 	for doContinue := true; doContinue; doContinue = len(token) > 0 {
-		historyResp, err := s.cluster.GetFrontendClient().GetWorkflowExecutionHistory(
+		historyResp, err := s.cluster.FrontendClient().GetWorkflowExecutionHistory(
 			s.newContext(),
 			&workflowservice.GetWorkflowExecutionHistoryRequest{
 				Namespace: s.namespace.String(),

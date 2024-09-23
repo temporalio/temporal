@@ -27,6 +27,7 @@ package tests
 import (
 	"context"
 	"errors"
+	testbase "go.temporal.io/server/tests/base"
 	"strings"
 	"time"
 
@@ -55,7 +56,7 @@ import (
 type (
 	// AddTasksSuite is a separate suite because we need to override the history service's executable wrapper.
 	AddTasksSuite struct {
-		FunctionalTestBase
+		testbase.FunctionalTestBase
 		*require.Assertions
 		shardController *faultyShardController
 		worker          worker.Worker
@@ -137,8 +138,8 @@ func (s *AddTasksSuite) SetupSuite() {
 	// tests, but this is called before SetupTest, and the s.T() value will change when SetupTest is called.
 	s.Assertions = require.New(s.T())
 	// Set up the test cluster and register our executable wrapper.
-	s.setupSuite("testdata/es_cluster.yaml",
-		WithFxOptionsForService(
+	s.FunctionalTestBase.SetupSuite("testdata/es_cluster.yaml",
+		testbase.WithFxOptionsForService(
 			primitives.HistoryService,
 			fx.Provide(
 				func() queues.ExecutorWrapper {
@@ -159,7 +160,7 @@ func (s *AddTasksSuite) SetupSuite() {
 
 func (s *AddTasksSuite) TearDownSuite() {
 	s.sdkClient.Close()
-	s.tearDownSuite()
+	s.FunctionalTestBase.TearDownSuite()
 }
 
 func (s *AddTasksSuite) SetupTest() {
@@ -184,7 +185,7 @@ func (s *AddTasksSuite) TestAddTasks_Ok() {
 	} {
 		s.Run(tc.name, func() {
 			// Register a workflow which does nothing.
-			taskQueue := s.randomizeStr("add-tasks-test-queue")
+			taskQueue := testbase.RandomizeStr("add-tasks-test-queue")
 			w := worker.New(s.sdkClient, taskQueue, worker.Options{DeadlockDetectionTimeout: 0})
 			myWorkflow := func(ctx workflow.Context) error {
 				return nil
@@ -220,7 +221,7 @@ func (s *AddTasksSuite) TestAddTasks_Ok() {
 			s.shouldSkip.Store(false)
 			blob, err := serialization.NewTaskSerializer().SerializeTask(task)
 			s.NoError(err)
-			shardID := tasks.GetShardIDForTask(task, int(s.testClusterConfig.HistoryConfig.NumHistoryShards))
+			shardID := tasks.GetShardIDForTask(task, int(s.TestClusterConfig().HistoryConfig.NumHistoryShards))
 			request := &adminservice.AddTasksRequest{
 				ShardId: int32(shardID),
 				Tasks: []*adminservice.AddTasksRequest_Task{
@@ -231,7 +232,7 @@ func (s *AddTasksSuite) TestAddTasks_Ok() {
 				},
 			}
 			if tc.shouldCallAddTasks {
-				_, err = s.testCluster.GetAdminClient().AddTasks(ctx, request)
+				_, err = s.TestCluster().AdminClient().AddTasks(ctx, request)
 				s.NoError(err)
 			}
 
@@ -249,7 +250,7 @@ func (s *AddTasksSuite) TestAddTasks_Ok() {
 }
 
 func (s *AddTasksSuite) TestAddTasks_ErrGetShardByID() {
-	_, err := s.testCluster.GetHistoryClient().AddTasks(context.Background(), &historyservice.AddTasksRequest{
+	_, err := s.TestCluster().HistoryClient().AddTasks(context.Background(), &historyservice.AddTasksRequest{
 		ShardId: 0,
 	})
 	s.Error(err)
@@ -261,7 +262,7 @@ func (s *AddTasksSuite) TestAddTasks_GetEngineErr() {
 		s.getEngineErr.Store(nil)
 	}()
 	s.getEngineErr.Store(errors.New("example shard engine error"))
-	_, err := s.testCluster.GetHistoryClient().AddTasks(context.Background(), &historyservice.AddTasksRequest{
+	_, err := s.TestCluster().HistoryClient().AddTasks(context.Background(), &historyservice.AddTasksRequest{
 		ShardId: 1,
 	})
 	s.Error(err)
@@ -270,8 +271,8 @@ func (s *AddTasksSuite) TestAddTasks_GetEngineErr() {
 
 func (s *AddTasksSuite) newSDKClient() sdkclient.Client {
 	client, err := sdkclient.Dial(sdkclient.Options{
-		HostPort:  s.hostPort,
-		Namespace: s.namespace,
+		HostPort:  s.HostPort(),
+		Namespace: s.Namespace(),
 	})
 	s.NoError(err)
 	return client

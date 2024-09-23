@@ -22,18 +22,10 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package tests
+package base
 
-import (
-	"context"
-	"time"
-
-	"go.temporal.io/server/common/debug"
-	"go.temporal.io/server/common/rpc"
+const (
+	DefaultPageSize   = 5
+	PprofTestPort     = 7000
+	TlsCertCommonName = "my-common-name"
 )
-
-// NewContext create new context with default timeout 90 seconds.
-func NewContext() context.Context {
-	ctx, _ := rpc.NewContextWithTimeoutAndVersionHeaders(90 * time.Second * debug.TimeoutMultiplier)
-	return ctx
-}

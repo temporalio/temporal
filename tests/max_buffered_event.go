@@ -113,7 +113,7 @@ func (s *ClientFunctionalSuite) TestMaxBufferedEventsLimit() {
 	s.NoError(err)
 	s.Equal(101, sigCount)
 
-	historyEvents := s.getHistory(s.namespace, &commonpb.WorkflowExecution{WorkflowId: wf1.GetID()})
+	historyEvents := s.GetHistory(s.Namespace(), &commonpb.WorkflowExecution{WorkflowId: wf1.GetID()})
 	// Not using historyrequire here because history is not deterministic.
 	var failedCause enumspb.WorkflowTaskFailedCause
 	for _, evt := range historyEvents {
@@ -203,7 +203,7 @@ func (s *ClientFunctionalSuite) TestBufferedEventsMutableStateSizeLimit() {
 	s.NoError(err)
 	s.Equal(17, sigCount)
 
-	historyEvents := s.getHistory(s.namespace, &commonpb.WorkflowExecution{WorkflowId: wf1.GetID()})
+	historyEvents := s.GetHistory(s.Namespace(), &commonpb.WorkflowExecution{WorkflowId: wf1.GetID()})
 	// Not using historyrequire here because history is not deterministic.
 	var failedCause enumspb.WorkflowTaskFailedCause
 	for _, evt := range historyEvents {

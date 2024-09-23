@@ -22,7 +22,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package tests
+package base
 
 import (
 	"time"
@@ -30,10 +30,7 @@ import (
 	"github.com/stretchr/testify/require"
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/workflowservice/v1"
-	"go.temporal.io/server/api/adminservice/v1"
-	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/dynamicconfig"
-	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/testing/historyrequire"
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/common/testing/updateutils"
@@ -58,11 +55,11 @@ func (s *FunctionalSuite) SetupSuite() {
 		dynamicconfig.EnableNexus.Key():                         true,
 		dynamicconfig.FrontendEnableExecuteMultiOperation.Key(): true,
 	}
-	s.setupSuite("testdata/es_cluster.yaml")
+	s.FunctionalTestBase.SetupSuite("testdata/es_cluster.yaml")
 }
 
 func (s *FunctionalSuite) TearDownSuite() {
-	s.tearDownSuite()
+	s.FunctionalTestBase.TearDownSuite()
 }
 
 func (s *FunctionalSuite) SetupTest() {
@@ -75,7 +72,7 @@ func (s *FunctionalSuite) SetupTest() {
 	s.UpdateUtils = updateutils.New(s.T())
 }
 
-func (s *FunctionalSuite) sendSignal(namespace string, execution *commonpb.WorkflowExecution, signalName string,
+func (s *FunctionalSuite) SendSignal(namespace string, execution *commonpb.WorkflowExecution, signalName string,
 	input *commonpb.Payloads, identity string) error {
 	_, err := s.client.SignalWorkflowExecution(NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
 		Namespace:         namespace,
@@ -86,28 +83,4 @@ func (s *FunctionalSuite) sendSignal(namespace string, execution *commonpb.Workf
 	})
 
 	return err
-}
-
-func (s *FunctionalSuite) closeShard(wid string) {
-	s.T().Helper()
-
-	resp, err := s.client.DescribeNamespace(NewContext(), &workflowservice.DescribeNamespaceRequest{
-		Namespace: s.namespace,
-	})
-	s.NoError(err)
-
-	_, err = s.adminClient.CloseShard(NewContext(), &adminservice.CloseShardRequest{
-		ShardId: common.WorkflowIDToHistoryShard(resp.NamespaceInfo.Id, wid, s.testClusterConfig.HistoryConfig.NumHistoryShards),
-	})
-	s.NoError(err)
-}
-
-func decodeString(t require.TestingT, pls *commonpb.Payloads) string {
-	if th, ok := t.(interface{ Helper() }); ok {
-		th.Helper()
-	}
-	var str string
-	err := payloads.Decode(pls, &str)
-	require.NoError(t, err)
-	return str
 }

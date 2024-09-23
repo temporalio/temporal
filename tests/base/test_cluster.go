@@ -22,7 +22,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package tests
+package base
 
 import (
 	"context"
@@ -30,6 +30,7 @@ import (
 	"crypto/x509"
 	"errors"
 	"fmt"
+	"go.temporal.io/server/tests"
 	"os"
 	"path"
 	"testing"
@@ -37,7 +38,6 @@ import (
 
 	"github.com/pborman/uuid"
 	"go.temporal.io/api/operatorservice/v1"
-	workflowservice "go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
@@ -74,7 +74,7 @@ type (
 	TestCluster struct {
 		testBase     *persistencetests.TestBase
 		archiverBase *ArchiverBase
-		host         *temporalImpl
+		host         *TemporalImpl
 	}
 
 	// ArchiverBase is a base struct for archiver provider being used in functional tests
@@ -110,12 +110,6 @@ type (
 	}
 )
 
-const (
-	defaultPageSize   = 5
-	pprofTestPort     = 7000
-	tlsCertCommonName = "my-common-name"
-)
-
 type TestClusterFactory interface {
 	NewCluster(t *testing.T, options *TestClusterConfig, logger log.Logger) (*TestCluster, error)
 }
@@ -146,11 +140,11 @@ type PersistenceTestBaseFactory interface {
 type defaultPersistenceTestBaseFactory struct{}
 
 func (f *defaultPersistenceTestBaseFactory) NewTestBase(options *persistencetests.TestBaseOptions) *persistencetests.TestBase {
-	options.StoreType = TestFlags.PersistenceType
-	switch TestFlags.PersistenceType {
+	options.StoreType = tests.TestFlags.PersistenceType
+	switch tests.TestFlags.PersistenceType {
 	case config.StoreTypeSQL:
 		var ops *persistencetests.TestBaseOptions
-		switch TestFlags.PersistenceDriver {
+		switch tests.TestFlags.PersistenceDriver {
 		case mysql.PluginName:
 			ops = persistencetests.GetMySQLTestClusterOption()
 		case postgresql.PluginName:
@@ -160,9 +154,9 @@ func (f *defaultPersistenceTestBaseFactory) NewTestBase(options *persistencetest
 		case sqlite.PluginName:
 			ops = persistencetests.GetSQLiteMemoryTestClusterOption()
 		default:
-			panic(fmt.Sprintf("unknown sql store driver: %v", TestFlags.PersistenceDriver))
+			panic(fmt.Sprintf("unknown sql store driver: %v", tests.TestFlags.PersistenceDriver))
 		}
-		options.SQLDBPluginName = TestFlags.PersistenceDriver
+		options.SQLDBPluginName = tests.TestFlags.PersistenceDriver
 		options.DBUsername = ops.DBUsername
 		options.DBPassword = ops.DBPassword
 		options.DBHost = ops.DBHost
@@ -207,7 +201,7 @@ func NewClusterWithPersistenceTestBaseFactory(t *testing.T, options *TestCluster
 		indexName string
 		esClient  esclient.Client
 	)
-	if !UsingSQLAdvancedVisibility() && options.ESConfig != nil {
+	if !tests.UsingSQLAdvancedVisibility() && options.ESConfig != nil {
 		// Randomize index name to avoid cross tests interference.
 		for k, v := range options.ESConfig.Indices {
 			options.ESConfig.Indices[k] = fmt.Sprintf("%v-%v", v, uuid.New())
@@ -311,7 +305,7 @@ func NewClusterWithPersistenceTestBaseFactory(t *testing.T, options *TestCluster
 		temporalParams.CaptureMetricsHandler = metricstest.NewCaptureHandler()
 	}
 
-	err = newPProfInitializerImpl(logger, pprofTestPort).Start()
+	err = newPProfInitializerImpl(logger, PprofTestPort).Start()
 	if err != nil {
 		logger.Fatal("Failed to start pprof", tag.Error(err))
 	}
@@ -492,7 +486,7 @@ func newArchiverBase(enabled bool, logger log.Logger) *ArchiverBase {
 func (tc *TestCluster) TearDownCluster() error {
 	errs := tc.host.Stop()
 	tc.testBase.TearDownWorkflowStore()
-	if !UsingSQLAdvancedVisibility() && tc.host.esConfig != nil {
+	if !tests.UsingSQLAdvancedVisibility() && tc.host.esConfig != nil {
 		if err := deleteIndex(tc.host.esConfig, tc.host.logger); err != nil {
 			errs = multierr.Combine(errs, err)
 		}
@@ -506,36 +500,44 @@ func (tc *TestCluster) TearDownCluster() error {
 	return errs
 }
 
-// GetFrontendClient returns a frontend client from the test cluster
-func (tc *TestCluster) GetFrontendClient() workflowservice.WorkflowServiceClient {
-	return tc.host.GetFrontendClient()
+func (tc *TestCluster) GetTestBase() *persistencetests.TestBase {
+	return tc.testBase
 }
 
-// GetAdminClient returns an admin client from the test cluster
-func (tc *TestCluster) GetAdminClient() adminservice.AdminServiceClient {
-	return tc.host.GetAdminClient()
+func (tc *TestCluster) ArchivalBase() *ArchiverBase {
+	return tc.archiverBase
 }
 
-func (tc *TestCluster) GetOperatorClient() operatorservice.OperatorServiceClient {
-	return tc.host.GetOperatorClient()
+// FrontendClient returns a frontend client from the test cluster
+func (tc *TestCluster) FrontendClient() tests.FrontendClient {
+	return tc.host.FrontendClient()
 }
 
-// GetHistoryClient returns a history client from the test cluster
-func (tc *TestCluster) GetHistoryClient() historyservice.HistoryServiceClient {
+// AdminClient returns an admin client from the test cluster
+func (tc *TestCluster) AdminClient() tests.AdminClient {
+	return tc.host.AdminClient()
+}
+
+func (tc *TestCluster) OperatorClient() operatorservice.OperatorServiceClient {
+	return tc.host.OperatorClient()
+}
+
+// HistoryClient returns a history client from the test cluster
+func (tc *TestCluster) HistoryClient() historyservice.HistoryServiceClient {
 	return tc.host.GetHistoryClient()
 }
 
-// GetMatchingClient returns a matching client from the test cluster
-func (tc *TestCluster) GetMatchingClient() matchingservice.MatchingServiceClient {
+// MatchingClient returns a matching client from the test cluster
+func (tc *TestCluster) MatchingClient() matchingservice.MatchingServiceClient {
 	return tc.host.GetMatchingClient()
 }
 
-// GetExecutionManager returns an execution manager factory from the test cluster
-func (tc *TestCluster) GetExecutionManager() persistence.ExecutionManager {
+// ExecutionManager returns an execution manager factory from the test cluster
+func (tc *TestCluster) ExecutionManager() persistence.ExecutionManager {
 	return tc.host.GetExecutionManager()
 }
 
-func (tc *TestCluster) GetHost() *temporalImpl {
+func (tc *TestCluster) Host() *TemporalImpl {
 	return tc.host
 }
 
@@ -554,7 +556,7 @@ func createFixedTLSConfigProvider() (*encryption.FixedTLSConfigProvider, error) 
 	}
 	defer os.RemoveAll(tempDir)
 
-	certChain, err := testutils.GenerateTestChain(tempDir, tlsCertCommonName)
+	certChain, err := testutils.GenerateTestChain(tempDir, TlsCertCommonName)
 	if err != nil {
 		return nil, err
 	}
@@ -579,7 +581,7 @@ func createFixedTLSConfigProvider() (*encryption.FixedTLSConfigProvider, error) 
 		ClientAuth:   tls.RequireAndVerifyClientCert,
 	}
 	clientTLSConfig := &tls.Config{
-		ServerName:   tlsCertCommonName,
+		ServerName:   TlsCertCommonName,
 		Certificates: []tls.Certificate{tlsCert},
 		RootCAs:      caCertPool,
 	}

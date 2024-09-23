@@ -26,6 +26,7 @@ package tests
 
 import (
 	"context"
+	"go.temporal.io/server/tests/base"
 	"time"
 
 	"github.com/stretchr/testify/require"
@@ -44,7 +45,7 @@ import (
 type (
 	PurgeDLQTasksSuite struct {
 		*require.Assertions
-		FunctionalTestBase
+		base.FunctionalTestBase
 		dlq              *faultyDLQ
 		sdkClientFactory sdk.ClientFactory
 	}
@@ -80,22 +81,22 @@ func (q *faultyDLQ) DeleteTasks(
 
 func (s *PurgeDLQTasksSuite) SetupSuite() {
 	s.Assertions = require.New(s.T())
-	s.setupSuite(
+	s.FunctionalTestBase.SetupSuite(
 		"testdata/es_cluster.yaml",
-		WithFxOptionsForService(primitives.HistoryService,
+		base.WithFxOptionsForService(primitives.HistoryService,
 			fx.Decorate(func(manager persistence.HistoryTaskQueueManager) persistence.HistoryTaskQueueManager {
 				s.dlq = &faultyDLQ{HistoryTaskQueueManager: manager}
 				return s.dlq
 			}),
 		),
-		WithFxOptionsForService(primitives.FrontendService,
+		base.WithFxOptionsForService(primitives.FrontendService,
 			fx.Populate(&s.sdkClientFactory),
 		),
 	)
 }
 
 func (s *PurgeDLQTasksSuite) TearDownSuite() {
-	s.tearDownSuite()
+	s.FunctionalTestBase.TearDownSuite()
 }
 
 func (s *PurgeDLQTasksSuite) SetupTest() {
@@ -172,7 +173,7 @@ func (s *PurgeDLQTasksSuite) TestPurgeDLQTasks() {
 			}
 			s.enqueueTasks(ctx, queueKey, &tasks.WorkflowTask{})
 
-			purgeDLQTasksResponse, err := s.adminClient.PurgeDLQTasks(ctx, &adminservice.PurgeDLQTasksRequest{
+			purgeDLQTasksResponse, err := s.AdminClient().PurgeDLQTasks(ctx, &adminservice.PurgeDLQTasksRequest{
 				DlqKey: &commonspb.HistoryDLQKey{
 					TaskCategory:  int32(params.category.ID()),
 					SourceCluster: params.sourceCluster,
@@ -236,7 +237,7 @@ func (s *PurgeDLQTasksSuite) enqueueTasks(ctx context.Context, queueKey persiste
 			SourceCluster: queueKey.SourceCluster,
 			TargetCluster: queueKey.TargetCluster,
 			Task:          task,
-			SourceShardID: tasks.GetShardIDForTask(task, int(s.testClusterConfig.HistoryConfig.NumHistoryShards)),
+			SourceShardID: tasks.GetShardIDForTask(task, int(s.TestClusterConfig().HistoryConfig.NumHistoryShards)),
 		})
 		s.NoError(err)
 	}

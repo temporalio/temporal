@@ -22,7 +22,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package tests
+package base
 
 import (
 	"context"
@@ -92,7 +92,7 @@ const (
 )
 
 type (
-	temporalImpl struct {
+	TemporalImpl struct {
 		// TODO: this is only used to refresh pernsworkermanager, we can get rid of this after
 		// it uses dynamic config subscriptions.
 		workerServices []*worker.Service
@@ -245,8 +245,8 @@ var (
 )
 
 // newTemporal returns an instance that hosts full temporal in one process
-func newTemporal(t *testing.T, params *TemporalParams) *temporalImpl {
-	impl := &temporalImpl{
+func newTemporal(t *testing.T, params *TemporalParams) *TemporalImpl {
+	impl := &TemporalImpl{
 		logger:                           params.Logger,
 		clusterMetadataConfig:            params.ClusterMetadataConfig,
 		persistenceConfig:                params.PersistenceConfig,
@@ -305,7 +305,7 @@ func newTemporal(t *testing.T, params *TemporalParams) *temporalImpl {
 	return impl
 }
 
-func (c *temporalImpl) Start() error {
+func (c *TemporalImpl) Start() error {
 	// create temporal-system namespace, this must be created before starting
 	// the services - so directly use the metadataManager to create this
 	if err := c.createSystemNamespace(); err != nil {
@@ -320,7 +320,7 @@ func (c *temporalImpl) Start() error {
 	return nil
 }
 
-func (c *temporalImpl) Stop() error {
+func (c *TemporalImpl) Stop() error {
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 
@@ -333,7 +333,7 @@ func (c *temporalImpl) Stop() error {
 	return multierr.Combine(errs...)
 }
 
-func (c *temporalImpl) makeHostMap(serviceName primitives.ServiceName, self string) map[primitives.ServiceName]static.Hosts {
+func (c *TemporalImpl) makeHostMap(serviceName primitives.ServiceName, self string) map[primitives.ServiceName]static.Hosts {
 	hostMap := maps.Clone(c.hostsByService)
 	hosts := hostMap[serviceName]
 	hosts.Self = self
@@ -341,7 +341,7 @@ func (c *temporalImpl) makeHostMap(serviceName primitives.ServiceName, self stri
 	return hostMap
 }
 
-func (c *temporalImpl) makeGRPCAddresses(num, port int) []string {
+func (c *TemporalImpl) makeGRPCAddresses(num, port int) []string {
 	hosts := make([]string, num)
 	for i := range hosts {
 		hosts[i] = fmt.Sprintf("127.0.%d.%d:%d", c.clusterNo, i+1, port)
@@ -349,16 +349,16 @@ func (c *temporalImpl) makeGRPCAddresses(num, port int) []string {
 	return hosts
 }
 
-func (c *temporalImpl) FrontendGRPCAddresses() []string {
+func (c *TemporalImpl) FrontendGRPCAddresses() []string {
 	return c.makeGRPCAddresses(c.frontendConfig.NumFrontendHosts, frontendPort)
 }
 
 // Use this to get an address for the Go SDK to connect to.
-func (c *temporalImpl) FrontendGRPCAddress() string {
+func (c *TemporalImpl) FrontendGRPCAddress() string {
 	return c.frontendMembershipAddress
 }
 
-func (c *temporalImpl) FrontendHTTPAddress() string {
+func (c *TemporalImpl) FrontendHTTPAddress() string {
 	// randomize like a load balancer would
 	addrs := c.FrontendGRPCAddresses()
 	addr := addrs[rand.Intn(len(addrs))]
@@ -369,43 +369,47 @@ func (c *temporalImpl) FrontendHTTPAddress() string {
 	return net.JoinHostPort(host, strconv.Itoa(frontendHTTPPort))
 }
 
-func (c *temporalImpl) HistoryServiceAddresses() []string {
+func (c *TemporalImpl) HistoryServiceAddresses() []string {
 	return c.makeGRPCAddresses(c.historyConfig.NumHistoryHosts, historyPort)
 }
 
-func (c *temporalImpl) MatchingServiceAddresses() []string {
+func (c *TemporalImpl) MatchingServiceAddresses() []string {
 	return c.makeGRPCAddresses(c.matchingConfig.NumMatchingHosts, matchingPort)
 }
 
-func (c *temporalImpl) WorkerServiceAddresses() []string {
+func (c *TemporalImpl) WorkerServiceAddresses() []string {
 	return c.makeGRPCAddresses(c.workerConfig.NumWorkers, workerPort)
 }
 
-func (c *temporalImpl) GetAdminClient() adminservice.AdminServiceClient {
+func (c *TemporalImpl) WorkerService() *worker.Service {
+	return c.workerService
+}
+
+func (c *TemporalImpl) AdminClient() adminservice.AdminServiceClient {
 	return c.adminClient
 }
 
-func (c *temporalImpl) GetOperatorClient() operatorservice.OperatorServiceClient {
+func (c *TemporalImpl) OperatorClient() operatorservice.OperatorServiceClient {
 	return c.operatorClient
 }
 
-func (c *temporalImpl) GetFrontendClient() workflowservice.WorkflowServiceClient {
+func (c *TemporalImpl) FrontendClient() workflowservice.WorkflowServiceClient {
 	return c.frontendClient
 }
 
-func (c *temporalImpl) GetHistoryClient() historyservice.HistoryServiceClient {
+func (c *TemporalImpl) HistoryClient() historyservice.HistoryServiceClient {
 	return c.historyClient
 }
 
-func (c *temporalImpl) GetMatchingClient() matchingservice.MatchingServiceClient {
+func (c *TemporalImpl) GetMatchingClient() matchingservice.MatchingServiceClient {
 	return c.matchingClient
 }
 
-func (c *temporalImpl) GetFrontendNamespaceRegistries() []namespace.Registry {
+func (c *TemporalImpl) GetFrontendNamespaceRegistries() []namespace.Registry {
 	return c.frontendNamespaceRegistries
 }
 
-func (c *temporalImpl) copyPersistenceConfig() config.Persistence {
+func (c *TemporalImpl) copyPersistenceConfig() config.Persistence {
 	persistenceConfig := copyPersistenceConfig(c.persistenceConfig)
 	if c.esConfig != nil {
 		esDataStoreName := "es-visibility"
@@ -417,7 +421,7 @@ func (c *temporalImpl) copyPersistenceConfig() config.Persistence {
 	return persistenceConfig
 }
 
-func (c *temporalImpl) startFrontend() {
+func (c *TemporalImpl) startFrontend() {
 	serviceName := primitives.FrontendService
 
 	// steal these references from one frontend, it doesn't matter which
@@ -491,6 +495,7 @@ func (c *temporalImpl) startFrontend() {
 	connection := rpcFactory.CreateLocalFrontendGRPCConnection()
 	c.frontendClient = workflowservice.NewWorkflowServiceClient(connection)
 	c.adminClient = adminservice.NewAdminServiceClient(connection)
+
 	c.operatorClient = operatorservice.NewOperatorServiceClient(connection)
 
 	// We also set the history and matching clients here, stealing them from one of the frontends.
@@ -501,7 +506,7 @@ func (c *temporalImpl) startFrontend() {
 	c.frontendMembershipAddress = grpcResolver.MakeURL(serviceName)
 }
 
-func (c *temporalImpl) startHistory() {
+func (c *TemporalImpl) startHistory() {
 	serviceName := primitives.HistoryService
 
 	for _, host := range c.hostsByService[serviceName].All {
@@ -559,7 +564,7 @@ func (c *temporalImpl) startHistory() {
 	}
 }
 
-func (c *temporalImpl) startMatching() {
+func (c *TemporalImpl) startMatching() {
 	serviceName := primitives.MatchingService
 
 	for _, host := range c.hostsByService[serviceName].All {
@@ -609,7 +614,7 @@ func (c *temporalImpl) startMatching() {
 	}
 }
 
-func (c *temporalImpl) startWorker() {
+func (c *TemporalImpl) startWorker() {
 	serviceName := primitives.WorkerService
 
 	clusterConfigCopy := cluster.Config{
@@ -676,11 +681,11 @@ func (c *temporalImpl) startWorker() {
 	}
 }
 
-func (c *temporalImpl) getFxOptionsForService(serviceName primitives.ServiceName) fx.Option {
+func (c *TemporalImpl) getFxOptionsForService(serviceName primitives.ServiceName) fx.Option {
 	return fx.Options(c.serviceFxOptions[serviceName]...)
 }
 
-func (c *temporalImpl) createSystemNamespace() error {
+func (c *TemporalImpl) createSystemNamespace() error {
 	err := c.metadataMgr.InitializeSystemNamespaces(context.Background(), c.clusterMetadataConfig.CurrentClusterName)
 	if err != nil {
 		return fmt.Errorf("failed to create temporal-system namespace: %v", err)
@@ -688,11 +693,11 @@ func (c *temporalImpl) createSystemNamespace() error {
 	return nil
 }
 
-func (c *temporalImpl) GetExecutionManager() persistence.ExecutionManager {
+func (c *TemporalImpl) GetExecutionManager() persistence.ExecutionManager {
 	return c.executionManager
 }
 
-func (c *temporalImpl) GetTLSConfigProvider() encryption.TLSConfigProvider {
+func (c *TemporalImpl) GetTLSConfigProvider() encryption.TLSConfigProvider {
 	// If we just return this directly, the interface will be non-nil but the
 	// pointer will be nil
 	if c.tlsConfigProvider != nil {
@@ -701,18 +706,18 @@ func (c *temporalImpl) GetTLSConfigProvider() encryption.TLSConfigProvider {
 	return nil
 }
 
-func (c *temporalImpl) GetTaskCategoryRegistry() tasks.TaskCategoryRegistry {
+func (c *TemporalImpl) GetTaskCategoryRegistry() tasks.TaskCategoryRegistry {
 	return c.taskCategoryRegistry
 }
 
-func (c *temporalImpl) GetMetricsHandler() metrics.Handler {
+func (c *TemporalImpl) GetMetricsHandler() metrics.Handler {
 	if c.captureMetricsHandler != nil {
 		return c.captureMetricsHandler
 	}
 	return metrics.NoopMetricsHandler
 }
 
-func (c *temporalImpl) frontendConfigProvider() *config.Config {
+func (c *TemporalImpl) frontendConfigProvider() *config.Config {
 	// Set HTTP port and a test HTTP forwarded header
 	return &config.Config{
 		Services: map[string]config.Service{
@@ -729,7 +734,7 @@ func (c *temporalImpl) frontendConfigProvider() *config.Config {
 	}
 }
 
-func (c *temporalImpl) overrideHistoryDynamicConfig(t *testing.T) {
+func (c *TemporalImpl) overrideHistoryDynamicConfig(t *testing.T) {
 	if c.esConfig != nil {
 		c.overrideDynamicConfig(t, dynamicconfig.SecondaryVisibilityWritingMode.Key(), visibility.SecondaryVisibilityWritingModeDual)
 	}
@@ -763,7 +768,7 @@ func (c *temporalImpl) overrideHistoryDynamicConfig(t *testing.T) {
 	c.overrideDynamicConfig(t, dynamicconfig.VisibilityProcessorUpdateAckInterval.Key(), 1*time.Second)
 }
 
-func (c *temporalImpl) newRPCFactory(
+func (c *TemporalImpl) newRPCFactory(
 	sn primitives.ServiceName,
 	grpcHostPort listenHostPort,
 	logger log.Logger,
@@ -800,7 +805,7 @@ func (c *temporalImpl) newRPCFactory(
 	), nil
 }
 
-func (c *temporalImpl) newClientFactoryProvider(
+func (c *TemporalImpl) newClientFactoryProvider(
 	config *cluster.Config,
 	mockAdminClient map[string]adminservice.AdminServiceClient,
 ) client.FactoryProvider {
@@ -860,13 +865,13 @@ func (f *clientFactory) NewRemoteAdminClientWithTimeout(rpcAddress string, timeo
 	return f.Factory.NewRemoteAdminClientWithTimeout(rpcAddress, timeout, largeTimeout)
 }
 
-func (c *temporalImpl) SetOnGetClaims(fn func(*authorization.AuthInfo) (*authorization.Claims, error)) {
+func (c *TemporalImpl) SetOnGetClaims(fn func(*authorization.AuthInfo) (*authorization.Claims, error)) {
 	c.callbackLock.Lock()
 	c.onGetClaims = fn
 	c.callbackLock.Unlock()
 }
 
-func (c *temporalImpl) GetClaims(authInfo *authorization.AuthInfo) (*authorization.Claims, error) {
+func (c *TemporalImpl) GetClaims(authInfo *authorization.AuthInfo) (*authorization.Claims, error) {
 	c.callbackLock.RLock()
 	onGetClaims := c.onGetClaims
 	c.callbackLock.RUnlock()
@@ -876,7 +881,7 @@ func (c *temporalImpl) GetClaims(authInfo *authorization.AuthInfo) (*authorizati
 	return &authorization.Claims{System: authorization.RoleAdmin}, nil
 }
 
-func (c *temporalImpl) SetOnAuthorize(
+func (c *TemporalImpl) SetOnAuthorize(
 	fn func(context.Context, *authorization.Claims, *authorization.CallTarget) (authorization.Result, error),
 ) {
 	c.callbackLock.Lock()
@@ -884,7 +889,7 @@ func (c *temporalImpl) SetOnAuthorize(
 	c.callbackLock.Unlock()
 }
 
-func (c *temporalImpl) Authorize(
+func (c *TemporalImpl) Authorize(
 	ctx context.Context,
 	caller *authorization.Claims,
 	target *authorization.CallTarget,
@@ -936,7 +941,7 @@ func sdkClientFactoryProvider(
 	)
 }
 
-func (c *temporalImpl) overrideDynamicConfig(t *testing.T, name dynamicconfig.Key, value any) func() {
+func (c *TemporalImpl) overrideDynamicConfig(t *testing.T, name dynamicconfig.Key, value any) func() {
 	cleanup := c.dcClient.OverrideValue(name, value)
 	t.Cleanup(cleanup)
 	return cleanup

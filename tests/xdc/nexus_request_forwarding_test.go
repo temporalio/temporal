@@ -27,6 +27,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"go.temporal.io/server/tests/base"
 	"io"
 	"net/http"
 	"slices"
@@ -210,7 +211,7 @@ func (s *NexusRequestForwardingSuite) TestStartOperationForwardedFromStandbyToAc
 			passiveCapture := passiveMetricsHandler.StartCapture()
 			defer passiveMetricsHandler.StopCapture(passiveCapture)
 
-			ctx, cancel := context.WithCancel(tests.NewContext())
+			ctx, cancel := context.WithCancel(base.NewContext())
 			defer cancel()
 
 			go s.nexusTaskPoller(ctx, s.cluster1.GetFrontendClient(), ns, tc.taskQueue, tc.handler)
@@ -311,7 +312,7 @@ func (s *NexusRequestForwardingSuite) TestCancelOperationForwardedFromStandbyToA
 			passiveCapture := passiveMetricsHandler.StartCapture()
 			defer passiveMetricsHandler.StopCapture(passiveCapture)
 
-			ctx, cancel := context.WithCancel(tests.NewContext())
+			ctx, cancel := context.WithCancel(base.NewContext())
 			defer cancel()
 
 			go s.nexusTaskPoller(ctx, s.cluster1.GetFrontendClient(), ns, tc.taskQueue, tc.handler)
@@ -335,10 +336,10 @@ func (s *NexusRequestForwardingSuite) TestCompleteOperationForwardedFromStandbyT
 		nexusoperations.CallbackURLTemplate,
 		"http://"+s.cluster2.GetHost().FrontendHTTPAddress()+"/namespaces/{{.NamespaceName}}/nexus/callback")
 
-	ctx := tests.NewContext()
+	ctx := base.NewContext()
 	ns := s.createGlobalNamespace()
 	taskQueue := fmt.Sprintf("%v-%v", "test-task-queue", uuid.New())
-	endpointName := tests.RandomizedNexusEndpoint(s.T().Name())
+	endpointName := base.RandomizedNexusEndpoint(s.T().Name())
 
 	var callbackToken, publicCallbackUrl string
 
@@ -365,10 +366,10 @@ func (s *NexusRequestForwardingSuite) TestCompleteOperationForwardedFromStandbyT
 		},
 	}
 
-	_, err := s.cluster1.GetOperatorClient().CreateNexusEndpoint(ctx, createEndpointReq)
+	_, err := s.cluster1.OperatorClient().CreateNexusEndpoint(ctx, createEndpointReq)
 	s.NoError(err)
 
-	_, err = s.cluster2.GetOperatorClient().CreateNexusEndpoint(ctx, createEndpointReq)
+	_, err = s.cluster2.OperatorClient().CreateNexusEndpoint(ctx, createEndpointReq)
 	s.NoError(err)
 
 	activeSDKClient, err := client.Dial(client.Options{
@@ -553,7 +554,7 @@ func (s *NexusRequestForwardingSuite) nexusTaskPoller(ctx context.Context, front
 func (s *NexusRequestForwardingSuite) sendNexusCompletionRequest(
 	ctx context.Context,
 	t *testing.T,
-	testCluster *tests.TestCluster,
+	testCluster *base.TestCluster,
 	url string,
 	completion nexus.OperationCompletion,
 	callbackToken string,

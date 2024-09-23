@@ -27,6 +27,9 @@ package tests
 import (
 	"errors"
 	"fmt"
+	"github.com/dgryski/go-farm"
+	"go.temporal.io/server/tests/base"
+	"os"
 	"strconv"
 	"time"
 	"unicode/utf8"
@@ -55,14 +58,14 @@ type (
 		*require.Assertions
 		suite.Suite
 
-		testClusterFactory TestClusterFactory
+		testClusterFactory base.TestClusterFactory
 
 		frontendClient workflowservice.WorkflowServiceClient
 		adminClient    adminservice.AdminServiceClient
 		operatorClient operatorservice.OperatorServiceClient
 
-		cluster       *TestCluster
-		clusterConfig *TestClusterConfig
+		cluster       *base.TestCluster
+		clusterConfig *base.TestClusterConfig
 		logger        log.Logger
 	}
 )
@@ -72,17 +75,17 @@ const invalidUTF8 = "\n\x8f\x01\n\x0ejunk\x12data"
 
 func (s *namespaceTestSuite) SetupSuite() {
 	s.logger = log.NewTestLogger()
-	s.testClusterFactory = NewTestClusterFactory()
+	s.testClusterFactory = base.NewTestClusterFactory()
 
 	if UsingSQLAdvancedVisibility() {
 		var err error
-		s.clusterConfig, err = GetTestClusterConfig("testdata/cluster.yaml")
+		s.clusterConfig, err = base.GetTestClusterConfig("testdata/cluster.yaml")
 		s.Require().NoError(err)
 		s.logger.Info(fmt.Sprintf("Running delete namespace tests with %s/%s persistence", TestFlags.PersistenceType, TestFlags.PersistenceDriver))
 	} else {
 		var err error
 		// Elasticsearch is needed to test advanced visibility code path in reclaim resources workflow.
-		s.clusterConfig, err = GetTestClusterConfig("testdata/es_cluster.yaml")
+		s.clusterConfig, err = base.GetTestClusterConfig("testdata/es_cluster.yaml")
 		s.Require().NoError(err)
 		s.logger.Info("Running delete namespace tests with Elasticsearch persistence")
 	}
@@ -94,9 +97,9 @@ func (s *namespaceTestSuite) SetupSuite() {
 	cluster, err := s.testClusterFactory.NewCluster(s.T(), s.clusterConfig, s.logger)
 	s.Require().NoError(err)
 	s.cluster = cluster
-	s.frontendClient = s.cluster.GetFrontendClient()
-	s.adminClient = s.cluster.GetAdminClient()
-	s.operatorClient = s.cluster.GetOperatorClient()
+	s.frontendClient = s.cluster.FrontendClient()
+	s.adminClient = s.cluster.AdminClient()
+	s.operatorClient = s.cluster.OperatorClient()
 }
 
 func (s *namespaceTestSuite) TearDownSuite() {
@@ -104,7 +107,7 @@ func (s *namespaceTestSuite) TearDownSuite() {
 }
 
 func (s *namespaceTestSuite) SetupTest() {
-	checkTestShard(s.T())
+	s.checkTestShard()
 
 	// Have to define our overridden assertions in the test setup. If we did it earlier, s.T() will return nil
 	s.Assertions = require.New(s.T())
@@ -116,8 +119,8 @@ func (s *namespaceTestSuite) Test_NamespaceDelete_InvalidUTF8() {
 	s.cluster.OverrideDynamicConfig(s.T(), dynamicconfig.ValidateUTF8FailRPCResponse, false)
 	s.cluster.OverrideDynamicConfig(s.T(), dynamicconfig.ValidateUTF8FailPersistence, false)
 
-	capture := s.cluster.host.captureMetricsHandler.StartCapture()
-	defer s.cluster.host.captureMetricsHandler.StopCapture(capture)
+	capture := s.cluster.Host().CaptureMetricsHandler().StartCapture()
+	defer s.cluster.Host().CaptureMetricsHandler().StopCapture(capture)
 
 	ctx, cancel := rpc.NewContextWithTimeoutAndVersionHeaders(10000 * time.Second)
 	defer cancel()
@@ -459,7 +462,7 @@ func (s *namespaceTestSuite) Test_NamespaceDelete_WithMissingWorkflows() {
 			s.clusterConfig.HistoryConfig.NumHistoryShards,
 		)
 
-		err = s.cluster.GetExecutionManager().DeleteWorkflowExecution(ctx, &persistence.DeleteWorkflowExecutionRequest{
+		err = s.cluster.ExecutionManager().DeleteWorkflowExecution(ctx, &persistence.DeleteWorkflowExecutionRequest{
 			ShardID:     shardID,
 			NamespaceID: nsID,
 			WorkflowID:  execution.GetWorkflowId(),
@@ -507,4 +510,33 @@ func (s *namespaceTestSuite) Test_NamespaceDelete_WithMissingWorkflows() {
 func (s *namespaceTestSuite) Test_NamespaceDelete_CrossNamespaceChild() {
 	// TODO (alex): create 2 namespaces, start workflow in first namespace and start child in second namespace.
 	// Delete second namespace and verify that parent received child termination signal.
+}
+
+// checkTestShard supports test sharding based on environment variables.
+func (s *namespaceTestSuite) checkTestShard() {
+	totalStr := os.Getenv("TEST_TOTAL_SHARDS")
+	indexStr := os.Getenv("TEST_SHARD_INDEX")
+	if totalStr == "" || indexStr == "" {
+		return
+	}
+	total, err := strconv.Atoi(totalStr)
+	if err != nil || total < 1 {
+		s.T().Fatal("Couldn't convert TEST_TOTAL_SHARDS")
+	}
+	index, err := strconv.Atoi(indexStr)
+	if err != nil || index < 0 || index >= total {
+		s.T().Fatal("Couldn't convert TEST_SHARD_INDEX")
+	}
+
+	// This was determined empirically to distribute our existing test names
+	// reasonably well. This can be adjusted from time to time.
+	// For parallelism 4, use 11. For 3, use 26. For 2, use 20.
+	const salt = "-salt-26"
+
+	nameToHash := s.T().Name() + salt
+	testIndex := int(farm.Fingerprint32([]byte(nameToHash))) % total
+	if testIndex != index {
+		s.T().Skipf("Skipping %s in test shard %d/%d (it runs in %d)", s.T().Name(), index+1, total, testIndex+1)
+	}
+	s.T().Logf("Running %s in test shard %d/%d", s.T().Name(), index+1, total)
 }

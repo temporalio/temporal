@@ -30,6 +30,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"go.temporal.io/server/tests/base"
 	"math"
 	"strconv"
 	"strings"
@@ -57,7 +58,6 @@ import (
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/service/history/replication"
 	"go.temporal.io/server/service/history/tasks"
-	"go.temporal.io/server/tests"
 	"go.temporal.io/server/tools/tdbg"
 	"go.temporal.io/server/tools/tdbg/tdbgtest"
 	"go.uber.org/atomic"
@@ -193,7 +193,7 @@ func (s *historyReplicationDLQSuite) SetupSuite() {
 			fmt.Sprintf(format, "active"),
 			fmt.Sprintf(format, "standby"),
 		},
-		tests.WithFxOptionsForService(primitives.HistoryService,
+		base.WithFxOptionsForService(primitives.HistoryService,
 			fx.Decorate(
 				taskExecutorDecorator,
 				func(dlqWriter replication.DLQWriter) replication.DLQWriter {
@@ -206,7 +206,7 @@ func (s *historyReplicationDLQSuite) SetupSuite() {
 				},
 			),
 		),
-		tests.WithFxOptionsForService(primitives.WorkerService,
+		base.WithFxOptionsForService(primitives.WorkerService,
 			fx.Decorate(
 				func(executor namespace.ReplicationTaskExecutor) namespace.ReplicationTaskExecutor {
 					return &testNamespaceReplicationTaskExecutor{

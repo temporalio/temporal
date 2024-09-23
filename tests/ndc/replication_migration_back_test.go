@@ -28,6 +28,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"go.temporal.io/server/tests/base"
 	"os"
 	"sync/atomic"
 	"testing"
@@ -71,8 +72,8 @@ type (
 		protorequire.ProtoAssertions
 		suite.Suite
 
-		testClusterFactory          tests.TestClusterFactory
-		standByReplicationTasksChan chan *replicationspb.ReplicationTask
+		testClusterFactory          base.TestClusterFactory
+		standByReplicationTasksChan chan *repicationpb.ReplicationTask
 		mockAdminClient             map[string]adminservice.AdminServiceClient
 		namespace                   namespace.Name
 		namespaceID                 namespace.ID
@@ -81,7 +82,7 @@ type (
 		passiveClusterName          string
 
 		controller     *gomock.Controller
-		passiveCluster *tests.TestCluster
+		passiveCluster *base.TestCluster
 		generator      test.Generator
 		serializer     serialization.Serializer
 		logger         log.Logger
@@ -97,7 +98,7 @@ func TestReplicationMigrationBackTest(t *testing.T) {
 func (s *ReplicationMigrationBackTestSuite) SetupSuite() {
 	s.logger = log.NewTestLogger()
 	s.serializer = serialization.NewSerializer()
-	s.testClusterFactory = tests.NewTestClusterFactory()
+	s.testClusterFactory = base.NewTestClusterFactory()
 	s.passiveClusterName = "cluster-b"
 
 	fileName := "../testdata/ndc_clusters.yaml"
@@ -111,7 +112,7 @@ func (s *ReplicationMigrationBackTestSuite) SetupSuite() {
 	s.Require().NoError(err)
 	confContent = []byte(os.ExpandEnv(string(confContent)))
 
-	var clusterConfigs []*tests.TestClusterConfig
+	var clusterConfigs []*base.TestClusterConfig
 	s.Require().NoError(yaml.Unmarshal(confContent, &clusterConfigs))
 	passiveClusterConfig := clusterConfigs[1]
 	passiveClusterConfig.WorkerConfig = tests.WorkerConfig{DisableWorker: true}
@@ -160,7 +161,7 @@ func (s *ReplicationMigrationBackTestSuite) SetupSuite() {
 		},
 	})
 	s.Require().NoError(err)
-	time.Sleep(2 * tests.NamespaceCacheRefreshInterval) // we have to wait for namespace cache to pick the change
+	time.Sleep(2 * base.NamespaceCacheRefreshInterval) // we have to wait for namespace cache to pick the change
 }
 
 func (s *ReplicationMigrationBackTestSuite) TearDownSuite() {
@@ -582,7 +583,7 @@ func (s *ReplicationMigrationBackTestSuite) registerNamespace() {
 	})
 	s.Require().NoError(err)
 	// Wait for namespace cache to pick the change
-	time.Sleep(2 * tests.NamespaceCacheRefreshInterval)
+	time.Sleep(2 * base.NamespaceCacheRefreshInterval)
 
 	descReq := &workflowservice.DescribeNamespaceRequest{
 		Namespace: s.namespace.String(),

@@ -25,6 +25,7 @@
 package tests
 
 import (
+	"go.temporal.io/server/tests/base"
 	"time"
 
 	"github.com/pborman/uuid"
@@ -38,10 +39,14 @@ import (
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 
-func (s *FunctionalSuite) TestServerRejectsInvalidRequests() {
+type NamespaceInterceptorTestSuite struct {
+	base.FunctionalSuite
+}
+
+func (s *NamespaceInterceptorTestSuite) TestServerRejectsInvalidRequests() {
 	sut := newSystemUnderTestConnector(s)
 
-	customersNamespace := namespace.Name(s.namespace)
+	customersNamespace := namespace.Name(s.Namespace())
 	err := sut.startWorkflowExecution(customersNamespace)
 	s.NoError(err)
 
@@ -57,7 +62,7 @@ func (s *FunctionalSuite) TestServerRejectsInvalidRequests() {
 }
 
 type sutConnector struct {
-	suite           *FunctionalSuite
+	suite           *NamespaceInterceptorTestSuite
 	identity        string
 	taskQueue       *taskqueuepb.TaskQueue
 	stickyTaskQueue *taskqueuepb.TaskQueue
@@ -65,7 +70,7 @@ type sutConnector struct {
 	taskToken       []byte
 }
 
-func newSystemUnderTestConnector(s *FunctionalSuite) *sutConnector {
+func newSystemUnderTestConnector(s *NamespaceInterceptorTestSuite) *sutConnector {
 	id := uuid.New()
 	return &sutConnector{
 		suite:           s,
@@ -80,13 +85,13 @@ func newSystemUnderTestConnector(s *FunctionalSuite) *sutConnector {
 func (b *sutConnector) startWorkflowExecution(ns namespace.Name) error {
 	request := newStartWorkflowExecutionRequest(ns, b.id, b.identity, b.taskQueue)
 
-	_, err := b.suite.client.StartWorkflowExecution(NewContext(), request)
+	_, err := b.suite.FrontendClient().StartWorkflowExecution(base.NewContext(), request)
 	return err
 }
 
 func (b *sutConnector) pollWorkflowTaskQueue(ns namespace.Name) ([]byte, error) {
 	request := newPollWorkflowTaskQueueRequest(ns, b.identity, b.taskQueue)
-	resp, err := b.suite.client.PollWorkflowTaskQueue(NewContext(), request)
+	resp, err := b.suite.FrontendClient().PollWorkflowTaskQueue(base.NewContext(), request)
 	if err != nil {
 		return nil, err
 	}
@@ -96,7 +101,7 @@ func (b *sutConnector) pollWorkflowTaskQueue(ns namespace.Name) ([]byte, error) 
 
 func (b *sutConnector) respondWorkflowTaskCompleted(token []byte, ns namespace.Name) error {
 	request := newRespondWorkflowTaskCompletedRequest(ns, b.stickyTaskQueue, token)
-	_, err := b.suite.client.RespondWorkflowTaskCompleted(NewContext(), request)
+	_, err := b.suite.FrontendClient().RespondWorkflowTaskCompleted(base.NewContext(), request)
 	return err
 }
 

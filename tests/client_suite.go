@@ -30,6 +30,7 @@ import (
 	"encoding/gob"
 	"errors"
 	"fmt"
+	"go.temporal.io/server/tests/base"
 	"strconv"
 	"strings"
 	"sync"
@@ -73,7 +74,7 @@ type (
 		// override suite.Suite.Assertions with require.Assertions; this means that s.NotNil(nil) will stop the test,
 		// not merely log an error
 		*require.Assertions
-		FunctionalTestBase
+		base.FunctionalTestBase
 		historyrequire.HistoryRequire
 		sdkClient                 sdkclient.Client
 		worker                    worker.Worker
@@ -97,7 +98,7 @@ func (s *ClientFunctionalSuite) SetupSuite() {
 	s.maxPendingActivities = limit
 	s.maxPendingCancelRequests = limit
 	s.maxPendingSignals = limit
-	s.dynamicConfigOverrides = map[dynamicconfig.Key]any{
+	dynamicConfigOverrides := map[dynamicconfig.Key]any{
 		dynamicconfig.NumPendingChildExecutionsLimitError.Key():             s.maxPendingChildExecutions,
 		dynamicconfig.NumPendingActivitiesLimitError.Key():                  s.maxPendingActivities,
 		dynamicconfig.NumPendingCancelRequestsLimitError.Key():              s.maxPendingCancelRequests,
@@ -109,12 +110,13 @@ func (s *ClientFunctionalSuite) SetupSuite() {
 		dynamicconfig.RefreshNexusEndpointsMinWait.Key():                    1 * time.Millisecond,
 		callbacks.AllowedAddresses.Key():                                    []any{map[string]any{"Pattern": "*", "AllowInsecure": true}},
 	}
-	s.setupSuite("testdata/client_cluster.yaml")
+	s.SetDynamicConfigOverrides(dynamicConfigOverrides)
+	s.FunctionalTestBase.SetupSuite("testdata/client_cluster.yaml")
 
 }
 
 func (s *ClientFunctionalSuite) TearDownSuite() {
-	s.tearDownSuite()
+	s.FunctionalTestBase.TearDownSuite()
 }
 
 func (s *ClientFunctionalSuite) SetupTest() {
@@ -127,17 +129,17 @@ func (s *ClientFunctionalSuite) SetupTest() {
 	// Set URL template after httpAPAddress is set, see commonnexus.RouteCompletionCallback
 	s.OverrideDynamicConfig(
 		nexusoperations.CallbackURLTemplate,
-		"http://"+s.httpAPIAddress+"/namespaces/{{.NamespaceName}}/nexus/callback")
+		"http://"+s.HttpAPIAddress()+"/namespaces/{{.NamespaceName}}/nexus/callback")
 
 	sdkClient, err := sdkclient.Dial(sdkclient.Options{
-		HostPort:  s.hostPort,
-		Namespace: s.namespace,
+		HostPort:  s.HostPort(),
+		Namespace: s.Namespace(),
 	})
 	if err != nil {
 		s.Logger.Fatal("Error when creating SDK client", tag.Error(err))
 	}
 	s.sdkClient = sdkClient
-	s.taskQueue = s.randomizeStr("tq")
+	s.taskQueue = base.RandomizeStr("tq")
 
 	// We need to set this timeout to 0 to disable the deadlock detector. Otherwise, the deadlock detector will cause
 	// TestTooManyChildWorkflows to fail because it thinks there is a deadlock due to the blocked child workflows.
@@ -254,7 +256,7 @@ func newTestDataConverter() converter.DataConverter {
 	return &testDataConverter{}
 }
 
-func testActivity(ctx context.Context, msg string) (string, error) {
+func testActivity(_ context.Context, msg string) (string, error) {
 	return "hello_" + msg, nil
 }
 
@@ -285,8 +287,8 @@ func testDataConverterWorkflow(ctx workflow.Context, tl string) (string, error) 
 
 func (s *ClientFunctionalSuite) startWorkerWithDataConverter(tl string, dataConverter converter.DataConverter) (sdkclient.Client, worker.Worker) {
 	sdkClient, err := sdkclient.Dial(sdkclient.Options{
-		HostPort:      s.hostPort,
-		Namespace:     s.namespace,
+		HostPort:      s.HostPort(),
+		Namespace:     s.Namespace(),
 		DataConverter: dataConverter,
 	})
 	if err != nil {
@@ -679,9 +681,9 @@ func (s *ClientFunctionalSuite) TestTooManyCancelRequests() {
 			defer cancel()
 			s.Error(run.Get(ctx, nil))
 		}
-		namespaceID := s.getNamespaceID(s.namespace)
-		shardID := common.WorkflowIDToHistoryShard(namespaceID, cancelerWorkflowId, s.testClusterConfig.HistoryConfig.NumHistoryShards)
-		workflowExecution, err := s.testCluster.GetExecutionManager().GetWorkflowExecution(ctx, &persistence.GetWorkflowExecutionRequest{
+		namespaceID := s.GetNamespaceID(s.Namespace())
+		shardID := common.WorkflowIDToHistoryShard(namespaceID, cancelerWorkflowId, s.TestClusterConfig().HistoryConfig.NumHistoryShards)
+		workflowExecution, err := s.TestCluster().ExecutionManager().GetWorkflowExecution(ctx, &persistence.GetWorkflowExecutionRequest{
 			ShardID:     shardID,
 			NamespaceID: namespaceID,
 			WorkflowID:  cancelerWorkflowId,
@@ -847,8 +849,8 @@ func (s *ClientFunctionalSuite) TestStickyAutoReset() {
 	// wait until wf started and sticky is set
 	var stickyQueue string
 	s.Eventually(func() bool {
-		ms, err := s.adminClient.DescribeMutableState(ctx, &adminservice.DescribeMutableStateRequest{
-			Namespace: s.namespace,
+		ms, err := s.AdminClient().DescribeMutableState(ctx, &adminservice.DescribeMutableStateRequest{
+			Namespace: s.Namespace(),
 			Execution: &commonpb.WorkflowExecution{
 				WorkflowId: future.GetID(),
 			},
@@ -862,8 +864,8 @@ func (s *ClientFunctionalSuite) TestStickyAutoReset() {
 	// stop worker
 	s.worker.Stop()
 	time.Sleep(time.Second * 11) // wait 11s (longer than 10s timeout), after this time, matching will detect StickyWorkerUnavailable
-	resp, err := s.client.DescribeTaskQueue(ctx, &workflowservice.DescribeTaskQueueRequest{
-		Namespace:     s.namespace,
+	resp, err := s.FrontendClient().DescribeTaskQueue(ctx, &workflowservice.DescribeTaskQueueRequest{
+		Namespace:     s.Namespace(),
 		TaskQueue:     &taskqueuepb.TaskQueue{Name: stickyQueue, Kind: enumspb.TASK_QUEUE_KIND_STICKY, NormalName: s.taskQueue},
 		TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
 	})
@@ -880,8 +882,8 @@ func (s *ClientFunctionalSuite) TestStickyAutoReset() {
 	s.NoError(err)
 
 	// check that mutable state still has sticky enabled
-	ms, err := s.adminClient.DescribeMutableState(ctx, &adminservice.DescribeMutableStateRequest{
-		Namespace: s.namespace,
+	ms, err := s.AdminClient().DescribeMutableState(ctx, &adminservice.DescribeMutableStateRequest{
+		Namespace: s.Namespace(),
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: future.GetID(),
 		},
@@ -891,8 +893,8 @@ func (s *ClientFunctionalSuite) TestStickyAutoReset() {
 	s.Equal(stickyQueue, ms.DatabaseMutableState.ExecutionInfo.StickyTaskQueue)
 
 	// now poll from normal queue, and it should see the full history.
-	task, err := s.client.PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
-		Namespace: s.namespace,
+	task, err := s.FrontendClient().PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
+		Namespace: s.Namespace(),
 		TaskQueue: &taskqueuepb.TaskQueue{Name: s.taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 	})
 
@@ -1307,7 +1309,7 @@ func (s *ClientFunctionalSuite) Test_BufferedSignalCausesUnhandledCommandAndSche
 	8 WorkflowTaskCompleted
 	9 MarkerRecorded
 	10 WorkflowExecutionCompleted`,
-		s.getHistory(s.namespace, tv.WorkflowExecution()))
+		s.GetHistory(s.Namespace(), tv.WorkflowExecution()))
 }
 
 // Analogous to Test_BufferedSignalCausesUnhandledCommandAndSchedulesNewTask
@@ -1382,7 +1384,7 @@ func (s *ClientFunctionalSuite) Test_WorkflowCanBeCompletedDespiteAdmittedUpdate
 	for {
 		time.Sleep(10 * time.Millisecond)
 		_, err = s.sdkClient.WorkflowService().PollWorkflowExecutionUpdate(ctx, &workflowservice.PollWorkflowExecutionUpdateRequest{
-			Namespace: s.namespace,
+			Namespace: s.Namespace(),
 			UpdateRef: tv.UpdateRef(),
 			Identity:  "my-identity",
 			WaitPolicy: &updatepb.WaitPolicy{
@@ -1418,7 +1420,7 @@ func (s *ClientFunctionalSuite) Test_WorkflowCanBeCompletedDespiteAdmittedUpdate
 	4 WorkflowTaskCompleted
 	5 MarkerRecorded
 	6 WorkflowExecutionCompleted`,
-		s.getHistory(s.namespace, tv.WorkflowExecution()))
+		s.GetHistory(s.Namespace(), tv.WorkflowExecution()))
 }
 
 func (s *ClientFunctionalSuite) Test_CancelActivityAndTimerBeforeComplete() {
@@ -1606,8 +1608,8 @@ func (s *ClientFunctionalSuite) Test_BufferedQuery() {
 		// sleep 2s to make sure DescribeMutableState is called after QueryWorkflow
 		time.Sleep(2 * time.Second)
 		// make DescribeMutableState call, which force mutable state to reload from db
-		_, err := s.adminClient.DescribeMutableState(ctx, &adminservice.DescribeMutableStateRequest{
-			Namespace: s.namespace,
+		_, err := s.AdminClient().DescribeMutableState(ctx, &adminservice.DescribeMutableStateRequest{
+			Namespace: s.Namespace(),
 			Execution: &commonpb.WorkflowExecution{
 				WorkflowId: id,
 				RunId:      workflowRun.GetRunID(),
@@ -1682,7 +1684,7 @@ func (s *ClientFunctionalSuite) TestBatchSignal() {
 	s.NoError(err)
 
 	_, err = s.sdkClient.WorkflowService().StartBatchOperation(context.Background(), &workflowservice.StartBatchOperationRequest{
-		Namespace: s.namespace,
+		Namespace: s.Namespace(),
 		Operation: &workflowservice.StartBatchOperationRequest_SignalOperation{
 			SignalOperation: &batchpb.BatchOperationSignal{
 				Signal: "my-signal",
@@ -1745,7 +1747,7 @@ func (s *ClientFunctionalSuite) TestBatchReset() {
 	count.Add(1)
 
 	_, err = s.sdkClient.WorkflowService().StartBatchOperation(context.Background(), &workflowservice.StartBatchOperationRequest{
-		Namespace: s.namespace,
+		Namespace: s.Namespace(),
 		Operation: &workflowservice.StartBatchOperationRequest_ResetOperation{
 			ResetOperation: &batchpb.BatchOperationReset{
 				ResetType: enumspb.RESET_TYPE_FIRST_WORKFLOW_TASK,
@@ -1771,7 +1773,7 @@ func (s *ClientFunctionalSuite) TestBatchReset() {
 }
 
 func (s *ClientFunctionalSuite) TestBatchResetByBuildId() {
-	tq := s.randomizeStr(s.T().Name())
+	tq := base.RandomizeStr(s.T().Name())
 	buildPrefix := uuid.New()[:6] + "-"
 	v1 := buildPrefix + "v1"
 	v2 := buildPrefix + "v2"
@@ -1849,7 +1851,7 @@ func (s *ClientFunctionalSuite) TestBatchResetByBuildId() {
 	s.NoError(err)
 	ex := &commonpb.WorkflowExecution{WorkflowId: run.GetID(), RunId: run.GetRunID()}
 	// wait for first wft and first activity to complete
-	s.Eventually(func() bool { return len(s.getHistory(s.namespace, ex)) >= 10 }, 5*time.Second, 100*time.Millisecond)
+	s.Eventually(func() bool { return len(s.GetHistory(s.Namespace(), ex)) >= 10 }, 5*time.Second, 100*time.Millisecond)
 
 	w1.Stop()
 
@@ -1894,16 +1896,16 @@ func (s *ClientFunctionalSuite) TestBatchResetByBuildId() {
 		searchattribute.ExecutionStatus, "Running",
 		searchattribute.BuildIds, worker_versioning.UnversionedBuildIdSearchAttribute(v2))
 	s.Eventually(func() bool {
-		resp, err := s.client.ListWorkflowExecutions(ctx, &workflowservice.ListWorkflowExecutionsRequest{
-			Namespace: s.namespace,
+		resp, err := s.FrontendClient().ListWorkflowExecutions(ctx, &workflowservice.ListWorkflowExecutionsRequest{
+			Namespace: s.Namespace(),
 			Query:     query,
 		})
 		return err == nil && len(resp.Executions) == 1
 	}, 10*time.Second, 500*time.Millisecond)
 
 	// reset it using v2 as the bad build ID
-	_, err = s.client.StartBatchOperation(context.Background(), &workflowservice.StartBatchOperationRequest{
-		Namespace:       s.namespace,
+	_, err = s.FrontendClient().StartBatchOperation(context.Background(), &workflowservice.StartBatchOperationRequest{
+		Namespace:       s.Namespace(),
 		VisibilityQuery: query,
 		JobId:           uuid.New(),
 		Reason:          "test",

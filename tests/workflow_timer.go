@@ -26,6 +26,7 @@ package tests
 
 import (
 	"fmt"
+	"go.temporal.io/server/tests/base"
 	"time"
 
 	"github.com/pborman/uuid"
@@ -38,7 +39,11 @@ import (
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 
-func (s *FunctionalSuite) TestCancelTimer() {
+type WorkflowTimerTestSuite struct {
+	base.FunctionalSuite
+}
+
+func (s *WorkflowTimerTestSuite) TestCancelTimer() {
 	id := "functional-cancel-timer-test"
 	wt := "functional-cancel-timer-test-type"
 	tl := "functional-cancel-timer-test-taskqueue"
@@ -46,7 +51,7 @@ func (s *FunctionalSuite) TestCancelTimer() {
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           uuid.New(),
-		Namespace:           s.namespace,
+		Namespace:           s.Namespace(),
 		WorkflowId:          id,
 		WorkflowType:        &commonpb.WorkflowType{Name: wt},
 		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
@@ -56,7 +61,7 @@ func (s *FunctionalSuite) TestCancelTimer() {
 		Identity:            identity,
 	}
 
-	creatResp, err0 := s.client.StartWorkflowExecution(NewContext(), request)
+	creatResp, err0 := s.FrontendClient().StartWorkflowExecution(base.NewContext(), request)
 	s.NoError(err0)
 	workflowExecution := &commonpb.WorkflowExecution{
 		WorkflowId: id,
@@ -80,7 +85,7 @@ func (s *FunctionalSuite) TestCancelTimer() {
 			}}, nil
 		}
 
-		historyEvents := s.getHistory(s.namespace, workflowExecution)
+		historyEvents := s.GetHistory(s.Namespace(), workflowExecution)
 		for _, event := range historyEvents {
 			switch event.GetEventType() {
 			case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED:
@@ -111,9 +116,9 @@ func (s *FunctionalSuite) TestCancelTimer() {
 		}}, nil
 	}
 
-	poller := &TaskPoller{
-		Client:              s.client,
-		Namespace:           s.namespace,
+	poller := &base.TaskPoller{
+		Client:              s.FrontendClient(),
+		Namespace:           s.Namespace(),
 		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		Identity:            identity,
 		WorkflowTaskHandler: wtHandler,
@@ -127,20 +132,20 @@ func (s *FunctionalSuite) TestCancelTimer() {
 	s.Logger.Info("PollAndProcessWorkflowTask: completed")
 	s.NoError(err)
 
-	s.Nil(s.sendSignal(s.namespace, workflowExecution, "random signal name", payloads.EncodeString("random signal payload"), identity))
+	s.Nil(s.SendSignal(s.Namespace(), workflowExecution, "random signal name", payloads.EncodeString("random signal payload"), identity))
 
 	// receive the signal & cancel the timer
 	_, err = poller.PollAndProcessWorkflowTask()
 	s.Logger.Info("PollAndProcessWorkflowTask: completed")
 	s.NoError(err)
 
-	s.Nil(s.sendSignal(s.namespace, workflowExecution, "random signal name", payloads.EncodeString("random signal payload"), identity))
+	s.Nil(s.SendSignal(s.Namespace(), workflowExecution, "random signal name", payloads.EncodeString("random signal payload"), identity))
 	// complete the workflow
 	_, err = poller.PollAndProcessWorkflowTask()
 	s.Logger.Info("PollAndProcessWorkflowTask: completed")
 	s.NoError(err)
 
-	historyEvents := s.getHistory(s.namespace, workflowExecution)
+	historyEvents := s.GetHistory(s.Namespace(), workflowExecution)
 	s.EqualHistoryEvents(`
   1 WorkflowExecutionStarted
   2 WorkflowTaskScheduled
@@ -160,7 +165,7 @@ func (s *FunctionalSuite) TestCancelTimer() {
 `, historyEvents)
 }
 
-func (s *FunctionalSuite) TestCancelTimer_CancelFiredAndBuffered() {
+func (s *WorkflowTimerTestSuite) TestCancelTimer_CancelFiredAndBuffered() {
 	id := "functional-cancel-timer-fired-and-buffered-test"
 	wt := "functional-cancel-timer-fired-and-buffered-test-type"
 	tl := "functional-cancel-timer-fired-and-buffered-test-taskqueue"
@@ -168,7 +173,7 @@ func (s *FunctionalSuite) TestCancelTimer_CancelFiredAndBuffered() {
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           uuid.New(),
-		Namespace:           s.namespace,
+		Namespace:           s.Namespace(),
 		WorkflowId:          id,
 		WorkflowType:        &commonpb.WorkflowType{Name: wt},
 		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
@@ -178,7 +183,7 @@ func (s *FunctionalSuite) TestCancelTimer_CancelFiredAndBuffered() {
 		Identity:            identity,
 	}
 
-	creatResp, err0 := s.client.StartWorkflowExecution(NewContext(), request)
+	creatResp, err0 := s.FrontendClient().StartWorkflowExecution(base.NewContext(), request)
 	s.NoError(err0)
 	workflowExecution := &commonpb.WorkflowExecution{
 		WorkflowId: id,
@@ -202,7 +207,7 @@ func (s *FunctionalSuite) TestCancelTimer_CancelFiredAndBuffered() {
 			}}, nil
 		}
 
-		historyEvents := s.getHistory(s.namespace, workflowExecution)
+		historyEvents := s.GetHistory(s.Namespace(), workflowExecution)
 		for _, event := range historyEvents {
 			switch event.GetEventType() {
 			case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED:
@@ -234,9 +239,9 @@ func (s *FunctionalSuite) TestCancelTimer_CancelFiredAndBuffered() {
 		}}, nil
 	}
 
-	poller := &TaskPoller{
-		Client:              s.client,
-		Namespace:           s.namespace,
+	poller := &base.TaskPoller{
+		Client:              s.FrontendClient(),
+		Namespace:           s.Namespace(),
 		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		Identity:            identity,
 		WorkflowTaskHandler: wtHandler,
@@ -250,20 +255,20 @@ func (s *FunctionalSuite) TestCancelTimer_CancelFiredAndBuffered() {
 	s.Logger.Info("PollAndProcessWorkflowTask: completed")
 	s.NoError(err)
 
-	s.Nil(s.sendSignal(s.namespace, workflowExecution, "random signal name", payloads.EncodeString("random signal payload"), identity))
+	s.Nil(s.SendSignal(s.Namespace(), workflowExecution, "random signal name", payloads.EncodeString("random signal payload"), identity))
 
 	// receive the signal & cancel the timer
 	_, err = poller.PollAndProcessWorkflowTask()
 	s.Logger.Info("PollAndProcessWorkflowTask: completed")
 	s.NoError(err)
 
-	s.Nil(s.sendSignal(s.namespace, workflowExecution, "random signal name", payloads.EncodeString("random signal payload"), identity))
+	s.Nil(s.SendSignal(s.Namespace(), workflowExecution, "random signal name", payloads.EncodeString("random signal payload"), identity))
 	// complete the workflow
 	_, err = poller.PollAndProcessWorkflowTask()
 	s.Logger.Info("PollAndProcessWorkflowTask: completed")
 	s.NoError(err)
 
-	historyEvents := s.getHistory(s.namespace, workflowExecution)
+	historyEvents := s.GetHistory(s.Namespace(), workflowExecution)
 	s.EqualHistoryEvents(`
   1 WorkflowExecutionStarted
   2 WorkflowTaskScheduled

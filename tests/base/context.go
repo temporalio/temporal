@@ -22,16 +22,18 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package tests
+package base
 
 import (
-	"flag"
-	"testing"
+	"context"
+	"time"
 
-	"github.com/stretchr/testify/suite"
+	"go.temporal.io/server/common/debug"
+	"go.temporal.io/server/common/rpc"
 )
 
-func TestFunctionalSuite(t *testing.T) {
-	flag.Parse()
-	suite.Run(t, new(FunctionalSuite))
+// NewContext create new context with default timeout 90 seconds.
+func NewContext() context.Context {
+	ctx, _ := rpc.NewContextWithTimeoutAndVersionHeaders(90 * time.Second * debug.TimeoutMultiplier)
+	return ctx
 }

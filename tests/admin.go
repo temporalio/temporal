@@ -77,8 +77,8 @@ func (s *ClientFunctionalSuite) TestAdminRebuildMutableState() {
 
 	var response1 *adminservice.DescribeMutableStateResponse
 	for {
-		response1, err = s.adminClient.DescribeMutableState(ctx, &adminservice.DescribeMutableStateRequest{
-			Namespace: s.namespace,
+		response1, err = s.AdminClient().DescribeMutableState(ctx, &adminservice.DescribeMutableStateRequest{
+			Namespace: s.Namespace(),
 			Execution: &commonpb.WorkflowExecution{
 				WorkflowId: workflowID,
 				RunId:      runID,
@@ -91,8 +91,8 @@ func (s *ClientFunctionalSuite) TestAdminRebuildMutableState() {
 		time.Sleep(20 * time.Millisecond)
 	}
 
-	_, err = s.adminClient.RebuildMutableState(ctx, &adminservice.RebuildMutableStateRequest{
-		Namespace: s.namespace,
+	_, err = s.AdminClient().RebuildMutableState(ctx, &adminservice.RebuildMutableStateRequest{
+		Namespace: s.Namespace(),
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: workflowID,
 			RunId:      runID,
@@ -100,8 +100,8 @@ func (s *ClientFunctionalSuite) TestAdminRebuildMutableState() {
 	})
 	s.NoError(err)
 
-	response2, err := s.adminClient.DescribeMutableState(ctx, &adminservice.DescribeMutableStateRequest{
-		Namespace: s.namespace,
+	response2, err := s.AdminClient().DescribeMutableState(ctx, &adminservice.DescribeMutableStateRequest{
+		Namespace: s.Namespace(),
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: workflowID,
 			RunId:      runID,

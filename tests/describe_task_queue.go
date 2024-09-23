@@ -24,6 +24,7 @@ package tests
 
 import (
 	"context"
+	"go.temporal.io/server/tests/base"
 	"time"
 
 	"github.com/pborman/uuid"
@@ -41,16 +42,16 @@ import (
 type (
 	DescribeTaskQueueSuite struct {
 		*require.Assertions
-		FunctionalTestBase
+		base.FunctionalTestBase
 	}
 )
 
 func (s *DescribeTaskQueueSuite) SetupSuite() {
-	s.setupSuite("testdata/es_cluster.yaml")
+	s.FunctionalTestBase.SetupSuite("testdata/es_cluster.yaml")
 }
 
 func (s *DescribeTaskQueueSuite) TearDownSuite() {
-	s.tearDownSuite()
+	s.FunctionalTestBase.TearDownSuite()
 }
 
 func (s *DescribeTaskQueueSuite) SetupTest() {
@@ -71,7 +72,7 @@ func (s *DescribeTaskQueueSuite) TestAddNoTasks_ValidateStats() {
 
 func (s *DescribeTaskQueueSuite) TestAddSingleTask_ValidateStats() {
 	s.OverrideDynamicConfig(dynamicconfig.MatchingUpdateAckInterval, 5*time.Second)
-	s.testWithMatchingBehavior(func() { s.publishConsumeWorkflowTasksValidateStats(1, true) })
+	s.TestWithMatchingBehavior(func() { s.publishConsumeWorkflowTasksValidateStats(1, true) })
 }
 
 func (s *DescribeTaskQueueSuite) TestAddMultipleTasksMultiplePartitions_ValidateStats() {
@@ -110,7 +111,7 @@ func (s *DescribeTaskQueueSuite) publishConsumeWorkflowTasksValidateStats(workfl
 	expectedAddRate[enumspb.TASK_QUEUE_TYPE_ACTIVITY] = false
 	expectedDispatchRate[enumspb.TASK_QUEUE_TYPE_ACTIVITY] = false
 
-	tqName := s.randomizeStr("backlog-counter-task-queue")
+	tqName := base.RandomizeStr("backlog-counter-task-queue")
 	tq := &taskqueuepb.TaskQueue{Name: tqName, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 	identity := "worker-multiple-tasks"
 	for i := 0; i < workflows; i++ {
@@ -120,7 +121,7 @@ func (s *DescribeTaskQueueSuite) publishConsumeWorkflowTasksValidateStats(workfl
 
 		request := &workflowservice.StartWorkflowExecutionRequest{
 			RequestId:           uuid.New(),
-			Namespace:           s.namespace,
+			Namespace:           s.Namespace(),
 			WorkflowId:          id,
 			WorkflowType:        workflowType,
 			TaskQueue:           tq,
@@ -130,7 +131,7 @@ func (s *DescribeTaskQueueSuite) publishConsumeWorkflowTasksValidateStats(workfl
 			Identity:            identity,
 		}
 
-		_, err0 := s.client.StartWorkflowExecution(NewContext(), request)
+		_, err0 := s.FrontendClient().StartWorkflowExecution(base.NewContext(), request)
 		s.NoError(err0)
 	}
 
@@ -143,8 +144,8 @@ func (s *DescribeTaskQueueSuite) publishConsumeWorkflowTasksValidateStats(workfl
 
 	// Poll the tasks
 	for i := 0; i < workflows; {
-		resp1, err1 := s.client.PollWorkflowTaskQueue(NewContext(), &workflowservice.PollWorkflowTaskQueueRequest{
-			Namespace: s.namespace,
+		resp1, err1 := s.FrontendClient().PollWorkflowTaskQueue(base.NewContext(), &workflowservice.PollWorkflowTaskQueueRequest{
+			Namespace: s.Namespace(),
 			TaskQueue: tq,
 			Identity:  identity,
 		})
@@ -153,8 +154,8 @@ func (s *DescribeTaskQueueSuite) publishConsumeWorkflowTasksValidateStats(workfl
 			continue // poll again on empty responses
 		}
 		i++
-		_, err := s.client.RespondWorkflowTaskCompleted(NewContext(), &workflowservice.RespondWorkflowTaskCompletedRequest{
-			Namespace: s.namespace,
+		_, err := s.FrontendClient().RespondWorkflowTaskCompleted(base.NewContext(), &workflowservice.RespondWorkflowTaskCompletedRequest{
+			Namespace: s.Namespace(),
 			Identity:  identity,
 			TaskToken: resp1.TaskToken,
 			Commands: []*commandpb.Command{
@@ -189,9 +190,9 @@ func (s *DescribeTaskQueueSuite) publishConsumeWorkflowTasksValidateStats(workfl
 
 	// Poll the tasks
 	for i := 0; i < workflows; {
-		resp1, err1 := s.client.PollActivityTaskQueue(
-			NewContext(), &workflowservice.PollActivityTaskQueueRequest{
-				Namespace: s.namespace,
+		resp1, err1 := s.FrontendClient().PollActivityTaskQueue(
+			base.NewContext(), &workflowservice.PollActivityTaskQueueRequest{
+				Namespace: s.Namespace(),
 				TaskQueue: tq,
 				Identity:  identity,
 			},
@@ -226,8 +227,8 @@ func (s *DescribeTaskQueueSuite) validateDescribeTaskQueue(
 
 	if isEnhancedMode {
 		s.EventuallyWithT(func(t *assert.CollectT) {
-			resp, err = s.client.DescribeTaskQueue(ctx, &workflowservice.DescribeTaskQueueRequest{
-				Namespace:              s.namespace,
+			resp, err = s.FrontendClient().DescribeTaskQueue(ctx, &workflowservice.DescribeTaskQueueRequest{
+				Namespace:              s.Namespace(),
 				TaskQueue:              &taskqueuepb.TaskQueue{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 				ApiMode:                enumspb.DESCRIBE_TASK_QUEUE_MODE_ENHANCED,
 				Versions:               nil, // default version, in this case unversioned queue
@@ -265,8 +266,8 @@ func (s *DescribeTaskQueueSuite) validateDescribeTaskQueue(
 	} else {
 		// Querying the Legacy API
 		s.Eventually(func() bool {
-			resp, err = s.client.DescribeTaskQueue(ctx, &workflowservice.DescribeTaskQueueRequest{
-				Namespace:              s.namespace,
+			resp, err = s.FrontendClient().DescribeTaskQueue(ctx, &workflowservice.DescribeTaskQueueRequest{
+				Namespace:              s.Namespace(),
 				TaskQueue:              &taskqueuepb.TaskQueue{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 				ApiMode:                enumspb.DESCRIBE_TASK_QUEUE_MODE_UNSPECIFIED,
 				IncludeTaskQueueStatus: true,

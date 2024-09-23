@@ -29,6 +29,7 @@ package xdc
 import (
 	"flag"
 	"fmt"
+	"go.temporal.io/server/tests/base"
 	"os"
 	"sync"
 	"testing"
@@ -71,12 +72,12 @@ type AdvVisCrossDCTestSuite struct {
 	historyrequire.HistoryRequire
 	suite.Suite
 
-	testClusterFactory tests.TestClusterFactory
+	testClusterFactory base.TestClusterFactory
 
-	cluster1               *tests.TestCluster
-	cluster2               *tests.TestCluster
+	cluster1               *base.TestCluster
+	cluster2               *base.TestCluster
 	logger                 log.Logger
-	clusterConfigs         []*tests.TestClusterConfig
+	clusterConfigs         []*base.TestClusterConfig
 	isElasticsearchEnabled bool
 
 	testSearchAttributeKey string
@@ -105,7 +106,7 @@ var (
 
 func (s *AdvVisCrossDCTestSuite) SetupSuite() {
 	s.logger = log.NewTestLogger()
-	s.testClusterFactory = tests.NewTestClusterFactory()
+	s.testClusterFactory = base.NewTestClusterFactory()
 
 	var fileName string
 	if tests.UsingSQLAdvancedVisibility() {
@@ -128,7 +129,7 @@ func (s *AdvVisCrossDCTestSuite) SetupSuite() {
 	s.Require().NoError(err)
 	confContent = []byte(os.ExpandEnv(string(confContent)))
 
-	var clusterConfigs []*tests.TestClusterConfig
+	var clusterConfigs []*base.TestClusterConfig
 	s.Require().NoError(yaml.Unmarshal(confContent, &clusterConfigs))
 	s.clusterConfigs = clusterConfigs
 
@@ -144,13 +145,13 @@ func (s *AdvVisCrossDCTestSuite) SetupSuite() {
 
 	cluster1Address := clusterConfigs[0].ClusterMetadata.ClusterInformation[clusterConfigs[0].ClusterMetadata.CurrentClusterName].RPCAddress
 	cluster2Address := clusterConfigs[1].ClusterMetadata.ClusterInformation[clusterConfigs[1].ClusterMetadata.CurrentClusterName].RPCAddress
-	_, err = s.cluster1.GetAdminClient().AddOrUpdateRemoteCluster(tests.NewContext(), &adminservice.AddOrUpdateRemoteClusterRequest{
+	_, err = s.cluster1.GetAdminClient().AddOrUpdateRemoteCluster(base.NewContext(), &adminservice.AddOrUpdateRemoteClusterRequest{
 		FrontendAddress:               cluster2Address,
 		EnableRemoteClusterConnection: true,
 	})
 	s.Require().NoError(err)
 
-	_, err = s.cluster2.GetAdminClient().AddOrUpdateRemoteCluster(tests.NewContext(), &adminservice.AddOrUpdateRemoteClusterRequest{
+	_, err = s.cluster2.GetAdminClient().AddOrUpdateRemoteCluster(base.NewContext(), &adminservice.AddOrUpdateRemoteClusterRequest{
 		FrontendAddress:               cluster1Address,
 		EnableRemoteClusterConnection: true,
 	})
@@ -189,14 +190,14 @@ func (s *AdvVisCrossDCTestSuite) TestSearchAttributes() {
 		IsGlobalNamespace:                true,
 		WorkflowExecutionRetentionPeriod: durationpb.New(1 * time.Hour * 24),
 	}
-	_, err := client1.RegisterNamespace(tests.NewContext(), regReq)
+	_, err := client1.RegisterNamespace(base.NewContext(), regReq)
 	s.NoError(err)
 
 	// Wait for namespace cache to pick the change
 	time.Sleep(cacheRefreshInterval)
 	if !s.isElasticsearchEnabled {
 		// When Elasticsearch is enabled, the search attribute aliases are not used.
-		_, err = client1.UpdateNamespace(tests.NewContext(), &workflowservice.UpdateNamespaceRequest{
+		_, err = client1.UpdateNamespace(base.NewContext(), &workflowservice.UpdateNamespaceRequest{
 			Namespace: namespace,
 			Config: &namespacepb.NamespaceConfig{
 				CustomSearchAttributeAliases: map[string]string{
@@ -217,12 +218,12 @@ func (s *AdvVisCrossDCTestSuite) TestSearchAttributes() {
 	descReq := &workflowservice.DescribeNamespaceRequest{
 		Namespace: namespace,
 	}
-	resp, err := client1.DescribeNamespace(tests.NewContext(), descReq)
+	resp, err := client1.DescribeNamespace(base.NewContext(), descReq)
 	s.NoError(err)
 	s.NotNil(resp)
 
 	client2 := s.cluster2.GetFrontendClient() // standby
-	resp2, err := client2.DescribeNamespace(tests.NewContext(), descReq)
+	resp2, err := client2.DescribeNamespace(base.NewContext(), descReq)
 	s.NoError(err)
 	s.NotNil(resp2)
 	s.Equal(resp, resp2)
@@ -252,7 +253,7 @@ func (s *AdvVisCrossDCTestSuite) TestSearchAttributes() {
 		SearchAttributes:    searchAttr,
 	}
 	startTime := time.Now().UTC()
-	we, err := client1.StartWorkflowExecution(tests.NewContext(), startReq)
+	we, err := client1.StartWorkflowExecution(base.NewContext(), startReq)
 	s.NoError(err)
 	s.NotNil(we.GetRunId())
 
@@ -271,7 +272,7 @@ func (s *AdvVisCrossDCTestSuite) TestSearchAttributes() {
 		for i := 0; i < numOfRetry; i++ {
 			startFilter.LatestTime = timestamppb.New(time.Now().UTC())
 
-			resp, err := client.ListWorkflowExecutions(tests.NewContext(), lr)
+			resp, err := client.ListWorkflowExecutions(base.NewContext(), lr)
 			s.NoError(err)
 			if len(resp.GetExecutions()) == 1 {
 				openExecution = resp.GetExecutions()[0]
@@ -307,7 +308,7 @@ func (s *AdvVisCrossDCTestSuite) TestSearchAttributes() {
 		return []*commandpb.Command{upsertCommand}, nil
 	}
 
-	poller := tests.TaskPoller{
+	poller := base.TaskPoller{
 		Client:              client1,
 		Namespace:           namespace,
 		TaskQueue:           taskQueue,
@@ -325,7 +326,7 @@ func (s *AdvVisCrossDCTestSuite) TestSearchAttributes() {
 
 	testListResult = func(client workflowservice.WorkflowServiceClient, lr *workflowservice.ListWorkflowExecutionsRequest) {
 		s.Eventually(func() bool {
-			resp, err := client.ListWorkflowExecutions(tests.NewContext(), lr)
+			resp, err := client.ListWorkflowExecutions(base.NewContext(), lr)
 			s.NoError(err)
 			if len(resp.GetExecutions()) != 1 {
 				return false
@@ -379,7 +380,7 @@ func (s *AdvVisCrossDCTestSuite) TestSearchAttributes() {
 	// terminate workflow
 	terminateReason := "force terminate to make sure standby process tasks"
 	terminateDetails := payloads.EncodeString("terminate details")
-	_, err = client1.TerminateWorkflowExecution(tests.NewContext(), &workflowservice.TerminateWorkflowExecutionRequest{
+	_, err = client1.TerminateWorkflowExecution(base.NewContext(), &workflowservice.TerminateWorkflowExecutionRequest{
 		Namespace: namespace,
 		WorkflowExecution: &commonpb.WorkflowExecution{
 			WorkflowId: id,
@@ -400,7 +401,7 @@ func (s *AdvVisCrossDCTestSuite) TestSearchAttributes() {
 	}
 GetHistoryLoop:
 	for i := 0; i < 10; i++ {
-		historyResponse, err := client1.GetWorkflowExecutionHistory(tests.NewContext(), getHistoryReq)
+		historyResponse, err := client1.GetWorkflowExecutionHistory(base.NewContext(), getHistoryReq)
 		s.NoError(err)
 		history := historyResponse.History
 
@@ -427,7 +428,7 @@ GetHistoryLoop:
 	eventsReplicated := false
 GetHistoryLoop2:
 	for i := 0; i < numOfRetry; i++ {
-		historyResponse, err = client2.GetWorkflowExecutionHistory(tests.NewContext(), getHistoryReq)
+		historyResponse, err = client2.GetWorkflowExecutionHistory(base.NewContext(), getHistoryReq)
 		if err == nil {
 			history := historyResponse.History
 			lastEvent := history.Events[len(history.Events)-1]
