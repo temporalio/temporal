@@ -22,7 +22,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package tests
+package base
 
 import (
 	"context"
@@ -82,7 +82,7 @@ import (
 )
 
 type (
-	temporalImpl struct {
+	TemporalImpl struct {
 		frontendService *frontend.Service
 		matchingService *matching.Service
 		historyServices []*history.Service
@@ -216,8 +216,8 @@ var (
 )
 
 // newTemporal returns an instance that hosts full temporal in one process
-func newTemporal(t *testing.T, params *TemporalParams) *temporalImpl {
-	impl := &temporalImpl{
+func newTemporal(t *testing.T, params *TemporalParams) *TemporalImpl {
+	impl := &TemporalImpl{
 		logger:                           params.Logger,
 		clusterMetadataConfig:            params.ClusterMetadataConfig,
 		persistenceConfig:                params.PersistenceConfig,
@@ -256,11 +256,11 @@ func newTemporal(t *testing.T, params *TemporalParams) *temporalImpl {
 	return impl
 }
 
-func (c *temporalImpl) enableWorker() bool {
+func (c *TemporalImpl) enableWorker() bool {
 	return c.workerConfig.StartWorkerAnyway || c.workerConfig.EnableArchiver || c.workerConfig.EnableReplicator
 }
 
-func (c *temporalImpl) Start() error {
+func (c *TemporalImpl) Start() error {
 	hosts := make(map[primitives.ServiceName]static.Hosts)
 	hosts[primitives.FrontendService] = static.SingleLocalHost(c.FrontendGRPCAddress())
 	hosts[primitives.MatchingService] = static.SingleLocalHost(c.MatchingGRPCServiceAddress())
@@ -294,7 +294,7 @@ func (c *temporalImpl) Start() error {
 	return nil
 }
 
-func (c *temporalImpl) Stop() error {
+func (c *TemporalImpl) Stop() error {
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 
@@ -322,7 +322,7 @@ func (c *temporalImpl) Stop() error {
 	return errs
 }
 
-func (c *temporalImpl) FrontendGRPCAddress() string {
+func (c *TemporalImpl) FrontendGRPCAddress() string {
 	switch c.clusterNo {
 	case 0:
 		return "127.0.0.1:7134"
@@ -337,22 +337,22 @@ func (c *temporalImpl) FrontendGRPCAddress() string {
 	}
 }
 
-func (c *temporalImpl) FrontendHTTPAddress() string {
+func (c *TemporalImpl) FrontendHTTPAddress() string {
 	host, port := c.FrontendHTTPHostPort()
 	return net.JoinHostPort(host, strconv.Itoa(port))
 }
 
-func (c *temporalImpl) FrontendHTTPHostPort() (string, int) {
+func (c *TemporalImpl) FrontendHTTPHostPort() (string, int) {
 	if host, port, err := net.SplitHostPort(c.FrontendGRPCAddress()); err != nil {
-		panic(fmt.Errorf("Invalid gRPC frontend address: %w", err))
+		panic(fmt.Errorf("Invalid gRPC frontend address: %w.", err))
 	} else if portNum, err := strconv.Atoi(port); err != nil {
-		panic(fmt.Errorf("Invalid gRPC frontend port: %w", err))
+		panic(fmt.Errorf("Invalid gRPC frontend port: %w.", err))
 	} else {
 		return host, portNum + 10
 	}
 }
 
-func (c *temporalImpl) HistoryServiceAddresses() []string {
+func (c *TemporalImpl) HistoryServiceAddresses() []string {
 	var hosts []string
 	var startPort int
 	switch c.clusterNo {
@@ -376,7 +376,7 @@ func (c *temporalImpl) HistoryServiceAddresses() []string {
 	return hosts
 }
 
-func (c *temporalImpl) MatchingGRPCServiceAddress() string {
+func (c *TemporalImpl) MatchingGRPCServiceAddress() string {
 	switch c.clusterNo {
 	case 0:
 		return "127.0.0.1:7136"
@@ -391,7 +391,7 @@ func (c *temporalImpl) MatchingGRPCServiceAddress() string {
 	}
 }
 
-func (c *temporalImpl) WorkerGRPCServiceAddress() string {
+func (c *TemporalImpl) WorkerGRPCServiceAddress() string {
 	switch c.clusterNo {
 	case 0:
 		return "127.0.0.1:7138"
@@ -406,37 +406,55 @@ func (c *temporalImpl) WorkerGRPCServiceAddress() string {
 	}
 }
 
-func (c *temporalImpl) OverrideDCValue(t *testing.T, setting dynamicconfig.GenericSetting, value any) {
+func (c *TemporalImpl) OverrideDCValue(t *testing.T, setting dynamicconfig.GenericSetting, value any) {
 	c.overrideDynamicConfigByKey(t, setting.Key(), value)
 }
 
-func (c *temporalImpl) GetAdminClient() adminservice.AdminServiceClient {
+func (c *TemporalImpl) WorkerService() *worker.Service {
+	return c.workerService
+}
+
+func (c *TemporalImpl) AdminClient() adminservice.AdminServiceClient {
 	return c.adminClient
 }
 
-func (c *temporalImpl) GetOperatorClient() operatorservice.OperatorServiceClient {
+func (c *TemporalImpl) OperatorClient() operatorservice.OperatorServiceClient {
 	return c.operatorClient
 }
 
-func (c *temporalImpl) GetFrontendClient() workflowservice.WorkflowServiceClient {
+func (c *TemporalImpl) FrontendClient() workflowservice.WorkflowServiceClient {
 	return c.frontendClient
 }
 
-func (c *temporalImpl) GetHistoryClient() historyservice.HistoryServiceClient {
+func (c *TemporalImpl) HistoryClient() historyservice.HistoryServiceClient {
 	return c.historyClient
 }
 
-func (c *temporalImpl) GetMatchingClient() matchingservice.MatchingServiceClient {
+func (c *TemporalImpl) MatchingClient() matchingservice.MatchingServiceClient {
 	// Note that this matching client does not do routing. But it doesn't matter since we have
 	// only one matching node in testing.
 	return c.matchingClient
 }
 
-func (c *temporalImpl) GetFrontendNamespaceRegistry() namespace.Registry {
+func (c *TemporalImpl) DcClient() *dynamicconfig.MemoryClient {
+	// Note that this matching client does not do routing. But it doesn't matter since we have
+	// only one matching node in testing.
+	return c.dcClient
+}
+
+func (c *TemporalImpl) FrontendNamespaceRegistry() namespace.Registry {
 	return c.frontendNamespaceRegistry
 }
 
-func (c *temporalImpl) startFrontend(
+func (c *TemporalImpl) CaptureMetricsHandler() *metricstest.CaptureHandler {
+	return c.captureMetricsHandler
+}
+
+func (c *TemporalImpl) TlsConfigProvider() *encryption.FixedTLSConfigProvider {
+	return c.tlsConfigProvider
+}
+
+func (c *TemporalImpl) startFrontend(
 	hostsByService map[primitives.ServiceName]static.Hosts,
 	startWG *sync.WaitGroup,
 ) {
@@ -511,8 +529,8 @@ func (c *temporalImpl) startFrontend(
 
 	if c.mockAdminClient != nil {
 		if clientBean != nil {
-			for serviceName, client := range c.mockAdminClient {
-				clientBean.SetRemoteAdminClient(serviceName, client)
+			for serviceName, adminClient := range c.mockAdminClient {
+				clientBean.SetRemoteAdminClient(serviceName, adminClient)
 			}
 		}
 	}
@@ -523,6 +541,7 @@ func (c *temporalImpl) startFrontend(
 	connection := rpcFactory.CreateLocalFrontendGRPCConnection()
 	c.frontendClient = workflowservice.NewWorkflowServiceClient(connection)
 	c.adminClient = adminservice.NewAdminServiceClient(connection)
+
 	c.operatorClient = operatorservice.NewOperatorServiceClient(connection)
 
 	if err := feApp.Start(context.Background()); err != nil {
@@ -534,7 +553,7 @@ func (c *temporalImpl) startFrontend(
 	c.shutdownWG.Done()
 }
 
-func (c *temporalImpl) startHistory(
+func (c *TemporalImpl) startHistory(
 	hostsByService map[primitives.ServiceName]static.Hosts,
 	startWG *sync.WaitGroup,
 ) {
@@ -613,8 +632,8 @@ func (c *temporalImpl) startHistory(
 
 		if c.mockAdminClient != nil {
 			if clientBean != nil {
-				for serviceName, client := range c.mockAdminClient {
-					clientBean.SetRemoteAdminClient(serviceName, client)
+				for serviceName, adminClient := range c.mockAdminClient {
+					clientBean.SetRemoteAdminClient(serviceName, adminClient)
 				}
 			}
 		}
@@ -643,7 +662,7 @@ func (c *temporalImpl) startHistory(
 	c.shutdownWG.Done()
 }
 
-func (c *temporalImpl) startMatching(
+func (c *TemporalImpl) startMatching(
 	hostsByService map[primitives.ServiceName]static.Hosts,
 	startWG *sync.WaitGroup,
 ) {
@@ -707,8 +726,8 @@ func (c *temporalImpl) startMatching(
 	}
 	if c.mockAdminClient != nil {
 		if clientBean != nil {
-			for serviceName, client := range c.mockAdminClient {
-				clientBean.SetRemoteAdminClient(serviceName, client)
+			for serviceName, adminClient := range c.mockAdminClient {
+				clientBean.SetRemoteAdminClient(serviceName, adminClient)
 			}
 		}
 	}
@@ -730,7 +749,7 @@ func (c *temporalImpl) startMatching(
 	c.shutdownWG.Done()
 }
 
-func (c *temporalImpl) startWorker(
+func (c *TemporalImpl) startWorker(
 	hostsByService map[primitives.ServiceName]static.Hosts,
 	startWG *sync.WaitGroup,
 ) {
@@ -818,11 +837,11 @@ func (c *temporalImpl) startWorker(
 	c.shutdownWG.Done()
 }
 
-func (c *temporalImpl) getFxOptionsForService(serviceName primitives.ServiceName) fx.Option {
+func (c *TemporalImpl) getFxOptionsForService(serviceName primitives.ServiceName) fx.Option {
 	return fx.Options(c.serviceFxOptions[serviceName]...)
 }
 
-func (c *temporalImpl) createSystemNamespace() error {
+func (c *TemporalImpl) createSystemNamespace() error {
 	err := c.metadataMgr.InitializeSystemNamespaces(context.Background(), c.clusterMetadataConfig.CurrentClusterName)
 	if err != nil {
 		return fmt.Errorf("failed to create temporal-system namespace: %v", err)
@@ -830,11 +849,11 @@ func (c *temporalImpl) createSystemNamespace() error {
 	return nil
 }
 
-func (c *temporalImpl) GetExecutionManager() persistence.ExecutionManager {
+func (c *TemporalImpl) GetExecutionManager() persistence.ExecutionManager {
 	return c.executionManager
 }
 
-func (c *temporalImpl) GetTLSConfigProvider() encryption.TLSConfigProvider {
+func (c *TemporalImpl) GetTLSConfigProvider() encryption.TLSConfigProvider {
 	// If we just return this directly, the interface will be non-nil but the
 	// pointer will be nil
 	if c.tlsConfigProvider != nil {
@@ -843,18 +862,18 @@ func (c *temporalImpl) GetTLSConfigProvider() encryption.TLSConfigProvider {
 	return nil
 }
 
-func (c *temporalImpl) GetTaskCategoryRegistry() tasks.TaskCategoryRegistry {
+func (c *TemporalImpl) GetTaskCategoryRegistry() tasks.TaskCategoryRegistry {
 	return c.taskCategoryRegistry
 }
 
-func (c *temporalImpl) GetMetricsHandler() metrics.Handler {
+func (c *TemporalImpl) GetMetricsHandler() metrics.Handler {
 	if c.captureMetricsHandler != nil {
 		return c.captureMetricsHandler
 	}
 	return metrics.NoopMetricsHandler
 }
 
-func (c *temporalImpl) frontendConfigProvider() *config.Config {
+func (c *TemporalImpl) frontendConfigProvider() *config.Config {
 	// Set HTTP port and a test HTTP forwarded header
 	_, httpPort := c.FrontendHTTPHostPort()
 	return &config.Config{
@@ -872,7 +891,7 @@ func (c *temporalImpl) frontendConfigProvider() *config.Config {
 	}
 }
 
-func (c *temporalImpl) overrideHistoryDynamicConfig(t *testing.T) {
+func (c *TemporalImpl) overrideHistoryDynamicConfig(t *testing.T) {
 	if c.esConfig != nil {
 		c.OverrideDCValue(t, dynamicconfig.SecondaryVisibilityWritingMode, visibility.SecondaryVisibilityWritingModeDual)
 	}
@@ -906,7 +925,7 @@ func (c *temporalImpl) overrideHistoryDynamicConfig(t *testing.T) {
 	c.OverrideDCValue(t, dynamicconfig.VisibilityProcessorUpdateAckInterval, 1*time.Second)
 }
 
-func (c *temporalImpl) newRPCFactory(
+func (c *TemporalImpl) newRPCFactory(
 	sn primitives.ServiceName,
 	grpcHostPort listenHostPort,
 	logger log.Logger,
@@ -943,13 +962,13 @@ func (c *temporalImpl) newRPCFactory(
 	), nil
 }
 
-func (c *temporalImpl) SetOnGetClaims(fn func(*authorization.AuthInfo) (*authorization.Claims, error)) {
+func (c *TemporalImpl) SetOnGetClaims(fn func(*authorization.AuthInfo) (*authorization.Claims, error)) {
 	c.callbackLock.Lock()
 	c.onGetClaims = fn
 	c.callbackLock.Unlock()
 }
 
-func (c *temporalImpl) GetClaims(authInfo *authorization.AuthInfo) (*authorization.Claims, error) {
+func (c *TemporalImpl) GetClaims(authInfo *authorization.AuthInfo) (*authorization.Claims, error) {
 	c.callbackLock.RLock()
 	onGetClaims := c.onGetClaims
 	c.callbackLock.RUnlock()
@@ -959,7 +978,7 @@ func (c *temporalImpl) GetClaims(authInfo *authorization.AuthInfo) (*authorizati
 	return &authorization.Claims{System: authorization.RoleAdmin}, nil
 }
 
-func (c *temporalImpl) SetOnAuthorize(
+func (c *TemporalImpl) SetOnAuthorize(
 	fn func(context.Context, *authorization.Claims, *authorization.CallTarget) (authorization.Result, error),
 ) {
 	c.callbackLock.Lock()
@@ -967,7 +986,7 @@ func (c *temporalImpl) SetOnAuthorize(
 	c.callbackLock.Unlock()
 }
 
-func (c *temporalImpl) Authorize(
+func (c *TemporalImpl) Authorize(
 	ctx context.Context,
 	caller *authorization.Claims,
 	target *authorization.CallTarget,
@@ -1026,7 +1045,7 @@ func sdkClientFactoryProvider(
 	)
 }
 
-func (c *temporalImpl) overrideDynamicConfigByKey(t *testing.T, name dynamicconfig.Key, value any) {
+func (c *TemporalImpl) overrideDynamicConfigByKey(t *testing.T, name dynamicconfig.Key, value any) {
 	existingValues := c.dcClient.GetValue(name)
 	c.dcClient.OverrideValueByKey(name, value)
 	t.Cleanup(func() {

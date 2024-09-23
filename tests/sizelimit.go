@@ -27,6 +27,7 @@ package tests
 import (
 	"bytes"
 	"encoding/binary"
+	"go.temporal.io/server/tests/base"
 	"time"
 
 	"github.com/pborman/uuid"
@@ -54,16 +55,16 @@ type SizeLimitFunctionalSuite struct {
 	// not merely log an error
 	*require.Assertions
 	historyrequire.HistoryRequire
-	FunctionalTestBase
+	base.FunctionalTestBase
 }
 
 // This cluster use customized threshold for history config
 func (s *SizeLimitFunctionalSuite) SetupSuite() {
-	s.setupSuite("testdata/sizelimit_cluster.yaml")
+	s.FunctionalTestBase.SetupSuite("testdata/sizelimit_cluster.yaml")
 }
 
 func (s *SizeLimitFunctionalSuite) TearDownSuite() {
-	s.tearDownSuite()
+	s.FunctionalTestBase.TearDownSuite()
 }
 
 func (s *SizeLimitFunctionalSuite) SetupTest() {
@@ -87,7 +88,7 @@ func (s *SizeLimitFunctionalSuite) TestTerminateWorkflowCausedByHistoryCountLimi
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           uuid.New(),
-		Namespace:           s.namespace,
+		Namespace:           s.Namespace(),
 		WorkflowId:          id,
 		WorkflowType:        workflowType,
 		TaskQueue:           taskQueue,
@@ -97,7 +98,7 @@ func (s *SizeLimitFunctionalSuite) TestTerminateWorkflowCausedByHistoryCountLimi
 		Identity:            identity,
 	}
 
-	we, err0 := s.client.StartWorkflowExecution(NewContext(), request)
+	we, err0 := s.FrontendClient().StartWorkflowExecution(base.NewContext(), request)
 	s.NoError(err0)
 
 	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
@@ -138,9 +139,9 @@ func (s *SizeLimitFunctionalSuite) TestTerminateWorkflowCausedByHistoryCountLimi
 		return payloads.EncodeString("Activity Result"), false, nil
 	}
 
-	poller := &TaskPoller{
-		Client:              s.client,
-		Namespace:           s.namespace,
+	poller := &base.TaskPoller{
+		Client:              s.FrontendClient(),
+		Namespace:           s.Namespace(),
 		TaskQueue:           taskQueue,
 		Identity:            identity,
 		WorkflowTaskHandler: wtHandler,
@@ -150,8 +151,8 @@ func (s *SizeLimitFunctionalSuite) TestTerminateWorkflowCausedByHistoryCountLimi
 	}
 
 	for i := int32(0); i < activityCount-1; i++ {
-		dwResp, err := s.client.DescribeWorkflowExecution(NewContext(), &workflowservice.DescribeWorkflowExecutionRequest{
-			Namespace: s.namespace,
+		dwResp, err := s.FrontendClient().DescribeWorkflowExecution(base.NewContext(), &workflowservice.DescribeWorkflowExecutionRequest{
+			Namespace: s.Namespace(),
 			Execution: &commonpb.WorkflowExecution{
 				WorkflowId: id,
 				RunId:      we.RunId,
@@ -178,8 +179,8 @@ SignalLoop:
 		// Send another signal without RunID
 		signalName := "another signal"
 		signalInput := payloads.EncodeString("another signal input")
-		_, signalErr = s.client.SignalWorkflowExecution(NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
-			Namespace: s.namespace,
+		_, signalErr = s.FrontendClient().SignalWorkflowExecution(base.NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
+			Namespace: s.Namespace(),
 			WorkflowExecution: &commonpb.WorkflowExecution{
 				WorkflowId: id,
 			},
@@ -197,7 +198,7 @@ SignalLoop:
 	s.EqualError(signalErr, common.FailureReasonHistoryCountExceedsLimit)
 	s.IsType(&serviceerror.InvalidArgument{}, signalErr)
 
-	historyEvents := s.getHistory(s.namespace, &commonpb.WorkflowExecution{
+	historyEvents := s.GetHistory(s.Namespace(), &commonpb.WorkflowExecution{
 		WorkflowId: id,
 		RunId:      we.GetRunId(),
 	})
@@ -228,10 +229,10 @@ SignalLoop:
 	// verify visibility is correctly processed from open to close
 	s.Eventually(
 		func() bool {
-			resp, err1 := s.client.ListClosedWorkflowExecutions(
-				NewContext(),
+			resp, err1 := s.FrontendClient().ListClosedWorkflowExecutions(
+				base.NewContext(),
 				&workflowservice.ListClosedWorkflowExecutionsRequest{
-					Namespace:       s.namespace,
+					Namespace:       s.Namespace(),
 					MaximumPageSize: 100,
 					StartTimeFilter: &filterpb.StartTimeFilter{
 						EarliestTime: nil,
@@ -289,9 +290,9 @@ func (s *SizeLimitFunctionalSuite) TestWorkflowFailed_PayloadSizeTooLarge() {
 			},
 		}, nil
 	}
-	poller := &TaskPoller{
-		Client:              s.client,
-		Namespace:           s.namespace,
+	poller := &base.TaskPoller{
+		Client:              s.FrontendClient(),
+		Namespace:           s.Namespace(),
 		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		Identity:            identity,
 		WorkflowTaskHandler: wtHandler,
@@ -302,7 +303,7 @@ func (s *SizeLimitFunctionalSuite) TestWorkflowFailed_PayloadSizeTooLarge() {
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           uuid.New(),
-		Namespace:           s.namespace,
+		Namespace:           s.Namespace(),
 		WorkflowId:          id,
 		WorkflowType:        &commonpb.WorkflowType{Name: wt},
 		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
@@ -311,7 +312,7 @@ func (s *SizeLimitFunctionalSuite) TestWorkflowFailed_PayloadSizeTooLarge() {
 		Identity:            identity,
 	}
 
-	we, err := s.client.StartWorkflowExecution(NewContext(), request)
+	we, err := s.FrontendClient().StartWorkflowExecution(base.NewContext(), request)
 	s.NoError(err)
 
 	go func() {
@@ -323,8 +324,8 @@ func (s *SizeLimitFunctionalSuite) TestWorkflowFailed_PayloadSizeTooLarge() {
 	case <-sigReadyToSendChan:
 	}
 
-	_, err = s.client.SignalWorkflowExecution(NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
-		Namespace:         s.namespace,
+	_, err = s.FrontendClient().SignalWorkflowExecution(base.NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
+		Namespace:         s.Namespace(),
 		WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: id, RunId: we.GetRunId()},
 		SignalName:        "signal-name",
 		Identity:          identity,
@@ -336,7 +337,7 @@ func (s *SizeLimitFunctionalSuite) TestWorkflowFailed_PayloadSizeTooLarge() {
 	// Wait for workflow to fail.
 	var historyEvents []*historypb.HistoryEvent
 	for i := 0; i < 10; i++ {
-		historyEvents = s.getHistory(s.namespace, &commonpb.WorkflowExecution{WorkflowId: id, RunId: we.GetRunId()})
+		historyEvents = s.GetHistory(s.Namespace(), &commonpb.WorkflowExecution{WorkflowId: id, RunId: we.GetRunId()})
 		lastEvent := historyEvents[len(historyEvents)-1]
 		if lastEvent.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_FAILED {
 			break
@@ -365,7 +366,7 @@ func (s *SizeLimitFunctionalSuite) TestTerminateWorkflowCausedByMsSizeLimit() {
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           uuid.New(),
-		Namespace:           s.namespace,
+		Namespace:           s.Namespace(),
 		WorkflowId:          id,
 		WorkflowType:        workflowType,
 		TaskQueue:           taskQueue,
@@ -375,7 +376,7 @@ func (s *SizeLimitFunctionalSuite) TestTerminateWorkflowCausedByMsSizeLimit() {
 		Identity:            identity,
 	}
 
-	we, err0 := s.client.StartWorkflowExecution(NewContext(), request)
+	we, err0 := s.FrontendClient().StartWorkflowExecution(base.NewContext(), request)
 	s.NoError(err0)
 
 	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
@@ -417,9 +418,9 @@ func (s *SizeLimitFunctionalSuite) TestTerminateWorkflowCausedByMsSizeLimit() {
 		return payloads.EncodeString("Activity Result"), false, nil
 	}
 
-	poller := &TaskPoller{
-		Client:              s.client,
-		Namespace:           s.namespace,
+	poller := &base.TaskPoller{
+		Client:              s.FrontendClient(),
+		Namespace:           s.Namespace(),
 		TaskQueue:           taskQueue,
 		Identity:            identity,
 		WorkflowTaskHandler: wtHandler,
@@ -428,8 +429,8 @@ func (s *SizeLimitFunctionalSuite) TestTerminateWorkflowCausedByMsSizeLimit() {
 		T:                   s.T(),
 	}
 
-	dwResp, err := s.client.DescribeWorkflowExecution(NewContext(), &workflowservice.DescribeWorkflowExecutionRequest{
-		Namespace: s.namespace,
+	dwResp, err := s.FrontendClient().DescribeWorkflowExecution(base.NewContext(), &workflowservice.DescribeWorkflowExecutionRequest{
+		Namespace: s.Namespace(),
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: id,
 			RunId:      we.RunId,
@@ -447,8 +448,8 @@ func (s *SizeLimitFunctionalSuite) TestTerminateWorkflowCausedByMsSizeLimit() {
 	}
 
 	// Send another signal without RunID
-	_, signalErr := s.client.SignalWorkflowExecution(NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
-		Namespace: s.namespace,
+	_, signalErr := s.FrontendClient().SignalWorkflowExecution(base.NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
+		Namespace: s.Namespace(),
 		WorkflowExecution: &commonpb.WorkflowExecution{
 			WorkflowId: id,
 		},
@@ -460,7 +461,7 @@ func (s *SizeLimitFunctionalSuite) TestTerminateWorkflowCausedByMsSizeLimit() {
 	s.EqualError(signalErr, consts.ErrWorkflowCompleted.Error())
 	s.IsType(&serviceerror.NotFound{}, signalErr)
 
-	historyEvents := s.getHistory(s.namespace, &commonpb.WorkflowExecution{
+	historyEvents := s.GetHistory(s.Namespace(), &commonpb.WorkflowExecution{
 		WorkflowId: id,
 		RunId:      we.GetRunId(),
 	})
@@ -474,10 +475,10 @@ func (s *SizeLimitFunctionalSuite) TestTerminateWorkflowCausedByMsSizeLimit() {
 	// verify visibility is correctly processed from open to close
 	s.Eventually(
 		func() bool {
-			resp, err1 := s.client.ListClosedWorkflowExecutions(
-				NewContext(),
+			resp, err1 := s.FrontendClient().ListClosedWorkflowExecutions(
+				base.NewContext(),
 				&workflowservice.ListClosedWorkflowExecutionsRequest{
-					Namespace:       s.namespace,
+					Namespace:       s.Namespace(),
 					MaximumPageSize: 100,
 					StartTimeFilter: &filterpb.StartTimeFilter{
 						EarliestTime: nil,
@@ -511,7 +512,7 @@ func (s *SizeLimitFunctionalSuite) TestTerminateWorkflowCausedByHistorySizeLimit
 	taskQueue := &taskqueuepb.TaskQueue{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           uuid.New(),
-		Namespace:           s.namespace,
+		Namespace:           s.Namespace(),
 		WorkflowId:          id,
 		WorkflowType:        workflowType,
 		TaskQueue:           taskQueue,
@@ -521,7 +522,7 @@ func (s *SizeLimitFunctionalSuite) TestTerminateWorkflowCausedByHistorySizeLimit
 		Identity:            identity,
 	}
 
-	we, err0 := s.client.StartWorkflowExecution(NewContext(), request)
+	we, err0 := s.FrontendClient().StartWorkflowExecution(base.NewContext(), request)
 	s.NoError(err0)
 
 	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
@@ -535,8 +536,8 @@ SignalLoop:
 		signalName := "another signal"
 		signalInput, err := payloads.Encode(largePayload)
 		s.NoError(err)
-		_, signalErr = s.client.SignalWorkflowExecution(NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
-			Namespace: s.namespace,
+		_, signalErr = s.FrontendClient().SignalWorkflowExecution(base.NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
+			Namespace: s.Namespace(),
 			WorkflowExecution: &commonpb.WorkflowExecution{
 				WorkflowId: id,
 			},
@@ -554,7 +555,7 @@ SignalLoop:
 	s.EqualError(signalErr, common.FailureReasonHistorySizeExceedsLimit)
 	s.IsType(&serviceerror.InvalidArgument{}, signalErr)
 
-	historyEvents := s.getHistory(s.namespace, &commonpb.WorkflowExecution{
+	historyEvents := s.GetHistory(s.Namespace(), &commonpb.WorkflowExecution{
 		WorkflowId: id,
 		RunId:      we.GetRunId(),
 	})
@@ -575,10 +576,10 @@ SignalLoop:
 	// verify visibility is correctly processed from open to close
 	s.Eventually(
 		func() bool {
-			resp, err1 := s.client.ListClosedWorkflowExecutions(
-				NewContext(),
+			resp, err1 := s.FrontendClient().ListClosedWorkflowExecutions(
+				base.NewContext(),
 				&workflowservice.ListClosedWorkflowExecutionsRequest{
-					Namespace:       s.namespace,
+					Namespace:       s.Namespace(),
 					MaximumPageSize: 100,
 					StartTimeFilter: &filterpb.StartTimeFilter{
 						EarliestTime: nil,

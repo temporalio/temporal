@@ -26,6 +26,7 @@ package tests
 
 import (
 	"context"
+	"go.temporal.io/server/tests/base"
 	"strings"
 	"time"
 
@@ -35,7 +36,7 @@ import (
 
 // AcquireShardFunctionalSuite is the base test suite for testing acquire shard.
 type AcquireShardFunctionalSuite struct {
-	FunctionalTestBase
+	base.FunctionalTestBase
 	logRecorder *logRecorder
 	logs        chan logRecord
 }
@@ -51,7 +52,7 @@ func (s *AcquireShardFunctionalSuite) SetupSuite() {
 func (s *AcquireShardFunctionalSuite) TearDownSuite() {
 	// we need to wait for all components to start before we can safely tear down
 	time.Sleep(time.Second * 5)
-	s.tearDownSuite()
+	s.FunctionalTestBase.TearDownSuite()
 }
 
 // newLogRecorder creates a new log recorder. It records all the logs to the given channel.
@@ -109,7 +110,7 @@ type OwnershipLostErrorSuite struct {
 // SetupSuite reads the shard ownership lost error fault injection config from the testdata folder.
 func (s *OwnershipLostErrorSuite) SetupSuite() {
 	s.AcquireShardFunctionalSuite.SetupSuite()
-	s.setupSuite("testdata/acquire_shard_ownership_lost_error.yaml")
+	s.FunctionalTestBase.SetupSuite("testdata/acquire_shard_ownership_lost_error.yaml")
 }
 
 // TestDoesNotRetry verifies that we do not retry acquiring the shard when we get an ownership lost error.
@@ -151,7 +152,7 @@ type DeadlineExceededErrorSuite struct {
 // SetupSuite reads the deadline exceeded error targeted fault injection config from the test data folder.
 func (s *DeadlineExceededErrorSuite) SetupSuite() {
 	s.AcquireShardFunctionalSuite.SetupSuite()
-	s.setupSuite("testdata/acquire_shard_deadline_exceeded_error.yaml")
+	s.FunctionalTestBase.SetupSuite("testdata/acquire_shard_deadline_exceeded_error.yaml")
 }
 
 // TestDoesRetry verifies that we do retry acquiring the shard when we get a deadline exceeded error because that should
@@ -193,7 +194,7 @@ type EventualSuccessSuite struct {
 // the next call to return a successful response.
 func (s *EventualSuccessSuite) SetupSuite() {
 	s.AcquireShardFunctionalSuite.SetupSuite()
-	s.setupSuite("testdata/acquire_shard_eventual_success.yaml")
+	s.FunctionalTestBase.SetupSuite("testdata/acquire_shard_eventual_success.yaml")
 }
 
 // TestEventuallySucceeds verifies that we eventually succeed in acquiring the shard when we get a deadline exceeded

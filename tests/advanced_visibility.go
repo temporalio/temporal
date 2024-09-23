@@ -62,6 +62,7 @@ import (
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/service/worker/scanner/build_ids"
+	testbase "go.temporal.io/server/tests/base"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -79,7 +80,7 @@ type AdvancedVisibilitySuite struct {
 	*require.Assertions
 	protorequire.ProtoAssertions
 	historyrequire.HistoryRequire
-	FunctionalTestBase
+	testbase.FunctionalTestBase
 	isElasticsearchEnabled bool
 
 	testSearchAttributeKey string
@@ -91,7 +92,7 @@ type AdvancedVisibilitySuite struct {
 
 // This cluster use customized threshold for history config
 func (s *AdvancedVisibilitySuite) SetupSuite() {
-	s.dynamicConfigOverrides = map[dynamicconfig.Key]any{
+	dynamicConfigOverrides := map[dynamicconfig.Key]any{
 		dynamicconfig.VisibilityDisableOrderByClause.Key():             false,
 		dynamicconfig.FrontendEnableWorkerVersioningDataAPIs.Key():     true,
 		dynamicconfig.FrontendEnableWorkerVersioningWorkflowAPIs.Key(): true,
@@ -103,12 +104,14 @@ func (s *AdvancedVisibilitySuite) SetupSuite() {
 		dynamicconfig.RemovableBuildIdDurationSinceDefault.Key(): time.Microsecond,
 	}
 
+	s.SetDynamicConfigOverrides(dynamicConfigOverrides)
+
 	if UsingSQLAdvancedVisibility() {
-		s.setupSuite("testdata/cluster.yaml")
+		s.FunctionalTestBase.SetupSuite("testdata/cluster.yaml")
 		s.Logger.Info(fmt.Sprintf("Running advanced visibility test with %s/%s persistence", TestFlags.PersistenceType, TestFlags.PersistenceDriver))
 		s.isElasticsearchEnabled = false
 	} else {
-		s.setupSuite("testdata/es_cluster.yaml")
+		s.FunctionalTestBase.SetupSuite("testdata/es_cluster.yaml")
 		s.Logger.Info("Running advanced visibility test with Elasticsearch persistence")
 		s.isElasticsearchEnabled = true
 		// To ensure that Elasticsearch won't return more than defaultPageSize documents,
@@ -123,7 +126,7 @@ func (s *AdvancedVisibilitySuite) SetupSuite() {
 	}
 	sdkClient, err := sdkclient.Dial(sdkclient.Options{
 		HostPort:  clientAddr,
-		Namespace: s.namespace,
+		Namespace: s.Namespace(),
 	})
 	if err != nil {
 		s.Logger.Fatal("Error when creating SDK client", tag.Error(err))
@@ -141,7 +144,7 @@ func (s *AdvancedVisibilitySuite) SetupSuite() {
 
 func (s *AdvancedVisibilitySuite) TearDownSuite() {
 	s.sdkClient.Close()
-	s.tearDownSuite()
+	s.FunctionalTestBase.TearDownSuite()
 }
 
 func (s *AdvancedVisibilitySuite) SetupTest() {
@@ -170,7 +173,7 @@ func (s *AdvancedVisibilitySuite) TestListOpenWorkflow() {
 	request.SearchAttributes = searchAttr
 
 	startTime := time.Now().UTC()
-	we, err := s.client.StartWorkflowExecution(NewContext(), request)
+	we, err := s.FrontendClient().StartWorkflowExecution(testbase.NewContext(), request)
 	s.NoError(err)
 
 	startFilter := &filterpb.StartTimeFilter{}
@@ -178,9 +181,9 @@ func (s *AdvancedVisibilitySuite) TestListOpenWorkflow() {
 	var openExecution *workflowpb.WorkflowExecutionInfo
 	for i := 0; i < numOfRetry; i++ {
 		startFilter.LatestTime = timestamppb.New(time.Now().UTC())
-		resp, err := s.client.ListOpenWorkflowExecutions(NewContext(), &workflowservice.ListOpenWorkflowExecutionsRequest{
-			Namespace:       s.namespace,
-			MaximumPageSize: defaultPageSize,
+		resp, err := s.FrontendClient().ListOpenWorkflowExecutions(testbase.NewContext(), &workflowservice.ListOpenWorkflowExecutionsRequest{
+			Namespace:       s.Namespace(),
+			MaximumPageSize: testbase.DefaultPageSize,
 			StartTimeFilter: startFilter,
 			Filters: &workflowservice.ListOpenWorkflowExecutionsRequest_ExecutionFilter{ExecutionFilter: &filterpb.WorkflowExecutionFilter{
 				WorkflowId: id,
@@ -212,7 +215,7 @@ func (s *AdvancedVisibilitySuite) TestListWorkflow() {
 	tl := "es-functional-list-workflow-test-taskqueue"
 	request := s.createStartWorkflowExecutionRequest(id, wt, tl)
 
-	we, err := s.client.StartWorkflowExecution(NewContext(), request)
+	we, err := s.FrontendClient().StartWorkflowExecution(testbase.NewContext(), request)
 	s.NoError(err)
 
 	query := fmt.Sprintf(`WorkflowId = "%s"`, id)
@@ -228,7 +231,7 @@ func (s *AdvancedVisibilitySuite) TestListWorkflow_ExecutionTime() {
 	request := s.createStartWorkflowExecutionRequest(id, wt, tl)
 
 	// Start workflow with ExecutionTime equal to StartTime
-	weNonCron, err := s.client.StartWorkflowExecution(NewContext(), request)
+	weNonCron, err := s.FrontendClient().StartWorkflowExecution(testbase.NewContext(), request)
 	s.NoError(err)
 
 	cronID := id + "-cron"
@@ -236,7 +239,7 @@ func (s *AdvancedVisibilitySuite) TestListWorkflow_ExecutionTime() {
 	request.WorkflowId = cronID
 
 	// Start workflow with ExecutionTime equal to StartTime + 1 minute (cron delay)
-	weCron, err := s.client.StartWorkflowExecution(NewContext(), request)
+	weCron, err := s.FrontendClient().StartWorkflowExecution(testbase.NewContext(), request)
 	s.NoError(err)
 
 	//       <<1s    <<1s                  1m
@@ -275,7 +278,7 @@ func (s *AdvancedVisibilitySuite) TestListWorkflow_SearchAttribute() {
 	}
 	request.SearchAttributes = searchAttr
 
-	we, err := s.client.StartWorkflowExecution(NewContext(), request)
+	we, err := s.FrontendClient().StartWorkflowExecution(testbase.NewContext(), request)
 	s.NoError(err)
 	query := fmt.Sprintf(`WorkflowId = "%s" and %s = "%s"`, id, s.testSearchAttributeKey, s.testSearchAttributeVal)
 	s.testHelperForReadOnce(we.GetRunId(), query, false)
@@ -292,9 +295,9 @@ func (s *AdvancedVisibilitySuite) TestListWorkflow_SearchAttribute() {
 		return []*commandpb.Command{upsertCommand}, nil
 	}
 	taskQueue := &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
-	poller := &TaskPoller{
-		Client:              s.client,
-		Namespace:           s.namespace,
+	poller := &testbase.TaskPoller{
+		Client:              s.FrontendClient(),
+		Namespace:           s.Namespace(),
 		TaskQueue:           taskQueue,
 		StickyTaskQueue:     taskQueue,
 		Identity:            "worker1",
@@ -303,11 +306,11 @@ func (s *AdvancedVisibilitySuite) TestListWorkflow_SearchAttribute() {
 		T:                   s.T(),
 	}
 	res, err := poller.PollAndProcessWorkflowTask(
-		WithPollSticky,
-		WithRespondSticky,
-		WithExpectedAttemptCount(0),
-		WithRetries(1),
-		WithForceNewWorkflowTask)
+		testbase.WithPollSticky,
+		testbase.WithRespondSticky,
+		testbase.WithExpectedAttemptCount(0),
+		testbase.WithRetries(1),
+		testbase.WithForceNewWorkflowTask)
 	s.NoError(err)
 	newTask := res.NewTask
 	s.NotNil(newTask)
@@ -316,7 +319,7 @@ func (s *AdvancedVisibilitySuite) TestListWorkflow_SearchAttribute() {
 	time.Sleep(waitForESToSettle)
 
 	listRequest := &workflowservice.ListWorkflowExecutionsRequest{
-		Namespace: s.namespace,
+		Namespace: s.Namespace(),
 		PageSize:  int32(2),
 		Query:     fmt.Sprintf(`WorkflowType = '%s' and ExecutionStatus = 'Running' and BinaryChecksums = 'binary-v1'`, wt),
 	}
@@ -325,12 +328,12 @@ func (s *AdvancedVisibilitySuite) TestListWorkflow_SearchAttribute() {
 
 	// verify DescribeWorkflowExecution
 	descRequest := &workflowservice.DescribeWorkflowExecutionRequest{
-		Namespace: s.namespace,
+		Namespace: s.Namespace(),
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: id,
 		},
 	}
-	descResp, err := s.client.DescribeWorkflowExecution(NewContext(), descRequest)
+	descResp, err := s.FrontendClient().DescribeWorkflowExecution(testbase.NewContext(), descRequest)
 	s.NoError(err)
 	// Add one for BuildIds={unversioned}
 	s.Equal(len(searchAttributes.GetIndexedFields())+1, len(descResp.WorkflowExecutionInfo.GetSearchAttributes().GetIndexedFields()))
@@ -350,7 +353,7 @@ func (s *AdvancedVisibilitySuite) TestListWorkflow_PageToken() {
 	tl := "es-functional-list-workflow-token-test-taskqueue"
 	request := s.createStartWorkflowExecutionRequest(id, wt, tl)
 
-	numOfWorkflows := defaultPageSize - 1 // == 4
+	numOfWorkflows := testbase.DefaultPageSize - 1 // == 4
 	pageSize := 3
 
 	s.testListWorkflowHelper(numOfWorkflows, pageSize, request, id, wt, false)
@@ -362,7 +365,7 @@ func (s *AdvancedVisibilitySuite) TestListWorkflow_SearchAfter() {
 	tl := "es-functional-list-workflow-searchAfter-test-taskqueue"
 	request := s.createStartWorkflowExecutionRequest(id, wt, tl)
 
-	numOfWorkflows := defaultPageSize + 1 // == 6
+	numOfWorkflows := testbase.DefaultPageSize + 1 // == 6
 	pageSize := 4
 
 	s.testListWorkflowHelper(numOfWorkflows, pageSize, request, id, wt, false)
@@ -383,21 +386,21 @@ func (s *AdvancedVisibilitySuite) TestListWorkflow_OrQuery() {
 		},
 	}
 	request.SearchAttributes = searchAttr
-	we1, err := s.client.StartWorkflowExecution(NewContext(), request)
+	we1, err := s.FrontendClient().StartWorkflowExecution(testbase.NewContext(), request)
 	s.NoError(err)
 
 	request.RequestId = uuid.New()
 	request.WorkflowId = id + "-2"
 	attrValBytes, _ = payload.Encode(2)
 	searchAttr.IndexedFields[key] = attrValBytes
-	we2, err := s.client.StartWorkflowExecution(NewContext(), request)
+	we2, err := s.FrontendClient().StartWorkflowExecution(testbase.NewContext(), request)
 	s.NoError(err)
 
 	request.RequestId = uuid.New()
 	request.WorkflowId = id + "-3"
 	attrValBytes, _ = payload.Encode(3)
 	searchAttr.IndexedFields[key] = attrValBytes
-	we3, err := s.client.StartWorkflowExecution(NewContext(), request)
+	we3, err := s.FrontendClient().StartWorkflowExecution(testbase.NewContext(), request)
 	s.NoError(err)
 
 	time.Sleep(waitForESToSettle)
@@ -406,12 +409,12 @@ func (s *AdvancedVisibilitySuite) TestListWorkflow_OrQuery() {
 	query1 := fmt.Sprintf(`CustomIntField = %d`, 1)
 	var openExecution *workflowpb.WorkflowExecutionInfo
 	listRequest := &workflowservice.ListWorkflowExecutionsRequest{
-		Namespace: s.namespace,
-		PageSize:  defaultPageSize,
+		Namespace: s.Namespace(),
+		PageSize:  testbase.DefaultPageSize,
 		Query:     query1,
 	}
 	for i := 0; i < numOfRetry; i++ {
-		resp, err := s.client.ListWorkflowExecutions(NewContext(), listRequest)
+		resp, err := s.FrontendClient().ListWorkflowExecutions(testbase.NewContext(), listRequest)
 		s.NoError(err)
 		if len(resp.GetExecutions()) == 1 {
 			openExecution = resp.GetExecutions()[0]
@@ -424,7 +427,7 @@ func (s *AdvancedVisibilitySuite) TestListWorkflow_OrQuery() {
 	s.True(!openExecution.GetExecutionTime().AsTime().Before(openExecution.GetStartTime().AsTime()))
 	searchValBytes := openExecution.SearchAttributes.GetIndexedFields()[key]
 	var searchVal int
-	payload.Decode(searchValBytes, &searchVal)
+	_ = payload.Decode(searchValBytes, &searchVal)
 	s.Equal(1, searchVal)
 
 	// query with or clause
@@ -432,7 +435,7 @@ func (s *AdvancedVisibilitySuite) TestListWorkflow_OrQuery() {
 	listRequest.Query = query2
 	var openExecutions []*workflowpb.WorkflowExecutionInfo
 	for i := 0; i < numOfRetry; i++ {
-		resp, err := s.client.ListWorkflowExecutions(NewContext(), listRequest)
+		resp, err := s.FrontendClient().ListWorkflowExecutions(testbase.NewContext(), listRequest)
 		s.NoError(err)
 		if len(resp.GetExecutions()) == 2 {
 			openExecutions = resp.GetExecutions()
@@ -450,14 +453,14 @@ func (s *AdvancedVisibilitySuite) TestListWorkflow_OrQuery() {
 	s.Equal(we1.GetRunId(), e1.GetExecution().GetRunId())
 	s.Equal(we2.GetRunId(), e2.GetExecution().GetRunId())
 	searchValBytes = e2.SearchAttributes.GetIndexedFields()[key]
-	payload.Decode(searchValBytes, &searchVal)
+	_ = payload.Decode(searchValBytes, &searchVal)
 	s.Equal(2, searchVal)
 
 	// query for open
 	query3 := fmt.Sprintf(`(CustomIntField = %d or CustomIntField = %d) and ExecutionStatus = 'Running'`, 2, 3)
 	listRequest.Query = query3
 	for i := 0; i < numOfRetry; i++ {
-		resp, err := s.client.ListWorkflowExecutions(NewContext(), listRequest)
+		resp, err := s.FrontendClient().ListWorkflowExecutions(testbase.NewContext(), listRequest)
 		s.NoError(err)
 		if len(resp.GetExecutions()) == 2 {
 			openExecutions = resp.GetExecutions()
@@ -471,7 +474,8 @@ func (s *AdvancedVisibilitySuite) TestListWorkflow_OrQuery() {
 	s.Equal(we3.GetRunId(), e1.GetExecution().GetRunId())
 	s.Equal(we2.GetRunId(), e2.GetExecution().GetRunId())
 	searchValBytes = e1.SearchAttributes.GetIndexedFields()[key]
-	payload.Decode(searchValBytes, &searchVal)
+	err = payload.Decode(searchValBytes, &searchVal)
+	s.NoError(err)
 	s.Equal(3, searchVal)
 }
 
@@ -490,7 +494,7 @@ func (s *AdvancedVisibilitySuite) TestListWorkflow_KeywordQuery() {
 	s.NoError(err)
 
 	request.SearchAttributes = searchAttr
-	we1, err := s.client.StartWorkflowExecution(NewContext(), request)
+	we1, err := s.FrontendClient().StartWorkflowExecution(testbase.NewContext(), request)
 	s.NoError(err)
 
 	time.Sleep(waitForESToSettle)
@@ -498,12 +502,12 @@ func (s *AdvancedVisibilitySuite) TestListWorkflow_KeywordQuery() {
 	// Exact match Keyword (supported)
 	var openExecution *workflowpb.WorkflowExecutionInfo
 	listRequest := &workflowservice.ListWorkflowExecutionsRequest{
-		Namespace: s.namespace,
-		PageSize:  defaultPageSize,
+		Namespace: s.Namespace(),
+		PageSize:  testbase.DefaultPageSize,
 		Query:     `CustomKeywordField = "justice for all"`,
 	}
 	for i := 0; i < numOfRetry; i++ {
-		resp, err := s.client.ListWorkflowExecutions(NewContext(), listRequest)
+		resp, err := s.FrontendClient().ListWorkflowExecutions(testbase.NewContext(), listRequest)
 		s.NoError(err)
 		if len(resp.GetExecutions()) == 1 {
 			openExecution = resp.GetExecutions()[0]
@@ -522,31 +526,31 @@ func (s *AdvancedVisibilitySuite) TestListWorkflow_KeywordQuery() {
 
 	// Partial match on Keyword (not supported)
 	listRequest = &workflowservice.ListWorkflowExecutionsRequest{
-		Namespace: s.namespace,
-		PageSize:  defaultPageSize,
+		Namespace: s.Namespace(),
+		PageSize:  testbase.DefaultPageSize,
 		Query:     `CustomKeywordField = "justice"`,
 	}
-	resp, err := s.client.ListWorkflowExecutions(NewContext(), listRequest)
+	resp, err := s.FrontendClient().ListWorkflowExecutions(testbase.NewContext(), listRequest)
 	s.NoError(err)
 	s.Len(resp.GetExecutions(), 0)
 
 	// Inordered match on Keyword (not supported)
 	listRequest = &workflowservice.ListWorkflowExecutionsRequest{
-		Namespace: s.namespace,
-		PageSize:  defaultPageSize,
+		Namespace: s.Namespace(),
+		PageSize:  testbase.DefaultPageSize,
 		Query:     `CustomKeywordField = "all for justice"`,
 	}
-	resp, err = s.client.ListWorkflowExecutions(NewContext(), listRequest)
+	resp, err = s.FrontendClient().ListWorkflowExecutions(testbase.NewContext(), listRequest)
 	s.NoError(err)
 	s.Len(resp.GetExecutions(), 0)
 
 	// Prefix search
 	listRequest = &workflowservice.ListWorkflowExecutionsRequest{
-		Namespace: s.namespace,
-		PageSize:  defaultPageSize,
+		Namespace: s.Namespace(),
+		PageSize:  testbase.DefaultPageSize,
 		Query:     `CustomKeywordField STARTS_WITH "justice"`,
 	}
-	resp, err = s.client.ListWorkflowExecutions(NewContext(), listRequest)
+	resp, err = s.FrontendClient().ListWorkflowExecutions(testbase.NewContext(), listRequest)
 	s.NoError(err)
 	s.Len(resp.GetExecutions(), 1)
 	s.Equal(id, resp.Executions[0].GetExecution().GetWorkflowId())
@@ -554,11 +558,11 @@ func (s *AdvancedVisibilitySuite) TestListWorkflow_KeywordQuery() {
 	s.ProtoEqual(searchAttr, resp.Executions[0].GetSearchAttributes())
 
 	listRequest = &workflowservice.ListWorkflowExecutionsRequest{
-		Namespace: s.namespace,
-		PageSize:  defaultPageSize,
+		Namespace: s.Namespace(),
+		PageSize:  testbase.DefaultPageSize,
 		Query:     fmt.Sprintf(`WorkflowId = %q AND CustomKeywordField NOT STARTS_WITH "justice"`, id),
 	}
-	resp, err = s.client.ListWorkflowExecutions(NewContext(), listRequest)
+	resp, err = s.FrontendClient().ListWorkflowExecutions(testbase.NewContext(), listRequest)
 	s.NoError(err)
 	s.Len(resp.GetExecutions(), 0)
 }
@@ -575,7 +579,7 @@ func (s *AdvancedVisibilitySuite) TestListWorkflow_StringQuery() {
 		},
 	}
 	request.SearchAttributes = searchAttr
-	we1, err := s.client.StartWorkflowExecution(NewContext(), request)
+	we1, err := s.FrontendClient().StartWorkflowExecution(testbase.NewContext(), request)
 	s.NoError(err)
 
 	time.Sleep(waitForESToSettle)
@@ -583,12 +587,12 @@ func (s *AdvancedVisibilitySuite) TestListWorkflow_StringQuery() {
 	// Exact match String (supported)
 	var openExecution *workflowpb.WorkflowExecutionInfo
 	listRequest := &workflowservice.ListWorkflowExecutionsRequest{
-		Namespace: s.namespace,
-		PageSize:  defaultPageSize,
+		Namespace: s.Namespace(),
+		PageSize:  testbase.DefaultPageSize,
 		Query:     `CustomTextField = "nothing else matters"`,
 	}
 	for i := 0; i < numOfRetry; i++ {
-		resp, err := s.client.ListWorkflowExecutions(NewContext(), listRequest)
+		resp, err := s.FrontendClient().ListWorkflowExecutions(testbase.NewContext(), listRequest)
 		s.NoError(err)
 		if len(resp.GetExecutions()) == 1 {
 			openExecution = resp.GetExecutions()[0]
@@ -607,21 +611,21 @@ func (s *AdvancedVisibilitySuite) TestListWorkflow_StringQuery() {
 
 	// Partial match on String (supported)
 	listRequest = &workflowservice.ListWorkflowExecutionsRequest{
-		Namespace: s.namespace,
-		PageSize:  defaultPageSize,
+		Namespace: s.Namespace(),
+		PageSize:  testbase.DefaultPageSize,
 		Query:     `CustomTextField = "nothing"`,
 	}
-	resp, err := s.client.ListWorkflowExecutions(NewContext(), listRequest)
+	resp, err := s.FrontendClient().ListWorkflowExecutions(testbase.NewContext(), listRequest)
 	s.NoError(err)
 	s.Len(resp.GetExecutions(), 1)
 
 	// Inordered match on String (supported)
 	listRequest = &workflowservice.ListWorkflowExecutionsRequest{
-		Namespace: s.namespace,
-		PageSize:  defaultPageSize,
+		Namespace: s.Namespace(),
+		PageSize:  testbase.DefaultPageSize,
 		Query:     `CustomTextField = "else nothing matters"`,
 	}
-	resp, err = s.client.ListWorkflowExecutions(NewContext(), listRequest)
+	resp, err = s.FrontendClient().ListWorkflowExecutions(testbase.NewContext(), listRequest)
 	s.NoError(err)
 	s.Len(resp.GetExecutions(), 1)
 }
@@ -633,10 +637,10 @@ func (s *AdvancedVisibilitySuite) TestListWorkflow_MaxWindowSize() {
 	tl := "es-functional-list-workflow-max-window-size-test-taskqueue"
 	startRequest := s.createStartWorkflowExecutionRequest(id, wt, tl)
 
-	for i := 0; i < defaultPageSize; i++ {
+	for i := 0; i < testbase.DefaultPageSize; i++ {
 		startRequest.RequestId = uuid.New()
 		startRequest.WorkflowId = id + strconv.Itoa(i)
-		_, err := s.client.StartWorkflowExecution(NewContext(), startRequest)
+		_, err := s.FrontendClient().StartWorkflowExecution(testbase.NewContext(), startRequest)
 		s.NoError(err)
 	}
 
@@ -646,16 +650,16 @@ func (s *AdvancedVisibilitySuite) TestListWorkflow_MaxWindowSize() {
 	var nextPageToken []byte
 
 	listRequest := &workflowservice.ListWorkflowExecutionsRequest{
-		Namespace:     s.namespace,
-		PageSize:      int32(defaultPageSize),
+		Namespace:     s.Namespace(),
+		PageSize:      int32(testbase.DefaultPageSize),
 		NextPageToken: nextPageToken,
 		Query:         fmt.Sprintf(`WorkflowType = '%s' and ExecutionStatus = "Running"`, wt),
 	}
 	// get first page
 	for i := 0; i < numOfRetry; i++ {
-		resp, err := s.client.ListWorkflowExecutions(NewContext(), listRequest)
+		resp, err := s.FrontendClient().ListWorkflowExecutions(testbase.NewContext(), listRequest)
 		s.NoError(err)
-		if len(resp.GetExecutions()) == defaultPageSize {
+		if len(resp.GetExecutions()) == testbase.DefaultPageSize {
 			listResp = resp
 			break
 		}
@@ -666,7 +670,7 @@ func (s *AdvancedVisibilitySuite) TestListWorkflow_MaxWindowSize() {
 
 	// the last request
 	listRequest.NextPageToken = listResp.GetNextPageToken()
-	resp, err := s.client.ListWorkflowExecutions(NewContext(), listRequest)
+	resp, err := s.FrontendClient().ListWorkflowExecutions(testbase.NewContext(), listRequest)
 	s.NoError(err)
 	s.True(len(resp.GetExecutions()) == 0)
 	s.Nil(resp.GetNextPageToken())
@@ -682,12 +686,12 @@ func (s *AdvancedVisibilitySuite) TestListWorkflow_OrderBy() {
 	tl := "es-functional-list-workflow-order-by-test-taskqueue"
 
 	initialTime := time.Now().UTC()
-	for i := 0; i < defaultPageSize+1; i++ { // start 6
+	for i := 0; i < testbase.DefaultPageSize+1; i++ { // start 6
 		startRequest := s.createStartWorkflowExecutionRequest(id, wt, tl)
 		startRequest.RequestId = uuid.New()
 		startRequest.WorkflowId = id + strconv.Itoa(i)
 
-		if i < defaultPageSize-1 { // 4 workflows have search attributes.
+		if i < testbase.DefaultPageSize-1 { // 4 workflows have search attributes.
 			intVal, _ := payload.Encode(i)
 			doubleVal, _ := payload.Encode(float64(i))
 			strVal, _ := payload.Encode(strconv.Itoa(i))
@@ -711,7 +715,7 @@ func (s *AdvancedVisibilitySuite) TestListWorkflow_OrderBy() {
 			}
 		}
 
-		_, err := s.client.StartWorkflowExecution(NewContext(), startRequest)
+		_, err := s.FrontendClient().StartWorkflowExecution(testbase.NewContext(), startRequest)
 		s.NoError(err)
 	}
 
@@ -720,18 +724,18 @@ func (s *AdvancedVisibilitySuite) TestListWorkflow_OrderBy() {
 	desc := "desc"
 	asc := "asc"
 	queryTemplate := `WorkflowType = "%s" order by %s %s`
-	pageSize := int32(defaultPageSize)
+	pageSize := int32(testbase.DefaultPageSize)
 
 	// order by CloseTime asc
 	query1 := fmt.Sprintf(queryTemplate, wt, searchattribute.CloseTime, asc)
 	var openExecutions []*workflowpb.WorkflowExecutionInfo
 	listRequest := &workflowservice.ListWorkflowExecutionsRequest{
-		Namespace: s.namespace,
+		Namespace: s.Namespace(),
 		PageSize:  pageSize,
 		Query:     query1,
 	}
 	for i := 0; i < numOfRetry; i++ {
-		resp, err := s.client.ListWorkflowExecutions(NewContext(), listRequest)
+		resp, err := s.FrontendClient().ListWorkflowExecutions(testbase.NewContext(), listRequest)
 		s.NoError(err)
 		if int32(len(resp.GetExecutions())) == listRequest.GetPageSize() {
 			openExecutions = resp.GetExecutions()
@@ -753,7 +757,7 @@ func (s *AdvancedVisibilitySuite) TestListWorkflow_OrderBy() {
 	testHelper := func(query, searchAttrKey string, prevVal, currVal interface{}) {
 		listRequest.Query = query
 		listRequest.NextPageToken = []byte{}
-		resp, err := s.client.ListWorkflowExecutions(NewContext(), listRequest)
+		resp, err := s.FrontendClient().ListWorkflowExecutions(testbase.NewContext(), listRequest)
 		s.NoError(err)
 		openExecutions = resp.GetExecutions()
 		dec := json.NewDecoder(bytes.NewReader(openExecutions[0].GetSearchAttributes().GetIndexedFields()[searchAttrKey].GetData()))
@@ -790,7 +794,7 @@ func (s *AdvancedVisibilitySuite) TestListWorkflow_OrderBy() {
 			prevVal = currVal
 		}
 		listRequest.NextPageToken = resp.GetNextPageToken()
-		resp, err = s.client.ListWorkflowExecutions(NewContext(), listRequest) // last page
+		resp, err = s.FrontendClient().ListWorkflowExecutions(testbase.NewContext(), listRequest) // last page
 		s.NoError(err)
 		s.Equal(1, len(resp.GetExecutions()))
 	}
@@ -828,7 +832,7 @@ func (s *AdvancedVisibilitySuite) testListWorkflowHelper(numOfWorkflows, pageSiz
 	for i := 0; i < numOfWorkflows; i++ {
 		startRequest.RequestId = uuid.New()
 		startRequest.WorkflowId = wid + strconv.Itoa(i)
-		_, err := s.client.StartWorkflowExecution(NewContext(), startRequest)
+		_, err := s.FrontendClient().StartWorkflowExecution(testbase.NewContext(), startRequest)
 		s.NoError(err)
 	}
 
@@ -838,14 +842,14 @@ func (s *AdvancedVisibilitySuite) testListWorkflowHelper(numOfWorkflows, pageSiz
 	var nextPageToken []byte
 
 	listRequest := &workflowservice.ListWorkflowExecutionsRequest{
-		Namespace:     s.namespace,
+		Namespace:     s.Namespace(),
 		PageSize:      int32(pageSize),
 		NextPageToken: nextPageToken,
 		Query:         fmt.Sprintf(`WorkflowType = '%s' and ExecutionStatus = 'Running'`, wType),
 	}
 
 	scanRequest := &workflowservice.ScanWorkflowExecutionsRequest{
-		Namespace:     s.namespace,
+		Namespace:     s.Namespace(),
 		PageSize:      int32(pageSize),
 		NextPageToken: nextPageToken,
 		Query:         fmt.Sprintf(`WorkflowType = '%s' and ExecutionStatus = 'Running'`, wType),
@@ -854,7 +858,7 @@ func (s *AdvancedVisibilitySuite) testListWorkflowHelper(numOfWorkflows, pageSiz
 	// test first page
 	for i := 0; i < numOfRetry; i++ {
 		if isScan {
-			scanResponse, err := s.client.ScanWorkflowExecutions(NewContext(), scanRequest)
+			scanResponse, err := s.FrontendClient().ScanWorkflowExecutions(testbase.NewContext(), scanRequest)
 			s.NoError(err)
 			if len(scanResponse.GetExecutions()) == pageSize {
 				openExecutions = scanResponse.GetExecutions()
@@ -862,7 +866,7 @@ func (s *AdvancedVisibilitySuite) testListWorkflowHelper(numOfWorkflows, pageSiz
 				break
 			}
 		} else {
-			listResponse, err := s.client.ListWorkflowExecutions(NewContext(), listRequest)
+			listResponse, err := s.FrontendClient().ListWorkflowExecutions(testbase.NewContext(), listRequest)
 			s.NoError(err)
 			if len(listResponse.GetExecutions()) == pageSize {
 				openExecutions = listResponse.GetExecutions()
@@ -882,7 +886,7 @@ func (s *AdvancedVisibilitySuite) testListWorkflowHelper(numOfWorkflows, pageSiz
 	inIf := false
 	for i := 0; i < numOfRetry; i++ {
 		if isScan {
-			scanResponse, err := s.client.ScanWorkflowExecutions(NewContext(), scanRequest)
+			scanResponse, err := s.FrontendClient().ScanWorkflowExecutions(testbase.NewContext(), scanRequest)
 			s.NoError(err)
 			if len(scanResponse.GetExecutions()) == numOfWorkflows-pageSize {
 				inIf = true
@@ -891,7 +895,7 @@ func (s *AdvancedVisibilitySuite) testListWorkflowHelper(numOfWorkflows, pageSiz
 				break
 			}
 		} else {
-			listResponse, err := s.client.ListWorkflowExecutions(NewContext(), listRequest)
+			listResponse, err := s.FrontendClient().ListWorkflowExecutions(testbase.NewContext(), listRequest)
 			s.NoError(err)
 			if len(listResponse.GetExecutions()) == numOfWorkflows-pageSize {
 				inIf = true
@@ -911,19 +915,19 @@ func (s *AdvancedVisibilitySuite) testListWorkflowHelper(numOfWorkflows, pageSiz
 func (s *AdvancedVisibilitySuite) testHelperForReadOnce(expectedRunID string, query string, isScan bool) {
 	var openExecution *workflowpb.WorkflowExecutionInfo
 	listRequest := &workflowservice.ListWorkflowExecutionsRequest{
-		Namespace: s.namespace,
-		PageSize:  defaultPageSize,
+		Namespace: s.Namespace(),
+		PageSize:  testbase.DefaultPageSize,
 		Query:     query,
 	}
 	scanRequest := &workflowservice.ScanWorkflowExecutionsRequest{
-		Namespace: s.namespace,
-		PageSize:  defaultPageSize,
+		Namespace: s.Namespace(),
+		PageSize:  testbase.DefaultPageSize,
 		Query:     query,
 	}
 
 	for i := 0; i < numOfRetry; i++ {
 		if isScan {
-			scanResponse, err := s.client.ScanWorkflowExecutions(NewContext(), scanRequest)
+			scanResponse, err := s.FrontendClient().ScanWorkflowExecutions(testbase.NewContext(), scanRequest)
 			s.NoError(err)
 			if len(scanResponse.GetExecutions()) == 1 {
 				openExecution = scanResponse.GetExecutions()[0]
@@ -931,7 +935,7 @@ func (s *AdvancedVisibilitySuite) testHelperForReadOnce(expectedRunID string, qu
 				break
 			}
 		} else {
-			listResponse, err := s.client.ListWorkflowExecutions(NewContext(), listRequest)
+			listResponse, err := s.FrontendClient().ListWorkflowExecutions(testbase.NewContext(), listRequest)
 			s.NoError(err)
 			if len(listResponse.GetExecutions()) == 1 {
 				openExecution = listResponse.GetExecutions()[0]
@@ -947,7 +951,7 @@ func (s *AdvancedVisibilitySuite) testHelperForReadOnce(expectedRunID string, qu
 	if openExecution.SearchAttributes != nil && len(openExecution.SearchAttributes.GetIndexedFields()) > 0 {
 		searchValBytes := openExecution.SearchAttributes.GetIndexedFields()[s.testSearchAttributeKey]
 		var searchVal string
-		payload.Decode(searchValBytes, &searchVal)
+		_ = payload.Decode(searchValBytes, &searchVal)
 		s.Equal(s.testSearchAttributeVal, searchVal)
 	}
 }
@@ -968,7 +972,7 @@ func (s *AdvancedVisibilitySuite) TestScanWorkflow() {
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           uuid.New(),
-		Namespace:           s.namespace,
+		Namespace:           s.Namespace(),
 		WorkflowId:          id,
 		WorkflowType:        workflowType,
 		TaskQueue:           taskQueue,
@@ -978,7 +982,7 @@ func (s *AdvancedVisibilitySuite) TestScanWorkflow() {
 		Identity:            identity,
 	}
 
-	we, err := s.client.StartWorkflowExecution(NewContext(), request)
+	we, err := s.FrontendClient().StartWorkflowExecution(testbase.NewContext(), request)
 	s.NoError(err)
 	query := fmt.Sprintf(`WorkflowId = "%s"`, id)
 	s.testHelperForReadOnce(we.GetRunId(), query, true)
@@ -1002,7 +1006,7 @@ func (s *AdvancedVisibilitySuite) TestScanWorkflow_SearchAttribute() {
 	}
 	request.SearchAttributes = searchAttr
 
-	we, err := s.client.StartWorkflowExecution(NewContext(), request)
+	we, err := s.FrontendClient().StartWorkflowExecution(testbase.NewContext(), request)
 	s.NoError(err)
 	query := fmt.Sprintf(`WorkflowId = "%s" and %s = "%s"`, id, s.testSearchAttributeKey, s.testSearchAttributeVal)
 	s.testHelperForReadOnce(we.GetRunId(), query, true)
@@ -1023,7 +1027,7 @@ func (s *AdvancedVisibilitySuite) TestScanWorkflow_PageToken() {
 	taskQueue := &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
-		Namespace:           s.namespace,
+		Namespace:           s.Namespace(),
 		WorkflowType:        workflowType,
 		TaskQueue:           taskQueue,
 		Input:               nil,
@@ -1052,17 +1056,17 @@ func (s *AdvancedVisibilitySuite) TestCountWorkflow() {
 	}
 	request.SearchAttributes = searchAttr
 
-	_, err := s.client.StartWorkflowExecution(NewContext(), request)
+	_, err := s.FrontendClient().StartWorkflowExecution(testbase.NewContext(), request)
 	s.NoError(err)
 
 	query := fmt.Sprintf(`WorkflowId = "%s" and %s = "%s"`, id, s.testSearchAttributeKey, s.testSearchAttributeVal)
 	countRequest := &workflowservice.CountWorkflowExecutionsRequest{
-		Namespace: s.namespace,
+		Namespace: s.Namespace(),
 		Query:     query,
 	}
 	var resp *workflowservice.CountWorkflowExecutionsResponse
 	for i := 0; i < numOfRetry; i++ {
-		resp, err = s.client.CountWorkflowExecutions(NewContext(), countRequest)
+		resp, err = s.FrontendClient().CountWorkflowExecutions(testbase.NewContext(), countRequest)
 		s.NoError(err)
 		if resp.GetCount() == int64(1) {
 			break
@@ -1073,7 +1077,7 @@ func (s *AdvancedVisibilitySuite) TestCountWorkflow() {
 
 	query = fmt.Sprintf(`WorkflowId = "%s" and %s = "%s"`, id, s.testSearchAttributeKey, "noMatch")
 	countRequest.Query = query
-	resp, err = s.client.CountWorkflowExecutions(NewContext(), countRequest)
+	resp, err = s.FrontendClient().CountWorkflowExecutions(testbase.NewContext(), countRequest)
 	s.NoError(err)
 	s.Equal(int64(0), resp.GetCount())
 }
@@ -1088,13 +1092,13 @@ func (s *AdvancedVisibilitySuite) TestCountGroupByWorkflow() {
 	for i := 0; i < numWorkflows; i++ {
 		wfid := id + strconv.Itoa(i)
 		request := s.createStartWorkflowExecutionRequest(wfid, wt, tl)
-		we, err := s.client.StartWorkflowExecution(NewContext(), request)
+		we, err := s.FrontendClient().StartWorkflowExecution(testbase.NewContext(), request)
 		s.NoError(err)
 		if i < numClosedWorkflows {
-			_, err := s.client.TerminateWorkflowExecution(
-				NewContext(),
+			_, err := s.FrontendClient().TerminateWorkflowExecution(
+				testbase.NewContext(),
 				&workflowservice.TerminateWorkflowExecutionRequest{
-					Namespace: s.namespace,
+					Namespace: s.Namespace(),
 					WorkflowExecution: &commonpb.WorkflowExecution{
 						WorkflowId: wfid,
 						RunId:      we.RunId,
@@ -1107,13 +1111,13 @@ func (s *AdvancedVisibilitySuite) TestCountGroupByWorkflow() {
 
 	query := fmt.Sprintf(`WorkflowType = %q GROUP BY ExecutionStatus`, wt)
 	countRequest := &workflowservice.CountWorkflowExecutionsRequest{
-		Namespace: s.namespace,
+		Namespace: s.Namespace(),
 		Query:     query,
 	}
 	var resp *workflowservice.CountWorkflowExecutionsResponse
 	var err error
 	for i := 0; i < numOfRetry; i++ {
-		resp, err = s.client.CountWorkflowExecutions(NewContext(), countRequest)
+		resp, err = s.FrontendClient().CountWorkflowExecutions(testbase.NewContext(), countRequest)
 		s.NoError(err)
 		if resp.GetCount() == int64(numWorkflows) {
 			break
@@ -1148,13 +1152,13 @@ func (s *AdvancedVisibilitySuite) TestCountGroupByWorkflow() {
 
 	query = `GROUP BY WorkflowType`
 	countRequest.Query = query
-	_, err = s.client.CountWorkflowExecutions(NewContext(), countRequest)
+	_, err = s.FrontendClient().CountWorkflowExecutions(testbase.NewContext(), countRequest)
 	s.Error(err)
 	s.Contains(err.Error(), "'group by' clause is only supported for ExecutionStatus search attribute")
 
 	query = `GROUP BY ExecutionStatus, WorkflowType`
 	countRequest.Query = query
-	_, err = s.client.CountWorkflowExecutions(NewContext(), countRequest)
+	_, err = s.FrontendClient().CountWorkflowExecutions(testbase.NewContext(), countRequest)
 	s.Error(err)
 	s.Contains(err.Error(), "'group by' clause supports only a single field")
 }
@@ -1165,7 +1169,7 @@ func (s *AdvancedVisibilitySuite) createStartWorkflowExecutionRequest(id, wt, tl
 	taskQueue := &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           uuid.New(),
-		Namespace:           s.namespace,
+		Namespace:           s.Namespace(),
 		WorkflowId:          id,
 		WorkflowType:        workflowType,
 		TaskQueue:           taskQueue,
@@ -1189,7 +1193,7 @@ func (s *AdvancedVisibilitySuite) TestUpsertWorkflowExecutionSearchAttributes() 
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           uuid.New(),
-		Namespace:           s.namespace,
+		Namespace:           s.Namespace(),
 		WorkflowId:          id,
 		WorkflowType:        workflowType,
 		TaskQueue:           taskQueue,
@@ -1199,7 +1203,7 @@ func (s *AdvancedVisibilitySuite) TestUpsertWorkflowExecutionSearchAttributes() 
 		Identity:            identity,
 	}
 
-	we, err0 := s.client.StartWorkflowExecution(NewContext(), request)
+	we, err0 := s.FrontendClient().StartWorkflowExecution(testbase.NewContext(), request)
 	s.NoError(err0)
 
 	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
@@ -1258,9 +1262,9 @@ func (s *AdvancedVisibilitySuite) TestUpsertWorkflowExecutionSearchAttributes() 
 		}}, nil
 	}
 
-	poller := &TaskPoller{
-		Client:              s.client,
-		Namespace:           s.namespace,
+	poller := &testbase.TaskPoller{
+		Client:              s.FrontendClient(),
+		Namespace:           s.Namespace(),
 		TaskQueue:           taskQueue,
 		StickyTaskQueue:     taskQueue,
 		Identity:            identity,
@@ -1271,11 +1275,11 @@ func (s *AdvancedVisibilitySuite) TestUpsertWorkflowExecutionSearchAttributes() 
 
 	// process 1st workflow task and assert workflow task is handled correctly.
 	res, err := poller.PollAndProcessWorkflowTask(
-		WithPollSticky,
-		WithRespondSticky,
-		WithExpectedAttemptCount(0),
-		WithRetries(1),
-		WithForceNewWorkflowTask)
+		testbase.WithPollSticky,
+		testbase.WithRespondSticky,
+		testbase.WithExpectedAttemptCount(0),
+		testbase.WithRetries(1),
+		testbase.WithForceNewWorkflowTask)
 	s.NoError(err)
 	newTask := res.NewTask
 	s.NotNil(newTask)
@@ -1292,13 +1296,13 @@ func (s *AdvancedVisibilitySuite) TestUpsertWorkflowExecutionSearchAttributes() 
 
 	// verify upsert data is on ES
 	listRequest := &workflowservice.ListWorkflowExecutionsRequest{
-		Namespace: s.namespace,
+		Namespace: s.Namespace(),
 		PageSize:  int32(2),
 		Query:     fmt.Sprintf(`WorkflowType = '%s' and ExecutionStatus = 'Running'`, wt),
 	}
 	verified := false
 	for i := 0; i < numOfRetry; i++ {
-		resp, err := s.client.ListWorkflowExecutions(NewContext(), listRequest)
+		resp, err := s.FrontendClient().ListWorkflowExecutions(testbase.NewContext(), listRequest)
 		s.NoError(err)
 		if len(resp.GetExecutions()) == 1 {
 			execution := resp.GetExecutions()[0]
@@ -1319,11 +1323,11 @@ func (s *AdvancedVisibilitySuite) TestUpsertWorkflowExecutionSearchAttributes() 
 
 	// process 2nd workflow task and assert workflow task is handled correctly.
 	res, err = poller.PollAndProcessWorkflowTask(
-		WithPollSticky,
-		WithRespondSticky,
-		WithExpectedAttemptCount(0),
-		WithRetries(1),
-		WithForceNewWorkflowTask)
+		testbase.WithPollSticky,
+		testbase.WithRespondSticky,
+		testbase.WithExpectedAttemptCount(0),
+		testbase.WithRetries(1),
+		testbase.WithForceNewWorkflowTask)
 	s.NoError(err)
 	newTask = res.NewTask
 	s.NotNil(newTask)
@@ -1341,11 +1345,11 @@ func (s *AdvancedVisibilitySuite) TestUpsertWorkflowExecutionSearchAttributes() 
 
 	// process 3rd workflow task and assert workflow task is handled correctly.
 	res, err = poller.PollAndProcessWorkflowTask(
-		WithPollSticky,
-		WithRespondSticky,
-		WithExpectedAttemptCount(0),
-		WithRetries(1),
-		WithForceNewWorkflowTask)
+		testbase.WithPollSticky,
+		testbase.WithRespondSticky,
+		testbase.WithExpectedAttemptCount(0),
+		testbase.WithRetries(1),
+		testbase.WithForceNewWorkflowTask)
 	s.NoError(err)
 	newTask = res.NewTask
 	s.NotNil(newTask)
@@ -1360,13 +1364,13 @@ func (s *AdvancedVisibilitySuite) TestUpsertWorkflowExecutionSearchAttributes() 
 
 	// verify search attributes are unset
 	listRequest = &workflowservice.ListWorkflowExecutionsRequest{
-		Namespace: s.namespace,
+		Namespace: s.Namespace(),
 		PageSize:  int32(2),
 		Query:     fmt.Sprintf(`WorkflowType = '%s' and ExecutionStatus = 'Running'`, wt),
 	}
 	verified = false
 	for i := 0; i < numOfRetry; i++ {
-		resp, err := s.client.ListWorkflowExecutions(NewContext(), listRequest)
+		resp, err := s.FrontendClient().ListWorkflowExecutions(testbase.NewContext(), listRequest)
 		s.NoError(err)
 		if len(resp.GetExecutions()) == 1 {
 			execution := resp.GetExecutions()[0]
@@ -1384,13 +1388,13 @@ func (s *AdvancedVisibilitySuite) TestUpsertWorkflowExecutionSearchAttributes() 
 
 	// verify query by unset search attribute
 	listRequest = &workflowservice.ListWorkflowExecutionsRequest{
-		Namespace: s.namespace,
+		Namespace: s.Namespace(),
 		PageSize:  int32(2),
 		Query:     fmt.Sprintf(`WorkflowType = '%s' and ExecutionStatus = 'Running' and CustomTextField is null and CustomIntField is null`, wt),
 	}
 	verified = false
 	for i := 0; i < numOfRetry; i++ {
-		resp, err := s.client.ListWorkflowExecutions(NewContext(), listRequest)
+		resp, err := s.FrontendClient().ListWorkflowExecutions(testbase.NewContext(), listRequest)
 		s.NoError(err)
 		if len(resp.GetExecutions()) == 1 {
 			verified = true
@@ -1402,12 +1406,12 @@ func (s *AdvancedVisibilitySuite) TestUpsertWorkflowExecutionSearchAttributes() 
 
 	// verify search attributes from DescribeWorkflowExecution
 	descRequest := &workflowservice.DescribeWorkflowExecutionRequest{
-		Namespace: s.namespace,
+		Namespace: s.Namespace(),
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: id,
 		},
 	}
-	descResp, err := s.client.DescribeWorkflowExecution(NewContext(), descRequest)
+	descResp, err := s.FrontendClient().DescribeWorkflowExecution(testbase.NewContext(), descRequest)
 	s.NoError(err)
 	expectedSearchAttributes, _ := searchattribute.Encode(
 		map[string]interface{}{
@@ -1432,11 +1436,11 @@ func (s *AdvancedVisibilitySuite) TestUpsertWorkflowExecutionSearchAttributes() 
 
 	// process close workflow task and assert search attributes is correct after workflow is closed
 	res, err = poller.PollAndProcessWorkflowTask(
-		WithPollSticky,
-		WithRespondSticky,
-		WithExpectedAttemptCount(0),
-		WithRetries(1),
-		WithForceNewWorkflowTask)
+		testbase.WithPollSticky,
+		testbase.WithRespondSticky,
+		testbase.WithExpectedAttemptCount(0),
+		testbase.WithRetries(1),
+		testbase.WithForceNewWorkflowTask)
 	s.NoError(err)
 	newTask = res.NewTask
 	s.NotNil(newTask)
@@ -1446,12 +1450,12 @@ func (s *AdvancedVisibilitySuite) TestUpsertWorkflowExecutionSearchAttributes() 
 
 	// verify search attributes from DescribeWorkflowExecution
 	descRequest = &workflowservice.DescribeWorkflowExecutionRequest{
-		Namespace: s.namespace,
+		Namespace: s.Namespace(),
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: id,
 		},
 	}
-	descResp, err = s.client.DescribeWorkflowExecution(NewContext(), descRequest)
+	descResp, err = s.FrontendClient().DescribeWorkflowExecution(testbase.NewContext(), descRequest)
 	s.NoError(err)
 	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, descResp.WorkflowExecutionInfo.Status)
 	s.Equal(
@@ -1480,7 +1484,7 @@ func (s *AdvancedVisibilitySuite) TestModifyWorkflowExecutionProperties() {
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           uuid.New(),
-		Namespace:           s.namespace,
+		Namespace:           s.Namespace(),
 		WorkflowId:          id,
 		WorkflowType:        workflowType,
 		TaskQueue:           taskQueue,
@@ -1490,7 +1494,7 @@ func (s *AdvancedVisibilitySuite) TestModifyWorkflowExecutionProperties() {
 		Identity:            identity,
 	}
 
-	we, err0 := s.client.StartWorkflowExecution(NewContext(), request)
+	we, err0 := s.FrontendClient().StartWorkflowExecution(testbase.NewContext(), request)
 	s.NoError(err0)
 
 	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
@@ -1546,9 +1550,9 @@ func (s *AdvancedVisibilitySuite) TestModifyWorkflowExecutionProperties() {
 		}}, nil
 	}
 
-	poller := &TaskPoller{
-		Client:              s.client,
-		Namespace:           s.namespace,
+	poller := &testbase.TaskPoller{
+		Client:              s.FrontendClient(),
+		Namespace:           s.Namespace(),
 		TaskQueue:           taskQueue,
 		StickyTaskQueue:     taskQueue,
 		Identity:            identity,
@@ -1559,11 +1563,11 @@ func (s *AdvancedVisibilitySuite) TestModifyWorkflowExecutionProperties() {
 
 	// process 1st workflow task and assert workflow task is handled correctly.
 	res, err := poller.PollAndProcessWorkflowTask(
-		WithPollSticky,
-		WithRespondSticky,
-		WithExpectedAttemptCount(0),
-		WithRetries(1),
-		WithForceNewWorkflowTask)
+		testbase.WithPollSticky,
+		testbase.WithRespondSticky,
+		testbase.WithExpectedAttemptCount(0),
+		testbase.WithRetries(1),
+		testbase.WithForceNewWorkflowTask)
 	s.NoError(err)
 	newTask := res.NewTask
 	s.NotNil(newTask)
@@ -1589,13 +1593,13 @@ func (s *AdvancedVisibilitySuite) TestModifyWorkflowExecutionProperties() {
 
 	// verify memo data is on ES
 	listRequest := &workflowservice.ListWorkflowExecutionsRequest{
-		Namespace: s.namespace,
+		Namespace: s.Namespace(),
 		PageSize:  int32(2),
 		Query:     fmt.Sprintf(`WorkflowType = '%s' and ExecutionStatus = 'Running'`, wt),
 	}
 	verified := false
 	for i := 0; i < numOfRetry; i++ {
-		resp, err := s.client.ListWorkflowExecutions(NewContext(), listRequest)
+		resp, err := s.FrontendClient().ListWorkflowExecutions(testbase.NewContext(), listRequest)
 		s.NoError(err)
 		if len(resp.GetExecutions()) == 1 {
 			s.True(proto.Equal(expectedMemo, resp.Executions[0].Memo))
@@ -1607,11 +1611,11 @@ func (s *AdvancedVisibilitySuite) TestModifyWorkflowExecutionProperties() {
 
 	// process 2nd workflow task and assert workflow task is handled correctly.
 	res, err = poller.PollAndProcessWorkflowTask(
-		WithPollSticky,
-		WithRespondSticky,
-		WithExpectedAttemptCount(0),
-		WithRetries(1),
-		WithForceNewWorkflowTask)
+		testbase.WithPollSticky,
+		testbase.WithRespondSticky,
+		testbase.WithExpectedAttemptCount(0),
+		testbase.WithRetries(1),
+		testbase.WithForceNewWorkflowTask)
 	s.NoError(err)
 	newTask = res.NewTask
 	s.NotNil(newTask)
@@ -1635,13 +1639,13 @@ func (s *AdvancedVisibilitySuite) TestModifyWorkflowExecutionProperties() {
 
 	// verify memo data is on ES
 	listRequest = &workflowservice.ListWorkflowExecutionsRequest{
-		Namespace: s.namespace,
+		Namespace: s.Namespace(),
 		PageSize:  int32(2),
 		Query:     fmt.Sprintf(`WorkflowType = '%s' and ExecutionStatus = 'Running'`, wt),
 	}
 	verified = false
 	for i := 0; i < numOfRetry; i++ {
-		resp, err := s.client.ListWorkflowExecutions(NewContext(), listRequest)
+		resp, err := s.FrontendClient().ListWorkflowExecutions(testbase.NewContext(), listRequest)
 		s.NoError(err)
 		if len(resp.GetExecutions()) == 1 {
 			s.True(proto.Equal(expectedMemo, resp.Executions[0].Memo))
@@ -1653,11 +1657,11 @@ func (s *AdvancedVisibilitySuite) TestModifyWorkflowExecutionProperties() {
 
 	// process close workflow task and assert workflow task is handled correctly.
 	res, err = poller.PollAndProcessWorkflowTask(
-		WithPollSticky,
-		WithRespondSticky,
-		WithExpectedAttemptCount(0),
-		WithRetries(1),
-		WithForceNewWorkflowTask)
+		testbase.WithPollSticky,
+		testbase.WithRespondSticky,
+		testbase.WithExpectedAttemptCount(0),
+		testbase.WithRetries(1),
+		testbase.WithForceNewWorkflowTask)
 	s.NoError(err)
 	newTask = res.NewTask
 	s.NotNil(newTask)
@@ -1666,12 +1670,12 @@ func (s *AdvancedVisibilitySuite) TestModifyWorkflowExecutionProperties() {
 	time.Sleep(waitForESToSettle)
 
 	descRequest := &workflowservice.DescribeWorkflowExecutionRequest{
-		Namespace: s.namespace,
+		Namespace: s.Namespace(),
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: id,
 		},
 	}
-	descResp, err := s.client.DescribeWorkflowExecution(NewContext(), descRequest)
+	descResp, err := s.FrontendClient().DescribeWorkflowExecution(testbase.NewContext(), descRequest)
 	s.NoError(err)
 	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, descResp.WorkflowExecutionInfo.Status)
 	s.ProtoEqual(expectedMemo, descResp.WorkflowExecutionInfo.Memo)
@@ -1680,7 +1684,7 @@ func (s *AdvancedVisibilitySuite) TestModifyWorkflowExecutionProperties() {
 func (s *AdvancedVisibilitySuite) testListResultForUpsertSearchAttributes(listRequest *workflowservice.ListWorkflowExecutionsRequest) {
 	verified := false
 	for i := 0; i < numOfRetry; i++ {
-		resp, err := s.client.ListWorkflowExecutions(NewContext(), listRequest)
+		resp, err := s.FrontendClient().ListWorkflowExecutions(testbase.NewContext(), listRequest)
 		s.NoError(err)
 		if len(resp.GetExecutions()) == 1 {
 			s.Nil(resp.NextPageToken)
@@ -1750,7 +1754,7 @@ func (s *AdvancedVisibilitySuite) TestUpsertWorkflowExecution_InvalidKey() {
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           uuid.New(),
-		Namespace:           s.namespace,
+		Namespace:           s.Namespace(),
 		WorkflowId:          id,
 		WorkflowType:        workflowType,
 		TaskQueue:           taskQueue,
@@ -1760,7 +1764,7 @@ func (s *AdvancedVisibilitySuite) TestUpsertWorkflowExecution_InvalidKey() {
 		Identity:            identity,
 	}
 
-	we, err0 := s.client.StartWorkflowExecution(NewContext(), request)
+	we, err0 := s.FrontendClient().StartWorkflowExecution(testbase.NewContext(), request)
 	s.NoError(err0)
 
 	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
@@ -1779,9 +1783,9 @@ func (s *AdvancedVisibilitySuite) TestUpsertWorkflowExecution_InvalidKey() {
 		return []*commandpb.Command{upsertCommand}, nil
 	}
 
-	poller := &TaskPoller{
-		Client:              s.client,
-		Namespace:           s.namespace,
+	poller := &testbase.TaskPoller{
+		Client:              s.FrontendClient(),
+		Namespace:           s.Namespace(),
 		TaskQueue:           taskQueue,
 		StickyTaskQueue:     taskQueue,
 		Identity:            identity,
@@ -1793,7 +1797,7 @@ func (s *AdvancedVisibilitySuite) TestUpsertWorkflowExecution_InvalidKey() {
 	_, err := poller.PollAndProcessWorkflowTask()
 	s.Error(err)
 	s.IsType(&serviceerror.InvalidArgument{}, err)
-	historyEvents := s.getHistory(s.namespace, &commonpb.WorkflowExecution{
+	historyEvents := s.GetHistory(s.Namespace(), &commonpb.WorkflowExecution{
 		WorkflowId: id,
 		RunId:      we.RunId,
 	})
@@ -1805,20 +1809,20 @@ func (s *AdvancedVisibilitySuite) TestUpsertWorkflowExecution_InvalidKey() {
   3 WorkflowTaskStarted
   4 WorkflowTaskFailed {"Cause":23,"Failure":{"Message":"BadSearchAttributes: search attribute INVALIDKEY is not defined"}}`, historyEvents)
 	} else {
-		s.ErrorContains(err, fmt.Sprintf("BadSearchAttributes: Namespace %s has no mapping defined for search attribute INVALIDKEY", s.namespace))
+		s.ErrorContains(err, fmt.Sprintf("BadSearchAttributes: Namespace %s has no mapping defined for search attribute INVALIDKEY", s.Namespace()))
 		s.EqualHistoryEvents(fmt.Sprintf(`
   1 WorkflowExecutionStarted
   2 WorkflowTaskScheduled
   3 WorkflowTaskStarted
-  4 WorkflowTaskFailed {"Cause":23,"Failure":{"Message":"BadSearchAttributes: Namespace %s has no mapping defined for search attribute INVALIDKEY"}}`, s.namespace), historyEvents)
+  4 WorkflowTaskFailed {"Cause":23,"Failure":{"Message":"BadSearchAttributes: Namespace %s has no mapping defined for search attribute INVALIDKEY"}}`, s.Namespace()), historyEvents)
 	}
 }
 
 func (s *AdvancedVisibilitySuite) TestChildWorkflow_ParentWorkflow() {
 	var (
-		ctx         = NewContext()
-		wfID        = s.randomizeStr(s.T().Name())
-		childWfID   = s.randomizeStr(s.T().Name())
+		ctx         = testbase.NewContext()
+		wfID        = testbase.RandomizeStr(s.T().Name())
+		childWfID   = testbase.RandomizeStr(s.T().Name())
 		childWfType = "child-wf-type-" + wfID
 		wfType      = "wf-type-" + wfID
 		taskQueue   = "task-queue-" + wfID
@@ -1853,12 +1857,12 @@ func (s *AdvancedVisibilitySuite) TestChildWorkflow_ParentWorkflow() {
 	// check main workflow doesn't have parent workflow and root is itself
 	s.EventuallyWithT(
 		func(c *assert.CollectT) {
-			resp, err := s.client.ListWorkflowExecutions(
+			resp, err := s.FrontendClient().ListWorkflowExecutions(
 				ctx,
 				&workflowservice.ListWorkflowExecutionsRequest{
-					Namespace: s.namespace,
+					Namespace: s.Namespace(),
 					Query:     fmt.Sprintf("WorkflowType = %q", wfType),
-					PageSize:  defaultPageSize,
+					PageSize:  testbase.DefaultPageSize,
 				},
 			)
 			assert.NoError(c, err)
@@ -1878,12 +1882,12 @@ func (s *AdvancedVisibilitySuite) TestChildWorkflow_ParentWorkflow() {
 	var childWfInfo *workflowpb.WorkflowExecutionInfo
 	s.EventuallyWithT(
 		func(c *assert.CollectT) {
-			resp, err := s.client.ListWorkflowExecutions(
+			resp, err := s.FrontendClient().ListWorkflowExecutions(
 				ctx,
 				&workflowservice.ListWorkflowExecutionsRequest{
-					Namespace: s.namespace,
+					Namespace: s.Namespace(),
 					Query:     fmt.Sprintf("WorkflowType = %q", childWfType),
-					PageSize:  defaultPageSize,
+					PageSize:  testbase.DefaultPageSize,
 				},
 			)
 			assert.NoError(c, err)
@@ -1903,7 +1907,7 @@ func (s *AdvancedVisibilitySuite) TestChildWorkflow_ParentWorkflow() {
 }
 
 func (s *AdvancedVisibilitySuite) Test_LongWorkflowID() {
-	if s.testClusterConfig.Persistence.StoreType == config.StoreTypeSQL {
+	if s.TestClusterConfig().Persistence.StoreType == config.StoreTypeSQL {
 		// TODO: remove this when workflow_id field size is increased from varchar(255) in SQL schema.
 		return
 	}
@@ -1913,7 +1917,7 @@ func (s *AdvancedVisibilitySuite) Test_LongWorkflowID() {
 	tl := "es-functional-long-workflow-id-test-taskqueue"
 	request := s.createStartWorkflowExecutionRequest(id, wt, tl)
 
-	we, err := s.client.StartWorkflowExecution(NewContext(), request)
+	we, err := s.FrontendClient().StartWorkflowExecution(testbase.NewContext(), request)
 	s.NoError(err)
 
 	query := fmt.Sprintf(`WorkflowId = "%s"`, id)
@@ -1921,21 +1925,21 @@ func (s *AdvancedVisibilitySuite) Test_LongWorkflowID() {
 }
 
 func (s *AdvancedVisibilitySuite) Test_BuildIdIndexedOnCompletion_UnversionedWorker() {
-	ctx := NewContext()
-	id := s.randomizeStr(s.T().Name())
+	ctx := testbase.NewContext()
+	id := testbase.RandomizeStr(s.T().Name())
 	workflowType := "functional-build-id"
-	taskQueue := s.randomizeStr(s.T().Name())
+	taskQueue := testbase.RandomizeStr(s.T().Name())
 
 	request := s.createStartWorkflowExecutionRequest(id, workflowType, taskQueue)
-	_, err := s.client.StartWorkflowExecution(ctx, request)
+	_, err := s.FrontendClient().StartWorkflowExecution(ctx, request)
 	s.NoError(err)
 
-	pollRequest := &workflowservice.PollWorkflowTaskQueueRequest{Namespace: s.namespace, TaskQueue: request.TaskQueue, Identity: id}
-	task, err := s.client.PollWorkflowTaskQueue(ctx, pollRequest)
+	pollRequest := &workflowservice.PollWorkflowTaskQueueRequest{Namespace: s.Namespace(), TaskQueue: request.TaskQueue, Identity: id}
+	task, err := s.FrontendClient().PollWorkflowTaskQueue(ctx, pollRequest)
 	s.NoError(err)
 	s.Greater(len(task.TaskToken), 0)
-	_, err = s.client.RespondWorkflowTaskCompleted(ctx, &workflowservice.RespondWorkflowTaskCompletedRequest{
-		Namespace:          s.namespace,
+	_, err = s.FrontendClient().RespondWorkflowTaskCompleted(ctx, &workflowservice.RespondWorkflowTaskCompletedRequest{
+		Namespace:          s.Namespace(),
 		Identity:           id,
 		WorkerVersionStamp: &commonpb.WorkerVersionStamp{BuildId: "1.0"},
 		TaskToken:          task.TaskToken,
@@ -1948,14 +1952,14 @@ func (s *AdvancedVisibilitySuite) Test_BuildIdIndexedOnCompletion_UnversionedWor
 		worker_versioning.UnversionedBuildIdSearchAttribute("1.0"),
 	}, buildIDs)
 
-	_, err = s.client.SignalWorkflowExecution(ctx, &workflowservice.SignalWorkflowExecutionRequest{Namespace: s.namespace, WorkflowExecution: task.WorkflowExecution, SignalName: "continue"})
+	_, err = s.FrontendClient().SignalWorkflowExecution(ctx, &workflowservice.SignalWorkflowExecutionRequest{Namespace: s.Namespace(), WorkflowExecution: task.WorkflowExecution, SignalName: "continue"})
 	s.NoError(err)
 
-	task, err = s.client.PollWorkflowTaskQueue(ctx, pollRequest)
+	task, err = s.FrontendClient().PollWorkflowTaskQueue(ctx, pollRequest)
 	s.NoError(err)
 	s.Greater(len(task.TaskToken), 0)
-	_, err = s.client.RespondWorkflowTaskCompleted(ctx, &workflowservice.RespondWorkflowTaskCompletedRequest{
-		Namespace:          s.namespace,
+	_, err = s.FrontendClient().RespondWorkflowTaskCompleted(ctx, &workflowservice.RespondWorkflowTaskCompletedRequest{
+		Namespace:          s.Namespace(),
 		Identity:           id,
 		WorkerVersionStamp: &commonpb.WorkerVersionStamp{BuildId: "1.1"},
 		TaskToken:          task.TaskToken,
@@ -1978,15 +1982,15 @@ func (s *AdvancedVisibilitySuite) Test_BuildIdIndexedOnCompletion_UnversionedWor
 		worker_versioning.UnversionedBuildIdSearchAttribute("1.1"),
 	}, buildIDs)
 
-	task, err = s.client.PollWorkflowTaskQueue(ctx, pollRequest)
+	task, err = s.FrontendClient().PollWorkflowTaskQueue(ctx, pollRequest)
 	s.NoError(err)
 	s.Greater(len(task.TaskToken), 0)
 
 	buildIDs = s.getBuildIds(ctx, task.WorkflowExecution)
 	s.Equal([]string{}, buildIDs)
 
-	_, err = s.client.RespondWorkflowTaskCompleted(ctx, &workflowservice.RespondWorkflowTaskCompletedRequest{
-		Namespace:          s.namespace,
+	_, err = s.FrontendClient().RespondWorkflowTaskCompleted(ctx, &workflowservice.RespondWorkflowTaskCompletedRequest{
+		Namespace:          s.Namespace(),
 		Identity:           id,
 		WorkerVersionStamp: &commonpb.WorkerVersionStamp{BuildId: "1.2"},
 		TaskToken:          task.TaskToken,
@@ -2004,10 +2008,10 @@ func (s *AdvancedVisibilitySuite) Test_BuildIdIndexedOnCompletion_UnversionedWor
 
 	for minor := 1; minor <= 2; minor++ {
 		s.Eventually(func() bool {
-			response, err := s.client.ListWorkflowExecutions(ctx, &workflowservice.ListWorkflowExecutionsRequest{
-				Namespace: s.namespace,
+			response, err := s.FrontendClient().ListWorkflowExecutions(ctx, &workflowservice.ListWorkflowExecutionsRequest{
+				Namespace: s.Namespace(),
 				Query:     fmt.Sprintf("BuildIds = '%s'", worker_versioning.UnversionedBuildIdSearchAttribute(fmt.Sprintf("1.%d", minor))),
-				PageSize:  defaultPageSize,
+				PageSize:  testbase.DefaultPageSize,
 			})
 			if err != nil {
 				return false
@@ -2026,12 +2030,12 @@ func (s *AdvancedVisibilitySuite) Test_BuildIdIndexedOnCompletion_VersionedWorke
 	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 1)
 	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 1)
 
-	ctx := NewContext()
-	id := s.randomizeStr(s.T().Name())
+	ctx := testbase.NewContext()
+	id := testbase.RandomizeStr(s.T().Name())
 	childId1 := "child1-" + id
 	childId2 := "child2-" + id
 	workflowType := "functional-build-id"
-	taskQueue := s.randomizeStr(s.T().Name())
+	taskQueue := testbase.RandomizeStr(s.T().Name())
 	v1 := s.T().Name() + "-v1"
 	v11 := s.T().Name() + "-v11"
 
@@ -2068,8 +2072,8 @@ func (s *AdvancedVisibilitySuite) Test_BuildIdIndexedOnCompletion_VersionedWorke
 	}
 
 	// Declare v1
-	_, err := s.client.UpdateWorkerBuildIdCompatibility(ctx, &workflowservice.UpdateWorkerBuildIdCompatibilityRequest{
-		Namespace: s.namespace,
+	_, err := s.FrontendClient().UpdateWorkerBuildIdCompatibility(ctx, &workflowservice.UpdateWorkerBuildIdCompatibilityRequest{
+		Namespace: s.Namespace(),
 		TaskQueue: taskQueue,
 		Operation: &workflowservice.UpdateWorkerBuildIdCompatibilityRequest_AddNewBuildIdInNewDefaultSet{
 			AddNewBuildIdInNewDefaultSet: v1,
@@ -2108,8 +2112,8 @@ func (s *AdvancedVisibilitySuite) Test_BuildIdIndexedOnCompletion_VersionedWorke
 	}, time.Second*15, time.Millisecond*100)
 
 	// Update sets with v1.1
-	_, err = s.client.UpdateWorkerBuildIdCompatibility(ctx, &workflowservice.UpdateWorkerBuildIdCompatibilityRequest{
-		Namespace: s.namespace,
+	_, err = s.FrontendClient().UpdateWorkerBuildIdCompatibility(ctx, &workflowservice.UpdateWorkerBuildIdCompatibilityRequest{
+		Namespace: s.Namespace(),
 		TaskQueue: taskQueue,
 		Operation: &workflowservice.UpdateWorkerBuildIdCompatibilityRequest_AddNewCompatibleBuildId{
 			AddNewCompatibleBuildId: &workflowservice.UpdateWorkerBuildIdCompatibilityRequest_AddNewCompatibleVersion{
@@ -2170,10 +2174,10 @@ func (s *AdvancedVisibilitySuite) Test_BuildIdIndexedOnCompletion_VersionedWorke
 
 	// We should have 3 runs with the v1.1 search attribute: First and second run in chain, and single child
 	s.Eventually(func() bool {
-		response, err := s.client.ListWorkflowExecutions(ctx, &workflowservice.ListWorkflowExecutionsRequest{
-			Namespace: s.namespace,
+		response, err := s.FrontendClient().ListWorkflowExecutions(ctx, &workflowservice.ListWorkflowExecutionsRequest{
+			Namespace: s.Namespace(),
 			Query:     fmt.Sprintf("BuildIds = %q", worker_versioning.VersionedBuildIdSearchAttribute(v11)),
-			PageSize:  defaultPageSize,
+			PageSize:  testbase.DefaultPageSize,
 		})
 		if err != nil {
 			return false
@@ -2190,10 +2194,10 @@ func (s *AdvancedVisibilitySuite) Test_BuildIdIndexedOnReset() {
 	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 1)
 	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 1)
 
-	ctx := NewContext()
-	id := s.randomizeStr(s.T().Name())
+	ctx := testbase.NewContext()
+	id := testbase.RandomizeStr(s.T().Name())
 	workflowType := "functional-build-id"
-	taskQueue := s.randomizeStr(s.T().Name())
+	taskQueue := testbase.RandomizeStr(s.T().Name())
 	v1 := s.T().Name() + "-v1"
 
 	startedCh := make(chan struct{})
@@ -2210,8 +2214,8 @@ func (s *AdvancedVisibilitySuite) Test_BuildIdIndexedOnReset() {
 	}
 
 	// Declare v1
-	_, err := s.client.UpdateWorkerBuildIdCompatibility(ctx, &workflowservice.UpdateWorkerBuildIdCompatibilityRequest{
-		Namespace: s.namespace,
+	_, err := s.FrontendClient().UpdateWorkerBuildIdCompatibility(ctx, &workflowservice.UpdateWorkerBuildIdCompatibilityRequest{
+		Namespace: s.Namespace(),
 		TaskQueue: taskQueue,
 		Operation: &workflowservice.UpdateWorkerBuildIdCompatibilityRequest_AddNewBuildIdInNewDefaultSet{
 			AddNewBuildIdInNewDefaultSet: v1,
@@ -2245,7 +2249,7 @@ func (s *AdvancedVisibilitySuite) Test_BuildIdIndexedOnReset() {
 	<-startedCh
 
 	resetResult, err := s.sdkClient.ResetWorkflowExecution(ctx, &workflowservice.ResetWorkflowExecutionRequest{
-		Namespace:                 s.namespace,
+		Namespace:                 s.Namespace(),
 		WorkflowExecution:         &commonpb.WorkflowExecution{WorkflowId: id},
 		WorkflowTaskFinishEventId: 3,
 	})
@@ -2254,10 +2258,10 @@ func (s *AdvancedVisibilitySuite) Test_BuildIdIndexedOnReset() {
 	s.Equal([]string{worker_versioning.VersionedBuildIdSearchAttribute(v1)}, buildIDs)
 
 	s.Eventually(func() bool {
-		response, err := s.client.ListWorkflowExecutions(ctx, &workflowservice.ListWorkflowExecutionsRequest{
-			Namespace: s.namespace,
+		response, err := s.FrontendClient().ListWorkflowExecutions(ctx, &workflowservice.ListWorkflowExecutionsRequest{
+			Namespace: s.Namespace(),
 			Query:     fmt.Sprintf("BuildIds = %q AND RunId = %q", worker_versioning.VersionedBuildIdSearchAttribute(v1), resetResult.RunId),
-			PageSize:  defaultPageSize,
+			PageSize:  testbase.DefaultPageSize,
 		})
 		if err != nil {
 			return false
@@ -2274,10 +2278,10 @@ func (s *AdvancedVisibilitySuite) Test_BuildIdIndexedOnRetry() {
 	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 1)
 	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 1)
 
-	ctx := NewContext()
-	id := s.randomizeStr(s.T().Name())
+	ctx := testbase.NewContext()
+	id := testbase.RandomizeStr(s.T().Name())
 	workflowType := "functional-build-id"
-	taskQueue := s.randomizeStr(s.T().Name())
+	taskQueue := testbase.RandomizeStr(s.T().Name())
 	v1 := s.T().Name() + "-v1"
 
 	wf := func(ctx workflow.Context) error {
@@ -2285,8 +2289,8 @@ func (s *AdvancedVisibilitySuite) Test_BuildIdIndexedOnRetry() {
 	}
 
 	// Declare v1
-	_, err := s.client.UpdateWorkerBuildIdCompatibility(ctx, &workflowservice.UpdateWorkerBuildIdCompatibilityRequest{
-		Namespace: s.namespace,
+	_, err := s.FrontendClient().UpdateWorkerBuildIdCompatibility(ctx, &workflowservice.UpdateWorkerBuildIdCompatibilityRequest{
+		Namespace: s.Namespace(),
 		TaskQueue: taskQueue,
 		Operation: &workflowservice.UpdateWorkerBuildIdCompatibilityRequest_AddNewBuildIdInNewDefaultSet{
 			AddNewBuildIdInNewDefaultSet: v1,
@@ -2321,10 +2325,10 @@ func (s *AdvancedVisibilitySuite) Test_BuildIdIndexedOnRetry() {
 	s.Equal([]string{worker_versioning.VersionedBuildIdSearchAttribute(v1)}, buildIDs)
 
 	s.Eventually(func() bool {
-		response, err := s.client.ListWorkflowExecutions(ctx, &workflowservice.ListWorkflowExecutionsRequest{
-			Namespace: s.namespace,
+		response, err := s.FrontendClient().ListWorkflowExecutions(ctx, &workflowservice.ListWorkflowExecutionsRequest{
+			Namespace: s.Namespace(),
 			Query:     fmt.Sprintf("BuildIds = %q", worker_versioning.VersionedBuildIdSearchAttribute(v1)),
-			PageSize:  defaultPageSize,
+			PageSize:  testbase.DefaultPageSize,
 		})
 		if err != nil {
 			return false
@@ -2338,7 +2342,7 @@ func (s *AdvancedVisibilitySuite) Test_BuildIdIndexedOnRetry() {
 }
 
 func (s *AdvancedVisibilitySuite) TestWorkerTaskReachability_ByBuildId() {
-	ctx := NewContext()
+	ctx := testbase.NewContext()
 	tq1 := s.T().Name()
 	tq2 := s.T().Name() + "-2"
 	tq3 := s.T().Name() + "-3"
@@ -2347,16 +2351,16 @@ func (s *AdvancedVisibilitySuite) TestWorkerTaskReachability_ByBuildId() {
 	v1 := s.T().Name() + "-v1"
 	var err error
 
-	_, err = s.client.UpdateWorkerBuildIdCompatibility(ctx, &workflowservice.UpdateWorkerBuildIdCompatibilityRequest{
-		Namespace: s.namespace,
+	_, err = s.FrontendClient().UpdateWorkerBuildIdCompatibility(ctx, &workflowservice.UpdateWorkerBuildIdCompatibilityRequest{
+		Namespace: s.Namespace(),
 		TaskQueue: tq1,
 		Operation: &workflowservice.UpdateWorkerBuildIdCompatibilityRequest_AddNewBuildIdInNewDefaultSet{
 			AddNewBuildIdInNewDefaultSet: v0,
 		},
 	})
 	s.Require().NoError(err)
-	_, err = s.client.UpdateWorkerBuildIdCompatibility(ctx, &workflowservice.UpdateWorkerBuildIdCompatibilityRequest{
-		Namespace: s.namespace,
+	_, err = s.FrontendClient().UpdateWorkerBuildIdCompatibility(ctx, &workflowservice.UpdateWorkerBuildIdCompatibilityRequest{
+		Namespace: s.Namespace(),
 		TaskQueue: tq1,
 		Operation: &workflowservice.UpdateWorkerBuildIdCompatibilityRequest_AddNewCompatibleBuildId{
 			AddNewCompatibleBuildId: &workflowservice.UpdateWorkerBuildIdCompatibilityRequest_AddNewCompatibleVersion{
@@ -2366,8 +2370,8 @@ func (s *AdvancedVisibilitySuite) TestWorkerTaskReachability_ByBuildId() {
 		},
 	})
 	s.Require().NoError(err)
-	_, err = s.client.UpdateWorkerBuildIdCompatibility(ctx, &workflowservice.UpdateWorkerBuildIdCompatibilityRequest{
-		Namespace: s.namespace,
+	_, err = s.FrontendClient().UpdateWorkerBuildIdCompatibility(ctx, &workflowservice.UpdateWorkerBuildIdCompatibilityRequest{
+		Namespace: s.Namespace(),
 		TaskQueue: tq2,
 		Operation: &workflowservice.UpdateWorkerBuildIdCompatibilityRequest_AddNewBuildIdInNewDefaultSet{
 			AddNewBuildIdInNewDefaultSet: v0,
@@ -2376,8 +2380,8 @@ func (s *AdvancedVisibilitySuite) TestWorkerTaskReachability_ByBuildId() {
 	s.Require().NoError(err)
 
 	// Map v0 to a third queue to test limit enforcement
-	_, err = s.client.UpdateWorkerBuildIdCompatibility(ctx, &workflowservice.UpdateWorkerBuildIdCompatibilityRequest{
-		Namespace: s.namespace,
+	_, err = s.FrontendClient().UpdateWorkerBuildIdCompatibility(ctx, &workflowservice.UpdateWorkerBuildIdCompatibilityRequest{
+		Namespace: s.Namespace(),
 		TaskQueue: tq3,
 		Operation: &workflowservice.UpdateWorkerBuildIdCompatibilityRequest_AddNewBuildIdInNewDefaultSet{
 			AddNewBuildIdInNewDefaultSet: v0,
@@ -2387,8 +2391,8 @@ func (s *AdvancedVisibilitySuite) TestWorkerTaskReachability_ByBuildId() {
 
 	var reachabilityResponse *workflowservice.GetWorkerTaskReachabilityResponse
 
-	reachabilityResponse, err = s.client.GetWorkerTaskReachability(ctx, &workflowservice.GetWorkerTaskReachabilityRequest{
-		Namespace:    s.namespace,
+	reachabilityResponse, err = s.FrontendClient().GetWorkerTaskReachability(ctx, &workflowservice.GetWorkerTaskReachabilityRequest{
+		Namespace:    s.Namespace(),
 		BuildIds:     []string{v0},
 		Reachability: enumspb.TASK_REACHABILITY_EXISTING_WORKFLOWS,
 	})
@@ -2403,10 +2407,10 @@ func (s *AdvancedVisibilitySuite) TestWorkerTaskReachability_ByBuildId() {
 	}}, reachabilityResponse.BuildIdReachability)
 
 	// Start a workflow on tq1 and verify it affects the reachability of v0.1
-	_, err = s.client.StartWorkflowExecution(ctx, &workflowservice.StartWorkflowExecutionRequest{
+	_, err = s.FrontendClient().StartWorkflowExecution(ctx, &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:    uuid.New(),
-		Namespace:    s.namespace,
-		WorkflowId:   s.randomizeStr(s.T().Name()),
+		Namespace:    s.Namespace(),
+		WorkflowId:   testbase.RandomizeStr(s.T().Name()),
 		WorkflowType: &commonpb.WorkflowType{Name: "dont-care"},
 		TaskQueue:    &taskqueuepb.TaskQueue{Name: tq1, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 	})
@@ -2416,15 +2420,15 @@ func (s *AdvancedVisibilitySuite) TestWorkerTaskReachability_ByBuildId() {
 	s.checkReachability(ctx, tq1, v01, enumspb.TASK_REACHABILITY_NEW_WORKFLOWS, enumspb.TASK_REACHABILITY_OPEN_WORKFLOWS)
 
 	// Complete the workflow and verify it affects reachability of v0.1
-	task, err := s.client.PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
-		Namespace:                 s.namespace,
+	task, err := s.FrontendClient().PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
+		Namespace:                 s.Namespace(),
 		TaskQueue:                 &taskqueuepb.TaskQueue{Name: tq1, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		WorkerVersionCapabilities: &commonpb.WorkerVersionCapabilities{BuildId: v01, UseVersioning: true},
 	})
 	s.Require().NoError(err)
 	s.Require().NotEmpty(task.GetTaskToken())
-	_, err = s.client.RespondWorkflowTaskCompleted(ctx, &workflowservice.RespondWorkflowTaskCompletedRequest{
-		Namespace:          s.namespace,
+	_, err = s.FrontendClient().RespondWorkflowTaskCompleted(ctx, &workflowservice.RespondWorkflowTaskCompletedRequest{
+		Namespace:          s.Namespace(),
 		TaskToken:          task.TaskToken,
 		WorkerVersionStamp: &commonpb.WorkerVersionStamp{BuildId: v01, UseVersioning: true},
 		Commands: []*commandpb.Command{{
@@ -2438,8 +2442,8 @@ func (s *AdvancedVisibilitySuite) TestWorkerTaskReachability_ByBuildId() {
 	s.checkReachability(ctx, tq1, v01, enumspb.TASK_REACHABILITY_NEW_WORKFLOWS, enumspb.TASK_REACHABILITY_CLOSED_WORKFLOWS)
 
 	// Make v1 default for queue 1
-	_, err = s.client.UpdateWorkerBuildIdCompatibility(ctx, &workflowservice.UpdateWorkerBuildIdCompatibilityRequest{
-		Namespace: s.namespace,
+	_, err = s.FrontendClient().UpdateWorkerBuildIdCompatibility(ctx, &workflowservice.UpdateWorkerBuildIdCompatibilityRequest{
+		Namespace: s.Namespace(),
 		TaskQueue: tq1,
 		Operation: &workflowservice.UpdateWorkerBuildIdCompatibilityRequest_AddNewBuildIdInNewDefaultSet{
 			AddNewBuildIdInNewDefaultSet: v1,
@@ -2460,11 +2464,11 @@ func (s *AdvancedVisibilitySuite) TestWorkerTaskReachability_ByBuildId() {
 }
 
 func (s *AdvancedVisibilitySuite) TestWorkerTaskReachability_ByBuildId_NotInNamespace() {
-	ctx := NewContext()
+	ctx := testbase.NewContext()
 	buildId := s.T().Name() + "v0"
 
-	reachabilityResponse, err := s.client.GetWorkerTaskReachability(ctx, &workflowservice.GetWorkerTaskReachabilityRequest{
-		Namespace:    s.namespace,
+	reachabilityResponse, err := s.FrontendClient().GetWorkerTaskReachability(ctx, &workflowservice.GetWorkerTaskReachabilityRequest{
+		Namespace:    s.Namespace(),
 		BuildIds:     []string{buildId},
 		Reachability: enumspb.TASK_REACHABILITY_EXISTING_WORKFLOWS,
 	})
@@ -2476,14 +2480,14 @@ func (s *AdvancedVisibilitySuite) TestWorkerTaskReachability_ByBuildId_NotInName
 }
 
 func (s *AdvancedVisibilitySuite) TestWorkerTaskReachability_ByBuildId_NotInTaskQueue() {
-	ctx := NewContext()
+	ctx := testbase.NewContext()
 	tq := s.T().Name()
 	v0 := s.T().Name() + "v0"
 	v01 := s.T().Name() + "v0.1"
 
 	checkReachability := func() {
-		reachabilityResponse, err := s.client.GetWorkerTaskReachability(ctx, &workflowservice.GetWorkerTaskReachabilityRequest{
-			Namespace:  s.namespace,
+		reachabilityResponse, err := s.FrontendClient().GetWorkerTaskReachability(ctx, &workflowservice.GetWorkerTaskReachabilityRequest{
+			Namespace:  s.Namespace(),
 			BuildIds:   []string{v01},
 			TaskQueues: []string{tq},
 		})
@@ -2498,8 +2502,8 @@ func (s *AdvancedVisibilitySuite) TestWorkerTaskReachability_ByBuildId_NotInTask
 	checkReachability()
 
 	// Same but with a versioned task queue
-	_, err := s.client.UpdateWorkerBuildIdCompatibility(ctx, &workflowservice.UpdateWorkerBuildIdCompatibilityRequest{
-		Namespace: s.namespace,
+	_, err := s.FrontendClient().UpdateWorkerBuildIdCompatibility(ctx, &workflowservice.UpdateWorkerBuildIdCompatibilityRequest{
+		Namespace: s.Namespace(),
 		TaskQueue: tq,
 		Operation: &workflowservice.UpdateWorkerBuildIdCompatibilityRequest_AddNewBuildIdInNewDefaultSet{
 			AddNewBuildIdInNewDefaultSet: v0,
@@ -2510,20 +2514,20 @@ func (s *AdvancedVisibilitySuite) TestWorkerTaskReachability_ByBuildId_NotInTask
 }
 
 func (s *AdvancedVisibilitySuite) TestWorkerTaskReachability_EmptyBuildIds() {
-	ctx := NewContext()
+	ctx := testbase.NewContext()
 
-	_, err := s.client.GetWorkerTaskReachability(ctx, &workflowservice.GetWorkerTaskReachabilityRequest{
-		Namespace: s.namespace,
+	_, err := s.FrontendClient().GetWorkerTaskReachability(ctx, &workflowservice.GetWorkerTaskReachabilityRequest{
+		Namespace: s.Namespace(),
 	})
 	var invalidArgument *serviceerror.InvalidArgument
 	s.Require().ErrorAs(err, &invalidArgument)
 }
 
 func (s *AdvancedVisibilitySuite) TestWorkerTaskReachability_TooManyBuildIds() {
-	ctx := NewContext()
+	ctx := testbase.NewContext()
 
-	_, err := s.client.GetWorkerTaskReachability(ctx, &workflowservice.GetWorkerTaskReachabilityRequest{
-		Namespace: s.namespace,
+	_, err := s.FrontendClient().GetWorkerTaskReachability(ctx, &workflowservice.GetWorkerTaskReachabilityRequest{
+		Namespace: s.Namespace(),
 		BuildIds:  []string{"", "v1"},
 	})
 	var invalidArgument *serviceerror.InvalidArgument
@@ -2531,10 +2535,10 @@ func (s *AdvancedVisibilitySuite) TestWorkerTaskReachability_TooManyBuildIds() {
 }
 
 func (s *AdvancedVisibilitySuite) TestWorkerTaskReachability_Unversioned_InNamespace() {
-	ctx := NewContext()
+	ctx := testbase.NewContext()
 
-	_, err := s.client.GetWorkerTaskReachability(ctx, &workflowservice.GetWorkerTaskReachabilityRequest{
-		Namespace: s.namespace,
+	_, err := s.FrontendClient().GetWorkerTaskReachability(ctx, &workflowservice.GetWorkerTaskReachabilityRequest{
+		Namespace: s.Namespace(),
 		BuildIds:  []string{""},
 	})
 	var invalidArgument *serviceerror.InvalidArgument
@@ -2542,13 +2546,13 @@ func (s *AdvancedVisibilitySuite) TestWorkerTaskReachability_Unversioned_InNames
 }
 
 func (s *AdvancedVisibilitySuite) TestWorkerTaskReachability_Unversioned_InTaskQueue() {
-	ctx := NewContext()
+	ctx := testbase.NewContext()
 	tq := s.T().Name()
 
-	_, err := s.client.StartWorkflowExecution(ctx, &workflowservice.StartWorkflowExecutionRequest{
+	_, err := s.FrontendClient().StartWorkflowExecution(ctx, &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:    uuid.New(),
-		Namespace:    s.namespace,
-		WorkflowId:   s.randomizeStr(s.T().Name()),
+		Namespace:    s.Namespace(),
+		WorkflowId:   testbase.RandomizeStr(s.T().Name()),
 		WorkflowType: &commonpb.WorkflowType{Name: "dont-care"},
 		TaskQueue:    &taskqueuepb.TaskQueue{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 	})
@@ -2557,14 +2561,14 @@ func (s *AdvancedVisibilitySuite) TestWorkerTaskReachability_Unversioned_InTaskQ
 	s.checkReachability(ctx, tq, "", enumspb.TASK_REACHABILITY_NEW_WORKFLOWS, enumspb.TASK_REACHABILITY_EXISTING_WORKFLOWS)
 	s.checkReachability(ctx, tq, "", enumspb.TASK_REACHABILITY_NEW_WORKFLOWS, enumspb.TASK_REACHABILITY_OPEN_WORKFLOWS)
 
-	task, err := s.client.PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
-		Namespace: s.namespace,
+	task, err := s.FrontendClient().PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
+		Namespace: s.Namespace(),
 		TaskQueue: &taskqueuepb.TaskQueue{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 	})
 	s.Require().NoError(err)
 	s.Require().NotEmpty(task.GetTaskToken())
-	_, err = s.client.RespondWorkflowTaskCompleted(ctx, &workflowservice.RespondWorkflowTaskCompletedRequest{
-		Namespace: s.namespace,
+	_, err = s.FrontendClient().RespondWorkflowTaskCompleted(ctx, &workflowservice.RespondWorkflowTaskCompletedRequest{
+		Namespace: s.Namespace(),
 		TaskToken: task.TaskToken,
 		Commands: []*commandpb.Command{{
 			CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
@@ -2577,8 +2581,8 @@ func (s *AdvancedVisibilitySuite) TestWorkerTaskReachability_Unversioned_InTaskQ
 	s.checkReachability(ctx, tq, "", enumspb.TASK_REACHABILITY_NEW_WORKFLOWS, enumspb.TASK_REACHABILITY_CLOSED_WORKFLOWS)
 
 	// Make the task queue versioned and rerun our assertion
-	_, err = s.client.UpdateWorkerBuildIdCompatibility(ctx, &workflowservice.UpdateWorkerBuildIdCompatibilityRequest{
-		Namespace: s.namespace,
+	_, err = s.FrontendClient().UpdateWorkerBuildIdCompatibility(ctx, &workflowservice.UpdateWorkerBuildIdCompatibilityRequest{
+		Namespace: s.Namespace(),
 		TaskQueue: tq,
 		Operation: &workflowservice.UpdateWorkerBuildIdCompatibilityRequest_AddNewBuildIdInNewDefaultSet{
 			AddNewBuildIdInNewDefaultSet: s.T().Name() + "-v0",
@@ -2597,22 +2601,22 @@ func (s *AdvancedVisibilitySuite) TestWorkerTaskReachability_Unversioned_InTaskQ
 }
 
 func (s *AdvancedVisibilitySuite) TestBuildIdScavenger_DeletesUnusedBuildId() {
-	ctx := NewContext()
+	ctx := testbase.NewContext()
 	tq := s.T().Name()
 	v0 := s.T().Name() + "-v0"
 	v1 := s.T().Name() + "-v1"
 	var err error
 
-	_, err = s.client.UpdateWorkerBuildIdCompatibility(ctx, &workflowservice.UpdateWorkerBuildIdCompatibilityRequest{
-		Namespace: s.namespace,
+	_, err = s.FrontendClient().UpdateWorkerBuildIdCompatibility(ctx, &workflowservice.UpdateWorkerBuildIdCompatibilityRequest{
+		Namespace: s.Namespace(),
 		TaskQueue: tq,
 		Operation: &workflowservice.UpdateWorkerBuildIdCompatibilityRequest_AddNewBuildIdInNewDefaultSet{
 			AddNewBuildIdInNewDefaultSet: v0,
 		},
 	})
 	s.Require().NoError(err)
-	_, err = s.client.UpdateWorkerBuildIdCompatibility(ctx, &workflowservice.UpdateWorkerBuildIdCompatibilityRequest{
-		Namespace: s.namespace,
+	_, err = s.FrontendClient().UpdateWorkerBuildIdCompatibility(ctx, &workflowservice.UpdateWorkerBuildIdCompatibilityRequest{
+		Namespace: s.Namespace(),
 		TaskQueue: tq,
 		Operation: &workflowservice.UpdateWorkerBuildIdCompatibilityRequest_AddNewBuildIdInNewDefaultSet{
 			AddNewBuildIdInNewDefaultSet: v1,
@@ -2638,7 +2642,7 @@ func (s *AdvancedVisibilitySuite) TestBuildIdScavenger_DeletesUnusedBuildId() {
 	s.Require().Equal([]string{v1}, compatibility.Sets[0].BuildIDs)
 	// Make sure the build ID was removed from the build ID->task queue mapping
 	res, err := s.sdkClient.WorkflowService().GetWorkerTaskReachability(ctx, &workflowservice.GetWorkerTaskReachabilityRequest{
-		Namespace: s.namespace,
+		Namespace: s.Namespace(),
 		BuildIds:  []string{v0},
 	})
 	s.Require().NoError(err)
@@ -2646,7 +2650,7 @@ func (s *AdvancedVisibilitySuite) TestBuildIdScavenger_DeletesUnusedBuildId() {
 }
 
 func (s *AdvancedVisibilitySuite) TestScheduleListingWithSearchAttributes() {
-	ctx := NewContext()
+	ctx := testbase.NewContext()
 
 	// Test 1: List schedule with "scheduleId" query
 	scheduleID := "test-schedule-" + uuid.New()
@@ -2654,7 +2658,7 @@ func (s *AdvancedVisibilitySuite) TestScheduleListingWithSearchAttributes() {
 	workflowID := "test-schedule-" + uuid.New()
 
 	schedule := &workflowservice.CreateScheduleRequest{
-		Namespace:  s.namespace,
+		Namespace:  s.Namespace(),
 		RequestId:  uuid.New(),
 		ScheduleId: scheduleID,
 		Schedule: &schedulepb.Schedule{
@@ -2676,17 +2680,17 @@ func (s *AdvancedVisibilitySuite) TestScheduleListingWithSearchAttributes() {
 		},
 	}
 
-	_, err := s.client.CreateSchedule(ctx, schedule)
+	_, err := s.FrontendClient().CreateSchedule(ctx, schedule)
 	s.NoError(err)
 
 	listRequest := &workflowservice.ListSchedulesRequest{
-		Namespace:       s.namespace,
+		Namespace:       s.Namespace(),
 		MaximumPageSize: 1,
 		Query:           fmt.Sprintf(`%s = "%s"`, searchattribute.ScheduleID, scheduleID),
 	}
 
 	s.Eventually(func() bool {
-		listResponse, err := s.client.ListSchedules(ctx, listRequest)
+		listResponse, err := s.FrontendClient().ListSchedules(ctx, listRequest)
 		if err != nil || len(listResponse.Schedules) != 1 {
 			return false
 		}
@@ -2695,7 +2699,7 @@ func (s *AdvancedVisibilitySuite) TestScheduleListingWithSearchAttributes() {
 	}, 30*time.Second, 1*time.Second)
 
 	listRequest.Query = fmt.Sprintf(`%s IN ("%s", "foo", "bar")`, searchattribute.ScheduleID, scheduleID)
-	listResponse, err := s.client.ListSchedules(ctx, listRequest)
+	listResponse, err := s.FrontendClient().ListSchedules(ctx, listRequest)
 	s.NoError(err)
 	s.Len(listResponse.Schedules, 1)
 	s.Equal(listResponse.Schedules[0].ScheduleId, scheduleID)
@@ -2715,12 +2719,12 @@ func (s *AdvancedVisibilitySuite) TestScheduleListingWithSearchAttributes() {
 		},
 	}
 
-	_, err = s.client.CreateSchedule(ctx, schedule)
+	_, err = s.FrontendClient().CreateSchedule(ctx, schedule)
 	s.NoError(err)
 
 	listRequest.Query = fmt.Sprintf(`%s = "%s"`, searchattribute.ScheduleID, customSearchAttrValue)
 	s.Eventually(func() bool {
-		listResponse, err := s.client.ListSchedules(ctx, listRequest)
+		listResponse, err := s.FrontendClient().ListSchedules(ctx, listRequest)
 		if err != nil || len(listResponse.Schedules) != 1 {
 			return false
 		}
@@ -2729,7 +2733,7 @@ func (s *AdvancedVisibilitySuite) TestScheduleListingWithSearchAttributes() {
 	}, 30*time.Second, 1*time.Second)
 
 	listRequest.Query = fmt.Sprintf(`%s IN ("%s", "foo", "bar")`, searchattribute.ScheduleID, customSearchAttrValue)
-	listResponse, err = s.client.ListSchedules(ctx, listRequest)
+	listResponse, err = s.FrontendClient().ListSchedules(ctx, listRequest)
 	s.NoError(err)
 	s.Len(listResponse.Schedules, 1)
 	s.Equal(listResponse.Schedules[0].ScheduleId, customScheduleID)
@@ -2737,8 +2741,8 @@ func (s *AdvancedVisibilitySuite) TestScheduleListingWithSearchAttributes() {
 
 func (s *AdvancedVisibilitySuite) checkReachability(ctx context.Context, taskQueue, buildId string, expectedReachability ...enumspb.TaskReachability) {
 	s.Require().Eventually(func() bool {
-		reachabilityResponse, err := s.client.GetWorkerTaskReachability(ctx, &workflowservice.GetWorkerTaskReachabilityRequest{
-			Namespace:    s.namespace,
+		reachabilityResponse, err := s.FrontendClient().GetWorkerTaskReachability(ctx, &workflowservice.GetWorkerTaskReachabilityRequest{
+			Namespace:    s.Namespace(),
 			BuildIds:     []string{buildId},
 			TaskQueues:   []string{taskQueue},
 			Reachability: expectedReachability[len(expectedReachability)-1],
@@ -2766,8 +2770,8 @@ func (s *AdvancedVisibilitySuite) checkReachability(ctx context.Context, taskQue
 }
 
 func (s *AdvancedVisibilitySuite) getBuildIds(ctx context.Context, execution *commonpb.WorkflowExecution) []string {
-	description, err := s.client.DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
-		Namespace: s.namespace,
+	description, err := s.FrontendClient().DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
+		Namespace: s.Namespace(),
 		Execution: execution,
 	})
 	s.NoError(err)
@@ -2782,7 +2786,7 @@ func (s *AdvancedVisibilitySuite) getBuildIds(ctx context.Context, execution *co
 }
 
 func (s *AdvancedVisibilitySuite) updateMaxResultWindow() {
-	esConfig := s.testClusterConfig.ESConfig
+	esConfig := s.TestClusterConfig().ESConfig
 
 	esClient, err := esclient.NewFunctionalTestsClient(esConfig, s.Logger)
 	s.Require().NoError(err)
@@ -2790,14 +2794,14 @@ func (s *AdvancedVisibilitySuite) updateMaxResultWindow() {
 	acknowledged, err := esClient.IndexPutSettings(
 		context.Background(),
 		esConfig.GetVisibilityIndex(),
-		fmt.Sprintf(`{"max_result_window" : %d}`, defaultPageSize))
+		fmt.Sprintf(`{"max_result_window" : %d}`, testbase.DefaultPageSize))
 	s.Require().NoError(err)
 	s.Require().True(acknowledged)
 
 	for i := 0; i < numOfRetry; i++ {
 		settings, err := esClient.IndexGetSettings(context.Background(), esConfig.GetVisibilityIndex())
 		s.Require().NoError(err)
-		if settings[esConfig.GetVisibilityIndex()].Settings["index"].(map[string]interface{})["max_result_window"].(string) == strconv.Itoa(defaultPageSize) {
+		if settings[esConfig.GetVisibilityIndex()].Settings["index"].(map[string]interface{})["max_result_window"].(string) == strconv.Itoa(testbase.DefaultPageSize) {
 			return
 		}
 		time.Sleep(waitTimeInMs * time.Millisecond)
@@ -2807,18 +2811,18 @@ func (s *AdvancedVisibilitySuite) updateMaxResultWindow() {
 
 func (s *AdvancedVisibilitySuite) addCustomKeywordSearchAttribute(ctx context.Context, attrName string) {
 	// Add new search attribute
-	_, err := s.operatorClient.AddSearchAttributes(ctx, &operatorservice.AddSearchAttributesRequest{
+	_, err := s.OperatorClient().AddSearchAttributes(ctx, &operatorservice.AddSearchAttributesRequest{
 		SearchAttributes: map[string]enumspb.IndexedValueType{
 			attrName: enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 		},
-		Namespace: s.namespace,
+		Namespace: s.Namespace(),
 	})
 	s.NoError(err)
 
 	// Wait for search attribute to be available
 	s.Eventually(func() bool {
-		descResp, err := s.operatorClient.ListSearchAttributes(ctx, &operatorservice.ListSearchAttributesRequest{
-			Namespace: s.namespace,
+		descResp, err := s.OperatorClient().ListSearchAttributes(ctx, &operatorservice.ListSearchAttributesRequest{
+			Namespace: s.Namespace(),
 		})
 		if err != nil {
 			return false

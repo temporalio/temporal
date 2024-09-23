@@ -25,6 +25,7 @@
 package tests
 
 import (
+	"go.temporal.io/server/tests/base"
 	"time"
 
 	"github.com/pborman/uuid"
@@ -39,7 +40,11 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-func (s *FunctionalSuite) TestVisibility() {
+type WorkflowVisibilityTestSuite struct {
+	base.FunctionalSuite
+}
+
+func (s *WorkflowVisibilityTestSuite) TestVisibility() {
 	startTime := time.Now().UTC()
 
 	// Start 2 workflow executions
@@ -51,7 +56,7 @@ func (s *FunctionalSuite) TestVisibility() {
 
 	startRequest := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           uuid.New(),
-		Namespace:           s.namespace,
+		Namespace:           s.Namespace(),
 		WorkflowId:          id1,
 		WorkflowType:        &commonpb.WorkflowType{Name: wt},
 		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
@@ -61,7 +66,7 @@ func (s *FunctionalSuite) TestVisibility() {
 		Identity:            identity,
 	}
 
-	startResponse, err0 := s.client.StartWorkflowExecution(NewContext(), startRequest)
+	startResponse, err0 := s.FrontendClient().StartWorkflowExecution(base.NewContext(), startRequest)
 	s.NoError(err0)
 
 	// Now complete one of the executions
@@ -74,9 +79,9 @@ func (s *FunctionalSuite) TestVisibility() {
 		}}, nil
 	}
 
-	poller := &TaskPoller{
-		Client:              s.client,
-		Namespace:           s.namespace,
+	poller := &base.TaskPoller{
+		Client:              s.FrontendClient(),
+		Namespace:           s.Namespace(),
 		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		Identity:            identity,
 		WorkflowTaskHandler: wtHandler,
@@ -92,7 +97,7 @@ func (s *FunctionalSuite) TestVisibility() {
 	var nextToken []byte
 	historyEventFilterType := enumspb.HISTORY_EVENT_FILTER_TYPE_CLOSE_EVENT
 	for {
-		historyResponse, historyErr := s.client.GetWorkflowExecutionHistory(NewContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
+		historyResponse, historyErr := s.FrontendClient().GetWorkflowExecutionHistory(base.NewContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
 			Namespace: startRequest.Namespace,
 			Execution: &commonpb.WorkflowExecution{
 				WorkflowId: startRequest.WorkflowId,
@@ -112,7 +117,7 @@ func (s *FunctionalSuite) TestVisibility() {
 
 	startRequest = &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           uuid.New(),
-		Namespace:           s.namespace,
+		Namespace:           s.Namespace(),
 		WorkflowId:          id2,
 		WorkflowType:        &commonpb.WorkflowType{Name: wt},
 		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
@@ -122,7 +127,7 @@ func (s *FunctionalSuite) TestVisibility() {
 		Identity:            identity,
 	}
 
-	_, err2 := s.client.StartWorkflowExecution(NewContext(), startRequest)
+	_, err2 := s.FrontendClient().StartWorkflowExecution(base.NewContext(), startRequest)
 	s.NoError(err2)
 
 	startFilter := &filterpb.StartTimeFilter{}
@@ -135,8 +140,8 @@ func (s *FunctionalSuite) TestVisibility() {
 	var historyLength int64
 	s.Eventually(
 		func() bool {
-			resp, err3 := s.client.ListClosedWorkflowExecutions(NewContext(), &workflowservice.ListClosedWorkflowExecutionsRequest{
-				Namespace:       s.namespace,
+			resp, err3 := s.FrontendClient().ListClosedWorkflowExecutions(base.NewContext(), &workflowservice.ListClosedWorkflowExecutionsRequest{
+				Namespace:       s.Namespace(),
 				MaximumPageSize: 100,
 				StartTimeFilter: startFilter,
 				Filters: &workflowservice.ListClosedWorkflowExecutionsRequest_TypeFilter{
@@ -163,8 +168,8 @@ func (s *FunctionalSuite) TestVisibility() {
 
 	s.Eventually(
 		func() bool {
-			resp, err4 := s.client.ListOpenWorkflowExecutions(NewContext(), &workflowservice.ListOpenWorkflowExecutionsRequest{
-				Namespace:       s.namespace,
+			resp, err4 := s.FrontendClient().ListOpenWorkflowExecutions(base.NewContext(), &workflowservice.ListOpenWorkflowExecutionsRequest{
+				Namespace:       s.Namespace(),
 				MaximumPageSize: 100,
 				StartTimeFilter: startFilter,
 				Filters: &workflowservice.ListOpenWorkflowExecutionsRequest_TypeFilter{

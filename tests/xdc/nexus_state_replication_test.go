@@ -27,6 +27,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"go.temporal.io/server/tests/base"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -118,12 +119,12 @@ func (s *NexusStateReplicationSuite) TestNexusOperationEventsReplicated() {
 	listenAddr := nexustest.AllocListenAddress(s.T())
 	nexustest.NewNexusServer(s.T(), listenAddr, h)
 
-	ctx := tests.NewContext()
+	ctx := base.NewContext()
 	ns := s.createGlobalNamespace()
-	endpointName := tests.RandomizedNexusEndpoint(s.T().Name())
+	endpointName := base.RandomizedNexusEndpoint(s.T().Name())
 
 	// Set URL template after httpAPAddress is set, see commonnexus.RouteCompletionCallback.
-	for _, cluster := range []*tests.TestCluster{s.cluster1, s.cluster2} {
+	for _, cluster := range []*base.TestCluster{s.cluster1, s.cluster2} {
 		cluster.OverrideDynamicConfig(
 			s.T(),
 			nexusoperations.CallbackURLTemplate,
@@ -132,7 +133,7 @@ func (s *NexusStateReplicationSuite) TestNexusOperationEventsReplicated() {
 	}
 
 	// Nexus endpoints registry isn't replicated yet, manually create the same endpoint in both clusters.
-	for _, cl := range []operatorservice.OperatorServiceClient{s.cluster1.GetOperatorClient(), s.cluster2.GetOperatorClient()} {
+	for _, cl := range []operatorservice.OperatorServiceClient{s.cluster1.OperatorClient(), s.cluster2.OperatorClient()} {
 		_, err := cl.CreateNexusEndpoint(ctx, &operatorservice.CreateNexusEndpointRequest{
 			Spec: &nexuspb.EndpointSpec{
 				Name: endpointName,
@@ -264,13 +265,13 @@ func (s *NexusStateReplicationSuite) TestNexusOperationCancelationReplicated() {
 	listenAddr := nexustest.AllocListenAddress(s.T())
 	nexustest.NewNexusServer(s.T(), listenAddr, h)
 
-	ctx := tests.NewContext()
+	ctx := base.NewContext()
 	ns := s.createGlobalNamespace()
-	endpointName := tests.RandomizedNexusEndpoint(s.T().Name())
+	endpointName := base.RandomizedNexusEndpoint(s.T().Name())
 
 	// Set URL template after httpAPAddress is set, see commonnexus.RouteCompletionCallback.
 	// We don't actually want to deliver callbacks in this test, the config just has to be set for nexus task execution.
-	for _, cluster := range []*tests.TestCluster{s.cluster1, s.cluster2} {
+	for _, cluster := range []*base.TestCluster{s.cluster1, s.cluster2} {
 		cluster.OverrideDynamicConfig(
 			s.T(),
 			nexusoperations.CallbackURLTemplate,
@@ -278,7 +279,7 @@ func (s *NexusStateReplicationSuite) TestNexusOperationCancelationReplicated() {
 	}
 
 	// Nexus endpoints registry isn't replicated yet, manually create the same endpoint in both clusters.
-	for _, cl := range []operatorservice.OperatorServiceClient{s.cluster1.GetOperatorClient(), s.cluster2.GetOperatorClient()} {
+	for _, cl := range []operatorservice.OperatorServiceClient{s.cluster1.OperatorClient(), s.cluster2.OperatorClient()} {
 		_, err := cl.CreateNexusEndpoint(ctx, &operatorservice.CreateNexusEndpointRequest{
 			Spec: &nexuspb.EndpointSpec{
 				Name: endpointName,
@@ -392,7 +393,7 @@ func (s *NexusStateReplicationSuite) TestNexusCallbackReplicated() {
 	}))
 	defer ts.Close()
 
-	ctx := tests.NewContext()
+	ctx := base.NewContext()
 	ns := s.createGlobalNamespace()
 
 	sdkClient1, err := sdkclient.Dial(sdkclient.Options{

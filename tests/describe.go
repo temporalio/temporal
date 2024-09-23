@@ -27,6 +27,7 @@ package tests
 import (
 	"bytes"
 	"encoding/binary"
+	"go.temporal.io/server/tests/base"
 	"time"
 
 	"github.com/pborman/uuid"
@@ -42,7 +43,11 @@ import (
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 
-func (s *FunctionalSuite) TestDescribeWorkflowExecution() {
+type DescribeTestSuite struct {
+	base.FunctionalSuite
+}
+
+func (s *DescribeTestSuite) TestDescribeWorkflowExecution() {
 	id := "functional-describe-wfe-test"
 	wt := "functional-describe-wfe-test-type"
 	tq := "functional-describe-wfe-test-taskqueue"
@@ -51,7 +56,7 @@ func (s *FunctionalSuite) TestDescribeWorkflowExecution() {
 	// Start workflow execution
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           uuid.New(),
-		Namespace:           s.namespace,
+		Namespace:           s.Namespace(),
 		WorkflowId:          id,
 		WorkflowType:        &commonpb.WorkflowType{Name: wt},
 		TaskQueue:           &taskqueuepb.TaskQueue{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
@@ -61,14 +66,14 @@ func (s *FunctionalSuite) TestDescribeWorkflowExecution() {
 		Identity:            identity,
 	}
 
-	we, err0 := s.client.StartWorkflowExecution(NewContext(), request)
+	we, err0 := s.FrontendClient().StartWorkflowExecution(base.NewContext(), request)
 	s.NoError(err0)
 
 	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
 
 	describeWorkflowExecution := func() (*workflowservice.DescribeWorkflowExecutionResponse, error) {
-		return s.client.DescribeWorkflowExecution(NewContext(), &workflowservice.DescribeWorkflowExecutionRequest{
-			Namespace: s.namespace,
+		return s.FrontendClient().DescribeWorkflowExecution(base.NewContext(), &workflowservice.DescribeWorkflowExecutionRequest{
+			Namespace: s.Namespace(),
 			Execution: &commonpb.WorkflowExecution{
 				WorkflowId: id,
 				RunId:      we.RunId,
@@ -127,9 +132,9 @@ func (s *FunctionalSuite) TestDescribeWorkflowExecution() {
 		return payloads.EncodeString("Activity Result"), false, nil
 	}
 
-	poller := &TaskPoller{
-		Client:              s.client,
-		Namespace:           s.namespace,
+	poller := &base.TaskPoller{
+		Client:              s.FrontendClient(),
+		Namespace:           s.Namespace(),
 		TaskQueue:           &taskqueuepb.TaskQueue{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		Identity:            identity,
 		WorkflowTaskHandler: wtHandler,
@@ -165,7 +170,7 @@ func (s *FunctionalSuite) TestDescribeWorkflowExecution() {
 	s.Equal(0, len(dweResponse.PendingActivities))
 
 	// Process signal in workflow
-	_, err = poller.PollAndProcessWorkflowTask(WithDumpHistory)
+	_, err = poller.PollAndProcessWorkflowTask(base.WithDumpHistory)
 	s.NoError(err)
 	s.True(workflowComplete)
 
@@ -182,7 +187,7 @@ func (s *FunctionalSuite) TestDescribeWorkflowExecution() {
 	s.Equal(int64(11), wfInfo.HistoryLength) // WorkflowTaskStarted, WorkflowTaskCompleted, WorkflowCompleted
 }
 
-func (s *FunctionalSuite) TestDescribeTaskQueue() {
+func (s *DescribeTestSuite) TestDescribeTaskQueue() {
 	workflowID := "functional-get-poller-history"
 	wt := "functional-get-poller-history-type"
 	tl := "functional-get-poller-history-taskqueue"
@@ -192,7 +197,7 @@ func (s *FunctionalSuite) TestDescribeTaskQueue() {
 	// Start workflow execution
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           uuid.New(),
-		Namespace:           s.namespace,
+		Namespace:           s.Namespace(),
 		WorkflowId:          workflowID,
 		WorkflowType:        &commonpb.WorkflowType{Name: wt},
 		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
@@ -202,7 +207,7 @@ func (s *FunctionalSuite) TestDescribeTaskQueue() {
 		Identity:            identity,
 	}
 
-	we, err0 := s.client.StartWorkflowExecution(NewContext(), request)
+	we, err0 := s.FrontendClient().StartWorkflowExecution(base.NewContext(), request)
 	s.NoError(err0)
 
 	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
@@ -244,9 +249,9 @@ func (s *FunctionalSuite) TestDescribeTaskQueue() {
 		return payloads.EncodeString("Activity Result"), false, nil
 	}
 
-	poller := &TaskPoller{
-		Client:              s.client,
-		Namespace:           s.namespace,
+	poller := &base.TaskPoller{
+		Client:              s.FrontendClient(),
+		Namespace:           s.Namespace(),
 		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		Identity:            identity,
 		WorkflowTaskHandler: wtHandler,
@@ -257,7 +262,7 @@ func (s *FunctionalSuite) TestDescribeTaskQueue() {
 
 	// this function poll events from history side
 	testDescribeTaskQueue := func(namespace string, taskqueue *taskqueuepb.TaskQueue, taskqueueType enumspb.TaskQueueType) []*taskqueuepb.PollerInfo {
-		responseInner, errInner := s.client.DescribeTaskQueue(NewContext(), &workflowservice.DescribeTaskQueueRequest{
+		responseInner, errInner := s.FrontendClient().DescribeTaskQueue(base.NewContext(), &workflowservice.DescribeTaskQueueRequest{
 			Namespace:     namespace,
 			TaskQueue:     taskqueue,
 			TaskQueueType: taskqueueType,
@@ -271,16 +276,16 @@ func (s *FunctionalSuite) TestDescribeTaskQueue() {
 
 	// when no one polling on the taskqueue (activity or workflow), there shall be no poller information
 	tq := &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
-	pollerInfos := testDescribeTaskQueue(s.namespace, tq, enumspb.TASK_QUEUE_TYPE_ACTIVITY)
+	pollerInfos := testDescribeTaskQueue(s.Namespace(), tq, enumspb.TASK_QUEUE_TYPE_ACTIVITY)
 	s.Empty(pollerInfos)
-	pollerInfos = testDescribeTaskQueue(s.namespace, tq, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
+	pollerInfos = testDescribeTaskQueue(s.Namespace(), tq, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
 	s.Empty(pollerInfos)
 
 	_, errWorkflowTask := poller.PollAndProcessWorkflowTask()
 	s.NoError(errWorkflowTask)
-	pollerInfos = testDescribeTaskQueue(s.namespace, tq, enumspb.TASK_QUEUE_TYPE_ACTIVITY)
+	pollerInfos = testDescribeTaskQueue(s.Namespace(), tq, enumspb.TASK_QUEUE_TYPE_ACTIVITY)
 	s.Empty(pollerInfos)
-	pollerInfos = testDescribeTaskQueue(s.namespace, tq, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
+	pollerInfos = testDescribeTaskQueue(s.Namespace(), tq, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
 	s.Equal(1, len(pollerInfos))
 	s.Equal(identity, pollerInfos[0].GetIdentity())
 	s.True(pollerInfos[0].GetLastAccessTime().AsTime().After(before))
@@ -288,12 +293,12 @@ func (s *FunctionalSuite) TestDescribeTaskQueue() {
 
 	errActivity := poller.PollAndProcessActivityTask(false)
 	s.NoError(errActivity)
-	pollerInfos = testDescribeTaskQueue(s.namespace, tq, enumspb.TASK_QUEUE_TYPE_ACTIVITY)
+	pollerInfos = testDescribeTaskQueue(s.Namespace(), tq, enumspb.TASK_QUEUE_TYPE_ACTIVITY)
 	s.Equal(1, len(pollerInfos))
 	s.Equal(identity, pollerInfos[0].GetIdentity())
 	s.True(pollerInfos[0].GetLastAccessTime().AsTime().After(before))
 	s.NotEmpty(pollerInfos[0].GetLastAccessTime())
-	pollerInfos = testDescribeTaskQueue(s.namespace, tq, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
+	pollerInfos = testDescribeTaskQueue(s.Namespace(), tq, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
 	s.Equal(1, len(pollerInfos))
 	s.Equal(identity, pollerInfos[0].GetIdentity())
 	s.True(pollerInfos[0].GetLastAccessTime().AsTime().After(before))

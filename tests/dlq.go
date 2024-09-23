@@ -31,6 +31,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"go.temporal.io/server/tests/base"
 	"io"
 	"os"
 	"strconv"
@@ -68,7 +69,7 @@ import (
 
 type (
 	DLQSuite struct {
-		FunctionalTestBase
+		base.FunctionalTestBase
 		*require.Assertions
 		dlq              persistence.HistoryTaskQueueManager
 		dlqTasks         chan tasks.Task
@@ -115,14 +116,15 @@ const (
 
 func (s *DLQSuite) SetupSuite() {
 	s.setAssertions()
-	s.dynamicConfigOverrides = map[dynamicconfig.Key]any{
+	dynamicConfigOverrides := map[dynamicconfig.Key]any{
 		dynamicconfig.HistoryTaskDLQEnabled.Key(): true,
 	}
+	s.SetDynamicConfigOverrides(dynamicConfigOverrides)
 	s.dlqTasks = make(chan tasks.Task)
 	s.failingWorkflowIDPrefix.Store("dlq-test-terminal-wfts-")
-	s.setupSuite(
+	s.FunctionalTestBase.SetupSuite(
 		"testdata/es_cluster.yaml",
-		WithFxOptionsForService(primitives.HistoryService,
+		base.WithFxOptionsForService(primitives.HistoryService,
 			fx.Populate(&s.dlq),
 			fx.Provide(
 				func() queues.ExecutorWrapper {
@@ -148,19 +150,19 @@ func (s *DLQSuite) SetupSuite() {
 				},
 			),
 		),
-		WithFxOptionsForService(primitives.FrontendService,
+		base.WithFxOptionsForService(primitives.FrontendService,
 			fx.Populate(&s.sdkClientFactory),
 		),
 	)
 	s.tdbgApp = tdbgtest.NewCliApp(
 		func(params *tdbg.Params) {
-			params.ClientFactory = tdbg.NewClientFactory(tdbg.WithFrontendAddress(s.hostPort))
+			params.ClientFactory = tdbg.NewClientFactory(tdbg.WithFrontendAddress(s.HostPort()))
 			params.Writer = &s.writer
 		},
 	)
 	sdkClient, err := sdkclient.Dial(sdkclient.Options{
-		HostPort:  s.hostPort,
-		Namespace: s.namespace,
+		HostPort:  s.HostPort(),
+		Namespace: s.Namespace(),
 	})
 	s.NoError(err)
 	s.worker = sdkworker.New(sdkClient, taskQueue, sdkworker.Options{})
@@ -170,7 +172,7 @@ func (s *DLQSuite) SetupSuite() {
 
 func (s *DLQSuite) TearDownSuite() {
 	s.worker.Stop()
-	s.tearDownSuite()
+	s.FunctionalTestBase.TearDownSuite()
 }
 
 func myWorkflow(workflow.Context) (string, error) {
@@ -223,7 +225,7 @@ func (s *DLQSuite) TestReadArtificialDLQTasks() {
 			SourceCluster: queueKey.SourceCluster,
 			TargetCluster: queueKey.TargetCluster,
 			Task:          task,
-			SourceShardID: tasks.GetShardIDForTask(task, int(s.testClusterConfig.HistoryConfig.NumHistoryShards)),
+			SourceShardID: tasks.GetShardIDForTask(task, int(s.TestClusterConfig().HistoryConfig.NumHistoryShards)),
 		})
 		s.NoError(err)
 	}
@@ -504,8 +506,8 @@ func (s *DLQSuite) verifyRunIsInDLQ(
 // executeWorkflow just executes a simple no-op workflow that returns "hello" and returns the sdk workflow run.
 func (s *DLQSuite) executeWorkflow(ctx context.Context, workflowID string) sdkclient.WorkflowRun {
 	sdkClient, err := sdkclient.Dial(sdkclient.Options{
-		HostPort:  s.hostPort,
-		Namespace: s.namespace,
+		HostPort:  s.HostPort(),
+		Namespace: s.Namespace(),
 	})
 	s.NoError(err)
 

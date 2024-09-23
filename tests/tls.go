@@ -26,6 +26,7 @@ package tests
 
 import (
 	"context"
+	testbase "go.temporal.io/server/tests/base"
 	"net/http"
 	"sync"
 	"time"
@@ -38,16 +39,16 @@ import (
 )
 
 type TLSFunctionalSuite struct {
-	FunctionalTestBase
+	testbase.FunctionalTestBase
 	sdkClient sdkclient.Client
 }
 
 func (s *TLSFunctionalSuite) SetupSuite() {
-	s.setupSuite("testdata/tls_cluster.yaml")
+	s.FunctionalTestBase.SetupSuite("testdata/tls_cluster.yaml")
 }
 
 func (s *TLSFunctionalSuite) TearDownSuite() {
-	s.tearDownSuite()
+	s.FunctionalTestBase.TearDownSuite()
 }
 
 func (s *TLSFunctionalSuite) SetupTest() {
@@ -55,10 +56,10 @@ func (s *TLSFunctionalSuite) SetupTest() {
 
 	var err error
 	s.sdkClient, err = sdkclient.Dial(sdkclient.Options{
-		HostPort:  s.hostPort,
-		Namespace: s.namespace,
+		HostPort:  s.HostPort(),
+		Namespace: s.Namespace(),
 		ConnectionOptions: sdkclient.ConnectionOptions{
-			TLS: s.testCluster.host.tlsConfigProvider.FrontendClientConfig,
+			TLS: s.TestCluster().Host().TlsConfigProvider().FrontendClientConfig,
 		},
 	})
 	if err != nil {
@@ -85,30 +86,30 @@ func (s *TLSFunctionalSuite) TestGRPCMTLS() {
 	// Confirm auth info as expected
 	authInfo, ok := calls.Load("/temporal.api.workflowservice.v1.WorkflowService/ListOpenWorkflowExecutions")
 	s.Require().True(ok)
-	s.Require().Equal(tlsCertCommonName, authInfo.(*authorization.AuthInfo).TLSSubject.CommonName)
+	s.Require().Equal(testbase.TlsCertCommonName, authInfo.(*authorization.AuthInfo).TLSSubject.CommonName)
 }
 
 func (s *TLSFunctionalSuite) TestHTTPMTLS() {
-	if s.httpAPIAddress == "" {
+	if s.HttpAPIAddress() == "" {
 		s.T().Skip("HTTP API server not enabled")
 	}
 	// Track auth info
 	calls := s.trackAuthInfoByCall()
 
 	// Confirm non-HTTPS call is rejected with 400
-	resp, err := http.Get("http://" + s.httpAPIAddress + "/namespaces/" + s.namespace + "/workflows")
+	resp, err := http.Get("http://" + s.HttpAPIAddress() + "/namespaces/" + s.Namespace() + "/workflows")
 	s.Require().NoError(err)
 	s.Require().Equal(http.StatusBadRequest, resp.StatusCode)
 
 	// Create HTTP client with TLS config
 	httpClient := http.Client{
 		Transport: &http.Transport{
-			TLSClientConfig: s.testCluster.host.tlsConfigProvider.FrontendClientConfig,
+			TLSClientConfig: s.TestCluster().Host().TlsConfigProvider().FrontendClientConfig,
 		},
 	}
 
 	// Make a list call
-	req, err := http.NewRequest("GET", "https://"+s.httpAPIAddress+"/namespaces/"+s.namespace+"/workflows", nil)
+	req, err := http.NewRequest("GET", "https://"+s.HttpAPIAddress()+"/namespaces/"+s.Namespace()+"/workflows", nil)
 	s.Require().NoError(err)
 	resp, err = httpClient.Do(req)
 	s.Require().NoError(err)
@@ -117,19 +118,19 @@ func (s *TLSFunctionalSuite) TestHTTPMTLS() {
 	// Confirm auth info as expected
 	authInfo, ok := calls.Load("/temporal.api.workflowservice.v1.WorkflowService/ListWorkflowExecutions")
 	s.Require().True(ok)
-	s.Require().Equal(tlsCertCommonName, authInfo.(*authorization.AuthInfo).TLSSubject.CommonName)
+	s.Require().Equal(testbase.TlsCertCommonName, authInfo.(*authorization.AuthInfo).TLSSubject.CommonName)
 }
 
 func (s *TLSFunctionalSuite) trackAuthInfoByCall() *sync.Map {
 	var calls sync.Map
 	// Put auth info on claim, then use authorizer to set on the map by call
-	s.testCluster.host.SetOnGetClaims(func(authInfo *authorization.AuthInfo) (*authorization.Claims, error) {
+	s.TestCluster().Host().SetOnGetClaims(func(authInfo *authorization.AuthInfo) (*authorization.Claims, error) {
 		return &authorization.Claims{
 			System:     authorization.RoleAdmin,
 			Extensions: authInfo,
 		}, nil
 	})
-	s.testCluster.host.SetOnAuthorize(func(
+	s.TestCluster().Host().SetOnAuthorize(func(
 		ctx context.Context,
 		caller *authorization.Claims,
 		target *authorization.CallTarget,

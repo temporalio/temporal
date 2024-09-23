@@ -26,6 +26,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"go.temporal.io/server/tests/base"
 	"time"
 
 	enumspb "go.temporal.io/api/enums/v1"
@@ -46,7 +47,7 @@ var (
 func (s *ClientFunctionalSuite) TestUpdateWorkflow_TerminateWorkflowAfterUpdateAdmitted() {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	defer cancel()
-	tv := testvars.New(s.T()).WithTaskQueue(s.taskQueue).WithNamespaceName(namespace.Name(s.namespace))
+	tv := testvars.New(s.T()).WithTaskQueue(s.taskQueue).WithNamespaceName(namespace.Name(s.Namespace()))
 
 	activityDone := make(chan struct{})
 	activityFn := func(ctx context.Context) error {
@@ -92,7 +93,7 @@ func (s *ClientFunctionalSuite) TestUpdateWorkflow_TerminateWorkflowAfterUpdateA
 func (s *ClientFunctionalSuite) TestUpdateWorkflow_TerminateWorkflowAfterUpdateAccepted() {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	defer cancel()
-	tv := testvars.New(s.T()).WithTaskQueue(s.taskQueue).WithNamespaceName(namespace.Name(s.namespace))
+	tv := testvars.New(s.T()).WithTaskQueue(s.taskQueue).WithNamespaceName(namespace.Name(s.Namespace()))
 
 	activityDone := make(chan struct{})
 	activityFn := func(ctx context.Context) error {
@@ -149,7 +150,7 @@ func (s *ClientFunctionalSuite) TestUpdateWorkflow_ContinueAsNewAfterUpdateAdmit
 		starts 2nd run, Update is delivered to it, and processed by registered handler.
 	*/
 
-	tv := testvars.New(s.T()).WithTaskQueue(s.taskQueue).WithNamespaceName(namespace.Name(s.namespace))
+	tv := testvars.New(s.T()).WithTaskQueue(s.taskQueue).WithNamespaceName(namespace.Name(s.Namespace()))
 
 	rootCtx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	defer cancel()
@@ -195,7 +196,7 @@ func (s *ClientFunctionalSuite) TestUpdateWorkflow_ContinueAsNewAfterUpdateAdmit
 			s.True(errors.As(err, &notFoundErr) || errors.As(err, &resourceExhaustedErr), "error must be NotFound or ResourceExhausted")
 			return false
 		}
-		secondRunID = decodeString(s.T(), resp.GetOutcome().GetSuccess())
+		secondRunID = base.DecodeString(s.T(), resp.GetOutcome().GetSuccess())
 		return true
 	}, 5*time.Second, 100*time.Millisecond, "update did not reach Completed stage")
 
@@ -207,14 +208,14 @@ func (s *ClientFunctionalSuite) TestUpdateWorkflow_ContinueAsNewAfterUpdateAdmit
   3 WorkflowTaskStarted
   4 WorkflowTaskCompleted
   5 MarkerRecorded
-  6 WorkflowExecutionContinuedAsNew`, s.getHistory(s.namespace, tv.WithRunID(firstRun.GetRunID()).WorkflowExecution()))
+  6 WorkflowExecutionContinuedAsNew`, s.GetHistory(s.Namespace(), tv.WithRunID(firstRun.GetRunID()).WorkflowExecution()))
 	s.EqualHistoryEvents(`
   1 WorkflowExecutionStarted
   2 WorkflowTaskScheduled
   3 WorkflowTaskStarted
   4 WorkflowTaskCompleted
   5 WorkflowExecutionUpdateAccepted
-  6 WorkflowExecutionUpdateCompleted`, s.getHistory(s.namespace, tv.WithRunID(secondRunID).WorkflowExecution()))
+  6 WorkflowExecutionUpdateCompleted`, s.GetHistory(s.Namespace(), tv.WithRunID(secondRunID).WorkflowExecution()))
 }
 
 func (s *ClientFunctionalSuite) startWorkflow(ctx context.Context, tv *testvars.TestVars, workflowFn interface{}) sdkclient.WorkflowRun {

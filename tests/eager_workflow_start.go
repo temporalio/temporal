@@ -26,6 +26,7 @@ package tests
 
 import (
 	"fmt"
+	"go.temporal.io/server/tests/base"
 	"time"
 
 	"github.com/pborman/uuid"
@@ -41,21 +42,25 @@ import (
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 
-func (s *FunctionalSuite) defaultWorkflowID() string {
+type EagerWorkflowTestSuite struct {
+	base.FunctionalSuite
+}
+
+func (s *EagerWorkflowTestSuite) defaultWorkflowID() string {
 	return fmt.Sprintf("functional-%v", s.T().Name())
 }
 
-func (s *FunctionalSuite) defaultTaskQueue() *taskqueuepb.TaskQueue {
+func (s *EagerWorkflowTestSuite) defaultTaskQueue() *taskqueuepb.TaskQueue {
 	name := fmt.Sprintf("functional-queue-%v", s.T().Name())
 	return &taskqueuepb.TaskQueue{Name: name, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 }
 
-func (s *FunctionalSuite) startEagerWorkflow(baseOptions *workflowservice.StartWorkflowExecutionRequest) *workflowservice.StartWorkflowExecutionResponse {
+func (s *EagerWorkflowTestSuite) startEagerWorkflow(baseOptions *workflowservice.StartWorkflowExecutionRequest) *workflowservice.StartWorkflowExecutionResponse {
 	options := proto.Clone(baseOptions).(*workflowservice.StartWorkflowExecutionRequest)
 	options.RequestEagerExecution = true
 
-	if options.Namespace == "" {
-		options.Namespace = s.namespace
+	if options.GetNamespace() == "" {
+		options.Namespace = s.Namespace()
 	}
 	if options.Identity == "" {
 		options.Identity = "test"
@@ -73,18 +78,18 @@ func (s *FunctionalSuite) startEagerWorkflow(baseOptions *workflowservice.StartW
 		options.RequestId = uuid.New()
 	}
 
-	response, err := s.client.StartWorkflowExecution(NewContext(), options)
+	response, err := s.FrontendClient().StartWorkflowExecution(base.NewContext(), options)
 	s.Require().NoError(err)
 
 	return response
 }
 
-func (s *FunctionalSuite) respondWorkflowTaskCompleted(task *workflowservice.PollWorkflowTaskQueueResponse, result interface{}) {
+func (s *EagerWorkflowTestSuite) respondWorkflowTaskCompleted(task *workflowservice.PollWorkflowTaskQueueResponse, result interface{}) {
 	dataConverter := converter.GetDefaultDataConverter()
 	payloads, err := dataConverter.ToPayloads(result)
 	s.Require().NoError(err)
 	completion := workflowservice.RespondWorkflowTaskCompletedRequest{
-		Namespace: s.namespace,
+		Namespace: s.Namespace(),
 		Identity:  "test",
 		TaskToken: task.TaskToken,
 		Commands: []*commandpb.Command{{CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION, Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{
@@ -93,13 +98,13 @@ func (s *FunctionalSuite) respondWorkflowTaskCompleted(task *workflowservice.Pol
 			},
 		}}},
 	}
-	_, err = s.client.RespondWorkflowTaskCompleted(NewContext(), &completion)
+	_, err = s.FrontendClient().RespondWorkflowTaskCompleted(base.NewContext(), &completion)
 	s.Require().NoError(err)
 }
 
-func (s *FunctionalSuite) pollWorkflowTaskQueue() *workflowservice.PollWorkflowTaskQueueResponse {
-	task, err := s.client.PollWorkflowTaskQueue(NewContext(), &workflowservice.PollWorkflowTaskQueueRequest{
-		Namespace: s.namespace,
+func (s *EagerWorkflowTestSuite) pollWorkflowTaskQueue() *workflowservice.PollWorkflowTaskQueueResponse {
+	task, err := s.FrontendClient().PollWorkflowTaskQueue(base.NewContext(), &workflowservice.PollWorkflowTaskQueueRequest{
+		Namespace: s.Namespace(),
 		TaskQueue: s.defaultTaskQueue(),
 		Identity:  "test",
 	})
@@ -108,21 +113,21 @@ func (s *FunctionalSuite) pollWorkflowTaskQueue() *workflowservice.PollWorkflowT
 	return task
 }
 
-func (s *FunctionalSuite) getWorkflowStringResult(workflowID, runID string) string {
+func (s *EagerWorkflowTestSuite) getWorkflowStringResult(workflowID, runID string) string {
 	hostPort := "127.0.0.1:7134"
 	if TestFlags.FrontendAddr != "" {
 		hostPort = TestFlags.FrontendAddr
 	}
-	c, err := client.Dial(client.Options{HostPort: hostPort, Namespace: s.namespace})
+	c, err := client.Dial(client.Options{HostPort: hostPort, Namespace: s.Namespace()})
 	s.Require().NoError(err)
-	run := c.GetWorkflow(NewContext(), workflowID, runID)
+	run := c.GetWorkflow(base.NewContext(), workflowID, runID)
 	var result string
-	err = run.Get(NewContext(), &result)
+	err = run.Get(base.NewContext(), &result)
 	s.Require().NoError(err)
 	return result
 }
 
-func (s *FunctionalSuite) TestEagerWorkflowStart_StartNew() {
+func (s *EagerWorkflowTestSuite) TestEagerWorkflowStart_StartNew() {
 	// Add a search attribute to verify that per namespace search attribute mapping is properly applied in the
 	// response.
 	response := s.startEagerWorkflow(&workflowservice.StartWorkflowExecutionRequest{
@@ -145,7 +150,7 @@ func (s *FunctionalSuite) TestEagerWorkflowStart_StartNew() {
 	s.Require().Equal("ok", result)
 }
 
-func (s *FunctionalSuite) TestEagerWorkflowStart_RetryTaskAfterTimeout() {
+func (s *EagerWorkflowTestSuite) TestEagerWorkflowStart_RetryTaskAfterTimeout() {
 	response := s.startEagerWorkflow(&workflowservice.StartWorkflowExecutionRequest{
 		// Should give enough grace time even in slow CI
 		WorkflowTaskTimeout: durationpb.New(2 * time.Second),
@@ -160,7 +165,7 @@ func (s *FunctionalSuite) TestEagerWorkflowStart_RetryTaskAfterTimeout() {
 	s.Require().Equal("ok", result)
 }
 
-func (s *FunctionalSuite) TestEagerWorkflowStart_RetryStartAfterTimeout() {
+func (s *EagerWorkflowTestSuite) TestEagerWorkflowStart_RetryStartAfterTimeout() {
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		// Should give enough grace time even in slow CI
 		WorkflowTaskTimeout: durationpb.New(2 * time.Second),
@@ -183,7 +188,7 @@ func (s *FunctionalSuite) TestEagerWorkflowStart_RetryStartAfterTimeout() {
 	s.Require().Equal("ok", result)
 }
 
-func (s *FunctionalSuite) TestEagerWorkflowStart_RetryStartImmediately() {
+func (s *EagerWorkflowTestSuite) TestEagerWorkflowStart_RetryStartImmediately() {
 	request := &workflowservice.StartWorkflowExecutionRequest{RequestId: uuid.New()}
 	response := s.startEagerWorkflow(request)
 	task := response.GetEagerWorkflowTask()
@@ -198,7 +203,7 @@ func (s *FunctionalSuite) TestEagerWorkflowStart_RetryStartImmediately() {
 	s.Require().Equal("ok", result)
 }
 
-func (s *FunctionalSuite) TestEagerWorkflowStart_TerminateDuplicate() {
+func (s *EagerWorkflowTestSuite) TestEagerWorkflowStart_TerminateDuplicate() {
 
 	// reset reuse minimal interval to allow workflow termination
 	s.OverrideDynamicConfig(dynamicconfig.WorkflowIdReuseMinimalInterval, 0)

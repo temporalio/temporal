@@ -27,6 +27,7 @@ package tests
 import (
 	"context"
 	"encoding/json"
+	"go.temporal.io/server/tests/base"
 	"io"
 	"net/http"
 	"strings"
@@ -94,12 +95,13 @@ func (s *ClientFunctionalSuite) runHTTPAPIBasicsTest(
 	s.worker.RegisterWorkflowWithOptions(workflowFn, workflow.RegisterOptions{Name: "http-basic-workflow"})
 
 	// Capture metrics
-	capture := s.testCluster.host.captureMetricsHandler.StartCapture()
-	defer s.testCluster.host.captureMetricsHandler.StopCapture(capture)
+	capture := s.TestCluster().Host().CaptureMetricsHandler().StartCapture()
+
+	defer s.TestCluster().Host().CaptureMetricsHandler().StopCapture(capture)
 
 	// Start
-	workflowID := s.randomizeStr("wf")
-	_, respBody := s.httpPost(http.StatusOK, "/namespaces/"+s.namespace+"/workflows/"+workflowID, contentType, startWFRequestBody())
+	workflowID := base.RandomizeStr("wf")
+	_, respBody := s.httpPost(http.StatusOK, "/namespaces/"+s.Namespace()+"/workflows/"+workflowID, contentType, startWFRequestBody())
 	var startResp struct {
 		RunID string `json:"runId"`
 	}
@@ -112,7 +114,7 @@ func (s *ClientFunctionalSuite) runHTTPAPIBasicsTest(
 	for _, metric := range capture.Snapshot()[metrics.HTTPServiceRequests.Name()] {
 		found =
 			metric.Tags[metrics.OperationTagName] == "/temporal.api.workflowservice.v1.WorkflowService/StartWorkflowExecution" &&
-				metric.Tags["namespace"] == s.namespace &&
+				metric.Tags["namespace"] == s.Namespace() &&
 				metric.Value == int64(1)
 		if found {
 			break
@@ -121,7 +123,7 @@ func (s *ClientFunctionalSuite) runHTTPAPIBasicsTest(
 	s.Require().True(found)
 
 	// Confirm already exists error with details and proper code
-	_, respBody = s.httpPost(http.StatusConflict, "/namespaces/"+s.namespace+"/workflows/"+workflowID, contentType, startWFRequestBody())
+	_, respBody = s.httpPost(http.StatusConflict, "/namespaces/"+s.Namespace()+"/workflows/"+workflowID, contentType, startWFRequestBody())
 	var errResp struct {
 		Message string `json:"message"`
 		Details []struct {
@@ -135,7 +137,7 @@ func (s *ClientFunctionalSuite) runHTTPAPIBasicsTest(
 	// Query
 	_, respBody = s.httpPost(
 		http.StatusOK,
-		"/namespaces/"+s.namespace+"/workflows/"+workflowID+"/query/some-query",
+		"/namespaces/"+s.Namespace()+"/workflows/"+workflowID+"/query/some-query",
 		contentType,
 		queryBody(),
 	)
@@ -144,7 +146,7 @@ func (s *ClientFunctionalSuite) runHTTPAPIBasicsTest(
 	// Signal which also completes the workflow
 	s.httpPost(
 		http.StatusOK,
-		"/namespaces/"+s.namespace+"/workflows/"+workflowID+"/signal/some-signal",
+		"/namespaces/"+s.Namespace()+"/workflows/"+workflowID+"/signal/some-signal",
 		contentType,
 		signalBody(),
 	)
@@ -153,7 +155,7 @@ func (s *ClientFunctionalSuite) runHTTPAPIBasicsTest(
 	_, respBody = s.httpGet(
 		http.StatusOK,
 		// Our version of gRPC gateway only supports integer enums in queries :-(
-		"/namespaces/"+s.namespace+"/workflows/"+workflowID+"/history?historyEventFilterType=2",
+		"/namespaces/"+s.Namespace()+"/workflows/"+workflowID+"/history?historyEventFilterType=2",
 		contentType,
 	)
 	verifyHistory(s, respBody)
@@ -176,7 +178,7 @@ func (s *ClientFunctionalSuite) TestHTTPAPIBasics_ShorthandPretty() {
 }
 
 func (s *ClientFunctionalSuite) runHTTPAPIBasicsTest_Protojson(contentType string, pretty bool) {
-	if s.httpAPIAddress == "" {
+	if s.HttpAPIAddress() == "" {
 		s.T().Skip("HTTP API server not enabled")
 	}
 	// These are callbacks because the worker needs to be initialized so we can get the task queue
@@ -241,7 +243,7 @@ func (s *ClientFunctionalSuite) runHTTPAPIBasicsTest_Protojson(contentType strin
 }
 
 func (s *ClientFunctionalSuite) runHTTPAPIBasicsTest_Shorthand(contentType string, pretty bool) {
-	if s.httpAPIAddress == "" {
+	if s.HttpAPIAddress() == "" {
 		s.T().Skip("HTTP API server not enabled")
 	}
 
@@ -295,14 +297,14 @@ func (s *ClientFunctionalSuite) runHTTPAPIBasicsTest_Shorthand(contentType strin
 }
 
 func (s *ClientFunctionalSuite) TestHTTPAPIHeaders() {
-	if s.httpAPIAddress == "" {
+	if s.HttpAPIAddress() == "" {
 		s.T().Skip("HTTP API server not enabled")
 	}
 	// Make a claim mapper and authorizer that capture info
 	var lastInfo *authorization.AuthInfo
 	var listWorkflowMetadata metadata.MD
 	var callbackLock sync.RWMutex
-	s.testCluster.host.SetOnGetClaims(func(info *authorization.AuthInfo) (*authorization.Claims, error) {
+	s.TestCluster().Host().SetOnGetClaims(func(info *authorization.AuthInfo) (*authorization.Claims, error) {
 		callbackLock.Lock()
 		defer callbackLock.Unlock()
 		if info != nil {
@@ -310,7 +312,7 @@ func (s *ClientFunctionalSuite) TestHTTPAPIHeaders() {
 		}
 		return &authorization.Claims{System: authorization.RoleAdmin}, nil
 	})
-	s.testCluster.host.SetOnAuthorize(func(
+	s.TestCluster().Host().SetOnAuthorize(func(
 		ctx context.Context,
 		caller *authorization.Claims,
 		target *authorization.CallTarget,
@@ -324,7 +326,7 @@ func (s *ClientFunctionalSuite) TestHTTPAPIHeaders() {
 	})
 
 	// Make a simple list call that we don't care about the result
-	req, err := http.NewRequest("GET", "/namespaces/"+s.namespace+"/workflows", nil)
+	req, err := http.NewRequest("GET", "/namespaces/"+s.Namespace()+"/workflows", nil)
 	s.Require().NoError(err)
 	req.Header.Set("Authorization", "my-auth-token")
 	req.Header.Set("X-Forwarded-For", "1.2.3.4:5678")
@@ -352,7 +354,7 @@ func (s *ClientFunctionalSuite) TestHTTPAPIHeaders() {
 }
 
 func (s *ClientFunctionalSuite) TestHTTPAPIPretty() {
-	if s.httpAPIAddress == "" {
+	if s.HttpAPIAddress() == "" {
 		s.T().Skip("HTTP API server not enabled")
 	}
 	// Make a call to system info normal, confirm no newline, then ask for pretty
@@ -388,7 +390,7 @@ func (s *ClientFunctionalSuite) httpRequest(expectedStatus int, req *http.Reques
 		req.URL.Scheme = "http"
 	}
 	if req.URL.Host == "" {
-		req.URL.Host = s.httpAPIAddress
+		req.URL.Host = s.HttpAPIAddress()
 	}
 	resp, err := http.DefaultClient.Do(req)
 	s.Require().NoError(err)
@@ -402,7 +404,7 @@ func (s *ClientFunctionalSuite) httpRequest(expectedStatus int, req *http.Reques
 func (s *ClientFunctionalSuite) TestHTTPAPI_OperatorService_ListSearchAttributes() {
 	_, respBody := s.httpGet(
 		http.StatusOK,
-		"/cluster/namespaces/"+s.namespace+"/search-attributes",
+		"/cluster/namespaces/"+s.Namespace()+"/search-attributes",
 		"application/json",
 	)
 	s.T().Log(string(respBody))

@@ -29,6 +29,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"go.temporal.io/server/tests/base"
 	"time"
 
 	"github.com/pborman/uuid"
@@ -47,7 +48,11 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-func (s *FunctionalSuite) TestWorkflowTimeout() {
+type WorkflowFailuresTestSuite struct {
+	base.FunctionalSuite
+}
+
+func (s *WorkflowFailuresTestSuite) TestWorkflowTimeout() {
 	startTime := time.Now().UTC()
 
 	id := "functional-workflow-timeout"
@@ -57,7 +62,7 @@ func (s *FunctionalSuite) TestWorkflowTimeout() {
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           uuid.New(),
-		Namespace:           s.namespace,
+		Namespace:           s.Namespace(),
 		WorkflowId:          id,
 		WorkflowType:        &commonpb.WorkflowType{Name: wt},
 		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
@@ -67,7 +72,7 @@ func (s *FunctionalSuite) TestWorkflowTimeout() {
 		Identity:            identity,
 	}
 
-	we, err0 := s.client.StartWorkflowExecution(NewContext(), request)
+	we, err0 := s.FrontendClient().StartWorkflowExecution(base.NewContext(), request)
 	s.NoError(err0)
 
 	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
@@ -77,7 +82,7 @@ func (s *FunctionalSuite) TestWorkflowTimeout() {
 	var historyEvents []*historypb.HistoryEvent
 GetHistoryLoop:
 	for i := 0; i < 10; i++ {
-		historyEvents = s.getHistory(s.namespace, &commonpb.WorkflowExecution{
+		historyEvents = s.GetHistory(s.Namespace(), &commonpb.WorkflowExecution{
 			WorkflowId: id,
 			RunId:      we.RunId,
 		})
@@ -104,8 +109,8 @@ GetHistoryLoop:
 	closedCount := 0
 ListClosedLoop:
 	for i := 0; i < 10; i++ {
-		resp, err3 := s.client.ListClosedWorkflowExecutions(NewContext(), &workflowservice.ListClosedWorkflowExecutionsRequest{
-			Namespace:       s.namespace,
+		resp, err3 := s.FrontendClient().ListClosedWorkflowExecutions(base.NewContext(), &workflowservice.ListClosedWorkflowExecutionsRequest{
+			Namespace:       s.Namespace(),
 			MaximumPageSize: 100,
 			StartTimeFilter: startFilter,
 			Filters: &workflowservice.ListClosedWorkflowExecutionsRequest_ExecutionFilter{ExecutionFilter: &filterpb.WorkflowExecutionFilter{
@@ -124,7 +129,7 @@ ListClosedLoop:
 	s.Equal(1, closedCount)
 }
 
-func (s *FunctionalSuite) TestWorkflowTaskFailed() {
+func (s *WorkflowFailuresTestSuite) TestWorkflowTaskFailed() {
 	id := "functional-workflowtask-failed-test"
 	wt := "functional-workflowtask-failed-test-type"
 	tl := "functional-workflowtask-failed-test-taskqueue"
@@ -134,7 +139,7 @@ func (s *FunctionalSuite) TestWorkflowTaskFailed() {
 	// Start workflow execution
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           uuid.New(),
-		Namespace:           s.namespace,
+		Namespace:           s.Namespace(),
 		WorkflowId:          id,
 		WorkflowType:        &commonpb.WorkflowType{Name: wt},
 		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
@@ -144,7 +149,7 @@ func (s *FunctionalSuite) TestWorkflowTaskFailed() {
 		Identity:            identity,
 	}
 
-	we, err0 := s.client.StartWorkflowExecution(NewContext(), request)
+	we, err0 := s.FrontendClient().StartWorkflowExecution(base.NewContext(), request)
 	s.NoError(err0)
 	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
 
@@ -176,9 +181,9 @@ func (s *FunctionalSuite) TestWorkflowTaskFailed() {
 
 		// Send signals during workflow task
 		if sendSignal {
-			s.NoError(s.sendSignal(s.namespace, workflowExecution, "signalC", nil, identity))
-			s.NoError(s.sendSignal(s.namespace, workflowExecution, "signalD", nil, identity))
-			s.NoError(s.sendSignal(s.namespace, workflowExecution, "signalE", nil, identity))
+			s.NoError(s.SendSignal(s.Namespace(), workflowExecution, "signalC", nil, identity))
+			s.NoError(s.SendSignal(s.Namespace(), workflowExecution, "signalD", nil, identity))
+			s.NoError(s.SendSignal(s.Namespace(), workflowExecution, "signalE", nil, identity))
 			sendSignal = false
 		}
 
@@ -227,9 +232,9 @@ func (s *FunctionalSuite) TestWorkflowTaskFailed() {
 		return payloads.EncodeString("Activity Result"), false, nil
 	}
 
-	poller := &TaskPoller{
-		Client:              s.client,
-		Namespace:           s.namespace,
+	poller := &base.TaskPoller{
+		Client:              s.FrontendClient(),
+		Namespace:           s.Namespace(),
 		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		Identity:            identity,
 		WorkflowTaskHandler: wtHandler,
@@ -250,11 +255,11 @@ func (s *FunctionalSuite) TestWorkflowTaskFailed() {
 
 	// fail workflow task 5 times
 	for i := 1; i <= 5; i++ {
-		_, err := poller.PollAndProcessWorkflowTask(WithExpectedAttemptCount(i))
+		_, err := poller.PollAndProcessWorkflowTask(base.WithExpectedAttemptCount(i))
 		s.NoError(err)
 	}
 
-	err = s.sendSignal(s.namespace, workflowExecution, "signalA", nil, identity)
+	err = s.SendSignal(s.Namespace(), workflowExecution, "signalA", nil, identity)
 	s.NoError(err, "failed to send signal to execution")
 
 	// process signal
@@ -264,37 +269,37 @@ func (s *FunctionalSuite) TestWorkflowTaskFailed() {
 	s.Equal(1, signalCount)
 
 	// send another signal to trigger workflow task
-	err = s.sendSignal(s.namespace, workflowExecution, "signalB", nil, identity)
+	err = s.SendSignal(s.Namespace(), workflowExecution, "signalB", nil, identity)
 	s.NoError(err, "failed to send signal to execution")
 
 	// fail workflow task 2 more times
 	for i := 1; i <= 2; i++ {
-		_, err := poller.PollAndProcessWorkflowTask(WithExpectedAttemptCount(i))
+		_, err := poller.PollAndProcessWorkflowTask(base.WithExpectedAttemptCount(i))
 		s.NoError(err)
 	}
 	s.Equal(3, signalCount)
 
 	// now send a signal during failed workflow task
 	sendSignal = true
-	_, err = poller.PollAndProcessWorkflowTask(WithExpectedAttemptCount(3))
+	_, err = poller.PollAndProcessWorkflowTask(base.WithExpectedAttemptCount(3))
 	s.NoError(err)
 	s.Equal(4, signalCount)
 
 	// fail workflow task 1 more times
 	for i := 1; i <= 2; i++ {
-		_, err := poller.PollAndProcessWorkflowTask(WithExpectedAttemptCount(i))
+		_, err := poller.PollAndProcessWorkflowTask(base.WithExpectedAttemptCount(i))
 		s.NoError(err)
 	}
 	s.Equal(12, signalCount)
 
 	// Make complete workflow workflow task
-	_, err = poller.PollAndProcessWorkflowTask(WithExpectedAttemptCount(3))
+	_, err = poller.PollAndProcessWorkflowTask(base.WithExpectedAttemptCount(3))
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 	s.True(workflowComplete)
 	s.Equal(16, signalCount)
 
-	events := s.getHistory(s.namespace, workflowExecution)
+	events := s.GetHistory(s.Namespace(), workflowExecution)
 	s.EqualHistoryEvents(`
   1 WorkflowExecutionStarted
   2 WorkflowTaskScheduled
@@ -331,7 +336,7 @@ func (s *FunctionalSuite) TestWorkflowTaskFailed() {
 	s.True(wfCompletedEvent.GetEventTime().AsTime().Sub(lastWorkflowTaskTime) >= time.Second)
 }
 
-func (s *FunctionalSuite) TestRespondWorkflowTaskCompleted_ReturnsErrorIfInvalidArgument() {
+func (s *WorkflowFailuresTestSuite) TestRespondWorkflowTaskCompleted_ReturnsErrorIfInvalidArgument() {
 	id := "functional-respond-workflow-task-completed-test"
 	wt := "functional-respond-workflow-task-completed-test-type"
 	tq := "functional-respond-workflow-task-completed-test-taskqueue"
@@ -339,7 +344,7 @@ func (s *FunctionalSuite) TestRespondWorkflowTaskCompleted_ReturnsErrorIfInvalid
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:          uuid.New(),
-		Namespace:          s.namespace,
+		Namespace:          s.Namespace(),
 		WorkflowId:         id,
 		WorkflowType:       &commonpb.WorkflowType{Name: wt},
 		TaskQueue:          &taskqueuepb.TaskQueue{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
@@ -348,7 +353,7 @@ func (s *FunctionalSuite) TestRespondWorkflowTaskCompleted_ReturnsErrorIfInvalid
 		Identity:           identity,
 	}
 
-	we0, err0 := s.client.StartWorkflowExecution(NewContext(), request)
+	we0, err0 := s.FrontendClient().StartWorkflowExecution(base.NewContext(), request)
 	s.NoError(err0)
 	s.NotNil(we0)
 
@@ -366,9 +371,9 @@ func (s *FunctionalSuite) TestRespondWorkflowTaskCompleted_ReturnsErrorIfInvalid
 		}}, nil
 	}
 
-	poller := &TaskPoller{
-		Client:              s.client,
-		Namespace:           s.namespace,
+	poller := &base.TaskPoller{
+		Client:              s.FrontendClient(),
+		Namespace:           s.Namespace(),
 		TaskQueue:           &taskqueuepb.TaskQueue{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		Identity:            identity,
 		WorkflowTaskHandler: wtHandler,
@@ -382,7 +387,7 @@ func (s *FunctionalSuite) TestRespondWorkflowTaskCompleted_ReturnsErrorIfInvalid
 	s.IsType(&serviceerror.InvalidArgument{}, err)
 	s.Equal("BadRecordMarkerAttributes: MarkerName is not set on RecordMarkerCommand.", err.Error())
 
-	historyEvents := s.getHistory(s.namespace, &commonpb.WorkflowExecution{
+	historyEvents := s.GetHistory(s.Namespace(), &commonpb.WorkflowExecution{
 		WorkflowId: id,
 		RunId:      we0.GetRunId(),
 	})

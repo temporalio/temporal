@@ -22,21 +22,18 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package tests
+package base
 
 import (
 	"bytes"
 	"context"
 	"encoding/binary"
 	"fmt"
+	"go.temporal.io/server/tests"
 	"maps"
 	"os"
-	"regexp"
-	"strconv"
-	"testing"
 	"time"
 
-	"github.com/dgryski/go-farm"
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
@@ -105,14 +102,58 @@ func WithFxOptionsForService(serviceName primitives.ServiceName, options ...fx.O
 	}
 }
 
-func (s *FunctionalTestBase) setupSuite(defaultClusterConfigFile string, options ...Option) {
+func (s *FunctionalTestBase) TestCluster() *TestCluster {
+	return s.testCluster
+}
+
+func (s *FunctionalTestBase) TestClusterConfig() *TestClusterConfig {
+	return s.testClusterConfig
+}
+
+func (s *FunctionalTestBase) FrontendClient() tests.FrontendClient {
+	return s.client
+}
+
+func (s *FunctionalTestBase) AdminClient() tests.AdminClient {
+	return s.adminClient
+}
+
+func (s *FunctionalTestBase) OperatorClient() operatorservice.OperatorServiceClient {
+	return s.operatorClient
+}
+
+func (s *FunctionalTestBase) HttpAPIAddress() string {
+	return s.httpAPIAddress
+}
+
+func (s *FunctionalTestBase) Namespace() string {
+	return s.namespace
+}
+
+func (s *FunctionalTestBase) ArchivalNamespace() string {
+	return s.archivalNamespace
+}
+
+func (s *FunctionalTestBase) ForeignNamespace() string {
+	return s.foreignNamespace
+}
+
+func (s *FunctionalTestBase) HostPort() string {
+	return s.hostPort
+}
+
+func (s *FunctionalTestBase) SetDynamicConfigOverrides(dynamicConfig map[dynamicconfig.Key]interface{}) {
+	s.dynamicConfigOverrides = dynamicConfig
+}
+
+func (s *FunctionalTestBase) SetupSuite(defaultClusterConfigFile string, options ...Option) {
 	s.testClusterFactory = NewTestClusterFactory()
 
 	params := ApplyTestClusterParams(options)
 
 	s.hostPort = "127.0.0.1:7134"
-	if TestFlags.FrontendAddr != "" {
-		s.hostPort = TestFlags.FrontendAddr
+	if tests.TestFlags.FrontendAddr != "" {
+		s.hostPort = tests.TestFlags.FrontendAddr
 	}
 	s.setupLogger()
 
@@ -136,9 +177,9 @@ func (s *FunctionalTestBase) setupSuite(defaultClusterConfigFile string, options
 	s.testClusterConfig = clusterConfig
 
 	if clusterConfig.FrontendAddress != "" {
-		s.Logger.Info("Running functional test against specified frontend", tag.Address(TestFlags.FrontendAddr))
+		s.Logger.Info("Running functional test against specified frontend", tag.Address(tests.TestFlags.FrontendAddr))
 
-		connection, err := rpc.Dial(TestFlags.FrontendAddr, nil, s.Logger)
+		connection, err := rpc.Dial(tests.TestFlags.FrontendAddr, nil, s.Logger)
 		if err != nil {
 			s.Require().NoError(err)
 		}
@@ -146,26 +187,26 @@ func (s *FunctionalTestBase) setupSuite(defaultClusterConfigFile string, options
 		s.client = workflowservice.NewWorkflowServiceClient(connection)
 		s.adminClient = adminservice.NewAdminServiceClient(connection)
 		s.operatorClient = operatorservice.NewOperatorServiceClient(connection)
-		s.httpAPIAddress = TestFlags.FrontendHTTPAddr
+		s.httpAPIAddress = tests.TestFlags.FrontendHTTPAddr
 	} else {
 		s.Logger.Info("Running functional test against test cluster")
 		cluster, err := s.testClusterFactory.NewCluster(s.T(), clusterConfig, s.Logger)
 		s.Require().NoError(err)
 		s.testCluster = cluster
-		s.client = s.testCluster.GetFrontendClient()
-		s.adminClient = s.testCluster.GetAdminClient()
-		s.operatorClient = s.testCluster.GetOperatorClient()
-		s.httpAPIAddress = cluster.host.FrontendHTTPAddress()
+		s.client = s.testCluster.FrontendClient()
+		s.adminClient = s.testCluster.AdminClient()
+		s.operatorClient = s.testCluster.OperatorClient()
+		s.httpAPIAddress = cluster.Host().FrontendHTTPAddress()
 	}
 
-	s.namespace = s.randomizeStr("functional-test-namespace")
+	s.namespace = RandomizeStr("functional-test-namespace")
 	s.Require().NoError(s.registerNamespaceWithDefaults(s.namespace))
 
-	s.foreignNamespace = s.randomizeStr("functional-foreign-test-namespace")
+	s.foreignNamespace = RandomizeStr("functional-foreign-test-namespace")
 	s.Require().NoError(s.registerNamespaceWithDefaults(s.foreignNamespace))
 
 	if clusterConfig.EnableArchival {
-		s.archivalNamespace = s.randomizeStr("functional-archival-enabled-namespace")
+		s.archivalNamespace = RandomizeStr("functional-archival-enabled-namespace")
 		s.Require().NoError(s.registerArchivalNamespace(s.archivalNamespace))
 	}
 }
@@ -203,43 +244,16 @@ func (s *FunctionalTestBase) setupLogger() {
 	}
 }
 
-// checkTestShard supports test sharding based on environment variables.
-func checkTestShard(t *testing.T) {
-	totalStr := os.Getenv("TEST_TOTAL_SHARDS")
-	indexStr := os.Getenv("TEST_SHARD_INDEX")
-	if totalStr == "" || indexStr == "" {
-		return
-	}
-	total, err := strconv.Atoi(totalStr)
-	if err != nil || total < 1 {
-		t.Fatal("Couldn't convert TEST_TOTAL_SHARDS")
-	}
-	index, err := strconv.Atoi(indexStr)
-	if err != nil || index < 0 || index >= total {
-		t.Fatal("Couldn't convert TEST_SHARD_INDEX")
-	}
-
-	// This was determined empirically to distribute our existing test names
-	// reasonably well. This can be adjusted from time to time.
-	// For parallelism 4, use 11. For 3, use 26. For 2, use 20.
-	const salt = "-salt-26"
-
-	nameToHash := t.Name() + salt
-	testIndex := int(farm.Fingerprint32([]byte(nameToHash))) % total
-	if testIndex != index {
-		t.Skipf("Skipping %s in test shard %d/%d (it runs in %d)", t.Name(), index+1, total, testIndex+1)
-	}
-	t.Logf("Running %s in test shard %d/%d", t.Name(), index+1, total)
-}
-
 // GetTestClusterConfig return test cluster config
 func GetTestClusterConfig(configFile string) (*TestClusterConfig, error) {
 	environment.SetupEnv()
 
 	configLocation := configFile
-	if TestFlags.TestClusterConfigFile != "" {
-		configLocation = TestFlags.TestClusterConfigFile
+	if tests.TestFlags.TestClusterConfigFile != "" {
+		configLocation = tests.TestFlags.TestClusterConfigFile
 	}
+	// This is just reading a config, so it's less of a security concern
+	// #nosec
 	confContent, err := os.ReadFile(configLocation)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read test cluster config file %s: %w", configLocation, err)
@@ -252,24 +266,24 @@ func GetTestClusterConfig(configFile string) (*TestClusterConfig, error) {
 
 	// If -FaultInjectionConfigFile is passed to the test runner,
 	// then fault injection config will be added to the test cluster config.
-	if TestFlags.FaultInjectionConfigFile != "" {
-		fiConfigContent, err := os.ReadFile(TestFlags.FaultInjectionConfigFile)
+	if tests.TestFlags.FaultInjectionConfigFile != "" {
+		fiConfigContent, err := os.ReadFile(tests.TestFlags.FaultInjectionConfigFile)
 		if err != nil {
-			return nil, fmt.Errorf("failed to read test cluster fault injection config file %s: %v", TestFlags.FaultInjectionConfigFile, err)
+			return nil, fmt.Errorf("failed to read test cluster fault injection config file %s: %v", tests.TestFlags.FaultInjectionConfigFile, err)
 		}
 
 		var fiOptions TestClusterConfig
 		if err := yaml.Unmarshal(fiConfigContent, &fiOptions); err != nil {
-			return nil, fmt.Errorf("failed to decode test cluster fault injection config %s: %w", TestFlags.FaultInjectionConfigFile, err)
+			return nil, fmt.Errorf("failed to decode test cluster fault injection config %s: %w", tests.TestFlags.FaultInjectionConfigFile, err)
 		}
 		options.FaultInjection = fiOptions.FaultInjection
 	}
 
-	options.FrontendAddress = TestFlags.FrontendAddr
+	options.FrontendAddress = tests.TestFlags.FrontendAddr
 	return &options, nil
 }
 
-func (s *FunctionalTestBase) tearDownSuite() {
+func (s *FunctionalTestBase) TearDownSuite() {
 	s.Require().NoError(s.markNamespaceAsDeleted(s.namespace))
 	s.Require().NoError(s.markNamespaceAsDeleted(s.foreignNamespace))
 	if s.archivalNamespace != "" {
@@ -342,11 +356,7 @@ func (s *FunctionalTestBase) markNamespaceAsDeleted(
 	return err
 }
 
-func (s *FunctionalTestBase) randomizeStr(id string) string {
-	return fmt.Sprintf("%v-%v", id, uuid.New())
-}
-
-func (s *FunctionalTestBase) getHistory(namespace string, execution *commonpb.WorkflowExecution) []*historypb.HistoryEvent {
+func (s *FunctionalTestBase) GetHistory(namespace string, execution *commonpb.WorkflowExecution) []*historypb.HistoryEvent {
 	historyResponse, err := s.client.GetWorkflowExecutionHistory(NewContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
 		Namespace:       namespace,
 		Execution:       execution,
@@ -368,21 +378,21 @@ func (s *FunctionalTestBase) getHistory(namespace string, execution *commonpb.Wo
 	return events
 }
 
-func (s *FunctionalTestBase) decodePayloadsString(ps *commonpb.Payloads) string {
+func (s *FunctionalTestBase) DecodePayloadsString(ps *commonpb.Payloads) string {
 	s.T().Helper()
 	var r string
 	s.NoError(payloads.Decode(ps, &r))
 	return r
 }
 
-func (s *FunctionalTestBase) decodePayloadsInt(ps *commonpb.Payloads) int {
+func (s *FunctionalTestBase) DecodePayloadsInt(ps *commonpb.Payloads) int {
 	s.T().Helper()
 	var r int
 	s.NoError(payloads.Decode(ps, &r))
 	return r
 }
 
-func (s *FunctionalTestBase) decodePayloadsByteSliceInt32(ps *commonpb.Payloads) (r int32) {
+func (s *FunctionalTestBase) DecodePayloadsByteSliceInt32(ps *commonpb.Payloads) (r int32) {
 	s.T().Helper()
 	var buf []byte
 	s.NoError(payloads.Decode(ps, &buf))
@@ -440,7 +450,15 @@ func (s *FunctionalTestBase) OverrideDynamicConfig(setting dynamicconfig.Generic
 	s.testCluster.host.overrideDynamicConfigByKey(s.T(), setting.Key(), value)
 }
 
-func (s *FunctionalTestBase) testWithMatchingBehavior(subtest func()) {
+func (s *FunctionalTestBase) GetNamespaceID(namespace string) string {
+	namespaceResp, err := s.FrontendClient().DescribeNamespace(NewContext(), &workflowservice.DescribeNamespaceRequest{
+		Namespace: namespace,
+	})
+	s.NoError(err)
+	return namespaceResp.NamespaceInfo.GetId()
+}
+
+func (s *FunctionalTestBase) TestWithMatchingBehavior(subtest func()) {
 	for _, forcePollForward := range []bool{false, true} {
 		for _, forceTaskForward := range []bool{false, true} {
 			for _, forceAsync := range []bool{false, true} {
@@ -486,10 +504,4 @@ func (s *FunctionalTestBase) testWithMatchingBehavior(subtest func()) {
 			}
 		}
 	}
-}
-
-func RandomizedNexusEndpoint(name string) string {
-	re := regexp.MustCompile("[/_]")
-	safeName := re.ReplaceAllString(name, "-")
-	return fmt.Sprintf("%v-%v", safeName, uuid.New())
 }

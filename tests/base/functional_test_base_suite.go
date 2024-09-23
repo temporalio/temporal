@@ -22,7 +22,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package tests
+package base
 
 import (
 	"github.com/stretchr/testify/require"
@@ -40,7 +40,7 @@ type FunctionalTestBaseSuite struct {
 }
 
 func (s *FunctionalTestBaseSuite) SetupSuite() {
-	s.setupSuite("testdata/es_cluster.yaml",
+	s.FunctionalTestBase.SetupSuite("testdata/es_cluster.yaml",
 		WithFxOptionsForService(primitives.FrontendService, fx.Populate(&s.frontendServiceName)),
 		WithFxOptionsForService(primitives.MatchingService, fx.Populate(&s.matchingServiceName)),
 		WithFxOptionsForService(primitives.HistoryService, fx.Populate(&s.historyServiceName)),
@@ -50,7 +50,7 @@ func (s *FunctionalTestBaseSuite) SetupSuite() {
 }
 
 func (s *FunctionalTestBaseSuite) TearDownSuite() {
-	s.tearDownSuite()
+	s.FunctionalTestBase.TearDownSuite()
 }
 
 func (s *FunctionalTestBaseSuite) TestWithFxOptionsForService() {

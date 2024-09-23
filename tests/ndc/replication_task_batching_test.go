@@ -27,6 +27,7 @@ package ndc
 import (
 	"context"
 	"flag"
+	"go.temporal.io/server/tests/base"
 	"os"
 	"sync/atomic"
 	"testing"
@@ -69,8 +70,8 @@ type (
 		protorequire.ProtoAssertions
 		suite.Suite
 
-		testClusterFactory          tests.TestClusterFactory
-		standByReplicationTasksChan chan *replicationspb.ReplicationTask
+		testClusterFactory          base.TestClusterFactory
+		standByReplicationTasksChan chan *repicationpb.ReplicationTask
 		mockAdminClient             map[string]adminservice.AdminServiceClient
 		namespace                   namespace.Name
 		namespaceID                 namespace.ID
@@ -79,7 +80,7 @@ type (
 		passiveClusterName          string
 
 		controller      *gomock.Controller
-		passtiveCluster *tests.TestCluster
+		passtiveCluster *base.TestCluster
 		generator       test.Generator
 		serializer      serialization.Serializer
 		logger          log.Logger
@@ -94,7 +95,7 @@ func TestNDCReplicationTaskBatching(t *testing.T) {
 func (s *NDCReplicationTaskBatchingTestSuite) SetupSuite() {
 	s.logger = log.NewTestLogger()
 	s.serializer = serialization.NewSerializer()
-	s.testClusterFactory = tests.NewTestClusterFactory()
+	s.testClusterFactory = base.NewTestClusterFactory()
 	s.passiveClusterName = "cluster-b"
 
 	fileName := "../testdata/ndc_clusters.yaml"
@@ -108,11 +109,11 @@ func (s *NDCReplicationTaskBatchingTestSuite) SetupSuite() {
 	s.Require().NoError(err)
 	confContent = []byte(os.ExpandEnv(string(confContent)))
 
-	var clusterConfigs []*tests.TestClusterConfig
+	var clusterConfigs []*base.TestClusterConfig
 	s.Require().NoError(yaml.Unmarshal(confContent, &clusterConfigs))
 
 	passiveClusterConfig := clusterConfigs[1]
-	passiveClusterConfig.WorkerConfig = &tests.WorkerConfig{}
+	passiveClusterConfig.WorkerConfig = &base.WorkerConfig{}
 	passiveClusterConfig.DynamicConfigOverrides = map[dynamicconfig.Key]any{
 		dynamicconfig.EnableReplicationStream.Key():             true,
 		dynamicconfig.EnableEagerNamespaceRefresher.Key():       true,
@@ -252,7 +253,7 @@ func (s *NDCReplicationTaskBatchingTestSuite) registerNamespace() {
 	})
 	s.Require().NoError(err)
 	// Wait for namespace cache to pick the change
-	time.Sleep(2 * tests.NamespaceCacheRefreshInterval)
+	time.Sleep(2 * base.NamespaceCacheRefreshInterval)
 
 	descReq := &workflowservice.DescribeNamespaceRequest{
 		Namespace: s.namespace.String(),
