@@ -2023,7 +2023,6 @@ func (e *matchingEngineImpl) updatePhysicalTaskQueueGauge(pqm *physicalTaskQueue
 	e.gaugeMetrics.lock.Lock()
 	e.gaugeMetrics.loadedPhysicalTaskQueueCount[physicalTaskQueueParameters] += delta
 	loadedPhysicalTaskQueueCounter := e.gaugeMetrics.loadedPhysicalTaskQueueCount[physicalTaskQueueParameters]
-	e.gaugeMetrics.lock.Unlock()
 
 	pm := pqm.partitionMgr
 	metrics.LoadedPhysicalTaskQueueGauge.With(
@@ -2038,6 +2037,7 @@ func (e *matchingEngineImpl) updatePhysicalTaskQueueGauge(pqm *physicalTaskQueue
 		float64(loadedPhysicalTaskQueueCounter),
 		metrics.VersionedTag(versioned),
 	)
+	e.gaugeMetrics.lock.Unlock()
 }
 
 // Responsible for emitting and updating loaded_task_queue_family_count, loaded_task_queue_count and
@@ -2060,6 +2060,8 @@ func (e *matchingEngineImpl) updateTaskQueuePartitionGauge(pm taskQueuePartition
 	}
 
 	rootPartition := pm.Partition().IsRoot()
+	nsName := pm.Namespace().Name().String()
+
 	e.gaugeMetrics.lock.Lock()
 
 	loadedTaskQueueFamilyCounter, loadedTaskQueueCounter, loadedTaskQueuePartitionCounter :=
@@ -2076,9 +2078,6 @@ func (e *matchingEngineImpl) updateTaskQueuePartitionGauge(pm taskQueuePartition
 			e.gaugeMetrics.loadedTaskQueueFamilyCount[taskQueueFamilyParameters] = loadedTaskQueueFamilyCounter
 		}
 	}
-	e.gaugeMetrics.lock.Unlock()
-
-	nsName := pm.Namespace().Name().String()
 
 	e.metricsHandler.Gauge(metrics.LoadedTaskQueueFamilyGauge.Name()).Record(
 		float64(loadedTaskQueueFamilyCounter),
@@ -2100,6 +2099,7 @@ func (e *matchingEngineImpl) updateTaskQueuePartitionGauge(pm taskQueuePartition
 		false, // we don't want breakdown by partition ID, only sticky vs normal breakdown.
 	)
 	metrics.LoadedTaskQueuePartitionGauge.With(taggedHandler).Record(float64(loadedTaskQueuePartitionCounter))
+	e.gaugeMetrics.lock.Unlock()
 }
 
 // Populate the workflow task response based on context and scheduled/started events.
