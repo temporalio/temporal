@@ -191,7 +191,7 @@ func (s *hrsuTestSuite) startHrsuTest() (*hrsuTest, context.Context, context.Can
 
 func (t *hrsuTest) newHrsuTestCluster(ns string, name string, cluster *base.TestCluster) hrsuTestCluster {
 	sdkClient, err := sdkclient.Dial(sdkclient.Options{
-		HostPort:  cluster.GetHost().FrontendGRPCAddress(),
+		HostPort:  cluster.Host().FrontendGRPCAddress(),
 		Namespace: ns,
 		Logger:    log.NewSdkLogger(t.s.logger),
 	})
@@ -718,7 +718,7 @@ func (s *hrsuTestSuite) executeHistoryReplicationTask(task *hrsuTestExecutableTa
 	return events
 }
 
-func (e *hrsuTestNamespaceReplicationTaskExecutor) Execute(ctx context.Context, task *replicationspb.NamespaceTaskAttributes) error {
+func (e *hrsuTestNamespaceReplicationTaskExecutor) Execute(_ context.Context, task *replicationspb.NamespaceTaskAttributes) error {
 	// TODO (dan) Use one channel per cluster, as we do for history replication tasks in this test suite. This is
 	// currently blocked by the fact that namespace tasks don't expose the current cluster name.
 	ns := task.Info.Name
@@ -809,7 +809,7 @@ func (c *hrsuTestCluster) sendUpdateAndWaitUntilStage(ctx context.Context, updat
 
 func (c *hrsuTestCluster) pollAndAcceptUpdate() error {
 	poller := &base.TaskPoller{
-		Client:              c.testCluster.GetFrontendClient(),
+		Client:              c.testCluster.FrontendClient(),
 		Namespace:           c.t.tv.NamespaceName().String(),
 		TaskQueue:           c.t.tv.TaskQueue(),
 		Identity:            c.t.tv.WorkerIdentity(),
@@ -824,7 +824,7 @@ func (c *hrsuTestCluster) pollAndAcceptUpdate() error {
 
 func (c *hrsuTestCluster) pollAndCompleteUpdate(updateId string) error {
 	poller := &base.TaskPoller{
-		Client:              c.testCluster.GetFrontendClient(),
+		Client:              c.testCluster.FrontendClient(),
 		Namespace:           c.t.tv.NamespaceName().String(),
 		TaskQueue:           c.t.tv.TaskQueue(),
 		Identity:            c.t.tv.WorkerIdentity(),
@@ -839,7 +839,7 @@ func (c *hrsuTestCluster) pollAndCompleteUpdate(updateId string) error {
 
 func (c *hrsuTestCluster) pollAndAcceptCompleteUpdate(updateId string) error {
 	poller := &base.TaskPoller{
-		Client:              c.testCluster.GetFrontendClient(),
+		Client:              c.testCluster.FrontendClient(),
 		Namespace:           c.t.tv.NamespaceName().String(),
 		TaskQueue:           c.t.tv.TaskQueue(),
 		Identity:            c.t.tv.WorkerIdentity(),
@@ -854,7 +854,7 @@ func (c *hrsuTestCluster) pollAndAcceptCompleteUpdate(updateId string) error {
 
 func (c *hrsuTestCluster) pollAndErrorWhileProcessingWorkflowTask() error {
 	poller := &base.TaskPoller{
-		Client:              c.testCluster.GetFrontendClient(),
+		Client:              c.testCluster.FrontendClient(),
 		Namespace:           c.t.tv.NamespaceName().String(),
 		TaskQueue:           c.t.tv.TaskQueue(),
 		Identity:            c.t.tv.WorkerIdentity(),
@@ -900,7 +900,7 @@ func (t *hrsuTest) acceptUpdateMessageHandler(resp *workflowservice.PollWorkflow
 	}, nil
 }
 
-func (t *hrsuTest) acceptUpdateWFTHandler(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
+func (t *hrsuTest) acceptUpdateWFTHandler(_ *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
 	return []*commandpb.Command{{
 		CommandType: enumspb.COMMAND_TYPE_PROTOCOL_MESSAGE,
 		Attributes: &commandpb.Command_ProtocolMessageCommandAttributes{ProtocolMessageCommandAttributes: &commandpb.ProtocolMessageCommandAttributes{
@@ -971,7 +971,7 @@ func (c *hrsuTestCluster) otherCluster() *hrsuTestCluster {
 // gRPC utilities
 
 func (t *hrsuTest) registerMultiRegionNamespace(ctx context.Context) {
-	_, err := t.cluster1.testCluster.GetFrontendClient().RegisterNamespace(ctx, &workflowservice.RegisterNamespaceRequest{
+	_, err := t.cluster1.testCluster.FrontendClient().RegisterNamespace(ctx, &workflowservice.RegisterNamespaceRequest{
 		Namespace:                        t.tv.NamespaceName().String(),
 		Clusters:                         t.s.clusterReplicationConfig(),
 		ActiveClusterName:                t.s.clusterNames[0],
@@ -1021,7 +1021,7 @@ func (c *hrsuTestCluster) resetWorkflow(ctx context.Context, workflowTaskFinishE
 }
 
 func (c *hrsuTestCluster) setActive(ctx context.Context, clusterName string) {
-	_, err := c.testCluster.GetFrontendClient().UpdateNamespace(ctx, &workflowservice.UpdateNamespaceRequest{
+	_, err := c.testCluster.FrontendClient().UpdateNamespace(ctx, &workflowservice.UpdateNamespaceRequest{
 		Namespace: c.t.tv.NamespaceName().String(),
 		ReplicationConfig: &replicationpb.NamespaceReplicationConfig{
 			ActiveClusterName: clusterName,
@@ -1035,7 +1035,7 @@ func (c *hrsuTestCluster) getHistory(ctx context.Context) []*historypb.HistoryEv
 }
 
 func (c *hrsuTestCluster) getHistoryForRunId(ctx context.Context, runId string) []*historypb.HistoryEvent {
-	historyResponse, err := c.testCluster.GetFrontendClient().GetWorkflowExecutionHistory(ctx, &workflowservice.GetWorkflowExecutionHistoryRequest{
+	historyResponse, err := c.testCluster.FrontendClient().GetWorkflowExecutionHistory(ctx, &workflowservice.GetWorkflowExecutionHistoryRequest{
 		Namespace: c.t.tv.NamespaceName().String(),
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: c.t.tv.WorkflowID(),
@@ -1047,7 +1047,7 @@ func (c *hrsuTestCluster) getHistoryForRunId(ctx context.Context, runId string) 
 }
 
 func (c *hrsuTestCluster) getActiveCluster(ctx context.Context) string {
-	resp, err := c.testCluster.GetFrontendClient().DescribeNamespace(ctx, &workflowservice.DescribeNamespaceRequest{Namespace: c.t.tv.NamespaceName().String()})
+	resp, err := c.testCluster.FrontendClient().DescribeNamespace(ctx, &workflowservice.DescribeNamespaceRequest{Namespace: c.t.tv.NamespaceName().String()})
 	c.t.s.NoError(err)
 	return resp.ReplicationConfig.ActiveClusterName
 }

@@ -147,14 +147,14 @@ func (s *ReplicationMigrationBackTestSuite) SetupSuite() {
 	s.passiveCluster = cluster
 
 	s.registerNamespace()
-	_, err = s.passiveCluster.GetFrontendClient().UpdateNamespace(context.Background(), &workflowservice.UpdateNamespaceRequest{
+	_, err = s.passiveCluster.FrontendClient().UpdateNamespace(context.Background(), &workflowservice.UpdateNamespaceRequest{
 		Namespace: s.namespace.String(),
 		ReplicationConfig: &replicationpb.NamespaceReplicationConfig{
 			ActiveClusterName: "cluster-b",
 		},
 	})
 	s.Require().NoError(err)
-	_, err = s.passiveCluster.GetFrontendClient().UpdateNamespace(context.Background(), &workflowservice.UpdateNamespaceRequest{
+	_, err = s.passiveCluster.FrontendClient().UpdateNamespace(context.Background(), &workflowservice.UpdateNamespaceRequest{
 		Namespace: s.namespace.String(),
 		ReplicationConfig: &replicationpb.NamespaceReplicationConfig{
 			ActiveClusterName: "cluster-a",
@@ -190,7 +190,7 @@ func (s *ReplicationMigrationBackTestSuite) TestHistoryReplication_MultiRunMigra
 	run1Slices := s.getEventSlices(version, 0) // run1 is older than run2
 	run2Slices := s.getEventSlices(version, 10)
 
-	history, err := tests.EventBatchesToVersionHistory(
+	history, err := base.EventBatchesToVersionHistory(
 		nil,
 		[]*historypb.History{{Events: run1Slices[0]}, {Events: run1Slices[1]}, {Events: run1Slices[2]}},
 	)
@@ -224,7 +224,7 @@ func (s *ReplicationMigrationBackTestSuite) TestHistoryReplication_MultiRunMigra
 
 	time.Sleep(1 * time.Second) // wait for 1 sec to let the run2 events replicated
 
-	res1, err := s.passiveCluster.GetAdminClient().DescribeMutableState(context.Background(), &adminservice.DescribeMutableStateRequest{
+	res1, err := s.passiveCluster.AdminClient().DescribeMutableState(context.Background(), &adminservice.DescribeMutableStateRequest{
 		Namespace: s.namespace.String(),
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: workflowId,
@@ -233,7 +233,7 @@ func (s *ReplicationMigrationBackTestSuite) TestHistoryReplication_MultiRunMigra
 	})
 	s.NoError(err)
 
-	res2, err := s.passiveCluster.GetAdminClient().DescribeMutableState(context.Background(), &adminservice.DescribeMutableStateRequest{
+	res2, err := s.passiveCluster.AdminClient().DescribeMutableState(context.Background(), &adminservice.DescribeMutableStateRequest{
 		Namespace: s.namespace.String(),
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: workflowId,
@@ -279,7 +279,7 @@ func (s *ReplicationMigrationBackTestSuite) longRunningMigrationBackReplicationT
 
 	time.Sleep(1 * time.Second) // wait for 1 sec to let the run1 events replicated
 
-	res1, err := s.passiveCluster.GetAdminClient().DescribeMutableState(context.Background(), &adminservice.DescribeMutableStateRequest{
+	res1, err := s.passiveCluster.AdminClient().DescribeMutableState(context.Background(), &adminservice.DescribeMutableStateRequest{
 		Namespace: s.namespace.String(),
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: workflowID,
@@ -350,7 +350,7 @@ func (s *ReplicationMigrationBackTestSuite) TestHistoryReplication_LongRunningMi
 
 	time.Sleep(1 * time.Second) // wait for 1 sec to let the run1 events replicated
 
-	res1, err := s.passiveCluster.GetAdminClient().DescribeMutableState(context.Background(), &adminservice.DescribeMutableStateRequest{
+	res1, err := s.passiveCluster.AdminClient().DescribeMutableState(context.Background(), &adminservice.DescribeMutableStateRequest{
 		Namespace: s.namespace.String(),
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: workflowId,
@@ -384,7 +384,7 @@ func (s *ReplicationMigrationBackTestSuite) assertHistoryEvents(
 	mockClientBean.
 		EXPECT().
 		GetRemoteAdminClient(s.passiveClusterName).
-		Return(s.passiveCluster.GetAdminClient(), nil).
+		Return(s.passiveCluster.AdminClient(), nil).
 		AnyTimes()
 
 	serializer := serialization.NewSerializer()
@@ -569,7 +569,7 @@ func (s *ReplicationMigrationBackTestSuite) getEventSlices(version int64, timeDr
 
 func (s *ReplicationMigrationBackTestSuite) registerNamespace() {
 	s.namespace = namespace.Name("test-simple-workflow-ndc-" + common.GenerateRandomString(5))
-	passiveFrontend := s.passiveCluster.GetFrontendClient() //
+	passiveFrontend := s.passiveCluster.FrontendClient() //
 	replicationConfig := []*replicationpb.ClusterReplicationConfig{
 		{ClusterName: clusterName[0]},
 		{ClusterName: clusterName[1]},
