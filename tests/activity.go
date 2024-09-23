@@ -55,6 +55,10 @@ import (
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 
+type ActivityTestSuite struct {
+	ClientFunctionalSuite
+}
+
 func (s *ActivityTestSuite) TestActivityScheduleToClose_FiredDuringBackoff() {
 	// We have activity that always fails.
 	// We have backoff timers and schedule_to_close activity timeout happens during that backoff timer.
@@ -75,8 +79,8 @@ func (s *ActivityTestSuite) TestActivityScheduleToClose_FiredDuringBackoff() {
 	actionCalled := 0
 	activityFunction := func() (string, error) {
 		actionCalled += 1
-		time.Sleep(workingInterval)
-		activityErr := errors.New("bad-luck-please-retry")
+		time.Sleep(workingInterval)                        //nolint:forbidigo
+		activityErr := errors.New("bad-luck-please-retry") //nolint:goerr113
 		return "", activityErr
 	}
 
@@ -134,8 +138,8 @@ func (s *ActivityTestSuite) TestActivityScheduleToClose_FiredDuringActivityRun()
 	activityCompleted := 0
 	activityFunction := func() (string, error) {
 		println(fmt.Sprintf("Activity #%d", activityCompleted+1))
-		time.Sleep(workingInterval)
-		activityErr := errors.New("bad-luck-please-retry")
+		time.Sleep(workingInterval)                        //nolint:forbidigo
+		activityErr := errors.New("bad-luck-please-retry") //nolint:goerr113
 		lastActivityRun = time.Now().UTC()
 		activityCompleted += 1
 		return "", activityErr

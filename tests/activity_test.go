@@ -31,10 +31,6 @@ import (
 	"github.com/stretchr/testify/suite"
 )
 
-type ActivityTestSuite struct {
-	ClientFunctionalSuite
-}
-
 func TestActivityTestSuite(t *testing.T) {
 	flag.Parse()
 	suite.Run(t, &ActivityTestSuite{})

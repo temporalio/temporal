@@ -292,7 +292,6 @@ func (t *timerSequenceImpl) getActivityScheduleToCloseTimeout(
 	}
 
 	timeoutTime := timestamp.TimeValue(activityInfo.FirstScheduledTime).Add(scheduleToCloseDuration)
-	//timeoutTime := timestamp.TimeValue(activityInfo.ScheduledTime).Add(scheduleToCloseDuration)
 
 	return &TimerSequenceID{
 		EventID:      activityInfo.ScheduledEventId,
