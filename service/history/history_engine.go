@@ -769,7 +769,7 @@ func (e *historyEngineImpl) ReplicateWorkflowState(
 }
 
 func (e *historyEngineImpl) ReplicateMutableState(ctx context.Context, request *shard.ReplicateMutableStateRequest) error {
-	return e.nDCWorkflowStateReplicator.ReplicateMutableState(ctx, request)
+	return e.nDCWorkflowStateReplicator.ReplicateVersionedTransition(ctx, request)
 }
 
 func (e *historyEngineImpl) ImportWorkflowExecution(
