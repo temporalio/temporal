@@ -177,7 +177,7 @@ func (s *NDCReplicationTaskBatchingTestSuite) TestHistoryReplicationTaskAndThenR
 				historyEvents.Events = append(historyEvents.Events, event.GetData().(*historypb.HistoryEvent))
 			}
 			historyBatch = append(historyBatch, historyEvents)
-			history, err := tests.EventBatchesToVersionHistory(nil, historyBatch)
+			history, err := base.EventBatchesToVersionHistory(nil, historyBatch)
 			s.NoError(err)
 			s.standByReplicationTasksChan <- s.createHistoryEventReplicationTaskFromHistoryEventBatch( // supply history replication task one by one
 				s.namespaceID.String(),
@@ -211,7 +211,7 @@ func (s *NDCReplicationTaskBatchingTestSuite) assertHistoryEvents(
 	mockClientBean.
 		EXPECT().
 		GetRemoteAdminClient(s.passiveClusterName).
-		Return(s.passtiveCluster.GetAdminClient(), nil).
+		Return(s.passtiveCluster.AdminClient(), nil).
 		AnyTimes()
 
 	serializer := serialization.NewSerializer()
@@ -239,7 +239,7 @@ func (s *NDCReplicationTaskBatchingTestSuite) assertHistoryEvents(
 
 func (s *NDCReplicationTaskBatchingTestSuite) registerNamespace() {
 	s.namespace = namespace.Name("test-simple-workflow-ndc-" + common.GenerateRandomString(5))
-	passiveFrontend := s.passtiveCluster.GetFrontendClient() //
+	passiveFrontend := s.passtiveCluster.FrontendClient() //
 	replicationConfig := []*replicationpb.ClusterReplicationConfig{
 		{ClusterName: clusterName[0]},
 		{ClusterName: clusterName[1]},

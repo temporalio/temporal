@@ -527,12 +527,12 @@ func (tc *TestCluster) OperatorClient() operatorservice.OperatorServiceClient {
 
 // HistoryClient returns a history client from the test cluster
 func (tc *TestCluster) HistoryClient() historyservice.HistoryServiceClient {
-	return tc.host.GetHistoryClient()
+	return tc.host.HistoryClient()
 }
 
 // MatchingClient returns a matching client from the test cluster
 func (tc *TestCluster) MatchingClient() matchingservice.MatchingServiceClient {
-	return tc.host.GetMatchingClient()
+	return tc.host.MatchingClient()
 }
 
 // ExecutionManager returns an execution manager factory from the test cluster

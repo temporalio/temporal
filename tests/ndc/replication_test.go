@@ -70,7 +70,7 @@ func (s *NDCFunctionalTestSuite) TestReplicationMessageDLQ() {
 		historyBatch,
 	)
 
-	executionManager := s.cluster.GetExecutionManager()
+	executionManager := s.cluster.ExecutionManager()
 	expectedDLQMsgs := map[int64]bool{}
 	for _, batch := range historyBatch {
 		firstEventID := batch.Events[0].GetEventId()
