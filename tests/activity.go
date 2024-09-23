@@ -31,6 +31,7 @@ import (
 	"errors"
 	"fmt"
 	"math/rand"
+	"sync/atomic"
 	"time"
 
 	"github.com/pborman/uuid"
@@ -76,9 +77,10 @@ func (s *ActivityTestSuite) TestActivityScheduleToClose_FiredDuringBackoff() {
 		MaximumAttempts:    10,
 	}
 
-	actionCalled := 0
+	var activityCompleted atomic.Int32
+	activityCompleted = 0
 	activityFunction := func() (string, error) {
-		actionCalled += 1
+		activityCompleted += 1
 		time.Sleep(workingInterval)                        //nolint:forbidigo
 		activityErr := errors.New("bad-luck-please-retry") //nolint:goerr113
 		return "", activityErr
@@ -112,7 +114,7 @@ func (s *ActivityTestSuite) TestActivityScheduleToClose_FiredDuringBackoff() {
 
 	var out string
 	err = workflowRun.Get(ctx, &out)
-	s.Equal(2, actionCalled)
+	s.Equal(2, activityCompleted)
 	s.NoError(err)
 }
 
