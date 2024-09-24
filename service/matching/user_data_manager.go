@@ -279,7 +279,10 @@ func (m *userDataManagerImpl) fetchUserData(ctx context.Context) error {
 			WaitNewData:              hasFetchedUserData,
 		})
 		if err != nil {
-			m.logger.Error("error fetching user data from parent", tag.Error(err))
+			// don't log on context canceled, produces too much log spam at shutdown
+			if !common.IsContextCanceledErr(err) {
+				m.logger.Error("error fetching user data from parent", tag.Error(err))
+			}
 			var unimplErr *serviceerror.Unimplemented
 			if errors.As(err, &unimplErr) {
 				// This might happen during a deployment. The older version couldn't have had any user data,
