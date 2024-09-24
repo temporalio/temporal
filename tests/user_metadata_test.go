@@ -25,20 +25,27 @@
 package tests
 
 import (
+	"testing"
+
 	"github.com/pborman/uuid"
+	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
 	sdkpb "go.temporal.io/api/sdk/v1"
 	updatepb "go.temporal.io/api/update/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/common/testing/testvars"
-	"go.temporal.io/server/tests/base"
+	"go.temporal.io/server/tests/testcore"
 )
 
-type UserMetadataTestSuite struct {
-	base.FunctionalSuite
+type UserMetadataSuite struct {
+	testcore.FunctionalSuite
 }
 
-func (s *UserMetadataTestSuite) TestUserMetadata() {
+func TestUserMetadataSuite(t *testing.T) {
+	suite.Run(t, new(UserMetadataSuite))
+}
+
+func (s *UserMetadataSuite) TestUserMetadata() {
 	getDescribeWorkflowExecutionInfo := func(client workflowservice.WorkflowServiceClient, namespace string, workflowID string, runID string) (*workflowservice.DescribeWorkflowExecutionResponse, error) {
 		return client.DescribeWorkflowExecution(base.NewContext(), &workflowservice.DescribeWorkflowExecutionRequest{
 			Namespace: namespace,
@@ -74,7 +81,7 @@ func (s *UserMetadataTestSuite) TestUserMetadata() {
 			UserMetadata: metadata,
 		}
 
-		we, err := s.FrontendClient().StartWorkflowExecution(base.NewContext(), request)
+		we, err := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
 		s.NoError(err)
 
 		// Verify that the UserMetadata associated with the start event is returned in the describe response.
@@ -97,7 +104,7 @@ func (s *UserMetadataTestSuite) TestUserMetadata() {
 			UserMetadata: metadata,
 		}
 
-		we, err := s.FrontendClient().SignalWithStartWorkflowExecution(base.NewContext(), request)
+		we, err := s.FrontendClient().SignalWithStartWorkflowExecution(testcore.NewContext(), request)
 		s.NoError(err)
 
 		// Verify that the UserMetadata associated with the start event is returned in the describe response.
@@ -142,7 +149,7 @@ func (s *UserMetadataTestSuite) TestUserMetadata() {
 			},
 		}
 
-		_, err := s.FrontendClient().ExecuteMultiOperation(base.NewContext(), request)
+		_, err := s.FrontendClient().ExecuteMultiOperation(testcore.NewContext(), request)
 		s.NoError(err)
 
 		// Verify that the UserMetadata associated with the start event is returned in the describe response.

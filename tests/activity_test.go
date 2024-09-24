@@ -32,4 +32,7 @@ import (
 func TestActivityTestSuite(t *testing.T) {
 	flag.Parse()
 	suite.Run(t, &ActivityTestSuite{})
+
+func TestActivityClientSuite(t *testing.T) {
+	suite.Run(t, new(ActivityClientTestSuite))
 }

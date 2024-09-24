@@ -33,7 +33,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"go.temporal.io/server/tests/base"
+	"go.temporal.io/server/tests/testcore"
 	"testing"
 	"time"
 
@@ -94,7 +94,7 @@ type (
 	}
 	hrsuTestCluster struct {
 		name        string
-		testCluster *base.TestCluster
+		testCluster *testcore.TestCluster
 		client      sdkclient.Client
 		// Per-test, per-cluster buffer of history event replication tasks
 		inboundHistoryReplicationTasks chan *hrsuTestExecutableTask
@@ -136,7 +136,7 @@ func (s *hrsuTestSuite) SetupSuite() {
 	s.logger = log.NewTestLogger()
 	s.setupSuite(
 		[]string{"cluster1", "cluster2"},
-		base.WithFxOptionsForService(primitives.WorkerService,
+		testcore.WithFxOptionsForService(primitives.WorkerService,
 			fx.Decorate(
 				func(executor namespace.ReplicationTaskExecutor) namespace.ReplicationTaskExecutor {
 					s.namespaceTaskExecutor = executor
@@ -147,7 +147,7 @@ func (s *hrsuTestSuite) SetupSuite() {
 				},
 			),
 		),
-		base.WithFxOptionsForService(primitives.HistoryService,
+		testcore.WithFxOptionsForService(primitives.HistoryService,
 			fx.Decorate(
 				func(converter replication.ExecutableTaskConverter) replication.ExecutableTaskConverter {
 					return &hrsuTestExecutableTaskConverter{
@@ -189,7 +189,7 @@ func (s *hrsuTestSuite) startHrsuTest() (*hrsuTest, context.Context, context.Can
 	return &t, ctx, cancel
 }
 
-func (t *hrsuTest) newHrsuTestCluster(ns string, name string, cluster *base.TestCluster) hrsuTestCluster {
+func (t *hrsuTest) newHrsuTestCluster(ns string, name string, cluster *testcore.TestCluster) hrsuTestCluster {
 	sdkClient, err := sdkclient.Dial(sdkclient.Options{
 		HostPort:  cluster.Host().FrontendGRPCAddress(),
 		Namespace: ns,
@@ -638,12 +638,12 @@ func (t *hrsuTest) failover1To2(ctx context.Context) {
 	t.cluster1.setActive(ctx, "cluster2")
 	t.s.Equal([]string{"cluster2", "cluster1"}, t.getActiveClusters(ctx))
 
-	time.Sleep(base.NamespaceCacheRefreshInterval)
+	time.Sleep(testcore.NamespaceCacheRefreshInterval)
 
 	t.executeNamespaceReplicationTasksUntil(ctx, enumsspb.NAMESPACE_OPERATION_UPDATE)
 	// Wait for active cluster to be changed in namespace registry entry.
 	// TODO (dan) It would be nice to find a better approach.
-	time.Sleep(base.NamespaceCacheRefreshInterval)
+	time.Sleep(testcore.NamespaceCacheRefreshInterval)
 	t.s.Equal([]string{"cluster2", "cluster2"}, t.getActiveClusters(ctx))
 }
 
@@ -652,12 +652,12 @@ func (t *hrsuTest) failover2To1(ctx context.Context) {
 	t.cluster1.setActive(ctx, "cluster1")
 	t.s.Equal([]string{"cluster1", "cluster2"}, t.getActiveClusters(ctx))
 
-	time.Sleep(base.NamespaceCacheRefreshInterval)
+	time.Sleep(testcore.NamespaceCacheRefreshInterval)
 
 	t.executeNamespaceReplicationTasksUntil(ctx, enumsspb.NAMESPACE_OPERATION_UPDATE)
 	// Wait for active cluster to be changed in namespace registry entry.
 	// TODO (dan) It would be nice to find a better approach.
-	time.Sleep(base.NamespaceCacheRefreshInterval)
+	time.Sleep(testcore.NamespaceCacheRefreshInterval)
 	t.s.Equal([]string{"cluster1", "cluster1"}, t.getActiveClusters(ctx))
 }
 
@@ -673,7 +673,7 @@ func (t *hrsuTest) enterSplitBrainState(ctx context.Context) {
 
 	// Wait for active cluster to be changed in namespace registry entry.
 	// TODO (dan) It would be nice to find a better approach.
-	time.Sleep(base.NamespaceCacheRefreshInterval)
+	time.Sleep(testcore.NamespaceCacheRefreshInterval)
 }
 
 // executeNamespaceReplicationTasksUntil executes buffered namespace event replication tasks until the specified event
@@ -732,7 +732,7 @@ func (e *hrsuTestNamespaceReplicationTaskExecutor) Execute(_ context.Context, ta
 	return nil
 }
 
-// Convert the replication tasks using the base converter, and wrap them in our own executable tasks.
+// Convert the replication tasks using the testcore converter, and wrap them in our own executable tasks.
 func (t *hrsuTestExecutableTaskConverter) Convert(
 	taskClusterName string,
 	clientShardKey replication.ClusterShardKey,
@@ -808,7 +808,7 @@ func (c *hrsuTestCluster) sendUpdateAndWaitUntilStage(ctx context.Context, updat
 }
 
 func (c *hrsuTestCluster) pollAndAcceptUpdate() error {
-	poller := &base.TaskPoller{
+	poller := &testcore.TaskPoller{
 		Client:              c.testCluster.FrontendClient(),
 		Namespace:           c.t.tv.NamespaceName().String(),
 		TaskQueue:           c.t.tv.TaskQueue(),
@@ -823,7 +823,7 @@ func (c *hrsuTestCluster) pollAndAcceptUpdate() error {
 }
 
 func (c *hrsuTestCluster) pollAndCompleteUpdate(updateId string) error {
-	poller := &base.TaskPoller{
+	poller := &testcore.TaskPoller{
 		Client:              c.testCluster.FrontendClient(),
 		Namespace:           c.t.tv.NamespaceName().String(),
 		TaskQueue:           c.t.tv.TaskQueue(),
@@ -838,7 +838,7 @@ func (c *hrsuTestCluster) pollAndCompleteUpdate(updateId string) error {
 }
 
 func (c *hrsuTestCluster) pollAndAcceptCompleteUpdate(updateId string) error {
-	poller := &base.TaskPoller{
+	poller := &testcore.TaskPoller{
 		Client:              c.testCluster.FrontendClient(),
 		Namespace:           c.t.tv.NamespaceName().String(),
 		TaskQueue:           c.t.tv.TaskQueue(),
@@ -853,7 +853,7 @@ func (c *hrsuTestCluster) pollAndAcceptCompleteUpdate(updateId string) error {
 }
 
 func (c *hrsuTestCluster) pollAndErrorWhileProcessingWorkflowTask() error {
-	poller := &base.TaskPoller{
+	poller := &testcore.TaskPoller{
 		Client:              c.testCluster.FrontendClient(),
 		Namespace:           c.t.tv.NamespaceName().String(),
 		TaskQueue:           c.t.tv.TaskQueue(),

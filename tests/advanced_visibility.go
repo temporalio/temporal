@@ -62,7 +62,7 @@ import (
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/service/worker/scanner/build_ids"
-	testbase "go.temporal.io/server/tests/base"
+	testbase "go.temporal.io/server/tests/testcore"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -71,7 +71,7 @@ import (
 const (
 	numOfRetry        = 50
 	waitTimeInMs      = 400
-	waitForESToSettle = 4 * time.Second // wait es shards for some time ensure data consistent
+	WaitForESToSettle = 4 * time.Second // wait es shards for some time ensure data consistent
 )
 
 type AdvancedVisibilitySuite struct {
@@ -106,9 +106,9 @@ func (s *AdvancedVisibilitySuite) SetupSuite() {
 
 	s.SetDynamicConfigOverrides(dynamicConfigOverrides)
 
-	if UsingSQLAdvancedVisibility() {
+	if testbase.UsingSQLAdvancedVisibility() {
 		s.FunctionalTestBase.SetupSuite("testdata/cluster.yaml")
-		s.Logger.Info(fmt.Sprintf("Running advanced visibility test with %s/%s persistence", TestFlags.PersistenceType, TestFlags.PersistenceDriver))
+		s.Logger.Info(fmt.Sprintf("Running advanced visibility test with %s/%s persistence", testbase.TestFlags.PersistenceType, testbase.TestFlags.PersistenceDriver))
 		s.isElasticsearchEnabled = false
 	} else {
 		s.FunctionalTestBase.SetupSuite("testdata/es_cluster.yaml")
@@ -121,8 +121,8 @@ func (s *AdvancedVisibilitySuite) SetupSuite() {
 	}
 
 	clientAddr := "127.0.0.1:7134"
-	if TestFlags.FrontendAddr != "" {
-		clientAddr = TestFlags.FrontendAddr
+	if testbase.TestFlags.FrontendAddr != "" {
+		clientAddr = testbase.TestFlags.FrontendAddr
 	}
 	sdkClient, err := sdkclient.Dial(sdkclient.Options{
 		HostPort:  clientAddr,
@@ -316,7 +316,7 @@ func (s *AdvancedVisibilitySuite) TestListWorkflow_SearchAttribute() {
 	s.NotNil(newTask)
 	s.NotNil(newTask.WorkflowTask)
 
-	time.Sleep(waitForESToSettle)
+	time.Sleep(WaitForESToSettle)
 
 	listRequest := &workflowservice.ListWorkflowExecutionsRequest{
 		Namespace: s.Namespace(),
@@ -403,7 +403,7 @@ func (s *AdvancedVisibilitySuite) TestListWorkflow_OrQuery() {
 	we3, err := s.FrontendClient().StartWorkflowExecution(testbase.NewContext(), request)
 	s.NoError(err)
 
-	time.Sleep(waitForESToSettle)
+	time.Sleep(WaitForESToSettle)
 
 	// query 1 workflow with search attr
 	query1 := fmt.Sprintf(`CustomIntField = %d`, 1)
@@ -497,7 +497,7 @@ func (s *AdvancedVisibilitySuite) TestListWorkflow_KeywordQuery() {
 	we1, err := s.FrontendClient().StartWorkflowExecution(testbase.NewContext(), request)
 	s.NoError(err)
 
-	time.Sleep(waitForESToSettle)
+	time.Sleep(WaitForESToSettle)
 
 	// Exact match Keyword (supported)
 	var openExecution *workflowpb.WorkflowExecutionInfo
@@ -582,7 +582,7 @@ func (s *AdvancedVisibilitySuite) TestListWorkflow_StringQuery() {
 	we1, err := s.FrontendClient().StartWorkflowExecution(testbase.NewContext(), request)
 	s.NoError(err)
 
-	time.Sleep(waitForESToSettle)
+	time.Sleep(WaitForESToSettle)
 
 	// Exact match String (supported)
 	var openExecution *workflowpb.WorkflowExecutionInfo
@@ -644,7 +644,7 @@ func (s *AdvancedVisibilitySuite) TestListWorkflow_MaxWindowSize() {
 		s.NoError(err)
 	}
 
-	time.Sleep(waitForESToSettle)
+	time.Sleep(WaitForESToSettle)
 
 	var listResp *workflowservice.ListWorkflowExecutionsResponse
 	var nextPageToken []byte
@@ -719,7 +719,7 @@ func (s *AdvancedVisibilitySuite) TestListWorkflow_OrderBy() {
 		s.NoError(err)
 	}
 
-	time.Sleep(waitForESToSettle)
+	time.Sleep(WaitForESToSettle)
 
 	desc := "desc"
 	asc := "asc"
@@ -836,7 +836,7 @@ func (s *AdvancedVisibilitySuite) testListWorkflowHelper(numOfWorkflows, pageSiz
 		s.NoError(err)
 	}
 
-	time.Sleep(waitForESToSettle)
+	time.Sleep(WaitForESToSettle)
 
 	var openExecutions []*workflowpb.WorkflowExecutionInfo
 	var nextPageToken []byte
@@ -1292,7 +1292,7 @@ func (s *AdvancedVisibilitySuite) TestUpsertWorkflowExecutionSearchAttributes() 
 	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED, newTask.WorkflowTask.History.Events[2].GetEventType())
 	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED, newTask.WorkflowTask.History.Events[3].GetEventType())
 
-	time.Sleep(waitForESToSettle)
+	time.Sleep(WaitForESToSettle)
 
 	// verify upsert data is on ES
 	listRequest := &workflowservice.ListWorkflowExecutionsRequest{
@@ -1338,7 +1338,7 @@ func (s *AdvancedVisibilitySuite) TestUpsertWorkflowExecutionSearchAttributes() 
 	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED, newTask.WorkflowTask.History.Events[2].GetEventType())
 	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED, newTask.WorkflowTask.History.Events[3].GetEventType())
 
-	time.Sleep(waitForESToSettle)
+	time.Sleep(WaitForESToSettle)
 
 	// verify upsert data is on ES
 	s.testListResultForUpsertSearchAttributes(listRequest)
@@ -1360,7 +1360,7 @@ func (s *AdvancedVisibilitySuite) TestUpsertWorkflowExecutionSearchAttributes() 
 	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED, newTask.WorkflowTask.History.Events[2].GetEventType())
 	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED, newTask.WorkflowTask.History.Events[3].GetEventType())
 
-	time.Sleep(waitForESToSettle)
+	time.Sleep(WaitForESToSettle)
 
 	// verify search attributes are unset
 	listRequest = &workflowservice.ListWorkflowExecutionsRequest{
@@ -1446,7 +1446,7 @@ func (s *AdvancedVisibilitySuite) TestUpsertWorkflowExecutionSearchAttributes() 
 	s.NotNil(newTask)
 	s.Nil(newTask.WorkflowTask)
 
-	time.Sleep(waitForESToSettle)
+	time.Sleep(WaitForESToSettle)
 
 	// verify search attributes from DescribeWorkflowExecution
 	descRequest = &workflowservice.DescribeWorkflowExecutionRequest{
@@ -1580,7 +1580,7 @@ func (s *AdvancedVisibilitySuite) TestModifyWorkflowExecutionProperties() {
 	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED, newTask.WorkflowTask.History.Events[2].GetEventType())
 	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED, newTask.WorkflowTask.History.Events[3].GetEventType())
 
-	time.Sleep(waitForESToSettle)
+	time.Sleep(WaitForESToSettle)
 
 	attrValPayload1, _ := payload.Encode("test memo val 1")
 	attrValPayload2, _ := payload.Encode("test memo val 2")
@@ -1626,7 +1626,7 @@ func (s *AdvancedVisibilitySuite) TestModifyWorkflowExecutionProperties() {
 	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED, newTask.WorkflowTask.History.Events[2].GetEventType())
 	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED, newTask.WorkflowTask.History.Events[3].GetEventType())
 
-	time.Sleep(waitForESToSettle)
+	time.Sleep(WaitForESToSettle)
 
 	attrValPayload1, _ = payload.Encode("test memo val 1 new")
 	attrValPayload3, _ := payload.Encode("test memo val 3")
@@ -1667,7 +1667,7 @@ func (s *AdvancedVisibilitySuite) TestModifyWorkflowExecutionProperties() {
 	s.NotNil(newTask)
 	s.Nil(newTask.WorkflowTask)
 
-	time.Sleep(waitForESToSettle)
+	time.Sleep(WaitForESToSettle)
 
 	descRequest := &workflowservice.DescribeWorkflowExecutionRequest{
 		Namespace: s.Namespace(),
@@ -1874,7 +1874,7 @@ func (s *AdvancedVisibilitySuite) TestChildWorkflow_ParentWorkflow() {
 				assert.Equal(c, run.GetRunID(), wfInfo.RootExecution.GetRunId())
 			}
 		},
-		waitForESToSettle,
+		WaitForESToSettle,
 		100*time.Millisecond,
 	)
 
@@ -1901,7 +1901,7 @@ func (s *AdvancedVisibilitySuite) TestChildWorkflow_ParentWorkflow() {
 				assert.Equal(c, run.GetRunID(), childWfInfo.RootExecution.GetRunId())
 			}
 		},
-		waitForESToSettle,
+		WaitForESToSettle,
 		100*time.Millisecond,
 	)
 }

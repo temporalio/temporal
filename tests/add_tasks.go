@@ -27,7 +27,7 @@ package tests
 import (
 	"context"
 	"errors"
-	testbase "go.temporal.io/server/tests/base"
+	testbase "go.temporal.io/server/tests/testcore"
 	"strings"
 	"time"
 

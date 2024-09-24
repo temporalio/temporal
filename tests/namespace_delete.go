@@ -28,7 +28,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/dgryski/go-farm"
-	"go.temporal.io/server/tests/base"
+	"go.temporal.io/server/tests/testcore"
 	"os"
 	"strconv"
 	"time"
@@ -58,14 +58,14 @@ type (
 		*require.Assertions
 		suite.Suite
 
-		testClusterFactory base.TestClusterFactory
+		testClusterFactory testcore.TestClusterFactory
 
 		frontendClient workflowservice.WorkflowServiceClient
 		adminClient    adminservice.AdminServiceClient
 		operatorClient operatorservice.OperatorServiceClient
 
-		cluster       *base.TestCluster
-		clusterConfig *base.TestClusterConfig
+		cluster       *testcore.TestCluster
+		clusterConfig *testcore.TestClusterConfig
 		logger        log.Logger
 	}
 )
@@ -75,17 +75,17 @@ const invalidUTF8 = "\n\x8f\x01\n\x0ejunk\x12data"
 
 func (s *namespaceTestSuite) SetupSuite() {
 	s.logger = log.NewTestLogger()
-	s.testClusterFactory = base.NewTestClusterFactory()
+	s.testClusterFactory = testcore.NewTestClusterFactory()
 
-	if UsingSQLAdvancedVisibility() {
+	if testcore.UsingSQLAdvancedVisibility() {
 		var err error
-		s.clusterConfig, err = base.GetTestClusterConfig("testdata/cluster.yaml")
+		s.clusterConfig, err = testcore.GetTestClusterConfig("testdata/cluster.yaml")
 		s.Require().NoError(err)
-		s.logger.Info(fmt.Sprintf("Running delete namespace tests with %s/%s persistence", TestFlags.PersistenceType, TestFlags.PersistenceDriver))
+		s.logger.Info(fmt.Sprintf("Running delete namespace tests with %s/%s persistence", testcore.TestFlags.PersistenceType, testcore.TestFlags.PersistenceDriver))
 	} else {
 		var err error
 		// Elasticsearch is needed to test advanced visibility code path in reclaim resources workflow.
-		s.clusterConfig, err = base.GetTestClusterConfig("testdata/es_cluster.yaml")
+		s.clusterConfig, err = testcore.GetTestClusterConfig("testdata/es_cluster.yaml")
 		s.Require().NoError(err)
 		s.logger.Info("Running delete namespace tests with Elasticsearch persistence")
 	}

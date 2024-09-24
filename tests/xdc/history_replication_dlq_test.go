@@ -30,7 +30,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
-	"go.temporal.io/server/tests/base"
+	"go.temporal.io/server/tests/testcore"
 	"math"
 	"strconv"
 	"strings"
@@ -193,7 +193,7 @@ func (s *historyReplicationDLQSuite) SetupSuite() {
 			fmt.Sprintf(format, "active"),
 			fmt.Sprintf(format, "standby"),
 		},
-		base.WithFxOptionsForService(primitives.HistoryService,
+		testcore.WithFxOptionsForService(primitives.HistoryService,
 			fx.Decorate(
 				taskExecutorDecorator,
 				func(dlqWriter replication.DLQWriter) replication.DLQWriter {
@@ -206,7 +206,7 @@ func (s *historyReplicationDLQSuite) SetupSuite() {
 				},
 			),
 		),
-		base.WithFxOptionsForService(primitives.WorkerService,
+		testcore.WithFxOptionsForService(primitives.WorkerService,
 			fx.Decorate(
 				func(executor namespace.ReplicationTaskExecutor) namespace.ReplicationTaskExecutor {
 					return &testNamespaceReplicationTaskExecutor{
@@ -593,7 +593,7 @@ func (f testReplicationTaskExecutor) execute(
 	return err
 }
 
-// Convert the replication tasks using the base converter, but then wrap them in our own faulty executable tasks.
+// Convert the replication tasks using the testcore converter, but then wrap them in our own faulty executable tasks.
 func (t *testExecutableTaskConverter) Convert(
 	taskClusterName string,
 	clientShardKey replication.ClusterShardKey,

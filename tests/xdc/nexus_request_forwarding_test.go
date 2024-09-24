@@ -27,7 +27,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
-	"go.temporal.io/server/tests/base"
+	"go.temporal.io/server/tests/testcore"
 	"io"
 	"net/http"
 	"slices"
@@ -210,7 +210,7 @@ func (s *NexusRequestForwardingSuite) TestStartOperationForwardedFromStandbyToAc
 			passiveCapture := passiveMetricsHandler.StartCapture()
 			defer passiveMetricsHandler.StopCapture(passiveCapture)
 
-			ctx, cancel := context.WithCancel(base.NewContext())
+			ctx, cancel := context.WithCancel(testcore.NewContext())
 			defer cancel()
 
 			go s.nexusTaskPoller(ctx, s.cluster1.FrontendClient(), ns, tc.taskQueue, tc.handler)
@@ -311,7 +311,7 @@ func (s *NexusRequestForwardingSuite) TestCancelOperationForwardedFromStandbyToA
 			passiveCapture := passiveMetricsHandler.StartCapture()
 			defer passiveMetricsHandler.StopCapture(passiveCapture)
 
-			ctx, cancel := context.WithCancel(base.NewContext())
+			ctx, cancel := context.WithCancel(testcore.NewContext())
 			defer cancel()
 
 			go s.nexusTaskPoller(ctx, s.cluster1.FrontendClient(), ns, tc.taskQueue, tc.handler)
@@ -335,10 +335,10 @@ func (s *NexusRequestForwardingSuite) TestCompleteOperationForwardedFromStandbyT
 		nexusoperations.CallbackURLTemplate,
 		"http://"+s.cluster2.Host().FrontendHTTPAddress()+"/namespaces/{{.NamespaceName}}/nexus/callback")
 
-	ctx := base.NewContext()
+	ctx := testcore.NewContext()
 	ns := s.createGlobalNamespace()
 	taskQueue := fmt.Sprintf("%v-%v", "test-task-queue", uuid.New())
-	endpointName := base.RandomizedNexusEndpoint(s.T().Name())
+	endpointName := testcore.RandomizedNexusEndpoint(s.T().Name())
 
 	var callbackToken, publicCallbackUrl string
 
@@ -553,7 +553,7 @@ func (s *NexusRequestForwardingSuite) nexusTaskPoller(ctx context.Context, front
 func (s *NexusRequestForwardingSuite) sendNexusCompletionRequest(
 	ctx context.Context,
 	t *testing.T,
-	testCluster *base.TestCluster,
+	testCluster *testcore.TestCluster,
 	url string,
 	completion nexus.OperationCompletion,
 	callbackToken string,

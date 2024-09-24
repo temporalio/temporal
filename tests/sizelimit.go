@@ -27,7 +27,7 @@ package tests
 import (
 	"bytes"
 	"encoding/binary"
-	"go.temporal.io/server/tests/base"
+	"go.temporal.io/server/tests/testcore"
 	"time"
 
 	"github.com/pborman/uuid"
@@ -55,7 +55,7 @@ type SizeLimitFunctionalSuite struct {
 	// not merely log an error
 	*require.Assertions
 	historyrequire.HistoryRequire
-	base.FunctionalTestBase
+	testcore.FunctionalTestBase
 }
 
 // This cluster use customized threshold for history config
@@ -98,7 +98,7 @@ func (s *SizeLimitFunctionalSuite) TestTerminateWorkflowCausedByHistoryCountLimi
 		Identity:            identity,
 	}
 
-	we, err0 := s.FrontendClient().StartWorkflowExecution(base.NewContext(), request)
+	we, err0 := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
 	s.NoError(err0)
 
 	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
@@ -139,7 +139,7 @@ func (s *SizeLimitFunctionalSuite) TestTerminateWorkflowCausedByHistoryCountLimi
 		return payloads.EncodeString("Activity Result"), false, nil
 	}
 
-	poller := &base.TaskPoller{
+	poller := &testcore.TaskPoller{
 		Client:              s.FrontendClient(),
 		Namespace:           s.Namespace(),
 		TaskQueue:           taskQueue,
@@ -151,7 +151,7 @@ func (s *SizeLimitFunctionalSuite) TestTerminateWorkflowCausedByHistoryCountLimi
 	}
 
 	for i := int32(0); i < activityCount-1; i++ {
-		dwResp, err := s.FrontendClient().DescribeWorkflowExecution(base.NewContext(), &workflowservice.DescribeWorkflowExecutionRequest{
+		dwResp, err := s.FrontendClient().DescribeWorkflowExecution(testcore.NewContext(), &workflowservice.DescribeWorkflowExecutionRequest{
 			Namespace: s.Namespace(),
 			Execution: &commonpb.WorkflowExecution{
 				WorkflowId: id,
@@ -179,7 +179,7 @@ SignalLoop:
 		// Send another signal without RunID
 		signalName := "another signal"
 		signalInput := payloads.EncodeString("another signal input")
-		_, signalErr = s.FrontendClient().SignalWorkflowExecution(base.NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
+		_, signalErr = s.FrontendClient().SignalWorkflowExecution(testcore.NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
 			Namespace: s.Namespace(),
 			WorkflowExecution: &commonpb.WorkflowExecution{
 				WorkflowId: id,
@@ -230,7 +230,7 @@ SignalLoop:
 	s.Eventually(
 		func() bool {
 			resp, err1 := s.FrontendClient().ListClosedWorkflowExecutions(
-				base.NewContext(),
+				testcore.NewContext(),
 				&workflowservice.ListClosedWorkflowExecutionsRequest{
 					Namespace:       s.Namespace(),
 					MaximumPageSize: 100,
@@ -252,7 +252,7 @@ SignalLoop:
 			s.Logger.Info("Closed WorkflowExecution is not yet visible")
 			return false
 		},
-		waitForESToSettle,
+		WaitForESToSettle,
 		100*time.Millisecond,
 	)
 }
@@ -290,7 +290,7 @@ func (s *SizeLimitFunctionalSuite) TestWorkflowFailed_PayloadSizeTooLarge() {
 			},
 		}, nil
 	}
-	poller := &base.TaskPoller{
+	poller := &testcore.TaskPoller{
 		Client:              s.FrontendClient(),
 		Namespace:           s.Namespace(),
 		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
@@ -312,7 +312,7 @@ func (s *SizeLimitFunctionalSuite) TestWorkflowFailed_PayloadSizeTooLarge() {
 		Identity:            identity,
 	}
 
-	we, err := s.FrontendClient().StartWorkflowExecution(base.NewContext(), request)
+	we, err := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
 	s.NoError(err)
 
 	go func() {
@@ -324,7 +324,7 @@ func (s *SizeLimitFunctionalSuite) TestWorkflowFailed_PayloadSizeTooLarge() {
 	case <-sigReadyToSendChan:
 	}
 
-	_, err = s.FrontendClient().SignalWorkflowExecution(base.NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
+	_, err = s.FrontendClient().SignalWorkflowExecution(testcore.NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
 		Namespace:         s.Namespace(),
 		WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: id, RunId: we.GetRunId()},
 		SignalName:        "signal-name",
@@ -376,7 +376,7 @@ func (s *SizeLimitFunctionalSuite) TestTerminateWorkflowCausedByMsSizeLimit() {
 		Identity:            identity,
 	}
 
-	we, err0 := s.FrontendClient().StartWorkflowExecution(base.NewContext(), request)
+	we, err0 := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
 	s.NoError(err0)
 
 	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
@@ -418,7 +418,7 @@ func (s *SizeLimitFunctionalSuite) TestTerminateWorkflowCausedByMsSizeLimit() {
 		return payloads.EncodeString("Activity Result"), false, nil
 	}
 
-	poller := &base.TaskPoller{
+	poller := &testcore.TaskPoller{
 		Client:              s.FrontendClient(),
 		Namespace:           s.Namespace(),
 		TaskQueue:           taskQueue,
@@ -429,7 +429,7 @@ func (s *SizeLimitFunctionalSuite) TestTerminateWorkflowCausedByMsSizeLimit() {
 		T:                   s.T(),
 	}
 
-	dwResp, err := s.FrontendClient().DescribeWorkflowExecution(base.NewContext(), &workflowservice.DescribeWorkflowExecutionRequest{
+	dwResp, err := s.FrontendClient().DescribeWorkflowExecution(testcore.NewContext(), &workflowservice.DescribeWorkflowExecutionRequest{
 		Namespace: s.Namespace(),
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: id,
@@ -448,7 +448,7 @@ func (s *SizeLimitFunctionalSuite) TestTerminateWorkflowCausedByMsSizeLimit() {
 	}
 
 	// Send another signal without RunID
-	_, signalErr := s.FrontendClient().SignalWorkflowExecution(base.NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
+	_, signalErr := s.FrontendClient().SignalWorkflowExecution(testcore.NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
 		Namespace: s.Namespace(),
 		WorkflowExecution: &commonpb.WorkflowExecution{
 			WorkflowId: id,
@@ -476,7 +476,7 @@ func (s *SizeLimitFunctionalSuite) TestTerminateWorkflowCausedByMsSizeLimit() {
 	s.Eventually(
 		func() bool {
 			resp, err1 := s.FrontendClient().ListClosedWorkflowExecutions(
-				base.NewContext(),
+				testcore.NewContext(),
 				&workflowservice.ListClosedWorkflowExecutionsRequest{
 					Namespace:       s.Namespace(),
 					MaximumPageSize: 100,
@@ -498,7 +498,7 @@ func (s *SizeLimitFunctionalSuite) TestTerminateWorkflowCausedByMsSizeLimit() {
 			s.Logger.Info("Closed WorkflowExecution is not yet visible")
 			return false
 		},
-		waitForESToSettle,
+		WaitForESToSettle,
 		100*time.Millisecond,
 	)
 }
@@ -522,7 +522,7 @@ func (s *SizeLimitFunctionalSuite) TestTerminateWorkflowCausedByHistorySizeLimit
 		Identity:            identity,
 	}
 
-	we, err0 := s.FrontendClient().StartWorkflowExecution(base.NewContext(), request)
+	we, err0 := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
 	s.NoError(err0)
 
 	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
@@ -536,7 +536,7 @@ SignalLoop:
 		signalName := "another signal"
 		signalInput, err := payloads.Encode(largePayload)
 		s.NoError(err)
-		_, signalErr = s.FrontendClient().SignalWorkflowExecution(base.NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
+		_, signalErr = s.FrontendClient().SignalWorkflowExecution(testcore.NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
 			Namespace: s.Namespace(),
 			WorkflowExecution: &commonpb.WorkflowExecution{
 				WorkflowId: id,
@@ -577,7 +577,7 @@ SignalLoop:
 	s.Eventually(
 		func() bool {
 			resp, err1 := s.FrontendClient().ListClosedWorkflowExecutions(
-				base.NewContext(),
+				testcore.NewContext(),
 				&workflowservice.ListClosedWorkflowExecutionsRequest{
 					Namespace:       s.Namespace(),
 					MaximumPageSize: 100,
@@ -599,7 +599,7 @@ SignalLoop:
 			s.Logger.Info("Closed WorkflowExecution is not yet visible")
 			return false
 		},
-		waitForESToSettle,
+		WaitForESToSettle,
 		100*time.Millisecond,
 	)
 }

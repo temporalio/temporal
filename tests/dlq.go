@@ -31,7 +31,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"go.temporal.io/server/tests/base"
+	"go.temporal.io/server/tests/testcore"
 	"io"
 	"os"
 	"strconv"
@@ -69,7 +69,7 @@ import (
 
 type (
 	DLQSuite struct {
-		base.FunctionalTestBase
+		testcore.FunctionalTestBase
 		*require.Assertions
 		dlq              persistence.HistoryTaskQueueManager
 		dlqTasks         chan tasks.Task
@@ -124,7 +124,7 @@ func (s *DLQSuite) SetupSuite() {
 	s.failingWorkflowIDPrefix.Store("dlq-test-terminal-wfts-")
 	s.FunctionalTestBase.SetupSuite(
 		"testdata/es_cluster.yaml",
-		base.WithFxOptionsForService(primitives.HistoryService,
+		testcore.WithFxOptionsForService(primitives.HistoryService,
 			fx.Populate(&s.dlq),
 			fx.Provide(
 				func() queues.ExecutorWrapper {
@@ -150,7 +150,7 @@ func (s *DLQSuite) SetupSuite() {
 				},
 			),
 		),
-		base.WithFxOptionsForService(primitives.FrontendService,
+		testcore.WithFxOptionsForService(primitives.FrontendService,
 			fx.Populate(&s.sdkClientFactory),
 		),
 	)

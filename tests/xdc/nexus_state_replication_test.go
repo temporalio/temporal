@@ -27,7 +27,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"go.temporal.io/server/tests/base"
+	"go.temporal.io/server/tests/testcore"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -56,7 +56,6 @@ import (
 	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/components/callbacks"
 	"go.temporal.io/server/components/nexusoperations"
-	"go.temporal.io/server/tests"
 )
 
 type NexusStateReplicationSuite struct {
@@ -119,12 +118,12 @@ func (s *NexusStateReplicationSuite) TestNexusOperationEventsReplicated() {
 	listenAddr := nexustest.AllocListenAddress(s.T())
 	nexustest.NewNexusServer(s.T(), listenAddr, h)
 
-	ctx := base.NewContext()
+	ctx := testcore.NewContext()
 	ns := s.createGlobalNamespace()
-	endpointName := base.RandomizedNexusEndpoint(s.T().Name())
+	endpointName := testcore.RandomizedNexusEndpoint(s.T().Name())
 
 	// Set URL template after httpAPAddress is set, see commonnexus.RouteCompletionCallback.
-	for _, cluster := range []*base.TestCluster{s.cluster1, s.cluster2} {
+	for _, cluster := range []*testcore.TestCluster{s.cluster1, s.cluster2} {
 		cluster.OverrideDynamicConfig(
 			s.T(),
 			nexusoperations.CallbackURLTemplate,
@@ -265,13 +264,13 @@ func (s *NexusStateReplicationSuite) TestNexusOperationCancelationReplicated() {
 	listenAddr := nexustest.AllocListenAddress(s.T())
 	nexustest.NewNexusServer(s.T(), listenAddr, h)
 
-	ctx := base.NewContext()
+	ctx := testcore.NewContext()
 	ns := s.createGlobalNamespace()
-	endpointName := base.RandomizedNexusEndpoint(s.T().Name())
+	endpointName := testcore.RandomizedNexusEndpoint(s.T().Name())
 
 	// Set URL template after httpAPAddress is set, see commonnexus.RouteCompletionCallback.
 	// We don't actually want to deliver callbacks in this test, the config just has to be set for nexus task execution.
-	for _, cluster := range []*base.TestCluster{s.cluster1, s.cluster2} {
+	for _, cluster := range []*testcore.TestCluster{s.cluster1, s.cluster2} {
 		cluster.OverrideDynamicConfig(
 			s.T(),
 			nexusoperations.CallbackURLTemplate,
@@ -393,7 +392,7 @@ func (s *NexusStateReplicationSuite) TestNexusCallbackReplicated() {
 	}))
 	defer ts.Close()
 
-	ctx := base.NewContext()
+	ctx := testcore.NewContext()
 	ns := s.createGlobalNamespace()
 
 	sdkClient1, err := sdkclient.Dial(sdkclient.Options{

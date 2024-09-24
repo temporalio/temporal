@@ -24,7 +24,7 @@ package tests
 
 import (
 	"context"
-	"go.temporal.io/server/tests/base"
+	"go.temporal.io/server/tests/testcore"
 	"time"
 
 	"github.com/pborman/uuid"
@@ -42,7 +42,7 @@ import (
 type (
 	DescribeTaskQueueSuite struct {
 		*require.Assertions
-		base.FunctionalTestBase
+		testcore.FunctionalTestBase
 	}
 )
 
@@ -111,7 +111,7 @@ func (s *DescribeTaskQueueSuite) publishConsumeWorkflowTasksValidateStats(workfl
 	expectedAddRate[enumspb.TASK_QUEUE_TYPE_ACTIVITY] = false
 	expectedDispatchRate[enumspb.TASK_QUEUE_TYPE_ACTIVITY] = false
 
-	tqName := base.RandomizeStr("backlog-counter-task-queue")
+	tqName := testcore.RandomizeStr("backlog-counter-task-queue")
 	tq := &taskqueuepb.TaskQueue{Name: tqName, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 	identity := "worker-multiple-tasks"
 	for i := 0; i < workflows; i++ {
@@ -131,7 +131,7 @@ func (s *DescribeTaskQueueSuite) publishConsumeWorkflowTasksValidateStats(workfl
 			Identity:            identity,
 		}
 
-		_, err0 := s.FrontendClient().StartWorkflowExecution(base.NewContext(), request)
+		_, err0 := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
 		s.NoError(err0)
 	}
 
@@ -144,7 +144,7 @@ func (s *DescribeTaskQueueSuite) publishConsumeWorkflowTasksValidateStats(workfl
 
 	// Poll the tasks
 	for i := 0; i < workflows; {
-		resp1, err1 := s.FrontendClient().PollWorkflowTaskQueue(base.NewContext(), &workflowservice.PollWorkflowTaskQueueRequest{
+		resp1, err1 := s.FrontendClient().PollWorkflowTaskQueue(testcore.NewContext(), &workflowservice.PollWorkflowTaskQueueRequest{
 			Namespace: s.Namespace(),
 			TaskQueue: tq,
 			Identity:  identity,
@@ -154,7 +154,7 @@ func (s *DescribeTaskQueueSuite) publishConsumeWorkflowTasksValidateStats(workfl
 			continue // poll again on empty responses
 		}
 		i++
-		_, err := s.FrontendClient().RespondWorkflowTaskCompleted(base.NewContext(), &workflowservice.RespondWorkflowTaskCompletedRequest{
+		_, err := s.FrontendClient().RespondWorkflowTaskCompleted(testcore.NewContext(), &workflowservice.RespondWorkflowTaskCompletedRequest{
 			Namespace: s.Namespace(),
 			Identity:  identity,
 			TaskToken: resp1.TaskToken,
@@ -191,7 +191,7 @@ func (s *DescribeTaskQueueSuite) publishConsumeWorkflowTasksValidateStats(workfl
 	// Poll the tasks
 	for i := 0; i < workflows; {
 		resp1, err1 := s.FrontendClient().PollActivityTaskQueue(
-			base.NewContext(), &workflowservice.PollActivityTaskQueueRequest{
+			testcore.NewContext(), &workflowservice.PollActivityTaskQueueRequest{
 				Namespace: s.Namespace(),
 				TaskQueue: tq,
 				Identity:  identity,

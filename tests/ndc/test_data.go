@@ -34,7 +34,7 @@ import (
 	replicationpb "go.temporal.io/api/replication/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/common/codec"
-	testbase "go.temporal.io/server/tests/base"
+	testbase "go.temporal.io/server/tests/testcore"
 )
 
 var (

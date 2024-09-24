@@ -28,7 +28,7 @@ import (
 	"bytes"
 	"encoding/binary"
 	"fmt"
-	"go.temporal.io/server/tests/base"
+	"go.temporal.io/server/tests/testcore"
 	"strconv"
 	"time"
 
@@ -63,7 +63,7 @@ const (
 type (
 	ArchivalSuite struct {
 		*require.Assertions
-		base.FunctionalTestBase
+		testcore.FunctionalTestBase
 	}
 
 	archivalWorkflowInfo struct {
@@ -88,7 +88,7 @@ func (s *ArchivalSuite) SetupTest() {
 }
 
 func (s *ArchivalSuite) TestArchival_TimerQueueProcessor() {
-	s.True(s.TestCluster().ArchivalBase().metadata.GetHistoryConfig().ClusterConfiguredForArchival())
+	s.True(s.TestCluster().ArchivalBase().Metadata().GetHistoryConfig().ClusterConfiguredForArchival())
 
 	namespaceID := s.GetNamespaceID(s.ArchivalNamespace())
 	workflowID := "archival-timer-queue-processor-workflow-id"
@@ -104,7 +104,7 @@ func (s *ArchivalSuite) TestArchival_TimerQueueProcessor() {
 }
 
 func (s *ArchivalSuite) TestArchival_ContinueAsNew() {
-	s.True(s.TestCluster().ArchivalBase().metadata.GetHistoryConfig().ClusterConfiguredForArchival())
+	s.True(s.TestCluster().ArchivalBase().Metadata().GetHistoryConfig().ClusterConfiguredForArchival())
 
 	namespaceID := s.GetNamespaceID(s.ArchivalNamespace())
 	workflowID := "archival-continueAsNew-workflow-id"
@@ -124,7 +124,7 @@ func (s *ArchivalSuite) TestArchival_ContinueAsNew() {
 func (s *ArchivalSuite) TestArchival_ArchiverWorker() {
 	s.T().SkipNow() // flaky test, skip for now, will reimplement archival feature.
 
-	s.True(s.TestCluster().ArchivalBase().metadata.GetHistoryConfig().ClusterConfiguredForArchival())
+	s.True(s.TestCluster().ArchivalBase().Metadata().GetHistoryConfig().ClusterConfiguredForArchival())
 
 	namespaceID := s.GetNamespaceID(s.ArchivalNamespace())
 	workflowID := "archival-archiver-worker-workflow-id"
@@ -139,7 +139,7 @@ func (s *ArchivalSuite) TestArchival_ArchiverWorker() {
 }
 
 func (s *ArchivalSuite) TestVisibilityArchival() {
-	s.True(s.TestCluster().ArchivalBase().metadata.GetVisibilityConfig().ClusterConfiguredForArchival())
+	s.True(s.TestCluster().ArchivalBase().Metadata().GetVisibilityConfig().ClusterConfiguredForArchival())
 
 	namespaceID := s.GetNamespaceID(s.ArchivalNamespace())
 	workflowID := "archival-visibility-workflow-id"
@@ -162,7 +162,7 @@ func (s *ArchivalSuite) TestVisibilityArchival() {
 			Query:     fmt.Sprintf("CloseTime >= %v and CloseTime <= %v and WorkflowType = '%s'", startTime, endTime, workflowType),
 		}
 		for len(executions) == 0 || request.NextPageToken != nil {
-			response, err := s.FrontendClient().ListArchivedWorkflowExecutions(base.NewContext(), request)
+			response, err := s.FrontendClient().ListArchivedWorkflowExecutions(testcore.NewContext(), request)
 			s.NoError(err)
 			s.NotNil(response)
 			executions = append(executions, response.GetExecutions()...)
@@ -191,24 +191,24 @@ func (s *ArchivalSuite) TestVisibilityArchival() {
 // isArchived returns true if both the workflow history and workflow visibility are archived.
 func (s *ArchivalSuite) isArchived(namespace string, execution *commonpb.WorkflowExecution) bool {
 	serviceName := string(primitives.HistoryService)
-	historyURI, err := archiver.NewURI(s.TestCluster().ArchivalBase().historyURI)
+	historyURI, err := archiver.NewURI(s.TestCluster().ArchivalBase().HistoryURI())
 	s.NoError(err)
-	historyArchiver, err := s.TestCluster().ArchivalBase().provider.GetHistoryArchiver(
+	historyArchiver, err := s.TestCluster().ArchivalBase().Provider().GetHistoryArchiver(
 		historyURI.Scheme(),
 		serviceName,
 	)
 	s.NoError(err)
 
-	visibilityURI, err := archiver.NewURI(s.TestCluster().ArchivalBase().visibilityURI)
+	visibilityURI, err := archiver.NewURI(s.TestCluster().ArchivalBase().VisibilityURI())
 	s.NoError(err)
-	visibilityArchiver, err := s.TestCluster().ArchivalBase().provider.GetVisibilityArchiver(
+	visibilityArchiver, err := s.TestCluster().ArchivalBase().Provider().GetVisibilityArchiver(
 		visibilityURI.Scheme(),
 		serviceName,
 	)
 	s.NoError(err)
 
 	for i := 0; i < retryLimit; i++ {
-		ctx := base.NewContext()
+		ctx := testcore.NewContext()
 		if i > 0 {
 			time.Sleep(retryBackoffTime)
 		}
@@ -265,8 +265,8 @@ func (s *ArchivalSuite) isHistoryDeleted(
 	)
 
 	for i := 0; i < retryLimit; i++ {
-		_, err := s.TestCluster().GetTestBase().ExecutionManager.ReadHistoryBranch(
-			base.NewContext(),
+		_, err := s.TestCluster().TestBase().ExecutionManager.ReadHistoryBranch(
+			testcore.NewContext(),
 			&persistence.ReadHistoryBranchRequest{
 				ShardID:       shardID,
 				BranchToken:   workflowInfo.branchToken,
@@ -297,7 +297,7 @@ func (s *ArchivalSuite) isMutableStateDeleted(namespaceID string, execution *com
 	}
 
 	for i := 0; i < retryLimit; i++ {
-		_, err := s.TestCluster().GetTestBase().ExecutionManager.GetWorkflowExecution(base.NewContext(), request)
+		_, err := s.TestCluster().TestBase().ExecutionManager.GetWorkflowExecution(testcore.NewContext(), request)
 		if _, isNotFound := err.(*serviceerror.NotFound); isNotFound {
 			return true
 		}
@@ -325,7 +325,7 @@ func (s *ArchivalSuite) startAndFinishWorkflow(
 		WorkflowTaskTimeout: durationpb.New(1 * time.Second),
 		Identity:            identity,
 	}
-	startResp, err := s.FrontendClient().StartWorkflowExecution(base.NewContext(), request)
+	startResp, err := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
 	s.NoError(err)
 	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(startResp.RunId))
 	workflowInfos := make([]archivalWorkflowInfo, numRuns)
@@ -399,7 +399,7 @@ func (s *ArchivalSuite) startAndFinishWorkflow(
 		return payloads.EncodeString("Activity Result"), false, nil
 	}
 
-	poller := &base.TaskPoller{
+	poller := &testcore.TaskPoller{
 		Client:              s.FrontendClient(),
 		Namespace:           namespace,
 		TaskQueue:           taskQueue,
@@ -423,7 +423,7 @@ func (s *ArchivalSuite) startAndFinishWorkflow(
 			s.NoError(err)
 		}
 
-		_, err = poller.PollAndProcessWorkflowTask(base.WithDumpHistory)
+		_, err = poller.PollAndProcessWorkflowTask(testcore.WithDumpHistory)
 		s.NoError(err)
 	}
 
@@ -440,7 +440,7 @@ func (s *ArchivalSuite) getBranchToken(
 	execution *commonpb.WorkflowExecution,
 ) ([]byte, error) {
 
-	descResp, err := s.AdminClient().DescribeMutableState(base.NewContext(), &adminservice.DescribeMutableStateRequest{
+	descResp, err := s.AdminClient().DescribeMutableState(testcore.NewContext(), &adminservice.DescribeMutableStateRequest{
 		Namespace: namespace,
 		Execution: execution,
 	})

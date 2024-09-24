@@ -28,7 +28,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/binary"
-	"go.temporal.io/server/tests/base"
+	"go.temporal.io/server/tests/testcore"
 	"time"
 
 	"github.com/pborman/uuid"
@@ -53,8 +53,12 @@ import (
 
 type RawHistorySuite struct {
 	*require.Assertions
-	base.FunctionalTestBase
+	testcore.FunctionalTestBase
 	historyrequire.HistoryRequire
+}
+
+type RawHistoryClientSuite struct {
+	testcore.ClientFunctionalSuite
 }
 
 func (s *RawHistorySuite) SetupSuite() {
@@ -100,7 +104,7 @@ func (s *RawHistorySuite) TestGetWorkflowExecutionHistory_All() {
 		Identity:            identity,
 	}
 
-	we, err0 := s.FrontendClient().StartWorkflowExecution(base.NewContext(), request)
+	we, err0 := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
 	s.NoError(err0)
 
 	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
@@ -144,7 +148,7 @@ func (s *RawHistorySuite) TestGetWorkflowExecutionHistory_All() {
 		return payloads.EncodeString("Activity Result"), false, nil
 	}
 
-	poller := &base.TaskPoller{
+	poller := &testcore.TaskPoller{
 		Client:              s.FrontendClient(),
 		Namespace:           s.Namespace(),
 		TaskQueue:           taskQueue,
@@ -157,7 +161,7 @@ func (s *RawHistorySuite) TestGetWorkflowExecutionHistory_All() {
 
 	// this function poll events from history side
 	getHistory := func(namespace string, workflowID string, token []byte, isLongPoll bool) ([]*historypb.HistoryEvent, []byte) {
-		responseInner, err := s.FrontendClient().GetWorkflowExecutionHistory(base.NewContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
+		responseInner, err := s.FrontendClient().GetWorkflowExecutionHistory(testcore.NewContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
 			Namespace: namespace,
 			Execution: &commonpb.WorkflowExecution{
 				WorkflowId: workflowID,
@@ -273,7 +277,7 @@ func (s *RawHistorySuite) TestGetWorkflowExecutionHistory_Close() {
 		Identity:            identity,
 	}
 
-	we, err0 := s.FrontendClient().StartWorkflowExecution(base.NewContext(), request)
+	we, err0 := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
 	s.NoError(err0)
 
 	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
@@ -317,7 +321,7 @@ func (s *RawHistorySuite) TestGetWorkflowExecutionHistory_Close() {
 		return payloads.EncodeString("Activity Result"), false, nil
 	}
 
-	poller := &base.TaskPoller{
+	poller := &testcore.TaskPoller{
 		Client:              s.FrontendClient(),
 		Namespace:           s.Namespace(),
 		TaskQueue:           taskQueue,
@@ -331,7 +335,7 @@ func (s *RawHistorySuite) TestGetWorkflowExecutionHistory_Close() {
 	// this function poll events from history side
 	getHistory := func(namespace string, workflowID string, token []byte, isLongPoll bool) ([]*historypb.HistoryEvent, []byte) {
 		closeEventOnly := enumspb.HISTORY_EVENT_FILTER_TYPE_CLOSE_EVENT
-		responseInner, err := s.FrontendClient().GetWorkflowExecutionHistory(base.NewContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
+		responseInner, err := s.FrontendClient().GetWorkflowExecutionHistory(testcore.NewContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
 			Namespace: namespace,
 			Execution: &commonpb.WorkflowExecution{
 				WorkflowId: workflowID,
@@ -429,7 +433,7 @@ func (s *RawHistorySuite) TestGetWorkflowExecutionHistory_GetRawHistoryData() {
 		Identity:            identity,
 	}
 
-	we, err0 := s.FrontendClient().StartWorkflowExecution(base.NewContext(), request)
+	we, err0 := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
 	s.Nil(err0)
 
 	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
@@ -477,7 +481,7 @@ func (s *RawHistorySuite) TestGetWorkflowExecutionHistory_GetRawHistoryData() {
 		return payloads.EncodeString("Activity Result."), false, nil
 	}
 
-	poller := &base.TaskPoller{
+	poller := &testcore.TaskPoller{
 		Client:              s.FrontendClient(),
 		Namespace:           s.Namespace(),
 		TaskQueue:           taskQueue,
@@ -490,7 +494,7 @@ func (s *RawHistorySuite) TestGetWorkflowExecutionHistory_GetRawHistoryData() {
 
 	// this function poll events from history side
 	getHistoryWithLongPoll := func(namespace string, workflowID string, token []byte, isLongPoll bool) ([]*commonpb.DataBlob, []byte) {
-		responseInner, err := s.FrontendClient().GetWorkflowExecutionHistory(base.NewContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
+		responseInner, err := s.FrontendClient().GetWorkflowExecutionHistory(testcore.NewContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
 			Namespace: namespace,
 			Execution: &commonpb.WorkflowExecution{
 				WorkflowId: workflowID,
@@ -506,7 +510,7 @@ func (s *RawHistorySuite) TestGetWorkflowExecutionHistory_GetRawHistoryData() {
 	}
 
 	getHistory := func(namespace string, workflowID string, token []byte) ([]*commonpb.DataBlob, []byte) {
-		responseInner, err := s.FrontendClient().GetWorkflowExecutionHistory(base.NewContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
+		responseInner, err := s.FrontendClient().GetWorkflowExecutionHistory(testcore.NewContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
 			Namespace: namespace,
 			Execution: &commonpb.WorkflowExecution{
 				WorkflowId: workflowID,
@@ -615,7 +619,7 @@ func (s *RawHistorySuite) TestGetWorkflowExecutionHistory_GetRawHistoryData() {
  11 WorkflowExecutionCompleted`, allEvents)
 }
 
-func (s *ClientFunctionalSuite) TestGetHistoryReverse() {
+func (s *RawHistoryClientSuite) TestGetHistoryReverse() {
 	activityFn := func(ctx context.Context) error {
 		return nil
 	}
@@ -642,18 +646,18 @@ func (s *ClientFunctionalSuite) TestGetHistoryReverse() {
 		return nil
 	}
 
-	s.worker.RegisterActivity(activityFn)
-	s.worker.RegisterWorkflow(workflowFn)
+	s.Worker().RegisterActivity(activityFn)
+	s.Worker().RegisterWorkflow(workflowFn)
 
 	wfId := "functional-test-gethistoryreverse"
 	workflowOptions := sdkclient.StartWorkflowOptions{
 		ID:                 wfId,
-		TaskQueue:          s.taskQueue,
+		TaskQueue:          s.TaskQueue(),
 		WorkflowRunTimeout: 20 * time.Second,
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-	workflowRun, err := s.sdkClient.ExecuteWorkflow(ctx, workflowOptions, workflowFn)
+	workflowRun, err := s.SdkClient().ExecuteWorkflow(ctx, workflowOptions, workflowFn)
 	if err != nil {
 		s.Logger.Fatal("Start workflow failed with err", tag.Error(err))
 	}
@@ -664,7 +668,7 @@ func (s *ClientFunctionalSuite) TestGetHistoryReverse() {
 	err = workflowRun.Get(ctx, nil)
 	s.NoError(err)
 
-	wfeResponse, err := s.sdkClient.DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
+	wfeResponse, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
 	s.Nil(err)
 
 	eventDefaultOrder := s.GetHistory(s.Namespace(), wfeResponse.WorkflowExecutionInfo.Execution)
@@ -683,7 +687,7 @@ func (s *ClientFunctionalSuite) TestGetHistoryReverse() {
 	s.Equal(eventDefaultOrder, events)
 }
 
-func (s *ClientFunctionalSuite) TestGetHistoryReverse_MultipleBranches() {
+func (s *RawHistoryClientSuite) TestGetHistoryReverse_MultipleBranches() {
 	activityFn := func(ctx context.Context) error {
 		return nil
 	}
@@ -719,18 +723,18 @@ func (s *ClientFunctionalSuite) TestGetHistoryReverse_MultipleBranches() {
 		return nil
 	}
 
-	s.worker.RegisterActivity(activityFn)
-	s.worker.RegisterWorkflow(workflowFn)
+	s.Worker().RegisterActivity(activityFn)
+	s.Worker().RegisterWorkflow(workflowFn)
 
 	wfId := "functional-test-wf-gethistory-reverse-multiple-branches"
 	workflowOptions := sdkclient.StartWorkflowOptions{
 		ID:                 wfId,
-		TaskQueue:          s.taskQueue,
+		TaskQueue:          s.TaskQueue(),
 		WorkflowRunTimeout: 20 * time.Second,
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-	workflowRun, err := s.sdkClient.ExecuteWorkflow(ctx, workflowOptions, workflowFn)
+	workflowRun, err := s.SdkClient().ExecuteWorkflow(ctx, workflowOptions, workflowFn)
 	if err != nil {
 		s.Logger.Fatal("Start workflow failed with err", tag.Error(err))
 	}
@@ -741,10 +745,10 @@ func (s *ClientFunctionalSuite) TestGetHistoryReverse_MultipleBranches() {
 	// we want to reset workflow in the middle of execution
 	time.Sleep(time.Second)
 
-	wfeResponse, err := s.sdkClient.DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
+	wfeResponse, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
 	s.NoError(err)
 
-	rweResponse, err := s.sdkClient.ResetWorkflowExecution(ctx, &workflowservice.ResetWorkflowExecutionRequest{
+	rweResponse, err := s.SdkClient().ResetWorkflowExecution(ctx, &workflowservice.ResetWorkflowExecutionRequest{
 		Namespace:                 s.Namespace(),
 		WorkflowExecution:         wfeResponse.WorkflowExecutionInfo.Execution,
 		Reason:                    "TestGetHistoryReverseBranch",
@@ -754,11 +758,11 @@ func (s *ClientFunctionalSuite) TestGetHistoryReverse_MultipleBranches() {
 	s.NoError(err)
 
 	resetRunId := rweResponse.GetRunId()
-	resetWorkflowRun := s.sdkClient.GetWorkflow(ctx, wfId, resetRunId)
+	resetWorkflowRun := s.SdkClient().GetWorkflow(ctx, wfId, resetRunId)
 	err = resetWorkflowRun.Get(ctx, nil)
 	s.NoError(err)
 
-	resetWfeResponse, err := s.sdkClient.DescribeWorkflowExecution(ctx, resetWorkflowRun.GetID(), resetWorkflowRun.GetRunID())
+	resetWfeResponse, err := s.SdkClient().DescribeWorkflowExecution(ctx, resetWorkflowRun.GetID(), resetWorkflowRun.GetRunID())
 	s.NoError(err)
 
 	eventsDefaultOrder := s.GetHistory(s.Namespace(), resetWfeResponse.WorkflowExecutionInfo.Execution)
@@ -784,8 +788,8 @@ func reverseSlice(events []*historypb.HistoryEvent) []*historypb.HistoryEvent {
 	return events
 }
 
-func (s *ClientFunctionalSuite) getHistoryReverse(namespace string, execution *commonpb.WorkflowExecution, pageSize int32) []*historypb.HistoryEvent {
-	historyResponse, err := s.FrontendClient().GetWorkflowExecutionHistoryReverse(base.NewContext(), &workflowservice.GetWorkflowExecutionHistoryReverseRequest{
+func (s *RawHistoryClientSuite) getHistoryReverse(namespace string, execution *commonpb.WorkflowExecution, pageSize int32) []*historypb.HistoryEvent {
+	historyResponse, err := s.FrontendClient().GetWorkflowExecutionHistoryReverse(testcore.NewContext(), &workflowservice.GetWorkflowExecutionHistoryReverseRequest{
 		Namespace:       namespace,
 		Execution:       execution,
 		NextPageToken:   nil,
@@ -795,7 +799,7 @@ func (s *ClientFunctionalSuite) getHistoryReverse(namespace string, execution *c
 
 	events := historyResponse.History.Events
 	for historyResponse.NextPageToken != nil {
-		historyResponse, err = s.FrontendClient().GetWorkflowExecutionHistoryReverse(base.NewContext(), &workflowservice.GetWorkflowExecutionHistoryReverseRequest{
+		historyResponse, err = s.FrontendClient().GetWorkflowExecutionHistoryReverse(testcore.NewContext(), &workflowservice.GetWorkflowExecutionHistoryReverseRequest{
 			Namespace:       namespace,
 			Execution:       execution,
 			NextPageToken:   historyResponse.NextPageToken,
