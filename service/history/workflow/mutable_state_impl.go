@@ -1605,7 +1605,7 @@ func (ms *MutableStateImpl) UpdateActivityInfo(
 
 	ai.Version = incomingActivityInfo.GetVersion()
 	ai.ScheduledTime = incomingActivityInfo.GetScheduledTime()
-	ai.FirstScheduledTime = incomingActivityInfo.GetScheduledTime()
+	// we don't need to update FirstScheduledTime
 	ai.StartedEventId = incomingActivityInfo.GetStartedEventId()
 	ai.LastHeartbeatUpdateTime = incomingActivityInfo.GetLastHeartbeatTime()
 	if ai.StartedEventId == common.EmptyEventID {
@@ -2854,6 +2854,9 @@ func (ms *MutableStateImpl) ApplyActivityTaskScheduledEvent(
 	firstEventID int64,
 	event *historypb.HistoryEvent,
 ) (*persistencespb.ActivityInfo, error) {
+	// QQQQQQQQ
+	println(fmt.Sprintf("ApplyActivityTaskScheduledEvent, %v", time.Now().UTC()))
+
 	attributes := event.GetActivityTaskScheduledEventAttributes()
 
 	scheduledEventID := event.GetEventId()

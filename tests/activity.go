@@ -29,7 +29,6 @@ import (
 	"context"
 	"encoding/binary"
 	"errors"
-	"fmt"
 	"math/rand"
 	"sync/atomic"
 	"time"
@@ -66,7 +65,6 @@ func (s *ActivityTestSuite) TestActivityScheduleToClose_FiredDuringBackoff() {
 	// activity will be scheduled twice. After second failure (that should happen at ~4.2 sec) next retry will not
 	// be scheduled because "schedule_to_close" will happen before retry happens
 	initialRetryInterval := time.Second * 2
-	workingInterval := time.Millisecond * 100
 	scheduleToCloseTimeout := 3 * time.Second
 	startToCloseTimeout := 1 * time.Second
 
@@ -79,7 +77,6 @@ func (s *ActivityTestSuite) TestActivityScheduleToClose_FiredDuringBackoff() {
 
 	var activityCompleted atomic.Int32
 	activityFunction := func() (string, error) {
-		time.Sleep(workingInterval)                        //nolint:forbidigo
 		activityErr := errors.New("bad-luck-please-retry") //nolint:goerr113
 		activityCompleted.Add(1)
 		return "", activityErr
@@ -93,8 +90,7 @@ func (s *ActivityTestSuite) TestActivityScheduleToClose_FiredDuringBackoff() {
 			ScheduleToCloseTimeout: scheduleToCloseTimeout,
 			RetryPolicy:            activityRetryPolicy,
 		}), activityFunction).Get(ctx, &ret)
-		s.Error(err)
-		return "done!", nil
+		return "done!", err
 	}
 
 	s.worker.RegisterWorkflow(workflowFn)
@@ -113,8 +109,16 @@ func (s *ActivityTestSuite) TestActivityScheduleToClose_FiredDuringBackoff() {
 
 	var out string
 	err = workflowRun.Get(ctx, &out)
-	s.Equal(2, activityCompleted.Load())
-	s.NoError(err)
+
+	s.Error(err)
+	var wfExecutionError *temporal.WorkflowExecutionError
+	s.True(errors.As(err, &wfExecutionError))
+	var activityError *temporal.ActivityError
+	s.True(errors.As(wfExecutionError.Unwrap(), &activityError))
+	s.Equal(enumspb.RETRY_STATE_TIMEOUT, activityError.RetryState())
+
+	s.Equal(int32(2), activityCompleted.Load())
+
 }
 
 func (s *ActivityTestSuite) TestActivityScheduleToClose_FiredDuringActivityRun() {
@@ -138,7 +142,6 @@ func (s *ActivityTestSuite) TestActivityScheduleToClose_FiredDuringActivityRun()
 
 	var activityCompleted atomic.Int32
 	activityFunction := func() (string, error) {
-		println(fmt.Sprintf("Activity #%d", activityCompleted.Load()+1))
 		time.Sleep(workingInterval)                        //nolint:forbidigo
 		activityErr := errors.New("bad-luck-please-retry") //nolint:goerr113
 		lastActivityRun = time.Now().UTC()
@@ -163,7 +166,7 @@ func (s *ActivityTestSuite) TestActivityScheduleToClose_FiredDuringActivityRun()
 
 		workflowCompleteRun = time.Now().UTC()
 		// schedule to close timeout should fire while last activity is still running.
-		s.Equal(2, activityCompleted)
+		s.Equal(int32(2), activityCompleted.Load())
 		return "done!", nil
 	}
 
@@ -171,9 +174,8 @@ func (s *ActivityTestSuite) TestActivityScheduleToClose_FiredDuringActivityRun()
 	s.worker.RegisterActivity(activityFunction)
 
 	workflowOptions := sdkclient.StartWorkflowOptions{
-		ID:                 "functional-test-schedule_to_close_failed_while_running",
-		TaskQueue:          s.taskQueue,
-		WorkflowRunTimeout: 10 * time.Second,
+		ID:        s.T().Name(),
+		TaskQueue: s.taskQueue,
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -184,7 +186,7 @@ func (s *ActivityTestSuite) TestActivityScheduleToClose_FiredDuringActivityRun()
 	err = workflowRun.Get(ctx, &out)
 	workflowCompleteRun = time.Now().UTC()
 	// we expect activities to be executed 3 times
-	s.Eventually(func() bool { return activityCompleted.Load() == 3 }, time.Second*10, time.Millisecond*500)
+	s.Eventually(func() bool { return activityCompleted.Load() == int32(3) }, time.Second*10, time.Millisecond*500)
 	s.True(lastActivityRun.After(workflowCompleteRun))
 	s.NoError(err)
 }
