@@ -166,7 +166,6 @@ func writeGrpcServerData(w io.Writer, grpcServerT reflect.Type, tmpl string) {
 
 		rd := workflowTagGetters(requestT, 0)
 		rd.Type = requestT.String()
-		// processOverrides(requestT, &rd)
 		sd.Requests = append(sd.Requests, rd)
 	}
 
@@ -204,11 +203,14 @@ func workflowTagGetters(requestT reflect.Type, depth int) requestData {
 		}
 	}
 
+	// Iterates over fields in order they defined in proto file, not proto index.
+	// Order is important because the first match wins.
 	for fieldNum := 0; fieldNum < requestT.Elem().NumField(); fieldNum++ {
-		// Iterates over fields in order they defined in proto file, not proto index.
-		// Order is important because the first match wins.
-		nestedRequest := requestT.Elem().Field(fieldNum)
+		if (rd.WorkflowIdGetter != "" && rd.RunIdGetter != "") || rd.TaskTokenGetter != "" {
+			break
+		}
 
+		nestedRequest := requestT.Elem().Field(fieldNum)
 		if nestedRequest.Type.Kind() != reflect.Ptr {
 			continue
 		}

@@ -249,7 +249,7 @@ service-clients:
 
 server-interceptors:
 	@printf $(COLOR) "Generate server interceptors..."
-	@go generate -run genrpcserverinterceptors ./common/rpc/interceptor/logtags/...
+	@go generate ./common/rpc/interceptor/logtags/...
 
 update-go-api:
 	@printf $(COLOR) "Update go.temporal.io/api@master..."
