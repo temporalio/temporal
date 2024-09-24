@@ -36,12 +36,8 @@ import (
 	"time"
 
 	"github.com/pborman/uuid"
-	"go.uber.org/fx"
-	"go.uber.org/multierr"
-
 	"go.temporal.io/api/operatorservice/v1"
 	workflowservice "go.temporal.io/api/workflowservice/v1"
-
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
@@ -69,6 +65,8 @@ import (
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/temporal"
 	"go.temporal.io/server/tests/testutils"
+	"go.uber.org/fx"
+	"go.uber.org/multierr"
 )
 
 type (
@@ -542,7 +540,7 @@ func (tc *TestCluster) GetHost() *temporalImpl {
 }
 
 func (tc *TestCluster) OverrideDynamicConfig(t *testing.T, key dynamicconfig.GenericSetting, value any) {
-	tc.host.dcClient.OverrideValue(t, key, value)
+	tc.host.OverrideDCValue(t, key, value)
 }
 
 var errCannotAddCACertToPool = errors.New("failed adding CA to pool")

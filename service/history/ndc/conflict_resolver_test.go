@@ -29,11 +29,9 @@ import (
 	"math/rand"
 	"testing"
 
-	"github.com/golang/mock/gomock"
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-
 	historyspb "go.temporal.io/server/api/history/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/definition"
@@ -43,6 +41,7 @@ import (
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tests"
 	"go.temporal.io/server/service/history/workflow"
+	"go.uber.org/mock/gomock"
 )
 
 type (
@@ -128,7 +127,7 @@ func (s *conflictResolverSuite) TestRebuild() {
 		[]*historyspb.VersionHistoryItem{versionhistory.NewVersionHistoryItem(lastEventID1, version)},
 	)
 	versionHistories := versionhistory.NewVersionHistories(versionHistory0)
-	_, _, err := versionhistory.AddVersionHistory(versionHistories, versionHistory1)
+	_, _, err := versionhistory.AddAndSwitchVersionHistory(versionHistories, versionHistory1)
 	s.NoError(err)
 
 	s.mockMutableState.EXPECT().GetUpdateCondition().Return(updateCondition, dbVersion).AnyTimes()
@@ -198,7 +197,7 @@ func (s *conflictResolverSuite) TestGetOrRebuildCurrentMutableState_NoRebuild_No
 		[]*historyspb.VersionHistoryItem{versionHistoryItem0, versionHistoryItem1},
 	)
 	versionHistories := versionhistory.NewVersionHistories(versionHistory0)
-	_, _, err := versionhistory.AddVersionHistory(versionHistories, versionHistory1)
+	_, _, err := versionhistory.AddAndSwitchVersionHistory(versionHistories, versionHistory1)
 	s.Nil(err)
 	s.mockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{VersionHistories: versionHistories}).AnyTimes()
 
@@ -254,7 +253,7 @@ func (s *conflictResolverSuite) TestGetOrRebuildCurrentMutableState_Rebuild() {
 	)
 
 	versionHistories := versionhistory.NewVersionHistories(versionHistory0)
-	_, _, err := versionhistory.AddVersionHistory(versionHistories, versionHistory1)
+	_, _, err := versionhistory.AddAndSwitchVersionHistory(versionHistories, versionHistory1)
 	s.Nil(err)
 
 	s.mockMutableState.EXPECT().GetUpdateCondition().Return(updateCondition, dbVersion).AnyTimes()
@@ -351,7 +350,7 @@ func (s *conflictResolverSuite) TestGetOrRebuildMutableState_Rebuild() {
 	)
 
 	versionHistories := versionhistory.NewVersionHistories(versionHistory0)
-	_, _, err := versionhistory.AddVersionHistory(versionHistories, versionHistory1)
+	_, _, err := versionhistory.AddAndSwitchVersionHistory(versionHistories, versionHistory1)
 	s.Nil(err)
 
 	s.mockMutableState.EXPECT().GetUpdateCondition().Return(updateCondition, dbVersion).AnyTimes()

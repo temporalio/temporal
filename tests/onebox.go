@@ -41,10 +41,6 @@ import (
 	otelsdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.temporal.io/api/operatorservice/v1"
 	"go.temporal.io/api/workflowservice/v1"
-	"go.uber.org/fx"
-	"go.uber.org/multierr"
-	"google.golang.org/grpc"
-
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
@@ -82,6 +78,9 @@ import (
 	"go.temporal.io/server/service/matching"
 	"go.temporal.io/server/service/worker"
 	"go.temporal.io/server/temporal"
+	"go.uber.org/fx"
+	"go.uber.org/multierr"
+	"google.golang.org/grpc"
 )
 
 const (
@@ -110,7 +109,7 @@ type (
 		historyClient  historyservice.HistoryServiceClient
 		matchingClient matchingservice.MatchingServiceClient
 
-		dcClient                         *dcClient
+		dcClient                         *dynamicconfig.MemoryClient
 		logger                           log.Logger
 		clusterMetadataConfig            *cluster.Config
 		persistenceConfig                config.Persistence
@@ -214,12 +213,36 @@ type (
 	httpPort       int
 )
 
+const NamespaceCacheRefreshInterval = time.Second
+
+var (
+	// Override values for dynamic configs
+	staticOverrides = map[dynamicconfig.Key]any{
+		dynamicconfig.FrontendRPS.Key():                                         3000,
+		dynamicconfig.FrontendMaxNamespaceVisibilityRPSPerInstance.Key():        50,
+		dynamicconfig.FrontendMaxNamespaceVisibilityBurstRatioPerInstance.Key(): 1,
+		dynamicconfig.ReplicationTaskProcessorErrorRetryMaxAttempts.Key():       1,
+		dynamicconfig.SecondaryVisibilityWritingMode.Key():                      visibility.SecondaryVisibilityWritingModeOff,
+		dynamicconfig.WorkflowTaskHeartbeatTimeout.Key():                        5 * time.Second,
+		dynamicconfig.ReplicationTaskFetcherAggregationInterval.Key():           200 * time.Millisecond,
+		dynamicconfig.ReplicationTaskFetcherErrorRetryWait.Key():                50 * time.Millisecond,
+		dynamicconfig.ReplicationTaskProcessorErrorRetryWait.Key():              time.Millisecond,
+		dynamicconfig.ClusterMetadataRefreshInterval.Key():                      100 * time.Millisecond,
+		dynamicconfig.NamespaceCacheRefreshInterval.Key():                       NamespaceCacheRefreshInterval,
+		dynamicconfig.ReplicationEnableUpdateWithNewTaskMerge.Key():             true,
+		dynamicconfig.ValidateUTF8SampleRPCRequest.Key():                        1.0,
+		dynamicconfig.ValidateUTF8SampleRPCResponse.Key():                       1.0,
+		dynamicconfig.ValidateUTF8SamplePersistence.Key():                       1.0,
+		dynamicconfig.ValidateUTF8FailRPCRequest.Key():                          true,
+		dynamicconfig.ValidateUTF8FailRPCResponse.Key():                         true,
+		dynamicconfig.ValidateUTF8FailPersistence.Key():                         true,
+		dynamicconfig.EnableWorkflowExecutionTimeoutTimer.Key():                 true,
+		dynamicconfig.FrontendMaskInternalErrorDetails.Key():                    false,
+	}
+)
+
 // newTemporal returns an instance that hosts full temporal in one process
 func newTemporal(t *testing.T, params *TemporalParams) *temporalImpl {
-	testDCClient := newTestDCClient(dynamicconfig.NewNoopClient())
-	for k, v := range params.DynamicConfigOverrides {
-		testDCClient.OverrideValueByKey(t, k, v)
-	}
 	impl := &temporalImpl{
 		logger:                           params.Logger,
 		clusterMetadataConfig:            params.ClusterMetadataConfig,
@@ -246,7 +269,7 @@ func newTemporal(t *testing.T, params *TemporalParams) *temporalImpl {
 		spanExporters:                    params.SpanExporters,
 		tlsConfigProvider:                params.TLSConfigProvider,
 		captureMetricsHandler:            params.CaptureMetricsHandler,
-		dcClient:                         testDCClient,
+		dcClient:                         dynamicconfig.NewMemoryClient(),
 		serviceFxOptions:                 params.ServiceFxOptions,
 		taskCategoryRegistry:             params.TaskCategoryRegistry,
 	}
@@ -265,7 +288,13 @@ func newTemporal(t *testing.T, params *TemporalParams) *temporalImpl {
 		primitives.WorkerService:   static.Hosts{All: impl.WorkerServiceAddresses()},
 	}
 
-	impl.overrideHistoryDynamicConfig(t, testDCClient)
+	for k, v := range staticOverrides {
+		impl.overrideDynamicConfigByKey(t, k, v)
+	}
+	for k, v := range params.DynamicConfigOverrides {
+		impl.overrideDynamicConfigByKey(t, k, v)
+	}
+	impl.overrideHistoryDynamicConfig(t)
 
 	return impl
 }
@@ -342,7 +371,7 @@ func (c *temporalImpl) WorkerServiceAddresses() []string {
 }
 
 func (c *temporalImpl) OverrideDCValue(t *testing.T, setting dynamicconfig.GenericSetting, value any) {
-	c.dcClient.OverrideValue(t, setting, value)
+	c.overrideDynamicConfigByKey(t, setting.Key(), value)
 }
 
 func (c *temporalImpl) GetAdminClient() adminservice.AdminServiceClient {
@@ -695,45 +724,45 @@ func (c *temporalImpl) frontendConfigProvider() *config.Config {
 	}
 }
 
-func (c *temporalImpl) overrideHistoryDynamicConfig(t *testing.T, client *dcClient) {
+func (c *temporalImpl) overrideHistoryDynamicConfig(t *testing.T) {
 	if c.esConfig != nil {
-		client.OverrideValue(t, dynamicconfig.SecondaryVisibilityWritingMode, visibility.SecondaryVisibilityWritingModeDual)
+		c.OverrideDCValue(t, dynamicconfig.SecondaryVisibilityWritingMode, visibility.SecondaryVisibilityWritingModeDual)
 	}
 	if c.historyConfig.HistoryCountLimitWarn != 0 {
-		client.OverrideValue(t, dynamicconfig.HistoryCountLimitWarn, c.historyConfig.HistoryCountLimitWarn)
+		c.OverrideDCValue(t, dynamicconfig.HistoryCountLimitWarn, c.historyConfig.HistoryCountLimitWarn)
 	}
 	if c.historyConfig.HistoryCountLimitError != 0 {
-		client.OverrideValue(t, dynamicconfig.HistoryCountLimitError, c.historyConfig.HistoryCountLimitError)
+		c.OverrideDCValue(t, dynamicconfig.HistoryCountLimitError, c.historyConfig.HistoryCountLimitError)
 	}
 	if c.historyConfig.HistorySizeLimitWarn != 0 {
-		client.OverrideValue(t, dynamicconfig.HistorySizeLimitWarn, c.historyConfig.HistorySizeLimitWarn)
+		c.OverrideDCValue(t, dynamicconfig.HistorySizeLimitWarn, c.historyConfig.HistorySizeLimitWarn)
 	}
 	if c.historyConfig.HistorySizeLimitError != 0 {
-		client.OverrideValue(t, dynamicconfig.HistorySizeLimitError, c.historyConfig.HistorySizeLimitError)
+		c.OverrideDCValue(t, dynamicconfig.HistorySizeLimitError, c.historyConfig.HistorySizeLimitError)
 	}
 	if c.historyConfig.BlobSizeLimitError != 0 {
-		client.OverrideValue(t, dynamicconfig.BlobSizeLimitError, c.historyConfig.BlobSizeLimitError)
+		c.OverrideDCValue(t, dynamicconfig.BlobSizeLimitError, c.historyConfig.BlobSizeLimitError)
 	}
 	if c.historyConfig.BlobSizeLimitWarn != 0 {
-		client.OverrideValue(t, dynamicconfig.BlobSizeLimitWarn, c.historyConfig.BlobSizeLimitWarn)
+		c.OverrideDCValue(t, dynamicconfig.BlobSizeLimitWarn, c.historyConfig.BlobSizeLimitWarn)
 	}
 	if c.historyConfig.MutableStateSizeLimitError != 0 {
-		client.OverrideValue(t, dynamicconfig.MutableStateSizeLimitError, c.historyConfig.MutableStateSizeLimitError)
+		c.OverrideDCValue(t, dynamicconfig.MutableStateSizeLimitError, c.historyConfig.MutableStateSizeLimitError)
 	}
 	if c.historyConfig.MutableStateSizeLimitWarn != 0 {
-		client.OverrideValue(t, dynamicconfig.MutableStateSizeLimitWarn, c.historyConfig.MutableStateSizeLimitWarn)
+		c.OverrideDCValue(t, dynamicconfig.MutableStateSizeLimitWarn, c.historyConfig.MutableStateSizeLimitWarn)
 	}
 
 	// For DeleteWorkflowExecution tests
-	client.OverrideValue(t, dynamicconfig.TransferProcessorUpdateAckInterval, 1*time.Second)
-	client.OverrideValue(t, dynamicconfig.VisibilityProcessorUpdateAckInterval, 1*time.Second)
+	c.OverrideDCValue(t, dynamicconfig.TransferProcessorUpdateAckInterval, 1*time.Second)
+	c.OverrideDCValue(t, dynamicconfig.VisibilityProcessorUpdateAckInterval, 1*time.Second)
 }
 
 func (c *temporalImpl) newRPCFactory(
 	sn primitives.ServiceName,
 	grpcHostPort listenHostPort,
 	logger log.Logger,
-	grpcResolver membership.GRPCResolver,
+	grpcResolver *membership.GRPCResolver,
 	tlsConfigProvider encryption.TLSConfigProvider,
 	monitor membership.Monitor,
 	httpPort httpPort,
@@ -757,8 +786,8 @@ func (c *temporalImpl) newRPCFactory(
 		sn,
 		logger,
 		tlsConfigProvider,
-		membership.MakeResolverURL(primitives.FrontendService),
-		membership.MakeResolverURL(primitives.FrontendService),
+		grpcResolver.MakeURL(primitives.FrontendService),
+		grpcResolver.MakeURL(primitives.FrontendService),
 		int(httpPort),
 		frontendTLSConfig,
 		nil,
@@ -820,7 +849,7 @@ func copyPersistenceConfig(cfg config.Persistence) config.Persistence {
 }
 
 func sdkClientFactoryProvider(
-	resolver membership.GRPCResolver,
+	grpcResolver *membership.GRPCResolver,
 	metricsHandler metrics.Handler,
 	logger log.Logger,
 	dc *dynamicconfig.Collection,
@@ -834,10 +863,22 @@ func sdkClientFactoryProvider(
 		}
 	}
 	return sdk.NewClientFactory(
-		membership.MakeResolverURL(primitives.FrontendService),
+		grpcResolver.MakeURL(primitives.FrontendService),
 		tlsConfig,
 		metricsHandler,
 		logger,
 		dynamicconfig.WorkerStickyCacheSize.Get(dc),
 	)
+}
+
+func (c *temporalImpl) overrideDynamicConfigByKey(t *testing.T, name dynamicconfig.Key, value any) {
+	existingValues := c.dcClient.GetValue(name)
+	c.dcClient.OverrideValueByKey(name, value)
+	t.Cleanup(func() {
+		if len(existingValues) > 0 {
+			c.dcClient.OverrideValueByKey(name, existingValues)
+		} else {
+			c.dcClient.RemoveOverrideByKey(name)
+		}
+	})
 }

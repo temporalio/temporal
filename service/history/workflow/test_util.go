@@ -30,17 +30,15 @@ import (
 	"testing"
 	"time"
 
-	"github.com/golang/mock/gomock"
-
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
-
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tests"
+	"go.uber.org/mock/gomock"
 )
 
 func TestLocalMutableState(
@@ -56,7 +54,7 @@ func TestLocalMutableState(
 	ms.executionInfo.NamespaceId = string(ns.ID())
 	ms.executionInfo.WorkflowId = workflowID
 	ms.executionState.RunId = runID
-	ms.GetExecutionInfo().ExecutionTime = ms.GetExecutionInfo().StartTime
+	ms.GetExecutionInfo().ExecutionTime = ms.GetExecutionState().StartTime
 	_ = ms.SetHistoryTree(nil, nil, runID)
 
 	return ms
@@ -105,7 +103,7 @@ func TestGlobalMutableState(
 ) *MutableStateImpl {
 
 	ms := NewMutableState(shard, eventsCache, logger, tests.GlobalNamespaceEntry, workflowID, runID, time.Now().UTC())
-	ms.GetExecutionInfo().ExecutionTime = ms.GetExecutionInfo().StartTime
+	ms.GetExecutionInfo().ExecutionTime = ms.GetExecutionState().StartTime
 	_ = ms.UpdateCurrentVersion(version, false)
 	_ = ms.SetHistoryTree(nil, nil, runID)
 

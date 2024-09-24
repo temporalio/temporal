@@ -28,17 +28,14 @@ import (
 	"testing"
 	"time"
 
-	"github.com/golang/mock/gomock"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
-	"go.temporal.io/api/serviceerror"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/history/v1"
-
 	persistencepb "go.temporal.io/server/api/persistence/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/client"
@@ -54,6 +51,7 @@ import (
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tests"
+	"go.uber.org/mock/gomock"
 )
 
 type (
@@ -296,45 +294,4 @@ func (s *executableBackfillHistoryEventsTaskSuite) TestHandleErr_Resend_Error() 
 	s.executableTask.EXPECT().Resend(gomock.Any(), s.sourceClusterName, err, ResendAttempt).Return(false, errors.New("OwO"))
 
 	s.Equal(err, s.task.HandleErr(err))
-}
-
-func (s *executableBackfillHistoryEventsTaskSuite) TestMarkPoisonPill() {
-	shardID := rand.Int31()
-	shardContext := shard.NewMockContext(s.controller)
-	s.shardController.EXPECT().GetShardByNamespaceWorkflow(
-		namespace.ID(s.task.NamespaceID),
-		s.task.WorkflowID,
-	).Return(shardContext, nil).AnyTimes()
-	shardContext.EXPECT().GetShardID().Return(shardID).AnyTimes()
-	s.executableTask.EXPECT().ReplicationTask().Times(1).Return(s.replicationTask)
-	s.mockExecutionManager.EXPECT().PutReplicationTaskToDLQ(gomock.Any(), &persistence.PutReplicationTaskToDLQRequest{
-		ShardID:           shardID,
-		SourceClusterName: s.sourceClusterName,
-		TaskInfo:          s.replicationTask.RawTaskInfo,
-	}).Return(nil)
-
-	err := s.task.MarkPoisonPill()
-	s.NoError(err)
-}
-
-func (s *executableBackfillHistoryEventsTaskSuite) TestMarkPoisonPill_MaxAttemptsReached() {
-	s.task.markPoisonPillAttempts = MarkPoisonPillMaxAttempts - 1
-	shardID := rand.Int31()
-	shardContext := shard.NewMockContext(s.controller)
-	s.shardController.EXPECT().GetShardByNamespaceWorkflow(
-		namespace.ID(s.task.NamespaceID),
-		s.task.WorkflowID,
-	).Return(shardContext, nil).AnyTimes()
-	shardContext.EXPECT().GetShardID().Return(shardID).AnyTimes()
-	s.executableTask.EXPECT().ReplicationTask().Times(2).Return(s.replicationTask)
-	s.mockExecutionManager.EXPECT().PutReplicationTaskToDLQ(gomock.Any(), &persistence.PutReplicationTaskToDLQRequest{
-		ShardID:           shardID,
-		SourceClusterName: s.sourceClusterName,
-		TaskInfo:          s.replicationTask.RawTaskInfo,
-	}).Return(serviceerror.NewInternal("failed"))
-
-	err := s.task.MarkPoisonPill()
-	s.Error(err)
-	err = s.task.MarkPoisonPill()
-	s.NoError(err)
 }

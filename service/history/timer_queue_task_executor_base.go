@@ -30,9 +30,10 @@ import (
 	"fmt"
 	"time"
 
+	"google.golang.org/protobuf/types/known/timestamppb"
+
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
-
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/locks"
@@ -173,7 +174,32 @@ func (t *timerQueueTaskExecutorBase) deleteHistoryBranch(
 	return nil
 }
 
-func (t *timerQueueTaskExecutorBase) isValidExecutionTimeoutTask(
+func (t *timerQueueTaskExecutorBase) isValidExpirationTime(
+	mutableState workflow.MutableState,
+	expirationTime *timestamppb.Timestamp,
+) bool {
+	if !mutableState.IsWorkflowExecutionRunning() {
+		return false
+	}
+
+	now := t.shardContext.GetTimeSource().Now()
+	taskShouldTriggerAt := expirationTime.AsTime()
+	expired := queues.IsTimeExpired(now, taskShouldTriggerAt)
+	return expired
+
+}
+
+func (t *timerQueueTaskExecutorBase) isValidWorkflowRunTimeoutTask(
+	mutableState workflow.MutableState,
+) bool {
+	executionInfo := mutableState.GetExecutionInfo()
+
+	// Check if workflow execution timeout is not expired
+	// This can happen if the workflow is reset but old timer task is still fired.
+	return t.isValidExpirationTime(mutableState, executionInfo.WorkflowRunExpirationTime)
+}
+
+func (t *timerQueueTaskExecutorBase) isValidWorkflowExecutionTimeoutTask(
 	mutableState workflow.MutableState,
 	task *tasks.WorkflowExecutionTimeoutTask,
 ) bool {
@@ -184,27 +210,21 @@ func (t *timerQueueTaskExecutorBase) isValidExecutionTimeoutTask(
 		return false
 	}
 
-	if !mutableState.IsWorkflowExecutionRunning() {
-		return false
-	}
+	// Check if workflow execution timeout is not expired
+	// This can happen if the workflow is reset since reset re-calculates
+	// the execution timeout but shares the same firstRunID as the base run
+	return t.isValidExpirationTime(mutableState, executionInfo.WorkflowExecutionExpirationTime)
 
 	// NOTE: we don't need to do version check here because if we were to do it, we need to compare the task version
 	// and the start version in the first run. However, failover & conflict resolution will never change
 	// the first event of a workflowID (the history tree model we are using always share at least one node),
 	// meaning start version check will always pass.
 	// Also there's no way we can perform version check before first run may already be deleted due to retention
-
-	// Check if workflow timeout is not expired
-	// This can happen if the workflow is reset since reset re-calculates
-	// the execution timeout but shares the same firstRunID as the base run
-
-	now := t.shardContext.GetTimeSource().Now()
-	expired := queues.IsTimeExpired(now, executionInfo.WorkflowExecutionExpirationTime.AsTime())
-
-	return expired
 }
 
 func (t *timerQueueTaskExecutorBase) executeSingleStateMachineTimer(
+	ctx context.Context,
+	workflowContext workflow.Context,
 	ms workflow.MutableState,
 	deadline time.Time,
 	timer *persistencespb.StateMachineTaskInfo,
@@ -226,7 +246,7 @@ func (t *timerQueueTaskExecutorBase) executeSingleStateMachineTimer(
 		WorkflowKey:     ms.GetWorkflowKey(),
 		StateMachineRef: timer.Ref,
 	}
-	if err := t.validateStateMachineRef(ms, ref, false); err != nil {
+	if err := t.validateStateMachineRef(ctx, workflowContext, ms, ref, false); err != nil {
 		return err
 	}
 	node, err := ms.HSM().Child(ref.StateMachinePath())
@@ -243,6 +263,8 @@ func (t *timerQueueTaskExecutorBase) executeSingleStateMachineTimer(
 // executeStateMachineTimers gets the state machine timers, processed the expired timers,
 // and return a slice of unprocessed timers.
 func (t *timerQueueTaskExecutorBase) executeStateMachineTimers(
+	ctx context.Context,
+	workflowContext workflow.Context,
 	ms workflow.MutableState,
 	execute func(node *hsm.Node, task hsm.Task) error,
 ) (int, error) {
@@ -264,7 +286,7 @@ func (t *timerQueueTaskExecutorBase) executeStateMachineTimers(
 		}
 
 		for _, timer := range group.Infos {
-			err := t.executeSingleStateMachineTimer(ms, group.Deadline.AsTime(), timer, execute)
+			err := t.executeSingleStateMachineTimer(ctx, workflowContext, ms, group.Deadline.AsTime(), timer, execute)
 			if err != nil {
 				if !errors.As(err, new(*serviceerror.NotFound)) {
 					metrics.StateMachineTimerProcessingFailuresCounter.With(t.metricHandler).Record(

@@ -29,7 +29,6 @@ import (
 	"time"
 
 	"go.temporal.io/api/serviceerror"
-
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
@@ -46,6 +45,7 @@ type visibilityManagerMetrics struct {
 	delegate      manager.VisibilityManager
 
 	visibilityPluginNameMetricsTag metrics.Tag
+	visibilityIndexNameMetricsTag  metrics.Tag
 }
 
 func NewVisibilityManagerMetrics(
@@ -53,6 +53,7 @@ func NewVisibilityManagerMetrics(
 	metricHandler metrics.Handler,
 	logger log.Logger,
 	visibilityPluginNameMetricsTag metrics.Tag,
+	visibilityIndexNameMetricsTag metrics.Tag,
 ) *visibilityManagerMetrics {
 	return &visibilityManagerMetrics{
 		metricHandler: metricHandler,
@@ -60,6 +61,7 @@ func NewVisibilityManagerMetrics(
 		delegate:      delegate,
 
 		visibilityPluginNameMetricsTag: visibilityPluginNameMetricsTag,
+		visibilityIndexNameMetricsTag:  visibilityIndexNameMetricsTag,
 	}
 }
 
@@ -170,7 +172,7 @@ func (m *visibilityManagerMetrics) GetWorkflowExecution(
 }
 
 func (m *visibilityManagerMetrics) tagScope(operation string) (metrics.Handler, time.Time) {
-	taggedHandler := m.metricHandler.WithTags(metrics.OperationTag(operation), m.visibilityPluginNameMetricsTag)
+	taggedHandler := m.metricHandler.WithTags(metrics.OperationTag(operation), m.visibilityPluginNameMetricsTag, m.visibilityIndexNameMetricsTag)
 	metrics.VisibilityPersistenceRequests.With(taggedHandler).Record(1)
 	return taggedHandler, time.Now().UTC()
 }

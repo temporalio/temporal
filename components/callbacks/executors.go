@@ -27,8 +27,6 @@ import (
 	"fmt"
 	"net/http"
 
-	"go.uber.org/fx"
-
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
@@ -36,6 +34,7 @@ import (
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/service/history/hsm"
 	"go.temporal.io/server/service/history/queues"
+	"go.uber.org/fx"
 )
 
 // HTTPCaller is a method that can be used to invoke HTTP requests.
@@ -148,14 +147,14 @@ func (e taskExecutor) loadInvocationArgs(
 				return err
 			}
 		case *persistencespb.Callback_Hsm:
-			target, err := hsm.MachineData[CanGetCompletionEvent](node.Parent)
+			target, err := hsm.MachineData[CanGetHSMCompletionCallbackArg](node.Parent)
 			if err != nil {
 				return err
 			}
 			// variant struct is immutable and ok to reference without copying
 			hsmInvokable := hsmInvocation{}
 			hsmInvokable.hsm = variant.Hsm
-			hsmInvokable.completionEvent, err = target.GetCompletionEvent(ctx)
+			hsmInvokable.callbackArg, err = target.GetHSMCompletionCallbackArg(ctx)
 			if err != nil {
 				return err
 			}

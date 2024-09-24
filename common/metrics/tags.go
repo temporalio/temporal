@@ -30,10 +30,8 @@ import (
 	"strings"
 
 	enumspb "go.temporal.io/api/enums/v1"
-	"go.temporal.io/server/common/locks"
-
 	enumsspb "go.temporal.io/server/api/enums/v1"
-
+	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/util"
 )
@@ -79,8 +77,6 @@ type Tag interface {
 	Key() string
 	Value() string
 }
-
-var StickyTaskQueueTag = TaskQueueTag("__sticky__")
 
 type (
 	tagImpl struct {
@@ -181,21 +177,31 @@ func ToClusterIDTag(value int32) Tag {
 	return &tagImpl{key: toCluster, value: strconv.FormatInt(int64(value), 10)}
 }
 
-// TaskQueueTag returns a new task queue tag.
-func TaskQueueTag(value string) Tag {
+// UnsafeTaskQueueTag returns a new task queue tag.
+// WARNING: Do not use this function directly in production code as it may create high number of unique task queue tag
+// values that can trouble the observability stack. Instead, use one of the following helper functions and pass a proper
+// breakdown boolean (typically based on the task queue dynamic configs):
+// - `workflow.PerTaskQueueFamilyScope`
+// - `tqid.PerTaskQueueFamilyScope`
+// - `tqid.PerTaskQueueScope`
+// - `tqid.PerTaskQueuePartitionScope`
+func UnsafeTaskQueueTag(value string) Tag {
 	if len(value) == 0 {
 		value = unknownValue
 	}
-	return &tagImpl{key: taskQueue, value: sanitizer.Value(value)}
+	return &tagImpl{key: taskQueue, value: value}
 }
 
 func TaskQueueTypeTag(tqType enumspb.TaskQueueType) Tag {
 	return &tagImpl{key: TaskTypeTagName, value: tqType.String()}
 }
 
-func WorkerBuildIdTag(buildId string) Tag {
+// Consider passing the value of "metrics.breakdownByBuildID" dynamic config to this function.
+func WorkerBuildIdTag(buildId string, buildIdBreakdown bool) Tag {
 	if buildId == "" {
-		buildId = "_unversioned_"
+		buildId = "__unversioned__"
+	} else if !buildIdBreakdown {
+		buildId = "__versioned__"
 	}
 	return &tagImpl{key: workerBuildId, value: buildId}
 }
@@ -254,11 +260,8 @@ func TaskTypeTag(value string) Tag {
 	return &tagImpl{key: TaskTypeTagName, value: value}
 }
 
-func PartitionTypeTag(value string) Tag {
-	if len(value) == 0 {
-		value = unknownValue
-	}
-	return &tagImpl{key: PartitionTypeName, value: value}
+func PartitionTag(partition string) Tag {
+	return &tagImpl{key: PartitionTagName, value: partition}
 }
 
 func TaskPriorityTag(value string) Tag {
@@ -291,6 +294,13 @@ func VisibilityPluginNameTag(value string) Tag {
 		value = unknownValue
 	}
 	return &tagImpl{key: visibilityPluginNameTagName, value: value}
+}
+
+func VisibilityIndexNameTag(value string) Tag {
+	if value == "" {
+		value = unknownValue
+	}
+	return &tagImpl{key: visibilityIndexNameTagName, value: value}
 }
 
 // VersionedTag represents whether a loaded task queue manager represents a specific version set or build ID or not.

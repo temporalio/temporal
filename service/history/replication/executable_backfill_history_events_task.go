@@ -28,7 +28,6 @@ import (
 
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
-
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/headers"
@@ -201,43 +200,6 @@ func (e *ExecutableBackfillHistoryEventsTask) HandleErr(err error) error {
 		)
 		return err
 	}
-}
-
-func (e *ExecutableBackfillHistoryEventsTask) MarkPoisonPill() error {
-	taskInfo := e.ReplicationTask().GetRawTaskInfo()
-
-	if e.markPoisonPillAttempts >= MarkPoisonPillMaxAttempts {
-		e.Logger.Error("MarkPoisonPill reached max attempts",
-			tag.SourceCluster(e.SourceClusterName()),
-			tag.ReplicationTask(taskInfo),
-		)
-		return nil
-	}
-	e.markPoisonPillAttempts++
-
-	shardContext, err := e.ShardController.GetShardByNamespaceWorkflow(
-		namespace.ID(e.NamespaceID),
-		e.WorkflowID,
-	)
-	if err != nil {
-		return err
-	}
-
-	// TODO: GetShardID will break GetDLQReplicationMessages we need to handle DLQ for cross shard replication.
-	e.Logger.Error("enqueue sync versioned transition replication task to DLQ",
-		tag.ShardID(shardContext.GetShardID()),
-		tag.WorkflowNamespaceID(e.NamespaceID),
-		tag.WorkflowID(e.WorkflowID),
-		tag.WorkflowRunID(e.RunID),
-		tag.TaskID(e.ExecutableTask.TaskID()),
-		tag.SourceCluster(e.SourceClusterName()),
-		tag.ReplicationTask(taskInfo),
-	)
-
-	ctx, cancel := newTaskContext(e.NamespaceID, e.Config.ReplicationTaskApplyTimeout())
-	defer cancel()
-
-	return writeTaskToDLQ(ctx, e.DLQWriter, shardContext, e.SourceClusterName(), taskInfo)
 }
 
 func (e *ExecutableBackfillHistoryEventsTask) getDeserializedEvents() (_ [][]*historypb.HistoryEvent, _ []*historypb.HistoryEvent, retError error) {

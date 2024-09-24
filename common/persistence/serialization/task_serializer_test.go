@@ -35,14 +35,13 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	enumspb "go.temporal.io/api/enums/v1"
-	"google.golang.org/protobuf/proto"
-
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/shuffle"
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/service/history/tasks"
+	"google.golang.org/protobuf/proto"
 )
 
 type (
@@ -363,6 +362,16 @@ func (s *taskSerializerSuite) TestSyncVersionedTransitionTask() {
 		VersionedTransition: &persistence.VersionedTransition{
 			NamespaceFailoverVersion: rand.Int63(),
 			TransitionCount:          rand.Int63(),
+		},
+		TaskEquivalents: []tasks.Task{
+			&tasks.HistoryReplicationTask{
+				WorkflowKey:         s.workflowKey,
+				VisibilityTimestamp: time.Unix(0, 0).UTC(),
+				FirstEventID:        rand.Int63(),
+				NextEventID:         rand.Int63(),
+				Version:             rand.Int63(),
+				NewRunID:            uuid.New().String(),
+			},
 		},
 	}
 

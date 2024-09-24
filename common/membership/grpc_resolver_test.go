@@ -30,11 +30,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/internal/nettest"
+	"go.uber.org/mock/gomock"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 )
@@ -85,26 +85,22 @@ func TestGRPCBuilder(t *testing.T) {
 
 	// This is where we invoke the code under test. We dial the frontend service. The URL should use our custom
 	// protocol, and then our resolver should resolve this to the localhost:1234 address.
-	resolverBuilder := &grpcBuilder{}
-	resolverBuilder.monitor.Store(monitor)
-
-	url := MakeResolverURL(primitives.FrontendService)
-	assert.Equal(t, "membership://frontend", url)
+	url := GRPCResolverURLForTesting(monitor, primitives.FrontendService)
+	assert.Regexp(t, "membership://frontend~0x[[:xdigit:]]*", url)
 
 	// dialedAddress is the actual address that the gRPC framework dialed after resolving the URL using our resolver.
 	var dialedAddress string
 
-	conn, err := grpc.Dial(
+	conn, err := grpc.NewClient(
 		url,
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
-		grpc.WithResolvers(resolverBuilder),
 		grpc.WithContextDialer(func(ctx context.Context, s string) (net.Conn, error) {
 			dialedAddress = s
 			return p.Connect(ctx.Done())
 		}),
 	)
 	require.NoError(t, err)
-
+	conn.Connect()
 	require.NoError(t, <-serverErrs)
 
 	// The gRPC library calls [resolver.Resolver.Close] when the connection is closed in a background goroutine, so we

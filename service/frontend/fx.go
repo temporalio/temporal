@@ -29,13 +29,6 @@ import (
 	"net"
 
 	"github.com/gorilla/mux"
-	"go.uber.org/fx"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/health"
-	"google.golang.org/grpc/keepalive"
-
-	healthpb "google.golang.org/grpc/health/grpc_health_v1"
-
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common"
@@ -74,6 +67,11 @@ import (
 	"go.temporal.io/server/service/frontend/configs"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/worker/scheduler"
+	"go.uber.org/fx"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/health"
+	healthpb "google.golang.org/grpc/health/grpc_health_v1"
+	"google.golang.org/grpc/keepalive"
 )
 
 type (
@@ -355,11 +353,13 @@ func TelemetryInterceptorProvider(
 	logger log.Logger,
 	metricsHandler metrics.Handler,
 	namespaceRegistry namespace.Registry,
+	serviceConfig *Config,
 ) *interceptor.TelemetryInterceptor {
 	return interceptor.NewTelemetryInterceptor(
 		namespaceRegistry,
 		metricsHandler,
 		logger,
+		serviceConfig.LogAllReqErrors,
 	)
 }
 
@@ -607,6 +607,7 @@ func AdminHandlerProvider(
 	eventSerializer serialization.Serializer,
 	timeSource clock.TimeSource,
 	taskCategoryRegistry tasks.TaskCategoryRegistry,
+	matchingClient resource.MatchingClient,
 ) *AdminHandler {
 	args := NewAdminHandlerArgs{
 		persistenceConfig,
@@ -635,6 +636,7 @@ func AdminHandlerProvider(
 		eventSerializer,
 		timeSource,
 		taskCategoryRegistry,
+		matchingClient,
 	}
 	return NewAdminHandler(args)
 }

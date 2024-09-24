@@ -29,14 +29,13 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/api/serviceerror"
-
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/mock"
+	"go.uber.org/mock/gomock"
 )
 
 func TestFaultInjection_DataStoreFactory_CreateErr(t *testing.T) {

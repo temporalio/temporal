@@ -29,12 +29,11 @@ import (
 	"time"
 
 	enumspb "go.temporal.io/api/enums/v1"
-	"go.uber.org/zap"
-	"google.golang.org/protobuf/types/known/timestamppb"
-
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/util"
+	"go.uber.org/zap"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 // All logging tags are defined in this file.
@@ -983,6 +982,10 @@ func Endpoint(endpoint string) ZapTag {
 
 func BuildId(buildId string) ZapTag {
 	return NewStringTag("build-id", buildId)
+}
+
+func UserDataVersion(v int64) ZapTag {
+	return NewInt64("user-data-version", v)
 }
 
 func Cause(cause string) ZapTag {

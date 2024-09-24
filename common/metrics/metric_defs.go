@@ -38,6 +38,7 @@ const (
 	QueueActionTagName          = "queue_action"
 	QueueTypeTagName            = "queue_type"
 	visibilityPluginNameTagName = "visibility_plugin_name"
+	visibilityIndexNameTagName  = "visibility_index_name"
 	ErrorTypeTagName            = "error_type"
 	httpStatusTagName           = "http_status"
 	nexusMethodTagName          = "method"
@@ -46,7 +47,7 @@ const (
 	versionedTagName            = "versioned"
 	resourceExhaustedTag        = "resource_exhausted_cause"
 	resourceExhaustedScopeTag   = "resource_exhausted_scope"
-	PartitionTypeName           = "partition_type"
+	PartitionTagName            = "partition"
 	PriorityTagName             = "priority"
 )
 
@@ -528,6 +529,8 @@ const (
 	SyncHSMTaskScope = "SyncHSMTask"
 	// BackfillHistoryEventsTaskScope is the scope used by backfill history events replication processing
 	BackfillHistoryEventsTaskScope = "BackfillHistoryEventsTask"
+	// VerifyVersionedTransitionTaskScope is the scope used by verify versioned transition task processing
+	VerifyVersionedTransitionTaskScope = "VerifyVersionedTransitionTask"
 	// SyncWatermarkScope is the scope used by closed workflow task replication processing
 	SyncWatermarkScope = "SyncWatermark"
 	// NoopTaskScope is the scope used by noop task
@@ -868,6 +871,7 @@ var (
 	CompleteWorkflowTaskWithStickyEnabledCounter  = NewCounterDef("complete_workflow_task_sticky_enabled_count")
 	CompleteWorkflowTaskWithStickyDisabledCounter = NewCounterDef("complete_workflow_task_sticky_disabled_count")
 	WorkflowTaskHeartbeatTimeoutCounter           = NewCounterDef("workflow_task_heartbeat_timeout_count")
+	SignalWithStartSkipDelayCounter               = NewCounterDef("signal_with_start_skip_delay_count")
 	DuplicateReplicationEventsCounter             = NewCounterDef("duplicate_replication_events")
 	AcquireLockFailedCounter                      = NewCounterDef("acquire_lock_failed")
 	WorkflowContextCleared                        = NewCounterDef("workflow_context_cleared")
@@ -986,43 +990,46 @@ var (
 	DDNamespaceRegistryLockLatency       = NewTimerDef("dd_namespace_registry_lock_latency")
 
 	// Matching
-	MatchingClientForwardedCounter            = NewCounterDef("forwarded")
-	MatchingClientInvalidTaskQueueName        = NewCounterDef("invalid_task_queue_name")
-	MatchingClientInvalidTaskQueuePartition   = NewCounterDef("invalid_task_queue_partition")
-	SyncMatchLatencyPerTaskQueue              = NewTimerDef("syncmatch_latency")
-	AsyncMatchLatencyPerTaskQueue             = NewTimerDef("asyncmatch_latency")
-	PollSuccessPerTaskQueueCounter            = NewCounterDef("poll_success")
-	PollTimeoutPerTaskQueueCounter            = NewCounterDef("poll_timeouts")
-	PollSuccessWithSyncPerTaskQueueCounter    = NewCounterDef("poll_success_sync")
-	PollLatencyPerTaskQueue                   = NewTimerDef("poll_latency")
-	LeaseRequestPerTaskQueueCounter           = NewCounterDef("lease_requests")
-	LeaseFailurePerTaskQueueCounter           = NewCounterDef("lease_failures")
-	ConditionFailedErrorPerTaskQueueCounter   = NewCounterDef("condition_failed_errors")
-	RespondQueryTaskFailedPerTaskQueueCounter = NewCounterDef("respond_query_failed")
-	RespondNexusTaskFailedPerTaskQueueCounter = NewCounterDef("respond_nexus_failed")
-	SyncThrottlePerTaskQueueCounter           = NewCounterDef("sync_throttle_count")
-	BufferThrottlePerTaskQueueCounter         = NewCounterDef("buffer_throttle_count")
-	ExpiredTasksPerTaskQueueCounter           = NewCounterDef("tasks_expired")
-	ForwardedPerTaskQueueCounter              = NewCounterDef("forwarded_per_tl")
-	ForwardTaskErrorsPerTaskQueue             = NewCounterDef("forward_task_errors")
-	LocalToLocalMatchPerTaskQueueCounter      = NewCounterDef("local_to_local_matches")
-	LocalToRemoteMatchPerTaskQueueCounter     = NewCounterDef("local_to_remote_matches")
-	RemoteToLocalMatchPerTaskQueueCounter     = NewCounterDef("remote_to_local_matches")
-	RemoteToRemoteMatchPerTaskQueueCounter    = NewCounterDef("remote_to_remote_matches")
-	LoadedTaskQueueFamilyGauge                = NewGaugeDef("loaded_task_queue_family_count")
-	LoadedTaskQueueGauge                      = NewGaugeDef("loaded_task_queue_count")
-	LoadedTaskQueuePartitionGauge             = NewGaugeDef("loaded_task_queue_partition_count")
-	LoadedPhysicalTaskQueueGauge              = NewGaugeDef("loaded_physical_task_queue_count")
-	TaskQueueStartedCounter                   = NewCounterDef("task_queue_started")
-	TaskQueueStoppedCounter                   = NewCounterDef("task_queue_stopped")
-	TaskWriteThrottlePerTaskQueueCounter      = NewCounterDef("task_write_throttle_count")
-	TaskWriteLatencyPerTaskQueue              = NewTimerDef("task_write_latency")
-	TaskLagPerTaskQueueGauge                  = NewGaugeDef("task_lag_per_tl")
-	NoRecentPollerTasksPerTaskQueueCounter    = NewCounterDef("no_poller_tasks")
-	UnknownBuildPollsCounter                  = NewCounterDef("unknown_build_polls")
-	UnknownBuildTasksCounter                  = NewCounterDef("unknown_build_tasks")
-	TaskDispatchLatencyPerTaskQueue           = NewTimerDef("task_dispatch_latency")
-	ApproximateBacklogCount                   = NewGaugeDef("approximate_backlog_count")
+	MatchingClientForwardedCounter                    = NewCounterDef("forwarded")
+	MatchingClientInvalidTaskQueueName                = NewCounterDef("invalid_task_queue_name")
+	MatchingClientInvalidTaskQueuePartition           = NewCounterDef("invalid_task_queue_partition")
+	SyncMatchLatencyPerTaskQueue                      = NewTimerDef("syncmatch_latency")
+	AsyncMatchLatencyPerTaskQueue                     = NewTimerDef("asyncmatch_latency")
+	PollSuccessPerTaskQueueCounter                    = NewCounterDef("poll_success")
+	PollTimeoutPerTaskQueueCounter                    = NewCounterDef("poll_timeouts")
+	PollSuccessWithSyncPerTaskQueueCounter            = NewCounterDef("poll_success_sync")
+	PollLatencyPerTaskQueue                           = NewTimerDef("poll_latency")
+	LeaseRequestPerTaskQueueCounter                   = NewCounterDef("lease_requests")
+	LeaseFailurePerTaskQueueCounter                   = NewCounterDef("lease_failures")
+	ConditionFailedErrorPerTaskQueueCounter           = NewCounterDef("condition_failed_errors")
+	RespondQueryTaskFailedPerTaskQueueCounter         = NewCounterDef("respond_query_failed")
+	RespondNexusTaskFailedPerTaskQueueCounter         = NewCounterDef("respond_nexus_failed")
+	SyncThrottlePerTaskQueueCounter                   = NewCounterDef("sync_throttle_count")
+	BufferThrottlePerTaskQueueCounter                 = NewCounterDef("buffer_throttle_count")
+	ExpiredTasksPerTaskQueueCounter                   = NewCounterDef("tasks_expired")
+	ForwardedPerTaskQueueCounter                      = NewCounterDef("forwarded_per_tl")
+	ForwardTaskErrorsPerTaskQueue                     = NewCounterDef("forward_task_errors")
+	LocalToLocalMatchPerTaskQueueCounter              = NewCounterDef("local_to_local_matches")
+	LocalToRemoteMatchPerTaskQueueCounter             = NewCounterDef("local_to_remote_matches")
+	RemoteToLocalMatchPerTaskQueueCounter             = NewCounterDef("remote_to_local_matches")
+	RemoteToRemoteMatchPerTaskQueueCounter            = NewCounterDef("remote_to_remote_matches")
+	LoadedTaskQueueFamilyGauge                        = NewGaugeDef("loaded_task_queue_family_count")
+	LoadedTaskQueueGauge                              = NewGaugeDef("loaded_task_queue_count")
+	LoadedTaskQueuePartitionGauge                     = NewGaugeDef("loaded_task_queue_partition_count")
+	ForceLoadedTaskQueuePartitions                    = NewCounterDef("force_loaded_task_queue_partitions_count")
+	ForceLoadedTaskQueuePartitionUnnecessarilyCounter = NewCounterDef("force_loaded_task_queue_partition_unnecessarily_count")
+	LoadedPhysicalTaskQueueGauge                      = NewGaugeDef("loaded_physical_task_queue_count")
+	TaskQueueStartedCounter                           = NewCounterDef("task_queue_started")
+	TaskQueueStoppedCounter                           = NewCounterDef("task_queue_stopped")
+	TaskWriteThrottlePerTaskQueueCounter              = NewCounterDef("task_write_throttle_count")
+	TaskWriteLatencyPerTaskQueue                      = NewTimerDef("task_write_latency")
+	TaskLagPerTaskQueueGauge                          = NewGaugeDef("task_lag_per_tl")
+	NoRecentPollerTasksPerTaskQueueCounter            = NewCounterDef("no_poller_tasks")
+	UnknownBuildPollsCounter                          = NewCounterDef("unknown_build_polls")
+	UnknownBuildTasksCounter                          = NewCounterDef("unknown_build_tasks")
+	TaskDispatchLatencyPerTaskQueue                   = NewTimerDef("task_dispatch_latency")
+	ApproximateBacklogCount                           = NewGaugeDef("approximate_backlog_count")
+	ApproximateBacklogAgeSeconds                      = NewGaugeDef("approximate_backlog_age_seconds")
 
 	// Versioning and Reachability
 	ReachabilityExitPointCounter = NewCounterDef("reachability_exit_point_count")

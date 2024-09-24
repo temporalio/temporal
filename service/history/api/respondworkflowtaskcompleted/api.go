@@ -28,8 +28,6 @@ import (
 	"context"
 	"fmt"
 
-	"google.golang.org/protobuf/types/known/timestamppb"
-
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
@@ -37,7 +35,6 @@ import (
 	querypb "go.temporal.io/api/query/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
-
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
@@ -66,6 +63,7 @@ import (
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/workflow"
 	"go.temporal.io/server/service/history/workflow/update"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type (
@@ -636,13 +634,22 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 	effects.Apply(ctx)
 
 	if !ms.IsWorkflowExecutionRunning() {
-		// If the workflow completed itself with one of the completion commands,
-		// abort all waiters with "workflow completed" error.
-		// Because all unprocessed updates were already rejected, incomplete updates in the registry are:
-		// - updates that were received while this WFT was running,
-		// - updates that were accepted but not completed by this WFT.
-		// It is important to call this after applying effects to be sure there are no unprocessed effects.
-		updateRegistry.Abort(update.AbortReasonWorkflowCompleted)
+		// NOTE: It is important to call this *after* applying effects to be sure there are no pending effects.
+
+		// Because all unprocessed Updates were already rejected, the registry only has:
+		//   (1) Updates that were received while this WFT was running,
+		//   (2) Updates that were accepted but not yet completed.
+		hasNewRun := newMutableState != nil
+		if hasNewRun {
+			// If a new run was created (e.g. ContinueAsNew, Retry, Cron), then Updates that were
+			// received while this WFT was running are aborted with a retryable error.
+			// Then, the SDK will retry the API call and the Update will land on the new run.
+			updateRegistry.Abort(update.AbortReasonWorkflowContinuing)
+		} else {
+			// If the Workflow completed itself via one of the completion commands without
+			// creating a new run, abort all Updates with a non-retryable error.
+			updateRegistry.Abort(update.AbortReasonWorkflowCompleted)
+		}
 	}
 
 	// Create speculative workflow task after mutable state is persisted.

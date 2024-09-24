@@ -33,7 +33,6 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/suite"
-
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/common"
@@ -219,7 +218,19 @@ func (s *TestBase) Setup(clusterMetadataConfig *cluster.Config) {
 		s.Logger,
 		metrics.NoopMetricsHandler,
 	)
-	factory := client.NewFactory(dataStoreFactory, &cfg, s.PersistenceRateLimiter, quotas.NoopRequestRateLimiter, serialization.NewSerializer(), nil, clusterName, metrics.NoopMetricsHandler, s.Logger, s.PersistenceHealthSignals)
+	factory := client.NewFactory(
+		dataStoreFactory,
+		&cfg,
+		s.PersistenceRateLimiter,
+		quotas.NoopRequestRateLimiter,
+		quotas.NoopRequestRateLimiter,
+		serialization.NewSerializer(),
+		nil,
+		clusterName,
+		metrics.NoopMetricsHandler,
+		s.Logger,
+		s.PersistenceHealthSignals,
+	)
 
 	s.TaskMgr, err = factory.NewTaskManager()
 	s.fatalOnError("NewTaskManager", err)

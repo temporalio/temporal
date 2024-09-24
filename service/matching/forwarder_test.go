@@ -31,7 +31,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/golang/mock/gomock"
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/suite"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -41,8 +40,8 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/convert"
-	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/tqid"
+	"go.uber.org/mock/gomock"
 )
 
 type ForwarderTestSuite struct {
@@ -275,7 +274,7 @@ func (t *ForwarderTestSuite) TestForwardPollWorkflowTaskQueue() {
 	t.NotNil(task)
 	t.NotNil(request)
 	t.Equal(pollerID, request.GetPollerId())
-	t.Equal(t.partition.TaskQueue().NamespaceId(), namespace.ID(request.GetNamespaceId()))
+	t.Equal(t.partition.TaskQueue().NamespaceId(), request.GetNamespaceId())
 	t.Equal("id1", request.GetPollRequest().GetIdentity())
 	t.Equal(mustParent(t.partition, 20).RpcName(), request.GetPollRequest().GetTaskQueue().GetName())
 	t.Equal(t.fwdr.partition.Kind(), request.GetPollRequest().GetTaskQueue().GetKind())
@@ -303,7 +302,7 @@ func (t *ForwarderTestSuite) TestForwardPollForActivity() {
 	t.NotNil(task)
 	t.NotNil(request)
 	t.Equal(pollerID, request.GetPollerId())
-	t.Equal(t.partition.TaskQueue().NamespaceId(), namespace.ID(request.GetNamespaceId()))
+	t.Equal(t.partition.TaskQueue().NamespaceId(), request.GetNamespaceId())
 	t.Equal("id1", request.GetPollRequest().GetIdentity())
 	t.Equal(mustParent(t.partition, 20).RpcName(), request.GetPollRequest().GetTaskQueue().GetName())
 	t.Equal(t.fwdr.partition.Kind(), request.GetPollRequest().GetTaskQueue().GetKind())

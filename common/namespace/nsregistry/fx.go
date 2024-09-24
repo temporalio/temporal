@@ -1,6 +1,8 @@
 // The MIT License
 //
-// Copyright (c) 2024 Temporal Technologies Inc.  All rights reserved.
+// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
+//
+// Copyright (c) 2020 Uber Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -20,16 +22,20 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package membership
+package nsregistry
 
 import (
-	"fmt"
-
-	"go.temporal.io/server/common/primitives"
+	"go.temporal.io/server/common/namespace"
+	"go.uber.org/fx"
 )
 
-const ResolverScheme = "membership"
+var RegistryLifetimeHooksModule = fx.Options(
+	fx.Invoke(RegistryLifetimeHooks),
+)
 
-func MakeResolverURL(service primitives.ServiceName) string {
-	return fmt.Sprintf("%s://%s", ResolverScheme, string(service))
+func RegistryLifetimeHooks(
+	lc fx.Lifecycle,
+	registry namespace.Registry,
+) {
+	lc.Append(fx.StartStopHook(registry.Start, registry.Stop))
 }

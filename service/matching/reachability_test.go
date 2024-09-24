@@ -30,17 +30,19 @@ import (
 	"testing"
 	"time"
 
-	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
 	enumspb "go.temporal.io/api/enums/v1"
-
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	commonclock "go.temporal.io/server/common/clock"
 	hlc "go.temporal.io/server/common/clock/hybrid_logical_clock"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/metrics/metricstest"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/visibility/manager"
+	"go.temporal.io/server/common/tqid"
+	"go.uber.org/mock/gomock"
 )
 
 const (
@@ -124,7 +126,7 @@ func TestExistsBackloggedActivityOrWFAssignedTo(t *testing.T) {
 Assignment Rules:
 [ (3, 50%), (2, nil) (1, nil) ]
 
-Expect 3 and 2 are reachable, but not 1 since it is behind an unconditional rule.
+Expect 3 and 2 are reachable, but not 1 since it is behind a fully-ramped rule.
 */
 func TestIsReachableAssignmentRuleTarget(t *testing.T) {
 	t.Parallel()
@@ -132,10 +134,10 @@ func TestIsReachableAssignmentRuleTarget(t *testing.T) {
 	deleteTs := hlc.Next(createTs, commonclock.NewRealTimeSource())
 	rc := &reachabilityCalculator{
 		assignmentRules: []*persistencespb.AssignmentRule{
-			mkAssignmentRulePersistence(mkAssignmentRule("3", mkNewAssignmentPercentageRamp(50)), createTs, nil),
-			mkAssignmentRulePersistence(mkAssignmentRule("2.5", nil), createTs, deleteTs),
-			mkAssignmentRulePersistence(mkAssignmentRule("2", nil), createTs, nil),
-			mkAssignmentRulePersistence(mkAssignmentRule("1", nil), createTs, nil),
+			mkAssignmentRulePersistence(mkAssignmentRuleWithRamp("3", 50), createTs, nil),
+			mkAssignmentRulePersistence(mkAssignmentRuleWithoutRamp("2.5"), createTs, deleteTs),
+			mkAssignmentRulePersistence(mkAssignmentRuleWithoutRamp("2"), createTs, nil),
+			mkAssignmentRulePersistence(mkAssignmentRuleWithoutRamp("1"), createTs, nil),
 		},
 	}
 
@@ -153,10 +155,10 @@ func TestGetDefaultBuildId(t *testing.T) {
 	createTs := hlc.Zero(1)
 	deleteTs := hlc.Next(createTs, commonclock.NewRealTimeSource())
 	assignmentRules := []*persistencespb.AssignmentRule{
-		mkAssignmentRulePersistence(mkAssignmentRule("3", mkNewAssignmentPercentageRamp(50)), createTs, nil),
-		mkAssignmentRulePersistence(mkAssignmentRule("2.5", nil), createTs, deleteTs),
-		mkAssignmentRulePersistence(mkAssignmentRule("2", nil), createTs, nil),
-		mkAssignmentRulePersistence(mkAssignmentRule("1", nil), createTs, nil),
+		mkAssignmentRulePersistence(mkAssignmentRuleWithRamp("3", 50), createTs, nil),
+		mkAssignmentRulePersistence(mkAssignmentRuleWithoutRamp("2.5"), createTs, deleteTs),
+		mkAssignmentRulePersistence(mkAssignmentRuleWithoutRamp("2"), createTs, nil),
+		mkAssignmentRulePersistence(mkAssignmentRuleWithoutRamp("1"), createTs, nil),
 	}
 	assert.Equal(t, "2", getDefaultBuildId(assignmentRules))
 }
@@ -164,7 +166,7 @@ func TestGetDefaultBuildId(t *testing.T) {
 func TestMakeBuildIdQuery(t *testing.T) {
 	t.Parallel()
 	rc := &reachabilityCalculator{
-		taskQueue: "test-query-tq",
+		taskQueue: tqid.UnsafeTaskQueueFamily("nsid", "test-query-tq"),
 	}
 
 	buildIdsOfInterest := []string{"0", "1", "2", ""}
@@ -198,7 +200,7 @@ func TestGetReachability_WithVisibility_WithoutRules(t *testing.T) {
 	checkReachability(ctx, t, rc, "", enumspb.BUILD_ID_TASK_REACHABILITY_REACHABLE, checkedRuleTargetsForUpstream)
 
 	// reachability("") --> closed_workflows_only (now that "" is not default)
-	rc.assignmentRules = []*persistencespb.AssignmentRule{mkAssignmentRulePersistence(mkAssignmentRule("A", nil), nil, nil)}
+	rc.assignmentRules = []*persistencespb.AssignmentRule{mkAssignmentRulePersistence(mkAssignmentRuleWithoutRamp("A"), nil, nil)}
 	setVisibilityExpect(t, rc, []string{""}, 0, 1)
 	checkReachability(ctx, t, rc, "", enumspb.BUILD_ID_TASK_REACHABILITY_CLOSED_WORKFLOWS_ONLY, checkedClosedWorkflowExecutionsForUpstreamMiss)
 	rc.assignmentRules = nil // remove rule for rest of test
@@ -221,8 +223,8 @@ func TestGetReachability_WithoutVisibility_WithRules(t *testing.T) {
 	trc := mkTestReachabilityCalculatorWithEmptyVisibility(t)
 	rc := trc.rc
 	rc.assignmentRules = []*persistencespb.AssignmentRule{
-		mkAssignmentRulePersistence(mkAssignmentRule("D", mkNewAssignmentPercentageRamp(50)), createTs, nil),
-		mkAssignmentRulePersistence(mkAssignmentRule("A", nil), createTs, nil),
+		mkAssignmentRulePersistence(mkAssignmentRuleWithRamp("D", 50), createTs, nil),
+		mkAssignmentRulePersistence(mkAssignmentRuleWithoutRamp("A"), createTs, nil),
 	}
 	rc.redirectRules = []*persistencespb.RedirectRule{
 		mkRedirectRulePersistence(mkRedirectRule("A", "B"), createTs, nil),
@@ -363,12 +365,13 @@ func mkTestReachabilityCalculatorWithEmptyVisibility(t *testing.T) *testReachabi
 	cacheMetricsHandler := metricstest.NewCaptureHandler()
 	vm := manager.NewMockVisibilityManager(gomock.NewController(t))
 	vm.EXPECT().CountWorkflowExecutions(gomock.Any(), gomock.Any()).AnyTimes().Return(mkCountResponse(0))
-
+	nsName := namespace.Name("test-namespace")
+	tqf := tqid.UnsafeTaskQueueFamily("nsid", "test-reachability-tq")
 	return &testReachabilityCalculator{
 		rc: &reachabilityCalculator{
 			nsID:                         "test-namespace-id",
-			nsName:                       "test-namespace",
-			taskQueue:                    "test-reachability-tq",
+			nsName:                       nsName,
+			taskQueue:                    tqf,
 			buildIdVisibilityGracePeriod: testBuildIdVisibilityGracePeriod,
 			cache: newReachabilityCache(
 				cacheMetricsHandler,
@@ -376,6 +379,7 @@ func mkTestReachabilityCalculatorWithEmptyVisibility(t *testing.T) *testReachabi
 				testReachabilityCacheOpenWFsTTL,
 				testReachabilityCacheClosedWFsTTL,
 			),
+			tqConfig: newTaskQueueConfig(tqf.TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW), NewConfig(dynamicconfig.NewNoopCollection()), nsName),
 		},
 		capture: cacheMetricsHandler.StartCapture(),
 	}

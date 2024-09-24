@@ -29,12 +29,8 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"go.uber.org/fx"
-	"go.uber.org/multierr"
-
 	"go.temporal.io/api/common/v1"
 	carchiver "go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/archiver/provider"
@@ -47,6 +43,9 @@ import (
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/testing/mocksdk"
 	"go.temporal.io/server/service/history/configs"
+	"go.uber.org/fx"
+	"go.uber.org/mock/gomock"
+	"go.uber.org/multierr"
 )
 
 func TestArchiver(t *testing.T) {

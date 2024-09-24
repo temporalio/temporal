@@ -27,18 +27,16 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/nexus-rpc/sdk-go/nexus"
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
-	"google.golang.org/protobuf/proto"
-	"google.golang.org/protobuf/types/known/timestamppb"
-
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/service/history/hsm"
+	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 const (
@@ -141,11 +139,16 @@ func (o Operation) Cancelation(node *hsm.Node) (*Cancelation, error) {
 	return &cancelation, err
 }
 
-// transitionTasks returns tasks that are emitted as transition outputs.
-func (o Operation) transitionTasks(node *hsm.Node) ([]hsm.Task, error) {
-	if canceled, err := o.cancelRequested(node); canceled || err != nil {
-		return nil, err
+func (o Operation) CancelationNode(node *hsm.Node) (*hsm.Node, error) {
+	child, err := node.Child([]hsm.Key{CancelationMachineKey})
+	if errors.Is(err, hsm.ErrStateMachineNotFound) {
+		return nil, nil
 	}
+	return child, err
+}
+
+// transitionTasks returns tasks that are emitted as transition outputs.
+func (o Operation) transitionTasks() ([]hsm.Task, error) {
 	switch o.State() { // nolint:exhaustive
 	case enumsspb.NEXUS_OPERATION_STATE_BACKING_OFF:
 		return []hsm.Task{BackoffTask{Deadline: o.NextAttemptScheduleTime.AsTime()}}, nil
@@ -169,7 +172,7 @@ func (o Operation) creationTasks(node *hsm.Node) ([]hsm.Task, error) {
 }
 
 func (o Operation) RegenerateTasks(node *hsm.Node) ([]hsm.Task, error) {
-	transitionTasks, err := o.transitionTasks(node)
+	transitionTasks, err := o.transitionTasks()
 	if err != nil {
 		return nil, err
 	}
@@ -180,8 +183,8 @@ func (o Operation) RegenerateTasks(node *hsm.Node) ([]hsm.Task, error) {
 	return append(transitionTasks, creationTasks...), nil
 }
 
-func (o Operation) output(node *hsm.Node) (hsm.TransitionOutput, error) {
-	tasks, err := o.transitionTasks(node)
+func (o Operation) output() (hsm.TransitionOutput, error) {
+	tasks, err := o.transitionTasks()
 	if err != nil {
 		return hsm.TransitionOutput{}, err
 	}
@@ -261,7 +264,7 @@ var TransitionScheduled = hsm.NewTransition(
 	[]enumsspb.NexusOperationState{enumsspb.NEXUS_OPERATION_STATE_UNSPECIFIED},
 	enumsspb.NEXUS_OPERATION_STATE_SCHEDULED,
 	func(op Operation, event EventScheduled) (hsm.TransitionOutput, error) {
-		return op.output(event.Node)
+		return op.output()
 	},
 )
 
@@ -276,7 +279,7 @@ var TransitionRescheduled = hsm.NewTransition(
 	enumsspb.NEXUS_OPERATION_STATE_SCHEDULED,
 	func(op Operation, event EventRescheduled) (hsm.TransitionOutput, error) {
 		op.NextAttemptScheduleTime = nil
-		return op.output(event.Node)
+		return op.output()
 	},
 )
 
@@ -305,7 +308,7 @@ var TransitionAttemptFailed = hsm.NewTransition(
 				},
 			},
 		}
-		return op.output(event.Node)
+		return op.output()
 	},
 )
 
@@ -343,7 +346,7 @@ var TransitionFailed = hsm.NewTransition(
 		}
 		// Keep last attempt information as-is for debuggability when completed asynchronously.
 		// When used in a workflow, this machine node will be deleted from the tree after this transition.
-		return op.output(event.Node)
+		return op.output()
 	},
 )
 
@@ -372,7 +375,7 @@ var TransitionSucceeded = hsm.NewTransition(
 		}
 		// Keep last attempt information as-is for debuggability when completed asynchronously.
 		// When used in a workflow, this machine node will be deleted from the tree after this transition.
-		return op.output(event.Node)
+		return op.output()
 	},
 )
 
@@ -395,13 +398,14 @@ var TransitionCanceled = hsm.NewTransition(
 		// response to a StartOpration request.  This may not be the case if a completion comes in before a response to
 		// the request but we ignore that detail for simplicity.
 		if event.CompletionSource == CompletionSourceResponse ||
+			// TODO: we'll never be in SCHEDULED state here, the state changes before calling the apply function.
 			event.CompletionSource == CompletionSourceUnspecified && op.State() == enumsspb.NEXUS_OPERATION_STATE_SCHEDULED {
 			op.recordAttempt(event.Time)
 			op.LastAttemptFailure = nil
 		}
 		// Keep last attempt information as-is for debuggability when completed asynchronously.
 		// When used in a workflow, this machine node will be deleted from the tree after this transition.
-		return op.output(event.Node)
+		return op.output()
 	},
 )
 
@@ -419,7 +423,21 @@ var TransitionStarted = hsm.NewTransition(
 	func(op Operation, event EventStarted) (hsm.TransitionOutput, error) {
 		op.recordAttempt(event.Time)
 		op.OperationId = event.Attributes.OperationId
-		return op.output(event.Node)
+
+		// If cancelation is requested already, schedule sending the cancelation request.
+		child, err := op.CancelationNode(event.Node)
+		if err != nil {
+			return hsm.TransitionOutput{}, err
+		}
+		if child != nil {
+			return hsm.TransitionOutput{}, hsm.MachineTransition(child, func(c Cancelation) (hsm.TransitionOutput, error) {
+				return TransitionCancelationScheduled.Apply(c, EventCancelationScheduled{
+					Time: event.Time,
+					Node: child,
+				})
+			})
+		}
+		return op.output()
 	},
 )
 
@@ -438,7 +456,7 @@ var TransitionTimedOut = hsm.NewTransition(
 	func(op Operation, event EventTimedOut) (hsm.TransitionOutput, error) {
 		// Keep attempt information as-is for debuggability.
 		// When used in a workflow, this machine node will be deleted from the tree after this transition.
-		return op.output(event.Node)
+		return op.output()
 	},
 )
 
@@ -452,16 +470,14 @@ func (o Operation) Cancel(node *hsm.Node, t time.Time) (hsm.TransitionOutput, er
 		// This function should be called as part of command/event handling and it should not called more than once.
 		return hsm.TransitionOutput{}, err
 	}
-	// TODO(bergundy): Support cancel before started. We need to transmit this intent to cancel to the handler because
-	// we don't know for sure that the operation hasn't been started.
-	if o.State() == enumsspb.NEXUS_OPERATION_STATE_BACKING_OFF || o.State() == enumsspb.NEXUS_OPERATION_STATE_SCHEDULED {
-		return handleUnsuccessfulOperationError(node, o, &nexus.UnsuccessfulOperationError{
-			State:   nexus.OperationStateCanceled,
-			Failure: nexus.Failure{Message: "operation canceled before started"},
-		}, CompletionSourceCancelRequested)
+	// Operation wasn't started yet, we don't know how to cancel it ATM.
+	// TODO(bergundy): Support cancel-before-started.
+	if o.OperationId == "" {
+		// Don't schedule the cancelation yet. We may schedule it again once the operation is started.
+		return hsm.TransitionOutput{}, nil
 	}
 	return hsm.TransitionOutput{}, hsm.MachineTransition(child, func(c Cancelation) (hsm.TransitionOutput, error) {
-		return TranstionCancelationScheduled.Apply(c, EventCancelationScheduled{
+		return TransitionCancelationScheduled.Apply(c, EventCancelationScheduled{
 			Time: t,
 			Node: child,
 		})
@@ -586,7 +602,9 @@ func (c Cancelation) output(node *hsm.Node) (hsm.TransitionOutput, error) {
 func (c Cancelation) progress() (int, int32, error) {
 	switch c.State() {
 	case enumspb.NEXUS_OPERATION_CANCELLATION_STATE_UNSPECIFIED:
-		return 0, 0, serviceerror.NewInvalidArgument("uninitialized cancelation state")
+		// UNSPECIFIED is a valid state since the cancelation may not initially get scheduled if the operation hasn't
+		// been started yet.
+		return 0, 0, nil
 	case enumspb.NEXUS_OPERATION_CANCELLATION_STATE_BACKING_OFF:
 		return 1, c.GetAttempt() * 2, nil
 	case enumspb.NEXUS_OPERATION_CANCELLATION_STATE_SCHEDULED:
@@ -608,7 +626,7 @@ type EventCancelationScheduled struct {
 	Node *hsm.Node
 }
 
-var TranstionCancelationScheduled = hsm.NewTransition(
+var TransitionCancelationScheduled = hsm.NewTransition(
 	[]enumspb.NexusOperationCancellationState{enumspb.NEXUS_OPERATION_CANCELLATION_STATE_UNSPECIFIED},
 	enumspb.NEXUS_OPERATION_CANCELLATION_STATE_SCHEDULED,
 	func(op Cancelation, event EventCancelationScheduled) (hsm.TransitionOutput, error) {
@@ -669,7 +687,12 @@ type EventCancelationFailed struct {
 }
 
 var TransitionCancelationFailed = hsm.NewTransition(
-	[]enumspb.NexusOperationCancellationState{enumspb.NEXUS_OPERATION_CANCELLATION_STATE_SCHEDULED},
+	[]enumspb.NexusOperationCancellationState{
+		// We can immediately transition to failed to since we don't know how to send a cancelation request for an
+		// unstarted operation.
+		enumspb.NEXUS_OPERATION_CANCELLATION_STATE_UNSPECIFIED,
+		enumspb.NEXUS_OPERATION_CANCELLATION_STATE_SCHEDULED,
+	},
 	enumspb.NEXUS_OPERATION_CANCELLATION_STATE_FAILED,
 	func(c Cancelation, event EventCancelationFailed) (hsm.TransitionOutput, error) {
 		c.recordAttempt(event.Time)

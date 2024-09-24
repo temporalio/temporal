@@ -37,6 +37,7 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
+	"go.temporal.io/server/common/clock/hybrid_logical_clock"
 	"go.temporal.io/server/common/future"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
@@ -66,6 +67,8 @@ type (
 		// UpdateUserData updates user data for this task queue and replicates across clusters if necessary.
 		// Extra care should be taken to avoid mutating the existing data in the update function.
 		UpdateUserData(ctx context.Context, options UserDataUpdateOptions, updateFn UserDataUpdateFunc) error
+		// Handles the maybe-long-poll GetUserData RPC.
+		HandleGetUserDataRequest(ctx context.Context, req *matchingservice.GetTaskQueueUserDataRequest) (*matchingservice.GetTaskQueueUserDataResponse, error)
 	}
 
 	UserDataUpdateOptions struct {
@@ -269,13 +272,17 @@ func (m *userDataManagerImpl) fetchUserData(ctx context.Context) error {
 		defer cancel()
 
 		res, err := m.matchingClient.GetTaskQueueUserData(callCtx, &matchingservice.GetTaskQueueUserDataRequest{
-			NamespaceId:              m.partition.NamespaceId().String(),
+			NamespaceId:              m.partition.NamespaceId(),
 			TaskQueue:                fetchSource.RpcName(),
 			TaskQueueType:            fetchSource.TaskType(),
 			LastKnownUserDataVersion: knownUserData.GetVersion(),
 			WaitNewData:              hasFetchedUserData,
 		})
 		if err != nil {
+			// don't log on context canceled, produces too much log spam at shutdown
+			if !common.IsContextCanceledErr(err) {
+				m.logger.Error("error fetching user data from parent", tag.Error(err))
+			}
 			var unimplErr *serviceerror.Unimplemented
 			if errors.As(err, &unimplErr) {
 				// This might happen during a deployment. The older version couldn't have had any user data,
@@ -292,6 +299,9 @@ func (m *userDataManagerImpl) fetchUserData(ctx context.Context) error {
 		// nil inner fields.
 		if res.GetUserData() != nil {
 			m.setUserDataForNonOwningPartition(res.GetUserData())
+			m.logNewUserData("fetched user data from parent", res.GetUserData())
+		} else {
+			m.logger.Debug("fetched user data from parent, no change")
 		}
 		hasFetchedUserData = true
 		m.setUserDataState(userDataEnabled, nil)
@@ -309,7 +319,7 @@ func (m *userDataManagerImpl) fetchUserData(ctx context.Context) error {
 		// one. But if the remote is broken and returns success immediately, we might end up
 		// spinning. So enforce a minimum wait time that increases as long as we keep getting
 		// very fast replies.
-		if elapsed < minWaitTime {
+		if elapsed < m.config.GetUserDataMinWaitTime {
 			util.InterruptibleSleep(ctx, minWaitTime-elapsed)
 			// Don't let this get near our call timeout, otherwise we can't tell the difference
 			// between a fast reply and a timeout.
@@ -325,7 +335,7 @@ func (m *userDataManagerImpl) fetchUserData(ctx context.Context) error {
 // Loads user data from db (called only on initialization of taskQueuePartitionManager).
 func (m *userDataManagerImpl) loadUserDataFromDB(ctx context.Context) error {
 	response, err := m.store.GetTaskQueueUserData(ctx, &persistence.GetTaskQueueUserDataRequest{
-		NamespaceID: m.partition.NamespaceId().String(),
+		NamespaceID: m.partition.NamespaceId(),
 		TaskQueue:   m.partition.TaskQueue().Name(),
 	})
 	if common.IsNotFoundError(err) {
@@ -339,6 +349,7 @@ func (m *userDataManagerImpl) loadUserDataFromDB(ctx context.Context) error {
 	m.lock.Lock()
 	defer m.lock.Unlock()
 	m.setUserDataLocked(response.UserData)
+	m.logNewUserData("loaded user data from db", response.UserData)
 
 	return nil
 }
@@ -349,6 +360,9 @@ func (m *userDataManagerImpl) UpdateUserData(ctx context.Context, options UserDa
 	if m.store == nil {
 		return errUserDataNoMutateNonRoot
 	}
+	if err := m.WaitUntilInitialized(ctx); err != nil {
+		return err
+	}
 	newData, shouldReplicate, err := m.updateUserData(ctx, updateFn, options.KnownVersion, options.TaskQueueLimitPerBuildId)
 	if err != nil {
 		return err
@@ -358,7 +372,7 @@ func (m *userDataManagerImpl) UpdateUserData(ctx context.Context, options UserDa
 	}
 
 	// Only replicate if namespace is global and has at least 2 clusters registered.
-	ns, err := m.namespaceRegistry.GetNamespaceByID(m.partition.NamespaceId())
+	ns, err := m.namespaceRegistry.GetNamespaceByID(namespace.ID(m.partition.NamespaceId()))
 	if err != nil {
 		return err
 	}
@@ -367,7 +381,7 @@ func (m *userDataManagerImpl) UpdateUserData(ctx context.Context, options UserDa
 	}
 
 	_, err = m.matchingClient.ReplicateTaskQueueUserData(ctx, &matchingservice.ReplicateTaskQueueUserDataRequest{
-		NamespaceId: m.partition.NamespaceId().String(),
+		NamespaceId: m.partition.NamespaceId(),
 		TaskQueue:   m.partition.TaskQueue().Name(),
 		UserData:    newData.GetData(),
 	})
@@ -413,6 +427,7 @@ func (m *userDataManagerImpl) updateUserData(
 	}
 	updatedUserData, shouldReplicate, err := updateFn(preUpdateData)
 	if err != nil {
+		m.logger.Error("user data update function failed", tag.Error(err))
 		return nil, false, err
 	}
 
@@ -422,7 +437,7 @@ func (m *userDataManagerImpl) updateUserData(
 		// We do not enforce the limit when applying replication events.
 		for _, buildId := range added {
 			numTaskQueues, err := m.store.CountTaskQueuesByBuildId(ctx, &persistence.CountTaskQueuesByBuildIdRequest{
-				NamespaceID: m.partition.NamespaceId().String(),
+				NamespaceID: m.partition.NamespaceId(),
 				BuildID:     buildId,
 			})
 			if err != nil {
@@ -435,18 +450,90 @@ func (m *userDataManagerImpl) updateUserData(
 	}
 
 	_, err = m.matchingClient.UpdateTaskQueueUserData(ctx, &matchingservice.UpdateTaskQueueUserDataRequest{
-		NamespaceId:     m.partition.NamespaceId().String(),
+		NamespaceId:     m.partition.NamespaceId(),
 		TaskQueue:       m.partition.TaskQueue().Name(),
 		UserData:        &persistencespb.VersionedTaskQueueUserData{Version: preUpdateVersion, Data: updatedUserData},
 		BuildIdsAdded:   added,
 		BuildIdsRemoved: removed,
 	})
-	var updatedVersionedData *persistencespb.VersionedTaskQueueUserData
-	if err == nil {
-		updatedVersionedData = &persistencespb.VersionedTaskQueueUserData{Version: preUpdateVersion + 1, Data: updatedUserData}
-		m.setUserDataLocked(updatedVersionedData)
+	if err != nil {
+		m.logger.Error("failed to push new user data to owning matching node for namespace", tag.Error(err))
+		return nil, false, err
 	}
+
+	updatedVersionedData := &persistencespb.VersionedTaskQueueUserData{Version: preUpdateVersion + 1, Data: updatedUserData}
+	m.logNewUserData("modified user data", updatedVersionedData)
+	m.setUserDataLocked(updatedVersionedData)
+
 	return updatedVersionedData, shouldReplicate, err
+}
+
+func (m *userDataManagerImpl) HandleGetUserDataRequest(
+	ctx context.Context,
+	req *matchingservice.GetTaskQueueUserDataRequest,
+) (*matchingservice.GetTaskQueueUserDataResponse, error) {
+	version := req.GetLastKnownUserDataVersion()
+	if version < 0 {
+		return nil, serviceerror.NewInvalidArgument("last_known_user_data_version must not be negative")
+	}
+
+	if req.WaitNewData {
+		var cancel context.CancelFunc
+		ctx, cancel = newChildContext(ctx, m.config.GetUserDataLongPollTimeout(), m.config.GetUserDataReturnBudget)
+		defer cancel()
+	}
+
+	for {
+		resp := &matchingservice.GetTaskQueueUserDataResponse{}
+		userData, userDataChanged, err := m.GetUserData()
+		if errors.Is(err, errTaskQueueClosed) {
+			// If we're closing, return a success with no data, as if the request expired. We shouldn't
+			// close due to idleness (because of the MarkAlive above), so we're probably closing due to a
+			// change of ownership. The caller will retry and be redirected to the new owner.
+			m.logger.Debug("returning empty user data (closing)", tag.NewBoolTag("long-poll", req.WaitNewData))
+			return resp, nil
+		} else if err != nil {
+			return nil, err
+		}
+		if req.WaitNewData && userData.GetVersion() == version {
+			// long-poll: wait for data to change/appear
+			select {
+			case <-ctx.Done():
+				m.logger.Debug("returning empty user data (expired)",
+					tag.NewBoolTag("long-poll", req.WaitNewData),
+					tag.NewInt64("request-known-version", version),
+					tag.UserDataVersion(userData.GetVersion()),
+				)
+				return resp, nil
+			case <-userDataChanged:
+				m.logger.Debug("user data changed while blocked in long poll")
+				continue
+			}
+		}
+		if userData != nil {
+			if userData.Version > version {
+				resp.UserData = userData
+				m.logger.Info("returning user data",
+					tag.NewBoolTag("long-poll", req.WaitNewData),
+					tag.NewInt64("request-known-version", version),
+					tag.UserDataVersion(userData.Version),
+				)
+			} else if userData.Version < version {
+				// This is highly unlikely but may happen due to an edge case in during ownership transfer.
+				// We rely on client retries in this case to let the system eventually self-heal.
+				m.logger.Error("requested task queue user data for version greater than known version",
+					tag.NewInt64("request-known-version", version),
+					tag.UserDataVersion(userData.Version),
+				)
+				return nil, serviceerror.NewInvalidArgument(
+					"requested task queue user data for version greater than known version")
+			}
+		} else {
+			m.logger.Debug("returning empty user data (no data)", tag.NewBoolTag("long-poll", req.WaitNewData))
+		}
+		return resp, nil
+	}
+
 }
 
 func (m *userDataManagerImpl) setUserDataForNonOwningPartition(userData *persistencespb.VersionedTaskQueueUserData) {
@@ -456,6 +543,13 @@ func (m *userDataManagerImpl) setUserDataForNonOwningPartition(userData *persist
 }
 
 func (m *userDataManagerImpl) callerInfoContext(ctx context.Context) context.Context {
-	ns, _ := m.namespaceRegistry.GetNamespaceName(m.partition.NamespaceId())
+	ns, _ := m.namespaceRegistry.GetNamespaceName(namespace.ID(m.partition.NamespaceId()))
 	return headers.SetCallerInfo(ctx, headers.NewBackgroundCallerInfo(ns.String()))
+}
+
+func (m *userDataManagerImpl) logNewUserData(message string, data *persistencespb.VersionedTaskQueueUserData) {
+	m.logger.Info(message,
+		tag.UserDataVersion(data.GetVersion()),
+		tag.Timestamp(hybrid_logical_clock.UTC(data.GetData().GetClock())),
+	)
 }

@@ -36,74 +36,76 @@ import (
 	protocolpb "go.temporal.io/api/protocol/v1"
 	"go.temporal.io/api/serviceerror"
 	updatepb "go.temporal.io/api/update/v1"
-	"google.golang.org/protobuf/types/known/anypb"
-
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/future"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/utf8validator"
 	"go.temporal.io/server/internal/effect"
+	"google.golang.org/protobuf/types/known/anypb"
 )
 
 type (
-	// Registry maintains a set of updates that have been admitted to run
+	// Registry maintains a set of Updates that have been admitted to run
 	// against a workflow execution.
 	Registry interface {
 		// FindOrCreate finds an existing Update or creates a new one. The second
 		// return value (bool) indicates whether the Update returned already
 		// existed and was found (true) or was not found and has been newly
-		// created (false)
-		FindOrCreate(ctx context.Context, protocolInstanceID string) (*Update, bool, error)
+		// created (false).
+		FindOrCreate(ctx context.Context, updateID string) (_ *Update, alreadyExisted bool, _ error)
 
-		// Find finds an existing update in this Registry but does not create a
-		// new update if no update is found.
-		Find(ctx context.Context, protocolInstanceID string) *Update
+		// Find an existing Update in this Registry.
+		// Returns nil if Update doesn't exist.
+		Find(ctx context.Context, updateID string) *Update
 
-		// TryResurrect tries to resurrect the update from the protocol message,
-		// whose body contains Acceptance or Rejection message.
+		// TryResurrect tries to resurrect the Update from the protocol message,
+		// whose body contains an Acceptance or Rejection message.
 		// It returns an error if some unexpected error happened, but if there is not
-		// enough data in the message, it just returns a nil update.
-		// If the update was successfully resurrected it is added to the registry in stateAdmitted.
+		// enough data in the message, it just returns a nil Update.
+		// If the Update was successfully resurrected, it is added to the registry in stateAdmitted.
 		TryResurrect(ctx context.Context, acptOrRejMsg *protocolpb.Message) (*Update, error)
 
-		// HasOutgoingMessages returns true if the registry has any Updates
+		// HasOutgoingMessages returns true if the Registry has any Updates
 		// for which outgoing message can be generated.
-		// If includeAlreadySent is set to true then it will return true
-		// even if update message was already sent but not processed by worker.
+		// If includeAlreadySent is set to true, then it will return true
+		// even if an Update message was already sent but not processed by worker.
 		HasOutgoingMessages(includeAlreadySent bool) bool
 
 		// Send returns messages for all Updates that need to be sent to the worker.
-		// If includeAlreadySent is set to true then messages will be created even
-		// for updates which were already sent but not processed by worker.
+		// If includeAlreadySent is set to true, then messages will be created even
+		// for Updates which were already sent but not processed by worker.
 		Send(ctx context.Context, includeAlreadySent bool, workflowTaskStartedEventID int64) []*protocolpb.Message
 
-		// RejectUnprocessed reject all updates that are waiting for workflow task to be completed.
+		// RejectUnprocessed rejects all Updates that are waiting for a workflow task to be completed.
 		// This method should be called after all messages from worker are handled to make sure
-		// that worker processed (rejected or accepted) all updates that were delivered on the workflow task.
+		// that worker processed (rejected or accepted) all Updates that were delivered on the workflow task.
 		RejectUnprocessed(ctx context.Context, effects effect.Controller) ([]string, error)
 
-		// Abort all incomplete updates in the registry.
+		// Abort all incomplete Updates in the Registry.
 		Abort(reason AbortReason)
 
-		Contains(protocolInstanceID string) bool
-
-		// Clear registry and abort all waiters.
+		// Clear the Registry and abort all Updates.
 		Clear()
 
-		// Len observes the number of incomplete updates in this Registry.
+		// Len observes the number of incomplete (not completed or rejected) Updates in this Registry.
 		Len() int
 
-		// GetSize returns the size of the update object
+		// GetSize returns approximate size of the Registry in bytes.
 		GetSize() int
 
-		// FailoverVersion of mutable state at the time of registry creation.
+		// FailoverVersion of a Mutable State at the time of Registry creation.
 		FailoverVersion() int64
 	}
 
 	registry struct {
-		updates         map[string]*Update
-		store           UpdateStore
+		// map of updateID to Update for admitted and accepted Updates.
+		// Completed and rejected Updates are not stored in this map.
+		updates map[string]*Update
+		// A store from which Registry is constructed with NewRegistry function,
+		// and completed Updates are loaded. Practically it is a Mutable State.
+		store UpdateStore
+
 		instrumentation instrumentation
 		maxInFlight     func() int
 		maxTotal        func() int
@@ -117,30 +119,28 @@ type (
 var _ Registry = (*registry)(nil)
 
 // WithInFlightLimit provides an optional limit to the number of incomplete
-// updates that a Registry instance will allow.
+// Updates that a Registry instance will allow.
 func WithInFlightLimit(f func() int) Option {
 	return func(r *registry) {
 		r.maxInFlight = f
 	}
 }
 
-// WithTotalLimit provides an optional limit to the total number of updates for workflow.
+// WithTotalLimit provides an optional limit to the total number of Updates for workflow run.
 func WithTotalLimit(f func() int) Option {
 	return func(r *registry) {
 		r.maxTotal = f
 	}
 }
 
-// WithLogger sets the log.Logger to be used by an UpdateRegistry and its
-// Updates.
+// WithLogger sets the log.Logger to be used by Registry and its Updates.
 func WithLogger(l log.Logger) Option {
 	return func(r *registry) {
 		r.instrumentation.log = l
 	}
 }
 
-// WithMetrics sets the metrics.Handler to be used by an UpdateRegistry and its
-// Updates.
+// WithMetrics sets the metrics.Handler to be used by Registry and its Updates.
 func WithMetrics(m metrics.Handler) Option {
 	return func(r *registry) {
 		r.instrumentation.metrics = m
@@ -148,7 +148,7 @@ func WithMetrics(m metrics.Handler) Option {
 }
 
 // WithTracerProvider sets the trace.TracerProvider (and by extension the
-// trace.Tracer) to be used by an UpdateRegistry and its Updates.
+// trace.Tracer) to be used by Registry and its Updates.
 func WithTracerProvider(t trace.TracerProvider) Option {
 	return func(r *registry) {
 		r.instrumentation.tracer = t.Tracer(libraryName)
@@ -173,11 +173,11 @@ func NewRegistry(
 
 	r.store.VisitUpdates(func(updID string, updInfo *persistencespb.UpdateInfo) {
 		if updInfo.GetAdmission() != nil {
-			// An update entry in the registry may have a request payload: we use this to write the payload to an
-			// UpdateAccepted event, in the event that the update is accepted. However, when populating the registry
-			// from mutable state, we do not have access to update request payloads. In this situation it is correct
+			// An Update entry in the Registry may have a request payload: we use this to write the payload to an
+			// UpdateAccepted event, in the event that the Update is accepted. However, when populating the registry
+			// from mutable state, we do not have access to Update request payloads. In this situation it is correct
 			// to create a registry entry in state Admitted with a nil payload for the following reason: the fact
-			// that we have encountered an UpdateInfo in state Admitted in mutable state implies that there is an
+			// that we have encountered an UpdateInfo in stateAdmitted in mutable state implies that there is an
 			// UpdateAdmitted event in history; and when there is an UpdateAdmitted event in history, we will not
 			// attempt to write the request payload to the UpdateAccepted event, since the request payload is
 			// already present in the UpdateAdmitted event.
@@ -195,8 +195,8 @@ func NewRegistry(
 				withInstrumentation(&r.instrumentation),
 			)
 			if !r.store.IsWorkflowExecutionRunning() {
-				// If workflow is completed, accepted update will never be completed.
-				// This will return "workflow completed" error to the pollers of outcome of accepted updates.
+				// If the Workflow is completed, accepted Update will never be completed.
+				// This will return "workflow completed" error to the pollers of outcome of accepted Updates.
 				u.abort(AbortReasonWorkflowCompleted)
 			}
 			r.updates[updID] = u
@@ -219,12 +219,12 @@ func (r *registry) FindOrCreate(ctx context.Context, id string) (*Update, bool, 
 	return upd, false, nil
 }
 
-func (r *registry) TryResurrect(ctx context.Context, acptOrRejMsg *protocolpb.Message) (*Update, error) {
+func (r *registry) TryResurrect(_ context.Context, acptOrRejMsg *protocolpb.Message) (*Update, error) {
 	if acptOrRejMsg == nil || acptOrRejMsg.Body == nil {
 		return nil, nil
 	}
 
-	// Check only total limit here. This might add more than maxInFlight updates to registry,
+	// Check only total limit here. This might add more than maxInFlight Updates to registry,
 	// but provides better developer experience.
 	if err := r.checkTotalLimit(); err != nil {
 		return nil, err
@@ -269,23 +269,14 @@ func (r *registry) TryResurrect(ctx context.Context, acptOrRejMsg *protocolpb.Me
 	return upd, nil
 }
 
-// Abort all incomplete updates in the registry.
 func (r *registry) Abort(reason AbortReason) {
 	for _, upd := range r.updates {
 		upd.abort(reason)
 	}
 }
 
-// Contains returns true iff the update ID exists in the registry.
-func (r *registry) Contains(id string) bool {
-	return r.updates[id] != nil
-}
-
-// RejectUnprocessed rejects all updates that are waiting for workflow task to be completed.
-// This method should be called after all messages from worker are handled to make sure
-// that worker processed (rejected or accepted) all updates that were delivered on specific workflow task.
 func (r *registry) RejectUnprocessed(
-	ctx context.Context,
+	_ context.Context,
 	effects effect.Controller,
 ) ([]string, error) {
 	var updatesToReject []*Update
@@ -305,10 +296,6 @@ func (r *registry) RejectUnprocessed(
 	return rejectedUpdateIDs, nil
 }
 
-// HasOutgoingMessages returns true if the registry has any Updates
-// for which outgoing message can be generated.
-// If includeAlreadySent is set to true then it will return true
-// even if update message was already sent but not processed by worker.
 func (r *registry) HasOutgoingMessages(includeAlreadySent bool) bool {
 	for _, upd := range r.updates {
 		if upd.needToSend(includeAlreadySent) {
@@ -318,11 +305,8 @@ func (r *registry) HasOutgoingMessages(includeAlreadySent bool) bool {
 	return false
 }
 
-// Send returns messages for all Updates that need to be sent to the worker.
-// If includeAlreadySent is set to true then messages will be created even
-// for updates which were already sent but not processed by worker.
 func (r *registry) Send(
-	ctx context.Context,
+	_ context.Context,
 	includeAlreadySent bool,
 	workflowTaskStartedEventID int64,
 ) []*protocolpb.Message {
@@ -337,7 +321,7 @@ func (r *registry) Send(
 	//  and events reordering in some SDKs.
 	sequencingEventID := &protocolpb.Message_EventId{EventId: workflowTaskStartedEventID - 1}
 
-	// sort updates by the time they were admitted
+	// Sort Updates by the time they were admitted to send them in deterministic order.
 	var sortedUpdates []*Update
 	for _, upd := range r.updates {
 		sortedUpdates = append(sortedUpdates, upd)
@@ -354,7 +338,6 @@ func (r *registry) Send(
 	return outgoingMessages
 }
 
-// Clear registry and abort all waiters.
 func (r *registry) Clear() {
 	r.Abort(AbortReasonRegistryCleared)
 
@@ -366,6 +349,7 @@ func (r *registry) Len() int {
 	return len(r.updates)
 }
 
+// remover is called when Update gets into terminal state (completed or rejected).
 func (r *registry) remover(id string) updateOpt {
 	return withCompletionCallback(
 		func() {
@@ -398,29 +382,29 @@ func (r *registry) checkTotalLimit() error {
 }
 
 func (r *registry) Find(ctx context.Context, id string) *Update {
+	// Check the admitted and accepted Updates map first.
 	if upd, ok := r.updates[id]; ok {
 		return upd
 	}
 
-	// update not found in ephemeral state, but could have already completed so
-	// check in registry storage
+	// Update is not found in an internal map, but could have already completed,
+	// so check in the store.
 	updOutcome, err := r.store.GetUpdateOutcome(ctx, id)
 
-	// Swallow NotFound error because it means that update doesn't exist.
+	// Swallow NotFound error because it means that Update doesn't exist.
 	var notFound *serviceerror.NotFound
 	if errors.As(err, &notFound) {
 		return nil
 	}
 
-	// Other errors go to the future of completed update because it means, that update exists, was found,
-	// but there is something broken in it.
+	// Other errors go to the future of completed Update,
+	// because it means that Update exists, was found, but there is something broken in it
+	// (UpdateInfo in mutable state is invalid or Update completion event is not found).
 
-	// Completed, create the Update object but do not add to registry.
-	// This should not happen often.
-	fut := future.NewReadyFuture(updOutcome, err)
+	// The Update is completed and its outcome loaded from the corresponding history event.
 	return newCompleted(
 		id,
-		fut,
+		future.NewReadyFuture(updOutcome, err),
 		withInstrumentation(&r.instrumentation),
 	)
 }

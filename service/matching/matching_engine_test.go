@@ -33,19 +33,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/assert"
-
 	"github.com/emirpasic/gods/maps/treemap"
 	godsutils "github.com/emirpasic/gods/utils"
-	"github.com/golang/mock/gomock"
 	"github.com/pborman/uuid"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-go/tally/v4"
-	"google.golang.org/protobuf/types/known/durationpb"
-	"google.golang.org/protobuf/types/known/timestamppb"
-	"google.golang.org/protobuf/types/known/wrapperspb"
-
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -54,28 +48,26 @@ import (
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
-	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
-	"go.temporal.io/server/common/cluster/clustertest"
-	"go.temporal.io/server/common/metrics/metricstest"
-	"go.temporal.io/server/common/worker_versioning"
-
 	clockspb "go.temporal.io/server/api/clock/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/historyservicemock/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/api/matchingservicemock/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	tokenspb "go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
 	hlc "go.temporal.io/server/common/clock/hybrid_logical_clock"
 	"go.temporal.io/server/common/cluster"
+	"go.temporal.io/server/common/cluster/clustertest"
 	"go.temporal.io/server/common/collection"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/payloads"
@@ -86,7 +78,12 @@ import (
 	"go.temporal.io/server/common/quotas"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/tqid"
+	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/service/history/consts"
+	"go.uber.org/mock/gomock"
+	"google.golang.org/protobuf/types/known/durationpb"
+	"google.golang.org/protobuf/types/known/timestamppb"
+	"google.golang.org/protobuf/types/known/wrapperspb"
 )
 
 type (
@@ -170,6 +167,8 @@ func (s *matchingEngineSuite) SetupTest() {
 		Return(&matchingservice.UpdateTaskQueueUserDataResponse{}, nil).AnyTimes()
 	s.mockMatchingClient.EXPECT().ReplicateTaskQueueUserData(gomock.Any(), gomock.Any()).
 		Return(&matchingservice.ReplicateTaskQueueUserDataResponse{}, nil).AnyTimes()
+	s.mockMatchingClient.EXPECT().ForceLoadTaskQueuePartition(gomock.Any(), gomock.Any()).
+		Return(&matchingservice.ForceLoadTaskQueuePartitionResponse{WasUnloaded: true}, nil).AnyTimes()
 	s.taskManager = newTestTaskManager(s.logger)
 	s.ns, s.mockNamespaceCache = createMockNamespaceCache(s.controller, matchingTestNamespace)
 	s.mockVisibilityManager = manager.NewMockVisibilityManager(s.controller)
@@ -369,12 +368,78 @@ func (s *matchingEngineSuite) TestPollWorkflowTaskQueuesEmptyResultWithShortCont
 	s.PollForTasksEmptyResultTest(callContext, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
 }
 
+func (s *matchingEngineSuite) PollForTasksEmptyResultTest(callContext context.Context, taskType enumspb.TaskQueueType) {
+	s.matchingEngine.config.RangeSize = 2 // to test that range is not updated without tasks
+	if _, ok := callContext.Deadline(); !ok {
+		s.matchingEngine.config.LongPollExpirationInterval = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueue(10 * time.Millisecond)
+	}
+
+	namespaceId := uuid.New()
+	tl := "makeToast"
+	identity := "selfDrivingToaster"
+
+	taskQueue := &taskqueuepb.TaskQueue{
+		Name: tl,
+		Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
+	}
+	var taskQueueType enumspb.TaskQueueType
+	tlID := newUnversionedRootQueueKey(namespaceId, tl, taskType)
+	const pollCount = 10
+	for i := 0; i < pollCount; i++ {
+		if taskType == enumspb.TASK_QUEUE_TYPE_ACTIVITY {
+			pollResp, err := s.matchingEngine.PollActivityTaskQueue(callContext, &matchingservice.PollActivityTaskQueueRequest{
+				NamespaceId: namespaceId,
+				PollRequest: &workflowservice.PollActivityTaskQueueRequest{
+					TaskQueue: taskQueue,
+					Identity:  identity,
+				},
+			}, metrics.NoopMetricsHandler)
+			s.NoError(err)
+			s.Equal(emptyPollActivityTaskQueueResponse, pollResp)
+
+			taskQueueType = enumspb.TASK_QUEUE_TYPE_ACTIVITY
+		} else {
+			resp, err := s.matchingEngine.PollWorkflowTaskQueue(callContext, &matchingservice.PollWorkflowTaskQueueRequest{
+				NamespaceId: namespaceId,
+				PollRequest: &workflowservice.PollWorkflowTaskQueueRequest{
+					TaskQueue: taskQueue,
+					Identity:  identity,
+				},
+			}, metrics.NoopMetricsHandler)
+			s.NoError(err)
+			s.Equal(emptyPollWorkflowTaskQueueResponse, resp)
+
+			taskQueueType = enumspb.TASK_QUEUE_TYPE_WORKFLOW
+		}
+		select {
+		case <-callContext.Done():
+			s.FailNow("Call context has expired.")
+		default:
+		}
+		// check the poller information
+		descResp, err := s.matchingEngine.DescribeTaskQueue(context.Background(), &matchingservice.DescribeTaskQueueRequest{
+			NamespaceId: namespaceId,
+			DescRequest: &workflowservice.DescribeTaskQueueRequest{
+				TaskQueue:              taskQueue,
+				TaskQueueType:          taskQueueType,
+				IncludeTaskQueueStatus: false,
+			},
+		})
+		s.NoError(err)
+		s.Equal(1, len(descResp.DescResponse.Pollers))
+		s.Equal(identity, descResp.DescResponse.Pollers[0].GetIdentity())
+		s.NotEmpty(descResp.DescResponse.Pollers[0].GetLastAccessTime())
+		s.Nil(descResp.DescResponse.GetTaskQueueStatus())
+	}
+	s.EqualValues(1, s.taskManager.getQueueManager(tlID).RangeID())
+}
+
 func (s *matchingEngineSuite) TestOnlyUnloadMatchingInstance() {
 	prtn := newRootPartition(
 		uuid.New(),
 		"makeToast",
 		enumspb.TASK_QUEUE_TYPE_ACTIVITY)
-	tqm, err := s.matchingEngine.getTaskQueuePartitionManager(context.Background(), prtn, true, loadCauseUnspecified)
+	tqm, _, err := s.matchingEngine.getTaskQueuePartitionManager(context.Background(), prtn, true, loadCauseUnspecified)
 	s.Require().NoError(err)
 
 	tqm2 := s.newPartitionManager(prtn, s.matchingEngine.config)
@@ -382,7 +447,7 @@ func (s *matchingEngineSuite) TestOnlyUnloadMatchingInstance() {
 	// try to unload a different tqm instance with the same taskqueue ID
 	s.matchingEngine.unloadTaskQueuePartition(tqm2, unloadCauseUnspecified)
 
-	got, err := s.matchingEngine.getTaskQueuePartitionManager(context.Background(), prtn, true, loadCauseUnspecified)
+	got, _, err := s.matchingEngine.getTaskQueuePartitionManager(context.Background(), prtn, true, loadCauseUnspecified)
 	s.Require().NoError(err)
 	s.Require().Same(tqm, got,
 		"Unload call with non-matching taskQueuePartitionManager should not cause unload")
@@ -390,7 +455,7 @@ func (s *matchingEngineSuite) TestOnlyUnloadMatchingInstance() {
 	// this time unload the right tqm
 	s.matchingEngine.unloadTaskQueuePartition(tqm, unloadCauseUnspecified)
 
-	got, err = s.matchingEngine.getTaskQueuePartitionManager(context.Background(), prtn, true, loadCauseUnspecified)
+	got, _, err = s.matchingEngine.getTaskQueuePartitionManager(context.Background(), prtn, true, loadCauseUnspecified)
 	s.Require().NoError(err)
 	s.Require().NotSame(tqm, got,
 		"Unload call with matching incarnation should have caused unload")
@@ -589,72 +654,6 @@ func (s *matchingEngineSuite) TestPollWorkflowTaskQueues() {
 	s.Equal(expectedResp, resp)
 }
 
-func (s *matchingEngineSuite) PollForTasksEmptyResultTest(callContext context.Context, taskType enumspb.TaskQueueType) {
-	s.matchingEngine.config.RangeSize = 2 // to test that range is not updated without tasks
-	if _, ok := callContext.Deadline(); !ok {
-		s.matchingEngine.config.LongPollExpirationInterval = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueue(10 * time.Millisecond)
-	}
-
-	namespaceId := uuid.New()
-	tl := "makeToast"
-	identity := "selfDrivingToaster"
-
-	taskQueue := &taskqueuepb.TaskQueue{
-		Name: tl,
-		Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
-	}
-	var taskQueueType enumspb.TaskQueueType
-	tlID := newUnversionedRootQueueKey(namespaceId, tl, taskType)
-	const pollCount = 10
-	for i := 0; i < pollCount; i++ {
-		if taskType == enumspb.TASK_QUEUE_TYPE_ACTIVITY {
-			pollResp, err := s.matchingEngine.PollActivityTaskQueue(callContext, &matchingservice.PollActivityTaskQueueRequest{
-				NamespaceId: namespaceId,
-				PollRequest: &workflowservice.PollActivityTaskQueueRequest{
-					TaskQueue: taskQueue,
-					Identity:  identity,
-				},
-			}, metrics.NoopMetricsHandler)
-			s.NoError(err)
-			s.Equal(emptyPollActivityTaskQueueResponse, pollResp)
-
-			taskQueueType = enumspb.TASK_QUEUE_TYPE_ACTIVITY
-		} else {
-			resp, err := s.matchingEngine.PollWorkflowTaskQueue(callContext, &matchingservice.PollWorkflowTaskQueueRequest{
-				NamespaceId: namespaceId,
-				PollRequest: &workflowservice.PollWorkflowTaskQueueRequest{
-					TaskQueue: taskQueue,
-					Identity:  identity,
-				},
-			}, metrics.NoopMetricsHandler)
-			s.NoError(err)
-			s.Equal(emptyPollWorkflowTaskQueueResponse, resp)
-
-			taskQueueType = enumspb.TASK_QUEUE_TYPE_WORKFLOW
-		}
-		select {
-		case <-callContext.Done():
-			s.FailNow("Call context has expired.")
-		default:
-		}
-		// check the poller information
-		descResp, err := s.matchingEngine.DescribeTaskQueue(context.Background(), &matchingservice.DescribeTaskQueueRequest{
-			NamespaceId: namespaceId,
-			DescRequest: &workflowservice.DescribeTaskQueueRequest{
-				TaskQueue:              taskQueue,
-				TaskQueueType:          taskQueueType,
-				IncludeTaskQueueStatus: false,
-			},
-		})
-		s.NoError(err)
-		s.Equal(1, len(descResp.DescResponse.Pollers))
-		s.Equal(identity, descResp.DescResponse.Pollers[0].GetIdentity())
-		s.NotEmpty(descResp.DescResponse.Pollers[0].GetLastAccessTime())
-		s.Nil(descResp.DescResponse.GetTaskQueueStatus())
-	}
-	s.EqualValues(1, s.taskManager.getQueueManager(tlID).RangeID())
-}
-
 func (s *matchingEngineSuite) TestPollWorkflowTaskQueues_NamespaceHandover() {
 	namespaceId := uuid.New()
 	taskQueue := &taskqueuepb.TaskQueue{Name: "queue", Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
@@ -676,6 +675,7 @@ func (s *matchingEngineSuite) TestPollWorkflowTaskQueues_NamespaceHandover() {
 
 	s.mockHistoryClient.EXPECT().RecordWorkflowTaskStarted(gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(nil, common.ErrNamespaceHandover).Times(1)
+
 	resp, err := s.matchingEngine.PollWorkflowTaskQueue(context.Background(), &matchingservice.PollWorkflowTaskQueueRequest{
 		NamespaceId: namespaceId,
 		PollRequest: &workflowservice.PollWorkflowTaskQueueRequest{
@@ -1107,7 +1107,7 @@ func (s *matchingEngineSuite) TestSyncMatchActivities() {
 
 	time.Sleep(20 * time.Millisecond) // So any buffer tasks from 0 rps get picked up
 	snap := scope.Snapshot()
-	syncCtr := snap.Counters()["test.sync_throttle_count+namespace="+matchingTestNamespace+",operation=TaskQueueMgr,service_name=matching,task_type=Activity,taskqueue=makeToast,worker-build-id=_unversioned_"]
+	syncCtr := snap.Counters()["test.sync_throttle_count+namespace="+matchingTestNamespace+",operation=TaskQueueMgr,partition=0,service_name=matching,task_type=Activity,taskqueue=makeToast,worker-build-id=__unversioned__"]
 	s.Equal(1, int(syncCtr.Value()))                        // Check times zero rps is set = throttle counter
 	s.EqualValues(1, s.taskManager.getCreateTaskCount(dbq)) // Check times zero rps is set = Tasks stored in persistence
 	s.EqualValues(0, s.taskManager.getTaskCount(dbq))
@@ -1359,7 +1359,6 @@ func (s *matchingEngineSuite) TestConcurrentPublishConsumeWorkflowTasks() {
 
 	var wg sync.WaitGroup
 	wg.Add(2 * workerCount)
-
 	for p := 0; p < workerCount; p++ {
 		go func() {
 			for i := int64(0); i < taskCount; i++ {
@@ -1989,7 +1988,7 @@ func (s *matchingEngineSuite) TestTaskQueueManager_CyclingBehavior() {
 		mgr.Start()
 		// tlMgr.taskWriter startup is async so give it time to complete
 		time.Sleep(100 * time.Millisecond)
-		mgr.(*taskQueuePartitionManagerImpl).unloadFromEngine(unloadCauseUnspecified)
+		mgr.(*taskQueuePartitionManagerImpl).Stop(unloadCauseUnspecified)
 
 		getTasksCount := s.taskManager.getGetTasksCount(dbq) - prevGetTasksCount
 		s.LessOrEqual(getTasksCount, 1)
@@ -2430,6 +2429,7 @@ func (s *matchingEngineSuite) TestUpdateUserData_FailsOnKnownVersionMismatch() {
 		Version: 1,
 		Data:    &persistencespb.TaskQueueUserData{Clock: &clockspb.HybridLogicalClock{WallClock: 123456}},
 	}
+
 	err := s.taskManager.UpdateTaskQueueUserData(context.Background(),
 		&persistence.UpdateTaskQueueUserDataRequest{
 			NamespaceID: namespaceID.String(),
@@ -2526,6 +2526,7 @@ func (s *matchingEngineSuite) TestDemotedMatch() {
 			},
 		},
 	}
+
 	err := s.taskManager.UpdateTaskQueueUserData(ctx, &persistence.UpdateTaskQueueUserDataRequest{
 		NamespaceID: namespaceId,
 		TaskQueue:   tq,
@@ -2550,7 +2551,7 @@ func (s *matchingEngineSuite) TestDemotedMatch() {
 
 	// unload base and versioned tqm. note: unload the partition manager unloads both
 	prtn := newRootPartition(namespaceId, tq, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
-	baseTqm, err := s.matchingEngine.getTaskQueuePartitionManager(ctx, prtn, false, loadCauseUnspecified)
+	baseTqm, _, err := s.matchingEngine.getTaskQueuePartitionManager(ctx, prtn, false, loadCauseUnspecified)
 	s.NoError(err)
 	s.NotNil(baseTqm)
 	s.matchingEngine.unloadTaskQueuePartition(baseTqm, unloadCauseUnspecified)
@@ -2575,6 +2576,7 @@ func (s *matchingEngineSuite) TestDemotedMatch() {
 			},
 		},
 	}
+
 	err = s.taskManager.UpdateTaskQueueUserData(ctx, &persistence.UpdateTaskQueueUserDataRequest{
 		NamespaceID: namespaceId,
 		TaskQueue:   tq,
@@ -2618,9 +2620,9 @@ func (s *matchingEngineSuite) TestUnloadOnMembershipChange() {
 	p2, err := tqid.NormalPartitionFromRpcName("makeToast", uuid.New(), enumspb.TASK_QUEUE_TYPE_ACTIVITY)
 	s.NoError(err)
 
-	_, err = e.getTaskQueuePartitionManager(context.Background(), p1, true, loadCauseUnspecified)
+	_, _, err = e.getTaskQueuePartitionManager(context.Background(), p1, true, loadCauseUnspecified)
 	s.NoError(err)
-	_, err = e.getTaskQueuePartitionManager(context.Background(), p2, true, loadCauseUnspecified)
+	_, _, err = e.getTaskQueuePartitionManager(context.Background(), p2, true, loadCauseUnspecified)
 	s.NoError(err)
 
 	s.Equal(2, len(e.getTaskQueuePartitions(1000)))
@@ -2643,7 +2645,7 @@ func (s *matchingEngineSuite) TestUnloadOnMembershipChange() {
 	}, 100*time.Millisecond, 10*time.Millisecond, "p2 should have been unloaded")
 
 	isLoaded := func(p tqid.Partition) bool {
-		tqm, err := e.getTaskQueuePartitionManager(context.Background(), p, false, loadCauseUnspecified)
+		tqm, _, err := e.getTaskQueuePartitionManager(context.Background(), p, false, loadCauseUnspecified)
 		s.NoError(err)
 		return tqm != nil
 	}
@@ -2681,12 +2683,11 @@ func (s *matchingEngineSuite) TestUpdateTaskQueuePartitionGauge_RootPartitionWor
 	captureHandler, ok := s.matchingEngine.metricsHandler.(*metricstest.CaptureHandler)
 	s.True(ok)
 	capture := captureHandler.StartCapture()
-
 	prtn := newRootPartition(
 		uuid.New(),
 		"MetricTester",
 		enumspb.TASK_QUEUE_TYPE_WORKFLOW)
-	tqm, err := s.matchingEngine.getTaskQueuePartitionManager(context.Background(), prtn, true, loadCauseUnspecified)
+	tqm, _, err := s.matchingEngine.getTaskQueuePartitionManager(context.Background(), prtn, true, loadCauseUnspecified)
 	s.Require().NoError(err)
 
 	s.TaskQueueMetricValidator(capture, 1, 1, 1, 1, 1, 1)
@@ -2711,7 +2712,7 @@ func (s *matchingEngineSuite) TestUpdateTaskQueuePartitionGauge_RootPartitionAct
 		uuid.New(),
 		"MetricTester",
 		enumspb.TASK_QUEUE_TYPE_ACTIVITY)
-	tqm, err := s.matchingEngine.getTaskQueuePartitionManager(context.Background(), prtn, true, loadCauseUnspecified)
+	tqm, _, err := s.matchingEngine.getTaskQueuePartitionManager(context.Background(), prtn, true, loadCauseUnspecified)
 	s.Require().NoError(err)
 
 	// Creation of a new root partition, having an activity task queue, should not have
@@ -2724,7 +2725,6 @@ func (s *matchingEngineSuite) TestUpdateTaskQueuePartitionGauge_RootPartitionAct
 	s.True(ok)
 	s.matchingEngine.updateTaskQueuePartitionGauge(tqmImpl, 1)
 	s.TaskQueueMetricValidator(capture, 2, 0, 2, 2, 2, 2)
-
 }
 
 func (s *matchingEngineSuite) TestUpdateTaskQueuePartitionGauge_NonRootPartition() {
@@ -2737,7 +2737,7 @@ func (s *matchingEngineSuite) TestUpdateTaskQueuePartitionGauge_NonRootPartition
 		uuid.New(),
 		"MetricTester",
 		enumspb.TASK_QUEUE_TYPE_WORKFLOW).NormalPartition(31)
-	tqm, err := s.matchingEngine.getTaskQueuePartitionManager(context.Background(), NonRootPrtn, true, loadCauseUnspecified)
+	tqm, _, err := s.matchingEngine.getTaskQueuePartitionManager(context.Background(), NonRootPrtn, true, loadCauseUnspecified)
 	s.Require().NoError(err)
 
 	// Creation of a non-root partition should only increase the Queue Partition counter
@@ -2749,7 +2749,6 @@ func (s *matchingEngineSuite) TestUpdateTaskQueuePartitionGauge_NonRootPartition
 	s.True(ok)
 	s.matchingEngine.updateTaskQueuePartitionGauge(tqmImpl, 1)
 	s.TaskQueueMetricValidator(capture, 2, 0, 2, 0, 2, 2)
-
 }
 
 func (s *matchingEngineSuite) TestUpdatePhysicalTaskQueueGauge_UnVersioned() {
@@ -2762,7 +2761,7 @@ func (s *matchingEngineSuite) TestUpdatePhysicalTaskQueueGauge_UnVersioned() {
 		uuid.New(),
 		"MetricTester",
 		enumspb.TASK_QUEUE_TYPE_ACTIVITY)
-	tqm, err := s.matchingEngine.getTaskQueuePartitionManager(context.Background(), prtn, true, loadCauseUnspecified)
+	tqm, _, err := s.matchingEngine.getTaskQueuePartitionManager(context.Background(), prtn, true, loadCauseUnspecified)
 	s.Require().NoError(err)
 
 	// Creating a TaskQueuePartitionManager results in creating a PhysicalTaskQueueManager which should increase
@@ -2797,7 +2796,7 @@ func (s *matchingEngineSuite) TestUpdatePhysicalTaskQueueGauge_VersionSet() {
 	versionSet := uuid.New()
 	tl := "MetricTester"
 	dbq := VersionSetQueueKey(newTestTaskQueue(namespaceId, tl, enumspb.TASK_QUEUE_TYPE_ACTIVITY).RootPartition(), versionSet)
-	tqm, err := s.matchingEngine.getTaskQueuePartitionManager(context.Background(), dbq.Partition(), true, loadCauseUnspecified)
+	tqm, _, err := s.matchingEngine.getTaskQueuePartitionManager(context.Background(), dbq.Partition(), true, loadCauseUnspecified)
 	s.Require().NoError(err)
 
 	// Creating a TaskQueuePartitionManager results in creating a PhysicalTaskQueueManager which should increase
@@ -2834,7 +2833,7 @@ func (s *matchingEngineSuite) TestUpdatePhysicalTaskQueueGauge_BuildID() {
 	buildID := uuid.New()
 	tl := "MetricTester"
 	dbq := BuildIdQueueKey(newTestTaskQueue(namespaceId, tl, enumspb.TASK_QUEUE_TYPE_ACTIVITY).RootPartition(), buildID)
-	tqm, err := s.matchingEngine.getTaskQueuePartitionManager(context.Background(), dbq.Partition(), true, loadCauseUnspecified)
+	tqm, _, err := s.matchingEngine.getTaskQueuePartitionManager(context.Background(), dbq.Partition(), true, loadCauseUnspecified)
 	s.Require().NoError(err)
 
 	// Creating a TaskQueuePartitionManager results in creating a PhysicalTaskQueueManager which should increase
@@ -3046,7 +3045,7 @@ func (s *matchingEngineSuite) resetBacklogCounter(numWorkers int, taskCount int,
 	minTaskID, done := s.taskManager.minTaskID(ptq)
 	s.True(done)
 
-	partitionManager, err := s.matchingEngine.getTaskQueuePartitionManagerNoWait(ptq.Partition(), false, loadCauseTask)
+	partitionManager, _, err := s.matchingEngine.getTaskQueuePartitionManager(context.Background(), ptq.Partition(), false, loadCauseTask)
 	s.NoError(err)
 	pgMgr := s.getPhysicalTaskQueueManagerImpl(ptq)
 
@@ -3098,6 +3097,7 @@ func (s *matchingEngineSuite) resetBacklogCounter(numWorkers int, taskCount int,
 
 // TestResettingBacklogCounter tests the scenario where approximateBacklogCounter over-counts and resets it accordingly
 func (s *matchingEngineSuite) TestResetBacklogCounterNoDBErrors() {
+
 	s.resetBacklogCounter(2, 2, 2)
 }
 
@@ -3107,11 +3107,13 @@ func (s *matchingEngineSuite) TestResetBacklogCounterDBErrors() {
 }
 
 func (s *matchingEngineSuite) TestMoreTasksResetBacklogCounterNoDBErrors() {
+
 	s.resetBacklogCounter(10, 20, 2)
 }
 
 func (s *matchingEngineSuite) TestMoreTasksResetBacklogCounterDBErrors() {
 	s.taskManager.dbConditionalFailedError = true
+
 	s.resetBacklogCounter(10, 50, 5)
 }
 
@@ -3140,6 +3142,7 @@ func (s *matchingEngineSuite) concurrentPublishAndConsumeValidateBacklogCounter(
 }
 
 func (s *matchingEngineSuite) TestConcurrentAddWorkflowTasksNoDBErrors() {
+
 	s.concurrentPublishAndConsumeValidateBacklogCounter(150, 100, 0)
 }
 
@@ -3147,10 +3150,12 @@ func (s *matchingEngineSuite) TestConcurrentAddWorkflowTasksDBErrors() {
 	s.T().Skip("Skipping this as the backlog counter could under-count. Fix requires making " +
 		"UpdateState an atomic operation.")
 	s.taskManager.dbConditionalFailedError = true
+
 	s.concurrentPublishAndConsumeValidateBacklogCounter(150, 100, 0)
 }
 
 func (s *matchingEngineSuite) TestConcurrentAdd_PollWorkflowTasksNoDBErrors() {
+
 	s.concurrentPublishAndConsumeValidateBacklogCounter(20, 100, 100)
 }
 
@@ -3158,6 +3163,7 @@ func (s *matchingEngineSuite) TestConcurrentAdd_PollWorkflowTasksDBErrors() {
 	s.T().Skip("Skipping this as the backlog counter could under-count. Fix requires making " +
 		"UpdateState an atomic operation.")
 	s.taskManager.dbConditionalFailedError = true
+
 	s.concurrentPublishAndConsumeValidateBacklogCounter(20, 100, 100)
 }
 
@@ -3167,10 +3173,12 @@ func (s *matchingEngineSuite) TestLesserNumberOfPollersThanTasksNoDBErrors() {
 
 func (s *matchingEngineSuite) TestLesserNumberOfPollersThanTasksDBErrors() {
 	s.taskManager.dbConditionalFailedError = true
+
 	s.concurrentPublishAndConsumeValidateBacklogCounter(1, 500, 200)
 }
 
 func (s *matchingEngineSuite) TestMultipleWorkersLesserNumberOfPollersThanTasksNoDBErrors() {
+
 	s.concurrentPublishAndConsumeValidateBacklogCounter(5, 500, 200)
 }
 
@@ -3178,6 +3186,7 @@ func (s *matchingEngineSuite) TestMultipleWorkersLesserNumberOfPollersThanTasksD
 	s.T().Skip("Skipping this as the backlog counter could under-count. Fix requires making " +
 		"UpdateState an atomic operation.")
 	s.taskManager.dbConditionalFailedError = true
+
 	s.concurrentPublishAndConsumeValidateBacklogCounter(5, 500, 200)
 }
 

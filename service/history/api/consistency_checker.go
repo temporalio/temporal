@@ -22,6 +22,8 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
+//go:generate mockgen -copyright_file ../../../LICENSE -package $GOPACKAGE -source $GOFILE -destination consistency_checker_mock.go
+
 package api
 
 import (
@@ -29,9 +31,7 @@ import (
 	"fmt"
 
 	commonpb "go.temporal.io/api/common/v1"
-
 	clockspb "go.temporal.io/server/api/clock/v1"
-
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/namespace"

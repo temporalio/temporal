@@ -31,7 +31,6 @@ import (
 
 	enumspb "go.temporal.io/api/enums/v1"
 	sdkworker "go.temporal.io/sdk/worker"
-
 	"go.temporal.io/server/common/debug"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/retrypolicy"
@@ -409,6 +408,11 @@ If exceeded, failure will be truncated before being stored in mutable state.`,
 		"limit.mutableStateSize.warn",
 		1*1024*1024,
 		`MutableStateSizeLimitWarn is the per workflow execution mutable state size limit in bytes for warning`,
+	)
+	MutableStateTombstoneCountLimit = NewGlobalIntSetting(
+		"limit.mutableStateTombstoneCountLimit",
+		16,
+		`MutableStateTombstoneCountLimit is the maximum number of deleted sub state machines tracked in mutable state.`,
 	)
 	HistoryCountSuggestContinueAsNew = NewNamespaceIntSetting(
 		"limit.historyCount.suggestContinueAsNew",
@@ -902,10 +906,8 @@ used when the first cache layer has a miss. Requires server restart for change t
 
 	FrontendEnableUpdateWorkflowExecution = NewNamespaceBoolSetting(
 		"frontend.enableUpdateWorkflowExecution",
-		false,
-		`FrontendEnableUpdateWorkflowExecution enables UpdateWorkflowExecution API in the frontend.
-The UpdateWorkflowExecution API has gone through rigorous testing efforts but this config's default is 'false' until the
-feature gets more time in production.`,
+		true,
+		`FrontendEnableUpdateWorkflowExecution enables UpdateWorkflowExecution API in the frontend.`,
 	)
 
 	FrontendEnableExecuteMultiOperation = NewNamespaceBoolSetting(
@@ -917,10 +919,9 @@ The API is under active development.`,
 
 	FrontendEnableUpdateWorkflowExecutionAsyncAccepted = NewNamespaceBoolSetting(
 		"frontend.enableUpdateWorkflowExecutionAsyncAccepted",
-		false,
-		`FrontendEnableUpdateWorkflowExecutionAsyncAccepted enables the form of
-asynchronous workflow execution update that waits on the "Accepted"
-lifecycle stage. Default value is 'false'.`,
+		true,
+		`FrontendEnableUpdateWorkflowExecutionAsyncAccepted enables the UpdateWorkflowExecution API
+to allow waiting on the "Accepted" lifecycle stage.`,
 	)
 
 	FrontendEnableWorkerVersioningDataAPIs = NewNamespaceBoolSetting(
@@ -1092,6 +1093,30 @@ Note: this should be greater than matching.longPollExpirationInterval and matchi
 		"matching.numTaskqueueReadPartitions",
 		defaultNumTaskQueuePartitions,
 		`MatchingNumTaskqueueReadPartitions is the number of read partitions for a task queue`,
+	)
+	MetricsBreakdownByTaskQueue = NewTaskQueueBoolSetting(
+		"metrics.breakdownByTaskQueue",
+		true,
+		`MetricsBreakdownByTaskQueue determines if the 'taskqueue' tag in Matching and History metrics should 
+contain the actual TQ name or a generic __omitted__ value. Disable this option if the cardinality is too high for your 
+observability stack. Disabling this option will disable all the per-Task Queue gauges such as backlog lag, count, and age.`,
+	)
+	MetricsBreakdownByPartition = NewTaskQueueBoolSetting(
+		"metrics.breakdownByPartition",
+		true,
+		`MetricsBreakdownByPartition determines if the 'partition' tag in Matching metrics should 
+contain the actual normal partition ID or a generic __normal__ value. Regardless of this config, the tag value for sticky 
+queues will be "__sticky__". Disable this option if the partition cardinality is too high for your 
+observability stack. Disabling this option will disable all the per-Task Queue gauges such as backlog lag, count, and age.`,
+	)
+	MetricsBreakdownByBuildID = NewTaskQueueBoolSetting(
+		"metrics.breakdownByBuildID",
+		true,
+		`MetricsBreakdownByBuildID determines if the 'worker-build-id' tag in Matching metrics should 
+contain the actual Build ID or a generic "__versioned__" value. Regardless of this config, the tag value for unversioned 
+queues will be "__unversioned__". Disable this option if the Build ID cardinality is too high for your 
+observability stack. Disabling this option will disable all the per-Task Queue gauges such as backlog lag, count, and age 
+for VERSIONED queues.`,
 	)
 	MatchingForwarderMaxOutstandingPolls = NewTaskQueueIntSetting(
 		"matching.forwarderMaxOutstandingPolls",
@@ -1433,6 +1458,15 @@ count is exceeded. But since queue action is async, we need this hard limit.
 NOTE: The outbound queue has a separate configuration: outboundQueuePendingTaskMaxCount.
 `,
 	)
+	QueueMaxPredicateSize = NewGlobalIntSetting(
+		"history.queueMaxPredicateSize",
+		0,
+		`The max size of the multi-cursor predicate structure stored in the shard info record. 0 is considered
+unlimited. When the predicate size is surpassed for a given scope, the predicate is converted to a universal predicate,
+which causes all tasks in the scope's range to eventually be reprocessed without applying any filtering logic.
+NOTE: The outbound queue has a separate configuration: outboundQueueMaxPredicateSize.
+`,
+	)
 
 	TaskSchedulerEnableRateLimiter = NewGlobalBoolSetting(
 		"history.taskSchedulerEnableRateLimiter",
@@ -1637,6 +1671,16 @@ critical count is exceeded. But since queue action is async, we need this hard l
 		9000,
 		`Max number of pending tasks in the outbound queue before triggering slice splitting and unloading.`,
 	)
+	OutboundQueueMaxPredicateSize = NewGlobalIntSetting(
+		"history.outboundQueueMaxPredicateSize",
+		10*1024,
+		`The max size of the multi-cursor predicate structure stored in the shard info record for the outbound queue. 0
+is considered unlimited. When the predicate size is surpassed for a given scope, the predicate is converted to a
+universal predicate, which causes all tasks in the scope's range to eventually be reprocessed without applying any
+filtering logic.
+`,
+	)
+
 	OutboundProcessorMaxPollRPS = NewGlobalIntSetting(
 		"history.outboundProcessorMaxPollRPS",
 		20,
@@ -2202,6 +2246,16 @@ that task will be sent to DLQ.`,
 		10,
 		`Maximum number of resend events batch for a single replication request`,
 	)
+	ReplicationProgressCacheMaxSize = NewGlobalIntSetting(
+		"history.ReplicationProgressCacheMaxSize",
+		128000,
+		`ReplicationProgressCacheMaxSize is the maximum number of entries in the replication progress cache`,
+	)
+	ReplicationProgressCacheTTL = NewGlobalDurationSetting(
+		"history.ReplicationProgressCacheTTL",
+		time.Hour,
+		`ReplicationProgressCacheTTL is TTL of replication progress cache`,
+	)
 	WorkflowIdReuseMinimalInterval = NewNamespaceDurationSetting(
 		"history.workflowIdReuseMinimalInterval",
 		1*time.Second,
@@ -2464,5 +2518,17 @@ WorkerActivitiesPerSecond, MaxConcurrentActivityTaskPollers.
 		"limit.userMetadataDetailsSize",
 		20000,
 		`MaxUserMetadataDetailsSize is the maximum size of user metadata details payloads in bytes.`,
+	)
+
+	LogAllReqErrors = NewNamespaceBoolSetting(
+		"system.logAllReqErrors",
+		false,
+		`When set to true, logs all RPC/request errors for the namespace, not just unexpected ones.`,
+	)
+
+	ActivityAPIsEnabled = NewNamespaceBoolSetting(
+		"frontend.activityAPIsEnabled",
+		false,
+		`ActivityAPIsEnabled is a "feature enable" flag. `,
 	)
 )

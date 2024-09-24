@@ -92,7 +92,10 @@ var (
 	errTaskQueuePartitionInvalid                          = serviceerror.NewInvalidArgument("Task Queue Partition invalid, use a different Task Queue or Task Queue Type")
 	errMultiOpWorkflowIdInconsistent                      = serviceerror.NewInvalidArgument("WorkflowId is not consistent with previous operation(s).")
 	errMultiOpStartCronSchedule                           = serviceerror.NewInvalidArgument("CronSchedule is not allowed.")
+	errMultiOpUpdateFirstExecutionRunId                   = serviceerror.NewInvalidArgument("FirstExecutionRunId is not allowed.")
+	errMultiOpUpdateExecutionRunId                        = serviceerror.NewInvalidArgument("RunId is not allowed.")
 	errMultiOpEagerWorkflow                               = serviceerror.NewInvalidArgument("RequestEagerExecution is not supported.")
+	errMultiOpStartDelay                                  = serviceerror.NewInvalidArgument("WorkflowStartDelay is not supported.")
 	errMultiOpNotStartAndUpdate                           = serviceerror.NewInvalidArgument("Operations have to be exactly [Start, Update].")
 	errMultiOpAborted                                     = serviceerror.NewMultiOperationAborted("Operation was aborted.")
 

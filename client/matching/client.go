@@ -23,7 +23,7 @@
 // THE SOFTWARE.
 
 // Generates all three generated files in this package:
-//go:generate go run ../../cmd/tools/rpcwrappers -service matching
+//go:generate go run ../../cmd/tools/genrpcwrappers -service matching
 
 package matching
 
@@ -33,16 +33,14 @@ import (
 
 	enumspb "go.temporal.io/api/enums/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
-	"google.golang.org/grpc"
-
+	"go.temporal.io/server/api/matchingservice/v1"
+	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/debug"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/tqid"
-
-	"go.temporal.io/server/api/matchingservice/v1"
-	"go.temporal.io/server/common"
-	"go.temporal.io/server/common/debug"
+	"google.golang.org/grpc"
 )
 
 var _ matchingservice.MatchingServiceClient = (*clientImpl)(nil)

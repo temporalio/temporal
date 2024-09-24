@@ -16,30 +16,13 @@
 //
 // THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
 // IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EENT SHALL THE
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
 // AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 // LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package metrics
+//go:generate mockgen -copyright_file ../../../LICENSE -package workflowservicemock -destination workflowservicemock/v1/service_grpc.pb.mock.go go.temporal.io/api/workflowservice/v1 WorkflowServiceClient
+//go:generate mockgen -copyright_file ../../../LICENSE -package operatorservicemock -destination operatorservicemock/v1/service_grpc.pb.mock.go go.temporal.io/api/operatorservice/v1 OperatorServiceClient
 
-import enumspb "go.temporal.io/api/enums/v1"
-
-func GetPerTaskQueueScope(
-	handler Handler,
-	namespaceName string,
-	taskQueueName string,
-	taskQueueKind enumspb.TaskQueueKind,
-) Handler {
-	var metricTaskQueueName string
-	switch taskQueueKind {
-	case enumspb.TASK_QUEUE_KIND_NORMAL:
-		metricTaskQueueName = taskQueueName
-	case enumspb.TASK_QUEUE_KIND_STICKY:
-		metricTaskQueueName = "__sticky__"
-	default:
-		metricTaskQueueName = unknownValue
-	}
-	return handler.WithTags(NamespaceTag(namespaceName), TaskQueueTag(metricTaskQueueName))
-}
+package mockapi

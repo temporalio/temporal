@@ -37,12 +37,14 @@ type (
 		definition.WorkflowKey
 		VisibilityTimestamp time.Time
 		TaskID              int64
-
-		FirstEventID int64
-		NextEventID  int64
-		NewRunID     string
+		Priority            enumsspb.TaskPriority
 
 		VersionedTransition *persistencespb.VersionedTransition
+		FirstEventID        int64
+		NextEventID         int64
+		NewRunID            string
+
+		TaskEquivalents []Task
 	}
 )
 

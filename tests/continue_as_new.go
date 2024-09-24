@@ -38,11 +38,10 @@ import (
 	historypb "go.temporal.io/api/history/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
-	"google.golang.org/protobuf/types/known/durationpb"
-
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/payloads"
+	"google.golang.org/protobuf/types/known/durationpb"
 )
 
 func (s *FunctionalSuite) TestContinueAsNewWorkflow() {
@@ -94,10 +93,12 @@ func (s *FunctionalSuite) TestContinueAsNewWorkflow() {
 	continueAsNewCount := int32(10)
 	continueAsNewCounter := int32(0)
 	var previousRunID string
+	var currentRunID string
 	var lastRunStartedEvent *historypb.HistoryEvent
 	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
+		currentRunID = task.WorkflowExecution.GetRunId()
 		if continueAsNewCounter < continueAsNewCount {
-			previousRunID = task.WorkflowExecution.GetRunId()
+			previousRunID = currentRunID
 			continueAsNewCounter++
 			buf := new(bytes.Buffer)
 			s.Nil(binary.Write(buf, binary.LittleEndian, continueAsNewCounter))
@@ -168,6 +169,17 @@ func (s *FunctionalSuite) TestContinueAsNewWorkflow() {
 		"Keyword",
 		string(lastRunStartedEventSearchAttrs.GetIndexedFields()[saName].GetMetadata()["type"]),
 	)
+	s.Equal(we.RunId, lastRunStartedEventAttrs.GetFirstExecutionRunId())
+
+	descResp, err := s.client.DescribeWorkflowExecution(NewContext(), &workflowservice.DescribeWorkflowExecutionRequest{
+		Namespace: s.namespace,
+		Execution: &commonpb.WorkflowExecution{
+			WorkflowId: id,
+		},
+	})
+	s.NoError(err)
+	s.Equal(currentRunID, descResp.WorkflowExecutionInfo.Execution.GetRunId())
+	s.Equal(we.RunId, descResp.WorkflowExecutionInfo.GetFirstRunId())
 }
 
 func (s *FunctionalSuite) TestContinueAsNewRun_RunTimeout() {

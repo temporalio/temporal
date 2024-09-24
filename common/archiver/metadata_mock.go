@@ -25,7 +25,7 @@
 package archiver
 
 import (
-	"github.com/golang/mock/gomock"
+	"go.uber.org/mock/gomock"
 )
 
 // MetadataMock is an implementation of ArchivalMetadata that can be used for testing.

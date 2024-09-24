@@ -35,7 +35,6 @@ import (
 	"github.com/pborman/uuid"
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
-
 	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/finalizer"
@@ -93,6 +92,7 @@ type (
 		nonUserContextLockTimeout time.Duration
 	}
 	cacheItem struct {
+		shardId   int32
 		wfContext workflow.Context
 		finalizer *finalizer.Finalizer
 	}
@@ -180,7 +180,8 @@ func newCache(
 				return nil
 			})
 			if err != nil {
-				logger.Warn("cache failed to register callback in finalizer", tag.Error(err))
+				logger.Debug("cache failed to register callback in finalizer",
+					tag.Error(err), tag.ShardID(item.shardId))
 			}
 		},
 		OnEvict: func(val any) {
@@ -192,7 +193,10 @@ func newCache(
 			wfKey := item.wfContext.GetWorkflowKey()
 			err := item.finalizer.Deregister(wfKey.String())
 			if err != nil {
-				logger.Warn("cache failed to de-register callback in finalizer", tag.Error(err))
+				// debug level since this is very common: the cache item was registered with a finalizer
+				// that has been finalized since then and is therefore no longer accepting any calls
+				logger.Debug("cache failed to de-register callback in finalizer",
+					tag.Error(err), tag.ShardID(item.shardId))
 			}
 		},
 	}
@@ -293,7 +297,7 @@ func (c *cacheImpl) Put(
 	handler metrics.Handler,
 ) (workflow.Context, error) {
 	cacheKey := makeCacheKey(shardContext, namespaceID, execution)
-	item := &cacheItem{wfContext: workflowCtx, finalizer: shardContext.GetFinalizer()}
+	item := &cacheItem{shardId: shardContext.GetShardID(), wfContext: workflowCtx, finalizer: shardContext.GetFinalizer()}
 	existing, err := c.PutIfNotExist(cacheKey, item)
 	if err != nil {
 		metrics.CacheFailures.With(handler).Record(1)
@@ -324,7 +328,7 @@ func (c *cacheImpl) getOrCreateWorkflowExecutionInternal(
 			cacheKey.WorkflowKey,
 			shardContext.GetLogger(),
 			shardContext.GetThrottledLogger(),
-			handler,
+			shardContext.GetMetricsHandler(),
 		)
 
 		var err error
