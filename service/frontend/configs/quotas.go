@@ -163,7 +163,7 @@ var (
 		"/temporal.api.workflowservice.v1.WorkflowService/GetWorkerTaskReachability":         1,
 		"/temporal.api.workflowservice.v1.WorkflowService/ListSchedules":                     1,
 		"/temporal.api.workflowservice.v1.WorkflowService/ListBatchOperations":               1,
-		"/temporal.api.workflowservice.v1.WorkflowService/DescribeTaskQueueWithReachability": 1,
+		"/temporal.api.workflowservice.v1.WorkflowService/DescribeTaskQueueWithReachability": 1, // note this isn't a real method name
 	}
 
 	VisibilityAPIPrioritiesOrdered = []int{0, 1}
