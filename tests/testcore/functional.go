@@ -55,7 +55,7 @@ func (s *FunctionalSuite) SetupSuite() {
 		dynamicconfig.EnableNexus.Key():                         true,
 		dynamicconfig.FrontendEnableExecuteMultiOperation.Key(): true,
 	}
-	s.FunctionalTestBase.SetupSuite("testdata/es_cluster.yaml")
+	s.FunctionalTestBase.SetupSuite("../testdata/es_cluster.yaml")
 }
 
 func (s *FunctionalSuite) TearDownSuite() {

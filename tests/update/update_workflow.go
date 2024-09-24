@@ -48,7 +48,6 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/metrics/metricstest"
-	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/testing/protoutils"
 	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/service/history/consts"
@@ -56,23 +55,7 @@ import (
 )
 
 type UpdateWorkflowSuite struct {
-	testcore.FunctionalSuite
-}
-
-func (s *UpdateWorkflowSuite) startWorkflow(tv *testvars.TestVars) *testvars.TestVars {
-	s.T().Helper()
-	request := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:    tv.Any().String(),
-		Namespace:    s.Namespace(),
-		WorkflowId:   tv.WorkflowID(),
-		WorkflowType: tv.WorkflowType(),
-		TaskQueue:    tv.TaskQueue(),
-	}
-
-	startResp, err := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
-	s.NoError(err)
-
-	return tv.WithRunID(startResp.GetRunId())
+	WorkflowUpdateBaseSuite
 }
 
 type updateResponseErr struct {
@@ -95,83 +78,6 @@ func (s *UpdateWorkflowSuite) sendUpdateNoError(tv *testvars.TestVars, updateID 
 func (s *UpdateWorkflowSuite) sendUpdateNoErrorWaitPolicyAccepted(tv *testvars.TestVars, updateID string) <-chan *workflowservice.UpdateWorkflowExecutionResponse {
 	s.T().Helper()
 	return s.sendUpdateNoErrorInternal(tv, updateID, &updatepb.WaitPolicy{LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ACCEPTED})
-}
-
-func (s *UpdateWorkflowSuite) sendUpdateNoErrorInternal(tv *testvars.TestVars, updateID string, waitPolicy *updatepb.WaitPolicy) <-chan *workflowservice.UpdateWorkflowExecutionResponse {
-	s.T().Helper()
-	retCh := make(chan *workflowservice.UpdateWorkflowExecutionResponse)
-	syncCh := make(chan struct{})
-	go func() {
-		urCh := s.sendUpdateInternal(testcore.NewContext(), tv, updateID, waitPolicy, true)
-		// Unblock return only after the server admits update.
-		syncCh <- struct{}{}
-		// Unblocked when an update result is ready.
-		retCh <- (<-urCh).response
-	}()
-	<-syncCh
-	return retCh
-}
-
-func (s *UpdateWorkflowSuite) sendUpdateInternal(
-	ctx context.Context,
-	tv *testvars.TestVars,
-	updateID string,
-	waitPolicy *updatepb.WaitPolicy,
-	requireNoError bool,
-) <-chan updateResponseErr {
-
-	s.T().Helper()
-
-	updateResultCh := make(chan updateResponseErr)
-	go func() {
-		updateResp, updateErr := s.FrontendClient().UpdateWorkflowExecution(ctx, &workflowservice.UpdateWorkflowExecutionRequest{
-			Namespace:         s.Namespace(),
-			WorkflowExecution: tv.WorkflowExecution(),
-			WaitPolicy:        waitPolicy,
-			Request: &updatepb.Request{
-				Meta: &updatepb.Meta{UpdateId: tv.UpdateID(updateID)},
-				Input: &updatepb.Input{
-					Name: tv.HandlerName(),
-					Args: payloads.EncodeString("args-value-of-" + tv.UpdateID(updateID)),
-				},
-			},
-		})
-		// It is important to do assert here (before writing to channel which doesn't have readers yet)
-		// to fail fast without trying to process update in wtHandler.
-		if requireNoError {
-			require.NoError(s.T(), updateErr)
-		}
-		updateResultCh <- updateResponseErr{response: updateResp, err: updateErr}
-	}()
-	s.waitUpdateAdmitted(tv, updateID)
-	return updateResultCh
-}
-
-func (s *UpdateWorkflowSuite) waitUpdateAdmitted(tv *testvars.TestVars, updateID string) {
-	s.T().Helper()
-	s.Eventuallyf(func() bool {
-		pollResp, pollErr := s.FrontendClient().PollWorkflowExecutionUpdate(testcore.NewContext(), &workflowservice.PollWorkflowExecutionUpdateRequest{
-			Namespace: s.Namespace(),
-			UpdateRef: &updatepb.UpdateRef{
-				WorkflowExecution: tv.WorkflowExecution(),
-				UpdateId:          tv.UpdateID(updateID),
-			},
-			WaitPolicy: &updatepb.WaitPolicy{LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_UNSPECIFIED},
-		})
-
-		if pollErr == nil {
-			// This is technically "at least Admitted".
-			s.GreaterOrEqual(pollResp.Stage, enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ADMITTED)
-			return true
-		}
-		if pollErr.Error() != fmt.Sprintf("update %q not found", tv.UpdateID(updateID)) {
-			s.T().Log("received error from Update poll: ", pollErr)
-			return true
-		}
-
-		// Poll beat send in race - poll again!
-		return false
-	}, 5*time.Second, 10*time.Millisecond, "update %s did not reach Admitted stage", updateID)
 }
 
 func (s *UpdateWorkflowSuite) pollUpdate(tv *testvars.TestVars, updateID string, waitPolicy *updatepb.WaitPolicy) (*workflowservice.PollWorkflowExecutionUpdateResponse, error) {

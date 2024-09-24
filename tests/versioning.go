@@ -511,48 +511,48 @@ func (s *VersioningIntegSuite) TestMaxTaskQueuesPerBuildIdEnforced() {
 	s.Equal("Exceeded max task queues allowed to be mapped to a single build ID: 3", failedPreconditionError.Message)
 }
 
-func (s *VersioningIntegSuite) testWithMatchingBehavior(subtest func()) {
-	for _, forceForward := range []bool{false, true} {
-		for _, forceAsync := range []bool{false, true} {
-			name := "NoForward"
-			if forceForward {
-				// force two levels of forwarding
-				name = "ForceForward"
-			}
-			if forceAsync {
-				name += "ForceAsync"
-			} else {
-				name += "AllowSync"
-			}
-
-			s.Run(name, func() {
-				if forceForward {
-					s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 13)
-					s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 13)
-					s.OverrideDynamicConfig(dynamicconfig.TestMatchingLBForceReadPartition, 5)
-					s.OverrideDynamicConfig(dynamicconfig.TestMatchingLBForceWritePartition, 11)
-				} else {
-					s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 1)
-					s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 1)
-				}
-				if forceAsync {
-					s.OverrideDynamicConfig(dynamicconfig.TestMatchingDisableSyncMatch, true)
-				} else {
-					s.OverrideDynamicConfig(dynamicconfig.TestMatchingDisableSyncMatch, false)
-				}
-
-				subtest()
-			})
-		}
-	}
-}
+//func (s *VersioningIntegSuite) testWithMatchingBehavior(subtest func()) {
+//	for _, forceForward := range []bool{false, true} {
+//		for _, forceAsync := range []bool{false, true} {
+//			name := "NoForward"
+//			if forceForward {
+//				// force two levels of forwarding
+//				name = "ForceForward"
+//			}
+//			if forceAsync {
+//				name += "ForceAsync"
+//			} else {
+//				name += "AllowSync"
+//			}
+//
+//			s.Run(name, func() {
+//				if forceForward {
+//					s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 13)
+//					s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 13)
+//					s.OverrideDynamicConfig(dynamicconfig.TestMatchingLBForceReadPartition, 5)
+//					s.OverrideDynamicConfig(dynamicconfig.TestMatchingLBForceWritePartition, 11)
+//				} else {
+//					s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 1)
+//					s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 1)
+//				}
+//				if forceAsync {
+//					s.OverrideDynamicConfig(dynamicconfig.TestMatchingDisableSyncMatch, true)
+//				} else {
+//					s.OverrideDynamicConfig(dynamicconfig.TestMatchingDisableSyncMatch, false)
+//				}
+//
+//				subtest()
+//			})
+//		}
+//	}
+//}
 
 func (s *VersioningIntegSuite) TestDispatchNewWorkflowOld() {
-	s.testWithMatchingBehavior(func() { s.dispatchNewWorkflow(false) })
+	s.RunTestWithMatchingBehavior(func() { s.dispatchNewWorkflow(false) })
 }
 
 func (s *VersioningIntegSuite) TestDispatchNewWorkflow() {
-	s.testWithMatchingBehavior(func() { s.dispatchNewWorkflow(true) })
+	s.RunTestWithMatchingBehavior(func() { s.dispatchNewWorkflow(true) })
 }
 
 func (s *VersioningIntegSuite) dispatchNewWorkflow(newVersioning bool) {
@@ -650,7 +650,7 @@ func (s *VersioningIntegSuite) TestDispatchNewWorkflowWithRamp() {
 }
 
 func (s *VersioningIntegSuite) TestWorkflowStaysInBuildId() {
-	s.testWithMatchingBehavior(s.workflowStaysInBuildId)
+	s.RunTestWithMatchingBehavior(s.workflowStaysInBuildId)
 }
 
 func (s *VersioningIntegSuite) workflowStaysInBuildId() {
@@ -738,7 +738,7 @@ func (s *VersioningIntegSuite) workflowStaysInBuildId() {
 }
 
 func (s *VersioningIntegSuite) TestUnversionedWorkflowStaysUnversioned() {
-	s.testWithMatchingBehavior(s.unversionedWorkflowStaysUnversioned)
+	s.RunTestWithMatchingBehavior(s.unversionedWorkflowStaysUnversioned)
 }
 
 func (s *VersioningIntegSuite) unversionedWorkflowStaysUnversioned() {
@@ -814,7 +814,7 @@ func (s *VersioningIntegSuite) unversionedWorkflowStaysUnversioned() {
 }
 
 func (s *VersioningIntegSuite) TestFirstWorkflowTaskAssignment_Spooled() {
-	s.testWithMatchingBehavior(s.firstWorkflowTaskAssignmentSpooled)
+	s.RunTestWithMatchingBehavior(s.firstWorkflowTaskAssignmentSpooled)
 }
 
 func (s *VersioningIntegSuite) firstWorkflowTaskAssignmentSpooled() {
@@ -926,7 +926,7 @@ func (s *VersioningIntegSuite) firstWorkflowTaskAssignmentSpooled() {
 }
 
 func (s *VersioningIntegSuite) TestFirstWorkflowTaskAssignment_SyncMatch() {
-	s.testWithMatchingBehavior(s.firstWorkflowTaskAssignmentSyncMatch)
+	s.RunTestWithMatchingBehavior(s.firstWorkflowTaskAssignmentSyncMatch)
 }
 
 func (s *VersioningIntegSuite) firstWorkflowTaskAssignmentSyncMatch() {
@@ -1037,11 +1037,11 @@ func (s *VersioningIntegSuite) firstWorkflowTaskAssignmentSyncMatch() {
 }
 
 func (s *VersioningIntegSuite) TestIndependentActivityTaskAssignment_Spooled_VersionedWorkflow() {
-	s.testWithMatchingBehavior(func() { s.independentActivityTaskAssignmentSpooled(true) })
+	s.RunTestWithMatchingBehavior(func() { s.independentActivityTaskAssignmentSpooled(true) })
 }
 
 func (s *VersioningIntegSuite) TestIndependentActivityTaskAssignment_Spooled_UnversionedWorkflow() {
-	s.testWithMatchingBehavior(func() { s.independentActivityTaskAssignmentSpooled(false) })
+	s.RunTestWithMatchingBehavior(func() { s.independentActivityTaskAssignmentSpooled(false) })
 }
 
 func (s *VersioningIntegSuite) independentActivityTaskAssignmentSpooled(versionedWf bool) {
@@ -1227,11 +1227,11 @@ func (s *VersioningIntegSuite) independentActivityTaskAssignmentSpooled(versione
 }
 
 func (s *VersioningIntegSuite) TestIndependentActivityTaskAssignment_SyncMatch_VersionedWorkflow() {
-	s.testWithMatchingBehavior(func() { s.independentActivityTaskAssignmentSyncMatch(true) })
+	s.RunTestWithMatchingBehavior(func() { s.independentActivityTaskAssignmentSyncMatch(true) })
 }
 
 func (s *VersioningIntegSuite) TestIndependentActivityTaskAssignment_SyncMatch_UnversionedWorkflow() {
-	s.testWithMatchingBehavior(func() { s.independentActivityTaskAssignmentSyncMatch(false) })
+	s.RunTestWithMatchingBehavior(func() { s.independentActivityTaskAssignmentSyncMatch(false) })
 }
 
 func (s *VersioningIntegSuite) independentActivityTaskAssignmentSyncMatch(versionedWf bool) {
@@ -1407,11 +1407,11 @@ func (s *VersioningIntegSuite) independentActivityTaskAssignmentSyncMatch(versio
 }
 
 func (s *VersioningIntegSuite) TestWorkflowTaskRedirectInRetryFirstTask() {
-	s.testWithMatchingBehavior(func() { s.testWorkflowTaskRedirectInRetry(true) })
+	s.RunTestWithMatchingBehavior(func() { s.testWorkflowTaskRedirectInRetry(true) })
 }
 
 func (s *VersioningIntegSuite) TestWorkflowTaskRedirectInRetryNonFirstTask() {
-	s.testWithMatchingBehavior(func() { s.testWorkflowTaskRedirectInRetry(false) })
+	s.RunTestWithMatchingBehavior(func() { s.testWorkflowTaskRedirectInRetry(false) })
 }
 
 func (s *VersioningIntegSuite) testWorkflowTaskRedirectInRetry(firstTask bool) {
@@ -1565,11 +1565,11 @@ func (s *VersioningIntegSuite) testWorkflowTaskRedirectInRetry(firstTask bool) {
 }
 
 func (s *VersioningIntegSuite) TestDispatchNotUsingVersioningOld() {
-	s.testWithMatchingBehavior(func() { s.dispatchNotUsingVersioning(false) })
+	s.RunTestWithMatchingBehavior(func() { s.dispatchNotUsingVersioning(false) })
 }
 
 func (s *VersioningIntegSuite) TestDispatchNotUsingVersioning() {
-	s.testWithMatchingBehavior(func() { s.dispatchNotUsingVersioning(true) })
+	s.RunTestWithMatchingBehavior(func() { s.dispatchNotUsingVersioning(true) })
 }
 
 func (s *VersioningIntegSuite) dispatchNotUsingVersioning(newVersioning bool) {
@@ -1621,7 +1621,7 @@ func (s *VersioningIntegSuite) dispatchNotUsingVersioning(newVersioning bool) {
 }
 
 func (s *VersioningIntegSuite) TestDispatchNewWorkflowStartWorkerFirst() {
-	s.testWithMatchingBehavior(s.dispatchNewWorkflowStartWorkerFirst)
+	s.RunTestWithMatchingBehavior(s.dispatchNewWorkflowStartWorkerFirst)
 }
 
 func (s *VersioningIntegSuite) dispatchNewWorkflowStartWorkerFirst() {
@@ -1661,7 +1661,7 @@ func (s *VersioningIntegSuite) dispatchNewWorkflowStartWorkerFirst() {
 }
 
 func (s *VersioningIntegSuite) TestDispatchUnversionedRemainsUnversioned() {
-	s.testWithMatchingBehavior(s.dispatchUnversionedRemainsUnversioned)
+	s.RunTestWithMatchingBehavior(s.dispatchUnversionedRemainsUnversioned)
 }
 
 func (s *VersioningIntegSuite) dispatchUnversionedRemainsUnversioned() {
@@ -1704,19 +1704,19 @@ func (s *VersioningIntegSuite) dispatchUnversionedRemainsUnversioned() {
 }
 
 func (s *VersioningIntegSuite) TestDispatchUpgradeStopOldOld() {
-	s.testWithMatchingBehavior(func() { s.dispatchUpgrade(false, true) })
+	s.RunTestWithMatchingBehavior(func() { s.dispatchUpgrade(false, true) })
 }
 
 func (s *VersioningIntegSuite) TestDispatchUpgradeWaitOld() {
-	s.testWithMatchingBehavior(func() { s.dispatchUpgrade(false, false) })
+	s.RunTestWithMatchingBehavior(func() { s.dispatchUpgrade(false, false) })
 }
 
 func (s *VersioningIntegSuite) TestDispatchUpgradeStopOld() {
-	s.testWithMatchingBehavior(func() { s.dispatchUpgrade(true, true) })
+	s.RunTestWithMatchingBehavior(func() { s.dispatchUpgrade(true, true) })
 }
 
 func (s *VersioningIntegSuite) TestDispatchUpgradeWait() {
-	s.testWithMatchingBehavior(func() { s.dispatchUpgrade(true, false) })
+	s.RunTestWithMatchingBehavior(func() { s.dispatchUpgrade(true, false) })
 }
 
 func (s *VersioningIntegSuite) dispatchUpgrade(newVersioning, stopOld bool) {
@@ -1817,39 +1817,39 @@ const (
 )
 
 func (s *VersioningIntegSuite) TestDispatchActivityOld() {
-	s.testWithMatchingBehavior(func() { s.dispatchActivity(dontFailActivity, false, false) })
+	s.RunTestWithMatchingBehavior(func() { s.dispatchActivity(dontFailActivity, false, false) })
 }
 
 func (s *VersioningIntegSuite) TestDispatchActivityFailOld() {
-	s.testWithMatchingBehavior(func() { s.dispatchActivity(failActivity, false, false) })
+	s.RunTestWithMatchingBehavior(func() { s.dispatchActivity(failActivity, false, false) })
 }
 
 func (s *VersioningIntegSuite) TestDispatchActivityTimeoutOld() {
-	s.testWithMatchingBehavior(func() { s.dispatchActivity(timeoutActivity, false, false) })
+	s.RunTestWithMatchingBehavior(func() { s.dispatchActivity(timeoutActivity, false, false) })
 }
 
 func (s *VersioningIntegSuite) TestDispatchActivity() {
-	s.testWithMatchingBehavior(func() { s.dispatchActivity(dontFailActivity, true, false) })
+	s.RunTestWithMatchingBehavior(func() { s.dispatchActivity(dontFailActivity, true, false) })
 }
 
 func (s *VersioningIntegSuite) TestDispatchActivityFail() {
-	s.testWithMatchingBehavior(func() { s.dispatchActivity(failActivity, true, false) })
+	s.RunTestWithMatchingBehavior(func() { s.dispatchActivity(failActivity, true, false) })
 }
 
 func (s *VersioningIntegSuite) TestDispatchActivityTimeout() {
-	s.testWithMatchingBehavior(func() { s.dispatchActivity(timeoutActivity, true, false) })
+	s.RunTestWithMatchingBehavior(func() { s.dispatchActivity(timeoutActivity, true, false) })
 }
 
 func (s *VersioningIntegSuite) TestDispatchActivityCrossTq() {
-	s.testWithMatchingBehavior(func() { s.dispatchActivity(dontFailActivity, true, true) })
+	s.RunTestWithMatchingBehavior(func() { s.dispatchActivity(dontFailActivity, true, true) })
 }
 
 func (s *VersioningIntegSuite) TestDispatchActivityFailCrossTq() {
-	s.testWithMatchingBehavior(func() { s.dispatchActivity(failActivity, true, true) })
+	s.RunTestWithMatchingBehavior(func() { s.dispatchActivity(failActivity, true, true) })
 }
 
 func (s *VersioningIntegSuite) TestDispatchActivityTimeoutCrossTq() {
-	s.testWithMatchingBehavior(func() { s.dispatchActivity(timeoutActivity, true, true) })
+	s.RunTestWithMatchingBehavior(func() { s.dispatchActivity(timeoutActivity, true, true) })
 }
 
 func (s *VersioningIntegSuite) dispatchActivity(failMode activityFailMode, newVersioning bool, crossTq bool) {
@@ -2376,7 +2376,7 @@ func (s *VersioningIntegSuite) TestRedirectWithConcurrentActivities() {
 }
 
 func (s *VersioningIntegSuite) TestDispatchActivityCompatible() {
-	s.testWithMatchingBehavior(s.dispatchActivityCompatible)
+	s.RunTestWithMatchingBehavior(s.dispatchActivityCompatible)
 }
 
 func (s *VersioningIntegSuite) dispatchActivityCompatible() {
@@ -2578,15 +2578,15 @@ func (s *VersioningIntegSuite) TestDispatchActivityCrossTQFails() {
 }
 
 func (s *VersioningIntegSuite) TestDispatchChildWorkflowOld() {
-	s.testWithMatchingBehavior(func() { s.dispatchChildWorkflow(false, false) })
+	s.RunTestWithMatchingBehavior(func() { s.dispatchChildWorkflow(false, false) })
 }
 
 func (s *VersioningIntegSuite) TestDispatchChildWorkflow() {
-	s.testWithMatchingBehavior(func() { s.dispatchChildWorkflow(true, false) })
+	s.RunTestWithMatchingBehavior(func() { s.dispatchChildWorkflow(true, false) })
 }
 
 func (s *VersioningIntegSuite) TestDispatchChildWorkflowCrossTq() {
-	s.testWithMatchingBehavior(func() { s.dispatchChildWorkflow(true, true) })
+	s.RunTestWithMatchingBehavior(func() { s.dispatchChildWorkflow(true, true) })
 }
 
 func (s *VersioningIntegSuite) dispatchChildWorkflow(newVersioning bool, crossTq bool) {
@@ -2752,11 +2752,11 @@ func (s *VersioningIntegSuite) dispatchChildWorkflow(newVersioning bool, crossTq
 }
 
 func (s *VersioningIntegSuite) TestDispatchChildWorkflowUpgradeOld() {
-	s.testWithMatchingBehavior(func() { s.dispatchChildWorkflowUpgrade(false) })
+	s.RunTestWithMatchingBehavior(func() { s.dispatchChildWorkflowUpgrade(false) })
 }
 
 func (s *VersioningIntegSuite) TestDispatchChildWorkflowUpgrade() {
-	s.testWithMatchingBehavior(func() { s.dispatchChildWorkflowUpgrade(true) })
+	s.RunTestWithMatchingBehavior(func() { s.dispatchChildWorkflowUpgrade(true) })
 }
 
 func (s *VersioningIntegSuite) dispatchChildWorkflowUpgrade(newVersioning bool) {
@@ -2921,11 +2921,11 @@ func (s *VersioningIntegSuite) TestDispatchChildWorkflowCrossTQFails() {
 }
 
 func (s *VersioningIntegSuite) TestDispatchQueryOld() {
-	s.testWithMatchingBehavior(func() { s.dispatchQuery(false) })
+	s.RunTestWithMatchingBehavior(func() { s.dispatchQuery(false) })
 }
 
 func (s *VersioningIntegSuite) TestDispatchQuery() {
-	s.testWithMatchingBehavior(func() { s.dispatchQuery(true) })
+	s.RunTestWithMatchingBehavior(func() { s.dispatchQuery(true) })
 }
 
 func (s *VersioningIntegSuite) dispatchQuery(newVersioning bool) {
@@ -3056,15 +3056,15 @@ func (s *VersioningIntegSuite) dispatchQuery(newVersioning bool) {
 }
 
 func (s *VersioningIntegSuite) TestDispatchContinueAsNewOld() {
-	s.testWithMatchingBehavior(func() { s.dispatchContinueAsNew(false, false) })
+	s.RunTestWithMatchingBehavior(func() { s.dispatchContinueAsNew(false, false) })
 }
 
 func (s *VersioningIntegSuite) TestDispatchContinueAsNew() {
-	s.testWithMatchingBehavior(func() { s.dispatchContinueAsNew(true, false) })
+	s.RunTestWithMatchingBehavior(func() { s.dispatchContinueAsNew(true, false) })
 }
 
 func (s *VersioningIntegSuite) TestDispatchContinueAsNewCrossTq() {
-	s.testWithMatchingBehavior(func() { s.dispatchContinueAsNew(true, true) })
+	s.RunTestWithMatchingBehavior(func() { s.dispatchContinueAsNew(true, true) })
 }
 
 func (s *VersioningIntegSuite) dispatchContinueAsNew(newVersioning bool, crossTq bool) {
@@ -3218,11 +3218,11 @@ func (s *VersioningIntegSuite) dispatchContinueAsNew(newVersioning bool, crossTq
 }
 
 func (s *VersioningIntegSuite) TestDispatchContinueAsNewUpgradeOld() {
-	s.testWithMatchingBehavior(func() { s.dispatchContinueAsNewUpgrade(false) })
+	s.RunTestWithMatchingBehavior(func() { s.dispatchContinueAsNewUpgrade(false) })
 }
 
 func (s *VersioningIntegSuite) TestDispatchContinueAsNewUpgrade() {
-	s.testWithMatchingBehavior(func() { s.dispatchContinueAsNewUpgrade(true) })
+	s.RunTestWithMatchingBehavior(func() { s.dispatchContinueAsNewUpgrade(true) })
 }
 
 func (s *VersioningIntegSuite) dispatchContinueAsNewUpgrade(newVersioning bool) {
@@ -3362,7 +3362,7 @@ func (s *VersioningIntegSuite) dispatchContinueAsNewUpgrade(newVersioning bool) 
 }
 
 func (s *VersioningIntegSuite) TestDispatchRetryOld() {
-	s.testWithMatchingBehavior(s.dispatchRetryOld)
+	s.RunTestWithMatchingBehavior(s.dispatchRetryOld)
 }
 
 func (s *VersioningIntegSuite) dispatchRetryOld() {
@@ -3477,7 +3477,7 @@ func (s *VersioningIntegSuite) dispatchRetryOld() {
 }
 
 func (s *VersioningIntegSuite) TestDispatchRetry() {
-	s.testWithMatchingBehavior(s.dispatchRetry)
+	s.RunTestWithMatchingBehavior(s.dispatchRetry)
 }
 
 func (s *VersioningIntegSuite) dispatchRetry() {
@@ -3568,11 +3568,11 @@ func (s *VersioningIntegSuite) dispatchRetry() {
 }
 
 func (s *VersioningIntegSuite) TestDispatchCronOld() {
-	s.testWithMatchingBehavior(func() { s.dispatchCron(false) })
+	s.RunTestWithMatchingBehavior(func() { s.dispatchCron(false) })
 }
 
 func (s *VersioningIntegSuite) TestDispatchCron() {
-	s.testWithMatchingBehavior(func() { s.dispatchCron(true) })
+	s.RunTestWithMatchingBehavior(func() { s.dispatchCron(true) })
 }
 
 func (s *VersioningIntegSuite) dispatchCron(newVersioning bool) {
