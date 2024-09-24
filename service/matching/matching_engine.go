@@ -1987,13 +1987,12 @@ func (e *matchingEngineImpl) updatePhysicalTaskQueueGauge(pqm *physicalTaskQueue
 
 	pm := pqm.partitionMgr
 	metrics.LoadedPhysicalTaskQueueGauge.With(
-		metrics.GetPerTaskQueuePartitionScope(
+		metrics.GetPerTaskQueuePartitionTypeScope(
 			e.metricsHandler,
 			pm.ns.Name().String(),
 			pm.Partition(),
 			// TODO: Track counters per TQ name so we can honor pm.config.BreakdownMetricsByTaskQueue(),
 			false,
-			false, // we don't want breakdown by partition ID, only sticky vs normal breakdown.
 		)).Record(
 		float64(loadedPhysicalTaskQueueCounter),
 		metrics.VersionedTag(versioned),
@@ -2051,13 +2050,12 @@ func (e *matchingEngineImpl) updateTaskQueuePartitionGauge(pm taskQueuePartition
 		metrics.TaskQueueTypeTag(taskQueueParameters.taskType),
 	)
 
-	taggedHandler := metrics.GetPerTaskQueuePartitionScope(
+	taggedHandler := metrics.GetPerTaskQueuePartitionTypeScope(
 		e.metricsHandler,
 		nsName,
 		pm.Partition(),
 		// TODO: Track counters per TQ name so we can honor pm.config.BreakdownMetricsByTaskQueue(),
 		false,
-		false, // we don't want breakdown by partition ID, only sticky vs normal breakdown.
 	)
 	metrics.LoadedTaskQueuePartitionGauge.With(taggedHandler).Record(float64(loadedTaskQueuePartitionCounter))
 }
