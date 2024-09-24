@@ -105,7 +105,7 @@ func (s *ClientFunctionalSuite) SetupSuite() {
 		callbacks.AllowedAddresses.Key():                                    []any{map[string]any{"Pattern": "*", "AllowInsecure": true}},
 	}
 	s.SetDynamicConfigOverrides(dynamicConfigOverrides)
-	s.FunctionalTestBase.SetupSuite("testdata/client_cluster.yaml")
+	s.FunctionalTestBase.SetupSuite("../testdata/client_cluster.yaml")
 
 }
 

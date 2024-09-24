@@ -22,7 +22,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package tests
+package update
 
 import (
 	"bytes"
@@ -56,7 +56,7 @@ import (
 )
 
 type ResetWorkflowTestSuite struct {
-	testcore.FunctionalSuite
+	WorkflowUpdateBaseSuite
 }
 
 func (s *ResetWorkflowTestSuite) TestResetWorkflow() {
@@ -444,6 +444,11 @@ func (t resetTest) sendUpdateAndProcessWFT(updateId string, poller *testcore.Tas
 	t.NoError(err)
 }
 
+func (s *ResetWorkflowTestSuite) sendUpdateNoErrorWaitPolicyAccepted(tv *testvars.TestVars, updateID string) <-chan *workflowservice.UpdateWorkflowExecutionResponse {
+	s.T().Helper()
+	return s.sendUpdateNoErrorInternal(tv, updateID, &updatepb.WaitPolicy{LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ACCEPTED})
+}
+
 func (t *resetTest) messageHandler(_ *workflowservice.PollWorkflowTaskQueueResponse) ([]*protocolpb.Message, error) {
 
 	// Increment WFT counter here; messageHandler is invoked prior to wftHandler
@@ -516,7 +521,7 @@ func (t resetTest) reset(eventId int64) string {
 func (t *resetTest) run() {
 	t.totalSignals = 2
 	t.totalUpdates = 2
-	t.tv = t.FunctionalSuite.startWorkflow(t.tv)
+	t.tv = t.WorkflowUpdateBaseSuite.startWorkflow(t.tv)
 
 	poller := &testcore.TaskPoller{
 		Client:              t.FrontendClient(),
