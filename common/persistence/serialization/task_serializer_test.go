@@ -363,6 +363,16 @@ func (s *taskSerializerSuite) TestSyncVersionedTransitionTask() {
 			NamespaceFailoverVersion: rand.Int63(),
 			TransitionCount:          rand.Int63(),
 		},
+		TaskEquivalents: []tasks.Task{
+			&tasks.HistoryReplicationTask{
+				WorkflowKey:         s.workflowKey,
+				VisibilityTimestamp: time.Unix(0, 0).UTC(),
+				FirstEventID:        rand.Int63(),
+				NextEventID:         rand.Int63(),
+				Version:             rand.Int63(),
+				NewRunID:            uuid.New().String(),
+			},
+		},
 	}
 
 	s.assertEqualTasksWithOpts(syncVersionedTransitionTask,
