@@ -617,7 +617,7 @@ pollLoop:
 			switch err.(type) {
 			case *serviceerror.Internal, *serviceerror.DataLoss,
 				*serialization.DeserializationError, *serialization.SerializationError:
-				e.nonRetryableErrorsDropTask(task, taskQueueName, req.GetNamespaceId(), err)
+				e.nonRetryableErrorsDropTask(task, taskQueueName, task.event.Data.NamespaceId, err)
 			case *serviceerror.NotFound: // mutable state not found, workflow not running or workflow task not found
 				e.logger.Info("Workflow task not found",
 					tag.WorkflowTaskQueueName(taskQueueName),
@@ -706,7 +706,7 @@ func (e *matchingEngineImpl) getHistoryForQueryTask(
 	return hist, resp.GetResponse().GetNextPageToken(), err
 }
 
-func (e *matchingEngineImpl) nonRetryableErrorsDropTask(task *internalTask, taskQueueName string, namespaceID string, err error) {
+func (e *matchingEngineImpl) nonRetryableErrorsDropTask(task *internalTask, taskQueueName string, err error) {
 	e.logger.Info(err.Error(),
 		tag.WorkflowNamespaceID(task.event.Data.GetNamespaceId()),
 		tag.WorkflowID(task.event.Data.GetWorkflowId()),
@@ -718,15 +718,8 @@ func (e *matchingEngineImpl) nonRetryableErrorsDropTask(task *internalTask, task
 	)
 
 	// log down the metrics
-	if common.IsInternalError(err) {
-		metrics.TaskInternalErrorCounter.With(e.metricsHandler).Record(1, metrics.NamespaceTag(namespaceID))
-	} else if common.IsDataLossError(err) {
-		metrics.TaskDataLossErrorCounter.With(e.metricsHandler).Record(1, metrics.NamespaceTag(namespaceID))
-	} else if serialization.IsDeserializationError(err) {
-		metrics.TaskDeserializationErrorCounter.With(e.metricsHandler).Record(1, metrics.NamespaceTag(namespaceID))
-	} else if serialization.IsSerializationError(err) {
-		metrics.TaskSerializationErrorCounter.With(e.metricsHandler).Record(1, metrics.NamespaceTag(namespaceID))
-	}
+	// todo shivam - maybe use error ServiceErrorTypeTag wihle emitting logs
+	metrics.TaskInternalErrorCounter.With(e.metricsHandler).Record(1, metrics.NamespaceTag(task.namespace.String()))
 
 	// drop the task as otherwise task would be stuck in a retry-loop since the errors from within this helper is called are non-retryable
 	task.finish(nil)
@@ -791,7 +784,7 @@ pollLoop:
 			switch err.(type) {
 			case *serviceerror.Internal, *serviceerror.DataLoss,
 				*serialization.DeserializationError, *serialization.SerializationError:
-				e.nonRetryableErrorsDropTask(task, taskQueueName, req.GetNamespaceId(), err)
+				e.nonRetryableErrorsDropTask(task, taskQueueName, err)
 			case *serviceerror.NotFound: // mutable state not found, workflow not running or activity info not found
 				e.logger.Info("Activity task not found",
 					tag.WorkflowNamespaceID(task.event.Data.GetNamespaceId()),

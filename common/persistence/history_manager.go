@@ -931,7 +931,7 @@ func (m *executionManagerImpl) readHistoryBranch(
 	historyEventBatches := make([]*historypb.History, 0, request.PageSize)
 
 	for _, batch := range dataBlobs {
-		events, err := m.serializer.DeserializeEvents(batch)
+		events, err := m.serializer.DeserializeEvents(batch) // TODO Shivam - returning persistence based errors from here
 		if err != nil {
 			return nil, nil, nil, nil, dataSize, err
 		}

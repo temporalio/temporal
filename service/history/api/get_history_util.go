@@ -27,6 +27,7 @@ package api
 import (
 	"context"
 	"fmt"
+	"go.temporal.io/server/common/persistence/serialization"
 
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -139,6 +140,25 @@ func GetHistory(
 			tag.Error(err),
 		)
 		return nil, nil, err
+	case *serialization.DeserializationError:
+		// log event
+		shard.GetLogger().Error("encountered de-serialization error",
+			tag.WorkflowNamespaceID(namespaceID.String()),
+			tag.WorkflowID(execution.GetWorkflowId()),
+			tag.WorkflowRunID(execution.GetRunId()),
+			tag.Error(err),
+		)
+		return nil, nil, err
+	case *serialization.SerializationError:
+		// log event
+		shard.GetLogger().Error("encountered serialization error",
+			tag.WorkflowNamespaceID(namespaceID.String()),
+			tag.WorkflowID(execution.GetWorkflowId()),
+			tag.WorkflowRunID(execution.GetRunId()),
+			tag.Error(err),
+		)
+		return nil, nil, err
+		// TODO Shivam - maybe add another case here to handle serialization/deserialization error?
 	default:
 		return nil, nil, err
 	}
