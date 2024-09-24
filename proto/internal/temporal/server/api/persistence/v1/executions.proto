@@ -458,6 +458,7 @@ message ActivityInfo {
         int64 last_redirect_counter = 2;
     }
 
+    // fist time activity was schedulled.
     google.protobuf.Timestamp first_scheduled_time = 39;
 }
 
