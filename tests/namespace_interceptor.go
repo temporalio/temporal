@@ -25,7 +25,7 @@
 package tests
 
 import (
-	"go.temporal.io/server/tests/base"
+	"go.temporal.io/server/tests/testcore"
 	"time"
 
 	"github.com/pborman/uuid"
@@ -40,7 +40,7 @@ import (
 )
 
 type NamespaceInterceptorTestSuite struct {
-	base.FunctionalSuite
+	testcore.FunctionalSuite
 }
 
 func (s *NamespaceInterceptorTestSuite) TestServerRejectsInvalidRequests() {
@@ -85,13 +85,13 @@ func newSystemUnderTestConnector(s *NamespaceInterceptorTestSuite) *sutConnector
 func (b *sutConnector) startWorkflowExecution(ns namespace.Name) error {
 	request := newStartWorkflowExecutionRequest(ns, b.id, b.identity, b.taskQueue)
 
-	_, err := b.suite.FrontendClient().StartWorkflowExecution(base.NewContext(), request)
+	_, err := b.suite.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
 	return err
 }
 
 func (b *sutConnector) pollWorkflowTaskQueue(ns namespace.Name) ([]byte, error) {
 	request := newPollWorkflowTaskQueueRequest(ns, b.identity, b.taskQueue)
-	resp, err := b.suite.FrontendClient().PollWorkflowTaskQueue(base.NewContext(), request)
+	resp, err := b.suite.FrontendClient().PollWorkflowTaskQueue(testcore.NewContext(), request)
 	if err != nil {
 		return nil, err
 	}
@@ -101,7 +101,7 @@ func (b *sutConnector) pollWorkflowTaskQueue(ns namespace.Name) ([]byte, error) 
 
 func (b *sutConnector) respondWorkflowTaskCompleted(token []byte, ns namespace.Name) error {
 	request := newRespondWorkflowTaskCompletedRequest(ns, b.stickyTaskQueue, token)
-	_, err := b.suite.FrontendClient().RespondWorkflowTaskCompleted(base.NewContext(), request)
+	_, err := b.suite.FrontendClient().RespondWorkflowTaskCompleted(testcore.NewContext(), request)
 	return err
 }
 

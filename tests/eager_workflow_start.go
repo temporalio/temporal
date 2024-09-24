@@ -26,7 +26,7 @@ package tests
 
 import (
 	"fmt"
-	"go.temporal.io/server/tests/base"
+	"go.temporal.io/server/tests/testcore"
 	"time"
 
 	"github.com/pborman/uuid"
@@ -43,7 +43,7 @@ import (
 )
 
 type EagerWorkflowTestSuite struct {
-	base.FunctionalSuite
+	testcore.FunctionalSuite
 }
 
 func (s *EagerWorkflowTestSuite) defaultWorkflowID() string {
@@ -78,7 +78,7 @@ func (s *EagerWorkflowTestSuite) startEagerWorkflow(baseOptions *workflowservice
 		options.RequestId = uuid.New()
 	}
 
-	response, err := s.FrontendClient().StartWorkflowExecution(base.NewContext(), options)
+	response, err := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), options)
 	s.Require().NoError(err)
 
 	return response
@@ -98,12 +98,12 @@ func (s *EagerWorkflowTestSuite) respondWorkflowTaskCompleted(task *workflowserv
 			},
 		}}},
 	}
-	_, err = s.FrontendClient().RespondWorkflowTaskCompleted(base.NewContext(), &completion)
+	_, err = s.FrontendClient().RespondWorkflowTaskCompleted(testcore.NewContext(), &completion)
 	s.Require().NoError(err)
 }
 
 func (s *EagerWorkflowTestSuite) pollWorkflowTaskQueue() *workflowservice.PollWorkflowTaskQueueResponse {
-	task, err := s.FrontendClient().PollWorkflowTaskQueue(base.NewContext(), &workflowservice.PollWorkflowTaskQueueRequest{
+	task, err := s.FrontendClient().PollWorkflowTaskQueue(testcore.NewContext(), &workflowservice.PollWorkflowTaskQueueRequest{
 		Namespace: s.Namespace(),
 		TaskQueue: s.defaultTaskQueue(),
 		Identity:  "test",
@@ -115,14 +115,14 @@ func (s *EagerWorkflowTestSuite) pollWorkflowTaskQueue() *workflowservice.PollWo
 
 func (s *EagerWorkflowTestSuite) getWorkflowStringResult(workflowID, runID string) string {
 	hostPort := "127.0.0.1:7134"
-	if TestFlags.FrontendAddr != "" {
-		hostPort = TestFlags.FrontendAddr
+	if testcore.TestFlags.FrontendAddr != "" {
+		hostPort = testcore.TestFlags.FrontendAddr
 	}
 	c, err := client.Dial(client.Options{HostPort: hostPort, Namespace: s.Namespace()})
 	s.Require().NoError(err)
-	run := c.GetWorkflow(base.NewContext(), workflowID, runID)
+	run := c.GetWorkflow(testcore.NewContext(), workflowID, runID)
 	var result string
-	err = run.Get(base.NewContext(), &result)
+	err = run.Get(testcore.NewContext(), &result)
 	s.Require().NoError(err)
 	return result
 }

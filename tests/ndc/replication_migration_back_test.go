@@ -28,7 +28,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
-	"go.temporal.io/server/tests/base"
+	"go.temporal.io/server/tests/testcore"
 	"os"
 	"sync/atomic"
 	"testing"
@@ -59,7 +59,6 @@ import (
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/environment"
 	"go.temporal.io/server/service/history/replication/eventhandler"
-	"go.temporal.io/server/tests"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -72,7 +71,7 @@ type (
 		protorequire.ProtoAssertions
 		suite.Suite
 
-		testClusterFactory          base.TestClusterFactory
+		testClusterFactory          testcore.TestClusterFactory
 		standByReplicationTasksChan chan *repicationpb.ReplicationTask
 		mockAdminClient             map[string]adminservice.AdminServiceClient
 		namespace                   namespace.Name
@@ -82,7 +81,7 @@ type (
 		passiveClusterName          string
 
 		controller     *gomock.Controller
-		passiveCluster *base.TestCluster
+		passiveCluster *testcore.TestCluster
 		generator      test.Generator
 		serializer     serialization.Serializer
 		logger         log.Logger
@@ -98,12 +97,12 @@ func TestReplicationMigrationBackTest(t *testing.T) {
 func (s *ReplicationMigrationBackTestSuite) SetupSuite() {
 	s.logger = log.NewTestLogger()
 	s.serializer = serialization.NewSerializer()
-	s.testClusterFactory = base.NewTestClusterFactory()
+	s.testClusterFactory = testcore.NewTestClusterFactory()
 	s.passiveClusterName = "cluster-b"
 
 	fileName := "../testdata/ndc_clusters.yaml"
-	if tests.TestFlags.TestClusterConfigFile != "" {
-		fileName = tests.TestFlags.TestClusterConfigFile
+	if testcore.TestFlags.TestClusterConfigFile != "" {
+		fileName = testcore.TestFlags.TestClusterConfigFile
 	}
 	environment.SetupEnv()
 	s.standByTaskID = 0
@@ -112,10 +111,10 @@ func (s *ReplicationMigrationBackTestSuite) SetupSuite() {
 	s.Require().NoError(err)
 	confContent = []byte(os.ExpandEnv(string(confContent)))
 
-	var clusterConfigs []*base.TestClusterConfig
+	var clusterConfigs []*testcore.TestClusterConfig
 	s.Require().NoError(yaml.Unmarshal(confContent, &clusterConfigs))
 	passiveClusterConfig := clusterConfigs[1]
-	passiveClusterConfig.WorkerConfig = &base.WorkerConfig{}
+	passiveClusterConfig.WorkerConfig = &testcore.WorkerConfig{}
 	passiveClusterConfig.DynamicConfigOverrides = map[dynamicconfig.Key]any{
 		dynamicconfig.EnableReplicationStream.Key():             true,
 		dynamicconfig.EnableEagerNamespaceRefresher.Key():       true,
@@ -161,7 +160,7 @@ func (s *ReplicationMigrationBackTestSuite) SetupSuite() {
 		},
 	})
 	s.Require().NoError(err)
-	time.Sleep(2 * base.NamespaceCacheRefreshInterval) // we have to wait for namespace cache to pick the change
+	time.Sleep(2 * testcore.NamespaceCacheRefreshInterval) // we have to wait for namespace cache to pick the change
 }
 
 func (s *ReplicationMigrationBackTestSuite) TearDownSuite() {
@@ -190,7 +189,7 @@ func (s *ReplicationMigrationBackTestSuite) TestHistoryReplication_MultiRunMigra
 	run1Slices := s.getEventSlices(version, 0) // run1 is older than run2
 	run2Slices := s.getEventSlices(version, 10)
 
-	history, err := base.EventBatchesToVersionHistory(
+	history, err := testcore.EventBatchesToVersionHistory(
 		nil,
 		[]*historypb.History{{Events: run1Slices[0]}, {Events: run1Slices[1]}, {Events: run1Slices[2]}},
 	)
@@ -583,7 +582,7 @@ func (s *ReplicationMigrationBackTestSuite) registerNamespace() {
 	})
 	s.Require().NoError(err)
 	// Wait for namespace cache to pick the change
-	time.Sleep(2 * base.NamespaceCacheRefreshInterval)
+	time.Sleep(2 * testcore.NamespaceCacheRefreshInterval)
 
 	descReq := &workflowservice.DescribeNamespaceRequest{
 		Namespace: s.namespace.String(),

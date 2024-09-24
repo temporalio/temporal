@@ -25,7 +25,7 @@
 package ndc
 
 import (
-	"go.temporal.io/server/tests/base"
+	"go.temporal.io/server/tests/testcore"
 	"math"
 	"reflect"
 	"time"
@@ -98,7 +98,7 @@ Loop:
 		var token []byte
 		for doPaging := true; doPaging; doPaging = len(token) > 0 {
 			request.NextPageToken = token
-			response, err := executionManager.GetReplicationTasksFromDLQ(base.NewContext(), request)
+			response, err := executionManager.GetReplicationTasksFromDLQ(testcore.NewContext(), request)
 			if err != nil {
 				continue Loop
 			}

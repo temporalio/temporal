@@ -29,7 +29,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"go.temporal.io/server/tests/base"
+	"go.temporal.io/server/tests/testcore"
 	"math/rand"
 	"strconv"
 	"strings"
@@ -62,7 +62,7 @@ import (
 type VersioningIntegSuite struct {
 	// override suite.Suite.Assertions with require.Assertions; this means that s.NotNil(nil) will stop the test,
 	// not merely log an error
-	base.FunctionalTestBase
+	testcore.FunctionalTestBase
 	sdkClient sdkclient.Client
 }
 
@@ -141,7 +141,7 @@ func (s *VersioningIntegSuite) TearDownTest() {
 }
 
 func (s *VersioningIntegSuite) TestVersionRuleConflictToken() {
-	ctx := base.NewContext()
+	ctx := testcore.NewContext()
 	tq := "test-conflict-token"
 
 	// nil token --> fail
@@ -182,7 +182,7 @@ func (s *VersioningIntegSuite) TestVersionRuleConflictToken() {
 
 func (s *VersioningIntegSuite) TestVersionRuleBuildIdValidation() {
 	// setup
-	ctx := base.NewContext()
+	ctx := testcore.NewContext()
 	tq := "test-build-id-validation"
 
 	// get initial conflict token
@@ -204,7 +204,7 @@ func (s *VersioningIntegSuite) TestVersionRuleBuildIdValidation() {
 
 func (s *VersioningIntegSuite) TestAssignmentRuleInsert() {
 	// setup
-	ctx := base.NewContext()
+	ctx := testcore.NewContext()
 	tq := "test-assignment-rule-insert"
 
 	// get initial conflict token
@@ -226,7 +226,7 @@ func (s *VersioningIntegSuite) TestAssignmentRuleInsert() {
 
 func (s *VersioningIntegSuite) TestAssignmentRuleReplace() {
 	// setup
-	ctx := base.NewContext()
+	ctx := testcore.NewContext()
 	tq := "test-assignment-rule-replace"
 
 	// get initial conflict token + do initial inserts
@@ -250,7 +250,7 @@ func (s *VersioningIntegSuite) TestAssignmentRuleReplace() {
 
 func (s *VersioningIntegSuite) TestAssignmentRuleDelete() {
 	// setup
-	ctx := base.NewContext()
+	ctx := testcore.NewContext()
 	tq := "test-assignment-rule-delete"
 
 	// get initial conflict token + do initial inserts
@@ -278,7 +278,7 @@ func (s *VersioningIntegSuite) TestAssignmentRuleDelete() {
 
 func (s *VersioningIntegSuite) TestRedirectRuleInsert() {
 	// setup
-	ctx := base.NewContext()
+	ctx := testcore.NewContext()
 	tq := "test-redirect-rule-insert"
 
 	// get initial conflict token
@@ -301,7 +301,7 @@ func (s *VersioningIntegSuite) TestRedirectRuleInsert() {
 
 func (s *VersioningIntegSuite) TestRedirectRuleReplace() {
 	// setup
-	ctx := base.NewContext()
+	ctx := testcore.NewContext()
 	tq := "test-redirect-rule-replace"
 
 	// get initial conflict token + do initial insert
@@ -325,7 +325,7 @@ func (s *VersioningIntegSuite) TestRedirectRuleReplace() {
 
 func (s *VersioningIntegSuite) TestRedirectRuleDelete() {
 	// setup
-	ctx := base.NewContext()
+	ctx := testcore.NewContext()
 	tq := "test-redirect-rule-delete"
 
 	// get initial conflict token + do initial inserts
@@ -348,7 +348,7 @@ func (s *VersioningIntegSuite) TestRedirectRuleDelete() {
 
 func (s *VersioningIntegSuite) TestCommitBuildID() {
 	// setup
-	ctx := base.NewContext()
+	ctx := testcore.NewContext()
 	tq := "test-commit-build-id"
 
 	// get initial conflict token
@@ -393,7 +393,7 @@ func mkRedirectRulesMap(redirectRules []*taskqueuepb.TimestampedCompatibleBuildI
 }
 
 func (s *VersioningIntegSuite) TestBasicVersionUpdate() {
-	ctx := base.NewContext()
+	ctx := testcore.NewContext()
 	tq := "functional-versioning-basic"
 
 	foo := s.prefixed("foo")
@@ -409,7 +409,7 @@ func (s *VersioningIntegSuite) TestBasicVersionUpdate() {
 }
 
 func (s *VersioningIntegSuite) TestSeriesOfUpdates() {
-	ctx := base.NewContext()
+	ctx := testcore.NewContext()
 	tq := "functional-versioning-series"
 
 	for i := 0; i < 10; i++ {
@@ -429,7 +429,7 @@ func (s *VersioningIntegSuite) TestSeriesOfUpdates() {
 }
 
 func (s *VersioningIntegSuite) TestLinkToNonexistentCompatibleVersionReturnsNotFound() {
-	ctx := base.NewContext()
+	ctx := testcore.NewContext()
 	tq := "functional-versioning-compat-not-found"
 
 	res, err := s.FrontendClient().UpdateWorkerBuildIdCompatibility(ctx, &workflowservice.UpdateWorkerBuildIdCompatibilityRequest{
@@ -448,7 +448,7 @@ func (s *VersioningIntegSuite) TestLinkToNonexistentCompatibleVersionReturnsNotF
 }
 
 func (s *VersioningIntegSuite) TestVersioningStatePersistsAcrossUnload() {
-	ctx := base.NewContext()
+	ctx := testcore.NewContext()
 	tq := "functional-versioning-persists"
 
 	s.addNewDefaultBuildId(ctx, tq, s.prefixed("foo"))
@@ -466,7 +466,7 @@ func (s *VersioningIntegSuite) TestVersioningStatePersistsAcrossUnload() {
 }
 
 func (s *VersioningIntegSuite) TestVersioningChangesPropagate() {
-	ctx := base.NewContext()
+	ctx := testcore.NewContext()
 	tq := "functional-versioning-propagate"
 
 	// ensure at least two hops
@@ -482,7 +482,7 @@ func (s *VersioningIntegSuite) TestVersioningChangesPropagate() {
 }
 
 func (s *VersioningIntegSuite) TestMaxTaskQueuesPerBuildIdEnforced() {
-	ctx := base.NewContext()
+	ctx := testcore.NewContext()
 	buildId := fmt.Sprintf("b-%s", s.T().Name())
 	// Map a 3 task queues to this build ID and verify success
 	for i := 1; i <= 3; i++ {
@@ -556,7 +556,7 @@ func (s *VersioningIntegSuite) TestDispatchNewWorkflow() {
 }
 
 func (s *VersioningIntegSuite) dispatchNewWorkflow(newVersioning bool) {
-	tq := base.RandomizeStr(s.T().Name())
+	tq := testcore.RandomizeStr(s.T().Name())
 	v1 := s.prefixed("v1")
 
 	wf := func(ctx workflow.Context) (string, error) {
@@ -598,7 +598,7 @@ func (s *VersioningIntegSuite) dispatchNewWorkflow(newVersioning bool) {
 }
 
 func (s *VersioningIntegSuite) TestDispatchNewWorkflowWithRamp() {
-	tq := base.RandomizeStr(s.T().Name())
+	tq := testcore.RandomizeStr(s.T().Name())
 	v1 := s.prefixed("v1")
 	v2 := s.prefixed("v2")
 
@@ -654,7 +654,7 @@ func (s *VersioningIntegSuite) TestWorkflowStaysInBuildId() {
 }
 
 func (s *VersioningIntegSuite) workflowStaysInBuildId() {
-	tq := base.RandomizeStr(s.T().Name())
+	tq := testcore.RandomizeStr(s.T().Name())
 	v1 := s.prefixed("v1")
 	v2 := s.prefixed("v2")
 
@@ -742,7 +742,7 @@ func (s *VersioningIntegSuite) TestUnversionedWorkflowStaysUnversioned() {
 }
 
 func (s *VersioningIntegSuite) unversionedWorkflowStaysUnversioned() {
-	tq := base.RandomizeStr(s.T().Name())
+	tq := testcore.RandomizeStr(s.T().Name())
 	v1 := s.prefixed("v1")
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
@@ -818,7 +818,7 @@ func (s *VersioningIntegSuite) TestFirstWorkflowTaskAssignment_Spooled() {
 }
 
 func (s *VersioningIntegSuite) firstWorkflowTaskAssignmentSpooled() {
-	tq := base.RandomizeStr(s.T().Name())
+	tq := testcore.RandomizeStr(s.T().Name())
 	v1 := s.prefixed("v1")
 	v2 := s.prefixed("v2")
 	v3 := s.prefixed("v3")
@@ -930,7 +930,7 @@ func (s *VersioningIntegSuite) TestFirstWorkflowTaskAssignment_SyncMatch() {
 }
 
 func (s *VersioningIntegSuite) firstWorkflowTaskAssignmentSyncMatch() {
-	tq := base.RandomizeStr(s.T().Name())
+	tq := testcore.RandomizeStr(s.T().Name())
 	v1 := s.prefixed("v1")
 	v2 := s.prefixed("v2")
 	v3 := s.prefixed("v3")
@@ -1045,8 +1045,8 @@ func (s *VersioningIntegSuite) TestIndependentActivityTaskAssignment_Spooled_Unv
 }
 
 func (s *VersioningIntegSuite) independentActivityTaskAssignmentSpooled(versionedWf bool) {
-	wfTq := base.RandomizeStr(s.T().Name())
-	actTq := base.RandomizeStr(s.T().Name())
+	wfTq := testcore.RandomizeStr(s.T().Name())
+	actTq := testcore.RandomizeStr(s.T().Name())
 	wfV1 := s.prefixed("wfv1")
 	v1 := s.prefixed("v1")
 	v2 := s.prefixed("v2")
@@ -1235,8 +1235,8 @@ func (s *VersioningIntegSuite) TestIndependentActivityTaskAssignment_SyncMatch_U
 }
 
 func (s *VersioningIntegSuite) independentActivityTaskAssignmentSyncMatch(versionedWf bool) {
-	wfTq := base.RandomizeStr(s.T().Name())
-	actTq := base.RandomizeStr(s.T().Name())
+	wfTq := testcore.RandomizeStr(s.T().Name())
+	actTq := testcore.RandomizeStr(s.T().Name())
 	wfV1 := s.prefixed("wfv1")
 	v1 := s.prefixed("v1")
 	v2 := s.prefixed("v2")
@@ -1415,7 +1415,7 @@ func (s *VersioningIntegSuite) TestWorkflowTaskRedirectInRetryNonFirstTask() {
 }
 
 func (s *VersioningIntegSuite) testWorkflowTaskRedirectInRetry(firstTask bool) {
-	tq := base.RandomizeStr(s.T().Name())
+	tq := testcore.RandomizeStr(s.T().Name())
 	v1 := s.prefixed("v1")
 	v11 := s.prefixed("v1.1")
 	v12 := s.prefixed("v1.2")
@@ -1573,7 +1573,7 @@ func (s *VersioningIntegSuite) TestDispatchNotUsingVersioning() {
 }
 
 func (s *VersioningIntegSuite) dispatchNotUsingVersioning(newVersioning bool) {
-	tq := base.RandomizeStr(s.T().Name())
+	tq := testcore.RandomizeStr(s.T().Name())
 	v1 := s.prefixed("v1")
 
 	wf1nover := func(ctx workflow.Context) (string, error) {
@@ -1625,7 +1625,7 @@ func (s *VersioningIntegSuite) TestDispatchNewWorkflowStartWorkerFirst() {
 }
 
 func (s *VersioningIntegSuite) dispatchNewWorkflowStartWorkerFirst() {
-	tq := base.RandomizeStr(s.T().Name())
+	tq := testcore.RandomizeStr(s.T().Name())
 	v1 := s.prefixed("v1")
 
 	wf := func(ctx workflow.Context) (string, error) {
@@ -1665,7 +1665,7 @@ func (s *VersioningIntegSuite) TestDispatchUnversionedRemainsUnversioned() {
 }
 
 func (s *VersioningIntegSuite) dispatchUnversionedRemainsUnversioned() {
-	tq := base.RandomizeStr(s.T().Name())
+	tq := testcore.RandomizeStr(s.T().Name())
 	v1 := s.prefixed("v1")
 
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
@@ -1720,7 +1720,7 @@ func (s *VersioningIntegSuite) TestDispatchUpgradeWait() {
 }
 
 func (s *VersioningIntegSuite) dispatchUpgrade(newVersioning, stopOld bool) {
-	tq := base.RandomizeStr(s.T().Name())
+	tq := testcore.RandomizeStr(s.T().Name())
 	v1 := s.prefixed("v1")
 	v11 := s.prefixed("v11")
 
@@ -1858,8 +1858,8 @@ func (s *VersioningIntegSuite) dispatchActivity(failMode activityFailMode, newVe
 	// stickiness on v1 is not broken by registering v2, because the channel send will panic on
 	// replay after we close the channel.
 
-	tq := base.RandomizeStr(s.T().Name())
-	actxTq := base.RandomizeStr(s.T().Name() + "activity")
+	tq := testcore.RandomizeStr(s.T().Name())
+	actxTq := testcore.RandomizeStr(s.T().Name() + "activity")
 	v1 := s.prefixed("v1")
 	v2 := s.prefixed("v2")
 
@@ -2009,7 +2009,7 @@ func (s *VersioningIntegSuite) TestDispatchActivityUpgrade() {
 	//   - this also implicitly verifies that sticky queue is cleared after redirecting activity task
 	// - redirecting independent activity does not redirect wf
 
-	tq := base.RandomizeStr(s.T().Name())
+	tq := testcore.RandomizeStr(s.T().Name())
 	v1 := s.prefixed("v1")
 	v11 := s.prefixed("v1.1")
 	v12 := s.prefixed("v1.2")
@@ -2178,7 +2178,7 @@ func (s *VersioningIntegSuite) TestRedirectWithConcurrentActivities() {
 	// this test.
 	s.OverrideDynamicConfig(dynamicconfig.MatchingGetUserDataLongPollTimeout, 2*time.Second)
 
-	tq := base.RandomizeStr(s.T().Name())
+	tq := testcore.RandomizeStr(s.T().Name())
 	v1 := s.prefixed("v1.0")
 
 	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
@@ -2380,7 +2380,7 @@ func (s *VersioningIntegSuite) TestDispatchActivityCompatible() {
 }
 
 func (s *VersioningIntegSuite) dispatchActivityCompatible() {
-	tq := base.RandomizeStr(s.T().Name())
+	tq := testcore.RandomizeStr(s.T().Name())
 	v1 := s.prefixed("v1")
 	v11 := s.prefixed("v11")
 
@@ -2454,7 +2454,7 @@ func (s *VersioningIntegSuite) dispatchActivityCompatible() {
 func (s *VersioningIntegSuite) TestDispatchActivityEager() {
 	s.OverrideDynamicConfig(dynamicconfig.EnableActivityEagerExecution, true)
 
-	tq := base.RandomizeStr(s.T().Name())
+	tq := testcore.RandomizeStr(s.T().Name())
 	v1 := s.prefixed("v1")
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
@@ -2527,8 +2527,8 @@ func (s *VersioningIntegSuite) TestDispatchActivityCrossTQFails() {
 	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 1)
 	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 1)
 
-	tq := base.RandomizeStr(s.T().Name())
-	crosstq := base.RandomizeStr(s.T().Name())
+	tq := testcore.RandomizeStr(s.T().Name())
+	crosstq := testcore.RandomizeStr(s.T().Name())
 	v1 := s.prefixed("v1")
 
 	act := func() (string, error) { return "v1", nil }
@@ -2595,8 +2595,8 @@ func (s *VersioningIntegSuite) dispatchChildWorkflow(newVersioning bool, crossTq
 	// stickiness on v1 is not broken by registering v2, because the channel send will panic on
 	// replay after we close the channel.
 
-	tq := base.RandomizeStr(s.T().Name())
-	childxTq := base.RandomizeStr(s.T().Name() + "child")
+	tq := testcore.RandomizeStr(s.T().Name())
+	childxTq := testcore.RandomizeStr(s.T().Name() + "child")
 	v1 := s.prefixed("v1")
 	v2 := s.prefixed("v2")
 	inheritedBuildId := ""
@@ -2760,7 +2760,7 @@ func (s *VersioningIntegSuite) TestDispatchChildWorkflowUpgrade() {
 }
 
 func (s *VersioningIntegSuite) dispatchChildWorkflowUpgrade(newVersioning bool) {
-	tq := base.RandomizeStr(s.T().Name())
+	tq := testcore.RandomizeStr(s.T().Name())
 	v1 := s.prefixed("v1")
 	v11 := s.prefixed("v11")
 	inheritedBuildId := ""
@@ -2871,8 +2871,8 @@ func (s *VersioningIntegSuite) TestDispatchChildWorkflowCrossTQFails() {
 	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 1)
 	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 1)
 
-	tq := base.RandomizeStr(s.T().Name())
-	crosstq := base.RandomizeStr(s.T().Name())
+	tq := testcore.RandomizeStr(s.T().Name())
+	crosstq := testcore.RandomizeStr(s.T().Name())
 	v1 := s.prefixed("v1")
 
 	child := func(ctx workflow.Context) (string, error) { return "v1", nil }
@@ -2929,7 +2929,7 @@ func (s *VersioningIntegSuite) TestDispatchQuery() {
 }
 
 func (s *VersioningIntegSuite) dispatchQuery(newVersioning bool) {
-	tq := base.RandomizeStr(s.T().Name())
+	tq := testcore.RandomizeStr(s.T().Name())
 	v1 := s.prefixed("v1")
 	v11 := s.prefixed("v11")
 	v2 := s.prefixed("v2")
@@ -3068,8 +3068,8 @@ func (s *VersioningIntegSuite) TestDispatchContinueAsNewCrossTq() {
 }
 
 func (s *VersioningIntegSuite) dispatchContinueAsNew(newVersioning bool, crossTq bool) {
-	tq := base.RandomizeStr(s.T().Name())
-	canxTq := base.RandomizeStr(s.T().Name() + "CaN")
+	tq := testcore.RandomizeStr(s.T().Name())
+	canxTq := testcore.RandomizeStr(s.T().Name() + "CaN")
 	v1 := s.prefixed("v1")
 	v2 := s.prefixed("v2")
 	inheritedBuildId := ""
@@ -3226,7 +3226,7 @@ func (s *VersioningIntegSuite) TestDispatchContinueAsNewUpgrade() {
 }
 
 func (s *VersioningIntegSuite) dispatchContinueAsNewUpgrade(newVersioning bool) {
-	tq := base.RandomizeStr(s.T().Name())
+	tq := testcore.RandomizeStr(s.T().Name())
 	v1 := s.prefixed("v1")
 	v11 := s.prefixed("v11")
 	v2 := s.prefixed("v2")
@@ -3366,7 +3366,7 @@ func (s *VersioningIntegSuite) TestDispatchRetryOld() {
 }
 
 func (s *VersioningIntegSuite) dispatchRetryOld() {
-	tq := base.RandomizeStr(s.T().Name())
+	tq := testcore.RandomizeStr(s.T().Name())
 	v1 := s.prefixed("v1")
 	v11 := s.prefixed("v11")
 	v2 := s.prefixed("v2")
@@ -3481,7 +3481,7 @@ func (s *VersioningIntegSuite) TestDispatchRetry() {
 }
 
 func (s *VersioningIntegSuite) dispatchRetry() {
-	tq := base.RandomizeStr(s.T().Name())
+	tq := testcore.RandomizeStr(s.T().Name())
 	v1 := s.prefixed("v1")
 	v2 := s.prefixed("v2")
 
@@ -3576,7 +3576,7 @@ func (s *VersioningIntegSuite) TestDispatchCron() {
 }
 
 func (s *VersioningIntegSuite) dispatchCron(newVersioning bool) {
-	tq := base.RandomizeStr(s.T().Name())
+	tq := testcore.RandomizeStr(s.T().Name())
 	v1 := s.prefixed("v1")
 	v11 := s.prefixed("v11")
 	v2 := s.prefixed("v2")
@@ -3688,7 +3688,7 @@ func (s *VersioningIntegSuite) dispatchCron(newVersioning bool) {
 }
 
 func (s *VersioningIntegSuite) TestResetWorkflowAssignsToCorrectBuildId() {
-	tq := base.RandomizeStr(s.T().Name())
+	tq := testcore.RandomizeStr(s.T().Name())
 	v1 := s.prefixed("v1")
 	v2 := s.prefixed("v2")
 
@@ -3755,7 +3755,7 @@ func (s *VersioningIntegSuite) TestResetWorkflowAssignsToCorrectBuildId_CaN_NoIn
 }
 
 func (s *VersioningIntegSuite) resetWorkflowAssignsToCorrectBuildIdCan(inheritBuildId bool) {
-	tq := base.RandomizeStr(s.T().Name())
+	tq := testcore.RandomizeStr(s.T().Name())
 	v1 := s.prefixed("v1")
 	v2 := s.prefixed("v2")
 
@@ -3843,7 +3843,7 @@ func (s *VersioningIntegSuite) TestResetWorkflowAssignsToCorrectBuildId_ChildWF_
 }
 
 func (s *VersioningIntegSuite) resetWorkflowAssignsToCorrectBuildIdChildWf(inheritBuildId bool) {
-	tq := base.RandomizeStr(s.T().Name())
+	tq := testcore.RandomizeStr(s.T().Name())
 	v1 := s.prefixed("v1")
 	v2 := s.prefixed("v2")
 
@@ -4000,7 +4000,7 @@ func (s *VersioningIntegSuite) validateBuildIdAfterReset(ctx context.Context, wf
 }
 
 func (s *VersioningIntegSuite) TestDescribeTaskQueueEnhanced_Versioned_ReachabilityCache() {
-	tq := base.RandomizeStr(s.T().Name())
+	tq := testcore.RandomizeStr(s.T().Name())
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
@@ -4015,7 +4015,7 @@ func (s *VersioningIntegSuite) TestDescribeTaskQueueEnhanced_Versioned_Reachabil
 		}
 		panic("oops")
 	}
-	wId := base.RandomizeStr("id")
+	wId := testcore.RandomizeStr("id")
 	w := worker.New(s.sdkClient, tq, worker.Options{
 		UseBuildIDForVersioning: true,
 		BuildID:                 "A",
@@ -4059,7 +4059,7 @@ func (s *VersioningIntegSuite) TestDescribeTaskQueueEnhanced_Versioned_Reachabil
 }
 
 func (s *VersioningIntegSuite) TestDescribeTaskQueueEnhanced_Versioned_BasicReachability() {
-	tq := base.RandomizeStr(s.T().Name())
+	tq := testcore.RandomizeStr(s.T().Name())
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
@@ -4083,7 +4083,7 @@ func (s *VersioningIntegSuite) TestDescribeTaskQueueEnhanced_Versioned_BasicReac
 		}
 		panic("oops")
 	}
-	wId := base.RandomizeStr("id")
+	wId := testcore.RandomizeStr("id")
 	w := worker.New(s.sdkClient, tq, worker.Options{
 		UseBuildIDForVersioning: true,
 		BuildID:                 "A",
@@ -4130,7 +4130,7 @@ func (s *VersioningIntegSuite) TestDescribeTaskQueueEnhanced_Versioned_BasicReac
 }
 
 func (s *VersioningIntegSuite) TestDescribeTaskQueueEnhanced_Unversioned() {
-	tq := base.RandomizeStr(s.T().Name())
+	tq := testcore.RandomizeStr(s.T().Name())
 	wf := func(ctx workflow.Context) (string, error) { return "ok", nil }
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -4138,7 +4138,7 @@ func (s *VersioningIntegSuite) TestDescribeTaskQueueEnhanced_Unversioned() {
 	workerN := 3
 	workerMap := make(map[string]worker.Worker)
 	for i := 0; i < workerN; i++ {
-		wId := base.RandomizeStr("id")
+		wId := testcore.RandomizeStr("id")
 		w := worker.New(s.sdkClient, tq, worker.Options{
 			UseBuildIDForVersioning: false,
 			Identity:                wId,
@@ -4185,12 +4185,12 @@ func (s *VersioningIntegSuite) TestDescribeTaskQueueEnhanced_Unversioned() {
 }
 
 func (s *VersioningIntegSuite) TestDescribeTaskQueueEnhanced_ReportFlags() {
-	tq := base.RandomizeStr(s.T().Name())
+	tq := testcore.RandomizeStr(s.T().Name())
 	wf := func(ctx workflow.Context) (string, error) { return "ok", nil }
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	wId := base.RandomizeStr("id")
+	wId := testcore.RandomizeStr("id")
 	w := worker.New(s.sdkClient, tq, worker.Options{
 		UseBuildIDForVersioning: false,
 		Identity:                wId,
@@ -4267,7 +4267,7 @@ func (s *VersioningIntegSuite) TestDescribeTaskQueueEnhanced_ReportFlags() {
 }
 
 func (s *VersioningIntegSuite) TestDescribeTaskQueueEnhanced_TooManyBuildIds() {
-	tq := base.RandomizeStr(s.T().Name())
+	tq := testcore.RandomizeStr(s.T().Name())
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
@@ -4303,7 +4303,7 @@ func (s *VersioningIntegSuite) TestDescribeTaskQueueLegacy_VersionSets() {
 	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 1)
 	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 1)
 
-	tq := base.RandomizeStr(s.T().Name())
+	tq := testcore.RandomizeStr(s.T().Name())
 	v1 := s.prefixed("v1")
 	v11 := s.prefixed("v11")
 	v2 := s.prefixed("v2")
@@ -4321,7 +4321,7 @@ func (s *VersioningIntegSuite) TestDescribeTaskQueueLegacy_VersionSets() {
 	w1 := worker.New(s.sdkClient, tq, worker.Options{
 		BuildID:                 v1,
 		UseBuildIDForVersioning: true,
-		Identity:                base.RandomizeStr("id"),
+		Identity:                testcore.RandomizeStr("id"),
 	})
 	w1.RegisterWorkflow(wf)
 	s.NoError(w1.Start())
@@ -4330,7 +4330,7 @@ func (s *VersioningIntegSuite) TestDescribeTaskQueueLegacy_VersionSets() {
 	w11 := worker.New(s.sdkClient, tq, worker.Options{
 		BuildID:                 v11,
 		UseBuildIDForVersioning: true,
-		Identity:                base.RandomizeStr("id"),
+		Identity:                testcore.RandomizeStr("id"),
 	})
 	w11.RegisterWorkflow(wf)
 	s.NoError(w11.Start())
@@ -4339,7 +4339,7 @@ func (s *VersioningIntegSuite) TestDescribeTaskQueueLegacy_VersionSets() {
 	w2 := worker.New(s.sdkClient, tq, worker.Options{
 		BuildID:                 v2,
 		UseBuildIDForVersioning: true,
-		Identity:                base.RandomizeStr("id"),
+		Identity:                testcore.RandomizeStr("id"),
 	})
 	w2.RegisterWorkflow(wf)
 	s.NoError(w2.Start())
@@ -4369,7 +4369,7 @@ func (s *VersioningIntegSuite) TestDescribeWorkflowExecution() {
 	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 4)
 	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 4)
 
-	tq := base.RandomizeStr(s.T().Name())
+	tq := testcore.RandomizeStr(s.T().Name())
 	v1 := s.prefixed("v1")
 	v11 := s.prefixed("v11")
 
@@ -4961,7 +4961,7 @@ func (s *VersioningIntegSuite) waitForPropagation(
 	condition func(data *persistencespb.VersioningData) bool,
 ) {
 	if partitionCount <= 0 {
-		v := s.TestCluster().Host().dcClient.GetValue(dynamicconfig.MatchingNumTaskqueueReadPartitions.Key())
+		v := s.TestCluster().Host().DcClient().GetValue(dynamicconfig.MatchingNumTaskqueueReadPartitions.Key())
 		s.NotEmpty(v, "versioning tests require setting explicit number of partitions")
 		count, ok := v[0].Value.(int)
 		s.True(ok, "partition count is not an int")

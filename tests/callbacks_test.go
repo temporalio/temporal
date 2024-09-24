@@ -26,7 +26,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"go.temporal.io/server/tests/base"
+	"github.com/stretchr/testify/suite"
+	"go.temporal.io/server/tests/testcore"
 	"net"
 	"net/http"
 	"testing"
@@ -61,7 +62,11 @@ func (h *completionHandler) CompleteOperation(ctx context.Context, request *nexu
 }
 
 type CallbacksSuite struct {
-	base.FunctionalSuite
+	testcore.FunctionalSuite
+}
+
+func TestCallbacksSuite(t *testing.T) {
+	suite.Run(t, new(CallbacksSuite))
 }
 
 func (s *CallbacksSuite) runNexusCompletionHTTPServer(h *completionHandler, listenAddr string) func() error {
@@ -90,8 +95,8 @@ func (s *CallbacksSuite) runNexusCompletionHTTPServer(h *completionHandler, list
 }
 
 func (s *CallbacksSuite) TestWorkflowCallbacks_InvalidArgument() {
-	ctx := base.NewContext()
-	taskQueue := base.RandomizeStr(s.T().Name())
+	ctx := testcore.NewContext()
+	taskQueue := testcore.RandomizeStr(s.T().Name())
 	workflowType := "test"
 
 	cases := []struct {
@@ -171,7 +176,7 @@ func (s *CallbacksSuite) TestWorkflowCallbacks_InvalidArgument() {
 			request := &workflowservice.StartWorkflowExecutionRequest{
 				RequestId:           uuid.New(),
 				Namespace:           s.Namespace(),
-				WorkflowId:          base.RandomizeStr(s.T().Name()),
+				WorkflowId:          testcore.RandomizeStr(s.T().Name()),
 				WorkflowType:        &commonpb.WorkflowType{Name: workflowType},
 				TaskQueue:           &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 				Input:               nil,
@@ -238,7 +243,7 @@ func (s *CallbacksSuite) TestWorkflowNexusCallbacks_CarriedOver() {
 
 	for _, tc := range cases {
 		s.T().Run(tc.name, func(t *testing.T) {
-			ctx := base.NewContext()
+			ctx := testcore.NewContext()
 			sdkClient, err := client.Dial(client.Options{
 				HostPort:  s.TestCluster().Host().FrontendGRPCAddress(),
 				Namespace: s.Namespace(),
@@ -246,7 +251,7 @@ func (s *CallbacksSuite) TestWorkflowNexusCallbacks_CarriedOver() {
 			s.NoError(err)
 			pp := temporalite.NewPortProvider()
 
-			taskQueue := base.RandomizeStr(s.T().Name())
+			taskQueue := testcore.RandomizeStr(s.T().Name())
 			workflowType := "test"
 
 			ch := &completionHandler{
@@ -268,7 +273,7 @@ func (s *CallbacksSuite) TestWorkflowNexusCallbacks_CarriedOver() {
 			request := &workflowservice.StartWorkflowExecutionRequest{
 				RequestId:          uuid.New(),
 				Namespace:          s.Namespace(),
-				WorkflowId:         base.RandomizeStr(s.T().Name()),
+				WorkflowId:         testcore.RandomizeStr(s.T().Name()),
 				WorkflowType:       &commonpb.WorkflowType{Name: workflowType},
 				TaskQueue:          &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 				Input:              nil,

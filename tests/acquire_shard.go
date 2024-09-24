@@ -26,7 +26,7 @@ package tests
 
 import (
 	"context"
-	"go.temporal.io/server/tests/base"
+	"go.temporal.io/server/tests/testcore"
 	"strings"
 	"time"
 
@@ -34,9 +34,9 @@ import (
 	"go.temporal.io/server/common/log/tag"
 )
 
-// AcquireShardFunctionalSuite is the base test suite for testing acquire shard.
+// AcquireShardFunctionalSuite is the testcore test suite for testing acquire shard.
 type AcquireShardFunctionalSuite struct {
-	base.FunctionalTestBase
+	testcore.FunctionalTestBase
 	logRecorder *logRecorder
 	logs        chan logRecord
 }

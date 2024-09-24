@@ -27,7 +27,7 @@ package ndc
 import (
 	"context"
 	"flag"
-	"go.temporal.io/server/tests/base"
+	"go.temporal.io/server/tests/testcore"
 	"os"
 	"sync/atomic"
 	"testing"
@@ -58,7 +58,6 @@ import (
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/environment"
 	"go.temporal.io/server/service/history/replication/eventhandler"
-	"go.temporal.io/server/tests"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"gopkg.in/yaml.v3"
@@ -70,7 +69,7 @@ type (
 		protorequire.ProtoAssertions
 		suite.Suite
 
-		testClusterFactory          base.TestClusterFactory
+		testClusterFactory          testcore.TestClusterFactory
 		standByReplicationTasksChan chan *repicationpb.ReplicationTask
 		mockAdminClient             map[string]adminservice.AdminServiceClient
 		namespace                   namespace.Name
@@ -80,7 +79,7 @@ type (
 		passiveClusterName          string
 
 		controller      *gomock.Controller
-		passtiveCluster *base.TestCluster
+		passtiveCluster *testcore.TestCluster
 		generator       test.Generator
 		serializer      serialization.Serializer
 		logger          log.Logger
@@ -95,12 +94,12 @@ func TestNDCReplicationTaskBatching(t *testing.T) {
 func (s *NDCReplicationTaskBatchingTestSuite) SetupSuite() {
 	s.logger = log.NewTestLogger()
 	s.serializer = serialization.NewSerializer()
-	s.testClusterFactory = base.NewTestClusterFactory()
+	s.testClusterFactory = testcore.NewTestClusterFactory()
 	s.passiveClusterName = "cluster-b"
 
 	fileName := "../testdata/ndc_clusters.yaml"
-	if tests.TestFlags.TestClusterConfigFile != "" {
-		fileName = tests.TestFlags.TestClusterConfigFile
+	if testcore.TestFlags.TestClusterConfigFile != "" {
+		fileName = testcore.TestFlags.TestClusterConfigFile
 	}
 	environment.SetupEnv()
 	s.standByTaskID = 0
@@ -109,11 +108,11 @@ func (s *NDCReplicationTaskBatchingTestSuite) SetupSuite() {
 	s.Require().NoError(err)
 	confContent = []byte(os.ExpandEnv(string(confContent)))
 
-	var clusterConfigs []*base.TestClusterConfig
+	var clusterConfigs []*testcore.TestClusterConfig
 	s.Require().NoError(yaml.Unmarshal(confContent, &clusterConfigs))
 
 	passiveClusterConfig := clusterConfigs[1]
-	passiveClusterConfig.WorkerConfig = &base.WorkerConfig{}
+	passiveClusterConfig.WorkerConfig = &testcore.WorkerConfig{}
 	passiveClusterConfig.DynamicConfigOverrides = map[dynamicconfig.Key]any{
 		dynamicconfig.EnableReplicationStream.Key():             true,
 		dynamicconfig.EnableEagerNamespaceRefresher.Key():       true,
@@ -177,7 +176,7 @@ func (s *NDCReplicationTaskBatchingTestSuite) TestHistoryReplicationTaskAndThenR
 				historyEvents.Events = append(historyEvents.Events, event.GetData().(*historypb.HistoryEvent))
 			}
 			historyBatch = append(historyBatch, historyEvents)
-			history, err := base.EventBatchesToVersionHistory(nil, historyBatch)
+			history, err := testcore.EventBatchesToVersionHistory(nil, historyBatch)
 			s.NoError(err)
 			s.standByReplicationTasksChan <- s.createHistoryEventReplicationTaskFromHistoryEventBatch( // supply history replication task one by one
 				s.namespaceID.String(),
@@ -253,7 +252,7 @@ func (s *NDCReplicationTaskBatchingTestSuite) registerNamespace() {
 	})
 	s.Require().NoError(err)
 	// Wait for namespace cache to pick the change
-	time.Sleep(2 * base.NamespaceCacheRefreshInterval)
+	time.Sleep(2 * testcore.NamespaceCacheRefreshInterval)
 
 	descReq := &workflowservice.DescribeNamespaceRequest{
 		Namespace: s.namespace.String(),

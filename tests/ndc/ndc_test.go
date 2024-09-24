@@ -28,7 +28,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
-	"go.temporal.io/server/tests/base"
+	"go.temporal.io/server/tests/testcore"
 	"math/rand"
 	"os"
 	"sync/atomic"
@@ -67,7 +67,6 @@ import (
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/environment"
 	"go.temporal.io/server/service/history/ndc"
-	"go.temporal.io/server/tests"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/grpc"
 	"google.golang.org/protobuf/types/known/durationpb"
@@ -83,10 +82,10 @@ type (
 		protorequire.ProtoAssertions
 		suite.Suite
 
-		testClusterFactory base.TestClusterFactory
+		testClusterFactory testcore.TestClusterFactory
 
 		controller *gomock.Controller
-		cluster    *base.TestCluster
+		cluster    *testcore.TestCluster
 		generator  test.Generator
 		serializer serialization.Serializer
 		logger     log.Logger
@@ -109,11 +108,11 @@ func TestNDCFuncTestSuite(t *testing.T) {
 func (s *NDCFunctionalTestSuite) SetupSuite() {
 	s.logger = log.NewTestLogger()
 	s.serializer = serialization.NewSerializer()
-	s.testClusterFactory = base.NewTestClusterFactory()
+	s.testClusterFactory = testcore.NewTestClusterFactory()
 
 	fileName := "../testdata/ndc_clusters.yaml"
-	if tests.TestFlags.TestClusterConfigFile != "" {
-		fileName = tests.TestFlags.TestClusterConfigFile
+	if testcore.TestFlags.TestClusterConfigFile != "" {
+		fileName = testcore.TestFlags.TestClusterConfigFile
 	}
 	environment.SetupEnv()
 
@@ -121,10 +120,10 @@ func (s *NDCFunctionalTestSuite) SetupSuite() {
 	s.Require().NoError(err)
 	confContent = []byte(os.ExpandEnv(string(confContent)))
 
-	var clusterConfigs []*base.TestClusterConfig
+	var clusterConfigs []*testcore.TestClusterConfig
 	s.Require().NoError(yaml.Unmarshal(confContent, &clusterConfigs))
-	clusterConfigs[0].WorkerConfig = &base.WorkerConfig{}
-	clusterConfigs[1].WorkerConfig = &base.WorkerConfig{}
+	clusterConfigs[0].WorkerConfig = &testcore.WorkerConfig{}
+	clusterConfigs[1].WorkerConfig = &testcore.WorkerConfig{}
 
 	s.controller = gomock.NewController(s.T())
 	mockStreamClient := adminservicemock.NewMockAdminService_StreamWorkflowReplicationMessagesClient(s.controller)
@@ -2088,7 +2087,7 @@ func (s *NDCFunctionalTestSuite) registerNamespace() {
 	})
 	s.Require().NoError(err)
 	// Wait for namespace cache to pick the change
-	time.Sleep(2 * base.NamespaceCacheRefreshInterval)
+	time.Sleep(2 * testcore.NamespaceCacheRefreshInterval)
 
 	descReq := &workflowservice.DescribeNamespaceRequest{
 		Namespace: s.namespace.String(),
@@ -2454,7 +2453,7 @@ func (s *NDCFunctionalTestSuite) sizeOfHistoryEvents(
 }
 
 func (s *NDCFunctionalTestSuite) newContext() context.Context {
-	ctx := base.NewContext()
+	ctx := testcore.NewContext()
 	return headers.SetCallerInfo(
 		ctx,
 		headers.NewCallerInfo(s.namespace.String(), headers.CallerTypeAPI, ""),

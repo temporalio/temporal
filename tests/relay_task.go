@@ -25,7 +25,7 @@
 package tests
 
 import (
-	"go.temporal.io/server/tests/base"
+	"go.temporal.io/server/tests/testcore"
 	"time"
 
 	"github.com/pborman/uuid"
@@ -39,7 +39,7 @@ import (
 )
 
 type RelayTaskTestSuite struct {
-	base.FunctionalSuite
+	testcore.FunctionalSuite
 }
 
 func (s *RelayTaskTestSuite) TestRelayWorkflowTaskTimeout() {
@@ -61,7 +61,7 @@ func (s *RelayTaskTestSuite) TestRelayWorkflowTaskTimeout() {
 		Identity:            identity,
 	}
 
-	we, err0 := s.FrontendClient().StartWorkflowExecution(base.NewContext(), request)
+	we, err0 := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
 	s.NoError(err0)
 	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
 
@@ -87,7 +87,7 @@ func (s *RelayTaskTestSuite) TestRelayWorkflowTaskTimeout() {
 			Attributes:  &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{}}}}, nil
 	}
 
-	poller := &base.TaskPoller{
+	poller := &testcore.TaskPoller{
 		Client:              s.FrontendClient(),
 		Namespace:           s.Namespace(),
 		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
@@ -100,9 +100,9 @@ func (s *RelayTaskTestSuite) TestRelayWorkflowTaskTimeout() {
 
 	// First workflow task complete with a marker command, and request to relay workflow task (immediately return a new workflow task)
 	res, err := poller.PollAndProcessWorkflowTask(
-		base.WithExpectedAttemptCount(0),
-		base.WithRetries(3),
-		base.WithForceNewWorkflowTask)
+		testcore.WithExpectedAttemptCount(0),
+		testcore.WithRetries(3),
+		testcore.WithForceNewWorkflowTask)
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 	newTask := res.NewTask
@@ -132,7 +132,7 @@ func (s *RelayTaskTestSuite) TestRelayWorkflowTaskTimeout() {
 	s.True(workflowTaskTimeout)
 
 	// Now complete workflow
-	_, err = poller.PollAndProcessWorkflowTask(base.WithDumpHistory, base.WithExpectedAttemptCount(2))
+	_, err = poller.PollAndProcessWorkflowTask(testcore.WithDumpHistory, testcore.WithExpectedAttemptCount(2))
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 

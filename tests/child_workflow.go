@@ -26,7 +26,7 @@ package tests
 
 import (
 	"fmt"
-	"go.temporal.io/server/tests/base"
+	"go.temporal.io/server/tests/testcore"
 	"sort"
 	"time"
 
@@ -48,7 +48,7 @@ import (
 )
 
 type ChildWorkflowSuite struct {
-	base.FunctionalSuite
+	testcore.FunctionalSuite
 }
 
 func (s *ChildWorkflowSuite) TestChildWorkflowExecution() {
@@ -91,7 +91,7 @@ func (s *ChildWorkflowSuite) TestChildWorkflowExecution() {
 		Identity:            identity,
 	}
 
-	we, err0 := s.FrontendClient().StartWorkflowExecution(base.NewContext(), request)
+	we, err0 := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
 	s.NoError(err0)
 	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
 
@@ -244,7 +244,7 @@ func (s *ChildWorkflowSuite) TestChildWorkflowExecution() {
 		}}, nil
 	}
 
-	pollerParent := &base.TaskPoller{
+	pollerParent := &testcore.TaskPoller{
 		Client:              s.FrontendClient(),
 		Namespace:           s.Namespace(),
 		TaskQueue:           taskQueueParent,
@@ -254,7 +254,7 @@ func (s *ChildWorkflowSuite) TestChildWorkflowExecution() {
 		T:                   s.T(),
 	}
 
-	pollerChild := &base.TaskPoller{
+	pollerChild := &testcore.TaskPoller{
 		Client:              s.FrontendClient(),
 		Namespace:           s.Namespace(),
 		TaskQueue:           taskQueueChild,
@@ -264,7 +264,7 @@ func (s *ChildWorkflowSuite) TestChildWorkflowExecution() {
 		T:                   s.T(),
 	}
 
-	pollerGrandchild := &base.TaskPoller{
+	pollerGrandchild := &testcore.TaskPoller{
 		Client:              s.FrontendClient(),
 		Namespace:           s.Namespace(),
 		TaskQueue:           taskQueueGrandchild,
@@ -407,7 +407,7 @@ func (s *ChildWorkflowSuite) TestCronChildWorkflowExecution() {
 	}
 
 	startParentWorkflowTS := time.Now().UTC()
-	we, err0 := s.FrontendClient().StartWorkflowExecution(base.NewContext(), request)
+	we, err0 := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
 	s.NoError(err0)
 	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
 
@@ -470,7 +470,7 @@ func (s *ChildWorkflowSuite) TestCronChildWorkflowExecution() {
 		}}, nil
 	}
 
-	pollerParent := &base.TaskPoller{
+	pollerParent := &testcore.TaskPoller{
 		Client:              s.FrontendClient(),
 		Namespace:           s.Namespace(),
 		TaskQueue:           taskQueueParent,
@@ -480,7 +480,7 @@ func (s *ChildWorkflowSuite) TestCronChildWorkflowExecution() {
 		T:                   s.T(),
 	}
 
-	pollerChild := &base.TaskPoller{
+	pollerChild := &testcore.TaskPoller{
 		Client:              s.FrontendClient(),
 		Namespace:           s.Namespace(),
 		TaskQueue:           taskQueueChild,
@@ -521,7 +521,7 @@ func (s *ChildWorkflowSuite) TestCronChildWorkflowExecution() {
 	}
 
 	// terminate the child workflow
-	_, terminateErr := s.FrontendClient().TerminateWorkflowExecution(base.NewContext(), &workflowservice.TerminateWorkflowExecutionRequest{
+	_, terminateErr := s.FrontendClient().TerminateWorkflowExecution(testcore.NewContext(), &workflowservice.TerminateWorkflowExecutionRequest{
 		Namespace: s.Namespace(),
 		WorkflowExecution: &commonpb.WorkflowExecution{
 			WorkflowId: childID,
@@ -543,7 +543,7 @@ func (s *ChildWorkflowSuite) TestCronChildWorkflowExecution() {
 	startFilter.LatestTime = timestamppb.New(time.Now().UTC())
 	var closedExecutions []*workflowpb.WorkflowExecutionInfo
 	for i := 0; i < 10; i++ {
-		resp, err := s.FrontendClient().ListClosedWorkflowExecutions(base.NewContext(), &workflowservice.ListClosedWorkflowExecutionsRequest{
+		resp, err := s.FrontendClient().ListClosedWorkflowExecutions(testcore.NewContext(), &workflowservice.ListClosedWorkflowExecutionsRequest{
 			Namespace:       s.Namespace(),
 			MaximumPageSize: 100,
 			StartTimeFilter: startFilter,
@@ -603,7 +603,7 @@ func (s *ChildWorkflowSuite) TestRetryChildWorkflowExecution() {
 		Identity:            identity,
 	}
 
-	we, err0 := s.FrontendClient().StartWorkflowExecution(base.NewContext(), request)
+	we, err0 := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
 	s.NoError(err0)
 	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
 
@@ -699,7 +699,7 @@ func (s *ChildWorkflowSuite) TestRetryChildWorkflowExecution() {
 		}
 	}
 
-	pollerParent := &base.TaskPoller{
+	pollerParent := &testcore.TaskPoller{
 		Client:              s.FrontendClient(),
 		Namespace:           s.Namespace(),
 		TaskQueue:           taskQueueParent,
@@ -709,7 +709,7 @@ func (s *ChildWorkflowSuite) TestRetryChildWorkflowExecution() {
 		T:                   s.T(),
 	}
 
-	pollerChild := &base.TaskPoller{
+	pollerChild := &testcore.TaskPoller{
 		Client:              s.FrontendClient(),
 		Namespace:           s.Namespace(),
 		TaskQueue:           taskQueueChild,
@@ -819,7 +819,7 @@ func (s *ChildWorkflowSuite) TestRetryFailChildWorkflowExecution() {
 		Identity:            identity,
 	}
 
-	we, err0 := s.FrontendClient().StartWorkflowExecution(base.NewContext(), request)
+	we, err0 := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
 	s.NoError(err0)
 	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
 
@@ -903,7 +903,7 @@ func (s *ChildWorkflowSuite) TestRetryFailChildWorkflowExecution() {
 		}}, nil
 	}
 
-	pollerParent := &base.TaskPoller{
+	pollerParent := &testcore.TaskPoller{
 		Client:              s.FrontendClient(),
 		Namespace:           s.Namespace(),
 		TaskQueue:           taskQueueParent,
@@ -913,7 +913,7 @@ func (s *ChildWorkflowSuite) TestRetryFailChildWorkflowExecution() {
 		T:                   s.T(),
 	}
 
-	pollerChild := &base.TaskPoller{
+	pollerChild := &testcore.TaskPoller{
 		Client:              s.FrontendClient(),
 		Namespace:           s.Namespace(),
 		TaskQueue:           taskQueueChild,

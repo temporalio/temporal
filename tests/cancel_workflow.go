@@ -27,7 +27,7 @@ package tests
 import (
 	"errors"
 	"fmt"
-	"go.temporal.io/server/tests/base"
+	"go.temporal.io/server/tests/testcore"
 	"time"
 
 	"github.com/pborman/uuid"
@@ -44,7 +44,7 @@ import (
 )
 
 type CancelWorkflowSuite struct {
-	base.FunctionalSuite
+	testcore.FunctionalSuite
 }
 
 func (s *CancelWorkflowSuite) TestExternalRequestCancelWorkflowExecution() {
@@ -70,7 +70,7 @@ func (s *CancelWorkflowSuite) TestExternalRequestCancelWorkflowExecution() {
 	}
 
 	// cancellation to non exist workflow will lead to error
-	_, err := s.FrontendClient().RequestCancelWorkflowExecution(base.NewContext(), &workflowservice.RequestCancelWorkflowExecutionRequest{
+	_, err := s.FrontendClient().RequestCancelWorkflowExecution(testcore.NewContext(), &workflowservice.RequestCancelWorkflowExecutionRequest{
 		Namespace: s.Namespace(),
 		WorkflowExecution: &commonpb.WorkflowExecution{
 			WorkflowId: id,
@@ -79,7 +79,7 @@ func (s *CancelWorkflowSuite) TestExternalRequestCancelWorkflowExecution() {
 	s.IsType(&serviceerror.NotFound{}, err)
 	s.EqualError(err, "workflow not found for ID: "+id)
 
-	we, err0 := s.FrontendClient().StartWorkflowExecution(base.NewContext(), request)
+	we, err0 := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
 	s.NoError(err0)
 
 	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
@@ -94,7 +94,7 @@ func (s *CancelWorkflowSuite) TestExternalRequestCancelWorkflowExecution() {
 		}}, nil
 	}
 
-	poller := &base.TaskPoller{
+	poller := &testcore.TaskPoller{
 		Client:              s.FrontendClient(),
 		Namespace:           s.Namespace(),
 		TaskQueue:           taskQueue,
@@ -104,7 +104,7 @@ func (s *CancelWorkflowSuite) TestExternalRequestCancelWorkflowExecution() {
 		T:                   s.T(),
 	}
 
-	_, err = s.FrontendClient().RequestCancelWorkflowExecution(base.NewContext(), &workflowservice.RequestCancelWorkflowExecutionRequest{
+	_, err = s.FrontendClient().RequestCancelWorkflowExecution(testcore.NewContext(), &workflowservice.RequestCancelWorkflowExecutionRequest{
 		Namespace: s.Namespace(),
 		WorkflowExecution: &commonpb.WorkflowExecution{
 			WorkflowId: id,
@@ -113,7 +113,7 @@ func (s *CancelWorkflowSuite) TestExternalRequestCancelWorkflowExecution() {
 	})
 	s.NoError(err)
 
-	_, err = s.FrontendClient().RequestCancelWorkflowExecution(base.NewContext(), &workflowservice.RequestCancelWorkflowExecutionRequest{
+	_, err = s.FrontendClient().RequestCancelWorkflowExecution(testcore.NewContext(), &workflowservice.RequestCancelWorkflowExecutionRequest{
 		Namespace: s.Namespace(),
 		WorkflowExecution: &commonpb.WorkflowExecution{
 			WorkflowId: id,
@@ -122,7 +122,7 @@ func (s *CancelWorkflowSuite) TestExternalRequestCancelWorkflowExecution() {
 	})
 	s.NoError(err)
 
-	_, err = poller.PollAndProcessWorkflowTask(base.WithDumpHistory)
+	_, err = poller.PollAndProcessWorkflowTask(testcore.WithDumpHistory)
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 
@@ -160,7 +160,7 @@ func (s *CancelWorkflowSuite) TestRequestCancelWorkflowCommandExecution_TargetRu
 		WorkflowTaskTimeout: durationpb.New(1 * time.Second),
 		Identity:            identity,
 	}
-	we, err0 := s.FrontendClient().StartWorkflowExecution(base.NewContext(), request)
+	we, err0 := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
 	s.NoError(err0)
 	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
 
@@ -175,7 +175,7 @@ func (s *CancelWorkflowSuite) TestRequestCancelWorkflowCommandExecution_TargetRu
 		WorkflowTaskTimeout: durationpb.New(1 * time.Second),
 		Identity:            identity,
 	}
-	we2, err0 := s.FrontendClient().StartWorkflowExecution(base.NewContext(), foreignRequest)
+	we2, err0 := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), foreignRequest)
 	s.NoError(err0)
 	s.Logger.Info("StartWorkflowExecution on foreign namespace", tag.WorkflowNamespace(s.ForeignNamespace()), tag.WorkflowRunID(we2.RunId))
 
@@ -211,7 +211,7 @@ func (s *CancelWorkflowSuite) TestRequestCancelWorkflowCommandExecution_TargetRu
 		}}, nil
 	}
 
-	poller := &base.TaskPoller{
+	poller := &testcore.TaskPoller{
 		Client:              s.FrontendClient(),
 		Namespace:           s.Namespace(),
 		TaskQueue:           taskQueue,
@@ -245,7 +245,7 @@ func (s *CancelWorkflowSuite) TestRequestCancelWorkflowCommandExecution_TargetRu
 		}}, nil
 	}
 
-	foreignPoller := &base.TaskPoller{
+	foreignPoller := &testcore.TaskPoller{
 		Client:              s.FrontendClient(),
 		Namespace:           s.ForeignNamespace(),
 		TaskQueue:           taskQueue,
@@ -256,14 +256,14 @@ func (s *CancelWorkflowSuite) TestRequestCancelWorkflowCommandExecution_TargetRu
 	}
 
 	// Cancel the foreign workflow with this workflow task request.
-	_, err := poller.PollAndProcessWorkflowTask(base.WithDumpHistory)
+	_, err := poller.PollAndProcessWorkflowTask(testcore.WithDumpHistory)
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 
 	s.True(cancellationSent)
 
 	// Finish execution
-	_, err = poller.PollAndProcessWorkflowTask(base.WithDumpHistory)
+	_, err = poller.PollAndProcessWorkflowTask(testcore.WithDumpHistory)
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 
@@ -294,7 +294,7 @@ func (s *CancelWorkflowSuite) TestRequestCancelWorkflowCommandExecution_TargetFi
 		WorkflowTaskTimeout: durationpb.New(1 * time.Second),
 		Identity:            identity,
 	}
-	we, err0 := s.FrontendClient().StartWorkflowExecution(base.NewContext(), request)
+	we, err0 := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
 	s.NoError(err0)
 	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
 
@@ -309,7 +309,7 @@ func (s *CancelWorkflowSuite) TestRequestCancelWorkflowCommandExecution_TargetFi
 		WorkflowTaskTimeout: durationpb.New(1 * time.Second),
 		Identity:            identity,
 	}
-	we2, err0 := s.FrontendClient().StartWorkflowExecution(base.NewContext(), foreignRequest)
+	we2, err0 := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), foreignRequest)
 	s.NoError(err0)
 	s.Logger.Info("StartWorkflowExecution on foreign namespace", tag.WorkflowNamespace(s.ForeignNamespace()), tag.WorkflowRunID(we2.RunId))
 
@@ -345,7 +345,7 @@ func (s *CancelWorkflowSuite) TestRequestCancelWorkflowCommandExecution_TargetFi
 		}}, nil
 	}
 
-	poller := &base.TaskPoller{
+	poller := &testcore.TaskPoller{
 		Client:              s.FrontendClient(),
 		Namespace:           s.Namespace(),
 		TaskQueue:           taskQueue,
@@ -375,7 +375,7 @@ func (s *CancelWorkflowSuite) TestRequestCancelWorkflowCommandExecution_TargetFi
 		}}, nil
 	}
 
-	foreignPoller := &base.TaskPoller{
+	foreignPoller := &testcore.TaskPoller{
 		Client:              s.FrontendClient(),
 		Namespace:           s.ForeignNamespace(),
 		TaskQueue:           taskQueue,
@@ -391,14 +391,14 @@ func (s *CancelWorkflowSuite) TestRequestCancelWorkflowCommandExecution_TargetFi
 	s.NoError(err)
 
 	// Cancel the target workflow with this workflow task request.
-	_, err = poller.PollAndProcessWorkflowTask(base.WithDumpHistory)
+	_, err = poller.PollAndProcessWorkflowTask(testcore.WithDumpHistory)
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 
 	s.True(cancellationSent)
 
 	// Finish execution
-	_, err = poller.PollAndProcessWorkflowTask(base.WithDumpHistory)
+	_, err = poller.PollAndProcessWorkflowTask(testcore.WithDumpHistory)
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 }
@@ -424,7 +424,7 @@ func (s *CancelWorkflowSuite) TestRequestCancelWorkflowCommandExecution_TargetNo
 		WorkflowTaskTimeout: durationpb.New(1 * time.Second),
 		Identity:            identity,
 	}
-	we, err0 := s.FrontendClient().StartWorkflowExecution(base.NewContext(), request)
+	we, err0 := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
 	s.NoError(err0)
 	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
 
@@ -459,7 +459,7 @@ func (s *CancelWorkflowSuite) TestRequestCancelWorkflowCommandExecution_TargetNo
 		}}, nil
 	}
 
-	poller := &base.TaskPoller{
+	poller := &testcore.TaskPoller{
 		Client:              s.FrontendClient(),
 		Namespace:           s.Namespace(),
 		TaskQueue:           taskQueue,
@@ -470,14 +470,14 @@ func (s *CancelWorkflowSuite) TestRequestCancelWorkflowCommandExecution_TargetNo
 	}
 
 	// Cancel the target workflow with this workflow task request.
-	_, err := poller.PollAndProcessWorkflowTask(base.WithDumpHistory)
+	_, err := poller.PollAndProcessWorkflowTask(testcore.WithDumpHistory)
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 
 	s.True(cancellationSent)
 
 	// Finish execution
-	_, err = poller.PollAndProcessWorkflowTask(base.WithDumpHistory)
+	_, err = poller.PollAndProcessWorkflowTask(testcore.WithDumpHistory)
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 }
@@ -505,11 +505,11 @@ func (s *CancelWorkflowSuite) TestImmediateChildCancellation_WorkflowTaskFailed(
 		WorkflowTaskTimeout: durationpb.New(1 * time.Second),
 		Identity:            identity,
 	}
-	we, err0 := s.FrontendClient().StartWorkflowExecution(base.NewContext(), request)
+	we, err0 := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
 	s.NoError(err0)
 	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
 
-	_, err := s.FrontendClient().RequestCancelWorkflowExecution(base.NewContext(),
+	_, err := s.FrontendClient().RequestCancelWorkflowExecution(testcore.NewContext(),
 		&workflowservice.RequestCancelWorkflowExecutionRequest{
 			Namespace: s.Namespace(),
 			WorkflowExecution: &commonpb.WorkflowExecution{
@@ -606,7 +606,7 @@ func (s *CancelWorkflowSuite) TestImmediateChildCancellation_WorkflowTaskFailed(
 		}}, nil
 	}
 
-	poller := &base.TaskPoller{
+	poller := &testcore.TaskPoller{
 		Client:              s.FrontendClient(),
 		Namespace:           s.Namespace(),
 		TaskQueue:           taskQueue,
@@ -648,7 +648,7 @@ func (s *CancelWorkflowSuite) TestImmediateChildCancellation_WorkflowTaskFailed(
 		WorkflowId: id,
 	}))
 
-	_, err = s.FrontendClient().DescribeWorkflowExecution(base.NewContext(), &workflowservice.DescribeWorkflowExecutionRequest{
+	_, err = s.FrontendClient().DescribeWorkflowExecution(testcore.NewContext(), &workflowservice.DescribeWorkflowExecutionRequest{
 		Namespace: s.Namespace(),
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: childWorkflowID,

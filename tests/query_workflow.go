@@ -28,6 +28,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"go.temporal.io/server/tests/testcore"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -43,7 +44,11 @@ import (
 	"go.temporal.io/server/service/history/consts"
 )
 
-func (s *ClientFunctionalSuite) TestQueryWorkflow_Sticky() {
+type QueryWorkflowSuite struct {
+	testcore.ClientFunctionalSuite
+}
+
+func (s *QueryWorkflowSuite) TestQueryWorkflow_Sticky() {
 	var replayCount int32
 	workflowFn := func(ctx workflow.Context) (string, error) {
 		// every replay will start from here
@@ -59,17 +64,17 @@ func (s *ClientFunctionalSuite) TestQueryWorkflow_Sticky() {
 		return msg, nil
 	}
 
-	s.worker.RegisterWorkflow(workflowFn)
+	s.Worker().RegisterWorkflow(workflowFn)
 
 	id := "test-query-sticky"
 	workflowOptions := sdkclient.StartWorkflowOptions{
 		ID:                 id,
-		TaskQueue:          s.taskQueue,
+		TaskQueue:          s.TaskQueue(),
 		WorkflowRunTimeout: 20 * time.Second,
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-	workflowRun, err := s.sdkClient.ExecuteWorkflow(ctx, workflowOptions, workflowFn)
+	workflowRun, err := s.SdkClient().ExecuteWorkflow(ctx, workflowOptions, workflowFn)
 	if err != nil {
 		s.Logger.Fatal("Start workflow failed with err", tag.Error(err))
 	}
@@ -77,7 +82,7 @@ func (s *ClientFunctionalSuite) TestQueryWorkflow_Sticky() {
 	s.NotNil(workflowRun)
 	s.True(workflowRun.GetRunID() != "")
 
-	queryResult, err := s.sdkClient.QueryWorkflow(ctx, id, "", "test", "test")
+	queryResult, err := s.SdkClient().QueryWorkflow(ctx, id, "", "test", "test")
 	s.NoError(err)
 
 	var queryResultStr string
@@ -89,7 +94,7 @@ func (s *ClientFunctionalSuite) TestQueryWorkflow_Sticky() {
 	s.Equal(int32(1), replayCount)
 }
 
-func (s *ClientFunctionalSuite) TestQueryWorkflow_Consistent_PiggybackQuery() {
+func (s *QueryWorkflowSuite) TestQueryWorkflow_Consistent_PiggybackQuery() {
 	workflowFn := func(ctx workflow.Context) (string, error) {
 		var receivedMsgs string
 		workflow.SetQueryHandler(ctx, "test", func() (string, error) {
@@ -110,17 +115,17 @@ func (s *ClientFunctionalSuite) TestQueryWorkflow_Consistent_PiggybackQuery() {
 		}
 	}
 
-	s.worker.RegisterWorkflow(workflowFn)
+	s.Worker().RegisterWorkflow(workflowFn)
 
 	id := "test-query-consistent"
 	workflowOptions := sdkclient.StartWorkflowOptions{
 		ID:                 id,
-		TaskQueue:          s.taskQueue,
+		TaskQueue:          s.TaskQueue(),
 		WorkflowRunTimeout: 20 * time.Second,
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-	workflowRun, err := s.sdkClient.ExecuteWorkflow(ctx, workflowOptions, workflowFn)
+	workflowRun, err := s.SdkClient().ExecuteWorkflow(ctx, workflowOptions, workflowFn)
 	if err != nil {
 		s.Logger.Fatal("Start workflow failed with err", tag.Error(err))
 	}
@@ -128,13 +133,13 @@ func (s *ClientFunctionalSuite) TestQueryWorkflow_Consistent_PiggybackQuery() {
 	s.NotNil(workflowRun)
 	s.True(workflowRun.GetRunID() != "")
 
-	err = s.sdkClient.SignalWorkflow(ctx, id, "", "test", "pause")
+	err = s.SdkClient().SignalWorkflow(ctx, id, "", "test", "pause")
 	s.NoError(err)
 
-	err = s.sdkClient.SignalWorkflow(ctx, id, "", "test", "abc")
+	err = s.SdkClient().SignalWorkflow(ctx, id, "", "test", "abc")
 	s.NoError(err)
 
-	queryResult, err := s.sdkClient.QueryWorkflow(ctx, id, "", "test")
+	queryResult, err := s.SdkClient().QueryWorkflow(ctx, id, "", "test")
 	s.NoError(err)
 
 	var queryResultStr string
@@ -145,7 +150,7 @@ func (s *ClientFunctionalSuite) TestQueryWorkflow_Consistent_PiggybackQuery() {
 	s.Equal("pauseabc", queryResultStr)
 }
 
-func (s *ClientFunctionalSuite) TestQueryWorkflow_QueryWhileBackoff() {
+func (s *QueryWorkflowSuite) TestQueryWorkflow_QueryWhileBackoff() {
 
 	tv := testvars.New(s.T())
 	workflowFn := func(ctx workflow.Context) error {
@@ -154,7 +159,7 @@ func (s *ClientFunctionalSuite) TestQueryWorkflow_QueryWhileBackoff() {
 		})
 		return nil
 	}
-	s.worker.RegisterWorkflow(workflowFn)
+	s.Worker().RegisterWorkflow(workflowFn)
 
 	testCases := []struct {
 		testName       string
@@ -180,7 +185,7 @@ func (s *ClientFunctionalSuite) TestQueryWorkflow_QueryWhileBackoff() {
 		s.T().Run(tc.testName, func(t *testing.T) {
 			workflowOptions := sdkclient.StartWorkflowOptions{
 				ID:         tv.WorkflowID(t.Name()),
-				TaskQueue:  s.taskQueue,
+				TaskQueue:  s.TaskQueue(),
 				StartDelay: tc.startDelay,
 			}
 
@@ -190,12 +195,12 @@ func (s *ClientFunctionalSuite) TestQueryWorkflow_QueryWhileBackoff() {
 			defer cancel()
 
 			t.Log(fmt.Sprintf("Start workflow with delay %v", tc.startDelay))
-			workflowRun, err := s.sdkClient.ExecuteWorkflow(ctx, workflowOptions, workflowFn)
+			workflowRun, err := s.SdkClient().ExecuteWorkflow(ctx, workflowOptions, workflowFn)
 			assert.NoError(t, err, "Start workflow failed")
 			assert.NotNil(t, workflowRun)
 			assert.NotEmpty(t, workflowRun.GetRunID())
 
-			queryResp, err := s.sdkClient.QueryWorkflow(ctx, tv.WorkflowID(t.Name()), workflowRun.GetRunID(), tv.QueryType())
+			queryResp, err := s.SdkClient().QueryWorkflow(ctx, tv.WorkflowID(t.Name()), workflowRun.GetRunID(), tv.QueryType())
 
 			if tc.err != nil {
 				assert.Error(t, err)
@@ -209,9 +214,9 @@ func (s *ClientFunctionalSuite) TestQueryWorkflow_QueryWhileBackoff() {
 	}
 }
 
-func (s *ClientFunctionalSuite) TestQueryWorkflow_QueryBeforeStart() {
+func (s *QueryWorkflowSuite) TestQueryWorkflow_QueryBeforeStart() {
 	// stop the worker, so the workflow won't be started before query
-	s.worker.Stop()
+	s.Worker().Stop()
 
 	workflowFn := func(ctx workflow.Context) (string, error) {
 		status := "initialized"
@@ -227,12 +232,12 @@ func (s *ClientFunctionalSuite) TestQueryWorkflow_QueryBeforeStart() {
 	id := "test-query-before-start"
 	workflowOptions := sdkclient.StartWorkflowOptions{
 		ID:                 id,
-		TaskQueue:          s.taskQueue,
+		TaskQueue:          s.TaskQueue(),
 		WorkflowRunTimeout: 20 * time.Second,
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-	workflowRun, err := s.sdkClient.ExecuteWorkflow(ctx, workflowOptions, workflowFn)
+	workflowRun, err := s.SdkClient().ExecuteWorkflow(ctx, workflowOptions, workflowFn)
 	if err != nil {
 		s.Logger.Fatal("Start workflow failed with err", tag.Error(err))
 	}
@@ -246,7 +251,7 @@ func (s *ClientFunctionalSuite) TestQueryWorkflow_QueryBeforeStart() {
 		defer wg.Done()
 
 		startTime := time.Now()
-		queryResult, err := s.sdkClient.QueryWorkflow(ctx, id, "", "test")
+		queryResult, err := s.SdkClient().QueryWorkflow(ctx, id, "", "test")
 		endTime := time.Now()
 		s.NoError(err)
 		var queryResultStr string
@@ -261,9 +266,11 @@ func (s *ClientFunctionalSuite) TestQueryWorkflow_QueryBeforeStart() {
 
 	// delay 2s to start worker, this will block query for 2s
 	time.Sleep(time.Second * 2)
-	s.worker = worker.New(s.sdkClient, s.taskQueue, worker.Options{})
-	s.worker.RegisterWorkflow(workflowFn)
-	if err := s.worker.Start(); err != nil {
+	var queryWorker worker.Worker
+
+	queryWorker = worker.New(s.SdkClient(), s.TaskQueue(), worker.Options{})
+	queryWorker.RegisterWorkflow(workflowFn)
+	if err := queryWorker.Start(); err != nil {
 		s.Logger.Fatal("Error when start worker", tag.Error(err))
 	}
 
@@ -271,7 +278,7 @@ func (s *ClientFunctionalSuite) TestQueryWorkflow_QueryBeforeStart() {
 	wg.Wait()
 }
 
-func (s *ClientFunctionalSuite) TestQueryWorkflow_QueryFailedWorkflowTask() {
+func (s *QueryWorkflowSuite) TestQueryWorkflow_QueryFailedWorkflowTask() {
 	testname := s.T().Name()
 	var failures int32
 	workflowFn := func(ctx workflow.Context) (string, error) {
@@ -287,18 +294,18 @@ func (s *ClientFunctionalSuite) TestQueryWorkflow_QueryFailedWorkflowTask() {
 		panic("Workflow failed")
 	}
 
-	s.worker.RegisterWorkflow(workflowFn)
+	s.Worker().RegisterWorkflow(workflowFn)
 
 	id := "test-query-failed-workflow-task"
 	workflowOptions := sdkclient.StartWorkflowOptions{
 		ID:                  id,
-		TaskQueue:           s.taskQueue,
+		TaskQueue:           s.TaskQueue(),
 		WorkflowTaskTimeout: time.Second * 1, // use shorter wft timeout to make this test faster
 		WorkflowRunTimeout:  20 * time.Second,
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-	workflowRun, err := s.sdkClient.ExecuteWorkflow(ctx, workflowOptions, workflowFn)
+	workflowRun, err := s.SdkClient().ExecuteWorkflow(ctx, workflowOptions, workflowFn)
 	if err != nil {
 		s.Logger.Fatal("Start workflow failed with err", tag.Error(err))
 	}
@@ -311,13 +318,13 @@ func (s *ClientFunctionalSuite) TestQueryWorkflow_QueryFailedWorkflowTask() {
 		return atomic.LoadInt32(&failures) >= 3
 	}, 10*time.Second, 50*time.Millisecond)
 
-	_, err = s.sdkClient.QueryWorkflow(ctx, id, "", testname)
+	_, err = s.SdkClient().QueryWorkflow(ctx, id, "", testname)
 	s.Error(err)
 	s.IsType(&serviceerror.WorkflowNotReady{}, err)
 
 }
 
-func (s *ClientFunctionalSuite) TestQueryWorkflow_ClosedWithoutWorkflowTaskStarted() {
+func (s *QueryWorkflowSuite) TestQueryWorkflow_ClosedWithoutWorkflowTaskStarted() {
 	testname := s.T().Name()
 	workflowFn := func(ctx workflow.Context) (string, error) {
 		return "", errors.New("workflow should never execute")
@@ -325,21 +332,21 @@ func (s *ClientFunctionalSuite) TestQueryWorkflow_ClosedWithoutWorkflowTaskStart
 	id := "test-query-after-terminate"
 	workflowOptions := sdkclient.StartWorkflowOptions{
 		ID:        id,
-		TaskQueue: s.taskQueue,
+		TaskQueue: s.TaskQueue(),
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-	workflowRun, err := s.sdkClient.ExecuteWorkflow(ctx, workflowOptions, workflowFn)
+	workflowRun, err := s.SdkClient().ExecuteWorkflow(ctx, workflowOptions, workflowFn)
 	if err != nil {
 		s.Logger.Fatal("Start workflow failed with err", tag.Error(err))
 	}
 	s.NotNil(workflowRun)
 	s.True(workflowRun.GetRunID() != "")
 
-	err = s.sdkClient.TerminateWorkflow(ctx, id, "", "terminating to make sure query fails")
+	err = s.SdkClient().TerminateWorkflow(ctx, id, "", "terminating to make sure query fails")
 	s.NoError(err)
 
-	_, err = s.sdkClient.QueryWorkflow(ctx, id, "", testname)
+	_, err = s.SdkClient().QueryWorkflow(ctx, id, "", testname)
 	s.Error(err)
 	s.ErrorContains(err, consts.ErrWorkflowClosedBeforeWorkflowTaskStarted.Error())
 }

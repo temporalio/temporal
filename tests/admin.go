@@ -26,6 +26,7 @@ package tests
 
 import (
 	"context"
+	"go.temporal.io/server/tests/testcore"
 	"time"
 
 	"github.com/google/uuid"
@@ -36,7 +37,11 @@ import (
 	"go.temporal.io/server/common/primitives/timestamp"
 )
 
-func (s *ClientFunctionalSuite) TestAdminRebuildMutableState() {
+type AdminTestSuite struct {
+	testcore.ClientFunctionalSuite
+}
+
+func (s *AdminTestSuite) TestAdminRebuildMutableState() {
 
 	workflowFn := func(ctx workflow.Context) error {
 		var randomUUID string
@@ -50,18 +55,18 @@ func (s *ClientFunctionalSuite) TestAdminRebuildMutableState() {
 		return nil
 	}
 
-	s.worker.RegisterWorkflow(workflowFn)
+	s.Worker().RegisterWorkflow(workflowFn)
 
 	workflowID := "functional-admin-rebuild-mutable-state-test"
 	workflowOptions := sdkclient.StartWorkflowOptions{
 		ID:                 workflowID,
-		TaskQueue:          s.taskQueue,
+		TaskQueue:          s.TaskQueue(),
 		WorkflowRunTimeout: 20 * time.Second,
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	workflowRun, err := s.sdkClient.ExecuteWorkflow(ctx, workflowOptions, workflowFn)
+	workflowRun, err := s.SdkClient().ExecuteWorkflow(ctx, workflowOptions, workflowFn)
 	s.NoError(err)
 	runID := workflowRun.GetRunID()
 

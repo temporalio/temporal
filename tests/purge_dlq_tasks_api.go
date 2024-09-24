@@ -26,7 +26,7 @@ package tests
 
 import (
 	"context"
-	"go.temporal.io/server/tests/base"
+	"go.temporal.io/server/tests/testcore"
 	"time"
 
 	"github.com/stretchr/testify/require"
@@ -45,7 +45,7 @@ import (
 type (
 	PurgeDLQTasksSuite struct {
 		*require.Assertions
-		base.FunctionalTestBase
+		testcore.FunctionalTestBase
 		dlq              *faultyDLQ
 		sdkClientFactory sdk.ClientFactory
 	}
@@ -83,13 +83,13 @@ func (s *PurgeDLQTasksSuite) SetupSuite() {
 	s.Assertions = require.New(s.T())
 	s.FunctionalTestBase.SetupSuite(
 		"testdata/es_cluster.yaml",
-		base.WithFxOptionsForService(primitives.HistoryService,
+		testcore.WithFxOptionsForService(primitives.HistoryService,
 			fx.Decorate(func(manager persistence.HistoryTaskQueueManager) persistence.HistoryTaskQueueManager {
 				s.dlq = &faultyDLQ{HistoryTaskQueueManager: manager}
 				return s.dlq
 			}),
 		),
-		base.WithFxOptionsForService(primitives.FrontendService,
+		testcore.WithFxOptionsForService(primitives.FrontendService,
 			fx.Populate(&s.sdkClientFactory),
 		),
 	)
