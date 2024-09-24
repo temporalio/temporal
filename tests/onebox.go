@@ -871,14 +871,16 @@ func sdkClientFactoryProvider(
 	)
 }
 
-func (c *temporalImpl) overrideDynamicConfigByKey(t *testing.T, name dynamicconfig.Key, value any) {
+func (c *temporalImpl) overrideDynamicConfigByKey(t *testing.T, name dynamicconfig.Key, value any) (cleanup func()) {
 	existingValues := c.dcClient.GetValue(name)
 	c.dcClient.OverrideValueByKey(name, value)
-	t.Cleanup(func() {
+	cleanup = func() {
 		if len(existingValues) > 0 {
 			c.dcClient.OverrideValueByKey(name, existingValues)
 		} else {
 			c.dcClient.RemoveOverrideByKey(name)
 		}
-	})
+	}
+	t.Cleanup(cleanup)
+	return
 }

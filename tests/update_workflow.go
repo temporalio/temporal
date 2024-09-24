@@ -190,8 +190,8 @@ func (s *FunctionalSuite) clearUpdateRegistryAndAbortPendingUpdates(tv *testvars
 // Simulating an unexpected loss of the update registry due to a crash. The shard finalizer won't run,
 // therefore the workflow context is NOT cleared, pending update requests are NOT aborted and will time out.
 func (s *FunctionalSuite) loseUpdateRegistryAndAbandonPendingUpdates(tv *testvars.TestVars) {
-	s.OverrideDynamicConfig(dynamicconfig.ShardFinalizerTimeout, 0)
-	defer s.testCluster.host.dcClient.RemoveOverride(dynamicconfig.ShardFinalizerTimeout)
+	revert := s.OverrideDynamicConfig(dynamicconfig.ShardFinalizerTimeout, 0)
+	defer revert()
 	s.closeShard(tv.WorkflowID())
 }
 

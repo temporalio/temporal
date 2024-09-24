@@ -436,8 +436,11 @@ func (s *FunctionalTestBase) registerArchivalNamespace(archivalNamespace string)
 	return err
 }
 
-func (s *FunctionalTestBase) OverrideDynamicConfig(setting dynamicconfig.GenericSetting, value any) {
-	s.testCluster.host.overrideDynamicConfigByKey(s.T(), setting.Key(), value)
+// Overrides one dynamic config setting for the duration of this test (or sub-test). The change
+// will automatically be reverted at the end of the test (using t.Cleanup). The cleanup
+// function is also returned if you want to revert the change before the end of the test.
+func (s *FunctionalTestBase) OverrideDynamicConfig(setting dynamicconfig.GenericSetting, value any) (cleanup func()) {
+	return s.testCluster.host.overrideDynamicConfigByKey(s.T(), setting.Key(), value)
 }
 
 func (s *FunctionalTestBase) testWithMatchingBehavior(subtest func()) {
