@@ -86,19 +86,26 @@ func TestWorkflowTagGetters(t *testing.T) {
 			workflowIDGetter: "GetSignalRequest().GetWorkflowExecution().GetWorkflowId()",
 			runIDGetter:      "GetSignalRequest().GetWorkflowExecution().GetRunId()",
 		},
+		{
+			name:             "History request overrides",
+			reqT:             reflect.TypeOf(&historyservice.ReplicateWorkflowStateRequest{}),
+			workflowIDGetter: "GetWorkflowState().GetExecutionInfo().GetWorkflowId()",
+			runIDGetter:      "GetWorkflowState().GetExecutionState().GetRunId()",
+		},
 	}
 
 	for _, tt := range testCases {
 		t.Run(tt.name, func(t *testing.T) {
 			rd := workflowTagGetters(tt.reqT, 0)
+			processOverrides(tt.reqT, &rd)
 			if tt.workflowIDGetter != "" {
-				assert.Equal(t, rd.WorkflowIdGetter, tt.workflowIDGetter)
+				assert.Equal(t, tt.workflowIDGetter, rd.WorkflowIdGetter)
 			}
 			if tt.runIDGetter != "" {
-				assert.Equal(t, rd.RunIdGetter, tt.runIDGetter)
+				assert.Equal(t, tt.runIDGetter, rd.RunIdGetter)
 			}
 			if tt.taskTokenGetter != "" {
-				assert.Equal(t, rd.TaskTokenGetter, tt.taskTokenGetter)
+				assert.Equal(t, tt.taskTokenGetter, rd.TaskTokenGetter)
 			}
 		})
 	}

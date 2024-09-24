@@ -212,6 +212,7 @@ func (wt *WorkflowTags) extractFromHistoryServiceServerRequest(req any) []tag.Ta
 	case *historyservice.ReplicateWorkflowStateRequest:
 		return []tag.Tag{
 			tag.WorkflowID(r.GetWorkflowState().GetExecutionInfo().GetWorkflowId()),
+			tag.WorkflowRunID(r.GetWorkflowState().GetExecutionState().GetRunId()),
 		}
 	case *historyservice.RequestCancelWorkflowExecutionRequest:
 		return []tag.Tag{

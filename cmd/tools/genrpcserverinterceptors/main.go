@@ -32,6 +32,8 @@ import (
 	"os"
 	"path"
 	"reflect"
+	"sort"
+	"strconv"
 	"strings"
 	"text/template"
 
@@ -83,6 +85,13 @@ var (
 		reflect.TypeOf((*workflowservice.RespondQueryTaskCompletedRequest)(nil)),
 		reflect.TypeOf((*workflowservice.RespondNexusTaskCompletedRequest)(nil)),
 		reflect.TypeOf((*workflowservice.RespondNexusTaskFailedRequest)(nil)),
+	}
+
+	// Getters that can't be build using common logic must be listed here.
+	overrides = map[reflect.Type]requestData{
+		reflect.TypeOf((*historyservice.ReplicateWorkflowStateRequest)(nil)): {
+			RunIdGetter: "GetWorkflowState().GetExecutionState().GetRunId()", // workflow_id and run_id are on different structs.
+		},
 	}
 
 	executionGetterT = reflect.TypeOf((*interface {
@@ -171,6 +180,7 @@ func writeGrpcServerData(w io.Writer, grpcServerT reflect.Type, tmpl string) {
 
 		rd := workflowTagGetters(requestT, 0)
 		rd.Type = requestT.String()
+		processOverrides(requestT, &rd)
 		sd.Requests = append(sd.Requests, rd)
 	}
 
@@ -208,12 +218,15 @@ func workflowTagGetters(requestT reflect.Type, depth int) requestData {
 		}
 	}
 
-	for fieldNum := 0; fieldNum < requestT.Elem().NumField(); fieldNum++ {
-		// First wins: of one of these fields is set, stop iterating.
+	for _, nestedRequest := range subFields(requestT) {
+		// If one of the getters is set, stop iterating. It implies:
+		//  - First nested request wins. As soon as one of the getters is found,
+		//    search is stopped.
+		//  - workflow_id and run_id fields must be in the same nested request struct.
+		//    If they are on the different structs, they can be set only using overrides.
 		if rd.WorkflowIdGetter != "" || rd.RunIdGetter != "" || rd.TaskTokenGetter != "" {
 			break
 		}
-		nestedRequest := requestT.Elem().Field(fieldNum)
 		if nestedRequest.Type.Kind() != reflect.Ptr {
 			continue
 		}
@@ -245,6 +258,42 @@ func workflowTagGetters(requestT reflect.Type, depth int) requestData {
 		}
 	}
 	return rd
+}
+
+func subFields(t reflect.Type) []reflect.StructField {
+	// This function returns subfields ordered in proto index order. Tag is the string like:
+	// `protobuf:"bytes,2,opt,name=workflow_id,json=workflowId,proto3" json:"workflow_id,omitempty"`
+	//                  ^ - this number is used for ordering.
+
+	var fields []reflect.StructField
+	for fieldNum := 0; fieldNum < t.Elem().NumField(); fieldNum++ {
+		f := t.Elem().Field(fieldNum)
+		if _, ok := f.Tag.Lookup("protobuf"); ok {
+			fields = append(fields, f)
+		}
+	}
+	protoOrder := func(tag reflect.StructTag) int {
+		o, _ := strconv.Atoi(strings.Split(tag.Get("protobuf"), ",")[1])
+		return o
+	}
+	sort.Slice(fields, func(i, j int) bool {
+		return protoOrder(fields[i].Tag) < protoOrder(fields[j].Tag)
+	})
+	return fields
+}
+
+func processOverrides(requestT reflect.Type, rd *requestData) {
+	if override, ok := overrides[requestT]; ok {
+		if override.RunIdGetter != "" {
+			rd.RunIdGetter = override.RunIdGetter
+		}
+		if override.WorkflowIdGetter != "" {
+			rd.WorkflowIdGetter = override.WorkflowIdGetter
+		}
+		if override.TaskTokenGetter != "" {
+			rd.TaskTokenGetter = override.TaskTokenGetter
+		}
+	}
 }
 
 func callWithFile(generator func(io.Writer, reflect.Type), server reflect.Type, outPath string, licenseText string) {
