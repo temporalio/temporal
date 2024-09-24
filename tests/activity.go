@@ -78,11 +78,10 @@ func (s *ActivityTestSuite) TestActivityScheduleToClose_FiredDuringBackoff() {
 	}
 
 	var activityCompleted atomic.Int32
-	activityCompleted = 0
 	activityFunction := func() (string, error) {
-		activityCompleted += 1
 		time.Sleep(workingInterval)                        //nolint:forbidigo
 		activityErr := errors.New("bad-luck-please-retry") //nolint:goerr113
+		activityCompleted.Add(1)
 		return "", activityErr
 	}
 
@@ -114,7 +113,7 @@ func (s *ActivityTestSuite) TestActivityScheduleToClose_FiredDuringBackoff() {
 
 	var out string
 	err = workflowRun.Get(ctx, &out)
-	s.Equal(2, activityCompleted)
+	s.Equal(2, activityCompleted.Load())
 	s.NoError(err)
 }
 
@@ -137,13 +136,13 @@ func (s *ActivityTestSuite) TestActivityScheduleToClose_FiredDuringActivityRun()
 	var lastActivityRun time.Time
 	var workflowCompleteRun time.Time
 
-	activityCompleted := 0
+	var activityCompleted atomic.Int32
 	activityFunction := func() (string, error) {
-		println(fmt.Sprintf("Activity #%d", activityCompleted+1))
+		println(fmt.Sprintf("Activity #%d", activityCompleted.Load()+1))
 		time.Sleep(workingInterval)                        //nolint:forbidigo
 		activityErr := errors.New("bad-luck-please-retry") //nolint:goerr113
 		lastActivityRun = time.Now().UTC()
-		activityCompleted += 1
+		activityCompleted.Add(1)
 		return "", activityErr
 	}
 
@@ -185,7 +184,7 @@ func (s *ActivityTestSuite) TestActivityScheduleToClose_FiredDuringActivityRun()
 	err = workflowRun.Get(ctx, &out)
 	workflowCompleteRun = time.Now().UTC()
 	// we expect activities to be executed 3 times
-	s.Eventually(func() bool { return activityCompleted == 3 }, time.Second*10, time.Millisecond*500)
+	s.Eventually(func() bool { return activityCompleted.Load() == 3 }, time.Second*10, time.Millisecond*500)
 	s.True(lastActivityRun.After(workflowCompleteRun))
 	s.NoError(err)
 }
