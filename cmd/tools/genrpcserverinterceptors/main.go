@@ -71,13 +71,17 @@ var (
 		reflect.TypeOf((*matchingservice.MatchingServiceServer)(nil)).Elem(),
 	}
 
-	// Only request fields that end with these suffixes are eligible for deeper inspection.
-	rootLevelFieldNameSuffixes = []string{
+	// Only request fields that end with suffixes or match exact name are eligible for deeper inspection.
+	fieldNameSuffixes = []string{
 		"Request",
-		"Completion",
-		"Ref",
-		"ParentExecution",
-		"WorkflowState", // for ReplicateWorkflowStateRequest
+	}
+	fieldNames = map[string]struct{}{
+		"Completion":      {},
+		"UpdateRef":       {},
+		"ParentExecution": {},
+		"WorkflowState":   {},
+		"ExecutionInfo":   {},
+		"ExecutionState":  {},
 	}
 
 	// These types have task_token field, but it is not of type *tokenspb.Task and doesn't have Workflow tags.
@@ -85,13 +89,6 @@ var (
 		reflect.TypeOf((*workflowservice.RespondQueryTaskCompletedRequest)(nil)),
 		reflect.TypeOf((*workflowservice.RespondNexusTaskCompletedRequest)(nil)),
 		reflect.TypeOf((*workflowservice.RespondNexusTaskFailedRequest)(nil)),
-	}
-
-	// Getters that can't be build using common logic must be listed here.
-	overrides = map[reflect.Type]requestData{
-		reflect.TypeOf((*historyservice.ReplicateWorkflowStateRequest)(nil)): {
-			RunIdGetter: "GetWorkflowState().GetExecutionState().GetRunId()", // workflow_id and run_id are on different structs.
-		},
 	}
 
 	executionGetterT = reflect.TypeOf((*interface {
@@ -180,7 +177,7 @@ func writeGrpcServerData(w io.Writer, grpcServerT reflect.Type, tmpl string) {
 
 		rd := workflowTagGetters(requestT, 0)
 		rd.Type = requestT.String()
-		processOverrides(requestT, &rd)
+		// processOverrides(requestT, &rd)
 		sd.Requests = append(sd.Requests, rd)
 	}
 
@@ -219,42 +216,33 @@ func workflowTagGetters(requestT reflect.Type, depth int) requestData {
 	}
 
 	for _, nestedRequest := range subFields(requestT) {
-		// If one of the getters is set, stop iterating. It implies:
-		//  - First nested request wins. As soon as one of the getters is found,
-		//    search is stopped.
-		//  - workflow_id and run_id fields must be in the same nested request struct.
-		//    If they are on the different structs, they can be set only using overrides.
-		if rd.WorkflowIdGetter != "" || rd.RunIdGetter != "" || rd.TaskTokenGetter != "" {
-			break
-		}
 		if nestedRequest.Type.Kind() != reflect.Ptr {
 			continue
 		}
 		if nestedRequest.Type.Elem().Kind() != reflect.Struct {
 			continue
 		}
-		if depth == 0 {
-			hasAllowedSuffix := false
-			for _, suffix := range rootLevelFieldNameSuffixes {
-				if strings.HasSuffix(nestedRequest.Name, suffix) {
-					hasAllowedSuffix = true
-					break
-				}
+		hasAllowedSuffix := false
+		for _, suffix := range fieldNameSuffixes {
+			if strings.HasSuffix(nestedRequest.Name, suffix) {
+				hasAllowedSuffix = true
+				break
 			}
-			if !hasAllowedSuffix {
-				continue
-			}
+		}
+		if _, hasAllowedName := fieldNames[nestedRequest.Name]; !hasAllowedName && !hasAllowedSuffix {
+			continue
 		}
 
-		rd = workflowTagGetters(nestedRequest.Type, depth+1)
-		if rd.WorkflowIdGetter != "" {
-			rd.WorkflowIdGetter = fmt.Sprintf("Get%s().%s", nestedRequest.Name, rd.WorkflowIdGetter)
+		nestedRd := workflowTagGetters(nestedRequest.Type, depth+1)
+		// First match wins. If getter is already set, it won't be overwritten.
+		if rd.WorkflowIdGetter == "" && nestedRd.WorkflowIdGetter != "" {
+			rd.WorkflowIdGetter = fmt.Sprintf("Get%s().%s", nestedRequest.Name, nestedRd.WorkflowIdGetter)
 		}
-		if rd.RunIdGetter != "" {
-			rd.RunIdGetter = fmt.Sprintf("Get%s().%s", nestedRequest.Name, rd.RunIdGetter)
+		if rd.RunIdGetter == "" && nestedRd.RunIdGetter != "" {
+			rd.RunIdGetter = fmt.Sprintf("Get%s().%s", nestedRequest.Name, nestedRd.RunIdGetter)
 		}
-		if rd.TaskTokenGetter != "" {
-			rd.TaskTokenGetter = fmt.Sprintf("Get%s().%s", nestedRequest.Name, rd.TaskTokenGetter)
+		if rd.TaskTokenGetter == "" && nestedRd.TaskTokenGetter != "" {
+			rd.TaskTokenGetter = fmt.Sprintf("Get%s().%s", nestedRequest.Name, nestedRd.TaskTokenGetter)
 		}
 	}
 	return rd
@@ -280,20 +268,6 @@ func subFields(t reflect.Type) []reflect.StructField {
 		return protoOrder(fields[i].Tag) < protoOrder(fields[j].Tag)
 	})
 	return fields
-}
-
-func processOverrides(requestT reflect.Type, rd *requestData) {
-	if override, ok := overrides[requestT]; ok {
-		if override.RunIdGetter != "" {
-			rd.RunIdGetter = override.RunIdGetter
-		}
-		if override.WorkflowIdGetter != "" {
-			rd.WorkflowIdGetter = override.WorkflowIdGetter
-		}
-		if override.TaskTokenGetter != "" {
-			rd.TaskTokenGetter = override.TaskTokenGetter
-		}
-	}
 }
 
 func callWithFile(generator func(io.Writer, reflect.Type), server reflect.Type, outPath string, licenseText string) {
