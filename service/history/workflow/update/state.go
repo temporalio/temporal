@@ -39,6 +39,7 @@ const (
 	stateProvisionallyCompleted
 	stateCompleted
 	stateAborted
+	stateProvisionallyCompletedAfterAccepted
 )
 
 func (s state) String() string {
@@ -61,6 +62,8 @@ func (s state) String() string {
 		return "Completed"
 	case stateAborted:
 		return "Aborted"
+	case stateProvisionallyCompletedAfterAccepted:
+		return "ProvisionallyCompletedAfterAccepted"
 	}
 	return "unrecognized state"
 }

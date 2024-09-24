@@ -237,7 +237,7 @@ func (r *BranchMgrImpl) createNewBranch(
 
 	versionhistory.SetVersionHistoryBranchToken(newVersionHistory, resp.NewBranchToken)
 
-	branchChanged, newIndex, err := versionhistory.AddVersionHistory(
+	branchChanged, newIndex, err := versionhistory.AddAndSwitchVersionHistory(
 		r.mutableState.GetExecutionInfo().GetVersionHistories(),
 		newVersionHistory,
 	)

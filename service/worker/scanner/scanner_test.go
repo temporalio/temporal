@@ -29,7 +29,6 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/suite"
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/server/api/adminservicemock/v1"
@@ -43,6 +42,7 @@ import (
 	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/testing/mocksdk"
 	"go.temporal.io/server/service/worker/scanner/build_ids"
+	"go.uber.org/mock/gomock"
 )
 
 type scannerTestSuite struct {

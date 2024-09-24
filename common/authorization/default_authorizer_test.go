@@ -29,10 +29,10 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"go.temporal.io/server/common/config"
+	"go.uber.org/mock/gomock"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 )
 

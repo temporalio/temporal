@@ -30,6 +30,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"sync"
 	"testing"
 	"time"
 
@@ -80,6 +81,9 @@ type AdvVisCrossDCTestSuite struct {
 
 	testSearchAttributeKey string
 	testSearchAttributeVal string
+
+	startTime          time.Time
+	onceClusterConnect sync.Once
 }
 
 func TestAdvVisCrossDCTestSuite(t *testing.T) {
@@ -136,6 +140,8 @@ func (s *AdvVisCrossDCTestSuite) SetupSuite() {
 	s.Require().NoError(err)
 	s.cluster2 = c
 
+	s.startTime = time.Now()
+
 	cluster1Address := clusterConfigs[0].ClusterMetadata.ClusterInformation[clusterConfigs[0].ClusterMetadata.CurrentClusterName].RPCAddress
 	cluster2Address := clusterConfigs[1].ClusterMetadata.ClusterInformation[clusterConfigs[1].ClusterMetadata.CurrentClusterName].RPCAddress
 	_, err = s.cluster1.GetAdminClient().AddOrUpdateRemoteCluster(tests.NewContext(), &adminservice.AddOrUpdateRemoteClusterRequest{
@@ -161,6 +167,11 @@ func (s *AdvVisCrossDCTestSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 	s.ProtoAssertions = protorequire.New(s.T())
 	s.HistoryRequire = historyrequire.New(s.T())
+
+	s.onceClusterConnect.Do(func() {
+		waitForClusterConnected(s.Assertions, s.logger, s.cluster1, clusterNameAdvVis[0], clusterNameAdvVis[1], s.startTime)
+		waitForClusterConnected(s.Assertions, s.logger, s.cluster2, clusterNameAdvVis[1], clusterNameAdvVis[0], s.startTime)
+	})
 }
 
 func (s *AdvVisCrossDCTestSuite) TearDownSuite() {
@@ -400,12 +411,12 @@ GetHistoryLoop:
 			continue GetHistoryLoop
 		}
 		s.EqualHistory(`
-  1 WorkflowExecutionStarted
-  2 WorkflowTaskScheduled
-  3 WorkflowTaskStarted
-  4 WorkflowTaskCompleted
-  5 UpsertWorkflowSearchAttributes
-  6 WorkflowExecutionTerminated {"Details":{"Payloads":[{"Data":"\"terminate details\""}]},"Identity":"worker1","Reason":"force terminate to make sure standby process tasks"}`, history)
+  1 1 WorkflowExecutionStarted
+  2 1 WorkflowTaskScheduled
+  3 1 WorkflowTaskStarted
+  4 1 WorkflowTaskCompleted
+  5 1 UpsertWorkflowSearchAttributes
+  6 1 WorkflowExecutionTerminated {"Details":{"Payloads":[{"Data":"\"terminate details\""}]},"Identity":"worker1","Reason":"force terminate to make sure standby process tasks"}`, history)
 		executionTerminated = true
 		break GetHistoryLoop
 	}
@@ -422,12 +433,12 @@ GetHistoryLoop2:
 			lastEvent := history.Events[len(history.Events)-1]
 			if lastEvent.EventType == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TERMINATED {
 				s.EqualHistory(`
-  1 WorkflowExecutionStarted
-  2 WorkflowTaskScheduled
-  3 WorkflowTaskStarted
-  4 WorkflowTaskCompleted
-  5 UpsertWorkflowSearchAttributes
-  6 WorkflowExecutionTerminated {"Details":{"Payloads":[{"Data":"\"terminate details\""}]},"Identity":"worker1","Reason":"force terminate to make sure standby process tasks"}`, history)
+  1 1 WorkflowExecutionStarted
+  2 1 WorkflowTaskScheduled
+  3 1 WorkflowTaskStarted
+  4 1 WorkflowTaskCompleted
+  5 1 UpsertWorkflowSearchAttributes
+  6 1 WorkflowExecutionTerminated {"Details":{"Payloads":[{"Data":"\"terminate details\""}]},"Identity":"worker1","Reason":"force terminate to make sure standby process tasks"}`, history)
 				eventsReplicated = true
 				break GetHistoryLoop2
 			}

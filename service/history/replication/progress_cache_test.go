@@ -28,7 +28,6 @@ import (
 	"math/rand"
 	"testing"
 
-	"github.com/golang/mock/gomock"
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -39,6 +38,7 @@ import (
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tests"
+	"go.uber.org/mock/gomock"
 )
 
 type (
@@ -147,9 +147,10 @@ func (s *progressCacheSuite) TestProgressCache() {
 	s.Nil(err)
 
 	expected2 := &ReplicationProgress{
-		versionedTransitions:       [][]*persistencespb.VersionedTransition{versionedTransitions2},
-		eventVersionHistoryItems:   [][]*historyspb.VersionHistoryItem{versionHistoryItems2},
-		lastVersionTransitionIndex: 0,
+		versionedTransitions:         [][]*persistencespb.VersionedTransition{versionedTransitions2},
+		eventVersionHistoryItems:     [][]*historyspb.VersionHistoryItem{versionHistoryItems2},
+		lastVersionTransitionIndex:   0,
+		lastEventVersionHistoryIndex: 0,
 	}
 	cachedProgress = s.progressCache.Get(s.runID, targetClusterID)
 	s.DeepEqual(expected2, cachedProgress)
@@ -169,9 +170,10 @@ func (s *progressCacheSuite) TestProgressCache() {
 	s.Nil(err)
 
 	expected3 := &ReplicationProgress{
-		versionedTransitions:       [][]*persistencespb.VersionedTransition{versionedTransitions2, versionedTransitions3},
-		eventVersionHistoryItems:   [][]*historyspb.VersionHistoryItem{versionHistoryItems2, versionHistoryItems3},
-		lastVersionTransitionIndex: 1,
+		versionedTransitions:         [][]*persistencespb.VersionedTransition{versionedTransitions2, versionedTransitions3},
+		eventVersionHistoryItems:     [][]*historyspb.VersionHistoryItem{versionHistoryItems2, versionHistoryItems3},
+		lastVersionTransitionIndex:   1,
+		lastEventVersionHistoryIndex: 1,
 	}
 	cachedProgress = s.progressCache.Get(s.runID, targetClusterID)
 	s.DeepEqual(expected3, cachedProgress)

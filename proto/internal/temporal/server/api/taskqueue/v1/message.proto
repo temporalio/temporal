@@ -50,6 +50,13 @@ message TaskVersionDirective {
     }
 }
 
+message InternalTaskQueueStatus {
+    int64 read_level = 1;
+    int64 ack_level = 2;
+    temporal.api.taskqueue.v1.TaskIdBlock task_id_block = 3;
+    int64 read_buffer_length = 4;
+}
+
 message TaskQueueVersionInfoInternal {
     PhysicalTaskQueueInfo physical_task_queue_info = 2;
 }
@@ -58,6 +65,7 @@ message PhysicalTaskQueueInfo {
     // Unversioned workers (with `useVersioning=false`) are reported in unversioned result even if they set a Build ID.
     repeated temporal.api.taskqueue.v1.PollerInfo pollers = 1;
     temporal.api.taskqueue.v1.TaskQueueStats task_queue_stats = 2;
+    InternalTaskQueueStatus internal_task_queue_status = 3;
 }
 
 // Represents a normal or sticky partition of a task queue.

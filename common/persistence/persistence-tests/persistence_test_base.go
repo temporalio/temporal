@@ -218,7 +218,19 @@ func (s *TestBase) Setup(clusterMetadataConfig *cluster.Config) {
 		s.Logger,
 		metrics.NoopMetricsHandler,
 	)
-	factory := client.NewFactory(dataStoreFactory, &cfg, s.PersistenceRateLimiter, quotas.NoopRequestRateLimiter, serialization.NewSerializer(), nil, clusterName, metrics.NoopMetricsHandler, s.Logger, s.PersistenceHealthSignals)
+	factory := client.NewFactory(
+		dataStoreFactory,
+		&cfg,
+		s.PersistenceRateLimiter,
+		quotas.NoopRequestRateLimiter,
+		quotas.NoopRequestRateLimiter,
+		serialization.NewSerializer(),
+		nil,
+		clusterName,
+		metrics.NoopMetricsHandler,
+		s.Logger,
+		s.PersistenceHealthSignals,
+	)
 
 	s.TaskMgr, err = factory.NewTaskManager()
 	s.fatalOnError("NewTaskManager", err)

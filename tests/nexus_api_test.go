@@ -73,8 +73,7 @@ func (s *ClientFunctionalSuite) TestNexusStartOperation_Outcomes() {
 			},
 		},
 	}
-	callerNexusLink, err := nexusoperations.ConvertLinkWorkflowEventToNexusLink(callerLink)
-	s.NoError(err)
+	callerNexusLink := nexusoperations.ConvertLinkWorkflowEventToNexusLink(callerLink)
 
 	handlerLink := &commonpb.Link_WorkflowEvent{
 		Namespace:  "handler-ns",
@@ -87,8 +86,7 @@ func (s *ClientFunctionalSuite) TestNexusStartOperation_Outcomes() {
 			},
 		},
 	}
-	handlerNexusLink, err := nexusoperations.ConvertLinkWorkflowEventToNexusLink(handlerLink)
-	s.NoError(err)
+	handlerNexusLink := nexusoperations.ConvertLinkWorkflowEventToNexusLink(handlerLink)
 
 	type testcase struct {
 		outcome   string
@@ -142,7 +140,8 @@ func (s *ClientFunctionalSuite) TestNexusStartOperation_Outcomes() {
 				require.NoError(t, err)
 				require.Equal(t, "test-id", res.Pending.ID)
 				require.Len(t, res.Links, 1)
-				require.Equal(t, handlerNexusLink, res.Links[0])
+				require.Equal(t, handlerNexusLink.URL.String(), res.Links[0].URL.String())
+				require.Equal(t, handlerNexusLink.Type, res.Links[0].Type)
 			},
 		},
 		{

@@ -76,14 +76,12 @@ const (
 	// ResourceExhaustedScopeHeader will be added to rpc response if request returns ResourceExhausted error.
 	// Value of this header will be the scope of exhausted resource.
 	ResourceExhaustedScopeHeader = "X-Resource-Exhausted-Scope"
-
-	shardUnavailableErrorMessage = "shard unavailable, please backoff and retry"
 )
 
 // Dial creates a client connection to the given target with default options.
 // The hostName syntax is defined in
 // https://github.com/grpc/grpc/blob/master/doc/naming.md.
-// e.g. to use dns resolver, a "dns:///" prefix should be applied to the target.
+// dns resolver is used by default
 func Dial(hostName string, tlsConfig *tls.Config, logger log.Logger, interceptors ...grpc.UnaryClientInterceptor) (*grpc.ClientConn, error) {
 	var grpcSecureOpt grpc.DialOption
 	if tlsConfig == nil {
@@ -122,10 +120,7 @@ func Dial(hostName string, tlsConfig *tls.Config, logger log.Logger, interceptor
 		grpc.WithConnectParams(cp),
 	}
 
-	return grpc.Dial(
-		hostName,
-		dialOptions...,
-	)
+	return grpc.NewClient(hostName, dialOptions...)
 }
 
 func errorInterceptor(

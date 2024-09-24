@@ -28,10 +28,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sync"
 	"testing"
 	"time"
 
-	"github.com/golang/mock/gomock"
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/suite"
 	commandpb "go.temporal.io/api/command/v1"
@@ -58,6 +58,7 @@ import (
 	"go.temporal.io/server/service/history/replication/eventhandler"
 	"go.temporal.io/server/tests"
 	"go.uber.org/fx"
+	"go.uber.org/mock/gomock"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 
@@ -69,6 +70,7 @@ type (
 		namespaceID   string
 		serializer    serialization.Serializer
 		generator     test.Generator
+		once          sync.Once
 	}
 )
 
@@ -99,28 +101,6 @@ func (s *streamBasedReplicationTestSuite) SetupSuite() {
 			),
 		),
 	)
-	ctx := context.Background()
-	s.namespaceName = "replication-test"
-	_, err := s.cluster1.GetFrontendClient().RegisterNamespace(ctx, &workflowservice.RegisterNamespaceRequest{
-		Namespace: s.namespaceName,
-		Clusters:  s.clusterReplicationConfig(),
-		// The first cluster is the active cluster.
-		ActiveClusterName: s.clusterNames[0],
-		// Needed so that the namespace is replicated.
-		IsGlobalNamespace: true,
-		// This is a required parameter.
-		WorkflowExecutionRetentionPeriod: durationpb.New(time.Hour * 24),
-	})
-	s.Require().NoError(err)
-	err = s.waitUntilNamespaceReplicated(ctx, s.namespaceName)
-	s.Require().NoError(err)
-
-	nsRes, _ := s.cluster1.GetFrontendClient().DescribeNamespace(ctx, &workflowservice.DescribeNamespaceRequest{
-		Namespace: s.namespaceName,
-	})
-
-	s.namespaceID = nsRes.NamespaceInfo.GetId()
-	s.generator = test.InitializeHistoryEventGenerator("namespace", "ns-id", 1)
 }
 
 func (s *streamBasedReplicationTestSuite) TearDownSuite() {
@@ -133,6 +113,31 @@ func (s *streamBasedReplicationTestSuite) TearDownSuite() {
 
 func (s *streamBasedReplicationTestSuite) SetupTest() {
 	s.setupTest()
+
+	s.once.Do(func() {
+		ctx := context.Background()
+		s.namespaceName = "replication-test"
+		_, err := s.cluster1.GetFrontendClient().RegisterNamespace(ctx, &workflowservice.RegisterNamespaceRequest{
+			Namespace: s.namespaceName,
+			Clusters:  s.clusterReplicationConfig(),
+			// The first cluster is the active cluster.
+			ActiveClusterName: s.clusterNames[0],
+			// Needed so that the namespace is replicated.
+			IsGlobalNamespace: true,
+			// This is a required parameter.
+			WorkflowExecutionRetentionPeriod: durationpb.New(time.Hour * 24),
+		})
+		s.Require().NoError(err)
+		err = s.waitUntilNamespaceReplicated(ctx, s.namespaceName)
+		s.Require().NoError(err)
+
+		nsRes, _ := s.cluster1.GetFrontendClient().DescribeNamespace(ctx, &workflowservice.DescribeNamespaceRequest{
+			Namespace: s.namespaceName,
+		})
+
+		s.namespaceID = nsRes.NamespaceInfo.GetId()
+		s.generator = test.InitializeHistoryEventGenerator("namespace", "ns-id", 1)
+	})
 }
 
 func (s *streamBasedReplicationTestSuite) TestReplicateHistoryEvents_ForceReplicationScenario() {

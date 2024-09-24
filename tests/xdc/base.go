@@ -32,6 +32,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -42,6 +43,9 @@ import (
 	replicationpb "go.temporal.io/api/replication/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/converter"
+	"google.golang.org/protobuf/types/known/durationpb"
+	"gopkg.in/yaml.v3"
+
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common/cluster"
@@ -53,8 +57,6 @@ import (
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/environment"
 	"go.temporal.io/server/tests"
-	"google.golang.org/protobuf/types/known/durationpb"
-	"gopkg.in/yaml.v3"
 )
 
 type (
@@ -74,7 +76,8 @@ type (
 		logger                 log.Logger
 		dynamicConfigOverrides map[dynamicconfig.Key]interface{}
 
-		startTime time.Time
+		startTime          time.Time
+		onceClusterConnect sync.Once
 	}
 )
 
@@ -100,6 +103,7 @@ func (s *xdcBaseSuite) setupSuite(clusterNames []string, opts ...tests.Option) {
 	if s.dynamicConfigOverrides == nil {
 		s.dynamicConfigOverrides = make(map[dynamicconfig.Key]interface{})
 	}
+	s.dynamicConfigOverrides[dynamicconfig.ClusterMetadataRefreshInterval.Key()] = time.Second * 5
 
 	fileName := "../testdata/xdc_clusters.yaml"
 	if tests.TestFlags.TestClusterConfigFile != "" {
@@ -165,34 +169,41 @@ func (s *xdcBaseSuite) setupSuite(clusterNames []string, opts ...tests.Option) {
 	time.Sleep(time.Millisecond * 200)
 }
 
-func (s *xdcBaseSuite) waitForClusterConnected() {
-	s.logger.Debug("wait for cluster to be connected")
+func waitForClusterConnected(
+	s *require.Assertions,
+	logger log.Logger,
+	sourceCluster *tests.TestCluster,
+	source string,
+	target string,
+	startTime time.Time,
+) {
+	logger.Info("wait for clusters to be synced", tag.SourceCluster(source), tag.TargetCluster(target))
 	s.EventuallyWithT(func(c *assert.CollectT) {
-		s.logger.Debug("check if stream is established")
-		resp, err := s.cluster1.GetHistoryClient().GetReplicationStatus(context.Background(), &historyservice.GetReplicationStatusRequest{})
-		if !(assert.NoError(c, err) &&
-			assert.Equal(c, 1, len(resp.Shards))) { // test cluster has only one history shard
+		logger.Info("check if clusters are synced", tag.SourceCluster(source), tag.TargetCluster(target))
+		resp, err := sourceCluster.GetHistoryClient().GetReplicationStatus(context.Background(), &historyservice.GetReplicationStatusRequest{})
+		if !assert.NoError(c, err) {
 			return
 		}
+		assert.Lenf(c, resp.Shards, 1, "test cluster has only one history shard")
+
 		shard := resp.Shards[0]
-		if !(assert.NotNil(c, shard) &&
-			assert.True(c, shard.MaxReplicationTaskId > 0) &&
-			assert.NotNil(c, shard.ShardLocalTime) &&
-			assert.True(c, shard.ShardLocalTime.AsTime().Before(time.Now())) &&
-			assert.True(c, shard.ShardLocalTime.AsTime().After(s.startTime)) &&
-			assert.NotNil(c, shard.RemoteClusters)) {
+		if !assert.NotNil(c, shard) {
 			return
 		}
-		standbyAckInfo, ok := shard.RemoteClusters[s.clusterNames[1]]
-		if !(assert.True(c, ok) &&
-			assert.NotNil(c, standbyAckInfo) &&
-			assert.NotNil(c, standbyAckInfo.AckedTaskVisibilityTime) &&
-			assert.True(c, standbyAckInfo.AckedTaskVisibilityTime.AsTime().Before(time.Now())) &&
-			assert.True(c, standbyAckInfo.AckedTaskVisibilityTime.AsTime().After(s.startTime))) {
+		assert.Greater(c, shard.MaxReplicationTaskId, int64(0))
+		assert.NotNil(c, shard.ShardLocalTime)
+		assert.WithinRange(c, shard.ShardLocalTime.AsTime(), startTime, time.Now())
+		assert.NotNil(c, shard.RemoteClusters)
+
+		standbyAckInfo, ok := shard.RemoteClusters[target]
+		if !assert.True(c, ok) || !assert.NotNil(c, standbyAckInfo) {
 			return
 		}
-		s.logger.Debug("cluster connected")
-	}, 60*time.Second, 1*time.Second)
+		assert.LessOrEqual(c, shard.MaxReplicationTaskId, standbyAckInfo.AckedTaskId)
+		assert.NotNil(c, standbyAckInfo.AckedTaskVisibilityTime)
+		assert.WithinRange(c, standbyAckInfo.AckedTaskVisibilityTime.AsTime(), startTime, time.Now())
+	}, 90*time.Second, 1*time.Second)
+	logger.Info("clusters synced", tag.SourceCluster(source), tag.TargetCluster(target))
 }
 
 func (s *xdcBaseSuite) tearDownSuite() {
@@ -206,7 +217,10 @@ func (s *xdcBaseSuite) setupTest() {
 	s.ProtoAssertions = protorequire.New(s.T())
 	s.HistoryRequire = historyrequire.New(s.T())
 
-	s.waitForClusterConnected()
+	s.onceClusterConnect.Do(func() {
+		waitForClusterConnected(s.Assertions, s.logger, s.cluster1, s.clusterNames[0], s.clusterNames[1], s.startTime)
+		waitForClusterConnected(s.Assertions, s.logger, s.cluster2, s.clusterNames[1], s.clusterNames[0], s.startTime)
+	})
 }
 
 func (s *xdcBaseSuite) createGlobalNamespace() string {

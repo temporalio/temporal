@@ -193,6 +193,8 @@ func newCache(
 			wfKey := item.wfContext.GetWorkflowKey()
 			err := item.finalizer.Deregister(wfKey.String())
 			if err != nil {
+				// debug level since this is very common: the cache item was registered with a finalizer
+				// that has been finalized since then and is therefore no longer accepting any calls
 				logger.Debug("cache failed to de-register callback in finalizer",
 					tag.Error(err), tag.ShardID(item.shardId))
 			}

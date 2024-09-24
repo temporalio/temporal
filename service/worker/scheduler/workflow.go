@@ -1337,6 +1337,7 @@ func (s *scheduler) startWorkflow(
 			Header:                   newWorkflow.Header,
 			LastCompletionResult:     lastCompletionResult,
 			ContinuedFailure:         continuedFailure,
+			UserMetadata:             newWorkflow.UserMetadata,
 		},
 	}
 	for {

@@ -155,7 +155,7 @@ type (
 
 		pendingSignalRequestedIDs map[string]struct{} // Set of signaled requestIds
 		updateSignalRequestedIDs  map[string]struct{} // Set of signaled requestIds since last update
-		deleteSignalRequestedIDs  map[string]struct{} // Deleted signaled requestId
+		deleteSignalRequestedIDs  map[string]struct{} // Deleted signaled requestId since last update
 
 		executionInfo  *persistencespb.WorkflowExecutionInfo // Workflow mutable state info.
 		executionState *persistencespb.WorkflowExecutionState
@@ -167,6 +167,8 @@ type (
 		// Running approximate total size of mutable state fields (except buffered events) when written to DB in bytes.
 		// Buffered events are added to this value when calling GetApproximatePersistedSize.
 		approximateSize int
+		// Total number of tomestones tracked in mutable state
+		totalTombstones int
 		// Buffer events from DB
 		bufferEventsInDB []*historypb.HistoryEvent
 		// Indicates the workflow state in DB, can be used to calculate
@@ -269,6 +271,7 @@ func NewMutableState(
 		deleteSignalRequestedIDs:  make(map[string]struct{}),
 
 		approximateSize:          0,
+		totalTombstones:          0,
 		currentVersion:           namespaceEntry.FailoverVersion(),
 		bufferEventsInDB:         nil,
 		stateInDB:                enumsspb.WORKFLOW_EXECUTION_STATE_VOID,
@@ -307,7 +310,6 @@ func NewMutableState(
 
 		LastCompletedWorkflowTaskStartedEventId: common.EmptyEventID,
 
-		StartTime:              timestamppb.New(startTime),
 		VersionHistories:       versionhistory.NewVersionHistories(&historyspb.VersionHistory{}),
 		ExecutionStats:         &persistencespb.ExecutionStats{HistorySize: 0},
 		SubStateMachinesByType: make(map[string]*persistencespb.StateMachineMap),
@@ -350,7 +352,9 @@ func NewMutableStateFromDB(
 	dbRecord *persistencespb.WorkflowMutableState,
 	dbRecordVersion int64,
 ) (*MutableStateImpl, error) {
-	startTime := timestamp.TimeValue(dbRecord.ExecutionState.StartTime)
+	// startTime will be overridden by DB record
+	startTime := time.Time{}
+
 	mutableState := NewMutableState(
 		shard,
 		eventsCache,
@@ -413,10 +417,19 @@ func NewMutableStateFromDB(
 		mutableState.approximateSize += len(requestID)
 	}
 
+	for _, tombstoneBatch := range dbRecord.ExecutionInfo.SubStateMachineTombstoneBatches {
+		mutableState.totalTombstones += len(tombstoneBatch.StateMachineTombstones)
+	}
+
 	mutableState.approximateSize += dbRecord.ExecutionState.Size() - mutableState.executionState.Size()
 	mutableState.executionState = dbRecord.ExecutionState
 	mutableState.approximateSize += dbRecord.ExecutionInfo.Size() - mutableState.executionInfo.Size()
 	mutableState.executionInfo = dbRecord.ExecutionInfo
+
+	// StartTime was moved from ExecutionInfo to executionState
+	if mutableState.executionState.StartTime == nil && dbRecord.ExecutionInfo.StartTime != nil {
+		mutableState.executionState.StartTime = dbRecord.ExecutionInfo.StartTime
+	}
 
 	mutableState.hBuilder = historybuilder.New(
 		mutableState.timeSource,
@@ -1021,11 +1034,11 @@ func (ms *MutableStateImpl) GetUpdateOutcome(
 	if ms.executionInfo.UpdateInfos == nil {
 		return nil, serviceerror.NewNotFound("update not found")
 	}
-	rec, ok := ms.executionInfo.UpdateInfos[updateID]
+	ui, ok := ms.executionInfo.UpdateInfos[updateID]
 	if !ok {
 		return nil, serviceerror.NewNotFound("update not found")
 	}
-	completion := rec.GetCompletion()
+	completion := ui.GetCompletion()
 	if completion == nil {
 		return nil, serviceerror.NewInternal("update has not completed")
 	}
@@ -1784,6 +1797,10 @@ func (ms *MutableStateImpl) GetPendingSignalExternalInfos() map[int64]*persisten
 	return ms.pendingSignalInfoIDs
 }
 
+func (ms *MutableStateImpl) GetPendingSignalRequestedIds() []string {
+	return convert.StringSetToSlice(ms.pendingSignalRequestedIDs)
+}
+
 func (ms *MutableStateImpl) HadOrHasWorkflowTask() bool {
 	return ms.workflowTaskManager.HadOrHasWorkflowTask()
 }
@@ -1913,7 +1930,7 @@ func (ms *MutableStateImpl) IsSignalRequested(
 }
 
 func (ms *MutableStateImpl) IsWorkflowPendingOnWorkflowTaskBackoff() bool {
-	workflowTaskBackoff := timestamp.TimeValue(ms.executionInfo.GetExecutionTime()).After(timestamp.TimeValue(ms.executionInfo.GetStartTime()))
+	workflowTaskBackoff := timestamp.TimeValue(ms.executionInfo.GetExecutionTime()).After(timestamp.TimeValue(ms.executionState.GetStartTime()))
 	if workflowTaskBackoff && !ms.HadOrHasWorkflowTask() {
 		return true
 	}
@@ -2073,7 +2090,7 @@ func (ms *MutableStateImpl) addWorkflowExecutionStartedEventForContinueAsNew(
 
 func (ms *MutableStateImpl) ContinueAsNewMinBackoff(backoffDuration *durationpb.Duration) *durationpb.Duration {
 	// lifetime of previous execution
-	lifetime := ms.timeSource.Now().Sub(ms.executionInfo.StartTime.AsTime().UTC())
+	lifetime := ms.timeSource.Now().Sub(ms.executionState.StartTime.AsTime().UTC())
 	if ms.executionInfo.ExecutionTime != nil {
 		lifetime = ms.timeSource.Now().Sub(ms.executionInfo.ExecutionTime.AsTime().UTC())
 	}
@@ -2127,7 +2144,7 @@ func (ms *MutableStateImpl) AddWorkflowExecutionStartedEventWithOptions(
 	}
 
 	event := ms.hBuilder.AddWorkflowExecutionStartedEvent(
-		ms.executionInfo.StartTime.AsTime(),
+		ms.executionState.StartTime.AsTime(),
 		startRequest,
 		resetPoints,
 		prevRunID,
@@ -2261,7 +2278,7 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionStartedEvent(
 	}
 
 	ms.executionInfo.ExecutionTime = timestamppb.New(
-		ms.executionInfo.StartTime.AsTime().Add(event.GetFirstWorkflowTaskBackoff().AsDuration()),
+		ms.executionState.StartTime.AsTime().Add(event.GetFirstWorkflowTaskBackoff().AsDuration()),
 	)
 
 	ms.executionInfo.Attempt = event.GetAttempt()
@@ -2276,7 +2293,7 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionStartedEvent(
 	if workflowRunTimeoutDuration != 0 {
 		firstWorkflowTaskDelayDuration := event.GetFirstWorkflowTaskBackoff().AsDuration()
 		workflowRunTimeoutDuration = workflowRunTimeoutDuration + firstWorkflowTaskDelayDuration
-		workflowRunTimeoutTime = ms.executionInfo.StartTime.AsTime().Add(workflowRunTimeoutDuration)
+		workflowRunTimeoutTime = ms.executionState.StartTime.AsTime().Add(workflowRunTimeoutDuration)
 
 		workflowExecutionTimeoutTime := timestamp.TimeValue(ms.executionInfo.WorkflowExecutionExpirationTime)
 		if !workflowExecutionTimeoutTime.IsZero() && workflowRunTimeoutTime.After(workflowExecutionTimeoutTime) {
@@ -5214,6 +5231,7 @@ func (ms *MutableStateImpl) closeTransaction(
 	if err := ms.closeTransactionUpdateTransitionHistory(
 		transactionPolicy,
 		workflowEventsSeq,
+		bufferEvents,
 	); err != nil {
 		return closeTransactionResult{}, err
 	}
@@ -5221,6 +5239,8 @@ func (ms *MutableStateImpl) closeTransaction(
 	ms.closeTransactionTrackLastUpdateVersionedTransition(
 		transactionPolicy,
 	)
+
+	ms.closeTransactionTrackTombstones(transactionPolicy)
 
 	if err := ms.closeTransactionPrepareTasks(
 		transactionPolicy,
@@ -5318,6 +5338,7 @@ func (ms *MutableStateImpl) closeTransactionHandleSpeculativeWorkflowTask(
 func (ms *MutableStateImpl) closeTransactionUpdateTransitionHistory(
 	transactionPolicy TransactionPolicy,
 	workflowEventsSeq []*persistence.WorkflowEvents,
+	newBufferEvents []*historypb.HistoryEvent,
 ) error {
 	if len(workflowEventsSeq) > 0 {
 		lastEvents := workflowEventsSeq[len(workflowEventsSeq)-1].Events
@@ -5340,7 +5361,12 @@ func (ms *MutableStateImpl) closeTransactionUpdateTransitionHistory(
 		return nil
 	}
 
-	if !ms.HSM().Dirty() && len(workflowEventsSeq) == 0 && len(ms.syncActivityTasks) == 0 {
+	// TODO: treat changes for transient workflow task or signalRequestID removal as state transition as well.
+	// Those changes are not replicated today.
+	if !ms.HSM().Dirty() &&
+		len(workflowEventsSeq) == 0 &&
+		len(newBufferEvents) == 0 &&
+		len(ms.syncActivityTasks) == 0 {
 		return nil
 	}
 
@@ -5361,7 +5387,7 @@ func (ms *MutableStateImpl) closeTransactionTrackLastUpdateVersionedTransition(
 		return
 	}
 
-	if len(ms.executionInfo.TransitionHistory) == 0 {
+	if !ms.transitionHistoryEnabled {
 		// transition history is not enabled
 		return
 	}
@@ -5408,6 +5434,83 @@ func (ms *MutableStateImpl) closeTransactionTrackLastUpdateVersionedTransition(
 	}
 
 	// LastUpdateVersionTransition for HSM nodes already updated when transitioning the nodes.
+}
+
+func (ms *MutableStateImpl) closeTransactionTrackTombstones(
+	transactionPolicy TransactionPolicy,
+) {
+	if transactionPolicy != TransactionPolicyActive {
+		// Passive/Replication logic will update tombstone list when applying mutable state
+		// snapshot or mutation.
+		return
+	}
+
+	if !ms.transitionHistoryEnabled {
+		// transition history is not enabled
+		return
+	}
+
+	var tombstones []*persistencespb.StateMachineTombstone
+	for scheduledEventID := range ms.deleteActivityInfos {
+		tombstones = append(tombstones, &persistencespb.StateMachineTombstone{
+			StateMachineKey: &persistencespb.StateMachineTombstone_ActivityScheduledEventId{
+				ActivityScheduledEventId: scheduledEventID,
+			},
+		})
+	}
+	for timerID := range ms.deleteTimerInfos {
+		tombstones = append(tombstones, &persistencespb.StateMachineTombstone{
+			StateMachineKey: &persistencespb.StateMachineTombstone_TimerId{
+				TimerId: timerID,
+			},
+		})
+	}
+	for initiatedEventId := range ms.deleteChildExecutionInfos {
+		tombstones = append(tombstones, &persistencespb.StateMachineTombstone{
+			StateMachineKey: &persistencespb.StateMachineTombstone_ChildExecutionInitiatedEventId{
+				ChildExecutionInitiatedEventId: initiatedEventId,
+			},
+		})
+	}
+	for initiatedEventId := range ms.deleteRequestCancelInfos {
+		tombstones = append(tombstones, &persistencespb.StateMachineTombstone{
+			StateMachineKey: &persistencespb.StateMachineTombstone_RequestCancelInitiatedEventId{
+				RequestCancelInitiatedEventId: initiatedEventId,
+			},
+		})
+	}
+	for initiatedEventId := range ms.deleteSignalInfos {
+		tombstones = append(tombstones, &persistencespb.StateMachineTombstone{
+			StateMachineKey: &persistencespb.StateMachineTombstone_SignalExternalInitiatedEventId{
+				SignalExternalInitiatedEventId: initiatedEventId,
+			},
+		})
+	}
+	// Entire signalRequestedIDs will be synced if updated, so we don't track individual signalRequestedID tombstone.
+	// TODO: Track signalRequestedID tombstone when we support syncing partial signalRequestedIDs.
+	// This requires tracking the lastUpdateVersionedTransition for each signalRequestedID,
+	// which is not supported by today's DB schema.
+	// TODO: we don't delete updateInfo and StateMachine today. Track them here when we do.
+
+	tombstoneBatch := &persistencespb.StateMachineTombstoneBatch{
+		VersionedTransition:    ms.executionInfo.TransitionHistory[len(ms.executionInfo.TransitionHistory)-1],
+		StateMachineTombstones: tombstones,
+	}
+	ms.executionInfo.SubStateMachineTombstoneBatches = append(ms.executionInfo.SubStateMachineTombstoneBatches, tombstoneBatch)
+
+	ms.totalTombstones += len(tombstones)
+	ms.capTombstoneCount()
+}
+
+// capTombstoneCount limits the total number of tombstones stored in the mutable state.
+// This method should be called whenever tombstone batch list is updated or synced.
+func (ms *MutableStateImpl) capTombstoneCount() {
+	tombstoneCountLimit := ms.config.MutableStateTombstoneCountLimit()
+	for ms.totalTombstones > tombstoneCountLimit &&
+		len(ms.executionInfo.SubStateMachineTombstoneBatches) > 0 {
+		ms.totalTombstones -= len(ms.executionInfo.SubStateMachineTombstoneBatches[0].StateMachineTombstones)
+		ms.executionInfo.SubStateMachineTombstoneBatches = ms.executionInfo.SubStateMachineTombstoneBatches[1:]
+	}
 }
 
 func (ms *MutableStateImpl) closeTransactionPrepareTasks(
@@ -6137,6 +6240,14 @@ func (ms *MutableStateImpl) RefreshExpirationTimeoutTask(ctx context.Context) er
 	weTimeout := timestamp.DurationValue(executionInfo.WorkflowExecutionTimeout)
 	if weTimeout > 0 {
 		executionInfo.WorkflowExecutionExpirationTime = timestamp.TimeNowPtrUtcAddDuration(weTimeout)
+	}
+	wrTimeout := timestamp.DurationValue(executionInfo.WorkflowRunTimeout)
+	if wrTimeout != 0 {
+		executionInfo.WorkflowRunExpirationTime = timestamp.TimeNowPtrUtcAddDuration(wrTimeout)
+
+		if weTimeout > 0 && executionInfo.WorkflowRunExpirationTime.AsTime().After(executionInfo.WorkflowExecutionExpirationTime.AsTime()) {
+			executionInfo.WorkflowRunExpirationTime = executionInfo.WorkflowExecutionExpirationTime
+		}
 	}
 
 	return RefreshTasksForWorkflowStart(ctx, ms, ms.taskGenerator, EmptyVersionedTransition)

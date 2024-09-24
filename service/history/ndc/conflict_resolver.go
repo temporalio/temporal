@@ -166,7 +166,7 @@ func (r *ConflictResolverImpl) rebuild(
 
 	rebuildMutableState, _, err := r.stateRebuilder.Rebuild(
 		ctx,
-		timestamp.TimeValue(executionInfo.StartTime),
+		timestamp.TimeValue(executionState.StartTime),
 		workflowKey,
 		replayVersionHistory.GetBranchToken(),
 		lastItem.GetEventId(),
@@ -191,10 +191,6 @@ func (r *ConflictResolverImpl) rebuild(
 	}
 
 	// set the current branch index to target branch index
-	// set the version history back
-	//
-	// caller can use the IsVersionHistoriesRebuilt function in VersionHistories
-	// telling whether mutable state is rebuilt, before apply new history events
 	if err := versionhistory.SetCurrentVersionHistoryIndex(versionHistories, branchIndex); err != nil {
 		return nil, err
 	}

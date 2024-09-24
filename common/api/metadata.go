@@ -113,6 +113,7 @@ var (
 		"GetSearchAttributes":                {Scope: ScopeCluster, Access: AccessReadOnly},
 		"RespondQueryTaskCompleted":          {Scope: ScopeNamespace, Access: AccessWrite},
 		"ResetStickyTaskQueue":               {Scope: ScopeNamespace, Access: AccessWrite},
+		"ShutdownWorker":                     {Scope: ScopeNamespace, Access: AccessWrite},
 		"ExecuteMultiOperation":              {Scope: ScopeNamespace, Access: AccessWrite},
 		"QueryWorkflow":                      {Scope: ScopeNamespace, Access: AccessReadOnly},
 		"DescribeWorkflowExecution":          {Scope: ScopeNamespace, Access: AccessReadOnly},
@@ -138,6 +139,7 @@ var (
 		"StopBatchOperation":                 {Scope: ScopeNamespace, Access: AccessWrite},
 		"DescribeBatchOperation":             {Scope: ScopeNamespace, Access: AccessReadOnly},
 		"ListBatchOperations":                {Scope: ScopeNamespace, Access: AccessReadOnly},
+		"UpdateActivityOptionsById":          {Scope: ScopeNamespace, Access: AccessWrite},
 	}
 	operatorServiceMetadata = map[string]MethodMetadata{
 		"AddSearchAttributes":      {Scope: ScopeNamespace, Access: AccessAdmin},

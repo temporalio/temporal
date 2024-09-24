@@ -27,6 +27,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+
 	enumspb "go.temporal.io/api/enums/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 )
@@ -126,14 +127,6 @@ func TestNormalizeAndValidate(t *testing.T) {
 			defaultVal:       "",
 			maxIDLengthLimit: 100,
 			expectedError:    "taskQueue \"\\xff\\xfe\\xfd\" is not a valid UTF-8 string",
-			expectedKind:     enumspb.TASK_QUEUE_KIND_STICKY,
-		},
-		{
-			name:             "Sticky queue with empty normal name",
-			taskQueue:        &taskqueuepb.TaskQueue{Name: "sticky", Kind: enumspb.TASK_QUEUE_KIND_STICKY, NormalName: ""},
-			defaultVal:       "",
-			maxIDLengthLimit: 100,
-			expectedError:    "taskQueue is not set",
 			expectedKind:     enumspb.TASK_QUEUE_KIND_STICKY,
 		},
 		{

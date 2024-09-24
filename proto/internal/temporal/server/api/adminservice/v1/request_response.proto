@@ -35,6 +35,7 @@ import "temporal/api/version/v1/message.proto";
 import "temporal/api/workflow/v1/message.proto";
 import "temporal/api/namespace/v1/message.proto";
 import "temporal/api/replication/v1/message.proto";
+import "temporal/api/taskqueue/v1/message.proto";
 
 import "temporal/server/api/cluster/v1/message.proto";
 import "temporal/server/api/common/v1/dlq.proto";
@@ -49,6 +50,8 @@ import "temporal/server/api/persistence/v1/cluster_metadata.proto";
 import "temporal/server/api/persistence/v1/executions.proto";
 import "temporal/server/api/persistence/v1/workflow_mutable_state.proto";
 import "temporal/server/api/persistence/v1/tasks.proto";
+import "temporal/server/api/persistence/v1/hsm.proto";
+import "temporal/server/api/taskqueue/v1/message.proto";
 
 message RebuildMutableStateRequest {
   string namespace = 1;
@@ -559,4 +562,50 @@ message DeepHealthCheckRequest {
 
 message DeepHealthCheckResponse {
   temporal.server.api.enums.v1.HealthState state = 1;
+}
+
+message SyncWorkflowStateRequest {
+  string namespace_id = 1;
+  temporal.api.common.v1.WorkflowExecution execution = 2;
+  temporal.server.api.persistence.v1.VersionedTransition versioned_transition = 3;
+  temporal.server.api.history.v1.VersionHistories version_histories = 4;
+  int32 target_cluster_id = 5;
+}
+
+message SyncWorkflowStateResponse {
+  oneof attributes {
+    replication.v1.SyncWorkflowStateMutationAttributes mutation = 1;
+    replication.v1.SyncWorkflowStateSnapshotAttributes snapshot = 2;
+  }
+  repeated temporal.api.common.v1.DataBlob event_batches = 3;
+  replication.v1.NewRunInfo new_run_info = 4;
+}
+
+message GenerateLastHistoryReplicationTasksRequest {
+  string namespace = 1;
+  temporal.api.common.v1.WorkflowExecution execution = 2;
+}
+
+message GenerateLastHistoryReplicationTasksResponse {
+  int64 state_transition_count = 1;
+  int64 history_length = 2;
+}
+
+message DescribeTaskQueuePartitionRequest {
+  string namespace = 1;
+  temporal.server.api.taskqueue.v1.TaskQueuePartition task_queue_partition = 2;
+  // Absent means unversioned queue. Ignored for sticky partitions.
+  temporal.api.taskqueue.v1.TaskQueueVersionSelection build_ids = 3;
+}
+
+message InternalTaskQueueStatus {
+  int64 read_level = 1;
+  int64 ack_level = 2;
+  temporal.api.taskqueue.v1.TaskIdBlock task_id_block = 3;
+  int64 read_buffer_length = 4;
+}
+
+message DescribeTaskQueuePartitionResponse {
+  // contains k-v pairs of the type: buildID -> TaskQueueVersionInfoInternal
+  map<string, temporal.server.api.taskqueue.v1.TaskQueueVersionInfoInternal> versions_info_internal = 1;
 }

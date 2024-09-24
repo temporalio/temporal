@@ -29,7 +29,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	enumspb "go.temporal.io/server/api/enums/v1"
@@ -44,6 +43,7 @@ import (
 	"go.temporal.io/server/service/history/queues/queuestest"
 	"go.temporal.io/server/service/history/replication"
 	"go.temporal.io/server/service/history/tests"
+	"go.uber.org/mock/gomock"
 )
 
 type (
