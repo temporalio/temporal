@@ -36,6 +36,7 @@ type (
 	}
 
 	kvpair struct {
+		valid bool
 		key   Key
 		value any
 	}
@@ -51,7 +52,8 @@ func (d *MemoryClient) GetValue(key Key) []ConstrainedValue {
 	defer d.lock.RUnlock()
 
 	for i := len(d.overrides) - 1; i >= 0; i-- {
-		if v := d.overrides[i].value; v != nil && d.overrides[i].key == key {
+		if d.overrides[i].valid && d.overrides[i].key == key {
+			v := d.overrides[i].value
 			if value, ok := v.([]ConstrainedValue); ok {
 				return value
 			}
@@ -72,7 +74,7 @@ func (d *MemoryClient) OverrideValue(key Key, value any) (cleanup func()) {
 	var idx atomic.Int64
 	idx.Store(int64(len(d.overrides)))
 
-	d.overrides = append(d.overrides, kvpair{key: key, value: value})
+	d.overrides = append(d.overrides, kvpair{valid: true, key: key, value: value})
 
 	return func() {
 		// only do this once
@@ -87,10 +89,10 @@ func (d *MemoryClient) remove(idx int) {
 	defer d.lock.Unlock()
 
 	// mark this pair deleted
-	d.overrides[idx].value = nil
+	d.overrides[idx] = kvpair{}
 
 	// pop all deleted pairs
-	for l := len(d.overrides); l > 0 && d.overrides[l-1].value == nil; l = len(d.overrides) {
+	for l := len(d.overrides); l > 0 && !d.overrides[l-1].valid; l = len(d.overrides) {
 		d.overrides = d.overrides[:l-1]
 	}
 }
