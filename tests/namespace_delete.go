@@ -70,9 +70,6 @@ type (
 	}
 )
 
-// 0x8f01 is invalid UTF-8
-const invalidUTF8 = "\n\x8f\x01\n\x0ejunk\x12data"
-
 func (s *namespaceTestSuite) SetupSuite() {
 	s.logger = log.NewTestLogger()
 	s.testClusterFactory = testcore.NewTestClusterFactory()
@@ -124,12 +121,12 @@ func (s *namespaceTestSuite) Test_NamespaceDelete_InvalidUTF8() {
 
 	ctx, cancel := rpc.NewContextWithTimeoutAndVersionHeaders(10000 * time.Second)
 	defer cancel()
-	s.False(utf8.Valid([]byte(invalidUTF8)))
+	s.False(utf8.Valid([]byte(testcore.InvalidUTF8)))
 	retention := 24 * time.Hour
 	_, err := s.frontendClient.RegisterNamespace(ctx, &workflowservice.RegisterNamespaceRequest{
 		Namespace:                        "valid-utf8", // we verify internally that these must be valid
-		Description:                      invalidUTF8,
-		Data:                             map[string]string{invalidUTF8: invalidUTF8},
+		Description:                      testcore.InvalidUTF8,
+		Data:                             map[string]string{testcore.InvalidUTF8: testcore.InvalidUTF8},
 		WorkflowExecutionRetentionPeriod: durationpb.New(retention),
 		HistoryArchivalState:             enumspb.ARCHIVAL_STATE_DISABLED,
 		VisibilityArchivalState:          enumspb.ARCHIVAL_STATE_DISABLED,

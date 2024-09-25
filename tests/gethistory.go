@@ -61,6 +61,10 @@ type RawHistoryClientSuite struct {
 	testcore.ClientFunctionalSuite
 }
 
+type GetHistoryFunctionalSuite struct {
+	testcore.FunctionalSuite
+}
+
 func (s *RawHistorySuite) SetupSuite() {
 	dynamicConfigOverrides := map[dynamicconfig.Key]any{
 		dynamicconfig.SendRawWorkflowHistory.Key(): true,
@@ -80,7 +84,7 @@ func (s *RawHistorySuite) SetupTest() {
 	s.HistoryRequire = historyrequire.New(s.T())
 }
 
-func (s *RawHistorySuite) TestGetWorkflowExecutionHistory_All() {
+func (s *GetHistoryFunctionalSuite) TestGetWorkflowExecutionHistory_All() {
 	workflowID := "functional-get-workflow-history-events-long-poll-test-all"
 	workflowTypeName := "functional-get-workflow-history-events-long-poll-test-all-type"
 	taskqueueName := "functional-get-workflow-history-events-long-poll-test-all-taskqueue"
@@ -166,7 +170,7 @@ func (s *RawHistorySuite) TestGetWorkflowExecutionHistory_All() {
 			Execution: &commonpb.WorkflowExecution{
 				WorkflowId: workflowID,
 			},
-			// since the page size have essential no relation with number of events..
+			// since the page size have essentially no relation with number of events.
 			// so just use a really larger number, to test whether long poll works
 			MaximumPageSize: 100,
 			WaitNewEvent:    isLongPoll,
@@ -253,7 +257,7 @@ func (s *RawHistorySuite) TestGetWorkflowExecutionHistory_All() {
 }
 
 // Note: not *RawHistorySuite. WHY???
-func (s *RawHistorySuite) TestGetWorkflowExecutionHistory_Close() {
+func (s *GetHistoryFunctionalSuite) TestGetWorkflowExecutionHistory_Close() {
 	workflowID := "functional-get-workflow-history-events-long-poll-test-close"
 	workflowTypeName := "functional-get-workflow-history-events-long-poll-test-close-type"
 	taskqueueName := "functional-get-workflow-history-events-long-poll-test-close-taskqueue"

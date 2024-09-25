@@ -70,7 +70,7 @@ type (
 		suite.Suite
 
 		testClusterFactory          testcore.TestClusterFactory
-		standByReplicationTasksChan chan *repicationpb.ReplicationTask
+		standByReplicationTasksChan chan *replicationspb.ReplicationTask
 		mockAdminClient             map[string]adminservice.AdminServiceClient
 		namespace                   namespace.Name
 		namespaceID                 namespace.ID

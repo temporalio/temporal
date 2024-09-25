@@ -26,7 +26,7 @@ package tests
 
 import (
 	"context"
-	testbase "go.temporal.io/server/tests/testcore"
+
 	"net/http"
 	"sync"
 	"time"
@@ -36,10 +36,11 @@ import (
 	"go.temporal.io/server/common/authorization"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/rpc"
+	"go.temporal.io/server/tests/testcore"
 )
 
 type TLSFunctionalSuite struct {
-	testbase.FunctionalTestBase
+	testcore.FunctionalTestBase
 	sdkClient sdkclient.Client
 }
 
@@ -86,7 +87,7 @@ func (s *TLSFunctionalSuite) TestGRPCMTLS() {
 	// Confirm auth info as expected
 	authInfo, ok := calls.Load("/temporal.api.workflowservice.v1.WorkflowService/ListOpenWorkflowExecutions")
 	s.Require().True(ok)
-	s.Require().Equal(testbase.TlsCertCommonName, authInfo.(*authorization.AuthInfo).TLSSubject.CommonName)
+	s.Require().Equal(testcore.TlsCertCommonName, authInfo.(*authorization.AuthInfo).TLSSubject.CommonName)
 }
 
 func (s *TLSFunctionalSuite) TestHTTPMTLS() {
@@ -118,7 +119,7 @@ func (s *TLSFunctionalSuite) TestHTTPMTLS() {
 	// Confirm auth info as expected
 	authInfo, ok := calls.Load("/temporal.api.workflowservice.v1.WorkflowService/ListWorkflowExecutions")
 	s.Require().True(ok)
-	s.Require().Equal(testbase.TlsCertCommonName, authInfo.(*authorization.AuthInfo).TLSSubject.CommonName)
+	s.Require().Equal(testcore.TlsCertCommonName, authInfo.(*authorization.AuthInfo).TLSSubject.CommonName)
 }
 
 func (s *TLSFunctionalSuite) trackAuthInfoByCall() *sync.Map {

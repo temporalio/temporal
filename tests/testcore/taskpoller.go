@@ -120,9 +120,6 @@ func WithRetries(c int) PollAndProcessWorkflowTaskOptionFunc {
 }
 func WithoutRetries(o *PollAndProcessWorkflowTaskOptions)           { o.Retries = 1 }
 func WithForceNewWorkflowTask(o *PollAndProcessWorkflowTaskOptions) { o.ForceNewWorkflowTask = true }
-func WithQueryResult(r *querypb.WorkflowQueryResult) PollAndProcessWorkflowTaskOptionFunc {
-	return func(o *PollAndProcessWorkflowTaskOptions) { o.QueryResult = r }
-}
 
 func (p *TaskPoller) PollAndProcessWorkflowTask(funcs ...PollAndProcessWorkflowTaskOptionFunc) (res PollAndProcessWorkflowTaskResponse, err error) {
 	opts := defaultPollAndProcessWorkflowTaskOptions
