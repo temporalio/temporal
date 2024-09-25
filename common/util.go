@@ -373,12 +373,6 @@ func IsInternalError(err error) bool {
 	return errors.As(err, &internalErr)
 }
 
-// IsDataLossError checks if the error is a data loss error.
-func IsDataLossError(err error) bool {
-	var internalErr *serviceerror.DataLoss
-	return errors.As(err, &internalErr)
-}
-
 // IsNotFoundError checks if the error is a not found error.
 func IsNotFoundError(err error) bool {
 	var notFoundErr *serviceerror.NotFound

@@ -1100,7 +1100,7 @@ type (
 
 		// The below are history V2 APIs
 		// V2 regards history events growing as a tree, decoupled from workflow concepts
-		// For Temporal, twfork(reset), treeID will be the runID that it forks from.
+		// For Temporal, treeID is new runID, except for fork(reset), treeID will be the runID that it forks from.
 
 		// AppendHistoryNodes add a node to history node table
 		AppendHistoryNodes(ctx context.Context, request *AppendHistoryNodesRequest) (*AppendHistoryNodesResponse, error)
