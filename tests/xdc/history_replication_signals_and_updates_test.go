@@ -133,7 +133,7 @@ func (s *hrsuTestSuite) SetupSuite() {
 	s.dynamicConfigOverrides = map[dynamicconfig.Key]any{
 		dynamicconfig.EnableReplicationStream.Key(): true,
 	}
-	s.logger = log.NewNoopLogger()
+	s.logger = log.NewTestLogger()
 	s.setupSuite(
 		[]string{"cluster1", "cluster2"},
 		tests.WithFxOptionsForService(primitives.WorkerService,

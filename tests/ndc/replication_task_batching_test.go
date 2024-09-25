@@ -92,7 +92,7 @@ func TestNDCReplicationTaskBatching(t *testing.T) {
 }
 
 func (s *NDCReplicationTaskBatchingTestSuite) SetupSuite() {
-	s.logger = log.NewNoopLogger()
+	s.logger = log.NewTestLogger()
 	s.serializer = serialization.NewSerializer()
 	s.testClusterFactory = tests.NewTestClusterFactory()
 	s.passiveClusterName = "cluster-b"
