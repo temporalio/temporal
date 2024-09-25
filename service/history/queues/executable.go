@@ -340,11 +340,16 @@ func (e *executableImpl) Execute() (retErr error) {
 }
 
 func (e *executableImpl) writeToDLQ(ctx context.Context) error {
+
+	currentClusterName := e.clusterMetadata.GetCurrentClusterName()
+	numShards := e.clusterMetadata.GetAllClusterInfo()[currentClusterName].ShardCount
+
 	start := e.timeSource.Now()
 	err := e.dlqWriter.WriteTaskToDLQ(
 		ctx,
-		e.clusterMetadata.GetCurrentClusterName(),
-		e.clusterMetadata.GetCurrentClusterName(),
+		currentClusterName,
+		currentClusterName,
+		tasks.GetShardIDForTask(e.Task, int(numShards)),
 		e.GetTask(),
 	)
 	if err != nil {

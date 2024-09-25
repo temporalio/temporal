@@ -79,6 +79,7 @@ type (
 
 		replicationTask   *replicationspb.HistoryTaskAttributes
 		sourceClusterName string
+		sourceShardKey    ClusterShardKey
 
 		taskID                     int64
 		task                       *ExecutableHistoryTask
@@ -191,6 +192,10 @@ func (s *executableHistoryTaskSuite) SetupTest() {
 		EventsBatches: s.eventsBlobs,
 	}
 	s.sourceClusterName = cluster.TestCurrentClusterName
+	s.sourceShardKey = ClusterShardKey{
+		ClusterID: int32(cluster.TestCurrentClusterInitialFailoverVersion),
+		ShardID:   rand.Int31(),
+	}
 
 	s.task = NewExecutableHistoryTask(
 		s.processToolBox,
@@ -198,6 +203,7 @@ func (s *executableHistoryTaskSuite) SetupTest() {
 		time.Unix(0, rand.Int63()),
 		s.replicationTask,
 		s.sourceClusterName,
+		s.sourceShardKey,
 		enumsspb.TASK_PRIORITY_HIGH,
 		nil,
 	)
@@ -567,11 +573,10 @@ func (s *executableHistoryTaskSuite) generateTwoBatchableTasks() (*ExecutableHis
 	runId := uuid.NewString()
 	workflowKeyCurrent := definition.NewWorkflowKey(namespaceId, workflowId, runId)
 	workflowKeyIncoming := definition.NewWorkflowKey(namespaceId, workflowId, runId)
-	sourceCluster := uuid.NewString()
 	sourceTaskId := int64(111)
 	incomingTaskId := int64(120)
-	currentTask := s.buildExecutableHistoryTask(currentEvent, nil, "", sourceTaskId, currentVersionHistoryItems, workflowKeyCurrent, sourceCluster)
-	incomingTask := s.buildExecutableHistoryTask(incomingEvent, nil, "", incomingTaskId, incomingVersionHistoryItems, workflowKeyIncoming, sourceCluster)
+	currentTask := s.buildExecutableHistoryTask(currentEvent, nil, "", sourceTaskId, currentVersionHistoryItems, workflowKeyCurrent)
+	incomingTask := s.buildExecutableHistoryTask(incomingEvent, nil, "", incomingTaskId, incomingVersionHistoryItems, workflowKeyIncoming)
 
 	resultTask, batched := currentTask.BatchWith(incomingTask)
 
@@ -600,7 +605,6 @@ func (s *executableHistoryTaskSuite) buildExecutableHistoryTask(
 	taskId int64,
 	versionHistoryItems []*history.VersionHistoryItem,
 	workflowKey definition.WorkflowKey,
-	sourceCluster string,
 ) *ExecutableHistoryTask {
 	eventsBlob, _ := s.eventSerializer.SerializeEvents(events[0], enumspb.ENCODING_TYPE_PROTO3)
 	newRunEventsBlob, _ := s.eventSerializer.SerializeEvents(newRunEvents, enumspb.ENCODING_TYPE_PROTO3)
@@ -616,13 +620,14 @@ func (s *executableHistoryTaskSuite) buildExecutableHistoryTask(
 	}
 	executableTask := NewMockExecutableTask(s.controller)
 	executableTask.EXPECT().TaskID().Return(taskId).AnyTimes()
-	executableTask.EXPECT().SourceClusterName().Return(sourceCluster).AnyTimes()
+	executableTask.EXPECT().SourceClusterName().Return(s.sourceClusterName).AnyTimes()
 	executableHistoryTask := NewExecutableHistoryTask(
 		s.processToolBox,
 		taskId,
 		time.Unix(0, rand.Int63()),
 		replicationTaskAttribute,
-		sourceCluster,
+		s.sourceClusterName,
+		s.sourceShardKey,
 		enumsspb.TASK_PRIORITY_HIGH,
 		nil,
 	)

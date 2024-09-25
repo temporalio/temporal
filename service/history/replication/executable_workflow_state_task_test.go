@@ -72,6 +72,7 @@ type (
 
 		replicationTask   *replicationspb.SyncWorkflowStateTaskAttributes
 		sourceClusterName string
+		sourceShardKey    ClusterShardKey
 
 		taskID int64
 		task   *ExecutableWorkflowStateTask
@@ -114,6 +115,10 @@ func (s *executableWorkflowStateTaskSuite) SetupTest() {
 		},
 	}
 	s.sourceClusterName = cluster.TestCurrentClusterName
+	s.sourceShardKey = ClusterShardKey{
+		ClusterID: int32(cluster.TestCurrentClusterInitialFailoverVersion),
+		ShardID:   rand.Int31(),
+	}
 	s.mockExecutionManager = persistence.NewMockExecutionManager(s.controller)
 	s.config = tests.NewDynamicConfig()
 
@@ -135,6 +140,7 @@ func (s *executableWorkflowStateTaskSuite) SetupTest() {
 		time.Unix(0, rand.Int63()),
 		s.replicationTask,
 		s.sourceClusterName,
+		s.sourceShardKey,
 		enumsspb.TASK_PRIORITY_HIGH,
 		nil,
 	)

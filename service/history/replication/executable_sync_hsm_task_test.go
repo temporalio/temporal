@@ -72,6 +72,7 @@ type (
 
 		replicationTask   *replicationspb.SyncHSMAttributes
 		sourceClusterName string
+		sourceShardKey    ClusterShardKey
 
 		taskID int64
 		task   *ExecutableSyncHSMTask
@@ -130,6 +131,10 @@ func (s *executableSyncHSMTaskSuite) SetupTest() {
 		},
 	}
 	s.sourceClusterName = cluster.TestCurrentClusterName
+	s.sourceShardKey = ClusterShardKey{
+		ClusterID: int32(cluster.TestCurrentClusterInitialFailoverVersion),
+		ShardID:   rand.Int31(),
+	}
 	s.mockExecutionManager = persistence.NewMockExecutionManager(s.controller)
 	s.config = tests.NewDynamicConfig()
 
@@ -152,6 +157,7 @@ func (s *executableSyncHSMTaskSuite) SetupTest() {
 		taskCreationTime,
 		s.replicationTask,
 		s.sourceClusterName,
+		s.sourceShardKey,
 		enumsspb.TASK_PRIORITY_HIGH,
 		nil,
 	)

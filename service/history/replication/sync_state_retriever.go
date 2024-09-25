@@ -44,6 +44,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/versionhistory"
+	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/hsm"
@@ -131,7 +132,7 @@ func (s *SyncStateRetrieverImpl) GetSyncWorkflowStateArtifact(
 	if err != nil {
 		return nil, err
 	}
-	mu := wfLease.GetMutableState()
+	mutableState := wfLease.GetMutableState()
 	releaseFunc := wfLease.GetReleaseFn()
 
 	defer func() {
@@ -140,8 +141,18 @@ func (s *SyncStateRetrieverImpl) GetSyncWorkflowStateArtifact(
 		}
 	}()
 
-	if err != nil {
-		return nil, err
+	transitionHistory := mutableState.GetExecutionInfo().TransitionHistory
+	if len(transitionHistory) == 0 {
+		// workflow essentially in an unknown state
+		// e.g. an event-based replication task got applied to the workflow after
+		// a syncVersionedTransition task is converted and streamed to target.
+		return nil, serviceerrors.NewSyncState(
+			"Transition history disable.",
+			namespaceID,
+			execution.WorkflowId,
+			execution.RunId,
+			nil,
+		)
 	}
 
 	shouldReturnMutation := func() bool {
@@ -149,11 +160,11 @@ func (s *SyncStateRetrieverImpl) GetSyncWorkflowStateArtifact(
 			return false
 		}
 		// not on the same branch
-		if workflow.TransitionHistoryStalenessCheck(mu.GetExecutionInfo().TransitionHistory, versionedTransition) != nil {
+		if workflow.TransitionHistoryStalenessCheck(transitionHistory, versionedTransition) != nil {
 			return false
 		}
-		tombstoneBatch := mu.GetExecutionInfo().SubStateMachineTombstoneBatches
-		if tombstoneBatch == nil || len(tombstoneBatch) == 0 {
+		tombstoneBatch := mutableState.GetExecutionInfo().SubStateMachineTombstoneBatches
+		if len(tombstoneBatch) == 0 {
 			return true
 		}
 		if workflow.CompareVersionedTransition(tombstoneBatch[0].VersionedTransition, versionedTransition) <= 0 {
@@ -169,14 +180,14 @@ func (s *SyncStateRetrieverImpl) GetSyncWorkflowStateArtifact(
 
 	result := &SyncStateResult{}
 	if shouldReturnMutation() {
-		mutation, err := s.getMutation(mu, versionedTransition)
+		mutation, err := s.getMutation(mutableState, versionedTransition)
 		if err != nil {
 			return nil, err
 		}
 		result.Type = Mutation
 		result.Mutation = mutation
 	} else {
-		snapshot, err := s.getSnapshot(mu)
+		snapshot, err := s.getSnapshot(mutableState)
 		if err != nil {
 			return nil, err
 		}
@@ -184,9 +195,9 @@ func (s *SyncStateRetrieverImpl) GetSyncWorkflowStateArtifact(
 		result.Snapshot = snapshot
 	}
 
-	newRunId := mu.GetExecutionInfo().NewExecutionRunId
-	sourceVersionHistories := versionhistory.CopyVersionHistories(mu.GetExecutionInfo().VersionHistories)
-	sourceTransitionHistory := workflow.CopyVersionedTransitions(mu.GetExecutionInfo().TransitionHistory)
+	newRunId := mutableState.GetExecutionInfo().NewExecutionRunId
+	sourceVersionHistories := versionhistory.CopyVersionHistories(mutableState.GetExecutionInfo().VersionHistories)
+	sourceTransitionHistory := workflow.CopyVersionedTransitions(transitionHistory)
 	releaseFunc(nil)
 	releaseFunc = nil
 
@@ -237,7 +248,7 @@ func (s *SyncStateRetrieverImpl) getNewRunInfo(ctx context.Context, namespaceId 
 	if err != nil {
 		return nil, err
 	}
-	mu, err := wfCtx.LoadMutableState(ctx, s.shardContext)
+	mutableState, err := wfCtx.LoadMutableState(ctx, s.shardContext)
 	switch err.(type) {
 	case nil:
 	case *serviceerror.NotFound:
@@ -249,7 +260,7 @@ func (s *SyncStateRetrieverImpl) getNewRunInfo(ctx context.Context, namespaceId 
 	default:
 		return nil, err
 	}
-	versionHistory, err := versionhistory.GetCurrentVersionHistory(mu.GetExecutionInfo().VersionHistories)
+	versionHistory, err := versionhistory.GetCurrentVersionHistory(mutableState.GetExecutionInfo().VersionHistories)
 	if err != nil {
 		return nil, err
 	}

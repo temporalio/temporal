@@ -74,6 +74,7 @@ func TestDLQWriter_ErrGetClusterMetadata(t *testing.T) {
 		context.Background(),
 		"source-cluster",
 		"target-cluster",
+		1,
 		&tasks.WorkflowTask{},
 	)
 	assert.ErrorIs(t, err, queues.ErrGetClusterMetadata)
@@ -109,6 +110,7 @@ func TestDLQWriter_ErrGetNamespaceName(t *testing.T) {
 		context.Background(),
 		"source-cluster",
 		"target-cluster",
+		tasks.GetShardIDForTask(task, 100),
 		task,
 	)
 	require.NoError(t, err)
@@ -158,6 +160,7 @@ func TestDLQWriter_Ok(t *testing.T) {
 		context.Background(),
 		"source-cluster",
 		"target-cluster",
+		tasks.GetShardIDForTask(task, 100),
 		task,
 	)
 	require.NoError(t, err)

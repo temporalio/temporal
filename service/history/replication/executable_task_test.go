@@ -72,6 +72,7 @@ type (
 		metricsHandler          metrics.Handler
 		logger                  log.Logger
 		sourceCluster           string
+		sourceShardKey          ClusterShardKey
 		eagerNamespaceRefresher *MockEagerNamespaceRefresher
 		config                  *configs.Config
 		namespaceId             string
@@ -107,6 +108,10 @@ func (s *executableTaskSuite) SetupTest() {
 	s.metricsHandler = metrics.NoopMetricsHandler
 	s.logger = log.NewNoopLogger()
 	s.sourceCluster = "some cluster"
+	s.sourceShardKey = ClusterShardKey{
+		ClusterID: int32(cluster.TestCurrentClusterInitialFailoverVersion),
+		ShardID:   rand.Int31(),
+	}
 	s.eagerNamespaceRefresher = NewMockEagerNamespaceRefresher(s.controller)
 	s.config = tests.NewDynamicConfig()
 	s.remoteHistoryFetcher = eventhandler.NewMockHistoryPaginatedFetcher(s.controller)
@@ -137,6 +142,7 @@ func (s *executableTaskSuite) SetupTest() {
 		creationTime,
 		receivedTime,
 		s.sourceCluster,
+		s.sourceShardKey,
 		enumsspb.TASK_PRIORITY_UNSPECIFIED,
 		&replicationspb.ReplicationTask{
 			RawTaskInfo: &persistencespb.ReplicationTaskInfo{
@@ -659,6 +665,7 @@ func (s *executableTaskSuite) TestGetNamespaceInfo_NamespaceFailoverNotSync_Sync
 		now,
 		now,
 		s.sourceCluster,
+		s.sourceShardKey,
 		enumsspb.TASK_PRIORITY_UNSPECIFIED,
 		&replicationspb.ReplicationTask{
 			TaskType:            enumsspb.REPLICATION_TASK_TYPE_NAMESPACE_TASK,
@@ -736,6 +743,7 @@ func (s *executableTaskSuite) TestGetNamespaceInfo_NamespaceFailoverBehind_Still
 		now,
 		now,
 		s.sourceCluster,
+		s.sourceShardKey,
 		enumsspb.TASK_PRIORITY_UNSPECIFIED,
 		&replicationspb.ReplicationTask{
 			TaskType:            enumsspb.REPLICATION_TASK_TYPE_NAMESPACE_TASK,

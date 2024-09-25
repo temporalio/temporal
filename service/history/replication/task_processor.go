@@ -374,7 +374,7 @@ func (p *taskProcessorImpl) handleReplicationDLQTask(
 		metrics.InstanceTag(convert.Int32ToString(p.shard.GetShardID())))
 	// The following is guaranteed to success or retry forever until processor is shutdown.
 	return backoff.ThrottleRetry(func() error {
-		err := writeTaskToDLQ(ctx, p.dlqWriter, p.shard, request.SourceClusterName, request.TaskInfo)
+		err := writeTaskToDLQ(ctx, p.dlqWriter, p.sourceShardID, request.SourceClusterName, p.shard.GetShardID(), request.TaskInfo)
 		if err != nil {
 			p.logger.Error("failed to enqueue replication task to DLQ", tag.Error(err))
 			metrics.ReplicationDLQFailed.With(p.metricsHandler).Record(

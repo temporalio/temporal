@@ -82,6 +82,7 @@ func NewExecutableHistoryTask(
 	taskCreationTime time.Time,
 	task *replicationspb.HistoryTaskAttributes,
 	sourceClusterName string,
+	sourceShardKey ClusterShardKey,
 	priority enumsspb.TaskPriority,
 	replicationTask *replicationspb.ReplicationTask,
 ) *ExecutableHistoryTask {
@@ -100,6 +101,7 @@ func NewExecutableHistoryTask(
 			taskCreationTime,
 			time.Now().UTC(),
 			sourceClusterName,
+			sourceShardKey,
 			priority,
 			replicationTask,
 		),
@@ -222,41 +224,6 @@ func (e *ExecutableHistoryTask) HandleErr(err error) error {
 }
 
 func (e *ExecutableHistoryTask) MarkPoisonPill() error {
-	if e.markPoisonPillAttempts >= MarkPoisonPillMaxAttempts {
-
-		events, newRunEvents, err := e.getDeserializedEvents()
-		taskInfo := &persistencespb.ReplicationTaskInfo{
-			NamespaceId: e.NamespaceID,
-			WorkflowId:  e.WorkflowID,
-			RunId:       e.RunID,
-			TaskId:      e.ExecutableTask.TaskID(),
-			TaskType:    enumsspb.TASK_TYPE_REPLICATION_HISTORY,
-			NewRunId:    e.newRunID,
-		}
-		if err != nil {
-			taskInfo.FirstEventId = -1
-			taskInfo.NextEventId = -1
-			taskInfo.Version = -1
-			e.Logger.Error("MarkPoisonPill reached max attempts, deserialize failed",
-				tag.SourceCluster(e.SourceClusterName()),
-				tag.ReplicationTask(taskInfo),
-				tag.Error(err),
-			)
-			return nil
-		}
-		taskInfo.FirstEventId = events[0][0].GetEventId()
-		taskInfo.NextEventId = events[len(events)-1][len(events[len(events)-1])-1].GetEventId() + 1
-		taskInfo.Version = events[0][0].GetVersion()
-		e.Logger.Error("MarkPoisonPill reached max attempts",
-			tag.SourceCluster(e.SourceClusterName()),
-			tag.ReplicationTask(taskInfo),
-			tag.NewAnyTag("NewRunFirstEventId", newRunEvents[0].GetEventId()),
-			tag.NewAnyTag("NewRunLastEventId", newRunEvents[len(newRunEvents)-1].GetEventId()),
-		)
-		return nil
-	}
-	e.markPoisonPillAttempts++
-
 	shardContext, err := e.ShardController.GetShardByNamespaceWorkflow(
 		namespace.ID(e.NamespaceID),
 		e.WorkflowID,
@@ -265,56 +232,48 @@ func (e *ExecutableHistoryTask) MarkPoisonPill() error {
 		return err
 	}
 
-	eventBatches := [][]*historypb.HistoryEvent{}
-	for _, eventsBlob := range e.eventsBlobs {
-		events, err := e.EventSerializer.DeserializeEvents(eventsBlob)
-		if err != nil {
-			e.Logger.Error("unable to enqueue history replication task to DLQ, ser/de error",
-				tag.ShardID(shardContext.GetShardID()),
-				tag.WorkflowNamespaceID(e.NamespaceID),
-				tag.WorkflowID(e.WorkflowID),
-				tag.WorkflowRunID(e.RunID),
-				tag.TaskID(e.ExecutableTask.TaskID()),
-				tag.Error(err),
-			)
-			return nil
-		} else if len(events) == 0 {
-			e.Logger.Error("unable to enqueue history replication task to DLQ, no events",
-				tag.ShardID(shardContext.GetShardID()),
-				tag.WorkflowNamespaceID(e.NamespaceID),
-				tag.WorkflowID(e.WorkflowID),
-				tag.WorkflowRunID(e.RunID),
-				tag.TaskID(e.ExecutableTask.TaskID()),
-			)
-			return nil
+	if e.ReplicationTask().GetRawTaskInfo() == nil {
+		eventBatches := [][]*historypb.HistoryEvent{}
+		for _, eventsBlob := range e.eventsBlobs {
+			events, err := e.EventSerializer.DeserializeEvents(eventsBlob)
+			if err != nil {
+				e.Logger.Error("unable to enqueue history replication task to DLQ, ser/de error",
+					tag.ShardID(shardContext.GetShardID()),
+					tag.WorkflowNamespaceID(e.NamespaceID),
+					tag.WorkflowID(e.WorkflowID),
+					tag.WorkflowRunID(e.RunID),
+					tag.TaskID(e.ExecutableTask.TaskID()),
+					tag.Error(err),
+				)
+				return nil
+			}
+
+			if len(events) == 0 {
+				e.Logger.Error("unable to enqueue history replication task to DLQ, no events",
+					tag.ShardID(shardContext.GetShardID()),
+					tag.WorkflowNamespaceID(e.NamespaceID),
+					tag.WorkflowID(e.WorkflowID),
+					tag.WorkflowRunID(e.RunID),
+					tag.TaskID(e.ExecutableTask.TaskID()),
+				)
+				return nil
+			}
+			eventBatches = append(eventBatches, events)
 		}
-		eventBatches = append(eventBatches, events)
+
+		e.ReplicationTask().RawTaskInfo = &persistencespb.ReplicationTaskInfo{
+			NamespaceId:  e.NamespaceID,
+			WorkflowId:   e.WorkflowID,
+			RunId:        e.RunID,
+			TaskId:       e.ExecutableTask.TaskID(),
+			TaskType:     enumsspb.TASK_TYPE_REPLICATION_HISTORY,
+			FirstEventId: eventBatches[0][0].GetEventId(),
+			NextEventId:  eventBatches[len(eventBatches)-1][len(eventBatches[len(eventBatches)-1])-1].GetEventId() + 1,
+			Version:      eventBatches[0][0].GetVersion(),
+		}
 	}
 
-	// TODO: GetShardID will break GetDLQReplicationMessages we need to handle DLQ for cross shard replication.
-	taskInfo := &persistencespb.ReplicationTaskInfo{
-		NamespaceId:  e.NamespaceID,
-		WorkflowId:   e.WorkflowID,
-		RunId:        e.RunID,
-		TaskId:       e.ExecutableTask.TaskID(),
-		TaskType:     enumsspb.TASK_TYPE_REPLICATION_HISTORY,
-		FirstEventId: eventBatches[0][0].GetEventId(),
-		NextEventId:  eventBatches[len(eventBatches)-1][len(eventBatches[len(eventBatches)-1])-1].GetEventId() + 1,
-		Version:      eventBatches[0][0].GetVersion(),
-	}
-
-	e.Logger.Error("enqueue history replication task to DLQ",
-		tag.ShardID(shardContext.GetShardID()),
-		tag.WorkflowNamespaceID(e.NamespaceID),
-		tag.WorkflowID(e.WorkflowID),
-		tag.WorkflowRunID(e.RunID),
-		tag.TaskID(e.ExecutableTask.TaskID()),
-	)
-
-	ctx, cancel := newTaskContext(e.NamespaceID, e.Config.ReplicationTaskApplyTimeout())
-	defer cancel()
-
-	return writeTaskToDLQ(ctx, e.DLQWriter, shardContext, e.SourceClusterName(), taskInfo)
+	return e.ExecutableTask.MarkPoisonPill()
 }
 
 func (e *ExecutableHistoryTask) getDeserializedEvents() (_ [][]*historypb.HistoryEvent, _ []*historypb.HistoryEvent, retError error) {

@@ -77,6 +77,7 @@ type (
 
 		replicationTask   *replicationspb.SyncActivityTaskAttributes
 		sourceClusterName string
+		sourceShardKey    ClusterShardKey
 
 		taskID int64
 		task   *ExecutableActivityStateTask
@@ -126,6 +127,10 @@ func (s *executableActivityStateTaskSuite) SetupTest() {
 		VersionHistory:     &history.VersionHistory{},
 	}
 	s.sourceClusterName = cluster.TestCurrentClusterName
+	s.sourceShardKey = ClusterShardKey{
+		ClusterID: int32(cluster.TestCurrentClusterInitialFailoverVersion),
+		ShardID:   rand.Int31(),
+	}
 	s.taskID = rand.Int63()
 	s.mockExecutionManager = persistence.NewMockExecutionManager(s.controller)
 	s.task = NewExecutableActivityStateTask(
@@ -144,6 +149,7 @@ func (s *executableActivityStateTaskSuite) SetupTest() {
 		time.Unix(0, rand.Int63()),
 		s.replicationTask,
 		s.sourceClusterName,
+		s.sourceShardKey,
 		enumsspb.TASK_PRIORITY_HIGH,
 		nil,
 	)
@@ -373,6 +379,7 @@ func (s *executableActivityStateTaskSuite) TestBatchedTask_ShouldBatchTogether_A
 		time.Unix(0, rand.Int63()),
 		replicationAttribute1,
 		s.sourceClusterName,
+		s.sourceShardKey,
 		enumsspb.TASK_PRIORITY_HIGH,
 		nil,
 	)
@@ -395,6 +402,7 @@ func (s *executableActivityStateTaskSuite) TestBatchedTask_ShouldBatchTogether_A
 		time.Unix(0, rand.Int63()),
 		replicationAttribute2,
 		s.sourceClusterName,
+		s.sourceShardKey,
 		enumsspb.TASK_PRIORITY_HIGH,
 		nil,
 	)
@@ -449,6 +457,7 @@ func (s *executableActivityStateTaskSuite) TestBatchWith_InvalidBatchTask_Should
 		time.Unix(0, rand.Int63()),
 		replicationAttribute1,
 		s.sourceClusterName,
+		s.sourceShardKey,
 		enumsspb.TASK_PRIORITY_HIGH,
 		nil,
 	)
@@ -470,6 +479,7 @@ func (s *executableActivityStateTaskSuite) TestBatchWith_InvalidBatchTask_Should
 		time.Unix(0, rand.Int63()),
 		replicationAttribute2,
 		s.sourceClusterName,
+		s.sourceShardKey,
 		enumsspb.TASK_PRIORITY_HIGH,
 		nil,
 	)

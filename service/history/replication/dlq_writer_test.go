@@ -61,14 +61,15 @@ func TestNewExecutionManagerDLQWriter(t *testing.T) {
 		TaskId: 21,
 	}
 	err := writer.WriteTaskToDLQ(context.Background(), replication.DLQWriteRequest{
-		ShardID:             13,
+		SourceShardID:       13,
+		TargetShardID:       26,
 		SourceCluster:       "test-source-cluster",
 		ReplicationTaskInfo: replicationTaskInfo,
 	})
 	require.NoError(t, err)
 	require.Len(t, executionManager.requests, 1)
 	request := executionManager.requests[0]
-	assert.Equal(t, 13, int(request.ShardID))
+	assert.Equal(t, 26, int(request.ShardID))
 	assert.Equal(t, "test-source-cluster", request.SourceClusterName)
 	assert.Equal(t, replicationTaskInfo, request.TaskInfo)
 }
@@ -118,7 +119,7 @@ func TestNewDLQWriterAdapter(t *testing.T) {
 				TaskId:      21,
 			}
 			err := writer.WriteTaskToDLQ(context.Background(), replication.DLQWriteRequest{
-				ShardID:             13,
+				SourceShardID:       13,
 				SourceCluster:       "test-source-cluster",
 				ReplicationTaskInfo: replicationTaskInfo,
 			})

@@ -101,6 +101,10 @@ func (s *executableNoopTaskSuite) SetupTest() {
 		rand.Int63(),
 		time.Unix(0, rand.Int63()),
 		"sourceCluster",
+		ClusterShardKey{
+			ClusterID: int32(cluster.TestCurrentClusterInitialFailoverVersion),
+			ShardID:   rand.Int31(),
+		},
 	)
 }
 

@@ -67,6 +67,7 @@ func NewExecutableActivityStateTask(
 	taskCreationTime time.Time,
 	task *replicationspb.SyncActivityTaskAttributes,
 	sourceClusterName string,
+	sourceShardKey ClusterShardKey,
 	priority enumsspb.TaskPriority,
 	replicationTask *replicationspb.ReplicationTask,
 ) *ExecutableActivityStateTask {
@@ -81,6 +82,7 @@ func NewExecutableActivityStateTask(
 			taskCreationTime,
 			time.Now().UTC(),
 			sourceClusterName,
+			sourceShardKey,
 			priority,
 			replicationTask,
 		),
@@ -216,8 +218,8 @@ func (e *ExecutableActivityStateTask) HandleErr(err error) error {
 }
 
 func (e *ExecutableActivityStateTask) MarkPoisonPill() error {
-	if e.markPoisonPillAttempts >= MarkPoisonPillMaxAttempts {
-		replicationTaskInfo := &persistencespb.ReplicationTaskInfo{
+	if e.ReplicationTask().GetRawTaskInfo() == nil {
+		e.ReplicationTask().RawTaskInfo = &persistencespb.ReplicationTaskInfo{
 			NamespaceId:      e.NamespaceID,
 			WorkflowId:       e.WorkflowID,
 			RunId:            e.RunID,
@@ -226,46 +228,9 @@ func (e *ExecutableActivityStateTask) MarkPoisonPill() error {
 			ScheduledEventId: e.req.ScheduledEventId,
 			Version:          e.req.Version,
 		}
-		e.Logger.Error("MarkPoisonPill reached max attempts",
-			tag.SourceCluster(e.SourceClusterName()),
-			tag.ReplicationTask(replicationTaskInfo),
-			tag.ActivityInfo(e.req),
-		)
-		return nil
-	}
-	e.markPoisonPillAttempts++
-
-	shardContext, err := e.ShardController.GetShardByNamespaceWorkflow(
-		namespace.ID(e.NamespaceID),
-		e.WorkflowID,
-	)
-	if err != nil {
-		return err
 	}
 
-	// TODO: GetShardID will break GetDLQReplicationMessages we need to handle DLQ for cross shard replication.
-	replicationTaskInfo := &persistencespb.ReplicationTaskInfo{
-		NamespaceId:      e.NamespaceID,
-		WorkflowId:       e.WorkflowID,
-		RunId:            e.RunID,
-		TaskId:           e.ExecutableTask.TaskID(),
-		TaskType:         enumsspb.TASK_TYPE_REPLICATION_SYNC_ACTIVITY,
-		ScheduledEventId: e.req.ScheduledEventId,
-		Version:          e.req.Version,
-	}
-
-	e.Logger.Error("enqueue activity state replication task to DLQ",
-		tag.ShardID(shardContext.GetShardID()),
-		tag.WorkflowNamespaceID(e.NamespaceID),
-		tag.WorkflowID(e.WorkflowID),
-		tag.WorkflowRunID(e.RunID),
-		tag.TaskID(e.ExecutableTask.TaskID()),
-	)
-
-	ctx, cancel := newTaskContext(e.NamespaceID, e.Config.ReplicationTaskApplyTimeout())
-	defer cancel()
-
-	return writeTaskToDLQ(ctx, e.DLQWriter, shardContext, e.SourceClusterName(), replicationTaskInfo)
+	return e.ExecutableTask.MarkPoisonPill()
 }
 
 func (e *ExecutableActivityStateTask) BatchWith(incomingTask BatchableTask) (TrackableExecutableTask, bool) {
