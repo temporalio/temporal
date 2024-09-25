@@ -247,10 +247,10 @@ func newTemporal(t *testing.T, params *TemporalParams) *temporalImpl {
 		taskCategoryRegistry:             params.TaskCategoryRegistry,
 	}
 	for k, v := range staticOverrides {
-		impl.overrideDynamicConfigByKey(t, k, v)
+		impl.overrideDynamicConfig(t, k, v)
 	}
 	for k, v := range params.DynamicConfigOverrides {
-		impl.overrideDynamicConfigByKey(t, k, v)
+		impl.overrideDynamicConfig(t, k, v)
 	}
 	impl.overrideHistoryDynamicConfig(t)
 	return impl
@@ -870,36 +870,36 @@ func (c *temporalImpl) frontendConfigProvider() *config.Config {
 
 func (c *temporalImpl) overrideHistoryDynamicConfig(t *testing.T) {
 	if c.esConfig != nil {
-		c.overrideDynamicConfigByKey(t, dynamicconfig.SecondaryVisibilityWritingMode.Key(), visibility.SecondaryVisibilityWritingModeDual)
+		c.overrideDynamicConfig(t, dynamicconfig.SecondaryVisibilityWritingMode.Key(), visibility.SecondaryVisibilityWritingModeDual)
 	}
 	if c.historyConfig.HistoryCountLimitWarn != 0 {
-		c.overrideDynamicConfigByKey(t, dynamicconfig.HistoryCountLimitWarn.Key(), c.historyConfig.HistoryCountLimitWarn)
+		c.overrideDynamicConfig(t, dynamicconfig.HistoryCountLimitWarn.Key(), c.historyConfig.HistoryCountLimitWarn)
 	}
 	if c.historyConfig.HistoryCountLimitError != 0 {
-		c.overrideDynamicConfigByKey(t, dynamicconfig.HistoryCountLimitError.Key(), c.historyConfig.HistoryCountLimitError)
+		c.overrideDynamicConfig(t, dynamicconfig.HistoryCountLimitError.Key(), c.historyConfig.HistoryCountLimitError)
 	}
 	if c.historyConfig.HistorySizeLimitWarn != 0 {
-		c.overrideDynamicConfigByKey(t, dynamicconfig.HistorySizeLimitWarn.Key(), c.historyConfig.HistorySizeLimitWarn)
+		c.overrideDynamicConfig(t, dynamicconfig.HistorySizeLimitWarn.Key(), c.historyConfig.HistorySizeLimitWarn)
 	}
 	if c.historyConfig.HistorySizeLimitError != 0 {
-		c.overrideDynamicConfigByKey(t, dynamicconfig.HistorySizeLimitError.Key(), c.historyConfig.HistorySizeLimitError)
+		c.overrideDynamicConfig(t, dynamicconfig.HistorySizeLimitError.Key(), c.historyConfig.HistorySizeLimitError)
 	}
 	if c.historyConfig.BlobSizeLimitError != 0 {
-		c.overrideDynamicConfigByKey(t, dynamicconfig.BlobSizeLimitError.Key(), c.historyConfig.BlobSizeLimitError)
+		c.overrideDynamicConfig(t, dynamicconfig.BlobSizeLimitError.Key(), c.historyConfig.BlobSizeLimitError)
 	}
 	if c.historyConfig.BlobSizeLimitWarn != 0 {
-		c.overrideDynamicConfigByKey(t, dynamicconfig.BlobSizeLimitWarn.Key(), c.historyConfig.BlobSizeLimitWarn)
+		c.overrideDynamicConfig(t, dynamicconfig.BlobSizeLimitWarn.Key(), c.historyConfig.BlobSizeLimitWarn)
 	}
 	if c.historyConfig.MutableStateSizeLimitError != 0 {
-		c.overrideDynamicConfigByKey(t, dynamicconfig.MutableStateSizeLimitError.Key(), c.historyConfig.MutableStateSizeLimitError)
+		c.overrideDynamicConfig(t, dynamicconfig.MutableStateSizeLimitError.Key(), c.historyConfig.MutableStateSizeLimitError)
 	}
 	if c.historyConfig.MutableStateSizeLimitWarn != 0 {
-		c.overrideDynamicConfigByKey(t, dynamicconfig.MutableStateSizeLimitWarn.Key(), c.historyConfig.MutableStateSizeLimitWarn)
+		c.overrideDynamicConfig(t, dynamicconfig.MutableStateSizeLimitWarn.Key(), c.historyConfig.MutableStateSizeLimitWarn)
 	}
 
 	// For DeleteWorkflowExecution tests
-	c.overrideDynamicConfigByKey(t, dynamicconfig.TransferProcessorUpdateAckInterval.Key(), 1*time.Second)
-	c.overrideDynamicConfigByKey(t, dynamicconfig.VisibilityProcessorUpdateAckInterval.Key(), 1*time.Second)
+	c.overrideDynamicConfig(t, dynamicconfig.TransferProcessorUpdateAckInterval.Key(), 1*time.Second)
+	c.overrideDynamicConfig(t, dynamicconfig.VisibilityProcessorUpdateAckInterval.Key(), 1*time.Second)
 }
 
 func (c *temporalImpl) newRPCFactory(
@@ -1022,7 +1022,7 @@ func sdkClientFactoryProvider(
 	)
 }
 
-func (c *temporalImpl) overrideDynamicConfigByKey(t *testing.T, name dynamicconfig.Key, value any) func() {
+func (c *temporalImpl) overrideDynamicConfig(t *testing.T, name dynamicconfig.Key, value any) func() {
 	cleanup := c.dcClient.OverrideValue(name, value)
 	t.Cleanup(cleanup)
 	return cleanup

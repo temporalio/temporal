@@ -438,7 +438,7 @@ func (s *FunctionalTestBase) registerArchivalNamespace(archivalNamespace string)
 }
 
 func (s *FunctionalTestBase) OverrideDynamicConfig(setting dynamicconfig.GenericSetting, value any) (cleanup func()) {
-	return s.testCluster.host.overrideDynamicConfigByKey(s.T(), setting.Key(), value)
+	return s.testCluster.host.overrideDynamicConfig(s.T(), setting.Key(), value)
 }
 
 func (s *FunctionalTestBase) testWithMatchingBehavior(subtest func()) {
