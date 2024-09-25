@@ -173,6 +173,7 @@ type (
 		EnableArchiver   bool
 		EnableReplicator bool
 		NumWorkers       int
+		DisableWorker    bool // overrides NumWorkers
 	}
 
 	// TemporalParams contains everything needed to bootstrap Temporal
@@ -280,6 +281,9 @@ func newTemporal(t *testing.T, params *TemporalParams) *temporalImpl {
 	impl.historyConfig.NumHistoryHosts = max(minNodes, impl.historyConfig.NumHistoryHosts)
 	impl.matchingConfig.NumMatchingHosts = max(minNodes, impl.matchingConfig.NumMatchingHosts)
 	impl.workerConfig.NumWorkers = max(minNodes, impl.workerConfig.NumWorkers)
+	if impl.workerConfig.DisableWorker {
+		impl.workerConfig.NumWorkers = 0
+	}
 
 	impl.hostsByService = map[primitives.ServiceName]static.Hosts{
 		primitives.FrontendService: static.Hosts{All: impl.FrontendGRPCAddresses()},
