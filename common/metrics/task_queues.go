@@ -66,7 +66,7 @@ func GetPerTaskQueueScope(
 		append(tags, TaskQueueTypeTag(taskQueue.TaskType()))...)
 }
 
-// GetPerTaskQueuePartitionIDScope similar to GetPerTaskQueuePartitionTypeScope, except that the partition tag will
+// GetPerTaskQueuePartitionIDScope is similar to GetPerTaskQueuePartitionTypeScope, except that the partition tag will
 // hold the normal partition ID if partitionIDBreakdown is true.
 func GetPerTaskQueuePartitionIDScope(
 	handler Handler,
