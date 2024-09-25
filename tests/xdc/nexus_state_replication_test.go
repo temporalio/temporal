@@ -295,12 +295,12 @@ func (s *NexusStateReplicationSuite) TestNexusOperationCancelationReplicated() {
 	}
 
 	sdkClient1, err := sdkclient.Dial(sdkclient.Options{
-		HostPort:  s.cluster1.GetHost().FrontendGRPCAddress(),
+		HostPort:  s.cluster1.GetHost().FrontendGRPCAddresses()[0],
 		Namespace: ns,
 	})
 	s.NoError(err)
 	sdkClient2, err := sdkclient.Dial(sdkclient.Options{
-		HostPort:  s.cluster2.GetHost().FrontendGRPCAddress(),
+		HostPort:  s.cluster2.GetHost().FrontendGRPCAddresses()[0],
 		Namespace: ns,
 	})
 	s.NoError(err)

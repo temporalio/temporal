@@ -402,12 +402,6 @@ func (c *temporalImpl) GetFrontendNamespaceRegistries() []namespace.Registry {
 	return c.frontendNamespaceRegistries
 }
 
-func (c *temporalImpl) setupMockAdminClient(clientBean client.Bean) {
-	for cluster, client := range c.mockAdminClient {
-		clientBean.SetRemoteAdminClient(cluster, client)
-	}
-}
-
 func (c *temporalImpl) copyPersistenceConfig() config.Persistence {
 	persistenceConfig := copyPersistenceConfig(c.persistenceConfig)
 	if c.esConfig != nil {
@@ -432,10 +426,10 @@ func (c *temporalImpl) startFrontend() {
 		logger := log.With(c.logger, tag.Host(host))
 		var namespaceRegistry namespace.Registry
 		app := fx.New(
-			fx.Invoke(c.setupMockAdminClient),
 			fx.Supply(
 				c.copyPersistenceConfig(),
 				serviceName,
+				c.mockAdminClient,
 			),
 			fx.Provide(c.frontendConfigProvider),
 			fx.Provide(func() listenHostPort { return listenHostPort(host) }),
@@ -455,7 +449,7 @@ func (c *temporalImpl) startFrontend() {
 			fx.Provide(func() authorization.Authorizer { return c }),
 			fx.Provide(func() authorization.ClaimMapper { return c }),
 			fx.Provide(func() authorization.JWTAudienceMapper { return nil }),
-			fx.Provide(func() client.FactoryProvider { return client.NewFactoryProvider() }),
+			fx.Provide(c.newClientFactoryProvider),
 			fx.Provide(func() searchattribute.Mapper { return nil }),
 			// Comment the line above and uncomment the line below to test with search attributes mapper.
 			// fx.Provide(func() searchattribute.Mapper { return NewSearchAttributeTestMapper() }),
@@ -506,10 +500,10 @@ func (c *temporalImpl) startHistory() {
 	for _, host := range c.hostsByService[serviceName].All {
 		logger := log.With(c.logger, tag.Host(host))
 		app := fx.New(
-			fx.Invoke(c.setupMockAdminClient),
 			fx.Supply(
 				c.copyPersistenceConfig(),
 				serviceName,
+				c.mockAdminClient,
 			),
 			fx.Provide(c.GetMetricsHandler),
 			fx.Provide(func() listenHostPort { return listenHostPort(host) }),
@@ -523,7 +517,7 @@ func (c *temporalImpl) startHistory() {
 			fx.Provide(func() carchiver.ArchivalMetadata { return c.archiverMetadata }),
 			fx.Provide(func() provider.ArchiverProvider { return c.archiverProvider }),
 			fx.Provide(sdkClientFactoryProvider),
-			fx.Provide(func() client.FactoryProvider { return client.NewFactoryProvider() }),
+			fx.Provide(c.newClientFactoryProvider),
 			fx.Provide(func() searchattribute.Mapper { return nil }),
 			// Comment the line above and uncomment the line below to test with search attributes mapper.
 			// fx.Provide(func() searchattribute.Mapper { return NewSearchAttributeTestMapper() }),
@@ -564,10 +558,10 @@ func (c *temporalImpl) startMatching() {
 	for _, host := range c.hostsByService[serviceName].All {
 		logger := log.With(c.logger, tag.Host(host))
 		app := fx.New(
-			fx.Invoke(c.setupMockAdminClient),
 			fx.Supply(
 				c.copyPersistenceConfig(),
 				serviceName,
+				c.mockAdminClient,
 			),
 			fx.Provide(c.GetMetricsHandler),
 			fx.Provide(func() listenHostPort { return listenHostPort(host) }),
@@ -579,7 +573,7 @@ func (c *temporalImpl) startMatching() {
 			fx.Provide(func() *cluster.Config { return c.clusterMetadataConfig }),
 			fx.Provide(func() carchiver.ArchivalMetadata { return c.archiverMetadata }),
 			fx.Provide(func() provider.ArchiverProvider { return c.archiverProvider }),
-			fx.Provide(func() client.FactoryProvider { return client.NewFactoryProvider() }),
+			fx.Provide(c.newClientFactoryProvider),
 			fx.Provide(func() searchattribute.Mapper { return nil }),
 			fx.Provide(func() resolver.ServiceResolver { return resolver.NewNoopResolver() }),
 			fx.Provide(persistenceClient.FactoryProvider),
@@ -626,10 +620,10 @@ func (c *temporalImpl) startWorker() {
 		logger := log.With(c.logger, tag.Host(host))
 		var workerService *worker.Service
 		app := fx.New(
-			// fx.Invoke(c.setupMockAdminClient),
 			fx.Supply(
 				c.copyPersistenceConfig(),
 				serviceName,
+				c.mockAdminClient,
 			),
 			fx.Provide(c.GetMetricsHandler),
 			fx.Provide(func() listenHostPort { return listenHostPort(host) }),
@@ -643,7 +637,7 @@ func (c *temporalImpl) startWorker() {
 			fx.Provide(func() carchiver.ArchivalMetadata { return c.archiverMetadata }),
 			fx.Provide(func() provider.ArchiverProvider { return c.archiverProvider }),
 			fx.Provide(sdkClientFactoryProvider),
-			fx.Provide(func() client.FactoryProvider { return client.NewFactoryProvider() }),
+			fx.Provide(c.newClientFactoryProvider),
 			fx.Provide(func() searchattribute.Mapper { return nil }),
 			fx.Provide(func() resolver.ServiceResolver { return resolver.NewNoopResolver() }),
 			fx.Provide(persistenceClient.FactoryProvider),
@@ -797,6 +791,66 @@ func (c *temporalImpl) newRPCFactory(
 		nil,
 		monitor,
 	), nil
+}
+
+func (c *temporalImpl) newClientFactoryProvider(
+	config *cluster.Config,
+	mockAdminClient map[string]adminservice.AdminServiceClient,
+) client.FactoryProvider {
+	return &clientFactoryProvider{
+		config:          config,
+		mockAdminClient: mockAdminClient,
+	}
+}
+
+type clientFactoryProvider struct {
+	config          *cluster.Config
+	mockAdminClient map[string]adminservice.AdminServiceClient
+}
+
+func (p *clientFactoryProvider) NewFactory(
+	rpcFactory common.RPCFactory,
+	monitor membership.Monitor,
+	metricsHandler metrics.Handler,
+	dc *dynamicconfig.Collection,
+	numberOfHistoryShards int32,
+	logger log.Logger,
+	throttledLogger log.Logger,
+) client.Factory {
+	f := client.NewFactoryProvider().NewFactory(
+		rpcFactory,
+		monitor,
+		metricsHandler,
+		dc,
+		numberOfHistoryShards,
+		logger,
+		throttledLogger,
+	)
+	return &clientFactory{
+		Factory:         f,
+		config:          p.config,
+		mockAdminClient: p.mockAdminClient,
+	}
+}
+
+type clientFactory struct {
+	client.Factory
+	config          *cluster.Config
+	mockAdminClient map[string]adminservice.AdminServiceClient
+}
+
+// override just this one:
+func (f *clientFactory) NewRemoteAdminClientWithTimeout(rpcAddress string, timeout time.Duration, largeTimeout time.Duration) adminservice.AdminServiceClient {
+	var clusterName string
+	for name, info := range f.config.ClusterInformation {
+		if rpcAddress == info.RPCAddress {
+			clusterName = name
+		}
+	}
+	if mock, ok := f.mockAdminClient[clusterName]; ok {
+		return mock
+	}
+	return f.Factory.NewRemoteAdminClientWithTimeout(rpcAddress, timeout, largeTimeout)
 }
 
 func (c *temporalImpl) SetOnGetClaims(fn func(*authorization.AuthInfo) (*authorization.Claims, error)) {
