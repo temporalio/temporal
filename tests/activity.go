@@ -72,7 +72,6 @@ func (s *ActivityTestSuite) TestActivityScheduleToClose_FiredDuringBackoff() {
 		InitialInterval:    initialRetryInterval,
 		BackoffCoefficient: 1,
 		MaximumInterval:    time.Second * 10,
-		MaximumAttempts:    10,
 	}
 
 	var activityCompleted atomic.Int32
@@ -98,9 +97,8 @@ func (s *ActivityTestSuite) TestActivityScheduleToClose_FiredDuringBackoff() {
 
 	wfId := "functional-test-gethistoryreverse"
 	workflowOptions := sdkclient.StartWorkflowOptions{
-		ID:                 wfId,
-		TaskQueue:          s.taskQueue,
-		WorkflowRunTimeout: 10 * time.Second,
+		ID:        wfId,
+		TaskQueue: s.taskQueue,
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
