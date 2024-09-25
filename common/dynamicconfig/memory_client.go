@@ -26,48 +26,74 @@ package dynamicconfig
 
 import (
 	"sync"
+	"sync/atomic"
 )
 
-type MemoryClient struct {
-	lock      sync.RWMutex
-	overrides map[Key]any
-}
+type (
+	MemoryClient struct {
+		lock      sync.RWMutex
+		overrides []kvpair
+	}
+
+	kvpair struct {
+		key   Key
+		value any
+	}
+)
 
 func (d *MemoryClient) GetValue(name Key) []ConstrainedValue {
 	d.lock.RLock()
 	defer d.lock.RUnlock()
-	if v, ok := d.overrides[name]; ok {
-		if value, ok := v.([]ConstrainedValue); ok {
-			return value
+
+	for i := len(d.overrides) - 1; i >= 0; i-- {
+		if v := d.overrides[i].value; d.overrides[i].key == name && v != nil {
+			if value, ok := v.([]ConstrainedValue); ok {
+				return value
+			}
+			return []ConstrainedValue{{Value: v}}
 		}
-		return []ConstrainedValue{{Value: v}}
 	}
 	return nil
 }
 
-func (d *MemoryClient) OverrideValue(setting GenericSetting, value any) {
-	d.OverrideValueByKey(setting.Key(), value)
+func (d *MemoryClient) OverrideSetting(setting GenericSetting, value any) (cleanup func()) {
+	return d.OverrideValue(setting.Key(), value)
 }
 
-func (d *MemoryClient) OverrideValueByKey(name Key, value any) {
+func (d *MemoryClient) OverrideValue(name Key, value any) (cleanup func()) {
 	d.lock.Lock()
 	defer d.lock.Unlock()
-	d.overrides[name] = value
+
+	var idx atomic.Int32
+	idx.Store(int32(len(d.overrides)))
+
+	d.overrides = append(d.overrides, kvpair{
+		key:   name,
+		value: value,
+	})
+
+	return func() {
+		// only do this once
+		if removeIdx := int(idx.Swap(-1)); removeIdx >= 0 {
+			d.remove(removeIdx)
+		}
+	}
 }
 
-func (d *MemoryClient) RemoveOverride(setting GenericSetting) {
-	d.RemoveOverrideByKey(setting.Key())
-}
-
-func (d *MemoryClient) RemoveOverrideByKey(name Key) {
+func (d *MemoryClient) remove(idx int) {
 	d.lock.Lock()
 	defer d.lock.Unlock()
-	delete(d.overrides, name)
+
+	// mark this pair deleted
+	d.overrides[idx].value = nil
+
+	// pop all deleted pairs
+	for l := len(d.overrides); l > 0 && d.overrides[l-1].value == nil; l = len(d.overrides) {
+		d.overrides = d.overrides[:l-1]
+	}
 }
 
 // NewMemoryClient - returns a memory based dynamic config client
 func NewMemoryClient() *MemoryClient {
-	return &MemoryClient{
-		overrides: make(map[Key]any),
-	}
+	return &MemoryClient{}
 }
