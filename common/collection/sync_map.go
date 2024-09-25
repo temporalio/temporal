@@ -25,6 +25,7 @@
 package collection
 
 import (
+	"maps"
 	"sync"
 )
 
@@ -92,7 +93,7 @@ func (m *SyncMap[K, V]) Pop(key K) (value V, ok bool) {
 func (m *SyncMap[K, V]) PopAll() map[K]V {
 	m.Lock()
 	defer m.Unlock()
-	contents := m.contents
-	m.contents = make(map[K]V)
+	contents := maps.Clone(m.contents)
+	clear(m.contents)
 	return contents
 }
