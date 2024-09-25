@@ -51,7 +51,6 @@ type (
 		GetMatchingClient(namespaceIDToName NamespaceIDToNameFunc) (matchingservice.MatchingServiceClient, error)
 		GetFrontendClient() workflowservice.WorkflowServiceClient
 		GetRemoteAdminClient(string) (adminservice.AdminServiceClient, error)
-		SetRemoteAdminClient(string, adminservice.AdminServiceClient)
 		GetRemoteFrontendClient(string) (grpc.ClientConnInterface, workflowservice.WorkflowServiceClient, error)
 	}
 
@@ -191,16 +190,6 @@ func (h *clientBeanImpl) GetRemoteAdminClient(cluster string) (adminservice.Admi
 	return client, nil
 }
 
-func (h *clientBeanImpl) SetRemoteAdminClient(
-	cluster string,
-	client adminservice.AdminServiceClient,
-) {
-	h.adminClientsLock.Lock()
-	defer h.adminClientsLock.Unlock()
-
-	h.adminClients[cluster] = client
-}
-
 func (h *clientBeanImpl) GetRemoteFrontendClient(clusterName string) (grpc.ClientConnInterface, workflowservice.WorkflowServiceClient, error) {
 	h.frontendClientsLock.RLock()
 	client, ok := h.frontendClients[clusterName]
@@ -243,13 +232,6 @@ func (h *clientBeanImpl) GetRemoteFrontendClient(clusterName string) (grpc.Clien
 	}
 	h.frontendClients[clusterName] = client
 	return client.connection, client, nil
-}
-
-func (h *clientBeanImpl) setRemoteAdminClientLocked(
-	cluster string,
-	client adminservice.AdminServiceClient,
-) {
-	h.adminClients[cluster] = client
 }
 
 func (h *clientBeanImpl) lazyInitMatchingClient(namespaceIDToName NamespaceIDToNameFunc) (matchingservice.MatchingServiceClient, error) {
