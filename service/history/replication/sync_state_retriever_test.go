@@ -364,22 +364,13 @@ func (s *syncWorkflowStateSuite) TestGetNewRunInfo_NotFound() {
 }
 
 func (s *syncWorkflowStateSuite) TestGetSyncStateEvents() {
-	targetVersionHistories := &history.VersionHistories{
-		CurrentVersionHistoryIndex: 1,
-		Histories: []*history.VersionHistory{
-			{
-				BranchToken: []byte("target ranchToken1"),
-				Items: []*history.VersionHistoryItem{
-					{EventId: 1, Version: 10},
-					{EventId: 18, Version: 13},
-				},
-			},
-			{
-				BranchToken: []byte("target ranchToken2"),
-				Items: []*history.VersionHistoryItem{
-					{EventId: 10, Version: 10},
-				},
-			},
+	targetVersionHistoriesItems := [][]*history.VersionHistoryItem{
+		{
+			{EventId: 1, Version: 10},
+			{EventId: 18, Version: 13},
+		},
+		{
+			{EventId: 10, Version: 10},
 		},
 	}
 	sourceVersionHistories := &history.VersionHistories{
@@ -405,23 +396,17 @@ func (s *syncWorkflowStateSuite) TestGetSyncStateEvents() {
 			{Data: []byte("event1")}},
 	}, nil)
 
-	events, err := s.syncStateRetriever.getSyncStateEvents(context.Background(), targetVersionHistories, sourceVersionHistories)
+	events, err := s.syncStateRetriever.getSyncStateEvents(context.Background(), targetVersionHistoriesItems, sourceVersionHistories)
 
 	s.NoError(err)
 	s.NotNil(events)
 }
 
 func (s *syncWorkflowStateSuite) TestGetSyncStateEvents_EventsUpToDate_ReturnNothing() {
-	targetVersionHistories := &history.VersionHistories{
-		CurrentVersionHistoryIndex: 0,
-		Histories: []*history.VersionHistory{
-			{
-				BranchToken: []byte("target ranchToken1"),
-				Items: []*history.VersionHistoryItem{
-					{EventId: 1, Version: 10},
-					{EventId: 18, Version: 13},
-				},
-			},
+	targetVersionHistoriesItems := [][]*history.VersionHistoryItem{
+		{
+			{EventId: 1, Version: 10},
+			{EventId: 18, Version: 13},
 		},
 	}
 	sourceVersionHistories := &history.VersionHistories{
@@ -437,7 +422,7 @@ func (s *syncWorkflowStateSuite) TestGetSyncStateEvents_EventsUpToDate_ReturnNot
 		},
 	}
 
-	events, err := s.syncStateRetriever.getSyncStateEvents(context.Background(), targetVersionHistories, sourceVersionHistories)
+	events, err := s.syncStateRetriever.getSyncStateEvents(context.Background(), targetVersionHistoriesItems, sourceVersionHistories)
 
 	s.NoError(err)
 	s.Nil(events)

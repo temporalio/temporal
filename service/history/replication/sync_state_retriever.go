@@ -77,6 +77,14 @@ type (
 			targetVersionedTransition *persistencepb.VersionedTransition,
 			targetVersionHistories *history.VersionHistories,
 		) (*SyncStateResult, error)
+		GetSyncWorkflowStateArtifactFromMutableState(
+			ctx context.Context,
+			namespaceID string,
+			execution *commonpb.WorkflowExecution,
+			mutableState workflow.MutableState,
+			targetVersionedTransition *persistencepb.VersionedTransition,
+			targetVersionHistories [][]*history.VersionHistoryItem,
+		) (*SyncStateResult, error)
 	}
 
 	SyncStateRetrieverImpl struct {
@@ -104,7 +112,6 @@ func NewSyncStateRetriever(
 	}
 }
 
-//nolint:revive // cognitive complexity 28 (> max enabled 25)
 func (s *SyncStateRetrieverImpl) GetSyncWorkflowStateArtifact(
 	ctx context.Context,
 	namespaceID string,
@@ -140,10 +147,36 @@ func (s *SyncStateRetrieverImpl) GetSyncWorkflowStateArtifact(
 		}
 	}()
 
-	if err != nil {
-		return nil, err
+	var versionHistoriesItems [][]*history.VersionHistoryItem
+	if targetVersionHistories != nil {
+		for _, versionHistory := range targetVersionHistories.Histories {
+			versionHistoriesItems = append(versionHistoriesItems, versionHistory.Items)
+		}
 	}
 
+	return s.getSyncStateResult(ctx, namespaceID, execution, mu, targetCurrentVersionedTransition, versionHistoriesItems, &releaseFunc)
+}
+
+func (s *SyncStateRetrieverImpl) GetSyncWorkflowStateArtifactFromMutableState(
+	ctx context.Context,
+	namespaceID string,
+	execution *commonpb.WorkflowExecution,
+	mu workflow.MutableState,
+	targetCurrentVersionedTransition *persistencepb.VersionedTransition,
+	targetVersionHistories [][]*history.VersionHistoryItem,
+) (_ *SyncStateResult, retError error) {
+	return s.getSyncStateResult(ctx, namespaceID, execution, mu, targetCurrentVersionedTransition, targetVersionHistories, nil)
+}
+
+func (s *SyncStateRetrieverImpl) getSyncStateResult(
+	ctx context.Context,
+	namespaceID string,
+	execution *commonpb.WorkflowExecution,
+	mu workflow.MutableState,
+	targetCurrentVersionedTransition *persistencepb.VersionedTransition,
+	targetVersionHistories [][]*history.VersionHistoryItem,
+	cacheReleaseFunc *wcache.ReleaseCacheFunc,
+) (_ *SyncStateResult, retError error) {
 	shouldReturnMutation := func() bool {
 		if targetCurrentVersionedTransition == nil {
 			return false
@@ -187,8 +220,10 @@ func (s *SyncStateRetrieverImpl) GetSyncWorkflowStateArtifact(
 	newRunId := mu.GetExecutionInfo().NewExecutionRunId
 	sourceVersionHistories := versionhistory.CopyVersionHistories(mu.GetExecutionInfo().VersionHistories)
 	sourceTransitionHistory := workflow.CopyVersionedTransitions(mu.GetExecutionInfo().TransitionHistory)
-	releaseFunc(nil)
-	releaseFunc = nil
+	if cacheReleaseFunc != nil {
+		(*cacheReleaseFunc)(nil)
+		*cacheReleaseFunc = nil
+	}
 
 	if len(newRunId) > 0 {
 		newRunInfo, err := s.getNewRunInfo(ctx, namespace.ID(namespaceID), execution, newRunId)
@@ -350,12 +385,16 @@ func (s *SyncStateRetrieverImpl) getEventsBlob(ctx context.Context, branchToken 
 	return rawHistoryResponse.HistoryEventBlobs, nil
 }
 
-func (s *SyncStateRetrieverImpl) getSyncStateEvents(ctx context.Context, targetVersionHistories *history.VersionHistories, sourceVersionHistories *history.VersionHistories) ([]*commonpb.DataBlob, error) {
+func (s *SyncStateRetrieverImpl) getSyncStateEvents(ctx context.Context, targetVersionHistories [][]*history.VersionHistoryItem, sourceVersionHistories *history.VersionHistories) ([]*commonpb.DataBlob, error) {
+	if targetVersionHistories == nil {
+		// return nil, so target will retrieve the missing events from source
+		return nil, nil
+	}
 	sourceHistory, err := versionhistory.GetCurrentVersionHistory(sourceVersionHistories)
 	if err != nil {
 		return nil, err
 	}
-	lcaItem, _, err := versionhistory.FindLCAVersionHistoryItemAndIndex(targetVersionHistories, sourceHistory)
+	lcaItem, _, err := versionhistory.FindLCAVersionHistoryItemFromItems(targetVersionHistories, sourceHistory.Items)
 	if err != nil {
 		return nil, err
 	}

@@ -244,6 +244,7 @@ func NewEngineWithShardContext(
 			eventBlobCache,
 			replicationProgressCache,
 			executionManager,
+			syncStateRetriever,
 			logger,
 		)
 		historyEngImpl.nDCHistoryReplicator = ndc.NewHistoryReplicator(

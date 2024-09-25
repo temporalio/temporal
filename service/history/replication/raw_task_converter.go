@@ -624,6 +624,7 @@ func newSyncVersionedTransitionTaskConverter(
 		replicationCache:   replicationCache,
 		executionManager:   executionManager,
 		syncStateRetriever: syncStateRetriever,
+		shardID:            shardContext.GetShardID(),
 		logger:             logger,
 	}
 }
@@ -646,39 +647,70 @@ func (c *syncVersionedTransitionTaskConverter) convert(
 		}
 		return c.generateBackfillHistoryTask(ctx, taskInfo, targetClusterID)
 	}
-	var versionHistories []*historyspb.VersionHistory
-	for _, versionHistoryItems := range progress.eventVersionHistoryItems {
-		versionHistories = append(versionHistories, &historyspb.VersionHistory{
-			Items: versionHistoryItems,
-		})
+
+	var targetHistoryItems [][]*historyspb.VersionHistoryItem
+	if progress != nil {
+		targetHistoryItems = progress.eventVersionHistoryItems
 	}
-	result, err := c.syncStateRetriever.GetSyncWorkflowStateArtifact(
+
+	result, err := c.syncStateRetriever.GetSyncWorkflowStateArtifactFromMutableState(
 		ctx,
 		taskInfo.NamespaceID,
 		&commonpb.WorkflowExecution{
 			WorkflowId: taskInfo.WorkflowID,
 			RunId:      taskInfo.RunID,
 		},
-		taskInfo.VersionedTransition,
-		// TODO: Maybe change progress cache to store VersionHistories as we have more utility func to operate on version histories
-		&historyspb.VersionHistories{
-			Histories: versionHistories,
-		},
+		mutableState,
+		progress.LastSyncedTransition(),
+		targetHistoryItems,
 	)
 	if err != nil {
 		return nil, err
 	}
-	if result.Type == Mutation {
-
+	var taskAttr *replicationspb.SyncVersionedTransitionTaskAttributes
+	switch result.Type {
+	case Mutation:
+		taskAttr = &replicationspb.SyncVersionedTransitionTaskAttributes{
+			EventBatches: result.EventBlobs,
+			NewRunInfo:   result.NewRunInfo,
+			StateAttributes: &replicationspb.SyncVersionedTransitionTaskAttributes_SyncWorkflowStateMutationAttributes{
+				SyncWorkflowStateMutationAttributes: &replicationspb.SyncWorkflowStateMutationAttributes{
+					StateMutation:                     result.Mutation,
+					ExclusiveStartVersionedTransition: taskInfo.VersionedTransition,
+				},
+			},
+		}
+	case Snapshot:
+		taskAttr = &replicationspb.SyncVersionedTransitionTaskAttributes{
+			EventBatches: result.EventBlobs,
+			NewRunInfo:   result.NewRunInfo,
+			StateAttributes: &replicationspb.SyncVersionedTransitionTaskAttributes_SyncWorkflowStateSnapshotAttributes{
+				SyncWorkflowStateSnapshotAttributes: &replicationspb.SyncWorkflowStateSnapshotAttributes{
+					State: result.Snapshot,
+				},
+			},
+		}
+	default:
+		return nil, serviceerror.NewInternal("unknown sync workflow state artifact type")
+	}
+	executionInfo := mutableState.GetExecutionInfo()
+	currentHistory, err := versionhistory.GetCurrentVersionHistory(executionInfo.VersionHistories)
+	if err != nil {
+		return nil, err
+	}
+	err = c.replicationCache.Update(taskInfo.RunID, targetClusterID, executionInfo.TransitionHistory, currentHistory.Items)
+	if err != nil {
+		return nil, err
 	}
 	return &replicationspb.ReplicationTask{
-		TaskType:            enumsspb.REPLICATION_TASK_TYPE_VERIFY_VERSIONED_TRANSITION_TASK,
-		SourceTaskId:        taskInfo.TaskID,
-		Attributes:          &replicationspb.ReplicationTask_SyncVersionedTransitionTaskAttributes{},
+		TaskType:     enumsspb.REPLICATION_TASK_TYPE_SYNC_VERSIONED_TRANSITION_TASK,
+		SourceTaskId: taskInfo.TaskID,
+		Attributes: &replicationspb.ReplicationTask_SyncVersionedTransitionTaskAttributes{
+			SyncVersionedTransitionTaskAttributes: taskAttr,
+		},
 		VersionedTransition: taskInfo.VersionedTransition,
 		VisibilityTime:      timestamppb.New(taskInfo.VisibilityTimestamp),
 	}, nil
-	return nil, nil
 }
 
 func (c *syncVersionedTransitionTaskConverter) onCurrentBranch(mutableState workflow.MutableState, versionedTransition *persistencespb.VersionedTransition) bool {

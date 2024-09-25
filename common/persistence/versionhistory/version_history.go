@@ -160,6 +160,32 @@ func FindLCAVersionHistoryItemFromItemSlice(versionHistoryItemsA []*historyspb.V
 	return nil, serviceerror.NewInternal("version history is malformed. No joint point found.")
 }
 
+func FindLCAVersionHistoryItemFromItems(versionHistoryItemsA [][]*historyspb.VersionHistoryItem, versionHistoryItemsB []*historyspb.VersionHistoryItem) (*historyspb.VersionHistoryItem, int32, error) {
+	var versionHistoryIndex int32
+	var versionHistoryLength int32
+	var versionHistoryItem *historyspb.VersionHistoryItem
+
+	for index, localHistory := range versionHistoryItemsA {
+		item, err := FindLCAVersionHistoryItemFromItemSlice(localHistory, versionHistoryItemsB)
+		if err != nil {
+			return nil, 0, err
+		}
+
+		// if not set
+		if versionHistoryItem == nil ||
+			// if seeing LCA item with higher event ID
+			item.GetEventId() > versionHistoryItem.GetEventId() ||
+			// if seeing LCA item with equal event ID but shorter history
+			(item.GetEventId() == versionHistoryItem.GetEventId() && int32(len(localHistory)) < versionHistoryLength) {
+
+			versionHistoryIndex = int32(index)
+			versionHistoryLength = int32(len(localHistory))
+			versionHistoryItem = item
+		}
+	}
+	return CopyVersionHistoryItem(versionHistoryItem), versionHistoryIndex, nil
+}
+
 // IsVersionHistoryItemsInSameBranch checks if two version history items are in the same branch
 func IsVersionHistoryItemsInSameBranch(versionHistoryItemsA []*historyspb.VersionHistoryItem, versionHistoryItemsB []*historyspb.VersionHistoryItem) bool {
 	lowestCommonAncestor, err := FindLCAVersionHistoryItemFromItemSlice(versionHistoryItemsA, versionHistoryItemsB)
