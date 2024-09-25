@@ -29,17 +29,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/golang/mock/gomock"
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	"google.golang.org/protobuf/types/known/durationpb"
-	"google.golang.org/protobuf/types/known/timestamppb"
-
 	commonpb "go.temporal.io/api/common/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
-
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	workflowspb "go.temporal.io/server/api/workflow/v1"
@@ -67,6 +62,9 @@ import (
 	"go.temporal.io/server/service/history/tests"
 	"go.temporal.io/server/service/history/workflow"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
+	"go.uber.org/mock/gomock"
+	"google.golang.org/protobuf/types/known/durationpb"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type (
@@ -154,7 +152,7 @@ func (s *visibilityQueueTaskExecutorSuite) SetupTest() {
 	mockClusterMetadata.EXPECT().IsGlobalNamespaceEnabled().Return(true).AnyTimes()
 	mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(true, s.version).Return(mockClusterMetadata.GetCurrentClusterName()).AnyTimes()
 
-	s.workflowCache = wcache.NewHostLevelCache(s.mockShard.GetConfig(), metrics.NoopMetricsHandler)
+	s.workflowCache = wcache.NewHostLevelCache(s.mockShard.GetConfig(), s.mockShard.GetLogger(), metrics.NoopMetricsHandler)
 	s.logger = s.mockShard.GetLogger()
 
 	h := &historyEngineImpl{
@@ -540,6 +538,14 @@ func (s *visibilityQueueTaskExecutorSuite) TestProcessorDeleteExecution() {
 		})
 		s.Assert().NoError(err)
 	})
+	s.Run("WorkflowCloseTime=1970-01-01T00:00:00Z", func() {
+		s.mockVisibilityMgr.EXPECT().DeleteWorkflowExecution(gomock.Any(), gomock.Any())
+		err := s.execute(&tasks.DeleteExecutionVisibilityTask{
+			WorkflowKey: workflowKey,
+			CloseTime:   time.Unix(0, 0).UTC(),
+		})
+		s.Assert().NoError(err)
+	})
 	s.Run("MultiCursorQueue", func() {
 		const highWatermark int64 = 5
 		s.NoError(s.mockShard.SetQueueState(tasks.CategoryVisibility, 1, &persistencespb.QueueState{
@@ -608,7 +614,7 @@ func (s *visibilityQueueTaskExecutorSuite) createVisibilityRequestBase(
 		Namespace:        namespaceName,
 		Execution:        execution,
 		WorkflowTypeName: executionInfo.WorkflowTypeName,
-		StartTime:        timestamp.TimeValue(executionInfo.GetStartTime()),
+		StartTime:        timestamp.TimeValue(mutableState.GetExecutionState().GetStartTime()),
 		Status:           mutableState.GetExecutionState().GetStatus(),
 		ExecutionTime:    timestamp.TimeValue(executionInfo.GetExecutionTime()),
 		TaskID:           task.GetTaskID(),

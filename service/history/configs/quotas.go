@@ -89,6 +89,7 @@ var (
 		"/temporal.server.api.historyservice.v1.HistoryService/PollWorkflowExecutionUpdate":            1,
 		"/temporal.server.api.historyservice.v1.HistoryService/ExecuteMultiOperation":                  1,
 		"/temporal.server.api.historyservice.v1.HistoryService/StreamWorkflowReplicationMessages":      1,
+		"/temporal.server.api.historyservice.v1.HistoryService/SyncWorkflowState":                      1,
 		"/temporal.server.api.historyservice.v1.HistoryService/GetWorkflowExecutionHistory":            1,
 		"/temporal.server.api.historyservice.v1.HistoryService/GetWorkflowExecutionHistoryReverse":     1,
 		"/temporal.server.api.historyservice.v1.HistoryService/GetWorkflowExecutionRawHistory":         1,
@@ -100,6 +101,9 @@ var (
 		"/temporal.server.api.historyservice.v1.HistoryService/ListQueues":                             1,
 		"/temporal.server.api.historyservice.v1.HistoryService/ListTasks":                              1,
 		"/temporal.server.api.historyservice.v1.HistoryService/CompleteNexusOperation":                 1,
+		"/temporal.server.api.historyservice.v1.HistoryService/InvokeStateMachineMethod":               1,
+		"/temporal.server.api.historyservice.v1.HistoryService/DeepHealthCheck":                        1,
+		"/temporal.server.api.historyservice.v1.HistoryService/UpdateActivityOptions":                  1,
 	}
 
 	APIPrioritiesOrdered = []int{OperatorPriority, 1}

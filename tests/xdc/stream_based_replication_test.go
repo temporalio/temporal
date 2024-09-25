@@ -27,10 +27,11 @@ package xdc
 import (
 	"context"
 	"errors"
+	"fmt"
+	"sync"
 	"testing"
 	"time"
 
-	"github.com/golang/mock/gomock"
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/suite"
 	commandpb "go.temporal.io/api/command/v1"
@@ -40,9 +41,6 @@ import (
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
-	"go.uber.org/fx"
-	"google.golang.org/protobuf/types/known/durationpb"
-
 	"go.temporal.io/server/api/adminservice/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/api/historyservice/v1"
@@ -59,6 +57,9 @@ import (
 	test "go.temporal.io/server/common/testing"
 	"go.temporal.io/server/service/history/replication/eventhandler"
 	"go.temporal.io/server/tests"
+	"go.uber.org/fx"
+	"go.uber.org/mock/gomock"
+	"google.golang.org/protobuf/types/known/durationpb"
 )
 
 type (
@@ -69,6 +70,7 @@ type (
 		namespaceID   string
 		serializer    serialization.Serializer
 		generator     test.Generator
+		once          sync.Once
 	}
 )
 
@@ -99,28 +101,6 @@ func (s *streamBasedReplicationTestSuite) SetupSuite() {
 			),
 		),
 	)
-	ctx := context.Background()
-	s.namespaceName = "replication-test"
-	_, err := s.cluster1.GetFrontendClient().RegisterNamespace(ctx, &workflowservice.RegisterNamespaceRequest{
-		Namespace: s.namespaceName,
-		Clusters:  s.clusterReplicationConfig(),
-		// The first cluster is the active cluster.
-		ActiveClusterName: s.clusterNames[0],
-		// Needed so that the namespace is replicated.
-		IsGlobalNamespace: true,
-		// This is a required parameter.
-		WorkflowExecutionRetentionPeriod: durationpb.New(time.Hour * 24),
-	})
-	s.Require().NoError(err)
-	err = s.waitUntilNamespaceReplicated(ctx, s.namespaceName)
-	s.Require().NoError(err)
-
-	nsRes, _ := s.cluster1.GetFrontendClient().DescribeNamespace(ctx, &workflowservice.DescribeNamespaceRequest{
-		Namespace: s.namespaceName,
-	})
-
-	s.namespaceID = nsRes.NamespaceInfo.GetId()
-	s.generator = test.InitializeHistoryEventGenerator("namespace", "ns-id", 1)
 }
 
 func (s *streamBasedReplicationTestSuite) TearDownSuite() {
@@ -133,6 +113,31 @@ func (s *streamBasedReplicationTestSuite) TearDownSuite() {
 
 func (s *streamBasedReplicationTestSuite) SetupTest() {
 	s.setupTest()
+
+	s.once.Do(func() {
+		ctx := context.Background()
+		s.namespaceName = "replication-test"
+		_, err := s.cluster1.GetFrontendClient().RegisterNamespace(ctx, &workflowservice.RegisterNamespaceRequest{
+			Namespace: s.namespaceName,
+			Clusters:  s.clusterReplicationConfig(),
+			// The first cluster is the active cluster.
+			ActiveClusterName: s.clusterNames[0],
+			// Needed so that the namespace is replicated.
+			IsGlobalNamespace: true,
+			// This is a required parameter.
+			WorkflowExecutionRetentionPeriod: durationpb.New(time.Hour * 24),
+		})
+		s.Require().NoError(err)
+		err = s.waitUntilNamespaceReplicated(ctx, s.namespaceName)
+		s.Require().NoError(err)
+
+		nsRes, _ := s.cluster1.GetFrontendClient().DescribeNamespace(ctx, &workflowservice.DescribeNamespaceRequest{
+			Namespace: s.namespaceName,
+		})
+
+		s.namespaceID = nsRes.NamespaceInfo.GetId()
+		s.generator = test.InitializeHistoryEventGenerator("namespace", "ns-id", 1)
+	})
 }
 
 func (s *streamBasedReplicationTestSuite) TestReplicateHistoryEvents_ForceReplicationScenario() {
@@ -142,7 +147,7 @@ func (s *streamBasedReplicationTestSuite) TestReplicateHistoryEvents_ForceReplic
 
 	// let's import some events into cluster 1
 	historyClient1 := s.cluster1.GetHistoryClient()
-	executions := s.importTestEvents(historyClient1, namespace.Name(s.namespaceName), namespace.ID(s.namespaceID), []int64{3, 13, 2, 202, 302, 402, 602, 502, 802, 1002, 902, 702, 1102})
+	executions := s.importTestEvents(historyClient1, namespace.Name(s.namespaceName), namespace.ID(s.namespaceID), []int64{2, 12, 22, 32, 2, 1, 5, 8, 9})
 
 	// let's trigger replication by calling GenerateLastHistoryReplicationTasks. This is also used by force replication logic
 	for _, execution := range executions {
@@ -168,6 +173,18 @@ func (s *streamBasedReplicationTestSuite) importTestEvents(
 ) []*commonpb.WorkflowExecution {
 	executions := []*commonpb.WorkflowExecution{}
 	s.generator.Reset()
+	isCloseEvent := func(event *historypb.HistoryEvent) bool {
+		eventType := event.GetEventType()
+		if eventType == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED ||
+			eventType == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_FAILED ||
+			eventType == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CANCELED ||
+			eventType == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TERMINATED ||
+			eventType == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CONTINUED_AS_NEW ||
+			eventType == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TIMED_OUT {
+			return true
+		}
+		return false
+	}
 	var runID string
 	for _, version := range versions {
 		workflowID := "xdc-stream-replication-test" + uuid.New()
@@ -175,12 +192,16 @@ func (s *streamBasedReplicationTestSuite) importTestEvents(
 
 		var historyBatch []*historypb.History
 		s.generator = test.InitializeHistoryEventGenerator(namespaceName, namespaceId, version)
+	ImportLoop:
 		for s.generator.HasNextVertex() {
 			events := s.generator.GetNextVertices()
 
 			historyEvents := &historypb.History{}
 			for _, event := range events {
 				historyEvents.Events = append(historyEvents.Events, event.GetData().(*historypb.HistoryEvent))
+			}
+			if isCloseEvent(historyEvents.Events[len(historyEvents.Events)-1]) {
+				break ImportLoop
 			}
 			historyBatch = append(historyBatch, historyEvents)
 		}
@@ -241,19 +262,17 @@ func (s *streamBasedReplicationTestSuite) assertHistoryEvents(
 		nil,
 		mockClientBean,
 		serializer,
-		nil,
 		s.logger,
 	)
 	cluster2Fetcher := eventhandler.NewHistoryPaginatedFetcher(
 		nil,
 		mockClientBean,
 		serializer,
-		nil,
 		s.logger,
 	)
-	iterator1 := cluster1Fetcher.GetSingleWorkflowHistoryPaginatedIterator(
+	iterator1 := cluster1Fetcher.GetSingleWorkflowHistoryPaginatedIteratorExclusive(
 		ctx, "cluster1", namespace.ID(namespaceId), workflowId, runId, 0, 1, 0, 0)
-	iterator2 := cluster2Fetcher.GetSingleWorkflowHistoryPaginatedIterator(
+	iterator2 := cluster2Fetcher.GetSingleWorkflowHistoryPaginatedIteratorExclusive(
 		ctx, "cluster2", namespace.ID(namespaceId), workflowId, runId, 0, 1, 0, 0)
 	for iterator1.HasNext() {
 		s.True(iterator2.HasNext())
@@ -261,8 +280,14 @@ func (s *streamBasedReplicationTestSuite) assertHistoryEvents(
 		s.NoError(err)
 		batch2, err := iterator2.Next()
 		s.NoError(err)
+		getMsg := func() string {
+			events1, _ := s.serializer.DeserializeEvents(batch1.RawEventBatch)
+			events2, _ := s.serializer.DeserializeEvents(batch2.RawEventBatch)
+			return fmt.Sprintf("Not equal \nevents1: %v \nevents2: %v", events1, events2)
+		}
+		s.Equal(batch1.RawEventBatch, batch2.RawEventBatch, getMsg())
 		s.Equal(batch1.VersionHistory.Items, batch2.VersionHistory.Items)
-		s.Equal(batch1.RawEventBatch, batch2.RawEventBatch)
+
 	}
 	s.False(iterator2.HasNext())
 	return nil

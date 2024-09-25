@@ -52,13 +52,6 @@ import (
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
-	"go.uber.org/multierr"
-
-	"go.temporal.io/server/common/testing/historyrequire"
-	"go.temporal.io/server/common/testing/testvars"
-	"go.temporal.io/server/components/callbacks"
-	"go.temporal.io/server/components/nexusoperations"
-
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
@@ -67,7 +60,12 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/rpc"
 	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/testing/historyrequire"
+	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/common/worker_versioning"
+	"go.temporal.io/server/components/callbacks"
+	"go.temporal.io/server/components/nexusoperations"
+	"go.uber.org/multierr"
 )
 
 type (
@@ -120,13 +118,14 @@ func (s *ClientFunctionalSuite) TearDownSuite() {
 }
 
 func (s *ClientFunctionalSuite) SetupTest() {
+	s.FunctionalTestBase.SetupTest()
+
 	// Have to define our overridden assertions in the test setup. If we did it earlier, s.T() will return nil
 	s.Assertions = require.New(s.T())
 	s.HistoryRequire = historyrequire.New(s.T())
 
 	// Set URL template after httpAPAddress is set, see commonnexus.RouteCompletionCallback
-	s.testCluster.host.dcClient.OverrideValue(
-		s.T(),
+	s.OverrideDynamicConfig(
 		nexusoperations.CallbackURLTemplate,
 		"http://"+s.httpAPIAddress+"/namespaces/{{.NamespaceName}}/nexus/callback")
 
@@ -149,8 +148,12 @@ func (s *ClientFunctionalSuite) SetupTest() {
 }
 
 func (s *ClientFunctionalSuite) TearDownTest() {
-	s.worker.Stop()
-	s.sdkClient.Close()
+	if s.worker != nil {
+		s.worker.Stop()
+	}
+	if s.sdkClient != nil {
+		s.sdkClient.Close()
+	}
 }
 
 // testDataConverter implements encoded.DataConverter using gob

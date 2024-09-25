@@ -39,16 +39,14 @@ import (
 
 	"github.com/urfave/cli/v2"
 	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/server/api/adminservice/v1"
+	"go.temporal.io/server/common/auth"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
 	"go.uber.org/multierr"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
-
-	"go.temporal.io/server/api/adminservice/v1"
-
-	"go.temporal.io/server/common/auth"
-	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/log/tag"
 )
 
 type (
@@ -138,7 +136,7 @@ func (b *clientFactory) createGRPCConnection(c *cli.Context) (*grpc.ClientConn, 
 		grpcSecurityOptions,
 	}
 
-	connection, err := grpc.Dial(frontendAddress, dialOpts...)
+	connection, err := grpc.NewClient(frontendAddress, dialOpts...)
 	if err != nil {
 		b.logger.Fatal("Failed to create connection", tag.Error(err))
 		return nil, err

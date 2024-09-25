@@ -31,15 +31,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/urfave/cli/v2"
-	"google.golang.org/protobuf/types/known/durationpb"
-	"google.golang.org/protobuf/types/known/timestamppb"
-
 	"github.com/temporalio/tctl-kit/pkg/color"
+	"github.com/urfave/cli/v2"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
-
 	"go.temporal.io/server/api/adminservice/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/history/v1"
@@ -52,6 +48,8 @@ import (
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/service/history/tasks"
+	"google.golang.org/protobuf/types/known/durationpb"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 const (
@@ -691,5 +689,41 @@ func AdminRebuildMutableState(c *cli.Context, clientFactory ClientFactory) error
 	} else {
 		fmt.Fprintln(c.App.Writer, "rebuild mutable state succeeded.")
 	}
+	return nil
+}
+
+// AdminReplicateWorkflow force replicates a workflow by generating replication tasks
+func AdminReplicateWorkflow(
+	c *cli.Context,
+	clientFactory ClientFactory,
+) error {
+	adminClient := clientFactory.AdminClient(c)
+
+	nsName, err := getRequiredOption(c, FlagNamespace)
+	if err != nil {
+		return err
+	}
+
+	wid, err := getRequiredOption(c, FlagWorkflowID)
+	if err != nil {
+		return err
+	}
+	rid := c.String(FlagRunID)
+
+	ctx, cancel := newContext(c)
+	defer cancel()
+
+	_, err = adminClient.GenerateLastHistoryReplicationTasks(ctx, &adminservice.GenerateLastHistoryReplicationTasksRequest{
+		Namespace: nsName,
+		Execution: &commonpb.WorkflowExecution{
+			WorkflowId: wid,
+			RunId:      rid,
+		},
+	})
+	if err != nil {
+		return fmt.Errorf("unable to replicate workflow: %w", err)
+	}
+
+	fmt.Fprintln(c.App.Writer, "Replication tasks generated successfully.")
 	return nil
 }

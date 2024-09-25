@@ -26,11 +26,11 @@ package history
 
 import (
 	"context"
+	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
-
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -324,6 +324,11 @@ func (t *visibilityQueueTaskExecutor) processDeleteExecution(
 		RunID:       task.RunID,
 		TaskID:      task.TaskID,
 	}
+
+	if task.CloseTime.After(time.Unix(0, 0)) {
+		request.CloseTime = &task.CloseTime
+	}
+
 	if t.ensureCloseBeforeDelete() {
 		// If visibility delete task is executed before visibility close task then visibility close task
 		// (which change workflow execution status by uploading new visibility record) will resurrect visibility record.
@@ -345,7 +350,7 @@ func (t *visibilityQueueTaskExecutor) getVisibilityRequestBase(
 ) *manager.VisibilityRequestBase {
 	var (
 		executionInfo    = mutableState.GetExecutionInfo()
-		startTime        = timestamp.TimeValue(executionInfo.GetStartTime())
+		startTime        = timestamp.TimeValue(mutableState.GetExecutionState().GetStartTime())
 		executionTime    = timestamp.TimeValue(executionInfo.GetExecutionTime())
 		visibilityMemo   = getWorkflowMemo(copyMapPayload(executionInfo.Memo))
 		searchAttributes = getSearchAttributes(copyMapPayload(executionInfo.SearchAttributes))

@@ -50,6 +50,13 @@ message TaskVersionDirective {
     }
 }
 
+message InternalTaskQueueStatus {
+    int64 read_level = 1;
+    int64 ack_level = 2;
+    temporal.api.taskqueue.v1.TaskIdBlock task_id_block = 3;
+    int64 read_buffer_length = 4;
+}
+
 message TaskQueueVersionInfoInternal {
     PhysicalTaskQueueInfo physical_task_queue_info = 2;
 }
@@ -58,6 +65,7 @@ message PhysicalTaskQueueInfo {
     // Unversioned workers (with `useVersioning=false`) are reported in unversioned result even if they set a Build ID.
     repeated temporal.api.taskqueue.v1.PollerInfo pollers = 1;
     temporal.api.taskqueue.v1.TaskQueueStats task_queue_stats = 2;
+    InternalTaskQueueStatus internal_task_queue_status = 3;
 }
 
 // Represents a normal or sticky partition of a task queue.
@@ -80,8 +88,10 @@ message BuildIdRedirectInfo {
     string assigned_build_id = 1;
 }
 
-// Information about task forwarding from one partition to its parent. Versioning decisions are made
-// at the source partition and sent to the parent partition in this message.
+// Information about task forwarding from one partition to its parent. Versioning decisions for activity/workflow
+// tasks are made at the source partition and sent to the parent partition in this message so that parent partition
+// does not have to make versioning decision again. For Query/Nexus tasks, this works differently as the child's
+// versioning decision is ignored and the parent partition makes a fresh decision.
 message TaskForwardInfo {
     // RPC name of the partition forwarded the task.
     // In case of multiple hops, this is the source partition of the last hop.
@@ -89,7 +99,7 @@ message TaskForwardInfo {
     temporal.server.api.enums.v1.TaskSource task_source = 2;
     // Redirect info is not present for Query and Nexus tasks.
     BuildIdRedirectInfo redirect_info = 3;
-    // Build ID that should be used to dispatch the task to.
+    // Build ID that should be used to dispatch the task to. Ignored in Query and Nexus tasks.
     string dispatch_build_id = 4;
     // Only used for old versioning. [cleanup-old-wv]
     string dispatch_version_set = 5;

@@ -32,7 +32,6 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	replicationpb "go.temporal.io/api/replication/v1"
 	"go.temporal.io/api/serviceerror"
-
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
@@ -204,7 +203,7 @@ func (h *namespaceReplicationTaskExecutorImpl) handleNamespaceCreationReplicatio
 					tag.WorkflowNamespaceID(resp.Namespace.Info.Id),
 					tag.NewStringTag("Task Namespace Id", task.GetId()),
 					tag.NewStringTag("Task Namepsace Info Id", task.Info.GetId()),
-					tag.NewErrorTag(err))
+					tag.Error(err))
 				return ErrNameUUIDCollision
 			}
 		case *serviceerror.NamespaceNotFound:
@@ -216,7 +215,7 @@ func (h *namespaceReplicationTaskExecutorImpl) handleNamespaceCreationReplicatio
 				"namespace replication encountered error during NamespaceCreationReplicationTask",
 				tag.WorkflowNamespace(task.Info.GetName()),
 				tag.WorkflowNamespaceID(task.Info.GetId()),
-				tag.NewErrorTag(err))
+				tag.Error(err))
 			return err
 		}
 
@@ -230,7 +229,7 @@ func (h *namespaceReplicationTaskExecutorImpl) handleNamespaceCreationReplicatio
 					"namespace replication encountered name collision during NamespaceCreationReplicationTask",
 					tag.WorkflowNamespace(resp.Namespace.Info.Name),
 					tag.NewStringTag("Task Namespace Name", task.Info.GetName()),
-					tag.NewErrorTag(err))
+					tag.Error(err))
 				return ErrNameUUIDCollision
 			}
 		case *serviceerror.NamespaceNotFound:

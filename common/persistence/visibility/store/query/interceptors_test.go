@@ -30,11 +30,10 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/temporalio/sqlparser"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/server/common/searchattribute"
-
-	"github.com/stretchr/testify/assert"
 )
 
 type (
@@ -50,7 +49,7 @@ func (t *testNameInterceptor) Name(name string, usage FieldNameUsage) (string, e
 	return name + "1", nil
 }
 
-func (t *testValuesInterceptor) Values(name string, values ...interface{}) ([]interface{}, error) {
+func (t *testValuesInterceptor) Values(name string, fieldName string, values ...interface{}) ([]interface{}, error) {
 	if name == "error" {
 		return nil, errors.New("interceptor error")
 	}

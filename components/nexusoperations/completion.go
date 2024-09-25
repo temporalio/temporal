@@ -31,10 +31,9 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
+	"go.temporal.io/api/serviceerror"
 	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/service/history/hsm"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
 )
 
 func handleSuccessfulOperationResult(
@@ -54,6 +53,7 @@ func handleSuccessfulOperationResult(
 			NexusOperationCompletedEventAttributes: &historypb.NexusOperationCompletedEventAttributes{
 				ScheduledEventId: eventID,
 				Result:           result,
+				RequestId:        operation.RequestId,
 			},
 		}
 	})
@@ -87,6 +87,7 @@ func handleUnsuccessfulOperationError(
 						commonnexus.UnsuccessfulOperationErrorToTemporalFailure(opFailedError),
 					),
 					ScheduledEventId: eventID,
+					RequestId:        operation.RequestId,
 				},
 			}
 		})
@@ -109,6 +110,7 @@ func handleUnsuccessfulOperationError(
 						commonnexus.UnsuccessfulOperationErrorToTemporalFailure(opFailedError),
 					),
 					ScheduledEventId: eventID,
+					RequestId:        operation.RequestId,
 				},
 			}
 		})
@@ -129,14 +131,22 @@ func CompletionHandler(
 	ctx context.Context,
 	env hsm.Environment,
 	ref hsm.Ref,
+	requestID string,
 	result *commonpb.Payload,
 	opFailedError *nexus.UnsuccessfulOperationError,
 ) error {
-	return env.Access(ctx, ref, hsm.AccessWrite, func(node *hsm.Node) error {
+	// The initial version of the completion token did not include a request ID.
+	// Only retry Access without a run ID if the request ID is not empty.
+	isRetryableNotFoundErr := requestID != ""
+	err := env.Access(ctx, ref, hsm.AccessWrite, func(node *hsm.Node) error {
 		if err := node.CheckRunning(); err != nil {
-			return status.Errorf(codes.NotFound, "operation not found")
+			return serviceerror.NewNotFound("operation not found")
 		}
 		err := hsm.MachineTransition(node, func(operation Operation) (hsm.TransitionOutput, error) {
+			if requestID != "" && operation.RequestId != requestID {
+				isRetryableNotFoundErr = false
+				return hsm.TransitionOutput{}, serviceerror.NewNotFound("operation not found")
+			}
 			if opFailedError != nil {
 				return handleUnsuccessfulOperationError(node, operation, opFailedError, CompletionSourceCallback)
 			}
@@ -144,8 +154,15 @@ func CompletionHandler(
 		})
 		// TODO(bergundy): Remove this once the operation auto-deletes itself from the tree on completion.
 		if errors.Is(err, hsm.ErrInvalidTransition) {
-			return status.Errorf(codes.NotFound, "operation not found")
+			isRetryableNotFoundErr = false
+			return serviceerror.NewNotFound("operation not found")
 		}
 		return err
 	})
+	if errors.As(err, new(*serviceerror.NotFound)) && isRetryableNotFoundErr && ref.WorkflowKey.RunID != "" {
+		// Try again without a run ID in case the original run was reset.
+		ref.WorkflowKey.RunID = ""
+		return CompletionHandler(ctx, env, ref, requestID, result, opFailedError)
+	}
+	return err
 }

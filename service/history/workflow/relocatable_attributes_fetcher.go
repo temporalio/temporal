@@ -28,7 +28,6 @@ import (
 	"context"
 
 	commonpb "go.temporal.io/api/common/v1"
-
 	"go.temporal.io/server/common/persistence/visibility/manager"
 )
 

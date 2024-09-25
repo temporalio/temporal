@@ -29,7 +29,6 @@ import (
 	"sync/atomic"
 
 	sdkworker "go.temporal.io/sdk/worker"
-
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"

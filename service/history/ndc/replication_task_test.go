@@ -27,13 +27,13 @@ package ndc
 import (
 	"testing"
 
-	"github.com/golang/mock/gomock"
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/definition"
+	"go.uber.org/mock/gomock"
 )
 
 type (
@@ -178,6 +178,7 @@ func (s *replicationTaskSuite) TestSkipDuplicatedEvents_ValidInput_SkipEvents() 
 		[][]*historypb.HistoryEvent{slice1, slice2},
 		nil,
 		"",
+		nil,
 	)
 	err := task.skipDuplicatedEvents(1)
 	s.NoError(err)
@@ -218,6 +219,7 @@ func (s *replicationTaskSuite) TestSkipDuplicatedEvents_InvalidInput_ErrorOut() 
 		[][]*historypb.HistoryEvent{slice1, slice2},
 		nil,
 		"",
+		nil,
 	)
 	err := task.skipDuplicatedEvents(2)
 	s.Error(err)
@@ -254,6 +256,7 @@ func (s *replicationTaskSuite) TestSkipDuplicatedEvents_ZeroInput_DoNothing() {
 		[][]*historypb.HistoryEvent{slice1, slice2},
 		nil,
 		"",
+		nil,
 	)
 	err := task.skipDuplicatedEvents(0)
 	s.NoError(err)

@@ -26,21 +26,19 @@ package describeworkflow
 
 import (
 	"context"
+	"strconv"
 
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
-	"google.golang.org/protobuf/types/known/durationpb"
-	"google.golang.org/protobuf/types/known/emptypb"
-	"google.golang.org/protobuf/types/known/timestamppb"
-
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/visibility/manager"
@@ -49,6 +47,9 @@ import (
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/workflow"
+	"google.golang.org/protobuf/types/known/durationpb"
+	"google.golang.org/protobuf/types/known/emptypb"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 func clonePayloadMap(source map[string]*commonpb.Payload) map[string]*commonpb.Payload {
@@ -87,7 +88,7 @@ func Invoke(
 			req.Request.Execution.WorkflowId,
 			req.Request.Execution.RunId,
 		),
-		workflow.LockPriorityHigh,
+		locks.PriorityHigh,
 	)
 	if err != nil {
 		return nil, err
@@ -123,7 +124,7 @@ func Invoke(
 				RunId:      executionState.RunId,
 			},
 			Type:          &commonpb.WorkflowType{Name: executionInfo.WorkflowTypeName},
-			StartTime:     executionInfo.StartTime,
+			StartTime:     executionState.StartTime,
 			Status:        executionState.Status,
 			HistoryLength: mutableState.GetNextEventID() - common.FirstEventID,
 			ExecutionTime: executionInfo.ExecutionTime,
@@ -140,6 +141,7 @@ func Invoke(
 			MostRecentWorkerVersionStamp: executionInfo.MostRecentWorkerVersionStamp,
 			AssignedBuildId:              executionInfo.AssignedBuildId,
 			InheritedBuildId:             executionInfo.InheritedBuildId,
+			FirstRunId:                   executionInfo.FirstExecutionRunId,
 		},
 	}
 
@@ -383,11 +385,26 @@ func Invoke(
 				NextAttemptScheduleTime: cancelation.NextAttemptScheduleTime,
 			}
 		}
+		// We store nexus operations in the tree by their string formatted scheduled event ID.
+		scheduledEventID, err := strconv.ParseInt(node.Key.ID, 10, 64)
+		if err != nil {
+			shard.GetLogger().Error(
+				"failed to determine Nexus operation scheduled event ID while building describe response",
+				tag.WorkflowNamespaceID(namespaceID.String()),
+				tag.WorkflowID(executionInfo.WorkflowId),
+				tag.WorkflowRunID(executionState.RunId),
+				tag.Error(err),
+			)
+			return nil, serviceerror.NewInternal("failed to construct describe response")
+
+		}
+
 		result.PendingNexusOperations = append(result.PendingNexusOperations, &workflowpb.PendingNexusOperationInfo{
 			Endpoint:                op.Endpoint,
 			Service:                 op.Service,
 			Operation:               op.Operation,
 			OperationId:             op.OperationId,
+			ScheduledEventId:        scheduledEventID,
 			ScheduleToCloseTimeout:  op.ScheduleToCloseTimeout,
 			ScheduledTime:           op.ScheduledTime,
 			State:                   state,

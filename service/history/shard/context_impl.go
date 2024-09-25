@@ -28,6 +28,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"math"
 	"sync"
 	"sync/atomic"
@@ -37,9 +38,6 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
-	"golang.org/x/exp/maps"
-	"google.golang.org/protobuf/types/known/timestamppb"
-
 	"go.temporal.io/server/api/adminservice/v1"
 	clockspb "go.temporal.io/server/api/clock/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
@@ -56,6 +54,7 @@ import (
 	"go.temporal.io/server/common/debug"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/finalizer"
 	"go.temporal.io/server/common/future"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/locks"
@@ -77,6 +76,7 @@ import (
 	"go.temporal.io/server/service/history/hsm"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/vclock"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 const (
@@ -118,6 +118,7 @@ type (
 		engineFactory       EngineFactory
 		engineFuture        *future.FutureImpl[Engine]
 		queueMetricEmitter  sync.Once
+		finalizer           *finalizer.Finalizer
 
 		persistenceShardManager persistence.ShardManager
 		clientBean              client.Bean
@@ -248,8 +249,8 @@ func (s *ContextImpl) GetPingChecks() []pingable.Check {
 		{
 			Name: s.String() + "-shard-lock",
 			// rwLock may be held for the duration of renewing shard rangeID, which are called with a
-			// timeout of shardIOTimeout. add a few more seconds for reliability.
-			Timeout: s.config.ShardIOTimeout() + 5*time.Second,
+			// timeout of shardIOTimeout.
+			Timeout: s.config.ShardIOTimeout() + 30*time.Second,
 			Ping: func() []pingable.Pingable {
 				// call rwLock.Lock directly to bypass metrics since this isn't a real request
 				s.rwLock.Lock()
@@ -263,7 +264,7 @@ func (s *ContextImpl) GetPingChecks() []pingable.Check {
 			Name: s.String() + "-io-semaphore",
 			// ioSemaphore is for the duration of a persistence op which has a persistence connection timeout
 			// of 10 sec.
-			Timeout: 10 * time.Second,
+			Timeout: 10*time.Second + 30*time.Second,
 			Ping: func() []pingable.Pingable {
 				_ = s.ioSemaphore.Acquire(context.Background(), locks.PriorityHigh, 1)
 				s.ioSemaphore.Release(1)
@@ -337,6 +338,10 @@ func (s *ContextImpl) GenerateTaskID() (int64, error) {
 	defer s.wUnlock()
 
 	return s.generateTaskIDLocked()
+}
+
+func (s *ContextImpl) GetFinalizer() *finalizer.Finalizer {
+	return s.finalizer
 }
 
 func (s *ContextImpl) GenerateTaskIDs(number int) ([]int64, error) {
@@ -943,6 +948,7 @@ func (s *ContextImpl) DeleteWorkflowExecution(
 	key definition.WorkflowKey,
 	branchToken []byte,
 	closeVisibilityTaskId int64,
+	workflowCloseTime time.Time,
 	stage *tasks.DeleteWorkflowExecutionStage,
 ) (retErr error) {
 	// DeleteWorkflowExecution is a 4 stages process (order is very important and should not be changed):
@@ -1019,6 +1025,7 @@ func (s *ContextImpl) DeleteWorkflowExecution(
 							WorkflowKey:                    key,
 							VisibilityTimestamp:            s.timeSource.Now(),
 							CloseExecutionVisibilityTaskID: closeVisibilityTaskId,
+							CloseTime:                      workflowCloseTime,
 						},
 					},
 				}
@@ -1474,14 +1481,19 @@ func (s *ContextImpl) FinishStop() {
 	// an Engine here, we won't ever have one.
 	_ = s.transition(contextRequestFinishStop{})
 
-	// use a context that we know is cancelled so that this doesn't block
+	// Use a context that we know is cancelled so that this doesn't block.
 	engine, _ := s.engineFuture.Get(s.lifecycleCtx)
 
-	// Stop the engine if it was running (outside the lock but before returning)
+	// Stop the engine if it was running (outside the lock but before returning).
 	if engine != nil {
 		s.contextTaggedLogger.Info("", tag.LifeCycleStopping, tag.ComponentShardEngine)
 		engine.Stop()
 		s.contextTaggedLogger.Info("", tag.LifeCycleStopped, tag.ComponentShardEngine)
+	}
+
+	// Run finalizer to cleanup any of the shard's associated resources that are registered.
+	if s.finalizer != nil {
+		s.finalizer.Run(s.config.ShardFinalizerTimeout())
 	}
 }
 
@@ -2077,6 +2089,7 @@ func newContext(
 		ioConcurrency = 1
 	}
 
+	taggedLogger := log.With(logger, tag.ShardID(shardID), tag.Address(hostIdentity))
 	shardContext := &ContextImpl{
 		state:                   contextStateInitialized,
 		shardID:                 shardID,
@@ -2086,7 +2099,8 @@ func newContext(
 		metricsHandler:          metricsHandler,
 		closeCallback:           closeCallback,
 		config:                  historyConfig,
-		contextTaggedLogger:     log.With(logger, tag.ShardID(shardID), tag.Address(hostIdentity)),
+		finalizer:               finalizer.New(taggedLogger, metricsHandler),
+		contextTaggedLogger:     taggedLogger,
 		throttledLogger:         log.With(throttledLogger, tag.ShardID(shardID), tag.Address(hostIdentity)),
 		engineFactory:           factory,
 		persistenceShardManager: persistenceShardManager,

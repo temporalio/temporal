@@ -64,15 +64,22 @@ For this reason, we recommend a blue-green deploy strategy.
 ## Getting Started
 
 ### Prerequisites
-The minimum server, CLI, and SDK 
-releases that support Worker Versioning are:
-- Temporal Server: [v1.24.0](https://github.com/temporalio/temporal/releases/tag/v1.24.0)
-- CLI: [v0.13.1](https://github.com/temporalio/cli/releases/tag/v0.13.1)
-- Go SDK: [v1.23.0](https://github.com/temporalio/sdk-go/releases/tag/v1.23.0) 
-- Java SDK: [v1.20.0](https://github.com/temporalio/sdk-java/releases/tag/v1.20.0)
-- TypeScript SDK: [v1.8.0](https://github.com/temporalio/sdk-typescript/releases/tag/v1.8.0)
-- Python SDK: [v1.3.0](https://github.com/temporalio/sdk-python/releases/tag/1.3.0)
-- .NET SDK: [v0.1.0-beta1](https://github.com/temporalio/sdk-dotnet/releases/tag/0.1.0-beta1)
+Temporal Server version [v1.24.0](https://github.com/temporalio/temporal/releases/tag/v1.24.0) or higher is needed to use the new Worker Versioning API.
+In addition, you need to use Temporal CLI or Go SDK for updating versioning rules (typically needed only when you do a new deployment).
+You can use the SDK of your choice, as listed below, to create and run workers that can opt into Worker Versioning.
+
+
+- Updating and getting versioning rules is supported by:
+  - CLI >= [v0.13.1](https://github.com/temporalio/cli/releases/tag/v0.13.1)
+  - Go SDK >= [v1.27.0](https://github.com/temporalio/sdk-go/releases/tag/v1.27.0)
+- Creating and running a versioned worker is supported by the following SDKs:
+  - Go SDK >= [v1.23.0](https://github.com/temporalio/sdk-go/releases/tag/v1.23.0)
+  - Java SDK >= [v1.20.0](https://github.com/temporalio/sdk-java/releases/tag/v1.20.0)
+  - TypeScript SDK >= [v1.8.0](https://github.com/temporalio/sdk-typescript/releases/tag/v1.8.0)
+  - Python SDK >= [v1.3.0](https://github.com/temporalio/sdk-python/releases/tag/1.3.0)
+  - .NET SDK >= [v0.1.0-beta1](https://github.com/temporalio/sdk-dotnet/releases/tag/0.1.0-beta1)
+- Listing versioning rules in the UI is supported by:
+  - UI >= [v2.28.0](https://github.com/temporalio/ui-server/releases/tag/v2.28.0)
 
 In order to run versioned workers and update the versioning rules for each task queue,
 Worker Versioning needs to be enabled in the server.
@@ -315,13 +322,19 @@ If you are using old Versioning API (i.e. using [Version Sets](https://docs.temp
 you can easily migrate to the new API.
 
 You don't need to change your worker code or Task Queue name. Only for your next 
-deployment, add an Assignment rule instead of a Version Set (incompatible Build ID).
+deployment, add an Assignment rule instead of a Version Set (incompatible Build ID). 
+The assignment rule can generally be done using the `insert-assignment-rule` command, 
+however, `commit-build-id` provides an idempotent replacement to both (now-deprecated) 
+`promote-set` and `add-new-default` operations. 
 
 The Version Sets added previously will be present and be used for the old Workflow
 executions. They will be cleaned up automatically once all their workflows pass their retention time.
 
 Note that:
 - For routing new executions, Assignment rules take precedence over the default Version Set.
+- If deploying your first build ID using the new API fails and you want to roll back,
+remove all the assignment rules so that the default Version Sets previously added be used
+again.
 - A single Build ID can either be added to a Version Set or Versioning Rules, not both.
 - It's not possible to add a Redirect Rule from a Version Set (or a Build of a Version Set)
 to another Build ID. This means you cannot redirect Workflows already started on a Version 

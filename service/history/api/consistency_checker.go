@@ -22,6 +22,8 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
+//go:generate mockgen -copyright_file ../../../LICENSE -package $GOPACKAGE -source $GOFILE -destination consistency_checker_mock.go
+
 package api
 
 import (
@@ -29,10 +31,9 @@ import (
 	"fmt"
 
 	commonpb "go.temporal.io/api/common/v1"
-
 	clockspb "go.temporal.io/server/api/clock/v1"
-
 	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/service/history/consts"
@@ -51,13 +52,13 @@ type (
 			ctx context.Context,
 			namespaceID string,
 			workflowID string,
-			lockPriority workflow.LockPriority,
+			lockPriority locks.Priority,
 		) (string, error)
 		GetWorkflowLease(
 			ctx context.Context,
 			reqClock *clockspb.VectorClock,
 			workflowKey definition.WorkflowKey,
-			lockPriority workflow.LockPriority,
+			lockPriority locks.Priority,
 		) (WorkflowLease, error)
 
 		GetWorkflowLeaseWithConsistencyCheck(
@@ -65,7 +66,7 @@ type (
 			reqClock *clockspb.VectorClock,
 			consistencyPredicate MutableStateConsistencyPredicate,
 			workflowKey definition.WorkflowKey,
-			lockPriority workflow.LockPriority,
+			lockPriority locks.Priority,
 		) (WorkflowLease, error)
 	}
 
@@ -93,7 +94,7 @@ func (c *WorkflowConsistencyCheckerImpl) GetCurrentRunID(
 	ctx context.Context,
 	namespaceID string,
 	workflowID string,
-	lockPriority workflow.LockPriority,
+	lockPriority locks.Priority,
 ) (runID string, retErr error) {
 	return wcache.GetCurrentRunID(
 		ctx,
@@ -109,7 +110,7 @@ func (c *WorkflowConsistencyCheckerImpl) GetWorkflowLease(
 	ctx context.Context,
 	reqClock *clockspb.VectorClock,
 	workflowKey definition.WorkflowKey,
-	lockPriority workflow.LockPriority,
+	lockPriority locks.Priority,
 ) (WorkflowLease, error) {
 	return c.getWorkflowLeaseImpl(ctx, reqClock, nil, workflowKey, lockPriority)
 }
@@ -122,7 +123,7 @@ func (c *WorkflowConsistencyCheckerImpl) GetWorkflowLeaseWithConsistencyCheck(
 	reqClock *clockspb.VectorClock,
 	consistencyPredicate MutableStateConsistencyPredicate,
 	workflowKey definition.WorkflowKey,
-	lockPriority workflow.LockPriority,
+	lockPriority locks.Priority,
 ) (WorkflowLease, error) {
 
 	return c.getWorkflowLeaseImpl(ctx, reqClock, consistencyPredicate, workflowKey, lockPriority)
@@ -133,7 +134,7 @@ func (c *WorkflowConsistencyCheckerImpl) getWorkflowLeaseImpl(
 	reqClock *clockspb.VectorClock,
 	consistencyPredicate MutableStateConsistencyPredicate,
 	workflowKey definition.WorkflowKey,
-	lockPriority workflow.LockPriority,
+	lockPriority locks.Priority,
 ) (WorkflowLease, error) {
 	if err := c.clockConsistencyCheck(reqClock); err != nil {
 		return nil, err
@@ -184,7 +185,7 @@ func (c *WorkflowConsistencyCheckerImpl) getCurrentWorkflowLease(
 	consistencyPredicate MutableStateConsistencyPredicate,
 	namespaceID string,
 	workflowID string,
-	lockPriority workflow.LockPriority,
+	lockPriority locks.Priority,
 ) (WorkflowLease, error) {
 	runID, err := c.GetCurrentRunID(
 		ctx,
@@ -227,7 +228,7 @@ func (c *WorkflowConsistencyCheckerImpl) getWorkflowLease(
 	ctx context.Context,
 	consistencyPredicate MutableStateConsistencyPredicate,
 	workflowKey definition.WorkflowKey,
-	lockPriority workflow.LockPriority,
+	lockPriority locks.Priority,
 ) (WorkflowLease, error) {
 
 	wfContext, release, err := c.workflowCache.GetOrCreateWorkflowExecution(

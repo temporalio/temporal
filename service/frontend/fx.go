@@ -29,13 +29,7 @@ import (
 	"net"
 
 	"github.com/gorilla/mux"
-	"go.uber.org/fx"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/health"
-	"google.golang.org/grpc/keepalive"
-
-	healthpb "google.golang.org/grpc/health/grpc_health_v1"
-
+	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/archiver"
@@ -73,6 +67,11 @@ import (
 	"go.temporal.io/server/service/frontend/configs"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/worker/scheduler"
+	"go.uber.org/fx"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/health"
+	healthpb "google.golang.org/grpc/health/grpc_health_v1"
+	"google.golang.org/grpc/keepalive"
 )
 
 type (
@@ -86,6 +85,7 @@ type (
 var Module = fx.Options(
 	resource.Module,
 	scheduler.Module,
+	dynamicconfig.Module,
 	// Note that with this approach routes may be registered in arbitrary order.
 	// This is okay because our routes don't have overlapping matches.
 	// The only important detail is that the PathPrefix("/") route registered in the HTTPAPIServerProvider comes last.
@@ -94,7 +94,6 @@ var Module = fx.Options(
 	// coverage to catch misconfiguration.
 	// A more robust approach would require using fx groups but we shouldn't overcomplicate until this becomes an issue.
 	fx.Provide(MuxRouterProvider),
-	fx.Provide(dynamicconfig.NewCollection),
 	fx.Provide(ConfigProvider),
 	fx.Provide(NamespaceLogInterceptorProvider),
 	fx.Provide(RedirectionInterceptorProvider),
@@ -354,11 +353,13 @@ func TelemetryInterceptorProvider(
 	logger log.Logger,
 	metricsHandler metrics.Handler,
 	namespaceRegistry namespace.Registry,
+	serviceConfig *Config,
 ) *interceptor.TelemetryInterceptor {
 	return interceptor.NewTelemetryInterceptor(
 		namespaceRegistry,
 		metricsHandler,
 		logger,
+		serviceConfig.LogAllReqErrors,
 	)
 }
 
@@ -398,7 +399,8 @@ func RateLimitInterceptorProvider(
 			serviceConfig.OperatorRPSRatio,
 		),
 		map[string]int{
-			healthpb.Health_Check_FullMethodName: 0, // exclude health check requests from rate limiting.
+			healthpb.Health_Check_FullMethodName:                     0, // exclude health check requests from rate limiting.
+			adminservice.AdminService_DeepHealthCheck_FullMethodName: 0, // exclude deep health check requests from rate limiting.
 		},
 	)
 }
@@ -537,6 +539,7 @@ func VisibilityManagerProvider(
 	persistenceServiceResolver resolver.ServiceResolver,
 	searchAttributesMapperProvider searchattribute.MapperProvider,
 	saProvider searchattribute.Provider,
+	namespaceRegistry namespace.Registry,
 ) (manager.VisibilityManager, error) {
 	return visibility.NewManager(
 		*persistenceConfig,
@@ -545,6 +548,7 @@ func VisibilityManagerProvider(
 		nil, // frontend visibility never write
 		saProvider,
 		searchAttributesMapperProvider,
+		namespaceRegistry,
 		serviceConfig.VisibilityPersistenceMaxReadQPS,
 		serviceConfig.VisibilityPersistenceMaxWriteQPS,
 		serviceConfig.OperatorRPSRatio,
@@ -603,6 +607,7 @@ func AdminHandlerProvider(
 	eventSerializer serialization.Serializer,
 	timeSource clock.TimeSource,
 	taskCategoryRegistry tasks.TaskCategoryRegistry,
+	matchingClient resource.MatchingClient,
 ) *AdminHandler {
 	args := NewAdminHandlerArgs{
 		persistenceConfig,
@@ -631,6 +636,7 @@ func AdminHandlerProvider(
 		eventSerializer,
 		timeSource,
 		taskCategoryRegistry,
+		matchingClient,
 	}
 	return NewAdminHandler(args)
 }

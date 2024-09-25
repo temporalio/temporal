@@ -28,12 +28,11 @@ import (
 	"context"
 	"testing"
 
-	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	"google.golang.org/grpc"
-
 	"go.temporal.io/server/common/quotas"
+	"go.uber.org/mock/gomock"
+	"google.golang.org/grpc"
 )
 
 type (

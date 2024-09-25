@@ -23,13 +23,11 @@
 package circuitbreaker
 
 import (
-	"sync"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/suite"
-
 	"go.temporal.io/server/common/dynamicconfig"
 )
 
@@ -45,14 +43,8 @@ func TestBasic(t *testing.T) {
 	s := assert.New(t)
 
 	name := "test-tscb"
-	tscb := NewTwoStepCircuitBreakerWithDynamicSettings(
-		Settings{
-			SettingsFn: func() dynamicconfig.CircuitBreakerSettings {
-				return dynamicconfig.CircuitBreakerSettings{}
-			},
-			Name: name,
-		},
-	)
+	tscb := NewTwoStepCircuitBreakerWithDynamicSettings(Settings{Name: name})
+	tscb.UpdateSettings(dynamicconfig.CircuitBreakerSettings{})
 	s.Equal(name, tscb.Name())
 
 	doneFn, err := tscb.Allow()
@@ -63,84 +55,21 @@ func TestBasic(t *testing.T) {
 func TestDynamicSettings(t *testing.T) {
 	s := assert.New(t)
 
-	settingsCallCount := 0
-	tscb := NewTwoStepCircuitBreakerWithDynamicSettings(
-		Settings{
-			SettingsFn: func() dynamicconfig.CircuitBreakerSettings {
-				settingsCallCount += 1
-				if settingsCallCount > 2 {
-					return dynamicconfig.CircuitBreakerSettings{
-						MaxRequests: 2,
-						Interval:    3600 * time.Second,
-						Timeout:     30 * time.Second,
-					}
-				}
-				return dynamicconfig.CircuitBreakerSettings{}
-			},
-		},
-	)
-	s.Equal(1, settingsCallCount)
+	tscb := NewTwoStepCircuitBreakerWithDynamicSettings(Settings{})
+	tscb.UpdateSettings(dynamicconfig.CircuitBreakerSettings{})
+	cb1 := tscb.cb.Load()
 
-	// settingsCallCount = 2
-	ds := tscb.settingsFn()
-	s.Equal(2, settingsCallCount)
-	s.Equal(dynamicconfig.CircuitBreakerSettings{}, ds)
+	// should not change
+	tscb.UpdateSettings(dynamicconfig.CircuitBreakerSettings{})
+	cb2 := tscb.cb.Load()
+	s.Equal(cb2, cb1)
 
-	// settingsCallCount = 3
-	ds = tscb.settingsFn()
-	s.Equal(3, settingsCallCount)
-	s.Equal(
-		dynamicconfig.CircuitBreakerSettings{
-			MaxRequests: 2,
-			Interval:    1 * time.Hour,
-			Timeout:     30 * time.Second,
-		},
-		ds,
-	)
-}
-
-func TestGetInternalCircuitBreaker(t *testing.T) {
-	s := assert.New(t)
-
-	settingsCallCount := 0
-	tscb := NewTwoStepCircuitBreakerWithDynamicSettings(
-		Settings{
-			SettingsFn: func() dynamicconfig.CircuitBreakerSettings {
-				settingsCallCount += 1
-				if settingsCallCount > 2 {
-					return dynamicconfig.CircuitBreakerSettings{
-						MaxRequests: 2,
-						Interval:    3600 * time.Second,
-						Timeout:     30 * time.Second,
-					}
-				}
-				return dynamicconfig.CircuitBreakerSettings{}
-			},
-			SettingsEvalInterval: 2 * time.Second,
-		},
-	)
-	s.Equal(1, settingsCallCount)
-
-	workerFn := func(wg *sync.WaitGroup) {
-		defer wg.Done()
-		ticker := time.NewTicker(100 * time.Millisecond)
-		timer := time.NewTimer(9 * time.Second)
-		for {
-			select {
-			case <-ticker.C:
-				_ = tscb.getInternalCircuitBreaker()
-			case <-timer.C:
-				return
-			}
-		}
-	}
-
-	wg := &sync.WaitGroup{}
-	for i := 0; i < 4; i++ {
-		wg.Add(1)
-		go workerFn(wg)
-	}
-	wg.Wait()
-	// Only one thread updates the settings at regular intervals
-	s.Equal(5, settingsCallCount)
+	// should change
+	tscb.UpdateSettings(dynamicconfig.CircuitBreakerSettings{
+		MaxRequests: 2,
+		Interval:    3600 * time.Second,
+		Timeout:     30 * time.Second,
+	})
+	cb3 := tscb.cb.Load()
+	s.NotEqual(cb3, cb2)
 }

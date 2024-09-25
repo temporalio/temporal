@@ -23,7 +23,7 @@
 // THE SOFTWARE.
 
 // Generates all three generated files in this package:
-//go:generate go run ../../cmd/tools/rpcwrappers -service frontend
+//go:generate go run ../../cmd/tools/genrpcwrappers -service frontend
 
 package frontend
 
@@ -32,7 +32,6 @@ import (
 	"time"
 
 	"go.temporal.io/api/workflowservice/v1"
-
 	"go.temporal.io/server/common/debug"
 )
 

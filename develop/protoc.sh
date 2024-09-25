@@ -13,7 +13,7 @@ rm -rf "$new" && mkdir -p "$new"
 
 $PROTOGEN \
   --descriptor_set_in="$API_BINPB" \
-  --root=proto/internal \
+  --root="$PROTO_ROOT"/internal \
   --rewrite-enum=BuildId_State:BuildId \
   --output="$new" \
   -p go-grpc_out=paths=source_relative:"$new" \

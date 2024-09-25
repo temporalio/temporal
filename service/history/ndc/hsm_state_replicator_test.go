@@ -26,7 +26,6 @@ import (
 	"context"
 	"testing"
 
-	"github.com/golang/mock/gomock"
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -50,6 +49,7 @@ import (
 	"go.temporal.io/server/service/history/tests"
 	"go.temporal.io/server/service/history/workflow"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
+	"go.uber.org/mock/gomock"
 )
 
 type (
@@ -65,7 +65,7 @@ type (
 
 		mockExecutionMgr *persistence.MockExecutionManager
 
-		workflowCache *wcache.CacheImpl
+		workflowCache wcache.Cache
 		logger        log.Logger
 
 		workflowKey     definition.WorkflowKey
@@ -109,9 +109,7 @@ func (s *hsmStateReplicatorSuite) SetupTest() {
 	err = stateMachineRegistry.RegisterTaskSerializer(hsmtest.TaskType, hsmtest.TaskSerializer{})
 	s.NoError(err)
 
-	var ok bool
-	s.workflowCache, ok = wcache.NewHostLevelCache(s.mockShard.GetConfig(), metrics.NoopMetricsHandler).(*wcache.CacheImpl)
-	s.True(ok)
+	s.workflowCache = wcache.NewHostLevelCache(s.mockShard.GetConfig(), s.mockShard.GetLogger(), metrics.NoopMetricsHandler)
 
 	s.namespaceEntry = tests.GlobalNamespaceEntry
 	s.workflowKey = definition.NewWorkflowKey(s.namespaceEntry.ID().String(), tests.WorkflowID, tests.RunID)

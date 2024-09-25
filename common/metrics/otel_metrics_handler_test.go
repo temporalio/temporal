@@ -30,7 +30,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/golang/mock/gomock"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/stretchr/testify/assert"
@@ -39,9 +38,9 @@ import (
 	"go.opentelemetry.io/otel/metric"
 	sdkmetrics "go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/sdk/metric/metricdata"
-	"go.temporal.io/server/common/log/tag"
-
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
+	"go.uber.org/mock/gomock"
 )
 
 var (
@@ -232,8 +231,8 @@ func recordMetrics(mp Handler) {
 	timer.Record(time.Duration(minLatency) * time.Millisecond)
 	timer.Record(time.Duration(maxLatency) * time.Millisecond)
 	histogram.Record(int64(testBytes))
-	hitsTaggedCounter.Record(11, TaskQueueTag("__sticky__"))
-	hitsTaggedExcludedCounter.Record(14, TaskQueueTag("filtered"))
+	hitsTaggedCounter.Record(11, UnsafeTaskQueueTag("__sticky__"))
+	hitsTaggedExcludedCounter.Record(14, UnsafeTaskQueueTag("filtered"))
 }
 
 type erroneousMeter struct {

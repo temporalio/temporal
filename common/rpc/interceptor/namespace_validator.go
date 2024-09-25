@@ -31,13 +31,12 @@ import (
 	"go.temporal.io/api/operatorservice/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
-	"google.golang.org/grpc"
-
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/api"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/namespace"
+	"google.golang.org/grpc"
 )
 
 type (
@@ -60,15 +59,22 @@ var (
 	errNamespaceTooLong           = serviceerror.NewInvalidArgument("Namespace length exceeds limit.")
 	errTaskTokenNotSet            = serviceerror.NewInvalidArgument("Task token not set on request.")
 	errTaskTokenNamespaceMismatch = serviceerror.NewInvalidArgument("Operation requested with a token from a different namespace.")
+	errDeserializingToken         = serviceerror.NewInvalidArgument("Error deserializing task token.")
 
-	allowedNamespaceStates = map[string][]enumspb.NamespaceState{
-		"/temporal.api.workflowservice.v1.WorkflowService/StartWorkflowExecution":           {enumspb.NAMESPACE_STATE_REGISTERED},
-		"/temporal.api.workflowservice.v1.WorkflowService/SignalWithStartWorkflowExecution": {enumspb.NAMESPACE_STATE_REGISTERED},
-		"/temporal.api.operatorservice.v1.OperatorService/DeleteNamespace":                  {enumspb.NAMESPACE_STATE_REGISTERED, enumspb.NAMESPACE_STATE_DEPRECATED, enumspb.NAMESPACE_STATE_DELETED},
-		"/temporal.api.nexusservice.v1.NexusService/DispatchNexusTask":                      {enumspb.NAMESPACE_STATE_REGISTERED},
+	allowedNamespaceStatesPerAPI = map[string][]enumspb.NamespaceState{
+		api.WorkflowServicePrefix + "StartWorkflowExecution":           {enumspb.NAMESPACE_STATE_REGISTERED},
+		api.WorkflowServicePrefix + "SignalWithStartWorkflowExecution": {enumspb.NAMESPACE_STATE_REGISTERED},
+		api.OperatorServicePrefix + "DeleteNamespace":                  {enumspb.NAMESPACE_STATE_REGISTERED, enumspb.NAMESPACE_STATE_DEPRECATED, enumspb.NAMESPACE_STATE_DELETED},
+		api.NexusServicePrefix + "DispatchNexusTask":                   {enumspb.NAMESPACE_STATE_REGISTERED},
 	}
-	// If API name is not in the map above, these are allowed states for all APIs that have `namespace` or `task_token` field in the request object.
-	defaultAllowedNamespaceStates = []enumspb.NamespaceState{enumspb.NAMESPACE_STATE_REGISTERED, enumspb.NAMESPACE_STATE_DEPRECATED}
+	// If API name is not in the map above, these are allowed states for all APIs of specific service
+	// that have `namespace` or `task_token` field in the request object.
+	allowedNamespaceStatesPerService = map[string][]enumspb.NamespaceState{
+		api.AdminServicePrefix: {enumspb.NAMESPACE_STATE_REGISTERED, enumspb.NAMESPACE_STATE_DEPRECATED, enumspb.NAMESPACE_STATE_DELETED},
+	}
+	// If service name is not in the map above, these are allowed states for all APIs
+	// that have `namespace` or `task_token` field in the request object.
+	allowedNamespaceStatesDefault = []enumspb.NamespaceState{enumspb.NAMESPACE_STATE_REGISTERED, enumspb.NAMESPACE_STATE_DEPRECATED}
 
 	allowedMethodsDuringHandover = map[string]struct{}{
 		"DescribeNamespace":                  {},
@@ -342,13 +348,13 @@ func (ni *NamespaceValidatorInterceptor) extractNamespaceFromTaskToken(req inter
 	if _, ok := req.(*workflowservice.RespondQueryTaskCompletedRequest); ok {
 		taskToken, err := ni.tokenSerializer.DeserializeQueryTaskToken(taskTokenBytes)
 		if err != nil {
-			return nil, err
+			return nil, errDeserializingToken
 		}
 		namespaceID = namespace.ID(taskToken.GetNamespaceId())
 	} else {
 		taskToken, err := ni.tokenSerializer.Deserialize(taskTokenBytes)
 		if err != nil {
-			return nil, err
+			return nil, errDeserializingToken
 		}
 		namespaceID = namespace.ID(taskToken.GetNamespaceId())
 	}
@@ -375,17 +381,20 @@ func (ni *NamespaceValidatorInterceptor) checkNamespaceState(namespaceEntry *nam
 		return nil
 	}
 
-	allowedStates, allowedStatesDefined := allowedNamespaceStates[fullMethod]
-	if !allowedStatesDefined {
-		allowedStates = defaultAllowedNamespaceStates
+	allowedStates, allowedStatesPerAPIDefined := allowedNamespaceStatesPerAPI[fullMethod]
+	if !allowedStatesPerAPIDefined {
+		serviceName := api.ServiceName(fullMethod)
+		var allowedStatesPerServiceDefined bool
+		allowedStates, allowedStatesPerServiceDefined = allowedNamespaceStatesPerService[serviceName]
+		if !allowedStatesPerServiceDefined {
+			allowedStates = allowedNamespaceStatesDefault
+		}
 	}
-
 	for _, allowedState := range allowedStates {
 		if allowedState == namespaceEntry.State() {
 			return nil
 		}
 	}
-
 	return serviceerror.NewNamespaceInvalidState(namespaceEntry.Name().String(), namespaceEntry.State(), allowedStates)
 }
 

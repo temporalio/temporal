@@ -29,6 +29,7 @@ import (
 	"strconv"
 
 	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/server/common/headers"
 	"google.golang.org/grpc/metadata"
 )
 
@@ -59,54 +60,34 @@ func EncodeClusterShardMD(
 }
 
 func DecodeClusterShardMD(
-	clusterShardMD metadata.MD,
-) (_ ClusterShardID, _ ClusterShardID, _ error) {
-	var clientClusterShardID ClusterShardID
-	var serverClusterShardID ClusterShardID
-
-	clientClusterID, err := parseInt32(clusterShardMD, MetadataKeyClientClusterID)
-	if err != nil {
-		return clientClusterShardID, serverClusterShardID, err
+	getter headers.HeaderGetter,
+) (client ClusterShardID, server ClusterShardID, err error) {
+	if client.ClusterID, err = parseInt32(getter, MetadataKeyClientClusterID); err != nil {
+		return
+	} else if client.ShardID, err = parseInt32(getter, MetadataKeyClientShardID); err != nil {
+		return
+	} else if server.ClusterID, err = parseInt32(getter, MetadataKeyServerClusterID); err != nil {
+		return
+	} else if server.ShardID, err = parseInt32(getter, MetadataKeyServerShardID); err != nil {
+		return
 	}
-	clientShardID, err := parseInt32(clusterShardMD, MetadataKeyClientShardID)
-	if err != nil {
-		return clientClusterShardID, serverClusterShardID, err
-	}
-	clientClusterShardID.ClusterID = clientClusterID
-	clientClusterShardID.ShardID = clientShardID
-
-	serverClusterID, err := parseInt32(clusterShardMD, MetadataKeyServerClusterID)
-	if err != nil {
-		return clientClusterShardID, serverClusterShardID, err
-	}
-	serverShardID, err := parseInt32(clusterShardMD, MetadataKeyServerShardID)
-	if err != nil {
-		return clientClusterShardID, serverClusterShardID, err
-	}
-	serverClusterShardID.ClusterID = serverClusterID
-	serverClusterShardID.ShardID = serverShardID
-
-	return clientClusterShardID, serverClusterShardID, nil
+	return
 }
 
 func parseInt32(
-	clusterShardMD metadata.MD,
+	getter headers.HeaderGetter,
 	metadataKey string,
 ) (int32, error) {
-	metadataValues := clusterShardMD.Get(metadataKey)
-	if len(metadataValues) != 1 {
-		return 0, serviceerror.NewInvalidArgument(fmt.Sprintf(
-			"unable to parse metadata key %v: %v",
-			metadataKey,
-			metadataValues,
-		))
+	stringValue := getter.Get(metadataKey)
+	if stringValue == "" {
+		return 0, serviceerror.NewInvalidArgument("missing cluster & shard ID metadata")
 	}
-	metadataValue, err := strconv.Atoi(metadataValues[0])
+	metadataValue, err := strconv.Atoi(stringValue)
 	if err != nil {
 		return 0, serviceerror.NewInvalidArgument(fmt.Sprintf(
 			"unable to parse metadata key %v: %v",
 			metadataKey,
-			metadataValues,
+			err,
 		))
 	}
 	return int32(metadataValue), nil

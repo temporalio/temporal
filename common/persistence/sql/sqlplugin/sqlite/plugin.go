@@ -34,8 +34,6 @@ import (
 
 	"github.com/iancoleman/strcase"
 	"github.com/jmoiron/sqlx"
-	"golang.org/x/exp/maps"
-
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
@@ -43,6 +41,7 @@ import (
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
 	"go.temporal.io/server/common/resolver"
 	sqliteschema "go.temporal.io/server/schema/sqlite"
+	expmaps "golang.org/x/exp/maps"
 )
 
 const (
@@ -195,7 +194,7 @@ func buildDSNAttr(cfg *config.SQL) (url.Values, error) {
 	parameters := url.Values{}
 
 	// sort ConnectAttributes to get a deterministic order
-	keys := maps.Keys(cfg.ConnectAttributes)
+	keys := expmaps.Keys(cfg.ConnectAttributes)
 	sort.Strings(keys)
 
 	for _, k := range keys {

@@ -173,5 +173,12 @@ service AdminService {
     rpc AddTasks (AddTasksRequest) returns (AddTasksResponse) {}
 
     rpc ListQueues (ListQueuesRequest) returns (ListQueuesResponse) {}
-}
 
+    rpc DeepHealthCheck (DeepHealthCheckRequest) returns (DeepHealthCheckResponse) {}
+
+    rpc SyncWorkflowState (SyncWorkflowStateRequest) returns (SyncWorkflowStateResponse) {}
+
+    rpc GenerateLastHistoryReplicationTasks(GenerateLastHistoryReplicationTasksRequest) returns (GenerateLastHistoryReplicationTasksResponse) {}
+
+    rpc DescribeTaskQueuePartition (DescribeTaskQueuePartitionRequest) returns (DescribeTaskQueuePartitionResponse) {}
+}

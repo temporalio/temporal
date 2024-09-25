@@ -33,6 +33,8 @@ import "temporal/api/enums/v1/common.proto";
 import "temporal/api/enums/v1/workflow.proto";
 import "temporal/api/failure/v1/message.proto";
 import "temporal/api/workflow/v1/message.proto";
+import "temporal/api/history/v1/message.proto";
+
 
 import "temporal/server/api/clock/v1/message.proto";
 import "temporal/server/api/enums/v1/common.proto";
@@ -90,6 +92,7 @@ message WorkflowExecutionInfo {
     int64 last_event_task_id = 17;
     int64 last_first_event_id = 18;
     int64 last_completed_workflow_task_started_event_id = 19;
+    // Deprecated. use `WorkflowExecutionState.start_time`
     google.protobuf.Timestamp start_time = 20;
     google.protobuf.Timestamp last_update_time = 21;
 
@@ -240,6 +243,12 @@ message WorkflowExecutionInfo {
     // (-- api-linter: core::0142::time-field-type=disabled
     //     aip.dev/not-precedent: This is a vector clock, not a timestamp --)
     int64 task_generation_shard_clock_timestamp = 91;
+
+    VersionedTransition workflow_task_last_update_versioned_transition = 92;
+    VersionedTransition visibility_last_update_versioned_transition = 93;
+    VersionedTransition signal_request_ids_last_update_versioned_transition = 94;
+
+    repeated StateMachineTombstoneBatch sub_state_machine_tombstone_batches = 95;
 }
 
 message ExecutionStats {
@@ -252,6 +261,8 @@ message WorkflowExecutionState {
     string run_id = 2;
     temporal.server.api.enums.v1.WorkflowExecutionState state = 3;
     temporal.api.enums.v1.WorkflowExecutionStatus status = 4;
+    VersionedTransition last_update_versioned_transition = 5;
+    google.protobuf.Timestamp start_time = 6;
 }
 
 // transfer column
@@ -303,6 +314,12 @@ message ReplicationTaskInfo {
     google.protobuf.Timestamp visibility_time = 16;
     string new_run_id = 17;
     temporal.server.api.enums.v1.TaskPriority priority = 18;
+    VersionedTransition versioned_transition = 19;
+    // A list of event-based replication tasks that, together, are equivalent
+    // to this state-based task. 
+    // TODO: Remove this field when state-based replication is stable and
+    // doesn't need to be disabled.
+    repeated ReplicationTaskInfo task_equivalents = 20;
 }
 
 // visibility_task_data column
@@ -317,6 +334,7 @@ message VisibilityTaskInfo {
     reserved 8;
     reserved 9;
     int64 close_visibility_task_id = 10;
+    google.protobuf.Timestamp close_time = 11;
 }
 
 // timer column
@@ -430,6 +448,7 @@ message ActivityInfo {
     }
     // The version stamp of the worker to whom this activity was most-recently dispatched
     temporal.api.common.v1.WorkerVersionStamp last_worker_version_stamp = 37;
+    VersionedTransition last_update_versioned_transition = 38;
 
     message UseWorkflowBuildIdInfo {
         // build ID of the wf when this activity started last time (which is the build ID of
@@ -448,6 +467,7 @@ message TimerInfo {
     int64 task_status = 4;
     // timerId serves the purpose of indicating whether a timer task is generated for this timer info.
     string timer_id = 5;
+    VersionedTransition last_update_versioned_transition = 6;
 }
 
 // child_executions_map column
@@ -466,6 +486,7 @@ message ChildExecutionInfo {
     int64 initiated_event_id = 12;
     temporal.server.api.clock.v1.VectorClock clock = 13;
     string namespace_id = 14;
+    VersionedTransition last_update_versioned_transition = 15;
 }
 
 // request_cancel_map column
@@ -474,6 +495,7 @@ message RequestCancelInfo {
     int64 initiated_event_batch_id = 2;
     string cancel_request_id = 3;
     int64 initiated_event_id = 4;
+    VersionedTransition last_update_versioned_transition = 5;
 }
 
 // signal_map column
@@ -486,6 +508,7 @@ message SignalInfo {
     reserved 6;
     int64 initiated_event_id = 7;
     reserved 8;
+    VersionedTransition last_update_versioned_transition = 9;
 }
 
 // checksum column
@@ -505,10 +528,37 @@ message Callback {
         map<string, string> header = 2;
     }
 
+    message HSM {
+        // namespace id of the target state machine.
+        string namespace_id = 1;
+        // ID of the workflow that the target state machine is attached to.
+        string workflow_id = 2;
+        // Run id of said workflow.
+        string run_id = 3;
+        // A reference to the state machine.
+        temporal.server.api.persistence.v1.StateMachineRef ref = 4;
+        // The method name to invoke. Methods must be explicitly registered for the target state machine in the state
+        // machine registry, and accept an argument type of HistoryEvent that is the completion event of the completed
+        // workflow.
+        string method = 5;
+    }
+
     reserved 1; // For a generic callback mechanism to be added later.
     oneof variant {
         Nexus nexus = 2;
+        HSM hsm = 3;
     }
+}
+
+message HSMCompletionCallbackArg {
+    // namespace ID of the workflow that just completed.
+    string namespace_id = 1;
+    // ID of the workflow that just completed.
+    string workflow_id = 2;
+    // run ID of the workflow that just completed.
+    string run_id = 3;
+    // Last event of the completed workflow.
+    temporal.api.history.v1.HistoryEvent last_event = 4;
 }
 
 message CallbackInfo {

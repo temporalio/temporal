@@ -105,6 +105,10 @@ const (
 	HistoryService_AddTasks_FullMethodName                               = "/temporal.server.api.historyservice.v1.HistoryService/AddTasks"
 	HistoryService_ListTasks_FullMethodName                              = "/temporal.server.api.historyservice.v1.HistoryService/ListTasks"
 	HistoryService_CompleteNexusOperation_FullMethodName                 = "/temporal.server.api.historyservice.v1.HistoryService/CompleteNexusOperation"
+	HistoryService_InvokeStateMachineMethod_FullMethodName               = "/temporal.server.api.historyservice.v1.HistoryService/InvokeStateMachineMethod"
+	HistoryService_DeepHealthCheck_FullMethodName                        = "/temporal.server.api.historyservice.v1.HistoryService/DeepHealthCheck"
+	HistoryService_SyncWorkflowState_FullMethodName                      = "/temporal.server.api.historyservice.v1.HistoryService/SyncWorkflowState"
+	HistoryService_UpdateActivityOptions_FullMethodName                  = "/temporal.server.api.historyservice.v1.HistoryService/UpdateActivityOptions"
 )
 
 // HistoryServiceClient is the client API for HistoryService service.
@@ -315,6 +319,14 @@ type HistoryServiceClient interface {
 	// Complete an async Nexus Operation using a completion token. The completion state could be successful, failed, or
 	// canceled.
 	CompleteNexusOperation(ctx context.Context, in *CompleteNexusOperationRequest, opts ...grpc.CallOption) (*CompleteNexusOperationResponse, error)
+	InvokeStateMachineMethod(ctx context.Context, in *InvokeStateMachineMethodRequest, opts ...grpc.CallOption) (*InvokeStateMachineMethodResponse, error)
+	// Deep health check history service dependencies health status
+	DeepHealthCheck(ctx context.Context, in *DeepHealthCheckRequest, opts ...grpc.CallOption) (*DeepHealthCheckResponse, error)
+	SyncWorkflowState(ctx context.Context, in *SyncWorkflowStateRequest, opts ...grpc.CallOption) (*SyncWorkflowStateResponse, error)
+	// UpdateActivityOptions is called by the client to update the options of an activity
+	// (-- api-linter: core::0134::method-signature=disabled
+	// (-- api-linter: core::0134::response-message-name=disabled
+	UpdateActivityOptions(ctx context.Context, in *UpdateActivityOptionsRequest, opts ...grpc.CallOption) (*UpdateActivityOptionsResponse, error)
 }
 
 type historyServiceClient struct {
@@ -914,6 +926,42 @@ func (c *historyServiceClient) CompleteNexusOperation(ctx context.Context, in *C
 	return out, nil
 }
 
+func (c *historyServiceClient) InvokeStateMachineMethod(ctx context.Context, in *InvokeStateMachineMethodRequest, opts ...grpc.CallOption) (*InvokeStateMachineMethodResponse, error) {
+	out := new(InvokeStateMachineMethodResponse)
+	err := c.cc.Invoke(ctx, HistoryService_InvokeStateMachineMethod_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *historyServiceClient) DeepHealthCheck(ctx context.Context, in *DeepHealthCheckRequest, opts ...grpc.CallOption) (*DeepHealthCheckResponse, error) {
+	out := new(DeepHealthCheckResponse)
+	err := c.cc.Invoke(ctx, HistoryService_DeepHealthCheck_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *historyServiceClient) SyncWorkflowState(ctx context.Context, in *SyncWorkflowStateRequest, opts ...grpc.CallOption) (*SyncWorkflowStateResponse, error) {
+	out := new(SyncWorkflowStateResponse)
+	err := c.cc.Invoke(ctx, HistoryService_SyncWorkflowState_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *historyServiceClient) UpdateActivityOptions(ctx context.Context, in *UpdateActivityOptionsRequest, opts ...grpc.CallOption) (*UpdateActivityOptionsResponse, error) {
+	out := new(UpdateActivityOptionsResponse)
+	err := c.cc.Invoke(ctx, HistoryService_UpdateActivityOptions_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // HistoryServiceServer is the server API for HistoryService service.
 // All implementations must embed UnimplementedHistoryServiceServer
 // for forward compatibility
@@ -1122,6 +1170,14 @@ type HistoryServiceServer interface {
 	// Complete an async Nexus Operation using a completion token. The completion state could be successful, failed, or
 	// canceled.
 	CompleteNexusOperation(context.Context, *CompleteNexusOperationRequest) (*CompleteNexusOperationResponse, error)
+	InvokeStateMachineMethod(context.Context, *InvokeStateMachineMethodRequest) (*InvokeStateMachineMethodResponse, error)
+	// Deep health check history service dependencies health status
+	DeepHealthCheck(context.Context, *DeepHealthCheckRequest) (*DeepHealthCheckResponse, error)
+	SyncWorkflowState(context.Context, *SyncWorkflowStateRequest) (*SyncWorkflowStateResponse, error)
+	// UpdateActivityOptions is called by the client to update the options of an activity
+	// (-- api-linter: core::0134::method-signature=disabled
+	// (-- api-linter: core::0134::response-message-name=disabled
+	UpdateActivityOptions(context.Context, *UpdateActivityOptionsRequest) (*UpdateActivityOptionsResponse, error)
 	mustEmbedUnimplementedHistoryServiceServer()
 }
 
@@ -1317,6 +1373,18 @@ func (UnimplementedHistoryServiceServer) ListTasks(context.Context, *ListTasksRe
 }
 func (UnimplementedHistoryServiceServer) CompleteNexusOperation(context.Context, *CompleteNexusOperationRequest) (*CompleteNexusOperationResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method CompleteNexusOperation not implemented")
+}
+func (UnimplementedHistoryServiceServer) InvokeStateMachineMethod(context.Context, *InvokeStateMachineMethodRequest) (*InvokeStateMachineMethodResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method InvokeStateMachineMethod not implemented")
+}
+func (UnimplementedHistoryServiceServer) DeepHealthCheck(context.Context, *DeepHealthCheckRequest) (*DeepHealthCheckResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method DeepHealthCheck not implemented")
+}
+func (UnimplementedHistoryServiceServer) SyncWorkflowState(context.Context, *SyncWorkflowStateRequest) (*SyncWorkflowStateResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method SyncWorkflowState not implemented")
+}
+func (UnimplementedHistoryServiceServer) UpdateActivityOptions(context.Context, *UpdateActivityOptionsRequest) (*UpdateActivityOptionsResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method UpdateActivityOptions not implemented")
 }
 func (UnimplementedHistoryServiceServer) mustEmbedUnimplementedHistoryServiceServer() {}
 
@@ -2473,6 +2541,78 @@ func _HistoryService_CompleteNexusOperation_Handler(srv interface{}, ctx context
 	return interceptor(ctx, in, info, handler)
 }
 
+func _HistoryService_InvokeStateMachineMethod_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(InvokeStateMachineMethodRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(HistoryServiceServer).InvokeStateMachineMethod(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: HistoryService_InvokeStateMachineMethod_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(HistoryServiceServer).InvokeStateMachineMethod(ctx, req.(*InvokeStateMachineMethodRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _HistoryService_DeepHealthCheck_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(DeepHealthCheckRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(HistoryServiceServer).DeepHealthCheck(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: HistoryService_DeepHealthCheck_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(HistoryServiceServer).DeepHealthCheck(ctx, req.(*DeepHealthCheckRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _HistoryService_SyncWorkflowState_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SyncWorkflowStateRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(HistoryServiceServer).SyncWorkflowState(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: HistoryService_SyncWorkflowState_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(HistoryServiceServer).SyncWorkflowState(ctx, req.(*SyncWorkflowStateRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _HistoryService_UpdateActivityOptions_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(UpdateActivityOptionsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(HistoryServiceServer).UpdateActivityOptions(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: HistoryService_UpdateActivityOptions_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(HistoryServiceServer).UpdateActivityOptions(ctx, req.(*UpdateActivityOptionsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // HistoryService_ServiceDesc is the grpc.ServiceDesc for HistoryService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -2727,6 +2867,22 @@ var HistoryService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "CompleteNexusOperation",
 			Handler:    _HistoryService_CompleteNexusOperation_Handler,
+		},
+		{
+			MethodName: "InvokeStateMachineMethod",
+			Handler:    _HistoryService_InvokeStateMachineMethod_Handler,
+		},
+		{
+			MethodName: "DeepHealthCheck",
+			Handler:    _HistoryService_DeepHealthCheck_Handler,
+		},
+		{
+			MethodName: "SyncWorkflowState",
+			Handler:    _HistoryService_SyncWorkflowState_Handler,
+		},
+		{
+			MethodName: "UpdateActivityOptions",
+			Handler:    _HistoryService_UpdateActivityOptions_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{

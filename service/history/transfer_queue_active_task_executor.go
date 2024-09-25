@@ -32,6 +32,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
+	sdkpb "go.temporal.io/api/sdk/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
@@ -42,6 +43,7 @@ import (
 	workflowspb "go.temporal.io/server/api/workflow/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
@@ -851,6 +853,7 @@ func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
 		sourceVersionStamp,
 		rootExecutionInfo,
 		inheritedBuildId,
+		initiatedEvent.GetUserMetadata(),
 	)
 	if err != nil {
 		t.logger.Debug("Failed to start child workflow execution", tag.Error(err))
@@ -996,7 +999,7 @@ func (t *transferQueueActiveTaskExecutor) processResetWorkflow(
 			t.shardContext,
 			t.cache,
 			definition.NewWorkflowKey(task.NamespaceID, task.WorkflowID, resetPoint.GetRunId()),
-			workflow.LockPriorityLow,
+			locks.PriorityLow,
 		)
 		if err != nil {
 			return err
@@ -1339,6 +1342,7 @@ func (t *transferQueueActiveTaskExecutor) startWorkflow(
 	sourceVersionStamp *commonpb.WorkerVersionStamp,
 	rootExecutionInfo *workflowspb.RootExecutionInfo,
 	inheritedBuildId string,
+	userMetadata *sdkpb.UserMetadata,
 ) (string, *clockspb.VectorClock, error) {
 	request := common.CreateHistoryStartWorkflowRequest(
 		task.TargetNamespaceID,
@@ -1360,6 +1364,7 @@ func (t *transferQueueActiveTaskExecutor) startWorkflow(
 			CronSchedule:          attributes.CronSchedule,
 			Memo:                  attributes.Memo,
 			SearchAttributes:      attributes.SearchAttributes,
+			UserMetadata:          userMetadata,
 		},
 		&workflowspb.ParentExecutionInfo{
 			NamespaceId: task.NamespaceID,

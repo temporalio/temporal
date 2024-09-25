@@ -30,7 +30,6 @@ import (
 	"context"
 
 	"go.temporal.io/api/serviceerror"
-
 	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/log"
@@ -238,7 +237,7 @@ func (r *BranchMgrImpl) createNewBranch(
 
 	versionhistory.SetVersionHistoryBranchToken(newVersionHistory, resp.NewBranchToken)
 
-	branchChanged, newIndex, err := versionhistory.AddVersionHistory(
+	branchChanged, newIndex, err := versionhistory.AddAndSwitchVersionHistory(
 		r.mutableState.GetExecutionInfo().GetVersionHistories(),
 		newVersionHistory,
 	)

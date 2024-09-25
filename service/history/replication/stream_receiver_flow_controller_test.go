@@ -27,11 +27,11 @@ package replication
 import (
 	"testing"
 
-	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/suite"
 	"go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/tests"
+	"go.uber.org/mock/gomock"
 )
 
 type (
@@ -59,6 +59,9 @@ func (f *flowControlTestSuite) SetupTest() {
 	}
 
 	f.config = tests.NewDynamicConfig()
+	f.config.ReplicationReceiverMaxOutstandingTaskCount = func() int {
+		return 50
+	}
 	f.controller = NewReceiverFlowControl(signals, f.config)
 	f.maxOutStandingTasks = f.config.ReplicationReceiverMaxOutstandingTaskCount()
 }

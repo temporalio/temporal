@@ -30,13 +30,6 @@ import (
 	"encoding/binary"
 	"time"
 
-	sdkclient "go.temporal.io/sdk/client"
-	"go.temporal.io/sdk/temporal"
-	"go.temporal.io/sdk/workflow"
-	"google.golang.org/protobuf/types/known/durationpb"
-
-	"go.temporal.io/server/common/testing/historyrequire"
-
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
 	commandpb "go.temporal.io/api/command/v1"
@@ -45,12 +38,16 @@ import (
 	historypb "go.temporal.io/api/history/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
-
+	sdkclient "go.temporal.io/sdk/client"
+	"go.temporal.io/sdk/temporal"
+	"go.temporal.io/sdk/workflow"
 	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/persistence/serialization"
+	"go.temporal.io/server/common/testing/historyrequire"
+	"google.golang.org/protobuf/types/known/durationpb"
 )
 
 type RawHistorySuite struct {
@@ -71,6 +68,8 @@ func (s *RawHistorySuite) TearDownSuite() {
 }
 
 func (s *RawHistorySuite) SetupTest() {
+	s.FunctionalTestBase.SetupTest()
+
 	s.Assertions = require.New(s.T())
 	s.HistoryRequire = historyrequire.New(s.T())
 }

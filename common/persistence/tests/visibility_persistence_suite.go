@@ -29,14 +29,12 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/golang/mock/gomock"
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
-
 	"go.temporal.io/server/common/debug"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log/tag"
@@ -50,6 +48,7 @@ import (
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/resolver"
 	"go.temporal.io/server/common/searchattribute"
+	"go.uber.org/mock/gomock"
 )
 
 type (
@@ -61,6 +60,7 @@ type (
 		controller *gomock.Controller
 
 		*persistencetests.TestBase
+		NamespaceRegistry              namespace.Registry
 		VisibilityMgr                  manager.VisibilityManager
 		SearchAttributesProvider       searchattribute.Provider
 		SearchAttributesMapperProvider searchattribute.MapperProvider
@@ -80,6 +80,7 @@ func (s *VisibilityPersistenceSuite) SetupSuite() {
 	s.controller = gomock.NewController(s.T())
 	s.SearchAttributesProvider = searchattribute.NewTestProvider()
 	s.SearchAttributesMapperProvider = searchattribute.NewTestMapperProvider(nil)
+	s.NamespaceRegistry = namespace.NewMockRegistry(s.controller)
 	s.VisibilityMgr, err = visibility.NewManager(
 		cfg,
 		resolver.NewNoopResolver(),
@@ -87,6 +88,7 @@ func (s *VisibilityPersistenceSuite) SetupSuite() {
 		nil,
 		s.SearchAttributesProvider,
 		s.SearchAttributesMapperProvider,
+		s.NamespaceRegistry,
 		dynamicconfig.GetIntPropertyFn(1000),
 		dynamicconfig.GetIntPropertyFn(1000),
 		dynamicconfig.GetFloatPropertyFn(0.2),

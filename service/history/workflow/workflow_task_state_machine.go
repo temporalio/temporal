@@ -39,9 +39,6 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	updatepb "go.temporal.io/api/update/v1"
 	"go.temporal.io/api/workflowservice/v1"
-	"google.golang.org/protobuf/types/known/durationpb"
-	"google.golang.org/protobuf/types/known/timestamppb"
-
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
@@ -52,11 +49,14 @@ import (
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/tqid"
 	"go.temporal.io/server/common/worker_versioning"
+	"google.golang.org/protobuf/types/known/durationpb"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type (
 	workflowTaskStateMachine struct {
-		ms *MutableStateImpl
+		ms             *MutableStateImpl
+		metricsHandler metrics.Handler
 	}
 )
 
@@ -67,9 +67,11 @@ const (
 
 func newWorkflowTaskStateMachine(
 	ms *MutableStateImpl,
+	metricsHandler metrics.Handler,
 ) *workflowTaskStateMachine {
 	return &workflowTaskStateMachine{
-		ms: ms,
+		ms:             ms,
+		metricsHandler: metricsHandler,
 	}
 }
 
@@ -612,8 +614,11 @@ func (m *workflowTaskStateMachine) skipWorkflowTaskCompletedEvent(workflowTaskTy
 		// Only Speculative WT can skip WorkflowTaskCompletedEvent.
 		return false
 	}
+
 	if len(request.GetCommands()) != 0 {
 		// If worker returned commands, they will be converted to events, which must follow by WorkflowTaskCompletedEvent.
+		metrics.SpeculativeWorkflowTaskCommits.With(m.metricsHandler).Record(1,
+			metrics.ReasonTag("worker_returned_commands"))
 		return false
 	}
 
@@ -622,6 +627,8 @@ func (m *workflowTaskStateMachine) skipWorkflowTaskCompletedEvent(workflowTaskTy
 		// New WT will be created as Normal and WorkflowTaskCompletedEvent for this WT is also must be written.
 		// In the future, if we decide not to write heartbeat of speculative WT to the history, this check should be removed,
 		// and extra logic should be added to create next WT as Speculative. Currently, new heartbeat WT is always created as Normal.
+		metrics.SpeculativeWorkflowTaskCommits.With(m.metricsHandler).Record(1,
+			metrics.ReasonTag("force_create_task"))
 		return false
 	}
 
@@ -634,11 +641,15 @@ func (m *workflowTaskStateMachine) skipWorkflowTaskCompletedEvent(workflowTaskTy
 	// In this case difference between NextEventID and LastCompletedWorkflowTaskStartedEventId is 2.
 	// If there are other events after WFTCompleted event, then difference is > 2 and speculative WFT can't be dropped.
 	if m.ms.GetNextEventID() != m.ms.GetLastCompletedWorkflowTaskStartedEventId()+2 {
+		metrics.SpeculativeWorkflowTaskCommits.With(m.metricsHandler).Record(1,
+			metrics.ReasonTag("interleaved_events"))
 		return false
 	}
 
 	for _, message := range request.Messages {
 		if !message.GetBody().MessageIs((*updatepb.Rejection)(nil)) {
+			metrics.SpeculativeWorkflowTaskCommits.With(m.metricsHandler).Record(1,
+				metrics.ReasonTag("update_accepted"))
 			return false
 		}
 	}
@@ -649,6 +660,8 @@ func (m *workflowTaskStateMachine) skipWorkflowTaskCompletedEvent(workflowTaskTy
 	// TODO: We should perform a shard ownership check here to prevent the case where the entire speculative workflow task
 	// is done on a stale mutable state and the fact that mutable state is stale caused workflow update requests to be rejected.
 	// NOTE: The AssertShardOwnership persistence API is not implemented in the repo.
+
+	metrics.SpeculativeWorkflowTaskRollbacks.With(m.metricsHandler).Record(1)
 	return true
 }
 
@@ -929,6 +942,8 @@ func (m *workflowTaskStateMachine) UpdateWorkflowTask(
 	m.ms.executionInfo.WorkflowTaskBuildId = workflowTask.BuildId
 	m.ms.executionInfo.WorkflowTaskBuildIdRedirectCounter = workflowTask.BuildIdRedirectCounter
 
+	m.ms.workflowTaskUpdated = true
+
 	// NOTE: do not update task queue in execution info
 
 	m.ms.logger.Debug("Workflow task updated",
@@ -1154,9 +1169,20 @@ func (m *workflowTaskStateMachine) convertSpeculativeWorkflowTaskToNormal() erro
 	// convert it to normal workflow task before persisting.
 	m.ms.RemoveSpeculativeWorkflowTaskTimeoutTask()
 
+	if !m.ms.workflowTaskUpdated {
+		// Whenever we close transaction, speculative workflow task will be converted to normal.
+		// This means when there's a speculative workflow task, we haven't closed the transaction for the
+		// speculative workflow task yet after it's created.
+		// Upon creation of the speculative workflow task, the workflowTaskUpdated flag should be set.
+		// The flag is only unset when closing the transaction, which we know haven't happened yet.
+		// So the workflowTaskUpdated flag should always be set here.
+		m.ms.logger.Warn("Speculative workflow task didn't set workflowTaskUpdated flag, likely due to a bug")
+		m.ms.workflowTaskUpdated = true
+	}
+
 	m.ms.executionInfo.WorkflowTaskType = enumsspb.WORKFLOW_TASK_TYPE_NORMAL
-	metrics.ConvertSpeculativeWorkflowTask.With(m.ms.metricsHandler).
-		Record(1, metrics.NamespaceTag(m.ms.GetNamespaceEntry().Name().String()))
+	metrics.SpeculativeWorkflowTaskCommits.With(m.metricsHandler).Record(1,
+		metrics.ReasonTag("close_transaction"))
 
 	wt := m.getWorkflowTaskInfo()
 

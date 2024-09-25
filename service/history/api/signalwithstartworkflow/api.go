@@ -29,15 +29,14 @@ import (
 
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
-	"go.temporal.io/server/common/enums"
-
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/enums"
+	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/shard"
-	"go.temporal.io/server/service/history/workflow"
 )
 
 func Invoke(
@@ -61,7 +60,7 @@ func Invoke(
 			signalWithStartRequest.SignalWithStartRequest.WorkflowId,
 			"",
 		),
-		workflow.LockPriorityHigh,
+		locks.PriorityHigh,
 	)
 	switch err.(type) {
 	case nil:

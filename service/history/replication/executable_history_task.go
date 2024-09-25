@@ -32,7 +32,6 @@ import (
 	"go.temporal.io/api/common/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
-
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -84,6 +83,7 @@ func NewExecutableHistoryTask(
 	task *replicationspb.HistoryTaskAttributes,
 	sourceClusterName string,
 	priority enumsspb.TaskPriority,
+	replicationTask *replicationspb.ReplicationTask,
 ) *ExecutableHistoryTask {
 	eventBatches := task.GetEventsBatches()
 	if eventBatches == nil {
@@ -101,6 +101,7 @@ func NewExecutableHistoryTask(
 			time.Now().UTC(),
 			sourceClusterName,
 			priority,
+			replicationTask,
 		),
 
 		baseExecutionInfo:      task.BaseExecutionInfo,

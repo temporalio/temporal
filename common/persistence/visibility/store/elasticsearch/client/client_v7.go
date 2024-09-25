@@ -38,7 +38,6 @@ import (
 	"github.com/olivere/elastic/v7"
 	"github.com/olivere/elastic/v7/uritemplates"
 	enumspb "go.temporal.io/api/enums/v1"
-
 	"go.temporal.io/server/common/auth"
 	"go.temporal.io/server/common/log"
 )
@@ -336,8 +335,11 @@ func (c *clientImpl) GetDateFieldType() string {
 	return "date_nanos"
 }
 
-func (c *clientImpl) CreateIndex(ctx context.Context, index string) (bool, error) {
-	resp, err := c.esClient.CreateIndex(index).Do(ctx)
+func (c *clientImpl) CreateIndex(ctx context.Context, index string, body map[string]any) (bool, error) {
+	if body == nil {
+		body = make(map[string]interface{})
+	}
+	resp, err := c.esClient.CreateIndex(index).BodyJson(body).Do(ctx)
 	if err != nil {
 		return false, err
 	}
@@ -348,8 +350,8 @@ func (c *clientImpl) IsNotFoundError(err error) bool {
 	return elastic.IsNotFound(err)
 }
 
-func (c *clientImpl) CatIndices(ctx context.Context) (elastic.CatIndicesResponse, error) {
-	return c.esClient.CatIndices().Do(ctx)
+func (c *clientImpl) CatIndices(ctx context.Context, target string) (elastic.CatIndicesResponse, error) {
+	return c.esClient.CatIndices().Index(target).Do(ctx)
 }
 
 func (c *clientImpl) Bulk() BulkService {

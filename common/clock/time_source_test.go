@@ -40,6 +40,21 @@ func TestNewRealClock_Now(t *testing.T) {
 	assert.Equal(t, "UTC", location.String())
 }
 
+func TestNewRealClock_Since(t *testing.T) {
+	t.Parallel()
+
+	source := clock.NewRealTimeSource()
+	start := source.Now()
+	assert.Eventually(
+		t,
+		func() bool {
+			return source.Since(start) >= 5*time.Millisecond
+		},
+		time.Second,
+		time.Millisecond,
+	)
+}
+
 func TestNewRealClock_AfterFunc(t *testing.T) {
 	t.Parallel()
 

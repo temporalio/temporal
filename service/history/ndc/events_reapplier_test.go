@@ -29,22 +29,24 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/golang/mock/gomock"
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
+	"go.temporal.io/api/serviceerror"
 	updatepb "go.temporal.io/api/update/v1"
-
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/payloads"
+	"go.temporal.io/server/service/history/hsm"
+	"go.temporal.io/server/service/history/hsm/hsmtest"
 	"go.temporal.io/server/service/history/workflow"
 	"go.temporal.io/server/service/history/workflow/update"
+	"go.uber.org/mock/gomock"
 )
 
 type (
@@ -55,6 +57,8 @@ type (
 		controller *gomock.Controller
 
 		nDCReapplication EventsReapplier
+
+		hsmNode *hsm.Node
 	}
 )
 
@@ -71,9 +75,16 @@ func (s *nDCEventReapplicationSuite) SetupTest() {
 	logger := log.NewTestLogger()
 	metricsHandler := metrics.NoopMetricsHandler
 	s.nDCReapplication = NewEventsReapplier(
+		hsm.NewRegistry(),
 		metricsHandler,
 		logger,
 	)
+
+	smReg := hsm.NewRegistry()
+	s.NoError(workflow.RegisterStateMachine(smReg))
+	root, err := hsm.NewRoot(smReg, workflow.StateMachineType, nil, make(map[string]*persistencespb.StateMachineMap), &hsmtest.NodeBackend{})
+	s.NoError(err)
+	s.hsmNode = root
 }
 
 func (s *nDCEventReapplicationSuite) TearDownTest() {
@@ -110,6 +121,7 @@ func (s *nDCEventReapplicationSuite) TestReapplyEvents_AppliedEvent_Signal() {
 		attr.GetHeader(),
 		attr.GetSkipGenerateWorkflowTask(),
 	).Return(event, nil)
+	msCurrent.EXPECT().HSM().Return(s.hsmNode).AnyTimes()
 	msCurrent.EXPECT().IsWorkflowPendingOnWorkflowTaskBackoff().Return(true)
 	dedupResource := definition.NewEventReappliedID(runID, event.GetEventId(), event.GetVersion())
 	msCurrent.EXPECT().IsResourceDuplicated(dedupResource).Return(false)
@@ -141,7 +153,8 @@ func (s *nDCEventReapplicationSuite) TestReapplyEvents_AppliedEvent_Update() {
 			EventId:   105,
 			EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ACCEPTED,
 			Attributes: &historypb.HistoryEvent_WorkflowExecutionUpdateAcceptedEventAttributes{WorkflowExecutionUpdateAcceptedEventAttributes: &historypb.WorkflowExecutionUpdateAcceptedEventAttributes{
-				AcceptedRequest: &updatepb.Request{Input: &updatepb.Input{Args: payloads.EncodeString("update-request-payload")}, Meta: &updatepb.Meta{UpdateId: "update-2"}},
+				AcceptedRequest:    &updatepb.Request{Input: &updatepb.Input{Args: payloads.EncodeString("update-request-payload")}, Meta: &updatepb.Meta{UpdateId: "update-2"}},
+				ProtocolInstanceId: "update-2",
 			}},
 		},
 	} {
@@ -159,13 +172,16 @@ func (s *nDCEventReapplicationSuite) TestReapplyEvents_AppliedEvent_Update() {
 				attr.GetRequest(),
 				enumspb.UPDATE_ADMITTED_EVENT_ORIGIN_UNSPECIFIED,
 			).Return(event, nil)
+			msCurrent.EXPECT().GetUpdateOutcome(gomock.Any(), attr.GetRequest().GetMeta().GetUpdateId()).Return(nil, serviceerror.NewNotFound(""))
 		case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ACCEPTED:
 			attr := event.GetWorkflowExecutionUpdateAcceptedEventAttributes()
 			msCurrent.EXPECT().AddWorkflowExecutionUpdateAdmittedEvent(
 				attr.GetAcceptedRequest(),
 				enumspb.UPDATE_ADMITTED_EVENT_ORIGIN_REAPPLY,
 			).Return(event, nil)
+			msCurrent.EXPECT().GetUpdateOutcome(gomock.Any(), attr.GetProtocolInstanceId()).Return(nil, serviceerror.NewNotFound(""))
 		}
+		msCurrent.EXPECT().HSM().Return(s.hsmNode).AnyTimes()
 		msCurrent.EXPECT().IsWorkflowPendingOnWorkflowTaskBackoff().Return(true)
 		dedupResource := definition.NewEventReappliedID(runID, event.GetEventId(), event.GetVersion())
 		msCurrent.EXPECT().IsResourceDuplicated(dedupResource).Return(false)
@@ -199,6 +215,7 @@ func (s *nDCEventReapplicationSuite) TestReapplyEvents_Noop() {
 	dedupResource := definition.NewEventReappliedID(runID, event.GetEventId(), event.GetVersion())
 	msCurrent.EXPECT().IsResourceDuplicated(dedupResource).Return(true)
 	msCurrent.EXPECT().IsWorkflowExecutionRunning().Return(true)
+	msCurrent.EXPECT().HSM().Return(s.hsmNode).AnyTimes()
 	events := []*historypb.HistoryEvent{
 		{EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED},
 		event,
@@ -254,6 +271,7 @@ func (s *nDCEventReapplicationSuite) TestReapplyEvents_PartialAppliedEvent() {
 	dedupResource2 := definition.NewEventReappliedID(runID, event2.GetEventId(), event2.GetVersion())
 	msCurrent.EXPECT().IsResourceDuplicated(dedupResource2).Return(true)
 	msCurrent.EXPECT().UpdateDuplicatedResource(dedupResource1)
+	msCurrent.EXPECT().HSM().Return(s.hsmNode).AnyTimes()
 	events := []*historypb.HistoryEvent{
 		{EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED},
 		event1,
@@ -296,6 +314,7 @@ func (s *nDCEventReapplicationSuite) TestReapplyEvents_Error() {
 	).Return(nil, fmt.Errorf("test"))
 	dedupResource := definition.NewEventReappliedID(runID, event.GetEventId(), event.GetVersion())
 	msCurrent.EXPECT().IsResourceDuplicated(dedupResource).Return(false)
+	msCurrent.EXPECT().HSM().Return(s.hsmNode).AnyTimes()
 	events := []*historypb.HistoryEvent{
 		{EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED},
 		event,

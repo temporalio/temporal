@@ -30,17 +30,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/golang/mock/gomock"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
 	failurepb "go.temporal.io/api/failure/v1"
 	"go.temporal.io/api/serviceerror"
-	"go.temporal.io/server/service/history/configs"
-	"go.temporal.io/server/service/history/tests"
-	"google.golang.org/protobuf/types/known/timestamppb"
-
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/api/historyservice/v1"
@@ -55,7 +50,11 @@ import (
 	"go.temporal.io/server/common/persistence"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/xdc"
+	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/shard"
+	"go.temporal.io/server/service/history/tests"
+	"go.uber.org/mock/gomock"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type (
@@ -146,6 +145,7 @@ func (s *executableActivityStateTaskSuite) SetupTest() {
 		s.replicationTask,
 		s.sourceClusterName,
 		enumsspb.TASK_PRIORITY_HIGH,
+		nil,
 	)
 	s.task.ExecutableTask = s.executableTask
 	s.executableTask.EXPECT().TaskID().Return(s.taskID).AnyTimes()
@@ -374,6 +374,7 @@ func (s *executableActivityStateTaskSuite) TestBatchedTask_ShouldBatchTogether_A
 		replicationAttribute1,
 		s.sourceClusterName,
 		enumsspb.TASK_PRIORITY_HIGH,
+		nil,
 	)
 	task1.ExecutableTask = s.executableTask
 
@@ -395,6 +396,7 @@ func (s *executableActivityStateTaskSuite) TestBatchedTask_ShouldBatchTogether_A
 		replicationAttribute2,
 		s.sourceClusterName,
 		enumsspb.TASK_PRIORITY_HIGH,
+		nil,
 	)
 	task2.ExecutableTask = s.executableTask
 
@@ -448,6 +450,7 @@ func (s *executableActivityStateTaskSuite) TestBatchWith_InvalidBatchTask_Should
 		replicationAttribute1,
 		s.sourceClusterName,
 		enumsspb.TASK_PRIORITY_HIGH,
+		nil,
 	)
 
 	replicationAttribute2 := s.generateReplicationAttribute(namespaceId, "wf_2", runId) //
@@ -468,6 +471,7 @@ func (s *executableActivityStateTaskSuite) TestBatchWith_InvalidBatchTask_Should
 		replicationAttribute2,
 		s.sourceClusterName,
 		enumsspb.TASK_PRIORITY_HIGH,
+		nil,
 	)
 	batchResult, batched := task1.BatchWith(task2)
 	s.False(batched)

@@ -34,8 +34,6 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
-	"google.golang.org/protobuf/types/known/durationpb"
-
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/common"
@@ -50,11 +48,13 @@ import (
 	"go.temporal.io/server/service/history/deletemanager"
 	"go.temporal.io/server/service/history/hsm"
 	"go.temporal.io/server/service/history/queues"
+	"go.temporal.io/server/service/history/replication/eventhandler"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/vclock"
 	"go.temporal.io/server/service/history/workflow"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
+	"google.golang.org/protobuf/types/known/durationpb"
 )
 
 type (
@@ -63,6 +63,7 @@ type (
 
 		clusterName        string
 		nDCHistoryResender xdc.NDCHistoryResender
+		resendHandler      eventhandler.ResendHandler
 	}
 )
 
@@ -71,6 +72,7 @@ func newTimerQueueStandbyTaskExecutor(
 	workflowCache wcache.Cache,
 	workflowDeleteManager deletemanager.DeleteManager,
 	nDCHistoryResender xdc.NDCHistoryResender,
+	resendHandler eventhandler.ResendHandler,
 	matchingRawClient resource.MatchingRawClient,
 	logger log.Logger,
 	metricProvider metrics.Handler,
@@ -86,9 +88,11 @@ func newTimerQueueStandbyTaskExecutor(
 			logger,
 			metricProvider,
 			config,
+			false,
 		),
 		clusterName:        clusterName,
 		nDCHistoryResender: nDCHistoryResender,
+		resendHandler:      resendHandler,
 	}
 }
 
@@ -432,9 +436,9 @@ func (t *timerQueueStandbyTaskExecutor) executeWorkflowRunTimeoutTask(
 	ctx context.Context,
 	timerTask *tasks.WorkflowRunTimeoutTask,
 ) error {
+
 	actionFn := func(_ context.Context, wfContext workflow.Context, mutableState workflow.MutableState) (interface{}, error) {
-		if !mutableState.IsWorkflowExecutionRunning() {
-			// workflow already finished, no need to process the timer
+		if !t.isValidWorkflowRunTimeoutTask(mutableState) {
 			return nil, nil
 		}
 
@@ -474,7 +478,7 @@ func (t *timerQueueStandbyTaskExecutor) executeWorkflowExecutionTimeoutTask(
 		wfContext workflow.Context,
 		mutableState workflow.MutableState,
 	) (interface{}, error) {
-		if !t.isValidExecutionTimeoutTask(mutableState, timerTask) {
+		if !t.isValidWorkflowExecutionTimeoutTask(mutableState, timerTask) {
 			return nil, nil
 		}
 
@@ -512,15 +516,19 @@ func (t *timerQueueStandbyTaskExecutor) executeStateMachineTimerTask(
 		mutableState workflow.MutableState,
 	) (any, error) {
 		processedTimers, err := t.executeStateMachineTimers(
+			ctx,
+			wfContext,
 			mutableState,
 			func(node *hsm.Node, task hsm.Task) error {
 				if task.Concurrent() {
 					//nolint:revive // concurrent tasks implements hsm.ConcurrentTask interface
 					concurrentTask := task.(hsm.ConcurrentTask)
-					return concurrentTask.Validate(node)
+					if err := concurrentTask.Validate(node); err != nil {
+						return err
+					}
 				}
-				// If the task is expired and still valid in the standby queue,
-				// then the state machine is stale.
+				// If the timer fired and the task is still valid in the standby queue, wait for the active cluster to
+				// transition and invalidate the task.
 				return consts.ErrTaskRetry
 			},
 		)
@@ -668,17 +676,32 @@ func (t *timerQueueStandbyTaskExecutor) fetchHistoryFromRemote(
 
 	// NOTE: history resend may take long time and its timeout is currently
 	// controlled by a separate dynamicconfig config: StandbyTaskReReplicationContextTimeout
-	if err = t.nDCHistoryResender.SendSingleWorkflowHistory(
-		ctx,
-		remoteClusterName,
-		namespace.ID(workflowKey.GetNamespaceID()),
-		workflowKey.GetWorkflowID(),
-		workflowKey.GetRunID(),
-		resendInfo.lastEventID,
-		resendInfo.lastEventVersion,
-		common.EmptyEventID,
-		common.EmptyVersion,
-	); err != nil {
+	if t.config.EnableReplicateLocalGeneratedEvent() {
+		err = t.resendHandler.ResendHistoryEvents(
+			ctx,
+			remoteClusterName,
+			namespace.ID(workflowKey.GetNamespaceID()),
+			workflowKey.GetWorkflowID(),
+			workflowKey.GetRunID(),
+			resendInfo.lastEventID,
+			resendInfo.lastEventVersion,
+			common.EmptyEventID,
+			common.EmptyVersion,
+		)
+	} else {
+		err = t.nDCHistoryResender.SendSingleWorkflowHistory(
+			ctx,
+			remoteClusterName,
+			namespace.ID(workflowKey.GetNamespaceID()),
+			workflowKey.GetWorkflowID(),
+			workflowKey.GetRunID(),
+			resendInfo.lastEventID,
+			resendInfo.lastEventVersion,
+			common.EmptyEventID,
+			common.EmptyVersion,
+		)
+	}
+	if err != nil {
 		if _, isNotFound := err.(*serviceerror.NamespaceNotFound); isNotFound {
 			// Don't log NamespaceNotFound error because it is valid case, and return error to stop retrying.
 			return err

@@ -31,13 +31,12 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
-	"google.golang.org/protobuf/types/known/timestamppb"
-
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/service/history/tasks"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type (
@@ -263,18 +262,9 @@ func (s *TaskSerializer) deserializeVisibilityTasks(
 func (s *TaskSerializer) serializeReplicationTask(
 	task tasks.Task,
 ) (*commonpb.DataBlob, error) {
-	var replicationTask *persistencespb.ReplicationTaskInfo
-	switch task := task.(type) {
-	case *tasks.SyncActivityTask:
-		replicationTask = s.replicationActivityTaskToProto(task)
-	case *tasks.HistoryReplicationTask:
-		replicationTask = s.replicationHistoryTaskToProto(task)
-	case *tasks.SyncWorkflowStateTask:
-		replicationTask = s.replicationSyncWorkflowStateTaskToProto(task)
-	case *tasks.SyncHSMTask:
-		replicationTask = s.replicationSyncHSMTaskToProto(task)
-	default:
-		return nil, serviceerror.NewInternal(fmt.Sprintf("Unknown repication task type: %v", task))
+	replicationTask, err := s.ParseReplicationTaskInfo(task)
+	if err != nil {
+		return nil, err
 	}
 
 	return ReplicationTaskInfoToBlob(replicationTask)
@@ -300,8 +290,27 @@ func (s *TaskSerializer) ParseReplicationTask(replicationTask *persistencespb.Re
 		return s.replicationSyncWorkflowStateTaskFromProto(replicationTask), nil
 	case enumsspb.TASK_TYPE_REPLICATION_SYNC_HSM:
 		return s.replicationSyncHSMTaskFromProto(replicationTask), nil
+	case enumsspb.TASK_TYPE_REPLICATION_SYNC_VERSIONED_TRANSITION:
+		return s.replicationSyncVersionedTransitionTaskFromProto(replicationTask)
 	default:
 		return nil, serviceerror.NewInternal(fmt.Sprintf("Unknown replication task type: %v", replicationTask.TaskType))
+	}
+}
+
+func (s *TaskSerializer) ParseReplicationTaskInfo(task tasks.Task) (*persistencespb.ReplicationTaskInfo, error) {
+	switch task := task.(type) {
+	case *tasks.SyncActivityTask:
+		return s.replicationActivityTaskToProto(task), nil
+	case *tasks.HistoryReplicationTask:
+		return s.replicationHistoryTaskToProto(task), nil
+	case *tasks.SyncWorkflowStateTask:
+		return s.replicationSyncWorkflowStateTaskToProto(task), nil
+	case *tasks.SyncHSMTask:
+		return s.replicationSyncHSMTaskToProto(task), nil
+	case *tasks.SyncVersionedTransitionTask:
+		return s.replicationSyncVersionedTransitionTaskToProto(task)
+	default:
+		return nil, serviceerror.NewInternal(fmt.Sprintf("Unknown repication task type: %v", task))
 	}
 }
 
@@ -1035,6 +1044,7 @@ func (s *TaskSerializer) visibilityDeleteTaskToProto(
 		TaskId:                deleteVisibilityTask.TaskID,
 		VisibilityTime:        timestamppb.New(deleteVisibilityTask.VisibilityTimestamp),
 		CloseVisibilityTaskId: deleteVisibilityTask.CloseExecutionVisibilityTaskID,
+		CloseTime:             timestamppb.New(deleteVisibilityTask.CloseTime),
 	}
 }
 
@@ -1050,6 +1060,7 @@ func (s *TaskSerializer) visibilityDeleteTaskFromProto(
 		VisibilityTimestamp:            deleteVisibilityTask.VisibilityTime.AsTime(),
 		TaskID:                         deleteVisibilityTask.TaskId,
 		CloseExecutionVisibilityTaskID: deleteVisibilityTask.CloseVisibilityTaskId,
+		CloseTime:                      deleteVisibilityTask.CloseTime.AsTime(),
 	}
 }
 
@@ -1233,6 +1244,66 @@ func (s *TaskSerializer) replicationSyncHSMTaskFromProto(
 		VisibilityTimestamp: visibilityTimestamp,
 		TaskID:              syncHSMTask.TaskId,
 	}
+}
+
+func (s *TaskSerializer) replicationSyncVersionedTransitionTaskToProto(
+	syncVersionedTransitionTask *tasks.SyncVersionedTransitionTask,
+) (*persistencespb.ReplicationTaskInfo, error) {
+	taskInfoEquivalents := make([]*persistencespb.ReplicationTaskInfo, 0, len(syncVersionedTransitionTask.TaskEquivalents))
+	for _, task := range syncVersionedTransitionTask.TaskEquivalents {
+		taskInfoEquivalent, err := s.ParseReplicationTaskInfo(task)
+		if err != nil {
+			return nil, err
+		}
+		taskInfoEquivalents = append(taskInfoEquivalents, taskInfoEquivalent)
+	}
+
+	return &persistencespb.ReplicationTaskInfo{
+		NamespaceId:         syncVersionedTransitionTask.WorkflowKey.NamespaceID,
+		WorkflowId:          syncVersionedTransitionTask.WorkflowKey.WorkflowID,
+		RunId:               syncVersionedTransitionTask.WorkflowKey.RunID,
+		TaskType:            enumsspb.TASK_TYPE_REPLICATION_SYNC_VERSIONED_TRANSITION,
+		TaskId:              syncVersionedTransitionTask.TaskID,
+		VisibilityTime:      timestamppb.New(syncVersionedTransitionTask.VisibilityTimestamp),
+		VersionedTransition: syncVersionedTransitionTask.VersionedTransition,
+		FirstEventId:        syncVersionedTransitionTask.FirstEventID,
+		NextEventId:         syncVersionedTransitionTask.NextEventID,
+		NewRunId:            syncVersionedTransitionTask.NewRunID,
+		TaskEquivalents:     taskInfoEquivalents,
+	}, nil
+}
+
+func (s *TaskSerializer) replicationSyncVersionedTransitionTaskFromProto(
+	syncVersionedTransitionTask *persistencespb.ReplicationTaskInfo,
+) (*tasks.SyncVersionedTransitionTask, error) {
+
+	taskEquivalents := make([]tasks.Task, 0, len(syncVersionedTransitionTask.TaskEquivalents))
+	for _, taskInfoEquivalent := range syncVersionedTransitionTask.TaskEquivalents {
+		taskEquivalent, err := s.ParseReplicationTask(taskInfoEquivalent)
+		if err != nil {
+			return nil, err
+		}
+		taskEquivalents = append(taskEquivalents, taskEquivalent)
+	}
+
+	visibilityTimestamp := time.Unix(0, 0)
+	if syncVersionedTransitionTask.VisibilityTime != nil {
+		visibilityTimestamp = syncVersionedTransitionTask.VisibilityTime.AsTime()
+	}
+	return &tasks.SyncVersionedTransitionTask{
+		WorkflowKey: definition.NewWorkflowKey(
+			syncVersionedTransitionTask.NamespaceId,
+			syncVersionedTransitionTask.WorkflowId,
+			syncVersionedTransitionTask.RunId,
+		),
+		VisibilityTimestamp: visibilityTimestamp,
+		TaskID:              syncVersionedTransitionTask.TaskId,
+		FirstEventID:        syncVersionedTransitionTask.FirstEventId,
+		NextEventID:         syncVersionedTransitionTask.NextEventId,
+		NewRunID:            syncVersionedTransitionTask.NewRunId,
+		VersionedTransition: syncVersionedTransitionTask.VersionedTransition,
+		TaskEquivalents:     taskEquivalents,
+	}, nil
 }
 
 func (s *TaskSerializer) serializeOutboundTask(task tasks.Task) (*commonpb.DataBlob, error) {

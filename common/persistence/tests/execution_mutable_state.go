@@ -26,6 +26,7 @@ package tests
 
 import (
 	"context"
+	"fmt"
 	"math"
 	"math/rand"
 	"testing"
@@ -37,8 +38,6 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
-	"google.golang.org/protobuf/proto"
-
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
@@ -49,6 +48,7 @@ import (
 	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/testing/protorequire"
+	"google.golang.org/protobuf/proto"
 )
 
 type (
@@ -1771,6 +1771,7 @@ func (s *ExecutionMutableStateSuite) TestDeleteCurrent_IsCurrent() {
 		WorkflowID:  s.WorkflowID,
 	})
 	s.IsType(&serviceerror.NotFound{}, err)
+	s.EqualError(err, "workflow not found for ID: "+s.WorkflowID)
 
 	s.AssertMSEqualWithDB(newSnapshot)
 	s.AssertHEEqualWithDB(branchToken, newEvents)
@@ -1817,6 +1818,7 @@ func (s *ExecutionMutableStateSuite) TestDeleteCurrent_NotCurrent() {
 		WorkflowID:  s.WorkflowID,
 	})
 	s.IsType(&serviceerror.NotFound{}, err)
+	s.EqualError(err, "workflow not found for ID: "+s.WorkflowID)
 
 	s.AssertMSEqualWithDB(newSnapshot)
 	s.AssertHEEqualWithDB(branchToken, newEvents)
@@ -1917,6 +1919,7 @@ func (s *ExecutionMutableStateSuite) AssertMissingFromDB(
 		RunID:       runID,
 	})
 	s.IsType(&serviceerror.NotFound{}, err)
+	s.EqualError(err, fmt.Sprintf("workflow execution not found for workflow ID %q and run ID %q", workflowID, runID))
 }
 
 func (s *ExecutionMutableStateSuite) AssertHEEqualWithDB(branchToken []byte, events ...[]*p.WorkflowEvents) {

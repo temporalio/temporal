@@ -33,8 +33,6 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
-	"google.golang.org/protobuf/types/known/durationpb"
-
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/common"
@@ -58,6 +56,7 @@ import (
 	"go.temporal.io/server/service/history/workflow"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
 	"go.temporal.io/server/service/history/workflow/update"
+	"google.golang.org/protobuf/types/known/durationpb"
 )
 
 type (
@@ -84,6 +83,7 @@ func newTimerQueueActiveTaskExecutor(
 			logger,
 			metricProvider,
 			config,
+			true,
 		),
 	}
 }
@@ -569,6 +569,10 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowRunTimeoutTask(
 		return err
 	}
 
+	if !t.isValidWorkflowRunTimeoutTask(mutableState) {
+		return nil
+	}
+
 	timeoutFailure := failure.NewTimeoutFailure("workflow timeout", enumspb.TIMEOUT_TYPE_START_TO_CLOSE)
 	backoffInterval := backoff.NoBackoff
 	retryState := enumspb.RETRY_STATE_TIMEOUT
@@ -699,7 +703,7 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowExecutionTimeoutTask(
 		return nil
 	}
 
-	if !t.isValidExecutionTimeoutTask(mutableState, task) {
+	if !t.isValidWorkflowExecutionTimeoutTask(mutableState, task) {
 		return nil
 	}
 
@@ -738,6 +742,8 @@ func (t *timerQueueActiveTaskExecutor) executeStateMachineTimerTask(
 	}
 
 	processedTimers, err := t.executeStateMachineTimers(
+		ctx,
+		wfCtx,
 		ms,
 		func(node *hsm.Node, task hsm.Task) error {
 			return t.shardContext.StateMachineRegistry().ExecuteTimerTask(t, node, task)

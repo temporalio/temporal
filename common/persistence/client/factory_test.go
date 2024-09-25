@@ -28,12 +28,11 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
-
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/persistence/client"
 	"go.temporal.io/server/common/persistence/mock"
+	"go.uber.org/mock/gomock"
 )
 
 func TestFactoryImpl_NewHistoryTaskQueueManager(t *testing.T) {
@@ -64,6 +63,7 @@ func TestFactoryImpl_NewHistoryTaskQueueManager(t *testing.T) {
 				&config.Persistence{
 					NumHistoryShards: 1,
 				},
+				nil,
 				nil,
 				nil,
 				nil,

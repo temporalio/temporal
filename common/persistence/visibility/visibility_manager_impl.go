@@ -33,17 +33,16 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	workflowpb "go.temporal.io/api/workflow/v1"
-	"go.temporal.io/server/common/persistence/serialization"
-	"google.golang.org/protobuf/proto"
-	"google.golang.org/protobuf/types/known/durationpb"
-	"google.golang.org/protobuf/types/known/timestamppb"
-
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/persistence/visibility/store"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/utf8validator"
+	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/durationpb"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type (
@@ -310,6 +309,7 @@ func (p *visibilityManagerImpl) convertInternalWorkflowExecutionInfo(
 			WorkflowId: internalExecution.RootWorkflowID,
 			RunId:      internalExecution.RootRunID,
 		},
+		// TODO: poplulate FirstRunId once it has been added as a system search attribute.
 	}
 
 	if internalExecution.ParentWorkflowID != "" {
@@ -333,7 +333,7 @@ func (p *visibilityManagerImpl) convertInternalWorkflowExecutionInfo(
 	// Remove this "if" block when ExecutionTime field has actual correct value (added 6/9/21).
 	// Affects only non-advanced visibility.
 	if !executionInfo.ExecutionTime.AsTime().After(time.Unix(0, 0)) {
-		executionInfo.ExecutionTime = executionInfo.StartTime
+		executionInfo.ExecutionTime = timestamppb.New(internalExecution.StartTime)
 	}
 
 	return executionInfo, nil

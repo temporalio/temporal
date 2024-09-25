@@ -32,7 +32,6 @@ import (
 	"go.opentelemetry.io/otel/trace"
 	commonpb "go.temporal.io/api/common/v1"
 	historypb "go.temporal.io/api/history/v1"
-
 	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
@@ -149,6 +148,8 @@ type (
 		taskCategoryRegistry       tasks.TaskCategoryRegistry
 		commandHandlerRegistry     *workflow.CommandHandlerRegistry
 		stateMachineEnvironment    *stateMachineEnvironment
+		replicationProgressCache   replication.ProgressCache
+		syncStateRetriever         replication.SyncStateRetriever
 	}
 )
 
@@ -162,6 +163,7 @@ func NewEngineWithShardContext(
 	config *configs.Config,
 	rawMatchingClient matchingservice.MatchingServiceClient,
 	workflowCache wcache.Cache,
+	replicationProgressCache replication.ProgressCache,
 	eventSerializer serialization.Serializer,
 	queueProcessorFactories []QueueFactory,
 	replicationTaskFetcherFactory replication.TaskFetcherFactory,
@@ -217,6 +219,13 @@ func NewEngineWithShardContext(
 			metricsHandler: shard.GetMetricsHandler(),
 			logger:         logger,
 		},
+		replicationProgressCache: replicationProgressCache,
+		syncStateRetriever: replication.NewSyncStateRetriever(
+			shard,
+			workflowCache,
+			workflowConsistencyChecker,
+			shard.GetLogger(),
+		),
 	}
 
 	historyEngImpl.queueProcessors = make(map[tasks.Category]queues.Queue)
@@ -225,13 +234,14 @@ func NewEngineWithShardContext(
 		historyEngImpl.queueProcessors[processor.Category()] = processor
 	}
 
-	historyEngImpl.eventsReapplier = ndc.NewEventsReapplier(shard.GetMetricsHandler(), logger)
+	historyEngImpl.eventsReapplier = ndc.NewEventsReapplier(shard.StateMachineRegistry(), shard.GetMetricsHandler(), logger)
 
 	if shard.GetClusterMetadata().IsGlobalNamespaceEnabled() {
 		historyEngImpl.replicationAckMgr = replication.NewAckManager(
 			shard,
 			workflowCache,
 			eventBlobCache,
+			replicationProgressCache,
 			executionManager,
 			logger,
 		)
@@ -743,6 +753,13 @@ func (e *historyEngineImpl) SyncHSM(
 	return e.nDCHSMStateReplicator.SyncHSMState(ctx, request)
 }
 
+func (e *historyEngineImpl) BackfillHistoryEvents(
+	ctx context.Context,
+	request *shard.BackfillHistoryEventsRequest,
+) error {
+	return e.nDCHistoryReplicator.BackfillHistoryEvents(ctx, request)
+}
+
 // ReplicateWorkflowState is an experimental method to replicate workflow state. This should not expose outside of history service role.
 func (e *historyEngineImpl) ReplicateWorkflowState(
 	ctx context.Context,
@@ -830,7 +847,11 @@ func (e *historyEngineImpl) NotifyNewTasks(
 		if len(tasksByCategory) > 0 {
 			proc, ok := e.queueProcessors[category]
 			if !ok {
-				e.logger.Error("Skipping notification for new tasks, processor not registered", tag.TaskCategoryID(category.ID()))
+				// On shard reload it sends fake tasks to wake up the queue processors. Only log if there are "real"
+				// tasks that can't be processed.
+				if _, ok := tasksByCategory[0].(*tasks.FakeTask); !ok {
+					e.logger.Error("Skipping notification for new tasks, processor not registered", tag.TaskCategoryID(category.ID()))
+				}
 				continue
 			}
 			proc.NotifyNewTasks(tasksByCategory)
@@ -859,8 +880,9 @@ func (e *historyEngineImpl) UnsubscribeReplicationNotification(subscriberID stri
 func (e *historyEngineImpl) ConvertReplicationTask(
 	ctx context.Context,
 	task tasks.Task,
+	clusterID int32,
 ) (*replicationspb.ReplicationTask, error) {
-	return e.replicationAckMgr.ConvertTask(ctx, task)
+	return e.replicationAckMgr.ConvertTaskByCluster(ctx, task, clusterID)
 }
 
 func (e *historyEngineImpl) GetReplicationTasksIter(
@@ -870,6 +892,10 @@ func (e *historyEngineImpl) GetReplicationTasksIter(
 	maxExclusiveTaskID int64,
 ) (collection.Iterator[tasks.Task], error) {
 	return e.replicationAckMgr.GetReplicationTasksIter(ctx, pollingCluster, minInclusiveTaskID, maxExclusiveTaskID)
+}
+
+func (e *historyEngineImpl) GetMaxReplicationTaskInfo() (int64, time.Time) {
+	return e.replicationAckMgr.GetMaxTaskInfo()
 }
 
 func (e *historyEngineImpl) GetDLQReplicationMessages(
@@ -1006,4 +1032,8 @@ func (e *historyEngineImpl) ListTasks(
 // StateMachineEnvironment implements shard.Engine.
 func (e *historyEngineImpl) StateMachineEnvironment() hsm.Environment {
 	return e.stateMachineEnvironment
+}
+
+func (e *historyEngineImpl) SyncWorkflowState(ctx context.Context, request *historyservice.SyncWorkflowStateRequest) (_ *historyservice.SyncWorkflowStateResponse, retErr error) {
+	return replicationapi.SyncWorkflowState(ctx, request, e.replicationProgressCache, e.syncStateRetriever, e.logger)
 }

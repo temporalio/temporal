@@ -31,25 +31,20 @@ import (
 	"fmt"
 	"maps"
 	"os"
+	"regexp"
 	"strconv"
 	"testing"
 	"time"
 
 	"github.com/dgryski/go-farm"
 	"github.com/pborman/uuid"
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/suite"
-	"go.uber.org/fx"
-	"google.golang.org/protobuf/types/known/durationpb"
-	"gopkg.in/yaml.v3"
-
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	namespacepb "go.temporal.io/api/namespace/v1"
 	"go.temporal.io/api/operatorservice/v1"
 	"go.temporal.io/api/workflowservice/v1"
-
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -57,11 +52,13 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/persistence"
-	esclient "go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/rpc"
 	"go.temporal.io/server/environment"
+	"go.uber.org/fx"
+	"google.golang.org/protobuf/types/known/durationpb"
+	"gopkg.in/yaml.v3"
 )
 
 type (
@@ -108,8 +105,6 @@ func WithFxOptionsForService(serviceName primitives.ServiceName, options ...fx.O
 }
 
 func (s *FunctionalTestBase) setupSuite(defaultClusterConfigFile string, options ...Option) {
-	checkTestShard(s.T())
-
 	s.testClusterFactory = NewTestClusterFactory()
 
 	params := ApplyTestClusterParams(options)
@@ -172,10 +167,16 @@ func (s *FunctionalTestBase) setupSuite(defaultClusterConfigFile string, options
 		s.archivalNamespace = s.randomizeStr("functional-archival-enabled-namespace")
 		s.Require().NoError(s.registerArchivalNamespace(s.archivalNamespace))
 	}
+}
 
-	if !UsingSQLAdvancedVisibility() {
-		s.waitForESReady()
-	}
+// All test suites that inherit FunctionalTestBase and overwrite SetupTest must
+// call this base FunctionalTestBase.SetupTest function to distribute the tests
+// into partitions. Otherwise, the test suite will be executed multiple times
+// in each partition.
+// Furthermore, all test suites in the "tests/" directory that don't inherit
+// from FunctionalTestBase must implement SetupTest that calls checkTestShard.
+func (s *FunctionalTestBase) SetupTest() {
+	checkTestShard(s.T())
 }
 
 func (s *FunctionalTestBase) registerNamespaceWithDefaults(name string) error {
@@ -217,7 +218,7 @@ func checkTestShard(t *testing.T) {
 		t.Fatal("Couldn't convert TEST_SHARD_INDEX")
 	}
 
-	// This was determined empirically to distribute our existing test names + run times
+	// This was determined empirically to distribute our existing test names
 	// reasonably well. This can be adjusted from time to time.
 	// For parallelism 4, use 11. For 3, use 26. For 2, use 20.
 	const salt = "-salt-26"
@@ -436,15 +437,60 @@ func (s *FunctionalTestBase) registerArchivalNamespace(archivalNamespace string)
 	return err
 }
 
-func (s *FunctionalTestBase) waitForESReady() {
-	s.Require().EventuallyWithTf(func(t *assert.CollectT) {
-		esClient, err := esclient.NewFunctionalTestsClient(s.testClusterConfig.ESConfig, s.Logger)
-		assert.NoError(t, err)
-		// WaitForYellowStatus is a blocking request, so set timeout equal to Eventually tick to cancel in-flight requests before retrying
-		ctx, cancel := context.WithTimeout(NewContext(), 1*time.Second)
-		defer cancel()
-		status, err := esClient.WaitForYellowStatus(ctx, s.testClusterConfig.ESConfig.GetVisibilityIndex())
-		assert.NoError(t, err)
-		assert.True(t, status == "yellow" || status == "green")
-	}, 2*time.Minute, 1*time.Second, "timed out waiting for elastic search to be healthy")
+func (s *FunctionalTestBase) OverrideDynamicConfig(setting dynamicconfig.GenericSetting, value any) {
+	s.testCluster.host.overrideDynamicConfigByKey(s.T(), setting.Key(), value)
+}
+
+func (s *FunctionalTestBase) testWithMatchingBehavior(subtest func()) {
+	for _, forcePollForward := range []bool{false, true} {
+		for _, forceTaskForward := range []bool{false, true} {
+			for _, forceAsync := range []bool{false, true} {
+				name := "NoTaskForward"
+				if forceTaskForward {
+					// force two levels of forwarding
+					name = "ForceTaskForward"
+				}
+				if forcePollForward {
+					name += "ForcePollForward"
+				} else {
+					name += "NoPollForward"
+				}
+				if forceAsync {
+					name += "ForceAsync"
+				} else {
+					name += "AllowSync"
+				}
+
+				s.Run(
+					name, func() {
+						if forceTaskForward {
+							s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 13)
+							s.OverrideDynamicConfig(dynamicconfig.TestMatchingLBForceWritePartition, 11)
+						} else {
+							s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 1)
+						}
+						if forcePollForward {
+							s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 13)
+							s.OverrideDynamicConfig(dynamicconfig.TestMatchingLBForceReadPartition, 5)
+						} else {
+							s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 1)
+						}
+						if forceAsync {
+							s.OverrideDynamicConfig(dynamicconfig.TestMatchingDisableSyncMatch, true)
+						} else {
+							s.OverrideDynamicConfig(dynamicconfig.TestMatchingDisableSyncMatch, false)
+						}
+
+						subtest()
+					},
+				)
+			}
+		}
+	}
+}
+
+func RandomizedNexusEndpoint(name string) string {
+	re := regexp.MustCompile("[/_]")
+	safeName := re.ReplaceAllString(name, "-")
+	return fmt.Sprintf("%v-%v", safeName, uuid.New())
 }

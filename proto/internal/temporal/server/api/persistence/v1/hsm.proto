@@ -139,3 +139,25 @@ message VersionedTransition {
     int64 transition_count = 2;
 }
 
+message StateMachineTombstoneBatch {
+    // The versioned transition in which the tombstones were created.
+    VersionedTransition versioned_transition = 1;
+    repeated StateMachineTombstone state_machine_tombstones = 2; 
+}
+
+message StateMachineTombstone {
+    oneof state_machine_key {
+        int64 activity_scheduled_event_id = 1;
+        string timer_id = 2;
+        int64 child_execution_initiated_event_id = 3;
+        int64 request_cancel_initiated_event_id = 4;
+        int64 signal_external_initiated_event_id = 5;
+        string update_id = 6;
+        StateMachinePath state_machine_path = 7;
+    }
+}
+
+message StateMachinePath {
+    repeated StateMachineKey path = 1;
+}
+

@@ -39,9 +39,8 @@ import (
 	"strings"
 	"time"
 
+	"go.temporal.io/api/enums/v1"
 	"go.temporal.io/sdk/client"
-	"golang.org/x/exp/maps"
-
 	"go.temporal.io/server/common/authorization"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/config"
@@ -51,6 +50,7 @@ import (
 	sqliteplugin "go.temporal.io/server/common/persistence/sql/sqlplugin/sqlite"
 	"go.temporal.io/server/schema/sqlite"
 	"go.temporal.io/server/temporal"
+	expmaps "golang.org/x/exp/maps"
 )
 
 const localBroadcastAddress = "127.0.0.1"
@@ -92,6 +92,8 @@ type LiteServerConfig struct {
 	BaseConfig *config.Config
 	// DynamicConfig sets dynamic config values used by the server.
 	DynamicConfig dynamicconfig.StaticClient
+	// SearchAttributes adds custom search attributes to all namespaces created on Temporal start.
+	SearchAttributes map[string]enums.IndexedValueType
 }
 
 func (cfg *LiteServerConfig) apply(serverConfig *config.Config, provider *PortProvider) {
@@ -268,7 +270,16 @@ func NewLiteServer(liteConfig *LiteServerConfig, opts ...temporal.ServerOption) 
 	// Pre-create namespaces
 	var namespaces []*sqlite.NamespaceConfig
 	for _, ns := range liteConfig.Namespaces {
-		namespaces = append(namespaces, sqlite.NewNamespaceConfig(liteConfig.BaseConfig.ClusterMetadata.CurrentClusterName, ns, false))
+		nsConfig, err := sqlite.NewNamespaceConfig(
+			liteConfig.BaseConfig.ClusterMetadata.CurrentClusterName,
+			ns,
+			false,
+			liteConfig.SearchAttributes,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("error creating namespace config: %w", err)
+		}
+		namespaces = append(namespaces, nsConfig)
 	}
 	if err := sqlite.CreateNamespaces(sqlConfig, namespaces...); err != nil {
 		return nil, fmt.Errorf("error creating namespaces: %w", err)
@@ -363,7 +374,7 @@ var supportedPragmas = map[string]struct{}{
 }
 
 func getAllowedPragmas() []string {
-	allowedPragmaList := maps.Keys(supportedPragmas)
+	allowedPragmaList := expmaps.Keys(supportedPragmas)
 	sort.Strings(allowedPragmaList)
 	return allowedPragmaList
 }

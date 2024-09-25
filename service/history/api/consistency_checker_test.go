@@ -29,15 +29,14 @@ import (
 	"math/rand"
 	"testing"
 
-	"github.com/golang/mock/gomock"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
-
 	"go.temporal.io/server/api/clock/v1"
 	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/testing/protomock"
@@ -46,6 +45,7 @@ import (
 	"go.temporal.io/server/service/history/tests"
 	"go.temporal.io/server/service/history/workflow"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
+	"go.uber.org/mock/gomock"
 )
 
 type (
@@ -117,14 +117,14 @@ func (s *workflowConsistencyCheckerSuite) TestGetWorkflowContextValidatedByCheck
 			WorkflowId: s.workflowID,
 			RunId:      s.currentRunID,
 		}),
-		workflow.LockPriorityHigh,
+		locks.PriorityHigh,
 	).Return(wfContext, releaseFn, nil)
 	wfContext.EXPECT().LoadMutableState(ctx, s.shardContext).Return(mutableState, nil)
 
 	workflowLease, err := s.checker.GetWorkflowLease(
 		ctx, nil,
 		definition.NewWorkflowKey(s.namespaceID, s.workflowID, s.currentRunID),
-		workflow.LockPriorityHigh,
+		locks.PriorityHigh,
 	)
 	s.NoError(err)
 	s.Equal(mutableState, workflowLease.GetMutableState())
@@ -141,7 +141,7 @@ func (s *workflowConsistencyCheckerSuite) TestGetCurrentRunID_Success() {
 		s.shardContext,
 		namespace.ID(s.namespaceID),
 		s.workflowID,
-		workflow.LockPriorityHigh,
+		locks.PriorityHigh,
 	).Return(releaseFn, nil)
 	s.shardContext.EXPECT().GetCurrentExecution(
 		ctx,
@@ -152,7 +152,7 @@ func (s *workflowConsistencyCheckerSuite) TestGetCurrentRunID_Success() {
 		},
 	).Return(&persistence.GetCurrentExecutionResponse{RunID: s.currentRunID}, nil)
 
-	runID, err := s.checker.GetCurrentRunID(ctx, s.namespaceID, s.workflowID, workflow.LockPriorityHigh)
+	runID, err := s.checker.GetCurrentRunID(ctx, s.namespaceID, s.workflowID, locks.PriorityHigh)
 	s.NoError(err)
 	s.Equal(s.currentRunID, runID)
 	s.True(released)
@@ -169,7 +169,7 @@ func (s *workflowConsistencyCheckerSuite) TestGetCurrentRunID_Error() {
 		s.shardContext,
 		namespace.ID(s.namespaceID),
 		s.workflowID,
-		workflow.LockPriorityHigh,
+		locks.PriorityHigh,
 	).Return(releaseFn, nil)
 	s.shardContext.EXPECT().GetCurrentExecution(
 		ctx,
@@ -180,7 +180,7 @@ func (s *workflowConsistencyCheckerSuite) TestGetCurrentRunID_Error() {
 		},
 	).Return(nil, serviceerror.NewUnavailable(""))
 
-	runID, err := s.checker.GetCurrentRunID(ctx, s.namespaceID, s.workflowID, workflow.LockPriorityHigh)
+	runID, err := s.checker.GetCurrentRunID(ctx, s.namespaceID, s.workflowID, locks.PriorityHigh)
 	s.IsType(&serviceerror.Unavailable{}, err)
 	s.Empty(runID)
 	s.True(released)

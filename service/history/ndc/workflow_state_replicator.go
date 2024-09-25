@@ -29,14 +29,13 @@ package ndc
 import (
 	"context"
 	"fmt"
+	"slices"
 	"sort"
 	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
-	"golang.org/x/exp/slices"
-
 	"go.temporal.io/server/api/adminservice/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
@@ -44,6 +43,7 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/collection"
+	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/namespace"
@@ -118,7 +118,7 @@ func (r *WorkflowStateReplicatorImpl) SyncWorkflowState(
 			WorkflowId: wid,
 			RunId:      rid,
 		},
-		workflow.LockPriorityLow,
+		locks.PriorityLow,
 	)
 	if err != nil {
 		return err
@@ -226,6 +226,10 @@ func (r *WorkflowStateReplicatorImpl) SyncWorkflowState(
 		namespaceID,
 		wid,
 		rid,
+		// TODO: The original run id is in the workflow started history event but not in mutable state.
+		// Use the history tree id to be the original run id.
+		// https://github.com/temporalio/temporal/issues/6501
+		branchInfo.GetTreeId(),
 		lastEventItem.GetEventId(),
 		lastEventItem.GetVersion(),
 		newHistoryBranchToken,
@@ -257,8 +261,8 @@ func (r *WorkflowStateReplicatorImpl) SyncWorkflowState(
 		return err
 	}
 
-	taskRefresh := workflow.NewTaskRefresher(r.shardContext, r.logger)
-	err = taskRefresh.RefreshTasks(ctx, mutableState)
+	taskRefresher := workflow.NewTaskRefresher(r.shardContext)
+	err = taskRefresher.Refresh(ctx, mutableState)
 	if err != nil {
 		return err
 	}
@@ -279,29 +283,36 @@ func (r *WorkflowStateReplicatorImpl) backfillHistory(
 	namespaceID namespace.ID,
 	workflowID string,
 	runID string,
+	originalRunID string,
 	lastEventID int64,
 	lastEventVersion int64,
 	branchToken []byte,
 ) (taskID int64, retError error) {
 
-	// Get the current run lock to make sure no concurrent backfill history across multiple runs.
-	currentRunReleaseFn, err := r.workflowCache.GetOrCreateCurrentWorkflowExecution(
-		ctx,
-		r.shardContext,
-		namespaceID,
-		workflowID,
-		workflow.LockPriorityLow,
-	)
-	if err != nil {
-		return common.EmptyEventTaskID, err
-	}
-	defer func() {
-		if rec := recover(); rec != nil {
-			currentRunReleaseFn(errPanic)
-			panic(rec)
+	if runID != originalRunID {
+		// At this point, it already acquired the workflow lock on the run ID.
+		// Get the lock of root run id to make sure no concurrent backfill history across multiple runs.
+		_, rootRunReleaseFn, err := r.workflowCache.GetOrCreateWorkflowExecution(
+			ctx,
+			r.shardContext,
+			namespaceID,
+			&commonpb.WorkflowExecution{
+				WorkflowId: workflowID,
+				RunId:      originalRunID,
+			},
+			locks.PriorityLow,
+		)
+		if err != nil {
+			return common.EmptyEventTaskID, err
 		}
-		currentRunReleaseFn(retError)
-	}()
+		defer func() {
+			if rec := recover(); rec != nil {
+				rootRunReleaseFn(errPanic)
+				panic(rec)
+			}
+			rootRunReleaseFn(retError)
+		}()
+	}
 
 	// Get the last batch node id to check if the history data is already in DB.
 	localHistoryIterator := collection.NewPagingIterator(r.getHistoryFromLocalPaginationFn(

@@ -33,10 +33,10 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
-
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/versionhistory"
@@ -66,7 +66,7 @@ func GetOrPollMutableState(
 			ctx,
 			request.NamespaceId,
 			request.Execution.WorkflowId,
-			workflow.LockPriorityHigh,
+			locks.PriorityHigh,
 		)
 		if err != nil {
 			return nil, err
@@ -220,7 +220,7 @@ func GetMutableState(
 		ctx,
 		nil,
 		workflowKey,
-		workflow.LockPriorityHigh,
+		locks.PriorityHigh,
 	)
 	if err != nil {
 		return nil, err
@@ -237,6 +237,11 @@ func GetMutableState(
 func MutableStateToGetResponse(
 	mutableState workflow.MutableState,
 ) (*historyservice.GetMutableStateResponse, error) {
+	// NOTE: fields of GetMutableStateResponse (returned value of this func)
+	// are accessed outside of workflow lock, and, therefore,
+	// ***MUST*** be copied by value from mutableState fields.
+	// strings are immutable, []byte is also considered to be immutable.
+
 	currentBranchToken, err := mutableState.GetCurrentBranchToken()
 	if err != nil {
 		return nil, err
@@ -245,6 +250,15 @@ func MutableStateToGetResponse(
 	executionInfo := mutableState.GetExecutionInfo()
 	workflowState, workflowStatus := mutableState.GetWorkflowStateStatus()
 	lastFirstEventID, lastFirstEventTxnID := mutableState.GetLastFirstEventIDTxnID()
+
+	var mostRecentWorkerVersionStamp *commonpb.WorkerVersionStamp
+	if mrwvs := mutableState.GetExecutionInfo().GetMostRecentWorkerVersionStamp(); mrwvs != nil {
+		mostRecentWorkerVersionStamp = &commonpb.WorkerVersionStamp{
+			BuildId:       mrwvs.GetBuildId(),
+			UseVersioning: mrwvs.GetUseVersioning(),
+		}
+	}
+
 	return &historyservice.GetMutableStateResponse{
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: mutableState.GetExecutionInfo().WorkflowId,
@@ -275,6 +289,7 @@ func MutableStateToGetResponse(
 		FirstExecutionRunId:          executionInfo.FirstExecutionRunId,
 		AssignedBuildId:              mutableState.GetAssignedBuildId(),
 		InheritedBuildId:             mutableState.GetInheritedBuildId(),
-		MostRecentWorkerVersionStamp: executionInfo.GetMostRecentWorkerVersionStamp(),
+		MostRecentWorkerVersionStamp: mostRecentWorkerVersionStamp,
+		TransitionHistory:            mutableState.GetExecutionInfo().TransitionHistory,
 	}, nil
 }

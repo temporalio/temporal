@@ -31,9 +31,10 @@ import "google/protobuf/timestamp.proto";
 import "temporal/server/api/enums/v1/replication.proto";
 import "temporal/server/api/enums/v1/task.proto";
 import "temporal/server/api/history/v1/message.proto";
-import "temporal/server/api/persistence/v1/workflow_mutable_state.proto";
-import "temporal/server/api/persistence/v1/task_queues.proto";
+import "temporal/server/api/persistence/v1/executions.proto";
 import "temporal/server/api/persistence/v1/hsm.proto";
+import "temporal/server/api/persistence/v1/task_queues.proto";
+import "temporal/server/api/persistence/v1/workflow_mutable_state.proto";
 
 import "temporal/api/common/v1/message.proto";
 import "temporal/api/namespace/v1/message.proto";
@@ -54,12 +55,17 @@ message ReplicationTask {
         SyncWorkflowStateTaskAttributes sync_workflow_state_task_attributes = 10;
         TaskQueueUserDataAttributes task_queue_user_data_attributes = 11;
         SyncHSMAttributes sync_hsm_attributes = 14;
+        BackfillHistoryTaskAttributes backfill_history_task_attributes = 16;
+        VerifyVersionedTransitionTaskAttributes verify_versioned_transition_task_attributes = 18;
+        SyncVersionedTransitionTaskAttributes sync_versioned_transition_task_attributes = 19;
     }
     // All attributes should be deprecated and replaced by this field.
     // The task_type + data provide more flexibility in future use cases.
     temporal.api.common.v1.DataBlob data = 12;
     google.protobuf.Timestamp visibility_time = 9;
     temporal.server.api.enums.v1.TaskPriority priority = 13;
+    temporal.server.api.persistence.v1.VersionedTransition versioned_transition = 15;
+    temporal.server.api.persistence.v1.ReplicationTaskInfo raw_task_info = 17;
 }
 
 message ReplicationToken {
@@ -193,4 +199,42 @@ message SyncHSMAttributes {
     string run_id = 3;
     temporal.server.api.history.v1.VersionHistory version_history = 4;
     temporal.server.api.persistence.v1.StateMachineNode state_machine_node = 5;
+}
+
+message BackfillHistoryTaskAttributes {
+    string namespace_id = 1;
+    string workflow_id = 2;
+    string run_id = 3;
+
+    repeated temporal.server.api.history.v1.VersionHistoryItem event_version_history = 5;
+    repeated temporal.api.common.v1.DataBlob event_batches = 6;
+    NewRunInfo new_run_info = 7;
+}
+
+message NewRunInfo {
+    string run_id = 1;
+    temporal.api.common.v1.DataBlob event_batch = 2;
+}
+
+message SyncWorkflowStateMutationAttributes {
+    temporal.server.api.persistence.v1.VersionedTransition exclusive_start_versioned_transition = 1;
+    temporal.server.api.persistence.v1.WorkflowMutableStateMutation state_mutation = 2;
+}
+
+message SyncWorkflowStateSnapshotAttributes {
+    temporal.server.api.persistence.v1.WorkflowMutableState state = 1;
+}
+
+message VerifyVersionedTransitionTaskAttributes {
+    string namespace_id = 1;
+    string workflow_id = 2;
+    string run_id = 3;
+    int64 next_event_id = 4;
+    repeated temporal.server.api.history.v1.VersionHistoryItem event_version_history = 5;
+    string new_run_id = 6;
+}
+
+message SyncVersionedTransitionTaskAttributes {
+    repeated temporal.api.common.v1.DataBlob event_batches = 1;
+    NewRunInfo new_run_info = 2;
 }

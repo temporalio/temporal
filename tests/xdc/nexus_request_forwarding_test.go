@@ -35,7 +35,6 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/nexus-rpc/sdk-go/nexus"
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commandpb "go.temporal.io/api/command/v1"
@@ -48,13 +47,11 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/converter"
-	"google.golang.org/protobuf/types/known/durationpb"
 
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/metrics/metricstest"
-	"go.temporal.io/server/common/namespace"
 	cnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/nexus/nexustest"
 	"go.temporal.io/server/components/callbacks"
@@ -95,7 +92,7 @@ func (s *NexusRequestForwardingSuite) TearDownSuite() {
 // Only tests dispatch by namespace+task_queue.
 // TODO: Add test cases for dispatch by endpoint ID once endpoints support replication.
 func (s *NexusRequestForwardingSuite) TestStartOperationForwardedFromStandbyToActive() {
-	ns := s.createNexusRequestForwardingNamespace()
+	ns := s.createGlobalNamespace()
 
 	testCases := []struct {
 		name      string
@@ -200,7 +197,7 @@ func (s *NexusRequestForwardingSuite) TestStartOperationForwardedFromStandbyToAc
 		tc := tc
 		s.T().Run(tc.name, func(t *testing.T) {
 			dispatchURL := fmt.Sprintf("http://%s/%s", s.cluster2.GetHost().FrontendHTTPAddress(), cnexus.RouteDispatchNexusTaskByNamespaceAndTaskQueue.Path(cnexus.NamespaceAndTaskQueue{Namespace: ns, TaskQueue: tc.taskQueue}))
-			nexusClient, err := nexus.NewClient(nexus.ClientOptions{BaseURL: dispatchURL, Service: "test_service"})
+			nexusClient, err := nexus.NewClient(nexus.ClientOptions{BaseURL: dispatchURL, Service: "test-service"})
 			s.NoError(err)
 
 			activeMetricsHandler, ok := s.cluster1.GetHost().GetMetricsHandler().(*metricstest.CaptureHandler)
@@ -231,7 +228,7 @@ func (s *NexusRequestForwardingSuite) TestStartOperationForwardedFromStandbyToAc
 // Only tests dispatch by namespace+task_queue.
 // TODO: Add test cases for dispatch by endpoint ID once endpoints support replication.
 func (s *NexusRequestForwardingSuite) TestCancelOperationForwardedFromStandbyToActive() {
-	ns := s.createNexusRequestForwardingNamespace()
+	ns := s.createGlobalNamespace()
 
 	testCases := []struct {
 		name      string
@@ -301,7 +298,7 @@ func (s *NexusRequestForwardingSuite) TestCancelOperationForwardedFromStandbyToA
 		tc := tc
 		s.T().Run(tc.name, func(t *testing.T) {
 			dispatchURL := fmt.Sprintf("http://%s/%s", s.cluster2.GetHost().FrontendHTTPAddress(), cnexus.RouteDispatchNexusTaskByNamespaceAndTaskQueue.Path(cnexus.NamespaceAndTaskQueue{Namespace: ns, TaskQueue: tc.taskQueue}))
-			nexusClient, err := nexus.NewClient(nexus.ClientOptions{BaseURL: dispatchURL, Service: "test_service"})
+			nexusClient, err := nexus.NewClient(nexus.ClientOptions{BaseURL: dispatchURL, Service: "test-service"})
 			s.NoError(err)
 
 			activeMetricsHandler, ok := s.cluster1.GetHost().GetMetricsHandler().(*metricstest.CaptureHandler)
@@ -339,9 +336,9 @@ func (s *NexusRequestForwardingSuite) TestCompleteOperationForwardedFromStandbyT
 		"http://"+s.cluster2.GetHost().FrontendHTTPAddress()+"/namespaces/{{.NamespaceName}}/nexus/callback")
 
 	ctx := tests.NewContext()
-	ns := s.createNexusRequestForwardingNamespace()
+	ns := s.createGlobalNamespace()
 	taskQueue := fmt.Sprintf("%v-%v", "test-task-queue", uuid.New())
-	endpointName := "test_complete_operation_forwarding_endpoint_name"
+	endpointName := tests.RandomizedNexusEndpoint(s.T().Name())
 
 	var callbackToken, publicCallbackUrl string
 
@@ -548,30 +545,9 @@ func (s *NexusRequestForwardingSuite) nexusTaskPoller(ctx context.Context, front
 		})
 	}
 
-	s.NoError(err)
-}
-
-func (s *NexusRequestForwardingSuite) createNexusRequestForwardingNamespace() string {
-	ctx := tests.NewContext()
-	ns := fmt.Sprintf("%v-%v", "test-namespace", uuid.New())
-
-	regReq := &workflowservice.RegisterNamespaceRequest{
-		Namespace:                        ns,
-		IsGlobalNamespace:                true,
-		Clusters:                         s.clusterReplicationConfig(),
-		ActiveClusterName:                s.clusterNames[0],
-		WorkflowExecutionRetentionPeriod: durationpb.New(7 * time.Hour * 24),
+	if err != nil && ctx.Err() == nil {
+		s.FailNow("received unexpected error responding to Nexus task", err)
 	}
-	_, err := s.cluster1.GetFrontendClient().RegisterNamespace(ctx, regReq)
-	s.NoError(err)
-
-	s.EventuallyWithT(func(t *assert.CollectT) {
-		// Wait for namespace record to be replicated and loaded into memory.
-		_, err := s.cluster2.GetHost().GetFrontendNamespaceRegistry().GetNamespace(namespace.Name(ns))
-		assert.NoError(t, err)
-	}, 15*time.Second, 500*time.Millisecond)
-
-	return ns
 }
 
 func (s *NexusRequestForwardingSuite) sendNexusCompletionRequest(
@@ -608,7 +584,6 @@ func requireExpectedMetricsCaptured(t *testing.T, snap map[string][]*metricstest
 	require.Equal(t, metrics.MetricUnit(""), snap["nexus_requests"][0].Unit)
 	require.Equal(t, 1, len(snap["nexus_latency"]))
 	require.Subset(t, snap["nexus_latency"][0].Tags, map[string]string{"namespace": ns, "method": method, "outcome": expectedOutcome})
-	require.Equal(t, metrics.MetricUnit(metrics.Milliseconds), snap["nexus_latency"][0].Unit)
 }
 
 func (s *NexusRequestForwardingSuite) mustToPayload(v any) *commonpb.Payload {

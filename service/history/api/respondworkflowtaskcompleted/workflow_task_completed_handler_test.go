@@ -31,27 +31,22 @@ import (
 	"testing"
 	"time"
 
-	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
-	commonpb "go.temporal.io/api/common/v1"
-	historypb "go.temporal.io/api/history/v1"
-	"google.golang.org/protobuf/proto"
-	"google.golang.org/protobuf/types/known/anypb"
-
 	commandpb "go.temporal.io/api/command/v1"
+	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	historypb "go.temporal.io/api/history/v1"
 	protocolpb "go.temporal.io/api/protocol/v1"
 	sdkpb "go.temporal.io/api/sdk/v1"
 	"go.temporal.io/api/serviceerror"
 	updatepb "go.temporal.io/api/update/v1"
-
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/collection"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
-	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/namespace/nsregistry"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/internal/effect"
 	"go.temporal.io/server/service/history/configs"
@@ -59,6 +54,9 @@ import (
 	"go.temporal.io/server/service/history/tests"
 	"go.temporal.io/server/service/history/workflow"
 	"go.temporal.io/server/service/history/workflow/update"
+	"go.uber.org/mock/gomock"
+	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/anypb"
 )
 
 func TestCommandProtocolMessage(t *testing.T) {
@@ -68,7 +66,6 @@ func TestCommandProtocolMessage(t *testing.T) {
 		ms      *workflow.MockMutableState
 		updates update.Registry
 		handler *workflowTaskCompletedHandler
-		conf    map[dynamicconfig.Key]any
 	}
 
 	const defaultBlobSizeLimit = 1 * 1024 * 1024
@@ -88,7 +85,6 @@ func TestCommandProtocolMessage(t *testing.T) {
 		shardCtx := shard.NewMockContext(gomock.NewController(t))
 		logger := log.NewNoopLogger()
 		metricsHandler := metrics.NoopMetricsHandler
-		out.conf = map[dynamicconfig.Key]any{}
 		out.ms = workflow.NewMockMutableState(gomock.NewController(t))
 		out.ms.EXPECT().VisitUpdates(gomock.Any())
 		out.ms.EXPECT().GetNamespaceEntry().Return(tests.LocalNamespaceEntry)
@@ -96,11 +92,10 @@ func TestCommandProtocolMessage(t *testing.T) {
 
 		out.updates = update.NewRegistry(out.ms)
 		var effects effect.Buffer
-		config := configs.NewConfig(
-			dynamicconfig.NewCollection(
-				dynamicconfig.StaticClient(out.conf), logger), 1)
+		col := dynamicconfig.NewCollection(dynamicconfig.StaticClient(nil), logger)
+		config := configs.NewConfig(col, 1)
 		mockMeta := persistence.NewMockMetadataManager(gomock.NewController(t))
-		nsReg := namespace.NewRegistry(
+		nsReg := nsregistry.NewRegistry(
 			mockMeta,
 			true,
 			func() time.Duration { return 1 * time.Hour },

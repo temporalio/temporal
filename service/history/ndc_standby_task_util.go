@@ -32,7 +32,6 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
-
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/namespace"
@@ -95,20 +94,6 @@ func standbyTimerTaskPostActionTaskDiscarded(
 	}
 
 	logger.Warn("Discarding standby timer task due to task being pending for too long.", tag.Task(taskInfo))
-	return consts.ErrTaskDiscarded
-}
-
-func standbyOutboundTaskPostActionTaskDiscarded(
-	_ context.Context,
-	taskInfo tasks.Task,
-	postActionInfo interface{},
-	logger log.Logger,
-) error {
-	if postActionInfo == nil {
-		return nil
-	}
-
-	logger.Warn("Discarding standby outbound task due to task being pending for too long.", tag.Task(taskInfo))
 	return consts.ErrTaskDiscarded
 }
 

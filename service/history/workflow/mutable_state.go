@@ -40,15 +40,12 @@ import (
 	updatepb "go.temporal.io/api/update/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
-	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
-	"google.golang.org/protobuf/types/known/durationpb"
-	"google.golang.org/protobuf/types/known/timestamppb"
-
 	clockspb "go.temporal.io/server/api/clock/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	workflowspb "go.temporal.io/server/api/workflow/v1"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/namespace"
@@ -57,6 +54,8 @@ import (
 	"go.temporal.io/server/service/history/historybuilder"
 	"go.temporal.io/server/service/history/hsm"
 	"go.temporal.io/server/service/history/tasks"
+	"google.golang.org/protobuf/types/known/durationpb"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type TransactionPolicy int
@@ -147,6 +146,7 @@ type (
 
 	MutableState interface {
 		callbacks.CanGetNexusCompletion
+		callbacks.CanGetHSMCompletionCallbackArg
 		AddHistoryEvent(t enumspb.EventType, setAttributes func(*historypb.HistoryEvent)) *historypb.HistoryEvent
 		LoadHistoryEvent(ctx context.Context, token []byte) (*historypb.HistoryEvent, error)
 
@@ -254,6 +254,7 @@ type (
 		GetPendingChildExecutionInfos() map[int64]*persistencespb.ChildExecutionInfo
 		GetPendingRequestCancelExternalInfos() map[int64]*persistencespb.RequestCancelInfo
 		GetPendingSignalExternalInfos() map[int64]*persistencespb.SignalInfo
+		GetPendingSignalRequestedIds() []string
 		GetRequestCancelInfo(int64) (*persistencespb.RequestCancelInfo, bool)
 		GetRetryBackoffDuration(failure *failurepb.Failure) (time.Duration, enumspb.RetryState)
 		GetCronBackoffDuration() time.Duration

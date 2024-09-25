@@ -26,9 +26,8 @@ package tests
 
 import (
 	"github.com/stretchr/testify/require"
-	"go.uber.org/fx"
-
 	"go.temporal.io/server/common/primitives"
+	"go.uber.org/fx"
 )
 
 type FunctionalTestBaseSuite struct {
@@ -68,5 +67,7 @@ func (s *FunctionalTestBaseSuite) TestWithFxOptionsForService() {
 }
 
 func (s *FunctionalTestBaseSuite) SetupTest() {
+	s.FunctionalTestBase.SetupTest()
+
 	s.Assertions = require.New(s.T())
 }

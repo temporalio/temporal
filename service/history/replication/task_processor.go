@@ -28,13 +28,12 @@ package replication
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sync/atomic"
 	"time"
 
 	"go.temporal.io/api/serviceerror"
-	"google.golang.org/protobuf/types/known/timestamppb"
-
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -55,6 +54,7 @@ import (
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/shard"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 const (
@@ -64,7 +64,8 @@ const (
 
 var (
 	// ErrUnknownReplicationTask is the error to indicate unknown replication task type
-	ErrUnknownReplicationTask = serviceerror.NewInvalidArgument("unknown replication task")
+	ErrUnknownReplicationTask     = serviceerror.NewInvalidArgument("unknown replication task")
+	ErrCorruptedHistoryEventBatch = errors.New("corrupted history event batch, empty events")
 )
 
 type (
@@ -417,7 +418,7 @@ func (p *taskProcessorImpl) convertTaskToDLQTask(
 
 		if len(events) == 0 {
 			p.logger.Error("Empty events in a batch")
-			return nil, fmt.Errorf("corrupted history event batch, empty events")
+			return nil, ErrCorruptedHistoryEventBatch
 		}
 		firstEvent := events[0]
 		lastEvent := events[len(events)-1]

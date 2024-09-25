@@ -28,6 +28,8 @@ import (
 	"cmp"
 	"context"
 	"fmt"
+	"os"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -43,6 +45,8 @@ import (
 )
 
 const (
+	debugModeEnvVar = "TEMPORAL_OTEL_DEBUG"
+
 	// the following defaults were taken from the grpc docs as of grpc v1.46.
 	// they are not available programmatically
 
@@ -138,7 +142,7 @@ type (
 	sharedConnSpanExporter struct {
 		baseOpts []otlptracegrpc.Option
 		dialer   interface {
-			Dial(context.Context) (*grpc.ClientConn, error)
+			Dial() (*grpc.ClientConn, error)
 		}
 		startOnce sync.Once
 		otelsdktrace.SpanExporter
@@ -147,7 +151,7 @@ type (
 	sharedConnMetricExporter struct {
 		baseOpts []otlpmetricgrpc.Option
 		dialer   interface {
-			Dial(context.Context) (*grpc.ClientConn, error)
+			Dial() (*grpc.ClientConn, error)
 		}
 		startOnce sync.Once
 		metric.Exporter
@@ -177,10 +181,10 @@ func (ec *ExportConfig) MetricExporters() ([]metric.Exporter, error) {
 
 // Dial returns the cached *grpc.ClientConn instance or creates a new one,
 // caches and then returns it. This function is not threadsafe.
-func (g *grpcconn) Dial(ctx context.Context) (*grpc.ClientConn, error) {
+func (g *grpcconn) Dial() (*grpc.ClientConn, error) {
 	var err error
 	if g.cc == nil {
-		g.cc, err = grpc.DialContext(ctx, g.Endpoint, g.dialOpts()...)
+		g.cc, err = grpc.NewClient(g.Endpoint, g.dialOpts()...)
 	}
 	return g.cc, err
 }
@@ -332,7 +336,7 @@ func (scse *sharedConnSpanExporter) Start(ctx context.Context) error {
 	var err error
 	scse.startOnce.Do(func() {
 		var cc *grpc.ClientConn
-		cc, err = scse.dialer.Dial(ctx)
+		cc, err = scse.dialer.Dial()
 		if err != nil {
 			return
 		}
@@ -347,7 +351,7 @@ func (scme *sharedConnMetricExporter) Start(ctx context.Context) error {
 	var err error
 	scme.startOnce.Do(func() {
 		var cc *grpc.ClientConn
-		cc, err = scme.dialer.Dial(ctx)
+		cc, err = scme.dialer.Dial()
 		if err != nil {
 			return
 		}
@@ -417,4 +421,12 @@ func (e *exporter) UnmarshalYAML(n *yaml.Node) error {
 		)
 	}
 	return obj.Spec.Decode(e.Spec)
+}
+
+func debugMode() bool {
+	isDebug, err := strconv.ParseBool(os.Getenv(debugModeEnvVar))
+	if err != nil {
+		return false
+	}
+	return isDebug
 }
