@@ -80,7 +80,11 @@ func GetPerTaskQueuePartitionIDScope(
 	if partition == nil {
 		value = unknownValue
 	} else if normalPartition, ok := partition.(*tqid.NormalPartition); ok {
-		value = strconv.Itoa(normalPartition.PartitionId())
+		if partitionIDBreakdown {
+			value = strconv.Itoa(normalPartition.PartitionId())
+		} else {
+			value = normal
+		}
 	} else {
 		value = sticky
 	}
