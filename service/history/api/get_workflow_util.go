@@ -267,7 +267,20 @@ func GetMutableStateWithConsistencyCheck(
 		ctx,
 		nil,
 		func(mutableState workflow.MutableState) bool {
-			return currentVersion < mutableState.GetCurrentVersion() && currentEventID < mutableState.GetNextEventID()
+			mutableState.GetExecutionInfo().GetVersionHistories()
+			currentVersionHistory, err := versionhistory.GetCurrentVersionHistory(mutableState.GetExecutionInfo().GetVersionHistories())
+			if err != nil {
+				return false
+			}
+			lastVersionHistoryItem, err := versionhistory.GetLastVersionHistoryItem(currentVersionHistory)
+			if err != nil {
+				return false
+			}
+
+			if currentVersion == lastVersionHistoryItem.GetVersion() {
+				return currentEventID <= lastVersionHistoryItem.GetEventId()
+			}
+			return currentVersion <= lastVersionHistoryItem.GetVersion()
 		},
 		workflowKey,
 		locks.PriorityHigh,
