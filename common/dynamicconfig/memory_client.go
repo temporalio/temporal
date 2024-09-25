@@ -41,12 +41,17 @@ type (
 	}
 )
 
-func (d *MemoryClient) GetValue(name Key) []ConstrainedValue {
+// NewMemoryClient - returns a memory based dynamic config client
+func NewMemoryClient() *MemoryClient {
+	return &MemoryClient{}
+}
+
+func (d *MemoryClient) GetValue(key Key) []ConstrainedValue {
 	d.lock.RLock()
 	defer d.lock.RUnlock()
 
 	for i := len(d.overrides) - 1; i >= 0; i-- {
-		if v := d.overrides[i].value; d.overrides[i].key == name && v != nil {
+		if v := d.overrides[i].value; v != nil && d.overrides[i].key == key {
 			if value, ok := v.([]ConstrainedValue); ok {
 				return value
 			}
@@ -60,17 +65,14 @@ func (d *MemoryClient) OverrideSetting(setting GenericSetting, value any) (clean
 	return d.OverrideValue(setting.Key(), value)
 }
 
-func (d *MemoryClient) OverrideValue(name Key, value any) (cleanup func()) {
+func (d *MemoryClient) OverrideValue(key Key, value any) (cleanup func()) {
 	d.lock.Lock()
 	defer d.lock.Unlock()
 
-	var idx atomic.Int32
-	idx.Store(int32(len(d.overrides)))
+	var idx atomic.Int64
+	idx.Store(int64(len(d.overrides)))
 
-	d.overrides = append(d.overrides, kvpair{
-		key:   name,
-		value: value,
-	})
+	d.overrides = append(d.overrides, kvpair{key: key, value: value})
 
 	return func() {
 		// only do this once
@@ -91,9 +93,4 @@ func (d *MemoryClient) remove(idx int) {
 	for l := len(d.overrides); l > 0 && d.overrides[l-1].value == nil; l = len(d.overrides) {
 		d.overrides = d.overrides[:l-1]
 	}
-}
-
-// NewMemoryClient - returns a memory based dynamic config client
-func NewMemoryClient() *MemoryClient {
-	return &MemoryClient{}
 }
