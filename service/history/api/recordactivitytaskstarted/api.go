@@ -157,9 +157,8 @@ func Invoke(
 		// convert serialization errors to be captured as serviceerrors across gRPC calls
 		if errors.As(err, &deserializationError) || errors.As(err, &serializationError) {
 			return nil, serviceerror.NewDataLoss(err.Error())
-		} else {
-			return nil, err
 		}
+		return nil, err
 	}
 
 	return response, err
