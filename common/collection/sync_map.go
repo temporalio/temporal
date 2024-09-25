@@ -29,10 +29,12 @@ import (
 	"sync"
 )
 
-// SyncMap implements a simple mutex-wrapped map. We've had bugs where we took the wrong lock
-// when reimplementing this pattern, so it's worth having a single canonical implementation.
+// SyncMap implements a simple mutex-wrapped map. SyncMap is copyable like a normal map[K]V.
 type SyncMap[K comparable, V any] struct {
+	// Use a pointer to RWMutex instead of embedding so that the contents of this struct itself
+	// are immutable and copyable, and copies refer to the same RWMutex and map.
 	*sync.RWMutex
+	// For the same reason, contents (the pointer) should not be changed.
 	contents map[K]V
 }
 
