@@ -24,7 +24,6 @@ package nexus
 
 import (
 	"context"
-	"github.com/stretchr/testify/suite"
 	"io"
 	"net/http"
 	"slices"
@@ -36,6 +35,8 @@ import (
 	"github.com/nexus-rpc/sdk-go/nexus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
+
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"

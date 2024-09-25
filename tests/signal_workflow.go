@@ -28,7 +28,6 @@ import (
 	"bytes"
 	"encoding/binary"
 	"fmt"
-	"go.temporal.io/server/tests/testcore"
 	"strconv"
 	"strings"
 	"time"
@@ -49,6 +48,7 @@ import (
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/rpc"
 	"go.temporal.io/server/service/history/consts"
+	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -1558,7 +1558,7 @@ func (s *SignalWorkflowTestSuite) TestSignalWithStartWorkflow() {
 			s.NoError(err)
 			return len(listResp.Executions) == 1
 		},
-		WaitForESToSettle,
+		testcore.WaitForESToSettle,
 		100*time.Millisecond,
 	)
 
@@ -1580,7 +1580,7 @@ func (s *SignalWorkflowTestSuite) TestSignalWithStartWorkflow() {
 			s.NoError(err)
 			return len(listResp.Executions) == 0
 		},
-		WaitForESToSettle,
+		testcore.WaitForESToSettle,
 		100*time.Millisecond,
 	)
 

@@ -26,7 +26,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"go.temporal.io/server/tests/testcore"
 	"time"
 
 	enumspb "go.temporal.io/api/enums/v1"
@@ -38,6 +37,7 @@ import (
 	"go.temporal.io/sdk/workflow"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/testing/testvars"
+	"go.temporal.io/server/tests/testcore"
 )
 
 var (

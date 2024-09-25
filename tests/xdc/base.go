@@ -31,7 +31,6 @@ package xdc
 import (
 	"context"
 	"fmt"
-	"go.temporal.io/server/tests/testcore"
 	"os"
 	"sync"
 	"time"
@@ -57,6 +56,7 @@ import (
 	"go.temporal.io/server/common/testing/historyrequire"
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/environment"
+	"go.temporal.io/server/tests/testcore"
 )
 
 type (

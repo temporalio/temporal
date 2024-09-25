@@ -27,7 +27,6 @@ package tests
 import (
 	"errors"
 	"fmt"
-	"go.temporal.io/server/tests/testcore"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -53,6 +52,7 @@ import (
 	"go.temporal.io/server/common/testing/protorequire"
 	schedulerhsm "go.temporal.io/server/components/scheduler"
 	"go.temporal.io/server/service/worker/scheduler"
+	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/durationpb"
 )

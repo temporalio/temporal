@@ -25,7 +25,6 @@
 package ndc
 
 import (
-	"go.temporal.io/server/tests/testcore"
 	"math"
 	"reflect"
 	"time"
@@ -35,6 +34,7 @@ import (
 	"go.temporal.io/server/common/persistence"
 	test "go.temporal.io/server/common/testing"
 	"go.temporal.io/server/service/history/tasks"
+	"go.temporal.io/server/tests/testcore"
 )
 
 func (s *NDCFunctionalTestSuite) TestReplicationMessageDLQ() {

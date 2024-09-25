@@ -26,8 +26,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/stretchr/testify/suite"
-	"go.temporal.io/server/tests/testcore"
 	"net"
 	"net/http"
 	"testing"
@@ -48,6 +46,7 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/components/callbacks"
 	"go.temporal.io/server/internal/temporalite"
+	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 

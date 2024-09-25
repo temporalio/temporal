@@ -26,12 +26,12 @@ package tests
 
 import (
 	"context"
-	"go.temporal.io/server/tests/testcore"
 	"strings"
 	"time"
 
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/tests/testcore"
 )
 
 // AcquireShardFunctionalSuite is the testcore test suite for testing acquire shard.

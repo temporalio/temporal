@@ -34,7 +34,6 @@ import (
 	"encoding/binary"
 	"errors"
 	"flag"
-	"go.temporal.io/server/tests/testcore"
 	"strconv"
 	"testing"
 	"time"
@@ -66,6 +65,7 @@ import (
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/service/worker/migration"
+	"go.temporal.io/server/tests/testcore"
 )
 
 type (

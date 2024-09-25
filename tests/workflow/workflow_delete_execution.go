@@ -26,8 +26,6 @@ package workflow
 
 import (
 	"fmt"
-	"go.temporal.io/server/tests"
-	"go.temporal.io/server/tests/testcore"
 	"strconv"
 	"time"
 
@@ -39,6 +37,7 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/testing/testvars"
+	"go.temporal.io/server/tests/testcore"
 )
 
 const (
@@ -122,7 +121,7 @@ func (s *WorkflowDeleteExecutionSuite) TestDeleteWorkflowExecution_CompetedWorkf
 				}
 				return false
 			},
-			tests.WaitForESToSettle,
+			testcore.WaitForESToSettle,
 			100*time.Millisecond,
 		)
 	}
@@ -194,7 +193,7 @@ func (s *WorkflowDeleteExecutionSuite) TestDeleteWorkflowExecution_CompetedWorkf
 				}
 				return true
 			},
-			tests.WaitForESToSettle,
+			testcore.WaitForESToSettle,
 			100*time.Millisecond,
 		)
 	}
@@ -240,7 +239,7 @@ func (s *WorkflowDeleteExecutionSuite) TestDeleteWorkflowExecution_RunningWorkfl
 				return len(visibilityResponse.Executions) == 1 &&
 					visibilityResponse.Executions[0].Status == enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING
 			},
-			tests.WaitForESToSettle,
+			testcore.WaitForESToSettle,
 			100*time.Millisecond,
 		)
 	}
@@ -309,7 +308,7 @@ func (s *WorkflowDeleteExecutionSuite) TestDeleteWorkflowExecution_RunningWorkfl
 				}
 				return true
 			},
-			tests.WaitForESToSettle,
+			testcore.WaitForESToSettle,
 			100*time.Millisecond,
 		)
 	}
@@ -355,7 +354,7 @@ func (s *WorkflowDeleteExecutionSuite) TestDeleteWorkflowExecution_JustTerminate
 				return len(visibilityResponse.Executions) == 1 &&
 					visibilityResponse.Executions[0].Status == enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING
 			},
-			tests.WaitForESToSettle,
+			testcore.WaitForESToSettle,
 			100*time.Millisecond,
 		)
 	}
@@ -438,7 +437,7 @@ func (s *WorkflowDeleteExecutionSuite) TestDeleteWorkflowExecution_JustTerminate
 				}
 				return true
 			},
-			tests.WaitForESToSettle,
+			testcore.WaitForESToSettle,
 			100*time.Millisecond,
 		)
 	}

@@ -28,7 +28,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"go.temporal.io/server/tests/testcore"
 	"strconv"
 	"time"
 
@@ -51,6 +50,7 @@ import (
 	"go.temporal.io/server/common/testing/protoutils"
 	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/service/history/consts"
+	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 

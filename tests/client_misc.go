@@ -27,7 +27,9 @@ package tests
 import (
 	"context"
 	"fmt"
+	"sync"
 	"sync/atomic"
+	"time"
 
 	batchpb "go.temporal.io/api/batch/v1"
 	commonpb "go.temporal.io/api/common/v1"
@@ -43,8 +45,6 @@ import (
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/common/worker_versioning"
-	"sync"
-	"time"
 
 	"github.com/pborman/uuid"
 

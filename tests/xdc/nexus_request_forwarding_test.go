@@ -27,7 +27,6 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
-	"go.temporal.io/server/tests/testcore"
 	"io"
 	"net/http"
 	"slices"
@@ -57,6 +56,7 @@ import (
 	"go.temporal.io/server/common/nexus/nexustest"
 	"go.temporal.io/server/components/callbacks"
 	"go.temporal.io/server/components/nexusoperations"
+	"go.temporal.io/server/tests/testcore"
 )
 
 var op = nexus.NewOperationReference[string, string]("my-operation")

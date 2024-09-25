@@ -24,7 +24,6 @@ package nexus
 
 import (
 	"fmt"
-	"go.temporal.io/server/tests/testcore"
 	"strings"
 	"testing"
 
@@ -42,6 +41,7 @@ import (
 	commonnexus "go.temporal.io/server/common/nexus"
 	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/testing/protorequire"
+	"go.temporal.io/server/tests/testcore"
 )
 
 func TestNexusEndpointsFunctionalSuite(t *testing.T) {

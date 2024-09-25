@@ -25,7 +25,6 @@
 package workflow
 
 import (
-	"go.temporal.io/server/tests"
 	"go.temporal.io/server/tests/testcore"
 	"time"
 
@@ -161,7 +160,7 @@ func (s *WorkflowVisibilityTestSuite) TestVisibility() {
 			s.Logger.Info("Closed WorkflowExecution is not yet visible")
 			return false
 		},
-		tests.WaitForESToSettle,
+		testcore.WaitForESToSettle,
 		100*time.Millisecond,
 	)
 	s.Equal(1, closedCount)
@@ -188,7 +187,7 @@ func (s *WorkflowVisibilityTestSuite) TestVisibility() {
 			s.Logger.Info("Open WorkflowExecution is not yet visible")
 			return false
 		},
-		tests.WaitForESToSettle,
+		testcore.WaitForESToSettle,
 		100*time.Millisecond,
 	)
 	s.Equal(1, openCount)

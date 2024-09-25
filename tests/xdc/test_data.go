@@ -25,8 +25,9 @@
 package xdc
 
 import (
-	"go.temporal.io/server/tests/testcore"
 	"time"
+
+	"go.temporal.io/server/tests/testcore"
 )
 
 const (

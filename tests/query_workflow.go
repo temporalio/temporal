@@ -28,7 +28,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"go.temporal.io/server/tests/testcore"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -42,6 +41,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/service/history/consts"
+	"go.temporal.io/server/tests/testcore"
 )
 
 type QueryWorkflowSuite struct {

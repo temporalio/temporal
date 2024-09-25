@@ -25,7 +25,6 @@
 package workflow
 
 import (
-	"go.temporal.io/server/tests"
 	"go.temporal.io/server/tests/testcore"
 	"time"
 
@@ -181,7 +180,7 @@ func (s *WorkflowMemoTestSuite) startWithMemoHelper(startFn startFunc, id string
 			s.Logger.Info("Open WorkflowExecution is not yet visible")
 			return false
 		},
-		tests.WaitForESToSettle,
+		testcore.WaitForESToSettle,
 		100*time.Millisecond,
 	)
 	s.NotNil(openExecutionInfo)
@@ -238,7 +237,7 @@ func (s *WorkflowMemoTestSuite) startWithMemoHelper(startFn startFunc, id string
 			s.Logger.Info("Closed WorkflowExecution is not yet visible")
 			return false
 		},
-		tests.WaitForESToSettle,
+		testcore.WaitForESToSettle,
 		100*time.Millisecond,
 	)
 	s.NotNil(closedExecutionInfo)

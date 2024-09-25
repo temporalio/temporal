@@ -26,7 +26,6 @@ package tests
 
 import (
 	"fmt"
-	"go.temporal.io/server/tests/testcore"
 	"sort"
 	"time"
 
@@ -43,6 +42,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/payloads"
+	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )

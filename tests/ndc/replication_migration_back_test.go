@@ -28,7 +28,6 @@ import (
 	"context"
 	"flag"
 	"fmt"
-	"go.temporal.io/server/tests/testcore"
 	"os"
 	"sync/atomic"
 	"testing"
@@ -59,6 +58,7 @@ import (
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/environment"
 	"go.temporal.io/server/service/history/replication/eventhandler"
+	"go.temporal.io/server/tests/testcore"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -160,7 +160,8 @@ func (s *ReplicationMigrationBackTestSuite) SetupSuite() {
 		},
 	})
 	s.Require().NoError(err)
-	time.Sleep(2 * testcore.NamespaceCacheRefreshInterval) // we have to wait for namespace cache to pick the change
+	// we have to wait for namespace cache to pick the change
+	time.Sleep(2 * testcore.NamespaceCacheRefreshInterval) //nolint:forbidigo
 }
 
 func (s *ReplicationMigrationBackTestSuite) TearDownSuite() {
@@ -208,8 +209,8 @@ func (s *ReplicationMigrationBackTestSuite) TestHistoryReplication_MultiRunMigra
 		nil,
 		history.Items,
 	)
-
-	time.Sleep(1 * time.Second) // wait for 1 sec to let the run1 events replicated
+	// wait for 1 sec to let the run1 events replicated
+	time.Sleep(1 * time.Second) //nolint:forbidigo
 
 	// replicate run2
 	s.standByReplicationTasksChan <- s.createHistoryEventReplicationTaskFromHistoryEventBatch( // supply history replication task one by one
@@ -220,8 +221,8 @@ func (s *ReplicationMigrationBackTestSuite) TestHistoryReplication_MultiRunMigra
 		nil,
 		history.Items,
 	)
-
-	time.Sleep(1 * time.Second) // wait for 1 sec to let the run2 events replicated
+	// wait for 1 sec to let the run2 events replicated
+	time.Sleep(1 * time.Second) //nolint:forbidigo
 
 	res1, err := s.passiveCluster.AdminClient().DescribeMutableState(context.Background(), &adminservice.DescribeMutableStateRequest{
 		Namespace: s.namespace.String(),
@@ -275,8 +276,8 @@ func (s *ReplicationMigrationBackTestSuite) longRunningMigrationBackReplicationT
 		nil,
 		history.Items,
 	)
-
-	time.Sleep(1 * time.Second) // wait for 1 sec to let the run1 events replicated
+	// wait for 1 sec to let the run1 events replicated
+	time.Sleep(1 * time.Second) //nolint:forbidigo
 
 	res1, err := s.passiveCluster.AdminClient().DescribeMutableState(context.Background(), &adminservice.DescribeMutableStateRequest{
 		Namespace: s.namespace.String(),
@@ -346,8 +347,8 @@ func (s *ReplicationMigrationBackTestSuite) TestHistoryReplication_LongRunningMi
 		nil,
 		history.Items,
 	)
-
-	time.Sleep(1 * time.Second) // wait for 1 sec to let the run1 events replicated
+	// wait for 1 sec to let the run1 events replicated
+	time.Sleep(1 * time.Second) //nolint:forbidigo
 
 	res1, err := s.passiveCluster.AdminClient().DescribeMutableState(context.Background(), &adminservice.DescribeMutableStateRequest{
 		Namespace: s.namespace.String(),
@@ -582,7 +583,7 @@ func (s *ReplicationMigrationBackTestSuite) registerNamespace() {
 	})
 	s.Require().NoError(err)
 	// Wait for namespace cache to pick the change
-	time.Sleep(2 * testcore.NamespaceCacheRefreshInterval)
+	time.Sleep(2 * testcore.NamespaceCacheRefreshInterval) //nolint:forbidigo
 
 	descReq := &workflowservice.DescribeNamespaceRequest{
 		Namespace: s.namespace.String(),

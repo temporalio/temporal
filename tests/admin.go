@@ -26,7 +26,6 @@ package tests
 
 import (
 	"context"
-	"go.temporal.io/server/tests/testcore"
 	"time"
 
 	"github.com/google/uuid"
@@ -35,6 +34,7 @@ import (
 	"go.temporal.io/sdk/workflow"
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/tests/testcore"
 )
 
 type AdminTestSuite struct {

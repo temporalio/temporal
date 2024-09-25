@@ -28,7 +28,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/binary"
-	"go.temporal.io/server/tests/testcore"
 	"time"
 
 	"github.com/pborman/uuid"
@@ -48,6 +47,7 @@ import (
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/testing/historyrequire"
+	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 

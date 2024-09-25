@@ -27,8 +27,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/stretchr/testify/suite"
-	"go.temporal.io/server/tests/testcore"
 	"net/http"
 	"strings"
 	"testing"
@@ -51,6 +49,7 @@ import (
 	cnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/components/nexusoperations"
 	"go.temporal.io/server/service/frontend/configs"
+	"go.temporal.io/server/tests/testcore"
 )
 
 var op = nexus.NewOperationReference[string, string]("my-operation")

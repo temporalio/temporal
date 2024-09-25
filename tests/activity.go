@@ -432,10 +432,10 @@ func (s *ActivitySuite) TestActivityHeartBeatWorkflow_Success() {
 	}
 
 	_, err := poller.PollAndProcessWorkflowTask()
-	s.True(err == nil || err == testcore.ErrNoTasks)
+	s.True(err == nil || errors.Is(err, testcore.ErrNoTasks))
 
 	err = poller.PollAndProcessActivityTask(false)
-	s.True(err == nil || err == testcore.ErrNoTasks)
+	s.True(err == nil || errors.Is(err, testcore.ErrNoTasks))
 
 	s.Logger.Info("Waiting for workflow to complete", tag.WorkflowRunID(we.RunId))
 
@@ -624,7 +624,7 @@ func (s *ActivitySuite) TestActivityRetry() {
 	s.NoError(err)
 
 	err = poller.PollAndProcessActivityTask(false)
-	s.True(err == nil || err == testcore.ErrNoTasks, err)
+	s.True(err == nil || errors.Is(err, testcore.ErrNoTasks))
 
 	descResp, err := describeWorkflowExecution()
 	s.NoError(err)
@@ -639,7 +639,7 @@ func (s *ActivitySuite) TestActivityRetry() {
 	}
 
 	err = poller2.PollAndProcessActivityTask(false)
-	s.True(err == nil || err == testcore.ErrNoTasks, err)
+	s.True(err == nil || errors.Is(err, testcore.ErrNoTasks))
 
 	descResp, err = describeWorkflowExecution()
 	s.NoError(err)
@@ -866,7 +866,7 @@ func (s *ActivitySuite) TestActivityHeartBeatWorkflow_Timeout() {
 	}
 
 	_, err := poller.PollAndProcessWorkflowTask()
-	s.True(err == nil || err == testcore.ErrNoTasks)
+	s.True(err == nil || errors.Is(err, testcore.ErrNoTasks))
 
 	err = poller.PollAndProcessActivityTask(false)
 	// Not s.ErrorIs() because error goes through RPC.
@@ -989,7 +989,7 @@ func (s *ActivitySuite) TestTryActivityCancellationFromWorkflow() {
 	}
 
 	_, err := poller.PollAndProcessWorkflowTask()
-	s.True(err == nil || err == testcore.ErrNoTasks, err)
+	s.True(err == nil || errors.Is(err, testcore.ErrNoTasks))
 
 	cancelCh := make(chan struct{})
 	go func() {
@@ -1016,7 +1016,7 @@ func (s *ActivitySuite) TestTryActivityCancellationFromWorkflow() {
 
 	s.Logger.Info("Start activity.")
 	err = poller.PollAndProcessActivityTask(false)
-	s.True(err == nil || err == testcore.ErrNoTasks, err)
+	s.True(err == nil || errors.Is(err, testcore.ErrNoTasks))
 
 	s.Logger.Info("Waiting for cancel to complete.", tag.WorkflowRunID(we.RunId))
 	<-cancelCh
@@ -1116,7 +1116,7 @@ func (s *ActivitySuite) TestActivityCancellationNotStarted() {
 	}
 
 	_, err := poller.PollAndProcessWorkflowTask()
-	s.True(err == nil || err == testcore.ErrNoTasks)
+	s.True(err == nil || errors.Is(err, testcore.ErrNoTasks))
 
 	// Send signal so that worker can send an activity cancel
 	signalName := "my signal"
@@ -1142,7 +1142,7 @@ func (s *ActivitySuite) TestActivityCancellationNotStarted() {
 	scheduleActivity = false
 	requestCancellation = false
 	_, err = poller.PollAndProcessWorkflowTask()
-	s.True(err == nil || err == testcore.ErrNoTasks)
+	s.True(err == nil || errors.Is(err, testcore.ErrNoTasks))
 }
 
 func (s *ActivityClientTestSuite) TestActivityHeartbeatDetailsDuringRetry() {
@@ -1351,12 +1351,12 @@ func (s *ActivitySuite) TestActivityHeartBeat_RecordIdentity() {
 
 	// execute workflow task so that an activity can be enqueued.
 	_, err = poller.PollAndProcessWorkflowTask()
-	s.True(err == nil || err == testcore.ErrNoTasks)
+	s.True(err == nil || errors.Is(err, testcore.ErrNoTasks))
 
 	// execute activity task which waits for signal before sending heartbeat.
 	go func() {
 		err := poller.PollAndProcessActivityTask(false)
-		s.True(err == nil || err == testcore.ErrNoTasks)
+		s.True(err == nil || errors.Is(err, testcore.ErrNoTasks))
 	}()
 
 	describeWorkflowExecution := func() (*workflowservice.DescribeWorkflowExecutionResponse, error) {

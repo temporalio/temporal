@@ -27,8 +27,6 @@ package tests
 import (
 	"context"
 	"encoding/json"
-	"github.com/stretchr/testify/suite"
-	"go.temporal.io/server/tests/testcore"
 	"io"
 	"net/http"
 	"strings"

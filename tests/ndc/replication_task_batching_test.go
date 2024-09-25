@@ -27,7 +27,6 @@ package ndc
 import (
 	"context"
 	"flag"
-	"go.temporal.io/server/tests/testcore"
 	"os"
 	"sync/atomic"
 	"testing"
@@ -58,6 +57,7 @@ import (
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/environment"
 	"go.temporal.io/server/service/history/replication/eventhandler"
+	"go.temporal.io/server/tests/testcore"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"gopkg.in/yaml.v3"
@@ -193,6 +193,7 @@ func (s *NDCReplicationTaskBatchingTestSuite) TestHistoryReplicationTaskAndThenR
 		}
 		executions[execution] = historyBatch
 	}
+	//nolint:forbidigo
 	time.Sleep(5 * time.Second) // 5 seconds is enough for the history replication task to be processed and applied to passive cluster
 
 	for execution, historyBatch := range executions {

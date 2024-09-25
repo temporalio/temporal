@@ -26,7 +26,6 @@ package tests
 
 import (
 	"context"
-	"go.temporal.io/server/tests/testcore"
 	"time"
 
 	"github.com/stretchr/testify/require"
@@ -38,6 +37,7 @@ import (
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/service/history/tasks"
+	"go.temporal.io/server/tests/testcore"
 	"go.uber.org/fx"
 	"google.golang.org/grpc/codes"
 )

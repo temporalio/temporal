@@ -27,7 +27,6 @@ package tests
 import (
 	"bytes"
 	"encoding/binary"
-	"go.temporal.io/server/tests/testcore"
 	"time"
 
 	"github.com/pborman/uuid"
@@ -46,6 +45,7 @@ import (
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/testing/historyrequire"
 	"go.temporal.io/server/service/history/consts"
+	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -252,7 +252,7 @@ SignalLoop:
 			s.Logger.Info("Closed WorkflowExecution is not yet visible")
 			return false
 		},
-		WaitForESToSettle,
+		testcore.WaitForESToSettle,
 		100*time.Millisecond,
 	)
 }
@@ -498,7 +498,7 @@ func (s *SizeLimitFunctionalSuite) TestTerminateWorkflowCausedByMsSizeLimit() {
 			s.Logger.Info("Closed WorkflowExecution is not yet visible")
 			return false
 		},
-		WaitForESToSettle,
+		testcore.WaitForESToSettle,
 		100*time.Millisecond,
 	)
 }
@@ -599,7 +599,7 @@ SignalLoop:
 			s.Logger.Info("Closed WorkflowExecution is not yet visible")
 			return false
 		},
-		WaitForESToSettle,
+		testcore.WaitForESToSettle,
 		100*time.Millisecond,
 	)
 }

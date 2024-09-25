@@ -29,7 +29,6 @@ import (
 	"context"
 	"encoding/binary"
 	"fmt"
-	"go.temporal.io/server/tests/testcore"
 	"strconv"
 	"time"
 
@@ -51,6 +50,7 @@ import (
 	"go.temporal.io/server/common/testing/protoutils"
 	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/service/history/api/resetworkflow"
+	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )

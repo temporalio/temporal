@@ -28,7 +28,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"go.temporal.io/server/tests/testcore"
 	"sort"
 	"time"
 
@@ -47,6 +46,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/payloads"
+	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -602,7 +602,7 @@ func (s *CronTestClientSuite) listOpenWorkflowExecutions(start, end time.Time, i
 			s.NoError(err)
 			return len(resp.GetExecutions()) == expectedNumber
 		},
-		WaitForESToSettle,
+		testcore.WaitForESToSettle,
 		100*time.Millisecond,
 		"timeout expecting %d executions, found %d",
 		expectedNumber,
@@ -636,7 +636,7 @@ func (s *CronTestClientSuite) listClosedWorkflowExecutions(start, end time.Time,
 			s.NoError(err)
 			return len(resp.GetExecutions()) == expectedNumber
 		},
-		WaitForESToSettle,
+		testcore.WaitForESToSettle,
 		100*time.Millisecond,
 		"timeout expecting %d executions, found %d",
 		expectedNumber,

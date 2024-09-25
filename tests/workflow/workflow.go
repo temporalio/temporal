@@ -28,8 +28,8 @@ import (
 	"bytes"
 	"context"
 	"encoding/binary"
+	"errors"
 	"fmt"
-	"go.temporal.io/server/tests/testcore"
 	"math"
 	"strconv"
 	"time"
@@ -53,6 +53,7 @@ import (
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/testing/testvars"
+	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 
@@ -659,11 +660,11 @@ func (s *WorkflowTestSuite) TestWorkflowTaskAndActivityTaskTimeoutsWorkflow() {
 				RunId:      we.RunId,
 			}))
 		}
-		s.True(err == nil || err == testcore.ErrNoTasks, err)
+		s.True(err == nil || errors.Is(err, testcore.ErrNoTasks))
 		if !dropWorkflowTask {
 			s.Logger.Info("Calling PollAndProcessActivityTask", tag.Counter(i))
 			err = poller.PollAndProcessActivityTask(i%4 == 0)
-			s.True(err == nil || err == testcore.ErrNoTasks)
+			s.True(err == nil || errors.Is(err, testcore.ErrNoTasks))
 		}
 	}
 

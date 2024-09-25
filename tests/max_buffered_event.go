@@ -26,7 +26,6 @@ package tests
 
 import (
 	"context"
-	"go.temporal.io/server/tests/testcore"
 	"sync"
 	"time"
 
@@ -36,6 +35,7 @@ import (
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
 	"go.temporal.io/server/common/payloads"
+	"go.temporal.io/server/tests/testcore"
 )
 
 type MaxBufferedEventSuite struct {

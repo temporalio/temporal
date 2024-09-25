@@ -28,6 +28,10 @@ import (
 	"errors"
 	"fmt"
 
+	"strconv"
+	"strings"
+	"time"
+
 	enumspb "go.temporal.io/api/enums/v1"
 	sdkclient "go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/converter"
@@ -36,9 +40,10 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/rpc"
 	"go.temporal.io/server/tests/testcore"
-	"strconv"
-	"strings"
-	"time"
+)
+
+var (
+	ErrInvalidRunCount = errors.New("invalid run count")
 )
 
 type ClientDataConverterTestSuite struct {
@@ -79,7 +84,7 @@ func testChildWorkflow(ctx workflow.Context, totalCount, runCount int) (string, 
 	logger.Info("Child workflow execution started")
 	if runCount <= 0 {
 		logger.Error("Invalid valid for run count", "RunCount", runCount)
-		return "", errors.New("invalid run count")
+		return "", ErrInvalidRunCount
 	}
 
 	totalCount++
@@ -104,14 +109,14 @@ func (s *ClientDataConverterTestSuite) startWorkerWithDataConverter(tl string, d
 		s.Logger.Fatal("Error when creating SDK client", tag.Error(err))
 	}
 
-	worker := worker.New(sdkClient, tl, worker.Options{})
-	worker.RegisterActivity(testActivity)
-	worker.RegisterWorkflow(testChildWorkflow)
+	newWorker := worker.New(sdkClient, tl, worker.Options{})
+	newWorker.RegisterActivity(testActivity)
+	newWorker.RegisterWorkflow(testChildWorkflow)
 
-	if err := worker.Start(); err != nil {
+	if err := newWorker.Start(); err != nil {
 		s.Logger.Fatal("Error when start worker with data converter", tag.Error(err))
 	}
-	return sdkClient, worker
+	return sdkClient, newWorker
 }
 
 var childTaskQueue = "client-func-data-converter-child-taskqueue"
@@ -155,9 +160,9 @@ func testParentWorkflow(ctx workflow.Context) (string, error) {
 func (s *ClientDataConverterTestSuite) TestClientDataConverter() {
 	tl := "client-func-data-converter-activity-taskqueue"
 	dc := testcore.NewTestDataConverter()
-	sdkClient, worker := s.startWorkerWithDataConverter(tl, dc)
+	sdkClient, testWorker := s.startWorkerWithDataConverter(tl, dc)
 	defer func() {
-		worker.Stop()
+		testWorker.Stop()
 		sdkClient.Close()
 	}()
 
@@ -184,16 +189,16 @@ func (s *ClientDataConverterTestSuite) TestClientDataConverter() {
 	s.Equal("hello_world,hello_world1", res)
 
 	// to ensure custom data converter is used, this number might be different if client changed.
-	d := dc.(*testcore.TestDataConverter)
+	d := dc.(*testcore.TestDataConverter) //nolint:revive // unchecked-type-assertion
 	s.Equal(1, d.NumOfCallToPayloads)
 	s.Equal(1, d.NumOfCallFromPayloads)
 }
 
 func (s *ClientDataConverterTestSuite) TestClientDataConverter_Failed() {
 	tl := "client-func-data-converter-activity-failed-taskqueue"
-	sdkClient, worker := s.startWorkerWithDataConverter(tl, nil) // mismatch of data converter
+	sdkClient, newWorker := s.startWorkerWithDataConverter(tl, nil) // mismatch of data converter
 	defer func() {
-		worker.Stop()
+		newWorker.Stop()
 		sdkClient.Close()
 	}()
 
@@ -271,7 +276,7 @@ func (s *ClientDataConverterTestSuite) TestClientDataConverter_WithChild() {
 	s.Equal("Complete child1 3 times, complete child2 2 times", res)
 
 	// to ensure custom data converter is used, this number might be different if client changed.
-	d := dc.(*testcore.TestDataConverter)
+	d := dc.(*testcore.TestDataConverter) //nolint:revive // unchecked-type-assertion
 	s.Equal(2, d.NumOfCallToPayloads)
 	s.Equal(2, d.NumOfCallFromPayloads)
 }

@@ -26,7 +26,6 @@ package tests
 
 import (
 	"fmt"
-	"go.temporal.io/server/tests/testcore"
 	"time"
 
 	"github.com/pborman/uuid"
@@ -38,6 +37,7 @@ import (
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/converter"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/durationpb"
 )

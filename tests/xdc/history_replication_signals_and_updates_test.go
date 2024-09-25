@@ -33,7 +33,6 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"go.temporal.io/server/tests/testcore"
 	"testing"
 	"time"
 
@@ -59,6 +58,7 @@ import (
 	"go.temporal.io/server/common/testing/protoutils"
 	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/service/history/replication"
+	"go.temporal.io/server/tests/testcore"
 	"go.uber.org/fx"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
@@ -638,12 +638,12 @@ func (t *hrsuTest) failover1To2(ctx context.Context) {
 	t.cluster1.setActive(ctx, "cluster2")
 	t.s.Equal([]string{"cluster2", "cluster1"}, t.getActiveClusters(ctx))
 
-	time.Sleep(testcore.NamespaceCacheRefreshInterval)
+	time.Sleep(testcore.NamespaceCacheRefreshInterval) //nolint:forbidigo
 
 	t.executeNamespaceReplicationTasksUntil(ctx, enumsspb.NAMESPACE_OPERATION_UPDATE)
 	// Wait for active cluster to be changed in namespace registry entry.
 	// TODO (dan) It would be nice to find a better approach.
-	time.Sleep(testcore.NamespaceCacheRefreshInterval)
+	time.Sleep(testcore.NamespaceCacheRefreshInterval) //nolint:forbidigo
 	t.s.Equal([]string{"cluster2", "cluster2"}, t.getActiveClusters(ctx))
 }
 
@@ -652,12 +652,12 @@ func (t *hrsuTest) failover2To1(ctx context.Context) {
 	t.cluster1.setActive(ctx, "cluster1")
 	t.s.Equal([]string{"cluster1", "cluster2"}, t.getActiveClusters(ctx))
 
-	time.Sleep(testcore.NamespaceCacheRefreshInterval)
+	time.Sleep(testcore.NamespaceCacheRefreshInterval) //nolint:forbidigo
 
 	t.executeNamespaceReplicationTasksUntil(ctx, enumsspb.NAMESPACE_OPERATION_UPDATE)
 	// Wait for active cluster to be changed in namespace registry entry.
 	// TODO (dan) It would be nice to find a better approach.
-	time.Sleep(testcore.NamespaceCacheRefreshInterval)
+	time.Sleep(testcore.NamespaceCacheRefreshInterval) //nolint:forbidigo
 	t.s.Equal([]string{"cluster1", "cluster1"}, t.getActiveClusters(ctx))
 }
 
@@ -673,7 +673,7 @@ func (t *hrsuTest) enterSplitBrainState(ctx context.Context) {
 
 	// Wait for active cluster to be changed in namespace registry entry.
 	// TODO (dan) It would be nice to find a better approach.
-	time.Sleep(testcore.NamespaceCacheRefreshInterval)
+	time.Sleep(testcore.NamespaceCacheRefreshInterval) //nolint:forbidigo
 }
 
 // executeNamespaceReplicationTasksUntil executes buffered namespace event replication tasks until the specified event

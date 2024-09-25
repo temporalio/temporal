@@ -28,7 +28,6 @@ import (
 	"errors"
 	"fmt"
 	"github.com/dgryski/go-farm"
-	"go.temporal.io/server/tests/testcore"
 	"os"
 	"strconv"
 	"time"
@@ -50,6 +49,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/rpc"
+	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 

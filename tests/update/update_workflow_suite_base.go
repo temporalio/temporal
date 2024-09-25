@@ -27,6 +27,8 @@ package update
 import (
 	"context"
 	"fmt"
+	"time"
+
 	"github.com/stretchr/testify/require"
 	enumspb "go.temporal.io/api/enums/v1"
 	updatepb "go.temporal.io/api/update/v1"
@@ -34,7 +36,6 @@ import (
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/tests/testcore"
-	"time"
 )
 
 type WorkflowUpdateBaseSuite struct {

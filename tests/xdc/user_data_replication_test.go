@@ -31,7 +31,6 @@ package xdc
 import (
 	"flag"
 	"fmt"
-	"go.temporal.io/server/tests/testcore"
 	"testing"
 	"time"
 
@@ -57,6 +56,7 @@ import (
 	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/service/worker/migration"
 	"go.temporal.io/server/service/worker/scanner/build_ids"
+	"go.temporal.io/server/tests/testcore"
 )
 
 type (

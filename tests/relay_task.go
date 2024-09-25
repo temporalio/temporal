@@ -25,7 +25,6 @@
 package tests
 
 import (
-	"go.temporal.io/server/tests/testcore"
 	"time"
 
 	"github.com/pborman/uuid"
@@ -35,6 +34,7 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 

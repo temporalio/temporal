@@ -29,12 +29,12 @@ import (
 	"context"
 	"encoding/binary"
 	"fmt"
-	"github.com/dgryski/go-farm"
 	"maps"
 	"os"
 	"strconv"
 	"time"
 
+	"github.com/dgryski/go-farm"
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"

@@ -27,7 +27,6 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"go.temporal.io/server/tests/testcore"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -56,6 +55,7 @@ import (
 	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/components/callbacks"
 	"go.temporal.io/server/components/nexusoperations"
+	"go.temporal.io/server/tests/testcore"
 )
 
 type NexusStateReplicationSuite struct {

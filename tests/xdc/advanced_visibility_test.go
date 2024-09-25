@@ -29,7 +29,6 @@ package xdc
 import (
 	"flag"
 	"fmt"
-	"go.temporal.io/server/tests/testcore"
 	"os"
 	"sync"
 	"testing"
@@ -58,6 +57,7 @@ import (
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/environment"
+	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 	"gopkg.in/yaml.v3"

@@ -28,7 +28,6 @@ import (
 	"context"
 	"flag"
 	"fmt"
-	"go.temporal.io/server/tests/testcore"
 	"math/rand"
 	"os"
 	"sync/atomic"
@@ -67,6 +66,7 @@ import (
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/environment"
 	"go.temporal.io/server/service/history/ndc"
+	"go.temporal.io/server/tests/testcore"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/grpc"
 	"google.golang.org/protobuf/types/known/durationpb"
@@ -2087,7 +2087,7 @@ func (s *NDCFunctionalTestSuite) registerNamespace() {
 	})
 	s.Require().NoError(err)
 	// Wait for namespace cache to pick the change
-	time.Sleep(2 * testcore.NamespaceCacheRefreshInterval)
+	time.Sleep(2 * testcore.NamespaceCacheRefreshInterval) //nolint:forbidigo
 
 	descReq := &workflowservice.DescribeNamespaceRequest{
 		Namespace: s.namespace.String(),
