@@ -43,7 +43,6 @@ import (
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
-	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -100,8 +99,7 @@ type (
 	perNamespaceWorker struct {
 		wm     *perNamespaceWorkerManager
 		logger log.Logger
-
-		cancel1, cancel2 func()
+		cancel func()
 
 		lock sync.Mutex // protects below fields
 		refreshArgs
@@ -210,7 +208,7 @@ func (wm *perNamespaceWorkerManager) Stop() {
 
 	for _, worker := range workers {
 		worker.stopWorkerAndResetTimer()
-		worker.cancelSubs()
+		worker.cancel()
 	}
 
 	wm.logger.Info("", tag.LifeCycleStopped)
@@ -247,9 +245,12 @@ func (wm *perNamespaceWorkerManager) getWorkerByNamespace(ns *namespace.Namespac
 		logger:  log.With(wm.logger, tag.WorkflowNamespace(ns.Name().String())),
 		retrier: backoff.NewRetrier(backoff.NewExponentialRetryPolicy(wm.initialRetry), clock.NewRealTimeSource()),
 	}
+	count, c1 := wm.config.PerNamespaceWorkerCount(ns.Name().String(), worker.setWorkerCount)
+	opts, c2 := wm.config.PerNamespaceWorkerOptions(ns.Name().String(), worker.setWorkerOptions)
 	worker.ns = ns
-	worker.count, worker.cancel1 = dynamicconfig.WorkerPerNamespaceWorkerCount.Subscribe(wm.config.col, ns.Name().String(), worker.setWorkerCount)
-	worker.opts, worker.cancel2 = dynamicconfig.WorkerPerNamespaceWorkerOptions.Subscribe(wm.config.col, ns.Name().String(), worker.setWorkerOptions)
+	worker.count = count
+	worker.opts = opts
+	worker.cancel = func() { c1(); c2() }
 
 	wm.workers[ns.ID()] = worker
 	return worker
@@ -261,7 +262,7 @@ func (wm *perNamespaceWorkerManager) removeWorker(ns *namespace.Namespace) {
 	prev := wm.workers[ns.ID()]
 	delete(wm.workers, ns.ID())
 	if prev != nil {
-		prev.cancelSubs()
+		prev.cancel()
 	}
 }
 
@@ -299,13 +300,6 @@ func (w *perNamespaceWorker) setWorkerCount(count int) {
 
 func (w *perNamespaceWorker) setWorkerOptions(opts sdkworker.Options) {
 	w.update(nil, false, nil, &opts)
-}
-
-func (w *perNamespaceWorker) cancelSubs() {
-	w.cancel1()
-	w.cancel2()
-	w.cancel1 = nil
-	w.cancel1 = nil
 }
 
 // called on namespace state change callback, membership change, and dynamic config change
