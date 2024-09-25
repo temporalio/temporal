@@ -280,7 +280,7 @@ func GetMutableStateWithConsistencyCheck(
 			if currentVersion == lastVersionHistoryItem.GetVersion() {
 				return currentEventID <= lastVersionHistoryItem.GetEventId()
 			}
-			return currentVersion <= lastVersionHistoryItem.GetVersion()
+			return currentVersion < lastVersionHistoryItem.GetVersion()
 		},
 		workflowKey,
 		locks.PriorityHigh,
