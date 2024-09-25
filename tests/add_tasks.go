@@ -27,7 +27,6 @@ package tests
 import (
 	"context"
 	"errors"
-	testbase "go.temporal.io/server/tests/testcore"
 	"strings"
 	"time"
 
@@ -45,6 +44,7 @@ import (
 	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
+	"go.temporal.io/server/tests/testcore"
 	"go.uber.org/atomic"
 	"go.uber.org/fx"
 )
@@ -56,7 +56,7 @@ import (
 type (
 	// AddTasksSuite is a separate suite because we need to override the history service's executable wrapper.
 	AddTasksSuite struct {
-		testbase.FunctionalTestBase
+		testcore.FunctionalTestBase
 		*require.Assertions
 		shardController *faultyShardController
 		worker          worker.Worker
@@ -139,7 +139,7 @@ func (s *AddTasksSuite) SetupSuite() {
 	s.Assertions = require.New(s.T())
 	// Set up the test cluster and register our executable wrapper.
 	s.FunctionalTestBase.SetupSuite("testdata/es_cluster.yaml",
-		testbase.WithFxOptionsForService(
+		testcore.WithFxOptionsForService(
 			primitives.HistoryService,
 			fx.Provide(
 				func() queues.ExecutorWrapper {
@@ -185,7 +185,7 @@ func (s *AddTasksSuite) TestAddTasks_Ok() {
 	} {
 		s.Run(tc.name, func() {
 			// Register a workflow which does nothing.
-			taskQueue := testbase.RandomizeStr("add-tasks-test-queue")
+			taskQueue := testcore.RandomizeStr("add-tasks-test-queue")
 			w := worker.New(s.sdkClient, taskQueue, worker.Options{DeadlockDetectionTimeout: 0})
 			myWorkflow := func(ctx workflow.Context) error {
 				return nil

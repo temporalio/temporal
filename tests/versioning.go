@@ -197,9 +197,9 @@ func (s *VersioningIntegSuite) TestVersionRuleBuildIdValidation() {
 	s.insertRedirectRule(ctx, tq, "foo", longStr, cT, false)
 
 	// failure due to invalid utf-8
-	s.insertAssignmentRule(ctx, tq, invalidUTF8, 0, cT, false)
-	s.insertRedirectRule(ctx, tq, invalidUTF8, "foo", cT, false)
-	s.insertRedirectRule(ctx, tq, "foo", invalidUTF8, cT, false)
+	s.insertAssignmentRule(ctx, tq, testcore.InvalidUTF8, 0, cT, false)
+	s.insertRedirectRule(ctx, tq, testcore.InvalidUTF8, "foo", cT, false)
+	s.insertRedirectRule(ctx, tq, "foo", testcore.InvalidUTF8, cT, false)
 }
 
 func (s *VersioningIntegSuite) TestAssignmentRuleInsert() {

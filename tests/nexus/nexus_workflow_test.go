@@ -25,7 +25,6 @@ package nexus
 import (
 	"context"
 	"github.com/stretchr/testify/suite"
-	testbase "go.temporal.io/server/tests/testcore"
 	"io"
 	"net/http"
 	"slices"
@@ -56,6 +55,7 @@ import (
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/components/nexusoperations"
 	"go.temporal.io/server/service/frontend/configs"
+	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 
@@ -68,9 +68,9 @@ func TestNexusWorkflowTestSuite(t *testing.T) {
 }
 
 func (s *NexusWorkflowTestSuite) TestNexusOperationCancelation() {
-	ctx := testbase.NewContext()
-	taskQueue := testbase.RandomizeStr(s.T().Name())
-	endpointName := testbase.RandomizedNexusEndpoint(s.T().Name())
+	ctx := testcore.NewContext()
+	taskQueue := testcore.RandomizeStr(s.T().Name())
+	endpointName := testcore.RandomizedNexusEndpoint(s.T().Name())
 
 	h := nexustest.Handler{
 		OnStartOperation: func(ctx context.Context, service, operation string, input *nexus.LazyValue, options nexus.StartOperationOptions) (nexus.HandlerStartOperationResult[any], error) {
@@ -193,9 +193,9 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationCancelation() {
 }
 
 func (s *NexusWorkflowTestSuite) TestNexusOperationSyncCompletion() {
-	ctx := testbase.NewContext()
-	taskQueue := testbase.RandomizeStr(s.T().Name())
-	endpointName := testbase.RandomizedNexusEndpoint(s.T().Name())
+	ctx := testcore.NewContext()
+	taskQueue := testcore.RandomizeStr(s.T().Name())
+	endpointName := testcore.RandomizedNexusEndpoint(s.T().Name())
 
 	h := nexustest.Handler{
 		OnStartOperation: func(ctx context.Context, service, operation string, input *nexus.LazyValue, options nexus.StartOperationOptions) (nexus.HandlerStartOperationResult[any], error) {
@@ -293,9 +293,9 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationSyncCompletion() {
 }
 
 func (s *NexusWorkflowTestSuite) TestNexusOperationSyncCompletion_LargePayload() {
-	ctx := testbase.NewContext()
-	taskQueue := testbase.RandomizeStr(s.T().Name())
-	endpointName := testbase.RandomizedNexusEndpoint(s.T().Name())
+	ctx := testcore.NewContext()
+	taskQueue := testcore.RandomizeStr(s.T().Name())
+	endpointName := testcore.RandomizedNexusEndpoint(s.T().Name())
 
 	h := nexustest.Handler{
 		OnStartOperation: func(ctx context.Context, service, operation string, input *nexus.LazyValue, options nexus.StartOperationOptions) (nexus.HandlerStartOperationResult[any], error) {
@@ -396,9 +396,9 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationSyncCompletion_LargePayload()
 }
 
 func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletion() {
-	ctx := testbase.NewContext()
-	taskQueue := testbase.RandomizeStr(s.T().Name())
-	endpointName := testbase.RandomizedNexusEndpoint(s.T().Name())
+	ctx := testcore.NewContext()
+	taskQueue := testcore.RandomizeStr(s.T().Name())
+	endpointName := testcore.RandomizedNexusEndpoint(s.T().Name())
 
 	testClusterInfo, err := s.FrontendClient().GetClusterInfo(ctx, &workflowservice.GetClusterInfoRequest{})
 	s.NoError(err)
@@ -560,7 +560,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletion() {
 	})
 	s.NoError(err)
 
-	invalidNamespace := testbase.RandomizeStr("ns")
+	invalidNamespace := testcore.RandomizeStr("ns")
 	_, err = s.FrontendClient().RegisterNamespace(ctx, &workflowservice.RegisterNamespaceRequest{
 		Namespace:                        invalidNamespace,
 		WorkflowExecutionRetentionPeriod: durationpb.New(time.Hour * 24),
@@ -691,9 +691,9 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletion() {
 }
 
 func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncFailure() {
-	ctx := testbase.NewContext()
-	taskQueue := testbase.RandomizeStr(s.T().Name())
-	endpointName := testbase.RandomizedNexusEndpoint(s.T().Name())
+	ctx := testcore.NewContext()
+	taskQueue := testcore.RandomizeStr(s.T().Name())
+	endpointName := testcore.RandomizedNexusEndpoint(s.T().Name())
 
 	var callbackToken, publicCallbackUrl string
 
@@ -828,7 +828,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncFailure() {
 }
 
 func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletionErrors() {
-	ctx := testbase.NewContext()
+	ctx := testcore.NewContext()
 
 	completion, err := nexus.NewOperationCompletionSuccessful(s.mustToPayload("result"), nexus.OperationCompletionSuccesfulOptions{
 		Serializer: commonnexus.PayloadSerializer,
@@ -882,7 +882,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletionErrors() {
 }
 
 func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletionAuthErrors() {
-	ctx := testbase.NewContext()
+	ctx := testcore.NewContext()
 
 	onAuthorize := func(ctx context.Context, c *authorization.Claims, ct *authorization.CallTarget) (authorization.Result, error) {
 		if ct.APIName == configs.CompleteNexusOperation {
@@ -911,9 +911,9 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletionInternalAuth()
 		nexusoperations.CallbackURLTemplate,
 		"http://INTERNAL/namespaces/{{.NamespaceName}}/nexus/callback")
 
-	ctx := testbase.NewContext()
-	taskQueue := testbase.RandomizeStr(s.T().Name())
-	endpointName := testbase.RandomizedNexusEndpoint(s.T().Name())
+	ctx := testcore.NewContext()
+	taskQueue := testcore.RandomizeStr(s.T().Name())
+	endpointName := testcore.RandomizedNexusEndpoint(s.T().Name())
 
 	_, err := s.OperatorClient().CreateNexusEndpoint(ctx, &operatorservice.CreateNexusEndpointRequest{
 		Spec: &nexuspb.EndpointSpec{
@@ -936,11 +936,11 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletionInternalAuth()
 	s.NoError(err)
 
 	completionWFType := "completion_wf"
-	completionWFTaskQueue := testbase.RandomizeStr(s.T().Name())
+	completionWFTaskQueue := testcore.RandomizeStr(s.T().Name())
 	completionWFStartReq := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:          uuid.NewString(),
 		Namespace:          s.Namespace(),
-		WorkflowId:         testbase.RandomizeStr(s.T().Name()),
+		WorkflowId:         testcore.RandomizeStr(s.T().Name()),
 		WorkflowType:       &commonpb.WorkflowType{Name: completionWFType},
 		TaskQueue:          &taskqueue.TaskQueue{Name: completionWFTaskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		Input:              nil,
@@ -1098,9 +1098,9 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletionInternalAuth()
 }
 
 func (s *NexusWorkflowTestSuite) TestNexusOperationCancelBeforeStarted_CancelationEventuallyDelivered() {
-	ctx := testbase.NewContext()
-	taskQueue := testbase.RandomizeStr(s.T().Name())
-	endpointName := testbase.RandomizedNexusEndpoint(s.T().Name())
+	ctx := testcore.NewContext()
+	taskQueue := testcore.RandomizeStr(s.T().Name())
+	endpointName := testcore.RandomizedNexusEndpoint(s.T().Name())
 
 	canStartCh := make(chan struct{})
 	cancelSentCh := make(chan struct{})
@@ -1222,9 +1222,9 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationCancelBeforeStarted_Cancelati
 }
 
 func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletionAfterReset() {
-	ctx := testbase.NewContext()
-	taskQueue := testbase.RandomizeStr(s.T().Name())
-	endpointName := testbase.RandomizedNexusEndpoint(s.T().Name())
+	ctx := testcore.NewContext()
+	taskQueue := testcore.RandomizeStr(s.T().Name())
+	endpointName := testcore.RandomizedNexusEndpoint(s.T().Name())
 
 	var callbackToken, publicCallbackUrl string
 
