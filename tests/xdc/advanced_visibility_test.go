@@ -266,7 +266,7 @@ func (s *AdvVisCrossDCTestSuite) TestSearchAttributes() {
 		Query:     fmt.Sprintf(`WorkflowId = "%s" and %s = "%s"`, id, s.testSearchAttributeKey, s.testSearchAttributeVal),
 	}
 
-	testListResult := func(client tests.FrontendClient, lr *workflowservice.ListWorkflowExecutionsRequest) {
+	testListResult := func(client workflowservice.WorkflowServiceClient, lr *workflowservice.ListWorkflowExecutionsRequest) {
 		var openExecution *workflowpb.WorkflowExecutionInfo
 		for i := 0; i < numOfRetry; i++ {
 			startFilter.LatestTime = timestamppb.New(time.Now().UTC())
@@ -323,7 +323,7 @@ func (s *AdvVisCrossDCTestSuite) TestSearchAttributes() {
 
 	time.Sleep(waitForESToSettle)
 
-	testListResult = func(client tests.FrontendClient, lr *workflowservice.ListWorkflowExecutionsRequest) {
+	testListResult = func(client workflowservice.WorkflowServiceClient, lr *workflowservice.ListWorkflowExecutionsRequest) {
 		s.Eventually(func() bool {
 			resp, err := client.ListWorkflowExecutions(tests.NewContext(), lr)
 			s.NoError(err)

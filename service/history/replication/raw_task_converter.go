@@ -296,6 +296,14 @@ func convertSyncVersionedTransitionTask(
 	targetClusterID int32,
 	converter *syncVersionedTransitionTaskConverter,
 ) (*replicationspb.ReplicationTask, error) {
+	converter.logger = log.With(
+		converter.logger,
+		tag.WorkflowNamespaceID(taskInfo.NamespaceID),
+		tag.WorkflowID(taskInfo.WorkflowID),
+		tag.WorkflowRunID(taskInfo.RunID),
+		tag.TaskKey(taskInfo.GetKey()),
+		tag.Task(taskInfo),
+	)
 	return generateStateReplicationTask(
 		ctx,
 		converter.shardContext,
@@ -635,6 +643,14 @@ func (c *syncVersionedTransitionTaskConverter) convert(
 	targetClusterID int32,
 	mutableState workflow.MutableState,
 ) (*replicationspb.ReplicationTask, error) {
+	executionInfo := mutableState.GetExecutionInfo()
+
+	// If workflow is not on any versionedTransition (in an unknown state from state-based replication perspective),
+	// we can't convert this raw task to a replication task, instead we need to rely on its task equivalents.
+	if len(executionInfo.TransitionHistory) == 0 {
+		return c.convertTaskEquivalents(ctx, taskInfo, targetClusterID)
+	}
+
 	progress := c.replicationCache.Get(taskInfo.RunID, targetClusterID)
 
 	if progress.VersionedTransitionSent(taskInfo.VersionedTransition) {
@@ -693,7 +709,6 @@ func (c *syncVersionedTransitionTaskConverter) convert(
 	default:
 		return nil, serviceerror.NewInternal("unknown sync workflow state artifact type")
 	}
-	executionInfo := mutableState.GetExecutionInfo()
 	currentHistory, err := versionhistory.GetCurrentVersionHistory(executionInfo.VersionHistories)
 	if err != nil {
 		return nil, err
@@ -806,4 +821,45 @@ func (c *syncVersionedTransitionTaskConverter) generateBackfillHistoryTask(
 		VersionedTransition: taskInfo.VersionedTransition,
 		VisibilityTime:      timestamppb.New(taskInfo.VisibilityTimestamp),
 	}, nil
+}
+
+func (c *syncVersionedTransitionTaskConverter) convertTaskEquivalents(
+	ctx context.Context,
+	taskInfo *tasks.SyncVersionedTransitionTask,
+	targetClusterID int32,
+) (*replicationspb.ReplicationTask, error) {
+	if len(taskInfo.TaskEquivalents) == 0 {
+		// no task equivalents, nothing to do
+		c.logger.Info("No task equivalents for sync versioned transition task, dropping the task.")
+		return nil, nil
+	}
+	if len(taskInfo.TaskEquivalents) == 1 {
+		// when there is only one task equivalent, we can directly convert it to a replication task
+		historyEngine, err := c.shardContext.GetEngine(ctx)
+		if err != nil {
+			return nil, err
+		}
+		taskEquivalent := taskInfo.TaskEquivalents[0]
+		taskEquivalent.SetTaskID(taskInfo.GetTaskID())
+		taskEquivalent.SetVisibilityTime(taskInfo.GetVisibilityTime())
+		// TODO: set workflow key as well so we don't have to persist it multiple times
+		return historyEngine.ConvertReplicationTask(ctx, taskEquivalent, targetClusterID)
+	}
+	// When there are multiple task equivalents, we have to write them back to the replication queue,
+	// as multiple tasks can't share the same taskID.
+	// AddTasks() method will handle:
+	// 1. The allocation of taskID (and task visibilityTimestamp)
+	// 2. The case where namespace is in handover state in which case, the AddTasks() request will fail
+	// and an ErrNamespaceHandover will be returned.
+	return nil, c.shardContext.AddTasks(
+		ctx,
+		&persistence.AddHistoryTasksRequest{
+			ShardID:     c.shardID,
+			NamespaceID: taskInfo.NamespaceID,
+			WorkflowID:  taskInfo.WorkflowID,
+			Tasks: map[tasks.Category][]tasks.Task{
+				tasks.CategoryReplication: taskInfo.TaskEquivalents,
+			},
+		},
+	)
 }

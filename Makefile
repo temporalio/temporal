@@ -18,7 +18,7 @@ clean: clean-bins clean-test-results
 	rm -rf $(LOCALBIN)
 
 # Recompile proto files.
-proto: lint-protos lint-api protoc service-clients
+proto: lint-protos lint-api protoc service-clients server-interceptors
 ########################################################################
 
 .PHONY: proto protoc install bins ci-build-misc clean
@@ -246,6 +246,10 @@ protoc: $(PROTOGEN) $(MOCKGEN) $(GOIMPORTS) $(PROTOC_GEN_GO) $(PROTOC_GEN_GO_GRP
 service-clients:
 	@printf $(COLOR) "Generate service clients..."
 	@go generate -run genrpcwrappers ./client/...
+
+server-interceptors:
+	@printf $(COLOR) "Generate server interceptors..."
+	@go generate ./common/rpc/interceptor/logtags/...
 
 update-go-api:
 	@printf $(COLOR) "Update go.temporal.io/api@master..."

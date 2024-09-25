@@ -984,6 +984,10 @@ func BuildId(buildId string) ZapTag {
 	return NewStringTag("build-id", buildId)
 }
 
+func UserDataVersion(v int64) ZapTag {
+	return NewInt64("user-data-version", v)
+}
+
 func Cause(cause string) ZapTag {
 	return NewStringTag("cause", cause)
 }

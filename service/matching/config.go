@@ -139,6 +139,7 @@ type (
 
 		GetUserDataLongPollTimeout dynamicconfig.DurationPropertyFn
 		GetUserDataMinWaitTime     time.Duration
+		GetUserDataReturnBudget    time.Duration
 
 		// taskWriter configuration
 		OutstandingTaskAppendsThreshold func() int
@@ -298,6 +299,7 @@ func newTaskQueueConfig(tq *tqid.TaskQueue, config *Config, ns namespace.Name) *
 		},
 		GetUserDataLongPollTimeout: config.GetUserDataLongPollTimeout,
 		GetUserDataMinWaitTime:     1 * time.Second,
+		GetUserDataReturnBudget:    returnEmptyTaskTimeBudget,
 		OutstandingTaskAppendsThreshold: func() int {
 			return config.OutstandingTaskAppendsThreshold(ns.String(), taskQueueName, taskType)
 		},
