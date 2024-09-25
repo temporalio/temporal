@@ -51,7 +51,7 @@ import (
 	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/persistence/v1"
-	replicationpb "go.temporal.io/server/api/replication/v1"
+	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/client/history"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/failure"
@@ -95,7 +95,7 @@ type (
 		version                     int64
 		versionIncrement            int64
 		mockAdminClient             map[string]adminservice.AdminServiceClient
-		standByReplicationTasksChan chan *replicationpb.ReplicationTask
+		standByReplicationTasksChan chan *replicationspb.ReplicationTask
 		standByTaskID               int64
 	}
 )
@@ -130,8 +130,8 @@ func (s *NDCFunctionalTestSuite) SetupSuite() {
 	mockStreamClient.EXPECT().Send(gomock.Any()).Return(nil).AnyTimes()
 	mockStreamClient.EXPECT().Recv().Return(&adminservice.StreamWorkflowReplicationMessagesResponse{
 		Attributes: &adminservice.StreamWorkflowReplicationMessagesResponse_Messages{
-			Messages: &replicationpb.WorkflowReplicationMessages{
-				ReplicationTasks:           []*replicationpb.ReplicationTask{},
+			Messages: &replicationspb.WorkflowReplicationMessages{
+				ReplicationTasks:           []*replicationspb.ReplicationTask{},
 				ExclusiveHighWatermark:     100,
 				ExclusiveHighWatermarkTime: timestamppb.New(time.Unix(0, 100)),
 			},
@@ -139,7 +139,7 @@ func (s *NDCFunctionalTestSuite) SetupSuite() {
 	}, nil).AnyTimes()
 	mockStreamClient.EXPECT().CloseSend().Return(nil).AnyTimes()
 
-	s.standByReplicationTasksChan = make(chan *replicationpb.ReplicationTask, 100)
+	s.standByReplicationTasksChan = make(chan *replicationspb.ReplicationTask, 100)
 
 	s.standByTaskID = 0
 	mockStandbyClient := adminservicemock.NewMockAdminServiceClient(s.controller)
@@ -148,7 +148,7 @@ func (s *NDCFunctionalTestSuite) SetupSuite() {
 	mockOtherClient := adminservicemock.NewMockAdminServiceClient(s.controller)
 	mockOtherClient.EXPECT().GetReplicationMessages(gomock.Any(), gomock.Any()).Return(
 		&adminservice.GetReplicationMessagesResponse{
-			ShardMessages: make(map[int32]*replicationpb.ReplicationMessages),
+			ShardMessages: make(map[int32]*replicationspb.ReplicationMessages),
 		}, nil).AnyTimes()
 	mockOtherClient.EXPECT().StreamWorkflowReplicationMessages(gomock.Any()).Return(mockStreamClient, nil).AnyTimes()
 	s.mockAdminClient = map[string]adminservice.AdminServiceClient{
@@ -177,7 +177,7 @@ func (s *NDCFunctionalTestSuite) GetReplicationMessagesMock(
 	case task := <-s.standByReplicationTasksChan:
 		taskID := atomic.AddInt64(&s.standByTaskID, 1)
 		task.SourceTaskId = taskID
-		tasks := []*replicationpb.ReplicationTask{task}
+		tasks := []*replicationspb.ReplicationTask{task}
 		for len(s.standByReplicationTasksChan) > 0 {
 			task = <-s.standByReplicationTasksChan
 			taskID := atomic.AddInt64(&s.standByTaskID, 1)
@@ -185,18 +185,18 @@ func (s *NDCFunctionalTestSuite) GetReplicationMessagesMock(
 			tasks = append(tasks, task)
 		}
 
-		replicationMessage := &replicationpb.ReplicationMessages{
+		replicationMessage := &replicationspb.ReplicationMessages{
 			ReplicationTasks:       tasks,
 			LastRetrievedMessageId: tasks[len(tasks)-1].SourceTaskId,
 			HasMore:                true,
 		}
 
 		return &adminservice.GetReplicationMessagesResponse{
-			ShardMessages: map[int32]*replicationpb.ReplicationMessages{1: replicationMessage},
+			ShardMessages: map[int32]*replicationspb.ReplicationMessages{1: replicationMessage},
 		}, nil
 	default:
 		return &adminservice.GetReplicationMessagesResponse{
-			ShardMessages: make(map[int32]*replicationpb.ReplicationMessages),
+			ShardMessages: make(map[int32]*replicationspb.ReplicationMessages),
 		}, nil
 	}
 }
@@ -2288,11 +2288,11 @@ func (s *NDCFunctionalTestSuite) applyEventsThroughFetcher(
 		eventBlob, newRunEventBlob, newRunID := s.generateEventBlobs(workflowID, runID, workflowType, taskqueue, batch)
 
 		taskType := enumsspb.REPLICATION_TASK_TYPE_HISTORY_V2_TASK
-		replicationTask := &replicationpb.ReplicationTask{
+		replicationTask := &replicationspb.ReplicationTask{
 			TaskType:     taskType,
 			SourceTaskId: 1,
-			Attributes: &replicationpb.ReplicationTask_HistoryTaskAttributes{
-				HistoryTaskAttributes: &replicationpb.HistoryTaskAttributes{
+			Attributes: &replicationspb.ReplicationTask_HistoryTaskAttributes{
+				HistoryTaskAttributes: &replicationspb.HistoryTaskAttributes{
 					NamespaceId:         s.namespaceID.String(),
 					WorkflowId:          workflowID,
 					RunId:               runID,
