@@ -245,7 +245,7 @@ func (s *CallbacksSuite) TestWorkflowNexusCallbacks_CarriedOver() {
 		s.T().Run(tc.name, func(t *testing.T) {
 			ctx := testcore.NewContext()
 			sdkClient, err := client.Dial(client.Options{
-				HostPort:  s.TestCluster().Host().FrontendGRPCAddress(),
+				HostPort:  s.GetTestCluster().Host().FrontendGRPCAddress(),
 				Namespace: s.Namespace(),
 			})
 			s.NoError(err)

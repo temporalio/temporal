@@ -103,11 +103,11 @@ func WithFxOptionsForService(serviceName primitives.ServiceName, options ...fx.O
 	}
 }
 
-func (s *FunctionalTestBase) TestCluster() *TestCluster {
+func (s *FunctionalTestBase) GetTestCluster() *TestCluster {
 	return s.testCluster
 }
 
-func (s *FunctionalTestBase) TestClusterConfig() *TestClusterConfig {
+func (s *FunctionalTestBase) GetTestClusterConfig() *TestClusterConfig {
 	return s.testClusterConfig
 }
 
@@ -282,6 +282,12 @@ func GetTestClusterConfig(configFile string) (*TestClusterConfig, error) {
 	if TestFlags.TestClusterConfigFile != "" {
 		configLocation = TestFlags.TestClusterConfigFile
 	}
+	if _, err := os.Stat(configLocation); err != nil {
+		if os.IsNotExist(err) {
+			configLocation = "../" + configLocation
+		}
+	}
+
 	// This is just reading a config, so it's less of a security concern
 	// #nosec
 	confContent, err := os.ReadFile(configLocation)

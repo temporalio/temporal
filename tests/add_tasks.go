@@ -221,7 +221,7 @@ func (s *AddTasksSuite) TestAddTasks_Ok() {
 			s.shouldSkip.Store(false)
 			blob, err := serialization.NewTaskSerializer().SerializeTask(task)
 			s.NoError(err)
-			shardID := tasks.GetShardIDForTask(task, int(s.TestClusterConfig().HistoryConfig.NumHistoryShards))
+			shardID := tasks.GetShardIDForTask(task, int(s.GetTestClusterConfig().HistoryConfig.NumHistoryShards))
 			request := &adminservice.AddTasksRequest{
 				ShardId: int32(shardID),
 				Tasks: []*adminservice.AddTasksRequest_Task{
@@ -232,7 +232,7 @@ func (s *AddTasksSuite) TestAddTasks_Ok() {
 				},
 			}
 			if tc.shouldCallAddTasks {
-				_, err = s.TestCluster().AdminClient().AddTasks(ctx, request)
+				_, err = s.GetTestCluster().AdminClient().AddTasks(ctx, request)
 				s.NoError(err)
 			}
 
@@ -250,7 +250,7 @@ func (s *AddTasksSuite) TestAddTasks_Ok() {
 }
 
 func (s *AddTasksSuite) TestAddTasks_ErrGetShardByID() {
-	_, err := s.TestCluster().HistoryClient().AddTasks(context.Background(), &historyservice.AddTasksRequest{
+	_, err := s.GetTestCluster().HistoryClient().AddTasks(context.Background(), &historyservice.AddTasksRequest{
 		ShardId: 0,
 	})
 	s.Error(err)
@@ -262,7 +262,7 @@ func (s *AddTasksSuite) TestAddTasks_GetEngineErr() {
 		s.getEngineErr.Store(nil)
 	}()
 	s.getEngineErr.Store(errors.New("example shard engine error"))
-	_, err := s.TestCluster().HistoryClient().AddTasks(context.Background(), &historyservice.AddTasksRequest{
+	_, err := s.GetTestCluster().HistoryClient().AddTasks(context.Background(), &historyservice.AddTasksRequest{
 		ShardId: 1,
 	})
 	s.Error(err)

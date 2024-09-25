@@ -63,7 +63,7 @@ type NexusWorkflowTestSuite struct {
 	NexusTestBaseSuite
 }
 
-func TestAdvancedVisibilitySuite(t *testing.T) {
+func TestNexusWorkflowTestSuite(t *testing.T) {
 	suite.Run(t, new(NexusWorkflowTestSuite))
 }
 
@@ -861,8 +861,8 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletionErrors() {
 
 	s.Run("InvalidClientVersion", func() {
 		publicCallbackUrl := "http://" + s.HttpAPIAddress() + "/" + commonnexus.RouteCompletionCallback.Path(s.Namespace())
-		capture := s.TestCluster().Host().CaptureMetricsHandler().StartCapture()
-		defer s.TestCluster().Host().CaptureMetricsHandler().StopCapture(capture)
+		capture := s.GetTestCluster().Host().CaptureMetricsHandler().StartCapture()
+		defer s.GetTestCluster().Host().CaptureMetricsHandler().StopCapture(capture)
 
 		req, err := nexus.NewCompletionHTTPRequest(ctx, publicCallbackUrl, completion)
 		s.NoError(err)
@@ -890,8 +890,8 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletionAuthErrors() {
 		}
 		return authorization.Result{Decision: authorization.DecisionAllow}, nil
 	}
-	s.TestCluster().Host().SetOnAuthorize(onAuthorize)
-	defer s.TestCluster().Host().SetOnAuthorize(nil)
+	s.GetTestCluster().Host().SetOnAuthorize(onAuthorize)
+	defer s.GetTestCluster().Host().SetOnAuthorize(nil)
 
 	completion, err := nexus.NewOperationCompletionSuccessful(s.mustToPayload("result"), nexus.OperationCompletionSuccesfulOptions{
 		Serializer: commonnexus.PayloadSerializer,
@@ -1386,8 +1386,8 @@ func (s *NexusWorkflowTestSuite) sendNexusCompletionRequest(
 	completion nexus.OperationCompletion,
 	callbackToken string,
 ) (*http.Response, map[string][]*metricstest.CapturedRecording) {
-	capture := s.TestCluster().Host().CaptureMetricsHandler().StartCapture()
-	defer s.TestCluster().Host().CaptureMetricsHandler().StopCapture(capture)
+	capture := s.GetTestCluster().Host().CaptureMetricsHandler().StartCapture()
+	defer s.GetTestCluster().Host().CaptureMetricsHandler().StopCapture(capture)
 	req, err := nexus.NewCompletionHTTPRequest(ctx, url, completion)
 	require.NoError(t, err)
 	if callbackToken != "" {

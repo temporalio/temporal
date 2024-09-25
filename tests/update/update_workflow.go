@@ -144,8 +144,8 @@ func (s *UpdateWorkflowSuite) TestUpdateWorkflow_EmptySpeculativeWorkflowTask_Ac
 				tv = tv.WithRunID("")
 			}
 
-			capture := s.TestCluster().Host().CaptureMetricsHandler().StartCapture()
-			defer s.TestCluster().Host().CaptureMetricsHandler().StopCapture(capture)
+			capture := s.GetTestCluster().Host().CaptureMetricsHandler().StartCapture()
+			defer s.GetTestCluster().Host().CaptureMetricsHandler().StopCapture(capture)
 
 			wtHandlerCalls := 0
 			wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
@@ -598,8 +598,8 @@ func (s *UpdateWorkflowSuite) TestUpdateWorkflow_RunningWorkflowTask_NewEmptySpe
 
 	tv = s.startWorkflow(tv)
 
-	capture := s.TestCluster().Host().CaptureMetricsHandler().StartCapture()
-	defer s.TestCluster().Host().CaptureMetricsHandler().StopCapture(capture)
+	capture := s.GetTestCluster().Host().CaptureMetricsHandler().StartCapture()
+	defer s.GetTestCluster().Host().CaptureMetricsHandler().StopCapture(capture)
 
 	var updateResultCh <-chan *workflowservice.UpdateWorkflowExecutionResponse
 
@@ -2630,8 +2630,8 @@ func (s *UpdateWorkflowSuite) TestUpdateWorkflow_ScheduledSpeculativeWorkflowTas
 func (s *UpdateWorkflowSuite) TestUpdateWorkflow_SpeculativeWorkflowTask_StartToCloseTimeout() {
 	tv := testvars.New(s.T())
 
-	capture := s.TestCluster().Host().CaptureMetricsHandler().StartCapture()
-	defer s.TestCluster().Host().CaptureMetricsHandler().StopCapture(capture)
+	capture := s.GetTestCluster().Host().CaptureMetricsHandler().StartCapture()
+	defer s.GetTestCluster().Host().CaptureMetricsHandler().StopCapture(capture)
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           tv.Any().String(),
@@ -5041,7 +5041,7 @@ func (s *UpdateWorkflowSuite) closeShard(wid string) {
 	s.NoError(err)
 
 	_, err = s.AdminClient().CloseShard(testcore.NewContext(), &adminservice.CloseShardRequest{
-		ShardId: common.WorkflowIDToHistoryShard(resp.NamespaceInfo.Id, wid, s.TestClusterConfig().HistoryConfig.NumHistoryShards),
+		ShardId: common.WorkflowIDToHistoryShard(resp.NamespaceInfo.Id, wid, s.GetTestClusterConfig().HistoryConfig.NumHistoryShards),
 	})
 	s.NoError(err)
 }

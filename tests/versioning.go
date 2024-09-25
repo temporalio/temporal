@@ -4961,7 +4961,7 @@ func (s *VersioningIntegSuite) waitForPropagation(
 	condition func(data *persistencespb.VersioningData) bool,
 ) {
 	if partitionCount <= 0 {
-		v := s.TestCluster().Host().DcClient().GetValue(dynamicconfig.MatchingNumTaskqueueReadPartitions.Key())
+		v := s.GetTestCluster().Host().DcClient().GetValue(dynamicconfig.MatchingNumTaskqueueReadPartitions.Key())
 		s.NotEmpty(v, "versioning tests require setting explicit number of partitions")
 		count, ok := v[0].Value.(int)
 		s.True(ok, "partition count is not an int")
@@ -4985,7 +4985,7 @@ func (s *VersioningIntegSuite) waitForPropagation(
 			partition := f.TaskQueue(pt.tp).NormalPartition(pt.part)
 			// Use lower-level GetTaskQueueUserData instead of GetWorkerBuildIdCompatibility
 			// here so that we can target activity queues.
-			res, err := s.TestCluster().Host().MatchingClient().GetTaskQueueUserData(
+			res, err := s.GetTestCluster().Host().MatchingClient().GetTaskQueueUserData(
 				ctx,
 				&matchingservice.GetTaskQueueUserDataRequest{
 					NamespaceId:   nsId,
@@ -5011,7 +5011,7 @@ func (s *VersioningIntegSuite) waitForChan(ctx context.Context, ch chan struct{}
 }
 
 func (s *VersioningIntegSuite) unloadTaskQueue(ctx context.Context, tq string) {
-	_, err := s.TestCluster().MatchingClient().ForceUnloadTaskQueue(ctx, &matchingservice.ForceUnloadTaskQueueRequest{
+	_, err := s.GetTestCluster().MatchingClient().ForceUnloadTaskQueue(ctx, &matchingservice.ForceUnloadTaskQueueRequest{
 		NamespaceId:   s.GetNamespaceID(s.Namespace()),
 		TaskQueue:     tq,
 		TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,

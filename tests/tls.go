@@ -59,7 +59,7 @@ func (s *TLSFunctionalSuite) SetupTest() {
 		HostPort:  s.HostPort(),
 		Namespace: s.Namespace(),
 		ConnectionOptions: sdkclient.ConnectionOptions{
-			TLS: s.TestCluster().Host().TlsConfigProvider().FrontendClientConfig,
+			TLS: s.GetTestCluster().Host().TlsConfigProvider().FrontendClientConfig,
 		},
 	})
 	if err != nil {
@@ -104,7 +104,7 @@ func (s *TLSFunctionalSuite) TestHTTPMTLS() {
 	// Create HTTP client with TLS config
 	httpClient := http.Client{
 		Transport: &http.Transport{
-			TLSClientConfig: s.TestCluster().Host().TlsConfigProvider().FrontendClientConfig,
+			TLSClientConfig: s.GetTestCluster().Host().TlsConfigProvider().FrontendClientConfig,
 		},
 	}
 
@@ -124,13 +124,13 @@ func (s *TLSFunctionalSuite) TestHTTPMTLS() {
 func (s *TLSFunctionalSuite) trackAuthInfoByCall() *sync.Map {
 	var calls sync.Map
 	// Put auth info on claim, then use authorizer to set on the map by call
-	s.TestCluster().Host().SetOnGetClaims(func(authInfo *authorization.AuthInfo) (*authorization.Claims, error) {
+	s.GetTestCluster().Host().SetOnGetClaims(func(authInfo *authorization.AuthInfo) (*authorization.Claims, error) {
 		return &authorization.Claims{
 			System:     authorization.RoleAdmin,
 			Extensions: authInfo,
 		}, nil
 	})
-	s.TestCluster().Host().SetOnAuthorize(func(
+	s.GetTestCluster().Host().SetOnAuthorize(func(
 		ctx context.Context,
 		caller *authorization.Claims,
 		target *authorization.CallTarget,
