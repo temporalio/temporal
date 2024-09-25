@@ -107,27 +107,6 @@ func NewClientBean(factory Factory, clusterMetadata cluster.Metadata) (Bean, err
 		WorkflowServiceClient: client,
 	}
 
-	for clusterName, info := range clusterMetadata.GetAllClusterInfo() {
-		if !info.Enabled || clusterName == currentClusterName {
-			continue
-		}
-		adminClient = factory.NewRemoteAdminClientWithTimeout(
-			info.RPCAddress,
-			admin.DefaultTimeout,
-			admin.DefaultLargeTimeout,
-		)
-		conn, client = factory.NewRemoteFrontendClientWithTimeout(
-			info.RPCAddress,
-			frontend.DefaultTimeout,
-			frontend.DefaultLongPollTimeout,
-		)
-		adminClients[clusterName] = adminClient
-		frontendClients[clusterName] = frontendClient{
-			connection:            conn,
-			WorkflowServiceClient: client,
-		}
-	}
-
 	bean := &clientBeanImpl{
 		factory:         factory,
 		historyClient:   historyClient,
