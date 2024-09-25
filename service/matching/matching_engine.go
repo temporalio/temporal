@@ -615,9 +615,8 @@ pollLoop:
 		resp, err := e.recordWorkflowTaskStarted(ctx, requestClone, task)
 		if err != nil {
 			switch err.(type) {
-			case *serviceerror.Internal, *serviceerror.DataLoss,
-				*serialization.DeserializationError, *serialization.SerializationError:
-				e.nonRetryableErrorsDropTask(task, taskQueueName, task.event.Data.NamespaceId, err)
+			case *serviceerror.Internal, *serviceerror.DataLoss:
+				e.nonRetryableErrorsDropTask(task, taskQueueName, err)
 			case *serviceerror.NotFound: // mutable state not found, workflow not running or workflow task not found
 				e.logger.Info("Workflow task not found",
 					tag.WorkflowTaskQueueName(taskQueueName),
@@ -707,7 +706,8 @@ func (e *matchingEngineImpl) getHistoryForQueryTask(
 }
 
 func (e *matchingEngineImpl) nonRetryableErrorsDropTask(task *internalTask, taskQueueName string, err error) {
-	e.logger.Info(err.Error(),
+	e.logger.Error(err.Error(),
+		tag.WorkflowNamespace(task.namespace.String()),
 		tag.WorkflowNamespaceID(task.event.Data.GetNamespaceId()),
 		tag.WorkflowID(task.event.Data.GetWorkflowId()),
 		tag.WorkflowRunID(task.event.Data.GetRunId()),
@@ -715,11 +715,10 @@ func (e *matchingEngineImpl) nonRetryableErrorsDropTask(task *internalTask, task
 		tag.TaskID(task.event.GetTaskId()),
 		tag.WorkflowEventID(task.event.Data.GetScheduledEventId()),
 		tag.Error(err),
+		tag.ErrorType(err),
 	)
 
-	// log down the metrics
-	// todo shivam - maybe use error ServiceErrorTypeTag wihle emitting logs
-	metrics.TaskInternalErrorCounter.With(e.metricsHandler).Record(1, metrics.NamespaceTag(task.namespace.String()))
+	metrics.TaskInternalErrorCounter.With(e.metricsHandler).Record(1, metrics.ServiceErrorTypeTag(err))
 
 	// drop the task as otherwise task would be stuck in a retry-loop since the errors from within this helper is called are non-retryable
 	task.finish(nil)
@@ -782,8 +781,7 @@ pollLoop:
 		resp, err := e.recordActivityTaskStarted(ctx, requestClone, task)
 		if err != nil {
 			switch err.(type) {
-			case *serviceerror.Internal, *serviceerror.DataLoss,
-				*serialization.DeserializationError, *serialization.SerializationError:
+			case *serviceerror.Internal, *serviceerror.DataLoss:
 				e.nonRetryableErrorsDropTask(task, taskQueueName, err)
 			case *serviceerror.NotFound: // mutable state not found, workflow not running or activity info not found
 				e.logger.Info("Activity task not found",

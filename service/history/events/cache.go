@@ -39,6 +39,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/service/history/configs"
 )
 
@@ -219,6 +220,20 @@ func (e *CacheImpl) getHistoryEventFromStore(
 			tag.WorkflowID(key.WorkflowID),
 			tag.WorkflowRunID(key.RunID))
 		metrics.CacheFailures.With(handler).Record(1)
+		return nil, err
+	case *serialization.DeserializationError:
+		// log event
+		e.logger.Error("encountered de-serialization error",
+			tag.WorkflowNamespaceID(key.NamespaceID.String()),
+			tag.WorkflowID(key.WorkflowID),
+			tag.WorkflowRunID(key.RunID))
+		return nil, err
+	case *serialization.SerializationError:
+		// log event
+		e.logger.Error("encountered serialization error",
+			tag.WorkflowNamespaceID(key.NamespaceID.String()),
+			tag.WorkflowID(key.WorkflowID),
+			tag.WorkflowRunID(key.RunID))
 		return nil, err
 	default:
 		metrics.CacheFailures.With(handler).Record(1)

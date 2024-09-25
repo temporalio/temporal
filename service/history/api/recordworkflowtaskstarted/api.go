@@ -27,6 +27,7 @@ package recordworkflowtaskstarted
 import (
 	"context"
 	"errors"
+
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	querypb "go.temporal.io/api/query/v1"
@@ -218,7 +219,14 @@ func Invoke(
 		resp,
 	)
 	if err != nil {
-		return nil, err // TODO Shivam - the error returned from here could be a non-service error (how do we handle this)
+		var deserializationError *serialization.DeserializationError
+		var serializationError *serialization.SerializationError
+		// convert serialization errors to be captured as serviceerrors across gRPC calls
+		if errors.As(err, &deserializationError) || errors.As(err, &serializationError) {
+			return nil, serviceerror.NewDataLoss(err.Error())
+		} else {
+			return nil, err
+		}
 	}
 	return resp, nil
 }
@@ -272,11 +280,7 @@ func setHistoryForRecordWfTaskStartedResp(
 		persistenceVisibilityMgr,
 	)
 	if err != nil {
-		var deserializationError *serialization.DeserializationError
-		if errors.As(retError, &deserializationError) {
-
-		}
-		return err // TODO Shivam - this error returned can very well be a non-serviceerror
+		return err
 	}
 
 	var continuation []byte

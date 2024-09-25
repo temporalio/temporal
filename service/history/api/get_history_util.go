@@ -158,7 +158,6 @@ func GetHistory(
 			tag.Error(err),
 		)
 		return nil, nil, err
-		// TODO Shivam - maybe add another case here to handle serialization/deserialization error?
 	default:
 		return nil, nil, err
 	}
