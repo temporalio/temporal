@@ -219,6 +219,14 @@ func (s *FunctionalSuite) TestResetWorkflow() {
 	s.Equal(we.RunId, descResp.WorkflowExecutionInfo.GetFirstRunId())
 }
 
+func (s *FunctionalSuite) TestResetWorkflow_ExcludeNoneReapplyDefault() {
+	t := resetTest{
+		FunctionalSuite: s,
+		tv:              testvars.New(s.T()),
+	}
+	t.run()
+}
+
 func (s *FunctionalSuite) TestResetWorkflow_ExcludeNoneReapplyAll() {
 	t := resetTest{
 		FunctionalSuite:     s,
