@@ -218,12 +218,12 @@ func (s *ActivityClientTestSuite) Test_ActivityTimeouts() {
 				// (basically increasing the room for delay in heartbeat goroutine from 0.1s to 1s)
 				for i := 0; i < 3; i++ {
 					activity.RecordHeartbeat(ctx, i)
-					time.Sleep(200 * time.Millisecond)
+					time.Sleep(200 * time.Millisecond) //nolint:forbidigo
 				}
 			}()
 		}
 
-		time.Sleep(5 * time.Second)
+		time.Sleep(5 * time.Second) //nolint:forbidigo
 		return nil
 	}
 

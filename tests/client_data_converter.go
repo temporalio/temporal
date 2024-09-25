@@ -246,9 +246,9 @@ func (s *ClientDataConverterTestSuite) TestClientDataConverter_Failed() {
 
 func (s *ClientDataConverterTestSuite) TestClientDataConverter_WithChild() {
 	dc := testcore.NewTestDataConverter()
-	sdkClient, worker := s.startWorkerWithDataConverter(childTaskQueue, dc)
+	sdkClient, testWorker := s.startWorkerWithDataConverter(childTaskQueue, dc)
 	defer func() {
-		worker.Stop()
+		testWorker.Stop()
 		sdkClient.Close()
 	}()
 

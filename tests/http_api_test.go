@@ -33,6 +33,8 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/stretchr/testify/suite"
+
 	"go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/query/v1"
@@ -43,6 +45,7 @@ import (
 	"go.temporal.io/server/common/authorization"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/protobuf/encoding/protojson"
 	"gopkg.in/yaml.v3"

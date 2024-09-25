@@ -194,7 +194,7 @@ func (s *AdvancedVisibilitySuite) TestListOpenWorkflow() {
 			s.Nil(resp.NextPageToken)
 			break
 		}
-		time.Sleep(waitTimeInMs * time.Millisecond)
+		time.Sleep(waitTimeInMs * time.Millisecond) //nolint:forbidigo
 	}
 	s.NotNil(openExecution)
 	s.Equal(we.GetRunId(), openExecution.GetExecution().GetRunId())
@@ -315,7 +315,7 @@ func (s *AdvancedVisibilitySuite) TestListWorkflow_SearchAttribute() {
 	s.NotNil(newTask)
 	s.NotNil(newTask.WorkflowTask)
 
-	time.Sleep(testcore.WaitForESToSettle)
+	time.Sleep(testcore.WaitForESToSettle) //nolint:forbidigo
 
 	listRequest := &workflowservice.ListWorkflowExecutionsRequest{
 		Namespace: s.Namespace(),
@@ -402,7 +402,7 @@ func (s *AdvancedVisibilitySuite) TestListWorkflow_OrQuery() {
 	we3, err := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
 	s.NoError(err)
 
-	time.Sleep(testcore.WaitForESToSettle)
+	time.Sleep(testcore.WaitForESToSettle) //nolint:forbidigo
 
 	// query 1 workflow with search attr
 	query1 := fmt.Sprintf(`CustomIntField = %d`, 1)
@@ -419,7 +419,7 @@ func (s *AdvancedVisibilitySuite) TestListWorkflow_OrQuery() {
 			openExecution = resp.GetExecutions()[0]
 			break
 		}
-		time.Sleep(waitTimeInMs * time.Millisecond)
+		time.Sleep(waitTimeInMs * time.Millisecond) //nolint:forbidigo
 	}
 	s.NotNil(openExecution)
 	s.Equal(we1.GetRunId(), openExecution.GetExecution().GetRunId())
@@ -440,7 +440,7 @@ func (s *AdvancedVisibilitySuite) TestListWorkflow_OrQuery() {
 			openExecutions = resp.GetExecutions()
 			break
 		}
-		time.Sleep(waitTimeInMs * time.Millisecond)
+		time.Sleep(waitTimeInMs * time.Millisecond) //nolint:forbidigo
 	}
 	s.Equal(2, len(openExecutions))
 	e1 := openExecutions[0]
@@ -465,7 +465,7 @@ func (s *AdvancedVisibilitySuite) TestListWorkflow_OrQuery() {
 			openExecutions = resp.GetExecutions()
 			break
 		}
-		time.Sleep(waitTimeInMs * time.Millisecond)
+		time.Sleep(waitTimeInMs * time.Millisecond) //nolint:forbidigo
 	}
 	s.Equal(2, len(openExecutions))
 	e1 = openExecutions[0]
@@ -496,7 +496,7 @@ func (s *AdvancedVisibilitySuite) TestListWorkflow_KeywordQuery() {
 	we1, err := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
 	s.NoError(err)
 
-	time.Sleep(testcore.WaitForESToSettle)
+	time.Sleep(testcore.WaitForESToSettle) //nolint:forbidigo
 
 	// Exact match Keyword (supported)
 	var openExecution *workflowpb.WorkflowExecutionInfo
@@ -512,7 +512,7 @@ func (s *AdvancedVisibilitySuite) TestListWorkflow_KeywordQuery() {
 			openExecution = resp.GetExecutions()[0]
 			break
 		}
-		time.Sleep(waitTimeInMs * time.Millisecond)
+		time.Sleep(waitTimeInMs * time.Millisecond) //nolint:forbidigo
 	}
 	s.NotNil(openExecution)
 	s.Equal(we1.GetRunId(), openExecution.GetExecution().GetRunId())
@@ -581,7 +581,7 @@ func (s *AdvancedVisibilitySuite) TestListWorkflow_StringQuery() {
 	we1, err := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
 	s.NoError(err)
 
-	time.Sleep(testcore.WaitForESToSettle)
+	time.Sleep(testcore.WaitForESToSettle) //nolint:forbidigo
 
 	// Exact match String (supported)
 	var openExecution *workflowpb.WorkflowExecutionInfo
@@ -597,7 +597,7 @@ func (s *AdvancedVisibilitySuite) TestListWorkflow_StringQuery() {
 			openExecution = resp.GetExecutions()[0]
 			break
 		}
-		time.Sleep(waitTimeInMs * time.Millisecond)
+		time.Sleep(waitTimeInMs * time.Millisecond) //nolint:forbidigo
 	}
 	s.NotNil(openExecution)
 	s.Equal(we1.GetRunId(), openExecution.GetExecution().GetRunId())
@@ -643,7 +643,7 @@ func (s *AdvancedVisibilitySuite) TestListWorkflow_MaxWindowSize() {
 		s.NoError(err)
 	}
 
-	time.Sleep(testcore.WaitForESToSettle)
+	time.Sleep(testcore.WaitForESToSettle) //nolint:forbidigo
 
 	var listResp *workflowservice.ListWorkflowExecutionsResponse
 	var nextPageToken []byte
@@ -662,7 +662,7 @@ func (s *AdvancedVisibilitySuite) TestListWorkflow_MaxWindowSize() {
 			listResp = resp
 			break
 		}
-		time.Sleep(waitTimeInMs * time.Millisecond)
+		time.Sleep(waitTimeInMs * time.Millisecond) //nolint:forbidigo
 	}
 	s.NotNil(listResp)
 	s.True(len(listResp.GetNextPageToken()) != 0)
@@ -718,7 +718,7 @@ func (s *AdvancedVisibilitySuite) TestListWorkflow_OrderBy() {
 		s.NoError(err)
 	}
 
-	time.Sleep(testcore.WaitForESToSettle)
+	time.Sleep(testcore.WaitForESToSettle) //nolint:forbidigo
 
 	desc := "desc"
 	asc := "asc"
@@ -740,7 +740,7 @@ func (s *AdvancedVisibilitySuite) TestListWorkflow_OrderBy() {
 			openExecutions = resp.GetExecutions()
 			break
 		}
-		time.Sleep(waitTimeInMs * time.Millisecond)
+		time.Sleep(waitTimeInMs * time.Millisecond) //nolint:forbidigo
 	}
 	s.NotNil(openExecutions)
 	for i := int32(1); i < pageSize; i++ {
@@ -835,7 +835,7 @@ func (s *AdvancedVisibilitySuite) testListWorkflowHelper(numOfWorkflows, pageSiz
 		s.NoError(err)
 	}
 
-	time.Sleep(testcore.WaitForESToSettle)
+	time.Sleep(testcore.WaitForESToSettle) //nolint:forbidigo
 
 	var openExecutions []*workflowpb.WorkflowExecutionInfo
 	var nextPageToken []byte
@@ -873,7 +873,7 @@ func (s *AdvancedVisibilitySuite) testListWorkflowHelper(numOfWorkflows, pageSiz
 				break
 			}
 		}
-		time.Sleep(waitTimeInMs * time.Millisecond)
+		time.Sleep(waitTimeInMs * time.Millisecond) //nolint:forbidigo
 	}
 	s.NotNil(openExecutions)
 	s.NotNil(nextPageToken)
@@ -903,7 +903,7 @@ func (s *AdvancedVisibilitySuite) testListWorkflowHelper(numOfWorkflows, pageSiz
 				break
 			}
 		}
-		time.Sleep(waitTimeInMs * time.Millisecond)
+		time.Sleep(waitTimeInMs * time.Millisecond) //nolint:forbidigo
 	}
 	s.True(inIf)
 	s.NotNil(openExecutions)
@@ -942,7 +942,7 @@ func (s *AdvancedVisibilitySuite) testHelperForReadOnce(expectedRunID string, qu
 				break
 			}
 		}
-		time.Sleep(waitTimeInMs * time.Millisecond)
+		time.Sleep(waitTimeInMs * time.Millisecond) //nolint:forbidigo
 	}
 	s.NotNil(openExecution)
 	s.Equal(expectedRunID, openExecution.GetExecution().GetRunId())
@@ -1070,7 +1070,7 @@ func (s *AdvancedVisibilitySuite) TestCountWorkflow() {
 		if resp.GetCount() == int64(1) {
 			break
 		}
-		time.Sleep(waitTimeInMs * time.Millisecond)
+		time.Sleep(waitTimeInMs * time.Millisecond) //nolint:forbidigo
 	}
 	s.Equal(int64(1), resp.GetCount())
 
@@ -1121,7 +1121,7 @@ func (s *AdvancedVisibilitySuite) TestCountGroupByWorkflow() {
 		if resp.GetCount() == int64(numWorkflows) {
 			break
 		}
-		time.Sleep(waitTimeInMs * time.Millisecond)
+		time.Sleep(waitTimeInMs * time.Millisecond) //nolint:forbidigo
 	}
 	s.Equal(int64(numWorkflows), resp.GetCount())
 	s.Equal(2, len(resp.Groups))
@@ -1291,7 +1291,7 @@ func (s *AdvancedVisibilitySuite) TestUpsertWorkflowExecutionSearchAttributes() 
 	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED, newTask.WorkflowTask.History.Events[2].GetEventType())
 	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED, newTask.WorkflowTask.History.Events[3].GetEventType())
 
-	time.Sleep(testcore.WaitForESToSettle)
+	time.Sleep(testcore.WaitForESToSettle) //nolint:forbidigo
 
 	// verify upsert data is on ES
 	listRequest := &workflowservice.ListWorkflowExecutionsRequest{
@@ -1316,7 +1316,7 @@ func (s *AdvancedVisibilitySuite) TestUpsertWorkflowExecutionSearchAttributes() 
 				break
 			}
 		}
-		time.Sleep(waitTimeInMs * time.Millisecond)
+		time.Sleep(waitTimeInMs * time.Millisecond) //nolint:forbidigo
 	}
 	s.True(verified)
 
@@ -1337,7 +1337,7 @@ func (s *AdvancedVisibilitySuite) TestUpsertWorkflowExecutionSearchAttributes() 
 	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED, newTask.WorkflowTask.History.Events[2].GetEventType())
 	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED, newTask.WorkflowTask.History.Events[3].GetEventType())
 
-	time.Sleep(testcore.WaitForESToSettle)
+	time.Sleep(testcore.WaitForESToSettle) //nolint:forbidigo
 
 	// verify upsert data is on ES
 	s.testListResultForUpsertSearchAttributes(listRequest)
@@ -1359,7 +1359,7 @@ func (s *AdvancedVisibilitySuite) TestUpsertWorkflowExecutionSearchAttributes() 
 	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED, newTask.WorkflowTask.History.Events[2].GetEventType())
 	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED, newTask.WorkflowTask.History.Events[3].GetEventType())
 
-	time.Sleep(testcore.WaitForESToSettle)
+	time.Sleep(testcore.WaitForESToSettle) //nolint:forbidigo
 
 	// verify search attributes are unset
 	listRequest = &workflowservice.ListWorkflowExecutionsRequest{
@@ -1381,7 +1381,7 @@ func (s *AdvancedVisibilitySuite) TestUpsertWorkflowExecutionSearchAttributes() 
 				break
 			}
 		}
-		time.Sleep(waitTimeInMs * time.Millisecond)
+		time.Sleep(waitTimeInMs * time.Millisecond) //nolint:forbidigo
 	}
 	s.True(verified)
 
@@ -1399,7 +1399,7 @@ func (s *AdvancedVisibilitySuite) TestUpsertWorkflowExecutionSearchAttributes() 
 			verified = true
 			break
 		}
-		time.Sleep(waitTimeInMs * time.Millisecond)
+		time.Sleep(waitTimeInMs * time.Millisecond) //nolint:forbidigo
 	}
 	s.True(verified)
 
@@ -1445,7 +1445,7 @@ func (s *AdvancedVisibilitySuite) TestUpsertWorkflowExecutionSearchAttributes() 
 	s.NotNil(newTask)
 	s.Nil(newTask.WorkflowTask)
 
-	time.Sleep(testcore.WaitForESToSettle)
+	time.Sleep(testcore.WaitForESToSettle) //nolint:forbidigo
 
 	// verify search attributes from DescribeWorkflowExecution
 	descRequest = &workflowservice.DescribeWorkflowExecutionRequest{
@@ -1579,7 +1579,7 @@ func (s *AdvancedVisibilitySuite) TestModifyWorkflowExecutionProperties() {
 	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED, newTask.WorkflowTask.History.Events[2].GetEventType())
 	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED, newTask.WorkflowTask.History.Events[3].GetEventType())
 
-	time.Sleep(testcore.WaitForESToSettle)
+	time.Sleep(testcore.WaitForESToSettle) //nolint:forbidigo
 
 	attrValPayload1, _ := payload.Encode("test memo val 1")
 	attrValPayload2, _ := payload.Encode("test memo val 2")
@@ -1604,7 +1604,7 @@ func (s *AdvancedVisibilitySuite) TestModifyWorkflowExecutionProperties() {
 			s.True(proto.Equal(expectedMemo, resp.Executions[0].Memo))
 			verified = true
 		}
-		time.Sleep(waitTimeInMs * time.Millisecond)
+		time.Sleep(waitTimeInMs * time.Millisecond) //nolint:forbidigo
 	}
 	s.True(verified)
 
@@ -1625,7 +1625,7 @@ func (s *AdvancedVisibilitySuite) TestModifyWorkflowExecutionProperties() {
 	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED, newTask.WorkflowTask.History.Events[2].GetEventType())
 	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED, newTask.WorkflowTask.History.Events[3].GetEventType())
 
-	time.Sleep(testcore.WaitForESToSettle)
+	time.Sleep(testcore.WaitForESToSettle) //nolint:forbidigo
 
 	attrValPayload1, _ = payload.Encode("test memo val 1 new")
 	attrValPayload3, _ := payload.Encode("test memo val 3")
@@ -1650,7 +1650,7 @@ func (s *AdvancedVisibilitySuite) TestModifyWorkflowExecutionProperties() {
 			s.True(proto.Equal(expectedMemo, resp.Executions[0].Memo))
 			verified = true
 		}
-		time.Sleep(waitTimeInMs * time.Millisecond)
+		time.Sleep(waitTimeInMs * time.Millisecond) //nolint:forbidigo
 	}
 	s.True(verified)
 
@@ -1666,7 +1666,7 @@ func (s *AdvancedVisibilitySuite) TestModifyWorkflowExecutionProperties() {
 	s.NotNil(newTask)
 	s.Nil(newTask.WorkflowTask)
 
-	time.Sleep(testcore.WaitForESToSettle)
+	time.Sleep(testcore.WaitForESToSettle) //nolint:forbidigo
 
 	descRequest := &workflowservice.DescribeWorkflowExecutionRequest{
 		Namespace: s.Namespace(),
@@ -1725,7 +1725,7 @@ func (s *AdvancedVisibilitySuite) testListResultForUpsertSearchAttributes(listRe
 				break
 			}
 		}
-		time.Sleep(waitTimeInMs * time.Millisecond)
+		time.Sleep(waitTimeInMs * time.Millisecond) //nolint:forbidigo
 	}
 	s.True(verified)
 }
@@ -2803,7 +2803,7 @@ func (s *AdvancedVisibilitySuite) updateMaxResultWindow() {
 		if settings[esConfig.GetVisibilityIndex()].Settings["index"].(map[string]interface{})["max_result_window"].(string) == strconv.Itoa(testcore.DefaultPageSize) { //nolint:revive // unchecked-type-assertion
 			return
 		}
-		time.Sleep(waitTimeInMs * time.Millisecond)
+		time.Sleep(waitTimeInMs * time.Millisecond) //nolint:forbidigo
 	}
 	s.FailNow(fmt.Sprintf("ES max result window size hasn't reach target size within %v", (numOfRetry*waitTimeInMs)*time.Millisecond))
 }

@@ -452,7 +452,7 @@ func (s *MatchingSuite) TestList() {
 			listReqDone := make(chan struct{})
 			go func() {
 				defer close(listReqDone)
-				resp, err := matchingClient.ListNexusEndpoints(testcore.NewContext(), tc.request)
+				resp, err := matchingClient.ListNexusEndpoints(testcore.NewContext(), tc.request) //nolint:revive
 				tc.assertion(resp, err)
 			}()
 			if tc.request.Wait && tc.request.NextPageToken == nil && tc.request.LastKnownTableVersion != 0 {

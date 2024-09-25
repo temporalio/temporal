@@ -451,6 +451,7 @@ func (s *ClientMiscTestSuite) TestStickyAutoReset() {
 
 	// stop worker
 	s.Worker().Stop()
+	//nolint:forbidigo
 	time.Sleep(time.Second * 11) // wait 11s (longer than 10s timeout), after this time, matching will detect StickyWorkerUnavailable
 	resp, err := s.FrontendClient().DescribeTaskQueue(ctx, &workflowservice.DescribeTaskQueueRequest{
 		Namespace:     s.Namespace(),
@@ -567,7 +568,7 @@ func (s *ClientMiscTestSuite) Test_WorkflowCanBeCompletedDespiteAdmittedUpdate()
 		updateHandleCh <- handle
 	}()
 	for {
-		time.Sleep(10 * time.Millisecond)
+		time.Sleep(10 * time.Millisecond) //nolint:forbidigo
 		_, err = s.SdkClient().WorkflowService().PollWorkflowExecutionUpdate(ctx, &workflowservice.PollWorkflowExecutionUpdateRequest{
 			Namespace: s.Namespace(),
 			UpdateRef: tv.UpdateRef(),
@@ -807,6 +808,7 @@ func (s *ClientMiscTestSuite) Test_InvalidCommandAttribute() {
 
 func (s *ClientMiscTestSuite) Test_BufferedQuery() {
 	localActivityFn := func(ctx context.Context) error {
+		//nolint:forbidigo
 		time.Sleep(5 * time.Second) // use local activity sleep to block workflow task to force query to be buffered
 		return nil
 	}
@@ -856,7 +858,7 @@ func (s *ClientMiscTestSuite) Test_BufferedQuery() {
 
 	go func() {
 		// sleep 2s to make sure DescribeMutableState is called after QueryWorkflow
-		time.Sleep(2 * time.Second)
+		time.Sleep(2 * time.Second) //nolint:forbidigo
 		// make DescribeMutableState call, which force mutable state to reload from db
 		_, err := s.AdminClient().DescribeMutableState(ctx, &adminservice.DescribeMutableStateRequest{
 			Namespace: s.Namespace(),
@@ -1084,7 +1086,7 @@ func (s *ClientMiscTestSuite) Test_StickyWorkerRestartWorkflowTask() {
 			oldWorker.Stop()
 
 			// maybe wait for 10s, which will make matching aware the old sticky worker is unavailable
-			time.Sleep(tt.waitTime)
+			time.Sleep(tt.waitTime) //nolint:forbidigo
 
 			// start a new worker
 			newWorker := worker.New(s.SdkClient(), taskQueue, worker.Options{})

@@ -25,7 +25,6 @@
 package workflow
 
 import (
-	"go.temporal.io/server/tests/testcore"
 	"time"
 
 	"github.com/pborman/uuid"
@@ -39,6 +38,8 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/payloads"
+	"go.temporal.io/server/tests/testcore"
+
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )

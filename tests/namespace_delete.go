@@ -27,12 +27,12 @@ package tests
 import (
 	"errors"
 	"fmt"
-	"github.com/dgryski/go-farm"
 	"os"
 	"strconv"
 	"time"
 	"unicode/utf8"
 
+	"github.com/dgryski/go-farm"
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"

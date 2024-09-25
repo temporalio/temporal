@@ -253,7 +253,7 @@ func (s *NDCReplicationTaskBatchingTestSuite) registerNamespace() {
 	})
 	s.Require().NoError(err)
 	// Wait for namespace cache to pick the change
-	time.Sleep(2 * testcore.NamespaceCacheRefreshInterval)
+	time.Sleep(2 * testcore.NamespaceCacheRefreshInterval) //nolint:forbidigo
 
 	descReq := &workflowservice.DescribeNamespaceRequest{
 		Namespace: s.namespace.String(),
