@@ -860,7 +860,7 @@ func (s *ScheduleFunctionalSuite) TestRefresh() {
 	wid := "sched-test-refresh-wf"
 	wt := "sched-test-refresh-wt"
 
-	s.TestCluster().Host().WorkerService().RefreshPerNSWorkerManager()
+	s.GetTestCluster().Host().WorkerService().RefreshPerNSWorkerManager()
 	schedule := &schedulepb.Schedule{
 		Spec: &schedulepb.ScheduleSpec{
 			Interval: []*schedulepb.IntervalSpec{
@@ -972,7 +972,7 @@ func (s *ScheduleFunctionalSuite) TestListBeforeRun() {
 
 	// disable per-ns worker so that the schedule workflow never runs
 	s.OverrideDynamicConfig(dynamicconfig.WorkerPerNamespaceWorkerCount, 0)
-	s.TestCluster().Host().WorkerService().RefreshPerNSWorkerManager()
+	s.GetTestCluster().Host().WorkerService().RefreshPerNSWorkerManager()
 	time.Sleep(2 * time.Second)
 
 	schedule := &schedulepb.Schedule{
@@ -1032,7 +1032,7 @@ func (s *ScheduleFunctionalSuite) TestListBeforeRun() {
 	})
 	s.NoError(err)
 
-	s.TestCluster().Host().WorkerService().RefreshPerNSWorkerManager()
+	s.GetTestCluster().Host().WorkerService().RefreshPerNSWorkerManager()
 	time.Sleep(2 * time.Second)
 }
 
@@ -1047,10 +1047,10 @@ func (s *ScheduleFunctionalSuite) TestRateLimit() {
 	// to the actual rate limiter object to refresh it directly.
 	s.OverrideDynamicConfig(dynamicconfig.SchedulerNamespaceStartWorkflowRPS, 1.0)
 	s.OverrideDynamicConfig(dynamicconfig.WorkerPerNamespaceWorkerCount, 0)
-	s.TestCluster().Host().WorkerService().RefreshPerNSWorkerManager()
+	s.GetTestCluster().Host().WorkerService().RefreshPerNSWorkerManager()
 	time.Sleep(2 * time.Second)
-	s.TestCluster().Host().DcClient().RemoveOverride(dynamicconfig.WorkerPerNamespaceWorkerCount)
-	s.TestCluster().Host().WorkerService().RefreshPerNSWorkerManager()
+	s.GetTestCluster().Host().DcClient().RemoveOverride(dynamicconfig.WorkerPerNamespaceWorkerCount)
+	s.GetTestCluster().Host().WorkerService().RefreshPerNSWorkerManager()
 	time.Sleep(2 * time.Second)
 
 	var runs int32
@@ -1107,12 +1107,12 @@ func (s *ScheduleFunctionalSuite) TestRateLimit() {
 		s.NoError(err)
 	}
 
-	s.TestCluster().Host().DcClient().RemoveOverride(dynamicconfig.SchedulerNamespaceStartWorkflowRPS)
+	s.GetTestCluster().Host().DcClient().RemoveOverride(dynamicconfig.SchedulerNamespaceStartWorkflowRPS)
 	s.OverrideDynamicConfig(dynamicconfig.WorkerPerNamespaceWorkerCount, 0)
-	s.TestCluster().Host().WorkerService().RefreshPerNSWorkerManager()
+	s.GetTestCluster().Host().WorkerService().RefreshPerNSWorkerManager()
 	time.Sleep(2 * time.Second)
-	s.TestCluster().Host().DcClient().RemoveOverride(dynamicconfig.WorkerPerNamespaceWorkerCount)
-	s.TestCluster().Host().WorkerService().RefreshPerNSWorkerManager()
+	s.GetTestCluster().Host().DcClient().RemoveOverride(dynamicconfig.WorkerPerNamespaceWorkerCount)
+	s.GetTestCluster().Host().WorkerService().RefreshPerNSWorkerManager()
 }
 
 func (s *ScheduleFunctionalSuite) TestNextTimeCache() {
@@ -1120,7 +1120,7 @@ func (s *ScheduleFunctionalSuite) TestNextTimeCache() {
 	wid := "sched-test-next-time-cache-wf"
 	wt := "sched-test-next-time-cache-wt"
 
-	s.TestCluster().Host().WorkerService().RefreshPerNSWorkerManager()
+	s.GetTestCluster().Host().WorkerService().RefreshPerNSWorkerManager()
 	schedule := &schedulepb.Schedule{
 		Spec: &schedulepb.ScheduleSpec{
 			Interval: []*schedulepb.IntervalSpec{

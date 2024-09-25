@@ -63,6 +63,142 @@ type ActivityClientTestSuite struct {
 	testcore.ClientFunctionalSuite
 }
 
+func (s *ActivityClientTestSuite) Test_ActivityTimeouts() {
+	activityFn := func(ctx context.Context) error {
+		info := activity.GetInfo(ctx)
+		if info.ActivityID == "Heartbeat" {
+			go func() {
+				// NOTE: due to client side heartbeat batching, heartbeat may be sent
+				// later than expected.
+				// e.g. if activity heartbeat timeout is 2s,
+				// and we call RecordHeartbeat() at 0s, 0.5s, 1s, 1.5s
+				// the client by default will send two heartbeats at 0s and 2*0.8=1.6s
+				// Now if when running the test, this heartbeat goroutine becomes slow,
+				// and call RecordHeartbeat() after 1.6s, then that heartbeat will be sent
+				// to server at 3.2s (the next batch).
+				// Since the entire activity will finish at 5s, there won't be
+				// any heartbeat timeout error.
+				// so here, we reduce the duration between two heartbeats, so that they are
+				// more likey be sent in the heartbeat batch at 1.6s
+				// (basically increasing the room for delay in heartbeat goroutine from 0.1s to 1s)
+				for i := 0; i < 3; i++ {
+					activity.RecordHeartbeat(ctx, i)
+					time.Sleep(200 * time.Millisecond)
+				}
+			}()
+		}
+
+		time.Sleep(5 * time.Second)
+		return nil
+	}
+
+	var err1, err2, err3, err4 error
+	workflowFn := func(ctx workflow.Context) error {
+		noRetryPolicy := &temporal.RetryPolicy{
+			MaximumAttempts: 1, // disable retry
+		}
+		ctx1 := workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
+			ActivityID:             "ScheduleToStart",
+			ScheduleToStartTimeout: 2 * time.Second,
+			StartToCloseTimeout:    2 * time.Second,
+			TaskQueue:              "NoWorkerTaskQueue",
+			RetryPolicy:            noRetryPolicy,
+		})
+		f1 := workflow.ExecuteActivity(ctx1, activityFn)
+
+		ctx2 := workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
+			ActivityID:             "StartToClose",
+			ScheduleToStartTimeout: 2 * time.Second,
+			StartToCloseTimeout:    2 * time.Second,
+			RetryPolicy:            noRetryPolicy,
+		})
+		f2 := workflow.ExecuteActivity(ctx2, activityFn)
+
+		ctx3 := workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
+			ActivityID:             "ScheduleToClose",
+			ScheduleToCloseTimeout: 2 * time.Second,
+			StartToCloseTimeout:    3 * time.Second,
+			RetryPolicy:            noRetryPolicy,
+		})
+		f3 := workflow.ExecuteActivity(ctx3, activityFn)
+
+		ctx4 := workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
+			ActivityID:          "Heartbeat",
+			StartToCloseTimeout: 10 * time.Second,
+			HeartbeatTimeout:    1 * time.Second,
+			RetryPolicy:         noRetryPolicy,
+		})
+		f4 := workflow.ExecuteActivity(ctx4, activityFn)
+
+		err1 = f1.Get(ctx1, nil)
+		err2 = f2.Get(ctx2, nil)
+		err3 = f3.Get(ctx3, nil)
+		err4 = f4.Get(ctx4, nil)
+
+		return nil
+	}
+
+	s.Worker().RegisterActivity(activityFn)
+	s.Worker().RegisterWorkflow(workflowFn)
+
+	id := "functional-test-activity-timeouts"
+	workflowOptions := sdkclient.StartWorkflowOptions{
+		ID:                 id,
+		TaskQueue:          s.TaskQueue(),
+		WorkflowRunTimeout: 20 * time.Second,
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	workflowRun, err := s.SdkClient().ExecuteWorkflow(ctx, workflowOptions, workflowFn)
+	if err != nil {
+		s.Logger.Fatal("Start workflow failed with err", tag.Error(err))
+	}
+
+	s.NotNil(workflowRun)
+	s.True(workflowRun.GetRunID() != "")
+	err = workflowRun.Get(ctx, nil)
+	s.NoError(err)
+
+	// verify activity timeout type
+	s.Error(err1)
+	activityErr, ok := err1.(*temporal.ActivityError)
+	s.True(ok)
+	s.Equal("ScheduleToStart", activityErr.ActivityID())
+	timeoutErr, ok := activityErr.Unwrap().(*temporal.TimeoutError)
+	s.True(ok)
+	s.Equal(enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START, timeoutErr.TimeoutType())
+
+	s.Error(err2)
+	activityErr, ok = err2.(*temporal.ActivityError)
+	s.True(ok)
+	s.Equal("StartToClose", activityErr.ActivityID())
+	timeoutErr, ok = activityErr.Unwrap().(*temporal.TimeoutError)
+	s.True(ok)
+	s.Equal(enumspb.TIMEOUT_TYPE_START_TO_CLOSE, timeoutErr.TimeoutType())
+
+	s.Error(err3)
+	activityErr, ok = err3.(*temporal.ActivityError)
+	s.True(ok)
+	s.Equal("ScheduleToClose", activityErr.ActivityID())
+	timeoutErr, ok = activityErr.Unwrap().(*temporal.TimeoutError)
+	s.True(ok)
+	s.Equal(enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE, timeoutErr.TimeoutType())
+
+	s.Error(err4)
+	activityErr, ok = err4.(*temporal.ActivityError)
+	s.True(ok)
+	s.Equal("Heartbeat", activityErr.ActivityID())
+	timeoutErr, ok = activityErr.Unwrap().(*temporal.TimeoutError)
+	s.True(ok)
+	s.Equal(enumspb.TIMEOUT_TYPE_HEARTBEAT, timeoutErr.TimeoutType())
+	s.True(timeoutErr.HasLastHeartbeatDetails())
+	var v int
+	s.NoError(timeoutErr.LastHeartbeatDetails(&v))
+	s.Equal(2, v)
+
+	// s.printHistory(id, workflowRun.GetRunID())
+}
+
 func (s *ActivitySuite) TestActivityHeartBeatWorkflow_Success() {
 	id := "functional-heartbeat-test"
 	wt := "functional-heartbeat-test-type"
@@ -1123,7 +1259,7 @@ func (s *ActivitySuite) TestActivityHeartBeat_RecordIdentity() {
 
 func (s *ActivitySuite) TestActivityTaskCompleteForceCompletion() {
 	sdkClient, err := sdkclient.Dial(sdkclient.Options{
-		HostPort:  s.TestCluster().Host().FrontendGRPCAddress(),
+		HostPort:  s.GetTestCluster().Host().FrontendGRPCAddress(),
 		Namespace: s.Namespace(),
 	})
 	s.NoError(err)
@@ -1160,7 +1296,7 @@ func (s *ActivitySuite) TestActivityTaskCompleteForceCompletion() {
 
 func (s *ActivitySuite) TestActivityTaskCompleteRejectCompletion() {
 	sdkClient, err := sdkclient.Dial(sdkclient.Options{
-		HostPort:  s.TestCluster().Host().FrontendGRPCAddress(),
+		HostPort:  s.GetTestCluster().Host().FrontendGRPCAddress(),
 		Namespace: s.Namespace(),
 	})
 	s.NoError(err)

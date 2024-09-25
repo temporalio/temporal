@@ -99,9 +99,9 @@ func (s *HttpApiTestSuite) runHTTPAPIBasicsTest(
 	s.Worker().RegisterWorkflowWithOptions(workflowFn, workflow.RegisterOptions{Name: "http-basic-workflow"})
 
 	// Capture metrics
-	capture := s.TestCluster().Host().CaptureMetricsHandler().StartCapture()
+	capture := s.GetTestCluster().Host().CaptureMetricsHandler().StartCapture()
 
-	defer s.TestCluster().Host().CaptureMetricsHandler().StopCapture(capture)
+	defer s.GetTestCluster().Host().CaptureMetricsHandler().StopCapture(capture)
 
 	// Start
 	workflowID := testcore.RandomizeStr("wf")
@@ -308,7 +308,7 @@ func (s *HttpApiTestSuite) TestHTTPAPIHeaders() {
 	var lastInfo *authorization.AuthInfo
 	var listWorkflowMetadata metadata.MD
 	var callbackLock sync.RWMutex
-	s.TestCluster().Host().SetOnGetClaims(func(info *authorization.AuthInfo) (*authorization.Claims, error) {
+	s.GetTestCluster().Host().SetOnGetClaims(func(info *authorization.AuthInfo) (*authorization.Claims, error) {
 		callbackLock.Lock()
 		defer callbackLock.Unlock()
 		if info != nil {
@@ -316,7 +316,7 @@ func (s *HttpApiTestSuite) TestHTTPAPIHeaders() {
 		}
 		return &authorization.Claims{System: authorization.RoleAdmin}, nil
 	})
-	s.TestCluster().Host().SetOnAuthorize(func(
+	s.GetTestCluster().Host().SetOnAuthorize(func(
 		ctx context.Context,
 		caller *authorization.Claims,
 		target *authorization.CallTarget,

@@ -992,8 +992,8 @@ func (s *WorkflowTestSuite) TestExecuteMultiOperation() {
 		tv *testvars.TestVars,
 		request *workflowservice.ExecuteMultiOperationRequest,
 	) (resp *workflowservice.ExecuteMultiOperationResponse, retErr error) {
-		capture := s.TestCluster().Host().CaptureMetricsHandler().StartCapture()
-		defer s.TestCluster().Host().CaptureMetricsHandler().StopCapture(capture)
+		capture := s.GetTestCluster().Host().CaptureMetricsHandler().StartCapture()
+		defer s.GetTestCluster().Host().CaptureMetricsHandler().StopCapture(capture)
 
 		poller := &testcore.TaskPoller{
 			Client:    s.FrontendClient(),

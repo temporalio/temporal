@@ -225,7 +225,7 @@ func (s *DLQSuite) TestReadArtificialDLQTasks() {
 			SourceCluster: queueKey.SourceCluster,
 			TargetCluster: queueKey.TargetCluster,
 			Task:          task,
-			SourceShardID: tasks.GetShardIDForTask(task, int(s.TestClusterConfig().HistoryConfig.NumHistoryShards)),
+			SourceShardID: tasks.GetShardIDForTask(task, int(s.GetTestClusterConfig().HistoryConfig.NumHistoryShards)),
 		})
 		s.NoError(err)
 	}

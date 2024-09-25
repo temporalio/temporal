@@ -1907,7 +1907,7 @@ func (s *AdvancedVisibilitySuite) TestChildWorkflow_ParentWorkflow() {
 }
 
 func (s *AdvancedVisibilitySuite) Test_LongWorkflowID() {
-	if s.TestClusterConfig().Persistence.StoreType == config.StoreTypeSQL {
+	if s.GetTestClusterConfig().Persistence.StoreType == config.StoreTypeSQL {
 		// TODO: remove this when workflow_id field size is increased from varchar(255) in SQL schema.
 		return
 	}
@@ -2786,7 +2786,7 @@ func (s *AdvancedVisibilitySuite) getBuildIds(ctx context.Context, execution *co
 }
 
 func (s *AdvancedVisibilitySuite) updateMaxResultWindow() {
-	esConfig := s.TestClusterConfig().ESConfig
+	esConfig := s.GetTestClusterConfig().ESConfig
 
 	esClient, err := esclient.NewFunctionalTestsClient(esConfig, s.Logger)
 	s.Require().NoError(err)

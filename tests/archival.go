@@ -88,7 +88,7 @@ func (s *ArchivalSuite) SetupTest() {
 }
 
 func (s *ArchivalSuite) TestArchival_TimerQueueProcessor() {
-	s.True(s.TestCluster().ArchivalBase().Metadata().GetHistoryConfig().ClusterConfiguredForArchival())
+	s.True(s.GetTestCluster().ArchivalBase().Metadata().GetHistoryConfig().ClusterConfiguredForArchival())
 
 	namespaceID := s.GetNamespaceID(s.ArchivalNamespace())
 	workflowID := "archival-timer-queue-processor-workflow-id"
@@ -104,7 +104,7 @@ func (s *ArchivalSuite) TestArchival_TimerQueueProcessor() {
 }
 
 func (s *ArchivalSuite) TestArchival_ContinueAsNew() {
-	s.True(s.TestCluster().ArchivalBase().Metadata().GetHistoryConfig().ClusterConfiguredForArchival())
+	s.True(s.GetTestCluster().ArchivalBase().Metadata().GetHistoryConfig().ClusterConfiguredForArchival())
 
 	namespaceID := s.GetNamespaceID(s.ArchivalNamespace())
 	workflowID := "archival-continueAsNew-workflow-id"
@@ -124,7 +124,7 @@ func (s *ArchivalSuite) TestArchival_ContinueAsNew() {
 func (s *ArchivalSuite) TestArchival_ArchiverWorker() {
 	s.T().SkipNow() // flaky test, skip for now, will reimplement archival feature.
 
-	s.True(s.TestCluster().ArchivalBase().Metadata().GetHistoryConfig().ClusterConfiguredForArchival())
+	s.True(s.GetTestCluster().ArchivalBase().Metadata().GetHistoryConfig().ClusterConfiguredForArchival())
 
 	namespaceID := s.GetNamespaceID(s.ArchivalNamespace())
 	workflowID := "archival-archiver-worker-workflow-id"
@@ -139,7 +139,7 @@ func (s *ArchivalSuite) TestArchival_ArchiverWorker() {
 }
 
 func (s *ArchivalSuite) TestVisibilityArchival() {
-	s.True(s.TestCluster().ArchivalBase().Metadata().GetVisibilityConfig().ClusterConfiguredForArchival())
+	s.True(s.GetTestCluster().ArchivalBase().Metadata().GetVisibilityConfig().ClusterConfiguredForArchival())
 
 	namespaceID := s.GetNamespaceID(s.ArchivalNamespace())
 	workflowID := "archival-visibility-workflow-id"
@@ -191,17 +191,17 @@ func (s *ArchivalSuite) TestVisibilityArchival() {
 // isArchived returns true if both the workflow history and workflow visibility are archived.
 func (s *ArchivalSuite) isArchived(namespace string, execution *commonpb.WorkflowExecution) bool {
 	serviceName := string(primitives.HistoryService)
-	historyURI, err := archiver.NewURI(s.TestCluster().ArchivalBase().HistoryURI())
+	historyURI, err := archiver.NewURI(s.GetTestCluster().ArchivalBase().HistoryURI())
 	s.NoError(err)
-	historyArchiver, err := s.TestCluster().ArchivalBase().Provider().GetHistoryArchiver(
+	historyArchiver, err := s.GetTestCluster().ArchivalBase().Provider().GetHistoryArchiver(
 		historyURI.Scheme(),
 		serviceName,
 	)
 	s.NoError(err)
 
-	visibilityURI, err := archiver.NewURI(s.TestCluster().ArchivalBase().VisibilityURI())
+	visibilityURI, err := archiver.NewURI(s.GetTestCluster().ArchivalBase().VisibilityURI())
 	s.NoError(err)
-	visibilityArchiver, err := s.TestCluster().ArchivalBase().Provider().GetVisibilityArchiver(
+	visibilityArchiver, err := s.GetTestCluster().ArchivalBase().Provider().GetVisibilityArchiver(
 		visibilityURI.Scheme(),
 		serviceName,
 	)
@@ -261,11 +261,11 @@ func (s *ArchivalSuite) isHistoryDeleted(
 	shardID := common.WorkflowIDToHistoryShard(
 		namespaceID,
 		workflowInfo.execution.WorkflowId,
-		s.TestClusterConfig().HistoryConfig.NumHistoryShards,
+		s.GetTestClusterConfig().HistoryConfig.NumHistoryShards,
 	)
 
 	for i := 0; i < retryLimit; i++ {
-		_, err := s.TestCluster().TestBase().ExecutionManager.ReadHistoryBranch(
+		_, err := s.GetTestCluster().TestBase().ExecutionManager.ReadHistoryBranch(
 			testcore.NewContext(),
 			&persistence.ReadHistoryBranchRequest{
 				ShardID:       shardID,
@@ -288,7 +288,7 @@ func (s *ArchivalSuite) isHistoryDeleted(
 
 func (s *ArchivalSuite) isMutableStateDeleted(namespaceID string, execution *commonpb.WorkflowExecution) bool {
 	shardID := common.WorkflowIDToHistoryShard(namespaceID, execution.GetWorkflowId(),
-		s.TestClusterConfig().HistoryConfig.NumHistoryShards)
+		s.GetTestClusterConfig().HistoryConfig.NumHistoryShards)
 	request := &persistence.GetWorkflowExecutionRequest{
 		ShardID:     shardID,
 		NamespaceID: namespaceID,
@@ -297,7 +297,7 @@ func (s *ArchivalSuite) isMutableStateDeleted(namespaceID string, execution *com
 	}
 
 	for i := 0; i < retryLimit; i++ {
-		_, err := s.TestCluster().TestBase().ExecutionManager.GetWorkflowExecution(testcore.NewContext(), request)
+		_, err := s.GetTestCluster().TestBase().ExecutionManager.GetWorkflowExecution(testcore.NewContext(), request)
 		if _, isNotFound := err.(*serviceerror.NotFound); isNotFound {
 			return true
 		}
