@@ -1,7 +1,5 @@
 [![Build status](https://github.com/temporalio/temporal/actions/workflows/run-tests.yml/badge.svg?branch=main)](https://github.com/temporalio/temporal/commits/main/)
-[![Coverage Status](https://coveralls.io/repos/github/temporalio/temporal/badge.svg?branch=main)](
-
-https://coveralls.io/github/temporalio/temporal?branch=main)
+[![Coverage Status](https://coveralls.io/repos/github/temporalio/temporal/badge.svg?branch=main)](https://coveralls.io/github/temporalio/temporal?branch=main)
 [![Discourse](https://img.shields.io/static/v1?label=Discourse&message=Get%20Help&color=informational)](https://community.temporal.io)
 [![Go Report Card][go-report-image]][go-report-url]
 
