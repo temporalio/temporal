@@ -27,11 +27,13 @@ package tests
 import (
 	"context"
 	"encoding/json"
+	"github.com/stretchr/testify/suite"
 	"go.temporal.io/server/tests/testcore"
 	"io"
 	"net/http"
 	"strings"
 	"sync"
+	"testing"
 
 	"go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -65,6 +67,10 @@ func jsonPayload(data string) *common.Payloads {
 
 type HttpApiTestSuite struct {
 	testcore.ClientFunctionalSuite
+}
+
+func TestHttpApiTestSuite(t *testing.T) {
+	suite.Run(t, new(HttpApiTestSuite))
 }
 
 func (s *HttpApiTestSuite) runHTTPAPIBasicsTest(
