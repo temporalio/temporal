@@ -3,8 +3,8 @@ module go.temporal.io/server
 go 1.22.6
 
 retract (
-    v1.26.0 // Published accidentally.
-    v1.26.1 // Contains retractions only.
+	v1.26.1 // Contains retractions only.
+	v1.26.0 // Published accidentally.
 )
 
 require (
