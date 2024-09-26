@@ -2,6 +2,11 @@ module go.temporal.io/server
 
 go 1.22.6
 
+retract (
+    v1.26.0 // Published accidentally.
+    v1.26.1 // Contains retractions only.
+)
+
 require (
 	cloud.google.com/go/storage v1.41.0
 	github.com/aws/aws-sdk-go v1.53.15
