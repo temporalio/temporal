@@ -163,6 +163,8 @@ type (
 		namespaceUpdateLockMapLock sync.Mutex
 		// Stores results of reachability queries to visibility
 		reachabilityCache reachabilityCache
+		// Stores aggregated task-queue statistics
+		taskQueueStatsCache taskQueueStatsCache
 	}
 )
 
@@ -239,6 +241,7 @@ func NewEngine(
 		visibilityManager,
 		e.config.ReachabilityCacheOpenWFsTTL(),
 		e.config.ReachabilityCacheClosedWFsTTL())
+	e.taskQueueStatsCache = newTaskQueueStatsCache(metrics.NoopMetricsHandler, e.config.TaskQueueStatsCacheTTL())
 	return e
 }
 
@@ -939,6 +942,7 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 		numPartitions := max(tqConfig.NumWritePartitions(), tqConfig.NumReadPartitions())
 		for _, taskQueueType := range req.TaskQueueTypes {
 			for i := 0; i < numPartitions; i++ {
+				// todo Shivam - only call
 				partitionResp, err := e.matchingRawClient.DescribeTaskQueuePartition(ctx, &matchingservice.DescribeTaskQueuePartitionRequest{
 					NamespaceId: request.GetNamespaceId(),
 					TaskQueuePartition: &taskqueuespb.TaskQueuePartition{
