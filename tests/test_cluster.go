@@ -37,7 +37,9 @@ import (
 
 	"github.com/pborman/uuid"
 	"go.temporal.io/api/operatorservice/v1"
+	workflowservice "go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/adminservice/v1"
+	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/archiver"
@@ -508,12 +510,12 @@ func (tc *TestCluster) TearDownCluster() error {
 }
 
 // GetFrontendClient returns a frontend client from the test cluster
-func (tc *TestCluster) GetFrontendClient() FrontendClient {
+func (tc *TestCluster) GetFrontendClient() workflowservice.WorkflowServiceClient {
 	return tc.host.GetFrontendClient()
 }
 
 // GetAdminClient returns an admin client from the test cluster
-func (tc *TestCluster) GetAdminClient() AdminClient {
+func (tc *TestCluster) GetAdminClient() adminservice.AdminServiceClient {
 	return tc.host.GetAdminClient()
 }
 
@@ -522,7 +524,7 @@ func (tc *TestCluster) GetOperatorClient() operatorservice.OperatorServiceClient
 }
 
 // GetHistoryClient returns a history client from the test cluster
-func (tc *TestCluster) GetHistoryClient() HistoryClient {
+func (tc *TestCluster) GetHistoryClient() historyservice.HistoryServiceClient {
 	return tc.host.GetHistoryClient()
 }
 
@@ -540,8 +542,8 @@ func (tc *TestCluster) GetHost() *temporalImpl {
 	return tc.host
 }
 
-func (tc *TestCluster) OverrideDynamicConfig(t *testing.T, key dynamicconfig.GenericSetting, value any) {
-	tc.host.OverrideDCValue(t, key, value)
+func (tc *TestCluster) OverrideDynamicConfig(t *testing.T, key dynamicconfig.GenericSetting, value any) (cleanup func()) {
+	return tc.host.overrideDynamicConfig(t, key.Key(), value)
 }
 
 var errCannotAddCACertToPool = errors.New("failed adding CA to pool")

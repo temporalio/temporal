@@ -86,7 +86,7 @@ func (s *streamBasedReplicationTestSuite) SetupSuite() {
 		dynamicconfig.EnableReplicationTaskBatching.Key():       true,
 		dynamicconfig.EnableReplicateLocalGeneratedEvents.Key(): true,
 	}
-	s.logger = log.NewNoopLogger()
+	s.logger = log.NewTestLogger()
 	s.serializer = serialization.NewSerializer()
 	s.setupSuite(
 		[]string{
@@ -166,7 +166,7 @@ func (s *streamBasedReplicationTestSuite) TestReplicateHistoryEvents_ForceReplic
 }
 
 func (s *streamBasedReplicationTestSuite) importTestEvents(
-	historyClient tests.HistoryClient,
+	historyClient historyservice.HistoryServiceClient,
 	namespaceName namespace.Name,
 	namespaceId namespace.ID,
 	versions []int64,
@@ -298,7 +298,7 @@ func (s *streamBasedReplicationTestSuite) importEvents(
 	runID string,
 	versionHistory *historyspb.VersionHistory,
 	eventBatches []*historypb.History,
-	historyClient tests.HistoryClient,
+	historyClient historyservice.HistoryServiceClient,
 	verifyWorkflowNotExists bool,
 ) {
 	if len(eventBatches) == 0 {

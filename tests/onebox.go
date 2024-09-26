@@ -247,10 +247,10 @@ func newTemporal(t *testing.T, params *TemporalParams) *temporalImpl {
 		taskCategoryRegistry:             params.TaskCategoryRegistry,
 	}
 	for k, v := range staticOverrides {
-		impl.overrideDynamicConfigByKey(t, k, v)
+		impl.overrideDynamicConfig(t, k, v)
 	}
 	for k, v := range params.DynamicConfigOverrides {
-		impl.overrideDynamicConfigByKey(t, k, v)
+		impl.overrideDynamicConfig(t, k, v)
 	}
 	impl.overrideHistoryDynamicConfig(t)
 	return impl
@@ -406,10 +406,6 @@ func (c *temporalImpl) WorkerGRPCServiceAddress() string {
 	}
 }
 
-func (c *temporalImpl) OverrideDCValue(t *testing.T, setting dynamicconfig.GenericSetting, value any) {
-	c.overrideDynamicConfigByKey(t, setting.Key(), value)
-}
-
 func (c *temporalImpl) GetAdminClient() adminservice.AdminServiceClient {
 	return c.adminClient
 }
@@ -461,6 +457,7 @@ func (c *temporalImpl) startFrontend(
 		fx.Supply(
 			persistenceConfig,
 			serviceName,
+			c.mockAdminClient,
 		),
 		fx.Provide(c.frontendConfigProvider),
 		fx.Provide(func() listenHostPort { return listenHostPort(c.FrontendGRPCAddress()) }),
@@ -482,7 +479,7 @@ func (c *temporalImpl) startFrontend(
 		fx.Provide(func() authorization.Authorizer { return c }),
 		fx.Provide(func() authorization.ClaimMapper { return c }),
 		fx.Provide(func() authorization.JWTAudienceMapper { return nil }),
-		fx.Provide(func() client.FactoryProvider { return client.NewFactoryProvider() }),
+		fx.Provide(c.newClientFactoryProvider),
 		fx.Provide(func() searchattribute.Mapper { return nil }),
 		// Comment the line above and uncomment the line below to test with search attributes mapper.
 		// fx.Provide(func() searchattribute.Mapper { return NewSearchAttributeTestMapper() }),
@@ -509,20 +506,12 @@ func (c *temporalImpl) startFrontend(
 		c.logger.Fatal("unable to construct frontend service", tag.Error(err))
 	}
 
-	if c.mockAdminClient != nil {
-		if clientBean != nil {
-			for serviceName, client := range c.mockAdminClient {
-				clientBean.SetRemoteAdminClient(serviceName, client)
-			}
-		}
-	}
-
 	c.frontendApp = feApp
 	c.frontendService = frontendService
 	c.frontendNamespaceRegistry = namespaceRegistry
 	connection := rpcFactory.CreateLocalFrontendGRPCConnection()
-	c.frontendClient = NewFrontendClient(connection)
-	c.adminClient = NewAdminClient(connection)
+	c.frontendClient = workflowservice.NewWorkflowServiceClient(connection)
+	c.adminClient = adminservice.NewAdminServiceClient(connection)
 	c.operatorClient = operatorservice.NewOperatorServiceClient(connection)
 
 	if err := feApp.Start(context.Background()); err != nil {
@@ -565,6 +554,7 @@ func (c *temporalImpl) startHistory(
 			fx.Supply(
 				persistenceConfig,
 				serviceName,
+				c.mockAdminClient,
 			),
 			fx.Provide(c.GetMetricsHandler),
 			fx.Provide(func() listenHostPort { return listenHostPort(host) }),
@@ -580,7 +570,7 @@ func (c *temporalImpl) startHistory(
 			fx.Provide(func() carchiver.ArchivalMetadata { return c.archiverMetadata }),
 			fx.Provide(func() provider.ArchiverProvider { return c.archiverProvider }),
 			fx.Provide(sdkClientFactoryProvider),
-			fx.Provide(func() client.FactoryProvider { return client.NewFactoryProvider() }),
+			fx.Provide(c.newClientFactoryProvider),
 			fx.Provide(func() searchattribute.Mapper { return nil }),
 			// Comment the line above and uncomment the line below to test with search attributes mapper.
 			// fx.Provide(func() searchattribute.Mapper { return NewSearchAttributeTestMapper() }),
@@ -611,14 +601,6 @@ func (c *temporalImpl) startHistory(
 			c.logger.Fatal("unable to construct history service", tag.Error(err))
 		}
 
-		if c.mockAdminClient != nil {
-			if clientBean != nil {
-				for serviceName, client := range c.mockAdminClient {
-					clientBean.SetRemoteAdminClient(serviceName, client)
-				}
-			}
-		}
-
 		// TODO: this is not correct when there are multiple history hosts as later client will overwrite previous ones.
 		// However current interface for getting history client doesn't specify which client it needs and the tests that use this API
 		// depends on the fact that there's only one history host.
@@ -629,7 +611,7 @@ func (c *temporalImpl) startHistory(
 		}
 
 		c.historyApps = append(c.historyApps, app)
-		c.historyClient = NewHistoryClient(historyConnection)
+		c.historyClient = historyservice.NewHistoryServiceClient(historyConnection)
 		c.historyServices = append(c.historyServices, historyService)
 		c.historyNamespaceRegistries = append(c.historyNamespaceRegistries, namespaceRegistry)
 
@@ -668,6 +650,7 @@ func (c *temporalImpl) startMatching(
 		fx.Supply(
 			persistenceConfig,
 			serviceName,
+			c.mockAdminClient,
 		),
 		fx.Provide(c.GetMetricsHandler),
 		fx.Provide(func() listenHostPort { return listenHostPort(c.MatchingGRPCServiceAddress()) }),
@@ -681,7 +664,7 @@ func (c *temporalImpl) startMatching(
 		fx.Provide(func() *cluster.Config { return c.clusterMetadataConfig }),
 		fx.Provide(func() carchiver.ArchivalMetadata { return c.archiverMetadata }),
 		fx.Provide(func() provider.ArchiverProvider { return c.archiverProvider }),
-		fx.Provide(func() client.FactoryProvider { return client.NewFactoryProvider() }),
+		fx.Provide(c.newClientFactoryProvider),
 		fx.Provide(func() searchattribute.Mapper { return nil }),
 		fx.Provide(func() resolver.ServiceResolver { return resolver.NewNoopResolver() }),
 		fx.Provide(persistenceClient.FactoryProvider),
@@ -704,13 +687,6 @@ func (c *temporalImpl) startMatching(
 	err = app.Err()
 	if err != nil {
 		c.logger.Fatal("unable to start matching service", tag.Error(err))
-	}
-	if c.mockAdminClient != nil {
-		if clientBean != nil {
-			for serviceName, client := range c.mockAdminClient {
-				clientBean.SetRemoteAdminClient(serviceName, client)
-			}
-		}
 	}
 
 	matchingConnection, err := rpc.Dial(c.MatchingGRPCServiceAddress(), nil, c.logger)
@@ -766,6 +742,7 @@ func (c *temporalImpl) startWorker(
 		fx.Supply(
 			persistenceConfig,
 			serviceName,
+			c.mockAdminClient,
 		),
 		fx.Provide(c.GetMetricsHandler),
 		fx.Provide(func() listenHostPort { return listenHostPort(c.WorkerGRPCServiceAddress()) }),
@@ -781,7 +758,7 @@ func (c *temporalImpl) startWorker(
 		fx.Provide(func() carchiver.ArchivalMetadata { return c.archiverMetadata }),
 		fx.Provide(func() provider.ArchiverProvider { return c.archiverProvider }),
 		fx.Provide(sdkClientFactoryProvider),
-		fx.Provide(func() client.FactoryProvider { return client.NewFactoryProvider() }),
+		fx.Provide(c.newClientFactoryProvider),
 		fx.Provide(func() searchattribute.Mapper { return nil }),
 		fx.Provide(func() resolver.ServiceResolver { return resolver.NewNoopResolver() }),
 		fx.Provide(persistenceClient.FactoryProvider),
@@ -874,36 +851,36 @@ func (c *temporalImpl) frontendConfigProvider() *config.Config {
 
 func (c *temporalImpl) overrideHistoryDynamicConfig(t *testing.T) {
 	if c.esConfig != nil {
-		c.OverrideDCValue(t, dynamicconfig.SecondaryVisibilityWritingMode, visibility.SecondaryVisibilityWritingModeDual)
+		c.overrideDynamicConfig(t, dynamicconfig.SecondaryVisibilityWritingMode.Key(), visibility.SecondaryVisibilityWritingModeDual)
 	}
 	if c.historyConfig.HistoryCountLimitWarn != 0 {
-		c.OverrideDCValue(t, dynamicconfig.HistoryCountLimitWarn, c.historyConfig.HistoryCountLimitWarn)
+		c.overrideDynamicConfig(t, dynamicconfig.HistoryCountLimitWarn.Key(), c.historyConfig.HistoryCountLimitWarn)
 	}
 	if c.historyConfig.HistoryCountLimitError != 0 {
-		c.OverrideDCValue(t, dynamicconfig.HistoryCountLimitError, c.historyConfig.HistoryCountLimitError)
+		c.overrideDynamicConfig(t, dynamicconfig.HistoryCountLimitError.Key(), c.historyConfig.HistoryCountLimitError)
 	}
 	if c.historyConfig.HistorySizeLimitWarn != 0 {
-		c.OverrideDCValue(t, dynamicconfig.HistorySizeLimitWarn, c.historyConfig.HistorySizeLimitWarn)
+		c.overrideDynamicConfig(t, dynamicconfig.HistorySizeLimitWarn.Key(), c.historyConfig.HistorySizeLimitWarn)
 	}
 	if c.historyConfig.HistorySizeLimitError != 0 {
-		c.OverrideDCValue(t, dynamicconfig.HistorySizeLimitError, c.historyConfig.HistorySizeLimitError)
+		c.overrideDynamicConfig(t, dynamicconfig.HistorySizeLimitError.Key(), c.historyConfig.HistorySizeLimitError)
 	}
 	if c.historyConfig.BlobSizeLimitError != 0 {
-		c.OverrideDCValue(t, dynamicconfig.BlobSizeLimitError, c.historyConfig.BlobSizeLimitError)
+		c.overrideDynamicConfig(t, dynamicconfig.BlobSizeLimitError.Key(), c.historyConfig.BlobSizeLimitError)
 	}
 	if c.historyConfig.BlobSizeLimitWarn != 0 {
-		c.OverrideDCValue(t, dynamicconfig.BlobSizeLimitWarn, c.historyConfig.BlobSizeLimitWarn)
+		c.overrideDynamicConfig(t, dynamicconfig.BlobSizeLimitWarn.Key(), c.historyConfig.BlobSizeLimitWarn)
 	}
 	if c.historyConfig.MutableStateSizeLimitError != 0 {
-		c.OverrideDCValue(t, dynamicconfig.MutableStateSizeLimitError, c.historyConfig.MutableStateSizeLimitError)
+		c.overrideDynamicConfig(t, dynamicconfig.MutableStateSizeLimitError.Key(), c.historyConfig.MutableStateSizeLimitError)
 	}
 	if c.historyConfig.MutableStateSizeLimitWarn != 0 {
-		c.OverrideDCValue(t, dynamicconfig.MutableStateSizeLimitWarn, c.historyConfig.MutableStateSizeLimitWarn)
+		c.overrideDynamicConfig(t, dynamicconfig.MutableStateSizeLimitWarn.Key(), c.historyConfig.MutableStateSizeLimitWarn)
 	}
 
 	// For DeleteWorkflowExecution tests
-	c.OverrideDCValue(t, dynamicconfig.TransferProcessorUpdateAckInterval, 1*time.Second)
-	c.OverrideDCValue(t, dynamicconfig.VisibilityProcessorUpdateAckInterval, 1*time.Second)
+	c.overrideDynamicConfig(t, dynamicconfig.TransferProcessorUpdateAckInterval.Key(), 1*time.Second)
+	c.overrideDynamicConfig(t, dynamicconfig.VisibilityProcessorUpdateAckInterval.Key(), 1*time.Second)
 }
 
 func (c *temporalImpl) newRPCFactory(
@@ -941,6 +918,66 @@ func (c *temporalImpl) newRPCFactory(
 		nil,
 		monitor,
 	), nil
+}
+
+func (c *temporalImpl) newClientFactoryProvider(
+	config *cluster.Config,
+	mockAdminClient map[string]adminservice.AdminServiceClient,
+) client.FactoryProvider {
+	return &clientFactoryProvider{
+		config:          config,
+		mockAdminClient: mockAdminClient,
+	}
+}
+
+type clientFactoryProvider struct {
+	config          *cluster.Config
+	mockAdminClient map[string]adminservice.AdminServiceClient
+}
+
+func (p *clientFactoryProvider) NewFactory(
+	rpcFactory common.RPCFactory,
+	monitor membership.Monitor,
+	metricsHandler metrics.Handler,
+	dc *dynamicconfig.Collection,
+	numberOfHistoryShards int32,
+	logger log.Logger,
+	throttledLogger log.Logger,
+) client.Factory {
+	f := client.NewFactoryProvider().NewFactory(
+		rpcFactory,
+		monitor,
+		metricsHandler,
+		dc,
+		numberOfHistoryShards,
+		logger,
+		throttledLogger,
+	)
+	return &clientFactory{
+		Factory:         f,
+		config:          p.config,
+		mockAdminClient: p.mockAdminClient,
+	}
+}
+
+type clientFactory struct {
+	client.Factory
+	config          *cluster.Config
+	mockAdminClient map[string]adminservice.AdminServiceClient
+}
+
+// override just this one and look up connections in mock admin client map
+func (f *clientFactory) NewRemoteAdminClientWithTimeout(rpcAddress string, timeout time.Duration, largeTimeout time.Duration) adminservice.AdminServiceClient {
+	var clusterName string
+	for name, info := range f.config.ClusterInformation {
+		if rpcAddress == info.RPCAddress {
+			clusterName = name
+		}
+	}
+	if mock, ok := f.mockAdminClient[clusterName]; ok {
+		return mock
+	}
+	return f.Factory.NewRemoteAdminClientWithTimeout(rpcAddress, timeout, largeTimeout)
 }
 
 func (c *temporalImpl) SetOnGetClaims(fn func(*authorization.AuthInfo) (*authorization.Claims, error)) {
@@ -1026,14 +1063,8 @@ func sdkClientFactoryProvider(
 	)
 }
 
-func (c *temporalImpl) overrideDynamicConfigByKey(t *testing.T, name dynamicconfig.Key, value any) {
-	existingValues := c.dcClient.GetValue(name)
-	c.dcClient.OverrideValueByKey(name, value)
-	t.Cleanup(func() {
-		if len(existingValues) > 0 {
-			c.dcClient.OverrideValueByKey(name, existingValues)
-		} else {
-			c.dcClient.RemoveOverrideByKey(name)
-		}
-	})
+func (c *temporalImpl) overrideDynamicConfig(t *testing.T, name dynamicconfig.Key, value any) func() {
+	cleanup := c.dcClient.OverrideValue(name, value)
+	t.Cleanup(cleanup)
+	return cleanup
 }

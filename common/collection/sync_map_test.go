@@ -154,6 +154,8 @@ func TestMap_PopAll(t *testing.T) {
 	m.Set(4, 4)
 	m.Pop(4)
 
+	mCopy := m
+
 	values = m.PopAll()
 	assert.Equal(t, 3, len(values))
 	sum := 0
@@ -161,4 +163,7 @@ func TestMap_PopAll(t *testing.T) {
 		sum += v
 	}
 	assert.Equal(t, 6, sum)
+
+	_, ok := mCopy.Get(3)
+	assert.False(t, ok, "SyncMap is not correctly copyable")
 }

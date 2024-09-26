@@ -140,15 +140,3 @@ func (mr *MockBeanMockRecorder) GetRemoteFrontendClient(arg0 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetRemoteFrontendClient", reflect.TypeOf((*MockBean)(nil).GetRemoteFrontendClient), arg0)
 }
-
-// SetRemoteAdminClient mocks base method.
-func (m *MockBean) SetRemoteAdminClient(arg0 string, arg1 adminservice.AdminServiceClient) {
-	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "SetRemoteAdminClient", arg0, arg1)
-}
-
-// SetRemoteAdminClient indicates an expected call of SetRemoteAdminClient.
-func (mr *MockBeanMockRecorder) SetRemoteAdminClient(arg0, arg1 any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetRemoteAdminClient", reflect.TypeOf((*MockBean)(nil).SetRemoteAdminClient), arg0, arg1)
-}

@@ -133,7 +133,7 @@ func (s *hrsuTestSuite) SetupSuite() {
 	s.dynamicConfigOverrides = map[dynamicconfig.Key]any{
 		dynamicconfig.EnableReplicationStream.Key(): true,
 	}
-	s.logger = log.NewNoopLogger()
+	s.logger = log.NewTestLogger()
 	s.setupSuite(
 		[]string{"cluster1", "cluster2"},
 		tests.WithFxOptionsForService(primitives.WorkerService,
@@ -1015,7 +1015,6 @@ func (c *hrsuTestCluster) resetWorkflow(ctx context.Context, workflowTaskFinishE
 		WorkflowExecution:         c.t.tv.WorkflowExecution(),
 		Reason:                    "reset",
 		WorkflowTaskFinishEventId: workflowTaskFinishEventId,
-		ResetReapplyType:          enumspb.RESET_REAPPLY_TYPE_ALL_ELIGIBLE,
 	})
 	c.t.s.NoError(err)
 	return resp.RunId

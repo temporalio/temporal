@@ -5091,12 +5091,8 @@ func (wh *WorkflowHandler) UpdateActivityOptionsById(
 	}
 
 	response, err := wh.historyClient.UpdateActivityOptions(ctx, &historyservice.UpdateActivityOptionsRequest{
-		NamespaceId:     namespace_id.String(),
-		WorkflowId:      request.WorkflowId,
-		RunId:           request.RunId,
-		ActivityId:      request.ActivityId,
-		ActivityOptions: request.ActivityOptions,
-		UpdateMask:      request.UpdateMask,
+		NamespaceId:   namespace_id.String(),
+		UpdateRequest: request,
 	})
 
 	if err != nil {

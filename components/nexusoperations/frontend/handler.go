@@ -436,6 +436,7 @@ func (c *requestContext) interceptRequest(ctx context.Context, request *nexus.Co
 		if retErr != nil {
 			c.TelemetryInterceptor.HandleError(
 				request,
+				"",
 				c.metricsHandlerForInterceptors,
 				[]tag.Tag{tag.Operation(methodNameForMetrics), tag.WorkflowNamespace(c.namespace.Name().String())},
 				retErr,
