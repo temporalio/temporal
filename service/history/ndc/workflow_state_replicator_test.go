@@ -583,3 +583,7 @@ func (s *workflowReplicatorSuite) Test_ApplyWorkflowState_ExistWorkflow_SyncHSM(
 	err = s.workflowStateReplicator.SyncWorkflowState(context.Background(), request)
 	s.NoError(err)
 }
+
+func (s *workflowReplicatorSuite) Test_ReplicateVersionedTransition() {
+
+}

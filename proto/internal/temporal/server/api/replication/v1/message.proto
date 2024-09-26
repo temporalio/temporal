@@ -242,3 +242,12 @@ message SyncVersionedTransitionTaskAttributes {
         SyncWorkflowStateSnapshotAttributes sync_workflow_state_snapshot_attributes = 4;
     }
 }
+
+message VersionedTransitionArtifact {
+    repeated temporal.api.common.v1.DataBlob event_batches = 1;
+    NewRunInfo new_run_info = 2;
+    oneof state_attributes {
+        SyncWorkflowStateMutationAttributes sync_workflow_state_mutation_attributes = 3;
+        SyncWorkflowStateSnapshotAttributes sync_workflow_state_snapshot_attributes = 4;
+    }
+}

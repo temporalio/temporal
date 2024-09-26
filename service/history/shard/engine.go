@@ -87,7 +87,7 @@ type (
 		) error
 		ReplicateEventsV2(ctx context.Context, request *historyservice.ReplicateEventsV2Request) error
 		ReplicateWorkflowState(ctx context.Context, request *historyservice.ReplicateWorkflowStateRequest) error
-		ReplicateMutableState(ctx context.Context, request *ReplicateMutableStateRequest) error
+		ReplicateMutableState(ctx context.Context, artifact *replicationspb.VersionedTransitionArtifact, sourceClusterName string) error
 		SyncShardStatus(ctx context.Context, request *historyservice.SyncShardStatusRequest) error
 		SyncActivity(ctx context.Context, request *historyservice.SyncActivityRequest) error
 		SyncActivities(ctx context.Context, request *historyservice.SyncActivitiesRequest) error
@@ -162,14 +162,5 @@ type (
 		Events    [][]*historypb.HistoryEvent
 		NewEvents []*historypb.HistoryEvent
 		NewRunID  string
-	}
-
-	ReplicateMutableStateRequest struct {
-		Mutation                          *persistencespb.WorkflowMutableStateMutation
-		Snapshot                          *persistencespb.WorkflowMutableState
-		EventBlobs                        []*commonpb.DataBlob
-		NewRunInfo                        *replicationspb.NewRunInfo
-		ExclusiveStartedVersionTransition *persistencespb.VersionedTransition
-		SourceClusterName                 string
 	}
 )

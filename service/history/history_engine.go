@@ -768,8 +768,8 @@ func (e *historyEngineImpl) ReplicateWorkflowState(
 	return e.nDCWorkflowStateReplicator.SyncWorkflowState(ctx, request)
 }
 
-func (e *historyEngineImpl) ReplicateMutableState(ctx context.Context, request *shard.ReplicateMutableStateRequest) error {
-	return e.nDCWorkflowStateReplicator.ReplicateVersionedTransition(ctx, request)
+func (e *historyEngineImpl) ReplicateMutableState(ctx context.Context, artifact *replicationspb.VersionedTransitionArtifact, sourceClusterName string) error {
+	return e.nDCWorkflowStateReplicator.ReplicateVersionedTransition(ctx, artifact, sourceClusterName)
 }
 
 func (e *historyEngineImpl) ImportWorkflowExecution(
