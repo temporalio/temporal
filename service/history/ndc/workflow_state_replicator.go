@@ -59,6 +59,7 @@ import (
 	"go.temporal.io/server/common/primitives/timestamp"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/service/history/consts"
+	"go.temporal.io/server/service/history/historybuilder"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/workflow"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
@@ -264,22 +265,31 @@ func (r *WorkflowStateReplicatorImpl) ReplicateVersionedTransition(
 			if err != nil {
 				return err
 			}
+			localLastHistoryItem, err := versionhistory.GetLastVersionHistoryItem(localCurrentHistory)
+			if err != nil {
+				return err
+			}
 			sourceCurrentHistory, err := versionhistory.GetCurrentVersionHistory(request.Snapshot.ExecutionInfo.VersionHistories)
 			if err != nil {
 				return err
 			}
+			sourceLastHistoryItem, err := versionhistory.GetLastVersionHistoryItem(sourceCurrentHistory)
 			sourceTransitionHistory := request.Snapshot.ExecutionInfo.TransitionHistory
-			msLastWriteVersion, err := ms.GetLastWriteVersion()
+			localLastWriteVersion, err := ms.GetLastWriteVersion()
 			if err != nil {
 				return err
 			}
+			sourceLastWriteVersion := sourceTransitionHistory[len(sourceTransitionHistory)-1].NamespaceFailoverVersion
 
-			if !versionhistory.IsVersionHistoryItemsInSameBranch(localCurrentHistory.Items, sourceCurrentHistory.Items) &&
-				msLastWriteVersion > sourceTransitionHistory[len(sourceTransitionHistory)-1].NamespaceFailoverVersion {
+			if localLastWriteVersion > sourceLastWriteVersion {
 				// local is newer, try backfill events
 				return r.backFillEvents(ctx, request, namespaceID, wid, rid, executionInfo.VersionHistories)
 			}
-			return r.applySnapshot(ctx, namespaceID, wid, rid, wfCtx, releaseFn, ms, request)
+			if localLastWriteVersion < sourceLastWriteVersion ||
+				localLastHistoryItem.GetEventId() <= sourceLastHistoryItem.EventId {
+				return r.applySnapshot(ctx, namespaceID, wid, rid, wfCtx, releaseFn, ms, request)
+			}
+			return nil
 		}
 
 		sourceTransitionHistory := executionInfo.TransitionHistory
@@ -474,7 +484,7 @@ func (r *WorkflowStateReplicatorImpl) applySnapshot(
 		releaseFn,
 	)
 	taskRefresher := workflow.NewTaskRefresher(r.shardContext)
-	if isBranchSwitched {
+	if isBranchSwitched || len(localTransitionHistory) == 0 {
 		err = taskRefresher.Refresh(ctx, localMutableState)
 		if err != nil {
 			return err
@@ -821,6 +831,7 @@ func (r *WorkflowStateReplicatorImpl) bringLocalEventsUpToSourceCurrentBranch(
 		}
 	}
 	versionHistoryToAppend.Items = versionhistory.CopyVersionHistoryItems(sourceVersionHistory.Items)
+	localMutableState.SetHistoryBuilder(historybuilder.NewImmutableForUpdateNextEventID(sourceLastItem))
 	return nil
 }
 
