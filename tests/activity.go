@@ -30,6 +30,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"math/rand"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -135,13 +136,14 @@ func (s *ActivityTestSuite) TestActivityScheduleToClose_FiredDuringActivityRun()
 	var workflowFinishedAt time.Time
 
 	var activityCompleted atomic.Int32
+	var wg sync.WaitGroup
 
 	// we need schedule_to_close timeout to fire when 3rd retry is running
 	// with 2 sec run time and 1 sec between retries 3rd retry will start around 2+1+2+1=6 sec
 	// with 2 sec run time it will finish at 8 sec
 	// schedule to close is set to 7 sec. This way schedule to close timeout should fire.
 	activityFunction := func() (string, error) {
-
+		defer wg.Done()
 		activityErr := errors.New("bad-luck-please-retry") //nolint:goerr113
 		time.Sleep(2 * time.Second)                        //nolint:forbidigo
 		activityCompleted.Add(1)
@@ -149,6 +151,7 @@ func (s *ActivityTestSuite) TestActivityScheduleToClose_FiredDuringActivityRun()
 		return "", activityErr
 	}
 
+	wg.Add(1)
 	workflowFn := func(ctx workflow.Context) (string, error) {
 		var ret string
 		err := workflow.ExecuteActivity(workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
@@ -174,7 +177,6 @@ func (s *ActivityTestSuite) TestActivityScheduleToClose_FiredDuringActivityRun()
 
 	var out string
 	err = workflowRun.Get(ctx, &out)
-	workflowFinishedAt = time.Now().UTC()
 	var activityError *temporal.ActivityError
 	s.True(errors.As(err, &activityError))
 	s.Equal(enumspb.RETRY_STATE_NON_RETRYABLE_FAILURE, activityError.RetryState())
@@ -185,7 +187,9 @@ func (s *ActivityTestSuite) TestActivityScheduleToClose_FiredDuringActivityRun()
 	s.Equal(int32(2), activityCompleted.Load())
 
 	// we expect activities to be executed 3 times. Wait for the last activity to finish
-	s.Eventually(func() bool { return activityCompleted.Load() == int32(3) }, time.Second*10, time.Millisecond*500)
+	workflowFinishedAt = time.Now().UTC()
+	wg.Wait() // Wait for activity to finish
+	s.Equal(int32(3), activityCompleted.Load())
 	s.True(activityFinishedAt.After(workflowFinishedAt))
 }
 
