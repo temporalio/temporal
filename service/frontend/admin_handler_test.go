@@ -95,6 +95,7 @@ type (
 		mockMetadata               *cluster.MockMetadata
 		mockProducer               *persistence.MockNamespaceReplicationQueue
 		mockMatchingClient         *matchingservicemock.MockMatchingServiceClient
+		mockSaMapper               *searchattribute.MockMapper
 
 		namespace      namespace.Name
 		namespaceID    namespace.ID
@@ -138,6 +139,10 @@ func (s *adminHandlerSuite) SetupTest() {
 	s.mockProducer = persistence.NewMockNamespaceReplicationQueue(s.controller)
 	s.mockMatchingClient = s.mockResource.MatchingClient
 
+	mockSaMapperProvider := searchattribute.NewMockMapperProvider(s.controller)
+	s.mockSaMapper = searchattribute.NewMockMapper(s.controller)
+	mockSaMapperProvider.EXPECT().GetMapper(s.namespace).Return(s.mockSaMapper).AnyTimes()
+
 	persistenceConfig := &config.Persistence{
 		NumHistoryShards: 1,
 	}
@@ -167,6 +172,7 @@ func (s *adminHandlerSuite) SetupTest() {
 		s.mockResource.GetNamespaceRegistry(),
 		s.mockResource.GetSearchAttributesProvider(),
 		s.mockResource.GetSearchAttributesManager(),
+		mockSaMapperProvider,
 		s.mockMetadata,
 		health.NewServer(),
 		serialization.NewSerializer(),
@@ -1774,6 +1780,10 @@ func (s *adminHandlerSuite) TestDescribeTaskQueuePartition() {
 
 	s.validatePhysicalTaskQueueInfo(unversionedPhysicalTaskQueueInfo, resp.VersionsInfoInternal[unversioned].GetPhysicalTaskQueueInfo())
 	s.validatePhysicalTaskQueueInfo(versionedPhysicalTaskQueueInfo, resp.VersionsInfoInternal[buildID].GetPhysicalTaskQueueInfo())
+}
+
+func (s *adminHandlerSuite) TestImportWorkflowExecution() {
+	// TODO: add test
 }
 
 func (s *adminHandlerSuite) validatePhysicalTaskQueueInfo(expectedPhysicalTaskQueueInfo *taskqueuespb.PhysicalTaskQueueInfo,

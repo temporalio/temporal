@@ -125,6 +125,7 @@ type (
 		namespaceRegistry          namespace.Registry
 		saProvider                 searchattribute.Provider
 		saManager                  searchattribute.Manager
+		saMapperProvider           searchattribute.MapperProvider
 		clusterMetadata            cluster.Metadata
 		healthServer               *health.Server
 		historyHealthChecker       HealthChecker
@@ -157,6 +158,7 @@ type (
 		NamespaceRegistry                   namespace.Registry
 		SaProvider                          searchattribute.Provider
 		SaManager                           searchattribute.Manager
+		SaMapperProvider                    searchattribute.MapperProvider
 		ClusterMetadata                     cluster.Metadata
 		HealthServer                        *health.Server
 		EventSerializer                     serialization.Serializer
@@ -227,6 +229,7 @@ func NewAdminHandler(
 		namespaceRegistry:          args.NamespaceRegistry,
 		saProvider:                 args.SaProvider,
 		saManager:                  args.SaManager,
+		saMapperProvider:           args.SaMapperProvider,
 		clusterMetadata:            args.ClusterMetadata,
 		healthServer:               args.HealthServer,
 		historyHealthChecker:       historyHealthChecker,
@@ -715,10 +718,14 @@ func (adh *AdminHandler) ImportWorkflowExecution(
 		return nil, err
 	}
 
+	unaliasedBatches, err := adh.unaliasSearchAttributes(request.HistoryBatches, namespace.Name(request.GetNamespace()))
+	if err != nil {
+		return nil, err
+	}
 	resp, err := adh.historyClient.ImportWorkflowExecution(ctx, &historyservice.ImportWorkflowExecutionRequest{
 		NamespaceId:    namespaceID.String(),
 		Execution:      request.Execution,
-		HistoryBatches: request.HistoryBatches,
+		HistoryBatches: unaliasedBatches,
 		VersionHistory: request.VersionHistory,
 		Token:          request.Token,
 	})
@@ -728,6 +735,42 @@ func (adh *AdminHandler) ImportWorkflowExecution(
 	return &adminservice.ImportWorkflowExecutionResponse{
 		Token: resp.Token,
 	}, nil
+}
+
+func (adh *AdminHandler) unaliasSearchAttributes(historyBatches []*commonpb.DataBlob, nsName namespace.Name) ([]*commonpb.DataBlob, error) {
+	var unaliasedBatches []*commonpb.DataBlob
+	for _, historyBatch := range historyBatches {
+		events, err := adh.eventSerializer.DeserializeEvents(historyBatch)
+		if err != nil {
+			// TODO: check if error needs to be wrapped in service error.
+			return nil, err
+		}
+		hasSas := false
+		for _, event := range events {
+			sas := searchattribute.GetFromEvent(event)
+			if sas == nil {
+				continue
+			}
+			sas, err = searchattribute.UnaliasFields(adh.saMapperProvider, sas, nsName.String())
+			if err != nil {
+				return nil, err
+			}
+			searchattribute.SetToEvent(event, sas)
+			hasSas = true
+		}
+		// If blob doesn't have search attributes, it can be used as is w/o serialization.
+		if !hasSas {
+			unaliasedBatches = append(unaliasedBatches, historyBatch)
+			continue
+		}
+
+		unaliasedBatch, err := adh.eventSerializer.SerializeEvents(events, enumspb.ENCODING_TYPE_PROTO3)
+		if err != nil {
+			return nil, err
+		}
+		unaliasedBatches = append(unaliasedBatches, unaliasedBatch)
+	}
+	return unaliasedBatches, nil
 }
 
 // DescribeMutableState returns information about the specified workflow execution.
