@@ -46,6 +46,9 @@ type (
 )
 
 func (s *DescribeTaskQueueSuite) SetupSuite() {
+	s.dynamicConfigOverrides = map[dynamicconfig.Key]any{
+		dynamicconfig.TaskQueueInternalInfoCacheTTL.Key(): time.Nanosecond, // small value since our tests require accurate data
+	}
 	s.setupSuite("testdata/es_cluster.yaml")
 }
 
@@ -55,7 +58,6 @@ func (s *DescribeTaskQueueSuite) TearDownSuite() {
 
 func (s *DescribeTaskQueueSuite) SetupTest() {
 	s.FunctionalTestBase.SetupTest()
-
 	// Have to define our overridden assertions in the test setup. If we did it earlier, s.T() will return nil
 	s.Assertions = require.New(s.T())
 }

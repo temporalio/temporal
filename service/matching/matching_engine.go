@@ -29,6 +29,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"go.temporal.io/server/common/cache"
 	"math"
 	"math/rand"
 	"sync"
@@ -164,7 +165,7 @@ type (
 		// Stores results of reachability queries to visibility
 		reachabilityCache reachabilityCache
 		// Stores aggregated task-queue statistics
-		taskQueueStatsCache taskQueueStatsCache
+		taskQueueInternalInfoCache taskQueueInternalInfoCache
 	}
 )
 
@@ -241,7 +242,7 @@ func NewEngine(
 		visibilityManager,
 		e.config.ReachabilityCacheOpenWFsTTL(),
 		e.config.ReachabilityCacheClosedWFsTTL())
-	e.taskQueueStatsCache = newTaskQueueStatsCache(metrics.NoopMetricsHandler, e.config.TaskQueueStatsCacheTTL())
+	e.taskQueueInternalInfoCache = newTaskQueueInternalInfoCache(e.metricsHandler, &cache.Options{TTL: e.config.TaskQueueInternalInfoCacheTTL()})
 	return e
 }
 
@@ -938,54 +939,60 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 			req.Versions = &taskqueuepb.TaskQueueVersionSelection{BuildIds: []string{defaultBuildId}}
 		}
 		// collect internal info
-		physicalInfoByBuildId := make(map[string]map[enumspb.TaskQueueType]*taskqueuespb.PhysicalTaskQueueInfo)
-		numPartitions := max(tqConfig.NumWritePartitions(), tqConfig.NumReadPartitions())
-		for _, taskQueueType := range req.TaskQueueTypes {
-			for i := 0; i < numPartitions; i++ {
-				// todo Shivam - only call
-				partitionResp, err := e.matchingRawClient.DescribeTaskQueuePartition(ctx, &matchingservice.DescribeTaskQueuePartitionRequest{
-					NamespaceId: request.GetNamespaceId(),
-					TaskQueuePartition: &taskqueuespb.TaskQueuePartition{
-						TaskQueue:     req.TaskQueue.Name,
-						TaskQueueType: taskQueueType,
-						PartitionId:   &taskqueuespb.TaskQueuePartition_NormalPartitionId{NormalPartitionId: int32(i)},
-					},
-					Versions:      req.GetVersions(),
-					ReportStats:   req.GetReportStats(),
-					ReportPollers: req.GetReportPollers(),
-				})
-				if err != nil {
-					return nil, err
-				}
-				for buildId, vii := range partitionResp.VersionsInfoInternal {
-					if _, ok := physicalInfoByBuildId[buildId]; !ok {
-						physicalInfoByBuildId[buildId] = make(map[enumspb.TaskQueueType]*taskqueuespb.PhysicalTaskQueueInfo)
+		physicalInfoByBuildId := e.taskQueueInternalInfoCache.Get(rootPartition.Key())
+		if physicalInfoByBuildId == nil {
+			// cache evicted an older entry for the root partition; make the gRPC call per partition
+			physicalInfoByBuildId = make(map[string]map[enumspb.TaskQueueType]*taskqueuespb.PhysicalTaskQueueInfo)
+
+			numPartitions := max(tqConfig.NumWritePartitions(), tqConfig.NumReadPartitions())
+			for _, taskQueueType := range req.TaskQueueTypes {
+				for i := 0; i < numPartitions; i++ {
+					partitionResp, err := e.matchingRawClient.DescribeTaskQueuePartition(ctx, &matchingservice.DescribeTaskQueuePartitionRequest{
+						NamespaceId: request.GetNamespaceId(),
+						TaskQueuePartition: &taskqueuespb.TaskQueuePartition{
+							TaskQueue:     req.TaskQueue.Name,
+							TaskQueueType: taskQueueType,
+							PartitionId:   &taskqueuespb.TaskQueuePartition_NormalPartitionId{NormalPartitionId: int32(i)},
+						},
+						Versions:      req.GetVersions(),
+						ReportStats:   req.GetReportStats(),
+						ReportPollers: req.GetReportPollers(),
+					})
+					if err != nil {
+						return nil, err
 					}
-					if physInfo, ok := physicalInfoByBuildId[buildId][taskQueueType]; !ok {
-						physicalInfoByBuildId[buildId][taskQueueType] = vii.PhysicalTaskQueueInfo
-					} else {
-						var mergedStats *taskqueuepb.TaskQueueStats
+					for buildId, vii := range partitionResp.VersionsInfoInternal {
+						if _, ok := physicalInfoByBuildId[buildId]; !ok {
+							physicalInfoByBuildId[buildId] = make(map[enumspb.TaskQueueType]*taskqueuespb.PhysicalTaskQueueInfo)
+						}
+						if physInfo, ok := physicalInfoByBuildId[buildId][taskQueueType]; !ok {
+							physicalInfoByBuildId[buildId][taskQueueType] = vii.PhysicalTaskQueueInfo
+						} else {
+							var mergedStats *taskqueuepb.TaskQueueStats
 
-						// only report Task Queue Statistics if requested.
-						if req.GetReportStats() {
-							totalStats := physicalInfoByBuildId[buildId][taskQueueType].TaskQueueStats
-							partitionStats := vii.PhysicalTaskQueueInfo.TaskQueueStats
+							// only report Task Queue Statistics if requested.
+							if req.GetReportStats() {
+								totalStats := physicalInfoByBuildId[buildId][taskQueueType].TaskQueueStats
+								partitionStats := vii.PhysicalTaskQueueInfo.TaskQueueStats
 
-							mergedStats = &taskqueuepb.TaskQueueStats{
-								ApproximateBacklogCount: totalStats.ApproximateBacklogCount + partitionStats.ApproximateBacklogCount,
-								ApproximateBacklogAge:   largerBacklogAge(totalStats.ApproximateBacklogAge, partitionStats.ApproximateBacklogAge),
-								TasksAddRate:            totalStats.TasksAddRate + partitionStats.TasksAddRate,
-								TasksDispatchRate:       totalStats.TasksDispatchRate + partitionStats.TasksDispatchRate,
+								mergedStats = &taskqueuepb.TaskQueueStats{
+									ApproximateBacklogCount: totalStats.ApproximateBacklogCount + partitionStats.ApproximateBacklogCount,
+									ApproximateBacklogAge:   largerBacklogAge(totalStats.ApproximateBacklogAge, partitionStats.ApproximateBacklogAge),
+									TasksAddRate:            totalStats.TasksAddRate + partitionStats.TasksAddRate,
+									TasksDispatchRate:       totalStats.TasksDispatchRate + partitionStats.TasksDispatchRate,
+								}
 							}
+							merged := &taskqueuespb.PhysicalTaskQueueInfo{
+								Pollers:        dedupPollers(append(physInfo.GetPollers(), vii.PhysicalTaskQueueInfo.GetPollers()...)),
+								TaskQueueStats: mergedStats,
+							}
+							physicalInfoByBuildId[buildId][taskQueueType] = merged
 						}
-						merged := &taskqueuespb.PhysicalTaskQueueInfo{
-							Pollers:        dedupPollers(append(physInfo.GetPollers(), vii.PhysicalTaskQueueInfo.GetPollers()...)),
-							TaskQueueStats: mergedStats,
-						}
-						physicalInfoByBuildId[buildId][taskQueueType] = merged
 					}
 				}
 			}
+			// add the latest entry to the cache
+			e.taskQueueInternalInfoCache.Put(rootPartition.Key(), physicalInfoByBuildId)
 		}
 		// smush internal info into versions info
 		versionsInfo := make(map[string]*taskqueuepb.TaskQueueVersionInfo, 0)

@@ -508,10 +508,10 @@ DescribeTaskQueue API with ReportTaskQueueReachability==true, or to the GetWorke
 		10*time.Minute,
 		`ReachabilityCacheClosedWFsTTL is the TTL for the reachability closed workflows cache.`,
 	)
-	TaskQueueStatsCacheTTL = NewGlobalDurationSetting(
-		"matching.wv.taskQueueStatsCacheTTL", // todo Shivam - what the heck is wv?
+	TaskQueueInternalInfoCacheTTL = NewGlobalDurationSetting(
+		"matching.wv.TaskQueueInternalInfoCacheTTL", // todo Shivam - what the heck is wv?
 		time.Minute,
-		`taskQueueStatsCacheTTL is the TTL for the task queue statistics cache.`,
+		`TaskQueueInternalInfoCacheTTL is the TTL for the task queue internal info cache.`,
 	)
 	ReachabilityQuerySetDurationSinceDefault = NewGlobalDurationSetting(
 		"frontend.reachabilityQuerySetDurationSinceDefault",

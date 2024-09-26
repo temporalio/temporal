@@ -25,44 +25,49 @@
 package matching
 
 import (
-	taskqueuepb "go.temporal.io/api/taskqueue/v1"
-	"go.temporal.io/server/common/tqid"
-	"time"
-
+	enumspb "go.temporal.io/api/enums/v1"
+	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/tqid"
 )
 
 const (
-	taskQueueStatsCacheMaxSize = 10000
+	taskQueueInternalInfoCacheMaxSize = 10000
 )
 
 /*
-In-memory Cache for storing task queue stats from multiple child partitions
+In-memory Cache for storing task queue child partitions' internal info (Stats, Pollers)
+Stores key-value pairs as: PartitionKey -> physicalInfoByBuildId
 */
 
-// todo Shivam - cache will have PartitionType -> stats
-type taskQueueStatsCache struct {
+type taskQueueInternalInfoCache struct {
 	cache          cache.Cache
 	metricsHandler metrics.Handler
 }
 
-func newTaskQueueStatsCache(handler metrics.Handler, taskQueueStatsCacheTTL time.Duration) taskQueueStatsCache {
-	return taskQueueStatsCache{
-		cache:          cache.New(taskQueueStatsCacheMaxSize, &cache.Options{TTL: taskQueueStatsCacheTTL}),
+func newTaskQueueInternalInfoCache(handler metrics.Handler, opts *cache.Options) taskQueueInternalInfoCache {
+	return taskQueueInternalInfoCache{
+		cache:          cache.New(taskQueueInternalInfoCacheMaxSize, opts),
 		metricsHandler: handler,
 	}
 }
 
-// Get retrieves the backlog stats for the partition
+// Get retrieves a map containing PhysicalTaskQueueInfo per task queue type, for each buildID
 // NOTE: Should only be called by the root Partition
-func (tqCache *taskQueueStatsCache) Get() *taskqueuepb.TaskQueueStats {
-	return tqCache.Get()
+func (tqCache *taskQueueInternalInfoCache) Get(partitionKey tqid.PartitionKey) map[string]map[enumspb.TaskQueueType]*taskqueuespb.PhysicalTaskQueueInfo {
+	stored := tqCache.cache.Get(partitionKey)
+
+	// Type assert the stored value to the expected map type
+	if physicalInfo, ok := stored.(map[string]map[enumspb.TaskQueueType]*taskqueuespb.PhysicalTaskQueueInfo); ok {
+		return physicalInfo
+	}
+	return nil
 }
 
-// Put updates the backlog stats for the partition
+// Put updates the PhysicalTaskQueueInfo per task queue type, for each buildID
 // NOTE: Should only be called by the root Partition
-func (tqCache *taskQueueStatsCache) Put(partitionKey tqid.PartitionKey, taskQueueStats *taskqueuepb.TaskQueueStats) {
-	tqCache.cache.Put(partitionKey, taskQueueStats)
+func (tqCache *taskQueueInternalInfoCache) Put(partitionKey tqid.PartitionKey, physicalInfoByBuildId map[string]map[enumspb.TaskQueueType]*taskqueuespb.PhysicalTaskQueueInfo) {
+	tqCache.cache.Put(partitionKey, physicalInfoByBuildId)
 	return
 }

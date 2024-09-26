@@ -85,7 +85,7 @@ type (
 		QueryPollerUnavailableWindow             dynamicconfig.DurationPropertyFn
 		QueryWorkflowTaskTimeoutLogRate          dynamicconfig.FloatPropertyFnWithTaskQueueFilter
 		MembershipUnloadDelay                    dynamicconfig.DurationPropertyFn
-		TaskQueueStatsCacheTTL                   dynamicconfig.DurationPropertyFn
+		TaskQueueInternalInfoCacheTTL            dynamicconfig.DurationPropertyFn
 
 		// Time to hold a poll request before returning an empty response if there are no tasks
 		LongPollExpirationInterval dynamicconfig.DurationPropertyFnWithTaskQueueFilter
@@ -246,7 +246,7 @@ func NewConfig(
 		QueryPollerUnavailableWindow:             dynamicconfig.QueryPollerUnavailableWindow.Get(dc),
 		QueryWorkflowTaskTimeoutLogRate:          dynamicconfig.MatchingQueryWorkflowTaskTimeoutLogRate.Get(dc),
 		MembershipUnloadDelay:                    dynamicconfig.MatchingMembershipUnloadDelay.Get(dc),
-		TaskQueueStatsCacheTTL:                   dynamicconfig.TaskQueueStatsCacheTTL.Get(dc),
+		TaskQueueInternalInfoCacheTTL:            dynamicconfig.TaskQueueInternalInfoCacheTTL.Get(dc),
 
 		AdminNamespaceToPartitionDispatchRate:          dynamicconfig.AdminMatchingNamespaceToPartitionDispatchRate.Get(dc),
 		AdminNamespaceTaskqueueToPartitionDispatchRate: dynamicconfig.AdminMatchingNamespaceTaskqueueToPartitionDispatchRate.Get(dc),
