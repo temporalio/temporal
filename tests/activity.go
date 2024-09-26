@@ -124,26 +124,28 @@ func (s *ActivityTestSuite) TestActivityScheduleToClose_FiredDuringActivityRun()
 	// We have backoff timers and schedule_to_close activity timeout happens while activity is running.
 	// activity will be scheduled twice.
 	// "schedule_to_close" timer should fire while activity is running for a second time
-	initialRetryInterval := time.Second * 1
-	workingInterval := time.Second * 2
 	scheduleToCloseTimeout := 7 * time.Second
 	startToCloseTimeout := 3 * time.Second
 
 	activityRetryPolicy := &temporal.RetryPolicy{
-		InitialInterval:    initialRetryInterval,
+		InitialInterval:    time.Second * 1,
 		BackoffCoefficient: 1,
-		MaximumInterval:    time.Second * 20,
-		MaximumAttempts:    10,
 	}
-	var lastActivityRun time.Time
-	var workflowCompleteRun time.Time
+	var activityFinishedAt time.Time
+	var workflowFinishedAt time.Time
 
 	var activityCompleted atomic.Int32
+
+	// we need schedule_to_close timeout to fire when 3rd retry is running
+	// with 2 sec run time and 1 sec between retries 3rd retry will start around 2+1+2+1=6 sec
+	// with 2 sec run time it will finish at 8 sec
+	// schedule to close is set to 7 sec. This way schedule to close timeout should fire.
 	activityFunction := func() (string, error) {
-		time.Sleep(workingInterval)                        //nolint:forbidigo
+
 		activityErr := errors.New("bad-luck-please-retry") //nolint:goerr113
-		lastActivityRun = time.Now().UTC()
+		time.Sleep(2 * time.Second)                        //nolint:forbidigo
 		activityCompleted.Add(1)
+		activityFinishedAt = time.Now().UTC()
 		return "", activityErr
 	}
 
@@ -155,17 +157,7 @@ func (s *ActivityTestSuite) TestActivityScheduleToClose_FiredDuringActivityRun()
 			ScheduleToCloseTimeout: scheduleToCloseTimeout,
 			RetryPolicy:            activityRetryPolicy,
 		}), activityFunction).Get(ctx, &ret)
-		var activityError *temporal.ActivityError
-		s.True(errors.As(err, &activityError))
-		s.Equal(enumspb.RETRY_STATE_NON_RETRYABLE_FAILURE, activityError.RetryState())
-		var timeoutError *temporal.TimeoutError
-		s.True(errors.As(activityError.Unwrap(), &timeoutError))
-		s.Equal(enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE, timeoutError.TimeoutType())
-
-		workflowCompleteRun = time.Now().UTC()
-		// schedule to close timeout should fire while last activity is still running.
-		s.Equal(int32(2), activityCompleted.Load())
-		return "done!", nil
+		return "done!", err
 	}
 
 	s.worker.RegisterWorkflow(workflowFn)
@@ -182,11 +174,19 @@ func (s *ActivityTestSuite) TestActivityScheduleToClose_FiredDuringActivityRun()
 
 	var out string
 	err = workflowRun.Get(ctx, &out)
-	workflowCompleteRun = time.Now().UTC()
-	// we expect activities to be executed 3 times
+	workflowFinishedAt = time.Now().UTC()
+	var activityError *temporal.ActivityError
+	s.True(errors.As(err, &activityError))
+	s.Equal(enumspb.RETRY_STATE_NON_RETRYABLE_FAILURE, activityError.RetryState())
+	var timeoutError *temporal.TimeoutError
+	s.True(errors.As(activityError.Unwrap(), &timeoutError))
+	s.Equal(enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE, timeoutError.TimeoutType())
+	// schedule to close timeout should fire while last activity is still running.
+	s.Equal(int32(2), activityCompleted.Load())
+
+	// we expect activities to be executed 3 times. Wait for the last activity to finish
 	s.Eventually(func() bool { return activityCompleted.Load() == int32(3) }, time.Second*10, time.Millisecond*500)
-	s.True(lastActivityRun.After(workflowCompleteRun))
-	s.NoError(err)
+	s.True(activityFinishedAt.After(workflowFinishedAt))
 }
 
 func (s *FunctionalSuite) TestActivityHeartBeatWorkflow_Success() {
