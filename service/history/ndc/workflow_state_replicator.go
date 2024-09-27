@@ -206,6 +206,7 @@ func (r *WorkflowStateReplicatorImpl) SyncWorkflowState(
 	return r.applySnapshotWhenWorkflowNotExist(ctx, namespaceID, wid, rid, wfCtx, releaseFn, request.GetWorkflowState(), request.RemoteCluster, nil)
 }
 
+//nolint:revive // cognitive complexity 37 (> max enabled 25)
 func (r *WorkflowStateReplicatorImpl) ReplicateVersionedTransition(
 	ctx context.Context,
 	versionedTransition *repication.VersionedTransitionArtifact,
@@ -289,6 +290,9 @@ func (r *WorkflowStateReplicatorImpl) ReplicateVersionedTransition(
 				return err
 			}
 			sourceLastHistoryItem, err := versionhistory.GetLastVersionHistoryItem(sourceCurrentHistory)
+			if err != nil {
+				return err
+			}
 			sourceTransitionHistory := executionInfo.TransitionHistory
 			localLastWriteVersion, err := ms.GetLastWriteVersion()
 			if err != nil {
@@ -674,6 +678,8 @@ func (r *WorkflowStateReplicatorImpl) getNewRunMutableState(
 // TODO: Future improvement:
 // we may need to some checkpoint mechanism for backfilling to handle large histories.
 // One idea can be: create a temp branch in version histories and use that to record how many events have been backfilled.
+//
+//nolint:revive // cognitive complexity 27 (> max enabled 25)
 func (r *WorkflowStateReplicatorImpl) bringLocalEventsUpToSourceCurrentBranch(
 	ctx context.Context,
 	namespaceID namespace.ID,
