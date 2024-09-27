@@ -50,7 +50,7 @@ type ClientDataConverterTestSuite struct {
 	testcore.ClientFunctionalSuite
 }
 
-func testActivity(ctx workflow.Context, msg string) (string, error) {
+func testActivity(_ workflow.Context, msg string) (string, error) {
 	return "hello_" + msg, nil
 }
 
@@ -194,7 +194,7 @@ func (s *ClientDataConverterTestSuite) TestClientDataConverter() {
 	s.Equal(1, d.NumOfCallFromPayloads)
 }
 
-func (s *ClientDataConverterTestSuite) TestClientDataConverter_Failed() {
+func (s *ClientDataConverterTestSuite) TestClientDataConverterFailed() {
 	tl := "client-func-data-converter-activity-failed-taskqueue"
 	sdkClient, newWorker := s.startWorkerWithDataConverter(tl, nil) // mismatch of data converter
 	defer func() {
@@ -244,7 +244,7 @@ func (s *ClientDataConverterTestSuite) TestClientDataConverter_Failed() {
 	s.Equal(1, failedAct)
 }
 
-func (s *ClientDataConverterTestSuite) TestClientDataConverter_WithChild() {
+func (s *ClientDataConverterTestSuite) TestClientDataConverterWithChild() {
 	dc := testcore.NewTestDataConverter()
 	sdkClient, testWorker := s.startWorkerWithDataConverter(childTaskQueue, dc)
 	defer func() {

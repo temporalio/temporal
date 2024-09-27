@@ -187,7 +187,7 @@ func (s *ContinueAsNewTestSuite) TestContinueAsNewWorkflow() {
 	s.Equal(we.RunId, descResp.WorkflowExecutionInfo.GetFirstRunId())
 }
 
-func (s *ContinueAsNewTestSuite) TestContinueAsNewRun_RunTimeout() {
+func (s *ContinueAsNewTestSuite) TestContinueAsNewRunTimeout() {
 	id := "functional-continue-as-new-workflow-run-timeout-test"
 	wt := "functional-continue-as-new-workflow-run-timeout-test-type"
 	tl := "functional-continue-as-new-workflow-run-timeout-test-taskqueue"
@@ -289,7 +289,7 @@ func (s *ContinueAsNewTestSuite) TestContinueAsNewRun_RunTimeout() {
   3 WorkflowExecutionTimedOut`, historyEvents)
 }
 
-func (s *ContinueAsNewTestSuite) TestContinueAsNewRun_ExecutionTimeout() {
+func (s *ContinueAsNewTestSuite) TestContinueAsNewRunExecutionTimeout() {
 	id := "functional-continue-as-new-workflow-execution-timeout-test"
 	wt := "functional-continue-as-new-workflow-execution-timeout-test-type"
 	tl := "functional-continue-as-new-workflow-execution-timeout-test-taskqueue"
@@ -377,7 +377,7 @@ func (s *ContinueAsNewTestSuite) TestContinueAsNewRun_ExecutionTimeout() {
 	close(testCompleted)
 }
 
-func (s *ContinueAsNewTestSuite) TestWorkflowContinueAsNew_TaskID() {
+func (s *ContinueAsNewTestSuite) TestWorkflowContinueAsNewTaskID() {
 	id := "functional-wf-continue-as-new-task-id-test"
 	wt := "functional-wf-continue-as-new-task-id-type"
 	tl := "functional-wf-continue-as-new-task-id-taskqueue"

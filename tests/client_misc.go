@@ -498,14 +498,14 @@ func (s *ClientMiscTestSuite) TestStickyAutoReset() {
 	s.Equal(int64(1), task.History.Events[0].EventId)
 }
 
-// Analogous to Test_BufferedSignalCausesUnhandledCommandAndSchedulesNewTask
+// Analogous to TestBufferedSignalCausesUnhandledCommandAndSchedulesNewTask
 // TODO: rename to previous name (Test_AdmittedUpdateCausesUnhandledCommandAndSchedulesNewTask) when/if admitted updates start to block workflow from completing.
 //
 //  1. The worker starts executing the first WFT, before any update is sent.
 //  2. While the first WFT is being executed, an update is sent.
 //  3. Once the server has received the update, the workflow tries to complete itself.
 //  4. The server fails update request with error and completes WF.
-func (s *ClientMiscTestSuite) Test_WorkflowCanBeCompletedDespiteAdmittedUpdate() {
+func (s *ClientMiscTestSuite) TestWorkflowCanBeCompletedDespiteAdmittedUpdate() {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
@@ -718,7 +718,7 @@ func (s *ClientMiscTestSuite) Test_FinishWorkflowWithDeferredCommands() {
 // Server is expected to fail the workflow task and schedule a retry immediately for first attempt,
 // but if workflow task keeps failing, server will drop the task and wait for timeout to schedule additional retries.
 // This is the same behavior as the SDK used to do, but now we would do on server.
-func (s *ClientMiscTestSuite) Test_InvalidCommandAttribute() {
+func (s *ClientMiscTestSuite) TestInvalidCommandAttribute() {
 	activityFn := func(ctx context.Context) error {
 		return nil
 	}
@@ -905,7 +905,7 @@ func (s *ClientMiscTestSuite) assertHistory(wid, rid string, expected []enumspb.
 //	Server rescheduled a new workflow task.
 //	Workflow runs the local activity again and drain the signal chan (with one signal) and complete workflow.
 //	Server complete workflow as requested.
-func (s *ClientMiscTestSuite) Test_BufferedSignalCausesUnhandledCommandAndSchedulesNewTask() {
+func (s *ClientMiscTestSuite) TestBufferedSignalCausesUnhandledCommandAndSchedulesNewTask() {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	tv := testvars.New(s.T()).WithTaskQueue(s.TaskQueue())
