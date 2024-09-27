@@ -665,3 +665,30 @@ testGetBoolPropertyKey:
 	}
 	s.Equal(3, found)
 }
+
+func (s *fileBasedClientSuite) TestBelowDynamicConfigKey() {
+	data := []byte(`
+dynamicConfig:
+  setting1:
+  - value: 1000
+`)
+	ctrl := gomock.NewController(s.T())
+	doneCh := make(chan interface{})
+	reader := dynamicconfig.NewMockFileReader(ctrl)
+	reader.EXPECT().GetModTime().Return(time.Now(), nil).AnyTimes()
+	reader.EXPECT().ReadFile().Return(data, nil).AnyTimes()
+
+	client, err := dynamicconfig.NewFileBasedClientWithReader(
+		reader,
+		&dynamicconfig.FileBasedClientConfig{
+			Filepath:              "dummy",
+			BelowDynamicConfigKey: true,
+		},
+		log.NewNoopLogger(),
+		doneCh)
+	s.NoError(err)
+	defer close(doneCh)
+
+	s.NotNil(client.GetValue(dynamicconfig.Key("setting1")))
+	s.Nil(client.GetValue(dynamicconfig.Key("setting2")))
+}
