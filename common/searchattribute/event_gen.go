@@ -32,30 +32,36 @@ import (
 
 // TODO: Generate this file.
 
-func SetToEvent(event *historypb.HistoryEvent, sas *commonpb.SearchAttributes) {
+func SetToEvent(event *historypb.HistoryEvent, sas *commonpb.SearchAttributes) bool {
 	switch event.GetEventType() {
 	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED:
 		event.GetWorkflowExecutionStartedEventAttributes().SearchAttributes = sas
+		return true
 	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CONTINUED_AS_NEW:
 		event.GetWorkflowExecutionContinuedAsNewEventAttributes().SearchAttributes = sas
+		return true
 	case enumspb.EVENT_TYPE_UPSERT_WORKFLOW_SEARCH_ATTRIBUTES:
 		event.GetUpsertWorkflowSearchAttributesEventAttributes().SearchAttributes = sas
+		return true
 	case enumspb.EVENT_TYPE_START_CHILD_WORKFLOW_EXECUTION_INITIATED:
 		event.GetStartChildWorkflowExecutionInitiatedEventAttributes().SearchAttributes = sas
+		return true
+	default:
+		return false
 	}
 }
 
-func GetFromEvent(event *historypb.HistoryEvent) *commonpb.SearchAttributes {
+func GetFromEvent(event *historypb.HistoryEvent) (*commonpb.SearchAttributes, bool) {
 	switch event.GetEventType() {
 	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED:
-		return event.GetWorkflowExecutionStartedEventAttributes().GetSearchAttributes()
+		return event.GetWorkflowExecutionStartedEventAttributes().GetSearchAttributes(), true
 	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CONTINUED_AS_NEW:
-		return event.GetWorkflowExecutionContinuedAsNewEventAttributes().GetSearchAttributes()
+		return event.GetWorkflowExecutionContinuedAsNewEventAttributes().GetSearchAttributes(), true
 	case enumspb.EVENT_TYPE_UPSERT_WORKFLOW_SEARCH_ATTRIBUTES:
-		return event.GetUpsertWorkflowSearchAttributesEventAttributes().GetSearchAttributes()
+		return event.GetUpsertWorkflowSearchAttributesEventAttributes().GetSearchAttributes(), true
 	case enumspb.EVENT_TYPE_START_CHILD_WORKFLOW_EXECUTION_INITIATED:
-		return event.GetStartChildWorkflowExecutionInitiatedEventAttributes().GetSearchAttributes()
+		return event.GetStartChildWorkflowExecutionInitiatedEventAttributes().GetSearchAttributes(), true
 	default:
-		return nil
+		return nil, false
 	}
 }

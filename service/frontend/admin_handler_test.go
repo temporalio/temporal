@@ -29,6 +29,7 @@ import (
 	"errors"
 	"fmt"
 	"math/rand"
+	"strings"
 	"sync"
 	"testing"
 
@@ -38,6 +39,7 @@ import (
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	historypb "go.temporal.io/api/history/v1"
 	namespacepb "go.temporal.io/api/namespace/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
@@ -68,10 +70,15 @@ import (
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/resourcetest"
 	"go.temporal.io/server/common/searchattribute"
+	test "go.temporal.io/server/common/testing"
+	"go.temporal.io/server/common/testing/historyrequire"
 	"go.temporal.io/server/common/testing/mocksdk"
+	"go.temporal.io/server/common/testing/protorequire"
+	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/worker/dlq"
 	"go.uber.org/mock/gomock"
+	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/health"
 	"google.golang.org/grpc/metadata"
@@ -81,6 +88,8 @@ type (
 	adminHandlerSuite struct {
 		suite.Suite
 		*require.Assertions
+		historyrequire.HistoryRequire
+		protorequire.ProtoAssertions
 
 		controller         *gomock.Controller
 		mockResource       *resourcetest.Test
@@ -112,6 +121,8 @@ func TestAdminHandlerSuite(t *testing.T) {
 
 func (s *adminHandlerSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
+	s.ProtoAssertions = protorequire.New(s.T())
+	s.HistoryRequire = historyrequire.New(s.T())
 
 	s.namespace = "some random namespace name"
 	s.namespaceID = "deadd0d0-c001-face-d00d-000000000000"
@@ -141,7 +152,7 @@ func (s *adminHandlerSuite) SetupTest() {
 
 	mockSaMapperProvider := searchattribute.NewMockMapperProvider(s.controller)
 	s.mockSaMapper = searchattribute.NewMockMapper(s.controller)
-	mockSaMapperProvider.EXPECT().GetMapper(s.namespace).Return(s.mockSaMapper).AnyTimes()
+	mockSaMapperProvider.EXPECT().GetMapper(s.namespace).Return(s.mockSaMapper, nil).AnyTimes()
 
 	persistenceConfig := &config.Persistence{
 		NumHistoryShards: 1,
@@ -1782,8 +1793,98 @@ func (s *adminHandlerSuite) TestDescribeTaskQueuePartition() {
 	s.validatePhysicalTaskQueueInfo(versionedPhysicalTaskQueueInfo, resp.VersionsInfoInternal[buildID].GetPhysicalTaskQueueInfo())
 }
 
-func (s *adminHandlerSuite) TestImportWorkflowExecution() {
-	// TODO: add test
+func (s *adminHandlerSuite) TestImportWorkflowExecution_NoSearchAttributes() {
+	tv := testvars.New(s.T()).WithNamespaceName(s.namespace).WithNamespaceID(s.namespaceID)
+
+	serializer := serialization.NewSerializer()
+	generator := test.InitializeHistoryEventGenerator(tv.NamespaceName(), tv.NamespaceID(), tv.Any().Int64())
+
+	// Generate random history.
+	var historyBatches []*commonpb.DataBlob
+	for generator.HasNextVertex() {
+		events := generator.GetNextVertices()
+		var historyEvents []*historypb.HistoryEvent
+		for _, event := range events {
+			historyEvent := event.GetData().(*historypb.HistoryEvent)
+			historyEvents = append(historyEvents, historyEvent)
+		}
+		historyBatch, err := serializer.SerializeEvents(historyEvents, enumspb.ENCODING_TYPE_PROTO3)
+		s.NoError(err)
+		historyBatches = append(historyBatches, historyBatch)
+	}
+
+	s.mockNamespaceCache.EXPECT().GetNamespaceID(tv.NamespaceName()).Return(tv.NamespaceID(), nil).AnyTimes()
+
+	s.mockHistoryClient.EXPECT().ImportWorkflowExecution(gomock.Any(), gomock.Any()).DoAndReturn(func(ctx context.Context, request *historyservice.ImportWorkflowExecutionRequest, opts ...grpc.CallOption) (*historyservice.ImportWorkflowExecutionResponse, error) {
+		s.Equal(tv.NamespaceID().String(), request.NamespaceId)
+		s.Equal(historyBatches, request.HistoryBatches, "history batches shouldn't be reserialized because there is no search attributes")
+		return &historyservice.ImportWorkflowExecutionResponse{}, nil
+	})
+	_, err := s.handler.ImportWorkflowExecution(context.Background(), &adminservice.ImportWorkflowExecutionRequest{
+		Namespace:      tv.NamespaceName().String(),
+		Execution:      tv.WorkflowExecution(),
+		HistoryBatches: historyBatches,
+		VersionHistory: nil,
+		Token:          nil,
+	})
+	s.NoError(err)
+}
+
+func (s *adminHandlerSuite) TestImportWorkflowExecution_WithSearchAttributes() {
+	tv := testvars.New(s.T()).WithNamespaceName(s.namespace).WithNamespaceID(s.namespaceID)
+
+	serializer := serialization.NewSerializer()
+	generator := test.InitializeHistoryEventGenerator(tv.NamespaceName(), tv.NamespaceID(), tv.Any().Int64())
+	saValue := tv.Any().Payload()
+	aliasedSas := &commonpb.SearchAttributes{IndexedFields: map[string]*commonpb.Payload{
+		"AliasOfFieldName": saValue,
+	}}
+
+	// Generate random history and set search attributes for all events that have search_attributes field.
+	var historyBatches []*commonpb.DataBlob
+	for generator.HasNextVertex() {
+		events := generator.GetNextVertices()
+		var historyEvents []*historypb.HistoryEvent
+		for _, event := range events {
+			historyEvent := event.GetData().(*historypb.HistoryEvent)
+			_ = searchattribute.SetToEvent(historyEvent, aliasedSas)
+			historyEvents = append(historyEvents, historyEvent)
+		}
+		historyBatch, err := serializer.SerializeEvents(historyEvents, enumspb.ENCODING_TYPE_PROTO3)
+		s.NoError(err)
+		historyBatches = append(historyBatches, historyBatch)
+	}
+
+	s.mockNamespaceCache.EXPECT().GetNamespaceID(tv.NamespaceName()).Return(tv.NamespaceID(), nil).AnyTimes()
+	// Mock mapper remove alias from alias name.
+	s.mockSaMapper.EXPECT().GetFieldName(gomock.Any(), tv.NamespaceName().String()).DoAndReturn(func(alias string, nsName string) (string, error) {
+		return strings.TrimPrefix(alias, "AliasOf"), nil
+	}).AnyTimes()
+
+	s.mockHistoryClient.EXPECT().ImportWorkflowExecution(gomock.Any(), gomock.Any()).DoAndReturn(func(ctx context.Context, request *historyservice.ImportWorkflowExecutionRequest, opts ...grpc.CallOption) (*historyservice.ImportWorkflowExecutionResponse, error) {
+		s.Equal(tv.NamespaceID().String(), request.NamespaceId)
+		for _, historyBatch := range request.HistoryBatches {
+			events, err := serializer.DeserializeEvents(historyBatch)
+			s.NoError(err)
+			for _, event := range events {
+				unaliasedSas, eventHasSas := searchattribute.GetFromEvent(event)
+				if eventHasSas {
+					s.NotNil(unaliasedSas, "search attributes must be set on every event with search_attributes field")
+					s.Len(unaliasedSas.GetIndexedFields(), 1, "only 1 search attribute must be set")
+					s.ProtoEqual(saValue, unaliasedSas.GetIndexedFields()["FieldName"])
+				}
+			}
+		}
+		return &historyservice.ImportWorkflowExecutionResponse{}, nil
+	})
+	_, err := s.handler.ImportWorkflowExecution(context.Background(), &adminservice.ImportWorkflowExecutionRequest{
+		Namespace:      tv.NamespaceName().String(),
+		Execution:      tv.WorkflowExecution(),
+		HistoryBatches: historyBatches,
+		VersionHistory: nil,
+		Token:          nil,
+	})
+	s.NoError(err)
 }
 
 func (s *adminHandlerSuite) validatePhysicalTaskQueueInfo(expectedPhysicalTaskQueueInfo *taskqueuespb.PhysicalTaskQueueInfo,

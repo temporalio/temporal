@@ -747,16 +747,16 @@ func (adh *AdminHandler) unaliasSearchAttributes(historyBatches []*commonpb.Data
 		}
 		hasSas := false
 		for _, event := range events {
-			sas := searchattribute.GetFromEvent(event)
+			sas, _ := searchattribute.GetFromEvent(event)
 			if sas == nil {
 				continue
 			}
+			hasSas = true
 			sas, err = searchattribute.UnaliasFields(adh.saMapperProvider, sas, nsName.String())
 			if err != nil {
 				return nil, err
 			}
-			searchattribute.SetToEvent(event, sas)
-			hasSas = true
+			_ = searchattribute.SetToEvent(event, sas)
 		}
 		// If blob doesn't have search attributes, it can be used as is w/o serialization.
 		if !hasSas {
