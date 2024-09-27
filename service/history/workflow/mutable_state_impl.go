@@ -2854,8 +2854,6 @@ func (ms *MutableStateImpl) ApplyActivityTaskScheduledEvent(
 	firstEventID int64,
 	event *historypb.HistoryEvent,
 ) (*persistencespb.ActivityInfo, error) {
-	// QQQQQQQQ
-	println(fmt.Sprintf("ApplyActivityTaskScheduledEvent, %v", time.Now().UTC()))
 
 	attributes := event.GetActivityTaskScheduledEventAttributes()
 
