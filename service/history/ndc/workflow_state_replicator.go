@@ -87,6 +87,7 @@ type (
 		historySerializer serialization.Serializer
 		transactionMgr    TransactionManager
 		logger            log.Logger
+		taskRefresher     workflow.TaskRefresher
 	}
 )
 
@@ -108,6 +109,7 @@ func NewWorkflowStateReplicator(
 		historySerializer: eventSerializer,
 		transactionMgr:    NewTransactionManager(shardContext, workflowCache, eventsReapplier, logger, false),
 		logger:            logger,
+		taskRefresher:     workflow.NewTaskRefresher(shardContext),
 	}
 }
 
@@ -390,8 +392,7 @@ func (r *WorkflowStateReplicatorImpl) applyMutation(
 		}
 	}
 
-	taskRefresher := workflow.NewTaskRefresher(r.shardContext)
-	err = taskRefresher.PartialRefresh(ctx, localMutableState, localTransitionHistory[len(localTransitionHistory)-1])
+	err = r.taskRefresher.PartialRefresh(ctx, localMutableState, localTransitionHistory[len(localTransitionHistory)-1])
 	if err != nil {
 		return err
 	}
@@ -500,14 +501,14 @@ func (r *WorkflowStateReplicatorImpl) applySnapshot(
 		localMutableState,
 		releaseFn,
 	)
-	taskRefresher := workflow.NewTaskRefresher(r.shardContext)
 	if isBranchSwitched || len(localTransitionHistory) == 0 {
-		err = taskRefresher.Refresh(ctx, localMutableState)
+		// TODO: If branch switched, maybe refresh from LCA?
+		err = r.taskRefresher.Refresh(ctx, localMutableState)
 		if err != nil {
 			return err
 		}
 	} else {
-		err = taskRefresher.PartialRefresh(ctx, localMutableState, localTransitionHistory[len(localTransitionHistory)-1])
+		err = r.taskRefresher.PartialRefresh(ctx, localMutableState, localTransitionHistory[len(localTransitionHistory)-1])
 		if err != nil {
 			return err
 		}
@@ -739,9 +740,9 @@ func (r *WorkflowStateReplicatorImpl) bringLocalEventsUpToSourceCurrentBranch(
 		return nil
 	}
 
-	startEventID := localLastItem.GetEventId()
+	startEventID := localLastItem.GetEventId() // exclusive
 	startEventVersion := localLastItem.GetVersion()
-	endEventID := sourceLastItem.GetEventId()
+	endEventID := sourceLastItem.GetEventId() // inclusive
 	endEventVersion := sourceLastItem.GetVersion()
 	var historyEvents [][]*historypb.HistoryEvent
 	for _, blob := range eventBlobs {
@@ -756,7 +757,7 @@ func (r *WorkflowStateReplicatorImpl) bringLocalEventsUpToSourceCurrentBranch(
 	fetchFromRemoteAndAppend := func(
 		startID, // exclusive
 		startVersion,
-		endID, // inclusive
+		endID, // exclusive
 		endVersion int64) error {
 		remoteHistoryIterator := collection.NewPagingIterator(r.getHistoryFromRemotePaginationFn(
 			ctx,
@@ -808,12 +809,15 @@ func (r *WorkflowStateReplicatorImpl) bringLocalEventsUpToSourceCurrentBranch(
 		if err != nil {
 			return err
 		}
-		startEventID = historyEvents[0][0].EventId
-		startEventVersion = historyEvents[0][0].Version
+		startEventID = historyEvents[0][0].EventId - 1
+		startEventVersion, err = versionhistory.GetVersionHistoryEventVersion(sourceVersionHistory, startEventID)
+		if err != nil {
+			return err
+		}
 	}
 
 	// add events from request
-	for _, events := range historyEvents {
+	for i, events := range historyEvents {
 		if events[0].EventId <= startEventID {
 			continue
 		}
@@ -821,13 +825,14 @@ func (r *WorkflowStateReplicatorImpl) bringLocalEventsUpToSourceCurrentBranch(
 		if err != nil {
 			return err
 		}
-		res, err := r.executionMgr.AppendHistoryNodes(ctx, &persistence.AppendHistoryNodesRequest{
+		_, err = r.executionMgr.AppendRawHistoryNodes(ctx, &persistence.AppendRawHistoryNodesRequest{
 			ShardID:           r.shardContext.GetShardID(),
 			IsNewBranch:       isNewBranch,
 			BranchToken:       versionHistoryToAppend.BranchToken,
+			History:           eventBlobs[i],
 			PrevTransactionID: prevTxnID,
 			TransactionID:     txnID,
-			Events:            events,
+			NodeID:            events[0].EventId,
 			Info: persistence.BuildHistoryGarbageCleanupInfo(
 				namespaceID.String(),
 				workflowID,
@@ -841,11 +846,11 @@ func (r *WorkflowStateReplicatorImpl) bringLocalEventsUpToSourceCurrentBranch(
 		isNewBranch = false
 		startEventID = events[len(events)-1].EventId
 		startEventVersion = events[len(events)-1].Version
-		localMutableState.GetExecutionInfo().ExecutionStats.HistorySize += int64(res.Size)
+		localMutableState.GetExecutionInfo().ExecutionStats.HistorySize += int64(len(eventBlobs[i].Data))
 	}
 	// add more events if there is any
 	if startEventID < endEventID {
-		err = fetchFromRemoteAndAppend(startEventID, startEventVersion, endEventID, endEventVersion)
+		err = fetchFromRemoteAndAppend(startEventID, startEventVersion, endEventID+1, endEventVersion)
 		if err != nil {
 			return err
 		}
@@ -1091,7 +1096,7 @@ func (r *WorkflowStateReplicatorImpl) backfillHistory(
 		runID,
 		common.EmptyEventID,
 		common.EmptyVersion,
-		lastEventID,
+		lastEventID+1,
 		lastEventVersion),
 	)
 	historyBranchUtil := r.executionMgr.GetHistoryBranchUtil()
@@ -1235,7 +1240,7 @@ func (r *WorkflowStateReplicatorImpl) getHistoryFromRemotePaginationFn(
 			Execution:         &commonpb.WorkflowExecution{WorkflowId: workflowID, RunId: runID},
 			StartEventId:      startEventID,
 			StartEventVersion: startEventVersion,
-			EndEventId:        endEventID + 1,
+			EndEventId:        endEventID,
 			EndEventVersion:   endEventVersion,
 			MaximumPageSize:   1000,
 			NextPageToken:     paginationToken,

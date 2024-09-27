@@ -664,18 +664,18 @@ func (mr *MockEngineMockRecorder) ReplicateHistoryEvents(ctx, workflowKey, baseE
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReplicateHistoryEvents", reflect.TypeOf((*MockEngine)(nil).ReplicateHistoryEvents), ctx, workflowKey, baseExecutionInfo, versionHistoryItems, historyEvents, newEvents, newRunID)
 }
 
-// ReplicateMutableState mocks base method.
-func (m *MockEngine) ReplicateMutableState(ctx context.Context, artifact *repication.VersionedTransitionArtifact, sourceClusterName string) error {
+// ReplicateVersionedTransition mocks base method.
+func (m *MockEngine) ReplicateVersionedTransition(ctx context.Context, artifact *repication.VersionedTransitionArtifact, sourceClusterName string) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ReplicateMutableState", ctx, artifact, sourceClusterName)
+	ret := m.ctrl.Call(m, "ReplicateVersionedTransition", ctx, artifact, sourceClusterName)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
-// ReplicateMutableState indicates an expected call of ReplicateMutableState.
-func (mr *MockEngineMockRecorder) ReplicateMutableState(ctx, artifact, sourceClusterName any) *gomock.Call {
+// ReplicateVersionedTransition indicates an expected call of ReplicateVersionedTransition.
+func (mr *MockEngineMockRecorder) ReplicateVersionedTransition(ctx, artifact, sourceClusterName any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReplicateMutableState", reflect.TypeOf((*MockEngine)(nil).ReplicateMutableState), ctx, artifact, sourceClusterName)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReplicateVersionedTransition", reflect.TypeOf((*MockEngine)(nil).ReplicateVersionedTransition), ctx, artifact, sourceClusterName)
 }
 
 // ReplicateWorkflowState mocks base method.
