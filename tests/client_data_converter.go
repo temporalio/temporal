@@ -159,7 +159,6 @@ func testParentWorkflow(ctx workflow.Context) (string, error) {
 
 func (s *ClientDataConverterTestSuite) TestClientDataConverter() {
 	s.T().SkipNow() // need to figure out what is going on
-	return
 	tl := "client-func-data-converter-activity-taskqueue"
 	dc := testcore.NewTestDataConverter()
 	sdkClient, testWorker := s.startWorkerWithDataConverter(tl, dc)
