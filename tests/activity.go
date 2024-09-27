@@ -151,7 +151,7 @@ func (s *ActivityTestSuite) TestActivityScheduleToClose_FiredDuringActivityRun()
 		return "", activityErr
 	}
 
-	wg.Add(1)
+	wg.Add(3) // activity should be executed 3 times
 	workflowFn := func(ctx workflow.Context) (string, error) {
 		var ret string
 		err := workflow.ExecuteActivity(workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
