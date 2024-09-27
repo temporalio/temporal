@@ -143,9 +143,8 @@ func (r *WorkflowStateReplicatorImpl) SyncWorkflowState(
 		if rec := recover(); rec != nil {
 			releaseFn(errPanic)
 			panic(rec)
-		} else {
-			releaseFn(retError)
 		}
+		releaseFn(retError)
 	}()
 
 	// Handle existing workflows
@@ -254,9 +253,8 @@ func (r *WorkflowStateReplicatorImpl) ReplicateVersionedTransition(
 		if rec := recover(); rec != nil {
 			releaseFn(errPanic)
 			panic(rec)
-		} else {
-			releaseFn(retError)
 		}
+		releaseFn(retError)
 	}()
 
 	ms, err := wfCtx.LoadMutableState(ctx, r.shardContext)
@@ -1003,9 +1001,9 @@ func (r *WorkflowStateReplicatorImpl) createNewRunWorkflow(
 		if rec := recover(); rec != nil {
 			newRunReleaseFn(errPanic)
 			panic(rec)
-		} else {
-			newRunReleaseFn(newRunErr)
 		}
+		newRunReleaseFn(newRunErr)
+
 	}()
 	_, newRunErr = newRunWfContext.LoadMutableState(ctx, r.shardContext)
 	switch newRunErr.(type) {
