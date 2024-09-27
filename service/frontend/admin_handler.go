@@ -36,6 +36,7 @@ import (
 	"time"
 
 	"go.temporal.io/server/api/matchingservice/v1"
+	"go.temporal.io/server/common/persistence/visibility"
 
 	"github.com/pborman/uuid"
 	commonpb "go.temporal.io/api/common/v1"
@@ -126,6 +127,7 @@ type (
 		saProvider                 searchattribute.Provider
 		saManager                  searchattribute.Manager
 		saMapperProvider           searchattribute.MapperProvider
+		saValidator                *searchattribute.Validator
 		clusterMetadata            cluster.Metadata
 		healthServer               *health.Server
 		historyHealthChecker       HealthChecker
@@ -230,11 +232,24 @@ func NewAdminHandler(
 		saProvider:                 args.SaProvider,
 		saManager:                  args.SaManager,
 		saMapperProvider:           args.SaMapperProvider,
-		clusterMetadata:            args.ClusterMetadata,
-		healthServer:               args.HealthServer,
-		historyHealthChecker:       historyHealthChecker,
-		taskCategoryRegistry:       args.CategoryRegistry,
-		matchingClient:             args.matchingClient,
+		saValidator: searchattribute.NewValidator(
+			args.SaProvider,
+			args.SaMapperProvider,
+			args.Config.SearchAttributesNumberOfKeysLimit,
+			args.Config.SearchAttributesSizeOfValueLimit,
+			args.Config.SearchAttributesTotalSizeLimit,
+			args.visibilityMgr,
+			visibility.AllowListForValidation(
+				args.visibilityMgr.GetStoreNames(),
+				args.Config.VisibilityAllowList,
+			),
+			args.Config.SuppressErrorSetSystemSearchAttribute,
+		),
+		clusterMetadata:      args.ClusterMetadata,
+		healthServer:         args.HealthServer,
+		historyHealthChecker: historyHealthChecker,
+		taskCategoryRegistry: args.CategoryRegistry,
+		matchingClient:       args.matchingClient,
 	}
 }
 
@@ -718,7 +733,7 @@ func (adh *AdminHandler) ImportWorkflowExecution(
 		return nil, err
 	}
 
-	unaliasedBatches, err := adh.unaliasSearchAttributes(request.HistoryBatches, namespace.Name(request.GetNamespace()))
+	unaliasedBatches, err := adh.validateSearchAttributes(request.HistoryBatches, namespace.Name(request.GetNamespace()))
 	if err != nil {
 		return nil, err
 	}
@@ -737,13 +752,12 @@ func (adh *AdminHandler) ImportWorkflowExecution(
 	}, nil
 }
 
-func (adh *AdminHandler) unaliasSearchAttributes(historyBatches []*commonpb.DataBlob, nsName namespace.Name) ([]*commonpb.DataBlob, error) {
+func (adh *AdminHandler) validateSearchAttributes(historyBatches []*commonpb.DataBlob, nsName namespace.Name) ([]*commonpb.DataBlob, error) {
 	var unaliasedBatches []*commonpb.DataBlob
 	for _, historyBatch := range historyBatches {
 		events, err := adh.eventSerializer.DeserializeEvents(historyBatch)
 		if err != nil {
-			// TODO: check if error needs to be wrapped in service error.
-			return nil, err
+			return nil, serviceerror.NewInvalidArgument(err.Error())
 		}
 		hasSas := false
 		for _, event := range events {
@@ -752,11 +766,24 @@ func (adh *AdminHandler) unaliasSearchAttributes(historyBatches []*commonpb.Data
 				continue
 			}
 			hasSas = true
-			sas, err = searchattribute.UnaliasFields(adh.saMapperProvider, sas, nsName.String())
+
+			unaliasedSas, err := searchattribute.UnaliasFields(adh.saMapperProvider, sas, nsName.String())
+			if err != nil {
+				var invArgErr *serviceerror.InvalidArgument
+				if !errors.As(err, &invArgErr) {
+					return nil, err
+				}
+				// Mapper returns InvalidArgument if alias is not found. It means that history has field names, not aliases.
+				// Ignore the error and proceed with the original search attributes.
+				unaliasedSas = sas
+			}
+			// Now validate that search attributes are valid.
+			err = adh.saValidator.Validate(unaliasedSas, nsName.String())
 			if err != nil {
 				return nil, err
 			}
-			_ = searchattribute.SetToEvent(event, sas)
+
+			_ = searchattribute.SetToEvent(event, unaliasedSas)
 		}
 		// If blob doesn't have search attributes, it can be used as is w/o serialization.
 		if !hasSas {
@@ -766,7 +793,7 @@ func (adh *AdminHandler) unaliasSearchAttributes(historyBatches []*commonpb.Data
 
 		unaliasedBatch, err := adh.eventSerializer.SerializeEvents(events, enumspb.ENCODING_TYPE_PROTO3)
 		if err != nil {
-			return nil, err
+			return nil, serviceerror.NewInvalidArgument(err.Error())
 		}
 		unaliasedBatches = append(unaliasedBatches, unaliasedBatch)
 	}
