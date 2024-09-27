@@ -1,21 +1,23 @@
-# In-memory timer queue
-This queue is similar to normal persisted timer queue, but it exists in memory only and never gets  
-persisted. It is created with generic `MemoryScheduledQueueFactory`, but currently serves only
-[speculative Workflow Task](./speculative-workflow-task.md) timeouts, therefore the only queue this factory creates
-is `SpeculativeWorkflowTaskTimeoutQueue` which uses same task executor as normal timer queue:
-`TimerQueueActiveTaskExecutor`.
+# In-memory Timer Queue
 
-Implementation uses `PriorityQueue` by `VisibilityTimestamp`: a task on top is the task that
-executed next.
+This queue is similar to the normal persisted timer queue, but it exists only in memory, ie it 
+never gets persisted. It is created by a generic `MemoryScheduledQueueFactory`, but currently serves
+only [speculative Workflow Task](./speculative-workflow-task.md) timeouts. Therefore, the only queue
+this factory creates is `SpeculativeWorkflowTaskTimeoutQueue` which uses the same task executor as
+the normal timer queue: `TimerQueueActiveTaskExecutor`.
 
-In-memory queue supports only `WorkflowTaskTimeoutTask` and there are two timeout types
-enforced by in-memory queue: `SCHEDULED_TO_START` and `START_TO_CLOSE`.
+Its implementation uses a `PriorityQueue` sorted by `VisibilityTimestamp`: the task on top is the
+task that is executed next.
 
-Executor of `WorkflowTaskTimeoutTask` from in-memory queue is the same as for normal timer queue,
-although it does one extra check for speculative Workflow Task. It checks if a task being executed still the same
-as stored in mutable state (`CheckSpeculativeWorkflowTaskTimeoutTask`). This is because MS can lose and create
-a new speculative Workflow Task, which will be a different Workflow Task and a timeout task must be skipped for it. 
+The in-memory queue only supports `WorkflowTaskTimeoutTask` and it only enforces
+`SCHEDULED_TO_START` and `START_TO_CLOSE`.
+
+Note that while the in-memory queue's executor of `WorkflowTaskTimeoutTask` is the same as for
+the normal timer queue, it does one extra check for speculative Workflow Tasks:
+`CheckSpeculativeWorkflowTaskTimeoutTask` checks if a task being executed is still the *same* task
+that's stored in mutable state. This is important since the mutable state can lose and create a *new*
+speculative Workflow Task, and therefore the old timeout task must be ignored. 
 
 > #### TODO
-> Future refactoring is necessary to make logic (and probably naming) clearer. It is not clear
-> if in-memory queue might have other applications besides timeouts for speculative Workflow Tasks.
+> Future refactoring is necessary to make the logic (and probably naming) clearer. It is not clear
+> yet if the in-memory queue has other applications besides timeouts for speculative Workflow Tasks.
