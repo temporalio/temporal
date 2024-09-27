@@ -27,8 +27,6 @@ package dynamicconfig
 import (
 	"sync"
 	"sync/atomic"
-
-	expmaps "golang.org/x/exp/maps"
 )
 
 type (
@@ -92,19 +90,16 @@ func (d *MemoryClient) OverrideSetting(setting GenericSetting, value any) (clean
 
 func (d *MemoryClient) OverrideValue(key Key, value any) (cleanup func()) {
 	d.lock.Lock()
+	defer d.lock.Unlock()
 
 	var idx atomic.Int64
 	idx.Store(int64(len(d.overrides)))
 
 	d.overrides = append(d.overrides, kvpair{valid: true, key: key, value: value})
 
-	subscriptions := expmaps.Values(d.subscriptions)
 	newValue := d.getValueLocked(key)
-
-	d.lock.Unlock()
-
 	changed := map[Key][]ConstrainedValue{key: newValue}
-	for _, update := range subscriptions {
+	for _, update := range d.subscriptions {
 		update(changed)
 	}
 
@@ -118,6 +113,7 @@ func (d *MemoryClient) OverrideValue(key Key, value any) (cleanup func()) {
 
 func (d *MemoryClient) remove(idx int) {
 	d.lock.Lock()
+	defer d.lock.Unlock()
 
 	key := d.overrides[idx].key
 	// mark this pair deleted
@@ -128,13 +124,9 @@ func (d *MemoryClient) remove(idx int) {
 		d.overrides = d.overrides[:l-1]
 	}
 
-	subscriptions := expmaps.Values(d.subscriptions)
 	newValue := d.getValueLocked(key)
-
-	d.lock.Unlock()
-
 	changed := map[Key][]ConstrainedValue{key: newValue}
-	for _, update := range subscriptions {
+	for _, update := range d.subscriptions {
 		update(changed)
 	}
 }
