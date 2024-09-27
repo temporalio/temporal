@@ -29,7 +29,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"go.temporal.io/server/common/cache"
 	"math"
 	"math/rand"
 	"sync"
@@ -53,6 +52,7 @@ import (
 	tokenspb "go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
+	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/clock"
 	hlc "go.temporal.io/server/common/clock/hybrid_logical_clock"
 	"go.temporal.io/server/common/cluster"
@@ -242,7 +242,10 @@ func NewEngine(
 		visibilityManager,
 		e.config.ReachabilityCacheOpenWFsTTL(),
 		e.config.ReachabilityCacheClosedWFsTTL())
-	e.taskQueueInternalInfoCache = newTaskQueueInternalInfoCache(e.metricsHandler, &cache.Options{TTL: e.config.TaskQueueInternalInfoCacheTTL()})
+	e.taskQueueInternalInfoCache = newTaskQueueInternalInfoCache(
+		metrics.NoopMetricsHandler, // todo Shivam - why noop
+		&cache.Options{TTL: e.config.TaskQueueInternalInfoCacheTTL()},
+	)
 	return e
 }
 
@@ -941,9 +944,7 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 		// collect internal info
 		physicalInfoByBuildId := e.taskQueueInternalInfoCache.Get(rootPartition.Key())
 		if physicalInfoByBuildId == nil {
-			// cache evicted an older entry for the root partition; make the gRPC call per partition
 			physicalInfoByBuildId = make(map[string]map[enumspb.TaskQueueType]*taskqueuespb.PhysicalTaskQueueInfo)
-
 			numPartitions := max(tqConfig.NumWritePartitions(), tqConfig.NumReadPartitions())
 			for _, taskQueueType := range req.TaskQueueTypes {
 				for i := 0; i < numPartitions; i++ {
@@ -991,9 +992,9 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 					}
 				}
 			}
-			// add the latest entry to the cache
 			e.taskQueueInternalInfoCache.Put(rootPartition.Key(), physicalInfoByBuildId)
 		}
+
 		// smush internal info into versions info
 		versionsInfo := make(map[string]*taskqueuepb.TaskQueueVersionInfo, 0)
 		for bid, typeMap := range physicalInfoByBuildId {

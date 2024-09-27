@@ -25,6 +25,9 @@
 package matching
 
 import (
+	"testing"
+	"time"
+
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -34,8 +37,6 @@ import (
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/tqid"
-	"testing"
-	"time"
 )
 
 type (
@@ -70,7 +71,6 @@ func (s *taskQueueInternalInfoCacheSuite) SetupTest() {
 
 func (s *taskQueueInternalInfoCacheSuite) TearDownTest() {}
 
-// testing the put method
 func (s *taskQueueInternalInfoCacheSuite) TestGetPutWithTTL() {
 	physicalInfoByBuildId := make(map[string]map[enumspb.TaskQueueType]*taskqueuespb.PhysicalTaskQueueInfo)
 

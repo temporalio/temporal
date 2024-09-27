@@ -33,3 +33,8 @@ func TestDescribeTaskQueueSuite(t *testing.T) {
 	flag.Parse()
 	suite.Run(t, new(DescribeTaskQueueSuite))
 }
+
+func TestDescribeTaskQueueSuiteWithCache(t *testing.T) {
+	flag.Parse()
+	suite.Run(t, new(DescribeTaskQueueSuiteWithCache))
+}
