@@ -326,11 +326,11 @@ func (s *NexusRequestForwardingSuite) TestCancelOperationForwardedFromStandbyToA
 
 func (s *NexusRequestForwardingSuite) TestCompleteOperationForwardedFromStandbyToActive() {
 	// Override templates to always return passive cluster in callback URL
-	s.cluster1.GetHost().OverrideDCValue(
+	s.cluster1.OverrideDynamicConfig(
 		s.T(),
 		nexusoperations.CallbackURLTemplate,
 		"http://"+s.cluster2.GetHost().FrontendHTTPAddress()+"/namespaces/{{.NamespaceName}}/nexus/callback")
-	s.cluster2.GetHost().OverrideDCValue(
+	s.cluster2.OverrideDynamicConfig(
 		s.T(),
 		nexusoperations.CallbackURLTemplate,
 		"http://"+s.cluster2.GetHost().FrontendHTTPAddress()+"/namespaces/{{.NamespaceName}}/nexus/callback")

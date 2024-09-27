@@ -1015,7 +1015,6 @@ func (c *hrsuTestCluster) resetWorkflow(ctx context.Context, workflowTaskFinishE
 		WorkflowExecution:         c.t.tv.WorkflowExecution(),
 		Reason:                    "reset",
 		WorkflowTaskFinishEventId: workflowTaskFinishEventId,
-		ResetReapplyType:          enumspb.RESET_REAPPLY_TYPE_ALL_ELIGIBLE,
 	})
 	c.t.s.NoError(err)
 	return resp.RunId
