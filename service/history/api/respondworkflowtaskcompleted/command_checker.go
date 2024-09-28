@@ -780,6 +780,14 @@ func (v *commandAttrValidator) validateStartChildExecutionAttributes(
 		return failedCause, fmt.Errorf("invalid WorkflowRetryPolicy on StartChildWorkflowExecutionCommand: %w. WorkflowId=%s WorkflowType=%s Namespace=%s", err, wfID, wfType, ns)
 	}
 
+	if len(attributes.GetCronSchedule()) > 0 && attributes.GetWorkflowStartDelay() != nil {
+		return failedCause, fmt.Errorf("CronSchedule and WorkflowStartDelay may not be used together on StartChildWorkflowExecutionCommand. WorkflowId=%s WorkflowType=%s Namespace=%s", wfID, wfType, ns)
+	}
+
+	if err := timer.ValidateAndCapTimer(attributes.GetWorkflowStartDelay()); err != nil {
+		return failedCause, serviceerror.NewInvalidArgument(fmt.Sprintf("Invalid WorkflowStartDelay on StartChildWorkflowExecutionCommand: %v. WorkflowId=%s WorkflowType=%s Namespace=%s", err, wfID, wfType, ns))
+	}
+
 	if err := backoff.ValidateSchedule(attributes.GetCronSchedule()); err != nil {
 		return failedCause, fmt.Errorf("invalid CronSchedule on StartChildWorkflowExecutionCommand: %w. WorkflowId=%s WorkflowType=%s Namespace=%s", err, wfID, wfType, ns)
 	}
@@ -801,9 +809,13 @@ func (v *commandAttrValidator) validateStartChildExecutionAttributes(
 	// workflow execution timeout is left as is
 	//  if workflow execution timeout == 0 -> infinity
 
-	attributes.WorkflowRunTimeout = durationpb.New(common.OverrideWorkflowRunTimeout(attributes.GetWorkflowRunTimeout().AsDuration(), attributes.GetWorkflowExecutionTimeout().AsDuration()))
+	if attributes.GetWorkflowRunTimeout() != nil {
+		attributes.WorkflowRunTimeout = durationpb.New(common.OverrideWorkflowRunTimeout(attributes.GetWorkflowRunTimeout().AsDuration(), attributes.GetWorkflowExecutionTimeout().AsDuration()))
+	}
 
-	attributes.WorkflowTaskTimeout = durationpb.New(common.OverrideWorkflowTaskTimeout(targetNamespace.String(), attributes.GetWorkflowTaskTimeout().AsDuration(), attributes.GetWorkflowRunTimeout().AsDuration(), defaultWorkflowTaskTimeoutFn))
+	if attributes.GetWorkflowTaskTimeout() != nil {
+		attributes.WorkflowTaskTimeout = durationpb.New(common.OverrideWorkflowTaskTimeout(targetNamespace.String(), attributes.GetWorkflowTaskTimeout().AsDuration(), attributes.GetWorkflowRunTimeout().AsDuration(), defaultWorkflowTaskTimeoutFn))
+	}
 
 	return enumspb.WORKFLOW_TASK_FAILED_CAUSE_UNSPECIFIED, nil
 }

@@ -111,8 +111,11 @@ var (
 		MaximumInterval:        durationpb.New(time.Duration(rand.Int63())),
 		NonRetryableErrorTypes: []string{"test non retryable error type"},
 	}
-	testCronSchedule = "12 * * * *"
-	testMemo         = &commonpb.Memo{
+	testCronSchedule       = "12 * * * *"
+	testWorkflowStartDelay = &durationpb.Duration{
+		Seconds: 10,
+	}
+	testMemo = &commonpb.Memo{
 		Fields: map[string]*commonpb.Payload{
 			"random memo key": testPayload,
 		},
@@ -1364,6 +1367,7 @@ func (s *historyBuilderSuite) TestStartChildWorkflowExecutionInitiated() {
 		WorkflowIdReusePolicy:    workflowIdReusePolicy,
 		RetryPolicy:              testRetryPolicy,
 		CronSchedule:             testCronSchedule,
+		WorkflowStartDelay:       testWorkflowStartDelay,
 		Memo:                     testMemo,
 		SearchAttributes:         testSearchAttributes,
 		Header:                   testHeader,
@@ -1397,6 +1401,7 @@ func (s *historyBuilderSuite) TestStartChildWorkflowExecutionInitiated() {
 				WorkflowIdReusePolicy:        workflowIdReusePolicy,
 				RetryPolicy:                  testRetryPolicy,
 				CronSchedule:                 testCronSchedule,
+				WorkflowStartDelay:           testWorkflowStartDelay,
 				Memo:                         testMemo,
 				SearchAttributes:             testSearchAttributes,
 				Header:                       testHeader,

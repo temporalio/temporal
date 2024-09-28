@@ -819,6 +819,7 @@ func (b *EventFactory) CreateStartChildWorkflowExecutionInitiatedEvent(
 			SearchAttributes:             command.SearchAttributes,
 			ParentClosePolicy:            command.GetParentClosePolicy(),
 			InheritBuildId:               command.InheritBuildId,
+			WorkflowStartDelay:           command.WorkflowStartDelay,
 		},
 	}
 	return event

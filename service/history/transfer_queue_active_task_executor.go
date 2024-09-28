@@ -1356,6 +1356,7 @@ func (t *transferQueueActiveTaskExecutor) startWorkflow(
 			WorkflowExecutionTimeout: attributes.WorkflowExecutionTimeout,
 			WorkflowRunTimeout:       attributes.WorkflowRunTimeout,
 			WorkflowTaskTimeout:      attributes.WorkflowTaskTimeout,
+			WorkflowStartDelay:       attributes.WorkflowStartDelay,
 
 			// Use the same request ID to dedupe StartWorkflowExecution calls
 			RequestId:             childRequestID,
