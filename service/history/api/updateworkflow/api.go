@@ -26,6 +26,7 @@ package updateworkflow
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
@@ -270,6 +271,7 @@ func (u *Updater) OnSuccess(
 	// If the long-poll times out due to serverTimeout then return a non-error empty response.
 	status, err := u.upd.WaitLifecycleStage(ctx, waitStage, serverTimeout)
 	if err != nil {
+		fmt.Println("update request wait error:", err)
 		return nil, err
 	}
 	resp := u.createResponse(u.wfKey, status.Outcome, status.Stage)
