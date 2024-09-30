@@ -269,44 +269,6 @@ func (c *clientImpl) StreamWorkflowReplicationMessages(
 	return streamClient, nil
 }
 
-// GetDLQTasks doesn't need redirects or routing because DLQ tasks are not sharded, so it just picks any available host
-// in the connection pool (or creates one) and forwards the request to it.
-func (c *clientImpl) GetDLQTasks(
-	ctx context.Context,
-	in *historyservice.GetDLQTasksRequest,
-	opts ...grpc.CallOption,
-) (*historyservice.GetDLQTasksResponse, error) {
-	historyClient, err := c.getAnyClient("GetDLQTasks")
-	if err != nil {
-		return nil, err
-	}
-	return historyClient.GetDLQTasks(ctx, in, opts...)
-}
-
-func (c *clientImpl) DeleteDLQTasks(
-	ctx context.Context,
-	in *historyservice.DeleteDLQTasksRequest,
-	opts ...grpc.CallOption,
-) (*historyservice.DeleteDLQTasksResponse, error) {
-	historyClient, err := c.getAnyClient("DeleteDLQTasks")
-	if err != nil {
-		return nil, err
-	}
-	return historyClient.DeleteDLQTasks(ctx, in, opts...)
-}
-
-func (c *clientImpl) ListQueues(
-	ctx context.Context,
-	in *historyservice.ListQueuesRequest,
-	opts ...grpc.CallOption,
-) (*historyservice.ListQueuesResponse, error) {
-	historyClient, err := c.getAnyClient("ListQueues")
-	if err != nil {
-		return nil, err
-	}
-	return historyClient.ListQueues(ctx, in, opts...)
-}
-
 func (c *clientImpl) ListTasks(
 	ctx context.Context,
 	in *historyservice.ListTasksRequest,
@@ -331,19 +293,14 @@ func (c *clientImpl) ListTasks(
 	return response, nil
 }
 
-// getAnyClient returns an arbitrary client by looking up a client by a sequentially increasing shard ID. This is useful
+// getAnyShard returns a sequentially increasing shard ID (mod number of shards). This is useful
 // for history APIs that are shard-agnostic (e.g. namespace or DLQ v2 APIs).
-func (c *clientImpl) getAnyClient(apiName string) (historyservice.HistoryServiceClient, error) {
+func (c *clientImpl) getAnyShard() int32 {
 	// Subtract 1 so that the first index is 0 because Add returns the new value.
 	shardIndex := c.shardIndex.Add(1) - 1
 	// Add 1 at the end because shard IDs are 1-indexed.
 	shardID := shardIndex%uint32(c.numberOfShards) + 1
-	client, err := c.redirector.clientForShardID(int32(shardID))
-	if err != nil {
-		msg := fmt.Sprintf("can't find history host to serve API: %q, err: %v", apiName, err)
-		return nil, serviceerror.NewUnavailable(msg)
-	}
-	return client, nil
+	return int32(shardID)
 }
 
 func (c *clientImpl) createContext(parent context.Context) (context.Context, context.CancelFunc) {

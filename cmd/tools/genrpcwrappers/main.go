@@ -106,9 +106,6 @@ var (
 		"client.history.DescribeHistoryHost":    true,
 		"client.history.GetReplicationMessages": true,
 		"client.history.GetReplicationStatus":   true,
-		"client.history.GetDLQTasks":            true,
-		"client.history.DeleteDLQTasks":         true,
-		"client.history.ListQueues":             true,
 		"client.history.ListTasks":              true,
 		"client.history.DeepHealthCheck":        true,
 		// these need to pick a partition. too complicated.
@@ -207,14 +204,14 @@ func makeGetHistoryClient(reqType reflect.Type) string {
 	taskInfosField := findNestedField(t, "TaskInfos", "request", 1)
 
 	found := len(shardIdField) + len(workflowIdField) + len(taskTokenField) + len(taskInfosField)
-	if found < 1 {
-		panic(fmt.Sprintf("Found no routing fields in %s", t))
-	} else if found > 1 {
+	if found > 1 {
 		panic(fmt.Sprintf("Found more than one routing field in %s (%v, %v, %v, %v)",
 			t, shardIdField, workflowIdField, taskTokenField, taskInfosField))
 	}
 
 	switch {
+	case found == 0:
+		return "shardID := c.getAnyShard()"
 	case len(shardIdField) == 1:
 		return fmt.Sprintf("shardID := %s", shardIdField[0].path)
 	case len(workflowIdField) == 1:

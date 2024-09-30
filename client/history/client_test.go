@@ -31,7 +31,6 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/client/history"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -51,51 +50,6 @@ type (
 		dialedAddresses []string
 	}
 )
-
-func TestErrLookup(t *testing.T) {
-	t.Parallel()
-
-	ctrl := gomock.NewController(t)
-	serviceResolver := membership.NewMockServiceResolver(ctrl)
-	serviceResolver.EXPECT().Lookup("1").Return(nil, assert.AnError).AnyTimes()
-	client := history.NewClient(
-		dynamicconfig.NewNoopCollection(),
-		serviceResolver,
-		log.NewTestLogger(),
-		1,
-		nil,
-		time.Duration(0),
-	)
-
-	for _, tc := range []struct {
-		name string
-		fn   func() error
-	}{
-		{
-			name: "GetDLQTasks",
-			fn: func() error {
-				_, err := client.GetDLQTasks(context.Background(), &historyservice.GetDLQTasksRequest{})
-				return err
-			},
-		},
-		{
-			name: "DeleteDLQTasks",
-			fn: func() error {
-				_, err := client.DeleteDLQTasks(context.Background(), &historyservice.DeleteDLQTasksRequest{})
-				return err
-			},
-		},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-			err := tc.fn()
-			var unavailableErr *serviceerror.Unavailable
-			require.ErrorAs(t, err, &unavailableErr, "Should return an 'Unavailable' error when there "+
-				"are no history hosts available to serve the request")
-			assert.ErrorContains(t, err, assert.AnError.Error())
-		})
-	}
-}
 
 // This tests our strategy for getting history hosts to serve shard-agnostic requests, like those interacting with the
 // DLQ. For such requests, we should round-robin over all available history shards. In addition, we should re-use any
@@ -157,7 +111,7 @@ func TestShardAgnosticConnectionStrategy(t *testing.T) {
 				log.NewTestLogger(),
 				2,
 				rpcFactory,
-				time.Duration(0),
+				1*time.Second,
 			)
 			for i := 0; i < 3; i++ {
 				err := tc.fn(client)

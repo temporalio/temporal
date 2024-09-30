@@ -94,6 +94,26 @@ func (c *clientImpl) CompleteNexusOperation(
 	return response, nil
 }
 
+func (c *clientImpl) DeleteDLQTasks(
+	ctx context.Context,
+	request *historyservice.DeleteDLQTasksRequest,
+	opts ...grpc.CallOption,
+) (*historyservice.DeleteDLQTasksResponse, error) {
+	shardID := c.getAnyShard()
+	var response *historyservice.DeleteDLQTasksResponse
+	op := func(ctx context.Context, client historyservice.HistoryServiceClient) error {
+		var err error
+		ctx, cancel := c.createContext(ctx)
+		defer cancel()
+		response, err = client.DeleteDLQTasks(ctx, request, opts...)
+		return err
+	}
+	if err := c.executeWithRedirect(ctx, shardID, op); err != nil {
+		return nil, err
+	}
+	return response, nil
+}
+
 func (c *clientImpl) DeleteWorkflowExecution(
 	ctx context.Context,
 	request *historyservice.DeleteWorkflowExecutionRequest,
@@ -270,6 +290,26 @@ func (c *clientImpl) GetDLQReplicationMessages(
 		ctx, cancel := c.createContext(ctx)
 		defer cancel()
 		response, err = client.GetDLQReplicationMessages(ctx, request, opts...)
+		return err
+	}
+	if err := c.executeWithRedirect(ctx, shardID, op); err != nil {
+		return nil, err
+	}
+	return response, nil
+}
+
+func (c *clientImpl) GetDLQTasks(
+	ctx context.Context,
+	request *historyservice.GetDLQTasksRequest,
+	opts ...grpc.CallOption,
+) (*historyservice.GetDLQTasksResponse, error) {
+	shardID := c.getAnyShard()
+	var response *historyservice.GetDLQTasksResponse
+	op := func(ctx context.Context, client historyservice.HistoryServiceClient) error {
+		var err error
+		ctx, cancel := c.createContext(ctx)
+		defer cancel()
+		response, err = client.GetDLQTasks(ctx, request, opts...)
 		return err
 	}
 	if err := c.executeWithRedirect(ctx, shardID, op); err != nil {
@@ -470,6 +510,26 @@ func (c *clientImpl) IsWorkflowTaskValid(
 		ctx, cancel := c.createContext(ctx)
 		defer cancel()
 		response, err = client.IsWorkflowTaskValid(ctx, request, opts...)
+		return err
+	}
+	if err := c.executeWithRedirect(ctx, shardID, op); err != nil {
+		return nil, err
+	}
+	return response, nil
+}
+
+func (c *clientImpl) ListQueues(
+	ctx context.Context,
+	request *historyservice.ListQueuesRequest,
+	opts ...grpc.CallOption,
+) (*historyservice.ListQueuesResponse, error) {
+	shardID := c.getAnyShard()
+	var response *historyservice.ListQueuesResponse
+	op := func(ctx context.Context, client historyservice.HistoryServiceClient) error {
+		var err error
+		ctx, cancel := c.createContext(ctx)
+		defer cancel()
+		response, err = client.ListQueues(ctx, request, opts...)
 		return err
 	}
 	if err := c.executeWithRedirect(ctx, shardID, op); err != nil {
