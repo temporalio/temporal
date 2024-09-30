@@ -372,7 +372,7 @@ func (s *NexusRequestForwardingSuite) TestCompleteOperationForwardedFromStandbyT
 	s.NoError(err)
 
 	activeSDKClient, err := client.Dial(client.Options{
-		HostPort:  s.cluster1.GetHost().FrontendGRPCAddresses()[0],
+		HostPort:  s.cluster1.GetHost().FrontendGRPCAddress(),
 		Namespace: ns,
 		Logger:    log.NewSdkLogger(s.logger),
 	})

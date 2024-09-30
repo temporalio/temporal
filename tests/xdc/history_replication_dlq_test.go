@@ -254,7 +254,7 @@ func (s *historyReplicationDLQSuite) TestWorkflowReplicationTaskFailure() {
 
 	// Create a worker and register a workflow on the active cluster.
 	activeClient, err := sdkclient.Dial(sdkclient.Options{
-		HostPort:  s.cluster1.GetHost().FrontendGRPCAddresses()[0],
+		HostPort:  s.cluster1.GetHost().FrontendGRPCAddress(),
 		Namespace: ns,
 		Logger:    log.NewSdkLogger(s.logger),
 	})
@@ -300,7 +300,7 @@ func (s *historyReplicationDLQSuite) TestWorkflowReplicationTaskFailure() {
 	// command itself works.
 	// Create a TDBG client pointing at the standby cluster.
 	clientFactory := tdbg.NewClientFactory(
-		tdbg.WithFrontendAddress(s.cluster2.GetHost().FrontendGRPCAddresses()[0]),
+		tdbg.WithFrontendAddress(s.cluster2.GetHost().FrontendGRPCAddress()),
 	)
 	// Send the output to a bytes buffer instead of a file because it's faster and simpler.
 	var cliOutputBuffer bytes.Buffer
@@ -351,7 +351,7 @@ func (s *historyReplicationDLQSuite) TestWorkflowReplicationTaskFailure() {
 
 	// Wait for the workflow to complete on the standby cluster.
 	standbyClient, err := sdkclient.Dial(sdkclient.Options{
-		HostPort:  s.cluster2.GetHost().FrontendGRPCAddresses()[0],
+		HostPort:  s.cluster2.GetHost().FrontendGRPCAddress(),
 		Namespace: ns,
 	})
 	s.NoError(err)

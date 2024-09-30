@@ -2277,8 +2277,8 @@ func (s *FunctionalClustersTestSuite) TestActivityHeartbeatFailover() {
 	s.registerNamespace(namespace, true)
 
 	taskqueue := "functional-activity-heartbeat-workflow-failover-test-taskqueue"
-	client1, worker1 := s.newClientAndWorker(s.cluster1.GetHost().FrontendGRPCAddresses()[0], namespace, taskqueue, "worker1")
-	client2, worker2 := s.newClientAndWorker(s.cluster2.GetHost().FrontendGRPCAddresses()[0], namespace, taskqueue, "worker2")
+	client1, worker1 := s.newClientAndWorker(s.cluster1.GetHost().FrontendGRPCAddress(), namespace, taskqueue, "worker1")
+	client2, worker2 := s.newClientAndWorker(s.cluster2.GetHost().FrontendGRPCAddress(), namespace, taskqueue, "worker2")
 
 	lastAttemptCount := 0
 	expectedHeartbeatValue := 100
@@ -2396,7 +2396,7 @@ func (s *FunctionalClustersTestSuite) TestLocalNamespaceMigration() {
 	s.registerNamespace(namespace, false)
 
 	taskqueue := "functional-local-ns-to-be-promote-taskqueue"
-	client1, worker1 := s.newClientAndWorker(s.cluster1.GetHost().FrontendGRPCAddresses()[0], namespace, taskqueue, "worker1")
+	client1, worker1 := s.newClientAndWorker(s.cluster1.GetHost().FrontendGRPCAddress(), namespace, taskqueue, "worker1")
 
 	testWorkflowFn := func(ctx workflow.Context, sleepInterval time.Duration) error {
 		return workflow.Sleep(ctx, sleepInterval)
@@ -2656,7 +2656,7 @@ func (s *FunctionalClustersTestSuite) TestLocalNamespaceMigration() {
 
 	// start force-replicate wf
 	sysClient, err := sdkclient.Dial(sdkclient.Options{
-		HostPort:  s.cluster1.GetHost().FrontendGRPCAddresses()[0],
+		HostPort:  s.cluster1.GetHost().FrontendGRPCAddress(),
 		Namespace: "temporal-system",
 	})
 	s.NoError(err)
@@ -2702,7 +2702,7 @@ func (s *FunctionalClustersTestSuite) TestLocalNamespaceMigration() {
 
 	// verify all wf in ns is now available in cluster2
 	client2, err := sdkclient.Dial(sdkclient.Options{
-		HostPort:  s.cluster2.GetHost().FrontendGRPCAddresses()[0],
+		HostPort:  s.cluster2.GetHost().FrontendGRPCAddress(),
 		Namespace: namespace,
 	})
 	s.NoError(err)
@@ -2752,7 +2752,7 @@ func (s *FunctionalClustersTestSuite) TestForceMigration_ClosedWorkflow() {
 	s.registerNamespace(namespace, true)
 
 	taskqueue := "functional-local-force-replication-task-queue"
-	client1, worker1 := s.newClientAndWorker(s.cluster1.GetHost().FrontendGRPCAddresses()[0], namespace, taskqueue, "worker1")
+	client1, worker1 := s.newClientAndWorker(s.cluster1.GetHost().FrontendGRPCAddress(), namespace, taskqueue, "worker1")
 
 	testWorkflowFn := func(ctx workflow.Context) error {
 		return nil
@@ -2799,7 +2799,7 @@ func (s *FunctionalClustersTestSuite) TestForceMigration_ClosedWorkflow() {
 
 	// Start force-replicate wf
 	sysClient, err := sdkclient.Dial(sdkclient.Options{
-		HostPort:  s.cluster1.GetHost().FrontendGRPCAddresses()[0],
+		HostPort:  s.cluster1.GetHost().FrontendGRPCAddress(),
 		Namespace: "temporal-system",
 	})
 	s.NoError(err)
@@ -2817,7 +2817,7 @@ func (s *FunctionalClustersTestSuite) TestForceMigration_ClosedWorkflow() {
 	s.NoError(err)
 
 	// Verify all wf in ns is now available in cluster2
-	client2, worker2 := s.newClientAndWorker(s.cluster2.GetHost().FrontendGRPCAddresses()[0], namespace, taskqueue, "worker2")
+	client2, worker2 := s.newClientAndWorker(s.cluster2.GetHost().FrontendGRPCAddress(), namespace, taskqueue, "worker2")
 	verify := func(wfID string, expectedRunID string) {
 		desc1, err := client2.DescribeWorkflowExecution(testCtx, wfID, "")
 		s.NoError(err)
@@ -2878,7 +2878,7 @@ func (s *FunctionalClustersTestSuite) TestForceMigration_ResetWorkflow() {
 	s.registerNamespace(namespace, true)
 
 	taskqueue := "functional-force-replication-reset-task-queue"
-	client1, worker1 := s.newClientAndWorker(s.cluster1.GetHost().FrontendGRPCAddresses()[0], namespace, taskqueue, "worker1")
+	client1, worker1 := s.newClientAndWorker(s.cluster1.GetHost().FrontendGRPCAddress(), namespace, taskqueue, "worker1")
 
 	testWorkflowFn := func(ctx workflow.Context) error {
 		return nil
@@ -2940,7 +2940,7 @@ func (s *FunctionalClustersTestSuite) TestForceMigration_ResetWorkflow() {
 
 	// Start force-replicate wf
 	sysClient, err := sdkclient.Dial(sdkclient.Options{
-		HostPort:  s.cluster1.GetHost().FrontendGRPCAddresses()[0],
+		HostPort:  s.cluster1.GetHost().FrontendGRPCAddress(),
 		Namespace: "temporal-system",
 	})
 	s.NoError(err)
@@ -2958,7 +2958,7 @@ func (s *FunctionalClustersTestSuite) TestForceMigration_ResetWorkflow() {
 	s.NoError(err)
 
 	// Verify all wf in ns is now available in cluster2
-	client2, _ := s.newClientAndWorker(s.cluster2.GetHost().FrontendGRPCAddresses()[0], namespace, taskqueue, "worker2")
+	client2, _ := s.newClientAndWorker(s.cluster2.GetHost().FrontendGRPCAddress(), namespace, taskqueue, "worker2")
 	verifyHistory := func(wfID string, runID string) {
 		iter1 := client1.GetWorkflowHistory(testCtx, wfID, runID, false, enumspb.HISTORY_EVENT_FILTER_TYPE_ALL_EVENT)
 		iter2 := client2.GetWorkflowHistory(testCtx, wfID, runID, false, enumspb.HISTORY_EVENT_FILTER_TYPE_ALL_EVENT)

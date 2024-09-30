@@ -351,6 +351,11 @@ func (c *temporalImpl) FrontendGRPCAddresses() []string {
 	return c.makeGRPCAddresses(c.frontendConfig.NumFrontendHosts, frontendPort)
 }
 
+func (c *temporalImpl) FrontendGRPCAddress() string {
+	// TODO: use grpc membership resolver to load-balance
+	return c.FrontendGRPCAddresses()[0]
+}
+
 func (c *temporalImpl) FrontendHTTPAddress() string {
 	// randomize like a load balancer would
 	addrs := c.FrontendGRPCAddresses()

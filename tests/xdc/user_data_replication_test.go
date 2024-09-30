@@ -212,7 +212,7 @@ func (s *UserDataReplicationTestSuite) TestUserDataEntriesAreReplicatedOnDemand(
 
 	// start force-replicate wf
 	sysClient, err := sdkclient.Dial(sdkclient.Options{
-		HostPort:  s.cluster1.GetHost().FrontendGRPCAddresses()[0],
+		HostPort:  s.cluster1.GetHost().FrontendGRPCAddress(),
 		Namespace: primitives.SystemLocalNamespace,
 	})
 	s.NoError(err)
@@ -290,7 +290,7 @@ func (s *UserDataReplicationTestSuite) TestUserDataTombstonesAreReplicated() {
 
 	// start build ID scavenger workflow
 	sysClient, err := sdkclient.Dial(sdkclient.Options{
-		HostPort:  s.cluster1.GetHost().FrontendGRPCAddresses()[0],
+		HostPort:  s.cluster1.GetHost().FrontendGRPCAddress(),
 		Namespace: primitives.SystemLocalNamespace,
 	})
 	s.NoError(err)
