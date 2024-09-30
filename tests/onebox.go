@@ -101,6 +101,8 @@ type (
 
 		// This is used to wait for namespace registries to have noticed a change in some xdc tests.
 		frontendNamespaceRegistries []namespace.Registry
+		// Address for SDK to connect to, using membership grpc resolver.
+		frontendMembershipAddress string
 
 		// These are routing/load balancing clients but do not do retries:
 		adminClient    adminservice.AdminServiceClient
@@ -351,9 +353,9 @@ func (c *temporalImpl) FrontendGRPCAddresses() []string {
 	return c.makeGRPCAddresses(c.frontendConfig.NumFrontendHosts, frontendPort)
 }
 
+// Use this to get an address for the Go SDK to connect to.
 func (c *temporalImpl) FrontendGRPCAddress() string {
-	// TODO: use grpc membership resolver to load-balance
-	return c.FrontendGRPCAddresses()[0]
+	return c.frontendMembershipAddress
 }
 
 func (c *temporalImpl) FrontendHTTPAddress() string {
@@ -422,6 +424,7 @@ func (c *temporalImpl) startFrontend() {
 	var rpcFactory common.RPCFactory
 	var historyRawClient resource.HistoryRawClient
 	var matchingRawClient resource.MatchingRawClient
+	var grpcResolver *membership.GRPCResolver
 
 	for _, host := range c.hostsByService[serviceName].All {
 		logger := log.With(c.logger, tag.Host(host))
@@ -467,7 +470,7 @@ func (c *temporalImpl) startFrontend() {
 			fx.Supply(c.spanExporters),
 			temporal.ServiceTracingModule,
 			frontend.Module,
-			fx.Populate(&namespaceRegistry, &rpcFactory, &historyRawClient, &matchingRawClient),
+			fx.Populate(&namespaceRegistry, &rpcFactory, &historyRawClient, &matchingRawClient, &grpcResolver),
 			temporal.FxLogAdapter,
 			c.getFxOptionsForService(primitives.FrontendService),
 		)
@@ -493,6 +496,9 @@ func (c *temporalImpl) startFrontend() {
 	// We also set the history and matching clients here, stealing them from one of the frontends.
 	c.historyClient = historyRawClient
 	c.matchingClient = matchingRawClient
+
+	// Address for SDKs
+	c.frontendMembershipAddress = grpcResolver.MakeURL(serviceName)
 }
 
 func (c *temporalImpl) startHistory() {
