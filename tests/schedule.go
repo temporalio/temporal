@@ -859,7 +859,9 @@ func (s *ScheduleFunctionalSuite) TestRefresh() {
 	wid := "sched-test-refresh-wf"
 	wt := "sched-test-refresh-wt"
 
-	s.testCluster.host.workerService.RefreshPerNSWorkerManager()
+	for _, w := range s.testCluster.host.workerServices {
+		w.RefreshPerNSWorkerManager()
+	}
 	schedule := &schedulepb.Schedule{
 		Spec: &schedulepb.ScheduleSpec{
 			Interval: []*schedulepb.IntervalSpec{
@@ -969,9 +971,19 @@ func (s *ScheduleFunctionalSuite) TestListBeforeRun() {
 	wid := "sched-test-list-before-run-wf"
 	wt := "sched-test-list-before-run-wt"
 
+	// clean up per-ns-worker. note that this will run after the OverrideDynamicConfig below is reverted.
+	s.T().Cleanup(func() {
+		for _, w := range s.testCluster.host.workerServices {
+			w.RefreshPerNSWorkerManager()
+		}
+		time.Sleep(2 * time.Second)
+	})
+
 	// disable per-ns worker so that the schedule workflow never runs
-	removeWorkerCount := s.OverrideDynamicConfig(dynamicconfig.WorkerPerNamespaceWorkerCount, 0)
-	s.testCluster.host.workerService.RefreshPerNSWorkerManager()
+	s.OverrideDynamicConfig(dynamicconfig.WorkerPerNamespaceWorkerCount, 0)
+	for _, w := range s.testCluster.host.workerServices {
+		w.RefreshPerNSWorkerManager()
+	}
 	time.Sleep(2 * time.Second)
 
 	schedule := &schedulepb.Schedule{
@@ -1030,10 +1042,6 @@ func (s *ScheduleFunctionalSuite) TestListBeforeRun() {
 		Identity:   "test",
 	})
 	s.NoError(err)
-
-	removeWorkerCount()
-	s.testCluster.host.workerService.RefreshPerNSWorkerManager()
-	time.Sleep(2 * time.Second)
 }
 
 func (s *ScheduleFunctionalSuite) TestRateLimit() {
@@ -1041,16 +1049,29 @@ func (s *ScheduleFunctionalSuite) TestRateLimit() {
 	wid := "sched-test-rate-limit-wf-%d"
 	wt := "sched-test-rate-limit-wt"
 
+	// clean up per-ns-worker. note that this will run after the OverrideDynamicConfig below is reverted.
+	s.T().Cleanup(func() {
+		for _, w := range s.testCluster.host.workerServices {
+			w.RefreshPerNSWorkerManager()
+		}
+		time.Sleep(2 * time.Second)
+	})
+
 	// Set 1/sec rate limit per namespace. To force this to take effect immediately (instead of
 	// waiting one minute) we have to cause the whole worker to be stopped and started. The
 	// sleeps are needed because the refresh is asynchronous, and there's no way to get access
 	// to the actual rate limiter object to refresh it directly.
-	removeRPS := s.OverrideDynamicConfig(dynamicconfig.SchedulerNamespaceStartWorkflowRPS, 1.0)
-	removeWorkerCount := s.OverrideDynamicConfig(dynamicconfig.WorkerPerNamespaceWorkerCount, 0)
-	s.testCluster.host.workerService.RefreshPerNSWorkerManager()
+	s.OverrideDynamicConfig(dynamicconfig.SchedulerNamespaceStartWorkflowRPS, 1.0)
+
+	revertWorkerCount := s.OverrideDynamicConfig(dynamicconfig.WorkerPerNamespaceWorkerCount, 0)
+	for _, w := range s.testCluster.host.workerServices {
+		w.RefreshPerNSWorkerManager()
+	}
 	time.Sleep(2 * time.Second)
-	removeWorkerCount()
-	s.testCluster.host.workerService.RefreshPerNSWorkerManager()
+	revertWorkerCount()
+	for _, w := range s.testCluster.host.workerServices {
+		w.RefreshPerNSWorkerManager()
+	}
 	time.Sleep(2 * time.Second)
 
 	var runs int32
@@ -1107,12 +1128,12 @@ func (s *ScheduleFunctionalSuite) TestRateLimit() {
 		s.NoError(err)
 	}
 
-	removeRPS()
-	removeWorkerCount = s.OverrideDynamicConfig(dynamicconfig.WorkerPerNamespaceWorkerCount, 0)
-	s.testCluster.host.workerService.RefreshPerNSWorkerManager()
+	// stop workers again so they get started with the default rps
+	s.OverrideDynamicConfig(dynamicconfig.WorkerPerNamespaceWorkerCount, 0)
+	for _, w := range s.testCluster.host.workerServices {
+		w.RefreshPerNSWorkerManager()
+	}
 	time.Sleep(2 * time.Second)
-	removeWorkerCount()
-	s.testCluster.host.workerService.RefreshPerNSWorkerManager()
 }
 
 func (s *ScheduleFunctionalSuite) TestNextTimeCache() {
@@ -1120,7 +1141,9 @@ func (s *ScheduleFunctionalSuite) TestNextTimeCache() {
 	wid := "sched-test-next-time-cache-wf"
 	wt := "sched-test-next-time-cache-wt"
 
-	s.testCluster.host.workerService.RefreshPerNSWorkerManager()
+	for _, w := range s.testCluster.host.workerServices {
+		w.RefreshPerNSWorkerManager()
+	}
 	schedule := &schedulepb.Schedule{
 		Spec: &schedulepb.ScheduleSpec{
 			Interval: []*schedulepb.IntervalSpec{

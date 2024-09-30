@@ -129,8 +129,8 @@ func (s *xdcBaseSuite) setupSuite(clusterNames []string, opts ...tests.Option) {
 		clusterConfigs[i].ClusterMetadata.ClusterInformation[s.clusterNames[i]] = cluster.ClusterInformation{
 			Enabled:                true,
 			InitialFailoverVersion: int64(i + 1),
-			RPCAddress:             fmt.Sprintf("127.0.0.1:%d134", 7+i),
-			HTTPAddress:            fmt.Sprintf("127.0.0.1:%d144", 7+i),
+			RPCAddress:             fmt.Sprintf("127.0.%d.1:7134", i),
+			HTTPAddress:            fmt.Sprintf("127.0.%d.1:7144", i),
 		}
 		clusterConfigs[i].ServiceFxOptions = params.ServiceOptions
 		clusterConfigs[i].EnableMetricsCapture = true
@@ -239,8 +239,10 @@ func (s *xdcBaseSuite) createGlobalNamespace() string {
 
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		// Wait for namespace record to be replicated and loaded into memory.
-		_, err := s.cluster2.GetHost().GetFrontendNamespaceRegistry().GetNamespace(namespace.Name(ns))
-		assert.NoError(t, err)
+		for _, r := range s.cluster2.GetHost().GetFrontendNamespaceRegistries() {
+			_, err := r.GetNamespace(namespace.Name(ns))
+			assert.NoError(t, err)
+		}
 	}, 15*time.Second, 500*time.Millisecond)
 
 	return ns
