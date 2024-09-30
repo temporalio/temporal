@@ -41,8 +41,7 @@ import (
 
 type (
 	eventData struct {
-		EventTypeCaps    string
-		AttributesGetter string
+		AttributesTypeName string
 	}
 
 	searchAttributesHelpersData struct {
@@ -52,7 +51,7 @@ type (
 
 var (
 	// Is used to find attribute getters and extract the event type (match[1]).
-	attributesGetterRegex = regexp.MustCompile("^Get(.+)EventAttributes$")
+	attributesGetterRegex = regexp.MustCompile("^Get(.+EventAttributes)$")
 )
 
 func main() {
@@ -73,15 +72,14 @@ package searchattribute
 
 import (
 	commonpb "go.temporal.io/api/common/v1"
-	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 )
 
 func SetToEvent(event *historypb.HistoryEvent, sas *commonpb.SearchAttributes) bool {
-	switch event.GetEventType() {
+	switch e := event.GetAttributes().(type) {
 	{{- range .Events}}
-	case enumspb.EVENT_TYPE_{{.EventTypeCaps}}:
-		event.{{.AttributesGetter}}().SearchAttributes = sas
+	case *historypb.HistoryEvent_{{.AttributesTypeName}}:
+		e.{{.AttributesTypeName}}.SearchAttributes = sas
 		return true
 	{{- end}}
 	default:
@@ -90,10 +88,10 @@ func SetToEvent(event *historypb.HistoryEvent, sas *commonpb.SearchAttributes) b
 }
 
 func GetFromEvent(event *historypb.HistoryEvent) (*commonpb.SearchAttributes, bool) {
-	switch event.GetEventType() {
+	switch e := event.GetAttributes().(type) {
 	{{- range .Events}}
-	case enumspb.EVENT_TYPE_{{.EventTypeCaps}}:
-		return event.{{.AttributesGetter}}().GetSearchAttributes(), true
+	case *historypb.HistoryEvent_{{.AttributesTypeName}}:
+		return e.{{.AttributesTypeName}}.GetSearchAttributes(), true
 	{{- end}}
 	default:
 		return nil, false
@@ -121,8 +119,7 @@ func writeSearchAttributesEventHelpers(w io.Writer, tmpl string) {
 		}
 
 		ed := eventData{
-			EventTypeCaps:    camelCaseToScreamingSnakeCase(matches[1]),
-			AttributesGetter: attributesGetter.Name,
+			AttributesTypeName: matches[1],
 		}
 		sahd.Events = append(sahd.Events, ed)
 	}
@@ -158,26 +155,4 @@ func fatalIfErr(err error) {
 		//nolint:revive // calls to log.Fatal only in main() or init() functions (revive)
 		log.Fatal(err)
 	}
-}
-
-func camelCaseToScreamingSnakeCase(s string) string {
-	if s == "" {
-		return ""
-	}
-	t := make([]rune, 0, len(s)+5)
-	for i, c := range s {
-		if isASCIIUpper(c) {
-			if i != 0 {
-				t = append(t, '_')
-			}
-		} else {
-			c ^= ' ' // Make it upper letter.
-		}
-		t = append(t, c)
-	}
-	return string(t)
-}
-
-func isASCIIUpper(c rune) bool {
-	return 'A' <= c && c <= 'Z'
 }

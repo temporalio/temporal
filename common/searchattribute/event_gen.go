@@ -28,23 +28,22 @@ package searchattribute
 
 import (
 	commonpb "go.temporal.io/api/common/v1"
-	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 )
 
 func SetToEvent(event *historypb.HistoryEvent, sas *commonpb.SearchAttributes) bool {
-	switch event.GetEventType() {
-	case enumspb.EVENT_TYPE_START_CHILD_WORKFLOW_EXECUTION_INITIATED:
-		event.GetStartChildWorkflowExecutionInitiatedEventAttributes().SearchAttributes = sas
+	switch e := event.GetAttributes().(type) {
+	case *historypb.HistoryEvent_StartChildWorkflowExecutionInitiatedEventAttributes:
+		e.StartChildWorkflowExecutionInitiatedEventAttributes.SearchAttributes = sas
 		return true
-	case enumspb.EVENT_TYPE_UPSERT_WORKFLOW_SEARCH_ATTRIBUTES:
-		event.GetUpsertWorkflowSearchAttributesEventAttributes().SearchAttributes = sas
+	case *historypb.HistoryEvent_UpsertWorkflowSearchAttributesEventAttributes:
+		e.UpsertWorkflowSearchAttributesEventAttributes.SearchAttributes = sas
 		return true
-	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CONTINUED_AS_NEW:
-		event.GetWorkflowExecutionContinuedAsNewEventAttributes().SearchAttributes = sas
+	case *historypb.HistoryEvent_WorkflowExecutionContinuedAsNewEventAttributes:
+		e.WorkflowExecutionContinuedAsNewEventAttributes.SearchAttributes = sas
 		return true
-	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED:
-		event.GetWorkflowExecutionStartedEventAttributes().SearchAttributes = sas
+	case *historypb.HistoryEvent_WorkflowExecutionStartedEventAttributes:
+		e.WorkflowExecutionStartedEventAttributes.SearchAttributes = sas
 		return true
 	default:
 		return false
@@ -52,15 +51,15 @@ func SetToEvent(event *historypb.HistoryEvent, sas *commonpb.SearchAttributes) b
 }
 
 func GetFromEvent(event *historypb.HistoryEvent) (*commonpb.SearchAttributes, bool) {
-	switch event.GetEventType() {
-	case enumspb.EVENT_TYPE_START_CHILD_WORKFLOW_EXECUTION_INITIATED:
-		return event.GetStartChildWorkflowExecutionInitiatedEventAttributes().GetSearchAttributes(), true
-	case enumspb.EVENT_TYPE_UPSERT_WORKFLOW_SEARCH_ATTRIBUTES:
-		return event.GetUpsertWorkflowSearchAttributesEventAttributes().GetSearchAttributes(), true
-	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CONTINUED_AS_NEW:
-		return event.GetWorkflowExecutionContinuedAsNewEventAttributes().GetSearchAttributes(), true
-	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED:
-		return event.GetWorkflowExecutionStartedEventAttributes().GetSearchAttributes(), true
+	switch e := event.GetAttributes().(type) {
+	case *historypb.HistoryEvent_StartChildWorkflowExecutionInitiatedEventAttributes:
+		return e.StartChildWorkflowExecutionInitiatedEventAttributes.GetSearchAttributes(), true
+	case *historypb.HistoryEvent_UpsertWorkflowSearchAttributesEventAttributes:
+		return e.UpsertWorkflowSearchAttributesEventAttributes.GetSearchAttributes(), true
+	case *historypb.HistoryEvent_WorkflowExecutionContinuedAsNewEventAttributes:
+		return e.WorkflowExecutionContinuedAsNewEventAttributes.GetSearchAttributes(), true
+	case *historypb.HistoryEvent_WorkflowExecutionStartedEventAttributes:
+		return e.WorkflowExecutionStartedEventAttributes.GetSearchAttributes(), true
 	default:
 		return nil, false
 	}
