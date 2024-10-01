@@ -77,6 +77,13 @@ services:
       - prometheus
     volumes:
       - ./grafana/provisioning/:/etc/grafana/provisioning/
+  tempo:
+    image: grafana/tempo:2.4.2
+    container_name: temporal-dev-grafana-tempo
+    command:
+      - "-config.file=/etc/tempo.yaml"
+    volumes:
+      - ./grafana/provisioning/tempo/tempo.yaml:/etc/tempo.yaml
   temporal-ui:
     image: temporalio/ui:2.26.2
     container_name: temporal-dev-ui
