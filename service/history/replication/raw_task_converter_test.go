@@ -1459,10 +1459,15 @@ func (s *rawTaskConverterSuite) TestConvertSyncVersionedTransitionTask_Mutation(
 		versionHistoryItems,
 	).Return(nil)
 	syncResult := &SyncStateResult{
-		Type: Snapshot,
-		Snapshot: &persistencespb.WorkflowMutableState{
-			Checksum: &persistencespb.Checksum{
-				Value: []byte("test-checksum"),
+		VersionedTransitionArtifact: &replicationspb.VersionedTransitionArtifact{
+			StateAttributes: &replicationspb.VersionedTransitionArtifact_SyncWorkflowStateSnapshotAttributes{
+				SyncWorkflowStateSnapshotAttributes: &replicationspb.SyncWorkflowStateSnapshotAttributes{
+					State: &persistencespb.WorkflowMutableState{
+						Checksum: &persistencespb.Checksum{
+							Value: []byte("test-checksum"),
+						},
+					},
+				},
 			},
 		},
 	}
@@ -1485,9 +1490,11 @@ func (s *rawTaskConverterSuite) TestConvertSyncVersionedTransitionTask_Mutation(
 		SourceTaskId: task.TaskID,
 		Attributes: &replicationspb.ReplicationTask_SyncVersionedTransitionTaskAttributes{
 			SyncVersionedTransitionTaskAttributes: &replicationspb.SyncVersionedTransitionTaskAttributes{
-				StateAttributes: &replicationspb.SyncVersionedTransitionTaskAttributes_SyncWorkflowStateSnapshotAttributes{
-					SyncWorkflowStateSnapshotAttributes: &replicationspb.SyncWorkflowStateSnapshotAttributes{
-						State: syncResult.Snapshot,
+				VersionedTransitionArtifact: &replicationspb.VersionedTransitionArtifact{
+					StateAttributes: &replicationspb.VersionedTransitionArtifact_SyncWorkflowStateSnapshotAttributes{
+						SyncWorkflowStateSnapshotAttributes: &replicationspb.SyncWorkflowStateSnapshotAttributes{
+							State: syncResult.VersionedTransitionArtifact.GetSyncWorkflowStateSnapshotAttributes().State,
+						},
 					},
 				},
 			},

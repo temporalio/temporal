@@ -24,10 +24,8 @@ package replication
 
 import (
 	"context"
-	"fmt"
 	"time"
 
-	"go.temporal.io/api/serviceerror"
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/headers"
@@ -121,28 +119,7 @@ func (e *ExecutableSyncVersionedTransitionTask) Execute() error {
 	if err != nil {
 		return err
 	}
-	var versionedTransitionArtifact *replicationspb.VersionedTransitionArtifact
-	switch artifactType := e.taskAttr.StateAttributes.(type) {
-	case *replicationspb.SyncVersionedTransitionTaskAttributes_SyncWorkflowStateSnapshotAttributes:
-		versionedTransitionArtifact = &replicationspb.VersionedTransitionArtifact{
-			StateAttributes: &replicationspb.VersionedTransitionArtifact_SyncWorkflowStateSnapshotAttributes{
-				SyncWorkflowStateSnapshotAttributes: e.taskAttr.GetSyncWorkflowStateSnapshotAttributes(),
-			},
-			NewRunInfo:   e.taskAttr.NewRunInfo,
-			EventBatches: e.taskAttr.EventBatches,
-		}
-	case *replicationspb.SyncVersionedTransitionTaskAttributes_SyncWorkflowStateMutationAttributes:
-		versionedTransitionArtifact = &replicationspb.VersionedTransitionArtifact{
-			StateAttributes: &replicationspb.VersionedTransitionArtifact_SyncWorkflowStateMutationAttributes{
-				SyncWorkflowStateMutationAttributes: e.taskAttr.GetSyncWorkflowStateMutationAttributes(),
-			},
-			NewRunInfo:   e.taskAttr.NewRunInfo,
-			EventBatches: e.taskAttr.EventBatches,
-		}
-	default:
-		return serviceerror.NewInvalidArgument(fmt.Sprintf("unknown artifact type %T", artifactType))
-	}
-	return engine.ReplicateVersionedTransition(ctx, versionedTransitionArtifact, e.SourceClusterName())
+	return engine.ReplicateVersionedTransition(ctx, e.taskAttr.VersionedTransitionArtifact, e.SourceClusterName())
 }
 
 func (e *ExecutableSyncVersionedTransitionTask) HandleErr(err error) error {
