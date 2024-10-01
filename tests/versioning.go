@@ -111,6 +111,7 @@ func (s *VersioningIntegSuite) SetupSuite() {
 		// this is overridden for tests using testWithMatchingBehavior
 		dynamicconfig.MatchingNumTaskqueueReadPartitions.Key():  4,
 		dynamicconfig.MatchingNumTaskqueueWritePartitions.Key(): 4,
+		dynamicconfig.TaskQueueInternalInfoCacheTTL.Key():       time.Nanosecond,
 	}
 	s.setupSuite("testdata/es_cluster.yaml")
 }
