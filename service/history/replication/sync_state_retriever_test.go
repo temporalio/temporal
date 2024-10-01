@@ -161,11 +161,9 @@ func (s *syncWorkflowStateSuite) TestSyncWorkflowState_ReturnMutation() {
 		versionHistories)
 	s.NoError(err)
 	s.NotNil(result)
-	s.Nil(result.Snapshot)
-	s.NotNil(result.Mutation)
-	s.Equal(result.Type, Mutation)
-	s.Nil(result.EventBlobs)
-	s.Nil(result.NewRunInfo)
+	s.Nil(result.VersionedTransitionArtifact.GetSyncWorkflowStateSnapshotAttributes())
+	s.Nil(result.VersionedTransitionArtifact.EventBatches)
+	s.Nil(result.VersionedTransitionArtifact.NewRunInfo)
 }
 
 func (s *syncWorkflowStateSuite) TestSyncWorkflowState_ReturnSnapshot() {
@@ -215,11 +213,9 @@ func (s *syncWorkflowStateSuite) TestSyncWorkflowState_ReturnSnapshot() {
 		versionHistories)
 	s.NoError(err)
 	s.NotNil(result)
-	s.NotNil(result.Snapshot)
-	s.Nil(result.Mutation)
-	s.Equal(result.Type, Snapshot)
-	s.Nil(result.EventBlobs)
-	s.Nil(result.NewRunInfo)
+	s.NotNil(result.VersionedTransitionArtifact.GetSyncWorkflowStateSnapshotAttributes())
+	s.Nil(result.VersionedTransitionArtifact.EventBatches)
+	s.Nil(result.VersionedTransitionArtifact.NewRunInfo)
 }
 
 func (s *syncWorkflowStateSuite) TestSyncWorkflowState_NoVersionTransitionProvided_ReturnSnapshot() {
@@ -266,11 +262,9 @@ func (s *syncWorkflowStateSuite) TestSyncWorkflowState_NoVersionTransitionProvid
 		versionHistories)
 	s.NoError(err)
 	s.NotNil(result)
-	s.NotNil(result.Snapshot)
-	s.Nil(result.Mutation)
-	s.Equal(result.Type, Snapshot)
-	s.Nil(result.EventBlobs)
-	s.Nil(result.NewRunInfo)
+	s.NotNil(result.VersionedTransitionArtifact.GetSyncWorkflowStateSnapshotAttributes())
+	s.Nil(result.VersionedTransitionArtifact.EventBatches)
+	s.Nil(result.VersionedTransitionArtifact.NewRunInfo)
 }
 
 func (s *syncWorkflowStateSuite) TestGetNewRunInfo() {
