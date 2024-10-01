@@ -29,8 +29,6 @@ import (
 	"fmt"
 	"sync/atomic"
 
-	"github.com/pborman/uuid"
-
 	sdkworker "go.temporal.io/sdk/worker"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/headers"
@@ -94,7 +92,7 @@ func (wm *workerManager) Start() {
 			// use default worker
 			wc.RegisterWorkflow(defaultWorker)
 		} else {
-			wfWorkerOptions.Options.Identity = fmt.Sprintf("temporal-system@%s", uuid.New())
+			wfWorkerOptions.Options.Identity = fmt.Sprintf("temporal-system@%s", wm.hostInfo.Identity())
 			// this worker component requires a dedicated worker
 			dedicatedWorker := wm.sdkClientFactory.NewWorker(sdkClient, wfWorkerOptions.TaskQueue, wfWorkerOptions.Options)
 			wc.RegisterWorkflow(dedicatedWorker)
