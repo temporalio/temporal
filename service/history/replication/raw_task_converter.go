@@ -296,14 +296,6 @@ func convertSyncVersionedTransitionTask(
 	targetClusterID int32,
 	converter *syncVersionedTransitionTaskConverter,
 ) (*replicationspb.ReplicationTask, error) {
-	converter.logger = log.With(
-		converter.logger,
-		tag.WorkflowNamespaceID(taskInfo.NamespaceID),
-		tag.WorkflowID(taskInfo.WorkflowID),
-		tag.WorkflowRunID(taskInfo.RunID),
-		tag.TaskKey(taskInfo.GetKey()),
-		tag.Task(taskInfo),
-	)
 	return generateStateReplicationTask(
 		ctx,
 		converter.shardContext,
@@ -830,7 +822,12 @@ func (c *syncVersionedTransitionTaskConverter) convertTaskEquivalents(
 ) (*replicationspb.ReplicationTask, error) {
 	if len(taskInfo.TaskEquivalents) == 0 {
 		// no task equivalents, nothing to do
-		c.logger.Info("No task equivalents for sync versioned transition task, dropping the task.")
+		c.logger.Info("No task equivalents for sync versioned transition task, dropping the task.",
+			tag.WorkflowNamespaceID(taskInfo.NamespaceID),
+			tag.WorkflowID(taskInfo.WorkflowID),
+			tag.WorkflowRunID(taskInfo.RunID),
+			tag.TaskKey(taskInfo.GetKey()),
+			tag.Task(taskInfo))
 		return nil, nil
 	}
 	if len(taskInfo.TaskEquivalents) == 1 {
