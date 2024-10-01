@@ -161,7 +161,7 @@ func (s *syncWorkflowStateSuite) TestSyncWorkflowState_ReturnMutation() {
 		versionHistories)
 	s.NoError(err)
 	s.NotNil(result)
-	s.Nil(result.VersionedTransitionArtifact.GetSyncWorkflowStateSnapshotAttributes())
+	s.NotNil(result.VersionedTransitionArtifact.GetSyncWorkflowStateMutationAttributes())
 	s.Nil(result.VersionedTransitionArtifact.EventBatches)
 	s.Nil(result.VersionedTransitionArtifact.NewRunInfo)
 }
