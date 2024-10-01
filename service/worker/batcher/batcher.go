@@ -81,7 +81,7 @@ func (s *Batcher) Start() error {
 	ctx := headers.SetCallerInfo(context.Background(), headers.SystemBackgroundCallerInfo)
 	workerOpts := worker.Options{
 		BackgroundActivityContext: ctx,
-		Identity:                  fmt.Sprintf("temporal-system@%s", s.hostInfo.Identity()),
+		Identity:                  "temporal-system@" + s.hostInfo.Identity(),
 	}
 	sdkClient := s.sdkClientFactory.GetSystemClient()
 	batchWorker := s.sdkClientFactory.NewWorker(sdkClient, taskQueueName, workerOpts)
