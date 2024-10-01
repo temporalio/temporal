@@ -86,22 +86,22 @@ func (s *perNsWorkerManagerSuite) SetupTest() {
 		NamespaceRegistry: s.registry,
 		HostName:          "self",
 		Config: &Config{
-			PerNamespaceWorkerCount: func(ns string) int {
-				return max(1, map[string]int{"ns1": 1, "ns2": 2, "ns3": 6}[ns])
+			PerNamespaceWorkerCount: func(ns string, cb func(int)) (int, func()) {
+				return max(1, map[string]int{"ns1": 1, "ns2": 2, "ns3": 6}[ns]), func() {}
 			},
-			PerNamespaceWorkerOptions: func(ns string) sdkworker.Options {
+			PerNamespaceWorkerOptions: func(ns string, cb func(sdkworker.Options)) (sdkworker.Options, func()) {
 				switch ns {
 				case "ns1":
 					return sdkworker.Options{
 						MaxConcurrentWorkflowTaskPollers: 100,
-					}
+					}, func() {}
 				case "ns2":
 					return sdkworker.Options{
 						WorkerLocalActivitiesPerSecond: 200.0,
 						StickyScheduleToStartTimeout:   7500 * time.Millisecond,
-					}
+					}, func() {}
 				default:
-					return sdkworker.Options{}
+					return sdkworker.Options{}, func() {}
 				}
 			},
 			PerNamespaceWorkerStartRate: dynamicconfig.GetFloatPropertyFn(10),
