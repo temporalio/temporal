@@ -1,6 +1,6 @@
 # In-memory Timer Queue
 
-This queue is similar to the normal persisted timer queue, but it exists only in memory, ie it 
+This queue is similar to the normal persisted timer queue, but it exists only in memory, i.e. it 
 never gets persisted. It is created by a generic `MemoryScheduledQueueFactory`, but currently serves
 only [speculative Workflow Task](./speculative-workflow-task.md) timeouts. Therefore, the only queue
 this factory creates is `SpeculativeWorkflowTaskTimeoutQueue` which uses the same task executor as
