@@ -78,7 +78,7 @@ func SyncWorkflowState(
 	response.NewRunInfo = result.NewRunInfo
 	response.EventBatches = result.EventBlobs
 
-	err = replicationProgressCache.Update(request.Execution.RunId, request.TargetClusterId, result.VersionedTransitionHistory, result.LastVersionHistory.Items)
+	err = replicationProgressCache.Update(request.Execution.RunId, request.TargetClusterId, result.VersionedTransitionHistory, result.SyncedVersionHistory.Items)
 	if err != nil {
 		logger.Error("SyncWorkflowState failed to update progress cache",
 			tag.WorkflowNamespaceID(request.NamespaceId),
