@@ -7,9 +7,9 @@ There are three types of Workflow Task:
   3. Speculative
 
 Every Workflow Task ships history events to the worker. It must always contain the two events
-`WorkflowTaskScheduled` and `WorkflowTaskStarted`. There might be some events in-between them if
-they came in after the Workflow Task was scheduled but not yet started (e.g. when the Workflow worker
-was down and didn't poll for Workflow Task).
+`WorkflowTaskScheduled` and `WorkflowTaskStarted` (must be last!). There might be some events in-between
+them if they came in after the Workflow Task was scheduled but not yet started (e.g. when the Workflow
+worker was down and didn't poll for Workflow Task).
 
 A **normal Workflow Task** is created by the server when it needs a Workflow to make progress. If 
 the Workflow Task fails (i.e. worker responds with a call to `RespondWorkflowTaskFailed` or an error
