@@ -55,8 +55,8 @@ type (
 		// created (false).
 		FindOrCreate(ctx context.Context, updateID string) (_ *Update, alreadyExisted bool, _ error)
 
-		// Find finds an existing Update in this Registry but does not create a
-		// new Update if no Update is found.
+		// Find an existing Update in this Registry.
+		// Returns nil if Update doesn't exist.
 		Find(ctx context.Context, updateID string) *Update
 
 		// TryResurrect tries to resurrect the Update from the protocol message,
@@ -84,9 +84,6 @@ type (
 
 		// Abort all incomplete Updates in the Registry.
 		Abort(reason AbortReason)
-
-		// Contains returns true iff the Update exists in the Registry.
-		Contains(updateID string) bool
 
 		// Clear the Registry and abort all Updates.
 		Clear()
@@ -278,10 +275,6 @@ func (r *registry) Abort(reason AbortReason) {
 	}
 }
 
-func (r *registry) Contains(updateID string) bool {
-	return r.updates[updateID] != nil
-}
-
 func (r *registry) RejectUnprocessed(
 	_ context.Context,
 	effects effect.Controller,
@@ -389,7 +382,7 @@ func (r *registry) checkTotalLimit() error {
 }
 
 func (r *registry) Find(ctx context.Context, id string) *Update {
-	// Check the Admitted and Accepted Updates map first.
+	// Check the admitted and accepted Updates map first.
 	if upd, ok := r.updates[id]; ok {
 		return upd
 	}

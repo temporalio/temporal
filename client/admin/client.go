@@ -23,7 +23,7 @@
 // THE SOFTWARE.
 
 // Generates all three generated files in this package:
-//go:generate go run ../../cmd/tools/rpcwrappers -service admin
+//go:generate go run ../../cmd/tools/genrpcwrappers -service admin
 
 package admin
 

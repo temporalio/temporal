@@ -214,7 +214,7 @@ func (s *namespaceTestSuite) Test_NamespaceDelete_OverrideDelay() {
 	ctx, cancel := rpc.NewContextWithTimeoutAndVersionHeaders(10000 * time.Second)
 	defer cancel()
 
-	s.cluster.host.OverrideDCValue(s.T(), dynamicconfig.DeleteNamespaceNamespaceDeleteDelay, time.Hour)
+	s.cluster.OverrideDynamicConfig(s.T(), dynamicconfig.DeleteNamespaceNamespaceDeleteDelay, time.Hour)
 
 	retention := 24 * time.Hour
 	_, err := s.frontendClient.RegisterNamespace(ctx, &workflowservice.RegisterNamespaceRequest{
