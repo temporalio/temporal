@@ -17,7 +17,7 @@ occurred while processing `RespondWorkflowTaskCompleted`) or times out (e.g. wor
 the server writes a corresponding Workflow Task failed event to the history and increases the
 attempt count in the mutable state.
 
-For the next attempt, a **transient Workflow Task** is used: the Workflow Task events
+For the next attempt, **transient Workflow Task events** are used: the Workflow Task events
 `WorkflowTaskScheduled` and `WorkflowTaskStarted` are *not* written to the history, but attached to
 the response from the `RecordWorkflowTaskStarted` API. The worker does not know they are transient,
 though. If the Workflow Task keeps failing, the attempt counter is increased in the mutable state,
