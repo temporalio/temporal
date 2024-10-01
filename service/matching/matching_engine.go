@@ -37,6 +37,7 @@ import (
 
 	"github.com/nexus-rpc/sdk-go/nexus"
 	"github.com/pborman/uuid"
+	"go.opentelemetry.io/otel/trace"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/history/v1"
@@ -68,6 +69,7 @@ import (
 	"go.temporal.io/server/common/resource"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/tasktoken"
+	"go.temporal.io/server/common/telemetry"
 	"go.temporal.io/server/common/tqid"
 	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/common/worker_versioning"
@@ -445,6 +447,10 @@ func (e *matchingEngineImpl) AddWorkflowTask(
 		return "", false, err
 	}
 
+	trace.SpanFromContext(ctx).SetAttributes(
+		telemetry.WorkflowIdAttr(addRequest.Execution.WorkflowId),
+	)
+
 	sticky := partition.Kind() == enumspb.TASK_QUEUE_KIND_STICKY
 	// do not load sticky task queue if it is not already loaded, which means it has no poller.
 	pm, _, err := e.getTaskQueuePartitionManager(ctx, partition, !sticky, loadCauseTask)
@@ -492,6 +498,10 @@ func (e *matchingEngineImpl) AddActivityTask(
 	if err != nil {
 		return "", false, err
 	}
+
+	trace.SpanFromContext(ctx).SetAttributes(
+		telemetry.WorkflowIdAttr(addRequest.Execution.WorkflowId),
+	)
 
 	var expirationTime *timestamppb.Timestamp
 	now := time.Now().UTC()
