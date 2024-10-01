@@ -73,15 +73,14 @@ type (
 	EndpointRegistryImpl struct {
 		config *EndpointRegistryConfig
 
-		dataReady chan struct{}
+		dataReady atomic.Pointer[dataReady]
 
 		dataLock        sync.RWMutex // Protects tableVersion and endpoints.
 		tableVersion    int64
 		endpointsByID   map[string]*persistencespb.NexusEndpointEntry // Mapping of endpoint ID -> endpoint.
 		endpointsByName map[string]*persistencespb.NexusEndpointEntry // Mapping of endpoint name -> endpoint.
 
-		refreshPoller atomic.Pointer[goro.Handle]
-		cancelDcSub   func()
+		cancelDcSub func()
 
 		matchingClient matchingservice.MatchingServiceClient
 		persistence    p.NexusEndpointManager
@@ -89,7 +88,14 @@ type (
 
 		readThroughCacheByID cache.Cache
 	}
+
+	dataReady struct {
+		refresh *goro.Handle  // handle to refresh goroutine
+		ready   chan struct{} // channel that clients can wait on for state changes
+	}
 )
+
+var ErrNexusDisabled = serviceerror.NewFailedPrecondition("nexus is disabled")
 
 func NewEndpointRegistryConfig(dc *dynamicconfig.Collection) *EndpointRegistryConfig {
 	config := &EndpointRegistryConfig{
@@ -113,7 +119,6 @@ func NewEndpointRegistry(
 ) *EndpointRegistryImpl {
 	return &EndpointRegistryImpl{
 		config:          config,
-		dataReady:       make(chan struct{}),
 		endpointsByID:   make(map[string]*persistencespb.NexusEndpointEntry),
 		endpointsByName: make(map[string]*persistencespb.NexusEndpointEntry),
 		matchingClient:  matchingClient,
@@ -141,22 +146,30 @@ func (r *EndpointRegistryImpl) StopLifecycle() {
 }
 
 func (r *EndpointRegistryImpl) setEnabled(enabled bool) {
-	oldPoller := r.refreshPoller.Load()
-	if oldPoller == nil && enabled {
+	oldReady := r.dataReady.Load()
+	if oldReady == nil && enabled {
 		backgroundCtx := headers.SetCallerInfo(
 			context.Background(),
 			headers.SystemBackgroundCallerInfo,
 		)
-		newPoller := goro.NewHandle(backgroundCtx)
-		oldPoller = r.refreshPoller.Swap(newPoller)
-		if oldPoller == nil {
-			newPoller.Go(r.refreshEndpointsLoop)
+		newReady := &dataReady{
+			refresh: goro.NewHandle(backgroundCtx),
+			ready:   make(chan struct{}),
 		}
-	} else if oldPoller != nil && !enabled {
-		oldPoller = r.refreshPoller.Swap(nil)
-		if oldPoller != nil {
-			oldPoller.Cancel()
-			<-oldPoller.Done()
+		if r.dataReady.CompareAndSwap(oldReady, newReady) {
+			newReady.refresh.Go(func(ctx context.Context) error {
+				return r.refreshEndpointsLoop(ctx, newReady)
+			})
+		}
+	} else if oldReady != nil && !enabled {
+		if r.dataReady.CompareAndSwap(oldReady, nil) {
+			oldReady.refresh.Cancel()
+			<-oldReady.refresh.Done()
+			// If oldReady.ready was not already closed here, callers blocked in waitUntilInitialized
+			// will block indefinitely (until context timeout). If we wanted to wake them up, we
+			// could close ready here, but we would need to use a sync.Once to avoid closing it
+			// twice. Then waitUntilInitialized would need to reload r.dataReady to check that the
+			// wakeup was due to data being ready rather than this close.
 		}
 	}
 }
@@ -206,15 +219,19 @@ func (r *EndpointRegistryImpl) GetByID(ctx context.Context, id string) (*persist
 }
 
 func (r *EndpointRegistryImpl) waitUntilInitialized(ctx context.Context) error {
+	dataReady := r.dataReady.Load()
+	if dataReady == nil {
+		return ErrNexusDisabled
+	}
 	select {
-	case <-r.dataReady:
+	case <-dataReady.ready:
 		return nil
 	case <-ctx.Done():
 		return ctx.Err()
 	}
 }
 
-func (r *EndpointRegistryImpl) refreshEndpointsLoop(ctx context.Context) error {
+func (r *EndpointRegistryImpl) refreshEndpointsLoop(ctx context.Context, dataReady *dataReady) error {
 	hasLoadedEndpointData := false
 
 	for ctx.Err() == nil {
@@ -226,7 +243,9 @@ func (r *EndpointRegistryImpl) refreshEndpointsLoop(ctx context.Context) error {
 			err := backoff.ThrottleRetryContext(ctx, r.loadEndpoints, r.config.refreshRetryPolicy, nil)
 			if err == nil {
 				hasLoadedEndpointData = true
-				close(r.dataReady)
+				// Note: do not reload r.dataReady here, use value from argument to ensure that
+				// each channel is closed no more than once.
+				close(dataReady.ready)
 			}
 		} else {
 			// Endpoints have previously been loaded, so just keep them up to date with long poll requests to

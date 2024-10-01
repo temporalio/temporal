@@ -75,7 +75,7 @@ func SetDefaultContinueAsNewInitiator(f *enumspb.ContinueAsNewInitiator) {
 
 func SetDefaultResetReapplyType(f *enumspb.ResetReapplyType) {
 	if *f == enumspb.RESET_REAPPLY_TYPE_UNSPECIFIED {
-		*f = enumspb.RESET_REAPPLY_TYPE_SIGNAL
+		*f = enumspb.RESET_REAPPLY_TYPE_ALL_ELIGIBLE
 	}
 }
 
