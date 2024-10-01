@@ -348,6 +348,7 @@ func (s *Service) initScanner() error {
 		s.matchingClient,
 		s.namespaceRegistry,
 		currentCluster,
+		s.hostInfo,
 	)
 	return nil
 }

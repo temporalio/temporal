@@ -30,8 +30,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/pborman/uuid"
-
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/sdk/activity"
 	sdkclient "go.temporal.io/sdk/client"
@@ -47,6 +45,7 @@ import (
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
@@ -114,6 +113,7 @@ type (
 		adminClient        adminservice.AdminServiceClient
 		namespaceRegistry  namespace.Registry
 		currentClusterName string
+		hostInfo           membership.HostInfo
 	}
 
 	// Scanner is the background sub-system that does full scans
@@ -145,6 +145,7 @@ func New(
 	matchingClient matchingservice.MatchingServiceClient,
 	registry namespace.Registry,
 	currentClusterName string,
+	hostInfo membership.HostInfo,
 ) *Scanner {
 	return &Scanner{
 		context: scannerContext{
@@ -161,6 +162,7 @@ func New(
 			adminClient:        adminClient,
 			namespaceRegistry:  registry,
 			currentClusterName: currentClusterName,
+			hostInfo:           hostInfo,
 		},
 	}
 }
@@ -172,7 +174,7 @@ func (s *Scanner) Start() error {
 	ctx, s.lifecycleCancel = context.WithCancel(ctx)
 
 	workerOpts := worker.Options{
-		Identity:                               fmt.Sprintf("temporal-system@%s", uuid.New()),
+		Identity:                               fmt.Sprintf("temporal-system@%s", s.context.hostInfo.Identity()),
 		MaxConcurrentActivityExecutionSize:     s.context.cfg.MaxConcurrentActivityExecutionSize(),
 		MaxConcurrentWorkflowTaskExecutionSize: s.context.cfg.MaxConcurrentWorkflowTaskExecutionSize(),
 		MaxConcurrentActivityTaskPollers:       s.context.cfg.MaxConcurrentActivityTaskPollers(),
