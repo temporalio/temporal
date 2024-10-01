@@ -32,7 +32,7 @@ Workflow Update, it is the same as `update_id`.
 
 > #### TODO
 > In the future, signals and queries might use the message protocol, too.
-> In that case `protocol_instance_id` would be `query_id` or `signal_id.
+> In that case `protocol_instance_id` would be `query_id` or `signal_id`.
 
 ### `body`
 This field is intentionally of type `Any` (not `oneof`) to support pluggable interfaces which the 
