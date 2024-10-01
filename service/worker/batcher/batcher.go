@@ -58,7 +58,14 @@ type (
 )
 
 // New returns a new instance of the Batcher.
-func New(metricsHandler metrics.Handler, logger log.Logger, hostInfo membership.HostInfo, sdkClientFactory sdk.ClientFactory, rps dynamicconfig.IntPropertyFnWithNamespaceFilter, concurrency dynamicconfig.IntPropertyFnWithNamespaceFilter) *Batcher {
+func New(
+	metricsHandler metrics.Handler,
+	logger log.Logger,
+	hostInfo membership.HostInfo,
+	sdkClientFactory sdk.ClientFactory,
+	rps dynamicconfig.IntPropertyFnWithNamespaceFilter,
+	concurrency dynamicconfig.IntPropertyFnWithNamespaceFilter,
+) *Batcher {
 	return &Batcher{
 		sdkClientFactory: sdkClientFactory,
 		metricsHandler:   metricsHandler,
