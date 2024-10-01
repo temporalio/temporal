@@ -89,9 +89,10 @@ func (s *workerComponent) DedicatedWorkerOptions(ns *namespace.Namespace) *worke
 	}
 }
 
-func (s *workerComponent) Register(registry sdkworker.Registry, ns *namespace.Namespace, _ workercommon.RegistrationDetails) {
+func (s *workerComponent) Register(registry sdkworker.Registry, ns *namespace.Namespace, _ workercommon.RegistrationDetails) func() {
 	registry.RegisterWorkflowWithOptions(BatchWorkflow, workflow.RegisterOptions{Name: BatchWFTypeName})
 	registry.RegisterActivity(s.activities(ns.Name(), ns.ID()))
+	return nil
 }
 
 func (s *workerComponent) activities(name namespace.Name, id namespace.ID) *activities {
