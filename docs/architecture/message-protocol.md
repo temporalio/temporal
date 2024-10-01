@@ -45,13 +45,13 @@ messages must be processed. This field can be:
 - `command_index`, to indicate the command after which message should be processed by the server.
 
 > #### TODO
-> `event_id` is *always* set to the id before the `WorkflowTaskStartedEvent` by the server,
-> which means that all messages are processed after all events. This is because buffered events are
-> reordered on the server (see `reorderBuffer()` func) and intersecting them based on `event_id`
+> `event_id` is not used as intended: it is *always* set to the id before the `WorkflowTaskStartedEvent`
+> by the server, which means that all messages are processed after all events. This is because buffered
+> events are reordered on the server (see `reorderBuffer()` func) and intersecting them based on `event_id`
 > is not possible. When reordering is removed, this field can be set to the right value.
 
 > #### TODO
-> `command_index` is not used because SDKs use a different approach: a special command of type
+> `command_index` is not used as intended: SDKs use a different approach where a special command of type
 > `COMMAND_TYPE_PROTOCOL_MESSAGE` is added to a command list to indicate the place where a message
 > must be processed. This command has only `message_id` fields which point to a particular message.
 >
