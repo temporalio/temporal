@@ -165,6 +165,26 @@ func (mr *MockWorkflowServiceClientMockRecorder) DeprecateNamespace(arg0, arg1 a
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeprecateNamespace", reflect.TypeOf((*MockWorkflowServiceClient)(nil).DeprecateNamespace), varargs...)
 }
 
+// DescribeActivityById mocks base method.
+func (m *MockWorkflowServiceClient) DescribeActivityById(arg0 context.Context, arg1 *workflowservice.DescribeActivityByIdRequest, arg2 ...grpc.CallOption) (*workflowservice.DescribeActivityByIdResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []any{arg0, arg1}
+	for _, a := range arg2 {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "DescribeActivityById", varargs...)
+	ret0, _ := ret[0].(*workflowservice.DescribeActivityByIdResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// DescribeActivityById indicates an expected call of DescribeActivityById.
+func (mr *MockWorkflowServiceClientMockRecorder) DescribeActivityById(arg0, arg1 any, arg2 ...any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]any{arg0, arg1}, arg2...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DescribeActivityById", reflect.TypeOf((*MockWorkflowServiceClient)(nil).DescribeActivityById), varargs...)
+}
+
 // DescribeBatchOperation mocks base method.
 func (m *MockWorkflowServiceClient) DescribeBatchOperation(arg0 context.Context, arg1 *workflowservice.DescribeBatchOperationRequest, arg2 ...grpc.CallOption) (*workflowservice.DescribeBatchOperationResponse, error) {
 	m.ctrl.T.Helper()
@@ -645,6 +665,26 @@ func (mr *MockWorkflowServiceClientMockRecorder) PatchSchedule(arg0, arg1 any, a
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PatchSchedule", reflect.TypeOf((*MockWorkflowServiceClient)(nil).PatchSchedule), varargs...)
 }
 
+// PauseActivityById mocks base method.
+func (m *MockWorkflowServiceClient) PauseActivityById(arg0 context.Context, arg1 *workflowservice.PauseActivityByIdRequest, arg2 ...grpc.CallOption) (*workflowservice.PauseActivityByIdResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []any{arg0, arg1}
+	for _, a := range arg2 {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "PauseActivityById", varargs...)
+	ret0, _ := ret[0].(*workflowservice.PauseActivityByIdResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// PauseActivityById indicates an expected call of PauseActivityById.
+func (mr *MockWorkflowServiceClientMockRecorder) PauseActivityById(arg0, arg1 any, arg2 ...any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]any{arg0, arg1}, arg2...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PauseActivityById", reflect.TypeOf((*MockWorkflowServiceClient)(nil).PauseActivityById), varargs...)
+}
+
 // PollActivityTaskQueue mocks base method.
 func (m *MockWorkflowServiceClient) PollActivityTaskQueue(arg0 context.Context, arg1 *workflowservice.PollActivityTaskQueueRequest, arg2 ...grpc.CallOption) (*workflowservice.PollActivityTaskQueueResponse, error) {
 	m.ctrl.T.Helper()
@@ -823,6 +863,26 @@ func (mr *MockWorkflowServiceClientMockRecorder) RequestCancelWorkflowExecution(
 	mr.mock.ctrl.T.Helper()
 	varargs := append([]any{arg0, arg1}, arg2...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RequestCancelWorkflowExecution", reflect.TypeOf((*MockWorkflowServiceClient)(nil).RequestCancelWorkflowExecution), varargs...)
+}
+
+// ResetActivityById mocks base method.
+func (m *MockWorkflowServiceClient) ResetActivityById(arg0 context.Context, arg1 *workflowservice.ResetActivityByIdRequest, arg2 ...grpc.CallOption) (*workflowservice.ResetActivityByIdResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []any{arg0, arg1}
+	for _, a := range arg2 {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "ResetActivityById", varargs...)
+	ret0, _ := ret[0].(*workflowservice.ResetActivityByIdResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ResetActivityById indicates an expected call of ResetActivityById.
+func (mr *MockWorkflowServiceClientMockRecorder) ResetActivityById(arg0, arg1 any, arg2 ...any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]any{arg0, arg1}, arg2...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ResetActivityById", reflect.TypeOf((*MockWorkflowServiceClient)(nil).ResetActivityById), varargs...)
 }
 
 // ResetStickyTaskQueue mocks base method.
@@ -1083,6 +1143,26 @@ func (mr *MockWorkflowServiceClientMockRecorder) RespondWorkflowTaskFailed(arg0,
 	mr.mock.ctrl.T.Helper()
 	varargs := append([]any{arg0, arg1}, arg2...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RespondWorkflowTaskFailed", reflect.TypeOf((*MockWorkflowServiceClient)(nil).RespondWorkflowTaskFailed), varargs...)
+}
+
+// ResumeActivityById mocks base method.
+func (m *MockWorkflowServiceClient) ResumeActivityById(arg0 context.Context, arg1 *workflowservice.ResumeActivityByIdRequest, arg2 ...grpc.CallOption) (*workflowservice.ResumeActivityByIdResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []any{arg0, arg1}
+	for _, a := range arg2 {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "ResumeActivityById", varargs...)
+	ret0, _ := ret[0].(*workflowservice.ResumeActivityByIdResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ResumeActivityById indicates an expected call of ResumeActivityById.
+func (mr *MockWorkflowServiceClientMockRecorder) ResumeActivityById(arg0, arg1 any, arg2 ...any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]any{arg0, arg1}, arg2...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ResumeActivityById", reflect.TypeOf((*MockWorkflowServiceClient)(nil).ResumeActivityById), varargs...)
 }
 
 // ScanWorkflowExecutions mocks base method.

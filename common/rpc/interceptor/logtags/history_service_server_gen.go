@@ -56,6 +56,11 @@ func (wt *WorkflowTags) extractFromHistoryServiceServerRequest(req any) []tag.Ta
 			tag.WorkflowID(r.GetExecution().GetWorkflowId()),
 			tag.WorkflowRunID(r.GetExecution().GetRunId()),
 		}
+	case *historyservice.DescribeActivityRequest:
+		return []tag.Tag{
+			tag.WorkflowID(r.GetRequest().GetWorkflowId()),
+			tag.WorkflowRunID(r.GetRequest().GetRunId()),
+		}
 	case *historyservice.DescribeHistoryHostRequest:
 		return []tag.Tag{
 			tag.WorkflowID(r.GetWorkflowExecution().GetWorkflowId()),
@@ -148,6 +153,11 @@ func (wt *WorkflowTags) extractFromHistoryServiceServerRequest(req any) []tag.Ta
 		return nil
 	case *historyservice.MergeDLQMessagesRequest:
 		return nil
+	case *historyservice.PauseActivityRequest:
+		return []tag.Tag{
+			tag.WorkflowID(r.GetRequest().GetWorkflowId()),
+			tag.WorkflowRunID(r.GetRequest().GetRunId()),
+		}
 	case *historyservice.PollMutableStateRequest:
 		return []tag.Tag{
 			tag.WorkflowID(r.GetExecution().GetWorkflowId()),
@@ -219,6 +229,11 @@ func (wt *WorkflowTags) extractFromHistoryServiceServerRequest(req any) []tag.Ta
 			tag.WorkflowID(r.GetCancelRequest().GetWorkflowExecution().GetWorkflowId()),
 			tag.WorkflowRunID(r.GetCancelRequest().GetWorkflowExecution().GetRunId()),
 		}
+	case *historyservice.ResetActivityRequest:
+		return []tag.Tag{
+			tag.WorkflowID(r.GetRequest().GetWorkflowId()),
+			tag.WorkflowRunID(r.GetRequest().GetRunId()),
+		}
 	case *historyservice.ResetStickyTaskQueueRequest:
 		return []tag.Tag{
 			tag.WorkflowID(r.GetExecution().GetWorkflowId()),
@@ -239,6 +254,11 @@ func (wt *WorkflowTags) extractFromHistoryServiceServerRequest(req any) []tag.Ta
 		return wt.fromTaskToken(r.GetCompleteRequest().GetTaskToken())
 	case *historyservice.RespondWorkflowTaskFailedRequest:
 		return wt.fromTaskToken(r.GetFailedRequest().GetTaskToken())
+	case *historyservice.ResumeActivityRequest:
+		return []tag.Tag{
+			tag.WorkflowID(r.GetRequest().GetWorkflowId()),
+			tag.WorkflowRunID(r.GetRequest().GetRunId()),
+		}
 	case *historyservice.ScheduleWorkflowTaskRequest:
 		return []tag.Tag{
 			tag.WorkflowID(r.GetWorkflowExecution().GetWorkflowId()),

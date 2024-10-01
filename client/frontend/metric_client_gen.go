@@ -103,6 +103,20 @@ func (c *metricClient) DeprecateNamespace(
 	return c.client.DeprecateNamespace(ctx, request, opts...)
 }
 
+func (c *metricClient) DescribeActivityById(
+	ctx context.Context,
+	request *workflowservice.DescribeActivityByIdRequest,
+	opts ...grpc.CallOption,
+) (_ *workflowservice.DescribeActivityByIdResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, "FrontendClientDescribeActivityById")
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.DescribeActivityById(ctx, request, opts...)
+}
+
 func (c *metricClient) DescribeBatchOperation(
 	ctx context.Context,
 	request *workflowservice.DescribeBatchOperationRequest,
@@ -439,6 +453,20 @@ func (c *metricClient) PatchSchedule(
 	return c.client.PatchSchedule(ctx, request, opts...)
 }
 
+func (c *metricClient) PauseActivityById(
+	ctx context.Context,
+	request *workflowservice.PauseActivityByIdRequest,
+	opts ...grpc.CallOption,
+) (_ *workflowservice.PauseActivityByIdResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, "FrontendClientPauseActivityById")
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.PauseActivityById(ctx, request, opts...)
+}
+
 func (c *metricClient) PollActivityTaskQueue(
 	ctx context.Context,
 	request *workflowservice.PollActivityTaskQueueRequest,
@@ -563,6 +591,20 @@ func (c *metricClient) RequestCancelWorkflowExecution(
 	}()
 
 	return c.client.RequestCancelWorkflowExecution(ctx, request, opts...)
+}
+
+func (c *metricClient) ResetActivityById(
+	ctx context.Context,
+	request *workflowservice.ResetActivityByIdRequest,
+	opts ...grpc.CallOption,
+) (_ *workflowservice.ResetActivityByIdResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, "FrontendClientResetActivityById")
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.ResetActivityById(ctx, request, opts...)
 }
 
 func (c *metricClient) ResetStickyTaskQueue(
@@ -745,6 +787,20 @@ func (c *metricClient) RespondWorkflowTaskFailed(
 	}()
 
 	return c.client.RespondWorkflowTaskFailed(ctx, request, opts...)
+}
+
+func (c *metricClient) ResumeActivityById(
+	ctx context.Context,
+	request *workflowservice.ResumeActivityByIdRequest,
+	opts ...grpc.CallOption,
+) (_ *workflowservice.ResumeActivityByIdResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, "FrontendClientResumeActivityById")
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.ResumeActivityById(ctx, request, opts...)
 }
 
 func (c *metricClient) ScanWorkflowExecutions(

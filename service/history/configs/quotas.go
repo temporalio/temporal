@@ -104,6 +104,10 @@ var (
 		"/temporal.server.api.historyservice.v1.HistoryService/InvokeStateMachineMethod":               1,
 		"/temporal.server.api.historyservice.v1.HistoryService/DeepHealthCheck":                        1,
 		"/temporal.server.api.historyservice.v1.HistoryService/UpdateActivityOptions":                  1,
+		"/temporal.server.api.historyservice.v1.HistoryService/DescribeActivity":                       1,
+		"/temporal.server.api.historyservice.v1.HistoryService/PauseActivity":                          1,
+		"/temporal.server.api.historyservice.v1.HistoryService/ResumeActivity":                         1,
+		"/temporal.server.api.historyservice.v1.HistoryService/ResetActivity":                          1,
 	}
 
 	APIPrioritiesOrdered = []int{OperatorPriority, 1}

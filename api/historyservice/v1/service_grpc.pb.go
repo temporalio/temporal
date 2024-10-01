@@ -109,6 +109,10 @@ const (
 	HistoryService_DeepHealthCheck_FullMethodName                        = "/temporal.server.api.historyservice.v1.HistoryService/DeepHealthCheck"
 	HistoryService_SyncWorkflowState_FullMethodName                      = "/temporal.server.api.historyservice.v1.HistoryService/SyncWorkflowState"
 	HistoryService_UpdateActivityOptions_FullMethodName                  = "/temporal.server.api.historyservice.v1.HistoryService/UpdateActivityOptions"
+	HistoryService_DescribeActivity_FullMethodName                       = "/temporal.server.api.historyservice.v1.HistoryService/DescribeActivity"
+	HistoryService_PauseActivity_FullMethodName                          = "/temporal.server.api.historyservice.v1.HistoryService/PauseActivity"
+	HistoryService_ResumeActivity_FullMethodName                         = "/temporal.server.api.historyservice.v1.HistoryService/ResumeActivity"
+	HistoryService_ResetActivity_FullMethodName                          = "/temporal.server.api.historyservice.v1.HistoryService/ResetActivity"
 )
 
 // HistoryServiceClient is the client API for HistoryService service.
@@ -327,6 +331,14 @@ type HistoryServiceClient interface {
 	// (-- api-linter: core::0134::method-signature=disabled
 	// (-- api-linter: core::0134::response-message-name=disabled
 	UpdateActivityOptions(ctx context.Context, in *UpdateActivityOptionsRequest, opts ...grpc.CallOption) (*UpdateActivityOptionsResponse, error)
+	// DescribeActivity is called by the client to get current activity options and state.
+	DescribeActivity(ctx context.Context, in *DescribeActivityRequest, opts ...grpc.CallOption) (*DescribeActivityResponse, error)
+	// PauseActivityById is called by the client to pause an activity.
+	PauseActivity(ctx context.Context, in *PauseActivityRequest, opts ...grpc.CallOption) (*PauseActivityResponse, error)
+	// ResumeActivity is called by the client to resume the activity that is in paused or waiting state.
+	ResumeActivity(ctx context.Context, in *ResumeActivityRequest, opts ...grpc.CallOption) (*ResumeActivityResponse, error)
+	// ResetActivity is called by the client to reset the activity to its "original" state.
+	ResetActivity(ctx context.Context, in *ResetActivityRequest, opts ...grpc.CallOption) (*ResetActivityResponse, error)
 }
 
 type historyServiceClient struct {
@@ -962,6 +974,42 @@ func (c *historyServiceClient) UpdateActivityOptions(ctx context.Context, in *Up
 	return out, nil
 }
 
+func (c *historyServiceClient) DescribeActivity(ctx context.Context, in *DescribeActivityRequest, opts ...grpc.CallOption) (*DescribeActivityResponse, error) {
+	out := new(DescribeActivityResponse)
+	err := c.cc.Invoke(ctx, HistoryService_DescribeActivity_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *historyServiceClient) PauseActivity(ctx context.Context, in *PauseActivityRequest, opts ...grpc.CallOption) (*PauseActivityResponse, error) {
+	out := new(PauseActivityResponse)
+	err := c.cc.Invoke(ctx, HistoryService_PauseActivity_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *historyServiceClient) ResumeActivity(ctx context.Context, in *ResumeActivityRequest, opts ...grpc.CallOption) (*ResumeActivityResponse, error) {
+	out := new(ResumeActivityResponse)
+	err := c.cc.Invoke(ctx, HistoryService_ResumeActivity_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *historyServiceClient) ResetActivity(ctx context.Context, in *ResetActivityRequest, opts ...grpc.CallOption) (*ResetActivityResponse, error) {
+	out := new(ResetActivityResponse)
+	err := c.cc.Invoke(ctx, HistoryService_ResetActivity_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // HistoryServiceServer is the server API for HistoryService service.
 // All implementations must embed UnimplementedHistoryServiceServer
 // for forward compatibility
@@ -1178,6 +1226,14 @@ type HistoryServiceServer interface {
 	// (-- api-linter: core::0134::method-signature=disabled
 	// (-- api-linter: core::0134::response-message-name=disabled
 	UpdateActivityOptions(context.Context, *UpdateActivityOptionsRequest) (*UpdateActivityOptionsResponse, error)
+	// DescribeActivity is called by the client to get current activity options and state.
+	DescribeActivity(context.Context, *DescribeActivityRequest) (*DescribeActivityResponse, error)
+	// PauseActivityById is called by the client to pause an activity.
+	PauseActivity(context.Context, *PauseActivityRequest) (*PauseActivityResponse, error)
+	// ResumeActivity is called by the client to resume the activity that is in paused or waiting state.
+	ResumeActivity(context.Context, *ResumeActivityRequest) (*ResumeActivityResponse, error)
+	// ResetActivity is called by the client to reset the activity to its "original" state.
+	ResetActivity(context.Context, *ResetActivityRequest) (*ResetActivityResponse, error)
 	mustEmbedUnimplementedHistoryServiceServer()
 }
 
@@ -1385,6 +1441,18 @@ func (UnimplementedHistoryServiceServer) SyncWorkflowState(context.Context, *Syn
 }
 func (UnimplementedHistoryServiceServer) UpdateActivityOptions(context.Context, *UpdateActivityOptionsRequest) (*UpdateActivityOptionsResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method UpdateActivityOptions not implemented")
+}
+func (UnimplementedHistoryServiceServer) DescribeActivity(context.Context, *DescribeActivityRequest) (*DescribeActivityResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method DescribeActivity not implemented")
+}
+func (UnimplementedHistoryServiceServer) PauseActivity(context.Context, *PauseActivityRequest) (*PauseActivityResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method PauseActivity not implemented")
+}
+func (UnimplementedHistoryServiceServer) ResumeActivity(context.Context, *ResumeActivityRequest) (*ResumeActivityResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ResumeActivity not implemented")
+}
+func (UnimplementedHistoryServiceServer) ResetActivity(context.Context, *ResetActivityRequest) (*ResetActivityResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ResetActivity not implemented")
 }
 func (UnimplementedHistoryServiceServer) mustEmbedUnimplementedHistoryServiceServer() {}
 
@@ -2613,6 +2681,78 @@ func _HistoryService_UpdateActivityOptions_Handler(srv interface{}, ctx context.
 	return interceptor(ctx, in, info, handler)
 }
 
+func _HistoryService_DescribeActivity_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(DescribeActivityRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(HistoryServiceServer).DescribeActivity(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: HistoryService_DescribeActivity_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(HistoryServiceServer).DescribeActivity(ctx, req.(*DescribeActivityRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _HistoryService_PauseActivity_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(PauseActivityRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(HistoryServiceServer).PauseActivity(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: HistoryService_PauseActivity_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(HistoryServiceServer).PauseActivity(ctx, req.(*PauseActivityRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _HistoryService_ResumeActivity_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ResumeActivityRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(HistoryServiceServer).ResumeActivity(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: HistoryService_ResumeActivity_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(HistoryServiceServer).ResumeActivity(ctx, req.(*ResumeActivityRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _HistoryService_ResetActivity_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ResetActivityRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(HistoryServiceServer).ResetActivity(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: HistoryService_ResetActivity_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(HistoryServiceServer).ResetActivity(ctx, req.(*ResetActivityRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // HistoryService_ServiceDesc is the grpc.ServiceDesc for HistoryService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -2883,6 +3023,22 @@ var HistoryService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "UpdateActivityOptions",
 			Handler:    _HistoryService_UpdateActivityOptions_Handler,
+		},
+		{
+			MethodName: "DescribeActivity",
+			Handler:    _HistoryService_DescribeActivity_Handler,
+		},
+		{
+			MethodName: "PauseActivity",
+			Handler:    _HistoryService_PauseActivity_Handler,
+		},
+		{
+			MethodName: "ResumeActivity",
+			Handler:    _HistoryService_ResumeActivity_Handler,
+		},
+		{
+			MethodName: "ResetActivity",
+			Handler:    _HistoryService_ResetActivity_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{
