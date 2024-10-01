@@ -57,15 +57,15 @@ import (
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 
-type ActivitySuite struct {
+type ActivityTestSuite struct {
 	testcore.FunctionalSuite
 }
 
-type ActivityTestSuite struct {
-	ClientFunctionalSuite
+type ActivityClientTestSuite struct {
+	testcore.ClientFunctionalSuite
 }
 
-func (s *ActivityTestSuite) TestActivityScheduleToClose_FiredDuringBackoff() {
+func (s *ActivityClientTestSuite) TestActivityScheduleToClose_FiredDuringBackoff() {
 	// We have activity that always fails.
 	// We have backoff timers and schedule_to_close activity timeout happens during that backoff timer.
 	// activity will be scheduled twice. After second failure (that should happen at ~4.2 sec) next retry will not
@@ -98,17 +98,17 @@ func (s *ActivityTestSuite) TestActivityScheduleToClose_FiredDuringBackoff() {
 		return "done!", err
 	}
 
-	s.worker.RegisterWorkflow(workflowFn)
-	s.worker.RegisterActivity(activityFunction)
+	s.Worker().RegisterWorkflow(workflowFn)
+	s.Worker().RegisterActivity(activityFunction)
 
 	wfId := "functional-test-gethistoryreverse"
 	workflowOptions := sdkclient.StartWorkflowOptions{
 		ID:        wfId,
-		TaskQueue: s.taskQueue,
+		TaskQueue: s.TaskQueue(),
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-	workflowRun, err := s.sdkClient.ExecuteWorkflow(ctx, workflowOptions, workflowFn)
+	workflowRun, err := s.SdkClient().ExecuteWorkflow(ctx, workflowOptions, workflowFn)
 	s.NoError(err)
 
 	var out string
@@ -125,7 +125,7 @@ func (s *ActivityTestSuite) TestActivityScheduleToClose_FiredDuringBackoff() {
 
 }
 
-func (s *ActivityTestSuite) TestActivityScheduleToClose_FiredDuringActivityRun() {
+func (s *ActivityClientTestSuite) TestActivityScheduleToClose_FiredDuringActivityRun() {
 	// We have activity that always fails.
 	// We have backoff timers and schedule_to_close activity timeout happens while activity is running.
 	// activity will be scheduled twice.
@@ -169,15 +169,15 @@ func (s *ActivityTestSuite) TestActivityScheduleToClose_FiredDuringActivityRun()
 	}
 
 	s.Worker().RegisterWorkflow(workflowFn)
-	s.worker.RegisterActivity(activityFunction)
+	s.Worker().RegisterActivity(activityFunction)
 
 	workflowOptions := sdkclient.StartWorkflowOptions{
 		ID:        s.T().Name(),
-		TaskQueue: s.taskQueue,
+		TaskQueue: s.TaskQueue(),
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-	workflowRun, err := s.sdkClient.ExecuteWorkflow(ctx, workflowOptions, workflowFn)
+	workflowRun, err := s.SdkClient().ExecuteWorkflow(ctx, workflowOptions, workflowFn)
 	s.NoError(err)
 
 	var out string
@@ -334,7 +334,7 @@ func (s *ActivityClientTestSuite) Test_ActivityTimeouts() {
 	// s.printHistory(id, workflowRun.GetRunID())
 }
 
-func (s *ActivitySuite) TestActivityHeartBeatWorkflow_Success() {
+func (s *ActivityTestSuite) TestActivityHeartBeatWorkflow_Success() {
 	id := "functional-heartbeat-test"
 	wt := "functional-heartbeat-test-type"
 	tl := "functional-heartbeat-test-taskqueue"
@@ -465,7 +465,7 @@ func (s *ActivitySuite) TestActivityHeartBeatWorkflow_Success() {
  11 WorkflowExecutionCompleted`, events)
 }
 
-func (s *ActivitySuite) TestActivityRetry() {
+func (s *ActivityTestSuite) TestActivityRetry() {
 	id := "functional-activity-retry-test"
 	wt := "functional-activity-retry-type"
 	tl := "functional-activity-retry-taskqueue"
@@ -676,7 +676,7 @@ func (s *ActivitySuite) TestActivityRetry() {
 	s.True(activityExecutedCount == 2)
 }
 
-func (s *ActivitySuite) TestActivityRetry_Infinite() {
+func (s *ActivityTestSuite) TestActivityRetry_Infinite() {
 	id := "functional-activity-retry-test"
 	wt := "functional-activity-retry-type"
 	tl := "functional-activity-retry-taskqueue"
@@ -779,7 +779,7 @@ func (s *ActivitySuite) TestActivityRetry_Infinite() {
 	s.True(workflowComplete)
 }
 
-func (s *ActivitySuite) TestActivityHeartBeatWorkflow_Timeout() {
+func (s *ActivityTestSuite) TestActivityHeartBeatWorkflow_Timeout() {
 	id := "functional-heartbeat-timeout-test"
 	wt := "functional-heartbeat-timeout-test-type"
 	tl := "functional-heartbeat-timeout-test-taskqueue"
@@ -881,7 +881,7 @@ func (s *ActivitySuite) TestActivityHeartBeatWorkflow_Timeout() {
 	s.True(workflowComplete)
 }
 
-func (s *ActivitySuite) TestTryActivityCancellationFromWorkflow() {
+func (s *ActivityTestSuite) TestTryActivityCancellationFromWorkflow() {
 	id := "functional-activity-cancellation-test"
 	wt := "functional-activity-cancellation-test-type"
 	tl := "functional-activity-cancellation-test-taskqueue"
@@ -1024,7 +1024,7 @@ func (s *ActivitySuite) TestTryActivityCancellationFromWorkflow() {
 	s.Logger.Info("Activity cancelled.", tag.WorkflowRunID(we.RunId))
 }
 
-func (s *ActivitySuite) TestActivityCancellationNotStarted() {
+func (s *ActivityTestSuite) TestActivityCancellationNotStarted() {
 	id := "functional-activity-notstarted-cancellation-test"
 	wt := "functional-activity-notstarted-cancellation-test-type"
 	tl := "functional-activity-notstarted-cancellation-test-taskqueue"
@@ -1260,7 +1260,7 @@ func (s *ActivityClientTestSuite) TestActivityHeartbeatDetailsDuringRetry() {
 // TestActivityHeartBeat_RecordIdentity verifies that the identity of the worker sending the heartbeat
 // is recorded in pending activity info and returned in describe workflow API response. This happens
 // only when the worker identity is not sent when a poller picks the task.
-func (s *ActivitySuite) TestActivityHeartBeat_RecordIdentity() {
+func (s *ActivityTestSuite) TestActivityHeartBeat_RecordIdentity() {
 	id := "functional-heartbeat-identity-record"
 	workerIdentity := "70df788a-b0b2-4113-a0d5-130f13889e35"
 	activityName := "activity_timer"
@@ -1392,7 +1392,7 @@ func (s *ActivitySuite) TestActivityHeartBeat_RecordIdentity() {
 	s.True(workflowComplete)
 }
 
-func (s *ActivitySuite) TestActivityTaskCompleteForceCompletion() {
+func (s *ActivityTestSuite) TestActivityTaskCompleteForceCompletion() {
 	sdkClient, err := sdkclient.Dial(sdkclient.Options{
 		HostPort:  s.GetTestCluster().Host().FrontendGRPCAddress(),
 		Namespace: s.Namespace(),
@@ -1429,7 +1429,7 @@ func (s *ActivitySuite) TestActivityTaskCompleteForceCompletion() {
 	s.NoError(run.Get(ctx, nil))
 }
 
-func (s *ActivitySuite) TestActivityTaskCompleteRejectCompletion() {
+func (s *ActivityTestSuite) TestActivityTaskCompleteRejectCompletion() {
 	sdkClient, err := sdkclient.Dial(sdkclient.Options{
 		HostPort:  s.GetTestCluster().Host().FrontendGRPCAddress(),
 		Namespace: s.Namespace(),
@@ -1464,7 +1464,7 @@ func (s *ActivitySuite) TestActivityTaskCompleteRejectCompletion() {
 	s.ErrorAs(err, &svcErr, "invalid activityID or activity already timed out or invoking workflow is completed")
 }
 
-func (s *ActivitySuite) mockWorkflowWithErrorActivity(activityInfo chan<- activity.Info, sdkClient sdkclient.Client, taskQueue string) (worker.Worker, func(ctx workflow.Context) error) {
+func (s *ActivityTestSuite) mockWorkflowWithErrorActivity(activityInfo chan<- activity.Info, sdkClient sdkclient.Client, taskQueue string) (worker.Worker, func(ctx workflow.Context) error) {
 	mockErrorActivity := func(ctx context.Context) error {
 		ai := activity.GetInfo(ctx)
 		activityInfo <- ai

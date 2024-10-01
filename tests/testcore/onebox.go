@@ -381,8 +381,8 @@ func (c *TemporalImpl) WorkerServiceAddresses() []string {
 	return c.makeGRPCAddresses(c.workerConfig.NumWorkers, workerPort)
 }
 
-func (c *TemporalImpl) WorkerService() *worker.Service {
-	return c.workerService
+func (c *TemporalImpl) WorkerServices() []*worker.Service {
+	return c.workerServices
 }
 
 func (c *TemporalImpl) AdminClient() adminservice.AdminServiceClient {
@@ -401,11 +401,11 @@ func (c *TemporalImpl) HistoryClient() historyservice.HistoryServiceClient {
 	return c.historyClient
 }
 
-func (c *TemporalImpl) GetMatchingClient() matchingservice.MatchingServiceClient {
+func (c *TemporalImpl) MatchingClient() matchingservice.MatchingServiceClient {
 	return c.matchingClient
 }
 
-func (c *TemporalImpl) GetFrontendNamespaceRegistries() []namespace.Registry {
+func (c *TemporalImpl) FrontendNamespaceRegistries() []namespace.Registry {
 	return c.frontendNamespaceRegistries
 }
 
@@ -707,6 +707,14 @@ func (c *TemporalImpl) GetTLSConfigProvider() encryption.TLSConfigProvider {
 
 func (c *TemporalImpl) GetTaskCategoryRegistry() tasks.TaskCategoryRegistry {
 	return c.taskCategoryRegistry
+}
+
+func (c *TemporalImpl) TlsConfigProvider() *encryption.FixedTLSConfigProvider {
+	return c.tlsConfigProvider
+}
+
+func (c *TemporalImpl) CaptureMetricsHandler() *metricstest.CaptureHandler {
+	return c.captureMetricsHandler
 }
 
 func (c *TemporalImpl) GetMetricsHandler() metrics.Handler {

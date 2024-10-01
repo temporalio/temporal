@@ -239,7 +239,7 @@ func (s *xdcBaseSuite) createGlobalNamespace() string {
 
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		// Wait for namespace record to be replicated and loaded into memory.
-		for _, r := range s.cluster2.GetHost().GetFrontendNamespaceRegistries() {
+		for _, r := range s.cluster2.Host().FrontendNamespaceRegistries() {
 			_, err := r.GetNamespace(namespace.Name(ns))
 			assert.NoError(t, err)
 		}
