@@ -2443,3 +2443,19 @@ func (h *Handler) SyncWorkflowState(ctx context.Context, request *historyservice
 func (h *Handler) UpdateActivityOptions(context.Context, *historyservice.UpdateActivityOptionsRequest) (*historyservice.UpdateActivityOptionsResponse, error) {
 	return nil, serviceerror.NewUnimplemented("UpdateActivityOptions is not supported yet")
 }
+
+func (h *Handler) DescribeActivity(context.Context, *historyservice.DescribeActivityRequest) (*historyservice.DescribeActivityResponse, error) {
+	return nil, serviceerror.NewUnimplemented("DescribeActivity is not supported yet")
+}
+
+func (h *Handler) PauseActivity(context.Context, *historyservice.PauseActivityRequest) (*historyservice.PauseActivityResponse, error) {
+	return nil, serviceerror.NewUnimplemented("PauseActivity is not supported yet")
+}
+
+func (h *Handler) ResumeActivity(context.Context, *historyservice.ResumeActivityRequest) (*historyservice.ResumeActivityResponse, error) {
+	return nil, serviceerror.NewUnimplemented("ResumeActivity is not supported yet")
+}
+
+func (h *Handler) ResetActivity(context.Context, *historyservice.ResetActivityRequest) (*historyservice.ResetActivityResponse, error) {
+	return nil, serviceerror.NewUnimplemented("ResetActivity is not supported yet")
+}

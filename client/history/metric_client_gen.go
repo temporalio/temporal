@@ -131,6 +131,20 @@ func (c *metricClient) DeleteWorkflowVisibilityRecord(
 	return c.client.DeleteWorkflowVisibilityRecord(ctx, request, opts...)
 }
 
+func (c *metricClient) DescribeActivity(
+	ctx context.Context,
+	request *historyservice.DescribeActivityRequest,
+	opts ...grpc.CallOption,
+) (_ *historyservice.DescribeActivityResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, "HistoryClientDescribeActivity")
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.DescribeActivity(ctx, request, opts...)
+}
+
 func (c *metricClient) DescribeHistoryHost(
 	ctx context.Context,
 	request *historyservice.DescribeHistoryHostRequest,
@@ -467,6 +481,20 @@ func (c *metricClient) MergeDLQMessages(
 	return c.client.MergeDLQMessages(ctx, request, opts...)
 }
 
+func (c *metricClient) PauseActivity(
+	ctx context.Context,
+	request *historyservice.PauseActivityRequest,
+	opts ...grpc.CallOption,
+) (_ *historyservice.PauseActivityResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, "HistoryClientPauseActivity")
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.PauseActivity(ctx, request, opts...)
+}
+
 func (c *metricClient) PollMutableState(
 	ctx context.Context,
 	request *historyservice.PollMutableStateRequest,
@@ -691,6 +719,20 @@ func (c *metricClient) RequestCancelWorkflowExecution(
 	return c.client.RequestCancelWorkflowExecution(ctx, request, opts...)
 }
 
+func (c *metricClient) ResetActivity(
+	ctx context.Context,
+	request *historyservice.ResetActivityRequest,
+	opts ...grpc.CallOption,
+) (_ *historyservice.ResetActivityResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, "HistoryClientResetActivity")
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.ResetActivity(ctx, request, opts...)
+}
+
 func (c *metricClient) ResetStickyTaskQueue(
 	ctx context.Context,
 	request *historyservice.ResetStickyTaskQueueRequest,
@@ -787,6 +829,20 @@ func (c *metricClient) RespondWorkflowTaskFailed(
 	}()
 
 	return c.client.RespondWorkflowTaskFailed(ctx, request, opts...)
+}
+
+func (c *metricClient) ResumeActivity(
+	ctx context.Context,
+	request *historyservice.ResumeActivityRequest,
+	opts ...grpc.CallOption,
+) (_ *historyservice.ResumeActivityResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, "HistoryClientResumeActivity")
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.ResumeActivity(ctx, request, opts...)
 }
 
 func (c *metricClient) ScheduleWorkflowTask(

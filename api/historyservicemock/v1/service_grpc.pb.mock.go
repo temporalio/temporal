@@ -206,6 +206,26 @@ func (mr *MockHistoryServiceClientMockRecorder) DeleteWorkflowVisibilityRecord(c
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteWorkflowVisibilityRecord", reflect.TypeOf((*MockHistoryServiceClient)(nil).DeleteWorkflowVisibilityRecord), varargs...)
 }
 
+// DescribeActivity mocks base method.
+func (m *MockHistoryServiceClient) DescribeActivity(ctx context.Context, in *historyservice.DescribeActivityRequest, opts ...grpc.CallOption) (*historyservice.DescribeActivityResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []any{ctx, in}
+	for _, a := range opts {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "DescribeActivity", varargs...)
+	ret0, _ := ret[0].(*historyservice.DescribeActivityResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// DescribeActivity indicates an expected call of DescribeActivity.
+func (mr *MockHistoryServiceClientMockRecorder) DescribeActivity(ctx, in any, opts ...any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]any{ctx, in}, opts...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DescribeActivity", reflect.TypeOf((*MockHistoryServiceClient)(nil).DescribeActivity), varargs...)
+}
+
 // DescribeHistoryHost mocks base method.
 func (m *MockHistoryServiceClient) DescribeHistoryHost(ctx context.Context, in *historyservice.DescribeHistoryHostRequest, opts ...grpc.CallOption) (*historyservice.DescribeHistoryHostResponse, error) {
 	m.ctrl.T.Helper()
@@ -686,6 +706,26 @@ func (mr *MockHistoryServiceClientMockRecorder) MergeDLQMessages(ctx, in any, op
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MergeDLQMessages", reflect.TypeOf((*MockHistoryServiceClient)(nil).MergeDLQMessages), varargs...)
 }
 
+// PauseActivity mocks base method.
+func (m *MockHistoryServiceClient) PauseActivity(ctx context.Context, in *historyservice.PauseActivityRequest, opts ...grpc.CallOption) (*historyservice.PauseActivityResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []any{ctx, in}
+	for _, a := range opts {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "PauseActivity", varargs...)
+	ret0, _ := ret[0].(*historyservice.PauseActivityResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// PauseActivity indicates an expected call of PauseActivity.
+func (mr *MockHistoryServiceClientMockRecorder) PauseActivity(ctx, in any, opts ...any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]any{ctx, in}, opts...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PauseActivity", reflect.TypeOf((*MockHistoryServiceClient)(nil).PauseActivity), varargs...)
+}
+
 // PollMutableState mocks base method.
 func (m *MockHistoryServiceClient) PollMutableState(ctx context.Context, in *historyservice.PollMutableStateRequest, opts ...grpc.CallOption) (*historyservice.PollMutableStateResponse, error) {
 	m.ctrl.T.Helper()
@@ -1006,6 +1046,26 @@ func (mr *MockHistoryServiceClientMockRecorder) RequestCancelWorkflowExecution(c
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RequestCancelWorkflowExecution", reflect.TypeOf((*MockHistoryServiceClient)(nil).RequestCancelWorkflowExecution), varargs...)
 }
 
+// ResetActivity mocks base method.
+func (m *MockHistoryServiceClient) ResetActivity(ctx context.Context, in *historyservice.ResetActivityRequest, opts ...grpc.CallOption) (*historyservice.ResetActivityResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []any{ctx, in}
+	for _, a := range opts {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "ResetActivity", varargs...)
+	ret0, _ := ret[0].(*historyservice.ResetActivityResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ResetActivity indicates an expected call of ResetActivity.
+func (mr *MockHistoryServiceClientMockRecorder) ResetActivity(ctx, in any, opts ...any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]any{ctx, in}, opts...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ResetActivity", reflect.TypeOf((*MockHistoryServiceClient)(nil).ResetActivity), varargs...)
+}
+
 // ResetStickyTaskQueue mocks base method.
 func (m *MockHistoryServiceClient) ResetStickyTaskQueue(ctx context.Context, in *historyservice.ResetStickyTaskQueueRequest, opts ...grpc.CallOption) (*historyservice.ResetStickyTaskQueueResponse, error) {
 	m.ctrl.T.Helper()
@@ -1144,6 +1204,26 @@ func (mr *MockHistoryServiceClientMockRecorder) RespondWorkflowTaskFailed(ctx, i
 	mr.mock.ctrl.T.Helper()
 	varargs := append([]any{ctx, in}, opts...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RespondWorkflowTaskFailed", reflect.TypeOf((*MockHistoryServiceClient)(nil).RespondWorkflowTaskFailed), varargs...)
+}
+
+// ResumeActivity mocks base method.
+func (m *MockHistoryServiceClient) ResumeActivity(ctx context.Context, in *historyservice.ResumeActivityRequest, opts ...grpc.CallOption) (*historyservice.ResumeActivityResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []any{ctx, in}
+	for _, a := range opts {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "ResumeActivity", varargs...)
+	ret0, _ := ret[0].(*historyservice.ResumeActivityResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ResumeActivity indicates an expected call of ResumeActivity.
+func (mr *MockHistoryServiceClientMockRecorder) ResumeActivity(ctx, in any, opts ...any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]any{ctx, in}, opts...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ResumeActivity", reflect.TypeOf((*MockHistoryServiceClient)(nil).ResumeActivity), varargs...)
 }
 
 // ScheduleWorkflowTask mocks base method.
@@ -1671,6 +1751,21 @@ func (mr *MockHistoryServiceServerMockRecorder) DeleteWorkflowVisibilityRecord(a
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteWorkflowVisibilityRecord", reflect.TypeOf((*MockHistoryServiceServer)(nil).DeleteWorkflowVisibilityRecord), arg0, arg1)
 }
 
+// DescribeActivity mocks base method.
+func (m *MockHistoryServiceServer) DescribeActivity(arg0 context.Context, arg1 *historyservice.DescribeActivityRequest) (*historyservice.DescribeActivityResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "DescribeActivity", arg0, arg1)
+	ret0, _ := ret[0].(*historyservice.DescribeActivityResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// DescribeActivity indicates an expected call of DescribeActivity.
+func (mr *MockHistoryServiceServerMockRecorder) DescribeActivity(arg0, arg1 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DescribeActivity", reflect.TypeOf((*MockHistoryServiceServer)(nil).DescribeActivity), arg0, arg1)
+}
+
 // DescribeHistoryHost mocks base method.
 func (m *MockHistoryServiceServer) DescribeHistoryHost(arg0 context.Context, arg1 *historyservice.DescribeHistoryHostRequest) (*historyservice.DescribeHistoryHostResponse, error) {
 	m.ctrl.T.Helper()
@@ -2031,6 +2126,21 @@ func (mr *MockHistoryServiceServerMockRecorder) MergeDLQMessages(arg0, arg1 any)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MergeDLQMessages", reflect.TypeOf((*MockHistoryServiceServer)(nil).MergeDLQMessages), arg0, arg1)
 }
 
+// PauseActivity mocks base method.
+func (m *MockHistoryServiceServer) PauseActivity(arg0 context.Context, arg1 *historyservice.PauseActivityRequest) (*historyservice.PauseActivityResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "PauseActivity", arg0, arg1)
+	ret0, _ := ret[0].(*historyservice.PauseActivityResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// PauseActivity indicates an expected call of PauseActivity.
+func (mr *MockHistoryServiceServerMockRecorder) PauseActivity(arg0, arg1 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PauseActivity", reflect.TypeOf((*MockHistoryServiceServer)(nil).PauseActivity), arg0, arg1)
+}
+
 // PollMutableState mocks base method.
 func (m *MockHistoryServiceServer) PollMutableState(arg0 context.Context, arg1 *historyservice.PollMutableStateRequest) (*historyservice.PollMutableStateResponse, error) {
 	m.ctrl.T.Helper()
@@ -2271,6 +2381,21 @@ func (mr *MockHistoryServiceServerMockRecorder) RequestCancelWorkflowExecution(a
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RequestCancelWorkflowExecution", reflect.TypeOf((*MockHistoryServiceServer)(nil).RequestCancelWorkflowExecution), arg0, arg1)
 }
 
+// ResetActivity mocks base method.
+func (m *MockHistoryServiceServer) ResetActivity(arg0 context.Context, arg1 *historyservice.ResetActivityRequest) (*historyservice.ResetActivityResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ResetActivity", arg0, arg1)
+	ret0, _ := ret[0].(*historyservice.ResetActivityResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ResetActivity indicates an expected call of ResetActivity.
+func (mr *MockHistoryServiceServerMockRecorder) ResetActivity(arg0, arg1 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ResetActivity", reflect.TypeOf((*MockHistoryServiceServer)(nil).ResetActivity), arg0, arg1)
+}
+
 // ResetStickyTaskQueue mocks base method.
 func (m *MockHistoryServiceServer) ResetStickyTaskQueue(arg0 context.Context, arg1 *historyservice.ResetStickyTaskQueueRequest) (*historyservice.ResetStickyTaskQueueResponse, error) {
 	m.ctrl.T.Helper()
@@ -2374,6 +2499,21 @@ func (m *MockHistoryServiceServer) RespondWorkflowTaskFailed(arg0 context.Contex
 func (mr *MockHistoryServiceServerMockRecorder) RespondWorkflowTaskFailed(arg0, arg1 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RespondWorkflowTaskFailed", reflect.TypeOf((*MockHistoryServiceServer)(nil).RespondWorkflowTaskFailed), arg0, arg1)
+}
+
+// ResumeActivity mocks base method.
+func (m *MockHistoryServiceServer) ResumeActivity(arg0 context.Context, arg1 *historyservice.ResumeActivityRequest) (*historyservice.ResumeActivityResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ResumeActivity", arg0, arg1)
+	ret0, _ := ret[0].(*historyservice.ResumeActivityResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ResumeActivity indicates an expected call of ResumeActivity.
+func (mr *MockHistoryServiceServerMockRecorder) ResumeActivity(arg0, arg1 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ResumeActivity", reflect.TypeOf((*MockHistoryServiceServer)(nil).ResumeActivity), arg0, arg1)
 }
 
 // ScheduleWorkflowTask mocks base method.

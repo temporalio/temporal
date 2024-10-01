@@ -5082,35 +5082,42 @@ func getBatchOperationState(workflowState enumspb.WorkflowExecutionStatus) enums
 	return operationState
 }
 
+func (wh *WorkflowHandler) validateActivityApiRequest(namespaceName string, workflowId string, activityId string) error {
+	if !wh.config.ActivityAPIsEnabled(namespaceName) {
+		return status.Errorf(codes.Unimplemented, "method UpdateActivityOptionsById not implemented")
+	}
+
+	if workflowId == "" {
+		return errWorkflowIDNotSet
+	}
+	if activityId == "" {
+		return errActivityIDNotSet
+	}
+	return nil
+}
+
 func (wh *WorkflowHandler) UpdateActivityOptionsById(
 	ctx context.Context,
 	request *workflowservice.UpdateActivityOptionsByIdRequest,
 ) (_ *workflowservice.UpdateActivityOptionsByIdResponse, retError error) {
 	defer log.CapturePanic(wh.logger, &retError)
-
-	if !wh.config.ActivityAPIsEnabled(request.GetNamespace()) {
-		return nil, status.Errorf(codes.Unimplemented, "method UpdateActivityOptionsById not implemented")
-	}
-
-	wh.logger.Debug("Received UpdateActivityOptionsById")
-
 	if request == nil {
 		return nil, errRequestNotSet
 	}
-	if request.GetWorkflowId() == "" {
-		return nil, errWorkflowIDNotSet
-	}
-	if request.GetActivityId() == "" {
-		return nil, errActivityIDNotSet
+	wh.logger.Debug("Received UpdateActivityOptionsById")
+
+	err := wh.validateActivityApiRequest(request.GetNamespace(), request.GetWorkflowId(), request.GetActivityId())
+	if err != nil {
+		return nil, err
 	}
 
-	namespace_id, err := wh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
+	namespaceId, err := wh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
 	if err != nil {
 		return nil, err
 	}
 
 	response, err := wh.historyClient.UpdateActivityOptions(ctx, &historyservice.UpdateActivityOptionsRequest{
-		NamespaceId:   namespace_id.String(),
+		NamespaceId:   namespaceId.String(),
 		UpdateRequest: request,
 	})
 
@@ -5121,4 +5128,135 @@ func (wh *WorkflowHandler) UpdateActivityOptionsById(
 	return &workflowservice.UpdateActivityOptionsByIdResponse{
 		ActivityOptions: response.ActivityOptions,
 	}, nil
+}
+
+func (wh *WorkflowHandler) DescribeActivityById(
+	ctx context.Context,
+	request *workflowservice.DescribeActivityByIdRequest,
+) (_ *workflowservice.DescribeActivityByIdResponse, retError error) {
+	defer log.CapturePanic(wh.logger, &retError)
+	if request == nil {
+		return nil, errRequestNotSet
+	}
+	wh.logger.Debug("Received DescribeActivityById")
+
+	err := wh.validateActivityApiRequest(request.GetNamespace(), request.GetWorkflowId(), request.GetActivityId())
+	if err != nil {
+		return nil, err
+	}
+
+	namespaceId, err := wh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
+	if err != nil {
+		return nil, err
+	}
+
+	response, err := wh.historyClient.DescribeActivity(ctx, &historyservice.DescribeActivityRequest{
+		NamespaceId: namespaceId.String(),
+		Request:     request,
+	})
+
+	if err != nil {
+		return nil, err
+	}
+
+	return &workflowservice.DescribeActivityByIdResponse{
+		ActivityOptions: response.ActivityOptions,
+		ActivityState:   response.ActivityState,
+	}, nil
+}
+
+func (wh *WorkflowHandler) PauseActivityById(
+	ctx context.Context,
+	request *workflowservice.PauseActivityByIdRequest,
+) (_ *workflowservice.PauseActivityByIdResponse, retError error) {
+	defer log.CapturePanic(wh.logger, &retError)
+	if request == nil {
+		return nil, errRequestNotSet
+	}
+	wh.logger.Debug("Received PauseActivityById")
+
+	err := wh.validateActivityApiRequest(request.GetNamespace(), request.GetWorkflowId(), request.GetActivityId())
+	if err != nil {
+		return nil, err
+	}
+
+	namespaceId, err := wh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
+	if err != nil {
+		return nil, err
+	}
+
+	_, err = wh.historyClient.PauseActivity(ctx, &historyservice.PauseActivityRequest{
+		NamespaceId: namespaceId.String(),
+		Request:     request,
+	})
+
+	if err != nil {
+		return nil, err
+	}
+
+	return &workflowservice.PauseActivityByIdResponse{}, nil
+}
+
+func (wh *WorkflowHandler) ResumeActivityById(
+	ctx context.Context,
+	request *workflowservice.ResumeActivityByIdRequest,
+) (_ *workflowservice.ResumeActivityByIdResponse, retError error) {
+	defer log.CapturePanic(wh.logger, &retError)
+	if request == nil {
+		return nil, errRequestNotSet
+	}
+	wh.logger.Debug("Received ResumeActivityById")
+
+	err := wh.validateActivityApiRequest(request.GetNamespace(), request.GetWorkflowId(), request.GetActivityId())
+	if err != nil {
+		return nil, err
+	}
+
+	namespaceId, err := wh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
+	if err != nil {
+		return nil, err
+	}
+
+	_, err = wh.historyClient.ResumeActivity(ctx, &historyservice.ResumeActivityRequest{
+		NamespaceId: namespaceId.String(),
+		Request:     request,
+	})
+
+	if err != nil {
+		return nil, err
+	}
+
+	return &workflowservice.ResumeActivityByIdResponse{}, nil
+}
+
+func (wh *WorkflowHandler) ResetActivityById(
+	ctx context.Context,
+	request *workflowservice.ResetActivityByIdRequest,
+) (_ *workflowservice.ResetActivityByIdResponse, retError error) {
+	defer log.CapturePanic(wh.logger, &retError)
+	if request == nil {
+		return nil, errRequestNotSet
+	}
+	wh.logger.Debug("Received ResetActivityById")
+
+	err := wh.validateActivityApiRequest(request.GetNamespace(), request.GetWorkflowId(), request.GetActivityId())
+	if err != nil {
+		return nil, err
+	}
+
+	namespaceId, err := wh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
+	if err != nil {
+		return nil, err
+	}
+
+	_, err = wh.historyClient.ResetActivity(ctx, &historyservice.ResetActivityRequest{
+		NamespaceId: namespaceId.String(),
+		Request:     request,
+	})
+
+	if err != nil {
+		return nil, err
+	}
+
+	return &workflowservice.ResetActivityByIdResponse{}, nil
 }

@@ -83,6 +83,16 @@ func (c *clientImpl) DeprecateNamespace(
 	return c.client.DeprecateNamespace(ctx, request, opts...)
 }
 
+func (c *clientImpl) DescribeActivityById(
+	ctx context.Context,
+	request *workflowservice.DescribeActivityByIdRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.DescribeActivityByIdResponse, error) {
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return c.client.DescribeActivityById(ctx, request, opts...)
+}
+
 func (c *clientImpl) DescribeBatchOperation(
 	ctx context.Context,
 	request *workflowservice.DescribeBatchOperationRequest,
@@ -323,6 +333,16 @@ func (c *clientImpl) PatchSchedule(
 	return c.client.PatchSchedule(ctx, request, opts...)
 }
 
+func (c *clientImpl) PauseActivityById(
+	ctx context.Context,
+	request *workflowservice.PauseActivityByIdRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.PauseActivityByIdResponse, error) {
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return c.client.PauseActivityById(ctx, request, opts...)
+}
+
 func (c *clientImpl) PollActivityTaskQueue(
 	ctx context.Context,
 	request *workflowservice.PollActivityTaskQueueRequest,
@@ -411,6 +431,16 @@ func (c *clientImpl) RequestCancelWorkflowExecution(
 	ctx, cancel := c.createContext(ctx)
 	defer cancel()
 	return c.client.RequestCancelWorkflowExecution(ctx, request, opts...)
+}
+
+func (c *clientImpl) ResetActivityById(
+	ctx context.Context,
+	request *workflowservice.ResetActivityByIdRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.ResetActivityByIdResponse, error) {
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return c.client.ResetActivityById(ctx, request, opts...)
 }
 
 func (c *clientImpl) ResetStickyTaskQueue(
@@ -541,6 +571,16 @@ func (c *clientImpl) RespondWorkflowTaskFailed(
 	ctx, cancel := c.createContext(ctx)
 	defer cancel()
 	return c.client.RespondWorkflowTaskFailed(ctx, request, opts...)
+}
+
+func (c *clientImpl) ResumeActivityById(
+	ctx context.Context,
+	request *workflowservice.ResumeActivityByIdRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.ResumeActivityByIdResponse, error) {
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return c.client.ResumeActivityById(ctx, request, opts...)
 }
 
 func (c *clientImpl) ScanWorkflowExecutions(

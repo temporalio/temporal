@@ -5171,3 +5171,299 @@ func (this *UpdateActivityOptionsResponse) Equal(that interface{}) bool {
 
 	return proto.Equal(this, that1)
 }
+
+// Marshal an object of type DescribeActivityRequest to the protobuf v3 wire format
+func (val *DescribeActivityRequest) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type DescribeActivityRequest from the protobuf v3 wire format
+func (val *DescribeActivityRequest) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *DescribeActivityRequest) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two DescribeActivityRequest values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *DescribeActivityRequest) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *DescribeActivityRequest
+	switch t := that.(type) {
+	case *DescribeActivityRequest:
+		that1 = t
+	case DescribeActivityRequest:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
+// Marshal an object of type DescribeActivityResponse to the protobuf v3 wire format
+func (val *DescribeActivityResponse) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type DescribeActivityResponse from the protobuf v3 wire format
+func (val *DescribeActivityResponse) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *DescribeActivityResponse) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two DescribeActivityResponse values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *DescribeActivityResponse) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *DescribeActivityResponse
+	switch t := that.(type) {
+	case *DescribeActivityResponse:
+		that1 = t
+	case DescribeActivityResponse:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
+// Marshal an object of type PauseActivityRequest to the protobuf v3 wire format
+func (val *PauseActivityRequest) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type PauseActivityRequest from the protobuf v3 wire format
+func (val *PauseActivityRequest) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *PauseActivityRequest) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two PauseActivityRequest values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *PauseActivityRequest) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *PauseActivityRequest
+	switch t := that.(type) {
+	case *PauseActivityRequest:
+		that1 = t
+	case PauseActivityRequest:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
+// Marshal an object of type PauseActivityResponse to the protobuf v3 wire format
+func (val *PauseActivityResponse) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type PauseActivityResponse from the protobuf v3 wire format
+func (val *PauseActivityResponse) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *PauseActivityResponse) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two PauseActivityResponse values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *PauseActivityResponse) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *PauseActivityResponse
+	switch t := that.(type) {
+	case *PauseActivityResponse:
+		that1 = t
+	case PauseActivityResponse:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
+// Marshal an object of type ResumeActivityRequest to the protobuf v3 wire format
+func (val *ResumeActivityRequest) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type ResumeActivityRequest from the protobuf v3 wire format
+func (val *ResumeActivityRequest) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *ResumeActivityRequest) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two ResumeActivityRequest values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *ResumeActivityRequest) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *ResumeActivityRequest
+	switch t := that.(type) {
+	case *ResumeActivityRequest:
+		that1 = t
+	case ResumeActivityRequest:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
+// Marshal an object of type ResumeActivityResponse to the protobuf v3 wire format
+func (val *ResumeActivityResponse) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type ResumeActivityResponse from the protobuf v3 wire format
+func (val *ResumeActivityResponse) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *ResumeActivityResponse) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two ResumeActivityResponse values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *ResumeActivityResponse) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *ResumeActivityResponse
+	switch t := that.(type) {
+	case *ResumeActivityResponse:
+		that1 = t
+	case ResumeActivityResponse:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
+// Marshal an object of type ResetActivityRequest to the protobuf v3 wire format
+func (val *ResetActivityRequest) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type ResetActivityRequest from the protobuf v3 wire format
+func (val *ResetActivityRequest) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *ResetActivityRequest) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two ResetActivityRequest values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *ResetActivityRequest) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *ResetActivityRequest
+	switch t := that.(type) {
+	case *ResetActivityRequest:
+		that1 = t
+	case ResetActivityRequest:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
+// Marshal an object of type ResetActivityResponse to the protobuf v3 wire format
+func (val *ResetActivityResponse) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type ResetActivityResponse from the protobuf v3 wire format
+func (val *ResetActivityResponse) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *ResetActivityResponse) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two ResetActivityResponse values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *ResetActivityResponse) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *ResetActivityResponse
+	switch t := that.(type) {
+	case *ResetActivityResponse:
+		that1 = t
+	case ResetActivityResponse:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}

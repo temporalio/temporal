@@ -370,4 +370,25 @@ service HistoryService {
     rpc UpdateActivityOptions (UpdateActivityOptionsRequest) returns (UpdateActivityOptionsResponse)
     {
     }
+
+    // DescribeActivity is called by the client to get current activity options and state.
+    rpc DescribeActivity (DescribeActivityRequest) returns (DescribeActivityResponse)
+    {
+    }
+
+    // PauseActivityById is called by the client to pause an activity.
+    rpc PauseActivity (PauseActivityRequest) returns (PauseActivityResponse)
+    {
+    }
+
+    // ResumeActivity is called by the client to resume the activity that is in paused or waiting state.
+    rpc ResumeActivity (ResumeActivityRequest) returns (ResumeActivityResponse)
+    {
+    }
+
+    // ResetActivity is called by the client to reset the activity to its "original" state.
+    rpc ResetActivity (ResetActivityRequest) returns (ResetActivityResponse)
+    {
+    }
+
 }

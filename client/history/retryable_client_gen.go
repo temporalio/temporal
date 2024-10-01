@@ -140,6 +140,21 @@ func (c *retryableClient) DeleteWorkflowVisibilityRecord(
 	return resp, err
 }
 
+func (c *retryableClient) DescribeActivity(
+	ctx context.Context,
+	request *historyservice.DescribeActivityRequest,
+	opts ...grpc.CallOption,
+) (*historyservice.DescribeActivityResponse, error) {
+	var resp *historyservice.DescribeActivityResponse
+	op := func(ctx context.Context) error {
+		var err error
+		resp, err = c.client.DescribeActivity(ctx, request, opts...)
+		return err
+	}
+	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
+	return resp, err
+}
+
 func (c *retryableClient) DescribeHistoryHost(
 	ctx context.Context,
 	request *historyservice.DescribeHistoryHostRequest,
@@ -500,6 +515,21 @@ func (c *retryableClient) MergeDLQMessages(
 	return resp, err
 }
 
+func (c *retryableClient) PauseActivity(
+	ctx context.Context,
+	request *historyservice.PauseActivityRequest,
+	opts ...grpc.CallOption,
+) (*historyservice.PauseActivityResponse, error) {
+	var resp *historyservice.PauseActivityResponse
+	op := func(ctx context.Context) error {
+		var err error
+		resp, err = c.client.PauseActivity(ctx, request, opts...)
+		return err
+	}
+	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
+	return resp, err
+}
+
 func (c *retryableClient) PollMutableState(
 	ctx context.Context,
 	request *historyservice.PollMutableStateRequest,
@@ -740,6 +770,21 @@ func (c *retryableClient) RequestCancelWorkflowExecution(
 	return resp, err
 }
 
+func (c *retryableClient) ResetActivity(
+	ctx context.Context,
+	request *historyservice.ResetActivityRequest,
+	opts ...grpc.CallOption,
+) (*historyservice.ResetActivityResponse, error) {
+	var resp *historyservice.ResetActivityResponse
+	op := func(ctx context.Context) error {
+		var err error
+		resp, err = c.client.ResetActivity(ctx, request, opts...)
+		return err
+	}
+	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
+	return resp, err
+}
+
 func (c *retryableClient) ResetStickyTaskQueue(
 	ctx context.Context,
 	request *historyservice.ResetStickyTaskQueueRequest,
@@ -839,6 +884,21 @@ func (c *retryableClient) RespondWorkflowTaskFailed(
 	op := func(ctx context.Context) error {
 		var err error
 		resp, err = c.client.RespondWorkflowTaskFailed(ctx, request, opts...)
+		return err
+	}
+	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
+	return resp, err
+}
+
+func (c *retryableClient) ResumeActivity(
+	ctx context.Context,
+	request *historyservice.ResumeActivityRequest,
+	opts ...grpc.CallOption,
+) (*historyservice.ResumeActivityResponse, error) {
+	var resp *historyservice.ResumeActivityResponse
+	op := func(ctx context.Context) error {
+		var err error
+		resp, err = c.client.ResumeActivity(ctx, request, opts...)
 		return err
 	}
 	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)

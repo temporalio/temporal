@@ -32,6 +32,7 @@ import "temporal/api/activity/v1/message.proto";
 import "temporal/api/common/v1/message.proto";
 import "temporal/api/history/v1/message.proto";
 import "temporal/api/taskqueue/v1/message.proto";
+import "temporal/api/enums/v1/activity.proto";
 import "temporal/api/enums/v1/workflow.proto";
 import "temporal/api/workflow/v1/message.proto";
 import "temporal/api/query/v1/message.proto";
@@ -984,4 +985,52 @@ message UpdateActivityOptionsRequest {
 message UpdateActivityOptionsResponse {
     // Activity options after an update
     temporal.api.activity.v1.ActivityOptions activity_options = 1;
+}
+
+
+message DescribeActivityRequest {
+    // Namespace ID of the workflow which scheduled this activity
+    string namespace_id = 1;
+
+    temporal.api.workflowservice.v1.DescribeActivityByIdRequest request = 2;
+}
+
+message DescribeActivityResponse {
+    // Activity options after an update
+    temporal.api.activity.v1.ActivityOptions activity_options = 1;
+
+    // Activity state
+    temporal.api.enums.v1.ActivityState activity_state = 2;
+}
+
+message PauseActivityRequest {
+    // Namespace ID of the workflow which scheduled this activity
+    string namespace_id = 1;
+
+    temporal.api.workflowservice.v1.PauseActivityByIdRequest request = 2;
+
+}
+
+message PauseActivityResponse {
+
+}
+
+message ResumeActivityRequest {
+    // Namespace ID of the workflow which scheduled this activity
+    string namespace_id = 1;
+
+    temporal.api.workflowservice.v1.ResumeActivityByIdRequest request = 2;
+}
+
+message ResumeActivityResponse {
+}
+
+message ResetActivityRequest {
+    // Namespace ID of the workflow which scheduled this activity
+    string namespace_id = 1;
+
+    temporal.api.workflowservice.v1.ResetActivityByIdRequest request = 2;
+}
+
+message ResetActivityResponse {
 }
