@@ -15,7 +15,7 @@ proved to be error-prone and hard to handle on the SDK side. Similarly, commands
 for Update either because some SDKs assume that every command will produce *exactly* one event, 
 which is not true for Update rejections as they don't produce an event.
 
-Another protocol was required to implement Workflow Update: Messages are attached to Workflow Task
+Another protocol was required to implement Workflow Update: messages are attached to Workflow Task
 and travel in both directions. They are similar to events and commands but don't have the same 
 limitations listed above.
 
