@@ -420,7 +420,6 @@ func getVersionHistoryAndEvents(
 		if xdcCacheValue, ok := eventBlobCache.Get(persistence.NewXDCCacheKey(
 			workflowKey,
 			firstEventID,
-			nextEventID,
 			eventVersion,
 		)); ok {
 			return xdcCacheValue.VersionHistoryItems, xdcCacheValue.EventBlobs, xdcCacheValue.BaseWorkflowInfo, nil

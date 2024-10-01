@@ -40,13 +40,13 @@ type (
 	XDCCacheKey struct {
 		WorkflowKey definition.WorkflowKey
 		MinEventID  int64 // inclusive
-		MaxEventID  int64 // exclusive
 		Version     int64
 	}
 	XDCCacheValue struct {
 		BaseWorkflowInfo    *workflowspb.BaseExecutionInfo
 		VersionHistoryItems []*historyspb.VersionHistoryItem
 		EventBlobs          []*commonpb.DataBlob
+		NextEventID         int64
 	}
 
 	XDCCache interface {
@@ -69,13 +69,11 @@ var _ cache.SizeGetter = XDCCacheValue{}
 func NewXDCCacheKey(
 	workflowKey definition.WorkflowKey,
 	minEventID int64,
-	maxEventID int64,
 	version int64,
 ) XDCCacheKey {
 	return XDCCacheKey{
 		WorkflowKey: workflowKey,
 		MinEventID:  minEventID,
-		MaxEventID:  maxEventID,
 		Version:     version,
 	}
 }
@@ -84,11 +82,13 @@ func NewXDCCacheValue(
 	baseWorkflowInfo *workflowspb.BaseExecutionInfo,
 	versionHistoryItems []*historyspb.VersionHistoryItem,
 	eventBlobs []*commonpb.DataBlob,
+	nextEventID int64,
 ) XDCCacheValue {
 	return XDCCacheValue{
 		BaseWorkflowInfo:    baseWorkflowInfo,
 		VersionHistoryItems: versionHistoryItems,
 		EventBlobs:          eventBlobs,
+		NextEventID:         nextEventID,
 	}
 }
 
