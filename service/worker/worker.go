@@ -36,6 +36,7 @@ import (
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/sdk"
 	workercommon "go.temporal.io/server/service/worker/common"
@@ -45,6 +46,7 @@ type (
 	// workerManager maintains list of SDK workers.
 	workerManager struct {
 		status           int32
+		hostInfo         membership.HostInfo
 		logger           log.Logger
 		sdkClientFactory sdk.ClientFactory
 		workers          []sdkworker.Worker
@@ -58,8 +60,10 @@ func NewWorkerManager(
 	workerComponents []workercommon.WorkerComponent,
 	logger log.Logger,
 	sdkClientFactory sdk.ClientFactory,
+	hostInfo membership.HostInfo,
 ) *workerManager {
 	return &workerManager{
+		hostInfo:         hostInfo,
 		logger:           logger,
 		sdkClientFactory: sdkClientFactory,
 		workerComponents: workerComponents,
@@ -76,7 +80,7 @@ func (wm *workerManager) Start() {
 	}
 
 	defaultWorkerOptions := sdkworker.Options{
-		Identity: fmt.Sprintf("temporal-system@%s", uuid.New()),
+		Identity: fmt.Sprintf("temporal-system@%s", wm.hostInfo.Identity()),
 		// TODO: add dynamic config for worker options
 		BackgroundActivityContext: headers.SetCallerType(context.Background(), headers.CallerTypeBackground),
 	}
@@ -107,7 +111,7 @@ func (wm *workerManager) Start() {
 
 			// this worker component requires a dedicated worker for activities
 			activityWorkerOptions.Options.DisableWorkflowWorker = true
-			activityWorkerOptions.Options.Identity = fmt.Sprintf("temporal-system@%s", uuid.New())
+			activityWorkerOptions.Options.Identity = fmt.Sprintf("temporal-system@%s", wm.hostInfo.Identity())
 			activityWorker := wm.sdkClientFactory.NewWorker(sdkClient, activityWorkerOptions.TaskQueue, activityWorkerOptions.Options)
 			wc.RegisterActivities(activityWorker)
 			wm.workers = append(wm.workers, activityWorker)

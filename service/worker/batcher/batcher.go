@@ -28,14 +28,13 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/pborman/uuid"
-
 	"go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/sdk"
@@ -54,23 +53,19 @@ type (
 		logger           log.Logger
 		rps              dynamicconfig.IntPropertyFnWithNamespaceFilter
 		concurrency      dynamicconfig.IntPropertyFnWithNamespaceFilter
+		hostInfo         membership.HostInfo
 	}
 )
 
 // New returns a new instance of the Batcher.
-func New(
-	metricsHandler metrics.Handler,
-	logger log.Logger,
-	sdkClientFactory sdk.ClientFactory,
-	rps dynamicconfig.IntPropertyFnWithNamespaceFilter,
-	concurrency dynamicconfig.IntPropertyFnWithNamespaceFilter,
-) *Batcher {
+func New(metricsHandler metrics.Handler, logger log.Logger, hostInfo membership.HostInfo, sdkClientFactory sdk.ClientFactory, rps dynamicconfig.IntPropertyFnWithNamespaceFilter, concurrency dynamicconfig.IntPropertyFnWithNamespaceFilter) *Batcher {
 	return &Batcher{
 		sdkClientFactory: sdkClientFactory,
 		metricsHandler:   metricsHandler,
 		logger:           log.With(logger, tag.ComponentBatcher),
 		rps:              rps,
 		concurrency:      concurrency,
+		hostInfo:         hostInfo,
 	}
 }
 
@@ -79,7 +74,7 @@ func (s *Batcher) Start() error {
 	ctx := headers.SetCallerInfo(context.Background(), headers.SystemBackgroundCallerInfo)
 	workerOpts := worker.Options{
 		BackgroundActivityContext: ctx,
-		Identity:                  fmt.Sprintf("temporal-system@%s", uuid.New()),
+		Identity:                  fmt.Sprintf("temporal-system@%s", s.hostInfo.Identity()),
 	}
 	sdkClient := s.sdkClientFactory.GetSystemClient()
 	batchWorker := s.sdkClientFactory.NewWorker(sdkClient, taskQueueName, workerOpts)

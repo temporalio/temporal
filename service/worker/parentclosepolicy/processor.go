@@ -28,8 +28,6 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/pborman/uuid"
-
 	"go.temporal.io/sdk/activity"
 	"go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
@@ -38,6 +36,7 @@ import (
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/sdk"
 )
@@ -65,6 +64,8 @@ type (
 		ClientBean client.Bean
 		// CurrentCluster is the name of current cluster
 		CurrentCluster string
+
+		HostInfo membership.HostInfo
 	}
 
 	// Processor is the background sub-system that execute workflow for ParentClosePolicy
@@ -75,6 +76,7 @@ type (
 		cfg              Config
 		logger           log.Logger
 		currentCluster   string
+		hostInfo         membership.HostInfo
 	}
 )
 
@@ -87,6 +89,7 @@ func New(params *BootstrapParams) *Processor {
 		logger:           log.With(params.Logger, tag.ComponentBatcher),
 		clientBean:       params.ClientBean,
 		currentCluster:   params.CurrentCluster,
+		hostInfo:         params.HostInfo,
 	}
 }
 
@@ -110,6 +113,6 @@ func getWorkerOptions(p *Processor) worker.Options {
 		MaxConcurrentActivityTaskPollers:       p.cfg.MaxConcurrentActivityTaskPollers(),
 		MaxConcurrentWorkflowTaskPollers:       p.cfg.MaxConcurrentWorkflowTaskPollers(),
 		BackgroundActivityContext:              ctx,
-		Identity:                               fmt.Sprintf("temporal-system@%s", uuid.New()),
+		Identity:                               fmt.Sprintf("temporal-system@%s", p.hostInfo.Identity()),
 	}
 }
