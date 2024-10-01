@@ -93,10 +93,6 @@ const (
 
 type (
 	temporalImpl struct {
-		// TODO: this is only used to refresh pernsworkermanager, we can get rid of this after
-		// it uses dynamic config subscriptions.
-		workerServices []*worker.Service
-
 		fxApps []*fx.App
 
 		// This is used to wait for namespace registries to have noticed a change in some xdc tests.
@@ -669,7 +665,6 @@ func (c *temporalImpl) startWorker() {
 		}
 
 		c.fxApps = append(c.fxApps, app)
-		c.workerServices = append(c.workerServices, workerService)
 		if err := app.Start(context.Background()); err != nil {
 			logger.Fatal("unable to start worker service", tag.Error(err))
 		}

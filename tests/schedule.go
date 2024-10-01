@@ -859,9 +859,6 @@ func (s *ScheduleFunctionalSuite) TestRefresh() {
 	wid := "sched-test-refresh-wf"
 	wt := "sched-test-refresh-wt"
 
-	for _, w := range s.testCluster.host.workerServices {
-		w.RefreshPerNSWorkerManager()
-	}
 	schedule := &schedulepb.Schedule{
 		Spec: &schedulepb.ScheduleSpec{
 			Interval: []*schedulepb.IntervalSpec{
@@ -971,20 +968,8 @@ func (s *ScheduleFunctionalSuite) TestListBeforeRun() {
 	wid := "sched-test-list-before-run-wf"
 	wt := "sched-test-list-before-run-wt"
 
-	// clean up per-ns-worker. note that this will run after the OverrideDynamicConfig below is reverted.
-	s.T().Cleanup(func() {
-		for _, w := range s.testCluster.host.workerServices {
-			w.RefreshPerNSWorkerManager()
-		}
-		time.Sleep(2 * time.Second)
-	})
-
 	// disable per-ns worker so that the schedule workflow never runs
 	s.OverrideDynamicConfig(dynamicconfig.WorkerPerNamespaceWorkerCount, 0)
-	for _, w := range s.testCluster.host.workerServices {
-		w.RefreshPerNSWorkerManager()
-	}
-	time.Sleep(2 * time.Second)
 
 	schedule := &schedulepb.Schedule{
 		Spec: &schedulepb.ScheduleSpec{
@@ -1112,9 +1097,6 @@ func (s *ScheduleFunctionalSuite) TestNextTimeCache() {
 	wid := "sched-test-next-time-cache-wf"
 	wt := "sched-test-next-time-cache-wt"
 
-	for _, w := range s.testCluster.host.workerServices {
-		w.RefreshPerNSWorkerManager()
-	}
 	schedule := &schedulepb.Schedule{
 		Spec: &schedulepb.ScheduleSpec{
 			Interval: []*schedulepb.IntervalSpec{
