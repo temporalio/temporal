@@ -26,7 +26,6 @@ package batcher
 
 import (
 	"context"
-	"fmt"
 
 	"go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
