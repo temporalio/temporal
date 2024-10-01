@@ -27,9 +27,10 @@ package scanner
 import (
 	"context"
 	"fmt"
-	"os"
 	"sync"
 	"time"
+
+	"github.com/pborman/uuid"
 
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/sdk/activity"
@@ -171,7 +172,7 @@ func (s *Scanner) Start() error {
 	ctx, s.lifecycleCancel = context.WithCancel(ctx)
 
 	workerOpts := worker.Options{
-		Identity:                               fmt.Sprintf("temporal-system@%d", os.Getpid()),
+		Identity:                               fmt.Sprintf("temporal-system@%s", uuid.New()),
 		MaxConcurrentActivityExecutionSize:     s.context.cfg.MaxConcurrentActivityExecutionSize(),
 		MaxConcurrentWorkflowTaskExecutionSize: s.context.cfg.MaxConcurrentWorkflowTaskExecutionSize(),
 		MaxConcurrentActivityTaskPollers:       s.context.cfg.MaxConcurrentActivityTaskPollers(),

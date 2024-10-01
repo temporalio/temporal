@@ -27,7 +27,8 @@ package parentclosepolicy
 import (
 	"context"
 	"fmt"
-	"os"
+
+	"github.com/pborman/uuid"
 
 	"go.temporal.io/sdk/activity"
 	"go.temporal.io/sdk/worker"
@@ -109,6 +110,6 @@ func getWorkerOptions(p *Processor) worker.Options {
 		MaxConcurrentActivityTaskPollers:       p.cfg.MaxConcurrentActivityTaskPollers(),
 		MaxConcurrentWorkflowTaskPollers:       p.cfg.MaxConcurrentWorkflowTaskPollers(),
 		BackgroundActivityContext:              ctx,
-		Identity:                               fmt.Sprintf("temporal-system@%d", os.Getpid()),
+		Identity:                               fmt.Sprintf("temporal-system@%s", uuid.New()),
 	}
 }

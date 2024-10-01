@@ -27,7 +27,8 @@ package batcher
 import (
 	"context"
 	"fmt"
-	"os"
+
+	"github.com/pborman/uuid"
 
 	"go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
@@ -78,7 +79,7 @@ func (s *Batcher) Start() error {
 	ctx := headers.SetCallerInfo(context.Background(), headers.SystemBackgroundCallerInfo)
 	workerOpts := worker.Options{
 		BackgroundActivityContext: ctx,
-		Identity:                  fmt.Sprintf("temporal-system@%d", os.Getpid()),
+		Identity:                  fmt.Sprintf("temporal-system@%s", uuid.New()),
 	}
 	sdkClient := s.sdkClientFactory.GetSystemClient()
 	batchWorker := s.sdkClientFactory.NewWorker(sdkClient, taskQueueName, workerOpts)

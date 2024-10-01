@@ -30,11 +30,11 @@ import (
 	"errors"
 	"fmt"
 	"maps"
-	"os"
 	"sync"
 	"sync/atomic"
 	"time"
 
+	"github.com/pborman/uuid"
 	"go.uber.org/fx"
 	expmaps "golang.org/x/exp/maps"
 
@@ -485,7 +485,7 @@ func (w *perNamespaceWorker) startWorker(
 	sdkoptions.StickyScheduleToStartTimeout = dcOptions.StickyScheduleToStartTimeout
 
 	sdkoptions.BackgroundActivityContext = headers.SetCallerInfo(context.Background(), headers.NewBackgroundCallerInfo(ns.Name().String()))
-	sdkoptions.Identity = fmt.Sprintf("temporal-system@%d@%s@%s", os.Getpid(), w.wm.hostName, nsName)
+	sdkoptions.Identity = fmt.Sprintf("temporal-system@%s@%s@%s", uuid.New(), w.wm.hostName, nsName)
 	// increase these if we're supposed to run with more allocation
 	sdkoptions.MaxConcurrentWorkflowTaskPollers *= allocation.Local
 	sdkoptions.MaxConcurrentActivityTaskPollers *= allocation.Local
