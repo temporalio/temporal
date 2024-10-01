@@ -1112,7 +1112,7 @@ func (r *WorkflowStateReplicatorImpl) backfillHistory(
 	prevTxnID := common.EmptyEventTaskID
 	var prevBranchID string
 	sortedAncestors := sortAncestors(historyBranch.GetAncestors())
-	sortedAncestorsIDx := 0
+	sortedAncestorsIdx := 0
 	var ancestors []*persistencespb.HistoryBranchRange
 
 BackfillLoop:
@@ -1124,29 +1124,29 @@ BackfillLoop:
 
 		if historyBlob.nodeID <= lastBatchNodeID {
 			// The history batch already in DB.
-			if len(sortedAncestors) > sortedAncestorsIDx {
-				currentAncestor := sortedAncestors[sortedAncestorsIDx]
+			if len(sortedAncestors) > sortedAncestorsIdx {
+				currentAncestor := sortedAncestors[sortedAncestorsIdx]
 
 				if historyBlob.nodeID >= currentAncestor.GetEndNodeId() {
 					// Update ancestor.
 					ancestors = append(ancestors, currentAncestor)
-					sortedAncestorsIDx++
+					sortedAncestorsIdx++
 				}
 			}
 			continue BackfillLoop
 		}
 
 		branchID := historyBranch.GetBranchId()
-		if sortedAncestorsIDx < len(sortedAncestors) {
-			currentAncestor := sortedAncestors[sortedAncestorsIDx]
+		if sortedAncestorsIdx < len(sortedAncestors) {
+			currentAncestor := sortedAncestors[sortedAncestorsIdx]
 			if historyBlob.nodeID >= currentAncestor.GetEndNodeId() {
 				// update ancestor
 				ancestors = append(ancestors, currentAncestor)
-				sortedAncestorsIDx++
+				sortedAncestorsIdx++
 			}
-			if sortedAncestorsIDx < len(sortedAncestors) {
+			if sortedAncestorsIdx < len(sortedAncestors) {
 				// use ancestor branch id
-				currentAncestor = sortedAncestors[sortedAncestorsIDx]
+				currentAncestor = sortedAncestors[sortedAncestorsIdx]
 				branchID = currentAncestor.GetBranchId()
 				if historyBlob.nodeID < currentAncestor.GetBeginNodeId() || historyBlob.nodeID >= currentAncestor.GetEndNodeId() {
 					return common.EmptyEventTaskID, serviceerror.NewInternal(
