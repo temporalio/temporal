@@ -10,7 +10,7 @@ Its implementation uses a `PriorityQueue` sorted by `VisibilityTimestamp`: the t
 task that is executed next.
 
 The in-memory queue only supports `WorkflowTaskTimeoutTask` and it only enforces
-`SCHEDULED_TO_START` and `START_TO_CLOSE`.
+`SCHEDULE_TO_START` and `START_TO_CLOSE`.
 
 Note that while the in-memory queue's executor of `WorkflowTaskTimeoutTask` is the same as for
 the normal timer queue, it does one extra check for speculative Workflow Tasks:
