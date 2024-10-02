@@ -224,8 +224,7 @@ func (s *SyncStateRetrieverImpl) getSyncStateResult(
 	sourceVersionHistories := versionhistory.CopyVersionHistories(mu.GetExecutionInfo().VersionHistories)
 	sourceTransitionHistory := workflow.CopyVersionedTransitions(mu.GetExecutionInfo().TransitionHistory)
 	if cacheReleaseFunc != nil {
-		(cacheReleaseFunc)(nil)
-		cacheReleaseFunc = nil
+		cacheReleaseFunc(nil)
 	}
 
 	if len(newRunId) > 0 {
