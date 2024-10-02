@@ -33,6 +33,7 @@ import (
 
 	"github.com/urfave/cli/v2"
 	"go.temporal.io/server/common/codec"
+	"google.golang.org/protobuf/encoding/prototext"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protoreflect"
 	"google.golang.org/protobuf/reflect/protoregistry"
@@ -96,9 +97,15 @@ func AdminDecodeProto(c *cli.Context) error {
 	encoder := codec.NewJSONPBIndentEncoder(" ")
 	json, err := encoder.Encode(message)
 	if err != nil {
-		return fmt.Errorf("unable to encode to JSON: %s", err)
+		err := fmt.Errorf("unable to encode to JSON: %s", err)
+		text, terr := prototext.Marshal(message)
+		if terr != nil {
+			return err
+		}
+		fmt.Fprintln(c.App.Writer, err)
+		fmt.Fprintln(c.App.Writer, "marshal to text:")
+		json = text
 	}
-	fmt.Fprintln(c.App.Writer)
 	fmt.Fprintln(c.App.Writer, string(json))
 	return nil
 }
