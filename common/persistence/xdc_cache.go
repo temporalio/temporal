@@ -133,7 +133,7 @@ func (e *XDCCacheImpl) Put(
 	value XDCCacheValue,
 ) {
 	existingValue, found := e.Get(key)
-	if found {
+	if found && existingValue.NextEventID != value.NextEventID {
 		deserializeBlobs := func(blobs []*commonpb.DataBlob) [][]*historypb.HistoryEvent {
 			events := make([][]*historypb.HistoryEvent, len(blobs))
 			for i, blob := range blobs {
