@@ -35,3 +35,13 @@ func TestRawHistorySuite(t *testing.T) {
 	flag.Parse()
 	suite.Run(t, new(RawHistorySuite))
 }
+
+func TestRawHistoryClientSuite(t *testing.T) {
+	flag.Parse()
+	suite.Run(t, new(RawHistoryClientSuite))
+}
+
+func TestGetHistoryFunctionalSuite(t *testing.T) {
+	flag.Parse()
+	suite.Run(t, new(GetHistoryFunctionalSuite))
+}

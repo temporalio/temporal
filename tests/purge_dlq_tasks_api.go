@@ -37,6 +37,7 @@ import (
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/service/history/tasks"
+	"go.temporal.io/server/tests/testcore"
 	"go.uber.org/fx"
 	"google.golang.org/grpc/codes"
 )
@@ -44,7 +45,7 @@ import (
 type (
 	PurgeDLQTasksSuite struct {
 		*require.Assertions
-		FunctionalTestBase
+		testcore.FunctionalTestBase
 		dlq              *faultyDLQ
 		sdkClientFactory sdk.ClientFactory
 	}
@@ -80,22 +81,22 @@ func (q *faultyDLQ) DeleteTasks(
 
 func (s *PurgeDLQTasksSuite) SetupSuite() {
 	s.Assertions = require.New(s.T())
-	s.setupSuite(
+	s.FunctionalTestBase.SetupSuite(
 		"testdata/es_cluster.yaml",
-		WithFxOptionsForService(primitives.HistoryService,
+		testcore.WithFxOptionsForService(primitives.HistoryService,
 			fx.Decorate(func(manager persistence.HistoryTaskQueueManager) persistence.HistoryTaskQueueManager {
 				s.dlq = &faultyDLQ{HistoryTaskQueueManager: manager}
 				return s.dlq
 			}),
 		),
-		WithFxOptionsForService(primitives.FrontendService,
+		testcore.WithFxOptionsForService(primitives.FrontendService,
 			fx.Populate(&s.sdkClientFactory),
 		),
 	)
 }
 
 func (s *PurgeDLQTasksSuite) TearDownSuite() {
-	s.tearDownSuite()
+	s.FunctionalTestBase.TearDownSuite()
 }
 
 func (s *PurgeDLQTasksSuite) SetupTest() {
@@ -172,7 +173,7 @@ func (s *PurgeDLQTasksSuite) TestPurgeDLQTasks() {
 			}
 			s.enqueueTasks(ctx, queueKey, &tasks.WorkflowTask{})
 
-			purgeDLQTasksResponse, err := s.adminClient.PurgeDLQTasks(ctx, &adminservice.PurgeDLQTasksRequest{
+			purgeDLQTasksResponse, err := s.AdminClient().PurgeDLQTasks(ctx, &adminservice.PurgeDLQTasksRequest{
 				DlqKey: &commonspb.HistoryDLQKey{
 					TaskCategory:  int32(params.category.ID()),
 					SourceCluster: params.sourceCluster,
@@ -236,7 +237,7 @@ func (s *PurgeDLQTasksSuite) enqueueTasks(ctx context.Context, queueKey persiste
 			SourceCluster: queueKey.SourceCluster,
 			TargetCluster: queueKey.TargetCluster,
 			Task:          task,
-			SourceShardID: tasks.GetShardIDForTask(task, int(s.testClusterConfig.HistoryConfig.NumHistoryShards)),
+			SourceShardID: tasks.GetShardIDForTask(task, int(s.GetTestClusterConfig().HistoryConfig.NumHistoryShards)),
 		})
 		s.NoError(err)
 	}

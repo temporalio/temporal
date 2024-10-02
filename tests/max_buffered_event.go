@@ -35,9 +35,14 @@ import (
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
 	"go.temporal.io/server/common/payloads"
+	"go.temporal.io/server/tests/testcore"
 )
 
-func (s *ClientFunctionalSuite) TestMaxBufferedEventsLimit() {
+type MaxBufferedEventSuite struct {
+	testcore.ClientFunctionalSuite
+}
+
+func (s *MaxBufferedEventSuite) TestMaxBufferedEventsLimit() {
 	/*
 		This test starts a workflow, and block its workflow task, then sending
 		signals to it which will be buffered. The default max buffered event
@@ -78,15 +83,15 @@ func (s *ClientFunctionalSuite) TestMaxBufferedEventsLimit() {
 		return sigCount, nil
 	}
 
-	s.worker.RegisterWorkflow(workflowFn)
+	s.Worker().RegisterWorkflow(workflowFn)
 
 	testCtx, cancel := context.WithTimeout(context.Background(), time.Second*20)
 	defer cancel()
 
 	wid := "test-max-buffered-events-limit"
-	wf1, err1 := s.sdkClient.ExecuteWorkflow(testCtx, client.StartWorkflowOptions{
+	wf1, err1 := s.SdkClient().ExecuteWorkflow(testCtx, client.StartWorkflowOptions{
 		ID:                  wid,
-		TaskQueue:           s.taskQueue,
+		TaskQueue:           s.TaskQueue(),
 		WorkflowTaskTimeout: time.Second * 20,
 	}, workflowFn)
 
@@ -97,12 +102,12 @@ func (s *ClientFunctionalSuite) TestMaxBufferedEventsLimit() {
 
 	// now send 100 signals, all of them will be buffered
 	for i := 0; i < 100; i++ {
-		err := s.sdkClient.SignalWorkflow(testCtx, wid, "", "test-signal", i)
+		err := s.SdkClient().SignalWorkflow(testCtx, wid, "", "test-signal", i)
 		s.NoError(err)
 	}
 
 	// send 101 signal, this will fail the started workflow task
-	err := s.sdkClient.SignalWorkflow(testCtx, wid, "", "test-signal", 100)
+	err := s.SdkClient().SignalWorkflow(testCtx, wid, "", "test-signal", 100)
 	s.NoError(err)
 
 	// unblock goroutine that runs local activity
@@ -113,7 +118,7 @@ func (s *ClientFunctionalSuite) TestMaxBufferedEventsLimit() {
 	s.NoError(err)
 	s.Equal(101, sigCount)
 
-	historyEvents := s.getHistory(s.namespace, &commonpb.WorkflowExecution{WorkflowId: wf1.GetID()})
+	historyEvents := s.GetHistory(s.Namespace(), &commonpb.WorkflowExecution{WorkflowId: wf1.GetID()})
 	// Not using historyrequire here because history is not deterministic.
 	var failedCause enumspb.WorkflowTaskFailedCause
 	for _, evt := range historyEvents {
@@ -125,7 +130,7 @@ func (s *ClientFunctionalSuite) TestMaxBufferedEventsLimit() {
 	s.Equal(enumspb.WORKFLOW_TASK_FAILED_CAUSE_FORCE_CLOSE_COMMAND, failedCause)
 }
 
-func (s *ClientFunctionalSuite) TestBufferedEventsMutableStateSizeLimit() {
+func (s *MaxBufferedEventSuite) TestBufferedEventsMutableStateSizeLimit() {
 	/*
 			This test starts a workflow, and block its workflow task, then sending
 			signals to it which will be buffered. The default max mutable state
@@ -166,15 +171,15 @@ func (s *ClientFunctionalSuite) TestBufferedEventsMutableStateSizeLimit() {
 		return sigCount, nil
 	}
 
-	s.worker.RegisterWorkflow(workflowFn)
+	s.Worker().RegisterWorkflow(workflowFn)
 
 	testCtx, cancel := context.WithTimeout(context.Background(), time.Second*20)
 	defer cancel()
 
 	wid := "test-max-buffered-events-limit"
-	wf1, err1 := s.sdkClient.ExecuteWorkflow(testCtx, client.StartWorkflowOptions{
+	wf1, err1 := s.SdkClient().ExecuteWorkflow(testCtx, client.StartWorkflowOptions{
 		ID:                  wid,
-		TaskQueue:           s.taskQueue,
+		TaskQueue:           s.TaskQueue(),
 		WorkflowTaskTimeout: time.Second * 20,
 	}, workflowFn)
 
@@ -187,12 +192,12 @@ func (s *ClientFunctionalSuite) TestBufferedEventsMutableStateSizeLimit() {
 	buf := make([]byte, 1048577)
 	largePayload := payloads.EncodeBytes(buf)
 	for i := 0; i < 16; i++ {
-		err := s.sdkClient.SignalWorkflow(testCtx, wid, "", "test-signal", largePayload)
+		err := s.SdkClient().SignalWorkflow(testCtx, wid, "", "test-signal", largePayload)
 		s.NoError(err)
 	}
 
 	// send 16th signal, this will fail the started workflow task and force terminate the workflow
-	err := s.sdkClient.SignalWorkflow(testCtx, wid, "", "test-signal", largePayload)
+	err := s.SdkClient().SignalWorkflow(testCtx, wid, "", "test-signal", largePayload)
 	s.NoError(err)
 
 	// unblock goroutine that runs local activity
@@ -203,7 +208,7 @@ func (s *ClientFunctionalSuite) TestBufferedEventsMutableStateSizeLimit() {
 	s.NoError(err)
 	s.Equal(17, sigCount)
 
-	historyEvents := s.getHistory(s.namespace, &commonpb.WorkflowExecution{WorkflowId: wf1.GetID()})
+	historyEvents := s.GetHistory(s.Namespace(), &commonpb.WorkflowExecution{WorkflowId: wf1.GetID()})
 	// Not using historyrequire here because history is not deterministic.
 	var failedCause enumspb.WorkflowTaskFailedCause
 	for _, evt := range historyEvents {

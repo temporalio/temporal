@@ -38,16 +38,22 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/payloads"
+	"go.temporal.io/server/tests/testcore"
+
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
+
+type WorkflowMemoTestSuite struct {
+	testcore.FunctionalSuite
+}
 
 type RunIdGetter interface {
 	GetRunId() string
 }
 type startFunc func() (RunIdGetter, error)
 
-func (s *FunctionalSuite) TestStartWithMemo() {
+func (s *WorkflowMemoTestSuite) TestStartWithMemo() {
 	id := "functional-start-with-memo-test"
 	wt := "functional-start-with-memo-test-type"
 	tl := "functional-start-with-memo-test-taskqueue"
@@ -61,7 +67,7 @@ func (s *FunctionalSuite) TestStartWithMemo() {
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           uuid.New(),
-		Namespace:           s.namespace,
+		Namespace:           s.Namespace(),
 		WorkflowId:          id,
 		WorkflowType:        &commonpb.WorkflowType{Name: wt},
 		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
@@ -73,7 +79,7 @@ func (s *FunctionalSuite) TestStartWithMemo() {
 	}
 
 	fn := func() (RunIdGetter, error) {
-		return s.client.StartWorkflowExecution(NewContext(), request)
+		return s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
 	}
 	s.startWithMemoHelper(fn, id, &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}, memo, `
   1 WorkflowExecutionStarted {"Memo":{"Fields":{"Info":{"Data":"\"memo-value\""}}}}
@@ -83,7 +89,7 @@ func (s *FunctionalSuite) TestStartWithMemo() {
   5 WorkflowExecutionCompleted`)
 }
 
-func (s *FunctionalSuite) TestSignalWithStartWithMemo() {
+func (s *WorkflowMemoTestSuite) TestSignalWithStartWithMemo() {
 	id := "functional-signal-with-start-with-memo-test"
 	wt := "functional-signal-with-start-with-memo-test-type"
 	tl := "functional-signal-with-start-with-memo-test-taskqueue"
@@ -99,7 +105,7 @@ func (s *FunctionalSuite) TestSignalWithStartWithMemo() {
 	signalInput := payloads.EncodeString("my signal input")
 	request := &workflowservice.SignalWithStartWorkflowExecutionRequest{
 		RequestId:           uuid.New(),
-		Namespace:           s.namespace,
+		Namespace:           s.Namespace(),
 		WorkflowId:          id,
 		WorkflowType:        &commonpb.WorkflowType{Name: wt},
 		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
@@ -113,7 +119,7 @@ func (s *FunctionalSuite) TestSignalWithStartWithMemo() {
 	}
 
 	fn := func() (RunIdGetter, error) {
-		return s.client.SignalWithStartWorkflowExecution(NewContext(), request)
+		return s.FrontendClient().SignalWithStartWorkflowExecution(testcore.NewContext(), request)
 	}
 	s.startWithMemoHelper(fn, id, &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}, memo, `
   1 WorkflowExecutionStarted {"Memo":{"Fields":{"Info":{"Data":"\"memo-value\""}}}}
@@ -125,7 +131,7 @@ func (s *FunctionalSuite) TestSignalWithStartWithMemo() {
 }
 
 // helper function for TestStartWithMemo and TestSignalWithStartWithMemo to reduce duplicate code
-func (s *FunctionalSuite) startWithMemoHelper(startFn startFunc, id string, taskQueue *taskqueuepb.TaskQueue, memo *commonpb.Memo, expectedHistory string) {
+func (s *WorkflowMemoTestSuite) startWithMemoHelper(startFn startFunc, id string, taskQueue *taskqueuepb.TaskQueue, memo *commonpb.Memo, expectedHistory string) {
 	identity := "worker1"
 
 	we, err0 := startFn()
@@ -142,9 +148,9 @@ func (s *FunctionalSuite) startWithMemoHelper(startFn startFunc, id string, task
 		}}, nil
 	}
 
-	poller := &TaskPoller{
-		Client:              s.client,
-		Namespace:           s.namespace,
+	poller := &testcore.TaskPoller{
+		Client:              s.FrontendClient(),
+		Namespace:           s.Namespace(),
 		TaskQueue:           taskQueue,
 		Identity:            identity,
 		WorkflowTaskHandler: wtHandler,
@@ -156,8 +162,8 @@ func (s *FunctionalSuite) startWithMemoHelper(startFn startFunc, id string, task
 	var openExecutionInfo *workflowpb.WorkflowExecutionInfo
 	s.Eventually(
 		func() bool {
-			resp, err1 := s.client.ListOpenWorkflowExecutions(NewContext(), &workflowservice.ListOpenWorkflowExecutionsRequest{
-				Namespace:       s.namespace,
+			resp, err1 := s.FrontendClient().ListOpenWorkflowExecutions(testcore.NewContext(), &workflowservice.ListOpenWorkflowExecutionsRequest{
+				Namespace:       s.Namespace(),
 				MaximumPageSize: 100,
 				StartTimeFilter: &filterpb.StartTimeFilter{
 					EarliestTime: nil,
@@ -175,7 +181,7 @@ func (s *FunctionalSuite) startWithMemoHelper(startFn startFunc, id string, task
 			s.Logger.Info("Open WorkflowExecution is not yet visible")
 			return false
 		},
-		waitForESToSettle,
+		testcore.WaitForESToSettle,
 		100*time.Millisecond,
 	)
 	s.NotNil(openExecutionInfo)
@@ -188,10 +194,10 @@ func (s *FunctionalSuite) startWithMemoHelper(startFn startFunc, id string, task
 
 	// verify DescribeWorkflowExecution result: workflow running
 	descRequest := &workflowservice.DescribeWorkflowExecutionRequest{
-		Namespace: s.namespace,
+		Namespace: s.Namespace(),
 		Execution: execution,
 	}
-	descResp, err := s.client.DescribeWorkflowExecution(NewContext(), descRequest)
+	descResp, err := s.FrontendClient().DescribeWorkflowExecution(testcore.NewContext(), descRequest)
 	s.NoError(err)
 	s.ProtoEqual(memo, descResp.WorkflowExecutionInfo.Memo)
 
@@ -201,11 +207,11 @@ func (s *FunctionalSuite) startWithMemoHelper(startFn startFunc, id string, task
 	s.NoError(err)
 
 	// verify history
-	historyEvents := s.getHistory(s.namespace, execution)
+	historyEvents := s.GetHistory(s.Namespace(), execution)
 	s.EqualHistoryEvents(expectedHistory, historyEvents)
 
 	// verify DescribeWorkflowExecution result: workflow closed, but close visibility task not completed
-	descResp, err = s.client.DescribeWorkflowExecution(NewContext(), descRequest)
+	descResp, err = s.FrontendClient().DescribeWorkflowExecution(testcore.NewContext(), descRequest)
 	s.NoError(err)
 	s.ProtoEqual(memo, descResp.WorkflowExecutionInfo.Memo)
 
@@ -213,8 +219,8 @@ func (s *FunctionalSuite) startWithMemoHelper(startFn startFunc, id string, task
 	var closedExecutionInfo *workflowpb.WorkflowExecutionInfo
 	s.Eventually(
 		func() bool {
-			resp, err1 := s.client.ListClosedWorkflowExecutions(NewContext(), &workflowservice.ListClosedWorkflowExecutionsRequest{
-				Namespace:       s.namespace,
+			resp, err1 := s.FrontendClient().ListClosedWorkflowExecutions(testcore.NewContext(), &workflowservice.ListClosedWorkflowExecutionsRequest{
+				Namespace:       s.Namespace(),
 				MaximumPageSize: 100,
 				StartTimeFilter: &filterpb.StartTimeFilter{
 					EarliestTime: nil,
@@ -232,14 +238,14 @@ func (s *FunctionalSuite) startWithMemoHelper(startFn startFunc, id string, task
 			s.Logger.Info("Closed WorkflowExecution is not yet visible")
 			return false
 		},
-		waitForESToSettle,
+		testcore.WaitForESToSettle,
 		100*time.Millisecond,
 	)
 	s.NotNil(closedExecutionInfo)
 	s.ProtoEqual(memo, closedExecutionInfo.Memo)
 
 	// verify DescribeWorkflowExecution result: workflow closed and close visibility task completed
-	descResp, err = s.client.DescribeWorkflowExecution(NewContext(), descRequest)
+	descResp, err = s.FrontendClient().DescribeWorkflowExecution(testcore.NewContext(), descRequest)
 	s.NoError(err)
 	s.ProtoEqual(memo, descResp.WorkflowExecutionInfo.Memo)
 }

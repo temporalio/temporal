@@ -34,7 +34,7 @@ import (
 	replicationpb "go.temporal.io/api/replication/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/common/codec"
-	"go.temporal.io/server/tests"
+	"go.temporal.io/server/tests/testcore"
 )
 
 var (
@@ -88,7 +88,7 @@ func GetEventBatchesFromTestEvents(fileName string, workflowId string) ([][]*his
 	for _, batch := range historyBatches {
 		eventsFlatted = append(eventsFlatted, batch...)
 	}
-	versionHistory, err := tests.EventBatchesToVersionHistory(nil, []*historypb.History{
+	versionHistory, err := testcore.EventBatchesToVersionHistory(nil, []*historypb.History{
 		{Events: eventsFlatted},
 	})
 	if err != nil {

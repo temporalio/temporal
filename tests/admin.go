@@ -34,9 +34,14 @@ import (
 	"go.temporal.io/sdk/workflow"
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/tests/testcore"
 )
 
-func (s *ClientFunctionalSuite) TestAdminRebuildMutableState() {
+type AdminTestSuite struct {
+	testcore.ClientFunctionalSuite
+}
+
+func (s *AdminTestSuite) TestAdminRebuildMutableState() {
 
 	workflowFn := func(ctx workflow.Context) error {
 		var randomUUID string
@@ -50,18 +55,18 @@ func (s *ClientFunctionalSuite) TestAdminRebuildMutableState() {
 		return nil
 	}
 
-	s.worker.RegisterWorkflow(workflowFn)
+	s.Worker().RegisterWorkflow(workflowFn)
 
 	workflowID := "functional-admin-rebuild-mutable-state-test"
 	workflowOptions := sdkclient.StartWorkflowOptions{
 		ID:                 workflowID,
-		TaskQueue:          s.taskQueue,
+		TaskQueue:          s.TaskQueue(),
 		WorkflowRunTimeout: 20 * time.Second,
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	workflowRun, err := s.sdkClient.ExecuteWorkflow(ctx, workflowOptions, workflowFn)
+	workflowRun, err := s.SdkClient().ExecuteWorkflow(ctx, workflowOptions, workflowFn)
 	s.NoError(err)
 	runID := workflowRun.GetRunID()
 
@@ -77,8 +82,8 @@ func (s *ClientFunctionalSuite) TestAdminRebuildMutableState() {
 
 	var response1 *adminservice.DescribeMutableStateResponse
 	for {
-		response1, err = s.adminClient.DescribeMutableState(ctx, &adminservice.DescribeMutableStateRequest{
-			Namespace: s.namespace,
+		response1, err = s.AdminClient().DescribeMutableState(ctx, &adminservice.DescribeMutableStateRequest{
+			Namespace: s.Namespace(),
 			Execution: &commonpb.WorkflowExecution{
 				WorkflowId: workflowID,
 				RunId:      runID,
@@ -91,8 +96,8 @@ func (s *ClientFunctionalSuite) TestAdminRebuildMutableState() {
 		time.Sleep(20 * time.Millisecond)
 	}
 
-	_, err = s.adminClient.RebuildMutableState(ctx, &adminservice.RebuildMutableStateRequest{
-		Namespace: s.namespace,
+	_, err = s.AdminClient().RebuildMutableState(ctx, &adminservice.RebuildMutableStateRequest{
+		Namespace: s.Namespace(),
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: workflowID,
 			RunId:      runID,
@@ -100,8 +105,8 @@ func (s *ClientFunctionalSuite) TestAdminRebuildMutableState() {
 	})
 	s.NoError(err)
 
-	response2, err := s.adminClient.DescribeMutableState(ctx, &adminservice.DescribeMutableStateRequest{
-		Namespace: s.namespace,
+	response2, err := s.AdminClient().DescribeMutableState(ctx, &adminservice.DescribeMutableStateRequest{
+		Namespace: s.Namespace(),
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: workflowID,
 			RunId:      runID,

@@ -40,10 +40,15 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/timer"
+	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 
-func (s *FunctionalSuite) TestUserTimers_Sequential() {
+type UserTimersTestSuite struct {
+	testcore.FunctionalSuite
+}
+
+func (s *UserTimersTestSuite) TestUserTimers_Sequential() {
 	id := "functional-user-timers-sequential-test"
 	wt := "functional-user-timers-sequential-test-type"
 	tl := "functional-user-timers-sequential-test-taskqueue"
@@ -51,7 +56,7 @@ func (s *FunctionalSuite) TestUserTimers_Sequential() {
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           uuid.New(),
-		Namespace:           s.namespace,
+		Namespace:           s.Namespace(),
 		WorkflowId:          id,
 		WorkflowType:        &commonpb.WorkflowType{Name: wt},
 		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
@@ -61,7 +66,7 @@ func (s *FunctionalSuite) TestUserTimers_Sequential() {
 		Identity:            identity,
 	}
 
-	we, err0 := s.client.StartWorkflowExecution(NewContext(), request)
+	we, err0 := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
 	s.NoError(err0)
 
 	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
@@ -92,9 +97,9 @@ func (s *FunctionalSuite) TestUserTimers_Sequential() {
 		}}, nil
 	}
 
-	poller := &TaskPoller{
-		Client:              s.client,
-		Namespace:           s.namespace,
+	poller := &testcore.TaskPoller{
+		Client:              s.FrontendClient(),
+		Namespace:           s.Namespace(),
 		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		Identity:            identity,
 		WorkflowTaskHandler: wtHandler,
@@ -110,12 +115,12 @@ func (s *FunctionalSuite) TestUserTimers_Sequential() {
 	}
 
 	s.False(workflowComplete)
-	_, err := poller.PollAndProcessWorkflowTask(WithDumpHistory)
+	_, err := poller.PollAndProcessWorkflowTask(testcore.WithDumpHistory)
 	s.NoError(err)
 	s.True(workflowComplete)
 }
 
-func (s *FunctionalSuite) TestUserTimers_CapDuration() {
+func (s *UserTimersTestSuite) TestUserTimers_CapDuration() {
 	id := "functional-user-timers-cap-duration-test"
 	wt := "functional-user-timers-cap-duration-test-type"
 	tl := "functional-user-timers-cap-duration-test-taskqueue"
@@ -123,7 +128,7 @@ func (s *FunctionalSuite) TestUserTimers_CapDuration() {
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           uuid.New(),
-		Namespace:           s.namespace,
+		Namespace:           s.Namespace(),
 		WorkflowId:          id,
 		WorkflowType:        &commonpb.WorkflowType{Name: wt},
 		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
@@ -133,11 +138,11 @@ func (s *FunctionalSuite) TestUserTimers_CapDuration() {
 		Identity:            identity,
 	}
 
-	we, err0 := s.client.StartWorkflowExecution(NewContext(), request)
+	we, err0 := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
 	s.NoError(err0)
 
-	descResp, err := s.client.DescribeWorkflowExecution(NewContext(), &workflowservice.DescribeWorkflowExecutionRequest{
-		Namespace: s.namespace,
+	descResp, err := s.FrontendClient().DescribeWorkflowExecution(testcore.NewContext(), &workflowservice.DescribeWorkflowExecutionRequest{
+		Namespace: s.Namespace(),
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: id,
 			RunId:      we.RunId,
@@ -159,9 +164,9 @@ func (s *FunctionalSuite) TestUserTimers_CapDuration() {
 		}}, nil
 	}
 
-	poller := &TaskPoller{
-		Client:              s.client,
-		Namespace:           s.namespace,
+	poller := &testcore.TaskPoller{
+		Client:              s.FrontendClient(),
+		Namespace:           s.Namespace(),
 		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		Identity:            identity,
 		WorkflowTaskHandler: wtHandler,
@@ -175,8 +180,8 @@ func (s *FunctionalSuite) TestUserTimers_CapDuration() {
 	s.Logger.Info("PollAndProcessWorkflowTask: completed")
 	s.NoError(err)
 
-	adminDescResp, err := s.adminClient.DescribeMutableState(NewContext(), &adminservice.DescribeMutableStateRequest{
-		Namespace: s.namespace,
+	adminDescResp, err := s.AdminClient().DescribeMutableState(testcore.NewContext(), &adminservice.DescribeMutableStateRequest{
+		Namespace: s.Namespace(),
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: id,
 			RunId:      we.RunId,
@@ -187,8 +192,8 @@ func (s *FunctionalSuite) TestUserTimers_CapDuration() {
 	s.Len(timerInfos, 1)
 	s.True(timerInfos[timerID].ExpiryTime.AsTime().Before(time.Now().Add(timer.MaxAllowedTimer)))
 
-	_, err = s.client.TerminateWorkflowExecution(NewContext(), &workflowservice.TerminateWorkflowExecutionRequest{
-		Namespace: s.namespace,
+	_, err = s.FrontendClient().TerminateWorkflowExecution(testcore.NewContext(), &workflowservice.TerminateWorkflowExecutionRequest{
+		Namespace: s.Namespace(),
 		WorkflowExecution: &commonpb.WorkflowExecution{
 			WorkflowId: id,
 			RunId:      we.RunId,

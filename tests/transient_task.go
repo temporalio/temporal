@@ -39,10 +39,15 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/payloads"
+	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 
-func (s *FunctionalSuite) TestTransientWorkflowTaskTimeout() {
+type TransientTaskSuite struct {
+	testcore.FunctionalSuite
+}
+
+func (s *TransientTaskSuite) TestTransientWorkflowTaskTimeout() {
 	id := "functional-transient-workflow-task-timeout-test"
 	wt := "functional-transient-workflow-task-timeout-test-type"
 	tl := "functional-transient-workflow-task-timeout-test-taskqueue"
@@ -51,7 +56,7 @@ func (s *FunctionalSuite) TestTransientWorkflowTaskTimeout() {
 	// Start workflow execution
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           uuid.New(),
-		Namespace:           s.namespace,
+		Namespace:           s.Namespace(),
 		WorkflowId:          id,
 		WorkflowType:        &commonpb.WorkflowType{Name: wt},
 		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
@@ -61,7 +66,7 @@ func (s *FunctionalSuite) TestTransientWorkflowTaskTimeout() {
 		Identity:            identity,
 	}
 
-	we, err0 := s.client.StartWorkflowExecution(NewContext(), request)
+	we, err0 := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
 	s.NoError(err0)
 	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
 
@@ -97,9 +102,9 @@ func (s *FunctionalSuite) TestTransientWorkflowTaskTimeout() {
 		}}, nil
 	}
 
-	poller := &TaskPoller{
-		Client:              s.client,
-		Namespace:           s.namespace,
+	poller := &testcore.TaskPoller{
+		Client:              s.FrontendClient(),
+		Namespace:           s.Namespace(),
 		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		Identity:            identity,
 		WorkflowTaskHandler: wtHandler,
@@ -114,16 +119,16 @@ func (s *FunctionalSuite) TestTransientWorkflowTaskTimeout() {
 	s.NoError(err)
 
 	// Now send a signal when transient workflow task is scheduled
-	err = s.sendSignal(s.namespace, workflowExecution, "signalA", nil, identity)
+	err = s.SendSignal(s.Namespace(), workflowExecution, "signalA", nil, identity)
 	s.NoError(err, "failed to send signal to execution")
 
 	// Drop workflow task to cause a workflow task timeout
-	_, err = poller.PollAndProcessWorkflowTask(WithDumpHistory, WithDropTask)
+	_, err = poller.PollAndProcessWorkflowTask(testcore.WithDumpHistory, testcore.WithDropTask)
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 
 	// Now process signal and complete workflow execution
-	_, err = poller.PollAndProcessWorkflowTask(WithDumpHistory, WithExpectedAttemptCount(2))
+	_, err = poller.PollAndProcessWorkflowTask(testcore.WithDumpHistory, testcore.WithExpectedAttemptCount(2))
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 
@@ -131,7 +136,7 @@ func (s *FunctionalSuite) TestTransientWorkflowTaskTimeout() {
 	s.True(workflowComplete)
 }
 
-func (s *FunctionalSuite) TestTransientWorkflowTaskHistorySize() {
+func (s *TransientTaskSuite) TestTransientWorkflowTaskHistorySize() {
 	id := "functional-transient-workflow-task-history-size-test"
 	wt := "functional-transient-workflow-task-history-size-test-type"
 	tl := "functional-transient-workflow-task-history-size-test-taskqueue"
@@ -140,7 +145,7 @@ func (s *FunctionalSuite) TestTransientWorkflowTaskHistorySize() {
 	// Start workflow execution
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           uuid.New(),
-		Namespace:           s.namespace,
+		Namespace:           s.Namespace(),
 		WorkflowId:          id,
 		WorkflowType:        &commonpb.WorkflowType{Name: wt},
 		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
@@ -150,7 +155,7 @@ func (s *FunctionalSuite) TestTransientWorkflowTaskHistorySize() {
 		Identity:            identity,
 	}
 
-	we, err0 := s.client.StartWorkflowExecution(NewContext(), request)
+	we, err0 := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
 	s.NoError(err0)
 	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
 
@@ -244,9 +249,9 @@ func (s *FunctionalSuite) TestTransientWorkflowTaskHistorySize() {
 		return nil, errors.New("bad stage")
 	}
 
-	poller := &TaskPoller{
-		Client:              s.client,
-		Namespace:           s.namespace,
+	poller := &testcore.TaskPoller{
+		Client:              s.FrontendClient(),
+		Namespace:           s.Namespace(),
 		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		Identity:            identity,
 		WorkflowTaskHandler: wtHandler,
@@ -256,23 +261,23 @@ func (s *FunctionalSuite) TestTransientWorkflowTaskHistorySize() {
 	}
 
 	// stage 1
-	_, err := poller.PollAndProcessWorkflowTask(WithNoDumpCommands)
+	_, err := poller.PollAndProcessWorkflowTask(testcore.WithNoDumpCommands)
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 
-	err = s.sendSignal(s.namespace, workflowExecution, "signal", nil, identity)
+	err = s.SendSignal(s.Namespace(), workflowExecution, "signal", nil, identity)
 	s.NoError(err, "failed to send signal to execution")
 
 	// stage 2
-	_, err = poller.PollAndProcessWorkflowTask(WithNoDumpCommands)
+	_, err = poller.PollAndProcessWorkflowTask(testcore.WithNoDumpCommands)
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 
-	err = s.sendSignal(s.namespace, workflowExecution, "signal", nil, identity)
+	err = s.SendSignal(s.Namespace(), workflowExecution, "signal", nil, identity)
 	s.NoError(err, "failed to send signal to execution")
 
 	// stage 3: this one fails with a panic
-	_, err = poller.PollAndProcessWorkflowTask(WithNoDumpCommands)
+	_, err = poller.PollAndProcessWorkflowTask(testcore.WithNoDumpCommands)
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 
@@ -281,20 +286,20 @@ func (s *FunctionalSuite) TestTransientWorkflowTaskHistorySize() {
 	s.OverrideDynamicConfig(dynamicconfig.HistorySizeSuggestContinueAsNew, 8*1024*1024)
 
 	// stage 4
-	_, err = poller.PollAndProcessWorkflowTask(WithNoDumpCommands)
+	_, err = poller.PollAndProcessWorkflowTask(testcore.WithNoDumpCommands)
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 
-	err = s.sendSignal(s.namespace, workflowExecution, "signal", nil, identity)
+	err = s.SendSignal(s.Namespace(), workflowExecution, "signal", nil, identity)
 	s.NoError(err, "failed to send signal to execution")
 
 	// drop workflow task to cause a workflow task timeout
-	_, err = poller.PollAndProcessWorkflowTask(WithDropTask, WithNoDumpCommands)
+	_, err = poller.PollAndProcessWorkflowTask(testcore.WithDropTask, testcore.WithNoDumpCommands)
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 
 	// stage 5
-	_, err = poller.PollAndProcessWorkflowTask(WithNoDumpCommands)
+	_, err = poller.PollAndProcessWorkflowTask(testcore.WithNoDumpCommands)
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 
@@ -305,7 +310,7 @@ func (s *FunctionalSuite) TestTransientWorkflowTaskHistorySize() {
 		sawFieldsFlat = append(sawFieldsFlat, f.size, f.suggest)
 	}
 
-	allEvents := s.getHistory(s.namespace, workflowExecution)
+	allEvents := s.GetHistory(s.Namespace(), workflowExecution)
 	s.EqualHistoryEvents(fmt.Sprintf(`
   1 WorkflowExecutionStarted
   2 WorkflowTaskScheduled
@@ -334,7 +339,7 @@ func (s *FunctionalSuite) TestTransientWorkflowTaskHistorySize() {
  25 WorkflowExecutionCompleted`, sawFieldsFlat...), allEvents)
 }
 
-func (s *FunctionalSuite) TestNoTransientWorkflowTaskAfterFlushBufferedEvents() {
+func (s *TransientTaskSuite) TestNoTransientWorkflowTaskAfterFlushBufferedEvents() {
 	id := "functional-no-transient-workflow-task-after-flush-buffered-events-test"
 	wt := "functional-no-transient-workflow-task-after-flush-buffered-events-test-type"
 	tl := "functional-no-transient-workflow-task-after-flush-buffered-events-test-taskqueue"
@@ -343,7 +348,7 @@ func (s *FunctionalSuite) TestNoTransientWorkflowTaskAfterFlushBufferedEvents() 
 	// Start workflow execution
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           uuid.New(),
-		Namespace:           s.namespace,
+		Namespace:           s.Namespace(),
 		WorkflowId:          id,
 		WorkflowType:        &commonpb.WorkflowType{Name: wt},
 		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
@@ -353,7 +358,7 @@ func (s *FunctionalSuite) TestNoTransientWorkflowTaskAfterFlushBufferedEvents() 
 		Identity:            identity,
 	}
 
-	we, err0 := s.client.StartWorkflowExecution(NewContext(), request)
+	we, err0 := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
 	s.NoError(err0)
 
 	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
@@ -365,9 +370,9 @@ func (s *FunctionalSuite) TestNoTransientWorkflowTaskAfterFlushBufferedEvents() 
 		if !continueAsNewAndSignal {
 			continueAsNewAndSignal = true
 			// this will create new event when there is in-flight workflow task, and the new event will be buffered
-			_, err := s.client.SignalWorkflowExecution(NewContext(),
+			_, err := s.FrontendClient().SignalWorkflowExecution(testcore.NewContext(),
 				&workflowservice.SignalWorkflowExecutionRequest{
-					Namespace: s.namespace,
+					Namespace: s.Namespace(),
 					WorkflowExecution: &commonpb.WorkflowExecution{
 						WorkflowId: id,
 					},
@@ -398,9 +403,9 @@ func (s *FunctionalSuite) TestNoTransientWorkflowTaskAfterFlushBufferedEvents() 
 		}}, nil
 	}
 
-	poller := &TaskPoller{
-		Client:              s.client,
-		Namespace:           s.namespace,
+	poller := &testcore.TaskPoller{
+		Client:              s.FrontendClient(),
+		Namespace:           s.Namespace(),
 		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		Identity:            identity,
 		WorkflowTaskHandler: wtHandler,
@@ -410,7 +415,7 @@ func (s *FunctionalSuite) TestNoTransientWorkflowTaskAfterFlushBufferedEvents() 
 
 	// fist workflow task, this try to do a continue as new but there is a buffered event,
 	// so it will fail and create a new workflow task
-	_, err := poller.PollAndProcessWorkflowTask(WithDumpHistory)
+	_, err := poller.PollAndProcessWorkflowTask(testcore.WithDumpHistory)
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.Error(err)
 	s.IsType(&serviceerror.InvalidArgument{}, err)
@@ -418,7 +423,7 @@ func (s *FunctionalSuite) TestNoTransientWorkflowTaskAfterFlushBufferedEvents() 
 
 	// second workflow task, which will complete the workflow
 	// this expect the workflow task to have attempt == 1
-	_, err = poller.PollAndProcessWorkflowTask(WithDumpHistory, WithExpectedAttemptCount(1))
+	_, err = poller.PollAndProcessWorkflowTask(testcore.WithDumpHistory, testcore.WithExpectedAttemptCount(1))
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 

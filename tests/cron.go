@@ -46,11 +46,20 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/payloads"
+	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-func (s *FunctionalSuite) TestCronWorkflow_Failed_Infinite() {
+type CronTestSuite struct {
+	testcore.FunctionalSuite
+}
+
+type CronTestClientSuite struct {
+	testcore.ClientFunctionalSuite
+}
+
+func (s *CronTestSuite) TestCronWorkflow_Failed_Infinite() {
 	id := "functional-wf-cron-failed-infinite-test"
 	wt := "functional-wf-cron-failed-infinite-type"
 	tl := "functional-wf-cron-failed-infinite-taskqueue"
@@ -59,7 +68,7 @@ func (s *FunctionalSuite) TestCronWorkflow_Failed_Infinite() {
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           uuid.New(),
-		Namespace:           s.namespace,
+		Namespace:           s.Namespace(),
 		WorkflowId:          id,
 		WorkflowType:        &commonpb.WorkflowType{Name: wt},
 		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
@@ -75,7 +84,7 @@ func (s *FunctionalSuite) TestCronWorkflow_Failed_Infinite() {
 		},
 	}
 
-	we, err0 := s.client.StartWorkflowExecution(NewContext(), request)
+	we, err0 := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
 	s.NoError(err0)
 
 	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
@@ -109,9 +118,9 @@ func (s *FunctionalSuite) TestCronWorkflow_Failed_Infinite() {
 			}}, nil
 	}
 
-	poller := &TaskPoller{
-		Client:              s.client,
-		Namespace:           s.namespace,
+	poller := &testcore.TaskPoller{
+		Client:              s.FrontendClient(),
+		Namespace:           s.Namespace(),
 		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		Identity:            identity,
 		WorkflowTaskHandler: wtHandler,
@@ -120,17 +129,17 @@ func (s *FunctionalSuite) TestCronWorkflow_Failed_Infinite() {
 	}
 
 	s.Logger.Info("Process first cron run which fails")
-	_, err := poller.PollAndProcessWorkflowTask(WithDumpHistory)
+	_, err := poller.PollAndProcessWorkflowTask(testcore.WithDumpHistory)
 	s.NoError(err)
 
 	s.Logger.Info("Process first cron run which completes")
-	_, err = poller.PollAndProcessWorkflowTask(WithDumpHistory)
+	_, err = poller.PollAndProcessWorkflowTask(testcore.WithDumpHistory)
 	s.NoError(err)
 
 	s.True(seeRetry)
 }
 
-func (s *FunctionalSuite) TestCronWorkflow() {
+func (s *CronTestSuite) TestCronWorkflow() {
 	id := "functional-wf-cron-test"
 	wt := "functional-wf-cron-type"
 	tl := "functional-wf-cron-taskqueue"
@@ -151,7 +160,7 @@ func (s *FunctionalSuite) TestCronWorkflow() {
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           uuid.New(),
-		Namespace:           s.namespace,
+		Namespace:           s.Namespace(),
 		WorkflowId:          id,
 		WorkflowType:        &commonpb.WorkflowType{Name: wt},
 		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
@@ -173,7 +182,7 @@ func (s *FunctionalSuite) TestCronWorkflow() {
 	}
 
 	startWorkflowTS := time.Now().UTC()
-	we, err0 := s.client.StartWorkflowExecution(NewContext(), request)
+	we, err0 := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
 	s.NoError(err0)
 
 	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
@@ -194,7 +203,7 @@ func (s *FunctionalSuite) TestCronWorkflow() {
 			}
 
 			// Just check that it can be decoded
-			s.decodePayloadsInt(startedEvent.GetWorkflowExecutionStartedEventAttributes().GetLastCompletionResult())
+			s.DecodePayloadsInt(startedEvent.GetWorkflowExecutionStartedEventAttributes().GetLastCompletionResult())
 		}
 
 		executions = append(executions, task.WorkflowExecution)
@@ -216,9 +225,9 @@ func (s *FunctionalSuite) TestCronWorkflow() {
 			}}, nil
 	}
 
-	poller := &TaskPoller{
-		Client:              s.client,
-		Namespace:           s.namespace,
+	poller := &testcore.TaskPoller{
+		Client:              s.FrontendClient(),
+		Namespace:           s.Namespace(),
 		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		Identity:            identity,
 		WorkflowTaskHandler: wtHandler,
@@ -233,8 +242,8 @@ func (s *FunctionalSuite) TestCronWorkflow() {
 	// Sleep some time before checking the open executions.
 	// This will not cost extra time as the polling for first workflow task will be blocked for 3 seconds.
 	time.Sleep(2 * time.Second)
-	resp, err := s.client.ListOpenWorkflowExecutions(NewContext(), &workflowservice.ListOpenWorkflowExecutionsRequest{
-		Namespace:       s.namespace,
+	resp, err := s.FrontendClient().ListOpenWorkflowExecutions(testcore.NewContext(), &workflowservice.ListOpenWorkflowExecutionsRequest{
+		Namespace:       s.Namespace(),
 		MaximumPageSize: 100,
 		StartTimeFilter: startFilter,
 		Filters: &workflowservice.ListOpenWorkflowExecutionsRequest_ExecutionFilter{ExecutionFilter: &filterpb.WorkflowExecutionFilter{
@@ -263,8 +272,8 @@ func (s *FunctionalSuite) TestCronWorkflow() {
 
 	s.Equal(3, len(executions))
 
-	_, terminateErr := s.client.TerminateWorkflowExecution(NewContext(), &workflowservice.TerminateWorkflowExecutionRequest{
-		Namespace: s.namespace,
+	_, terminateErr := s.FrontendClient().TerminateWorkflowExecution(testcore.NewContext(), &workflowservice.TerminateWorkflowExecutionRequest{
+		Namespace: s.Namespace(),
 		WorkflowExecution: &commonpb.WorkflowExecution{
 			WorkflowId: id,
 		},
@@ -273,7 +282,7 @@ func (s *FunctionalSuite) TestCronWorkflow() {
 
 	// first two should be failures
 	for i := 0; i < 2; i++ {
-		events := s.getHistory(s.namespace, executions[i])
+		events := s.GetHistory(s.Namespace(), executions[i])
 		s.EqualHistoryEvents(fmt.Sprintf(`
   1 WorkflowExecutionStarted {"Memo":{"Fields":{"memoKey":{"Data":"\"memoVal\""}}},"SearchAttributes":{"IndexedFields":{"CustomKeywordField":{"Data":"\"keyword-value\"","Metadata":{"type":"Keyword"}}}}}
   2 WorkflowTaskScheduled
@@ -284,7 +293,7 @@ func (s *FunctionalSuite) TestCronWorkflow() {
 	}
 
 	// third should be completed
-	events := s.getHistory(s.namespace, executions[2])
+	events := s.GetHistory(s.Namespace(), executions[2])
 	s.EqualHistoryEvents(`
   1 WorkflowExecutionStarted {"Memo":{"Fields":{"memoKey":{"Data":"\"memoVal\""}}},"SearchAttributes":{"IndexedFields":{"CustomKeywordField":{"Data":"\"keyword-value\"","Metadata":{"type":"Keyword"}}}}}
   2 WorkflowTaskScheduled
@@ -296,8 +305,8 @@ func (s *FunctionalSuite) TestCronWorkflow() {
 	startFilter.LatestTime = timestamppb.New(time.Now().UTC())
 	var closedExecutions []*workflowpb.WorkflowExecutionInfo
 	for i := 0; i < 10; i++ {
-		resp, err := s.client.ListClosedWorkflowExecutions(NewContext(), &workflowservice.ListClosedWorkflowExecutionsRequest{
-			Namespace:       s.namespace,
+		resp, err := s.FrontendClient().ListClosedWorkflowExecutions(testcore.NewContext(), &workflowservice.ListClosedWorkflowExecutionsRequest{
+			Namespace:       s.Namespace(),
 			MaximumPageSize: 100,
 			StartTimeFilter: startFilter,
 			Filters: &workflowservice.ListClosedWorkflowExecutionsRequest_ExecutionFilter{ExecutionFilter: &filterpb.WorkflowExecutionFilter{
@@ -312,8 +321,8 @@ func (s *FunctionalSuite) TestCronWorkflow() {
 		time.Sleep(200 * time.Millisecond)
 	}
 	s.NotNil(closedExecutions)
-	dweResponse, err := s.client.DescribeWorkflowExecution(NewContext(), &workflowservice.DescribeWorkflowExecutionRequest{
-		Namespace: s.namespace,
+	dweResponse, err := s.FrontendClient().DescribeWorkflowExecution(testcore.NewContext(), &workflowservice.DescribeWorkflowExecutionRequest{
+		Namespace: s.Namespace(),
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: id,
 			RunId:      we.RunId,
@@ -348,8 +357,8 @@ func (s *FunctionalSuite) TestCronWorkflow() {
 
 		// TODO: Remove the describeWorkflowExecution call when firstRunID in WorkflowExecutionInfo
 		// is populated by Visibility api as well.
-		dweResponse, err := s.client.DescribeWorkflowExecution(NewContext(), &workflowservice.DescribeWorkflowExecutionRequest{
-			Namespace: s.namespace,
+		dweResponse, err := s.FrontendClient().DescribeWorkflowExecution(testcore.NewContext(), &workflowservice.DescribeWorkflowExecutionRequest{
+			Namespace: s.Namespace(),
 			Execution: executionInfo.GetExecution(),
 		})
 		s.NoError(err)
@@ -357,7 +366,7 @@ func (s *FunctionalSuite) TestCronWorkflow() {
 	}
 }
 
-func (s *ClientFunctionalSuite) TestCronWorkflowCompletionStates() {
+func (s *CronTestClientSuite) TestCronWorkflowCompletionStates() {
 	// Run a cron workflow that completes in (almost) all the possible ways:
 	// Run 1: succeeds
 	// Run 2: fails
@@ -425,7 +434,7 @@ func (s *ClientFunctionalSuite) TestCronWorkflowCompletionStates() {
 		panic("shouldn't get here")
 	}
 
-	s.worker.RegisterWorkflow(workflowFn)
+	s.Worker().RegisterWorkflow(workflowFn)
 
 	// Because of rounding in GetBackoffForNextSchedule, we'll tend to stay aligned to whatever
 	// phase we start in relative to second boundaries, but drift slightly later within the second
@@ -437,7 +446,7 @@ func (s *ClientFunctionalSuite) TestCronWorkflowCompletionStates() {
 
 	workflowOptions := sdkclient.StartWorkflowOptions{
 		ID:                 id,
-		TaskQueue:          s.taskQueue,
+		TaskQueue:          s.TaskQueue(),
 		WorkflowRunTimeout: workflowRunTimeout,
 		CronSchedule:       cronSchedule,
 	}
@@ -445,14 +454,14 @@ func (s *ClientFunctionalSuite) TestCronWorkflowCompletionStates() {
 	startTs := ts
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-	_, err := s.sdkClient.ExecuteWorkflow(ctx, workflowOptions, workflowFn)
+	_, err := s.SdkClient().ExecuteWorkflow(ctx, workflowOptions, workflowFn)
 	s.NoError(err)
 
 	// check execution and history of first run
 	exec := s.listOpenWorkflowExecutions(startTs, time.Now(), id, 1)[0]
 	firstRunID := exec.GetExecution().RunId
 	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, exec.GetStatus())
-	historyEvents := s.getHistory(s.namespace, exec.GetExecution())
+	historyEvents := s.GetHistory(s.Namespace(), exec.GetExecution())
 	s.EqualHistoryEvents(fmt.Sprintf(`
   1 WorkflowExecutionStarted {"ContinuedExecutionRunId":"","CronSchedule":"@every 3s","FirstExecutionRunId":"%s", "Initiator":3}`, firstRunID), historyEvents)
 	attrs1 := historyEvents[0].GetWorkflowExecutionStartedEventAttributes()
@@ -474,7 +483,7 @@ func (s *ClientFunctionalSuite) TestCronWorkflowCompletionStates() {
 		250*time.Millisecond,
 	)
 	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, exec.GetStatus())
-	historyEvents = s.getHistory(s.namespace, exec.GetExecution())
+	historyEvents = s.GetHistory(s.Namespace(), exec.GetExecution())
 	s.EqualHistoryEvents(fmt.Sprintf(`
   1 WorkflowExecutionStarted {"ContinuedExecutionRunId":"%s","CronSchedule":"@every 3s","FirstExecutionRunId":"%s", "Initiator":%d}`, firstRunID, firstRunID, enumspb.CONTINUE_AS_NEW_INITIATOR_CRON_SCHEDULE), historyEvents)
 	attrs2 := historyEvents[0].GetWorkflowExecutionStartedEventAttributes()
@@ -506,13 +515,13 @@ func (s *ClientFunctionalSuite) TestCronWorkflowCompletionStates() {
 	_ = s.listClosedWorkflowExecutions(startTs, time.Now().Add(targetBackoffDuration), id, 5)
 	_ = s.listOpenWorkflowExecutions(startTs, time.Now().Add(targetBackoffDuration), id, 1)
 	// then terminate
-	s.NoError(s.sdkClient.TerminateWorkflow(ctx, id, "", "test is over"))
+	s.NoError(s.SdkClient().TerminateWorkflow(ctx, id, "", "test is over"))
 
 	closedExecutions := s.listClosedWorkflowExecutions(startTs, time.Now(), id, 6)
 
 	exec = closedExecutions[5] // first: success
 	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, exec.GetStatus())
-	historyEvents = s.getHistory(s.namespace, exec.GetExecution())
+	historyEvents = s.GetHistory(s.Namespace(), exec.GetExecution())
 	s.EqualHistoryEvents(`
   1 WorkflowExecutionStarted
   2 WorkflowTaskScheduled
@@ -522,7 +531,7 @@ func (s *ClientFunctionalSuite) TestCronWorkflowCompletionStates() {
 
 	exec = closedExecutions[4] // second: fail
 	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_FAILED, exec.GetStatus())
-	historyEvents = s.getHistory(s.namespace, exec.GetExecution())
+	historyEvents = s.GetHistory(s.Namespace(), exec.GetExecution())
 	s.EqualHistoryEvents(`
   1 WorkflowExecutionStarted
   2 WorkflowTaskScheduled
@@ -532,7 +541,7 @@ func (s *ClientFunctionalSuite) TestCronWorkflowCompletionStates() {
 
 	exec = closedExecutions[3] // third: timed out
 	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_TIMED_OUT, exec.GetStatus())
-	historyEvents = s.getHistory(s.namespace, exec.GetExecution())
+	historyEvents = s.GetHistory(s.Namespace(), exec.GetExecution())
 	s.EqualHistoryEvents(`
   1 WorkflowExecutionStarted
   2 WorkflowTaskScheduled
@@ -543,7 +552,7 @@ func (s *ClientFunctionalSuite) TestCronWorkflowCompletionStates() {
 
 	exec = closedExecutions[2] // fourth: success
 	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, exec.GetStatus())
-	historyEvents = s.getHistory(s.namespace, exec.GetExecution())
+	historyEvents = s.GetHistory(s.Namespace(), exec.GetExecution())
 	s.EqualHistoryEvents(`
   1 WorkflowExecutionStarted
   2 WorkflowTaskScheduled
@@ -553,7 +562,7 @@ func (s *ClientFunctionalSuite) TestCronWorkflowCompletionStates() {
 
 	exec = closedExecutions[1] // fifth: success
 	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, exec.GetStatus())
-	historyEvents = s.getHistory(s.namespace, exec.GetExecution())
+	historyEvents = s.GetHistory(s.Namespace(), exec.GetExecution())
 	s.EqualHistoryEvents(`
   1 WorkflowExecutionStarted
   2 WorkflowTaskScheduled
@@ -563,21 +572,21 @@ func (s *ClientFunctionalSuite) TestCronWorkflowCompletionStates() {
 
 	exec = closedExecutions[0] // sixth: terminated
 	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED, exec.GetStatus())
-	events := s.getHistory(s.namespace, exec.GetExecution())
+	events := s.GetHistory(s.Namespace(), exec.GetExecution())
 	s.EqualHistoryEvents(`
   1 WorkflowExecutionStarted
   2 WorkflowExecutionTerminated {"Reason":"test is over"}`, events)
 }
 
-func (s *ClientFunctionalSuite) listOpenWorkflowExecutions(start, end time.Time, id string, expectedNumber int) []*workflowpb.WorkflowExecutionInfo {
+func (s *CronTestClientSuite) listOpenWorkflowExecutions(start, end time.Time, id string, expectedNumber int) []*workflowpb.WorkflowExecutionInfo {
 	s.T().Helper()
 	var resp *workflowservice.ListOpenWorkflowExecutionsResponse
 	s.Eventuallyf(
 		func() bool {
 			var err error
-			resp, err = s.sdkClient.ListOpenWorkflow(
-				NewContext(), &workflowservice.ListOpenWorkflowExecutionsRequest{
-					Namespace:       s.namespace,
+			resp, err = s.SdkClient().ListOpenWorkflow(
+				testcore.NewContext(), &workflowservice.ListOpenWorkflowExecutionsRequest{
+					Namespace:       s.Namespace(),
 					MaximumPageSize: int32(2 * expectedNumber),
 					StartTimeFilter: &filterpb.StartTimeFilter{
 						EarliestTime: timestamppb.New(start),
@@ -593,7 +602,7 @@ func (s *ClientFunctionalSuite) listOpenWorkflowExecutions(start, end time.Time,
 			s.NoError(err)
 			return len(resp.GetExecutions()) == expectedNumber
 		},
-		waitForESToSettle,
+		testcore.WaitForESToSettle,
 		100*time.Millisecond,
 		"timeout expecting %d executions, found %d",
 		expectedNumber,
@@ -602,16 +611,16 @@ func (s *ClientFunctionalSuite) listOpenWorkflowExecutions(start, end time.Time,
 	return resp.GetExecutions()
 }
 
-func (s *ClientFunctionalSuite) listClosedWorkflowExecutions(start, end time.Time, id string, expectedNumber int) []*workflowpb.WorkflowExecutionInfo {
+func (s *CronTestClientSuite) listClosedWorkflowExecutions(start, end time.Time, id string, expectedNumber int) []*workflowpb.WorkflowExecutionInfo {
 	s.T().Helper()
 	var resp *workflowservice.ListClosedWorkflowExecutionsResponse
 	s.Eventuallyf(
 		func() bool {
 			var err error
-			resp, err = s.sdkClient.ListClosedWorkflow(
-				NewContext(),
+			resp, err = s.SdkClient().ListClosedWorkflow(
+				testcore.NewContext(),
 				&workflowservice.ListClosedWorkflowExecutionsRequest{
-					Namespace:       s.namespace,
+					Namespace:       s.Namespace(),
 					MaximumPageSize: int32(2 * expectedNumber),
 					StartTimeFilter: &filterpb.StartTimeFilter{
 						EarliestTime: timestamppb.New(start),
@@ -627,7 +636,7 @@ func (s *ClientFunctionalSuite) listClosedWorkflowExecutions(start, end time.Tim
 			s.NoError(err)
 			return len(resp.GetExecutions()) == expectedNumber
 		},
-		waitForESToSettle,
+		testcore.WaitForESToSettle,
 		100*time.Millisecond,
 		"timeout expecting %d executions, found %d",
 		expectedNumber,

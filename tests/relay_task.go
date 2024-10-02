@@ -34,10 +34,15 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 
-func (s *FunctionalSuite) TestRelayWorkflowTaskTimeout() {
+type RelayTaskTestSuite struct {
+	testcore.FunctionalSuite
+}
+
+func (s *RelayTaskTestSuite) TestRelayWorkflowTaskTimeout() {
 	id := "functional-relay-workflow-task-timeout-test"
 	wt := "functional-relay-workflow-task-timeout-test-type"
 	tl := "functional-relay-workflow-task-timeout-test-taskqueue"
@@ -46,7 +51,7 @@ func (s *FunctionalSuite) TestRelayWorkflowTaskTimeout() {
 	// Start workflow execution
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           uuid.New(),
-		Namespace:           s.namespace,
+		Namespace:           s.Namespace(),
 		WorkflowId:          id,
 		WorkflowType:        &commonpb.WorkflowType{Name: wt},
 		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
@@ -56,7 +61,7 @@ func (s *FunctionalSuite) TestRelayWorkflowTaskTimeout() {
 		Identity:            identity,
 	}
 
-	we, err0 := s.client.StartWorkflowExecution(NewContext(), request)
+	we, err0 := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
 	s.NoError(err0)
 	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
 
@@ -82,9 +87,9 @@ func (s *FunctionalSuite) TestRelayWorkflowTaskTimeout() {
 			Attributes:  &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{}}}}, nil
 	}
 
-	poller := &TaskPoller{
-		Client:              s.client,
-		Namespace:           s.namespace,
+	poller := &testcore.TaskPoller{
+		Client:              s.FrontendClient(),
+		Namespace:           s.Namespace(),
 		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		Identity:            identity,
 		WorkflowTaskHandler: wtHandler,
@@ -95,9 +100,9 @@ func (s *FunctionalSuite) TestRelayWorkflowTaskTimeout() {
 
 	// First workflow task complete with a marker command, and request to relay workflow task (immediately return a new workflow task)
 	res, err := poller.PollAndProcessWorkflowTask(
-		WithExpectedAttemptCount(0),
-		WithRetries(3),
-		WithForceNewWorkflowTask)
+		testcore.WithExpectedAttemptCount(0),
+		testcore.WithRetries(3),
+		testcore.WithForceNewWorkflowTask)
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 	newTask := res.NewTask
@@ -107,7 +112,7 @@ func (s *FunctionalSuite) TestRelayWorkflowTaskTimeout() {
 	time.Sleep(time.Second * 2) // wait 2s for relay workflow task to timeout
 	workflowTaskTimeout := false
 	for i := 0; i < 3; i++ {
-		events := s.getHistory(s.namespace, workflowExecution)
+		events := s.GetHistory(s.Namespace(), workflowExecution)
 		if len(events) == 8 {
 			s.EqualHistoryEvents(`
   1 WorkflowExecutionStarted
@@ -127,7 +132,7 @@ func (s *FunctionalSuite) TestRelayWorkflowTaskTimeout() {
 	s.True(workflowTaskTimeout)
 
 	// Now complete workflow
-	_, err = poller.PollAndProcessWorkflowTask(WithDumpHistory, WithExpectedAttemptCount(2))
+	_, err = poller.PollAndProcessWorkflowTask(testcore.WithDumpHistory, testcore.WithExpectedAttemptCount(2))
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 
