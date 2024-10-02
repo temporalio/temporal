@@ -79,9 +79,9 @@ can't be properly handled outside of the Workflow lock, or returned to the user.
 the speculative Workflow Task is converted to a normal one and creates a transfer task which will
 eventually reach matching and the worker.
 
-The timeout timer task is is created for a `SCHEDULED_TO_START` timeout for every speculative
+The timeout timer task is is created for a `SCHEDULE_TO_START` timeout for every speculative
 Workflow Task - even if it is on a *normal* task queue. In comparision, for a normal Workflow Task, the
-`SCHEDULED_TO_START` timeout timer is only created for *sticky* task queues.
+`SCHEDULE_TO_START` timeout timer is only created for *sticky* task queues.
 
 ## Start of Speculative Workflow Task
 Speculative Workflow Task's `WorkflowTaskScheduled` and `WorkflowTaskStarted` events are shipped
