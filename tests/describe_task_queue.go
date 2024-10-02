@@ -38,17 +38,21 @@ import (
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 
-// making a BaseSuite
 type (
 	DescribeTaskQueueSuiteBase struct {
 		*require.Assertions
 		FunctionalTestBase
 	}
 
+	// DescribeTaskQueueSuite tests DescribeTaskQueue calls with the smaller cache TTL than one second.
+	// This is done to test if DescribeTaskQueue calls return the most updated information from the server with large
+	// cache evictions
 	DescribeTaskQueueSuite struct {
 		DescribeTaskQueueSuiteBase
 	}
 
+	// DescribeTaskQueueSuiteWithCache tests DescribeTaskQueue calls with a larger cache TTL than one second.
+	// This is done to test if the cached responses are as expected.
 	DescribeTaskQueueSuiteWithCache struct {
 		DescribeTaskQueueSuiteBase
 	}
@@ -64,7 +68,7 @@ func (s *DescribeTaskQueueSuiteBase) TearDownSuite() {
 
 func (s *DescribeTaskQueueSuite) SetupSuite() {
 	s.dynamicConfigOverrides = map[dynamicconfig.Key]any{
-		dynamicconfig.TaskQueueInternalInfoCacheTTL.Key(): time.Nanosecond, // small TTL value -> quicker cache evictions
+		dynamicconfig.TaskQueueInternalInfoCacheTTL.Key(): time.Nanosecond,
 	}
 	s.DescribeTaskQueueSuiteBase.SetupSuite()
 }
@@ -74,7 +78,7 @@ func (s *DescribeTaskQueueSuite) TearDownSuite() {
 
 func (s *DescribeTaskQueueSuiteWithCache) SetupSuite() {
 	s.dynamicConfigOverrides = map[dynamicconfig.Key]any{
-		dynamicconfig.TaskQueueInternalInfoCacheTTL.Key(): 5 * time.Second, // large TTL value -> slower cache evictions
+		dynamicconfig.TaskQueueInternalInfoCacheTTL.Key(): 5 * time.Second,
 	}
 	s.DescribeTaskQueueSuiteBase.SetupSuite()
 }
@@ -280,7 +284,7 @@ func (s *DescribeTaskQueueSuiteBase) validateDescribeTaskQueue(
 			a.Equal(expectedAddRate[enumspb.TASK_QUEUE_TYPE_ACTIVITY], actStats.TasksAddRate > 0)
 			a.Equal(expectedDispatchRate[enumspb.TASK_QUEUE_TYPE_WORKFLOW], wfStats.TasksDispatchRate > 0)
 			a.Equal(expectedDispatchRate[enumspb.TASK_QUEUE_TYPE_ACTIVITY], actStats.TasksDispatchRate > 0)
-		}, 6*time.Second, 100*time.Millisecond)
+		}, 2*time.Second, 100*time.Millisecond)
 	} else {
 		// Querying the Legacy API
 		s.Eventually(func() bool {

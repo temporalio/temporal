@@ -509,8 +509,8 @@ DescribeTaskQueue API with ReportTaskQueueReachability==true, or to the GetWorke
 		`ReachabilityCacheClosedWFsTTL is the TTL for the reachability closed workflows cache.`,
 	)
 	TaskQueueInternalInfoCacheTTL = NewGlobalDurationSetting(
-		"matching.wv.TaskQueueInternalInfoCacheTTL", // todo Shivam - what the heck is wv?
-		time.Minute,
+		"matching.wv.TaskQueueInternalInfoCacheTTL",
+		time.Second,
 		`TaskQueueInternalInfoCacheTTL is the TTL for the task queue internal info cache.`,
 	)
 	ReachabilityQuerySetDurationSinceDefault = NewGlobalDurationSetting(
