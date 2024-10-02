@@ -405,6 +405,10 @@ func (c *TemporalImpl) MatchingClient() matchingservice.MatchingServiceClient {
 	return c.matchingClient
 }
 
+func (c *TemporalImpl) DcClient() *dynamicconfig.MemoryClient {
+	return c.dcClient
+}
+
 func (c *TemporalImpl) FrontendNamespaceRegistries() []namespace.Registry {
 	return c.frontendNamespaceRegistries
 }

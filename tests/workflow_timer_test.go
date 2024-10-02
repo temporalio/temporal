@@ -30,6 +30,6 @@ import (
 	"github.com/stretchr/testify/suite"
 )
 
-func TestNamespaceInterceptorTestSuite(t *testing.T) {
-	suite.Run(t, new(NamespaceInterceptorTestSuite))
+func TestWorkflowTimerTestSuite(t *testing.T) {
+	suite.Run(t, new(WorkflowTimerTestSuite))
 }

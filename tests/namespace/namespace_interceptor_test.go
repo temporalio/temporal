@@ -22,7 +22,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package workflow
+package namespace
 
 import (
 	"testing"
@@ -30,6 +30,6 @@ import (
 	"github.com/stretchr/testify/suite"
 )
 
-func TestWorkflowTestSuite(t *testing.T) {
-	suite.Run(t, new(WorkflowTestSuite))
+func TestNamespaceInterceptorTestSuite(t *testing.T) {
+	suite.Run(t, new(NamespaceInterceptorTestSuite))
 }

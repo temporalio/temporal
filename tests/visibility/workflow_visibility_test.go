@@ -22,7 +22,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package workflow
+package visibility
 
 import (
 	"testing"
@@ -30,6 +30,6 @@ import (
 	"github.com/stretchr/testify/suite"
 )
 
-func TestWorkflowDeleteExecutionSuite(t *testing.T) {
-	suite.Run(t, new(WorkflowDeleteExecutionSuite))
+func TestWorkflowVisibilityTestSuite(t *testing.T) {
+	suite.Run(t, new(WorkflowVisibilityTestSuite))
 }

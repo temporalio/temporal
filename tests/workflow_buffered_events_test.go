@@ -22,7 +22,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package workflow
+package tests
 
 import (
 	"testing"
@@ -30,6 +30,6 @@ import (
 	"github.com/stretchr/testify/suite"
 )
 
-func TestWorkflowTaskTestSuite(t *testing.T) {
-	suite.Run(t, new(WorkflowTaskTestSuite))
+func TestWorkflowBufferedEventsTestSuite(t *testing.T) {
+	suite.Run(t, new(WorkflowBufferedEventsTestSuite))
 }

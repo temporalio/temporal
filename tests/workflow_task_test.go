@@ -25,13 +25,11 @@
 package tests
 
 import (
-	"flag"
 	"testing"
 
 	"github.com/stretchr/testify/suite"
 )
 
-func TestAdvancedVisibilitySuite(t *testing.T) {
-	flag.Parse()
-	suite.Run(t, new(AdvancedVisibilitySuite))
+func TestWorkflowTaskTestSuite(t *testing.T) {
+	suite.Run(t, new(WorkflowTaskTestSuite))
 }

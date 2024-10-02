@@ -22,14 +22,16 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package workflow
+package namespace
 
 import (
+	"flag"
 	"testing"
 
 	"github.com/stretchr/testify/suite"
 )
 
-func TestWorkflowMemoTestSuite(t *testing.T) {
-	suite.Run(t, new(WorkflowMemoTestSuite))
+func TestNamespaceSuite(t *testing.T) {
+	flag.Parse()
+	suite.Run(t, &namespaceTestSuite{})
 }

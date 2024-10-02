@@ -22,7 +22,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package tests
+package visibility
 
 import (
 	"flag"
@@ -31,7 +31,7 @@ import (
 	"github.com/stretchr/testify/suite"
 )
 
-func TestNamespaceSuite(t *testing.T) {
+func TestAdvancedVisibilitySuite(t *testing.T) {
 	flag.Parse()
-	suite.Run(t, &namespaceTestSuite{})
+	suite.Run(t, new(AdvancedVisibilitySuite))
 }
