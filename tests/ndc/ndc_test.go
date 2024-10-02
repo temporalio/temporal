@@ -122,8 +122,8 @@ func (s *NDCFunctionalTestSuite) SetupSuite() {
 
 	var clusterConfigs []*testcore.TestClusterConfig
 	s.Require().NoError(yaml.Unmarshal(confContent, &clusterConfigs))
-	clusterConfigs[0].WorkerConfig = tests.WorkerConfig{DisableWorker: true}
-	clusterConfigs[1].WorkerConfig = tests.WorkerConfig{DisableWorker: true}
+	clusterConfigs[0].WorkerConfig = testcore.WorkerConfig{DisableWorker: true}
+	clusterConfigs[1].WorkerConfig = testcore.WorkerConfig{DisableWorker: true}
 
 	s.controller = gomock.NewController(s.T())
 	mockStreamClient := adminservicemock.NewMockAdminService_StreamWorkflowReplicationMessagesClient(s.controller)
