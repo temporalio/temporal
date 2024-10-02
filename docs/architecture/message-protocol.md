@@ -51,7 +51,7 @@ messages must be processed. This field can be:
 > is not possible. When reordering is removed, this field can be set to the right value.
 
 > #### TODO
-> `command_index` is not used as intended: SDKs use a different approach where a special command of type
+> `command_index` is not used: SDKs use a different approach where a special command of type
 > `COMMAND_TYPE_PROTOCOL_MESSAGE` is added to a command list to indicate the place where a message
 > must be processed. This command has only `message_id` fields which point to a particular message.
 >
