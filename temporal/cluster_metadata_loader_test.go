@@ -28,6 +28,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/config"
@@ -47,16 +48,8 @@ func TestNewClusterMetadataLoader(t *testing.T) {
 	svc := &config.Config{
 		ClusterMetadata: &cluster.Config{
 			CurrentClusterName: "current_cluster",
-			ClusterInformation: map[string]cluster.ClusterInformation{
-				"current_cluster": {
-					RPCAddress:  "rpc_old",
-					HTTPAddress: "http_old",
-				},
-				"remote_cluster1": {
-					RPCAddress:  "rpc_old",
-					HTTPAddress: "http_old",
-				},
-			},
+			RPCAddress:         "rpc_old",
+			HTTPAddress:        "http_old",
 		},
 	}
 
@@ -86,7 +79,7 @@ func TestNewClusterMetadataLoader(t *testing.T) {
 		},
 	}, nil)
 
-	err := loader.LoadAndMergeWithStaticConfig(ctx, svc)
+	clusterMap, err := loader.LoadAndMergeWithStaticConfig(ctx, svc)
 	require.NoError(t, err)
 
 	assert.Equal(t, map[string]cluster.ClusterInformation{
@@ -102,5 +95,5 @@ func TestNewClusterMetadataLoader(t *testing.T) {
 			RPCAddress:  "rpc_new",
 			HTTPAddress: "http_new",
 		},
-	}, svc.ClusterMetadata.ClusterInformation)
+	}, clusterMap.ClusterInformation)
 }

@@ -201,6 +201,7 @@ func (s *TestBase) Setup(clusterMetadataConfig *cluster.Config) {
 	if clusterMetadataConfig == nil {
 		clusterMetadataConfig = cluster.NewTestClusterMetadataConfig(false, false)
 	}
+	clusterMap := cluster.NewTestClusterMapConfig(clusterMetadataConfig.EnableGlobalNamespace)
 	if s.PersistenceHealthSignals == nil {
 		s.PersistenceHealthSignals = persistence.NoopHealthSignalAggregator
 	}
@@ -238,7 +239,7 @@ func (s *TestBase) Setup(clusterMetadataConfig *cluster.Config) {
 	s.ClusterMetadataManager, err = factory.NewClusterMetadataManager()
 	s.fatalOnError("NewClusterMetadataManager", err)
 
-	s.ClusterMetadata = cluster.NewMetadataFromConfig(clusterMetadataConfig, s.ClusterMetadataManager, dynamicconfig.NewNoopCollection(), s.Logger)
+	s.ClusterMetadata = cluster.NewMetadataFromConfig(clusterMetadataConfig, clusterMap, s.ClusterMetadataManager, dynamicconfig.NewNoopCollection(), s.Logger)
 	s.SearchAttributesManager = searchattribute.NewManager(clock.NewRealTimeSource(), s.ClusterMetadataManager, dynamicconfig.GetBoolPropertyFn(true))
 
 	s.MetadataManager, err = factory.NewMetadataManager()

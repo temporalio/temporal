@@ -352,6 +352,7 @@ type (
 		fx.In
 
 		Cfg                        *config.Config
+		ClusterMapper              *cluster.ClusterMap
 		ServiceNames               resource.ServiceNames
 		Logger                     log.Logger
 		NamespaceLogger            resource.NamespaceLogger
@@ -399,6 +400,7 @@ func (params ServiceProviderParamsCommon) GetCommonServiceOptions(serviceName pr
 			params.PersistenceConfig,
 			params.ClusterMetadata,
 			params.Cfg,
+			params.ClusterMapper,
 			params.SpanExporters,
 		),
 		fx.Provide(
@@ -594,61 +596,54 @@ func WorkerServiceProvider(
 // TODO: move this to cluster.fx
 func ApplyClusterMetadataConfigProvider(
 	logger log.Logger,
-	svc *config.Config,
+	staticConfig *config.Config,
 	persistenceServiceResolver resolver.ServiceResolver,
 	persistenceFactoryProvider persistenceClient.FactoryProviderFn,
 	customDataStoreFactory persistenceClient.AbstractDataStoreFactory,
 	metricsHandler metrics.Handler,
-) (*cluster.Config, config.Persistence, error) {
+) (*cluster.Config, *cluster.ClusterMap, config.Persistence, error) {
 	ctx := context.TODO()
 	logger = log.With(logger, tag.ComponentMetadataInitializer)
 	metricsHandler = metricsHandler.WithTags(metrics.ServiceNameTag(primitives.ServerService))
-	clusterName := persistenceClient.ClusterName(svc.ClusterMetadata.CurrentClusterName)
+	clusterName := persistenceClient.ClusterName(staticConfig.ClusterMetadata.CurrentClusterName)
 	dataStoreFactory := persistenceClient.DataStoreFactoryProvider(
 		clusterName,
 		persistenceServiceResolver,
-		&svc.Persistence,
+		&staticConfig.Persistence,
 		customDataStoreFactory,
 		logger,
 		metricsHandler,
 	)
 	factory := persistenceFactoryProvider(persistenceClient.NewFactoryParams{
 		DataStoreFactory:           dataStoreFactory,
-		Cfg:                        &svc.Persistence,
+		Cfg:                        &staticConfig.Persistence,
 		PersistenceMaxQPS:          nil,
 		PersistenceNamespaceMaxQPS: nil,
-		ClusterName:                persistenceClient.ClusterName(svc.ClusterMetadata.CurrentClusterName),
+		ClusterName:                persistenceClient.ClusterName(staticConfig.ClusterMetadata.CurrentClusterName),
 		MetricsHandler:             metricsHandler,
 		Logger:                     logger,
 	})
 	defer factory.Close()
 
+	clusterMap := &cluster.ClusterMap{
+		ClusterInformation: make(map[string]cluster.ClusterInformation),
+	}
+
 	clusterMetadataManager, err := factory.NewClusterMetadataManager()
 	if err != nil {
-		return svc.ClusterMetadata, svc.Persistence, fmt.Errorf("error initializing cluster metadata manager: %w", err)
+		return staticConfig.ClusterMetadata, clusterMap, staticConfig.Persistence, fmt.Errorf("error initializing cluster metadata manager: %w", err)
 	}
 	defer clusterMetadataManager.Close()
 
 	initialIndexSearchAttributes := make(map[string]*persistencespb.IndexSearchAttributes)
-	if ds := svc.Persistence.GetVisibilityStoreConfig(); ds.SQL != nil {
+	if ds := staticConfig.Persistence.GetVisibilityStoreConfig(); ds.SQL != nil {
 		initialIndexSearchAttributes[ds.GetIndexName()] = searchattribute.GetSqlDbIndexSearchAttributes()
 	}
-	if ds := svc.Persistence.GetSecondaryVisibilityStoreConfig(); ds.SQL != nil {
+	if ds := staticConfig.Persistence.GetSecondaryVisibilityStoreConfig(); ds.SQL != nil {
 		initialIndexSearchAttributes[ds.GetIndexName()] = searchattribute.GetSqlDbIndexSearchAttributes()
 	}
 
-	clusterMetadata := svc.ClusterMetadata
-	if len(clusterMetadata.ClusterInformation) > 1 {
-		logger.Warn(
-			"All remote cluster settings under ClusterMetadata.ClusterInformation config will be ignored. "+
-				"Please use TCTL admin tool to configure remote cluster settings",
-			tag.Key("clusterInformation"))
-	}
-	if _, ok := clusterMetadata.ClusterInformation[clusterMetadata.CurrentClusterName]; !ok {
-		logger.Error("Current cluster setting is missing under clusterMetadata.ClusterInformation",
-			tag.ClusterName(clusterMetadata.CurrentClusterName))
-		return svc.ClusterMetadata, svc.Persistence, missingCurrentClusterMetadataErr
-	}
+	clusterMetadata := staticConfig.ClusterMetadata
 	ctx = headers.SetCallerInfo(ctx, headers.SystemBackgroundCallerInfo)
 	resp, err := clusterMetadataManager.GetClusterMetadata(
 		ctx,
@@ -660,15 +655,15 @@ func ApplyClusterMetadataConfigProvider(
 		if updateErr := updateCurrentClusterMetadataRecord(
 			ctx,
 			clusterMetadataManager,
-			svc,
+			staticConfig,
 			initialIndexSearchAttributes,
 			resp,
 		); updateErr != nil {
-			return svc.ClusterMetadata, svc.Persistence, updateErr
+			return staticConfig.ClusterMetadata, clusterMap, staticConfig.Persistence, updateErr
 		}
 		// Ignore invalid cluster metadata
 		overwriteCurrentClusterMetadataWithDBRecord(
-			svc,
+			staticConfig,
 			resp,
 			logger,
 		)
@@ -677,22 +672,22 @@ func ApplyClusterMetadataConfigProvider(
 		if initErr := initCurrentClusterMetadataRecord(
 			ctx,
 			clusterMetadataManager,
-			svc,
+			staticConfig,
 			initialIndexSearchAttributes,
 			logger,
 		); initErr != nil {
-			return svc.ClusterMetadata, svc.Persistence, initErr
+			return staticConfig.ClusterMetadata, clusterMap, staticConfig.Persistence, initErr
 		}
 	default:
-		return svc.ClusterMetadata, svc.Persistence, fmt.Errorf("error while fetching cluster metadata: %w", err)
+		return staticConfig.ClusterMetadata, clusterMap, staticConfig.Persistence, fmt.Errorf("error while fetching cluster metadata: %w", err)
 	}
 
 	clusterLoader := NewClusterMetadataLoader(clusterMetadataManager, logger)
-	err = clusterLoader.LoadAndMergeWithStaticConfig(ctx, svc)
+	clusterMap, err = clusterLoader.LoadAndMergeWithStaticConfig(ctx, staticConfig)
 	if err != nil {
-		return svc.ClusterMetadata, svc.Persistence, fmt.Errorf("error while loading metadata from cluster: %w", err)
+		return staticConfig.ClusterMetadata, clusterMap, staticConfig.Persistence, fmt.Errorf("error while loading metadata from cluster: %w", err)
 	}
-	return svc.ClusterMetadata, svc.Persistence, nil
+	return staticConfig.ClusterMetadata, clusterMap, staticConfig.Persistence, nil
 }
 
 func initCurrentClusterMetadataRecord(
@@ -704,14 +699,13 @@ func initCurrentClusterMetadataRecord(
 ) error {
 	var clusterId string
 	currentClusterName := svc.ClusterMetadata.CurrentClusterName
-	currentClusterInfo := svc.ClusterMetadata.ClusterInformation[currentClusterName]
-	if uuid.Parse(currentClusterInfo.ClusterID) == nil {
-		if currentClusterInfo.ClusterID != "" {
+	if uuid.Parse(svc.ClusterMetadata.ClusterID) == nil {
+		if svc.ClusterMetadata.ClusterID != "" {
 			logger.Warn("Cluster Id in Cluster Metadata config is not a valid uuid. Generating a new Cluster Id")
 		}
 		clusterId = uuid.New()
 	} else {
-		clusterId = currentClusterInfo.ClusterID
+		clusterId = svc.ClusterMetadata.ClusterID
 	}
 
 	applied, err := clusterMetadataManager.SaveClusterMetadata(
@@ -721,12 +715,12 @@ func initCurrentClusterMetadataRecord(
 				HistoryShardCount:        svc.Persistence.NumHistoryShards,
 				ClusterName:              currentClusterName,
 				ClusterId:                clusterId,
-				ClusterAddress:           currentClusterInfo.RPCAddress,
-				HttpAddress:              currentClusterInfo.HTTPAddress,
+				ClusterAddress:           svc.ClusterMetadata.RPCAddress,
+				HttpAddress:              svc.ClusterMetadata.HTTPAddress,
 				FailoverVersionIncrement: svc.ClusterMetadata.FailoverVersionIncrement,
-				InitialFailoverVersion:   currentClusterInfo.InitialFailoverVersion,
+				InitialFailoverVersion:   svc.ClusterMetadata.InitialFailoverVersion,
 				IsGlobalNamespaceEnabled: svc.ClusterMetadata.EnableGlobalNamespace,
-				IsConnectionEnabled:      currentClusterInfo.Enabled,
+				IsConnectionEnabled:      true,
 				UseClusterIdMembership:   true, // Enable this for new cluster after 1.19. This is to prevent two clusters join into one ring.
 				IndexSearchAttributes:    initialIndexSearchAttributes,
 				Tags:                     svc.ClusterMetadata.Tags,
@@ -752,21 +746,19 @@ func updateCurrentClusterMetadataRecord(
 ) error {
 	updateDBRecord := false
 	currentClusterMetadata := svc.ClusterMetadata
-	currentClusterName := currentClusterMetadata.CurrentClusterName
-	currentCLusterInfo := currentClusterMetadata.ClusterInformation[currentClusterName]
 	// Allow updating cluster metadata if global namespace is disabled
 	if !currentClusterDBRecord.IsGlobalNamespaceEnabled && currentClusterMetadata.EnableGlobalNamespace {
 		currentClusterDBRecord.IsGlobalNamespaceEnabled = currentClusterMetadata.EnableGlobalNamespace
-		currentClusterDBRecord.InitialFailoverVersion = currentCLusterInfo.InitialFailoverVersion
+		currentClusterDBRecord.InitialFailoverVersion = currentClusterMetadata.InitialFailoverVersion
 		currentClusterDBRecord.FailoverVersionIncrement = currentClusterMetadata.FailoverVersionIncrement
 		updateDBRecord = true
 	}
-	if currentClusterDBRecord.ClusterAddress != currentCLusterInfo.RPCAddress {
-		currentClusterDBRecord.ClusterAddress = currentCLusterInfo.RPCAddress
+	if len(currentClusterMetadata.RPCAddress) != 0 && currentClusterDBRecord.ClusterAddress != currentClusterMetadata.RPCAddress {
+		currentClusterDBRecord.ClusterAddress = currentClusterMetadata.RPCAddress
 		updateDBRecord = true
 	}
-	if currentClusterDBRecord.HttpAddress != currentCLusterInfo.HTTPAddress {
-		currentClusterDBRecord.HttpAddress = currentCLusterInfo.HTTPAddress
+	if len(currentClusterMetadata.HTTPAddress) != 0 && currentClusterDBRecord.HttpAddress != currentClusterMetadata.HTTPAddress {
+		currentClusterDBRecord.HttpAddress = currentClusterMetadata.HTTPAddress
 		updateDBRecord = true
 	}
 	if !maps.Equal(currentClusterDBRecord.Tags, svc.ClusterMetadata.Tags) {

@@ -31,12 +31,13 @@ import (
 func NewMetadataForTest(
 	config *cluster.Config,
 ) cluster.Metadata {
+	clusterMap := cluster.NewTestClusterMapConfig(config.EnableGlobalNamespace)
 	return cluster.NewMetadata(
 		config.EnableGlobalNamespace,
 		config.FailoverVersionIncrement,
 		config.MasterClusterName,
 		config.CurrentClusterName,
-		config.ClusterInformation,
+		clusterMap.ClusterInformation,
 		nil,
 		nil,
 		log.NewNoopLogger(),

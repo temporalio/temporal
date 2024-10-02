@@ -31,7 +31,6 @@ import (
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/persistence"
 )
 
@@ -51,45 +50,41 @@ func NewClusterMetadataLoader(manager persistence.ClusterMetadataManager, logger
 }
 
 // LoadAndMergeWithStaticConfig loads cluster metadata from the database and merges it with the static config.
-func (c *ClusterMetadataLoader) LoadAndMergeWithStaticConfig(ctx context.Context, svc *config.Config) error {
+func (c *ClusterMetadataLoader) LoadAndMergeWithStaticConfig(ctx context.Context, staticConfig *config.Config) (*cluster.ClusterMap, error) {
 	iter := cluster.GetAllClustersIter(ctx, c.manager)
 
+	clusterMap := &cluster.ClusterMap{
+		ClusterInformation: make(map[string]cluster.ClusterInformation),
+	}
 	for iter.HasNext() {
 		item, err := iter.Next()
 		if err != nil {
-			return err
+			return clusterMap, err
 		}
-		newMetadata := cluster.ClusterInformationFromDB(item)
-		c.mergeMetadataFromDBWithStaticConfig(svc, item.ClusterName, newMetadata)
+		dbMetadata := cluster.ClusterInformationFromDB(item)
+		c.mergeMetadataFromDBWithStaticConfig(staticConfig, item.ClusterName, dbMetadata)
+		clusterMap.ClusterInformation[item.ClusterName] = *dbMetadata
 	}
-	return nil
+	return clusterMap, nil
 }
 
-func (c *ClusterMetadataLoader) mergeMetadataFromDBWithStaticConfig(svc *config.Config, clusterName string, newMetadata *cluster.ClusterInformation) {
-	c.backfillShardCount(svc, newMetadata)
-	if currentMetadata, ok := svc.ClusterMetadata.ClusterInformation[clusterName]; ok {
-		c.reconcileMetadata(svc, clusterName, currentMetadata, newMetadata)
+func (c *ClusterMetadataLoader) mergeMetadataFromDBWithStaticConfig(staticConfig *config.Config, clusterName string, dbMetadata *cluster.ClusterInformation) {
+	c.backfillShardCount(staticConfig, dbMetadata)
+	if clusterName == staticConfig.ClusterMetadata.CurrentClusterName {
+		c.reconcileCurrentClusterMetadata(clusterName, staticConfig.ClusterMetadata, dbMetadata)
 	}
-	svc.ClusterMetadata.ClusterInformation[clusterName] = *newMetadata
 }
 
 // reconcileMetadata merges the current metadata with the new metadata, modifying the new metadata in place.
-func (c *ClusterMetadataLoader) reconcileMetadata(
-	svc *config.Config,
+func (c *ClusterMetadataLoader) reconcileCurrentClusterMetadata(
 	clusterName string,
-	currentMetadata cluster.ClusterInformation,
-	newMetadata *cluster.ClusterInformation,
+	staticMetadata *cluster.Config,
+	dbMetadata *cluster.ClusterInformation,
 ) {
-	if clusterName != svc.ClusterMetadata.CurrentClusterName {
-		c.logger.Warn(
-			"ClusterInformation in static config is deprecated. Please use TCTL tool to configure remote cluster connections",
-			tag.Key("clusterInformation"),
-			tag.IgnoredValue(currentMetadata),
-			tag.Value(newMetadata))
-		return
-	}
-	newMetadata.RPCAddress = currentMetadata.RPCAddress
-	c.logger.Info(fmt.Sprintf("Use rpc address %v for cluster %v.", newMetadata.RPCAddress, clusterName))
+	dbMetadata.RPCAddress = staticMetadata.RPCAddress
+	c.logger.Info(fmt.Sprintf("Use rpc address %v for cluster %v.", dbMetadata.RPCAddress, clusterName))
+	dbMetadata.HTTPAddress = staticMetadata.HTTPAddress
+	c.logger.Info(fmt.Sprintf("Use http address %v for cluster %v.", dbMetadata.RPCAddress, clusterName))
 }
 
 // backfillShardCount is to add backward compatibility to the svc based cluster connection. It sets the shard count for
