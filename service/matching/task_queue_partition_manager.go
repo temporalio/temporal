@@ -319,7 +319,7 @@ func (pm *taskQueuePartitionManagerImpl) PollTask(
 		defer dbq.UpdatePollerInfo(pollerIdentity(identity), pollMetadata)
 	}
 
-	task, err := dbq.PollTask(ctx, pollMetadata)
+	task, err := dbq.PollTask(ctx, pollMetadata) // todo Shivam - pass in an extra variable denoting if we
 	return task, versionSetUsed, err
 }
 

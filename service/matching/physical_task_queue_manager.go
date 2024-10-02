@@ -340,6 +340,9 @@ func (c *physicalTaskQueueManagerImpl) PollTask(
 	// one rateLimiter for this entire task queue and as we get polls,
 	// we update the ratelimiter rps if it has changed from the last
 	// value. Last poller wins if different pollers provide different values
+
+	// todo Shivam - this shall be updated to now be a value set by customer from userData by checking a variable
+	// todo Shivam - if the variable is not set, we just simply use the current implementation
 	c.matcher.UpdateRatelimit(pollMetadata.ratePerSecond)
 
 	if !namespaceEntry.ActiveInCluster(c.clusterMeta.GetCurrentClusterName()) {
