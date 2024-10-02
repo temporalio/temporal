@@ -26,7 +26,6 @@ package temporal.server.api.historyservice.v1;
 option go_package = "go.temporal.io/server/api/historyservice/v1;historyservice";
 
 import "google/protobuf/duration.proto";
-import "google/protobuf/field_mask.proto";
 import "google/protobuf/timestamp.proto";
 
 import "temporal/api/activity/v1/message.proto";
@@ -966,30 +965,19 @@ message SyncWorkflowStateRequest {
 }
 
 message SyncWorkflowStateResponse {
-    oneof attributes {
-        replication.v1.SyncWorkflowStateMutationAttributes mutation = 1;
-        replication.v1.SyncWorkflowStateSnapshotAttributes snapshot = 2;
-    }
-    repeated temporal.api.common.v1.DataBlob event_batches = 3;
-    replication.v1.NewRunInfo new_run_info = 4;
+    reserved 1;
+    reserved 2;
+    reserved 3;
+    reserved 4;
+    replication.v1.VersionedTransitionArtifact versioned_transition_artifact = 5;
 }
-
+// (-- api-linter: core::0134::request-mask-required=disabled
+// (-- api-linter: core::0134::request-resource-required=disabled
 message UpdateActivityOptionsRequest {
     // Namespace ID of the workflow which scheduled this activity
     string namespace_id = 1;
-    // ID of the workflow which scheduled this activity
-    string workflow_id = 2;
-    // Run ID of the workflow which scheduled this activity
-    // if empty - latest workflow is used
-    string run_id = 3;
-    // ID of the activity we're updating
-    string activity_id = 4;
 
-    // Activity options. Partial updates are accepted and controlled by update_mask
-    temporal.api.activity.v1.ActivityOptions activity_options = 6;
-
-    // Controls which fields from `activity_options` will be applied
-    google.protobuf.FieldMask update_mask = 7;
+    temporal.api.workflowservice.v1.UpdateActivityOptionsByIdRequest update_request = 2;
 }
 
 message UpdateActivityOptionsResponse {

@@ -28,6 +28,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sync"
 	"testing"
 	"time"
 
@@ -69,6 +70,7 @@ type (
 		namespaceID   string
 		serializer    serialization.Serializer
 		generator     test.Generator
+		once          sync.Once
 	}
 )
 
@@ -84,7 +86,7 @@ func (s *streamBasedReplicationTestSuite) SetupSuite() {
 		dynamicconfig.EnableReplicationTaskBatching.Key():       true,
 		dynamicconfig.EnableReplicateLocalGeneratedEvents.Key(): true,
 	}
-	s.logger = log.NewNoopLogger()
+	s.logger = log.NewTestLogger()
 	s.serializer = serialization.NewSerializer()
 	s.setupSuite(
 		[]string{
@@ -99,28 +101,6 @@ func (s *streamBasedReplicationTestSuite) SetupSuite() {
 			),
 		),
 	)
-	ctx := context.Background()
-	s.namespaceName = "replication-test"
-	_, err := s.cluster1.GetFrontendClient().RegisterNamespace(ctx, &workflowservice.RegisterNamespaceRequest{
-		Namespace: s.namespaceName,
-		Clusters:  s.clusterReplicationConfig(),
-		// The first cluster is the active cluster.
-		ActiveClusterName: s.clusterNames[0],
-		// Needed so that the namespace is replicated.
-		IsGlobalNamespace: true,
-		// This is a required parameter.
-		WorkflowExecutionRetentionPeriod: durationpb.New(time.Hour * 24),
-	})
-	s.Require().NoError(err)
-	err = s.waitUntilNamespaceReplicated(ctx, s.namespaceName)
-	s.Require().NoError(err)
-
-	nsRes, _ := s.cluster1.GetFrontendClient().DescribeNamespace(ctx, &workflowservice.DescribeNamespaceRequest{
-		Namespace: s.namespaceName,
-	})
-
-	s.namespaceID = nsRes.NamespaceInfo.GetId()
-	s.generator = test.InitializeHistoryEventGenerator("namespace", "ns-id", 1)
 }
 
 func (s *streamBasedReplicationTestSuite) TearDownSuite() {
@@ -133,6 +113,31 @@ func (s *streamBasedReplicationTestSuite) TearDownSuite() {
 
 func (s *streamBasedReplicationTestSuite) SetupTest() {
 	s.setupTest()
+
+	s.once.Do(func() {
+		ctx := context.Background()
+		s.namespaceName = "replication-test"
+		_, err := s.cluster1.GetFrontendClient().RegisterNamespace(ctx, &workflowservice.RegisterNamespaceRequest{
+			Namespace: s.namespaceName,
+			Clusters:  s.clusterReplicationConfig(),
+			// The first cluster is the active cluster.
+			ActiveClusterName: s.clusterNames[0],
+			// Needed so that the namespace is replicated.
+			IsGlobalNamespace: true,
+			// This is a required parameter.
+			WorkflowExecutionRetentionPeriod: durationpb.New(time.Hour * 24),
+		})
+		s.Require().NoError(err)
+		err = s.waitUntilNamespaceReplicated(ctx, s.namespaceName)
+		s.Require().NoError(err)
+
+		nsRes, _ := s.cluster1.GetFrontendClient().DescribeNamespace(ctx, &workflowservice.DescribeNamespaceRequest{
+			Namespace: s.namespaceName,
+		})
+
+		s.namespaceID = nsRes.NamespaceInfo.GetId()
+		s.generator = test.InitializeHistoryEventGenerator("namespace", "ns-id", 1)
+	})
 }
 
 func (s *streamBasedReplicationTestSuite) TestReplicateHistoryEvents_ForceReplicationScenario() {
@@ -161,7 +166,7 @@ func (s *streamBasedReplicationTestSuite) TestReplicateHistoryEvents_ForceReplic
 }
 
 func (s *streamBasedReplicationTestSuite) importTestEvents(
-	historyClient tests.HistoryClient,
+	historyClient historyservice.HistoryServiceClient,
 	namespaceName namespace.Name,
 	namespaceId namespace.ID,
 	versions []int64,
@@ -293,7 +298,7 @@ func (s *streamBasedReplicationTestSuite) importEvents(
 	runID string,
 	versionHistory *historyspb.VersionHistory,
 	eventBatches []*historypb.History,
-	historyClient tests.HistoryClient,
+	historyClient historyservice.HistoryServiceClient,
 	verifyWorkflowNotExists bool,
 ) {
 	if len(eventBatches) == 0 {

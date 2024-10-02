@@ -505,8 +505,9 @@ func (r *workflowResetterImpl) failInflightActivity(
 		switch ai.StartedEventId {
 		case common.EmptyEventID:
 			// activity not started, noop
-			// override the activity time to now
+			// override the scheduled activity time to now
 			ai.ScheduledTime = timestamppb.New(now)
+			ai.FirstScheduledTime = timestamppb.New(now)
 			if err := mutableState.UpdateActivity(ai); err != nil {
 				return err
 			}

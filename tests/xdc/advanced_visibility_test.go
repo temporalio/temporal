@@ -30,6 +30,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"sync"
 	"testing"
 	"time"
 
@@ -80,6 +81,9 @@ type AdvVisCrossDCTestSuite struct {
 
 	testSearchAttributeKey string
 	testSearchAttributeVal string
+
+	startTime          time.Time
+	onceClusterConnect sync.Once
 }
 
 func TestAdvVisCrossDCTestSuite(t *testing.T) {
@@ -136,6 +140,8 @@ func (s *AdvVisCrossDCTestSuite) SetupSuite() {
 	s.Require().NoError(err)
 	s.cluster2 = c
 
+	s.startTime = time.Now()
+
 	cluster1Address := clusterConfigs[0].ClusterMetadata.ClusterInformation[clusterConfigs[0].ClusterMetadata.CurrentClusterName].RPCAddress
 	cluster2Address := clusterConfigs[1].ClusterMetadata.ClusterInformation[clusterConfigs[1].ClusterMetadata.CurrentClusterName].RPCAddress
 	_, err = s.cluster1.GetAdminClient().AddOrUpdateRemoteCluster(tests.NewContext(), &adminservice.AddOrUpdateRemoteClusterRequest{
@@ -161,6 +167,11 @@ func (s *AdvVisCrossDCTestSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 	s.ProtoAssertions = protorequire.New(s.T())
 	s.HistoryRequire = historyrequire.New(s.T())
+
+	s.onceClusterConnect.Do(func() {
+		waitForClusterConnected(s.Assertions, s.logger, s.cluster1, clusterNameAdvVis[0], clusterNameAdvVis[1], s.startTime)
+		waitForClusterConnected(s.Assertions, s.logger, s.cluster2, clusterNameAdvVis[1], clusterNameAdvVis[0], s.startTime)
+	})
 }
 
 func (s *AdvVisCrossDCTestSuite) TearDownSuite() {
@@ -255,7 +266,7 @@ func (s *AdvVisCrossDCTestSuite) TestSearchAttributes() {
 		Query:     fmt.Sprintf(`WorkflowId = "%s" and %s = "%s"`, id, s.testSearchAttributeKey, s.testSearchAttributeVal),
 	}
 
-	testListResult := func(client tests.FrontendClient, lr *workflowservice.ListWorkflowExecutionsRequest) {
+	testListResult := func(client workflowservice.WorkflowServiceClient, lr *workflowservice.ListWorkflowExecutionsRequest) {
 		var openExecution *workflowpb.WorkflowExecutionInfo
 		for i := 0; i < numOfRetry; i++ {
 			startFilter.LatestTime = timestamppb.New(time.Now().UTC())
@@ -312,7 +323,7 @@ func (s *AdvVisCrossDCTestSuite) TestSearchAttributes() {
 
 	time.Sleep(waitForESToSettle)
 
-	testListResult = func(client tests.FrontendClient, lr *workflowservice.ListWorkflowExecutionsRequest) {
+	testListResult = func(client workflowservice.WorkflowServiceClient, lr *workflowservice.ListWorkflowExecutionsRequest) {
 		s.Eventually(func() bool {
 			resp, err := client.ListWorkflowExecutions(tests.NewContext(), lr)
 			s.NoError(err)

@@ -45,7 +45,7 @@ import (
 	"go.temporal.io/server/api/adminservicemock/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
-	repicationpb "go.temporal.io/server/api/replication/v1"
+	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -70,7 +70,7 @@ type (
 		suite.Suite
 
 		testClusterFactory          tests.TestClusterFactory
-		standByReplicationTasksChan chan *repicationpb.ReplicationTask
+		standByReplicationTasksChan chan *replicationspb.ReplicationTask
 		mockAdminClient             map[string]adminservice.AdminServiceClient
 		namespace                   namespace.Name
 		namespaceID                 namespace.ID
@@ -92,7 +92,7 @@ func TestNDCReplicationTaskBatching(t *testing.T) {
 }
 
 func (s *NDCReplicationTaskBatchingTestSuite) SetupSuite() {
-	s.logger = log.NewNoopLogger()
+	s.logger = log.NewTestLogger()
 	s.serializer = serialization.NewSerializer()
 	s.testClusterFactory = tests.NewTestClusterFactory()
 	s.passiveClusterName = "cluster-b"
@@ -112,7 +112,7 @@ func (s *NDCReplicationTaskBatchingTestSuite) SetupSuite() {
 	s.Require().NoError(yaml.Unmarshal(confContent, &clusterConfigs))
 
 	passiveClusterConfig := clusterConfigs[1]
-	passiveClusterConfig.WorkerConfig = &tests.WorkerConfig{}
+	passiveClusterConfig.WorkerConfig = tests.WorkerConfig{DisableWorker: true}
 	passiveClusterConfig.DynamicConfigOverrides = map[dynamicconfig.Key]any{
 		dynamicconfig.EnableReplicationStream.Key():             true,
 		dynamicconfig.EnableEagerNamespaceRefresher.Key():       true,
@@ -128,7 +128,7 @@ func (s *NDCReplicationTaskBatchingTestSuite) SetupSuite() {
 		return s.GetReplicationMessagesMock()
 	}).AnyTimes()
 	mockActiveStreamClient.EXPECT().CloseSend().Return(nil).AnyTimes()
-	s.standByReplicationTasksChan = make(chan *repicationpb.ReplicationTask, 100)
+	s.standByReplicationTasksChan = make(chan *replicationspb.ReplicationTask, 100)
 
 	mockActiveClient := adminservicemock.NewMockAdminServiceClient(s.controller)
 	mockActiveClient.EXPECT().StreamWorkflowReplicationMessages(gomock.Any()).Return(mockActiveStreamClient, nil).AnyTimes()
@@ -269,9 +269,9 @@ func (s *NDCReplicationTaskBatchingTestSuite) GetReplicationMessagesMock() (*adm
 	task := <-s.standByReplicationTasksChan
 	taskID := atomic.AddInt64(&s.standByTaskID, 1)
 	task.SourceTaskId = taskID
-	tasks := []*repicationpb.ReplicationTask{task}
+	tasks := []*replicationspb.ReplicationTask{task}
 
-	replicationMessage := &repicationpb.WorkflowReplicationMessages{
+	replicationMessage := &replicationspb.WorkflowReplicationMessages{
 		ReplicationTasks:       tasks,
 		ExclusiveHighWatermark: taskID + 1,
 	}
@@ -290,7 +290,7 @@ func (s *NDCReplicationTaskBatchingTestSuite) createHistoryEventReplicationTaskF
 	events []*historypb.HistoryEvent,
 	newRunEvents []*historypb.HistoryEvent,
 	versionHistoryItems []*historyspb.VersionHistoryItem,
-) *repicationpb.ReplicationTask {
+) *replicationspb.ReplicationTask {
 	eventBlob, err := s.serializer.SerializeEvents(events, enumspb.ENCODING_TYPE_PROTO3)
 	var newRunEventBlob *commonpb.DataBlob
 	if newRunEvents != nil {
@@ -299,10 +299,10 @@ func (s *NDCReplicationTaskBatchingTestSuite) createHistoryEventReplicationTaskF
 	}
 	s.NoError(err)
 	taskType := enumsspb.REPLICATION_TASK_TYPE_HISTORY_V2_TASK
-	replicationTask := &repicationpb.ReplicationTask{
+	replicationTask := &replicationspb.ReplicationTask{
 		TaskType: taskType,
-		Attributes: &repicationpb.ReplicationTask_HistoryTaskAttributes{
-			HistoryTaskAttributes: &repicationpb.HistoryTaskAttributes{
+		Attributes: &replicationspb.ReplicationTask_HistoryTaskAttributes{
+			HistoryTaskAttributes: &replicationspb.HistoryTaskAttributes{
 				NamespaceId:         namespaceId,
 				WorkflowId:          workflowId,
 				RunId:               runId,

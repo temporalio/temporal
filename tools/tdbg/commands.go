@@ -48,6 +48,7 @@ import (
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/service/history/tasks"
+	"google.golang.org/protobuf/encoding/prototext"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -111,22 +112,39 @@ func AdminShowWorkflow(c *cli.Context, clientFactory ClientFactory) error {
 
 	var historyBatches []*historypb.History
 	totalSize := 0
+	var errs []error
 	for idx, b := range histories {
 		totalSize += len(b.Data)
 		fmt.Fprintf(c.App.Writer, "======== batch %v, blob len: %v ======\n", idx+1, len(b.Data))
 		historyBatch, err := serializer.DeserializeEvents(b)
 		if err != nil {
-			return fmt.Errorf("unable to deserialize Events: %s", err)
+			err := fmt.Errorf("unable to deserialize Events: %s", err)
+			fmt.Fprintln(c.App.Writer, err)
+			errs = append(errs, err)
+			continue
 		}
 		historyBatches = append(historyBatches, &historypb.History{Events: historyBatch})
 		encoder := codec.NewJSONPBEncoder()
 		data, err := encoder.EncodeHistoryEvents(historyBatch)
 		if err != nil {
-			return fmt.Errorf("unable to encode History Events: %s", err)
+			err := fmt.Errorf("unable to encode History Events: %s", err)
+			fmt.Fprintln(c.App.Writer, err)
+			text, terr := prototext.Marshal(&historypb.History{Events: historyBatch})
+			if terr == nil {
+				fmt.Fprintln(c.App.Writer, "marshal to text:")
+				fmt.Fprintln(c.App.Writer, string(text))
+			}
+			errs = append(errs, err)
+			continue
 		}
 		fmt.Fprintln(c.App.Writer, string(data))
 	}
 	fmt.Fprintf(c.App.Writer, "======== total batches %v, total blob len: %v ======\n", len(histories), totalSize)
+
+	err = errors.Join(errs...)
+	if err != nil {
+		return err
+	}
 
 	if outputFileName != "" {
 		encoder := codec.NewJSONPBEncoder()
@@ -689,5 +707,41 @@ func AdminRebuildMutableState(c *cli.Context, clientFactory ClientFactory) error
 	} else {
 		fmt.Fprintln(c.App.Writer, "rebuild mutable state succeeded.")
 	}
+	return nil
+}
+
+// AdminReplicateWorkflow force replicates a workflow by generating replication tasks
+func AdminReplicateWorkflow(
+	c *cli.Context,
+	clientFactory ClientFactory,
+) error {
+	adminClient := clientFactory.AdminClient(c)
+
+	nsName, err := getRequiredOption(c, FlagNamespace)
+	if err != nil {
+		return err
+	}
+
+	wid, err := getRequiredOption(c, FlagWorkflowID)
+	if err != nil {
+		return err
+	}
+	rid := c.String(FlagRunID)
+
+	ctx, cancel := newContext(c)
+	defer cancel()
+
+	_, err = adminClient.GenerateLastHistoryReplicationTasks(ctx, &adminservice.GenerateLastHistoryReplicationTasksRequest{
+		Namespace: nsName,
+		Execution: &commonpb.WorkflowExecution{
+			WorkflowId: wid,
+			RunId:      rid,
+		},
+	})
+	if err != nil {
+		return fmt.Errorf("unable to replicate workflow: %w", err)
+	}
+
+	fmt.Fprintln(c.App.Writer, "Replication tasks generated successfully.")
 	return nil
 }

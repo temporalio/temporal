@@ -318,6 +318,7 @@ func NewMutableState(
 
 		LastCompletedWorkflowTaskStartedEventId: common.EmptyEventID,
 
+		StartTime:              timestamppb.New(startTime),
 		VersionHistories:       versionhistory.NewVersionHistories(&historyspb.VersionHistory{}),
 		ExecutionStats:         &persistencespb.ExecutionStats{HistorySize: 0},
 		SubStateMachinesByType: make(map[string]*persistencespb.StateMachineMap),
@@ -1613,6 +1614,7 @@ func (ms *MutableStateImpl) UpdateActivityInfo(
 
 	ai.Version = incomingActivityInfo.GetVersion()
 	ai.ScheduledTime = incomingActivityInfo.GetScheduledTime()
+	// we don't need to update FirstScheduledTime
 	ai.StartedEventId = incomingActivityInfo.GetStartedEventId()
 	ai.LastHeartbeatUpdateTime = incomingActivityInfo.GetLastHeartbeatTime()
 	if ai.StartedEventId == common.EmptyEventID {
@@ -2861,6 +2863,7 @@ func (ms *MutableStateImpl) ApplyActivityTaskScheduledEvent(
 	firstEventID int64,
 	event *historypb.HistoryEvent,
 ) (*persistencespb.ActivityInfo, error) {
+
 	attributes := event.GetActivityTaskScheduledEventAttributes()
 
 	scheduledEventID := event.GetEventId()
@@ -2871,6 +2874,7 @@ func (ms *MutableStateImpl) ApplyActivityTaskScheduledEvent(
 		ScheduledEventId:        scheduledEventID,
 		ScheduledEventBatchId:   firstEventID,
 		ScheduledTime:           event.GetEventTime(),
+		FirstScheduledTime:      event.GetEventTime(),
 		StartedEventId:          common.EmptyEventID,
 		StartedTime:             nil,
 		ActivityId:              attributes.ActivityId,

@@ -344,6 +344,14 @@ func (s *FunctionalSuite) TestResetWorkflowAfterTimeout() {
 	8 WorkflowExecutionCompleted`, events)
 }
 
+func (s *FunctionalSuite) TestResetWorkflow_ExcludeNoneReapplyDefault() {
+	t := resetTest{
+		FunctionalSuite: s,
+		tv:              testvars.New(s.T()),
+	}
+	t.run()
+}
+
 func (s *FunctionalSuite) TestResetWorkflow_ExcludeNoneReapplyAll() {
 	t := resetTest{
 		FunctionalSuite:     s,
