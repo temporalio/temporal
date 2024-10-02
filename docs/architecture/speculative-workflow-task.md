@@ -17,13 +17,14 @@ occurred while processing `RespondWorkflowTaskCompleted`) or times out (e.g. wor
 the server writes a corresponding Workflow Task failed event to the history and increases the
 attempt count in the mutable state.
 
-For the next attempt, **transient Workflow Task events** are used: the Workflow Task events
+For the next attempt, a **transient Workflow Task** is used: the *transient* Workflow Task events
 `WorkflowTaskScheduled` and `WorkflowTaskStarted` are *not* written to the history, but attached to
-the response from the `RecordWorkflowTaskStarted` API. The worker does not know they are transient,
-though. If the Workflow Task keeps failing, the attempt counter is increased in the mutable state,
-and transient Workflow Task events are created again - but no new failure event is written into the
-history again. When the Workflow Task finally completes, the `WorkflowTaskScheduled` and
-`WorkflowTaskStarted` events are written to the history, followed by the `WorklfowTaskCompleted` event.
+the response from the `RecordWorkflowTaskStarted` API. The worker does not know the events are
+transient, though. If the Workflow Task keeps failing, the attempt counter is increased in the
+mutable state, and transient Workflow Task events are created again - but no new failure event is
+written into the history again. When the Workflow Task finally completes, the `WorkflowTaskScheduled`
+and `WorkflowTaskStarted` events are written to the history, followed by the `WorklfowTaskCompleted`
+event.
 
 > #### TODO
 > Although the `WorkflowTaskInfo` struct has a `Type` field, `WORKFLOW_TASK_TYPE_TRANSIENT` value is
