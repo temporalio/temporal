@@ -394,9 +394,8 @@ func AdminGetShardID(c *cli.Context) error {
 
 // getCategory first searches the registry for the category by the [tasks.Category.Name].
 func getCategory(registry tasks.TaskCategoryRegistry, key string) (tasks.Category, error) {
-	key = strings.ToLower(key)
 	for _, category := range registry.GetCategories() {
-		if category.Name() == key {
+		if strings.EqualFold(category.Name(), key) {
 			return category, nil
 		}
 	}
