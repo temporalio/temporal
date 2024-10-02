@@ -1599,8 +1599,9 @@ func (s *timerQueueActiveTaskExecutorSuite) TestWorkflowRunTimeout_Cron() {
 		},
 	)
 	s.Nil(err)
-	mutableState.GetExecutionState().StartTime = timestamppb.New(s.now)
-	mutableState.GetExecutionInfo().CronSchedule = "* * * * *"
+	executionInfo := mutableState.GetExecutionInfo()
+	executionInfo.StartTime = timestamppb.New(s.now)
+	executionInfo.CronSchedule = "* * * * *"
 
 	wt := addWorkflowTaskScheduledEvent(mutableState)
 	startEvent := addWorkflowTaskStartedEvent(mutableState, wt.ScheduledEventID, taskQueueName, uuid.New())
@@ -1656,8 +1657,9 @@ func (s *timerQueueActiveTaskExecutorSuite) TestWorkflowRunTimeout_WorkflowExpir
 		},
 	)
 	s.Nil(err)
-	mutableState.GetExecutionState().StartTime = timestamppb.New(s.now)
-	mutableState.GetExecutionInfo().CronSchedule = "* * * * *"
+	executionInfo := mutableState.GetExecutionInfo()
+	executionInfo.StartTime = timestamppb.New(s.now)
+	executionInfo.CronSchedule = "* * * * *"
 
 	wt := addWorkflowTaskScheduledEvent(mutableState)
 	startEvent := addWorkflowTaskStartedEvent(mutableState, wt.ScheduledEventID, taskQueueName, uuid.New())

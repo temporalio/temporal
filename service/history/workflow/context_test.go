@@ -398,6 +398,7 @@ func (s *contextSuite) TestRefreshTask() {
 			NamespaceId:        tests.NamespaceID.String(),
 			WorkflowId:         tests.WorkflowID,
 			WorkflowRunTimeout: timestamp.DurationFromSeconds(200),
+			StartTime:          timestamppb.New(now),
 			ExecutionTime:      timestamppb.New(now),
 			VersionHistories: &historyspb.VersionHistories{
 				Histories: []*historyspb.VersionHistory{
@@ -420,10 +421,9 @@ func (s *contextSuite) TestRefreshTask() {
 			},
 		},
 		ExecutionState: &persistencespb.WorkflowExecutionState{
-			RunId:     tests.RunID,
-			State:     enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
-			Status:    enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
-			StartTime: timestamppb.New(now),
+			RunId:  tests.RunID,
+			State:  enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
+			Status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 		},
 		NextEventId: 2,
 	}
