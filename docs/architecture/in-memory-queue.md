@@ -9,8 +9,8 @@ the normal timer queue: `TimerQueueActiveTaskExecutor`.
 Its implementation uses a `PriorityQueue` sorted by `VisibilityTimestamp`: the task on top is the
 task that is executed next.
 
-The in-memory queue only supports `WorkflowTaskTimeoutTask` and it only enforces
-`SCHEDULE_TO_START` and `START_TO_CLOSE`.
+The in-memory queue only supports `WorkflowTaskTimeoutTask`, and enforces the
+`SCHEDULE_TO_START` and `START_TO_CLOSE` timeouts.
 
 Note that while the in-memory queue's executor of `WorkflowTaskTimeoutTask` is the same as for
 the normal timer queue, it does one extra check for speculative Workflow Tasks:
