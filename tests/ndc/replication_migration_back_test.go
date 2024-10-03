@@ -89,6 +89,7 @@ type (
 )
 
 func TestReplicationMigrationBackTest(t *testing.T) {
+	// TODO: doesn't work yet: t.Parallel()
 	flag.Parse()
 	suite.Run(t, new(ReplicationMigrationBackTestSuite))
 
