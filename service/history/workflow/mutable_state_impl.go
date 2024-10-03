@@ -6289,6 +6289,9 @@ func (ms *MutableStateImpl) ApplyMutation(
 	if err != nil {
 		return err
 	}
+	if mutation.ExecutionInfo.WorkflowTaskType == enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE {
+		ms.workflowTaskManager.deleteWorkflowTask()
+	}
 
 	ms.applyUpdatesToUpdateInfos(mutation.UpdatedUpdateInfos, false)
 
@@ -6327,6 +6330,10 @@ func (ms *MutableStateImpl) ApplySnapshot(
 	if err != nil {
 		return err
 	}
+	if snapshot.ExecutionInfo.WorkflowTaskType == enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE {
+		ms.workflowTaskManager.deleteWorkflowTask()
+	}
+
 	ms.applyUpdatesToUpdateInfos(snapshot.ExecutionInfo.UpdateInfos, true)
 
 	err = ms.syncSubStateMachinesByType(snapshot.ExecutionInfo.SubStateMachinesByType)
@@ -6490,11 +6497,12 @@ func applyUpdatesToSubStateMachine[K comparable, V lastUpdatedStateTransitionGet
 	}
 
 	getSizeOfKey := func(key any) int {
-		val := reflect.ValueOf(key)
-		if val.Kind() == reflect.String {
-			return int(len(val.String()))
+		switch v := key.(type) {
+		case string:
+			return len(v)
+		default:
+			return int(reflect.TypeOf(key).Size())
 		}
-		return int(reflect.TypeOf(key).Size())
 	}
 
 	for key, updated := range updatedSubStateMachine {
@@ -6547,64 +6555,65 @@ func (ms *MutableStateImpl) applyUpdatesToUpdateInfos(
 }
 
 func (ms *MutableStateImpl) syncExecutionInfo(current *persistencespb.WorkflowExecutionInfo, incoming *persistencespb.WorkflowExecutionInfo) error {
-	doNotSyncFields := []interface{}{
-		&current.WorkflowTaskVersion,
-		&current.WorkflowTaskScheduledEventId,
-		&current.WorkflowTaskStartedEventId,
-		&current.WorkflowTaskRequestId,
-		&current.WorkflowTaskTimeout,
-		&current.WorkflowTaskAttempt,
-		&current.WorkflowTaskStartedTime,
-		&current.WorkflowTaskScheduledTime,
-		&current.WorkflowTaskOriginalScheduledTime,
-		&current.WorkflowTaskType,
-		&current.WorkflowTaskSuggestContinueAsNew,
-		&current.WorkflowTaskHistorySizeBytes,
-		&current.WorkflowTaskBuildId,
-		&current.WorkflowTaskBuildIdRedirectCounter,
-		&current.VersionHistories,
-		&current.ExecutionStats,
-		&current.LastFirstEventTxnId,
-		&current.ParentClock,
-		&current.CloseTransferTaskId,
-		&current.CloseVisibilityTaskId,
-		&current.CloseVisibilityTaskCompleted,
-		&current.WorkflowExecutionTimerTaskStatus,
-		&current.SubStateMachinesByType,
-		&current.StateMachineTimers,
-		&current.TaskGenerationShardClockTimestamp,
-		&current.UpdateInfos,
+	doNotSync := func(v any) []interface{} {
+		info, ok := v.(*persistencespb.WorkflowExecutionInfo)
+		if !ok || info == nil {
+			return nil
+		}
+		return []interface{}{
+			&info.WorkflowTaskVersion,
+			&info.WorkflowTaskScheduledEventId,
+			&info.WorkflowTaskStartedEventId,
+			&info.WorkflowTaskRequestId,
+			&info.WorkflowTaskTimeout,
+			&info.WorkflowTaskAttempt,
+			&info.WorkflowTaskStartedTime,
+			&info.WorkflowTaskScheduledTime,
+			&info.WorkflowTaskOriginalScheduledTime,
+			&info.WorkflowTaskType,
+			&info.WorkflowTaskSuggestContinueAsNew,
+			&info.WorkflowTaskHistorySizeBytes,
+			&info.WorkflowTaskBuildId,
+			&info.WorkflowTaskBuildIdRedirectCounter,
+			&info.VersionHistories,
+			&info.ExecutionStats,
+			&info.LastFirstEventTxnId,
+			&info.ParentClock,
+			&info.CloseTransferTaskId,
+			&info.CloseVisibilityTaskId,
+			&info.CloseVisibilityTaskCompleted,
+			&info.WorkflowExecutionTimerTaskStatus,
+			&info.SubStateMachinesByType,
+			&info.StateMachineTimers,
+			&info.TaskGenerationShardClockTimestamp,
+			&info.UpdateInfos,
+		}
 	}
-	err := common.MergeProtoExcludingFields(current, incoming, doNotSyncFields...)
+	err := common.MergeProtoExcludingFields(current, incoming, doNotSync)
 	if err != nil {
 		return err
 	}
 
 	ms.ClearStickyTaskQueue()
 
-	if ms.executionInfo.WorkflowTaskType == enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE {
-		ms.workflowTaskManager.deleteWorkflowTask()
-	} else {
-		taskInfo := &WorkflowTaskInfo{
-			Version:             incoming.WorkflowTaskVersion,
-			ScheduledEventID:    incoming.WorkflowTaskScheduledEventId,
-			StartedEventID:      incoming.WorkflowTaskStartedEventId,
-			RequestID:           incoming.WorkflowTaskRequestId,
-			WorkflowTaskTimeout: incoming.WorkflowTaskTimeout.AsDuration(),
-			Attempt:             incoming.WorkflowTaskAttempt,
-			StartedTime:         incoming.WorkflowTaskStartedTime.AsTime(),
-			ScheduledTime:       incoming.WorkflowTaskScheduledTime.AsTime(),
+	ms.workflowTaskManager.UpdateWorkflowTask(&WorkflowTaskInfo{
+		Version:             incoming.WorkflowTaskVersion,
+		ScheduledEventID:    incoming.WorkflowTaskScheduledEventId,
+		StartedEventID:      incoming.WorkflowTaskStartedEventId,
+		RequestID:           incoming.WorkflowTaskRequestId,
+		WorkflowTaskTimeout: incoming.WorkflowTaskTimeout.AsDuration(),
+		Attempt:             incoming.WorkflowTaskAttempt,
+		StartedTime:         incoming.WorkflowTaskStartedTime.AsTime(),
+		ScheduledTime:       incoming.WorkflowTaskScheduledTime.AsTime(),
 
-			OriginalScheduledTime: incoming.WorkflowTaskOriginalScheduledTime.AsTime(),
-			Type:                  incoming.WorkflowTaskType,
+		OriginalScheduledTime: incoming.WorkflowTaskOriginalScheduledTime.AsTime(),
+		Type:                  incoming.WorkflowTaskType,
 
-			SuggestContinueAsNew:   incoming.WorkflowTaskSuggestContinueAsNew,
-			HistorySizeBytes:       incoming.WorkflowTaskHistorySizeBytes,
-			BuildId:                incoming.WorkflowTaskBuildId,
-			BuildIdRedirectCounter: incoming.WorkflowTaskBuildIdRedirectCounter,
-		}
-		ms.workflowTaskManager.UpdateWorkflowTask(taskInfo)
-	}
+		SuggestContinueAsNew:   incoming.WorkflowTaskSuggestContinueAsNew,
+		HistorySizeBytes:       incoming.WorkflowTaskHistorySizeBytes,
+		BuildId:                incoming.WorkflowTaskBuildId,
+		BuildIdRedirectCounter: incoming.WorkflowTaskBuildIdRedirectCounter,
+	})
 
 	return nil
 }

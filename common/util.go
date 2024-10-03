@@ -717,7 +717,7 @@ func DiscardUnknownProto(m proto.Message) error {
 
 // MergeProtoExcludingFields merges fields from source into target, excluding specific fields.
 // The fields to exclude are specified as pointers to fields in the target struct.
-func MergeProtoExcludingFields(target, source proto.Message, excludeFields ...interface{}) error {
+func MergeProtoExcludingFields(target, source proto.Message, doNotSyncFunc func(v any) []interface{}) error {
 	if target == nil || source == nil {
 		return serviceerror.NewInvalidArgument("target and source cannot be nil")
 	}
@@ -726,6 +726,7 @@ func MergeProtoExcludingFields(target, source proto.Message, excludeFields ...in
 		return serviceerror.NewInvalidArgument("target and source must be of the same type")
 	}
 
+	excludeFields := doNotSyncFunc(target)
 	excludeSet := make(map[string]struct{}, len(excludeFields))
 	for _, fieldPtr := range excludeFields {
 		fieldName, err := getFieldNameFromStruct(target, fieldPtr)
