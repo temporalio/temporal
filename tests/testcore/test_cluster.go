@@ -73,6 +73,7 @@ type (
 	TestCluster struct {
 		testBase     *persistencetests.TestBase
 		archiverBase *ArchiverBase
+		clusterNo    int
 		host         *TemporalImpl
 	}
 
@@ -88,10 +89,8 @@ type (
 
 	// TestClusterConfig are config for a test cluster
 	TestClusterConfig struct {
-		FrontendAddress        string // deprecated
 		EnableArchival         bool
 		IsMasterCluster        bool
-		ClusterNo              int
 		ClusterMetadata        cluster.Config
 		Persistence            persistencetests.TestBaseOptions
 		FrontendConfig         FrontendConfig
@@ -106,6 +105,9 @@ type (
 		EnableMetricsCapture   bool
 		// ServiceFxOptions can be populated using WithFxOptionsForService.
 		ServiceFxOptions map[primitives.ServiceName][]fx.Option
+
+		DeprecatedFrontendAddress string `yaml:"FrontendAddress"`
+		DeprecatedClusterNo       int    `yaml:"ClusterNo"`
 	}
 )
 
@@ -188,6 +190,18 @@ func (f *defaultPersistenceTestBaseFactory) NewTestBase(options *persistencetest
 }
 
 func NewClusterWithPersistenceTestBaseFactory(t *testing.T, options *TestClusterConfig, logger log.Logger, tbFactory PersistenceTestBaseFactory) (*TestCluster, error) {
+	clusterNo := GetFreeClusterNumber()
+
+	if len(options.ClusterMetadata.ClusterInformation) > 0 {
+		// set self-address for current cluster
+		// TODO: remove duplication between this and makeGRPCAddresses. we don't have a TemporalImpl
+		// yet so we can't just call that.
+		ci := options.ClusterMetadata.ClusterInformation[options.ClusterMetadata.CurrentClusterName]
+		ci.RPCAddress = fmt.Sprintf("127.0.%d.%d:%d", clusterNo, 1, frontendPort)
+		ci.HTTPAddress = fmt.Sprintf("127.0.%d.%d:%d", clusterNo, 1, frontendHTTPPort)
+		options.ClusterMetadata.ClusterInformation[options.ClusterMetadata.CurrentClusterName] = ci
+	}
+
 	clusterMetadataConfig := cluster.NewTestClusterMetadataConfig(
 		options.ClusterMetadata.EnableGlobalNamespace,
 		options.IsMasterCluster,
@@ -299,7 +313,7 @@ func NewClusterWithPersistenceTestBaseFactory(t *testing.T, options *TestCluster
 		VisibilityStoreFactory:           testBase.VisibilityStoreFactory,
 		TaskMgr:                          testBase.TaskMgr,
 		Logger:                           logger,
-		ClusterNo:                        options.ClusterNo,
+		ClusterNo:                        clusterNo,
 		ESConfig:                         options.ESConfig,
 		ESClient:                         esClient,
 		ArchiverMetadata:                 archiverBase.metadata,
@@ -330,7 +344,7 @@ func NewClusterWithPersistenceTestBaseFactory(t *testing.T, options *TestCluster
 		return nil, err
 	}
 
-	return &TestCluster{testBase: testBase, archiverBase: archiverBase, host: cluster}, nil
+	return &TestCluster{testBase: testBase, archiverBase: archiverBase, clusterNo: clusterNo, host: cluster}, nil
 }
 
 func setupIndex(esConfig *esclient.Config, logger log.Logger) error {
@@ -499,6 +513,8 @@ func newArchiverBase(enabled bool, logger log.Logger) *ArchiverBase {
 
 // TearDownCluster tears down the test cluster
 func (tc *TestCluster) TearDownCluster() error {
+	defer PutFreeClusterNumber(tc.clusterNo)
+
 	errs := tc.host.Stop()
 	tc.testBase.TearDownWorkflowStore()
 	if !UsingSQLAdvancedVisibility() && tc.host.esConfig != nil {

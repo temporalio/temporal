@@ -131,6 +131,7 @@ type (
 )
 
 func TestHistoryReplicationDLQSuite(t *testing.T) {
+	t.Parallel()
 	flag.Parse()
 	for _, tc := range []struct {
 		name                    string

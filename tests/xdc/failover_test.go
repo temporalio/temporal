@@ -75,6 +75,7 @@ type (
 )
 
 func TestFuncClustersTestSuite(t *testing.T) {
+	t.Parallel()
 	flag.Parse()
 	suite.Run(t, new(FunctionalClustersTestSuite))
 }

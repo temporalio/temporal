@@ -155,7 +155,8 @@ func (s *FunctionalTestBase) SetupSuite(defaultClusterConfigFile string, options
 
 	clusterConfig, err := GetTestClusterConfig(defaultClusterConfigFile)
 	s.Require().NoError(err)
-	s.Empty(clusterConfig.FrontendAddress, "Functional tests against external frontends are not supported")
+	s.Empty(clusterConfig.DeprecatedFrontendAddress, "Functional tests against external frontends are not supported")
+	s.Empty(clusterConfig.DeprecatedClusterNo, "ClusterNo should not be present in cluster config files")
 
 	if clusterConfig.DynamicConfigOverrides == nil {
 		clusterConfig.DynamicConfigOverrides = make(map[dynamicconfig.Key]interface{})
