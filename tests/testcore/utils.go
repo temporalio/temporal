@@ -47,8 +47,8 @@ func init() {
 	}
 }
 
-func GetFreeClusterNumber() int { return <-freeClusterNumbers }
-func PutFreeClusterNumber(i int)    { freeClusterNumbers <- i }
+func GetFreeClusterNumber() int  { return <-freeClusterNumbers }
+func PutFreeClusterNumber(i int) { freeClusterNumbers <- i }
 
 func RandomizeStr(id string) string {
 	return fmt.Sprintf("%v-%v", id, uuid.New())
