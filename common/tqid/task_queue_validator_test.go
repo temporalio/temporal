@@ -40,6 +40,7 @@ func TestNormalizeAndValidate(t *testing.T) {
 		maxIDLengthLimit int
 		expectedError    string
 		expectedKind     enumspb.TaskQueueKind
+		validAsPartition bool
 	}{
 		{
 			name:             "Nil task queue",
@@ -96,6 +97,7 @@ func TestNormalizeAndValidate(t *testing.T) {
 			maxIDLengthLimit: 100,
 			expectedError:    "task queue name cannot start with reserved prefix /_sys/",
 			expectedKind:     enumspb.TASK_QUEUE_KIND_NORMAL,
+			validAsPartition: true,
 		},
 		{
 			name:             "Valid UTF-8 name",
@@ -158,6 +160,15 @@ func TestNormalizeAndValidate(t *testing.T) {
 			err := NormalizeAndValidate(tt.taskQueue, tt.defaultVal, tt.maxIDLengthLimit)
 
 			if tt.expectedError == "" {
+				assert.NoError(t, err)
+			} else {
+				assert.Error(t, err)
+				assert.Contains(t, err.Error(), tt.expectedError)
+			}
+
+			err = NormalizeAndValidatePartition(tt.taskQueue, tt.defaultVal, tt.maxIDLengthLimit)
+
+			if tt.expectedError == "" || tt.validAsPartition {
 				assert.NoError(t, err)
 			} else {
 				assert.Error(t, err)
