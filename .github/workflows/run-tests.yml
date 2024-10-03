@@ -82,6 +82,17 @@ jobs:
         timeout-minutes: 15
         run: make unit-test-coverage
 
+      - name: Test Report
+        uses: dorny/test-reporter@v1
+        if: success() || failure()
+        with:
+          name: Go Tests
+          path: ./.testoutput/*.junit.xml
+          reporter: java-junit
+          only-summary: true
+          list-suites: failed
+          list-tests: failed
+
       - name: Upload test results
         if: ${{ !cancelled() }}
         run: make upload-test-results
@@ -118,6 +129,17 @@ jobs:
       - name: Run integration test
         timeout-minutes: 15
         run: make integration-test-coverage
+
+      - name: Test Report
+        uses: dorny/test-reporter@v1
+        if: success() || failure()
+        with:
+          name: Go Tests
+          path: ./.testoutput/*.junit.xml
+          reporter: java-junit
+          only-summary: true
+          list-suites: failed
+          list-tests: failed
 
       - name: Upload test results
         if: ${{ !cancelled() }}
@@ -194,6 +216,17 @@ jobs:
         timeout-minutes: 30 # make sure this is larger than the test timeout in the Makefile
         run: make functional-test-coverage
 
+      - name: Test Report
+        uses: dorny/test-reporter@v1
+        if: success() || failure()
+        with:
+          name: Go Tests
+          path: ./.testoutput/*.junit.xml
+          reporter: java-junit
+          only-summary: true
+          list-suites: failed
+          list-tests: failed
+
       - name: Upload test results
         if: ${{ !cancelled() }}
         run: make upload-test-results
@@ -253,6 +286,17 @@ jobs:
       - name: Run functional test xdc
         timeout-minutes: 30
         run: make functional-test-xdc-coverage
+
+      - name: Test Report
+        uses: dorny/test-reporter@v1
+        if: success() || failure()
+        with:
+          name: Go Tests
+          path: ./.testoutput/*.junit.xml
+          reporter: java-junit
+          only-summary: true
+          list-suites: failed
+          list-tests: failed
 
       - name: Upload test results
         if: ${{ !cancelled() }}
