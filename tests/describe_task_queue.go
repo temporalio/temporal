@@ -24,6 +24,9 @@ package tests
 
 import (
 	"context"
+	"flag"
+	"github.com/stretchr/testify/suite"
+	"testing"
 	"time"
 
 	"github.com/pborman/uuid"
@@ -45,6 +48,11 @@ type (
 		testcore.FunctionalTestBase
 	}
 )
+
+func TestDescribeTaskQueueSuite(t *testing.T) {
+	flag.Parse()
+	suite.Run(t, new(DescribeTaskQueueSuite))
+}
 
 func (s *DescribeTaskQueueSuite) SetupSuite() {
 	s.FunctionalTestBase.SetupSuite("testdata/es_cluster.yaml")
