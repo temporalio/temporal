@@ -124,6 +124,7 @@ type (
 		abstractDataStoreFactory         persistenceClient.AbstractDataStoreFactory
 		visibilityStoreFactory           visibility.VisibilityStoreFactory
 		clusterNo                        int // cluster number
+		clusterSetIdx                    int
 		archiverMetadata                 carchiver.ArchivalMetadata
 		archiverProvider                 provider.ArchiverProvider
 		frontendConfig                   FrontendConfig
@@ -259,6 +260,7 @@ func newTemporal(t *testing.T, params *TemporalParams) *TemporalImpl {
 		abstractDataStoreFactory:         params.AbstractDataStoreFactory,
 		visibilityStoreFactory:           params.VisibilityStoreFactory,
 		clusterNo:                        params.ClusterNo,
+		clusterSetIdx:                    GetClusterSetIndex(),
 		esConfig:                         params.ESConfig,
 		esClient:                         params.ESClient,
 		archiverMetadata:                 params.ArchiverMetadata,
@@ -321,6 +323,8 @@ func (c *TemporalImpl) Start() error {
 }
 
 func (c *TemporalImpl) Stop() error {
+	defer PutClusterSetIndex(c.clusterSetIdx)
+
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 
@@ -344,7 +348,7 @@ func (c *TemporalImpl) makeHostMap(serviceName primitives.ServiceName, self stri
 func (c *TemporalImpl) makeGRPCAddresses(num, port int) []string {
 	hosts := make([]string, num)
 	for i := range hosts {
-		hosts[i] = fmt.Sprintf("127.0.%d.%d:%d", c.clusterNo, i+1, port)
+		hosts[i] = fmt.Sprintf("127.%d.%d.%d:%d", c.clusterSetIdx, c.clusterNo, i+1, port)
 	}
 	return hosts
 }

@@ -37,6 +37,19 @@ import (
 	"go.temporal.io/server/common/persistence/versionhistory"
 )
 
+const maxClusterSetIndex = 200
+
+var clusterSetIndexes = make(chan int, maxClusterSetIndex)
+
+func init() {
+	for i := 0; i < maxClusterSetIndex; i++ {
+		clusterSetIndexes <- i
+	}
+}
+
+func GetClusterSetIndex() int  { return <-clusterSetIndexes }
+func PutClusterSetIndex(i int) { clusterSetIndexes <- i }
+
 func RandomizeStr(id string) string {
 	return fmt.Sprintf("%v-%v", id, uuid.New())
 }
