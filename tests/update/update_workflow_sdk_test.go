@@ -32,6 +32,7 @@ import (
 
 // TestAcquireShard_OwnershipLostErrorSuite tests what happens when acquire shard returns an ownership lost error.
 func TestUpdateWorkflowClientSuite(t *testing.T) {
+	t.Parallel()
 	s := new(UpdateWorkflowClientSuite)
 	suite.Run(t, s)
 }
