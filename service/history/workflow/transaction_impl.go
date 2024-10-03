@@ -668,12 +668,14 @@ func emitMutationMetrics(
 	namespace *namespace.Namespace,
 	stats ...*persistence.MutableStateStatistics,
 ) {
-	metricsHandler := shard.GetMetricsHandler()
 	namespaceName := namespace.Name()
 	for _, stat := range stats {
 		emitMutableStateStatus(
-			metricsHandler.WithTags(metrics.OperationTag(metrics.SessionStatsScope), metrics.NamespaceTag(namespaceName.String())),
 			stat,
+			shard.GetMetricsHandler(),
+			shard.GetBatchMetricsHandler(),
+			metrics.OperationTag(metrics.SessionStatsScope),
+			metrics.NamespaceTag(namespaceName.String()),
 		)
 	}
 }
@@ -683,12 +685,14 @@ func emitGetMetrics(
 	namespace *namespace.Namespace,
 	stats ...*persistence.MutableStateStatistics,
 ) {
-	metricsHandler := shard.GetMetricsHandler()
 	namespaceName := namespace.Name()
 	for _, stat := range stats {
 		emitMutableStateStatus(
-			metricsHandler.WithTags(metrics.OperationTag(metrics.ExecutionStatsScope), metrics.NamespaceTag(namespaceName.String())),
 			stat,
+			shard.GetMetricsHandler(),
+			shard.GetBatchMetricsHandler(),
+			metrics.OperationTag(metrics.ExecutionStatsScope),
+			metrics.NamespaceTag(namespaceName.String()),
 		)
 	}
 }

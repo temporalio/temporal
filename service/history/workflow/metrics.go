@@ -54,44 +54,48 @@ func emitWorkflowHistoryStats(
 }
 
 func emitMutableStateStatus(
-	metricsHandler metrics.Handler,
 	stats *persistence.MutableStateStatistics,
+	metricsHandler metrics.Handler,
+	batchMetricHandler metrics.BatchMetricsHandler,
+	tags ...metrics.Tag,
 ) {
 	if stats == nil {
 		return
 	}
-	metrics.MutableStateSize.With(metricsHandler).Record(int64(stats.TotalSize))
-	metrics.ExecutionInfoSize.With(metricsHandler).Record(int64(stats.ExecutionInfoSize))
-	metrics.ExecutionStateSize.With(metricsHandler).Record(int64(stats.ExecutionStateSize))
-	metrics.ActivityInfoSize.With(metricsHandler).Record(int64(stats.ActivityInfoSize))
-	metrics.ActivityInfoCount.With(metricsHandler).Record(int64(stats.ActivityInfoCount))
-	metrics.TotalActivityCount.With(metricsHandler).Record(stats.TotalActivityCount)
-	metrics.TimerInfoSize.With(metricsHandler).Record(int64(stats.TimerInfoSize))
-	metrics.TimerInfoCount.With(metricsHandler).Record(int64(stats.TimerInfoCount))
-	metrics.TotalUserTimerCount.With(metricsHandler).Record(stats.TotalUserTimerCount)
-	metrics.ChildInfoSize.With(metricsHandler).Record(int64(stats.ChildInfoSize))
-	metrics.ChildInfoCount.With(metricsHandler).Record(int64(stats.ChildInfoCount))
-	metrics.TotalChildExecutionCount.With(metricsHandler).Record(stats.TotalChildExecutionCount)
-	metrics.RequestCancelInfoSize.With(metricsHandler).Record(int64(stats.RequestCancelInfoSize))
-	metrics.RequestCancelInfoCount.With(metricsHandler).Record(int64(stats.RequestCancelInfoCount))
-	metrics.TotalRequestCancelExternalCount.With(metricsHandler).Record(stats.TotalRequestCancelExternalCount)
-	metrics.SignalInfoSize.With(metricsHandler).Record(int64(stats.SignalInfoSize))
-	metrics.SignalInfoCount.With(metricsHandler).Record(int64(stats.SignalInfoCount))
-	metrics.TotalSignalExternalCount.With(metricsHandler).Record(stats.TotalSignalExternalCount)
-	metrics.SignalRequestIDSize.With(metricsHandler).Record(int64(stats.SignalRequestIDSize))
-	metrics.SignalRequestIDCount.With(metricsHandler).Record(int64(stats.SignalRequestIDCount))
-	metrics.TotalSignalCount.With(metricsHandler).Record(stats.TotalSignalCount)
-	metrics.BufferedEventsSize.With(metricsHandler).Record(int64(stats.BufferedEventsSize))
-	metrics.BufferedEventsCount.With(metricsHandler).Record(int64(stats.BufferedEventsCount))
 
+	batch := batchMetricHandler.CreateBatch("mutable_state_status", tags...)
+	batch.WithHistogram(metrics.MutableStateSize, int64(stats.TotalSize))
+	batch.WithHistogram(metrics.ExecutionInfoSize, int64(stats.ExecutionInfoSize))
+	batch.WithHistogram(metrics.ExecutionStateSize, int64(stats.ExecutionStateSize))
+	batch.WithHistogram(metrics.ActivityInfoSize, int64(stats.ActivityInfoSize))
+	batch.WithHistogram(metrics.ActivityInfoCount, int64(stats.ActivityInfoCount))
+	batch.WithHistogram(metrics.TotalActivityCount, stats.TotalActivityCount)
+	batch.WithHistogram(metrics.TimerInfoSize, int64(stats.TimerInfoSize))
+	batch.WithHistogram(metrics.TimerInfoCount, int64(stats.TimerInfoCount))
+	batch.WithHistogram(metrics.TotalUserTimerCount, stats.TotalUserTimerCount)
+	batch.WithHistogram(metrics.ChildInfoSize, int64(stats.ChildInfoSize))
+	batch.WithHistogram(metrics.ChildInfoCount, int64(stats.ChildInfoCount))
+	batch.WithHistogram(metrics.TotalChildExecutionCount, stats.TotalChildExecutionCount)
+	batch.WithHistogram(metrics.RequestCancelInfoSize, int64(stats.RequestCancelInfoSize))
+	batch.WithHistogram(metrics.RequestCancelInfoCount, int64(stats.RequestCancelInfoCount))
+	batch.WithHistogram(metrics.TotalRequestCancelExternalCount, stats.TotalRequestCancelExternalCount)
+	batch.WithHistogram(metrics.SignalInfoSize, int64(stats.SignalInfoSize))
+	batch.WithHistogram(metrics.SignalInfoCount, int64(stats.SignalInfoCount))
+	batch.WithHistogram(metrics.TotalSignalExternalCount, stats.TotalSignalExternalCount)
+	batch.WithHistogram(metrics.SignalRequestIDSize, int64(stats.SignalRequestIDSize))
+	batch.WithHistogram(metrics.SignalRequestIDCount, int64(stats.SignalRequestIDCount))
+	batch.WithHistogram(metrics.TotalSignalCount, stats.TotalSignalCount)
+	batch.WithHistogram(metrics.BufferedEventsSize, int64(stats.BufferedEventsSize))
+	batch.WithHistogram(metrics.BufferedEventsCount, int64(stats.BufferedEventsCount))
 	if stats.HistoryStatistics != nil {
-		metrics.HistorySize.With(metricsHandler).Record(int64(stats.HistoryStatistics.SizeDiff))
-		metrics.HistoryCount.With(metricsHandler).Record(int64(stats.HistoryStatistics.CountDiff))
+		batch.WithHistogram(metrics.HistorySize, int64(stats.HistoryStatistics.SizeDiff))
+		batch.WithHistogram(metrics.HistoryCount, int64(stats.HistoryStatistics.CountDiff))
 	}
+	batch.Emit()
 
+	metricsHandler = metricsHandler.WithTags(tags...)
 	for category, taskCount := range stats.TaskCountByCategory {
-		metrics.TaskCount.With(metricsHandler).
-			Record(int64(taskCount), metrics.TaskCategoryTag(category))
+		metrics.TaskCount.With(metricsHandler).Record(int64(taskCount), metrics.TaskCategoryTag(category))
 	}
 }
 
