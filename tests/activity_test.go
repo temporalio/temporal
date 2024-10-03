@@ -33,3 +33,7 @@ func TestActivityTestSuite(t *testing.T) {
 	flag.Parse()
 	suite.Run(t, &ActivityTestSuite{})
 }
+
+func TestActivityClientTestSuite(t *testing.T) {
+	suite.Run(t, new(ActivityClientTestSuite))
+}

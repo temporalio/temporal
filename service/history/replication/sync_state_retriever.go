@@ -61,13 +61,9 @@ const (
 type (
 	ResultType      int
 	SyncStateResult struct {
-		Type                       ResultType
-		Mutation                   *persistencepb.WorkflowMutableStateMutation
-		Snapshot                   *persistencepb.WorkflowMutableState
-		EventBlobs                 []*commonpb.DataBlob
-		NewRunInfo                 *replicationpb.NewRunInfo
-		VersionedTransitionHistory []*persistencepb.VersionedTransition
-		SyncedVersionHistory       *history.VersionHistory
+		VersionedTransitionArtifact *replicationpb.VersionedTransitionArtifact
+		VersionedTransitionHistory  []*persistencepb.VersionedTransition
+		SyncedVersionHistory        *history.VersionHistory
 	}
 	SyncStateRetriever interface {
 		GetSyncWorkflowStateArtifact(
@@ -200,21 +196,28 @@ func (s *SyncStateRetrieverImpl) getSyncStateResult(
 		return false
 	}
 
-	result := &SyncStateResult{}
+	versionedTransitionArtifact := &replicationpb.VersionedTransitionArtifact{}
 	if shouldReturnMutation() {
 		mutation, err := s.getMutation(mu, targetCurrentVersionedTransition)
 		if err != nil {
 			return nil, err
 		}
-		result.Type = Mutation
-		result.Mutation = mutation
+		versionedTransitionArtifact.StateAttributes = &replicationpb.VersionedTransitionArtifact_SyncWorkflowStateMutationAttributes{
+			SyncWorkflowStateMutationAttributes: &replicationpb.SyncWorkflowStateMutationAttributes{
+				StateMutation:                     mutation,
+				ExclusiveStartVersionedTransition: targetCurrentVersionedTransition,
+			},
+		}
 	} else {
 		snapshot, err := s.getSnapshot(mu)
 		if err != nil {
 			return nil, err
 		}
-		result.Type = Snapshot
-		result.Snapshot = snapshot
+		versionedTransitionArtifact.StateAttributes = &replicationpb.VersionedTransitionArtifact_SyncWorkflowStateSnapshotAttributes{
+			SyncWorkflowStateSnapshotAttributes: &replicationpb.SyncWorkflowStateSnapshotAttributes{
+				State: snapshot,
+			},
+		}
 	}
 
 	newRunId := mu.GetExecutionInfo().NewExecutionRunId
@@ -230,14 +233,17 @@ func (s *SyncStateRetrieverImpl) getSyncStateResult(
 		if err != nil {
 			return nil, err
 		}
-		result.NewRunInfo = newRunInfo
+		versionedTransitionArtifact.NewRunInfo = newRunInfo
 	}
 
 	events, err := s.getSyncStateEvents(ctx, targetVersionHistories, sourceVersionHistories)
 	if err != nil {
 		return nil, err
 	}
-	result.EventBlobs = events
+	versionedTransitionArtifact.EventBatches = events
+	result := &SyncStateResult{
+		VersionedTransitionArtifact: versionedTransitionArtifact,
+	}
 	result.VersionedTransitionHistory = sourceTransitionHistory
 	currentVersionHistory, err := versionhistory.GetCurrentVersionHistory(sourceVersionHistories)
 	if err != nil {
@@ -461,6 +467,8 @@ func (s *SyncStateRetrieverImpl) getUpdatedSubStateMachine(n *hsm.Node, versione
 		}
 		return nil
 	}
+	// Source cluster uses Walk() to generate node mutations.
+	// Walk() uses pre-order DFS. Updated parent nodes will be added before children.
 	err := n.Walk(walkFn)
 	if err != nil {
 		return nil, err

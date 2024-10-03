@@ -420,7 +420,6 @@ func getVersionHistoryAndEvents(
 		if xdcCacheValue, ok := eventBlobCache.Get(persistence.NewXDCCacheKey(
 			workflowKey,
 			firstEventID,
-			nextEventID,
 			eventVersion,
 		)); ok {
 			return xdcCacheValue.VersionHistoryItems, xdcCacheValue.EventBlobs, xdcCacheValue.BaseWorkflowInfo, nil
@@ -675,32 +674,6 @@ func (c *syncVersionedTransitionTaskConverter) convert(
 	if err != nil {
 		return nil, err
 	}
-	var taskAttr *replicationspb.SyncVersionedTransitionTaskAttributes
-	switch result.Type {
-	case Mutation:
-		taskAttr = &replicationspb.SyncVersionedTransitionTaskAttributes{
-			EventBatches: result.EventBlobs,
-			NewRunInfo:   result.NewRunInfo,
-			StateAttributes: &replicationspb.SyncVersionedTransitionTaskAttributes_SyncWorkflowStateMutationAttributes{
-				SyncWorkflowStateMutationAttributes: &replicationspb.SyncWorkflowStateMutationAttributes{
-					StateMutation:                     result.Mutation,
-					ExclusiveStartVersionedTransition: taskInfo.VersionedTransition,
-				},
-			},
-		}
-	case Snapshot:
-		taskAttr = &replicationspb.SyncVersionedTransitionTaskAttributes{
-			EventBatches: result.EventBlobs,
-			NewRunInfo:   result.NewRunInfo,
-			StateAttributes: &replicationspb.SyncVersionedTransitionTaskAttributes_SyncWorkflowStateSnapshotAttributes{
-				SyncWorkflowStateSnapshotAttributes: &replicationspb.SyncWorkflowStateSnapshotAttributes{
-					State: result.Snapshot,
-				},
-			},
-		}
-	default:
-		return nil, serviceerror.NewInternal("unknown sync workflow state artifact type")
-	}
 	currentHistory, err := versionhistory.GetCurrentVersionHistory(executionInfo.VersionHistories)
 	if err != nil {
 		return nil, err
@@ -713,7 +686,9 @@ func (c *syncVersionedTransitionTaskConverter) convert(
 		TaskType:     enumsspb.REPLICATION_TASK_TYPE_SYNC_VERSIONED_TRANSITION_TASK,
 		SourceTaskId: taskInfo.TaskID,
 		Attributes: &replicationspb.ReplicationTask_SyncVersionedTransitionTaskAttributes{
-			SyncVersionedTransitionTaskAttributes: taskAttr,
+			SyncVersionedTransitionTaskAttributes: &replicationspb.SyncVersionedTransitionTaskAttributes{
+				VersionedTransitionArtifact: result.VersionedTransitionArtifact,
+			},
 		},
 		VersionedTransition: taskInfo.VersionedTransition,
 		VisibilityTime:      timestamppb.New(taskInfo.VisibilityTimestamp),
