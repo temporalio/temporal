@@ -27,12 +27,13 @@ package tests
 import (
 	"context"
 	"flag"
-	"github.com/stretchr/testify/suite"
 	"testing"
 
 	"net/http"
 	"sync"
 	"time"
+
+	"github.com/stretchr/testify/suite"
 
 	"go.temporal.io/api/workflowservice/v1"
 	sdkclient "go.temporal.io/sdk/client"
@@ -144,6 +145,7 @@ func (s *TLSFunctionalSuite) trackAuthInfoByCall() *sync.Map {
 		caller *authorization.Claims,
 		target *authorization.CallTarget,
 	) (authorization.Result, error) {
+		//nolint:revive
 		if authInfo, _ := caller.Extensions.(*authorization.AuthInfo); authInfo != nil {
 			calls.Store(target.APIName, authInfo)
 		}

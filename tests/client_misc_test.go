@@ -28,11 +28,12 @@ import (
 	"context"
 	"flag"
 	"fmt"
-	"github.com/stretchr/testify/suite"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/suite"
 
 	batchpb "go.temporal.io/api/batch/v1"
 	commonpb "go.temporal.io/api/common/v1"
@@ -1249,9 +1250,9 @@ func (s *ClientMiscTestSuite) TestBatchReset() {
 func (s *ClientMiscTestSuite) TestBatchResetByBuildId() {
 	tq := testcore.RandomizeStr(s.T().Name())
 	buildPrefix := uuid.New()[:6] + "-"
-	v1 := buildPrefix + "v1"
-	v2 := buildPrefix + "v2"
-	v3 := buildPrefix + "v3"
+	buildIdv1 := buildPrefix + "v1"
+	buildIdv2 := buildPrefix + "v2"
+	buildIdv3 := buildPrefix + "v3"
 
 	var act1count, act2count, act3count, badcount atomic.Int32
 	act1 := func() error { act1count.Add(1); return nil }
@@ -1286,7 +1287,7 @@ func (s *ClientMiscTestSuite) TestBatchResetByBuildId() {
 		// otherwise we wouldn't need a reset to "fix" it, just a new build would be enough.)
 		for i := 0; i < 1000; i++ {
 			s.NoError(workflow.ExecuteActivity(ao, "badact").Get(ctx, nil))
-			workflow.Sleep(ctx, time.Second)
+			_ = workflow.Sleep(ctx, time.Second)
 		}
 
 		return "done 2!", nil
@@ -1305,7 +1306,7 @@ func (s *ClientMiscTestSuite) TestBatchResetByBuildId() {
 
 		// instead of calling badact, do something different to force a non-determinism error
 		// (the change of activity type below isn't enough)
-		workflow.Sleep(ctx, time.Second)
+		_ = workflow.Sleep(ctx, time.Second)
 
 		// call act3 once
 		s.NoError(workflow.ExecuteActivity(ao, "act3").Get(ctx, nil))
@@ -1316,7 +1317,7 @@ func (s *ClientMiscTestSuite) TestBatchResetByBuildId() {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	w1 := worker.New(s.SdkClient(), tq, worker.Options{BuildID: v1})
+	w1 := worker.New(s.SdkClient(), tq, worker.Options{BuildID: buildIdv1})
 	w1.RegisterWorkflowWithOptions(wf1, workflow.RegisterOptions{Name: "wf"})
 	w1.RegisterActivityWithOptions(act1, activity.RegisterOptions{Name: "act1"})
 	s.NoError(w1.Start())
@@ -1332,7 +1333,7 @@ func (s *ClientMiscTestSuite) TestBatchResetByBuildId() {
 	// should see one run of act1
 	s.Equal(int32(1), act1count.Load())
 
-	w2 := worker.New(s.SdkClient(), tq, worker.Options{BuildID: v2})
+	w2 := worker.New(s.SdkClient(), tq, worker.Options{BuildID: buildIdv2})
 	w2.RegisterWorkflowWithOptions(wf2, workflow.RegisterOptions{Name: "wf"})
 	w2.RegisterActivityWithOptions(act1, activity.RegisterOptions{Name: "act1"})
 	w2.RegisterActivityWithOptions(act2, activity.RegisterOptions{Name: "act2"})
@@ -1351,7 +1352,7 @@ func (s *ClientMiscTestSuite) TestBatchResetByBuildId() {
 
 	w2.Stop()
 
-	w3 := worker.New(s.SdkClient(), tq, worker.Options{BuildID: v3})
+	w3 := worker.New(s.SdkClient(), tq, worker.Options{BuildID: buildIdv3})
 	w3.RegisterWorkflowWithOptions(wf3, workflow.RegisterOptions{Name: "wf"})
 	w3.RegisterActivityWithOptions(act1, activity.RegisterOptions{Name: "act1"})
 	w3.RegisterActivityWithOptions(act2, activity.RegisterOptions{Name: "act2"})
@@ -1368,7 +1369,7 @@ func (s *ClientMiscTestSuite) TestBatchResetByBuildId() {
 	// wait for it to appear in visibility
 	query := fmt.Sprintf(`%s = "%s" and %s = "%s"`,
 		searchattribute.ExecutionStatus, "Running",
-		searchattribute.BuildIds, worker_versioning.UnversionedBuildIdSearchAttribute(v2))
+		searchattribute.BuildIds, worker_versioning.UnversionedBuildIdSearchAttribute(buildIdv2))
 	s.Eventually(func() bool {
 		resp, err := s.FrontendClient().ListWorkflowExecutions(ctx, &workflowservice.ListWorkflowExecutionsRequest{
 			Namespace: s.Namespace(),
@@ -1387,7 +1388,7 @@ func (s *ClientMiscTestSuite) TestBatchResetByBuildId() {
 			ResetOperation: &batchpb.BatchOperationReset{
 				Options: &commonpb.ResetOptions{
 					Target: &commonpb.ResetOptions_BuildId{
-						BuildId: v2,
+						BuildId: buildIdv2,
 					},
 				},
 			},

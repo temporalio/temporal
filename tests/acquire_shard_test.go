@@ -26,10 +26,11 @@ package tests
 
 import (
 	"context"
-	"github.com/stretchr/testify/suite"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/suite"
 
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -57,7 +58,7 @@ func (s *AcquireShardFunctionalSuite) SetupSuite() {
 // TearDownSuite tears down the test suite by shutting down the test cluster after a short delay.
 func (s *AcquireShardFunctionalSuite) TearDownSuite() {
 	// we need to wait for all components to start before we can safely tear down
-	time.Sleep(time.Second * 5)
+	time.Sleep(time.Second * 5) //nolint:forbidigo
 	s.FunctionalTestBase.TearDownSuite()
 }
 

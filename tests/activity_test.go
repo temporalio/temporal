@@ -30,7 +30,6 @@ import (
 	"encoding/binary"
 	"errors"
 	"flag"
-	"github.com/stretchr/testify/suite"
 	"math/rand"
 	"sync"
 	"sync/atomic"
@@ -39,6 +38,7 @@ import (
 
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/suite"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -94,7 +94,7 @@ func (s *ActivityClientTestSuite) TestActivityScheduleToClose_FiredDuringBackoff
 
 	var activityCompleted atomic.Int32
 	activityFunction := func() (string, error) {
-		activityErr := errors.New("bad-luck-please-retry") //nolint:goerr113
+		activityErr := errors.New("bad-luck-please-retry") //nolint:err113
 		activityCompleted.Add(1)
 		return "", activityErr
 	}
@@ -161,7 +161,7 @@ func (s *ActivityClientTestSuite) TestActivityScheduleToClose_FiredDuringActivit
 	// schedule to close is set to 7 sec. This way schedule to close timeout should fire.
 	activityFunction := func() (string, error) {
 		defer wg.Done()
-		activityErr := errors.New("bad-luck-please-retry") //nolint:goerr113
+		activityErr := errors.New("bad-luck-please-retry") //nolint:err113
 		time.Sleep(2 * time.Second)                        //nolint:forbidigo
 		activityCompleted.Add(1)
 		activityFinishedAt = time.Now().UTC()
@@ -426,7 +426,7 @@ func (s *ActivityTestSuite) TestActivityHeartBeatWorkflow_Success() {
 				Details:   payloads.EncodeString("details"),
 			})
 			s.NoError(err)
-			time.Sleep(10 * time.Millisecond)
+			time.Sleep(10 * time.Millisecond) //nolint:forbidigo
 		}
 		activityExecutedCount++
 		return payloads.EncodeString("Activity Result"), false, nil
@@ -550,7 +550,7 @@ func (s *ActivityTestSuite) TestActivityRetry() {
 			}, nil
 		} else if task.PreviousStartedEventId > 0 {
 			for _, event := range task.History.Events[task.PreviousStartedEventId:] {
-				switch event.GetEventType() {
+				switch event.GetEventType() { // nolint:exhaustive
 				case enumspb.EVENT_TYPE_ACTIVITY_TASK_SCHEDULED:
 					switch event.GetActivityTaskScheduledEventAttributes().GetActivityId() {
 					case "A":
@@ -592,7 +592,7 @@ func (s *ActivityTestSuite) TestActivityRetry() {
 		s.Equal(activityName, task.ActivityType.GetName())
 		var err error
 		if activityExecutedCount == 0 {
-			err = errors.New("bad-luck-please-retry")
+			err = errors.New("bad-luck-please-retry") //nolint:err113
 		} else if activityExecutedCount == 1 {
 			err = temporal.NewNonRetryableApplicationError("bad-bug", "", nil)
 		}
@@ -759,7 +759,7 @@ func (s *ActivityTestSuite) TestActivityRetry_Infinite() {
 
 		var err error
 		if activityExecutedCount < activityExecutedLimit {
-			err = errors.New("retry-error")
+			err = errors.New("retry-error") //nolint:err113
 		} else if activityExecutedCount == activityExecutedLimit {
 			err = nil
 		}
@@ -861,7 +861,7 @@ func (s *ActivityTestSuite) TestActivityHeartBeatWorkflow_Timeout() {
 		s.Equal(id, task.WorkflowExecution.GetWorkflowId())
 		s.Equal(activityName, task.ActivityType.GetName())
 		// Timing out more than HB time.
-		time.Sleep(2 * time.Second)
+		time.Sleep(2 * time.Second) //nolint:forbidigo
 		activityExecutedCount++
 		return payloads.EncodeString("Activity Result"), false, nil
 	}
@@ -984,7 +984,7 @@ func (s *ActivityTestSuite) TestTryActivityCancellationFromWorkflow() {
 				return payloads.EncodeString("Activity Cancelled"), true, nil
 			}
 			s.NoError(err)
-			time.Sleep(10 * time.Millisecond)
+			time.Sleep(10 * time.Millisecond) //nolint:forbidigo
 		}
 		return payloads.EncodeString("Activity Result"), false, nil
 	}
@@ -1176,10 +1176,10 @@ func (s *ActivityClientTestSuite) TestActivityHeartbeatDetailsDuringRetry() {
 		var err error
 		if activityExecutedCount == 0 {
 			activity.RecordHeartbeat(ctx, heartbeatDetails)
-			time.Sleep(activityTimeout + time.Second)
+			time.Sleep(activityTimeout + time.Second) //nolint:forbidigo
 		} else if activityExecutedCount == 1 {
-			time.Sleep(activityTimeout / 2)
-			err = errors.New("retryable-error")
+			time.Sleep(activityTimeout / 2)     //nolint:forbidigo
+			err = errors.New("retryable-error") //nolint:err113
 		}
 
 		if activityExecutedCount > 0 {
@@ -1248,6 +1248,7 @@ func (s *ActivityClientTestSuite) TestActivityHeartbeatDetailsDuringRetry() {
 		})
 	}
 
+	//nolint:forbidigo
 	time.Sleep(time.Second) // wait for the timeout to trigger
 
 	for dweResult, dweErr := describeWorkflowExecution(); dweResult.GetWorkflowExecutionInfo().GetCloseTime() == nil; dweResult, dweErr = describeWorkflowExecution() {
@@ -1260,7 +1261,7 @@ func (s *ActivityClientTestSuite) TestActivityHeartbeatDetailsDuringRetry() {
 			s.Equal(heartbeatDetailsPayload, details)
 		}
 
-		time.Sleep(time.Millisecond * 100)
+		time.Sleep(time.Millisecond * 100) //nolint:forbidigo
 	}
 
 	err = workflowRun.Get(ctx, nil)
@@ -1302,7 +1303,7 @@ func (s *ActivityTestSuite) TestActivityHeartBeat_RecordIdentity() {
 	workflowComplete := false
 	workflowNextCmd := enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK
 	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
-		switch workflowNextCmd {
+		switch workflowNextCmd { // nolint:exhaustive
 		case enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK:
 			workflowNextCmd = enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION
 			return []*commandpb.Command{{
@@ -1480,7 +1481,7 @@ func (s *ActivityTestSuite) mockWorkflowWithErrorActivity(activityInfo chan<- ac
 	mockErrorActivity := func(ctx context.Context) error {
 		ai := activity.GetInfo(ctx)
 		activityInfo <- ai
-		return errors.New("mock error of an activity")
+		return errors.New("mock error of an activity") //nolint:err113
 	}
 	wf := func(ctx workflow.Context) error {
 		ao := workflow.ActivityOptions{

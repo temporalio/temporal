@@ -29,12 +29,13 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"github.com/stretchr/testify/suite"
 	"sort"
 	"testing"
 	"time"
 
 	"github.com/pborman/uuid"
+	"github.com/stretchr/testify/suite"
+
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -191,7 +192,7 @@ func (s *CronTestSuite) TestCronWorkflow() {
 	// over time. If we cross a second boundary, one of our intervals will end up being 2s instead
 	// of 3s. To avoid this, wait until we can start early in the second.
 	for time.Now().Nanosecond()/int(time.Millisecond) > 150 {
-		time.Sleep(50 * time.Millisecond)
+		time.Sleep(50 * time.Millisecond) //nolint:forbidigo
 	}
 
 	startWorkflowTS := time.Now().UTC()
@@ -254,7 +255,7 @@ func (s *CronTestSuite) TestCronWorkflow() {
 
 	// Sleep some time before checking the open executions.
 	// This will not cost extra time as the polling for first workflow task will be blocked for 3 seconds.
-	time.Sleep(2 * time.Second)
+	time.Sleep(2 * time.Second) //nolint:forbidigo
 	resp, err := s.FrontendClient().ListOpenWorkflowExecutions(testcore.NewContext(), &workflowservice.ListOpenWorkflowExecutionsRequest{
 		Namespace:       s.Namespace(),
 		MaximumPageSize: 100,
@@ -331,7 +332,7 @@ func (s *CronTestSuite) TestCronWorkflow() {
 			closedExecutions = resp.GetExecutions()
 			break
 		}
-		time.Sleep(200 * time.Millisecond)
+		time.Sleep(200 * time.Millisecond) //nolint:forbidigo
 	}
 	s.NotNil(closedExecutions)
 	dweResponse, err := s.FrontendClient().DescribeWorkflowExecution(testcore.NewContext(), &workflowservice.DescribeWorkflowExecutionRequest{
@@ -417,7 +418,7 @@ func (s *CronTestClientSuite) TestCronWorkflowCompletionStates() {
 			s.NoError(workflow.GetLastCompletionResult(ctx, &lcr))
 			s.Equal(lcr, "pass")
 			s.Nil(workflow.GetLastError(ctx))
-			return "", errors.New("second error")
+			return "", errors.New("second error") //nolint:err113
 
 		case 3:
 			s.True(workflow.HasLastCompletionResult(ctx))
@@ -454,7 +455,7 @@ func (s *CronTestClientSuite) TestCronWorkflowCompletionStates() {
 	// over time. If we cross a second boundary, one of our intervals will end up being 2s instead
 	// of 3s. To avoid this, wait until we can start early in the second.
 	for time.Now().Nanosecond()/int(time.Millisecond) > 150 {
-		time.Sleep(50 * time.Millisecond)
+		time.Sleep(50 * time.Millisecond) //nolint:forbidigo
 	}
 
 	workflowOptions := sdkclient.StartWorkflowOptions{

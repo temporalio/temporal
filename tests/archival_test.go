@@ -29,14 +29,13 @@ import (
 	"encoding/binary"
 	"flag"
 	"fmt"
-	"github.com/stretchr/testify/suite"
-	"go.temporal.io/server/common/dynamicconfig"
 	"strconv"
 	"testing"
 	"time"
 
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -48,6 +47,7 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/convert"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/persistence"
@@ -186,7 +186,7 @@ func (s *ArchivalSuite) TestVisibilityArchival() {
 		if len(executions) == numRuns {
 			break
 		}
-		time.Sleep(retryBackoffTime)
+		time.Sleep(retryBackoffTime) //nolint:forbidigo
 	}
 
 	for _, execution := range executions {
@@ -225,7 +225,7 @@ func (s *ArchivalSuite) isArchived(namespace string, execution *commonpb.Workflo
 	for i := 0; i < retryLimit; i++ {
 		ctx := testcore.NewContext()
 		if i > 0 {
-			time.Sleep(retryBackoffTime)
+			time.Sleep(retryBackoffTime) //nolint:forbidigo
 		}
 		namespaceID := s.GetNamespaceID(namespace)
 		var historyResponse *archiver.GetHistoryResponse
@@ -296,7 +296,7 @@ func (s *ArchivalSuite) isHistoryDeleted(
 		}
 
 		s.NoError(err)
-		time.Sleep(retryBackoffTime)
+		time.Sleep(retryBackoffTime) //nolint:forbidigo
 	}
 	return false
 }
@@ -316,7 +316,7 @@ func (s *ArchivalSuite) isMutableStateDeleted(namespaceID string, execution *com
 		if _, isNotFound := err.(*serviceerror.NotFound); isNotFound {
 			return true
 		}
-		time.Sleep(retryBackoffTime)
+		time.Sleep(retryBackoffTime) //nolint:forbidigo
 	}
 	return false
 }

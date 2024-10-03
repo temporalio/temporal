@@ -26,9 +26,12 @@ package tests
 
 import (
 	"fmt"
+	"testing"
 	"time"
 
 	"github.com/pborman/uuid"
+	"github.com/stretchr/testify/suite"
+
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -91,7 +94,7 @@ func (s *WorkflowTimerTestSuite) TestCancelTimer() {
 
 		historyEvents := s.GetHistory(s.Namespace(), workflowExecution)
 		for _, event := range historyEvents {
-			switch event.GetEventType() {
+			switch event.GetEventType() { // nolint:exhaustive
 			case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED:
 				signalDelivered = true
 			case enumspb.EVENT_TYPE_TIMER_CANCELED:
@@ -213,7 +216,7 @@ func (s *WorkflowTimerTestSuite) TestCancelTimer_CancelFiredAndBuffered() {
 
 		historyEvents := s.GetHistory(s.Namespace(), workflowExecution)
 		for _, event := range historyEvents {
-			switch event.GetEventType() {
+			switch event.GetEventType() { // nolint:exhaustive
 			case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED:
 				signalDelivered = true
 			case enumspb.EVENT_TYPE_TIMER_CANCELED:
@@ -226,7 +229,7 @@ func (s *WorkflowTimerTestSuite) TestCancelTimer_CancelFiredAndBuffered() {
 		}
 
 		if !timerCancelled {
-			time.Sleep(2 * timer)
+			time.Sleep(2 * timer) //nolint:forbidigo
 			return []*commandpb.Command{{
 				CommandType: enumspb.COMMAND_TYPE_CANCEL_TIMER,
 				Attributes: &commandpb.Command_CancelTimerCommandAttributes{CancelTimerCommandAttributes: &commandpb.CancelTimerCommandAttributes{

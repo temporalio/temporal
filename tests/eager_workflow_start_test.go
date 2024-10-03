@@ -26,11 +26,12 @@ package tests
 
 import (
 	"fmt"
-	"github.com/stretchr/testify/suite"
 	"testing"
 	"time"
 
 	"github.com/pborman/uuid"
+	"github.com/stretchr/testify/suite"
+
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -62,7 +63,7 @@ func (s *EagerWorkflowTestSuite) defaultTaskQueue() *taskqueuepb.TaskQueue {
 }
 
 func (s *EagerWorkflowTestSuite) startEagerWorkflow(baseOptions *workflowservice.StartWorkflowExecutionRequest) *workflowservice.StartWorkflowExecutionResponse {
-	options := proto.Clone(baseOptions).(*workflowservice.StartWorkflowExecutionRequest)
+	options := proto.Clone(baseOptions).(*workflowservice.StartWorkflowExecutionRequest) //nolint:revive
 	options.RequestEagerExecution = true
 
 	if options.GetNamespace() == "" {
@@ -182,7 +183,7 @@ func (s *EagerWorkflowTestSuite) TestEagerWorkflowStart_RetryStartAfterTimeout()
 	s.Require().NotNil(task, "StartWorkflowExecution response did not contain a workflow task")
 
 	// Let it timeout
-	time.Sleep(request.WorkflowTaskTimeout.AsDuration())
+	time.Sleep(request.WorkflowTaskTimeout.AsDuration()) //nolint:forbidigo
 	response = s.startEagerWorkflow(request)
 	task = response.GetEagerWorkflowTask()
 	s.Require().Nil(task, "StartWorkflowExecution response contained a workflow task")

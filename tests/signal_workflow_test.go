@@ -28,13 +28,14 @@ import (
 	"bytes"
 	"encoding/binary"
 	"fmt"
-	"github.com/stretchr/testify/suite"
 	"strconv"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/pborman/uuid"
+	"github.com/stretchr/testify/suite"
+
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -577,7 +578,7 @@ CheckHistoryLoopForSignalSent:
 		signalRequestedEvent := historyEvents[len(historyEvents)-2]
 		if signalRequestedEvent.GetEventType() != enumspb.EVENT_TYPE_EXTERNAL_WORKFLOW_EXECUTION_SIGNALED {
 			s.Logger.Info("Signal still not sent")
-			time.Sleep(100 * time.Millisecond)
+			time.Sleep(100 * time.Millisecond) //nolint:forbidigo
 			continue CheckHistoryLoopForSignalSent
 		}
 		break
@@ -1054,7 +1055,7 @@ CheckHistoryLoopForSignalSent:
 		signalRequestedEvent := historyEvents[len(historyEvents)-2]
 		if signalRequestedEvent.GetEventType() != enumspb.EVENT_TYPE_EXTERNAL_WORKFLOW_EXECUTION_SIGNALED {
 			s.Logger.Info("Signal still not sent")
-			time.Sleep(100 * time.Millisecond)
+			time.Sleep(100 * time.Millisecond) //nolint:forbidigo
 			continue CheckHistoryLoopForSignalSent
 		}
 
@@ -1188,7 +1189,7 @@ CheckHistoryLoopForCancelSent:
 		signalFailedEvent := historyEvents[len(historyEvents)-2]
 		if signalFailedEvent.GetEventType() != enumspb.EVENT_TYPE_SIGNAL_EXTERNAL_WORKFLOW_EXECUTION_FAILED {
 			s.Logger.Info("Cancellaton not cancelled yet")
-			time.Sleep(100 * time.Millisecond)
+			time.Sleep(100 * time.Millisecond) //nolint:forbidigo
 			continue CheckHistoryLoopForCancelSent
 		}
 		break
@@ -1310,7 +1311,7 @@ CheckHistoryLoopForCancelSent:
 		signalFailedEvent := historyEvents[len(historyEvents)-2]
 		if signalFailedEvent.GetEventType() != enumspb.EVENT_TYPE_SIGNAL_EXTERNAL_WORKFLOW_EXECUTION_FAILED {
 			s.Logger.Info("Cancellaton not cancelled yet")
-			time.Sleep(100 * time.Millisecond)
+			time.Sleep(100 * time.Millisecond) //nolint:forbidigo
 			continue CheckHistoryLoopForCancelSent
 		}
 

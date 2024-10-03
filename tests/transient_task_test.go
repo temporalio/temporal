@@ -27,11 +27,11 @@ package tests
 import (
 	"errors"
 	"fmt"
-	"github.com/stretchr/testify/suite"
 	"testing"
 	"time"
 
 	"github.com/pborman/uuid"
+	"github.com/stretchr/testify/suite"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -89,7 +89,7 @@ func (s *TransientTaskSuite) TestTransientWorkflowTaskTimeout() {
 	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
 		if failWorkflowTask {
 			failWorkflowTask = false
-			return nil, errors.New("Workflow panic")
+			return nil, errors.New("workflow panic") //nolint:err113
 		}
 
 		// Count signals
@@ -225,7 +225,7 @@ func (s *TransientTaskSuite) TestTransientWorkflowTaskHistorySize() {
 			s.True(attrs.SuggestContinueAsNew)
 			failedTaskSawSize = attrs.HistorySizeBytes
 			// fail workflow task and we'll get a transient one
-			return nil, errors.New("oops")
+			return nil, errors.New("oops") //nolint:err113
 
 		case 4:
 			// we might not get the same value but it shouldn't be smaller, and not too much larger
@@ -252,7 +252,7 @@ func (s *TransientTaskSuite) TestTransientWorkflowTaskHistorySize() {
 			}}, nil
 		}
 
-		return nil, errors.New("bad stage")
+		return nil, errors.New("bad stage") //nolint:err113
 	}
 
 	poller := &testcore.TaskPoller{

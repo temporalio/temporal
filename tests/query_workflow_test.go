@@ -28,13 +28,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/stretchr/testify/suite"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/suite"
+
 	"go.temporal.io/api/serviceerror"
 	sdkclient "go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/worker"
@@ -59,7 +60,7 @@ func (s *QueryWorkflowSuite) TestQueryWorkflow_Sticky() {
 		// every replay will start from here
 		atomic.AddInt32(&replayCount, 1)
 
-		workflow.SetQueryHandler(ctx, "test", func() (string, error) {
+		_ = workflow.SetQueryHandler(ctx, "test", func() (string, error) {
 			return "query works", nil
 		})
 
@@ -99,10 +100,11 @@ func (s *QueryWorkflowSuite) TestQueryWorkflow_Sticky() {
 	s.Equal(int32(1), replayCount)
 }
 
+//nolint:forbidigo
 func (s *QueryWorkflowSuite) TestQueryWorkflow_Consistent_PiggybackQuery() {
 	workflowFn := func(ctx workflow.Context) (string, error) {
 		var receivedMsgs string
-		workflow.SetQueryHandler(ctx, "test", func() (string, error) {
+		_ = workflow.SetQueryHandler(ctx, "test", func() (string, error) {
 			return receivedMsgs, nil
 		})
 
@@ -113,7 +115,7 @@ func (s *QueryWorkflowSuite) TestQueryWorkflow_Consistent_PiggybackQuery() {
 			receivedMsgs += msg
 			if msg == "pause" {
 				// block workflow task for 3s.
-				workflow.ExecuteLocalActivity(ctx, func() {
+				_ = workflow.ExecuteLocalActivity(ctx, func() {
 					time.Sleep(time.Second * 3)
 				}).Get(ctx, nil)
 			}
@@ -225,12 +227,12 @@ func (s *QueryWorkflowSuite) TestQueryWorkflow_QueryBeforeStart() {
 
 	workflowFn := func(ctx workflow.Context) (string, error) {
 		status := "initialized"
-		workflow.SetQueryHandler(ctx, "test", func() (string, error) {
+		_ = workflow.SetQueryHandler(ctx, "test", func() (string, error) {
 			return status, nil
 		})
 
 		status = "started"
-		workflow.Sleep(ctx, time.Hour)
+		_ = workflow.Sleep(ctx, time.Hour)
 		return "", nil
 	}
 
@@ -270,7 +272,7 @@ func (s *QueryWorkflowSuite) TestQueryWorkflow_QueryBeforeStart() {
 	}()
 
 	// delay 2s to start worker, this will block query for 2s
-	time.Sleep(time.Second * 2)
+	time.Sleep(time.Second * 2) //nolint:forbidigo
 	var queryWorker worker.Worker
 
 	queryWorker = worker.New(s.SdkClient(), s.TaskQueue(), worker.Options{})
@@ -332,7 +334,7 @@ func (s *QueryWorkflowSuite) TestQueryWorkflow_QueryFailedWorkflowTask() {
 func (s *QueryWorkflowSuite) TestQueryWorkflow_ClosedWithoutWorkflowTaskStarted() {
 	testname := s.T().Name()
 	workflowFn := func(ctx workflow.Context) (string, error) {
-		return "", errors.New("workflow should never execute")
+		return "", errors.New("workflow should never execute") //nolint:err113
 	}
 	id := "test-query-after-terminate"
 	workflowOptions := sdkclient.StartWorkflowOptions{

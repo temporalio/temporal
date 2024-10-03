@@ -32,7 +32,6 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"github.com/stretchr/testify/suite"
 	"io"
 	"os"
 	"strconv"
@@ -42,6 +41,7 @@ import (
 
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 	"github.com/urfave/cli/v2"
 	enumspb "go.temporal.io/api/enums/v1"
 	sdkclient "go.temporal.io/sdk/client"
@@ -722,6 +722,8 @@ func (t testExecutorWrapper) Wrap(delegate queues.Executor) queues.Executor {
 
 // Execute is used to wrap the executor so that we can intercept the workflow task and ensure it fails with a terminal
 // error.
+//
+//nolint:err113
 func (t testExecutor) Execute(ctx context.Context, e queues.Executable) queues.ExecuteResponse {
 	if strings.HasPrefix(e.GetWorkflowID(), t.suite.failingWorkflowIDPrefix.Load()) && e.GetCategory() == tasks.CategoryTransfer {
 		// Return a terminal error that will cause this task to be added to the DLQ.

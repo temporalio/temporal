@@ -28,7 +28,6 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"github.com/stretchr/testify/suite"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -36,6 +35,8 @@ import (
 
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/suite"
+
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	schedulepb "go.temporal.io/api/schedule/v1"
@@ -225,7 +226,7 @@ func (s *ScheduleFunctionalSuite) TestBasics() {
 
 	// sleep until we see two runs, plus a bit more to ensure that the second run has completed
 	s.Eventually(func() bool { return atomic.LoadInt32(&runs) == 2 }, 12*time.Second, 500*time.Millisecond)
-	time.Sleep(1 * time.Second)
+	time.Sleep(1 * time.Second) //nolint:forbidigo
 
 	// describe
 
@@ -512,7 +513,7 @@ func (s *ScheduleFunctionalSuite) TestBasics() {
 	})
 	s.NoError(err)
 
-	time.Sleep(7 * time.Second)
+	time.Sleep(7 * time.Second) //nolint:forbidigo
 	s.EqualValues(1, atomic.LoadInt32(&runs2), "has not run again")
 
 	describeResp, err = s.FrontendClient().DescribeSchedule(testcore.NewContext(), &workflowservice.DescribeScheduleRequest{
@@ -757,7 +758,7 @@ func (s *ScheduleFunctionalSuite) TestLastCompletionAndError() {
 		case 2:
 			s.NoError(lastErr)
 			s.Equal("this one succeeds", lcr)
-			return "", errors.New("this one fails")
+			return "", errors.New("this one fails") //nolint:goerr113
 		case 3:
 			s.Equal("this one succeeds", lcr)
 			s.ErrorContains(lastErr, "this one fails")
@@ -838,7 +839,7 @@ func (s *ScheduleFunctionalSuite) TestExperimentalHsmLastCompletionAndError() {
 		case 2:
 			s.NoError(lastErr)
 			s.Equal("this one succeeds", lcr)
-			return "", errors.New("this one fails")
+			return "", errors.New("this one fails") //nolint:goerr113
 		case 3:
 			s.Equal("this one succeeds", lcr)
 			s.ErrorContains(lastErr, "this one fails")
@@ -943,7 +944,7 @@ func (s *ScheduleFunctionalSuite) TestRefresh() {
 
 	s.EqualHistoryEvents(expectedHistory, events1)
 
-	time.Sleep(4 * time.Second)
+	time.Sleep(4 * time.Second) //nolint:forbidigo
 	// now it has timed out, but the scheduler hasn't noticed yet. we can prove it by checking
 	// its history.
 
@@ -981,13 +982,13 @@ func (s *ScheduleFunctionalSuite) TestListBeforeRun() {
 	// clean up per-ns-worker. note that this will run after the OverrideDynamicConfig below is reverted.
 	s.T().Cleanup(func() {
 		s.refreshWorkerServices()
-		time.Sleep(2 * time.Second)
+		time.Sleep(2 * time.Second) //nolint:forbidigo
 	})
 
 	// disable per-ns worker so that the schedule workflow never runs
 	s.OverrideDynamicConfig(dynamicconfig.WorkerPerNamespaceWorkerCount, 0)
 	s.refreshWorkerServices()
-	time.Sleep(2 * time.Second)
+	time.Sleep(2 * time.Second) //nolint:forbidigo
 
 	schedule := &schedulepb.Schedule{
 		Spec: &schedulepb.ScheduleSpec{
@@ -1093,7 +1094,7 @@ func (s *ScheduleFunctionalSuite) TestRateLimit() {
 		s.NoError(err)
 	}
 
-	time.Sleep(5 * time.Second)
+	time.Sleep(5 * time.Second) //nolint:forbidigo
 
 	// With no rate limit, we'd see 10/second == 50 workflows run. With a limit of 1/sec, we
 	// expect to see around 5.

@@ -25,11 +25,12 @@
 package tests
 
 import (
-	"github.com/stretchr/testify/suite"
 	"testing"
 	"time"
 
 	"github.com/pborman/uuid"
+	"github.com/stretchr/testify/suite"
+
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -127,7 +128,7 @@ func (s *WorkflowTaskTestSuite) TestWorkflowTaskHeartbeatingWithEmptyResult() {
 			s.NoError(err2)
 			taskToken = resp2.WorkflowTask.GetTaskToken()
 		}
-		time.Sleep(time.Second)
+		time.Sleep(time.Second) //nolint:forbidigo
 	}
 
 	s.Equal(2, hbTimeout)

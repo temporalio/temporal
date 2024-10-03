@@ -30,7 +30,6 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"github.com/stretchr/testify/suite"
 	"math/rand"
 	"strconv"
 	"strings"
@@ -39,6 +38,8 @@ import (
 	"time"
 
 	"github.com/dgryski/go-farm"
+	"github.com/stretchr/testify/suite"
+
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -881,9 +882,9 @@ func (s *VersioningIntegSuite) firstWorkflowTaskAssignmentSpooled() {
 
 	timedoutTask := make(chan struct{})
 	wf2 := func(ctx workflow.Context) (string, error) {
-		time.Sleep(1 * time.Second)
+		time.Sleep(1 * time.Second) //nolint:forbidigo
 		timedoutTask <- struct{}{}
-		time.Sleep(100 * time.Second)
+		time.Sleep(100 * time.Second) //nolint:forbidigo
 		return "return after long sleep", nil
 	}
 
@@ -982,9 +983,9 @@ func (s *VersioningIntegSuite) firstWorkflowTaskAssignmentSyncMatch() {
 	// v2 times out the task
 	timedoutTask := make(chan struct{})
 	wf2 := func(ctx workflow.Context) (string, error) {
-		time.Sleep(1 * time.Second)
+		time.Sleep(1 * time.Second) //nolint:forbidigo
 		timedoutTask <- struct{}{}
-		time.Sleep(100 * time.Second)
+		time.Sleep(100 * time.Second) //nolint:forbidigo
 		return "return after long sleep", nil
 	}
 
@@ -1131,7 +1132,7 @@ func (s *VersioningIntegSuite) independentActivityTaskAssignmentSpooled(versione
 	failedTask := make(chan struct{})
 	act1 := func() (string, error) {
 		close(failedTask)
-		return "", errors.New("failing activity task intentionally")
+		return "", errors.New("failing activity task intentionally") //nolint:err113
 	}
 
 	// run v1 activity worker so it can fail the scheduled activity
@@ -1164,9 +1165,9 @@ func (s *VersioningIntegSuite) independentActivityTaskAssignmentSpooled(versione
 
 	timedoutTask := make(chan struct{})
 	act2 := func() (string, error) {
-		time.Sleep(1 * time.Second)
+		time.Sleep(1 * time.Second) //nolint:forbidigo
 		close(timedoutTask)
-		time.Sleep(100 * time.Second)
+		time.Sleep(100 * time.Second) //nolint:forbidigo
 		return "return after long sleep", nil
 	}
 
@@ -1289,7 +1290,7 @@ func (s *VersioningIntegSuite) independentActivityTaskAssignmentSyncMatch(versio
 	failedTask := make(chan struct{})
 	act1 := func() (string, error) {
 		close(failedTask)
-		return "", errors.New("failing activity task intentionally")
+		return "", errors.New("failing activity task intentionally") //nolint:goerr113
 	}
 
 	w1 := worker.New(s.sdkClient, actTq, worker.Options{
@@ -1334,9 +1335,9 @@ func (s *VersioningIntegSuite) independentActivityTaskAssignmentSyncMatch(versio
 	// v2 timesout the activity
 	timedoutTask := make(chan struct{})
 	act2 := func() (string, error) {
-		time.Sleep(1 * time.Second)
+		time.Sleep(1 * time.Second) //nolint:forbidigo
 		close(timedoutTask)
-		time.Sleep(100 * time.Second)
+		time.Sleep(100 * time.Second) //nolint:forbidigo
 		return "return after long sleep", nil
 	}
 
@@ -1495,9 +1496,9 @@ func (s *VersioningIntegSuite) testWorkflowTaskRedirectInRetry(firstTask bool) {
 				StartToCloseTimeout: 1 * time.Second}), act).Get(ctx, &out)
 			s.NoError(err)
 		}
-		time.Sleep(1 * time.Second)
+		time.Sleep(1 * time.Second) //nolint:forbidigo
 		timedoutTask <- struct{}{}
-		time.Sleep(100 * time.Second)
+		time.Sleep(100 * time.Second) //nolint:forbidigo
 		return "return after long sleep", nil
 	}
 
@@ -1651,7 +1652,7 @@ func (s *VersioningIntegSuite) dispatchNewWorkflowStartWorkerFirst() {
 	defer w1.Stop()
 
 	// wait for it to start polling
-	time.Sleep(200 * time.Millisecond)
+	time.Sleep(200 * time.Millisecond) //nolint:forbidigo
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -1778,7 +1779,7 @@ func (s *VersioningIntegSuite) dispatchUpgrade(newVersioning, stopOld bool) {
 		s.waitForVersionSetPropagation(ctx, tq, v11)
 	}
 	// add another 100ms to make sure it got to sticky queues also
-	time.Sleep(100 * time.Millisecond)
+	time.Sleep(100 * time.Millisecond) //nolint:forbidigo
 
 	w11 := worker.New(s.sdkClient, tq, worker.Options{
 		BuildID:                          v11,
@@ -1802,7 +1803,7 @@ func (s *VersioningIntegSuite) dispatchUpgrade(newVersioning, stopOld bool) {
 			// the normal queue which could pick up tasks that we want to go to v11. (We don't
 			// interrupt long polls.) To ensure those polls don't interfere, wait for them to
 			// expire.
-			time.Sleep(longPollTime)
+			time.Sleep(longPollTime) //nolint:forbidigo
 		}
 	}
 
@@ -1879,9 +1880,9 @@ func (s *VersioningIntegSuite) dispatchActivity(failMode activityFailMode, newVe
 		if state.Add(1) == 1 {
 			switch failMode {
 			case failActivity:
-				return "", errors.New("try again")
+				return "", errors.New("try again") //nolint:goerr113
 			case timeoutActivity:
-				time.Sleep(5 * time.Second)
+				time.Sleep(5 * time.Second) //nolint:forbidigo
 				return "ignored", nil
 			}
 		}
@@ -2223,7 +2224,7 @@ func (s *VersioningIntegSuite) TestRedirectWithConcurrentActivities() {
 			lastRedirectTarget.CompareAndSwap(version+" observed", version+" redirect cleaned")
 		}
 		if rand.Float64() < activityErrorRate {
-			return "", errors.New("intentionally failing activity")
+			return "", errors.New("intentionally failing activity") //nolint:goerr113
 		}
 		if triggerRedirectAtActivityRun.Load() == runId {
 			// When enough activities are run using the current version, add redirect rule to the next version.
@@ -2243,7 +2244,7 @@ func (s *VersioningIntegSuite) TestRedirectWithConcurrentActivities() {
 
 		// Add random sleep to simulate network delay
 		//nolint:forbidigo
-		time.Sleep(time.Duration(int64(rand.Intn(50)) * int64(time.Millisecond)))
+		time.Sleep(time.Duration(int64(rand.Intn(50)) * int64(time.Millisecond))) //nolint:forbidigo
 		s.T().Logf("Completing activity %d on %s at %d\n", runId, version, runs)
 		return version, nil
 	}
@@ -2447,7 +2448,7 @@ func (s *VersioningIntegSuite) dispatchActivityCompatible() {
 	defer w11.Stop()
 
 	// wait for w1 long polls to all time out
-	time.Sleep(longPollTime)
+	time.Sleep(longPollTime) //nolint:forbidigo
 
 	// unblock the workflow
 	s.NoError(s.sdkClient.SignalWorkflow(ctx, run.GetID(), run.GetRunID(), "wait", nil))
@@ -2864,7 +2865,7 @@ func (s *VersioningIntegSuite) dispatchChildWorkflowUpgrade(newVersioning bool) 
 	defer w11.Stop()
 
 	// wait for w1 long polls to all time out
-	time.Sleep(longPollTime)
+	time.Sleep(longPollTime) //nolint:forbidigo
 
 	// unblock the workflow
 	s.NoError(s.sdkClient.SignalWorkflow(ctx, run.GetID(), run.GetRunID(), "wait", nil))
@@ -3005,7 +3006,7 @@ func (s *VersioningIntegSuite) dispatchQuery(newVersioning bool) {
 		s.waitForVersionSetPropagation(ctx, tq, v2)
 	}
 	// add another 100ms to make sure it got to sticky queues also
-	time.Sleep(100 * time.Millisecond)
+	time.Sleep(100 * time.Millisecond) //nolint:forbidigo
 
 	// start worker for v1.1 and v2
 	w11 := worker.New(s.sdkClient, tq, worker.Options{
@@ -3027,7 +3028,7 @@ func (s *VersioningIntegSuite) dispatchQuery(newVersioning bool) {
 
 	if !newVersioning {
 		// wait for w1 long polls to all time out
-		time.Sleep(longPollTime)
+		time.Sleep(longPollTime) //nolint:forbidigo
 	}
 
 	// query
@@ -3184,7 +3185,7 @@ func (s *VersioningIntegSuite) dispatchContinueAsNew(newVersioning bool, crossTq
 		s.waitForVersionSetPropagation(ctx, tq, v2)
 	}
 	// add another 100ms to make sure it got to sticky queues also
-	time.Sleep(100 * time.Millisecond)
+	time.Sleep(100 * time.Millisecond) //nolint:forbidigo
 
 	s.validateWorkflowBuildIds(ctx, run.GetID(), run.GetRunID(), v1, newVersioning, v1, "", nil)
 
@@ -3208,7 +3209,7 @@ func (s *VersioningIntegSuite) dispatchContinueAsNew(newVersioning bool, crossTq
 
 	if !newVersioning {
 		// wait for w1 long polls to all time out
-		time.Sleep(longPollTime)
+		time.Sleep(longPollTime) //nolint:forbidigo
 	}
 
 	// unblock the workflow. it should get kicked off the sticky queue and replay on v1
@@ -3315,7 +3316,7 @@ func (s *VersioningIntegSuite) dispatchContinueAsNewUpgrade(newVersioning bool) 
 		s.waitForVersionSetPropagation(ctx, tq, v2)
 	}
 	// add another 100ms to make sure it got to sticky queues also
-	time.Sleep(100 * time.Millisecond)
+	time.Sleep(100 * time.Millisecond) //nolint:forbidigo
 
 	// start workers for v11 and v2
 	w11 := worker.New(s.sdkClient, tq, worker.Options{
@@ -3338,7 +3339,7 @@ func (s *VersioningIntegSuite) dispatchContinueAsNewUpgrade(newVersioning bool) 
 
 	if !newVersioning {
 		// wait for w1 long polls to all time out
-		time.Sleep(longPollTime)
+		time.Sleep(longPollTime) //nolint:forbidigo
 	}
 
 	// unblock the workflow. it should get kicked off the sticky queue and replay on v11
@@ -3400,9 +3401,9 @@ func (s *VersioningIntegSuite) dispatchRetryOld() {
 		workflow.GetSignalChannel(ctx, "wait").Receive(ctx, nil)
 		switch workflow.GetInfo(ctx).Attempt {
 		case 1:
-			return "", errors.New("try again")
+			return "", errors.New("try again") //nolint:err113
 		case 2:
-			return "", errors.New("try again")
+			return "", errors.New("try again") //nolint:err113
 		case 3:
 			return "done!", nil
 		}
@@ -3442,7 +3443,7 @@ func (s *VersioningIntegSuite) dispatchRetryOld() {
 	s.addNewDefaultBuildId(ctx, tq, v2)
 	s.waitForVersionSetPropagation(ctx, tq, v2)
 	// add another 100ms to make sure it got to sticky queues also
-	time.Sleep(100 * time.Millisecond)
+	time.Sleep(100 * time.Millisecond) //nolint:forbidigo
 
 	// start workers for v11 and v2
 	w11 := worker.New(s.sdkClient, tq, worker.Options{
@@ -3464,7 +3465,7 @@ func (s *VersioningIntegSuite) dispatchRetryOld() {
 	defer w2.Stop()
 
 	// wait for w1 long polls to all time out
-	time.Sleep(longPollTime)
+	time.Sleep(longPollTime) //nolint:forbidigo
 
 	// unblock the workflow. it should replay on v11 and then retry (on v11).
 	s.NoError(s.sdkClient.SignalWorkflow(ctx, run.GetID(), "", "wait", nil))
@@ -3500,7 +3501,7 @@ func (s *VersioningIntegSuite) dispatchRetry() {
 		started1 <- struct{}{}
 		workflow.GetSignalChannel(ctx, "wait").Receive(ctx, nil)
 		if workflow.GetInfo(ctx).Attempt == 1 {
-			return "", errors.New("try again")
+			return "", errors.New("try again") //nolint:err113
 		}
 		panic("oops")
 	}
@@ -3511,7 +3512,7 @@ func (s *VersioningIntegSuite) dispatchRetry() {
 		case 1:
 			panic("oops")
 		case 2:
-			return "", errors.New("try again")
+			return "", errors.New("try again") //nolint:err113
 		case 3:
 			return "done!", nil
 		}
@@ -3547,7 +3548,7 @@ func (s *VersioningIntegSuite) dispatchRetry() {
 	rule = s.addAssignmentRule(ctx, tq, v2)
 	s.waitForAssignmentRulePropagation(ctx, tq, rule)
 	// add another 100ms to make sure it got to sticky queues also
-	time.Sleep(100 * time.Millisecond)
+	time.Sleep(100 * time.Millisecond) //nolint:forbidigo
 
 	w2 := worker.New(s.sdkClient, tq, worker.Options{
 		BuildID:                          v2,
@@ -3786,7 +3787,7 @@ func (s *VersioningIntegSuite) resetWorkflowAssignsToCorrectBuildIdCan(inheritBu
 		case 2:
 			if workflow.GetInfo(ctx).Attempt == 1 {
 				// failing first attempt of the CaN so we test inherit behavior across retry attempts
-				return "", errors.New("try again")
+				return "", errors.New("try again") //nolint:err113
 			}
 			var ret string
 			err := workflow.ExecuteActivity(
@@ -3868,7 +3869,7 @@ func (s *VersioningIntegSuite) resetWorkflowAssignsToCorrectBuildIdChildWf(inher
 	child := func(ctx workflow.Context) (string, error) {
 		if workflow.GetInfo(ctx).Attempt == 1 {
 			// failing first attempt of so we test inherit behavior across retry attempts
-			return "", errors.New("try again")
+			return "", errors.New("try again") //nolint:err113
 		}
 		var ret string
 		err := workflow.ExecuteActivity(
@@ -4019,7 +4020,7 @@ func (s *VersioningIntegSuite) TestDescribeTaskQueueEnhanced_Versioned_Reachabil
 		started <- struct{}{}
 		workflow.GetSignalChannel(ctx, "wait").Receive(ctx, nil)
 		if workflow.GetInfo(ctx).Attempt == 1 {
-			return "", errors.New("try again")
+			return "", errors.New("try again") //nolint:err113
 		}
 		panic("oops")
 	}
@@ -4087,7 +4088,7 @@ func (s *VersioningIntegSuite) TestDescribeTaskQueueEnhanced_Versioned_BasicReac
 		started <- struct{}{}
 		workflow.GetSignalChannel(ctx, "wait").Receive(ctx, nil)
 		if workflow.GetInfo(ctx).Attempt == 1 {
-			return "", errors.New("try again")
+			return "", errors.New("try again") //nolint:err113
 		}
 		panic("oops")
 	}
@@ -4422,7 +4423,7 @@ func (s *VersioningIntegSuite) TestDescribeWorkflowExecution() {
 	s.addCompatibleBuildId(ctx, tq, v11, v1, false)
 	s.waitForVersionSetPropagation(ctx, tq, v11)
 	// add another 100ms to make sure it got to sticky queues also
-	time.Sleep(100 * time.Millisecond)
+	time.Sleep(100 * time.Millisecond) //nolint:forbidigo
 
 	// start worker for v11
 	w11 := worker.New(s.sdkClient, tq, worker.Options{
@@ -4434,7 +4435,7 @@ func (s *VersioningIntegSuite) TestDescribeWorkflowExecution() {
 	defer w11.Stop()
 
 	// wait for w1 long polls to all time out
-	time.Sleep(longPollTime)
+	time.Sleep(longPollTime) //nolint:forbidigo
 
 	// unblock the workflow. it should get kicked off the sticky queue and replay on v11
 	s.NoError(s.sdkClient.SignalWorkflow(ctx, run.GetID(), "", "wait", nil))
@@ -4746,7 +4747,7 @@ func (s *VersioningIntegSuite) registerWorkflowAndPollVersionedTaskQueue(tq, bui
 	defer w1.Stop()
 
 	// wait for it to start polling
-	time.Sleep(200 * time.Millisecond)
+	time.Sleep(200 * time.Millisecond) //nolint:forbidigo
 }
 
 func (s *VersioningIntegSuite) getBuildIdReachability(

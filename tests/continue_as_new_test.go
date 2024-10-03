@@ -29,12 +29,13 @@ import (
 	"encoding/binary"
 	"flag"
 	"fmt"
-	"github.com/stretchr/testify/suite"
 	"strconv"
 	"testing"
 	"time"
 
 	"github.com/pborman/uuid"
+	"github.com/stretchr/testify/suite"
+
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -273,6 +274,7 @@ func (s *ContinueAsNewTestSuite) TestContinueAsNewRunTimeout() {
 
 	s.False(workflowComplete)
 
+	//nolint:forbidigo
 	time.Sleep(1 * time.Second) // wait 1 second for timeout
 
 	var historyEvents []*historypb.HistoryEvent
@@ -283,7 +285,7 @@ func (s *ContinueAsNewTestSuite) TestContinueAsNewRunTimeout() {
 		lastEvent := historyEvents[len(historyEvents)-1]
 		if lastEvent.GetEventType() != enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TIMED_OUT {
 			s.Logger.Warn("Execution not timedout yet")
-			time.Sleep(200 * time.Millisecond)
+			time.Sleep(200 * time.Millisecond) //nolint:forbidigo
 			continue
 		}
 
@@ -831,7 +833,7 @@ func (s *ContinueAsNewTestSuite) TestChildWorkflowWithContinueAsNewParentTermina
 		}
 
 		// Wait for child to be terminated by background transfer task processing
-		time.Sleep(time.Second)
+		time.Sleep(time.Second) //nolint:forbidigo
 	}
 	s.Equal(
 		enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED,

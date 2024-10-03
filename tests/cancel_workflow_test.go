@@ -27,11 +27,11 @@ package tests
 import (
 	"errors"
 	"fmt"
-	"github.com/stretchr/testify/suite"
 	"testing"
 	"time"
 
 	"github.com/pborman/uuid"
+	"github.com/stretchr/testify/suite"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -536,17 +536,17 @@ func (s *CancelWorkflowSuite) TestImmediateChildCancellation_WorkflowTaskFailed(
 		if !childCancelled {
 			startEvent := task.History.Events[0]
 			if startEvent.EventType != enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED {
-				return nil, errors.New("first event is not workflow execution started")
+				return nil, errors.New("first event is not workflow execution started") //nolint:err113
 			}
 
 			workflowTaskScheduledEvent := task.History.Events[1]
 			if workflowTaskScheduledEvent.EventType != enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED {
-				return nil, errors.New("second event is not workflow task scheduled")
+				return nil, errors.New("second event is not workflow task scheduled") //nolint:err113
 			}
 
 			cancelRequestedEvent := task.History.Events[2]
 			if cancelRequestedEvent.EventType != enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CANCEL_REQUESTED {
-				return nil, errors.New("third event is not cancel requested")
+				return nil, errors.New("third event is not cancel requested") //nolint:err113
 			}
 
 			// Schedule and cancel child workflow in the same decision
@@ -571,12 +571,12 @@ func (s *CancelWorkflowSuite) TestImmediateChildCancellation_WorkflowTaskFailed(
 		}
 
 		if task.PreviousStartedEventId != 0 {
-			return nil, errors.New("previous started decision moved unexpectedly after first failed workflow task")
+			return nil, errors.New("previous started decision moved unexpectedly after first failed workflow task") //nolint:err113
 		}
 		// Validate child workflow as cancelled
 		for _, event := range task.History.Events[task.PreviousStartedEventId:] {
 			s.Logger.Info(fmt.Sprintf("Processing EventID: %v, Event: %v", event.GetEventId(), event))
-			switch event.GetEventType() {
+			switch event.GetEventType() { // nolint:exhaustive
 			case enumspb.EVENT_TYPE_START_CHILD_WORKFLOW_EXECUTION_INITIATED:
 				initiatedEvent = event
 			case enumspb.EVENT_TYPE_REQUEST_CANCEL_EXTERNAL_WORKFLOW_EXECUTION_INITIATED:
@@ -587,20 +587,20 @@ func (s *CancelWorkflowSuite) TestImmediateChildCancellation_WorkflowTaskFailed(
 		}
 
 		if initiatedEvent != nil {
-			return nil, errors.New("start child workflow command accepted from previous workflow task")
+			return nil, errors.New("start child workflow command accepted from previous workflow task") //nolint:err113
 		}
 
 		if requestCancelEvent != nil {
-			return nil, errors.New("request cancel command accepted from previous workflow task")
+			return nil, errors.New("request cancel command accepted from previous workflow task") //nolint:err113
 		}
 
 		if workflowtaskFailedEvent == nil {
-			return nil, errors.New("workflow task failed event not found due to previous bad commands")
+			return nil, errors.New("workflow task failed event not found due to previous bad commands") //nolint:err113
 		}
 
 		taskFailure := workflowtaskFailedEvent.GetWorkflowTaskFailedEventAttributes().GetFailure()
 		if taskFailure.GetMessage() != fmt.Sprintf("BadRequestCancelExternalWorkflowExecutionAttributes: Start and RequestCancel for child workflow is not allowed in same workflow task. WorkflowId=%s RunId= Namespace=%s", childWorkflowID, s.Namespace()) {
-			return nil, errors.New("unexpected workflow task failure")
+			return nil, errors.New("unexpected workflow task failure") //nolint:err113
 		}
 
 		workflowComplete = true

@@ -26,11 +26,12 @@ package tests
 
 import (
 	"errors"
-	"github.com/stretchr/testify/suite"
 	"testing"
 	"time"
 
 	"github.com/pborman/uuid"
+	"github.com/stretchr/testify/suite"
+
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -102,19 +103,21 @@ func (s *StickyTqTestSuite) TestStickyTimeout_NonTransientWorkflowTask() {
 
 		if failureCount > 0 {
 			// send a signal on third failure to be buffered, forcing a non-transient workflow task when buffer is flushed
-			/*if failureCount == 3 {
-				err := s.FrontendClient().SignalWorkflowExecution(NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
-					Namespace:            s.Namespace(),
-					WorkflowExecution: workflowExecution,
-					SignalName:        "signalB",
-					Input:             codec.EncodeString("signal input"),
-					Identity:          identity,
-					RequestId:         uuid.New(),
-				})
-				s.NoError(err)
-			}*/
+			/*
+				if failureCount == 3 {
+					err := s.FrontendClient().SignalWorkflowExecution(NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
+						Namespace:            s.Namespace(),
+						WorkflowExecution: workflowExecution,
+						SignalName:        "signalB",
+						Input:             codec.EncodeString("signal input"),
+						Identity:          identity,
+						RequestId:         uuid.New(),
+					})
+					s.NoError(err)
+				}
+			*/
 			failureCount--
-			return nil, errors.New("non deterministic error")
+			return nil, errors.New("non deterministic error") //nolint:goerr113
 		}
 
 		return []*commandpb.Command{{
@@ -172,7 +175,7 @@ WaitForStickyTimeoutLoop:
 				break WaitForStickyTimeoutLoop
 			}
 		}
-		time.Sleep(time.Second)
+		time.Sleep(time.Second) //nolint:forbidigo
 	}
 	s.True(stickyTimeout, "Workflow task not timed out")
 
@@ -295,7 +298,7 @@ func (s *StickyTqTestSuite) TestStickyTaskqueueResetThenTimeout() {
 
 		if failureCount > 0 {
 			failureCount--
-			return nil, errors.New("non deterministic error")
+			return nil, errors.New("non deterministic error") //nolint:goerr113
 		}
 
 		return []*commandpb.Command{{
@@ -360,7 +363,7 @@ WaitForStickyTimeoutLoop:
 				break WaitForStickyTimeoutLoop
 			}
 		}
-		time.Sleep(time.Second)
+		time.Sleep(time.Second) //nolint:forbidigo
 	}
 	s.True(stickyTimeout, "Workflow task not timed out")
 

@@ -107,7 +107,7 @@ func (s *namespaceTestSuite) SetupSuite() {
 }
 
 func (s *namespaceTestSuite) TearDownSuite() {
-	s.cluster.TearDownCluster()
+	_ = s.cluster.TearDownCluster()
 }
 
 func (s *namespaceTestSuite) SetupTest() {

@@ -29,12 +29,13 @@ import (
 	"context"
 	"encoding/binary"
 	"flag"
-	"github.com/stretchr/testify/suite"
 	"testing"
 	"time"
 
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
+
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -765,7 +766,7 @@ func (s *RawHistoryClientSuite) TestGetHistoryReverse_MultipleBranches() {
 	s.True(workflowRun.GetRunID() != "")
 
 	// we want to reset workflow in the middle of execution
-	time.Sleep(time.Second)
+	time.Sleep(time.Second) //nolint:forbidigo
 
 	wfeResponse, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
 	s.NoError(err)

@@ -29,11 +29,12 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
-	"github.com/stretchr/testify/suite"
 	"testing"
 	"time"
 
 	"github.com/pborman/uuid"
+	"github.com/stretchr/testify/suite"
+
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -83,7 +84,7 @@ func (s *WorkflowFailuresTestSuite) TestWorkflowTimeout() {
 
 	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
 
-	time.Sleep(time.Second)
+	time.Sleep(time.Second) //nolint:forbidigo
 
 	var historyEvents []*historypb.HistoryEvent
 GetHistoryLoop:
@@ -96,7 +97,7 @@ GetHistoryLoop:
 		lastEvent := historyEvents[len(historyEvents)-1]
 		if lastEvent.GetEventType() != enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TIMED_OUT {
 			s.Logger.Warn("Execution not timedout yet. Last event: " + lastEvent.GetEventType().String())
-			time.Sleep(200 * time.Millisecond)
+			time.Sleep(200 * time.Millisecond) //nolint:forbidigo
 			continue GetHistoryLoop
 		}
 
@@ -127,7 +128,7 @@ ListClosedLoop:
 		closedCount = len(resp.Executions)
 		if closedCount == 0 {
 			s.Logger.Info("Closed WorkflowExecution is not yet visibile")
-			time.Sleep(1000 * time.Millisecond)
+			time.Sleep(1000 * time.Millisecond) //nolint:forbidigo
 			continue ListClosedLoop
 		}
 		break ListClosedLoop
@@ -214,11 +215,11 @@ func (s *WorkflowFailuresTestSuite) TestWorkflowTaskFailed() {
 		} else if failureCount > 0 {
 			// Otherwise decrement failureCount and keep failing workflow tasks
 			failureCount--
-			return nil, errors.New("Workflow panic")
+			return nil, errors.New("workflow panic") //nolint:err113
 		}
 
 		workflowComplete = true
-		time.Sleep(time.Second)
+		time.Sleep(time.Second) //nolint:forbidigo
 		s.Logger.Warn(fmt.Sprintf("PrevStarted: %v, StartedEventID: %v, Size: %v", task.PreviousStartedEventId, task.StartedEventId,
 			len(task.History.Events)))
 		lastWorkflowTaskEvent := task.History.Events[task.StartedEventId-1]

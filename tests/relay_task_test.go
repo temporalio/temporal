@@ -25,11 +25,11 @@
 package tests
 
 import (
-	"github.com/stretchr/testify/suite"
 	"testing"
 	"time"
 
 	"github.com/pborman/uuid"
+	"github.com/stretchr/testify/suite"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -115,6 +115,7 @@ func (s *RelayTaskTestSuite) TestRelayWorkflowTaskTimeout() {
 	s.NotNil(newTask)
 	s.NotNil(newTask.WorkflowTask)
 
+	//nolint:forbidigo
 	time.Sleep(time.Second * 2) // wait 2s for relay workflow task to timeout
 	workflowTaskTimeout := false
 	for i := 0; i < 3; i++ {
@@ -132,7 +133,7 @@ func (s *RelayTaskTestSuite) TestRelayWorkflowTaskTimeout() {
 			workflowTaskTimeout = true
 			break
 		}
-		time.Sleep(time.Second)
+		time.Sleep(time.Second) //nolint:forbidigo
 	}
 	// verify relay workflow task timeout
 	s.True(workflowTaskTimeout)

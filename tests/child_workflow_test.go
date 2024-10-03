@@ -26,12 +26,12 @@ package tests
 
 import (
 	"fmt"
-	"github.com/stretchr/testify/suite"
 	"sort"
 	"testing"
 	"time"
 
 	"github.com/pborman/uuid"
+	"github.com/stretchr/testify/suite"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -409,7 +409,7 @@ func (s *ChildWorkflowSuite) TestCronChildWorkflowExecution() {
 	// over time. If we cross a second boundary, one of our intervals will end up being 2s instead
 	// of 3s. To avoid this, wait until we can start early in the second.
 	for time.Now().Nanosecond()/int(time.Millisecond) > 150 {
-		time.Sleep(50 * time.Millisecond)
+		time.Sleep(50 * time.Millisecond) //nolint:forbidigo
 	}
 
 	startParentWorkflowTS := time.Now().UTC()
@@ -559,7 +559,7 @@ func (s *ChildWorkflowSuite) TestCronChildWorkflowExecution() {
 			closedExecutions = resp.GetExecutions()
 			break
 		}
-		time.Sleep(200 * time.Millisecond)
+		time.Sleep(200 * time.Millisecond) //nolint:forbidigo
 	}
 	s.NotNil(closedExecutions)
 	sort.Slice(closedExecutions, func(i, j int) bool {
@@ -692,17 +692,16 @@ func (s *ChildWorkflowSuite) TestRetryChildWorkflowExecution() {
 						},
 					}},
 			}}, nil
-		} else {
-			childComplete = true
-			return []*commandpb.Command{{
-				CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
-				Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{
-					CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
-						Result: payloads.EncodeString("Child Done"),
-					},
-				},
-			}}, nil
 		}
+		childComplete = true
+		return []*commandpb.Command{{
+			CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
+			Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{
+				CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
+					Result: payloads.EncodeString("Child Done"),
+				},
+			},
+		}}, nil
 	}
 
 	pollerParent := &testcore.TaskPoller{

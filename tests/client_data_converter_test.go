@@ -27,12 +27,13 @@ package tests
 import (
 	"errors"
 	"fmt"
-	"github.com/stretchr/testify/suite"
 	"testing"
 
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/stretchr/testify/suite"
 
 	enumspb "go.temporal.io/api/enums/v1"
 	sdkclient "go.temporal.io/sdk/client"

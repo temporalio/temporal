@@ -26,11 +26,11 @@ package tests
 
 import (
 	"context"
-	"github.com/stretchr/testify/suite"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
 	sdkclient "go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/workflow"
@@ -99,7 +99,7 @@ func (s *AdminTestSuite) TestAdminRebuildMutableState() {
 		if response1.DatabaseMutableState.ExecutionInfo.StateTransitionCount == 3 {
 			break
 		}
-		time.Sleep(20 * time.Millisecond)
+		time.Sleep(20 * time.Millisecond) //nolint:forbidigo
 	}
 
 	_, err = s.AdminClient().RebuildMutableState(ctx, &adminservice.RebuildMutableStateRequest{

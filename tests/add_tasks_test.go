@@ -27,13 +27,13 @@ package tests
 import (
 	"context"
 	"errors"
-	"github.com/stretchr/testify/suite"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 	sdkclient "go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
@@ -267,7 +267,7 @@ func (s *AddTasksSuite) TestAddTasks_GetEngineErr() {
 	defer func() {
 		s.getEngineErr.Store(nil)
 	}()
-	s.getEngineErr.Store(errors.New("example shard engine error"))
+	s.getEngineErr.Store(errors.New("example shard engine error")) //nolint:err113
 	_, err := s.GetTestCluster().HistoryClient().AddTasks(context.Background(), &historyservice.AddTasksRequest{
 		ShardId: 1,
 	})

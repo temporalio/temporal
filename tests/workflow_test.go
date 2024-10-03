@@ -32,9 +32,12 @@ import (
 	"fmt"
 	"math"
 	"strconv"
+	"testing"
 	"time"
 
 	"github.com/pborman/uuid"
+	"github.com/stretchr/testify/suite"
+
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -358,7 +361,7 @@ GetHistoryLoop:
 		lastEvent := historyEvents[len(historyEvents)-1]
 		if lastEvent.EventType != enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TERMINATED {
 			s.Logger.Warn("Execution not terminated yet")
-			time.Sleep(100 * time.Millisecond)
+			time.Sleep(100 * time.Millisecond) //nolint:forbidigo
 			continue GetHistoryLoop
 		}
 		break GetHistoryLoop
@@ -390,7 +393,7 @@ StartNewExecutionLoop:
 		newExecution, err := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
 		if err != nil {
 			s.Logger.Warn("Start New Execution failed. Error", tag.Error(err))
-			time.Sleep(100 * time.Millisecond)
+			time.Sleep(100 * time.Millisecond) //nolint:forbidigo
 			continue StartNewExecutionLoop
 		}
 
