@@ -1643,7 +1643,6 @@ func (adh *AdminHandler) DescribeTaskQueuePartition(
 		return nil, err
 	}
 
-	// The response returned is for multiple build Id's
 	return &adminservice.DescribeTaskQueuePartitionResponse{
 		VersionsInfoInternal: resp.VersionsInfoInternal,
 	}, nil
