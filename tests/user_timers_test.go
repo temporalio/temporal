@@ -31,5 +31,6 @@ import (
 )
 
 func TestUserTimersTestSuite(t *testing.T) {
+	t.Parallel()
 	suite.Run(t, new(UserTimersTestSuite))
 }

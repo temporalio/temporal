@@ -30,6 +30,7 @@ import (
 )
 
 func TestDescribeTaskQueueSuite(t *testing.T) {
+	t.Parallel()
 	flag.Parse()
 	suite.Run(t, new(DescribeTaskQueueSuite))
 }

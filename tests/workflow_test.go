@@ -31,5 +31,6 @@ import (
 )
 
 func TestWorkflowTestSuite(t *testing.T) {
+	t.Parallel()
 	suite.Run(t, new(WorkflowTestSuite))
 }

@@ -30,10 +30,12 @@ import (
 )
 
 func TestActivityTestSuite(t *testing.T) {
+	t.Parallel()
 	flag.Parse()
 	suite.Run(t, &ActivityTestSuite{})
 }
 
 func TestActivityClientTestSuite(t *testing.T) {
+	t.Parallel()
 	suite.Run(t, new(ActivityClientTestSuite))
 }

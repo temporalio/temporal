@@ -31,5 +31,6 @@ import (
 )
 
 func TestWorkflowBufferedEventsTestSuite(t *testing.T) {
+	t.Parallel()
 	suite.Run(t, new(WorkflowBufferedEventsTestSuite))
 }

@@ -32,6 +32,7 @@ import (
 )
 
 func TestCronTestSuite(t *testing.T) {
+	t.Parallel()
 	flag.Parse()
 	suite.Run(t, new(CronTestSuite))
 }

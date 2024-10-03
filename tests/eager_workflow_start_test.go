@@ -31,5 +31,6 @@ import (
 )
 
 func TestEagerWorkflowTestSuite(t *testing.T) {
+	t.Parallel()
 	suite.Run(t, new(EagerWorkflowTestSuite))
 }

@@ -66,6 +66,7 @@ type CallbacksSuite struct {
 }
 
 func TestCallbacksSuite(t *testing.T) {
+	t.Parallel()
 	suite.Run(t, new(CallbacksSuite))
 }
 

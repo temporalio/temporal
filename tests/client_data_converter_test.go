@@ -31,5 +31,6 @@ import (
 )
 
 func TestClientDataConverterTestSuite(t *testing.T) {
+	t.Parallel()
 	suite.Run(t, new(ClientDataConverterTestSuite))
 }

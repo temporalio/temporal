@@ -32,6 +32,7 @@ import (
 )
 
 func TestDescribeTestSuite(t *testing.T) {
+	t.Parallel()
 	flag.Parse()
 	suite.Run(t, new(DescribeTestSuite))
 }
