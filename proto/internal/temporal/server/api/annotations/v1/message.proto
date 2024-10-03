@@ -1,0 +1,16 @@
+syntax = "proto3";
+
+package temporal.server.api.annotations.v1;
+
+import "google/protobuf/descriptor.proto";
+
+option go_package = "go.temporal.io/server/api/annotations/v1;annotations";
+
+extend google.protobuf.MessageOptions {
+  optional ShardingOptions sharding = 1000;
+}
+
+message ShardingOptions {
+  bool any = 1;
+  repeated string fields = 2;
+}

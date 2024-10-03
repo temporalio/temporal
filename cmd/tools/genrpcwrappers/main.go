@@ -36,8 +36,12 @@ import (
 
 	"go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/reflect/protoreflect"
+	"google.golang.org/protobuf/reflect/protoregistry"
 
 	"go.temporal.io/server/api/adminservice/v1"
+	"go.temporal.io/server/api/annotations/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 )
@@ -196,6 +200,27 @@ func tryFindOneNestedField(t reflect.Type, name string, path string, maxDepth in
 func makeGetHistoryClient(reqType reflect.Type) string {
 	// this magically figures out how to get a HistoryServiceClient from a request
 	t := reqType.Elem() // we know it's a pointer
+
+	inst := reflect.New(t)
+	reflectable, ok := inst.Interface().(interface{ ProtoReflect() protoreflect.Message })
+	if !ok {
+		panic(fmt.Sprintf("Request has no ProtoReflect method %s", t))
+	}
+	opts := reflectable.ProtoReflect().Descriptor().Options()
+
+	ext, err := protoregistry.GlobalTypes.FindExtensionByName("temporal.server.api.annotations.v1.sharding")
+	if err != nil {
+		panic(fmt.Sprintf("Error finding extension: %s", err))
+	}
+
+	// Retrieve the value of the custom option
+	optionValue := proto.GetExtension(opts, ext)
+	if optionValue != nil {
+		shardingOptions := optionValue.(*annotations.ShardingOptions)
+		if shardingOptions != nil {
+			fmt.Println(shardingOptions.Any, shardingOptions.Fields)
+		}
+	}
 
 	shardIdField := findNestedField(t, "ShardId", "request", 1)
 	workflowIdField := findNestedField(t, "WorkflowId", "request", 4)

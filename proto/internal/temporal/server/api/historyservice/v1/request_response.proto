@@ -56,8 +56,13 @@ import "temporal/server/api/token/v1/message.proto";
 import "temporal/api/workflowservice/v1/request_response.proto";
 import "temporal/server/api/adminservice/v1/request_response.proto";
 import "temporal/server/api/common/v1/dlq.proto";
+import "temporal/server/api/annotations/v1/message.proto";
 
 message StartWorkflowExecutionRequest {
+    option (temporal.server.api.annotations.v1.sharding) = {
+        any: true
+    };
+
     string namespace_id = 1;
     temporal.api.workflowservice.v1.StartWorkflowExecutionRequest start_request = 2;
     temporal.server.api.workflow.v1.ParentExecutionInfo parent_execution_info = 3;
@@ -89,6 +94,10 @@ message StartWorkflowExecutionResponse {
 }
 
 message GetMutableStateRequest {
+    option (temporal.server.api.annotations.v1.sharding) = {
+        fields: ["namespace_id", "execution.workflow_id"]
+    };
+
     string namespace_id = 1;
     temporal.api.common.v1.WorkflowExecution execution = 2;
     int64 expected_next_event_id = 3;
