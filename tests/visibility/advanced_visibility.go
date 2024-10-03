@@ -119,12 +119,8 @@ func (s *AdvancedVisibilitySuite) SetupSuite() {
 		s.updateMaxResultWindow()
 	}
 
-	clientAddr := "127.0.0.1:7134"
-	if testcore.TestFlags.FrontendAddr != "" {
-		clientAddr = testcore.TestFlags.FrontendAddr
-	}
 	sdkClient, err := sdkclient.Dial(sdkclient.Options{
-		HostPort:  clientAddr,
+		HostPort:  s.FrontendGRPCAddress(),
 		Namespace: s.Namespace(),
 	})
 	if err != nil {
@@ -132,7 +128,7 @@ func (s *AdvancedVisibilitySuite) SetupSuite() {
 	}
 	s.sdkClient = sdkClient
 	sysSDKClient, err := sdkclient.Dial(sdkclient.Options{
-		HostPort:  clientAddr,
+		HostPort:  s.FrontendGRPCAddress(),
 		Namespace: primitives.SystemLocalNamespace,
 	})
 	if err != nil {

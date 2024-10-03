@@ -101,7 +101,7 @@ func testChildWorkflow(ctx workflow.Context, totalCount, runCount int) (string, 
 
 func (s *ClientDataConverterTestSuite) startWorkerWithDataConverter(tl string, dataConverter converter.DataConverter) (sdkclient.Client, worker.Worker) {
 	sdkClient, err := sdkclient.Dial(sdkclient.Options{
-		HostPort:      s.HostPort(),
+		HostPort:      s.FrontendGRPCAddress(),
 		Namespace:     s.Namespace(),
 		DataConverter: dataConverter,
 	})

@@ -57,7 +57,7 @@ func (s *TLSFunctionalSuite) SetupTest() {
 
 	var err error
 	s.sdkClient, err = sdkclient.Dial(sdkclient.Options{
-		HostPort:  s.HostPort(),
+		HostPort:  s.FrontendGRPCAddress(),
 		Namespace: s.Namespace(),
 		ConnectionOptions: sdkclient.ConnectionOptions{
 			TLS: s.GetTestCluster().Host().TlsConfigProvider().FrontendClientConfig,

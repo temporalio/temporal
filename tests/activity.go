@@ -1394,7 +1394,7 @@ func (s *ActivityTestSuite) TestActivityHeartBeat_RecordIdentity() {
 
 func (s *ActivityTestSuite) TestActivityTaskCompleteForceCompletion() {
 	sdkClient, err := sdkclient.Dial(sdkclient.Options{
-		HostPort:  s.GetTestCluster().Host().FrontendGRPCAddress(),
+		HostPort:  s.FrontendGRPCAddress(),
 		Namespace: s.Namespace(),
 	})
 	s.NoError(err)
@@ -1431,7 +1431,7 @@ func (s *ActivityTestSuite) TestActivityTaskCompleteForceCompletion() {
 
 func (s *ActivityTestSuite) TestActivityTaskCompleteRejectCompletion() {
 	sdkClient, err := sdkclient.Dial(sdkclient.Options{
-		HostPort:  s.GetTestCluster().Host().FrontendGRPCAddress(),
+		HostPort:  s.FrontendGRPCAddress(),
 		Namespace: s.Namespace(),
 	})
 	s.NoError(err)

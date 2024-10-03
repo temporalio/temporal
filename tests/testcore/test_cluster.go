@@ -88,7 +88,7 @@ type (
 
 	// TestClusterConfig are config for a test cluster
 	TestClusterConfig struct {
-		FrontendAddress        string
+		FrontendAddress        string // deprecated
 		EnableArchival         bool
 		IsMasterCluster        bool
 		ClusterNo              int

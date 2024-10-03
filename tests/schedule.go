@@ -104,7 +104,7 @@ func (s *ScheduleFunctionalSuite) SetupTest() {
 	s.HistoryRequire = historyrequire.New(s.T())
 	s.dataConverter = testcore.NewTestDataConverter()
 	sdkClient, err := sdkclient.Dial(sdkclient.Options{
-		HostPort:      s.HostPort(),
+		HostPort:      s.FrontendGRPCAddress(),
 		Namespace:     s.Namespace(),
 		DataConverter: s.dataConverter,
 	})
