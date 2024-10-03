@@ -34,7 +34,7 @@ import (
 )
 
 func TestArchivalSuite(t *testing.T) {
-	t.Parallel()
+	// TODO: archival doesn't support parallel yet: t.Parallel()
 	flag.Parse()
 	s := new(ArchivalSuite)
 	dynamicConfigOverrides := map[dynamicconfig.Key]any{
