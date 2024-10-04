@@ -46,7 +46,8 @@ type MaxBufferedEventSuite struct {
 }
 
 func TestMaxBufferedEventSuite(t *testing.T) {
-	t.Parallel()
+	// TODO: this is more flaky when run in parallel, fix flakiness and re-enable:
+	// t.Parallel()
 	suite.Run(t, new(MaxBufferedEventSuite))
 }
 
