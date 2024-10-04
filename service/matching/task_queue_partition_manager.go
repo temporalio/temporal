@@ -97,7 +97,7 @@ func newTaskQueuePartitionManager(
 		tag.WorkflowTaskQueueName(partition.RpcName()),
 		tag.WorkflowTaskQueueType(partition.TaskType()),
 		tag.WorkflowNamespace(nsName))
-	taggedMetricsHandler := metrics.GetPerTaskQueuePartitionScope(
+	taggedMetricsHandler := metrics.GetPerTaskQueuePartitionIDScope(
 		e.metricsHandler,
 		nsName,
 		partition,

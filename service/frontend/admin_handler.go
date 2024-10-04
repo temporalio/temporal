@@ -261,6 +261,8 @@ func (adh *AdminHandler) DeepHealthCheck(
 	ctx context.Context,
 	_ *adminservice.DeepHealthCheckRequest,
 ) (_ *adminservice.DeepHealthCheckResponse, retError error) {
+	defer log.CapturePanic(adh.logger, &retError)
+
 	healthStatus, err := adh.historyHealthChecker.Check(ctx)
 	if err != nil {
 		return nil, err
@@ -2136,26 +2138,44 @@ func (adh *AdminHandler) SyncWorkflowState(ctx context.Context, request *adminse
 	if err != nil {
 		return nil, err
 	}
-	switch att := res.Attributes.(type) {
-	case *historyservice.SyncWorkflowStateResponse_Mutation:
-		return &adminservice.SyncWorkflowStateResponse{
-			Attributes: &adminservice.SyncWorkflowStateResponse_Mutation{
-				Mutation: res.GetMutation(),
-			},
-			EventBatches: res.EventBatches,
-			NewRunInfo:   res.NewRunInfo,
-		}, nil
-	case *historyservice.SyncWorkflowStateResponse_Snapshot:
-		return &adminservice.SyncWorkflowStateResponse{
-			Attributes: &adminservice.SyncWorkflowStateResponse_Snapshot{
-				Snapshot: res.GetSnapshot(),
-			},
-			EventBatches: res.EventBatches,
-			NewRunInfo:   res.NewRunInfo,
-		}, nil
-	default:
-		return nil, serviceerror.NewInternal(fmt.Sprintf("unknown type in SyncWorkflowStateResponse: %T", att))
+	return &adminservice.SyncWorkflowStateResponse{
+		VersionedTransitionArtifact: res.VersionedTransitionArtifact,
+	}, nil
+}
+
+func (adh *AdminHandler) GenerateLastHistoryReplicationTasks(
+	ctx context.Context,
+	request *adminservice.GenerateLastHistoryReplicationTasksRequest,
+) (_ *adminservice.GenerateLastHistoryReplicationTasksResponse, retError error) {
+	defer log.CapturePanic(adh.logger, &retError)
+
+	if request == nil {
+		return nil, errRequestNotSet
 	}
+
+	if err := validateExecution(request.Execution); err != nil {
+		return nil, err
+	}
+
+	namespaceEntry, err := adh.namespaceRegistry.GetNamespace(namespace.Name(request.GetNamespace()))
+	if err != nil {
+		return nil, err
+	}
+
+	resp, err := adh.historyClient.GenerateLastHistoryReplicationTasks(
+		ctx,
+		&historyservice.GenerateLastHistoryReplicationTasksRequest{
+			NamespaceId: namespaceEntry.ID().String(),
+			Execution:   request.Execution,
+		},
+	)
+	if err != nil {
+		return nil, err
+	}
+	return &adminservice.GenerateLastHistoryReplicationTasksResponse{
+		StateTransitionCount: resp.StateTransitionCount,
+		HistoryLength:        resp.HistoryLength,
+	}, nil
 }
 
 func (adh *AdminHandler) getDLQWorkflowID(

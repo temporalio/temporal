@@ -326,6 +326,26 @@ func (mr *MockAdminServiceClientMockRecorder) ForceUnloadTaskQueuePartition(ctx,
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ForceUnloadTaskQueuePartition", reflect.TypeOf((*MockAdminServiceClient)(nil).ForceUnloadTaskQueuePartition), varargs...)
 }
 
+// GenerateLastHistoryReplicationTasks mocks base method.
+func (m *MockAdminServiceClient) GenerateLastHistoryReplicationTasks(ctx context.Context, in *adminservice.GenerateLastHistoryReplicationTasksRequest, opts ...grpc.CallOption) (*adminservice.GenerateLastHistoryReplicationTasksResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []any{ctx, in}
+	for _, a := range opts {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "GenerateLastHistoryReplicationTasks", varargs...)
+	ret0, _ := ret[0].(*adminservice.GenerateLastHistoryReplicationTasksResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GenerateLastHistoryReplicationTasks indicates an expected call of GenerateLastHistoryReplicationTasks.
+func (mr *MockAdminServiceClientMockRecorder) GenerateLastHistoryReplicationTasks(ctx, in any, opts ...any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]any{ctx, in}, opts...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GenerateLastHistoryReplicationTasks", reflect.TypeOf((*MockAdminServiceClient)(nil).GenerateLastHistoryReplicationTasks), varargs...)
+}
+
 // GetDLQMessages mocks base method.
 func (m *MockAdminServiceClient) GetDLQMessages(ctx context.Context, in *adminservice.GetDLQMessagesRequest, opts ...grpc.CallOption) (*adminservice.GetDLQMessagesResponse, error) {
 	m.ctrl.T.Helper()
@@ -1259,6 +1279,21 @@ func (m *MockAdminServiceServer) ForceUnloadTaskQueuePartition(arg0 context.Cont
 func (mr *MockAdminServiceServerMockRecorder) ForceUnloadTaskQueuePartition(arg0, arg1 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ForceUnloadTaskQueuePartition", reflect.TypeOf((*MockAdminServiceServer)(nil).ForceUnloadTaskQueuePartition), arg0, arg1)
+}
+
+// GenerateLastHistoryReplicationTasks mocks base method.
+func (m *MockAdminServiceServer) GenerateLastHistoryReplicationTasks(arg0 context.Context, arg1 *adminservice.GenerateLastHistoryReplicationTasksRequest) (*adminservice.GenerateLastHistoryReplicationTasksResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GenerateLastHistoryReplicationTasks", arg0, arg1)
+	ret0, _ := ret[0].(*adminservice.GenerateLastHistoryReplicationTasksResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GenerateLastHistoryReplicationTasks indicates an expected call of GenerateLastHistoryReplicationTasks.
+func (mr *MockAdminServiceServerMockRecorder) GenerateLastHistoryReplicationTasks(arg0, arg1 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GenerateLastHistoryReplicationTasks", reflect.TypeOf((*MockAdminServiceServer)(nil).GenerateLastHistoryReplicationTasks), arg0, arg1)
 }
 
 // GetDLQMessages mocks base method.

@@ -38,6 +38,7 @@ import (
 	reflect "reflect"
 
 	historyservice "go.temporal.io/server/api/historyservice/v1"
+	repication "go.temporal.io/server/api/replication/v1"
 	gomock "go.uber.org/mock/gomock"
 )
 
@@ -62,6 +63,20 @@ func NewMockWorkflowStateReplicator(ctrl *gomock.Controller) *MockWorkflowStateR
 // EXPECT returns an object that allows the caller to indicate expected use.
 func (m *MockWorkflowStateReplicator) EXPECT() *MockWorkflowStateReplicatorMockRecorder {
 	return m.recorder
+}
+
+// ReplicateVersionedTransition mocks base method.
+func (m *MockWorkflowStateReplicator) ReplicateVersionedTransition(ctx context.Context, versionedTransition *repication.VersionedTransitionArtifact, sourceClusterName string) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ReplicateVersionedTransition", ctx, versionedTransition, sourceClusterName)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// ReplicateVersionedTransition indicates an expected call of ReplicateVersionedTransition.
+func (mr *MockWorkflowStateReplicatorMockRecorder) ReplicateVersionedTransition(ctx, versionedTransition, sourceClusterName any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReplicateVersionedTransition", reflect.TypeOf((*MockWorkflowStateReplicator)(nil).ReplicateVersionedTransition), ctx, versionedTransition, sourceClusterName)
 }
 
 // SyncWorkflowState mocks base method.

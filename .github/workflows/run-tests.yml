@@ -205,29 +205,28 @@ jobs:
       fail-fast: false
       matrix:
         runs-on: [ubuntu-20.04]
-        name: [cass_es]
-#        name: [cass_es, cass_es8, mysql8, postgres12, postgres12_pgx]
+        name: [cass_es, cass_es8, mysql8, postgres12, postgres12_pgx]
         include:
           - name: cass_es
             persistence_type: nosql
             persistence_driver: elasticsearch
             containers: [cassandra, elasticsearch]
-#          - name: cass_es8
-#            persistence_type: nosql
-#            persistence_driver: elasticsearch
-#            containers: [cassandra, elasticsearch8]
-#          - name: mysql8
-#            persistence_type: sql
-#            persistence_driver: mysql8
-#            containers: [mysql]
-#          - name: postgres12
-#            persistence_type: sql
-#            persistence_driver: postgres12
-#            containers: [postgresql]
-#          - name: postgres12_pgx
-#            persistence_type: sql
-#            persistence_driver: postgres12_pgx
-#            containers: [postgresql]
+          - name: cass_es8
+            persistence_type: nosql
+            persistence_driver: elasticsearch
+            containers: [cassandra, elasticsearch8]
+          - name: mysql8
+            persistence_type: sql
+            persistence_driver: mysql8
+            containers: [mysql]
+          - name: postgres12
+            persistence_type: sql
+            persistence_driver: postgres12
+            containers: [postgresql]
+          - name: postgres12_pgx
+            persistence_type: sql
+            persistence_driver: postgres12_pgx
+            containers: [postgresql]
     runs-on: ${{ matrix.runs-on }}
     env:
       PERSISTENCE_TYPE: ${{ matrix.persistence_type }}

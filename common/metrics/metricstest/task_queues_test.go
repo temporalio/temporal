@@ -53,28 +53,46 @@ func TestPerTaskQueueScope(t *testing.T) {
 	)
 }
 
-func TestPerTaskQueuePartitionScope_Normal(t *testing.T) {
+func TestPerTaskQueuePartitionIDScope_Normal(t *testing.T) {
 	ns := "my_ns"
 	p := tqid.UnsafeTaskQueueFamily("ns_id", "my_tq").TaskQueue(enums.TASK_QUEUE_TYPE_WORKFLOW).NormalPartition(1)
 	verifyTags(t,
-		metrics.GetPerTaskQueuePartitionScope(NewCaptureHandler(), ns, p, true, false),
+		metrics.GetPerTaskQueuePartitionIDScope(NewCaptureHandler(), ns, p, true, false),
 		map[string]string{"namespace": ns, "taskqueue": p.TaskQueue().Name(), "task_type": "Workflow", "partition": normal},
 	)
 	verifyTags(t,
-		metrics.GetPerTaskQueuePartitionScope(NewCaptureHandler(), ns, p, true, true),
+		metrics.GetPerTaskQueuePartitionIDScope(NewCaptureHandler(), ns, p, true, true),
 		map[string]string{"namespace": ns, "taskqueue": p.TaskQueue().Name(), "task_type": "Workflow", "partition": "1"},
 	)
 }
 
-func TestPerTaskQueuePartitionScope_Sticky(t *testing.T) {
+func TestPerTaskQueuePartitionIDScope_Sticky(t *testing.T) {
 	ns := "my_ns"
 	p := tqid.UnsafeTaskQueueFamily("ns_id", "my_tq").TaskQueue(enums.TASK_QUEUE_TYPE_WORKFLOW).StickyPartition("abc")
 	verifyTags(t,
-		metrics.GetPerTaskQueuePartitionScope(NewCaptureHandler(), ns, p, true, false),
+		metrics.GetPerTaskQueuePartitionIDScope(NewCaptureHandler(), ns, p, true, false),
 		map[string]string{"namespace": ns, "taskqueue": p.TaskQueue().Name(), "task_type": "Workflow", "partition": sticky},
 	)
 	verifyTags(t,
-		metrics.GetPerTaskQueuePartitionScope(NewCaptureHandler(), ns, p, true, true),
+		metrics.GetPerTaskQueuePartitionIDScope(NewCaptureHandler(), ns, p, true, true),
+		map[string]string{"namespace": ns, "taskqueue": p.TaskQueue().Name(), "task_type": "Workflow", "partition": sticky},
+	)
+}
+
+func TestPerTaskQueuePartitionTypeScope_Normal(t *testing.T) {
+	ns := "my_ns"
+	p := tqid.UnsafeTaskQueueFamily("ns_id", "my_tq").TaskQueue(enums.TASK_QUEUE_TYPE_WORKFLOW).NormalPartition(1)
+	verifyTags(t,
+		metrics.GetPerTaskQueuePartitionTypeScope(NewCaptureHandler(), ns, p, true),
+		map[string]string{"namespace": ns, "taskqueue": p.TaskQueue().Name(), "task_type": "Workflow", "partition": normal},
+	)
+}
+
+func TestPerTaskQueuePartitionTypeScope_Sticky(t *testing.T) {
+	ns := "my_ns"
+	p := tqid.UnsafeTaskQueueFamily("ns_id", "my_tq").TaskQueue(enums.TASK_QUEUE_TYPE_WORKFLOW).StickyPartition("abc")
+	verifyTags(t,
+		metrics.GetPerTaskQueuePartitionTypeScope(NewCaptureHandler(), ns, p, true),
 		map[string]string{"namespace": ns, "taskqueue": p.TaskQueue().Name(), "task_type": "Workflow", "partition": sticky},
 	)
 }

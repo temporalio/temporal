@@ -163,6 +163,16 @@ func (c *clientImpl) ForceUnloadTaskQueuePartition(
 	return c.client.ForceUnloadTaskQueuePartition(ctx, request, opts...)
 }
 
+func (c *clientImpl) GenerateLastHistoryReplicationTasks(
+	ctx context.Context,
+	request *adminservice.GenerateLastHistoryReplicationTasksRequest,
+	opts ...grpc.CallOption,
+) (*adminservice.GenerateLastHistoryReplicationTasksResponse, error) {
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return c.client.GenerateLastHistoryReplicationTasks(ctx, request, opts...)
+}
+
 func (c *clientImpl) GetDLQMessages(
 	ctx context.Context,
 	request *adminservice.GetDLQMessagesRequest,

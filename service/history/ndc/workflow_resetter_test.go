@@ -461,15 +461,17 @@ func (s *workflowResetterSuite) TestFailInflightActivity() {
 		Version:              12,
 		ScheduledEventId:     123,
 		ScheduledTime:        timestamppb.New(now.Add(-10 * time.Second)),
+		FirstScheduledTime:   timestamppb.New(now.Add(-10 * time.Second)),
 		StartedEventId:       124,
 		LastHeartbeatDetails: payloads.EncodeString("some random activity 1 details"),
 		StartedIdentity:      "some random activity 1 started identity",
 	}
 	activity2 := &persistencespb.ActivityInfo{
-		Version:          12,
-		ScheduledEventId: 456,
-		ScheduledTime:    timestamppb.New(now.Add(-10 * time.Second)),
-		StartedEventId:   common.EmptyEventID,
+		Version:            12,
+		ScheduledEventId:   456,
+		ScheduledTime:      timestamppb.New(now.Add(-10 * time.Second)),
+		FirstScheduledTime: timestamppb.New(now.Add(-10 * time.Second)),
+		StartedEventId:     common.EmptyEventID,
 	}
 	mutableState.EXPECT().GetPendingActivityInfos().Return(map[int64]*persistencespb.ActivityInfo{
 		activity1.ScheduledEventId: activity1,
@@ -486,10 +488,11 @@ func (s *workflowResetterSuite) TestFailInflightActivity() {
 	).Return(&historypb.HistoryEvent{}, nil)
 
 	mutableState.EXPECT().UpdateActivity(&persistencespb.ActivityInfo{
-		Version:          activity2.Version,
-		ScheduledEventId: activity2.ScheduledEventId,
-		ScheduledTime:    timestamppb.New(now),
-		StartedEventId:   activity2.StartedEventId,
+		Version:            activity2.Version,
+		ScheduledEventId:   activity2.ScheduledEventId,
+		ScheduledTime:      timestamppb.New(now),
+		FirstScheduledTime: timestamppb.New(now),
+		StartedEventId:     activity2.StartedEventId,
 	}).Return(nil)
 
 	err := s.workflowResetter.failInflightActivity(now, mutableState, terminateReason)
