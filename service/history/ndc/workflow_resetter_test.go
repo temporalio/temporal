@@ -986,6 +986,42 @@ func (s *workflowResetterSuite) TestReapplyEvents_Excludes() {
 	s.NoError(err)
 }
 
+func (s *workflowResetterSuite) TestReapplyContinueAsNewWorkflowEvents_ExcludeAllEvents() {
+	ctx := context.Background()
+	baseFirstEventID := int64(123)
+	baseNextEventID := int64(456)
+	baseBranchToken := []byte("some random base branch token")
+	optionExcludeAllReapplyEvents := map[enumspb.ResetReapplyExcludeType]bool{
+		enumspb.RESET_REAPPLY_EXCLUDE_TYPE_SIGNAL: true,
+		enumspb.RESET_REAPPLY_EXCLUDE_TYPE_UPDATE: true,
+		enumspb.RESET_REAPPLY_EXCLUDE_TYPE_NEXUS:  true,
+	}
+
+	mutableState := workflow.NewMockMutableState(s.controller)
+	currentWorkflow := NewMockWorkflow(s.controller)
+
+	// Assert that we don't read any history events when we are asked to exclude all reapply events.
+	s.mockExecutionMgr.EXPECT().ReadHistoryBranchByBatch(gomock.Any(), gomock.Any()).Times(0)
+	// Make sure that we don't access the mutable state of the current workflow since there is nothing to update in this case.
+	currentWorkflow.EXPECT().GetMutableState().Times(0)
+
+	lastVisitedRunID, err := s.workflowResetter.reapplyContinueAsNewWorkflowEvents(
+		ctx,
+		mutableState,
+		nil,
+		currentWorkflow,
+		s.namespaceID,
+		s.workflowID,
+		s.baseRunID,
+		baseBranchToken,
+		baseFirstEventID,
+		baseNextEventID,
+		optionExcludeAllReapplyEvents,
+	)
+	s.NoError(err)
+	s.Equal(s.baseRunID, lastVisitedRunID)
+}
+
 func (s *workflowResetterSuite) TestPagination() {
 	firstEventID := common.FirstEventID
 	nextEventID := int64(101)
