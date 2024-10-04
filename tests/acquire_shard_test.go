@@ -45,6 +45,7 @@ type AcquireShardFunctionalSuite struct {
 }
 
 func TestAcquireShardFunctionalSuite(t *testing.T) {
+	t.Parallel()
 	suite.Run(t, new(AcquireShardFunctionalSuite))
 }
 

@@ -70,6 +70,7 @@ func TestCronTestSuite(t *testing.T) {
 }
 
 func TestCronTestClientSuite(t *testing.T) {
+	t.Parallel()
 	flag.Parse()
 	suite.Run(t, new(CronTestClientSuite))
 }

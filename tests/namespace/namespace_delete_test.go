@@ -73,6 +73,7 @@ type (
 )
 
 func TestNamespaceSuite(t *testing.T) {
+	t.Parallel()
 	flag.Parse()
 	suite.Run(t, &namespaceTestSuite{})
 }
