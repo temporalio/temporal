@@ -210,27 +210,33 @@ jobs:
           - name: cass_es
             persistence_type: nosql
             persistence_driver: elasticsearch
+            extra_flags: ""
             containers: [cassandra, elasticsearch]
           - name: cass_es8
             persistence_type: nosql
             persistence_driver: elasticsearch
+            extra_flags: ""
             containers: [cassandra, elasticsearch8]
           - name: mysql8
             persistence_type: sql
             persistence_driver: mysql8
+            extra_flags: ""
             containers: [mysql]
           - name: postgres12
             persistence_type: sql
             persistence_driver: postgres12
+            extra_flags: "-parallel=2" # reduce parallelism for postgres
             containers: [postgresql]
           - name: postgres12_pgx
             persistence_type: sql
             persistence_driver: postgres12_pgx
+            extra_flags: "-parallel=2" # reduce parallelism for postgres
             containers: [postgresql]
     runs-on: ${{ matrix.runs-on }}
     env:
       PERSISTENCE_TYPE: ${{ matrix.persistence_type }}
       PERSISTENCE_DRIVER: ${{ matrix.persistence_driver }}
+      EXTRA_TEST_FLAGS: ${{ matrix.extra_flags }}
     steps:
       - uses: actions/checkout@v4
         with:
