@@ -102,6 +102,7 @@ func NewTestController(
 		HostInfoProvider:            hostInfoProvider,
 		Logger:                      resource.GetLogger(),
 		MetricsHandler:              metricsTestHandler,
+		BatchMetricsHandler:         metrics.NewBatchMetricsHandler(metricsTestHandler),
 		NamespaceRegistry:           resource.GetNamespaceRegistry(),
 		PayloadSerializer:           resource.GetPayloadSerializer(),
 		PersistenceExecutionManager: resource.GetExecutionManager(),

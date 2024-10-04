@@ -68,6 +68,7 @@ type (
 		HostInfoProvider            membership.HostInfoProvider
 		Logger                      log.Logger
 		MetricsHandler              metrics.Handler
+		BatchMetricsHandler         metrics.BatchMetricsHandler
 		NamespaceRegistry           namespace.Registry
 		PayloadSerializer           serialization.Serializer
 		PersistenceExecutionManager persistence.ExecutionManager
@@ -110,6 +111,7 @@ func (c *contextFactoryImpl) CreateContext(
 		c.ClientBean,
 		c.HistoryClient,
 		c.MetricsHandler,
+		c.BatchMetricsHandler,
 		c.PayloadSerializer,
 		c.TimeSource,
 		c.NamespaceRegistry,

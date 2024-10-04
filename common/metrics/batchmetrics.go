@@ -29,9 +29,9 @@ package metrics
 import "time"
 
 // The BatchMetrics interfaces provide a way to emit "wide events" within the codebase. If a wide event
-// implementation is not provided we default to the implementations provided below which will maintain
-// backwards compatibility by emitting each field as an individual metric. Fields can be labeled using
-// the metricDefinition.Name() accessor in the respective With() methods.
+// implementation is not provided we default to the implementation provided below which will maintain
+// backwards compatibility by emitting each field as an individual metric. In custom implementations, fields
+// can be labeled using the metricDefinition.Name() accessor within the respective With() methods.
 
 type (
 	BatchMetricsHandler interface {
@@ -40,9 +40,9 @@ type (
 
 	BatchMetric interface {
 		WithHistogram(histogramDefinition, int64) BatchMetric
-		WithTimer(timerDefinition, int64) BatchMetric
+		WithTimer(timerDefinition, time.Duration) BatchMetric
 		WithCounter(counterDefinition, int64) BatchMetric
-		WithGauge(gaugeDefinition, int64) BatchMetric
+		WithGauge(gaugeDefinition, float64) BatchMetric
 		Emit()
 	}
 
@@ -51,41 +51,42 @@ type (
 	}
 	BatchMetricImpl struct {
 		emitter Handler
-		tags    []Tag
 	}
 )
 
-func NewBatchMetricHandler(metricHandler Handler) *BatchHandlerImpl {
-	return &BatchHandlerImpl{metricHandler}
+func NewBatchMetricsHandler(metricHandler Handler) BatchHandlerImpl {
+	return BatchHandlerImpl{metricHandler}
 }
 
-// CreateBatch will emit a BatchMetric that will emit
-func (bh *BatchHandlerImpl) CreateBatch(_ string, tags ...Tag) *BatchMetricImpl {
+func (bh BatchHandlerImpl) CreateBatch(_ string, tags ...Tag) BatchMetric {
+	emitter := bh.metricsHandler
+	if len(tags) > 0 {
+		emitter = emitter.WithTags(tags...)
+	}
 	return &BatchMetricImpl{
-		emitter: bh.metricsHandler.WithTags(tags...),
-		tags:    tags,
+		emitter: emitter,
 	}
 }
 
-func (bm *BatchMetricImpl) WithHistogram(def histogramDefinition, value int64) *BatchMetricImpl {
+func (bm *BatchMetricImpl) WithHistogram(def histogramDefinition, value int64) BatchMetric {
 	def.With(bm.emitter).Record(value)
 	return bm
 }
 
-func (bm *BatchMetricImpl) WithTimer(def timerDefinition, value time.Duration) *BatchMetricImpl {
+func (bm *BatchMetricImpl) WithTimer(def timerDefinition, value time.Duration) BatchMetric {
 	def.With(bm.emitter).Record(value)
 	return bm
 }
 
-func (bm *BatchMetricImpl) WithCounter(def counterDefinition, value int64) *BatchMetricImpl {
+func (bm *BatchMetricImpl) WithCounter(def counterDefinition, value int64) BatchMetric {
 	def.With(bm.emitter).Record(value)
 	return bm
 }
 
-func (bm *BatchMetricImpl) WithGauge(def gaugeDefinition, value float64) *BatchMetricImpl {
+func (bm *BatchMetricImpl) WithGauge(def gaugeDefinition, value float64) BatchMetric {
 	def.With(bm.emitter).Record(value)
 	return bm
 }
 
-// Emit is a no-op since there's no actual wide event being sent in this implementation.
+// Emit is a no-op in this implementation since we don't actually send wide events.
 func (bm *BatchMetricImpl) Emit() {}

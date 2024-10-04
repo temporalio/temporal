@@ -128,6 +128,7 @@ type (
 		eventNotifier              events.Notifier
 		tokenSerializer            common.TaskTokenSerializer
 		metricsHandler             metrics.Handler
+		batchMetricsHandler        metrics.BatchMetricsHandler
 		logger                     log.Logger
 		throttledLogger            log.Logger
 		config                     *configs.Config
@@ -200,6 +201,7 @@ func NewEngineWithShardContext(
 		logger:                     log.With(logger, tag.ComponentHistoryEngine),
 		throttledLogger:            log.With(shard.GetThrottledLogger(), tag.ComponentHistoryEngine),
 		metricsHandler:             shard.GetMetricsHandler(),
+		batchMetricsHandler:        shard.GetBatchMetricsHandler(),
 		eventNotifier:              eventNotifier,
 		config:                     config,
 		sdkClientFactory:           sdkClientFactory,

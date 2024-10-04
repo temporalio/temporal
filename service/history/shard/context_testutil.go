@@ -153,6 +153,7 @@ func newTestContext(t *resourcetest.Test, eventsCache events.Cache, config Conte
 		stringRepr:          fmt.Sprintf("Shard(%d)", config.ShardInfo.GetShardId()),
 		executionManager:    executionManager,
 		metricsHandler:      t.MetricsHandler,
+		batchMetricsHandler: metrics.NewBatchMetricsHandler(t.MetricsHandler),
 		eventsCache:         eventsCache,
 		config:              config.Config,
 		contextTaggedLogger: t.GetLogger(),

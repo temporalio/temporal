@@ -140,6 +140,7 @@ type (
 		EsConfig              *esclient.Config
 		EsClient              esclient.Client
 		MetricsHandler        metrics.Handler
+		BatchMetricsHandler   metrics.BatchMetricsHandler
 	}
 )
 
@@ -215,6 +216,13 @@ func ServerOptionsProvider(opts []ServerOption) (serverOptionsProvider, error) {
 		if err != nil {
 			return serverOptionsProvider{}, fmt.Errorf("unable to create metrics handler: %w", err)
 		}
+	}
+
+	// BatchMetricsHandler
+	batchMetricsHandler := so.batchMetricsHandler
+	if batchMetricsHandler == nil {
+		// If no custom handler is provided we fall back to one backed by the metrics handler.
+		batchMetricsHandler = metrics.NewBatchMetricsHandler(metricHandler)
 	}
 
 	// DynamicConfigClient
@@ -312,6 +320,7 @@ func ServerOptionsProvider(opts []ServerOption) (serverOptionsProvider, error) {
 		EsConfig:              esConfig,
 		EsClient:              esClient,
 		MetricsHandler:        metricHandler,
+		BatchMetricsHandler:   batchMetricsHandler,
 	}, nil
 }
 
@@ -357,6 +366,7 @@ type (
 		NamespaceLogger            resource.NamespaceLogger
 		DynamicConfigClient        dynamicconfig.Client
 		MetricsHandler             metrics.Handler
+		BatchMetricsHandler        metrics.BatchMetricsHandler
 		EsConfig                   *esclient.Config
 		EsClient                   esclient.Client
 		TlsConfigProvider          encryption.TLSConfigProvider
@@ -439,6 +449,9 @@ func (params ServiceProviderParamsCommon) GetCommonServiceOptions(serviceName pr
 			},
 			func() metrics.Handler {
 				return params.MetricsHandler.WithTags(metrics.ServiceNameTag(serviceName))
+			},
+			func() metrics.BatchMetricsHandler {
+				return params.BatchMetricsHandler
 			},
 			func() esclient.Client {
 				return params.EsClient
