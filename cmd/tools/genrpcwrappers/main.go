@@ -36,6 +36,9 @@ import (
 
 	"go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/reflect/protoreflect"
+	"google.golang.org/protobuf/reflect/protoregistry"
 
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
@@ -95,22 +98,14 @@ var (
 	}
 	ignoreMethod = map[string]bool{
 		// TODO stream APIs are not supported. do not generate.
-		"client.admin.StreamWorkflowReplicationMessages":            true,
-		"metricsClient.admin.StreamWorkflowReplicationMessages":     true,
-		"retryableClient.admin.StreamWorkflowReplicationMessages":   true,
+		"client.admin.StreamWorkflowReplicationMessages":          true,
+		"metricsClient.admin.StreamWorkflowReplicationMessages":   true,
+		"retryableClient.admin.StreamWorkflowReplicationMessages": true,
+		// TODO(bergundy): Allow specifying custom routing for streaming messages.
 		"client.history.StreamWorkflowReplicationMessages":          true,
 		"metricsClient.history.StreamWorkflowReplicationMessages":   true,
 		"retryableClient.history.StreamWorkflowReplicationMessages": true,
 
-		// these are non-standard implementations. do not generate.
-		"client.history.DescribeHistoryHost":    true,
-		"client.history.GetReplicationMessages": true,
-		"client.history.GetReplicationStatus":   true,
-		"client.history.GetDLQTasks":            true,
-		"client.history.DeleteDLQTasks":         true,
-		"client.history.ListQueues":             true,
-		"client.history.ListTasks":              true,
-		"client.history.DeepHealthCheck":        true,
 		// these need to pick a partition. too complicated.
 		"client.matching.AddActivityTask":       true,
 		"client.matching.AddWorkflowTask":       true,
@@ -155,6 +150,30 @@ func writeTemplatedCode(w io.Writer, service service, text string) {
 	}))
 }
 
+func verifyFieldExists(t reflect.Type, path string) {
+	pathPrefix := fmt.Sprintf("%s", t)
+	parts := strings.Split(path, ".")
+	for i, part := range parts {
+		if t.Kind() != reflect.Struct {
+			panic(fmt.Errorf("%s is not a struct", pathPrefix))
+		}
+		fieldName := snakeToPascal(part)
+		f, ok := t.FieldByName(fieldName)
+		if !ok {
+			panic(fmt.Errorf("%s has no field named %s", pathPrefix, fieldName))
+		}
+		if i == len(parts)-1 {
+			return
+		}
+		ft := f.Type
+		if ft.Kind() != reflect.Pointer {
+			panic(fmt.Errorf("%s.%s is not a struct pointer", pathPrefix, fieldName))
+		}
+		t = ft.Elem()
+		pathPrefix += "." + fieldName
+	}
+}
+
 func findNestedField(t reflect.Type, name string, path string, maxDepth int) []fieldWithPath {
 	if t.Kind() != reflect.Struct || maxDepth <= 0 {
 		return nil
@@ -196,55 +215,107 @@ func tryFindOneNestedField(t reflect.Type, name string, path string, maxDepth in
 	return fields[0]
 }
 
-func makeGetHistoryClient(reqType reflect.Type) string {
+func historyRoutingOptions(reqType reflect.Type) *historyservice.RoutingOptions {
 	// this magically figures out how to get a HistoryServiceClient from a request
 	t := reqType.Elem() // we know it's a pointer
 
-	shardIdField := findNestedField(t, "ShardId", "request", 1)
-	workflowIdField := findNestedField(t, "WorkflowId", "request", 4)
-	taskTokenField := findNestedField(t, "TaskToken", "request", 2)
-	namespaceIdField := findNestedField(t, "NamespaceId", "request", 2)
-	taskInfosField := findNestedField(t, "TaskInfos", "request", 1)
+	inst := reflect.New(t)
+	reflectable, ok := inst.Interface().(interface{ ProtoReflect() protoreflect.Message })
+	if !ok {
+		panic(fmt.Sprintf("Request has no ProtoReflect method %s", t))
+	}
+	opts := reflectable.ProtoReflect().Descriptor().Options()
 
-	found := len(shardIdField) + len(workflowIdField) + len(taskTokenField) + len(taskInfosField)
-	if found < 1 {
-		panic(fmt.Sprintf("Found no routing fields in %s", t))
-	} else if found > 1 {
-		panic(fmt.Sprintf("Found more than one routing field in %s (%v, %v, %v, %v)",
-			t, shardIdField, workflowIdField, taskTokenField, taskInfosField))
+	ext, err := protoregistry.GlobalTypes.FindExtensionByName("temporal.server.api.historyservice.v1.routing")
+	if err != nil {
+		panic(fmt.Sprintf("Error finding extension: %s", err))
 	}
 
-	switch {
-	case len(shardIdField) == 1:
-		return fmt.Sprintf("shardID := %s", shardIdField[0].path)
-	case len(workflowIdField) == 1:
-		if len(namespaceIdField) == 1 {
-			return fmt.Sprintf("shardID := c.shardIDFromWorkflowID(%s, %s)", namespaceIdField[0].path, workflowIdField[0].path)
-		} else if len(namespaceIdField) == 0 {
-			panic(fmt.Sprintf("expected at least one namespace ID field in request with nesting of 2 in %s", t))
-		} else {
-			// There's more than one, assume there's a top level one (e.g.
-			// historyservice.GetWorkflowExecutionRawHistoryRequest)
-			return fmt.Sprintf("shardID := c.shardIDFromWorkflowID(request.NamespaceId, %s)", workflowIdField[0].path)
+	// Retrieve the value of the custom option
+	optionValue := proto.GetExtension(opts, ext)
+	if optionValue == nil {
+		panic("Got nil while retrieving extension from options")
+	}
+
+	routingOptions := optionValue.(*historyservice.RoutingOptions)
+	if routingOptions == nil {
+		panic(fmt.Sprintf("Request has no routing options: %s", t))
+	}
+	return routingOptions
+}
+
+func snakeToPascal(snake string) string {
+	// Split the string by underscores
+	words := strings.Split(snake, "_")
+
+	// Capitalize the first letter of each word
+	for i, word := range words {
+		// Convert first rune to upper and the rest to lower case
+		words[i] = strings.Title(strings.ToLower(word))
+	}
+
+	// Join them back into a single string
+	return strings.Join(words, "")
+}
+
+func toGetter(snake string) string {
+	parts := strings.Split(snake, ".")
+	for i, part := range parts {
+		parts[i] = "Get" + snakeToPascal(part) + "()"
+	}
+	return "request." + strings.Join(parts, ".")
+}
+
+func makeGetHistoryClient(reqType reflect.Type, routingOptions *historyservice.RoutingOptions) string {
+	// this magically figures out how to get a HistoryServiceClient from a request
+	t := reqType.Elem() // we know it's a pointer
+
+	if routingOptions.AnyHost && routingOptions.ShardId != "" && routingOptions.WorkflowId != "" && routingOptions.TaskToken != "" && routingOptions.TaskInfos != "" {
+		panic(fmt.Sprintf("Found more than one routing directive in %s", t))
+	}
+	if routingOptions.AnyHost {
+		return "shardID := c.getRandomShard()"
+	}
+	if routingOptions.ShardId != "" {
+		verifyFieldExists(t, routingOptions.ShardId)
+		return "shardID := " + toGetter(routingOptions.ShardId)
+	}
+	if routingOptions.WorkflowId != "" {
+		namespaceIdField := routingOptions.NamespaceId
+		if namespaceIdField == "" {
+			namespaceIdField = "namespace_id"
 		}
-	case len(taskTokenField) == 1:
+		verifyFieldExists(t, namespaceIdField)
+		verifyFieldExists(t, routingOptions.WorkflowId)
+		return fmt.Sprintf("shardID := c.shardIDFromWorkflowID(%s, %s)", toGetter(namespaceIdField), toGetter(routingOptions.WorkflowId))
+	}
+	if routingOptions.TaskToken != "" {
+		namespaceIdField := routingOptions.NamespaceId
+		if namespaceIdField == "" {
+			namespaceIdField = "namespace_id"
+		}
+
+		verifyFieldExists(t, namespaceIdField)
+		verifyFieldExists(t, routingOptions.TaskToken)
 		return fmt.Sprintf(`taskToken, err := c.tokenSerializer.Deserialize(%s)
 	if err != nil {
 		return nil, serviceerror.NewInvalidArgument("error deserializing task token")
 	}
-	shardID := c.shardIDFromWorkflowID(request.NamespaceId, taskToken.GetWorkflowId())
-`, taskTokenField[0].path)
-	case len(taskInfosField) == 1:
-		p := taskInfosField[0].path
+	shardID := c.shardIDFromWorkflowID(%s, taskToken.GetWorkflowId())
+`, toGetter(routingOptions.TaskToken), toGetter(namespaceIdField))
+	}
+	if routingOptions.TaskInfos != "" {
+		verifyFieldExists(t, routingOptions.TaskInfos)
+		p := toGetter(routingOptions.TaskInfos)
 		// slice needs a tiny bit of extra handling for namespace
 		return fmt.Sprintf(`// All workflow IDs are in the same shard per request
 	if len(%s) == 0 {
 		return nil, serviceerror.NewInvalidArgument("missing TaskInfos")
 	}
 	shardID := c.shardIDFromWorkflowID(%s[0].NamespaceId, %s[0].WorkflowId)`, p, p, p)
-	default:
-		panic("not reached")
 	}
+
+	panic(fmt.Sprintf("No routing directive specified on %s", t))
 }
 
 func makeGetMatchingClient(reqType reflect.Type) string {
@@ -342,7 +413,7 @@ func writeTemplatedMethod(w io.Writer, service service, impl string, m reflect.M
 		mt.NumOut() != 2 ||
 		mt.In(0).String() != "context.Context" ||
 		mt.Out(1).String() != "error" {
-		panic(m.Name + " doesn't look like a grpc handler method")
+		panic(key + " doesn't look like a grpc handler method")
 	}
 
 	reqType := mt.In(1)
@@ -362,7 +433,11 @@ func writeTemplatedMethod(w io.Writer, service service, impl string, m reflect.M
 	}
 	if impl == "client" {
 		if service.name == "history" {
-			fields["GetClient"] = makeGetHistoryClient(reqType)
+			routingOptions := historyRoutingOptions(reqType)
+			if routingOptions.Custom {
+				return
+			}
+			fields["GetClient"] = makeGetHistoryClient(reqType, routingOptions)
 		} else if service.name == "matching" {
 			fields["GetClient"] = makeGetMatchingClient(reqType)
 		}
