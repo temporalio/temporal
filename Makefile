@@ -376,9 +376,8 @@ $(TEST_OUTPUT_ROOT):
 prepare-coverage-test: $(GOTESTSUM) $(TEST_OUTPUT_ROOT)
 
 unit-test-coverage: prepare-coverage-test
-	@printf $(COLOR) $(UNIT_TEST_DIRS)
 	@printf $(COLOR) "Run unit tests with coverage..."
-	@$(GOTESTSUM) --junitfile $(NEW_REPORT) -- \
+	$(GOTESTSUM) --junitfile $(NEW_REPORT) -- \
 		$(UNIT_TEST_DIRS) -shuffle on -timeout=$(TEST_TIMEOUT) -race $(TEST_TAG_FLAG) $(SINGLE_TEST_ARGS) -coverprofile=$(NEW_COVER_PROFILE)
 
 integration-test-coverage: prepare-coverage-test
