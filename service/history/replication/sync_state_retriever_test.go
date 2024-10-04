@@ -27,6 +27,7 @@ package replication
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
@@ -55,6 +56,7 @@ type (
 		suite.Suite
 		*require.Assertions
 		workflowCache              *wcache.MockCache
+		eventBlobCache             persistence.XDCCache
 		logger                     log.Logger
 		mockShard                  *shard.ContextTest
 		controller                 *gomock.Controller
@@ -64,6 +66,7 @@ type (
 		namespaceID                string
 		execution                  *common.WorkflowExecution
 		newRunId                   string
+		workflowKey                definition.WorkflowKey
 		syncStateRetriever         *SyncStateRetrieverImpl
 		workflowConsistencyChecker *api.MockWorkflowConsistencyChecker
 	}
@@ -97,15 +100,24 @@ func (s *syncWorkflowStateSuite) SetupSuite() {
 		RunId:      uuid.New(),
 	}
 	s.newRunId = uuid.New()
+	s.workflowKey = definition.WorkflowKey{
+		NamespaceID: s.namespaceID,
+		WorkflowID:  s.execution.WorkflowId,
+		RunID:       s.execution.RunId,
+	}
 	s.workflowConsistencyChecker = api.NewMockWorkflowConsistencyChecker(s.controller)
-	s.syncStateRetriever = NewSyncStateRetriever(s.mockShard, s.workflowCache, s.workflowConsistencyChecker, s.logger)
 }
 
 func (s *syncWorkflowStateSuite) TearDownSuite() {
 }
 
 func (s *syncWorkflowStateSuite) SetupTest() {
-
+	s.eventBlobCache = persistence.NewEventsBlobCache(
+		1024*1024,
+		20*time.Second,
+		s.logger,
+	)
+	s.syncStateRetriever = NewSyncStateRetriever(s.mockShard, s.workflowCache, s.workflowConsistencyChecker, s.eventBlobCache, s.logger)
 }
 
 func (s *syncWorkflowStateSuite) TearDownTest() {
@@ -357,6 +369,19 @@ func (s *syncWorkflowStateSuite) TestGetNewRunInfo_NotFound() {
 	s.Nil(newRunInfo)
 }
 
+func (s *syncWorkflowStateSuite) addXDCCache(minEventID int64, version int64, nextEventID int64, eventBlobs []*common.DataBlob, versionHistoryItems []*history.VersionHistoryItem) {
+	s.eventBlobCache.Put(persistence.NewXDCCacheKey(
+		s.workflowKey,
+		minEventID,
+		version,
+	), persistence.NewXDCCacheValue(
+		nil,
+		versionHistoryItems,
+		eventBlobs,
+		nextEventID,
+	))
+}
+
 func (s *syncWorkflowStateSuite) TestGetSyncStateEvents() {
 	targetVersionHistoriesItems := [][]*history.VersionHistoryItem{
 		{
@@ -367,33 +392,60 @@ func (s *syncWorkflowStateSuite) TestGetSyncStateEvents() {
 			{EventId: 10, Version: 10},
 		},
 	}
+	versionHistoryItems := []*history.VersionHistoryItem{
+		{EventId: 1, Version: 10},
+		{EventId: 30, Version: 13},
+	}
 	sourceVersionHistories := &history.VersionHistories{
 		CurrentVersionHistoryIndex: 0,
 		Histories: []*history.VersionHistory{
 			{
 				BranchToken: []byte("source branchToken1"),
-				Items: []*history.VersionHistoryItem{
-					{EventId: 1, Version: 10},
-					{EventId: 20, Version: 13},
-				},
+				Items:       versionHistoryItems,
 			},
 		},
 	}
+	eventBlob := &common.DataBlob{Data: []byte("event1")}
+	getEventBlobs := func(minEventID, maxEventID int64) []*common.DataBlob {
+		eventBlobs := make([]*common.DataBlob, maxEventID-minEventID)
+		for i := 0; i < int(maxEventID-minEventID); i++ {
+			eventBlobs[i] = eventBlob
+		}
+		return eventBlobs
+	}
+
+	// get [19, 31) from DB
 	s.mockShard.Resource.ExecutionMgr.EXPECT().ReadRawHistoryBranch(gomock.Any(), &persistence.ReadHistoryBranchRequest{
 		BranchToken: sourceVersionHistories.Histories[0].GetBranchToken(),
 		MinEventID:  19,
-		MaxEventID:  21,
+		MaxEventID:  31,
 		ShardID:     s.mockShard.GetShardID(),
 		PageSize:    defaultPageSize,
-	}).Return(&persistence.ReadRawHistoryBranchResponse{
-		HistoryEventBlobs: []*common.DataBlob{
-			{Data: []byte("event1")}},
-	}, nil)
+	}).Return(&persistence.ReadRawHistoryBranchResponse{HistoryEventBlobs: getEventBlobs(19, 31)}, nil)
 
-	events, err := s.syncStateRetriever.getSyncStateEvents(context.Background(), targetVersionHistoriesItems, sourceVersionHistories)
-
+	events, err := s.syncStateRetriever.getSyncStateEvents(context.Background(), s.workflowKey, targetVersionHistoriesItems, sourceVersionHistories)
 	s.NoError(err)
-	s.NotNil(events)
+	s.Len(events, 31-19)
+
+	// get [19,21) from cache, [21, 31) from DB
+	s.mockShard.Resource.ExecutionMgr.EXPECT().ReadRawHistoryBranch(gomock.Any(), &persistence.ReadHistoryBranchRequest{
+		BranchToken: sourceVersionHistories.Histories[0].GetBranchToken(),
+		MinEventID:  21,
+		MaxEventID:  31,
+		ShardID:     s.mockShard.GetShardID(),
+		PageSize:    defaultPageSize,
+	}).Return(&persistence.ReadRawHistoryBranchResponse{HistoryEventBlobs: getEventBlobs(21, 31)}, nil)
+
+	s.addXDCCache(19, 13, 21, getEventBlobs(19, 21), versionHistoryItems)
+	events, err = s.syncStateRetriever.getSyncStateEvents(context.Background(), s.workflowKey, targetVersionHistoriesItems, sourceVersionHistories)
+	s.NoError(err)
+	s.Len(events, 31-19)
+
+	// get [19,31) from cache
+	s.addXDCCache(21, 13, 41, getEventBlobs(21, 41), versionHistoryItems)
+	events, err = s.syncStateRetriever.getSyncStateEvents(context.Background(), s.workflowKey, targetVersionHistoriesItems, sourceVersionHistories)
+	s.NoError(err)
+	s.Len(events, 31-19)
 }
 
 func (s *syncWorkflowStateSuite) TestGetSyncStateEvents_EventsUpToDate_ReturnNothing() {
@@ -416,7 +468,7 @@ func (s *syncWorkflowStateSuite) TestGetSyncStateEvents_EventsUpToDate_ReturnNot
 		},
 	}
 
-	events, err := s.syncStateRetriever.getSyncStateEvents(context.Background(), targetVersionHistoriesItems, sourceVersionHistories)
+	events, err := s.syncStateRetriever.getSyncStateEvents(context.Background(), s.workflowKey, targetVersionHistoriesItems, sourceVersionHistories)
 
 	s.NoError(err)
 	s.Nil(events)
