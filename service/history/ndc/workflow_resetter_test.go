@@ -974,6 +974,7 @@ func (s *workflowResetterSuite) TestReapplyEvents_Excludes() {
 	arg := gomock.Any()
 	ms.EXPECT().AddWorkflowExecutionSignaled(arg, arg, arg, arg, arg).Times(0)
 	ms.EXPECT().AddWorkflowExecutionUpdateAdmittedEvent(arg, arg).Times(0)
+	ms.EXPECT().AddHistoryEvent(arg, arg).Times(0)
 
 	smReg := hsm.NewRegistry()
 	smReg.RegisterEventDefinition(nexusoperations.StartedEventDefinition{})
