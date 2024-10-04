@@ -282,8 +282,16 @@ func (tv *TestVars) QueryType(key ...string) string {
 	return tv.getOrCreate("query_type", key).(string)
 }
 
-func (tv *TestVars) WithQueryType(queryTypeID string, key ...string) *TestVars {
-	return tv.cloneSet("query_type", key, queryTypeID)
+func (tv *TestVars) WithQueryType(queryType string, key ...string) *TestVars {
+	return tv.cloneSet("query_type", key, queryType)
+}
+
+func (tv *TestVars) IndexName(key ...string) string {
+	return tv.getOrCreate("index_name", key).(string)
+}
+
+func (tv *TestVars) WithIndexName(indexName string, key ...string) *TestVars {
+	return tv.cloneSet("index_name", key, indexName)
 }
 
 // ----------- Generic methods ------------
