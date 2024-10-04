@@ -240,6 +240,9 @@ message SyncVersionedTransitionTaskAttributes {
     reserved 3;
     reserved 4;
     VersionedTransitionArtifact versioned_transition_artifact = 5;
+    string namespace_id = 6;
+    string workflow_id = 7;
+    string run_id = 8;
 }
 
 message VersionedTransitionArtifact {

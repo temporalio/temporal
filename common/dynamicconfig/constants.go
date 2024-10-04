@@ -1324,7 +1324,7 @@ containing this flag is deployed to all history service nodes in the cluster.`,
 	)
 	EnableTransitionHistory = NewGlobalBoolSetting(
 		"history.enableTransitionHistory",
-		false,
+		true,
 		`EnableTransitionHistory controls whether to enable the new logic for recording the history for each state transition.
 This feature is still under development and should NOT be enabled.`,
 	)

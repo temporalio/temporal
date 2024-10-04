@@ -96,7 +96,7 @@ type (
 		// replication tasks
 		GenerateHistoryReplicationTasks(
 			eventBatches [][]*historypb.HistoryEvent,
-		) (tasks.Task, error)
+		) ([]tasks.Task, error)
 		GenerateMigrationTasks() ([]tasks.Task, int64, error)
 
 		// Generate tasks for any updated state machines on mutable state.
@@ -696,7 +696,7 @@ func (r *TaskGeneratorImpl) GenerateUserTimerTasks() error {
 
 func (r *TaskGeneratorImpl) GenerateHistoryReplicationTasks(
 	eventBatches [][]*historypb.HistoryEvent,
-) (tasks.Task, error) {
+) ([]tasks.Task, error) {
 	if len(eventBatches) == 0 {
 		return nil, nil
 	}
@@ -717,12 +717,14 @@ func (r *TaskGeneratorImpl) GenerateHistoryReplicationTasks(
 		}
 	}
 
-	return &tasks.HistoryReplicationTask{
-		// TaskID, VisibilityTimestamp is set by shard
-		WorkflowKey:  r.mutableState.GetWorkflowKey(),
-		FirstEventID: firstEvent.GetEventId(),
-		NextEventID:  lastEvent.GetEventId() + 1,
-		Version:      version,
+	return []tasks.Task{
+		&tasks.HistoryReplicationTask{
+			// TaskID, VisibilityTimestamp is set by shard
+			WorkflowKey:  r.mutableState.GetWorkflowKey(),
+			FirstEventID: firstEvent.GetEventId(),
+			NextEventID:  lastEvent.GetEventId() + 1,
+			Version:      version,
+		},
 	}, nil
 }
 

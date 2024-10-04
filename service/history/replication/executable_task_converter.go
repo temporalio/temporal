@@ -85,8 +85,9 @@ func (e *executableTaskConverterImpl) convertOne(
 	} else {
 		taskCreationTime = time.Now().UTC()
 	}
-
+	println("xinwduan: ", replicationTask.GetTaskType().String())
 	switch replicationTask.GetTaskType() {
+
 	case enumsspb.REPLICATION_TASK_TYPE_SYNC_SHARD_STATUS_TASK: // TODO to be deprecated
 		return NewExecutableNoopTask(
 			e.processToolBox,
@@ -151,6 +152,14 @@ func (e *executableTaskConverterImpl) convertOne(
 		)
 	case enumsspb.REPLICATION_TASK_TYPE_VERIFY_VERSIONED_TRANSITION_TASK:
 		return NewExecutableVerifyVersionedTransitionTask(
+			e.processToolBox,
+			replicationTask.SourceTaskId,
+			taskCreationTime,
+			taskClusterName,
+			replicationTask,
+		)
+	case enumsspb.REPLICATION_TASK_TYPE_SYNC_VERSIONED_TRANSITION_TASK:
+		return NewExecutableSyncVersionedTransitionTask(
 			e.processToolBox,
 			replicationTask.SourceTaskId,
 			taskCreationTime,

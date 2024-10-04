@@ -362,6 +362,7 @@ func (s *SyncStateRetrieverImpl) getMutation(mutableState workflow.MutableState,
 		SubStateMachineTombstoneBatches: tombstones,
 		SignalRequestedIds:              signalRequestedIds,
 		ExecutionInfo:                   mutableStateClone.ExecutionInfo,
+		ExecutionState:                  mutableStateClone.ExecutionState,
 	}, nil
 }
 

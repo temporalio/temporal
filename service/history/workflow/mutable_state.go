@@ -293,6 +293,8 @@ type (
 		IsWorkflowPendingOnWorkflowTaskBackoff() bool
 		UpdateDuplicatedResource(resourceDedupKey definition.DeduplicationID)
 		UpdateActivityInfo(*historyservice.ActivitySyncInfo, bool) error
+		ApplyMutation(mutation *persistencespb.WorkflowMutableStateMutation) error
+		ApplySnapshot(snapshot *persistencespb.WorkflowMutableState) error
 		ApplyActivityTaskCancelRequestedEvent(*historypb.HistoryEvent) error
 		ApplyActivityTaskCanceledEvent(*historypb.HistoryEvent) error
 		ApplyActivityTaskCompletedEvent(*historypb.HistoryEvent) error
