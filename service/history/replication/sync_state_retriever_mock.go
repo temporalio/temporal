@@ -41,6 +41,7 @@ import (
 	history "go.temporal.io/server/api/history/v1"
 	persistence "go.temporal.io/server/api/persistence/v1"
 	workflow "go.temporal.io/server/service/history/workflow"
+	cache "go.temporal.io/server/service/history/workflow/cache"
 	gomock "go.uber.org/mock/gomock"
 )
 
@@ -83,18 +84,18 @@ func (mr *MockSyncStateRetrieverMockRecorder) GetSyncWorkflowStateArtifact(ctx, 
 }
 
 // GetSyncWorkflowStateArtifactFromMutableState mocks base method.
-func (m *MockSyncStateRetriever) GetSyncWorkflowStateArtifactFromMutableState(ctx context.Context, namespaceID string, execution *common.WorkflowExecution, mutableState workflow.MutableState, targetVersionedTransition *persistence.VersionedTransition, targetVersionHistories [][]*history.VersionHistoryItem) (*SyncStateResult, error) {
+func (m *MockSyncStateRetriever) GetSyncWorkflowStateArtifactFromMutableState(ctx context.Context, namespaceID string, execution *common.WorkflowExecution, mutableState workflow.MutableState, targetVersionedTransition *persistence.VersionedTransition, targetVersionHistories [][]*history.VersionHistoryItem, releaseFunc cache.ReleaseCacheFunc) (*SyncStateResult, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetSyncWorkflowStateArtifactFromMutableState", ctx, namespaceID, execution, mutableState, targetVersionedTransition, targetVersionHistories)
+	ret := m.ctrl.Call(m, "GetSyncWorkflowStateArtifactFromMutableState", ctx, namespaceID, execution, mutableState, targetVersionedTransition, targetVersionHistories, releaseFunc)
 	ret0, _ := ret[0].(*SyncStateResult)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // GetSyncWorkflowStateArtifactFromMutableState indicates an expected call of GetSyncWorkflowStateArtifactFromMutableState.
-func (mr *MockSyncStateRetrieverMockRecorder) GetSyncWorkflowStateArtifactFromMutableState(ctx, namespaceID, execution, mutableState, targetVersionedTransition, targetVersionHistories any) *gomock.Call {
+func (mr *MockSyncStateRetrieverMockRecorder) GetSyncWorkflowStateArtifactFromMutableState(ctx, namespaceID, execution, mutableState, targetVersionedTransition, targetVersionHistories, releaseFunc any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetSyncWorkflowStateArtifactFromMutableState", reflect.TypeOf((*MockSyncStateRetriever)(nil).GetSyncWorkflowStateArtifactFromMutableState), ctx, namespaceID, execution, mutableState, targetVersionedTransition, targetVersionHistories)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetSyncWorkflowStateArtifactFromMutableState", reflect.TypeOf((*MockSyncStateRetriever)(nil).GetSyncWorkflowStateArtifactFromMutableState), ctx, namespaceID, execution, mutableState, targetVersionedTransition, targetVersionHistories, releaseFunc)
 }
 
 // MocklastUpdatedStateTransitionGetter is a mock of lastUpdatedStateTransitionGetter interface.
