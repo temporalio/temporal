@@ -138,7 +138,7 @@ service MatchingService {
     
 
     // Force unloading a task queue. Used for testing only.
-    rpc ForceUnloadTaskQueue (ForceUnloadTaskQueueRequest) returns (ForceUnloadTaskQueueResponse) {}
+    rpc ForceUnloadTaskQueuePartition (ForceUnloadTaskQueuePartitionRequest) returns (ForceUnloadTaskQueuePartitionResponse) {}
 
     // Update task queue user data in owning node for all updates in namespace.
     // All user data updates must first go through the task queue owner using the `UpdateWorkerBuildIdCompatibility`

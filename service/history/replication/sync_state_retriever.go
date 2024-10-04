@@ -53,8 +53,6 @@ import (
 )
 
 const (
-	Mutation ResultType = iota
-	Snapshot
 	defaultPageSize = 32
 )
 
@@ -80,6 +78,7 @@ type (
 			mutableState workflow.MutableState,
 			targetVersionedTransition *persistencepb.VersionedTransition,
 			targetVersionHistories [][]*history.VersionHistoryItem,
+			releaseFunc wcache.ReleaseCacheFunc,
 		) (*SyncStateResult, error)
 	}
 
@@ -153,7 +152,7 @@ func (s *SyncStateRetrieverImpl) GetSyncWorkflowStateArtifact(
 		}
 	}
 
-	return s.getSyncStateResult(ctx, namespaceID, execution, mu, targetCurrentVersionedTransition, versionHistoriesItems, &releaseFunc)
+	return s.getSyncStateResult(ctx, namespaceID, execution, mu, targetCurrentVersionedTransition, versionHistoriesItems, releaseFunc)
 }
 
 func (s *SyncStateRetrieverImpl) GetSyncWorkflowStateArtifactFromMutableState(
@@ -163,8 +162,9 @@ func (s *SyncStateRetrieverImpl) GetSyncWorkflowStateArtifactFromMutableState(
 	mu workflow.MutableState,
 	targetCurrentVersionedTransition *persistencepb.VersionedTransition,
 	targetVersionHistories [][]*history.VersionHistoryItem,
+	releaseFunc wcache.ReleaseCacheFunc,
 ) (_ *SyncStateResult, retError error) {
-	return s.getSyncStateResult(ctx, namespaceID, execution, mu, targetCurrentVersionedTransition, targetVersionHistories, nil)
+	return s.getSyncStateResult(ctx, namespaceID, execution, mu, targetCurrentVersionedTransition, targetVersionHistories, releaseFunc)
 }
 
 func (s *SyncStateRetrieverImpl) getSyncStateResult(
@@ -174,7 +174,7 @@ func (s *SyncStateRetrieverImpl) getSyncStateResult(
 	mu workflow.MutableState,
 	targetCurrentVersionedTransition *persistencepb.VersionedTransition,
 	targetVersionHistories [][]*history.VersionHistoryItem,
-	cacheReleaseFunc *wcache.ReleaseCacheFunc,
+	cacheReleaseFunc wcache.ReleaseCacheFunc,
 ) (_ *SyncStateResult, retError error) {
 	shouldReturnMutation := func() bool {
 		if targetCurrentVersionedTransition == nil {
@@ -227,8 +227,7 @@ func (s *SyncStateRetrieverImpl) getSyncStateResult(
 	sourceVersionHistories := versionhistory.CopyVersionHistories(mu.GetExecutionInfo().VersionHistories)
 	sourceTransitionHistory := workflow.CopyVersionedTransitions(mu.GetExecutionInfo().TransitionHistory)
 	if cacheReleaseFunc != nil {
-		(*cacheReleaseFunc)(nil)
-		*cacheReleaseFunc = nil
+		cacheReleaseFunc(nil)
 	}
 
 	if len(newRunId) > 0 {
