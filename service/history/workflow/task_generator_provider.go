@@ -31,10 +31,7 @@ import (
 )
 
 var (
-	// The default value is just for testing purpose,
-	// so we don't have to specify its value in every test.
-	// If TaskGeneratorFactory is not provided as an fx Option,
-	// fx.Populate in fx.go and server start up will still fail.
+	// TODO: do this properly though fx
 	taskGeneratorProvider atomic.Value
 )
 
@@ -45,6 +42,14 @@ type (
 
 	taskGeneratorProviderImpl struct{}
 )
+
+func init() {
+	// This default value is just for testing purpose,
+	// so we don't have to specify its value in every test.
+	// If TaskGeneratorProvider is not provided as an fx Option,
+	// fx.Invoke in fx.go and server start up will still fail.
+	taskGeneratorProvider.Store(NewTaskGeneratorProvider())
+}
 
 func NewTaskGeneratorProvider() TaskGeneratorProvider {
 	return &taskGeneratorProviderImpl{}
