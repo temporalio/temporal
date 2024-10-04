@@ -25,10 +25,10 @@ on:
         description: "sqlite"
         type: boolean
         default: false
-      mysql8:
-        description: "mysql8"
-        type: boolean
-        default: false
+#      mysql8:
+#        description: "mysql8"
+#        type: boolean
+#        default: false
       postgres12:
         description: "postgres12"
         type: boolean
@@ -40,6 +40,10 @@ on:
       test_name:
         description: "[Single Test Only] Name of the test to run (i.e. 'TestAcquireShard_DeadlineExceededErrorSuite' or 'TestFunctionalSuite/TestUpdateWorkflow')"
         type: string
+      test_directory:
+        description: "[Single Test Only] Directory to run 'go test' in"
+        type: string
+        default: "./tests"
       timeout_minutes:
         description: "[Single Test Only] Test timeout in minutes"
         type: number
@@ -271,6 +275,7 @@ jobs:
       PERSISTENCE_TYPE: ${{ matrix.persistence_type }}
       PERSISTENCE_DRIVER: ${{ matrix.persistence_driver }}
       SINGLE_TEST_ARGS: ${{ needs.set-up-functional-test.outputs.single_test_args }}
+      FUNCTIONAL_TEST_ROOT: ${{ inputs.test_directory }}
       TEST_TIMEOUT: ${{ needs.set-up-functional-test.outputs.test_timeout }}
       BUILDKITE_MESSAGE: "{\"job\": \"functional-test\", \"db\": \"${{ matrix.persistence_driver }}\"}"
     steps:

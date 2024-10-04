@@ -82,7 +82,7 @@ ALL_SCRIPTS     := $(shell find . -name "*.sh")
 MAIN_BRANCH    := main
 
 TEST_DIRS       := $(sort $(dir $(filter %_test.go,$(ALL_SRC))))
-FUNCTIONAL_TEST_ROOT          := ./tests
+FUNCTIONAL_TEST_ROOT          ?= ./tests
 FUNCTIONAL_TEST_XDC_ROOT      := ./tests/xdc
 FUNCTIONAL_TEST_NDC_ROOT      := ./tests/ndc
 DB_INTEGRATION_TEST_ROOT      := ./common/persistence/tests
