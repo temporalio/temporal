@@ -211,7 +211,7 @@ func (t *MatcherTestSuite) testRemoteSyncMatch(taskSource enumsspb.TaskSource) {
 
 func (t *MatcherTestSuite) TestRejectSyncMatchWhenBacklog() {
 	historyTask := newInternalTaskForSyncMatch(randomTaskInfo().Data, nil)
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 
 	// sync match happens when there is no backlog
 	t.client.EXPECT().PollWorkflowTaskQueue(gomock.Any(), gomock.Any(), gomock.Any()).Return(&matchingservice.PollWorkflowTaskQueueResponse{}, errMatchingHostThrottleTest)
@@ -236,6 +236,8 @@ func (t *MatcherTestSuite) TestRejectSyncMatchWhenBacklog() {
 
 	// should not allow sync match when there is an old task in backlog
 	oldBacklogTask := newInternalTaskFromBacklog(randomTaskInfoWithAge(time.Minute), nil)
+	time.Sleep(time.Second)
+	t.client.EXPECT().AddWorkflowTask(gomock.Any(), gomock.Any(), gomock.Any()).Return(&matchingservice.AddWorkflowTaskResponse{}, errMatchingHostThrottleTest)
 	go t.childMatcher.MustOffer(ctx, oldBacklogTask, intruptC) //nolint:errcheck
 	time.Sleep(time.Millisecond)
 	happened, err = t.childMatcher.Offer(ctx, historyTask)
