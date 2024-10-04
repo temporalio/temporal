@@ -151,3 +151,35 @@ func TestClockedRateLimiter_Wait_DeadlineWouldExceed(t *testing.T) {
 	t.Cleanup(cancel)
 	assert.ErrorIs(t, rl.Wait(ctx), quotas.ErrRateLimiterReservationWouldExceedContextDeadline)
 }
+
+func TestClockedRateLimiter_Wait_Recycle(t *testing.T) {
+	t.Parallel()
+
+	ts := clock.NewEventTimeSource()
+	rl := quotas.NewClockedRateLimiter(rate.NewLimiter(1, 1), ts)
+	ctx := context.Background()
+
+	// take first token
+	assert.NoError(t, rl.Wait(ctx))
+
+	// wait for next token and report when success
+	gotToken := false
+	waiting := make(chan struct{})
+	done := make(chan struct{})
+	go func() {
+		go func() {
+			assert.NoError(t, rl.Wait(ctx))
+		}()
+		waiting <- struct{}{}
+		gotToken = true
+		done <- struct{}{}
+	}()
+
+	// once a waiter exists, recycle the token instead of advancing time
+	<-waiting
+	rl.RecycleToken()
+
+	// once done, gotToken should be true
+	<-done
+	assert.True(t, gotToken)
+}
