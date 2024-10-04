@@ -1521,10 +1521,12 @@ func (s *matchingEngineSuite) TestForceUnloadTaskQueue() {
 	s.NoError(err)
 
 	// Force unload the sticky queue
-	unloadResp, err := s.matchingEngine.ForceUnloadTaskQueue(ctx, &matchingservice.ForceUnloadTaskQueueRequest{
-		NamespaceId:   namespaceId,
-		TaskQueue:     stickyQueue.Name,
-		TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+	unloadResp, err := s.matchingEngine.ForceUnloadTaskQueuePartition(ctx, &matchingservice.ForceUnloadTaskQueuePartitionRequest{
+		NamespaceId: namespaceId,
+		TaskQueuePartition: &taskqueuespb.TaskQueuePartition{
+			TaskQueue:     stickyQueue.Name,
+			TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+		},
 	})
 	s.NoError(err)
 	s.NotNil(unloadResp)
