@@ -28,7 +28,6 @@ package tests
 import (
 	"context"
 	"errors"
-	"flag"
 	"fmt"
 	"math/rand"
 	"strconv"
@@ -83,7 +82,6 @@ const (
 
 func TestVersioningFunctionalSuite(t *testing.T) {
 	t.Parallel()
-	flag.Parse()
 	suite.Run(t, new(VersioningIntegSuite))
 }
 

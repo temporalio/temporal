@@ -26,7 +26,6 @@ package tests
 
 import (
 	"errors"
-	"flag"
 	"fmt"
 	"strings"
 	"sync/atomic"
@@ -89,7 +88,6 @@ type (
 
 func TestScheduleFunctionalSuite(t *testing.T) {
 	t.Parallel()
-	flag.Parse()
 	suite.Run(t, new(ScheduleFunctionalSuite))
 }
 

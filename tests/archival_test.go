@@ -27,7 +27,6 @@ package tests
 import (
 	"bytes"
 	"encoding/binary"
-	"flag"
 	"fmt"
 	"strconv"
 	"testing"
@@ -78,7 +77,6 @@ type (
 
 func TestArchivalSuite(t *testing.T) {
 	// TODO: archival doesn't support parallel yet: t.Parallel()
-	flag.Parse()
 	s := new(ArchivalSuite)
 	dynamicConfigOverrides := map[dynamicconfig.Key]any{
 		dynamicconfig.RetentionTimerJitterDuration.Key():  time.Second,

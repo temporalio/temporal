@@ -27,7 +27,6 @@ package tests
 import (
 	"bytes"
 	"encoding/binary"
-	"flag"
 	"testing"
 	"time"
 
@@ -53,7 +52,6 @@ type DescribeTestSuite struct {
 
 func TestDescribeTestSuite(t *testing.T) {
 	t.Parallel()
-	flag.Parse()
 	suite.Run(t, new(DescribeTestSuite))
 }
 

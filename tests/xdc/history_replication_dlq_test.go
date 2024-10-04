@@ -28,7 +28,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"flag"
 	"fmt"
 	"math"
 	"strconv"
@@ -132,7 +131,6 @@ type (
 
 func TestHistoryReplicationDLQSuite(t *testing.T) {
 	t.Parallel()
-	flag.Parse()
 	for _, tc := range []struct {
 		name                    string
 		enableQueueV2           bool

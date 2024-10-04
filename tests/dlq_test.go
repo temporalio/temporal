@@ -30,7 +30,6 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
-	"flag"
 	"fmt"
 	"io"
 	"os"
@@ -119,7 +118,6 @@ const (
 
 func TestDLQSuite(t *testing.T) {
 	t.Parallel()
-	flag.Parse()
 	suite.Run(t, new(DLQSuite))
 }
 

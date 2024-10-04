@@ -27,7 +27,6 @@ package tests
 import (
 	"bytes"
 	"encoding/binary"
-	"flag"
 	"fmt"
 	"strconv"
 	"testing"
@@ -55,7 +54,6 @@ type ContinueAsNewTestSuite struct {
 
 func TestContinueAsNewTestSuite(t *testing.T) {
 	t.Parallel()
-	flag.Parse()
 	suite.Run(t, new(ContinueAsNewTestSuite))
 }
 

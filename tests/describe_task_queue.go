@@ -24,7 +24,6 @@ package tests
 
 import (
 	"context"
-	"flag"
 	"testing"
 	"time"
 
@@ -52,7 +51,6 @@ type (
 
 func TestDescribeTaskQueueSuite(t *testing.T) {
 	t.Parallel()
-	flag.Parse()
 	suite.Run(t, new(DescribeTaskQueueSuite))
 }
 

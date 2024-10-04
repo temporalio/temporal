@@ -27,7 +27,6 @@
 package xdc
 
 import (
-	"flag"
 	"fmt"
 	"os"
 	"sync"
@@ -88,7 +87,6 @@ type AdvVisCrossDCTestSuite struct {
 
 func TestAdvVisCrossDCTestSuite(t *testing.T) {
 	t.Parallel()
-	flag.Parse()
 	suite.Run(t, new(AdvVisCrossDCTestSuite))
 }
 

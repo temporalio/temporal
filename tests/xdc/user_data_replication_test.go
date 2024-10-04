@@ -29,7 +29,6 @@
 package xdc
 
 import (
-	"flag"
 	"fmt"
 	"testing"
 	"time"
@@ -67,7 +66,6 @@ type (
 
 func TestUserDataReplicationTestSuite(t *testing.T) {
 	t.Parallel()
-	flag.Parse()
 	suite.Run(t, new(UserDataReplicationTestSuite))
 }
 

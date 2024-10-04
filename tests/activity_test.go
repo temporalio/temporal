@@ -29,7 +29,6 @@ import (
 	"context"
 	"encoding/binary"
 	"errors"
-	"flag"
 	"math/rand"
 	"sync"
 	"sync/atomic"
@@ -70,7 +69,6 @@ type ActivityClientTestSuite struct {
 
 func TestActivityTestSuite(t *testing.T) {
 	t.Parallel()
-	flag.Parse()
 	suite.Run(t, &ActivityTestSuite{})
 }
 

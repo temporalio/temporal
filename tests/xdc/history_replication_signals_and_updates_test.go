@@ -31,7 +31,6 @@ package xdc
 import (
 	"context"
 	"errors"
-	"flag"
 	"fmt"
 	"testing"
 	"time"
@@ -126,7 +125,6 @@ const (
 
 func TestHistoryReplicationSignalsAndUpdatesTestSuite(t *testing.T) {
 	t.Parallel()
-	flag.Parse()
 	suite.Run(t, new(hrsuTestSuite))
 }
 

@@ -28,7 +28,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/binary"
-	"flag"
 	"testing"
 	"time"
 
@@ -71,19 +70,16 @@ type GetHistoryFunctionalSuite struct {
 
 func TestRawHistorySuite(t *testing.T) {
 	t.Parallel()
-	flag.Parse()
 	suite.Run(t, new(RawHistorySuite))
 }
 
 func TestRawHistoryClientSuite(t *testing.T) {
 	t.Parallel()
-	flag.Parse()
 	suite.Run(t, new(RawHistoryClientSuite))
 }
 
 func TestGetHistoryFunctionalSuite(t *testing.T) {
 	t.Parallel()
-	flag.Parse()
 	suite.Run(t, new(GetHistoryFunctionalSuite))
 }
 

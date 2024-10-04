@@ -26,7 +26,6 @@ package namespace
 
 import (
 	"errors"
-	"flag"
 	"fmt"
 	"os"
 	"strconv"
@@ -74,7 +73,6 @@ type (
 
 func TestNamespaceSuite(t *testing.T) {
 	t.Parallel()
-	flag.Parse()
 	suite.Run(t, &namespaceTestSuite{})
 }
 
