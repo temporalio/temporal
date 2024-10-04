@@ -445,10 +445,6 @@ func (tm *TaskMatcher) PollForQuery(ctx context.Context, pollMetadata *pollMetad
 	return task, err
 }
 
-/*
-Note: Called for every poll, not applied for every poll. Applied to every minute, could reduce to 5-10s.
-*/
-
 // UpdateRatelimit updates the task dispatch rate
 func (tm *TaskMatcher) UpdateRatelimit(rpsPtr *float64) {
 	if rpsPtr == nil {
