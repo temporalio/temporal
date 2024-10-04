@@ -76,7 +76,7 @@ func NewTaskRefresher(
 	return &TaskRefresherImpl{
 		shard: shard,
 
-		taskGeneratorProvider: taskGeneratorProvider.Load().(TaskGeneratorProvider),
+		taskGeneratorProvider: *taskGeneratorProvider.Load(),
 	}
 }
 
