@@ -25,6 +25,8 @@
 package workflow
 
 import (
+	"sync/atomic"
+
 	"go.temporal.io/server/service/history/shard"
 )
 
@@ -33,7 +35,7 @@ var (
 	// so we don't have to specify its value in every test.
 	// If TaskGeneratorFactory is not provided as an fx Option,
 	// fx.Populate in fx.go and server start up will still fail.
-	taskGeneratorProvider = NewTaskGeneratorProvider()
+	taskGeneratorProvider atomic.Value
 )
 
 type (
