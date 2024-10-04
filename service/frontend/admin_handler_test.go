@@ -1684,6 +1684,64 @@ func (s *adminHandlerSuite) TestListQueues_Err() {
 	s.ErrorIs(err, assert.AnError)
 }
 
+func (s *adminHandlerSuite) TestForceUnloadTaskQueuePartition() {
+	handler := s.handler
+	ctx := context.Background()
+	s.mockNamespaceCache.EXPECT().GetNamespaceID(gomock.Any()).Return(s.namespaceID, nil).AnyTimes()
+
+	type test struct {
+		Name     string
+		Request  *adminservice.ForceUnloadTaskQueuePartitionRequest
+		Expected error
+	}
+	// request validation tests
+	errorCases := []test{
+		{
+			Name:     "nil request",
+			Request:  nil,
+			Expected: &serviceerror.InvalidArgument{Message: "Request is nil."},
+		},
+		{
+			Name:     "empty request",
+			Request:  &adminservice.ForceUnloadTaskQueuePartitionRequest{},
+			Expected: &serviceerror.InvalidArgument{Message: "Namespace is not set on request."},
+		},
+	}
+	for _, test := range errorCases {
+		s.T().Run(test.Name, func(t *testing.T) {
+			resp, err := handler.ForceUnloadTaskQueuePartition(ctx, test.Request)
+			s.Equal(test.Expected, err)
+			s.Nil(resp)
+		})
+	}
+
+	// valid request
+	tqPartitionRequest := &taskqueuespb.TaskQueuePartition{
+		TaskQueue:     "hello-world",
+		TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+		PartitionId:   &taskqueuespb.TaskQueuePartition_NormalPartitionId{NormalPartitionId: 0},
+	}
+
+	// request-response structures for mocking matching
+	matchingMockRequest := &matchingservice.ForceUnloadTaskQueuePartitionRequest{
+		NamespaceId:        s.namespaceID.String(),
+		TaskQueuePartition: tqPartitionRequest,
+	}
+	matchingMockResponse := &matchingservice.ForceUnloadTaskQueuePartitionResponse{
+		WasLoaded: true,
+	}
+	s.mockMatchingClient.EXPECT().ForceUnloadTaskQueuePartition(ctx, matchingMockRequest).Return(matchingMockResponse, nil).Times(1)
+
+	resp, err := handler.ForceUnloadTaskQueuePartition(ctx, &adminservice.ForceUnloadTaskQueuePartitionRequest{
+		Namespace:          s.namespace.String(),
+		TaskQueuePartition: tqPartitionRequest,
+	})
+
+	s.NoError(err)
+	s.NotNil(resp)
+	s.True(resp.WasLoaded)
+}
+
 func (s *adminHandlerSuite) TestDescribeTaskQueuePartition() {
 	handler := s.handler
 	ctx := context.Background()

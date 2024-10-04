@@ -1715,9 +1715,43 @@ func (adh *AdminHandler) DescribeTaskQueuePartition(
 		return nil, err
 	}
 
-	// The response returned is for multiple build Id's
 	return &adminservice.DescribeTaskQueuePartitionResponse{
 		VersionsInfoInternal: resp.VersionsInfoInternal,
+	}, nil
+}
+
+// ForceUnloadTaskQueuePartition forcefully unloads a given task queue partition
+func (adh *AdminHandler) ForceUnloadTaskQueuePartition(
+	ctx context.Context,
+	request *adminservice.ForceUnloadTaskQueuePartitionRequest,
+) (_ *adminservice.ForceUnloadTaskQueuePartitionResponse, err error) {
+	defer log.CapturePanic(adh.logger, &err)
+
+	// validate request
+	if request == nil {
+		return nil, errRequestNotSet
+	}
+	if len(request.Namespace) == 0 {
+		return nil, errNamespaceNotSet
+	}
+
+	namespaceID, err := adh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
+	if err != nil {
+		return nil, err
+	}
+
+	resp, err := adh.matchingClient.ForceUnloadTaskQueuePartition(ctx, &matchingservice.ForceUnloadTaskQueuePartitionRequest{
+		NamespaceId:        namespaceID.String(),
+		TaskQueuePartition: request.GetTaskQueuePartition(),
+	})
+
+	if err != nil {
+		return nil, err
+	}
+
+	// The response returned is for multiple build Id's
+	return &adminservice.ForceUnloadTaskQueuePartitionResponse{
+		WasLoaded: resp.WasLoaded,
 	}, nil
 }
 
@@ -2174,26 +2208,9 @@ func (adh *AdminHandler) SyncWorkflowState(ctx context.Context, request *adminse
 	if err != nil {
 		return nil, err
 	}
-	switch att := res.Attributes.(type) {
-	case *historyservice.SyncWorkflowStateResponse_Mutation:
-		return &adminservice.SyncWorkflowStateResponse{
-			Attributes: &adminservice.SyncWorkflowStateResponse_Mutation{
-				Mutation: res.GetMutation(),
-			},
-			EventBatches: res.EventBatches,
-			NewRunInfo:   res.NewRunInfo,
-		}, nil
-	case *historyservice.SyncWorkflowStateResponse_Snapshot:
-		return &adminservice.SyncWorkflowStateResponse{
-			Attributes: &adminservice.SyncWorkflowStateResponse_Snapshot{
-				Snapshot: res.GetSnapshot(),
-			},
-			EventBatches: res.EventBatches,
-			NewRunInfo:   res.NewRunInfo,
-		}, nil
-	default:
-		return nil, serviceerror.NewInternal(fmt.Sprintf("unknown type in SyncWorkflowStateResponse: %T", att))
-	}
+	return &adminservice.SyncWorkflowStateResponse{
+		VersionedTransitionArtifact: res.VersionedTransitionArtifact,
+	}, nil
 }
 
 func (adh *AdminHandler) GenerateLastHistoryReplicationTasks(

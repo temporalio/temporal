@@ -573,12 +573,11 @@ message SyncWorkflowStateRequest {
 }
 
 message SyncWorkflowStateResponse {
-  oneof attributes {
-    replication.v1.SyncWorkflowStateMutationAttributes mutation = 1;
-    replication.v1.SyncWorkflowStateSnapshotAttributes snapshot = 2;
-  }
-  repeated temporal.api.common.v1.DataBlob event_batches = 3;
-  replication.v1.NewRunInfo new_run_info = 4;
+  reserved 1;
+  reserved 2;
+  reserved 3;
+  reserved 4;
+  replication.v1.VersionedTransitionArtifact versioned_transition_artifact = 5;
 }
 
 message GenerateLastHistoryReplicationTasksRequest {
@@ -608,4 +607,13 @@ message InternalTaskQueueStatus {
 message DescribeTaskQueuePartitionResponse {
   // contains k-v pairs of the type: buildID -> TaskQueueVersionInfoInternal
   map<string, temporal.server.api.taskqueue.v1.TaskQueueVersionInfoInternal> versions_info_internal = 1;
+}
+
+message ForceUnloadTaskQueuePartitionRequest {
+  string namespace = 1;
+  temporal.server.api.taskqueue.v1.TaskQueuePartition task_queue_partition = 2;
+}
+
+message ForceUnloadTaskQueuePartitionResponse {
+  bool was_loaded = 1;
 }

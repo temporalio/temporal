@@ -48,6 +48,7 @@ import (
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/service/history/tasks"
+	"google.golang.org/protobuf/encoding/prototext"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -111,22 +112,39 @@ func AdminShowWorkflow(c *cli.Context, clientFactory ClientFactory) error {
 
 	var historyBatches []*historypb.History
 	totalSize := 0
+	var errs []error
 	for idx, b := range histories {
 		totalSize += len(b.Data)
 		fmt.Fprintf(c.App.Writer, "======== batch %v, blob len: %v ======\n", idx+1, len(b.Data))
 		historyBatch, err := serializer.DeserializeEvents(b)
 		if err != nil {
-			return fmt.Errorf("unable to deserialize Events: %s", err)
+			err := fmt.Errorf("unable to deserialize Events: %s", err)
+			fmt.Fprintln(c.App.Writer, err)
+			errs = append(errs, err)
+			continue
 		}
 		historyBatches = append(historyBatches, &historypb.History{Events: historyBatch})
 		encoder := codec.NewJSONPBEncoder()
 		data, err := encoder.EncodeHistoryEvents(historyBatch)
 		if err != nil {
-			return fmt.Errorf("unable to encode History Events: %s", err)
+			err := fmt.Errorf("unable to encode History Events: %s", err)
+			fmt.Fprintln(c.App.Writer, err)
+			text, terr := prototext.Marshal(&historypb.History{Events: historyBatch})
+			if terr == nil {
+				fmt.Fprintln(c.App.Writer, "marshal to text:")
+				fmt.Fprintln(c.App.Writer, string(text))
+			}
+			errs = append(errs, err)
+			continue
 		}
 		fmt.Fprintln(c.App.Writer, string(data))
 	}
 	fmt.Fprintf(c.App.Writer, "======== total batches %v, total blob len: %v ======\n", len(histories), totalSize)
+
+	err = errors.Join(errs...)
+	if err != nil {
+		return err
+	}
 
 	if outputFileName != "" {
 		encoder := codec.NewJSONPBEncoder()
@@ -375,9 +393,8 @@ func AdminGetShardID(c *cli.Context) error {
 
 // getCategory first searches the registry for the category by the [tasks.Category.Name].
 func getCategory(registry tasks.TaskCategoryRegistry, key string) (tasks.Category, error) {
-	key = strings.ToLower(key)
 	for _, category := range registry.GetCategories() {
-		if category.Name() == key {
+		if strings.EqualFold(category.Name(), key) {
 			return category, nil
 		}
 	}
