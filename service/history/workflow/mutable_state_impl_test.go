@@ -2612,6 +2612,7 @@ func (s *mutableStateSuite) TestCloseTransactionPrepareReplicationTasks_HistoryT
 			},
 		},
 	}
+	s.mockConfig.EnableTransitionHistory = func() bool { return false }
 
 	ms := s.mutableState
 
@@ -2702,6 +2703,7 @@ func (s *mutableStateSuite) TestCloseTransactionPrepareReplicationTasks_SyncHSMT
 	stateMachineDef := hsmtest.NewDefinition("test")
 	err := s.mockShard.StateMachineRegistry().RegisterMachine(stateMachineDef)
 	s.NoError(err)
+	s.mockConfig.EnableTransitionHistory = func() bool { return false }
 
 	testCases := []struct {
 		name                    string

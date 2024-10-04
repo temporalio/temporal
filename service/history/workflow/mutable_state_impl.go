@@ -5584,7 +5584,7 @@ func (ms *MutableStateImpl) closeTransactionPrepareReplicationTasks(
 		lastBatch := eventBatches[len(eventBatches)-1]
 		nextEventID = lastBatch[len(lastBatch)-1].EventId + 1
 	}
-	if ms.transitionHistoryEnabled {
+	if ms.config.EnableTransitionHistory() {
 		switch transactionPolicy {
 		case TransactionPolicyActive:
 			if ms.generateReplicationTask() {

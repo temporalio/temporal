@@ -85,7 +85,7 @@ func (e *executableTaskConverterImpl) convertOne(
 	} else {
 		taskCreationTime = time.Now().UTC()
 	}
-	
+
 	switch replicationTask.GetTaskType() {
 	case enumsspb.REPLICATION_TASK_TYPE_SYNC_SHARD_STATUS_TASK: // TODO to be deprecated
 		return NewExecutableNoopTask(
