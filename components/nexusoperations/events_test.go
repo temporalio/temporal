@@ -51,7 +51,9 @@ func TestCherryPick(t *testing.T) {
 					ScheduledEventId: eventID,
 				},
 			},
-		})
+		},
+			false,
+		)
 		require.NoError(t, err)
 	})
 	t.Run("ValidRequestID", func(t *testing.T) {
@@ -63,7 +65,9 @@ func TestCherryPick(t *testing.T) {
 					RequestId:        op.RequestId,
 				},
 			},
-		})
+		},
+			false,
+		)
 		require.NoError(t, err)
 	})
 	t.Run("InvalidRequestID", func(t *testing.T) {
@@ -75,7 +79,9 @@ func TestCherryPick(t *testing.T) {
 					RequestId:        "invalid",
 				},
 			},
-		})
+		},
+			false,
+		)
 		require.ErrorIs(t, err, hsm.ErrNotCherryPickable)
 	})
 	t.Run("InvalidScheduledEventID", func(t *testing.T) {
@@ -86,7 +92,9 @@ func TestCherryPick(t *testing.T) {
 					ScheduledEventId: eventID + 1,
 				},
 			},
-		})
+		},
+			false,
+		)
 		require.ErrorIs(t, err, hsm.ErrStateMachineNotFound)
 	})
 	t.Run("DoubleApply", func(t *testing.T) {
@@ -97,7 +105,9 @@ func TestCherryPick(t *testing.T) {
 					ScheduledEventId: eventID,
 				},
 			},
-		})
+		},
+			false,
+		)
 		require.NoError(t, err)
 		err = nexusoperations.StartedEventDefinition{}.CherryPick(node.Parent, &historypb.HistoryEvent{
 			Attributes: &historypb.HistoryEvent_NexusOperationStartedEventAttributes{
@@ -105,7 +115,26 @@ func TestCherryPick(t *testing.T) {
 					ScheduledEventId: eventID,
 				},
 			},
-		})
+		},
+			false,
+		)
 		require.ErrorIs(t, err, hsm.ErrInvalidTransition)
+	})
+	t.Run("shouldExcludeNexusEvents", func(t *testing.T) {
+		node, _, _ := setup(t)
+		nexusOperations := []hsm.EventDefinition{
+			nexusoperations.ScheduledEventDefinition{},
+			nexusoperations.StartedEventDefinition{},
+			nexusoperations.CompletedEventDefinition{},
+			nexusoperations.CancelRequestedEventDefinition{},
+			nexusoperations.CanceledEventDefinition{},
+			nexusoperations.FailedEventDefinition{},
+			nexusoperations.TimedOutEventDefinition{},
+		}
+
+		for _, nexusOperation := range nexusOperations {
+			err := nexusOperation.CherryPick(node.Parent, &historypb.HistoryEvent{}, true)
+			require.ErrorIs(t, err, hsm.ErrNotCherryPickable, "%T should not be cherrypickable when shouldExcludeNexusEvent=true", nexusOperation)
+		}
 	})
 }
