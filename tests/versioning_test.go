@@ -54,6 +54,7 @@ import (
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/api/taskqueue/v1"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/searchattribute"
@@ -5020,10 +5021,12 @@ func (s *VersioningIntegSuite) waitForChan(ctx context.Context, ch chan struct{}
 }
 
 func (s *VersioningIntegSuite) unloadTaskQueue(ctx context.Context, tq string) {
-	_, err := s.GetTestCluster().MatchingClient().ForceUnloadTaskQueue(ctx, &matchingservice.ForceUnloadTaskQueueRequest{
-		NamespaceId:   s.GetNamespaceID(s.Namespace()),
-		TaskQueue:     tq,
-		TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+	_, err := s.GetTestCluster().MatchingClient().ForceUnloadTaskQueuePartition(ctx, &matchingservice.ForceUnloadTaskQueuePartitionRequest{
+		NamespaceId: s.GetNamespaceID(s.Namespace()),
+		TaskQueuePartition: &taskqueue.TaskQueuePartition{
+			TaskQueue:     tq,
+			TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+		},
 	})
 	s.Require().NoError(err)
 }

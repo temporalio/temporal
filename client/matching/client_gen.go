@@ -191,16 +191,13 @@ func (c *clientImpl) ForceLoadTaskQueuePartition(
 	return client.ForceLoadTaskQueuePartition(ctx, request, opts...)
 }
 
-func (c *clientImpl) ForceUnloadTaskQueue(
+func (c *clientImpl) ForceUnloadTaskQueuePartition(
 	ctx context.Context,
-	request *matchingservice.ForceUnloadTaskQueueRequest,
+	request *matchingservice.ForceUnloadTaskQueuePartitionRequest,
 	opts ...grpc.CallOption,
-) (*matchingservice.ForceUnloadTaskQueueResponse, error) {
+) (*matchingservice.ForceUnloadTaskQueuePartitionResponse, error) {
 
-	p, err := tqid.NormalPartitionFromRpcName(request.GetTaskQueue(), request.GetNamespaceId(), request.GetTaskQueueType())
-	if err != nil {
-		return nil, err
-	}
+	p := tqid.PartitionFromPartitionProto(request.GetTaskQueuePartition(), request.GetNamespaceId())
 
 	client, err := c.getClientForTaskQueuePartition(p)
 	if err != nil {
@@ -208,7 +205,7 @@ func (c *clientImpl) ForceUnloadTaskQueue(
 	}
 	ctx, cancel := c.createContext(ctx)
 	defer cancel()
-	return client.ForceUnloadTaskQueue(ctx, request, opts...)
+	return client.ForceUnloadTaskQueuePartition(ctx, request, opts...)
 }
 
 func (c *clientImpl) GetBuildIdTaskQueueMapping(

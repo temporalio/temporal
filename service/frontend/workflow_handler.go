@@ -51,6 +51,7 @@ import (
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	schedspb "go.temporal.io/server/api/schedule/v1"
+	"go.temporal.io/server/api/taskqueue/v1"
 	"go.temporal.io/server/client/frontend"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/archiver"
@@ -2618,10 +2619,12 @@ func (wh *WorkflowHandler) ShutdownWorker(ctx context.Context, request *workflow
 	}
 
 	// TODO: update poller info to indicate poller was shut down (pass identity/reason along)
-	_, err = wh.matchingClient.ForceUnloadTaskQueue(ctx, &matchingservice.ForceUnloadTaskQueueRequest{
-		NamespaceId:   namespaceId.String(),
-		TaskQueue:     request.GetStickyTaskQueue(),
-		TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW, // sticky task queues are always workflow queues
+	_, err = wh.matchingClient.ForceUnloadTaskQueuePartition(ctx, &matchingservice.ForceUnloadTaskQueuePartitionRequest{
+		NamespaceId: namespaceId.String(),
+		TaskQueuePartition: &taskqueue.TaskQueuePartition{
+			TaskQueue:     request.GetStickyTaskQueue(),
+			TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW, // sticky task queues are always workflow queues
+		},
 	})
 	if err != nil {
 		return nil, err

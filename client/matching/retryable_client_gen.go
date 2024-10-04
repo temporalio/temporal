@@ -185,15 +185,15 @@ func (c *retryableClient) ForceLoadTaskQueuePartition(
 	return resp, err
 }
 
-func (c *retryableClient) ForceUnloadTaskQueue(
+func (c *retryableClient) ForceUnloadTaskQueuePartition(
 	ctx context.Context,
-	request *matchingservice.ForceUnloadTaskQueueRequest,
+	request *matchingservice.ForceUnloadTaskQueuePartitionRequest,
 	opts ...grpc.CallOption,
-) (*matchingservice.ForceUnloadTaskQueueResponse, error) {
-	var resp *matchingservice.ForceUnloadTaskQueueResponse
+) (*matchingservice.ForceUnloadTaskQueuePartitionResponse, error) {
+	var resp *matchingservice.ForceUnloadTaskQueuePartitionResponse
 	op := func(ctx context.Context) error {
 		var err error
-		resp, err = c.client.ForceUnloadTaskQueue(ctx, request, opts...)
+		resp, err = c.client.ForceUnloadTaskQueuePartition(ctx, request, opts...)
 		return err
 	}
 	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)

@@ -59,7 +59,7 @@ func (wt *WorkflowTags) extractFromMatchingServiceServerRequest(req any) []tag.T
 		return nil
 	case *matchingservice.ForceLoadTaskQueuePartitionRequest:
 		return nil
-	case *matchingservice.ForceUnloadTaskQueueRequest:
+	case *matchingservice.ForceUnloadTaskQueuePartitionRequest:
 		return nil
 	case *matchingservice.GetBuildIdTaskQueueMappingRequest:
 		return nil
