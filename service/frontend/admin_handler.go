@@ -733,7 +733,7 @@ func (adh *AdminHandler) ImportWorkflowExecution(
 		return nil, err
 	}
 
-	unaliasedBatches, err := adh.validateSearchAttributes(request.HistoryBatches, namespace.Name(request.GetNamespace()))
+	unaliasedBatches, err := adh.unaliasAndValidateSearchAttributes(request.HistoryBatches, namespace.Name(request.GetNamespace()))
 	if err != nil {
 		return nil, err
 	}
@@ -752,7 +752,7 @@ func (adh *AdminHandler) ImportWorkflowExecution(
 	}, nil
 }
 
-func (adh *AdminHandler) validateSearchAttributes(historyBatches []*commonpb.DataBlob, nsName namespace.Name) ([]*commonpb.DataBlob, error) {
+func (adh *AdminHandler) unaliasAndValidateSearchAttributes(historyBatches []*commonpb.DataBlob, nsName namespace.Name) ([]*commonpb.DataBlob, error) {
 	var unaliasedBatches []*commonpb.DataBlob
 	for _, historyBatch := range historyBatches {
 		events, err := adh.eventSerializer.DeserializeEvents(historyBatch)
