@@ -39,6 +39,7 @@ import (
 type ClockedRateLimiter struct {
 	rateLimiter *rate.Limiter
 	timeSource  clock.TimeSource
+	recycleCh   chan struct{}
 }
 
 var (
@@ -51,6 +52,7 @@ func NewClockedRateLimiter(rateLimiter *rate.Limiter, timeSource clock.TimeSourc
 	return ClockedRateLimiter{
 		rateLimiter: rateLimiter,
 		timeSource:  timeSource,
+		recycleCh:   make(chan struct{}),
 	}
 }
 
@@ -137,6 +139,8 @@ func (l ClockedRateLimiter) WaitN(ctx context.Context, token int) error {
 		return fmt.Errorf("%w: %v", ErrRateLimiterWaitInterrupted, ctx.Err())
 	case <-waitExpired:
 		return nil
+	case <-l.recycleCh:
+		return nil
 	}
 }
 
@@ -150,4 +154,36 @@ func (l ClockedRateLimiter) SetBurstAt(t time.Time, newBurst int) {
 
 func (l ClockedRateLimiter) TokensAt(t time.Time) int {
 	return int(l.rateLimiter.TokensAt(t))
+}
+
+// RecycleToken should be called when the action being rate limited was not completed
+// for some reason (i.e. a task is not dispatched because it was invalid).
+// In this case, we want to immediately unblock another process that is waiting for a token
+// so that the actual rate of completed actions is as close to the intended rate limit as possible.
+// If no process is waiting for a token when RecycleToken is called, this is a no-op.
+//
+// Because recycleCh is an unbuffered channel, the token will be reused for the next waiter as long
+// as there exists a waiter at the time RecycleToken is called. Usually the attempted rate is consistently
+// above or below the limit for a period of time, so if rate limiting is in effect and recycling matters,
+// most likely there will be a waiter. If the actual rate is erratically bouncing to either side of the
+// rate limit AND there are many invalid tasks, we can make it a buffered channel instead.
+//
+// Our goal is to ensure that each token in our bucket is used every second, meaning the time between
+// taking and successfully using a token must be <= 1s. For this to be true, we must have:
+//
+//	time_to_recycle * number_of_recycles_per_second <= 1s
+//	time_to_recycle * probability_of_recycle * number_of_attempts_per_second <= 1s
+//
+// Therefore, it is also possible for this strategy to be inaccurate if the delay between taking and
+// successfully using a token is greater than one second.
+//
+// Currently, RecycleToken is called when we take a token to attempt a matching task dispatch and
+// then later find out (usually via RPC to History) that the task should not be dispatched.
+// If history rpc takes 10ms --> 100 opportunities for the token to be used that second --> 99% recycle probability is ok.
+// If recycle probability is 50% --> need at least 2 opportunities for token to be used --> 500ms history rpc time is ok.
+func (l ClockedRateLimiter) RecycleToken() {
+	select {
+	case l.recycleCh <- struct{}{}:
+	default:
+	}
 }

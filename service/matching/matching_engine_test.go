@@ -109,6 +109,15 @@ type (
 
 const (
 	matchingTestNamespace = "matching-test"
+	testWorkflowId        = "workflow1"
+	testActivityTypeName  = "activity1"
+	testActivityID        = "activityId1"
+	testIdentity          = "nobody"
+)
+
+var (
+	testActivityType  = &commonpb.ActivityType{Name: testActivityTypeName}
+	testActivityInput = payloads.EncodeString("Activity1 Input")
 )
 
 func createTestMatchingEngine(
@@ -828,6 +837,32 @@ func (s *matchingEngineSuite) TestQueryWorkflowDoesNotLoadSticky() {
 	s.Equal(0, len(s.matchingEngine.partitions))
 }
 
+func (s *matchingEngineSuite) setHistoryMockRecordActivityTaskStarted(taskQueueName string) {
+	s.mockHistoryClient.EXPECT().RecordActivityTaskStarted(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
+		func(ctx context.Context, taskRequest *historyservice.RecordActivityTaskStartedRequest, arg2 ...interface{}) (*historyservice.RecordActivityTaskStartedResponse, error) {
+			s.logger.Debug("Mock Received RecordActivityTaskStartedRequest")
+			resp := &historyservice.RecordActivityTaskStartedResponse{
+				Attempt: 1,
+				ScheduledEvent: newActivityTaskScheduledEvent(taskRequest.ScheduledEventId, 0,
+					&commandpb.ScheduleActivityTaskCommandAttributes{
+						ActivityId: testActivityID,
+						TaskQueue: &taskqueuepb.TaskQueue{
+							Name: taskQueueName,
+							Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
+						},
+						ActivityType:           testActivityType,
+						Input:                  testActivityInput,
+						ScheduleToCloseTimeout: durationpb.New(100 * time.Second),
+						ScheduleToStartTimeout: durationpb.New(50 * time.Second),
+						StartToCloseTimeout:    durationpb.New(50 * time.Second),
+						HeartbeatTimeout:       durationpb.New(10 * time.Second),
+					}),
+			}
+			resp.StartedTime = timestamp.TimeNowPtrUtc()
+			return resp, nil
+		}).AnyTimes()
+}
+
 func (s *matchingEngineSuite) TestAddThenConsumeActivities() {
 	s.matchingEngine.config.LongPollExpirationInterval = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueue(10 * time.Millisecond)
 
@@ -837,7 +872,6 @@ func (s *matchingEngineSuite) TestAddThenConsumeActivities() {
 
 	const taskCount = 1000
 	const initialRangeID = 102
-	// TODO: Understand why publish is low when rangeSize is 3
 	const rangeSize = 30
 
 	namespaceId := uuid.New()
@@ -866,13 +900,6 @@ func (s *matchingEngineSuite) TestAddThenConsumeActivities() {
 	}
 	s.EqualValues(taskCount, s.taskManager.getTaskCount(tlID))
 
-	activityTypeName := "activity1"
-	activityID := "activityId1"
-	activityType := &commonpb.ActivityType{Name: activityTypeName}
-	activityInput := payloads.EncodeString("Activity1 Input")
-
-	identity := "nobody"
-
 	// History service is using mock
 	s.mockHistoryClient.EXPECT().RecordActivityTaskStarted(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
 		func(ctx context.Context, taskRequest *historyservice.RecordActivityTaskStartedRequest, arg2 ...interface{}) (*historyservice.RecordActivityTaskStartedResponse, error) {
@@ -881,13 +908,13 @@ func (s *matchingEngineSuite) TestAddThenConsumeActivities() {
 				Attempt: 1,
 				ScheduledEvent: newActivityTaskScheduledEvent(taskRequest.ScheduledEventId, 0,
 					&commandpb.ScheduleActivityTaskCommandAttributes{
-						ActivityId: activityID,
+						ActivityId: testActivityID,
 						TaskQueue: &taskqueuepb.TaskQueue{
 							Name: taskQueue.Name,
 							Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
 						},
-						ActivityType:           activityType,
-						Input:                  activityInput,
+						ActivityType:           testActivityType,
+						Input:                  testActivityInput,
 						ScheduleToCloseTimeout: durationpb.New(100 * time.Second),
 						ScheduleToStartTimeout: durationpb.New(50 * time.Second),
 						StartToCloseTimeout:    durationpb.New(50 * time.Second),
@@ -905,7 +932,7 @@ func (s *matchingEngineSuite) TestAddThenConsumeActivities() {
 			NamespaceId: namespaceId,
 			PollRequest: &workflowservice.PollActivityTaskQueueRequest{
 				TaskQueue: taskQueue,
-				Identity:  identity,
+				Identity:  testIdentity,
 			},
 		}, metrics.NoopMetricsHandler)
 
@@ -915,9 +942,9 @@ func (s *matchingEngineSuite) TestAddThenConsumeActivities() {
 			s.logger.Debug("empty poll returned")
 			continue
 		}
-		s.EqualValues(activityID, result.ActivityId)
-		s.EqualValues(activityType, result.ActivityType)
-		s.EqualValues(activityInput, result.Input)
+		s.EqualValues(testActivityID, result.ActivityId)
+		s.EqualValues(testActivityType, result.ActivityType)
+		s.EqualValues(testActivityInput, result.Input)
 		s.EqualValues(workflowExecution, result.WorkflowExecution)
 		s.Equal(true, validateTimeRange(result.ScheduledTime.AsTime(), time.Minute))
 		s.EqualValues(time.Second*100, result.ScheduleToCloseTimeout.AsDuration())
@@ -930,8 +957,8 @@ func (s *matchingEngineSuite) TestAddThenConsumeActivities() {
 			WorkflowId:       workflowID,
 			RunId:            runID,
 			ScheduledEventId: scheduledEventID,
-			ActivityId:       activityID,
-			ActivityType:     activityTypeName,
+			ActivityId:       testActivityID,
+			ActivityType:     testActivityTypeName,
 		}
 
 		serializedToken, _ := s.matchingEngine.tokenSerializer.Serialize(taskToken)
@@ -951,10 +978,7 @@ func (s *matchingEngineSuite) TestAddThenConsumeActivities() {
 func (s *matchingEngineSuite) TestSyncMatchActivities() {
 	// Set a short long poll expiration so that we don't have to wait too long for 0 throttling cases
 	s.matchingEngine.config.LongPollExpirationInterval = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueue(2 * time.Second)
-
-	runID := uuid.NewRandom().String()
-	workflowID := "workflow1"
-	workflowExecution := &commonpb.WorkflowExecution{RunId: runID, WorkflowId: workflowID}
+	workflowExecution := &commonpb.WorkflowExecution{RunId: uuid.NewRandom().String(), WorkflowId: "workflow1"}
 
 	const taskCount = 10
 	const initialRangeID = 102
@@ -996,42 +1020,16 @@ func (s *matchingEngineSuite) TestSyncMatchActivities() {
 		Name: tl,
 		Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
 	}
-	activityTypeName := "activity1"
-	activityID := "activityId1"
-	activityType := &commonpb.ActivityType{Name: activityTypeName}
-	activityInput := payloads.EncodeString("Activity1 Input")
-
-	identity := "nobody"
 
 	// History service is using mock
-	s.mockHistoryClient.EXPECT().RecordActivityTaskStarted(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
-		func(ctx context.Context, taskRequest *historyservice.RecordActivityTaskStartedRequest, arg2 ...interface{}) (*historyservice.RecordActivityTaskStartedResponse, error) {
-			s.logger.Debug("Mock Received RecordActivityTaskStartedRequest")
-			return &historyservice.RecordActivityTaskStartedResponse{
-				Attempt: 1,
-				ScheduledEvent: newActivityTaskScheduledEvent(taskRequest.ScheduledEventId, 0,
-					&commandpb.ScheduleActivityTaskCommandAttributes{
-						ActivityId: activityID,
-						TaskQueue: &taskqueuepb.TaskQueue{
-							Name: taskQueue.Name,
-							Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
-						},
-						ActivityType:           activityType,
-						Input:                  activityInput,
-						ScheduleToStartTimeout: durationpb.New(1 * time.Second),
-						ScheduleToCloseTimeout: durationpb.New(2 * time.Second),
-						StartToCloseTimeout:    durationpb.New(1 * time.Second),
-						HeartbeatTimeout:       durationpb.New(1 * time.Second),
-					}),
-			}, nil
-		}).AnyTimes()
+	s.setHistoryMockRecordActivityTaskStarted(taskQueue.Name)
 
 	pollFunc := func(maxDispatch float64) (*matchingservice.PollActivityTaskQueueResponse, error) {
 		return s.matchingEngine.PollActivityTaskQueue(context.Background(), &matchingservice.PollActivityTaskQueueRequest{
 			NamespaceId: namespaceId,
 			PollRequest: &workflowservice.PollActivityTaskQueueRequest{
 				TaskQueue:         taskQueue,
-				Identity:          identity,
+				Identity:          testIdentity,
 				TaskQueueMetadata: &taskqueuepb.TaskQueueMetadata{MaxTasksPerSecond: &wrapperspb.DoubleValue{Value: maxDispatch}},
 			},
 		}, metrics.NoopMetricsHandler)
@@ -1085,14 +1083,14 @@ func (s *matchingEngineSuite) TestSyncMatchActivities() {
 			s.True(len(result.TaskToken) > 0)
 		}
 
-		s.EqualValues(activityID, result.ActivityId)
-		s.EqualValues(activityType, result.ActivityType)
-		s.EqualValues(activityInput, result.Input)
+		s.EqualValues(testActivityID, result.ActivityId)
+		s.EqualValues(testActivityType, result.ActivityType)
+		s.EqualValues(testActivityInput, result.Input)
 		s.EqualValues(workflowExecution, result.WorkflowExecution)
 		taskToken := &tokenspb.Task{
 			Attempt:          1,
 			NamespaceId:      namespaceId,
-			WorkflowId:       workflowID,
+			WorkflowId:       testWorkflowID,
 			RunId:            runID,
 			ScheduledEventId: scheduledEventID,
 			ActivityId:       activityID,
@@ -1136,6 +1134,51 @@ func (s *matchingEngineSuite) TestSyncMatchActivities() {
 	s.NotNil(descResp.DescResponse.GetTaskQueueStatus())
 	numPartitions := float64(s.matchingEngine.config.NumTaskqueueWritePartitions("", "", tlType))
 	s.True(descResp.DescResponse.GetTaskQueueStatus().GetRatePerSecond()*numPartitions >= (defaultTaskDispatchRPS - 1))
+}
+
+func (s *matchingEngineSuite) TestExcludeInvalidTasksFromRateLimit() {
+	s.matchingEngine.config.LongPollExpirationInterval = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueue(10 * time.Millisecond)
+
+	runID := uuid.NewRandom().String()
+	workflowID := "workflow1"
+	workflowExecution := &commonpb.WorkflowExecution{RunId: runID, WorkflowId: workflowID}
+
+	const taskCount = 1000
+	const initialRangeID = 102
+	// TODO: Understand why publish is low when rangeSize is 3
+	const rangeSize = 30
+
+	namespaceId := uuid.New()
+	tl := "makeToast"
+	tlID := newUnversionedRootQueueKey(namespaceId, tl, enumspb.TASK_QUEUE_TYPE_ACTIVITY)
+	s.taskManager.getQueueManager(tlID).rangeID = initialRangeID
+	s.matchingEngine.config.RangeSize = rangeSize // override to low number for the test
+
+	taskQueue := &taskqueuepb.TaskQueue{
+		Name: tl,
+		Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
+	}
+
+	for i := int64(0); i < taskCount; i++ {
+		scheduledEventID := i * 3
+		addRequest := matchingservice.AddActivityTaskRequest{
+			NamespaceId:            namespaceId,
+			Execution:              workflowExecution,
+			ScheduledEventId:       scheduledEventID,
+			TaskQueue:              taskQueue,
+			ScheduleToStartTimeout: timestamp.DurationFromSeconds(100),
+		}
+
+		_, _, err := s.matchingEngine.AddActivityTask(context.Background(), &addRequest)
+		s.NoError(err)
+	}
+	s.EqualValues(taskCount, s.taskManager.getTaskCount(tlID))
+
+	// define a workflow with multiple activity tasks
+	// start a workflow with no pollers --> write tasks to backlog
+	// assert that tasks are written to the backlog
+	// terminate the workflow
+	// start polling for tasks --> should not hit rate limit (before fix we should hit the rate limit)
 }
 
 func (s *matchingEngineSuite) TestConcurrentPublishConsumeActivities() {

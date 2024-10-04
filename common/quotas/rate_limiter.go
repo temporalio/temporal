@@ -68,5 +68,8 @@ type (
 
 		// TokensAt returns the number of tokens that will be available at time t
 		TokensAt(t time.Time) int
+
+		// RecycleToken returns a token to the rate limiter // todo: describe better
+		RecycleToken()
 	}
 )
