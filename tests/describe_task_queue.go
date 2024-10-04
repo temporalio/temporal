@@ -24,11 +24,15 @@ package tests
 
 import (
 	"context"
+	"flag"
+	"testing"
 	"time"
 
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
+
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -45,6 +49,11 @@ type (
 		testcore.FunctionalTestBase
 	}
 )
+
+func TestDescribeTaskQueueSuite(t *testing.T) {
+	flag.Parse()
+	suite.Run(t, new(DescribeTaskQueueSuite))
+}
 
 func (s *DescribeTaskQueueSuite) SetupSuite() {
 	s.FunctionalTestBase.SetupSuite("testdata/es_cluster.yaml")
