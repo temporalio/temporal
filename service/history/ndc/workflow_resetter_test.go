@@ -977,7 +977,7 @@ func (s *workflowResetterSuite) TestReapplyEvents_Excludes() {
 	ms.EXPECT().AddHistoryEvent(arg, arg).Times(0)
 
 	smReg := hsm.NewRegistry()
-	smReg.RegisterEventDefinition(nexusoperations.StartedEventDefinition{})
+	s.NoError(smReg.RegisterEventDefinition(nexusoperations.StartedEventDefinition{}))
 	s.NoError(workflow.RegisterStateMachine(smReg))
 	root, err := hsm.NewRoot(smReg, workflow.StateMachineType, nil, make(map[string]*persistencespb.StateMachineMap), nil)
 	s.NoError(err)
