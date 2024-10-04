@@ -1470,6 +1470,7 @@ func (s *rawTaskConverterSuite) TestConvertSyncVersionedTransitionTask_Mutation(
 				},
 			},
 		},
+		VersionedTransitionHistory: transitionHistory,
 	}
 	s.syncStateRetriever.EXPECT().GetSyncWorkflowStateArtifactFromMutableState(
 		ctx,
@@ -1481,6 +1482,7 @@ func (s *rawTaskConverterSuite) TestConvertSyncVersionedTransitionTask_Mutation(
 		s.mutableState,
 		nil,
 		nil,
+		gomock.Any(),
 	).Return(syncResult, nil)
 	converter := newSyncVersionedTransitionTaskConverter(s.shardContext, s.workflowCache, nil, s.progressCache, s.executionManager, s.syncStateRetriever, s.logger)
 	result, err := convertSyncVersionedTransitionTask(ctx, task, targetClusterID, converter)
