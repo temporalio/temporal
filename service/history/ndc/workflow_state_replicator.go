@@ -490,7 +490,7 @@ func (r *WorkflowStateReplicatorImpl) applySnapshot(
 	if err != nil {
 		return err
 	}
-	
+
 	err = localMutableState.ApplySnapshot(snapshot)
 	if err != nil {
 		return err
