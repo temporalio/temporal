@@ -136,7 +136,6 @@ func (r *workflowResetterImpl) ResetWorkflow(
 	var currentWorkflowEventsSeq []*persistence.WorkflowEvents
 	var reapplyEventsFn workflowResetReapplyEventsFn
 	currentMutableState := currentWorkflow.GetMutableState()
-	currentUpdateRegistry := currentWorkflow.GetContext().UpdateRegistry(ctx, nil)
 	if currentMutableState.IsWorkflowExecutionRunning() {
 		if err := r.terminateWorkflow(
 			currentMutableState,
@@ -157,7 +156,6 @@ func (r *workflowResetterImpl) ResetWorkflow(
 			lastVisitedRunID, err := r.reapplyContinueAsNewWorkflowEvents(
 				ctx,
 				resetMutableState,
-				currentUpdateRegistry,
 				currentWorkflow,
 				namespaceID,
 				workflowID,
@@ -185,7 +183,6 @@ func (r *workflowResetterImpl) ResetWorkflow(
 			_, err := r.reapplyContinueAsNewWorkflowEvents(
 				ctx,
 				resetMutableState,
-				currentUpdateRegistry,
 				currentWorkflow,
 				namespaceID,
 				workflowID,
@@ -575,7 +572,6 @@ func (r *workflowResetterImpl) terminateWorkflow(
 func (r *workflowResetterImpl) reapplyContinueAsNewWorkflowEvents(
 	ctx context.Context,
 	resetMutableState workflow.MutableState,
-	currentUpdateRegistry update.Registry,
 	currentWorkflow Workflow,
 	namespaceID namespace.ID,
 	workflowID string,
