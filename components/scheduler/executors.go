@@ -157,34 +157,39 @@ func (e taskExecutor) executeSchedulerRunTask(
 	defer cancel()
 
 	var s Scheduler
+	var prevS *Scheduler
 	var prevArgs *schedspb.HsmSchedulerState
 	var prevRunningWorkflows []*commonpb.WorkflowExecution
+
 	err = env.Access(ctx, ref, hsm.AccessRead, func(node *hsm.Node) error {
 		if err := node.CheckRunning(); err != nil {
 			return err
 		}
-		prevS, err := hsm.MachineData[*Scheduler](node)
+
+		prevS, err = hsm.MachineData[*Scheduler](node)
 		if err != nil {
 			return err
 		}
+
 		prevArgs = prevS.HsmSchedulerState
-
-		// Ensure that this is copy, so later (stateful) processing does not update state machine without protection
-		s = Scheduler{
-			HsmSchedulerState: common.CloneProto(prevS.HsmSchedulerState),
-			cspec:             prevS.cspec,
-		}
-
-		// Copy the list of current running workflows so we can tell later which ones are newly started
-		prevRunningWorkflows = make([]*commonpb.WorkflowExecution, len(prevS.Args.Info.RunningWorkflows))
-		for i := 0; i < len(prevS.Args.Info.RunningWorkflows); i++ {
-			prevRunningWorkflows[i] = prevS.Args.Info.RunningWorkflows[i]
-		}
-		return err
+		return nil
 	})
 	if err != nil {
 		return err
 	}
+
+	// Ensure that this is copy, so later (stateful) processing does not update state machine without protection
+	s = Scheduler{
+		HsmSchedulerState: common.CloneProto(prevS.HsmSchedulerState),
+		cspec:             prevS.cspec,
+	}
+
+	// Copy the list of current running workflows so we can tell later which ones are newly started
+	prevRunningWorkflows = make([]*commonpb.WorkflowExecution, len(prevS.Args.Info.RunningWorkflows))
+	for i := 0; i < len(prevS.Args.Info.RunningWorkflows); i++ {
+		prevRunningWorkflows[i] = prevS.Args.Info.RunningWorkflows[i]
+	}
+
 	// Update in case namespace was renamed since creation
 	s.Args.State.Namespace = ns.Name().String()
 	tweakables := e.Config.Tweakables(s.Args.State.Namespace)
