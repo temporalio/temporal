@@ -130,7 +130,7 @@ func ConvertGRPCError(err error, exposeDetails bool) error {
 	errMessage := err.Error()
 
 	switch st.Code() {
-	case codes.AlreadyExists, codes.Canceled, codes.InvalidArgument, codes.FailedPrecondition, codes.OutOfRange:
+	case codes.AlreadyExists, codes.InvalidArgument, codes.FailedPrecondition, codes.OutOfRange:
 		if !exposeDetails {
 			errMessage = "bad request"
 		}
@@ -140,6 +140,13 @@ func ConvertGRPCError(err error, exposeDetails bool) error {
 			errMessage = "service unavailable"
 		}
 		return nexus.HandlerErrorf(nexus.HandlerErrorTypeUnavailable, errMessage)
+	case codes.Canceled:
+		// TODO: This should have a different status code (e.g. 499 which is semi standard but not supported by nexus).
+		// The important thing is that the request is retryable, internal serves that purpose.
+		if !exposeDetails {
+			errMessage = "canceled"
+		}
+		return nexus.HandlerErrorf(nexus.HandlerErrorTypeInternal, errMessage)
 	case codes.DataLoss, codes.Internal, codes.Unknown:
 		if !exposeDetails {
 			errMessage = "internal error"
