@@ -40,6 +40,7 @@ const (
 	callerNameHeaderName = "caller-name"
 	CallerTypeHeaderName = "caller-type"
 	callOriginHeaderName = "call-initiation"
+	callerAuthorization  = "authorization"
 )
 
 var (
@@ -52,6 +53,7 @@ var (
 		callerNameHeaderName,
 		CallerTypeHeaderName,
 		callOriginHeaderName,
+		callerAuthorization,
 	}
 )
 
