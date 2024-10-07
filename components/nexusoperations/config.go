@@ -23,6 +23,8 @@
 package nexusoperations
 
 import (
+	"fmt"
+	"strings"
 	"time"
 
 	"go.temporal.io/server/common/backoff"
@@ -68,6 +70,32 @@ ScheduleNexusOperation commands with an operation name that exceeds this limit w
 Uses Go's len() function to determine the length.`,
 )
 
+var MaxOperationHeaderSize = dynamicconfig.NewNamespaceIntSetting(
+	"component.nexusoperations.limit.header.size",
+	4096,
+	`The maximum allowed header size for a Nexus Operation.
+ScheduleNexusOperation commands with a "nexus_header" field that exceeds this limit will be rejected.
+Uses Go's len() function on header keys and values to determine the total size.`,
+)
+
+var DisallowedOperationHeaders = dynamicconfig.NewNamespaceTypedSettingWithConverter(
+	"component.nexusoperations.disallowedHeaders",
+	func(a any) ([]string, error) {
+		keys, ok := a.([]string)
+		if !ok {
+			return nil, fmt.Errorf("expected a string slice, got: %v", a)
+		}
+		for i, k := range keys {
+			keys[i] = strings.ToLower(k)
+		}
+		return keys, nil
+	},
+	[]string{"request-timeout"},
+	`Case insensitive list of disallowed header keys for Nexus Operations.
+ScheduleNexusOperation commands with a "nexus_header" field that contains any of these disallowed keys will be
+rejected.`,
+)
+
 var MaxOperationScheduleToCloseTimeout = dynamicconfig.NewNamespaceDurationSetting(
 	"component.nexusoperations.limit.scheduleToCloseTimeout",
 	0,
@@ -102,6 +130,8 @@ type Config struct {
 	MaxConcurrentOperations            dynamicconfig.IntPropertyFnWithNamespaceFilter
 	MaxServiceNameLength               dynamicconfig.IntPropertyFnWithNamespaceFilter
 	MaxOperationNameLength             dynamicconfig.IntPropertyFnWithNamespaceFilter
+	MaxOperationHeaderSize             dynamicconfig.IntPropertyFnWithNamespaceFilter
+	DisallowedOperationHeaders         dynamicconfig.TypedPropertyFnWithNamespaceFilter[[]string]
 	MaxOperationScheduleToCloseTimeout dynamicconfig.DurationPropertyFnWithNamespaceFilter
 	PayloadSizeLimit                   dynamicconfig.IntPropertyFnWithNamespaceFilter
 	CallbackURLTemplate                dynamicconfig.StringPropertyFn
@@ -116,6 +146,8 @@ func ConfigProvider(dc *dynamicconfig.Collection) *Config {
 		MaxConcurrentOperations:            MaxConcurrentOperations.Get(dc),
 		MaxServiceNameLength:               MaxServiceNameLength.Get(dc),
 		MaxOperationNameLength:             MaxOperationNameLength.Get(dc),
+		MaxOperationHeaderSize:             MaxOperationHeaderSize.Get(dc),
+		DisallowedOperationHeaders:         DisallowedOperationHeaders.Get(dc),
 		MaxOperationScheduleToCloseTimeout: MaxOperationScheduleToCloseTimeout.Get(dc),
 		PayloadSizeLimit:                   dynamicconfig.BlobSizeLimitError.Get(dc),
 		CallbackURLTemplate:                CallbackURLTemplate.Get(dc),
