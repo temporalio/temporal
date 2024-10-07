@@ -267,7 +267,7 @@ func (t *MatcherTestSuite) TestRejectSyncMatchWhenBacklog() {
 func (t *MatcherTestSuite) TestForwardingWhenBacklogIsYoung() {
 	historyTask := newInternalTaskForSyncMatch(randomTaskInfo().Data, nil)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 4*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	intruptC := make(chan struct{})
 
 	var wg sync.WaitGroup
@@ -280,7 +280,7 @@ func (t *MatcherTestSuite) TestForwardingWhenBacklogIsYoung() {
 	).Return(&matchingservice.PollWorkflowTaskQueueResponse{}, errMatchingHostThrottleTest)
 
 	go func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 4*time.Second)
+		ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 		// poll forwarding attempt happens when there is no backlog
 		_, err := t.childMatcher.Poll(ctx, &pollMetadata{})
 		t.Assert().NoError(err)
