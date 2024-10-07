@@ -5,16 +5,13 @@ import (
 	"fmt"
 	"io"
 	"log"
-	"os"
 	"reflect"
 	"slices"
 	"strings"
-	"text/template"
 
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
-	"golang.org/x/text/cases"
-	"golang.org/x/text/language"
+	"go.temporal.io/server/cmd/tools/codegen"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protoreflect"
 	"google.golang.org/protobuf/reflect/protoregistry"
@@ -28,7 +25,7 @@ type (
 	service struct {
 		name            string
 		clientType      reflect.Type
-		clientGenerator func(io.Writer, service)
+		clientGenerator func(io.Writer, service) error
 	}
 
 	fieldWithPath struct {
@@ -124,17 +121,11 @@ var historyRoutingProtoExtension = func() protoreflect.ExtensionType {
 	return ext
 }()
 
-func panicIfErr(err error) {
-	if err != nil {
-		panic(err)
-	}
-}
-
-func writeTemplatedCode(w io.Writer, service service, text string) {
-	panicIfErr(template.Must(template.New("code").Parse(text)).Execute(w, map[string]string{
+func writeTemplatedCode(w io.Writer, service service, tmpl string) {
+	codegen.FatalIfErr(codegen.GenerateTemplateToWriter(tmpl, map[string]string{
 		"ServiceName":        service.name,
 		"ServicePackagePath": service.clientType.Elem().PkgPath(),
-	}))
+	}, w))
 }
 
 func verifyFieldExists(t reflect.Type, path string) {
@@ -142,19 +133,19 @@ func verifyFieldExists(t reflect.Type, path string) {
 	parts := strings.Split(path, ".")
 	for i, part := range parts {
 		if t.Kind() != reflect.Struct {
-			panic(fmt.Errorf("%s is not a struct", pathPrefix))
+			codegen.FatalIfErr(fmt.Errorf("%s is not a struct", pathPrefix))
 		}
-		fieldName := snakeToPascal(part)
+		fieldName := codegen.SnakeCaseToPascalCase(part)
 		f, ok := t.FieldByName(fieldName)
 		if !ok {
-			panic(fmt.Errorf("%s has no field named %s", pathPrefix, fieldName))
+			codegen.FatalIfErr(fmt.Errorf("%s has no field named %s", pathPrefix, fieldName))
 		}
 		if i == len(parts)-1 {
 			return
 		}
 		ft := f.Type
 		if ft.Kind() != reflect.Pointer {
-			panic(fmt.Errorf("%s.%s is not a struct pointer", pathPrefix, fieldName))
+			codegen.FatalIfErr(fmt.Errorf("%s.%s is not a struct pointer", pathPrefix, fieldName))
 		}
 		t = ft.Elem()
 		pathPrefix += "." + fieldName
@@ -185,9 +176,9 @@ func findNestedField(t reflect.Type, name string, path string, maxDepth int) []f
 func findOneNestedField(t reflect.Type, name string, path string, maxDepth int) fieldWithPath {
 	fields := findNestedField(t, name, path, maxDepth)
 	if len(fields) == 0 {
-		panic(fmt.Sprintf("Couldn't find %s in %s", name, t))
+		codegen.FatalIfErr(fmt.Errorf("couldn't find %s in %s", name, t))
 	} else if len(fields) > 1 {
-		panic(fmt.Sprintf("Found more than one %s in %s (%v)", name, t, fields))
+		codegen.FatalIfErr(fmt.Errorf("found more than one %s in %s (%v)", name, t, fields))
 	}
 	return fields[0]
 }
@@ -197,7 +188,7 @@ func tryFindOneNestedField(t reflect.Type, name string, path string, maxDepth in
 	if len(fields) == 0 {
 		return fieldWithPath{}
 	} else if len(fields) > 1 {
-		panic(fmt.Sprintf("Found more than one %s in %s (%v)", name, t, fields))
+		codegen.FatalIfErr(fmt.Errorf("found more than one %s in %s (%v)", name, t, fields))
 	}
 	return fields[0]
 }
@@ -225,24 +216,10 @@ func historyRoutingOptions(reqType reflect.Type) *historyservice.RoutingOptions 
 	return routingOptions
 }
 
-func snakeToPascal(snake string) string {
-	// Split the string by underscores
-	words := strings.Split(snake, "_")
-
-	// Capitalize the first letter of each word
-	for i, word := range words {
-		// Convert first rune to upper and the rest to lower case
-		words[i] = cases.Title(language.AmericanEnglish).String(strings.ToLower(word))
-	}
-
-	// Join them back into a single string
-	return strings.Join(words, "")
-}
-
 func toGetter(snake string) string {
 	parts := strings.Split(snake, ".")
 	for i, part := range parts {
-		parts[i] = "Get" + snakeToPascal(part) + "()"
+		parts[i] = "Get" + codegen.SnakeCaseToPascalCase(part) + "()"
 	}
 	return "request." + strings.Join(parts, ".")
 }
@@ -296,7 +273,7 @@ func makeGetHistoryClient(reqType reflect.Type, routingOptions *historyservice.R
 	}
 
 	log.Fatalf("No routing directive specified on %s", t)
-	panic("unreachable")
+	return ""
 }
 
 func makeGetMatchingClient(reqType reflect.Type) string {
@@ -352,7 +329,7 @@ func makeGetMatchingClient(reqType reflect.Type) string {
 	}
 
 	if !nsID.found() {
-		panic("I don't know how to get a client from a " + t.String())
+		codegen.FatalIfErr(fmt.Errorf("I don't know how to get a client from a %s", t))
 	}
 
 	if tqp.found() {
@@ -384,7 +361,7 @@ func makeGetMatchingClient(reqType reflect.Type) string {
 	panic("I don't know how to get a client from a " + t.String())
 }
 
-func writeTemplatedMethod(w io.Writer, service service, impl string, m reflect.Method, text string) {
+func writeTemplatedMethod(w io.Writer, service service, impl string, m reflect.Method, tmpl string) {
 	key := fmt.Sprintf("%s.%s.%s", impl, service.name, m.Name)
 	if ignoreMethod[key] {
 		return
@@ -426,18 +403,19 @@ func writeTemplatedMethod(w io.Writer, service service, impl string, m reflect.M
 		}
 	}
 
-	panicIfErr(template.Must(template.New("code").Parse(text)).Execute(w, fields))
+	codegen.FatalIfErr(codegen.GenerateTemplateToWriter(tmpl, fields, w))
 }
 
-func writeTemplatedMethods(w io.Writer, service service, impl string, text string) {
+func writeTemplatedMethods(w io.Writer, service service, impl string, tmpl string) {
 	sType := service.clientType.Elem()
 	for n := 0; n < sType.NumMethod(); n++ {
-		writeTemplatedMethod(w, service, impl, sType.Method(n), text)
+		writeTemplatedMethod(w, service, impl, sType.Method(n), tmpl)
 	}
 }
 
-func generateFrontendOrAdminClient(w io.Writer, service service) {
-	writeTemplatedCode(w, service, `
+func generateFrontendOrAdminClient(w io.Writer, service service) error {
+	writeTemplatedCode(w, service, `// Code generated by cmd/tools/genrpcwrappers. DO NOT EDIT.
+
 package {{.ServiceName}}
 
 import (
@@ -459,10 +437,12 @@ func (c *clientImpl) {{.Method}}(
 	return c.client.{{.Method}}(ctx, request, opts...)
 }
 `)
+	return nil
 }
 
-func generateHistoryClient(w io.Writer, service service) {
-	writeTemplatedCode(w, service, `
+func generateHistoryClient(w io.Writer, service service) error {
+	writeTemplatedCode(w, service, `// Code generated by cmd/tools/genrpcwrappers. DO NOT EDIT.
+
 package {{.ServiceName}}
 
 import (
@@ -500,10 +480,13 @@ func (c *clientImpl) {{.Method}}(
 	// GetDLQMessages
 	// PurgeDLQMessages
 	// MergeDLQMessages
+
+	return nil
 }
 
-func generateMatchingClient(w io.Writer, service service) {
-	writeTemplatedCode(w, service, `
+func generateMatchingClient(w io.Writer, service service) error {
+	writeTemplatedCode(w, service, `// Code generated by cmd/tools/genrpcwrappers. DO NOT EDIT.
+
 package {{.ServiceName}}
 
 import (
@@ -534,10 +517,12 @@ func (c *clientImpl) {{.Method}}(
 	return client.{{.Method}}(ctx, request, opts...)
 }
 `)
+	return nil
 }
 
-func generateMetricClient(w io.Writer, service service) {
-	writeTemplatedCode(w, service, `
+func generateMetricClient(w io.Writer, service service) error {
+	writeTemplatedCode(w, service, `// Code generated by cmd/tools/genrpcwrappers. DO NOT EDIT.
+
 package {{.ServiceName}}
 
 import (
@@ -563,10 +548,12 @@ func (c *metricClient) {{.Method}}(
 	return c.client.{{.Method}}(ctx, request, opts...)
 }
 `)
+	return nil
 }
 
-func generateRetryableClient(w io.Writer, service service) {
-	writeTemplatedCode(w, service, `
+func generateRetryableClient(w io.Writer, service service) error {
+	writeTemplatedCode(w, service, `// Code generated by cmd/tools/genrpcwrappers. DO NOT EDIT.
+
 package {{.ServiceName}}
 
 import (
@@ -595,20 +582,7 @@ func (c *retryableClient) {{.Method}}(
 	return resp, err
 }
 `)
-}
-
-func callWithFile(f func(io.Writer, service), service service, filename string) {
-	w, err := os.Create(filename + "_gen.go")
-	if err != nil {
-		panic(err)
-	}
-	defer func() {
-		panicIfErr(w.Close())
-	}()
-	if _, err := fmt.Fprint(w, "\n// Code generated by cmd/tools/genrpcwrappers. DO NOT EDIT.\n"); err != nil {
-		panic(err)
-	}
-	f(w, service)
+	return nil
 }
 
 func main() {
@@ -617,11 +591,11 @@ func main() {
 
 	i := slices.IndexFunc(services, func(s service) bool { return s.name == *serviceFlag })
 	if i < 0 {
-		panic("unknown service")
+		codegen.FatalIfErr(fmt.Errorf("unknown service: %s", *serviceFlag))
 	}
 	svc := services[i]
 
-	callWithFile(svc.clientGenerator, svc, "client")
-	callWithFile(generateMetricClient, svc, "metric_client")
-	callWithFile(generateRetryableClient, svc, "retryable_client")
+	codegen.GenerateToFile(svc.clientGenerator, svc, "", "client")
+	codegen.GenerateToFile(generateMetricClient, svc, "", "metric_client")
+	codegen.GenerateToFile(generateRetryableClient, svc, "", "retryable_client")
 }
