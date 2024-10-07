@@ -27,17 +27,18 @@ package recordactivitytaskstarted
 import (
 	"context"
 
+	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
+	"go.temporal.io/server/common/tqid"
 	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/shard"
-	"go.temporal.io/server/service/history/workflow"
 )
 
 func Invoke(
@@ -120,13 +121,14 @@ func Invoke(
 			}
 
 			scheduleToStartLatency := ai.GetStartedTime().AsTime().Sub(ai.GetScheduledTime().AsTime())
-			namespaceName := namespaceEntry.Name()
+			namespaceName := namespaceEntry.Name().String()
 			metrics.TaskScheduleToStartLatency.With(
-				workflow.GetPerTaskQueueFamilyScope(
+				metrics.GetPerTaskQueuePartitionTypeScope(
 					taggedMetrics,
 					namespaceName,
-					ai.GetTaskQueue(),
-					shard.GetConfig(),
+					// passing the root partition all the time as we don't care about partition ID in this metric
+					tqid.UnsafeTaskQueueFamily(namespaceEntry.ID().String(), ai.GetTaskQueue()).TaskQueue(enumspb.TASK_QUEUE_TYPE_ACTIVITY).RootPartition(),
+					shard.GetConfig().BreakdownMetricsByTaskQueue(namespaceName, ai.GetTaskQueue(), enumspb.TASK_QUEUE_TYPE_ACTIVITY),
 				),
 			).Record(scheduleToStartLatency)
 

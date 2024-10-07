@@ -306,6 +306,46 @@ func (mr *MockAdminServiceClientMockRecorder) DescribeTaskQueuePartition(ctx, in
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DescribeTaskQueuePartition", reflect.TypeOf((*MockAdminServiceClient)(nil).DescribeTaskQueuePartition), varargs...)
 }
 
+// ForceUnloadTaskQueuePartition mocks base method.
+func (m *MockAdminServiceClient) ForceUnloadTaskQueuePartition(ctx context.Context, in *adminservice.ForceUnloadTaskQueuePartitionRequest, opts ...grpc.CallOption) (*adminservice.ForceUnloadTaskQueuePartitionResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []any{ctx, in}
+	for _, a := range opts {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "ForceUnloadTaskQueuePartition", varargs...)
+	ret0, _ := ret[0].(*adminservice.ForceUnloadTaskQueuePartitionResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ForceUnloadTaskQueuePartition indicates an expected call of ForceUnloadTaskQueuePartition.
+func (mr *MockAdminServiceClientMockRecorder) ForceUnloadTaskQueuePartition(ctx, in any, opts ...any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]any{ctx, in}, opts...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ForceUnloadTaskQueuePartition", reflect.TypeOf((*MockAdminServiceClient)(nil).ForceUnloadTaskQueuePartition), varargs...)
+}
+
+// GenerateLastHistoryReplicationTasks mocks base method.
+func (m *MockAdminServiceClient) GenerateLastHistoryReplicationTasks(ctx context.Context, in *adminservice.GenerateLastHistoryReplicationTasksRequest, opts ...grpc.CallOption) (*adminservice.GenerateLastHistoryReplicationTasksResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []any{ctx, in}
+	for _, a := range opts {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "GenerateLastHistoryReplicationTasks", varargs...)
+	ret0, _ := ret[0].(*adminservice.GenerateLastHistoryReplicationTasksResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GenerateLastHistoryReplicationTasks indicates an expected call of GenerateLastHistoryReplicationTasks.
+func (mr *MockAdminServiceClientMockRecorder) GenerateLastHistoryReplicationTasks(ctx, in any, opts ...any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]any{ctx, in}, opts...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GenerateLastHistoryReplicationTasks", reflect.TypeOf((*MockAdminServiceClient)(nil).GenerateLastHistoryReplicationTasks), varargs...)
+}
+
 // GetDLQMessages mocks base method.
 func (m *MockAdminServiceClient) GetDLQMessages(ctx context.Context, in *adminservice.GetDLQMessagesRequest, opts ...grpc.CallOption) (*adminservice.GetDLQMessagesResponse, error) {
 	m.ctrl.T.Helper()
@@ -866,6 +906,26 @@ func (mr *MockAdminServiceClientMockRecorder) StreamWorkflowReplicationMessages(
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "StreamWorkflowReplicationMessages", reflect.TypeOf((*MockAdminServiceClient)(nil).StreamWorkflowReplicationMessages), varargs...)
 }
 
+// SyncWorkflowState mocks base method.
+func (m *MockAdminServiceClient) SyncWorkflowState(ctx context.Context, in *adminservice.SyncWorkflowStateRequest, opts ...grpc.CallOption) (*adminservice.SyncWorkflowStateResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []any{ctx, in}
+	for _, a := range opts {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "SyncWorkflowState", varargs...)
+	ret0, _ := ret[0].(*adminservice.SyncWorkflowStateResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// SyncWorkflowState indicates an expected call of SyncWorkflowState.
+func (mr *MockAdminServiceClientMockRecorder) SyncWorkflowState(ctx, in any, opts ...any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]any{ctx, in}, opts...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SyncWorkflowState", reflect.TypeOf((*MockAdminServiceClient)(nil).SyncWorkflowState), varargs...)
+}
+
 // MockAdminService_StreamWorkflowReplicationMessagesClient is a mock of AdminService_StreamWorkflowReplicationMessagesClient interface.
 type MockAdminService_StreamWorkflowReplicationMessagesClient struct {
 	ctrl     *gomock.Controller
@@ -1204,6 +1264,36 @@ func (m *MockAdminServiceServer) DescribeTaskQueuePartition(arg0 context.Context
 func (mr *MockAdminServiceServerMockRecorder) DescribeTaskQueuePartition(arg0, arg1 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DescribeTaskQueuePartition", reflect.TypeOf((*MockAdminServiceServer)(nil).DescribeTaskQueuePartition), arg0, arg1)
+}
+
+// ForceUnloadTaskQueuePartition mocks base method.
+func (m *MockAdminServiceServer) ForceUnloadTaskQueuePartition(arg0 context.Context, arg1 *adminservice.ForceUnloadTaskQueuePartitionRequest) (*adminservice.ForceUnloadTaskQueuePartitionResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ForceUnloadTaskQueuePartition", arg0, arg1)
+	ret0, _ := ret[0].(*adminservice.ForceUnloadTaskQueuePartitionResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ForceUnloadTaskQueuePartition indicates an expected call of ForceUnloadTaskQueuePartition.
+func (mr *MockAdminServiceServerMockRecorder) ForceUnloadTaskQueuePartition(arg0, arg1 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ForceUnloadTaskQueuePartition", reflect.TypeOf((*MockAdminServiceServer)(nil).ForceUnloadTaskQueuePartition), arg0, arg1)
+}
+
+// GenerateLastHistoryReplicationTasks mocks base method.
+func (m *MockAdminServiceServer) GenerateLastHistoryReplicationTasks(arg0 context.Context, arg1 *adminservice.GenerateLastHistoryReplicationTasksRequest) (*adminservice.GenerateLastHistoryReplicationTasksResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GenerateLastHistoryReplicationTasks", arg0, arg1)
+	ret0, _ := ret[0].(*adminservice.GenerateLastHistoryReplicationTasksResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GenerateLastHistoryReplicationTasks indicates an expected call of GenerateLastHistoryReplicationTasks.
+func (mr *MockAdminServiceServerMockRecorder) GenerateLastHistoryReplicationTasks(arg0, arg1 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GenerateLastHistoryReplicationTasks", reflect.TypeOf((*MockAdminServiceServer)(nil).GenerateLastHistoryReplicationTasks), arg0, arg1)
 }
 
 // GetDLQMessages mocks base method.
@@ -1623,6 +1713,21 @@ func (m *MockAdminServiceServer) StreamWorkflowReplicationMessages(arg0 adminser
 func (mr *MockAdminServiceServerMockRecorder) StreamWorkflowReplicationMessages(arg0 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "StreamWorkflowReplicationMessages", reflect.TypeOf((*MockAdminServiceServer)(nil).StreamWorkflowReplicationMessages), arg0)
+}
+
+// SyncWorkflowState mocks base method.
+func (m *MockAdminServiceServer) SyncWorkflowState(arg0 context.Context, arg1 *adminservice.SyncWorkflowStateRequest) (*adminservice.SyncWorkflowStateResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "SyncWorkflowState", arg0, arg1)
+	ret0, _ := ret[0].(*adminservice.SyncWorkflowStateResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// SyncWorkflowState indicates an expected call of SyncWorkflowState.
+func (mr *MockAdminServiceServerMockRecorder) SyncWorkflowState(arg0, arg1 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SyncWorkflowState", reflect.TypeOf((*MockAdminServiceServer)(nil).SyncWorkflowState), arg0, arg1)
 }
 
 // mustEmbedUnimplementedAdminServiceServer mocks base method.

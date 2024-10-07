@@ -5023,3 +5023,151 @@ func (this *DeepHealthCheckResponse) Equal(that interface{}) bool {
 
 	return proto.Equal(this, that1)
 }
+
+// Marshal an object of type SyncWorkflowStateRequest to the protobuf v3 wire format
+func (val *SyncWorkflowStateRequest) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type SyncWorkflowStateRequest from the protobuf v3 wire format
+func (val *SyncWorkflowStateRequest) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *SyncWorkflowStateRequest) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two SyncWorkflowStateRequest values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *SyncWorkflowStateRequest) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *SyncWorkflowStateRequest
+	switch t := that.(type) {
+	case *SyncWorkflowStateRequest:
+		that1 = t
+	case SyncWorkflowStateRequest:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
+// Marshal an object of type SyncWorkflowStateResponse to the protobuf v3 wire format
+func (val *SyncWorkflowStateResponse) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type SyncWorkflowStateResponse from the protobuf v3 wire format
+func (val *SyncWorkflowStateResponse) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *SyncWorkflowStateResponse) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two SyncWorkflowStateResponse values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *SyncWorkflowStateResponse) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *SyncWorkflowStateResponse
+	switch t := that.(type) {
+	case *SyncWorkflowStateResponse:
+		that1 = t
+	case SyncWorkflowStateResponse:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
+// Marshal an object of type UpdateActivityOptionsRequest to the protobuf v3 wire format
+func (val *UpdateActivityOptionsRequest) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type UpdateActivityOptionsRequest from the protobuf v3 wire format
+func (val *UpdateActivityOptionsRequest) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *UpdateActivityOptionsRequest) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two UpdateActivityOptionsRequest values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *UpdateActivityOptionsRequest) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *UpdateActivityOptionsRequest
+	switch t := that.(type) {
+	case *UpdateActivityOptionsRequest:
+		that1 = t
+	case UpdateActivityOptionsRequest:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
+// Marshal an object of type UpdateActivityOptionsResponse to the protobuf v3 wire format
+func (val *UpdateActivityOptionsResponse) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type UpdateActivityOptionsResponse from the protobuf v3 wire format
+func (val *UpdateActivityOptionsResponse) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *UpdateActivityOptionsResponse) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two UpdateActivityOptionsResponse values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *UpdateActivityOptionsResponse) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *UpdateActivityOptionsResponse
+	switch t := that.(type) {
+	case *UpdateActivityOptionsResponse:
+		that1 = t
+	case UpdateActivityOptionsResponse:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}

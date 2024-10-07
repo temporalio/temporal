@@ -27,13 +27,13 @@ package xdc
 import (
 	"time"
 
-	"go.temporal.io/server/tests"
+	"go.temporal.io/server/tests/testcore"
 )
 
 const (
 	numOfRetry           = 100
 	waitTimeInMs         = 400
 	waitForESToSettle    = 4 * time.Second // wait es shards for some time ensure data consistent
-	cacheRefreshInterval = tests.NamespaceCacheRefreshInterval + 5*time.Second
+	cacheRefreshInterval = testcore.NamespaceCacheRefreshInterval + 5*time.Second
 	testTimeout          = 30 * time.Second
 )

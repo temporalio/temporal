@@ -30,6 +30,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"sync"
 	"testing"
 	"time"
 
@@ -56,7 +57,7 @@ import (
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/environment"
-	"go.temporal.io/server/tests"
+	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 	"gopkg.in/yaml.v3"
@@ -70,16 +71,19 @@ type AdvVisCrossDCTestSuite struct {
 	historyrequire.HistoryRequire
 	suite.Suite
 
-	testClusterFactory tests.TestClusterFactory
+	testClusterFactory testcore.TestClusterFactory
 
-	cluster1               *tests.TestCluster
-	cluster2               *tests.TestCluster
+	cluster1               *testcore.TestCluster
+	cluster2               *testcore.TestCluster
 	logger                 log.Logger
-	clusterConfigs         []*tests.TestClusterConfig
+	clusterConfigs         []*testcore.TestClusterConfig
 	isElasticsearchEnabled bool
 
 	testSearchAttributeKey string
 	testSearchAttributeVal string
+
+	startTime          time.Time
+	onceClusterConnect sync.Once
 }
 
 func TestAdvVisCrossDCTestSuite(t *testing.T) {
@@ -101,22 +105,22 @@ var (
 
 func (s *AdvVisCrossDCTestSuite) SetupSuite() {
 	s.logger = log.NewTestLogger()
-	s.testClusterFactory = tests.NewTestClusterFactory()
+	s.testClusterFactory = testcore.NewTestClusterFactory()
 
 	var fileName string
-	if tests.UsingSQLAdvancedVisibility() {
+	if testcore.UsingSQLAdvancedVisibility() {
 		// NOTE: can't use xdc_clusters.yaml here because it somehow interferes with the other xDC tests.
 		fileName = "../testdata/xdc_adv_vis_clusters.yaml"
 		s.isElasticsearchEnabled = false
-		s.logger.Info(fmt.Sprintf("Running xDC advanced visibility test with %s/%s persistence", tests.TestFlags.PersistenceType, tests.TestFlags.PersistenceDriver))
+		s.logger.Info(fmt.Sprintf("Running xDC advanced visibility test with %s/%s persistence", testcore.TestFlags.PersistenceType, testcore.TestFlags.PersistenceDriver))
 	} else {
 		fileName = "../testdata/xdc_adv_vis_es_clusters.yaml"
 		s.isElasticsearchEnabled = true
 		s.logger.Info("Running xDC advanced visibility test with Elasticsearch persistence")
 	}
 
-	if tests.TestFlags.TestClusterConfigFile != "" {
-		fileName = tests.TestFlags.TestClusterConfigFile
+	if testcore.TestFlags.TestClusterConfigFile != "" {
+		fileName = testcore.TestFlags.TestClusterConfigFile
 	}
 	environment.SetupEnv()
 
@@ -124,7 +128,7 @@ func (s *AdvVisCrossDCTestSuite) SetupSuite() {
 	s.Require().NoError(err)
 	confContent = []byte(os.ExpandEnv(string(confContent)))
 
-	var clusterConfigs []*tests.TestClusterConfig
+	var clusterConfigs []*testcore.TestClusterConfig
 	s.Require().NoError(yaml.Unmarshal(confContent, &clusterConfigs))
 	s.clusterConfigs = clusterConfigs
 
@@ -136,15 +140,17 @@ func (s *AdvVisCrossDCTestSuite) SetupSuite() {
 	s.Require().NoError(err)
 	s.cluster2 = c
 
+	s.startTime = time.Now()
+
 	cluster1Address := clusterConfigs[0].ClusterMetadata.ClusterInformation[clusterConfigs[0].ClusterMetadata.CurrentClusterName].RPCAddress
 	cluster2Address := clusterConfigs[1].ClusterMetadata.ClusterInformation[clusterConfigs[1].ClusterMetadata.CurrentClusterName].RPCAddress
-	_, err = s.cluster1.GetAdminClient().AddOrUpdateRemoteCluster(tests.NewContext(), &adminservice.AddOrUpdateRemoteClusterRequest{
+	_, err = s.cluster1.AdminClient().AddOrUpdateRemoteCluster(testcore.NewContext(), &adminservice.AddOrUpdateRemoteClusterRequest{
 		FrontendAddress:               cluster2Address,
 		EnableRemoteClusterConnection: true,
 	})
 	s.Require().NoError(err)
 
-	_, err = s.cluster2.GetAdminClient().AddOrUpdateRemoteCluster(tests.NewContext(), &adminservice.AddOrUpdateRemoteClusterRequest{
+	_, err = s.cluster2.AdminClient().AddOrUpdateRemoteCluster(testcore.NewContext(), &adminservice.AddOrUpdateRemoteClusterRequest{
 		FrontendAddress:               cluster1Address,
 		EnableRemoteClusterConnection: true,
 	})
@@ -161,6 +167,11 @@ func (s *AdvVisCrossDCTestSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 	s.ProtoAssertions = protorequire.New(s.T())
 	s.HistoryRequire = historyrequire.New(s.T())
+
+	s.onceClusterConnect.Do(func() {
+		waitForClusterConnected(s.Assertions, s.logger, s.cluster1, clusterNameAdvVis[0], clusterNameAdvVis[1], s.startTime)
+		waitForClusterConnected(s.Assertions, s.logger, s.cluster2, clusterNameAdvVis[1], clusterNameAdvVis[0], s.startTime)
+	})
 }
 
 func (s *AdvVisCrossDCTestSuite) TearDownSuite() {
@@ -170,7 +181,7 @@ func (s *AdvVisCrossDCTestSuite) TearDownSuite() {
 
 func (s *AdvVisCrossDCTestSuite) TestSearchAttributes() {
 	namespace := "test-xdc-search-attr-" + common.GenerateRandomString(5)
-	client1 := s.cluster1.GetFrontendClient() // active
+	client1 := s.cluster1.FrontendClient() // active
 	regReq := &workflowservice.RegisterNamespaceRequest{
 		Namespace:                        namespace,
 		Clusters:                         clusterReplicationConfigAdvVis,
@@ -178,14 +189,14 @@ func (s *AdvVisCrossDCTestSuite) TestSearchAttributes() {
 		IsGlobalNamespace:                true,
 		WorkflowExecutionRetentionPeriod: durationpb.New(1 * time.Hour * 24),
 	}
-	_, err := client1.RegisterNamespace(tests.NewContext(), regReq)
+	_, err := client1.RegisterNamespace(testcore.NewContext(), regReq)
 	s.NoError(err)
 
 	// Wait for namespace cache to pick the change
 	time.Sleep(cacheRefreshInterval)
 	if !s.isElasticsearchEnabled {
 		// When Elasticsearch is enabled, the search attribute aliases are not used.
-		_, err = client1.UpdateNamespace(tests.NewContext(), &workflowservice.UpdateNamespaceRequest{
+		_, err = client1.UpdateNamespace(testcore.NewContext(), &workflowservice.UpdateNamespaceRequest{
 			Namespace: namespace,
 			Config: &namespacepb.NamespaceConfig{
 				CustomSearchAttributeAliases: map[string]string{
@@ -206,12 +217,12 @@ func (s *AdvVisCrossDCTestSuite) TestSearchAttributes() {
 	descReq := &workflowservice.DescribeNamespaceRequest{
 		Namespace: namespace,
 	}
-	resp, err := client1.DescribeNamespace(tests.NewContext(), descReq)
+	resp, err := client1.DescribeNamespace(testcore.NewContext(), descReq)
 	s.NoError(err)
 	s.NotNil(resp)
 
-	client2 := s.cluster2.GetFrontendClient() // standby
-	resp2, err := client2.DescribeNamespace(tests.NewContext(), descReq)
+	client2 := s.cluster2.FrontendClient() // standby
+	resp2, err := client2.DescribeNamespace(testcore.NewContext(), descReq)
 	s.NoError(err)
 	s.NotNil(resp2)
 	s.Equal(resp, resp2)
@@ -241,7 +252,7 @@ func (s *AdvVisCrossDCTestSuite) TestSearchAttributes() {
 		SearchAttributes:    searchAttr,
 	}
 	startTime := time.Now().UTC()
-	we, err := client1.StartWorkflowExecution(tests.NewContext(), startReq)
+	we, err := client1.StartWorkflowExecution(testcore.NewContext(), startReq)
 	s.NoError(err)
 	s.NotNil(we.GetRunId())
 
@@ -255,12 +266,12 @@ func (s *AdvVisCrossDCTestSuite) TestSearchAttributes() {
 		Query:     fmt.Sprintf(`WorkflowId = "%s" and %s = "%s"`, id, s.testSearchAttributeKey, s.testSearchAttributeVal),
 	}
 
-	testListResult := func(client tests.FrontendClient, lr *workflowservice.ListWorkflowExecutionsRequest) {
+	testListResult := func(client workflowservice.WorkflowServiceClient, lr *workflowservice.ListWorkflowExecutionsRequest) {
 		var openExecution *workflowpb.WorkflowExecutionInfo
 		for i := 0; i < numOfRetry; i++ {
 			startFilter.LatestTime = timestamppb.New(time.Now().UTC())
 
-			resp, err := client.ListWorkflowExecutions(tests.NewContext(), lr)
+			resp, err := client.ListWorkflowExecutions(testcore.NewContext(), lr)
 			s.NoError(err)
 			if len(resp.GetExecutions()) == 1 {
 				openExecution = resp.GetExecutions()[0]
@@ -278,11 +289,11 @@ func (s *AdvVisCrossDCTestSuite) TestSearchAttributes() {
 	}
 
 	// List workflow in active
-	engine1 := s.cluster1.GetFrontendClient()
+	engine1 := s.cluster1.FrontendClient()
 	testListResult(engine1, saListRequest)
 
 	// List workflow in standby
-	engine2 := s.cluster2.GetFrontendClient()
+	engine2 := s.cluster2.FrontendClient()
 	testListResult(engine2, saListRequest)
 
 	// upsert search attributes
@@ -296,7 +307,7 @@ func (s *AdvVisCrossDCTestSuite) TestSearchAttributes() {
 		return []*commandpb.Command{upsertCommand}, nil
 	}
 
-	poller := tests.TaskPoller{
+	poller := testcore.TaskPoller{
 		Client:              client1,
 		Namespace:           namespace,
 		TaskQueue:           taskQueue,
@@ -312,9 +323,9 @@ func (s *AdvVisCrossDCTestSuite) TestSearchAttributes() {
 
 	time.Sleep(waitForESToSettle)
 
-	testListResult = func(client tests.FrontendClient, lr *workflowservice.ListWorkflowExecutionsRequest) {
+	testListResult = func(client workflowservice.WorkflowServiceClient, lr *workflowservice.ListWorkflowExecutionsRequest) {
 		s.Eventually(func() bool {
-			resp, err := client.ListWorkflowExecutions(tests.NewContext(), lr)
+			resp, err := client.ListWorkflowExecutions(testcore.NewContext(), lr)
 			s.NoError(err)
 			if len(resp.GetExecutions()) != 1 {
 				return false
@@ -368,7 +379,7 @@ func (s *AdvVisCrossDCTestSuite) TestSearchAttributes() {
 	// terminate workflow
 	terminateReason := "force terminate to make sure standby process tasks"
 	terminateDetails := payloads.EncodeString("terminate details")
-	_, err = client1.TerminateWorkflowExecution(tests.NewContext(), &workflowservice.TerminateWorkflowExecutionRequest{
+	_, err = client1.TerminateWorkflowExecution(testcore.NewContext(), &workflowservice.TerminateWorkflowExecutionRequest{
 		Namespace: namespace,
 		WorkflowExecution: &commonpb.WorkflowExecution{
 			WorkflowId: id,
@@ -389,7 +400,7 @@ func (s *AdvVisCrossDCTestSuite) TestSearchAttributes() {
 	}
 GetHistoryLoop:
 	for i := 0; i < 10; i++ {
-		historyResponse, err := client1.GetWorkflowExecutionHistory(tests.NewContext(), getHistoryReq)
+		historyResponse, err := client1.GetWorkflowExecutionHistory(testcore.NewContext(), getHistoryReq)
 		s.NoError(err)
 		history := historyResponse.History
 
@@ -400,12 +411,12 @@ GetHistoryLoop:
 			continue GetHistoryLoop
 		}
 		s.EqualHistory(`
-  1 WorkflowExecutionStarted
-  2 WorkflowTaskScheduled
-  3 WorkflowTaskStarted
-  4 WorkflowTaskCompleted
-  5 UpsertWorkflowSearchAttributes
-  6 WorkflowExecutionTerminated {"Details":{"Payloads":[{"Data":"\"terminate details\""}]},"Identity":"worker1","Reason":"force terminate to make sure standby process tasks"}`, history)
+  1 1 WorkflowExecutionStarted
+  2 1 WorkflowTaskScheduled
+  3 1 WorkflowTaskStarted
+  4 1 WorkflowTaskCompleted
+  5 1 UpsertWorkflowSearchAttributes
+  6 1 WorkflowExecutionTerminated {"Details":{"Payloads":[{"Data":"\"terminate details\""}]},"Identity":"worker1","Reason":"force terminate to make sure standby process tasks"}`, history)
 		executionTerminated = true
 		break GetHistoryLoop
 	}
@@ -416,18 +427,18 @@ GetHistoryLoop:
 	eventsReplicated := false
 GetHistoryLoop2:
 	for i := 0; i < numOfRetry; i++ {
-		historyResponse, err = client2.GetWorkflowExecutionHistory(tests.NewContext(), getHistoryReq)
+		historyResponse, err = client2.GetWorkflowExecutionHistory(testcore.NewContext(), getHistoryReq)
 		if err == nil {
 			history := historyResponse.History
 			lastEvent := history.Events[len(history.Events)-1]
 			if lastEvent.EventType == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TERMINATED {
 				s.EqualHistory(`
-  1 WorkflowExecutionStarted
-  2 WorkflowTaskScheduled
-  3 WorkflowTaskStarted
-  4 WorkflowTaskCompleted
-  5 UpsertWorkflowSearchAttributes
-  6 WorkflowExecutionTerminated {"Details":{"Payloads":[{"Data":"\"terminate details\""}]},"Identity":"worker1","Reason":"force terminate to make sure standby process tasks"}`, history)
+  1 1 WorkflowExecutionStarted
+  2 1 WorkflowTaskScheduled
+  3 1 WorkflowTaskStarted
+  4 1 WorkflowTaskCompleted
+  5 1 UpsertWorkflowSearchAttributes
+  6 1 WorkflowExecutionTerminated {"Details":{"Payloads":[{"Data":"\"terminate details\""}]},"Identity":"worker1","Reason":"force terminate to make sure standby process tasks"}`, history)
 				eventsReplicated = true
 				break GetHistoryLoop2
 			}

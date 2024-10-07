@@ -315,14 +315,6 @@ func (m *StreamReceiverMonitorImpl) doReconcileOutboundStreams(
 }
 
 func (m *StreamReceiverMonitorImpl) statusMonitorLoop() {
-	var panicErr error
-	defer func() {
-		if panicErr != nil {
-			metrics.ReplicationStreamPanic.With(m.MetricsHandler).Record(1)
-		}
-	}()
-	defer log.CapturePanic(m.Logger, &panicErr)
-
 	ticker := time.NewTicker(5 * time.Minute)
 	defer ticker.Stop()
 
@@ -336,6 +328,14 @@ func (m *StreamReceiverMonitorImpl) statusMonitorLoop() {
 	}
 }
 func (m *StreamReceiverMonitorImpl) monitorStreamStatus() {
+	var panicErr error
+	defer func() {
+		log.CapturePanic(m.Logger, &panicErr)
+		if panicErr != nil {
+			metrics.ReplicationStreamPanic.With(m.MetricsHandler).Record(1)
+		}
+	}()
+
 	if m.shutdownOnce.IsShutdown() {
 		return
 	}
@@ -381,8 +381,9 @@ func (m *StreamReceiverMonitorImpl) evaluateSingleStreamConnection(key *ClusterS
 	if !current.isTieredStackEnabled {
 		return checkIfMakeProgress(enumspb.TASK_PRIORITY_UNSPECIFIED, current.defaultAckLevel, current.maxReplicationTaskId, previous.defaultAckLevel, previous.maxReplicationTaskId)
 	}
-	return checkIfMakeProgress(enumspb.TASK_PRIORITY_HIGH, current.highPriorityAckLevel, current.maxReplicationTaskId, previous.highPriorityAckLevel, previous.maxReplicationTaskId) &&
-		checkIfMakeProgress(enumspb.TASK_PRIORITY_LOW, current.lowPriorityAckLevel, current.maxReplicationTaskId, previous.lowPriorityAckLevel, previous.maxReplicationTaskId)
+	highPriorityResult := checkIfMakeProgress(enumspb.TASK_PRIORITY_HIGH, current.highPriorityAckLevel, current.maxReplicationTaskId, previous.highPriorityAckLevel, previous.maxReplicationTaskId)
+	lowPriorityResult := checkIfMakeProgress(enumspb.TASK_PRIORITY_LOW, current.lowPriorityAckLevel, current.maxReplicationTaskId, previous.lowPriorityAckLevel, previous.maxReplicationTaskId)
+	return highPriorityResult && lowPriorityResult
 }
 
 func (m *StreamReceiverMonitorImpl) generateStatusMap(inboundKeys map[ClusterShardKeyPair]struct{}) map[ClusterShardKeyPair]*streamStatus {

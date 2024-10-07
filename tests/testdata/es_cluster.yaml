@@ -5,7 +5,6 @@ historyconfig:
   numhistoryshards: 4
   numhistoryhosts: 1
 workerconfig:
-  startworkeranyway: true
   enablearchiver: true
   enablereplicator: true
 esconfig:

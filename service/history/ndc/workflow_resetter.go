@@ -136,7 +136,6 @@ func (r *workflowResetterImpl) ResetWorkflow(
 	var currentWorkflowEventsSeq []*persistence.WorkflowEvents
 	var reapplyEventsFn workflowResetReapplyEventsFn
 	currentMutableState := currentWorkflow.GetMutableState()
-	currentUpdateRegistry := currentWorkflow.GetContext().UpdateRegistry(ctx, nil)
 	if currentMutableState.IsWorkflowExecutionRunning() {
 		if err := r.terminateWorkflow(
 			currentMutableState,
@@ -157,7 +156,6 @@ func (r *workflowResetterImpl) ResetWorkflow(
 			lastVisitedRunID, err := r.reapplyContinueAsNewWorkflowEvents(
 				ctx,
 				resetMutableState,
-				currentUpdateRegistry,
 				currentWorkflow,
 				namespaceID,
 				workflowID,
@@ -173,7 +171,7 @@ func (r *workflowResetterImpl) ResetWorkflow(
 
 			if lastVisitedRunID == currentMutableState.GetExecutionState().RunId {
 				for _, event := range currentWorkflowEventsSeq {
-					if _, err := r.reapplyEvents(resetMutableState, event.Events, resetReapplyExcludeTypes); err != nil {
+					if _, err := r.reapplyEvents(ctx, resetMutableState, event.Events, resetReapplyExcludeTypes); err != nil {
 						return err
 					}
 				}
@@ -185,7 +183,6 @@ func (r *workflowResetterImpl) ResetWorkflow(
 			_, err := r.reapplyContinueAsNewWorkflowEvents(
 				ctx,
 				resetMutableState,
-				currentUpdateRegistry,
 				currentWorkflow,
 				namespaceID,
 				workflowID,
@@ -221,7 +218,7 @@ func (r *workflowResetterImpl) ResetWorkflow(
 	if err := reapplyEventsFn(ctx, resetMS); err != nil {
 		return err
 	}
-	if _, err := r.reapplyEvents(resetMS, additionalReapplyEvents, nil); err != nil {
+	if _, err := r.reapplyEvents(ctx, resetMS, additionalReapplyEvents, nil); err != nil {
 		return err
 	}
 
@@ -505,8 +502,9 @@ func (r *workflowResetterImpl) failInflightActivity(
 		switch ai.StartedEventId {
 		case common.EmptyEventID:
 			// activity not started, noop
-			// override the activity time to now
+			// override the scheduled activity time to now
 			ai.ScheduledTime = timestamppb.New(now)
+			ai.FirstScheduledTime = timestamppb.New(now)
 			if err := mutableState.UpdateActivity(ai); err != nil {
 				return err
 			}
@@ -574,7 +572,6 @@ func (r *workflowResetterImpl) terminateWorkflow(
 func (r *workflowResetterImpl) reapplyContinueAsNewWorkflowEvents(
 	ctx context.Context,
 	resetMutableState workflow.MutableState,
-	currentUpdateRegistry update.Registry,
 	currentWorkflow Workflow,
 	namespaceID namespace.ID,
 	workflowID string,
@@ -707,7 +704,7 @@ func (r *workflowResetterImpl) reapplyEventsFromBranch(
 			return "", err
 		}
 		lastEvents = batch.Events
-		if _, err := r.reapplyEvents(mutableState, lastEvents, resetReapplyExcludeTypes); err != nil {
+		if _, err := r.reapplyEvents(ctx, mutableState, lastEvents, resetReapplyExcludeTypes); err != nil {
 			return "", err
 		}
 	}
@@ -722,6 +719,7 @@ func (r *workflowResetterImpl) reapplyEventsFromBranch(
 }
 
 func (r *workflowResetterImpl) reapplyEvents(
+	ctx context.Context,
 	mutableState workflow.MutableState,
 	events []*historypb.HistoryEvent,
 	resetReapplyExcludeTypes map[enumspb.ResetReapplyExcludeType]bool,
@@ -729,10 +727,11 @@ func (r *workflowResetterImpl) reapplyEvents(
 	// When reapplying events during WorkflowReset, we do not check for conflicting update IDs (they are not possible,
 	// since the workflow was in a consistent state before reset), and we do not perform deduplication (because we never
 	// did, before the refactoring that unified two code paths; see comment below.)
-	return reapplyEvents(mutableState, nil, r.shardContext.StateMachineRegistry(), events, resetReapplyExcludeTypes, "")
+	return reapplyEvents(ctx, mutableState, nil, r.shardContext.StateMachineRegistry(), events, resetReapplyExcludeTypes, "")
 }
 
 func reapplyEvents(
+	ctx context.Context,
 	mutableState workflow.MutableState,
 	targetBranchUpdateRegistry update.Registry,
 	stateMachineRegistry *hsm.Registry,
@@ -751,7 +750,7 @@ func reapplyEvents(
 	}
 	excludeSignal := resetReapplyExcludeTypes[enumspb.RESET_REAPPLY_EXCLUDE_TYPE_SIGNAL]
 	excludeUpdate := resetReapplyExcludeTypes[enumspb.RESET_REAPPLY_EXCLUDE_TYPE_UPDATE]
-	reappliedEvents := []*historypb.HistoryEvent{}
+	var reappliedEvents []*historypb.HistoryEvent
 	for _, event := range events {
 		switch event.GetEventType() {
 		case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED:
@@ -774,7 +773,10 @@ func reapplyEvents(
 				continue
 			}
 			attr := event.GetWorkflowExecutionUpdateAdmittedEventAttributes()
-			if targetBranchUpdateRegistry != nil && targetBranchUpdateRegistry.Contains(attr.Request.Meta.UpdateId) {
+			// targetBranchUpdateRegistry is a nil in a Reset case, and not nil in a conflict resolution case.
+			// If the Update with the same UpdateId is already present in the target branch (Find returns non-nil),
+			// it is skipped and not reapplied.
+			if targetBranchUpdateRegistry != nil && targetBranchUpdateRegistry.Find(ctx, attr.Request.Meta.UpdateId) != nil {
 				continue
 			}
 			if _, err := mutableState.AddWorkflowExecutionUpdateAdmittedEvent(
@@ -789,7 +791,10 @@ func reapplyEvents(
 				continue
 			}
 			attr := event.GetWorkflowExecutionUpdateAcceptedEventAttributes()
-			if targetBranchUpdateRegistry != nil && targetBranchUpdateRegistry.Contains(attr.ProtocolInstanceId) {
+			// targetBranchUpdateRegistry is a nil in a Reset case, and not nil in a conflict resolution case.
+			// If the Update with the same UpdateId is already present in the target branch (Find returns non-nil),
+			// it is skipped and not reapplied.
+			if targetBranchUpdateRegistry != nil && targetBranchUpdateRegistry.Find(ctx, attr.ProtocolInstanceId) != nil {
 				continue
 			}
 			request := attr.GetAcceptedRequest()

@@ -250,20 +250,21 @@ func syncOfferTask[T any](
 	}
 
 	fwdrTokenC := tm.fwdrAddReqTokenC()
-	var noPollerCtxC <-chan struct{}
-
-	if returnNoPollerErr {
-		if deadline, ok := ctx.Deadline(); ok && fwdrTokenC == nil {
-			// Reserving 1sec to customize the timeout error if user is querying a workflow
-			// without having started the workers.
-			noPollerTimeout := time.Until(deadline) - time.Second
-			noPollerCtx, cancel := context.WithTimeout(ctx, noPollerTimeout)
-			noPollerCtxC = noPollerCtx.Done()
-			defer cancel()
-		}
-	}
+	var noPollerC <-chan time.Time
 
 	for {
+		if returnNoPollerErr {
+			returnNoPollerErr = false // only do this once
+			if deadline, ok := ctx.Deadline(); ok && fwdrTokenC == nil {
+				// Reserving 1sec to customize the timeout error if user is querying a workflow
+				// without having started the workers.
+				noPollerTimeout := time.Until(deadline) - returnEmptyTaskTimeBudget
+				t := time.NewTimer(noPollerTimeout)
+				noPollerC = t.C
+				defer t.Stop()
+			}
+		}
+
 		select {
 		case taskChan <- task:
 			<-task.responseC
@@ -281,7 +282,7 @@ func syncOfferTask[T any](
 				continue
 			}
 			return t, err
-		case <-noPollerCtxC:
+		case <-noPollerC:
 			// only error if there has not been a recent poller. Otherwise, let it wait for the remaining time
 			// hopping for a match, or ultimately returning the default CDE error.
 			if tm.timeSinceLastPoll() > tm.config.QueryPollerUnavailableWindow() {

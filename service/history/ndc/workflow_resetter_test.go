@@ -57,7 +57,6 @@ import (
 	"go.temporal.io/server/service/history/tests"
 	"go.temporal.io/server/service/history/workflow"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
-	"go.temporal.io/server/service/history/workflow/update"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -461,15 +460,17 @@ func (s *workflowResetterSuite) TestFailInflightActivity() {
 		Version:              12,
 		ScheduledEventId:     123,
 		ScheduledTime:        timestamppb.New(now.Add(-10 * time.Second)),
+		FirstScheduledTime:   timestamppb.New(now.Add(-10 * time.Second)),
 		StartedEventId:       124,
 		LastHeartbeatDetails: payloads.EncodeString("some random activity 1 details"),
 		StartedIdentity:      "some random activity 1 started identity",
 	}
 	activity2 := &persistencespb.ActivityInfo{
-		Version:          12,
-		ScheduledEventId: 456,
-		ScheduledTime:    timestamppb.New(now.Add(-10 * time.Second)),
-		StartedEventId:   common.EmptyEventID,
+		Version:            12,
+		ScheduledEventId:   456,
+		ScheduledTime:      timestamppb.New(now.Add(-10 * time.Second)),
+		FirstScheduledTime: timestamppb.New(now.Add(-10 * time.Second)),
+		StartedEventId:     common.EmptyEventID,
 	}
 	mutableState.EXPECT().GetPendingActivityInfos().Return(map[int64]*persistencespb.ActivityInfo{
 		activity1.ScheduledEventId: activity1,
@@ -486,10 +487,11 @@ func (s *workflowResetterSuite) TestFailInflightActivity() {
 	).Return(&historypb.HistoryEvent{}, nil)
 
 	mutableState.EXPECT().UpdateActivity(&persistencespb.ActivityInfo{
-		Version:          activity2.Version,
-		ScheduledEventId: activity2.ScheduledEventId,
-		ScheduledTime:    timestamppb.New(now),
-		StartedEventId:   activity2.StartedEventId,
+		Version:            activity2.Version,
+		ScheduledEventId:   activity2.ScheduledEventId,
+		ScheduledTime:      timestamppb.New(now),
+		FirstScheduledTime: timestamppb.New(now),
+		StartedEventId:     activity2.StartedEventId,
 	}).Return(nil)
 
 	err := s.workflowResetter.failInflightActivity(now, mutableState, terminateReason)
@@ -599,9 +601,6 @@ func (s *workflowResetterSuite) TestReapplyContinueAsNewWorkflowEvents_WithOutCo
 	}, nil)
 
 	mutableState := workflow.NewMockMutableState(s.controller)
-	mutableState.EXPECT().VisitUpdates(gomock.Any()).Return()
-	mutableState.EXPECT().GetCurrentVersion().Return(int64(0))
-	currentUpdateRegistry := update.NewRegistry(mutableState)
 	currentWorkflow := NewMockWorkflow(s.controller)
 	smReg := hsm.NewRegistry()
 	s.NoError(workflow.RegisterStateMachine(smReg))
@@ -612,7 +611,6 @@ func (s *workflowResetterSuite) TestReapplyContinueAsNewWorkflowEvents_WithOutCo
 	lastVisitedRunID, err := s.workflowResetter.reapplyContinueAsNewWorkflowEvents(
 		ctx,
 		mutableState,
-		currentUpdateRegistry,
 		currentWorkflow,
 		s.namespaceID,
 		s.workflowID,
@@ -729,10 +727,7 @@ func (s *workflowResetterSuite) TestReapplyContinueAsNewWorkflowEvents_WithConti
 	s.NoError(err)
 
 	mutableState := workflow.NewMockMutableState(s.controller)
-	mutableState.EXPECT().VisitUpdates(gomock.Any()).Return()
-	mutableState.EXPECT().GetCurrentVersion().Return(int64(0))
 	mutableState.EXPECT().GetWorkflowKey().Return(definition.WorkflowKey{RunID: "random-run-id"})
-	currentUpdateRegistry := update.NewRegistry(mutableState)
 	currentWorkflow := NewMockWorkflow(s.controller)
 	currentWorkflow.EXPECT().GetMutableState().Return(mutableState)
 	smReg := hsm.NewRegistry()
@@ -744,7 +739,6 @@ func (s *workflowResetterSuite) TestReapplyContinueAsNewWorkflowEvents_WithConti
 	lastVisitedRunID, err := s.workflowResetter.reapplyContinueAsNewWorkflowEvents(
 		ctx,
 		mutableState,
-		currentUpdateRegistry,
 		currentWorkflow,
 		s.namespaceID,
 		s.workflowID,
@@ -918,7 +912,7 @@ func (s *workflowResetterSuite) TestReapplyEvents() {
 	s.NoError(err)
 	ms.EXPECT().HSM().Return(root).AnyTimes()
 
-	_, err = reapplyEvents(ms, nil, smReg, events, nil, "")
+	_, err = reapplyEvents(context.Background(), ms, nil, smReg, events, nil, "")
 	s.NoError(err)
 }
 

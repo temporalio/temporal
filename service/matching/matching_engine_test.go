@@ -1489,6 +1489,54 @@ func (s *matchingEngineSuite) TestPollWithExpiredContext() {
 	s.Equal(emptyPollActivityTaskQueueResponse, resp)
 }
 
+func (s *matchingEngineSuite) TestForceUnloadTaskQueue() {
+	ctx := context.Background()
+	namespaceId := uuid.New()
+	identity := "nobody"
+
+	// We unload a sticky queue so that we can verify the unload took effect by
+	// attempting to add a task to it
+	stickyQueue := &taskqueuepb.TaskQueue{Name: "sticky-queue", Kind: enumspb.TASK_QUEUE_KIND_STICKY}
+
+	addTaskRequest := matchingservice.AddWorkflowTaskRequest{
+		NamespaceId:      namespaceId,
+		Execution:        &commonpb.WorkflowExecution{WorkflowId: "workflowID", RunId: uuid.NewRandom().String()},
+		ScheduledEventId: int64(0),
+		TaskQueue:        stickyQueue,
+	}
+
+	// Poll to create the queue
+	pollResp, err := s.matchingEngine.PollWorkflowTaskQueue(ctx, &matchingservice.PollWorkflowTaskQueueRequest{
+		NamespaceId: namespaceId,
+		PollRequest: &workflowservice.PollWorkflowTaskQueueRequest{
+			TaskQueue: stickyQueue,
+			Identity:  identity,
+		}},
+		metrics.NoopMetricsHandler)
+	s.Nil(err)
+	s.NotNil(pollResp)
+
+	// Sanity check: adding a task should succeed with the queue loaded
+	_, _, err = s.matchingEngine.AddWorkflowTask(ctx, &addTaskRequest)
+	s.NoError(err)
+
+	// Force unload the sticky queue
+	unloadResp, err := s.matchingEngine.ForceUnloadTaskQueuePartition(ctx, &matchingservice.ForceUnloadTaskQueuePartitionRequest{
+		NamespaceId: namespaceId,
+		TaskQueuePartition: &taskqueuespb.TaskQueuePartition{
+			TaskQueue:     stickyQueue.Name,
+			TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+		},
+	})
+	s.NoError(err)
+	s.NotNil(unloadResp)
+	s.True(unloadResp.WasLoaded)
+
+	// Adding a task should now fast fail
+	_, _, err = s.matchingEngine.AddWorkflowTask(ctx, &addTaskRequest)
+	s.ErrorAs(err, new(*serviceerrors.StickyWorkerUnavailable))
+}
+
 func (s *matchingEngineSuite) TestMultipleEnginesActivitiesRangeStealing() {
 	runID := uuid.NewRandom().String()
 	workflowID := "workflow1"
@@ -2404,10 +2452,12 @@ func (s *matchingEngineSuite) TestGetTaskQueueUserData_LongPoll_Closes() {
 
 	go func() {
 		time.Sleep(200 * time.Millisecond)
-		_, _ = s.matchingEngine.ForceUnloadTaskQueue(context.Background(), &matchingservice.ForceUnloadTaskQueueRequest{
-			NamespaceId:   namespaceID.String(),
-			TaskQueue:     tq,
-			TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+		_, _ = s.matchingEngine.ForceUnloadTaskQueuePartition(context.Background(), &matchingservice.ForceUnloadTaskQueuePartitionRequest{
+			NamespaceId: namespaceID.String(),
+			TaskQueuePartition: &taskqueuespb.TaskQueuePartition{
+				TaskQueue:     tq,
+				TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+			},
 		})
 	}()
 

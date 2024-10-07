@@ -51,6 +51,7 @@ import (
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	schedspb "go.temporal.io/server/api/schedule/v1"
+	"go.temporal.io/server/api/taskqueue/v1"
 	"go.temporal.io/server/client/frontend"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/archiver"
@@ -2608,6 +2609,27 @@ func (wh *WorkflowHandler) ResetStickyTaskQueue(ctx context.Context, request *wo
 func (wh *WorkflowHandler) ShutdownWorker(ctx context.Context, request *workflowservice.ShutdownWorkerRequest) (_ *workflowservice.ShutdownWorkerResponse, retError error) {
 	defer log.CapturePanic(wh.logger, &retError)
 
+	if request == nil {
+		return nil, errRequestNotSet
+	}
+
+	namespaceId, err := wh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
+	if err != nil {
+		return nil, err
+	}
+
+	// TODO: update poller info to indicate poller was shut down (pass identity/reason along)
+	_, err = wh.matchingClient.ForceUnloadTaskQueuePartition(ctx, &matchingservice.ForceUnloadTaskQueuePartitionRequest{
+		NamespaceId: namespaceId.String(),
+		TaskQueuePartition: &taskqueue.TaskQueuePartition{
+			TaskQueue:     request.GetStickyTaskQueue(),
+			TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW, // sticky task queues are always workflow queues
+		},
+	})
+	if err != nil {
+		return nil, err
+	}
+
 	return &workflowservice.ShutdownWorkerResponse{}, nil
 }
 
@@ -5063,6 +5085,43 @@ func getBatchOperationState(workflowState enumspb.WorkflowExecutionStatus) enums
 	return operationState
 }
 
-func (wh *WorkflowHandler) UpdateActivityOptionsById(context.Context, *workflowservice.UpdateActivityOptionsByIdRequest) (*workflowservice.UpdateActivityOptionsByIdResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method UpdateActivityOptionsById not implemented")
+func (wh *WorkflowHandler) UpdateActivityOptionsById(
+	ctx context.Context,
+	request *workflowservice.UpdateActivityOptionsByIdRequest,
+) (_ *workflowservice.UpdateActivityOptionsByIdResponse, retError error) {
+	defer log.CapturePanic(wh.logger, &retError)
+
+	if !wh.config.ActivityAPIsEnabled(request.GetNamespace()) {
+		return nil, status.Errorf(codes.Unimplemented, "method UpdateActivityOptionsById not implemented")
+	}
+
+	wh.logger.Debug("Received UpdateActivityOptionsById")
+
+	if request == nil {
+		return nil, errRequestNotSet
+	}
+	if request.GetWorkflowId() == "" {
+		return nil, errWorkflowIDNotSet
+	}
+	if request.GetActivityId() == "" {
+		return nil, errActivityIDNotSet
+	}
+
+	namespace_id, err := wh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
+	if err != nil {
+		return nil, err
+	}
+
+	response, err := wh.historyClient.UpdateActivityOptions(ctx, &historyservice.UpdateActivityOptionsRequest{
+		NamespaceId:   namespace_id.String(),
+		UpdateRequest: request,
+	})
+
+	if err != nil {
+		return nil, err
+	}
+
+	return &workflowservice.UpdateActivityOptionsByIdResponse{
+		ActivityOptions: response.ActivityOptions,
+	}, nil
 }

@@ -140,37 +140,39 @@ func (t *MatcherTestSuite) TestRemoteSyncMatchBlocking() {
 
 func (t *MatcherTestSuite) testRemoteSyncMatch(taskSource enumsspb.TaskSource) {
 	pollSigC := make(chan struct{})
+	<-t.fwdr.PollReqTokenC()
 
 	go func() {
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
-		<-pollSigC
+		<-pollSigC // blocking call since we are receiving something
 		if taskSource == enumsspb.TASK_SOURCE_DB_BACKLOG {
 			// when task is from dbBacklog, sync match SHOULD block
 			// so lets delay polling by a bit to verify that
 			time.Sleep(time.Millisecond * 10)
 		}
-		task, err := t.childMatcher.Poll(ctx, &pollMetadata{})
+		task, err := t.rootMatcher.Poll(ctx, &pollMetadata{})
 		cancel()
+		t.False(task.isStarted())
 		if err == nil && !task.isStarted() {
 			task.finish(nil, true)
 		}
 	}()
 
-	var remotePollErr error
-	var remotePollResp matchingservice.PollWorkflowTaskQueueResponse
-	t.client.EXPECT().PollWorkflowTaskQueue(gomock.Any(), gomock.Any(), gomock.Any()).Do(
-		func(arg0 context.Context, arg1 *matchingservice.PollWorkflowTaskQueueRequest, arg2 ...interface{}) {
-			task, err := t.rootMatcher.Poll(arg0, &pollMetadata{})
-			if err != nil {
-				remotePollErr = err
-			} else {
-				task.finish(nil, true)
-				remotePollResp = matchingservice.PollWorkflowTaskQueueResponse{
-					WorkflowExecution: task.workflowExecution(),
-				}
-			}
-		},
-	).Return(&remotePollResp, remotePollErr).AnyTimes()
+	// var remotePollErr error
+	// var remotePollResp matchingservice.PollWorkflowTaskQueueResponse
+	// t.client.EXPECT().PollWorkflowTaskQueue(gomock.Any(), gomock.Any(), gomock.Any()).Do(
+	// 	func(arg0 context.Context, arg1 *matchingservice.PollWorkflowTaskQueueRequest, arg2 ...interface{}) {
+	// 		task, err := t.rootMatcher.Poll(arg0, &pollMetadata{})
+	// 		if err != nil {
+	// 			remotePollErr = err
+	// 		} else {
+	// 			task.finish(nil)
+	// 			remotePollResp = matchingservice.PollWorkflowTaskQueueResponse{
+	// 				WorkflowExecution: task.workflowExecution(),
+	// 			}
+	// 		}
+	// 	},
+	// ).Return(&remotePollResp, remotePollErr).AnyTimes()
 
 	task := newInternalTaskForSyncMatch(randomTaskInfo().Data, nil)
 	if taskSource == enumsspb.TASK_SOURCE_DB_BACKLOG {
@@ -199,7 +201,7 @@ func (t *MatcherTestSuite) testRemoteSyncMatch(taskSource enumsspb.TaskSource) {
 		},
 	).Return(&matchingservice.AddWorkflowTaskResponse{}, nil)
 
-	_, err0 := t.childMatcher.Offer(ctx, task)
+	err0 := t.childMatcher.MustOffer(ctx, task, nil)
 	t.NoError(err0)
 	cancel()
 	t.NotNil(req)
@@ -236,6 +238,7 @@ func (t *MatcherTestSuite) TestRejectSyncMatchWhenBacklog() {
 
 	// should not allow sync match when there is an old task in backlog
 	oldBacklogTask := newInternalTaskFromBacklog(randomTaskInfoWithAge(time.Minute), nil)
+	// todo Shivam - how to avoid the task from being forwarded here? this seems to be the flake!
 	go t.childMatcher.MustOffer(ctx, oldBacklogTask, intruptC) //nolint:errcheck
 	time.Sleep(time.Millisecond)
 	happened, err = t.childMatcher.Offer(ctx, historyTask)

@@ -46,7 +46,7 @@ import (
 	"go.temporal.io/server/api/adminservicemock/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
-	repicationpb "go.temporal.io/server/api/replication/v1"
+	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -58,7 +58,7 @@ import (
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/environment"
 	"go.temporal.io/server/service/history/replication/eventhandler"
-	"go.temporal.io/server/tests"
+	"go.temporal.io/server/tests/testcore"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -71,8 +71,8 @@ type (
 		protorequire.ProtoAssertions
 		suite.Suite
 
-		testClusterFactory          tests.TestClusterFactory
-		standByReplicationTasksChan chan *repicationpb.ReplicationTask
+		testClusterFactory          testcore.TestClusterFactory
+		standByReplicationTasksChan chan *replicationspb.ReplicationTask
 		mockAdminClient             map[string]adminservice.AdminServiceClient
 		namespace                   namespace.Name
 		namespaceID                 namespace.ID
@@ -81,7 +81,7 @@ type (
 		passiveClusterName          string
 
 		controller     *gomock.Controller
-		passiveCluster *tests.TestCluster
+		passiveCluster *testcore.TestCluster
 		generator      test.Generator
 		serializer     serialization.Serializer
 		logger         log.Logger
@@ -97,12 +97,12 @@ func TestReplicationMigrationBackTest(t *testing.T) {
 func (s *ReplicationMigrationBackTestSuite) SetupSuite() {
 	s.logger = log.NewTestLogger()
 	s.serializer = serialization.NewSerializer()
-	s.testClusterFactory = tests.NewTestClusterFactory()
+	s.testClusterFactory = testcore.NewTestClusterFactory()
 	s.passiveClusterName = "cluster-b"
 
 	fileName := "../testdata/ndc_clusters.yaml"
-	if tests.TestFlags.TestClusterConfigFile != "" {
-		fileName = tests.TestFlags.TestClusterConfigFile
+	if testcore.TestFlags.TestClusterConfigFile != "" {
+		fileName = testcore.TestFlags.TestClusterConfigFile
 	}
 	environment.SetupEnv()
 	s.standByTaskID = 0
@@ -111,10 +111,10 @@ func (s *ReplicationMigrationBackTestSuite) SetupSuite() {
 	s.Require().NoError(err)
 	confContent = []byte(os.ExpandEnv(string(confContent)))
 
-	var clusterConfigs []*tests.TestClusterConfig
+	var clusterConfigs []*testcore.TestClusterConfig
 	s.Require().NoError(yaml.Unmarshal(confContent, &clusterConfigs))
 	passiveClusterConfig := clusterConfigs[1]
-	passiveClusterConfig.WorkerConfig = &tests.WorkerConfig{}
+	passiveClusterConfig.WorkerConfig = testcore.WorkerConfig{DisableWorker: true}
 	passiveClusterConfig.DynamicConfigOverrides = map[dynamicconfig.Key]any{
 		dynamicconfig.EnableReplicationStream.Key():             true,
 		dynamicconfig.EnableEagerNamespaceRefresher.Key():       true,
@@ -130,7 +130,7 @@ func (s *ReplicationMigrationBackTestSuite) SetupSuite() {
 		return s.GetReplicationMessagesMock()
 	}).AnyTimes()
 	mockActiveStreamClient.EXPECT().CloseSend().Return(nil).AnyTimes()
-	s.standByReplicationTasksChan = make(chan *repicationpb.ReplicationTask, 100)
+	s.standByReplicationTasksChan = make(chan *replicationspb.ReplicationTask, 100)
 
 	mockActiveClient := adminservicemock.NewMockAdminServiceClient(s.controller)
 	mockActiveClient.EXPECT().StreamWorkflowReplicationMessages(gomock.Any()).Return(mockActiveStreamClient, nil).AnyTimes()
@@ -146,21 +146,22 @@ func (s *ReplicationMigrationBackTestSuite) SetupSuite() {
 	s.passiveCluster = cluster
 
 	s.registerNamespace()
-	_, err = s.passiveCluster.GetFrontendClient().UpdateNamespace(context.Background(), &workflowservice.UpdateNamespaceRequest{
+	_, err = s.passiveCluster.FrontendClient().UpdateNamespace(context.Background(), &workflowservice.UpdateNamespaceRequest{
 		Namespace: s.namespace.String(),
 		ReplicationConfig: &replicationpb.NamespaceReplicationConfig{
 			ActiveClusterName: "cluster-b",
 		},
 	})
 	s.Require().NoError(err)
-	_, err = s.passiveCluster.GetFrontendClient().UpdateNamespace(context.Background(), &workflowservice.UpdateNamespaceRequest{
+	_, err = s.passiveCluster.FrontendClient().UpdateNamespace(context.Background(), &workflowservice.UpdateNamespaceRequest{
 		Namespace: s.namespace.String(),
 		ReplicationConfig: &replicationpb.NamespaceReplicationConfig{
 			ActiveClusterName: "cluster-a",
 		},
 	})
 	s.Require().NoError(err)
-	time.Sleep(2 * tests.NamespaceCacheRefreshInterval) // we have to wait for namespace cache to pick the change
+	// we have to wait for namespace cache to pick the change
+	time.Sleep(2 * testcore.NamespaceCacheRefreshInterval) //nolint:forbidigo
 }
 
 func (s *ReplicationMigrationBackTestSuite) TearDownSuite() {
@@ -189,7 +190,7 @@ func (s *ReplicationMigrationBackTestSuite) TestHistoryReplication_MultiRunMigra
 	run1Slices := s.getEventSlices(version, 0) // run1 is older than run2
 	run2Slices := s.getEventSlices(version, 10)
 
-	history, err := tests.EventBatchesToVersionHistory(
+	history, err := testcore.EventBatchesToVersionHistory(
 		nil,
 		[]*historypb.History{{Events: run1Slices[0]}, {Events: run1Slices[1]}, {Events: run1Slices[2]}},
 	)
@@ -208,8 +209,8 @@ func (s *ReplicationMigrationBackTestSuite) TestHistoryReplication_MultiRunMigra
 		nil,
 		history.Items,
 	)
-
-	time.Sleep(1 * time.Second) // wait for 1 sec to let the run1 events replicated
+	// wait for 1 sec to let the run1 events replicated
+	time.Sleep(1 * time.Second) //nolint:forbidigo
 
 	// replicate run2
 	s.standByReplicationTasksChan <- s.createHistoryEventReplicationTaskFromHistoryEventBatch( // supply history replication task one by one
@@ -220,10 +221,10 @@ func (s *ReplicationMigrationBackTestSuite) TestHistoryReplication_MultiRunMigra
 		nil,
 		history.Items,
 	)
+	// wait for 1 sec to let the run2 events replicated
+	time.Sleep(1 * time.Second) //nolint:forbidigo
 
-	time.Sleep(1 * time.Second) // wait for 1 sec to let the run2 events replicated
-
-	res1, err := s.passiveCluster.GetAdminClient().DescribeMutableState(context.Background(), &adminservice.DescribeMutableStateRequest{
+	res1, err := s.passiveCluster.AdminClient().DescribeMutableState(context.Background(), &adminservice.DescribeMutableStateRequest{
 		Namespace: s.namespace.String(),
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: workflowId,
@@ -232,7 +233,7 @@ func (s *ReplicationMigrationBackTestSuite) TestHistoryReplication_MultiRunMigra
 	})
 	s.NoError(err)
 
-	res2, err := s.passiveCluster.GetAdminClient().DescribeMutableState(context.Background(), &adminservice.DescribeMutableStateRequest{
+	res2, err := s.passiveCluster.AdminClient().DescribeMutableState(context.Background(), &adminservice.DescribeMutableStateRequest{
 		Namespace: s.namespace.String(),
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: workflowId,
@@ -275,10 +276,10 @@ func (s *ReplicationMigrationBackTestSuite) longRunningMigrationBackReplicationT
 		nil,
 		history.Items,
 	)
+	// wait for 1 sec to let the run1 events replicated
+	time.Sleep(1 * time.Second) //nolint:forbidigo
 
-	time.Sleep(1 * time.Second) // wait for 1 sec to let the run1 events replicated
-
-	res1, err := s.passiveCluster.GetAdminClient().DescribeMutableState(context.Background(), &adminservice.DescribeMutableStateRequest{
+	res1, err := s.passiveCluster.AdminClient().DescribeMutableState(context.Background(), &adminservice.DescribeMutableStateRequest{
 		Namespace: s.namespace.String(),
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: workflowID,
@@ -346,10 +347,10 @@ func (s *ReplicationMigrationBackTestSuite) TestHistoryReplication_LongRunningMi
 		nil,
 		history.Items,
 	)
+	// wait for 1 sec to let the run1 events replicated
+	time.Sleep(1 * time.Second) //nolint:forbidigo
 
-	time.Sleep(1 * time.Second) // wait for 1 sec to let the run1 events replicated
-
-	res1, err := s.passiveCluster.GetAdminClient().DescribeMutableState(context.Background(), &adminservice.DescribeMutableStateRequest{
+	res1, err := s.passiveCluster.AdminClient().DescribeMutableState(context.Background(), &adminservice.DescribeMutableStateRequest{
 		Namespace: s.namespace.String(),
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: workflowId,
@@ -383,7 +384,7 @@ func (s *ReplicationMigrationBackTestSuite) assertHistoryEvents(
 	mockClientBean.
 		EXPECT().
 		GetRemoteAdminClient(s.passiveClusterName).
-		Return(s.passiveCluster.GetAdminClient(), nil).
+		Return(s.passiveCluster.AdminClient(), nil).
 		AnyTimes()
 
 	serializer := serialization.NewSerializer()
@@ -568,7 +569,7 @@ func (s *ReplicationMigrationBackTestSuite) getEventSlices(version int64, timeDr
 
 func (s *ReplicationMigrationBackTestSuite) registerNamespace() {
 	s.namespace = namespace.Name("test-simple-workflow-ndc-" + common.GenerateRandomString(5))
-	passiveFrontend := s.passiveCluster.GetFrontendClient() //
+	passiveFrontend := s.passiveCluster.FrontendClient() //
 	replicationConfig := []*replicationpb.ClusterReplicationConfig{
 		{ClusterName: clusterName[0]},
 		{ClusterName: clusterName[1]},
@@ -582,7 +583,7 @@ func (s *ReplicationMigrationBackTestSuite) registerNamespace() {
 	})
 	s.Require().NoError(err)
 	// Wait for namespace cache to pick the change
-	time.Sleep(2 * tests.NamespaceCacheRefreshInterval)
+	time.Sleep(2 * testcore.NamespaceCacheRefreshInterval) //nolint:forbidigo
 
 	descReq := &workflowservice.DescribeNamespaceRequest{
 		Namespace: s.namespace.String(),
@@ -599,9 +600,9 @@ func (s *ReplicationMigrationBackTestSuite) GetReplicationMessagesMock() (*admin
 	task := <-s.standByReplicationTasksChan
 	taskID := atomic.AddInt64(&s.standByTaskID, 1)
 	task.SourceTaskId = taskID
-	tasks := []*repicationpb.ReplicationTask{task}
+	tasks := []*replicationspb.ReplicationTask{task}
 
-	replicationMessage := &repicationpb.WorkflowReplicationMessages{
+	replicationMessage := &replicationspb.WorkflowReplicationMessages{
 		ReplicationTasks:       tasks,
 		ExclusiveHighWatermark: taskID + 1,
 	}
@@ -620,7 +621,7 @@ func (s *ReplicationMigrationBackTestSuite) createHistoryEventReplicationTaskFro
 	events []*historypb.HistoryEvent,
 	newRunEvents []*historypb.HistoryEvent,
 	versionHistoryItems []*historyspb.VersionHistoryItem,
-) *repicationpb.ReplicationTask {
+) *replicationspb.ReplicationTask {
 	eventBlob, err := s.serializer.SerializeEvents(events, enumspb.ENCODING_TYPE_PROTO3)
 	var newRunEventBlob *commonpb.DataBlob
 	if newRunEvents != nil {
@@ -629,10 +630,10 @@ func (s *ReplicationMigrationBackTestSuite) createHistoryEventReplicationTaskFro
 	}
 	s.NoError(err)
 	taskType := enumsspb.REPLICATION_TASK_TYPE_HISTORY_V2_TASK
-	replicationTask := &repicationpb.ReplicationTask{
+	replicationTask := &replicationspb.ReplicationTask{
 		TaskType: taskType,
-		Attributes: &repicationpb.ReplicationTask_HistoryTaskAttributes{
-			HistoryTaskAttributes: &repicationpb.HistoryTaskAttributes{
+		Attributes: &replicationspb.ReplicationTask_HistoryTaskAttributes{
+			HistoryTaskAttributes: &replicationspb.HistoryTaskAttributes{
 				NamespaceId:         namespaceId,
 				WorkflowId:          workflowId,
 				RunId:               runId,

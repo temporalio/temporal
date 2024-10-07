@@ -9,7 +9,7 @@ bins: temporal-server temporal-cassandra-tool temporal-sql-tool tdbg
 all: clean proto bins check test
 
 # Used in CI
-ci-build-misc: print-go-version proto go-generate buf-breaking bins temporal-server-debug shell-check copyright-check  goimports-all gomodtidy ensure-no-changes
+ci-build-misc: print-go-version proto go-generate buf-breaking bins temporal-server-debug shell-check copyright-check goimports-all gomodtidy ensure-no-changes
 
 # Delete all build artifacts
 clean: clean-bins clean-test-results
@@ -18,7 +18,7 @@ clean: clean-bins clean-test-results
 	rm -rf $(LOCALBIN)
 
 # Recompile proto files.
-proto: lint-protos lint-api protoc service-clients
+proto: lint-protos lint-api protoc proto-codegen
 ########################################################################
 
 .PHONY: proto protoc install bins ci-build-misc clean
@@ -243,9 +243,13 @@ protoc: $(PROTOGEN) $(MOCKGEN) $(GOIMPORTS) $(PROTOC_GEN_GO) $(PROTOC_GEN_GO_GRP
 		API_BINPB=$(API_BINPB) PROTO_ROOT=$(PROTO_ROOT) PROTO_OUT=$(PROTO_OUT) \
 		./develop/protoc.sh
 
-service-clients:
+proto-codegen:
 	@printf $(COLOR) "Generate service clients..."
-	@go generate -run rpcwrappers ./client/...
+	@go generate -run genrpcwrappers ./client/...
+	@printf $(COLOR) "Generate server interceptors..."
+	@go generate ./common/rpc/interceptor/logtags/...
+	@printf $(COLOR) "Generate search attributes helpers..."
+	@go generate -run gensearchattributehelpers ./common/searchattribute/...
 
 update-go-api:
 	@printf $(COLOR) "Update go.temporal.io/api@master..."

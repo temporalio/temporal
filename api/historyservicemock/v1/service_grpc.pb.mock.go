@@ -1286,6 +1286,26 @@ func (mr *MockHistoryServiceClientMockRecorder) SyncShardStatus(ctx, in any, opt
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SyncShardStatus", reflect.TypeOf((*MockHistoryServiceClient)(nil).SyncShardStatus), varargs...)
 }
 
+// SyncWorkflowState mocks base method.
+func (m *MockHistoryServiceClient) SyncWorkflowState(ctx context.Context, in *historyservice.SyncWorkflowStateRequest, opts ...grpc.CallOption) (*historyservice.SyncWorkflowStateResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []any{ctx, in}
+	for _, a := range opts {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "SyncWorkflowState", varargs...)
+	ret0, _ := ret[0].(*historyservice.SyncWorkflowStateResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// SyncWorkflowState indicates an expected call of SyncWorkflowState.
+func (mr *MockHistoryServiceClientMockRecorder) SyncWorkflowState(ctx, in any, opts ...any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]any{ctx, in}, opts...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SyncWorkflowState", reflect.TypeOf((*MockHistoryServiceClient)(nil).SyncWorkflowState), varargs...)
+}
+
 // TerminateWorkflowExecution mocks base method.
 func (m *MockHistoryServiceClient) TerminateWorkflowExecution(ctx context.Context, in *historyservice.TerminateWorkflowExecutionRequest, opts ...grpc.CallOption) (*historyservice.TerminateWorkflowExecutionResponse, error) {
 	m.ctrl.T.Helper()
@@ -1304,6 +1324,26 @@ func (mr *MockHistoryServiceClientMockRecorder) TerminateWorkflowExecution(ctx, 
 	mr.mock.ctrl.T.Helper()
 	varargs := append([]any{ctx, in}, opts...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "TerminateWorkflowExecution", reflect.TypeOf((*MockHistoryServiceClient)(nil).TerminateWorkflowExecution), varargs...)
+}
+
+// UpdateActivityOptions mocks base method.
+func (m *MockHistoryServiceClient) UpdateActivityOptions(ctx context.Context, in *historyservice.UpdateActivityOptionsRequest, opts ...grpc.CallOption) (*historyservice.UpdateActivityOptionsResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []any{ctx, in}
+	for _, a := range opts {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "UpdateActivityOptions", varargs...)
+	ret0, _ := ret[0].(*historyservice.UpdateActivityOptionsResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UpdateActivityOptions indicates an expected call of UpdateActivityOptions.
+func (mr *MockHistoryServiceClientMockRecorder) UpdateActivityOptions(ctx, in any, opts ...any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]any{ctx, in}, opts...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateActivityOptions", reflect.TypeOf((*MockHistoryServiceClient)(nil).UpdateActivityOptions), varargs...)
 }
 
 // UpdateWorkflowExecution mocks base method.
@@ -2440,6 +2480,21 @@ func (mr *MockHistoryServiceServerMockRecorder) SyncShardStatus(arg0, arg1 any) 
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SyncShardStatus", reflect.TypeOf((*MockHistoryServiceServer)(nil).SyncShardStatus), arg0, arg1)
 }
 
+// SyncWorkflowState mocks base method.
+func (m *MockHistoryServiceServer) SyncWorkflowState(arg0 context.Context, arg1 *historyservice.SyncWorkflowStateRequest) (*historyservice.SyncWorkflowStateResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "SyncWorkflowState", arg0, arg1)
+	ret0, _ := ret[0].(*historyservice.SyncWorkflowStateResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// SyncWorkflowState indicates an expected call of SyncWorkflowState.
+func (mr *MockHistoryServiceServerMockRecorder) SyncWorkflowState(arg0, arg1 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SyncWorkflowState", reflect.TypeOf((*MockHistoryServiceServer)(nil).SyncWorkflowState), arg0, arg1)
+}
+
 // TerminateWorkflowExecution mocks base method.
 func (m *MockHistoryServiceServer) TerminateWorkflowExecution(arg0 context.Context, arg1 *historyservice.TerminateWorkflowExecutionRequest) (*historyservice.TerminateWorkflowExecutionResponse, error) {
 	m.ctrl.T.Helper()
@@ -2453,6 +2508,21 @@ func (m *MockHistoryServiceServer) TerminateWorkflowExecution(arg0 context.Conte
 func (mr *MockHistoryServiceServerMockRecorder) TerminateWorkflowExecution(arg0, arg1 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "TerminateWorkflowExecution", reflect.TypeOf((*MockHistoryServiceServer)(nil).TerminateWorkflowExecution), arg0, arg1)
+}
+
+// UpdateActivityOptions mocks base method.
+func (m *MockHistoryServiceServer) UpdateActivityOptions(arg0 context.Context, arg1 *historyservice.UpdateActivityOptionsRequest) (*historyservice.UpdateActivityOptionsResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdateActivityOptions", arg0, arg1)
+	ret0, _ := ret[0].(*historyservice.UpdateActivityOptionsResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UpdateActivityOptions indicates an expected call of UpdateActivityOptions.
+func (mr *MockHistoryServiceServerMockRecorder) UpdateActivityOptions(arg0, arg1 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateActivityOptions", reflect.TypeOf((*MockHistoryServiceServer)(nil).UpdateActivityOptions), arg0, arg1)
 }
 
 // UpdateWorkflowExecution mocks base method.

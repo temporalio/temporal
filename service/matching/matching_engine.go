@@ -1461,51 +1461,11 @@ func (e *matchingEngineImpl) GetTaskQueueUserData(
 	if err != nil {
 		return nil, err
 	}
-	version := req.GetLastKnownUserDataVersion()
-	if version < 0 {
-		return nil, serviceerror.NewInvalidArgument("last_known_user_data_version must not be negative")
-	}
-
 	if req.WaitNewData {
-		var cancel context.CancelFunc
-		ctx, cancel = newChildContext(ctx, e.config.GetUserDataLongPollTimeout(), returnEmptyTaskTimeBudget)
-		defer cancel()
 		// mark alive so that it doesn't unload while a child partition is doing a long poll
 		pm.MarkAlive()
 	}
-
-	for {
-		resp := &matchingservice.GetTaskQueueUserDataResponse{}
-		userData, userDataChanged, err := pm.GetUserDataManager().GetUserData()
-		if errors.Is(err, errTaskQueueClosed) {
-			// If we're closing, return a success with no data, as if the request expired. We shouldn't
-			// close due to idleness (because of the MarkAlive above), so we're probably closing due to a
-			// change of ownership. The caller will retry and be redirected to the new owner.
-			return resp, nil
-		} else if err != nil {
-			return nil, err
-		}
-		if req.WaitNewData && userData.GetVersion() == version {
-			// long-poll: wait for data to change/appear
-			select {
-			case <-ctx.Done():
-				return resp, nil
-			case <-userDataChanged:
-				continue
-			}
-		}
-		if userData != nil {
-			if userData.Version > version {
-				resp.UserData = userData
-			} else if userData.Version < version {
-				// This is highly unlikely but may happen due to an edge case in during ownership transfer.
-				// We rely on client retries in this case to let the system eventually self-heal.
-				return nil, serviceerror.NewInvalidArgument(
-					"requested task queue user data for version greater than known version")
-			}
-		}
-		return resp, nil
-	}
+	return pm.GetUserDataManager().HandleGetUserDataRequest(ctx, req)
 }
 
 func (e *matchingEngineImpl) ApplyTaskQueueUserDataReplicationEvent(
@@ -1599,17 +1559,14 @@ func (e *matchingEngineImpl) ForceLoadTaskQueuePartition(
 	return &matchingservice.ForceLoadTaskQueuePartitionResponse{WasUnloaded: wasUnloaded}, nil
 }
 
-func (e *matchingEngineImpl) ForceUnloadTaskQueue(
+func (e *matchingEngineImpl) ForceUnloadTaskQueuePartition(
 	ctx context.Context,
-	req *matchingservice.ForceUnloadTaskQueueRequest,
-) (*matchingservice.ForceUnloadTaskQueueResponse, error) {
-	p, err := tqid.NormalPartitionFromRpcName(req.GetTaskQueue(), req.GetNamespaceId(), req.GetTaskQueueType())
-	if err != nil {
-		return nil, err
-	}
+	req *matchingservice.ForceUnloadTaskQueuePartitionRequest,
+) (*matchingservice.ForceUnloadTaskQueuePartitionResponse, error) {
+	partition := tqid.PartitionFromPartitionProto(req.GetTaskQueuePartition(), req.GetNamespaceId())
 
-	wasLoaded := e.unloadTaskQueuePartitionByKey(p, nil, unloadCauseForce)
-	return &matchingservice.ForceUnloadTaskQueueResponse{WasLoaded: wasLoaded}, nil
+	wasLoaded := e.unloadTaskQueuePartitionByKey(partition, nil, unloadCauseForce)
+	return &matchingservice.ForceUnloadTaskQueuePartitionResponse{WasLoaded: wasLoaded}, nil
 }
 
 func (e *matchingEngineImpl) UpdateTaskQueueUserData(ctx context.Context, request *matchingservice.UpdateTaskQueueUserDataRequest) (*matchingservice.UpdateTaskQueueUserDataResponse, error) {
@@ -2027,13 +1984,12 @@ func (e *matchingEngineImpl) updatePhysicalTaskQueueGauge(pqm *physicalTaskQueue
 
 	pm := pqm.partitionMgr
 	metrics.LoadedPhysicalTaskQueueGauge.With(
-		metrics.GetPerTaskQueuePartitionScope(
+		metrics.GetPerTaskQueuePartitionTypeScope(
 			e.metricsHandler,
 			pm.ns.Name().String(),
 			pm.Partition(),
 			// TODO: Track counters per TQ name so we can honor pm.config.BreakdownMetricsByTaskQueue(),
 			false,
-			false, // we don't want breakdown by partition ID, only sticky vs normal breakdown.
 		)).Record(
 		float64(loadedPhysicalTaskQueueCounter),
 		metrics.VersionedTag(versioned),
@@ -2091,13 +2047,12 @@ func (e *matchingEngineImpl) updateTaskQueuePartitionGauge(pm taskQueuePartition
 		metrics.TaskQueueTypeTag(taskQueueParameters.taskType),
 	)
 
-	taggedHandler := metrics.GetPerTaskQueuePartitionScope(
+	taggedHandler := metrics.GetPerTaskQueuePartitionTypeScope(
 		e.metricsHandler,
 		nsName,
 		pm.Partition(),
 		// TODO: Track counters per TQ name so we can honor pm.config.BreakdownMetricsByTaskQueue(),
 		false,
-		false, // we don't want breakdown by partition ID, only sticky vs normal breakdown.
 	)
 	metrics.LoadedTaskQueuePartitionGauge.With(taggedHandler).Record(float64(loadedTaskQueuePartitionCounter))
 }
