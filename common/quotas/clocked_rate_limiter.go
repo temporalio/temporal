@@ -133,15 +133,21 @@ func (l ClockedRateLimiter) WaitN(ctx context.Context, token int) error {
 		close(waitExpired)
 	})
 	defer timer.Stop()
-	select {
-	case <-ctx.Done():
-		reservation.Cancel()
-		return fmt.Errorf("%w: %v", ErrRateLimiterWaitInterrupted, ctx.Err())
-	case <-waitExpired:
-		return nil
-	case <-l.recycleCh:
-		reservation.Cancel()
-		return nil
+
+	for {
+		select {
+		case <-ctx.Done():
+			reservation.Cancel()
+			return fmt.Errorf("%w: %v", ErrRateLimiterWaitInterrupted, ctx.Err())
+		case <-waitExpired:
+			return nil
+		case <-l.recycleCh:
+			if token > 1 {
+				break
+			}
+			reservation.Cancel()
+			return nil
+		}
 	}
 }
 
@@ -159,9 +165,13 @@ func (l ClockedRateLimiter) TokensAt(t time.Time) int {
 
 // RecycleToken should be called when the action being rate limited was not completed
 // for some reason (i.e. a task is not dispatched because it was invalid).
-// In this case, we want to immediately unblock another process that is waiting for a token
+// In this case, we want to immediately unblock another process that is waiting for one token
 // so that the actual rate of completed actions is as close to the intended rate limit as possible.
 // If no process is waiting for a token when RecycleToken is called, this is a no-op.
+//
+// Since we don't know how many tokens were reserved by the process calling recycle, we will only unblock
+// new reservations that are for one token (otherwise we could recycle a 1-token-reservation and unblock
+// a 100-token-reservation). If all waiting processes are waiting for >1 tokens, this is a no-op.
 //
 // Because recycleCh is an unbuffered channel, the token will be reused for the next waiter as long
 // as there exists a waiter at the time RecycleToken is called. Usually the attempted rate is consistently

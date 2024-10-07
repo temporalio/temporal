@@ -152,9 +152,9 @@ func TestClockedRateLimiter_Wait_DeadlineWouldExceed(t *testing.T) {
 	assert.ErrorIs(t, rl.Wait(ctx), quotas.ErrRateLimiterReservationWouldExceedContextDeadline)
 }
 
+// test that reservations for 1 token ARE unblocked by RecycleToken
 func TestClockedRateLimiter_Wait_Recycle(t *testing.T) {
 	t.Parallel()
-
 	ts := clock.NewEventTimeSource()
 	rl := quotas.NewClockedRateLimiter(rate.NewLimiter(1, 1), ts)
 	ctx := context.Background()
@@ -163,23 +163,69 @@ func TestClockedRateLimiter_Wait_Recycle(t *testing.T) {
 	assert.NoError(t, rl.Wait(ctx))
 
 	// wait for next token and report when success
-	gotToken := false
 	waiting := make(chan struct{})
 	done := make(chan struct{})
 	go func() {
 		go func() {
 			assert.NoError(t, rl.Wait(ctx))
+			done <- struct{}{}
 		}()
+
+		// The waiting channel isn't enough by itself to confirm waiting, because
+		// the inner go func can be called without the rl.Wait() having finished.
+		// Use time.Sleep to allow rl.Wait() to complete before signalling `waiting`.
+		// 1-millisecond sleep succeeded >50,000x, whereas 1-nanosecond sleep deadlocks.
+		time.Sleep(time.Millisecond)
 		waiting <- struct{}{}
-		gotToken = true
-		done <- struct{}{}
 	}()
 
 	// once a waiter exists, recycle the token instead of advancing time
 	<-waiting
 	rl.RecycleToken()
 
-	// once done, gotToken should be true
+	// wait until done so we know assert.NoError was called
 	<-done
-	assert.True(t, gotToken)
+}
+
+// test that reservations for >1 token are NOT unblocked by RecycleToken
+func TestClockedRateLimiter_WaitN_NoRecycle(t *testing.T) {
+	t.Parallel()
+	ts := clock.NewEventTimeSource()
+
+	// set burst to 2 so that the reservation succeeds and WaitN gets to the select statement
+	rl := quotas.NewClockedRateLimiter(rate.NewLimiter(1, 2), ts)
+	ctx, cancel := context.WithCancel(context.Background())
+
+	// take first token
+	assert.NoError(t, rl.Wait(ctx))
+
+	// wait for 2 tokens, which will never get a recycle
+	// expect a context cancel error instead once we advance time
+	waiting := make(chan struct{})
+	done := make(chan struct{})
+	go func() {
+		go func() {
+			err := rl.WaitN(ctx, 2)
+			assert.ErrorContains(t, err, quotas.ErrRateLimiterWaitInterrupted.Error())
+			done <- struct{}{}
+		}()
+
+		// The waiting channel isn't enough by itself to confirm waiting, because
+		// the inner go func can be called without the rl.Wait() having finished.
+		// Use time.Sleep to allow rl.Wait() to complete before signalling `waiting`.
+		// 1-millisecond sleep succeeded >50,000x, whereas 1-nanosecond sleep deadlocks.
+		time.Sleep(time.Millisecond)
+		waiting <- struct{}{}
+	}()
+
+	// Once a waiter exists, recycle the token instead of advancing time.
+	// This should be a no-op. If it works unexpectedly, assert.Error will fail.
+	<-waiting
+	rl.RecycleToken()
+
+	// cancel the context so that we return an error
+	cancel()
+
+	// wait until done so we know assert.Error was called
+	<-done
 }
