@@ -35,7 +35,6 @@ import (
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/clock"
-	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/tqid"
 )
 
@@ -51,7 +50,7 @@ type (
 const taskQueueInternalInfoCacheTTL = 10 * time.Second
 
 func createTaskQueueInternalInfoCache(options *cache.Options) taskQueueInternalInfoCache {
-	return newTaskQueueInternalInfoCache(metrics.NoopMetricsHandler, options)
+	return newTaskQueueInternalInfoCache(options)
 }
 
 func TestTaskQueueInternalInfoSuite(t *testing.T) {

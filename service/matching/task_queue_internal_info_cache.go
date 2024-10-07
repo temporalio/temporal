@@ -28,7 +28,6 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	"go.temporal.io/server/common/cache"
-	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/tqid"
 )
 
@@ -42,14 +41,12 @@ Stores key-value pairs as: PartitionKey -> physicalInfoByBuildId
 */
 
 type taskQueueInternalInfoCache struct {
-	cache          cache.Cache
-	metricsHandler metrics.Handler
+	cache cache.Cache
 }
 
-func newTaskQueueInternalInfoCache(handler metrics.Handler, opts *cache.Options) taskQueueInternalInfoCache {
+func newTaskQueueInternalInfoCache(opts *cache.Options) taskQueueInternalInfoCache {
 	return taskQueueInternalInfoCache{
-		cache:          cache.New(taskQueueInternalInfoCacheMaxSize, opts),
-		metricsHandler: handler,
+		cache: cache.New(taskQueueInternalInfoCacheMaxSize, opts),
 	}
 }
 

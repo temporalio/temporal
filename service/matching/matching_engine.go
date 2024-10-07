@@ -243,7 +243,6 @@ func NewEngine(
 		e.config.ReachabilityCacheOpenWFsTTL(),
 		e.config.ReachabilityCacheClosedWFsTTL())
 	e.taskQueueInternalInfoCache = newTaskQueueInternalInfoCache(
-		metrics.NoopMetricsHandler, // todo Shivam - why noop
 		&cache.Options{TTL: e.config.TaskQueueInternalInfoCacheTTL()},
 	)
 	return e
