@@ -203,8 +203,7 @@ func AdminImportWorkflow(c *cli.Context, clientFactory ClientFactory) error {
 	}
 
 	var token []byte
-
-	blobs := []*commonpb.DataBlob{}
+	var blobs []*commonpb.DataBlob
 	blobSize := 0
 	for i := 0; i < len(historyBatches)+1; i++ {
 		if i < len(historyBatches) {
