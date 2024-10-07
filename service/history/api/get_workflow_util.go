@@ -147,6 +147,7 @@ func GetOrPollMutableState(
 		if err != nil {
 			return nil, err
 		}
+		// TODO: update to use transition version history
 		if !versionhistory.ContainsVersionHistoryItem(currentVersionHistory, request.VersionHistoryItem) {
 			logItem, err := versionhistory.GetLastVersionHistoryItem(currentVersionHistory)
 			if err != nil {
@@ -189,6 +190,7 @@ func GetOrPollMutableState(
 				}
 				response.CurrentBranchToken = latestVersionHistory.GetBranchToken()
 				response.VersionHistories = event.VersionHistories
+				// TODO: update to use transition version history
 				if !versionhistory.ContainsVersionHistoryItem(latestVersionHistory, request.VersionHistoryItem) {
 					logItem, err := versionhistory.GetLastVersionHistoryItem(latestVersionHistory)
 					if err != nil {
