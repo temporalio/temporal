@@ -2558,7 +2558,7 @@ func (x *ForceLoadTaskQueuePartitionResponse) GetWasUnloaded() bool {
 	return false
 }
 
-// TODO Shivam - Please remove this in 1.23.0
+// TODO Shivam - Please remove this in 123
 type ForceUnloadTaskQueueRequest struct {
 	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache
@@ -2622,7 +2622,7 @@ func (x *ForceUnloadTaskQueueRequest) GetTaskQueueType() v19.TaskQueueType {
 	return v19.TaskQueueType(0)
 }
 
-// TODO Shivam - Please remove this in 1.23.0
+// TODO Shivam - Please remove this in 123
 type ForceUnloadTaskQueueResponse struct {
 	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache

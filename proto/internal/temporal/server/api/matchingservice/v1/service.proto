@@ -136,7 +136,7 @@ service MatchingService {
     // worker which triggered the root partition being loaded in the first place.
     rpc ForceLoadTaskQueuePartition (ForceLoadTaskQueuePartitionRequest) returns (ForceLoadTaskQueuePartitionResponse) {}
     
-    // TODO Shivam - remove this in 1.23.0. Present for backwards compatibility.
+    // TODO Shivam - remove this in 123. Present for backwards compatibility.
     rpc ForceUnloadTaskQueue (ForceUnloadTaskQueueRequest) returns (ForceUnloadTaskQueueResponse) {}
 
     // Force unloading a task queue partition.

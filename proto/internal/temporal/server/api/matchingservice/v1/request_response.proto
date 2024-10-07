@@ -340,14 +340,14 @@ message ForceLoadTaskQueuePartitionResponse {
     bool was_unloaded = 1;
 }
 
-// TODO Shivam - Please remove this in 1.23.0
+// TODO Shivam - Please remove this in 123
 message ForceUnloadTaskQueueRequest {
     string namespace_id = 1;
     string task_queue = 2;
     temporal.api.enums.v1.TaskQueueType task_queue_type = 3;
 }
 
-// TODO Shivam - Please remove this in 1.23.0
+// TODO Shivam - Please remove this in 123
 message ForceUnloadTaskQueueResponse {
     bool was_loaded = 1;
 }
