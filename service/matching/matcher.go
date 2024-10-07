@@ -158,7 +158,6 @@ func (tm *TaskMatcher) Stop() {
 //   - task is matched and consumer returns error in response channel
 func (tm *TaskMatcher) Offer(ctx context.Context, task *internalTask) (bool, error) {
 	if !tm.isBacklogNegligible() {
-		fmt.Println("BLOCKING SYNC MATCHING BECAUSE OF BACKLOG PRESENT :) ")
 		// To ensure better dispatch ordering, we block sync match when a significant backlog is present.
 		// Note that this check does not make a noticeable difference for history tasks, as they do not wait for a
 		// poller to become available. In presence of a backlog the chance of a poller being available when sync match
@@ -170,6 +169,7 @@ func (tm *TaskMatcher) Offer(ctx context.Context, task *internalTask) (bool, err
 	if !task.isForwarded() {
 		if err := tm.rateLimiter.Wait(ctx); err != nil {
 			metrics.SyncThrottlePerTaskQueueCounter.With(tm.metricsHandler).Record(1)
+			fmt.Println("task is forwarded error inside Offer")
 			return false, err
 		}
 	}
@@ -226,7 +226,6 @@ func (tm *TaskMatcher) offerOrTimeout(ctx context.Context, task *internalTask) (
 		}
 		return false, nil
 	case <-ctx.Done():
-		fmt.Printf("Context done for the task with source %s\n", task.source.Enum().String())
 		return false, nil
 	}
 }
@@ -357,12 +356,12 @@ forLoop:
 			// becomes an issue when the pollers are fewer than the partitions)
 			lp := tm.timeSinceLastPoll()
 			maxWaitForLocalPoller := tm.config.MaxWaitForPollerBeforeFwd()
-			x := lp < maxWaitForLocalPoller
-			fmt.Printf("%t\n\n", x)
 			if lp < maxWaitForLocalPoller {
 				fwdTokenC = nil
 				reconsiderFwdTimer = time.NewTimer(maxWaitForLocalPoller - lp)
 				reconsiderFwdTimerC = reconsiderFwdTimer.C
+			} else {
+				fmt.Printf("lp is %d and config is %d\n", lp, tm.config.MaxWaitForPollerBeforeFwd())
 			}
 		}
 
@@ -414,7 +413,6 @@ forLoop:
 }
 
 func (tm *TaskMatcher) emitDispatchLatency(task *internalTask, forwarded bool) {
-	fmt.Printf("Matched task source %s\n", task.source.Enum().String())
 	if task.event.Data.CreateTime == nil {
 		return // should not happen but for safety
 	}
@@ -522,7 +520,6 @@ func (tm *TaskMatcher) poll(
 	// 2. taskC and queryTaskC
 	select {
 	case task := <-taskC:
-		fmt.Println("Got from the channel!")
 		if task.responseC != nil {
 			metrics.PollSuccessWithSyncPerTaskQueueCounter.With(tm.metricsHandler).Record(1)
 		}
@@ -572,6 +569,7 @@ func (tm *TaskMatcher) poll(
 		metrics.PollTimeoutPerTaskQueueCounter.With(tm.metricsHandler).Record(1)
 		return nil, false, errNoTasks
 	case <-tm.closeC:
+		fmt.Println("Did channel close?")
 		return nil, false, errNoTasks
 	case task := <-taskC:
 		if task.responseC != nil {
