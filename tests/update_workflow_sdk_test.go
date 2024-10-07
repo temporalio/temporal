@@ -47,39 +47,27 @@ var (
 	unreachableErr = errors.New("unreachable code")
 )
 
-type UpdateWorkflowClientSuite struct {
+type UpdateWorkflowSdkSuite struct {
 	testcore.ClientFunctionalSuite
 }
 
-func TestUpdateWorkflowClientSuite(t *testing.T) {
-	s := new(UpdateWorkflowClientSuite)
+func TestUpdateWorkflowSdkSuite(t *testing.T) {
+	s := new(UpdateWorkflowSdkSuite)
 	suite.Run(t, s)
 }
 
-func (s *UpdateWorkflowClientSuite) TestUpdateWorkflow_TerminateWorkflowAfterUpdateAdmitted() {
+func (s *UpdateWorkflowSdkSuite) TestUpdateWorkflow_TerminateWorkflowAfterUpdateAdmitted() {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	defer cancel()
 	tv := testvars.New(s.T()).WithTaskQueue(s.TaskQueue()).WithNamespaceName(namespace.Name(s.Namespace()))
-
-	activityDone := make(chan struct{})
-	activityFn := func(ctx context.Context) error {
-		activityDone <- struct{}{}
-		return nil
-	}
 
 	workflowFn := func(ctx workflow.Context) error {
 		s.NoError(workflow.SetUpdateHandler(ctx, tv.HandlerName(), func(ctx workflow.Context, arg string) error {
 			ctx = workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
 				StartToCloseTimeout: 10 * time.Second,
 			})
-			for {
-				s.NoError(workflow.ExecuteActivity(ctx, activityFn).Get(ctx, nil))
-				if false {
-					// appease compiler
-					break
-				}
-			}
-			return nil
+			s.NoError(workflow.Await(ctx, func() bool { return false }))
+			return unreachableErr
 		}))
 		s.NoError(workflow.Await(ctx, func() bool { return false }))
 		return unreachableErr
@@ -90,71 +78,119 @@ func (s *UpdateWorkflowClientSuite) TestUpdateWorkflow_TerminateWorkflowAfterUpd
 	s.updateWorkflowWaitAdmitted(ctx, tv, "update-arg")
 
 	s.Worker().RegisterWorkflow(workflowFn)
-	s.Worker().RegisterActivity(activityFn)
 
 	s.NoError(s.SdkClient().TerminateWorkflow(ctx, tv.WorkflowID(), run.GetRunID(), "reason"))
 
 	_, err := s.pollUpdate(ctx, tv, &updatepb.WaitPolicy{LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ACCEPTED})
 	var notFound *serviceerror.NotFound
 	s.ErrorAs(err, &notFound)
+
+	s.EqualHistoryEvents(`
+  1 WorkflowExecutionStarted
+  2 WorkflowTaskScheduled
+  3 WorkflowTaskStarted
+  4 WorkflowTaskFailed
+  5 WorkflowExecutionTerminated`, s.GetHistory(s.Namespace(), tv.WorkflowExecution()))
 }
 
-// TestUpdateWorkflow_TerminateWorkflowDuringUpdate executes a long-running update (schedules a sequence of activity
-// calls) and terminates the workflow after the update has been accepted but before it has been completed. It checks
+// TestUpdateWorkflow_TimeoutWorkflowAfterUpdateAccepted executes an update, and while WF awaits
+// server times out the WF after the update has been accepted but before it has been completed. It checks
 // that the client gets a NotFound error when attempting to fetch the update result (rather than a timeout).
-func (s *UpdateWorkflowClientSuite) TestUpdateWorkflow_TerminateWorkflowAfterUpdateAccepted() {
+func (s *UpdateWorkflowSdkSuite) TestUpdateWorkflow_TimeoutWorkflowAfterUpdateAccepted() {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	defer cancel()
 	tv := testvars.New(s.T()).WithTaskQueue(s.TaskQueue()).WithNamespaceName(namespace.Name(s.Namespace()))
-
-	activityDone := make(chan struct{})
-	activityFn := func(ctx context.Context) error {
-		activityDone <- struct{}{}
-		return nil
-	}
 
 	workflowFn := func(ctx workflow.Context) error {
 		s.NoError(workflow.SetUpdateHandler(ctx, tv.HandlerName(), func(ctx workflow.Context, arg string) error {
 			ctx = workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
 				StartToCloseTimeout: 10 * time.Second,
 			})
-			for {
-				s.NoError(workflow.ExecuteActivity(ctx, activityFn).Get(ctx, nil))
-				if false {
-					// appease compiler
-					break
-				}
-			}
-			return nil
+			s.NoError(workflow.Await(ctx, func() bool { return false }))
+			return unreachableErr
 		}))
 		s.NoError(workflow.Await(ctx, func() bool { return false }))
 		return unreachableErr
 	}
 
 	s.Worker().RegisterWorkflow(workflowFn)
-	s.Worker().RegisterActivity(activityFn)
+
+	wfRun, err := s.SdkClient().ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{
+		ID:                       tv.WorkflowID(),
+		TaskQueue:                tv.TaskQueue().Name,
+		WorkflowExecutionTimeout: time.Second,
+	}, workflowFn)
+	s.NoError(err)
+
+	updateHandle, err := s.updateWorkflowWaitAccepted(ctx, tv, "my-update-arg")
+	s.NoError(err)
+
+	var notFound *serviceerror.NotFound
+	s.ErrorAs(updateHandle.Get(ctx, nil), &notFound)
+
+	_, pollErr := s.pollUpdate(ctx, tv, &updatepb.WaitPolicy{LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED})
+	s.ErrorAs(pollErr, &notFound)
+
+	var wee *temporal.WorkflowExecutionError
+	s.ErrorAs(wfRun.Get(ctx, nil), &wee)
+
+	s.EqualHistoryEvents(`
+  1 WorkflowExecutionStarted
+  2 WorkflowTaskScheduled
+  3 WorkflowTaskStarted
+  4 WorkflowTaskCompleted
+  5 WorkflowExecutionUpdateAccepted
+  6 WorkflowExecutionTimedOut`, s.GetHistory(s.Namespace(), tv.WorkflowExecution()))
+}
+
+// TestUpdateWorkflow_TerminateWorkflowDuringUpdate executes an update, and while WF awaits
+// server terminates the WF after the update has been accepted but before it has been completed. It checks
+// that the client gets a NotFound error when attempting to fetch the update result (rather than a timeout).
+func (s *UpdateWorkflowSdkSuite) TestUpdateWorkflow_TerminateWorkflowAfterUpdateAccepted() {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	defer cancel()
+	tv := testvars.New(s.T()).WithTaskQueue(s.TaskQueue()).WithNamespaceName(namespace.Name(s.Namespace()))
+
+	workflowFn := func(ctx workflow.Context) error {
+		s.NoError(workflow.SetUpdateHandler(ctx, tv.HandlerName(), func(ctx workflow.Context, arg string) error {
+			ctx = workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
+				StartToCloseTimeout: 10 * time.Second,
+			})
+			s.NoError(workflow.Await(ctx, func() bool { return false }))
+			return unreachableErr
+		}))
+		s.NoError(workflow.Await(ctx, func() bool { return false }))
+		return unreachableErr
+	}
+
+	s.Worker().RegisterWorkflow(workflowFn)
 	wfRun := s.startWorkflow(ctx, tv, workflowFn)
 
 	updateHandle, err := s.updateWorkflowWaitAccepted(ctx, tv, "my-update-arg")
 	s.NoError(err)
 
-	select {
-	case <-activityDone:
-	case <-ctx.Done():
-		s.FailNow("timed out waiting for activity to be called by update handler")
-	}
 	s.NoError(s.SdkClient().TerminateWorkflow(ctx, tv.WorkflowID(), wfRun.GetRunID(), "reason"))
 
 	var notFound *serviceerror.NotFound
 	s.ErrorAs(updateHandle.Get(ctx, nil), &notFound)
 
+	_, pollErr := s.pollUpdate(ctx, tv, &updatepb.WaitPolicy{LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED})
+	s.ErrorAs(pollErr, &notFound)
+
 	var wee *temporal.WorkflowExecutionError
 	s.ErrorAs(wfRun.Get(ctx, nil), &wee)
+
+	s.EqualHistoryEvents(`
+  1 WorkflowExecutionStarted
+  2 WorkflowTaskScheduled
+  3 WorkflowTaskStarted
+  4 WorkflowTaskCompleted
+  5 WorkflowExecutionUpdateAccepted
+  6 WorkflowExecutionTerminated`, s.GetHistory(s.Namespace(), tv.WorkflowExecution()))
 }
 
-func (s *UpdateWorkflowClientSuite) TestUpdateWorkflow_ContinueAsNewAfterUpdateAdmitted() {
+func (s *UpdateWorkflowSdkSuite) TestUpdateWorkflow_ContinueAsNewAfterUpdateAdmitted() {
 	s.T().Skip("flaky test")
-
 	/*
 		Start Workflow and send Update to itself from LA to make sure it is admitted
 		by server while WFT is running. This WFT does CAN. For test simplicity,
@@ -232,7 +268,7 @@ func (s *UpdateWorkflowClientSuite) TestUpdateWorkflow_ContinueAsNewAfterUpdateA
   6 WorkflowExecutionUpdateCompleted`, s.GetHistory(s.Namespace(), tv.WithRunID(secondRunID).WorkflowExecution()))
 }
 
-func (s *UpdateWorkflowClientSuite) startWorkflow(ctx context.Context, tv *testvars.TestVars, workflowFn interface{}) sdkclient.WorkflowRun {
+func (s *UpdateWorkflowSdkSuite) startWorkflow(ctx context.Context, tv *testvars.TestVars, workflowFn any) sdkclient.WorkflowRun {
 	run, err := s.SdkClient().ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{
 		ID:        tv.WorkflowID(),
 		TaskQueue: tv.TaskQueue().Name,
@@ -241,7 +277,7 @@ func (s *UpdateWorkflowClientSuite) startWorkflow(ctx context.Context, tv *testv
 	return run
 }
 
-func (s *UpdateWorkflowClientSuite) updateWorkflowWaitAdmitted(ctx context.Context, tv *testvars.TestVars, arg string) {
+func (s *UpdateWorkflowSdkSuite) updateWorkflowWaitAdmitted(ctx context.Context, tv *testvars.TestVars, arg string) {
 	go func() { _, _ = s.updateWorkflowWaitAccepted(ctx, tv, arg) }()
 	s.Eventually(func() bool {
 		resp, err := s.pollUpdate(ctx, tv, &updatepb.WaitPolicy{LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ADMITTED})
@@ -255,7 +291,7 @@ func (s *UpdateWorkflowClientSuite) updateWorkflowWaitAdmitted(ctx context.Conte
 	}, 5*time.Second, 100*time.Millisecond, fmt.Sprintf("update %s did not reach Admitted stage", tv.UpdateID()))
 }
 
-func (s *UpdateWorkflowClientSuite) updateWorkflowWaitAccepted(ctx context.Context, tv *testvars.TestVars, arg string) (sdkclient.WorkflowUpdateHandle, error) {
+func (s *UpdateWorkflowSdkSuite) updateWorkflowWaitAccepted(ctx context.Context, tv *testvars.TestVars, arg string) (sdkclient.WorkflowUpdateHandle, error) {
 	return s.SdkClient().UpdateWorkflow(ctx, sdkclient.UpdateWorkflowOptions{
 		UpdateID:     tv.UpdateID(),
 		WorkflowID:   tv.WorkflowID(),
@@ -266,7 +302,7 @@ func (s *UpdateWorkflowClientSuite) updateWorkflowWaitAccepted(ctx context.Conte
 	})
 }
 
-func (s *UpdateWorkflowClientSuite) pollUpdate(ctx context.Context, tv *testvars.TestVars, waitPolicy *updatepb.WaitPolicy) (*workflowservice.PollWorkflowExecutionUpdateResponse, error) {
+func (s *UpdateWorkflowSdkSuite) pollUpdate(ctx context.Context, tv *testvars.TestVars, waitPolicy *updatepb.WaitPolicy) (*workflowservice.PollWorkflowExecutionUpdateResponse, error) {
 	return s.SdkClient().WorkflowService().PollWorkflowExecutionUpdate(ctx, &workflowservice.PollWorkflowExecutionUpdateRequest{
 		Namespace:  tv.NamespaceName().String(),
 		UpdateRef:  tv.UpdateRef(),
