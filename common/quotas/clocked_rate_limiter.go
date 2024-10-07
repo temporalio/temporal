@@ -140,6 +140,7 @@ func (l ClockedRateLimiter) WaitN(ctx context.Context, token int) error {
 	case <-waitExpired:
 		return nil
 	case <-l.recycleCh:
+		reservation.Cancel()
 		return nil
 	}
 }
