@@ -156,7 +156,7 @@ type MatchingServiceClient interface {
 	// but not being forwarded/synced to the root partition to find the polling
 	// worker which triggered the root partition being loaded in the first place.
 	ForceLoadTaskQueuePartition(ctx context.Context, in *ForceLoadTaskQueuePartitionRequest, opts ...grpc.CallOption) (*ForceLoadTaskQueuePartitionResponse, error)
-	// TODO Shivam - remove this in 1.23.0. Present for backwards compatibility.
+	// TODO Shivam - remove this in 123. Present for backwards compatibility.
 	ForceUnloadTaskQueue(ctx context.Context, in *ForceUnloadTaskQueueRequest, opts ...grpc.CallOption) (*ForceUnloadTaskQueueResponse, error)
 	// Force unloading a task queue partition.
 	ForceUnloadTaskQueuePartition(ctx context.Context, in *ForceUnloadTaskQueuePartitionRequest, opts ...grpc.CallOption) (*ForceUnloadTaskQueuePartitionResponse, error)
@@ -567,7 +567,7 @@ type MatchingServiceServer interface {
 	// but not being forwarded/synced to the root partition to find the polling
 	// worker which triggered the root partition being loaded in the first place.
 	ForceLoadTaskQueuePartition(context.Context, *ForceLoadTaskQueuePartitionRequest) (*ForceLoadTaskQueuePartitionResponse, error)
-	// TODO Shivam - remove this in 1.23.0. Present for backwards compatibility.
+	// TODO Shivam - remove this in 123. Present for backwards compatibility.
 	ForceUnloadTaskQueue(context.Context, *ForceUnloadTaskQueueRequest) (*ForceUnloadTaskQueueResponse, error)
 	// Force unloading a task queue partition.
 	ForceUnloadTaskQueuePartition(context.Context, *ForceUnloadTaskQueuePartitionRequest) (*ForceUnloadTaskQueuePartitionResponse, error)
