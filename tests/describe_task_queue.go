@@ -58,6 +58,9 @@ type (
 	}
 )
 
+var smallTTL = time.Nanosecond
+var largeTTL = 3 * time.Second
+
 func (s *DescribeTaskQueueSuiteBase) SetupSuite() {
 	s.setupSuite("testdata/es_cluster.yaml")
 }
@@ -66,9 +69,15 @@ func (s *DescribeTaskQueueSuiteBase) TearDownSuite() {
 	s.tearDownSuite()
 }
 
+func (s *DescribeTaskQueueSuiteBase) SetupTest() {
+	s.FunctionalTestBase.SetupTest()
+	// Have to define our overridden assertions in the test setup. If we did it earlier, s.T() will return nil
+	s.Assertions = require.New(s.T())
+}
+
 func (s *DescribeTaskQueueSuite) SetupSuite() {
 	s.dynamicConfigOverrides = map[dynamicconfig.Key]any{
-		dynamicconfig.TaskQueueInternalInfoCacheTTL.Key(): time.Nanosecond,
+		dynamicconfig.TaskQueueInternalInfoCacheTTL.Key(): smallTTL,
 	}
 	s.DescribeTaskQueueSuiteBase.SetupSuite()
 }
@@ -78,7 +87,7 @@ func (s *DescribeTaskQueueSuite) TearDownSuite() {
 
 func (s *DescribeTaskQueueSuiteWithCache) SetupSuite() {
 	s.dynamicConfigOverrides = map[dynamicconfig.Key]any{
-		dynamicconfig.TaskQueueInternalInfoCacheTTL.Key(): 5 * time.Second,
+		dynamicconfig.TaskQueueInternalInfoCacheTTL.Key(): largeTTL,
 	}
 	s.DescribeTaskQueueSuiteBase.SetupSuite()
 }
@@ -87,14 +96,10 @@ func (s *DescribeTaskQueueSuiteWithCache) TearDownSuite() {
 }
 
 func (s *DescribeTaskQueueSuite) SetupTest() {
-	s.FunctionalTestBase.SetupTest()
-	// Have to define our overridden assertions in the test setup. If we did it earlier, s.T() will return nil
-	s.Assertions = require.New(s.T())
+	s.DescribeTaskQueueSuiteBase.SetupTest()
 }
 func (s *DescribeTaskQueueSuiteWithCache) SetupTest() {
-	s.FunctionalTestBase.SetupTest()
-	// Have to define our overridden assertions in the test setup. If we did it earlier, s.T() will return nil
-	s.Assertions = require.New(s.T())
+	s.DescribeTaskQueueSuiteBase.SetupTest()
 }
 
 /* Tests for DescribeTaskQueueSuite suite */
@@ -284,7 +289,7 @@ func (s *DescribeTaskQueueSuiteBase) validateDescribeTaskQueue(
 			a.Equal(expectedAddRate[enumspb.TASK_QUEUE_TYPE_ACTIVITY], actStats.TasksAddRate > 0)
 			a.Equal(expectedDispatchRate[enumspb.TASK_QUEUE_TYPE_WORKFLOW], wfStats.TasksDispatchRate > 0)
 			a.Equal(expectedDispatchRate[enumspb.TASK_QUEUE_TYPE_ACTIVITY], actStats.TasksDispatchRate > 0)
-		}, 2*time.Second, 100*time.Millisecond)
+		}, 1*time.Second, 100*time.Millisecond)
 	} else {
 		// Querying the Legacy API
 		s.Eventually(func() bool {
@@ -406,7 +411,7 @@ func (s *DescribeTaskQueueSuiteWithCache) publishConsumeWorkflowTasksValidateSta
 	expectedAddRate[enumspb.TASK_QUEUE_TYPE_ACTIVITY] = workflows > 0
 	expectedDispatchRate[enumspb.TASK_QUEUE_TYPE_ACTIVITY] = false
 
-	time.Sleep(6 * time.Second) // forcing cache evictions due to TTL
+	time.Sleep(largeTTL) // forcing cache evictions due to TTL
 
 	// fetches the latest stats by making per partition gRPC calls
 	s.validateDescribeTaskQueue(tqName, expectedBacklogCount, maxBacklogExtraTasks, expectedAddRate, expectedDispatchRate, isEnhancedMode)
