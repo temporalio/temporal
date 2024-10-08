@@ -66,6 +66,8 @@ func (wt *WorkflowTags) extractFromAdminServiceServerRequest(req any) []tag.Tag 
 		}
 	case *adminservice.DescribeTaskQueuePartitionRequest:
 		return nil
+	case *adminservice.ForceUnloadTaskQueuePartitionRequest:
+		return nil
 	case *adminservice.GenerateLastHistoryReplicationTasksRequest:
 		return []tag.Tag{
 			tag.WorkflowID(r.GetExecution().GetWorkflowId()),

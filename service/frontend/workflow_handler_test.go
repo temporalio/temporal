@@ -53,6 +53,7 @@ import (
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/api/matchingservicemock/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/api/taskqueue/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/archiver/provider"
@@ -2952,14 +2953,16 @@ func (s *workflowHandlerSuite) TestShutdownWorker() {
 
 	stickyTaskQueue := "sticky-task-queue"
 
-	expectedMatchingRequest := &matchingservice.ForceUnloadTaskQueueRequest{
-		NamespaceId:   s.testNamespaceID.String(),
-		TaskQueue:     stickyTaskQueue,
-		TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+	expectedMatchingRequest := &matchingservice.ForceUnloadTaskQueuePartitionRequest{
+		NamespaceId: s.testNamespaceID.String(),
+		TaskQueuePartition: &taskqueue.TaskQueuePartition{
+			TaskQueue:     stickyTaskQueue,
+			TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+		},
 	}
 
 	s.mockNamespaceCache.EXPECT().GetNamespaceID(gomock.Eq(s.testNamespace)).Return(s.testNamespaceID, nil).AnyTimes()
-	s.mockMatchingClient.EXPECT().ForceUnloadTaskQueue(gomock.Any(), gomock.Eq(expectedMatchingRequest)).Return(&matchingservice.ForceUnloadTaskQueueResponse{}, nil)
+	s.mockMatchingClient.EXPECT().ForceUnloadTaskQueuePartition(gomock.Any(), gomock.Eq(expectedMatchingRequest)).Return(&matchingservice.ForceUnloadTaskQueuePartitionResponse{}, nil)
 
 	_, err := wh.ShutdownWorker(ctx, &workflowservice.ShutdownWorkerRequest{
 		Namespace:       s.testNamespace.String(),

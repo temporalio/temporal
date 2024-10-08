@@ -36,6 +36,7 @@ package mocksdk
 import (
 	reflect "reflect"
 
+	nexus "github.com/nexus-rpc/sdk-go/nexus"
 	activity "go.temporal.io/sdk/activity"
 	workflow "go.temporal.io/sdk/workflow"
 	gomock "go.uber.org/mock/gomock"
@@ -86,6 +87,18 @@ func (m *MockWorker) RegisterActivityWithOptions(arg0 any, arg1 activity.Registe
 func (mr *MockWorkerMockRecorder) RegisterActivityWithOptions(arg0, arg1 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RegisterActivityWithOptions", reflect.TypeOf((*MockWorker)(nil).RegisterActivityWithOptions), arg0, arg1)
+}
+
+// RegisterNexusService mocks base method.
+func (m *MockWorker) RegisterNexusService(arg0 *nexus.Service) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "RegisterNexusService", arg0)
+}
+
+// RegisterNexusService indicates an expected call of RegisterNexusService.
+func (mr *MockWorkerMockRecorder) RegisterNexusService(arg0 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RegisterNexusService", reflect.TypeOf((*MockWorker)(nil).RegisterNexusService), arg0)
 }
 
 // RegisterWorkflow mocks base method.

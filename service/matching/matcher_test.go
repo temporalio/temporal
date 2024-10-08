@@ -291,34 +291,35 @@ func (t *MatcherTestSuite) TestRejectSyncMatchWhenBacklog() {
 	cancel()
 }
 
-// TODO Shivam - this seems to be flaky too :(
 func (t *MatcherTestSuite) TestForwardingWhenBacklogIsYoung() {
 	historyTask := newInternalTaskForSyncMatch(randomTaskInfo().Data, nil)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 4*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	intruptC := make(chan struct{})
 
-	// idea 1 - having a waitGroup to sync completion of an attempt to forward the poll
 	var wg sync.WaitGroup
 	wg.Add(1)
 
-	// poll forwarding attempt happens when there is no backlog
 	t.client.EXPECT().PollWorkflowTaskQueue(gomock.Any(), gomock.Any(), gomock.Any()).Do(
 		func(arg0 context.Context, arg1 *matchingservice.PollWorkflowTaskQueueRequest, arg2 ...interface{}) {
-			// Poll forwarding has occured 100%
 			wg.Done()
 		},
 	).Return(&matchingservice.PollWorkflowTaskQueueResponse{}, errMatchingHostThrottleTest)
 
 	go func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 4*time.Second)
+		ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+		// poll forwarding attempt happens when there is no backlog
 		_, err := t.childMatcher.Poll(ctx, &pollMetadata{})
 		t.Assert().NoError(err)
 		cancel()
 	}()
-	wg.Wait() // for the poll to reach the root partition
+	// This ensures that the poll request has been forwarded to the parent partition before the offer is made.
+	// Without this, there is a chance that the request is matched on the child partition, which will fail the test by
+	// complaining about a missing PollWorkflowTaskQueue.
+	wg.Wait()
 
-	time.Sleep(2 * time.Millisecond) // to ensure poller polls locally
+	// to ensure poller is now blocked locally
+	time.Sleep(2 * time.Millisecond)
 
 	// task is not forwarded because there is a local poller waiting
 	err := t.childMatcher.MustOffer(ctx, historyTask, intruptC)
@@ -328,7 +329,6 @@ func (t *MatcherTestSuite) TestForwardingWhenBacklogIsYoung() {
 	// young task is forwarded
 	youngBacklogTask := newInternalTaskFromBacklog(randomTaskInfoWithAge(time.Second), nil)
 
-	// using a waitGroup to ensure we have forwarded the task
 	wg.Add(1)
 	t.client.EXPECT().AddWorkflowTask(gomock.Any(), gomock.Any(), gomock.Any()).Do(
 		func(arg0 context.Context, arg1 *matchingservice.AddWorkflowTaskRequest, arg2 ...interface{}) {
