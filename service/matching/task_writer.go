@@ -122,6 +122,7 @@ func (w *taskWriter) Stop() {
 		return
 	}
 	w.writeLoop.Cancel()
+	<-w.writeLoop.Done()
 }
 
 func (w *taskWriter) initReadWriteState(ctx context.Context) error {
