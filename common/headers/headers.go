@@ -30,6 +30,8 @@ import (
 	"google.golang.org/grpc/metadata"
 )
 
+// Note the nexusoperations component references these headers and adds them to a list of disallowed headers for users to set.
+// If any other headers are added for internal use, they should be added to the disallowed headers list.
 const (
 	ClientNameHeaderName              = "client-name"
 	ClientVersionHeaderName           = "client-version"
@@ -37,9 +39,9 @@ const (
 	SupportedFeaturesHeaderName       = "supported-features"
 	SupportedFeaturesHeaderDelim      = ","
 
-	callerNameHeaderName = "caller-name"
+	CallerNameHeaderName = "caller-name"
 	CallerTypeHeaderName = "caller-type"
-	callOriginHeaderName = "call-initiation"
+	CallOriginHeaderName = "call-initiation"
 )
 
 var (
@@ -49,9 +51,9 @@ var (
 		ClientVersionHeaderName,
 		SupportedServerVersionsHeaderName,
 		SupportedFeaturesHeaderName,
-		callerNameHeaderName,
+		CallerNameHeaderName,
 		CallerTypeHeaderName,
-		callOriginHeaderName,
+		CallOriginHeaderName,
 	}
 )
 

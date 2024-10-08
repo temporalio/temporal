@@ -29,6 +29,8 @@ import (
 
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/headers"
+	"go.temporal.io/server/common/rpc/interceptor"
 )
 
 var RequestTimeout = dynamicconfig.NewDestinationDurationSetting(
@@ -90,7 +92,14 @@ var DisallowedOperationHeaders = dynamicconfig.NewNamespaceTypedSettingWithConve
 		}
 		return keys, nil
 	},
-	[]string{"request-timeout"},
+	[]string{
+		"request-timeout",
+		interceptor.DCRedirectionApiHeaderName,
+		interceptor.DCRedirectionContextHeaderName,
+		headers.CallerNameHeaderName,
+		headers.CallerTypeHeaderName,
+		headers.CallOriginHeaderName,
+	},
 	`Case insensitive list of disallowed header keys for Nexus Operations.
 ScheduleNexusOperation commands with a "nexus_header" field that contains any of these disallowed keys will be
 rejected.`,
