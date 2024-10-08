@@ -360,8 +360,6 @@ forLoop:
 				fwdTokenC = nil
 				reconsiderFwdTimer = time.NewTimer(maxWaitForLocalPoller - lp)
 				reconsiderFwdTimerC = reconsiderFwdTimer.C
-			} else {
-				fmt.Printf("lp is %d and config is %d\n", lp, tm.config.MaxWaitForPollerBeforeFwd())
 			}
 		}
 
