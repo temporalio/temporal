@@ -549,7 +549,7 @@ func (c *TemporalImpl) startHistory() {
 			fx.Provide(resource.DefaultSnTaggedLoggerProvider),
 			fx.Provide(func() *esclient.Config { return c.esConfig }),
 			fx.Provide(func() esclient.Client { return c.esClient }),
-			fx.Provide(workflow.NewTaskGeneratorProvider),
+			fx.Provide(workflow.DefaultTaskGeneratorProvider),
 			fx.Provide(c.GetTLSConfigProvider),
 			fx.Provide(c.GetTaskCategoryRegistry),
 			fx.Supply(c.spanExporters),

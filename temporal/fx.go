@@ -493,7 +493,7 @@ func HistoryServiceProvider(
 	}
 
 	app := fx.New(
-		fx.Provide(workflow.NewTaskGeneratorProvider),
+		fx.Provide(workflow.DefaultTaskGeneratorProvider),
 		params.GetCommonServiceOptions(serviceName),
 		history.QueueModule,
 		history.Module,
