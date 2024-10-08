@@ -27,6 +27,7 @@ package matching
 import (
 	"context"
 	"errors"
+	"fmt"
 	"sync/atomic"
 	"time"
 
@@ -125,6 +126,7 @@ func (fwdr *Forwarder) ForwardTask(ctx context.Context, task *internalTask) erro
 	}
 
 	if !fwdr.limiter.Allow() {
+		fmt.Println("rate limiter said no")
 		return errForwarderSlowDown
 	}
 

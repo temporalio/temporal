@@ -209,57 +209,87 @@ func (t *MatcherTestSuite) testRemoteSyncMatch(taskSource enumsspb.TaskSource) {
 	t.Equal(mustParent(t.queue.partition.(*tqid.NormalPartition), 20).RpcName(), req.GetTaskQueue().GetName())
 }
 
+// validateSyncMatchWhenNoBacklog is a helper which validates a sync match when there is no backlog
+func (t *MatcherTestSuite) validateSyncMatchWhenNoBacklog(wg *sync.WaitGroup, historyTask *internalTask, ctx context.Context) {
+	wg.Add(1)
+
+	// poll forwarding attempt happens when there is no backlog
+	t.client.EXPECT().PollWorkflowTaskQueue(gomock.Any(), gomock.Any(), gomock.Any()).Do(
+		func(arg0 context.Context, arg1 *matchingservice.PollWorkflowTaskQueueRequest, arg2 ...interface{}) {
+			wg.Done()
+		},
+	).Return(&matchingservice.PollWorkflowTaskQueueResponse{}, errMatchingHostThrottleTest)
+
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 4*time.Second)
+		_, err := t.childMatcher.Poll(ctx, &pollMetadata{})
+		t.Assert().NoError(err)
+		cancel()
+	}()
+	wg.Wait()                        // for the poll to reach the root partition
+	time.Sleep(2 * time.Millisecond) // to ensure poller now polls locally since it encountered a forwarding error
+
+	go func() {
+		historyTask.responseC <- nil
+	}()
+	happened, err := t.childMatcher.Offer(ctx, historyTask)
+	t.True(happened)
+	t.Nil(err)
+}
+
 func (t *MatcherTestSuite) TestRejectSyncMatchWhenBacklog() {
-	// historyTask := newInternalTaskForSyncMatch(randomTaskInfo().Data, nil)
+	historyTask := newInternalTaskForSyncMatch(randomTaskInfo().Data, nil)
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 
-	// TODO Shivam - flake #1
-	// change this to a remote/local sync-match
-	t.testRemoteSyncMatch(enumsspb.TASK_SOURCE_HISTORY)
+	// sync match happens when there is no backlog
+	var wg sync.WaitGroup
+	t.validateSyncMatchWhenNoBacklog(&wg, historyTask, ctx)
 
-	// first task waiting for a poller now :)
+	// first task waiting for a local poller now :)
 	intruptC := make(chan struct{})
 	youngBacklogTask := newInternalTaskFromBacklog(randomTaskInfoWithAge(time.Second), nil)
-	t.client.EXPECT().AddWorkflowTask(gomock.Any(), gomock.Any(), gomock.Any()).Return(&matchingservice.AddWorkflowTaskResponse{}, errMatchingHostThrottleTest).AnyTimes()
+	t.client.EXPECT().AddWorkflowTask(gomock.Any(), gomock.Any(), gomock.Any()).Do(
+		func(arg0 context.Context, arg1 *matchingservice.AddWorkflowTaskRequest, arg2 ...interface{}) {
+			wg.Done()
+		},
+	).Return(&matchingservice.AddWorkflowTaskResponse{}, errMatchingHostThrottleTest)
+	wg.Add(1)
 	go t.childMatcher.MustOffer(ctx, youngBacklogTask, intruptC) //nolint:errcheck
+	wg.Wait()
 	time.Sleep(time.Millisecond)
 
-	// // should allow sync match when there is only young tasks in the backlog
-	// // Shivam - this guy flakes when it doesn't get any forwarding token (maybe sleep more for the previous forward?)
-	// t.client.EXPECT().AddWorkflowTask(gomock.Any(), gomock.Any(), gomock.Any()).Return(&matchingservice.AddWorkflowTaskResponse{}, errMatchingHostThrottleTest)
-	// happened, err = t.childMatcher.Offer(ctx, historyTask)
-	// t.Nil(err)
-	// t.False(happened) // sync match did not happen, but we called the forwarder client
-
-	// should not allow sync match when there is an old task in backlog
+	// should allow sync match when there is only young tasks in the backlog
+	t.client.EXPECT().AddWorkflowTask(gomock.Any(), gomock.Any(), gomock.Any()).Do(
+		func(arg0 context.Context, arg1 *matchingservice.AddWorkflowTaskRequest, arg2 ...interface{}) {
+		},
+	).Return(&matchingservice.AddWorkflowTaskResponse{}, errMatchingHostThrottleTest)
+	happened, err := t.childMatcher.Offer(ctx, historyTask)
+	t.Nil(err)
+	t.False(happened) // sync match did not happen, but we called the forwarder client
 
 	// second task waiting for a poller now :)
-	// oldBacklogTask := newInternalTaskFromBacklog(randomTaskInfoWithAge(time.Minute), nil)
-	// go t.childMatcher.MustOffer(ctx, oldBacklogTask, intruptC) //nolint:errcheck
-	// time.Sleep(time.Millisecond)
+	// there *could* be a chance that the poller gets forwarded but the rate limiter doesn't allow forwarding.
+	oldBacklogTask := newInternalTaskFromBacklog(randomTaskInfoWithAge(time.Minute), nil)
+	t.client.EXPECT().AddWorkflowTask(gomock.Any(), gomock.Any(), gomock.Any()).Return(&matchingservice.AddWorkflowTaskResponse{}, errMatchingHostThrottleTest).AnyTimes()
+	go t.childMatcher.MustOffer(ctx, oldBacklogTask, intruptC) //nolint:errcheck
+	time.Sleep(time.Millisecond)
 
-	// happened, err = t.childMatcher.Offer(ctx, historyTask)
-	// t.False(happened)
-	// t.Nil(err)
+	// should not allow sync match when there is an old task in backlog
+	happened, err = t.childMatcher.Offer(ctx, historyTask)
+	t.False(happened)
+	t.Nil(err)
 
-	// // poll both tasks which are from the backlog
-	// task, _ := t.childMatcher.Poll(ctx, &pollMetadata{})
-	// t.NotNil(task)
-	// t.Equal(enumsspb.TASK_SOURCE_DB_BACKLOG, task.source)
-	// task, _ = t.childMatcher.Poll(ctx, &pollMetadata{})
-	// t.NotNil(task)
-	// t.Equal(enumsspb.TASK_SOURCE_DB_BACKLOG, task.source)
-	// time.Sleep(time.Millisecond)
+	// poll both tasks which are from the backlog
+	task, _ := t.childMatcher.Poll(ctx, &pollMetadata{})
+	t.NotNil(task)
+	t.Equal(enumsspb.TASK_SOURCE_DB_BACKLOG, task.source)
+	task, _ = t.childMatcher.Poll(ctx, &pollMetadata{})
+	t.NotNil(task)
+	t.Equal(enumsspb.TASK_SOURCE_DB_BACKLOG, task.source)
+	time.Sleep(time.Millisecond)
 
 	// should allow sync match now
-	// t.client.EXPECT().PollWorkflowTaskQueue(gomock.Any(), gomock.Any(), gomock.Any()).Return(&matchingservice.PollWorkflowTaskQueueResponse{}, errMatchingHostThrottleTest)
-	// go t.childMatcher.Poll(ctx, &pollMetadata{}) //nolint:errcheck
-	// time.Sleep(time.Millisecond)
-	// go func() { historyTask.responseC <- nil }()
-	// happened, err = t.childMatcher.Offer(ctx, historyTask)
-	// t.True(happened)
-	// t.Nil(err)
-
+	t.validateSyncMatchWhenNoBacklog(&wg, historyTask, ctx)
 	cancel()
 }
 
@@ -300,7 +330,7 @@ func (t *MatcherTestSuite) TestForwardingWhenBacklogIsYoung() {
 	// young task is forwarded
 	youngBacklogTask := newInternalTaskFromBacklog(randomTaskInfoWithAge(time.Second), nil)
 
-	// using a waitGroup to ensure we have forwarded the taskw
+	// using a waitGroup to ensure we have forwarded the task
 	wg.Add(1)
 	t.client.EXPECT().AddWorkflowTask(gomock.Any(), gomock.Any(), gomock.Any()).Do(
 		func(arg0 context.Context, arg1 *matchingservice.AddWorkflowTaskRequest, arg2 ...interface{}) {
