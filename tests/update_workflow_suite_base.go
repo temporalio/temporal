@@ -22,7 +22,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package update
+package tests
 
 import (
 	"context"
@@ -40,6 +40,11 @@ import (
 
 type WorkflowUpdateBaseSuite struct {
 	testcore.FunctionalSuite
+}
+
+type updateResponseErr struct {
+	response *workflowservice.UpdateWorkflowExecutionResponse
+	err      error
 }
 
 func (s *WorkflowUpdateBaseSuite) sendUpdateNoErrorWaitPolicyAccepted(tv *testvars.TestVars, updateID string) <-chan *workflowservice.UpdateWorkflowExecutionResponse {

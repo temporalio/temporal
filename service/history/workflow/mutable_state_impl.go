@@ -575,14 +575,12 @@ func (ms *MutableStateImpl) GetNexusCompletion(ctx context.Context) (nexus.Opera
 	switch ce.GetEventType() {
 	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED:
 		payloads := ce.GetWorkflowExecutionCompletedEventAttributes().GetResult().GetPayloads()
-		var p *commonpb.Payload
+		var p *commonpb.Payload // default to nil, the payload serializer converts nil to Nexus nil Content.
 		if len(payloads) > 0 {
 			// All of our SDKs support returning a single value from workflows, we can safely ignore the
 			// rest of the payloads. Additionally, even if a workflow could return more than a single value,
 			// Nexus does not support it.
 			p = payloads[0]
-		} else {
-			p = &commonpb.Payload{}
 		}
 		completion, err := nexus.NewOperationCompletionSuccessful(p, nexus.OperationCompletionSuccesfulOptions{
 			Serializer: commonnexus.PayloadSerializer,

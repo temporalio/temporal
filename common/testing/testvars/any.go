@@ -61,6 +61,10 @@ func (a Any) Int() int {
 	return randInt(a.testHash, 3, 3, 3)
 }
 
+func (a Any) Int64() int64 {
+	return int64(a.Int())
+}
+
 func (a Any) EventID() int64 {
 	// This produces EventID in XX0YY format, where XX is unique for every test and YY is a random number.
 	return int64(randInt(a.testHash, 2, 1, 2))
