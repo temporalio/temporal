@@ -27,6 +27,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/server/components/nexusoperations"
 	"go.temporal.io/server/service/history/hsm"
@@ -52,7 +53,7 @@ func TestCherryPick(t *testing.T) {
 				},
 			},
 		},
-			false,
+			nil,
 		)
 		require.NoError(t, err)
 	})
@@ -66,7 +67,7 @@ func TestCherryPick(t *testing.T) {
 				},
 			},
 		},
-			false,
+			nil,
 		)
 		require.NoError(t, err)
 	})
@@ -80,7 +81,7 @@ func TestCherryPick(t *testing.T) {
 				},
 			},
 		},
-			false,
+			nil,
 		)
 		require.ErrorIs(t, err, hsm.ErrNotCherryPickable)
 	})
@@ -93,7 +94,7 @@ func TestCherryPick(t *testing.T) {
 				},
 			},
 		},
-			false,
+			nil,
 		)
 		require.ErrorIs(t, err, hsm.ErrStateMachineNotFound)
 	})
@@ -106,7 +107,7 @@ func TestCherryPick(t *testing.T) {
 				},
 			},
 		},
-			false,
+			nil,
 		)
 		require.NoError(t, err)
 		err = nexusoperations.StartedEventDefinition{}.CherryPick(node.Parent, &historypb.HistoryEvent{
@@ -116,7 +117,7 @@ func TestCherryPick(t *testing.T) {
 				},
 			},
 		},
-			false,
+			nil,
 		)
 		require.ErrorIs(t, err, hsm.ErrInvalidTransition)
 	})
@@ -132,8 +133,9 @@ func TestCherryPick(t *testing.T) {
 			nexusoperations.TimedOutEventDefinition{},
 		}
 
+		excludeNexusOperation := map[enumspb.ResetReapplyExcludeType]bool{enumspb.RESET_REAPPLY_EXCLUDE_TYPE_NEXUS: true}
 		for _, nexusOperation := range nexusOperations {
-			err := nexusOperation.CherryPick(node.Parent, &historypb.HistoryEvent{}, true)
+			err := nexusOperation.CherryPick(node.Parent, &historypb.HistoryEvent{}, excludeNexusOperation)
 			require.ErrorIs(t, err, hsm.ErrNotCherryPickable, "%T should not be cherrypickable when shouldExcludeNexusEvent=true", nexusOperation)
 		}
 	})
