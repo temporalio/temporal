@@ -176,8 +176,7 @@ func (c *backlogManagerImpl) WaitUntilInitialized(ctx context.Context) error {
 }
 
 func (c *backlogManagerImpl) SpoolTask(taskInfo *persistencespb.TaskInfo) error {
-	_, err := c.taskWriter.appendTask(taskInfo)
-	c.signalIfFatal(err)
+	err := c.taskWriter.appendTask(taskInfo)
 	if err == nil {
 		c.taskReader.Signal()
 	}
@@ -233,8 +232,7 @@ func (c *backlogManagerImpl) completeTask(task *persistencespb.AllocatedTaskInfo
 		// Note that RecordTaskStarted only fails after retrying for a long time, so a single task will not be
 		// re-written to persistence frequently.
 		err = executeWithRetry(context.Background(), func(_ context.Context) error {
-			_, err := c.taskWriter.appendTask(task.Data)
-			return err
+			return c.taskWriter.appendTask(task.Data)
 		})
 
 		if err != nil {

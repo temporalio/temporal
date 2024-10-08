@@ -190,7 +190,6 @@ func (s *matchingEngineSuite) SetupTest() {
 
 func (s *matchingEngineSuite) TearDownTest() {
 	s.matchingEngine.Stop()
-	s.controller.Finish()
 }
 
 func (s *matchingEngineSuite) newMatchingEngine(

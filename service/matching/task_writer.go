@@ -44,14 +44,9 @@ import (
 )
 
 type (
-	writeTaskResponse struct {
-		err                 error
-		persistenceResponse *persistence.CreateTasksResponse
-	}
-
 	writeTaskRequest struct {
 		taskInfo   *persistencespb.TaskInfo
-		responseCh chan<- *writeTaskResponse
+		responseCh chan<- error
 	}
 
 	taskIDBlock struct {
@@ -143,17 +138,17 @@ func (w *taskWriter) initReadWriteState(ctx context.Context) error {
 
 func (w *taskWriter) appendTask(
 	taskInfo *persistencespb.TaskInfo,
-) (*persistence.CreateTasksResponse, error) {
+) error {
 
 	select {
 	case <-w.writeLoop.Done():
-		return nil, errShutdown
+		return errShutdown
 	default:
 		// noop
 	}
 
 	startTime := time.Now().UTC()
-	ch := make(chan *writeTaskResponse)
+	ch := make(chan error)
 	req := &writeTaskRequest{
 		taskInfo:   taskInfo,
 		responseCh: ch,
@@ -162,17 +157,17 @@ func (w *taskWriter) appendTask(
 	select {
 	case w.appendCh <- req:
 		select {
-		case r := <-ch:
+		case err := <-ch:
 			metrics.TaskWriteLatencyPerTaskQueue.With(w.backlogMgr.metricsHandler).Record(time.Since(startTime))
-			return r.persistenceResponse, r.err
+			return err
 		case <-w.writeLoop.Done():
 			// if we are shutting down, this request will never make
 			// it to cassandra, just bail out and fail this request
-			return nil, errShutdown
+			return errShutdown
 		}
 	default: // channel is full, throttle
 		metrics.TaskWriteThrottlePerTaskQueueCounter.With(w.backlogMgr.metricsHandler).Record(1)
-		return nil, &serviceerror.ResourceExhausted{
+		return &serviceerror.ResourceExhausted{
 			Cause:   enumspb.RESOURCE_EXHAUSTED_CAUSE_SYSTEM_OVERLOADED,
 			Scope:   enumspb.RESOURCE_EXHAUSTED_SCOPE_NAMESPACE,
 			Message: "Too many outstanding appends to the task queue",
@@ -231,12 +226,12 @@ writerLoop:
 
 			taskIDs, err := w.allocTaskIDs(ctx, batchSize)
 			if err != nil {
-				w.sendWriteResponse(reqs, nil, err)
+				w.sendWriteResponse(ctx, reqs, err)
 				continue writerLoop
 			}
 
-			resp, err := w.appendTasks(ctx, taskIDs, reqs)
-			w.sendWriteResponse(reqs, resp, err)
+			_, err = w.appendTasks(ctx, taskIDs, reqs)
+			w.sendWriteResponse(ctx, reqs, err)
 
 		case <-ctx.Done():
 			return ctx.Err()
@@ -258,17 +253,18 @@ readLoop:
 }
 
 func (w *taskWriter) sendWriteResponse(
+	ctx context.Context,
 	reqs []*writeTaskRequest,
-	persistenceResponse *persistence.CreateTasksResponse,
 	err error,
 ) {
 	for _, req := range reqs {
-		resp := &writeTaskResponse{
-			err:                 err,
-			persistenceResponse: persistenceResponse,
+		select {
+		case req.responseCh <- err:
+		case <-ctx.Done():
+			// if we are shutting down, the read side of responseCh will also abort, so we can
+			// just return here.
+			return
 		}
-
-		req.responseCh <- resp
 	}
 }
 
