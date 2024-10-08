@@ -27,7 +27,6 @@ package matching
 import (
 	"context"
 	"errors"
-	"fmt"
 	"math"
 	"strconv"
 	"sync"
@@ -566,7 +565,6 @@ func (tm *TaskMatcher) poll(
 		metrics.PollTimeoutPerTaskQueueCounter.With(tm.metricsHandler).Record(1)
 		return nil, false, errNoTasks
 	case <-tm.closeC:
-		fmt.Println("Did channel close?")
 		return nil, false, errNoTasks
 	case task := <-taskC:
 		if task.responseC != nil {
