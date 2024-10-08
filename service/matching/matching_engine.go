@@ -718,7 +718,7 @@ func (e *matchingEngineImpl) nonRetryableErrorsDropTask(task *internalTask, task
 		tag.ErrorType(err),
 	)
 
-	metrics.TaskInternalErrorCounter.With(e.metricsHandler).Record(1, metrics.ServiceErrorTypeTag(err))
+	metrics.NonRetryableTasks.With(e.metricsHandler).Record(1, metrics.ServiceErrorTypeTag(err))
 
 	// drop the task as otherwise task would be stuck in a retry-loop since the errors from within this helper is called are non-retryable
 	task.finish(nil)

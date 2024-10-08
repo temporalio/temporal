@@ -132,27 +132,9 @@ func GetHistory(
 	switch err.(type) {
 	case nil:
 		// noop
-	case *serviceerror.DataLoss:
+	case *serviceerror.DataLoss, *serialization.DeserializationError, *serialization.SerializationError:
 		// log event
-		shard.GetLogger().Error("encountered data loss event",
-			tag.WorkflowNamespaceID(namespaceID.String()),
-			tag.WorkflowID(execution.GetWorkflowId()),
-			tag.WorkflowRunID(execution.GetRunId()),
-			tag.Error(err),
-		)
-		return nil, nil, err
-	case *serialization.DeserializationError:
-		// log event
-		shard.GetLogger().Error("encountered de-serialization error",
-			tag.WorkflowNamespaceID(namespaceID.String()),
-			tag.WorkflowID(execution.GetWorkflowId()),
-			tag.WorkflowRunID(execution.GetRunId()),
-			tag.Error(err),
-		)
-		return nil, nil, err
-	case *serialization.SerializationError:
-		// log event
-		shard.GetLogger().Error("encountered serialization error",
+		shard.GetLogger().Error("encountered data corruption event",
 			tag.WorkflowNamespaceID(namespaceID.String()),
 			tag.WorkflowID(execution.GetWorkflowId()),
 			tag.WorkflowRunID(execution.GetRunId()),

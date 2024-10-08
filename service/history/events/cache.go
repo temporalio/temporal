@@ -213,27 +213,13 @@ func (e *CacheImpl) getHistoryEventFromStore(
 	switch err.(type) {
 	case nil:
 		// noop
-	case *serviceerror.DataLoss:
+	case *serviceerror.DataLoss, *serialization.DeserializationError, *serialization.SerializationError:
 		// log event
-		e.logger.Error("encounter data loss event",
+		e.logger.Error("encounter data corruption event",
 			tag.WorkflowNamespaceID(key.NamespaceID.String()),
 			tag.WorkflowID(key.WorkflowID),
 			tag.WorkflowRunID(key.RunID))
 		metrics.CacheFailures.With(handler).Record(1)
-		return nil, err
-	case *serialization.DeserializationError:
-		// log event
-		e.logger.Error("encountered de-serialization error",
-			tag.WorkflowNamespaceID(key.NamespaceID.String()),
-			tag.WorkflowID(key.WorkflowID),
-			tag.WorkflowRunID(key.RunID))
-		return nil, err
-	case *serialization.SerializationError:
-		// log event
-		e.logger.Error("encountered serialization error",
-			tag.WorkflowNamespaceID(key.NamespaceID.String()),
-			tag.WorkflowID(key.WorkflowID),
-			tag.WorkflowRunID(key.RunID))
 		return nil, err
 	default:
 		metrics.CacheFailures.With(handler).Record(1)

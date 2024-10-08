@@ -1030,6 +1030,9 @@ var (
 	TaskDispatchLatencyPerTaskQueue                   = NewTimerDef("task_dispatch_latency")
 	ApproximateBacklogCount                           = NewGaugeDef("approximate_backlog_count")
 	ApproximateBacklogAgeSeconds                      = NewGaugeDef("approximate_backlog_age_seconds")
+	NonRetryableTasks                                 = NewCounterDef(
+		"non_retryable_tasks",
+		WithDescription("The number of non-retryable tasks which are dropped due to specific errors"))
 
 	// Versioning and Reachability
 	ReachabilityExitPointCounter = NewCounterDef("reachability_exit_point_count")
@@ -1145,9 +1148,6 @@ var (
 		"schedule_action_delay",
 		WithDescription("Delay between when scheduled actions should/actually happen"),
 	)
-	NonRetryableTasks = NewCounterDef(
-		"non_retryable_tasks",
-		WithDescription("The number of non-retryable tasks which are dropped due to specific errors"))
 
 	// Force replication
 	EncounterZombieWorkflowCount        = NewCounterDef("encounter_zombie_workflow_count")
