@@ -2167,12 +2167,6 @@ Do not turn this on if you aren't using Cassandra as the history task DLQ is not
 		70, // 70 attempts takes about an hour
 		`HistoryTaskDLQUnexpectedErrorAttempts is the number of task execution attempts before sending the task to DLQ.`,
 	)
-	HistoryTaskDLQInternalErrors = NewGlobalBoolSetting(
-		"history.TaskDLQInternalErrors",
-		false,
-		`HistoryTaskDLQInternalErrors causes history task processing to send tasks failing with serviceerror.Internal to
-the dlq (or will drop them if not enabled)`,
-	)
 	HistoryTaskDLQErrorPattern = NewGlobalStringSetting(
 		"history.TaskDLQErrorPattern",
 		"",
