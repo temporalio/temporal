@@ -991,11 +991,7 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 					}
 				}
 			}
-			fmt.Printf("Activity tasks are %d \n\n\n", physicalInfoByBuildId[""][enumspb.TASK_QUEUE_TYPE_ACTIVITY].TaskQueueStats.ApproximateBacklogCount)
 			e.taskQueueInternalInfoCache.Put(rootPartition.Key(), physicalInfoByBuildId)
-		} else {
-			fmt.Println("fetched from cache!!!!!")
-			fmt.Printf("Activity tasks are %d \n\n\n", physicalInfoByBuildId[""][enumspb.TASK_QUEUE_TYPE_ACTIVITY].TaskQueueStats.ApproximateBacklogCount)
 		}
 
 		// smush internal info into versions info

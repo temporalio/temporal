@@ -24,7 +24,6 @@ package tests
 
 import (
 	"context"
-	"fmt"
 	"time"
 
 	"github.com/pborman/uuid"
@@ -82,25 +81,12 @@ func (s *DescribeTaskQueueSuite) SetupSuite() {
 	}
 	s.DescribeTaskQueueSuiteBase.SetupSuite()
 }
-func (s *DescribeTaskQueueSuite) TearDownSuite() {
-	s.DescribeTaskQueueSuiteBase.TearDownSuite()
-}
 
 func (s *DescribeTaskQueueSuiteWithCache) SetupSuite() {
 	s.dynamicConfigOverrides = map[dynamicconfig.Key]any{
 		dynamicconfig.TaskQueueInternalInfoCacheTTL.Key(): largeTTL,
 	}
 	s.DescribeTaskQueueSuiteBase.SetupSuite()
-}
-func (s *DescribeTaskQueueSuiteWithCache) TearDownSuite() {
-	s.DescribeTaskQueueSuiteBase.TearDownSuite()
-}
-
-func (s *DescribeTaskQueueSuite) SetupTest() {
-	s.DescribeTaskQueueSuiteBase.SetupTest()
-}
-func (s *DescribeTaskQueueSuiteWithCache) SetupTest() {
-	s.DescribeTaskQueueSuiteBase.SetupTest()
 }
 
 /* Tests for DescribeTaskQueueSuite suite */
@@ -233,7 +219,6 @@ func (s *DescribeTaskQueueSuiteBase) PollActivityTasks(workflows int, tq *taskqu
 		)
 		s.NoError(err1)
 		if resp1 == nil || resp1.GetAttempt() < 1 {
-			fmt.Println("empty poll response")
 			continue // poll again on empty responses
 		}
 		i++
@@ -276,7 +261,6 @@ func (s *DescribeTaskQueueSuiteBase) validateDescribeTaskQueue(
 
 			wfStats := types[int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW)].Stats
 			actStats := types[int32(enumspb.TASK_QUEUE_TYPE_ACTIVITY)].Stats
-			fmt.Printf("Activity tasks inside matching are %d and expected activity backlog count %d \n\n\n", actStats.ApproximateBacklogCount, expectedBacklogCount[enumspb.TASK_QUEUE_TYPE_ACTIVITY])
 
 			a := assert.New(t)
 
@@ -417,13 +401,11 @@ func (s *DescribeTaskQueueSuiteWithCache) publishConsumeWorkflowTasksValidateSta
 	time.Sleep(largeTTL + 30*time.Millisecond) // forcing cache evictions due to TTL
 
 	// fetches the latest stats by making per partition gRPC calls
-	fmt.Println("First DescribeTQ call")
 	s.validateDescribeTaskQueue(tqName, expectedBacklogCount, maxBacklogExtraTasks, expectedAddRate, expectedDispatchRate, isEnhancedMode)
 
 	// Poll the activity tasks
 	s.PollActivityTasks(workflows, tq, identity)
 
 	// validating with cached stats
-	fmt.Println("Second DescribeTQ call")
 	s.validateDescribeTaskQueue(tqName, expectedBacklogCount, maxBacklogExtraTasks, expectedAddRate, expectedDispatchRate, isEnhancedMode)
 }
