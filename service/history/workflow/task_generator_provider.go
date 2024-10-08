@@ -29,13 +29,15 @@ import (
 )
 
 var (
-	// The default value is just for testing purpose,
-	// so we don't have to specify its value in every test.
-	// If TaskGeneratorFactory is not provided as an fx Option,
-	// fx.Populate in fx.go and server start up will still fail.
+	// This is set as a global to avoid plumbing through many layers. The default
+	// implementation has no state so this is safe even though it bypasses DI.
+	// It's set to a default value statically so that we can avoid setting it in tests, which
+	// would trip the race detector when running multiple servers in a single process.
+	// Note that TaskGeneratorProvider still needs to be provided through fx even with this
+	// default value.
 	taskGeneratorProvider TaskGeneratorProvider = defaultTaskGeneratorProvider
 
-	defaultTaskGeneratorProvider = &taskGeneratorProviderImpl{}
+	defaultTaskGeneratorProvider TaskGeneratorProvider = &taskGeneratorProviderImpl{}
 )
 
 type (
@@ -48,18 +50,13 @@ type (
 
 func populateTaskGeneratorProvider(provider TaskGeneratorProvider) {
 	if provider == defaultTaskGeneratorProvider {
-		// avoid setting default over default to eliminate racey writes during testing
-		return
+		return // avoid setting default over default to eliminate racey writes during testing
 	}
 	taskGeneratorProvider = provider
 }
 
 func GetTaskGeneratorProvider() TaskGeneratorProvider {
 	return taskGeneratorProvider
-}
-
-func DefaultTaskGeneratorProvider() TaskGeneratorProvider {
-	return defaultTaskGeneratorProvider
 }
 
 func (p *taskGeneratorProviderImpl) NewTaskGenerator(
