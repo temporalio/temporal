@@ -29,9 +29,7 @@ import (
 )
 
 var Module = fx.Options(
-	fx.Invoke(func(tgp TaskGeneratorProvider) {
-		taskGeneratorProvider.Store(&tgp)
-	}),
+	fx.Populate(&taskGeneratorProvider),
 	fx.Provide(RelocatableAttributesFetcherProvider),
 	fx.Invoke(RegisterStateMachine),
 )

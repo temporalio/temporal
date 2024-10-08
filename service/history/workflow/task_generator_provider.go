@@ -25,14 +25,15 @@
 package workflow
 
 import (
-	"sync/atomic"
-
 	"go.temporal.io/server/service/history/shard"
 )
 
 var (
-	// TODO: do this properly though fx
-	taskGeneratorProvider atomic.Pointer[TaskGeneratorProvider]
+	// The default value is just for testing purpose,
+	// so we don't have to specify its value in every test.
+	// If TaskGeneratorFactory is not provided as an fx Option,
+	// fx.Populate in fx.go and server start up will still fail.
+	taskGeneratorProvider = NewTaskGeneratorProvider()
 )
 
 type (
@@ -42,15 +43,6 @@ type (
 
 	taskGeneratorProviderImpl struct{}
 )
-
-func init() {
-	// This default value is just for testing purpose,
-	// so we don't have to specify its value in every test.
-	// If TaskGeneratorProvider is not provided as an fx Option,
-	// fx.Invoke in fx.go and server start up will still fail.
-	tgp := NewTaskGeneratorProvider()
-	taskGeneratorProvider.Store(&tgp)
-}
 
 func NewTaskGeneratorProvider() TaskGeneratorProvider {
 	return &taskGeneratorProviderImpl{}

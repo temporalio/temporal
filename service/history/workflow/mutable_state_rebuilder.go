@@ -114,7 +114,7 @@ func (b *MutableStateRebuilderImpl) ApplyEvents(
 	// TODO: There doesn't seem to be a good reason to generate tasks here since they'll be generated eventually when we
 	// close the transaction.
 	// Previously this comment was here: must generate the activity timer / user timer at the very end
-	taskGenerator := (*taskGeneratorProvider.Load()).NewTaskGenerator(b.shard, b.mutableState)
+	taskGenerator := taskGeneratorProvider.NewTaskGenerator(b.shard, b.mutableState)
 	if err := taskGenerator.GenerateActivityTimerTasks(); err != nil {
 		return nil, err
 	}
@@ -141,7 +141,7 @@ func (b *MutableStateRebuilderImpl) applyEvents(
 	firstEvent := history[0]
 	lastEvent := history[len(history)-1]
 
-	taskGenerator := (*taskGeneratorProvider.Load()).NewTaskGenerator(b.shard, b.mutableState)
+	taskGenerator := taskGeneratorProvider.NewTaskGenerator(b.shard, b.mutableState)
 
 	// Need to clear the sticky task queue because workflow turned to passive.
 	b.mutableState.ClearStickyTaskQueue()
