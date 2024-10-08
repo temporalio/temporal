@@ -361,9 +361,7 @@ func NewMutableStateFromDB(
 	dbRecord *persistencespb.WorkflowMutableState,
 	dbRecordVersion int64,
 ) (*MutableStateImpl, error) {
-	// startTime will be overridden by DB record
-	startTime := time.Time{}
-
+	startTime := timestamp.TimeValue(dbRecord.ExecutionState.StartTime)
 	mutableState := NewMutableState(
 		shard,
 		eventsCache,
@@ -434,11 +432,6 @@ func NewMutableStateFromDB(
 	mutableState.executionState = dbRecord.ExecutionState
 	mutableState.approximateSize += dbRecord.ExecutionInfo.Size() - mutableState.executionInfo.Size()
 	mutableState.executionInfo = dbRecord.ExecutionInfo
-
-	// StartTime was moved from ExecutionInfo to executionState
-	if mutableState.executionState.StartTime == nil && dbRecord.ExecutionInfo.StartTime != nil {
-		mutableState.executionState.StartTime = dbRecord.ExecutionInfo.StartTime
-	}
 
 	mutableState.hBuilder = historybuilder.New(
 		mutableState.timeSource,
@@ -1938,7 +1931,7 @@ func (ms *MutableStateImpl) IsSignalRequested(
 }
 
 func (ms *MutableStateImpl) IsWorkflowPendingOnWorkflowTaskBackoff() bool {
-	workflowTaskBackoff := timestamp.TimeValue(ms.executionInfo.GetExecutionTime()).After(timestamp.TimeValue(ms.executionState.GetStartTime()))
+	workflowTaskBackoff := timestamp.TimeValue(ms.executionInfo.GetExecutionTime()).After(timestamp.TimeValue(ms.executionInfo.GetStartTime()))
 	if workflowTaskBackoff && !ms.HadOrHasWorkflowTask() {
 		return true
 	}
@@ -2098,7 +2091,7 @@ func (ms *MutableStateImpl) addWorkflowExecutionStartedEventForContinueAsNew(
 
 func (ms *MutableStateImpl) ContinueAsNewMinBackoff(backoffDuration *durationpb.Duration) *durationpb.Duration {
 	// lifetime of previous execution
-	lifetime := ms.timeSource.Now().Sub(ms.executionState.StartTime.AsTime().UTC())
+	lifetime := ms.timeSource.Now().Sub(ms.executionInfo.StartTime.AsTime().UTC())
 	if ms.executionInfo.ExecutionTime != nil {
 		lifetime = ms.timeSource.Now().Sub(ms.executionInfo.ExecutionTime.AsTime().UTC())
 	}
@@ -2152,7 +2145,7 @@ func (ms *MutableStateImpl) AddWorkflowExecutionStartedEventWithOptions(
 	}
 
 	event := ms.hBuilder.AddWorkflowExecutionStartedEvent(
-		ms.executionState.StartTime.AsTime(),
+		ms.executionInfo.StartTime.AsTime(),
 		startRequest,
 		resetPoints,
 		prevRunID,
@@ -2286,7 +2279,7 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionStartedEvent(
 	}
 
 	ms.executionInfo.ExecutionTime = timestamppb.New(
-		ms.executionState.StartTime.AsTime().Add(event.GetFirstWorkflowTaskBackoff().AsDuration()),
+		ms.executionInfo.StartTime.AsTime().Add(event.GetFirstWorkflowTaskBackoff().AsDuration()),
 	)
 
 	ms.executionInfo.Attempt = event.GetAttempt()
@@ -2301,7 +2294,7 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionStartedEvent(
 	if workflowRunTimeoutDuration != 0 {
 		firstWorkflowTaskDelayDuration := event.GetFirstWorkflowTaskBackoff().AsDuration()
 		workflowRunTimeoutDuration = workflowRunTimeoutDuration + firstWorkflowTaskDelayDuration
-		workflowRunTimeoutTime = ms.executionState.StartTime.AsTime().Add(workflowRunTimeoutDuration)
+		workflowRunTimeoutTime = ms.executionInfo.StartTime.AsTime().Add(workflowRunTimeoutDuration)
 
 		workflowExecutionTimeoutTime := timestamp.TimeValue(ms.executionInfo.WorkflowExecutionExpirationTime)
 		if !workflowExecutionTimeoutTime.IsZero() && workflowRunTimeoutTime.After(workflowExecutionTimeoutTime) {

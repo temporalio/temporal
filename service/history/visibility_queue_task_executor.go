@@ -350,7 +350,7 @@ func (t *visibilityQueueTaskExecutor) getVisibilityRequestBase(
 ) *manager.VisibilityRequestBase {
 	var (
 		executionInfo    = mutableState.GetExecutionInfo()
-		startTime        = timestamp.TimeValue(mutableState.GetExecutionState().GetStartTime())
+		startTime        = timestamp.TimeValue(executionInfo.GetStartTime())
 		executionTime    = timestamp.TimeValue(executionInfo.GetExecutionTime())
 		visibilityMemo   = getWorkflowMemo(copyMapPayload(executionInfo.Memo))
 		searchAttributes = getSearchAttributes(copyMapPayload(executionInfo.SearchAttributes))
