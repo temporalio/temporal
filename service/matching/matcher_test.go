@@ -221,7 +221,7 @@ func (t *MatcherTestSuite) validateSyncMatchWhenNoBacklog(wg *sync.WaitGroup, hi
 	).Return(&matchingservice.PollWorkflowTaskQueueResponse{}, errMatchingHostThrottleTest)
 
 	go func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 4*time.Second)
+		ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 		_, err := t.childMatcher.Poll(ctx, &pollMetadata{})
 		t.Assert().NoError(err)
 		cancel()
@@ -239,13 +239,13 @@ func (t *MatcherTestSuite) validateSyncMatchWhenNoBacklog(wg *sync.WaitGroup, hi
 
 func (t *MatcherTestSuite) TestRejectSyncMatchWhenBacklog() {
 	historyTask := newInternalTaskForSyncMatch(randomTaskInfo().Data, nil)
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 
 	// sync match happens when there is no backlog
 	var wg sync.WaitGroup
 	t.validateSyncMatchWhenNoBacklog(&wg, historyTask, ctx)
 
-	// first task waiting for a local poller now :)
+	// first task waits for a local poller
 	intruptC := make(chan struct{})
 	youngBacklogTask := newInternalTaskFromBacklog(randomTaskInfoWithAge(time.Second), nil)
 	t.client.EXPECT().AddWorkflowTask(gomock.Any(), gomock.Any(), gomock.Any()).Do(
@@ -267,8 +267,7 @@ func (t *MatcherTestSuite) TestRejectSyncMatchWhenBacklog() {
 	t.Nil(err)
 	t.False(happened) // sync match did not happen, but we called the forwarder client
 
-	// second task waiting for a poller now :)
-	// there *could* be a chance that the poller gets forwarded but the rate limiter doesn't allow forwarding.
+	// second task waits for a local poller
 	oldBacklogTask := newInternalTaskFromBacklog(randomTaskInfoWithAge(time.Minute), nil)
 	t.client.EXPECT().AddWorkflowTask(gomock.Any(), gomock.Any(), gomock.Any()).Return(&matchingservice.AddWorkflowTaskResponse{}, errMatchingHostThrottleTest).AnyTimes()
 	go t.childMatcher.MustOffer(ctx, oldBacklogTask, intruptC) //nolint:errcheck
@@ -280,12 +279,11 @@ func (t *MatcherTestSuite) TestRejectSyncMatchWhenBacklog() {
 	t.Nil(err)
 
 	// poll both tasks which are from the backlog
-	task, _ := t.childMatcher.Poll(ctx, &pollMetadata{})
-	t.NotNil(task)
-	t.Equal(enumsspb.TASK_SOURCE_DB_BACKLOG, task.source)
-	task, _ = t.childMatcher.Poll(ctx, &pollMetadata{})
-	t.NotNil(task)
-	t.Equal(enumsspb.TASK_SOURCE_DB_BACKLOG, task.source)
+	for i := 0; i < 2; i++ {
+		task, _ := t.childMatcher.Poll(ctx, &pollMetadata{})
+		t.NotNil(task)
+		t.Equal(enumsspb.TASK_SOURCE_DB_BACKLOG, task.source)
+	}
 	time.Sleep(time.Millisecond)
 
 	// should allow sync match now
