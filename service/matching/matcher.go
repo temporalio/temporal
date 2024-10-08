@@ -169,7 +169,6 @@ func (tm *TaskMatcher) Offer(ctx context.Context, task *internalTask) (bool, err
 	if !task.isForwarded() {
 		if err := tm.rateLimiter.Wait(ctx); err != nil {
 			metrics.SyncThrottlePerTaskQueueCounter.With(tm.metricsHandler).Record(1)
-			fmt.Println("task is forwarded error inside Offer")
 			return false, err
 		}
 	}
