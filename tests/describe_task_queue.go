@@ -24,6 +24,7 @@ package tests
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/pborman/uuid"
@@ -59,7 +60,7 @@ type (
 )
 
 var smallTTL = time.Nanosecond
-var largeTTL = 3 * time.Second
+var largeTTL = 1 * time.Second
 
 func (s *DescribeTaskQueueSuiteBase) SetupSuite() {
 	s.setupSuite("testdata/es_cluster.yaml")
@@ -154,7 +155,7 @@ func (s *DescribeTaskQueueSuiteWithCache) TestAddMultipleTasksMultiplePartitions
 	// Override the ReadPartitions and WritePartitions
 	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 4)
 	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 4)
-	s.OverrideDynamicConfig(dynamicconfig.MatchingLongPollExpirationInterval, 10*time.Second)
+	s.OverrideDynamicConfig(dynamicconfig.MatchingLongPollExpirationInterval, 100*time.Millisecond)
 
 	s.publishConsumeWorkflowTasksValidateStats(100, true)
 }
@@ -232,6 +233,7 @@ func (s *DescribeTaskQueueSuiteBase) PollActivityTasks(workflows int, tq *taskqu
 		)
 		s.NoError(err1)
 		if resp1 == nil || resp1.GetAttempt() < 1 {
+			fmt.Println("empty poll response")
 			continue // poll again on empty responses
 		}
 		i++
@@ -274,6 +276,7 @@ func (s *DescribeTaskQueueSuiteBase) validateDescribeTaskQueue(
 
 			wfStats := types[int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW)].Stats
 			actStats := types[int32(enumspb.TASK_QUEUE_TYPE_ACTIVITY)].Stats
+			fmt.Printf("Activity tasks inside matching are %d and expected activity backlog count %d \n\n\n", actStats.ApproximateBacklogCount, expectedBacklogCount[enumspb.TASK_QUEUE_TYPE_ACTIVITY])
 
 			a := assert.New(t)
 
@@ -289,7 +292,7 @@ func (s *DescribeTaskQueueSuiteBase) validateDescribeTaskQueue(
 			a.Equal(expectedAddRate[enumspb.TASK_QUEUE_TYPE_ACTIVITY], actStats.TasksAddRate > 0)
 			a.Equal(expectedDispatchRate[enumspb.TASK_QUEUE_TYPE_WORKFLOW], wfStats.TasksDispatchRate > 0)
 			a.Equal(expectedDispatchRate[enumspb.TASK_QUEUE_TYPE_ACTIVITY], actStats.TasksDispatchRate > 0)
-		}, 1*time.Second, 100*time.Millisecond)
+		}, 400*time.Millisecond, 100*time.Millisecond)
 	} else {
 		// Querying the Legacy API
 		s.Eventually(func() bool {
@@ -411,14 +414,16 @@ func (s *DescribeTaskQueueSuiteWithCache) publishConsumeWorkflowTasksValidateSta
 	expectedAddRate[enumspb.TASK_QUEUE_TYPE_ACTIVITY] = workflows > 0
 	expectedDispatchRate[enumspb.TASK_QUEUE_TYPE_ACTIVITY] = false
 
-	time.Sleep(largeTTL) // forcing cache evictions due to TTL
+	time.Sleep(largeTTL + 30*time.Millisecond) // forcing cache evictions due to TTL
 
 	// fetches the latest stats by making per partition gRPC calls
+	fmt.Println("First DescribeTQ call")
 	s.validateDescribeTaskQueue(tqName, expectedBacklogCount, maxBacklogExtraTasks, expectedAddRate, expectedDispatchRate, isEnhancedMode)
 
 	// Poll the activity tasks
 	s.PollActivityTasks(workflows, tq, identity)
 
 	// validating with cached stats
+	fmt.Println("Second DescribeTQ call")
 	s.validateDescribeTaskQueue(tqName, expectedBacklogCount, maxBacklogExtraTasks, expectedAddRate, expectedDispatchRate, isEnhancedMode)
 }
