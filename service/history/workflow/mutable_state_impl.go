@@ -6664,15 +6664,25 @@ func (ms *MutableStateImpl) applyTombstones(tombstoneBatches []*persistencespb.S
 		for _, tombstone := range tombstoneBatch.StateMachineTombstones {
 			switch tombstone.StateMachineKey.(type) {
 			case *persistencespb.StateMachineTombstone_ActivityScheduledEventId:
-				err = ms.DeleteActivity(tombstone.GetActivityScheduledEventId())
+				if _, ok := ms.pendingActivityInfoIDs[tombstone.GetActivityScheduledEventId()]; ok {
+					err = ms.DeleteActivity(tombstone.GetActivityScheduledEventId())
+				}
 			case *persistencespb.StateMachineTombstone_TimerId:
-				err = ms.DeleteUserTimer(tombstone.GetTimerId())
+				if _, ok := ms.pendingTimerInfoIDs[tombstone.GetTimerId()]; ok {
+					err = ms.DeleteUserTimer(tombstone.GetTimerId())
+				}
 			case *persistencespb.StateMachineTombstone_ChildExecutionInitiatedEventId:
-				err = ms.DeletePendingChildExecution(tombstone.GetChildExecutionInitiatedEventId())
+				if _, ok := ms.pendingChildExecutionInfoIDs[tombstone.GetChildExecutionInitiatedEventId()]; ok {
+					err = ms.DeletePendingChildExecution(tombstone.GetChildExecutionInitiatedEventId())
+				}
 			case *persistencespb.StateMachineTombstone_RequestCancelInitiatedEventId:
-				err = ms.DeletePendingRequestCancel(tombstone.GetRequestCancelInitiatedEventId())
+				if _, ok := ms.pendingRequestCancelInfoIDs[tombstone.GetRequestCancelInitiatedEventId()]; ok {
+					err = ms.DeletePendingRequestCancel(tombstone.GetRequestCancelInitiatedEventId())
+				}
 			case *persistencespb.StateMachineTombstone_SignalExternalInitiatedEventId:
-				err = ms.DeletePendingSignal(tombstone.GetSignalExternalInitiatedEventId())
+				if _, ok := ms.pendingSignalInfoIDs[tombstone.GetSignalExternalInitiatedEventId()]; ok {
+					err = ms.DeletePendingSignal(tombstone.GetSignalExternalInitiatedEventId())
+				}
 			default:
 				// TODO: updateID and stateMachinePath
 				err = serviceerror.NewInternal("unknown tombstone type")
