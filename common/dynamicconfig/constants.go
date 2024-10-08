@@ -888,6 +888,16 @@ used when the first cache layer has a miss. Requires server restart for change t
 		32,
 		`MaxCallbacksPerWorkflow is the maximum number of callbacks that can be attached to a workflow.`,
 	)
+	FrontendLinkMaxSize = NewNamespaceIntSetting(
+		"frontend.linkMaxSize",
+		4000, // Links may include a workflow ID and namespace name, both of which are limited to a length of 1000.
+		`Maximum size in bytes of temporal.api.common.v1.Link object in an API request.`,
+	)
+	FrontendMaxLinksPerRequest = NewNamespaceIntSetting(
+		"frontend.maxlinksPerRequest",
+		10,
+		`Maximum number of links allowed to be attached via a single API request.`,
+	)
 	FrontendMaxConcurrentBatchOperationPerNamespace = NewNamespaceIntSetting(
 		"frontend.MaxConcurrentBatchOperationPerNamespace",
 		1,
