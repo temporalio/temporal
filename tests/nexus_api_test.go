@@ -61,7 +61,6 @@ type NexusApiTestSuite struct {
 
 func TestNexusApiTestSuite(t *testing.T) {
 	suite.Run(t, new(NexusApiTestSuite))
-
 }
 
 func (s *NexusApiTestSuite) TestNexusStartOperation_Outcomes() {

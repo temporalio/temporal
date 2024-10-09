@@ -2,8 +2,6 @@
 # Use to run service locally or run integration tests.
 # Include platform specific file also:
 # docker-compose -f docker-compose.yml -f docker-compose.linux.yml up
-version: "3.5"
-
 services:
   mysql:
     image: mysql:8.0.29-oracle

@@ -4057,13 +4057,14 @@ func (ms *MutableStateImpl) AddWorkflowExecutionTerminatedEvent(
 	details *commonpb.Payloads,
 	identity string,
 	deleteAfterTerminate bool,
+	links []*commonpb.Link,
 ) (*historypb.HistoryEvent, error) {
 	opTag := tag.WorkflowActionWorkflowTerminated
 	if err := ms.checkMutability(opTag); err != nil {
 		return nil, err
 	}
 
-	event := ms.hBuilder.AddWorkflowExecutionTerminatedEvent(reason, details, identity)
+	event := ms.hBuilder.AddWorkflowExecutionTerminatedEvent(reason, details, identity, links)
 	if err := ms.ApplyWorkflowExecutionTerminatedEvent(firstEventID, event); err != nil {
 		return nil, err
 	}
@@ -4248,6 +4249,7 @@ func (ms *MutableStateImpl) AddWorkflowExecutionSignaled(
 	identity string,
 	header *commonpb.Header,
 	skipGenerateWorkflowTask bool,
+	links []*commonpb.Link,
 ) (*historypb.HistoryEvent, error) {
 	return ms.AddWorkflowExecutionSignaledEvent(
 		signalName,
@@ -4256,6 +4258,7 @@ func (ms *MutableStateImpl) AddWorkflowExecutionSignaled(
 		header,
 		skipGenerateWorkflowTask,
 		nil,
+		links,
 	)
 }
 
@@ -4266,6 +4269,7 @@ func (ms *MutableStateImpl) AddWorkflowExecutionSignaledEvent(
 	header *commonpb.Header,
 	skipGenerateWorkflowTask bool,
 	externalWorkflowExecution *commonpb.WorkflowExecution,
+	links []*commonpb.Link,
 ) (*historypb.HistoryEvent, error) {
 	opTag := tag.WorkflowActionWorkflowSignaled
 	if err := ms.checkMutability(opTag); err != nil {
@@ -4279,6 +4283,7 @@ func (ms *MutableStateImpl) AddWorkflowExecutionSignaledEvent(
 		header,
 		skipGenerateWorkflowTask,
 		externalWorkflowExecution,
+		links,
 	)
 	if err := ms.ApplyWorkflowExecutionSignaled(event); err != nil {
 		return nil, err

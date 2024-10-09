@@ -1824,6 +1824,10 @@ func (wh *WorkflowHandler) RequestCancelWorkflowExecution(ctx context.Context, r
 		return nil, err
 	}
 
+	if err := wh.validateLinks(namespace.Name(request.GetNamespace()), request.GetLinks()); err != nil {
+		return nil, err
+	}
+
 	namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
 	if err != nil {
 		return nil, err
@@ -1863,6 +1867,10 @@ func (wh *WorkflowHandler) SignalWorkflowExecution(ctx context.Context, request 
 
 	if len(request.GetRequestId()) > wh.config.MaxIDLengthLimit() {
 		return nil, errRequestIDTooLong
+	}
+
+	if err := wh.validateLinks(namespace.Name(request.GetNamespace()), request.GetLinks()); err != nil {
+		return nil, err
 	}
 
 	namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
@@ -1983,6 +1991,10 @@ func (wh *WorkflowHandler) SignalWithStartWorkflowExecution(ctx context.Context,
 		request.SearchAttributes = sa
 	}
 
+	if err := wh.validateLinks(namespaceName, request.GetLinks()); err != nil {
+		return nil, err
+	}
+
 	namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespaceName)
 	if err != nil {
 		return nil, err
@@ -2053,6 +2065,10 @@ func (wh *WorkflowHandler) TerminateWorkflowExecution(ctx context.Context, reque
 	}
 
 	if err := validateExecution(request.WorkflowExecution); err != nil {
+		return nil, err
+	}
+
+	if err := wh.validateLinks(namespace.Name(request.GetNamespace()), request.GetLinks()); err != nil {
 		return nil, err
 	}
 
@@ -4592,6 +4608,27 @@ func (wh *WorkflowHandler) validateLinks(
 	for _, l := range links {
 		if l.Size() > maxSize {
 			return serviceerror.NewInvalidArgument(fmt.Sprintf("link exceeds allowed size of %d, got %d", maxSize, l.Size()))
+		}
+		switch t := l.Variant.(type) {
+		case *commonpb.Link_WorkflowEvent_:
+			if t.WorkflowEvent.GetNamespace() == "" {
+				return serviceerror.NewInvalidArgument("workflow event link must not have an empty namespace field")
+			}
+			if t.WorkflowEvent.GetWorkflowId() == "" {
+				return serviceerror.NewInvalidArgument("workflow event link must not have an empty workflow ID field")
+			}
+			if t.WorkflowEvent.GetRunId() == "" {
+				return serviceerror.NewInvalidArgument("workflow event link must not have an empty run ID field")
+			}
+			if t.WorkflowEvent.GetEventRef().GetEventType() == enumspb.EVENT_TYPE_UNSPECIFIED && t.WorkflowEvent.GetEventRef().GetEventId() != 0 {
+				return serviceerror.NewInvalidArgument("workflow event link ref cannot have an unspecified event type and a non-zero event ID")
+			}
+		case *commonpb.Link_BatchJob_:
+			if t.BatchJob.GetJobId() == "" {
+				return serviceerror.NewInvalidArgument("batch job link must not have an empty job ID")
+			}
+		default:
+			return serviceerror.NewInvalidArgument("unsupported link variant")
 		}
 	}
 	return nil
