@@ -27,6 +27,7 @@ package workflow
 import (
 	"context"
 	"fmt"
+	"reflect"
 	"testing"
 	"time"
 
@@ -75,6 +76,7 @@ import (
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/tests"
 	"go.uber.org/mock/gomock"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -1146,7 +1148,7 @@ func (s *mutableStateSuite) buildWorkflowMutableState() *persistencespb.Workflow
 	}
 
 	signalRequestIDs := []string{
-		uuid.New(),
+		"signal_request_id_1",
 	}
 
 	bufferedEvents := []*historypb.HistoryEvent{
@@ -2971,4 +2973,506 @@ func tombstoneExists(
 		}
 	}
 	return false
+}
+
+func (s *mutableStateSuite) TestExecutionInfoClone() {
+	newInstance := reflect.New(reflect.TypeOf(s.mutableState.executionInfo).Elem()).Interface()
+	clone, ok := newInstance.(*persistencespb.WorkflowExecutionInfo)
+	if !ok {
+		s.T().Fatal("type assertion to *persistencespb.WorkflowExecutionInfo failed")
+	}
+	clone.NamespaceId = "namespace-id"
+	clone.WorkflowId = "workflow-id"
+	err := common.MergeProtoExcludingFields(s.mutableState.executionInfo, clone, func(v any) []interface{} {
+		info, ok := v.(*persistencespb.WorkflowExecutionInfo)
+		if !ok || info == nil {
+			return nil
+		}
+		return []interface{}{
+			&info.NamespaceId,
+		}
+	})
+	s.Nil(err)
+}
+
+func (s *mutableStateSuite) addChangesForStateReplication(state *persistencespb.WorkflowMutableState) {
+	// These fields will be updated during ApplySnapshot
+	proto.Merge(state.ExecutionInfo, &persistencespb.WorkflowExecutionInfo{
+		LastUpdateTime: timestamp.TimeNowPtrUtc(),
+	})
+	proto.Merge(state.ExecutionState, &persistencespb.WorkflowExecutionState{
+		State: enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
+	})
+
+	state.ActivityInfos[90].TimerTaskStatus = TimerTaskStatusCreated
+	state.TimerInfos["25"].ExpiryTime = timestamp.TimeNowPtrUtcAddDuration(time.Hour)
+	state.ChildExecutionInfos[80].StartedEventId = 84
+	state.RequestCancelInfos[70].CancelRequestId = uuid.New()
+	state.SignalInfos[75].RequestId = uuid.New()
+
+	// These infos will be deleted during ApplySnapshot
+	state.ActivityInfos[89] = &persistencespb.ActivityInfo{}
+	state.TimerInfos["to-be-deleted"] = &persistencespb.TimerInfo{}
+	state.ChildExecutionInfos[79] = &persistencespb.ChildExecutionInfo{}
+	state.RequestCancelInfos[69] = &persistencespb.RequestCancelInfo{}
+	state.SignalInfos[74] = &persistencespb.SignalInfo{}
+	state.SignalRequestedIds = []string{"to-be-deleted"}
+}
+
+func compareMapOfProto[K comparable, V proto.Message](s *mutableStateSuite, expected, actual map[K]V) {
+	s.Equal(len(expected), len(actual))
+	for k, v := range expected {
+		s.True(proto.Equal(v, actual[k]))
+	}
+}
+
+func (s *mutableStateSuite) verifyChildExecutionInfos(expectedMap, actualMap, originMap map[int64]*persistencespb.ChildExecutionInfo) {
+	s.Equal(len(expectedMap), len(actualMap))
+	for k, expected := range expectedMap {
+		actual, ok := actualMap[k]
+		s.True(ok)
+		origin := originMap[k]
+
+		s.Equal(expected.Version, actual.Version, "Version mismatch")
+		s.Equal(expected.InitiatedEventBatchId, actual.InitiatedEventBatchId, "InitiatedEventBatchId mismatch")
+		s.Equal(expected.StartedEventId, actual.StartedEventId, "StartedEventId mismatch")
+		s.Equal(expected.StartedWorkflowId, actual.StartedWorkflowId, "StartedWorkflowId mismatch")
+		s.Equal(expected.StartedRunId, actual.StartedRunId, "StartedRunId mismatch")
+		s.NotEqual(expected.CreateRequestId, actual.CreateRequestId, "CreateRequestId mismatch")
+		s.Equal(expected.Namespace, actual.Namespace, "Namespace mismatch")
+		s.Equal(expected.WorkflowTypeName, actual.WorkflowTypeName, "WorkflowTypeName mismatch")
+		s.Equal(expected.ParentClosePolicy, actual.ParentClosePolicy, "ParentClosePolicy mismatch")
+		s.Equal(expected.InitiatedEventId, actual.InitiatedEventId, "InitiatedEventId mismatch")
+		s.Equal(expected.NamespaceId, actual.NamespaceId, "NamespaceId mismatch")
+		s.True(proto.Equal(expected.LastUpdateVersionedTransition, actual.LastUpdateVersionedTransition), "LastUpdateVersionedTransition mismatch")
+
+		// special handled fields
+		if origin != nil {
+			s.Equal(origin.Clock, actual.Clock, "Clock mismatch")
+		}
+	}
+}
+
+func (s *mutableStateSuite) verifyActivityInfos(expectedMap, actualMap map[int64]*persistencespb.ActivityInfo) {
+	s.Equal(len(expectedMap), len(actualMap))
+	for k, expected := range expectedMap {
+		actual, ok := actualMap[k]
+		s.True(ok)
+
+		s.Equal(expected.Version, actual.Version, "Version mismatch")
+		s.Equal(expected.ScheduledEventBatchId, actual.ScheduledEventBatchId, "ScheduledEventBatchId mismatch")
+		s.True(proto.Equal(expected.ScheduledTime, actual.ScheduledTime), "ScheduledTime mismatch")
+		s.Equal(expected.StartedEventId, actual.StartedEventId, "StartedEventId mismatch")
+		s.True(proto.Equal(expected.StartedTime, actual.StartedTime), "StartedTime mismatch")
+		s.Equal(expected.ActivityId, actual.ActivityId, "ActivityId mismatch")
+		s.Equal(expected.RequestId, actual.RequestId, "RequestId mismatch")
+		s.True(proto.Equal(expected.ScheduleToStartTimeout, actual.ScheduleToStartTimeout), "ScheduleToStartTimeout mismatch")
+		s.True(proto.Equal(expected.ScheduleToCloseTimeout, actual.ScheduleToCloseTimeout), "ScheduleToCloseTimeout mismatch")
+		s.True(proto.Equal(expected.StartToCloseTimeout, actual.StartToCloseTimeout), "StartToCloseTimeout mismatch")
+		s.True(proto.Equal(expected.HeartbeatTimeout, actual.HeartbeatTimeout), "HeartbeatTimeout mismatch")
+		s.Equal(expected.CancelRequested, actual.CancelRequested, "CancelRequested mismatch")
+		s.Equal(expected.CancelRequestId, actual.CancelRequestId, "CancelRequestId mismatch")
+		s.Equal(expected.Attempt, actual.Attempt, "Attempt mismatch")
+		s.Equal(expected.TaskQueue, actual.TaskQueue, "TaskQueue mismatch")
+		s.Equal(expected.StartedIdentity, actual.StartedIdentity, "StartedIdentity mismatch")
+		s.Equal(expected.HasRetryPolicy, actual.HasRetryPolicy, "HasRetryPolicy mismatch")
+		s.True(proto.Equal(expected.RetryInitialInterval, actual.RetryInitialInterval), "RetryInitialInterval mismatch")
+		s.True(proto.Equal(expected.RetryMaximumInterval, actual.RetryMaximumInterval), "RetryMaximumInterval mismatch")
+		s.Equal(expected.RetryMaximumAttempts, actual.RetryMaximumAttempts, "RetryMaximumAttempts mismatch")
+		s.True(proto.Equal(expected.RetryExpirationTime, actual.RetryExpirationTime), "RetryExpirationTime mismatch")
+		s.Equal(expected.RetryBackoffCoefficient, actual.RetryBackoffCoefficient, "RetryBackoffCoefficient mismatch")
+		s.Equal(expected.RetryNonRetryableErrorTypes, actual.RetryNonRetryableErrorTypes, "RetryNonRetryableErrorTypes mismatch")
+		s.True(proto.Equal(expected.RetryLastFailure, actual.RetryLastFailure), "RetryLastFailure mismatch")
+		s.Equal(expected.RetryLastWorkerIdentity, actual.RetryLastWorkerIdentity, "RetryLastWorkerIdentity mismatch")
+		s.Equal(expected.ScheduledEventId, actual.ScheduledEventId, "ScheduledEventId mismatch")
+		s.True(proto.Equal(expected.LastHeartbeatDetails, actual.LastHeartbeatDetails), "LastHeartbeatDetails mismatch")
+		s.True(proto.Equal(expected.LastHeartbeatUpdateTime, actual.LastHeartbeatUpdateTime), "LastHeartbeatUpdateTime mismatch")
+		s.Equal(expected.UseCompatibleVersion, actual.UseCompatibleVersion, "UseCompatibleVersion mismatch")
+		s.True(proto.Equal(expected.ActivityType, actual.ActivityType), "ActivityType mismatch")
+		s.True(proto.Equal(expected.LastWorkerVersionStamp, actual.LastWorkerVersionStamp), "LastWorkerVersionStamp mismatch")
+		s.True(proto.Equal(expected.LastUpdateVersionedTransition, actual.LastUpdateVersionedTransition), "LastUpdateVersionedTransition mismatch")
+
+		// special handled fields
+		s.Equal(int32(TimerTaskStatusNone), actual.TimerTaskStatus, "TimerTaskStatus mismatch")
+	}
+}
+
+func (s *mutableStateSuite) verifyExecutionInfo(current, target, origin *persistencespb.WorkflowExecutionInfo) {
+	// These fields should not change.
+	s.Equal(origin.WorkflowTaskVersion, current.WorkflowTaskVersion, "WorkflowTaskVersion mismatch")
+	s.Equal(origin.WorkflowTaskScheduledEventId, current.WorkflowTaskScheduledEventId, "WorkflowTaskScheduledEventId mismatch")
+	s.Equal(origin.WorkflowTaskStartedEventId, current.WorkflowTaskStartedEventId, "WorkflowTaskStartedEventId mismatch")
+	s.Equal(origin.WorkflowTaskRequestId, current.WorkflowTaskRequestId, "WorkflowTaskRequestId mismatch")
+	s.Equal(origin.WorkflowTaskTimeout, current.WorkflowTaskTimeout, "WorkflowTaskTimeout mismatch")
+	s.Equal(origin.WorkflowTaskAttempt, current.WorkflowTaskAttempt, "WorkflowTaskAttempt mismatch")
+	s.Equal(origin.WorkflowTaskStartedTime, current.WorkflowTaskStartedTime, "WorkflowTaskStartedTime mismatch")
+	s.Equal(origin.WorkflowTaskScheduledTime, current.WorkflowTaskScheduledTime, "WorkflowTaskScheduledTime mismatch")
+	s.Equal(origin.WorkflowTaskOriginalScheduledTime, current.WorkflowTaskOriginalScheduledTime, "WorkflowTaskOriginalScheduledTime mismatch")
+	s.Equal(origin.WorkflowTaskType, current.WorkflowTaskType, "WorkflowTaskType mismatch")
+	s.Equal(origin.WorkflowTaskSuggestContinueAsNew, current.WorkflowTaskSuggestContinueAsNew, "WorkflowTaskSuggestContinueAsNew mismatch")
+	s.Equal(origin.WorkflowTaskHistorySizeBytes, current.WorkflowTaskHistorySizeBytes, "WorkflowTaskHistorySizeBytes mismatch")
+	s.Equal(origin.WorkflowTaskBuildId, current.WorkflowTaskBuildId, "WorkflowTaskBuildId mismatch")
+	s.Equal(origin.WorkflowTaskBuildIdRedirectCounter, current.WorkflowTaskBuildIdRedirectCounter, "WorkflowTaskBuildIdRedirectCounter mismatch")
+	s.True(proto.Equal(origin.VersionHistories, current.VersionHistories), "VersionHistories mismatch")
+	s.True(proto.Equal(origin.ExecutionStats, current.ExecutionStats), "ExecutionStats mismatch")
+	s.Equal(origin.LastFirstEventTxnId, current.LastFirstEventTxnId, "LastFirstEventTxnId mismatch")
+	s.True(proto.Equal(origin.ParentClock, current.ParentClock), "ParentClock mismatch")
+	s.Equal(origin.CloseTransferTaskId, current.CloseTransferTaskId, "CloseTransferTaskId mismatch")
+	s.Equal(origin.CloseVisibilityTaskId, current.CloseVisibilityTaskId, "CloseVisibilityTaskId mismatch")
+	s.Equal(origin.CloseVisibilityTaskCompleted, current.CloseVisibilityTaskCompleted, "CloseVisibilityTaskCompleted mismatch")
+	s.Equal(origin.WorkflowExecutionTimerTaskStatus, current.WorkflowExecutionTimerTaskStatus, "WorkflowExecutionTimerTaskStatus mismatch")
+	s.Equal(origin.SubStateMachinesByType, current.SubStateMachinesByType, "SubStateMachinesByType mismatch")
+	s.Equal(origin.StateMachineTimers, current.StateMachineTimers, "StateMachineTimers mismatch")
+	s.Equal(origin.TaskGenerationShardClockTimestamp, current.TaskGenerationShardClockTimestamp, "TaskGenerationShardClockTimestamp mismatch")
+	s.Equal(origin.UpdateInfos, current.UpdateInfos, "UpdateInfos mismatch")
+
+	// These fields should be updated.
+	s.Equal(target.NamespaceId, current.NamespaceId, "NamespaceId mismatch")
+	s.Equal(target.WorkflowId, current.WorkflowId, "WorkflowId mismatch")
+	s.Equal(target.ParentNamespaceId, current.ParentNamespaceId, "ParentNamespaceId mismatch")
+	s.Equal(target.ParentWorkflowId, current.ParentWorkflowId, "ParentWorkflowId mismatch")
+	s.Equal(target.ParentRunId, current.ParentRunId, "ParentRunId mismatch")
+	s.Equal(target.ParentInitiatedId, current.ParentInitiatedId, "ParentInitiatedId mismatch")
+	s.Equal(target.CompletionEventBatchId, current.CompletionEventBatchId, "CompletionEventBatchId mismatch")
+	s.Equal(target.TaskQueue, current.TaskQueue, "TaskQueue mismatch")
+	s.Equal(target.WorkflowTypeName, current.WorkflowTypeName, "WorkflowTypeName mismatch")
+	s.True(proto.Equal(target.WorkflowExecutionTimeout, current.WorkflowExecutionTimeout), "WorkflowExecutionTimeout mismatch")
+	s.True(proto.Equal(target.WorkflowRunTimeout, current.WorkflowRunTimeout), "WorkflowRunTimeout mismatch")
+	s.True(proto.Equal(target.DefaultWorkflowTaskTimeout, current.DefaultWorkflowTaskTimeout), "DefaultWorkflowTaskTimeout mismatch")
+	s.Equal(target.LastEventTaskId, current.LastEventTaskId, "LastEventTaskId mismatch")
+	s.Equal(target.LastFirstEventId, current.LastFirstEventId, "LastFirstEventId mismatch")
+	s.Equal(target.LastCompletedWorkflowTaskStartedEventId, current.LastCompletedWorkflowTaskStartedEventId, "LastCompletedWorkflowTaskStartedEventId mismatch")
+	s.True(proto.Equal(target.StartTime, current.StartTime), "StartTime mismatch")
+	s.True(proto.Equal(target.LastUpdateTime, current.LastUpdateTime), "LastUpdateTime mismatch")
+	s.Equal(target.CancelRequested, current.CancelRequested, "CancelRequested mismatch")
+	s.Equal(target.CancelRequestId, current.CancelRequestId, "CancelRequestId mismatch")
+	s.Equal(target.StickyTaskQueue, current.StickyTaskQueue, "StickyTaskQueue mismatch")
+	s.True(proto.Equal(target.StickyScheduleToStartTimeout, current.StickyScheduleToStartTimeout), "StickyScheduleToStartTimeout mismatch")
+	s.Equal(target.Attempt, current.Attempt, "Attempt mismatch")
+	s.True(proto.Equal(target.RetryInitialInterval, current.RetryInitialInterval), "RetryInitialInterval mismatch")
+	s.True(proto.Equal(target.RetryMaximumInterval, current.RetryMaximumInterval), "RetryMaximumInterval mismatch")
+	s.Equal(target.RetryMaximumAttempts, current.RetryMaximumAttempts, "RetryMaximumAttempts mismatch")
+	s.Equal(target.RetryBackoffCoefficient, current.RetryBackoffCoefficient, "RetryBackoffCoefficient mismatch")
+	s.True(proto.Equal(target.WorkflowExecutionExpirationTime, current.WorkflowExecutionExpirationTime), "WorkflowExecutionExpirationTime mismatch")
+	s.Equal(target.RetryNonRetryableErrorTypes, current.RetryNonRetryableErrorTypes, "RetryNonRetryableErrorTypes mismatch")
+	s.Equal(target.HasRetryPolicy, current.HasRetryPolicy, "HasRetryPolicy mismatch")
+	s.Equal(target.CronSchedule, current.CronSchedule, "CronSchedule mismatch")
+	s.Equal(target.SignalCount, current.SignalCount, "SignalCount mismatch")
+	s.Equal(target.ActivityCount, current.ActivityCount, "ActivityCount mismatch")
+	s.Equal(target.ChildExecutionCount, current.ChildExecutionCount, "ChildExecutionCount mismatch")
+	s.Equal(target.UserTimerCount, current.UserTimerCount, "UserTimerCount mismatch")
+	s.Equal(target.RequestCancelExternalCount, current.RequestCancelExternalCount, "RequestCancelExternalCount mismatch")
+	s.Equal(target.SignalExternalCount, current.SignalExternalCount, "SignalExternalCount mismatch")
+	s.Equal(target.UpdateCount, current.UpdateCount, "UpdateCount mismatch")
+	s.True(proto.Equal(target.AutoResetPoints, current.AutoResetPoints), "AutoResetPoints mismatch")
+	s.Equal(target.SearchAttributes, current.SearchAttributes, "SearchAttributes mismatch")
+	s.Equal(target.Memo, current.Memo, "Memo mismatch")
+	s.Equal(target.FirstExecutionRunId, current.FirstExecutionRunId, "FirstExecutionRunId mismatch")
+	s.True(proto.Equal(target.WorkflowRunExpirationTime, current.WorkflowRunExpirationTime), "WorkflowRunExpirationTime mismatch")
+	s.Equal(target.StateTransitionCount, current.StateTransitionCount, "StateTransitionCount mismatch")
+	s.True(proto.Equal(target.ExecutionTime, current.ExecutionTime), "ExecutionTime mismatch")
+	s.Equal(target.NewExecutionRunId, current.NewExecutionRunId, "NewExecutionRunId mismatch")
+	s.Equal(target.ParentInitiatedVersion, current.ParentInitiatedVersion, "ParentInitiatedVersion mismatch")
+	s.True(proto.Equal(target.CloseTime, current.CloseTime), "CloseTime mismatch")
+	s.True(proto.Equal(target.BaseExecutionInfo, current.BaseExecutionInfo), "BaseExecutionInfo mismatch")
+	s.True(proto.Equal(target.MostRecentWorkerVersionStamp, current.MostRecentWorkerVersionStamp), "MostRecentWorkerVersionStamp mismatch")
+	s.Equal(target.AssignedBuildId, current.AssignedBuildId, "AssignedBuildId mismatch")
+	s.Equal(target.InheritedBuildId, current.InheritedBuildId, "InheritedBuildId mismatch")
+	s.Equal(target.BuildIdRedirectCounter, current.BuildIdRedirectCounter, "BuildIdRedirectCounter mismatch")
+	s.Equal(target.SubStateMachinesByType, current.SubStateMachinesByType, "SubStateMachinesByType mismatch")
+	s.Equal(target.RootWorkflowId, current.RootWorkflowId, "RootWorkflowId mismatch")
+	s.Equal(target.RootRunId, current.RootRunId, "RootRunId mismatch")
+	s.Equal(target.StateMachineTimers, current.StateMachineTimers, "StateMachineTimers mismatch")
+	s.True(proto.Equal(target.WorkflowTaskLastUpdateVersionedTransition, current.WorkflowTaskLastUpdateVersionedTransition), "WorkflowTaskLastUpdateVersionedTransition mismatch")
+	s.True(proto.Equal(target.VisibilityLastUpdateVersionedTransition, current.VisibilityLastUpdateVersionedTransition), "VisibilityLastUpdateVersionedTransition mismatch")
+	s.True(proto.Equal(target.SignalRequestIdsLastUpdateVersionedTransition, current.SignalRequestIdsLastUpdateVersionedTransition), "SignalRequestIdsLastUpdateVersionedTransition mismatch")
+	s.Equal(target.SubStateMachineTombstoneBatches, current.SubStateMachineTombstoneBatches, "SubStateMachineTombstoneBatches mismatch")
+}
+
+func (s *mutableStateSuite) verifyMutableState(current, target, origin *MutableStateImpl) {
+	s.verifyExecutionInfo(current.executionInfo, target.executionInfo, origin.executionInfo)
+	s.True(proto.Equal(target.executionState, current.executionState), "executionState mismatch")
+
+	s.Equal(target.pendingActivityTimerHeartbeats, current.pendingActivityTimerHeartbeats, "pendingActivityTimerHeartbeats mismatch")
+	s.verifyActivityInfos(target.pendingActivityInfoIDs, current.pendingActivityInfoIDs)
+	s.Equal(target.pendingActivityIDToEventID, current.pendingActivityIDToEventID, "pendingActivityIDToEventID mismatch")
+	compareMapOfProto(s, current.pendingActivityInfoIDs, current.updateActivityInfos)
+	s.Equal(map[int64]struct{}{89: {}}, current.deleteActivityInfos, "deleteActivityInfos mismatch")
+
+	compareMapOfProto(s, target.pendingTimerInfoIDs, current.pendingTimerInfoIDs)
+	s.Equal(target.pendingTimerEventIDToID, current.pendingTimerEventIDToID, "pendingTimerEventIDToID mismatch")
+	compareMapOfProto(s, target.pendingTimerInfoIDs, current.updateTimerInfos)
+	s.Equal(map[string]struct{}{"to-be-deleted": {}}, current.deleteTimerInfos, "deleteTimerInfos mismatch")
+
+	s.verifyChildExecutionInfos(target.pendingChildExecutionInfoIDs, current.pendingChildExecutionInfoIDs, origin.pendingChildExecutionInfoIDs)
+	s.verifyChildExecutionInfos(target.pendingChildExecutionInfoIDs, current.updateChildExecutionInfos, origin.pendingChildExecutionInfoIDs)
+	s.Equal(map[int64]struct{}{79: {}}, current.deleteChildExecutionInfos, "deleteChildExecutionInfos mismatch")
+
+	compareMapOfProto(s, target.pendingRequestCancelInfoIDs, current.pendingRequestCancelInfoIDs)
+	compareMapOfProto(s, target.pendingRequestCancelInfoIDs, current.updateRequestCancelInfos)
+	s.Equal(map[int64]struct{}{69: {}}, current.deleteRequestCancelInfos, "deleteRequestCancelInfos mismatch")
+
+	compareMapOfProto(s, target.pendingSignalInfoIDs, current.pendingSignalInfoIDs)
+	compareMapOfProto(s, target.pendingSignalInfoIDs, current.updateSignalInfos)
+	s.Equal(map[int64]struct{}{74: {}}, current.deleteSignalInfos, "deleteSignalInfos mismatch")
+
+	s.Equal(target.pendingSignalRequestedIDs, current.pendingSignalRequestedIDs, "pendingSignalRequestedIDs mismatch")
+	s.Equal(target.pendingSignalRequestedIDs, current.updateSignalRequestedIDs, "updateSignalRequestedIDs mismatch")
+	s.Equal(map[string]struct{}{"to-be-deleted": {}}, current.deleteSignalRequestedIDs, "deleteSignalRequestedIDs mismatch")
+
+	s.Equal(target.currentVersion, current.currentVersion, "currentVersion mismatch")
+	s.Equal(target.totalTombstones, current.totalTombstones, "totalTombstones mismatch")
+	s.Equal(target.dbRecordVersion, current.dbRecordVersion, "dbRecordVersion mismatch")
+	s.True(proto.Equal(target.checksum, current.checksum), "checksum mismatch")
+}
+
+func (s *mutableStateSuite) buildSnapshot(state *MutableStateImpl) *persistencespb.WorkflowMutableState {
+	snapshot := &persistencespb.WorkflowMutableState{
+		ActivityInfos: map[int64]*persistencespb.ActivityInfo{
+			90: {
+				Version:                       1234,
+				ScheduledTime:                 state.pendingActivityInfoIDs[90].ScheduledTime,
+				StartedTime:                   state.pendingActivityInfoIDs[90].StartedTime,
+				ActivityId:                    "activityID_5",
+				ScheduleToStartTimeout:        timestamp.DurationPtr(time.Second * 100),
+				ScheduleToCloseTimeout:        timestamp.DurationPtr(time.Second * 200),
+				StartToCloseTimeout:           timestamp.DurationPtr(time.Second * 300),
+				HeartbeatTimeout:              timestamp.DurationPtr(time.Second * 50),
+				ScheduledEventId:              90,
+				LastUpdateVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 1025},
+			},
+			91: {
+				ActivityId:                    "activity_id_91",
+				LastUpdateVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 1025},
+			},
+		},
+		TimerInfos: map[string]*persistencespb.TimerInfo{
+			"25": {
+				Version:                       1234,
+				StartedEventId:                85,
+				ExpiryTime:                    state.pendingTimerInfoIDs["25"].ExpiryTime,
+				TimerId:                       "25",
+				LastUpdateVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 1025},
+			},
+			"26": {
+				TimerId:                       "26",
+				LastUpdateVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 1025},
+			},
+		},
+		ChildExecutionInfos: map[int64]*persistencespb.ChildExecutionInfo{
+			80: {
+				Version:                       1234,
+				InitiatedEventBatchId:         20,
+				CreateRequestId:               state.pendingChildExecutionInfoIDs[80].CreateRequestId,
+				Namespace:                     "mock namespace name",
+				WorkflowTypeName:              "code.uber.internal/test/foobar",
+				InitiatedEventId:              80,
+				LastUpdateVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 1025},
+			},
+			81: {
+				InitiatedEventBatchId:         81,
+				LastUpdateVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 1025},
+			},
+		},
+		RequestCancelInfos: map[int64]*persistencespb.RequestCancelInfo{
+			70: {
+				Version:                       1234,
+				InitiatedEventBatchId:         20,
+				CancelRequestId:               state.pendingRequestCancelInfoIDs[70].CancelRequestId,
+				InitiatedEventId:              70,
+				LastUpdateVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 1025},
+			},
+			71: {
+				InitiatedEventBatchId:         71,
+				LastUpdateVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 1025},
+			},
+		},
+		SignalInfos: map[int64]*persistencespb.SignalInfo{
+			75: {
+				Version:                       1234,
+				InitiatedEventBatchId:         17,
+				RequestId:                     state.pendingSignalInfoIDs[75].RequestId,
+				InitiatedEventId:              75,
+				LastUpdateVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 1025},
+			},
+			76: {
+				InitiatedEventBatchId:         76,
+				LastUpdateVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 1025},
+			},
+		},
+		SignalRequestedIds: []string{"signal_request_id_1", "signal_requested_id_2"},
+		ExecutionInfo: &persistencespb.WorkflowExecutionInfo{
+			NamespaceId:                             "deadbeef-0123-4567-890a-bcdef0123456",
+			WorkflowId:                              "wId",
+			TaskQueue:                               "testTaskQueue",
+			WorkflowTypeName:                        "wType",
+			WorkflowRunTimeout:                      timestamp.DurationPtr(time.Second * 200),
+			DefaultWorkflowTaskTimeout:              timestamp.DurationPtr(time.Second * 100),
+			LastCompletedWorkflowTaskStartedEventId: 99,
+			LastUpdateTime:                          state.executionInfo.LastUpdateTime,
+			WorkflowTaskVersion:                     1234,
+			WorkflowTaskScheduledEventId:            101,
+			WorkflowTaskStartedEventId:              102,
+			WorkflowTaskTimeout:                     timestamp.DurationPtr(time.Second * 100),
+			WorkflowTaskAttempt:                     1,
+			WorkflowTaskType:                        enumsspb.WORKFLOW_TASK_TYPE_NORMAL,
+			VersionHistories: &historyspb.VersionHistories{
+				Histories: []*historyspb.VersionHistory{
+					{
+						BranchToken: []byte("token#1"),
+						Items: []*historyspb.VersionHistoryItem{
+							{EventId: 102, Version: 1234},
+						},
+					},
+				},
+			},
+			FirstExecutionRunId: state.executionInfo.FirstExecutionRunId,
+			ExecutionTime:       state.executionInfo.ExecutionTime,
+			TransitionHistory: []*persistencespb.VersionedTransition{
+				{NamespaceFailoverVersion: 1234, TransitionCount: 1024},
+				{TransitionCount: 1025},
+			},
+			SignalRequestIdsLastUpdateVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 1025},
+		},
+		ExecutionState: &persistencespb.WorkflowExecutionState{
+			RunId:     state.executionState.RunId,
+			State:     enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
+			Status:    enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+			StartTime: state.executionState.StartTime,
+		},
+		NextEventId: 103,
+	}
+	return snapshot
+}
+
+func (s *mutableStateSuite) TestApplySnapshot() {
+	state := s.buildWorkflowMutableState()
+	s.addChangesForStateReplication(state)
+
+	originMS, err := NewMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, tests.LocalNamespaceEntry, state, 123)
+	s.NoError(err)
+
+	currentMS, err := NewMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, tests.LocalNamespaceEntry, state, 123)
+	s.NoError(err)
+
+	state = s.buildWorkflowMutableState()
+	state.ActivityInfos[91] = &persistencespb.ActivityInfo{
+		ActivityId: "activity_id_91",
+	}
+	state.TimerInfos["26"] = &persistencespb.TimerInfo{
+		TimerId: "26",
+	}
+	state.ChildExecutionInfos[81] = &persistencespb.ChildExecutionInfo{
+		InitiatedEventBatchId: 81,
+	}
+	state.RequestCancelInfos[71] = &persistencespb.RequestCancelInfo{
+		InitiatedEventBatchId: 71,
+	}
+	state.SignalInfos[76] = &persistencespb.SignalInfo{
+		InitiatedEventBatchId: 76,
+	}
+	state.SignalRequestedIds = append(state.SignalRequestedIds, "signal_requested_id_2")
+
+	targetMS, err := NewMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, tests.LocalNamespaceEntry, state, 123)
+	s.NoError(err)
+
+	targetMS.GetExecutionInfo().TransitionHistory = UpdatedTransitionHistory(targetMS.GetExecutionInfo().TransitionHistory, targetMS.GetCurrentVersion())
+
+	// set updateXXX so LastUpdateVersionedTransition will be updated
+	targetMS.updateActivityInfos = targetMS.pendingActivityInfoIDs
+	targetMS.updateTimerInfos = targetMS.pendingTimerInfoIDs
+	targetMS.updateChildExecutionInfos = targetMS.pendingChildExecutionInfoIDs
+	targetMS.updateRequestCancelInfos = targetMS.pendingRequestCancelInfoIDs
+	targetMS.updateSignalInfos = targetMS.pendingSignalInfoIDs
+	targetMS.updateSignalRequestedIDs = targetMS.pendingSignalRequestedIDs
+	targetMS.closeTransactionTrackLastUpdateVersionedTransition(TransactionPolicyActive)
+
+	snapshot := s.buildSnapshot(targetMS)
+	err = currentMS.ApplySnapshot(snapshot)
+	s.NoError(err)
+
+	s.verifyMutableState(currentMS, targetMS, originMS)
+}
+
+func (s *mutableStateSuite) buildMutation(state *MutableStateImpl) *persistencespb.WorkflowMutableStateMutation {
+	tombstones := []*persistencespb.StateMachineTombstoneBatch{
+		{
+			VersionedTransition: state.currentVersionedTransition(),
+			StateMachineTombstones: []*persistencespb.StateMachineTombstone{
+				{
+					StateMachineKey: &persistencespb.StateMachineTombstone_ActivityScheduledEventId{
+						ActivityScheduledEventId: 89,
+					},
+				},
+				{
+					StateMachineKey: &persistencespb.StateMachineTombstone_TimerId{
+						TimerId: "to-be-deleted",
+					},
+				},
+				{
+					StateMachineKey: &persistencespb.StateMachineTombstone_ChildExecutionInitiatedEventId{
+						ChildExecutionInitiatedEventId: 79,
+					},
+				},
+				{
+					StateMachineKey: &persistencespb.StateMachineTombstone_RequestCancelInitiatedEventId{
+						RequestCancelInitiatedEventId: 69,
+					},
+				},
+				{
+					StateMachineKey: &persistencespb.StateMachineTombstone_SignalExternalInitiatedEventId{
+						SignalExternalInitiatedEventId: 74,
+					},
+				},
+			},
+		},
+	}
+	mutation := &persistencespb.WorkflowMutableStateMutation{
+		UpdatedActivityInfos:            state.pendingActivityInfoIDs,
+		UpdatedTimerInfos:               state.pendingTimerInfoIDs,
+		UpdatedChildExecutionInfos:      state.pendingChildExecutionInfoIDs,
+		UpdatedRequestCancelInfos:       state.pendingRequestCancelInfoIDs,
+		UpdatedSignalInfos:              state.pendingSignalInfoIDs,
+		SignalRequestedIds:              state.GetPendingSignalRequestedIds(),
+		SubStateMachineTombstoneBatches: tombstones,
+		ExecutionInfo:                   state.executionInfo,
+		ExecutionState:                  state.executionState,
+	}
+	state.totalTombstones += len(tombstones[0].StateMachineTombstones)
+	return mutation
+}
+
+func (s *mutableStateSuite) TestApplyMutation() {
+	state := s.buildWorkflowMutableState()
+	s.addChangesForStateReplication(state)
+
+	originMS, err := NewMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, tests.LocalNamespaceEntry, state, 123)
+	s.NoError(err)
+
+	currentMS, err := NewMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, tests.LocalNamespaceEntry, state, 123)
+	s.NoError(err)
+
+	state = s.buildWorkflowMutableState()
+
+	targetMS, err := NewMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, tests.LocalNamespaceEntry, state, 123)
+	s.NoError(err)
+
+	transitionHistory := targetMS.executionInfo.TransitionHistory
+	failoverVersion := transitionHistory[len(transitionHistory)-1].NamespaceFailoverVersion
+	targetMS.executionInfo.TransitionHistory = UpdatedTransitionHistory(transitionHistory, failoverVersion)
+
+	// set updateXXX so LastUpdateVersionedTransition will be updated
+	targetMS.updateActivityInfos = targetMS.pendingActivityInfoIDs
+	targetMS.updateTimerInfos = targetMS.pendingTimerInfoIDs
+	targetMS.updateChildExecutionInfos = targetMS.pendingChildExecutionInfoIDs
+	targetMS.updateRequestCancelInfos = targetMS.pendingRequestCancelInfoIDs
+	targetMS.updateSignalInfos = targetMS.pendingSignalInfoIDs
+	targetMS.updateSignalRequestedIDs = targetMS.pendingSignalRequestedIDs
+	targetMS.closeTransactionTrackLastUpdateVersionedTransition(TransactionPolicyActive)
+
+	mutation := s.buildMutation(targetMS)
+	err = currentMS.ApplyMutation(mutation)
+	s.NoError(err)
+
+	s.verifyMutableState(currentMS, targetMS, originMS)
 }

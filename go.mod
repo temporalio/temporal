@@ -2,12 +2,17 @@ module go.temporal.io/server
 
 go 1.22.6
 
+retract (
+	v1.26.1 // Contains retractions only.
+	v1.26.0 // Published accidentally.
+)
+
 require (
 	cloud.google.com/go/storage v1.41.0
 	github.com/aws/aws-sdk-go v1.53.15
 	github.com/blang/semver/v4 v4.0.0
 	github.com/cactus/go-statsd-client/v5 v5.1.0
-	github.com/dgryski/go-farm v0.0.0-20200201041132-a6ae2369ad13
+	github.com/dgryski/go-farm v0.0.0-20240924180020-3414d57e47da
 	github.com/emirpasic/gods v1.18.1
 	github.com/fatih/color v1.17.0
 	github.com/go-faker/faker/v4 v4.4.1
@@ -51,7 +56,7 @@ require (
 	go.opentelemetry.io/otel/sdk/metric v1.27.0
 	go.opentelemetry.io/otel/trace v1.27.0
 	go.temporal.io/api v1.39.1-0.20240910163028-b13574e18f3c
-	go.temporal.io/sdk v1.27.0
+	go.temporal.io/sdk v1.29.1
 	go.temporal.io/version v0.3.0
 	go.uber.org/atomic v1.11.0
 	go.uber.org/automaxprocs v1.5.3

@@ -34,7 +34,7 @@ import (
 	"go.temporal.io/server/common/persistence"
 	test "go.temporal.io/server/common/testing"
 	"go.temporal.io/server/service/history/tasks"
-	"go.temporal.io/server/tests"
+	"go.temporal.io/server/tests/testcore"
 )
 
 func (s *NDCFunctionalTestSuite) TestReplicationMessageDLQ() {
@@ -70,7 +70,7 @@ func (s *NDCFunctionalTestSuite) TestReplicationMessageDLQ() {
 		historyBatch,
 	)
 
-	executionManager := s.cluster.GetExecutionManager()
+	executionManager := s.cluster.ExecutionManager()
 	expectedDLQMsgs := map[int64]bool{}
 	for _, batch := range historyBatch {
 		firstEventID := batch.Events[0].GetEventId()
@@ -98,7 +98,7 @@ Loop:
 		var token []byte
 		for doPaging := true; doPaging; doPaging = len(token) > 0 {
 			request.NextPageToken = token
-			response, err := executionManager.GetReplicationTasksFromDLQ(tests.NewContext(), request)
+			response, err := executionManager.GetReplicationTasksFromDLQ(testcore.NewContext(), request)
 			if err != nil {
 				continue Loop
 			}

@@ -219,6 +219,26 @@ func newAdminWorkflowCommands(clientFactory ClientFactory, prompterFactory Promp
 			},
 		},
 		{
+			Name:    "replicate",
+			Aliases: []string{},
+			Usage:   "Force replicate a workflow by generating replication tasks",
+			Flags: []cli.Flag{
+				&cli.StringFlag{
+					Name:    FlagWorkflowID,
+					Aliases: FlagWorkflowIDAlias,
+					Usage:   "Workflow ID",
+				},
+				&cli.StringFlag{
+					Name:    FlagRunID,
+					Aliases: FlagRunIDAlias,
+					Usage:   "Run ID",
+				},
+			},
+			Action: func(c *cli.Context) error {
+				return AdminReplicateWorkflow(c, clientFactory)
+			},
+		},
+		{
 			Name:    "delete",
 			Aliases: []string{"del"},
 			Usage:   "Delete current workflow execution and the mutableState record",
@@ -553,6 +573,40 @@ func newAdminTaskQueueCommands(clientFactory ClientFactory) []*cli.Command {
 			},
 			Action: func(c *cli.Context) error {
 				return AdminDescribeTaskQueuePartition(c, clientFactory)
+			},
+		},
+		{
+			Name:  "force-unload-task-queue-partition",
+			Usage: "Forcefully unload a task queue partition",
+			Flags: []cli.Flag{
+				&cli.StringFlag{
+					Name:  FlagNamespaceID,
+					Usage: "NamespaceId",
+					Value: "default",
+				},
+				&cli.StringFlag{
+					Name:     FlagTaskQueue,
+					Usage:    "Task Queue name",
+					Required: true,
+				},
+				&cli.StringFlag{
+					Name:  FlagTaskQueueType,
+					Value: "TASK_QUEUE_TYPE_WORKFLOW",
+					Usage: "Task Queue type: activity, workflow, nexus (experimental)",
+				},
+				&cli.Int64Flag{
+					Name:  FlagPartitionID,
+					Usage: "Partition ID",
+					Value: 0,
+				},
+				&cli.StringFlag{
+					Name:  FlagStickyName,
+					Usage: "Sticky Name for a task queue partition, if present",
+					Value: "",
+				},
+			},
+			Action: func(c *cli.Context) error {
+				return AdminForceUnloadTaskQueuePartition(c, clientFactory)
 			},
 		},
 	}

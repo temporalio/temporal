@@ -51,7 +51,7 @@ import (
 	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/persistence/v1"
-	replicationpb "go.temporal.io/server/api/replication/v1"
+	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/client/history"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/failure"
@@ -66,7 +66,7 @@ import (
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/environment"
 	"go.temporal.io/server/service/history/ndc"
-	"go.temporal.io/server/tests"
+	"go.temporal.io/server/tests/testcore"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/grpc"
 	"google.golang.org/protobuf/types/known/durationpb"
@@ -82,10 +82,10 @@ type (
 		protorequire.ProtoAssertions
 		suite.Suite
 
-		testClusterFactory tests.TestClusterFactory
+		testClusterFactory testcore.TestClusterFactory
 
 		controller *gomock.Controller
-		cluster    *tests.TestCluster
+		cluster    *testcore.TestCluster
 		generator  test.Generator
 		serializer serialization.Serializer
 		logger     log.Logger
@@ -95,7 +95,7 @@ type (
 		version                     int64
 		versionIncrement            int64
 		mockAdminClient             map[string]adminservice.AdminServiceClient
-		standByReplicationTasksChan chan *replicationpb.ReplicationTask
+		standByReplicationTasksChan chan *replicationspb.ReplicationTask
 		standByTaskID               int64
 	}
 )
@@ -108,11 +108,11 @@ func TestNDCFuncTestSuite(t *testing.T) {
 func (s *NDCFunctionalTestSuite) SetupSuite() {
 	s.logger = log.NewTestLogger()
 	s.serializer = serialization.NewSerializer()
-	s.testClusterFactory = tests.NewTestClusterFactory()
+	s.testClusterFactory = testcore.NewTestClusterFactory()
 
 	fileName := "../testdata/ndc_clusters.yaml"
-	if tests.TestFlags.TestClusterConfigFile != "" {
-		fileName = tests.TestFlags.TestClusterConfigFile
+	if testcore.TestFlags.TestClusterConfigFile != "" {
+		fileName = testcore.TestFlags.TestClusterConfigFile
 	}
 	environment.SetupEnv()
 
@@ -120,18 +120,18 @@ func (s *NDCFunctionalTestSuite) SetupSuite() {
 	s.Require().NoError(err)
 	confContent = []byte(os.ExpandEnv(string(confContent)))
 
-	var clusterConfigs []*tests.TestClusterConfig
+	var clusterConfigs []*testcore.TestClusterConfig
 	s.Require().NoError(yaml.Unmarshal(confContent, &clusterConfigs))
-	clusterConfigs[0].WorkerConfig = &tests.WorkerConfig{}
-	clusterConfigs[1].WorkerConfig = &tests.WorkerConfig{}
+	clusterConfigs[0].WorkerConfig = testcore.WorkerConfig{DisableWorker: true}
+	clusterConfigs[1].WorkerConfig = testcore.WorkerConfig{DisableWorker: true}
 
 	s.controller = gomock.NewController(s.T())
 	mockStreamClient := adminservicemock.NewMockAdminService_StreamWorkflowReplicationMessagesClient(s.controller)
 	mockStreamClient.EXPECT().Send(gomock.Any()).Return(nil).AnyTimes()
 	mockStreamClient.EXPECT().Recv().Return(&adminservice.StreamWorkflowReplicationMessagesResponse{
 		Attributes: &adminservice.StreamWorkflowReplicationMessagesResponse_Messages{
-			Messages: &replicationpb.WorkflowReplicationMessages{
-				ReplicationTasks:           []*replicationpb.ReplicationTask{},
+			Messages: &replicationspb.WorkflowReplicationMessages{
+				ReplicationTasks:           []*replicationspb.ReplicationTask{},
 				ExclusiveHighWatermark:     100,
 				ExclusiveHighWatermarkTime: timestamppb.New(time.Unix(0, 100)),
 			},
@@ -139,7 +139,7 @@ func (s *NDCFunctionalTestSuite) SetupSuite() {
 	}, nil).AnyTimes()
 	mockStreamClient.EXPECT().CloseSend().Return(nil).AnyTimes()
 
-	s.standByReplicationTasksChan = make(chan *replicationpb.ReplicationTask, 100)
+	s.standByReplicationTasksChan = make(chan *replicationspb.ReplicationTask, 100)
 
 	s.standByTaskID = 0
 	mockStandbyClient := adminservicemock.NewMockAdminServiceClient(s.controller)
@@ -148,7 +148,7 @@ func (s *NDCFunctionalTestSuite) SetupSuite() {
 	mockOtherClient := adminservicemock.NewMockAdminServiceClient(s.controller)
 	mockOtherClient.EXPECT().GetReplicationMessages(gomock.Any(), gomock.Any()).Return(
 		&adminservice.GetReplicationMessagesResponse{
-			ShardMessages: make(map[int32]*replicationpb.ReplicationMessages),
+			ShardMessages: make(map[int32]*replicationspb.ReplicationMessages),
 		}, nil).AnyTimes()
 	mockOtherClient.EXPECT().StreamWorkflowReplicationMessages(gomock.Any()).Return(mockStreamClient, nil).AnyTimes()
 	s.mockAdminClient = map[string]adminservice.AdminServiceClient{
@@ -177,7 +177,7 @@ func (s *NDCFunctionalTestSuite) GetReplicationMessagesMock(
 	case task := <-s.standByReplicationTasksChan:
 		taskID := atomic.AddInt64(&s.standByTaskID, 1)
 		task.SourceTaskId = taskID
-		tasks := []*replicationpb.ReplicationTask{task}
+		tasks := []*replicationspb.ReplicationTask{task}
 		for len(s.standByReplicationTasksChan) > 0 {
 			task = <-s.standByReplicationTasksChan
 			taskID := atomic.AddInt64(&s.standByTaskID, 1)
@@ -185,18 +185,18 @@ func (s *NDCFunctionalTestSuite) GetReplicationMessagesMock(
 			tasks = append(tasks, task)
 		}
 
-		replicationMessage := &replicationpb.ReplicationMessages{
+		replicationMessage := &replicationspb.ReplicationMessages{
 			ReplicationTasks:       tasks,
 			LastRetrievedMessageId: tasks[len(tasks)-1].SourceTaskId,
 			HasMore:                true,
 		}
 
 		return &adminservice.GetReplicationMessagesResponse{
-			ShardMessages: map[int32]*replicationpb.ReplicationMessages{1: replicationMessage},
+			ShardMessages: map[int32]*replicationspb.ReplicationMessages{1: replicationMessage},
 		}, nil
 	default:
 		return &adminservice.GetReplicationMessagesResponse{
-			ShardMessages: make(map[int32]*replicationpb.ReplicationMessages),
+			ShardMessages: make(map[int32]*replicationspb.ReplicationMessages),
 		}, nil
 	}
 }
@@ -225,7 +225,7 @@ func (s *NDCFunctionalTestSuite) TestSingleBranch() {
 	taskqueue := "event-generator-taskQueue"
 
 	// cluster has initial version 1
-	historyClient := s.cluster.GetHistoryClient()
+	historyClient := s.cluster.HistoryClient()
 
 	versions := []int64{3, 13, 2, 202, 302, 402, 602, 502, 802, 1002, 902, 702, 1102}
 	for _, version := range versions {
@@ -269,7 +269,7 @@ func (s *NDCFunctionalTestSuite) TestMultipleBranches() {
 	taskqueue := "event-generator-taskQueue"
 
 	// cluster has initial version 1
-	historyClient := s.cluster.GetHistoryClient()
+	historyClient := s.cluster.HistoryClient()
 
 	versions := []int64{102, 2, 202}
 	versionIncs := [][]int64{{1, 10}, {11, 10}}
@@ -399,7 +399,7 @@ func (s *NDCFunctionalTestSuite) TestEmptyVersionAndNonEmptyVersion() {
 	taskqueue := "event-generator-taskQueue"
 
 	// cluster has initial version 1
-	historyClient := s.cluster.GetHistoryClient()
+	historyClient := s.cluster.HistoryClient()
 
 	runID := uuid.New()
 
@@ -461,7 +461,7 @@ func (s *NDCFunctionalTestSuite) TestReplicateWorkflowState_PartialReplicated() 
 	taskqueue := "event-generator-taskQueue"
 
 	// cluster has initial version 1
-	historyClient := s.cluster.GetHistoryClient()
+	historyClient := s.cluster.HistoryClient()
 	var historyBatch []*historypb.History
 	// standby initial failover version 2
 	s.generator = test.InitializeHistoryEventGenerator(s.namespace, s.namespaceID, 12)
@@ -538,7 +538,7 @@ func (s *NDCFunctionalTestSuite) TestHandcraftedMultipleBranches() {
 	identity := "worker-identity"
 
 	// cluster has initial version 1
-	historyClient := s.cluster.GetHistoryClient()
+	historyClient := s.cluster.HistoryClient()
 
 	eventsBatch1 := []*historypb.History{
 		{Events: []*historypb.HistoryEvent{
@@ -881,7 +881,7 @@ func (s *NDCFunctionalTestSuite) TestHandcraftedMultipleBranchesWithZombieContin
 	identity := "worker-identity"
 
 	// cluster has initial version 1
-	historyClient := s.cluster.GetHistoryClient()
+	historyClient := s.cluster.HistoryClient()
 
 	eventsBatch1 := []*historypb.History{
 		{Events: []*historypb.HistoryEvent{
@@ -1178,7 +1178,7 @@ func (s *NDCFunctionalTestSuite) TestImportSingleBranch() {
 	taskqueue := "event-generator-taskQueue"
 
 	// cluster has initial version 1
-	historyClient := s.cluster.GetHistoryClient()
+	historyClient := s.cluster.HistoryClient()
 
 	versions := []int64{3, 13, 2, 202, 301, 401, 602, 502, 803, 1002, 902, 701, 1103}
 	for _, version := range versions {
@@ -1222,7 +1222,7 @@ func (s *NDCFunctionalTestSuite) TestImportMultipleBranches() {
 	taskqueue := "event-generator-taskQueue"
 
 	// cluster has initial version 1
-	historyClient := s.cluster.GetHistoryClient()
+	historyClient := s.cluster.HistoryClient()
 
 	versions := []int64{102, 2, 202}
 	versionIncs := [][]int64{
@@ -1363,7 +1363,7 @@ func (s *NDCFunctionalTestSuite) TestEventsReapply_ZombieWorkflow() {
 	taskqueue := "event-generator-taskQueue"
 
 	// cluster has initial version 1
-	historyClient := s.cluster.GetHistoryClient()
+	historyClient := s.cluster.HistoryClient()
 
 	version := int64(102)
 	runID := uuid.New()
@@ -1460,7 +1460,7 @@ func (s *NDCFunctionalTestSuite) testEventsReapplyNonCurrentBranch(staleEventTyp
 	version := int64(102)
 	isWorkflowFinished := false
 
-	historyClient := s.cluster.GetHistoryClient()
+	historyClient := s.cluster.HistoryClient()
 
 	s.generator = test.InitializeHistoryEventGenerator(s.namespace, s.namespaceID, version)
 	baseBranch := []*historypb.History{}
@@ -1584,8 +1584,8 @@ func (s *NDCFunctionalTestSuite) TestResend() {
 	taskqueue := "event-generator-taskQueue"
 	identity := "ndc-re-send-test"
 
-	historyClient := s.cluster.GetHistoryClient()
-	adminClient := s.cluster.GetAdminClient()
+	historyClient := s.cluster.HistoryClient()
+	adminClient := s.cluster.AdminClient()
 	getHistory := func(
 		nsName namespace.Name,
 		nsID namespace.ID,
@@ -2076,7 +2076,7 @@ func (s *NDCFunctionalTestSuite) TestResend() {
 
 func (s *NDCFunctionalTestSuite) registerNamespace() {
 	s.namespace = namespace.Name("test-simple-workflow-ndc-" + common.GenerateRandomString(5))
-	client1 := s.cluster.GetFrontendClient() // cluster
+	client1 := s.cluster.FrontendClient() // cluster
 	_, err := client1.RegisterNamespace(s.newContext(), &workflowservice.RegisterNamespaceRequest{
 		Namespace:         s.namespace.String(),
 		IsGlobalNamespace: true,
@@ -2087,7 +2087,7 @@ func (s *NDCFunctionalTestSuite) registerNamespace() {
 	})
 	s.Require().NoError(err)
 	// Wait for namespace cache to pick the change
-	time.Sleep(2 * tests.NamespaceCacheRefreshInterval)
+	time.Sleep(2 * testcore.NamespaceCacheRefreshInterval) //nolint:forbidigo
 
 	descReq := &workflowservice.DescribeNamespaceRequest{
 		Namespace: s.namespace.String(),
@@ -2183,7 +2183,7 @@ func (s *NDCFunctionalTestSuite) applyEvents(
 	taskqueue string,
 	versionHistory *historyspb.VersionHistory,
 	eventBatches []*historypb.History,
-	historyClient tests.HistoryClient,
+	historyClient historyservice.HistoryServiceClient,
 ) {
 	historyClient = history.NewRetryableClient(
 		historyClient,
@@ -2220,7 +2220,7 @@ func (s *NDCFunctionalTestSuite) importEvents(
 	taskqueue string,
 	versionHistory *historyspb.VersionHistory,
 	eventBatches []*historypb.History,
-	historyClient tests.HistoryClient,
+	historyClient historyservice.HistoryServiceClient,
 	verifyWorkflowNotExists bool,
 ) {
 	if len(eventBatches) == 0 {
@@ -2288,11 +2288,11 @@ func (s *NDCFunctionalTestSuite) applyEventsThroughFetcher(
 		eventBlob, newRunEventBlob, newRunID := s.generateEventBlobs(workflowID, runID, workflowType, taskqueue, batch)
 
 		taskType := enumsspb.REPLICATION_TASK_TYPE_HISTORY_V2_TASK
-		replicationTask := &replicationpb.ReplicationTask{
+		replicationTask := &replicationspb.ReplicationTask{
 			TaskType:     taskType,
 			SourceTaskId: 1,
-			Attributes: &replicationpb.ReplicationTask_HistoryTaskAttributes{
-				HistoryTaskAttributes: &replicationpb.HistoryTaskAttributes{
+			Attributes: &replicationspb.ReplicationTask_HistoryTaskAttributes{
+				HistoryTaskAttributes: &replicationspb.HistoryTaskAttributes{
 					NamespaceId:         s.namespaceID.String(),
 					WorkflowId:          workflowID,
 					RunId:               runID,
@@ -2339,7 +2339,7 @@ func (s *NDCFunctionalTestSuite) verifyEventHistorySize(
 	historySize int64,
 ) {
 	// get replicated history events from passive side
-	describeWorkflow, err := s.cluster.GetFrontendClient().DescribeWorkflowExecution(
+	describeWorkflow, err := s.cluster.FrontendClient().DescribeWorkflowExecution(
 		s.newContext(),
 		&workflowservice.DescribeWorkflowExecutionRequest{
 			Namespace: s.namespace.String(),
@@ -2361,7 +2361,7 @@ func (s *NDCFunctionalTestSuite) verifyVersionHistory(
 	expectedVersionHistory *historyspb.VersionHistory,
 ) {
 	// get replicated history events from passive side
-	resp, err := s.cluster.GetHistoryClient().GetMutableState(
+	resp, err := s.cluster.HistoryClient().GetMutableState(
 		s.newContext(),
 		&historyservice.GetMutableStateRequest{
 			NamespaceId: string(s.namespaceID),
@@ -2407,7 +2407,7 @@ func (s *NDCFunctionalTestSuite) verifyEventHistory(
 	historyBatch []*historypb.History,
 ) {
 	// get replicated history events from passive side
-	replicatedHistory, err := s.cluster.GetFrontendClient().GetWorkflowExecutionHistory(
+	replicatedHistory, err := s.cluster.FrontendClient().GetWorkflowExecutionHistory(
 		s.newContext(),
 		&workflowservice.GetWorkflowExecutionHistoryRequest{
 			Namespace: s.namespace.String(),
@@ -2453,7 +2453,7 @@ func (s *NDCFunctionalTestSuite) sizeOfHistoryEvents(
 }
 
 func (s *NDCFunctionalTestSuite) newContext() context.Context {
-	ctx := tests.NewContext()
+	ctx := testcore.NewContext()
 	return headers.SetCallerInfo(
 		ctx,
 		headers.NewCallerInfo(s.namespace.String(), headers.CallerTypeAPI, ""),
@@ -2467,7 +2467,7 @@ func (s *NDCFunctionalTestSuite) IsForceTerminated(
 	var token []byte
 	var lastEvent *historypb.HistoryEvent
 	for doContinue := true; doContinue; doContinue = len(token) > 0 {
-		historyResp, err := s.cluster.GetFrontendClient().GetWorkflowExecutionHistory(
+		historyResp, err := s.cluster.FrontendClient().GetWorkflowExecutionHistory(
 			s.newContext(),
 			&workflowservice.GetWorkflowExecutionHistoryRequest{
 				Namespace: s.namespace.String(),

@@ -32,6 +32,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -1293,6 +1294,10 @@ func (p *metricEmitter) recordRequestMetrics(operation string, caller string, la
 func updateErrorMetric(handler metrics.Handler, logger log.Logger, operation string, err error) {
 	if err != nil {
 		metrics.PersistenceErrorWithType.With(handler).Record(1, metrics.ServiceErrorTypeTag(err))
+		if common.IsContextCanceledErr(err) {
+			// no-op
+			return
+		}
 		switch err := err.(type) {
 		case *ShardAlreadyExistError,
 			*ShardOwnershipLostError,

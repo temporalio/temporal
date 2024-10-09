@@ -136,7 +136,8 @@ func NewTaskQueueFamily(namespaceId string, name string) (*TaskQueueFamily, erro
 	}, nil
 }
 
-// UnsafeTaskQueueFamily should be avoided as much as possible. Use NewTaskQueueFamily instead as it validates the tq name.
+// UnsafeTaskQueueFamily returns a TaskQueueFamily object without validating the task queue name.
+// This method should only be used in logs/metrics, not in the server logic (use NewTaskQueueFamily instead).
 func UnsafeTaskQueueFamily(namespaceId string, name string) *TaskQueueFamily {
 	return &TaskQueueFamily{namespaceId, name}
 }

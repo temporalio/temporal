@@ -80,19 +80,20 @@ type (
 	}
 
 	ackMgrImpl struct {
-		currentClusterName       string
-		shardContext             shard.Context
-		config                   *configs.Config
-		workflowCache            wcache.Cache
-		eventBlobCache           persistence.XDCCache
-		replicationProgressCache ProgressCache
-		executionMgr             persistence.ExecutionManager
-		metricsHandler           metrics.Handler
-		logger                   log.Logger
-		retryPolicy              backoff.RetryPolicy
-		namespaceRegistry        namespace.Registry
-		pageSize                 dynamicconfig.IntPropertyFn
-		maxSkipTaskCount         dynamicconfig.IntPropertyFn
+		currentClusterName                   string
+		shardContext                         shard.Context
+		config                               *configs.Config
+		workflowCache                        wcache.Cache
+		eventBlobCache                       persistence.XDCCache
+		replicationProgressCache             ProgressCache
+		executionMgr                         persistence.ExecutionManager
+		metricsHandler                       metrics.Handler
+		logger                               log.Logger
+		retryPolicy                          backoff.RetryPolicy
+		namespaceRegistry                    namespace.Registry
+		syncVersionedTransitionTaskConverter *syncVersionedTransitionTaskConverter
+		pageSize                             dynamicconfig.IntPropertyFn
+		maxSkipTaskCount                     dynamicconfig.IntPropertyFn
 
 		sync.Mutex
 		// largest replication task ID generated
@@ -115,6 +116,7 @@ func NewAckManager(
 	eventBlobCache persistence.XDCCache,
 	replicationProgressCache ProgressCache,
 	executionMgr persistence.ExecutionManager,
+	syncStateRetriever SyncStateRetriever,
 	logger log.Logger,
 ) AckManager {
 
@@ -126,19 +128,20 @@ func NewAckManager(
 		WithBackoffCoefficient(1)
 
 	return &ackMgrImpl{
-		currentClusterName:       currentClusterName,
-		shardContext:             shardContext,
-		config:                   shardContext.GetConfig(),
-		workflowCache:            workflowCache,
-		eventBlobCache:           eventBlobCache,
-		replicationProgressCache: replicationProgressCache,
-		executionMgr:             executionMgr,
-		metricsHandler:           shardContext.GetMetricsHandler().WithTags(metrics.OperationTag(metrics.ReplicatorQueueProcessorScope)),
-		logger:                   log.With(logger, tag.ComponentReplicatorQueue),
-		retryPolicy:              retryPolicy,
-		namespaceRegistry:        shardContext.GetNamespaceRegistry(),
-		pageSize:                 config.ReplicatorProcessorFetchTasksBatchSize,
-		maxSkipTaskCount:         config.ReplicatorProcessorMaxSkipTaskCount,
+		currentClusterName:                   currentClusterName,
+		shardContext:                         shardContext,
+		config:                               shardContext.GetConfig(),
+		workflowCache:                        workflowCache,
+		eventBlobCache:                       eventBlobCache,
+		replicationProgressCache:             replicationProgressCache,
+		executionMgr:                         executionMgr,
+		metricsHandler:                       shardContext.GetMetricsHandler().WithTags(metrics.OperationTag(metrics.ReplicatorQueueProcessorScope)),
+		logger:                               log.With(logger, tag.ComponentReplicatorQueue),
+		retryPolicy:                          retryPolicy,
+		namespaceRegistry:                    shardContext.GetNamespaceRegistry(),
+		syncVersionedTransitionTaskConverter: newSyncVersionedTransitionTaskConverter(shardContext, workflowCache, eventBlobCache, replicationProgressCache, executionMgr, syncStateRetriever, logger),
+		pageSize:                             config.ReplicatorProcessorFetchTasksBatchSize,
+		maxSkipTaskCount:                     config.ReplicatorProcessorMaxSkipTaskCount,
 
 		maxTaskID:       nil,
 		sanityCheckTime: time.Time{},
@@ -474,15 +477,9 @@ func (p *ackMgrImpl) ConvertTaskByCluster(
 	case *tasks.SyncVersionedTransitionTask:
 		return convertSyncVersionedTransitionTask(
 			ctx,
-			p.shardContext,
 			task,
-			p.shardContext.GetShardID(),
-			p.workflowCache,
-			p.eventBlobCache,
-			p.replicationProgressCache,
 			targetClusterID,
-			p.executionMgr,
-			p.logger,
+			p.syncVersionedTransitionTaskConverter,
 		)
 	default:
 		return p.ConvertTask(ctx, task)

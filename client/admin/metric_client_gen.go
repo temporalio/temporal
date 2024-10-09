@@ -201,6 +201,34 @@ func (c *metricClient) DescribeTaskQueuePartition(
 	return c.client.DescribeTaskQueuePartition(ctx, request, opts...)
 }
 
+func (c *metricClient) ForceUnloadTaskQueuePartition(
+	ctx context.Context,
+	request *adminservice.ForceUnloadTaskQueuePartitionRequest,
+	opts ...grpc.CallOption,
+) (_ *adminservice.ForceUnloadTaskQueuePartitionResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, "AdminClientForceUnloadTaskQueuePartition")
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.ForceUnloadTaskQueuePartition(ctx, request, opts...)
+}
+
+func (c *metricClient) GenerateLastHistoryReplicationTasks(
+	ctx context.Context,
+	request *adminservice.GenerateLastHistoryReplicationTasksRequest,
+	opts ...grpc.CallOption,
+) (_ *adminservice.GenerateLastHistoryReplicationTasksResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, "AdminClientGenerateLastHistoryReplicationTasks")
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.GenerateLastHistoryReplicationTasks(ctx, request, opts...)
+}
+
 func (c *metricClient) GetDLQMessages(
 	ctx context.Context,
 	request *adminservice.GetDLQMessagesRequest,

@@ -112,6 +112,7 @@ type (
 		componentSet string
 		client       sdkclient.Client
 		worker       sdkworker.Worker
+		cleanup      []func()
 	}
 
 	workerAllocation struct {
@@ -448,6 +449,7 @@ func (w *perNamespaceWorker) tryRefresh(ns *namespace.Namespace) error {
 	client, worker, err := w.startWorker(ns, enabledComponents, workerAllocation, dcOptions)
 	if err != nil {
 		// TODO: add metric also
+		w.stopWorkerLocked() // for calling cleanup
 		return err
 	}
 
@@ -500,7 +502,10 @@ func (w *perNamespaceWorker) startWorker(
 		Multiplicity: allocation.Local,
 	}
 	for _, cmp := range components {
-		cmp.Register(worker, ns, details)
+		cleanup := cmp.Register(worker, ns, details)
+		if cleanup != nil {
+			w.cleanup = append(w.cleanup, cleanup)
+		}
 	}
 
 	// this blocks by calling DescribeNamespace a few times (with a 10s timeout)
@@ -554,6 +559,10 @@ func (w *perNamespaceWorker) stopWorkerAndResetTimer() {
 }
 
 func (w *perNamespaceWorker) stopWorkerLocked() {
+	for _, cleanup := range w.cleanup {
+		cleanup()
+	}
+	w.cleanup = nil
 	if w.worker != nil {
 		w.worker.Stop()
 		w.worker = nil
