@@ -167,6 +167,7 @@ func (s *signalWithStartWorkflowSuite) TestSignalWorkflow_NewWorkflowTask() {
 		request.GetIdentity(),
 		request.GetHeader(),
 		request.GetSkipGenerateWorkflowTask(),
+		request.GetLinks(),
 	).Return(&history.HistoryEvent{}, nil)
 	s.currentMutableState.EXPECT().HasPendingWorkflowTask().Return(false)
 	s.currentMutableState.EXPECT().HadOrHasWorkflowTask().Return(true)
@@ -200,6 +201,7 @@ func (s *signalWithStartWorkflowSuite) TestSignalWorkflow_NoNewWorkflowTask() {
 		request.GetIdentity(),
 		request.GetHeader(),
 		request.GetSkipGenerateWorkflowTask(),
+		request.GetLinks(),
 	).Return(&history.HistoryEvent{}, nil)
 	s.currentMutableState.EXPECT().HasPendingWorkflowTask().Return(true)
 	s.currentContext.EXPECT().UpdateWorkflowExecutionAsActive(ctx, s.shardContext).Return(nil)
