@@ -26,15 +26,12 @@ package recordactivitytaskstarted
 
 import (
 	"context"
-	"errors"
 
-	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
-	"go.temporal.io/server/common/persistence/serialization"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/service/history/api"
@@ -152,12 +149,6 @@ func Invoke(
 	)
 
 	if err != nil {
-		var deserializationError *serialization.DeserializationError
-		var serializationError *serialization.SerializationError
-		// convert serialization errors to be captured as serviceerrors across gRPC calls
-		if errors.As(err, &deserializationError) || errors.As(err, &serializationError) {
-			return nil, serviceerror.NewDataLoss(err.Error())
-		}
 		return nil, err
 	}
 

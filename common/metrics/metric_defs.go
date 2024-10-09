@@ -1032,7 +1032,7 @@ var (
 	ApproximateBacklogAgeSeconds                      = NewGaugeDef("approximate_backlog_age_seconds")
 	NonRetryableTasks                                 = NewCounterDef(
 		"non_retryable_tasks",
-		WithDescription("The number of non-retryable tasks which are dropped due to specific errors"))
+		WithDescription("The number of non-retryable matching tasks which are dropped due to specific errors"))
 
 	// Versioning and Reachability
 	ReachabilityExitPointCounter = NewCounterDef("reachability_exit_point_count")

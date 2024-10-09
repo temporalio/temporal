@@ -26,7 +26,6 @@ package recordworkflowtaskstarted
 
 import (
 	"context"
-	"errors"
 
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -40,7 +39,6 @@ import (
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
-	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/tqid"
@@ -219,14 +217,7 @@ func Invoke(
 		resp,
 	)
 	if err != nil {
-		var deserializationError *serialization.DeserializationError
-		var serializationError *serialization.SerializationError
-		// convert serialization errors to be captured as serviceerrors across gRPC calls
-		if errors.As(err, &deserializationError) || errors.As(err, &serializationError) {
-			return nil, serviceerror.NewDataLoss(err.Error())
-		}
 		return nil, err
-
 	}
 	return resp, nil
 }

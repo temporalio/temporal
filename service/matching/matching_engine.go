@@ -617,6 +617,8 @@ pollLoop:
 			switch err.(type) {
 			case *serviceerror.Internal, *serviceerror.DataLoss:
 				e.nonRetryableErrorsDropTask(task, taskQueueName, err)
+				// drop the task as otherwise task would be stuck in a retry-loop
+				task.finish(nil)
 			case *serviceerror.NotFound: // mutable state not found, workflow not running or workflow task not found
 				e.logger.Info("Workflow task not found",
 					tag.WorkflowTaskQueueName(taskQueueName),
@@ -706,7 +708,7 @@ func (e *matchingEngineImpl) getHistoryForQueryTask(
 }
 
 func (e *matchingEngineImpl) nonRetryableErrorsDropTask(task *internalTask, taskQueueName string, err error) {
-	e.logger.Error(err.Error(),
+	e.logger.Error("dropping task due to non-nonretryable errors",
 		tag.WorkflowNamespace(task.namespace.String()),
 		tag.WorkflowNamespaceID(task.event.Data.GetNamespaceId()),
 		tag.WorkflowID(task.event.Data.GetWorkflowId()),
@@ -719,9 +721,6 @@ func (e *matchingEngineImpl) nonRetryableErrorsDropTask(task *internalTask, task
 	)
 
 	metrics.NonRetryableTasks.With(e.metricsHandler).Record(1, metrics.ServiceErrorTypeTag(err))
-
-	// drop the task as otherwise task would be stuck in a retry-loop since the errors from within this helper is called are non-retryable
-	task.finish(nil)
 }
 
 // PollActivityTaskQueue takes one task from the task manager, update workflow execution history, mark task as
@@ -783,6 +782,8 @@ pollLoop:
 			switch err.(type) {
 			case *serviceerror.Internal, *serviceerror.DataLoss:
 				e.nonRetryableErrorsDropTask(task, taskQueueName, err)
+				// drop the task as otherwise task would be stuck in a retry-loop
+				task.finish(nil)
 			case *serviceerror.NotFound: // mutable state not found, workflow not running or activity info not found
 				e.logger.Info("Activity task not found",
 					tag.WorkflowNamespaceID(task.event.Data.GetNamespaceId()),
