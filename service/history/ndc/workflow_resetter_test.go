@@ -554,6 +554,7 @@ func (s *workflowResetterSuite) TestTerminateWorkflow() {
 		nil,
 		consts.IdentityResetter,
 		false,
+		nil,
 	).Return(&historypb.HistoryEvent{}, nil)
 
 	err := s.workflowResetter.terminateWorkflow(mutableState, terminateReason)
@@ -891,6 +892,7 @@ func (s *workflowResetterSuite) TestReapplyEvents() {
 				attr.GetIdentity(),
 				attr.GetHeader(),
 				attr.GetSkipGenerateWorkflowTask(),
+				event.Links,
 			).Return(&historypb.HistoryEvent{}, nil)
 		case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ADMITTED:
 			attr := event.GetWorkflowExecutionUpdateAdmittedEventAttributes()

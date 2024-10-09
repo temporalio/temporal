@@ -317,6 +317,7 @@ func signalWorkflow(
 		request.GetIdentity(),
 		request.GetHeader(),
 		request.GetSkipGenerateWorkflowTask(),
+		request.GetLinks(),
 	); err != nil {
 		return err
 	}
