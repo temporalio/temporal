@@ -33,6 +33,7 @@ import (
 
 	"github.com/dgryski/go-farm"
 	schedpb "go.temporal.io/api/schedule/v1"
+
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/primitives/timestamp"
@@ -255,11 +256,15 @@ func validateInterval(i *schedpb.IntervalSpec) error {
 	if i == nil {
 		return errors.New("interval is nil")
 	}
+	if err := timestamp.ValidateProtoDuration(i.Interval); err != nil {
+		return errors.New(fmt.Sprintf("invalid interval: %s", err.Error()))
+	}
+	if err := timestamp.ValidateProtoDuration(i.Phase); err != nil {
+		return errors.New(fmt.Sprintf("invalid phase: %s", err.Error()))
+	}
 	iv, phase := timestamp.DurationValue(i.Interval), timestamp.DurationValue(i.Phase)
 	if iv < time.Second {
 		return errors.New("interval is too small")
-	} else if phase < 0 {
-		return errors.New("phase is negative")
 	} else if phase >= iv {
 		return errors.New("phase cannot be greater than Interval")
 	}

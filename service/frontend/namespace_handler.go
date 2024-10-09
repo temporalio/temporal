@@ -37,6 +37,9 @@ import (
 	replicationpb "go.temporal.io/api/replication/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
+	"google.golang.org/protobuf/types/known/durationpb"
+	"google.golang.org/protobuf/types/known/timestamppb"
+
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
@@ -51,7 +54,6 @@ import (
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/util"
-	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type (
@@ -130,7 +132,7 @@ func (d *namespaceHandler) RegisterNamespace(
 	}
 
 	if err := validateRetentionDuration(
-		timestamp.DurationValue(registerRequest.WorkflowExecutionRetentionPeriod),
+		registerRequest.WorkflowExecutionRetentionPeriod,
 		registerRequest.IsGlobalNamespace,
 	); err != nil {
 		return nil, err
@@ -464,7 +466,7 @@ func (d *namespaceHandler) UpdateNamespace(
 
 			config.Retention = updatedConfig.GetWorkflowExecutionRetentionTtl()
 			if err := validateRetentionDuration(
-				timestamp.DurationValue(config.Retention),
+				config.Retention,
 				isGlobalNamespace,
 			); err != nil {
 				return nil, err
@@ -888,12 +890,16 @@ func (d *namespaceHandler) maybeUpdateFailoverHistory(
 }
 
 // validateRetentionDuration ensures that retention duration can't be set below a sane minimum.
-func validateRetentionDuration(retention time.Duration, isGlobalNamespace bool) error {
+func validateRetentionDuration(retention *durationpb.Duration, isGlobalNamespace bool) error {
+	if err := timestamp.ValidateProtoDuration(retention); err != nil {
+		return errInvalidRetentionPeriod
+	}
+
 	min := namespace.MinRetentionLocal
 	if isGlobalNamespace {
 		min = namespace.MinRetentionGlobal
 	}
-	if retention < min {
+	if timestamp.DurationValue(retention) < min {
 		return errInvalidRetentionPeriod
 	}
 	return nil

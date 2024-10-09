@@ -48,6 +48,14 @@ import (
 	updatepb "go.temporal.io/api/update/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/health"
+	healthpb "google.golang.org/grpc/health/grpc_health_v1"
+	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/encoding/protowire"
+	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/durationpb"
+
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	schedspb "go.temporal.io/server/api/schedule/v1"
@@ -84,19 +92,11 @@ import (
 	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/tasktoken"
-	"go.temporal.io/server/common/timer"
 	"go.temporal.io/server/common/tqid"
 	"go.temporal.io/server/common/utf8validator"
 	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/service/worker/batcher"
 	"go.temporal.io/server/service/worker/scheduler"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/health"
-	healthpb "google.golang.org/grpc/health/grpc_health_v1"
-	"google.golang.org/grpc/status"
-	"google.golang.org/protobuf/encoding/protowire"
-	"google.golang.org/protobuf/proto"
-	"google.golang.org/protobuf/types/known/durationpb"
 )
 
 var _ Handler = (*WorkflowHandler)(nil)
@@ -4902,16 +4902,16 @@ func validateRequestId(requestID *string, lenLimit int) error {
 func (wh *WorkflowHandler) validateStartWorkflowTimeouts(
 	request *workflowservice.StartWorkflowExecutionRequest,
 ) error {
-	if err := timer.ValidateAndCapTimer(request.GetWorkflowExecutionTimeout()); err != nil {
-		return errInvalidWorkflowExecutionTimeoutSeconds
+	if err := timestamp.ValidateProtoDuration(request.GetWorkflowExecutionTimeout()); err != nil {
+		return fmt.Errorf("%w cause: %s", errInvalidWorkflowExecutionTimeoutSeconds, err.Error())
 	}
 
-	if err := timer.ValidateAndCapTimer(request.GetWorkflowRunTimeout()); err != nil {
-		return errInvalidWorkflowRunTimeoutSeconds
+	if err := timestamp.ValidateProtoDuration(request.GetWorkflowRunTimeout()); err != nil {
+		return fmt.Errorf("%w cause: %s", errInvalidWorkflowRunTimeoutSeconds, err.Error())
 	}
 
-	if err := timer.ValidateAndCapTimer(request.GetWorkflowTaskTimeout()); err != nil {
-		return errInvalidWorkflowTaskTimeoutSeconds
+	if err := timestamp.ValidateProtoDuration(request.GetWorkflowTaskTimeout()); err != nil {
+		return fmt.Errorf("%w cause: %s", errInvalidWorkflowTaskTimeoutSeconds, err.Error())
 	}
 
 	return nil
@@ -4920,16 +4920,16 @@ func (wh *WorkflowHandler) validateStartWorkflowTimeouts(
 func (wh *WorkflowHandler) validateSignalWithStartWorkflowTimeouts(
 	request *workflowservice.SignalWithStartWorkflowExecutionRequest,
 ) error {
-	if err := timer.ValidateAndCapTimer(request.WorkflowTaskTimeout); err != nil {
-		return errInvalidWorkflowExecutionTimeoutSeconds
+	if err := timestamp.ValidateProtoDuration(request.GetWorkflowExecutionTimeout()); err != nil {
+		return fmt.Errorf("%w cause: %s", errInvalidWorkflowExecutionTimeoutSeconds, err.Error())
 	}
 
-	if err := timer.ValidateAndCapTimer(request.WorkflowRunTimeout); err != nil {
-		return errInvalidWorkflowRunTimeoutSeconds
+	if err := timestamp.ValidateProtoDuration(request.GetWorkflowRunTimeout()); err != nil {
+		return fmt.Errorf("%w cause: %s", errInvalidWorkflowRunTimeoutSeconds, err.Error())
 	}
 
-	if err := timer.ValidateAndCapTimer(request.WorkflowTaskTimeout); err != nil {
-		return errInvalidWorkflowTaskTimeoutSeconds
+	if err := timestamp.ValidateProtoDuration(request.GetWorkflowTaskTimeout()); err != nil {
+		return fmt.Errorf("%w cause: %s", errInvalidWorkflowTaskTimeoutSeconds, err.Error())
 	}
 
 	return nil
@@ -4943,8 +4943,8 @@ func (wh *WorkflowHandler) validateWorkflowStartDelay(
 		return errCronAndStartDelaySet
 	}
 
-	if err := timer.ValidateAndCapTimer(startDelay); err != nil {
-		return errInvalidWorkflowStartDelaySeconds
+	if err := timestamp.ValidateProtoDuration(startDelay); err != nil {
+		return fmt.Errorf("%w cause: %s", errInvalidWorkflowStartDelaySeconds, err.Error())
 	}
 
 	return nil
