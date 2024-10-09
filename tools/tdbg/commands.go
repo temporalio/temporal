@@ -462,6 +462,7 @@ func AdminRemoveTask(
 	var visibilityTimestamp int64
 	if category.Type() == tasks.CategoryTypeScheduled {
 		if !c.IsSet(FlagTaskVisibilityTimestamp) {
+			//nolint:revive
 			return fmt.Errorf("%s is required to remove %s tasks", FlagTaskVisibilityTimestamp, category.Name())
 		}
 		visibilityTimestamp = c.Int64(FlagTaskVisibilityTimestamp)
