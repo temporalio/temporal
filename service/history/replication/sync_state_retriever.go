@@ -44,7 +44,6 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/versionhistory"
-	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/hsm"
@@ -146,13 +145,7 @@ func (s *SyncStateRetrieverImpl) GetSyncWorkflowStateArtifact(
 		// workflow essentially in an unknown state
 		// e.g. an event-based replication task got applied to the workflow after
 		// a syncVersionedTransition task is converted and streamed to target.
-		return nil, serviceerrors.NewSyncState(
-			"Transition history disable.",
-			namespaceID,
-			execution.WorkflowId,
-			execution.RunId,
-			nil,
-		)
+		return nil, consts.ErrTransitionHistoryDisabled
 	}
 
 	shouldReturnMutation := func() bool {

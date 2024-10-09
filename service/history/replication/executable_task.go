@@ -442,6 +442,8 @@ func (e *ExecutableTaskImpl) SyncState(
 	remainingAttempt int,
 ) (bool, error) {
 
+	// TODO: check & update remainingAttempt
+
 	remoteAdminClient, err := e.ClientBean.GetRemoteAdminClient(e.sourceClusterName)
 	if err != nil {
 		return false, err
@@ -460,8 +462,8 @@ func (e *ExecutableTaskImpl) SyncState(
 		TargetClusterId: int32(targetClusterInfo.InitialFailoverVersion),
 	})
 	if err != nil {
-		var syncStateErr *serviceerrors.SyncState
-		if !errors.As(err, &syncStateErr) {
+		var failedPreconditionErr *serviceerror.FailedPrecondition
+		if !errors.As(err, &failedPreconditionErr) {
 			return false, err
 		}
 		// Unable to perform sync state. Transition history maybe disabled in source cluster.
