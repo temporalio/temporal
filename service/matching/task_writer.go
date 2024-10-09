@@ -216,6 +216,9 @@ func (w *taskWriter) appendTasks(
 func (w *taskWriter) taskWriterLoop(ctx context.Context) error {
 	err := w.initReadWriteState(ctx)
 	w.backlogMgr.SetInitializedError(err)
+	if err != nil {
+		return errShutdown
+	}
 
 writerLoop:
 	for {

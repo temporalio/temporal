@@ -166,7 +166,7 @@ func (c *backlogManagerImpl) SetInitializedError(err error) {
 		// We can't recover from here without starting over, so unload the whole task queue.
 		// Skip final update since we never initialized.
 		c.skipFinalUpdate.Store(true)
-		c.pqMgr.UnloadFromPartitionManager(unloadCauseInitError)
+		go c.pqMgr.UnloadFromPartitionManager(unloadCauseInitError)
 	}
 }
 
@@ -246,7 +246,7 @@ func (c *backlogManagerImpl) completeTask(task *persistencespb.AllocatedTaskInfo
 				tag.WorkflowTaskQueueType(c.queueKey().TaskType()))
 			// Skip final update since persistence is having problems.
 			c.skipFinalUpdate.Store(true)
-			c.pqMgr.UnloadFromPartitionManager(unloadCauseOtherError)
+			go c.pqMgr.UnloadFromPartitionManager(unloadCauseOtherError)
 			return
 		}
 		c.taskReader.Signal()
