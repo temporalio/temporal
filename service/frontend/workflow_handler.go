@@ -481,6 +481,10 @@ func (wh *WorkflowHandler) prepareStartWorkflowRequest(
 		return nil, err
 	}
 
+	if err := wh.validateLinks(namespaceName, request.GetLinks()); err != nil {
+		return nil, err
+	}
+
 	return request, nil
 }
 
@@ -4571,6 +4575,24 @@ func (wh *WorkflowHandler) validateWorkflowIdReusePolicy(
 	if conflictPolicy != enumspb.WORKFLOW_ID_CONFLICT_POLICY_UNSPECIFIED &&
 		reusePolicy == enumspb.WORKFLOW_ID_REUSE_POLICY_TERMINATE_IF_RUNNING {
 		return errIncompatibleIDReusePolicy
+	}
+	return nil
+}
+
+func (wh *WorkflowHandler) validateLinks(
+	ns namespace.Name,
+	links []*commonpb.Link,
+) error {
+	maxAllowedLinks := wh.config.MaxLinksPerRequest(ns.String())
+	if len(links) > maxAllowedLinks {
+		return serviceerror.NewInvalidArgument(fmt.Sprintf("cannot attach more than %d links per request, got %d", maxAllowedLinks, len(links)))
+	}
+
+	maxSize := wh.config.LinkMaxSize(ns.String())
+	for _, l := range links {
+		if l.Size() > maxSize {
+			return serviceerror.NewInvalidArgument(fmt.Sprintf("link exceeds allowed size of %d, got %d", maxSize, l.Size()))
+		}
 	}
 	return nil
 }

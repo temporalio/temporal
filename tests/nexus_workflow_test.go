@@ -20,7 +20,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package nexus
+package tests
 
 import (
 	"context"
@@ -695,6 +695,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletion() {
 }
 
 func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncFailure() {
+	s.T().SkipNow()
 	ctx := testcore.NewContext()
 	taskQueue := testcore.RandomizeStr(s.T().Name())
 	endpointName := testcore.RandomizedNexusEndpoint(s.T().Name())

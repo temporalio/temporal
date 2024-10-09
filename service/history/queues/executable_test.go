@@ -75,7 +75,6 @@ type (
 		dlqEnabled                 dynamicconfig.BoolPropertyFn
 		priorityAssigner           queues.PriorityAssigner
 		maxUnexpectedErrorAttempts dynamicconfig.IntPropertyFn
-		dlqInternalErrors          dynamicconfig.BoolPropertyFn
 		dlqErrorPattern            dynamicconfig.StringPropertyFn
 	}
 	option func(*params)
@@ -540,14 +539,11 @@ func (s *executableSuite) TestExecute_SendToDLQAfterMaxAttemptsThenDisable() {
 	s.Empty(queueWriter.EnqueueTaskRequests)
 }
 
-func (s *executableSuite) TestExecute_SendsInternalErrorsToDLQ_WhenEnabled() {
+func (s *executableSuite) TestExecute_SendsInternalErrorsToDLQ() {
 	queueWriter := &queuestest.FakeQueueWriter{}
 	executable := s.newTestExecutable(func(p *params) {
 		p.dlqWriter = queues.NewDLQWriter(queueWriter, s.mockClusterMetadata, metrics.NoopMetricsHandler, log.NewTestLogger(), s.mockNamespaceRegistry)
 		p.dlqEnabled = func() bool {
-			return true
-		}
-		p.dlqInternalErrors = func() bool {
 			return true
 		}
 	})
@@ -564,35 +560,6 @@ func (s *executableSuite) TestExecute_SendsInternalErrorsToDLQ_WhenEnabled() {
 	s.Len(queueWriter.EnqueueTaskRequests, 1)
 }
 
-func (s *executableSuite) TestExecute_DoesntSendInternalErrorsToDLQ_WhenDisabled() {
-	queueWriter := &queuestest.FakeQueueWriter{}
-	executable := s.newTestExecutable(func(p *params) {
-		p.dlqWriter = queues.NewDLQWriter(queueWriter, s.mockClusterMetadata, metrics.NoopMetricsHandler, log.NewTestLogger(), s.mockNamespaceRegistry)
-		p.dlqEnabled = func() bool {
-			return true
-		}
-		p.dlqInternalErrors = func() bool {
-			return false
-		}
-	})
-
-	s.mockExecutor.EXPECT().Execute(gomock.Any(), executable).Return(queues.ExecuteResponse{
-		ExecutionMetricTags: nil,
-		ExecutedAsActive:    false,
-		ExecutionErr:        serviceerror.NewInternal("injected error"),
-	}).Times(2)
-
-	// Attempt 1
-	err := executable.Execute()
-	s.Error(executable.HandleErr(err))
-
-	// Attempt 2
-	err = executable.Execute()
-	s.Error(err)
-	s.Error(executable.HandleErr(err))
-	s.Empty(queueWriter.EnqueueTaskRequests)
-}
-
 func (s *executableSuite) TestExecute_SendInternalErrorsToDLQ_ThenDisable() {
 	queueWriter := &queuestest.FakeQueueWriter{}
 	dlqEnabled := true
@@ -600,9 +567,6 @@ func (s *executableSuite) TestExecute_SendInternalErrorsToDLQ_ThenDisable() {
 		p.dlqWriter = queues.NewDLQWriter(queueWriter, s.mockClusterMetadata, metrics.NoopMetricsHandler, log.NewTestLogger(), s.mockNamespaceRegistry)
 		p.dlqEnabled = func() bool {
 			return dlqEnabled
-		}
-		p.dlqInternalErrors = func() bool {
-			return true
 		}
 	})
 
@@ -1041,9 +1005,6 @@ func (s *executableSuite) newTestExecutable(opts ...option) queues.Executable {
 		dlqEnabled: func() bool {
 			return false
 		},
-		dlqInternalErrors: func() bool {
-			return false
-		},
 		priorityAssigner: queues.NewNoopPriorityAssigner(),
 		maxUnexpectedErrorAttempts: func() int {
 			return math.MaxInt
@@ -1079,7 +1040,6 @@ func (s *executableSuite) newTestExecutable(opts ...option) queues.Executable {
 			params.DLQEnabled = p.dlqEnabled
 			params.DLQWriter = p.dlqWriter
 			params.MaxUnexpectedErrorAttempts = p.maxUnexpectedErrorAttempts
-			params.DLQInternalErrors = p.dlqInternalErrors
 			params.DLQErrorPattern = p.dlqErrorPattern
 		},
 	)
