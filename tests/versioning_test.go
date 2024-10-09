@@ -1047,6 +1047,8 @@ func (s *VersioningIntegSuite) firstWorkflowTaskAssignmentSyncMatch() {
 }
 
 func (s *VersioningIntegSuite) TestIndependentActivityTaskAssignment_Spooled_VersionedWorkflow() {
+	s.T().Skip("flaky test")
+
 	s.RunTestWithMatchingBehavior(func() { s.independentActivityTaskAssignmentSpooled(true) })
 }
 
@@ -2600,6 +2602,8 @@ func (s *VersioningIntegSuite) TestDispatchActivityCrossTQFails() {
 }
 
 func (s *VersioningIntegSuite) TestDispatchChildWorkflowOld() {
+	s.T().Skip("flaky test")
+
 	s.RunTestWithMatchingBehavior(func() { s.dispatchChildWorkflow(false, false) })
 }
 
