@@ -143,7 +143,7 @@ func (s *UpdateWorkflowSdkSuite) TestUpdateWorkflow_TimeoutWorkflowAfterUpdateAc
   6 WorkflowExecutionTimedOut`, s.GetHistory(s.Namespace(), tv.WorkflowExecution()))
 }
 
-// TestUpdateWorkflow_TerminateWorkflowDuringUpdate executes an update, and while WF awaits
+// TestUpdateWorkflow_TerminateWorkflowAfterUpdateAccepted executes an update, and while WF awaits
 // server terminates the WF after the update has been accepted but before it has been completed. It checks
 // that the client gets a NotFound error when attempting to fetch the update result (rather than a timeout).
 func (s *UpdateWorkflowSdkSuite) TestUpdateWorkflow_TerminateWorkflowAfterUpdateAccepted() {
@@ -259,6 +259,81 @@ func (s *UpdateWorkflowSdkSuite) TestUpdateWorkflow_ContinueAsNewAfterUpdateAdmi
   4 WorkflowTaskCompleted
   5 MarkerRecorded
   6 WorkflowExecutionContinuedAsNew`, s.GetHistory(s.Namespace(), tv.WithRunID(firstRun.GetRunID()).WorkflowExecution()))
+	s.EqualHistoryEvents(`
+  1 WorkflowExecutionStarted
+  2 WorkflowTaskScheduled
+  3 WorkflowTaskStarted
+  4 WorkflowTaskCompleted
+  5 WorkflowExecutionUpdateAccepted
+  6 WorkflowExecutionUpdateCompleted`, s.GetHistory(s.Namespace(), tv.WithRunID(secondRunID).WorkflowExecution()))
+}
+
+func (s *UpdateWorkflowSdkSuite) TestUpdateWorkflow_TimeoutWithRetryAfterUpdateAdmitted() {
+	/*
+		Test ensures that admitted Updates are aborted with retriable error
+		when WF times out with retries and carried over to the new run.
+
+		Send update to WF with short timeout (1s) w/o running worker for this WF. Update gets admitted
+		by server but not processed by WF. WF times out, Update is aborted with retriable error,
+		server starts new run, and Update is retried on that new run. In the meantime, worker is started
+		and catch up the second run.
+	*/
+
+	tv := testvars.New(s.T()).WithTaskQueue(s.TaskQueue()).WithNamespaceName(namespace.Name(s.Namespace()))
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	defer cancel()
+
+	workflowFn := func(ctx workflow.Context) error {
+		s.NoError(workflow.SetUpdateHandler(ctx, tv.HandlerName(), func(ctx workflow.Context, arg string) (string, error) {
+			return workflow.GetInfo(ctx).WorkflowExecution.RunID, nil
+		}))
+		s.NoError(workflow.Await(ctx, func() bool { return false }))
+		return unreachableErr
+	}
+
+	firstRun, err := s.SdkClient().ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{
+		ID:                 tv.WorkflowID(),
+		TaskQueue:          tv.TaskQueue().Name,
+		WorkflowRunTimeout: 1 * time.Second,
+		RetryPolicy: &temporal.RetryPolicy{
+			InitialInterval: time.Nanosecond,
+			MaximumAttempts: 2,
+		},
+	}, workflowFn)
+	s.NoError(err)
+	s.updateWorkflowWaitAdmitted(ctx, tv, tv.Any().String())
+
+	err = firstRun.GetWithOptions(ctx, nil, sdkclient.WorkflowRunGetOptions{DisableFollowingRuns: true})
+	var canErr *workflow.ContinueAsNewError
+	s.ErrorAs(err, &canErr)
+
+	// "start" worker for workflowFn.
+	s.Worker().RegisterWorkflow(workflowFn)
+
+	var secondRunID string
+	s.Eventually(func() bool {
+		resp, err := s.pollUpdate(ctx, tv, &updatepb.WaitPolicy{LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED})
+		if err != nil {
+			var notFoundErr *serviceerror.NotFound
+			// If a poll beats internal update retries, it will get NotFound error for a few attempts.
+			// All other errors are unexpected.
+			s.ErrorAs(err, &notFoundErr, "error must be NotFound")
+			return false
+		}
+		secondRunID = testcore.DecodeString(s.T(), resp.GetOutcome().GetSuccess())
+		s.NotEmpty(secondRunID)
+		return true
+	}, 5*time.Second, 100*time.Millisecond, "update did not reach Completed stage")
+
+	s.NotEqual(firstRun.GetRunID(), secondRunID, "RunId of started WF and WF that received Update should be different")
+
+	s.EqualHistoryEvents(`
+  1 WorkflowExecutionStarted
+  2 WorkflowTaskScheduled
+  3 WorkflowTaskStarted
+  4 WorkflowTaskFailed
+  5 WorkflowExecutionTimedOut`, s.GetHistory(s.Namespace(), tv.WithRunID(firstRun.GetRunID()).WorkflowExecution()))
 	s.EqualHistoryEvents(`
   1 WorkflowExecutionStarted
   2 WorkflowTaskScheduled

@@ -685,7 +685,7 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowRunTimeoutTask(
 
 	// A new run was created after the previous run timed out. Running Updates
 	// for this WF are aborted with a retryable error.
-	// The SDK will retry the API call, and the Update will land on the new run.
+	// Internal server retries will retry the API call, and the Update will be sent to the new run.
 	weContext.UpdateRegistry(ctx, nil).Abort(update.AbortReasonWorkflowContinuing)
 	return nil
 }
