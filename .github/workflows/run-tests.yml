@@ -109,6 +109,7 @@ jobs:
     runs-on: ${{ matrix.runs-on }}
     steps:
       - uses: actions/checkout@v4
+        if: ${{ !inputs.run_single_functional_test && !inputs.run_single_unit_test }}
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           ref: ${{ env.COMMIT }}
@@ -116,19 +117,25 @@ jobs:
           fetch-depth: 100
 
       - uses: actions/setup-go@v5
+        if: ${{ !inputs.run_single_functional_test && !inputs.run_single_unit_test }}
         with:
           go-version-file: 'go.mod'
           check-latest: true
 
       - uses: arduino/setup-protoc@v3
+        if: ${{ !inputs.run_single_functional_test && !inputs.run_single_unit_test }}
 
       - run: GOOS=windows GOARCH=amd64 make clean-bins bins
+        if: ${{ !inputs.run_single_functional_test && !inputs.run_single_unit_test }}
 
       - run: GOOS=darwin GOARCH=arm64 make clean-bins bins
+        if: ${{ !inputs.run_single_functional_test && !inputs.run_single_unit_test }}
 
       - run: make clean-bins ci-build-misc
+        if: ${{ !inputs.run_single_functional_test && !inputs.run_single_unit_test }}
 
       - run: make build-tests
+        if: ${{ !inputs.run_single_functional_test && !inputs.run_single_unit_test }}
 
   unit-test:
     if: ${{ inputs.run_single_functional_test != true }}
