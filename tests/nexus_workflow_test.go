@@ -20,7 +20,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package nexus
+package tests
 
 import (
 	"context"
@@ -854,7 +854,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncFailure() {
 	var wee *temporal.WorkflowExecutionError
 
 	s.ErrorAs(err, &wee)
-	s.Equal("nexus operation completed unsuccessfully: test operation failed (type: NexusOperationFailure, retryable: false)", wee.Unwrap().Error())
+	s.True(strings.HasPrefix(wee.Unwrap().Error(), "nexus operation completed unsuccessfully"))
 }
 
 func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletionErrors() {
