@@ -77,6 +77,9 @@ func durationMultipleOf(amt int64, mult time.Duration) *durationpb.Duration {
 //  2. the golang representation of the duration is not negative
 //
 // nil durations are considered valid because they will be treated as the zero value.
+// durationpb.CheckValid cannot be used directly because it will return an error for
+// very large durations but we are okay with truncating these. durationpb.AsDuration()
+// caps the upper bound for timers at 10,000 years to prevent overflow.
 func ValidateProtoDuration(d *durationpb.Duration) error {
 	if d == nil {
 		// nil durations are converted to 0 value

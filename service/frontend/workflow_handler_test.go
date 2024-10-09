@@ -446,6 +446,8 @@ func (s *workflowHandlerSuite) TestStartWorkflowExecution_Failed_InvalidExecutio
 		RequestId: uuid.New(),
 	}
 	_, err := wh.StartWorkflowExecution(context.Background(), startWorkflowExecutionRequest)
+	var invalidArg *serviceerror.InvalidArgument
+	s.ErrorAs(err, &invalidArg)
 	s.ErrorContains(err, errInvalidWorkflowExecutionTimeoutSeconds.Error())
 }
 
@@ -474,6 +476,8 @@ func (s *workflowHandlerSuite) TestStartWorkflowExecution_Failed_InvalidRunTimeo
 		RequestId: uuid.New(),
 	}
 	_, err := wh.StartWorkflowExecution(context.Background(), startWorkflowExecutionRequest)
+	var invalidArg *serviceerror.InvalidArgument
+	s.ErrorAs(err, &invalidArg)
 	s.ErrorContains(err, errInvalidWorkflowRunTimeoutSeconds.Error())
 }
 
@@ -554,6 +558,8 @@ func (s *workflowHandlerSuite) TestStartWorkflowExecution_Failed_InvalidTaskTime
 		RequestId: uuid.New(),
 	}
 	_, err := wh.StartWorkflowExecution(context.Background(), startWorkflowExecutionRequest)
+	var invalidArg *serviceerror.InvalidArgument
+	s.ErrorAs(err, &invalidArg)
 	s.ErrorContains(err, errInvalidWorkflowTaskTimeoutSeconds.Error())
 }
 
@@ -616,6 +622,8 @@ func (s *workflowHandlerSuite) TestStartWorkflowExecution_Failed_InvalidStartDel
 	}
 
 	_, err := wh.StartWorkflowExecution(context.Background(), startWorkflowExecutionRequest)
+	var invalidArg *serviceerror.InvalidArgument
+	s.ErrorAs(err, &invalidArg)
 	s.ErrorContains(err, errInvalidWorkflowStartDelaySeconds.Error())
 }
 
