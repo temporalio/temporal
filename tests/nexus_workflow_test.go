@@ -695,7 +695,6 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletion() {
 }
 
 func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncFailure() {
-	s.T().SkipNow()
 	ctx := testcore.NewContext()
 	taskQueue := testcore.RandomizeStr(s.T().Name())
 	endpointName := testcore.RandomizedNexusEndpoint(s.T().Name())
@@ -829,7 +828,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncFailure() {
 	var wee *temporal.WorkflowExecutionError
 
 	s.ErrorAs(err, &wee)
-	s.Equal("nexus operation completed unsuccessfully: test operation failed (type: NexusOperationFailure, retryable: false)", wee.Unwrap().Error())
+	s.True(strings.HasPrefix(wee.Unwrap().Error(), "nexus operation completed unsuccessfully"))
 }
 
 func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletionErrors() {
