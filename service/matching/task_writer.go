@@ -200,7 +200,9 @@ func (w *taskWriter) appendTasks(
 
 	resp, err := w.backlogMgr.db.CreateTasks(ctx, taskIDs, reqs)
 	if err != nil {
-		w.backlogMgr.signalIfFatal(err)
+		if w.backlogMgr.signalIfFatal(err) {
+			return nil, errShutdown
+		}
 		w.logger.Error("Persistent store operation failure",
 			tag.StoreOperationCreateTask,
 			tag.Error(err),
@@ -226,12 +228,18 @@ writerLoop:
 
 			taskIDs, err := w.allocTaskIDs(ctx, batchSize)
 			if err != nil {
+				if errors.Is(err, errShutdown) {
+					return err
+				}
 				w.sendWriteResponse(ctx, reqs, err)
 				continue writerLoop
 			}
 
 			_, err = w.appendTasks(ctx, taskIDs, reqs)
 			w.sendWriteResponse(ctx, reqs, err)
+			if err != nil && errors.Is(err, errShutdown) {
+				return err
+			}
 
 		case <-ctx.Done():
 			return ctx.Err()

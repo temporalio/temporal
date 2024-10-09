@@ -197,7 +197,9 @@ Loop:
 
 		case <-tr.notifyC:
 			batch, err := tr.getTaskBatch(ctx)
-			tr.backlogMgr.signalIfFatal(err)
+			if tr.backlogMgr.signalIfFatal(err) {
+				return errShutdown
+			}
 			if err != nil {
 				// TODO: Should we ever stop retrying on db errors?
 				if common.IsResourceExhausted(err) {
@@ -226,7 +228,9 @@ Loop:
 		case <-updateAckTimer.C:
 			err := tr.persistAckBacklogCountLevel(ctx)
 			isConditionFailed := tr.backlogMgr.signalIfFatal(err)
-			if err != nil && !isConditionFailed {
+			if isConditionFailed {
+				return errShutdown
+			} else if err != nil {
 				tr.logger().Error("Persistent store operation failure",
 					tag.StoreOperationUpdateTaskQueue,
 					tag.Error(err))
