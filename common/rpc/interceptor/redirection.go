@@ -45,6 +45,8 @@ import (
 	"google.golang.org/grpc/metadata"
 )
 
+// Note the nexusoperations component references these headers and adds them to a list of disallowed headers for users to set.
+// If any other headers are added for internal use, they should be added to the disallowed headers list.
 const (
 	DCRedirectionContextHeaderName = "xdc-redirection"
 	DCRedirectionApiHeaderName     = "xdc-redirection-api"
