@@ -86,6 +86,15 @@ jobs:
         if: ${{ !cancelled() }}
         run: make upload-test-results
 
+      - name: Upload test results as a GitHub Actions artifact
+        uses: actions/upload-artifact@v4.4.0
+        if: ${{ !cancelled() }}
+        with:
+          name: junit-xml--${{github.run_id}}--${{github.run_attempt}}--${{matrix.runs-on}}--unit-test
+          path: .testoutput
+          retention-days: 14
+          include-hidden-files: true
+
   integration-test:
     name: Integration test
     needs: misc-checks
@@ -122,6 +131,15 @@ jobs:
       - name: Upload test results
         if: ${{ !cancelled() }}
         run: make upload-test-results
+
+      - name: Upload test results as a GitHub Actions artifact
+        uses: actions/upload-artifact@v4.4.0
+        if: always()
+        with:
+          name: junit-xml--${{github.run_id}}--${{github.run_attempt}}--${{matrix.runs-on}}--integration-test
+          path: .testoutput
+          retention-days: 14
+          include-hidden-files: true
 
   functional-test:
     name: Functional test
@@ -198,6 +216,15 @@ jobs:
         if: ${{ !cancelled() }}
         run: make upload-test-results
 
+      - name: Upload test results as a GitHub Actions artifact
+        uses: actions/upload-artifact@v4.4.0
+        if: ${{ !cancelled() }}
+        with:
+          name: junit-xml--${{github.run_id}}--${{github.run_attempt}}--${{matrix.runs-on}}--${{matrix.name}}--${{matrix.shard_index}}--functional-test
+          path: .testoutput
+          retention-days: 14
+          include-hidden-files: true
+
   functional-test-xdc:
     name: Functional test xdc
     needs: misc-checks
@@ -257,6 +284,15 @@ jobs:
       - name: Upload test results
         if: ${{ !cancelled() }}
         run: make upload-test-results
+
+      - name: Upload test results as a GitHub Actions artifact
+        uses: actions/upload-artifact@v4.4.0
+        if: ${{ !cancelled() }}
+        with:
+          name: junit-xml--${{github.run_id}}--${{github.run_attempt}}--${{matrix.runs-on}}--${{matrix.name}}--functional-test-xdc
+          path: .testoutput
+          retention-days: 14
+          include-hidden-files: true
 
   functional-test-ndc:
     name: Functional test ndc
@@ -321,6 +357,15 @@ jobs:
       - name: Run functional test ndc
         timeout-minutes: 15
         run: make functional-test-ndc-coverage
+
+      - name: Upload test results as a GitHub Actions artifact
+        uses: actions/upload-artifact@v4.4.0
+        if: ${{ !cancelled() }}
+        with:
+          name: junit-xml--${{github.run_id}}--${{github.run_attempt}}--${{matrix.runs-on}}--${{matrix.name}}--functional-test-ndc
+          path: .testoutput
+          retention-days: 14
+          include-hidden-files: true
 
   test-status:
     name: Test Status
