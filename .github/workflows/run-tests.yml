@@ -43,24 +43,10 @@ on:
         options:
           - "16GB RAM (ubuntu-20.04)"
           - "64GB RAM (ubuntu-22.04)"
-      cassandra:
-        description: "cassandra"
-        type: boolean
-        default: false
-      sqlite:
-        description: "sqlite"
-        type: boolean
-        default: false
-      #      mysql8:
-      #        description: "mysql8"
-      #        type: boolean
-      #        default: false
-#      postgres12:
-#        description: "postgres12"
-#        type: boolean
-#        default: false
-          # if [[ "${{ inputs.mysql8 }}" == "true" ]]; then dbs_arr+=("mysql8"); fi
-        # if [[ "${{ inputs.postgres12 }}" == "true" ]]; then dbs_arr+=("postgres12"); fi
+      test_dbs:
+        description: 'List of DBs to test on (i.e. ["sqlite", "cassandra", "mysql8", "postgres12"])'
+        type: string
+        default: '["sqlite"]'
 
 concurrency: # Auto-cancel existing runs in the PR when a new commit is pushed
   group: run-tests-${{ github.head_ref || github.run_id }}
@@ -87,7 +73,7 @@ jobs:
       test_timeout: ${{ steps.generate_output.outputs.test_timeout }}
       single_test_args: ${{ steps.generate_output.outputs.single_test_args }}
       runs_on: ${{ steps.generate_output.outputs.runs_on }}
-      dbs: ${{ steps.generate_output.outputs.dbs }}
+      dbs: ${{ inputs.test_dbs }}
     steps:
       - id: generate_output
         run: |
@@ -100,14 +86,6 @@ jobs:
             single_test_args="-run ${{ inputs.test_name }} -count ${{ inputs.n_runs }}"
             if [[ "${{ inputs.test_runner }}" == "64GB RAM (ubuntu-22.04)" ]]; then
               runs_on='[ "ubuntu-latest-16-cores" ]'
-            fi 
-            dbs_arr=()
-            if [[ "${{ inputs.cassandra }}" == "true" ]]; then dbs_arr+=("cassandra"); fi
-            if [[ "${{ inputs.sqlite }}" == "true" ]]; then dbs_arr+=("sqlite"); fi
-            if [[ ${#dbs_arr[@]} == 0 ]]; then
-              dbs='["sqlite"]'
-            else
-              dbs=$(jq -c -n '$ARGS.positional' --args "${dbs_arr[@]}")
             fi
           fi
           {
@@ -117,7 +95,6 @@ jobs:
             echo "test_timeout=${timeout}m"
             echo "single_test_args=$single_test_args"
             echo "runs_on=$runs_on"
-            echo "dbs=$dbs" 
           } >> "$GITHUB_OUTPUT"
       - id: cat_output
         run: |
@@ -398,7 +375,7 @@ jobs:
       fail-fast: false
       matrix:
         runs-on: [ubuntu-20.04]
-        name: 
+        name:
           - cass_es
           - cass_es8
           - mysql8
