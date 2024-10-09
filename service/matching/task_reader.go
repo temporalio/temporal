@@ -106,6 +106,7 @@ func (tr *taskReader) Stop() {
 	}
 
 	tr.gorogrp.Cancel()
+	tr.gorogrp.Wait()
 }
 
 func (tr *taskReader) Signal() {
