@@ -566,6 +566,7 @@ func (r *workflowResetterImpl) terminateWorkflow(
 		nil,
 		consts.IdentityResetter,
 		false,
+		nil, // No links necessary.
 	)
 }
 
@@ -764,6 +765,7 @@ func reapplyEvents(
 				attr.GetIdentity(),
 				attr.GetHeader(),
 				attr.GetSkipGenerateWorkflowTask(),
+				event.Links,
 			); err != nil {
 				return reappliedEvents, err
 			}
