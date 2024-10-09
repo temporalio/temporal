@@ -22,14 +22,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package update
+// Generates event helper functions for setting and getting search attributes on history events.
+//go:generate go run ../../cmd/tools/gensearchattributehelpers -copyright_file ../../LICENSE
 
-import (
-	"testing"
-
-	"github.com/stretchr/testify/suite"
-)
-
-func TestResetWorkflowTestSuite(t *testing.T) {
-	suite.Run(t, new(ResetWorkflowTestSuite))
-}
+package searchattribute

@@ -57,7 +57,6 @@ import (
 	"go.temporal.io/server/service/history/tests"
 	"go.temporal.io/server/service/history/workflow"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
-	"go.temporal.io/server/service/history/workflow/update"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -554,6 +553,7 @@ func (s *workflowResetterSuite) TestTerminateWorkflow() {
 		nil,
 		consts.IdentityResetter,
 		false,
+		nil,
 	).Return(&historypb.HistoryEvent{}, nil)
 
 	err := s.workflowResetter.terminateWorkflow(mutableState, terminateReason)
@@ -602,9 +602,6 @@ func (s *workflowResetterSuite) TestReapplyContinueAsNewWorkflowEvents_WithOutCo
 	}, nil)
 
 	mutableState := workflow.NewMockMutableState(s.controller)
-	mutableState.EXPECT().VisitUpdates(gomock.Any()).Return()
-	mutableState.EXPECT().GetCurrentVersion().Return(int64(0))
-	currentUpdateRegistry := update.NewRegistry(mutableState)
 	currentWorkflow := NewMockWorkflow(s.controller)
 	smReg := hsm.NewRegistry()
 	s.NoError(workflow.RegisterStateMachine(smReg))
@@ -615,7 +612,6 @@ func (s *workflowResetterSuite) TestReapplyContinueAsNewWorkflowEvents_WithOutCo
 	lastVisitedRunID, err := s.workflowResetter.reapplyContinueAsNewWorkflowEvents(
 		ctx,
 		mutableState,
-		currentUpdateRegistry,
 		currentWorkflow,
 		s.namespaceID,
 		s.workflowID,
@@ -732,10 +728,7 @@ func (s *workflowResetterSuite) TestReapplyContinueAsNewWorkflowEvents_WithConti
 	s.NoError(err)
 
 	mutableState := workflow.NewMockMutableState(s.controller)
-	mutableState.EXPECT().VisitUpdates(gomock.Any()).Return()
-	mutableState.EXPECT().GetCurrentVersion().Return(int64(0))
 	mutableState.EXPECT().GetWorkflowKey().Return(definition.WorkflowKey{RunID: "random-run-id"})
-	currentUpdateRegistry := update.NewRegistry(mutableState)
 	currentWorkflow := NewMockWorkflow(s.controller)
 	currentWorkflow.EXPECT().GetMutableState().Return(mutableState)
 	smReg := hsm.NewRegistry()
@@ -747,7 +740,6 @@ func (s *workflowResetterSuite) TestReapplyContinueAsNewWorkflowEvents_WithConti
 	lastVisitedRunID, err := s.workflowResetter.reapplyContinueAsNewWorkflowEvents(
 		ctx,
 		mutableState,
-		currentUpdateRegistry,
 		currentWorkflow,
 		s.namespaceID,
 		s.workflowID,
@@ -899,6 +891,7 @@ func (s *workflowResetterSuite) TestReapplyEvents() {
 				attr.GetIdentity(),
 				attr.GetHeader(),
 				attr.GetSkipGenerateWorkflowTask(),
+				event.Links,
 			).Return(&historypb.HistoryEvent{}, nil)
 		case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ADMITTED:
 			attr := event.GetWorkflowExecutionUpdateAdmittedEventAttributes()

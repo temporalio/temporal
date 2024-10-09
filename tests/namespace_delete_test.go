@@ -22,13 +22,15 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package namespace
+package tests
 
 import (
 	"errors"
+	"flag"
 	"fmt"
 	"os"
 	"strconv"
+	"testing"
 	"time"
 	"unicode/utf8"
 
@@ -70,6 +72,11 @@ type (
 	}
 )
 
+func TestNamespaceSuite(t *testing.T) {
+	flag.Parse()
+	suite.Run(t, &namespaceTestSuite{})
+}
+
 func (s *namespaceTestSuite) SetupSuite() {
 	s.logger = log.NewTestLogger()
 	s.testClusterFactory = testcore.NewTestClusterFactory()
@@ -100,7 +107,7 @@ func (s *namespaceTestSuite) SetupSuite() {
 }
 
 func (s *namespaceTestSuite) TearDownSuite() {
-	s.cluster.TearDownCluster()
+	_ = s.cluster.TearDownCluster()
 }
 
 func (s *namespaceTestSuite) SetupTest() {

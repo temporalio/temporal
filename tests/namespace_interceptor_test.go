@@ -22,12 +22,14 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package namespace
+package tests
 
 import (
+	"testing"
 	"time"
 
 	"github.com/pborman/uuid"
+	"github.com/stretchr/testify/suite"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -41,6 +43,10 @@ import (
 
 type NamespaceInterceptorTestSuite struct {
 	testcore.FunctionalSuite
+}
+
+func TestNamespaceInterceptorTestSuite(t *testing.T) {
+	suite.Run(t, new(NamespaceInterceptorTestSuite))
 }
 
 func (s *NamespaceInterceptorTestSuite) TestServerRejectsInvalidRequests() {

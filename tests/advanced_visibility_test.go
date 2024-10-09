@@ -22,20 +22,23 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package visibility
+package tests
 
 import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"flag"
 	"fmt"
 	"strconv"
 	"strings"
+	"testing"
 	"time"
 
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -87,6 +90,11 @@ type AdvancedVisibilitySuite struct {
 	sdkClient              sdkclient.Client
 	// client for the system namespace
 	sysSDKClient sdkclient.Client
+}
+
+func TestAdvancedVisibilitySuite(t *testing.T) {
+	flag.Parse()
+	suite.Run(t, new(AdvancedVisibilitySuite))
 }
 
 // This cluster use customized threshold for history config
@@ -2035,8 +2043,8 @@ func (s *AdvancedVisibilitySuite) Test_BuildIdIndexedOnCompletion_VersionedWorke
 	childId2 := "child2-" + id
 	workflowType := "functional-build-id"
 	taskQueue := testcore.RandomizeStr(s.T().Name())
-	v1 := s.T().Name() + "-v1"
-	v11 := s.T().Name() + "-v11"
+	buildIdv1 := s.T().Name() + "-v1"
+	buildIdv11 := s.T().Name() + "-v11"
 
 	startedCh := make(chan string, 1)
 
@@ -2075,14 +2083,14 @@ func (s *AdvancedVisibilitySuite) Test_BuildIdIndexedOnCompletion_VersionedWorke
 		Namespace: s.Namespace(),
 		TaskQueue: taskQueue,
 		Operation: &workflowservice.UpdateWorkerBuildIdCompatibilityRequest_AddNewBuildIdInNewDefaultSet{
-			AddNewBuildIdInNewDefaultSet: v1,
+			AddNewBuildIdInNewDefaultSet: buildIdv1,
 		},
 	})
 	s.Require().NoError(err)
 
 	// Start first worker
 	w1 := worker.New(s.sdkClient, taskQueue, worker.Options{
-		BuildID:                      v1,
+		BuildID:                      buildIdv1,
 		UseBuildIDForVersioning:      true,
 		StickyScheduleToStartTimeout: time.Second,
 	})
@@ -2106,7 +2114,7 @@ func (s *AdvancedVisibilitySuite) Test_BuildIdIndexedOnCompletion_VersionedWorke
 		if len(buildIDs) == 0 {
 			return false
 		}
-		s.Equal([]string{worker_versioning.VersionedBuildIdSearchAttribute(v1)}, buildIDs)
+		s.Equal([]string{worker_versioning.VersionedBuildIdSearchAttribute(buildIdv1)}, buildIDs)
 		return true
 	}, time.Second*15, time.Millisecond*100)
 
@@ -2116,8 +2124,8 @@ func (s *AdvancedVisibilitySuite) Test_BuildIdIndexedOnCompletion_VersionedWorke
 		TaskQueue: taskQueue,
 		Operation: &workflowservice.UpdateWorkerBuildIdCompatibilityRequest_AddNewCompatibleBuildId{
 			AddNewCompatibleBuildId: &workflowservice.UpdateWorkerBuildIdCompatibilityRequest_AddNewCompatibleVersion{
-				ExistingCompatibleBuildId: v1,
-				NewBuildId:                v11,
+				ExistingCompatibleBuildId: buildIdv1,
+				NewBuildId:                buildIdv11,
 			},
 		},
 	})
@@ -2125,7 +2133,7 @@ func (s *AdvancedVisibilitySuite) Test_BuildIdIndexedOnCompletion_VersionedWorke
 
 	// Start v1.1 worker
 	w11 := worker.New(s.sdkClient, taskQueue, worker.Options{
-		BuildID:                 v11,
+		BuildID:                 buildIdv11,
 		UseBuildIDForVersioning: true,
 	})
 	w11.RegisterWorkflowWithOptions(wf, workflow.RegisterOptions{Name: workflowType})
@@ -2145,11 +2153,11 @@ func (s *AdvancedVisibilitySuite) Test_BuildIdIndexedOnCompletion_VersionedWorke
 
 	// Verify both workers appear in the search attribute for first run in chain
 	buildIDs := s.getBuildIds(ctx, &commonpb.WorkflowExecution{WorkflowId: id, RunId: run.GetRunID()})
-	s.Equal([]string{worker_versioning.VersionedBuildIdSearchAttribute(v1), worker_versioning.VersionedBuildIdSearchAttribute(v11)}, buildIDs)
+	s.Equal([]string{worker_versioning.VersionedBuildIdSearchAttribute(buildIdv1), worker_versioning.VersionedBuildIdSearchAttribute(buildIdv11)}, buildIDs)
 
 	// Check search attribute is propagated after first continue as new
 	buildIDs = s.getBuildIds(ctx, &commonpb.WorkflowExecution{WorkflowId: id})
-	s.Equal([]string{worker_versioning.VersionedBuildIdSearchAttribute(v11)}, buildIDs)
+	s.Equal([]string{worker_versioning.VersionedBuildIdSearchAttribute(buildIdv11)}, buildIDs)
 
 	// Resume and wait for the workflow CAN for the last time
 	err = s.sdkClient.SignalWorkflow(ctx, id, "", "continue", nil)
@@ -2165,7 +2173,7 @@ func (s *AdvancedVisibilitySuite) Test_BuildIdIndexedOnCompletion_VersionedWorke
 
 	// Check search attribute is propagated to first child
 	buildIDs = s.getBuildIds(ctx, &commonpb.WorkflowExecution{WorkflowId: childId1})
-	s.Equal([]string{worker_versioning.VersionedBuildIdSearchAttribute(v11)}, buildIDs)
+	s.Equal([]string{worker_versioning.VersionedBuildIdSearchAttribute(buildIdv11)}, buildIDs)
 
 	// Check search attribute is not propagated to second child
 	buildIDs = s.getBuildIds(ctx, &commonpb.WorkflowExecution{WorkflowId: childId2})
@@ -2175,7 +2183,7 @@ func (s *AdvancedVisibilitySuite) Test_BuildIdIndexedOnCompletion_VersionedWorke
 	s.Eventually(func() bool {
 		response, err := s.FrontendClient().ListWorkflowExecutions(ctx, &workflowservice.ListWorkflowExecutionsRequest{
 			Namespace: s.Namespace(),
-			Query:     fmt.Sprintf("BuildIds = %q", worker_versioning.VersionedBuildIdSearchAttribute(v11)),
+			Query:     fmt.Sprintf("BuildIds = %q", worker_versioning.VersionedBuildIdSearchAttribute(buildIdv11)),
 			PageSize:  testcore.DefaultPageSize,
 		})
 		if err != nil {
@@ -2197,7 +2205,7 @@ func (s *AdvancedVisibilitySuite) Test_BuildIdIndexedOnReset() {
 	id := testcore.RandomizeStr(s.T().Name())
 	workflowType := "functional-build-id"
 	taskQueue := testcore.RandomizeStr(s.T().Name())
-	v1 := s.T().Name() + "-v1"
+	buildIdv1 := s.T().Name() + "-v1"
 
 	startedCh := make(chan struct{})
 	wf := func(ctx workflow.Context) error {
@@ -2217,14 +2225,14 @@ func (s *AdvancedVisibilitySuite) Test_BuildIdIndexedOnReset() {
 		Namespace: s.Namespace(),
 		TaskQueue: taskQueue,
 		Operation: &workflowservice.UpdateWorkerBuildIdCompatibilityRequest_AddNewBuildIdInNewDefaultSet{
-			AddNewBuildIdInNewDefaultSet: v1,
+			AddNewBuildIdInNewDefaultSet: buildIdv1,
 		},
 	})
 	s.Require().NoError(err)
 
 	// Start a worker
 	w := worker.New(s.sdkClient, taskQueue, worker.Options{
-		BuildID:                      v1,
+		BuildID:                      buildIdv1,
 		UseBuildIDForVersioning:      true,
 		StickyScheduleToStartTimeout: time.Second,
 	})
@@ -2254,12 +2262,12 @@ func (s *AdvancedVisibilitySuite) Test_BuildIdIndexedOnReset() {
 	})
 	s.Require().NoError(err)
 	buildIDs := s.getBuildIds(ctx, &commonpb.WorkflowExecution{WorkflowId: id, RunId: resetResult.RunId})
-	s.Equal([]string{worker_versioning.VersionedBuildIdSearchAttribute(v1)}, buildIDs)
+	s.Equal([]string{worker_versioning.VersionedBuildIdSearchAttribute(buildIdv1)}, buildIDs)
 
 	s.Eventually(func() bool {
 		response, err := s.FrontendClient().ListWorkflowExecutions(ctx, &workflowservice.ListWorkflowExecutionsRequest{
 			Namespace: s.Namespace(),
-			Query:     fmt.Sprintf("BuildIds = %q AND RunId = %q", worker_versioning.VersionedBuildIdSearchAttribute(v1), resetResult.RunId),
+			Query:     fmt.Sprintf("BuildIds = %q AND RunId = %q", worker_versioning.VersionedBuildIdSearchAttribute(buildIdv1), resetResult.RunId),
 			PageSize:  testcore.DefaultPageSize,
 		})
 		if err != nil {
@@ -2281,10 +2289,10 @@ func (s *AdvancedVisibilitySuite) Test_BuildIdIndexedOnRetry() {
 	id := testcore.RandomizeStr(s.T().Name())
 	workflowType := "functional-build-id"
 	taskQueue := testcore.RandomizeStr(s.T().Name())
-	v1 := s.T().Name() + "-v1"
+	buildIdv1 := s.T().Name() + "-v1"
 
 	wf := func(ctx workflow.Context) error {
-		return fmt.Errorf("fail")
+		return fmt.Errorf("fail") //nolint:goerr113
 	}
 
 	// Declare v1
@@ -2292,14 +2300,14 @@ func (s *AdvancedVisibilitySuite) Test_BuildIdIndexedOnRetry() {
 		Namespace: s.Namespace(),
 		TaskQueue: taskQueue,
 		Operation: &workflowservice.UpdateWorkerBuildIdCompatibilityRequest_AddNewBuildIdInNewDefaultSet{
-			AddNewBuildIdInNewDefaultSet: v1,
+			AddNewBuildIdInNewDefaultSet: buildIdv1,
 		},
 	})
 	s.Require().NoError(err)
 
 	// Start a worker
 	w := worker.New(s.sdkClient, taskQueue, worker.Options{
-		BuildID:                      v1,
+		BuildID:                      buildIdv1,
 		UseBuildIDForVersioning:      true,
 		StickyScheduleToStartTimeout: time.Second,
 	})
@@ -2321,12 +2329,12 @@ func (s *AdvancedVisibilitySuite) Test_BuildIdIndexedOnRetry() {
 	s.Require().Error(run.Get(ctx, nil))
 
 	buildIDs := s.getBuildIds(ctx, &commonpb.WorkflowExecution{WorkflowId: id})
-	s.Equal([]string{worker_versioning.VersionedBuildIdSearchAttribute(v1)}, buildIDs)
+	s.Equal([]string{worker_versioning.VersionedBuildIdSearchAttribute(buildIdv1)}, buildIDs)
 
 	s.Eventually(func() bool {
 		response, err := s.FrontendClient().ListWorkflowExecutions(ctx, &workflowservice.ListWorkflowExecutionsRequest{
 			Namespace: s.Namespace(),
-			Query:     fmt.Sprintf("BuildIds = %q", worker_versioning.VersionedBuildIdSearchAttribute(v1)),
+			Query:     fmt.Sprintf("BuildIds = %q", worker_versioning.VersionedBuildIdSearchAttribute(buildIdv1)),
 			PageSize:  testcore.DefaultPageSize,
 		})
 		if err != nil {
@@ -2347,7 +2355,7 @@ func (s *AdvancedVisibilitySuite) TestWorkerTaskReachability_ByBuildId() {
 	tq3 := s.T().Name() + "-3"
 	v0 := s.T().Name() + "-v0"
 	v01 := s.T().Name() + "-v0.1"
-	v1 := s.T().Name() + "-v1"
+	buildIdv1 := s.T().Name() + "-v1"
 	var err error
 
 	_, err = s.FrontendClient().UpdateWorkerBuildIdCompatibility(ctx, &workflowservice.UpdateWorkerBuildIdCompatibilityRequest{
@@ -2445,7 +2453,7 @@ func (s *AdvancedVisibilitySuite) TestWorkerTaskReachability_ByBuildId() {
 		Namespace: s.Namespace(),
 		TaskQueue: tq1,
 		Operation: &workflowservice.UpdateWorkerBuildIdCompatibilityRequest_AddNewBuildIdInNewDefaultSet{
-			AddNewBuildIdInNewDefaultSet: v1,
+			AddNewBuildIdInNewDefaultSet: buildIdv1,
 		},
 	})
 	s.Require().NoError(err)
@@ -2602,15 +2610,15 @@ func (s *AdvancedVisibilitySuite) TestWorkerTaskReachability_Unversioned_InTaskQ
 func (s *AdvancedVisibilitySuite) TestBuildIdScavenger_DeletesUnusedBuildId() {
 	ctx := testcore.NewContext()
 	tq := s.T().Name()
-	v0 := s.T().Name() + "-v0"
-	v1 := s.T().Name() + "-v1"
+	buildIdv0 := s.T().Name() + "-v0"
+	buildIdv1 := s.T().Name() + "-v1"
 	var err error
 
 	_, err = s.FrontendClient().UpdateWorkerBuildIdCompatibility(ctx, &workflowservice.UpdateWorkerBuildIdCompatibilityRequest{
 		Namespace: s.Namespace(),
 		TaskQueue: tq,
 		Operation: &workflowservice.UpdateWorkerBuildIdCompatibilityRequest_AddNewBuildIdInNewDefaultSet{
-			AddNewBuildIdInNewDefaultSet: v0,
+			AddNewBuildIdInNewDefaultSet: buildIdv0,
 		},
 	})
 	s.Require().NoError(err)
@@ -2618,7 +2626,7 @@ func (s *AdvancedVisibilitySuite) TestBuildIdScavenger_DeletesUnusedBuildId() {
 		Namespace: s.Namespace(),
 		TaskQueue: tq,
 		Operation: &workflowservice.UpdateWorkerBuildIdCompatibilityRequest_AddNewBuildIdInNewDefaultSet{
-			AddNewBuildIdInNewDefaultSet: v1,
+			AddNewBuildIdInNewDefaultSet: buildIdv1,
 		},
 	})
 	s.Require().NoError(err)
@@ -2638,11 +2646,11 @@ func (s *AdvancedVisibilitySuite) TestBuildIdScavenger_DeletesUnusedBuildId() {
 	})
 	s.Require().NoError(err)
 	s.Require().Equal(1, len(compatibility.Sets))
-	s.Require().Equal([]string{v1}, compatibility.Sets[0].BuildIDs)
+	s.Require().Equal([]string{buildIdv1}, compatibility.Sets[0].BuildIDs)
 	// Make sure the build ID was removed from the build ID->task queue mapping
 	res, err := s.sdkClient.WorkflowService().GetWorkerTaskReachability(ctx, &workflowservice.GetWorkerTaskReachabilityRequest{
 		Namespace: s.Namespace(),
-		BuildIds:  []string{v0},
+		BuildIds:  []string{buildIdv0},
 	})
 	s.Require().NoError(err)
 	s.Require().Equal(0, len(res.BuildIdReachability[0].TaskQueueReachability))

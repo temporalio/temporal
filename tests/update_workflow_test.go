@@ -22,16 +22,18 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package update
+package tests
 
 import (
 	"context"
 	"errors"
 	"fmt"
 	"strconv"
+	"testing"
 	"time"
 
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -58,9 +60,9 @@ type UpdateWorkflowSuite struct {
 	WorkflowUpdateBaseSuite
 }
 
-type updateResponseErr struct {
-	response *workflowservice.UpdateWorkflowExecutionResponse
-	err      error
+func TestUpdateWorkflowSuite(t *testing.T) {
+	s := new(UpdateWorkflowSuite)
+	suite.Run(t, s)
 }
 
 // TODO: extract sendUpdate* methods to separate package.
@@ -1442,7 +1444,7 @@ func (s *UpdateWorkflowSuite) TestUpdateWorkflow_StickySpeculativeWorkflowTask_A
 
 			// This is to make sure that sticky poller above reached server first.
 			// And when update comes, stick poller is already available.
-			time.Sleep(500 * time.Millisecond)
+			time.Sleep(500 * time.Millisecond) //nolint:forbidigo
 			updateResult := <-s.sendUpdateNoError(tv, "1")
 
 			s.EqualValues("success-result-of-"+tv.UpdateID("1"), testcore.DecodeString(s.T(), updateResult.GetOutcome().GetSuccess()))
@@ -1535,7 +1537,7 @@ func (s *UpdateWorkflowSuite) TestUpdateWorkflow_StickySpeculativeWorkflowTask_A
 	s.NoError(err)
 
 	s.Logger.Info("Sleep 10+ seconds to make sure stickyPollerUnavailableWindow time has passed.")
-	time.Sleep(10*time.Second + 100*time.Millisecond)
+	time.Sleep(10*time.Second + 100*time.Millisecond) //nolint:forbidigo
 	s.Logger.Info("Sleep 10+ seconds is done.")
 
 	// Now send an update. It should try sticky task queue first, but got "StickyWorkerUnavailable" error
@@ -2335,7 +2337,7 @@ func (s *UpdateWorkflowSuite) TestUpdateWorkflow_SpeculativeWorkflowTask_Fail() 
 			wtHandlerCalls++ // because it won't be called for case 3 but counter should be in sync.
 			// Fail WT one more time. Although 2nd attempt is normal WT, it is also transient and shouldn't appear in the history.
 			// Returning error will cause the poller to fail WT.
-			return nil, errors.New("malformed request")
+			return nil, errors.New("malformed request") //nolint:goerr113
 		case 4:
 			// 3rd attempt UpdateWorkflowExecution call has timed out but the
 			// update is still running
@@ -2344,7 +2346,7 @@ func (s *UpdateWorkflowSuite) TestUpdateWorkflow_SpeculativeWorkflowTask_Fail() 
 			wtHandlerCalls++ // because it won't be called for case 4 but counter should be in sync.
 			// Fail WT one more time. This is transient WT and shouldn't appear in the history.
 			// Returning error will cause the poller to fail WT.
-			return nil, errors.New("malformed request")
+			return nil, errors.New("malformed request") //nolint:goerr113
 		case 5:
 			return nil, nil
 		default:
@@ -2664,7 +2666,7 @@ func (s *UpdateWorkflowSuite) TestUpdateWorkflow_SpeculativeWorkflowTask_StartTo
   6 WorkflowTaskStarted
 `, task.History)
 			// Emulate slow worker: sleep little more than WT timeout.
-			time.Sleep(request.WorkflowTaskTimeout.AsDuration() + 100*time.Millisecond)
+			time.Sleep(request.WorkflowTaskTimeout.AsDuration() + 100*time.Millisecond) //nolint:forbidigo
 			// This doesn't matter because WT times out before update is applied.
 			return s.UpdateAcceptCompleteCommands(tv, "1"), nil
 		case 3:
@@ -2852,7 +2854,7 @@ func (s *UpdateWorkflowSuite) TestUpdateWorkflow_SpeculativeWorkflowTask_Schedul
 	s.sendUpdateNoError(tv, "1")
 
 	s.Logger.Info("Wait for sticky timeout to fire. Sleep poller.StickyScheduleToStartTimeout+ seconds.", tag.NewDurationTag("StickyScheduleToStartTimeout", poller.StickyScheduleToStartTimeout))
-	time.Sleep(poller.StickyScheduleToStartTimeout + 100*time.Millisecond)
+	time.Sleep(poller.StickyScheduleToStartTimeout + 100*time.Millisecond) //nolint:forbidigo
 	s.Logger.Info("Sleep is done.")
 
 	// Try to process update in workflow, poll from normal task queue.
@@ -2951,7 +2953,7 @@ func (s *UpdateWorkflowSuite) TestUpdateWorkflow_SpeculativeWorkflowTask_Schedul
 	// TODO: it would be nice to shutdown matching before sending an update to emulate case which is actually being tested here.
 	//  But test infrastructure doesn't support it. 5 seconds sleep will cause same observable effect.
 	s.Logger.Info("Sleep 5+ seconds to make sure tasks.SpeculativeWorkflowTaskScheduleToStartTimeout time has passed.")
-	time.Sleep(5*time.Second + 100*time.Millisecond)
+	time.Sleep(5*time.Second + 100*time.Millisecond) //nolint:forbidigo
 	s.Logger.Info("Sleep 5+ seconds is done.")
 
 	// Process update in workflow.
@@ -4807,7 +4809,7 @@ func (s *UpdateWorkflowSuite) TestUpdateWorkflow_SpeculativeWorkflowTask_QueryFa
 	// will create new update and WFT.
 
 	// Wait to make sure that UpdateWorkflowExecution call is retried, update and speculative WFT are recreated.
-	time.Sleep(500 * time.Millisecond)
+	time.Sleep(500 * time.Millisecond) //nolint:forbidigo
 
 	// Process update in workflow.
 	res, err := poller.PollAndProcessWorkflowTask(testcore.WithoutRetries)

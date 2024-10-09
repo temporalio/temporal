@@ -112,6 +112,7 @@ func Invoke(
 				request.GetHeader(),
 				request.GetSkipGenerateWorkflowTask(),
 				externalWorkflowExecution,
+				request.GetLinks(),
 			)
 			if err != nil {
 				return nil, err

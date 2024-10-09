@@ -20,13 +20,16 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package update
+package tests
 
 import (
 	"context"
 	"errors"
 	"fmt"
+	"testing"
 	"time"
+
+	"github.com/stretchr/testify/suite"
 
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
@@ -46,6 +49,11 @@ var (
 
 type UpdateWorkflowClientSuite struct {
 	testcore.ClientFunctionalSuite
+}
+
+func TestUpdateWorkflowClientSuite(t *testing.T) {
+	s := new(UpdateWorkflowClientSuite)
+	suite.Run(t, s)
 }
 
 func (s *UpdateWorkflowClientSuite) TestUpdateWorkflow_TerminateWorkflowAfterUpdateAdmitted() {
