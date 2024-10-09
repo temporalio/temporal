@@ -1546,6 +1546,20 @@ func (e *matchingEngineImpl) GetBuildIdTaskQueueMapping(
 	return &matchingservice.GetBuildIdTaskQueueMappingResponse{TaskQueues: taskQueues}, nil
 }
 
+// TODO Shivam - remove this in 123
+func (e *matchingEngineImpl) ForceUnloadTaskQueue(
+	ctx context.Context,
+	req *matchingservice.ForceUnloadTaskQueueRequest,
+) (*matchingservice.ForceUnloadTaskQueueResponse, error) {
+	p, err := tqid.NormalPartitionFromRpcName(req.GetTaskQueue(), req.GetNamespaceId(), req.GetTaskQueueType())
+	if err != nil {
+		return nil, err
+	}
+
+	wasLoaded := e.unloadTaskQueuePartitionByKey(p, nil, unloadCauseForce)
+	return &matchingservice.ForceUnloadTaskQueueResponse{WasLoaded: wasLoaded}, nil
+}
+
 func (e *matchingEngineImpl) ForceLoadTaskQueuePartition(
 	ctx context.Context,
 	req *matchingservice.ForceLoadTaskQueuePartitionRequest,
@@ -1559,17 +1573,14 @@ func (e *matchingEngineImpl) ForceLoadTaskQueuePartition(
 	return &matchingservice.ForceLoadTaskQueuePartitionResponse{WasUnloaded: wasUnloaded}, nil
 }
 
-func (e *matchingEngineImpl) ForceUnloadTaskQueue(
+func (e *matchingEngineImpl) ForceUnloadTaskQueuePartition(
 	ctx context.Context,
-	req *matchingservice.ForceUnloadTaskQueueRequest,
-) (*matchingservice.ForceUnloadTaskQueueResponse, error) {
-	p, err := tqid.NormalPartitionFromRpcName(req.GetTaskQueue(), req.GetNamespaceId(), req.GetTaskQueueType())
-	if err != nil {
-		return nil, err
-	}
+	req *matchingservice.ForceUnloadTaskQueuePartitionRequest,
+) (*matchingservice.ForceUnloadTaskQueuePartitionResponse, error) {
+	partition := tqid.PartitionFromPartitionProto(req.GetTaskQueuePartition(), req.GetNamespaceId())
 
-	wasLoaded := e.unloadTaskQueuePartitionByKey(p, nil, unloadCauseForce)
-	return &matchingservice.ForceUnloadTaskQueueResponse{WasLoaded: wasLoaded}, nil
+	wasLoaded := e.unloadTaskQueuePartitionByKey(partition, nil, unloadCauseForce)
+	return &matchingservice.ForceUnloadTaskQueuePartitionResponse{WasLoaded: wasLoaded}, nil
 }
 
 func (e *matchingEngineImpl) UpdateTaskQueueUserData(ctx context.Context, request *matchingservice.UpdateTaskQueueUserDataRequest) (*matchingservice.UpdateTaskQueueUserDataResponse, error) {
@@ -1987,13 +1998,12 @@ func (e *matchingEngineImpl) updatePhysicalTaskQueueGauge(pqm *physicalTaskQueue
 
 	pm := pqm.partitionMgr
 	metrics.LoadedPhysicalTaskQueueGauge.With(
-		metrics.GetPerTaskQueuePartitionScope(
+		metrics.GetPerTaskQueuePartitionTypeScope(
 			e.metricsHandler,
 			pm.ns.Name().String(),
 			pm.Partition(),
 			// TODO: Track counters per TQ name so we can honor pm.config.BreakdownMetricsByTaskQueue(),
 			false,
-			false, // we don't want breakdown by partition ID, only sticky vs normal breakdown.
 		)).Record(
 		float64(loadedPhysicalTaskQueueCounter),
 		metrics.VersionedTag(versioned),
@@ -2051,13 +2061,12 @@ func (e *matchingEngineImpl) updateTaskQueuePartitionGauge(pm taskQueuePartition
 		metrics.TaskQueueTypeTag(taskQueueParameters.taskType),
 	)
 
-	taggedHandler := metrics.GetPerTaskQueuePartitionScope(
+	taggedHandler := metrics.GetPerTaskQueuePartitionTypeScope(
 		e.metricsHandler,
 		nsName,
 		pm.Partition(),
 		// TODO: Track counters per TQ name so we can honor pm.config.BreakdownMetricsByTaskQueue(),
 		false,
-		false, // we don't want breakdown by partition ID, only sticky vs normal breakdown.
 	)
 	metrics.LoadedTaskQueuePartitionGauge.With(taggedHandler).Record(float64(loadedTaskQueuePartitionCounter))
 }

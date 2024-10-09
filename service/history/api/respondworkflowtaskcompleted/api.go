@@ -464,6 +464,7 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 				nil,
 				consts.IdentityHistoryService,
 				false,
+				nil, // No links necessary.
 			)
 			if err != nil {
 				return nil, err
@@ -614,6 +615,7 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 				payloads.EncodeString(updateErr.Error()),
 				consts.IdentityHistoryService,
 				false,
+				nil, // no links necessary.
 			); err != nil {
 				return nil, err
 			}

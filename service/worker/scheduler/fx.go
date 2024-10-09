@@ -26,6 +26,7 @@ package scheduler
 
 import (
 	"fmt"
+	"math"
 	"time"
 
 	enumspb "go.temporal.io/api/enums/v1"
@@ -66,7 +67,7 @@ type (
 		specBuilder              *SpecBuilder // workflow dep
 		activityDeps             activityDeps
 		enabledForNs             dynamicconfig.BoolPropertyFnWithNamespaceFilter
-		globalNSStartWorkflowRPS dynamicconfig.FloatPropertyFnWithNamespaceFilter
+		globalNSStartWorkflowRPS dynamicconfig.TypedSubscribableWithNamespaceFilter[float64]
 		maxBlobSize              dynamicconfig.IntPropertyFnWithNamespaceFilter
 		localActivitySleepLimit  dynamicconfig.DurationPropertyFnWithNamespaceFilter
 	}
@@ -100,7 +101,7 @@ func NewResult(
 			specBuilder:              specBuilder,
 			activityDeps:             params,
 			enabledForNs:             dynamicconfig.WorkerEnableScheduler.Get(dc),
-			globalNSStartWorkflowRPS: dynamicconfig.SchedulerNamespaceStartWorkflowRPS.Get(dc),
+			globalNSStartWorkflowRPS: dynamicconfig.SchedulerNamespaceStartWorkflowRPS.Subscribe(dc),
 			maxBlobSize:              dynamicconfig.BlobSizeLimitError.Get(dc),
 			localActivitySleepLimit:  dynamicconfig.SchedulerLocalActivitySleepLimit.Get(dc),
 		},
@@ -113,24 +114,35 @@ func (s *workerComponent) DedicatedWorkerOptions(ns *namespace.Namespace) *worke
 	}
 }
 
-func (s *workerComponent) Register(registry sdkworker.Registry, ns *namespace.Namespace, details workercommon.RegistrationDetails) {
+func (s *workerComponent) Register(registry sdkworker.Registry, ns *namespace.Namespace, details workercommon.RegistrationDetails) func() {
 	wfFunc := func(ctx workflow.Context, args *schedspb.StartScheduleArgs) error {
 		return schedulerWorkflowWithSpecBuilder(ctx, args, s.specBuilder)
 	}
 	registry.RegisterWorkflowWithOptions(wfFunc, workflow.RegisterOptions{Name: WorkflowType})
-	registry.RegisterActivity(s.activities(ns.Name(), ns.ID(), details))
+
+	activities, cleanup := s.newActivities(ns.Name(), ns.ID(), details)
+	registry.RegisterActivity(activities)
+	return cleanup
 }
 
-func (s *workerComponent) activities(name namespace.Name, id namespace.ID, details workercommon.RegistrationDetails) *activities {
-	localRPS := func() float64 {
-		return float64(details.Multiplicity) * s.globalNSStartWorkflowRPS(name.String()) / float64(details.TotalWorkers)
+func (s *workerComponent) newActivities(name namespace.Name, id namespace.ID, details workercommon.RegistrationDetails) (*activities, func()) {
+	const burstRatio = 1.0
+
+	lim := quotas.NewRateLimiter(1, 1)
+	cb := func(rps float64) {
+		localRPS := rps * float64(details.Multiplicity) / float64(details.TotalWorkers)
+		burst := max(1, int(math.Ceil(localRPS*burstRatio)))
+		lim.SetRateBurst(localRPS, burst)
 	}
+	initialRPS, cancel := s.globalNSStartWorkflowRPS(name.String(), cb)
+	cb(initialRPS)
+
 	return &activities{
 		activityDeps:             s.activityDeps,
 		namespace:                name,
 		namespaceID:              id,
-		startWorkflowRateLimiter: quotas.NewDefaultOutgoingRateLimiter(localRPS),
+		startWorkflowRateLimiter: lim,
 		maxBlobSize:              func() int { return s.maxBlobSize(name.String()) },
 		localActivitySleepLimit:  func() time.Duration { return s.localActivitySleepLimit(name.String()) },
-	}
+	}, cancel
 }

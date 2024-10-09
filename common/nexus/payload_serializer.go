@@ -129,11 +129,13 @@ func (payloadSerializer) Serialize(v any) (*nexus.Content, error) {
 		return nil, fmt.Errorf("%w: cannot serialize %v", errSerializer, v)
 	}
 
+	// Use the "nil" Nexus Content representation for nil Payloads.
 	if payload == nil {
-		return &nexus.Content{}, nil
+		// Use same structure as the nil serializer from the Nexus Go SDK.
+		return &nexus.Content{Header: nexus.Header{}}, nil
 	}
 
-	if payload.GetMetadata() == nil {
+	if len(payload.GetMetadata()) == 0 {
 		return xTemporalPayload(payload)
 	}
 

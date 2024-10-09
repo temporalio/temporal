@@ -457,6 +457,9 @@ message ActivityInfo {
         // workflows redirect_counter value when this activity started last time
         int64 last_redirect_counter = 2;
     }
+
+    // fist time activity was schedulled.
+    google.protobuf.Timestamp first_scheduled_time = 39;
 }
 
 // timer_map column

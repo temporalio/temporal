@@ -1314,7 +1314,7 @@ func (s *sutTestingAdapter) AddTimeoutWorkflowEvent(_ ...eventConfig) *historypb
 }
 
 func (s *sutTestingAdapter) AddWorkflowExecutionTerminatedEvent(_ ...eventConfig) *historypb.HistoryEvent {
-	return s.HistoryBuilder.AddWorkflowExecutionTerminatedEvent("no reason to terminate", nil, "identity-secret")
+	return s.HistoryBuilder.AddWorkflowExecutionTerminatedEvent("no reason to terminate", nil, "identity-secret", nil)
 }
 
 func (s *sutTestingAdapter) AddWorkflowExecutionUpdateAcceptedEvent(_ ...eventConfig) *historypb.HistoryEvent {
@@ -1452,6 +1452,7 @@ func (s *sutTestingAdapter) AddWorkflowExecutionSignaledEvent(_ ...eventConfig) 
 		"identity-1",
 		nil,
 		false,
+		nil,
 		nil,
 	)
 }

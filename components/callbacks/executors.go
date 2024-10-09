@@ -183,7 +183,9 @@ func (e taskExecutor) saveResult(
 		return hsm.MachineTransition(node, func(callback Callback) (hsm.TransitionOutput, error) {
 			switch result {
 			case ok:
-				return TransitionSucceeded.Apply(callback, EventSucceeded{})
+				return TransitionSucceeded.Apply(callback, EventSucceeded{
+					Time: env.Now(),
+				})
 			case retry:
 				return TransitionAttemptFailed.Apply(callback, EventAttemptFailed{
 					Time:        env.Now(),

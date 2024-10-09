@@ -136,7 +136,6 @@ func (r *workflowResetterImpl) ResetWorkflow(
 	var currentWorkflowEventsSeq []*persistence.WorkflowEvents
 	var reapplyEventsFn workflowResetReapplyEventsFn
 	currentMutableState := currentWorkflow.GetMutableState()
-	currentUpdateRegistry := currentWorkflow.GetContext().UpdateRegistry(ctx, nil)
 	if currentMutableState.IsWorkflowExecutionRunning() {
 		if err := r.terminateWorkflow(
 			currentMutableState,
@@ -157,7 +156,6 @@ func (r *workflowResetterImpl) ResetWorkflow(
 			lastVisitedRunID, err := r.reapplyContinueAsNewWorkflowEvents(
 				ctx,
 				resetMutableState,
-				currentUpdateRegistry,
 				currentWorkflow,
 				namespaceID,
 				workflowID,
@@ -185,7 +183,6 @@ func (r *workflowResetterImpl) ResetWorkflow(
 			_, err := r.reapplyContinueAsNewWorkflowEvents(
 				ctx,
 				resetMutableState,
-				currentUpdateRegistry,
 				currentWorkflow,
 				namespaceID,
 				workflowID,
@@ -505,8 +502,9 @@ func (r *workflowResetterImpl) failInflightActivity(
 		switch ai.StartedEventId {
 		case common.EmptyEventID:
 			// activity not started, noop
-			// override the activity time to now
+			// override the scheduled activity time to now
 			ai.ScheduledTime = timestamppb.New(now)
+			ai.FirstScheduledTime = timestamppb.New(now)
 			if err := mutableState.UpdateActivity(ai); err != nil {
 				return err
 			}
@@ -568,13 +566,13 @@ func (r *workflowResetterImpl) terminateWorkflow(
 		nil,
 		consts.IdentityResetter,
 		false,
+		nil, // No links necessary.
 	)
 }
 
 func (r *workflowResetterImpl) reapplyContinueAsNewWorkflowEvents(
 	ctx context.Context,
 	resetMutableState workflow.MutableState,
-	currentUpdateRegistry update.Registry,
 	currentWorkflow Workflow,
 	namespaceID namespace.ID,
 	workflowID string,
@@ -767,6 +765,7 @@ func reapplyEvents(
 				attr.GetIdentity(),
 				attr.GetHeader(),
 				attr.GetSkipGenerateWorkflowTask(),
+				event.Links,
 			); err != nil {
 				return reappliedEvents, err
 			}

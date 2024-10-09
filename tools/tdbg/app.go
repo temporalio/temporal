@@ -126,7 +126,7 @@ func NewCliApp(opts ...Option) *cli.App {
 		},
 		&cli.StringFlag{
 			Name:  color.FlagColor,
-			Usage: fmt.Sprintf("when to use color: %v, %v, %v.", color.Auto, color.Always, color.Never),
+			Usage: fmt.Sprintf("When to use color: %v, %v, %v.", color.Auto, color.Always, color.Never),
 			Value: string(color.Auto),
 		},
 	}

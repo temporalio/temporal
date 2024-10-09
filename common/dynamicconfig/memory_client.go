@@ -26,48 +26,107 @@ package dynamicconfig
 
 import (
 	"sync"
+	"sync/atomic"
 )
 
-type MemoryClient struct {
-	lock      sync.RWMutex
-	overrides map[Key]any
+type (
+	MemoryClient struct {
+		lock      sync.RWMutex
+		overrides []kvpair
+
+		subscriptionIdx int
+		subscriptions   map[int]ClientUpdateFunc
+	}
+
+	kvpair struct {
+		valid bool
+		key   Key
+		value any
+	}
+)
+
+// NewMemoryClient - returns a memory based dynamic config client
+func NewMemoryClient() *MemoryClient {
+	return &MemoryClient{subscriptions: make(map[int]ClientUpdateFunc)}
 }
 
-func (d *MemoryClient) GetValue(name Key) []ConstrainedValue {
+func (d *MemoryClient) GetValue(key Key) []ConstrainedValue {
 	d.lock.RLock()
 	defer d.lock.RUnlock()
-	if v, ok := d.overrides[name]; ok {
-		if value, ok := v.([]ConstrainedValue); ok {
-			return value
+	return d.getValueLocked(key)
+}
+
+func (d *MemoryClient) getValueLocked(key Key) []ConstrainedValue {
+	for i := len(d.overrides) - 1; i >= 0; i-- {
+		if d.overrides[i].valid && d.overrides[i].key == key {
+			v := d.overrides[i].value
+			if value, ok := v.([]ConstrainedValue); ok {
+				return value
+			}
+			return []ConstrainedValue{{Value: v}}
 		}
-		return []ConstrainedValue{{Value: v}}
 	}
 	return nil
 }
 
-func (d *MemoryClient) OverrideValue(setting GenericSetting, value any) {
-	d.OverrideValueByKey(setting.Key(), value)
-}
-
-func (d *MemoryClient) OverrideValueByKey(name Key, value any) {
+func (d *MemoryClient) Subscribe(f ClientUpdateFunc) (cancel func()) {
 	d.lock.Lock()
 	defer d.lock.Unlock()
-	d.overrides[name] = value
+
+	d.subscriptionIdx++
+	id := d.subscriptionIdx
+	d.subscriptions[id] = f
+
+	return func() {
+		d.lock.Lock()
+		defer d.lock.Unlock()
+		delete(d.subscriptions, id)
+	}
 }
 
-func (d *MemoryClient) RemoveOverride(setting GenericSetting) {
-	d.RemoveOverrideByKey(setting.Key())
+func (d *MemoryClient) OverrideSetting(setting GenericSetting, value any) (cleanup func()) {
+	return d.OverrideValue(setting.Key(), value)
 }
 
-func (d *MemoryClient) RemoveOverrideByKey(name Key) {
+func (d *MemoryClient) OverrideValue(key Key, value any) (cleanup func()) {
 	d.lock.Lock()
 	defer d.lock.Unlock()
-	delete(d.overrides, name)
+
+	var idx atomic.Int64
+	idx.Store(int64(len(d.overrides)))
+
+	d.overrides = append(d.overrides, kvpair{valid: true, key: key, value: value})
+
+	newValue := d.getValueLocked(key)
+	changed := map[Key][]ConstrainedValue{key: newValue}
+	for _, update := range d.subscriptions {
+		update(changed)
+	}
+
+	return func() {
+		// only do this once
+		if removeIdx := int(idx.Swap(-1)); removeIdx >= 0 {
+			d.remove(removeIdx)
+		}
+	}
 }
 
-// NewMemoryClient - returns a memory based dynamic config client
-func NewMemoryClient() *MemoryClient {
-	return &MemoryClient{
-		overrides: make(map[Key]any),
+func (d *MemoryClient) remove(idx int) {
+	d.lock.Lock()
+	defer d.lock.Unlock()
+
+	key := d.overrides[idx].key
+	// mark this pair deleted
+	d.overrides[idx] = kvpair{}
+
+	// pop all deleted pairs
+	for l := len(d.overrides); l > 0 && !d.overrides[l-1].valid; l = len(d.overrides) {
+		d.overrides = d.overrides[:l-1]
+	}
+
+	newValue := d.getValueLocked(key)
+	changed := map[Key][]ConstrainedValue{key: newValue}
+	for _, update := range d.subscriptions {
+		update(changed)
 	}
 }

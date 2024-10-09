@@ -94,6 +94,7 @@ func Invoke(
 				request.GetDetails(),
 				request.GetIdentity(),
 				false,
+				request.GetLinks(),
 			)
 		},
 		nil,
