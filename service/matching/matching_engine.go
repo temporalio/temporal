@@ -951,8 +951,6 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 			// collect internal info
 			numPartitions := max(tqConfig.NumWritePartitions(), tqConfig.NumReadPartitions())
 
-			//fmt.Println("conducting fan out!")
-
 			for _, taskQueueType := range req.TaskQueueTypes {
 				for i := 0; i < numPartitions; i++ {
 					partitionResp, err := e.matchingRawClient.DescribeTaskQueuePartition(ctx, &matchingservice.DescribeTaskQueuePartitionRequest{

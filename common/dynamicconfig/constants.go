@@ -1201,8 +1201,7 @@ these log lines can be noisy, we want to be able to turn on and sample selective
 	CachedPhysicalInfoByBuildIdTTL = NewTaskQueueDurationSetting(
 		"matching.cachedPhysicalInfoByBuildIdTTL",
 		time.Second,
-		`cachedPhysicalInfoByBuildIdTTL acts as a cache TTL for taskQueuePartitionManager.cachedPhysicalInfoByBuildIdCache and
-		is responsible for setting the time limit before an update to this variable`,
+		`cachedPhysicalInfoByBuildIdTTL acts as a cache TTL for cachedPhysicalInfoByBuildIdCache`,
 	)
 	// for matching testing only:
 

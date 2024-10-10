@@ -27,7 +27,6 @@ package matching
 import (
 	"context"
 	"errors"
-	"fmt"
 	"math"
 	"strconv"
 	"sync"
@@ -550,7 +549,6 @@ func (tm *TaskMatcher) poll(
 			return task, false, nil
 		case token := <-tm.fwdrPollReqTokenC():
 			// Arrange to cancel this request if closeC is closed
-			fmt.Println("forwarding poll request in matcher")
 			fwdCtx, cancel := contextWithCancelOnChannelClose(ctx, tm.closeC)
 			task, err := tm.fwdr.ForwardPoll(fwdCtx, pollMetadata)
 			cancel()
