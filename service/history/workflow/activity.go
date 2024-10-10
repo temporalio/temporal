@@ -94,12 +94,12 @@ func ActivityState(ai *persistence.ActivityInfo) enumspb.PendingActivityState {
 }
 
 func GetPendingActivityInfo(
-	ctx context.Context, //only used as a passthrough to GetActivityType
-	shard shard.Context,
+	ctx context.Context, // only used as a passthrough to GetActivityType
+	shardContext shard.Context,
 	mutableState MutableState,
 	ai *persistence.ActivityInfo,
 ) (*workflowpb.PendingActivityInfo, error) {
-	now := shard.GetTimeSource().Now().UTC()
+	now := shardContext.GetTimeSource().Now().UTC()
 
 	p := &workflowpb.PendingActivityInfo{
 		ActivityId: ai.ActivityId,
