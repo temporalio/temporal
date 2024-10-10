@@ -409,12 +409,15 @@ func (s *SyncStateRetrieverImpl) getEventsBlob(
 				break
 			}
 			left := endEventId - startEventId
-			if int64(len(xdcCacheValue.EventBlobs)) >= left {
+			if startEventId != common.FirstEventID && int64(len(xdcCacheValue.EventBlobs)) >= left {
 				eventBlobs = append(eventBlobs, xdcCacheValue.EventBlobs[:left]...)
 				return eventBlobs, nil
 			}
 			eventBlobs = append(eventBlobs, xdcCacheValue.EventBlobs...)
 			startEventId = xdcCacheValue.NextEventID
+			if startEventId >= endEventId {
+				return eventBlobs, nil
+			}
 		}
 	}
 
