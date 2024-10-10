@@ -1,6 +1,6 @@
 name: All Tests
 
-run-name: ${{ inputs.test_name }}
+run-name: ${{ inputs.test_name }}${{ inputs.test_dbs }}
 
 on:
   pull_request:
@@ -325,11 +325,11 @@ jobs:
         include:
           - name: cass_es
             persistence_type: nosql
-            persistence_driver: elasticsearch
+            persistence_driver: cassandra
             containers: [cassandra, elasticsearch]
           - name: cass_es8
             persistence_type: nosql
-            persistence_driver: elasticsearch
+            persistence_driver: cassandra
             containers: [cassandra, elasticsearch8]
           - name: mysql8
             persistence_type: sql
@@ -399,12 +399,12 @@ jobs:
         include:
           - name: cass_es
             persistence_type: nosql
-            persistence_driver: elasticsearch
+            persistence_driver: cassandra
             containers: [cassandra, elasticsearch]
             es_version: v7
           - name: cass_es8
             persistence_type: nosql
-            persistence_driver: elasticsearch
+            persistence_driver: cassandra
             containers: [cassandra, elasticsearch8]
             es_version: v8
           - name: mysql8
