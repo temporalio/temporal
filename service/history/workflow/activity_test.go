@@ -24,13 +24,13 @@ package workflow
 
 import (
 	"context"
-	"google.golang.org/protobuf/types/known/durationpb"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"go.uber.org/mock/gomock"
+	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	commonpb "go.temporal.io/api/common/v1"
