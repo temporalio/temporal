@@ -67,38 +67,56 @@ jobs:
     name: Set up single test
     runs-on: ubuntu-20.04
     outputs:
-      shard_indices: ${{ steps.generate_output.outputs.shard_indices }}
-      total_shards: ${{ steps.generate_output.outputs.shards }}
-      github_timeout: ${{ steps.generate_output.outputs.github_timeout }}
-      test_timeout: ${{ steps.generate_output.outputs.test_timeout }}
-      single_test_args: ${{ steps.generate_output.outputs.single_test_args }}
-      runs_on: ${{ steps.generate_output.outputs.runs_on }}
-      dbs: ${{ inputs.test_dbs }}
+      modified_unit_test_suites: ${{ steps.collect_modified_tests.outputs.MODIFIED_UNIT_TEST_SUITES }}
+      modified_integration_test_suites: ${{ steps.collect_modified_tests.outputs.MODIFIED_INTEGRATION_TEST_SUITES }}
+      modified_functional_test_suites: ${{ steps.collect_modified_tests.outputs.MODIFIED_FUNCTIONAL_TEST_SUITES }}
+      modified_functional_test_ndc_suites: ${{ steps.collect_modified_tests.outputs.MODIFIED_FUNCTIONAL_TEST_NDC_SUITES }}
+      modified_functional_test_xdc_suites: ${{ steps.collect_modified_tests.outputs.MODIFIED_FUNCTIONAL_TEST_XDC_SUITES }}
     steps:
-      - id: generate_output
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          ref: ${{ env.COMMIT }}
+          fetch-depth: 0
+
+      - name: Get Modified Test Files
+        id: get_modified_tests
         run: |
-          shards=3
-          timeout=30
-          runs_on='["ubuntu-20.04"]'
-          if [[ "${{ inputs.run_single_functional_test }}" == "true" || "${{ inputs.run_single_unit_test }}" == "true" ]]; then
-            shards=1
-            timeout=${{ inputs.timeout_minutes }}
-            single_test_args="-run ${{ inputs.test_name }} -count ${{ inputs.n_runs }}"
-            if [[ "${{ inputs.test_runner }}" == "64GB RAM (ubuntu-22.04)" ]]; then
-              runs_on='[ "ubuntu-latest-16-cores" ]'
-            fi
+          if [[ "${{ github.event_name }}" != "pull_request" ]]; then
+            echo "MODIFIED_TEST_FILES=" >> "$GITHUB_ENV"
+            exit 0
           fi
-          {
-            echo "shard_indices=[ $(seq -s, 0 $((shards-1))) ]"
-            echo "shards=$shards"
-            echo "github_timeout=$((timeout+5))"
-            echo "test_timeout=${timeout}m"
-            echo "single_test_args=$single_test_args"
-            echo "runs_on=$runs_on"
-          } >> "$GITHUB_OUTPUT"
-      - id: cat_output
+          git diff --name-only ${{ env.PR_BASE_COMMIT }} ${{ env.COMMIT }} > changed_files.txt
+          MODIFIED_TEST_FILES=$(grep -E '_test\.go$' changed_files.txt || true)
+          echo "MODIFIED_TEST_FILES=$MODIFIED_TEST_FILES" >> "$GITHUB_ENV"
+
+      - name: Collect Modified Tests
+        id: collect_modified_tests
+        shell: bash
         run: |
-          cat "$GITHUB_OUTPUT"
+          make collect-modified-tests MODIFIED_TEST_FILES="$MODIFIED_TEST_FILES" | tee modified_tests_output.txt
+          source modified_tests_output.txt
+
+          echo "MODIFIED_UNIT_TEST_SUITES<<EOF" >> "$GITHUB_OUTPUT"
+          echo "$MODIFIED_UNIT_TEST_SUITES" >> "$GITHUB_OUTPUT"
+          echo "EOF" >> "$GITHUB_OUTPUT"
+
+          echo "MODIFIED_INTEGRATION_TEST_SUITES<<EOF" >> "$GITHUB_OUTPUT"
+          echo "$MODIFIED_INTEGRATION_TEST_SUITES" >> "$GITHUB_OUTPUT"
+          echo "EOF" >> "$GITHUB_OUTPUT"
+
+          echo "MODIFIED_FUNCTIONAL_TEST_SUITES<<EOF" >> "$GITHUB_OUTPUT"
+          echo "$MODIFIED_FUNCTIONAL_TEST_SUITES" >> "$GITHUB_OUTPUT"
+          echo "EOF" >> "$GITHUB_OUTPUT"
+
+          echo "MODIFIED_FUNCTIONAL_TEST_NDC_SUITES<<EOF" >> "$GITHUB_OUTPUT"
+          echo "$MODIFIED_FUNCTIONAL_TEST_NDC_SUITES" >> "$GITHUB_OUTPUT"
+          echo "EOF" >> "$GITHUB_OUTPUT"
+
+          echo "MODIFIED_FUNCTIONAL_TEST_XDC_SUITES<<EOF" >> "$GITHUB_OUTPUT"
+          echo "$MODIFIED_FUNCTIONAL_TEST_XDC_SUITES" >> "$GITHUB_OUTPUT"
+          echo "EOF" >> "$GITHUB_OUTPUT"
 
   misc-checks:
     name: Misc checks
@@ -152,6 +170,8 @@ jobs:
       UNIT_TEST_DIR: ${{ inputs.unit_test_directory }}
       TEST_TIMEOUT: ${{ needs.set-up-single-test.outputs.test_timeout }}
       RUN_SINGLE_UNIT_TEST: ${{ inputs.run_single_unit_test }}
+      MODIFIED_TEST_SUITES: ${{ needs.set-up-single-test.outputs.modified_unit_test_suites }}
+      N_RUNS: 10
     steps:
       - uses: actions/checkout@v4
         with:
@@ -168,10 +188,12 @@ jobs:
         timeout-minutes: 15
         run: make unit-test-coverage
 
-      - name: Run single unit test
-        if: ${{ !cancelled() && inputs.run_single_unit_test }}
+      - name: Flaky Unit Test Detection
+        if: ${{ !cancelled() && !inputs.run_single_unit_test && env.MODIFIED_TEST_SUITES != '' }}
         timeout-minutes: 15
-        run: UNIT_TEST_DIRS=$UNIT_TEST_DIR make unit-test-coverage
+        run: |
+          echo "Detecting flaky unit tests: $MODIFIED_TEST_SUITES"
+          make unit-test-coverage TEST_SUITES="$MODIFIED_TEST_SUITES" N_RUNS="$N_RUNS"
 
       - name: Upload test results
         if: ${{ !cancelled() }}
@@ -188,6 +210,8 @@ jobs:
     runs-on: ${{ matrix.runs-on }}
     env:
       BUILDKITE_MESSAGE: "{\"job\": \"integration-test\"}"
+      MODIFIED_TEST_SUITES: ${{ needs.set-up-single-test.outputs.modified_integration_test_suites }}
+      N_RUNS: 10
     steps:
       - uses: actions/checkout@v4
         with:
@@ -213,7 +237,14 @@ jobs:
         timeout-minutes: 15
         run: make integration-test-coverage
 
-      - name: Upload test results
+      - name: Flaky Integration Test Detection
+        if: ${{ env.MODIFIED_TEST_SUITES != '' }}
+        timeout-minutes: 15
+        run: |
+          echo "Detecting flaky integration tests: $MODIFIED_TEST_SUITES"
+          make integration-test-coverage TEST_SUITES="$MODIFIED_TEST_SUITES" N_RUNS="$N_RUNS"
+
+      - name: Upload Test Results
         if: ${{ !cancelled() }}
         run: make upload-test-results
 
@@ -271,9 +302,8 @@ jobs:
       TEST_SHARD_INDEX: ${{ matrix.shard_index }}
       PERSISTENCE_TYPE: ${{ matrix.persistence_type }}
       PERSISTENCE_DRIVER: ${{ matrix.persistence_driver }}
-      SINGLE_TEST_ARGS: ${{ needs.set-up-single-test.outputs.single_test_args }}
-      TEST_TIMEOUT: ${{ needs.set-up-single-test.outputs.test_timeout }}
-      BUILDKITE_MESSAGE: "{\"job\": \"functional-test\", \"db\": \"${{ matrix.persistence_driver }}\"}"
+      N_RUNS: 10
+      MODIFIED_TEST_SUITES: ${{ needs.set-up-single-test.outputs.modified_functional_test_suites }}
     steps:
       - name: Print functional test
         run: echo "${{ needs.set-up-single-test.outputs.dbs }}" && echo "$SINGLE_TEST_ARGS"
@@ -307,6 +337,13 @@ jobs:
         timeout-minutes: ${{ fromJSON(needs.set-up-single-test.outputs.github_timeout) }} # make sure this is larger than the test timeout in the Makefile
         run: make functional-test-coverage
 
+      - name: Flaky Functional Test Detection
+        if: ${{ (env.MODIFIED_TEST_SUITES != '') && (inputs.run_single_functional_test != true || (inputs.run_single_functional_test == true && contains(fromJSON(needs.set-up-tests.outputs.dbs), env.PERSISTENCE_DRIVER))) }}
+        timeout-minutes: ${{ fromJSON(needs.set-up-single-test.outputs.github_timeout) }} # make sure this is larger than the test timeout in the Makefile
+        run: |
+          echo "Detecting flaky functional tests: $MODIFIED_TEST_SUITES"
+          make functional-test-coverage TEST_SUITES="$MODIFIED_TEST_SUITES" N_RUNS="$N_RUNS"
+
       - name: Upload test results
         if: ${{ !cancelled() && (inputs.run_single_functional_test != true || (inputs.run_single_functional_test == true && contains(fromJSON(needs.set-up-single-test.outputs.dbs), env.PERSISTENCE_DRIVER))) }}
         run: make upload-test-results
@@ -314,7 +351,7 @@ jobs:
   functional-test-xdc:
     if: ${{ inputs.run_single_functional_test != true && inputs.run_single_unit_test != true }}
     name: Functional test xdc
-    needs: misc-checks
+    needs: [misc-checks, set-up-single-test]
     strategy:
       fail-fast: false
       matrix:
@@ -346,6 +383,8 @@ jobs:
       PERSISTENCE_TYPE: ${{ matrix.persistence_type }}
       PERSISTENCE_DRIVER: ${{ matrix.persistence_driver }}
       BUILDKITE_MESSAGE: "{\"job\": \"functional-test-xdc\", \"db\": \"${{ matrix.persistence_driver }}\"}"
+      N_RUNS: 10
+      MODIFIED_TEST_SUITES: ${{ needs.set-up-single-test.outputs.modified_functional_test_xdc_suites }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -369,6 +408,12 @@ jobs:
         timeout-minutes: 30
         run: make functional-test-xdc-coverage
 
+      - name: Run Modified Functional XDC Tests Multiple Times
+        if: ${{ env.MODIFIED_TEST_SUITES != '' }}
+        run: |
+          echo "Detecting flaky functional xdc tests: $MODIFIED_TEST_SUITES"
+          make functional-test-xdc-coverage TEST_SUITES="$MODIFIED_TEST_SUITES" N_RUNS="$N_RUNS"
+
       - name: Upload test results
         if: ${{ !cancelled() }}
         run: make upload-test-results
@@ -376,7 +421,7 @@ jobs:
   functional-test-ndc:
     if: ${{ inputs.run_single_functional_test != true && inputs.run_single_unit_test != true }}
     name: Functional test ndc
-    needs: misc-checks
+    needs: [misc-checks, set-up-single-test]
     strategy:
       fail-fast: false
       matrix:
@@ -415,6 +460,8 @@ jobs:
       PERSISTENCE_TYPE: ${{ matrix.persistence_type }}
       PERSISTENCE_DRIVER: ${{ matrix.persistence_driver }}
       ES_VERSION: ${{ matrix.es_version }}
+      N_RUNS: 10
+      MODIFIED_TEST_SUITES: ${{ needs.set-up-single-test.outputs.modified_functional_test_ndc_suites }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -437,6 +484,13 @@ jobs:
       - name: Run functional test ndc
         timeout-minutes: 15
         run: make functional-test-ndc-coverage
+
+      - name: Flaky Functional NDC Test Detection
+        if: ${{ env.MODIFIED_TEST_SUITES != '' }}
+        timeout-minutes: 15
+        run: |
+          echo "Detecting flaky functional ndc tests: $MODIFIED_TEST_SUITES"
+          make functional-test-ndc-coverage TEST_SUITES="$MODIFIED_TEST_SUITES" N_RUNS="$N_RUNS"
 
   test-status:
     if: ${{ inputs.run_single_functional_test != true && inputs.run_single_unit_test != true }}

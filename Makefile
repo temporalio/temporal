@@ -92,6 +92,9 @@ DB_TOOL_INTEGRATION_TEST_ROOT := ./tools/tests
 INTEGRATION_TEST_DIRS := $(DB_INTEGRATION_TEST_ROOT) $(DB_TOOL_INTEGRATION_TEST_ROOT) ./temporaltest ./internal/temporalite
 UNIT_TEST_DIRS ?= $(filter-out $(FUNCTIONAL_TEST_ROOT)% $(FUNCTIONAL_TEST_XDC_ROOT)% $(FUNCTIONAL_TEST_NDC_ROOT)% $(DB_INTEGRATION_TEST_ROOT)% $(DB_TOOL_INTEGRATION_TEST_ROOT)% ./temporaltest% ./internal/temporalite%,$(TEST_DIRS))
 
+TEST_SUITES ?=
+N_RUNS ?= 1
+
 # github.com/urfave/cli/v2@v2.4.0             - needs to accept comma in values before unlocking https://github.com/urfave/cli/pull/1241.
 PINNED_DEPENDENCIES := \
 	github.com/go-sql-driver/mysql@v1.5.0 \
@@ -339,6 +342,47 @@ shell-check:
 check: copyright-check lint shell-check
 
 ##### Tests #####
+collect-modified-tests:
+	@echo "Collecting modified tests..."
+	@MODIFIED_UNIT_TEST_SUITES=""
+	@MODIFIED_INTEGRATION_TEST_SUITES=""
+	@MODIFIED_FUNCTIONAL_TEST_SUITES=""
+	@MODIFIED_FUNCTIONAL_TEST_NDC_SUITES=""
+	@MODIFIED_FUNCTIONAL_TEST_XDC_SUITES=""
+	@for file in $(MODIFIED_TEST_FILES); do \
+		if [ -f "$$file" ]; then \
+			CATEGORY=""; \
+			if echo "$$file" | grep -q "^$(FUNCTIONAL_TEST_NDC_ROOT)/"; then \
+				CATEGORY="MODIFIED_FUNCTIONAL_TEST_NDC_SUITES"; \
+			elif echo "$$file" | grep -q "^$(FUNCTIONAL_TEST_XDC_ROOT)/"; then \
+				CATEGORY="MODIFIED_FUNCTIONAL_TEST_XDC_SUITES"; \
+			elif echo "$$file" | grep -q "^$(FUNCTIONAL_TEST_ROOT)/"; then \
+				CATEGORY="MODIFIED_FUNCTIONAL_TEST_SUITES"; \
+			elif echo "$$file" | grep -q -e "^$(DB_INTEGRATION_TEST_ROOT)/" -e "^$(DB_TOOL_INTEGRATION_TEST_ROOT)/" -e "^./temporaltest/" -e "^./internal/temporalite/"; then \
+				CATEGORY="MODIFIED_INTEGRATION_TEST_SUITES"; \
+			else \
+				CATEGORY="MODIFIED_UNIT_TEST_SUITES"; \
+			fi; \
+			SUITES=$$(grep -Eo 'func\s+(Test[a-zA-Z0-9_]*Suite)\s*\(' "$$file" | awk '{print $$2}'); \
+			if [ -n "$$SUITES" ]; then \
+				SUITES=$$(echo "$$SUITES" | tr '\n' '|'); \
+				SUITES=$${SUITES%|}; \
+				eval "$$CATEGORY=\"\$$${CATEGORY}|$${SUITES}\""; \
+			fi; \
+		fi; \
+	done; \
+	# Remove leading '|' from each variable using sed
+	MODIFIED_UNIT_TEST_SUITES=$$(echo "$$MODIFIED_UNIT_TEST_SUITES" | sed 's/^|//'); \
+	MODIFIED_INTEGRATION_TEST_SUITES=$$(echo "$$MODIFIED_INTEGRATION_TEST_SUITES" | sed 's/^|//'); \
+	MODIFIED_FUNCTIONAL_TEST_SUITES=$$(echo "$$MODIFIED_FUNCTIONAL_TEST_SUITES" | sed 's/^|//'); \
+	MODIFIED_FUNCTIONAL_TEST_NDC_SUITES=$$(echo "$$MODIFIED_FUNCTIONAL_TEST_NDC_SUITES" | sed 's/^|//'); \
+	MODIFIED_FUNCTIONAL_TEST_XDC_SUITES=$$(echo "$$MODIFIED_FUNCTIONAL_TEST_XDC_SUITES" | sed 's/^|//'); \
+	echo "MODIFIED_UNIT_TEST_SUITES=\"$$MODIFIED_UNIT_TEST_SUITES\""; \
+	echo "MODIFIED_INTEGRATION_TEST_SUITES=\"$$MODIFIED_INTEGRATION_TEST_SUITES\""; \
+	echo "MODIFIED_FUNCTIONAL_TEST_SUITES=\"$$MODIFIED_FUNCTIONAL_TEST_SUITES\""; \
+	echo "MODIFIED_FUNCTIONAL_TEST_NDC_SUITES=\"$$MODIFIED_FUNCTIONAL_TEST_NDC_SUITES\""; \
+	echo "MODIFIED_FUNCTIONAL_TEST_XDC_SUITES=\"$$MODIFIED_FUNCTIONAL_TEST_XDC_SUITES\"";
+
 clean-test-results:
 	@rm -f test.log $(TEST_OUTPUT_ROOT)/*
 	@go clean -testcache
@@ -383,13 +427,24 @@ prepare-coverage-test: $(GOTESTSUM) $(TEST_OUTPUT_ROOT)
 
 unit-test-coverage: prepare-coverage-test
 	@printf $(COLOR) "Run unit tests with coverage..."
+ifeq ($(TEST_SUITES),)
 	$(GOTESTSUM) --junitfile $(NEW_REPORT) -- \
-		$(UNIT_TEST_DIRS) -shuffle on -timeout=$(TEST_TIMEOUT) -race $(TEST_TAG_FLAG) $(SINGLE_TEST_ARGS) -coverprofile=$(NEW_COVER_PROFILE)
+    		$(UNIT_TEST_DIRS) -shuffle on -timeout=$(TEST_TIMEOUT) -race $(TEST_TAG_FLAG) $(SINGLE_TEST_ARGS) -coverprofile=$(NEW_COVER_PROFILE)
+else
+	$(GOTESTSUM) --junitfile $(NEW_REPORT) -- \
+    		$(UNIT_TEST_DIRS) -shuffle on -timeout=$(TEST_TIMEOUT) -race $(TEST_TAG_FLAG) $(SINGLE_TEST_ARGS) -coverprofile=$(NEW_COVER_PROFILE) -count=$(N_RUNS) -run="$(TEST_SUITES)"
+endif
+	@! grep -q "^--- FAIL" test.log
 
 integration-test-coverage: prepare-coverage-test
 	@printf $(COLOR) "Run integration tests with coverage..."
+ifeq ($(TEST_SUITES),)
 	@$(GOTESTSUM) --junitfile $(NEW_REPORT) -- \
-		$(INTEGRATION_TEST_DIRS) -shuffle on -timeout=$(TEST_TIMEOUT) $(TEST_TAG_FLAG) $(INTEGRATION_TEST_COVERPKG) -coverprofile=$(NEW_COVER_PROFILE)
+    		$(INTEGRATION_TEST_DIRS) -shuffle on -timeout=$(TEST_TIMEOUT) $(TEST_TAG_FLAG) $(INTEGRATION_TEST_COVERPKG) -coverprofile=$(NEW_COVER_PROFILE)
+else
+	@$(GOTESTSUM) --junitfile $(NEW_REPORT) -- \
+			$(INTEGRATION_TEST_DIRS) -shuffle on -timeout=$(TEST_TIMEOUT) $(TEST_TAG_FLAG) $(INTEGRATION_TEST_COVERPKG) -coverprofile=$(NEW_COVER_PROFILE) -count=$(N_RUNS) -run="$(TEST_SUITES)"
+endif
 
 # This should use the same build flags as functional-test-coverage for best build caching.
 pre-build-functional-test-coverage: prepare-coverage-test
@@ -397,20 +452,37 @@ pre-build-functional-test-coverage: prepare-coverage-test
 
 functional-test-coverage: prepare-coverage-test
 	@printf $(COLOR) "Run functional tests with coverage with $(PERSISTENCE_DRIVER) driver..."
+ifeq ($(TEST_SUITES),)
 	$(GOTESTSUM) --junitfile $(NEW_REPORT) -- \
 		$(FUNCTIONAL_TEST_ROOT) -shuffle on -timeout=$(TEST_TIMEOUT) $(TEST_ARGS) $(SINGLE_TEST_ARGS) $(TEST_TAG_FLAG) \
 		 -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER) \
 		 $(FUNCTIONAL_TEST_COVERPKG) -coverprofile=$(NEW_COVER_PROFILE)
+else
+	$(GOTESTSUM) --junitfile $(NEW_REPORT) -- \
+		$(FUNCTIONAL_TEST_ROOT) -shuffle on -timeout=$(TEST_TIMEOUT) $(TEST_ARGS) $(SINGLE_TEST_ARGS) $(TEST_TAG_FLAG) \
+		 -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER) \
+		 $(FUNCTIONAL_TEST_COVERPKG) -coverprofile=$(NEW_COVER_PROFILE) -count=$(N_RUNS) -run="$(TEST_SUITES)"
+endif
 
 functional-test-xdc-coverage: prepare-coverage-test
 	@printf $(COLOR) "Run functional test for cross DC with coverage with $(PERSISTENCE_DRIVER) driver..."
+ifeq ($(TEST_SUITES),)
 	@$(GOTESTSUM) --junitfile $(NEW_REPORT) -- \
 		$(FUNCTIONAL_TEST_XDC_ROOT) -shuffle on -timeout=$(TEST_TIMEOUT) $(TEST_TAG_FLAG) -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER) $(FUNCTIONAL_TEST_COVERPKG) -coverprofile=$(NEW_COVER_PROFILE)
+else
+	@$(GOTESTSUM) --junitfile $(NEW_REPORT) -- \
+		$(FUNCTIONAL_TEST_XDC_ROOT) -shuffle on -timeout=$(TEST_TIMEOUT) $(TEST_TAG_FLAG) -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER) $(FUNCTIONAL_TEST_COVERPKG) -coverprofile=$(NEW_COVER_PROFILE) -count=$(N_RUNS) -run="$(TEST_SUITES)"
+endif
 
 functional-test-ndc-coverage: prepare-coverage-test
 	@printf $(COLOR) "Run functional test for NDC with coverage with $(PERSISTENCE_DRIVER) driver..."
+ifeq ($(TEST_SUITES),)
 	@$(GOTESTSUM) --junitfile $(NEW_REPORT) -- \
 		$(FUNCTIONAL_TEST_NDC_ROOT) -shuffle on -timeout=$(TEST_TIMEOUT) $(TEST_ARGS) $(TEST_TAG_FLAG) -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER) $(FUNCTIONAL_TEST_COVERPKG) -coverprofile=$(NEW_COVER_PROFILE)
+else
+	@$(GOTESTSUM) --junitfile $(NEW_REPORT) -- \
+    		$(FUNCTIONAL_TEST_NDC_ROOT) -shuffle on -timeout=$(TEST_TIMEOUT) $(TEST_ARGS) $(TEST_TAG_FLAG) -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER) $(FUNCTIONAL_TEST_COVERPKG) -coverprofile=$(NEW_COVER_PROFILE) -count=$(N_RUNS) -run="$(TEST_SUITES)"
+endif
 
 .PHONY: $(SUMMARY_COVER_PROFILE)
 $(SUMMARY_COVER_PROFILE):
