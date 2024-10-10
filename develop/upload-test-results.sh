@@ -7,6 +7,8 @@ fi
 
 echo "uploading test results from $(pwd)"
 
+BUILDKITE_MESSAGE="{\"job\": \"${BUILDKITE_JOB}\", \"name\": \"${BUILDKITE_TEST_NAME}\", \"db\": \"${BUILDKITE_DB}\"}"
+
 for file in *.junit.xml; do
   [ -e "$file" ] || continue
   echo "uploading ${file}"
