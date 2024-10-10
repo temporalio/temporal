@@ -309,7 +309,7 @@ func (s *SyncStateRetrieverImpl) getNewRunInfo(ctx context.Context, namespaceId 
 		WorkflowID:  execution.WorkflowId,
 		RunID:       newRunId,
 	}
-	newRunEvents, err := s.getEventsBlob(ctx, wfKey, versionHistory, common.FirstEventID, common.FirstEventID+1)
+	newRunEvents, err := s.getEventsBlob(ctx, wfKey, versionHistory, common.FirstEventID, common.FirstEventID+1, true)
 	switch err.(type) {
 	case nil:
 	case *serviceerror.NotFound:
@@ -395,6 +395,7 @@ func (s *SyncStateRetrieverImpl) getEventsBlob(
 	versionHistory *history.VersionHistory,
 	startEventId int64,
 	endEventId int64,
+	isNewRun bool,
 ) ([]*commonpb.DataBlob, error) {
 	var eventBlobs []*commonpb.DataBlob
 
@@ -409,7 +410,15 @@ func (s *SyncStateRetrieverImpl) getEventsBlob(
 				break
 			}
 			left := endEventId - startEventId
-			if startEventId != common.FirstEventID && int64(len(xdcCacheValue.EventBlobs)) >= left {
+			if !isNewRun && int64(len(xdcCacheValue.EventBlobs)) >= left {
+				s.logger.Error(
+					fmt.Sprintf("xdc cached events are truncated, want [%d, %d), got [%d, %d) from cache",
+						startEventId, endEventId, startEventId, xdcCacheValue.NextEventID),
+					tag.FirstEventVersion(eventVersion),
+					tag.WorkflowNamespaceID(workflowKey.NamespaceID),
+					tag.WorkflowID(workflowKey.WorkflowID),
+					tag.WorkflowRunID(workflowKey.RunID),
+				)
 				eventBlobs = append(eventBlobs, xdcCacheValue.EventBlobs[:left]...)
 				return eventBlobs, nil
 			}
@@ -458,7 +467,7 @@ func (s *SyncStateRetrieverImpl) getSyncStateEvents(ctx context.Context, workflo
 	}
 	startEventId := lcaItem.GetEventId() + 1
 
-	return s.getEventsBlob(ctx, workflowKey, sourceHistory, startEventId, sourceLastItem.GetEventId()+1)
+	return s.getEventsBlob(ctx, workflowKey, sourceHistory, startEventId, sourceLastItem.GetEventId()+1, false)
 }
 
 func isInfoUpdated(subStateMachine lastUpdatedStateTransitionGetter, versionedTransition *persistencepb.VersionedTransition) bool {

@@ -466,13 +466,13 @@ func (s *syncWorkflowStateSuite) TestGetEventsBlob_NewRun() {
 		ShardID:     s.mockShard.GetShardID(),
 		PageSize:    defaultPageSize,
 	}).Return(&persistence.ReadRawHistoryBranchResponse{HistoryEventBlobs: s.getEventBlobs(1, 4)}, nil)
-	events, err := s.syncStateRetriever.getEventsBlob(context.Background(), s.workflowKey, versionHistory, common.FirstEventID, common.FirstEventID+1)
+	events, err := s.syncStateRetriever.getEventsBlob(context.Background(), s.workflowKey, versionHistory, common.FirstEventID, common.FirstEventID+1, true)
 	s.NoError(err)
 	s.Len(events, 4-1)
 
 	// get [1,4) from cache
 	s.addXDCCache(1, 1, 4, s.getEventBlobs(1, 4), versionHistory.Items)
-	events, err = s.syncStateRetriever.getEventsBlob(context.Background(), s.workflowKey, versionHistory, common.FirstEventID, common.FirstEventID+1)
+	events, err = s.syncStateRetriever.getEventsBlob(context.Background(), s.workflowKey, versionHistory, common.FirstEventID, common.FirstEventID+1, true)
 	s.NoError(err)
 	s.Len(events, 4-1)
 }
