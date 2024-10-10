@@ -281,7 +281,7 @@ jobs:
           echo "Detecting flaky integration tests: $MODIFIED_TEST_SUITES"
           make integration-test-coverage TEST_SUITES="$MODIFIED_TEST_SUITES" N_RUNS="$N_RUNS"
 
-      - name: Upload Test Results
+      - name: Upload test results
         if: ${{ !cancelled() }}
         run: make upload-test-results
 
