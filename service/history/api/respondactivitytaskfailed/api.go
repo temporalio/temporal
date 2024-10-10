@@ -28,6 +28,8 @@ import (
 	"context"
 	"time"
 
+	"google.golang.org/protobuf/types/known/timestamppb"
+
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
@@ -118,6 +120,8 @@ func Invoke(
 
 			postActions := &api.UpdateWorkflowAction{}
 			failure := request.GetFailure()
+			ai.LastAttemptCompleteTime = timestamppb.New(shard.GetTimeSource().Now().UTC())
+
 			retryState, err := mutableState.RetryActivity(ai, failure)
 			if err != nil {
 				return nil, err
