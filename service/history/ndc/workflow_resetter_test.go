@@ -51,6 +51,7 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/util"
+	"go.temporal.io/server/components/nexusoperations"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/hsm"
 	"go.temporal.io/server/service/history/shard"
@@ -915,6 +916,73 @@ func (s *workflowResetterSuite) TestReapplyEvents() {
 	ms.EXPECT().HSM().Return(root).AnyTimes()
 
 	_, err = reapplyEvents(context.Background(), ms, nil, smReg, events, nil, "")
+	s.NoError(err)
+}
+func (s *workflowResetterSuite) TestReapplyEvents_Excludes() {
+	event1 := &historypb.HistoryEvent{
+		EventId:   101,
+		EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED,
+		Attributes: &historypb.HistoryEvent_WorkflowExecutionSignaledEventAttributes{WorkflowExecutionSignaledEventAttributes: &historypb.WorkflowExecutionSignaledEventAttributes{
+			SignalName: "signal-name-1",
+			Input:      payloads.EncodeString("signal-input-1"),
+			Identity:   "signal-identity-1",
+			Header:     &commonpb.Header{Fields: map[string]*commonpb.Payload{"myheader": {Data: []byte("myheader")}}},
+		}},
+	}
+	event2 := &historypb.HistoryEvent{
+		EventId:   102,
+		EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ADMITTED,
+		Attributes: &historypb.HistoryEvent_WorkflowExecutionUpdateAdmittedEventAttributes{
+			WorkflowExecutionUpdateAdmittedEventAttributes: &historypb.WorkflowExecutionUpdateAdmittedEventAttributes{
+				Request: &updatepb.Request{Input: &updatepb.Input{Args: payloads.EncodeString("update-request-payload-1")}},
+				Origin:  enumspb.UPDATE_ADMITTED_EVENT_ORIGIN_UNSPECIFIED,
+			},
+		},
+	}
+	event3 := &historypb.HistoryEvent{
+		EventId:   103,
+		EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ACCEPTED,
+		Attributes: &historypb.HistoryEvent_WorkflowExecutionUpdateAcceptedEventAttributes{
+			WorkflowExecutionUpdateAcceptedEventAttributes: &historypb.WorkflowExecutionUpdateAcceptedEventAttributes{
+				AcceptedRequest: &updatepb.Request{Input: &updatepb.Input{Args: payloads.EncodeString("update-request-payload-1")}},
+			},
+		},
+	}
+	event4 := &historypb.HistoryEvent{
+		EventId:   104,
+		EventType: enumspb.EVENT_TYPE_NEXUS_OPERATION_STARTED,
+	}
+	event5 := &historypb.HistoryEvent{
+		EventId:   105,
+		EventType: enumspb.EVENT_TYPE_NEXUS_OPERATION_COMPLETED,
+	}
+	event6 := &historypb.HistoryEvent{
+		EventId:   106,
+		EventType: enumspb.EVENT_TYPE_NEXUS_OPERATION_CANCELED,
+	}
+	events := []*historypb.HistoryEvent{event1, event2, event3, event4, event5, event6}
+
+	ms := workflow.NewMockMutableState(s.controller)
+	// Assert that none of these following methods are invoked.
+	arg := gomock.Any()
+	ms.EXPECT().AddWorkflowExecutionSignaled(arg, arg, arg, arg, arg, arg).Times(0)
+	ms.EXPECT().AddWorkflowExecutionUpdateAdmittedEvent(arg, arg).Times(0)
+	ms.EXPECT().AddHistoryEvent(arg, arg).Times(0)
+
+	smReg := hsm.NewRegistry()
+	s.NoError(smReg.RegisterEventDefinition(nexusoperations.StartedEventDefinition{}))
+	s.NoError(workflow.RegisterStateMachine(smReg))
+	root, err := hsm.NewRoot(smReg, workflow.StateMachineType, nil, make(map[string]*persistencespb.StateMachineMap), nil)
+	s.NoError(err)
+	ms.EXPECT().HSM().Return(root).AnyTimes()
+
+	excludes := map[enumspb.ResetReapplyExcludeType]struct{}{
+		enumspb.RESET_REAPPLY_EXCLUDE_TYPE_SIGNAL: {},
+		enumspb.RESET_REAPPLY_EXCLUDE_TYPE_UPDATE: {},
+		enumspb.RESET_REAPPLY_EXCLUDE_TYPE_NEXUS:  {},
+	}
+	reappliedEvents, err := reapplyEvents(context.Background(), ms, nil, smReg, events, excludes, "")
+	s.Empty(reappliedEvents)
 	s.NoError(err)
 }
 

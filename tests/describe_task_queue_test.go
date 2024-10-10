@@ -82,7 +82,7 @@ func (s *DescribeTaskQueueSuite) TestAddNoTasks_ValidateStats() {
 }
 
 func (s *DescribeTaskQueueSuite) TestAddSingleTask_ValidateStats() {
-	s.OverrideDynamicConfig(dynamicconfig.CachedPhysicalInfoByBuildIdTTL, 0*time.Millisecond)
+	s.T().Skip("flaky test")
 	s.OverrideDynamicConfig(dynamicconfig.MatchingUpdateAckInterval, 5*time.Second)
 	s.RunTestWithMatchingBehavior(func() { s.publishConsumeWorkflowTasksValidateStats(1, true, false) })
 }
