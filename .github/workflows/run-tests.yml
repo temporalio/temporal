@@ -80,6 +80,31 @@ jobs:
       modified_functional_test_ndc_suites: ${{ steps.collect_modified_tests.outputs.MODIFIED_FUNCTIONAL_TEST_NDC_SUITES }}
       modified_functional_test_xdc_suites: ${{ steps.collect_modified_tests.outputs.MODIFIED_FUNCTIONAL_TEST_XDC_SUITES }}
     steps:
+      - id: generate_output
+        run: |
+          shards=3
+          timeout=30
+          runs_on='["ubuntu-20.04"]'
+          if [[ "${{ inputs.run_single_functional_test }}" == "true" || "${{ inputs.run_single_unit_test }}" == "true" ]]; then
+          shards=1
+          timeout=${{ inputs.timeout_minutes }}
+          single_test_args="-run ${{ inputs.test_name }} -count ${{ inputs.n_runs }}"
+          if [[ "${{ inputs.test_runner }}" == "64GB RAM (ubuntu-22.04)" ]]; then
+          runs_on='[ "ubuntu-latest-16-cores" ]'
+          fi
+          fi
+          {
+          echo "shard_indices=[ $(seq -s, 0 $((shards-1))) ]"
+          echo "shards=$shards"
+          echo "github_timeout=$((timeout+5))"
+          echo "test_timeout=${timeout}m"
+          echo "single_test_args=$single_test_args"
+          echo "runs_on=$runs_on"
+          } >> "$GITHUB_OUTPUT"
+      - id: cat_output
+        run: |
+            cat "$GITHUB_OUTPUT"
+
       - name: Checkout Code
         uses: actions/checkout@v4
         with:
