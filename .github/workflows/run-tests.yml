@@ -220,6 +220,11 @@ jobs:
         timeout-minutes: 15
         run: make unit-test-coverage
 
+      - name: Run single unit test
+        if: ${{ !cancelled() && inputs.run_single_unit_test }}
+        timeout-minutes: 15
+        run: UNIT_TEST_DIRS=$UNIT_TEST_DIR make unit-test-coverage
+
       - name: Flaky Unit Test Detection
         if: ${{ !cancelled() && !inputs.run_single_unit_test && env.MODIFIED_TEST_SUITES != '' }}
         timeout-minutes: 15
