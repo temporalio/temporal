@@ -999,43 +999,30 @@ func (s *ClientMiscTestSuite) TestBufferedSignalCausesUnhandledCommandAndSchedul
 
 func (s *ClientMiscTestSuite) Test_StickyWorkerRestartWorkflowTask() {
 	testCases := []struct {
-		name       string
-		waitTime   time.Duration
-		doQuery    bool
-		doSignal   bool
-		delayCheck func(duration time.Duration) bool
+		name     string
+		waitTime time.Duration
+		doQuery  bool
+		doSignal bool
 	}{
 		{
 			name:     "new workflow task after 10s, no delay",
 			waitTime: 10 * time.Second,
 			doSignal: true,
-			delayCheck: func(duration time.Duration) bool {
-				return duration < 5*time.Second
-			},
 		},
 		{
-			name:     "new workflow task immediately, expect 5s delay",
+			name:     "new workflow task immediately, no delay",
 			waitTime: 0,
 			doSignal: true,
-			delayCheck: func(duration time.Duration) bool {
-				return duration > 5*time.Second
-			},
 		},
 		{
 			name:     "new query after 10s, no delay",
 			waitTime: 10 * time.Second,
 			doQuery:  true,
-			delayCheck: func(duration time.Duration) bool {
-				return duration < 5*time.Second
-			},
 		},
 		{
-			name:     "new query immediately, expect 5s delay",
+			name:     "new query immediately, no delay",
 			waitTime: 0,
 			doQuery:  true,
-			delayCheck: func(duration time.Duration) bool {
-				return duration > 5*time.Second
-			},
 		},
 	}
 	for _, tt := range testCases {
@@ -1124,7 +1111,7 @@ func (s *ClientMiscTestSuite) Test_StickyWorkerRestartWorkflowTask() {
 			}
 			endTime := time.Now()
 			duration := endTime.Sub(startTime)
-			s.True(tt.delayCheck(duration), "delay check failed: %s", duration)
+			s.Less(duration, 5*time.Second)
 		})
 	}
 }
