@@ -82,7 +82,7 @@ jobs:
           shards=3
           timeout=30
           runs_on='["ubuntu-20.04"]'
-          if [[ "${{ inputs.run_single_test_mode }}" != "N/A" ]]; then
+          if [[ "${{ inputs.run_single_test_mode }}" != "" ]]; then
             shards=1
             timeout=${{ inputs.timeout_minutes }}
             single_test_args="-run ${{ inputs.test_name }} -count ${{ inputs.n_runs }}"
