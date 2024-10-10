@@ -108,7 +108,7 @@ func (m *DeleteManagerImpl) AddDeleteWorkflowExecutionTask(
 	ms workflow.MutableState,
 ) error {
 
-	taskGenerator := workflow.NewTaskGeneratorProvider().NewTaskGenerator(m.shardContext, ms)
+	taskGenerator := workflow.GetTaskGeneratorProvider().NewTaskGenerator(m.shardContext, ms)
 
 	// We can make this task immediately because the task itself will keep rescheduling itself until the workflow is
 	// closed before actually deleting the workflow.

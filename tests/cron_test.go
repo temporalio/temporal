@@ -27,7 +27,6 @@ package tests
 import (
 	"context"
 	"errors"
-	"flag"
 	"fmt"
 	"sort"
 	"testing"
@@ -64,12 +63,12 @@ type CronTestClientSuite struct {
 }
 
 func TestCronTestSuite(t *testing.T) {
-	flag.Parse()
+	t.Parallel()
 	suite.Run(t, new(CronTestSuite))
 }
 
 func TestCronTestClientSuite(t *testing.T) {
-	flag.Parse()
+	t.Parallel()
 	suite.Run(t, new(CronTestClientSuite))
 }
 

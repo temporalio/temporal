@@ -60,6 +60,7 @@ type NexusApiTestSuite struct {
 }
 
 func TestNexusApiTestSuite(t *testing.T) {
+	t.Parallel()
 	suite.Run(t, new(NexusApiTestSuite))
 }
 

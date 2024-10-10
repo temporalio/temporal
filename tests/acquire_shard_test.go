@@ -45,6 +45,7 @@ type AcquireShardFunctionalSuite struct {
 }
 
 func TestAcquireShardFunctionalSuite(t *testing.T) {
+	t.Parallel()
 	suite.Run(t, new(AcquireShardFunctionalSuite))
 }
 
@@ -116,6 +117,7 @@ type OwnershipLostErrorSuite struct {
 
 // TestAcquireShard_OwnershipLostErrorSuite tests what happens when acquire shard returns an ownership lost error.
 func TestAcquireShard_OwnershipLostErrorSuite(t *testing.T) {
+	t.Parallel()
 	s := new(OwnershipLostErrorSuite)
 	suite.Run(t, s)
 }
@@ -164,6 +166,7 @@ type DeadlineExceededErrorSuite struct {
 
 // TestAcquireShard_DeadlineExceededErrorSuite tests what happens when acquire shard returns a deadline exceeded error
 func TestAcquireShard_DeadlineExceededErrorSuite(t *testing.T) {
+	t.Parallel()
 	s := new(DeadlineExceededErrorSuite)
 	suite.Run(t, s)
 }
@@ -212,6 +215,7 @@ type EventualSuccessSuite struct {
 // exceeded error followed by a successful acquire shard call.
 // To make this test deterministic, we set the seed to in the config file to a fixed value.
 func TestAcquireShard_EventualSuccess(t *testing.T) {
+	t.Parallel()
 	s := new(EventualSuccessSuite)
 	suite.Run(t, s)
 }

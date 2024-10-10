@@ -26,7 +26,6 @@ package tests
 
 import (
 	"errors"
-	"flag"
 	"fmt"
 	"os"
 	"strconv"
@@ -73,7 +72,9 @@ type (
 )
 
 func TestNamespaceSuite(t *testing.T) {
-	flag.Parse()
+	// Test_NamespaceDelete_InvalidUTF8 can't run in parallel because of the global utf-8
+	// validator. Enable this after the utf-8 stuff is gone.
+	// TODO: enable this later: t.Parallel()
 	suite.Run(t, &namespaceTestSuite{})
 }
 

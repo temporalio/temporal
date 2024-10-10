@@ -75,6 +75,7 @@ type (
 )
 
 func TestStreamBasedReplicationTestSuite(t *testing.T) {
+	t.Parallel()
 	suite.Run(t, new(streamBasedReplicationTestSuite))
 }
 

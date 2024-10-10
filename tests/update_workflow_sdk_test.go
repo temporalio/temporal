@@ -52,6 +52,7 @@ type UpdateWorkflowClientSuite struct {
 }
 
 func TestUpdateWorkflowClientSuite(t *testing.T) {
+	t.Parallel()
 	s := new(UpdateWorkflowClientSuite)
 	suite.Run(t, s)
 }

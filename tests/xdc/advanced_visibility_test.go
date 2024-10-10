@@ -22,12 +22,9 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-//go:build !race
-
 package xdc
 
 import (
-	"flag"
 	"fmt"
 	"os"
 	"sync"
@@ -87,7 +84,7 @@ type AdvVisCrossDCTestSuite struct {
 }
 
 func TestAdvVisCrossDCTestSuite(t *testing.T) {
-	flag.Parse()
+	t.Parallel()
 	suite.Run(t, new(AdvVisCrossDCTestSuite))
 }
 

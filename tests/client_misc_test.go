@@ -26,7 +26,6 @@ package tests
 
 import (
 	"context"
-	"flag"
 	"fmt"
 	"sync"
 	"sync/atomic"
@@ -72,7 +71,7 @@ type ClientMiscTestSuite struct {
 }
 
 func TestClientMiscTestSuite(t *testing.T) {
-	flag.Parse()
+	t.Parallel()
 	suite.Run(t, new(ClientMiscTestSuite))
 }
 

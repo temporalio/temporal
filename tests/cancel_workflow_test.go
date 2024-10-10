@@ -50,6 +50,7 @@ type CancelWorkflowSuite struct {
 }
 
 func TestCancelWorkflowSuite(t *testing.T) {
+	t.Parallel()
 	suite.Run(t, new(CancelWorkflowSuite))
 }
 

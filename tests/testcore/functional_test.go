@@ -25,13 +25,12 @@
 package testcore
 
 import (
-	"flag"
 	"testing"
 
 	"github.com/stretchr/testify/suite"
 )
 
 func TestFunctionalSuite(t *testing.T) {
-	flag.Parse()
+	t.Parallel()
 	suite.Run(t, new(FunctionalSuite))
 }

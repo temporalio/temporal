@@ -29,7 +29,6 @@ import (
 	"context"
 	"encoding/binary"
 	"errors"
-	"flag"
 	"math/rand"
 	"sync"
 	"sync/atomic"
@@ -69,11 +68,12 @@ type ActivityClientTestSuite struct {
 }
 
 func TestActivityTestSuite(t *testing.T) {
-	flag.Parse()
+	t.Parallel()
 	suite.Run(t, &ActivityTestSuite{})
 }
 
 func TestActivityClientTestSuite(t *testing.T) {
+	t.Parallel()
 	suite.Run(t, new(ActivityClientTestSuite))
 }
 
@@ -1407,7 +1407,7 @@ func (s *ActivityTestSuite) TestActivityHeartBeat_RecordIdentity() {
 
 func (s *ActivityTestSuite) TestActivityTaskCompleteForceCompletion() {
 	sdkClient, err := sdkclient.Dial(sdkclient.Options{
-		HostPort:  s.GetTestCluster().Host().FrontendGRPCAddress(),
+		HostPort:  s.FrontendGRPCAddress(),
 		Namespace: s.Namespace(),
 	})
 	s.NoError(err)
@@ -1444,7 +1444,7 @@ func (s *ActivityTestSuite) TestActivityTaskCompleteForceCompletion() {
 
 func (s *ActivityTestSuite) TestActivityTaskCompleteRejectCompletion() {
 	sdkClient, err := sdkclient.Dial(sdkclient.Options{
-		HostPort:  s.GetTestCluster().Host().FrontendGRPCAddress(),
+		HostPort:  s.FrontendGRPCAddress(),
 		Namespace: s.Namespace(),
 	})
 	s.NoError(err)

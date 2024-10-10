@@ -45,6 +45,7 @@ import (
 )
 
 func TestNexusEndpointsFunctionalSuite(t *testing.T) {
+	t.Parallel()
 	t.Run("Common", func(t *testing.T) {
 		s := new(CommonSuite)
 		suite.Run(t, s)

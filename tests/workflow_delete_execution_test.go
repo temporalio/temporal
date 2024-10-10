@@ -59,6 +59,7 @@ type WorkflowDeleteExecutionSuite struct {
 }
 
 func TestWorkflowDeleteExecutionSuite(t *testing.T) {
+	t.Parallel()
 	suite.Run(t, new(WorkflowDeleteExecutionSuite))
 }
 

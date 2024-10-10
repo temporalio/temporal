@@ -72,6 +72,7 @@ type (
 )
 
 func TestPurgeDLQTasksSuite(t *testing.T) {
+	t.Parallel()
 	suite.Run(t, new(PurgeDLQTasksSuite))
 }
 

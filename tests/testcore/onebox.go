@@ -74,7 +74,6 @@ import (
 	"go.temporal.io/server/service/history"
 	"go.temporal.io/server/service/history/replication"
 	"go.temporal.io/server/service/history/tasks"
-	"go.temporal.io/server/service/history/workflow"
 	"go.temporal.io/server/service/matching"
 	"go.temporal.io/server/service/worker"
 	"go.temporal.io/server/temporal"
@@ -358,6 +357,11 @@ func (c *TemporalImpl) FrontendGRPCAddress() string {
 	return c.frontendMembershipAddress
 }
 
+// Use this to get an address for a remote cluster to connect to.
+func (c *TemporalImpl) RemoteFrontendGRPCAddress() string {
+	return c.FrontendGRPCAddresses()[0]
+}
+
 func (c *TemporalImpl) FrontendHTTPAddress() string {
 	// randomize like a load balancer would
 	addrs := c.FrontendGRPCAddresses()
@@ -544,7 +548,6 @@ func (c *TemporalImpl) startHistory() {
 			fx.Provide(resource.DefaultSnTaggedLoggerProvider),
 			fx.Provide(func() *esclient.Config { return c.esConfig }),
 			fx.Provide(func() esclient.Client { return c.esClient }),
-			fx.Provide(workflow.NewTaskGeneratorProvider),
 			fx.Provide(c.GetTLSConfigProvider),
 			fx.Provide(c.GetTaskCategoryRegistry),
 			fx.Supply(c.spanExporters),

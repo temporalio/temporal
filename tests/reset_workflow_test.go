@@ -62,6 +62,7 @@ type ResetWorkflowTestSuite struct {
 }
 
 func TestResetWorkflowTestSuite(t *testing.T) {
+	t.Parallel()
 	suite.Run(t, new(ResetWorkflowTestSuite))
 }
 
@@ -923,7 +924,7 @@ func (s *ResetWorkflowTestSuite) TestResetWorkflow_ResetAfterContinueAsNew() {
 
 	// get sdkClient
 	sdkClient, err := sdkclient.Dial(sdkclient.Options{
-		HostPort:  s.HostPort(),
+		HostPort:  s.FrontendGRPCAddress(),
 		Namespace: s.Namespace(),
 	})
 	if err != nil {

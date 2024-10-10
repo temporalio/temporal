@@ -50,6 +50,7 @@ type EagerWorkflowTestSuite struct {
 }
 
 func TestEagerWorkflowTestSuite(t *testing.T) {
+	t.Parallel()
 	suite.Run(t, new(EagerWorkflowTestSuite))
 }
 
@@ -121,11 +122,7 @@ func (s *EagerWorkflowTestSuite) pollWorkflowTaskQueue() *workflowservice.PollWo
 }
 
 func (s *EagerWorkflowTestSuite) getWorkflowStringResult(workflowID, runID string) string {
-	hostPort := "127.0.0.1:7134"
-	if testcore.TestFlags.FrontendAddr != "" {
-		hostPort = testcore.TestFlags.FrontendAddr
-	}
-	c, err := client.Dial(client.Options{HostPort: hostPort, Namespace: s.Namespace()})
+	c, err := client.Dial(client.Options{HostPort: s.FrontendGRPCAddress(), Namespace: s.Namespace()})
 	s.Require().NoError(err)
 	run := c.GetWorkflow(testcore.NewContext(), workflowID, runID)
 	var result string

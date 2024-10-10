@@ -68,6 +68,7 @@ type NexusWorkflowTestSuite struct {
 }
 
 func TestNexusWorkflowTestSuite(t *testing.T) {
+	t.Parallel()
 	suite.Run(t, new(NexusWorkflowTestSuite))
 }
 

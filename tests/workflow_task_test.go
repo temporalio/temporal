@@ -47,6 +47,7 @@ type WorkflowTaskTestSuite struct {
 }
 
 func TestWorkflowTaskTestSuite(t *testing.T) {
+	t.Parallel()
 	suite.Run(t, new(WorkflowTaskTestSuite))
 }
 
