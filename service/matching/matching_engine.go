@@ -945,7 +945,6 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 
 		lastFanOut := rootPMImpl.timeSinceLastFanOut()
 		lastFanOutTTL := tqConfig.CachedPhysicalInfoByBuildIdTTL()
-		fmt.Printf("last fan out was %s and TTL is %s\n", lastFanOut.String(), lastFanOutTTL.String())
 
 		physicalInfoByBuildId := make(map[string]map[enumspb.TaskQueueType]*taskqueuespb.PhysicalTaskQueueInfo)
 		if lastFanOut > lastFanOutTTL {
@@ -1003,7 +1002,6 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 			// update cache
 			start := time.Now()
 			rootPMImpl.lastFanOut.Store(start.UnixNano())
-			fmt.Printf("Updated fan out timing to %s\n", rootPMImpl.timeSinceLastFanOut().String())
 			rootPMImpl.cachedPhysicalInfoByBuildId = physicalInfoByBuildId
 		} else {
 			// fetch info from rootPartition's cache
