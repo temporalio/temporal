@@ -18,13 +18,11 @@ on:
       run_single_test_mode:
         description: "Which type of single test to run"
         type: choice
-        default: 'N/A'
         options:
           - 'unit'
           - 'functional'
           - 'functional-xdc'
           - 'functional-ndc'
-          - 'N/A'
       unit_test_directory:
         description: "[Unit Test Only] Directory to run unit tests in"
         type: string
@@ -113,7 +111,7 @@ jobs:
     runs-on: ${{ matrix.runs-on }}
     steps:
       - uses: actions/checkout@v4
-        if: ${{ inputs.run_single_test_mode == 'N/A' }}
+        if: ${{ inputs.run_single_test_mode == '' }}
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           ref: ${{ env.COMMIT }}
@@ -121,28 +119,28 @@ jobs:
           fetch-depth: 100
 
       - uses: actions/setup-go@v5
-        if: ${{ inputs.run_single_test_mode == 'N/A' }}
+        if: ${{ inputs.run_single_test_mode == '' }}
         with:
           go-version-file: 'go.mod'
           check-latest: true
 
       - uses: arduino/setup-protoc@v3
-        if: ${{ inputs.run_single_test_mode == 'N/A' }}
+        if: ${{ inputs.run_single_test_mode == '' }}
 
       - run: GOOS=windows GOARCH=amd64 make clean-bins bins
-        if: ${{ inputs.run_single_test_mode == 'N/A' }}
+        if: ${{ inputs.run_single_test_mode == '' }}
 
       - run: GOOS=darwin GOARCH=arm64 make clean-bins bins
-        if: ${{ inputs.run_single_test_mode == 'N/A' }}
+        if: ${{ inputs.run_single_test_mode == '' }}
 
       - run: make clean-bins ci-build-misc
-        if: ${{ inputs.run_single_test_mode == 'N/A' }}
+        if: ${{ inputs.run_single_test_mode == '' }}
 
       - run: make build-tests
-        if: ${{ inputs.run_single_test_mode == 'N/A' }}
+        if: ${{ inputs.run_single_test_mode == '' }}
 
   unit-test:
-    if: ${{ inputs.run_single_test_mode == 'N/A' || inputs.run_single_test_mode == 'unit' }}
+    if: ${{ inputs.run_single_test_mode == '' || inputs.run_single_test_mode == 'unit' }}
     name: Unit test
     needs: [misc-checks, set-up-single-test]
     strategy:
@@ -181,7 +179,7 @@ jobs:
         run: make upload-test-results
 
   integration-test:
-    if: ${{ inputs.run_single_test_mode == 'N/A' }}
+    if: ${{ inputs.run_single_test_mode == '' }}
     name: Integration test
     needs: misc-checks
     strategy:
@@ -226,7 +224,7 @@ jobs:
           docker compose -f ${{ env.DOCKER_COMPOSE_FILE }} down -v
 
   functional-test:
-    if: ${{ inputs.run_single_test_mode == 'N/A' || inputs.run_single_test_mode == 'functional' }}
+    if: ${{ inputs.run_single_test_mode == '' || inputs.run_single_test_mode == 'functional' }}
     name: Functional test
     needs: [misc-checks, set-up-single-test]
     strategy:
@@ -279,24 +277,24 @@ jobs:
       BUILDKITE_MESSAGE: "{\"job\": \"functional-test\", \"db\": \"${{ matrix.persistence_driver }}\"}"
     steps:
       - uses: ScribeMD/docker-cache@0.3.7
-        if: ${{ inputs.run_single_test_mode == 'N/A' || (inputs.run_single_test_mode == 'functional' && contains(fromJSON(needs.set-up-single-test.outputs.dbs), env.PERSISTENCE_DRIVER)) }}
+        if: ${{ inputs.run_single_test_mode == '' || (inputs.run_single_test_mode == 'functional' && contains(fromJSON(needs.set-up-single-test.outputs.dbs), env.PERSISTENCE_DRIVER)) }}
         with:
           key: docker-${{ runner.os }}-${{ hashFiles(env.DOCKER_COMPOSE_FILE) }}
 
       - uses: actions/checkout@v4
-        if: ${{ inputs.run_single_test_mode == 'N/A' || (inputs.run_single_test_mode == 'functional' && contains(fromJSON(needs.set-up-single-test.outputs.dbs), env.PERSISTENCE_DRIVER)) }}
+        if: ${{ inputs.run_single_test_mode == '' || (inputs.run_single_test_mode == 'functional' && contains(fromJSON(needs.set-up-single-test.outputs.dbs), env.PERSISTENCE_DRIVER)) }}
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           ref: ${{ env.COMMIT }}
 
       - uses: actions/setup-go@v5
-        if: ${{ inputs.run_single_test_mode == 'N/A' || (inputs.run_single_test_mode == 'functional' && contains(fromJSON(needs.set-up-single-test.outputs.dbs), env.PERSISTENCE_DRIVER)) }}
+        if: ${{ inputs.run_single_test_mode == '' || (inputs.run_single_test_mode == 'functional' && contains(fromJSON(needs.set-up-single-test.outputs.dbs), env.PERSISTENCE_DRIVER)) }}
         with:
           go-version-file: 'go.mod'
           check-latest: true
 
       - name: Start containerized dependencies
-        if: ${{ toJson(matrix.containers) != '[]' && (inputs.run_single_test_mode == 'N/A' || (inputs.run_single_test_mode == 'functional' && contains(fromJSON(needs.set-up-single-test.outputs.dbs), env.PERSISTENCE_DRIVER))) }}
+        if: ${{ toJson(matrix.containers) != '[]' && (inputs.run_single_test_mode == '' || (inputs.run_single_test_mode == 'functional' && contains(fromJSON(needs.set-up-single-test.outputs.dbs), env.PERSISTENCE_DRIVER))) }}
         uses: hoverkraft-tech/compose-action@v2.0.1
         with:
           compose-file: ${{ env.DOCKER_COMPOSE_FILE }}
@@ -304,16 +302,16 @@ jobs:
           down-flags: -v
 
       - name: Run functional test
-        if: ${{ inputs.run_single_test_mode == 'N/A' || (inputs.run_single_test_mode == 'functional' && contains(fromJSON(needs.set-up-single-test.outputs.dbs), env.PERSISTENCE_DRIVER)) }}
+        if: ${{ inputs.run_single_test_mode == '' || (inputs.run_single_test_mode == 'functional' && contains(fromJSON(needs.set-up-single-test.outputs.dbs), env.PERSISTENCE_DRIVER)) }}
         timeout-minutes: ${{ fromJSON(needs.set-up-single-test.outputs.github_timeout) }} # make sure this is larger than the test timeout in the Makefile
         run: make functional-test-coverage
 
       - name: Upload test results
-        if: ${{ !cancelled() && (inputs.run_single_test_mode == 'N/A' || (inputs.run_single_test_mode == 'functional' && contains(fromJSON(needs.set-up-single-test.outputs.dbs), env.PERSISTENCE_DRIVER))) }}
+        if: ${{ !cancelled() && (inputs.run_single_test_mode == '' || (inputs.run_single_test_mode == 'functional' && contains(fromJSON(needs.set-up-single-test.outputs.dbs), env.PERSISTENCE_DRIVER))) }}
         run: make upload-test-results
 
   functional-test-xdc:
-    if: ${{ inputs.run_single_test_mode == 'N/A' || inputs.run_single_test_mode == 'functional-xdc' }}
+    if: ${{ inputs.run_single_test_mode == '' || inputs.run_single_test_mode == 'functional-xdc' }}
     name: Functional test xdc
     needs: [misc-checks, set-up-single-test]
     strategy:
@@ -351,19 +349,19 @@ jobs:
       BUILDKITE_MESSAGE: "{\"job\": \"functional-test-xdc\", \"db\": \"${{ matrix.persistence_driver }}\"}"
     steps:
       - uses: actions/checkout@v4
-        if: ${{ inputs.run_single_test_mode == 'N/A' || (inputs.run_single_test_mode == 'functional-xdc' && contains(fromJSON(needs.set-up-single-test.outputs.dbs), env.PERSISTENCE_DRIVER)) }}
+        if: ${{ inputs.run_single_test_mode == '' || (inputs.run_single_test_mode == 'functional-xdc' && contains(fromJSON(needs.set-up-single-test.outputs.dbs), env.PERSISTENCE_DRIVER)) }}
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           ref: ${{ env.COMMIT }}
 
       - uses: actions/setup-go@v5
-        if: ${{ inputs.run_single_test_mode == 'N/A' || (inputs.run_single_test_mode == 'functional-xdc' && contains(fromJSON(needs.set-up-single-test.outputs.dbs), env.PERSISTENCE_DRIVER)) }}
+        if: ${{ inputs.run_single_test_mode == '' || (inputs.run_single_test_mode == 'functional-xdc' && contains(fromJSON(needs.set-up-single-test.outputs.dbs), env.PERSISTENCE_DRIVER)) }}
         with:
           go-version-file: 'go.mod'
           check-latest: true
 
       - name: Start containerized dependencies
-        if: ${{ toJson(matrix.containers) != '[]' && (inputs.run_single_test_mode == 'N/A' || (inputs.run_single_test_mode == 'functional-xdc' && contains(fromJSON(needs.set-up-single-test.outputs.dbs), env.PERSISTENCE_DRIVER))) }}
+        if: ${{ toJson(matrix.containers) != '[]' && (inputs.run_single_test_mode == '' || (inputs.run_single_test_mode == 'functional-xdc' && contains(fromJSON(needs.set-up-single-test.outputs.dbs), env.PERSISTENCE_DRIVER))) }}
         uses: hoverkraft-tech/compose-action@v2.0.1
         with:
           compose-file: ${{ env.DOCKER_COMPOSE_FILE }}
@@ -371,16 +369,16 @@ jobs:
           down-flags: -v
 
       - name: Run functional test xdc
-        if: ${{ inputs.run_single_test_mode == 'N/A' || (inputs.run_single_test_mode == 'functional-xdc' && contains(fromJSON(needs.set-up-single-test.outputs.dbs), env.PERSISTENCE_DRIVER)) }}
+        if: ${{ inputs.run_single_test_mode == '' || (inputs.run_single_test_mode == 'functional-xdc' && contains(fromJSON(needs.set-up-single-test.outputs.dbs), env.PERSISTENCE_DRIVER)) }}
         timeout-minutes: 30
         run: make functional-test-xdc-coverage
 
       - name: Upload test results
-        if: ${{ !cancelled() && (inputs.run_single_test_mode == 'N/A' || (inputs.run_single_test_mode == 'functional-xdc' && contains(fromJSON(needs.set-up-single-test.outputs.dbs), env.PERSISTENCE_DRIVER))) }}
+        if: ${{ !cancelled() && (inputs.run_single_test_mode == '' || (inputs.run_single_test_mode == 'functional-xdc' && contains(fromJSON(needs.set-up-single-test.outputs.dbs), env.PERSISTENCE_DRIVER))) }}
         run: make upload-test-results
 
   functional-test-ndc:
-    if: ${{ inputs.run_single_test_mode == 'N/A' || inputs.run_single_test_mode == 'functional-ndc' }}
+    if: ${{ inputs.run_single_test_mode == '' || inputs.run_single_test_mode == 'functional-ndc' }}
     name: Functional test ndc
     needs: [misc-checks, set-up-single-test]
     strategy:
@@ -425,19 +423,19 @@ jobs:
       ES_VERSION: ${{ matrix.es_version }}
     steps:
       - uses: actions/checkout@v4
-        if: ${{ inputs.run_single_test_mode == 'N/A' || (inputs.run_single_test_mode == 'functional-ndc' && contains(fromJSON(needs.set-up-single-test.outputs.dbs), env.PERSISTENCE_DRIVER)) }}
+        if: ${{ inputs.run_single_test_mode == '' || (inputs.run_single_test_mode == 'functional-ndc' && contains(fromJSON(needs.set-up-single-test.outputs.dbs), env.PERSISTENCE_DRIVER)) }}
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           ref: ${{ env.COMMIT }}
 
       - uses: actions/setup-go@v5
-        if: ${{ inputs.run_single_test_mode == 'N/A' || (inputs.run_single_test_mode == 'functional-ndc' && contains(fromJSON(needs.set-up-single-test.outputs.dbs), env.PERSISTENCE_DRIVER)) }}
+        if: ${{ inputs.run_single_test_mode == '' || (inputs.run_single_test_mode == 'functional-ndc' && contains(fromJSON(needs.set-up-single-test.outputs.dbs), env.PERSISTENCE_DRIVER)) }}
         with:
           go-version-file: 'go.mod'
           check-latest: true
 
       - name: Start containerized dependencies
-        if: ${{ toJson(matrix.containers) != '[]' && (inputs.run_single_test_mode == 'N/A' || (inputs.run_single_test_mode == 'functional-ndc' && contains(fromJSON(needs.set-up-single-test.outputs.dbs), env.PERSISTENCE_DRIVER))) }}
+        if: ${{ toJson(matrix.containers) != '[]' && (inputs.run_single_test_mode == '' || (inputs.run_single_test_mode == 'functional-ndc' && contains(fromJSON(needs.set-up-single-test.outputs.dbs), env.PERSISTENCE_DRIVER))) }}
         uses: hoverkraft-tech/compose-action@v2.0.1
         with:
           compose-file: ${{ env.DOCKER_COMPOSE_FILE }}
@@ -445,12 +443,12 @@ jobs:
           down-flags: -v
 
       - name: Run functional test ndc
-        if: ${{ inputs.run_single_test_mode == 'N/A' || (inputs.run_single_test_mode == 'functional-ndc' && contains(fromJSON(needs.set-up-single-test.outputs.dbs), env.PERSISTENCE_DRIVER)) }}
+        if: ${{ inputs.run_single_test_mode == '' || (inputs.run_single_test_mode == 'functional-ndc' && contains(fromJSON(needs.set-up-single-test.outputs.dbs), env.PERSISTENCE_DRIVER)) }}
         timeout-minutes: 15
         run: make functional-test-ndc-coverage
 
   test-status:
-    if: ${{ inputs.run_single_test_mode == 'N/A' }}
+    if: ${{ inputs.run_single_test_mode == '' }}
     name: Test Status
     needs:
       - unit-test
