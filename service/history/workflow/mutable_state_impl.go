@@ -2361,7 +2361,7 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionStartedEvent(
 	return nil
 }
 
-// AddFirstWorkflowTaskScheduled adds the first workflow task scehduled event unless it should be delayed as indicated
+// AddFirstWorkflowTaskScheduled adds the first workflow task scheduled event unless it should be delayed as indicated
 // by the startEvent's FirstWorkflowTaskBackoff.
 // Returns the workflow task's scheduled event ID if a task was scheduled, 0 otherwise.
 func (ms *MutableStateImpl) AddFirstWorkflowTaskScheduled(
