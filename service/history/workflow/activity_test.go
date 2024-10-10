@@ -24,6 +24,7 @@ package workflow
 
 import (
 	"context"
+	"google.golang.org/protobuf/types/known/durationpb"
 	"testing"
 	"time"
 
@@ -130,7 +131,7 @@ func (s *activitySuite) TestGetActivityState() {
 	}
 }
 
-func (s *activitySuite) TestGetPendingActivityInfo() {
+func (s *activitySuite) TestGetPendingActivityInfoAcceptance() {
 	now := s.mockShard.GetTimeSource().Now().UTC().Round(time.Hour)
 	activityType := commonpb.ActivityType{
 		Name: "activityType",
@@ -150,4 +151,68 @@ func (s *activitySuite) TestGetPendingActivityInfo() {
 	pi, err := GetPendingActivityInfo(context.Background(), s.mockShard, s.mutableState, ai)
 	s.NoError(err)
 	s.NotNil(pi)
+}
+
+func (s *activitySuite) TestGetPendingActivityInfoNoRetryPolicy() {
+	now := s.mockShard.GetTimeSource().Now().UTC().Round(time.Hour)
+	activityType := commonpb.ActivityType{
+		Name: "activityType",
+	}
+	ai := &persistencespb.ActivityInfo{
+		ActivityType:            &activityType,
+		ActivityId:              "activityID",
+		CancelRequested:         false,
+		StartedEventId:          1,
+		Attempt:                 2,
+		ScheduledTime:           timestamppb.New(now),
+		LastAttemptCompleteTime: timestamppb.New(now.Add(-1 * time.Hour)),
+		HasRetryPolicy:          false,
+	}
+
+	s.mutableState.EXPECT().GetActivityType(gomock.Any(), gomock.Any()).Return(&activityType, nil).Times(1)
+	pi, err := GetPendingActivityInfo(context.Background(), s.mockShard, s.mutableState, ai)
+	s.NoError(err)
+	s.NotNil(pi)
+	s.Equal(enumspb.PENDING_ACTIVITY_STATE_STARTED, pi.State)
+	s.Equal(int32(1), pi.Attempt)
+	s.Nil(pi.NextAttemptScheduleTime)
+	s.Nil(pi.CurrentRetryInterval)
+}
+
+func (s *activitySuite) TestGetPendingActivityInfoHasRetryPolicy() {
+	now := s.mockShard.GetTimeSource().Now().UTC().Round(time.Hour)
+	activityType := commonpb.ActivityType{
+		Name: "activityType",
+	}
+	ai := &persistencespb.ActivityInfo{
+		ActivityType:            &activityType,
+		ActivityId:              "activityID",
+		CancelRequested:         false,
+		StartedEventId:          common.EmptyEventID,
+		Attempt:                 2,
+		ScheduledTime:           timestamppb.New(now.Add(-1 * time.Minute)),
+		LastAttemptCompleteTime: timestamppb.New(now.Add(-1 * time.Hour)),
+		HasRetryPolicy:          true,
+		RetryMaximumInterval:    nil,
+		RetryInitialInterval:    durationpb.New(time.Minute),
+		RetryBackoffCoefficient: 1.0,
+		RetryMaximumAttempts:    10,
+	}
+
+	s.mutableState.EXPECT().GetActivityType(gomock.Any(), gomock.Any()).Return(&activityType, nil).Times(1)
+	pi, err := GetPendingActivityInfo(context.Background(), s.mockShard, s.mutableState, ai)
+	s.NoError(err)
+	s.NotNil(pi)
+	s.Equal(enumspb.PENDING_ACTIVITY_STATE_SCHEDULED, pi.State)
+	s.Equal(int32(2), pi.Attempt)
+	s.Equal(ai.ActivityId, pi.ActivityId)
+	s.Nil(pi.HeartbeatDetails)
+	s.Nil(pi.LastHeartbeatTime)
+	s.Nil(pi.LastStartedTime)
+	s.Nil(pi.NextAttemptScheduleTime) // can't get this from the activity info, activity is scheduled/started
+	s.Equal(ai.RetryMaximumAttempts, pi.MaximumAttempts)
+	s.Nil(pi.AssignedBuildId)
+	s.Equal(durationpb.New(time.Minute), pi.CurrentRetryInterval)
+	s.Equal(ai.ScheduledTime, pi.ScheduledTime)
+	s.Equal(ai.LastAttemptCompleteTime, pi.LastAttemptCompleteTime)
 }

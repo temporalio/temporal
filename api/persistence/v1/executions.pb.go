@@ -1978,9 +1978,9 @@ type ActivityInfo struct {
 	// The version stamp of the worker to whom this activity was most-recently dispatched
 	LastWorkerVersionStamp        *v12.WorkerVersionStamp `protobuf:"bytes,37,opt,name=last_worker_version_stamp,json=lastWorkerVersionStamp,proto3" json:"last_worker_version_stamp,omitempty"`
 	LastUpdateVersionedTransition *VersionedTransition    `protobuf:"bytes,38,opt,name=last_update_versioned_transition,json=lastUpdateVersionedTransition,proto3" json:"last_update_versioned_transition,omitempty"`
-	// Fist time activity was scheduled.
+	// Fist time the activity was scheduled.
 	FirstScheduledTime *timestamppb.Timestamp `protobuf:"bytes,39,opt,name=first_scheduled_time,json=firstScheduledTime,proto3" json:"first_scheduled_time,omitempty"`
-	// Last time activity failed. This is the time temporal server receive the failure.
+	// Last time an activity failure was recorded by the server.
 	LastAttemptCompleteTime *timestamppb.Timestamp `protobuf:"bytes,40,opt,name=last_attempt_complete_time,json=lastAttemptCompleteTime,proto3" json:"last_attempt_complete_time,omitempty"`
 }
 

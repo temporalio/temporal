@@ -49,7 +49,6 @@ import (
 	"go.temporal.io/server/service/history/workflow"
 
 	"google.golang.org/protobuf/types/known/durationpb"
-	"google.golang.org/protobuf/types/known/emptypb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -168,76 +167,12 @@ func Invoke(
 		result.WorkflowExecutionInfo.ExecutionDuration = durationpb.New(executionDuration)
 	}
 
-	now := shard.GetTimeSource().Now().UTC()
-
 	for _, ai := range mutableState.GetPendingActivityInfos() {
-		p := &workflowpb.PendingActivityInfo{
-			ActivityId: ai.ActivityId,
-		}
-		if ai.GetUseWorkflowBuildIdInfo() != nil {
-			p.AssignedBuildId = &workflowpb.PendingActivityInfo_UseWorkflowBuildId{UseWorkflowBuildId: &emptypb.Empty{}}
-		} else if ai.GetLastIndependentlyAssignedBuildId() != "" {
-			p.AssignedBuildId = &workflowpb.PendingActivityInfo_LastIndependentlyAssignedBuildId{
-				LastIndependentlyAssignedBuildId: ai.GetLastIndependentlyAssignedBuildId(),
-			}
-		}
-
-		p.State = workflow.ActivityState(ai)
-		p.Attempt = ai.Attempt
-		if p.Attempt < 1 {
-			p.Attempt = 1
-		}
-
-		if p.State == enumspb.PENDING_ACTIVITY_STATE_SCHEDULED && now.Before(ai.ScheduledTime.AsTime()) {
-			p.NextAttemptScheduleTime = ai.ScheduledTime
-		}
-
-		p.LastAttemptCompleteTime = ai.LastAttemptCompleteTime
-		if !ai.HasRetryPolicy {
-			p.NextAttemptScheduleTime = nil
-		} else {
-			now := shard.GetTimeSource().Now().UTC()
-			if p.State == enumspb.PENDING_ACTIVITY_STATE_SCHEDULED {
-				if now.Before(ai.ScheduledTime.AsTime()) {
-					// in this case activity is waiting for a retry
-					p.NextAttemptScheduleTime = ai.ScheduledTime
-					currentRetryDuration := p.NextAttemptScheduleTime.AsTime().Sub(p.LastAttemptCompleteTime.AsTime())
-					p.CurrentRetryInterval = durationpb.New(currentRetryDuration)
-				} else {
-					// in this case activity is at least scheduled
-					p.NextAttemptScheduleTime = nil
-					interval := workflow.ExponentialBackoffAlgorithm(ai.RetryInitialInterval, ai.RetryBackoffCoefficient, p.Attempt)
-					p.CurrentRetryInterval = durationpb.New(interval)
-				}
-			}
-		}
-
-		if ai.LastHeartbeatUpdateTime != nil && !ai.LastHeartbeatUpdateTime.AsTime().IsZero() {
-			p.LastHeartbeatTime = ai.LastHeartbeatUpdateTime
-			p.HeartbeatDetails = ai.LastHeartbeatDetails
-		}
-		p.ActivityType, err = mutableState.GetActivityType(ctx, ai)
+		p, err := workflow.GetPendingActivityInfo(ctx, shard, mutableState, ai)
 		if err != nil {
 			return nil, err
 		}
-		if p.State == enumspb.PENDING_ACTIVITY_STATE_SCHEDULED {
-			p.ScheduledTime = ai.ScheduledTime
-		} else {
-			p.LastStartedTime = ai.StartedTime
-		}
-		p.LastWorkerIdentity = ai.StartedIdentity
-		if ai.HasRetryPolicy {
-			p.ExpirationTime = ai.RetryExpirationTime
-			if ai.RetryMaximumAttempts != 0 {
-				p.MaximumAttempts = ai.RetryMaximumAttempts
-			}
-			if ai.RetryLastFailure != nil {
-				p.LastFailure = ai.RetryLastFailure
-			}
-			if p.LastWorkerIdentity == "" && ai.RetryLastWorkerIdentity != "" {
-				p.LastWorkerIdentity = ai.RetryLastWorkerIdentity
-			}
-		}
+
 		result.PendingActivities = append(result.PendingActivities, p)
 	}
 
