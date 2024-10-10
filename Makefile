@@ -402,13 +402,17 @@ functional-test-coverage: prepare-coverage-test
 
 functional-test-xdc-coverage: prepare-coverage-test
 	@printf $(COLOR) "Run functional test for cross DC with coverage with $(PERSISTENCE_DRIVER) driver..."
-	@$(GOTESTSUM) --junitfile $(NEW_REPORT) -- \
-		$(FUNCTIONAL_TEST_XDC_ROOT) -shuffle on -timeout=$(TEST_TIMEOUT) $(TEST_TAG_FLAG) -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER) $(FUNCTIONAL_TEST_COVERPKG) -coverprofile=$(NEW_COVER_PROFILE)
+	$(GOTESTSUM) --junitfile $(NEW_REPORT) -- \
+		$(FUNCTIONAL_TEST_XDC_ROOT) -shuffle on -timeout=$(TEST_TIMEOUT) $(SINGLE_TEST_ARGS) $(TEST_TAG_FLAG) \
+		-persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER) \
+		$(FUNCTIONAL_TEST_COVERPKG) -coverprofile=$(NEW_COVER_PROFILE)
 
 functional-test-ndc-coverage: prepare-coverage-test
 	@printf $(COLOR) "Run functional test for NDC with coverage with $(PERSISTENCE_DRIVER) driver..."
-	@$(GOTESTSUM) --junitfile $(NEW_REPORT) -- \
-		$(FUNCTIONAL_TEST_NDC_ROOT) -shuffle on -timeout=$(TEST_TIMEOUT) $(TEST_ARGS) $(TEST_TAG_FLAG) -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER) $(FUNCTIONAL_TEST_COVERPKG) -coverprofile=$(NEW_COVER_PROFILE)
+	$(GOTESTSUM) --junitfile $(NEW_REPORT) -- \
+		$(FUNCTIONAL_TEST_NDC_ROOT) -shuffle on -timeout=$(TEST_TIMEOUT) $(TEST_ARGS) $(SINGLE_TEST_ARGS) $(TEST_TAG_FLAG) \
+		-persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER) \
+		$(FUNCTIONAL_TEST_COVERPKG) -coverprofile=$(NEW_COVER_PROFILE)
 
 .PHONY: $(SUMMARY_COVER_PROFILE)
 $(SUMMARY_COVER_PROFILE):
