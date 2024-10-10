@@ -63,9 +63,6 @@ func (s *UpdateWorkflowSdkSuite) TestUpdateWorkflow_TerminateWorkflowAfterUpdate
 
 	workflowFn := func(ctx workflow.Context) error {
 		s.NoError(workflow.SetUpdateHandler(ctx, tv.HandlerName(), func(ctx workflow.Context, arg string) error {
-			ctx = workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
-				StartToCloseTimeout: 10 * time.Second,
-			})
 			s.NoError(workflow.Await(ctx, func() bool { return false }))
 			return unreachableErr
 		}))
@@ -103,9 +100,6 @@ func (s *UpdateWorkflowSdkSuite) TestUpdateWorkflow_TimeoutWorkflowAfterUpdateAc
 
 	workflowFn := func(ctx workflow.Context) error {
 		s.NoError(workflow.SetUpdateHandler(ctx, tv.HandlerName(), func(ctx workflow.Context, arg string) error {
-			ctx = workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
-				StartToCloseTimeout: 10 * time.Second,
-			})
 			s.NoError(workflow.Await(ctx, func() bool { return false }))
 			return unreachableErr
 		}))
@@ -153,9 +147,6 @@ func (s *UpdateWorkflowSdkSuite) TestUpdateWorkflow_TerminateWorkflowAfterUpdate
 
 	workflowFn := func(ctx workflow.Context) error {
 		s.NoError(workflow.SetUpdateHandler(ctx, tv.HandlerName(), func(ctx workflow.Context, arg string) error {
-			ctx = workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
-				StartToCloseTimeout: 10 * time.Second,
-			})
 			s.NoError(workflow.Await(ctx, func() bool { return false }))
 			return unreachableErr
 		}))
@@ -180,13 +171,17 @@ func (s *UpdateWorkflowSdkSuite) TestUpdateWorkflow_TerminateWorkflowAfterUpdate
 	var wee *temporal.WorkflowExecutionError
 	s.ErrorAs(wfRun.Get(ctx, nil), &wee)
 
-	s.EqualHistoryEvents(`
-  1 WorkflowExecutionStarted
-  2 WorkflowTaskScheduled
-  3 WorkflowTaskStarted
-  4 WorkflowTaskCompleted
-  5 WorkflowExecutionUpdateAccepted
-  6 WorkflowExecutionTerminated`, s.GetHistory(s.Namespace(), tv.WorkflowExecution()))
+	hist := s.GetHistory(s.Namespace(), tv.WorkflowExecution())
+	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TERMINATED, hist[len(hist)-1].GetEventType())
+	// Not EqualHistoryEvents because there is a race and Update might be on first WFT and might be on second.
+	// TODO: Use s.EqualHistorySuffix when it is implemented.
+	// s.EqualHistoryEvents(`
+	// 1 WorkflowExecutionStarted
+	// 2 WorkflowTaskScheduled
+	// 3 WorkflowTaskStarted
+	// 4 WorkflowTaskCompleted
+	// 5 WorkflowExecutionUpdateAccepted
+	// 6 WorkflowExecutionTerminated`, s.GetHistory(s.Namespace(), tv.WorkflowExecution()))
 }
 
 func (s *UpdateWorkflowSdkSuite) TestUpdateWorkflow_ContinueAsNewAfterUpdateAdmitted() {
