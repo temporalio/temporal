@@ -45,6 +45,12 @@ const (
 
 type (
 	taskValidator interface {
+		// maybeValidate checks if a task has expired / is valid
+		// if return false, then task is invalid and should be discarded
+		// if return true, then task is *maybe-valid*, and should be dispatched
+		//
+		// a task is invalid if this task is already failed; timeout; completed, etc.
+		// a task is *not invalid* if this task can be started, or caller cannot verify the validity
 		maybeValidate(
 			task *persistencespb.AllocatedTaskInfo,
 			taskType enumspb.TaskQueueType,
@@ -80,12 +86,6 @@ func newTaskValidator(
 	}
 }
 
-// check if a task has expired / is valid
-// if return false, then task is invalid and should be discarded
-// if return true, then task is *maybe-valid*, and should be dispatched
-//
-// a task is invalid if this task is already failed; timeout; completed, etc
-// a task is *not invalid* if this task can be started, or caller cannot verify the validity
 func (v *taskValidatorImpl) maybeValidate(
 	task *persistencespb.AllocatedTaskInfo,
 	taskType enumspb.TaskQueueType,

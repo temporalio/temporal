@@ -95,8 +95,8 @@ func (rl *MultiRateLimiterImpl) Reserve() Reservation {
 	return rl.ReserveN(time.Now(), 1)
 }
 
-// ReserveN returns a Reservation that indicates how long the caller
-// must wait before event happen.
+// ReserveN calls ReserveN on its list of rate limiters and returns a MultiReservation that is a list of the
+// individual reservation objects indicating how long the caller must wait before the event can happen.
 func (rl *MultiRateLimiterImpl) ReserveN(now time.Time, numToken int) Reservation {
 	length := len(rl.rateLimiters)
 	reservations := make([]Reservation, 0, length)
@@ -116,12 +116,12 @@ func (rl *MultiRateLimiterImpl) ReserveN(now time.Time, numToken int) Reservatio
 	return NewMultiReservation(true, reservations)
 }
 
-// Wait waits up till deadline for a rate limit token
+// Wait waits up till maximum deadline for a rate limit token
 func (rl *MultiRateLimiterImpl) Wait(ctx context.Context) error {
 	return rl.WaitN(ctx, 1)
 }
 
-// WaitN waits up till deadline for n rate limit token
+// WaitN waits up till maximum deadline for n rate limit tokens
 func (rl *MultiRateLimiterImpl) WaitN(ctx context.Context, numToken int) error {
 	select {
 	case <-ctx.Done():
@@ -160,7 +160,7 @@ func (rl *MultiRateLimiterImpl) WaitN(ctx context.Context, numToken int) error {
 	}
 }
 
-// Rate returns the rate per second for this rate limiter
+// Rate returns the minimum rate per second for this rate limiter
 func (rl *MultiRateLimiterImpl) Rate() float64 {
 	result := rl.rateLimiters[0].Rate()
 	for _, rateLimiter := range rl.rateLimiters {
@@ -172,7 +172,7 @@ func (rl *MultiRateLimiterImpl) Rate() float64 {
 	return result
 }
 
-// Burst returns the burst for this rate limiter
+// Burst returns the minimum burst for this rate limiter
 func (rl *MultiRateLimiterImpl) Burst() int {
 	result := rl.rateLimiters[0].Burst()
 	for _, rateLimiter := range rl.rateLimiters {
@@ -190,4 +190,12 @@ func (rl *MultiRateLimiterImpl) TokensAt(t time.Time) int {
 		tokens = min(tokens, rateLimiter.TokensAt(t))
 	}
 	return tokens
+}
+
+// RecycleToken returns a token to each sub-rate-limiter, unblocking each
+// sub-rate-limiter's WaitN callers.
+func (rl *MultiRateLimiterImpl) RecycleToken() {
+	for _, rateLimiter := range rl.rateLimiters {
+		rateLimiter.RecycleToken()
+	}
 }

@@ -116,7 +116,7 @@ func (t *MatcherTestSuite) TestLocalSyncMatch() {
 		task, err := t.childMatcher.Poll(ctx, &pollMetadata{})
 		cancel()
 		if err == nil {
-			task.finish(nil)
+			task.finish(nil, true)
 		}
 	}()
 
@@ -152,7 +152,7 @@ func (t *MatcherTestSuite) testRemoteSyncMatch(taskSource enumsspb.TaskSource) {
 		task, err := t.childMatcher.Poll(ctx, &pollMetadata{})
 		cancel()
 		if err == nil && !task.isStarted() {
-			task.finish(nil)
+			task.finish(nil, true)
 		}
 	}()
 
@@ -528,7 +528,7 @@ func (t *MatcherTestSuite) TestQueryLocalSyncMatch() {
 		task, err := t.childMatcher.PollForQuery(ctx, &pollMetadata{})
 		cancel()
 		if err == nil && task.isQuery() {
-			task.finish(nil)
+			task.finish(nil, true)
 		}
 	}()
 
@@ -551,7 +551,7 @@ func (t *MatcherTestSuite) TestQueryRemoteSyncMatch() {
 		task, err := t.childMatcher.PollForQuery(ctx, &pollMetadata{})
 		cancel()
 		if err == nil && task.isQuery() {
-			task.finish(nil)
+			task.finish(nil, true)
 		}
 	}()
 
@@ -564,7 +564,7 @@ func (t *MatcherTestSuite) TestQueryRemoteSyncMatch() {
 			if err != nil {
 				remotePollErr = err
 			} else if task.isQuery() {
-				task.finish(nil)
+				task.finish(nil, true)
 				querySet.Swap(true)
 				remotePollResp = matchingservice.PollWorkflowTaskQueueResponse{
 					Query: &querypb.WorkflowQuery{},
@@ -615,7 +615,7 @@ func (t *MatcherTestSuite) TestQueryRemoteSyncMatchError() {
 		cancel()
 		if err == nil && task.isQuery() {
 			matched = true
-			task.finish(nil)
+			task.finish(nil, true)
 		}
 	}()
 
@@ -653,7 +653,7 @@ func (t *MatcherTestSuite) TestMustOfferLocalMatch() {
 		task, err := t.childMatcher.Poll(ctx, &pollMetadata{})
 		cancel()
 		if err == nil {
-			task.finish(nil)
+			task.finish(nil, true)
 		}
 	}()
 
@@ -682,7 +682,7 @@ func (t *MatcherTestSuite) TestMustOfferRemoteMatch() {
 			if err != nil {
 				remotePollErr = err
 			} else {
-				task.finish(nil)
+				task.finish(nil, true)
 				remotePollResp = matchingservice.PollWorkflowTaskQueueResponse{
 					WorkflowExecution: task.workflowExecution(),
 				}
