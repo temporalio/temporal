@@ -67,6 +67,13 @@ jobs:
     name: Set up single test
     runs-on: ubuntu-20.04
     outputs:
+      shard_indices: ${{ steps.generate_output.outputs.shard_indices }}
+      total_shards: ${{ steps.generate_output.outputs.shards }}
+      github_timeout: ${{ steps.generate_output.outputs.github_timeout }}
+      test_timeout: ${{ steps.generate_output.outputs.test_timeout }}
+      single_test_args: ${{ steps.generate_output.outputs.single_test_args }}
+      runs_on: ${{ steps.generate_output.outputs.runs_on }}
+      dbs: ${{ inputs.test_dbs }}
       modified_unit_test_suites: ${{ steps.collect_modified_tests.outputs.MODIFIED_UNIT_TEST_SUITES }}
       modified_integration_test_suites: ${{ steps.collect_modified_tests.outputs.MODIFIED_INTEGRATION_TEST_SUITES }}
       modified_functional_test_suites: ${{ steps.collect_modified_tests.outputs.MODIFIED_FUNCTIONAL_TEST_SUITES }}
