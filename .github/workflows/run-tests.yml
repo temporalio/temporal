@@ -94,16 +94,16 @@ jobs:
             fi
           fi
           {
-          echo "shard_indices=[ $(seq -s, 0 $((shards-1))) ]"
-          echo "shards=$shards"
-          echo "github_timeout=$((timeout+5))"
-          echo "test_timeout=${timeout}m"
-          echo "single_test_args=$single_test_args"
-          echo "runs_on=$runs_on"
+            echo "shard_indices=[ $(seq -s, 0 $((shards-1))) ]"
+            echo "shards=$shards"
+            echo "github_timeout=$((timeout+5))"
+            echo "test_timeout=${timeout}m"
+            echo "single_test_args=$single_test_args"
+            echo "runs_on=$runs_on"
           } >> "$GITHUB_OUTPUT"
       - id: cat_output
         run: |
-            cat "$GITHUB_OUTPUT"
+          cat "$GITHUB_OUTPUT"
 
       - name: Checkout Code
         uses: actions/checkout@v4
