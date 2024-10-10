@@ -110,6 +110,7 @@ type (
 		stringRepr          string
 		executionManager    persistence.ExecutionManager
 		metricsHandler      metrics.Handler
+		batchMetricsHandler metrics.BatchMetricsHandler
 		eventsCache         events.Cache
 		closeCallback       CloseCallback
 		config              *configs.Config
@@ -2063,6 +2064,7 @@ func newContext(
 	clientBean client.Bean,
 	historyClient historyservice.HistoryServiceClient,
 	metricsHandler metrics.Handler,
+	batchMetricsHandler metrics.BatchMetricsHandler,
 	payloadSerializer serialization.Serializer,
 	timeSource cclock.TimeSource,
 	namespaceRegistry namespace.Registry,
@@ -2097,6 +2099,7 @@ func newContext(
 		stringRepr:              fmt.Sprintf("Shard(%d)", shardID),
 		executionManager:        persistenceExecutionManager,
 		metricsHandler:          metricsHandler,
+		batchMetricsHandler:     batchMetricsHandler,
 		closeCallback:           closeCallback,
 		config:                  historyConfig,
 		finalizer:               finalizer.New(taggedLogger, metricsHandler),
@@ -2194,6 +2197,10 @@ func (s *ContextImpl) GetHistoryClient() historyservice.HistoryServiceClient {
 
 func (s *ContextImpl) GetMetricsHandler() metrics.Handler {
 	return s.metricsHandler
+}
+
+func (s *ContextImpl) GetBatchMetricsHandler() metrics.BatchMetricsHandler {
+	return s.batchMetricsHandler
 }
 
 func (s *ContextImpl) GetTimeSource() cclock.TimeSource {

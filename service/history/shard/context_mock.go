@@ -244,6 +244,20 @@ func (mr *MockContextMockRecorder) GetArchivalMetadata() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetArchivalMetadata", reflect.TypeOf((*MockContext)(nil).GetArchivalMetadata))
 }
 
+// GetBatchMetricsHandler mocks base method.
+func (m *MockContext) GetBatchMetricsHandler() metrics.BatchMetricsHandler {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetBatchMetricsHandler")
+	ret0, _ := ret[0].(metrics.BatchMetricsHandler)
+	return ret0
+}
+
+// GetBatchMetricsHandler indicates an expected call of GetBatchMetricsHandler.
+func (mr *MockContextMockRecorder) GetBatchMetricsHandler() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetBatchMetricsHandler", reflect.TypeOf((*MockContext)(nil).GetBatchMetricsHandler))
+}
+
 // GetClusterMetadata mocks base method.
 func (m *MockContext) GetClusterMetadata() cluster.Metadata {
 	m.ctrl.T.Helper()
@@ -970,6 +984,20 @@ func (m *MockControllableContext) GetArchivalMetadata() archiver.ArchivalMetadat
 func (mr *MockControllableContextMockRecorder) GetArchivalMetadata() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetArchivalMetadata", reflect.TypeOf((*MockControllableContext)(nil).GetArchivalMetadata))
+}
+
+// GetBatchMetricsHandler mocks base method.
+func (m *MockControllableContext) GetBatchMetricsHandler() metrics.BatchMetricsHandler {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetBatchMetricsHandler")
+	ret0, _ := ret[0].(metrics.BatchMetricsHandler)
+	return ret0
+}
+
+// GetBatchMetricsHandler indicates an expected call of GetBatchMetricsHandler.
+func (mr *MockControllableContextMockRecorder) GetBatchMetricsHandler() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetBatchMetricsHandler", reflect.TypeOf((*MockControllableContext)(nil).GetBatchMetricsHandler))
 }
 
 // GetClusterMetadata mocks base method.

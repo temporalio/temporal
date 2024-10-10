@@ -77,6 +77,7 @@ type (
 		searchAttributesMapper       searchattribute.Mapper
 		customFrontendInterceptors   []grpc.UnaryServerInterceptor
 		metricHandler                metrics.Handler
+		batchMetricsHandler          metrics.BatchMetricsHandler
 	}
 )
 
