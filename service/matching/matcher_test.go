@@ -209,55 +209,85 @@ func (t *MatcherTestSuite) testRemoteSyncMatch(taskSource enumsspb.TaskSource) {
 	t.Equal(mustParent(t.queue.partition.(*tqid.NormalPartition), 20).RpcName(), req.GetTaskQueue().GetName())
 }
 
-func (t *MatcherTestSuite) TestRejectSyncMatchWhenBacklog() {
-	historyTask := newInternalTaskForSyncMatch(randomTaskInfo().Data, nil)
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+// validateSyncMatchWhenNoBacklog is a helper which validates a sync match when there is no backlog
+func (t *MatcherTestSuite) validateSyncMatchWhenNoBacklog(wg *sync.WaitGroup, historyTask *internalTask, ctx context.Context) {
+	wg.Add(1)
 
-	// sync match happens when there is no backlog
-	t.client.EXPECT().PollWorkflowTaskQueue(gomock.Any(), gomock.Any(), gomock.Any()).Return(&matchingservice.PollWorkflowTaskQueueResponse{}, errMatchingHostThrottleTest)
-	go t.childMatcher.Poll(ctx, &pollMetadata{}) //nolint:errcheck
-	time.Sleep(time.Millisecond)
-	go func() { historyTask.responseC <- nil }()
+	// poll forwarding attempt happens when there is no backlog
+	t.client.EXPECT().PollWorkflowTaskQueue(gomock.Any(), gomock.Any(), gomock.Any()).Do(
+		func(arg0 context.Context, arg1 *matchingservice.PollWorkflowTaskQueueRequest, arg2 ...interface{}) {
+			wg.Done()
+		},
+	).Return(&matchingservice.PollWorkflowTaskQueueResponse{}, errMatchingHostThrottleTest)
+
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+		_, err := t.childMatcher.Poll(ctx, &pollMetadata{})
+		t.Assert().NoError(err)
+		cancel()
+	}()
+	wg.Wait()                        // for the poll to reach the root partition
+	time.Sleep(2 * time.Millisecond) // to ensure poller now polls locally since it encountered a forwarding error
+
+	go func() {
+		historyTask.responseC <- nil
+	}()
 	happened, err := t.childMatcher.Offer(ctx, historyTask)
 	t.True(happened)
 	t.Nil(err)
+}
 
+func (t *MatcherTestSuite) TestRejectSyncMatchWhenBacklog() {
+	historyTask := newInternalTaskForSyncMatch(randomTaskInfo().Data, nil)
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+
+	// sync match happens when there is no backlog
+	var wg sync.WaitGroup
+	t.validateSyncMatchWhenNoBacklog(&wg, historyTask, ctx)
+
+	// first task waits for a local poller
 	intruptC := make(chan struct{})
 	youngBacklogTask := newInternalTaskFromBacklog(randomTaskInfoWithAge(time.Second), nil)
-	t.client.EXPECT().AddWorkflowTask(gomock.Any(), gomock.Any(), gomock.Any()).Return(&matchingservice.AddWorkflowTaskResponse{}, errMatchingHostThrottleTest)
+	t.client.EXPECT().AddWorkflowTask(gomock.Any(), gomock.Any(), gomock.Any()).Do(
+		func(arg0 context.Context, arg1 *matchingservice.AddWorkflowTaskRequest, arg2 ...interface{}) {
+			wg.Done()
+		},
+	).Return(&matchingservice.AddWorkflowTaskResponse{}, errMatchingHostThrottleTest)
+	wg.Add(1)
 	go t.childMatcher.MustOffer(ctx, youngBacklogTask, intruptC) //nolint:errcheck
+	wg.Wait()
 	time.Sleep(time.Millisecond)
 
 	// should allow sync match when there is only young tasks in the backlog
-	t.client.EXPECT().AddWorkflowTask(gomock.Any(), gomock.Any(), gomock.Any()).Return(&matchingservice.AddWorkflowTaskResponse{}, errMatchingHostThrottleTest)
-	happened, err = t.childMatcher.Offer(ctx, historyTask)
+	t.client.EXPECT().AddWorkflowTask(gomock.Any(), gomock.Any(), gomock.Any()).Do(
+		func(arg0 context.Context, arg1 *matchingservice.AddWorkflowTaskRequest, arg2 ...interface{}) {
+		},
+	).Return(&matchingservice.AddWorkflowTaskResponse{}, errMatchingHostThrottleTest)
+	happened, err := t.childMatcher.Offer(ctx, historyTask)
 	t.Nil(err)
 	t.False(happened) // sync match did not happen, but we called the forwarder client
 
-	// should not allow sync match when there is an old task in backlog
+	// second task waits for a local poller
 	oldBacklogTask := newInternalTaskFromBacklog(randomTaskInfoWithAge(time.Minute), nil)
+	t.client.EXPECT().AddWorkflowTask(gomock.Any(), gomock.Any(), gomock.Any()).Return(&matchingservice.AddWorkflowTaskResponse{}, errMatchingHostThrottleTest).AnyTimes()
 	go t.childMatcher.MustOffer(ctx, oldBacklogTask, intruptC) //nolint:errcheck
 	time.Sleep(time.Millisecond)
+
+	// should not allow sync match when there is an old task in backlog
 	happened, err = t.childMatcher.Offer(ctx, historyTask)
 	t.False(happened)
 	t.Nil(err)
 
-	// poll both tasks
-	task, _ := t.childMatcher.Poll(ctx, &pollMetadata{})
-	t.NotNil(task)
-	task, _ = t.childMatcher.Poll(ctx, &pollMetadata{})
-	t.NotNil(task)
+	// poll both tasks which are from the backlog
+	for i := 0; i < 2; i++ {
+		task, _ := t.childMatcher.Poll(ctx, &pollMetadata{})
+		t.NotNil(task)
+		t.Equal(enumsspb.TASK_SOURCE_DB_BACKLOG, task.source)
+	}
 	time.Sleep(time.Millisecond)
 
 	// should allow sync match now
-	t.client.EXPECT().PollWorkflowTaskQueue(gomock.Any(), gomock.Any(), gomock.Any()).Return(&matchingservice.PollWorkflowTaskQueueResponse{}, errMatchingHostThrottleTest)
-	go t.childMatcher.Poll(ctx, &pollMetadata{}) //nolint:errcheck
-	time.Sleep(time.Millisecond)
-	go func() { historyTask.responseC <- nil }()
-	happened, err = t.childMatcher.Offer(ctx, historyTask)
-	t.True(happened)
-	t.Nil(err)
-
+	t.validateSyncMatchWhenNoBacklog(&wg, historyTask, ctx)
 	cancel()
 }
 
