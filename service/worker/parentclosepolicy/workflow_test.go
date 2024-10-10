@@ -31,6 +31,8 @@ import (
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	"google.golang.org/grpc"
+
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
@@ -42,10 +44,10 @@ import (
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/service/history/tests"
-	"google.golang.org/grpc"
 )
 
 type parentClosePolicyWorkflowSuite struct {
@@ -53,6 +55,7 @@ type parentClosePolicyWorkflowSuite struct {
 	suite.Suite
 	testsuite.WorkflowTestSuite
 
+	hostInfo          membership.HostInfo
 	controller        *gomock.Controller
 	mockClientBean    *client.MockBean
 	mockHistoryClient *historyservicemock.MockHistoryServiceClient
@@ -69,6 +72,7 @@ func TestParentClosePolicyWorkflowSuite(t *testing.T) {
 func (s *parentClosePolicyWorkflowSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 
+	s.hostInfo = membership.NewHostInfoFromAddress("localhost")
 	s.controller = gomock.NewController(s.T())
 	s.mockClientBean = client.NewMockBean(s.controller)
 	s.mockHistoryClient = historyservicemock.NewMockHistoryServiceClient(s.controller)
@@ -88,6 +92,7 @@ func (s *parentClosePolicyWorkflowSuite) SetupTest() {
 			NumParentClosePolicySystemWorkflows:    dynamicconfig.GetIntPropertyFn(10),
 		},
 		clientBean: s.mockClientBean,
+		hostInfo:   s.hostInfo,
 	}
 }
 
