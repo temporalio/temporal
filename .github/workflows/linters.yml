@@ -59,12 +59,30 @@ jobs:
         run: |
           make lint-api
 
+  lint-copyright:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: 'go.mod'
+          check-latest: true
+
+      - name: Check new go files for license
+        run: |
+          git fetch origin main
+          make copyright-check
+
   linters-succeed:
     name: All Linters Succeed
     needs:
       - lint-api
       - lint-protos
       - lint-actions
+      - lint-copyright
     runs-on: ubuntu-latest
     if: always()
     env:
