@@ -821,7 +821,7 @@ func reapplyEvents(
 				// Only reapply hardcoded events above or ones registered and are cherry-pickable in the HSM framework.
 				continue
 			}
-			if err := def.CherryPick(root, event); err != nil {
+			if err := def.CherryPick(root, event, resetReapplyExcludeTypes); err != nil {
 				if errors.Is(err, hsm.ErrNotCherryPickable) || errors.Is(err, hsm.ErrStateMachineNotFound) || errors.Is(err, hsm.ErrInvalidTransition) {
 					continue
 				}

@@ -51,7 +51,7 @@ func (d ScheduledEventDefinition) Apply(root *hsm.Node, event *historypb.History
 	return err
 }
 
-func (d ScheduledEventDefinition) CherryPick(root *hsm.Node, event *historypb.HistoryEvent) error {
+func (d ScheduledEventDefinition) CherryPick(root *hsm.Node, event *historypb.HistoryEvent, _ map[enumspb.ResetReapplyExcludeType]bool) error {
 	// We never cherry pick command events, and instead allow user logic to reschedule those commands.
 	return hsm.ErrNotCherryPickable
 }
@@ -72,7 +72,7 @@ func (d CancelRequestedEventDefinition) Apply(root *hsm.Node, event *historypb.H
 	})
 }
 
-func (d CancelRequestedEventDefinition) CherryPick(root *hsm.Node, event *historypb.HistoryEvent) error {
+func (d CancelRequestedEventDefinition) CherryPick(root *hsm.Node, event *historypb.HistoryEvent, _ map[enumspb.ResetReapplyExcludeType]bool) error {
 	// We never cherry pick command events, and instead allow user logic to reschedule those commands.
 	return hsm.ErrNotCherryPickable
 }
@@ -97,7 +97,10 @@ func (d StartedEventDefinition) Apply(root *hsm.Node, event *historypb.HistoryEv
 	})
 }
 
-func (d StartedEventDefinition) CherryPick(root *hsm.Node, event *historypb.HistoryEvent) error {
+func (d StartedEventDefinition) CherryPick(root *hsm.Node, event *historypb.HistoryEvent, excludeTypes map[enumspb.ResetReapplyExcludeType]bool) error {
+	if excludeTypes[enumspb.RESET_REAPPLY_EXCLUDE_TYPE_NEXUS] {
+		return hsm.ErrNotCherryPickable
+	}
 	return d.Apply(root, event)
 }
 
@@ -120,7 +123,10 @@ func (d CompletedEventDefinition) Type() enumspb.EventType {
 	return enumspb.EVENT_TYPE_NEXUS_OPERATION_COMPLETED
 }
 
-func (d CompletedEventDefinition) CherryPick(root *hsm.Node, event *historypb.HistoryEvent) error {
+func (d CompletedEventDefinition) CherryPick(root *hsm.Node, event *historypb.HistoryEvent, excludeTypes map[enumspb.ResetReapplyExcludeType]bool) error {
+	if excludeTypes[enumspb.RESET_REAPPLY_EXCLUDE_TYPE_NEXUS] {
+		return hsm.ErrNotCherryPickable
+	}
 	return d.Apply(root, event)
 }
 
@@ -144,7 +150,10 @@ func (d FailedEventDefinition) Apply(root *hsm.Node, event *historypb.HistoryEve
 	})
 }
 
-func (d FailedEventDefinition) CherryPick(root *hsm.Node, event *historypb.HistoryEvent) error {
+func (d FailedEventDefinition) CherryPick(root *hsm.Node, event *historypb.HistoryEvent, excludeTypes map[enumspb.ResetReapplyExcludeType]bool) error {
+	if excludeTypes[enumspb.RESET_REAPPLY_EXCLUDE_TYPE_NEXUS] {
+		return hsm.ErrNotCherryPickable
+	}
 	return d.Apply(root, event)
 }
 
@@ -167,7 +176,10 @@ func (d CanceledEventDefinition) Apply(root *hsm.Node, event *historypb.HistoryE
 	})
 }
 
-func (d CanceledEventDefinition) CherryPick(root *hsm.Node, event *historypb.HistoryEvent) error {
+func (d CanceledEventDefinition) CherryPick(root *hsm.Node, event *historypb.HistoryEvent, excludeTypes map[enumspb.ResetReapplyExcludeType]bool) error {
+	if excludeTypes[enumspb.RESET_REAPPLY_EXCLUDE_TYPE_NEXUS] {
+		return hsm.ErrNotCherryPickable
+	}
 	return d.Apply(root, event)
 }
 
@@ -189,7 +201,10 @@ func (d TimedOutEventDefinition) Apply(root *hsm.Node, event *historypb.HistoryE
 	})
 }
 
-func (d TimedOutEventDefinition) CherryPick(root *hsm.Node, event *historypb.HistoryEvent) error {
+func (d TimedOutEventDefinition) CherryPick(root *hsm.Node, event *historypb.HistoryEvent, excludeTypes map[enumspb.ResetReapplyExcludeType]bool) error {
+	if excludeTypes[enumspb.RESET_REAPPLY_EXCLUDE_TYPE_NEXUS] {
+		return hsm.ErrNotCherryPickable
+	}
 	return d.Apply(root, event)
 }
 
