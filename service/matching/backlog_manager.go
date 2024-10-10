@@ -127,7 +127,10 @@ func (c *backlogManagerImpl) signalIfFatal(err error) bool {
 	if errors.As(err, &condfail) {
 		c.metricsHandler.Counter(metrics.ConditionFailedErrorPerTaskQueueCounter.Name()).Record(1)
 		c.skipFinalUpdate.Store(true)
-		c.pqMgr.UnloadFromPartitionManager(unloadCauseConflict)
+		// Run this in a new goroutine since this will call taskReader and taskWriter's Stop()
+		// synchronously, which wait for their goroutines to exit, and this is probably being
+		// called from one of those goroutines.
+		go c.pqMgr.UnloadFromPartitionManager(unloadCauseConflict)
 		return true
 	}
 	return false
@@ -163,7 +166,7 @@ func (c *backlogManagerImpl) SetInitializedError(err error) {
 		// We can't recover from here without starting over, so unload the whole task queue.
 		// Skip final update since we never initialized.
 		c.skipFinalUpdate.Store(true)
-		c.pqMgr.UnloadFromPartitionManager(unloadCauseInitError)
+		go c.pqMgr.UnloadFromPartitionManager(unloadCauseInitError)
 	}
 }
 
@@ -173,8 +176,7 @@ func (c *backlogManagerImpl) WaitUntilInitialized(ctx context.Context) error {
 }
 
 func (c *backlogManagerImpl) SpoolTask(taskInfo *persistencespb.TaskInfo) error {
-	_, err := c.taskWriter.appendTask(taskInfo)
-	c.signalIfFatal(err)
+	err := c.taskWriter.appendTask(taskInfo)
 	if err == nil {
 		c.taskReader.Signal()
 	}
@@ -230,8 +232,7 @@ func (c *backlogManagerImpl) completeTask(task *persistencespb.AllocatedTaskInfo
 		// Note that RecordTaskStarted only fails after retrying for a long time, so a single task will not be
 		// re-written to persistence frequently.
 		err = executeWithRetry(context.Background(), func(_ context.Context) error {
-			_, err := c.taskWriter.appendTask(task.Data)
-			return err
+			return c.taskWriter.appendTask(task.Data)
 		})
 
 		if err != nil {
@@ -245,7 +246,7 @@ func (c *backlogManagerImpl) completeTask(task *persistencespb.AllocatedTaskInfo
 				tag.WorkflowTaskQueueType(c.queueKey().TaskType()))
 			// Skip final update since persistence is having problems.
 			c.skipFinalUpdate.Store(true)
-			c.pqMgr.UnloadFromPartitionManager(unloadCauseOtherError)
+			go c.pqMgr.UnloadFromPartitionManager(unloadCauseOtherError)
 			return
 		}
 		c.taskReader.Signal()
