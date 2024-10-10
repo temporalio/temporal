@@ -48,8 +48,7 @@ type (
 
 		definition.WorkflowKey
 		ExecutableTask
-		req                    *historyservice.ReplicateWorkflowStateRequest
-		markPoisonPillAttempts int
+		req *historyservice.ReplicateWorkflowStateRequest
 	}
 )
 
@@ -91,7 +90,6 @@ func NewExecutableWorkflowStateTask(
 			WorkflowState: task.GetWorkflowState(),
 			RemoteCluster: sourceClusterName,
 		},
-		markPoisonPillAttempts: 0,
 	}
 }
 

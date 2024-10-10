@@ -31,7 +31,6 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -60,45 +59,18 @@ func (l *logRecorder) Warn(msg string, tags ...tag.Tag) {
 	l.records = append(l.records, logRecord{msg: msg, tags: tags})
 }
 
-func TestDLQWriter_ErrGetClusterMetadata(t *testing.T) {
-	t.Parallel()
-
-	queueWriter := &queuestest.FakeQueueWriter{}
-	ctrl := gomock.NewController(t)
-	clusterMetadata := cluster.NewMockMetadata(ctrl)
-	clusterMetadata.EXPECT().GetAllClusterInfo().Return(map[string]cluster.ClusterInformation{})
-	namespaceRegistry := namespace.NewMockRegistry(ctrl)
-	namespaceRegistry.EXPECT().GetNamespaceByID(gomock.Any()).Return(&namespace.Namespace{}, nil).AnyTimes()
-	writer := queues.NewDLQWriter(queueWriter, clusterMetadata, metrics.NoopMetricsHandler, log.NewTestLogger(), namespaceRegistry)
-	err := writer.WriteTaskToDLQ(
-		context.Background(),
-		"source-cluster",
-		"target-cluster",
-		1,
-		&tasks.WorkflowTask{},
-	)
-	assert.ErrorIs(t, err, queues.ErrGetClusterMetadata)
-	assert.Empty(t, queueWriter.EnqueueTaskRequests)
-}
-
 func TestDLQWriter_ErrGetNamespaceName(t *testing.T) {
 	t.Parallel()
 
 	queueWriter := &queuestest.FakeQueueWriter{}
 	ctrl := gomock.NewController(t)
-	clusterMetadata := cluster.NewMockMetadata(ctrl)
-	clusterMetadata.EXPECT().GetAllClusterInfo().Return(map[string]cluster.ClusterInformation{
-		"source-cluster": {
-			ShardCount: 100,
-		},
-	})
 	namespaceRegistry := namespace.NewMockRegistry(ctrl)
 	errorMsg := "GetNamespaceByID failed"
 	namespaceRegistry.EXPECT().GetNamespaceByID(gomock.Any()).Return(nil, errors.New(errorMsg)).AnyTimes()
 	logger := &logRecorder{SnTaggedLogger: log.NewTestLogger()}
 	metricsHandler := metricstest.NewCaptureHandler()
 	capture := metricsHandler.StartCapture()
-	writer := queues.NewDLQWriter(queueWriter, clusterMetadata, metricsHandler, logger, namespaceRegistry)
+	writer := queues.NewDLQWriter(queueWriter, metricsHandler, logger, namespaceRegistry)
 	task := &tasks.WorkflowTask{
 		WorkflowKey: definition.WorkflowKey{
 			NamespaceID: string(tests.NamespaceID),
@@ -137,18 +109,12 @@ func TestDLQWriter_Ok(t *testing.T) {
 
 	queueWriter := &queuestest.FakeQueueWriter{}
 	ctrl := gomock.NewController(t)
-	clusterMetadata := cluster.NewMockMetadata(ctrl)
-	clusterMetadata.EXPECT().GetAllClusterInfo().Return(map[string]cluster.ClusterInformation{
-		"source-cluster": {
-			ShardCount: 100,
-		},
-	})
 	namespaceRegistry := namespace.NewMockRegistry(ctrl)
 	namespaceRegistry.EXPECT().GetNamespaceByID(gomock.Any()).Return(&namespace.Namespace{}, nil).AnyTimes()
 	logger := &logRecorder{SnTaggedLogger: log.NewTestLogger()}
 	metricsHandler := metricstest.NewCaptureHandler()
 	capture := metricsHandler.StartCapture()
-	writer := queues.NewDLQWriter(queueWriter, clusterMetadata, metricsHandler, logger, namespaceRegistry)
+	writer := queues.NewDLQWriter(queueWriter, metricsHandler, logger, namespaceRegistry)
 	task := &tasks.WorkflowTask{
 		WorkflowKey: definition.WorkflowKey{
 			NamespaceID: string(tests.NamespaceID),

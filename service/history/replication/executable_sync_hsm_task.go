@@ -53,8 +53,6 @@ type (
 		ExecutableTask
 
 		taskAttr *replicationspb.SyncHSMAttributes
-
-		markPoisonPillAttempts int
 	}
 )
 
@@ -88,8 +86,7 @@ func NewExecutableSyncHSMTask(
 			priority,
 			replicationTask,
 		),
-		taskAttr:               task,
-		markPoisonPillAttempts: 0,
+		taskAttr: task,
 	}
 }
 

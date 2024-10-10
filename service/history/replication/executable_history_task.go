@@ -62,8 +62,7 @@ type (
 		deserializeLock   sync.Mutex
 		eventsDesResponse *eventsDeserializeResponse
 
-		batchable              bool
-		markPoisonPillAttempts int
+		batchable bool
 	}
 	eventsDeserializeResponse struct {
 		events       [][]*historypb.HistoryEvent
@@ -106,13 +105,12 @@ func NewExecutableHistoryTask(
 			replicationTask,
 		),
 
-		baseExecutionInfo:      task.BaseExecutionInfo,
-		versionHistoryItems:    task.VersionHistoryItems,
-		eventsBlobs:            eventBatches,
-		newRunEventsBlob:       task.GetNewRunEvents(),
-		newRunID:               task.GetNewRunId(),
-		batchable:              true,
-		markPoisonPillAttempts: 0,
+		baseExecutionInfo:   task.BaseExecutionInfo,
+		versionHistoryItems: task.VersionHistoryItems,
+		eventsBlobs:         eventBatches,
+		newRunEventsBlob:    task.GetNewRunEvents(),
+		newRunID:            task.GetNewRunId(),
+		batchable:           true,
 	}
 }
 

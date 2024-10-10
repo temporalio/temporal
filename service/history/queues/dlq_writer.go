@@ -29,7 +29,6 @@ import (
 	"errors"
 	"fmt"
 
-	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
@@ -42,7 +41,6 @@ type (
 	// DLQWriter can be used to write tasks to the DLQ.
 	DLQWriter struct {
 		dlqWriter         QueueWriter
-		clusterMetadata   cluster.Metadata
 		metricsHandler    metrics.Handler
 		logger            log.SnTaggedLogger
 		namespaceRegistry namespace.Registry
@@ -61,16 +59,19 @@ type (
 )
 
 var (
-	ErrSendTaskToDLQ      = errors.New("failed to send task to DLQ")
-	ErrCreateDLQ          = errors.New("failed to create DLQ")
-	ErrGetClusterMetadata = errors.New("failed to get cluster metadata")
+	ErrSendTaskToDLQ = errors.New("failed to send task to DLQ")
+	ErrCreateDLQ     = errors.New("failed to create DLQ")
 )
 
 // NewDLQWriter returns a DLQ which will write to the given QueueWriter.
-func NewDLQWriter(w QueueWriter, m cluster.Metadata, h metrics.Handler, l log.SnTaggedLogger, r namespace.Registry) *DLQWriter {
+func NewDLQWriter(
+	w QueueWriter,
+	h metrics.Handler,
+	l log.SnTaggedLogger,
+	r namespace.Registry,
+) *DLQWriter {
 	return &DLQWriter{
 		dlqWriter:         w,
-		clusterMetadata:   m,
 		metricsHandler:    h,
 		logger:            l,
 		namespaceRegistry: r,

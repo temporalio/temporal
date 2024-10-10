@@ -51,9 +51,8 @@ type (
 		req *historyservice.SyncActivityRequest
 
 		// following fields are used only for batching functionality
-		batchable              bool
-		activityInfos          []*historyservice.ActivitySyncInfo
-		markPoisonPillAttempts int
+		batchable     bool
+		activityInfos []*historyservice.ActivitySyncInfo
 	}
 )
 
@@ -122,7 +121,6 @@ func NewExecutableActivityStateTask(
 			LastStartedBuildId:         task.LastStartedBuildId,
 			LastStartedRedirectCounter: task.LastStartedRedirectCounter,
 		}),
-		markPoisonPillAttempts: 0,
 	}
 }
 

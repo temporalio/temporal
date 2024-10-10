@@ -300,58 +300,29 @@ func (s *executableActivityStateTaskSuite) TestHandleErr_Other() {
 }
 
 func (s *executableActivityStateTaskSuite) TestMarkPoisonPill() {
-	shardID := rand.Int31()
-	shardContext := shard.NewMockContext(s.controller)
-	s.shardController.EXPECT().GetShardByNamespaceWorkflow(
-		namespace.ID(s.task.NamespaceID),
-		s.task.WorkflowID,
-	).Return(shardContext, nil).AnyTimes()
-	shardContext.EXPECT().GetShardID().Return(shardID).AnyTimes()
-	s.mockExecutionManager.EXPECT().PutReplicationTaskToDLQ(gomock.Any(), &persistence.PutReplicationTaskToDLQRequest{
-		ShardID:           shardID,
-		SourceClusterName: s.sourceClusterName,
-		TaskInfo: &persistencespb.ReplicationTaskInfo{
-			NamespaceId:      s.task.NamespaceID,
-			WorkflowId:       s.task.WorkflowID,
-			RunId:            s.task.RunID,
-			TaskId:           s.task.ExecutableTask.TaskID(),
-			TaskType:         enumsspb.TASK_TYPE_REPLICATION_SYNC_ACTIVITY,
-			ScheduledEventId: s.task.req.ScheduledEventId,
-			Version:          s.task.req.Version,
+	replicationTask := &replicationspb.ReplicationTask{
+		TaskType:     enumsspb.REPLICATION_TASK_TYPE_SYNC_ACTIVITY_TASK,
+		SourceTaskId: s.taskID,
+		Attributes: &replicationspb.ReplicationTask_SyncActivityTaskAttributes{
+			SyncActivityTaskAttributes: s.replicationTask,
 		},
-	}).Return(nil)
+		RawTaskInfo: nil,
+	}
+	s.executableTask.EXPECT().ReplicationTask().Return(replicationTask).AnyTimes()
+	s.executableTask.EXPECT().MarkPoisonPill().Times(1)
 
 	err := s.task.MarkPoisonPill()
 	s.NoError(err)
-}
 
-func (s *executableActivityStateTaskSuite) TestMarkPoisonPill_MaxAttemptsReached() {
-	s.task.markPoisonPillAttempts = MarkPoisonPillMaxAttempts - 1
-	shardID := rand.Int31()
-	shardContext := shard.NewMockContext(s.controller)
-	s.shardController.EXPECT().GetShardByNamespaceWorkflow(
-		namespace.ID(s.task.NamespaceID),
-		s.task.WorkflowID,
-	).Return(shardContext, nil).AnyTimes()
-	shardContext.EXPECT().GetShardID().Return(shardID).AnyTimes()
-	s.mockExecutionManager.EXPECT().PutReplicationTaskToDLQ(gomock.Any(), &persistence.PutReplicationTaskToDLQRequest{
-		ShardID:           shardID,
-		SourceClusterName: s.sourceClusterName,
-		TaskInfo: &persistencespb.ReplicationTaskInfo{
-			NamespaceId:      s.task.NamespaceID,
-			WorkflowId:       s.task.WorkflowID,
-			RunId:            s.task.RunID,
-			TaskId:           s.task.ExecutableTask.TaskID(),
-			TaskType:         enumsspb.TASK_TYPE_REPLICATION_SYNC_ACTIVITY,
-			ScheduledEventId: s.task.req.ScheduledEventId,
-			Version:          s.task.req.Version,
-		},
-	}).Return(serviceerror.NewInternal("failed"))
-
-	err := s.task.MarkPoisonPill()
-	s.Error(err)
-	err = s.task.MarkPoisonPill()
-	s.NoError(err)
+	s.Equal(&persistencespb.ReplicationTaskInfo{
+		NamespaceId:      s.task.NamespaceID,
+		WorkflowId:       s.task.WorkflowID,
+		RunId:            s.task.RunID,
+		TaskId:           s.task.ExecutableTask.TaskID(),
+		TaskType:         enumsspb.TASK_TYPE_REPLICATION_SYNC_ACTIVITY,
+		ScheduledEventId: s.task.req.ScheduledEventId,
+		Version:          s.task.req.Version,
+	}, replicationTask.RawTaskInfo)
 }
 
 func (s *executableActivityStateTaskSuite) TestBatchedTask_ShouldBatchTogether_AndExecute() {
