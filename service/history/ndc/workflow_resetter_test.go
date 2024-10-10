@@ -1008,7 +1008,6 @@ func (s *workflowResetterSuite) TestReapplyContinueAsNewWorkflowEvents_ExcludeAl
 	lastVisitedRunID, err := s.workflowResetter.reapplyContinueAsNewWorkflowEvents(
 		ctx,
 		mutableState,
-		nil,
 		currentWorkflow,
 		s.namespaceID,
 		s.workflowID,
