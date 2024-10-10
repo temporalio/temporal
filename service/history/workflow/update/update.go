@@ -263,21 +263,21 @@ func (u *Update) WaitLifecycleStage(
 func (u *Update) abort(reason AbortReason) {
 	u.instrumentation.countAborted()
 
+	abortFailure, abortErr := reason.FailureError(u.state)
+	var abortOutcome *updatepb.Outcome
+	if abortFailure != nil {
+		abortOutcome = &updatepb.Outcome{Value: &updatepb.Outcome_Failure{Failure: abortFailure}}
+	}
+
 	const preAcceptedStates = stateSet(stateCreated | stateProvisionallyAdmitted | stateAdmitted | stateSent | stateProvisionallyAccepted)
 	if u.state.Matches(preAcceptedStates | stateSet(stateProvisionallyCompletedAfterAccepted)) {
-		u.accepted.(*future.FutureImpl[*failurepb.Failure]).Set(nil, reason.Error())
-		u.outcome.(*future.FutureImpl[*updatepb.Outcome]).Set(nil, reason.Error())
+		u.accepted.(*future.FutureImpl[*failurepb.Failure]).Set(abortFailure, abortErr)
+		u.outcome.(*future.FutureImpl[*updatepb.Outcome]).Set(abortOutcome, abortErr)
 	}
 
 	const preCompletedStates = stateSet(stateAccepted | stateProvisionallyCompleted)
 	if u.state.Matches(preCompletedStates) {
-		abortErr := reason.Error()
-		if reason == AbortReasonWorkflowContinuing {
-			// Accepted Update can't be applied to the new run, and must be aborted
-			// same way as if Workflow is completed.
-			abortErr = AbortReasonWorkflowCompleted.Error()
-		}
-		u.outcome.(*future.FutureImpl[*updatepb.Outcome]).Set(nil, abortErr)
+		u.outcome.(*future.FutureImpl[*updatepb.Outcome]).Set(abortOutcome, abortErr)
 	}
 
 	u.setState(stateAborted)
@@ -302,7 +302,9 @@ func (u *Update) Admit(
 		// There shouldn't be any waiters before Update is admitted (this func returns).
 		// Call abort to seal the Update.
 		u.abort(AbortReasonWorkflowCompleted)
-		return AbortReasonWorkflowCompleted.Error()
+		// This error must be not nil.
+		_, abortErr := AbortReasonWorkflowCompleted.FailureError(stateCreated)
+		return abortErr
 	}
 
 	u.instrumentation.countRequestMsg()
