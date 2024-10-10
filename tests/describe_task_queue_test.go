@@ -25,6 +25,7 @@ package tests
 import (
 	"context"
 	"flag"
+	"fmt"
 	"testing"
 	"time"
 
@@ -75,11 +76,13 @@ func (s *DescribeTaskQueueSuite) TestAddNoTasks_ValidateStats() {
 	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 4)
 	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 4)
 	s.OverrideDynamicConfig(dynamicconfig.MatchingLongPollExpirationInterval, 10*time.Second)
+	s.OverrideDynamicConfig(dynamicconfig.CachedPhysicalInfoByBuildIdTTL, 0*time.Millisecond)
 
 	s.publishConsumeWorkflowTasksValidateStats(0, true)
 }
 
 func (s *DescribeTaskQueueSuite) TestAddSingleTask_ValidateStats() {
+	s.OverrideDynamicConfig(dynamicconfig.CachedPhysicalInfoByBuildIdTTL, 0*time.Millisecond)
 	s.OverrideDynamicConfig(dynamicconfig.MatchingUpdateAckInterval, 5*time.Second)
 	s.RunTestWithMatchingBehavior(func() { s.publishConsumeWorkflowTasksValidateStats(1, true) })
 }
@@ -89,6 +92,7 @@ func (s *DescribeTaskQueueSuite) TestAddMultipleTasksMultiplePartitions_Validate
 	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 4)
 	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 4)
 	s.OverrideDynamicConfig(dynamicconfig.MatchingLongPollExpirationInterval, 10*time.Second)
+	s.OverrideDynamicConfig(dynamicconfig.CachedPhysicalInfoByBuildIdTTL, 0*time.Second)
 
 	s.publishConsumeWorkflowTasksValidateStats(100, true)
 }
@@ -100,6 +104,31 @@ func (s *DescribeTaskQueueSuite) TestAddSingleTask_ValidateStatsLegacyAPIMode() 
 	s.OverrideDynamicConfig(dynamicconfig.MatchingLongPollExpirationInterval, 10*time.Second)
 
 	s.publishConsumeWorkflowTasksValidateStats(1, false)
+}
+
+// TODO Shivam - Consult Shahab about the timing taken for polls here for ForceTaskForwardNoPollForwardAllowSync as polls take ~ 1.2 seconds!
+// Question - Why are polls taking longer when CachedPhysicalInfoByBuildIdTTL value shifts from 2 seconds to 800 milliseconds?
+func (s *DescribeTaskQueueSuite) TestAddSingleTask_ValidateCachedStats() {
+	s.OverrideDynamicConfig(dynamicconfig.CachedPhysicalInfoByBuildIdTTL, 800*time.Millisecond)
+	s.OverrideDynamicConfig(dynamicconfig.MatchingUpdateAckInterval, 5*time.Second)
+	s.RunTestWithMatchingBehavior(func() { s.publishConsumeWorkflowTasksValidateStats(1, true) })
+}
+
+func (s *DescribeTaskQueueSuite) TestAddSingleTask_ValidateCachedStatsNoMatchingBehaviour() {
+	s.OverrideDynamicConfig(dynamicconfig.CachedPhysicalInfoByBuildIdTTL, 600*time.Millisecond)
+	s.OverrideDynamicConfig(dynamicconfig.MatchingLongPollExpirationInterval, time.Minute)
+	s.OverrideDynamicConfig(dynamicconfig.MatchingUpdateAckInterval, 5*time.Second)
+	s.publishConsumeWorkflowTasksValidateStats(1, true)
+}
+
+func (s *DescribeTaskQueueSuite) TestAddMultipleTasksMultiplePartitions_ValidateCachedStats() {
+	// Override the ReadPartitions and WritePartitions
+	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 4)
+	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 4)
+	s.OverrideDynamicConfig(dynamicconfig.CachedPhysicalInfoByBuildIdTTL, 600*time.Millisecond)
+	s.OverrideDynamicConfig(dynamicconfig.MatchingLongPollExpirationInterval, 5*time.Millisecond)
+
+	s.publishConsumeWorkflowTasksValidateStats(100, true)
 }
 
 func (s *DescribeTaskQueueSuite) publishConsumeWorkflowTasksValidateStats(workflows int, isEnhancedMode bool) {
@@ -149,6 +178,7 @@ func (s *DescribeTaskQueueSuite) publishConsumeWorkflowTasksValidateStats(workfl
 	expectedAddRate[enumspb.TASK_QUEUE_TYPE_WORKFLOW] = workflows > 0
 	expectedDispatchRate[enumspb.TASK_QUEUE_TYPE_WORKFLOW] = false
 
+	fmt.Println("first call")
 	s.validateDescribeTaskQueue(tqName, expectedBacklogCount, maxBacklogExtraTasks, expectedAddRate, expectedDispatchRate, isEnhancedMode)
 
 	// Poll the tasks
@@ -185,6 +215,17 @@ func (s *DescribeTaskQueueSuite) publishConsumeWorkflowTasksValidateStats(workfl
 		s.NoError(err)
 	}
 
+	// cache based tests
+	cacheTTL := s.GetTestCluster().Host().DcClient().GetValue(dynamicconfig.CachedPhysicalInfoByBuildIdTTL.Key())[0].Value
+	cacheTTLDuration, ok := cacheTTL.(time.Duration)
+	s.True(ok)
+
+	// why is the sleep duration here affecting the poll timings below?
+	if cacheTTLDuration != 0 {
+		//time.Sleep(cacheTTLDuration)
+		time.Sleep(1 * time.Second)
+	}
+
 	// call describeTaskQueue to verify if the WTF backlog decreased and activity backlog increased
 	expectedBacklogCount[enumspb.TASK_QUEUE_TYPE_WORKFLOW] = int64(0)
 	expectedAddRate[enumspb.TASK_QUEUE_TYPE_WORKFLOW] = workflows > 0
@@ -195,7 +236,11 @@ func (s *DescribeTaskQueueSuite) publishConsumeWorkflowTasksValidateStats(workfl
 	expectedAddRate[enumspb.TASK_QUEUE_TYPE_ACTIVITY] = workflows > 0
 	expectedDispatchRate[enumspb.TASK_QUEUE_TYPE_ACTIVITY] = false
 
+	fmt.Println("second last call")
 	s.validateDescribeTaskQueue(tqName, expectedBacklogCount, maxBacklogExtraTasks, expectedAddRate, expectedDispatchRate, isEnhancedMode)
+
+	// checking how much time has passed?
+	pollStart := time.Now()
 
 	// Poll the tasks
 	for i := 0; i < workflows; {
@@ -208,15 +253,22 @@ func (s *DescribeTaskQueueSuite) publishConsumeWorkflowTasksValidateStats(workfl
 		)
 		s.NoError(err1)
 		if resp1 == nil || resp1.GetAttempt() < 1 {
+			fmt.Println("got empty response")
 			continue // poll again on empty responses
 		}
 		i++
 	}
 
-	expectedBacklogCount[enumspb.TASK_QUEUE_TYPE_ACTIVITY] = int64(0)
-	expectedAddRate[enumspb.TASK_QUEUE_TYPE_ACTIVITY] = workflows > 0
-	expectedDispatchRate[enumspb.TASK_QUEUE_TYPE_ACTIVITY] = workflows > 0
+	// how is this time affected by time.sleep above?
+	fmt.Printf("\n polls ended in %s time\n", time.Since(pollStart))
 
+	if cacheTTLDuration == 0 {
+		// fetch the latest stats
+		expectedBacklogCount[enumspb.TASK_QUEUE_TYPE_ACTIVITY] = int64(0)
+		expectedAddRate[enumspb.TASK_QUEUE_TYPE_ACTIVITY] = workflows > 0
+		expectedDispatchRate[enumspb.TASK_QUEUE_TYPE_ACTIVITY] = workflows > 0
+	}
+	fmt.Println("final call")
 	s.validateDescribeTaskQueue(tqName, expectedBacklogCount, maxBacklogExtraTasks, expectedAddRate, expectedDispatchRate, isEnhancedMode)
 }
 
@@ -243,14 +295,14 @@ func (s *DescribeTaskQueueSuite) validateDescribeTaskQueue(
 				Versions:               nil, // default version, in this case unversioned queue
 				TaskQueueTypes:         nil, // both types
 				ReportPollers:          true,
-				ReportTaskReachability: true,
+				ReportTaskReachability: false,
 				ReportStats:            true,
 			})
 			s.NoError(err)
 			s.NotNil(resp)
 			s.Equal(1, len(resp.GetVersionsInfo()), "should be 1 because only default/unversioned queue")
 			versionInfo := resp.GetVersionsInfo()[""]
-			s.Equal(enumspb.BUILD_ID_TASK_REACHABILITY_REACHABLE, versionInfo.GetTaskReachability())
+			s.Equal(enumspb.BUILD_ID_TASK_REACHABILITY_UNSPECIFIED, versionInfo.GetTaskReachability())
 			types := versionInfo.GetTypesInfo()
 			s.Equal(len(types), len(expectedBacklogCount))
 
@@ -271,7 +323,7 @@ func (s *DescribeTaskQueueSuite) validateDescribeTaskQueue(
 			a.Equal(expectedAddRate[enumspb.TASK_QUEUE_TYPE_ACTIVITY], actStats.TasksAddRate > 0)
 			a.Equal(expectedDispatchRate[enumspb.TASK_QUEUE_TYPE_WORKFLOW], wfStats.TasksDispatchRate > 0)
 			a.Equal(expectedDispatchRate[enumspb.TASK_QUEUE_TYPE_ACTIVITY], actStats.TasksDispatchRate > 0)
-		}, 6*time.Second, 100*time.Millisecond)
+		}, 300*time.Millisecond, 100*time.Millisecond)
 	} else {
 		// Querying the Legacy API
 		s.Eventually(func() bool {

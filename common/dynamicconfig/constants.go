@@ -1198,6 +1198,12 @@ Set to zero to disable proactive unload.`,
 		`MatchingQueryWorkflowTaskTimeoutLogRate defines the sampling rate for logs when a query workflow task times out. Since
 these log lines can be noisy, we want to be able to turn on and sample selectively for each affected namespace.`,
 	)
+	CachedPhysicalInfoByBuildIdTTL = NewTaskQueueDurationSetting(
+		"matching.cachedPhysicalInfoByBuildIdTTL",
+		time.Second,
+		`cachedPhysicalInfoByBuildIdTTL acts as a cache TTL for taskQueuePartitionManager.cachedPhysicalInfoByBuildIdCache and
+		is responsible for setting the time limit before an update to this variable`,
+	)
 	// for matching testing only:
 
 	TestMatchingDisableSyncMatch = NewGlobalBoolSetting(
