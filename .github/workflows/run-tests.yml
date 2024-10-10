@@ -86,12 +86,12 @@ jobs:
           timeout=30
           runs_on='["ubuntu-20.04"]'
           if [[ "${{ inputs.run_single_functional_test }}" == "true" || "${{ inputs.run_single_unit_test }}" == "true" ]]; then
-          shards=1
-          timeout=${{ inputs.timeout_minutes }}
-          single_test_args="-run ${{ inputs.test_name }} -count ${{ inputs.n_runs }}"
-          if [[ "${{ inputs.test_runner }}" == "64GB RAM (ubuntu-22.04)" ]]; then
-          runs_on='[ "ubuntu-latest-16-cores" ]'
-          fi
+            shards=1
+            timeout=${{ inputs.timeout_minutes }}
+            single_test_args="-run ${{ inputs.test_name }} -count ${{ inputs.n_runs }}"
+            if [[ "${{ inputs.test_runner }}" == "64GB RAM (ubuntu-22.04)" ]]; then
+              runs_on='[ "ubuntu-latest-16-cores" ]'
+            fi
           fi
           {
           echo "shard_indices=[ $(seq -s, 0 $((shards-1))) ]"
