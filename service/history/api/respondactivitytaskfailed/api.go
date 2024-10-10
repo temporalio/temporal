@@ -26,6 +26,7 @@ package respondactivitytaskfailed
 
 import (
 	"context"
+	"google.golang.org/protobuf/types/known/timestamppb"
 	"time"
 
 	enumspb "go.temporal.io/api/enums/v1"
@@ -118,6 +119,8 @@ func Invoke(
 
 			postActions := &api.UpdateWorkflowAction{}
 			failure := request.GetFailure()
+			ai.LastAttemptCompleteTime = timestamppb.New(shard.GetTimeSource().Now().UTC())
+
 			retryState, err := mutableState.RetryActivity(ai, failure)
 			if err != nil {
 				return nil, err
