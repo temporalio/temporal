@@ -747,12 +747,31 @@ func (c *ContextImpl) mergeUpdateWithNewReplicationTasks(
 	newRunBranchToken := newRunTask.BranchToken
 	newRunID := newRunTask.RunID
 	taskUpdated := false
+
+	updateTask := func(task interface{}) bool {
+		switch t := task.(type) {
+		case *tasks.HistoryReplicationTask:
+			t.NewRunBranchToken = newRunBranchToken
+			t.NewRunID = newRunID
+			return true
+		case *tasks.SyncVersionedTransitionTask:
+			t.NewRunID = newRunID
+			for _, subTask := range t.TaskEquivalents {
+				if historyTask, ok := subTask.(*tasks.HistoryReplicationTask); ok {
+					historyTask.NewRunBranchToken = newRunBranchToken
+					historyTask.NewRunID = newRunID
+					return true
+				}
+			}
+		default:
+		}
+		return false
+	}
+
 	for idx := numCurrentReplicationTasks - 1; idx >= 0; idx-- {
 		replicationTask := currentWorkflowMutation.Tasks[tasks.CategoryReplication][idx]
-		if task, ok := replicationTask.(*tasks.HistoryReplicationTask); ok {
+		if updateTask(replicationTask) {
 			taskUpdated = true
-			task.NewRunBranchToken = newRunBranchToken
-			task.NewRunID = newRunID
 			break
 		}
 	}
