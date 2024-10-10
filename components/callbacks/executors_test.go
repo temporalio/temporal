@@ -221,7 +221,7 @@ func TestProcessInvocationTaskNexus_Outcomes(t *testing.T) {
 						},
 					},
 				},
-				callbacks.InvocationTask{Destination: "http://localhost"},
+				callbacks.NewInvocationTask("http://localhost"),
 			)
 
 			if tc.destinationDown {
