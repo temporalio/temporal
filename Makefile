@@ -64,7 +64,9 @@ define NEWLINE
 
 endef
 
-TEST_TIMEOUT ?= 25m
+# 30 minutes is the upper bound defined for all tests, the longer running ones at the time of writing are XDC tests. The
+# 30 minute timeout is also defined in run-tests.yml
+TEST_TIMEOUT ?= 30m
 
 PROTO_ROOT := proto
 PROTO_FILES = $(shell find ./$(PROTO_ROOT)/internal -name "*.proto")
