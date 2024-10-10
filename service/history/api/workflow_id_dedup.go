@@ -161,6 +161,7 @@ func terminateWorkflowAction(
 			payloads.EncodeString(fmt.Sprintf("terminated by new runID: %s", newRunID)),
 			consts.IdentityHistoryService,
 			false,
+			nil, // No links necessary.
 		)
 	}, nil
 }

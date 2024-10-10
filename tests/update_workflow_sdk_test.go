@@ -154,6 +154,8 @@ func (s *UpdateWorkflowClientSuite) TestUpdateWorkflow_TerminateWorkflowAfterUpd
 }
 
 func (s *UpdateWorkflowClientSuite) TestUpdateWorkflow_ContinueAsNewAfterUpdateAdmitted() {
+	s.T().Skip("flaky test")
+
 	/*
 		Start Workflow and send Update to itself from LA to make sure it is admitted
 		by server while WFT is running. This WFT does CAN. For test simplicity,

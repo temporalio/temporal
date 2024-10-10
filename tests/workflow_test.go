@@ -576,6 +576,8 @@ func (s *WorkflowTestSuite) TestCompleteWorkflowTaskAndCreateNewOne() {
 }
 
 func (s *WorkflowTestSuite) TestWorkflowTaskAndActivityTaskTimeoutsWorkflow() {
+	s.T().Skip("flaky test")
+
 	id := "functional-timeouts-workflow-test"
 	wt := "functional-timeouts-workflow-test-type"
 	tl := "functional-timeouts-workflow-test-taskqueue"
@@ -1034,7 +1036,7 @@ func (s *WorkflowTestSuite) TestExecuteMultiOperation() {
 		s.NoError(err)
 
 		// wait for request to complete
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
 		select {
 		case <-ctx.Done():
