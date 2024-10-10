@@ -149,7 +149,8 @@ jobs:
         runs-on: [ubuntu-20.04]
     runs-on: ${{ matrix.runs-on }}
     env:
-      BUILDKITE_MESSAGE: "{\"job\": \"unit-test\"}"
+      BUILDKITE_JOB: "unit-test"
+      BUILDKITE_TEST_NAME: ${{ inputs.test_name }}
       SINGLE_TEST_ARGS: ${{ needs.set-up-single-test.outputs.single_test_args }}
       UNIT_TEST_DIR: ${{ inputs.unit_test_directory }}
       TEST_TIMEOUT: ${{ needs.set-up-single-test.outputs.test_timeout }}
@@ -188,7 +189,7 @@ jobs:
         runs-on: [ubuntu-20.04]
     runs-on: ${{ matrix.runs-on }}
     env:
-      BUILDKITE_MESSAGE: "{\"job\": \"integration-test\"}"
+      BUILDKITE_JOB: "integration-test"
     steps:
       - uses: actions/checkout@v4
         with:
@@ -274,7 +275,9 @@ jobs:
       PERSISTENCE_DRIVER: ${{ matrix.persistence_driver }}
       SINGLE_TEST_ARGS: ${{ needs.set-up-single-test.outputs.single_test_args }}
       TEST_TIMEOUT: ${{ needs.set-up-single-test.outputs.test_timeout }}
-      BUILDKITE_MESSAGE: "{\"job\": \"functional-test\", \"db\": \"${{ matrix.persistence_driver }}\"}"
+      BUILDKITE_JOB: "functional-test"
+      BUILDKITE_TEST_NAME: ${{ inputs.test_name }}
+      BUILDKITE_DB: ${{ matrix.persistence_driver }}
     steps:
       - uses: ScribeMD/docker-cache@0.3.7
         if: ${{ inputs.run_single_test_mode == '' || (inputs.run_single_test_mode == 'functional' && contains(fromJSON(needs.set-up-single-test.outputs.dbs), env.PERSISTENCE_DRIVER)) }}
@@ -346,7 +349,9 @@ jobs:
       PERSISTENCE_DRIVER: ${{ matrix.persistence_driver }}
       SINGLE_TEST_ARGS: ${{ needs.set-up-single-test.outputs.single_test_args }}
       TEST_TIMEOUT: ${{ needs.set-up-single-test.outputs.test_timeout }}
-      BUILDKITE_MESSAGE: "{\"job\": \"functional-test-xdc\", \"db\": \"${{ matrix.persistence_driver }}\"}"
+      BUILDKITE_JOB: "functional-test-xdc"
+      BUILDKITE_TEST_NAME: ${{ inputs.test_name }}
+      BUILDKITE_DB: ${{ matrix.persistence_driver }}
     steps:
       - uses: actions/checkout@v4
         if: ${{ inputs.run_single_test_mode == '' || (inputs.run_single_test_mode == 'functional-xdc' && contains(fromJSON(needs.set-up-single-test.outputs.dbs), env.PERSISTENCE_DRIVER)) }}
@@ -421,6 +426,9 @@ jobs:
       SINGLE_TEST_ARGS: ${{ needs.set-up-single-test.outputs.single_test_args }}
       TEST_TIMEOUT: ${{ needs.set-up-single-test.outputs.test_timeout }}
       ES_VERSION: ${{ matrix.es_version }}
+      BUILDKITE_JOB: "functional-test-ndc"
+      BUILDKITE_TEST_NAME: ${{ inputs.test_name }}
+      BUILDKITE_DB: ${{ matrix.persistence_driver }}
     steps:
       - uses: actions/checkout@v4
         if: ${{ inputs.run_single_test_mode == '' || (inputs.run_single_test_mode == 'functional-ndc' && contains(fromJSON(needs.set-up-single-test.outputs.dbs), env.PERSISTENCE_DRIVER)) }}
@@ -446,6 +454,10 @@ jobs:
         if: ${{ inputs.run_single_test_mode == '' || (inputs.run_single_test_mode == 'functional-ndc' && contains(fromJSON(needs.set-up-single-test.outputs.dbs), env.PERSISTENCE_DRIVER)) }}
         timeout-minutes: 15
         run: make functional-test-ndc-coverage
+
+      - name: Upload test results
+        if: ${{ !cancelled() && (inputs.run_single_test_mode == '' || (inputs.run_single_test_mode == 'functional-ndc' && contains(fromJSON(needs.set-up-single-test.outputs.dbs), env.PERSISTENCE_DRIVER))) }}
+        run: make upload-test-results
 
   test-status:
     if: ${{ inputs.run_single_test_mode == '' }}
