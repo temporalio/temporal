@@ -113,19 +113,13 @@ func GetPendingActivityInfo(
 	}
 
 	p.State = ActivityState(ai)
-	p.Attempt = ai.Attempt
-	if p.Attempt < 1 {
-		p.Attempt = 1
-	}
-
-	if p.State == enumspb.PENDING_ACTIVITY_STATE_SCHEDULED && now.Before(ai.ScheduledTime.AsTime()) {
-		p.NextAttemptScheduleTime = ai.ScheduledTime
-	}
 
 	p.LastAttemptCompleteTime = ai.LastAttemptCompleteTime
 	if !ai.HasRetryPolicy {
+		p.Attempt = 1
 		p.NextAttemptScheduleTime = nil
 	} else {
+		p.Attempt = ai.Attempt
 		if p.State == enumspb.PENDING_ACTIVITY_STATE_SCHEDULED {
 			if now.Before(ai.ScheduledTime.AsTime()) {
 				// in this case activity is waiting for a retry
@@ -138,6 +132,9 @@ func GetPendingActivityInfo(
 				interval := ExponentialBackoffAlgorithm(ai.RetryInitialInterval, ai.RetryBackoffCoefficient, p.Attempt)
 				p.CurrentRetryInterval = durationpb.New(interval)
 			}
+		}
+		if p.Attempt < 1 {
+			p.Attempt = 1
 		}
 	}
 
