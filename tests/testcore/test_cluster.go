@@ -106,8 +106,8 @@ type (
 		// ServiceFxOptions can be populated using WithFxOptionsForService.
 		ServiceFxOptions map[primitives.ServiceName][]fx.Option
 
-		DeprecatedFrontendAddress string `yaml:"FrontendAddress"`
-		DeprecatedClusterNo       int    `yaml:"ClusterNo"`
+		DeprecatedFrontendAddress string `yaml:"frontendAddress"`
+		DeprecatedClusterNo       int    `yaml:"clusterno"`
 	}
 )
 
