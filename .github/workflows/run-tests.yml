@@ -439,7 +439,7 @@ jobs:
         run: make functional-test-ndc-coverage
 
   test-status:
-    if: ${{ inputs.run_single_functional_test != true && inputs.run_single_unit_test != true }}
+    if: always()
     name: Test Status
     needs:
       - unit-test
