@@ -339,6 +339,9 @@ jobs:
       TEST_SHARD_INDEX: ${{ matrix.shard_index }}
       PERSISTENCE_TYPE: ${{ matrix.persistence_type }}
       PERSISTENCE_DRIVER: ${{ matrix.persistence_driver }}
+      SINGLE_TEST_ARGS: ${{ needs.set-up-single-test.outputs.single_test_args }}
+      TEST_TIMEOUT: ${{ needs.set-up-single-test.outputs.test_timeout }}
+      BUILDKITE_MESSAGE: "{\"job\": \"functional-test\", \"db\": \"${{ matrix.persistence_driver }}\"}"
       N_RUNS: 10
       MODIFIED_TEST_SUITES: ${{ needs.set-up-single-test.outputs.modified_functional_test_suites }}
     steps:
