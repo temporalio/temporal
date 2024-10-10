@@ -36,6 +36,8 @@ import (
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/server/api/adminservice/v1"
+	"go.temporal.io/server/api/adminservicemock/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -51,10 +53,13 @@ import (
 	ctasks "go.temporal.io/server/common/tasks"
 	"go.temporal.io/server/common/xdc"
 	"go.temporal.io/server/service/history/configs"
+	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/replication/eventhandler"
 	"go.temporal.io/server/service/history/shard"
+	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/tests"
 	"go.uber.org/mock/gomock"
+	"google.golang.org/grpc"
 )
 
 type (
@@ -72,6 +77,7 @@ type (
 		metricsHandler          metrics.Handler
 		logger                  log.Logger
 		sourceCluster           string
+		sourceShardKey          ClusterShardKey
 		eagerNamespaceRefresher *MockEagerNamespaceRefresher
 		config                  *configs.Config
 		namespaceId             string
@@ -104,20 +110,27 @@ func (s *executableTaskSuite) SetupTest() {
 	s.shardController = shard.NewMockController(s.controller)
 	s.namespaceCache = namespace.NewMockRegistry(s.controller)
 	s.ndcHistoryResender = xdc.NewMockNDCHistoryResender(s.controller)
+	s.mockExecutionManager = persistence.NewMockExecutionManager(s.controller)
+	s.eagerNamespaceRefresher = NewMockEagerNamespaceRefresher(s.controller)
+	s.remoteHistoryFetcher = eventhandler.NewMockHistoryPaginatedFetcher(s.controller)
 	s.metricsHandler = metrics.NoopMetricsHandler
 	s.logger = log.NewNoopLogger()
-	s.sourceCluster = "some cluster"
-	s.eagerNamespaceRefresher = NewMockEagerNamespaceRefresher(s.controller)
 	s.config = tests.NewDynamicConfig()
-	s.remoteHistoryFetcher = eventhandler.NewMockHistoryPaginatedFetcher(s.controller)
+
+	s.clusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
+	s.clusterMetadata.EXPECT().GetAllClusterInfo().Return(cluster.TestAllClusterInfo).AnyTimes()
 
 	creationTime := time.Unix(0, rand.Int63())
 	receivedTime := creationTime.Add(time.Duration(rand.Int63()))
+	s.sourceCluster = cluster.TestAlternativeClusterName
+	s.sourceShardKey = ClusterShardKey{
+		ClusterID: int32(cluster.TestAlternativeClusterInitialFailoverVersion),
+		ShardID:   rand.Int31(),
+	}
 	s.namespaceId = uuid.NewString()
 	s.workflowId = uuid.NewString()
 	s.runId = uuid.NewString()
 	s.taskId = rand.Int63()
-	s.mockExecutionManager = persistence.NewMockExecutionManager(s.controller)
 
 	s.task = NewExecutableTask(
 		ProcessToolBox{
@@ -137,6 +150,7 @@ func (s *executableTaskSuite) SetupTest() {
 		creationTime,
 		receivedTime,
 		s.sourceCluster,
+		s.sourceShardKey,
 		enumsspb.TASK_PRIORITY_UNSPECIFIED,
 		&replicationspb.ReplicationTask{
 			RawTaskInfo: &persistencespb.ReplicationTaskInfo{
@@ -144,6 +158,10 @@ func (s *executableTaskSuite) SetupTest() {
 				WorkflowId:  s.workflowId,
 				RunId:       s.runId,
 				TaskId:      s.taskId,
+				TaskEquivalents: []*persistencespb.ReplicationTaskInfo{
+					{NamespaceId: s.namespaceId, WorkflowId: s.workflowId, RunId: s.runId},
+					{NamespaceId: s.namespaceId, WorkflowId: s.workflowId, RunId: s.runId},
+				},
 			},
 		},
 	)
@@ -539,6 +557,49 @@ func (s *executableTaskSuite) TestResend_Error() {
 	s.False(doContinue)
 }
 
+func (s *executableTaskSuite) TestResend_TransitionHistoryDisabled() {
+	syncStateErr := &serviceerrors.SyncState{
+		NamespaceId: uuid.NewString(),
+		WorkflowId:  uuid.NewString(),
+		RunId:       uuid.NewString(),
+		VersionedTransition: &persistencespb.VersionedTransition{
+			NamespaceFailoverVersion: rand.Int63(),
+			TransitionCount:          rand.Int63(),
+		},
+	}
+
+	mockRemoteAdminClient := adminservicemock.NewMockAdminServiceClient(s.controller)
+	s.clientBean.EXPECT().GetRemoteAdminClient(s.sourceCluster).Return(mockRemoteAdminClient, nil).AnyTimes()
+
+	mockRemoteAdminClient.EXPECT().SyncWorkflowState(
+		gomock.Any(),
+		&adminservice.SyncWorkflowStateRequest{
+			NamespaceId: syncStateErr.NamespaceId,
+			Execution: &commonpb.WorkflowExecution{
+				WorkflowId: syncStateErr.WorkflowId,
+				RunId:      syncStateErr.RunId,
+			},
+			VersionedTransition: syncStateErr.VersionedTransition,
+			TargetClusterId:     int32(s.clusterMetadata.GetAllClusterInfo()[s.clusterMetadata.GetCurrentClusterName()].InitialFailoverVersion),
+		},
+	).Return(nil, consts.ErrTransitionHistoryDisabled).Times(1)
+
+	mockRemoteAdminClient.EXPECT().AddTasks(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(_ context.Context, request *adminservice.AddTasksRequest, opts ...grpc.CallOption) (*adminservice.AddTasksResponse, error) {
+			s.Equal(s.sourceShardKey.ShardID, request.ShardId)
+			s.Len(request.Tasks, len(s.task.replicationTask.GetRawTaskInfo().TaskEquivalents))
+			for _, task := range request.Tasks {
+				s.Equal(tasks.CategoryIDReplication, int(task.CategoryId))
+			}
+			return nil, nil
+		},
+	)
+
+	doContinue, err := s.task.SyncState(context.Background(), syncStateErr, ResendAttempt)
+	s.Nil(err)
+	s.False(doContinue)
+}
+
 func (s *executableTaskSuite) TestGetNamespaceInfo_Process() {
 	namespaceID := uuid.NewString()
 	namespaceName := uuid.NewString()
@@ -559,7 +620,6 @@ func (s *executableTaskSuite) TestGetNamespaceInfo_Process() {
 		},
 	})
 	s.namespaceCache.EXPECT().GetNamespaceByID(namespace.ID(namespaceID)).Return(namespaceEntry, nil).AnyTimes()
-	s.clusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 
 	name, toProcess, err := s.task.GetNamespaceInfo(context.Background(), namespaceID)
 	s.NoError(err)
@@ -586,7 +646,6 @@ func (s *executableTaskSuite) TestGetNamespaceInfo_Skip() {
 		},
 	})
 	s.namespaceCache.EXPECT().GetNamespaceByID(namespace.ID(namespaceID)).Return(namespaceEntry, nil).AnyTimes()
-	s.clusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 
 	name, toProcess, err := s.task.GetNamespaceInfo(context.Background(), namespaceID)
 	s.NoError(err)
@@ -597,7 +656,6 @@ func (s *executableTaskSuite) TestGetNamespaceInfo_Skip() {
 func (s *executableTaskSuite) TestGetNamespaceInfo_Error() {
 	namespaceID := uuid.NewString()
 	s.namespaceCache.EXPECT().GetNamespaceByID(namespace.ID(namespaceID)).Return(nil, errors.New("OwO")).AnyTimes()
-	s.clusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 
 	_, _, err := s.task.GetNamespaceInfo(context.Background(), namespaceID)
 	s.Error(err)
@@ -629,7 +687,6 @@ func (s *executableTaskSuite) TestGetNamespaceInfo_NotFoundOnCurrentCluster_Sync
 	s.namespaceCache.EXPECT().GetNamespaceByID(namespace.ID(namespaceID)).Return(namespaceEntry, nil).Times(1)
 	s.eagerNamespaceRefresher.EXPECT().SyncNamespaceFromSourceCluster(gomock.Any(), namespace.ID(namespaceID), gomock.Any()).Return(
 		namespaceEntry, nil)
-	s.clusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 
 	name, toProcess, err := s.task.GetNamespaceInfo(context.Background(), namespaceID)
 	s.NoError(err)
@@ -659,6 +716,7 @@ func (s *executableTaskSuite) TestGetNamespaceInfo_NamespaceFailoverNotSync_Sync
 		now,
 		now,
 		s.sourceCluster,
+		s.sourceShardKey,
 		enumsspb.TASK_PRIORITY_UNSPECIFIED,
 		&replicationspb.ReplicationTask{
 			TaskType:            enumsspb.REPLICATION_TASK_TYPE_NAMESPACE_TASK,
@@ -706,7 +764,6 @@ func (s *executableTaskSuite) TestGetNamespaceInfo_NamespaceFailoverNotSync_Sync
 	s.namespaceCache.EXPECT().GetNamespaceByID(namespace.ID(namespaceID)).Return(namespaceEntryNew, nil).Times(1)
 	s.eagerNamespaceRefresher.EXPECT().SyncNamespaceFromSourceCluster(gomock.Any(), namespace.ID(namespaceID), gomock.Any()).Return(
 		namespaceEntryNew, nil)
-	s.clusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 
 	name, toProcess, err := s.task.GetNamespaceInfo(context.Background(), namespaceID)
 	s.NoError(err)
@@ -736,6 +793,7 @@ func (s *executableTaskSuite) TestGetNamespaceInfo_NamespaceFailoverBehind_Still
 		now,
 		now,
 		s.sourceCluster,
+		s.sourceShardKey,
 		enumsspb.TASK_PRIORITY_UNSPECIFIED,
 		&replicationspb.ReplicationTask{
 			TaskType:            enumsspb.REPLICATION_TASK_TYPE_NAMESPACE_TASK,
@@ -766,7 +824,6 @@ func (s *executableTaskSuite) TestGetNamespaceInfo_NamespaceFailoverBehind_Still
 	s.namespaceCache.EXPECT().GetNamespaceByID(namespace.ID(namespaceID)).Return(namespaceEntryOld, nil).Times(1)
 	s.eagerNamespaceRefresher.EXPECT().SyncNamespaceFromSourceCluster(gomock.Any(), namespace.ID(namespaceID), gomock.Any()).Return(
 		namespaceEntryOld, nil)
-	s.clusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 
 	name, toProcess, err := s.task.GetNamespaceInfo(context.Background(), namespaceID)
 	s.Empty(name)
@@ -782,7 +839,6 @@ func (s *executableTaskSuite) TestGetNamespaceInfo_NotFoundOnCurrentCluster_Sync
 	s.namespaceCache.EXPECT().GetNamespaceByID(namespace.ID(namespaceID)).Return(nil, serviceerror.NewNamespaceNotFound("namespace not found")).AnyTimes()
 	s.eagerNamespaceRefresher.EXPECT().SyncNamespaceFromSourceCluster(gomock.Any(), namespace.ID(namespaceID), gomock.Any()).Return(
 		nil, errors.New("some error"))
-	s.clusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 
 	_, toProcess, err := s.task.GetNamespaceInfo(context.Background(), namespaceID)
 	s.Nil(err)

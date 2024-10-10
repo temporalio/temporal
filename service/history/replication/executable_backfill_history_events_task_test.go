@@ -75,6 +75,7 @@ type (
 
 		replicationTask   *replicationspb.ReplicationTask
 		sourceClusterName string
+		sourceShardKey    ClusterShardKey
 
 		taskID        int64
 		task          *ExecutableBackfillHistoryEventsTask
@@ -156,6 +157,10 @@ func (s *executableBackfillHistoryEventsTaskSuite) SetupTest() {
 		},
 	}
 	s.sourceClusterName = cluster.TestCurrentClusterName
+	s.sourceShardKey = ClusterShardKey{
+		ClusterID: int32(cluster.TestCurrentClusterInitialFailoverVersion),
+		ShardID:   rand.Int31(),
+	}
 	s.mockExecutionManager = persistence.NewMockExecutionManager(s.controller)
 	s.config = tests.NewDynamicConfig()
 
@@ -177,6 +182,7 @@ func (s *executableBackfillHistoryEventsTaskSuite) SetupTest() {
 		s.taskID,
 		taskCreationTime,
 		s.sourceClusterName,
+		s.sourceShardKey,
 		s.replicationTask,
 	)
 	s.task.ExecutableTask = s.executableTask

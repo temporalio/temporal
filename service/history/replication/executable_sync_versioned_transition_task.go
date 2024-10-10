@@ -55,6 +55,7 @@ func NewExecutableSyncVersionedTransitionTask(
 	taskID int64,
 	taskCreationTime time.Time,
 	sourceClusterName string,
+	sourceShardKey ClusterShardKey,
 	replicationTask *replicationspb.ReplicationTask,
 ) *ExecutableVerifyVersionedTransitionTask {
 	task := replicationTask.GetVerifyVersionedTransitionTaskAttributes()
@@ -69,6 +70,7 @@ func NewExecutableSyncVersionedTransitionTask(
 			taskCreationTime,
 			time.Now().UTC(),
 			sourceClusterName,
+			sourceShardKey,
 			replicationTask.Priority,
 			replicationTask,
 		),
@@ -137,7 +139,6 @@ func (e *ExecutableSyncVersionedTransitionTask) HandleErr(err error) error {
 
 		if doContinue, syncStateErr := e.SyncState(
 			ctx,
-			e.ExecutableTask.SourceClusterName(),
 			taskErr,
 			ResendAttempt,
 		); syncStateErr != nil || !doContinue {

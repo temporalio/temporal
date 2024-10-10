@@ -61,6 +61,7 @@ func NewExecutableBackfillHistoryEventsTask(
 	taskID int64,
 	taskCreationTime time.Time,
 	sourceClusterName string,
+	sourceShardKey ClusterShardKey,
 	replicationTask *replicationspb.ReplicationTask,
 ) *ExecutableBackfillHistoryEventsTask {
 	task := replicationTask.GetBackfillHistoryTaskAttributes()
@@ -75,6 +76,7 @@ func NewExecutableBackfillHistoryEventsTask(
 			taskCreationTime,
 			time.Now().UTC(),
 			sourceClusterName,
+			sourceShardKey,
 			replicationTask.Priority,
 			replicationTask,
 		),
@@ -163,10 +165,19 @@ func (e *ExecutableBackfillHistoryEventsTask) HandleErr(err error) error {
 
 		if doContinue, syncStateErr := e.SyncState(
 			ctx,
-			e.ExecutableTask.SourceClusterName(),
 			taskErr,
 			ResendAttempt,
 		); syncStateErr != nil || !doContinue {
+			if syncStateErr != nil {
+				e.Logger.Error("Backfill history events replication task encountered error during sync state",
+					tag.WorkflowNamespaceID(e.NamespaceID),
+					tag.WorkflowID(e.WorkflowID),
+					tag.WorkflowRunID(e.RunID),
+					tag.TaskID(e.ExecutableTask.TaskID()),
+					tag.Error(syncStateErr),
+				)
+			}
+			// return original task processing error
 			return err
 		}
 		return e.Execute()
