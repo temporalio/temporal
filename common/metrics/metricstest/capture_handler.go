@@ -25,6 +25,7 @@
 package metricstest
 
 import (
+	"io"
 	"sync"
 	"time"
 
@@ -140,6 +141,14 @@ func (c *CaptureHandler) Timer(name string) metrics.TimerIface {
 // Histogram implements [metrics.Handler.Histogram].
 func (c *CaptureHandler) Histogram(name string, unit metrics.MetricUnit) metrics.HistogramIface {
 	return metrics.HistogramFunc(func(v int64, tags ...metrics.Tag) { c.record(name, v, unit, tags...) })
+}
+
+func (c *CaptureHandler) Close() error {
+	return nil
+}
+
+func (c *CaptureHandler) BatchStart(_ string) (metrics.Handler, io.Closer) {
+	return c, c
 }
 
 // Stop implements [metrics.Handler.Stop].

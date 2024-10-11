@@ -25,6 +25,7 @@
 package historybuilder
 
 import (
+	"io"
 	"testing"
 	"time"
 
@@ -65,6 +66,14 @@ func (h StubHandler) Histogram(_ string, _ metrics.MetricUnit) metrics.Histogram
 }
 
 func (h StubHandler) Stop(_ log.Logger) {}
+
+func (h StubHandler) Close() error {
+	return nil
+}
+
+func (h StubHandler) BatchStart(_ string) (metrics.Handler, io.Closer) {
+	return h, h
+}
 
 func TestHistoryBuilder_IsDirty(t *testing.T) {
 	hb := HistoryBuilder{EventStore: EventStore{}}
