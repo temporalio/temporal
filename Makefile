@@ -408,7 +408,6 @@ unit-test-coverage: prepare-coverage-test
 	@printf $(COLOR) "Run unit tests with coverage..."
 	$(GOTESTSUM) --junitfile $(NEW_REPORT) -- \
 		$(UNIT_TEST_DIRS) -shuffle on -timeout=$(TEST_TIMEOUT) -race $(TEST_TAG_FLAG) $(SINGLE_TEST_ARGS) -coverprofile=$(NEW_COVER_PROFILE) -count=$(N_RUNS) -run="$(TEST_SUITES)"
-	@! grep -q "^--- FAIL" test.log
 
 integration-test-coverage: prepare-coverage-test
 	@printf $(COLOR) "Run integration tests with coverage..."
