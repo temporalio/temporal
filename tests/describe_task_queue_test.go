@@ -25,10 +25,11 @@ package tests
 import (
 	"context"
 	"flag"
-	"go.temporal.io/server/api/matchingservice/v1"
-	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	"testing"
 	"time"
+
+	"go.temporal.io/server/api/matchingservice/v1"
+	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/assert"
