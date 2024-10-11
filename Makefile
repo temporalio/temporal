@@ -94,6 +94,8 @@ UNIT_TEST_DIRS ?= $(filter-out $(FUNCTIONAL_TEST_ROOT)% $(FUNCTIONAL_TEST_XDC_RO
 
 TEST_SUITES ?=
 N_RUNS ?= 1
+SOURCE_REF ?= origin/main
+TARGET_REF ?= HEAD
 
 # github.com/urfave/cli/v2@v2.4.0             - needs to accept comma in values before unlocking https://github.com/urfave/cli/pull/1241.
 PINNED_DEPENDENCIES := \
@@ -344,44 +346,21 @@ check: copyright-check lint shell-check
 ##### Tests #####
 collect-modified-tests:
 	@echo "Collecting modified tests..."
-	@MODIFIED_UNIT_TEST_SUITES=""
-	@MODIFIED_INTEGRATION_TEST_SUITES=""
-	@MODIFIED_FUNCTIONAL_TEST_SUITES=""
-	@MODIFIED_FUNCTIONAL_TEST_NDC_SUITES=""
-	@MODIFIED_FUNCTIONAL_TEST_XDC_SUITES=""
-	@for file in $(MODIFIED_TEST_FILES); do \
-		if [ -f "$$file" ]; then \
-			CATEGORY=""; \
-			if echo "$$file" | grep -q "^$(FUNCTIONAL_TEST_NDC_ROOT)/"; then \
-				CATEGORY="MODIFIED_FUNCTIONAL_TEST_NDC_SUITES"; \
-			elif echo "$$file" | grep -q "^$(FUNCTIONAL_TEST_XDC_ROOT)/"; then \
-				CATEGORY="MODIFIED_FUNCTIONAL_TEST_XDC_SUITES"; \
-			elif echo "$$file" | grep -q "^$(FUNCTIONAL_TEST_ROOT)/"; then \
-				CATEGORY="MODIFIED_FUNCTIONAL_TEST_SUITES"; \
-			elif echo "$$file" | grep -q -e "^$(DB_INTEGRATION_TEST_ROOT)/" -e "^$(DB_TOOL_INTEGRATION_TEST_ROOT)/" -e "^./temporaltest/" -e "^./internal/temporalite/"; then \
-				CATEGORY="MODIFIED_INTEGRATION_TEST_SUITES"; \
-			else \
-				CATEGORY="MODIFIED_UNIT_TEST_SUITES"; \
-			fi; \
-			SUITES=$$(grep -Eo 'func\s+(Test[a-zA-Z0-9_]*Suite)\s*\(' "$$file" | awk '{print $$2}'); \
-			if [ -n "$$SUITES" ]; then \
-				SUITES=$$(echo "$$SUITES" | tr '\n' '|'); \
-				SUITES=$${SUITES%|}; \
-				eval "$$CATEGORY=\"\$$${CATEGORY}|$${SUITES}\""; \
-			fi; \
-		fi; \
-	done; \
-	# Remove leading '|' from each variable using sed
-	MODIFIED_UNIT_TEST_SUITES=$$(echo "$$MODIFIED_UNIT_TEST_SUITES" | sed 's/^|//'); \
-	MODIFIED_INTEGRATION_TEST_SUITES=$$(echo "$$MODIFIED_INTEGRATION_TEST_SUITES" | sed 's/^|//'); \
-	MODIFIED_FUNCTIONAL_TEST_SUITES=$$(echo "$$MODIFIED_FUNCTIONAL_TEST_SUITES" | sed 's/^|//'); \
-	MODIFIED_FUNCTIONAL_TEST_NDC_SUITES=$$(echo "$$MODIFIED_FUNCTIONAL_TEST_NDC_SUITES" | sed 's/^|//'); \
-	MODIFIED_FUNCTIONAL_TEST_XDC_SUITES=$$(echo "$$MODIFIED_FUNCTIONAL_TEST_XDC_SUITES" | sed 's/^|//'); \
-	echo "MODIFIED_UNIT_TEST_SUITES=\"$$MODIFIED_UNIT_TEST_SUITES\""; \
-	echo "MODIFIED_INTEGRATION_TEST_SUITES=\"$$MODIFIED_INTEGRATION_TEST_SUITES\""; \
-	echo "MODIFIED_FUNCTIONAL_TEST_SUITES=\"$$MODIFIED_FUNCTIONAL_TEST_SUITES\""; \
-	echo "MODIFIED_FUNCTIONAL_TEST_NDC_SUITES=\"$$MODIFIED_FUNCTIONAL_TEST_NDC_SUITES\""; \
-	echo "MODIFIED_FUNCTIONAL_TEST_XDC_SUITES=\"$$MODIFIED_FUNCTIONAL_TEST_XDC_SUITES\"";
+	@set -e; \
+	UNIT_TEST_DIRS_CSV=$$(echo $(UNIT_TEST_DIRS) | tr ' ' ','); \
+	INTEGRATION_TEST_DIRS_CSV=$$(echo $(INTEGRATION_TEST_DIRS) | tr ' ' ','); \
+	MODIFIED_UNIT_TEST_SUITES=$$(./cmd/tools/test/find_altered_tests -c unit -source-ref $(SOURCE_REF) -target-ref $(TARGET_REF) -d $$UNIT_TEST_DIRS_CSV); \
+	MODIFIED_INTEGRATION_TEST_SUITES=$$(./cmd/tools/test/find_altered_tests -c integration -source-ref $(SOURCE_REF) -target-ref $(TARGET_REF) -d $$INTEGRATION_TEST_DIRS_CSV); \
+	MODIFIED_FUNCTIONAL_TEST_SUITES=$$(./cmd/tools/test/find_altered_tests -c functional -source-ref $(SOURCE_REF) -target-ref $(TARGET_REF) -d $(FUNCTIONAL_TEST_ROOT)); \
+	MODIFIED_FUNCTIONAL_TEST_NDC_SUITES=$$(./cmd/tools/test/find_altered_tests -c functional-ndc -source-ref $(SOURCE_REF) -target-ref $(TARGET_REF) -d $(FUNCTIONAL_TEST_NDC_ROOT)); \
+	MODIFIED_FUNCTIONAL_TEST_XDC_SUITES=$$(./cmd/tools/test/find_altered_tests -c functional-xdc -source-ref $(SOURCE_REF) -target-ref $(TARGET_REF) -d $(FUNCTIONAL_TEST_XDC_ROOT)); \
+	echo '{'; \
+	echo '  "MODIFIED_UNIT_TEST_SUITES": "'$$MODIFIED_UNIT_TEST_SUITES'",'; \
+	echo '  "MODIFIED_INTEGRATION_TEST_SUITES": "'$$MODIFIED_INTEGRATION_TEST_SUITES'",'; \
+	echo '  "MODIFIED_FUNCTIONAL_TEST_SUITES": "'$$MODIFIED_FUNCTIONAL_TEST_SUITES'",'; \
+	echo '  "MODIFIED_FUNCTIONAL_TEST_NDC_SUITES": "'$$MODIFIED_FUNCTIONAL_TEST_NDC_SUITES'",'; \
+	echo '  "MODIFIED_FUNCTIONAL_TEST_XDC_SUITES": "'$$MODIFIED_FUNCTIONAL_TEST_XDC_SUITES'"'; \
+	echo '}';
 
 clean-test-results:
 	@rm -f test.log $(TEST_OUTPUT_ROOT)/*

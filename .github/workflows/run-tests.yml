@@ -56,8 +56,8 @@ env:
   # For workflow_dispatch: use the given commit.
   # For pull_request: use the head of the PR branch (not the merge branch which is the default!)
   # For push: use the pushed commit.
-  COMMIT: ${{ github.event.inputs.commit || github.event.pull_request.head.sha || github.sha }}
-  PR_BASE_COMMIT: ${{ github.event.pull_request.base.sha }}
+  TARGET_REF: ${{ github.event.inputs.commit || github.event.pull_request.head.sha || github.sha }}
+  SOURCE_REF: ${{ github.event.pull_request.base.sha }}
   DOCKER_COMPOSE_FILE: ./develop/github/docker-compose.yml
   TEMPORAL_VERSION_CHECK_DISABLED: 1
   BUILDKITE_ANALYTICS_TOKEN: ${{ secrets.BUILDKITE_ANALYTICS_TOKEN }}
@@ -112,43 +112,36 @@ jobs:
           ref: ${{ env.COMMIT }}
           fetch-depth: 0
 
-      - name: Get Modified Test Files
-        id: get_modified_tests
+      - name: Fetch base branch
+        # Fetch the base branch to ensure git diff works
+        run: git fetch origin ${{ github.event.pull_request.base.ref }}:${{ env.SOURCE_REF }}
+
+      - name: Build find_altered_tests tool
         run: |
-          if [[ "${{ github.event_name }}" != "pull_request" ]]; then
-            echo "MODIFIED_TEST_FILES=" >> "$GITHUB_ENV"
-            exit 0
-          fi
-          git diff --name-only ${{ env.PR_BASE_COMMIT }} ${{ env.COMMIT }} > changed_files.txt
-          MODIFIED_TEST_FILES=$(grep -E '_test\.go$' changed_files.txt || true)
-          echo "MODIFIED_TEST_FILES=$MODIFIED_TEST_FILES" >> "$GITHUB_ENV"
+          go build -o ./cmd/tools/test/find_altered_tests ./cmd/tools/test/find_altered_tests.go
 
       - name: Collect Modified Tests
         id: collect_modified_tests
-        shell: bash
         run: |
-          make collect-modified-tests MODIFIED_TEST_FILES="$MODIFIED_TEST_FILES" | tee modified_tests_output.txt
-          source modified_tests_output.txt
+          set -e
+          OUTPUT=$(make collect-modified-tests SOURCE_REF="${SOURCE_REF}" TARGET_REF="${TARGET_REF}")
+          echo "$OUTPUT"
+          echo "::set-output name=modified_tests::$OUTPUT"
 
-          echo "MODIFIED_UNIT_TEST_SUITES<<EOF" >> "$GITHUB_OUTPUT"
-          echo "$MODIFIED_UNIT_TEST_SUITES" >> "$GITHUB_OUTPUT"
-          echo "EOF" >> "$GITHUB_OUTPUT"
-
-          echo "MODIFIED_INTEGRATION_TEST_SUITES<<EOF" >> "$GITHUB_OUTPUT"
-          echo "$MODIFIED_INTEGRATION_TEST_SUITES" >> "$GITHUB_OUTPUT"
-          echo "EOF" >> "$GITHUB_OUTPUT"
-
-          echo "MODIFIED_FUNCTIONAL_TEST_SUITES<<EOF" >> "$GITHUB_OUTPUT"
-          echo "$MODIFIED_FUNCTIONAL_TEST_SUITES" >> "$GITHUB_OUTPUT"
-          echo "EOF" >> "$GITHUB_OUTPUT"
-
-          echo "MODIFIED_FUNCTIONAL_TEST_NDC_SUITES<<EOF" >> "$GITHUB_OUTPUT"
-          echo "$MODIFIED_FUNCTIONAL_TEST_NDC_SUITES" >> "$GITHUB_OUTPUT"
-          echo "EOF" >> "$GITHUB_OUTPUT"
-
-          echo "MODIFIED_FUNCTIONAL_TEST_XDC_SUITES<<EOF" >> "$GITHUB_OUTPUT"
-          echo "$MODIFIED_FUNCTIONAL_TEST_XDC_SUITES" >> "$GITHUB_OUTPUT"
-          echo "EOF" >> "$GITHUB_OUTPUT"
+      - name: Parse Modified Tests
+        id: parse_modified_tests
+        run: |
+          echo "${{ steps.collect_modified_tests.outputs.modified_tests }}" > modified_tests.json
+          MODIFIED_UNIT_TEST_SUITES=$(jq -r '.MODIFIED_UNIT_TEST_SUITES' modified_tests.json)
+          MODIFIED_INTEGRATION_TEST_SUITES=$(jq -r '.MODIFIED_INTEGRATION_TEST_SUITES' modified_tests.json)
+          MODIFIED_FUNCTIONAL_TEST_SUITES=$(jq -r '.MODIFIED_FUNCTIONAL_TEST_SUITES' modified_tests.json)
+          MODIFIED_FUNCTIONAL_TEST_NDC_SUITES=$(jq -r '.MODIFIED_FUNCTIONAL_TEST_NDC_SUITES' modified_tests.json)
+          MODIFIED_FUNCTIONAL_TEST_XDC_SUITES=$(jq -r '.MODIFIED_FUNCTIONAL_TEST_XDC_SUITES' modified_tests.json)
+          echo "MODIFIED_UNIT_TEST_SUITES=$MODIFIED_UNIT_TEST_SUITES" >> $GITHUB_ENV
+          echo "MODIFIED_INTEGRATION_TEST_SUITES=$MODIFIED_INTEGRATION_TEST_SUITES" >> $GITHUB_ENV
+          echo "MODIFIED_FUNCTIONAL_TEST_SUITES=$MODIFIED_FUNCTIONAL_TEST_SUITES" >> $GITHUB_ENV
+          echo "MODIFIED_FUNCTIONAL_TEST_NDC_SUITES=$MODIFIED_FUNCTIONAL_TEST_NDC_SUITES" >> $GITHUB_ENV
+          echo "MODIFIED_FUNCTIONAL_TEST_XDC_SUITES=$MODIFIED_FUNCTIONAL_TEST_XDC_SUITES" >> $GITHUB_ENV
 
   misc-checks:
     name: Misc checks
@@ -342,8 +335,8 @@ jobs:
       SINGLE_TEST_ARGS: ${{ needs.set-up-single-test.outputs.single_test_args }}
       TEST_TIMEOUT: ${{ needs.set-up-single-test.outputs.test_timeout }}
       BUILDKITE_MESSAGE: "{\"job\": \"functional-test\", \"db\": \"${{ matrix.persistence_driver }}\"}"
-      N_RUNS: 10
       MODIFIED_TEST_SUITES: ${{ needs.set-up-single-test.outputs.modified_functional_test_suites }}
+      N_RUNS: 10
     steps:
       - name: Print functional test
         run: echo "${{ needs.set-up-single-test.outputs.dbs }}" && echo "$SINGLE_TEST_ARGS"
@@ -423,8 +416,8 @@ jobs:
       PERSISTENCE_TYPE: ${{ matrix.persistence_type }}
       PERSISTENCE_DRIVER: ${{ matrix.persistence_driver }}
       BUILDKITE_MESSAGE: "{\"job\": \"functional-test-xdc\", \"db\": \"${{ matrix.persistence_driver }}\"}"
-      N_RUNS: 10
       MODIFIED_TEST_SUITES: ${{ needs.set-up-single-test.outputs.modified_functional_test_xdc_suites }}
+      N_RUNS: 10
     steps:
       - uses: actions/checkout@v4
         with:
@@ -500,8 +493,8 @@ jobs:
       PERSISTENCE_TYPE: ${{ matrix.persistence_type }}
       PERSISTENCE_DRIVER: ${{ matrix.persistence_driver }}
       ES_VERSION: ${{ matrix.es_version }}
-      N_RUNS: 10
       MODIFIED_TEST_SUITES: ${{ needs.set-up-single-test.outputs.modified_functional_test_ndc_suites }}
+      N_RUNS: 10
     steps:
       - uses: actions/checkout@v4
         with:
