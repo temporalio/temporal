@@ -124,24 +124,15 @@ jobs:
         id: collect_modified_tests
         run: |
           set -e
-          OUTPUT=$(make collect-modified-tests SOURCE_REF="${SOURCE_REF}" TARGET_REF="${TARGET_REF}")
-          echo "$OUTPUT"
-          echo "::set-output name=modified_tests::$OUTPUT"
+          set -o pipefail  
 
-      - name: Parse Modified Tests
-        id: parse_modified_tests
-        run: |
-          echo "${{ steps.collect_modified_tests.outputs.modified_tests }}" > modified_tests.json
-          modified_unit_test_suites=$(jq -r '.modified_unit_test_suites' modified_tests.json)
-          modified_integration_test_suites=$(jq -r '.modified_integration_test_suites' modified_tests.json)
-          modified_functional_test_suites=$(jq -r '.modified_functional_test_suites' modified_tests.json)
-          modified_functional_test_ndc_suites=$(jq -r '.modified_functional_test_ndc_suites' modified_tests.json)
-          modified_functional_test_xdc_suites=$(jq -r '.modified_functional_test_xdc_suites' modified_tests.json)
-          echo "modified_unit_test_suites=$modified_unit_test_suites" >> $GITHUB_ENV
-          echo "modified_integration_test_suites=$modified_integration_test_suites" >> $GITHUB_ENV
-          echo "modified_functional_test_suites=$modified_functional_test_suites" >> $GITHUB_ENV
-          echo "modified_functional_test_ndc_suites=$modified_functional_test_ndc_suites" >> $GITHUB_ENV
-          echo "modified_functional_test_xdc_suites=$modified_functional_test_xdc_suites
+          OUTPUT=$(make collect-modified-tests SOURCE_REF="${SOURCE_REF}" TARGET_REF="${TARGET_REF}")
+          
+          test_suites=("modified_unit_test_suites" "modified_integration_test_suites" "modified_functional_test_suites" "modified_functional_test_ndc_suites" "modified_functional_test_xdc_suites")
+          for suite in "${test_suites[@]}"; do
+            value=$(echo "$OUTPUT" | jq -r ".${suite}")
+            echo "$suite=$value" >> $GITHUB_ENV
+          done
 
   misc-checks:
     name: Misc checks
