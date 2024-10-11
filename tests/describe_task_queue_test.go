@@ -113,8 +113,6 @@ func (s *DescribeTaskQueueSuite) TestAddSingleTask_ValidateCachedStatsNoMatching
 	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 1)
 
 	s.OverrideDynamicConfig(dynamicconfig.PhysicalTaskQueueInfoByBuildIdTTL, 500*time.Millisecond)
-	s.OverrideDynamicConfig(dynamicconfig.MatchingLongPollExpirationInterval, 30*time.Second)
-	s.OverrideDynamicConfig(dynamicconfig.MatchingUpdateAckInterval, 5*time.Second)
 	s.publishConsumeWorkflowTasksValidateStatsCached(1)
 }
 
@@ -356,7 +354,43 @@ func (s *DescribeTaskQueueSuite) publishConsumeWorkflowTasksValidateStatsCached(
 	expectedAddRate[enumspb.TASK_QUEUE_TYPE_WORKFLOW] = workflows > 0
 	expectedDispatchRate[enumspb.TASK_QUEUE_TYPE_WORKFLOW] = false
 
-	s.validateDescribeTaskQueueCached(tqName, expectedBacklogCount, maxBacklogExtraTasks, expectedAddRate, expectedDispatchRate, true)
+	// DescribeTaskQueuePartition loads the latest stats into the partition; this ensures
+	// we don't wait when we make the following DescribeTaskQueue call
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		resp, err := s.GetTestCluster().MatchingClient().DescribeTaskQueuePartition(
+			context.Background(),
+			&matchingservice.DescribeTaskQueuePartitionRequest{
+				NamespaceId: s.GetNamespaceID(s.Namespace()),
+				TaskQueuePartition: &taskqueuespb.TaskQueuePartition{
+					TaskQueue:     tqName,
+					TaskQueueType: 0, // since we have only workflow tasks
+				},
+				Versions: &taskqueuepb.TaskQueueVersionSelection{
+					Unversioned: true,
+				},
+				ReportStats:                   true,
+				ReportPollers:                 false,
+				ReportInternalTaskQueueStatus: false,
+			})
+		a := assert.New(t)
+		a.NoError(err)
+
+		// parsing out the response
+		a.Equal(1, len(resp.GetVersionsInfoInternal()), "should be 1 because only default/unversioned queue")
+		a.NotNil(resp.GetVersionsInfoInternal()[""])
+		a.NotNil(resp.GetVersionsInfoInternal()[""].GetPhysicalTaskQueueInfo())
+
+		// validating stats
+		wfStats := resp.GetVersionsInfoInternal()[""].GetPhysicalTaskQueueInfo().GetTaskQueueStats()
+		a.NotNil(wfStats)
+
+		a.GreaterOrEqual(int64(0), wfStats.ApproximateBacklogCount)
+		a.Equal(time.Duration(0), wfStats.ApproximateBacklogAge.AsDuration())
+		a.Equal(float32(0), wfStats.TasksAddRate)
+		a.Equal(float32(0), wfStats.TasksDispatchRate)
+	}, 200*time.Millisecond, 5*time.Millisecond)
+
+	s.validateDescribeTaskQueueCached(tqName, expectedBacklogCount, maxBacklogExtraTasks, expectedAddRate, expectedDispatchRate, false)
 
 	// Poll the tasks
 	for i := 0; i < workflows; {
@@ -371,8 +405,6 @@ func (s *DescribeTaskQueueSuite) publishConsumeWorkflowTasksValidateStatsCached(
 		}
 		i++
 	}
-
-	// in the worst case, can I not spend 1 second here? if that happens, the TTL for the cache gets expired.
 
 	// Do a describe Tq partition calls in an eventually with the matching client
 	s.EventuallyWithT(func(t *assert.CollectT) {
