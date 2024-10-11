@@ -175,13 +175,18 @@ func GetOrPollMutableState(
 				}
 				response.CurrentBranchToken = latestVersionHistory.GetBranchToken()
 				response.VersionHistories = event.VersionHistories
+				latestVersionHistoryItem, err := versionhistory.GetLastVersionHistoryItem(latestVersionHistory)
+				if err != nil {
+					return nil, err
+				}
+				// It is possible the notifier sends an out of date event, we can ignore this event.
+				if versionhistory.CompareVersionHistoryItem(latestVersionHistoryItem, request.VersionHistoryItem) < 0 {
+					continue
+				}
 				if !versionhistory.ContainsVersionHistoryItem(latestVersionHistory, request.VersionHistoryItem) {
-					logItem, err := versionhistory.GetLastVersionHistoryItem(latestVersionHistory)
-					if err != nil {
-						return nil, err
-					}
+
 					logger.Warn("Request history branch and current history branch don't match after polling the mutable state",
-						tag.Value(logItem),
+						tag.Value(latestVersionHistoryItem),
 						tag.TokenLastEventVersion(request.VersionHistoryItem.GetVersion()),
 						tag.TokenLastEventID(request.VersionHistoryItem.GetEventId()),
 						tag.WorkflowNamespaceID(workflowKey.GetNamespaceID()),
