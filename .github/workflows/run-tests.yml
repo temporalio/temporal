@@ -74,11 +74,11 @@ jobs:
       single_test_args: ${{ steps.generate_output.outputs.single_test_args }}
       runs_on: ${{ steps.generate_output.outputs.runs_on }}
       dbs: ${{ inputs.test_dbs }}
-      modified_unit_test_suites: ${{ steps.collect_modified_tests.outputs.MODIFIED_UNIT_TEST_SUITES }}
-      modified_integration_test_suites: ${{ steps.collect_modified_tests.outputs.MODIFIED_INTEGRATION_TEST_SUITES }}
-      modified_functional_test_suites: ${{ steps.collect_modified_tests.outputs.MODIFIED_FUNCTIONAL_TEST_SUITES }}
-      modified_functional_test_ndc_suites: ${{ steps.collect_modified_tests.outputs.MODIFIED_FUNCTIONAL_TEST_NDC_SUITES }}
-      modified_functional_test_xdc_suites: ${{ steps.collect_modified_tests.outputs.MODIFIED_FUNCTIONAL_TEST_XDC_SUITES }}
+      modified_unit_test_suites: ${{ steps.collect_modified_tests.outputs.modified_unit_test_suites }}
+      modified_integration_test_suites: ${{ steps.collect_modified_tests.outputs.modified_integration_test_suites }}
+      modified_functional_test_suites: ${{ steps.collect_modified_tests.outputs.modified_functional_test_suites }}
+      modified_functional_test_ndc_suites: ${{ steps.collect_modified_tests.outputs.modified_functional_test_ndc_suites }}
+      modified_functional_test_xdc_suites: ${{ steps.collect_modified_tests.outputs.modified_functional_test_xdc_suites }}
     steps:
       - id: generate_output
         run: |
@@ -132,16 +132,16 @@ jobs:
         id: parse_modified_tests
         run: |
           echo "${{ steps.collect_modified_tests.outputs.modified_tests }}" > modified_tests.json
-          MODIFIED_UNIT_TEST_SUITES=$(jq -r '.MODIFIED_UNIT_TEST_SUITES' modified_tests.json)
-          MODIFIED_INTEGRATION_TEST_SUITES=$(jq -r '.MODIFIED_INTEGRATION_TEST_SUITES' modified_tests.json)
-          MODIFIED_FUNCTIONAL_TEST_SUITES=$(jq -r '.MODIFIED_FUNCTIONAL_TEST_SUITES' modified_tests.json)
-          MODIFIED_FUNCTIONAL_TEST_NDC_SUITES=$(jq -r '.MODIFIED_FUNCTIONAL_TEST_NDC_SUITES' modified_tests.json)
-          MODIFIED_FUNCTIONAL_TEST_XDC_SUITES=$(jq -r '.MODIFIED_FUNCTIONAL_TEST_XDC_SUITES' modified_tests.json)
-          echo "MODIFIED_UNIT_TEST_SUITES=$MODIFIED_UNIT_TEST_SUITES" >> $GITHUB_ENV
-          echo "MODIFIED_INTEGRATION_TEST_SUITES=$MODIFIED_INTEGRATION_TEST_SUITES" >> $GITHUB_ENV
-          echo "MODIFIED_FUNCTIONAL_TEST_SUITES=$MODIFIED_FUNCTIONAL_TEST_SUITES" >> $GITHUB_ENV
-          echo "MODIFIED_FUNCTIONAL_TEST_NDC_SUITES=$MODIFIED_FUNCTIONAL_TEST_NDC_SUITES" >> $GITHUB_ENV
-          echo "MODIFIED_FUNCTIONAL_TEST_XDC_SUITES=$MODIFIED_FUNCTIONAL_TEST_XDC_SUITES" >> $GITHUB_ENV
+          modified_unit_test_suites=$(jq -r '.modified_unit_test_suites' modified_tests.json)
+          modified_integration_test_suites=$(jq -r '.modified_integration_test_suites' modified_tests.json)
+          modified_functional_test_suites=$(jq -r '.modified_functional_test_suites' modified_tests.json)
+          modified_functional_test_ndc_suites=$(jq -r '.modified_functional_test_ndc_suites' modified_tests.json)
+          modified_functional_test_xdc_suites=$(jq -r '.modified_functional_test_xdc_suites' modified_tests.json)
+          echo "modified_unit_test_suites=$modified_unit_test_suites" >> $GITHUB_ENV
+          echo "modified_integration_test_suites=$modified_integration_test_suites" >> $GITHUB_ENV
+          echo "modified_functional_test_suites=$modified_functional_test_suites" >> $GITHUB_ENV
+          echo "modified_functional_test_ndc_suites=$modified_functional_test_ndc_suites" >> $GITHUB_ENV
+          echo "modified_functional_test_xdc_suites=$modified_functional_test_xdc_suites
 
   misc-checks:
     name: Misc checks

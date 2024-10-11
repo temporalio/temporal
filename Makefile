@@ -355,11 +355,11 @@ collect-modified-tests:
 	MODIFIED_FUNCTIONAL_TEST_NDC_SUITES=$$(./cmd/tools/test/find_altered_tests -c functional-ndc -source-ref $(SOURCE_REF) -target-ref $(TARGET_REF) -d $(FUNCTIONAL_TEST_NDC_ROOT)); \
 	MODIFIED_FUNCTIONAL_TEST_XDC_SUITES=$$(./cmd/tools/test/find_altered_tests -c functional-xdc -source-ref $(SOURCE_REF) -target-ref $(TARGET_REF) -d $(FUNCTIONAL_TEST_XDC_ROOT)); \
 	echo '{'; \
-	echo '  "MODIFIED_UNIT_TEST_SUITES": "'$$MODIFIED_UNIT_TEST_SUITES'",'; \
-	echo '  "MODIFIED_INTEGRATION_TEST_SUITES": "'$$MODIFIED_INTEGRATION_TEST_SUITES'",'; \
-	echo '  "MODIFIED_FUNCTIONAL_TEST_SUITES": "'$$MODIFIED_FUNCTIONAL_TEST_SUITES'",'; \
-	echo '  "MODIFIED_FUNCTIONAL_TEST_NDC_SUITES": "'$$MODIFIED_FUNCTIONAL_TEST_NDC_SUITES'",'; \
-	echo '  "MODIFIED_FUNCTIONAL_TEST_XDC_SUITES": "'$$MODIFIED_FUNCTIONAL_TEST_XDC_SUITES'"'; \
+	echo '  "modified_unit_test_suites": "'$$MODIFIED_UNIT_TEST_SUITES'",'; \
+	echo '  "modified_integration_test_suites": "'$$MODIFIED_INTEGRATION_TEST_SUITES'",'; \
+	echo '  "modified_functional_test_suites": "'$$MODIFIED_FUNCTIONAL_TEST_SUITES'",'; \
+	echo '  "modified_functional_test_ndc_suites": "'$$MODIFIED_FUNCTIONAL_TEST_NDC_SUITES'",'; \
+	echo '  "modified_functional_test_xdc_suites": "'$$MODIFIED_FUNCTIONAL_TEST_XDC_SUITES'"'; \
 	echo '}';
 
 clean-test-results:
