@@ -117,7 +117,7 @@ jobs:
 
       - name: Compute merge base
         run: |
-          MERGE_BASE=$(git merge-base ${{ env.COMMIT }} ${{ github.event.pull_request.base.ref }})
+          MERGE_BASE=$(git merge-base "${{ env.COMMIT }}" "${{ github.event.pull_request.base.ref }}")
           echo "MERGE_BASE=$MERGE_BASE" >> $GITHUB_ENV
 
       - name: Collect Modified Tests
