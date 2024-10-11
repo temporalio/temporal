@@ -28,6 +28,8 @@ package matching
 
 import (
 	"context"
+	enumspb "go.temporal.io/api/enums/v1"
+	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	"time"
 
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
@@ -76,5 +78,11 @@ type (
 		String() string
 		Partition() tqid.Partition
 		LongPollExpirationInterval() time.Duration
+		// TimeSinceLastFanOut returns the time since the last DescribeTaskQueuePartition fan out
+		TimeSinceLastFanOut() time.Duration
+		// UpdateTimeSinceLastFanOutAndCache updates the cache and it's TTL
+		UpdateTimeSinceLastFanOutAndCache(physicalInfoByBuildId map[string]map[enumspb.TaskQueueType]*taskqueuespb.PhysicalTaskQueueInfo)
+		// GetPhysicalTaskQueueInfoFromCache returns the cached physicalInfoByBuildId
+		GetPhysicalTaskQueueInfoFromCache() map[string]map[enumspb.TaskQueueType]*taskqueuespb.PhysicalTaskQueueInfo
 	}
 )

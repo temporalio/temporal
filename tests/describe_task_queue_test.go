@@ -25,7 +25,6 @@ package tests
 import (
 	"context"
 	"flag"
-	"fmt"
 	"testing"
 	"time"
 
@@ -76,7 +75,7 @@ func (s *DescribeTaskQueueSuite) TestAddNoTasks_ValidateStats() {
 	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 4)
 	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 4)
 	s.OverrideDynamicConfig(dynamicconfig.MatchingLongPollExpirationInterval, 10*time.Second)
-	s.OverrideDynamicConfig(dynamicconfig.CachedPhysicalInfoByBuildIdTTL, 0*time.Millisecond)
+	s.OverrideDynamicConfig(dynamicconfig.PhysicalTaskQueueInfoByBuildIdTTL, 0*time.Millisecond)
 
 	s.publishConsumeWorkflowTasksValidateStats(0, true, false)
 }
@@ -92,7 +91,7 @@ func (s *DescribeTaskQueueSuite) TestAddMultipleTasksMultiplePartitions_Validate
 	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 4)
 	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 4)
 	s.OverrideDynamicConfig(dynamicconfig.MatchingLongPollExpirationInterval, 10*time.Second)
-	s.OverrideDynamicConfig(dynamicconfig.CachedPhysicalInfoByBuildIdTTL, 0*time.Second)
+	s.OverrideDynamicConfig(dynamicconfig.PhysicalTaskQueueInfoByBuildIdTTL, 0*time.Second)
 
 	s.publishConsumeWorkflowTasksValidateStats(100, true, false)
 }
@@ -110,7 +109,7 @@ func (s *DescribeTaskQueueSuite) TestAddSingleTask_ValidateCachedStatsNoMatching
 	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 1)
 	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 1)
 
-	s.OverrideDynamicConfig(dynamicconfig.CachedPhysicalInfoByBuildIdTTL, 20*time.Millisecond)
+	s.OverrideDynamicConfig(dynamicconfig.PhysicalTaskQueueInfoByBuildIdTTL, 20*time.Millisecond)
 	s.OverrideDynamicConfig(dynamicconfig.MatchingLongPollExpirationInterval, 30*time.Second)
 	s.OverrideDynamicConfig(dynamicconfig.MatchingUpdateAckInterval, 5*time.Second)
 	s.publishConsumeWorkflowTasksValidateStats(1, true, true)
@@ -163,7 +162,6 @@ func (s *DescribeTaskQueueSuite) publishConsumeWorkflowTasksValidateStats(workfl
 	expectedAddRate[enumspb.TASK_QUEUE_TYPE_WORKFLOW] = workflows > 0
 	expectedDispatchRate[enumspb.TASK_QUEUE_TYPE_WORKFLOW] = false
 
-	fmt.Println("first call")
 	s.validateDescribeTaskQueue(tqName, expectedBacklogCount, maxBacklogExtraTasks, expectedAddRate, expectedDispatchRate, isEnhancedMode, isCached)
 
 	// Poll the tasks
@@ -201,7 +199,7 @@ func (s *DescribeTaskQueueSuite) publishConsumeWorkflowTasksValidateStats(workfl
 	}
 
 	// cache based tests
-	cacheTTL := s.GetTestCluster().Host().DcClient().GetValue(dynamicconfig.CachedPhysicalInfoByBuildIdTTL.Key())[0].Value
+	cacheTTL := s.GetTestCluster().Host().DcClient().GetValue(dynamicconfig.PhysicalTaskQueueInfoByBuildIdTTL.Key())[0].Value
 	cacheTTLDuration, ok := cacheTTL.(time.Duration)
 	s.True(ok)
 

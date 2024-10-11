@@ -962,16 +962,12 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 		if err != nil {
 			return nil, err
 		}
-		rootPMImpl, ok := rootPM.(*taskQueuePartitionManagerImpl)
-		if !ok {
-			return nil, fmt.Errorf("failed type assertion on root partition")
-		}
 
-		lastFanOut := rootPMImpl.timeSinceLastFanOut()
-		lastFanOutTTL := tqConfig.CachedPhysicalInfoByBuildIdTTL()
+		timeSinceLastFanOut := rootPM.TimeSinceLastFanOut()
+		lastFanOutTTL := tqConfig.PhysicalTaskQueueInfoByBuildIdTTL()
 
 		physicalInfoByBuildId := make(map[string]map[enumspb.TaskQueueType]*taskqueuespb.PhysicalTaskQueueInfo)
-		if lastFanOut > lastFanOutTTL {
+		if timeSinceLastFanOut > lastFanOutTTL {
 			// collect internal info
 			numPartitions := max(tqConfig.NumWritePartitions(), tqConfig.NumReadPartitions())
 
@@ -1022,12 +1018,10 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 				}
 			}
 			// update cache
-			start := time.Now()
-			rootPMImpl.lastFanOut.Store(start.UnixNano())
-			rootPMImpl.cachedPhysicalInfoByBuildId = physicalInfoByBuildId
+			rootPM.UpdateTimeSinceLastFanOutAndCache(physicalInfoByBuildId)
 		} else {
 			// fetch info from rootPartition's cache
-			physicalInfoByBuildId = rootPMImpl.cachedPhysicalInfoByBuildId
+			physicalInfoByBuildId = rootPM.GetPhysicalTaskQueueInfoFromCache()
 		}
 
 		// smush internal info into versions info

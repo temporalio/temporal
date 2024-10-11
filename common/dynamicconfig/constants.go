@@ -1198,10 +1198,11 @@ Set to zero to disable proactive unload.`,
 		`MatchingQueryWorkflowTaskTimeoutLogRate defines the sampling rate for logs when a query workflow task times out. Since
 these log lines can be noisy, we want to be able to turn on and sample selectively for each affected namespace.`,
 	)
-	CachedPhysicalInfoByBuildIdTTL = NewTaskQueueDurationSetting(
-		"matching.cachedPhysicalInfoByBuildIdTTL",
+	PhysicalTaskQueueInfoByBuildIdTTL = NewTaskQueueDurationSetting(
+		"matching.physicalTaskQueueInfoByBuildIdTTL",
 		time.Second,
-		`cachedPhysicalInfoByBuildIdTTL acts as a cache TTL for cachedPhysicalInfoByBuildIdCache`,
+		`physicalTaskQueueInfoByBuildIdTTL is a cache TTL for physicalTaskQueueInfoByBuildIdCache,
+which is used in DescribeTaskQueue,`,
 	)
 	// for matching testing only:
 
