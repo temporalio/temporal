@@ -184,20 +184,25 @@ func GetOrPollMutableState(
 				// Note: Later events could modify response.WorkerVersionStamp and we won't
 				// update it here. That's okay since this return value is only informative and isn't used for task dispatch.
 				// For correctness we could pass it in the Notification event.
-				latestVersionHistory, err := versionhistory.GetCurrentVersionHistory(event.VersionHistories)
+				eventVersionHistory, err := versionhistory.GetCurrentVersionHistory(event.VersionHistories)
 				if err != nil {
 					return nil, err
 				}
-				response.CurrentBranchToken = latestVersionHistory.GetBranchToken()
+				response.CurrentBranchToken = eventVersionHistory.GetBranchToken()
 				response.VersionHistories = event.VersionHistories
+
+				notifiedEventVersionItem, err := versionhistory.GetLastVersionHistoryItem(eventVersionHistory)
+				if err != nil {
+					return nil, err
+				}
+				// It is possible the notifier sends an out of date event, we can ignore this event.
+				if versionhistory.CompareVersionHistoryItem(notifiedEventVersionItem, request.VersionHistoryItem) < 0 {
+					continue
+				}
 				// TODO: update to use transition version history
-				if !versionhistory.ContainsVersionHistoryItem(latestVersionHistory, request.VersionHistoryItem) {
-					logItem, err := versionhistory.GetLastVersionHistoryItem(latestVersionHistory)
-					if err != nil {
-						return nil, err
-					}
+				if !versionhistory.ContainsVersionHistoryItem(eventVersionHistory, request.VersionHistoryItem) {
 					logger.Warn("Request history branch and current history branch don't match after polling the mutable state",
-						tag.Value(logItem),
+						tag.Value(notifiedEventVersionItem),
 						tag.TokenLastEventVersion(request.VersionHistoryItem.GetVersion()),
 						tag.TokenLastEventID(request.VersionHistoryItem.GetEventId()),
 						tag.WorkflowNamespaceID(workflowKey.GetNamespaceID()),
