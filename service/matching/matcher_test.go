@@ -210,7 +210,7 @@ func (t *MatcherTestSuite) testRemoteSyncMatch(taskSource enumsspb.TaskSource) {
 }
 
 // validateSyncMatchWhenNoBacklog is a helper which validates a sync match when there is no backlog
-func (t *MatcherTestSuite) validateSyncMatchWhenNoBacklog(wg *sync.WaitGroup, historyTask *internalTask, ctx context.Context) {
+func (t *MatcherTestSuite) validateSyncMatchWhenNoBacklog(ctx context.Context, wg *sync.WaitGroup, historyTask *internalTask) {
 	wg.Add(1)
 
 	// poll forwarding attempt happens when there is no backlog
@@ -227,7 +227,7 @@ func (t *MatcherTestSuite) validateSyncMatchWhenNoBacklog(wg *sync.WaitGroup, hi
 		cancel()
 	}()
 	wg.Wait()                        // for the poll to reach the root partition
-	time.Sleep(2 * time.Millisecond) // to ensure poller now polls locally since it encountered a forwarding error
+	time.Sleep(2 * time.Millisecond) //nolint:forbidigo
 
 	go func() {
 		historyTask.responseC <- nil
@@ -243,7 +243,7 @@ func (t *MatcherTestSuite) TestRejectSyncMatchWhenBacklog() {
 
 	// sync match happens when there is no backlog
 	var wg sync.WaitGroup
-	t.validateSyncMatchWhenNoBacklog(&wg, historyTask, ctx)
+	t.validateSyncMatchWhenNoBacklog(ctx, &wg, historyTask)
 
 	// first task waits for a local poller
 	intruptC := make(chan struct{})
@@ -287,7 +287,7 @@ func (t *MatcherTestSuite) TestRejectSyncMatchWhenBacklog() {
 	time.Sleep(time.Millisecond)
 
 	// should allow sync match now
-	t.validateSyncMatchWhenNoBacklog(&wg, historyTask, ctx)
+	t.validateSyncMatchWhenNoBacklog(ctx, &wg, historyTask)
 	cancel()
 }
 
