@@ -56,8 +56,8 @@ var CategoryDirs = map[string][]string{
 	"unit":           {"./client", "./common", "./internal", "./service", "./temporal", "./tools", "./cmd"},
 	"integration":    {"./common/persistence/tests", "./tools/tests", "./temporaltest", "./internal/temporalite"},
 	"functional":     {"./tests"},
-	"functional-ndc": {"./tests/ndc"},
-	"functional-xdc": {"./tests/xdc"},
+	"functional_ndc": {"./tests/ndc"},
+	"functional_xdc": {"./tests/xdc"},
 }
 
 func main() {
