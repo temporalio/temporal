@@ -183,7 +183,7 @@ func createClient(ctrl *gomock.Controller, listener *nettest.PipeListener) histo
 		log.NewTestLogger(),
 		1,
 		rpcFactory,
-		time.Duration(0),
+		time.Second,
 	)
 	return client
 }
