@@ -1352,15 +1352,15 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletionAfterReset() {
 
 	hist := s.SdkClient().GetWorkflowHistory(ctx, run.GetID(), resetResp.RunId, false, enumspb.HISTORY_EVENT_FILTER_TYPE_ALL_EVENT)
 
-	seenCompletedEvent := false
+	seenStartedEvent := false
 	for hist.HasNext() {
 		event, err := hist.Next()
 		s.NoError(err)
 		if event.EventType == enumspb.EVENT_TYPE_NEXUS_OPERATION_STARTED {
-			seenCompletedEvent = true
+			seenStartedEvent = true
 		}
 	}
-	s.True(seenCompletedEvent)
+	s.True(seenStartedEvent)
 	completion, err := nexus.NewOperationCompletionSuccessful(s.mustToPayload("result"), nexus.OperationCompletionSuccesfulOptions{
 		Serializer: commonnexus.PayloadSerializer,
 	})

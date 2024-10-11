@@ -976,10 +976,10 @@ func (s *workflowResetterSuite) TestReapplyEvents_Excludes() {
 	s.NoError(err)
 	ms.EXPECT().HSM().Return(root).AnyTimes()
 
-	excludes := map[enumspb.ResetReapplyExcludeType]bool{
-		enumspb.RESET_REAPPLY_EXCLUDE_TYPE_SIGNAL: true,
-		enumspb.RESET_REAPPLY_EXCLUDE_TYPE_UPDATE: true,
-		enumspb.RESET_REAPPLY_EXCLUDE_TYPE_NEXUS:  true,
+	excludes := map[enumspb.ResetReapplyExcludeType]struct{}{
+		enumspb.RESET_REAPPLY_EXCLUDE_TYPE_SIGNAL: {},
+		enumspb.RESET_REAPPLY_EXCLUDE_TYPE_UPDATE: {},
+		enumspb.RESET_REAPPLY_EXCLUDE_TYPE_NEXUS:  {},
 	}
 	reappliedEvents, err := reapplyEvents(context.Background(), ms, nil, smReg, events, excludes, "")
 	s.Empty(reappliedEvents)

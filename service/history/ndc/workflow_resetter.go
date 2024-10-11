@@ -74,7 +74,7 @@ type (
 			currentWorkflow Workflow,
 			resetReason string,
 			additionalReapplyEvents []*historypb.HistoryEvent,
-			resetReapplyExcludeTypes map[enumspb.ResetReapplyExcludeType]bool,
+			resetReapplyExcludeTypes map[enumspb.ResetReapplyExcludeType]struct{},
 		) error
 	}
 
@@ -123,7 +123,7 @@ func (r *workflowResetterImpl) ResetWorkflow(
 	currentWorkflow Workflow,
 	resetReason string,
 	additionalReapplyEvents []*historypb.HistoryEvent,
-	resetReapplyExcludeTypes map[enumspb.ResetReapplyExcludeType]bool,
+	resetReapplyExcludeTypes map[enumspb.ResetReapplyExcludeType]struct{},
 ) (retError error) {
 
 	namespaceEntry, err := r.namespaceRegistry.GetNamespaceByID(namespaceID)
@@ -580,7 +580,7 @@ func (r *workflowResetterImpl) reapplyContinueAsNewWorkflowEvents(
 	baseBranchToken []byte,
 	baseRebuildNextEventID int64,
 	baseNextEventID int64,
-	resetReapplyExcludeTypes map[enumspb.ResetReapplyExcludeType]bool,
+	resetReapplyExcludeTypes map[enumspb.ResetReapplyExcludeType]struct{},
 ) (string, error) {
 
 	// TODO change this logic to fetching all workflow [baseWorkflow, currentWorkflow]
@@ -685,7 +685,7 @@ func (r *workflowResetterImpl) reapplyEventsFromBranch(
 	firstEventID int64,
 	nextEventID int64,
 	branchToken []byte,
-	resetReapplyExcludeTypes map[enumspb.ResetReapplyExcludeType]bool,
+	resetReapplyExcludeTypes map[enumspb.ResetReapplyExcludeType]struct{},
 ) (string, error) {
 
 	// TODO change this logic to fetching all workflow [baseWorkflow, currentWorkflow]
@@ -726,7 +726,7 @@ func (r *workflowResetterImpl) reapplyEvents(
 	ctx context.Context,
 	mutableState workflow.MutableState,
 	events []*historypb.HistoryEvent,
-	resetReapplyExcludeTypes map[enumspb.ResetReapplyExcludeType]bool,
+	resetReapplyExcludeTypes map[enumspb.ResetReapplyExcludeType]struct{},
 ) ([]*historypb.HistoryEvent, error) {
 	// When reapplying events during WorkflowReset, we do not check for conflicting update IDs (they are not possible,
 	// since the workflow was in a consistent state before reset), and we do not perform deduplication (because we never
@@ -740,7 +740,7 @@ func reapplyEvents(
 	targetBranchUpdateRegistry update.Registry,
 	stateMachineRegistry *hsm.Registry,
 	events []*historypb.HistoryEvent,
-	resetReapplyExcludeTypes map[enumspb.ResetReapplyExcludeType]bool,
+	resetReapplyExcludeTypes map[enumspb.ResetReapplyExcludeType]struct{},
 	runIdForDeduplication string,
 ) ([]*historypb.HistoryEvent, error) {
 	// TODO (dan): This implementation is the result of unifying two previous implementations, one of which did
@@ -752,8 +752,8 @@ func reapplyEvents(
 		resource := definition.NewEventReappliedID(runIdForDeduplication, event.GetEventId(), event.GetVersion())
 		return mutableState.IsResourceDuplicated(resource)
 	}
-	excludeSignal := resetReapplyExcludeTypes[enumspb.RESET_REAPPLY_EXCLUDE_TYPE_SIGNAL]
-	excludeUpdate := resetReapplyExcludeTypes[enumspb.RESET_REAPPLY_EXCLUDE_TYPE_UPDATE]
+	_, excludeSignal := resetReapplyExcludeTypes[enumspb.RESET_REAPPLY_EXCLUDE_TYPE_SIGNAL]
+	_, excludeUpdate := resetReapplyExcludeTypes[enumspb.RESET_REAPPLY_EXCLUDE_TYPE_UPDATE]
 	var reappliedEvents []*historypb.HistoryEvent
 	for _, event := range events {
 		switch event.GetEventType() {
