@@ -618,7 +618,7 @@ pollLoop:
 			case *serviceerror.Internal, *serviceerror.DataLoss:
 				e.nonRetryableErrorsDropTask(task, taskQueueName, err)
 				// drop the task as otherwise task would be stuck in a retry-loop
-				task.finish(nil)
+				task.finish(nil, false)
 			case *serviceerror.NotFound: // mutable state not found, workflow not running or workflow task not found
 				e.logger.Info("Workflow task not found",
 					tag.WorkflowTaskQueueName(taskQueueName),
@@ -783,7 +783,7 @@ pollLoop:
 			case *serviceerror.Internal, *serviceerror.DataLoss:
 				e.nonRetryableErrorsDropTask(task, taskQueueName, err)
 				// drop the task as otherwise task would be stuck in a retry-loop
-				task.finish(nil)
+				task.finish(nil, false)
 			case *serviceerror.NotFound: // mutable state not found, workflow not running or activity info not found
 				e.logger.Info("Activity task not found",
 					tag.WorkflowNamespaceID(task.event.Data.GetNamespaceId()),
