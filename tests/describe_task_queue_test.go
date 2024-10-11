@@ -109,7 +109,7 @@ func (s *DescribeTaskQueueSuite) TestAddSingleTask_ValidateCachedStatsNoMatching
 	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 1)
 	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 1)
 
-	s.OverrideDynamicConfig(dynamicconfig.PhysicalTaskQueueInfoByBuildIdTTL, 20*time.Millisecond)
+	s.OverrideDynamicConfig(dynamicconfig.PhysicalTaskQueueInfoByBuildIdTTL, 500*time.Millisecond)
 	s.OverrideDynamicConfig(dynamicconfig.MatchingLongPollExpirationInterval, 30*time.Second)
 	s.OverrideDynamicConfig(dynamicconfig.MatchingUpdateAckInterval, 5*time.Second)
 	s.publishConsumeWorkflowTasksValidateStats(1, true, true)
@@ -265,8 +265,8 @@ func (s *DescribeTaskQueueSuite) validateDescribeTaskQueue(
 	if isCached {
 		// reducing the waitFor and tick since it affects the cache TTL
 		// small values since we don't sleep for long in the tests involving cache
-		waitFor = 20 * time.Millisecond
-		tick = 5 * time.Millisecond
+		waitFor = 500 * time.Millisecond
+		tick = 50 * time.Millisecond
 	}
 
 	if isEnhancedMode {
