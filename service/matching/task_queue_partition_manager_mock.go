@@ -145,18 +145,18 @@ func (mr *MocktaskQueuePartitionManagerMockRecorder) GetAllPollerInfo() *gomock.
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetAllPollerInfo", reflect.TypeOf((*MocktaskQueuePartitionManager)(nil).GetAllPollerInfo))
 }
 
-// GetCache mocks base method.
-func (m *MocktaskQueuePartitionManager) GetCache() map[string]map[enums.TaskQueueType]*taskqueue0.PhysicalTaskQueueInfo {
+// GetPhysicalTaskQueueInfoFromCache mocks base method.
+func (m *MocktaskQueuePartitionManager) GetPhysicalTaskQueueInfoFromCache() map[string]map[enums.TaskQueueType]*taskqueue0.PhysicalTaskQueueInfo {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetCache")
+	ret := m.ctrl.Call(m, "GetPhysicalTaskQueueInfoFromCache")
 	ret0, _ := ret[0].(map[string]map[enums.TaskQueueType]*taskqueue0.PhysicalTaskQueueInfo)
 	return ret0
 }
 
-// GetCache indicates an expected call of GetCache.
-func (mr *MocktaskQueuePartitionManagerMockRecorder) GetCache() *gomock.Call {
+// GetPhysicalTaskQueueInfoFromCache indicates an expected call of GetPhysicalTaskQueueInfoFromCache.
+func (mr *MocktaskQueuePartitionManagerMockRecorder) GetPhysicalTaskQueueInfoFromCache() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetCache", reflect.TypeOf((*MocktaskQueuePartitionManager)(nil).GetCache))
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetPhysicalTaskQueueInfoFromCache", reflect.TypeOf((*MocktaskQueuePartitionManager)(nil).GetPhysicalTaskQueueInfoFromCache))
 }
 
 // GetUserDataManager mocks base method.

@@ -204,7 +204,7 @@ func (s *DescribeTaskQueueSuite) publishConsumeWorkflowTasksValidateStats(workfl
 	s.True(ok)
 
 	if cacheTTLDuration != 0 {
-		time.Sleep(cacheTTLDuration)
+		time.Sleep(cacheTTLDuration) //nolint:forbidigo
 	}
 
 	// call describeTaskQueue to verify if the WTF backlog decreased and activity backlog increased
