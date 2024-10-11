@@ -443,6 +443,7 @@ jobs:
 
       - name: Run Modified Functional XDC Tests Multiple Times
         if: ${{ env.MODIFIED_TEST_SUITES != '' }}
+        timeout-minutes: 60
         env:
           N_RUNS: 10
         run: |
