@@ -103,7 +103,7 @@ func (s *DLQMetricsEmitter) emitMetricsLoop() {
 				s.emitMetrics()
 			} else {
 				// We have to clear the gauge dlq_message_count for this host when another host starts
-				// emitting the metrics.
+				// emitting this metric.
 				s.emitZeroMetrics()
 			}
 		}
