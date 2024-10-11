@@ -28,9 +28,10 @@ package matching
 
 import (
 	"context"
+	"time"
+
 	enumspb "go.temporal.io/api/enums/v1"
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
-	"time"
 
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
