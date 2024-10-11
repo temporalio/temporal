@@ -287,7 +287,7 @@ func (s *UpdateWorkflowSdkSuite) TestUpdateWorkflow_ContinueAsNewAfterUpdateAdmi
   4 WorkflowTaskCompleted
   5 MarkerRecorded
   6 WorkflowExecutionContinuedAsNew`, s.GetHistory(s.Namespace(), tv.WithRunID(firstRun.GetRunID()).WorkflowExecution()))
-	// TODO: This might have different history if 1st WFT completes before Update is retired. Then
+	// TODO: This might have different history if 1st WFT completes before Update is retried. Then
 	//  there will be another 3 WFT events before Event 5. This needs to be replaced with s.EqualHistorySuffix once available.
 	s.EqualHistoryEvents(`
   1 WorkflowExecutionStarted
