@@ -164,7 +164,7 @@ func (t *MatcherTestSuite) testRemoteSyncMatch(taskSource enumsspb.TaskSource) {
 			if err != nil {
 				remotePollErr = err
 			} else {
-				task.finish(nil)
+				task.finish(nil, true)
 				remotePollResp = matchingservice.PollWorkflowTaskQueueResponse{
 					WorkflowExecution: task.workflowExecution(),
 				}
