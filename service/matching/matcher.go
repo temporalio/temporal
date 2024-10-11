@@ -644,9 +644,7 @@ func (tm *TaskMatcher) getBacklogAge() time.Duration {
 
 	oldest := int64(math.MaxInt64)
 	for createTime := range tm.backlogTasksCreateTime {
-		if createTime < oldest {
-			oldest = createTime
-		}
+		oldest = min(oldest, createTime)
 	}
 
 	return time.Since(time.Unix(0, oldest))
