@@ -27,6 +27,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/server/components/nexusoperations"
 	"go.temporal.io/server/service/history/hsm"
@@ -51,7 +52,9 @@ func TestCherryPick(t *testing.T) {
 					ScheduledEventId: eventID,
 				},
 			},
-		})
+		},
+			nil,
+		)
 		require.NoError(t, err)
 	})
 	t.Run("ValidRequestID", func(t *testing.T) {
@@ -63,7 +66,9 @@ func TestCherryPick(t *testing.T) {
 					RequestId:        op.RequestId,
 				},
 			},
-		})
+		},
+			nil,
+		)
 		require.NoError(t, err)
 	})
 	t.Run("InvalidRequestID", func(t *testing.T) {
@@ -75,7 +80,9 @@ func TestCherryPick(t *testing.T) {
 					RequestId:        "invalid",
 				},
 			},
-		})
+		},
+			nil,
+		)
 		require.ErrorIs(t, err, hsm.ErrNotCherryPickable)
 	})
 	t.Run("InvalidScheduledEventID", func(t *testing.T) {
@@ -86,7 +93,9 @@ func TestCherryPick(t *testing.T) {
 					ScheduledEventId: eventID + 1,
 				},
 			},
-		})
+		},
+			nil,
+		)
 		require.ErrorIs(t, err, hsm.ErrStateMachineNotFound)
 	})
 	t.Run("DoubleApply", func(t *testing.T) {
@@ -97,7 +106,9 @@ func TestCherryPick(t *testing.T) {
 					ScheduledEventId: eventID,
 				},
 			},
-		})
+		},
+			nil,
+		)
 		require.NoError(t, err)
 		err = nexusoperations.StartedEventDefinition{}.CherryPick(node.Parent, &historypb.HistoryEvent{
 			Attributes: &historypb.HistoryEvent_NexusOperationStartedEventAttributes{
@@ -105,7 +116,27 @@ func TestCherryPick(t *testing.T) {
 					ScheduledEventId: eventID,
 				},
 			},
-		})
+		},
+			nil,
+		)
 		require.ErrorIs(t, err, hsm.ErrInvalidTransition)
+	})
+	t.Run("shouldExcludeNexusEvents", func(t *testing.T) {
+		node, _, _ := setup(t)
+		nexusOperations := []hsm.EventDefinition{
+			nexusoperations.ScheduledEventDefinition{},
+			nexusoperations.StartedEventDefinition{},
+			nexusoperations.CompletedEventDefinition{},
+			nexusoperations.CancelRequestedEventDefinition{},
+			nexusoperations.CanceledEventDefinition{},
+			nexusoperations.FailedEventDefinition{},
+			nexusoperations.TimedOutEventDefinition{},
+		}
+
+		excludeNexusOperation := map[enumspb.ResetReapplyExcludeType]struct{}{enumspb.RESET_REAPPLY_EXCLUDE_TYPE_NEXUS: {}}
+		for _, nexusOperation := range nexusOperations {
+			err := nexusOperation.CherryPick(node.Parent, &historypb.HistoryEvent{}, excludeNexusOperation)
+			require.ErrorIs(t, err, hsm.ErrNotCherryPickable, "%T should not be cherrypickable when shouldExcludeNexusEvent=true", nexusOperation)
+		}
 	})
 }

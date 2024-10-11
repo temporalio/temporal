@@ -2361,7 +2361,7 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionStartedEvent(
 	return nil
 }
 
-// AddFirstWorkflowTaskScheduled adds the first workflow task scehduled event unless it should be delayed as indicated
+// AddFirstWorkflowTaskScheduled adds the first workflow task scheduled event unless it should be delayed as indicated
 // by the startEvent's FirstWorkflowTaskBackoff.
 // Returns the workflow task's scheduled event ID if a task was scheduled, 0 otherwise.
 func (ms *MutableStateImpl) AddFirstWorkflowTaskScheduled(
@@ -4057,13 +4057,14 @@ func (ms *MutableStateImpl) AddWorkflowExecutionTerminatedEvent(
 	details *commonpb.Payloads,
 	identity string,
 	deleteAfterTerminate bool,
+	links []*commonpb.Link,
 ) (*historypb.HistoryEvent, error) {
 	opTag := tag.WorkflowActionWorkflowTerminated
 	if err := ms.checkMutability(opTag); err != nil {
 		return nil, err
 	}
 
-	event := ms.hBuilder.AddWorkflowExecutionTerminatedEvent(reason, details, identity)
+	event := ms.hBuilder.AddWorkflowExecutionTerminatedEvent(reason, details, identity, links)
 	if err := ms.ApplyWorkflowExecutionTerminatedEvent(firstEventID, event); err != nil {
 		return nil, err
 	}
@@ -4248,6 +4249,7 @@ func (ms *MutableStateImpl) AddWorkflowExecutionSignaled(
 	identity string,
 	header *commonpb.Header,
 	skipGenerateWorkflowTask bool,
+	links []*commonpb.Link,
 ) (*historypb.HistoryEvent, error) {
 	return ms.AddWorkflowExecutionSignaledEvent(
 		signalName,
@@ -4256,6 +4258,7 @@ func (ms *MutableStateImpl) AddWorkflowExecutionSignaled(
 		header,
 		skipGenerateWorkflowTask,
 		nil,
+		links,
 	)
 }
 
@@ -4266,6 +4269,7 @@ func (ms *MutableStateImpl) AddWorkflowExecutionSignaledEvent(
 	header *commonpb.Header,
 	skipGenerateWorkflowTask bool,
 	externalWorkflowExecution *commonpb.WorkflowExecution,
+	links []*commonpb.Link,
 ) (*historypb.HistoryEvent, error) {
 	opTag := tag.WorkflowActionWorkflowSignaled
 	if err := ms.checkMutability(opTag); err != nil {
@@ -4279,6 +4283,7 @@ func (ms *MutableStateImpl) AddWorkflowExecutionSignaledEvent(
 		header,
 		skipGenerateWorkflowTask,
 		externalWorkflowExecution,
+		links,
 	)
 	if err := ms.ApplyWorkflowExecutionSignaled(event); err != nil {
 		return nil, err
@@ -6664,15 +6669,25 @@ func (ms *MutableStateImpl) applyTombstones(tombstoneBatches []*persistencespb.S
 		for _, tombstone := range tombstoneBatch.StateMachineTombstones {
 			switch tombstone.StateMachineKey.(type) {
 			case *persistencespb.StateMachineTombstone_ActivityScheduledEventId:
-				err = ms.DeleteActivity(tombstone.GetActivityScheduledEventId())
+				if _, ok := ms.pendingActivityInfoIDs[tombstone.GetActivityScheduledEventId()]; ok {
+					err = ms.DeleteActivity(tombstone.GetActivityScheduledEventId())
+				}
 			case *persistencespb.StateMachineTombstone_TimerId:
-				err = ms.DeleteUserTimer(tombstone.GetTimerId())
+				if _, ok := ms.pendingTimerInfoIDs[tombstone.GetTimerId()]; ok {
+					err = ms.DeleteUserTimer(tombstone.GetTimerId())
+				}
 			case *persistencespb.StateMachineTombstone_ChildExecutionInitiatedEventId:
-				err = ms.DeletePendingChildExecution(tombstone.GetChildExecutionInitiatedEventId())
+				if _, ok := ms.pendingChildExecutionInfoIDs[tombstone.GetChildExecutionInitiatedEventId()]; ok {
+					err = ms.DeletePendingChildExecution(tombstone.GetChildExecutionInitiatedEventId())
+				}
 			case *persistencespb.StateMachineTombstone_RequestCancelInitiatedEventId:
-				err = ms.DeletePendingRequestCancel(tombstone.GetRequestCancelInitiatedEventId())
+				if _, ok := ms.pendingRequestCancelInfoIDs[tombstone.GetRequestCancelInitiatedEventId()]; ok {
+					err = ms.DeletePendingRequestCancel(tombstone.GetRequestCancelInitiatedEventId())
+				}
 			case *persistencespb.StateMachineTombstone_SignalExternalInitiatedEventId:
-				err = ms.DeletePendingSignal(tombstone.GetSignalExternalInitiatedEventId())
+				if _, ok := ms.pendingSignalInfoIDs[tombstone.GetSignalExternalInitiatedEventId()]; ok {
+					err = ms.DeletePendingSignal(tombstone.GetSignalExternalInitiatedEventId())
+				}
 			default:
 				// TODO: updateID and stateMachinePath
 				err = serviceerror.NewInternal("unknown tombstone type")

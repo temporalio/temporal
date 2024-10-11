@@ -22,7 +22,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package update
+package tests
 
 import (
 	"bytes"
@@ -597,9 +597,11 @@ func (t *resetTest) run() {
 	events := t.GetHistory(t.Namespace(), t.tv.WorkflowExecution())
 
 	resetReapplyExcludeTypes := resetworkflow.GetResetReapplyExcludeTypes(t.reapplyExcludeTypes, t.reapplyType)
-	signals := !resetReapplyExcludeTypes[enumspb.RESET_REAPPLY_EXCLUDE_TYPE_SIGNAL]
-	updates := !resetReapplyExcludeTypes[enumspb.RESET_REAPPLY_EXCLUDE_TYPE_UPDATE]
+	_, noSignals := resetReapplyExcludeTypes[enumspb.RESET_REAPPLY_EXCLUDE_TYPE_SIGNAL]
+	_, noUpdates := resetReapplyExcludeTypes[enumspb.RESET_REAPPLY_EXCLUDE_TYPE_UPDATE]
 
+	signals := !noSignals
+	updates := !noUpdates
 	if !signals && !updates {
 		t.EqualHistoryEvents(`
   1 WorkflowExecutionStarted

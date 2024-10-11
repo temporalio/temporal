@@ -86,6 +86,9 @@ import (
 	"google.golang.org/protobuf/types/known/wrapperspb"
 )
 
+// static error used in tests
+var randomTestError = errors.New("random error")
+
 type (
 	matchingEngineSuite struct {
 		suite.Suite
@@ -470,7 +473,7 @@ func (s *matchingEngineSuite) TestFailAddTaskWithHistoryExhausted() {
 func (s *matchingEngineSuite) TestFailAddTaskWithHistoryError() {
 	historyError := serviceerror.NewInternal("nothing to start")
 	tqName := "testFailAddTaskWithHistoryError"
-	s.testFailAddTaskWithHistoryError(tqName, true, historyError, historyError)
+	s.testFailAddTaskWithHistoryError(tqName, true, historyError, nil) // expectedError shall be nil since history drops the task
 }
 
 func (s *matchingEngineSuite) testFailAddTaskWithHistoryError(
@@ -685,6 +688,119 @@ func (s *matchingEngineSuite) TestPollWorkflowTaskQueues_NamespaceHandover() {
 	}, metrics.NoopMetricsHandler)
 	s.Nil(resp)
 	s.Equal(common.ErrNamespaceHandover.Error(), err.Error())
+}
+
+func (s *matchingEngineSuite) TestPollActivityTaskQueues_InternalError() {
+	namespaceId := uuid.New()
+	tl := "queue"
+	taskQueue := &taskqueuepb.TaskQueue{Name: "queue", Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
+
+	addRequest := matchingservice.AddActivityTaskRequest{
+		NamespaceId:            namespaceId,
+		Execution:              &commonpb.WorkflowExecution{WorkflowId: "workflowID", RunId: uuid.NewRandom().String()},
+		ScheduledEventId:       int64(5),
+		TaskQueue:              taskQueue,
+		ScheduleToStartTimeout: timestamp.DurationFromSeconds(0),
+	}
+
+	// add an activity task
+	_, _, err := s.matchingEngine.AddActivityTask(context.Background(), &addRequest)
+	s.NoError(err)
+	s.EqualValues(s.taskManager.getTaskCount(newUnversionedRootQueueKey(namespaceId, tl, enumspb.TASK_QUEUE_TYPE_ACTIVITY)), 1)
+
+	// task is dropped with no retry; RecordActivityTaskStarted should only be called once
+	s.mockHistoryClient.EXPECT().RecordActivityTaskStarted(gomock.Any(), gomock.Any(), gomock.Any()).
+		Return(nil, serviceerror.NewInternal("Internal error")).Times(1)
+	resp, err := s.matchingEngine.PollActivityTaskQueue(context.Background(), &matchingservice.PollActivityTaskQueueRequest{
+		NamespaceId: namespaceId,
+		PollRequest: &workflowservice.PollActivityTaskQueueRequest{
+			TaskQueue: taskQueue,
+			Identity:  "identity",
+		},
+	}, metrics.NoopMetricsHandler)
+	s.EqualValues(emptyPollActivityTaskQueueResponse, resp)
+	s.NoError(err)
+}
+
+func (s *matchingEngineSuite) TestPollActivityTaskQueues_DataLossError() {
+	namespaceId := uuid.New()
+	tl := "queue"
+	taskQueue := &taskqueuepb.TaskQueue{Name: "queue", Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
+
+	addRequest := matchingservice.AddActivityTaskRequest{
+		NamespaceId:            namespaceId,
+		Execution:              &commonpb.WorkflowExecution{WorkflowId: "workflowID", RunId: uuid.NewRandom().String()},
+		ScheduledEventId:       int64(5),
+		TaskQueue:              taskQueue,
+		ScheduleToStartTimeout: timestamp.DurationFromSeconds(0),
+	}
+
+	// add an activity task
+	_, _, err := s.matchingEngine.AddActivityTask(context.Background(), &addRequest)
+	s.NoError(err)
+	s.EqualValues(s.taskManager.getTaskCount(newUnversionedRootQueueKey(namespaceId, tl, enumspb.TASK_QUEUE_TYPE_ACTIVITY)), 1)
+
+	// task is dropped with no retry; RecordActivityTaskStarted should only be called once
+	s.mockHistoryClient.EXPECT().RecordActivityTaskStarted(gomock.Any(), gomock.Any(), gomock.Any()).
+		Return(nil, serviceerror.NewDataLoss("DataLoss Error")).Times(1)
+
+	resp, err := s.matchingEngine.PollActivityTaskQueue(context.Background(), &matchingservice.PollActivityTaskQueueRequest{
+		NamespaceId: namespaceId,
+		PollRequest: &workflowservice.PollActivityTaskQueueRequest{
+			TaskQueue: taskQueue,
+			Identity:  "identity",
+		},
+	}, metrics.NoopMetricsHandler)
+	s.EqualValues(emptyPollActivityTaskQueueResponse, resp)
+	s.NoError(err)
+}
+
+func (s *matchingEngineSuite) TestPollWorkflowTaskQueues_InternalError() {
+	tqName := "queue"
+	taskQueue := &taskqueuepb.TaskQueue{Name: tqName, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
+	wfExecution := &commonpb.WorkflowExecution{WorkflowId: "workflowID", RunId: uuid.NewRandom().String()}
+
+	// add a wf task
+	s.addWorkflowTask(wfExecution, taskQueue)
+	s.EqualValues(1, s.taskManager.getTaskCount(newUnversionedRootQueueKey(namespaceId, tqName, enumspb.TASK_QUEUE_TYPE_WORKFLOW)))
+
+	// task is dropped with no retry; RecordWorkflowTaskStarted should only be called once
+	s.mockHistoryClient.EXPECT().RecordWorkflowTaskStarted(gomock.Any(), gomock.Any(), gomock.Any()).
+		Return(nil, serviceerror.NewInternal("internal error")).Times(1)
+
+	resp, err := s.matchingEngine.PollWorkflowTaskQueue(context.Background(), &matchingservice.PollWorkflowTaskQueueRequest{
+		NamespaceId: namespaceId,
+		PollRequest: &workflowservice.PollWorkflowTaskQueueRequest{
+			TaskQueue: taskQueue,
+			Identity:  "identity",
+		},
+	}, metrics.NoopMetricsHandler)
+	s.EqualValues(emptyPollWorkflowTaskQueueResponse, resp)
+	s.NoError(err)
+}
+
+func (s *matchingEngineSuite) TestPollWorkflowTaskQueues_DataLossError() {
+	tqName := "queue"
+	taskQueue := &taskqueuepb.TaskQueue{Name: tqName, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
+	wfExecution := &commonpb.WorkflowExecution{WorkflowId: "workflowID", RunId: uuid.NewRandom().String()}
+
+	// add a wf task
+	s.addWorkflowTask(wfExecution, taskQueue)
+	s.EqualValues(1, s.taskManager.getTaskCount(newUnversionedRootQueueKey(namespaceId, tqName, enumspb.TASK_QUEUE_TYPE_WORKFLOW)))
+
+	// task is dropped with no retry; RecordWorkflowTaskStarted should only be called once
+	s.mockHistoryClient.EXPECT().RecordWorkflowTaskStarted(gomock.Any(), gomock.Any(), gomock.Any()).
+		Return(nil, serviceerror.NewDataLoss("DataLoss error")).Times(1)
+
+	resp, err := s.matchingEngine.PollWorkflowTaskQueue(context.Background(), &matchingservice.PollWorkflowTaskQueueRequest{
+		NamespaceId: namespaceId,
+		PollRequest: &workflowservice.PollWorkflowTaskQueueRequest{
+			TaskQueue: taskQueue,
+			Identity:  "identity",
+		},
+	}, metrics.NoopMetricsHandler)
+	s.EqualValues(emptyPollWorkflowTaskQueueResponse, resp)
+	s.NoError(err)
 }
 
 func (s *matchingEngineSuite) TestPollActivityTaskQueues_NamespaceHandover() {
