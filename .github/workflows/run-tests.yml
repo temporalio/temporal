@@ -194,7 +194,6 @@ jobs:
       TEST_TIMEOUT: ${{ needs.set-up-single-test.outputs.test_timeout }}
       RUN_SINGLE_UNIT_TEST: ${{ inputs.run_single_unit_test }}
       MODIFIED_TEST_SUITES: ${{ needs.set-up-single-test.outputs.modified_unit_test_suites }}
-      N_RUNS: 10
     steps:
       - uses: actions/checkout@v4
         with:
@@ -218,7 +217,9 @@ jobs:
 
       - name: Flaky Unit Test Detection
         if: ${{ !cancelled() && !inputs.run_single_unit_test && env.MODIFIED_TEST_SUITES != '' }}
-        timeout-minutes: 15
+        timeout-minutes: 30
+        env:
+          N_RUNS: 10
         run: |
           echo "Detecting flaky unit tests: $MODIFIED_TEST_SUITES"
           make unit-test-coverage TEST_SUITES="$MODIFIED_TEST_SUITES" N_RUNS="$N_RUNS"
@@ -239,7 +240,6 @@ jobs:
     env:
       BUILDKITE_MESSAGE: "{\"job\": \"integration-test\"}"
       MODIFIED_TEST_SUITES: ${{ needs.set-up-single-test.outputs.modified_integration_test_suites }}
-      N_RUNS: 10
     steps:
       - uses: actions/checkout@v4
         with:
@@ -267,7 +267,9 @@ jobs:
 
       - name: Flaky Integration Test Detection
         if: ${{ env.MODIFIED_TEST_SUITES != '' }}
-        timeout-minutes: 15
+        timeout-minutes: 30
+        env:
+          N_RUNS: 10
         run: |
           echo "Detecting flaky integration tests: $MODIFIED_TEST_SUITES"
           make integration-test-coverage TEST_SUITES="$MODIFIED_TEST_SUITES" N_RUNS="$N_RUNS"
@@ -334,7 +336,6 @@ jobs:
       TEST_TIMEOUT: ${{ needs.set-up-single-test.outputs.test_timeout }}
       BUILDKITE_MESSAGE: "{\"job\": \"functional-test\", \"db\": \"${{ matrix.persistence_driver }}\"}"
       MODIFIED_TEST_SUITES: ${{ needs.set-up-single-test.outputs.modified_functional_test_suites }}
-      N_RUNS: 10
     steps:
       - name: Print functional test
         run: echo "${{ needs.set-up-single-test.outputs.dbs }}" && echo "$SINGLE_TEST_ARGS"
@@ -371,6 +372,8 @@ jobs:
       - name: Flaky Functional Test Detection
         if: ${{ (env.MODIFIED_TEST_SUITES != '') && (inputs.run_single_functional_test != true || (inputs.run_single_functional_test == true && contains(fromJSON(needs.set-up-single-test.outputs.dbs), env.PERSISTENCE_DRIVER))) }}
         timeout-minutes: ${{ fromJSON(needs.set-up-single-test.outputs.github_timeout) }} # make sure this is larger than the test timeout in the Makefile
+        env:
+          N_RUNS: 10
         run: |
           echo "Detecting flaky functional tests: $MODIFIED_TEST_SUITES"
           make functional-test-coverage TEST_SUITES="$MODIFIED_TEST_SUITES" N_RUNS="$N_RUNS"
@@ -415,7 +418,6 @@ jobs:
       PERSISTENCE_DRIVER: ${{ matrix.persistence_driver }}
       BUILDKITE_MESSAGE: "{\"job\": \"functional-test-xdc\", \"db\": \"${{ matrix.persistence_driver }}\"}"
       MODIFIED_TEST_SUITES: ${{ needs.set-up-single-test.outputs.modified_functional_xdc_test_suites }}
-      N_RUNS: 10
     steps:
       - uses: actions/checkout@v4
         with:
@@ -441,6 +443,8 @@ jobs:
 
       - name: Run Modified Functional XDC Tests Multiple Times
         if: ${{ env.MODIFIED_TEST_SUITES != '' }}
+        env:
+          N_RUNS: 10
         run: |
           echo "Detecting flaky functional xdc tests: $MODIFIED_TEST_SUITES"
           make functional-test-xdc-coverage TEST_SUITES="$MODIFIED_TEST_SUITES" N_RUNS="$N_RUNS"
@@ -492,7 +496,6 @@ jobs:
       PERSISTENCE_DRIVER: ${{ matrix.persistence_driver }}
       ES_VERSION: ${{ matrix.es_version }}
       MODIFIED_TEST_SUITES: ${{ needs.set-up-single-test.outputs.modified_functional_ndc_test_suites }}
-      N_RUNS: 10
     steps:
       - uses: actions/checkout@v4
         with:
@@ -518,7 +521,9 @@ jobs:
 
       - name: Flaky Functional NDC Test Detection
         if: ${{ env.MODIFIED_TEST_SUITES != '' }}
-        timeout-minutes: 15
+        timeout-minutes: 30
+        env:
+          N_RUNS: 10
         run: |
           echo "Detecting flaky functional ndc tests: $MODIFIED_TEST_SUITES"
           make functional-test-ndc-coverage TEST_SUITES="$MODIFIED_TEST_SUITES" N_RUNS="$N_RUNS"
