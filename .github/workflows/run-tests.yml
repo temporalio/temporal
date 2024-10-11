@@ -124,14 +124,15 @@ jobs:
         id: collect_modified_tests
         run: |
           set -e
-          set -o pipefail  
-          
-          OUTPUT="$(make collect-modified-tests SOURCE_REF="${PR_BASE_COMMIT}" TARGET_REF="${COMMIT}")"
-          
+          set -o pipefail
+
+          OUTPUT="$(make collect-modified-tests "SOURCE_REF=${PR_BASE_COMMIT}" "TARGET_REF=${COMMIT}")"
+
           test_suites=("modified_unit_test_suites" "modified_integration_test_suites" "modified_functional_test_suites" "modified_functional_test_ndc_suites" "modified_functional_test_xdc_suites")
+
           for suite in "${test_suites[@]}"; do
-            value=$(echo "$OUTPUT" | jq -r ".${suite}")
-            echo "${suite}=${value}" >> $GITHUB_ENV
+            value=$(echo "$OUTPUT" | jq -r ".\"${suite}\"")  
+            echo "${suite}=${value}" >> "$GITHUB_ENV"
           done
 
   misc-checks:
