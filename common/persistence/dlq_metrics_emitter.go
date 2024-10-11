@@ -99,10 +99,13 @@ func (s *DLQMetricsEmitter) emitMetricsLoop() {
 		case <-s.shutdownCh:
 			return
 		case <-s.emitMetricsTimer.C:
-			if !s.shouldEmitMetrics() {
-				continue
+			if s.shouldEmitMetrics() {
+				s.emitMetrics()
+			} else {
+				// We have to clear the gauge dlq_message_count for this host when another host starts
+				// emitting the metrics.
+				s.emitZeroMetrics()
 			}
-			s.emitMetrics()
 		}
 	}
 }
@@ -131,6 +134,12 @@ func (s *DLQMetricsEmitter) emitMetrics() {
 			s.logger.Error("Failed to find category from ID", tag.TaskCategoryID(id))
 		}
 		metrics.DLQMessageCount.With(s.metricsHandler).Record(float64(count), metrics.TaskCategoryTag(category.Name()))
+	}
+}
+
+func (s *DLQMetricsEmitter) emitZeroMetrics() {
+	for _, category := range s.taskCategoryRegistry.GetCategories() {
+		metrics.DLQMessageCount.With(s.metricsHandler).Record(float64(0), metrics.TaskCategoryTag(category.Name()))
 	}
 }
 

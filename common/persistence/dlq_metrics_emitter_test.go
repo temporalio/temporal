@@ -113,15 +113,24 @@ func TestDLQMetricsEmitter_DoesNotEmitMetrics_WhenInstanceDoesNotHostShardOne(t 
 	hostInfoProvider.EXPECT().HostInfo().Return(membership.NewHostInfoFromAddress("testAddress2")).MinTimes(1)
 
 	emitter := NewDLQMetricsEmitter(metricsHandler, logger, manager, resolver, hostInfoProvider, tasks.NewDefaultTaskCategoryRegistry())
-	emitter.emitMetricsTimer = time.NewTicker(time.Millisecond)
+	emitter.emitMetricsTimer = time.NewTicker(10 * time.Millisecond)
 	logger.EXPECT().Info(gomock.Any()).AnyTimes()
 	logger.EXPECT().Error(gomock.Any()).AnyTimes()
 
 	emitter.Start()
-	time.Sleep(100 * time.Millisecond) //nolint
+	assert.Eventually(t, func() bool {
+		snapshot := capture.Snapshot()
+		if len(snapshot[metrics.DLQMessageCount.Name()]) == 0 {
+			return false
+		}
+		for _, r := range snapshot[metrics.DLQMessageCount.Name()] {
+			value := r.Value.(float64)
+			if value != 0 {
+				return false
+			}
+		}
+		return true
+	}, 5*time.Second, 15*time.Millisecond)
 	emitter.Stop()
 	<-emitter.shutdownCh
-
-	snapshot := capture.Snapshot()
-	assert.Empty(t, snapshot[metrics.DLQMessageCount.Name()])
 }
