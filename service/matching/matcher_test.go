@@ -413,7 +413,8 @@ func (t *MatcherTestSuite) TestAvoidForwardingWhenBacklogIsOldButReconsider() {
 
 	select {
 	case fwdTime := <-forwardTask:
-		t.Greater(fwdTime.Sub(start), t.childConfig.MaxWaitForPollerBeforeFwd())
+		// check forward was after reconsider time. add a little buffer for last poller time calculation in MustOffer.
+		t.Greater(fwdTime.Sub(start), t.childConfig.MaxWaitForPollerBeforeFwd()*9/10)
 	case <-ctx.Done():
 		t.FailNow("timed out")
 	}
