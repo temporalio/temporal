@@ -116,16 +116,21 @@ func (s *UpdateWorkflowSdkSuite) TestUpdateWorkflow_TimeoutWorkflowAfterUpdateAc
 	}, workflowFn)
 	s.NoError(err)
 
+	// Wait for the first WFT to complete.
+	// TODO: replace with s.WaitForHistoryEvents when its ready.
 	s.Eventually(func() bool {
 		// Wait until the first WFT completes.
-		return len(s.GetHistory(s.Namespace(), tv.WorkflowExecution())) == 4
-	}, 1*time.Second, 200*time.Millisecond)
-
-	s.EqualHistoryEvents(`
+		h := s.GetHistory(s.Namespace(), tv.WorkflowExecution())
+		if len(h) == 4 {
+			s.EqualHistoryEvents(`
   1 WorkflowExecutionStarted
   2 WorkflowTaskScheduled
   3 WorkflowTaskStarted
-  4 WorkflowTaskCompleted`, s.GetHistory(s.Namespace(), tv.WorkflowExecution()))
+  4 WorkflowTaskCompleted`, h)
+			return true
+		}
+		return false
+	}, 1*time.Second, 200*time.Millisecond)
 
 	updateHandle, err := s.updateWorkflowWaitAccepted(ctx, tv, "my-update-arg")
 	s.NoError(err)
@@ -171,16 +176,21 @@ func (s *UpdateWorkflowSdkSuite) TestUpdateWorkflow_TerminateWorkflowAfterUpdate
 	s.Worker().RegisterWorkflow(workflowFn)
 	wfRun := s.startWorkflow(ctx, tv, workflowFn)
 
+	// Wait for the first WFT to complete.
+	// TODO: replace with s.WaitForHistoryEvents when its ready.
 	s.Eventually(func() bool {
 		// Wait until the first WFT completes.
-		return len(s.GetHistory(s.Namespace(), tv.WorkflowExecution())) == 4
-	}, 1*time.Second, 200*time.Millisecond)
-
-	s.EqualHistoryEvents(`
+		h := s.GetHistory(s.Namespace(), tv.WorkflowExecution())
+		if len(h) == 4 {
+			s.EqualHistoryEvents(`
   1 WorkflowExecutionStarted
   2 WorkflowTaskScheduled
   3 WorkflowTaskStarted
-  4 WorkflowTaskCompleted`, s.GetHistory(s.Namespace(), tv.WorkflowExecution()))
+  4 WorkflowTaskCompleted`, h)
+			return true
+		}
+		return false
+	}, 1*time.Second, 200*time.Millisecond)
 
 	updateHandle, err := s.updateWorkflowWaitAccepted(ctx, tv, "my-update-arg")
 	s.NoError(err)
@@ -214,7 +224,7 @@ func (s *UpdateWorkflowSdkSuite) TestUpdateWorkflow_ContinueAsNewAfterUpdateAdmi
 		by server while WFT is running. This WFT does CAN. For test simplicity,
 		it used another WF function for 2nd run. This 2nd function has Update handler
 		registered. When server receives CAN it abort all Updates with retryable
-		"workflow is closing" error and SDK retries. In mean time, server process CAN,
+		"workflow is closing" error and server internally retries. In the meantime, server process CAN,
 		starts 2nd run, Update is delivered to it, and processed by registered handler.
 	*/
 
@@ -277,6 +287,8 @@ func (s *UpdateWorkflowSdkSuite) TestUpdateWorkflow_ContinueAsNewAfterUpdateAdmi
   4 WorkflowTaskCompleted
   5 MarkerRecorded
   6 WorkflowExecutionContinuedAsNew`, s.GetHistory(s.Namespace(), tv.WithRunID(firstRun.GetRunID()).WorkflowExecution()))
+	// TODO: This might have different history if 1st WFT completes before Update is retired. Then
+	//  there will be another 3 WFT events before Event 5. This needs to be replaced with s.EqualHistorySuffix once available.
 	s.EqualHistoryEvents(`
   1 WorkflowExecutionStarted
   2 WorkflowTaskScheduled
