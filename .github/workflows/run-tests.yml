@@ -125,7 +125,8 @@ jobs:
         run: |
           set -e
           set -o pipefail
-          @echo "MERGE_BASE=$(MERGE_BASE) COMMIT=$(COMMIT)"
+          
+          echo "MERGE_BASE=${MERGE_BASE} COMMIT=${COMMIT}"
           
           go build -o ./cmd/tools/test/find_altered_tests ./cmd/tools/test/find_altered_tests.go
           
