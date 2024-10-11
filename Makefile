@@ -348,11 +348,11 @@ collect-modified-tests:
 	@set -e; \
 	UNIT_TEST_DIRS_CSV=$$(echo $(UNIT_TEST_DIRS) | tr ' ' ','); \
 	INTEGRATION_TEST_DIRS_CSV=$$(echo $(INTEGRATION_TEST_DIRS) | tr ' ' ','); \
-	MODIFIED_UNIT_TEST_SUITES=$$(./cmd/tools/test/find_altered_tests -c unit -source-ref $(SOURCE_REF) -target-ref $(TARGET_REF) -d $$UNIT_TEST_DIRS_CSV); \
-	MODIFIED_INTEGRATION_TEST_SUITES=$$(./cmd/tools/test/find_altered_tests -c integration -source-ref $(SOURCE_REF) -target-ref $(TARGET_REF) -d $$INTEGRATION_TEST_DIRS_CSV); \
-	MODIFIED_FUNCTIONAL_TEST_SUITES=$$(./cmd/tools/test/find_altered_tests -c functional -source-ref $(SOURCE_REF) -target-ref $(TARGET_REF) -d $(FUNCTIONAL_TEST_ROOT)); \
-	MODIFIED_FUNCTIONAL_TEST_NDC_SUITES=$$(./cmd/tools/test/find_altered_tests -c functional-ndc -source-ref $(SOURCE_REF) -target-ref $(TARGET_REF) -d $(FUNCTIONAL_TEST_NDC_ROOT)); \
-	MODIFIED_FUNCTIONAL_TEST_XDC_SUITES=$$(./cmd/tools/test/find_altered_tests -c functional-xdc -source-ref $(SOURCE_REF) -target-ref $(TARGET_REF) -d $(FUNCTIONAL_TEST_XDC_ROOT)); \
+	MODIFIED_UNIT_TEST_SUITES=$$(./cmd/tools/test/find_altered_tests -c unit -s $(MERGE_BASE) -t $(COMMIT) -d $$UNIT_TEST_DIRS_CSV); \
+	MODIFIED_INTEGRATION_TEST_SUITES=$$(./cmd/tools/test/find_altered_tests -c integration -s $(MERGE_BASE) -t $(COMMIT) -d $$INTEGRATION_TEST_DIRS_CSV); \
+	MODIFIED_FUNCTIONAL_TEST_SUITES=$$(./cmd/tools/test/find_altered_tests -c functional -s $(MERGE_BASE) -t $(COMMIT) -d $(FUNCTIONAL_TEST_ROOT)); \
+	MODIFIED_FUNCTIONAL_TEST_NDC_SUITES=$$(./cmd/tools/test/find_altered_tests -c functional-ndc -s $(MERGE_BASE) -t $(COMMIT) -d $(FUNCTIONAL_TEST_NDC_ROOT)); \
+	MODIFIED_FUNCTIONAL_TEST_XDC_SUITES=$$(./cmd/tools/test/find_altered_tests -c functional-xdc -s $(MERGE_BASE) -t $(COMMIT) -d $(FUNCTIONAL_TEST_XDC_ROOT)); \
 	echo '{'; \
 	echo '  "modified_unit_test_suites": "'$$MODIFIED_UNIT_TEST_SUITES'",'; \
 	echo '  "modified_integration_test_suites": "'$$MODIFIED_INTEGRATION_TEST_SUITES'",'; \

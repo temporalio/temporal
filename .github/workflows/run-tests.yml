@@ -113,21 +113,24 @@ jobs:
           fetch-depth: 0
 
       - name: Fetch base branch
-        # Fetch the base branch to ensure git diff works
-        run: git fetch origin ${{ github.event.pull_request.base.ref }}:${{ env.PR_BASE_COMMIT }}
+        run: git fetch origin ${{ github.event.pull_request.base.ref }}:${{ github.event.pull_request.base.ref }}
 
-      - name: Build find_altered_tests tool
+      - name: Compute merge base
         run: |
-          go build -o ./cmd/tools/test/find_altered_tests ./cmd/tools/test/find_altered_tests.go
+          MERGE_BASE="$(git merge-base ${{ env.COMMIT }} ${{ github.event.pull_request.base.ref }})"
+          echo "MERGE_BASE=$MERGE_BASE" >> "$GITHUB_ENV"
 
       - name: Collect Modified Tests
         id: collect_modified_tests
         run: |
           set -e
           set -o pipefail
-
-          OUTPUT="$(make collect-modified-tests "SOURCE_REF=${PR_BASE_COMMIT}" "TARGET_REF=${COMMIT}")"
-
+          @echo "MERGE_BASE=$(MERGE_BASE) COMMIT=$(COMMIT)"
+          
+          go build -o ./cmd/tools/test/find_altered_tests ./cmd/tools/test/find_altered_tests.go
+          
+          OUTPUT="$(make collect-modified-tests "MERGE_BASE=${MERGE_BASE}" "COMMIT=${COMMIT}")"
+          
           echo "OUTPUT: $OUTPUT"
           
           test_suites=("modified_unit_test_suites" "modified_integration_test_suites" "modified_functional_test_suites" "modified_functional_test_ndc_suites" "modified_functional_test_xdc_suites")

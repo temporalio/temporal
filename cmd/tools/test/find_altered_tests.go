@@ -56,13 +56,13 @@ func main() {
 	var testDirs string
 
 	flag.StringVar(&category, "c", "", "Category of altered tests to find")
-	flag.StringVar(&sourceRef, "source-ref", "", "Source Git reference (commit SHA, branch, etc.)")
-	flag.StringVar(&targetRef, "target-ref", "", "Target Git reference (commit SHA, branch, etc.)")
+	flag.StringVar(&sourceRef, "s", "", "Source Git reference (commit SHA, branch, etc.)")
+	flag.StringVar(&targetRef, "t", "", "Target Git reference (commit SHA, branch, etc.)")
 	flag.StringVar(&testDirs, "d", "", "Comma-separated list of test directories")
 	flag.Parse()
 
 	if category == "" || sourceRef == "" || targetRef == "" || testDirs == "" {
-		fmt.Println("Usage: find_altered_tests -c <category> -source-ref <sourceRef> -target-ref <targetRef> -d <testDirs>")
+		fmt.Println("Usage: find_altered_tests -c <category> -s <sourceRef> -t <targetRef> -d <testDirs>")
 		os.Exit(1)
 	}
 
