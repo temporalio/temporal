@@ -362,7 +362,7 @@ jobs:
         run: make functional-test-coverage
 
       - name: Flaky Functional Test Detection
-        if: ${{ (env.MODIFIED_TEST_SUITES != '') && (inputs.run_single_functional_test != true || (inputs.run_single_functional_test == true && contains(fromJSON(needs.set-up-tests.outputs.dbs), env.PERSISTENCE_DRIVER))) }}
+        if: ${{ (env.MODIFIED_TEST_SUITES != '') && (inputs.run_single_functional_test != true || (inputs.run_single_functional_test == true && contains(fromJSON(needs.set-up-single-test.outputs.dbs), env.PERSISTENCE_DRIVER))) }}
         timeout-minutes: ${{ fromJSON(needs.set-up-single-test.outputs.github_timeout) }} # make sure this is larger than the test timeout in the Makefile
         run: |
           echo "Detecting flaky functional tests: $MODIFIED_TEST_SUITES"
