@@ -80,8 +80,7 @@ func newTaskReader(backlogMgr *backlogManagerImpl) *taskReader {
 	return tr
 }
 
-// Start reading pump for the given task queue.
-// The pump fills up taskBuffer from persistence.
+// Start taskReader background goroutines.
 func (tr *taskReader) Start() {
 	if !atomic.CompareAndSwapInt32(
 		&tr.status,
@@ -95,7 +94,8 @@ func (tr *taskReader) Start() {
 	tr.gorogrp.Go(tr.getTasksPump)
 }
 
-// Stop pump that fills up taskBuffer from persistence.
+// Stop taskReader goroutines.
+// Note that this does not wait until
 func (tr *taskReader) Stop() {
 	if !atomic.CompareAndSwapInt32(
 		&tr.status,
