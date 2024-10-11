@@ -124,7 +124,10 @@ func TestDLQMetricsEmitter_DoesNotEmitMetrics_WhenInstanceDoesNotHostShardOne(t 
 			return false
 		}
 		for _, r := range snapshot[metrics.DLQMessageCount.Name()] {
-			value := r.Value.(float64)
+			value, ok := r.Value.(float64)
+			if !ok {
+				return false
+			}
 			if value != 0 {
 				return false
 			}
