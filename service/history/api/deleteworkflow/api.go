@@ -95,6 +95,8 @@ func Invoke(
 						nil,
 						consts.IdentityHistoryService,
 						true,
+						// TODO(bergundy): No links will be attached here for now, we may want to add support for this later though.
+						nil,
 					)
 				},
 				nil,

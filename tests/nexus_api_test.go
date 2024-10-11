@@ -20,7 +20,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package nexus
+package tests
 
 import (
 	"context"
@@ -61,7 +61,6 @@ type NexusApiTestSuite struct {
 
 func TestNexusApiTestSuite(t *testing.T) {
 	suite.Run(t, new(NexusApiTestSuite))
-
 }
 
 func (s *NexusApiTestSuite) TestNexusStartOperation_Outcomes() {

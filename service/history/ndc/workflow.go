@@ -300,6 +300,7 @@ func (r *WorkflowImpl) terminateWorkflow(
 		payloads.EncodeString(fmt.Sprintf("terminated by version: %v", incomingLastWriteVersion)),
 		WorkflowTerminationIdentity,
 		false,
+		nil, // No links necessary.
 	)
 
 	// Don't abort updates here for a few reasons:
