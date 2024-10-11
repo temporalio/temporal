@@ -116,7 +116,6 @@ func GetPendingActivityInfo(
 
 	p.LastAttemptCompleteTime = ai.LastAttemptCompleteTime
 	if !ai.HasRetryPolicy {
-		p.Attempt = 1
 		p.NextAttemptScheduleTime = nil
 	} else {
 		p.Attempt = ai.Attempt
@@ -129,14 +128,13 @@ func GetPendingActivityInfo(
 			} else {
 				// in this case activity is at least scheduled
 				p.NextAttemptScheduleTime = nil
+				// we rely on the fact that ExponentialBackoffAlgorithm is deterministic, and  there's no random jitter
 				interval := ExponentialBackoffAlgorithm(ai.RetryInitialInterval, ai.RetryBackoffCoefficient, p.Attempt)
 				p.CurrentRetryInterval = durationpb.New(interval)
 			}
 		}
-		if p.Attempt < 1 {
-			p.Attempt = 1
-		}
 	}
+	p.Attempt = max(p.Attempt, 1)
 
 	if ai.LastHeartbeatUpdateTime != nil && !ai.LastHeartbeatUpdateTime.AsTime().IsZero() {
 		p.LastHeartbeatTime = ai.LastHeartbeatUpdateTime
@@ -147,20 +145,13 @@ func GetPendingActivityInfo(
 	if err != nil {
 		return nil, err
 	}
-	if p.State == enumspb.PENDING_ACTIVITY_STATE_SCHEDULED {
-		p.ScheduledTime = ai.ScheduledTime
-	} else {
-		p.LastStartedTime = ai.StartedTime
-	}
+	p.ScheduledTime = ai.ScheduledTime
+	p.LastStartedTime = ai.StartedTime
 	p.LastWorkerIdentity = ai.StartedIdentity
 	if ai.HasRetryPolicy {
 		p.ExpirationTime = ai.RetryExpirationTime
-		if ai.RetryMaximumAttempts != 0 {
-			p.MaximumAttempts = ai.RetryMaximumAttempts
-		}
-		if ai.RetryLastFailure != nil {
-			p.LastFailure = ai.RetryLastFailure
-		}
+		p.MaximumAttempts = ai.RetryMaximumAttempts
+		p.LastFailure = ai.RetryLastFailure
 		if p.LastWorkerIdentity == "" && ai.RetryLastWorkerIdentity != "" {
 			p.LastWorkerIdentity = ai.RetryLastWorkerIdentity
 		}

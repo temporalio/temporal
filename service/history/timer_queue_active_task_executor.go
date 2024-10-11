@@ -28,6 +28,9 @@ import (
 	"context"
 	"fmt"
 
+	"google.golang.org/protobuf/types/known/durationpb"
+	"google.golang.org/protobuf/types/known/timestamppb"
+
 	"github.com/pborman/uuid"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -56,7 +59,6 @@ import (
 	"go.temporal.io/server/service/history/workflow"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
 	"go.temporal.io/server/service/history/workflow/update"
-	"google.golang.org/protobuf/types/known/durationpb"
 )
 
 type (
@@ -270,6 +272,7 @@ Loop:
 
 		failureMsg := fmt.Sprintf("activity %v timeout", timerSequenceID.TimerType.String())
 		timeoutFailure := failure.NewTimeoutFailure(failureMsg, timerSequenceID.TimerType)
+		activityInfo.LastAttemptCompleteTime = timestamppb.New(referenceTime.UTC())
 		var retryState enumspb.RetryState
 		if retryState, err = mutableState.RetryActivity(activityInfo, timeoutFailure); err != nil {
 			return err
