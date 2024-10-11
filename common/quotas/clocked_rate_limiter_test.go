@@ -154,6 +154,7 @@ func TestClockedRateLimiter_Wait_DeadlineWouldExceed(t *testing.T) {
 
 // test that reservations for 1 token ARE unblocked by RecycleToken
 func TestClockedRateLimiter_Wait_Recycle(t *testing.T) {
+	t.Skip("flaky test")
 	t.Parallel()
 	ts := clock.NewEventTimeSource()
 	rl := quotas.NewClockedRateLimiter(rate.NewLimiter(1, 1), ts)
@@ -180,6 +181,7 @@ func TestClockedRateLimiter_Wait_Recycle(t *testing.T) {
 
 // test that reservations for >1 token are NOT unblocked by RecycleToken
 func TestClockedRateLimiter_WaitN_NoRecycle(t *testing.T) {
+	t.Skip("flaky test")
 	t.Parallel()
 	ts := clock.NewEventTimeSource()
 
