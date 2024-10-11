@@ -86,6 +86,7 @@ type (
 		shardContext               shard.Context
 		workflowCache              wcache.Cache
 		workflowConsistencyChecker api.WorkflowConsistencyChecker
+		eventBlobCache             persistence.XDCCache
 		logger                     log.Logger
 	}
 	lastUpdatedStateTransitionGetter interface {
@@ -97,12 +98,14 @@ func NewSyncStateRetriever(
 	shardContext shard.Context,
 	workflowCache wcache.Cache,
 	workflowConsistencyChecker api.WorkflowConsistencyChecker,
+	eventBlobCache persistence.XDCCache,
 	logger log.Logger,
 ) *SyncStateRetrieverImpl {
 	return &SyncStateRetrieverImpl{
 		shardContext:               shardContext,
 		workflowCache:              workflowCache,
 		workflowConsistencyChecker: workflowConsistencyChecker,
+		eventBlobCache:             eventBlobCache,
 		logger:                     logger,
 	}
 }
@@ -235,7 +238,12 @@ func (s *SyncStateRetrieverImpl) getSyncStateResult(
 		versionedTransitionArtifact.NewRunInfo = newRunInfo
 	}
 
-	events, err := s.getSyncStateEvents(ctx, targetVersionHistories, sourceVersionHistories)
+	wfKey := definition.WorkflowKey{
+		NamespaceID: namespaceID,
+		WorkflowID:  execution.WorkflowId,
+		RunID:       execution.RunId,
+	}
+	events, err := s.getSyncStateEvents(ctx, wfKey, targetVersionHistories, sourceVersionHistories)
 	if err != nil {
 		return nil, err
 	}
@@ -296,7 +304,12 @@ func (s *SyncStateRetrieverImpl) getNewRunInfo(ctx context.Context, namespaceId 
 	versionHistory = versionhistory.CopyVersionHistory(versionHistory)
 	releaseFunc(nil)
 	releaseFunc = nil
-	newRunEvents, err := s.getEventsBlob(ctx, versionHistory.BranchToken, common.FirstEventID, common.FirstEventID+1)
+	wfKey := definition.WorkflowKey{
+		NamespaceID: namespaceId.String(),
+		WorkflowID:  execution.WorkflowId,
+		RunID:       newRunId,
+	}
+	newRunEvents, err := s.getEventsBlob(ctx, wfKey, versionHistory, common.FirstEventID, common.FirstEventID+1, true)
 	switch err.(type) {
 	case nil:
 	case *serviceerror.NotFound:
@@ -376,9 +389,49 @@ func (s *SyncStateRetrieverImpl) getSnapshot(mutableState workflow.MutableState)
 	return mutableStateProto, nil
 }
 
-func (s *SyncStateRetrieverImpl) getEventsBlob(ctx context.Context, branchToken []byte, startEventId int64, endEventId int64) ([]*commonpb.DataBlob, error) {
+func (s *SyncStateRetrieverImpl) getEventsBlob(
+	ctx context.Context,
+	workflowKey definition.WorkflowKey,
+	versionHistory *history.VersionHistory,
+	startEventId int64,
+	endEventId int64,
+	isNewRun bool,
+) ([]*commonpb.DataBlob, error) {
+	var eventBlobs []*commonpb.DataBlob
+
+	if s.eventBlobCache != nil {
+		for {
+			eventVersion, err := versionhistory.GetVersionHistoryEventVersion(versionHistory, startEventId)
+			if err != nil {
+				return nil, err
+			}
+			xdcCacheValue, ok := s.eventBlobCache.Get(persistence.NewXDCCacheKey(workflowKey, startEventId, eventVersion))
+			if !ok {
+				break
+			}
+			left := endEventId - startEventId
+			if !isNewRun && int64(len(xdcCacheValue.EventBlobs)) >= left {
+				s.logger.Error(
+					fmt.Sprintf("xdc cached events are truncated, want [%d, %d), got [%d, %d) from cache",
+						startEventId, endEventId, startEventId, xdcCacheValue.NextEventID),
+					tag.FirstEventVersion(eventVersion),
+					tag.WorkflowNamespaceID(workflowKey.NamespaceID),
+					tag.WorkflowID(workflowKey.WorkflowID),
+					tag.WorkflowRunID(workflowKey.RunID),
+				)
+				eventBlobs = append(eventBlobs, xdcCacheValue.EventBlobs[:left]...)
+				return eventBlobs, nil
+			}
+			eventBlobs = append(eventBlobs, xdcCacheValue.EventBlobs...)
+			startEventId = xdcCacheValue.NextEventID
+			if startEventId >= endEventId {
+				return eventBlobs, nil
+			}
+		}
+	}
+
 	rawHistoryResponse, err := s.shardContext.GetExecutionManager().ReadRawHistoryBranch(ctx, &persistence.ReadHistoryBranchRequest{
-		BranchToken: branchToken,
+		BranchToken: versionHistory.BranchToken,
 		MinEventID:  startEventId,
 		MaxEventID:  endEventId,
 		PageSize:    defaultPageSize,
@@ -387,10 +440,12 @@ func (s *SyncStateRetrieverImpl) getEventsBlob(ctx context.Context, branchToken 
 	if err != nil {
 		return nil, err
 	}
-	return rawHistoryResponse.HistoryEventBlobs, nil
+
+	eventBlobs = append(eventBlobs, rawHistoryResponse.HistoryEventBlobs...)
+	return eventBlobs, nil
 }
 
-func (s *SyncStateRetrieverImpl) getSyncStateEvents(ctx context.Context, targetVersionHistories [][]*history.VersionHistoryItem, sourceVersionHistories *history.VersionHistories) ([]*commonpb.DataBlob, error) {
+func (s *SyncStateRetrieverImpl) getSyncStateEvents(ctx context.Context, workflowKey definition.WorkflowKey, targetVersionHistories [][]*history.VersionHistoryItem, sourceVersionHistories *history.VersionHistories) ([]*commonpb.DataBlob, error) {
 	if targetVersionHistories == nil {
 		// return nil, so target will retrieve the missing events from source
 		return nil, nil
@@ -412,7 +467,7 @@ func (s *SyncStateRetrieverImpl) getSyncStateEvents(ctx context.Context, targetV
 	}
 	startEventId := lcaItem.GetEventId() + 1
 
-	return s.getEventsBlob(ctx, sourceHistory.BranchToken, startEventId, sourceLastItem.GetEventId()+1)
+	return s.getEventsBlob(ctx, workflowKey, sourceHistory, startEventId, sourceLastItem.GetEventId()+1, false)
 }
 
 func isInfoUpdated(subStateMachine lastUpdatedStateTransitionGetter, versionedTransition *persistencepb.VersionedTransition) bool {

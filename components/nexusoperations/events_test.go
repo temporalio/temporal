@@ -133,7 +133,7 @@ func TestCherryPick(t *testing.T) {
 			nexusoperations.TimedOutEventDefinition{},
 		}
 
-		excludeNexusOperation := map[enumspb.ResetReapplyExcludeType]bool{enumspb.RESET_REAPPLY_EXCLUDE_TYPE_NEXUS: true}
+		excludeNexusOperation := map[enumspb.ResetReapplyExcludeType]struct{}{enumspb.RESET_REAPPLY_EXCLUDE_TYPE_NEXUS: {}}
 		for _, nexusOperation := range nexusOperations {
 			err := nexusOperation.CherryPick(node.Parent, &historypb.HistoryEvent{}, excludeNexusOperation)
 			require.ErrorIs(t, err, hsm.ErrNotCherryPickable, "%T should not be cherrypickable when shouldExcludeNexusEvent=true", nexusOperation)
