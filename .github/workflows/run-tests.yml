@@ -223,7 +223,7 @@ jobs:
   integration-test:
     if: ${{ inputs.run_single_functional_test != true && inputs.run_single_unit_test != true }}
     name: Integration test
-    needs: misc-checks
+    needs: [misc-checks, set-up-single-test]
     strategy:
       fail-fast: false
       matrix:
