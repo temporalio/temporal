@@ -56,8 +56,8 @@ env:
   # For workflow_dispatch: use the given commit.
   # For pull_request: use the head of the PR branch (not the merge branch which is the default!)
   # For push: use the pushed commit.
-  TARGET_REF: ${{ github.event.inputs.commit || github.event.pull_request.head.sha || github.sha }}
-  SOURCE_REF: ${{ github.event.pull_request.base.sha }}
+  COMMIT: ${{ github.event.inputs.commit || github.event.pull_request.head.sha || github.sha }}
+  PR_BASE_COMMIT: ${{ github.event.pull_request.base.sha }}
   DOCKER_COMPOSE_FILE: ./develop/github/docker-compose.yml
   TEMPORAL_VERSION_CHECK_DISABLED: 1
   BUILDKITE_ANALYTICS_TOKEN: ${{ secrets.BUILDKITE_ANALYTICS_TOKEN }}
@@ -114,7 +114,7 @@ jobs:
 
       - name: Fetch base branch
         # Fetch the base branch to ensure git diff works
-        run: git fetch origin ${{ github.event.pull_request.base.ref }}:${{ env.SOURCE_REF }}
+        run: git fetch origin ${{ github.event.pull_request.base.ref }}:${{ env.PR_BASE_COMMIT }}
 
       - name: Build find_altered_tests tool
         run: |
@@ -126,7 +126,7 @@ jobs:
           set -e
           set -o pipefail  
 
-          OUTPUT=$(make collect-modified-tests SOURCE_REF="${SOURCE_REF}" TARGET_REF="${TARGET_REF}")
+          OUTPUT=$(make collect-modified-tests SOURCE_REF="${PR_BASE_COMMIT}" TARGET_REF="${COMMIT}")
           
           test_suites=("modified_unit_test_suites" "modified_integration_test_suites" "modified_functional_test_suites" "modified_functional_test_ndc_suites" "modified_functional_test_xdc_suites")
           for suite in "${test_suites[@]}"; do
