@@ -177,7 +177,8 @@ func (l ClockedRateLimiter) TokensAt(t time.Time) int {
 // as there exists a waiter at the time RecycleToken is called. Usually the attempted rate is consistently
 // above or below the limit for a period of time, so if rate limiting is in effect and recycling matters,
 // most likely there will be a waiter. If the actual rate is erratically bouncing to either side of the
-// rate limit AND there are many invalid tasks, we can make it a buffered channel instead.
+// rate limit AND we perform many recycles, this will drop some recycled tokens.
+// If that situation turns out to be common, we may want to make it a buffered channel instead.
 //
 // Our goal is to ensure that each token in our bucket is used every second, meaning the time between
 // taking and successfully using a token must be <= 1s. For this to be true, we must have:
