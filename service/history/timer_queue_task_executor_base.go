@@ -247,7 +247,8 @@ func (t *timerQueueTaskExecutorBase) executeSingleStateMachineTimer(
 		StateMachineRef: timer.Ref,
 		Validate:        smt.Validate,
 	}
-	// TODO(bergundy): I think we never want to execute tasks on zombie workflows, not sure why we check write access.
+	// TODO(bergundy): Duplicated this logic from the Access method. We specify write access here because
+	// validateNotZombieWorkflow only blocks write access to zombie workflows.
 	if err := t.validateNotZombieWorkflow(ms, hsm.AccessWrite); err != nil {
 		return err
 	}
@@ -283,6 +284,7 @@ func (t *timerQueueTaskExecutorBase) executeStateMachineTimers(
 
 	timers := ms.GetExecutionInfo().StateMachineTimers
 	processedTimers := 0
+
 	// StateMachineTimers are sorted by Deadline, iterate through them as long as the deadline is expired.
 	for len(timers) > 0 {
 		group := timers[0]
