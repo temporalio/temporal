@@ -28,6 +28,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"log"
 	"os"
 	"reflect"
 	"slices"
@@ -36,6 +37,8 @@ import (
 
 	"go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	"golang.org/x/text/cases"
+	"golang.org/x/text/language"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protoreflect"
 	"google.golang.org/protobuf/reflect/protoregistry"
@@ -137,6 +140,14 @@ var (
 	}
 )
 
+var historyRoutingProtoExtension = func() protoreflect.ExtensionType {
+	ext, err := protoregistry.GlobalTypes.FindExtensionByName("temporal.server.api.historyservice.v1.routing")
+	if err != nil {
+		log.Fatalf("Error finding extension: %s", err)
+	}
+	return ext
+}()
+
 func panicIfErr(err error) {
 	if err != nil {
 		panic(err)
@@ -151,7 +162,7 @@ func writeTemplatedCode(w io.Writer, service service, text string) {
 }
 
 func verifyFieldExists(t reflect.Type, path string) {
-	pathPrefix := fmt.Sprintf("%s", t)
+	pathPrefix := t.String()
 	parts := strings.Split(path, ".")
 	for i, part := range parts {
 		if t.Kind() != reflect.Struct {
@@ -216,30 +227,24 @@ func tryFindOneNestedField(t reflect.Type, name string, path string, maxDepth in
 }
 
 func historyRoutingOptions(reqType reflect.Type) *historyservice.RoutingOptions {
-	// this magically figures out how to get a HistoryServiceClient from a request
 	t := reqType.Elem() // we know it's a pointer
 
 	inst := reflect.New(t)
 	reflectable, ok := inst.Interface().(interface{ ProtoReflect() protoreflect.Message })
 	if !ok {
-		panic(fmt.Sprintf("Request has no ProtoReflect method %s", t))
+		log.Fatalf("Request has no ProtoReflect method %s", t)
 	}
 	opts := reflectable.ProtoReflect().Descriptor().Options()
 
-	ext, err := protoregistry.GlobalTypes.FindExtensionByName("temporal.server.api.historyservice.v1.routing")
-	if err != nil {
-		panic(fmt.Sprintf("Error finding extension: %s", err))
-	}
-
 	// Retrieve the value of the custom option
-	optionValue := proto.GetExtension(opts, ext)
+	optionValue := proto.GetExtension(opts, historyRoutingProtoExtension)
 	if optionValue == nil {
-		panic("Got nil while retrieving extension from options")
+		log.Fatalf("Got nil while retrieving extension from options")
 	}
 
 	routingOptions := optionValue.(*historyservice.RoutingOptions)
 	if routingOptions == nil {
-		panic(fmt.Sprintf("Request has no routing options: %s", t))
+		log.Fatalf("Request has no routing options: %s", t)
 	}
 	return routingOptions
 }
@@ -251,7 +256,7 @@ func snakeToPascal(snake string) string {
 	// Capitalize the first letter of each word
 	for i, word := range words {
 		// Convert first rune to upper and the rest to lower case
-		words[i] = strings.Title(strings.ToLower(word))
+		words[i] = cases.Title(language.AmericanEnglish).String(strings.ToLower(word))
 	}
 
 	// Join them back into a single string
@@ -267,11 +272,10 @@ func toGetter(snake string) string {
 }
 
 func makeGetHistoryClient(reqType reflect.Type, routingOptions *historyservice.RoutingOptions) string {
-	// this magically figures out how to get a HistoryServiceClient from a request
 	t := reqType.Elem() // we know it's a pointer
 
 	if routingOptions.AnyHost && routingOptions.ShardId != "" && routingOptions.WorkflowId != "" && routingOptions.TaskToken != "" && routingOptions.TaskInfos != "" {
-		panic(fmt.Sprintf("Found more than one routing directive in %s", t))
+		log.Fatalf("Found more than one routing directive in %s", t)
 	}
 	if routingOptions.AnyHost {
 		return "shardID := c.getRandomShard()"
@@ -315,7 +319,8 @@ func makeGetHistoryClient(reqType reflect.Type, routingOptions *historyservice.R
 	shardID := c.shardIDFromWorkflowID(%s[0].NamespaceId, %s[0].WorkflowId)`, p, p, p)
 	}
 
-	panic(fmt.Sprintf("No routing directive specified on %s", t))
+	log.Fatalf("No routing directive specified on %s", t)
+	panic("unreachable")
 }
 
 func makeGetMatchingClient(reqType reflect.Type) string {

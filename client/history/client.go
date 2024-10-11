@@ -267,7 +267,7 @@ func (c *clientImpl) StreamWorkflowReplicationMessages(
 // getRandomShard returns a random shard ID for history APIs that are shard-agnostic (e.g. namespace or DLQ v2 APIs).
 func (c *clientImpl) getRandomShard() int32 {
 	// Add 1 at the end because shard IDs are 1-indexed.
-	return int32(rand.Uint32()%uint32(c.numberOfShards) + 1)
+	return int32(rand.Intn(int(c.numberOfShards)) + 1)
 }
 
 func (c *clientImpl) createContext(parent context.Context) (context.Context, context.CancelFunc) {
