@@ -94,8 +94,6 @@ UNIT_TEST_DIRS ?= $(filter-out $(FUNCTIONAL_TEST_ROOT)% $(FUNCTIONAL_TEST_XDC_RO
 
 TEST_SUITES ?=
 N_RUNS ?= 1
-SOURCE_REF ?= origin/main
-TARGET_REF ?= HEAD
 
 # github.com/urfave/cli/v2@v2.4.0             - needs to accept comma in values before unlocking https://github.com/urfave/cli/pull/1241.
 PINNED_DEPENDENCIES := \
@@ -344,23 +342,6 @@ shell-check:
 check: copyright-check lint shell-check
 
 ##### Tests #####
-collect-modified-tests:
-	@set -e; \
-	UNIT_TEST_DIRS_CSV=$$(echo $(UNIT_TEST_DIRS) | tr ' ' ','); \
-	INTEGRATION_TEST_DIRS_CSV=$$(echo $(INTEGRATION_TEST_DIRS) | tr ' ' ','); \
-	MODIFIED_UNIT_TEST_SUITES=$$(./cmd/tools/test/find_altered_tests -c unit -s $(MERGE_BASE) -t $(COMMIT) -d $$UNIT_TEST_DIRS_CSV); \
-	MODIFIED_INTEGRATION_TEST_SUITES=$$(./cmd/tools/test/find_altered_tests -c integration -s $(MERGE_BASE) -t $(COMMIT) -d $$INTEGRATION_TEST_DIRS_CSV); \
-	MODIFIED_FUNCTIONAL_TEST_SUITES=$$(./cmd/tools/test/find_altered_tests -c functional -s $(MERGE_BASE) -t $(COMMIT) -d $(FUNCTIONAL_TEST_ROOT)); \
-	MODIFIED_FUNCTIONAL_TEST_NDC_SUITES=$$(./cmd/tools/test/find_altered_tests -c functional-ndc -s $(MERGE_BASE) -t $(COMMIT) -d $(FUNCTIONAL_TEST_NDC_ROOT)); \
-	MODIFIED_FUNCTIONAL_TEST_XDC_SUITES=$$(./cmd/tools/test/find_altered_tests -c functional-xdc -s $(MERGE_BASE) -t $(COMMIT) -d $(FUNCTIONAL_TEST_XDC_ROOT)); \
-	echo '{'; \
-	echo '  "modified_unit_test_suites": "'$$MODIFIED_UNIT_TEST_SUITES'",'; \
-	echo '  "modified_integration_test_suites": "'$$MODIFIED_INTEGRATION_TEST_SUITES'",'; \
-	echo '  "modified_functional_test_suites": "'$$MODIFIED_FUNCTIONAL_TEST_SUITES'",'; \
-	echo '  "modified_functional_test_ndc_suites": "'$$MODIFIED_FUNCTIONAL_TEST_NDC_SUITES'",'; \
-	echo '  "modified_functional_test_xdc_suites": "'$$MODIFIED_FUNCTIONAL_TEST_XDC_SUITES'"'; \
-	echo '}';
-
 clean-test-results:
 	@rm -f test.log $(TEST_OUTPUT_ROOT)/*
 	@go clean -testcache

@@ -124,21 +124,26 @@ jobs:
         id: collect_modified_tests
         run: |
           set -euo pipefail
-          
-          echo "MERGE_BASE=${MERGE_BASE} COMMIT=${COMMIT}"
-          
-          go build -o ./cmd/tools/test/find_altered_tests ./cmd/tools/test/find_altered_tests.go
-          
-          OUTPUT="$(make collect-modified-tests "MERGE_BASE=${MERGE_BASE}" "COMMIT=${COMMIT}")"
-          
-          echo "OUTPUT: $OUTPUT"
-          
-          test_suites=("modified_unit_test_suites" "modified_integration_test_suites" "modified_functional_test_suites" "modified_functional_test_ndc_suites" "modified_functional_test_xdc_suites")
 
-          for suite in "${test_suites[@]}"; do
-            value=$(echo "$OUTPUT" | jq -r ".\"${suite}\"")  
-            echo "${suite}=${value}" >> "$GITHUB_ENV"
-          done
+          echo "MERGE_BASE=${MERGE_BASE} COMMIT=${COMMIT}"
+
+          go run ./cmd/tools/test/find_altered_tests.go \
+            -c unit \
+            -c integration \
+            -c functional \
+            -c functional-ndc \
+            -c functional-xdc \
+            -s "${MERGE_BASE}" \
+            -t "${COMMIT}" \
+            >> "$GITHUB_ENV"
+
+          echo "Modified Unit Test Suites: $modified_unit_test_suites"
+          echo "Modified Integration Test Suites: $modified_integration_test_suites"
+          echo "Modified Functional Test Suites: $modified_functional_test_suites"
+          echo "Modified Functional Test NDC Suites: $modified_functional_test_ndc_suites"
+          echo "Modified Functional Test XDC Suites: $modified_functional_test_xdc_suites"
+
+        shell: bash
 
   misc-checks:
     name: Misc checks

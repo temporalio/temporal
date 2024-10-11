@@ -27,6 +27,7 @@ package main
 import (
 	"flag"
 	"fmt"
+	"log"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -36,55 +37,83 @@ import (
 
 // find_altered_tests.go
 //
-// This program identifies altered or added test suite names based on the provided criteria.
+// This program identifies altered or added test suite names based on the provided categories.
 // It accepts the following inputs via command-line flags:
 //
-// - Category (-c): The category of tests to find (e.g., unit, integration).
-// - Source Git Reference (-source-ref): The source Git reference (commit SHA, branch, etc.).
-// - Target Git Reference (-target-ref): The target Git reference (commit SHA, branch, etc.).
-// - Test Directories (-d): Comma-separated list of test directories to search.
+// - Category (-c): The category of tests to find (e.g., unit, integration, functional, functional-ndc).
+// - Source Git Reference (-s): The source Git reference (commit SHA, branch, etc.).
+// - Target Git Reference (-t): The target Git reference (commit SHA, branch, etc.).
 //
-// The program outputs the names of altered test suites, separated by '|'.
+// The program outputs environment variable assignments in the format `key=value`,
+// where each key corresponds to a modified test suite category, and the value is a
+// pipe-separated list of altered test suites.
 //
 // Usage:
-//   find_altered_tests -c <category> -source-ref <sourceRef> -target-ref <targetRef> -d <testDirs>
+//   go run find_altered_tests.go -c <category1> -c <category2> ... -s <sourceRef> -t <targetRef>
+
+// CategoryDirs maps test categories to their corresponding directories
+var CategoryDirs = map[string][]string{
+	"unit":           {"./client", "./common", "./internal", "./service", "./temporal", "./tools", "./cmd"},
+	"integration":    {"./common/persistence/tests", "./tools/tests", "./temporaltest", "./internal/temporalite"},
+	"functional":     {"./tests"},
+	"functional-ndc": {"./tests/ndc"},
+	"functional-xdc": {"./tests/xdc"},
+}
 
 func main() {
-	var category string
+	var categories multiFlag
 	var sourceRef string
 	var targetRef string
-	var testDirs string
 
-	flag.StringVar(&category, "c", "", "Category of altered tests to find")
+	flag.Var(&categories, "c", "Category of altered tests to find (can specify multiple)")
 	flag.StringVar(&sourceRef, "s", "", "Source Git reference (commit SHA, branch, etc.)")
 	flag.StringVar(&targetRef, "t", "", "Target Git reference (commit SHA, branch, etc.)")
-	flag.StringVar(&testDirs, "d", "", "Comma-separated list of test directories")
 	flag.Parse()
 
-	if category == "" || sourceRef == "" || targetRef == "" || testDirs == "" {
-		fmt.Println("Usage: find_altered_tests -c <category> -s <sourceRef> -t <targetRef> -d <testDirs>")
-		os.Exit(1)
+	if len(categories) == 0 || sourceRef == "" || targetRef == "" {
+		log.Fatalf("Usage: find_altered_tests -c <category1> -c <category2> ... -s <sourceRef> -t <targetRef>")
+	}
+
+	for _, category := range categories {
+		if _, exists := CategoryDirs[category]; !exists {
+			log.Fatalf("Unknown category: %s", category)
+		}
 	}
 
 	modifiedFiles, err := getModifiedTestFiles(sourceRef, targetRef)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error getting modified test files: %v\n", err)
-		os.Exit(1)
+		log.Fatalf("Error getting modified test files: %v", err)
 	}
 
-	testSuites, err := findAlteredTestSuites(modifiedFiles, testDirs)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error finding altered test suites: %v\n", err)
-		os.Exit(1)
+	// Initialize a map to hold modified suites per category
+	modifiedSuites := make(map[string][]string)
+
+	for _, category := range categories {
+		dirs := CategoryDirs[category]
+		suites, err := findAlteredTestSuites(modifiedFiles, dirs)
+		if err != nil {
+			log.Fatalf("Error finding altered test suites for category %s: %v", category, err)
+		}
+		modifiedSuites[category] = suites
 	}
 
-	if len(testSuites) == 0 {
-		// No modified test suites found
-		os.Exit(0)
+	// Output in key=value format
+	for category, suites := range modifiedSuites {
+		joinedSuites := strings.Join(suites, "|")
+		fmt.Printf("modified_%s_suites=%s\n", category, joinedSuites)
 	}
+}
 
-	// Output the test suite names, separated by '|'
-	fmt.Println(strings.Join(testSuites, "|"))
+// multiFlag allows multiple instances of a flag
+type multiFlag []string
+
+func (m *multiFlag) String() string {
+	return strings.Join(*m, ",")
+}
+
+func (m *multiFlag) Set(value string) error {
+	*m = append(*m, value)
+	return nil
 }
 
 // getModifiedTestFiles runs 'git diff' to find modified '_test.go' files between two references
@@ -108,19 +137,11 @@ func getModifiedTestFiles(sourceRef, targetRef string) ([]string, error) {
 }
 
 // findAlteredTestSuites filters files by the test directories and extracts test suite names from them
-func findAlteredTestSuites(files []string, testDirs string) ([]string, error) {
+func findAlteredTestSuites(files []string, testDirs []string) ([]string, error) {
 	var testSuites []string
 	suiteSet := make(map[string]struct{})
 
 	testSuiteRegex := regexp.MustCompile(`func\s+(Test[a-zA-Z0-9_]*Suite)\s*\(`)
-
-	dirs := strings.Split(testDirs, ",")
-	for i, dir := range dirs {
-		dirs[i] = filepath.Clean(dir)
-		if !strings.HasSuffix(dirs[i], string(os.PathSeparator)) {
-			dirs[i] += string(os.PathSeparator)
-		}
-	}
 
 	for _, file := range files {
 		if _, err := os.Stat(file); err != nil {
@@ -129,7 +150,7 @@ func findAlteredTestSuites(files []string, testDirs string) ([]string, error) {
 
 		filePath := filepath.Clean(file)
 
-		if !isInAnyPath(filePath, dirs) {
+		if !isInAnyPath(filePath, testDirs) {
 			continue
 		}
 
@@ -155,7 +176,11 @@ func findAlteredTestSuites(files []string, testDirs string) ([]string, error) {
 // isInAnyPath checks if the file is within any of the specified paths
 func isInAnyPath(file string, paths []string) bool {
 	for _, path := range paths {
-		if strings.HasPrefix(file, path) {
+		cleanPath := filepath.Clean(path)
+		if !strings.HasSuffix(cleanPath, string(os.PathSeparator)) {
+			cleanPath += string(os.PathSeparator)
+		}
+		if strings.HasPrefix(file, cleanPath) {
 			return true
 		}
 	}
