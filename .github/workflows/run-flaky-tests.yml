@@ -1,0 +1,26 @@
+name: All Tests Including Flaky
+
+on:
+  push: # todo: remove this trigger later
+    branches:
+      - "cdf/run-flaky-tests-nightly"
+
+  schedule:
+    # Run once a day at midnight
+    - cron:  '0 0 * * *'
+
+  workflow_dispatch:
+
+env:
+  COMMIT: ${{ github.sha }}
+  PR_BASE_COMMIT: ${{ github.event.push.base.sha }}
+  DOCKER_COMPOSE_FILE: ./develop/github/docker-compose.yml
+  TEMPORAL_VERSION_CHECK_DISABLED: 1
+  BUILDKITE_ANALYTICS_TOKEN: ${{ secrets.BUILDKITE_ANALYTICS_TOKEN }}
+
+jobs:
+  call-run-tests-workflow-with-flaky:
+    uses: temporalio/temporal/.github/workflows/run-tests.yml@cdf/run-flaky-tests-nightly
+    with:
+      include_flaky_tests: true
+    secrets: inherit

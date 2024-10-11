@@ -25,6 +25,7 @@ package tests
 import (
 	"context"
 	"flag"
+	"os"
 	"testing"
 	"time"
 
@@ -80,7 +81,9 @@ func (s *DescribeTaskQueueSuite) TestAddNoTasks_ValidateStats() {
 }
 
 func (s *DescribeTaskQueueSuite) TestAddSingleTask_ValidateStats() {
-	s.T().Skip("flaky test")
+	if os.Getenv("INCLUDE_FLAKY_TESTS") != "true" {
+		s.T().Skip("flaky test")
+	}
 
 	s.OverrideDynamicConfig(dynamicconfig.MatchingUpdateAckInterval, 5*time.Second)
 	s.RunTestWithMatchingBehavior(func() { s.publishConsumeWorkflowTasksValidateStats(1, true) })

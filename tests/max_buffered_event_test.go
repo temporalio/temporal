@@ -26,6 +26,7 @@ package tests
 
 import (
 	"context"
+	"os"
 	"sync"
 	"testing"
 	"time"
@@ -138,7 +139,9 @@ func (s *MaxBufferedEventSuite) TestMaxBufferedEventsLimit() {
 }
 
 func (s *MaxBufferedEventSuite) TestBufferedEventsMutableStateSizeLimit() {
-	s.T().Skip("flaky test")
+	if os.Getenv("INCLUDE_FLAKY_TESTS") != "true" {
+		s.T().Skip("flaky test")
+	}
 
 	/*
 			This test starts a workflow, and block its workflow task, then sending

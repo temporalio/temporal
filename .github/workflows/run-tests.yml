@@ -8,6 +8,12 @@ on:
       - release/**
       - cloud/**
 
+  workflow_call:
+    inputs:
+      include_flaky_tests:
+        description: 'Whether to include flaky tests'
+        type: boolean
+
   workflow_dispatch:
     inputs:
       commit:
@@ -47,6 +53,9 @@ on:
         description: 'List of DBs to test on (i.e. ["sqlite", "cassandra", "mysql8", "postgres12"])'
         type: string
         default: '["sqlite"]'
+      include_flaky_tests:
+        description: 'Whether to include flaky tests'
+        type: boolean
 
 concurrency: # Auto-cancel existing runs in the PR when a new commit is pushed
   group: run-tests-${{ github.head_ref || github.run_id }}
@@ -152,6 +161,7 @@ jobs:
       UNIT_TEST_DIR: ${{ inputs.unit_test_directory }}
       TEST_TIMEOUT: ${{ needs.set-up-single-test.outputs.test_timeout }}
       RUN_SINGLE_UNIT_TEST: ${{ inputs.run_single_unit_test }}
+      INCLUDE_FLAKY_TESTS: ${{ inputs.include_flaky_tests }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -188,6 +198,7 @@ jobs:
     runs-on: ${{ matrix.runs-on }}
     env:
       BUILDKITE_MESSAGE: "{\"job\": \"integration-test\"}"
+      INCLUDE_FLAKY_TESTS: ${{ inputs.include_flaky_tests }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -274,6 +285,7 @@ jobs:
       SINGLE_TEST_ARGS: ${{ needs.set-up-single-test.outputs.single_test_args }}
       TEST_TIMEOUT: ${{ needs.set-up-single-test.outputs.test_timeout }}
       BUILDKITE_MESSAGE: "{\"job\": \"functional-test\", \"db\": \"${{ matrix.persistence_driver }}\"}"
+      INCLUDE_FLAKY_TESTS: ${{ inputs.include_flaky_tests }}
     steps:
       - name: Print functional test
         run: echo "${{ needs.set-up-single-test.outputs.dbs }}" && echo "$SINGLE_TEST_ARGS"
@@ -346,6 +358,7 @@ jobs:
       PERSISTENCE_TYPE: ${{ matrix.persistence_type }}
       PERSISTENCE_DRIVER: ${{ matrix.persistence_driver }}
       BUILDKITE_MESSAGE: "{\"job\": \"functional-test-xdc\", \"db\": \"${{ matrix.persistence_driver }}\"}"
+      INCLUDE_FLAKY_TESTS: ${{ inputs.include_flaky_tests }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -415,6 +428,7 @@ jobs:
       PERSISTENCE_TYPE: ${{ matrix.persistence_type }}
       PERSISTENCE_DRIVER: ${{ matrix.persistence_driver }}
       ES_VERSION: ${{ matrix.es_version }}
+      INCLUDE_FLAKY_TESTS: ${{ inputs.include_flaky_tests }}
     steps:
       - uses: actions/checkout@v4
         with:

@@ -227,7 +227,9 @@ func (s *EventualSuccessSuite) SetupSuite() {
 // TestEventuallySucceeds verifies that we eventually succeed in acquiring the shard when we get a deadline exceeded
 // error followed by a successful acquire shard call.
 func (s *EventualSuccessSuite) TestEventuallySucceeds() {
-	s.T().Skip("flaky test")
+	if os.Getenv("INCLUDE_FLAKY_TESTS") != "true" {
+		s.T().Skip("flaky test")
+	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 	defer cancel()

@@ -308,7 +308,9 @@ func (s *HttpApiTestSuite) runHTTPAPIBasicsTest_Shorthand(contentType string, pr
 }
 
 func (s *HttpApiTestSuite) TestHTTPAPIHeaders() {
-	s.T().Skip("flaky test")
+	if os.Getenv("INCLUDE_FLAKY_TESTS") != "true" {
+		s.T().Skip("flaky test")
+	}
 
 	if s.HttpAPIAddress() == "" {
 		s.T().Skip("HTTP API server not enabled")

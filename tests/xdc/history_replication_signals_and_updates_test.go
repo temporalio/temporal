@@ -208,7 +208,9 @@ func (t *hrsuTest) newHrsuTestCluster(ns string, name string, cluster *testcore.
 // TestAcceptedUpdateCanBeCompletedAfterFailoverAndFailback tests that an update can be accepted in one cluster, and completed in a
 // different cluster, after a failover.
 func (s *hrsuTestSuite) TestAcceptedUpdateCanBeCompletedAfterFailoverAndFailback() {
-	s.T().Skip("flaky test")
+	if os.Getenv("INCLUDE_FLAKY_TESTS") != "true" {
+		s.T().Skip("flaky test")
+	}
 
 	t, ctx, cancel := s.startHrsuTest()
 	defer cancel()
@@ -360,7 +362,9 @@ func (s *hrsuTestSuite) TestConflictResolutionReappliesUpdates() {
 // updates have the same update ID. The test confirms that when the conflict is resolved, we do not reapply the
 // UpdateAccepted event, since it has a conflicting ID.
 func (s *hrsuTestSuite) TestConflictResolutionDoesNotReapplyAcceptedUpdateWithConflictingId() {
-	s.T().Skip("flaky test")
+	if os.Getenv("INCLUDE_FLAKY_TESTS") != "true" {
+		s.T().Skip("flaky test")
+	}
 
 	t, ctx, cancel := s.startHrsuTest()
 	defer cancel()
