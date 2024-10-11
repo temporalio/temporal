@@ -10,12 +10,6 @@ on:
       - release/**
       - cloud/**
 
-  workflow_call:
-    inputs:
-      include_flaky_tests:
-        description: 'Whether to include flaky tests'
-        type: boolean
-
   workflow_dispatch:
     inputs:
       commit:
@@ -34,7 +28,7 @@ on:
         type: string
         default: "./temporal"
       n_runs:
-        description: "Number of times to repeat the single test per database type"
+        description: "Number of times to repeat the test per database type (except for unit tests, start with n=25 or lower to avoid OOMKill)"
         type: number
         default: 1
       test_name:
@@ -55,9 +49,6 @@ on:
         description: 'List of DBs to test on (i.e. ["sqlite", "cassandra", "mysql8", "postgres12"])'
         type: string
         default: '["sqlite"]'
-      include_flaky_tests:
-        description: 'Whether to include flaky tests'
-        type: boolean
 
 concurrency: # Auto-cancel existing runs in the PR when a new commit is pushed
   group: run-tests-${{ github.head_ref || github.run_id }}
@@ -163,7 +154,6 @@ jobs:
       SINGLE_TEST_ARGS: ${{ needs.set-up-single-test.outputs.single_test_args }}
       UNIT_TEST_DIR: ${{ inputs.unit_test_directory }}
       TEST_TIMEOUT: ${{ needs.set-up-single-test.outputs.test_timeout }}
-      INCLUDE_FLAKY_TESTS: ${{ inputs.include_flaky_tests }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -200,7 +190,6 @@ jobs:
     runs-on: ${{ matrix.runs-on }}
     env:
       BUILDKITE_JOB: "integration-test"
-      INCLUDE_FLAKY_TESTS: ${{ inputs.include_flaky_tests }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -289,7 +278,6 @@ jobs:
       BUILDKITE_JOB: "functional-test"
       BUILDKITE_TEST_NAME: ${{ inputs.test_name }}
       BUILDKITE_DB: ${{ matrix.persistence_driver }}
-      INCLUDE_FLAKY_TESTS: ${{ inputs.include_flaky_tests }}
     steps:
       - uses: ScribeMD/docker-cache@0.3.7
         if: ${{ inputs.run_single_test_job == '' || (inputs.run_single_test_job == 'functional-test' && contains(fromJSON(needs.set-up-single-test.outputs.dbs), env.PERSISTENCE_DRIVER)) }}
@@ -364,7 +352,6 @@ jobs:
       BUILDKITE_JOB: "functional-test-xdc"
       BUILDKITE_TEST_NAME: ${{ inputs.test_name }}
       BUILDKITE_DB: ${{ matrix.persistence_driver }}
-      INCLUDE_FLAKY_TESTS: ${{ inputs.include_flaky_tests }}
     steps:
       - uses: actions/checkout@v4
         if: ${{ inputs.run_single_test_job == '' || (inputs.run_single_test_job == 'functional-test-xdc' && contains(fromJSON(needs.set-up-single-test.outputs.dbs), env.PERSISTENCE_DRIVER)) }}
@@ -442,7 +429,6 @@ jobs:
       BUILDKITE_JOB: "functional-test-ndc"
       BUILDKITE_TEST_NAME: ${{ inputs.test_name }}
       BUILDKITE_DB: ${{ matrix.persistence_driver }}
-      INCLUDE_FLAKY_TESTS: ${{ inputs.include_flaky_tests }}
     steps:
       - uses: actions/checkout@v4
         if: ${{ inputs.run_single_test_job == '' || (inputs.run_single_test_job == 'functional-test-ndc' && contains(fromJSON(needs.set-up-single-test.outputs.dbs), env.PERSISTENCE_DRIVER)) }}
