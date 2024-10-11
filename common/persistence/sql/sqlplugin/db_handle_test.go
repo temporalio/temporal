@@ -29,6 +29,7 @@ import (
 
 	"github.com/jmoiron/sqlx"
 	"github.com/stretchr/testify/assert"
+	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 )
@@ -56,13 +57,14 @@ func TestDatabaseHandleReconnect(t *testing.T) {
 			actualConnectAttemptCount := 0
 			connectFunc := func() (*sqlx.DB, error) {
 				actualConnectAttemptCount++
-				return nil, testErr
+				return nil, errTest
 			}
-			dbHandle := NewDatabaseHandle(connectFunc, needsRefreshFunc, log.NewNoopLogger(), metrics.NoopMetricsHandler)
+			fakeTimeSource := clock.NewEventTimeSource().Update(time.Now())
+			dbHandle := NewDatabaseHandle(connectFunc, needsRefreshFunc, log.NewNoopLogger(), metrics.NoopMetricsHandler, fakeTimeSource)
 			assert.NotNil(t, dbHandle)
 
 			for i := 0; i < tc.numRetries; i++ {
-				<-time.NewTimer(tc.retryDelay).C
+				fakeTimeSource.Advance(tc.retryDelay)
 				db, err := dbHandle.DB()
 				assert.Nil(t, db, tc.msg)
 				assert.ErrorIs(t, err, DatabaseUnavailableError)
@@ -72,4 +74,4 @@ func TestDatabaseHandleReconnect(t *testing.T) {
 	}
 }
 
-var testErr = errors.New("test")
+var errTest = errors.New("test")
