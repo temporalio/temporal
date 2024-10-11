@@ -27,6 +27,7 @@ package metrics
 import (
 	"context"
 	"fmt"
+	"io"
 	"sync"
 	"time"
 
@@ -202,6 +203,14 @@ func (omp *otelMetricsHandler) Histogram(histogram string, unit MetricUnit) Hist
 
 func (omp *otelMetricsHandler) Stop(l log.Logger) {
 	omp.provider.Stop(l)
+}
+
+func (omp *otelMetricsHandler) Close() error {
+	return nil
+}
+
+func (omp *otelMetricsHandler) BatchStart(_ string) (Handler, io.Closer) {
+	return omp, omp
 }
 
 // makeSet returns an otel attribute.Set with the given tags merged with the

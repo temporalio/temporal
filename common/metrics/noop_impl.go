@@ -25,6 +25,7 @@
 package metrics
 
 import (
+	"io"
 	"time"
 
 	"go.temporal.io/server/common/log"
@@ -67,6 +68,14 @@ func (*noopMetricsHandler) Histogram(string, MetricUnit) HistogramIface {
 }
 
 func (*noopMetricsHandler) Stop(log.Logger) {}
+
+func (*noopMetricsHandler) Close() error {
+	return nil
+}
+
+func (n *noopMetricsHandler) BatchStart(_ string) (Handler, io.Closer) {
+	return n, n
+}
 
 var NoopCounterMetricFunc = CounterFunc(func(i int64, t ...Tag) {})
 var NoopGaugeMetricFunc = GaugeFunc(func(f float64, t ...Tag) {})

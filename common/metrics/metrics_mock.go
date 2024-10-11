@@ -34,6 +34,7 @@
 package metrics
 
 import (
+	io "io"
 	reflect "reflect"
 	time "time"
 
@@ -62,6 +63,21 @@ func NewMockHandler(ctrl *gomock.Controller) *MockHandler {
 // EXPECT returns an object that allows the caller to indicate expected use.
 func (m *MockHandler) EXPECT() *MockHandlerMockRecorder {
 	return m.recorder
+}
+
+// BatchStart mocks base method.
+func (m *MockHandler) BatchStart(arg0 string) (Handler, io.Closer) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "BatchStart", arg0)
+	ret0, _ := ret[0].(Handler)
+	ret1, _ := ret[1].(io.Closer)
+	return ret0, ret1
+}
+
+// BatchStart indicates an expected call of BatchStart.
+func (mr *MockHandlerMockRecorder) BatchStart(arg0 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "BatchStart", reflect.TypeOf((*MockHandler)(nil).BatchStart), arg0)
 }
 
 // Counter mocks base method.
