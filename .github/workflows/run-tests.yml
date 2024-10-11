@@ -74,11 +74,11 @@ jobs:
       single_test_args: ${{ steps.generate_output.outputs.single_test_args }}
       runs_on: ${{ steps.generate_output.outputs.runs_on }}
       dbs: ${{ inputs.test_dbs }}
-      modified_unit_test_suites: ${{ steps.collect_modified_tests.outputs.modified_unit_test_suites }}
-      modified_integration_test_suites: ${{ steps.collect_modified_tests.outputs.modified_integration_test_suites }}
-      modified_functional_test_suites: ${{ steps.collect_modified_tests.outputs.modified_functional_test_suites }}
-      modified_functional_test_ndc_suites: ${{ steps.collect_modified_tests.outputs.modified_functional_test_ndc_suites }}
-      modified_functional_test_xdc_suites: ${{ steps.collect_modified_tests.outputs.modified_functional_test_xdc_suites }}
+      modified_unit_test_suites: ${{ env.modified_unit_test_suites }}
+      modified_integration_test_suites: ${{ env.modified_integration_test_suites }}
+      modified_functional_test_suites: ${{ env.modified_functional_test_suites }}
+      modified_functional_test_ndc_suites: ${{ env.modified_functional_test_ndc_suites }}
+      modified_functional_test_xdc_suites: ${{ env.modified_functional_test_xdc_suites }}
     steps:
       - id: generate_output
         run: |
@@ -117,8 +117,8 @@ jobs:
 
       - name: Compute merge base
         run: |
-          MERGE_BASE="$(git merge-base ${{ env.COMMIT }} ${{ github.event.pull_request.base.ref }})"
-          echo "MERGE_BASE=$MERGE_BASE" >> "$GITHUB_ENV"
+          MERGE_BASE=$(git merge-base ${{ env.COMMIT }} ${{ github.event.pull_request.base.ref }})
+          echo "MERGE_BASE=$MERGE_BASE" >> $GITHUB_ENV
 
       - name: Collect Modified Tests
         id: collect_modified_tests
@@ -127,22 +127,18 @@ jobs:
 
           echo "MERGE_BASE=${MERGE_BASE} COMMIT=${COMMIT}"
 
-          go run ./cmd/tools/test/find_altered_tests.go \
+          OUTPUT=$(go run ./cmd/tools/test/find_altered_tests.go \
             -c unit \
             -c integration \
             -c functional \
             -c functional-ndc \
             -c functional-xdc \
             -s "${MERGE_BASE}" \
-            -t "${COMMIT}" \
-            >> "$GITHUB_ENV"
+            -t "${COMMIT}")
 
-          echo "Modified Unit Test Suites: $modified_unit_test_suites"
-          echo "Modified Integration Test Suites: $modified_integration_test_suites"
-          echo "Modified Functional Test Suites: $modified_functional_test_suites"
-          echo "Modified Functional Test NDC Suites: $modified_functional_test_ndc_suites"
-          echo "Modified Functional Test XDC Suites: $modified_functional_test_xdc_suites"
+          echo "OUTPUT: $OUTPUT"
 
+          echo "$OUTPUT" | grep -E '^(modified_unit_test_suites|modified_integration_test_suites|modified_functional_test_suites|modified_functional_test_ndc_suites|modified_functional_test_xdc_suites)=' >> "$GITHUB_ENV"
         shell: bash
 
   misc-checks:
