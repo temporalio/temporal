@@ -143,8 +143,21 @@ func (l ClockedRateLimiter) WaitN(ctx context.Context, token int) error {
 			return nil
 		case <-l.recycleCh:
 			if token > 1 {
-				break
+				break // recycling 1 token to a process requesting >1 tokens is a no-op
 			}
+
+			// Cancel() reverses the effects of this Reservation on the rate limit as much as possible,
+			// considering that other reservations may have already been made. Normally, Cancel() indicates
+			// that the reservation holder will not perform the reserved action, so it would make the most
+			// sense to cancel the reservation whose token was just recycled. However, we don't have access
+			// to the recycled reservation anymore, so instead we cancel the current reservation as a proxy.
+			//
+			// Since Cancel() just restores tokens to the rate limiter, cancelling the current 1-token
+			// reservation should have approximately the same effect on the actual rate as cancelling the
+			// recycled reservation.
+			//
+			// If the recycled reservation was for >1 token, cancelling the current 1-token reservation will
+			// lead to a slower actual rate than cancelling the original, so the approximation is conservative.
 			reservation.Cancel()
 			return nil
 		}
