@@ -123,8 +123,7 @@ jobs:
       - name: Collect Modified Tests
         id: collect_modified_tests
         run: |
-          set -e
-          set -o pipefail
+          set -euo pipefail
           
           echo "MERGE_BASE=${MERGE_BASE} COMMIT=${COMMIT}"
           
