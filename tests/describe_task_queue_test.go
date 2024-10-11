@@ -111,7 +111,7 @@ func (s *DescribeTaskQueueSuite) TestAddSingleTask_ValidateCachedStatsNoMatching
 	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 1)
 	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 1)
 
-	s.OverrideDynamicConfig(dynamicconfig.PhysicalTaskQueueInfoByBuildIdTTL, 100*time.Millisecond)
+	s.OverrideDynamicConfig(dynamicconfig.PhysicalTaskQueueInfoByBuildIdTTL, 500*time.Millisecond)
 	s.OverrideDynamicConfig(dynamicconfig.MatchingLongPollExpirationInterval, 30*time.Second)
 	s.OverrideDynamicConfig(dynamicconfig.MatchingUpdateAckInterval, 5*time.Second)
 	s.publishConsumeWorkflowTasksValidateStatsCached(1)
@@ -371,6 +371,8 @@ func (s *DescribeTaskQueueSuite) publishConsumeWorkflowTasksValidateStatsCached(
 		i++
 	}
 
+	// in the worst case, can I not spend 1 second here? if that happens, the TTL for the cache gets expired.
+
 	// Do a describe Tq partition calls in an eventually with the matching client
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		resp, err := s.GetTestCluster().MatchingClient().DescribeTaskQueuePartition(
@@ -404,7 +406,7 @@ func (s *DescribeTaskQueueSuite) publishConsumeWorkflowTasksValidateStatsCached(
 		a.Equal(time.Duration(0), wfStats.ApproximateBacklogAge.AsDuration())
 		a.Equal(float32(0), wfStats.TasksAddRate)
 		a.Equal(float32(0), wfStats.TasksDispatchRate)
-	}, time.Second, 5*time.Millisecond)
+	}, 200*time.Millisecond, 5*time.Millisecond)
 
 	// fetches cached stats
 	s.validateDescribeTaskQueueCached(tqName, expectedBacklogCount, maxBacklogExtraTasks, expectedAddRate, expectedDispatchRate, false)
