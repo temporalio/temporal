@@ -77,8 +77,8 @@ jobs:
       modified_unit_test_suites: ${{ env.modified_unit_test_suites }}
       modified_integration_test_suites: ${{ env.modified_integration_test_suites }}
       modified_functional_test_suites: ${{ env.modified_functional_test_suites }}
-      modified_functional_test_ndc_suites: ${{ env.modified_functional_test_ndc_suites }}
-      modified_functional_test_xdc_suites: ${{ env.modified_functional_test_xdc_suites }}
+      modified_functional_ndc_test_suites: ${{ env.modified_functional_ndc_test_suites }}
+      modified_functional_xdc_test_suites: ${{ env.modified_functional_xdc_test_suites }}
     steps:
       - id: generate_output
         run: |
@@ -131,14 +131,14 @@ jobs:
             -c unit \
             -c integration \
             -c functional \
-            -c functional-ndc \
-            -c functional-xdc \
+            -c functional_ndc \
+            -c functional_xdc \
             -s "${MERGE_BASE}" \
             -t "${COMMIT}")
 
           echo "OUTPUT: $OUTPUT"
 
-          echo "$OUTPUT" | grep -E '^(modified_unit_test_suites|modified_integration_test_suites|modified_functional_test_suites|modified_functional_test_ndc_suites|modified_functional_test_xdc_suites)=' >> "$GITHUB_ENV"
+          echo "$OUTPUT" | grep -E '^(modified_unit_test_suites|modified_integration_test_suites|modified_functional_test_suites|modified_functional_ndc_test_suites|modified_functional_xdc_test_suites)=' >> "$GITHUB_ENV"
         shell: bash
 
   misc-checks:
@@ -414,7 +414,7 @@ jobs:
       PERSISTENCE_TYPE: ${{ matrix.persistence_type }}
       PERSISTENCE_DRIVER: ${{ matrix.persistence_driver }}
       BUILDKITE_MESSAGE: "{\"job\": \"functional-test-xdc\", \"db\": \"${{ matrix.persistence_driver }}\"}"
-      MODIFIED_TEST_SUITES: ${{ needs.set-up-single-test.outputs.modified_functional_test_xdc_suites }}
+      MODIFIED_TEST_SUITES: ${{ needs.set-up-single-test.outputs.modified_functional_xdc_test_suites }}
       N_RUNS: 10
     steps:
       - uses: actions/checkout@v4
@@ -491,7 +491,7 @@ jobs:
       PERSISTENCE_TYPE: ${{ matrix.persistence_type }}
       PERSISTENCE_DRIVER: ${{ matrix.persistence_driver }}
       ES_VERSION: ${{ matrix.es_version }}
-      MODIFIED_TEST_SUITES: ${{ needs.set-up-single-test.outputs.modified_functional_test_ndc_suites }}
+      MODIFIED_TEST_SUITES: ${{ needs.set-up-single-test.outputs.modified_functional_ndc_test_suites }}
       N_RUNS: 10
     steps:
       - uses: actions/checkout@v4

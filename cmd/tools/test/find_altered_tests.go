@@ -40,7 +40,7 @@ import (
 // This program identifies altered or added test suite names based on the provided categories.
 // It accepts the following inputs via command-line flags:
 //
-// - Category (-c): The category of tests to find (e.g., unit, integration, functional, functional-ndc).
+// - Category (-c): The category of tests to find (e.g., unit, integration, functional, functional_ndc).
 // - Source Git Reference (-s): The source Git reference (commit SHA, branch, etc.).
 // - Target Git Reference (-t): The target Git reference (commit SHA, branch, etc.).
 //
@@ -100,7 +100,7 @@ func main() {
 	// Output in key=value format
 	for category, suites := range modifiedSuites {
 		joinedSuites := strings.Join(suites, "|")
-		fmt.Printf("modified_%s_suites=%s\n", category, joinedSuites)
+		fmt.Printf("modified_%s_test_suites=%s\n", category, joinedSuites)
 	}
 }
 
