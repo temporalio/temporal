@@ -345,7 +345,6 @@ check: copyright-check lint shell-check
 
 ##### Tests #####
 collect-modified-tests:
-	@echo "Collecting modified tests..."
 	@set -e; \
 	UNIT_TEST_DIRS_CSV=$$(echo $(UNIT_TEST_DIRS) | tr ' ' ','); \
 	INTEGRATION_TEST_DIRS_CSV=$$(echo $(INTEGRATION_TEST_DIRS) | tr ' ' ','); \
