@@ -69,9 +69,9 @@ func getModifiedTestFiles(sourceRef, targetRef string) ([]string, error) {
 	output, err := cmd.Output()
 	if err != nil {
 		if exitErr, ok := err.(*exec.ExitError); ok {
-			return nil, fmt.Errorf("git diff error: %s", string(exitErr.Stderr))
+			return nil, fmt.Errorf("git diff error: %w", exitErr)
 		}
-		return nil, fmt.Errorf("error running git diff: %v", err)
+		return nil, fmt.Errorf("error running git diff: %w", err)
 	}
 	lines := strings.Split(strings.TrimSpace(string(output)), "\n")
 	var testFiles []string
