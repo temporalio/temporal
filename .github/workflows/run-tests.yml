@@ -219,10 +219,10 @@ jobs:
         if: ${{ !cancelled() && !inputs.run_single_unit_test && env.MODIFIED_TEST_SUITES != '' }}
         timeout-minutes: 30
         env:
-          N_RUNS: 10
+          FLAKY_TEST_ITERATIONS: 10
         run: |
           echo "Detecting flaky unit tests: $MODIFIED_TEST_SUITES"
-          make unit-test-coverage TEST_SUITES="$MODIFIED_TEST_SUITES" N_RUNS="$N_RUNS"
+          make unit-test-coverage TEST_SUITES="$MODIFIED_TEST_SUITES" N_RUNS="$FLAKY_TEST_ITERATIONS"
 
       - name: Upload test results
         if: ${{ !cancelled() }}
@@ -269,10 +269,10 @@ jobs:
         if: ${{ env.MODIFIED_TEST_SUITES != '' }}
         timeout-minutes: 30
         env:
-          N_RUNS: 10
+          FLAKY_TEST_ITERATIONS: 5
         run: |
           echo "Detecting flaky integration tests: $MODIFIED_TEST_SUITES"
-          make integration-test-coverage TEST_SUITES="$MODIFIED_TEST_SUITES" N_RUNS="$N_RUNS"
+          make integration-test-coverage TEST_SUITES="$MODIFIED_TEST_SUITES" N_RUNS="$FLAKY_TEST_ITERATIONS"
 
       - name: Upload test results
         if: ${{ !cancelled() }}
@@ -373,10 +373,10 @@ jobs:
         if: ${{ (env.MODIFIED_TEST_SUITES != '') && (inputs.run_single_functional_test != true || (inputs.run_single_functional_test == true && contains(fromJSON(needs.set-up-single-test.outputs.dbs), env.PERSISTENCE_DRIVER))) }}
         timeout-minutes: ${{ fromJSON(needs.set-up-single-test.outputs.github_timeout) }} # make sure this is larger than the test timeout in the Makefile
         env:
-          N_RUNS: 10
+          FLAKY_TEST_ITERATIONS: 5
         run: |
           echo "Detecting flaky functional tests: $MODIFIED_TEST_SUITES"
-          make functional-test-coverage TEST_SUITES="$MODIFIED_TEST_SUITES" N_RUNS="$N_RUNS"
+          make functional-test-coverage TEST_SUITES="$MODIFIED_TEST_SUITES" N_RUNS="$FLAKY_TEST_ITERATIONS"
 
       - name: Upload test results
         if: ${{ !cancelled() && (inputs.run_single_functional_test != true || (inputs.run_single_functional_test == true && contains(fromJSON(needs.set-up-single-test.outputs.dbs), env.PERSISTENCE_DRIVER))) }}
@@ -445,10 +445,10 @@ jobs:
         if: ${{ env.MODIFIED_TEST_SUITES != '' }}
         timeout-minutes: 60
         env:
-          N_RUNS: 10
+          FLAKY_TEST_ITERATIONS: 5
         run: |
           echo "Detecting flaky functional xdc tests: $MODIFIED_TEST_SUITES"
-          make functional-test-xdc-coverage TEST_SUITES="$MODIFIED_TEST_SUITES" N_RUNS="$N_RUNS"
+          make functional-test-xdc-coverage TEST_SUITES="$MODIFIED_TEST_SUITES" N_RUNS="$FLAKY_TEST_ITERATIONS"
 
       - name: Upload test results
         if: ${{ !cancelled() }}
@@ -524,10 +524,10 @@ jobs:
         if: ${{ env.MODIFIED_TEST_SUITES != '' }}
         timeout-minutes: 30
         env:
-          N_RUNS: 10
+          FLAKY_TEST_ITERATIONS: 5
         run: |
           echo "Detecting flaky functional ndc tests: $MODIFIED_TEST_SUITES"
-          make functional-test-ndc-coverage TEST_SUITES="$MODIFIED_TEST_SUITES" N_RUNS="$N_RUNS"
+          make functional-test-ndc-coverage TEST_SUITES="$MODIFIED_TEST_SUITES" N_RUNS="$FLAKY_TEST_ITERATIONS"
 
   test-status:
     if: always()
