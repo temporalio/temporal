@@ -4849,7 +4849,7 @@ func (ms *MutableStateImpl) ApplyChildWorkflowExecutionTimedOutEvent(
 
 func (ms *MutableStateImpl) RetryActivity(
 	ai *persistencespb.ActivityInfo,
-	failure *failurepb.Failure,
+	activityFailure *failurepb.Failure,
 ) (enumspb.RetryState, error) {
 	opTag := tag.WorkflowActionActivityTaskRetry
 	if err := ms.checkMutability(opTag); err != nil {
@@ -4862,13 +4862,13 @@ func (ms *MutableStateImpl) RetryActivity(
 		return enumspb.RETRY_STATE_CANCEL_REQUESTED, nil
 	}
 
-	if !isRetryable(failure, ai.RetryNonRetryableErrorTypes) {
+	if !isRetryable(activityFailure, ai.RetryNonRetryableErrorTypes) {
 		return enumspb.RETRY_STATE_NON_RETRYABLE_FAILURE, nil
 	}
 
 	retryMaxInterval := ai.RetryMaximumInterval
 	// if a delay is specified by the application it should override the maximum interval set by the retry policy.
-	delay := nextRetryDelayFrom(failure)
+	delay := nextRetryDelayFrom(activityFailure)
 	if delay != nil {
 		retryMaxInterval = durationpb.New(*delay)
 	}
@@ -4891,7 +4891,7 @@ func (ms *MutableStateImpl) RetryActivity(
 	ms.updateActivityInfoForRetries(ai,
 		now.Add(retryBackoff),
 		ai.Attempt+1,
-		failure)
+		activityFailure)
 
 	if err := ms.taskGenerator.GenerateActivityRetryTasks(ai); err != nil {
 		return enumspb.RETRY_STATE_INTERNAL_SERVER_ERROR, err
@@ -4910,14 +4910,14 @@ func (ms *MutableStateImpl) updateActivityInfoForRetries(
 	ai *persistencespb.ActivityInfo,
 	nextScheduledTime time.Time,
 	nextAttempt int32,
-	failure *failurepb.Failure,
+	activityFailure *failurepb.Failure,
 ) {
 	ms.updateActivity(ai, func(info *persistencespb.ActivityInfo, impl *MutableStateImpl) *persistencespb.ActivityInfo {
 		ai = updateActivityInfoForRetries(
 			ai,
 			ms.GetCurrentVersion(),
 			nextAttempt,
-			ms.truncateRetryableActivityFailure(failure),
+			ms.truncateRetryableActivityFailure(activityFailure),
 			timestamppb.New(nextScheduledTime),
 		)
 		return ai
