@@ -158,11 +158,16 @@ func (h *namespaceReplicationTaskExecutorImpl) handleNamespaceCreationReplicatio
 		return err
 	}
 
+	name := task.Info.GetName()
+	if h.currentCluster == "cluster-b" {
+		name = name + ".cloud"
+	}
+
 	request := &persistence.CreateNamespaceRequest{
 		Namespace: &persistencespb.NamespaceDetail{
 			Info: &persistencespb.NamespaceInfo{
 				Id:          task.GetId(),
-				Name:        task.Info.GetName(),
+				Name:        name,
 				State:       task.Info.GetState(),
 				Description: task.Info.GetDescription(),
 				Owner:       task.Info.GetOwnerEmail(),
@@ -271,7 +276,7 @@ func (h *namespaceReplicationTaskExecutorImpl) handleNamespaceUpdateReplicationT
 	// plus, we need to check whether the config version is <= the config version set in the input
 	// plus, we need to check whether the failover version is <= the failover version set in the input
 	resp, err := h.metadataManager.GetNamespace(ctx, &persistence.GetNamespaceRequest{
-		Name: task.Info.GetName(),
+		ID: task.Info.GetId(),
 	})
 	if err != nil {
 		if _, isNotFound := err.(*serviceerror.NamespaceNotFound); isNotFound {
@@ -293,7 +298,7 @@ func (h *namespaceReplicationTaskExecutorImpl) handleNamespaceUpdateReplicationT
 		recordUpdated = true
 		request.Namespace.Info = &persistencespb.NamespaceInfo{
 			Id:          task.GetId(),
-			Name:        task.Info.GetName(),
+			Name:        resp.Namespace.Info.GetName(),
 			State:       task.Info.GetState(),
 			Description: task.Info.GetDescription(),
 			Owner:       task.Info.GetOwnerEmail(),
