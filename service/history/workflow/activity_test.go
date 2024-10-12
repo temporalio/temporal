@@ -180,7 +180,7 @@ func (s *activitySuite) TestGetPendingActivityInfoNoRetryPolicy() {
 }
 
 func (s *activitySuite) TestGetPendingActivityInfoHasRetryPolicy() {
-	now := s.mockShard.GetTimeSource().Now().UTC().Round(time.Hour)
+	now := s.mockShard.GetTimeSource().Now().UTC()
 	activityType := commonpb.ActivityType{
 		Name: "activityType",
 	}
@@ -190,8 +190,8 @@ func (s *activitySuite) TestGetPendingActivityInfoHasRetryPolicy() {
 		CancelRequested:         false,
 		StartedEventId:          common.EmptyEventID,
 		Attempt:                 2,
-		ScheduledTime:           timestamppb.New(now.Add(-1 * time.Minute)),
-		LastAttemptCompleteTime: timestamppb.New(now.Add(-1 * time.Hour)),
+		ScheduledTime:           timestamppb.New(now.Add(1 * time.Minute)),
+		LastAttemptCompleteTime: timestamppb.New(now.Add(-1 * time.Minute)),
 		HasRetryPolicy:          true,
 		RetryMaximumInterval:    nil,
 		RetryInitialInterval:    durationpb.New(time.Minute),
@@ -209,10 +209,10 @@ func (s *activitySuite) TestGetPendingActivityInfoHasRetryPolicy() {
 	s.Nil(pi.HeartbeatDetails)
 	s.Nil(pi.LastHeartbeatTime)
 	s.Nil(pi.LastStartedTime)
-	s.Nil(pi.NextAttemptScheduleTime) // can't get this from the activity info, activity is scheduled/started
+	s.NotNil(pi.NextAttemptScheduleTime) // activity is waiting for retry
 	s.Equal(ai.RetryMaximumAttempts, pi.MaximumAttempts)
 	s.Nil(pi.AssignedBuildId)
-	s.Equal(durationpb.New(time.Minute), pi.CurrentRetryInterval)
+	s.Equal(durationpb.New(2*time.Minute), pi.CurrentRetryInterval)
 	s.Equal(ai.ScheduledTime, pi.ScheduledTime)
 	s.Equal(ai.LastAttemptCompleteTime, pi.LastAttemptCompleteTime)
 }

@@ -120,7 +120,8 @@ func GetPendingActivityInfo(
 	} else {
 		p.Attempt = ai.Attempt
 		if p.State == enumspb.PENDING_ACTIVITY_STATE_SCHEDULED {
-			if now.Before(ai.ScheduledTime.AsTime()) {
+			scheduledTime := ai.ScheduledTime.AsTime()
+			if now.Before(scheduledTime) {
 				// in this case activity is waiting for a retry
 				p.NextAttemptScheduleTime = ai.ScheduledTime
 				currentRetryDuration := p.NextAttemptScheduleTime.AsTime().Sub(p.LastAttemptCompleteTime.AsTime())
