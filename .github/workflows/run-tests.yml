@@ -441,7 +441,7 @@ jobs:
         timeout-minutes: 30
         run: make functional-test-xdc-coverage
 
-      - name: Run Modified Functional XDC Tests Multiple Times
+      - name: Flaky Functional XDC Test Detection
         if: ${{ env.MODIFIED_TEST_SUITES != '' }}
         timeout-minutes: 60
         env:
