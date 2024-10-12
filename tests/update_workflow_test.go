@@ -51,7 +51,6 @@ import (
 	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/testing/protoutils"
 	"go.temporal.io/server/common/testing/testvars"
-	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
@@ -926,7 +925,7 @@ func (s *UpdateWorkflowSuite) TestUpdateWorkflow_CompletedWorkflow() {
 		s.EqualValues(updateResult1, updateResult2)
 	})
 
-	s.Run("receive error from accepted Update", func() {
+	s.Run("receive update failure from accepted Update", func() {
 		tv := testvars.New(s.T())
 		tv = s.startWorkflow(tv)
 
@@ -988,12 +987,14 @@ func (s *UpdateWorkflowSuite) TestUpdateWorkflow_CompletedWorkflow() {
 
 		// Receive Update result.
 		updateResult1 := <-updateResultCh
-		s.Error(updateResult1.err, consts.ErrWorkflowCompleted)
+		s.NoError(updateResult1.err)
+		s.Equal("Workflow Update is failed because it was accepted by Workflow but then Workflow completed.", updateResult1.response.GetOutcome().GetFailure().GetMessage())
 
-		// Send same Update request again, receiving the same error.
+		// Send same Update request again, receiving the same failure.
 		updateResultCh = s.sendUpdate(testcore.NewContext(), tv, "1")
 		updateResult2 := <-updateResultCh
-		s.Error(updateResult2.err, consts.ErrWorkflowCompleted)
+		s.NoError(updateResult2.err)
+		s.Equal("Workflow Update is failed because it was accepted by Workflow but then Workflow completed.", updateResult2.response.GetOutcome().GetFailure().GetMessage())
 	})
 }
 
@@ -3202,9 +3203,9 @@ func (s *UpdateWorkflowSuite) TestUpdateWorkflow_CompleteWorkflow_AbortUpdates()
 		},
 		{
 			name:          "update accepted",
-			description:   "update in stateAccepted must get an error",
-			updateErr:     map[string]string{"*": "workflow execution already completed"},
-			updateFailure: "",
+			description:   "update in stateAccepted must get an update failure",
+			updateErr:     map[string]string{"*": ""},
+			updateFailure: "Workflow Update is failed because it was accepted by Workflow but then Workflow completed.",
 			commands:      func(tv *testvars.TestVars) []*commandpb.Command { return s.UpdateAcceptCommands(tv, "1") },
 			messages: func(tv *testvars.TestVars, updRequestMsg *protocolpb.Message) []*protocolpb.Message {
 				return s.UpdateAcceptMessages(tv, updRequestMsg, "1")
@@ -4682,7 +4683,8 @@ func (s *UpdateWorkflowSuite) TestUpdateWorkflow_LastWorkflowTask_HasUpdateMessa
 	_, err := poller.PollAndProcessWorkflowTask(testcore.WithoutRetries)
 	s.NoError(err)
 	updateResult := <-updateResultCh
-	s.Equal(enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ACCEPTED, updateResult.GetStage())
+	s.Equal(enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED, updateResult.GetStage())
+	s.Equal("Workflow Update is failed because it was accepted by Workflow but then Workflow completed.", updateResult.GetOutcome().GetFailure().GetMessage())
 
 	s.EqualHistoryEvents(`
 	1 WorkflowExecutionStarted
@@ -4956,7 +4958,7 @@ func (s *UpdateWorkflowSuite) TestUpdateWorkflow_ContinueAsNew_UpdateIsNotCarrie
 		Both of them are aborted but with different errors:
 		- Admitted Update is aborted with retryable "workflow is closing" error. SDK should retry this error
 		  and new attempt should land on the new run.
-		- Accepted Update is aborted with non-retryable NotFound ("workflow is completed") error.
+		- Accepted Update is aborted with update failure.
 	*/
 
 	var update2ResponseCh <-chan updateResponseErr
@@ -5009,10 +5011,8 @@ func (s *UpdateWorkflowSuite) TestUpdateWorkflow_ContinueAsNew_UpdateIsNotCarrie
 	s.NoError(err)
 
 	update1Response := <-update1ResponseCh
-	s.Error(update1Response.err)
-	var notFound *serviceerror.NotFound
-	s.ErrorAs(update1Response.err, &notFound)
-	s.Equal("workflow execution already completed", update1Response.err.Error())
+	s.NoError(update1Response.err)
+	s.Equal("Workflow Update is failed because it was accepted by Workflow but then Workflow completed.", update1Response.response.GetOutcome().GetFailure().GetMessage())
 
 	update2Response := <-update2ResponseCh
 	s.Error(update2Response.err)
