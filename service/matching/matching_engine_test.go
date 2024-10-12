@@ -1990,7 +1990,7 @@ func (s *matchingEngineSuite) TestAddTaskAfterStartFailure() {
 	task, _, err := s.matchingEngine.pollTask(context.Background(), dbq.partition, &pollMetadata{})
 	s.NoError(err)
 
-	task.finish(errors.New("test error"))
+	task.finish(serviceerror.NewInternal("test error"), true)
 	s.EqualValues(1, s.taskManager.getTaskCount(dbq))
 	task2, _, err := s.matchingEngine.pollTask(context.Background(), dbq.partition, &pollMetadata{})
 	s.NoError(err)
@@ -2001,7 +2001,7 @@ func (s *matchingEngineSuite) TestAddTaskAfterStartFailure() {
 	s.Equal(task.event.Data.GetRunId(), task2.event.Data.GetRunId())
 	s.Equal(task.event.Data.GetScheduledEventId(), task2.event.Data.GetScheduledEventId())
 
-	task2.finish(nil)
+	task2.finish(nil, true)
 	s.EqualValues(0, s.taskManager.getTaskCount(dbq))
 }
 
@@ -2660,7 +2660,7 @@ func (s *matchingEngineSuite) TestUnknownBuildId_Match() {
 		s.NoError(err)
 		s.Equal("wf", task.event.Data.WorkflowId)
 		s.Equal(int64(123), task.event.Data.ScheduledEventId)
-		task.finish(nil)
+		task.finish(nil, true)
 		wg.Done()
 	}()
 
@@ -2763,7 +2763,7 @@ func (s *matchingEngineSuite) TestDemotedMatch() {
 	s.Require().NoError(err)
 	s.Equal("wf", task.event.Data.WorkflowId)
 	s.Equal(int64(123), task.event.Data.ScheduledEventId)
-	task.finish(nil)
+	task.finish(nil, true)
 }
 
 func (s *matchingEngineSuite) TestUnloadOnMembershipChange() {
