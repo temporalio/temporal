@@ -26,6 +26,7 @@ package quotas_test
 
 import (
 	"context"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -154,7 +155,6 @@ func TestClockedRateLimiter_Wait_DeadlineWouldExceed(t *testing.T) {
 
 // test that reservations for 1 token ARE unblocked by RecycleToken
 func TestClockedRateLimiter_Wait_Recycle(t *testing.T) {
-	t.Skip("flaky test")
 	t.Parallel()
 	ts := clock.NewEventTimeSource()
 	rl := quotas.NewClockedRateLimiter(rate.NewLimiter(1, 1), ts)
@@ -164,24 +164,24 @@ func TestClockedRateLimiter_Wait_Recycle(t *testing.T) {
 	assert.NoError(t, rl.Wait(ctx))
 
 	// wait for next token and report when success
-	asserted := false
+	var asserted atomic.Bool
+	asserted.Store(false)
 	go func() {
 		assert.NoError(t, rl.Wait(ctx))
-		asserted = true
+		asserted.Store(true)
 	}()
 	// wait for rl.Wait() to start and get to the select statement
-	time.Sleep(time.Second) // nolint
+	time.Sleep(10 * time.Millisecond) // nolint
 
 	// once a waiter exists, recycle the token instead of advancing time
 	rl.RecycleToken()
 
 	// wait until done so we know assert.NoError was called
-	assert.Eventually(t, func() bool { return asserted }, time.Second, time.Millisecond)
+	assert.Eventually(t, func() bool { return asserted.Load() }, time.Second, time.Millisecond)
 }
 
 // test that reservations for >1 token are NOT unblocked by RecycleToken
 func TestClockedRateLimiter_WaitN_NoRecycle(t *testing.T) {
-	t.Skip("flaky test")
 	t.Parallel()
 	ts := clock.NewEventTimeSource()
 
@@ -195,14 +195,15 @@ func TestClockedRateLimiter_WaitN_NoRecycle(t *testing.T) {
 	// wait for 2 tokens, which will never get a recycle
 	// expect a context cancel error instead once we advance time
 	// wait for next token and report when success
-	asserted := false
+	var asserted atomic.Bool
+	asserted.Store(false)
 	go func() {
 		err := rl.WaitN(ctx, 2)
 		assert.ErrorContains(t, err, quotas.ErrRateLimiterWaitInterrupted.Error())
-		asserted = true
+		asserted.Store(true)
 	}()
 	// wait for rl.Wait() to start and get to the select statement
-	time.Sleep(time.Second) // nolint
+	time.Sleep(10 * time.Millisecond) // nolint
 
 	// once a waiter exists, recycle the token instead of advancing time
 	rl.RecycleToken()
@@ -211,5 +212,5 @@ func TestClockedRateLimiter_WaitN_NoRecycle(t *testing.T) {
 	cancel()
 
 	// wait until done so we know assert.NoError was called
-	assert.Eventually(t, func() bool { return asserted }, time.Second, time.Millisecond)
+	assert.Eventually(t, func() bool { return asserted.Load() }, time.Second, time.Millisecond)
 }
