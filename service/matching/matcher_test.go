@@ -255,7 +255,7 @@ func (t *MatcherTestSuite) TestRejectSyncMatchWhenBacklog() {
 	go t.rootMatcher.MustOffer(ctx, oldBacklogTask, intruptC) //nolint:errcheck
 	time.Sleep(time.Millisecond)
 
-	//should not allow sync match when there is an old task in backlog
+	// should not allow sync match when there is an old task in backlog
 	happened, err = t.rootMatcher.Offer(ctx, historyTask)
 	t.False(happened)
 	t.Nil(err)
