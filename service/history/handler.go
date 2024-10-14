@@ -2440,7 +2440,9 @@ func (h *Handler) SyncWorkflowState(ctx context.Context, request *historyservice
 	return response, nil
 }
 
-func (h *Handler) UpdateActivityOptions(ctx context.Context, request *historyservice.UpdateActivityOptionsRequest) (*historyservice.UpdateActivityOptionsResponse, error) {
+func (h *Handler) UpdateActivityOptions(
+	ctx context.Context, request *historyservice.UpdateActivityOptionsRequest,
+) (response *historyservice.UpdateActivityOptionsResponse, retError error) {
 	defer metrics.CapturePanic(h.logger, h.metricsHandler, &retError)
 	h.startWG.Wait()
 
@@ -2459,11 +2461,7 @@ func (h *Handler) UpdateActivityOptions(ctx context.Context, request *historyser
 		return nil, h.convertError(err)
 	}
 
-	response, err := engine.RecordActivityTaskStarted(ctx, request)
-	if err != nil {
-		return nil, h.convertError(err)
-	}
-	response.Clock, err = shardContext.NewVectorClock()
+	response, err = engine.UpdateActivityOptions(ctx, request)
 	if err != nil {
 		return nil, h.convertError(err)
 	}
