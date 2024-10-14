@@ -222,7 +222,7 @@ func (t *MatcherTestSuite) validateSyncMatchWhenNoBacklog(ctx context.Context, h
 	go func() {
 		historyTask.responseC <- nil
 	}()
-	time.Sleep(2 * time.Millisecond)
+	time.Sleep(2 * time.Millisecond) //nolint:forbidigo
 	happened, err := t.rootMatcher.Offer(ctx, historyTask)
 	t.True(happened)
 	t.Nil(err)
