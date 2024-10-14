@@ -189,10 +189,14 @@ type Config struct {
 	// EnableNexusAPIs controls whether to allow invoking Nexus related APIs.
 	EnableNexusAPIs dynamicconfig.BoolPropertyFn
 
-	CallbackURLMaxLength        dynamicconfig.IntPropertyFnWithNamespaceFilter
-	CallbackHeaderMaxSize       dynamicconfig.IntPropertyFnWithNamespaceFilter
-	MaxCallbacksPerWorkflow     dynamicconfig.IntPropertyFnWithNamespaceFilter
-	CallbackEndpointConfigs     dynamicconfig.TypedPropertyFnWithNamespaceFilter[[]callbacks.AddressMatchRule]
+	CallbackURLMaxLength    dynamicconfig.IntPropertyFnWithNamespaceFilter
+	CallbackHeaderMaxSize   dynamicconfig.IntPropertyFnWithNamespaceFilter
+	MaxCallbacksPerWorkflow dynamicconfig.IntPropertyFnWithNamespaceFilter
+	CallbackEndpointConfigs dynamicconfig.TypedPropertyFnWithNamespaceFilter[[]callbacks.AddressMatchRule]
+
+	LinkMaxSize        dynamicconfig.IntPropertyFnWithNamespaceFilter
+	MaxLinksPerRequest dynamicconfig.IntPropertyFnWithNamespaceFilter
+
 	AdminEnableListHistoryTasks dynamicconfig.BoolPropertyFn
 
 	MaskInternalErrorDetails dynamicconfig.BoolPropertyFnWithNamespaceFilter
@@ -307,10 +311,14 @@ func NewConfig(
 		EnableWorkerVersioningWorkflow: dynamicconfig.FrontendEnableWorkerVersioningWorkflowAPIs.Get(dc),
 		EnableWorkerVersioningRules:    dynamicconfig.FrontendEnableWorkerVersioningRuleAPIs.Get(dc),
 
-		EnableNexusAPIs:             dynamicconfig.EnableNexus.Get(dc),
-		CallbackURLMaxLength:        dynamicconfig.FrontendCallbackURLMaxLength.Get(dc),
-		CallbackHeaderMaxSize:       dynamicconfig.FrontendCallbackHeaderMaxSize.Get(dc),
-		MaxCallbacksPerWorkflow:     dynamicconfig.MaxCallbacksPerWorkflow.Get(dc),
+		EnableNexusAPIs:         dynamicconfig.EnableNexus.Get(dc),
+		CallbackURLMaxLength:    dynamicconfig.FrontendCallbackURLMaxLength.Get(dc),
+		CallbackHeaderMaxSize:   dynamicconfig.FrontendCallbackHeaderMaxSize.Get(dc),
+		MaxCallbacksPerWorkflow: dynamicconfig.MaxCallbacksPerWorkflow.Get(dc),
+
+		LinkMaxSize:        dynamicconfig.FrontendLinkMaxSize.Get(dc),
+		MaxLinksPerRequest: dynamicconfig.FrontendMaxLinksPerRequest.Get(dc),
+
 		CallbackEndpointConfigs:     callbacks.AllowedAddresses.Get(dc),
 		AdminEnableListHistoryTasks: dynamicconfig.AdminEnableListHistoryTasks.Get(dc),
 

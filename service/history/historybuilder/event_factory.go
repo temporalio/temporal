@@ -374,6 +374,7 @@ func (b *EventFactory) CreateWorkflowExecutionTerminatedEvent(
 	reason string,
 	details *commonpb.Payloads,
 	identity string,
+	links []*commonpb.Link,
 ) *historypb.HistoryEvent {
 	event := b.createHistoryEvent(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TERMINATED, b.timeSource.Now())
 	event.Attributes = &historypb.HistoryEvent_WorkflowExecutionTerminatedEventAttributes{
@@ -383,6 +384,7 @@ func (b *EventFactory) CreateWorkflowExecutionTerminatedEvent(
 			Identity: identity,
 		},
 	}
+	event.Links = links
 	return event
 }
 
@@ -547,6 +549,7 @@ func (b *EventFactory) CreateWorkflowExecutionCancelRequestedEvent(request *hist
 			ExternalWorkflowExecution: request.ExternalWorkflowExecution,
 		},
 	}
+	event.Links = request.CancelRequest.Links
 	return event
 }
 
@@ -777,6 +780,7 @@ func (b *EventFactory) CreateWorkflowExecutionSignaledEvent(
 	header *commonpb.Header,
 	skipGenerateWorkflowTask bool,
 	externalWorkflowExecution *commonpb.WorkflowExecution,
+	links []*commonpb.Link,
 ) *historypb.HistoryEvent {
 	event := b.createHistoryEvent(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED, b.timeSource.Now())
 	event.Attributes = &historypb.HistoryEvent_WorkflowExecutionSignaledEventAttributes{
@@ -789,6 +793,7 @@ func (b *EventFactory) CreateWorkflowExecutionSignaledEvent(
 			ExternalWorkflowExecution: externalWorkflowExecution,
 		},
 	}
+	event.Links = links
 	return event
 }
 
