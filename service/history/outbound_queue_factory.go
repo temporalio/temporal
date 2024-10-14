@@ -294,7 +294,6 @@ func (f *outboundQueueFactory) CreateQueue(
 		f.DLQWriter,
 		f.Config.TaskDLQEnabled,
 		f.Config.TaskDLQUnexpectedErrorAttempts,
-		f.Config.TaskDLQInternalErrors,
 		f.Config.TaskDLQErrorPattern,
 	)
 	return queues.NewImmediateQueue(
@@ -307,6 +306,7 @@ func (f *outboundQueueFactory) CreateQueue(
 				BatchSize:            f.Config.OutboundTaskBatchSize,
 				MaxPendingTasksCount: f.Config.OutboundQueuePendingTaskMaxCount,
 				PollBackoffInterval:  f.Config.OutboundProcessorPollBackoffInterval,
+				MaxPredicateSize:     f.Config.OutboundQueueMaxPredicateSize,
 			},
 			MonitorOptions: queues.MonitorOptions{
 				PendingTasksCriticalCount: f.Config.OutboundQueuePendingTaskCriticalCount,

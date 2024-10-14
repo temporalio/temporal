@@ -29,7 +29,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/golang/mock/gomock"
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
 	commonpb "go.temporal.io/api/common/v1"
@@ -49,6 +48,7 @@ import (
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/resolver"
 	"go.temporal.io/server/common/searchattribute"
+	"go.uber.org/mock/gomock"
 )
 
 type (

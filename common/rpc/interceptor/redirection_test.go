@@ -29,7 +29,6 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/golang/mock/gomock"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -46,6 +45,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/testing/temporalapi"
+	"go.uber.org/mock/gomock"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
 )
@@ -144,6 +144,7 @@ func (s *redirectionInterceptorSuite) TestGlobalAPI() {
 		"RecordActivityTaskHeartbeatById":    {},
 		"RequestCancelWorkflowExecution":     {},
 		"ResetStickyTaskQueue":               {},
+		"ShutdownWorker":                     {},
 		"ResetWorkflowExecution":             {},
 		"RespondActivityTaskCanceled":        {},
 		"RespondActivityTaskCanceledById":    {},
@@ -179,10 +180,11 @@ func (s *redirectionInterceptorSuite) TestGlobalAPI() {
 		"GetWorkerVersioningRules":         {},
 		"GetWorkerTaskReachability":        {},
 
-		"StartBatchOperation":    {},
-		"StopBatchOperation":     {},
-		"DescribeBatchOperation": {},
-		"ListBatchOperations":    {},
+		"StartBatchOperation":       {},
+		"StopBatchOperation":        {},
+		"DescribeBatchOperation":    {},
+		"ListBatchOperations":       {},
+		"UpdateActivityOptionsById": {},
 	}, apis)
 }
 

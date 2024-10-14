@@ -23,15 +23,15 @@
 // THE SOFTWARE.
 
 // Generates all three generated files in this package:
-//go:generate go run ../../cmd/tools/rpcwrappers -service history
+//go:generate go run ../../cmd/tools/genrpcwrappers -service history
 
 package history
 
 import (
 	"context"
 	"fmt"
+	"math/rand"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"go.temporal.io/api/serviceerror"
@@ -64,11 +64,6 @@ type clientImpl struct {
 	redirector      redirector
 	timeout         time.Duration
 	tokenSerializer common.TaskTokenSerializer
-	// shardIndex is incremented every time a shard-agnostic API is invoked. It is used to load balance requests
-	// across hosts by picking an essentially random host. We use an index here so that we don't need to inject any
-	// random number generator in order to make tests deterministic. We use a uint instead of an int because we
-	// don't want this to become negative if we ever overflow.
-	shardIndex atomic.Uint32
 }
 
 // NewClient creates a new history service gRPC client
@@ -254,91 +249,25 @@ func (c *clientImpl) StreamWorkflowReplicationMessages(
 	if err != nil {
 		return nil, err
 	}
-	client, err := c.redirector.clientForShardID(targetClusterShardID.ShardID)
-	if err != nil {
-		return nil, err
-	}
-	return client.StreamWorkflowReplicationMessages(
-		metadata.NewOutgoingContext(ctx, ctxMetadata),
-		opts...,
-	)
-}
 
-// GetDLQTasks doesn't need redirects or routing because DLQ tasks are not sharded, so it just picks any available host
-// in the connection pool (or creates one) and forwards the request to it.
-func (c *clientImpl) GetDLQTasks(
-	ctx context.Context,
-	in *historyservice.GetDLQTasksRequest,
-	opts ...grpc.CallOption,
-) (*historyservice.GetDLQTasksResponse, error) {
-	historyClient, err := c.getAnyClient("GetDLQTasks")
-	if err != nil {
-		return nil, err
-	}
-	return historyClient.GetDLQTasks(ctx, in, opts...)
-}
-
-func (c *clientImpl) DeleteDLQTasks(
-	ctx context.Context,
-	in *historyservice.DeleteDLQTasksRequest,
-	opts ...grpc.CallOption,
-) (*historyservice.DeleteDLQTasksResponse, error) {
-	historyClient, err := c.getAnyClient("DeleteDLQTasks")
-	if err != nil {
-		return nil, err
-	}
-	return historyClient.DeleteDLQTasks(ctx, in, opts...)
-}
-
-func (c *clientImpl) ListQueues(
-	ctx context.Context,
-	in *historyservice.ListQueuesRequest,
-	opts ...grpc.CallOption,
-) (*historyservice.ListQueuesResponse, error) {
-	historyClient, err := c.getAnyClient("ListQueues")
-	if err != nil {
-		return nil, err
-	}
-	return historyClient.ListQueues(ctx, in, opts...)
-}
-
-func (c *clientImpl) ListTasks(
-	ctx context.Context,
-	in *historyservice.ListTasksRequest,
-	opts ...grpc.CallOption,
-) (*historyservice.ListTasksResponse, error) {
-	// Depth of the shardId field is 2 which is not supported by the rpcwrapper generator.
-	// Simply changing the maxDepth for ShardId field in the rpcwrapper generator will
-	// cause the generation logic for other methods to find more than one routing fields.
-
-	shardID := in.Request.GetShardId()
-	var response *historyservice.ListTasksResponse
+	var streamClient historyservice.HistoryService_StreamWorkflowReplicationMessagesClient
 	op := func(ctx context.Context, client historyservice.HistoryServiceClient) error {
 		var err error
-		ctx, cancel := c.createContext(ctx)
-		defer cancel()
-		response, err = client.ListTasks(ctx, in, opts...)
+		streamClient, err = client.StreamWorkflowReplicationMessages(
+			metadata.NewOutgoingContext(ctx, ctxMetadata),
+			opts...)
 		return err
 	}
-	if err := c.executeWithRedirect(ctx, shardID, op); err != nil {
+	if err := c.executeWithRedirect(ctx, targetClusterShardID.ShardID, op); err != nil {
 		return nil, err
 	}
-	return response, nil
+	return streamClient, nil
 }
 
-// getAnyClient returns an arbitrary client by looking up a client by a sequentially increasing shard ID. This is useful
-// for history APIs that are shard-agnostic (e.g. namespace or DLQ v2 APIs).
-func (c *clientImpl) getAnyClient(apiName string) (historyservice.HistoryServiceClient, error) {
-	// Subtract 1 so that the first index is 0 because Add returns the new value.
-	shardIndex := c.shardIndex.Add(1) - 1
+// getRandomShard returns a random shard ID for history APIs that are shard-agnostic (e.g. namespace or DLQ v2 APIs).
+func (c *clientImpl) getRandomShard() int32 {
 	// Add 1 at the end because shard IDs are 1-indexed.
-	shardID := shardIndex%uint32(c.numberOfShards) + 1
-	client, err := c.redirector.clientForShardID(int32(shardID))
-	if err != nil {
-		msg := fmt.Sprintf("can't find history host to serve API: %q, err: %v", apiName, err)
-		return nil, serviceerror.NewUnavailable(msg)
-	}
-	return client, nil
+	return int32(rand.Intn(int(c.numberOfShards)) + 1)
 }
 
 func (c *clientImpl) createContext(parent context.Context) (context.Context, context.CancelFunc) {

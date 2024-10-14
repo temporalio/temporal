@@ -436,9 +436,9 @@ func (t *timerQueueStandbyTaskExecutor) executeWorkflowRunTimeoutTask(
 	ctx context.Context,
 	timerTask *tasks.WorkflowRunTimeoutTask,
 ) error {
+
 	actionFn := func(_ context.Context, wfContext workflow.Context, mutableState workflow.MutableState) (interface{}, error) {
-		if !mutableState.IsWorkflowExecutionRunning() {
-			// workflow already finished, no need to process the timer
+		if !t.isValidWorkflowRunTimeoutTask(mutableState) {
 			return nil, nil
 		}
 
@@ -478,7 +478,7 @@ func (t *timerQueueStandbyTaskExecutor) executeWorkflowExecutionTimeoutTask(
 		wfContext workflow.Context,
 		mutableState workflow.MutableState,
 	) (interface{}, error) {
-		if !t.isValidExecutionTimeoutTask(mutableState, timerTask) {
+		if !t.isValidWorkflowExecutionTimeoutTask(mutableState, timerTask) {
 			return nil, nil
 		}
 
@@ -523,10 +523,12 @@ func (t *timerQueueStandbyTaskExecutor) executeStateMachineTimerTask(
 				if task.Concurrent() {
 					//nolint:revive // concurrent tasks implements hsm.ConcurrentTask interface
 					concurrentTask := task.(hsm.ConcurrentTask)
-					return concurrentTask.Validate(node)
+					if err := concurrentTask.Validate(node); err != nil {
+						return err
+					}
 				}
-				// If the task is expired and still valid in the standby queue,
-				// then the state machine is stale.
+				// If the timer fired and the task is still valid in the standby queue, wait for the active cluster to
+				// transition and invalidate the task.
 				return consts.ErrTaskRetry
 			},
 		)

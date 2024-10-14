@@ -52,7 +52,7 @@ func TestNewRegistry(t *testing.T) {
 		reg := update.NewRegistry(emptyUpdateStore)
 
 		require.Empty(t, reg.Len())
-		require.False(t, reg.Contains(tv.UpdateID()))
+		require.Nil(t, reg.Find(context.Background(), tv.UpdateID()))
 	})
 
 	t.Run("registry created from store with update in stateAdmitted contains admitted update", func(t *testing.T) {
@@ -70,7 +70,7 @@ func TestNewRegistry(t *testing.T) {
 		evStore := mockEventStore{Controller: effect.Immediate(context.Background())}
 
 		require.Equal(t, 1, reg.Len())
-		require.True(t, reg.Contains(tv.UpdateID()))
+		require.NotNil(t, reg.Find(context.Background(), tv.UpdateID()))
 
 		upd := reg.Find(context.Background(), tv.UpdateID())
 		require.NotNil(t, upd)
@@ -99,7 +99,7 @@ func TestNewRegistry(t *testing.T) {
 		evStore := mockEventStore{Controller: effect.Immediate(context.Background())}
 
 		require.Equal(t, 1, reg.Len())
-		require.True(t, reg.Contains(tv.UpdateID()))
+		require.NotNil(t, reg.Find(context.Background(), tv.UpdateID()))
 
 		upd := reg.Find(context.Background(), tv.UpdateID())
 		require.NotNil(t, upd)
@@ -127,7 +127,7 @@ func TestNewRegistry(t *testing.T) {
 		})
 
 		require.Equal(t, 1, reg.Len())
-		require.True(t, reg.Contains(tv.UpdateID()))
+		require.NotNil(t, reg.Find(context.Background(), tv.UpdateID()))
 
 		upd := reg.Find(context.Background(), tv.UpdateID())
 		require.NotNil(t, upd)

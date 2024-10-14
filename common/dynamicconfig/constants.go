@@ -409,6 +409,11 @@ If exceeded, failure will be truncated before being stored in mutable state.`,
 		1*1024*1024,
 		`MutableStateSizeLimitWarn is the per workflow execution mutable state size limit in bytes for warning`,
 	)
+	MutableStateTombstoneCountLimit = NewGlobalIntSetting(
+		"limit.mutableStateTombstoneCountLimit",
+		16,
+		`MutableStateTombstoneCountLimit is the maximum number of deleted sub state machines tracked in mutable state.`,
+	)
 	HistoryCountSuggestContinueAsNew = NewNamespaceIntSetting(
 		"limit.historyCount.suggestContinueAsNew",
 		4*1024,
@@ -882,6 +887,16 @@ used when the first cache layer has a miss. Requires server restart for change t
 		"system.maxCallbacksPerWorkflow",
 		32,
 		`MaxCallbacksPerWorkflow is the maximum number of callbacks that can be attached to a workflow.`,
+	)
+	FrontendLinkMaxSize = NewNamespaceIntSetting(
+		"frontend.linkMaxSize",
+		4000, // Links may include a workflow ID and namespace name, both of which are limited to a length of 1000.
+		`Maximum size in bytes of temporal.api.common.v1.Link object in an API request.`,
+	)
+	FrontendMaxLinksPerRequest = NewNamespaceIntSetting(
+		"frontend.maxlinksPerRequest",
+		10,
+		`Maximum number of links allowed to be attached via a single API request.`,
 	)
 	FrontendMaxConcurrentBatchOperationPerNamespace = NewNamespaceIntSetting(
 		"frontend.MaxConcurrentBatchOperationPerNamespace",
@@ -1453,6 +1468,15 @@ count is exceeded. But since queue action is async, we need this hard limit.
 NOTE: The outbound queue has a separate configuration: outboundQueuePendingTaskMaxCount.
 `,
 	)
+	QueueMaxPredicateSize = NewGlobalIntSetting(
+		"history.queueMaxPredicateSize",
+		0,
+		`The max size of the multi-cursor predicate structure stored in the shard info record. 0 is considered
+unlimited. When the predicate size is surpassed for a given scope, the predicate is converted to a universal predicate,
+which causes all tasks in the scope's range to eventually be reprocessed without applying any filtering logic.
+NOTE: The outbound queue has a separate configuration: outboundQueueMaxPredicateSize.
+`,
+	)
 
 	TaskSchedulerEnableRateLimiter = NewGlobalBoolSetting(
 		"history.taskSchedulerEnableRateLimiter",
@@ -1657,6 +1681,16 @@ critical count is exceeded. But since queue action is async, we need this hard l
 		9000,
 		`Max number of pending tasks in the outbound queue before triggering slice splitting and unloading.`,
 	)
+	OutboundQueueMaxPredicateSize = NewGlobalIntSetting(
+		"history.outboundQueueMaxPredicateSize",
+		10*1024,
+		`The max size of the multi-cursor predicate structure stored in the shard info record for the outbound queue. 0
+is considered unlimited. When the predicate size is surpassed for a given scope, the predicate is converted to a
+universal predicate, which causes all tasks in the scope's range to eventually be reprocessed without applying any
+filtering logic.
+`,
+	)
+
 	OutboundProcessorMaxPollRPS = NewGlobalIntSetting(
 		"history.outboundProcessorMaxPollRPS",
 		20,
@@ -2143,12 +2177,6 @@ Do not turn this on if you aren't using Cassandra as the history task DLQ is not
 		70, // 70 attempts takes about an hour
 		`HistoryTaskDLQUnexpectedErrorAttempts is the number of task execution attempts before sending the task to DLQ.`,
 	)
-	HistoryTaskDLQInternalErrors = NewGlobalBoolSetting(
-		"history.TaskDLQInternalErrors",
-		false,
-		`HistoryTaskDLQInternalErrors causes history task processing to send tasks failing with serviceerror.Internal to
-the dlq (or will drop them if not enabled)`,
-	)
 	HistoryTaskDLQErrorPattern = NewGlobalStringSetting(
 		"history.TaskDLQErrorPattern",
 		"",
@@ -2500,5 +2528,11 @@ WorkerActivitiesPerSecond, MaxConcurrentActivityTaskPollers.
 		"system.logAllReqErrors",
 		false,
 		`When set to true, logs all RPC/request errors for the namespace, not just unexpected ones.`,
+	)
+
+	ActivityAPIsEnabled = NewNamespaceBoolSetting(
+		"frontend.activityAPIsEnabled",
+		false,
+		`ActivityAPIsEnabled is a "feature enable" flag. `,
 	)
 )

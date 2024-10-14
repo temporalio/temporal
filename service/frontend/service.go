@@ -189,10 +189,14 @@ type Config struct {
 	// EnableNexusAPIs controls whether to allow invoking Nexus related APIs.
 	EnableNexusAPIs dynamicconfig.BoolPropertyFn
 
-	CallbackURLMaxLength        dynamicconfig.IntPropertyFnWithNamespaceFilter
-	CallbackHeaderMaxSize       dynamicconfig.IntPropertyFnWithNamespaceFilter
-	MaxCallbacksPerWorkflow     dynamicconfig.IntPropertyFnWithNamespaceFilter
-	CallbackEndpointConfigs     dynamicconfig.TypedPropertyFnWithNamespaceFilter[[]callbacks.AddressMatchRule]
+	CallbackURLMaxLength    dynamicconfig.IntPropertyFnWithNamespaceFilter
+	CallbackHeaderMaxSize   dynamicconfig.IntPropertyFnWithNamespaceFilter
+	MaxCallbacksPerWorkflow dynamicconfig.IntPropertyFnWithNamespaceFilter
+	CallbackEndpointConfigs dynamicconfig.TypedPropertyFnWithNamespaceFilter[[]callbacks.AddressMatchRule]
+
+	LinkMaxSize        dynamicconfig.IntPropertyFnWithNamespaceFilter
+	MaxLinksPerRequest dynamicconfig.IntPropertyFnWithNamespaceFilter
+
 	AdminEnableListHistoryTasks dynamicconfig.BoolPropertyFn
 
 	MaskInternalErrorDetails dynamicconfig.BoolPropertyFnWithNamespaceFilter
@@ -201,6 +205,10 @@ type Config struct {
 	HistoryHostErrorPercentage dynamicconfig.FloatPropertyFn
 
 	LogAllReqErrors dynamicconfig.BoolPropertyFnWithNamespaceFilter
+
+	EnableEagerWorkflowStart dynamicconfig.BoolPropertyFnWithNamespaceFilter
+
+	ActivityAPIsEnabled dynamicconfig.BoolPropertyFnWithNamespaceFilter
 }
 
 // NewConfig returns new service config with default values
@@ -303,18 +311,23 @@ func NewConfig(
 		EnableWorkerVersioningWorkflow: dynamicconfig.FrontendEnableWorkerVersioningWorkflowAPIs.Get(dc),
 		EnableWorkerVersioningRules:    dynamicconfig.FrontendEnableWorkerVersioningRuleAPIs.Get(dc),
 
-		EnableNexusAPIs:             dynamicconfig.EnableNexus.Get(dc),
-		CallbackURLMaxLength:        dynamicconfig.FrontendCallbackURLMaxLength.Get(dc),
-		CallbackHeaderMaxSize:       dynamicconfig.FrontendCallbackHeaderMaxSize.Get(dc),
-		MaxCallbacksPerWorkflow:     dynamicconfig.MaxCallbacksPerWorkflow.Get(dc),
+		EnableNexusAPIs:         dynamicconfig.EnableNexus.Get(dc),
+		CallbackURLMaxLength:    dynamicconfig.FrontendCallbackURLMaxLength.Get(dc),
+		CallbackHeaderMaxSize:   dynamicconfig.FrontendCallbackHeaderMaxSize.Get(dc),
+		MaxCallbacksPerWorkflow: dynamicconfig.MaxCallbacksPerWorkflow.Get(dc),
+
+		LinkMaxSize:        dynamicconfig.FrontendLinkMaxSize.Get(dc),
+		MaxLinksPerRequest: dynamicconfig.FrontendMaxLinksPerRequest.Get(dc),
+
 		CallbackEndpointConfigs:     callbacks.AllowedAddresses.Get(dc),
 		AdminEnableListHistoryTasks: dynamicconfig.AdminEnableListHistoryTasks.Get(dc),
 
 		MaskInternalErrorDetails: dynamicconfig.FrontendMaskInternalErrorDetails.Get(dc),
 
 		HistoryHostErrorPercentage: dynamicconfig.HistoryHostErrorPercentage.Get(dc),
-
-		LogAllReqErrors: dynamicconfig.LogAllReqErrors.Get(dc),
+		LogAllReqErrors:            dynamicconfig.LogAllReqErrors.Get(dc),
+		EnableEagerWorkflowStart:   dynamicconfig.EnableEagerWorkflowStart.Get(dc),
+		ActivityAPIsEnabled:        dynamicconfig.ActivityAPIsEnabled.Get(dc),
 	}
 }
 

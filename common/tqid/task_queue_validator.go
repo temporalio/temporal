@@ -72,8 +72,11 @@ func NormalizeAndValidate(
 	}
 
 	if taskQueue.GetKind() == enumspb.TASK_QUEUE_KIND_STICKY {
-		if err := Validate(taskQueue.GetNormalName(), maxIDLengthLimit); err != nil {
-			return err
+		normalName := taskQueue.GetNormalName()
+		if normalName != "" {
+			if err := Validate(normalName, maxIDLengthLimit); err != nil {
+				return err
+			}
 		}
 	}
 

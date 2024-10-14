@@ -29,14 +29,13 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"go.temporal.io/api/workflowservice/v1"
-	"go.temporal.io/api/workflowservicemock/v1"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	"go.uber.org/mock/gomock"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
 )
@@ -60,13 +59,12 @@ type (
 		suite.Suite
 		*require.Assertions
 
-		controller          *gomock.Controller
-		mockFrontendHandler *workflowservicemock.MockWorkflowServiceServer
-		mockAuthorizer      *MockAuthorizer
-		mockMetricsHandler  *metrics.MockHandler
-		interceptor         *Interceptor
-		handler             grpc.UnaryHandler
-		mockClaimMapper     *MockClaimMapper
+		controller         *gomock.Controller
+		mockAuthorizer     *MockAuthorizer
+		mockMetricsHandler *metrics.MockHandler
+		interceptor        *Interceptor
+		handler            grpc.UnaryHandler
+		mockClaimMapper    *MockClaimMapper
 	}
 
 	mockNamespaceChecker namespace.Name
@@ -81,7 +79,6 @@ func (s *authorizerInterceptorSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 	s.controller = gomock.NewController(s.T())
 
-	s.mockFrontendHandler = workflowservicemock.NewMockWorkflowServiceServer(s.controller)
 	s.mockAuthorizer = NewMockAuthorizer(s.controller)
 	s.mockMetricsHandler = metrics.NewMockHandler(s.controller)
 	s.mockMetricsHandler.EXPECT().WithTags(

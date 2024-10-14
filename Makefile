@@ -9,7 +9,7 @@ bins: temporal-server temporal-cassandra-tool temporal-sql-tool tdbg
 all: clean proto bins check test
 
 # Used in CI
-ci-build-misc: print-go-version proto buf-breaking bins temporal-server-debug shell-check copyright-check go-generate goimports-all gomodtidy ensure-no-changes
+ci-build-misc: print-go-version proto go-generate buf-breaking bins temporal-server-debug shell-check copyright-check goimports-all gomodtidy ensure-no-changes
 
 # Delete all build artifacts
 clean: clean-bins clean-test-results
@@ -18,7 +18,7 @@ clean: clean-bins clean-test-results
 	rm -rf $(LOCALBIN)
 
 # Recompile proto files.
-proto: lint-protos lint-api protoc service-clients
+proto: lint-protos lint-api protoc proto-codegen
 ########################################################################
 
 .PHONY: proto protoc install bins ci-build-misc clean
@@ -64,7 +64,9 @@ define NEWLINE
 
 endef
 
-TEST_TIMEOUT := 25m
+# 30 minutes is the upper bound defined for all tests, the longer running ones at the time of writing are XDC tests. The
+# 30 minute timeout is also defined in run-tests.yml
+TEST_TIMEOUT ?= 30m
 
 PROTO_ROOT := proto
 PROTO_FILES = $(shell find ./$(PROTO_ROOT)/internal -name "*.proto")
@@ -88,7 +90,7 @@ FUNCTIONAL_TEST_NDC_ROOT      := ./tests/ndc
 DB_INTEGRATION_TEST_ROOT      := ./common/persistence/tests
 DB_TOOL_INTEGRATION_TEST_ROOT := ./tools/tests
 INTEGRATION_TEST_DIRS := $(DB_INTEGRATION_TEST_ROOT) $(DB_TOOL_INTEGRATION_TEST_ROOT) ./temporaltest ./internal/temporalite
-UNIT_TEST_DIRS := $(filter-out $(FUNCTIONAL_TEST_ROOT)% $(FUNCTIONAL_TEST_XDC_ROOT)% $(FUNCTIONAL_TEST_NDC_ROOT)% $(DB_INTEGRATION_TEST_ROOT)% $(DB_TOOL_INTEGRATION_TEST_ROOT)% ./temporaltest% ./internal/temporalite%,$(TEST_DIRS))
+UNIT_TEST_DIRS ?= $(filter-out $(FUNCTIONAL_TEST_ROOT)% $(FUNCTIONAL_TEST_XDC_ROOT)% $(FUNCTIONAL_TEST_NDC_ROOT)% $(DB_INTEGRATION_TEST_ROOT)% $(DB_TOOL_INTEGRATION_TEST_ROOT)% ./temporaltest% ./internal/temporalite%,$(TEST_DIRS))
 
 # github.com/urfave/cli/v2@v2.4.0             - needs to accept comma in values before unlocking https://github.com/urfave/cli/pull/1241.
 PINNED_DEPENDENCIES := \
@@ -177,10 +179,10 @@ $(STAMPDIR)/goimports-$(GOIMPORTS_VER): | $(STAMPDIR) $(LOCALBIN)
 $(GOIMPORTS): $(STAMPDIR)/goimports-$(GOIMPORTS_VER)
 
 # Mockgen is called by name throughout the codebase, so we need to keep the binary name consistent
-MOCKGEN_VER := v1.7.0-rc.1
+MOCKGEN_VER := v0.4.0
 MOCKGEN := $(LOCALBIN)/mockgen
 $(STAMPDIR)/mockgen-$(MOCKGEN_VER): | $(STAMPDIR) $(LOCALBIN)
-	$(call go-install-tool,$(MOCKGEN),github.com/golang/mock/mockgen,$(MOCKGEN_VER))
+	$(call go-install-tool,$(MOCKGEN),go.uber.org/mock/mockgen,$(MOCKGEN_VER))
 	@touch $@
 $(MOCKGEN): $(STAMPDIR)/mockgen-$(MOCKGEN_VER)
 
@@ -243,9 +245,13 @@ protoc: $(PROTOGEN) $(MOCKGEN) $(GOIMPORTS) $(PROTOC_GEN_GO) $(PROTOC_GEN_GO_GRP
 		API_BINPB=$(API_BINPB) PROTO_ROOT=$(PROTO_ROOT) PROTO_OUT=$(PROTO_OUT) \
 		./develop/protoc.sh
 
-service-clients:
+proto-codegen:
 	@printf $(COLOR) "Generate service clients..."
-	@go generate -run rpcwrappers ./client/...
+	@go generate -run genrpcwrappers ./client/...
+	@printf $(COLOR) "Generate server interceptors..."
+	@go generate ./common/rpc/interceptor/logtags/...
+	@printf $(COLOR) "Generate search attributes helpers..."
+	@go generate -run gensearchattributehelpers ./common/searchattribute/...
 
 update-go-api:
 	@printf $(COLOR) "Update go.temporal.io/api@master..."
@@ -377,8 +383,8 @@ prepare-coverage-test: $(GOTESTSUM) $(TEST_OUTPUT_ROOT)
 
 unit-test-coverage: prepare-coverage-test
 	@printf $(COLOR) "Run unit tests with coverage..."
-	@$(GOTESTSUM) --junitfile $(NEW_REPORT) -- \
-		$(UNIT_TEST_DIRS) -shuffle on -timeout=$(TEST_TIMEOUT) -race $(TEST_TAG_FLAG) -coverprofile=$(NEW_COVER_PROFILE)
+	$(GOTESTSUM) --junitfile $(NEW_REPORT) -- \
+		$(UNIT_TEST_DIRS) -shuffle on -timeout=$(TEST_TIMEOUT) -race $(TEST_TAG_FLAG) $(SINGLE_TEST_ARGS) -coverprofile=$(NEW_COVER_PROFILE)
 
 integration-test-coverage: prepare-coverage-test
 	@printf $(COLOR) "Run integration tests with coverage..."
@@ -391,8 +397,10 @@ pre-build-functional-test-coverage: prepare-coverage-test
 
 functional-test-coverage: prepare-coverage-test
 	@printf $(COLOR) "Run functional tests with coverage with $(PERSISTENCE_DRIVER) driver..."
-	@$(GOTESTSUM) --junitfile $(NEW_REPORT) -- \
-		$(FUNCTIONAL_TEST_ROOT) -shuffle on -timeout=$(TEST_TIMEOUT) $(TEST_ARGS) $(TEST_TAG_FLAG) -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER) $(FUNCTIONAL_TEST_COVERPKG) -coverprofile=$(NEW_COVER_PROFILE)
+	$(GOTESTSUM) --junitfile $(NEW_REPORT) -- \
+		$(FUNCTIONAL_TEST_ROOT) -shuffle on -timeout=$(TEST_TIMEOUT) $(TEST_ARGS) $(SINGLE_TEST_ARGS) $(TEST_TAG_FLAG) \
+		 -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER) \
+		 $(FUNCTIONAL_TEST_COVERPKG) -coverprofile=$(NEW_COVER_PROFILE)
 
 functional-test-xdc-coverage: prepare-coverage-test
 	@printf $(COLOR) "Run functional test for cross DC with coverage with $(PERSISTENCE_DRIVER) driver..."

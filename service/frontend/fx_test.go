@@ -31,7 +31,6 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -45,6 +44,7 @@ import (
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/rpc"
 	"go.temporal.io/server/internal/nettest"
+	"go.uber.org/mock/gomock"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/metadata"
@@ -273,9 +273,9 @@ func TestRateLimitInterceptorProvider(t *testing.T) {
 				return pipe.Connect(ctx.Done())
 			})
 			transportCredentials := grpc.WithTransportCredentials(insecure.NewCredentials())
-			conn, err := grpc.DialContext(context.Background(), "fake", dialer, transportCredentials)
+			conn, err := grpc.NewClient("localhost", dialer, transportCredentials)
 			require.NoError(t, err)
-
+			conn.Connect()
 			defer server.Stop()
 
 			client := workflowservice.NewWorkflowServiceClient(conn)
@@ -629,7 +629,7 @@ func TestNamespaceRateLimitInterceptorProvider(t *testing.T) {
 				return pipe.Connect(ctx.Done())
 			})
 			transportCredentials := grpc.WithTransportCredentials(insecure.NewCredentials())
-			conn, err := grpc.DialContext(context.Background(), "fake", dialer, transportCredentials)
+			conn, err := grpc.NewClient("localhost", dialer, transportCredentials)
 			require.NoError(t, err)
 
 			defer server.Stop()
@@ -816,7 +816,7 @@ func TestNamespaceRateLimitMetrics(t *testing.T) {
 				return pipe.Connect(ctx.Done())
 			})
 			transportCredentials := grpc.WithTransportCredentials(insecure.NewCredentials())
-			conn, err := grpc.DialContext(context.Background(), "fake", dialer, transportCredentials)
+			conn, err := grpc.NewClient("localhost", dialer, transportCredentials)
 			require.NoError(t, err)
 
 			defer server.Stop()

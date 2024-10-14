@@ -192,7 +192,14 @@ type (
 		AddWorkflowPropertiesModifiedEvent(int64, *commandpb.ModifyWorkflowPropertiesCommandAttributes) (*historypb.HistoryEvent, error)
 		AddWorkflowExecutionCancelRequestedEvent(*historyservice.RequestCancelWorkflowExecutionRequest) (*historypb.HistoryEvent, error)
 		AddWorkflowExecutionCanceledEvent(int64, *commandpb.CancelWorkflowExecutionCommandAttributes) (*historypb.HistoryEvent, error)
-		AddWorkflowExecutionSignaled(signalName string, input *commonpb.Payloads, identity string, header *commonpb.Header, skipGenerateWorkflowTask bool) (*historypb.HistoryEvent, error)
+		AddWorkflowExecutionSignaled(
+			signalName string,
+			input *commonpb.Payloads,
+			identity string,
+			header *commonpb.Header,
+			skipGenerateWorkflowTask bool,
+			links []*commonpb.Link,
+		) (*historypb.HistoryEvent, error)
 		AddWorkflowExecutionSignaledEvent(
 			signalName string,
 			input *commonpb.Payloads,
@@ -200,10 +207,11 @@ type (
 			header *commonpb.Header,
 			skipGenerateWorkflowTask bool,
 			externalWorkflowExecution *commonpb.WorkflowExecution,
+			links []*commonpb.Link,
 		) (*historypb.HistoryEvent, error)
 		AddWorkflowExecutionStartedEvent(*commonpb.WorkflowExecution, *historyservice.StartWorkflowExecutionRequest) (*historypb.HistoryEvent, error)
 		AddWorkflowExecutionStartedEventWithOptions(*commonpb.WorkflowExecution, *historyservice.StartWorkflowExecutionRequest, *workflowpb.ResetPoints, string, string) (*historypb.HistoryEvent, error)
-		AddWorkflowExecutionTerminatedEvent(firstEventID int64, reason string, details *commonpb.Payloads, identity string, deleteAfterTerminate bool) (*historypb.HistoryEvent, error)
+		AddWorkflowExecutionTerminatedEvent(firstEventID int64, reason string, details *commonpb.Payloads, identity string, deleteAfterTerminate bool, links []*commonpb.Link) (*historypb.HistoryEvent, error)
 
 		AddWorkflowExecutionUpdateAcceptedEvent(protocolInstanceID string, acceptedRequestMessageId string, acceptedRequestSequencingEventId int64, acceptedRequest *updatepb.Request) (*historypb.HistoryEvent, error)
 		AddWorkflowExecutionUpdateCompletedEvent(acceptedEventID int64, updResp *updatepb.Response) (*historypb.HistoryEvent, error)
@@ -254,6 +262,7 @@ type (
 		GetPendingChildExecutionInfos() map[int64]*persistencespb.ChildExecutionInfo
 		GetPendingRequestCancelExternalInfos() map[int64]*persistencespb.RequestCancelInfo
 		GetPendingSignalExternalInfos() map[int64]*persistencespb.SignalInfo
+		GetPendingSignalRequestedIds() []string
 		GetRequestCancelInfo(int64) (*persistencespb.RequestCancelInfo, bool)
 		GetRetryBackoffDuration(failure *failurepb.Failure) (time.Duration, enumspb.RetryState)
 		GetCronBackoffDuration() time.Duration

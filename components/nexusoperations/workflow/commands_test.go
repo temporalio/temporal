@@ -28,7 +28,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 	commandpb "go.temporal.io/api/command/v1"
 	"go.temporal.io/api/common/v1"
@@ -45,6 +44,7 @@ import (
 	"go.temporal.io/server/service/history/hsm"
 	"go.temporal.io/server/service/history/tests"
 	"go.temporal.io/server/service/history/workflow"
+	"go.uber.org/mock/gomock"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -70,6 +70,8 @@ var defaultConfig = &nexusoperations.Config{
 	MaxServiceNameLength:               dynamicconfig.GetIntPropertyFnFilteredByNamespace(len("service")),
 	MaxOperationNameLength:             dynamicconfig.GetIntPropertyFnFilteredByNamespace(len("op")),
 	MaxConcurrentOperations:            dynamicconfig.GetIntPropertyFnFilteredByNamespace(2),
+	MaxOperationHeaderSize:             dynamicconfig.GetIntPropertyFnFilteredByNamespace(20),
+	DisallowedOperationHeaders:         dynamicconfig.GetTypedPropertyFnFilteredByNamespace([]string{"request-timeout"}),
 	MaxOperationScheduleToCloseTimeout: dynamicconfig.GetDurationPropertyFnFilteredByNamespace(time.Hour * 24),
 	EndpointNotFoundAlwaysNonRetryable: dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false),
 }
@@ -211,6 +213,48 @@ func TestHandleScheduleCommand(t *testing.T) {
 					Endpoint:  "endpoint",
 					Service:   "service",
 					Operation: "too long",
+				},
+			},
+		})
+		var failWFTErr workflow.FailWorkflowTaskError
+		require.ErrorAs(t, err, &failWFTErr)
+		require.False(t, failWFTErr.TerminateWorkflow)
+		require.Equal(t, enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SCHEDULE_NEXUS_OPERATION_ATTRIBUTES, failWFTErr.Cause)
+		require.Equal(t, 0, len(tcx.history.Events))
+	})
+
+	t.Run("exceeds max operation header size", func(t *testing.T) {
+		tcx := newTestContext(t, defaultConfig)
+		err := tcx.scheduleHandler(context.Background(), tcx.ms, commandValidator{maxPayloadSize: 1}, 1, &commandpb.Command{
+			Attributes: &commandpb.Command_ScheduleNexusOperationCommandAttributes{
+				ScheduleNexusOperationCommandAttributes: &commandpb.ScheduleNexusOperationCommandAttributes{
+					Endpoint:  "endpoint",
+					Service:   "service",
+					Operation: "op",
+					NexusHeader: map[string]string{
+						"key1234567890": "value1234567890",
+					},
+				},
+			},
+		})
+		var failWFTErr workflow.FailWorkflowTaskError
+		require.ErrorAs(t, err, &failWFTErr)
+		require.False(t, failWFTErr.TerminateWorkflow)
+		require.Equal(t, enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SCHEDULE_NEXUS_OPERATION_ATTRIBUTES, failWFTErr.Cause)
+		require.Equal(t, 0, len(tcx.history.Events))
+	})
+
+	t.Run("invalid header keys", func(t *testing.T) {
+		tcx := newTestContext(t, defaultConfig)
+		err := tcx.scheduleHandler(context.Background(), tcx.ms, commandValidator{maxPayloadSize: 1}, 1, &commandpb.Command{
+			Attributes: &commandpb.Command_ScheduleNexusOperationCommandAttributes{
+				ScheduleNexusOperationCommandAttributes: &commandpb.ScheduleNexusOperationCommandAttributes{
+					Endpoint:  "endpoint",
+					Service:   "service",
+					Operation: "op",
+					NexusHeader: map[string]string{
+						"request-timeout": "1s",
+					},
 				},
 			},
 		})
@@ -524,17 +568,12 @@ func TestHandleCancelCommand(t *testing.T) {
 		require.NoError(t, err)
 		require.NotNil(t, child)
 
-		require.Equal(t, 3, len(tcx.history.Events))
+		require.Equal(t, 2, len(tcx.history.Events))
 		crAttrs := tcx.history.Events[1].GetNexusOperationCancelRequestedEventAttributes()
 		require.Equal(t, event.EventId, crAttrs.ScheduledEventId)
 		require.Equal(t, int64(1), crAttrs.WorkflowTaskCompletedEventId)
 		savedUserMetadata := tcx.history.Events[1].GetUserMetadata()
 		require.EqualExportedValues(t, userMetadata, savedUserMetadata)
-
-		cAttrs := tcx.history.Events[2].GetNexusOperationCanceledEventAttributes()
-		require.Equal(t, event.EventId, cAttrs.ScheduledEventId)
-		require.Equal(t, "operation canceled before started", cAttrs.Failure.Cause.Message)
-		require.NotNil(t, cAttrs.Failure.Cause.GetCanceledFailureInfo())
 
 		child, err = child.Child([]hsm.Key{nexusoperations.CancelationMachineKey})
 		require.NoError(t, err)

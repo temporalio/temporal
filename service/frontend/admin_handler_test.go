@@ -29,18 +29,20 @@ import (
 	"errors"
 	"fmt"
 	"math/rand"
+	"strings"
 	"sync"
 	"testing"
 
-	"github.com/golang/mock/gomock"
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	historypb "go.temporal.io/api/history/v1"
 	namespacepb "go.temporal.io/api/namespace/v1"
 	"go.temporal.io/api/serviceerror"
+	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/adminservice/v1"
@@ -49,12 +51,16 @@ import (
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/historyservicemock/v1"
+	"go.temporal.io/server/api/matchingservice/v1"
+	"go.temporal.io/server/api/matchingservicemock/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	clientmocks "go.temporal.io/server/client"
 	historyclient "go.temporal.io/server/client/history"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/config"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
@@ -65,9 +71,15 @@ import (
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/resourcetest"
 	"go.temporal.io/server/common/searchattribute"
+	test "go.temporal.io/server/common/testing"
+	"go.temporal.io/server/common/testing/historyrequire"
 	"go.temporal.io/server/common/testing/mocksdk"
+	"go.temporal.io/server/common/testing/protorequire"
+	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/worker/dlq"
+	"go.uber.org/mock/gomock"
+	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/health"
 	"google.golang.org/grpc/metadata"
@@ -77,6 +89,8 @@ type (
 	adminHandlerSuite struct {
 		suite.Suite
 		*require.Assertions
+		historyrequire.HistoryRequire
+		protorequire.ProtoAssertions
 
 		controller         *gomock.Controller
 		mockResource       *resourcetest.Test
@@ -90,6 +104,8 @@ type (
 		mockAdminClient            *adminservicemock.MockAdminServiceClient
 		mockMetadata               *cluster.MockMetadata
 		mockProducer               *persistence.MockNamespaceReplicationQueue
+		mockMatchingClient         *matchingservicemock.MockMatchingServiceClient
+		mockSaMapper               *searchattribute.MockMapper
 
 		namespace      namespace.Name
 		namespaceID    namespace.ID
@@ -106,6 +122,8 @@ func TestAdminHandlerSuite(t *testing.T) {
 
 func (s *adminHandlerSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
+	s.ProtoAssertions = protorequire.New(s.T())
+	s.HistoryRequire = historyrequire.New(s.T())
 
 	s.namespace = "some random namespace name"
 	s.namespaceID = "deadd0d0-c001-face-d00d-000000000000"
@@ -131,6 +149,11 @@ func (s *adminHandlerSuite) SetupTest() {
 	s.mockMetadata = s.mockResource.ClusterMetadata
 	s.mockVisibilityMgr = s.mockResource.VisibilityManager
 	s.mockProducer = persistence.NewMockNamespaceReplicationQueue(s.controller)
+	s.mockMatchingClient = s.mockResource.MatchingClient
+
+	mockSaMapperProvider := searchattribute.NewMockMapperProvider(s.controller)
+	s.mockSaMapper = searchattribute.NewMockMapper(s.controller)
+	mockSaMapperProvider.EXPECT().GetMapper(s.namespace).Return(s.mockSaMapper, nil).AnyTimes()
 
 	persistenceConfig := &config.Persistence{
 		NumHistoryShards: 1,
@@ -138,6 +161,12 @@ func (s *adminHandlerSuite) SetupTest() {
 
 	cfg := &Config{
 		NumHistoryShards: 4,
+
+		SearchAttributesNumberOfKeysLimit:     dynamicconfig.GetIntPropertyFnFilteredByNamespace(10),
+		SearchAttributesSizeOfValueLimit:      dynamicconfig.GetIntPropertyFnFilteredByNamespace(10),
+		SearchAttributesTotalSizeLimit:        dynamicconfig.GetIntPropertyFnFilteredByNamespace(10),
+		VisibilityAllowList:                   dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false),
+		SuppressErrorSetSystemSearchAttribute: dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false),
 	}
 	args := NewAdminHandlerArgs{
 		persistenceConfig,
@@ -145,7 +174,7 @@ func (s *adminHandlerSuite) SetupTest() {
 		s.mockResource.GetNamespaceReplicationQueue(),
 		s.mockProducer,
 		s.mockResource.ESClient,
-		s.mockResource.GetVisibilityManager(),
+		s.mockVisibilityMgr,
 		s.mockResource.GetLogger(),
 		s.mockResource.GetTaskManager(),
 		s.mockResource.GetExecutionManager(),
@@ -161,14 +190,17 @@ func (s *adminHandlerSuite) SetupTest() {
 		s.mockResource.GetNamespaceRegistry(),
 		s.mockResource.GetSearchAttributesProvider(),
 		s.mockResource.GetSearchAttributesManager(),
+		mockSaMapperProvider,
 		s.mockMetadata,
 		health.NewServer(),
 		serialization.NewSerializer(),
 		clock.NewRealTimeSource(),
 		tasks.NewDefaultTaskCategoryRegistry(),
+		s.mockResource.GetMatchingClient(),
 	}
 	s.mockMetadata.EXPECT().GetCurrentClusterName().Return(uuid.New()).AnyTimes()
 	s.mockExecutionMgr.EXPECT().GetName().Return("mock-execution-manager").AnyTimes()
+	s.mockVisibilityMgr.EXPECT().GetStoreNames().Return([]string{"mock-vis-store"})
 	s.handler = NewAdminHandler(args)
 	s.handler.Start()
 }
@@ -1650,4 +1682,432 @@ func (s *adminHandlerSuite) TestListQueues_Err() {
 	s.mockHistoryClient.EXPECT().ListQueues(gomock.Any(), gomock.Any()).Return(nil, assert.AnError)
 	_, err := s.handler.ListQueues(context.Background(), &adminservice.ListQueuesRequest{})
 	s.ErrorIs(err, assert.AnError)
+}
+
+func (s *adminHandlerSuite) TestForceUnloadTaskQueuePartition() {
+	handler := s.handler
+	ctx := context.Background()
+	s.mockNamespaceCache.EXPECT().GetNamespaceID(gomock.Any()).Return(s.namespaceID, nil).AnyTimes()
+
+	type test struct {
+		Name     string
+		Request  *adminservice.ForceUnloadTaskQueuePartitionRequest
+		Expected error
+	}
+	// request validation tests
+	errorCases := []test{
+		{
+			Name:     "nil request",
+			Request:  nil,
+			Expected: &serviceerror.InvalidArgument{Message: "Request is nil."},
+		},
+		{
+			Name:     "empty request",
+			Request:  &adminservice.ForceUnloadTaskQueuePartitionRequest{},
+			Expected: &serviceerror.InvalidArgument{Message: "Namespace is not set on request."},
+		},
+	}
+	for _, test := range errorCases {
+		s.T().Run(test.Name, func(t *testing.T) {
+			resp, err := handler.ForceUnloadTaskQueuePartition(ctx, test.Request)
+			s.Equal(test.Expected, err)
+			s.Nil(resp)
+		})
+	}
+
+	// valid request
+	tqPartitionRequest := &taskqueuespb.TaskQueuePartition{
+		TaskQueue:     "hello-world",
+		TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+		PartitionId:   &taskqueuespb.TaskQueuePartition_NormalPartitionId{NormalPartitionId: 0},
+	}
+
+	// request-response structures for mocking matching
+	matchingMockRequest := &matchingservice.ForceUnloadTaskQueuePartitionRequest{
+		NamespaceId:        s.namespaceID.String(),
+		TaskQueuePartition: tqPartitionRequest,
+	}
+	matchingMockResponse := &matchingservice.ForceUnloadTaskQueuePartitionResponse{
+		WasLoaded: true,
+	}
+	s.mockMatchingClient.EXPECT().ForceUnloadTaskQueuePartition(ctx, matchingMockRequest).Return(matchingMockResponse, nil).Times(1)
+
+	resp, err := handler.ForceUnloadTaskQueuePartition(ctx, &adminservice.ForceUnloadTaskQueuePartitionRequest{
+		Namespace:          s.namespace.String(),
+		TaskQueuePartition: tqPartitionRequest,
+	})
+
+	s.NoError(err)
+	s.NotNil(resp)
+	s.True(resp.WasLoaded)
+}
+
+func (s *adminHandlerSuite) TestDescribeTaskQueuePartition() {
+	handler := s.handler
+	ctx := context.Background()
+	unversioned := " "
+	buildID := "blx"
+
+	s.mockNamespaceCache.EXPECT().GetNamespaceID(gomock.Any()).Return(s.namespaceID, nil).AnyTimes()
+
+	type test struct {
+		Name     string
+		Request  *adminservice.DescribeTaskQueuePartitionRequest
+		Expected error
+	}
+	// request validation tests
+	errorCases := []test{
+		{
+			Name:     "nil request",
+			Request:  nil,
+			Expected: &serviceerror.InvalidArgument{Message: "Request is nil."},
+		},
+		{
+			Name:     "empty request",
+			Request:  &adminservice.DescribeTaskQueuePartitionRequest{},
+			Expected: &serviceerror.InvalidArgument{Message: "Namespace is not set on request."},
+		},
+	}
+	for _, test := range errorCases {
+		s.T().Run(test.Name, func(t *testing.T) {
+			resp, err := handler.DescribeTaskQueuePartition(ctx, test.Request)
+			s.Equal(test.Expected, err)
+			s.Nil(resp)
+		})
+	}
+
+	// request on a partition with buildIds
+	tqPartitionRequest := &taskqueuespb.TaskQueuePartition{
+		TaskQueue:     "hello-world",
+		TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+		PartitionId:   &taskqueuespb.TaskQueuePartition_NormalPartitionId{NormalPartitionId: 0},
+	}
+	buildIdRequest := &taskqueuepb.TaskQueueVersionSelection{
+		BuildIds:    []string{unversioned, buildID},
+		Unversioned: true,
+		AllActive:   true,
+	}
+
+	// request-response structures for mocking matching
+	matchingMockRequest := &matchingservice.DescribeTaskQueuePartitionRequest{
+		NamespaceId:                   s.namespaceID.String(),
+		TaskQueuePartition:            tqPartitionRequest,
+		Versions:                      buildIdRequest,
+		ReportStats:                   true,
+		ReportPollers:                 true,
+		ReportInternalTaskQueueStatus: true,
+	}
+	unversionedPhysicalTaskQueueInfo := &taskqueuespb.PhysicalTaskQueueInfo{
+		Pollers: []*taskqueuepb.PollerInfo(nil),
+		TaskQueueStats: &taskqueuepb.TaskQueueStats{
+			ApproximateBacklogCount: 0,
+			ApproximateBacklogAge:   nil,
+			TasksAddRate:            0,
+			TasksDispatchRate:       0,
+		},
+		InternalTaskQueueStatus: &taskqueuespb.InternalTaskQueueStatus{
+			ReadLevel: 0,
+			AckLevel:  0,
+			TaskIdBlock: &taskqueuepb.TaskIdBlock{
+				StartId: 0,
+				EndId:   0,
+			},
+			ReadBufferLength: 0,
+		},
+	}
+	versionedPhysicalTaskQueueInfo := &taskqueuespb.PhysicalTaskQueueInfo{
+		Pollers: []*taskqueuepb.PollerInfo(nil),
+		TaskQueueStats: &taskqueuepb.TaskQueueStats{
+			ApproximateBacklogCount: 100,
+			ApproximateBacklogAge:   nil,
+			TasksAddRate:            10.21,
+			TasksDispatchRate:       10.50,
+		},
+		InternalTaskQueueStatus: &taskqueuespb.InternalTaskQueueStatus{
+			ReadLevel: 1,
+			AckLevel:  1,
+			TaskIdBlock: &taskqueuepb.TaskIdBlock{
+				StartId: 1,
+				EndId:   1000,
+			},
+			ReadBufferLength: 10,
+		},
+	}
+
+	matchingMockResponse := &matchingservice.DescribeTaskQueuePartitionResponse{
+		VersionsInfoInternal: map[string]*taskqueuespb.TaskQueueVersionInfoInternal{
+			unversioned: {
+				PhysicalTaskQueueInfo: unversionedPhysicalTaskQueueInfo,
+			},
+			buildID: {
+				PhysicalTaskQueueInfo: versionedPhysicalTaskQueueInfo,
+			},
+		},
+	}
+	s.mockMatchingClient.EXPECT().DescribeTaskQueuePartition(ctx, matchingMockRequest).Return(matchingMockResponse, nil).Times(1)
+
+	resp, err := handler.DescribeTaskQueuePartition(ctx, &adminservice.DescribeTaskQueuePartitionRequest{
+		Namespace:          s.namespace.String(),
+		TaskQueuePartition: tqPartitionRequest,
+		BuildIds:           buildIdRequest,
+	})
+	s.NoError(err)
+	s.NotNil(resp)
+	s.Equal(2, len(resp.VersionsInfoInternal))
+
+	s.validatePhysicalTaskQueueInfo(unversionedPhysicalTaskQueueInfo, resp.VersionsInfoInternal[unversioned].GetPhysicalTaskQueueInfo())
+	s.validatePhysicalTaskQueueInfo(versionedPhysicalTaskQueueInfo, resp.VersionsInfoInternal[buildID].GetPhysicalTaskQueueInfo())
+}
+
+func (s *adminHandlerSuite) TestImportWorkflowExecution_NoSearchAttributes() {
+	tv := testvars.New(s.T()).WithNamespaceName(s.namespace).WithNamespaceID(s.namespaceID)
+
+	serializer := serialization.NewSerializer()
+	generator := test.InitializeHistoryEventGenerator(tv.NamespaceName(), tv.NamespaceID(), tv.Any().Int64())
+
+	// Generate random history.
+	var historyBatches []*commonpb.DataBlob
+	for generator.HasNextVertex() {
+		events := generator.GetNextVertices()
+		var historyEvents []*historypb.HistoryEvent
+		for _, event := range events {
+			historyEvent := event.GetData().(*historypb.HistoryEvent)
+			historyEvents = append(historyEvents, historyEvent)
+		}
+		historyBatch, err := serializer.SerializeEvents(historyEvents, enumspb.ENCODING_TYPE_PROTO3)
+		s.NoError(err)
+		historyBatches = append(historyBatches, historyBatch)
+	}
+
+	s.mockNamespaceCache.EXPECT().GetNamespaceID(tv.NamespaceName()).Return(tv.NamespaceID(), nil)
+
+	s.mockHistoryClient.EXPECT().ImportWorkflowExecution(gomock.Any(), gomock.Any()).DoAndReturn(func(ctx context.Context, request *historyservice.ImportWorkflowExecutionRequest, opts ...grpc.CallOption) (*historyservice.ImportWorkflowExecutionResponse, error) {
+		s.Equal(tv.NamespaceID().String(), request.NamespaceId)
+		s.Equal(historyBatches, request.HistoryBatches, "history batches shouldn't be reserialized because there is no search attributes")
+		return &historyservice.ImportWorkflowExecutionResponse{}, nil
+	})
+	_, err := s.handler.ImportWorkflowExecution(context.Background(), &adminservice.ImportWorkflowExecutionRequest{
+		Namespace:      tv.NamespaceName().String(),
+		Execution:      tv.WorkflowExecution(),
+		HistoryBatches: historyBatches,
+		VersionHistory: nil,
+		Token:          nil,
+	})
+	s.NoError(err)
+}
+
+func (s *adminHandlerSuite) TestImportWorkflowExecution_WithAliasedSearchAttributes() {
+	tv := testvars.New(s.T()).WithNamespaceName(s.namespace).WithNamespaceID(s.namespaceID)
+
+	serializer := serialization.NewSerializer()
+
+	subTests := []struct {
+		Name        string
+		SaName      string
+		ExpectedErr error
+	}{
+		{
+			Name:        "valid SA alias",
+			SaName:      "AliasOfCustomKeywordField",
+			ExpectedErr: nil,
+		},
+		{
+			Name:        "invalid SA alias",
+			SaName:      "InvalidAlias",
+			ExpectedErr: &serviceerror.InvalidArgument{},
+		},
+		{
+			Name:        "invalid SA field",
+			SaName:      "AliasOfInvalidField",
+			ExpectedErr: &serviceerror.InvalidArgument{},
+		},
+	}
+	for _, subTest := range subTests {
+		s.T().Run(subTest.Name, func(t *testing.T) {
+			generator := test.InitializeHistoryEventGenerator(tv.NamespaceName(), tv.NamespaceID(), tv.Any().Int64())
+			saValue := tv.Any().Payload()
+			aliasedSas := &commonpb.SearchAttributes{IndexedFields: map[string]*commonpb.Payload{
+				subTest.SaName: saValue,
+			}}
+
+			// Generate random history and set search attributes for all events that have search_attributes field.
+			var historyBatches []*commonpb.DataBlob
+			eventsWithSasCount := 0
+			for generator.HasNextVertex() {
+				events := generator.GetNextVertices()
+				var historyEvents []*historypb.HistoryEvent
+				for _, event := range events {
+					historyEvent := event.GetData().(*historypb.HistoryEvent)
+					eventHasSas := searchattribute.SetToEvent(historyEvent, aliasedSas)
+					if eventHasSas {
+						eventsWithSasCount++
+					}
+					historyEvents = append(historyEvents, historyEvent)
+				}
+				historyBatch, err := serializer.SerializeEvents(historyEvents, enumspb.ENCODING_TYPE_PROTO3)
+				s.NoError(err)
+				historyBatches = append(historyBatches, historyBatch)
+			}
+			if subTest.ExpectedErr != nil {
+				// Import will fail fast on first event and won't check other events.
+				eventsWithSasCount = 1
+			}
+
+			s.mockNamespaceCache.EXPECT().GetNamespaceID(tv.NamespaceName()).Return(tv.NamespaceID(), nil)
+			s.mockVisibilityMgr.EXPECT().GetIndexName().Return(tv.IndexName()).Times(eventsWithSasCount)
+
+			// Mock mapper remove alias from alias name.
+			s.mockSaMapper.EXPECT().GetFieldName(gomock.Any(), tv.NamespaceName().String()).DoAndReturn(func(alias string, nsName string) (string, error) {
+				if strings.HasPrefix(alias, "AliasOf") {
+					return strings.TrimPrefix(alias, "AliasOf"), nil
+				}
+				return "", serviceerror.NewInvalidArgument("unknown alias")
+			}).Times(eventsWithSasCount)
+
+			s.mockResource.SearchAttributesProvider.EXPECT().GetSearchAttributes(tv.IndexName(), gomock.Any()).Return(searchattribute.TestNameTypeMap, nil).Times(eventsWithSasCount)
+
+			if subTest.ExpectedErr != nil {
+				s.mockSaMapper.EXPECT().GetAlias(gomock.Any(), tv.NamespaceName().String()).Return("", serviceerror.NewInvalidArgument(""))
+			} else {
+				s.mockVisibilityMgr.EXPECT().ValidateCustomSearchAttributes(gomock.Any()).Return(nil, nil).Times(eventsWithSasCount)
+				s.mockHistoryClient.EXPECT().ImportWorkflowExecution(gomock.Any(), gomock.Any()).DoAndReturn(func(ctx context.Context, request *historyservice.ImportWorkflowExecutionRequest, opts ...grpc.CallOption) (*historyservice.ImportWorkflowExecutionResponse, error) {
+					s.Equal(tv.NamespaceID().String(), request.NamespaceId)
+					for _, historyBatch := range request.HistoryBatches {
+						events, err := serializer.DeserializeEvents(historyBatch)
+						s.NoError(err)
+						for _, event := range events {
+							unaliasedSas, eventHasSas := searchattribute.GetFromEvent(event)
+							if eventHasSas {
+								s.NotNil(unaliasedSas, "search attributes must be set on every event with search_attributes field")
+								s.Len(unaliasedSas.GetIndexedFields(), 1, "only 1 search attribute must be set")
+								s.ProtoEqual(saValue, unaliasedSas.GetIndexedFields()["CustomKeywordField"])
+							}
+						}
+					}
+					return &historyservice.ImportWorkflowExecutionResponse{}, nil
+				})
+			}
+			_, err := s.handler.ImportWorkflowExecution(context.Background(), &adminservice.ImportWorkflowExecutionRequest{
+				Namespace:      tv.NamespaceName().String(),
+				Execution:      tv.WorkflowExecution(),
+				HistoryBatches: historyBatches,
+				VersionHistory: nil,
+				Token:          nil,
+			})
+			if subTest.ExpectedErr == nil {
+				s.NoError(err)
+			} else {
+				s.Error(err)
+				s.ErrorAs(err, &subTest.ExpectedErr)
+			}
+		})
+	}
+}
+
+func (s *adminHandlerSuite) TestImportWorkflowExecution_WithNonAliasedSearchAttributes() {
+	tv := testvars.New(s.T()).WithNamespaceName(s.namespace).WithNamespaceID(s.namespaceID)
+
+	serializer := serialization.NewSerializer()
+	subTests := []struct {
+		Name        string
+		SaName      string
+		ExpectedErr error
+	}{
+		{
+			Name:        "valid SA field",
+			SaName:      "CustomKeywordField",
+			ExpectedErr: nil,
+		},
+		{
+			Name:        "invalid SA field",
+			SaName:      "InvalidField",
+			ExpectedErr: &serviceerror.InvalidArgument{},
+		},
+	}
+	for _, subTest := range subTests {
+		s.T().Run(subTest.Name, func(t *testing.T) {
+			generator := test.InitializeHistoryEventGenerator(tv.NamespaceName(), tv.NamespaceID(), tv.Any().Int64())
+			saValue := tv.Any().Payload()
+			aliasedSas := &commonpb.SearchAttributes{IndexedFields: map[string]*commonpb.Payload{
+				subTest.SaName: saValue,
+			}}
+
+			// Generate random history and set search attributes for all events that have search_attributes field.
+			var historyBatches []*commonpb.DataBlob
+			eventsWithSasCount := 0
+			for generator.HasNextVertex() {
+				events := generator.GetNextVertices()
+				var historyEvents []*historypb.HistoryEvent
+				for _, event := range events {
+					historyEvent := event.GetData().(*historypb.HistoryEvent)
+					eventHasSas := searchattribute.SetToEvent(historyEvent, aliasedSas)
+					if eventHasSas {
+						eventsWithSasCount++
+					}
+					historyEvents = append(historyEvents, historyEvent)
+				}
+				historyBatch, err := serializer.SerializeEvents(historyEvents, enumspb.ENCODING_TYPE_PROTO3)
+				s.NoError(err)
+				historyBatches = append(historyBatches, historyBatch)
+			}
+			if subTest.ExpectedErr != nil {
+				// Import will fail fast on first event and won't check other events.
+				eventsWithSasCount = 1
+			}
+
+			s.mockNamespaceCache.EXPECT().GetNamespaceID(tv.NamespaceName()).Return(tv.NamespaceID(), nil)
+			s.mockVisibilityMgr.EXPECT().GetIndexName().Return(tv.IndexName()).Times(eventsWithSasCount)
+
+			s.mockResource.SearchAttributesProvider.EXPECT().GetSearchAttributes(tv.IndexName(), gomock.Any()).Return(searchattribute.TestNameTypeMap, nil).Times(eventsWithSasCount)
+
+			// Mock mapper returns error because field name is not an alias.
+			s.mockSaMapper.EXPECT().GetFieldName(gomock.Any(), tv.NamespaceName().String()).DoAndReturn(func(alias string, nsName string) (string, error) {
+				return "", serviceerror.NewInvalidArgument("unknown alias")
+			}).Times(eventsWithSasCount)
+
+			if subTest.ExpectedErr != nil {
+				s.mockSaMapper.EXPECT().GetAlias(gomock.Any(), tv.NamespaceName().String()).Return("", serviceerror.NewInvalidArgument(""))
+			} else {
+				s.mockVisibilityMgr.EXPECT().ValidateCustomSearchAttributes(gomock.Any()).Return(nil, nil).Times(eventsWithSasCount)
+				s.mockHistoryClient.EXPECT().ImportWorkflowExecution(gomock.Any(), gomock.Any()).DoAndReturn(func(ctx context.Context, request *historyservice.ImportWorkflowExecutionRequest, opts ...grpc.CallOption) (*historyservice.ImportWorkflowExecutionResponse, error) {
+					s.Equal(tv.NamespaceID().String(), request.NamespaceId)
+					for _, historyBatch := range request.HistoryBatches {
+						events, err := serializer.DeserializeEvents(historyBatch)
+						s.NoError(err)
+						for _, event := range events {
+							unaliasedSas, eventHasSas := searchattribute.GetFromEvent(event)
+							if eventHasSas {
+								s.NotNil(unaliasedSas, "search attributes must be set on every event with search_attributes field")
+								s.Len(unaliasedSas.GetIndexedFields(), 1, "only 1 search attribute must be set")
+								s.ProtoEqual(saValue, unaliasedSas.GetIndexedFields()["CustomKeywordField"])
+							}
+						}
+					}
+					return &historyservice.ImportWorkflowExecutionResponse{}, nil
+				})
+			}
+
+			_, err := s.handler.ImportWorkflowExecution(context.Background(), &adminservice.ImportWorkflowExecutionRequest{
+				Namespace:      tv.NamespaceName().String(),
+				Execution:      tv.WorkflowExecution(),
+				HistoryBatches: historyBatches,
+				VersionHistory: nil,
+				Token:          nil,
+			})
+			if subTest.ExpectedErr == nil {
+				s.NoError(err)
+			} else {
+				s.Error(err)
+				s.ErrorAs(err, &subTest.ExpectedErr)
+			}
+		})
+	}
+}
+
+func (s *adminHandlerSuite) validatePhysicalTaskQueueInfo(expectedPhysicalTaskQueueInfo *taskqueuespb.PhysicalTaskQueueInfo,
+	responsePhysicalTaskQueueInfo *taskqueuespb.PhysicalTaskQueueInfo) {
+
+	s.Equal(expectedPhysicalTaskQueueInfo.GetPollers(), responsePhysicalTaskQueueInfo.GetPollers())
+	s.Equal(expectedPhysicalTaskQueueInfo.GetTaskQueueStats(), responsePhysicalTaskQueueInfo.GetTaskQueueStats())
+	s.Equal(expectedPhysicalTaskQueueInfo.GetInternalTaskQueueStatus(), responsePhysicalTaskQueueInfo.GetInternalTaskQueueStatus())
 }

@@ -30,7 +30,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/golang/mock/gomock"
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -52,6 +51,7 @@ import (
 	"go.temporal.io/server/service/history/tests"
 	"go.temporal.io/server/service/history/workflow"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
+	"go.uber.org/mock/gomock"
 )
 
 type (
@@ -64,6 +64,7 @@ type (
 		mockNamespaceRegistry *namespace.MockRegistry
 		mockMutableState      *workflow.MockMutableState
 		mockClusterMetadata   *cluster.MockMetadata
+		syncStateRetriever    *MockSyncStateRetriever
 
 		mockExecutionMgr *persistence.MockExecutionManager
 
@@ -121,9 +122,9 @@ func (s *ackManagerSuite) SetupTest() {
 	s.logger = s.mockShard.GetLogger()
 	workflowCache := wcache.NewHostLevelCache(s.mockShard.GetConfig(), s.mockShard.GetLogger(), metrics.NoopMetricsHandler)
 	replicationProgressCache := NewProgressCache(s.mockShard.GetConfig(), s.mockShard.GetLogger(), metrics.NoopMetricsHandler)
-
+	s.syncStateRetriever = NewMockSyncStateRetriever(s.controller)
 	s.replicationAckManager = NewAckManager(
-		s.mockShard, workflowCache, nil, replicationProgressCache, s.mockExecutionMgr, s.logger,
+		s.mockShard, workflowCache, nil, replicationProgressCache, s.mockExecutionMgr, s.syncStateRetriever, s.logger,
 	).(*ackMgrImpl)
 }
 

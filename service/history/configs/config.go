@@ -111,10 +111,10 @@ type Config struct {
 	QueueReaderStuckCriticalAttempts dynamicconfig.IntPropertyFn
 	QueueCriticalSlicesCount         dynamicconfig.IntPropertyFn
 	QueuePendingTaskMaxCount         dynamicconfig.IntPropertyFn
+	QueueMaxPredicateSize            dynamicconfig.IntPropertyFn
 
 	TaskDLQEnabled                 dynamicconfig.BoolPropertyFn
 	TaskDLQUnexpectedErrorAttempts dynamicconfig.IntPropertyFn
-	TaskDLQInternalErrors          dynamicconfig.BoolPropertyFn
 	TaskDLQErrorPattern            dynamicconfig.StringPropertyFn
 
 	TaskSchedulerEnableRateLimiter           dynamicconfig.BoolPropertyFn
@@ -169,6 +169,7 @@ type Config struct {
 	OutboundProcessorPollBackoffInterval                dynamicconfig.DurationPropertyFn
 	OutboundQueuePendingTaskCriticalCount               dynamicconfig.IntPropertyFn
 	OutboundQueuePendingTaskMaxCount                    dynamicconfig.IntPropertyFn
+	OutboundQueueMaxPredicateSize                       dynamicconfig.IntPropertyFn
 	OutboundQueueMaxReaderCount                         dynamicconfig.IntPropertyFn
 	OutboundQueueGroupLimiterBufferSize                 dynamicconfig.IntPropertyFnWithDestinationFilter
 	OutboundQueueGroupLimiterConcurrency                dynamicconfig.IntPropertyFnWithDestinationFilter
@@ -233,6 +234,7 @@ type Config struct {
 	MutableStateActivityFailureSizeLimitWarn  dynamicconfig.IntPropertyFnWithNamespaceFilter
 	MutableStateSizeLimitError                dynamicconfig.IntPropertyFn
 	MutableStateSizeLimitWarn                 dynamicconfig.IntPropertyFn
+	MutableStateTombstoneCountLimit           dynamicconfig.IntPropertyFn
 	NumPendingChildExecutionsLimit            dynamicconfig.IntPropertyFnWithNamespaceFilter
 	NumPendingActivitiesLimit                 dynamicconfig.IntPropertyFnWithNamespaceFilter
 	NumPendingSignalsLimit                    dynamicconfig.IntPropertyFnWithNamespaceFilter
@@ -445,10 +447,10 @@ func NewConfig(
 		QueueReaderStuckCriticalAttempts: dynamicconfig.QueueReaderStuckCriticalAttempts.Get(dc),
 		QueueCriticalSlicesCount:         dynamicconfig.QueueCriticalSlicesCount.Get(dc),
 		QueuePendingTaskMaxCount:         dynamicconfig.QueuePendingTaskMaxCount.Get(dc),
+		QueueMaxPredicateSize:            dynamicconfig.QueueMaxPredicateSize.Get(dc),
 
 		TaskDLQEnabled:                 dynamicconfig.HistoryTaskDLQEnabled.Get(dc),
 		TaskDLQUnexpectedErrorAttempts: dynamicconfig.HistoryTaskDLQUnexpectedErrorAttempts.Get(dc),
-		TaskDLQInternalErrors:          dynamicconfig.HistoryTaskDLQInternalErrors.Get(dc),
 		TaskDLQErrorPattern:            dynamicconfig.HistoryTaskDLQErrorPattern.Get(dc),
 
 		TaskSchedulerEnableRateLimiter:           dynamicconfig.TaskSchedulerEnableRateLimiter.Get(dc),
@@ -500,6 +502,7 @@ func NewConfig(
 		OutboundProcessorPollBackoffInterval:                dynamicconfig.OutboundProcessorPollBackoffInterval.Get(dc),
 		OutboundQueuePendingTaskCriticalCount:               dynamicconfig.OutboundQueuePendingTaskCriticalCount.Get(dc),
 		OutboundQueuePendingTaskMaxCount:                    dynamicconfig.OutboundQueuePendingTaskMaxCount.Get(dc),
+		OutboundQueueMaxPredicateSize:                       dynamicconfig.OutboundQueueMaxPredicateSize.Get(dc),
 		OutboundQueueMaxReaderCount:                         dynamicconfig.OutboundQueueMaxReaderCount.Get(dc),
 		OutboundQueueGroupLimiterBufferSize:                 dynamicconfig.OutboundQueueGroupLimiterBufferSize.Get(dc),
 		OutboundQueueGroupLimiterConcurrency:                dynamicconfig.OutboundQueueGroupLimiterConcurrency.Get(dc),
@@ -569,6 +572,7 @@ func NewConfig(
 		MutableStateActivityFailureSizeLimitWarn:  dynamicconfig.MutableStateActivityFailureSizeLimitWarn.Get(dc),
 		MutableStateSizeLimitError:                dynamicconfig.MutableStateSizeLimitError.Get(dc),
 		MutableStateSizeLimitWarn:                 dynamicconfig.MutableStateSizeLimitWarn.Get(dc),
+		MutableStateTombstoneCountLimit:           dynamicconfig.MutableStateTombstoneCountLimit.Get(dc),
 
 		ThrottledLogRPS:   dynamicconfig.HistoryThrottledLogRPS.Get(dc),
 		EnableStickyQuery: dynamicconfig.EnableStickyQuery.Get(dc),

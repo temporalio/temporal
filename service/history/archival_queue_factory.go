@@ -184,7 +184,6 @@ func (f *archivalQueueFactory) newScheduledQueue(shard shard.Context, executor q
 		f.DLQWriter,
 		f.Config.TaskDLQEnabled,
 		f.Config.TaskDLQUnexpectedErrorAttempts,
-		f.Config.TaskDLQInternalErrors,
 		f.Config.TaskDLQErrorPattern,
 	)
 	return queues.NewScheduledQueue(
@@ -198,6 +197,7 @@ func (f *archivalQueueFactory) newScheduledQueue(shard shard.Context, executor q
 				BatchSize:            f.Config.ArchivalTaskBatchSize,
 				MaxPendingTasksCount: f.Config.QueuePendingTaskMaxCount,
 				PollBackoffInterval:  f.Config.ArchivalProcessorPollBackoffInterval,
+				MaxPredicateSize:     f.Config.QueueMaxPredicateSize,
 			},
 			MonitorOptions: queues.MonitorOptions{
 				PendingTasksCriticalCount:   f.Config.QueuePendingTaskCriticalCount,

@@ -558,7 +558,7 @@ pollLoop:
 		}
 
 		if task.isQuery() {
-			task.finish(nil) // this only means query task sync match succeed.
+			task.finish(nil, true) // this only means query task sync match succeed.
 
 			// for query task, we don't need to update history to record workflow task started. but we need to know
 			// the NextEventID and the currently set sticky task queue.
@@ -615,6 +615,10 @@ pollLoop:
 		resp, err := e.recordWorkflowTaskStarted(ctx, requestClone, task)
 		if err != nil {
 			switch err.(type) {
+			case *serviceerror.Internal, *serviceerror.DataLoss:
+				e.nonRetryableErrorsDropTask(task, taskQueueName, err)
+				// drop the task as otherwise task would be stuck in a retry-loop
+				task.finish(nil, false)
 			case *serviceerror.NotFound: // mutable state not found, workflow not running or workflow task not found
 				e.logger.Info("Workflow task not found",
 					tag.WorkflowTaskQueueName(taskQueueName),
@@ -626,10 +630,10 @@ pollLoop:
 					tag.WorkflowEventID(task.event.Data.GetScheduledEventId()),
 					tag.Error(err),
 				)
-				task.finish(nil)
+				task.finish(nil, false)
 			case *serviceerrors.TaskAlreadyStarted:
 				e.logger.Debug("Duplicated workflow task", tag.WorkflowTaskQueueName(taskQueueName), tag.TaskID(task.event.GetTaskId()))
-				task.finish(nil)
+				task.finish(nil, false)
 			case *serviceerrors.ObsoleteDispatchBuildId:
 				// history should've scheduled another task on the right build ID. dropping this one.
 				e.logger.Info("dropping workflow task due to invalid build ID",
@@ -641,9 +645,9 @@ pollLoop:
 					tag.TaskVisibilityTimestamp(timestamp.TimeValue(task.event.Data.GetCreateTime())),
 					tag.BuildId(requestClone.WorkerVersionCapabilities.GetBuildId()),
 				)
-				task.finish(nil)
+				task.finish(nil, false)
 			default:
-				task.finish(err)
+				task.finish(err, false)
 				if err.Error() == common.ErrNamespaceHandover.Error() {
 					// do not keep polling new tasks when namespace is in handover state
 					// as record start request will be rejected by history service
@@ -654,7 +658,7 @@ pollLoop:
 			continue pollLoop
 		}
 
-		task.finish(nil)
+		task.finish(nil, true)
 		return e.createPollWorkflowTaskQueueResponse(task, resp, opMetrics), nil
 	}
 }
@@ -701,6 +705,22 @@ func (e *matchingEngineImpl) getHistoryForQueryTask(
 	}
 
 	return hist, resp.GetResponse().GetNextPageToken(), err
+}
+
+func (e *matchingEngineImpl) nonRetryableErrorsDropTask(task *internalTask, taskQueueName string, err error) {
+	e.logger.Error("dropping task due to non-nonretryable errors",
+		tag.WorkflowNamespace(task.namespace.String()),
+		tag.WorkflowNamespaceID(task.event.Data.GetNamespaceId()),
+		tag.WorkflowID(task.event.Data.GetWorkflowId()),
+		tag.WorkflowRunID(task.event.Data.GetRunId()),
+		tag.WorkflowTaskQueueName(taskQueueName),
+		tag.TaskID(task.event.GetTaskId()),
+		tag.WorkflowEventID(task.event.Data.GetScheduledEventId()),
+		tag.Error(err),
+		tag.ErrorType(err),
+	)
+
+	metrics.NonRetryableTasks.With(e.metricsHandler).Record(1, metrics.ServiceErrorTypeTag(err))
 }
 
 // PollActivityTaskQueue takes one task from the task manager, update workflow execution history, mark task as
@@ -760,6 +780,10 @@ pollLoop:
 		resp, err := e.recordActivityTaskStarted(ctx, requestClone, task)
 		if err != nil {
 			switch err.(type) {
+			case *serviceerror.Internal, *serviceerror.DataLoss:
+				e.nonRetryableErrorsDropTask(task, taskQueueName, err)
+				// drop the task as otherwise task would be stuck in a retry-loop
+				task.finish(nil, false)
 			case *serviceerror.NotFound: // mutable state not found, workflow not running or activity info not found
 				e.logger.Info("Activity task not found",
 					tag.WorkflowNamespaceID(task.event.Data.GetNamespaceId()),
@@ -771,10 +795,10 @@ pollLoop:
 					tag.WorkflowEventID(task.event.Data.GetScheduledEventId()),
 					tag.Error(err),
 				)
-				task.finish(nil)
+				task.finish(nil, false)
 			case *serviceerrors.TaskAlreadyStarted:
 				e.logger.Debug("Duplicated activity task", tag.WorkflowTaskQueueName(taskQueueName), tag.TaskID(task.event.GetTaskId()))
-				task.finish(nil)
+				task.finish(nil, false)
 			case *serviceerrors.ObsoleteDispatchBuildId:
 				// history should've scheduled another task on the right build ID. dropping this one.
 				e.logger.Info("dropping activity task due to invalid build ID",
@@ -786,9 +810,9 @@ pollLoop:
 					tag.TaskVisibilityTimestamp(timestamp.TimeValue(task.event.Data.GetCreateTime())),
 					tag.BuildId(requestClone.WorkerVersionCapabilities.GetBuildId()),
 				)
-				task.finish(nil)
+				task.finish(nil, false)
 			default:
-				task.finish(err)
+				task.finish(err, false)
 				if err.Error() == common.ErrNamespaceHandover.Error() {
 					// do not keep polling new tasks when namespace is in handover state
 					// as record start request will be rejected by history service
@@ -798,7 +822,7 @@ pollLoop:
 
 			continue pollLoop
 		}
-		task.finish(nil)
+		task.finish(nil, true)
 		return e.createPollActivityTaskQueueResponse(task, resp, opMetrics), nil
 	}
 }
@@ -1063,7 +1087,7 @@ func (e *matchingEngineImpl) DescribeTaskQueuePartition(
 	if err != nil {
 		return nil, err
 	}
-	return pm.Describe(ctx, buildIds, request.GetVersions().GetAllActive(), request.GetReportStats(), request.GetReportPollers())
+	return pm.Describe(ctx, buildIds, request.GetVersions().GetAllActive(), request.GetReportStats(), request.GetReportPollers(), request.GetReportInternalTaskQueueStatus())
 }
 
 func (e *matchingEngineImpl) getBuildIds(versions *taskqueuepb.TaskQueueVersionSelection) (map[string]bool, error) {
@@ -1461,51 +1485,11 @@ func (e *matchingEngineImpl) GetTaskQueueUserData(
 	if err != nil {
 		return nil, err
 	}
-	version := req.GetLastKnownUserDataVersion()
-	if version < 0 {
-		return nil, serviceerror.NewInvalidArgument("last_known_user_data_version must not be negative")
-	}
-
 	if req.WaitNewData {
-		var cancel context.CancelFunc
-		ctx, cancel = newChildContext(ctx, e.config.GetUserDataLongPollTimeout(), returnEmptyTaskTimeBudget)
-		defer cancel()
 		// mark alive so that it doesn't unload while a child partition is doing a long poll
 		pm.MarkAlive()
 	}
-
-	for {
-		resp := &matchingservice.GetTaskQueueUserDataResponse{}
-		userData, userDataChanged, err := pm.GetUserDataManager().GetUserData()
-		if errors.Is(err, errTaskQueueClosed) {
-			// If we're closing, return a success with no data, as if the request expired. We shouldn't
-			// close due to idleness (because of the MarkAlive above), so we're probably closing due to a
-			// change of ownership. The caller will retry and be redirected to the new owner.
-			return resp, nil
-		} else if err != nil {
-			return nil, err
-		}
-		if req.WaitNewData && userData.GetVersion() == version {
-			// long-poll: wait for data to change/appear
-			select {
-			case <-ctx.Done():
-				return resp, nil
-			case <-userDataChanged:
-				continue
-			}
-		}
-		if userData != nil {
-			if userData.Version > version {
-				resp.UserData = userData
-			} else if userData.Version < version {
-				// This is highly unlikely but may happen due to an edge case in during ownership transfer.
-				// We rely on client retries in this case to let the system eventually self-heal.
-				return nil, serviceerror.NewInvalidArgument(
-					"requested task queue user data for version greater than known version")
-			}
-		}
-		return resp, nil
-	}
+	return pm.GetUserDataManager().HandleGetUserDataRequest(ctx, req)
 }
 
 func (e *matchingEngineImpl) ApplyTaskQueueUserDataReplicationEvent(
@@ -1586,6 +1570,20 @@ func (e *matchingEngineImpl) GetBuildIdTaskQueueMapping(
 	return &matchingservice.GetBuildIdTaskQueueMappingResponse{TaskQueues: taskQueues}, nil
 }
 
+// TODO Shivam - remove this in 123
+func (e *matchingEngineImpl) ForceUnloadTaskQueue(
+	ctx context.Context,
+	req *matchingservice.ForceUnloadTaskQueueRequest,
+) (*matchingservice.ForceUnloadTaskQueueResponse, error) {
+	p, err := tqid.NormalPartitionFromRpcName(req.GetTaskQueue(), req.GetNamespaceId(), req.GetTaskQueueType())
+	if err != nil {
+		return nil, err
+	}
+
+	wasLoaded := e.unloadTaskQueuePartitionByKey(p, nil, unloadCauseForce)
+	return &matchingservice.ForceUnloadTaskQueueResponse{WasLoaded: wasLoaded}, nil
+}
+
 func (e *matchingEngineImpl) ForceLoadTaskQueuePartition(
 	ctx context.Context,
 	req *matchingservice.ForceLoadTaskQueuePartitionRequest,
@@ -1599,17 +1597,14 @@ func (e *matchingEngineImpl) ForceLoadTaskQueuePartition(
 	return &matchingservice.ForceLoadTaskQueuePartitionResponse{WasUnloaded: wasUnloaded}, nil
 }
 
-func (e *matchingEngineImpl) ForceUnloadTaskQueue(
+func (e *matchingEngineImpl) ForceUnloadTaskQueuePartition(
 	ctx context.Context,
-	req *matchingservice.ForceUnloadTaskQueueRequest,
-) (*matchingservice.ForceUnloadTaskQueueResponse, error) {
-	p, err := tqid.NormalPartitionFromRpcName(req.GetTaskQueue(), req.GetNamespaceId(), req.GetTaskQueueType())
-	if err != nil {
-		return nil, err
-	}
+	req *matchingservice.ForceUnloadTaskQueuePartitionRequest,
+) (*matchingservice.ForceUnloadTaskQueuePartitionResponse, error) {
+	partition := tqid.PartitionFromPartitionProto(req.GetTaskQueuePartition(), req.GetNamespaceId())
 
-	wasLoaded := e.unloadTaskQueuePartitionByKey(p, nil, unloadCauseForce)
-	return &matchingservice.ForceUnloadTaskQueueResponse{WasLoaded: wasLoaded}, nil
+	wasLoaded := e.unloadTaskQueuePartitionByKey(partition, nil, unloadCauseForce)
+	return &matchingservice.ForceUnloadTaskQueuePartitionResponse{WasLoaded: wasLoaded}, nil
 }
 
 func (e *matchingEngineImpl) UpdateTaskQueueUserData(ctx context.Context, request *matchingservice.UpdateTaskQueueUserDataRequest) (*matchingservice.UpdateTaskQueueUserDataResponse, error) {
@@ -1743,7 +1738,7 @@ pollLoop:
 			return task.pollNexusTaskQueueResponse(), nil
 		}
 
-		task.finish(err)
+		task.finish(err, true)
 		if err != nil {
 			continue pollLoop
 		}
@@ -2027,13 +2022,12 @@ func (e *matchingEngineImpl) updatePhysicalTaskQueueGauge(pqm *physicalTaskQueue
 
 	pm := pqm.partitionMgr
 	metrics.LoadedPhysicalTaskQueueGauge.With(
-		metrics.GetPerTaskQueuePartitionScope(
+		metrics.GetPerTaskQueuePartitionTypeScope(
 			e.metricsHandler,
 			pm.ns.Name().String(),
 			pm.Partition(),
 			// TODO: Track counters per TQ name so we can honor pm.config.BreakdownMetricsByTaskQueue(),
 			false,
-			false, // we don't want breakdown by partition ID, only sticky vs normal breakdown.
 		)).Record(
 		float64(loadedPhysicalTaskQueueCounter),
 		metrics.VersionedTag(versioned),
@@ -2091,13 +2085,12 @@ func (e *matchingEngineImpl) updateTaskQueuePartitionGauge(pm taskQueuePartition
 		metrics.TaskQueueTypeTag(taskQueueParameters.taskType),
 	)
 
-	taggedHandler := metrics.GetPerTaskQueuePartitionScope(
+	taggedHandler := metrics.GetPerTaskQueuePartitionTypeScope(
 		e.metricsHandler,
 		nsName,
 		pm.Partition(),
 		// TODO: Track counters per TQ name so we can honor pm.config.BreakdownMetricsByTaskQueue(),
 		false,
-		false, // we don't want breakdown by partition ID, only sticky vs normal breakdown.
 	)
 	metrics.LoadedTaskQueuePartitionGauge.With(taggedHandler).Record(float64(loadedTaskQueuePartitionCounter))
 }

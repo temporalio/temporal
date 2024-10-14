@@ -100,17 +100,19 @@ func ClusterNameProvider(config *cluster.Config) ClusterName {
 
 func EventBlobCacheProvider(
 	dc *dynamicconfig.Collection,
+	logger log.Logger,
 ) persistence.XDCCache {
 	return persistence.NewEventsBlobCache(
 		dynamicconfig.XDCCacheMaxSizeBytes.Get(dc)(),
 		20*time.Second,
+		logger,
 	)
 }
 
 func FactoryProvider(
 	params NewFactoryParams,
 ) Factory {
-	var systemRequestRateLimiter, namespaceRequestRateLimiter quotas.RequestRateLimiter
+	var systemRequestRateLimiter, namespaceRequestRateLimiter, shardRequestRateLimiter quotas.RequestRateLimiter
 	if params.PersistenceMaxQPS != nil && params.PersistenceMaxQPS() > 0 {
 		systemRequestRateLimiter = NewPriorityRateLimiter(
 			params.PersistenceMaxQPS,
@@ -125,6 +127,12 @@ func FactoryProvider(
 		namespaceRequestRateLimiter = NewPriorityNamespaceRateLimiter(
 			params.PersistenceMaxQPS,
 			params.PersistenceNamespaceMaxQPS,
+			RequestPriorityFn,
+			params.OperatorRPSRatio,
+			params.PersistenceBurstRatio,
+		)
+		shardRequestRateLimiter = NewPriorityNamespaceShardRateLimiter(
+			params.PersistenceMaxQPS,
 			params.PersistencePerShardNamespaceMaxQPS,
 			RequestPriorityFn,
 			params.OperatorRPSRatio,
@@ -137,6 +145,7 @@ func FactoryProvider(
 		params.Cfg,
 		systemRequestRateLimiter,
 		namespaceRequestRateLimiter,
+		shardRequestRateLimiter,
 		serialization.NewSerializer(),
 		params.EventBlobCache,
 		string(params.ClusterName),

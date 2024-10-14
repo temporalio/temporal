@@ -148,6 +148,8 @@ type (
 		taskCategoryRegistry       tasks.TaskCategoryRegistry
 		commandHandlerRegistry     *workflow.CommandHandlerRegistry
 		stateMachineEnvironment    *stateMachineEnvironment
+		replicationProgressCache   replication.ProgressCache
+		syncStateRetriever         replication.SyncStateRetriever
 	}
 )
 
@@ -186,6 +188,13 @@ func NewEngineWithShardContext(
 		shard.GetTimeSource(),
 		persistenceVisibilityMgr,
 	)
+	syncStateRetriever := replication.NewSyncStateRetriever(
+		shard,
+		workflowCache,
+		workflowConsistencyChecker,
+		eventBlobCache,
+		shard.GetLogger(),
+	)
 
 	historyEngImpl := &historyEngineImpl{
 		status:                     common.DaemonStatusInitialized,
@@ -217,6 +226,8 @@ func NewEngineWithShardContext(
 			metricsHandler: shard.GetMetricsHandler(),
 			logger:         logger,
 		},
+		replicationProgressCache: replicationProgressCache,
+		syncStateRetriever:       syncStateRetriever,
 	}
 
 	historyEngImpl.queueProcessors = make(map[tasks.Category]queues.Queue)
@@ -234,6 +245,7 @@ func NewEngineWithShardContext(
 			eventBlobCache,
 			replicationProgressCache,
 			executionManager,
+			syncStateRetriever,
 			logger,
 		)
 		historyEngImpl.nDCHistoryReplicator = ndc.NewHistoryReplicator(
@@ -759,6 +771,10 @@ func (e *historyEngineImpl) ReplicateWorkflowState(
 	return e.nDCWorkflowStateReplicator.SyncWorkflowState(ctx, request)
 }
 
+func (e *historyEngineImpl) ReplicateVersionedTransition(ctx context.Context, artifact *replicationspb.VersionedTransitionArtifact, sourceClusterName string) error {
+	return e.nDCWorkflowStateReplicator.ReplicateVersionedTransition(ctx, artifact, sourceClusterName)
+}
+
 func (e *historyEngineImpl) ImportWorkflowExecution(
 	ctx context.Context,
 	request *historyservice.ImportWorkflowExecutionRequest,
@@ -1023,4 +1039,8 @@ func (e *historyEngineImpl) ListTasks(
 // StateMachineEnvironment implements shard.Engine.
 func (e *historyEngineImpl) StateMachineEnvironment() hsm.Environment {
 	return e.stateMachineEnvironment
+}
+
+func (e *historyEngineImpl) SyncWorkflowState(ctx context.Context, request *historyservice.SyncWorkflowStateRequest) (_ *historyservice.SyncWorkflowStateResponse, retErr error) {
+	return replicationapi.SyncWorkflowState(ctx, request, e.replicationProgressCache, e.syncStateRetriever, e.logger)
 }

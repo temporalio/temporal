@@ -29,7 +29,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/golang/mock/gomock"
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -47,6 +46,7 @@ import (
 	"go.temporal.io/server/service/history/tests"
 	"go.temporal.io/server/service/history/workflow"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
+	"go.uber.org/mock/gomock"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -249,7 +249,7 @@ func (s *timerQueueTaskExecutorBaseSuite) TestIsValidExecutionTimeoutTask() {
 			}).AnyTimes()
 			mockMutableState.EXPECT().IsWorkflowExecutionRunning().Return(tc.workflowRunning).AnyTimes()
 
-			isValid := s.timerQueueTaskExecutorBase.isValidExecutionTimeoutTask(mockMutableState, timerTask)
+			isValid := s.timerQueueTaskExecutorBase.isValidWorkflowExecutionTimeoutTask(mockMutableState, timerTask)
 			s.Equal(tc.isValid, isValid)
 		})
 	}
@@ -292,7 +292,7 @@ func (s *timerQueueTaskExecutorBaseSuite) TestIsValidExecutionTimeouts() {
 			FirstExecutionRunId:             timerTask.FirstRunID,
 			WorkflowExecutionExpirationTime: timestamppb.New(tc.expirationTime),
 		})
-		isValid := s.timerQueueTaskExecutorBase.isValidExecutionTimeoutTask(mockMutableState, timerTask)
+		isValid := s.timerQueueTaskExecutorBase.isValidWorkflowExecutionTimeoutTask(mockMutableState, timerTask)
 		s.Equal(tc.isValid, isValid)
 	}
 }

@@ -569,6 +569,10 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowRunTimeoutTask(
 		return err
 	}
 
+	if !t.isValidWorkflowRunTimeoutTask(mutableState) {
+		return nil
+	}
+
 	timeoutFailure := failure.NewTimeoutFailure("workflow timeout", enumspb.TIMEOUT_TYPE_START_TO_CLOSE)
 	backoffInterval := backoff.NoBackoff
 	retryState := enumspb.RETRY_STATE_TIMEOUT
@@ -604,7 +608,12 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowRunTimeoutTask(
 	if initiator == enumspb.CONTINUE_AS_NEW_INITIATOR_UNSPECIFIED {
 		// We apply the update to execution using optimistic concurrency.  If it fails due to a conflict than reload
 		// the history and try the operation again.
-		return t.updateWorkflowExecution(ctx, weContext, mutableState, false)
+		updateErr := t.updateWorkflowExecution(ctx, weContext, mutableState, false)
+		if updateErr != nil {
+			return updateErr
+		}
+		weContext.UpdateRegistry(ctx, nil).Abort(update.AbortReasonWorkflowCompleted)
+		return nil
 	}
 
 	startEvent, err := mutableState.GetStartEvent(ctx)
@@ -674,7 +683,10 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowRunTimeoutTask(
 		return updateErr
 	}
 
-	weContext.UpdateRegistry(ctx, nil).Abort(update.AbortReasonWorkflowCompleted)
+	// A new run was created after the previous run timed out. Running Updates
+	// for this WF are aborted with a retryable error.
+	// Internal server retries will retry the API call, and the Update will be sent to the new run.
+	weContext.UpdateRegistry(ctx, nil).Abort(update.AbortReasonWorkflowContinuing)
 	return nil
 }
 
@@ -699,7 +711,7 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowExecutionTimeoutTask(
 		return nil
 	}
 
-	if !t.isValidExecutionTimeoutTask(mutableState, task) {
+	if !t.isValidWorkflowExecutionTimeoutTask(mutableState, task) {
 		return nil
 	}
 

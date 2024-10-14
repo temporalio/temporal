@@ -203,6 +203,7 @@ message DescribeTaskQueuePartitionRequest {
     bool report_stats = 4;
     // Report list of pollers for requested task queue types and versions
     bool report_pollers = 5;
+    bool report_internal_task_queue_status = 6;
 }
 
 message DescribeTaskQueuePartitionResponse {
@@ -339,14 +340,24 @@ message ForceLoadTaskQueuePartitionResponse {
     bool was_unloaded = 1;
 }
 
-
+// TODO Shivam - Please remove this in 123
 message ForceUnloadTaskQueueRequest {
     string namespace_id = 1;
     string task_queue = 2;
     temporal.api.enums.v1.TaskQueueType task_queue_type = 3;
 }
 
+// TODO Shivam - Please remove this in 123
 message ForceUnloadTaskQueueResponse {
+    bool was_loaded = 1;
+}
+
+message ForceUnloadTaskQueuePartitionRequest {
+    string namespace_id = 1;
+    temporal.server.api.taskqueue.v1.TaskQueuePartition task_queue_partition = 2;
+}
+
+message ForceUnloadTaskQueuePartitionResponse {
     bool was_loaded = 1;
 }
 

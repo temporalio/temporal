@@ -15,12 +15,12 @@
         enabled: true
         initialFailoverVersion: 2
         rpcName: "frontend"
-        rpcAddress: "127.0.0.1:8134"
+        rpcAddress: "127.0.1.1:7134"
       cluster-c:
         enabled: true
         initialFailoverVersion: 3
         rpcName: "frontend"
-        rpcAddress: "127.0.0.1:9134"
+        rpcAddress: "127.0.2.1:7134"
   enablearchival: false
   workerconfig:
     enablearchiver: false
@@ -54,12 +54,12 @@
         enabled: true
         initialFailoverVersion: 2
         rpcName: "frontend"
-        rpcAddress: "127.0.0.1:8134"
+        rpcAddress: "127.0.1.1:7134"
       cluster-c:
         enabled: true
         initialFailoverVersion: 3
         rpcName: "frontend"
-        rpcAddress: "127.0.0.1:9134"
+        rpcAddress: "127.0.2.1:7134"
   enablearchival: false
   workerconfig:
     enablearchiver: false
@@ -93,12 +93,12 @@
         enabled: true
         initialFailoverVersion: 2
         rpcName: "frontend"
-        rpcAddress: "127.0.0.1:8134"
+        rpcAddress: "127.0.1.1:7134"
       cluster-c:
         enabled: true
         initialFailoverVersion: 3
         rpcName: "frontend"
-        rpcAddress: "127.0.0.1:9134"
+        rpcAddress: "127.0.2.1:7134"
   enablearchival: false
   workerconfig:
     enablearchiver: false

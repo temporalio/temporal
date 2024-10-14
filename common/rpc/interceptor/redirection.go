@@ -45,6 +45,8 @@ import (
 	"google.golang.org/grpc/metadata"
 )
 
+// Note the nexusoperations component references these headers and adds them to a list of disallowed headers for users to set.
+// If any other headers are added for internal use, they should be added to the disallowed headers list.
 const (
 	DCRedirectionContextHeaderName = "xdc-redirection"
 	DCRedirectionApiHeaderName     = "xdc-redirection-api"
@@ -85,6 +87,7 @@ var (
 		"RecordActivityTaskHeartbeatById":    func() any { return &workflowservice.RecordActivityTaskHeartbeatByIdResponse{} },
 		"RequestCancelWorkflowExecution":     func() any { return &workflowservice.RequestCancelWorkflowExecutionResponse{} },
 		"ResetStickyTaskQueue":               func() any { return &workflowservice.ResetStickyTaskQueueResponse{} },
+		"ShutdownWorker":                     func() any { return &workflowservice.ShutdownWorkerResponse{} },
 		"ResetWorkflowExecution":             func() any { return &workflowservice.ResetWorkflowExecutionResponse{} },
 		"RespondActivityTaskCanceled":        func() any { return &workflowservice.RespondActivityTaskCanceledResponse{} },
 		"RespondActivityTaskCanceledById":    func() any { return &workflowservice.RespondActivityTaskCanceledByIdResponse{} },
@@ -120,10 +123,11 @@ var (
 		"GetWorkerVersioningRules":         func() any { return &workflowservice.GetWorkerVersioningRulesResponse{} },
 		"GetWorkerTaskReachability":        func() any { return &workflowservice.GetWorkerTaskReachabilityResponse{} },
 
-		"StartBatchOperation":    func() any { return &workflowservice.StartBatchOperationResponse{} },
-		"StopBatchOperation":     func() any { return &workflowservice.StopBatchOperationResponse{} },
-		"DescribeBatchOperation": func() any { return &workflowservice.DescribeBatchOperationResponse{} },
-		"ListBatchOperations":    func() any { return &workflowservice.ListBatchOperationsResponse{} },
+		"StartBatchOperation":       func() any { return &workflowservice.StartBatchOperationResponse{} },
+		"StopBatchOperation":        func() any { return &workflowservice.StopBatchOperationResponse{} },
+		"DescribeBatchOperation":    func() any { return &workflowservice.DescribeBatchOperationResponse{} },
+		"ListBatchOperations":       func() any { return &workflowservice.ListBatchOperationsResponse{} },
+		"UpdateActivityOptionsById": func() any { return &workflowservice.UpdateActivityOptionsByIdResponse{} },
 	}
 )
 

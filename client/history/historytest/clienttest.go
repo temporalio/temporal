@@ -33,7 +33,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel/trace"
@@ -49,6 +48,7 @@ import (
 	"go.temporal.io/server/internal/nettest"
 	historyserver "go.temporal.io/server/service/history"
 	"go.temporal.io/server/service/history/tasks"
+	"go.uber.org/mock/gomock"
 	"google.golang.org/grpc"
 )
 
@@ -183,7 +183,7 @@ func createClient(ctrl *gomock.Controller, listener *nettest.PipeListener) histo
 		log.NewTestLogger(),
 		1,
 		rpcFactory,
-		time.Duration(0),
+		time.Second,
 	)
 	return client
 }

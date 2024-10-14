@@ -141,7 +141,6 @@ func (f *visibilityQueueFactory) CreateQueue(
 		f.DLQWriter,
 		f.Config.TaskDLQEnabled,
 		f.Config.TaskDLQUnexpectedErrorAttempts,
-		f.Config.TaskDLQInternalErrors,
 		f.Config.TaskDLQErrorPattern,
 	)
 	return queues.NewImmediateQueue(
@@ -154,6 +153,7 @@ func (f *visibilityQueueFactory) CreateQueue(
 				BatchSize:            f.Config.VisibilityTaskBatchSize,
 				MaxPendingTasksCount: f.Config.QueuePendingTaskMaxCount,
 				PollBackoffInterval:  f.Config.VisibilityProcessorPollBackoffInterval,
+				MaxPredicateSize:     f.Config.QueueMaxPredicateSize,
 			},
 			MonitorOptions: queues.MonitorOptions{
 				PendingTasksCriticalCount:   f.Config.QueuePendingTaskCriticalCount,

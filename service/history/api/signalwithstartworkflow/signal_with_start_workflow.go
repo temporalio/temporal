@@ -159,7 +159,7 @@ func createWorkflowMutationFunction(
 	}
 	currentMutableState := currentWorkflowLease.GetMutableState()
 	currentExecutionState := currentMutableState.GetExecutionState()
-	currentWorkflowStartTime := currentMutableState.GetExecutionInfo().StartTime.AsTime()
+	currentWorkflowStartTime := currentMutableState.GetExecutionState().StartTime.AsTime()
 
 	// It is unclear if currentExecutionState.RunId is the same as
 	// currentWorkflowLease.GetContext().GetWorkflowKey().RunID
@@ -317,6 +317,7 @@ func signalWorkflow(
 		request.GetIdentity(),
 		request.GetHeader(),
 		request.GetSkipGenerateWorkflowTask(),
+		request.GetLinks(),
 	); err != nil {
 		return err
 	}
@@ -325,7 +326,8 @@ func signalWorkflow(
 	if !mutableState.HasPendingWorkflowTask() && !request.GetSkipGenerateWorkflowTask() {
 
 		executionInfo := mutableState.GetExecutionInfo()
-		if !mutableState.HadOrHasWorkflowTask() && !executionInfo.ExecutionTime.AsTime().Equal(executionInfo.StartTime.AsTime()) {
+		executionState := mutableState.GetExecutionState()
+		if !mutableState.HadOrHasWorkflowTask() && !executionInfo.ExecutionTime.AsTime().Equal(executionState.StartTime.AsTime()) {
 			metrics.SignalWithStartSkipDelayCounter.With(shardContext.GetMetricsHandler()).Record(1, metrics.NamespaceTag(request.GetNamespace()))
 
 			workflowKey := workflowLease.GetContext().GetWorkflowKey()

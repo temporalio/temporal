@@ -136,7 +136,7 @@ func (h *Handler) opMetricsHandler(
 ) metrics.Handler {
 	nsName := h.namespaceName(namespace.ID(namespaceID))
 	partition := tqid.UnsafePartitionFromProto(taskQueue, namespaceID, taskQueueType)
-	return metrics.GetPerTaskQueuePartitionScope(
+	return metrics.GetPerTaskQueuePartitionIDScope(
 		h.metricsHandler.WithTags(metrics.OperationTag(operation)),
 		nsName.String(),
 		partition,
@@ -411,6 +411,14 @@ func (h *Handler) ForceUnloadTaskQueue(
 ) (_ *matchingservice.ForceUnloadTaskQueueResponse, retError error) {
 	defer log.CapturePanic(h.logger, &retError)
 	return h.engine.ForceUnloadTaskQueue(ctx, request)
+}
+
+func (h *Handler) ForceUnloadTaskQueuePartition(
+	ctx context.Context,
+	request *matchingservice.ForceUnloadTaskQueuePartitionRequest,
+) (_ *matchingservice.ForceUnloadTaskQueuePartitionResponse, retError error) {
+	defer log.CapturePanic(h.logger, &retError)
+	return h.engine.ForceUnloadTaskQueuePartition(ctx, request)
 }
 
 func (h *Handler) ForceLoadTaskQueuePartition(

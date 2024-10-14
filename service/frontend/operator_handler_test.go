@@ -31,7 +31,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/golang/mock/gomock"
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -56,6 +55,7 @@ import (
 	"go.temporal.io/server/common/testing/mocksdk"
 	"go.temporal.io/server/service/worker/addsearchattributes"
 	"go.temporal.io/server/service/worker/deletenamespace"
+	"go.uber.org/mock/gomock"
 	expmaps "golang.org/x/exp/maps"
 	"google.golang.org/grpc/health"
 )

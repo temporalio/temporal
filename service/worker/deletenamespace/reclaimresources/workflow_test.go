@@ -30,7 +30,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/sdk/temporal"
@@ -43,6 +42,7 @@ import (
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/service/worker/deletenamespace/deleteexecutions"
 	"go.temporal.io/server/service/worker/deletenamespace/errors"
+	"go.uber.org/mock/gomock"
 )
 
 func Test_ReclaimResourcesWorkflow_Success(t *testing.T) {

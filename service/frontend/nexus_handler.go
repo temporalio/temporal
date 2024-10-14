@@ -186,6 +186,7 @@ func (c *operationContext) interceptRequest(ctx context.Context, request *matchi
 		if retErr != nil {
 			c.telemetryInterceptor.HandleError(
 				request,
+				"",
 				c.metricsHandlerForInterceptors,
 				[]tag.Tag{tag.Operation(c.method), tag.WorkflowNamespace(c.namespaceName)},
 				retErr,
@@ -393,7 +394,9 @@ func (h *nexusHandler) StartOperation(
 			for _, link := range t.AsyncSuccess.GetLinks() {
 				linkURL, err := url.Parse(link.Url)
 				if err != nil {
-					// silently ignore for now
+					// TODO(rodrigozhou): links are non-essential for the execution of the workflow,
+					// so ignoring the error for now; we will revisit how to handle these errors later.
+					oc.logger.Error(fmt.Sprintf("failed to parse link url: %s", link.Url), tag.Error(err))
 					continue
 				}
 				nexusLinks = append(nexusLinks, nexus.Link{

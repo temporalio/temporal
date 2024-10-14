@@ -27,12 +27,12 @@ package batcher
 import (
 	"testing"
 
-	"github.com/golang/mock/gomock"
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/sdk/testsuite"
+	"go.uber.org/mock/gomock"
 )
 
 type batcherSuite struct {

@@ -29,7 +29,6 @@ import (
 	"runtime"
 	"testing"
 
-	"github.com/golang/mock/gomock"
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -41,6 +40,7 @@ import (
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/workflow"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
+	"go.uber.org/mock/gomock"
 )
 
 type (
@@ -288,7 +288,7 @@ func (s *workflowSuite) TestSuppressWorkflowBy_Terminate() {
 	s.mockMutableState.EXPECT().FlushBufferedEvents()
 
 	s.mockMutableState.EXPECT().AddWorkflowExecutionTerminatedEvent(
-		wtFailedEventID, WorkflowTerminationReason, gomock.Any(), WorkflowTerminationIdentity, false,
+		wtFailedEventID, WorkflowTerminationReason, gomock.Any(), WorkflowTerminationIdentity, false, nil,
 	).Return(&historypb.HistoryEvent{}, nil)
 
 	// if workflow is in zombie or finished state, keep as is
