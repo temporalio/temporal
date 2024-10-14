@@ -127,6 +127,7 @@ func (e *ExecutableVerifyVersionedTransitionTask) Execute() error {
 				e.WorkflowID,
 				e.RunID,
 				e.ReplicationTask().VersionedTransition,
+				nil,
 			)
 		default:
 			return err
@@ -153,6 +154,7 @@ func (e *ExecutableVerifyVersionedTransitionTask) Execute() error {
 			e.WorkflowID,
 			e.RunID,
 			e.ReplicationTask().VersionedTransition,
+			ms.GetExecutionInfo().VersionHistories,
 		)
 	}
 	// case 3: state transition is not on non-current branch, but no event to verify
