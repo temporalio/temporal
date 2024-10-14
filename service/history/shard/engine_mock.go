@@ -1021,6 +1021,21 @@ func (mr *MockEngineMockRecorder) UnsubscribeReplicationNotification(arg0 any) *
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UnsubscribeReplicationNotification", reflect.TypeOf((*MockEngine)(nil).UnsubscribeReplicationNotification), arg0)
 }
 
+// UpdateActivityOptions mocks base method.
+func (m *MockEngine) UpdateActivityOptions(ctx context.Context, request *historyservice.UpdateActivityOptionsRequest) (*historyservice.UpdateActivityOptionsResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdateActivityOptions", ctx, request)
+	ret0, _ := ret[0].(*historyservice.UpdateActivityOptionsResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UpdateActivityOptions indicates an expected call of UpdateActivityOptions.
+func (mr *MockEngineMockRecorder) UpdateActivityOptions(ctx, request any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateActivityOptions", reflect.TypeOf((*MockEngine)(nil).UpdateActivityOptions), ctx, request)
+}
+
 // UpdateWorkflowExecution mocks base method.
 func (m *MockEngine) UpdateWorkflowExecution(ctx context.Context, request *historyservice.UpdateWorkflowExecutionRequest) (*historyservice.UpdateWorkflowExecutionResponse, error) {
 	m.ctrl.T.Helper()
