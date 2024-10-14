@@ -139,8 +139,6 @@ func TestReadLevelForAllExpiredTasksInBatch(t *testing.T) {
 }
 
 func TestTaskWriterShutdown(t *testing.T) {
-	t.Skip("flaky test")
-
 	controller := gomock.NewController(t)
 
 	tlm := mustCreateTestPhysicalTaskQueueManager(t, controller)
