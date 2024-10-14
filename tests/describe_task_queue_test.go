@@ -307,6 +307,45 @@ func (s *DescribeTaskQueueSuite) validateDescribeTaskQueue(
 	}
 }
 
+// validateDescribeTaskQueuePartition calls DescribeTaskQueuePartition to fetch the stats into the partition; used for testing the
+// DescribeTaskQueue caching behaviour
+func (s *DescribeTaskQueueSuite) validateDescribeTaskQueuePartition(tqName string, expectedBacklogCount map[enumspb.TaskQueueType]int64,
+	expectedAddRate map[enumspb.TaskQueueType]bool, expectedDispatchRate map[enumspb.TaskQueueType]bool) {
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		resp, err := s.GetTestCluster().MatchingClient().DescribeTaskQueuePartition(
+			context.Background(),
+			&matchingservice.DescribeTaskQueuePartitionRequest{
+				NamespaceId: s.GetNamespaceID(s.Namespace()),
+				TaskQueuePartition: &taskqueuespb.TaskQueuePartition{
+					TaskQueue:     tqName,
+					TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW, // since we have only workflow tasks
+				},
+				Versions: &taskqueuepb.TaskQueueVersionSelection{
+					Unversioned: true,
+				},
+				ReportStats:                   true,
+				ReportPollers:                 false,
+				ReportInternalTaskQueueStatus: false,
+			})
+		a := assert.New(t)
+		a.NoError(err)
+
+		// parsing out the response
+		a.Equal(1, len(resp.GetVersionsInfoInternal()), "should be 1 because only default/unversioned queue")
+		a.NotNil(resp.GetVersionsInfoInternal()[""])
+		a.NotNil(resp.GetVersionsInfoInternal()[""].GetPhysicalTaskQueueInfo())
+
+		// validating stats
+		wfStats := resp.GetVersionsInfoInternal()[""].GetPhysicalTaskQueueInfo().GetTaskQueueStats()
+		a.NotNil(wfStats)
+
+		a.GreaterOrEqual(wfStats.ApproximateBacklogCount, expectedBacklogCount[enumspb.TASK_QUEUE_TYPE_WORKFLOW])
+		a.Equal(expectedBacklogCount[enumspb.TASK_QUEUE_TYPE_WORKFLOW] == 0, wfStats.ApproximateBacklogAge.AsDuration() == time.Duration(0))
+		a.Equal(expectedAddRate[enumspb.TASK_QUEUE_TYPE_WORKFLOW], wfStats.TasksAddRate > 0)
+		a.Equal(expectedDispatchRate[enumspb.TASK_QUEUE_TYPE_WORKFLOW], wfStats.TasksDispatchRate > 0)
+	}, 200*time.Millisecond, 50*time.Millisecond)
+}
+
 func (s *DescribeTaskQueueSuite) publishConsumeWorkflowTasksValidateStatsCached(workflows int) {
 	expectedBacklogCount := make(map[enumspb.TaskQueueType]int64)
 	maxBacklogExtraTasks := make(map[enumspb.TaskQueueType]int64)
@@ -356,39 +395,7 @@ func (s *DescribeTaskQueueSuite) publishConsumeWorkflowTasksValidateStatsCached(
 
 	// DescribeTaskQueuePartition loads the latest stats into the partition; this ensures
 	// we don't wait when we make the following DescribeTaskQueue call
-	s.EventuallyWithT(func(t *assert.CollectT) {
-		resp, err := s.GetTestCluster().MatchingClient().DescribeTaskQueuePartition(
-			context.Background(),
-			&matchingservice.DescribeTaskQueuePartitionRequest{
-				NamespaceId: s.GetNamespaceID(s.Namespace()),
-				TaskQueuePartition: &taskqueuespb.TaskQueuePartition{
-					TaskQueue:     tqName,
-					TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW, // since we have only workflow tasks
-				},
-				Versions: &taskqueuepb.TaskQueueVersionSelection{
-					Unversioned: true,
-				},
-				ReportStats:                   true,
-				ReportPollers:                 false,
-				ReportInternalTaskQueueStatus: false,
-			})
-		a := assert.New(t)
-		a.NoError(err)
-
-		// parsing out the response
-		a.Equal(1, len(resp.GetVersionsInfoInternal()), "should be 1 because only default/unversioned queue")
-		a.NotNil(resp.GetVersionsInfoInternal()[""])
-		a.NotNil(resp.GetVersionsInfoInternal()[""].GetPhysicalTaskQueueInfo())
-
-		// validating stats
-		wfStats := resp.GetVersionsInfoInternal()[""].GetPhysicalTaskQueueInfo().GetTaskQueueStats()
-		a.NotNil(wfStats)
-
-		a.GreaterOrEqual(wfStats.ApproximateBacklogCount, expectedBacklogCount[enumspb.TASK_QUEUE_TYPE_WORKFLOW])
-		a.Equal(expectedBacklogCount[enumspb.TASK_QUEUE_TYPE_WORKFLOW] == 0, wfStats.ApproximateBacklogAge.AsDuration() == time.Duration(0))
-		a.Equal(expectedAddRate[enumspb.TASK_QUEUE_TYPE_WORKFLOW], wfStats.TasksAddRate > 0)
-		a.Equal(expectedDispatchRate[enumspb.TASK_QUEUE_TYPE_WORKFLOW], wfStats.TasksDispatchRate > 0)
-	}, 200*time.Millisecond, 50*time.Millisecond)
+	s.validateDescribeTaskQueuePartition(tqName, expectedBacklogCount, expectedAddRate, expectedDispatchRate)
 
 	// cache gets populated for the first time
 	s.validateDescribeTaskQueueCached(tqName, expectedBacklogCount, maxBacklogExtraTasks, expectedAddRate, expectedDispatchRate, false)
@@ -408,41 +415,16 @@ func (s *DescribeTaskQueueSuite) publishConsumeWorkflowTasksValidateStatsCached(
 	}
 
 	// Do a describe Tq partition calls in an eventually with the matching client
-	s.EventuallyWithT(func(t *assert.CollectT) {
-		resp, err := s.GetTestCluster().MatchingClient().DescribeTaskQueuePartition(
-			context.Background(),
-			&matchingservice.DescribeTaskQueuePartitionRequest{
-				NamespaceId: s.GetNamespaceID(s.Namespace()),
-				TaskQueuePartition: &taskqueuespb.TaskQueuePartition{
-					TaskQueue:     tqName,
-					TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW, // since we have only workflow tasks
-				},
-				Versions: &taskqueuepb.TaskQueueVersionSelection{
-					Unversioned: true,
-				},
-				ReportStats:                   true,
-				ReportPollers:                 false,
-				ReportInternalTaskQueueStatus: false,
-			})
-		a := assert.New(t)
-		a.NoError(err)
-
-		// parsing out the response
-		a.Equal(1, len(resp.GetVersionsInfoInternal()), "should be 1 because only default/unversioned queue")
-		a.NotNil(resp.GetVersionsInfoInternal()[""])
-		a.NotNil(resp.GetVersionsInfoInternal()[""].GetPhysicalTaskQueueInfo())
-
-		// validating stats
-		wfStats := resp.GetVersionsInfoInternal()[""].GetPhysicalTaskQueueInfo().GetTaskQueueStats()
-		a.NotNil(wfStats)
-
-		a.GreaterOrEqual(wfStats.ApproximateBacklogCount, int64(0))
-		a.Equal(true, wfStats.ApproximateBacklogAge.AsDuration() == time.Duration(0))
-		a.Equal(true, wfStats.TasksAddRate > 0)
-		a.Equal(true, wfStats.TasksDispatchRate > 0)
-	}, 200*time.Millisecond, 5*time.Millisecond)
+	expectedBacklogCount[enumspb.TASK_QUEUE_TYPE_WORKFLOW] = int64(0)
+	expectedAddRate[enumspb.TASK_QUEUE_TYPE_WORKFLOW] = workflows > 0
+	expectedDispatchRate[enumspb.TASK_QUEUE_TYPE_WORKFLOW] = true
+	s.validateDescribeTaskQueuePartition(tqName, expectedBacklogCount, expectedAddRate, expectedDispatchRate)
 
 	// verify cached stats, injected in the initial call, are being fetched
+	expectedBacklogCount[enumspb.TASK_QUEUE_TYPE_WORKFLOW] = int64(workflows)
+	maxBacklogExtraTasks[enumspb.TASK_QUEUE_TYPE_WORKFLOW] = maxExtraTasksAllowed
+	expectedAddRate[enumspb.TASK_QUEUE_TYPE_WORKFLOW] = workflows > 0
+	expectedDispatchRate[enumspb.TASK_QUEUE_TYPE_WORKFLOW] = false
 	s.validateDescribeTaskQueueCached(tqName, expectedBacklogCount, maxBacklogExtraTasks, expectedAddRate, expectedDispatchRate, false)
 
 }
