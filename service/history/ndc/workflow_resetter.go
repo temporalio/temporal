@@ -587,7 +587,10 @@ func (r *workflowResetterImpl) reapplyContinueAsNewWorkflowEvents(
 	//  from visibility for better coverage of events eligible for re-application.
 
 	lastVisitedRunID := baseRunID
-
+	if r.shouldExcludeAllReapplyEvents(resetReapplyExcludeTypes) {
+		// All subsequent events should be excluded from being re-applied. So, do nothing and return.
+		return lastVisitedRunID, nil
+	}
 	// First, special handling of remaining events for base workflow
 	nextRunID, err := r.reapplyEventsFromBranch(
 		ctx,
@@ -869,4 +872,18 @@ func IsTerminatedByResetter(event *historypb.HistoryEvent) bool {
 		return true
 	}
 	return false
+}
+
+// shouldExcludeAllReapplyEvents returns true if the excludeTypes map contains all the elegible re-apply event types.
+func (r *workflowResetterImpl) shouldExcludeAllReapplyEvents(excludeTypes map[enumspb.ResetReapplyExcludeType]struct{}) bool {
+	for key := range enumspb.ResetReapplyExcludeType_name {
+		eventType := enumspb.ResetReapplyExcludeType(key)
+		if eventType == enumspb.RESET_REAPPLY_EXCLUDE_TYPE_UNSPECIFIED {
+			continue
+		}
+		if _, ok := excludeTypes[eventType]; !ok {
+			return false
+		}
+	}
+	return true
 }
