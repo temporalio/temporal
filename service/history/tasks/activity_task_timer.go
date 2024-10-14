@@ -42,6 +42,7 @@ type (
 		TimeoutType         enumspb.TimeoutType
 		EventID             int64
 		Attempt             int32
+		Stamp               int32
 	}
 )
 
@@ -71,4 +72,12 @@ func (a *ActivityTimeoutTask) GetCategory() Category {
 
 func (a *ActivityTimeoutTask) GetType() enumsspb.TaskType {
 	return enumsspb.TASK_TYPE_ACTIVITY_TIMEOUT
+}
+
+func (r *ActivityTimeoutTask) GetStamp() int32 {
+	return r.Stamp
+}
+
+func (r *ActivityTimeoutTask) SetStamp(stamp int32) {
+	r.Stamp = stamp
 }

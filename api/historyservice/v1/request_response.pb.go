@@ -8699,7 +8699,7 @@ type UpdateActivityOptionsResponse struct {
 	unknownFields protoimpl.UnknownFields
 
 	// Activity options after an update
-	ActivityOptions *v121.ActivityOptions `protobuf:"bytes,1,opt,name=activity_options,json=activityOptions,proto3" json:"activity_options,omitempty"`
+	ActivityOptions *v121.ActivityOptions  `protobuf:"bytes,1,opt,name=activity_options,json=activityOptions,proto3" json:"activity_options,omitempty"`
 }
 
 func (x *UpdateActivityOptionsResponse) Reset() {
