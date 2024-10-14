@@ -363,7 +363,7 @@ func (s *DescribeTaskQueueSuite) publishConsumeWorkflowTasksValidateStatsCached(
 				NamespaceId: s.GetNamespaceID(s.Namespace()),
 				TaskQueuePartition: &taskqueuespb.TaskQueuePartition{
 					TaskQueue:     tqName,
-					TaskQueueType: 0, // since we have only workflow tasks
+					TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW, // since we have only workflow tasks
 				},
 				Versions: &taskqueuepb.TaskQueueVersionSelection{
 					Unversioned: true,
@@ -384,12 +384,13 @@ func (s *DescribeTaskQueueSuite) publishConsumeWorkflowTasksValidateStatsCached(
 		wfStats := resp.GetVersionsInfoInternal()[""].GetPhysicalTaskQueueInfo().GetTaskQueueStats()
 		a.NotNil(wfStats)
 
-		a.GreaterOrEqual(int64(0), wfStats.ApproximateBacklogCount)
-		a.Equal(time.Duration(0), wfStats.ApproximateBacklogAge.AsDuration())
-		a.Equal(float32(0), wfStats.TasksAddRate)
-		a.Equal(float32(0), wfStats.TasksDispatchRate)
-	}, 200*time.Millisecond, 5*time.Millisecond)
+		a.GreaterOrEqual(wfStats.ApproximateBacklogCount, expectedBacklogCount[enumspb.TASK_QUEUE_TYPE_WORKFLOW])
+		a.Equal(expectedBacklogCount[enumspb.TASK_QUEUE_TYPE_WORKFLOW] == 0, wfStats.ApproximateBacklogAge.AsDuration() == time.Duration(0))
+		a.Equal(expectedAddRate[enumspb.TASK_QUEUE_TYPE_WORKFLOW], wfStats.TasksAddRate > 0)
+		a.Equal(expectedDispatchRate[enumspb.TASK_QUEUE_TYPE_WORKFLOW], wfStats.TasksDispatchRate > 0)
+	}, 200*time.Millisecond, 50*time.Millisecond)
 
+	// cache gets populated for the first time
 	s.validateDescribeTaskQueueCached(tqName, expectedBacklogCount, maxBacklogExtraTasks, expectedAddRate, expectedDispatchRate, false)
 
 	// Poll the tasks
@@ -414,7 +415,7 @@ func (s *DescribeTaskQueueSuite) publishConsumeWorkflowTasksValidateStatsCached(
 				NamespaceId: s.GetNamespaceID(s.Namespace()),
 				TaskQueuePartition: &taskqueuespb.TaskQueuePartition{
 					TaskQueue:     tqName,
-					TaskQueueType: 0, // since we have only workflow tasks
+					TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW, // since we have only workflow tasks
 				},
 				Versions: &taskqueuepb.TaskQueueVersionSelection{
 					Unversioned: true,
@@ -435,13 +436,13 @@ func (s *DescribeTaskQueueSuite) publishConsumeWorkflowTasksValidateStatsCached(
 		wfStats := resp.GetVersionsInfoInternal()[""].GetPhysicalTaskQueueInfo().GetTaskQueueStats()
 		a.NotNil(wfStats)
 
-		a.GreaterOrEqual(int64(0), wfStats.ApproximateBacklogCount)
-		a.Equal(time.Duration(0), wfStats.ApproximateBacklogAge.AsDuration())
-		a.Equal(float32(0), wfStats.TasksAddRate)
-		a.Equal(float32(0), wfStats.TasksDispatchRate)
+		a.GreaterOrEqual(wfStats.ApproximateBacklogCount, int64(0))
+		a.Equal(true, wfStats.ApproximateBacklogAge.AsDuration() == time.Duration(0))
+		a.Equal(true, wfStats.TasksAddRate > 0)
+		a.Equal(true, wfStats.TasksDispatchRate > 0)
 	}, 200*time.Millisecond, 5*time.Millisecond)
 
-	// fetches cached stats
+	// verify cached stats, injected in the initial call, are being fetched
 	s.validateDescribeTaskQueueCached(tqName, expectedBacklogCount, maxBacklogExtraTasks, expectedAddRate, expectedDispatchRate, false)
 
 }
