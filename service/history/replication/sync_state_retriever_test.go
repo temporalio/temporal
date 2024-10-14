@@ -43,6 +43,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/service/history/api"
+	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/hsm"
 	"go.temporal.io/server/service/history/hsm/hsmtest"
 	"go.temporal.io/server/service/history/shard"
@@ -124,6 +125,31 @@ func (s *syncWorkflowStateSuite) SetupTest() {
 func (s *syncWorkflowStateSuite) TearDownTest() {
 	s.controller.Finish()
 	s.mockShard.StopForTest()
+}
+
+func (s *syncWorkflowStateSuite) TestSyncWorkflowState_TransitionHistoryDisabled() {
+	mu := workflow.NewMockMutableState(s.controller)
+	s.workflowConsistencyChecker.EXPECT().GetWorkflowLeaseWithConsistencyCheck(gomock.Any(), nil, gomock.Any(), definition.WorkflowKey{
+		NamespaceID: s.namespaceID,
+		WorkflowID:  s.execution.WorkflowId,
+		RunID:       s.execution.RunId,
+	}, locks.PriorityLow).Return(
+		api.NewWorkflowLease(nil, func(err error) {}, mu), nil)
+
+	executionInfo := &persistencespb.WorkflowExecutionInfo{
+		TransitionHistory: nil, // transition history is disabled
+	}
+	mu.EXPECT().GetExecutionInfo().Return(executionInfo).AnyTimes()
+	result, err := s.syncStateRetriever.GetSyncWorkflowStateArtifact(
+		context.Background(),
+		s.namespaceID,
+		s.execution,
+		nil,
+		nil,
+	)
+	s.Nil(result)
+	s.Error(err)
+	s.ErrorIs(err, consts.ErrTransitionHistoryDisabled)
 }
 
 func (s *syncWorkflowStateSuite) TestSyncWorkflowState_ReturnMutation() {
