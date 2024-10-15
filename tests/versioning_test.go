@@ -125,7 +125,7 @@ func (s *VersioningIntegSuite) SetupSuite() {
 
 		// this is overridden since we don't want caching to be enabled while testing DescribeTaskQueue
 		// behaviour related to versioning
-		dynamicconfig.PhysicalTaskQueueInfoByBuildIdTTL.Key(): 0 * time.Second,
+		dynamicconfig.TaskQueueInfoByBuildIdTTL.Key(): 0 * time.Second,
 	}
 	s.SetDynamicConfigOverrides(dynamicConfigOverrides)
 	s.FunctionalTestBase.SetupSuite("testdata/es_cluster.yaml")

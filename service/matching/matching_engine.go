@@ -964,7 +964,7 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 		}
 
 		timeSinceLastFanOut := rootPM.TimeSinceLastFanOut()
-		lastFanOutTTL := tqConfig.PhysicalTaskQueueInfoByBuildIdTTL()
+		lastFanOutTTL := tqConfig.TaskQueueInfoByBuildIdTTL()
 
 		physicalInfoByBuildId := make(map[string]map[enumspb.TaskQueueType]*taskqueuespb.PhysicalTaskQueueInfo)
 		if timeSinceLastFanOut > lastFanOutTTL {
