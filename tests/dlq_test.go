@@ -30,7 +30,6 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
-	"flag"
 	"fmt"
 	"io"
 	"os"
@@ -118,7 +117,7 @@ const (
 )
 
 func TestDLQSuite(t *testing.T) {
-	flag.Parse()
+	t.Parallel()
 	suite.Run(t, new(DLQSuite))
 }
 
@@ -164,12 +163,12 @@ func (s *DLQSuite) SetupSuite() {
 	)
 	s.tdbgApp = tdbgtest.NewCliApp(
 		func(params *tdbg.Params) {
-			params.ClientFactory = tdbg.NewClientFactory(tdbg.WithFrontendAddress(s.HostPort()))
+			params.ClientFactory = tdbg.NewClientFactory(tdbg.WithFrontendAddress(s.FrontendGRPCAddress()))
 			params.Writer = &s.writer
 		},
 	)
 	sdkClient, err := sdkclient.Dial(sdkclient.Options{
-		HostPort:  s.HostPort(),
+		HostPort:  s.FrontendGRPCAddress(),
 		Namespace: s.Namespace(),
 	})
 	s.NoError(err)
@@ -514,7 +513,7 @@ func (s *DLQSuite) verifyRunIsInDLQ(
 // executeWorkflow just executes a simple no-op workflow that returns "hello" and returns the sdk workflow run.
 func (s *DLQSuite) executeWorkflow(ctx context.Context, workflowID string) sdkclient.WorkflowRun {
 	sdkClient, err := sdkclient.Dial(sdkclient.Options{
-		HostPort:  s.HostPort(),
+		HostPort:  s.FrontendGRPCAddress(),
 		Namespace: s.Namespace(),
 	})
 	s.NoError(err)

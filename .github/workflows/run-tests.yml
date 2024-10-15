@@ -78,7 +78,7 @@ jobs:
       - id: generate_output
         run: |
           shards=3
-          timeout=40
+          timeout=35   # update this to TEST_TIMEOUT if you update the Makefile
           runs_on='["ubuntu-20.04"]'
           if [[ "${{ inputs.run_single_functional_test }}" == "true" || "${{ inputs.run_single_unit_test }}" == "true" ]]; then
             shards=1
@@ -324,28 +324,34 @@ jobs:
           - name: cass_es
             persistence_type: nosql
             persistence_driver: elasticsearch
+            parallel_flags: ""
             containers: [cassandra, elasticsearch]
           - name: cass_es8
             persistence_type: nosql
             persistence_driver: elasticsearch
+            parallel_flags: ""
             containers: [cassandra, elasticsearch8]
           - name: mysql8
             persistence_type: sql
             persistence_driver: mysql8
+            parallel_flags: ""
             containers: [mysql]
           - name: postgres12
             persistence_type: sql
             persistence_driver: postgres12
+            parallel_flags: "-parallel=2" # reduce parallelism for postgres
             containers: [postgresql]
           - name: postgres12_pgx
             persistence_type: sql
             persistence_driver: postgres12_pgx
+            parallel_flags: "-parallel=2" # reduce parallelism for postgres
             containers: [postgresql]
     runs-on: ${{ matrix.runs-on }}
     env:
       PERSISTENCE_TYPE: ${{ matrix.persistence_type }}
       PERSISTENCE_DRIVER: ${{ matrix.persistence_driver }}
       BUILDKITE_MESSAGE: '{"job": "functional-test-xdc", "db": "${{ matrix.persistence_driver }}"}'
+      TEST_PARALLEL_FLAGS: ${{ matrix.parallel_flags }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -366,7 +372,7 @@ jobs:
           down-flags: -v
 
       - name: Run functional test xdc
-        timeout-minutes: 40
+        timeout-minutes: 40   # update this to TEST_TIMEOUT+5 if you update the Makefile
         run: make functional-test-xdc-coverage
 
       - name: Upload test results

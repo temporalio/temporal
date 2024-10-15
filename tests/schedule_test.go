@@ -26,7 +26,6 @@ package tests
 
 import (
 	"errors"
-	"flag"
 	"fmt"
 	"strings"
 	"sync/atomic"
@@ -88,7 +87,7 @@ type (
 )
 
 func TestScheduleFunctionalSuite(t *testing.T) {
-	flag.Parse()
+	t.Parallel()
 	suite.Run(t, new(ScheduleFunctionalSuite))
 }
 
@@ -113,7 +112,7 @@ func (s *ScheduleFunctionalSuite) SetupTest() {
 	s.HistoryRequire = historyrequire.New(s.T())
 	s.dataConverter = testcore.NewTestDataConverter()
 	sdkClient, err := sdkclient.Dial(sdkclient.Options{
-		HostPort:      s.HostPort(),
+		HostPort:      s.FrontendGRPCAddress(),
 		Namespace:     s.Namespace(),
 		DataConverter: s.dataConverter,
 	})

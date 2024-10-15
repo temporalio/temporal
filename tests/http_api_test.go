@@ -71,6 +71,7 @@ type HttpApiTestSuite struct {
 }
 
 func TestHttpApiTestSuite(t *testing.T) {
+	t.Parallel()
 	suite.Run(t, new(HttpApiTestSuite))
 }
 

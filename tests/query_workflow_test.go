@@ -51,6 +51,7 @@ type QueryWorkflowSuite struct {
 }
 
 func TestQueryWorkflowSuite(t *testing.T) {
+	t.Parallel()
 	suite.Run(t, new(QueryWorkflowSuite))
 }
 
