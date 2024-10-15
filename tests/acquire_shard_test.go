@@ -37,26 +37,25 @@ import (
 	"go.temporal.io/server/tests/testcore"
 )
 
-// AcquireShardFunctionalSuite is the base test suite for testing acquire shard.
-type AcquireShardFunctionalSuite struct {
+// AcquireShardSuiteBase is the base test suite for testing acquire shard.
+type AcquireShardSuiteBase struct {
 	testcore.FunctionalTestBase
 	logRecorder *logRecorder
 	logs        chan logRecord
 }
 
-func TestAcquireShardFunctionalSuite(t *testing.T) {
-	suite.Run(t, new(AcquireShardFunctionalSuite))
-}
-
 // SetupSuite sets up the test suite by setting the log recorder.
-func (s *AcquireShardFunctionalSuite) SetupSuite() {
-	s.logs = make(chan logRecord, 100)
+func (s *AcquireShardSuiteBase) SetupSuite() {
+	// Server startup happens in Setup_Suite_, but we don't listen on the log channel until the
+	// _test_ runs. So this needs to be big enough to buffer all of the server startup logs,
+	// which are currently about 190 lines (October 2024).
+	s.logs = make(chan logRecord, 2000)
 	s.logRecorder = newLogRecorder(s.logs)
 	s.Logger = s.logRecorder
 }
 
 // TearDownSuite tears down the test suite by shutting down the test cluster after a short delay.
-func (s *AcquireShardFunctionalSuite) TearDownSuite() {
+func (s *AcquireShardSuiteBase) TearDownSuite() {
 	// we need to wait for all components to start before we can safely tear down
 	time.Sleep(time.Second * 5) //nolint:forbidigo
 	s.FunctionalTestBase.TearDownSuite()
@@ -65,7 +64,7 @@ func (s *AcquireShardFunctionalSuite) TearDownSuite() {
 // newLogRecorder creates a new log recorder. It records all the logs to the given channel.
 func newLogRecorder(logs chan logRecord) *logRecorder {
 	return &logRecorder{
-		Logger: log.NewNoopLogger(),
+		Logger: log.NewTestLogger(),
 		logs:   logs,
 	}
 }
@@ -84,16 +83,19 @@ type logRecorder struct {
 
 // Info records the info message
 func (r *logRecorder) Info(msg string, tags ...tag.Tag) {
+	r.Logger.Info(msg, tags...)
 	r.record(msg, tags...)
 }
 
 // Error records the error message
 func (r *logRecorder) Error(msg string, tags ...tag.Tag) {
+	r.Logger.Error(msg, tags...)
 	r.record(msg, tags...)
 }
 
 // Fatal ignores the fatal call
-func (r *logRecorder) Fatal(string, ...tag.Tag) {
+func (r *logRecorder) Fatal(msg string, tags ...tag.Tag) {
+	r.Logger.Error("FATAL: "+msg, tags...)
 	// Fatal errors sometimes happen for other components we instantiate and tear down during this test.
 }
 
@@ -105,13 +107,14 @@ func (r *logRecorder) record(msg string, tags ...tag.Tag) {
 		tags: tags,
 	}:
 	default:
+		r.Logger.Warn("failed to deliver log message to listener: " + msg)
 	}
 }
 
 // OwnershipLostErrorSuite is the test suite for testing what happens when acquire shard returns an ownership lost
 // error.
 type OwnershipLostErrorSuite struct {
-	AcquireShardFunctionalSuite
+	AcquireShardSuiteBase
 }
 
 // TestAcquireShard_OwnershipLostErrorSuite tests what happens when acquire shard returns an ownership lost error.
@@ -122,7 +125,7 @@ func TestAcquireShard_OwnershipLostErrorSuite(t *testing.T) {
 
 // SetupSuite reads the shard ownership lost error fault injection config from the testdata folder.
 func (s *OwnershipLostErrorSuite) SetupSuite() {
-	s.AcquireShardFunctionalSuite.SetupSuite()
+	s.AcquireShardSuiteBase.SetupSuite()
 	s.FunctionalTestBase.SetupSuite("testdata/acquire_shard_ownership_lost_error.yaml")
 }
 
@@ -159,7 +162,7 @@ func (s *OwnershipLostErrorSuite) TestDoesNotRetry() {
 
 // DeadlineExceededErrorSuite is the test suite for testing what happens when acquire shard returns a deadline exceeded.
 type DeadlineExceededErrorSuite struct {
-	AcquireShardFunctionalSuite
+	AcquireShardSuiteBase
 }
 
 // TestAcquireShard_DeadlineExceededErrorSuite tests what happens when acquire shard returns a deadline exceeded error
@@ -170,7 +173,7 @@ func TestAcquireShard_DeadlineExceededErrorSuite(t *testing.T) {
 
 // SetupSuite reads the deadline exceeded error targeted fault injection config from the test data folder.
 func (s *DeadlineExceededErrorSuite) SetupSuite() {
-	s.AcquireShardFunctionalSuite.SetupSuite()
+	s.AcquireShardSuiteBase.SetupSuite()
 	s.FunctionalTestBase.SetupSuite("testdata/acquire_shard_deadline_exceeded_error.yaml")
 }
 
@@ -205,7 +208,7 @@ func (s *DeadlineExceededErrorSuite) TestDoesRetry() {
 // EventualSuccessSuite is the test suite for testing what happens when acquire shard returns a deadline exceeded error
 // followed by a successful acquire shard call.
 type EventualSuccessSuite struct {
-	AcquireShardFunctionalSuite
+	AcquireShardSuiteBase
 }
 
 // TestAcquireShard_EventualSuccess verifies that we eventually succeed in acquiring the shard when we get a deadline
@@ -220,15 +223,13 @@ func TestAcquireShard_EventualSuccess(t *testing.T) {
 // This config deterministically causes the first acquire shard call to return a deadline exceeded error, and it causes
 // the next call to return a successful response.
 func (s *EventualSuccessSuite) SetupSuite() {
-	s.AcquireShardFunctionalSuite.SetupSuite()
+	s.AcquireShardSuiteBase.SetupSuite()
 	s.FunctionalTestBase.SetupSuite("testdata/acquire_shard_eventual_success.yaml")
 }
 
 // TestEventuallySucceeds verifies that we eventually succeed in acquiring the shard when we get a deadline exceeded
 // error followed by a successful acquire shard call.
 func (s *EventualSuccessSuite) TestEventuallySucceeds() {
-	s.T().Skip("flaky test")
-
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 	defer cancel()
 

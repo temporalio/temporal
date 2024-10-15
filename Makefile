@@ -64,9 +64,10 @@ define NEWLINE
 
 endef
 
-# 30 minutes is the upper bound defined for all tests, the longer running ones at the time of writing are XDC tests. The
-# 30 minute timeout is also defined in run-tests.yml
-TEST_TIMEOUT ?= 30m
+# 35 minutes is the upper bound defined for all tests, the longer running ones at the time of writing are XDC tests.
+# This takes into account the 40 minute timeout defined in run-tests.yml minus 5 minutes to avoid timing out the GH
+# action, which causes the a job run to not produce any logs and hurts the debugging experience.
+TEST_TIMEOUT ?= 35m
 
 PROTO_ROOT := proto
 PROTO_FILES = $(shell find ./$(PROTO_ROOT)/internal -name "*.proto")
@@ -139,7 +140,7 @@ $(LOCALBIN):
 .PHONY: golangci-lint
 GOLANGCI_LINT_BASE_REV ?= $(MAIN_BRANCH)
 GOLANGCI_LINT_FIX ?= true
-GOLANGCI_LINT_VERSION := v1.59.1
+GOLANGCI_LINT_VERSION := v1.60.3
 GOLANGCI_LINT := $(LOCALBIN)/golangci-lint-$(GOLANGCI_LINT_VERSION)
 $(GOLANGCI_LINT): $(LOCALBIN)
 	$(call go-install-tool,$(GOLANGCI_LINT),github.com/golangci/golangci-lint/cmd/golangci-lint,$(GOLANGCI_LINT_VERSION))

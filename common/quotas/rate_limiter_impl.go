@@ -60,12 +60,12 @@ func NewRateLimiter(newRPS float64, newBurst int) *RateLimiterImpl {
 	return rl
 }
 
-// SetRate set the rate of the rate limiter
+// SetRPS sets the rate of the rate limiter
 func (rl *RateLimiterImpl) SetRPS(rps float64) {
 	rl.refreshInternalRateLimiterImpl(&rps, nil)
 }
 
-// SetBurst set the burst of the rate limiter
+// SetBurst sets the burst of the rate limiter
 func (rl *RateLimiterImpl) SetBurst(burst int) {
 	rl.refreshInternalRateLimiterImpl(nil, &burst)
 }
@@ -78,7 +78,7 @@ func (rl *RateLimiterImpl) ReserveN(now time.Time, n int) Reservation {
 	return rl.ClockedRateLimiter.ReserveN(now, n)
 }
 
-// SetRateBurst set the rps & burst of the rate limiter
+// SetRateBurst sets the rps & burst of the rate limiter
 func (rl *RateLimiterImpl) SetRateBurst(rps float64, burst int) {
 	rl.refreshInternalRateLimiterImpl(&rps, &burst)
 }
@@ -131,4 +131,9 @@ func (rl *RateLimiterImpl) refreshInternalRateLimiterImpl(
 		rl.SetLimitAt(now, rate.Limit(rl.rps))
 		rl.SetBurstAt(now, rl.burst)
 	}
+}
+
+// RecycleToken returns a token to the rate limiter
+func (rl *RateLimiterImpl) RecycleToken() {
+	rl.ClockedRateLimiter.RecycleToken()
 }
