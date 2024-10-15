@@ -151,6 +151,7 @@ func findAlteredTestSuites(files []string, testDirs []string) ([]string, error) 
 	var testSuites []string
 	suiteSet := make(map[string]struct{})
 
+	// to be detected, _test.go file must contain TestXXXXSuite function
 	testSuiteRegex := regexp.MustCompile(`func\s+(Test[a-zA-Z0-9_]*Suite)\s*\(`)
 
 	for _, file := range files {
