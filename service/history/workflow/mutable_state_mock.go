@@ -2741,6 +2741,20 @@ func (mr *MockMutableStateMockRecorder) IsTransientWorkflowTask() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsTransientWorkflowTask", reflect.TypeOf((*MockMutableState)(nil).IsTransientWorkflowTask))
 }
 
+// IsTransitionHistoryEnabled mocks base method.
+func (m *MockMutableState) IsTransitionHistoryEnabled() bool {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "IsTransitionHistoryEnabled")
+	ret0, _ := ret[0].(bool)
+	return ret0
+}
+
+// IsTransitionHistoryEnabled indicates an expected call of IsTransitionHistoryEnabled.
+func (mr *MockMutableStateMockRecorder) IsTransitionHistoryEnabled() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsTransitionHistoryEnabled", reflect.TypeOf((*MockMutableState)(nil).IsTransitionHistoryEnabled))
+}
+
 // IsWorkflowCloseAttempted mocks base method.
 func (m *MockMutableState) IsWorkflowCloseAttempted() bool {
 	m.ctrl.T.Helper()

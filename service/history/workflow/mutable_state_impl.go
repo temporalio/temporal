@@ -171,6 +171,8 @@ type (
 		approximateSize int
 		// Total number of tomestones tracked in mutable state
 		totalTombstones int
+		// last versioned transition in DB
+		versionedTransitionInDB *persistencespb.VersionedTransition
 		// Buffer events from DB
 		bufferEventsInDB []*historypb.HistoryEvent
 		// Indicates the workflow state in DB, can be used to calculate
@@ -455,6 +457,9 @@ func NewMutableStateFromDB(
 	mutableState.nextEventIDInDB = dbRecord.NextEventId
 	mutableState.dbRecordVersion = dbRecordVersion
 	mutableState.checksum = dbRecord.Checksum
+	if len(mutableState.executionInfo.TransitionHistory) != 0 {
+		mutableState.versionedTransitionInDB = CopyVersionedTransition(mutableState.executionInfo.TransitionHistory[len(mutableState.executionInfo.TransitionHistory)-1])
+	}
 
 	if len(dbRecord.Checksum.GetValue()) > 0 {
 		switch {
@@ -5060,6 +5065,10 @@ func (ms *MutableStateImpl) IsDirty() bool {
 	return ms.hBuilder.IsDirty() || len(ms.InsertTasks) > 0 || (ms.stateMachineNode != nil && ms.stateMachineNode.Dirty())
 }
 
+func (ms *MutableStateImpl) IsTransitionHistoryEnabled() bool {
+	return ms.transitionHistoryEnabled
+}
+
 func (ms *MutableStateImpl) StartTransaction(
 	namespaceEntry *namespace.Namespace,
 ) (bool, error) {
@@ -5584,7 +5593,7 @@ func (ms *MutableStateImpl) closeTransactionPrepareReplicationTasks(
 		lastBatch := eventBatches[len(eventBatches)-1]
 		nextEventID = lastBatch[len(lastBatch)-1].EventId + 1
 	}
-	if ms.config.EnableTransitionHistory() {
+	if ms.transitionHistoryEnabled {
 		switch transactionPolicy {
 		case TransactionPolicyActive:
 			if ms.generateReplicationTask() {
@@ -5604,10 +5613,16 @@ func (ms *MutableStateImpl) closeTransactionPrepareReplicationTasks(
 					NextEventID:         nextEventID,
 					TaskEquivalents:     replicationTasks,
 				}
-				ms.InsertTasks[tasks.CategoryReplication] = append(
-					ms.InsertTasks[tasks.CategoryReplication],
-					syncVersionedTransitionTask,
-				)
+				if CompareVersionedTransition(
+					ms.versionedTransitionInDB,
+					ms.executionInfo.TransitionHistory[len(ms.executionInfo.TransitionHistory)-1],
+				) != 0 || len(replicationTasks) > 0 {
+					// versioned transition updated in the transaction
+					ms.InsertTasks[tasks.CategoryReplication] = append(
+						ms.InsertTasks[tasks.CategoryReplication],
+						syncVersionedTransitionTask,
+					)
+				}
 			}
 		case TransactionPolicyPassive:
 		default:

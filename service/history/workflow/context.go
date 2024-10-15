@@ -756,13 +756,18 @@ func (c *ContextImpl) mergeUpdateWithNewReplicationTasks(
 			return true
 		case *tasks.SyncVersionedTransitionTask:
 			t.NewRunID = newRunID
-			for _, subTask := range t.TaskEquivalents {
-				if historyTask, ok := subTask.(*tasks.HistoryReplicationTask); ok {
+			taskEquivalents := t.TaskEquivalents
+			taskEquivalentsUpdated := false
+			for idx := len(taskEquivalents) - 1; idx >= 0; idx-- {
+				if historyTask, ok := taskEquivalents[idx].(*tasks.HistoryReplicationTask); ok {
 					historyTask.NewRunBranchToken = newRunBranchToken
 					historyTask.NewRunID = newRunID
-					return true
+					taskEquivalentsUpdated = true
+					break
 				}
 			}
+			c.logger.Error("SyncVersionedTransitionTask has no HistoryReplicationTask equivalent to update")
+			return taskEquivalentsUpdated
 		default:
 		}
 		return false

@@ -495,6 +495,7 @@ func (r *WorkflowStateReplicatorImpl) applySnapshot(
 	if err != nil {
 		return err
 	}
+	localMutableState.PopTasks() // tasks are refreshed manually below
 
 	var newRunWorkflow Workflow
 	if versionedTransition.NewRunInfo != nil {
