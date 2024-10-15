@@ -114,13 +114,15 @@ func (e *outboundQueueStandbyTaskExecutor) processTask(
 		return err
 	}
 
-	ref, smt, err := stateMachineTask(e.shardContext, task)
+	ref, _, err := stateMachineTask(e.shardContext, task)
 	if err != nil {
 		return err
 	}
 
 	err = e.Access(ctx, ref, hsm.AccessRead, func(node *hsm.Node) error {
-		return smt.Validate(ref.StateMachineRef, node)
+		// If we managed to access the machine the task is still valid.
+		// The logic below will either discard it or retry.
+		return nil
 	})
 
 	if err != nil {
