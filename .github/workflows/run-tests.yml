@@ -118,7 +118,6 @@ jobs:
         if: ${{ !inputs.run_single_functional_test && !inputs.run_single_unit_test }}
         with:
           go-version-file: "go.mod"
-          check-latest: true
 
       - run: make pre-build-functional-test-coverage
         if: ${{ !inputs.run_single_functional_test && !inputs.run_single_unit_test }}
@@ -143,7 +142,6 @@ jobs:
         if: ${{ !inputs.run_single_functional_test && !inputs.run_single_unit_test }}
         with:
           go-version-file: "go.mod"
-          check-latest: true
 
       - uses: arduino/setup-protoc@v3
         if: ${{ !inputs.run_single_functional_test && !inputs.run_single_unit_test }}
@@ -181,7 +179,6 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version-file: "go.mod"
-          check-latest: true
 
       - name: Run unit tests
         if: ${{ !cancelled() && !inputs.run_single_unit_test }}
@@ -217,7 +214,6 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version-file: "go.mod"
-          check-latest: true
 
       - name: Start containerized dependencies
         uses: hoverkraft-tech/compose-action@v2.0.1
@@ -312,7 +308,6 @@ jobs:
         if: ${{ inputs.run_single_functional_test != true || (inputs.run_single_functional_test == true && contains(fromJSON(needs.set-up-single-test.outputs.dbs), env.PERSISTENCE_DRIVER)) }}
         with:
           go-version-file: "go.mod"
-          check-latest: true
 
       - name: Start containerized dependencies
         if: ${{ toJson(matrix.containers) != '[]' && (inputs.run_single_functional_test != true || (inputs.run_single_functional_test == true && contains(fromJSON(needs.set-up-single-test.outputs.dbs), env.PERSISTENCE_DRIVER))) }}
@@ -381,7 +376,6 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version-file: "go.mod"
-          check-latest: true
 
       - name: Start containerized dependencies
         if: ${{ toJson(matrix.containers) != '[]' }}
@@ -450,7 +444,6 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version-file: "go.mod"
-          check-latest: true
 
       - name: Start containerized dependencies
         if: ${{ toJson(matrix.containers) != '[]' }}
