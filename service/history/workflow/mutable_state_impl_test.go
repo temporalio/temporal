@@ -1084,12 +1084,6 @@ func (s *mutableStateSuite) TestTotalEntitiesCount() {
 	)
 	s.NoError(err)
 
-	s.mockShard.Resource.ClusterMetadata.EXPECT().ClusterNameForFailoverVersion(
-		tests.LocalNamespaceEntry.IsGlobalNamespace(),
-		s.mutableState.GetCurrentVersion(),
-	).Return(cluster.TestCurrentClusterName)
-	s.mockShard.Resource.ClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName)
-
 	mutation, _, err := s.mutableState.CloseTransactionAsMutation(
 		TransactionPolicyActive,
 	)
