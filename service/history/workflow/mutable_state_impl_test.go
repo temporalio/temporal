@@ -1442,6 +1442,7 @@ func (s *mutableStateSuite) TestTotalEntitiesCount() {
 		"identity",
 		&commonpb.Header{},
 		false,
+		nil,
 	)
 	s.NoError(err)
 
@@ -3405,8 +3406,19 @@ func (s *mutableStateSuite) buildMutation(state *MutableStateImpl) *persistences
 					},
 				},
 				{
+					StateMachineKey: &persistencespb.StateMachineTombstone_ActivityScheduledEventId{
+						ActivityScheduledEventId: 9999, // not exist
+					},
+				},
+				{
 					StateMachineKey: &persistencespb.StateMachineTombstone_TimerId{
 						TimerId: "to-be-deleted",
+					},
+				},
+				{
+
+					StateMachineKey: &persistencespb.StateMachineTombstone_TimerId{
+						TimerId: "not-exist",
 					},
 				},
 				{
@@ -3415,13 +3427,28 @@ func (s *mutableStateSuite) buildMutation(state *MutableStateImpl) *persistences
 					},
 				},
 				{
+					StateMachineKey: &persistencespb.StateMachineTombstone_ChildExecutionInitiatedEventId{
+						ChildExecutionInitiatedEventId: 9998, // not exist
+					},
+				},
+				{
 					StateMachineKey: &persistencespb.StateMachineTombstone_RequestCancelInitiatedEventId{
 						RequestCancelInitiatedEventId: 69,
 					},
 				},
 				{
+					StateMachineKey: &persistencespb.StateMachineTombstone_RequestCancelInitiatedEventId{
+						RequestCancelInitiatedEventId: 9997, // not exist
+					},
+				},
+				{
 					StateMachineKey: &persistencespb.StateMachineTombstone_SignalExternalInitiatedEventId{
 						SignalExternalInitiatedEventId: 74,
+					},
+				},
+				{
+					StateMachineKey: &persistencespb.StateMachineTombstone_SignalExternalInitiatedEventId{
+						SignalExternalInitiatedEventId: 9996, // not exist
 					},
 				},
 			},

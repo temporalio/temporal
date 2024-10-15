@@ -22,7 +22,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package update
+package tests
 
 import (
 	"context"
@@ -63,11 +63,6 @@ type UpdateWorkflowSuite struct {
 func TestUpdateWorkflowSuite(t *testing.T) {
 	s := new(UpdateWorkflowSuite)
 	suite.Run(t, s)
-}
-
-type updateResponseErr struct {
-	response *workflowservice.UpdateWorkflowExecutionResponse
-	err      error
 }
 
 // TODO: extract sendUpdate* methods to separate package.

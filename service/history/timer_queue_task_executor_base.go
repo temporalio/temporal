@@ -234,7 +234,7 @@ func (t *timerQueueTaskExecutorBase) executeSingleStateMachineTimer(
 	if !ok {
 		return queues.NewUnprocessableTaskError(fmt.Sprintf("deserializer not registered for task type %v", timer.Type))
 	}
-	smt, err := def.Deserialize(timer.Data, hsm.TaskKindTimer{Deadline: deadline})
+	smt, err := def.Deserialize(timer.Data, hsm.TaskAttributes{Deadline: deadline})
 	if err != nil {
 		return fmt.Errorf(
 			"%w: %w",

@@ -192,6 +192,7 @@ func NewEngineWithShardContext(
 		shard,
 		workflowCache,
 		workflowConsistencyChecker,
+		eventBlobCache,
 		shard.GetLogger(),
 	)
 

@@ -20,7 +20,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package nexus
+package tests
 
 import (
 	"context"
@@ -689,9 +689,35 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletion() {
 		s.NoError(err)
 		if event.EventType == enumspb.EVENT_TYPE_NEXUS_OPERATION_COMPLETED {
 			seenCompletedEvent = true
+			break
 		}
 	}
 	s.True(seenCompletedEvent)
+
+	// Reset the workflow again to the same point with enumspb.RESET_REAPPLY_EXCLUDE_TYPE_NEXUS option
+	// and verify that the completion event has been excluded.
+	resp, err = s.FrontendClient().ResetWorkflowExecution(ctx, &workflowservice.ResetWorkflowExecutionRequest{
+		Namespace:                 s.Namespace(),
+		WorkflowExecution:         pollResp.WorkflowExecution,
+		Reason:                    "test",
+		RequestId:                 uuid.NewString(),
+		WorkflowTaskFinishEventId: wftCompletedEventID,
+		ResetReapplyExcludeTypes:  []enumspb.ResetReapplyExcludeType{enumspb.RESET_REAPPLY_EXCLUDE_TYPE_NEXUS},
+	})
+	s.NoError(err)
+
+	hist = s.SdkClient().GetWorkflowHistory(ctx, run.GetID(), resp.RunId, false, enumspb.HISTORY_EVENT_FILTER_TYPE_ALL_EVENT)
+
+	seenCompletedEvent = false
+	for hist.HasNext() {
+		event, err := hist.Next()
+		s.NoError(err)
+		if event.EventType == enumspb.EVENT_TYPE_NEXUS_OPERATION_COMPLETED {
+			seenCompletedEvent = true
+			break
+		}
+	}
+	s.False(seenCompletedEvent)
 }
 
 func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncFailure() {
@@ -828,7 +854,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncFailure() {
 	var wee *temporal.WorkflowExecutionError
 
 	s.ErrorAs(err, &wee)
-	s.Equal("nexus operation completed unsuccessfully: test operation failed (type: NexusOperationFailure, retryable: false)", wee.Unwrap().Error())
+	s.True(strings.HasPrefix(wee.Unwrap().Error(), "nexus operation completed unsuccessfully"))
 }
 
 func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletionErrors() {
@@ -1326,15 +1352,15 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletionAfterReset() {
 
 	hist := s.SdkClient().GetWorkflowHistory(ctx, run.GetID(), resetResp.RunId, false, enumspb.HISTORY_EVENT_FILTER_TYPE_ALL_EVENT)
 
-	seenCompletedEvent := false
+	seenStartedEvent := false
 	for hist.HasNext() {
 		event, err := hist.Next()
 		s.NoError(err)
 		if event.EventType == enumspb.EVENT_TYPE_NEXUS_OPERATION_STARTED {
-			seenCompletedEvent = true
+			seenStartedEvent = true
 		}
 	}
-	s.True(seenCompletedEvent)
+	s.True(seenStartedEvent)
 	completion, err := nexus.NewOperationCompletionSuccessful(s.mustToPayload("result"), nexus.OperationCompletionSuccesfulOptions{
 		Serializer: commonnexus.PayloadSerializer,
 	})

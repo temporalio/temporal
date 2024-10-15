@@ -151,6 +151,8 @@ func TestTaskWriterShutdown(t *testing.T) {
 
 	// stop the task writer explicitly
 	tlm.backlogMgr.taskWriter.Stop()
+	// need to wait on channel to ensure goroutine has exited
+	<-tlm.backlogMgr.taskWriter.writeLoop.Done()
 
 	// now attempt to add a task
 	err = tlm.backlogMgr.SpoolTask(&persistencespb.TaskInfo{})

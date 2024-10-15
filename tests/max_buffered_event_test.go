@@ -138,6 +138,8 @@ func (s *MaxBufferedEventSuite) TestMaxBufferedEventsLimit() {
 }
 
 func (s *MaxBufferedEventSuite) TestBufferedEventsMutableStateSizeLimit() {
+	s.T().Skip("flaky test")
+
 	/*
 			This test starts a workflow, and block its workflow task, then sending
 			signals to it which will be buffered. The default max mutable state

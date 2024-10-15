@@ -71,7 +71,7 @@ func TestValidTransitions(t *testing.T) {
 	// Assert backoff task is generated
 	require.Equal(t, 1, len(out.Tasks))
 	boTask := out.Tasks[0].(callbacks.BackoffTask)
-	require.Equal(t, callback.NextAttemptScheduleTime.AsTime(), boTask.Deadline)
+	require.Equal(t, callback.NextAttemptScheduleTime.AsTime(), boTask.Deadline())
 
 	// Rescheduled
 	out, err = callbacks.TransitionRescheduled.Apply(callback, callbacks.EventRescheduled{})
@@ -88,7 +88,7 @@ func TestValidTransitions(t *testing.T) {
 	// Assert callback task is generated
 	require.Equal(t, 1, len(out.Tasks))
 	cbTask := out.Tasks[0].(callbacks.InvocationTask)
-	require.Equal(t, "http://address:666", cbTask.Destination)
+	require.Equal(t, "http://address:666", cbTask.Destination())
 
 	// Store the pre-succeeded state to test Failed later
 	dup := callbacks.Callback{common.CloneProto(callback.CallbackInfo)}

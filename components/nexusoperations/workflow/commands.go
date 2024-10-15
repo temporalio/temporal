@@ -26,7 +26,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strconv"
+	"strings"
 
 	"github.com/google/uuid"
 	commandpb "go.temporal.io/api/command/v1"
@@ -113,6 +115,24 @@ func (ch *commandHandler) HandleScheduleCommand(
 			Cause:             enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SCHEDULE_NEXUS_OPERATION_ATTRIBUTES,
 			Message:           "ScheduleNexusOperationCommandAttributes.Input exceeds size limit",
 			TerminateWorkflow: true,
+		}
+	}
+
+	headerLength := 0
+	for k, v := range attrs.NexusHeader {
+		headerLength += len(k) + len(v)
+		if slices.Contains(ch.config.DisallowedOperationHeaders(nsName), strings.ToLower(k)) {
+			return workflow.FailWorkflowTaskError{
+				Cause:   enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SCHEDULE_NEXUS_OPERATION_ATTRIBUTES,
+				Message: fmt.Sprintf("ScheduleNexusOperationCommandAttributes.NexusHeader contains a disallowed header key: %q", k),
+			}
+		}
+	}
+
+	if headerLength > ch.config.MaxOperationHeaderSize(nsName) {
+		return workflow.FailWorkflowTaskError{
+			Cause:   enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SCHEDULE_NEXUS_OPERATION_ATTRIBUTES,
+			Message: "ScheduleNexusOperationCommandAttributes.NexusHeader exceeds size limit",
 		}
 	}
 

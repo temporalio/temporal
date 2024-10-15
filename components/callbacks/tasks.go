@@ -23,7 +23,6 @@
 package callbacks
 
 import (
-	"fmt"
 	"time"
 
 	"go.temporal.io/server/service/history/hsm"
@@ -37,17 +36,25 @@ const (
 type InvocationTask struct {
 	// The base URL for nexus callbacks.
 	// Will have other meanings as more callback use cases are added.
-	Destination string
+	destination string
 }
 
 var _ hsm.Task = InvocationTask{}
+
+func NewInvocationTask(destination string) InvocationTask {
+	return InvocationTask{destination: destination}
+}
 
 func (InvocationTask) Type() string {
 	return TaskTypeInvocation
 }
 
-func (t InvocationTask) Kind() hsm.TaskKind {
-	return hsm.TaskKindOutbound{Destination: t.Destination}
+func (t InvocationTask) Destination() string {
+	return t.destination
+}
+
+func (t InvocationTask) Deadline() time.Time {
+	return hsm.Immediate
 }
 
 func (InvocationTask) Concurrent() bool {
@@ -56,11 +63,8 @@ func (InvocationTask) Concurrent() bool {
 
 type InvocationTaskSerializer struct{}
 
-func (InvocationTaskSerializer) Deserialize(data []byte, kind hsm.TaskKind) (hsm.Task, error) {
-	if kind, ok := kind.(hsm.TaskKindOutbound); ok {
-		return InvocationTask{Destination: kind.Destination}, nil
-	}
-	return nil, fmt.Errorf("%w: expected outbound", hsm.ErrInvalidTaskKind)
+func (InvocationTaskSerializer) Deserialize(data []byte, attrs hsm.TaskAttributes) (hsm.Task, error) {
+	return InvocationTask{destination: attrs.Destination}, nil
 }
 
 func (InvocationTaskSerializer) Serialize(hsm.Task) ([]byte, error) {
@@ -68,7 +72,7 @@ func (InvocationTaskSerializer) Serialize(hsm.Task) ([]byte, error) {
 }
 
 type BackoffTask struct {
-	Deadline time.Time
+	deadline time.Time
 }
 
 var _ hsm.Task = BackoffTask{}
@@ -77,21 +81,22 @@ func (BackoffTask) Type() string {
 	return TaskTypeBackoff
 }
 
-func (t BackoffTask) Kind() hsm.TaskKind {
-	return hsm.TaskKindTimer{Deadline: t.Deadline}
-}
-
 func (BackoffTask) Concurrent() bool {
 	return false
 }
 
+func (t BackoffTask) Deadline() time.Time {
+	return t.deadline
+}
+
+func (BackoffTask) Destination() string {
+	return ""
+}
+
 type BackoffTaskSerializer struct{}
 
-func (BackoffTaskSerializer) Deserialize(data []byte, kind hsm.TaskKind) (hsm.Task, error) {
-	if kind, ok := kind.(hsm.TaskKindTimer); ok {
-		return BackoffTask{Deadline: kind.Deadline}, nil
-	}
-	return nil, fmt.Errorf("%w: expected timer", hsm.ErrInvalidTaskKind)
+func (BackoffTaskSerializer) Deserialize(data []byte, attrs hsm.TaskAttributes) (hsm.Task, error) {
+	return BackoffTask{deadline: attrs.Deadline}, nil
 }
 
 func (BackoffTaskSerializer) Serialize(hsm.Task) ([]byte, error) {
