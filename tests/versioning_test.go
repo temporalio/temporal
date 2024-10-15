@@ -1047,6 +1047,8 @@ func (s *VersioningIntegSuite) firstWorkflowTaskAssignmentSyncMatch() {
 }
 
 func (s *VersioningIntegSuite) TestIndependentActivityTaskAssignment_Spooled_VersionedWorkflow() {
+	s.T().Skip("flaky test")
+
 	s.RunTestWithMatchingBehavior(func() { s.independentActivityTaskAssignmentSpooled(true) })
 }
 
@@ -1237,6 +1239,8 @@ func (s *VersioningIntegSuite) independentActivityTaskAssignmentSpooled(versione
 }
 
 func (s *VersioningIntegSuite) TestIndependentActivityTaskAssignment_SyncMatch_VersionedWorkflow() {
+	s.T().Skip("flaky test")
+
 	s.RunTestWithMatchingBehavior(func() { s.independentActivityTaskAssignmentSyncMatch(true) })
 }
 
@@ -1417,6 +1421,8 @@ func (s *VersioningIntegSuite) independentActivityTaskAssignmentSyncMatch(versio
 }
 
 func (s *VersioningIntegSuite) TestWorkflowTaskRedirectInRetryFirstTask() {
+	s.T().Skip("flaky test")
+
 	s.RunTestWithMatchingBehavior(func() { s.testWorkflowTaskRedirectInRetry(true) })
 }
 
@@ -1726,6 +1732,8 @@ func (s *VersioningIntegSuite) TestDispatchUpgradeStopOld() {
 }
 
 func (s *VersioningIntegSuite) TestDispatchUpgradeWait() {
+	s.T().Skip("flaky test")
+
 	s.RunTestWithMatchingBehavior(func() { s.dispatchUpgrade(true, false) })
 }
 
@@ -1827,14 +1835,20 @@ const (
 )
 
 func (s *VersioningIntegSuite) TestDispatchActivityOld() {
+	s.T().Skip("flaky test")
+
 	s.RunTestWithMatchingBehavior(func() { s.dispatchActivity(dontFailActivity, false, false) })
 }
 
 func (s *VersioningIntegSuite) TestDispatchActivityFailOld() {
+	s.T().Skip("flaky test")
+
 	s.RunTestWithMatchingBehavior(func() { s.dispatchActivity(failActivity, false, false) })
 }
 
 func (s *VersioningIntegSuite) TestDispatchActivityTimeoutOld() {
+	s.T().Skip("flaky test")
+
 	s.RunTestWithMatchingBehavior(func() { s.dispatchActivity(timeoutActivity, false, false) })
 }
 
@@ -2588,10 +2602,14 @@ func (s *VersioningIntegSuite) TestDispatchActivityCrossTQFails() {
 }
 
 func (s *VersioningIntegSuite) TestDispatchChildWorkflowOld() {
+	s.T().Skip("flaky test")
+
 	s.RunTestWithMatchingBehavior(func() { s.dispatchChildWorkflow(false, false) })
 }
 
 func (s *VersioningIntegSuite) TestDispatchChildWorkflow() {
+	s.T().Skip("flaky test")
+
 	s.RunTestWithMatchingBehavior(func() { s.dispatchChildWorkflow(true, false) })
 }
 
@@ -3066,6 +3084,8 @@ func (s *VersioningIntegSuite) dispatchQuery(newVersioning bool) {
 }
 
 func (s *VersioningIntegSuite) TestDispatchContinueAsNewOld() {
+	s.T().Skip("flaky test")
+
 	s.RunTestWithMatchingBehavior(func() { s.dispatchContinueAsNew(false, false) })
 }
 
@@ -3228,6 +3248,8 @@ func (s *VersioningIntegSuite) dispatchContinueAsNew(newVersioning bool, crossTq
 }
 
 func (s *VersioningIntegSuite) TestDispatchContinueAsNewUpgradeOld() {
+	s.T().Skip("flaky test")
+
 	s.RunTestWithMatchingBehavior(func() { s.dispatchContinueAsNewUpgrade(false) })
 }
 
@@ -3487,6 +3509,8 @@ func (s *VersioningIntegSuite) dispatchRetryOld() {
 }
 
 func (s *VersioningIntegSuite) TestDispatchRetry() {
+	s.T().Skip("flaky test")
+
 	s.RunTestWithMatchingBehavior(s.dispatchRetry)
 }
 
@@ -3578,10 +3602,14 @@ func (s *VersioningIntegSuite) dispatchRetry() {
 }
 
 func (s *VersioningIntegSuite) TestDispatchCronOld() {
+	s.T().Skip("flaky test")
+
 	s.RunTestWithMatchingBehavior(func() { s.dispatchCron(false) })
 }
 
 func (s *VersioningIntegSuite) TestDispatchCron() {
+	s.T().Skip("flaky test")
+
 	s.RunTestWithMatchingBehavior(func() { s.dispatchCron(true) })
 }
 

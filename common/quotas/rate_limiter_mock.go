@@ -120,6 +120,18 @@ func (mr *MockRateLimiterMockRecorder) Rate() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Rate", reflect.TypeOf((*MockRateLimiter)(nil).Rate))
 }
 
+// RecycleToken mocks base method.
+func (m *MockRateLimiter) RecycleToken() {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "RecycleToken")
+}
+
+// RecycleToken indicates an expected call of RecycleToken.
+func (mr *MockRateLimiterMockRecorder) RecycleToken() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RecycleToken", reflect.TypeOf((*MockRateLimiter)(nil).RecycleToken))
+}
+
 // Reserve mocks base method.
 func (m *MockRateLimiter) Reserve() Reservation {
 	m.ctrl.T.Helper()
