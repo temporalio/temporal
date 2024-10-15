@@ -125,18 +125,14 @@ jobs:
         run: |
           set -exuo pipefail
 
-          OUTPUT=$(go run ./cmd/tools/test/find_altered_tests.go \
+          go run ./cmd/tools/test/find_altered_tests.go \
             -c unit \
             -c integration \
             -c functional \
             -c functional_ndc \
             -c functional_xdc \
             -s "${MERGE_BASE}" \
-            -t "${COMMIT}")
-
-          echo "OUTPUT: $OUTPUT"
-
-          echo "$OUTPUT" | grep -E '^(modified_unit_test_suites|modified_integration_test_suites|modified_functional_test_suites|modified_functional_ndc_test_suites|modified_functional_xdc_test_suites)=' >> "$GITHUB_ENV"
+            -t "${COMMIT}" | tee -a "$GITHUB_ENV"
         shell: bash
 
   misc-checks:
