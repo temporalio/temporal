@@ -784,7 +784,7 @@ func (r *TaskGeneratorImpl) GenerateMigrationTasks() ([]tasks.Task, int64, error
 		})
 	}
 
-	if r.config.EnableTransitionHistory() {
+	if r.mutableState.IsTransitionHistoryEnabled() {
 		transitionHistory := executionInfo.TransitionHistory
 		return []tasks.Task{&tasks.SyncVersionedTransitionTask{
 			WorkflowKey:         workflowKey,
