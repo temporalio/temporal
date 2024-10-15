@@ -111,7 +111,7 @@ func (s *ClientFunctionalSuite) SetupTest() {
 		"http://"+s.HttpAPIAddress()+"/namespaces/{{.NamespaceName}}/nexus/callback")
 
 	sdkClient, err := sdkclient.Dial(sdkclient.Options{
-		HostPort:  s.HostPort(),
+		HostPort:  s.FrontendGRPCAddress(),
 		Namespace: s.Namespace(),
 	})
 	if err != nil {

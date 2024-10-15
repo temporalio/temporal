@@ -47,6 +47,7 @@ type WorkflowVisibilityTestSuite struct {
 }
 
 func TestWorkflowVisibilityTestSuite(t *testing.T) {
+	t.Parallel()
 	suite.Run(t, new(WorkflowVisibilityTestSuite))
 }
 

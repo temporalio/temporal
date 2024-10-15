@@ -25,7 +25,6 @@ package xdc
 import (
 	"context"
 	"errors"
-	"flag"
 	"fmt"
 	"io"
 	"net/http"
@@ -63,7 +62,7 @@ type NexusStateReplicationSuite struct {
 }
 
 func TestNexusStateReplicationTestSuite(t *testing.T) {
-	flag.Parse()
+	t.Parallel()
 	suite.Run(t, new(NexusStateReplicationSuite))
 }
 

@@ -22,15 +22,10 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-//go:build !race
-
-// need to run xdc tests with race detector off because of ringpop bug causing data race issue
-
 package xdc
 
 import (
 	"context"
-	"fmt"
 	"os"
 	"sync"
 	"time"
@@ -122,15 +117,12 @@ func (s *xdcBaseSuite) setupSuite(clusterNames []string, opts ...testcore.Option
 		clusterConfigs[i].ClusterMetadata.MasterClusterName = s.clusterNames[i]
 		clusterConfigs[i].ClusterMetadata.CurrentClusterName = s.clusterNames[i]
 		clusterConfigs[i].Persistence.DBName = "func_" + s.clusterNames[i]
-		clusterConfigs[i].ClusterMetadata.ClusterInformation = make(map[string]cluster.ClusterInformation)
-		// TODO: make tests.temporalImpl actually use these ports. Right now, we're just setting these to the values
-		// that the tests.temporalImpl uses by default, so that our info here is right, but these aren't actually used
-		// by NewCluster.
-		clusterConfigs[i].ClusterMetadata.ClusterInformation[s.clusterNames[i]] = cluster.ClusterInformation{
-			Enabled:                true,
-			InitialFailoverVersion: int64(i + 1),
-			RPCAddress:             fmt.Sprintf("127.0.%d.1:7134", i),
-			HTTPAddress:            fmt.Sprintf("127.0.%d.1:7144", i),
+		clusterConfigs[i].ClusterMetadata.ClusterInformation = map[string]cluster.ClusterInformation{
+			s.clusterNames[i]: cluster.ClusterInformation{
+				Enabled:                true,
+				InitialFailoverVersion: int64(i + 1),
+				// RPCAddress and HTTPAddress will be filled in
+			},
 		}
 		clusterConfigs[i].ServiceFxOptions = params.ServiceOptions
 		clusterConfigs[i].EnableMetricsCapture = true
@@ -146,13 +138,11 @@ func (s *xdcBaseSuite) setupSuite(clusterNames []string, opts ...testcore.Option
 
 	s.startTime = time.Now()
 
-	cluster1Info := clusterConfigs[0].ClusterMetadata.ClusterInformation[clusterConfigs[0].ClusterMetadata.CurrentClusterName]
-	cluster2Info := clusterConfigs[1].ClusterMetadata.ClusterInformation[clusterConfigs[1].ClusterMetadata.CurrentClusterName]
 	_, err = s.cluster1.AdminClient().AddOrUpdateRemoteCluster(
 		testcore.NewContext(),
 		&adminservice.AddOrUpdateRemoteClusterRequest{
-			FrontendAddress:               cluster2Info.RPCAddress,
-			FrontendHttpAddress:           cluster2Info.HTTPAddress,
+			FrontendAddress:               s.cluster2.Host().RemoteFrontendGRPCAddress(),
+			FrontendHttpAddress:           s.cluster2.Host().FrontendHTTPAddress(),
 			EnableRemoteClusterConnection: true,
 		})
 	s.Require().NoError(err)
@@ -160,8 +150,8 @@ func (s *xdcBaseSuite) setupSuite(clusterNames []string, opts ...testcore.Option
 	_, err = s.cluster2.AdminClient().AddOrUpdateRemoteCluster(
 		testcore.NewContext(),
 		&adminservice.AddOrUpdateRemoteClusterRequest{
-			FrontendAddress:               cluster1Info.RPCAddress,
-			FrontendHttpAddress:           cluster1Info.HTTPAddress,
+			FrontendAddress:               s.cluster1.Host().RemoteFrontendGRPCAddress(),
+			FrontendHttpAddress:           s.cluster1.Host().FrontendHTTPAddress(),
 			EnableRemoteClusterConnection: true,
 		})
 	s.Require().NoError(err)

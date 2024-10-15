@@ -50,6 +50,7 @@ type TransientTaskSuite struct {
 }
 
 func TestTransientTaskSuite(t *testing.T) {
+	t.Parallel()
 	suite.Run(t, new(TransientTaskSuite))
 }
 
