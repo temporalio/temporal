@@ -1,8 +1,6 @@
 // The MIT License
 //
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
+// Copyright (c) 2024 Temporal Technologies Inc.  All rights reserved.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -52,6 +50,12 @@ import (
 //   go run find_altered_tests.go -c <category1> -c <category2> ... -s <sourceRef> -t <targetRef>
 
 // CategoryDirs maps test categories to their corresponding directories
+// If you update these, please also update the corresponding dirs in the Makefile
+// FUNCTIONAL_TEST_ROOT
+// FUNCTIONAL_TEST_XDC_ROOT
+// FUNCTIONAL_TEST_NDC_ROOT
+// INTEGRATION_TEST_DIRS
+// UNIT_TEST_DIRS
 var CategoryDirs = map[string][]string{
 	"unit":           {"./client", "./common", "./internal", "./service", "./temporal", "./tools", "./cmd"},
 	"integration":    {"./common/persistence/tests", "./tools/tests", "./temporaltest", "./internal/temporalite"},
@@ -97,8 +101,14 @@ func main() {
 		modifiedSuites[category] = suites
 	}
 
-	// Output in key=value format
-	for category, suites := range modifiedSuites {
+	for _, category := range categories {
+		dirs := CategoryDirs[category]
+		suites, err := findAlteredTestSuites(modifiedFiles, dirs)
+		if err != nil {
+			log.Fatalf("Error finding altered test suites for category %s: %v", category, err)
+		}
+
+		// Directly join suites and output the result without using a map
 		joinedSuites := strings.Join(suites, "|")
 		fmt.Printf("modified_%s_test_suites=%s\n", category, joinedSuites)
 	}
