@@ -25,7 +25,6 @@
 package metrics
 
 import (
-	"io"
 	"time"
 
 	"go.temporal.io/server/common/log"
@@ -73,8 +72,8 @@ func (*noopMetricsHandler) Close() error {
 	return nil
 }
 
-func (n *noopMetricsHandler) BatchStart(_ string) (Handler, io.Closer) {
-	return n, n
+func (n *noopMetricsHandler) StartBatch(_ string) BatchHandler {
+	return n
 }
 
 var NoopCounterMetricFunc = CounterFunc(func(i int64, t ...Tag) {})

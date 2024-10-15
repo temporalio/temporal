@@ -27,7 +27,6 @@ package metrics
 import (
 	"context"
 	"fmt"
-	"io"
 	"sync"
 	"time"
 
@@ -209,8 +208,8 @@ func (omp *otelMetricsHandler) Close() error {
 	return nil
 }
 
-func (omp *otelMetricsHandler) BatchStart(_ string) (Handler, io.Closer) {
-	return omp, omp
+func (omp *otelMetricsHandler) StartBatch(_ string) BatchHandler {
+	return omp
 }
 
 // makeSet returns an otel attribute.Set with the given tags merged with the

@@ -25,7 +25,6 @@
 package metricstest
 
 import (
-	"io"
 	"sync"
 	"time"
 
@@ -147,8 +146,8 @@ func (c *CaptureHandler) Close() error {
 	return nil
 }
 
-func (c *CaptureHandler) BatchStart(_ string) (metrics.Handler, io.Closer) {
-	return c, c
+func (c *CaptureHandler) StartBatch(_ string) metrics.BatchHandler {
+	return c
 }
 
 // Stop implements [metrics.Handler.Stop].

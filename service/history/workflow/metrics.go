@@ -61,8 +61,8 @@ func emitMutableStateStatus(
 		return
 	}
 
-	batchHandler, closer := metricsHandler.BatchStart("mutable_state_status")
-	defer closer.Close()
+	batchHandler := metricsHandler.StartBatch("mutable_state_status")
+	defer batchHandler.Close()
 	metrics.MutableStateSize.With(batchHandler).Record(int64(stats.TotalSize))
 	metrics.ExecutionInfoSize.With(batchHandler).Record(int64(stats.ExecutionInfoSize))
 	metrics.ExecutionStateSize.With(batchHandler).Record(int64(stats.ExecutionStateSize))

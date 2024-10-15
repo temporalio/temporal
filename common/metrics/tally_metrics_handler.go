@@ -25,7 +25,6 @@
 package metrics
 
 import (
-	"io"
 	"time"
 
 	"github.com/uber-go/tally/v4"
@@ -125,8 +124,8 @@ func (*tallyMetricsHandler) Close() error {
 	return nil
 }
 
-func (tmh *tallyMetricsHandler) BatchStart(_ string) (Handler, io.Closer) {
-	return tmh, tmh
+func (tmh *tallyMetricsHandler) StartBatch(_ string) BatchHandler {
+	return tmh
 }
 
 func tagsToMap(t1 []Tag, e excludeTags) map[string]string {
