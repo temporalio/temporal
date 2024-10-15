@@ -360,6 +360,7 @@ func stateMachineTask(shardContext shard.Context, task tasks.Task) (hsm.Ref, hsm
 		WorkflowKey:     taskWorkflowKey(task),
 		StateMachineRef: cbt.Info.Ref,
 		TaskID:          task.GetTaskID(),
+		Validate:        smt.Validate,
 	}, smt, nil
 }
 

@@ -835,33 +835,29 @@ func generateSubStateMachineTask(
 			Id:   k.ID,
 		}
 	}
-	// Only set transition count if a task is non-concurrent.
-	var machineLastUpdateVersionedTransition *persistencespb.VersionedTransition
-	if task.Concurrent() {
-		transitionCount = 0
-	} else {
-		// An already outdated concurrent task.
-		// This happens during replication when multiple event batches are applied in a single transaction.
-		if node.InternalRepr().TransitionCount != transitionCount {
-			return nil
-		}
-		machineLastUpdateVersionedTransition = node.InternalRepr().GetLastUpdateVersionedTransition()
-	}
+	machineLastUpdateVersionedTransition := node.InternalRepr().GetLastUpdateVersionedTransition()
 
 	transitionHistory := mutableState.GetExecutionInfo().TransitionHistory
 	var currentVersionedTransition *persistencespb.VersionedTransition
 	if len(transitionHistory) > 0 {
 		currentVersionedTransition = transitionHistory[len(transitionHistory)-1]
 	}
+	ref := &persistencespb.StateMachineRef{
+		Path:                                 ppath,
+		MutableStateVersionedTransition:      currentVersionedTransition,
+		MachineInitialVersionedTransition:    node.InternalRepr().GetInitialVersionedTransition(),
+		MachineLastUpdateVersionedTransition: machineLastUpdateVersionedTransition,
+		MachineTransitionCount:               transitionCount,
+	}
+
+	// Task is invalid at generation time.
+	// This may happen during replication when multiple event batches are applied in a single transaction.
+	if err := task.Validate(ref, node); err != nil {
+		return nil
+	}
 
 	taskInfo := &persistencespb.StateMachineTaskInfo{
-		Ref: &persistencespb.StateMachineRef{
-			Path:                                 ppath,
-			MutableStateVersionedTransition:      currentVersionedTransition,
-			MachineInitialVersionedTransition:    node.InternalRepr().GetInitialVersionedTransition(),
-			MachineLastUpdateVersionedTransition: machineLastUpdateVersionedTransition,
-			MachineTransitionCount:               transitionCount,
-		},
+		Ref:  ref,
 		Type: task.Type(),
 		Data: data,
 	}
