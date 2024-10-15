@@ -742,7 +742,7 @@ func (r *TaskGeneratorImpl) GenerateMigrationTasks() ([]tasks.Task, int64, error
 	workflowKey := r.mutableState.GetWorkflowKey()
 
 	if r.mutableState.GetExecutionState().State == enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED {
-		if r.config.EnableTransitionHistory() {
+		if r.mutableState.IsTransitionHistoryEnabled() {
 			transitionHistory := executionInfo.TransitionHistory
 			return []tasks.Task{&tasks.SyncVersionedTransitionTask{
 				WorkflowKey:         workflowKey,
