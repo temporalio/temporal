@@ -123,9 +123,7 @@ jobs:
       - name: Collect Modified Tests
         id: collect_modified_tests
         run: |
-          set -euo pipefail
-
-          echo "MERGE_BASE=${MERGE_BASE} COMMIT=${COMMIT}"
+          set -exuo pipefail
 
           OUTPUT=$(go run ./cmd/tools/test/find_altered_tests.go \
             -c unit \
