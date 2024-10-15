@@ -283,6 +283,7 @@ func (r *HistoryReplicatorImpl) doApplyBackfillEvents(
 			task.getWorkflowID(),
 			task.getRunID(),
 			task.getVersionedTransition(),
+			nil,
 		)
 	default:
 		return err
@@ -313,6 +314,7 @@ func (r *HistoryReplicatorImpl) applyBackfillEvents(
 			task.getWorkflowID(),
 			task.getRunID(),
 			task.getVersionedTransition(),
+			mutableState.GetExecutionInfo().VersionHistories,
 		)
 	}
 

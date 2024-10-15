@@ -457,9 +457,8 @@ func (e *ExecutableTaskImpl) SyncState(
 			RunId:      syncStateErr.RunId,
 		},
 		VersionedTransition: syncStateErr.VersionedTransition,
-		// TODO: add version histories to serviceerrors.SyncState and use it here.
-		// VersionHistories: nil,
-		TargetClusterId: int32(targetClusterInfo.InitialFailoverVersion),
+		VersionHistories:    syncStateErr.VersionHistories,
+		TargetClusterId:     int32(targetClusterInfo.InitialFailoverVersion),
 	})
 	if err != nil {
 		var failedPreconditionErr *serviceerror.FailedPrecondition
