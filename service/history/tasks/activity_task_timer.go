@@ -74,10 +74,10 @@ func (a *ActivityTimeoutTask) GetType() enumsspb.TaskType {
 	return enumsspb.TASK_TYPE_ACTIVITY_TIMEOUT
 }
 
-func (r *ActivityTimeoutTask) GetStamp() int32 {
-	return r.Stamp
+func (a *ActivityTimeoutTask) GetStamp() int32 {
+	return a.Stamp
 }
 
-func (r *ActivityTimeoutTask) SetStamp(stamp int32) {
-	r.Stamp = stamp
+func (a *ActivityTimeoutTask) SetStamp(stamp int32) {
+	a.Stamp = stamp
 }

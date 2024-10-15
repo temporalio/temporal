@@ -24,12 +24,12 @@ package updateactivityoptions
 
 import (
 	"context"
+	"time"
+
 	activitypb "go.temporal.io/api/activity/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
-	"time"
-
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/namespace"
@@ -41,7 +41,7 @@ import (
 )
 
 func updateActivityOptions(
-	shard shard.Context,
+	shardContext shard.Context,
 	mutableState workflow.MutableState,
 	request *historyservice.UpdateActivityOptionsRequest,
 	response *historyservice.UpdateActivityOptionsResponse,
@@ -73,7 +73,7 @@ func updateActivityOptions(
 	// regenerate retry tasks
 	if workflow.GetActivityState(ai) == enumspb.PENDING_ACTIVITY_STATE_SCHEDULED {
 		// two options - it can be in backoff, or waiting to be started
-		now := shard.GetTimeSource().Now().In(time.UTC)
+		now := shardContext.GetTimeSource().Now().In(time.UTC)
 		if now.After(ai.ScheduledTime.AsTime()) {
 			// activity is past its scheduled time and ready to be started
 			// we don't really need to do generate timer tasks, it should be done in closeTransaction
@@ -87,21 +87,19 @@ func updateActivityOptions(
 	}
 
 	// fill the response
-	response = &historyservice.UpdateActivityOptionsResponse{
-		ActivityOptions: &activitypb.ActivityOptions{
-			TaskQueue: &taskqueuepb.TaskQueue{
-				Name: ai.TaskQueue,
-			},
-			ScheduleToCloseTimeout: ai.ScheduleToCloseTimeout,
-			ScheduleToStartTimeout: ai.ScheduleToStartTimeout,
-			StartToCloseTimeout:    ai.StartToCloseTimeout,
-			HeartbeatTimeout:       ai.HeartbeatTimeout,
-			RetryPolicy: &commonpb.RetryPolicy{
-				BackoffCoefficient: ai.RetryBackoffCoefficient,
-				InitialInterval:    ai.RetryInitialInterval,
-				MaximumInterval:    ai.RetryMaximumInterval,
-				MaximumAttempts:    ai.RetryMaximumAttempts,
-			},
+	response.ActivityOptions = &activitypb.ActivityOptions{
+		TaskQueue: &taskqueuepb.TaskQueue{
+			Name: ai.TaskQueue,
+		},
+		ScheduleToCloseTimeout: ai.ScheduleToCloseTimeout,
+		ScheduleToStartTimeout: ai.ScheduleToStartTimeout,
+		StartToCloseTimeout:    ai.StartToCloseTimeout,
+		HeartbeatTimeout:       ai.HeartbeatTimeout,
+		RetryPolicy: &commonpb.RetryPolicy{
+			BackoffCoefficient: ai.RetryBackoffCoefficient,
+			InitialInterval:    ai.RetryInitialInterval,
+			MaximumInterval:    ai.RetryMaximumInterval,
+			MaximumAttempts:    ai.RetryMaximumAttempts,
 		},
 	}
 
@@ -114,10 +112,10 @@ func updateActivityOptions(
 func Invoke(
 	ctx context.Context,
 	request *historyservice.UpdateActivityOptionsRequest,
-	shard shard.Context,
+	shardContext shard.Context,
 	workflowConsistencyChecker api.WorkflowConsistencyChecker,
 ) (resp *historyservice.UpdateActivityOptionsResponse, retError error) {
-	_, err := api.GetActiveNamespace(shard, namespace.ID(request.GetNamespaceId()))
+	_, err := api.GetActiveNamespace(shardContext, namespace.ID(request.GetNamespaceId()))
 	if err != nil {
 		return nil, err
 	}
@@ -137,10 +135,10 @@ func Invoke(
 				return nil, consts.ErrWorkflowCompleted
 			}
 
-			return updateActivityOptions(shard, mutableState, request, response)
+			return updateActivityOptions(shardContext, mutableState, request, response)
 		},
 		nil,
-		shard,
+		shardContext,
 		workflowConsistencyChecker,
 	)
 
