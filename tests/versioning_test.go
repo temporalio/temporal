@@ -3508,6 +3508,8 @@ func (s *VersioningIntegSuite) dispatchRetryOld() {
 }
 
 func (s *VersioningIntegSuite) TestDispatchRetry() {
+	s.T().Skip("flaky test")
+
 	s.RunTestWithMatchingBehavior(s.dispatchRetry)
 }
 

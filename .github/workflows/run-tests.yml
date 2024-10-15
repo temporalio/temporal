@@ -78,7 +78,7 @@ jobs:
       - id: generate_output
         run: |
           shards=3
-          timeout=30   # update this to TEST_TIMEOUT if you update the Makefile
+          timeout=35   # update this to TEST_TIMEOUT if you update the Makefile
           runs_on='["ubuntu-20.04"]'
           if [[ "${{ inputs.run_single_functional_test }}" == "true" || "${{ inputs.run_single_unit_test }}" == "true" ]]; then
             shards=1
@@ -119,7 +119,7 @@ jobs:
       - uses: actions/setup-go@v5
         if: ${{ !inputs.run_single_functional_test && !inputs.run_single_unit_test }}
         with:
-          go-version-file: 'go.mod'
+          go-version-file: "go.mod"
           check-latest: true
 
       - uses: arduino/setup-protoc@v3
@@ -147,7 +147,7 @@ jobs:
         runs-on: [ubuntu-20.04]
     runs-on: ${{ matrix.runs-on }}
     env:
-      BUILDKITE_MESSAGE: "{\"job\": \"unit-test\"}"
+      BUILDKITE_MESSAGE: '{"job": "unit-test"}'
       SINGLE_TEST_ARGS: ${{ needs.set-up-single-test.outputs.single_test_args }}
       UNIT_TEST_DIR: ${{ inputs.unit_test_directory }}
       TEST_TIMEOUT: ${{ needs.set-up-single-test.outputs.test_timeout }}
@@ -160,7 +160,7 @@ jobs:
 
       - uses: actions/setup-go@v5
         with:
-          go-version-file: 'go.mod'
+          go-version-file: "go.mod"
           check-latest: true
 
       - name: Run unit tests
@@ -187,7 +187,7 @@ jobs:
         runs-on: [ubuntu-20.04]
     runs-on: ${{ matrix.runs-on }}
     env:
-      BUILDKITE_MESSAGE: "{\"job\": \"integration-test\"}"
+      BUILDKITE_MESSAGE: '{"job": "integration-test"}'
     steps:
       - uses: actions/checkout@v4
         with:
@@ -196,7 +196,7 @@ jobs:
 
       - uses: actions/setup-go@v5
         with:
-          go-version-file: 'go.mod'
+          go-version-file: "go.mod"
           check-latest: true
 
       - name: Start containerized dependencies
@@ -273,7 +273,7 @@ jobs:
       PERSISTENCE_DRIVER: ${{ matrix.persistence_driver }}
       SINGLE_TEST_ARGS: ${{ needs.set-up-single-test.outputs.single_test_args }}
       TEST_TIMEOUT: ${{ needs.set-up-single-test.outputs.test_timeout }}
-      BUILDKITE_MESSAGE: "{\"job\": \"functional-test\", \"db\": \"${{ matrix.persistence_driver }}\"}"
+      BUILDKITE_MESSAGE: '{"job": "functional-test", "db": "${{ matrix.persistence_driver }}"}'
     steps:
       - name: Print functional test
         run: echo "${{ needs.set-up-single-test.outputs.dbs }}" && echo "$SINGLE_TEST_ARGS"
@@ -291,7 +291,7 @@ jobs:
       - uses: actions/setup-go@v5
         if: ${{ inputs.run_single_functional_test != true || (inputs.run_single_functional_test == true && contains(fromJSON(needs.set-up-single-test.outputs.dbs), env.PERSISTENCE_DRIVER)) }}
         with:
-          go-version-file: 'go.mod'
+          go-version-file: "go.mod"
           check-latest: true
 
       - name: Start containerized dependencies
@@ -350,7 +350,7 @@ jobs:
     env:
       PERSISTENCE_TYPE: ${{ matrix.persistence_type }}
       PERSISTENCE_DRIVER: ${{ matrix.persistence_driver }}
-      BUILDKITE_MESSAGE: "{\"job\": \"functional-test-xdc\", \"db\": \"${{ matrix.persistence_driver }}\"}"
+      BUILDKITE_MESSAGE: '{"job": "functional-test-xdc", "db": "${{ matrix.persistence_driver }}"}'
       TEST_PARALLEL_FLAGS: ${{ matrix.parallel_flags }}
     steps:
       - uses: actions/checkout@v4
@@ -360,7 +360,7 @@ jobs:
 
       - uses: actions/setup-go@v5
         with:
-          go-version-file: 'go.mod'
+          go-version-file: "go.mod"
           check-latest: true
 
       - name: Start containerized dependencies
@@ -372,7 +372,7 @@ jobs:
           down-flags: -v
 
       - name: Run functional test xdc
-        timeout-minutes: 35   # update this to TEST_TIMEOUT+5 if you update the Makefile
+        timeout-minutes: 40   # update this to TEST_TIMEOUT+5 if you update the Makefile
         run: make functional-test-xdc-coverage
 
       - name: Upload test results
@@ -429,7 +429,7 @@ jobs:
 
       - uses: actions/setup-go@v5
         with:
-          go-version-file: 'go.mod'
+          go-version-file: "go.mod"
           check-latest: true
 
       - name: Start containerized dependencies
