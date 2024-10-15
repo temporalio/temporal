@@ -45,6 +45,10 @@ yet.
 
 To enable Nexus in your deployment:
 
+> NOTE: Replace `$PUBLIC_URL` with a URL value that is accessible to external callers or internally within the cluster.
+> At the time of writing external Nexus calls are considered experimental so it should be safe to use the address of an
+> internal load balancer for the frontend service.
+
 1. Ensure that the server's static configuration file enables the HTTP API.
 
     ```yaml
