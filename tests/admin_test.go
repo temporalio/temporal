@@ -44,6 +44,7 @@ type AdminTestSuite struct {
 }
 
 func TestAdminTestSuite(t *testing.T) {
+	t.Parallel()
 	suite.Run(t, new(AdminTestSuite))
 }
 

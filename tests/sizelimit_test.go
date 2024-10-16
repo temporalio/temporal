@@ -27,7 +27,6 @@ package tests
 import (
 	"bytes"
 	"encoding/binary"
-	"flag"
 	"testing"
 	"time"
 
@@ -63,7 +62,7 @@ type SizeLimitFunctionalSuite struct {
 }
 
 func TestSizeLimitFunctionalSuite(t *testing.T) {
-	flag.Parse()
+	t.Parallel()
 	suite.Run(t, new(SizeLimitFunctionalSuite))
 }
 

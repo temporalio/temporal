@@ -26,7 +26,6 @@ package ndc
 
 import (
 	"context"
-	"flag"
 	"os"
 	"sync/atomic"
 	"testing"
@@ -87,7 +86,7 @@ type (
 )
 
 func TestNDCReplicationTaskBatching(t *testing.T) {
-	flag.Parse()
+	// TODO: doesn't work yet: t.Parallel()
 	suite.Run(t, new(NDCReplicationTaskBatchingTestSuite))
 }
 

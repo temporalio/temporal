@@ -28,7 +28,6 @@ package tests
 import (
 	"context"
 	"errors"
-	"flag"
 	"fmt"
 	"math/rand"
 	"strconv"
@@ -82,7 +81,7 @@ const (
 )
 
 func TestVersioningFunctionalSuite(t *testing.T) {
-	flag.Parse()
+	t.Parallel()
 	suite.Run(t, new(VersioningIntegSuite))
 }
 
@@ -139,7 +138,7 @@ func (s *VersioningIntegSuite) SetupTest() {
 	s.FunctionalTestBase.SetupTest()
 
 	sdkClient, err := sdkclient.Dial(sdkclient.Options{
-		HostPort:  s.HostPort(),
+		HostPort:  s.FrontendGRPCAddress(),
 		Namespace: s.Namespace(),
 	})
 	if err != nil {
