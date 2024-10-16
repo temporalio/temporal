@@ -24,12 +24,13 @@ package updateactivityoptions
 
 import (
 	"context"
+	"strings"
+	"time"
+
 	"go.temporal.io/api/serviceerror"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/util"
 	"google.golang.org/protobuf/types/known/fieldmaskpb"
-	"strings"
-	"time"
 
 	activitypb "go.temporal.io/api/activity/v1"
 	commonpb "go.temporal.io/api/common/v1"
@@ -66,8 +67,10 @@ func updateActivityOptions(
 	}
 
 	// update activity options
-	applyActivityOptions(ai, activityOptions, updateRequest.GetUpdateMask())
-	//util.ApplyFieldMask(ai, activityOptions, updateRequest.GetUpdateMask())
+	err := applyActivityOptions(ai, activityOptions, updateRequest.GetUpdateMask())
+	if err != nil {
+		return nil, err
+	}
 
 	// move forward activity version
 	ai.Stamp += 1
@@ -84,7 +87,7 @@ func updateActivityOptions(
 			// we don't really need to do generate timer tasks, it should be done in closeTransaction
 		} else {
 			// activity is in backoff
-			_, err := mutableState.RetryActivity(ai, nil)
+			_, err = mutableState.RetryActivity(ai, nil)
 			if err != nil {
 				return nil, err
 			}
@@ -168,6 +171,9 @@ func applyActivityOptions(ai *persistencespb.ActivityInfo, ao *activitypb.Activi
 	}
 
 	if _, ok := updateFields["taskQueue.name"]; ok {
+		if ao.TaskQueue == nil {
+			return serviceerror.NewInvalidArgument("TaskQueue is not provided")
+		}
 		ai.TaskQueue = ao.TaskQueue.Name
 	}
 
