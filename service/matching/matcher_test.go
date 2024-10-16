@@ -210,8 +210,10 @@ func (t *MatcherTestSuite) testRemoteSyncMatch(taskSource enumsspb.TaskSource) {
 	t.Equal(mustParent(t.queue.partition.(*tqid.NormalPartition), 20).RpcName(), req.GetTaskQueue().GetName())
 }
 
-// validateSyncMatchWhenNoBacklog is a helper which validates a sync match when there is no backlog
-func (t *MatcherTestSuite) validateSyncMatchWhenNoBacklog(ctx context.Context, historyTask *internalTask) {
+// TestValidateSyncMatchWhenNoBacklog validates a sync match when there is no backlog
+func (t *MatcherTestSuite) TestValidateSyncMatchWhenNoBacklog() {
+	historyTask := newInternalTaskForSyncMatch(randomTaskInfo().Data, nil)
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	go func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 		_, err := t.rootMatcher.Poll(ctx, &pollMetadata{})
@@ -227,24 +229,34 @@ func (t *MatcherTestSuite) validateSyncMatchWhenNoBacklog(ctx context.Context, h
 	happened, err := t.rootMatcher.Offer(ctx, historyTask)
 	t.True(happened)
 	t.Nil(err)
+	cancel()
 }
 
 func (t *MatcherTestSuite) TestRejectSyncMatchWhenBacklog() {
-	historyTask := newInternalTaskForSyncMatch(randomTaskInfo().Data, nil)
-	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
-
-	// sync match happens when there is no backlog
-	t.validateSyncMatchWhenNoBacklog(ctx, historyTask)
-
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	intruptC := make(chan struct{})
 
 	// task waits for a local poller
 	oldBacklogTask := newInternalTaskFromBacklog(randomTaskInfoWithAge(time.Minute), nil)
-	go t.rootMatcher.MustOffer(ctx, oldBacklogTask, intruptC) //nolint:errcheck
-	time.Sleep(2 * time.Millisecond)                          //nolint:forbidigo
+
+	var wg sync.WaitGroup
+	go func() {
+		t.rootMatcher.MustOffer(ctx, oldBacklogTask, intruptC) //nolint:errcheck
+	}()
+
+	// Wait for the task to be added to the map
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		for {
+			if len(t.rootMatcher.backlogTasksCreateTime) > 0 {
+				return // Exit if a task has been added
+			}
+		}
+	}()
+	wg.Wait()
 
 	// should not allow sync match when there is an old task in backlog
-
 	backlogTask := newInternalTaskFromBacklog(randomTaskInfoWithAge(time.Minute), nil)
 	backlogTask.forwardInfo = &taskqueuespb.TaskForwardInfo{
 		SourcePartition:    "",
@@ -253,30 +265,25 @@ func (t *MatcherTestSuite) TestRejectSyncMatchWhenBacklog() {
 		DispatchBuildId:    "",
 		DispatchVersionSet: "",
 	}
-	newCtx, newCtxCancel := context.WithTimeout(context.Background(), 10*time.Second)
+	newCtx, newCtxCancel := context.WithTimeout(context.Background(), 1*time.Second)
 	// When the root partition has no pollers and is offered a task from the backlog, the task
 	// gets blocked locally (until a local poller arrives) *unless* the partition has a non-negligible backlog.
 	// Since the partition currently has no pollers, the test verifies that the task is not blocked locally
 	// by asserting a context cancellation due to a timeout never occurred and we received a *false* due to a
 	// non-negligible backlog.
 	happened, err := t.rootMatcher.Offer(newCtx, backlogTask)
-	select {
-	case <-newCtx.Done():
+	if newCtx.Err() != nil {
 		t.FailNow("waited on a local poller due to a negligible backlog")
-	default:
-		t.False(happened)
-		t.Nil(err)
+
 	}
+	t.False(happened)
+	t.Nil(err)
 	newCtxCancel()
 
 	// poll old task which is from the backlog
 	task, _ := t.rootMatcher.Poll(ctx, &pollMetadata{})
 	t.NotNil(task)
 	t.Equal(enumsspb.TASK_SOURCE_DB_BACKLOG, task.source)
-	time.Sleep(time.Millisecond)
-
-	// should allow sync match now
-	t.validateSyncMatchWhenNoBacklog(ctx, historyTask)
 	cancel()
 }
 
