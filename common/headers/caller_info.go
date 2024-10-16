@@ -113,9 +113,9 @@ func SetCallerInfo(
 	info CallerInfo,
 ) context.Context {
 	return setIncomingMD(ctx, map[string]string{
-		callerNameHeaderName: info.CallerName,
+		CallerNameHeaderName: info.CallerName,
 		CallerTypeHeaderName: info.CallerType,
-		callOriginHeaderName: info.CallOrigin,
+		CallOriginHeaderName: info.CallOrigin,
 	})
 }
 
@@ -125,7 +125,7 @@ func SetCallerName(
 	ctx context.Context,
 	callerName string,
 ) context.Context {
-	return setIncomingMD(ctx, map[string]string{callerNameHeaderName: callerName})
+	return setIncomingMD(ctx, map[string]string{CallerNameHeaderName: callerName})
 }
 
 // SetCallerType set caller type in the context.
@@ -143,7 +143,7 @@ func SetOrigin(
 	ctx context.Context,
 	callOrigin string,
 ) context.Context {
-	return setIncomingMD(ctx, map[string]string{callOriginHeaderName: callOrigin})
+	return setIncomingMD(ctx, map[string]string{CallOriginHeaderName: callOrigin})
 }
 
 func setIncomingMD(
@@ -169,7 +169,7 @@ func setIncomingMD(
 func GetCallerInfo(
 	ctx context.Context,
 ) CallerInfo {
-	values := GetValues(ctx, callerNameHeaderName, CallerTypeHeaderName, callOriginHeaderName)
+	values := GetValues(ctx, CallerNameHeaderName, CallerTypeHeaderName, CallOriginHeaderName)
 	return CallerInfo{
 		CallerName: values[0],
 		CallerType: values[1],

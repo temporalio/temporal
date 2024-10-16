@@ -173,12 +173,11 @@ func Invoke(
 			namespaceName := namespaceEntry.Name()
 			tqPartition := tqid.UnsafePartitionFromProto(workflowTask.TaskQueue, req.GetNamespaceId(), enumspb.TASK_QUEUE_TYPE_WORKFLOW)
 			metrics.TaskScheduleToStartLatency.With(
-				metrics.GetPerTaskQueuePartitionScope(
+				metrics.GetPerTaskQueuePartitionTypeScope(
 					metricsScope,
 					namespaceName.String(),
 					tqPartition,
 					config.BreakdownMetricsByTaskQueue(namespaceName.String(), tqPartition.TaskQueue().Name(), enumspb.TASK_QUEUE_TYPE_WORKFLOW),
-					false, // we don't want breakdown by normal partition, only sticky vs normal breakdown.
 				),
 			).Record(workflowScheduleToStartLatency)
 

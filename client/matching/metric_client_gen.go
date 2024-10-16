@@ -159,6 +159,20 @@ func (c *metricClient) ForceUnloadTaskQueue(
 	return c.client.ForceUnloadTaskQueue(ctx, request, opts...)
 }
 
+func (c *metricClient) ForceUnloadTaskQueuePartition(
+	ctx context.Context,
+	request *matchingservice.ForceUnloadTaskQueuePartitionRequest,
+	opts ...grpc.CallOption,
+) (_ *matchingservice.ForceUnloadTaskQueuePartitionResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, "MatchingClientForceUnloadTaskQueuePartition")
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.ForceUnloadTaskQueuePartition(ctx, request, opts...)
+}
+
 func (c *metricClient) GetBuildIdTaskQueueMapping(
 	ctx context.Context,
 	request *matchingservice.GetBuildIdTaskQueueMappingRequest,

@@ -234,7 +234,7 @@ func (t *timerQueueTaskExecutorBase) executeSingleStateMachineTimer(
 	if !ok {
 		return queues.NewUnprocessableTaskError(fmt.Sprintf("deserializer not registered for task type %v", timer.Type))
 	}
-	smt, err := def.Deserialize(timer.Data, hsm.TaskKindTimer{Deadline: deadline})
+	smt, err := def.Deserialize(timer.Data, hsm.TaskAttributes{Deadline: deadline})
 	if err != nil {
 		return fmt.Errorf(
 			"%w: %w",
@@ -245,6 +245,12 @@ func (t *timerQueueTaskExecutorBase) executeSingleStateMachineTimer(
 	ref := hsm.Ref{
 		WorkflowKey:     ms.GetWorkflowKey(),
 		StateMachineRef: timer.Ref,
+		Validate:        smt.Validate,
+	}
+	// TODO(bergundy): Duplicated this logic from the Access method. We specify write access here because
+	// validateNotZombieWorkflow only blocks write access to zombie workflows.
+	if err := t.validateNotZombieWorkflow(ms, hsm.AccessWrite); err != nil {
+		return err
 	}
 	if err := t.validateStateMachineRef(ctx, workflowContext, ms, ref, false); err != nil {
 		return err
@@ -278,6 +284,7 @@ func (t *timerQueueTaskExecutorBase) executeStateMachineTimers(
 
 	timers := ms.GetExecutionInfo().StateMachineTimers
 	processedTimers := 0
+
 	// StateMachineTimers are sorted by Deadline, iterate through them as long as the deadline is expired.
 	for len(timers) > 0 {
 		group := timers[0]
@@ -288,6 +295,7 @@ func (t *timerQueueTaskExecutorBase) executeStateMachineTimers(
 		for _, timer := range group.Infos {
 			err := t.executeSingleStateMachineTimer(ctx, workflowContext, ms, group.Deadline.AsTime(), timer, execute)
 			if err != nil {
+				// This includes errors such as ErrStaleReference and ErrWorkflowCompleted.
 				if !errors.As(err, new(*serviceerror.NotFound)) {
 					metrics.StateMachineTimerProcessingFailuresCounter.With(t.metricHandler).Record(
 						1,
@@ -303,7 +311,7 @@ func (t *timerQueueTaskExecutorBase) executeStateMachineTimers(
 					1,
 					metrics.OperationTag(queues.GetTimerStateMachineTaskTypeTagValue(timer.GetType(), t.isActive)),
 				)
-				t.logger.Warn("Skipped state machine timer", tag.Error(err))
+				t.logger.Info("Skipped state machine timer", tag.Error(err))
 			}
 		}
 		// Remove the processed timer group.

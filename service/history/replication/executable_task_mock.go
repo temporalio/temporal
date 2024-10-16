@@ -273,18 +273,18 @@ func (mr *MockExecutableTaskMockRecorder) State() *gomock.Call {
 }
 
 // SyncState mocks base method.
-func (m *MockExecutableTask) SyncState(ctx context.Context, remoteCluster string, syncStateErr *serviceerror.SyncState, remainingAttempt int) (bool, error) {
+func (m *MockExecutableTask) SyncState(ctx context.Context, syncStateErr *serviceerror.SyncState, remainingAttempt int) (bool, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "SyncState", ctx, remoteCluster, syncStateErr, remainingAttempt)
+	ret := m.ctrl.Call(m, "SyncState", ctx, syncStateErr, remainingAttempt)
 	ret0, _ := ret[0].(bool)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // SyncState indicates an expected call of SyncState.
-func (mr *MockExecutableTaskMockRecorder) SyncState(ctx, remoteCluster, syncStateErr, remainingAttempt any) *gomock.Call {
+func (mr *MockExecutableTaskMockRecorder) SyncState(ctx, syncStateErr, remainingAttempt any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SyncState", reflect.TypeOf((*MockExecutableTask)(nil).SyncState), ctx, remoteCluster, syncStateErr, remainingAttempt)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SyncState", reflect.TypeOf((*MockExecutableTask)(nil).SyncState), ctx, syncStateErr, remainingAttempt)
 }
 
 // TaskCreationTime mocks base method.

@@ -68,5 +68,10 @@ type (
 
 		// TokensAt returns the number of tokens that will be available at time t
 		TokensAt(t time.Time) int
+
+		// RecycleToken immediately unblocks another process that is waiting for a token, if
+		// a waiter exists. A token should be recycled when the action being rate limited was
+		// not completed for some reason (i.e. a task is not dispatched because it was invalid).
+		RecycleToken()
 	}
 )

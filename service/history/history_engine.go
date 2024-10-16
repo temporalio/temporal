@@ -188,6 +188,13 @@ func NewEngineWithShardContext(
 		shard.GetTimeSource(),
 		persistenceVisibilityMgr,
 	)
+	syncStateRetriever := replication.NewSyncStateRetriever(
+		shard,
+		workflowCache,
+		workflowConsistencyChecker,
+		eventBlobCache,
+		shard.GetLogger(),
+	)
 
 	historyEngImpl := &historyEngineImpl{
 		status:                     common.DaemonStatusInitialized,
@@ -220,12 +227,7 @@ func NewEngineWithShardContext(
 			logger:         logger,
 		},
 		replicationProgressCache: replicationProgressCache,
-		syncStateRetriever: replication.NewSyncStateRetriever(
-			shard,
-			workflowCache,
-			workflowConsistencyChecker,
-			shard.GetLogger(),
-		),
+		syncStateRetriever:       syncStateRetriever,
 	}
 
 	historyEngImpl.queueProcessors = make(map[tasks.Category]queues.Queue)
@@ -243,6 +245,7 @@ func NewEngineWithShardContext(
 			eventBlobCache,
 			replicationProgressCache,
 			executionManager,
+			syncStateRetriever,
 			logger,
 		)
 		historyEngImpl.nDCHistoryReplicator = ndc.NewHistoryReplicator(
@@ -766,6 +769,10 @@ func (e *historyEngineImpl) ReplicateWorkflowState(
 	request *historyservice.ReplicateWorkflowStateRequest,
 ) error {
 	return e.nDCWorkflowStateReplicator.SyncWorkflowState(ctx, request)
+}
+
+func (e *historyEngineImpl) ReplicateVersionedTransition(ctx context.Context, artifact *replicationspb.VersionedTransitionArtifact, sourceClusterName string) error {
+	return e.nDCWorkflowStateReplicator.ReplicateVersionedTransition(ctx, artifact, sourceClusterName)
 }
 
 func (e *historyEngineImpl) ImportWorkflowExecution(

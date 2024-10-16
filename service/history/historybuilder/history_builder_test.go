@@ -353,7 +353,7 @@ func (s *historyBuilderSuite) TestWorkflowExecutionCancelRequested() {
 func (s *historyBuilderSuite) TestWorkflowExecutionSignaled() {
 	signalName := "random signal name"
 	event := s.historyBuilder.AddWorkflowExecutionSignaledEvent(
-		signalName, testPayloads, testIdentity, testHeader, false, nil,
+		signalName, testPayloads, testIdentity, testHeader, false, nil, nil,
 	)
 	s.Equal(event, s.flush())
 	s.Equal(&historypb.HistoryEvent{
@@ -564,6 +564,7 @@ func (s *historyBuilderSuite) TestWorkflowExecutionTerminated() {
 		reason,
 		testPayloads,
 		testIdentity,
+		nil,
 	)
 	s.Equal(event, s.flush())
 	s.Equal(&historypb.HistoryEvent{
@@ -2371,6 +2372,7 @@ func (s *historyBuilderSuite) TestBufferSize_Memory() {
 		"identity",
 		&commonpb.Header{},
 		false,
+		nil,
 		nil,
 	)
 	s.Assert().Equal(1, s.historyBuilder.NumBufferedEvents())

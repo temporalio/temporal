@@ -53,8 +53,6 @@ type (
 		ExecutableTask
 
 		taskAttr *replicationspb.SyncHSMAttributes
-
-		markPoisonPillAttempts int
 	}
 )
 
@@ -69,6 +67,7 @@ func NewExecutableSyncHSMTask(
 	taskCreationTime time.Time,
 	task *replicationspb.SyncHSMAttributes,
 	sourceClusterName string,
+	sourceShardKey ClusterShardKey,
 	priority enumsspb.TaskPriority,
 	replicationTask *replicationspb.ReplicationTask,
 ) *ExecutableSyncHSMTask {
@@ -83,11 +82,11 @@ func NewExecutableSyncHSMTask(
 			taskCreationTime,
 			time.Now().UTC(),
 			sourceClusterName,
+			sourceShardKey,
 			priority,
 			replicationTask,
 		),
-		taskAttr:               task,
-		markPoisonPillAttempts: 0,
+		taskAttr: task,
 	}
 }
 
@@ -180,50 +179,18 @@ func (e *ExecutableSyncHSMTask) HandleErr(err error) error {
 
 func (e *ExecutableSyncHSMTask) MarkPoisonPill() error {
 
-	replicationTaskInfo := e.toReplicationTaskInfo()
-
-	if e.markPoisonPillAttempts >= MarkPoisonPillMaxAttempts {
-		e.Logger.Error("MarkPoisonPill reached max attempts",
-			tag.SourceCluster(e.SourceClusterName()),
-			tag.ReplicationTask(replicationTaskInfo),
-			tag.NewAnyTag("sync-hsm-task-attr", e.taskAttr),
-		)
-		return nil
-	}
-	e.markPoisonPillAttempts++
-
-	shardContext, err := e.ShardController.GetShardByNamespaceWorkflow(
-		namespace.ID(e.NamespaceID),
-		e.WorkflowID,
-	)
-	if err != nil {
-		return err
+	if e.ReplicationTask().GetRawTaskInfo() == nil {
+		e.ReplicationTask().RawTaskInfo = &persistencespb.ReplicationTaskInfo{
+			NamespaceId:    e.NamespaceID,
+			WorkflowId:     e.WorkflowID,
+			RunId:          e.RunID,
+			TaskType:       enumsspb.TASK_TYPE_REPLICATION_SYNC_HSM,
+			TaskId:         e.ExecutableTask.TaskID(),
+			VisibilityTime: timestamppb.New(e.TaskCreationTime()),
+		}
 	}
 
-	e.Logger.Error("enqueue sync HSM replication task to DLQ",
-		tag.ShardID(shardContext.GetShardID()),
-		tag.WorkflowNamespaceID(e.NamespaceID),
-		tag.WorkflowID(e.WorkflowID),
-		tag.WorkflowRunID(e.RunID),
-		tag.TaskID(e.ExecutableTask.TaskID()),
-	)
-
-	ctx, cancel := newTaskContext(e.NamespaceID, e.Config.ReplicationTaskApplyTimeout())
-	defer cancel()
-
-	// TODO: GetShardID will break GetDLQReplicationMessages we need to handle DLQ for cross shard replication.
-	return writeTaskToDLQ(ctx, e.DLQWriter, shardContext, e.SourceClusterName(), replicationTaskInfo)
-}
-
-func (e *ExecutableSyncHSMTask) toReplicationTaskInfo() *persistencespb.ReplicationTaskInfo {
-	return &persistencespb.ReplicationTaskInfo{
-		NamespaceId:    e.NamespaceID,
-		WorkflowId:     e.WorkflowID,
-		RunId:          e.RunID,
-		TaskType:       enumsspb.TASK_TYPE_REPLICATION_SYNC_HSM,
-		TaskId:         e.ExecutableTask.TaskID(),
-		VisibilityTime: timestamppb.New(e.TaskCreationTime()),
-	}
+	return e.ExecutableTask.MarkPoisonPill()
 }
 
 // TODO: implement the following methods to batch syncHSM task if needed

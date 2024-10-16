@@ -114,17 +114,14 @@ func (e *outboundQueueStandbyTaskExecutor) processTask(
 		return err
 	}
 
-	ref, smt, err := stateMachineTask(e.shardContext, task)
+	ref, _, err := stateMachineTask(e.shardContext, task)
 	if err != nil {
 		return err
 	}
 
 	err = e.Access(ctx, ref, hsm.AccessRead, func(node *hsm.Node) error {
-		if smt.Concurrent() {
-			//nolint:revive // concurrent tasks implements hsm.ConcurrentTask interface
-			concurrentSmt := smt.(hsm.ConcurrentTask)
-			return concurrentSmt.Validate(node)
-		}
+		// If we managed to access the machine the task is still valid.
+		// The logic below will either discard it or retry.
 		return nil
 	})
 

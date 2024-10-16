@@ -36,6 +36,7 @@ import (
 	"time"
 
 	"go.temporal.io/server/api/matchingservice/v1"
+	"go.temporal.io/server/common/persistence/visibility"
 
 	"github.com/pborman/uuid"
 	commonpb "go.temporal.io/api/common/v1"
@@ -125,6 +126,8 @@ type (
 		namespaceRegistry          namespace.Registry
 		saProvider                 searchattribute.Provider
 		saManager                  searchattribute.Manager
+		saMapperProvider           searchattribute.MapperProvider
+		saValidator                *searchattribute.Validator
 		clusterMetadata            cluster.Metadata
 		healthServer               *health.Server
 		historyHealthChecker       HealthChecker
@@ -157,6 +160,7 @@ type (
 		NamespaceRegistry                   namespace.Registry
 		SaProvider                          searchattribute.Provider
 		SaManager                           searchattribute.Manager
+		SaMapperProvider                    searchattribute.MapperProvider
 		ClusterMetadata                     cluster.Metadata
 		HealthServer                        *health.Server
 		EventSerializer                     serialization.Serializer
@@ -192,7 +196,7 @@ func NewAdminHandler(
 		func(ctx context.Context, hostAddress string) (enumsspb.HealthState, error) {
 			resp, err := args.HistoryClient.DeepHealthCheck(ctx, &historyservice.DeepHealthCheckRequest{HostAddress: hostAddress})
 			if err != nil {
-				return enumsspb.HEALTH_STATE_UNSPECIFIED, err
+				return enumsspb.HEALTH_STATE_NOT_SERVING, err
 			}
 			return resp.GetState(), nil
 		},
@@ -227,11 +231,25 @@ func NewAdminHandler(
 		namespaceRegistry:          args.NamespaceRegistry,
 		saProvider:                 args.SaProvider,
 		saManager:                  args.SaManager,
-		clusterMetadata:            args.ClusterMetadata,
-		healthServer:               args.HealthServer,
-		historyHealthChecker:       historyHealthChecker,
-		taskCategoryRegistry:       args.CategoryRegistry,
-		matchingClient:             args.matchingClient,
+		saMapperProvider:           args.SaMapperProvider,
+		saValidator: searchattribute.NewValidator(
+			args.SaProvider,
+			args.SaMapperProvider,
+			args.Config.SearchAttributesNumberOfKeysLimit,
+			args.Config.SearchAttributesSizeOfValueLimit,
+			args.Config.SearchAttributesTotalSizeLimit,
+			args.visibilityMgr,
+			visibility.AllowListForValidation(
+				args.visibilityMgr.GetStoreNames(),
+				args.Config.VisibilityAllowList,
+			),
+			args.Config.SuppressErrorSetSystemSearchAttribute,
+		),
+		clusterMetadata:      args.ClusterMetadata,
+		healthServer:         args.HealthServer,
+		historyHealthChecker: historyHealthChecker,
+		taskCategoryRegistry: args.CategoryRegistry,
+		matchingClient:       args.matchingClient,
 	}
 }
 
@@ -715,10 +733,14 @@ func (adh *AdminHandler) ImportWorkflowExecution(
 		return nil, err
 	}
 
+	unaliasedBatches, err := adh.unaliasAndValidateSearchAttributes(request.HistoryBatches, namespace.Name(request.GetNamespace()))
+	if err != nil {
+		return nil, err
+	}
 	resp, err := adh.historyClient.ImportWorkflowExecution(ctx, &historyservice.ImportWorkflowExecutionRequest{
 		NamespaceId:    namespaceID.String(),
 		Execution:      request.Execution,
-		HistoryBatches: request.HistoryBatches,
+		HistoryBatches: unaliasedBatches,
 		VersionHistory: request.VersionHistory,
 		Token:          request.Token,
 	})
@@ -728,6 +750,54 @@ func (adh *AdminHandler) ImportWorkflowExecution(
 	return &adminservice.ImportWorkflowExecutionResponse{
 		Token: resp.Token,
 	}, nil
+}
+
+func (adh *AdminHandler) unaliasAndValidateSearchAttributes(historyBatches []*commonpb.DataBlob, nsName namespace.Name) ([]*commonpb.DataBlob, error) {
+	var unaliasedBatches []*commonpb.DataBlob
+	for _, historyBatch := range historyBatches {
+		events, err := adh.eventSerializer.DeserializeEvents(historyBatch)
+		if err != nil {
+			return nil, serviceerror.NewInvalidArgument(err.Error())
+		}
+		hasSas := false
+		for _, event := range events {
+			sas, _ := searchattribute.GetFromEvent(event)
+			if sas == nil {
+				continue
+			}
+			hasSas = true
+
+			unaliasedSas, err := searchattribute.UnaliasFields(adh.saMapperProvider, sas, nsName.String())
+			if err != nil {
+				var invArgErr *serviceerror.InvalidArgument
+				if !errors.As(err, &invArgErr) {
+					return nil, err
+				}
+				// Mapper returns InvalidArgument if alias is not found. It means that history has field names, not aliases.
+				// Ignore the error and proceed with the original search attributes.
+				unaliasedSas = sas
+			}
+			// Now validate that search attributes are valid.
+			err = adh.saValidator.Validate(unaliasedSas, nsName.String())
+			if err != nil {
+				return nil, err
+			}
+
+			_ = searchattribute.SetToEvent(event, unaliasedSas)
+		}
+		// If blob doesn't have search attributes, it can be used as is w/o serialization.
+		if !hasSas {
+			unaliasedBatches = append(unaliasedBatches, historyBatch)
+			continue
+		}
+
+		unaliasedBatch, err := adh.eventSerializer.SerializeEvents(events, enumspb.ENCODING_TYPE_PROTO3)
+		if err != nil {
+			return nil, serviceerror.NewInvalidArgument(err.Error())
+		}
+		unaliasedBatches = append(unaliasedBatches, unaliasedBatch)
+	}
+	return unaliasedBatches, nil
 }
 
 // DescribeMutableState returns information about the specified workflow execution.
@@ -1645,9 +1715,43 @@ func (adh *AdminHandler) DescribeTaskQueuePartition(
 		return nil, err
 	}
 
-	// The response returned is for multiple build Id's
 	return &adminservice.DescribeTaskQueuePartitionResponse{
 		VersionsInfoInternal: resp.VersionsInfoInternal,
+	}, nil
+}
+
+// ForceUnloadTaskQueuePartition forcefully unloads a given task queue partition
+func (adh *AdminHandler) ForceUnloadTaskQueuePartition(
+	ctx context.Context,
+	request *adminservice.ForceUnloadTaskQueuePartitionRequest,
+) (_ *adminservice.ForceUnloadTaskQueuePartitionResponse, err error) {
+	defer log.CapturePanic(adh.logger, &err)
+
+	// validate request
+	if request == nil {
+		return nil, errRequestNotSet
+	}
+	if len(request.Namespace) == 0 {
+		return nil, errNamespaceNotSet
+	}
+
+	namespaceID, err := adh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
+	if err != nil {
+		return nil, err
+	}
+
+	resp, err := adh.matchingClient.ForceUnloadTaskQueuePartition(ctx, &matchingservice.ForceUnloadTaskQueuePartitionRequest{
+		NamespaceId:        namespaceID.String(),
+		TaskQueuePartition: request.GetTaskQueuePartition(),
+	})
+
+	if err != nil {
+		return nil, err
+	}
+
+	// The response returned is for multiple build Id's
+	return &adminservice.ForceUnloadTaskQueuePartitionResponse{
+		WasLoaded: resp.WasLoaded,
 	}, nil
 }
 
@@ -2104,26 +2208,9 @@ func (adh *AdminHandler) SyncWorkflowState(ctx context.Context, request *adminse
 	if err != nil {
 		return nil, err
 	}
-	switch att := res.Attributes.(type) {
-	case *historyservice.SyncWorkflowStateResponse_Mutation:
-		return &adminservice.SyncWorkflowStateResponse{
-			Attributes: &adminservice.SyncWorkflowStateResponse_Mutation{
-				Mutation: res.GetMutation(),
-			},
-			EventBatches: res.EventBatches,
-			NewRunInfo:   res.NewRunInfo,
-		}, nil
-	case *historyservice.SyncWorkflowStateResponse_Snapshot:
-		return &adminservice.SyncWorkflowStateResponse{
-			Attributes: &adminservice.SyncWorkflowStateResponse_Snapshot{
-				Snapshot: res.GetSnapshot(),
-			},
-			EventBatches: res.EventBatches,
-			NewRunInfo:   res.NewRunInfo,
-		}, nil
-	default:
-		return nil, serviceerror.NewInternal(fmt.Sprintf("unknown type in SyncWorkflowStateResponse: %T", att))
-	}
+	return &adminservice.SyncWorkflowStateResponse{
+		VersionedTransitionArtifact: res.VersionedTransitionArtifact,
+	}, nil
 }
 
 func (adh *AdminHandler) GenerateLastHistoryReplicationTasks(

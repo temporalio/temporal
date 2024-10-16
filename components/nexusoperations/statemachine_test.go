@@ -199,7 +199,7 @@ func TestRetry(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, enumsspb.NEXUS_OPERATION_STATE_BACKING_OFF, op.State())
 	require.Equal(t, int32(1), op.Attempt)
-	require.Equal(t, op.NextAttemptScheduleTime.AsTime(), boTask.Deadline)
+	require.Equal(t, op.NextAttemptScheduleTime.AsTime(), boTask.Deadline())
 	require.NotNil(t, op.LastAttemptFailure)
 
 	node.ClearTransactionState()
@@ -509,7 +509,7 @@ func TestCancelationValidTransitions(t *testing.T) {
 	// Assert backoff task is generated
 	require.Equal(t, 1, len(out.Tasks))
 	boTask := out.Tasks[0].(nexusoperations.CancelationBackoffTask) // nolint:revive
-	require.Equal(t, cancelation.NextAttemptScheduleTime.AsTime(), boTask.Deadline)
+	require.Equal(t, cancelation.NextAttemptScheduleTime.AsTime(), boTask.Deadline())
 
 	// Rescheduled
 	out, err = nexusoperations.TransitionCancelationRescheduled.Apply(cancelation, nexusoperations.EventCancelationRescheduled{
