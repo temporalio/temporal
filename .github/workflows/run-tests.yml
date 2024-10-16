@@ -127,13 +127,6 @@ jobs:
           path: ~/go/pkg/mod
           key: go-${{ runner.os }}-deps-${{ hashFiles('go.sum') }}
 
-      - name: Restore build outputs
-        id: restore-build
-        uses: actions/cache/restore@v4
-        with:
-          path: ~/.cache/go-build
-          key: go-${{ runner.os }}-build-${{ env.COMMIT }}
-
       - run: make pre-build-functional-test-coverage
         if: ${{ !inputs.run_single_functional_test && !inputs.run_single_unit_test }}
 
@@ -147,7 +140,7 @@ jobs:
         uses: actions/cache/save@v4
         with:
           path: ~/.cache/go-build
-          key: ${{ steps.restore-build.outputs.cache-primary-key }}
+          key: go-${{ runner.os }}-build-${{ env.COMMIT }}
 
   misc-checks:
     name: Misc checks
