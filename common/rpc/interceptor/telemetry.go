@@ -80,12 +80,13 @@ var (
 	respondWorkflowTaskCompleted = "RespondWorkflowTaskCompleted"
 	pollActivityTaskQueue        = "PollActivityTaskQueue"
 	startWorkflowExecution       = "StartWorkflowExecution"
+	queryWorkflow                = "QueryWorkflow"
 
 	grpcActions = map[string]struct{}{
 		startWorkflowExecution:             {},
 		respondWorkflowTaskCompleted:       {},
 		pollActivityTaskQueue:              {},
-		"QueryWorkflow":                    {},
+		queryWorkflow:                      {},
 		"RecordActivityTaskHeartbeat":      {},
 		"RecordActivityTaskHeartbeatById":  {},
 		"ResetWorkflowExecution":           {},
@@ -258,7 +259,6 @@ func (ti *TelemetryInterceptor) emitActionMetric(
 		if resp.Started {
 			metrics.ActionCounter.With(metricsHandler).Record(1, metrics.ActionType("grpc_"+methodName))
 		}
-
 	case respondWorkflowTaskCompleted:
 		// handle commands
 		completedRequest, ok := req.(*workflowservice.RespondWorkflowTaskCompletedRequest)
@@ -321,7 +321,18 @@ func (ti *TelemetryInterceptor) emitActionMetric(
 		if activityPollResponse.Attempt > 1 {
 			metrics.ActionCounter.With(metricsHandler).Record(1, metrics.ActionType("activity_retry"))
 		}
-
+	case queryWorkflow:
+		queryWorkflowReq, ok := req.(*workflowservice.QueryWorkflowRequest)
+		if !ok {
+			return
+		}
+		queryType := queryWorkflowReq.GetQuery().GetQueryType()
+		switch queryType {
+		case "__temporal_workflow_metadata":
+			return
+		default:
+			metrics.ActionCounter.With(metricsHandler).Record(1, metrics.ActionType("grpc_"+methodName))
+		}
 	default:
 		// grpc action
 		metrics.ActionCounter.With(metricsHandler).Record(1, metrics.ActionType("grpc_"+methodName))
