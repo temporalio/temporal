@@ -290,7 +290,7 @@ func (s *ScheduleFunctionalSuite) TestBasics() {
 	// list
 
 	visibilityResponse := s.getScheduleEntryFomVisibility(sid, func(ent *schedulepb.ScheduleListEntry) bool {
-		return ent.GetInfo().GetRecentActions() >= 2
+		return len(ent.GetInfo().GetRecentActions()) >= 2
 	})
 	s.Equal(sid, visibilityResponse.ScheduleId)
 	s.Equal(schSAValue.Data, visibilityResponse.SearchAttributes.IndexedFields[csaKeyword].Data)
