@@ -15,7 +15,6 @@ ci-build-misc: print-go-version proto bins shell-check copyright-check go-genera
 clean: clean-bins clean-test-results
 	rm -rf $(STAMPDIR)
 	rm -rf $(TEST_OUTPUT_ROOT)
-	rm -rf $(PROTO_OUT)
 	rm -rf $(LOCALBIN)
 
 # Recompile proto files.
