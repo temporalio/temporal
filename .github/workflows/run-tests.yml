@@ -120,14 +120,14 @@ jobs:
           go-version-file: "go.mod"
           cache: false  # do our own caching
 
-      - name: restore dependencies
+      - name: Restore dependencies
         id: restore-deps
         uses: actions/cache/restore@v4
         with:
           path: ~/go/pkg/mod
           key: go-${{ runner.os }}-deps-${{ hashFiles('go.sum') }}
 
-      - name: restore build outputs
+      - name: Restore build outputs
         id: restore-build
         uses: actions/cache/restore@v4
         with:
@@ -137,13 +137,13 @@ jobs:
       - run: make pre-build-functional-test-coverage
         if: ${{ !inputs.run_single_functional_test && !inputs.run_single_unit_test }}
 
-      - name: save dependencies
+      - name: Save dependencies
         uses: actions/cache/save@v4
         with:
           path: ~/go/pkg/mod
           key: ${{ steps.restore-deps.outputs.cache-primary-key }}
 
-      - name: save build outputs
+      - name: Save build outputs
         uses: actions/cache/save@v4
         with:
           path: ~/.cache/go-build
@@ -172,13 +172,13 @@ jobs:
           go-version-file: "go.mod"
           cache: false  # do our own caching
 
-      - name: restore dependencies
+      - name: Restore dependencies
         uses: actions/cache/restore@v4
         with:
           path: ~/go/pkg/mod
           key: go-${{ runner.os }}-deps-${{ hashFiles('go.sum') }}
 
-      - name: restore build outputs
+      - name: Restore build outputs
         uses: actions/cache/restore@v4
         with:
           path: ~/.cache/go-build
@@ -222,13 +222,13 @@ jobs:
           go-version-file: "go.mod"
           cache: false  # do our own caching
 
-      - name: restore dependencies
+      - name: Restore dependencies
         uses: actions/cache/restore@v4
         with:
           path: ~/go/pkg/mod
           key: go-${{ runner.os }}-deps-${{ hashFiles('go.sum') }}
 
-      - name: restore build outputs
+      - name: Restore build outputs
         uses: actions/cache/restore@v4
         with:
           path: ~/.cache/go-build
@@ -265,23 +265,6 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
           ref: ${{ env.COMMIT }}
 
-      - uses: actions/setup-go@v5
-        with:
-          go-version-file: "go.mod"
-          cache: false  # do our own caching
-
-      - name: restore dependencies
-        uses: actions/cache/restore@v4
-        with:
-          path: ~/go/pkg/mod
-          key: go-${{ runner.os }}-deps-${{ hashFiles('go.sum') }}
-
-      - name: restore build outputs
-        uses: actions/cache/restore@v4
-        with:
-          path: ~/.cache/go-build
-          key: go-${{ runner.os }}-build-${{ env.COMMIT }}
-
       - name: Start containerized dependencies
         uses: hoverkraft-tech/compose-action@v2.0.1
         with:
@@ -291,6 +274,23 @@ jobs:
             mysql
             postgresql
           down-flags: -v
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: "go.mod"
+          cache: false  # do our own caching
+
+      - name: Restore dependencies
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/go/pkg/mod
+          key: go-${{ runner.os }}-deps-${{ hashFiles('go.sum') }}
+
+      - name: Restore build outputs
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/.cache/go-build
+          key: go-${{ runner.os }}-build-${{ env.COMMIT }}
 
       - name: Run integration test
         timeout-minutes: 15
@@ -371,24 +371,6 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
           ref: ${{ env.COMMIT }}
 
-      - uses: actions/setup-go@v5
-        if: ${{ inputs.run_single_functional_test != true || (inputs.run_single_functional_test == true && contains(fromJSON(needs.set-up-single-test.outputs.dbs), env.PERSISTENCE_DRIVER)) }}
-        with:
-          go-version-file: "go.mod"
-          cache: false  # do our own caching
-
-      - name: restore dependencies
-        uses: actions/cache/restore@v4
-        with:
-          path: ~/go/pkg/mod
-          key: go-${{ runner.os }}-deps-${{ hashFiles('go.sum') }}
-
-      - name: restore build outputs
-        uses: actions/cache/restore@v4
-        with:
-          path: ~/.cache/go-build
-          key: go-${{ runner.os }}-build-${{ env.COMMIT }}
-
       - name: Start containerized dependencies
         if: ${{ toJson(matrix.containers) != '[]' && (inputs.run_single_functional_test != true || (inputs.run_single_functional_test == true && contains(fromJSON(needs.set-up-single-test.outputs.dbs), env.PERSISTENCE_DRIVER))) }}
         uses: hoverkraft-tech/compose-action@v2.0.1
@@ -396,6 +378,24 @@ jobs:
           compose-file: ${{ env.DOCKER_COMPOSE_FILE }}
           services: "${{ join(matrix.containers, '\n') }}"
           down-flags: -v
+
+      - uses: actions/setup-go@v5
+        if: ${{ inputs.run_single_functional_test != true || (inputs.run_single_functional_test == true && contains(fromJSON(needs.set-up-single-test.outputs.dbs), env.PERSISTENCE_DRIVER)) }}
+        with:
+          go-version-file: "go.mod"
+          cache: false  # do our own caching
+
+      - name: Restore dependencies
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/go/pkg/mod
+          key: go-${{ runner.os }}-deps-${{ hashFiles('go.sum') }}
+
+      - name: Restore build outputs
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/.cache/go-build
+          key: go-${{ runner.os }}-build-${{ env.COMMIT }}
 
       - name: Run functional test
         if: ${{ inputs.run_single_functional_test != true || (inputs.run_single_functional_test == true && contains(fromJSON(needs.set-up-single-test.outputs.dbs), env.PERSISTENCE_DRIVER)) }}
@@ -453,23 +453,6 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
           ref: ${{ env.COMMIT }}
 
-      - uses: actions/setup-go@v5
-        with:
-          go-version-file: "go.mod"
-          cache: false  # do our own caching
-
-      - name: restore dependencies
-        uses: actions/cache/restore@v4
-        with:
-          path: ~/go/pkg/mod
-          key: go-${{ runner.os }}-deps-${{ hashFiles('go.sum') }}
-
-      - name: restore build outputs
-        uses: actions/cache/restore@v4
-        with:
-          path: ~/.cache/go-build
-          key: go-${{ runner.os }}-build-${{ env.COMMIT }}
-
       - name: Start containerized dependencies
         if: ${{ toJson(matrix.containers) != '[]' }}
         uses: hoverkraft-tech/compose-action@v2.0.1
@@ -477,6 +460,23 @@ jobs:
           compose-file: ${{ env.DOCKER_COMPOSE_FILE }}
           services: "${{ join(matrix.containers, '\n') }}"
           down-flags: -v
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: "go.mod"
+          cache: false  # do our own caching
+
+      - name: Restore dependencies
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/go/pkg/mod
+          key: go-${{ runner.os }}-deps-${{ hashFiles('go.sum') }}
+
+      - name: Restore build outputs
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/.cache/go-build
+          key: go-${{ runner.os }}-build-${{ env.COMMIT }}
 
       - name: Run functional test xdc
         timeout-minutes: 40   # update this to TEST_TIMEOUT+5 if you update the Makefile
@@ -534,23 +534,6 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
           ref: ${{ env.COMMIT }}
 
-      - uses: actions/setup-go@v5
-        with:
-          go-version-file: "go.mod"
-          cache: false  # do our own caching
-
-      - name: restore dependencies
-        uses: actions/cache/restore@v4
-        with:
-          path: ~/go/pkg/mod
-          key: go-${{ runner.os }}-deps-${{ hashFiles('go.sum') }}
-
-      - name: restore build outputs
-        uses: actions/cache/restore@v4
-        with:
-          path: ~/.cache/go-build
-          key: go-${{ runner.os }}-build-${{ env.COMMIT }}
-
       - name: Start containerized dependencies
         if: ${{ toJson(matrix.containers) != '[]' }}
         uses: hoverkraft-tech/compose-action@v2.0.1
@@ -558,6 +541,23 @@ jobs:
           compose-file: ${{ env.DOCKER_COMPOSE_FILE }}
           services: "${{ join(matrix.containers, '\n') }}"
           down-flags: -v
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: "go.mod"
+          cache: false  # do our own caching
+
+      - name: Restore dependencies
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/go/pkg/mod
+          key: go-${{ runner.os }}-deps-${{ hashFiles('go.sum') }}
+
+      - name: Restore build outputs
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/.cache/go-build
+          key: go-${{ runner.os }}-build-${{ env.COMMIT }}
 
       - name: Run functional test ndc
         timeout-minutes: 15
