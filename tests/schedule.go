@@ -1115,6 +1115,75 @@ func (s *ScheduleFunctionalSuite) TestRateLimit() {
 	s.testCluster.host.workerService.RefreshPerNSWorkerManager()
 }
 
+func (s *ScheduleFunctionalSuite) TestListSchedulesReturnsRunningWorkflows() {
+	s.testCluster.host.workerService.RefreshPerNSWorkerManager()
+
+	sid := "sched-test-list-running"
+	wid := "sched-test-list-running-wf"
+	wt := "sched-test-list-running-wt"
+
+	// Set up a schedule that immediately starts a single running workflow
+	schedule := &schedulepb.Schedule{
+		Spec: &schedulepb.ScheduleSpec{
+			Interval: []*schedulepb.IntervalSpec{
+				{Interval: durationpb.New(1 * time.Hour)},
+			},
+		},
+		Action: &schedulepb.ScheduleAction{
+			Action: &schedulepb.ScheduleAction_StartWorkflow{
+				StartWorkflow: &workflowpb.NewWorkflowExecutionInfo{
+					WorkflowId:   wid,
+					WorkflowType: &commonpb.WorkflowType{Name: wt},
+					TaskQueue:    &taskqueuepb.TaskQueue{Name: s.taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+				},
+			},
+		},
+	}
+	patch := &schedulepb.SchedulePatch{
+		TriggerImmediately: &schedulepb.TriggerImmediatelyRequest{},
+	}
+
+	// The workflow sits open
+	workflowFn := func(ctx workflow.Context) error {
+		workflow.Sleep(ctx, 1*time.Hour)
+		return nil
+	}
+	s.worker.RegisterWorkflowWithOptions(workflowFn, workflow.RegisterOptions{Name: wt})
+
+	req := &workflowservice.CreateScheduleRequest{
+		Namespace:    s.namespace,
+		ScheduleId:   sid,
+		Schedule:     schedule,
+		InitialPatch: patch,
+		Identity:     "test",
+		RequestId:    uuid.New(),
+	}
+	_, err := s.client.CreateSchedule(NewContext(), req)
+	s.NoError(err)
+
+	s.Eventually(func() bool { // wait for visibility
+		listResp, err := s.client.ListSchedules(NewContext(), &workflowservice.ListSchedulesRequest{
+			Namespace:       s.namespace,
+			MaximumPageSize: 5,
+		})
+		if err != nil || len(listResp.Schedules) != 1 || listResp.Schedules[0].ScheduleId != sid {
+			return false
+		}
+
+		entry := listResp.Schedules[0]
+		s.Equal(sid, entry.ScheduleId)
+		s.NotNil(entry.Info)
+
+		// ensure we got back a WorkflowExecution
+		s.NotNil(entry.Info.RunningWorkflows)
+		s.Equal(1, len(entry.Info.RunningWorkflows))
+		runningWorkflow := entry.Info.RunningWorkflows[0]
+		s.True(strings.HasPrefix(runningWorkflow.WorkflowId, wid))
+
+		return true
+	}, 10*time.Second, 1*time.Second)
+}
+
 func (s *ScheduleFunctionalSuite) TestNextTimeCache() {
 	sid := "sched-test-next-time-cache"
 	wid := "sched-test-next-time-cache-wf"

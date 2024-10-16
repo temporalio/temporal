@@ -828,6 +828,8 @@ func (s *scheduler) processWatcherResult(id string, f workflow.Future, long bool
 	// now we know it's not running, remove from running workflow list
 	match := func(ex *commonpb.WorkflowExecution) bool { return ex.WorkflowId == id }
 	if idx := slices.IndexFunc(s.Info.RunningWorkflows, match); idx >= 0 {
+		// We could also immediately update visibility, with updateMemoAndSearchAttributes,
+		// but the wakeup here will trigger a write after anyways (after processing the buffer).
 		s.Info.RunningWorkflows = slices.Delete(s.Info.RunningWorkflows, idx, idx+1)
 	} else {
 		// This could happen if the watcher activity gets interrupted and is retried after the
@@ -1035,6 +1037,7 @@ func (s *scheduler) getListInfo(inWorkflowContext bool) *schedpb.ScheduleListInf
 		Paused:            s.Schedule.State.Paused,
 		RecentActions:     util.SliceTail(s.Info.RecentActions, s.tweakables.RecentActionCountForList),
 		FutureActionTimes: s.getFutureActionTimes(inWorkflowContext, s.tweakables.FutureActionCountForList),
+		RunningWorkflows:  s.Info.RunningWorkflows,
 	}
 }
 
