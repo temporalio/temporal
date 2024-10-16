@@ -25,6 +25,10 @@ on:
         description: "[Unit Test Only] Directory to run unit tests in"
         type: string
         default: "./temporal"
+      n_runs:
+        description: "Number of times to repeat the single test per database type"
+        type: number
+        default: 1
       test_name:
         description: "Name of the test to run (i.e. 'TestAcquireShard_DeadlineExceededErrorSuite' or 'TestFunctionalSuite/TestUpdateWorkflow')"
         type: string
