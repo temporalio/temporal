@@ -628,7 +628,6 @@ func (c *TemporalImpl) startWorker() {
 
 	for _, host := range c.hostsByService[serviceName].All {
 		logger := log.With(c.logger, tag.Host(host))
-		var workerService *worker.Service
 		app := fx.New(
 			fx.Supply(
 				c.copyPersistenceConfig(),
@@ -662,7 +661,6 @@ func (c *TemporalImpl) startWorker() {
 			fx.Supply(c.spanExporters),
 			temporal.ServiceTracingModule,
 			worker.Module,
-			fx.Populate(&workerService),
 			temporal.FxLogAdapter,
 			c.getFxOptionsForService(primitives.WorkerService),
 		)
