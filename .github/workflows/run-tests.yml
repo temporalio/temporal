@@ -118,9 +118,36 @@ jobs:
         if: ${{ !inputs.run_single_functional_test && !inputs.run_single_unit_test }}
         with:
           go-version-file: "go.mod"
+          cache: false  # do our own caching
+
+      - name: restore dependencies
+        id: restore-deps
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/go/pkg/mod
+          key: go-${{ runner.os }}-deps-${{ hashFiles('go.sum') }}
+
+      - name: restore build outputs
+        id: restore-build
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/.cache/go-build
+          key: go-${{ runner.os }}-build-${{ github.sha }}
 
       - run: make pre-build-functional-test-coverage
         if: ${{ !inputs.run_single_functional_test && !inputs.run_single_unit_test }}
+
+      - name: save dependencies
+        uses: actions/cache/save@v4
+        with:
+          path: ~/go/pkg/mod
+          key: ${{ steps.restore-deps.outputs.cache-primary-key }}
+
+      - name: save build outputs
+        uses: actions/cache/save@v4
+        with:
+          path: ~/.cache/go-build
+          key: ${{ steps.restore-build.outputs.cache-primary-key }}
 
   misc-checks:
     name: Misc checks
@@ -142,6 +169,19 @@ jobs:
         if: ${{ !inputs.run_single_functional_test && !inputs.run_single_unit_test }}
         with:
           go-version-file: "go.mod"
+          cache: false  # do our own caching
+
+      - name: restore dependencies
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/go/pkg/mod
+          key: go-${{ runner.os }}-deps-${{ hashFiles('go.sum') }}
+
+      - name: restore build outputs
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/.cache/go-build
+          key: go-${{ runner.os }}-build-${{ github.sha }}
 
       - uses: arduino/setup-protoc@v3
         if: ${{ !inputs.run_single_functional_test && !inputs.run_single_unit_test }}
@@ -179,6 +219,19 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version-file: "go.mod"
+          cache: false  # do our own caching
+
+      - name: restore dependencies
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/go/pkg/mod
+          key: go-${{ runner.os }}-deps-${{ hashFiles('go.sum') }}
+
+      - name: restore build outputs
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/.cache/go-build
+          key: go-${{ runner.os }}-build-${{ github.sha }}
 
       - name: Run unit tests
         if: ${{ !cancelled() && !inputs.run_single_unit_test }}
@@ -214,6 +267,19 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version-file: "go.mod"
+          cache: false  # do our own caching
+
+      - name: restore dependencies
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/go/pkg/mod
+          key: go-${{ runner.os }}-deps-${{ hashFiles('go.sum') }}
+
+      - name: restore build outputs
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/.cache/go-build
+          key: go-${{ runner.os }}-build-${{ github.sha }}
 
       - name: Start containerized dependencies
         uses: hoverkraft-tech/compose-action@v2.0.1
@@ -308,6 +374,19 @@ jobs:
         if: ${{ inputs.run_single_functional_test != true || (inputs.run_single_functional_test == true && contains(fromJSON(needs.set-up-single-test.outputs.dbs), env.PERSISTENCE_DRIVER)) }}
         with:
           go-version-file: "go.mod"
+          cache: false  # do our own caching
+
+      - name: restore dependencies
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/go/pkg/mod
+          key: go-${{ runner.os }}-deps-${{ hashFiles('go.sum') }}
+
+      - name: restore build outputs
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/.cache/go-build
+          key: go-${{ runner.os }}-build-${{ github.sha }}
 
       - name: Start containerized dependencies
         if: ${{ toJson(matrix.containers) != '[]' && (inputs.run_single_functional_test != true || (inputs.run_single_functional_test == true && contains(fromJSON(needs.set-up-single-test.outputs.dbs), env.PERSISTENCE_DRIVER))) }}
@@ -376,6 +455,19 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version-file: "go.mod"
+          cache: false  # do our own caching
+
+      - name: restore dependencies
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/go/pkg/mod
+          key: go-${{ runner.os }}-deps-${{ hashFiles('go.sum') }}
+
+      - name: restore build outputs
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/.cache/go-build
+          key: go-${{ runner.os }}-build-${{ github.sha }}
 
       - name: Start containerized dependencies
         if: ${{ toJson(matrix.containers) != '[]' }}
@@ -444,6 +536,19 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version-file: "go.mod"
+          cache: false  # do our own caching
+
+      - name: restore dependencies
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/go/pkg/mod
+          key: go-${{ runner.os }}-deps-${{ hashFiles('go.sum') }}
+
+      - name: restore build outputs
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/.cache/go-build
+          key: go-${{ runner.os }}-build-${{ github.sha }}
 
       - name: Start containerized dependencies
         if: ${{ toJson(matrix.containers) != '[]' }}
