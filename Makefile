@@ -393,7 +393,7 @@ unit-test-coverage: prepare-coverage-test
 integration-test-coverage: prepare-coverage-test
 	@printf $(COLOR) "Run integration tests with coverage..."
 	$(GOTESTSUM) --junitfile $(NEW_REPORT) -- \
-		$(INTEGRATION_TEST_DIRS) -shuffle on -timeout=$(TEST_TIMEOUT) $(TEST_TAG_FLAG) $(INTEGRATION_TEST_COVERPKG) -coverprofile=$(NEW_COVER_PROFILE) -count=$(N_RUNS) -run="$(TEST_SUITES)"
+		$(INTEGRATION_TEST_DIRS) -shuffle on -timeout=$(TEST_TIMEOUT) $(TEST_ARGS) $(TEST_TAG_FLAG) $(INTEGRATION_TEST_COVERPKG) -coverprofile=$(NEW_COVER_PROFILE) -count=$(N_RUNS) -run="$(TEST_SUITES)"
 
 # This should use the same build flags as functional-test-coverage for best build caching.
 pre-build-functional-test-coverage: prepare-coverage-test
@@ -409,7 +409,7 @@ functional-test-coverage: prepare-coverage-test
 functional-test-xdc-coverage: prepare-coverage-test
 	@printf $(COLOR) "Run functional test for cross DC with coverage with $(PERSISTENCE_DRIVER) driver..."
 	@$(GOTESTSUM) --junitfile $(NEW_REPORT) -- \
-		$(FUNCTIONAL_TEST_XDC_ROOT) -shuffle on -timeout=$(TEST_TIMEOUT) $(TEST_TAG_FLAG) -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER) $(FUNCTIONAL_TEST_COVERPKG) -coverprofile=$(NEW_COVER_PROFILE) $(TEST_PARALLEL_FLAGS) -count=$(N_RUNS) -run="$(TEST_SUITES)"
+		$(FUNCTIONAL_TEST_XDC_ROOT) -shuffle on -timeout=$(TEST_TIMEOUT) $(TEST_ARGS) $(TEST_TAG_FLAG) -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER) $(FUNCTIONAL_TEST_COVERPKG) -coverprofile=$(NEW_COVER_PROFILE) $(TEST_PARALLEL_FLAGS) -count=$(N_RUNS) -run="$(TEST_SUITES)"
 
 functional-test-ndc-coverage: prepare-coverage-test
 	@printf $(COLOR) "Run functional test for NDC with coverage with $(PERSISTENCE_DRIVER) driver..."
