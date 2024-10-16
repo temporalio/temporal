@@ -236,8 +236,10 @@ func (t *MatcherTestSuite) TestRejectSyncMatchWhenBacklog() {
 	wg.Wait()
 
 	// should not allow sync match when there is an old task in backlog
-	backlogTask := newInternalTaskFromBacklog(randomTaskInfoWithAge(time.Minute), nil)
-	backlogTask.forwardInfo = &taskqueuespb.TaskForwardInfo{
+	syncMatchTask := newInternalTaskForSyncMatch(randomTaskInfoWithAge(time.Minute).Data, nil)
+	// Adding forwardInfo to replicate a task being forwarded from the child partition.
+	// This field is required to be non-nil for the matcher to offer this task locally to a poller, which is desired.
+	syncMatchTask.forwardInfo = &taskqueuespb.TaskForwardInfo{
 		SourcePartition:    "",
 		TaskSource:         0,
 		RedirectInfo:       nil,
@@ -245,12 +247,12 @@ func (t *MatcherTestSuite) TestRejectSyncMatchWhenBacklog() {
 		DispatchVersionSet: "",
 	}
 	newCtx, newCtxCancel := context.WithTimeout(context.Background(), 1*time.Second)
-	// When the root partition has no pollers and is offered a task from the backlog, the task
+	// When the root partition has no pollers and is offered a task for sync match, the task
 	// gets blocked locally (until a local poller arrives) *unless* the partition has a non-negligible backlog.
 	// Since the partition currently has no pollers, the test verifies that the task is not blocked locally
 	// by asserting a context cancellation due to a timeout never occurred and we received a *false* due to a
 	// non-negligible backlog.
-	happened, err := t.rootMatcher.Offer(newCtx, backlogTask)
+	happened, err := t.rootMatcher.Offer(newCtx, syncMatchTask)
 	if newCtx.Err() != nil {
 		t.FailNow("waited on a local poller due to a negligible backlog")
 
