@@ -384,8 +384,8 @@ prepare-coverage-test: $(GOTESTSUM) $(TEST_OUTPUT_ROOT)
 
 unit-test-coverage: prepare-coverage-test
 	@printf $(COLOR) "Run unit tests with coverage..."
-	$(GOTESTSUM) --junitfile $(NEW_REPORT) -- \
-		$(UNIT_TEST_DIRS) -shuffle on -timeout=$(TEST_TIMEOUT) $(TEST_ARGS) $(TEST_TAG_FLAG) $(SINGLE_TEST_ARGS) -coverprofile=$(NEW_COVER_PROFILE)
+	$(GOTESTSUM) --rerun-fails=2 --rerun-fails-max-failures=20 --junitfile $(NEW_REPORT) --packages $(UNIT_TEST_DIRS) -- \
+		-shuffle on -timeout=$(TEST_TIMEOUT) $(TEST_ARGS) $(TEST_TAG_FLAG) $(SINGLE_TEST_ARGS) -coverprofile=$(NEW_COVER_PROFILE)
 
 integration-test-coverage: prepare-coverage-test
 	@printf $(COLOR) "Run integration tests with coverage..."

@@ -183,10 +183,10 @@ jobs:
     runs-on: ${{ matrix.runs-on }}
     env:
       BUILDKITE_MESSAGE: '{"job": "unit-test"}'
-      SINGLE_TEST_ARGS: ${{ needs.set-up-single-test.outputs.single_test_args }}
-      UNIT_TEST_DIR: ${{ inputs.unit_test_directory }}
+      # Used by the Makefile to build the go test command.
+      UNIT_TEST_DIRS: ${{ inputs.unit_test_directory }}
+      # Used by the Makefile to build the go test command.
       TEST_TIMEOUT: ${{ needs.set-up-single-test.outputs.test_timeout }}
-      RUN_SINGLE_UNIT_TEST: ${{ inputs.run_single_unit_test }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -199,14 +199,10 @@ jobs:
           check-latest: true
 
       - name: Run unit tests
-        if: ${{ !cancelled() && !inputs.run_single_unit_test }}
         timeout-minutes: 15
         run: make unit-test-coverage
-
-      - name: Run single unit test
-        if: ${{ !cancelled() && inputs.run_single_unit_test }}
-        timeout-minutes: 15
-        run: UNIT_TEST_DIRS=$UNIT_TEST_DIR make unit-test-coverage
+        env:
+          TEST_ARGS: ${{ needs.set-up-single-test.outputs.single_test_args }}
 
       - name: Flaky Unit Test Detection
         if: ${{ !cancelled() && !inputs.run_single_unit_test && env.MODIFIED_TEST_SUITES != '' }}
