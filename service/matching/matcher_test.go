@@ -228,11 +228,9 @@ func (t *MatcherTestSuite) TestRejectSyncMatchWhenBacklog() {
 	go func() {
 		defer wg.Done()
 		for {
-			t.rootMatcher.backlogTasksLock.RLock()
-			if len(t.rootMatcher.backlogTasksCreateTime) > 0 {
+			if !t.rootMatcher.isBacklogNegligible() {
 				return // Exit if a task has been added
 			}
-			t.rootMatcher.backlogTasksLock.RUnlock()
 		}
 	}()
 	wg.Wait()
