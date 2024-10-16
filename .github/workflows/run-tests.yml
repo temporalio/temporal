@@ -83,7 +83,7 @@ jobs:
       - id: generate_output
         run: |
           shards=3
-          timeout=35   # update this to TEST_TIMEOUT if you update the Makefile
+          timeout=20   # update this to TEST_TIMEOUT if you update the Makefile
           runs_on='["ubuntu-20.04"]'
           if [[ "${{ inputs.run_single_functional_test }}" == "true" || "${{ inputs.run_single_unit_test }}" == "true" ]]; then
             shards=1
@@ -135,13 +135,55 @@ jobs:
             -t "${COMMIT}" | tee -a "$GITHUB_ENV"
         shell: bash
 
-  misc-checks:
-    name: Misc checks
+  pre-build:
+    name: Pre-build for cache
     strategy:
       fail-fast: false
-      matrix:
-        runs-on: [ubuntu-20.04]
-    runs-on: ${{ matrix.runs-on }}
+    runs-on: ubuntu-20.04
+    steps:
+      - uses: actions/checkout@v4
+        if: ${{ !inputs.run_single_functional_test && !inputs.run_single_unit_test }}
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          ref: ${{ env.COMMIT }}
+
+      - uses: actions/setup-go@v5
+        if: ${{ !inputs.run_single_functional_test && !inputs.run_single_unit_test }}
+        with:
+          go-version-file: "go.mod"
+          cache: false  # do our own caching
+
+      - name: Restore dependencies
+        if: ${{ !inputs.run_single_functional_test && !inputs.run_single_unit_test }}
+        id: restore-deps
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/go/pkg/mod
+          key: go-${{ runner.os }}${{ runner.arch }}-deps-${{ hashFiles('go.sum') }}
+
+      - run: make pre-build-functional-test-coverage
+        if: ${{ !inputs.run_single_functional_test && !inputs.run_single_unit_test }}
+
+      - name: Save dependencies
+        uses: actions/cache/save@v4
+        if: ${{ !inputs.run_single_functional_test && !inputs.run_single_unit_test && steps.restore-deps.outputs.cache-hit != 'true' }}
+        with:
+          path: ~/go/pkg/mod
+          key: ${{ steps.restore-deps.outputs.cache-primary-key }}
+
+      - name: Save build outputs
+        uses: actions/cache/save@v4
+        if: ${{ !inputs.run_single_functional_test && !inputs.run_single_unit_test }}
+        with:
+          path: ~/.cache/go-build
+          key: go-${{ runner.os }}${{ runner.arch }}-build-${{ env.COMMIT }}
+
+  misc-checks:
+    name: Misc checks
+    needs: pre-build
+    strategy:
+      fail-fast: false
+    runs-on: ubuntu-20.04
     steps:
       - uses: actions/checkout@v4
         if: ${{ !inputs.run_single_functional_test && !inputs.run_single_unit_test }}
@@ -155,7 +197,21 @@ jobs:
         if: ${{ !inputs.run_single_functional_test && !inputs.run_single_unit_test }}
         with:
           go-version-file: "go.mod"
-          check-latest: true
+          cache: false  # do our own caching
+
+      - name: Restore dependencies
+        if: ${{ !inputs.run_single_functional_test && !inputs.run_single_unit_test }}
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/go/pkg/mod
+          key: go-${{ runner.os }}${{ runner.arch }}-deps-${{ hashFiles('go.sum') }}
+
+      - name: Restore build outputs
+        if: ${{ !inputs.run_single_functional_test && !inputs.run_single_unit_test }}
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/.cache/go-build
+          key: go-${{ runner.os }}${{ runner.arch }}-build-${{ env.COMMIT }}
 
       - uses: arduino/setup-protoc@v3
         if: ${{ !inputs.run_single_functional_test && !inputs.run_single_unit_test }}
@@ -169,18 +225,13 @@ jobs:
       - run: make clean-bins ci-build-misc
         if: ${{ !inputs.run_single_functional_test && !inputs.run_single_unit_test }}
 
-      - run: make build-tests
-        if: ${{ !inputs.run_single_functional_test && !inputs.run_single_unit_test }}
-
   unit-test:
     if: ${{ inputs.run_single_functional_test != true }}
     name: Unit test
-    needs: [misc-checks, set-up-single-test]
+    needs: [pre-build, set-up-single-test]
     strategy:
       fail-fast: false
-      matrix:
-        runs-on: [ubuntu-20.04]
-    runs-on: ${{ matrix.runs-on }}
+    runs-on: ubuntu-20.04
     env:
       BUILDKITE_MESSAGE: '{"job": "unit-test"}'
       SINGLE_TEST_ARGS: ${{ needs.set-up-single-test.outputs.single_test_args }}
@@ -196,7 +247,19 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version-file: "go.mod"
-          check-latest: true
+          cache: false  # do our own caching
+
+      - name: Restore dependencies
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/go/pkg/mod
+          key: go-${{ runner.os }}${{ runner.arch }}-deps-${{ hashFiles('go.sum') }}
+
+      - name: Restore build outputs
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/.cache/go-build
+          key: go-${{ runner.os }}${{ runner.arch }}-build-${{ env.COMMIT }}
 
       - name: Run unit tests
         if: ${{ !cancelled() && !inputs.run_single_unit_test }}
@@ -222,12 +285,10 @@ jobs:
   integration-test:
     if: ${{ inputs.run_single_functional_test != true && inputs.run_single_unit_test != true }}
     name: Integration test
-    needs: [misc-checks, set-up-single-test]
+    needs: [pre-build, set-up-single-test]
     strategy:
       fail-fast: false
-      matrix:
-        runs-on: [ubuntu-20.04]
-    runs-on: ${{ matrix.runs-on }}
+    runs-on: ubuntu-20.04
     env:
       BUILDKITE_MESSAGE: '{"job": "integration-test"}'
     steps:
@@ -235,11 +296,6 @@ jobs:
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           ref: ${{ env.COMMIT }}
-
-      - uses: actions/setup-go@v5
-        with:
-          go-version-file: "go.mod"
-          check-latest: true
 
       - name: Start containerized dependencies
         uses: hoverkraft-tech/compose-action@v2.0.1
@@ -250,6 +306,23 @@ jobs:
             mysql
             postgresql
           down-flags: -v
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: "go.mod"
+          cache: false  # do our own caching
+
+      - name: Restore dependencies
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/go/pkg/mod
+          key: go-${{ runner.os }}${{ runner.arch }}-deps-${{ hashFiles('go.sum') }}
+
+      - name: Restore build outputs
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/.cache/go-build
+          key: go-${{ runner.os }}${{ runner.arch }}-build-${{ env.COMMIT }}
 
       - name: Run integration test
         timeout-minutes: 15
@@ -273,7 +346,7 @@ jobs:
   functional-test:
     if: ${{ inputs.run_single_unit_test != true }}
     name: Functional test
-    needs: [misc-checks, set-up-single-test]
+    needs: [pre-build, set-up-single-test]
     strategy:
       fail-fast: false
       matrix:
@@ -328,19 +401,13 @@ jobs:
       - uses: ScribeMD/docker-cache@0.3.7
         if: ${{ inputs.run_single_functional_test != true || (inputs.run_single_functional_test == true && contains(fromJSON(needs.set-up-single-test.outputs.dbs), env.PERSISTENCE_DRIVER)) }}
         with:
-          key: docker-${{ runner.os }}-${{ hashFiles(env.DOCKER_COMPOSE_FILE) }}
+          key: docker-${{ runner.os }}${{ runner.arch }}-${{ hashFiles(env.DOCKER_COMPOSE_FILE) }}
 
       - uses: actions/checkout@v4
         if: ${{ inputs.run_single_functional_test != true || (inputs.run_single_functional_test == true && contains(fromJSON(needs.set-up-single-test.outputs.dbs), env.PERSISTENCE_DRIVER)) }}
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           ref: ${{ env.COMMIT }}
-
-      - uses: actions/setup-go@v5
-        if: ${{ inputs.run_single_functional_test != true || (inputs.run_single_functional_test == true && contains(fromJSON(needs.set-up-single-test.outputs.dbs), env.PERSISTENCE_DRIVER)) }}
-        with:
-          go-version-file: "go.mod"
-          check-latest: true
 
       - name: Start containerized dependencies
         if: ${{ toJson(matrix.containers) != '[]' && (inputs.run_single_functional_test != true || (inputs.run_single_functional_test == true && contains(fromJSON(needs.set-up-single-test.outputs.dbs), env.PERSISTENCE_DRIVER))) }}
@@ -349,6 +416,24 @@ jobs:
           compose-file: ${{ env.DOCKER_COMPOSE_FILE }}
           services: "${{ join(matrix.containers, '\n') }}"
           down-flags: -v
+
+      - uses: actions/setup-go@v5
+        if: ${{ inputs.run_single_functional_test != true || (inputs.run_single_functional_test == true && contains(fromJSON(needs.set-up-single-test.outputs.dbs), env.PERSISTENCE_DRIVER)) }}
+        with:
+          go-version-file: "go.mod"
+          cache: false  # do our own caching
+
+      - name: Restore dependencies
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/go/pkg/mod
+          key: go-${{ runner.os }}${{ runner.arch }}-deps-${{ hashFiles('go.sum') }}
+
+      - name: Restore build outputs
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/.cache/go-build
+          key: go-${{ runner.os }}${{ runner.arch }}-build-${{ env.COMMIT }}
 
       - name: Run functional test
         if: ${{ inputs.run_single_functional_test != true || (inputs.run_single_functional_test == true && contains(fromJSON(needs.set-up-single-test.outputs.dbs), env.PERSISTENCE_DRIVER)) }}
@@ -369,11 +454,10 @@ jobs:
   functional-test-xdc:
     if: ${{ inputs.run_single_functional_test != true && inputs.run_single_unit_test != true }}
     name: Functional test xdc
-    needs: [misc-checks, set-up-single-test]
+    needs: [pre-build, set-up-single-test]
     strategy:
       fail-fast: false
       matrix:
-        runs-on: [ubuntu-20.04]
         name: [cass_es, cass_es8, mysql8, postgres12, postgres12_pgx]
         include:
           - name: cass_es
@@ -401,7 +485,7 @@ jobs:
             persistence_driver: postgres12_pgx
             parallel_flags: "-parallel=2" # reduce parallelism for postgres
             containers: [postgresql]
-    runs-on: ${{ matrix.runs-on }}
+    runs-on: ubuntu-20.04
     env:
       PERSISTENCE_TYPE: ${{ matrix.persistence_type }}
       PERSISTENCE_DRIVER: ${{ matrix.persistence_driver }}
@@ -413,11 +497,6 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
           ref: ${{ env.COMMIT }}
 
-      - uses: actions/setup-go@v5
-        with:
-          go-version-file: "go.mod"
-          check-latest: true
-
       - name: Start containerized dependencies
         if: ${{ toJson(matrix.containers) != '[]' }}
         uses: hoverkraft-tech/compose-action@v2.0.1
@@ -426,8 +505,25 @@ jobs:
           services: "${{ join(matrix.containers, '\n') }}"
           down-flags: -v
 
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: "go.mod"
+          cache: false  # do our own caching
+
+      - name: Restore dependencies
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/go/pkg/mod
+          key: go-${{ runner.os }}${{ runner.arch }}-deps-${{ hashFiles('go.sum') }}
+
+      - name: Restore build outputs
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/.cache/go-build
+          key: go-${{ runner.os }}${{ runner.arch }}-build-${{ env.COMMIT }}
+
       - name: Run functional test xdc
-        timeout-minutes: 40   # update this to TEST_TIMEOUT+5 if you update the Makefile
+        timeout-minutes: 25   # update this to TEST_TIMEOUT+5 if you update the Makefile
         run: make functional-test-xdc-coverage
 
       - name: Flaky Functional XDC Test Detection
@@ -444,11 +540,10 @@ jobs:
   functional-test-ndc:
     if: ${{ inputs.run_single_functional_test != true && inputs.run_single_unit_test != true }}
     name: Functional test ndc
-    needs: [misc-checks, set-up-single-test]
+    needs: [pre-build, set-up-single-test]
     strategy:
       fail-fast: false
       matrix:
-        runs-on: [ubuntu-20.04]
         name:
           - cass_es
           - cass_es8
@@ -478,7 +573,7 @@ jobs:
             persistence_type: sql
             persistence_driver: postgres12_pgx
             containers: [postgresql]
-    runs-on: ${{ matrix.runs-on }}
+    runs-on: ubuntu-20.04
     env:
       PERSISTENCE_TYPE: ${{ matrix.persistence_type }}
       PERSISTENCE_DRIVER: ${{ matrix.persistence_driver }}
@@ -489,11 +584,6 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
           ref: ${{ env.COMMIT }}
 
-      - uses: actions/setup-go@v5
-        with:
-          go-version-file: "go.mod"
-          check-latest: true
-
       - name: Start containerized dependencies
         if: ${{ toJson(matrix.containers) != '[]' }}
         uses: hoverkraft-tech/compose-action@v2.0.1
@@ -501,6 +591,23 @@ jobs:
           compose-file: ${{ env.DOCKER_COMPOSE_FILE }}
           services: "${{ join(matrix.containers, '\n') }}"
           down-flags: -v
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: "go.mod"
+          cache: false  # do our own caching
+
+      - name: Restore dependencies
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/go/pkg/mod
+          key: go-${{ runner.os }}${{ runner.arch }}-deps-${{ hashFiles('go.sum') }}
+
+      - name: Restore build outputs
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/.cache/go-build
+          key: go-${{ runner.os }}${{ runner.arch }}-build-${{ env.COMMIT }}
 
       - name: Run functional test ndc
         timeout-minutes: 15
@@ -517,6 +624,7 @@ jobs:
     if: always()
     name: Test Status
     needs:
+      - misc-checks
       - unit-test
       - integration-test
       - functional-test
