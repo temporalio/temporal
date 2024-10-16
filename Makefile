@@ -9,7 +9,7 @@ bins: temporal-server temporal-cassandra-tool temporal-sql-tool tdbg
 all: clean proto bins check test
 
 # Used in CI
-ci-build-misc: print-go-version proto go-generate buf-breaking bins temporal-server-debug shell-check copyright-check goimports-all gomodtidy ensure-no-changes
+ci-build-misc: print-go-version proto go-generate buf-breaking shell-check copyright-check goimports-all gomodtidy ensure-no-changes
 
 # Delete all build artifacts
 clean: clean-bins clean-test-results
@@ -64,11 +64,11 @@ define NEWLINE
 
 endef
 
-# 35 minutes is the upper bound defined for all tests, the longer running ones at the time of writing are XDC tests.
+# 20 minutes is the upper bound defined for all tests. (Tests in CI take up to about 12:30 now)
 # If you change this, also change .github/workflows/run-tests.yml!
 # The timeout in the GH workflow must be larger than this to avoid GH timing out the action,
 # which causes the a job run to not produce any logs and hurts the debugging experience.
-TEST_TIMEOUT ?= 35m
+TEST_TIMEOUT ?= 20m
 
 PROTO_ROOT := proto
 PROTO_FILES = $(shell find ./$(PROTO_ROOT)/internal -name "*.proto")
@@ -392,7 +392,7 @@ integration-test-coverage: prepare-coverage-test
 	$(GOTESTSUM) --junitfile $(NEW_REPORT) -- \
 		$(INTEGRATION_TEST_DIRS) -shuffle on -timeout=$(TEST_TIMEOUT) $(TEST_ARGS) $(TEST_TAG_FLAG) $(INTEGRATION_TEST_COVERPKG) -coverprofile=$(NEW_COVER_PROFILE)
 
-# This should use the same build flags as functional-test-coverage for best build caching.
+# This should use the same build flags as functional-test-coverage and functional-test-{xdc,ndc}-coverage for best build caching.
 pre-build-functional-test-coverage: prepare-coverage-test
 	go test -c -o /dev/null $(FUNCTIONAL_TEST_ROOT) $(TEST_ARGS) $(TEST_TAG_FLAG) $(FUNCTIONAL_TEST_COVERPKG)
 
