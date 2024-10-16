@@ -210,6 +210,7 @@ func (t *MatcherTestSuite) testRemoteSyncMatch(taskSource enumsspb.TaskSource) {
 	t.Equal(mustParent(t.queue.partition.(*tqid.NormalPartition), 20).RpcName(), req.GetTaskQueue().GetName())
 }
 
+//nolint:errcheck
 func (t *MatcherTestSuite) TestRejectSyncMatchWhenBacklog() {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	intruptC := make(chan struct{})
@@ -219,7 +220,7 @@ func (t *MatcherTestSuite) TestRejectSyncMatchWhenBacklog() {
 
 	var wg sync.WaitGroup
 	go func() {
-		t.rootMatcher.MustOffer(ctx, oldBacklogTask, intruptC) //nolint:errcheck
+		t.rootMatcher.MustOffer(ctx, oldBacklogTask, intruptC) //nolint:revive
 	}()
 
 	// Wait for the task to be added to the map
