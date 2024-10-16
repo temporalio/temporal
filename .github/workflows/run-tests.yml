@@ -116,12 +116,14 @@ jobs:
         run: git fetch origin ${{ github.event.pull_request.base.ref }}:${{ github.event.pull_request.base.ref }}
 
       - name: Compute merge base
+        if: github.ref != 'refs/heads/main'
         run: |
           MERGE_BASE="$(git merge-base "${{ env.COMMIT }}" "${{ github.event.pull_request.base.ref }}")"
           echo "MERGE_BASE=${MERGE_BASE}" >> "$GITHUB_ENV"
 
       - name: Collect Modified Tests
         id: collect_modified_tests
+        if: github.ref != 'refs/heads/main'
         run: |
           set -exuo pipefail
 
