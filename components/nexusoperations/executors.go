@@ -205,6 +205,11 @@ func (e taskExecutor) executeInvocationTask(ctx context.Context, env hsm.Environ
 
 	// Make the call and record metrics.
 	startTime := time.Now()
+	methodTag := metrics.NexusMethodTag("StartOperation")
+	namespaceTag := metrics.NamespaceTag(ns.Name().String())
+	destTag := metrics.DestinationTag(endpoint.Endpoint.Spec.GetName())
+	OutboundRequestScheduleToStartLatency.With(e.MetricsHandler).Record(time.Since(args.scheduledTime), namespaceTag, destTag, methodTag)
+
 	rawResult, callErr := client.StartOperation(callCtx, args.operation, args.payload, nexus.StartOperationOptions{
 		Header:      header,
 		CallbackURL: callbackURL,
@@ -215,9 +220,6 @@ func (e taskExecutor) executeInvocationTask(ctx context.Context, env hsm.Environ
 		Links: []nexus.Link{args.nexusLink},
 	})
 
-	methodTag := metrics.NexusMethodTag("StartOperation")
-	namespaceTag := metrics.NamespaceTag(ns.Name().String())
-	destTag := metrics.DestinationTag(endpoint.Endpoint.Spec.GetName())
 	outcomeTag := metrics.OutcomeTag(startCallOutcomeTag(callCtx, rawResult, callErr))
 	OutboundRequestCounter.With(e.MetricsHandler).Record(1, namespaceTag, destTag, methodTag, outcomeTag)
 	OutboundRequestLatency.With(e.MetricsHandler).Record(time.Since(startTime), namespaceTag, destTag, methodTag, outcomeTag)
@@ -270,6 +272,7 @@ type startArgs struct {
 	payload                  *commonpb.Payload
 	nexusLink                nexus.Link
 	namespaceFailoverVersion int64
+	scheduledTime            time.Time
 	cancelRequested          bool
 }
 
@@ -315,6 +318,7 @@ func (e taskExecutor) loadOperationArgs(
 			},
 		})
 		args.namespaceFailoverVersion = event.Version
+		args.scheduledTime = event.EventTime.AsTime()
 		return nil
 	})
 	return
