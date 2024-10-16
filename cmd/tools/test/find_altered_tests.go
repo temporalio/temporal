@@ -78,10 +78,12 @@ func main() {
 		log.Fatalf("Usage: find_altered_tests -c <category1> -c <category2> ... -s <sourceRef> -t <targetRef>")
 	}
 
+	uniqCategories := make(map[string]struct{})
 	for _, category := range categories {
 		if _, exists := CategoryDirs[category]; !exists {
 			log.Fatalf("Unknown category: %s", category)
 		}
+		uniqCategories[category] = struct{}{}
 	}
 
 	modifiedFiles, err := getModifiedTestFiles(sourceRef, targetRef)
@@ -89,26 +91,14 @@ func main() {
 		log.Fatalf("Error getting modified test files: %v", err)
 	}
 
-	// Initialize a map to hold modified suites per category
-	modifiedSuites := make(map[string][]string)
-
-	for _, category := range categories {
-		dirs := CategoryDirs[category]
-		suites, err := findAlteredTestSuites(modifiedFiles, dirs)
-		if err != nil {
-			log.Fatalf("Error finding altered test suites for category %s: %v", category, err)
-		}
-		modifiedSuites[category] = suites
-	}
-
-	for _, category := range categories {
+	for category := range uniqCategories {
 		dirs := CategoryDirs[category]
 		suites, err := findAlteredTestSuites(modifiedFiles, dirs)
 		if err != nil {
 			log.Fatalf("Error finding altered test suites for category %s: %v", category, err)
 		}
 
-		// Directly join suites and output the result without using a map
+		// Join suites and output the result directly
 		joinedSuites := strings.Join(suites, "|")
 		fmt.Printf("modified_%s_test_suites=%s\n", category, joinedSuites)
 	}
