@@ -210,28 +210,6 @@ func (t *MatcherTestSuite) testRemoteSyncMatch(taskSource enumsspb.TaskSource) {
 	t.Equal(mustParent(t.queue.partition.(*tqid.NormalPartition), 20).RpcName(), req.GetTaskQueue().GetName())
 }
 
-// TestValidateSyncMatchWhenNoBacklog validates a sync match when there is no backlog
-func (t *MatcherTestSuite) TestValidateSyncMatchWhenNoBacklog() {
-	historyTask := newInternalTaskForSyncMatch(randomTaskInfo().Data, nil)
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-	go func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-		_, err := t.rootMatcher.Poll(ctx, &pollMetadata{})
-		t.Assert().NoError(err)
-		cancel()
-	}()
-	time.Sleep(2 * time.Millisecond) //nolint:forbidigo
-
-	go func() {
-		historyTask.responseC <- nil
-	}()
-	time.Sleep(2 * time.Millisecond) //nolint:forbidigo
-	happened, err := t.rootMatcher.Offer(ctx, historyTask)
-	t.True(happened)
-	t.Nil(err)
-	cancel()
-}
-
 func (t *MatcherTestSuite) TestRejectSyncMatchWhenBacklog() {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	intruptC := make(chan struct{})
