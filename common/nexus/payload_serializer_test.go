@@ -23,7 +23,6 @@
 package nexus
 
 import (
-	"math/rand"
 	"testing"
 
 	"github.com/nexus-rpc/sdk-go/nexus"
@@ -215,9 +214,6 @@ func TestNexusPayloadSerializer(t *testing.T) {
 		t.Run(c.name, func(t *testing.T) {
 			t.Parallel()
 			s := payloadSerializer{}
-			if c.name == "nexus content with length header" && rand.Float32() < 0.5 {
-				t.FailNow()
-			}
 			content, err := s.Serialize(c.inputPayload)
 			require.NoError(t, err)
 			require.Equal(t, c.header, content.Header)
