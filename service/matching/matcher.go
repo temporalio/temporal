@@ -71,7 +71,7 @@ type TaskMatcher struct {
 	metricsHandler         metrics.Handler // namespace metric scope
 	numPartitions          func() int      // number of task queue partitions
 	backlogTasksCreateTime map[int64]int   // task creation time (unix nanos) -> number of tasks with that time
-	backlogTasksLock       sync.Mutex
+	backlogTasksLock       sync.RWMutex
 	lastPoller             atomic.Int64 // unix nanos of most recent poll start time
 }
 
@@ -646,8 +646,8 @@ func (tm *TaskMatcher) unregisterBacklogTask(task *internalTask) {
 // getBacklogAge is the latest age across all backlogs re-directing to this matcher; may momentarily
 // be 0 cause of race conditions when no reader pushes a task into the matcher at this moment
 func (tm *TaskMatcher) getBacklogAge() time.Duration {
-	tm.backlogTasksLock.Lock()
-	defer tm.backlogTasksLock.Unlock()
+	tm.backlogTasksLock.RLock()
+	defer tm.backlogTasksLock.RUnlock()
 
 	if len(tm.backlogTasksCreateTime) == 0 {
 		return emptyBacklogAge
