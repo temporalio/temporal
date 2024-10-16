@@ -30,6 +30,9 @@ GOPATH      ?= $(shell go env GOPATH)
 # Disable cgo by default.
 CGO_ENABLED ?= 0
 
+# NOTE: This is incompatible with TEST_ARGS which specify the `-run` flag due to how gotestsum selects which tests to
+# retry.
+FAILED_TEST_RETRIES ?= 2
 TEST_ARGS ?= -race
 PERSISTENCE_TYPE ?= nosql
 PERSISTENCE_DRIVER ?= cassandra
@@ -384,8 +387,14 @@ prepare-coverage-test: $(GOTESTSUM) $(TEST_OUTPUT_ROOT)
 
 unit-test-coverage: prepare-coverage-test
 	@printf $(COLOR) "Run unit tests with coverage..."
-	$(GOTESTSUM) --rerun-fails=2 --rerun-fails-max-failures=20 --junitfile $(NEW_REPORT) --packages $(UNIT_TEST_DIRS) -- \
-		-shuffle on -timeout=$(TEST_TIMEOUT) $(TEST_ARGS) $(TEST_TAG_FLAG) $(SINGLE_TEST_ARGS) -coverprofile=$(NEW_COVER_PROFILE)
+ifeq ($(FAILED_TEST_RETRIES), 0)
+	$(GOTESTSUM) --junitfile $(NEW_REPORT) -- \
+		$(UNIT_TEST_DIRS) shuffle on -timeout=$(TEST_TIMEOUT) $(TEST_ARGS) $(TEST_TAG_FLAG) -coverprofile=$(NEW_COVER_PROFILE)
+else
+	# Packages need to be provided via a named argument when --rerun-fails is on as stated in the gotestsum README.
+	$(GOTESTSUM) --rerun-fails=$(FAILED_TEST_RETRIES) --rerun-fails-max-failures=10 --junitfile $(NEW_REPORT) --packages $(UNIT_TEST_DIRS) -- \
+		-shuffle on -timeout=$(TEST_TIMEOUT) $(TEST_ARGS) $(TEST_TAG_FLAG) -coverprofile=$(NEW_COVER_PROFILE)
+endif
 
 integration-test-coverage: prepare-coverage-test
 	@printf $(COLOR) "Run integration tests with coverage..."
