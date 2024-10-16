@@ -78,7 +78,7 @@ jobs:
       - id: generate_output
         run: |
           shards=3
-          timeout=35   # update this to TEST_TIMEOUT if you update the Makefile
+          timeout=20   # update this to TEST_TIMEOUT if you update the Makefile
           runs_on='["ubuntu-20.04"]'
           if [[ "${{ inputs.run_single_functional_test }}" == "true" || "${{ inputs.run_single_unit_test }}" == "true" ]]; then
             shards=1
@@ -473,7 +473,7 @@ jobs:
           key: go-${{ runner.os }}-build-${{ env.COMMIT }}
 
       - name: Run functional test xdc
-        timeout-minutes: 40   # update this to TEST_TIMEOUT+5 if you update the Makefile
+        timeout-minutes: 25   # update this to TEST_TIMEOUT+5 if you update the Makefile
         run: make functional-test-xdc-coverage
 
       - name: Upload test results

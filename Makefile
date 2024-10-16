@@ -64,11 +64,11 @@ define NEWLINE
 
 endef
 
-# 35 minutes is the upper bound defined for all tests, the longer running ones at the time of writing are XDC tests.
+# 20 minutes is the upper bound defined for all tests. (Tests in CI take up to about 12:30 now)
 # If you change this, also change .github/workflows/run-tests.yml!
 # The timeout in the GH workflow must be larger than this to avoid GH timing out the action,
 # which causes the a job run to not produce any logs and hurts the debugging experience.
-TEST_TIMEOUT ?= 35m
+TEST_TIMEOUT ?= 20m
 
 PROTO_ROOT := proto
 PROTO_FILES = $(shell find ./$(PROTO_ROOT)/internal -name "*.proto")
