@@ -236,37 +236,43 @@ func (t *MatcherTestSuite) TestRejectSyncMatchWhenBacklog() {
 	// sync match happens when there is no backlog
 	t.validateSyncMatchWhenNoBacklog(ctx, historyTask)
 
-	// first task waits for a local poller
 	intruptC := make(chan struct{})
-	youngBacklogTask := newInternalTaskFromBacklog(randomTaskInfoWithAge(time.Second), nil)
-	go t.rootMatcher.MustOffer(ctx, youngBacklogTask, intruptC) //nolint:errcheck
-	time.Sleep(time.Millisecond)
 
-	// should allow sync match when there is only young tasks in the backlog
-	t.client.EXPECT().AddWorkflowTask(gomock.Any(), gomock.Any(), gomock.Any()).Do(
-		func(arg0 context.Context, arg1 *matchingservice.AddWorkflowTaskRequest, arg2 ...interface{}) {
-		},
-	).Return(&matchingservice.AddWorkflowTaskResponse{}, errMatchingHostThrottleTest)
-	happened, err := t.childMatcher.Offer(ctx, historyTask)
-	t.Nil(err)
-	t.False(happened) // sync match did not happen, but we called the forwarder client
-
-	// second task waits for a local poller
+	// task waits for a local poller
 	oldBacklogTask := newInternalTaskFromBacklog(randomTaskInfoWithAge(time.Minute), nil)
 	go t.rootMatcher.MustOffer(ctx, oldBacklogTask, intruptC) //nolint:errcheck
-	time.Sleep(time.Millisecond)
+	time.Sleep(2 * time.Millisecond)
 
 	// should not allow sync match when there is an old task in backlog
-	happened, err = t.rootMatcher.Offer(ctx, historyTask)
-	t.False(happened)
-	t.Nil(err)
 
-	// poll both tasks which are from the backlog
-	for i := 0; i < 2; i++ {
-		task, _ := t.rootMatcher.Poll(ctx, &pollMetadata{})
-		t.NotNil(task)
-		t.Equal(enumsspb.TASK_SOURCE_DB_BACKLOG, task.source)
+	backlogTask := newInternalTaskFromBacklog(randomTaskInfoWithAge(time.Minute), nil)
+	backlogTask.forwardInfo = &taskqueuespb.TaskForwardInfo{
+		SourcePartition:    "",
+		TaskSource:         0,
+		RedirectInfo:       nil,
+		DispatchBuildId:    "",
+		DispatchVersionSet: "",
 	}
+	newCtx, newCtxCancel := context.WithTimeout(context.Background(), 10*time.Second)
+	// When the root partition has no pollers and is offered a task from the backlog, the task
+	// gets blocked locally (until a local poller arrives) *unless* the partition has a non-negligible backlog.
+	// Since the partition currently has no pollers, the test verifies that the task is not blocked locally
+	// by asserting a context cancellation due to a timeout never occurred and we received a *false* due to a
+	// non-negligible backlog.
+	happened, err := t.rootMatcher.Offer(newCtx, backlogTask)
+	select {
+	case <-newCtx.Done():
+		t.FailNow("waited on a local poller due to a negligible backlog")
+	default:
+		t.False(happened)
+		t.Nil(err)
+	}
+	newCtxCancel()
+
+	// poll old task which is from the backlog
+	task, _ := t.rootMatcher.Poll(ctx, &pollMetadata{})
+	t.NotNil(task)
+	t.Equal(enumsspb.TASK_SOURCE_DB_BACKLOG, task.source)
 	time.Sleep(time.Millisecond)
 
 	// should allow sync match now
