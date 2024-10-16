@@ -241,7 +241,7 @@ func (t *MatcherTestSuite) TestRejectSyncMatchWhenBacklog() {
 	// task waits for a local poller
 	oldBacklogTask := newInternalTaskFromBacklog(randomTaskInfoWithAge(time.Minute), nil)
 	go t.rootMatcher.MustOffer(ctx, oldBacklogTask, intruptC) //nolint:errcheck
-	time.Sleep(2 * time.Millisecond)
+	time.Sleep(2 * time.Millisecond)                          //nolint:forbidigo
 
 	// should not allow sync match when there is an old task in backlog
 
