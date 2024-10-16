@@ -222,6 +222,7 @@ func (s *ScheduleFunctionalSuite) TestBasics() {
 	createTime := time.Now()
 	_, err := s.FrontendClient().CreateSchedule(testcore.NewContext(), req)
 	s.NoError(err)
+	s.cleanup(sid)
 
 	// sleep until we see two runs, plus a bit more to ensure that the second run has completed
 	s.Eventually(func() bool { return atomic.LoadInt32(&runs) == 2 }, 15*time.Second, 500*time.Millisecond)
@@ -1042,6 +1043,7 @@ func (s *ScheduleFunctionalSuite) TestRateLimit() {
 			RequestId:  uuid.New(),
 		})
 		s.NoError(err)
+		s.cleanup(fmt.Sprintf(sid, i))
 	}
 
 	time.Sleep(5 * time.Second) //nolint:forbidigo
@@ -1049,16 +1051,6 @@ func (s *ScheduleFunctionalSuite) TestRateLimit() {
 	// With no rate limit, we'd see 10/second == 50 workflows run. With a limit of 1/sec, we
 	// expect to see around 5.
 	s.Less(atomic.LoadInt32(&runs), int32(10))
-
-	// clean up
-	for i := 0; i < 10; i++ {
-		_, err := s.FrontendClient().DeleteSchedule(testcore.NewContext(), &workflowservice.DeleteScheduleRequest{
-			Namespace:  s.Namespace(),
-			ScheduleId: fmt.Sprintf(sid, i),
-			Identity:   "test",
-		})
-		s.NoError(err)
-	}
 }
 
 func (s *ScheduleFunctionalSuite) TestNextTimeCache() {
