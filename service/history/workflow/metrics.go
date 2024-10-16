@@ -93,9 +93,7 @@ func emitMutableStateStatus(
 	}
 
 	for category, taskCount := range stats.TaskCountByCategory {
-		// We use the metricsHandler rather than the batchHandler here because the same metric is repeatedly sent
-		metrics.TaskCount.With(metricsHandler).
-			Record(int64(taskCount), metrics.TaskCategoryTag(category))
+		metrics.TaskCount.With(batchHandler).Record(int64(taskCount), metrics.TaskCategoryTag(category))
 	}
 }
 
