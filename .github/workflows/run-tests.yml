@@ -151,6 +151,7 @@ jobs:
 
   misc-checks:
     name: Misc checks
+    needs: pre-build
     strategy:
       fail-fast: false
       matrix:
