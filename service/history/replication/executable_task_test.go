@@ -39,6 +39,7 @@ import (
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/api/adminservicemock/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
+	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
@@ -566,6 +567,16 @@ func (s *executableTaskSuite) TestResend_TransitionHistoryDisabled() {
 			NamespaceFailoverVersion: rand.Int63(),
 			TransitionCount:          rand.Int63(),
 		},
+		VersionHistories: &historyspb.VersionHistories{
+			Histories: []*historyspb.VersionHistory{
+				{
+					BranchToken: []byte("token#1"),
+					Items: []*historyspb.VersionHistoryItem{
+						{EventId: 102, Version: 1234},
+					},
+				},
+			},
+		},
 	}
 
 	mockRemoteAdminClient := adminservicemock.NewMockAdminServiceClient(s.controller)
@@ -580,6 +591,7 @@ func (s *executableTaskSuite) TestResend_TransitionHistoryDisabled() {
 				RunId:      syncStateErr.RunId,
 			},
 			VersionedTransition: syncStateErr.VersionedTransition,
+			VersionHistories:    syncStateErr.VersionHistories,
 			TargetClusterId:     int32(s.clusterMetadata.GetAllClusterInfo()[s.clusterMetadata.GetCurrentClusterName()].InitialFailoverVersion),
 		},
 	).Return(nil, consts.ErrTransitionHistoryDisabled).Times(1)
@@ -882,4 +894,69 @@ func (s *executableTaskSuite) TestMarkPoisonPill_MaxAttemptsReached() {
 	s.Error(err)
 	err = s.task.MarkPoisonPill()
 	s.NoError(err)
+}
+
+func (s *executableTaskSuite) TestSyncState() {
+	syncStateErr := &serviceerrors.SyncState{
+		NamespaceId: uuid.NewString(),
+		WorkflowId:  uuid.NewString(),
+		RunId:       uuid.NewString(),
+		VersionedTransition: &persistencespb.VersionedTransition{
+			NamespaceFailoverVersion: rand.Int63(),
+			TransitionCount:          rand.Int63(),
+		},
+		VersionHistories: &historyspb.VersionHistories{
+			Histories: []*historyspb.VersionHistory{
+				{
+					BranchToken: []byte("token#1"),
+					Items: []*historyspb.VersionHistoryItem{
+						{EventId: 102, Version: 1234},
+					},
+				},
+			},
+		},
+	}
+
+	versionedTransitionArtifact := &replicationspb.VersionedTransitionArtifact{
+		StateAttributes: &replicationspb.VersionedTransitionArtifact_SyncWorkflowStateSnapshotAttributes{
+			SyncWorkflowStateSnapshotAttributes: &replicationspb.SyncWorkflowStateSnapshotAttributes{
+				State: &persistencespb.WorkflowMutableState{
+					Checksum: &persistencespb.Checksum{
+						Value: []byte("test-checksum"),
+					},
+				},
+			},
+		},
+	}
+
+	mockRemoteAdminClient := adminservicemock.NewMockAdminServiceClient(s.controller)
+	s.clientBean.EXPECT().GetRemoteAdminClient(s.sourceCluster).Return(mockRemoteAdminClient, nil).AnyTimes()
+	mockRemoteAdminClient.EXPECT().SyncWorkflowState(
+		gomock.Any(),
+		&adminservice.SyncWorkflowStateRequest{
+			NamespaceId: syncStateErr.NamespaceId,
+			Execution: &commonpb.WorkflowExecution{
+				WorkflowId: syncStateErr.WorkflowId,
+				RunId:      syncStateErr.RunId,
+			},
+			VersionedTransition: syncStateErr.VersionedTransition,
+			VersionHistories:    syncStateErr.VersionHistories,
+			TargetClusterId:     int32(s.clusterMetadata.GetAllClusterInfo()[s.clusterMetadata.GetCurrentClusterName()].InitialFailoverVersion),
+		},
+	).Return(&adminservice.SyncWorkflowStateResponse{
+		VersionedTransitionArtifact: versionedTransitionArtifact,
+	}, nil).Times(1)
+
+	shardContext := shard.NewMockContext(s.controller)
+	engine := shard.NewMockEngine(s.controller)
+	s.shardController.EXPECT().GetShardByNamespaceWorkflow(
+		namespace.ID(syncStateErr.NamespaceId),
+		syncStateErr.WorkflowId,
+	).Return(shardContext, nil).AnyTimes()
+	shardContext.EXPECT().GetEngine(gomock.Any()).Return(engine, nil).AnyTimes()
+	engine.EXPECT().ReplicateVersionedTransition(gomock.Any(), versionedTransitionArtifact, s.sourceCluster).Return(nil)
+
+	doContinue, err := s.task.SyncState(context.Background(), syncStateErr, ResendAttempt)
+	s.NoError(err)
+	s.True(doContinue)
 }
