@@ -45,6 +45,7 @@ type RelayTaskTestSuite struct {
 }
 
 func TestRelayTaskTestSuite(t *testing.T) {
+	t.Parallel()
 	suite.Run(t, new(RelayTaskTestSuite))
 }
 

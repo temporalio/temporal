@@ -357,6 +357,11 @@ func (c *TemporalImpl) FrontendGRPCAddress() string {
 	return c.frontendMembershipAddress
 }
 
+// Use this to get an address for a remote cluster to connect to.
+func (c *TemporalImpl) RemoteFrontendGRPCAddress() string {
+	return c.FrontendGRPCAddresses()[0]
+}
+
 func (c *TemporalImpl) FrontendHTTPAddress() string {
 	// randomize like a load balancer would
 	addrs := c.FrontendGRPCAddresses()

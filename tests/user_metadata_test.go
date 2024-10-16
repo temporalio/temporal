@@ -42,6 +42,7 @@ type UserMetadataSuite struct {
 }
 
 func TestUserMetadataSuite(t *testing.T) {
+	t.Parallel()
 	suite.Run(t, new(UserMetadataSuite))
 }
 

@@ -40,6 +40,10 @@ type Ref struct {
 	// serves as an indicator whether this Ref can reference stale state. This should be set during task processing
 	// where we can validate the task that embeds this reference against shard clock.
 	TaskID int64
+
+	// An optional function to validate the ref is not stale.
+	// For tasks, this is copied from the task's Validate() implementation.
+	Validate func(ref *persistencespb.StateMachineRef, node *Node) error
 }
 
 // StateMachinePath gets the state machine path for from this reference.

@@ -26,6 +26,7 @@ package serviceerror
 
 import (
 	"go.temporal.io/server/api/errordetails/v1"
+	historyspb "go.temporal.io/server/api/history/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -40,6 +41,7 @@ type (
 		WorkflowId          string
 		RunId               string
 		VersionedTransition *persistencespb.VersionedTransition
+		VersionHistories    *historyspb.VersionHistories
 		st                  *status.Status
 	}
 )
@@ -51,6 +53,7 @@ func NewSyncState(
 	workflowId string,
 	runId string,
 	versionedTransition *persistencespb.VersionedTransition,
+	versionHistories *historyspb.VersionHistories,
 ) error {
 	return &SyncState{
 		Message:             message,
@@ -58,6 +61,7 @@ func NewSyncState(
 		WorkflowId:          workflowId,
 		RunId:               runId,
 		VersionedTransition: versionedTransition,
+		VersionHistories:    versionHistories,
 	}
 }
 
@@ -78,6 +82,7 @@ func (e *SyncState) Status() *status.Status {
 			WorkflowId:          e.WorkflowId,
 			RunId:               e.RunId,
 			VersionedTransition: e.VersionedTransition,
+			VersionHistories:    e.VersionHistories,
 		},
 	)
 	return st
@@ -87,7 +92,8 @@ func (e *SyncState) Equal(err *SyncState) bool {
 	return e.NamespaceId == err.NamespaceId &&
 		e.WorkflowId == err.WorkflowId &&
 		e.RunId == err.RunId &&
-		proto.Equal(e.VersionedTransition, err.VersionedTransition)
+		proto.Equal(e.VersionedTransition, err.VersionedTransition) &&
+		proto.Equal(e.VersionHistories, err.VersionHistories)
 }
 
 func newSyncState(
@@ -100,6 +106,7 @@ func newSyncState(
 		WorkflowId:          errDetails.GetWorkflowId(),
 		RunId:               errDetails.GetRunId(),
 		VersionedTransition: errDetails.GetVersionedTransition(),
+		VersionHistories:    errDetails.GetVersionHistories(),
 		st:                  st,
 	}
 }

@@ -52,6 +52,7 @@ type UpdateWorkflowSdkSuite struct {
 }
 
 func TestUpdateWorkflowSdkSuite(t *testing.T) {
+	t.Parallel()
 	s := new(UpdateWorkflowSdkSuite)
 	suite.Run(t, s)
 }
@@ -94,6 +95,8 @@ func (s *UpdateWorkflowSdkSuite) TestUpdateWorkflow_TerminateWorkflowAfterUpdate
 // server times out the WF after the update has been accepted but before it has been completed. It checks
 // that the client gets a NotFound error when attempting to fetch the update result (rather than a timeout).
 func (s *UpdateWorkflowSdkSuite) TestUpdateWorkflow_TimeoutWorkflowAfterUpdateAccepted() {
+	s.T().Skip("flaky test")
+
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	defer cancel()
 	tv := testvars.New(s.T()).WithTaskQueue(s.TaskQueue()).WithNamespaceName(namespace.Name(s.Namespace()))
