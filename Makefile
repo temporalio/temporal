@@ -85,6 +85,7 @@ ALL_SCRIPTS     := $(shell find . -name "*.sh")
 
 MAIN_BRANCH    := main
 
+# If you update these dirs, please also update in CategoryDirs find_altered_tests.go
 TEST_DIRS       := $(sort $(dir $(filter %_test.go,$(ALL_SRC))))
 FUNCTIONAL_TEST_ROOT          := ./tests
 FUNCTIONAL_TEST_XDC_ROOT      := ./tests/xdc
@@ -389,7 +390,7 @@ unit-test-coverage: prepare-coverage-test
 integration-test-coverage: prepare-coverage-test
 	@printf $(COLOR) "Run integration tests with coverage..."
 	$(GOTESTSUM) --junitfile $(NEW_REPORT) -- \
-		$(INTEGRATION_TEST_DIRS) -shuffle on -timeout=$(TEST_TIMEOUT) $(TEST_TAG_FLAG) $(INTEGRATION_TEST_COVERPKG) -coverprofile=$(NEW_COVER_PROFILE)
+		$(INTEGRATION_TEST_DIRS) -shuffle on -timeout=$(TEST_TIMEOUT) $(TEST_ARGS) $(TEST_TAG_FLAG) $(INTEGRATION_TEST_COVERPKG) -coverprofile=$(NEW_COVER_PROFILE)
 
 # This should use the same build flags as functional-test-coverage for best build caching.
 pre-build-functional-test-coverage: prepare-coverage-test
