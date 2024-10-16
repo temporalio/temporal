@@ -132,6 +132,7 @@ jobs:
 
       - name: Save dependencies
         uses: actions/cache/save@v4
+        if: ${{ steps.restore-deps.outputs.cache-hit != 'true' }}
         with:
           path: ~/go/pkg/mod
           key: ${{ steps.restore-deps.outputs.cache-primary-key }}
