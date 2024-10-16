@@ -289,7 +289,9 @@ func (s *ScheduleFunctionalSuite) TestBasics() {
 
 	// list
 
-	visibilityResponse := s.getScheduleEntryFomVisibility(sid, 2)
+	visibilityResponse := s.getScheduleEntryFomVisibility(sid, func(ent *schedulepb.ScheduleListEntry) bool {
+		return ent.GetInfo().GetRecentActions() >= 2
+	})
 	s.Equal(sid, visibilityResponse.ScheduleId)
 	s.Equal(schSAValue.Data, visibilityResponse.SearchAttributes.IndexedFields[csaKeyword].Data)
 	s.Equal(schSAIntValue.Data, describeResp.SearchAttributes.IndexedFields[csaInt].Data)
@@ -990,7 +992,7 @@ func (s *ScheduleFunctionalSuite) TestListBeforeRun() {
 	s.NoError(err)
 	s.cleanup(sid)
 
-	entry := s.getScheduleEntryFomVisibility(sid, 0)
+	entry := s.getScheduleEntryFomVisibility(sid, nil)
 	s.NotNil(entry.Info)
 	s.ProtoEqual(schedule.Spec, entry.Info.Spec)
 	s.Equal(wt, entry.Info.WorkflowType.Name)
@@ -1132,7 +1134,9 @@ func (s *ScheduleFunctionalSuite) TestNextTimeCache() {
 	s.Equal(expectedRefills, nextTimeSideEffects)
 }
 
-func (s *ScheduleFunctionalSuite) getScheduleEntryFomVisibility(sid string, requiredRecentActions int) *schedulepb.ScheduleListEntry {
+// getScheduleEntryFomVisibility polls visibility using ListSchedules until it finds a schedule
+// with the given id and for which the optional predicate function returns true.
+func (s *ScheduleFunctionalSuite) getScheduleEntryFomVisibility(sid string, predicate func(*schedulepb.ScheduleListEntry) bool) *schedulepb.ScheduleListEntry {
 	var slEntry *schedulepb.ScheduleListEntry
 	s.Require().Eventually(func() bool { // wait for visibility
 		listResp, err := s.FrontendClient().ListSchedules(testcore.NewContext(), &workflowservice.ListSchedulesRequest{
@@ -1144,7 +1148,7 @@ func (s *ScheduleFunctionalSuite) getScheduleEntryFomVisibility(sid string, requ
 		}
 		for _, ent := range listResp.Schedules {
 			if ent.ScheduleId == sid {
-				if len(ent.GetInfo().GetRecentActions()) < requiredRecentActions {
+				if predicate != nil && !predicate(ent) {
 					return false
 				}
 				slEntry = ent
