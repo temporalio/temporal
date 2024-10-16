@@ -32,6 +32,8 @@ import (
 	"fmt"
 	"time"
 
+	"google.golang.org/protobuf/types/known/timestamppb"
+
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
@@ -53,7 +55,6 @@ import (
 	"go.temporal.io/server/service/history/workflow"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
 	"go.temporal.io/server/service/history/workflow/update"
-	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type (
@@ -137,6 +138,10 @@ func (r *workflowResetterImpl) ResetWorkflow(
 	var reapplyEventsFn workflowResetReapplyEventsFn
 	currentMutableState := currentWorkflow.GetMutableState()
 	if currentMutableState.IsWorkflowExecutionRunning() {
+		currentMutableState.GetExecutionInfo().WorkflowReset = true
+		if !currentMutableState.GetExecutionInfo().WorkflowReset {
+			return errors.New("WorkflowReset flag not set correctly")
+		}
 		if err := r.terminateWorkflow(
 			currentMutableState,
 			resetReason,
