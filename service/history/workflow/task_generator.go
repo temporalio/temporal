@@ -742,21 +742,22 @@ func (r *TaskGeneratorImpl) GenerateMigrationTasks() ([]tasks.Task, int64, error
 	workflowKey := r.mutableState.GetWorkflowKey()
 
 	if r.mutableState.GetExecutionState().State == enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED {
-		if r.mutableState.IsTransitionHistoryEnabled() {
-			transitionHistory := executionInfo.TransitionHistory
-			return []tasks.Task{&tasks.SyncVersionedTransitionTask{
-				WorkflowKey:         workflowKey,
-				VisibilityTimestamp: now,
-				Priority:            enumsspb.TASK_PRIORITY_LOW,
-				VersionedTransition: transitionHistory[len(transitionHistory)-1],
-			}}, 1, nil
-		}
-		return []tasks.Task{&tasks.SyncWorkflowStateTask{
+		syncWorkflowStateTask := []tasks.Task{&tasks.SyncWorkflowStateTask{
 			// TaskID, VisibilityTimestamp is set by shard
 			WorkflowKey: workflowKey,
 			Version:     lastItem.GetVersion(),
 			Priority:    enumsspb.TASK_PRIORITY_LOW,
-		}}, 1, nil
+		}}
+		if r.mutableState.IsTransitionHistoryEnabled() {
+			transitionHistory := executionInfo.TransitionHistory
+			return []tasks.Task{&tasks.SyncVersionedTransitionTask{
+				WorkflowKey:         workflowKey,
+				Priority:            enumsspb.TASK_PRIORITY_LOW,
+				VersionedTransition: transitionHistory[len(transitionHistory)-1],
+				TaskEquivalents:     syncWorkflowStateTask,
+			}}, 1, nil
+		}
+		return syncWorkflowStateTask, 1, nil
 	}
 
 	replicationTasks := make([]tasks.Task, 0, len(r.mutableState.GetPendingActivityInfos())+1)
@@ -788,7 +789,6 @@ func (r *TaskGeneratorImpl) GenerateMigrationTasks() ([]tasks.Task, int64, error
 		transitionHistory := executionInfo.TransitionHistory
 		return []tasks.Task{&tasks.SyncVersionedTransitionTask{
 			WorkflowKey:         workflowKey,
-			VisibilityTimestamp: now,
 			Priority:            enumsspb.TASK_PRIORITY_LOW,
 			VersionedTransition: transitionHistory[len(transitionHistory)-1],
 			TaskEquivalents:     replicationTasks,

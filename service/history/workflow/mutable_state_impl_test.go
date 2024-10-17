@@ -2612,10 +2612,9 @@ func (s *mutableStateSuite) TestCloseTransactionPrepareReplicationTasks_HistoryT
 			},
 		},
 	}
-	s.mockConfig.EnableTransitionHistory = func() bool { return false }
 
 	ms := s.mutableState
-
+	ms.transitionHistoryEnabled = false
 	for _, tc := range testCases {
 		s.Run(
 			tc.name,
@@ -2636,6 +2635,96 @@ func (s *mutableStateSuite) TestCloseTransactionPrepareReplicationTasks_HistoryT
 			},
 		)
 	}
+}
+
+func (s *mutableStateSuite) TestCloseTransactionPrepareReplicationTasks_SyncVersionedTransitionTask() {
+	if s.replicationMultipleBatches == true {
+		return
+	}
+	version := int64(777)
+	firstEventID := int64(2)
+	lastEventID := int64(3)
+	now := time.Now().UTC()
+	taskqueue := "taskqueue for test"
+	workflowTaskTimeout := 11 * time.Second
+	workflowTaskAttempt := int32(1)
+	eventBatches := [][]*historypb.HistoryEvent{
+		{
+			&historypb.HistoryEvent{
+				Version:   version,
+				EventId:   firstEventID,
+				EventTime: timestamppb.New(now),
+				EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED,
+				Attributes: &historypb.HistoryEvent_WorkflowTaskScheduledEventAttributes{WorkflowTaskScheduledEventAttributes: &historypb.WorkflowTaskScheduledEventAttributes{
+					TaskQueue:           &taskqueuepb.TaskQueue{Name: taskqueue},
+					StartToCloseTimeout: durationpb.New(workflowTaskTimeout),
+					Attempt:             workflowTaskAttempt,
+				}},
+			},
+		},
+		{
+			&historypb.HistoryEvent{
+				Version:   version,
+				EventId:   lastEventID,
+				EventTime: timestamppb.New(now),
+				EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED,
+				Attributes: &historypb.HistoryEvent_WorkflowTaskStartedEventAttributes{WorkflowTaskStartedEventAttributes: &historypb.WorkflowTaskStartedEventAttributes{
+					ScheduledEventId: firstEventID,
+					RequestId:        uuid.New(),
+				}},
+			},
+		},
+	}
+
+	ms := s.mutableState
+	ms.transitionHistoryEnabled = true
+	ms.syncActivityTasks[1] = struct{}{}
+	ms.pendingActivityInfoIDs[1] = &persistencespb.ActivityInfo{
+		Version:          version,
+		ScheduledEventId: 1,
+	}
+	ms.InsertTasks[tasks.CategoryReplication] = []tasks.Task{}
+	transitionHistory := []*persistencespb.VersionedTransition{
+		{
+			NamespaceFailoverVersion: 1,
+			TransitionCount:          10,
+		},
+	}
+	ms.executionInfo.TransitionHistory = transitionHistory
+	err := ms.closeTransactionPrepareReplicationTasks(TransactionPolicyActive, eventBatches, false)
+	s.NoError(err)
+	replicationTasks := ms.InsertTasks[tasks.CategoryReplication]
+	s.Equal(1, len(replicationTasks))
+	historyTasks := []tasks.Task{
+		&tasks.HistoryReplicationTask{
+			WorkflowKey:  s.mutableState.GetWorkflowKey(),
+			FirstEventID: firstEventID,
+			NextEventID:  firstEventID + 1,
+			Version:      version,
+		},
+		&tasks.HistoryReplicationTask{
+			WorkflowKey:  s.mutableState.GetWorkflowKey(),
+			FirstEventID: lastEventID,
+			NextEventID:  lastEventID + 1,
+			Version:      version,
+		},
+	}
+	expectedTask := &tasks.SyncVersionedTransitionTask{
+		WorkflowKey:         s.mutableState.GetWorkflowKey(),
+		VisibilityTimestamp: now,
+		Priority:            enumsspb.TASK_PRIORITY_HIGH,
+		VersionedTransition: transitionHistory[0],
+		FirstEventID:        firstEventID,
+		NextEventID:         lastEventID + 1,
+	}
+	s.Equal(enumsspb.TASK_TYPE_REPLICATION_SYNC_VERSIONED_TRANSITION, replicationTasks[0].GetType())
+	actualTask := replicationTasks[0].(*tasks.SyncVersionedTransitionTask)
+	s.Equal(expectedTask.WorkflowKey, actualTask.WorkflowKey)
+	s.Equal(expectedTask.VersionedTransition, actualTask.VersionedTransition)
+	s.Equal(3, len(actualTask.TaskEquivalents))
+	s.Equal(historyTasks[0], actualTask.TaskEquivalents[0])
+	s.Equal(historyTasks[1], actualTask.TaskEquivalents[1])
+	s.Equal(enumsspb.TASK_TYPE_REPLICATION_SYNC_ACTIVITY, actualTask.TaskEquivalents[2].GetType())
 }
 
 func (s *mutableStateSuite) TestMaxAllowedTimer() {

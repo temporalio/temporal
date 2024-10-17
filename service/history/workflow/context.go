@@ -759,6 +759,7 @@ func (c *ContextImpl) mergeUpdateWithNewReplicationTasks(
 			taskEquivalents := t.TaskEquivalents
 			taskEquivalentsUpdated := false
 			for idx := len(taskEquivalents) - 1; idx >= 0; idx-- {
+				// For state based, we should update a sync versioned transition task and update a history task inside task equivalent.
 				if historyTask, ok := taskEquivalents[idx].(*tasks.HistoryReplicationTask); ok {
 					historyTask.NewRunBranchToken = newRunBranchToken
 					historyTask.NewRunID = newRunID
