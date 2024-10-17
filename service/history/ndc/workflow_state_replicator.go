@@ -678,6 +678,8 @@ func (r *WorkflowStateReplicatorImpl) getNewRunMutableState(
 		return nil, err
 	}
 
+	newRunMutableState.InitTransitionHistory()
+
 	return newRunMutableState, nil
 }
 

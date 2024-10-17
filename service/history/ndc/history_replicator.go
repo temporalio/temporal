@@ -555,6 +555,10 @@ func (r *HistoryReplicatorImpl) applyStartEvents(
 		)
 	}
 
+	if task.getVersionedTransition() != nil {
+		mutableState.InitTransitionHistory()
+	}
+
 	err = r.transactionMgr.CreateWorkflow(
 		ctx,
 		NewWorkflow(

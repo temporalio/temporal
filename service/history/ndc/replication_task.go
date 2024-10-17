@@ -409,6 +409,13 @@ func (t *replicationTaskImpl) splitTask() (_ replicationTask, _ replicationTask,
 		newRunID:         "",
 		logger:           logger,
 	}
+	if t.versionedTransition != nil {
+		newRunTask.versionedTransition = &persistencespb.VersionedTransition{
+			NamespaceFailoverVersion: t.newEvents[0].GetVersion(),
+			TransitionCount:          1,
+		}
+	}
+
 	t.newEvents = nil
 	t.newRunID = ""
 
