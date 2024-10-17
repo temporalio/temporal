@@ -37,6 +37,8 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 
+	"google.golang.org/protobuf/types/known/durationpb"
+
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -60,7 +62,6 @@ import (
 	"go.temporal.io/server/components/nexusoperations"
 	"go.temporal.io/server/service/frontend/configs"
 	"go.temporal.io/server/tests/testcore"
-	"google.golang.org/protobuf/types/known/durationpb"
 )
 
 type NexusWorkflowTestSuite struct {
@@ -1503,6 +1504,132 @@ func (s *NexusWorkflowTestSuite) TestNexusAsyncOperationWithNilIO() {
 			break
 		}
 	}
+}
+
+func (s *NexusWorkflowTestSuite) TestNexusResetWithCallback() {
+	ctx := testcore.NewContext()
+	taskQueue := testcore.RandomizeStr(s.T().Name())
+	endpointName := testcore.RandomizedNexusEndpoint(s.T().Name())
+
+	callbackCh := make(chan struct{}, 1)
+
+	h := nexustest.Handler{
+		OnStartOperation: func(ctx context.Context, service, operation string, input *nexus.LazyValue, options nexus.StartOperationOptions) (nexus.HandlerStartOperationResult[any], error) {
+			return &nexus.HandlerStartOperationResultAsync{
+				OperationID: "test-op",
+			}, nil
+		},
+	}
+	listenAddr := nexustest.AllocListenAddress(s.T())
+	nexustest.NewNexusServer(s.T(), listenAddr, h)
+
+	_, err := s.OperatorClient().CreateNexusEndpoint(ctx, &operatorservice.CreateNexusEndpointRequest{
+		Spec: &nexuspb.EndpointSpec{
+			Name: endpointName,
+			Target: &nexuspb.EndpointTarget{
+				Variant: &nexuspb.EndpointTarget_External_{
+					External: &nexuspb.EndpointTarget_External{
+						Url: "http://" + listenAddr,
+					},
+				},
+			},
+		},
+	})
+	s.NoError(err)
+
+	run, err := s.SdkClient().ExecuteWorkflow(ctx, client.StartWorkflowOptions{
+		TaskQueue: taskQueue,
+	}, "workflow")
+	s.NoError(err)
+
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		pollResp, err := s.FrontendClient().PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
+			Namespace: s.Namespace(),
+			TaskQueue: &taskqueuepb.TaskQueue{
+				Name: taskQueue,
+				Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
+			},
+			Identity: "test",
+		})
+		require.NoError(t, err)
+		_, err = s.FrontendClient().RespondWorkflowTaskCompleted(ctx, &workflowservice.RespondWorkflowTaskCompletedRequest{
+			Identity:  "test",
+			TaskToken: pollResp.TaskToken,
+			Commands: []*commandpb.Command{
+				{
+					CommandType: enumspb.COMMAND_TYPE_SCHEDULE_NEXUS_OPERATION,
+					Attributes: &commandpb.Command_ScheduleNexusOperationCommandAttributes{
+						ScheduleNexusOperationCommandAttributes: &commandpb.ScheduleNexusOperationCommandAttributes{
+							Endpoint:  endpointName,
+							Service:   "test-service",
+							Operation: "test-operation",
+							Input:     s.mustToPayload("input"),
+						},
+					},
+				},
+			},
+		})
+		assert.NoError(t, err)
+	}, time.Second*20, time.Millisecond*200)
+
+	// Poll and wait for the "started" event to be recorded.
+	pollResp, err := s.FrontendClient().PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
+		Namespace: s.Namespace(),
+		TaskQueue: &taskqueuepb.TaskQueue{
+			Name: taskQueue,
+			Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
+		},
+		Identity: "test",
+	})
+	s.NoError(err)
+
+	startedEventIdx := slices.IndexFunc(pollResp.History.Events, func(e *historypb.HistoryEvent) bool {
+		return e.GetNexusOperationStartedEventAttributes() != nil
+	})
+	s.Greater(startedEventIdx, 0)
+
+	// Get the scheduleEventId to issue the cancel command.
+	scheduledEventIdx := slices.IndexFunc(pollResp.History.Events, func(e *historypb.HistoryEvent) bool {
+		return e.GetNexusOperationScheduledEventAttributes() != nil
+	})
+	s.Greater(scheduledEventIdx, 0)
+
+	// Reset the workflow
+	resetResp, err := s.FrontendClient().ResetWorkflowExecution(ctx, &workflowservice.ResetWorkflowExecutionRequest{
+		Namespace: s.Namespace(),
+		WorkflowExecution: &commonpb.WorkflowExecution{
+			WorkflowId: run.GetID(),
+			RunId:      run.GetRunID(),
+		},
+		Reason:                    "test reset",
+		WorkflowTaskFinishEventId: pollResp.History.Events[scheduledEventIdx].EventId,
+		RequestId:                 uuid.New().String(),
+	})
+	s.NoError(err)
+
+	// Verify that the callback was not invoked during reset
+	select {
+	case <-callbackCh:
+		s.Fail("Callback was unexpectedly invoked during reset")
+	case <-time.After(3 * time.Second):
+		// If we don't receive anything on the channel after 3 seconds, we assume the callback wasn't called
+	}
+
+	// Wait for the workflow to complete after reset
+	var result string
+	err = s.SdkClient().GetWorkflow(ctx, run.GetID(), resetResp.RunId).Get(ctx, &result)
+	s.NoError(err)
+	s.Equal("Workflow completed after reset", result)
+
+	// Verify that the original run was terminated
+	desc, err := s.SdkClient().DescribeWorkflowExecution(ctx, run.GetID(), run.GetRunID())
+	s.NoError(err)
+	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED, desc.WorkflowExecutionInfo.Status)
+
+	// Verify that the reset run completed successfully
+	desc, err = s.SdkClient().DescribeWorkflowExecution(ctx, run.GetID(), resetResp.RunId)
+	s.NoError(err)
+	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, desc.WorkflowExecutionInfo.Status)
 }
 
 func (s *NexusWorkflowTestSuite) sendNexusCompletionRequest(
