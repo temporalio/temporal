@@ -25,56 +25,24 @@
 package update
 
 import (
-	"fmt"
+	"testing"
+
+	"github.com/stretchr/testify/require"
 )
 
-type (
-	state    uint32
-	stateSet uint32
-)
-
-const (
-	stateCreated state = 1 << iota
-	stateProvisionallyAdmitted
-	stateAdmitted
-	stateSent
-	stateProvisionallyAccepted
-	stateAccepted
-	stateProvisionallyCompleted
-	stateCompleted
-	stateAborted
-	stateProvisionallyCompletedAfterAccepted
-	lastState
-)
-
-func (s state) String() string {
-	switch s {
-	case stateCreated:
-		return "Created"
-	case stateProvisionallyAdmitted:
-		return "ProvisionallyAdmitted"
-	case stateAdmitted:
-		return "Admitted"
-	case stateSent:
-		return "Sent"
-	case stateProvisionallyAccepted:
-		return "ProvisionallyAccepted"
-	case stateAccepted:
-		return "Accepted"
-	case stateProvisionallyCompleted:
-		return "ProvisionallyCompleted"
-	case stateCompleted:
-		return "Completed"
-	case stateAborted:
-		return "Aborted"
-	case stateProvisionallyCompletedAfterAccepted:
-		return "ProvisionallyCompletedAfterAccepted"
-	case lastState:
-		return fmt.Sprintf("invalid state %d", s)
+func TestAbortReasonUpdateStateMatrix(t *testing.T) {
+	for r := AbortReasonRegistryCleared; r < lastAbortReason; r++ {
+		for st := stateCreated; st < lastState; st <<= 1 {
+			fe, ok := reasonStateMatrix[reasonState{r: r, st: st}]
+			// If new abort reason or state is added, this test will fail.
+			// Do not modify the test but make sure to update the reasonStateMatrix.
+			require.True(t, ok, "Missing combination: %v, %v. If new abort reason or state is added make sure to update the reasonStateMatrix", r, st)
+			if fe.f != nil {
+				require.Nil(t, fe.err)
+			}
+			if fe.err != nil {
+				require.Nil(t, fe.f)
+			}
+		}
 	}
-	return fmt.Sprintf("unrecognized state %d", s)
-}
-
-func (s state) Matches(mask stateSet) bool {
-	return uint32(s)&uint32(mask) == uint32(s)
 }

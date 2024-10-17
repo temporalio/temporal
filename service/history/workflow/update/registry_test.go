@@ -26,7 +26,6 @@ package update_test
 
 import (
 	"context"
-	"fmt"
 	"sync"
 	"testing"
 	"time"
@@ -132,8 +131,10 @@ func TestNewRegistry(t *testing.T) {
 		upd := reg.Find(context.Background(), tv.UpdateID())
 		require.NotNil(t, upd)
 
-		_, err := upd.WaitLifecycleStage(context.Background(), 0, 100*time.Millisecond)
-		require.Equal(t, err, consts.ErrWorkflowCompleted)
+		status, err := upd.WaitLifecycleStage(context.Background(), 0, 100*time.Millisecond)
+		require.NoError(t, err)
+		require.NotNil(t, status)
+		require.Equal(t, "Workflow Update failed because the Workflow completed before the Update completed.", status.Outcome.GetFailure().Message)
 	})
 
 	t.Run("registry created from store with update in stateCompleted has no updates but increased completed count", func(t *testing.T) {
@@ -580,13 +581,19 @@ func TestAbort(t *testing.T) {
 	// abort both updates
 	reg.Abort(update.AbortReasonWorkflowCompleted)
 
-	for i := 1; i <= 2; i++ {
-		upd := reg.Find(context.Background(), tv.UpdateID(fmt.Sprintf("%d", i)))
-		require.NotNil(t, upd)
+	upd1 := reg.Find(context.Background(), tv.UpdateID("1"))
+	require.NotNil(t, upd1)
+	status1, err := upd1.WaitLifecycleStage(context.Background(), 0, 2*time.Second)
+	require.Equal(t, consts.ErrWorkflowCompleted, err)
+	require.Nil(t, status1)
 
-		_, err := upd.WaitLifecycleStage(context.Background(), 0, 2*time.Second)
-		require.Equal(t, consts.ErrWorkflowCompleted, err)
-	}
+	upd2 := reg.Find(context.Background(), tv.UpdateID("2"))
+	require.NotNil(t, upd2)
+	status2, err := upd2.WaitLifecycleStage(context.Background(), 0, 2*time.Second)
+	require.NoError(t, err)
+	require.NotNil(t, status2)
+	require.Equal(t, "Workflow Update failed because the Workflow completed before the Update completed.", status2.Outcome.GetFailure().Message)
+
 	require.Equal(t, 2, reg.Len(), "registry should still contain both updates")
 }
 
