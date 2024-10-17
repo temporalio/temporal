@@ -34,8 +34,6 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
-	"google.golang.org/protobuf/types/known/durationpb"
-
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
@@ -50,6 +48,7 @@ import (
 	"go.temporal.io/server/common/tqid"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/workflow"
+	"google.golang.org/protobuf/types/known/durationpb"
 )
 
 type (
