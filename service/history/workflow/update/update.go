@@ -258,9 +258,14 @@ func (u *Update) WaitLifecycleStage(
 	return statusAdmitted(), nil
 }
 
-// abort fails Update futures with reason.Error() error (which will notify all waiters with error)
+// abort set Update futures with error or failure (which is passed to all waiters)
 // and set state to stateAborted. It is a terminal state. Update can't be changed after it is aborted.
 func (u *Update) abort(reason AbortReason) {
+	const terminalStates = stateSet(stateCompleted | stateAborted)
+	if u.state.Matches(terminalStates) {
+		return
+	}
+
 	u.instrumentation.countAborted()
 
 	abortFailure, abortErr := reason.FailureError(u.state)
