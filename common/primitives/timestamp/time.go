@@ -27,7 +27,6 @@ package timestamp
 import (
 	"time"
 
-	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -48,26 +47,6 @@ func TimeValuePtr(t *timestamppb.Timestamp) *time.Time {
 	}
 	result := t.AsTime()
 	return &result
-}
-
-func DurationValue(d *durationpb.Duration) time.Duration {
-	if d == nil {
-		return 0
-	}
-	return d.AsDuration()
-}
-
-func MinDurationPtr(d1 *durationpb.Duration, d2 *durationpb.Duration) *durationpb.Duration {
-	res := min(DurationValue(d1), DurationValue(d2))
-	return durationpb.New(res)
-}
-
-func RoundUp(d time.Duration) time.Duration {
-	res := d.Truncate(time.Second)
-	if res == d {
-		return d
-	}
-	return res + time.Second
 }
 
 func UnixOrZeroTime(nanos int64) time.Time {
