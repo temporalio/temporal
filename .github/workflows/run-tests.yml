@@ -116,13 +116,11 @@ jobs:
         run: git fetch origin ${{ github.event.pull_request.base.ref }}:${{ github.event.pull_request.base.ref }}
 
       - name: Compute merge base
+        if: ${{ github.event_name == 'pull_request' }}
         run: |
           MERGE_BASE="$(git merge-base "${{ env.COMMIT }}" "${{ github.event.pull_request.base.ref }}")"
           echo "MERGE_BASE=${MERGE_BASE}" >> "$GITHUB_ENV"
 
-      - name: Collect Modified Tests
-        id: collect_modified_tests
-        run: |
           set -exuo pipefail
 
           go run ./cmd/tools/test/find_altered_tests.go \
