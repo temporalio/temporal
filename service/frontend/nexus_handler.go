@@ -38,6 +38,9 @@ import (
 	nexuspb "go.temporal.io/api/nexus/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/taskqueue/v1"
+	"google.golang.org/grpc/metadata"
+	"google.golang.org/protobuf/types/known/timestamppb"
+
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/authorization"
@@ -50,8 +53,6 @@ import (
 	"go.temporal.io/server/common/namespace"
 	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/rpc/interceptor"
-	"google.golang.org/grpc/metadata"
-	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 // user-agent header contains Nexus SDK client info in the form <sdk-name>/v<sdk-version>
@@ -90,7 +91,7 @@ type operationContext struct {
 	telemetryInterceptor          *interceptor.TelemetryInterceptor
 	redirectionInterceptor        *interceptor.Redirection
 	forwardingEnabledForNamespace dynamicconfig.BoolPropertyFnWithNamespaceFilter
-	cleanupFunctions              []func(error)
+	cleanupFunctions              []func(map[string]string, error)
 }
 
 // Panic handler and metrics recording function.
@@ -118,7 +119,7 @@ func (c *operationContext) capturePanicAndRecordMetrics(ctxPtr *context.Context,
 	c.telemetryInterceptor.RecordLatencyMetrics(*ctxPtr, c.requestStartTime, c.metricsHandlerForInterceptors)
 
 	for _, fn := range c.cleanupFunctions {
-		fn(*errPtr)
+		fn(c.responseHeaders, *errPtr)
 	}
 }
 
@@ -173,7 +174,7 @@ func (c *operationContext) interceptRequest(ctx context.Context, request *matchi
 			c.metricsHandler = c.metricsHandler.WithTags(metrics.OutcomeTag("request_forwarded"))
 			var forwardStartTime time.Time
 			c.metricsHandlerForInterceptors, forwardStartTime = c.redirectionInterceptor.BeforeCall(c.apiName)
-			c.cleanupFunctions = append(c.cleanupFunctions, func(retErr error) {
+			c.cleanupFunctions = append(c.cleanupFunctions, func(_ map[string]string, retErr error) {
 				c.redirectionInterceptor.AfterCall(c.metricsHandlerForInterceptors, forwardStartTime, c.namespace.ActiveClusterName(), retErr)
 			})
 			return serviceerror.NewNamespaceNotActive(c.namespaceName, c.clusterMetadata.GetCurrentClusterName(), c.namespace.ActiveClusterName())
@@ -182,21 +183,23 @@ func (c *operationContext) interceptRequest(ctx context.Context, request *matchi
 		return nexus.HandlerErrorf(nexus.HandlerErrorTypeUnavailable, "cluster inactive")
 	}
 
-	c.cleanupFunctions = append(c.cleanupFunctions, func(retErr error) {
+	c.cleanupFunctions = append(c.cleanupFunctions, func(respHeaders map[string]string, retErr error) {
 		if retErr != nil {
-			c.telemetryInterceptor.HandleError(
-				request,
-				"",
-				c.metricsHandlerForInterceptors,
-				[]tag.Tag{tag.Operation(c.method), tag.WorkflowNamespace(c.namespaceName)},
-				retErr,
-				c.namespace.Name(),
-			)
+			if source, ok := respHeaders[nexusFailureSourceHeaderName]; ok && source != failureSourceWorker {
+				c.telemetryInterceptor.HandleError(
+					request,
+					"",
+					c.metricsHandlerForInterceptors,
+					[]tag.Tag{tag.Operation(c.method), tag.WorkflowNamespace(c.namespaceName)},
+					retErr,
+					c.namespace.Name(),
+				)
+			}
 		}
 	})
 
 	cleanup, err := c.namespaceConcurrencyLimitInterceptor.Allow(c.namespace.Name(), c.apiName, c.metricsHandlerForInterceptors, request)
-	c.cleanupFunctions = append(c.cleanupFunctions, func(error) { cleanup() })
+	c.cleanupFunctions = append(c.cleanupFunctions, func(map[string]string, error) { cleanup() })
 	if err != nil {
 		c.metricsHandler = c.metricsHandler.WithTags(metrics.OutcomeTag("namespace_concurrency_limited"))
 		return commonnexus.ConvertGRPCError(err, false)
@@ -274,7 +277,7 @@ func (h *nexusHandler) getOperationContext(ctx context.Context, method string) (
 		telemetryInterceptor:          h.telemetryInterceptor,
 		redirectionInterceptor:        h.redirectionInterceptor,
 		forwardingEnabledForNamespace: h.forwardingEnabledForNamespace,
-		cleanupFunctions:              make([]func(error), 0),
+		cleanupFunctions:              make([]func(map[string]string, error), 0),
 	}
 	oc.metricsHandlerForInterceptors = h.metricsHandler.WithTags(
 		metrics.OperationTag(method),
