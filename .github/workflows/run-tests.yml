@@ -262,7 +262,10 @@ jobs:
 
       - name: Run unit tests
         timeout-minutes: 15
-        run: make unit-test-coverage UNIT_TEST_DIRS="${{ inputs.unit_test_directory }}" TEST_ARGS="${{ needs.set-up-single-test.outputs.single_test_args }}"
+        run: make unit-test-coverage
+        env:
+          UNIT_TEST_DIRS: ${{ inputs.unit_test_directory }}
+          TEST_ARGS: ${{ needs.set-up-single-test.outputs.single_test_args }}
 
       - name: Flaky Unit Test Detection
         if: ${{ !cancelled() && !inputs.run_single_unit_test && env.MODIFIED_TEST_SUITES != '' }}
