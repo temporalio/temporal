@@ -270,6 +270,7 @@ Loop:
 
 		failureMsg := fmt.Sprintf("activity %v timeout", timerSequenceID.TimerType.String())
 		timeoutFailure := failure.NewTimeoutFailure(failureMsg, timerSequenceID.TimerType)
+		mutableState.RecordLastActivityStarted(activityInfo)
 		var retryState enumspb.RetryState
 		if retryState, err = mutableState.RetryActivity(activityInfo, timeoutFailure); err != nil {
 			return err

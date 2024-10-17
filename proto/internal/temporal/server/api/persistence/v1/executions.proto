@@ -458,8 +458,11 @@ message ActivityInfo {
         int64 last_redirect_counter = 2;
     }
 
-    // fist time activity was schedulled.
+    // First time the activity was scheduled.
     google.protobuf.Timestamp first_scheduled_time = 39;
+
+    // Last time an activity failure was recorded by the server.
+    google.protobuf.Timestamp last_attempt_complete_time = 40;
 }
 
 // timer_map column
