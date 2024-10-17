@@ -94,13 +94,13 @@ func Validate(policy *commonpb.RetryPolicy) error {
 		return nil
 	}
 	if err := timestamp.ValidateProtoDuration(policy.GetInitialInterval()); err != nil {
-		return serviceerror.NewInvalidArgument(fmt.Sprintf("invalid InitialInterval set on retry policy: %s", err.Error()))
+		return serviceerror.NewInvalidArgument(fmt.Sprintf("invalid InitialInterval set on retry policy: %v", err))
 	}
 	if policy.GetBackoffCoefficient() < 1 {
 		return serviceerror.NewInvalidArgument("BackoffCoefficient cannot be less than 1 on retry policy.")
 	}
 	if err := timestamp.ValidateProtoDuration(policy.GetMaximumInterval()); err != nil {
-		return serviceerror.NewInvalidArgument(fmt.Sprintf("invalid MaximumInterval set on retry policy: %s", err.Error()))
+		return serviceerror.NewInvalidArgument(fmt.Sprintf("invalid MaximumInterval set on retry policy: %v", err))
 	}
 	if timestamp.DurationValue(policy.GetMaximumInterval()) > 0 && timestamp.DurationValue(policy.GetMaximumInterval()) < timestamp.DurationValue(policy.GetInitialInterval()) {
 		return serviceerror.NewInvalidArgument("MaximumInterval cannot be less than InitialInterval on retry policy.")

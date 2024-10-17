@@ -4962,15 +4962,15 @@ func (wh *WorkflowHandler) validateStartWorkflowTimeouts(
 	request *workflowservice.StartWorkflowExecutionRequest,
 ) error {
 	if err := timestamp.ValidateProtoDuration(request.GetWorkflowExecutionTimeout()); err != nil {
-		return fmt.Errorf("%w cause: %s", errInvalidWorkflowExecutionTimeoutSeconds, err.Error())
+		return fmt.Errorf("%w cause: %v", errInvalidWorkflowExecutionTimeoutSeconds, err)
 	}
 
 	if err := timestamp.ValidateProtoDuration(request.GetWorkflowRunTimeout()); err != nil {
-		return fmt.Errorf("%w cause: %s", errInvalidWorkflowRunTimeoutSeconds, err.Error())
+		return fmt.Errorf("%w cause: %v", errInvalidWorkflowRunTimeoutSeconds, err)
 	}
 
 	if err := timestamp.ValidateProtoDuration(request.GetWorkflowTaskTimeout()); err != nil {
-		return fmt.Errorf("%w cause: %s", errInvalidWorkflowTaskTimeoutSeconds, err.Error())
+		return fmt.Errorf("%w cause: %v", errInvalidWorkflowTaskTimeoutSeconds, err)
 	}
 
 	return nil
@@ -4980,15 +4980,15 @@ func (wh *WorkflowHandler) validateSignalWithStartWorkflowTimeouts(
 	request *workflowservice.SignalWithStartWorkflowExecutionRequest,
 ) error {
 	if err := timestamp.ValidateProtoDuration(request.GetWorkflowExecutionTimeout()); err != nil {
-		return fmt.Errorf("%w cause: %s", errInvalidWorkflowExecutionTimeoutSeconds, err.Error())
+		return fmt.Errorf("%w cause: %v", errInvalidWorkflowExecutionTimeoutSeconds, err)
 	}
 
 	if err := timestamp.ValidateProtoDuration(request.GetWorkflowRunTimeout()); err != nil {
-		return fmt.Errorf("%w cause: %s", errInvalidWorkflowRunTimeoutSeconds, err.Error())
+		return fmt.Errorf("%w cause: %v", errInvalidWorkflowRunTimeoutSeconds, err)
 	}
 
 	if err := timestamp.ValidateProtoDuration(request.GetWorkflowTaskTimeout()); err != nil {
-		return fmt.Errorf("%w cause: %s", errInvalidWorkflowTaskTimeoutSeconds, err.Error())
+		return fmt.Errorf("%w cause: %v", errInvalidWorkflowTaskTimeoutSeconds, err)
 	}
 
 	return nil
@@ -5003,7 +5003,7 @@ func (wh *WorkflowHandler) validateWorkflowStartDelay(
 	}
 
 	if err := timestamp.ValidateProtoDuration(startDelay); err != nil {
-		return fmt.Errorf("%w cause: %s", errInvalidWorkflowStartDelaySeconds, err.Error())
+		return fmt.Errorf("%w cause: %v", errInvalidWorkflowStartDelaySeconds, err)
 	}
 
 	return nil
