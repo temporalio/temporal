@@ -66,6 +66,14 @@ func (h StubHandler) Histogram(_ string, _ metrics.MetricUnit) metrics.Histogram
 
 func (h StubHandler) Stop(_ log.Logger) {}
 
+func (h StubHandler) Close() error {
+	return nil
+}
+
+func (h StubHandler) StartBatch(_ string) metrics.BatchHandler {
+	return h
+}
+
 func TestHistoryBuilder_IsDirty(t *testing.T) {
 	hb := HistoryBuilder{EventStore: EventStore{}}
 	if hb.IsDirty() {
