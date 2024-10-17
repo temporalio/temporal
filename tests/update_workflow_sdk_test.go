@@ -132,11 +132,11 @@ func (s *UpdateWorkflowSdkSuite) TestUpdateWorkflow_TimeoutWorkflowAfterUpdateAc
 	err = updateHandle.Get(ctx, nil)
 	var appErr *temporal.ApplicationError
 	s.ErrorAs(err, &appErr)
-	s.Contains("Workflow Update is failed because it was accepted by Workflow but then Workflow completed.", appErr.Message())
+	s.Contains("Workflow Update failed because the Workflow completed before the Update completed.", appErr.Message())
 
 	pollFailure, pollErr := s.pollUpdate(ctx, tv, &updatepb.WaitPolicy{LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED})
 	s.NoError(pollErr)
-	s.Equal("Workflow Update is failed because it was accepted by Workflow but then Workflow completed.", pollFailure.GetOutcome().GetFailure().GetMessage())
+	s.Equal("Workflow Update failed because the Workflow completed before the Update completed.", pollFailure.GetOutcome().GetFailure().GetMessage())
 
 	var wee *temporal.WorkflowExecutionError
 	s.ErrorAs(wfRun.Get(ctx, nil), &wee)
@@ -190,11 +190,11 @@ func (s *UpdateWorkflowSdkSuite) TestUpdateWorkflow_TerminateWorkflowAfterUpdate
 	err = updateHandle.Get(ctx, nil)
 	var appErr *temporal.ApplicationError
 	s.ErrorAs(err, &appErr)
-	s.Contains("Workflow Update is failed because it was accepted by Workflow but then Workflow completed.", appErr.Message())
+	s.Contains("Workflow Update failed because the Workflow completed before the Update completed.", appErr.Message())
 
 	pollFailure, pollErr := s.pollUpdate(ctx, tv, &updatepb.WaitPolicy{LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED})
 	s.NoError(pollErr)
-	s.Equal("Workflow Update is failed because it was accepted by Workflow but then Workflow completed.", pollFailure.GetOutcome().GetFailure().GetMessage())
+	s.Equal("Workflow Update failed because the Workflow completed before the Update completed.", pollFailure.GetOutcome().GetFailure().GetMessage())
 
 	var wee *temporal.WorkflowExecutionError
 	s.ErrorAs(wfRun.Get(ctx, nil), &wee)

@@ -134,7 +134,7 @@ func TestNewRegistry(t *testing.T) {
 		status, err := upd.WaitLifecycleStage(context.Background(), 0, 100*time.Millisecond)
 		require.NoError(t, err)
 		require.NotNil(t, status)
-		require.Equal(t, "Workflow Update is failed because it was accepted by Workflow but then Workflow completed.", status.Outcome.GetFailure().Message)
+		require.Equal(t, "Workflow Update failed because the Workflow completed before the Update completed.", status.Outcome.GetFailure().Message)
 	})
 
 	t.Run("registry created from store with update in stateCompleted has no updates but increased completed count", func(t *testing.T) {
@@ -592,7 +592,7 @@ func TestAbort(t *testing.T) {
 	status2, err := upd2.WaitLifecycleStage(context.Background(), 0, 2*time.Second)
 	require.NoError(t, err)
 	require.NotNil(t, status2)
-	require.Equal(t, "Workflow Update is failed because it was accepted by Workflow but then Workflow completed.", status2.Outcome.GetFailure().Message)
+	require.Equal(t, "Workflow Update failed because the Workflow completed before the Update completed.", status2.Outcome.GetFailure().Message)
 
 	require.Equal(t, 2, reg.Len(), "registry should still contain both updates")
 }

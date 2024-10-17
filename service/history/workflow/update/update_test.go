@@ -709,7 +709,7 @@ func TestUpdateState(t *testing.T) {
 					status, err := upd.WaitLifecycleStage(context.Background(), UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED, 100*time.Millisecond)
 					require.NoError(t, err)
 					require.NotNil(t, status)
-					require.Equal(t, "Workflow Update is failed because it was accepted by Workflow but then Workflow completed.", status.Outcome.GetFailure().Message)
+					require.Equal(t, "Workflow Update failed because the Workflow completed before the Update completed.", status.Outcome.GetFailure().Message)
 				},
 			}, {
 				title: "fail to transition to stateCompleted on store write failure",

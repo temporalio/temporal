@@ -988,13 +988,13 @@ func (s *UpdateWorkflowSuite) TestUpdateWorkflow_CompletedWorkflow() {
 		// Receive Update result.
 		updateResult1 := <-updateResultCh
 		s.NoError(updateResult1.err)
-		s.Equal("Workflow Update is failed because it was accepted by Workflow but then Workflow completed.", updateResult1.response.GetOutcome().GetFailure().GetMessage())
+		s.Equal("Workflow Update failed because the Workflow completed before the Update completed.", updateResult1.response.GetOutcome().GetFailure().GetMessage())
 
 		// Send same Update request again, receiving the same failure.
 		updateResultCh = s.sendUpdate(testcore.NewContext(), tv, "1")
 		updateResult2 := <-updateResultCh
 		s.NoError(updateResult2.err)
-		s.Equal("Workflow Update is failed because it was accepted by Workflow but then Workflow completed.", updateResult2.response.GetOutcome().GetFailure().GetMessage())
+		s.Equal("Workflow Update failed because the Workflow completed before the Update completed.", updateResult2.response.GetOutcome().GetFailure().GetMessage())
 	})
 }
 
@@ -3205,7 +3205,7 @@ func (s *UpdateWorkflowSuite) TestUpdateWorkflow_CompleteWorkflow_AbortUpdates()
 			name:          "update accepted",
 			description:   "update in stateAccepted must get an update failure",
 			updateErr:     map[string]string{"*": ""},
-			updateFailure: "Workflow Update is failed because it was accepted by Workflow but then Workflow completed.",
+			updateFailure: "Workflow Update failed because the Workflow completed before the Update completed.",
 			commands:      func(tv *testvars.TestVars) []*commandpb.Command { return s.UpdateAcceptCommands(tv, "1") },
 			messages: func(tv *testvars.TestVars, updRequestMsg *protocolpb.Message) []*protocolpb.Message {
 				return s.UpdateAcceptMessages(tv, updRequestMsg, "1")
@@ -4684,7 +4684,7 @@ func (s *UpdateWorkflowSuite) TestUpdateWorkflow_LastWorkflowTask_HasUpdateMessa
 	s.NoError(err)
 	updateResult := <-updateResultCh
 	s.Equal(enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED, updateResult.GetStage())
-	s.Equal("Workflow Update is failed because it was accepted by Workflow but then Workflow completed.", updateResult.GetOutcome().GetFailure().GetMessage())
+	s.Equal("Workflow Update failed because the Workflow completed before the Update completed.", updateResult.GetOutcome().GetFailure().GetMessage())
 
 	s.EqualHistoryEvents(`
 	1 WorkflowExecutionStarted
@@ -5012,7 +5012,7 @@ func (s *UpdateWorkflowSuite) TestUpdateWorkflow_ContinueAsNew_UpdateIsNotCarrie
 
 	update1Response := <-update1ResponseCh
 	s.NoError(update1Response.err)
-	s.Equal("Workflow Update is failed because it was accepted by Workflow but then Workflow completed.", update1Response.response.GetOutcome().GetFailure().GetMessage())
+	s.Equal("Workflow Update failed because the Workflow completed before the Update completed.", update1Response.response.GetOutcome().GetFailure().GetMessage())
 
 	update2Response := <-update2ResponseCh
 	s.Error(update2Response.err)
