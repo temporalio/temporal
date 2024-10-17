@@ -52,6 +52,7 @@ type WorkflowMemoTestSuite struct {
 }
 
 func TestWorkflowMemoTestSuite(t *testing.T) {
+	t.Parallel()
 	suite.Run(t, new(WorkflowMemoTestSuite))
 }
 

@@ -26,6 +26,7 @@ package mysql
 
 import (
 	"github.com/jmoiron/sqlx"
+	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
@@ -62,7 +63,7 @@ func (p *plugin) CreateDB(
 		}
 		return p.createDBConnection(dbKind, cfg, r)
 	}
-	handle := sqlplugin.NewDatabaseHandle(connect, isConnNeedsRefreshError, logger, metricsHandler)
+	handle := sqlplugin.NewDatabaseHandle(connect, isConnNeedsRefreshError, logger, metricsHandler, clock.NewRealTimeSource())
 	db := newDB(dbKind, cfg.DatabaseName, handle, nil)
 	return db, nil
 }
@@ -81,7 +82,7 @@ func (p *plugin) CreateAdminDB(
 		}
 		return p.createDBConnection(dbKind, cfg, r)
 	}
-	handle := sqlplugin.NewDatabaseHandle(connect, isConnNeedsRefreshError, logger, metricsHandler)
+	handle := sqlplugin.NewDatabaseHandle(connect, isConnNeedsRefreshError, logger, metricsHandler, clock.NewRealTimeSource())
 	db := newDB(dbKind, cfg.DatabaseName, handle, nil)
 	return db, nil
 }

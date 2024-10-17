@@ -25,6 +25,7 @@ package scheduler
 import (
 	"time"
 
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/service/history/hsm"
 )
 
@@ -51,8 +52,12 @@ func (SchedulerWaitTask) Destination() string {
 	return ""
 }
 
-func (SchedulerWaitTask) Concurrent() bool {
-	return false
+func (SchedulerWaitTask) Validate(ref *persistencespb.StateMachineRef, node *hsm.Node) error {
+	// TODO: We should allow an RPC to transition the machine.
+	if err := hsm.ValidateNotTransitioned(ref, node); err != nil {
+		return err
+	}
+	return node.CheckRunning()
 }
 
 type ScheduleWaitTaskSerializer struct{}
@@ -81,8 +86,12 @@ func (t SchedulerActivateTask) Destination() string {
 	return "TODO(bergundy): make this an empty string when we support transfer tasks"
 }
 
-func (SchedulerActivateTask) Concurrent() bool {
-	return false
+func (SchedulerActivateTask) Validate(ref *persistencespb.StateMachineRef, node *hsm.Node) error {
+	// TODO: We should allow an RPC to transition the machine.
+	if err := hsm.ValidateNotTransitioned(ref, node); err != nil {
+		return err
+	}
+	return node.CheckRunning()
 }
 
 type ScheduleExecuteTaskSerializer struct{}

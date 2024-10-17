@@ -273,6 +273,7 @@ func (r *WorkflowStateReplicatorImpl) ReplicateVersionedTransition(
 					wid,
 					rid,
 					nil,
+					ms.GetExecutionInfo().VersionHistories,
 				)
 			}
 			localCurrentHistory, err := versionhistory.GetCurrentVersionHistory(ms.GetExecutionInfo().VersionHistories)
@@ -353,6 +354,7 @@ func (r *WorkflowStateReplicatorImpl) applyMutation(
 			workflowID,
 			runID,
 			nil,
+			nil,
 		)
 	}
 	localTransitionHistory := workflow.CopyVersionedTransitions(localMutableState.GetExecutionInfo().TransitionHistory)
@@ -367,6 +369,7 @@ func (r *WorkflowStateReplicatorImpl) applyMutation(
 			workflowID,
 			runID,
 			localTransitionHistory[len(localTransitionHistory)-1],
+			localMutableState.GetExecutionInfo().VersionHistories,
 		)
 	}
 
@@ -426,12 +429,17 @@ func (r *WorkflowStateReplicatorImpl) applySnapshot(
 ) error {
 	snapshot := versionedTransition.GetSyncWorkflowStateSnapshotAttributes().State
 	if snapshot == nil {
+		var versionHistories *history.VersionHistories
+		if localMutableState != nil {
+			versionHistories = localMutableState.GetExecutionInfo().VersionHistories
+		}
 		return serviceerrors.NewSyncState(
 			"failed to apply mutation due to missing mutable state",
 			namespaceID.String(),
 			workflowID,
 			runID,
 			nil,
+			versionHistories,
 		)
 	}
 	if localMutableState == nil {
@@ -453,6 +461,7 @@ func (r *WorkflowStateReplicatorImpl) applySnapshot(
 				workflowID,
 				runID,
 				localTransitionHistory[len(localTransitionHistory)-1],
+				localMutableState.GetExecutionInfo().VersionHistories,
 			)
 		case errors.Is(err, consts.ErrStaleReference):
 			// local versioned transition is stale

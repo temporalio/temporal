@@ -23,7 +23,11 @@
 package hsm
 
 import (
+	"fmt"
 	"time"
+
+	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/service/history/consts"
 )
 
 // Immediate is a sentinel value to express that a task must be executed immediately instead of delayed to a certain
@@ -38,14 +42,6 @@ var Immediate = time.Time{}
 // are executed by an executor that is registered to handle a specific task type. The framework converts this minimal
 // task representation into [tasks.Task] instances, filling in the state machine reference, workflow key, and task ID.
 // A [TaskSerializer] need to be registered in a [Registry] for a given type in order to process tasks of that type.
-//
-// Tasks must specify whether they can run concurrently with other tasks. A non-concurrent task is a task that
-// correlates with a single machine transition and is considered stale if its corresponding machine has transitioned
-// since it was generated.
-// Non-concurrent tasks are persisted with a [Ref] that contains the machine transition count at the time they was
-// generated, which is expected to match the current machine's transition count upon execution. Concurrent tasks skip
-// this validation.
-// If the task is concurrent, you must implement the ConcurrentTask interface below.
 type Task interface {
 	// Task type that must be unique per task definition.
 	Type() string
@@ -59,19 +55,11 @@ type Task interface {
 	// If a destination is set, a task will be scheduled on the outbound queue.
 	// Currently Destination and Deadline are mutually exclusive.
 	Destination() string
-	// Whether this task is automatically invalidated if the machine transitioned since generating it.
-	Concurrent() bool
-}
-
-// A concurrent task can run concurrently with other tasks.
-type ConcurrentTask interface {
-	Task
-	// Validate checks if the [ConcurrentTask] is still valid for processing in
-	// either active or standby queue task executor.
-	// Must return ErrStaleReference if the task is no longer valid.
-	// A typical implementation may check if the state of the machine is still
-	// relevant for running this task.
-	Validate(node *Node) error
+	// Validate checks if the task is still valid for processing for the current node state.
+	// Implementors may return [ErrStaleReference] or [consts.ErrWorkflowCompleted] if the task is no longer valid.
+	// A typical implementation may use [node.CheckRunning], [ValidateNotTransitioned], or check if the state of the
+	// machine is still relevant for running this task.
+	Validate(ref *persistencespb.StateMachineRef, node *Node) error
 }
 
 // TaskAttributes are common attributes for a [Task].
@@ -84,4 +72,13 @@ type TaskAttributes struct {
 type TaskSerializer interface {
 	Serialize(Task) ([]byte, error)
 	Deserialize(data []byte, attrs TaskAttributes) (Task, error)
+}
+
+// ValidateNotTransitioned returns a [consts.ErrStaleReference] if the machine has transitioned since the task was
+// generated.
+func ValidateNotTransitioned(ref *persistencespb.StateMachineRef, node *Node) error {
+	if ref.MachineTransitionCount != node.InternalRepr().TransitionCount {
+		return fmt.Errorf("%w: state machine transitions != ref transitions", consts.ErrStaleReference)
+	}
+	return nil
 }

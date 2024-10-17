@@ -26,6 +26,7 @@ import (
 	"fmt"
 	"time"
 
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/service/history/hsm"
 )
 
@@ -52,8 +53,8 @@ func (t ImmediateTask) Destination() string {
 	return t.destination
 }
 
-func (ImmediateTask) Concurrent() bool {
-	return false
+func (ImmediateTask) Validate(ref *persistencespb.StateMachineRef, node *hsm.Node) error {
+	return hsm.ValidateNotTransitioned(ref, node)
 }
 
 type ImmediateTaskSerializer struct{}
@@ -85,12 +86,10 @@ func (TimerTask) Destination() string {
 	return ""
 }
 
-func (t TimerTask) Concurrent() bool {
-	return t.concurrent
-}
-
-func (t TimerTask) Validate(*hsm.Node) error {
-	// In case the task is considered concurrent, consider it valid for now.
+func (t TimerTask) Validate(ref *persistencespb.StateMachineRef, node *hsm.Node) error {
+	if !t.concurrent {
+		return hsm.ValidateNotTransitioned(ref, node)
+	}
 	return nil
 }
 
@@ -106,6 +105,7 @@ func (s TimerTaskSerializer) Serialize(task hsm.Task) ([]byte, error) {
 			// Non empty data marks the task as concurrent.
 			return []byte{1}, nil
 		}
+		// No-op.
 		return nil, nil
 	}
 	return nil, fmt.Errorf("incompatible task: %v", task)

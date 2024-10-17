@@ -26,7 +26,6 @@ package ndc
 
 import (
 	"context"
-	"flag"
 	"fmt"
 	"os"
 	"sync/atomic"
@@ -89,7 +88,7 @@ type (
 )
 
 func TestReplicationMigrationBackTest(t *testing.T) {
-	flag.Parse()
+	// TODO: doesn't work yet: t.Parallel()
 	suite.Run(t, new(ReplicationMigrationBackTestSuite))
 
 }

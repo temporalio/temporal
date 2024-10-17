@@ -49,6 +49,7 @@ type UserTimersTestSuite struct {
 }
 
 func TestUserTimersTestSuite(t *testing.T) {
+	t.Parallel()
 	suite.Run(t, new(UserTimersTestSuite))
 }
 

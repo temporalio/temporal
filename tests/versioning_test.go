@@ -28,7 +28,6 @@ package tests
 import (
 	"context"
 	"errors"
-	"flag"
 	"fmt"
 	"math/rand"
 	"strconv"
@@ -82,7 +81,7 @@ const (
 )
 
 func TestVersioningFunctionalSuite(t *testing.T) {
-	flag.Parse()
+	t.Parallel()
 	suite.Run(t, new(VersioningIntegSuite))
 }
 
@@ -122,6 +121,10 @@ func (s *VersioningIntegSuite) SetupSuite() {
 		// this is overridden for tests using testWithMatchingBehavior
 		dynamicconfig.MatchingNumTaskqueueReadPartitions.Key():  4,
 		dynamicconfig.MatchingNumTaskqueueWritePartitions.Key(): 4,
+
+		// this is overridden since we don't want caching to be enabled while testing DescribeTaskQueue
+		// behaviour related to versioning
+		dynamicconfig.TaskQueueInfoByBuildIdTTL.Key(): 0 * time.Second,
 	}
 	s.SetDynamicConfigOverrides(dynamicConfigOverrides)
 	s.FunctionalTestBase.SetupSuite("testdata/es_cluster.yaml")
@@ -135,7 +138,7 @@ func (s *VersioningIntegSuite) SetupTest() {
 	s.FunctionalTestBase.SetupTest()
 
 	sdkClient, err := sdkclient.Dial(sdkclient.Options{
-		HostPort:  s.HostPort(),
+		HostPort:  s.FrontendGRPCAddress(),
 		Namespace: s.Namespace(),
 	})
 	if err != nil {

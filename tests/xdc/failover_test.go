@@ -22,10 +22,6 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-//go:build !race
-
-// need to run xdc tests with race detector off because of ringpop bug causing data race issue
-
 package xdc
 
 import (
@@ -33,7 +29,6 @@ import (
 	"context"
 	"encoding/binary"
 	"errors"
-	"flag"
 	"strconv"
 	"testing"
 	"time"
@@ -75,7 +70,7 @@ type (
 )
 
 func TestFuncClustersTestSuite(t *testing.T) {
-	flag.Parse()
+	t.Parallel()
 	suite.Run(t, new(FunctionalClustersTestSuite))
 }
 

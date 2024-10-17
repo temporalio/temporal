@@ -26,7 +26,8 @@ import (
 	"fmt"
 	"time"
 
-	"go.temporal.io/server/api/enums/v1"
+	enumspb "go.temporal.io/server/api/enums/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/hsm"
 )
@@ -57,12 +58,8 @@ func (TimeoutTask) Destination() string {
 	return ""
 }
 
-func (TimeoutTask) Concurrent() bool {
-	return true
-}
-
 // Validate checks if the timeout task is still valid to execute for the given node state.
-func (t TimeoutTask) Validate(node *hsm.Node) error {
+func (t TimeoutTask) Validate(ref *persistencespb.StateMachineRef, node *hsm.Node) error {
 	if err := node.CheckRunning(); err != nil {
 		return err
 	}
@@ -109,11 +106,7 @@ func (t InvocationTask) Destination() string {
 	return t.EndpointName
 }
 
-func (InvocationTask) Concurrent() bool {
-	return true
-}
-
-func (t InvocationTask) Validate(node *hsm.Node) error {
+func (InvocationTask) Validate(ref *persistencespb.StateMachineRef, node *hsm.Node) error {
 	if err := node.CheckRunning(); err != nil {
 		return err
 	}
@@ -121,7 +114,7 @@ func (t InvocationTask) Validate(node *hsm.Node) error {
 	if err != nil {
 		return err
 	}
-	if op.State() != enums.NEXUS_OPERATION_STATE_SCHEDULED {
+	if op.State() != enumspb.NEXUS_OPERATION_STATE_SCHEDULED {
 		return fmt.Errorf(
 			"%w: operation is not in Scheduled state, current state: %v",
 			consts.ErrStaleReference,
@@ -159,11 +152,7 @@ func (t BackoffTask) Destination() string {
 	return ""
 }
 
-func (BackoffTask) Concurrent() bool {
-	return true
-}
-
-func (t BackoffTask) Validate(node *hsm.Node) error {
+func (t BackoffTask) Validate(_ *persistencespb.StateMachineRef, node *hsm.Node) error {
 	if err := node.CheckRunning(); err != nil {
 		return err
 	}
@@ -171,7 +160,7 @@ func (t BackoffTask) Validate(node *hsm.Node) error {
 	if err != nil {
 		return err
 	}
-	if op.State() != enums.NEXUS_OPERATION_STATE_BACKING_OFF {
+	if op.State() != enumspb.NEXUS_OPERATION_STATE_BACKING_OFF {
 		return fmt.Errorf(
 			"%w: operation is not in BackingOff state, current state: %v",
 			consts.ErrStaleReference,
@@ -209,8 +198,11 @@ func (t CancelationTask) Destination() string {
 	return t.EndpointName
 }
 
-func (CancelationTask) Concurrent() bool {
-	return false
+func (CancelationTask) Validate(ref *persistencespb.StateMachineRef, node *hsm.Node) error {
+	if err := hsm.ValidateNotTransitioned(ref, node); err != nil {
+		return err
+	}
+	return node.CheckRunning()
 }
 
 type CancelationTaskSerializer struct{}
@@ -241,8 +233,11 @@ func (CancelationBackoffTask) Destination() string {
 	return ""
 }
 
-func (CancelationBackoffTask) Concurrent() bool {
-	return false
+func (CancelationBackoffTask) Validate(ref *persistencespb.StateMachineRef, node *hsm.Node) error {
+	if err := hsm.ValidateNotTransitioned(ref, node); err != nil {
+		return err
+	}
+	return node.CheckRunning()
 }
 
 type CancelationBackoffTaskSerializer struct{}
