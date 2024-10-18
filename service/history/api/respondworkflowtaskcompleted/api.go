@@ -78,7 +78,7 @@ type (
 		metricsHandler                 metrics.Handler
 		logger                         log.Logger
 		throttledLogger                log.Logger
-		commandAttrValidator           *commandAttrValidator
+		commandAttrValidator           *api.CommandAttrValidator
 		searchAttributesMapperProvider searchattribute.MapperProvider
 		searchAttributesValidator      *searchattribute.Validator
 		persistenceVisibilityMgr       manager.VisibilityManager
@@ -106,7 +106,7 @@ func NewWorkflowTaskCompletedHandler(
 		metricsHandler:             shardContext.GetMetricsHandler(),
 		logger:                     shardContext.GetLogger(),
 		throttledLogger:            shardContext.GetThrottledLogger(),
-		commandAttrValidator: newCommandAttrValidator(
+		commandAttrValidator: api.NewCommandAttrValidator(
 			shardContext.GetNamespaceRegistry(),
 			shardContext.GetConfig(),
 			searchAttributesValidator,

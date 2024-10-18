@@ -26,6 +26,7 @@ import (
 	"context"
 
 	activitypb "go.temporal.io/api/activity/v1"
+	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
@@ -39,7 +40,6 @@ import (
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/workflow"
-	"google.golang.org/protobuf/types/known/fieldmaskpb"
 )
 
 func Invoke(
@@ -53,6 +53,12 @@ func Invoke(
 		return nil, err
 	}
 
+	validator := api.NewCommandAttrValidator(
+		shardContext.GetNamespaceRegistry(),
+		shardContext.GetConfig(),
+		nil,
+	)
+
 	response := &historyservice.UpdateActivityOptionsResponse{}
 	err = api.GetAndUpdateWorkflowWithNew(
 		ctx,
@@ -64,7 +70,7 @@ func Invoke(
 		),
 		func(workflowLease api.WorkflowLease) (*api.UpdateWorkflowAction, error) {
 			mutableState := workflowLease.GetMutableState()
-			return updateActivityOptions(shardContext, mutableState, request, response)
+			return updateActivityOptions(shardContext, validator, mutableState, request, response)
 		},
 		nil,
 		shardContext,
@@ -80,6 +86,7 @@ func Invoke(
 
 func updateActivityOptions(
 	shardContext shard.Context,
+	validator *api.CommandAttrValidator,
 	mutableState workflow.MutableState,
 	request *historyservice.UpdateActivityOptionsRequest,
 	response *historyservice.UpdateActivityOptionsResponse,
@@ -88,7 +95,7 @@ func updateActivityOptions(
 		return nil, consts.ErrWorkflowCompleted
 	}
 	updateRequest := request.GetUpdateRequest()
-	activityOptions := updateRequest.GetActivityOptions()
+	mergeFrom := updateRequest.GetActivityOptions()
 	activityId := updateRequest.GetActivityId()
 
 	ai, activityFound := mutableState.GetActivityByActivityID(activityId)
@@ -98,9 +105,36 @@ func updateActivityOptions(
 		// It is OK to drop the task at this point.
 		return nil, consts.ErrActivityTaskNotFound
 	}
+	mask := updateRequest.GetUpdateMask()
+	if mask == nil {
+		return nil, serviceerror.NewInvalidArgument("UpdateMask is nil")
+	}
+
+	updateFields := util.ParseFieldMask(mask)
+	mergeInto := &activitypb.ActivityOptions{
+		TaskQueue: &taskqueuepb.TaskQueue{
+			Name: ai.TaskQueue,
+		},
+		ScheduleToCloseTimeout: ai.ScheduleToCloseTimeout,
+		ScheduleToStartTimeout: ai.ScheduleToStartTimeout,
+		StartToCloseTimeout:    ai.StartToCloseTimeout,
+		HeartbeatTimeout:       ai.HeartbeatTimeout,
+		RetryPolicy: &commonpb.RetryPolicy{
+			BackoffCoefficient: ai.RetryBackoffCoefficient,
+			InitialInterval:    ai.RetryInitialInterval,
+			MaximumInterval:    ai.RetryMaximumInterval,
+			MaximumAttempts:    ai.RetryMaximumAttempts,
+		},
+	}
 
 	// update activity options
-	err := applyActivityOptions(ai, activityOptions, updateRequest.GetUpdateMask())
+	err := applyActivityOptions(mergeInto, mergeFrom, updateFields)
+	if err != nil {
+		return nil, err
+	}
+
+	// validate the updated options
+	err = validateActivityOptions(validator, request.NamespaceId, ai, mergeInto)
 	if err != nil {
 		return nil, err
 	}
@@ -128,21 +162,7 @@ func updateActivityOptions(
 	}
 
 	// fill the response
-	response.ActivityOptions = &activitypb.ActivityOptions{
-		TaskQueue: &taskqueuepb.TaskQueue{
-			Name: ai.TaskQueue,
-		},
-		ScheduleToCloseTimeout: ai.ScheduleToCloseTimeout,
-		ScheduleToStartTimeout: ai.ScheduleToStartTimeout,
-		StartToCloseTimeout:    ai.StartToCloseTimeout,
-		HeartbeatTimeout:       ai.HeartbeatTimeout,
-		RetryPolicy: &commonpb.RetryPolicy{
-			BackoffCoefficient: ai.RetryBackoffCoefficient,
-			InitialInterval:    ai.RetryInitialInterval,
-			MaximumInterval:    ai.RetryMaximumInterval,
-			MaximumAttempts:    ai.RetryMaximumAttempts,
-		},
-	}
+	response.ActivityOptions = mergeInto
 
 	return &api.UpdateWorkflowAction{
 		Noop:               false,
@@ -150,61 +170,97 @@ func updateActivityOptions(
 	}, nil
 }
 
-func applyActivityOptions(ai *persistencespb.ActivityInfo, ao *activitypb.ActivityOptions, mask *fieldmaskpb.FieldMask) error {
-	if mask == nil {
-		return serviceerror.NewInvalidArgument("UpdateMask is nil")
+func applyActivityOptions(
+	mergeInto *activitypb.ActivityOptions,
+	mergeFrom *activitypb.ActivityOptions,
+	updateFields map[string]struct{},
+) error {
+	if mergeInto == nil {
+		return serviceerror.NewInvalidArgument("MergeInto argument is not provided")
+	}
+	if mergeFrom == nil {
+		return serviceerror.NewInvalidArgument("mergeFrom argument is not provided")
+	}
+	if updateFields == nil {
+		return serviceerror.NewInvalidArgument("updateFields argument is not provided")
 	}
 
-	updateFields := util.ParseFieldMask(mask)
-
 	if _, ok := updateFields["taskQueue.name"]; ok {
-		if ao.TaskQueue == nil {
+		if mergeFrom.TaskQueue == nil {
 			return serviceerror.NewInvalidArgument("TaskQueue is not provided")
 		}
-		ai.TaskQueue = ao.TaskQueue.Name
+		if mergeInto.TaskQueue == nil {
+			mergeInto.TaskQueue = mergeFrom.TaskQueue
+		}
+		mergeInto.TaskQueue.Name = mergeFrom.TaskQueue.Name
 	}
 
 	if _, ok := updateFields["scheduleToCloseTimeout"]; ok {
-		ai.ScheduleToCloseTimeout = ao.ScheduleToCloseTimeout
+		mergeInto.ScheduleToCloseTimeout = mergeFrom.ScheduleToCloseTimeout
 	}
 
 	if _, ok := updateFields["scheduleToStartTimeout"]; ok {
-		ai.ScheduleToStartTimeout = ao.ScheduleToStartTimeout
+		mergeInto.ScheduleToStartTimeout = mergeFrom.ScheduleToStartTimeout
 	}
 
 	if _, ok := updateFields["startToCloseTimeout"]; ok {
-		ai.StartToCloseTimeout = ao.StartToCloseTimeout
+		mergeInto.StartToCloseTimeout = mergeFrom.StartToCloseTimeout
 	}
 
 	if _, ok := updateFields["heartbeatTimeout"]; ok {
-		ai.HeartbeatTimeout = ao.HeartbeatTimeout
+		mergeInto.HeartbeatTimeout = mergeFrom.HeartbeatTimeout
+	}
+
+	if mergeInto.RetryPolicy == nil {
+		mergeInto.RetryPolicy = &commonpb.RetryPolicy{}
 	}
 
 	if _, ok := updateFields["retryPolicy.initialInterval"]; ok {
-		if ao.RetryPolicy == nil {
+		if mergeFrom.RetryPolicy == nil {
 			return serviceerror.NewInvalidArgument("RetryPolicy is not provided")
 		}
-		ai.RetryInitialInterval = ao.RetryPolicy.InitialInterval
+		mergeInto.RetryPolicy.InitialInterval = mergeFrom.RetryPolicy.InitialInterval
 	}
 
 	if _, ok := updateFields["retryPolicy.backoffCoefficient"]; ok {
-		if ao.RetryPolicy == nil {
+		if mergeFrom.RetryPolicy == nil {
 			return serviceerror.NewInvalidArgument("RetryPolicy is not provided")
 		}
-		ai.RetryBackoffCoefficient = ao.RetryPolicy.BackoffCoefficient
+		mergeInto.RetryPolicy.BackoffCoefficient = mergeFrom.RetryPolicy.BackoffCoefficient
 	}
+
 	if _, ok := updateFields["retryPolicy.maximumInterval"]; ok {
-		if ao.RetryPolicy == nil {
+		if mergeFrom.RetryPolicy == nil {
 			return serviceerror.NewInvalidArgument("RetryPolicy is not provided")
 		}
-		ai.RetryMaximumInterval = ao.RetryPolicy.MaximumInterval
+		mergeInto.RetryPolicy.MaximumInterval = mergeFrom.RetryPolicy.MaximumInterval
 	}
 	if _, ok := updateFields["retryPolicy.maximumAttempts"]; ok {
-		if ao.RetryPolicy == nil {
+		if mergeFrom.RetryPolicy == nil {
 			return serviceerror.NewInvalidArgument("RetryPolicy is not provided")
 		}
-		ai.RetryMaximumAttempts = ao.RetryPolicy.MaximumAttempts
+		mergeInto.RetryPolicy.MaximumAttempts = mergeFrom.RetryPolicy.MaximumAttempts
 	}
 
 	return nil
+}
+
+func validateActivityOptions(
+	validator *api.CommandAttrValidator,
+	namespaceID string,
+	ai *persistencespb.ActivityInfo,
+	ao *activitypb.ActivityOptions,
+) error {
+	attributes := &commandpb.ScheduleActivityTaskCommandAttributes{
+		TaskQueue:              ao.TaskQueue,
+		ScheduleToCloseTimeout: ao.ScheduleToCloseTimeout,
+		ScheduleToStartTimeout: ao.ScheduleToStartTimeout,
+		StartToCloseTimeout:    ao.StartToCloseTimeout,
+		HeartbeatTimeout:       ao.HeartbeatTimeout,
+		ActivityId:             ai.ActivityId,
+		ActivityType:           ai.ActivityType,
+	}
+
+	_, err := validator.ValidateActivityScheduleAttributes(namespace.ID(namespaceID), attributes, nil)
+	return err
 }
