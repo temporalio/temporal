@@ -535,7 +535,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestProcessActivityTimeout_NoRetryPo
 		TaskID:              s.mustGenerateTaskID(),
 		TimeoutType:         enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE,
 		VisibilityTimestamp: task.(*tasks.ActivityTimeoutTask).VisibilityTimestamp,
-		EventID:             wt.ScheduledEventID,
+		EventID:             scheduledEvent.EventId,
 	}
 
 	persistenceMutableState := s.createPersistenceMutableState(mutableState, scheduledEvent.GetEventId(), scheduledEvent.GetVersion())
@@ -703,7 +703,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestProcessActivityTimeout_RetryPoli
 		TaskID:              s.mustGenerateTaskID(),
 		TimeoutType:         enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE,
 		VisibilityTimestamp: task.(*tasks.ActivityTimeoutTask).VisibilityTimestamp,
-		EventID:             wt.ScheduledEventID,
+		EventID:             scheduledEvent.EventId,
 	}
 
 	persistenceMutableState := s.createPersistenceMutableState(mutableState, scheduledEvent.GetEventId(), scheduledEvent.GetVersion())
@@ -795,7 +795,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestProcessActivityTimeout_RetryPoli
 		TaskID:              s.mustGenerateTaskID(),
 		TimeoutType:         enumspb.TIMEOUT_TYPE_START_TO_CLOSE,
 		VisibilityTimestamp: task.(*tasks.ActivityTimeoutTask).VisibilityTimestamp,
-		EventID:             wt.ScheduledEventID,
+		EventID:             scheduledEvent.EventId,
 	}
 
 	persistenceMutableState := s.createPersistenceMutableState(mutableState, scheduledEvent.GetEventId(), scheduledEvent.GetVersion())
@@ -893,7 +893,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestProcessActivityTimeout_RetryPoli
 		TaskID:              s.mustGenerateTaskID(),
 		TimeoutType:         enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE,
 		VisibilityTimestamp: task.(*tasks.ActivityTimeoutTask).VisibilityTimestamp,
-		EventID:             wt.ScheduledEventID,
+		EventID:             scheduledEvent.EventId,
 	}
 
 	persistenceMutableState := s.createPersistenceMutableState(mutableState, scheduledEvent.GetEventId(), scheduledEvent.GetVersion())
@@ -2020,7 +2020,6 @@ func (s *timerQueueActiveTaskExecutorSuite) TestProcessTimeoutTask() {
 			name: "Retry Policy Not Set",
 			timerSequenceID: workflow.TimerSequenceID{
 				Attempt: 1,
-				Stamp:   1,
 			},
 			ai: &persistencespb.ActivityInfo{
 				Attempt: 1,
@@ -2037,7 +2036,6 @@ func (s *timerQueueActiveTaskExecutorSuite) TestProcessTimeoutTask() {
 			name: "Retry State Timeout",
 			timerSequenceID: workflow.TimerSequenceID{
 				Attempt: 1,
-				Stamp:   1,
 			},
 			ai: &persistencespb.ActivityInfo{
 				Attempt: 1,
@@ -2054,11 +2052,9 @@ func (s *timerQueueActiveTaskExecutorSuite) TestProcessTimeoutTask() {
 			name: "Retry State In Progress",
 			timerSequenceID: workflow.TimerSequenceID{
 				Attempt: 1,
-				Stamp:   1,
 			},
 			ai: &persistencespb.ActivityInfo{
 				Attempt: 1,
-				Stamp:   1,
 			},
 			expectRetryActivity:          true,
 			retryState:                   enumspb.RETRY_STATE_IN_PROGRESS,
@@ -2071,30 +2067,13 @@ func (s *timerQueueActiveTaskExecutorSuite) TestProcessTimeoutTask() {
 			name: "Attempt dont match",
 			timerSequenceID: workflow.TimerSequenceID{
 				Attempt: 1,
-				Stamp:   1,
 			},
 			ai: &persistencespb.ActivityInfo{
 				Attempt: 2,
-				Stamp:   1,
 			},
 			expectRetryActivity:          false,
 			expectAddTimedTask:           false,
 			expectedUpdateMutableState:   false,
-			expectedScheduleWorkflowTask: false,
-		},
-		{
-			name: "Stamp dont match",
-			timerSequenceID: workflow.TimerSequenceID{
-				Attempt: 1,
-				Stamp:   1,
-			},
-			ai: &persistencespb.ActivityInfo{
-				Attempt: 1,
-				Stamp:   2,
-			},
-			expectRetryActivity:          false,
-			expectAddTimedTask:           false,
-			expectedUpdateMutableState:   true,
 			expectedScheduleWorkflowTask: false,
 		},
 	}
@@ -2111,13 +2090,12 @@ func (s *timerQueueActiveTaskExecutorSuite) TestProcessTimeoutTask() {
 				ms.EXPECT().AddActivityTaskTimedOutEvent(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, nil)
 			}
 
-			updateMutableState := false
-			scheduleWorkflowTask := false
-			err := s.timerQueueActiveTaskExecutor.processTimeoutTask(ms, tc.timerSequenceID, tc.ai, &updateMutableState, &scheduleWorkflowTask)
+			result, err := s.timerQueueActiveTaskExecutor.processSingleActivityTimeoutTask(
+				ms, tc.timerSequenceID, tc.ai)
 
 			s.NoError(err)
-			s.Equal(tc.expectedScheduleWorkflowTask, scheduleWorkflowTask, "scheduleWorkflowTask")
-			s.Equal(tc.expectedUpdateMutableState, updateMutableState, "updateMutableState")
+			s.Equal(tc.expectedScheduleWorkflowTask, result.shouldScheduleWorkflowTask, "scheduleWorkflowTask")
+			s.Equal(tc.expectedUpdateMutableState, result.shouldUpdateMutableState, "updateMutableState")
 		})
 	}
 }

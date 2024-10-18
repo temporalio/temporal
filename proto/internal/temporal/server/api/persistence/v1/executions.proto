@@ -464,7 +464,7 @@ message ActivityInfo {
     // fist time activity was schedulled.
     google.protobuf.Timestamp first_scheduled_time = 39;
     // stamp represent "version" of activity during its lifetime. It can be changed with Activity API
-    int32 stamp = 40;
+    int64 stamp = 40;
 }
 
 // timer_map column
