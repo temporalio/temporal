@@ -453,9 +453,6 @@ coverage-report: $(SUMMARY_COVER_PROFILE)
 	@printf $(COLOR) "Generate HTML report from $(SUMMARY_COVER_PROFILE) to $(SUMMARY_COVER_PROFILE).html..."
 	@go tool cover -html=$(SUMMARY_COVER_PROFILE) -o $(SUMMARY_COVER_PROFILE).html
 
-upload-test-results:
-	@(cd $(TEST_OUTPUT_ROOT) && sh $(ROOT)/develop/upload-test-results.sh)
-
 ##### Schema #####
 install-schema-cass-es: temporal-cassandra-tool install-schema-es
 	@printf $(COLOR) "Install Cassandra schema..."

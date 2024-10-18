@@ -264,10 +264,6 @@ jobs:
           TEST_TIMEOUT: ${{ needs.set-up-single-test.outputs.test_timeout }}
 
       - name: Upload test results
-        if: ${{ !cancelled() }}
-        run: make upload-test-results
-
-      - name: Upload test results as a GitHub Actions artifact
         uses: actions/upload-artifact@v4.4.0
         if: ${{ !cancelled() && !inputs.run_single_unit_test }}
         with:
@@ -336,10 +332,6 @@ jobs:
         run: make integration-test-coverage
 
       - name: Upload test results
-        if: ${{ !cancelled() }}
-        run: make upload-test-results
-
-      - name: Upload test results as a GitHub Actions artifact
         uses: actions/upload-artifact@v4.4.0
         if: ${{ !cancelled() }}
         with:
@@ -462,10 +454,6 @@ jobs:
           TEST_ARGS: ${{ needs.set-up-single-test.outputs.single_test_args }}
 
       - name: Upload test results
-        if: ${{ !cancelled() && (inputs.run_single_functional_test != true || (inputs.run_single_functional_test == true && contains(fromJSON(needs.set-up-single-test.outputs.dbs), env.PERSISTENCE_DRIVER))) }}
-        run: make upload-test-results
-
-      - name: Upload test results as a GitHub Actions artifact
         uses: actions/upload-artifact@v4.4.0
         if: ${{ !cancelled() && !inputs.run_single_functional_test }}
         with:
@@ -562,10 +550,6 @@ jobs:
         run: make functional-test-xdc-coverage
 
       - name: Upload test results
-        if: ${{ !cancelled() }}
-        run: make upload-test-results
-
-      - name: Upload test results as a GitHub Actions artifact
         uses: actions/upload-artifact@v4.4.0
         if: ${{ !cancelled() }}
         with:
@@ -662,7 +646,7 @@ jobs:
         timeout-minutes: 15
         run: make functional-test-ndc-coverage
 
-      - name: Upload test results as a GitHub Actions artifact
+      - name: Upload test results
         uses: actions/upload-artifact@v4.4.0
         if: ${{ !cancelled() }}
         with:
