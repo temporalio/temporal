@@ -31,6 +31,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/stretchr/testify/require"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -58,7 +59,6 @@ func New(t require.TestingT) HistoryRequire {
 }
 
 // TODO (maybe):
-//  - ContainsHistoryEvents
 //  - WaitForHistoryEvents (call getHistory until expectedHistory is reached, with interval and timeout)
 //  - Funcs like WithVersion, WithTime, WithAttributes, WithPayloadLimit(100) and pass them to PrintHistory
 //  - oneof support
@@ -83,7 +83,7 @@ func (h HistoryRequire) EqualHistoryEventsSuffix(expectedHistorySuffix string, a
 
 	expectedHistoryEvents, expectedEventsAttributes := h.parseHistory(expectedHistorySuffix)
 
-	require.GreaterOrEqualf(h.t, len(actualHistoryEvents), len(expectedHistoryEvents), "Length of actual history(%d) must be greater or equal to the length of expected history(%d)", len(actualHistoryEvents), len(expectedHistoryEvents))
+	require.GreaterOrEqualf(h.t, len(actualHistoryEvents), len(expectedHistoryEvents), "Length of actual history(%d) must be greater or equal to the length of expected history suffix(%d)", len(actualHistoryEvents), len(expectedHistoryEvents))
 
 	h.equalHistoryEvents(expectedHistoryEvents, expectedEventsAttributes, actualHistoryEvents[len(actualHistoryEvents)-len(expectedHistoryEvents):])
 }
@@ -95,9 +95,43 @@ func (h HistoryRequire) EqualHistoryEventsPrefix(expectedHistoryPrefix string, a
 
 	expectedHistoryEvents, expectedEventsAttributes := h.parseHistory(expectedHistoryPrefix)
 
-	require.GreaterOrEqualf(h.t, len(actualHistoryEvents), len(expectedHistoryEvents), "Length of actual history(%d) must be greater or equal to the length of expected history(%d)", len(actualHistoryEvents), len(expectedHistoryEvents))
+	require.GreaterOrEqualf(h.t, len(actualHistoryEvents), len(expectedHistoryEvents), "Length of actual history(%d) must be greater or equal to the length of expected history prefix(%d)", len(actualHistoryEvents), len(expectedHistoryEvents))
 
 	h.equalHistoryEvents(expectedHistoryEvents, expectedEventsAttributes, actualHistoryEvents[:len(expectedHistoryEvents)])
+}
+
+// ContainsHistoryEvents checks if expectedHistorySegment is contained in actualHistoryEvents.
+// actualHistoryEvents are sanitized based on the first event in expectedHistorySegment.
+func (h HistoryRequire) ContainsHistoryEvents(expectedHistorySegment string, actualHistoryEvents []*historypb.HistoryEvent) {
+	if th, ok := h.t.(helper); ok {
+		th.Helper()
+	}
+
+	expectedHistoryEvents, expectedEventsAttributes := h.parseHistory(expectedHistorySegment)
+
+	require.GreaterOrEqualf(h.t, len(actualHistoryEvents), len(expectedHistoryEvents), "Length of actual history(%d) must be greater or equal to the length of expected history segment(%d)", len(actualHistoryEvents), len(expectedHistoryEvents))
+
+	h.containsHistoryEvents(expectedHistoryEvents, expectedEventsAttributes, actualHistoryEvents)
+}
+
+type (
+	HistoryEventsReader func() []*historypb.HistoryEvent
+)
+
+func (h HistoryRequire) WaitForHistoryEvents(expectedHistory string, actualHistoryEventsReader HistoryEventsReader, waitFor time.Duration, tick time.Duration) {
+	if th, ok := h.t.(helper); ok {
+		th.Helper()
+	}
+
+	expectedHistoryEvents, expectedEventsAttributes := h.parseHistory(expectedHistory)
+
+	var actualHistoryEvents []*historypb.HistoryEvent
+	require.Eventuallyf(h.t, func() bool {
+		actualHistoryEvents = actualHistoryEventsReader()
+		return len(expectedHistoryEvents) == len(actualHistoryEvents)
+	}, waitFor, tick, "Length of expected(%d) and actual(%d) histories is not equal", len(expectedHistoryEvents), len(actualHistoryEvents))
+
+	h.equalHistoryEvents(expectedHistoryEvents, expectedEventsAttributes, actualHistoryEvents)
 }
 
 func (h HistoryRequire) EqualHistory(expectedHistory string, actualHistory *historypb.History) {
@@ -122,6 +156,14 @@ func (h HistoryRequire) EqualHistoryPrefix(expectedHistoryPrefix string, actualH
 	}
 
 	h.EqualHistoryEventsPrefix(expectedHistoryPrefix, actualHistory.GetEvents())
+}
+
+func (h HistoryRequire) ContainsHistory(expectedHistorySegment string, actualHistory *historypb.History) {
+	if th, ok := h.t.(helper); ok {
+		th.Helper()
+	}
+
+	h.ContainsHistoryEvents(expectedHistorySegment, actualHistory.GetEvents())
 }
 
 func (h HistoryRequire) PrintHistory(history *historypb.History) {
@@ -149,31 +191,116 @@ func (h HistoryRequire) equalHistoryEvents(
 		th.Helper()
 	}
 
+	actualHistoryEvents = h.sanitizeActualHistoryEventsForEquals(expectedHistoryEvents, actualHistoryEvents)
+
+	expectedCompactHistory := h.formatHistoryEvents(expectedHistoryEvents, true)
+	actualCompactHistory := h.formatHistoryEvents(actualHistoryEvents, true)
+
+	require.Equal(h.t, expectedCompactHistory, actualCompactHistory)
+	h.equalHistoryEventsAttributes(expectedEventsAttributes, actualHistoryEvents)
+}
+
+func (h HistoryRequire) containsHistoryEvents(
+	expectedHistoryEvents []*historypb.HistoryEvent,
+	expectedEventsAttributes []map[string]any,
+	actualHistoryEvents []*historypb.HistoryEvent,
+) {
+	if th, ok := h.t.(helper); ok {
+		th.Helper()
+	}
+
+	actualHistoryEvents = h.sanitizeActualHistoryEventsForContains(expectedHistoryEvents, actualHistoryEvents)
+
+	expectedCompactHistory := h.formatHistoryEvents(expectedHistoryEvents, true)
+	actualCompactHistory := h.formatHistoryEvents(actualHistoryEvents, true)
+
+	startPos := strings.Index(actualCompactHistory, expectedCompactHistory)
+	require.True(h.t, startPos >= 0, "Expected history is not found in actual history. Expected:\n%s\nActual:\n%s", expectedCompactHistory, actualCompactHistory)
+	actualHistoryEventsFirstIndex := strings.Count(actualCompactHistory[:startPos], "\n")
+
+	h.equalHistoryEventsAttributes(expectedEventsAttributes, actualHistoryEvents[actualHistoryEventsFirstIndex:])
+}
+
+// sanitizeActualHistoryEventsForEquals clears EventID and Version fields from actual history events
+// if they are not set in the CORRESPONDING expected history event.
+// The length of expectedHistoryEvents and actualHistoryEvents must be equal.
+func (h HistoryRequire) sanitizeActualHistoryEventsForEquals(
+	expectedHistoryEvents []*historypb.HistoryEvent,
+	actualHistoryEvents []*historypb.HistoryEvent,
+) []*historypb.HistoryEvent {
+
+	if len(expectedHistoryEvents) != len(actualHistoryEvents) {
+		panic("len(expectedHistoryEvents) != len(actualHistoryEvents)")
+	}
+
 	var sanitizedActualHistoryEvents []*historypb.HistoryEvent
 	for i, actualHistoryEvent := range actualHistoryEvents {
-		if expectedHistoryEvents[i].GetEventId() != 0 && expectedHistoryEvents[i].GetVersion() != 0 {
+		sanitizeEventID := expectedHistoryEvents[i].GetEventId() == 0
+		sanitizeVersion := expectedHistoryEvents[i].GetVersion() == 0
+
+		if !sanitizeEventID && !sanitizeVersion {
 			sanitizedActualHistoryEvents = append(sanitizedActualHistoryEvents, actualHistoryEvent)
 			continue
 		}
 
 		sanitizedActualHistoryEvent := proto.Clone(actualHistoryEvent).(*historypb.HistoryEvent)
-		if expectedHistoryEvents[i].GetEventId() == 0 {
+		if sanitizeEventID {
 			sanitizedActualHistoryEvent.EventId = 0
 		}
-		if expectedHistoryEvents[i].GetVersion() == 0 {
+		if sanitizeVersion {
 			sanitizedActualHistoryEvent.Version = 0
 		}
 		sanitizedActualHistoryEvents = append(sanitizedActualHistoryEvents, sanitizedActualHistoryEvent)
 	}
+	return sanitizedActualHistoryEvents
+}
 
-	expectedCompactHistory := h.formatHistoryEvents(expectedHistoryEvents, true)
-	actualCompactHistory := h.formatHistoryEvents(sanitizedActualHistoryEvents, true)
-	require.Equal(h.t, expectedCompactHistory, actualCompactHistory)
-	for i, actualHistoryEvent := range sanitizedActualHistoryEvents {
-		if expectedEventAttributes := expectedEventsAttributes[i]; expectedEventAttributes != nil {
-			actualEventAttributes := reflect.ValueOf(actualHistoryEvent.Attributes).Elem().Field(0).Elem()
-			h.equalExpectedMapToActualAttributes(expectedEventAttributes, actualEventAttributes, actualHistoryEvent.EventId, "")
+// sanitizeActualHistoryEventsForContains clears EventID and Version fields from actual history events
+// if they are not set in the FIRST expected history event.
+func (h HistoryRequire) sanitizeActualHistoryEventsForContains(
+	expectedHistoryEvents []*historypb.HistoryEvent,
+	actualHistoryEvents []*historypb.HistoryEvent,
+) []*historypb.HistoryEvent {
+	if len(expectedHistoryEvents) == 0 {
+		return actualHistoryEvents
+	}
+
+	sanitizeEventID := expectedHistoryEvents[0].GetEventId() == 0
+	sanitizeVersion := expectedHistoryEvents[0].GetVersion() == 0
+
+	if !sanitizeEventID && !sanitizeVersion {
+		return actualHistoryEvents
+	}
+
+	var sanitizedActualHistoryEvents []*historypb.HistoryEvent
+	for _, actualHistoryEvent := range actualHistoryEvents {
+		sanitizedActualHistoryEvent := proto.Clone(actualHistoryEvent).(*historypb.HistoryEvent)
+		if sanitizeEventID {
+			sanitizedActualHistoryEvent.EventId = 0
 		}
+		if sanitizeVersion {
+			sanitizedActualHistoryEvent.Version = 0
+		}
+		sanitizedActualHistoryEvents = append(sanitizedActualHistoryEvents, sanitizedActualHistoryEvent)
+	}
+	return sanitizedActualHistoryEvents
+}
+
+func (h HistoryRequire) equalHistoryEventsAttributes(
+	expectedEventsAttributes []map[string]any,
+	actualHistoryEvents []*historypb.HistoryEvent,
+) {
+	if th, ok := h.t.(helper); ok {
+		th.Helper()
+	}
+
+	for i, expectedEventAttributes := range expectedEventsAttributes {
+		if expectedEventAttributes == nil {
+			continue
+		}
+		actualHistoryEvent := actualHistoryEvents[i]
+		actualEventAttributes := reflect.ValueOf(actualHistoryEvent.Attributes).Elem().Field(0).Elem()
+		h.equalExpectedMapToActualAttributes(expectedEventAttributes, actualEventAttributes, actualHistoryEvent.EventId, "")
 	}
 }
 

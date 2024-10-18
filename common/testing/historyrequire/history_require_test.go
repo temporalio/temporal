@@ -192,3 +192,70 @@ func TestParsePartialHistoryEvents(t *testing.T) {
  12 WorkflowTaskStarted
  13 WorkflowTaskCompleted`, historyEvents)
 }
+
+func TestContainsHistoryEventsWithoutEventID(t *testing.T) {
+	hr := New(t)
+	historyEvents, _ := sampleCompactHistory(t)
+
+	historyEvents[3].Attributes = &historypb.HistoryEvent_WorkflowTaskFailedEventAttributes{
+		WorkflowTaskFailedEventAttributes: &historypb.WorkflowTaskFailedEventAttributes{
+			Identity: "Was wollen wir trinken",
+		},
+	}
+
+	hr.ContainsHistoryEvents(`
+WorkflowTaskFailed {"Identity": "Was wollen wir trinken"}
+WorkflowTaskScheduled
+WorkflowTaskStarted
+`, historyEvents)
+}
+
+func TestContainsHistoryEventsWithEventID(t *testing.T) {
+	hr := New(t)
+	historyEvents, _ := sampleCompactHistory(t)
+
+	historyEvents[4].Attributes = &historypb.HistoryEvent_WorkflowTaskScheduledEventAttributes{
+		WorkflowTaskScheduledEventAttributes: &historypb.WorkflowTaskScheduledEventAttributes{
+			Attempt: 2208,
+		},
+	}
+
+	hr.ContainsHistoryEvents(`
+4 WorkflowTaskFailed
+5 WorkflowTaskScheduled {"Attempt": 2208}
+6 WorkflowTaskStarted
+`, historyEvents)
+}
+
+func TestEmptyHistoryEvents(t *testing.T) {
+	hr := New(t)
+	emptyHistoryEvents := make([]*historypb.HistoryEvent, 0)
+
+	hr.EqualHistoryEvents(``, emptyHistoryEvents)
+	hr.EqualHistoryEvents(``, nil)
+	hr.EqualHistoryEvents(`
+`, emptyHistoryEvents)
+	hr.EqualHistoryEvents(`
+`, nil)
+
+	hr.EqualHistoryEventsPrefix(``, emptyHistoryEvents)
+	hr.EqualHistoryEventsPrefix(``, nil)
+	hr.EqualHistoryEventsPrefix(`
+`, emptyHistoryEvents)
+	hr.EqualHistoryEventsPrefix(`
+`, nil)
+
+	hr.EqualHistoryEventsSuffix(``, emptyHistoryEvents)
+	hr.EqualHistoryEventsSuffix(``, nil)
+	hr.EqualHistoryEventsSuffix(`
+`, emptyHistoryEvents)
+	hr.EqualHistoryEventsSuffix(`
+`, nil)
+
+	hr.ContainsHistoryEvents(``, emptyHistoryEvents)
+	hr.ContainsHistoryEvents(``, nil)
+	hr.ContainsHistoryEvents(`
+`, emptyHistoryEvents)
+	hr.ContainsHistoryEvents(`
+`, nil)
+}
