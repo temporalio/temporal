@@ -152,7 +152,16 @@ func CopyVersionedTransitions(
 	}
 	copied := make([]*persistencespb.VersionedTransition, len(transitions))
 	for i, t := range transitions {
-		copied[i] = common.CloneProto(t)
+		copied[i] = CopyVersionedTransition(t)
 	}
 	return copied
+}
+
+func CopyVersionedTransition(
+	transition *persistencespb.VersionedTransition,
+) *persistencespb.VersionedTransition {
+	if transition == nil {
+		return nil
+	}
+	return common.CloneProto(transition)
 }
