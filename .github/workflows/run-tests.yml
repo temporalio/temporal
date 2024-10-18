@@ -284,7 +284,7 @@ jobs:
         uses: actions/upload-artifact@v4.4.0
         if: ${{ !cancelled() }}
         with:
-          name: junit-xml--${{github.run_id}}--${{github.run_attempt}}--${{matrix.runs-on}}--unit-test
+          name: junit-xml--${{github.run_id}}--${{github.run_attempt}}--unit-test
           path: .testoutput
           retention-days: 14
           include-hidden-files: true
@@ -355,7 +355,7 @@ jobs:
         uses: actions/upload-artifact@v4.4.0
         if: always()
         with:
-          name: junit-xml--${{github.run_id}}--${{github.run_attempt}}--${{matrix.runs-on}}--integration-test
+          name: junit-xml--${{github.run_id}}--${{github.run_attempt}}--integration-test
           path: .testoutput
           retention-days: 14
           include-hidden-files: true
@@ -567,7 +567,7 @@ jobs:
         uses: actions/upload-artifact@v4.4.0
         if: ${{ !cancelled() }}
         with:
-          name: junit-xml--${{github.run_id}}--${{github.run_attempt}}--${{matrix.runs-on}}--${{matrix.name}}--functional-test-xdc
+          name: junit-xml--${{github.run_id}}--${{github.run_attempt}}--${{matrix.name}}--functional-test-xdc
           path: .testoutput
           retention-days: 14
           include-hidden-files: true
@@ -659,7 +659,7 @@ jobs:
         uses: actions/upload-artifact@v4.4.0
         if: ${{ !cancelled() }}
         with:
-          name: junit-xml--${{github.run_id}}--${{github.run_attempt}}--${{matrix.runs-on}}--${{matrix.name}}--functional-test-ndc
+          name: junit-xml--${{github.run_id}}--${{github.run_attempt}}--${{matrix.name}}--functional-test-ndc
           path: .testoutput
           retention-days: 14
           include-hidden-files: true
