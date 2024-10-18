@@ -157,7 +157,6 @@ func (e taskExecutor) executeInvocationTask(ctx context.Context, env hsm.Environ
 		return err
 	}
 
-	header := nexus.Header(args.header)
 	if e.Config.CallbackURLTemplate() == "unset" {
 		return serviceerror.NewInternal(fmt.Sprintf("dynamic config %q is unset", CallbackURLTemplate.Key().String()))
 	}
@@ -203,9 +202,13 @@ func (e taskExecutor) executeInvocationTask(ctx context.Context, env hsm.Environ
 	// (ScheduleToClose set, Operation-Timeout set) -> no changes, use ScheduleToClose
 	// (ScheduleToClose set, Operation-Timeout unset) -> set Operation-Timeout to ScheduleToClose, use ScheduleToClose
 	// (ScheduleToClose unset, Operation-Timeout set) -> no changes, use Operation-Timeout
+	header := nexus.Header(args.header)
 	opTimeout := args.scheduleToCloseTimeout
 	opTimeoutHeader, set := header["Operation-Timeout"]
 	if !set && args.scheduleToCloseTimeout > 0 {
+		if header == nil {
+			header = make(nexus.Header, 1)
+		}
 		header["Operation-Timeout"] = args.scheduleToCloseTimeout.String()
 	} else if set && args.scheduleToCloseTimeout == 0 {
 		parsedTimeout, parseErr := time.ParseDuration(opTimeoutHeader)
