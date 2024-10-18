@@ -26,11 +26,12 @@ package matching
 
 import (
 	"context"
-	"github.com/stretchr/testify/assert"
 	"math/rand"
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/assert"
 
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/suite"
