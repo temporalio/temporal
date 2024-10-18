@@ -371,6 +371,10 @@ func (h *nexusHandler) StartOperation(
 			oc.metricsHandler = oc.metricsHandler.WithTags(metrics.OutcomeTag("handler_timeout"))
 			return nil, nexus.HandlerErrorf(nexus.HandlerErrorTypeDownstreamTimeout, "downstream timeout")
 		}
+		if common.IsContextCanceledErr(err) {
+			oc.metricsHandler = oc.metricsHandler.WithTags(metrics.OutcomeTag("handler_error"))
+			return nil, nexus.HandlerErrorf(nexus.HandlerErrorTypeInternal, "context canceled")
+		}
 		return nil, commonnexus.ConvertGRPCError(err, false)
 	}
 	// Convert to standard Nexus SDK response.
@@ -491,6 +495,10 @@ func (h *nexusHandler) CancelOperation(ctx context.Context, service, operation, 
 		if common.IsContextDeadlineExceededErr(err) {
 			oc.metricsHandler = oc.metricsHandler.WithTags(metrics.OutcomeTag("handler_timeout"))
 			return nexus.HandlerErrorf(nexus.HandlerErrorTypeDownstreamTimeout, "downstream timeout")
+		}
+		if common.IsContextCanceledErr(err) {
+			oc.metricsHandler = oc.metricsHandler.WithTags(metrics.OutcomeTag("handler_error"))
+			return nexus.HandlerErrorf(nexus.HandlerErrorTypeInternal, "canceled")
 		}
 		return commonnexus.ConvertGRPCError(err, false)
 	}

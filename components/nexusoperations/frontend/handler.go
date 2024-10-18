@@ -42,6 +42,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/api/historyservice/v1"
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/authorization"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -212,6 +213,12 @@ func (h *completionHandler) CompleteOperation(ctx context.Context, r *nexus.Comp
 		}
 		if st, ok := status.FromError(err); ok && st.Code() == codes.NotFound {
 			return nexus.HandlerErrorf(nexus.HandlerErrorTypeNotFound, "operation not found")
+		}
+		if common.IsContextDeadlineExceededErr(err) {
+			return nexus.HandlerErrorf(nexus.HandlerErrorTypeDownstreamTimeout, "downstream timeout")
+		}
+		if common.IsContextCanceledErr(err) {
+			return nexus.HandlerErrorf(nexus.HandlerErrorTypeInternal, "canceled")
 		}
 		return commonnexus.ConvertGRPCError(err, false)
 	}
