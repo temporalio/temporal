@@ -287,6 +287,57 @@ func (s *NexusApiTestSuite) TestNexusStartOperation_Outcomes() {
 	}
 }
 
+func (s *NexusApiTestSuite) TestNexusStartOperation_ContextCanceled() {
+	testEndpoint := s.createNexusEndpoint(testcore.RandomizeStr("test-service"), testcore.RandomizeStr("task-queue"))
+
+	testFn := func(t *testing.T, dispatchURL string) {
+		handlerStarted := make(chan struct{})
+		ctxCanceled := make(chan struct{})
+
+		handler := func(res *workflowservice.PollNexusTaskQueueResponse) (*nexuspb.Response, *nexuspb.HandlerError) {
+			close(handlerStarted)
+			<-ctxCanceled
+			return nil, nil
+		}
+
+		ctx, cancel := context.WithCancel(testcore.NewContext())
+		go func() {
+			<-handlerStarted
+			cancel()
+			close(ctxCanceled)
+		}()
+
+		client, err := nexus.NewClient(nexus.ClientOptions{BaseURL: dispatchURL, Service: "test-service"})
+		require.NoError(t, err)
+
+		go s.nexusTaskPoller(ctx, testEndpoint.Spec.Target.GetWorker().TaskQueue, handler)
+
+		// Wait until the endpoint is loaded into the registry.
+		s.Eventually(func() bool {
+			_, err = nexus.StartOperation(ctx, client, op, "input", nexus.StartOperationOptions{
+				CallbackURL: "http://localhost/callback",
+				RequestID:   "request-id",
+			})
+			var unexpectedResponseErr *nexus.UnexpectedResponseError
+			return err == nil || !(errors.As(err, &unexpectedResponseErr) && unexpectedResponseErr.Response.StatusCode == http.StatusNotFound)
+		}, 10*time.Second, 500*time.Millisecond)
+
+		var unexpectedError *nexus.UnexpectedResponseError
+		require.ErrorAs(t, err, &unexpectedError)
+		require.Equal(t, http.StatusInternalServerError, unexpectedError.Response.StatusCode)
+		require.Equal(t, "canceled", unexpectedError.Failure.Message)
+	}
+
+	s.T().Run("context canceled", func(t *testing.T) {
+		t.Run("ByNamespaceAndTaskQueue", func(t *testing.T) {
+			testFn(t, getDispatchByNsAndTqURL(s.HttpAPIAddress(), s.Namespace(), testEndpoint.Spec.Target.GetWorker().TaskQueue))
+		})
+		t.Run("ByEndpoint", func(t *testing.T) {
+			testFn(t, getDispatchByEndpointURL(s.HttpAPIAddress(), testEndpoint.Id))
+		})
+	})
+}
+
 func (s *NexusApiTestSuite) TestNexusStartOperation_WithNamespaceAndTaskQueue_NamespaceNotFound() {
 	// Also use this test to verify that namespaces are unescaped in the path.
 	taskQueue := testcore.RandomizeStr("task-queue")
