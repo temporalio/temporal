@@ -25,7 +25,6 @@ package xdc
 import (
 	"context"
 	"encoding/json"
-	"flag"
 	"fmt"
 	"io"
 	"net/http"
@@ -66,7 +65,7 @@ type NexusRequestForwardingSuite struct {
 }
 
 func TestNexusRequestForwardingTestSuite(t *testing.T) {
-	flag.Parse()
+	t.Parallel()
 	suite.Run(t, new(NexusRequestForwardingSuite))
 }
 

@@ -476,7 +476,7 @@ func TestTaskGenerator_GenerateDirtySubStateMachineTasks(t *testing.T) {
 		},
 	}, timers[0])
 
-	// Reset and test a concurrent task (nexusoperations.TimeoutTask)
+	// Reset and test another timer task (nexusoperations.TimeoutTask)
 	node.ClearTransactionState()
 	genTasks = nil
 	opNode, err := nexusoperations.AddChild(node, "ID", &historypb.HistoryEvent{
@@ -520,8 +520,11 @@ func TestTaskGenerator_GenerateDirtySubStateMachineTasks(t *testing.T) {
 				NamespaceFailoverVersion: 3,
 				TransitionCount:          3,
 			},
-			MachineLastUpdateVersionedTransition: nil,
-			MachineTransitionCount:               0, // concurrent tasks don't store the machine transition count.
+			MachineLastUpdateVersionedTransition: &persistencespb.VersionedTransition{
+				NamespaceFailoverVersion: 3,
+				TransitionCount:          3,
+			},
+			MachineTransitionCount: 1,
 		},
 		Type: nexusoperations.TaskTypeTimeout,
 		Data: nil,

@@ -26,7 +26,6 @@ package tests
 
 import (
 	"context"
-	"flag"
 	"testing"
 
 	"net/http"
@@ -49,7 +48,7 @@ type TLSFunctionalSuite struct {
 }
 
 func TestTLSFunctionalSuite(t *testing.T) {
-	flag.Parse()
+	t.Parallel()
 	suite.Run(t, new(TLSFunctionalSuite))
 }
 
@@ -66,7 +65,7 @@ func (s *TLSFunctionalSuite) SetupTest() {
 
 	var err error
 	s.sdkClient, err = sdkclient.Dial(sdkclient.Options{
-		HostPort:  s.HostPort(),
+		HostPort:  s.FrontendGRPCAddress(),
 		Namespace: s.Namespace(),
 		ConnectionOptions: sdkclient.ConnectionOptions{
 			TLS: s.GetTestCluster().Host().TlsConfigProvider().FrontendClientConfig,

@@ -66,6 +66,7 @@ type CallbacksSuite struct {
 }
 
 func TestCallbacksSuite(t *testing.T) {
+	t.Parallel()
 	suite.Run(t, new(CallbacksSuite))
 }
 
@@ -245,7 +246,7 @@ func (s *CallbacksSuite) TestWorkflowNexusCallbacks_CarriedOver() {
 		s.T().Run(tc.name, func(t *testing.T) {
 			ctx := testcore.NewContext()
 			sdkClient, err := client.Dial(client.Options{
-				HostPort:  s.GetTestCluster().Host().FrontendGRPCAddress(),
+				HostPort:  s.FrontendGRPCAddress(),
 				Namespace: s.Namespace(),
 			})
 			s.NoError(err)
