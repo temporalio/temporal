@@ -24,26 +24,59 @@ package updateactivityoptions
 
 import (
 	"context"
-	"strings"
-	"time"
-
-	"go.temporal.io/api/serviceerror"
-	persistencespb "go.temporal.io/server/api/persistence/v1"
-	"go.temporal.io/server/common/util"
-	"google.golang.org/protobuf/types/known/fieldmaskpb"
 
 	activitypb "go.temporal.io/api/activity/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/server/api/historyservice/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/workflow"
+	"google.golang.org/protobuf/types/known/fieldmaskpb"
 )
+
+func Invoke(
+	ctx context.Context,
+	request *historyservice.UpdateActivityOptionsRequest,
+	shardContext shard.Context,
+	workflowConsistencyChecker api.WorkflowConsistencyChecker,
+) (resp *historyservice.UpdateActivityOptionsResponse, retError error) {
+	_, err := api.GetActiveNamespace(shardContext, namespace.ID(request.GetNamespaceId()))
+	if err != nil {
+		return nil, err
+	}
+
+	response := &historyservice.UpdateActivityOptionsResponse{}
+	err = api.GetAndUpdateWorkflowWithNew(
+		ctx,
+		nil,
+		definition.NewWorkflowKey(
+			request.NamespaceId,
+			request.GetUpdateRequest().WorkflowId,
+			request.GetUpdateRequest().RunId,
+		),
+		func(workflowLease api.WorkflowLease) (*api.UpdateWorkflowAction, error) {
+			mutableState := workflowLease.GetMutableState()
+			return updateActivityOptions(shardContext, mutableState, request, response)
+		},
+		nil,
+		shardContext,
+		workflowConsistencyChecker,
+	)
+
+	if err != nil {
+		return nil, err
+	}
+
+	return response, err
+}
 
 func updateActivityOptions(
 	shardContext shard.Context,
@@ -73,7 +106,7 @@ func updateActivityOptions(
 	}
 
 	// move forward activity version
-	ai.Stamp += 1
+	ai.Stamp++
 
 	// invalidate timers
 	ai.TimerTaskStatus = workflow.TimerTaskStatusNone
@@ -81,7 +114,7 @@ func updateActivityOptions(
 	// regenerate retry tasks
 	if workflow.GetActivityState(ai) == enumspb.PENDING_ACTIVITY_STATE_SCHEDULED {
 		// two options - it can be in backoff, or waiting to be started
-		now := shardContext.GetTimeSource().Now().In(time.UTC)
+		now := shardContext.GetTimeSource().Now()
 		if now.After(ai.ScheduledTime.AsTime()) {
 			// activity is past its scheduled time and ready to be started
 			// we don't really need to do generate timer tasks, it should be done in closeTransaction
@@ -117,58 +150,12 @@ func updateActivityOptions(
 	}, nil
 }
 
-func Invoke(
-	ctx context.Context,
-	request *historyservice.UpdateActivityOptionsRequest,
-	shardContext shard.Context,
-	workflowConsistencyChecker api.WorkflowConsistencyChecker,
-) (resp *historyservice.UpdateActivityOptionsResponse, retError error) {
-	_, err := api.GetActiveNamespace(shardContext, namespace.ID(request.GetNamespaceId()))
-	if err != nil {
-		return nil, err
-	}
-
-	response := &historyservice.UpdateActivityOptionsResponse{}
-	err = api.GetAndUpdateWorkflowWithNew(
-		ctx,
-		nil,
-		definition.NewWorkflowKey(
-			request.NamespaceId,
-			request.GetUpdateRequest().WorkflowId,
-			request.GetUpdateRequest().RunId,
-		),
-		func(workflowLease api.WorkflowLease) (*api.UpdateWorkflowAction, error) {
-			mutableState := workflowLease.GetMutableState()
-			if !mutableState.IsWorkflowExecutionRunning() {
-				return nil, consts.ErrWorkflowCompleted
-			}
-
-			return updateActivityOptions(shardContext, mutableState, request, response)
-		},
-		nil,
-		shardContext,
-		workflowConsistencyChecker,
-	)
-
-	if err != nil {
-		return nil, err
-	}
-
-	return response, err
-}
-
 func applyActivityOptions(ai *persistencespb.ActivityInfo, ao *activitypb.ActivityOptions, mask *fieldmaskpb.FieldMask) error {
 	if mask == nil {
 		return serviceerror.NewInvalidArgument("UpdateMask is nil")
 	}
 
-	updateFields := make(map[string]struct{})
-
-	for _, path := range mask.Paths {
-		pathParts := util.ConvertPathToCamel(path)
-		jsonPath := strings.Join(pathParts, ".")
-		updateFields[jsonPath] = struct{}{}
-	}
+	updateFields := util.ParseFieldMask(mask)
 
 	if _, ok := updateFields["taskQueue.name"]; ok {
 		if ao.TaskQueue == nil {

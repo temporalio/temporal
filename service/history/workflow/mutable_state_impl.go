@@ -4897,7 +4897,7 @@ func (ms *MutableStateImpl) RetryActivity(
 	if prev, ok := ms.pendingActivityInfoIDs[ai.ScheduledEventId]; ok {
 		originalSize = prev.Size()
 	}
-	ai = UpdateActivityInfoForRetries(
+	ai = updateActivityInfoForRetries(
 		ai,
 		ms.GetCurrentVersion(),
 		nextAttempt,
@@ -4912,10 +4912,6 @@ func (ms *MutableStateImpl) RetryActivity(
 		return enumspb.RETRY_STATE_INTERNAL_SERVER_ERROR, err
 	}
 	return enumspb.RETRY_STATE_IN_PROGRESS, nil
-}
-
-func (ms *MutableStateImpl) GenerateActivityRetryTask(ai *persistencespb.ActivityInfo) error {
-	return ms.taskGenerator.GenerateActivityRetryTasks(ai)
 }
 
 func (ms *MutableStateImpl) truncateRetryableActivityFailure(

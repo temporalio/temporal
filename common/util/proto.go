@@ -27,6 +27,7 @@ import (
 
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
+	"google.golang.org/protobuf/types/known/fieldmaskpb"
 )
 
 func ConvertPathToCamel(input string) []string {
@@ -48,4 +49,16 @@ func ConvertPathToCamel(input string) []string {
 	}
 	// Join all CamelCase substrings back with "."
 	return pathParts
+}
+
+func ParseFieldMask(mask *fieldmaskpb.FieldMask) map[string]struct{} {
+	updateFields := make(map[string]struct{})
+
+	for _, path := range mask.Paths {
+		pathParts := ConvertPathToCamel(path)
+		jsonPath := strings.Join(pathParts, ".")
+		updateFields[jsonPath] = struct{}{}
+	}
+
+	return updateFields
 }

@@ -31,7 +31,6 @@ import (
 	failurepb "go.temporal.io/api/failure/v1"
 	"go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
-	"go.temporal.io/server/common/backoff"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -69,7 +68,7 @@ func nextRetryDelayFrom(failure *failurepb.Failure) *time.Duration {
 	return delay
 }
 
-func UpdateActivityInfoForRetries(
+func updateActivityInfoForRetries(
 	ai *persistence.ActivityInfo,
 	version int64,
 	attempt int32,
@@ -87,44 +86,4 @@ func UpdateActivityInfoForRetries(
 	ai.RetryLastFailure = failure
 
 	return ai
-}
-
-func NextBackoffInterval(
-	ai *persistence.ActivityInfo,
-	now time.Time,
-	retryMaxInterval time.Duration,
-	intervalCalculator BackoffCalculatorAlgorithmFunc,
-) (time.Duration, enumspb.RetryState) {
-
-	if ai.Attempt < 1 {
-		ai.Attempt = 1
-	}
-
-	expirationTime := ai.RetryExpirationTime
-	if expirationTime != nil && expirationTime.AsTime().IsZero() {
-		expirationTime = nil
-	}
-
-	if ai.RetryMaximumAttempts > 0 && ai.Attempt >= ai.RetryMaximumAttempts {
-		return backoff.NoBackoff, enumspb.RETRY_STATE_MAXIMUM_ATTEMPTS_REACHED
-	}
-
-	interval := intervalCalculator(ai.RetryInitialInterval, ai.RetryBackoffCoefficient, ai.Attempt)
-
-	if retryMaxInterval == 0 {
-		retryMaxInterval = ai.RetryMaximumInterval.AsDuration()
-	}
-
-	if retryMaxInterval == 0 && interval <= 0 {
-		return backoff.NoBackoff, enumspb.RETRY_STATE_TIMEOUT
-	}
-
-	if retryMaxInterval != 0 && (interval <= 0 || interval > retryMaxInterval) {
-		interval = retryMaxInterval
-	}
-
-	if expirationTime != nil && now.Add(interval).After(expirationTime.AsTime()) {
-		return backoff.NoBackoff, enumspb.RETRY_STATE_TIMEOUT
-	}
-	return interval, enumspb.RETRY_STATE_IN_PROGRESS
 }
