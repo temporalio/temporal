@@ -29,13 +29,17 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 	commandpb "go.temporal.io/api/command/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
 	commonnexus "go.temporal.io/server/common/nexus"
+	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/components/nexusoperations"
 	"go.temporal.io/server/service/history/hsm"
 	"go.temporal.io/server/service/history/workflow"
@@ -45,6 +49,7 @@ import (
 type commandHandler struct {
 	config           *nexusoperations.Config
 	endpointRegistry commonnexus.EndpointRegistry
+	logger           log.Logger
 }
 
 func (ch *commandHandler) HandleScheduleCommand(
@@ -110,6 +115,14 @@ func (ch *commandHandler) HandleScheduleCommand(
 		}
 	}
 
+	if err := timestamp.ValidateProtoDuration(attrs.ScheduleToCloseTimeout); err != nil {
+		return workflow.FailWorkflowTaskError{
+			Cause: enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SCHEDULE_NEXUS_OPERATION_ATTRIBUTES,
+			Message: fmt.Sprintf(
+				"ScheduleNexusOperationCommandAttributes.ScheduleToCloseTimeout is invalid: %v", err),
+		}
+	}
+
 	if !validator.IsValidPayloadSize(attrs.Input.Size()) {
 		return workflow.FailWorkflowTaskError{
 			Cause:             enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SCHEDULE_NEXUS_OPERATION_ATTRIBUTES,
@@ -149,6 +162,17 @@ func (ch *commandHandler) HandleScheduleCommand(
 	// Trim timeout to workflow run timeout.
 	runTimeout := ms.GetExecutionInfo().WorkflowRunTimeout.AsDuration()
 	opTimeout := attrs.ScheduleToCloseTimeout.AsDuration()
+	if opTimeout == 0 {
+		if headerOpTimeout, ok := attrs.GetNexusHeader()["Operation-Timeout"]; ok {
+			parsedHeaderOpTimeout, err := time.ParseDuration(headerOpTimeout)
+			if err != nil {
+				// Operation timeout is not required, so do not fail the command on parsing errors.
+				ch.logger.Warn(fmt.Sprintf("unable to parse Operation-Timeout header: %v", headerOpTimeout), tag.Error(err))
+			} else {
+				opTimeout = parsedHeaderOpTimeout
+			}
+		}
+	}
 	if runTimeout > 0 && (opTimeout == 0 || opTimeout > runTimeout) {
 		attrs.ScheduleToCloseTimeout = ms.GetExecutionInfo().WorkflowRunTimeout
 		opTimeout = attrs.ScheduleToCloseTimeout.AsDuration()
@@ -253,8 +277,12 @@ func (ch *commandHandler) HandleCancelCommand(
 	return err
 }
 
-func RegisterCommandHandlers(reg *workflow.CommandHandlerRegistry, endpointRegistry commonnexus.EndpointRegistry, config *nexusoperations.Config) error {
-	h := commandHandler{config: config, endpointRegistry: endpointRegistry}
+func RegisterCommandHandlers(reg *workflow.CommandHandlerRegistry, endpointRegistry commonnexus.EndpointRegistry, config *nexusoperations.Config, logger log.Logger) error {
+	h := commandHandler{
+		config:           config,
+		endpointRegistry: endpointRegistry,
+		logger:           logger,
+	}
 	if err := reg.Register(enumspb.COMMAND_TYPE_SCHEDULE_NEXUS_OPERATION, h.HandleScheduleCommand); err != nil {
 		return err
 	}

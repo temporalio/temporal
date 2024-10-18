@@ -423,6 +423,22 @@ func (c *physicalTaskQueueManagerImpl) DispatchNexusTask(
 	request *matchingservice.DispatchNexusTaskRequest,
 ) (*matchingservice.DispatchNexusTaskResponse, error) {
 	deadline, _ := ctx.Deadline() // If not set by user, our client will set a default.
+
+	// Set task deadline to the minimum of the context deadline and time.Now() + the Operation-Timeout header.
+	opTimeoutHeader, ok := request.GetRequest().GetHeader()["Operation-Timeout"]
+	if ok {
+		opTimeout, err := time.ParseDuration(opTimeoutHeader)
+		if err != nil {
+			// Operation-Timeout is not required, so do not fail request on parsing errors.
+			c.logger.Warn(fmt.Sprintf("unable to parse Nexus Operation-Timeout header: %v", opTimeoutHeader), tag.Error(err))
+		} else {
+			opDeadline := time.Now().Add(opTimeout)
+			if opDeadline.Before(deadline) {
+				deadline = opDeadline
+			}
+		}
+	}
+
 	task := newInternalNexusTask(taskId, deadline, request)
 	if !task.isForwarded() {
 		c.tasksAddedInIntervals.incrementTaskCount()
