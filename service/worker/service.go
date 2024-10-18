@@ -102,8 +102,8 @@ type (
 		BatcherRPS                           dynamicconfig.IntPropertyFnWithNamespaceFilter
 		BatcherConcurrency                   dynamicconfig.IntPropertyFnWithNamespaceFilter
 		EnableParentClosePolicyWorker        dynamicconfig.BoolPropertyFn
-		PerNamespaceWorkerCount              dynamicconfig.IntPropertyFnWithNamespaceFilter
-		PerNamespaceWorkerOptions            dynamicconfig.TypedPropertyFnWithNamespaceFilter[sdkworker.Options]
+		PerNamespaceWorkerCount              dynamicconfig.TypedSubscribableWithNamespaceFilter[int]
+		PerNamespaceWorkerOptions            dynamicconfig.TypedSubscribableWithNamespaceFilter[sdkworker.Options]
 		PerNamespaceWorkerStartRate          dynamicconfig.FloatPropertyFn
 
 		VisibilityPersistenceMaxReadQPS   dynamicconfig.IntPropertyFn
@@ -213,8 +213,8 @@ func NewConfig(
 		BatcherRPS:                           dynamicconfig.BatcherRPS.Get(dc),
 		BatcherConcurrency:                   dynamicconfig.BatcherConcurrency.Get(dc),
 		EnableParentClosePolicyWorker:        dynamicconfig.EnableParentClosePolicyWorker.Get(dc),
-		PerNamespaceWorkerCount:              dynamicconfig.WorkerPerNamespaceWorkerCount.Get(dc),
-		PerNamespaceWorkerOptions:            dynamicconfig.WorkerPerNamespaceWorkerOptions.Get(dc),
+		PerNamespaceWorkerCount:              dynamicconfig.WorkerPerNamespaceWorkerCount.Subscribe(dc),
+		PerNamespaceWorkerOptions:            dynamicconfig.WorkerPerNamespaceWorkerOptions.Subscribe(dc),
 		PerNamespaceWorkerStartRate:          dynamicconfig.WorkerPerNamespaceWorkerStartRate.Get(dc),
 		ThrottledLogRPS:                      dynamicconfig.WorkerThrottledLogRPS.Get(dc),
 		PersistenceMaxQPS:                    dynamicconfig.WorkerPersistenceMaxQPS.Get(dc),
@@ -393,9 +393,4 @@ func (s *Service) ensureSystemNamespaceExists(
 			tag.Error(err),
 		)
 	}
-}
-
-// This is intended for use by integration tests only.
-func (s *Service) RefreshPerNSWorkerManager() {
-	s.perNamespaceWorkerManager.refreshAll()
 }
