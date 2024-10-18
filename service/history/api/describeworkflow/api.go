@@ -178,13 +178,8 @@ func Invoke(
 				LastIndependentlyAssignedBuildId: ai.GetLastIndependentlyAssignedBuildId(),
 			}
 		}
-		if ai.CancelRequested {
-			p.State = enumspb.PENDING_ACTIVITY_STATE_CANCEL_REQUESTED
-		} else if ai.StartedEventId != common.EmptyEventID {
-			p.State = enumspb.PENDING_ACTIVITY_STATE_STARTED
-		} else {
-			p.State = enumspb.PENDING_ACTIVITY_STATE_SCHEDULED
-		}
+		p.State = workflow.GetActivityState(ai)
+
 		if ai.LastHeartbeatUpdateTime != nil && !ai.LastHeartbeatUpdateTime.AsTime().IsZero() {
 			p.LastHeartbeatTime = ai.LastHeartbeatUpdateTime
 			p.HeartbeatDetails = ai.LastHeartbeatDetails

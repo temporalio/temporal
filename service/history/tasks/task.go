@@ -50,7 +50,7 @@ type (
 
 		// TODO: All tasks should have a method returning the versioned transition
 		// in which the task is generated.
-		// This versioned transiton can be used to determine if the task or
+		// This versioned transition can be used to determine if the task or
 		// the mutable state is stale.
 	}
 
