@@ -30,6 +30,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/suite"
+	historypb "go.temporal.io/api/history/v1"
 
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
@@ -119,20 +120,14 @@ func (s *UpdateWorkflowSdkSuite) TestUpdateWorkflow_TimeoutWorkflowAfterUpdateAc
 	s.NoError(err)
 
 	// Wait for the first WFT to complete.
-	// TODO: replace with s.WaitForHistoryEvents when its ready.
-	s.Eventually(func() bool {
-		// Wait until the first WFT completes.
-		h := s.GetHistory(s.Namespace(), tv.WorkflowExecution())
-		if len(h) == 4 {
-			s.EqualHistoryEvents(`
+	s.WaitForHistoryEvents(`
   1 WorkflowExecutionStarted
   2 WorkflowTaskScheduled
   3 WorkflowTaskStarted
-  4 WorkflowTaskCompleted`, h)
-			return true
-		}
-		return false
-	}, 1*time.Second, 200*time.Millisecond)
+  4 WorkflowTaskCompleted`,
+		func() []*historypb.HistoryEvent {
+			return s.GetHistory(s.Namespace(), tv.WorkflowExecution())
+		}, 1*time.Second, 200*time.Millisecond)
 
 	updateHandle, err := s.updateWorkflowWaitAccepted(ctx, tv, "my-update-arg")
 	s.NoError(err)
@@ -179,20 +174,14 @@ func (s *UpdateWorkflowSdkSuite) TestUpdateWorkflow_TerminateWorkflowAfterUpdate
 	wfRun := s.startWorkflow(ctx, tv, workflowFn)
 
 	// Wait for the first WFT to complete.
-	// TODO: replace with s.WaitForHistoryEvents when its ready.
-	s.Eventually(func() bool {
-		// Wait until the first WFT completes.
-		h := s.GetHistory(s.Namespace(), tv.WorkflowExecution())
-		if len(h) == 4 {
-			s.EqualHistoryEvents(`
+	s.WaitForHistoryEvents(`
   1 WorkflowExecutionStarted
   2 WorkflowTaskScheduled
   3 WorkflowTaskStarted
-  4 WorkflowTaskCompleted`, h)
-			return true
-		}
-		return false
-	}, 1*time.Second, 200*time.Millisecond)
+  4 WorkflowTaskCompleted`,
+		func() []*historypb.HistoryEvent {
+			return s.GetHistory(s.Namespace(), tv.WorkflowExecution())
+		}, 1*time.Second, 200*time.Millisecond)
 
 	updateHandle, err := s.updateWorkflowWaitAccepted(ctx, tv, "my-update-arg")
 	s.NoError(err)

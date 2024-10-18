@@ -2,6 +2,7 @@ package historyrequire
 
 import (
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 	historypb "go.temporal.io/api/history/v1"
@@ -225,6 +226,50 @@ func TestContainsHistoryEventsWithEventID(t *testing.T) {
 5 WorkflowTaskScheduled {"Attempt": 2208}
 6 WorkflowTaskStarted
 `, historyEvents)
+}
+
+func TestWaitForHistoryEvents(t *testing.T) {
+	hr := New(t)
+	historyEvents, _ := sampleCompactHistory(t)
+
+	attempt := 0
+	hr.WaitForHistoryEvents(`
+  1 WorkflowExecutionStarted
+  2 WorkflowTaskScheduled
+  3 WorkflowTaskStarted
+  4 WorkflowTaskFailed
+  5 WorkflowTaskScheduled
+  6 WorkflowTaskStarted
+  7 WorkflowTaskCompleted
+  8 ActivityTaskScheduled
+  9 ActivityTaskStarted
+ 10 ActivityTaskCompleted
+ 11 WorkflowTaskScheduled
+ 12 WorkflowTaskStarted
+ 13 WorkflowTaskCompleted`, func() []*historypb.HistoryEvent {
+		if attempt < 13 {
+			attempt++
+		}
+		t.Logf("Attempt %d", attempt)
+		return historyEvents[:attempt]
+	}, 1*time.Second, 10*time.Millisecond)
+}
+
+func TestWaitForHistoryEventsSuffix(t *testing.T) {
+	hr := New(t)
+	historyEvents, _ := sampleCompactHistory(t)
+
+	attempt := 0
+	hr.WaitForHistoryEventsSuffix(`
+ 11 WorkflowTaskScheduled
+ 12 WorkflowTaskStarted
+ 13 WorkflowTaskCompleted`, func() []*historypb.HistoryEvent {
+		if attempt < 13 {
+			attempt++
+		}
+		t.Logf("Attempt %d", attempt)
+		return historyEvents[:attempt]
+	}, 1*time.Second, 10*time.Millisecond)
 }
 
 func TestEmptyHistoryEvents(t *testing.T) {

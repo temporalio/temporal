@@ -33,6 +33,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
@@ -47,10 +48,15 @@ type (
 	helper interface {
 		Helper()
 	}
+
+	HistoryEventsReader func() []*historypb.HistoryEvent
+	HistoryReader       func() *historypb.History
 )
 
-var publicRgx = regexp.MustCompile("^[A-Z]")
-var typeOfBytes = reflect.TypeOf([]byte(nil))
+var (
+	publicRgx   = regexp.MustCompile("^[A-Z]")
+	typeOfBytes = reflect.TypeOf([]byte(nil))
+)
 
 func New(t require.TestingT) HistoryRequire {
 	return HistoryRequire{
@@ -59,8 +65,7 @@ func New(t require.TestingT) HistoryRequire {
 }
 
 // TODO (maybe):
-//  - WaitForHistoryEvents (call getHistory until expectedHistory is reached, with interval and timeout)
-//  - Funcs like WithVersion, WithTime, WithAttributes, WithPayloadLimit(100) and pass them to PrintHistory
+//  - Funcs like WithTime, WithAttributes, WithPayloadLimit(100) and pass them to PrintHistory
 //  - oneof support
 //  - enums as strings not as ints
 
@@ -114,10 +119,6 @@ func (h HistoryRequire) ContainsHistoryEvents(expectedHistorySegment string, act
 	h.containsHistoryEvents(expectedHistoryEvents, expectedEventsAttributes, actualHistoryEvents)
 }
 
-type (
-	HistoryEventsReader func() []*historypb.HistoryEvent
-)
-
 func (h HistoryRequire) WaitForHistoryEvents(expectedHistory string, actualHistoryEventsReader HistoryEventsReader, waitFor time.Duration, tick time.Duration) {
 	if th, ok := h.t.(helper); ok {
 		th.Helper()
@@ -126,12 +127,44 @@ func (h HistoryRequire) WaitForHistoryEvents(expectedHistory string, actualHisto
 	expectedHistoryEvents, expectedEventsAttributes := h.parseHistory(expectedHistory)
 
 	var actualHistoryEvents []*historypb.HistoryEvent
-	require.Eventuallyf(h.t, func() bool {
+	require.EventuallyWithT(h.t, func(collect *assert.CollectT) {
 		actualHistoryEvents = actualHistoryEventsReader()
-		return len(expectedHistoryEvents) == len(actualHistoryEvents)
-	}, waitFor, tick, "Length of expected(%d) and actual(%d) histories is not equal", len(expectedHistoryEvents), len(actualHistoryEvents))
+		assert.Equalf(collect, len(expectedHistoryEvents), len(actualHistoryEvents), "Length of expected(%d) and actual(%d) histories is not equal", len(expectedHistoryEvents), len(actualHistoryEvents))
+	}, waitFor, tick)
 
 	h.equalHistoryEvents(expectedHistoryEvents, expectedEventsAttributes, actualHistoryEvents)
+}
+
+func (h HistoryRequire) WaitForHistoryEventsSuffix(expectedHistorySuffix string, actualHistoryEventsReader HistoryEventsReader, waitFor time.Duration, tick time.Duration) {
+	if th, ok := h.t.(helper); ok {
+		th.Helper()
+	}
+
+	expectedHistoryEvents, expectedEventsAttributes := h.parseHistory(expectedHistorySuffix)
+
+	expectedCompactHistory := h.formatHistoryEvents(expectedHistoryEvents, true)
+
+	var actualHistoryEvents []*historypb.HistoryEvent
+	require.EventuallyWithT(h.t, func(collect *assert.CollectT) {
+		actualHistoryEvents = actualHistoryEventsReader()
+
+		assert.GreaterOrEqualf(collect, len(actualHistoryEvents), len(expectedHistoryEvents), "Length of actual history(%d) must be greater or equal to the length of expected history suffix(%d)", len(actualHistoryEvents), len(expectedHistoryEvents))
+		if len(actualHistoryEvents) < len(expectedHistoryEvents) {
+			return
+		}
+
+		actualHistoryEvents = actualHistoryEvents[len(actualHistoryEvents)-len(expectedHistoryEvents):]
+		actualHistoryEvents = h.sanitizeActualHistoryEventsForEquals(expectedHistoryEvents, actualHistoryEvents)
+		actualCompactHistory := h.formatHistoryEvents(actualHistoryEvents, true)
+
+		assert.Equalf(collect, actualCompactHistory, expectedCompactHistory, "Expected history suffix is not found in actual history. Expected suffix:\n%s\nLast actual:\n%s", expectedCompactHistory, actualCompactHistory)
+	}, waitFor, tick)
+
+	// TODO: Now if expected sequence of events is found, all attributes must match.
+	//  If attributes also need to be checked (but not asserted) then this call
+	//  needs to be moved to Eventually block. This will require passing `collect`
+	//  all way down and replace require with assert.
+	h.equalHistoryEventsAttributes(expectedEventsAttributes, actualHistoryEvents)
 }
 
 func (h HistoryRequire) EqualHistory(expectedHistory string, actualHistory *historypb.History) {
@@ -164,6 +197,26 @@ func (h HistoryRequire) ContainsHistory(expectedHistorySegment string, actualHis
 	}
 
 	h.ContainsHistoryEvents(expectedHistorySegment, actualHistory.GetEvents())
+}
+
+func (h HistoryRequire) WaitForHistory(expectedHistory string, actualHistoryReader HistoryReader, waitFor time.Duration, tick time.Duration) {
+	if th, ok := h.t.(helper); ok {
+		th.Helper()
+	}
+
+	h.WaitForHistoryEvents(expectedHistory, func() []*historypb.HistoryEvent {
+		return actualHistoryReader().GetEvents()
+	}, waitFor, tick)
+}
+
+func (h HistoryRequire) WaitForHistorySuffix(expectedHistorySuffix string, actualHistoryReader HistoryReader, waitFor time.Duration, tick time.Duration) {
+	if th, ok := h.t.(helper); ok {
+		th.Helper()
+	}
+
+	h.WaitForHistoryEventsSuffix(expectedHistorySuffix, func() []*historypb.HistoryEvent {
+		return actualHistoryReader().GetEvents()
+	}, waitFor, tick)
 }
 
 func (h HistoryRequire) PrintHistory(history *historypb.History) {
