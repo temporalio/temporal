@@ -71,9 +71,9 @@ COMPILED_TEST_ARGS := -timeout=$(TEST_TIMEOUT) \
 ##### Variables ######
 
 ROOT := $(shell git rev-parse --show-toplevel)
-LOCALBIN := $(ROOT)/.bin
+LOCALBIN := .bin
 STAMPDIR := .stamp
-export PATH := $(LOCALBIN):$(PATH)
+export PATH := $(ROOT)/$(LOCALBIN):$(PATH)
 GOINSTALL := GOBIN=$(ROOT)/$(LOCALBIN) go install
 
 MODULE_ROOT := $(lastword $(shell grep -e "^module " go.mod))
@@ -118,7 +118,7 @@ PINNED_DEPENDENCIES := \
 	github.com/urfave/cli/v2@v2.4.0
 
 # Code coverage & test report output files.
-TEST_OUTPUT_ROOT        := $(ROOT)/.testoutput
+TEST_OUTPUT_ROOT        := ./.testoutput
 NEW_COVER_PROFILE       = $(TEST_OUTPUT_ROOT)/$(shell xxd -p -l 16 /dev/urandom).cover.out   # generates a new filename each time it's substituted
 SUMMARY_COVER_PROFILE  := $(TEST_OUTPUT_ROOT)/summary.cover.out
 NEW_REPORT              = $(TEST_OUTPUT_ROOT)/$(shell xxd -p -l 16 /dev/urandom).junit.xml   # generates a new filename each time it's substituted
@@ -399,24 +399,17 @@ $(TEST_OUTPUT_ROOT):
 
 prepare-coverage-test: $(GOTESTSUM) $(TEST_OUTPUT_ROOT)
 
-# Runs gotestsum, retrying failed tests as specified by the FAILED_TEST_RETRIES variable.
-# A function is required here there are two variants of this command, putting the packages to test in different
-# positions.
-# NOTE: Packages need to be provided via a named argument when --rerun-fails is on as stated in the gotestsum README.
-# NOTE: This had to be a long line to avoid adding newlines to the generated command.
-define gotestsum_coverage
-	$(if $(shell test $(FAILED_TEST_RETRIES) -eq 0 && echo "OK"), $(GOTESTSUM) --junitfile $(NEW_REPORT) -- $(1), $(GOTESTSUM) --rerun-fails=$(FAILED_TEST_RETRIES) --rerun-fails-max-failures=10 --junitfile $(NEW_REPORT) --packages $(1) --)
-endef
-
 unit-test-coverage: prepare-coverage-test
 	@printf $(COLOR) "Run unit tests with coverage..."
-	$(call gotestsum_coverage, $(UNIT_TEST_DIRS)) \
-		$(COMPILED_TEST_ARGS) -coverprofile=$(NEW_COVER_PROFILE)
+	$(GOTESTSUM) --rerun-fails=$(FAILED_TEST_RETRIES) --rerun-fails-max-failures=10 --junitfile $(NEW_REPORT) --packages $(UNIT_TEST_DIRS) -- \
+		$(COMPILED_TEST_ARGS) \
+		-coverprofile=$(NEW_COVER_PROFILE)
 
 integration-test-coverage: prepare-coverage-test
 	@printf $(COLOR) "Run integration tests with coverage..."
-	$(call gotestsum_coverage, $(INTEGRATION_TEST_DIRS)) \
-		$(COMPILED_TEST_ARGS) $(INTEGRATION_TEST_COVERPKG) -coverprofile=$(NEW_COVER_PROFILE)
+	$(GOTESTSUM) --rerun-fails=$(FAILED_TEST_RETRIES) --rerun-fails-max-failures=10 --junitfile $(NEW_REPORT) --packages $(INTEGRATION_TEST_DIRS) -- \
+		$(COMPILED_TEST_ARGS) \
+		-coverprofile=$(NEW_COVER_PROFILE) $(INTEGRATION_TEST_COVERPKG)
 
 # This should use the same build flags as functional-test-coverage and functional-test-{xdc,ndc}-coverage for best build caching.
 pre-build-functional-test-coverage: prepare-coverage-test
@@ -424,24 +417,24 @@ pre-build-functional-test-coverage: prepare-coverage-test
 
 functional-test-coverage: prepare-coverage-test
 	@printf $(COLOR) "Run functional tests with coverage with $(PERSISTENCE_DRIVER) driver..."
-	cd $(FUNCTIONAL_TEST_ROOT) && \
-	$(call gotestsum_coverage, $(FUNCTIONAL_TEST_ROOT)) \
-		$(COMPILED_TEST_ARGS) -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER) \
-		$(FUNCTIONAL_TEST_COVERPKG) -coverprofile=$(NEW_COVER_PROFILE)
+	$(GOTESTSUM) --rerun-fails=$(FAILED_TEST_RETRIES) --rerun-fails-max-failures=10 --junitfile $(NEW_REPORT) --packages $(FUNCTIONAL_TEST_ROOT) -- \
+		$(COMPILED_TEST_ARGS) \
+		-coverprofile=$(NEW_COVER_PROFILE) $(FUNCTIONAL_TEST_COVERPKG) \
+		-args -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER)
 
 functional-test-xdc-coverage: prepare-coverage-test
 	@printf $(COLOR) "Run functional test for cross DC with coverage with $(PERSISTENCE_DRIVER) driver..."
-	cd $(FUNCTIONAL_TEST_XDC_ROOT) && \
-	$(call gotestsum_coverage, $(FUNCTIONAL_TEST_XDC_ROOT)) \
-		$(COMPILED_TEST_ARGS) -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER) \
-		$(FUNCTIONAL_TEST_COVERPKG) -coverprofile=$(NEW_COVER_PROFILE)
+	$(GOTESTSUM) --rerun-fails=$(FAILED_TEST_RETRIES) --rerun-fails-max-failures=10 --junitfile $(NEW_REPORT) --packages $(FUNCTIONAL_TEST_XDC_ROOT) -- \
+		$(COMPILED_TEST_ARGS) \
+		-coverprofile=$(NEW_COVER_PROFILE) $(FUNCTIONAL_TEST_COVERPKG) \
+		-args -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER)
 
 functional-test-ndc-coverage: prepare-coverage-test
 	@printf $(COLOR) "Run functional test for NDC with coverage with $(PERSISTENCE_DRIVER) driver..."
-	cd $(FUNCTIONAL_TEST_NDC_ROOT) && \
-	$(call gotestsum_coverage, $(FUNCTIONAL_TEST_NDC_ROOT)) \
-		$(COMPILED_TEST_ARGS) -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER) \
-		$(FUNCTIONAL_TEST_COVERPKG) -coverprofile=$(NEW_COVER_PROFILE)
+	$(GOTESTSUM) --rerun-fails=$(FAILED_TEST_RETRIES) --rerun-fails-max-failures=10 --junitfile $(NEW_REPORT) --packages $(FUNCTIONAL_TEST_NDC_ROOT) -- \
+		$(COMPILED_TEST_ARGS) \
+		-coverprofile=$(NEW_COVER_PROFILE) $(FUNCTIONAL_TEST_COVERPKG) \
+		-args -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER)
 
 .PHONY: $(SUMMARY_COVER_PROFILE)
 $(SUMMARY_COVER_PROFILE):
