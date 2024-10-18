@@ -83,20 +83,19 @@ func (s *UpdateWorkflowSdkSuite) TestUpdateWorkflow_TerminateWorkflowAfterUpdate
 	var notFound *serviceerror.NotFound
 	s.ErrorAs(err, &notFound)
 
-	s.EqualHistoryEvents(`
+	hist := s.GetHistory(s.Namespace(), tv.WorkflowExecution())
+	s.EqualHistoryEventsPrefix(`
   1 WorkflowExecutionStarted
-  2 WorkflowTaskScheduled
-  3 WorkflowTaskStarted
-  4 WorkflowTaskFailed
-  5 WorkflowExecutionTerminated`, s.GetHistory(s.Namespace(), tv.WorkflowExecution()))
+  2 WorkflowTaskScheduled`, hist)
+
+	s.EqualHistoryEventsSuffix(`
+WorkflowExecutionTerminated // This can be EventID=3 if WF is terminated before 1st WFT is started or 5 if after.`, hist)
 }
 
 // TestUpdateWorkflow_TimeoutWorkflowAfterUpdateAccepted executes an update, and while WF awaits
 // server times out the WF after the update has been accepted but before it has been completed. It checks
 // that the client gets a NotFound error when attempting to fetch the update result (rather than a timeout).
 func (s *UpdateWorkflowSdkSuite) TestUpdateWorkflow_TimeoutWorkflowAfterUpdateAccepted() {
-	s.T().Skip("flaky test")
-
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	defer cancel()
 	tv := testvars.New(s.T()).WithTaskQueue(s.TaskQueue()).WithNamespaceName(namespace.Name(s.Namespace()))
@@ -290,15 +289,19 @@ func (s *UpdateWorkflowSdkSuite) TestUpdateWorkflow_ContinueAsNewAfterUpdateAdmi
   4 WorkflowTaskCompleted
   5 MarkerRecorded
   6 WorkflowExecutionContinuedAsNew`, s.GetHistory(s.Namespace(), tv.WithRunID(firstRun.GetRunID()).WorkflowExecution()))
-	// TODO: This might have different history if 1st WFT completes before Update is retried. Then
-	//  there will be another 3 WFT events before Event 5. This needs to be replaced with s.EqualHistorySuffix once available.
-	s.EqualHistoryEvents(`
+
+	hist2 := s.GetHistory(s.Namespace(), tv.WithRunID(secondRunID).WorkflowExecution())
+	s.EqualHistoryEventsPrefix(`
   1 WorkflowExecutionStarted
   2 WorkflowTaskScheduled
   3 WorkflowTaskStarted
-  4 WorkflowTaskCompleted
-  5 WorkflowExecutionUpdateAccepted
-  6 WorkflowExecutionUpdateCompleted`, s.GetHistory(s.Namespace(), tv.WithRunID(secondRunID).WorkflowExecution()))
+  4 WorkflowTaskCompleted`, hist2)
+	s.EqualHistoryEventsSuffix(`
+WorkflowTaskScheduled // This can be EventID=2 if Update is retried before 1st WFT is completed or 5 if 1st WFT completes first.
+WorkflowTaskStarted
+WorkflowTaskCompleted
+WorkflowExecutionUpdateAccepted
+WorkflowExecutionUpdateCompleted`, hist2)
 }
 
 func (s *UpdateWorkflowSdkSuite) TestUpdateWorkflow_TimeoutWithRetryAfterUpdateAdmitted() {
