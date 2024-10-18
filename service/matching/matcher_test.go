@@ -26,6 +26,7 @@ package matching
 
 import (
 	"context"
+	"github.com/stretchr/testify/assert"
 	"math/rand"
 	"sync"
 	"testing"
@@ -218,22 +219,14 @@ func (t *MatcherTestSuite) TestRejectSyncMatchWhenBacklog() {
 	// task waits for a local poller
 	oldBacklogTask := newInternalTaskFromBacklog(randomTaskInfoWithAge(time.Minute), nil)
 
-	var wg sync.WaitGroup
 	go func() {
 		t.rootMatcher.MustOffer(ctx, oldBacklogTask, intruptC) //nolint:revive
 	}()
 
 	// Wait for the task to be added to the map
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		for {
-			if !t.rootMatcher.isBacklogNegligible() {
-				return // Exit if a task has been added
-			}
-		}
-	}()
-	wg.Wait()
+	t.EventuallyWithT(func(c *assert.CollectT) {
+		assert.False(c, t.rootMatcher.isBacklogNegligible())
+	}, 30*time.Second, 1*time.Millisecond)
 
 	// should not allow sync match when there is an old task in backlog
 	syncMatchTask := newInternalTaskForSyncMatch(randomTaskInfoWithAge(time.Minute).Data, nil)
