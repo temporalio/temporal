@@ -166,6 +166,15 @@ func (e *executableTaskConverterImpl) convertOne(
 			sourceShardKey,
 			replicationTask,
 		)
+	case enumsspb.REPLICATION_TASK_TYPE_SYNC_VERSIONED_TRANSITION_TASK:
+		return NewExecutableSyncVersionedTransitionTask(
+			e.processToolBox,
+			replicationTask.SourceTaskId,
+			taskCreationTime,
+			sourceClusterName,
+			sourceShardKey,
+			replicationTask,
+		)
 	default:
 		e.processToolBox.Logger.Error(fmt.Sprintf("unknown replication task: %v", replicationTask))
 		return NewExecutableUnknownTask(
