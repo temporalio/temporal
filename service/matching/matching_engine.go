@@ -1769,6 +1769,9 @@ pollLoop:
 
 		nexusReq := task.nexus.request.GetRequest()
 		nexusReq.Header[nexus.HeaderRequestTimeout] = time.Until(task.nexus.deadline).String()
+		if !task.nexus.operationDeadline.IsZero() {
+			nexusReq.Header["Operation-Timeout"] = time.Until(task.nexus.operationDeadline).String()
+		}
 
 		return &matchingservice.PollNexusTaskQueueResponse{
 			Response: &workflowservice.PollNexusTaskQueueResponse{
