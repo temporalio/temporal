@@ -263,6 +263,20 @@ jobs:
           TEST_ARGS: ${{ needs.set-up-single-test.outputs.single_test_args }}
           TEST_TIMEOUT: ${{ needs.set-up-single-test.outputs.test_timeout }}
 
+      - name: Upload test results
+        if: ${{ !cancelled() }}
+        run: make upload-test-results
+
+      - name: Upload test results as a GitHub Actions artifact
+        uses: actions/upload-artifact@v4.4.0
+        if: ${{ !cancelled() && !inputs.run_single_unit_test }}
+        with:
+          name: junit-xml--${{github.run_id}}--${{github.run_attempt}}--unit-test
+          path: .testoutput
+          retention-days: 14
+          include-hidden-files: true
+
+      # Ensure this doesn't contribute to the junit output.
       - name: Flaky Unit Test Detection
         if: ${{ !cancelled() && !inputs.run_single_unit_test && env.MODIFIED_TEST_SUITES != '' }}
         timeout-minutes: 30
@@ -274,10 +288,6 @@ jobs:
           FAILED_TEST_RETRIES: "0"
           TEST_ARGS: "-run=${{ needs.set-up-single-test.outputs.modified_unit_test_suites }} -count=10"
           TEST_TIMEOUT: 25
-
-      - name: Upload test results
-        if: ${{ !cancelled() }}
-        run: make upload-test-results
 
   integration-test:
     if: ${{ inputs.run_single_functional_test != true && inputs.run_single_unit_test != true }}
@@ -325,6 +335,20 @@ jobs:
         timeout-minutes: 15
         run: make integration-test-coverage
 
+      - name: Upload test results
+        if: ${{ !cancelled() }}
+        run: make upload-test-results
+
+      - name: Upload test results as a GitHub Actions artifact
+        uses: actions/upload-artifact@v4.4.0
+        if: ${{ !cancelled() }}
+        with:
+          name: junit-xml--${{github.run_id}}--${{github.run_attempt}}--integration-test
+          path: .testoutput
+          retention-days: 14
+          include-hidden-files: true
+
+      # Ensure this doesn't contribute to the junit output.
       - name: Flaky Integration Test Detection
         if: ${{ env.MODIFIED_TEST_SUITES != '' }}
         timeout-minutes: 30
@@ -335,10 +359,6 @@ jobs:
           # Not retrying failed tests intentionally here since we're trying to detect flakes.
           FAILED_TEST_RETRIES: "0"
           TEST_ARGS: "-run=${{ needs.set-up-single-test.outputs.modified_integration_test_suites }} -count=5"
-
-      - name: Upload test results
-        if: ${{ !cancelled() }}
-        run: make upload-test-results
 
       - name: Tear down docker compose
         if: ${{ always() }}
@@ -441,6 +461,20 @@ jobs:
         env:
           TEST_ARGS: ${{ needs.set-up-single-test.outputs.single_test_args }}
 
+      - name: Upload test results
+        if: ${{ !cancelled() && (inputs.run_single_functional_test != true || (inputs.run_single_functional_test == true && contains(fromJSON(needs.set-up-single-test.outputs.dbs), env.PERSISTENCE_DRIVER))) }}
+        run: make upload-test-results
+
+      - name: Upload test results as a GitHub Actions artifact
+        uses: actions/upload-artifact@v4.4.0
+        if: ${{ !cancelled() && !inputs.run_single_functional_test }}
+        with:
+          name: junit-xml--${{github.run_id}}--${{github.run_attempt}}--${{matrix.runs-on}}--${{matrix.name}}--${{matrix.shard_index}}--functional-test
+          path: .testoutput
+          retention-days: 14
+          include-hidden-files: true
+
+      # Ensure this doesn't contribute to the junit output.
       - name: Flaky Functional Test Detection
         if: ${{ (env.MODIFIED_TEST_SUITES != '') && (inputs.run_single_functional_test != true || (inputs.run_single_functional_test == true && contains(fromJSON(needs.set-up-single-test.outputs.dbs), env.PERSISTENCE_DRIVER))) }}
         timeout-minutes: ${{ fromJSON(needs.set-up-single-test.outputs.github_timeout) }} # make sure this is larger than the test timeout in the Makefile
@@ -451,10 +485,6 @@ jobs:
           # Not retrying failed tests intentionally here since we're trying to detect flakes.
           FAILED_TEST_RETRIES: "0"
           TEST_ARGS: "-run=${{ needs.set-up-single-test.outputs.modified_functional_test_suites }} -count=5"
-
-      - name: Upload test results
-        if: ${{ !cancelled() && (inputs.run_single_functional_test != true || (inputs.run_single_functional_test == true && contains(fromJSON(needs.set-up-single-test.outputs.dbs), env.PERSISTENCE_DRIVER))) }}
-        run: make upload-test-results
 
   functional-test-xdc:
     if: ${{ inputs.run_single_functional_test != true && inputs.run_single_unit_test != true }}
@@ -531,6 +561,20 @@ jobs:
         timeout-minutes: 25   # update this to TEST_TIMEOUT+5 if you update the Makefile
         run: make functional-test-xdc-coverage
 
+      - name: Upload test results
+        if: ${{ !cancelled() }}
+        run: make upload-test-results
+
+      - name: Upload test results as a GitHub Actions artifact
+        uses: actions/upload-artifact@v4.4.0
+        if: ${{ !cancelled() }}
+        with:
+          name: junit-xml--${{github.run_id}}--${{github.run_attempt}}--${{matrix.name}}--functional-test-xdc
+          path: .testoutput
+          retention-days: 14
+          include-hidden-files: true
+
+      # Ensure this doesn't contribute to the junit output.
       - name: Flaky Functional XDC Test Detection
         if: ${{ env.MODIFIED_TEST_SUITES != '' }}
         timeout-minutes: 60
@@ -541,10 +585,6 @@ jobs:
           # Not retrying failed tests intentionally here since we're trying to detect flakes.
           FAILED_TEST_RETRIES: "0"
           TEST_ARGS: "-run=${{ needs.set-up-single-test.outputs.modified_functional_xdc_test_suites }} -count=5"
-
-      - name: Upload test results
-        if: ${{ !cancelled() }}
-        run: make upload-test-results
 
   functional-test-ndc:
     if: ${{ inputs.run_single_functional_test != true && inputs.run_single_unit_test != true }}
@@ -622,6 +662,16 @@ jobs:
         timeout-minutes: 15
         run: make functional-test-ndc-coverage
 
+      - name: Upload test results as a GitHub Actions artifact
+        uses: actions/upload-artifact@v4.4.0
+        if: ${{ !cancelled() }}
+        with:
+          name: junit-xml--${{github.run_id}}--${{github.run_attempt}}--${{matrix.name}}--functional-test-ndc
+          path: .testoutput
+          retention-days: 14
+          include-hidden-files: true
+
+      # Ensure this doesn't contribute to the junit output.
       - name: Flaky Functional NDC Test Detection
         if: ${{ env.MODIFIED_TEST_SUITES != '' }}
         timeout-minutes: 30
