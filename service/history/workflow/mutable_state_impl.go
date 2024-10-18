@@ -6363,6 +6363,19 @@ func (ms *MutableStateImpl) ApplySnapshot(
 	return nil
 }
 
+func (ms *MutableStateImpl) shouldResetActivityTimerTaskMask(current, incoming *persistencespb.ActivityInfo) bool {
+	// calculate whether to reset the activity timer task status bits
+	// reset timer task status bits if
+	// 1. same source cluster & attempt changes
+	// 2. different source cluster
+	if !ms.clusterMetadata.IsVersionFromSameCluster(current.Version, incoming.Version) {
+		return true
+	} else if current.Attempt != incoming.Attempt {
+		return true
+	}
+	return false
+}
+
 func (ms *MutableStateImpl) applyUpdatesToSubStateMachines(
 	updatedActivityInfos map[int64]*persistencespb.ActivityInfo,
 	updatedTimerInfos map[string]*persistencespb.TimerInfo,
@@ -6372,7 +6385,11 @@ func (ms *MutableStateImpl) applyUpdatesToSubStateMachines(
 	isSnapshot bool,
 ) error {
 	err := applyUpdatesToSubStateMachine(ms, ms.pendingActivityInfoIDs, ms.updateActivityInfos, updatedActivityInfos, isSnapshot, ms.DeleteActivity, func(current, incoming *persistencespb.ActivityInfo) {
-		incoming.TimerTaskStatus = TimerTaskStatusNone
+		if current == nil || ms.shouldResetActivityTimerTaskMask(current, incoming) {
+			incoming.TimerTaskStatus = TimerTaskStatusNone
+		} else {
+			incoming.TimerTaskStatus = current.TimerTaskStatus
+		}
 	}, func(ai *persistencespb.ActivityInfo) {
 		ms.pendingActivityIDToEventID[ai.ActivityId] = ai.ScheduledEventId
 	})
