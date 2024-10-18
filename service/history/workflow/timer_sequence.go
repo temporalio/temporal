@@ -63,6 +63,7 @@ type (
 		TimerType    enumspb.TimeoutType
 		TimerCreated bool
 		Attempt      int32
+		Stamp        int32
 	}
 
 	TimerSequenceIDs []TimerSequenceID
@@ -173,6 +174,7 @@ func (t *timerSequenceImpl) CreateNextActivityTimer() (bool, error) {
 		TimeoutType:         firstTimerTask.TimerType,
 		EventID:             firstTimerTask.EventID,
 		Attempt:             firstTimerTask.Attempt,
+		Stamp:               activityInfo.Stamp,
 	})
 	return true, nil
 }
@@ -306,6 +308,7 @@ func (t *timerSequenceImpl) getActivityScheduleToCloseTimeout(
 		TimerType:    enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE,
 		TimerCreated: (activityInfo.TimerTaskStatus & TimerTaskStatusCreatedScheduleToClose) > 0,
 		Attempt:      activityInfo.Attempt,
+		Stamp:        activityInfo.Stamp,
 	}
 }
 

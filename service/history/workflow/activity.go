@@ -27,12 +27,23 @@ package workflow
 import (
 	"time"
 
+	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
 	"go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
+
+func GetActivityState(ai *persistence.ActivityInfo) enumspb.PendingActivityState {
+	if ai.CancelRequested {
+		return enumspb.PENDING_ACTIVITY_STATE_CANCEL_REQUESTED
+	}
+	if ai.StartedEventId != common.EmptyEventID {
+		return enumspb.PENDING_ACTIVITY_STATE_STARTED
+	}
+	return enumspb.PENDING_ACTIVITY_STATE_SCHEDULED
+}
 
 func makeBackoffAlgorithm(requestedDelay *time.Duration) BackoffCalculatorAlgorithmFunc {
 	return func(duration *durationpb.Duration, coefficient float64, currentAttempt int32) time.Duration {
