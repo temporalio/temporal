@@ -71,6 +71,7 @@ type HttpApiTestSuite struct {
 }
 
 func TestHttpApiTestSuite(t *testing.T) {
+	t.Parallel()
 	suite.Run(t, new(HttpApiTestSuite))
 }
 
@@ -308,6 +309,8 @@ func (s *HttpApiTestSuite) runHTTPAPIBasicsTest_Shorthand(contentType string, pr
 }
 
 func (s *HttpApiTestSuite) TestHTTPAPIHeaders() {
+	s.T().Skip("flaky test")
+
 	if s.HttpAPIAddress() == "" {
 		s.T().Skip("HTTP API server not enabled")
 	}

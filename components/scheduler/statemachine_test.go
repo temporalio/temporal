@@ -63,7 +63,7 @@ func TestValidTransitions(t *testing.T) {
 	require.Equal(t, 1, len(out.Tasks))
 	runTask, ok := out.Tasks[0].(scheduler.SchedulerActivateTask)
 	require.True(t, ok)
-	require.Equal(t, "", runTask.Destination)
+	require.Equal(t, "TODO(bergundy): make this an empty string when we support transfer tasks", runTask.Destination())
 
 	// Manually set the next invocation time and verify that it is scheduled for that
 	now := timestamppb.Now()
@@ -74,5 +74,5 @@ func TestValidTransitions(t *testing.T) {
 	require.Equal(t, 1, len(out.Tasks))
 	waitTask, ok := out.Tasks[0].(scheduler.SchedulerWaitTask)
 	require.True(t, ok)
-	require.Equal(t, now.AsTime(), waitTask.Deadline)
+	require.Equal(t, now.AsTime(), waitTask.Deadline())
 }

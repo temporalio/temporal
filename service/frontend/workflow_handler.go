@@ -51,6 +51,7 @@ import (
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	schedspb "go.temporal.io/server/api/schedule/v1"
+	"go.temporal.io/server/api/taskqueue/v1"
 	"go.temporal.io/server/client/frontend"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/archiver"
@@ -477,6 +478,10 @@ func (wh *WorkflowHandler) prepareStartWorkflowRequest(
 	}
 
 	if err := wh.validateWorkflowCompletionCallbacks(namespaceName, request.GetCompletionCallbacks()); err != nil {
+		return nil, err
+	}
+
+	if err := wh.validateLinks(namespaceName, request.GetLinks()); err != nil {
 		return nil, err
 	}
 
@@ -1819,6 +1824,10 @@ func (wh *WorkflowHandler) RequestCancelWorkflowExecution(ctx context.Context, r
 		return nil, err
 	}
 
+	if err := wh.validateLinks(namespace.Name(request.GetNamespace()), request.GetLinks()); err != nil {
+		return nil, err
+	}
+
 	namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
 	if err != nil {
 		return nil, err
@@ -1858,6 +1867,10 @@ func (wh *WorkflowHandler) SignalWorkflowExecution(ctx context.Context, request 
 
 	if len(request.GetRequestId()) > wh.config.MaxIDLengthLimit() {
 		return nil, errRequestIDTooLong
+	}
+
+	if err := wh.validateLinks(namespace.Name(request.GetNamespace()), request.GetLinks()); err != nil {
+		return nil, err
 	}
 
 	namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
@@ -1978,6 +1991,10 @@ func (wh *WorkflowHandler) SignalWithStartWorkflowExecution(ctx context.Context,
 		request.SearchAttributes = sa
 	}
 
+	if err := wh.validateLinks(namespaceName, request.GetLinks()); err != nil {
+		return nil, err
+	}
+
 	namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespaceName)
 	if err != nil {
 		return nil, err
@@ -2048,6 +2065,10 @@ func (wh *WorkflowHandler) TerminateWorkflowExecution(ctx context.Context, reque
 	}
 
 	if err := validateExecution(request.WorkflowExecution); err != nil {
+		return nil, err
+	}
+
+	if err := wh.validateLinks(namespace.Name(request.GetNamespace()), request.GetLinks()); err != nil {
 		return nil, err
 	}
 
@@ -2618,10 +2639,12 @@ func (wh *WorkflowHandler) ShutdownWorker(ctx context.Context, request *workflow
 	}
 
 	// TODO: update poller info to indicate poller was shut down (pass identity/reason along)
-	_, err = wh.matchingClient.ForceUnloadTaskQueue(ctx, &matchingservice.ForceUnloadTaskQueueRequest{
-		NamespaceId:   namespaceId.String(),
-		TaskQueue:     request.GetStickyTaskQueue(),
-		TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW, // sticky task queues are always workflow queues
+	_, err = wh.matchingClient.ForceUnloadTaskQueuePartition(ctx, &matchingservice.ForceUnloadTaskQueuePartitionRequest{
+		NamespaceId: namespaceId.String(),
+		TaskQueuePartition: &taskqueue.TaskQueuePartition{
+			TaskQueue:     request.GetStickyTaskQueue(),
+			TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW, // sticky task queues are always workflow queues
+		},
 	})
 	if err != nil {
 		return nil, err
@@ -4568,6 +4591,45 @@ func (wh *WorkflowHandler) validateWorkflowIdReusePolicy(
 	if conflictPolicy != enumspb.WORKFLOW_ID_CONFLICT_POLICY_UNSPECIFIED &&
 		reusePolicy == enumspb.WORKFLOW_ID_REUSE_POLICY_TERMINATE_IF_RUNNING {
 		return errIncompatibleIDReusePolicy
+	}
+	return nil
+}
+
+func (wh *WorkflowHandler) validateLinks(
+	ns namespace.Name,
+	links []*commonpb.Link,
+) error {
+	maxAllowedLinks := wh.config.MaxLinksPerRequest(ns.String())
+	if len(links) > maxAllowedLinks {
+		return serviceerror.NewInvalidArgument(fmt.Sprintf("cannot attach more than %d links per request, got %d", maxAllowedLinks, len(links)))
+	}
+
+	maxSize := wh.config.LinkMaxSize(ns.String())
+	for _, l := range links {
+		if l.Size() > maxSize {
+			return serviceerror.NewInvalidArgument(fmt.Sprintf("link exceeds allowed size of %d, got %d", maxSize, l.Size()))
+		}
+		switch t := l.Variant.(type) {
+		case *commonpb.Link_WorkflowEvent_:
+			if t.WorkflowEvent.GetNamespace() == "" {
+				return serviceerror.NewInvalidArgument("workflow event link must not have an empty namespace field")
+			}
+			if t.WorkflowEvent.GetWorkflowId() == "" {
+				return serviceerror.NewInvalidArgument("workflow event link must not have an empty workflow ID field")
+			}
+			if t.WorkflowEvent.GetRunId() == "" {
+				return serviceerror.NewInvalidArgument("workflow event link must not have an empty run ID field")
+			}
+			if t.WorkflowEvent.GetEventRef().GetEventType() == enumspb.EVENT_TYPE_UNSPECIFIED && t.WorkflowEvent.GetEventRef().GetEventId() != 0 {
+				return serviceerror.NewInvalidArgument("workflow event link ref cannot have an unspecified event type and a non-zero event ID")
+			}
+		case *commonpb.Link_BatchJob_:
+			if t.BatchJob.GetJobId() == "" {
+				return serviceerror.NewInvalidArgument("batch job link must not have an empty job ID")
+			}
+		default:
+			return serviceerror.NewInvalidArgument("unsupported link variant")
+		}
 	}
 	return nil
 }

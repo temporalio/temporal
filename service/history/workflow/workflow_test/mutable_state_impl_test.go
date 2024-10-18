@@ -206,6 +206,7 @@ func addWorkflowExecutionSignaled(t *testing.T, i int, ms *workflow.MutableState
 		identity,
 		header,
 		false,
+		nil,
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -427,7 +428,7 @@ func TestGetNexusCompletion(t *testing.T) {
 		{
 			name: "termination",
 			mutateState: func(mutableState workflow.MutableState) (*historypb.HistoryEvent, error) {
-				return mutableState.AddWorkflowExecutionTerminatedEvent(mutableState.GetNextEventID(), "dont care", nil, "identity", false)
+				return mutableState.AddWorkflowExecutionTerminatedEvent(mutableState.GetNextEventID(), "dont care", nil, "identity", false, nil)
 			},
 			verifyCompletion: func(t *testing.T, completion nexus.OperationCompletion) {
 				failure, ok := completion.(*nexus.OperationCompletionUnsuccessful)

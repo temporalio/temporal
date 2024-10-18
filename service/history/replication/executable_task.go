@@ -26,23 +26,28 @@ package replication
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sync/atomic"
 	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/server/api/adminservice/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/headers"
+	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/persistence/serialization"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	ctasks "go.temporal.io/server/common/tasks"
+	"go.temporal.io/server/service/history/tasks"
 )
 
 //go:generate mockgen -copyright_file ../../../LICENSE -package $GOPACKAGE -source $GOFILE -destination executable_task_mock.go
@@ -100,7 +105,6 @@ type (
 		) (string, bool, error)
 		SyncState(
 			ctx context.Context,
-			remoteCluster string,
 			syncStateErr *serviceerrors.SyncState,
 			remainingAttempt int,
 		) (bool, error)
@@ -116,6 +120,7 @@ type (
 		taskCreationTime  time.Time
 		taskReceivedTime  time.Time
 		sourceClusterName string
+		sourceShardKey    ClusterShardKey
 		taskPriority      enumsspb.TaskPriority
 		replicationTask   *replicationspb.ReplicationTask
 
@@ -134,6 +139,7 @@ func NewExecutableTask(
 	taskCreationTime time.Time,
 	taskReceivedTime time.Time,
 	sourceClusterName string,
+	sourceShardKey ClusterShardKey,
 	priority enumsspb.TaskPriority,
 	replicationTask *replicationspb.ReplicationTask,
 ) *ExecutableTaskImpl {
@@ -144,6 +150,7 @@ func NewExecutableTask(
 		taskCreationTime:       taskCreationTime,
 		taskReceivedTime:       taskReceivedTime,
 		sourceClusterName:      sourceClusterName,
+		sourceShardKey:         sourceShardKey,
 		taskPriority:           priority,
 		replicationTask:        replicationTask,
 		taskState:              taskStatePending,
@@ -431,11 +438,86 @@ func (e *ExecutableTaskImpl) Resend(
 
 func (e *ExecutableTaskImpl) SyncState(
 	ctx context.Context,
-	remoteCluster string,
 	syncStateErr *serviceerrors.SyncState,
 	remainingAttempt int,
 ) (bool, error) {
-	return false, serviceerror.NewUnimplemented("not implemented") // TODO
+
+	// TODO: check & update remainingAttempt
+
+	remoteAdminClient, err := e.ClientBean.GetRemoteAdminClient(e.sourceClusterName)
+	if err != nil {
+		return false, err
+	}
+
+	targetClusterInfo := e.ClusterMetadata.GetAllClusterInfo()[e.ClusterMetadata.GetCurrentClusterName()]
+	resp, err := remoteAdminClient.SyncWorkflowState(ctx, &adminservice.SyncWorkflowStateRequest{
+		NamespaceId: syncStateErr.NamespaceId,
+		Execution: &commonpb.WorkflowExecution{
+			WorkflowId: syncStateErr.WorkflowId,
+			RunId:      syncStateErr.RunId,
+		},
+		VersionedTransition: syncStateErr.VersionedTransition,
+		VersionHistories:    syncStateErr.VersionHistories,
+		TargetClusterId:     int32(targetClusterInfo.InitialFailoverVersion),
+	})
+	if err != nil {
+		var failedPreconditionErr *serviceerror.FailedPrecondition
+		if !errors.As(err, &failedPreconditionErr) {
+			return false, err
+		}
+		// Unable to perform sync state. Transition history maybe disabled in source cluster.
+		// Add task equivalents back to source cluster.
+		taskEquivalents := e.replicationTask.GetRawTaskInfo().GetTaskEquivalents()
+
+		logger := log.With(e.Logger,
+			tag.WorkflowNamespaceID(syncStateErr.NamespaceId),
+			tag.WorkflowID(syncStateErr.WorkflowId),
+			tag.WorkflowRunID(syncStateErr.RunId),
+			tag.ReplicationTask(e.replicationTask),
+		)
+
+		if len(taskEquivalents) == 0 {
+			// Just drop the task since there's nothing to replicate in event-based stack.
+			logger.Info("Dropped replication task as there's no event-based replication task equivalent.")
+			return false, nil
+		}
+
+		tasksToAdd := make([]*adminservice.AddTasksRequest_Task, 0, len(taskEquivalents))
+		for _, taskEquivalent := range taskEquivalents {
+			blob, err := serialization.ReplicationTaskInfoToBlob(taskEquivalent)
+			if err != nil {
+				return false, err
+			}
+
+			tasksToAdd = append(tasksToAdd, &adminservice.AddTasksRequest_Task{
+				CategoryId: tasks.CategoryIDReplication,
+				Blob:       blob,
+			})
+		}
+
+		_, err := remoteAdminClient.AddTasks(ctx, &adminservice.AddTasksRequest{
+			ShardId: e.sourceShardKey.ShardID,
+			Tasks:   tasksToAdd,
+		})
+		return false, err
+	}
+
+	shardContext, err := e.ShardController.GetShardByNamespaceWorkflow(
+		namespace.ID(syncStateErr.NamespaceId),
+		syncStateErr.WorkflowId,
+	)
+	if err != nil {
+		return false, err
+	}
+	engine, err := shardContext.GetEngine(ctx)
+	if err != nil {
+		return false, err
+	}
+	err = engine.ReplicateVersionedTransition(ctx, resp.VersionedTransitionArtifact, e.SourceClusterName())
+	if err != nil {
+		return false, err
+	}
+	return true, nil
 }
 
 func (e *ExecutableTaskImpl) DeleteWorkflow(
@@ -533,9 +615,9 @@ func (e *ExecutableTaskImpl) MarkPoisonPill() error {
 		return err
 	}
 
-	// TODO: GetShardID will break GetDLQReplicationMessages we need to handle DLQ for cross shard replication.
-	e.Logger.Error("enqueue sync versioned transition replication task to DLQ",
-		tag.ShardID(shardContext.GetShardID()),
+	e.Logger.Error("Enqueued replication task to DLQ",
+		tag.TargetShardID(shardContext.GetShardID()),
+		tag.SourceShardID(e.sourceShardKey.ShardID),
 		tag.WorkflowNamespaceID(e.replicationTask.RawTaskInfo.NamespaceId),
 		tag.WorkflowID(e.replicationTask.RawTaskInfo.WorkflowId),
 		tag.WorkflowRunID(e.replicationTask.RawTaskInfo.NamespaceId),
@@ -547,7 +629,7 @@ func (e *ExecutableTaskImpl) MarkPoisonPill() error {
 	ctx, cancel := newTaskContext(e.replicationTask.RawTaskInfo.NamespaceId, e.Config.ReplicationTaskApplyTimeout())
 	defer cancel()
 
-	return writeTaskToDLQ(ctx, e.DLQWriter, shardContext, e.SourceClusterName(), taskInfo)
+	return writeTaskToDLQ(ctx, e.DLQWriter, e.sourceShardKey.ShardID, e.SourceClusterName(), shardContext.GetShardID(), taskInfo)
 }
 
 func newTaskContext(

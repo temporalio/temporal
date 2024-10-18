@@ -118,6 +118,7 @@ func TerminateWorkflow(
 	terminateDetails *commonpb.Payloads,
 	terminateIdentity string,
 	deleteAfterTerminate bool,
+	links []*commonpb.Link,
 ) error {
 
 	// Terminate workflow is written as a separate batch and might result in more than one event
@@ -149,6 +150,7 @@ func TerminateWorkflow(
 		terminateDetails,
 		terminateIdentity,
 		deleteAfterTerminate,
+		links,
 	)
 
 	return err

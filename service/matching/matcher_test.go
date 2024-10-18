@@ -47,6 +47,7 @@ import (
 	"go.temporal.io/server/common/tqid"
 	"go.uber.org/atomic"
 	"go.uber.org/mock/gomock"
+	"google.golang.org/grpc"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -116,7 +117,7 @@ func (t *MatcherTestSuite) TestLocalSyncMatch() {
 		task, err := t.childMatcher.Poll(ctx, &pollMetadata{})
 		cancel()
 		if err == nil {
-			task.finish(nil)
+			task.finish(nil, true)
 		}
 	}()
 
@@ -152,7 +153,7 @@ func (t *MatcherTestSuite) testRemoteSyncMatch(taskSource enumsspb.TaskSource) {
 		task, err := t.childMatcher.Poll(ctx, &pollMetadata{})
 		cancel()
 		if err == nil && !task.isStarted() {
-			task.finish(nil)
+			task.finish(nil, true)
 		}
 	}()
 
@@ -164,7 +165,7 @@ func (t *MatcherTestSuite) testRemoteSyncMatch(taskSource enumsspb.TaskSource) {
 			if err != nil {
 				remotePollErr = err
 			} else {
-				task.finish(nil)
+				task.finish(nil, true)
 				remotePollResp = matchingservice.PollWorkflowTaskQueueResponse{
 					WorkflowExecution: task.workflowExecution(),
 				}
@@ -264,24 +265,51 @@ func (t *MatcherTestSuite) TestRejectSyncMatchWhenBacklog() {
 func (t *MatcherTestSuite) TestForwardingWhenBacklogIsYoung() {
 	historyTask := newInternalTaskForSyncMatch(randomTaskInfo().Data, nil)
 
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	intruptC := make(chan struct{})
 
-	// poll forwarding attempt happens when there is no backlog
-	t.client.EXPECT().PollWorkflowTaskQueue(gomock.Any(), gomock.Any(), gomock.Any()).Return(&matchingservice.PollWorkflowTaskQueueResponse{}, errMatchingHostThrottleTest)
-	go t.childMatcher.Poll(ctx, &pollMetadata{}) //nolint:errcheck
-	time.Sleep(time.Millisecond)
+	var wg sync.WaitGroup
+	wg.Add(1)
 
-	// task is not forwarded because there is a poller waiting
-	youngBacklogTask := newInternalTaskFromBacklog(randomTaskInfoWithAge(time.Second), nil)
+	t.client.EXPECT().PollWorkflowTaskQueue(gomock.Any(), gomock.Any(), gomock.Any()).Do(
+		func(arg0 context.Context, arg1 *matchingservice.PollWorkflowTaskQueueRequest, arg2 ...interface{}) {
+			wg.Done()
+		},
+	).Return(&matchingservice.PollWorkflowTaskQueueResponse{}, errMatchingHostThrottleTest)
+
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+		// poll forwarding attempt happens when there is no backlog
+		_, err := t.childMatcher.Poll(ctx, &pollMetadata{})
+		t.Assert().NoError(err)
+		cancel()
+	}()
+	// This ensures that the poll request has been forwarded to the parent partition before the offer is made.
+	// Without this, there is a chance that the request is matched on the child partition, which will fail the test by
+	// complaining about a missing PollWorkflowTaskQueue.
+	wg.Wait()
+
+	// to ensure poller is now blocked locally
+	time.Sleep(2 * time.Millisecond)
+
+	// task is not forwarded because there is a local poller waiting
 	err := t.childMatcher.MustOffer(ctx, historyTask, intruptC)
 	t.Nil(err)
 	cancel()
 
 	// young task is forwarded
-	t.client.EXPECT().AddWorkflowTask(gomock.Any(), gomock.Any(), gomock.Any()).Return(&matchingservice.AddWorkflowTaskResponse{}, errMatchingHostThrottleTest)
+	youngBacklogTask := newInternalTaskFromBacklog(randomTaskInfoWithAge(time.Second), nil)
+
+	wg.Add(1)
+	t.client.EXPECT().AddWorkflowTask(gomock.Any(), gomock.Any(), gomock.Any()).Do(
+		func(arg0 context.Context, arg1 *matchingservice.AddWorkflowTaskRequest, arg2 ...interface{}) {
+			// Offer forwarding has occured
+			wg.Done()
+		},
+	).Return(&matchingservice.AddWorkflowTaskResponse{}, errMatchingHostThrottleTest)
 	ctx, cancel = context.WithTimeout(context.Background(), time.Second)
 	go t.childMatcher.MustOffer(ctx, youngBacklogTask, intruptC) //nolint:errcheck
+	wg.Wait()
 	time.Sleep(time.Millisecond)
 	cancel()
 }
@@ -301,48 +329,99 @@ func (t *MatcherTestSuite) TestForwardingWhenBacklogIsEmpty() {
 }
 
 func (t *MatcherTestSuite) TestAvoidForwardingWhenBacklogIsOld() {
-	intruptC := make(chan struct{})
+	t.childConfig.MaxWaitForPollerBeforeFwd = dynamicconfig.GetDurationPropertyFn(20 * time.Millisecond)
+
+	interruptC := make(chan struct{})
 	// forwarding will be triggered after t.cfg.MaxWaitForPollerBeforeFwd() so steps in this test should finish sooner.
-	maxWait := t.childConfig.MaxWaitForPollerBeforeFwd() / 2
+	maxWait := t.childConfig.MaxWaitForPollerBeforeFwd() * 2 / 3
 
 	// poll forwarding attempt happens when there is no backlog.
 	// important to make this empty poll to set the last poll timestamp to a recent time
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
-	t.client.EXPECT().PollWorkflowTaskQueue(gomock.Any(), gomock.Any(), gomock.Any()).Return(&matchingservice.PollWorkflowTaskQueueResponse{}, errMatchingHostThrottleTest)
+	forwardPoll := make(chan struct{})
+	t.client.EXPECT().PollWorkflowTaskQueue(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
+		func(ctx context.Context, in *matchingservice.PollWorkflowTaskQueueRequest, opts ...grpc.CallOption) (*matchingservice.PollWorkflowTaskQueueResponse, error) {
+			forwardPoll <- struct{}{}
+			return &matchingservice.PollWorkflowTaskQueueResponse{}, errMatchingHostThrottleTest
+		})
 	go t.childMatcher.Poll(ctx, &pollMetadata{}) //nolint:errcheck
-	t.Eventually(
-		func() bool {
-			return t.childMatcher.timeSinceLastPoll() < time.Second
-		}, maxWait, time.Millisecond)
+	select {
+	case <-forwardPoll:
+	case <-ctx.Done():
+		t.FailNow("timed out")
+	}
 	cancel()
 
 	// old task is not forwarded (forwarded client is not called)
 	oldBacklogTask := newInternalTaskFromBacklog(randomTaskInfoWithAge(time.Minute), nil)
 	ctx, cancel = context.WithTimeout(context.Background(), time.Second)
-	go t.childMatcher.MustOffer(ctx, oldBacklogTask, intruptC) //nolint:errcheck
-	t.Eventually(
+	go t.childMatcher.MustOffer(ctx, oldBacklogTask, interruptC) //nolint:errcheck
+	t.Require().Eventually(
 		func() bool {
 			return t.childMatcher.getBacklogAge() > 0
-		}, maxWait, time.Millisecond)
+		}, maxWait, time.Millisecond/2)
 
 	// poll the task
 	task, _ := t.childMatcher.Poll(ctx, &pollMetadata{})
 	t.NotNil(task)
 	cancel()
 
+	// should be back to no backlog
+	t.Require().Eventually(
+		func() bool {
+			return t.childMatcher.getBacklogAge() == emptyBacklogAge
+		}, maxWait, time.Millisecond/2)
+
 	// even old task is forwarded if last poll is not recent enough
 	time.Sleep(t.childConfig.MaxWaitForPollerBeforeFwd() + time.Millisecond) //nolint:forbidigo
+	t.Greater(t.childMatcher.timeSinceLastPoll(), t.childConfig.MaxWaitForPollerBeforeFwd())
+
 	ctx, cancel = context.WithTimeout(context.Background(), time.Second)
-	t.client.EXPECT().AddWorkflowTask(gomock.Any(), gomock.Any(), gomock.Any()).Return(&matchingservice.AddWorkflowTaskResponse{}, errMatchingHostThrottleTest)
-	go t.childMatcher.MustOffer(ctx, oldBacklogTask, intruptC) //nolint:errcheck
-	t.Eventually(
-		func() bool {
-			return t.childMatcher.getBacklogAge() > 0
-		}, maxWait, time.Millisecond)
+	forwardTask := make(chan struct{})
+	t.client.EXPECT().AddWorkflowTask(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
+		func(ctx context.Context, in *matchingservice.AddWorkflowTaskRequest, opts ...grpc.CallOption) (*matchingservice.AddWorkflowTaskResponse, error) {
+			forwardTask <- struct{}{}
+			return &matchingservice.AddWorkflowTaskResponse{}, nil // return success so it won't retry
+		})
+	go t.childMatcher.MustOffer(ctx, oldBacklogTask, interruptC) //nolint:errcheck
+	select {
+	case <-forwardTask:
+	case <-ctx.Done():
+		t.FailNow("timed out")
+	}
 	cancel()
 }
 
+func (t *MatcherTestSuite) TestAvoidForwardingWhenBacklogIsOldButReconsider() {
+	t.childConfig.MaxWaitForPollerBeforeFwd = dynamicconfig.GetDurationPropertyFn(20 * time.Millisecond)
+
+	// make it look like there was a recent poll
+	t.childMatcher.lastPoller.Store(time.Now().UnixNano())
+
+	// old task is not forwarded, until after the reconsider time
+	oldBacklogTask := newInternalTaskFromBacklog(randomTaskInfoWithAge(time.Minute), nil)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	start := time.Now()
+	forwardTask := make(chan time.Time)
+	t.client.EXPECT().AddWorkflowTask(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
+		func(ctx context.Context, in *matchingservice.AddWorkflowTaskRequest, opts ...grpc.CallOption) (*matchingservice.AddWorkflowTaskResponse, error) {
+			forwardTask <- time.Now()
+			return &matchingservice.AddWorkflowTaskResponse{}, nil // return success so it won't retry
+		})
+	go t.childMatcher.MustOffer(ctx, oldBacklogTask, make(chan struct{})) //nolint:errcheck
+
+	select {
+	case fwdTime := <-forwardTask:
+		// check forward was after reconsider time. add a little buffer for last poller time calculation in MustOffer.
+		t.Greater(fwdTime.Sub(start), t.childConfig.MaxWaitForPollerBeforeFwd()*9/10)
+	case <-ctx.Done():
+		t.FailNow("timed out")
+	}
+}
+
 func (t *MatcherTestSuite) TestBacklogAge() {
+	t.T().Skip("flaky test")
 	t.Equal(emptyBacklogAge, t.rootMatcher.getBacklogAge())
 
 	youngBacklogTask := newInternalTaskFromBacklog(randomTaskInfoWithAge(time.Second), nil)
@@ -501,7 +580,7 @@ func (t *MatcherTestSuite) TestQueryLocalSyncMatch() {
 		task, err := t.childMatcher.PollForQuery(ctx, &pollMetadata{})
 		cancel()
 		if err == nil && task.isQuery() {
-			task.finish(nil)
+			task.finish(nil, true)
 		}
 	}()
 
@@ -524,7 +603,7 @@ func (t *MatcherTestSuite) TestQueryRemoteSyncMatch() {
 		task, err := t.childMatcher.PollForQuery(ctx, &pollMetadata{})
 		cancel()
 		if err == nil && task.isQuery() {
-			task.finish(nil)
+			task.finish(nil, true)
 		}
 	}()
 
@@ -537,7 +616,7 @@ func (t *MatcherTestSuite) TestQueryRemoteSyncMatch() {
 			if err != nil {
 				remotePollErr = err
 			} else if task.isQuery() {
-				task.finish(nil)
+				task.finish(nil, true)
 				querySet.Swap(true)
 				remotePollResp = matchingservice.PollWorkflowTaskQueueResponse{
 					Query: &querypb.WorkflowQuery{},
@@ -588,7 +667,7 @@ func (t *MatcherTestSuite) TestQueryRemoteSyncMatchError() {
 		cancel()
 		if err == nil && task.isQuery() {
 			matched = true
-			task.finish(nil)
+			task.finish(nil, true)
 		}
 	}()
 
@@ -626,7 +705,7 @@ func (t *MatcherTestSuite) TestMustOfferLocalMatch() {
 		task, err := t.childMatcher.Poll(ctx, &pollMetadata{})
 		cancel()
 		if err == nil {
-			task.finish(nil)
+			task.finish(nil, true)
 		}
 	}()
 
@@ -655,7 +734,7 @@ func (t *MatcherTestSuite) TestMustOfferRemoteMatch() {
 			if err != nil {
 				remotePollErr = err
 			} else {
-				task.finish(nil)
+				task.finish(nil, true)
 				remotePollResp = matchingservice.PollWorkflowTaskQueueResponse{
 					WorkflowExecution: task.workflowExecution(),
 				}

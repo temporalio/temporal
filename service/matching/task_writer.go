@@ -100,6 +100,7 @@ func newTaskWriter(
 	}
 }
 
+// Start taskWriter background goroutine.
 func (w *taskWriter) Start() {
 	if !atomic.CompareAndSwapInt32(
 		&w.status,
@@ -112,7 +113,8 @@ func (w *taskWriter) Start() {
 	w.writeLoop.Go(w.taskWriterLoop)
 }
 
-// Stop stops the taskWriter
+// Stop stops the taskWriter.
+// Note that this does not wait until the background goroutine has exited!
 func (w *taskWriter) Stop() {
 	if !atomic.CompareAndSwapInt32(
 		&w.status,

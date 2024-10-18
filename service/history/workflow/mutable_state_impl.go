@@ -171,8 +171,6 @@ type (
 		approximateSize int
 		// Total number of tomestones tracked in mutable state
 		totalTombstones int
-		// last versioned transition in DB
-		versionedTransitionInDB *persistencespb.VersionedTransition
 		// Buffer events from DB
 		bufferEventsInDB []*historypb.HistoryEvent
 		// Indicates the workflow state in DB, can be used to calculate
@@ -181,6 +179,9 @@ type (
 		// TODO deprecate nextEventIDInDB in favor of dbRecordVersion.
 		// Indicates the next event ID in DB, for conditional update.
 		nextEventIDInDB int64
+		// Indicates the versionedTransition in DB, can be used to
+		// calculate if the state-based replication is disabling.
+		versionedTransitionInDB *persistencespb.VersionedTransition
 		// Indicates the DB record version, for conditional update.
 		dbRecordVersion int64
 		// Namespace entry contains a snapshot of namespace.
@@ -458,7 +459,7 @@ func NewMutableStateFromDB(
 	mutableState.dbRecordVersion = dbRecordVersion
 	mutableState.checksum = dbRecord.Checksum
 	if len(mutableState.executionInfo.TransitionHistory) != 0 {
-		mutableState.versionedTransitionInDB = CopyVersionedTransition(mutableState.executionInfo.TransitionHistory[len(mutableState.executionInfo.TransitionHistory)-1])
+		mutableState.versionedTransitionInDB = mutableState.executionInfo.TransitionHistory[len(mutableState.executionInfo.TransitionHistory)-1]
 	}
 
 	if len(dbRecord.Checksum.GetValue()) > 0 {
@@ -580,14 +581,12 @@ func (ms *MutableStateImpl) GetNexusCompletion(ctx context.Context) (nexus.Opera
 	switch ce.GetEventType() {
 	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED:
 		payloads := ce.GetWorkflowExecutionCompletedEventAttributes().GetResult().GetPayloads()
-		var p *commonpb.Payload
+		var p *commonpb.Payload // default to nil, the payload serializer converts nil to Nexus nil Content.
 		if len(payloads) > 0 {
 			// All of our SDKs support returning a single value from workflows, we can safely ignore the
 			// rest of the payloads. Additionally, even if a workflow could return more than a single value,
 			// Nexus does not support it.
 			p = payloads[0]
-		} else {
-			p = &commonpb.Payload{}
 		}
 		completion, err := nexus.NewOperationCompletionSuccessful(p, nexus.OperationCompletionSuccesfulOptions{
 			Serializer: commonnexus.PayloadSerializer,
@@ -2368,7 +2367,7 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionStartedEvent(
 	return nil
 }
 
-// AddFirstWorkflowTaskScheduled adds the first workflow task scehduled event unless it should be delayed as indicated
+// AddFirstWorkflowTaskScheduled adds the first workflow task scheduled event unless it should be delayed as indicated
 // by the startEvent's FirstWorkflowTaskBackoff.
 // Returns the workflow task's scheduled event ID if a task was scheduled, 0 otherwise.
 func (ms *MutableStateImpl) AddFirstWorkflowTaskScheduled(
@@ -4064,13 +4063,14 @@ func (ms *MutableStateImpl) AddWorkflowExecutionTerminatedEvent(
 	details *commonpb.Payloads,
 	identity string,
 	deleteAfterTerminate bool,
+	links []*commonpb.Link,
 ) (*historypb.HistoryEvent, error) {
 	opTag := tag.WorkflowActionWorkflowTerminated
 	if err := ms.checkMutability(opTag); err != nil {
 		return nil, err
 	}
 
-	event := ms.hBuilder.AddWorkflowExecutionTerminatedEvent(reason, details, identity)
+	event := ms.hBuilder.AddWorkflowExecutionTerminatedEvent(reason, details, identity, links)
 	if err := ms.ApplyWorkflowExecutionTerminatedEvent(firstEventID, event); err != nil {
 		return nil, err
 	}
@@ -4255,6 +4255,7 @@ func (ms *MutableStateImpl) AddWorkflowExecutionSignaled(
 	identity string,
 	header *commonpb.Header,
 	skipGenerateWorkflowTask bool,
+	links []*commonpb.Link,
 ) (*historypb.HistoryEvent, error) {
 	return ms.AddWorkflowExecutionSignaledEvent(
 		signalName,
@@ -4263,6 +4264,7 @@ func (ms *MutableStateImpl) AddWorkflowExecutionSignaled(
 		header,
 		skipGenerateWorkflowTask,
 		nil,
+		links,
 	)
 }
 
@@ -4273,6 +4275,7 @@ func (ms *MutableStateImpl) AddWorkflowExecutionSignaledEvent(
 	header *commonpb.Header,
 	skipGenerateWorkflowTask bool,
 	externalWorkflowExecution *commonpb.WorkflowExecution,
+	links []*commonpb.Link,
 ) (*historypb.HistoryEvent, error) {
 	opTag := tag.WorkflowActionWorkflowSignaled
 	if err := ms.checkMutability(opTag); err != nil {
@@ -4286,6 +4289,7 @@ func (ms *MutableStateImpl) AddWorkflowExecutionSignaledEvent(
 		header,
 		skipGenerateWorkflowTask,
 		externalWorkflowExecution,
+		links,
 	)
 	if err := ms.ApplyWorkflowExecutionSignaled(event); err != nil {
 		return nil, err
@@ -5681,6 +5685,11 @@ func (ms *MutableStateImpl) cleanupTransaction() error {
 
 	ms.stateInDB = ms.executionState.State
 	ms.nextEventIDInDB = ms.GetNextEventID()
+	if len(ms.executionInfo.TransitionHistory) != 0 {
+		ms.versionedTransitionInDB = ms.executionInfo.TransitionHistory[len(ms.executionInfo.TransitionHistory)-1]
+	} else {
+		ms.versionedTransitionInDB = nil
+	}
 	// ms.dbRecordVersion remains the same
 
 	ms.hBuilder = historybuilder.New(
@@ -5775,6 +5784,15 @@ func (ms *MutableStateImpl) syncActivityToReplicationTask(
 	switch transactionPolicy {
 	case TransactionPolicyActive:
 		if ms.generateReplicationTask() {
+			var activityIDs map[int64]struct{}
+			if ms.disablingTransitionHistory() {
+				activityIDs = make(map[int64]struct{}, len(ms.GetPendingActivityInfos()))
+				for activityID := range ms.GetPendingActivityInfos() {
+					activityIDs[activityID] = struct{}{}
+				}
+			} else {
+				activityIDs = ms.syncActivityTasks
+			}
 			return convertSyncActivityInfos(
 				now,
 				definition.NewWorkflowKey(
@@ -5783,7 +5801,7 @@ func (ms *MutableStateImpl) syncActivityToReplicationTask(
 					ms.executionState.RunId,
 				),
 				ms.pendingActivityInfoIDs,
-				ms.syncActivityTasks,
+				activityIDs,
 			)
 		}
 		return nil
@@ -6731,15 +6749,25 @@ func (ms *MutableStateImpl) applyTombstones(tombstoneBatches []*persistencespb.S
 		for _, tombstone := range tombstoneBatch.StateMachineTombstones {
 			switch tombstone.StateMachineKey.(type) {
 			case *persistencespb.StateMachineTombstone_ActivityScheduledEventId:
-				err = ms.DeleteActivity(tombstone.GetActivityScheduledEventId())
+				if _, ok := ms.pendingActivityInfoIDs[tombstone.GetActivityScheduledEventId()]; ok {
+					err = ms.DeleteActivity(tombstone.GetActivityScheduledEventId())
+				}
 			case *persistencespb.StateMachineTombstone_TimerId:
-				err = ms.DeleteUserTimer(tombstone.GetTimerId())
+				if _, ok := ms.pendingTimerInfoIDs[tombstone.GetTimerId()]; ok {
+					err = ms.DeleteUserTimer(tombstone.GetTimerId())
+				}
 			case *persistencespb.StateMachineTombstone_ChildExecutionInitiatedEventId:
-				err = ms.DeletePendingChildExecution(tombstone.GetChildExecutionInitiatedEventId())
+				if _, ok := ms.pendingChildExecutionInfoIDs[tombstone.GetChildExecutionInitiatedEventId()]; ok {
+					err = ms.DeletePendingChildExecution(tombstone.GetChildExecutionInitiatedEventId())
+				}
 			case *persistencespb.StateMachineTombstone_RequestCancelInitiatedEventId:
-				err = ms.DeletePendingRequestCancel(tombstone.GetRequestCancelInitiatedEventId())
+				if _, ok := ms.pendingRequestCancelInfoIDs[tombstone.GetRequestCancelInitiatedEventId()]; ok {
+					err = ms.DeletePendingRequestCancel(tombstone.GetRequestCancelInitiatedEventId())
+				}
 			case *persistencespb.StateMachineTombstone_SignalExternalInitiatedEventId:
-				err = ms.DeletePendingSignal(tombstone.GetSignalExternalInitiatedEventId())
+				if _, ok := ms.pendingSignalInfoIDs[tombstone.GetSignalExternalInitiatedEventId()]; ok {
+					err = ms.DeletePendingSignal(tombstone.GetSignalExternalInitiatedEventId())
+				}
 			default:
 				// TODO: updateID and stateMachinePath
 				err = serviceerror.NewInternal("unknown tombstone type")
@@ -6753,4 +6781,8 @@ func (ms *MutableStateImpl) applyTombstones(tombstoneBatches []*persistencespb.S
 	}
 	ms.capTombstoneCount()
 	return nil
+}
+
+func (ms *MutableStateImpl) disablingTransitionHistory() bool {
+	return ms.versionedTransitionInDB != nil && len(ms.executionInfo.TransitionHistory) == 0
 }

@@ -26,7 +26,6 @@ package ndc
 
 import (
 	"context"
-	"flag"
 	"fmt"
 	"math/rand"
 	"os"
@@ -101,7 +100,7 @@ type (
 )
 
 func TestNDCFuncTestSuite(t *testing.T) {
-	flag.Parse()
+	// TODO: doesn't work yet: t.Parallel()
 	suite.Run(t, new(NDCFunctionalTestSuite))
 }
 

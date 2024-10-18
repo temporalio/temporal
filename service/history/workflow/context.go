@@ -1121,6 +1121,7 @@ func (c *ContextImpl) forceTerminateWorkflow(
 		nil,
 		consts.IdentityHistoryService,
 		false,
+		nil, // No links necessary.
 	)
 }
 

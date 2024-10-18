@@ -30,6 +30,7 @@ import (
 
 	"github.com/jmoiron/sqlx"
 	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
@@ -80,7 +81,7 @@ func (d *plugin) CreateDB(
 		return d.createDBConnection(cfg, r)
 	}
 	needsRefresh := d.d.IsConnNeedsRefreshError
-	handle := sqlplugin.NewDatabaseHandle(connect, needsRefresh, logger, metricsHandler)
+	handle := sqlplugin.NewDatabaseHandle(connect, needsRefresh, logger, metricsHandler, clock.NewRealTimeSource())
 	db := newDB(dbKind, cfg.DatabaseName, d.d, handle, nil)
 	return db, nil
 }
@@ -100,7 +101,7 @@ func (d *plugin) CreateAdminDB(
 		return d.createDBConnection(cfg, r)
 	}
 	needsRefresh := d.d.IsConnNeedsRefreshError
-	handle := sqlplugin.NewDatabaseHandle(connect, needsRefresh, logger, metricsHandler)
+	handle := sqlplugin.NewDatabaseHandle(connect, needsRefresh, logger, metricsHandler, clock.NewRealTimeSource())
 	db := newDB(dbKind, cfg.DatabaseName, d.d, handle, nil)
 	return db, nil
 }

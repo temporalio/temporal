@@ -855,47 +855,51 @@ func generateSubStateMachineTask(
 			Id:   k.ID,
 		}
 	}
-	// Only set transition count if a task is non-concurrent.
-	var machineLastUpdateVersionedTransition *persistencespb.VersionedTransition
-	if task.Concurrent() {
-		transitionCount = 0
-	} else {
-		// An already outdated concurrent task.
-		// This happens during replication when multiple event batches are applied in a single transaction.
-		if node.InternalRepr().TransitionCount != transitionCount {
-			return nil
-		}
-		machineLastUpdateVersionedTransition = node.InternalRepr().GetLastUpdateVersionedTransition()
-	}
+	machineLastUpdateVersionedTransition := node.InternalRepr().GetLastUpdateVersionedTransition()
 
 	transitionHistory := mutableState.GetExecutionInfo().TransitionHistory
 	var currentVersionedTransition *persistencespb.VersionedTransition
 	if len(transitionHistory) > 0 {
 		currentVersionedTransition = transitionHistory[len(transitionHistory)-1]
 	}
+	ref := &persistencespb.StateMachineRef{
+		Path:                                 ppath,
+		MutableStateVersionedTransition:      currentVersionedTransition,
+		MachineInitialVersionedTransition:    node.InternalRepr().GetInitialVersionedTransition(),
+		MachineLastUpdateVersionedTransition: machineLastUpdateVersionedTransition,
+		MachineTransitionCount:               transitionCount,
+	}
+
+	// Task is invalid at generation time.
+	// This may happen during replication when multiple event batches are applied in a single transaction.
+	if err := task.Validate(ref, node); err != nil {
+		return nil
+	}
 
 	taskInfo := &persistencespb.StateMachineTaskInfo{
-		Ref: &persistencespb.StateMachineRef{
-			Path:                                 ppath,
-			MutableStateVersionedTransition:      currentVersionedTransition,
-			MachineInitialVersionedTransition:    node.InternalRepr().GetInitialVersionedTransition(),
-			MachineLastUpdateVersionedTransition: machineLastUpdateVersionedTransition,
-			MachineTransitionCount:               transitionCount,
-		},
+		Ref:  ref,
 		Type: task.Type(),
 		Data: data,
 	}
-	switch kind := task.Kind().(type) {
-	case hsm.TaskKindOutbound:
+	// NOTE: at the moment deadline is mutually exclusive with destination.
+	// This will change when we add the outbound timer queue.
+	if task.Deadline() != hsm.Immediate {
+		if task.Destination() != "" {
+			// TODO: support outbound timer tasks.
+			return fmt.Errorf("task cannot have both a deadline and destination due to missing outbound timer queue implementation")
+		}
+		TrackStateMachineTimer(mutableState, task.Deadline(), taskInfo)
+	} else if task.Destination() != "" {
 		mutableState.AddTasks(&tasks.StateMachineOutboundTask{
 			StateMachineTask: tasks.StateMachineTask{
 				WorkflowKey: mutableState.GetWorkflowKey(),
 				Info:        taskInfo,
 			},
-			Destination: kind.Destination,
+			Destination: task.Destination(),
 		})
-	case hsm.TaskKindTimer:
-		TrackStateMachineTimer(mutableState, kind.Deadline, taskInfo)
+	} else {
+		// TODO: support "transfer" tasks - immediate without destination.
+		return fmt.Errorf("task has no deadline or destination")
 	}
 
 	return nil

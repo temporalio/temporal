@@ -23,9 +23,9 @@
 package scheduler
 
 import (
-	"fmt"
 	"time"
 
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/service/history/hsm"
 )
 
@@ -35,37 +35,42 @@ const (
 )
 
 type SchedulerWaitTask struct {
-	Deadline time.Time
+	deadline time.Time
 }
+
+var _ hsm.Task = SchedulerWaitTask{}
 
 func (SchedulerWaitTask) Type() string {
 	return TaskTypeSchedulerWait
 }
 
-func (t SchedulerWaitTask) Kind() hsm.TaskKind {
-	return hsm.TaskKindTimer{Deadline: t.Deadline}
+func (t SchedulerWaitTask) Deadline() time.Time {
+	return t.deadline
 }
 
-func (SchedulerWaitTask) Concurrent() bool {
-	return false
+func (SchedulerWaitTask) Destination() string {
+	return ""
+}
+
+func (SchedulerWaitTask) Validate(ref *persistencespb.StateMachineRef, node *hsm.Node) error {
+	// TODO: We should allow an RPC to transition the machine.
+	if err := hsm.ValidateNotTransitioned(ref, node); err != nil {
+		return err
+	}
+	return node.CheckRunning()
 }
 
 type ScheduleWaitTaskSerializer struct{}
 
-func (ScheduleWaitTaskSerializer) Deserialize(data []byte, kind hsm.TaskKind) (hsm.Task, error) {
-	if kind, ok := kind.(hsm.TaskKindTimer); ok {
-		return SchedulerWaitTask{Deadline: kind.Deadline}, nil
-	}
-	return nil, fmt.Errorf("%w: expected timer", hsm.ErrInvalidTaskKind)
+func (ScheduleWaitTaskSerializer) Deserialize(data []byte, attrs hsm.TaskAttributes) (hsm.Task, error) {
+	return SchedulerWaitTask{deadline: attrs.Deadline}, nil
 }
 
 func (ScheduleWaitTaskSerializer) Serialize(hsm.Task) ([]byte, error) {
 	return nil, nil
 }
 
-type SchedulerActivateTask struct {
-	Destination string
-}
+type SchedulerActivateTask struct{}
 
 var _ hsm.Task = SchedulerActivateTask{}
 
@@ -73,21 +78,26 @@ func (SchedulerActivateTask) Type() string {
 	return TaskTypeSchedulerExecute
 }
 
-func (t SchedulerActivateTask) Kind() hsm.TaskKind {
-	return hsm.TaskKindOutbound{Destination: t.Destination}
+func (t SchedulerActivateTask) Deadline() time.Time {
+	return hsm.Immediate
 }
 
-func (SchedulerActivateTask) Concurrent() bool {
-	return false
+func (t SchedulerActivateTask) Destination() string {
+	return "TODO(bergundy): make this an empty string when we support transfer tasks"
+}
+
+func (SchedulerActivateTask) Validate(ref *persistencespb.StateMachineRef, node *hsm.Node) error {
+	// TODO: We should allow an RPC to transition the machine.
+	if err := hsm.ValidateNotTransitioned(ref, node); err != nil {
+		return err
+	}
+	return node.CheckRunning()
 }
 
 type ScheduleExecuteTaskSerializer struct{}
 
-func (ScheduleExecuteTaskSerializer) Deserialize(data []byte, kind hsm.TaskKind) (hsm.Task, error) {
-	if kind, ok := kind.(hsm.TaskKindOutbound); ok {
-		return SchedulerActivateTask{Destination: kind.Destination}, nil
-	}
-	return nil, fmt.Errorf("%w: expected outbound", hsm.ErrInvalidTaskKind)
+func (ScheduleExecuteTaskSerializer) Deserialize(data []byte, kind hsm.TaskAttributes) (hsm.Task, error) {
+	return SchedulerActivateTask{}, nil
 }
 
 func (ScheduleExecuteTaskSerializer) Serialize(hsm.Task) ([]byte, error) {

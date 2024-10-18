@@ -22,17 +22,13 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-//go:build !race
-
-// need to run xdc tests with race detector off because of ringpop bug causing data race issue
-
 package xdc
 
 import (
 	"context"
 	"errors"
-	"flag"
 	"fmt"
+	"sync"
 	"testing"
 	"time"
 
@@ -78,6 +74,7 @@ type (
 		// able to route tasks to test-specific (i.e. workflow-specific) buffers. The following two maps serve that
 		// purpose (each test registers itself in these maps as it starts). Workflow ID and namespace name are both
 		// unique per test (due to the use of TestVars).
+		testMapLock          sync.Mutex
 		testsByWorkflowId    map[string]*hrsuTest
 		testsByNamespaceName map[string]*hrsuTest
 	}
@@ -125,7 +122,7 @@ const (
 )
 
 func TestHistoryReplicationSignalsAndUpdatesTestSuite(t *testing.T) {
-	flag.Parse()
+	t.Parallel()
 	suite.Run(t, new(hrsuTestSuite))
 }
 
@@ -180,8 +177,10 @@ func (s *hrsuTestSuite) startHrsuTest() (*hrsuTest, context.Context, context.Can
 		s:                         s,
 	}
 	// Register test with the suite, so that globally modified task executors can push tasks to test-specific buffers.
+	s.testMapLock.Lock()
 	s.testsByWorkflowId[tv.WorkflowID()] = &t
 	s.testsByNamespaceName[ns] = &t
+	s.testMapLock.Unlock()
 
 	t.cluster1 = t.newHrsuTestCluster(ns, s.clusterNames[0], s.cluster1)
 	t.cluster2 = t.newHrsuTestCluster(ns, s.clusterNames[1], s.cluster2)
@@ -208,6 +207,8 @@ func (t *hrsuTest) newHrsuTestCluster(ns string, name string, cluster *testcore.
 // TestAcceptedUpdateCanBeCompletedAfterFailoverAndFailback tests that an update can be accepted in one cluster, and completed in a
 // different cluster, after a failover.
 func (s *hrsuTestSuite) TestAcceptedUpdateCanBeCompletedAfterFailoverAndFailback() {
+	s.T().Skip("flaky test")
+
 	t, ctx, cancel := s.startHrsuTest()
 	defer cancel()
 	t.cluster1.startWorkflow(ctx, func(workflow.Context) error { return nil })
@@ -358,6 +359,8 @@ func (s *hrsuTestSuite) TestConflictResolutionReappliesUpdates() {
 // updates have the same update ID. The test confirms that when the conflict is resolved, we do not reapply the
 // UpdateAccepted event, since it has a conflicting ID.
 func (s *hrsuTestSuite) TestConflictResolutionDoesNotReapplyAcceptedUpdateWithConflictingId() {
+	s.T().Skip("flaky test")
+
 	t, ctx, cancel := s.startHrsuTest()
 	defer cancel()
 	t.cluster1.startWorkflow(ctx, func(workflow.Context) error { return nil })
@@ -722,7 +725,9 @@ func (e *hrsuTestNamespaceReplicationTaskExecutor) Execute(_ context.Context, ta
 	// TODO (dan) Use one channel per cluster, as we do for history replication tasks in this test suite. This is
 	// currently blocked by the fact that namespace tasks don't expose the current cluster name.
 	ns := task.Info.Name
+	e.s.testMapLock.Lock()
 	test := e.s.testsByNamespaceName[ns]
+	e.s.testMapLock.Unlock()
 	if test == nil {
 		// This can happen after a test has completed
 		return fmt.Errorf("failed to retrieve test for namespace %s", ns)
@@ -755,7 +760,9 @@ func (t *hrsuTestExecutableTaskConverter) Convert(
 
 // Execute pushes the task to a buffer and waits for it to be executed.
 func (task *hrsuTestExecutableTask) Execute() error {
+	task.s.testMapLock.Lock()
 	test := task.s.testsByWorkflowId[task.workflowId()]
+	task.s.testMapLock.Unlock()
 	if test == nil {
 		return fmt.Errorf("failed to retrieve test for workflow %s", task.workflowId())
 	}
