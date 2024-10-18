@@ -97,20 +97,24 @@ func mustNewScheduledEvent(schedTime time.Time, timeout time.Duration) *historyp
 		panic(err)
 	}
 
+	attr := &historypb.NexusOperationScheduledEventAttributes{
+		EndpointId: "endpoint-id",
+		Endpoint:   "endpoint",
+		Service:    "service",
+		Operation:  "operation",
+		Input:      payload,
+		RequestId:  uuid.NewString(),
+	}
+	if timeout > 0 {
+		attr.ScheduleToCloseTimeout = durationpb.New(timeout)
+	}
+
 	return &historypb.HistoryEvent{
 		EventType: enumspb.EVENT_TYPE_NEXUS_OPERATION_SCHEDULED,
 		EventId:   1,
 		EventTime: timestamppb.New(schedTime),
 		Attributes: &historypb.HistoryEvent_NexusOperationScheduledEventAttributes{
-			NexusOperationScheduledEventAttributes: &historypb.NexusOperationScheduledEventAttributes{
-				EndpointId:             "endpoint-id",
-				Endpoint:               "endpoint",
-				Service:                "service",
-				Operation:              "operation",
-				Input:                  payload,
-				RequestId:              uuid.NewString(),
-				ScheduleToCloseTimeout: durationpb.New(timeout),
-			},
+			NexusOperationScheduledEventAttributes: attr,
 		},
 	}
 }

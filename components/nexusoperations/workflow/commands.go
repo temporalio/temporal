@@ -36,6 +36,7 @@ import (
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 	commonnexus "go.temporal.io/server/common/nexus"
+	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/components/nexusoperations"
 	"go.temporal.io/server/service/history/hsm"
 	"go.temporal.io/server/service/history/workflow"
@@ -107,6 +108,14 @@ func (ch *commandHandler) HandleScheduleCommand(
 				"ScheduleNexusOperationCommandAttributes.Operation exceeds length limit of %d",
 				ch.config.MaxOperationNameLength(nsName),
 			),
+		}
+	}
+
+	if err := timestamp.ValidateProtoDuration(attrs.ScheduleToCloseTimeout); err != nil {
+		return workflow.FailWorkflowTaskError{
+			Cause: enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SCHEDULE_NEXUS_OPERATION_ATTRIBUTES,
+			Message: fmt.Sprintf(
+				"ScheduleNexusOperationCommandAttributes.ScheduleToCloseTimeout is invalid: %v", err),
 		}
 	}
 
