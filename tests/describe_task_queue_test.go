@@ -72,6 +72,16 @@ func (s *DescribeTaskQueueSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 }
 
+func (s *DescribeTaskQueueSuite) TestNonRootLegacy() {
+	resp, err := s.FrontendClient().DescribeTaskQueue(context.Background(), &workflowservice.DescribeTaskQueueRequest{
+		Namespace: s.Namespace(),
+		TaskQueue: &taskqueuepb.TaskQueue{Name: "/_sys/foo/1", Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+		ApiMode:   enumspb.DESCRIBE_TASK_QUEUE_MODE_UNSPECIFIED,
+	})
+	s.NoError(err)
+	s.NotNil(resp)
+}
+
 func (s *DescribeTaskQueueSuite) TestAddNoTasks_ValidateStats() {
 	// Override the ReadPartitions and WritePartitions
 	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 4)
