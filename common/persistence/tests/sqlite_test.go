@@ -65,7 +65,7 @@ func NewSQLiteMemoryConfig() *config.SQL {
 	}
 }
 
-// NewSQLiteMemoryConfig returns a new SQLite config for test
+// NewSQLiteFileConfig returns a new SQLite config for test
 func NewSQLiteFileConfig() *config.SQL {
 	return &config.SQL{
 		User:              "",
