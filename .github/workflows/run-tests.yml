@@ -280,6 +280,15 @@ jobs:
         if: ${{ !cancelled() }}
         run: make upload-test-results
 
+      - name: Upload test results as a GitHub Actions artifact
+        uses: actions/upload-artifact@v4.4.0
+        if: ${{ !cancelled() }}
+        with:
+          name: junit-xml--${{github.run_id}}--${{github.run_attempt}}--unit-test
+          path: .testoutput
+          retention-days: 14
+          include-hidden-files: true
+
   integration-test:
     if: ${{ inputs.run_single_functional_test != true && inputs.run_single_unit_test != true }}
     name: Integration test
@@ -332,6 +341,7 @@ jobs:
         run: |
           echo "Detecting flaky integration tests: ${{ needs.set-up-single-test.outputs.modified_integration_test_suites }}"
           make integration-test-coverage TEST_ARGS="-run=${{ needs.set-up-single-test.outputs.modified_integration_test_suites }} -count=5"
+          
       - name: Upload test results
         if: ${{ !cancelled() }}
         run: make upload-test-results
@@ -340,6 +350,15 @@ jobs:
         if: ${{ always() }}
         run: |
           docker compose -f ${{ env.DOCKER_COMPOSE_FILE }} down -v
+          
+      - name: Upload test results as a GitHub Actions artifact
+        uses: actions/upload-artifact@v4.4.0
+        if: always()
+        with:
+          name: junit-xml--${{github.run_id}}--${{github.run_attempt}}--integration-test
+          path: .testoutput
+          retention-days: 14
+          include-hidden-files: true
 
   functional-test:
     if: ${{ inputs.run_single_unit_test != true }}
@@ -449,6 +468,15 @@ jobs:
         if: ${{ !cancelled() && (inputs.run_single_functional_test != true || (inputs.run_single_functional_test == true && contains(fromJSON(needs.set-up-single-test.outputs.dbs), env.PERSISTENCE_DRIVER))) }}
         run: make upload-test-results
 
+      - name: Upload test results as a GitHub Actions artifact
+        uses: actions/upload-artifact@v4.4.0
+        if: ${{ !cancelled() }}
+        with:
+          name: junit-xml--${{github.run_id}}--${{github.run_attempt}}--${{matrix.runs-on}}--${{matrix.name}}--${{matrix.shard_index}}--functional-test
+          path: .testoutput
+          retention-days: 14
+          include-hidden-files: true
+
   functional-test-xdc:
     if: ${{ inputs.run_single_functional_test != true && inputs.run_single_unit_test != true }}
     name: Functional test xdc
@@ -535,6 +563,15 @@ jobs:
         if: ${{ !cancelled() }}
         run: make upload-test-results
 
+      - name: Upload test results as a GitHub Actions artifact
+        uses: actions/upload-artifact@v4.4.0
+        if: ${{ !cancelled() }}
+        with:
+          name: junit-xml--${{github.run_id}}--${{github.run_attempt}}--${{matrix.name}}--functional-test-xdc
+          path: .testoutput
+          retention-days: 14
+          include-hidden-files: true
+
   functional-test-ndc:
     if: ${{ inputs.run_single_functional_test != true && inputs.run_single_unit_test != true }}
     name: Functional test ndc
@@ -617,6 +654,15 @@ jobs:
         run: |
           echo "Detecting flaky functional ndc tests: ${{ needs.set-up-single-test.outputs.modified_functional_ndc_test_suites }}"
           make functional-test-ndc-coverage TEST_ARGS="-run=${{ needs.set-up-single-test.outputs.modified_functional_ndc_test_suites }} -count=5"
+          
+      - name: Upload test results as a GitHub Actions artifact
+        uses: actions/upload-artifact@v4.4.0
+        if: ${{ !cancelled() }}
+        with:
+          name: junit-xml--${{github.run_id}}--${{github.run_attempt}}--${{matrix.name}}--functional-test-ndc
+          path: .testoutput
+          retention-days: 14
+          include-hidden-files: true
 
   test-status:
     if: always()
