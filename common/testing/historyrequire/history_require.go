@@ -35,6 +35,7 @@ import (
 	"github.com/stretchr/testify/require"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
+	"google.golang.org/protobuf/proto"
 )
 
 type (
@@ -57,10 +58,8 @@ func New(t require.TestingT) HistoryRequire {
 }
 
 // TODO (maybe):
-//  - ContainsHistoryEvents (should accept expectedHistory with and w/o event Ids)
-//  - StartsWithHistoryEvents (should accept expectedHistory with and w/o event Ids)
-//  - EndsWithHistoryEvents (should accept expectedHistory with and w/o event Ids)
-//  - WaitForHistoryEvents (call getHistory until expectedHistory is found, with interval and timeout)
+//  - ContainsHistoryEvents
+//  - WaitForHistoryEvents (call getHistory until expectedHistory is reached, with interval and timeout)
 //  - Funcs like WithVersion, WithTime, WithAttributes, WithPayloadLimit(100) and pass them to PrintHistory
 //  - oneof support
 //  - enums as strings not as ints
@@ -70,15 +69,35 @@ func (h HistoryRequire) EqualHistoryEvents(expectedHistory string, actualHistory
 		th.Helper()
 	}
 
-	expectedCompactHistory, expectedEventsAttributes := h.parseHistory(expectedHistory)
-	actualCompactHistory := h.formatHistoryEventsCompact(actualHistoryEvents)
-	require.Equal(h.t, expectedCompactHistory, actualCompactHistory)
-	for _, actualHistoryEvent := range actualHistoryEvents {
-		if expectedEventAttributes, ok := expectedEventsAttributes[actualHistoryEvent.EventId]; ok {
-			actualEventAttributes := reflect.ValueOf(actualHistoryEvent.Attributes).Elem().Field(0).Elem()
-			h.equalExpectedMapToActualAttributes(expectedEventAttributes, actualEventAttributes, actualHistoryEvent.EventId, "")
-		}
+	expectedHistoryEvents, expectedEventsAttributes := h.parseHistory(expectedHistory)
+
+	require.Equalf(h.t, len(expectedHistoryEvents), len(actualHistoryEvents), "Length of expected(%d) and actual(%d) histories is not equal", len(expectedHistoryEvents), len(actualHistoryEvents))
+
+	h.equalHistoryEvents(expectedHistoryEvents, expectedEventsAttributes, actualHistoryEvents)
+}
+
+func (h HistoryRequire) EqualHistoryEventsSuffix(expectedHistorySuffix string, actualHistoryEvents []*historypb.HistoryEvent) {
+	if th, ok := h.t.(helper); ok {
+		th.Helper()
 	}
+
+	expectedHistoryEvents, expectedEventsAttributes := h.parseHistory(expectedHistorySuffix)
+
+	require.GreaterOrEqualf(h.t, len(actualHistoryEvents), len(expectedHistoryEvents), "Length of actual history(%d) must be greater or equal to the length of expected history(%d)", len(actualHistoryEvents), len(expectedHistoryEvents))
+
+	h.equalHistoryEvents(expectedHistoryEvents, expectedEventsAttributes, actualHistoryEvents[len(actualHistoryEvents)-len(expectedHistoryEvents):])
+}
+
+func (h HistoryRequire) EqualHistoryEventsPrefix(expectedHistoryPrefix string, actualHistoryEvents []*historypb.HistoryEvent) {
+	if th, ok := h.t.(helper); ok {
+		th.Helper()
+	}
+
+	expectedHistoryEvents, expectedEventsAttributes := h.parseHistory(expectedHistoryPrefix)
+
+	require.GreaterOrEqualf(h.t, len(actualHistoryEvents), len(expectedHistoryEvents), "Length of actual history(%d) must be greater or equal to the length of expected history(%d)", len(actualHistoryEvents), len(expectedHistoryEvents))
+
+	h.equalHistoryEvents(expectedHistoryEvents, expectedEventsAttributes, actualHistoryEvents[:len(expectedHistoryEvents)])
 }
 
 func (h HistoryRequire) EqualHistory(expectedHistory string, actualHistory *historypb.History) {
@@ -89,12 +108,28 @@ func (h HistoryRequire) EqualHistory(expectedHistory string, actualHistory *hist
 	h.EqualHistoryEvents(expectedHistory, actualHistory.GetEvents())
 }
 
+func (h HistoryRequire) EqualHistorySuffix(expectedHistorySuffix string, actualHistory *historypb.History) {
+	if th, ok := h.t.(helper); ok {
+		th.Helper()
+	}
+
+	h.EqualHistoryEventsSuffix(expectedHistorySuffix, actualHistory.GetEvents())
+}
+
+func (h HistoryRequire) EqualHistoryPrefix(expectedHistoryPrefix string, actualHistory *historypb.History) {
+	if th, ok := h.t.(helper); ok {
+		th.Helper()
+	}
+
+	h.EqualHistoryEventsPrefix(expectedHistoryPrefix, actualHistory.GetEvents())
+}
+
 func (h HistoryRequire) PrintHistory(history *historypb.History) {
 	h.PrintHistoryEvents(history.GetEvents())
 }
 
 func (h HistoryRequire) PrintHistoryEvents(events []*historypb.HistoryEvent) {
-	_, _ = fmt.Println(h.formatHistoryEvents(events))
+	_, _ = fmt.Println(h.formatHistoryEvents(events, false))
 }
 
 func (h HistoryRequire) PrintHistoryCompact(history *historypb.History) {
@@ -102,45 +137,79 @@ func (h HistoryRequire) PrintHistoryCompact(history *historypb.History) {
 }
 
 func (h HistoryRequire) PrintHistoryEventsCompact(events []*historypb.HistoryEvent) {
-	_, _ = fmt.Println(h.formatHistoryEventsCompact(events))
+	_, _ = fmt.Println(h.formatHistoryEvents(events, true))
 }
 
-func (h HistoryRequire) formatHistoryEventsCompact(historyEvents []*historypb.HistoryEvent) string {
+func (h HistoryRequire) equalHistoryEvents(
+	expectedHistoryEvents []*historypb.HistoryEvent,
+	expectedEventsAttributes []map[string]any,
+	actualHistoryEvents []*historypb.HistoryEvent,
+) {
 	if th, ok := h.t.(helper); ok {
 		th.Helper()
 	}
 
+	var sanitizedActualHistoryEvents []*historypb.HistoryEvent
+	for i, actualHistoryEvent := range actualHistoryEvents {
+		if expectedHistoryEvents[i].GetEventId() != 0 && expectedHistoryEvents[i].GetVersion() != 0 {
+			sanitizedActualHistoryEvents = append(sanitizedActualHistoryEvents, actualHistoryEvent)
+			continue
+		}
+
+		sanitizedActualHistoryEvent := proto.Clone(actualHistoryEvent).(*historypb.HistoryEvent)
+		if expectedHistoryEvents[i].GetEventId() == 0 {
+			sanitizedActualHistoryEvent.EventId = 0
+		}
+		if expectedHistoryEvents[i].GetVersion() == 0 {
+			sanitizedActualHistoryEvent.Version = 0
+		}
+		sanitizedActualHistoryEvents = append(sanitizedActualHistoryEvents, sanitizedActualHistoryEvent)
+	}
+
+	expectedCompactHistory := h.formatHistoryEvents(expectedHistoryEvents, true)
+	actualCompactHistory := h.formatHistoryEvents(sanitizedActualHistoryEvents, true)
+	require.Equal(h.t, expectedCompactHistory, actualCompactHistory)
+	for i, actualHistoryEvent := range sanitizedActualHistoryEvents {
+		if expectedEventAttributes := expectedEventsAttributes[i]; expectedEventAttributes != nil {
+			actualEventAttributes := reflect.ValueOf(actualHistoryEvent.Attributes).Elem().Field(0).Elem()
+			h.equalExpectedMapToActualAttributes(expectedEventAttributes, actualEventAttributes, actualHistoryEvent.EventId, "")
+		}
+	}
+}
+
+func (h HistoryRequire) formatHistoryEvents(historyEvents []*historypb.HistoryEvent, compact bool) string {
+	if th, ok := h.t.(helper); ok {
+		th.Helper()
+	}
+
+	if len(historyEvents) == 0 {
+		return ""
+	}
+
 	var sb strings.Builder
 	for _, event := range historyEvents {
+		var eventIDStr string
+		if event.GetEventId() != 0 {
+			eventIDStr = fmt.Sprintf("%3d ", event.GetEventId())
+		}
+
 		var versionStr string
 		if event.GetVersion() != 0 {
-			versionStr = fmt.Sprintf(" %2d", event.GetVersion())
+			versionStr = fmt.Sprintf("v%2d ", event.GetVersion())
 		}
-		_, _ = sb.WriteString(fmt.Sprintf("%3d%s %s\n", event.GetEventId(), versionStr, event.GetEventType()))
-	}
-	if sb.Len() > 0 {
-		return sb.String()[:sb.Len()-1]
-	}
-	return ""
-}
 
-func (h HistoryRequire) formatHistoryEvents(historyEvents []*historypb.HistoryEvent) string {
-	if th, ok := h.t.(helper); ok {
-		th.Helper()
+		var eventAttrsJsonStr string
+		if !compact {
+			eventAttrs := reflect.ValueOf(event.Attributes).Elem().Field(0).Elem().Interface()
+			eventAttrsMap := h.structToMap(eventAttrs)
+			eventAttrsJsonBytes, err := json.Marshal(eventAttrsMap)
+			require.NoError(h.t, err)
+			eventAttrsJsonStr = " " + string(eventAttrsJsonBytes)
+		}
+		_, _ = sb.WriteString(strings.Join([]string{eventIDStr, versionStr, event.GetEventType().String(), eventAttrsJsonStr, "\n"}, ""))
 	}
 
-	var sb strings.Builder
-	for _, event := range historyEvents {
-		eventAttrs := reflect.ValueOf(event.Attributes).Elem().Field(0).Elem().Interface()
-		eventAttrsMap := h.structToMap(eventAttrs)
-		eventAttrsJson, err := json.Marshal(eventAttrsMap)
-		require.NoError(h.t, err)
-		_, _ = sb.WriteString(fmt.Sprintf("%3d %s %s\n", event.GetEventId(), event.GetEventType(), string(eventAttrsJson)))
-	}
-	if sb.Len() > 0 {
-		return sb.String()[:sb.Len()-1]
-	}
-	return ""
+	return sb.String()[:sb.Len()-1]
 }
 
 func (h HistoryRequire) structToMap(strct any) map[string]any {
@@ -257,63 +326,72 @@ func (h HistoryRequire) equalExpectedMapToActualAttributes(expectedMap map[strin
 	}
 }
 
-// parseHistory accept history in a formatHistoryEvents format and returns compact history string and map of eventID to map of event attributes.
-func (h HistoryRequire) parseHistory(expectedHistory string) (string, map[int64]map[string]any) {
+// parseHistory accept history in a formatHistoryEvents format and return slice of history events w/o attributes and maps of event attributes for every event.
+func (h HistoryRequire) parseHistory(history string) ([]*historypb.HistoryEvent, []map[string]any) {
 	if th, ok := h.t.(helper); ok {
 		th.Helper()
 	}
 
 	var historyEvents []*historypb.HistoryEvent
-	eventsAttrs := make(map[int64]map[string]any)
+	var eventsAttrs []map[string]any
 	prevEventID := 0
-	for lineNum, eventLine := range strings.Split(expectedHistory, "\n") {
+	firstEvent := true
+	for lineNum, eventLine := range strings.Split(history, "\n") {
 		fields := strings.Fields(eventLine)
 		if len(fields) == 0 || fields[0] == "//" {
 			continue
 		}
-		if len(fields) < 2 {
+		if len(fields) < 1 {
 			require.FailNowf(h.t, "", "Not enough fields on line %d", lineNum+1)
 		}
-		eventID, err := strconv.Atoi(fields[0])
-		if err != nil {
-			require.FailNowf(h.t, err.Error(), "Failed to parse EventID on line %d", lineNum+1)
+
+		nextFieldIndex := 0
+
+		eventID, err := strconv.Atoi(fields[nextFieldIndex])
+		if err == nil {
+			nextFieldIndex++
 		}
-		if eventID != prevEventID+1 && prevEventID != 0 {
+		if !firstEvent && eventID != 0 && eventID != prevEventID+1 {
 			require.FailNowf(h.t, "", "Wrong EventID sequence after EventID %d on line %d", prevEventID, lineNum+1)
 		}
 		prevEventID = eventID
+		firstEvent = false
 
-		eventVersion, err := strconv.Atoi(fields[1])
-		eventTypeIndex := 1
-		if err == nil {
-			eventTypeIndex = 2
+		var eventVersion int
+		if fields[nextFieldIndex][0:1] == "v" {
+			eventVersion, err = strconv.Atoi(fields[nextFieldIndex][1:])
+			if err != nil {
+				require.FailNowf(h.t, "", "Wrong event version %s on line %d. Must be in v1 format", fields[nextFieldIndex], lineNum+1)
+			}
+			nextFieldIndex++
 		}
 
-		eventType, err := enumspb.EventTypeFromString(fields[eventTypeIndex])
+		eventType, err := enumspb.EventTypeFromString(fields[nextFieldIndex])
 		if err != nil {
-			require.FailNowf(h.t, "", "Unknown event type %s for EventID=%d", fields[eventTypeIndex], lineNum+1)
+			require.FailNowf(h.t, "", "Unknown event type %s for event on line %d", fields[nextFieldIndex], lineNum+1)
 		}
 		historyEvents = append(historyEvents, &historypb.HistoryEvent{
 			EventId:   int64(eventID),
 			Version:   int64(eventVersion),
 			EventType: eventType,
 		})
+		nextFieldIndex++
 		var jb strings.Builder
-		for i := eventTypeIndex + 1; i < len(fields); i++ {
+		for i := nextFieldIndex; i < len(fields); i++ {
 			if strings.HasPrefix(fields[i], "//") {
 				break
 			}
 			_, _ = jb.WriteString(fields[i])
 			_, _ = jb.WriteRune(' ')
 		}
+		var eventAttrs map[string]any
 		if jb.Len() > 0 {
-			var eventAttrs map[string]any
-			err := json.Unmarshal([]byte(jb.String()), &eventAttrs)
+			err = json.Unmarshal([]byte(jb.String()), &eventAttrs)
 			if err != nil {
-				require.FailNowf(h.t, err.Error(), "Failed to unmarshal attributes %q for EventID=%d", jb.String(), lineNum+1)
+				require.FailNowf(h.t, err.Error(), "Failed to unmarshal attributes %q for event on line %d", jb.String(), lineNum+1)
 			}
-			eventsAttrs[int64(eventID)] = eventAttrs
 		}
+		eventsAttrs = append(eventsAttrs, eventAttrs)
 	}
-	return h.formatHistoryEventsCompact(historyEvents), eventsAttrs
+	return historyEvents, eventsAttrs
 }
