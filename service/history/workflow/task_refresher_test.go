@@ -556,55 +556,108 @@ func (s *taskRefresherSuite) TestRefreshActivityTasks() {
 			},
 		},
 	}
-	mutableState, err := NewMutableStateFromDB(
-		s.mockShard,
-		s.mockShard.GetEventsCache(),
-		log.NewTestLogger(),
-		tests.LocalNamespaceEntry,
-		mutableStateRecord,
-		10,
-	)
-	s.NoError(err)
 
-	// only the first activity will actually refresh the transfer activity task
-	scheduledEvent := &historypb.HistoryEvent{
-		EventId:   5,
-		Version:   common.EmptyVersion,
-		EventType: enumspb.EVENT_TYPE_ACTIVITY_TASK_SCHEDULED,
-		Attributes: &historypb.HistoryEvent_ActivityTaskScheduledEventAttributes{
-			ActivityTaskScheduledEventAttributes: &historypb.ActivityTaskScheduledEventAttributes{},
+	testCase := []struct {
+		name                         string
+		minVersionedTransition       *persistencespb.VersionedTransition
+		getActivityScheduledEventIDs []int64
+		generateActivityTaskIDs      []int64
+		expectedTimerTaskStatus      map[int64]int32
+		expectedRefreshedTasks       []tasks.Task
+	}{
+		{
+			name: "PartialRefresh",
+			minVersionedTransition: &persistencespb.VersionedTransition{
+				TransitionCount:          4,
+				NamespaceFailoverVersion: common.EmptyVersion,
+			},
+			expectedTimerTaskStatus: map[int64]int32{
+				5: TimerTaskStatusCreatedScheduleToStart,
+				6: TimerTaskStatusCreatedStartToClose,
+				7: TimerTaskStatusCreatedScheduleToStart,
+			},
+		},
+		{
+			name:                         "FullRefresh",
+			minVersionedTransition:       EmptyVersionedTransition,
+			getActivityScheduledEventIDs: []int64{5, 7},
+			generateActivityTaskIDs:      []int64{5, 7},
+			expectedTimerTaskStatus: map[int64]int32{
+				5: TimerTaskStatusNone,
+				6: TimerTaskStatusNone,
+				7: TimerTaskStatusCreatedScheduleToStart,
+			},
+			expectedRefreshedTasks: []tasks.Task{
+				&tasks.ActivityTimeoutTask{
+					WorkflowKey:         s.mutableState.GetWorkflowKey(),
+					VisibilityTimestamp: mutableStateRecord.ActivityInfos[7].ScheduledTime.AsTime().Add(mutableStateRecord.ActivityInfos[7].ScheduleToStartTimeout.AsDuration()),
+					EventID:             7,
+					TimeoutType:         enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START,
+					Attempt:             0,
+				},
+			},
 		},
 	}
-	s.mockShard.MockEventsCache.EXPECT().GetEvent(
-		gomock.Any(),
-		s.mockShard.GetShardID(),
-		events.EventKey{
-			NamespaceID: tests.NamespaceID,
-			WorkflowID:  tests.WorkflowID,
-			RunID:       tests.RunID,
-			EventID:     int64(5),
-			Version:     common.EmptyVersion,
-		},
-		int64(4),
-		branchToken,
-	).Return(scheduledEvent, nil).Times(1)
 
-	s.mockTaskGenerator.EXPECT().GenerateActivityTasks(int64(5)).Return(nil).Times(1)
+	for _, tc := range testCase {
+		s.T().Run(tc.name, func(t *testing.T) {
+			mutableState, err := NewMutableStateFromDB(
+				s.mockShard,
+				s.mockShard.GetEventsCache(),
+				log.NewTestLogger(),
+				tests.LocalNamespaceEntry,
+				mutableStateRecord,
+				10,
+			)
+			s.NoError(err)
 
-	err = s.taskRefresher.refreshTasksForActivity(context.Background(), mutableState, s.mockTaskGenerator, &persistencespb.VersionedTransition{
-		TransitionCount:          4,
-		NamespaceFailoverVersion: common.EmptyVersion,
-	})
-	s.NoError(err)
+			for _, eventID := range tc.getActivityScheduledEventIDs {
+				// only the first activity will actually refresh the transfer activity task
+				scheduledEvent := &historypb.HistoryEvent{
+					EventId:   eventID,
+					Version:   common.EmptyVersion,
+					EventType: enumspb.EVENT_TYPE_ACTIVITY_TASK_SCHEDULED,
+					Attributes: &historypb.HistoryEvent_ActivityTaskScheduledEventAttributes{
+						ActivityTaskScheduledEventAttributes: &historypb.ActivityTaskScheduledEventAttributes{},
+					},
+				}
+				s.mockShard.MockEventsCache.EXPECT().GetEvent(
+					gomock.Any(),
+					s.mockShard.GetShardID(),
+					events.EventKey{
+						NamespaceID: tests.NamespaceID,
+						WorkflowID:  tests.WorkflowID,
+						RunID:       tests.RunID,
+						EventID:     eventID,
+						Version:     common.EmptyVersion,
+					},
+					int64(4),
+					branchToken,
+				).Return(scheduledEvent, nil).Times(1)
+			}
+			for _, eventID := range tc.generateActivityTaskIDs {
+				s.mockTaskGenerator.EXPECT().GenerateActivityTasks(int64(eventID)).Return(nil).Times(1)
+			}
 
-	pendingActivityInfos := mutableState.GetPendingActivityInfos()
-	s.Len(pendingActivityInfos, 3)
-	s.Equal(int32(TimerTaskStatusNone), pendingActivityInfos[5].TimerTaskStatus)
-	s.Equal(int32(TimerTaskStatusNone), pendingActivityInfos[6].TimerTaskStatus)
-	s.Equal(int32(TimerTaskStatusCreatedScheduleToStart), pendingActivityInfos[7].TimerTaskStatus)
+			err = s.taskRefresher.refreshTasksForActivity(context.Background(), mutableState, s.mockTaskGenerator, tc.minVersionedTransition)
+			s.NoError(err)
 
-	refreshedTasks := mutableState.PopTasks()
-	s.Empty(refreshedTasks[tasks.CategoryTimer])
+			pendingActivityInfos := mutableState.GetPendingActivityInfos()
+			s.Len(pendingActivityInfos, 3)
+			s.Equal(tc.expectedTimerTaskStatus[5], pendingActivityInfos[5].TimerTaskStatus)
+			s.Equal(tc.expectedTimerTaskStatus[6], pendingActivityInfos[6].TimerTaskStatus)
+			s.Equal(tc.expectedTimerTaskStatus[7], pendingActivityInfos[7].TimerTaskStatus)
+
+			refreshedTasks := mutableState.PopTasks()
+			s.Len(refreshedTasks[tasks.CategoryTimer], len(tc.expectedRefreshedTasks))
+			for idx, task := range refreshedTasks[tasks.CategoryTimer] {
+				if activityTimeoutTask, ok := task.(*tasks.ActivityTimeoutTask); ok {
+					s.Equal(tc.expectedRefreshedTasks[idx], activityTimeoutTask)
+				}
+			}
+		})
+	}
+
 }
 
 func (s *taskRefresherSuite) TestRefreshUserTimer() {
