@@ -427,7 +427,7 @@ functional-test-coverage: prepare-coverage-test
 	cd $(FUNCTIONAL_TEST_ROOT) && \
 	$(call gotestsum_coverage, $(FUNCTIONAL_TEST_ROOT)) \
 		$(COMPILED_TEST_ARGS) -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER) \
-		$(FUNCTIONAL_TEST_COVERPKG)  -coverprofile=$(NEW_COVER_PROFILE)
+		$(FUNCTIONAL_TEST_COVERPKG) -coverprofile=$(NEW_COVER_PROFILE)
 
 functional-test-xdc-coverage: prepare-coverage-test
 	@printf $(COLOR) "Run functional test for cross DC with coverage with $(PERSISTENCE_DRIVER) driver..."
