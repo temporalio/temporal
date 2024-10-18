@@ -30,7 +30,6 @@ GOPATH      ?= $(shell go env GOPATH)
 # Disable cgo by default.
 CGO_ENABLED ?= 0
 
-TEST_ARGS ?= -race
 PERSISTENCE_TYPE ?= nosql
 PERSISTENCE_DRIVER ?= cassandra
 
@@ -46,13 +45,35 @@ ALL_TEST_TAGS := $(ALL_BUILD_TAGS),$(TEST_TAG)
 BUILD_TAG_FLAG := -tags $(ALL_BUILD_TAGS)
 TEST_TAG_FLAG := -tags $(ALL_TEST_TAGS)
 
+# 20 minutes is the upper bound defined for all tests. (Tests in CI take up to about 12:30 now)
+# If you change this, also change .github/workflows/run-tests.yml!
+# The timeout in the GH workflow must be larger than this to avoid GH timing out the action,
+# which causes the a job run to not produce any logs and hurts the debugging experience.
+TEST_TIMEOUT ?= 20m
+
+# Number of retries for *-coverage targets.
+# NOTE: This is incompatible with TEST_ARGS which specify the `-run` flag due to how gotestsum selects which tests to
+# retry.
+FAILED_TEST_RETRIES ?= 2
+
+# Whether or not to test with the race detector. All of (1 on y yes t true) are true values.
+TEST_RACE_FLAG ?= on
+# Whether or not to shuffle tests. All of (1 on y yes t true) are true values.
+TEST_SHUFFLE_FLAG ?= on
+# Common test args used in the various test suite targets.
+COMPILED_TEST_ARGS := -timeout=$(TEST_TIMEOUT) \
+		     $(if $(filter 1 on y yes t true, $(TEST_RACE_FLAG)),-race,) \
+		     $(if $(filter 1 on y yes t true, $(TEST_SHUFFLE_FLAG)),-shuffle on,) \
+		     $(TEST_PARALLEL_FLAGS) \
+		     $(TEST_ARGS) \
+		     $(TEST_TAG_FLAG)
 
 ##### Variables ######
 
 ROOT := $(shell git rev-parse --show-toplevel)
-LOCALBIN := .bin
+LOCALBIN := $(ROOT)/.bin
 STAMPDIR := .stamp
-export PATH := $(ROOT)/$(LOCALBIN):$(PATH)
+export PATH := $(LOCALBIN):$(PATH)
 GOINSTALL := GOBIN=$(ROOT)/$(LOCALBIN) go install
 
 MODULE_ROOT := $(lastword $(shell grep -e "^module " go.mod))
@@ -63,12 +84,6 @@ define NEWLINE
 
 
 endef
-
-# 20 minutes is the upper bound defined for all tests. (Tests in CI take up to about 12:30 now)
-# If you change this, also change .github/workflows/run-tests.yml!
-# The timeout in the GH workflow must be larger than this to avoid GH timing out the action,
-# which causes the a job run to not produce any logs and hurts the debugging experience.
-TEST_TIMEOUT ?= 20m
 
 PROTO_ROOT := proto
 PROTO_FILES = $(shell find ./$(PROTO_ROOT)/internal -name "*.proto")
@@ -93,7 +108,9 @@ FUNCTIONAL_TEST_NDC_ROOT      := ./tests/ndc
 DB_INTEGRATION_TEST_ROOT      := ./common/persistence/tests
 DB_TOOL_INTEGRATION_TEST_ROOT := ./tools/tests
 INTEGRATION_TEST_DIRS := $(DB_INTEGRATION_TEST_ROOT) $(DB_TOOL_INTEGRATION_TEST_ROOT) ./temporaltest ./internal/temporalite
-UNIT_TEST_DIRS ?= $(filter-out $(FUNCTIONAL_TEST_ROOT)% $(FUNCTIONAL_TEST_XDC_ROOT)% $(FUNCTIONAL_TEST_NDC_ROOT)% $(DB_INTEGRATION_TEST_ROOT)% $(DB_TOOL_INTEGRATION_TEST_ROOT)% ./temporaltest% ./internal/temporalite%,$(TEST_DIRS))
+ifeq ($(UNIT_TEST_DIRS),)
+UNIT_TEST_DIRS := $(filter-out $(FUNCTIONAL_TEST_ROOT)% $(FUNCTIONAL_TEST_XDC_ROOT)% $(FUNCTIONAL_TEST_NDC_ROOT)% $(DB_INTEGRATION_TEST_ROOT)% $(DB_TOOL_INTEGRATION_TEST_ROOT)% ./temporaltest% ./internal/temporalite%,$(TEST_DIRS))
+endif
 
 # github.com/urfave/cli/v2@v2.4.0             - needs to accept comma in values before unlocking https://github.com/urfave/cli/pull/1241.
 PINNED_DEPENDENCIES := \
@@ -101,7 +118,7 @@ PINNED_DEPENDENCIES := \
 	github.com/urfave/cli/v2@v2.4.0
 
 # Code coverage & test report output files.
-TEST_OUTPUT_ROOT        := ./.testoutput
+TEST_OUTPUT_ROOT        := $(ROOT)/.testoutput
 NEW_COVER_PROFILE       = $(TEST_OUTPUT_ROOT)/$(shell xxd -p -l 16 /dev/urandom).cover.out   # generates a new filename each time it's substituted
 SUMMARY_COVER_PROFILE  := $(TEST_OUTPUT_ROOT)/summary.cover.out
 NEW_REPORT              = $(TEST_OUTPUT_ROOT)/$(shell xxd -p -l 16 /dev/urandom).junit.xml   # generates a new filename each time it's substituted
@@ -352,26 +369,26 @@ build-tests:
 
 unit-test: clean-test-results
 	@printf $(COLOR) "Run unit tests..."
-	@go test $(UNIT_TEST_DIRS) -shuffle on -timeout=$(TEST_TIMEOUT) $(TEST_TAG_FLAG) $(TEST_ARGS) 2>&1 | tee -a test.log
+	@go test $(UNIT_TEST_DIRS) $(COMPILED_TEST_ARGS) 2>&1 | tee -a test.log
 	@! grep -q "^--- FAIL" test.log
 
 integration-test: clean-test-results
 	@printf $(COLOR) "Run integration tests..."
-	@go test $(INTEGRATION_TEST_DIRS) -shuffle on -timeout=$(TEST_TIMEOUT) $(TEST_TAG_FLAG) $(TEST_ARGS) 2>&1 | tee -a test.log
+	@go test $(INTEGRATION_TEST_DIRS) $(COMPILED_TEST_ARGS) 2>&1 | tee -a test.log
 	@! grep -q "^--- FAIL" test.log
 
 functional-test: clean-test-results
 	@printf $(COLOR) "Run functional tests..."
-	@go test $(FUNCTIONAL_TEST_ROOT) -shuffle on -timeout=$(TEST_TIMEOUT) $(TEST_TAG_FLAG) $(TEST_ARGS) -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER) 2>&1 | tee -a test.log
-	@go test $(FUNCTIONAL_TEST_NDC_ROOT) -shuffle on -timeout=$(TEST_TIMEOUT) $(TEST_TAG_FLAG) $(TEST_ARGS) -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER) 2>&1 | tee -a test.log
-	@go test $(FUNCTIONAL_TEST_XDC_ROOT) -shuffle on -timeout=$(TEST_TIMEOUT) $(TEST_TAG_FLAG) $(TEST_ARGS) -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER) 2>&1 | tee -a test.log
+	@go test $(FUNCTIONAL_TEST_ROOT) $(COMPILED_TEST_ARGS) -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER) 2>&1 | tee -a test.log
+	@go test $(FUNCTIONAL_TEST_NDC_ROOT) $(COMPILED_TEST_ARGS) -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER) 2>&1 | tee -a test.log
+	@go test $(FUNCTIONAL_TEST_XDC_ROOT) $(COMPILED_TEST_ARGS) -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER) 2>&1 | tee -a test.log
 	@! grep -q "^--- FAIL" test.log
 
 functional-with-fault-injection-test: clean-test-results
 	@printf $(COLOR) "Run integration tests with fault injection..."
-	@go test $(FUNCTIONAL_TEST_ROOT) -shuffle on -timeout=$(TEST_TIMEOUT) $(TEST_TAG_FLAG) $(TEST_ARGS) -FaultInjectionConfigFile=testdata/fault_injection.yaml -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER) 2>&1 | tee -a test.log
-	@go test $(FUNCTIONAL_TEST_NDC_ROOT) -shuffle on -timeout=$(TEST_TIMEOUT) $(TEST_TAG_FLAG) $(TEST_ARGS) -FaultInjectionConfigFile=testdata/fault_injection.yaml -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER) 2>&1 | tee -a test.log
-	@go test $(FUNCTIONAL_TEST_XDC_ROOT) -shuffle on -timeout=$(TEST_TIMEOUT) $(TEST_TAG_FLAG) $(TEST_ARGS) -FaultInjectionConfigFile=testdata/fault_injection.yaml -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER) 2>&1 | tee -a test.log
+	@go test $(FUNCTIONAL_TEST_ROOT) $(COMPILED_TEST_ARGS) -FaultInjectionConfigFile=testdata/fault_injection.yaml -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER) 2>&1 | tee -a test.log
+	@go test $(FUNCTIONAL_TEST_NDC_ROOT) $(COMPILED_TEST_ARGS) -FaultInjectionConfigFile=testdata/fault_injection.yaml -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER) 2>&1 | tee -a test.log
+	@go test $(FUNCTIONAL_TEST_XDC_ROOT) $(COMPILED_TEST_ARGS) -FaultInjectionConfigFile=testdata/fault_injection.yaml -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER) 2>&1 | tee -a test.log
 	@! grep -q "^--- FAIL" test.log
 
 test: unit-test integration-test functional-test
@@ -382,15 +399,24 @@ $(TEST_OUTPUT_ROOT):
 
 prepare-coverage-test: $(GOTESTSUM) $(TEST_OUTPUT_ROOT)
 
+# Runs gotestsum, retrying failed tests as specified by the FAILED_TEST_RETRIES variable.
+# A function is required here there are two variants of this command, putting the packages to test in different
+# positions.
+# NOTE: Packages need to be provided via a named argument when --rerun-fails is on as stated in the gotestsum README.
+# NOTE: This had to be a long line to avoid adding newlines to the generated command.
+define gotestsum_coverage
+	$(if $(shell test $(FAILED_TEST_RETRIES) -eq 0 && echo "OK"), $(GOTESTSUM) --junitfile $(NEW_REPORT) -- $(1), $(GOTESTSUM) --rerun-fails=$(FAILED_TEST_RETRIES) --rerun-fails-max-failures=10 --junitfile $(NEW_REPORT) --packages $(1) --)
+endef
+
 unit-test-coverage: prepare-coverage-test
 	@printf $(COLOR) "Run unit tests with coverage..."
-	$(GOTESTSUM) --junitfile $(NEW_REPORT) -- \
-		$(UNIT_TEST_DIRS) -shuffle on -timeout=$(TEST_TIMEOUT) $(TEST_ARGS) $(TEST_TAG_FLAG) $(SINGLE_TEST_ARGS) -coverprofile=$(NEW_COVER_PROFILE)
+	$(call gotestsum_coverage, $(UNIT_TEST_DIRS)) \
+		$(COMPILED_TEST_ARGS) -coverprofile=$(NEW_COVER_PROFILE)
 
 integration-test-coverage: prepare-coverage-test
 	@printf $(COLOR) "Run integration tests with coverage..."
-	$(GOTESTSUM) --junitfile $(NEW_REPORT) -- \
-		$(INTEGRATION_TEST_DIRS) -shuffle on -timeout=$(TEST_TIMEOUT) $(TEST_ARGS) $(TEST_TAG_FLAG) $(INTEGRATION_TEST_COVERPKG) -coverprofile=$(NEW_COVER_PROFILE)
+	$(call gotestsum_coverage, $(INTEGRATION_TEST_DIRS)) \
+		$(COMPILED_TEST_ARGS) $(INTEGRATION_TEST_COVERPKG) -coverprofile=$(NEW_COVER_PROFILE)
 
 # This should use the same build flags as functional-test-coverage and functional-test-{xdc,ndc}-coverage for best build caching.
 pre-build-functional-test-coverage: prepare-coverage-test
@@ -398,20 +424,24 @@ pre-build-functional-test-coverage: prepare-coverage-test
 
 functional-test-coverage: prepare-coverage-test
 	@printf $(COLOR) "Run functional tests with coverage with $(PERSISTENCE_DRIVER) driver..."
-	$(GOTESTSUM) --junitfile $(NEW_REPORT) -- \
-		$(FUNCTIONAL_TEST_ROOT) -shuffle on -timeout=$(TEST_TIMEOUT) $(TEST_ARGS) $(SINGLE_TEST_ARGS) $(TEST_TAG_FLAG) \
-		 -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER) \
-		 $(FUNCTIONAL_TEST_COVERPKG) -coverprofile=$(NEW_COVER_PROFILE) $(TEST_PARALLEL_FLAGS)
+	cd $(FUNCTIONAL_TEST_ROOT) && \
+	$(call gotestsum_coverage, $(FUNCTIONAL_TEST_ROOT)) \
+		$(COMPILED_TEST_ARGS) -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER) \
+		$(FUNCTIONAL_TEST_COVERPKG)  -coverprofile=$(NEW_COVER_PROFILE)
 
 functional-test-xdc-coverage: prepare-coverage-test
 	@printf $(COLOR) "Run functional test for cross DC with coverage with $(PERSISTENCE_DRIVER) driver..."
-	$(GOTESTSUM) --junitfile $(NEW_REPORT) -- \
-		$(FUNCTIONAL_TEST_XDC_ROOT) -shuffle on -timeout=$(TEST_TIMEOUT) $(TEST_ARGS) $(TEST_TAG_FLAG) -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER) $(FUNCTIONAL_TEST_COVERPKG) -coverprofile=$(NEW_COVER_PROFILE) $(TEST_PARALLEL_FLAGS)
+	cd $(FUNCTIONAL_TEST_XDC_ROOT) && \
+	$(call gotestsum_coverage, $(FUNCTIONAL_TEST_XDC_ROOT)) \
+		$(COMPILED_TEST_ARGS) -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER) \
+		$(FUNCTIONAL_TEST_COVERPKG) -coverprofile=$(NEW_COVER_PROFILE)
 
 functional-test-ndc-coverage: prepare-coverage-test
 	@printf $(COLOR) "Run functional test for NDC with coverage with $(PERSISTENCE_DRIVER) driver..."
-	$(GOTESTSUM) --junitfile $(NEW_REPORT) -- \
-		$(FUNCTIONAL_TEST_NDC_ROOT) -shuffle on -timeout=$(TEST_TIMEOUT) $(TEST_ARGS) $(TEST_TAG_FLAG) -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER) $(FUNCTIONAL_TEST_COVERPKG) -coverprofile=$(NEW_COVER_PROFILE) $(TEST_PARALLEL_FLAGS)
+	cd $(FUNCTIONAL_TEST_NDC_ROOT) && \
+	$(call gotestsum_coverage, $(FUNCTIONAL_TEST_NDC_ROOT)) \
+		$(COMPILED_TEST_ARGS) -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER) \
+		$(FUNCTIONAL_TEST_COVERPKG) -coverprofile=$(NEW_COVER_PROFILE)
 
 .PHONY: $(SUMMARY_COVER_PROFILE)
 $(SUMMARY_COVER_PROFILE):
