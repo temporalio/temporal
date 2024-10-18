@@ -171,7 +171,8 @@ func (e *executableTaskConverterImpl) convertOne(
 			e.processToolBox,
 			replicationTask.SourceTaskId,
 			taskCreationTime,
-			taskClusterName,
+			sourceClusterName,
+			sourceShardKey,
 			replicationTask,
 		)
 	default:
