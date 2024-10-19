@@ -268,7 +268,7 @@ jobs:
         if: ${{ !cancelled() && !inputs.run_single_unit_test }}
         with:
           name: junit-xml--${{github.run_id}}--${{github.run_attempt}}--unit-test
-          path: .testoutput
+          path: .testoutput/**/*.junit.xml
           retention-days: 14
           include-hidden-files: true
 
@@ -336,7 +336,7 @@ jobs:
         if: ${{ !cancelled() }}
         with:
           name: junit-xml--${{github.run_id}}--${{github.run_attempt}}--integration-test
-          path: .testoutput
+          path: .testoutput/**/*.junit.xml
           retention-days: 14
           include-hidden-files: true
 
@@ -458,7 +458,7 @@ jobs:
         if: ${{ !cancelled() && !inputs.run_single_functional_test }}
         with:
           name: junit-xml--${{github.run_id}}--${{github.run_attempt}}--${{matrix.runs-on}}--${{matrix.name}}--${{matrix.shard_index}}--functional-test
-          path: .testoutput
+          path: .testoutput/**/*.junit.xml
           retention-days: 14
           include-hidden-files: true
 
@@ -554,7 +554,7 @@ jobs:
         if: ${{ !cancelled() }}
         with:
           name: junit-xml--${{github.run_id}}--${{github.run_attempt}}--${{matrix.name}}--functional-test-xdc
-          path: .testoutput
+          path: .testoutput/**/*.junit.xml
           retention-days: 14
           include-hidden-files: true
 
@@ -651,7 +651,7 @@ jobs:
         if: ${{ !cancelled() }}
         with:
           name: junit-xml--${{github.run_id}}--${{github.run_attempt}}--${{matrix.name}}--functional-test-ndc
-          path: .testoutput
+          path: .testoutput/**/*.junit.xml
           retention-days: 14
           include-hidden-files: true
 
