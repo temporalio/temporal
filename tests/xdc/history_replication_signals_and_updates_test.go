@@ -257,14 +257,14 @@ func (s *hrsuTestSuite) TestConflictResolutionReappliesSignals() {
 	s.NoError(t.cluster2.client.SignalWorkflow(ctx, t.tv.WorkflowID(), t.tv.RunID(), "my-signal", "cluster2-signal"))
 
 	// cluster1 has accepted a signal
-	s.HistoryRequire.EqualHistoryEvents(`
+	s.EqualHistoryEvents(`
 	1 v1 WorkflowExecutionStarted
 	2 v1 WorkflowTaskScheduled
 	3 v1 WorkflowExecutionSignaled {"Input": {"Payloads": [{"Data": "\"cluster1-signal\""}]}}
 	`, t.cluster1.getHistory(ctx))
 
 	// cluster2 has also accepted a signal (with failover version 2 since it is endogenous to cluster 2)
-	s.HistoryRequire.EqualHistoryEvents(`
+	s.EqualHistoryEvents(`
 	1 v1 WorkflowExecutionStarted
 	2 v1 WorkflowTaskScheduled
 	3 v2 WorkflowExecutionSignaled {"Input": {"Payloads": [{"Data": "\"cluster2-signal\""}]}}
@@ -276,7 +276,7 @@ func (s *hrsuTestSuite) TestConflictResolutionReappliesSignals() {
 	// cluster2 sends its signal to cluster1. Since it has a higher failover version, it supersedes the endogenous
 	// signal in cluster1.
 	t.cluster1.executeHistoryReplicationTasksUntil(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED)
-	s.HistoryRequire.EqualHistoryEvents(`
+	s.EqualHistoryEvents(`
 	1 v1 WorkflowExecutionStarted
 	2 v1 WorkflowTaskScheduled
 	3 v2 WorkflowExecutionSignaled {"Input": {"Payloads": [{"Data": "\"cluster2-signal\""}]}}
@@ -285,7 +285,7 @@ func (s *hrsuTestSuite) TestConflictResolutionReappliesSignals() {
 	// cluster1 sends its signal to cluster2. Since it has a lower failover version, it is reapplied after the
 	// endogenous cluster 2 signal.
 	t.cluster2.executeHistoryReplicationTasksUntil(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED)
-	s.HistoryRequire.EqualHistoryEvents(`
+	s.EqualHistoryEvents(`
 	1 v1 WorkflowExecutionStarted
 	2 v1 WorkflowTaskScheduled
 	3 v2 WorkflowExecutionSignaled {"Input": {"Payloads": [{"Data": "\"cluster2-signal\""}]}}
@@ -315,7 +315,7 @@ func (s *hrsuTestSuite) TestConflictResolutionReappliesUpdates() {
 	t.cluster2.executeHistoryReplicationTasksUntil(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ACCEPTED)
 
 	// cluster1 has received an update with failover version 2 which superseded its own update.
-	s.HistoryRequire.EqualHistoryEvents(fmt.Sprintf(`
+	s.EqualHistoryEvents(fmt.Sprintf(`
 	1 v1 WorkflowExecutionStarted
 	2 v1 WorkflowTaskScheduled
 	3 v2 WorkflowTaskStarted
@@ -325,7 +325,7 @@ func (s *hrsuTestSuite) TestConflictResolutionReappliesUpdates() {
 
 	// cluster2 has reapplied the accepted update from cluster 1 on top of its own update, changing it from state
 	// Accepted to state Admitted, since it must be submitted to the validator on the new branch.
-	s.HistoryRequire.EqualHistoryEvents(fmt.Sprintf(`
+	s.EqualHistoryEvents(fmt.Sprintf(`
 	1 v1 WorkflowExecutionStarted
 	2 v1 WorkflowTaskScheduled
 	3 v2 WorkflowTaskStarted
@@ -340,7 +340,7 @@ func (s *hrsuTestSuite) TestConflictResolutionReappliesUpdates() {
 	s.EqualValues(t.cluster1.getHistory(ctx), t.cluster2.getHistory(ctx))
 
 	s.NoError(t.cluster2.pollAndCompleteUpdate(cluster2UpdateId))
-	s.HistoryRequire.EqualHistoryEvents(fmt.Sprintf(`
+	s.EqualHistoryEvents(fmt.Sprintf(`
 	1 v1 WorkflowExecutionStarted
 	2 v1 WorkflowTaskScheduled
 	3 v2 WorkflowTaskStarted
@@ -378,7 +378,7 @@ func (s *hrsuTestSuite) TestConflictResolutionDoesNotReapplyAcceptedUpdateWithCo
 	// we must not reapply it. The result is that both clusters have the same history; the update accepted in cluster 1
 	// has been dropped.
 	for _, c := range []hrsuTestCluster{t.cluster1, t.cluster2} {
-		t.s.HistoryRequire.EqualHistoryEvents(`
+		t.s.EqualHistoryEvents(`
 	1 v1 WorkflowExecutionStarted
 	2 v1 WorkflowTaskScheduled
 	3 v2 WorkflowTaskStarted
@@ -411,7 +411,7 @@ func (s *hrsuTestSuite) TestConflictResolutionDoesNotReapplyCompleteUpdateWithCo
 	// we must not reapply it. The result is that both clusters have the same history; the update accepted in cluster 1
 	// has been dropped.
 	for _, c := range []hrsuTestCluster{t.cluster1, t.cluster2} {
-		t.s.HistoryRequire.EqualHistoryEvents(`
+		t.s.EqualHistoryEvents(`
 	1 v1 WorkflowExecutionStarted
 	2 v1 WorkflowTaskScheduled
 	3 v2 WorkflowTaskStarted
@@ -436,7 +436,7 @@ func (s *hrsuTestSuite) TestConflictResolutionDoesNotReapplyAdmittedUpdateWithCo
 	t.enterSplitBrainStateAndAcceptUpdatesInBothClusters(ctx, "update-id", "update-id")
 	for i, c := range []hrsuTestCluster{t.cluster1, t.cluster2} {
 		clusterId := i + 1
-		t.s.HistoryRequire.EqualHistoryEvents(fmt.Sprintf(`
+		t.s.EqualHistoryEvents(fmt.Sprintf(`
 	1 v1 WorkflowExecutionStarted
 	2 v1 WorkflowTaskScheduled
 	3 v%[1]d WorkflowTaskStarted
@@ -450,7 +450,7 @@ func (s *hrsuTestSuite) TestConflictResolutionDoesNotReapplyAdmittedUpdateWithCo
 	for i, c := range []hrsuTestCluster{t.cluster1, t.cluster2} {
 		clusterId := i + 1
 		resetRunIds = append(resetRunIds, c.resetWorkflow(ctx, int64(workflowTaskCompletedId)))
-		t.s.HistoryRequire.EqualHistoryEvents(fmt.Sprintf(`
+		t.s.EqualHistoryEvents(fmt.Sprintf(`
 	1 v1 WorkflowExecutionStarted
 	2 v1 WorkflowTaskScheduled
 	3 v%[1]d WorkflowTaskStarted
@@ -473,7 +473,7 @@ func (s *hrsuTestSuite) TestConflictResolutionDoesNotReapplyAdmittedUpdateWithCo
 		// reapplied. But since it has the same update ID as the cluster 1 update, and since that update is not completed,
 		// we must not reapply it. The result is that both clusters have the same history; the update admitted in cluster 1
 		// has been dropped.
-		t.s.HistoryRequire.EqualHistoryEvents(`
+		t.s.EqualHistoryEvents(`
 	1 v1 WorkflowExecutionStarted
 	2 v1 WorkflowTaskScheduled
 	3 v2 WorkflowTaskStarted
@@ -491,7 +491,7 @@ func (t *hrsuTest) startAndAcceptUpdateInCluster1ThenFailoverTo2AndCompleteUpdat
 	t.cluster2.executeHistoryReplicationTasksUntil(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ACCEPTED)
 
 	for _, c := range []hrsuTestCluster{t.cluster1, t.cluster2} {
-		t.s.HistoryRequire.EqualHistoryEvents(`
+		t.s.EqualHistoryEvents(`
 		1 v1 WorkflowExecutionStarted
 		2 v1 WorkflowTaskScheduled
 		3 v1 WorkflowTaskStarted
@@ -511,7 +511,7 @@ func (t *hrsuTest) startAndAcceptUpdateInCluster1ThenFailoverTo2AndCompleteUpdat
 	// Complete the update in  cluster 2 after the failover.
 	t.s.NoError(t.cluster2.pollAndCompleteUpdate("cluster1-update-id"))
 
-	t.s.HistoryRequire.EqualHistoryEvents(`
+	t.s.EqualHistoryEvents(`
 	1 v1 WorkflowExecutionStarted
 	2 v1 WorkflowTaskScheduled
 	3 v1 WorkflowTaskStarted
@@ -531,7 +531,7 @@ func (t *hrsuTest) startAndAcceptUpdateInCluster2ThenFailoverTo1AndCompleteUpdat
 	t.cluster1.executeHistoryReplicationTasksUntil(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ACCEPTED)
 
 	for _, c := range []hrsuTestCluster{t.cluster1, t.cluster2} {
-		t.s.HistoryRequire.EqualHistoryEvents(`
+		t.s.EqualHistoryEvents(`
 		1 v1 WorkflowExecutionStarted
 		2 v1 WorkflowTaskScheduled
 		3 v1 WorkflowTaskStarted
@@ -555,7 +555,7 @@ func (t *hrsuTest) startAndAcceptUpdateInCluster2ThenFailoverTo1AndCompleteUpdat
 	t.s.NoError(t.cluster1.client.SignalWorkflow(ctx, t.tv.WorkflowID(), t.tv.RunID(), "my-signal", "cluster1-signal"))
 	t.s.NoError(t.cluster1.pollAndCompleteUpdate("cluster2-update-id"))
 
-	t.s.HistoryRequire.EqualHistoryEvents(`
+	t.s.EqualHistoryEvents(`
 	1  v1 WorkflowExecutionStarted
 	2  v1 WorkflowTaskScheduled
 	3  v1 WorkflowTaskStarted
@@ -588,7 +588,7 @@ func (t *hrsuTest) enterSplitBrainStateAndAcceptUpdatesInBothClusters(ctx contex
 	t.cluster2.sendUpdateAndWaitUntilStage(ctx, cluster2UpdateId, "cluster2-update-input", sdkclient.WorkflowUpdateStageAccepted)
 
 	// cluster1 has accepted an update
-	t.s.HistoryRequire.EqualHistoryEvents(fmt.Sprintf(`
+	t.s.EqualHistoryEvents(fmt.Sprintf(`
 	1 v1 WorkflowExecutionStarted
 	2 v1 WorkflowTaskScheduled
 	3 v1 WorkflowTaskStarted
@@ -597,7 +597,7 @@ func (t *hrsuTest) enterSplitBrainStateAndAcceptUpdatesInBothClusters(ctx contex
 	`, cluster1UpdateId), t.cluster1.getHistory(ctx))
 
 	// cluster2 has also accepted an update (events have failover version 2 since they are endogenous to cluster 2)
-	t.s.HistoryRequire.EqualHistoryEvents(fmt.Sprintf(`
+	t.s.EqualHistoryEvents(fmt.Sprintf(`
 	1 v1 WorkflowExecutionStarted
 	2 v1 WorkflowTaskScheduled
 	3 v2 WorkflowTaskStarted
@@ -616,7 +616,7 @@ func (t *hrsuTest) enterSplitBrainStateAndCompletedUpdatesInBothClusters(ctx con
 	t.cluster2.sendUpdateAndWaitUntilStage(ctx, cluster2UpdateId, "cluster2-update-input", sdkclient.WorkflowUpdateStageCompleted)
 
 	// cluster1 has completed an update
-	t.s.HistoryRequire.EqualHistoryEvents(fmt.Sprintf(`
+	t.s.EqualHistoryEvents(fmt.Sprintf(`
 	1 v1 WorkflowExecutionStarted
 	2 v1 WorkflowTaskScheduled
 	3 v1 WorkflowTaskStarted
@@ -626,7 +626,7 @@ func (t *hrsuTest) enterSplitBrainStateAndCompletedUpdatesInBothClusters(ctx con
 	`, cluster1UpdateId), t.cluster1.getHistory(ctx))
 
 	// cluster2 has also completed an update (events have failover version 2 since they are endogenous to cluster 2)
-	t.s.HistoryRequire.EqualHistoryEvents(fmt.Sprintf(`
+	t.s.EqualHistoryEvents(fmt.Sprintf(`
 	1 v1 WorkflowExecutionStarted
 	2 v1 WorkflowTaskScheduled
 	3 v2 WorkflowTaskStarted
@@ -1009,7 +1009,7 @@ func (c *hrsuTestCluster) startWorkflow(ctx context.Context, workflowFn any) {
 	c.otherCluster().executeHistoryReplicationTasksUntil(enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED)
 
 	for _, cluster := range []*hrsuTestCluster{&c.t.cluster1, &c.t.cluster2} {
-		c.t.s.HistoryRequire.EqualHistoryEvents(`
+		c.t.s.EqualHistoryEvents(`
 		1 v1 WorkflowExecutionStarted
 		2 v1 WorkflowTaskScheduled
 		  `, cluster.getHistory(ctx))

@@ -368,24 +368,20 @@ func (s *FunctionalClustersTestSuite) TestSimpleWorkflowFailover() {
 			RunId:      rid,
 		},
 	}
-	eventsReplicated := false
-	for i := 0; i < 15; i++ {
-		var historyResponse *workflowservice.GetWorkflowExecutionHistoryResponse
-		historyResponse, err = client2.GetWorkflowExecutionHistory(testcore.NewContext(), getHistoryReq)
-		if err == nil && len(historyResponse.History.Events) == 5 {
-			eventsReplicated = true
-			s.EqualHistory(`
+	s.WaitForHistory(`
   1 v1 WorkflowExecutionStarted
   2 v1 WorkflowTaskScheduled
   3 v1 WorkflowTaskStarted
   4 v1 WorkflowTaskCompleted
-  5 v1 ActivityTaskScheduled`, historyResponse.History)
-			break
-		}
-		time.Sleep(1 * time.Second)
-	}
-	s.NoError(err)
-	s.True(eventsReplicated)
+  5 v1 ActivityTaskScheduled`,
+		func() *historypb.History {
+			historyResponse, err := client2.GetWorkflowExecutionHistory(testcore.NewContext(), getHistoryReq)
+			if err != nil {
+				return nil
+			}
+			return historyResponse.History
+		}, 15*time.Second, 1*time.Second,
+	)
 
 	// Make sure query is still working after failover
 	// call QueryWorkflow in separate goroutinue (because it is blocking). That will generate a query task
@@ -438,13 +434,7 @@ func (s *FunctionalClustersTestSuite) TestSimpleWorkflowFailover() {
 	s.True(workflowComplete)
 
 	// check history replicated in cluster 1
-	eventsReplicated = false
-	for i := 0; i < 15; i++ {
-		var historyResponse *workflowservice.GetWorkflowExecutionHistoryResponse
-		historyResponse, err = client1.GetWorkflowExecutionHistory(testcore.NewContext(), getHistoryReq)
-		if err == nil && len(historyResponse.History.Events) == 11 {
-			eventsReplicated = true
-			s.EqualHistory(`
+	s.WaitForHistory(`
   1 v1 WorkflowExecutionStarted
   2 v1 WorkflowTaskScheduled
   3 v1 WorkflowTaskStarted
@@ -455,13 +445,15 @@ func (s *FunctionalClustersTestSuite) TestSimpleWorkflowFailover() {
   8 v2 WorkflowTaskScheduled
   9 v2 WorkflowTaskStarted
  10 v2 WorkflowTaskCompleted
- 11 v2 WorkflowExecutionCompleted`, historyResponse.History)
-			break
-		}
-		time.Sleep(1 * time.Second)
-	}
-	s.NoError(err)
-	s.True(eventsReplicated)
+ 11 v2 WorkflowExecutionCompleted`,
+		func() *historypb.History {
+			historyResponse, err := client1.GetWorkflowExecutionHistory(testcore.NewContext(), getHistoryReq)
+			if err != nil {
+				return nil
+			}
+			return historyResponse.History
+		}, 15*time.Second, 1*time.Second,
+	)
 }
 
 func (s *FunctionalClustersTestSuite) TestStickyWorkflowTaskFailover() {
@@ -851,27 +843,14 @@ func (s *FunctionalClustersTestSuite) TestTerminateFailover() {
 	s.NoError(err)
 
 	// check terminate done
-	executionTerminated := false
 	getHistoryReq := &workflowservice.GetWorkflowExecutionHistoryRequest{
 		Namespace: namespace,
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: id,
 		},
 	}
-GetHistoryLoop:
-	for i := 0; i < 10; i++ {
-		historyResponse, err := client2.GetWorkflowExecutionHistory(testcore.NewContext(), getHistoryReq)
-		s.NoError(err)
-		history := historyResponse.History
 
-		lastEvent := history.Events[len(history.Events)-1]
-		if lastEvent.EventType != enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TERMINATED {
-			s.logger.Warn("Execution not terminated yet")
-			time.Sleep(100 * time.Millisecond)
-			continue GetHistoryLoop
-		}
-
-		s.EqualHistory(`
+	s.WaitForHistory(`
   1 v1 WorkflowExecutionStarted
   2 v1 WorkflowTaskScheduled
   3 v1 WorkflowTaskStarted
@@ -879,24 +858,16 @@ GetHistoryLoop:
   5 v1 ActivityTaskScheduled
   6 v2 ActivityTaskTimedOut
   7 v2 WorkflowTaskScheduled
-  8 v2 WorkflowExecutionTerminated  {"Details":{"Payloads":[{"Data":"\"terminate details\""}]},"Identity":"worker1","Reason":"terminate reason"}`, history)
-
-		executionTerminated = true
-		break GetHistoryLoop
-	}
-	s.True(executionTerminated)
+  8 v2 WorkflowExecutionTerminated  {"Details":{"Payloads":[{"Data":"\"terminate details\""}]},"Identity":"worker1","Reason":"terminate reason"}`,
+		func() *historypb.History {
+			historyResponse, err := client2.GetWorkflowExecutionHistory(testcore.NewContext(), getHistoryReq)
+			s.NoError(err)
+			return historyResponse.History
+		}, 1*time.Second, 100*time.Millisecond,
+	)
 
 	// check history replicated to the other cluster
-	var historyResponse *workflowservice.GetWorkflowExecutionHistoryResponse
-	eventsReplicated := false
-GetHistoryLoop2:
-	for i := 0; i < 15; i++ {
-		historyResponse, err = client1.GetWorkflowExecutionHistory(testcore.NewContext(), getHistoryReq)
-		if err == nil {
-			history := historyResponse.History
-			lastEvent := history.Events[len(history.Events)-1]
-			if lastEvent.EventType == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TERMINATED {
-				s.EqualHistory(`
+	s.WaitForHistory(`
   1 v1 WorkflowExecutionStarted
   2 v1 WorkflowTaskScheduled
   3 v1 WorkflowTaskStarted
@@ -904,15 +875,15 @@ GetHistoryLoop2:
   5 v1 ActivityTaskScheduled
   6 v2 ActivityTaskTimedOut
   7 v2 WorkflowTaskScheduled
-  8 v2 WorkflowExecutionTerminated  {"Details":{"Payloads":[{"Data":"\"terminate details\""}]},"Identity":"worker1","Reason":"terminate reason"}`, history)
-				eventsReplicated = true
-				break GetHistoryLoop2
+  8 v2 WorkflowExecutionTerminated  {"Details":{"Payloads":[{"Data":"\"terminate details\""}]},"Identity":"worker1","Reason":"terminate reason"}`,
+		func() *historypb.History {
+			historyResponse, err := client1.GetWorkflowExecutionHistory(testcore.NewContext(), getHistoryReq)
+			if err != nil {
+				return nil
 			}
-		}
-		time.Sleep(1 * time.Second)
-	}
-	s.NoError(err)
-	s.True(eventsReplicated)
+			return historyResponse.History
+		}, 15*time.Second, 1*time.Second,
+	)
 }
 
 func (s *FunctionalClustersTestSuite) TestResetWorkflowFailover() {
@@ -1350,12 +1321,7 @@ func (s *FunctionalClustersTestSuite) TestSignalFailover() {
 			WorkflowId: id,
 		},
 	}
-	var historyResponse *workflowservice.GetWorkflowExecutionHistoryResponse
-	eventsReplicated := false
-	for i := 0; i < 15; i++ {
-		historyResponse, err = client2.GetWorkflowExecutionHistory(testcore.NewContext(), getHistoryReq)
-		if err == nil && len(historyResponse.History.Events) == 9 {
-			s.EqualHistory(`
+	s.WaitForHistory(`
   1 v1 WorkflowExecutionStarted
   2 v1 WorkflowTaskScheduled
   3 v1 WorkflowTaskStarted
@@ -1364,14 +1330,15 @@ func (s *FunctionalClustersTestSuite) TestSignalFailover() {
   6 v1 WorkflowExecutionSignaled
   7 v1 WorkflowTaskScheduled
   8 v1 WorkflowTaskStarted
-  9 v1 WorkflowTaskCompleted`, historyResponse.History)
-			eventsReplicated = true
-			break
-		}
-		time.Sleep(1 * time.Second)
-	}
-	s.NoError(err)
-	s.True(eventsReplicated)
+  9 v1 WorkflowTaskCompleted`,
+		func() *historypb.History {
+			historyResponse, err := client2.GetWorkflowExecutionHistory(testcore.NewContext(), getHistoryReq)
+			if err != nil {
+				return nil
+			}
+			return historyResponse.History
+		}, 15*time.Second, 1*time.Second,
+	)
 
 	// Send another signal without a task in cluster 2
 	_, err = client2.SignalWorkflowExecution(testcore.NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
@@ -1409,11 +1376,7 @@ func (s *FunctionalClustersTestSuite) TestSignalFailover() {
 	s.True(eventSignaled)
 
 	// check history matched
-	eventsReplicated = false
-	for i := 0; i < 15; i++ {
-		historyResponse, err = client2.GetWorkflowExecutionHistory(testcore.NewContext(), getHistoryReq)
-		if err == nil && len(historyResponse.History.Events) == 14 {
-			s.EqualHistory(`
+	s.WaitForHistory(`
   1 v1 WorkflowExecutionStarted
   2 v1 WorkflowTaskScheduled
   3 v1 WorkflowTaskStarted
@@ -1427,14 +1390,15 @@ func (s *FunctionalClustersTestSuite) TestSignalFailover() {
  11 v2 WorkflowExecutionSignaled
  12 v2 WorkflowTaskScheduled
  13 v2 WorkflowTaskStarted
- 14 v2 WorkflowTaskCompleted`, historyResponse.History)
-			eventsReplicated = true
-			break
-		}
-		time.Sleep(1 * time.Second)
-	}
-	s.NoError(err)
-	s.True(eventsReplicated)
+ 14 v2 WorkflowTaskCompleted`,
+		func() *historypb.History {
+			historyResponse, err := client2.GetWorkflowExecutionHistory(testcore.NewContext(), getHistoryReq)
+			if err != nil {
+				return nil
+			}
+			return historyResponse.History
+		}, 15*time.Second, 1*time.Second,
+	)
 }
 
 func (s *FunctionalClustersTestSuite) TestUserTimerFailover() {

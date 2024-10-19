@@ -38,6 +38,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	filterpb "go.temporal.io/api/filter/v1"
+	historypb "go.temporal.io/api/history/v1"
 	namespacepb "go.temporal.io/api/namespace/v1"
 	replicationpb "go.temporal.io/api/replication/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
@@ -388,62 +389,41 @@ func (s *AdvVisCrossDCTestSuite) TestSearchAttributes() {
 	s.NoError(err)
 
 	// check terminate done
-	executionTerminated := false
 	getHistoryReq := &workflowservice.GetWorkflowExecutionHistoryRequest{
 		Namespace: namespace,
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: id,
 		},
 	}
-GetHistoryLoop:
-	for i := 0; i < 10; i++ {
-		historyResponse, err := client1.GetWorkflowExecutionHistory(testcore.NewContext(), getHistoryReq)
-		s.NoError(err)
-		history := historyResponse.History
 
-		lastEvent := history.Events[len(history.Events)-1]
-		if lastEvent.EventType != enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TERMINATED {
-			s.logger.Warn("Execution not terminated yet")
-			time.Sleep(100 * time.Millisecond)
-			continue GetHistoryLoop
-		}
-		s.EqualHistory(`
+	s.WaitForHistory(`
   1 v1 WorkflowExecutionStarted
   2 v1 WorkflowTaskScheduled
   3 v1 WorkflowTaskStarted
   4 v1 WorkflowTaskCompleted
   5 v1 UpsertWorkflowSearchAttributes
-  6 v1 WorkflowExecutionTerminated {"Details":{"Payloads":[{"Data":"\"terminate details\""}]},"Identity":"worker1","Reason":"force terminate to make sure standby process tasks"}`, history)
-		executionTerminated = true
-		break GetHistoryLoop
-	}
-	s.True(executionTerminated)
+  6 v1 WorkflowExecutionTerminated {"Details":{"Payloads":[{"Data":"\"terminate details\""}]},"Identity":"worker1","Reason":"force terminate to make sure standby process tasks"}`,
+		func() *historypb.History {
+			historyResponse, err := client1.GetWorkflowExecutionHistory(testcore.NewContext(), getHistoryReq)
+			s.NoError(err)
+			return historyResponse.History
+		}, 1*time.Second, 100*time.Millisecond)
 
 	// check history replicated to the other cluster
-	var historyResponse *workflowservice.GetWorkflowExecutionHistoryResponse
-	eventsReplicated := false
-GetHistoryLoop2:
-	for i := 0; i < numOfRetry; i++ {
-		historyResponse, err = client2.GetWorkflowExecutionHistory(testcore.NewContext(), getHistoryReq)
-		if err == nil {
-			history := historyResponse.History
-			lastEvent := history.Events[len(history.Events)-1]
-			if lastEvent.EventType == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TERMINATED {
-				s.EqualHistory(`
+	s.WaitForHistory(`
   1 v1 WorkflowExecutionStarted
   2 v1 WorkflowTaskScheduled
   3 v1 WorkflowTaskStarted
   4 v1 WorkflowTaskCompleted
   5 v1 UpsertWorkflowSearchAttributes
-  6 v1 WorkflowExecutionTerminated {"Details":{"Payloads":[{"Data":"\"terminate details\""}]},"Identity":"worker1","Reason":"force terminate to make sure standby process tasks"}`, history)
-				eventsReplicated = true
-				break GetHistoryLoop2
+  6 v1 WorkflowExecutionTerminated {"Details":{"Payloads":[{"Data":"\"terminate details\""}]},"Identity":"worker1","Reason":"force terminate to make sure standby process tasks"}`,
+		func() *historypb.History {
+			historyResponse, err := client2.GetWorkflowExecutionHistory(testcore.NewContext(), getHistoryReq)
+			if err != nil {
+				return nil
 			}
-		}
-		time.Sleep(waitTimeInMs * time.Millisecond)
-	}
-	s.NoError(err)
-	s.True(eventsReplicated)
+			return historyResponse.History
+		}, waitTimeInMs*numOfRetry*time.Millisecond, waitTimeInMs*time.Millisecond)
 
 	terminatedListRequest := &workflowservice.ListWorkflowExecutionsRequest{
 		Namespace: namespace,
