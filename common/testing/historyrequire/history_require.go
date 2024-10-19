@@ -507,6 +507,8 @@ func (h HistoryRequire) equalExpectedMapToActualAttributes(expectedMap map[strin
 }
 
 // parseHistory accept history in a formatHistoryEvents format and return slice of history events w/o attributes and maps of event attributes for every event.
+//
+//nolint:revive // cognitive complexity 29 (> max enabled 25)
 func (h HistoryRequire) parseHistory(history string) ([]*historypb.HistoryEvent, []map[string]any) {
 	if th, ok := h.t.(helper); ok {
 		th.Helper()
