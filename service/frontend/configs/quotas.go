@@ -110,6 +110,7 @@ var (
 
 		// P3: Status Querying APIs
 		"/temporal.api.workflowservice.v1.WorkflowService/DescribeWorkflowExecution":     3,
+		"/temporal.api.workflowservice.v1.WorkflowService/DescribeTaskQueue":             3,
 		"/temporal.api.workflowservice.v1.WorkflowService/GetWorkerBuildIdCompatibility": 3,
 		"/temporal.api.workflowservice.v1.WorkflowService/GetWorkerVersioningRules":      3,
 		"/temporal.api.workflowservice.v1.WorkflowService/ListTaskQueuePartitions":       3,
@@ -159,10 +160,10 @@ var (
 		"/temporal.api.workflowservice.v1.WorkflowService/ListArchivedWorkflowExecutions": 1,
 
 		// APIs that rely on visibility
-		"/temporal.api.workflowservice.v1.WorkflowService/GetWorkerTaskReachability": 1,
-		"/temporal.api.workflowservice.v1.WorkflowService/ListSchedules":             1,
-		"/temporal.api.workflowservice.v1.WorkflowService/ListBatchOperations":       1,
-		"/temporal.api.workflowservice.v1.WorkflowService/DescribeTaskQueue":         1,
+		"/temporal.api.workflowservice.v1.WorkflowService/GetWorkerTaskReachability":         1,
+		"/temporal.api.workflowservice.v1.WorkflowService/ListSchedules":                     1,
+		"/temporal.api.workflowservice.v1.WorkflowService/ListBatchOperations":               1,
+		"/temporal.api.workflowservice.v1.WorkflowService/DescribeTaskQueueWithReachability": 1, // note this isn't a real method name
 	}
 
 	VisibilityAPIPrioritiesOrdered = []int{0, 1}

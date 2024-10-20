@@ -30,6 +30,7 @@ import (
 
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/quotas"
 	"google.golang.org/grpc"
@@ -72,7 +73,15 @@ func (i *RateLimitInterceptor) Intercept(
 	info *grpc.UnaryServerInfo,
 	handler grpc.UnaryHandler,
 ) (interface{}, error) {
-	if err := i.Allow(info.FullMethod, headers.NewGRPCHeaderGetter(ctx)); err != nil {
+	methodName := info.FullMethod
+
+	// for DescribeTaskQueueRequest, we want to use visibility rate limit only if reachability is queried
+	describeTQReq, ok := req.(*workflowservice.DescribeTaskQueueRequest)
+	if ok && describeTQReq.GetReportTaskReachability() {
+		methodName += "WithReachability"
+	}
+
+	if err := i.Allow(methodName, headers.NewGRPCHeaderGetter(ctx)); err != nil {
 		return nil, err
 	}
 
