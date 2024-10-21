@@ -2719,7 +2719,8 @@ func (s *mutableStateSuite) TestCloseTransactionPrepareReplicationTasks_SyncVers
 		NextEventID:         lastEventID + 1,
 	}
 	s.Equal(enumsspb.TASK_TYPE_REPLICATION_SYNC_VERSIONED_TRANSITION, replicationTasks[0].GetType())
-	actualTask := replicationTasks[0].(*tasks.SyncVersionedTransitionTask)
+	actualTask, ok := replicationTasks[0].(*tasks.SyncVersionedTransitionTask)
+	s.True(ok)
 	s.Equal(expectedTask.WorkflowKey, actualTask.WorkflowKey)
 	s.Equal(expectedTask.VersionedTransition, actualTask.VersionedTransition)
 	s.Equal(3, len(actualTask.TaskEquivalents))
