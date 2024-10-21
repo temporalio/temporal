@@ -1247,16 +1247,15 @@ func (handler *workflowTaskCompletedHandler) handleCommandModifyWorkflowProperti
 	// get namespace name
 	executionInfo := handler.mutableState.GetExecutionInfo()
 	namespaceID := namespace.ID(executionInfo.NamespaceId)
-	namespaceEntry, err := handler.namespaceRegistry.GetNamespaceByID(namespaceID)
+	_, err := handler.namespaceRegistry.GetNamespaceByID(namespaceID)
 	if err != nil {
 		return nil, serviceerror.NewUnavailable(fmt.Sprintf("Unable to get namespace for namespaceID: %v.", namespaceID))
 	}
-	namespace := namespaceEntry.Name()
 
 	// valid properties
 	if err := handler.validateCommandAttr(
 		func() (enumspb.WorkflowTaskFailedCause, error) {
-			return handler.attrValidator.ValidateModifyWorkflowProperties(namespace, attr)
+			return handler.attrValidator.ValidateModifyWorkflowProperties(attr)
 		},
 	); err != nil || handler.stopProcessing {
 		return nil, err

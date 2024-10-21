@@ -156,15 +156,15 @@ func updateActivityOptions(
 	if workflow.GetActivityState(ai) == enumspb.PENDING_ACTIVITY_STATE_SCHEDULED {
 		// two options - it can be in backoff, or waiting to be started
 		now := shardContext.GetTimeSource().Now()
+
+		// if activity is past its scheduled time and ready to be started
+		// we don't really need to do generate timer tasks, it should be done in closeTransaction
 		if now.Before(ai.ScheduledTime.AsTime()) {
 			// activity is in backoff
 			_, err = mutableState.RetryActivity(ai, nil)
 			if err != nil {
 				return nil, err
 			}
-		} else {
-			// activity is past its scheduled time and ready to be started
-			// we don't really need to do generate timer tasks, it should be done in closeTransaction
 		}
 	}
 

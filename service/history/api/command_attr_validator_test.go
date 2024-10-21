@@ -199,20 +199,20 @@ func (s *commandAttrValidatorSuite) TestValidateSignalExternalWorkflowExecutionA
 }
 
 func (s *commandAttrValidatorSuite) TestValidateUpsertWorkflowSearchAttributes() {
-	namespace := namespace.Name("tests.Namespace")
+	namespaceName := namespace.Name("tests.Namespace")
 	var attributes *commandpb.UpsertWorkflowSearchAttributesCommandAttributes
 
-	fc, err := s.validator.ValidateUpsertWorkflowSearchAttributes(namespace, attributes)
+	fc, err := s.validator.ValidateUpsertWorkflowSearchAttributes(namespaceName, attributes)
 	s.EqualError(err, "UpsertWorkflowSearchAttributesCommandAttributes is not set on UpsertWorkflowSearchAttributesCommand.")
 	s.Equal(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SEARCH_ATTRIBUTES, fc)
 
 	attributes = &commandpb.UpsertWorkflowSearchAttributesCommandAttributes{}
-	fc, err = s.validator.ValidateUpsertWorkflowSearchAttributes(namespace, attributes)
+	fc, err = s.validator.ValidateUpsertWorkflowSearchAttributes(namespaceName, attributes)
 	s.EqualError(err, "SearchAttributes is not set on UpsertWorkflowSearchAttributesCommand.")
 	s.Equal(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SEARCH_ATTRIBUTES, fc)
 
 	attributes.SearchAttributes = &commonpb.SearchAttributes{}
-	fc, err = s.validator.ValidateUpsertWorkflowSearchAttributes(namespace, attributes)
+	fc, err = s.validator.ValidateUpsertWorkflowSearchAttributes(namespaceName, attributes)
 	s.EqualError(err, "IndexedFields is not set on UpsertWorkflowSearchAttributesCommand.")
 	s.Equal(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SEARCH_ATTRIBUTES, fc)
 
@@ -221,7 +221,7 @@ func (s *commandAttrValidatorSuite) TestValidateUpsertWorkflowSearchAttributes()
 	attributes.SearchAttributes.IndexedFields = map[string]*commonpb.Payload{
 		"CustomKeywordField": saPayload,
 	}
-	fc, err = s.validator.ValidateUpsertWorkflowSearchAttributes(namespace, attributes)
+	fc, err = s.validator.ValidateUpsertWorkflowSearchAttributes(namespaceName, attributes)
 	s.NoError(err)
 	s.Equal(enumspb.WORKFLOW_TASK_FAILED_CAUSE_UNSPECIFIED, fc)
 }
@@ -261,16 +261,15 @@ func (s *commandAttrValidatorSuite) TestValidateContinueAsNewWorkflowExecutionAt
 }
 
 func (s *commandAttrValidatorSuite) TestValidateModifyWorkflowProperties() {
-	namespace := namespace.Name("tests.Namespace")
 	var attributes *commandpb.ModifyWorkflowPropertiesCommandAttributes
 
-	fc, err := s.validator.ValidateModifyWorkflowProperties(namespace, attributes)
+	fc, err := s.validator.ValidateModifyWorkflowProperties(attributes)
 	s.EqualError(err, "ModifyWorkflowPropertiesCommandAttributes is not set on ModifyWorkflowPropertiesCommand.")
 	s.Equal(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_MODIFY_WORKFLOW_PROPERTIES_ATTRIBUTES, fc)
 
 	// test attributes has at least one non-nil attribute
 	attributes = &commandpb.ModifyWorkflowPropertiesCommandAttributes{}
-	fc, err = s.validator.ValidateModifyWorkflowProperties(namespace, attributes)
+	fc, err = s.validator.ValidateModifyWorkflowProperties(attributes)
 	s.EqualError(err, "UpsertedMemo is not set on ModifyWorkflowPropertiesCommand.")
 	s.Equal(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_MODIFY_WORKFLOW_PROPERTIES_ATTRIBUTES, fc)
 
@@ -278,7 +277,7 @@ func (s *commandAttrValidatorSuite) TestValidateModifyWorkflowProperties() {
 	attributes = &commandpb.ModifyWorkflowPropertiesCommandAttributes{
 		UpsertedMemo: &commonpb.Memo{},
 	}
-	fc, err = s.validator.ValidateModifyWorkflowProperties(namespace, attributes)
+	fc, err = s.validator.ValidateModifyWorkflowProperties(attributes)
 	s.EqualError(err, "UpsertedMemo.Fields is not set on ModifyWorkflowPropertiesCommand.")
 	s.Equal(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_MODIFY_WORKFLOW_PROPERTIES_ATTRIBUTES, fc)
 }

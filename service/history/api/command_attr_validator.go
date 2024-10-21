@@ -91,6 +91,7 @@ func (v *CommandAttrValidator) ValidateProtocolMessageAttributes(
 	return enumspb.WORKFLOW_TASK_FAILED_CAUSE_UNSPECIFIED, nil
 }
 
+//nolint:revive
 func (v *CommandAttrValidator) ValidateActivityScheduleAttributes(
 	namespaceID namespace.ID,
 	attributes *commandpb.ScheduleActivityTaskCommandAttributes,
@@ -411,7 +412,7 @@ func (v *CommandAttrValidator) ValidateSignalExternalWorkflowExecutionAttributes
 }
 
 func (v *CommandAttrValidator) ValidateUpsertWorkflowSearchAttributes(
-	namespace namespace.Name,
+	namespaceName namespace.Name,
 	attributes *commandpb.UpsertWorkflowSearchAttributesCommandAttributes,
 ) (enumspb.WorkflowTaskFailedCause, error) {
 
@@ -425,7 +426,7 @@ func (v *CommandAttrValidator) ValidateUpsertWorkflowSearchAttributes(
 	if len(attributes.GetSearchAttributes().GetIndexedFields()) == 0 {
 		return failedCause, serviceerror.NewInvalidArgument("IndexedFields is not set on UpsertWorkflowSearchAttributesCommand.")
 	}
-	if err := v.searchAttributesValidator.Validate(attributes.GetSearchAttributes(), namespace.String()); err != nil {
+	if err := v.searchAttributesValidator.Validate(attributes.GetSearchAttributes(), namespaceName.String()); err != nil {
 		return failedCause, err
 	}
 
@@ -433,7 +434,6 @@ func (v *CommandAttrValidator) ValidateUpsertWorkflowSearchAttributes(
 }
 
 func (v *CommandAttrValidator) ValidateModifyWorkflowProperties(
-	namespace namespace.Name,
 	attributes *commandpb.ModifyWorkflowPropertiesCommandAttributes,
 ) (enumspb.WorkflowTaskFailedCause, error) {
 	const failedCause = enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_MODIFY_WORKFLOW_PROPERTIES_ATTRIBUTES
@@ -453,7 +453,7 @@ func (v *CommandAttrValidator) ValidateModifyWorkflowProperties(
 }
 
 func (v *CommandAttrValidator) ValidateContinueAsNewWorkflowExecutionAttributes(
-	namespace namespace.Name,
+	namespaceName namespace.Name,
 	attributes *commandpb.ContinueAsNewWorkflowExecutionCommandAttributes,
 	executionInfo *persistencespb.WorkflowExecutionInfo,
 ) (enumspb.WorkflowTaskFailedCause, error) {
@@ -505,13 +505,13 @@ func (v *CommandAttrValidator) ValidateContinueAsNewWorkflowExecutionAttributes(
 
 	attributes.WorkflowRunTimeout = durationpb.New(common.OverrideWorkflowRunTimeout(attributes.GetWorkflowRunTimeout().AsDuration(), executionInfo.GetWorkflowExecutionTimeout().AsDuration()))
 
-	attributes.WorkflowTaskTimeout = durationpb.New(common.OverrideWorkflowTaskTimeout(namespace.String(), attributes.GetWorkflowTaskTimeout().AsDuration(), attributes.GetWorkflowRunTimeout().AsDuration(), v.config.DefaultWorkflowTaskTimeout))
+	attributes.WorkflowTaskTimeout = durationpb.New(common.OverrideWorkflowTaskTimeout(namespaceName.String(), attributes.GetWorkflowTaskTimeout().AsDuration(), attributes.GetWorkflowRunTimeout().AsDuration(), v.config.DefaultWorkflowTaskTimeout))
 
-	if err := v.validateWorkflowRetryPolicy(namespace, attributes.RetryPolicy); err != nil {
+	if err := v.validateWorkflowRetryPolicy(namespaceName, attributes.RetryPolicy); err != nil {
 		return failedCause, fmt.Errorf("invalid WorkflowRetryPolicy on ContinueAsNewWorkflowExecutionCommand: %w. WorkflowType=%s TaskQueue=%s", err, wfType, attributes.TaskQueue)
 	}
 
-	if err := v.searchAttributesValidator.Validate(attributes.GetSearchAttributes(), namespace.String()); err != nil {
+	if err := v.searchAttributesValidator.Validate(attributes.GetSearchAttributes(), namespaceName.String()); err != nil {
 		return enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SEARCH_ATTRIBUTES, fmt.Errorf("invalid SearchAttributes on ContinueAsNewWorkflowExecutionCommand: %w. WorkflowType=%s TaskQueue=%s", err, wfType, attributes.TaskQueue)
 	}
 
@@ -709,6 +709,7 @@ func (v *CommandAttrValidator) ValidateCommandSequence(
 			))
 		}
 
+		// nolint:exhaustive
 		switch command.GetCommandType() {
 		case enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
 			enumspb.COMMAND_TYPE_REQUEST_CANCEL_ACTIVITY_TASK,
