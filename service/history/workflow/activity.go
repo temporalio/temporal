@@ -73,7 +73,7 @@ func nextRetryDelayFrom(failure *failurepb.Failure) *time.Duration {
 	return delay
 }
 
-func UpdateActivityInfoForRetries(
+func updateActivityInfoForRetries(
 	ai *persistence.ActivityInfo,
 	version int64,
 	attempt int32,

@@ -4945,10 +4945,6 @@ func (ms *MutableStateImpl) updateActivity(ai *persistencespb.ActivityInfo, upda
 	ms.syncActivityTasks[ai.ScheduledEventId] = struct{}{}
 }
 
-func (ms *MutableStateImpl) GenerateActivityRetryTask(ai *persistencespb.ActivityInfo) error {
-	return ms.taskGenerator.GenerateActivityRetryTasks(ai)
-}
-
 func (ms *MutableStateImpl) truncateRetryableActivityFailure(
 	activityFailure *failurepb.Failure,
 ) *failurepb.Failure {

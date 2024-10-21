@@ -287,10 +287,9 @@ func (t *timerQueueActiveTaskExecutor) processTimeoutTask(
 	ai *persistencespb.ActivityInfo,
 	updateMutableState *bool,
 	scheduleWorkflowTask *bool,
-) (retError error) {
+) error {
 
 	if timerSequenceID.Attempt < ai.Attempt {
-		// 2. timerSequenceID.attempt < activityInfo.Attempt
 		//  retry could update activity attempt, should not timeouts new attempt
 		return nil
 	}
@@ -298,19 +297,19 @@ func (t *timerQueueActiveTaskExecutor) processTimeoutTask(
 	if timerSequenceID.Stamp != ai.Stamp {
 		// this timer event is from an old stamp. In this case we ignore the event.
 		*updateMutableState = true
-		return
+		return nil
 	}
 
 	failureMsg := fmt.Sprintf("activity %v timeout", timerSequenceID.TimerType.String())
 	timeoutFailure := failure.NewTimeoutFailure(failureMsg, timerSequenceID.TimerType)
-	var retryState enumspb.RetryState
-	if retryState, retError = mutableState.RetryActivity(ai, timeoutFailure); retError != nil {
-		return
+	retryState, err := mutableState.RetryActivity(ai, timeoutFailure)
+	if err != nil {
+		return err
 	}
 
 	if retryState == enumspb.RETRY_STATE_IN_PROGRESS {
 		*updateMutableState = true
-		return
+		return nil
 	}
 
 	if retryState == enumspb.RETRY_STATE_TIMEOUT {
@@ -327,18 +326,18 @@ func (t *timerQueueActiveTaskExecutor) processTimeoutTask(
 		metrics.TimerActiveTaskActivityTimeoutScope,
 		timerSequenceID.TimerType,
 	)
-	if _, retError = mutableState.AddActivityTaskTimedOutEvent(
+	if _, err = mutableState.AddActivityTaskTimedOutEvent(
 		ai.ScheduledEventId,
 		ai.StartedEventId,
 		timeoutFailure,
 		retryState,
-	); retError != nil {
-		return
+	); err != nil {
+		return err
 	}
 
 	*updateMutableState = true
 	*scheduleWorkflowTask = true
-	return
+	return nil
 }
 
 func (t *timerQueueActiveTaskExecutor) executeWorkflowTaskTimeoutTask(
