@@ -222,6 +222,9 @@ type (
 		GetUpdateOutcome(ctx context.Context, updateID string) (*updatepb.Outcome, error)
 
 		CheckResettable() error
+		// UpdateResetRunID saves the runID that resulted when this execution was reset.
+		UpdateResetRunID(runID string)
+
 		CloneToProto() *persistencespb.WorkflowMutableState
 		RetryActivity(ai *persistencespb.ActivityInfo, failure *failurepb.Failure) (enumspb.RetryState, error)
 		RecordLastActivityStarted(ai *persistencespb.ActivityInfo)
