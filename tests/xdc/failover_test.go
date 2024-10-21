@@ -368,24 +368,20 @@ func (s *FunctionalClustersTestSuite) TestSimpleWorkflowFailover() {
 			RunId:      rid,
 		},
 	}
-	eventsReplicated := false
-	for i := 0; i < 15; i++ {
-		var historyResponse *workflowservice.GetWorkflowExecutionHistoryResponse
-		historyResponse, err = client2.GetWorkflowExecutionHistory(testcore.NewContext(), getHistoryReq)
-		if err == nil && len(historyResponse.History.Events) == 5 {
-			eventsReplicated = true
-			s.EqualHistory(`
-  1 1 WorkflowExecutionStarted
-  2 1 WorkflowTaskScheduled
-  3 1 WorkflowTaskStarted
-  4 1 WorkflowTaskCompleted
-  5 1 ActivityTaskScheduled`, historyResponse.History)
-			break
-		}
-		time.Sleep(1 * time.Second)
-	}
-	s.NoError(err)
-	s.True(eventsReplicated)
+	s.WaitForHistory(`
+  1 v1 WorkflowExecutionStarted
+  2 v1 WorkflowTaskScheduled
+  3 v1 WorkflowTaskStarted
+  4 v1 WorkflowTaskCompleted
+  5 v1 ActivityTaskScheduled`,
+		func() *historypb.History {
+			historyResponse, err := client2.GetWorkflowExecutionHistory(testcore.NewContext(), getHistoryReq)
+			if err != nil {
+				return nil
+			}
+			return historyResponse.History
+		}, 15*time.Second, 1*time.Second,
+	)
 
 	// Make sure query is still working after failover
 	// call QueryWorkflow in separate goroutinue (because it is blocking). That will generate a query task
@@ -438,30 +434,26 @@ func (s *FunctionalClustersTestSuite) TestSimpleWorkflowFailover() {
 	s.True(workflowComplete)
 
 	// check history replicated in cluster 1
-	eventsReplicated = false
-	for i := 0; i < 15; i++ {
-		var historyResponse *workflowservice.GetWorkflowExecutionHistoryResponse
-		historyResponse, err = client1.GetWorkflowExecutionHistory(testcore.NewContext(), getHistoryReq)
-		if err == nil && len(historyResponse.History.Events) == 11 {
-			eventsReplicated = true
-			s.EqualHistory(`
-  1 1 WorkflowExecutionStarted
-  2 1 WorkflowTaskScheduled
-  3 1 WorkflowTaskStarted
-  4 1 WorkflowTaskCompleted
-  5 1 ActivityTaskScheduled
-  6 2 ActivityTaskStarted
-  7 2 ActivityTaskCompleted
-  8 2 WorkflowTaskScheduled
-  9 2 WorkflowTaskStarted
- 10 2 WorkflowTaskCompleted
- 11 2 WorkflowExecutionCompleted`, historyResponse.History)
-			break
-		}
-		time.Sleep(1 * time.Second)
-	}
-	s.NoError(err)
-	s.True(eventsReplicated)
+	s.WaitForHistory(`
+  1 v1 WorkflowExecutionStarted
+  2 v1 WorkflowTaskScheduled
+  3 v1 WorkflowTaskStarted
+  4 v1 WorkflowTaskCompleted
+  5 v1 ActivityTaskScheduled
+  6 v2 ActivityTaskStarted
+  7 v2 ActivityTaskCompleted
+  8 v2 WorkflowTaskScheduled
+  9 v2 WorkflowTaskStarted
+ 10 v2 WorkflowTaskCompleted
+ 11 v2 WorkflowExecutionCompleted`,
+		func() *historypb.History {
+			historyResponse, err := client1.GetWorkflowExecutionHistory(testcore.NewContext(), getHistoryReq)
+			if err != nil {
+				return nil
+			}
+			return historyResponse.History
+		}, 15*time.Second, 1*time.Second,
+	)
 }
 
 func (s *FunctionalClustersTestSuite) TestStickyWorkflowTaskFailover() {
@@ -851,68 +843,47 @@ func (s *FunctionalClustersTestSuite) TestTerminateFailover() {
 	s.NoError(err)
 
 	// check terminate done
-	executionTerminated := false
 	getHistoryReq := &workflowservice.GetWorkflowExecutionHistoryRequest{
 		Namespace: namespace,
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: id,
 		},
 	}
-GetHistoryLoop:
-	for i := 0; i < 10; i++ {
-		historyResponse, err := client2.GetWorkflowExecutionHistory(testcore.NewContext(), getHistoryReq)
-		s.NoError(err)
-		history := historyResponse.History
 
-		lastEvent := history.Events[len(history.Events)-1]
-		if lastEvent.EventType != enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TERMINATED {
-			s.logger.Warn("Execution not terminated yet")
-			time.Sleep(100 * time.Millisecond)
-			continue GetHistoryLoop
-		}
-
-		s.EqualHistory(`
-  1 1 WorkflowExecutionStarted
-  2 1 WorkflowTaskScheduled
-  3 1 WorkflowTaskStarted
-  4 1 WorkflowTaskCompleted
-  5 1 ActivityTaskScheduled
-  6 2 ActivityTaskTimedOut
-  7 2 WorkflowTaskScheduled
-  8 2 WorkflowExecutionTerminated  {"Details":{"Payloads":[{"Data":"\"terminate details\""}]},"Identity":"worker1","Reason":"terminate reason"}`, history)
-
-		executionTerminated = true
-		break GetHistoryLoop
-	}
-	s.True(executionTerminated)
+	s.WaitForHistory(`
+  1 v1 WorkflowExecutionStarted
+  2 v1 WorkflowTaskScheduled
+  3 v1 WorkflowTaskStarted
+  4 v1 WorkflowTaskCompleted
+  5 v1 ActivityTaskScheduled
+  6 v2 ActivityTaskTimedOut
+  7 v2 WorkflowTaskScheduled
+  8 v2 WorkflowExecutionTerminated  {"Details":{"Payloads":[{"Data":"\"terminate details\""}]},"Identity":"worker1","Reason":"terminate reason"}`,
+		func() *historypb.History {
+			historyResponse, err := client2.GetWorkflowExecutionHistory(testcore.NewContext(), getHistoryReq)
+			s.NoError(err)
+			return historyResponse.History
+		}, 1*time.Second, 100*time.Millisecond,
+	)
 
 	// check history replicated to the other cluster
-	var historyResponse *workflowservice.GetWorkflowExecutionHistoryResponse
-	eventsReplicated := false
-GetHistoryLoop2:
-	for i := 0; i < 15; i++ {
-		historyResponse, err = client1.GetWorkflowExecutionHistory(testcore.NewContext(), getHistoryReq)
-		if err == nil {
-			history := historyResponse.History
-			lastEvent := history.Events[len(history.Events)-1]
-			if lastEvent.EventType == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TERMINATED {
-				s.EqualHistory(`
-  1 1 WorkflowExecutionStarted
-  2 1 WorkflowTaskScheduled
-  3 1 WorkflowTaskStarted
-  4 1 WorkflowTaskCompleted
-  5 1 ActivityTaskScheduled
-  6 2 ActivityTaskTimedOut
-  7 2 WorkflowTaskScheduled
-  8 2 WorkflowExecutionTerminated  {"Details":{"Payloads":[{"Data":"\"terminate details\""}]},"Identity":"worker1","Reason":"terminate reason"}`, history)
-				eventsReplicated = true
-				break GetHistoryLoop2
+	s.WaitForHistory(`
+  1 v1 WorkflowExecutionStarted
+  2 v1 WorkflowTaskScheduled
+  3 v1 WorkflowTaskStarted
+  4 v1 WorkflowTaskCompleted
+  5 v1 ActivityTaskScheduled
+  6 v2 ActivityTaskTimedOut
+  7 v2 WorkflowTaskScheduled
+  8 v2 WorkflowExecutionTerminated  {"Details":{"Payloads":[{"Data":"\"terminate details\""}]},"Identity":"worker1","Reason":"terminate reason"}`,
+		func() *historypb.History {
+			historyResponse, err := client1.GetWorkflowExecutionHistory(testcore.NewContext(), getHistoryReq)
+			if err != nil {
+				return nil
 			}
-		}
-		time.Sleep(1 * time.Second)
-	}
-	s.NoError(err)
-	s.True(eventsReplicated)
+			return historyResponse.History
+		}, 15*time.Second, 1*time.Second,
+	)
 }
 
 func (s *FunctionalClustersTestSuite) TestResetWorkflowFailover() {
@@ -1063,28 +1034,28 @@ func (s *FunctionalClustersTestSuite) TestResetWorkflowFailover() {
 	getHistoryResp, err := client1.GetWorkflowExecutionHistory(testcore.NewContext(), getHistoryReq)
 	s.NoError(err)
 	s.EqualHistory(`
-  1 1 WorkflowExecutionStarted
-  2 1 WorkflowTaskScheduled
-  3 1 WorkflowExecutionSignaled
-  4 1 WorkflowTaskStarted
-  5 1 WorkflowTaskFailed
-  6 1 WorkflowTaskScheduled
-  7 2 WorkflowTaskStarted
-  8 2 WorkflowTaskCompleted
-  9 2 WorkflowExecutionCompleted`, getHistoryResp.History)
+  1 v1 WorkflowExecutionStarted
+  2 v1 WorkflowTaskScheduled
+  3 v1 WorkflowExecutionSignaled
+  4 v1 WorkflowTaskStarted
+  5 v1 WorkflowTaskFailed
+  6 v1 WorkflowTaskScheduled
+  7 v2 WorkflowTaskStarted
+  8 v2 WorkflowTaskCompleted
+  9 v2 WorkflowExecutionCompleted`, getHistoryResp.History)
 
 	getHistoryResp, err = client2.GetWorkflowExecutionHistory(testcore.NewContext(), getHistoryReq)
 	s.NoError(err)
 	s.EqualHistory(`
-  1 1 WorkflowExecutionStarted
-  2 1 WorkflowTaskScheduled
-  3 1 WorkflowExecutionSignaled
-  4 1 WorkflowTaskStarted
-  5 1 WorkflowTaskFailed
-  6 1 WorkflowTaskScheduled
-  7 2 WorkflowTaskStarted
-  8 2 WorkflowTaskCompleted
-  9 2 WorkflowExecutionCompleted`, getHistoryResp.History)
+  1 v1 WorkflowExecutionStarted
+  2 v1 WorkflowTaskScheduled
+  3 v1 WorkflowExecutionSignaled
+  4 v1 WorkflowTaskStarted
+  5 v1 WorkflowTaskFailed
+  6 v1 WorkflowTaskScheduled
+  7 v2 WorkflowTaskStarted
+  8 v2 WorkflowTaskCompleted
+  9 v2 WorkflowExecutionCompleted`, getHistoryResp.History)
 }
 
 func (s *FunctionalClustersTestSuite) TestContinueAsNewFailover() {
@@ -1350,28 +1321,24 @@ func (s *FunctionalClustersTestSuite) TestSignalFailover() {
 			WorkflowId: id,
 		},
 	}
-	var historyResponse *workflowservice.GetWorkflowExecutionHistoryResponse
-	eventsReplicated := false
-	for i := 0; i < 15; i++ {
-		historyResponse, err = client2.GetWorkflowExecutionHistory(testcore.NewContext(), getHistoryReq)
-		if err == nil && len(historyResponse.History.Events) == 9 {
-			s.EqualHistory(`
-  1 1 WorkflowExecutionStarted
-  2 1 WorkflowTaskScheduled
-  3 1 WorkflowTaskStarted
-  4 1 WorkflowTaskCompleted
-  5 1 WorkflowExecutionSignaled
-  6 1 WorkflowExecutionSignaled
-  7 1 WorkflowTaskScheduled
-  8 1 WorkflowTaskStarted
-  9 1 WorkflowTaskCompleted`, historyResponse.History)
-			eventsReplicated = true
-			break
-		}
-		time.Sleep(1 * time.Second)
-	}
-	s.NoError(err)
-	s.True(eventsReplicated)
+	s.WaitForHistory(`
+  1 v1 WorkflowExecutionStarted
+  2 v1 WorkflowTaskScheduled
+  3 v1 WorkflowTaskStarted
+  4 v1 WorkflowTaskCompleted
+  5 v1 WorkflowExecutionSignaled
+  6 v1 WorkflowExecutionSignaled
+  7 v1 WorkflowTaskScheduled
+  8 v1 WorkflowTaskStarted
+  9 v1 WorkflowTaskCompleted`,
+		func() *historypb.History {
+			historyResponse, err := client2.GetWorkflowExecutionHistory(testcore.NewContext(), getHistoryReq)
+			if err != nil {
+				return nil
+			}
+			return historyResponse.History
+		}, 15*time.Second, 1*time.Second,
+	)
 
 	// Send another signal without a task in cluster 2
 	_, err = client2.SignalWorkflowExecution(testcore.NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
@@ -1409,32 +1376,29 @@ func (s *FunctionalClustersTestSuite) TestSignalFailover() {
 	s.True(eventSignaled)
 
 	// check history matched
-	eventsReplicated = false
-	for i := 0; i < 15; i++ {
-		historyResponse, err = client2.GetWorkflowExecutionHistory(testcore.NewContext(), getHistoryReq)
-		if err == nil && len(historyResponse.History.Events) == 14 {
-			s.EqualHistory(`
-  1 1 WorkflowExecutionStarted
-  2 1 WorkflowTaskScheduled
-  3 1 WorkflowTaskStarted
-  4 1 WorkflowTaskCompleted
-  5 1 WorkflowExecutionSignaled
-  6 1 WorkflowExecutionSignaled
-  7 1 WorkflowTaskScheduled
-  8 1 WorkflowTaskStarted
-  9 1 WorkflowTaskCompleted
- 10 2 WorkflowExecutionSignaled
- 11 2 WorkflowExecutionSignaled
- 12 2 WorkflowTaskScheduled
- 13 2 WorkflowTaskStarted
- 14 2 WorkflowTaskCompleted`, historyResponse.History)
-			eventsReplicated = true
-			break
-		}
-		time.Sleep(1 * time.Second)
-	}
-	s.NoError(err)
-	s.True(eventsReplicated)
+	s.WaitForHistory(`
+  1 v1 WorkflowExecutionStarted
+  2 v1 WorkflowTaskScheduled
+  3 v1 WorkflowTaskStarted
+  4 v1 WorkflowTaskCompleted
+  5 v1 WorkflowExecutionSignaled
+  6 v1 WorkflowExecutionSignaled
+  7 v1 WorkflowTaskScheduled
+  8 v1 WorkflowTaskStarted
+  9 v1 WorkflowTaskCompleted
+ 10 v2 WorkflowExecutionSignaled
+ 11 v2 WorkflowExecutionSignaled
+ 12 v2 WorkflowTaskScheduled
+ 13 v2 WorkflowTaskStarted
+ 14 v2 WorkflowTaskCompleted`,
+		func() *historypb.History {
+			historyResponse, err := client2.GetWorkflowExecutionHistory(testcore.NewContext(), getHistoryReq)
+			if err != nil {
+				return nil
+			}
+			return historyResponse.History
+		}, 15*time.Second, 1*time.Second,
+	)
 }
 
 func (s *FunctionalClustersTestSuite) TestUserTimerFailover() {
@@ -1931,11 +1895,11 @@ func (s *FunctionalClustersTestSuite) TestCronWorkflowStartAndFailover() {
 	s.True(wfCompleted)
 	events := s.getHistory(client2, namespace, executions[0])
 	s.EqualHistoryEvents(`
-  1 1 WorkflowExecutionStarted
-  2 2 WorkflowTaskScheduled
-  3 2 WorkflowTaskStarted
-  4 2 WorkflowTaskCompleted
-  5 2 WorkflowExecutionCompleted`, events)
+  1 v1 WorkflowExecutionStarted
+  2 v2 WorkflowTaskScheduled
+  3 v2 WorkflowTaskStarted
+  4 v2 WorkflowTaskCompleted
+  5 v2 WorkflowExecutionCompleted`, events)
 
 	// terminate the remaining cron
 	_, err = client2.TerminateWorkflowExecution(testcore.NewContext(), &workflowservice.TerminateWorkflowExecutionRequest{
@@ -2035,11 +1999,11 @@ func (s *FunctionalClustersTestSuite) TestCronWorkflowCompleteAndFailover() {
 	s.Equal(1, wfCompletionCount)
 	events := s.getHistory(client1, namespace, executions[0])
 	s.EqualHistoryEvents(`
-  1 1 WorkflowExecutionStarted
-  2 1 WorkflowTaskScheduled
-  3 1 WorkflowTaskStarted
-  4 1 WorkflowTaskCompleted
-  5 1 WorkflowExecutionCompleted`, events)
+  1 v1 WorkflowExecutionStarted
+  2 v1 WorkflowTaskScheduled
+  3 v1 WorkflowTaskStarted
+  4 v1 WorkflowTaskCompleted
+  5 v1 WorkflowExecutionCompleted`, events)
 
 	s.failover(namespace, s.clusterNames[1], int64(2), client1)
 
@@ -2048,11 +2012,11 @@ func (s *FunctionalClustersTestSuite) TestCronWorkflowCompleteAndFailover() {
 	s.Equal(2, wfCompletionCount)
 	events = s.getHistory(client2, namespace, executions[1])
 	s.EqualHistoryEvents(`
-  1 1 WorkflowExecutionStarted
-  2 2 WorkflowTaskScheduled
-  3 2 WorkflowTaskStarted
-  4 2 WorkflowTaskCompleted
-  5 2 WorkflowExecutionCompleted`, events)
+  1 v1 WorkflowExecutionStarted
+  2 v2 WorkflowTaskScheduled
+  3 v2 WorkflowTaskStarted
+  4 v2 WorkflowTaskCompleted
+  5 v2 WorkflowExecutionCompleted`, events)
 
 	_, err = client2.TerminateWorkflowExecution(testcore.NewContext(), &workflowservice.TerminateWorkflowExecutionRequest{
 		Namespace: namespace,
@@ -2145,22 +2109,22 @@ func (s *FunctionalClustersTestSuite) TestWorkflowRetryStartAndFailover() {
 	s.NoError(err)
 	events := s.getHistory(client2, namespace, executions[0])
 	s.EqualHistoryEvents(`
-  1 1 WorkflowExecutionStarted {"Attempt":1}
-  2 1 WorkflowTaskScheduled
-  3 2 WorkflowTaskStarted
-  4 2 WorkflowTaskCompleted
-  5 2 WorkflowExecutionFailed`, events)
+  1 v1 WorkflowExecutionStarted {"Attempt":1}
+  2 v1 WorkflowTaskScheduled
+  3 v2 WorkflowTaskStarted
+  4 v2 WorkflowTaskCompleted
+  5 v2 WorkflowExecutionFailed`, events)
 
 	// second attempt
 	_, err = poller2.PollAndProcessWorkflowTask()
 	s.NoError(err)
 	events = s.getHistory(client2, namespace, executions[1])
 	s.EqualHistoryEvents(`
-  1 2 WorkflowExecutionStarted {"Attempt":2}
-  2 2 WorkflowTaskScheduled
-  3 2 WorkflowTaskStarted
-  4 2 WorkflowTaskCompleted
-  5 2 WorkflowExecutionFailed`, events)
+  1 v2 WorkflowExecutionStarted {"Attempt":2}
+  2 v2 WorkflowTaskScheduled
+  3 v2 WorkflowTaskStarted
+  4 v2 WorkflowTaskCompleted
+  5 v2 WorkflowExecutionFailed`, events)
 }
 
 func (s *FunctionalClustersTestSuite) TestWorkflowRetryFailAndFailover() {
@@ -2252,11 +2216,11 @@ func (s *FunctionalClustersTestSuite) TestWorkflowRetryFailAndFailover() {
 	s.NoError(err)
 	events := s.getHistory(client1, namespace, executions[0])
 	s.EqualHistoryEvents(`
-  1 1 WorkflowExecutionStarted {"Attempt":1}
-  2 1 WorkflowTaskScheduled
-  3 1 WorkflowTaskStarted
-  4 1 WorkflowTaskCompleted
-  5 1 WorkflowExecutionFailed`, events)
+  1 v1 WorkflowExecutionStarted {"Attempt":1}
+  2 v1 WorkflowTaskScheduled
+  3 v1 WorkflowTaskStarted
+  4 v1 WorkflowTaskCompleted
+  5 v1 WorkflowExecutionFailed`, events)
 
 	s.failover(namespace, s.clusterNames[1], int64(2), client1)
 
@@ -2264,11 +2228,11 @@ func (s *FunctionalClustersTestSuite) TestWorkflowRetryFailAndFailover() {
 	s.NoError(err)
 	events = s.getHistory(client2, namespace, executions[1])
 	s.EqualHistoryEvents(`
-  1 1 WorkflowExecutionStarted {"Attempt":2}
-  2 1 WorkflowTaskScheduled
-  3 2 WorkflowTaskStarted
-  4 2 WorkflowTaskCompleted
-  5 2 WorkflowExecutionFailed`, events)
+  1 v1 WorkflowExecutionStarted {"Attempt":2}
+  2 v1 WorkflowTaskScheduled
+  3 v2 WorkflowTaskStarted
+  4 v2 WorkflowTaskCompleted
+  5 v2 WorkflowExecutionFailed`, events)
 }
 
 func (s *FunctionalClustersTestSuite) TestActivityHeartbeatFailover() {

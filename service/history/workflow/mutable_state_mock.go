@@ -2840,6 +2840,18 @@ func (mr *MockMutableStateMockRecorder) PopTasks() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PopTasks", reflect.TypeOf((*MockMutableState)(nil).PopTasks))
 }
 
+// RecordLastActivityStarted mocks base method.
+func (m *MockMutableState) RecordLastActivityStarted(ai *persistence.ActivityInfo) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "RecordLastActivityStarted", ai)
+}
+
+// RecordLastActivityStarted indicates an expected call of RecordLastActivityStarted.
+func (mr *MockMutableStateMockRecorder) RecordLastActivityStarted(ai any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RecordLastActivityStarted", reflect.TypeOf((*MockMutableState)(nil).RecordLastActivityStarted), ai)
+}
+
 // RefreshExpirationTimeoutTask mocks base method.
 func (m *MockMutableState) RefreshExpirationTimeoutTask(ctx context.Context) error {
 	m.ctrl.T.Helper()
