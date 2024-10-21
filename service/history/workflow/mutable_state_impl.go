@@ -179,6 +179,9 @@ type (
 		// TODO deprecate nextEventIDInDB in favor of dbRecordVersion.
 		// Indicates the next event ID in DB, for conditional update.
 		nextEventIDInDB int64
+		// Indicates the versionedTransition in DB, can be used to
+		// calculate if the state-based replication is disabling.
+		versionedTransitionInDB *persistencespb.VersionedTransition
 		// Indicates the DB record version, for conditional update.
 		dbRecordVersion int64
 		// Namespace entry contains a snapshot of namespace.
@@ -455,6 +458,9 @@ func NewMutableStateFromDB(
 	mutableState.nextEventIDInDB = dbRecord.NextEventId
 	mutableState.dbRecordVersion = dbRecordVersion
 	mutableState.checksum = dbRecord.Checksum
+	if len(mutableState.executionInfo.TransitionHistory) != 0 {
+		mutableState.versionedTransitionInDB = mutableState.executionInfo.TransitionHistory[len(mutableState.executionInfo.TransitionHistory)-1]
+	}
 
 	if len(dbRecord.Checksum.GetValue()) > 0 {
 		switch {
@@ -4849,7 +4855,7 @@ func (ms *MutableStateImpl) ApplyChildWorkflowExecutionTimedOutEvent(
 
 func (ms *MutableStateImpl) RetryActivity(
 	ai *persistencespb.ActivityInfo,
-	failure *failurepb.Failure,
+	activityFailure *failurepb.Failure,
 ) (enumspb.RetryState, error) {
 	opTag := tag.WorkflowActionActivityTaskRetry
 	if err := ms.checkMutability(opTag); err != nil {
@@ -4862,13 +4868,13 @@ func (ms *MutableStateImpl) RetryActivity(
 		return enumspb.RETRY_STATE_CANCEL_REQUESTED, nil
 	}
 
-	if !isRetryable(failure, ai.RetryNonRetryableErrorTypes) {
+	if !isRetryable(activityFailure, ai.RetryNonRetryableErrorTypes) {
 		return enumspb.RETRY_STATE_NON_RETRYABLE_FAILURE, nil
 	}
 
 	retryMaxInterval := ai.RetryMaximumInterval
 	// if a delay is specified by the application it should override the maximum interval set by the retry policy.
-	delay := nextRetryDelayFrom(failure)
+	delay := nextRetryDelayFrom(activityFailure)
 	if delay != nil {
 		retryMaxInterval = durationpb.New(*delay)
 	}
@@ -4888,8 +4894,43 @@ func (ms *MutableStateImpl) RetryActivity(
 		return retryState, nil
 	}
 
-	nextScheduledTime := now.Add(retryBackoff)
-	nextAttempt := ai.Attempt + 1
+	ms.updateActivityInfoForRetries(ai,
+		now.Add(retryBackoff),
+		ai.Attempt+1,
+		activityFailure)
+
+	if err := ms.taskGenerator.GenerateActivityRetryTasks(ai); err != nil {
+		return enumspb.RETRY_STATE_INTERNAL_SERVER_ERROR, err
+	}
+	return enumspb.RETRY_STATE_IN_PROGRESS, nil
+}
+
+func (ms *MutableStateImpl) RecordLastActivityStarted(ai *persistencespb.ActivityInfo) {
+	ms.updateActivity(ai, func(info *persistencespb.ActivityInfo, impl *MutableStateImpl) *persistencespb.ActivityInfo {
+		ai.LastAttemptCompleteTime = timestamppb.New(ms.shard.GetTimeSource().Now().UTC())
+		return ai
+	})
+}
+
+func (ms *MutableStateImpl) updateActivityInfoForRetries(
+	ai *persistencespb.ActivityInfo,
+	nextScheduledTime time.Time,
+	nextAttempt int32,
+	activityFailure *failurepb.Failure,
+) {
+	ms.updateActivity(ai, func(info *persistencespb.ActivityInfo, impl *MutableStateImpl) *persistencespb.ActivityInfo {
+		ai = updateActivityInfoForRetries(
+			ai,
+			ms.GetCurrentVersion(),
+			nextAttempt,
+			ms.truncateRetryableActivityFailure(activityFailure),
+			timestamppb.New(nextScheduledTime),
+		)
+		return ai
+	})
+}
+
+func (ms *MutableStateImpl) updateActivity(ai *persistencespb.ActivityInfo, updateCallback func(*persistencespb.ActivityInfo, *MutableStateImpl) *persistencespb.ActivityInfo) {
 	// we need to store activity info size since pendingActivityInfoIDs holds pointers to activity
 	// info and if prev found it points to the same activity info as ai, so updating ai will cause
 	// size of prev change.
@@ -4897,21 +4938,12 @@ func (ms *MutableStateImpl) RetryActivity(
 	if prev, ok := ms.pendingActivityInfoIDs[ai.ScheduledEventId]; ok {
 		originalSize = prev.Size()
 	}
-	ai = updateActivityInfoForRetries(
-		ai,
-		ms.GetCurrentVersion(),
-		nextAttempt,
-		ms.truncateRetryableActivityFailure(failure),
-		timestamppb.New(nextScheduledTime),
-	)
+
+	updateCallback(ai, ms)
+
 	ms.approximateSize += ai.Size() - originalSize
 	ms.updateActivityInfos[ai.ScheduledEventId] = ai
 	ms.syncActivityTasks[ai.ScheduledEventId] = struct{}{}
-
-	if err := ms.taskGenerator.GenerateActivityRetryTasks(ai); err != nil {
-		return enumspb.RETRY_STATE_INTERNAL_SERVER_ERROR, err
-	}
-	return enumspb.RETRY_STATE_IN_PROGRESS, nil
 }
 
 func (ms *MutableStateImpl) truncateRetryableActivityFailure(
@@ -5619,6 +5651,11 @@ func (ms *MutableStateImpl) cleanupTransaction() error {
 
 	ms.stateInDB = ms.executionState.State
 	ms.nextEventIDInDB = ms.GetNextEventID()
+	if len(ms.executionInfo.TransitionHistory) != 0 {
+		ms.versionedTransitionInDB = ms.executionInfo.TransitionHistory[len(ms.executionInfo.TransitionHistory)-1]
+	} else {
+		ms.versionedTransitionInDB = nil
+	}
 	// ms.dbRecordVersion remains the same
 
 	ms.hBuilder = historybuilder.New(
@@ -5713,6 +5750,15 @@ func (ms *MutableStateImpl) syncActivityToReplicationTask(
 	switch transactionPolicy {
 	case TransactionPolicyActive:
 		if ms.generateReplicationTask() {
+			var activityIDs map[int64]struct{}
+			if ms.disablingTransitionHistory() {
+				activityIDs = make(map[int64]struct{}, len(ms.GetPendingActivityInfos()))
+				for activityID := range ms.GetPendingActivityInfos() {
+					activityIDs[activityID] = struct{}{}
+				}
+			} else {
+				activityIDs = ms.syncActivityTasks
+			}
 			return convertSyncActivityInfos(
 				now,
 				definition.NewWorkflowKey(
@@ -5721,7 +5767,7 @@ func (ms *MutableStateImpl) syncActivityToReplicationTask(
 					ms.executionState.RunId,
 				),
 				ms.pendingActivityInfoIDs,
-				ms.syncActivityTasks,
+				activityIDs,
 			)
 		}
 		return nil
@@ -6701,4 +6747,8 @@ func (ms *MutableStateImpl) applyTombstones(tombstoneBatches []*persistencespb.S
 	}
 	ms.capTombstoneCount()
 	return nil
+}
+
+func (ms *MutableStateImpl) disablingTransitionHistory() bool {
+	return ms.versionedTransitionInDB != nil && len(ms.executionInfo.TransitionHistory) == 0
 }

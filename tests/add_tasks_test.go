@@ -91,6 +91,7 @@ type (
 )
 
 func TestAddTasksSuite(t *testing.T) {
+	t.Parallel()
 	suite.Run(t, new(AddTasksSuite))
 }
 
@@ -277,7 +278,7 @@ func (s *AddTasksSuite) TestAddTasks_GetEngineErr() {
 
 func (s *AddTasksSuite) newSDKClient() sdkclient.Client {
 	client, err := sdkclient.Dial(sdkclient.Options{
-		HostPort:  s.HostPort(),
+		HostPort:  s.FrontendGRPCAddress(),
 		Namespace: s.Namespace(),
 	})
 	s.NoError(err)

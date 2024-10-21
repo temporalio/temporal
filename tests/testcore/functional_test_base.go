@@ -36,6 +36,7 @@ import (
 
 	"github.com/dgryski/go-farm"
 	"github.com/pborman/uuid"
+	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -77,7 +78,6 @@ type (
 		foreignNamespace       string
 		archivalNamespace      string
 		dynamicConfigOverrides map[dynamicconfig.Key]interface{}
-		hostPort               string
 	}
 	// TestClusterParams contains the variables which are used to configure test suites via the Option type.
 	TestClusterParams struct {
@@ -139,8 +139,8 @@ func (s *FunctionalTestBase) ForeignNamespace() string {
 	return s.foreignNamespace
 }
 
-func (s *FunctionalTestBase) HostPort() string {
-	return s.hostPort
+func (s *FunctionalTestBase) FrontendGRPCAddress() string {
+	return s.GetTestCluster().Host().FrontendGRPCAddress()
 }
 
 func (s *FunctionalTestBase) SetDynamicConfigOverrides(dynamicConfig map[dynamicconfig.Key]interface{}) {
@@ -152,14 +152,13 @@ func (s *FunctionalTestBase) SetupSuite(defaultClusterConfigFile string, options
 
 	params := ApplyTestClusterParams(options)
 
-	s.hostPort = "127.0.0.1:7134"
-	if TestFlags.FrontendAddr != "" {
-		s.hostPort = TestFlags.FrontendAddr
-	}
 	s.setupLogger()
 
 	clusterConfig, err := GetTestClusterConfig(defaultClusterConfigFile)
 	s.Require().NoError(err)
+	s.Empty(clusterConfig.DeprecatedFrontendAddress, "Functional tests against external frontends are not supported")
+	s.Empty(clusterConfig.DeprecatedClusterNo, "ClusterNo should not be present in cluster config files")
+
 	if clusterConfig.DynamicConfigOverrides == nil {
 		clusterConfig.DynamicConfigOverrides = make(map[dynamicconfig.Key]interface{})
 	}
@@ -177,28 +176,13 @@ func (s *FunctionalTestBase) SetupSuite(defaultClusterConfigFile string, options
 	clusterConfig.EnableMetricsCapture = true
 	s.testClusterConfig = clusterConfig
 
-	if clusterConfig.FrontendAddress != "" {
-		s.Logger.Info("Running functional test against specified frontend", tag.Address(TestFlags.FrontendAddr))
-
-		connection, err := rpc.Dial(TestFlags.FrontendAddr, nil, s.Logger)
-		if err != nil {
-			s.Require().NoError(err)
-		}
-
-		s.client = workflowservice.NewWorkflowServiceClient(connection)
-		s.adminClient = adminservice.NewAdminServiceClient(connection)
-		s.operatorClient = operatorservice.NewOperatorServiceClient(connection)
-		s.httpAPIAddress = TestFlags.FrontendHTTPAddr
-	} else {
-		s.Logger.Info("Running functional test against test cluster")
-		cluster, err := s.testClusterFactory.NewCluster(s.T(), clusterConfig, s.Logger)
-		s.Require().NoError(err)
-		s.testCluster = cluster
-		s.client = s.testCluster.FrontendClient()
-		s.adminClient = s.testCluster.AdminClient()
-		s.operatorClient = s.testCluster.OperatorClient()
-		s.httpAPIAddress = cluster.Host().FrontendHTTPAddress()
-	}
+	cluster, err := s.testClusterFactory.NewCluster(s.T(), clusterConfig, s.Logger)
+	s.Require().NoError(err)
+	s.testCluster = cluster
+	s.client = s.testCluster.FrontendClient()
+	s.adminClient = s.testCluster.AdminClient()
+	s.operatorClient = s.testCluster.OperatorClient()
+	s.httpAPIAddress = cluster.Host().FrontendHTTPAddress()
 
 	s.namespace = RandomizeStr("functional-test-namespace")
 	s.Require().NoError(s.registerNamespaceWithDefaults(s.namespace))
@@ -315,7 +299,6 @@ func GetTestClusterConfig(configFile string) (*TestClusterConfig, error) {
 		options.FaultInjection = fiOptions.FaultInjection
 	}
 
-	options.FrontendAddress = TestFlags.FrontendAddr
 	return &options, nil
 }
 
@@ -392,26 +375,32 @@ func (s *FunctionalTestBase) markNamespaceAsDeleted(
 	return err
 }
 
-func (s *FunctionalTestBase) GetHistory(namespace string, execution *commonpb.WorkflowExecution) []*historypb.HistoryEvent {
-	historyResponse, err := s.client.GetWorkflowExecutionHistory(NewContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
-		Namespace:       namespace,
-		Execution:       execution,
-		MaximumPageSize: 5, // Use small page size to force pagination code path
-	})
-	s.Require().NoError(err)
-
-	events := historyResponse.History.Events
-	for historyResponse.NextPageToken != nil {
-		historyResponse, err = s.client.GetWorkflowExecutionHistory(NewContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
-			Namespace:     namespace,
-			Execution:     execution,
-			NextPageToken: historyResponse.NextPageToken,
+func (s *FunctionalTestBase) GetHistoryFunc(namespace string, execution *commonpb.WorkflowExecution) func() []*historypb.HistoryEvent {
+	return func() []*historypb.HistoryEvent {
+		historyResponse, err := s.client.GetWorkflowExecutionHistory(NewContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
+			Namespace:       namespace,
+			Execution:       execution,
+			MaximumPageSize: 5, // Use small page size to force pagination code path
 		})
-		s.Require().NoError(err)
-		events = append(events, historyResponse.History.Events...)
-	}
+		require.NoError(s.T(), err)
 
-	return events
+		events := historyResponse.History.Events
+		for historyResponse.NextPageToken != nil {
+			historyResponse, err = s.client.GetWorkflowExecutionHistory(NewContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
+				Namespace:     namespace,
+				Execution:     execution,
+				NextPageToken: historyResponse.NextPageToken,
+			})
+			require.NoError(s.T(), err)
+			events = append(events, historyResponse.History.Events...)
+		}
+
+		return events
+	}
+}
+
+func (s *FunctionalTestBase) GetHistory(namespace string, execution *commonpb.WorkflowExecution) []*historypb.HistoryEvent {
+	return s.GetHistoryFunc(namespace, execution)()
 }
 
 func (s *FunctionalTestBase) DecodePayloadsString(ps *commonpb.Payloads) string {

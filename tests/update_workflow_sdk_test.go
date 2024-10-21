@@ -30,7 +30,6 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/suite"
-
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	updatepb "go.temporal.io/api/update/v1"
@@ -52,6 +51,7 @@ type UpdateWorkflowSdkSuite struct {
 }
 
 func TestUpdateWorkflowSdkSuite(t *testing.T) {
+	t.Parallel()
 	s := new(UpdateWorkflowSdkSuite)
 	suite.Run(t, s)
 }
@@ -82,12 +82,13 @@ func (s *UpdateWorkflowSdkSuite) TestUpdateWorkflow_TerminateWorkflowAfterUpdate
 	var notFound *serviceerror.NotFound
 	s.ErrorAs(err, &notFound)
 
-	s.EqualHistoryEvents(`
+	hist := s.GetHistory(s.Namespace(), tv.WorkflowExecution())
+	s.EqualHistoryEventsPrefix(`
   1 WorkflowExecutionStarted
-  2 WorkflowTaskScheduled
-  3 WorkflowTaskStarted
-  4 WorkflowTaskFailed
-  5 WorkflowExecutionTerminated`, s.GetHistory(s.Namespace(), tv.WorkflowExecution()))
+  2 WorkflowTaskScheduled`, hist)
+
+	s.EqualHistoryEventsSuffix(`
+WorkflowExecutionTerminated // This can be EventID=3 if WF is terminated before 1st WFT is started or 5 if after.`, hist)
 }
 
 // TestUpdateWorkflow_TimeoutWorkflowAfterUpdateAccepted executes an update, and while WF awaits
@@ -117,20 +118,13 @@ func (s *UpdateWorkflowSdkSuite) TestUpdateWorkflow_TimeoutWorkflowAfterUpdateAc
 	s.NoError(err)
 
 	// Wait for the first WFT to complete.
-	// TODO: replace with s.WaitForHistoryEvents when its ready.
-	s.Eventually(func() bool {
-		// Wait until the first WFT completes.
-		h := s.GetHistory(s.Namespace(), tv.WorkflowExecution())
-		if len(h) == 4 {
-			s.EqualHistoryEvents(`
+	s.WaitForHistoryEvents(`
   1 WorkflowExecutionStarted
   2 WorkflowTaskScheduled
   3 WorkflowTaskStarted
-  4 WorkflowTaskCompleted`, h)
-			return true
-		}
-		return false
-	}, 1*time.Second, 200*time.Millisecond)
+  4 WorkflowTaskCompleted`,
+		s.GetHistoryFunc(tv.NamespaceName().String(), tv.WorkflowExecution()),
+		1*time.Second, 200*time.Millisecond)
 
 	updateHandle, err := s.updateWorkflowWaitAccepted(ctx, tv, "my-update-arg")
 	s.NoError(err)
@@ -177,20 +171,13 @@ func (s *UpdateWorkflowSdkSuite) TestUpdateWorkflow_TerminateWorkflowAfterUpdate
 	wfRun := s.startWorkflow(ctx, tv, workflowFn)
 
 	// Wait for the first WFT to complete.
-	// TODO: replace with s.WaitForHistoryEvents when its ready.
-	s.Eventually(func() bool {
-		// Wait until the first WFT completes.
-		h := s.GetHistory(s.Namespace(), tv.WorkflowExecution())
-		if len(h) == 4 {
-			s.EqualHistoryEvents(`
+	s.WaitForHistoryEvents(`
   1 WorkflowExecutionStarted
   2 WorkflowTaskScheduled
   3 WorkflowTaskStarted
-  4 WorkflowTaskCompleted`, h)
-			return true
-		}
-		return false
-	}, 1*time.Second, 200*time.Millisecond)
+  4 WorkflowTaskCompleted`,
+		s.GetHistoryFunc(tv.NamespaceName().String(), tv.WorkflowExecution()),
+		1*time.Second, 200*time.Millisecond)
 
 	updateHandle, err := s.updateWorkflowWaitAccepted(ctx, tv, "my-update-arg")
 	s.NoError(err)
@@ -287,15 +274,19 @@ func (s *UpdateWorkflowSdkSuite) TestUpdateWorkflow_ContinueAsNewAfterUpdateAdmi
   4 WorkflowTaskCompleted
   5 MarkerRecorded
   6 WorkflowExecutionContinuedAsNew`, s.GetHistory(s.Namespace(), tv.WithRunID(firstRun.GetRunID()).WorkflowExecution()))
-	// TODO: This might have different history if 1st WFT completes before Update is retried. Then
-	//  there will be another 3 WFT events before Event 5. This needs to be replaced with s.EqualHistorySuffix once available.
-	s.EqualHistoryEvents(`
+
+	hist2 := s.GetHistory(s.Namespace(), tv.WithRunID(secondRunID).WorkflowExecution())
+	s.EqualHistoryEventsPrefix(`
   1 WorkflowExecutionStarted
   2 WorkflowTaskScheduled
   3 WorkflowTaskStarted
-  4 WorkflowTaskCompleted
-  5 WorkflowExecutionUpdateAccepted
-  6 WorkflowExecutionUpdateCompleted`, s.GetHistory(s.Namespace(), tv.WithRunID(secondRunID).WorkflowExecution()))
+  4 WorkflowTaskCompleted`, hist2)
+	s.EqualHistoryEventsSuffix(`
+WorkflowTaskScheduled // This can be EventID=2 if Update is retried before 1st WFT is completed or 5 if 1st WFT completes first.
+WorkflowTaskStarted
+WorkflowTaskCompleted
+WorkflowExecutionUpdateAccepted
+WorkflowExecutionUpdateCompleted`, hist2)
 }
 
 func (s *UpdateWorkflowSdkSuite) TestUpdateWorkflow_TimeoutWithRetryAfterUpdateAdmitted() {

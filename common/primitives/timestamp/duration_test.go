@@ -1,8 +1,6 @@
 // The MIT License
 //
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
+// Copyright (c) 2024 Temporal Technologies Inc.  All rights reserved.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -22,7 +20,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package timer
+package timestamp
 
 import (
 	"testing"
@@ -32,7 +30,7 @@ import (
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 
-func TestValidateAndCapTimer(t *testing.T) {
+func TestValidateProtoDuration(t *testing.T) {
 	t.Parallel()
 
 	testCases := []struct {
@@ -60,17 +58,16 @@ func TestValidateAndCapTimer(t *testing.T) {
 			expectedTimerDuration: durationpb.New(0),
 		},
 		{
-			name:          "cap timer duration",
-			timerDuration: durationpb.New(200 * 365 * 24 * time.Hour),
-
-			expectedErr:           nil,
-			expectedTimerDuration: durationpb.New(MaxAllowedTimer),
-		},
-		{
 			name:                  "valid timer duration",
 			timerDuration:         durationpb.New(time.Hour),
 			expectedErr:           nil,
 			expectedTimerDuration: durationpb.New(time.Hour),
+		},
+		{
+			name:                  "mismatched signs",
+			timerDuration:         &durationpb.Duration{Seconds: 360, Nanos: -100},
+			expectedErr:           errMismatchedSigns,
+			expectedTimerDuration: nil,
 		},
 	}
 
@@ -78,7 +75,7 @@ func TestValidateAndCapTimer(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			actualErr := ValidateAndCapTimer(tc.timerDuration)
+			actualErr := ValidateProtoDuration(tc.timerDuration)
 
 			assert.Equal(t, tc.expectedErr, actualErr)
 			if tc.expectedErr == nil {

@@ -1819,7 +1819,6 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestExecuteStateMachineTimerTask_Va
 			},
 		},
 		Type: dummy.TaskTypeTimer,
-		Data: []byte{1}, // Mark the task as concurrent
 	})
 
 	wfCtx := workflow.NewMockContext(s.controller)

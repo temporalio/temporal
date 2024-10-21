@@ -30,6 +30,7 @@ import (
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	"go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/definition"
@@ -263,4 +264,35 @@ func (s *replicationTaskSuite) TestSkipDuplicatedEvents_ZeroInput_DoNothing() {
 	s.Equal(2, len(task.getEvents()))
 	s.Equal(slice1, task.getEvents()[0])
 	s.Equal(slice2, task.getEvents()[1])
+}
+
+func (s *replicationTaskSuite) TestResetInfo() {
+	workflowKey := definition.WorkflowKey{
+		WorkflowID: uuid.New(),
+		RunID:      uuid.New(),
+	}
+	slice1 := []*historypb.HistoryEvent{
+		{
+			EventId:   13,
+			EventType: enums.EVENT_TYPE_WORKFLOW_TASK_FAILED,
+		},
+		{
+			EventId: 14,
+		},
+	}
+
+	task, _ := newReplicationTask(
+		s.clusterMetadata,
+		nil,
+		workflowKey,
+		nil,
+		nil,
+		[][]*historypb.HistoryEvent{slice1},
+		nil,
+		"",
+		nil,
+	)
+	info := task.getBaseWorkflowInfo()
+	s.Nil(info)
+	s.False(task.isWorkflowReset())
 }
