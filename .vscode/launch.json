@@ -1,6 +1,13 @@
 {
 	"version": "0.2.0",
 	"configurations": [
+        {
+            "name": "Debug Running Server",
+            "type": "go",
+            "request": "attach",
+            "mode": "local",
+            "cwd": "${workspaceFolder}",
+        },
 		{
 			"name": "Debug single functional test method",
 			"type": "go",
@@ -21,6 +28,8 @@
 			"program": "${workspaceFolder}/cmd/server",
 			"cwd": "${workspaceFolder}",
 			"args": [
+				"--env",
+				"development-cass-es",
 				"start",
 			]
 		},
