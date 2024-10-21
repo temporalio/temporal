@@ -28,6 +28,7 @@ import (
 	"context"
 	"fmt"
 	"reflect"
+	"sort"
 	"testing"
 	"time"
 
@@ -2907,7 +2908,6 @@ func (s *mutableStateSuite) TestCloseTransactionPrepareReplicationTasks_SyncHSMT
 func (s *mutableStateSuite) setDisablingTransitionHistory(ms *MutableStateImpl) {
 	ms.versionedTransitionInDB = &persistencespb.VersionedTransition{TransitionCount: 1025}
 	ms.executionInfo.TransitionHistory = nil
-	ms.transitionHistoryEnabled = false
 }
 
 func (s *mutableStateSuite) TestCloseTransactionPrepareReplicationTasks_SyncActivityTask() {
@@ -2956,6 +2956,9 @@ func (s *mutableStateSuite) TestCloseTransactionPrepareReplicationTasks_SyncActi
 
 			repicationTasks := ms.syncActivityToReplicationTask(TransactionPolicyActive)
 			s.Len(repicationTasks, len(tc.expectedReplicationTask))
+			sort.Slice(repicationTasks, func(i, j int) bool {
+				return repicationTasks[i].(*tasks.SyncActivityTask).ScheduledEventID < repicationTasks[j].(*tasks.SyncActivityTask).ScheduledEventID
+			})
 			for i, task := range tc.expectedReplicationTask {
 				s.Equal(task.ScheduledEventID, repicationTasks[i].(*tasks.SyncActivityTask).ScheduledEventID)
 			}
