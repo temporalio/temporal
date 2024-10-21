@@ -4919,7 +4919,7 @@ func (ms *MutableStateImpl) updateActivityInfoForRetries(
 	activityFailure *failurepb.Failure,
 ) {
 	ms.updateActivity(ai, func(info *persistencespb.ActivityInfo, impl *MutableStateImpl) *persistencespb.ActivityInfo {
-		ai = updateActivityInfoForRetries(
+		ai = UpdateActivityInfoForRetries(
 			ai,
 			ms.GetCurrentVersion(),
 			nextAttempt,
