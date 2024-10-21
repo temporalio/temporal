@@ -2794,7 +2794,6 @@ func (s *mutableStateSuite) TestCloseTransactionPrepareReplicationTasks_SyncHSMT
 	stateMachineDef := hsmtest.NewDefinition("test")
 	err := s.mockShard.StateMachineRegistry().RegisterMachine(stateMachineDef)
 	s.NoError(err)
-	s.mockConfig.EnableTransitionHistory = func() bool { return false }
 
 	testCases := []struct {
 		name                    string
@@ -2888,7 +2887,7 @@ func (s *mutableStateSuite) TestCloseTransactionPrepareReplicationTasks_SyncHSMT
 						s.mutableState.HSM().ClearTransactionState()
 					}
 				}
-
+				s.mutableState.transitionHistoryEnabled = false
 				err := s.mutableState.closeTransactionPrepareReplicationTasks(TransactionPolicyActive, tc.eventBatches, tc.clearBufferEvents)
 				s.NoError(err)
 
@@ -2908,6 +2907,7 @@ func (s *mutableStateSuite) TestCloseTransactionPrepareReplicationTasks_SyncHSMT
 func (s *mutableStateSuite) setDisablingTransitionHistory(ms *MutableStateImpl) {
 	ms.versionedTransitionInDB = &persistencespb.VersionedTransition{TransitionCount: 1025}
 	ms.executionInfo.TransitionHistory = nil
+	ms.transitionHistoryEnabled = false
 }
 
 func (s *mutableStateSuite) TestCloseTransactionPrepareReplicationTasks_SyncActivityTask() {

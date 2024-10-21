@@ -5591,23 +5591,6 @@ func (ms *MutableStateImpl) closeTransactionPrepareReplicationTasks(
 
 	replicationTasks = append(replicationTasks, ms.syncActivityToReplicationTask(transactionPolicy)...)
 	replicationTasks = append(replicationTasks, ms.dirtyHSMToReplicationTask(transactionPolicy, eventBatches, clearBufferEvents)...)
-	var firstEventID, nextEventID int64
-	if len(eventBatches) > 0 {
-		firstEventID = eventBatches[0][0].EventId
-		lastBatch := eventBatches[len(eventBatches)-1]
-		nextEventID = lastBatch[len(lastBatch)-1].EventId + 1
-	} else {
-		currentHistory, err := versionhistory.GetCurrentVersionHistory(ms.executionInfo.VersionHistories)
-		if err != nil {
-			return err
-		}
-		item, err := versionhistory.GetLastVersionHistoryItem(currentHistory)
-		if err != nil {
-			return err
-		}
-		firstEventID = item.EventId
-		nextEventID = item.EventId + 1
-	}
 	if ms.transitionHistoryEnabled {
 		switch transactionPolicy {
 		case TransactionPolicyActive:
@@ -5618,6 +5601,23 @@ func (ms *MutableStateImpl) closeTransactionPrepareReplicationTasks(
 					ms.executionInfo.WorkflowId,
 					ms.executionState.RunId,
 				)
+				var firstEventID, nextEventID int64
+				if len(eventBatches) > 0 {
+					firstEventID = eventBatches[0][0].EventId
+					lastBatch := eventBatches[len(eventBatches)-1]
+					nextEventID = lastBatch[len(lastBatch)-1].EventId + 1
+				} else {
+					currentHistory, err := versionhistory.GetCurrentVersionHistory(ms.executionInfo.VersionHistories)
+					if err != nil {
+						return err
+					}
+					item, err := versionhistory.GetLastVersionHistoryItem(currentHistory)
+					if err != nil {
+						return err
+					}
+					firstEventID = item.EventId
+					nextEventID = item.EventId + 1
+				}
 				transitionHistory := ms.executionInfo.TransitionHistory
 				syncVersionedTransitionTask := &tasks.SyncVersionedTransitionTask{
 					WorkflowKey:         workflowKey,
