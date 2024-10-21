@@ -257,7 +257,7 @@ func (s *AddTasksSuite) TestAddTasks_Ok() {
 	}
 }
 
-var ExampleShardEngineErr error = errors.New("example shard engine error")
+var ExampleShardEngineErr = errors.New("example shard engine error")
 
 func (s *AddTasksSuite) TestAddTasks_ErrGetShardByID() {
 	_, err := s.GetTestCluster().HistoryClient().AddTasks(context.Background(), &historyservice.AddTasksRequest{
