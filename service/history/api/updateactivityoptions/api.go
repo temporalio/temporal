@@ -24,6 +24,11 @@ package updateactivityoptions
 
 import (
 	"context"
+	"go.temporal.io/api/serviceerror"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/common/util"
+	"google.golang.org/protobuf/types/known/fieldmaskpb"
+	"strings"
 	"time"
 
 	activitypb "go.temporal.io/api/activity/v1"
@@ -33,7 +38,6 @@ import (
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/namespace"
-	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/shard"
@@ -62,7 +66,8 @@ func updateActivityOptions(
 	}
 
 	// update activity options
-	util.ApplyFieldMask(ai, activityOptions, updateRequest.GetUpdateMask())
+	applyActivityOptions(ai, activityOptions, updateRequest.GetUpdateMask())
+	//util.ApplyFieldMask(ai, activityOptions, updateRequest.GetUpdateMask())
 
 	// move forward activity version
 	ai.Stamp += 1
@@ -147,4 +152,66 @@ func Invoke(
 	}
 
 	return response, err
+}
+
+func applyActivityOptions(ai *persistencespb.ActivityInfo, ao *activitypb.ActivityOptions, mask *fieldmaskpb.FieldMask) error {
+	if mask == nil {
+		return serviceerror.NewInvalidArgument("UpdateMask is nil")
+	}
+
+	updateFields := make(map[string]struct{})
+
+	for _, path := range mask.Paths {
+		pathParts := util.ConvertPathToCamel(path)
+		jsonPath := strings.Join(pathParts, ".")
+		updateFields[jsonPath] = struct{}{}
+	}
+
+	if _, ok := updateFields["taskQueue.name"]; ok {
+		ai.TaskQueue = ao.TaskQueue.Name
+	}
+
+	if _, ok := updateFields["scheduleToCloseTimeout"]; ok {
+		ai.ScheduleToCloseTimeout = ao.ScheduleToCloseTimeout
+	}
+
+	if _, ok := updateFields["scheduleToStartTimeout"]; ok {
+		ai.ScheduleToStartTimeout = ao.ScheduleToStartTimeout
+	}
+
+	if _, ok := updateFields["startToCloseTimeout"]; ok {
+		ai.StartToCloseTimeout = ao.StartToCloseTimeout
+	}
+
+	if _, ok := updateFields["heartbeatTimeout"]; ok {
+		ai.HeartbeatTimeout = ao.HeartbeatTimeout
+	}
+
+	if _, ok := updateFields["retryPolicy.initialInterval"]; ok {
+		if ao.RetryPolicy == nil {
+			return serviceerror.NewInvalidArgument("RetryPolicy is not provided")
+		}
+		ai.RetryInitialInterval = ao.RetryPolicy.InitialInterval
+	}
+
+	if _, ok := updateFields["retryPolicy.backoffCoefficient"]; ok {
+		if ao.RetryPolicy == nil {
+			return serviceerror.NewInvalidArgument("RetryPolicy is not provided")
+		}
+		ai.RetryBackoffCoefficient = ao.RetryPolicy.BackoffCoefficient
+	}
+	if _, ok := updateFields["retryPolicy.maximumInterval"]; ok {
+		if ao.RetryPolicy == nil {
+			return serviceerror.NewInvalidArgument("RetryPolicy is not provided")
+		}
+		ai.RetryMaximumInterval = ao.RetryPolicy.MaximumInterval
+	}
+	if _, ok := updateFields["retryPolicy.maximumAttempts"]; ok {
+		if ao.RetryPolicy == nil {
+			return serviceerror.NewInvalidArgument("RetryPolicy is not provided")
+		}
+		ai.RetryMaximumAttempts = ao.RetryPolicy.MaximumAttempts
+	}
+
+	return nil
 }
