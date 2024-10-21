@@ -467,7 +467,7 @@ message ActivityInfo {
     // Last time an activity failure was recorded by the server.
     google.protobuf.Timestamp last_attempt_complete_time = 40;
     // stamp represent "version" of activity during its lifetime. It can be changed with Activity API
-    int64 stamp = 41;
+    int32 stamp = 41;
 }
 
 // timer_map column

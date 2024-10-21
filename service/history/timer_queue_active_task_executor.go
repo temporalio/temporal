@@ -271,18 +271,14 @@ Loop:
 			break Loop
 		}
 
-		failureMsg := fmt.Sprintf("activity %v timeout", timerSequenceID.TimerType.String())
-		timeoutFailure := failure.NewTimeoutFailure(failureMsg, timerSequenceID.TimerType)
-		mutableState.RecordLastActivityStarted(activityInfo)
-		var retryState enumspb.RetryState
-		if retryState, err = mutableState.RetryActivity(activityInfo, timeoutFailure); err != nil {
-			return err
-		} else if retryState == enumspb.RETRY_STATE_IN_PROGRESS {
-			updateMutableState = true
+		activityInfo, ok := mutableState.GetActivityInfo(timerSequenceID.EventID)
+		if !ok {
+			//  this case can happen since each activity can have 4 timers
+			//  and one of those 4 timers may have fired in this loop
 			continue Loop
 		}
 
-		result, err := t.processSingleActivityTimeoutTask(mutableState, timerSequenceID, ai)
+		result, err := t.processSingleActivityTimeoutTask(mutableState, timerSequenceID, activityInfo)
 
 		if err != nil {
 			return err
