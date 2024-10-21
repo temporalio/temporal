@@ -1672,20 +1672,6 @@ func (mr *MockMutableStateMockRecorder) FlushBufferedEvents() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FlushBufferedEvents", reflect.TypeOf((*MockMutableState)(nil).FlushBufferedEvents))
 }
 
-// GenerateActivityRetryTask mocks base method.
-func (m *MockMutableState) GenerateActivityRetryTask(ai *persistence.ActivityInfo) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GenerateActivityRetryTask", ai)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// GenerateActivityRetryTask indicates an expected call of GenerateActivityRetryTask.
-func (mr *MockMutableStateMockRecorder) GenerateActivityRetryTask(ai any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GenerateActivityRetryTask", reflect.TypeOf((*MockMutableState)(nil).GenerateActivityRetryTask), ai)
-}
-
 // GenerateMigrationTasks mocks base method.
 func (m *MockMutableState) GenerateMigrationTasks() ([]tasks.Task, int64, error) {
 	m.ctrl.T.Helper()
