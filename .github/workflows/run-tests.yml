@@ -1,5 +1,7 @@
 name: All Tests
 
+run-name: ${{ inputs.test_name }}${{ inputs.test_dbs }}${{ inputs.run_single_test_job }}
+
 on:
   pull_request:
   push:
@@ -13,20 +15,20 @@ on:
       commit:
         description: "Commit SHA"
         required: true
-      run_single_functional_test:
-        description: "Run a single functional test"
-        type: boolean
-        default: false
-      run_single_unit_test:
-        description: "Run a single unit test (INSTEAD of functional test)"
-        type: boolean
-        default: false
+      run_single_test_job:
+        description: "Which job to run a single test in"
+        type: choice
+        options:
+          - 'unit-test'
+          - 'functional-test'
+          - 'functional-test-xdc'
+          - 'functional-test-ndc'
       unit_test_directory:
         description: "[Unit Test Only] Directory to run unit tests in"
         type: string
         default: "./temporal"
       n_runs:
-        description: "Number of times to repeat the single test per database type"
+        description: "Number of times to repeat the test per database type (except for unit tests, start with n=25 or lower to avoid OOMKill)"
         type: number
         default: 1
       test_name:
@@ -85,7 +87,7 @@ jobs:
           shards=3
           timeout=20   # update this to TEST_TIMEOUT if you update the Makefile
           runs_on='["ubuntu-20.04"]'
-          if [[ "${{ inputs.run_single_functional_test }}" == "true" || "${{ inputs.run_single_unit_test }}" == "true" ]]; then
+          if [[ "${{ inputs.run_single_test_job }}" != "" ]]; then
             shards=1
             timeout=${{ inputs.timeout_minutes }}
             single_test_args="-run ${{ inputs.test_name }} -count ${{ inputs.n_runs }}"
@@ -140,19 +142,19 @@ jobs:
     runs-on: ubuntu-20.04
     steps:
       - uses: actions/checkout@v4
-        if: ${{ !inputs.run_single_functional_test && !inputs.run_single_unit_test }}
+        if: ${{ inputs.run_single_test_job == '' }}
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           ref: ${{ env.COMMIT }}
 
       - uses: actions/setup-go@v5
-        if: ${{ !inputs.run_single_functional_test && !inputs.run_single_unit_test }}
+        if: ${{ inputs.run_single_test_job == '' }}
         with:
           go-version-file: "go.mod"
           cache: false  # do our own caching
 
       - name: Restore dependencies
-        if: ${{ !inputs.run_single_functional_test && !inputs.run_single_unit_test }}
+        if: ${{ inputs.run_single_test_job == '' }}
         id: restore-deps
         uses: actions/cache/restore@v4
         with:
@@ -160,18 +162,18 @@ jobs:
           key: go-${{ runner.os }}${{ runner.arch }}-deps-${{ hashFiles('go.sum') }}
 
       - run: make pre-build-functional-test-coverage
-        if: ${{ !inputs.run_single_functional_test && !inputs.run_single_unit_test }}
+        if: ${{ inputs.run_single_test_job == '' }}
 
       - name: Save dependencies
         uses: actions/cache/save@v4
-        if: ${{ !inputs.run_single_functional_test && !inputs.run_single_unit_test && steps.restore-deps.outputs.cache-hit != 'true' }}
+        if: ${{ inputs.run_single_test_job == '' && steps.restore-deps.outputs.cache-hit != 'true' }}
         with:
           path: ~/go/pkg/mod
           key: ${{ steps.restore-deps.outputs.cache-primary-key }}
 
       - name: Save build outputs
         uses: actions/cache/save@v4
-        if: ${{ !inputs.run_single_functional_test && !inputs.run_single_unit_test }}
+        if: ${{ inputs.run_single_test_job == '' }}
         with:
           path: ~/.cache/go-build
           key: go-${{ runner.os }}${{ runner.arch }}-build-${{ env.COMMIT }}
@@ -184,7 +186,7 @@ jobs:
     runs-on: ubuntu-20.04
     steps:
       - uses: actions/checkout@v4
-        if: ${{ !inputs.run_single_functional_test && !inputs.run_single_unit_test }}
+        if: ${{ inputs.run_single_test_job == '' }}
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           ref: ${{ env.COMMIT }}
@@ -192,46 +194,51 @@ jobs:
           fetch-depth: 100
 
       - uses: actions/setup-go@v5
-        if: ${{ !inputs.run_single_functional_test && !inputs.run_single_unit_test }}
+        if: ${{ inputs.run_single_test_job == '' }}
         with:
           go-version-file: "go.mod"
           cache: false  # do our own caching
 
       - name: Restore dependencies
-        if: ${{ !inputs.run_single_functional_test && !inputs.run_single_unit_test }}
+        if: ${{ inputs.run_single_test_job == '' }}
         uses: actions/cache/restore@v4
         with:
           path: ~/go/pkg/mod
           key: go-${{ runner.os }}${{ runner.arch }}-deps-${{ hashFiles('go.sum') }}
 
       - name: Restore build outputs
-        if: ${{ !inputs.run_single_functional_test && !inputs.run_single_unit_test }}
+        if: ${{ inputs.run_single_test_job == '' }}
         uses: actions/cache/restore@v4
         with:
           path: ~/.cache/go-build
           key: go-${{ runner.os }}${{ runner.arch }}-build-${{ env.COMMIT }}
 
       - uses: arduino/setup-protoc@v3
-        if: ${{ !inputs.run_single_functional_test && !inputs.run_single_unit_test }}
+        if: ${{ inputs.run_single_test_job == '' }}
 
       - run: GOOS=windows GOARCH=amd64 make clean-bins bins
-        if: ${{ !inputs.run_single_functional_test && !inputs.run_single_unit_test }}
+        if: ${{ inputs.run_single_test_job == '' }}
 
       - run: GOOS=darwin GOARCH=arm64 make clean-bins bins
-        if: ${{ !inputs.run_single_functional_test && !inputs.run_single_unit_test }}
+        if: ${{ inputs.run_single_test_job == '' }}
 
       - run: make clean-bins ci-build-misc
-        if: ${{ !inputs.run_single_functional_test && !inputs.run_single_unit_test }}
+        if: ${{ inputs.run_single_test_job == '' }}
+
+      - run: make build-tests
+        if: ${{ inputs.run_single_test_job == '' }}
 
   unit-test:
-    if: ${{ inputs.run_single_functional_test != true }}
+    if: ${{ inputs.run_single_test_job == '' || inputs.run_single_test_job == 'unit-test' }}
     name: Unit test
     needs: [pre-build, set-up-single-test]
     strategy:
       fail-fast: false
     runs-on: ubuntu-20.04
     env:
-      BUILDKITE_MESSAGE: '{"job": "unit-test"}'
+      SINGLE_TEST_ARGS: ${{ needs.set-up-single-test.outputs.single_test_args }}
+      UNIT_TEST_DIR: ${{ inputs.unit_test_directory }}
+      TEST_TIMEOUT: ${{ needs.set-up-single-test.outputs.test_timeout }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -265,7 +272,7 @@ jobs:
 
       - name: Upload test results
         uses: actions/upload-artifact@v4.4.0
-        if: ${{ !cancelled() && !inputs.run_single_unit_test }}
+        if: ${{ !cancelled() && inputs.run_single_test_job != 'unit-test' }} }}
         with:
           name: junit-xml--${{github.run_id}}--${{github.run_attempt}}--unit-test
           path: .testoutput
@@ -274,7 +281,7 @@ jobs:
 
       # Ensure this doesn't contribute to the junit output.
       - name: Flaky Unit Test Detection
-        if: ${{ !cancelled() && !inputs.run_single_unit_test && env.MODIFIED_TEST_SUITES != '' }}
+        if: ${{ !cancelled() && inputs.run_single_test_job != 'unit-test' && env.MODIFIED_TEST_SUITES != '' }}
         timeout-minutes: 30
         run: |
           echo "Detecting flaky unit tests: ${{ needs.set-up-single-test.outputs.modified_unit_test_suites }}"
@@ -286,14 +293,12 @@ jobs:
           TEST_TIMEOUT: 25
 
   integration-test:
-    if: ${{ inputs.run_single_functional_test != true && inputs.run_single_unit_test != true }}
+    if: ${{ inputs.run_single_test_job == '' }}
     name: Integration test
     needs: [pre-build, set-up-single-test]
     strategy:
       fail-fast: false
     runs-on: ubuntu-20.04
-    env:
-      BUILDKITE_MESSAGE: '{"job": "integration-test"}'
     steps:
       - uses: actions/checkout@v4
         with:
@@ -358,7 +363,7 @@ jobs:
           docker compose -f ${{ env.DOCKER_COMPOSE_FILE }} down -v
 
   functional-test:
-    if: ${{ inputs.run_single_unit_test != true }}
+    if: ${{ inputs.run_single_test_job == '' || inputs.run_single_test_job == 'functional-test' }}
     name: Functional test
     needs: [pre-build, set-up-single-test]
     strategy:
@@ -407,21 +412,20 @@ jobs:
       PERSISTENCE_TYPE: ${{ matrix.persistence_type }}
       PERSISTENCE_DRIVER: ${{ matrix.persistence_driver }}
       TEST_TIMEOUT: ${{ needs.set-up-single-test.outputs.test_timeout }}
-      BUILDKITE_MESSAGE: '{"job": "functional-test", "db": "${{ matrix.persistence_driver }}"}'
     steps:
       - uses: ScribeMD/docker-cache@0.3.7
-        if: ${{ inputs.run_single_functional_test != true || (inputs.run_single_functional_test == true && contains(fromJSON(needs.set-up-single-test.outputs.dbs), env.PERSISTENCE_DRIVER)) }}
+        if: ${{ inputs.run_single_test_job == '' || (inputs.run_single_test_job == 'functional-test' && contains(fromJSON(needs.set-up-single-test.outputs.dbs), env.PERSISTENCE_DRIVER)) }}
         with:
           key: docker-${{ runner.os }}${{ runner.arch }}-${{ hashFiles(env.DOCKER_COMPOSE_FILE) }}
 
       - uses: actions/checkout@v4
-        if: ${{ inputs.run_single_functional_test != true || (inputs.run_single_functional_test == true && contains(fromJSON(needs.set-up-single-test.outputs.dbs), env.PERSISTENCE_DRIVER)) }}
+        if: ${{ inputs.run_single_test_job == '' || (inputs.run_single_test_job == 'functional-test' && contains(fromJSON(needs.set-up-single-test.outputs.dbs), env.PERSISTENCE_DRIVER)) }}
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           ref: ${{ env.COMMIT }}
 
       - name: Start containerized dependencies
-        if: ${{ toJson(matrix.containers) != '[]' && (inputs.run_single_functional_test != true || (inputs.run_single_functional_test == true && contains(fromJSON(needs.set-up-single-test.outputs.dbs), env.PERSISTENCE_DRIVER))) }}
+        if: ${{ toJson(matrix.containers) != '[]' && (inputs.run_single_test_job == '' || (inputs.run_single_test_job == 'functional-test' && contains(fromJSON(needs.set-up-single-test.outputs.dbs), env.PERSISTENCE_DRIVER))) }}
         uses: hoverkraft-tech/compose-action@v2.0.1
         with:
           compose-file: ${{ env.DOCKER_COMPOSE_FILE }}
@@ -429,10 +433,10 @@ jobs:
           down-flags: -v
 
       - uses: actions/setup-go@v5
-        if: ${{ inputs.run_single_functional_test != true || (inputs.run_single_functional_test == true && contains(fromJSON(needs.set-up-single-test.outputs.dbs), env.PERSISTENCE_DRIVER)) }}
+        if: ${{ inputs.run_single_test_job == '' || (inputs.run_single_test_job == 'functional-test' && contains(fromJSON(needs.set-up-single-test.outputs.dbs), env.PERSISTENCE_DRIVER)) }}
         with:
-          go-version-file: "go.mod"
-          cache: false  # do our own caching
+          go-version-file: 'go.mod'
+          check-latest: true
 
       - name: Restore dependencies
         uses: actions/cache/restore@v4
@@ -447,7 +451,7 @@ jobs:
           key: go-${{ runner.os }}${{ runner.arch }}-build-${{ env.COMMIT }}
 
       - name: Run functional test
-        if: ${{ inputs.run_single_functional_test != true || (inputs.run_single_functional_test == true && contains(fromJSON(needs.set-up-single-test.outputs.dbs), env.PERSISTENCE_DRIVER)) }}
+        if: ${{ inputs.run_single_test_job == '' || (inputs.run_single_test_job == 'functional-test' && contains(fromJSON(needs.set-up-single-test.outputs.dbs), env.PERSISTENCE_DRIVER)) }}
         timeout-minutes: ${{ fromJSON(needs.set-up-single-test.outputs.github_timeout) }} # make sure this is larger than the test timeout in the Makefile
         run: make functional-test-coverage
         env:
@@ -455,7 +459,7 @@ jobs:
 
       - name: Upload test results
         uses: actions/upload-artifact@v4.4.0
-        if: ${{ !cancelled() && !inputs.run_single_functional_test }}
+        if: ${{ !cancelled() && inputs.run_single_test_job == '' }}
         with:
           name: junit-xml--${{github.run_id}}--${{github.run_attempt}}--${{matrix.runs-on}}--${{matrix.name}}--${{matrix.shard_index}}--functional-test
           path: .testoutput
@@ -464,7 +468,7 @@ jobs:
 
       # Ensure this doesn't contribute to the junit output.
       - name: Flaky Functional Test Detection
-        if: ${{ (env.MODIFIED_TEST_SUITES != '') && (inputs.run_single_functional_test != true || (inputs.run_single_functional_test == true && contains(fromJSON(needs.set-up-single-test.outputs.dbs), env.PERSISTENCE_DRIVER))) }}
+        if: ${{ (env.MODIFIED_TEST_SUITES != '') && (inputs.run_single_test_job == '' || (inputs.run_single_test_job == 'functional-test' && contains(fromJSON(needs.set-up-single-test.outputs.dbs), env.PERSISTENCE_DRIVER))) }}
         timeout-minutes: ${{ fromJSON(needs.set-up-single-test.outputs.github_timeout) }} # make sure this is larger than the test timeout in the Makefile
         run: |
           echo "Detecting flaky functional tests: ${{ needs.set-up-single-test.outputs.modified_integration_test_suites }}"
@@ -475,7 +479,7 @@ jobs:
           TEST_ARGS: "-run=${{ needs.set-up-single-test.outputs.modified_functional_test_suites }} -count=5"
 
   functional-test-xdc:
-    if: ${{ inputs.run_single_functional_test != true && inputs.run_single_unit_test != true }}
+    if: ${{ inputs.run_single_test_job == '' || inputs.run_single_test_job == 'functional-test-xdc' }}
     name: Functional test xdc
     needs: [pre-build, set-up-single-test]
     strategy:
@@ -485,12 +489,12 @@ jobs:
         include:
           - name: cass_es
             persistence_type: nosql
-            persistence_driver: elasticsearch
+            persistence_driver: cassandra
             parallel_flags: ""
             containers: [cassandra, elasticsearch]
           - name: cass_es8
             persistence_type: nosql
-            persistence_driver: elasticsearch
+            persistence_driver: cassandra
             parallel_flags: ""
             containers: [cassandra, elasticsearch8]
           - name: mysql8
@@ -508,20 +512,21 @@ jobs:
             persistence_driver: postgres12_pgx
             parallel_flags: "-parallel=2" # reduce parallelism for postgres
             containers: [postgresql]
-    runs-on: ubuntu-20.04
+    runs-on: ${{ fromJson(needs.set-up-single-test.outputs.runs_on) }}
     env:
       PERSISTENCE_TYPE: ${{ matrix.persistence_type }}
       PERSISTENCE_DRIVER: ${{ matrix.persistence_driver }}
-      BUILDKITE_MESSAGE: '{"job": "functional-test-xdc", "db": "${{ matrix.persistence_driver }}"}'
+      TEST_TIMEOUT: ${{ needs.set-up-single-test.outputs.test_timeout }}
       TEST_PARALLEL_FLAGS: ${{ matrix.parallel_flags }}
     steps:
       - uses: actions/checkout@v4
+        if: ${{ inputs.run_single_test_job == '' || (inputs.run_single_test_job == 'functional-test-xdc' && contains(fromJSON(needs.set-up-single-test.outputs.dbs), env.PERSISTENCE_DRIVER)) }}
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           ref: ${{ env.COMMIT }}
 
       - name: Start containerized dependencies
-        if: ${{ toJson(matrix.containers) != '[]' }}
+        if: ${{ toJson(matrix.containers) != '[]' && (inputs.run_single_test_job == '' || (inputs.run_single_test_job == 'functional-test-xdc' && contains(fromJSON(needs.set-up-single-test.outputs.dbs), env.PERSISTENCE_DRIVER))) }}
         uses: hoverkraft-tech/compose-action@v2.0.1
         with:
           compose-file: ${{ env.DOCKER_COMPOSE_FILE }}
@@ -529,6 +534,7 @@ jobs:
           down-flags: -v
 
       - uses: actions/setup-go@v5
+        if: ${{ inputs.run_single_test_job == '' || (inputs.run_single_test_job == 'functional-test-xdc' && contains(fromJSON(needs.set-up-single-test.outputs.dbs), env.PERSISTENCE_DRIVER)) }}
         with:
           go-version-file: "go.mod"
           cache: false  # do our own caching
@@ -546,12 +552,15 @@ jobs:
           key: go-${{ runner.os }}${{ runner.arch }}-build-${{ env.COMMIT }}
 
       - name: Run functional test xdc
+        if: ${{ inputs.run_single_test_job == '' || (inputs.run_single_test_job == 'functional-test-xdc' && contains(fromJSON(needs.set-up-single-test.outputs.dbs), env.PERSISTENCE_DRIVER)) }}
         timeout-minutes: 25   # update this to TEST_TIMEOUT+5 if you update the Makefile
         run: make functional-test-xdc-coverage
+        env:
+          TEST_ARGS: ${{ needs.set-up-single-test.outputs.single_test_args }}
 
       - name: Upload test results
         uses: actions/upload-artifact@v4.4.0
-        if: ${{ !cancelled() }}
+        if: ${{ !cancelled() && (inputs.run_single_test_job == '' || (inputs.run_single_test_job == 'functional-test-xdc' && contains(fromJSON(needs.set-up-single-test.outputs.dbs), env.PERSISTENCE_DRIVER))) }}
         with:
           name: junit-xml--${{github.run_id}}--${{github.run_attempt}}--${{matrix.name}}--functional-test-xdc
           path: .testoutput
@@ -571,7 +580,7 @@ jobs:
           TEST_ARGS: "-run=${{ needs.set-up-single-test.outputs.modified_functional_xdc_test_suites }} -count=5"
 
   functional-test-ndc:
-    if: ${{ inputs.run_single_functional_test != true && inputs.run_single_unit_test != true }}
+    if: ${{ inputs.run_single_test_job == '' || inputs.run_single_test_job == 'functional-test-ndc' }}
     name: Functional test ndc
     needs: [pre-build, set-up-single-test]
     strategy:
@@ -586,12 +595,12 @@ jobs:
         include:
           - name: cass_es
             persistence_type: nosql
-            persistence_driver: elasticsearch
+            persistence_driver: cassandra
             containers: [cassandra, elasticsearch]
             es_version: v7
           - name: cass_es8
             persistence_type: nosql
-            persistence_driver: elasticsearch
+            persistence_driver: cassandra
             containers: [cassandra, elasticsearch8]
             es_version: v8
           - name: mysql8
@@ -606,19 +615,21 @@ jobs:
             persistence_type: sql
             persistence_driver: postgres12_pgx
             containers: [postgresql]
-    runs-on: ubuntu-20.04
+    runs-on: ${{ fromJson(needs.set-up-single-test.outputs.runs_on) }}
     env:
       PERSISTENCE_TYPE: ${{ matrix.persistence_type }}
       PERSISTENCE_DRIVER: ${{ matrix.persistence_driver }}
+      TEST_TIMEOUT: ${{ needs.set-up-single-test.outputs.test_timeout }}
       ES_VERSION: ${{ matrix.es_version }}
     steps:
       - uses: actions/checkout@v4
+        if: ${{ inputs.run_single_test_job == '' || (inputs.run_single_test_job == 'functional-test-ndc' && contains(fromJSON(needs.set-up-single-test.outputs.dbs), env.PERSISTENCE_DRIVER)) }}
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           ref: ${{ env.COMMIT }}
 
       - name: Start containerized dependencies
-        if: ${{ toJson(matrix.containers) != '[]' }}
+        if: ${{ toJson(matrix.containers) != '[]' && (inputs.run_single_test_job == '' || (inputs.run_single_test_job == 'functional-test-ndc' && contains(fromJSON(needs.set-up-single-test.outputs.dbs), env.PERSISTENCE_DRIVER))) }}
         uses: hoverkraft-tech/compose-action@v2.0.1
         with:
           compose-file: ${{ env.DOCKER_COMPOSE_FILE }}
@@ -626,6 +637,7 @@ jobs:
           down-flags: -v
 
       - uses: actions/setup-go@v5
+        if: ${{ inputs.run_single_test_job == '' || (inputs.run_single_test_job == 'functional-test-ndc' && contains(fromJSON(needs.set-up-single-test.outputs.dbs), env.PERSISTENCE_DRIVER)) }}
         with:
           go-version-file: "go.mod"
           cache: false  # do our own caching
@@ -643,12 +655,13 @@ jobs:
           key: go-${{ runner.os }}${{ runner.arch }}-build-${{ env.COMMIT }}
 
       - name: Run functional test ndc
+        if: ${{ inputs.run_single_test_job == '' || (inputs.run_single_test_job == 'functional-test-ndc' && contains(fromJSON(needs.set-up-single-test.outputs.dbs), env.PERSISTENCE_DRIVER)) }}
         timeout-minutes: 15
         run: make functional-test-ndc-coverage
 
       - name: Upload test results
         uses: actions/upload-artifact@v4.4.0
-        if: ${{ !cancelled() }}
+        if: ${{ !cancelled() && (inputs.run_single_test_job == '' || (inputs.run_single_test_job == 'functional-test-ndc' && contains(fromJSON(needs.set-up-single-test.outputs.dbs), env.PERSISTENCE_DRIVER))) }}
         with:
           name: junit-xml--${{github.run_id}}--${{github.run_attempt}}--${{matrix.name}}--functional-test-ndc
           path: .testoutput
@@ -683,6 +696,14 @@ jobs:
     steps:
       - name: Check results
         run: |
-          if [[ -n $(echo "$RESULTS" | jq '.[] | select (. != "success")') ]]; then
-            exit 1
+          if [[ ${{ inputs.run_single_test_job }} == "" ]]; then
+            # if in all-tests mode, all statuses must be success
+            if [[ -n $(echo "$RESULTS" | jq '.[] | select (. != "success")') ]]; then
+              exit 1
+            fi
+          else
+            # if in single-test mode, skipped status is ok, failure is failure
+            if [[ -n $(echo "$RESULTS" | jq '.[] | select (. == "failure")') ]]; then
+              exit 1
+            fi
           fi
