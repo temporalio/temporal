@@ -460,9 +460,14 @@ message ActivityInfo {
 
     // First time the activity was scheduled.
     google.protobuf.Timestamp first_scheduled_time = 39;
+<<<<<<< HEAD
 
     // Last time an activity failure was recorded by the server.
     google.protobuf.Timestamp last_attempt_complete_time = 40;
+=======
+    // stamp represent "version" of activity during its lifetime. It can be changed with Activity API
+    int32 stamp = 40;
+>>>>>>> eced26ba5 (Adding UpdateActivityOptions, first iteration)
 }
 
 // timer_map column

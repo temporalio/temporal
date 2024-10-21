@@ -2440,6 +2440,32 @@ func (h *Handler) SyncWorkflowState(ctx context.Context, request *historyservice
 	return response, nil
 }
 
-func (h *Handler) UpdateActivityOptions(context.Context, *historyservice.UpdateActivityOptionsRequest) (*historyservice.UpdateActivityOptionsResponse, error) {
-	return nil, serviceerror.NewUnimplemented("UpdateActivityOptions is not supported yet")
+func (h *Handler) UpdateActivityOptions(ctx context.Context, request *historyservice.UpdateActivityOptionsRequest) (*historyservice.UpdateActivityOptionsResponse, error) {
+	defer metrics.CapturePanic(h.logger, h.metricsHandler, &retError)
+	h.startWG.Wait()
+
+	namespaceID := namespace.ID(request.GetNamespaceId())
+	workflowID := request.GetUpdateRequest().WorkflowId
+	if request.GetNamespaceId() == "" {
+		return nil, h.convertError(errNamespaceNotSet)
+	}
+
+	shardContext, err := h.controller.GetShardByNamespaceWorkflow(namespaceID, workflowID)
+	if err != nil {
+		return nil, h.convertError(err)
+	}
+	engine, err := shardContext.GetEngine(ctx)
+	if err != nil {
+		return nil, h.convertError(err)
+	}
+
+	response, err := engine.RecordActivityTaskStarted(ctx, request)
+	if err != nil {
+		return nil, h.convertError(err)
+	}
+	response.Clock, err = shardContext.NewVectorClock()
+	if err != nil {
+		return nil, h.convertError(err)
+	}
+	return response, nil
 }

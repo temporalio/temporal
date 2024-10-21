@@ -4938,12 +4938,15 @@ func (ms *MutableStateImpl) updateActivity(ai *persistencespb.ActivityInfo, upda
 	if prev, ok := ms.pendingActivityInfoIDs[ai.ScheduledEventId]; ok {
 		originalSize = prev.Size()
 	}
-
 	updateCallback(ai, ms)
 
 	ms.approximateSize += ai.Size() - originalSize
 	ms.updateActivityInfos[ai.ScheduledEventId] = ai
 	ms.syncActivityTasks[ai.ScheduledEventId] = struct{}{}
+}
+
+func (ms *MutableStateImpl) GenerateActivityRetryTask(ai *persistencespb.ActivityInfo) error {
+	return ms.taskGenerator.GenerateActivityRetryTasks(ai)
 }
 
 func (ms *MutableStateImpl) truncateRetryableActivityFailure(
