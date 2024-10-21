@@ -167,9 +167,7 @@ func TestApplyActivityOptionsAcceptance(t *testing.T) {
 }
 
 func TestApplyActivityOptionsErrors(t *testing.T) {
-	err := applyActivityOptions(nil, nil, nil)
-	assert.Error(t, err)
-
+	var err error
 	err = applyActivityOptions(&activitypb.ActivityOptions{}, &activitypb.ActivityOptions{},
 		util.ParseFieldMask(&fieldmaskpb.FieldMask{Paths: []string{"retry_policy.maximum_interval"}}))
 	assert.Error(t, err)
@@ -330,14 +328,25 @@ func (s *activityOptionsSuite) Test_updateActivityOptionsWfNotRunning() {
 }
 
 func (s *activityOptionsSuite) Test_updateActivityOptionsWfNoActivity() {
-	request := &historyservice.UpdateActivityOptionsRequest{}
+	request := &historyservice.UpdateActivityOptionsRequest{
+		UpdateRequest: &workflowservicepb.UpdateActivityOptionsByIdRequest{
+			ActivityOptions: &activitypb.ActivityOptions{
+				TaskQueue: &taskqueuepb.TaskQueue{Name: "task_queue_name"},
+			},
+			UpdateMask: &fieldmaskpb.FieldMask{
+				Paths: []string{
+					"TaskQueue.Name",
+				},
+			},
+		},
+	}
 	response := &historyservice.UpdateActivityOptionsResponse{}
 
 	s.mockMutableState.EXPECT().IsWorkflowExecutionRunning().Return(true)
 	s.mockMutableState.EXPECT().GetActivityByActivityID(gomock.Any()).Return(nil, false)
 	_, err := updateActivityOptions(s.mockShard, s.validator, s.mockMutableState, request, response)
 	s.Error(err)
-	s.ErrorAs(err, &consts.ErrActivityTaskNotFound)
+	s.ErrorAs(err, &consts.ErrActivityNotFound)
 }
 
 func (s *activityOptionsSuite) Test_updateActivityOptionsAcceptance() {

@@ -48,11 +48,6 @@ func Invoke(
 	shardContext shard.Context,
 	workflowConsistencyChecker api.WorkflowConsistencyChecker,
 ) (resp *historyservice.UpdateActivityOptionsResponse, retError error) {
-	_, err := api.GetActiveNamespace(shardContext, namespace.ID(request.GetNamespaceId()))
-	if err != nil {
-		return nil, err
-	}
-
 	validator := api.NewCommandAttrValidator(
 		shardContext.GetNamespaceRegistry(),
 		shardContext.GetConfig(),
@@ -60,7 +55,7 @@ func Invoke(
 	)
 
 	response := &historyservice.UpdateActivityOptionsResponse{}
-	err = api.GetAndUpdateWorkflowWithNew(
+	err := api.GetAndUpdateWorkflowWithNew(
 		ctx,
 		nil,
 		definition.NewWorkflowKey(
@@ -96,18 +91,19 @@ func updateActivityOptions(
 	}
 	updateRequest := request.GetUpdateRequest()
 	mergeFrom := updateRequest.GetActivityOptions()
+	if mergeFrom == nil {
+		return nil, serviceerror.NewInvalidArgument("ActivityOptions are not provided")
+	}
 	activityId := updateRequest.GetActivityId()
 
 	ai, activityFound := mutableState.GetActivityByActivityID(activityId)
 
 	if !activityFound {
-		// Looks like ActivityTask already completed as a result of another call.
-		// It is OK to drop the task at this point.
-		return nil, consts.ErrActivityTaskNotFound
+		return nil, consts.ErrActivityNotFound
 	}
 	mask := updateRequest.GetUpdateMask()
 	if mask == nil {
-		return nil, serviceerror.NewInvalidArgument("UpdateMask is nil")
+		return nil, serviceerror.NewInvalidArgument("UpdateMask is not provided")
 	}
 
 	updateFields := util.ParseFieldMask(mask)
@@ -139,6 +135,17 @@ func updateActivityOptions(
 		return nil, err
 	}
 
+	// update activity info with new options
+	ai.TaskQueue = mergeInto.TaskQueue.Name
+	ai.ScheduleToCloseTimeout = mergeInto.ScheduleToCloseTimeout
+	ai.ScheduleToStartTimeout = mergeInto.ScheduleToStartTimeout
+	ai.StartToCloseTimeout = mergeInto.StartToCloseTimeout
+	ai.HeartbeatTimeout = mergeInto.HeartbeatTimeout
+	ai.RetryMaximumInterval = mergeInto.RetryPolicy.MaximumInterval
+	ai.RetryBackoffCoefficient = mergeInto.RetryPolicy.BackoffCoefficient
+	ai.RetryMaximumInterval = mergeInto.RetryPolicy.MaximumInterval
+	ai.RetryMaximumAttempts = mergeInto.RetryPolicy.MaximumAttempts
+
 	// move forward activity version
 	ai.Stamp++
 
@@ -149,15 +156,15 @@ func updateActivityOptions(
 	if workflow.GetActivityState(ai) == enumspb.PENDING_ACTIVITY_STATE_SCHEDULED {
 		// two options - it can be in backoff, or waiting to be started
 		now := shardContext.GetTimeSource().Now()
-		if now.After(ai.ScheduledTime.AsTime()) {
-			// activity is past its scheduled time and ready to be started
-			// we don't really need to do generate timer tasks, it should be done in closeTransaction
-		} else {
+		if now.Before(ai.ScheduledTime.AsTime()) {
 			// activity is in backoff
 			_, err = mutableState.RetryActivity(ai, nil)
 			if err != nil {
 				return nil, err
 			}
+		} else {
+			// activity is past its scheduled time and ready to be started
+			// we don't really need to do generate timer tasks, it should be done in closeTransaction
 		}
 	}
 
@@ -175,15 +182,6 @@ func applyActivityOptions(
 	mergeFrom *activitypb.ActivityOptions,
 	updateFields map[string]struct{},
 ) error {
-	if mergeInto == nil {
-		return serviceerror.NewInvalidArgument("MergeInto argument is not provided")
-	}
-	if mergeFrom == nil {
-		return serviceerror.NewInvalidArgument("mergeFrom argument is not provided")
-	}
-	if updateFields == nil {
-		return serviceerror.NewInvalidArgument("updateFields argument is not provided")
-	}
 
 	if _, ok := updateFields["taskQueue.name"]; ok {
 		if mergeFrom.TaskQueue == nil {

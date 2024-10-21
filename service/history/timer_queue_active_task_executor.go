@@ -230,6 +230,18 @@ func (t *timerQueueActiveTaskExecutor) executeActivityTimeoutTask(
 	if mutableState == nil || !mutableState.IsWorkflowExecutionRunning() {
 		return nil
 	}
+	ai, ok := mutableState.GetActivityInfo(task.EventID)
+
+	if !ok {
+		// if activity is not found, the timer is invalid.
+		return nil
+	}
+
+	if task.Stamp != ai.Stamp {
+		// if this task is invalid - we want to generate new activity timeout task
+		// it will be done in closeTransactionPrepareTasks call
+		return weContext.UpdateWorkflowExecutionAsActive(ctx, t.shardContext)
+	}
 
 	timerSequence := t.getTimerSequence(mutableState)
 	referenceTime := t.shardContext.GetTimeSource().Now()
@@ -270,9 +282,15 @@ Loop:
 			continue Loop
 		}
 
-		if err = t.processTimeoutTask(mutableState, timerSequenceID, ai, &updateMutableState, &scheduleWorkflowTask); err != nil {
+		result, err := t.processSingleActivityTimeoutTask(mutableState, timerSequenceID, ai)
+
+		if err != nil {
 			return err
 		}
+
+		updateMutableState = updateMutableState || result.shouldUpdateMutableState
+		scheduleWorkflowTask = scheduleWorkflowTask || result.shouldScheduleWorkflowTask
+
 	}
 
 	if !updateMutableState {
@@ -281,35 +299,37 @@ Loop:
 	return t.updateWorkflowExecution(ctx, weContext, mutableState, scheduleWorkflowTask)
 }
 
-func (t *timerQueueActiveTaskExecutor) processTimeoutTask(
+type processingActivityTimeoutResult struct {
+	shouldUpdateMutableState   bool
+	shouldScheduleWorkflowTask bool
+}
+
+func (t *timerQueueActiveTaskExecutor) processSingleActivityTimeoutTask(
 	mutableState workflow.MutableState,
 	timerSequenceID workflow.TimerSequenceID,
 	ai *persistencespb.ActivityInfo,
-	updateMutableState *bool,
-	scheduleWorkflowTask *bool,
-) error {
+) (processingActivityTimeoutResult, error) {
 
-	if timerSequenceID.Attempt < ai.Attempt {
-		//  retry could update activity attempt, should not timeouts new attempt
-		return nil
+	result := processingActivityTimeoutResult{
+		shouldUpdateMutableState:   false,
+		shouldScheduleWorkflowTask: false,
 	}
 
-	if timerSequenceID.Stamp != ai.Stamp {
-		// this timer event is from an old stamp. In this case we ignore the event.
-		*updateMutableState = true
-		return nil
+	if timerSequenceID.Attempt < ai.Attempt {
+		//  The RetryActivity call below could update activity attempt, in which case we do not want to apply a timeout for the previous attempt.
+		return result, nil
 	}
 
 	failureMsg := fmt.Sprintf("activity %v timeout", timerSequenceID.TimerType.String())
 	timeoutFailure := failure.NewTimeoutFailure(failureMsg, timerSequenceID.TimerType)
 	retryState, err := mutableState.RetryActivity(ai, timeoutFailure)
 	if err != nil {
-		return err
+		return result, nil
 	}
 
 	if retryState == enumspb.RETRY_STATE_IN_PROGRESS {
-		*updateMutableState = true
-		return nil
+		result.shouldUpdateMutableState = true
+		return result, nil
 	}
 
 	if retryState == enumspb.RETRY_STATE_TIMEOUT {
@@ -332,12 +352,12 @@ func (t *timerQueueActiveTaskExecutor) processTimeoutTask(
 		timeoutFailure,
 		retryState,
 	); err != nil {
-		return err
+		return result, err
 	}
 
-	*updateMutableState = true
-	*scheduleWorkflowTask = true
-	return nil
+	result.shouldUpdateMutableState = true
+	result.shouldScheduleWorkflowTask = true
+	return result, nil
 }
 
 func (t *timerQueueActiveTaskExecutor) executeWorkflowTaskTimeoutTask(
@@ -500,18 +520,29 @@ func (t *timerQueueActiveTaskExecutor) executeActivityRetryTimerTask(
 
 	// generate activity task
 	activityInfo, ok := mutableState.GetActivityInfo(task.EventID)
-	if !ok || task.Attempt < activityInfo.Attempt || activityInfo.StartedEventId != common.EmptyEventID {
-		if ok {
-			t.logger.Info("Duplicate activity retry timer task",
-				tag.WorkflowID(mutableState.GetExecutionInfo().WorkflowId),
-				tag.WorkflowRunID(mutableState.GetExecutionState().GetRunId()),
-				tag.WorkflowNamespaceID(mutableState.GetExecutionInfo().NamespaceId),
-				tag.WorkflowScheduledEventID(activityInfo.ScheduledEventId),
-				tag.Attempt(activityInfo.Attempt),
-				tag.FailoverVersion(activityInfo.Version),
-				tag.TimerTaskStatus(activityInfo.TimerTaskStatus),
-				tag.ScheduleAttempt(task.Attempt))
-		}
+
+	if !ok {
+		release(nil) // release(nil) so mutable state is not unloaded from cache
+		return consts.ErrActivityTaskNotFound
+	}
+
+	if task.Stamp != activityInfo.Stamp {
+		// this timer event is from an old stamp. In this case we ignore the event.
+		release(nil) // release(nil) so mutable state is not unloaded from cache
+		// I really don't understand why we need this release(nil) call...
+		return nil
+	}
+
+	if task.Attempt < activityInfo.Attempt || activityInfo.StartedEventId != common.EmptyEventID {
+		t.logger.Info("Duplicate activity retry timer task",
+			tag.WorkflowID(mutableState.GetExecutionInfo().WorkflowId),
+			tag.WorkflowRunID(mutableState.GetExecutionState().GetRunId()),
+			tag.WorkflowNamespaceID(mutableState.GetExecutionInfo().NamespaceId),
+			tag.WorkflowScheduledEventID(activityInfo.ScheduledEventId),
+			tag.Attempt(activityInfo.Attempt),
+			tag.FailoverVersion(activityInfo.Version),
+			tag.TimerTaskStatus(activityInfo.TimerTaskStatus),
+			tag.ScheduleAttempt(task.Attempt))
 		release(nil) // release(nil) so mutable state is not unloaded from cache
 		return consts.ErrActivityTaskNotFound
 	}
