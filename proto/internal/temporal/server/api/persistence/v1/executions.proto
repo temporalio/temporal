@@ -362,6 +362,9 @@ message TimerTaskInfo {
     // If specified, the task is a for a workflow chain instead of a specific workflow run.
     // A workflow chain is identified by the run_id of the first workflow in the chain.
     string first_run_id = 15;
+
+    // The stamp represents the version of the activity for which the timer task was created.
+    int32 stamp = 16;
 }
 
 message ArchivalTaskInfo {

@@ -41,9 +41,10 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/versionhistory"
+	"go.temporal.io/server/common/util"
+	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/events"
-	"go.temporal.io/server/service/history/hsm"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tests"
 	"go.temporal.io/server/service/history/workflow"
@@ -54,19 +55,7 @@ import (
 
 func TestApplyActivityOptionsAcceptance(t *testing.T) {
 
-	fullActivityInfo := &persistencespb.ActivityInfo{
-		TaskQueue:               "task_queue_name",
-		ScheduleToCloseTimeout:  durationpb.New(time.Second),
-		ScheduleToStartTimeout:  durationpb.New(time.Second),
-		StartToCloseTimeout:     durationpb.New(time.Second),
-		HeartbeatTimeout:        durationpb.New(time.Second),
-		RetryBackoffCoefficient: 1.0,
-		RetryInitialInterval:    durationpb.New(time.Second),
-		RetryMaximumInterval:    durationpb.New(time.Second),
-		RetryMaximumAttempts:    5,
-	}
-
-	allOptions := &activitypb.ActivityOptions{
+	options := &activitypb.ActivityOptions{
 		TaskQueue:              &taskqueuepb.TaskQueue{Name: "task_queue_name"},
 		ScheduleToCloseTimeout: durationpb.New(time.Second),
 		StartToCloseTimeout:    durationpb.New(time.Second),
@@ -81,17 +70,17 @@ func TestApplyActivityOptionsAcceptance(t *testing.T) {
 	}
 
 	testCases := []struct {
-		name     string
-		options  *activitypb.ActivityOptions
-		ai       *persistencespb.ActivityInfo
-		expected *persistencespb.ActivityInfo
-		mask     *fieldmaskpb.FieldMask
+		name      string
+		mergeInto *activitypb.ActivityOptions
+		mergeFrom *activitypb.ActivityOptions
+		expected  *activitypb.ActivityOptions
+		mask      *fieldmaskpb.FieldMask
 	}{
 		{
-			name:     "full mix - CamelCase",
-			options:  allOptions,
-			ai:       &persistencespb.ActivityInfo{},
-			expected: fullActivityInfo,
+			name:      "full mix - CamelCase",
+			mergeFrom: options,
+			mergeInto: &activitypb.ActivityOptions{},
+			expected:  options,
 			mask: &fieldmaskpb.FieldMask{
 				Paths: []string{
 					"TaskQueue.Name",
@@ -107,10 +96,10 @@ func TestApplyActivityOptionsAcceptance(t *testing.T) {
 			},
 		},
 		{
-			name:     "full mix - snake_case",
-			options:  allOptions,
-			ai:       &persistencespb.ActivityInfo{},
-			expected: fullActivityInfo,
+			name:      "full mix - snake_case",
+			mergeFrom: options,
+			mergeInto: &activitypb.ActivityOptions{},
+			expected:  options,
 			mask: &fieldmaskpb.FieldMask{
 				Paths: []string{
 					"task_queue.name",
@@ -127,7 +116,7 @@ func TestApplyActivityOptionsAcceptance(t *testing.T) {
 		},
 		{
 			name: "partial",
-			options: &activitypb.ActivityOptions{
+			mergeFrom: &activitypb.ActivityOptions{
 				TaskQueue:              &taskqueuepb.TaskQueue{Name: "task_queue_name"},
 				ScheduleToCloseTimeout: durationpb.New(time.Second),
 				ScheduleToStartTimeout: durationpb.New(time.Second),
@@ -136,13 +125,15 @@ func TestApplyActivityOptionsAcceptance(t *testing.T) {
 					MaximumAttempts: 5,
 				},
 			},
-			ai: &persistencespb.ActivityInfo{
-				StartToCloseTimeout:     durationpb.New(time.Second),
-				HeartbeatTimeout:        durationpb.New(time.Second),
-				RetryBackoffCoefficient: 1.0,
-				RetryInitialInterval:    durationpb.New(time.Second),
+			mergeInto: &activitypb.ActivityOptions{
+				StartToCloseTimeout: durationpb.New(time.Second),
+				HeartbeatTimeout:    durationpb.New(time.Second),
+				RetryPolicy: &commonpb.RetryPolicy{
+					BackoffCoefficient: 1.0,
+					InitialInterval:    durationpb.New(time.Second),
+				},
 			},
-			expected: fullActivityInfo,
+			expected: options,
 			mask: &fieldmaskpb.FieldMask{
 				Paths: []string{
 					"task_queue.name",
@@ -155,20 +146,22 @@ func TestApplyActivityOptionsAcceptance(t *testing.T) {
 		},
 	}
 	for _, tc := range testCases {
+		updateFields := util.ParseFieldMask(tc.mask)
+
 		t.Run(tc.name, func(t *testing.T) {})
-		err := applyActivityOptions(tc.ai, tc.options, tc.mask)
+		err := applyActivityOptions(tc.mergeInto, tc.mergeFrom, updateFields)
 		assert.NoError(t, err)
-		assert.Equal(t, tc.ai.RetryInitialInterval, tc.expected.RetryInitialInterval, "RetryInitialInterval")
-		assert.Equal(t, tc.ai.RetryMaximumInterval, tc.expected.RetryMaximumInterval, "RetryMaximumInterval")
-		assert.Equal(t, tc.ai.RetryBackoffCoefficient, tc.expected.RetryBackoffCoefficient, "RetryBackoffCoefficient")
-		assert.Equal(t, tc.ai.RetryExpirationTime, tc.expected.RetryExpirationTime, "RetryExpirationTime")
+		assert.Equal(t, tc.mergeInto.RetryPolicy.InitialInterval, tc.expected.RetryPolicy.InitialInterval, "RetryInitialInterval")
+		assert.Equal(t, tc.mergeInto.RetryPolicy.MaximumInterval, tc.expected.RetryPolicy.MaximumInterval, "RetryMaximumInterval")
+		assert.Equal(t, tc.mergeInto.RetryPolicy.BackoffCoefficient, tc.expected.RetryPolicy.BackoffCoefficient, "RetryBackoffCoefficient")
+		assert.Equal(t, tc.mergeInto.RetryPolicy.MaximumAttempts, tc.expected.RetryPolicy.MaximumAttempts, "RetryMaximumAttempts")
 
-		assert.Equal(t, tc.ai.TaskQueue, tc.expected.TaskQueue, "TaskQueue")
+		assert.Equal(t, tc.mergeInto.TaskQueue, tc.expected.TaskQueue, "TaskQueue")
 
-		assert.Equal(t, tc.ai.ScheduleToCloseTimeout, tc.expected.ScheduleToCloseTimeout, "ScheduleToCloseTimeout")
-		assert.Equal(t, tc.ai.ScheduleToStartTimeout, tc.expected.ScheduleToStartTimeout, "ScheduleToStartTimeout")
-		assert.Equal(t, tc.ai.StartToCloseTimeout, tc.expected.StartToCloseTimeout, "StartToCloseTimeout")
-		assert.Equal(t, tc.ai.HeartbeatTimeout, tc.expected.HeartbeatTimeout, "HeartbeatTimeout")
+		assert.Equal(t, tc.mergeInto.ScheduleToCloseTimeout, tc.expected.ScheduleToCloseTimeout, "ScheduleToCloseTimeout")
+		assert.Equal(t, tc.mergeInto.ScheduleToStartTimeout, tc.expected.ScheduleToStartTimeout, "ScheduleToStartTimeout")
+		assert.Equal(t, tc.mergeInto.StartToCloseTimeout, tc.expected.StartToCloseTimeout, "StartToCloseTimeout")
+		assert.Equal(t, tc.mergeInto.HeartbeatTimeout, tc.expected.HeartbeatTimeout, "HeartbeatTimeout")
 
 	}
 }
@@ -177,39 +170,41 @@ func TestApplyActivityOptionsErrors(t *testing.T) {
 	err := applyActivityOptions(nil, nil, nil)
 	assert.Error(t, err)
 
-	err = applyActivityOptions(&persistencespb.ActivityInfo{}, &activitypb.ActivityOptions{},
-		&fieldmaskpb.FieldMask{Paths: []string{"retry_policy.maximum_interval"}})
+	err = applyActivityOptions(&activitypb.ActivityOptions{}, &activitypb.ActivityOptions{},
+		util.ParseFieldMask(&fieldmaskpb.FieldMask{Paths: []string{"retry_policy.maximum_interval"}}))
 	assert.Error(t, err)
 
-	err = applyActivityOptions(&persistencespb.ActivityInfo{}, &activitypb.ActivityOptions{},
-		&fieldmaskpb.FieldMask{Paths: []string{"retry_policy.maximum_attempts"}})
+	err = applyActivityOptions(&activitypb.ActivityOptions{}, &activitypb.ActivityOptions{},
+		util.ParseFieldMask(&fieldmaskpb.FieldMask{Paths: []string{"retry_policy.maximum_attempts"}}))
 	assert.Error(t, err)
 
-	err = applyActivityOptions(&persistencespb.ActivityInfo{}, &activitypb.ActivityOptions{},
-		&fieldmaskpb.FieldMask{Paths: []string{"retry_policy.backoff_coefficient"}})
+	err = applyActivityOptions(&activitypb.ActivityOptions{}, &activitypb.ActivityOptions{},
+		util.ParseFieldMask(&fieldmaskpb.FieldMask{Paths: []string{"retry_policy.backoff_coefficient"}}))
 	assert.Error(t, err)
 
-	err = applyActivityOptions(&persistencespb.ActivityInfo{}, &activitypb.ActivityOptions{},
-		&fieldmaskpb.FieldMask{Paths: []string{"retry_policy.initial_interval"}})
+	err = applyActivityOptions(&activitypb.ActivityOptions{}, &activitypb.ActivityOptions{},
+		util.ParseFieldMask(&fieldmaskpb.FieldMask{Paths: []string{"retry_policy.initial_interval"}}))
 	assert.Error(t, err)
 
-	err = applyActivityOptions(&persistencespb.ActivityInfo{}, &activitypb.ActivityOptions{},
-		&fieldmaskpb.FieldMask{Paths: []string{"taskQueue.name"}})
+	err = applyActivityOptions(&activitypb.ActivityOptions{}, &activitypb.ActivityOptions{},
+		util.ParseFieldMask(&fieldmaskpb.FieldMask{Paths: []string{"taskQueue.name"}}))
 	assert.Error(t, err)
 
 }
 
 func TestApplyActivityOptionsReset(t *testing.T) {
-	fullActivityInfo := &persistencespb.ActivityInfo{
-		TaskQueue:               "task_queue_name",
-		ScheduleToCloseTimeout:  durationpb.New(time.Second),
-		ScheduleToStartTimeout:  durationpb.New(time.Second),
-		StartToCloseTimeout:     durationpb.New(time.Second),
-		HeartbeatTimeout:        durationpb.New(time.Second),
-		RetryBackoffCoefficient: 1.0,
-		RetryInitialInterval:    durationpb.New(time.Second),
-		RetryMaximumInterval:    durationpb.New(time.Second),
-		RetryMaximumAttempts:    5,
+	options := &activitypb.ActivityOptions{
+		TaskQueue:              &taskqueuepb.TaskQueue{Name: "task_queue_name"},
+		ScheduleToCloseTimeout: durationpb.New(time.Second),
+		ScheduleToStartTimeout: durationpb.New(time.Second),
+		StartToCloseTimeout:    durationpb.New(time.Second),
+		HeartbeatTimeout:       durationpb.New(time.Second),
+		RetryPolicy: &commonpb.RetryPolicy{
+			MaximumInterval:    durationpb.New(time.Second),
+			MaximumAttempts:    5,
+			BackoffCoefficient: 1.0,
+			InitialInterval:    durationpb.New(time.Second),
+		},
 	}
 
 	fullMask := &fieldmaskpb.FieldMask{
@@ -225,57 +220,60 @@ func TestApplyActivityOptionsReset(t *testing.T) {
 		},
 	}
 
-	err := applyActivityOptions(fullActivityInfo,
+	updateFields := util.ParseFieldMask(fullMask)
+
+	err := applyActivityOptions(options,
 		&activitypb.ActivityOptions{
 			RetryPolicy: &commonpb.RetryPolicy{
 				MaximumAttempts:    5,
 				BackoffCoefficient: 1.0,
 			},
 		},
-		fullMask)
+		updateFields)
 	assert.NoError(t, err)
 
-	assert.Nil(t, fullActivityInfo.ScheduleToCloseTimeout)
-	assert.Nil(t, fullActivityInfo.ScheduleToStartTimeout)
-	assert.Nil(t, fullActivityInfo.StartToCloseTimeout)
-	assert.Nil(t, fullActivityInfo.HeartbeatTimeout)
+	assert.Nil(t, options.ScheduleToCloseTimeout)
+	assert.Nil(t, options.ScheduleToStartTimeout)
+	assert.Nil(t, options.StartToCloseTimeout)
+	assert.Nil(t, options.HeartbeatTimeout)
 
-	assert.Nil(t, fullActivityInfo.RetryInitialInterval)
-	assert.Nil(t, fullActivityInfo.RetryMaximumInterval)
+	assert.Nil(t, options.RetryPolicy.InitialInterval)
+	assert.Nil(t, options.RetryPolicy.MaximumInterval)
 }
 
 type (
-	stateBuilderSuite struct {
+	activityOptionsSuite struct {
 		suite.Suite
 		*require.Assertions
 
-		controller           *gomock.Controller
-		mockShard            *shard.ContextTest
-		mockEventsCache      *events.MockCache
-		mockNamespaceCache   *namespace.MockRegistry
-		mockTaskGenerator    *workflow.MockTaskGenerator
-		mockMutableState     *workflow.MockMutableState
-		mockClusterMetadata  *cluster.MockMetadata
-		stateMachineRegistry *hsm.Registry
+		controller          *gomock.Controller
+		mockShard           *shard.ContextTest
+		mockEventsCache     *events.MockCache
+		mockNamespaceCache  *namespace.MockRegistry
+		mockTaskGenerator   *workflow.MockTaskGenerator
+		mockMutableState    *workflow.MockMutableState
+		mockClusterMetadata *cluster.MockMetadata
 
 		executionInfo *persistencespb.WorkflowExecutionInfo
+
+		validator *api.CommandAttrValidator
 
 		logger log.Logger
 	}
 )
 
 func TestStateBuilderSuite(t *testing.T) {
-	s := new(stateBuilderSuite)
+	s := new(activityOptionsSuite)
 	suite.Run(t, s)
 }
 
-func (s *stateBuilderSuite) SetupSuite() {
+func (s *activityOptionsSuite) SetupSuite() {
 }
 
-func (s *stateBuilderSuite) TearDownSuite() {
+func (s *activityOptionsSuite) TearDownSuite() {
 }
 
-func (s *stateBuilderSuite) SetupTest() {
+func (s *activityOptionsSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 
 	s.controller = gomock.NewController(s.T())
@@ -308,36 +306,41 @@ func (s *stateBuilderSuite) SetupTest() {
 	s.mockMutableState.EXPECT().GetExecutionInfo().Return(s.executionInfo).AnyTimes()
 	s.mockMutableState.EXPECT().GetCurrentVersion().Return(int64(1)).AnyTimes()
 
+	s.validator = api.NewCommandAttrValidator(
+		s.mockShard.GetNamespaceRegistry(),
+		s.mockShard.GetConfig(),
+		nil,
+	)
 }
 
-func (s *stateBuilderSuite) TearDownTest() {
+func (s *activityOptionsSuite) TearDownTest() {
 	s.controller.Finish()
 	s.mockShard.StopForTest()
 }
 
-func (s *stateBuilderSuite) Test_updateActivityOptionsWfNotRunning() {
+func (s *activityOptionsSuite) Test_updateActivityOptionsWfNotRunning() {
 	request := &historyservice.UpdateActivityOptionsRequest{}
 	response := &historyservice.UpdateActivityOptionsResponse{}
 
 	s.mockMutableState.EXPECT().IsWorkflowExecutionRunning().Return(false)
-	_, err := updateActivityOptions(s.mockShard, s.mockMutableState, request, response)
+
+	_, err := updateActivityOptions(s.mockShard, s.validator, s.mockMutableState, request, response)
 	s.Error(err)
 	s.ErrorAs(err, &consts.ErrWorkflowCompleted)
 }
 
-func (s *stateBuilderSuite) Test_updateActivityOptionsWfNoActivity() {
+func (s *activityOptionsSuite) Test_updateActivityOptionsWfNoActivity() {
 	request := &historyservice.UpdateActivityOptionsRequest{}
 	response := &historyservice.UpdateActivityOptionsResponse{}
 
 	s.mockMutableState.EXPECT().IsWorkflowExecutionRunning().Return(true)
 	s.mockMutableState.EXPECT().GetActivityByActivityID(gomock.Any()).Return(nil, false)
-	_, err := updateActivityOptions(s.mockShard, s.mockMutableState, request, response)
+	_, err := updateActivityOptions(s.mockShard, s.validator, s.mockMutableState, request, response)
 	s.Error(err)
 	s.ErrorAs(err, &consts.ErrActivityTaskNotFound)
 }
 
-func (s *stateBuilderSuite) Test_updateActivityOptionsAcceptance() {
-
+func (s *activityOptionsSuite) Test_updateActivityOptionsAcceptance() {
 	fullActivityInfo := &persistencespb.ActivityInfo{
 		TaskQueue:               "task_queue_name",
 		ScheduleToCloseTimeout:  durationpb.New(time.Second),
@@ -348,10 +351,15 @@ func (s *stateBuilderSuite) Test_updateActivityOptionsAcceptance() {
 		RetryInitialInterval:    durationpb.New(time.Second),
 		RetryMaximumInterval:    durationpb.New(time.Second),
 		RetryMaximumAttempts:    5,
+		ActivityId:              "activity_id",
+		ActivityType: &commonpb.ActivityType{
+			Name: "activity_type",
+		},
 	}
 
 	updateMask := &fieldmaskpb.FieldMask{
 		Paths: []string{
+			"task_queue.name",
 			"schedule_to_close_timeout",
 			"schedule_to_start_timeout",
 			"start_to_close_timeout",
@@ -363,7 +371,7 @@ func (s *stateBuilderSuite) Test_updateActivityOptionsAcceptance() {
 		},
 	}
 
-	allOptions := &activitypb.ActivityOptions{
+	options := &activitypb.ActivityOptions{
 		TaskQueue:              &taskqueuepb.TaskQueue{Name: "task_queue_name"},
 		ScheduleToCloseTimeout: durationpb.New(2 * time.Second),
 		StartToCloseTimeout:    durationpb.New(2 * time.Second),
@@ -382,13 +390,13 @@ func (s *stateBuilderSuite) Test_updateActivityOptionsAcceptance() {
 
 	request := &historyservice.UpdateActivityOptionsRequest{
 		UpdateRequest: &workflowservicepb.UpdateActivityOptionsByIdRequest{
-			ActivityOptions: allOptions,
+			ActivityOptions: options,
 			UpdateMask:      updateMask,
 		},
 	}
 	response := &historyservice.UpdateActivityOptionsResponse{}
 
-	wfAction, err := updateActivityOptions(s.mockShard, s.mockMutableState, request, response)
+	wfAction, err := updateActivityOptions(s.mockShard, s.validator, s.mockMutableState, request, response)
 	s.NoError(err)
 	s.Equal(false, wfAction.Noop)
 	s.Equal(false, wfAction.CreateWorkflowTask)
