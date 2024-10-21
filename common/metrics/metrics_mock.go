@@ -106,6 +106,20 @@ func (mr *MockHandlerMockRecorder) Histogram(arg0, arg1 any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Histogram", reflect.TypeOf((*MockHandler)(nil).Histogram), arg0, arg1)
 }
 
+// StartBatch mocks base method.
+func (m *MockHandler) StartBatch(arg0 string) BatchHandler {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "StartBatch", arg0)
+	ret0, _ := ret[0].(BatchHandler)
+	return ret0
+}
+
+// StartBatch indicates an expected call of StartBatch.
+func (mr *MockHandlerMockRecorder) StartBatch(arg0 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "StartBatch", reflect.TypeOf((*MockHandler)(nil).StartBatch), arg0)
+}
+
 // Stop mocks base method.
 func (m *MockHandler) Stop(arg0 log.Logger) {
 	m.ctrl.T.Helper()
@@ -148,6 +162,143 @@ func (m *MockHandler) WithTags(arg0 ...Tag) Handler {
 func (mr *MockHandlerMockRecorder) WithTags(arg0 ...any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "WithTags", reflect.TypeOf((*MockHandler)(nil).WithTags), arg0...)
+}
+
+// MockBatchHandler is a mock of BatchHandler interface.
+type MockBatchHandler struct {
+	ctrl     *gomock.Controller
+	recorder *MockBatchHandlerMockRecorder
+}
+
+// MockBatchHandlerMockRecorder is the mock recorder for MockBatchHandler.
+type MockBatchHandlerMockRecorder struct {
+	mock *MockBatchHandler
+}
+
+// NewMockBatchHandler creates a new mock instance.
+func NewMockBatchHandler(ctrl *gomock.Controller) *MockBatchHandler {
+	mock := &MockBatchHandler{ctrl: ctrl}
+	mock.recorder = &MockBatchHandlerMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockBatchHandler) EXPECT() *MockBatchHandlerMockRecorder {
+	return m.recorder
+}
+
+// Close mocks base method.
+func (m *MockBatchHandler) Close() error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Close")
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// Close indicates an expected call of Close.
+func (mr *MockBatchHandlerMockRecorder) Close() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Close", reflect.TypeOf((*MockBatchHandler)(nil).Close))
+}
+
+// Counter mocks base method.
+func (m *MockBatchHandler) Counter(arg0 string) CounterIface {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Counter", arg0)
+	ret0, _ := ret[0].(CounterIface)
+	return ret0
+}
+
+// Counter indicates an expected call of Counter.
+func (mr *MockBatchHandlerMockRecorder) Counter(arg0 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Counter", reflect.TypeOf((*MockBatchHandler)(nil).Counter), arg0)
+}
+
+// Gauge mocks base method.
+func (m *MockBatchHandler) Gauge(arg0 string) GaugeIface {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Gauge", arg0)
+	ret0, _ := ret[0].(GaugeIface)
+	return ret0
+}
+
+// Gauge indicates an expected call of Gauge.
+func (mr *MockBatchHandlerMockRecorder) Gauge(arg0 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Gauge", reflect.TypeOf((*MockBatchHandler)(nil).Gauge), arg0)
+}
+
+// Histogram mocks base method.
+func (m *MockBatchHandler) Histogram(arg0 string, arg1 MetricUnit) HistogramIface {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Histogram", arg0, arg1)
+	ret0, _ := ret[0].(HistogramIface)
+	return ret0
+}
+
+// Histogram indicates an expected call of Histogram.
+func (mr *MockBatchHandlerMockRecorder) Histogram(arg0, arg1 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Histogram", reflect.TypeOf((*MockBatchHandler)(nil).Histogram), arg0, arg1)
+}
+
+// StartBatch mocks base method.
+func (m *MockBatchHandler) StartBatch(arg0 string) BatchHandler {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "StartBatch", arg0)
+	ret0, _ := ret[0].(BatchHandler)
+	return ret0
+}
+
+// StartBatch indicates an expected call of StartBatch.
+func (mr *MockBatchHandlerMockRecorder) StartBatch(arg0 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "StartBatch", reflect.TypeOf((*MockBatchHandler)(nil).StartBatch), arg0)
+}
+
+// Stop mocks base method.
+func (m *MockBatchHandler) Stop(arg0 log.Logger) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "Stop", arg0)
+}
+
+// Stop indicates an expected call of Stop.
+func (mr *MockBatchHandlerMockRecorder) Stop(arg0 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Stop", reflect.TypeOf((*MockBatchHandler)(nil).Stop), arg0)
+}
+
+// Timer mocks base method.
+func (m *MockBatchHandler) Timer(arg0 string) TimerIface {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Timer", arg0)
+	ret0, _ := ret[0].(TimerIface)
+	return ret0
+}
+
+// Timer indicates an expected call of Timer.
+func (mr *MockBatchHandlerMockRecorder) Timer(arg0 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Timer", reflect.TypeOf((*MockBatchHandler)(nil).Timer), arg0)
+}
+
+// WithTags mocks base method.
+func (m *MockBatchHandler) WithTags(arg0 ...Tag) Handler {
+	m.ctrl.T.Helper()
+	varargs := []any{}
+	for _, a := range arg0 {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "WithTags", varargs...)
+	ret0, _ := ret[0].(Handler)
+	return ret0
+}
+
+// WithTags indicates an expected call of WithTags.
+func (mr *MockBatchHandlerMockRecorder) WithTags(arg0 ...any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "WithTags", reflect.TypeOf((*MockBatchHandler)(nil).WithTags), arg0...)
 }
 
 // MockCounterIface is a mock of CounterIface interface.

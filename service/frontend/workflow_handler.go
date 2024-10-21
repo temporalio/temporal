@@ -84,7 +84,6 @@ import (
 	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/tasktoken"
-	"go.temporal.io/server/common/timer"
 	"go.temporal.io/server/common/tqid"
 	"go.temporal.io/server/common/utf8validator"
 	"go.temporal.io/server/common/util"
@@ -2781,7 +2780,12 @@ func (wh *WorkflowHandler) DescribeTaskQueue(ctx context.Context, request *workf
 		return nil, err
 	}
 
-	if err := tqid.NormalizeAndValidate(request.TaskQueue, "", wh.config.MaxIDLengthLimit()); err != nil {
+	if request.ApiMode == enumspb.DESCRIBE_TASK_QUEUE_MODE_UNSPECIFIED {
+		err = tqid.NormalizeAndValidatePartition(request.TaskQueue, "", wh.config.MaxIDLengthLimit())
+	} else {
+		err = tqid.NormalizeAndValidate(request.TaskQueue, "", wh.config.MaxIDLengthLimit())
+	}
+	if err != nil {
 		return nil, err
 	}
 
@@ -4961,16 +4965,16 @@ func validateRequestId(requestID *string, lenLimit int) error {
 func (wh *WorkflowHandler) validateStartWorkflowTimeouts(
 	request *workflowservice.StartWorkflowExecutionRequest,
 ) error {
-	if err := timer.ValidateAndCapTimer(request.GetWorkflowExecutionTimeout()); err != nil {
-		return errInvalidWorkflowExecutionTimeoutSeconds
+	if err := timestamp.ValidateProtoDuration(request.GetWorkflowExecutionTimeout()); err != nil {
+		return fmt.Errorf("%w cause: %v", errInvalidWorkflowExecutionTimeoutSeconds, err)
 	}
 
-	if err := timer.ValidateAndCapTimer(request.GetWorkflowRunTimeout()); err != nil {
-		return errInvalidWorkflowRunTimeoutSeconds
+	if err := timestamp.ValidateProtoDuration(request.GetWorkflowRunTimeout()); err != nil {
+		return fmt.Errorf("%w cause: %v", errInvalidWorkflowRunTimeoutSeconds, err)
 	}
 
-	if err := timer.ValidateAndCapTimer(request.GetWorkflowTaskTimeout()); err != nil {
-		return errInvalidWorkflowTaskTimeoutSeconds
+	if err := timestamp.ValidateProtoDuration(request.GetWorkflowTaskTimeout()); err != nil {
+		return fmt.Errorf("%w cause: %v", errInvalidWorkflowTaskTimeoutSeconds, err)
 	}
 
 	return nil
@@ -4979,16 +4983,16 @@ func (wh *WorkflowHandler) validateStartWorkflowTimeouts(
 func (wh *WorkflowHandler) validateSignalWithStartWorkflowTimeouts(
 	request *workflowservice.SignalWithStartWorkflowExecutionRequest,
 ) error {
-	if err := timer.ValidateAndCapTimer(request.WorkflowTaskTimeout); err != nil {
-		return errInvalidWorkflowExecutionTimeoutSeconds
+	if err := timestamp.ValidateProtoDuration(request.GetWorkflowExecutionTimeout()); err != nil {
+		return fmt.Errorf("%w cause: %v", errInvalidWorkflowExecutionTimeoutSeconds, err)
 	}
 
-	if err := timer.ValidateAndCapTimer(request.WorkflowRunTimeout); err != nil {
-		return errInvalidWorkflowRunTimeoutSeconds
+	if err := timestamp.ValidateProtoDuration(request.GetWorkflowRunTimeout()); err != nil {
+		return fmt.Errorf("%w cause: %v", errInvalidWorkflowRunTimeoutSeconds, err)
 	}
 
-	if err := timer.ValidateAndCapTimer(request.WorkflowTaskTimeout); err != nil {
-		return errInvalidWorkflowTaskTimeoutSeconds
+	if err := timestamp.ValidateProtoDuration(request.GetWorkflowTaskTimeout()); err != nil {
+		return fmt.Errorf("%w cause: %v", errInvalidWorkflowTaskTimeoutSeconds, err)
 	}
 
 	return nil
@@ -5002,8 +5006,8 @@ func (wh *WorkflowHandler) validateWorkflowStartDelay(
 		return errCronAndStartDelaySet
 	}
 
-	if err := timer.ValidateAndCapTimer(startDelay); err != nil {
-		return errInvalidWorkflowStartDelaySeconds
+	if err := timestamp.ValidateProtoDuration(startDelay); err != nil {
+		return fmt.Errorf("%w cause: %v", errInvalidWorkflowStartDelaySeconds, err)
 	}
 
 	return nil

@@ -142,5 +142,13 @@ func (c *CaptureHandler) Histogram(name string, unit metrics.MetricUnit) metrics
 	return metrics.HistogramFunc(func(v int64, tags ...metrics.Tag) { c.record(name, v, unit, tags...) })
 }
 
+func (c *CaptureHandler) Close() error {
+	return nil
+}
+
+func (c *CaptureHandler) StartBatch(_ string) metrics.BatchHandler {
+	return c
+}
+
 // Stop implements [metrics.Handler.Stop].
 func (*CaptureHandler) Stop(log.Logger) {}
