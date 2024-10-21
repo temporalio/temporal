@@ -161,7 +161,8 @@ API caller and subsequent internal retries recreate the Update in the Registry.
 Also, it is important to note that the Workflow context itself is stored in the Workflow cache
 and might be evicted any time. Therefore, the Workflow Update feature relies on a properly
 configured cache size. If the cache is too small, it will evict Workflow contexts too soon and their
-Update Registry will be lost. Then, the `UpdateWorkflowExecutions` API call will time out.
+Update Registry will be cleared. Note that in that case, all in-flight Updates are aborted with a
+retryable error; and the frontend will retry the `UpdateWorkflowExecution` call.
 
 ## `UpdateWorkflowExecutions` and `PollWorkflowExecutionUpdate` APIs
 The Workflow Update feature exposes two APIs: `UpdateWorkflowExecution` to send Update requests
