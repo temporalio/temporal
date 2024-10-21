@@ -737,6 +737,10 @@ func (ms *MutableStateImpl) SetBaseWorkflow(
 	}
 }
 
+func (ms *MutableStateImpl) UpdateResetRunID(runID string) {
+	ms.executionInfo.ResetRunId = runID
+}
+
 func (ms *MutableStateImpl) GetBaseWorkflowInfo() *workflowspb.BaseExecutionInfo {
 	return ms.executionInfo.BaseExecutionInfo
 }

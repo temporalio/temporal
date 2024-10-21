@@ -3161,6 +3161,18 @@ func (mr *MockMutableStateMockRecorder) UpdateDuplicatedResource(resourceDedupKe
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateDuplicatedResource", reflect.TypeOf((*MockMutableState)(nil).UpdateDuplicatedResource), resourceDedupKey)
 }
 
+// UpdateResetRunID mocks base method.
+func (m *MockMutableState) UpdateResetRunID(runID string) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "UpdateResetRunID", runID)
+}
+
+// UpdateResetRunID indicates an expected call of UpdateResetRunID.
+func (mr *MockMutableStateMockRecorder) UpdateResetRunID(runID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateResetRunID", reflect.TypeOf((*MockMutableState)(nil).UpdateResetRunID), runID)
+}
+
 // UpdateUserTimer mocks base method.
 func (m *MockMutableState) UpdateUserTimer(arg0 *persistence.TimerInfo) error {
 	m.ctrl.T.Helper()
