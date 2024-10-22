@@ -2813,6 +2813,92 @@ func (s *mutableStateSuite) TestCloseTransactionPrepareReplicationTasks_SyncHSMT
 	}
 }
 
+func (s *mutableStateSuite) setDisablingTransitionHistory(ms *MutableStateImpl) {
+	ms.versionedTransitionInDB = &persistencespb.VersionedTransition{TransitionCount: 1025}
+	ms.executionInfo.TransitionHistory = nil
+}
+
+func (s *mutableStateSuite) TestCloseTransactionPrepareReplicationTasks_SyncActivityTask() {
+	testCases := []struct {
+		name                       string
+		disablingTransitionHistory bool
+		expectedReplicationTask    []tasks.SyncActivityTask
+	}{
+		{
+			name:                       "NoDisablingTransitionHistory",
+			disablingTransitionHistory: false,
+			expectedReplicationTask: []tasks.SyncActivityTask{
+				{
+					ScheduledEventID: 100,
+				},
+			},
+		},
+		{
+			name:                       "DisablingTransitionHistory",
+			disablingTransitionHistory: true,
+			expectedReplicationTask: []tasks.SyncActivityTask{
+				{
+					ScheduledEventID: 90,
+				},
+				{
+					ScheduledEventID: 100,
+				},
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		s.T().Run(tc.name, func(t *testing.T) {
+			dbState := s.buildWorkflowMutableState()
+			dbState.ActivityInfos[100] = &persistencespb.ActivityInfo{
+				ScheduledEventId: 100,
+			}
+			ms, err := NewMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, s.namespaceEntry, dbState, 123)
+			s.NoError(err)
+
+			if tc.disablingTransitionHistory {
+				s.setDisablingTransitionHistory(ms)
+			}
+
+			ms.UpdateActivityProgress(ms.pendingActivityInfoIDs[100], &workflowservice.RecordActivityTaskHeartbeatRequest{})
+
+			repicationTasks := ms.syncActivityToReplicationTask(TransactionPolicyActive)
+			s.Len(repicationTasks, len(tc.expectedReplicationTask))
+			for i, task := range tc.expectedReplicationTask {
+				s.Equal(task.ScheduledEventID, repicationTasks[i].(*tasks.SyncActivityTask).ScheduledEventID)
+			}
+		})
+	}
+}
+
+func (s *mutableStateSuite) TestVersionedTransitionInDB() {
+	// case 1: versionedTransitionInDB is not nil
+	dbState := s.buildWorkflowMutableState()
+	ms, err := NewMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, s.namespaceEntry, dbState, 123)
+	s.NoError(err)
+
+	s.True(proto.Equal(ms.executionInfo.TransitionHistory[len(ms.executionInfo.TransitionHistory)-1], ms.versionedTransitionInDB))
+
+	s.NoError(ms.cleanupTransaction())
+	s.True(proto.Equal(ms.executionInfo.TransitionHistory[len(ms.executionInfo.TransitionHistory)-1], ms.versionedTransitionInDB))
+
+	ms.executionInfo.TransitionHistory = nil
+	s.NoError(ms.cleanupTransaction())
+	s.Nil(ms.versionedTransitionInDB)
+
+	// case 2: versionedTransitionInDB is nil
+	dbState = s.buildWorkflowMutableState()
+	dbState.ExecutionInfo.TransitionHistory = nil
+	ms, err = NewMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, s.namespaceEntry, dbState, 123)
+	s.NoError(err)
+
+	s.Nil(ms.versionedTransitionInDB)
+
+	ms.executionInfo.TransitionHistory = UpdatedTransitionHistory(ms.executionInfo.TransitionHistory, s.namespaceEntry.FailoverVersion())
+	s.NoError(ms.cleanupTransaction())
+	s.True(proto.Equal(ms.executionInfo.TransitionHistory[len(ms.executionInfo.TransitionHistory)-1], ms.versionedTransitionInDB))
+}
+
 func (s *mutableStateSuite) TestCloseTransactionTrackTombstones() {
 	testCases := []struct {
 		name        string
