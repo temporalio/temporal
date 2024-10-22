@@ -560,6 +560,7 @@ func (r *TaskGeneratorImpl) GenerateActivityRetryTasks(activityInfo *persistence
 		VisibilityTimestamp: activityInfo.GetScheduledTime().AsTime(),
 		EventID:             activityInfo.GetScheduledEventId(),
 		Attempt:             activityInfo.GetAttempt(),
+		Stamp:               activityInfo.Stamp,
 	})
 	return nil
 }

@@ -164,11 +164,20 @@ func updateActivityOptions(
 
 	// regenerate retry tasks
 	if workflow.GetActivityState(ai) == enumspb.PENDING_ACTIVITY_STATE_SCHEDULED {
-		// two options - it can be in backoff, or waiting to be started
-		now := shardContext.GetTimeSource().Now()
+		// in this case we always want to generate a new retry task
+
+		// TODO:
+		// two options - activity can be in backoff, or scheduled (waiting to be started)
+		// if activity in backoff
+		// 		in this case there is already old retry task
+		// 		it will be ignored because of stamp mismatch
+		// if activity is scheduled and waiting to be started
+		// 		eventually matching service will call history service (recordActivityTaskStarted)
+		// 		history service will return error based on stamp. Task will be dropped
 
 		// if activity is past its scheduled time and ready to be started
 		// we don't really need to do generate timer tasks, it should be done in closeTransaction
+		now := shardContext.GetTimeSource().Now()
 		if now.Before(ai.ScheduledTime.AsTime()) {
 			// activity is in backoff
 			_, err = mutableState.RetryActivity(ai, nil)
