@@ -4993,10 +4993,8 @@ func (ms *MutableStateImpl) AddHistorySize(size int64) {
 // processCloseCallbacks triggers "WorkflowClosed" callbacks, applying the state machine transition that schedules
 // callback tasks.
 func (ms *MutableStateImpl) processCloseCallbacks() error {
-	ms.logger.Info(fmt.Sprintf("Processing close callbacks. WorkflowReset: %v", ms.GetExecutionInfo().GetWorkflowReset()))
-
 	continuedAsNew := ms.GetExecutionInfo().NewExecutionRunId != ""
-	if continuedAsNew || ms.GetExecutionInfo().GetWorkflowReset() {
+	if continuedAsNew || ms.GetExecutionInfo().GetWorkflowWasReset() {
 		return nil
 	}
 

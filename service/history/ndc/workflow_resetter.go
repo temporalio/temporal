@@ -137,7 +137,7 @@ func (r *workflowResetterImpl) ResetWorkflow(
 	var reapplyEventsFn workflowResetReapplyEventsFn
 	currentMutableState := currentWorkflow.GetMutableState()
 	if currentMutableState.IsWorkflowExecutionRunning() {
-		currentMutableState.GetExecutionInfo().WorkflowReset = true
+		currentMutableState.GetExecutionInfo().WorkflowWasReset = true
 		if err := r.terminateWorkflow(
 			currentMutableState,
 			resetReason,

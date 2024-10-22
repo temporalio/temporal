@@ -44,7 +44,6 @@ import (
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
-	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/components/callbacks"
 	"go.temporal.io/server/internal/temporalite"
@@ -368,13 +367,17 @@ func (s *CallbacksSuite) TestNexusResetWorkflowWithCallback() {
 
 		w := worker.New(sdkClient, taskQueue, worker.Options{})
 
-		longRunningWorkflow := func(ctx workflow.Context) (int, error) {
-			s.NoError(workflow.Sleep(ctx, 2*time.Second))
+		longRunningWorkflow := func(ctx workflow.Context) error {
+			return workflow.Await(ctx, func() bool {
+				info := workflow.GetInfo(ctx)
 
-			return 123, nil
+				return info.OriginalRunID != info.WorkflowExecution.RunID
+			})
 		}
 
-		w.RegisterWorkflow(longRunningWorkflow)
+		w.RegisterWorkflowWithOptions(longRunningWorkflow, workflow.RegisterOptions{
+			Name: "longRunningWorkflow",
+		})
 		s.NoError(w.Start())
 		defer w.Stop()
 
@@ -398,32 +401,42 @@ func (s *CallbacksSuite) TestNexusResetWorkflowWithCallback() {
 			},
 		}
 
-		_, err = s.FrontendClient().StartWorkflowExecution(ctx, request)
+		startResponse, err := s.FrontendClient().StartWorkflowExecution(ctx, request)
 		s.NoError(err)
 
-		var description *workflowservice.DescribeWorkflowExecutionResponse
-		s.Eventually(func() bool {
-			description, err = sdkClient.DescribeWorkflowExecution(ctx, request.WorkflowId, "")
-			s.NoError(err)
-			s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, description.WorkflowExecutionInfo.Status)
-
-			return true
-		}, time.Second*3, time.Millisecond*500)
+		// Get history, iterate to ensure workflow task completed event exists. then reset
+		workflowExecution := &commonpb.WorkflowExecution{
+			WorkflowId: request.WorkflowId,
+			RunId:      startResponse.RunId,
+		}
+		s.WaitForHistoryEvents(`
+			1 WorkflowExecutionStarted
+  			2 WorkflowTaskScheduled
+  			3 WorkflowTaskStarted
+  			4 WorkflowTaskCompleted`,
+			s.GetHistoryFunc(s.Namespace(), workflowExecution),
+			5*time.Second,
+			10*time.Millisecond)
 
 		resetWfResponse, err := sdkClient.ResetWorkflowExecution(ctx, &workflowservice.ResetWorkflowExecutionRequest{
-			Namespace:                 s.Namespace(),
-			WorkflowExecution:         description.WorkflowExecutionInfo.Execution,
+			Namespace: s.Namespace(),
+
+			WorkflowExecution:         workflowExecution,
 			Reason:                    "TestNexusResetWorkflowWithCallback",
 			WorkflowTaskFinishEventId: 3,
 			RequestId:                 "test_id",
 		})
 		s.NoError(err)
 
+		description, err := sdkClient.DescribeWorkflowExecution(ctx, request.WorkflowId, startResponse.RunId)
+		s.NoError(err)
+		s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED, description.WorkflowExecutionInfo.Status)
+
 		// Should not be invoked during a reset
 		s.Equal(1, len(description.Callbacks))
 		callbackInfo := description.Callbacks[0]
 		s.ProtoEqual(request.CompletionCallbacks[0], callbackInfo.Callback)
-		s.Equal(enumsspb.CALLBACK_STATE_STANDBY.String(), callbackInfo.State.String())
+		s.Equal(enumspb.CALLBACK_STATE_STANDBY, callbackInfo.State)
 		s.Equal(int32(0), callbackInfo.Attempt)
 
 		resetWorkflowRun := sdkClient.GetWorkflow(ctx, request.WorkflowId, resetWfResponse.RunId)
@@ -432,18 +445,15 @@ func (s *CallbacksSuite) TestNexusResetWorkflowWithCallback() {
 
 		completion := <-ch.requestCh
 		s.Equal(nexus.OperationStateSucceeded, completion.State)
-		var result int
-		s.NoError(completion.Result.Consume(&result))
-		s.Equal(123, result)
 		ch.requestCompleteCh <- err
 
 		description, err = sdkClient.DescribeWorkflowExecution(ctx, resetWorkflowRun.GetID(), "")
 		s.NoError(err)
-		s.Equal(description.WorkflowExecutionInfo.Status, enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED)
+		s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, description.WorkflowExecutionInfo.Status)
 
 		s.Equal(1, len(description.Callbacks))
 		callbackInfo = description.Callbacks[0]
 		s.ProtoEqual(request.CompletionCallbacks[0], callbackInfo.Callback)
-		s.Equal(enumsspb.CALLBACK_STATE_SUCCEEDED.String(), callbackInfo.State.String())
+		s.Equal(enumspb.CALLBACK_STATE_SUCCEEDED, callbackInfo.State)
 	})
 }
