@@ -167,7 +167,9 @@ message WorkflowExecutionInfo {
     // Used to check if visibility close task is processed before deleting the workflow execution.
     int64 close_visibility_task_id = 65;
     google.protobuf.Timestamp close_time = 66;
-    bool close_visibility_task_completed = 67;
+    // Relocatable attributes are memo and search attributes. If they were removed, then they are not
+    // present in the mutable state, and they should be in visibility store.
+    bool relocatable_attributes_removed = 67;
     temporal.server.api.workflow.v1.BaseExecutionInfo base_execution_info = 76;
     // If using build-id based versioning: version stamp of the last worker to complete a
     // workflow tasks for this workflow.
