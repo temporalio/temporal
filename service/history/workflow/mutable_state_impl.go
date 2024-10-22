@@ -4881,6 +4881,7 @@ func (ms *MutableStateImpl) RetryActivity(
 	}
 
 	now := ms.timeSource.Now().In(time.UTC)
+	// TODO retry should start from last failure time, not from now
 	retryBackoff, retryState := nextBackoffInterval(
 		ms.timeSource.Now().In(time.UTC),
 		ai.Attempt,
@@ -4920,7 +4921,7 @@ func (ms *MutableStateImpl) updateActivityInfoForRetries(
 	activityFailure *failurepb.Failure,
 ) {
 	ms.updateActivity(ai, func(info *persistencespb.ActivityInfo, impl *MutableStateImpl) *persistencespb.ActivityInfo {
-		ai = updateActivityInfoForRetries(
+		ai = UpdateActivityInfoForRetries(
 			ai,
 			ms.GetCurrentVersion(),
 			nextAttempt,
@@ -4939,7 +4940,6 @@ func (ms *MutableStateImpl) updateActivity(ai *persistencespb.ActivityInfo, upda
 	if prev, ok := ms.pendingActivityInfoIDs[ai.ScheduledEventId]; ok {
 		originalSize = prev.Size()
 	}
-
 	updateCallback(ai, ms)
 
 	ms.approximateSize += ai.Size() - originalSize

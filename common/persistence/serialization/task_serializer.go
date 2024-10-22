@@ -732,6 +732,7 @@ func (s *TaskSerializer) timerActivityTaskToProto(
 		EventId:             activityTimer.EventID,
 		TaskId:              activityTimer.TaskID,
 		VisibilityTime:      timestamppb.New(activityTimer.VisibilityTimestamp),
+		Stamp:               activityTimer.Stamp,
 	}
 }
 
@@ -749,6 +750,7 @@ func (s *TaskSerializer) timerActivityTaskFromProto(
 		EventID:             activityTimer.EventId,
 		Attempt:             activityTimer.ScheduleAttempt,
 		TimeoutType:         activityTimer.TimeoutType,
+		Stamp:               activityTimer.Stamp,
 	}
 }
 
@@ -767,6 +769,7 @@ func (s *TaskSerializer) timerActivityRetryTaskToProto(
 		EventId:             activityRetryTimer.EventID,
 		TaskId:              activityRetryTimer.TaskID,
 		VisibilityTime:      timestamppb.New(activityRetryTimer.VisibilityTimestamp),
+		Stamp:               activityRetryTimer.Stamp,
 	}
 }
 
@@ -784,6 +787,7 @@ func (s *TaskSerializer) timerActivityRetryTaskFromProto(
 		EventID:             activityRetryTimer.EventId,
 		Version:             activityRetryTimer.Version,
 		Attempt:             activityRetryTimer.ScheduleAttempt,
+		Stamp:               activityRetryTimer.Stamp,
 	}
 }
 
