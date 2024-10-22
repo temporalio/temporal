@@ -241,6 +241,7 @@ func (r *HistoryReplicatorImpl) BackfillHistoryEvents(
 		request.NewEvents,
 		request.NewRunID,
 		request.VersionedHistory,
+		true,
 	)
 	if err != nil {
 		return err
@@ -433,6 +434,7 @@ func (r *HistoryReplicatorImpl) ReplicateHistoryEvents(
 		newEvents,
 		newRunID,
 		nil,
+		false,
 	)
 	if err != nil {
 		return err
@@ -555,7 +557,7 @@ func (r *HistoryReplicatorImpl) applyStartEvents(
 		)
 	}
 
-	if task.getVersionedTransition() != nil {
+	if task.stateBased() {
 		mutableState.InitTransitionHistory()
 	}
 
