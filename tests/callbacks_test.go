@@ -36,8 +36,6 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 
-	"google.golang.org/protobuf/types/known/durationpb"
-
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
@@ -52,6 +50,7 @@ import (
 	"go.temporal.io/server/components/callbacks"
 	"go.temporal.io/server/internal/temporalite"
 	"go.temporal.io/server/tests/testcore"
+	"google.golang.org/protobuf/types/known/durationpb"
 )
 
 type completionHandler struct {
