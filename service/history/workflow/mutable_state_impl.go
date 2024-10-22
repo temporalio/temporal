@@ -4880,6 +4880,7 @@ func (ms *MutableStateImpl) RetryActivity(
 	}
 
 	now := ms.timeSource.Now().In(time.UTC)
+	// TODO retry should start from last failure time, not from now
 	retryBackoff, retryState := nextBackoffInterval(
 		ms.timeSource.Now().In(time.UTC),
 		ai.Attempt,

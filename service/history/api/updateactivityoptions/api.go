@@ -158,6 +158,9 @@ func updateActivityOptions(
 
 	// invalidate timers
 	ai.TimerTaskStatus = workflow.TimerTaskStatusNone
+	if err := mutableState.UpdateActivity(ai); err != nil {
+		return nil, err
+	}
 
 	// regenerate retry tasks
 	if workflow.GetActivityState(ai) == enumspb.PENDING_ACTIVITY_STATE_SCHEDULED {

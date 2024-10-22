@@ -394,6 +394,7 @@ func (s *activityOptionsSuite) Test_updateActivityOptionsAcceptance() {
 
 	s.mockMutableState.EXPECT().IsWorkflowExecutionRunning().Return(true)
 	s.mockMutableState.EXPECT().GetActivityByActivityID(gomock.Any()).Return(fullActivityInfo, true)
+	s.mockMutableState.EXPECT().UpdateActivity(gomock.Any()).Return(nil)
 
 	request := &historyservice.UpdateActivityOptionsRequest{
 		UpdateRequest: &workflowservicepb.UpdateActivityOptionsByIdRequest{

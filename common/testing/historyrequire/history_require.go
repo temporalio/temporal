@@ -577,3 +577,15 @@ func (h HistoryRequire) parseHistory(history string) ([]*historypb.HistoryEvent,
 	}
 	return historyEvents, eventsAttrs
 }
+
+func getEventAttributes(eventTypeIndex int, fields []string) string {
+	var jb strings.Builder
+	for i := eventTypeIndex + 1; i < len(fields); i++ {
+		if strings.HasPrefix(fields[i], "//") {
+			break
+		}
+		_, _ = jb.WriteString(fields[i])
+		_, _ = jb.WriteRune(' ')
+	}
+	return jb.String()
+}

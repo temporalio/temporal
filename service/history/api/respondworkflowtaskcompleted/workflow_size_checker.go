@@ -95,7 +95,7 @@ func (c *workflowSizeChecker) checkIfPayloadSizeExceedsLimit(
 		tag.BlobSizeViolationOperation(commandTypeTag.Value()),
 	)
 	if err != nil {
-		return fmt.Errorf(message)
+		return fmt.Errorf("%s", message) // nolint:err113
 	}
 	return nil
 }
@@ -123,7 +123,7 @@ func (c *workflowSizeChecker) checkIfMemoSizeExceedsLimit(
 		tag.BlobSizeViolationOperation(commandTypeTag.Value()),
 	)
 	if err != nil {
-		return fmt.Errorf(message)
+		return fmt.Errorf("%s", message) // nolint:err113
 	}
 	return nil
 }
@@ -154,6 +154,7 @@ func (c *workflowSizeChecker) checkCountConstraint(
 		return nil
 	}
 	c.metricsHandler.Counter(metricName).Record(1)
+	// nolint:err113
 	err := fmt.Errorf(
 		"the number of %s, %d, has reached the per-workflow limit of %d",
 		resourceName,
@@ -209,18 +210,18 @@ func (c *workflowSizeChecker) checkIfNumPendingSignalsExceedsLimit() error {
 
 func (c *workflowSizeChecker) checkIfSearchAttributesSizeExceedsLimit(
 	searchAttributes *commonpb.SearchAttributes,
-	namespace namespace.Name,
+	namespaceName namespace.Name,
 	commandTypeTag metrics.Tag,
 ) error {
 	metrics.SearchAttributesSize.With(c.metricsHandler).Record(
 		int64(searchAttributes.Size()),
 		commandTypeTag)
-	err := c.searchAttributesValidator.ValidateSize(searchAttributes, namespace.String())
+	err := c.searchAttributesValidator.ValidateSize(searchAttributes, namespaceName.String())
 	if err != nil {
 		c.logger.Warn(
 			"Search attributes size exceeds limits. Fail workflow.",
 			tag.Error(err),
-			tag.WorkflowNamespace(namespace.String()),
+			tag.WorkflowNamespace(namespaceName.String()),
 		)
 	}
 	return err
