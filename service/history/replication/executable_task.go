@@ -450,7 +450,7 @@ func (e *ExecutableTaskImpl) SyncState(
 	}
 
 	targetClusterInfo := e.ClusterMetadata.GetAllClusterInfo()[e.ClusterMetadata.GetCurrentClusterName()]
-	_, err = remoteAdminClient.SyncWorkflowState(ctx, &adminservice.SyncWorkflowStateRequest{
+	resp, err := remoteAdminClient.SyncWorkflowState(ctx, &adminservice.SyncWorkflowStateRequest{
 		NamespaceId: syncStateErr.NamespaceId,
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: syncStateErr.WorkflowId,
@@ -502,8 +502,22 @@ func (e *ExecutableTaskImpl) SyncState(
 		return false, err
 	}
 
-	// TODO: handle SyncWorkflowState response
-	return false, serviceerror.NewUnimplemented("not implemented")
+	shardContext, err := e.ShardController.GetShardByNamespaceWorkflow(
+		namespace.ID(syncStateErr.NamespaceId),
+		syncStateErr.WorkflowId,
+	)
+	if err != nil {
+		return false, err
+	}
+	engine, err := shardContext.GetEngine(ctx)
+	if err != nil {
+		return false, err
+	}
+	err = engine.ReplicateVersionedTransition(ctx, resp.VersionedTransitionArtifact, e.SourceClusterName())
+	if err != nil {
+		return false, err
+	}
+	return true, nil
 }
 
 func (e *ExecutableTaskImpl) DeleteWorkflow(
