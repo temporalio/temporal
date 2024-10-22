@@ -2467,3 +2467,7 @@ func (h *Handler) UpdateActivityOptions(
 	}
 	return response, nil
 }
+
+func (h *Handler) PauseActivity(context.Context, *historyservice.PauseActivityRequest) (*historyservice.PauseActivityResponse, error) {
+	return nil, serviceerror.NewUnimplemented("PauseActivityResponse is not supported yet")
+}

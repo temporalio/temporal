@@ -1147,3 +1147,17 @@ message UpdateActivityOptionsResponse {
     // Activity options after an update
     temporal.api.activity.v1.ActivityOptions activity_options = 1;
 }
+
+// (-- api-linter: core::0134::request-mask-required=disabled
+// (-- api-linter: core::0134::request-resource-required=disabled
+message PauseActivityRequest {
+    option (routing).workflow_id = "pause_request.workflow_id";
+
+    // Namespace ID of the workflow which scheduled this activity
+    string namespace_id = 1;
+
+    temporal.api.workflowservice.v1.PauseActivityByIdRequest pause_request = 2;
+}
+
+message PauseActivityResponse {
+}

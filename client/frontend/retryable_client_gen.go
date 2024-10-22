@@ -470,6 +470,21 @@ func (c *retryableClient) PatchSchedule(
 	return resp, err
 }
 
+func (c *retryableClient) PauseActivityById(
+	ctx context.Context,
+	request *workflowservice.PauseActivityByIdRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.PauseActivityByIdResponse, error) {
+	var resp *workflowservice.PauseActivityByIdResponse
+	op := func(ctx context.Context) error {
+		var err error
+		resp, err = c.client.PauseActivityById(ctx, request, opts...)
+		return err
+	}
+	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
+	return resp, err
+}
+
 func (c *retryableClient) PollActivityTaskQueue(
 	ctx context.Context,
 	request *workflowservice.PollActivityTaskQueueRequest,

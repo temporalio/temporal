@@ -686,6 +686,26 @@ func (mr *MockHistoryServiceClientMockRecorder) MergeDLQMessages(ctx, in any, op
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MergeDLQMessages", reflect.TypeOf((*MockHistoryServiceClient)(nil).MergeDLQMessages), varargs...)
 }
 
+// PauseActivity mocks base method.
+func (m *MockHistoryServiceClient) PauseActivity(ctx context.Context, in *historyservice.PauseActivityRequest, opts ...grpc.CallOption) (*historyservice.PauseActivityResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []any{ctx, in}
+	for _, a := range opts {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "PauseActivity", varargs...)
+	ret0, _ := ret[0].(*historyservice.PauseActivityResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// PauseActivity indicates an expected call of PauseActivity.
+func (mr *MockHistoryServiceClientMockRecorder) PauseActivity(ctx, in any, opts ...any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]any{ctx, in}, opts...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PauseActivity", reflect.TypeOf((*MockHistoryServiceClient)(nil).PauseActivity), varargs...)
+}
+
 // PollMutableState mocks base method.
 func (m *MockHistoryServiceClient) PollMutableState(ctx context.Context, in *historyservice.PollMutableStateRequest, opts ...grpc.CallOption) (*historyservice.PollMutableStateResponse, error) {
 	m.ctrl.T.Helper()
@@ -2029,6 +2049,21 @@ func (m *MockHistoryServiceServer) MergeDLQMessages(arg0 context.Context, arg1 *
 func (mr *MockHistoryServiceServerMockRecorder) MergeDLQMessages(arg0, arg1 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MergeDLQMessages", reflect.TypeOf((*MockHistoryServiceServer)(nil).MergeDLQMessages), arg0, arg1)
+}
+
+// PauseActivity mocks base method.
+func (m *MockHistoryServiceServer) PauseActivity(arg0 context.Context, arg1 *historyservice.PauseActivityRequest) (*historyservice.PauseActivityResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "PauseActivity", arg0, arg1)
+	ret0, _ := ret[0].(*historyservice.PauseActivityResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// PauseActivity indicates an expected call of PauseActivity.
+func (mr *MockHistoryServiceServerMockRecorder) PauseActivity(arg0, arg1 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PauseActivity", reflect.TypeOf((*MockHistoryServiceServer)(nil).PauseActivity), arg0, arg1)
 }
 
 // PollMutableState mocks base method.
