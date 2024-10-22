@@ -767,7 +767,9 @@ func (c *ContextImpl) mergeUpdateWithNewReplicationTasks(
 					break
 				}
 			}
-			c.logger.Error("SyncVersionedTransitionTask has no HistoryReplicationTask equivalent to update")
+			if !taskEquivalentsUpdated {
+				c.logger.Error("SyncVersionedTransitionTask has no HistoryReplicationTask equivalent to update")
+			}
 			return taskEquivalentsUpdated
 		default:
 		}

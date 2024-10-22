@@ -5645,19 +5645,20 @@ func (ms *MutableStateImpl) closeTransactionPrepareReplicationTasks(
 					nextEventID = item.EventId + 1
 				}
 				transitionHistory := ms.executionInfo.TransitionHistory
-				syncVersionedTransitionTask := &tasks.SyncVersionedTransitionTask{
-					WorkflowKey:         workflowKey,
-					VisibilityTimestamp: now,
-					Priority:            enumsspb.TASK_PRIORITY_HIGH,
-					VersionedTransition: transitionHistory[len(transitionHistory)-1],
-					FirstEventID:        firstEventID,
-					NextEventID:         nextEventID,
-					TaskEquivalents:     replicationTasks,
-				}
-				if CompareVersionedTransition(
+				if len(transitionHistory) > 0 && CompareVersionedTransition(
 					ms.versionedTransitionInDB,
 					ms.executionInfo.TransitionHistory[len(ms.executionInfo.TransitionHistory)-1],
-				) != 0 || len(replicationTasks) > 0 {
+				) != 0 {
+					syncVersionedTransitionTask := &tasks.SyncVersionedTransitionTask{
+						WorkflowKey:         workflowKey,
+						VisibilityTimestamp: now,
+						Priority:            enumsspb.TASK_PRIORITY_HIGH,
+						VersionedTransition: transitionHistory[len(transitionHistory)-1],
+						FirstEventID:        firstEventID,
+						NextEventID:         nextEventID,
+						TaskEquivalents:     replicationTasks,
+					}
+
 					// versioned transition updated in the transaction
 					ms.InsertTasks[tasks.CategoryReplication] = append(
 						ms.InsertTasks[tasks.CategoryReplication],
