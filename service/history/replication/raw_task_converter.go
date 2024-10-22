@@ -694,6 +694,9 @@ func (c *syncVersionedTransitionTaskConverter) convert(
 		Attributes: &replicationspb.ReplicationTask_SyncVersionedTransitionTaskAttributes{
 			SyncVersionedTransitionTaskAttributes: &replicationspb.SyncVersionedTransitionTaskAttributes{
 				VersionedTransitionArtifact: result.VersionedTransitionArtifact,
+				NamespaceId:                 taskInfo.NamespaceID,
+				WorkflowId:                  taskInfo.WorkflowID,
+				RunId:                       taskInfo.RunID,
 			},
 		},
 		VersionedTransition: taskInfo.VersionedTransition,
