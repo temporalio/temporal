@@ -35,6 +35,7 @@ import (
 	"go.temporal.io/api/common/v1"
 	"go.temporal.io/api/workflow/v1"
 	"go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/service/history/tests"
 	"go.uber.org/mock/gomock"
@@ -58,12 +59,16 @@ func TestRelocatableAttributesFetcher_Fetch(t *testing.T) {
 			"searchAttributesLocation": {Data: []byte("persistence")},
 		}},
 	}
+
+	emptyAttributes := &RelocatableAttributes{}
+
 	require.NotEqual(t, mutableStateAttributes.Memo, persistenceAttributes.Memo)
 	require.NotEqual(t, mutableStateAttributes.SearchAttributes, persistenceAttributes.SearchAttributes)
 	testErr := errors.New("test error")
 	for _, c := range []*struct {
 		Name                         string
-		CloseVisibilityTaskCompleted bool
+		RelocatableAttributesRemoved bool
+		DisableFetchFromVisibility   bool
 		GetWorkflowExecutionErr      error
 
 		ExpectedInfo *RelocatableAttributes
@@ -71,19 +76,26 @@ func TestRelocatableAttributesFetcher_Fetch(t *testing.T) {
 	}{
 		{
 			Name:                         "CloseVisibilityTaskNotComplete",
-			CloseVisibilityTaskCompleted: false,
+			RelocatableAttributesRemoved: false,
 
 			ExpectedInfo: mutableStateAttributes,
 		},
 		{
-			Name:                         "CloseVisibilityTaskCompleted",
-			CloseVisibilityTaskCompleted: true,
+			Name:                         "RelocatableAttributesRemoved",
+			RelocatableAttributesRemoved: true,
 
 			ExpectedInfo: persistenceAttributes,
 		},
 		{
+			Name:                         "RelocatableAttributesRemoved DisableFetchFromVisibility",
+			RelocatableAttributesRemoved: true,
+			DisableFetchFromVisibility:   true,
+
+			ExpectedInfo: emptyAttributes,
+		},
+		{
 			Name:                         "GetWorkflowExecutionErr",
-			CloseVisibilityTaskCompleted: true,
+			RelocatableAttributesRemoved: true,
 			GetWorkflowExecutionErr:      testErr,
 
 			ExpectedErr: testErr,
@@ -96,7 +108,7 @@ func TestRelocatableAttributesFetcher_Fetch(t *testing.T) {
 			executionInfo := &persistence.WorkflowExecutionInfo{
 				Memo:                         mutableStateAttributes.Memo.Fields,
 				SearchAttributes:             mutableStateAttributes.SearchAttributes.IndexedFields,
-				CloseVisibilityTaskCompleted: c.CloseVisibilityTaskCompleted,
+				RelocatableAttributesRemoved: c.RelocatableAttributesRemoved,
 				CloseTime:                    timestamppb.New(closeTime),
 				WorkflowId:                   tests.WorkflowID,
 			}
@@ -110,7 +122,7 @@ func TestRelocatableAttributesFetcher_Fetch(t *testing.T) {
 			mutableState.EXPECT().GetExecutionInfo().Return(executionInfo).AnyTimes()
 			mutableState.EXPECT().GetNamespaceEntry().Return(namespaceEntry).AnyTimes()
 			mutableState.EXPECT().GetExecutionState().Return(executionState).AnyTimes()
-			if c.CloseVisibilityTaskCompleted {
+			if c.RelocatableAttributesRemoved && !c.DisableFetchFromVisibility {
 				visibilityManager.EXPECT().GetWorkflowExecution(gomock.Any(), &manager.GetWorkflowExecutionRequest{
 					NamespaceID: namespaceEntry.ID(),
 					Namespace:   namespaceEntry.Name(),
@@ -125,7 +137,9 @@ func TestRelocatableAttributesFetcher_Fetch(t *testing.T) {
 			}
 			ctx := context.Background()
 
-			fetcher := RelocatableAttributesFetcherProvider(visibilityManager)
+			cfg := tests.NewDynamicConfig()
+			cfg.DisableFetchRelocatableAttributesFromVisibility = dynamicconfig.GetBoolPropertyFnFilteredByNamespace(c.DisableFetchFromVisibility)
+			fetcher := RelocatableAttributesFetcherProvider(cfg, visibilityManager)
 			info, err := fetcher.Fetch(ctx, mutableState)
 
 			if c.ExpectedErr != nil {
