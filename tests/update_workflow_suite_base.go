@@ -106,11 +106,8 @@ func (s *WorkflowUpdateBaseSuite) waitUpdateAdmitted(tv *testvars.TestVars, upda
 	s.T().Helper()
 	s.Eventuallyf(func() bool {
 		pollResp, pollErr := s.FrontendClient().PollWorkflowExecutionUpdate(testcore.NewContext(), &workflowservice.PollWorkflowExecutionUpdateRequest{
-			Namespace: s.Namespace(),
-			UpdateRef: &updatepb.UpdateRef{
-				WorkflowExecution: tv.WorkflowExecution(),
-				UpdateId:          tv.UpdateID(updateID),
-			},
+			Namespace:  s.Namespace(),
+			UpdateRef:  tv.UpdateRef(updateID),
 			WaitPolicy: &updatepb.WaitPolicy{LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_UNSPECIFIED},
 		})
 
@@ -126,7 +123,7 @@ func (s *WorkflowUpdateBaseSuite) waitUpdateAdmitted(tv *testvars.TestVars, upda
 
 		// Poll beat send in race - poll again!
 		return false
-	}, 5*time.Second, 10*time.Millisecond, "update %s did not reach Admitted stage", updateID)
+	}, 5*time.Second, 10*time.Millisecond, "update %s did not reach Admitted stage", tv.UpdateID(updateID))
 }
 
 func (s *WorkflowUpdateBaseSuite) startWorkflow(tv *testvars.TestVars) *testvars.TestVars {

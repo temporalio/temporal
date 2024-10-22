@@ -207,8 +207,6 @@ func (t *hrsuTest) newHrsuTestCluster(ns string, name string, cluster *testcore.
 // TestAcceptedUpdateCanBeCompletedAfterFailoverAndFailback tests that an update can be accepted in one cluster, and completed in a
 // different cluster, after a failover.
 func (s *hrsuTestSuite) TestAcceptedUpdateCanBeCompletedAfterFailoverAndFailback() {
-	s.T().Skip("flaky test")
-
 	t, ctx, cancel := s.startHrsuTest()
 	defer cancel()
 	t.cluster1.startWorkflow(ctx, func(workflow.Context) error { return nil })
@@ -359,8 +357,6 @@ func (s *hrsuTestSuite) TestConflictResolutionReappliesUpdates() {
 // updates have the same update ID. The test confirms that when the conflict is resolved, we do not reapply the
 // UpdateAccepted event, since it has a conflicting ID.
 func (s *hrsuTestSuite) TestConflictResolutionDoesNotReapplyAcceptedUpdateWithConflictingId() {
-	s.T().Skip("flaky test")
-
 	t, ctx, cancel := s.startHrsuTest()
 	defer cancel()
 	t.cluster1.startWorkflow(ctx, func(workflow.Context) error { return nil })
@@ -785,33 +781,62 @@ func (task *hrsuTestExecutableTask) workflowId() string {
 
 // Update test utilities
 func (c *hrsuTestCluster) sendUpdateAndWaitUntilStage(ctx context.Context, updateId string, arg string, stage sdkclient.WorkflowUpdateStage) {
-	updateResponse := make(chan error)
-	processWorkflowTaskResponse := make(chan error)
+	updateErrCh := make(chan error)
 	go func() {
 		_, err := c.client.UpdateWorkflow(ctx, sdkclient.UpdateWorkflowOptions{
 			UpdateID:     updateId,
 			WorkflowID:   c.t.tv.WorkflowID(),
 			RunID:        c.t.tv.RunID(),
-			UpdateName:   "the-test-doesn't-use-this",
-			Args:         []interface{}{arg},
+			UpdateName:   c.t.tv.Any().String(),
+			Args:         []any{arg},
 			WaitForStage: stage,
 		})
+		updateErrCh <- err
+	}()
+
+	// Wait admitted to make sure that Update reached server, and added to registry.
+	// This guarantees following poll to get an Update request message.
+	c.waitUpdateAdmitted(c.t.tv, updateId)
+
+	// Blocks until the update request causes a WFT to be dispatched; then sends the update acceptance message
+	// required for the update request to return.
+	if stage == sdkclient.WorkflowUpdateStageCompleted {
+		err := c.pollAndAcceptCompleteUpdate(updateId)
 		c.t.s.NoError(err)
-		updateResponse <- err
-	}()
-	go func() {
-		// Blocks until the update request causes a WFT to be dispatched; then sends the update acceptance message
-		// required for the update request to return.
-		if stage == sdkclient.WorkflowUpdateStageCompleted {
-			processWorkflowTaskResponse <- c.pollAndAcceptCompleteUpdate(updateId)
-		} else if stage == sdkclient.WorkflowUpdateStageAccepted {
-			processWorkflowTaskResponse <- c.pollAndAcceptUpdate()
-		} else {
-			c.t.s.FailNow("invalid stage")
+	} else if stage == sdkclient.WorkflowUpdateStageAccepted {
+		err := c.pollAndAcceptUpdate()
+		c.t.s.NoError(err)
+	} else {
+		c.t.s.FailNow("invalid stage", stage)
+	}
+
+	c.t.s.NoError(<-updateErrCh)
+}
+
+func (c *hrsuTestCluster) waitUpdateAdmitted(tv *testvars.TestVars, updateID string) {
+	c.t.s.Eventuallyf(func() bool {
+		pollResp, pollErr := c.testCluster.FrontendClient().PollWorkflowExecutionUpdate(testcore.NewContext(), &workflowservice.PollWorkflowExecutionUpdateRequest{
+			Namespace: tv.NamespaceName().String(),
+			UpdateRef: &updatepb.UpdateRef{
+				WorkflowExecution: tv.WorkflowExecution(),
+				UpdateId:          updateID,
+			},
+			WaitPolicy: &updatepb.WaitPolicy{LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_UNSPECIFIED},
+		})
+
+		if pollErr == nil {
+			// This is technically "at least Admitted".
+			c.t.s.GreaterOrEqual(pollResp.Stage, enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ADMITTED)
+			return true
 		}
-	}()
-	c.t.s.NoError(<-updateResponse)
-	c.t.s.NoError(<-processWorkflowTaskResponse)
+		if pollErr.Error() != fmt.Sprintf("update %q not found", updateID) {
+			c.t.s.T().Log("received error from Update poll: ", pollErr)
+			return true
+		}
+
+		// Poll beat send in race - poll again!
+		return false
+	}, 5*time.Second, 10*time.Millisecond, "update %s did not reach Admitted stage", updateID)
 }
 
 func (c *hrsuTestCluster) pollAndAcceptUpdate() error {
@@ -890,7 +915,7 @@ func (t *hrsuTest) acceptUpdateMessageHandler(resp *workflowservice.PollWorkflow
 		attrs := updateAdmittedEvent.GetWorkflowExecutionUpdateAdmittedEventAttributes()
 		updateId = attrs.Request.Meta.UpdateId
 	} else {
-		t.s.Equal(1, len(resp.Messages))
+		t.s.Len(resp.Messages, 1)
 		msg := resp.Messages[0]
 		updateId = msg.ProtocolInstanceId
 	}
