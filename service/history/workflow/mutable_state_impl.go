@@ -36,9 +36,6 @@ import (
 
 	"github.com/nexus-rpc/sdk-go/nexus"
 	"github.com/pborman/uuid"
-	"google.golang.org/protobuf/proto"
-	"google.golang.org/protobuf/types/known/durationpb"
-	"google.golang.org/protobuf/types/known/timestamppb"
 
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
@@ -87,6 +84,9 @@ import (
 	"go.temporal.io/server/service/history/hsm"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
+	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/durationpb"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 const (
@@ -4997,13 +4997,7 @@ func (ms *MutableStateImpl) processCloseCallbacks() error {
 	ms.logger.Info(fmt.Sprintf("Processing close callbacks. WorkflowReset: %v", ms.GetExecutionInfo().GetWorkflowReset()))
 
 	continuedAsNew := ms.GetExecutionInfo().NewExecutionRunId != ""
-	if continuedAsNew {
-		ms.logger.Info("Skipping callbacks due to continued as new")
-		return nil
-	}
-
-	if ms.GetExecutionInfo().GetWorkflowReset() {
-		ms.logger.Info("Skipping callbacks due to workflow reset")
+	if continuedAsNew || ms.GetExecutionInfo().GetWorkflowReset() {
 		return nil
 	}
 
