@@ -367,6 +367,13 @@ func (s *CallbacksSuite) TestNexusResetWorkflowWithCallback() {
 		})
 
 		w := worker.New(sdkClient, taskQueue, worker.Options{})
+
+		longRunningWorkflow := func(ctx workflow.Context) (int, error) {
+			s.NoError(workflow.Sleep(ctx, 2*time.Second))
+
+			return 123, nil
+		}
+
 		w.RegisterWorkflow(longRunningWorkflow)
 		s.NoError(w.Start())
 		defer w.Stop()
@@ -439,10 +446,4 @@ func (s *CallbacksSuite) TestNexusResetWorkflowWithCallback() {
 		s.ProtoEqual(request.CompletionCallbacks[0], callbackInfo.Callback)
 		s.Equal(enumsspb.CALLBACK_STATE_SUCCEEDED.String(), callbackInfo.State.String())
 	})
-}
-
-func longRunningWorkflow(ctx workflow.Context) (int, error) {
-	workflow.Sleep(ctx, 2*time.Second)
-
-	return 123, nil
 }
