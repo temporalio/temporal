@@ -154,7 +154,7 @@ func (s *AdvVisCrossDCTestSuite) SetupSuite() {
 	})
 	s.Require().NoError(err)
 	// Wait for cluster metadata to refresh new added clusters
-	time.Sleep(time.Millisecond * 200)
+	time.Sleep(time.Millisecond * 200) // nolint:forbidigo
 
 	s.testSearchAttributeKey = "CustomTextField"
 	s.testSearchAttributeVal = "test value"
@@ -191,7 +191,7 @@ func (s *AdvVisCrossDCTestSuite) TestSearchAttributes() {
 	s.NoError(err)
 
 	// Wait for namespace cache to pick the change
-	time.Sleep(cacheRefreshInterval)
+	time.Sleep(cacheRefreshInterval) // nolint:forbidigo
 	if !s.isElasticsearchEnabled {
 		// When Elasticsearch is enabled, the search attribute aliases are not used.
 		_, err = client1.UpdateNamespace(testcore.NewContext(), &workflowservice.UpdateNamespaceRequest{
@@ -209,7 +209,7 @@ func (s *AdvVisCrossDCTestSuite) TestSearchAttributes() {
 		})
 		s.NoError(err)
 		// Wait for namespace cache to pick the UpdateNamespace changes.
-		time.Sleep(cacheRefreshInterval)
+		time.Sleep(cacheRefreshInterval) // nolint:forbidigo
 	}
 
 	descReq := &workflowservice.DescribeNamespaceRequest{
@@ -275,7 +275,7 @@ func (s *AdvVisCrossDCTestSuite) TestSearchAttributes() {
 				openExecution = resp.GetExecutions()[0]
 				break
 			}
-			time.Sleep(waitTimeInMs * time.Millisecond)
+			time.Sleep(waitTimeInMs * time.Millisecond) // nolint:forbidigo
 		}
 		s.NotNil(openExecution)
 		s.Equal(we.GetRunId(), openExecution.GetExecution().GetRunId())
@@ -319,7 +319,7 @@ func (s *AdvVisCrossDCTestSuite) TestSearchAttributes() {
 	s.logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 
-	time.Sleep(waitForESToSettle)
+	time.Sleep(waitForESToSettle) // nolint:forbidigo
 
 	testListResult = func(client workflowservice.WorkflowServiceClient, lr *workflowservice.ListWorkflowExecutionsRequest) {
 		s.Eventually(func() bool {

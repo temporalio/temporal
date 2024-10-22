@@ -40,6 +40,16 @@ import (
 	"go.temporal.io/server/service/history/shard"
 )
 
+func GetActivityState(ai *persistence.ActivityInfo) enumspb.PendingActivityState {
+	if ai.CancelRequested {
+		return enumspb.PENDING_ACTIVITY_STATE_CANCEL_REQUESTED
+	}
+	if ai.StartedEventId != common.EmptyEventID {
+		return enumspb.PENDING_ACTIVITY_STATE_STARTED
+	}
+	return enumspb.PENDING_ACTIVITY_STATE_SCHEDULED
+}
+
 func makeBackoffAlgorithm(requestedDelay *time.Duration) BackoffCalculatorAlgorithmFunc {
 	return func(duration *durationpb.Duration, coefficient float64, currentAttempt int32) time.Duration {
 		if requestedDelay != nil {
@@ -63,7 +73,7 @@ func nextRetryDelayFrom(failure *failurepb.Failure) *time.Duration {
 	return delay
 }
 
-func updateActivityInfoForRetries(
+func UpdateActivityInfoForRetries(
 	ai *persistence.ActivityInfo,
 	version int64,
 	attempt int32,
