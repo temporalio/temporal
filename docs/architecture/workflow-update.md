@@ -159,17 +159,17 @@ retryable error; and the frontend will retry the `UpdateWorkflowExecution` call.
 ### Aborting an Update
 An Update is aborted when:
 1. The Update Registry is cleared. Then, a retryable `WorkflowUpdateAbortedErr` error is returned
-   (see "Update Registry Lifecycle" below).
-2. The Workflow completes itself (i.g. with `COMPLETE_WORKFLOW_EXECUTION` command) or completed externally
-   (i.g. terminated or timed out). Then, a non-retryable `ErrWorkflowCompleted` error or failure is returned
+   (see "Update Registry Lifecycle" above).
+2. The Workflow completes itself (e.g., with `COMPLETE_WORKFLOW_EXECUTION` command) or completed externally
+   (e.g., terminated or timed out). Then, a non-retryable `ErrWorkflowCompleted` error or failure is returned
    to the API caller depending on an Update state.
-3. The Workflow is continuing (i.g. with `CONTINUE_AS_NEW_WORKFLOW_EXECUTION` command) or is retried after
+3. The Workflow is continuing (e.g., with `CONTINUE_AS_NEW_WORKFLOW_EXECUTION` command) or is retried after
    failure or timeout. Then, a retryable `ErrWorkflowClosing` error or failure is returned to the API caller
-   depending on an Update state.
+   depending on Update state.
 
 Full "Update state" and "Abort reason" matrix is the following:
 
-| Update State / Abort Reason             | RegistryCleared            | WorkflowCompleted                        | WorkflowContinuing                       |
+| Update State / Abort Reason             | (1) RegistryCleared        | (2) WorkflowCompleted                    | (3) WorkflowContinuing                   |
 |-----------------------------------------|----------------------------|------------------------------------------|------------------------------------------|
 | **Created**                             | `WorkflowUpdateAbortedErr` | `ErrWorkflowCompleted`                   | `ErrWorkflowClosing`                     |
 | **ProvisionallyAdmitted**               | `WorkflowUpdateAbortedErr` | `ErrWorkflowCompleted`                   | `ErrWorkflowClosing`                     |
@@ -190,9 +190,9 @@ knows that Update has been accepted, it expects any following requests to return
 
 When a Workflow completion command creates a new run, accepted Updates are failed in the same way:
 with the `acceptedUpdateCompletedWorkflowFailure` failure on the `completed` future. Admitted Updates,
-though, are aborted with the retryable `ErrWorkflowClosing` error. Server internally retries this error
-and new attempt should land on the new run. Because Updates received while the Workflow Task
-was running haven't been seen by the Workflow yet can be safely retried on the new run.
+though, are aborted with the retryable `ErrWorkflowClosing` error. The server internally retries this error
+and the next attempt should land on the new run. Because Updates received while the Workflow Task
+was running haven't been seen by the Workflow yet, they can be safely retried on the new run.
 It also provides a better experience for API callers since they will not notice that the Workflow
 started a new run.
 
@@ -205,7 +205,7 @@ the Update Registry is reconstructed from the history.
 ## `UpdateWorkflowExecutions` and `PollWorkflowExecutionUpdate` APIs
 The Workflow Update feature exposes two APIs: `UpdateWorkflowExecution` to send Update requests
 to a Workflow and wait for results, and `PollWorkflowExecutionUpdate` to just wait for results.
-These can be thought of as "PUT + GET" and "GET", respectively.
+These can be thought of as "get-or-create" and "get", respectively.
 
 ### Schedule new Workflow Task
 After an Update is added to the Registry, the server schedules a new Workflow Task to deliver the 
@@ -226,7 +226,7 @@ API call is returned. Currently, it can only be `ACCEPTED` or `COMPLETED`.
 > also allow using an Update as a "fire-and-forget" (just like Signal).
 
 ### Waiters
-Server performs few checks before blocking on corresponding future:  
+The server performs a few checks before blocking on corresponding future:
 ```mermaid
 flowchart TD
     updateWorkflowExecution[UpdateWorkflowExecution / PollWorkflowExecutionUpdate] --> wfExists{Workflow exists?}
@@ -237,8 +237,8 @@ flowchart TD
     updateExists --> |yes| success1(((Update result)))
     updateExists --> |no| wfCompleted(((ErrWorkflowCompleted)))
 
-    waitFor --> |ACCEPTED| blockAccepted[block on `accepted` future]
-    waitFor --> |COMPLETED| blockCompleted[block on `completed` future]
+    waitFor --> |ACCEPTED| blockAccepted[block on 'accepted' future]
+    waitFor --> |COMPLETED| blockCompleted[block on 'completed' future]
 ```
 When the wait stage is `ACCEPTED`, the API caller waits for the `accepted` future to complete
 (type `*failurepb.Failure`). The future can be resolved with the following results:
@@ -382,7 +382,7 @@ trying to recreate the Update.
 Update results are available after the Workflow is completed. They can be accessed using the
 `PollWorkflowExecutionUpdate` API. Note that the `UpdateWorkflowExecution` API will return the
 result, too. This provides a consistent experience for API caller: no matter at what stage the 
-Workflow is, the API caller will always get the error or failure, when the Update wasn't
+Workflow is, the API caller will always get an error or failure, when the Update wasn't
 processed by the Workflow, or the Update outcome when it was.
 
 > #### NOTE

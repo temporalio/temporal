@@ -102,7 +102,7 @@ var reasonStateMatrix = map[reasonState]failureError{
 	reasonState{r: AbortReasonWorkflowContinuing, st: stateAborted}:   {f: nil, err: nil},
 }
 
-// FailureError returns failure or error which will be set to Update futures while aborting Update.
+// FailureError returns failure or error which will be set on Update futures while aborting Update.
 // Only one of the return values will be non-nil.
 func (r AbortReason) FailureError(st state) (*failurepb.Failure, error) {
 	fe, ok := reasonStateMatrix[reasonState{r: r, st: st}]
