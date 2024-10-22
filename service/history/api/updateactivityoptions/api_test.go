@@ -318,11 +318,10 @@ func (s *activityOptionsSuite) TearDownTest() {
 
 func (s *activityOptionsSuite) Test_updateActivityOptionsWfNotRunning() {
 	request := &historyservice.UpdateActivityOptionsRequest{}
-	response := &historyservice.UpdateActivityOptionsResponse{}
 
 	s.mockMutableState.EXPECT().IsWorkflowExecutionRunning().Return(false)
 
-	_, err := updateActivityOptions(s.mockShard, s.validator, s.mockMutableState, request, response)
+	_, err := updateActivityOptions(s.mockShard, s.validator, s.mockMutableState, request)
 	s.Error(err)
 	s.ErrorAs(err, &consts.ErrWorkflowCompleted)
 }
@@ -340,11 +339,10 @@ func (s *activityOptionsSuite) Test_updateActivityOptionsWfNoActivity() {
 			},
 		},
 	}
-	response := &historyservice.UpdateActivityOptionsResponse{}
 
 	s.mockMutableState.EXPECT().IsWorkflowExecutionRunning().Return(true)
 	s.mockMutableState.EXPECT().GetActivityByActivityID(gomock.Any()).Return(nil, false)
-	_, err := updateActivityOptions(s.mockShard, s.validator, s.mockMutableState, request, response)
+	_, err := updateActivityOptions(s.mockShard, s.validator, s.mockMutableState, request)
 	s.Error(err)
 	s.ErrorAs(err, &consts.ErrActivityNotFound)
 }
@@ -403,10 +401,9 @@ func (s *activityOptionsSuite) Test_updateActivityOptionsAcceptance() {
 			UpdateMask:      updateMask,
 		},
 	}
-	response := &historyservice.UpdateActivityOptionsResponse{}
 
-	wfAction, err := updateActivityOptions(s.mockShard, s.validator, s.mockMutableState, request, response)
+	response, err := updateActivityOptions(s.mockShard, s.validator, s.mockMutableState, request)
+
 	s.NoError(err)
-	s.Equal(false, wfAction.Noop)
-	s.Equal(false, wfAction.CreateWorkflowTask)
+	s.NotNil(response)
 }

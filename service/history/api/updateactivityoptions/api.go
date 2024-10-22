@@ -32,7 +32,6 @@ import (
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/server/api/historyservice/v1"
-	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/util"
@@ -54,7 +53,8 @@ func Invoke(
 		nil,
 	)
 
-	response := &historyservice.UpdateActivityOptionsResponse{}
+	var response *historyservice.UpdateActivityOptionsResponse
+
 	err := api.GetAndUpdateWorkflowWithNew(
 		ctx,
 		nil,
@@ -65,7 +65,15 @@ func Invoke(
 		),
 		func(workflowLease api.WorkflowLease) (*api.UpdateWorkflowAction, error) {
 			mutableState := workflowLease.GetMutableState()
-			return updateActivityOptions(shardContext, validator, mutableState, request, response)
+			var err error
+			response, err = updateActivityOptions(shardContext, validator, mutableState, request)
+			if err != nil {
+				return nil, err
+			}
+			return &api.UpdateWorkflowAction{
+				Noop:               false,
+				CreateWorkflowTask: false,
+			}, nil
 		},
 		nil,
 		shardContext,
@@ -84,8 +92,7 @@ func updateActivityOptions(
 	validator *api.CommandAttrValidator,
 	mutableState workflow.MutableState,
 	request *historyservice.UpdateActivityOptionsRequest,
-	response *historyservice.UpdateActivityOptionsResponse,
-) (*api.UpdateWorkflowAction, error) {
+) (*historyservice.UpdateActivityOptionsResponse, error) {
 	if !mutableState.IsWorkflowExecutionRunning() {
 		return nil, consts.ErrWorkflowCompleted
 	}
@@ -130,21 +137,21 @@ func updateActivityOptions(
 	}
 
 	// validate the updated options
-	err = validateActivityOptions(validator, request.NamespaceId, ai, mergeInto)
+	adjustedOptions, err := adjustActivityOptions(validator, request.NamespaceId, ai.ActivityId, ai.ActivityType, mergeInto)
 	if err != nil {
 		return nil, err
 	}
 
 	// update activity info with new options
-	ai.TaskQueue = mergeInto.TaskQueue.Name
-	ai.ScheduleToCloseTimeout = mergeInto.ScheduleToCloseTimeout
-	ai.ScheduleToStartTimeout = mergeInto.ScheduleToStartTimeout
-	ai.StartToCloseTimeout = mergeInto.StartToCloseTimeout
-	ai.HeartbeatTimeout = mergeInto.HeartbeatTimeout
-	ai.RetryMaximumInterval = mergeInto.RetryPolicy.MaximumInterval
-	ai.RetryBackoffCoefficient = mergeInto.RetryPolicy.BackoffCoefficient
-	ai.RetryMaximumInterval = mergeInto.RetryPolicy.MaximumInterval
-	ai.RetryMaximumAttempts = mergeInto.RetryPolicy.MaximumAttempts
+	ai.TaskQueue = adjustedOptions.TaskQueue.Name
+	ai.ScheduleToCloseTimeout = adjustedOptions.ScheduleToCloseTimeout
+	ai.ScheduleToStartTimeout = adjustedOptions.ScheduleToStartTimeout
+	ai.StartToCloseTimeout = adjustedOptions.StartToCloseTimeout
+	ai.HeartbeatTimeout = adjustedOptions.HeartbeatTimeout
+	ai.RetryMaximumInterval = adjustedOptions.RetryPolicy.MaximumInterval
+	ai.RetryBackoffCoefficient = adjustedOptions.RetryPolicy.BackoffCoefficient
+	ai.RetryMaximumInterval = adjustedOptions.RetryPolicy.MaximumInterval
+	ai.RetryMaximumAttempts = adjustedOptions.RetryPolicy.MaximumAttempts
 
 	// move forward activity version
 	ai.Stamp++
@@ -169,12 +176,11 @@ func updateActivityOptions(
 	}
 
 	// fill the response
-	response.ActivityOptions = mergeInto
+	response := &historyservice.UpdateActivityOptionsResponse{
+		ActivityOptions: adjustedOptions,
+	}
+	return response, nil
 
-	return &api.UpdateWorkflowAction{
-		Noop:               false,
-		CreateWorkflowTask: false,
-	}, nil
 }
 
 func applyActivityOptions(
@@ -243,22 +249,32 @@ func applyActivityOptions(
 	return nil
 }
 
-func validateActivityOptions(
+func adjustActivityOptions(
 	validator *api.CommandAttrValidator,
 	namespaceID string,
-	ai *persistencespb.ActivityInfo,
+	activityID string,
+	activityType *commonpb.ActivityType,
 	ao *activitypb.ActivityOptions,
-) error {
+) (*activitypb.ActivityOptions, error) {
 	attributes := &commandpb.ScheduleActivityTaskCommandAttributes{
 		TaskQueue:              ao.TaskQueue,
 		ScheduleToCloseTimeout: ao.ScheduleToCloseTimeout,
 		ScheduleToStartTimeout: ao.ScheduleToStartTimeout,
 		StartToCloseTimeout:    ao.StartToCloseTimeout,
 		HeartbeatTimeout:       ao.HeartbeatTimeout,
-		ActivityId:             ai.ActivityId,
-		ActivityType:           ai.ActivityType,
+		ActivityId:             activityID,
+		ActivityType:           activityType,
 	}
 
 	_, err := validator.ValidateActivityScheduleAttributes(namespace.ID(namespaceID), attributes, nil)
-	return err
+	if err != nil {
+		return nil, err
+	}
+
+	ao.ScheduleToCloseTimeout = attributes.ScheduleToCloseTimeout
+	ao.ScheduleToStartTimeout = attributes.ScheduleToStartTimeout
+	ao.StartToCloseTimeout = attributes.StartToCloseTimeout
+	ao.HeartbeatTimeout = attributes.HeartbeatTimeout
+
+	return ao, nil
 }
