@@ -21,6 +21,8 @@
 			"program": "${workspaceFolder}/cmd/server",
 			"cwd": "${workspaceFolder}",
 			"args": [
+				"--env",
+				"development-cass-es",
 				"start",
 			]
 		},

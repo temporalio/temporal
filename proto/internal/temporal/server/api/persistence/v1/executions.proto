@@ -249,6 +249,9 @@ message WorkflowExecutionInfo {
     VersionedTransition signal_request_ids_last_update_versioned_transition = 94;
 
     repeated StateMachineTombstoneBatch sub_state_machine_tombstone_batches = 95;
+
+    // Reset Run ID points to the new nun when this execution is reset. If the execution is reset multiple times, it points to the latest run.
+    string reset_run_id = 96;
 }
 
 message ExecutionStats {
@@ -316,7 +319,7 @@ message ReplicationTaskInfo {
     temporal.server.api.enums.v1.TaskPriority priority = 18;
     VersionedTransition versioned_transition = 19;
     // A list of event-based replication tasks that, together, are equivalent
-    // to this state-based task. 
+    // to this state-based task.
     // TODO: Remove this field when state-based replication is stable and
     // doesn't need to be disabled.
     repeated ReplicationTaskInfo task_equivalents = 20;
@@ -599,7 +602,7 @@ message CallbackInfo {
 
 // NexusOperationInfo contains the state of a nexus operation.
 message NexusOperationInfo {
-    // Endpoint name. 
+    // Endpoint name.
     // Resolved the endpoint registry for this workflow's namespace.
     string endpoint = 1;
 
