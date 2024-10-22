@@ -29,17 +29,13 @@ import (
 	"fmt"
 	"math"
 
-	historypb "go.temporal.io/api/history/v1"
-	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
-	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
-	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 )
 
@@ -86,8 +82,7 @@ func Invoke(
 			return nil, err
 		}
 		// continue to deletion
-		warnMsg := "Unable to load mutable state when deleting workflow execution, " +
-			"will skip deleting workflow history and visibility record"
+		warnMsg := "Unable to load mutable state. Skipping workflow history deletion."
 		logger.Warn(warnMsg, tag.Error(err))
 		warnings = append(warnings, fmt.Sprintf("%s. Error: %v", warnMsg, err.Error()))
 	} else {
@@ -147,43 +142,4 @@ func Invoke(
 			Warnings: warnings,
 		},
 	}, nil
-}
-
-func getWorkflowCompletionEvent(
-	ctx context.Context,
-	shardID int32,
-	mutableState *persistencespb.WorkflowMutableState,
-	persistenceExecutionManager persistence.ExecutionManager,
-) (*historypb.HistoryEvent, error) {
-	executionInfo := mutableState.GetExecutionInfo()
-	completionEventID := mutableState.GetNextEventId() - 1
-
-	currentVersionHistory, err := versionhistory.GetCurrentVersionHistory(executionInfo.VersionHistories)
-	if err != nil {
-		return nil, err
-	}
-	version, err := versionhistory.GetVersionHistoryEventVersion(currentVersionHistory, completionEventID)
-	if err != nil {
-		return nil, err
-	}
-
-	resp, err := persistenceExecutionManager.ReadHistoryBranch(ctx, &persistence.ReadHistoryBranchRequest{
-		ShardID:     shardID,
-		BranchToken: currentVersionHistory.GetBranchToken(),
-		MinEventID:  executionInfo.CompletionEventBatchId,
-		MaxEventID:  completionEventID + 1,
-		PageSize:    1,
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	// find history event from batch and return back single event to caller
-	for _, e := range resp.HistoryEvents {
-		if e.EventId == completionEventID && e.Version == version {
-			return e, nil
-		}
-	}
-
-	return nil, serviceerror.NewInternal("Unable to find closed event for workflow")
 }
