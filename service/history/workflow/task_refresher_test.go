@@ -571,6 +571,8 @@ func (s *taskRefresherSuite) TestRefreshActivityTasks() {
 				TransitionCount:          4,
 				NamespaceFailoverVersion: common.EmptyVersion,
 			},
+			getActivityScheduledEventIDs: []int64{5},
+			generateActivityTaskIDs:      []int64{5},
 			expectedTimerTaskStatus: map[int64]int32{
 				5: TimerTaskStatusCreatedScheduleToStart,
 				6: TimerTaskStatusCreatedStartToClose,

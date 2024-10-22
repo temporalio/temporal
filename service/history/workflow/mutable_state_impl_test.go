@@ -2814,7 +2814,10 @@ func (s *mutableStateSuite) TestCloseTransactionPrepareReplicationTasks_SyncHSMT
 }
 
 func (s *mutableStateSuite) setDisablingTransitionHistory(ms *MutableStateImpl) {
-	ms.versionedTransitionInDB = &persistencespb.VersionedTransition{TransitionCount: 1025}
+	ms.versionedTransitionInDB = &persistencespb.VersionedTransition{
+		NamespaceFailoverVersion: s.namespaceEntry.FailoverVersion(),
+		TransitionCount:          1025,
+	}
 	ms.executionInfo.TransitionHistory = nil
 }
 
@@ -2822,28 +2825,17 @@ func (s *mutableStateSuite) TestCloseTransactionPrepareReplicationTasks_SyncActi
 	testCases := []struct {
 		name                       string
 		disablingTransitionHistory bool
-		expectedReplicationTask    []tasks.SyncActivityTask
+		expectedScheduledEventIDs  map[int64]struct{}
 	}{
 		{
 			name:                       "NoDisablingTransitionHistory",
 			disablingTransitionHistory: false,
-			expectedReplicationTask: []tasks.SyncActivityTask{
-				{
-					ScheduledEventID: 100,
-				},
-			},
+			expectedScheduledEventIDs:  map[int64]struct{}{100: {}},
 		},
 		{
 			name:                       "DisablingTransitionHistory",
 			disablingTransitionHistory: true,
-			expectedReplicationTask: []tasks.SyncActivityTask{
-				{
-					ScheduledEventID: 90,
-				},
-				{
-					ScheduledEventID: 100,
-				},
-			},
+			expectedScheduledEventIDs:  map[int64]struct{}{90: {}, 100: {}},
 		},
 	}
 
@@ -2863,9 +2855,9 @@ func (s *mutableStateSuite) TestCloseTransactionPrepareReplicationTasks_SyncActi
 			ms.UpdateActivityProgress(ms.pendingActivityInfoIDs[100], &workflowservice.RecordActivityTaskHeartbeatRequest{})
 
 			repicationTasks := ms.syncActivityToReplicationTask(TransactionPolicyActive)
-			s.Len(repicationTasks, len(tc.expectedReplicationTask))
-			for i, task := range tc.expectedReplicationTask {
-				s.Equal(task.ScheduledEventID, repicationTasks[i].(*tasks.SyncActivityTask).ScheduledEventID)
+			s.Len(repicationTasks, len(tc.expectedScheduledEventIDs))
+			for _, task := range repicationTasks {
+				s.NotNil(tc.expectedScheduledEventIDs[task.(*tasks.SyncActivityTask).ScheduledEventID])
 			}
 		})
 	}
@@ -3588,4 +3580,67 @@ func (s *mutableStateSuite) TestApplyMutation() {
 	s.NoError(err)
 
 	s.verifyMutableState(currentMS, targetMS, originMS)
+}
+
+func (s *mutableStateSuite) TestRefreshTask_DiffCluster() {
+	version := int64(99)
+	attempt := int32(1)
+	incomingActivityInfo := &persistencespb.ActivityInfo{
+		Version: version,
+		Attempt: attempt,
+	}
+	localActivityInfo := &persistencespb.ActivityInfo{
+		Version: int64(100),
+		Attempt: incomingActivityInfo.Attempt,
+	}
+
+	s.mockShard.Resource.ClusterMetadata.EXPECT().IsVersionFromSameCluster(localActivityInfo.Version, version).Return(false)
+
+	shouldReset := s.mutableState.ShouldResetActivityTimerTaskMask(
+		localActivityInfo,
+		incomingActivityInfo,
+	)
+	s.True(shouldReset)
+}
+
+func (s *mutableStateSuite) TestRefreshTask_SameCluster_DiffAttempt() {
+	version := int64(99)
+	attempt := int32(1)
+	incomingActivityInfo := &persistencespb.ActivityInfo{
+		Version: version,
+		Attempt: attempt,
+	}
+	localActivityInfo := &persistencespb.ActivityInfo{
+		Version: version,
+		Attempt: attempt + 1,
+	}
+
+	s.mockShard.Resource.ClusterMetadata.EXPECT().IsVersionFromSameCluster(version, version).Return(true)
+
+	shouldReset := s.mutableState.ShouldResetActivityTimerTaskMask(
+		localActivityInfo,
+		incomingActivityInfo,
+	)
+	s.True(shouldReset)
+}
+
+func (s *mutableStateSuite) TestRefreshTask_SameCluster_SameAttempt() {
+	version := int64(99)
+	attempt := int32(1)
+	incomingActivityInfo := &persistencespb.ActivityInfo{
+		Version: version,
+		Attempt: attempt,
+	}
+	localActivityInfo := &persistencespb.ActivityInfo{
+		Version: version,
+		Attempt: attempt,
+	}
+
+	s.mockShard.Resource.ClusterMetadata.EXPECT().IsVersionFromSameCluster(version, version).Return(true)
+
+	shouldReset := s.mutableState.ShouldResetActivityTimerTaskMask(
+		localActivityInfo,
+		incomingActivityInfo,
+	)
+	s.False(shouldReset)
 }

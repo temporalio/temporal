@@ -458,9 +458,7 @@ func NewMutableStateFromDB(
 	mutableState.nextEventIDInDB = dbRecord.NextEventId
 	mutableState.dbRecordVersion = dbRecordVersion
 	mutableState.checksum = dbRecord.Checksum
-	if len(mutableState.executionInfo.TransitionHistory) != 0 {
-		mutableState.versionedTransitionInDB = mutableState.executionInfo.TransitionHistory[len(mutableState.executionInfo.TransitionHistory)-1]
-	}
+	mutableState.initVersionedTransitionInDB()
 
 	if len(dbRecord.Checksum.GetValue()) > 0 {
 		switch {
@@ -6409,7 +6407,7 @@ func (ms *MutableStateImpl) ApplySnapshot(
 	return nil
 }
 
-func (ms *MutableStateImpl) shouldResetActivityTimerTaskMask(current, incoming *persistencespb.ActivityInfo) bool {
+func (ms *MutableStateImpl) ShouldResetActivityTimerTaskMask(current, incoming *persistencespb.ActivityInfo) bool {
 	// calculate whether to reset the activity timer task status bits
 	// reset timer task status bits if
 	// 1. same source cluster & attempt changes
@@ -6431,7 +6429,7 @@ func (ms *MutableStateImpl) applyUpdatesToSubStateMachines(
 	isSnapshot bool,
 ) error {
 	err := applyUpdatesToSubStateMachine(ms, ms.pendingActivityInfoIDs, ms.updateActivityInfos, updatedActivityInfos, isSnapshot, ms.DeleteActivity, func(current, incoming *persistencespb.ActivityInfo) {
-		if current == nil || ms.shouldResetActivityTimerTaskMask(current, incoming) {
+		if current == nil || ms.ShouldResetActivityTimerTaskMask(current, incoming) {
 			incoming.TimerTaskStatus = TimerTaskStatusNone
 		} else {
 			incoming.TimerTaskStatus = current.TimerTaskStatus
@@ -6768,4 +6766,10 @@ func (ms *MutableStateImpl) applyTombstones(tombstoneBatches []*persistencespb.S
 
 func (ms *MutableStateImpl) disablingTransitionHistory() bool {
 	return ms.versionedTransitionInDB != nil && len(ms.executionInfo.TransitionHistory) == 0
+}
+
+func (ms *MutableStateImpl) initVersionedTransitionInDB() {
+	if len(ms.executionInfo.TransitionHistory) != 0 {
+		ms.versionedTransitionInDB = ms.executionInfo.TransitionHistory[len(ms.executionInfo.TransitionHistory)-1]
+	}
 }

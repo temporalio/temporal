@@ -37,7 +37,6 @@ import (
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/service/history/hsm"
 	"go.temporal.io/server/service/history/shard"
-	"google.golang.org/protobuf/proto"
 )
 
 type (
@@ -389,7 +388,7 @@ func (r *TaskRefresherImpl) refreshTasksForActivity(
 			continue
 		}
 
-		if proto.Equal(minVersionedTransition, EmptyVersionedTransition) { // Full refresh
+		if CompareVersionedTransition(minVersionedTransition, EmptyVersionedTransition) == 0 { // Full refresh
 			// clear activity timer task mask for later activity timer task re-generation
 			activityInfo.TimerTaskStatus = TimerTaskStatusNone
 
@@ -399,10 +398,6 @@ func (r *TaskRefresherImpl) refreshTasksForActivity(
 			); err != nil {
 				return err
 			}
-		}
-
-		if activityInfo.TimerTaskStatus != TimerTaskStatusNone {
-			continue
 		}
 
 		refreshActivityTimerTask = true
