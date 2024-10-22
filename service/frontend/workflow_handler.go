@@ -5158,8 +5158,6 @@ func (wh *WorkflowHandler) UpdateActivityOptionsById(
 		return nil, status.Errorf(codes.Unimplemented, "method UpdateActivityOptionsById not implemented")
 	}
 
-	wh.logger.Debug("Received UpdateActivityOptionsById")
-
 	if request == nil {
 		return nil, errRequestNotSet
 	}
@@ -5196,10 +5194,8 @@ func (wh *WorkflowHandler) PauseActivityById(
 	defer log.CapturePanic(wh.logger, &retError)
 
 	if !wh.config.ActivityAPIsEnabled(request.GetNamespace()) {
-		return nil, status.Errorf(codes.Unimplemented, "method PauseActivity not implemented")
+		return nil, status.Errorf(codes.Unimplemented, "method PauseActivityById not implemented")
 	}
-
-	wh.logger.Debug("Received PauseActivity")
 
 	if request == nil {
 		return nil, errRequestNotSet

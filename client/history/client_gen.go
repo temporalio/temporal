@@ -583,7 +583,7 @@ func (c *clientImpl) PauseActivity(
 	request *historyservice.PauseActivityRequest,
 	opts ...grpc.CallOption,
 ) (*historyservice.PauseActivityResponse, error) {
-	shardID := c.shardIDFromWorkflowID(request.GetNamespaceId(), request.GetPauseRequest().GetWorkflowId())
+	shardID := c.shardIDFromWorkflowID(request.GetNamespaceId(), request.GetFrontendRequest().GetWorkflowId())
 	var response *historyservice.PauseActivityResponse
 	op := func(ctx context.Context, client historyservice.HistoryServiceClient) error {
 		var err error
