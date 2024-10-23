@@ -448,6 +448,7 @@ func (s *CallbacksSuite) TestNexusResetWorkflowWithCallback() {
 	s.Equal(nexus.OperationStateSucceeded, completion.State)
 	ch.requestCompleteCh <- err
 
+	// Get the description of the run post-reset and ensure that its callback is in SUCCEEDED state.
 	description, err = sdkClient.DescribeWorkflowExecution(ctx, resetWorkflowRun.GetID(), "")
 	s.NoError(err)
 	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, description.WorkflowExecutionInfo.Status)
