@@ -121,8 +121,8 @@ func (r *workflowResetterImpl) ResetWorkflow(
 	baseNextEventID int64,
 	resetRunID string,
 	resetRequestID string,
-	currentWorkflow Workflow,
 	baseWorkflow Workflow,
+	currentWorkflow Workflow,
 	resetReason string,
 	additionalReapplyEvents []*historypb.HistoryEvent,
 	resetReapplyExcludeTypes map[enumspb.ResetReapplyExcludeType]struct{},
@@ -229,8 +229,12 @@ func (r *workflowResetterImpl) ResetWorkflow(
 		return err
 	}
 
+	// update base workflow to point to new runID after the reset.
+	baseWorkflow.GetMutableState().UpdateResetRunID(resetRunID)
+
 	if err = r.persistToDB(
 		ctx,
+		baseWorkflow,
 		currentWorkflow,
 		currentWorkflowMutation,
 		currentWorkflowEventsSeq,
@@ -322,11 +326,40 @@ func (r *workflowResetterImpl) prepareResetWorkflow(
 
 func (r *workflowResetterImpl) persistToDB(
 	ctx context.Context,
+	baseWorkflow Workflow,
 	currentWorkflow Workflow,
 	currentWorkflowMutation *persistence.WorkflowMutation,
 	currentWorkflowEventsSeq []*persistence.WorkflowEvents,
 	resetWorkflow Workflow,
 ) error {
+
+	if baseWorkflow != currentWorkflow && currentWorkflow != nil {
+		// Write to all three executions - base, current & reset (i.e new)
+		return baseWorkflow.GetContext().ConflictResolveWorkflowExecution(
+			ctx,
+			r.shardContext,
+			persistence.ConflictResolveWorkflowModeUpdateCurrent,
+			baseWorkflow.GetMutableState(),
+			resetWorkflow.GetContext(),
+			resetWorkflow.GetMutableState(),
+			currentWorkflow.GetContext(),
+			currentWorkflow.GetMutableState(),
+			workflow.TransactionPolicyPassive,
+			nil,
+			nil,
+		)
+	}
+
+	return baseWorkflow.GetContext().UpdateWorkflowExecutionWithNew(
+		ctx,
+		r.shardContext,
+		persistence.UpdateWorkflowModeUpdateCurrent,
+		resetWorkflow.GetContext(),
+		resetWorkflow.GetMutableState(),
+		workflow.TransactionPolicyPassive,
+		workflow.TransactionPolicyActive.Ptr(),
+	)
+	//////////////////////////////////////////////////////////////////////////
 
 	resetWorkflowSnapshot, resetWorkflowEventsSeq, err := resetWorkflow.GetMutableState().CloseTransactionAsSnapshot(
 		workflow.TransactionPolicyActive,
