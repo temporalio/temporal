@@ -26,9 +26,9 @@ package tests
 
 import (
 	"context"
-	"fmt"
 	"time"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	enumspb "go.temporal.io/api/enums/v1"
 	updatepb "go.temporal.io/api/update/v1"
@@ -104,29 +104,16 @@ func (s *WorkflowUpdateBaseSuite) sendUpdateInternal(
 
 func (s *WorkflowUpdateBaseSuite) waitUpdateAdmitted(tv *testvars.TestVars, updateID string) {
 	s.T().Helper()
-	s.Eventuallyf(func() bool {
+	s.EventuallyWithTf(func(collect *assert.CollectT) {
 		pollResp, pollErr := s.FrontendClient().PollWorkflowExecutionUpdate(testcore.NewContext(), &workflowservice.PollWorkflowExecutionUpdateRequest{
-			Namespace: s.Namespace(),
-			UpdateRef: &updatepb.UpdateRef{
-				WorkflowExecution: tv.WorkflowExecution(),
-				UpdateId:          tv.UpdateID(updateID),
-			},
+			Namespace:  s.Namespace(),
+			UpdateRef:  tv.UpdateRef(updateID),
 			WaitPolicy: &updatepb.WaitPolicy{LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_UNSPECIFIED},
 		})
 
-		if pollErr == nil {
-			// This is technically "at least Admitted".
-			s.GreaterOrEqual(pollResp.Stage, enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ADMITTED)
-			return true
-		}
-		if pollErr.Error() != fmt.Sprintf("update %q not found", tv.UpdateID(updateID)) {
-			s.T().Log("received error from Update poll: ", pollErr)
-			return true
-		}
-
-		// Poll beat send in race - poll again!
-		return false
-	}, 5*time.Second, 10*time.Millisecond, "update %s did not reach Admitted stage", updateID)
+		assert.NoError(collect, pollErr)
+		assert.GreaterOrEqual(collect, pollResp.GetStage(), enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ADMITTED)
+	}, 5*time.Second, 10*time.Millisecond, "update %s did not reach Admitted stage", tv.UpdateID(updateID))
 }
 
 func (s *WorkflowUpdateBaseSuite) startWorkflow(tv *testvars.TestVars) *testvars.TestVars {

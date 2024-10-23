@@ -35,6 +35,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
+	"go.temporal.io/server/api/history/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/backoff"
@@ -716,6 +717,133 @@ func TestTaskGenerator_GenerateWorkflowStartTasks(t *testing.T) {
 			require.NoError(t, err)
 			require.Equal(t, tc.expectedExecutionTimerStatus, actualExecutionTimerTaskStatus)
 			require.ElementsMatch(t, tc.expectedTaskTypes, generatedTaskTypes)
+		})
+	}
+}
+
+func TestTaskGeneratorImpl_GenerateMigrationTasks(t *testing.T) {
+	testCases := []struct {
+		name                        string
+		workflowState               enumsspb.WorkflowExecutionState
+		transitionHistoryEnabled    bool
+		pendingActivityInfo         map[int64]*persistencespb.ActivityInfo
+		expectedTaskTypes           []enumsspb.TaskType
+		expectedTaskEquivalentTypes []enumsspb.TaskType
+	}{
+		{
+			name:                     "transition history disabled, execution completed",
+			transitionHistoryEnabled: false,
+			workflowState:            enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
+			pendingActivityInfo:      map[int64]*persistencespb.ActivityInfo{},
+			expectedTaskTypes:        []enumsspb.TaskType{enumsspb.TASK_TYPE_REPLICATION_SYNC_WORKFLOW_STATE},
+		},
+		{
+			name:                        "transition history enabled, execution completed",
+			transitionHistoryEnabled:    true,
+			workflowState:               enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
+			pendingActivityInfo:         map[int64]*persistencespb.ActivityInfo{},
+			expectedTaskTypes:           []enumsspb.TaskType{enumsspb.TASK_TYPE_REPLICATION_SYNC_VERSIONED_TRANSITION},
+			expectedTaskEquivalentTypes: []enumsspb.TaskType{enumsspb.TASK_TYPE_REPLICATION_SYNC_WORKFLOW_STATE},
+		},
+		{
+			name:                     "transition history enabled, execution running",
+			transitionHistoryEnabled: true,
+			workflowState:            enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
+			pendingActivityInfo: map[int64]*persistencespb.ActivityInfo{
+				1: {
+					Version:          1,
+					ScheduledEventId: 1,
+				},
+				2: {
+					Version:          1,
+					ScheduledEventId: 2,
+				},
+			},
+			expectedTaskTypes:           []enumsspb.TaskType{enumsspb.TASK_TYPE_REPLICATION_SYNC_VERSIONED_TRANSITION},
+			expectedTaskEquivalentTypes: []enumsspb.TaskType{enumsspb.TASK_TYPE_REPLICATION_HISTORY, enumsspb.TASK_TYPE_REPLICATION_SYNC_ACTIVITY, enumsspb.TASK_TYPE_REPLICATION_SYNC_ACTIVITY, enumsspb.TASK_TYPE_REPLICATION_SYNC_HSM},
+		},
+		{
+			name:                     "transition history disabled, execution running",
+			transitionHistoryEnabled: false,
+			workflowState:            enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
+			pendingActivityInfo: map[int64]*persistencespb.ActivityInfo{
+				1: {
+					Version:          1,
+					ScheduledEventId: 1,
+				},
+				2: {
+					Version:          1,
+					ScheduledEventId: 2,
+				},
+			},
+			expectedTaskTypes: []enumsspb.TaskType{enumsspb.TASK_TYPE_REPLICATION_HISTORY, enumsspb.TASK_TYPE_REPLICATION_SYNC_ACTIVITY, enumsspb.TASK_TYPE_REPLICATION_SYNC_ACTIVITY, enumsspb.TASK_TYPE_REPLICATION_SYNC_HSM},
+		},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			controller := gomock.NewController(t)
+			mockMutableState := NewMockMutableState(controller)
+			executionInfo := &persistencespb.WorkflowExecutionInfo{
+				VersionHistories: &history.VersionHistories{
+					CurrentVersionHistoryIndex: 0,
+					Histories: []*history.VersionHistory{
+						{
+							BranchToken: []byte{1},
+							Items: []*history.VersionHistoryItem{
+								{
+									EventId: 10,
+									Version: 1,
+								},
+							},
+						},
+					},
+				},
+				TransitionHistory: []*persistencespb.VersionedTransition{
+					{
+						NamespaceFailoverVersion: 1,
+						TransitionCount:          5,
+					},
+				},
+			}
+			mockMutableState.EXPECT().GetExecutionInfo().Return(executionInfo).AnyTimes()
+			mockMutableState.EXPECT().GetWorkflowKey().Return(tests.WorkflowKey).AnyTimes()
+			mockMutableState.EXPECT().GetPendingActivityInfos().Return(tc.pendingActivityInfo).AnyTimes()
+			mockMutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{
+				State: tc.workflowState,
+			}).AnyTimes()
+			mockMutableState.EXPECT().IsTransitionHistoryEnabled().Return(tc.transitionHistoryEnabled).AnyTimes()
+			mockShard := shard.NewTestContext(
+				controller,
+				&persistencespb.ShardInfo{
+					ShardId: 1,
+					RangeId: 1,
+				},
+				tests.NewDynamicConfig(),
+			)
+			taskGenerator := NewTaskGenerator(
+				mockShard.GetNamespaceRegistry(),
+				mockMutableState,
+				mockShard.GetConfig(),
+				mockShard.GetArchivalMetadata(),
+			)
+			resultTasks, _, err := taskGenerator.GenerateMigrationTasks()
+			require.NoError(t, err)
+			require.Equal(t, len(tc.expectedTaskTypes), len(resultTasks))
+			if tc.transitionHistoryEnabled {
+				require.Equal(t, 1, len(resultTasks))
+				require.Equal(t, tc.expectedTaskTypes[0].String(), resultTasks[0].GetType().String())
+				syncVersionTask, ok := resultTasks[0].(*tasks.SyncVersionedTransitionTask)
+				require.True(t, ok)
+				taskEquivalent := syncVersionTask.TaskEquivalents
+				require.Equal(t, len(tc.expectedTaskEquivalentTypes), len(taskEquivalent))
+				for i, equivalent := range taskEquivalent {
+					require.Equal(t, tc.expectedTaskEquivalentTypes[i], equivalent.GetType())
+				}
+			} else {
+				for i, task := range resultTasks {
+					require.Equal(t, tc.expectedTaskTypes[i], task.GetType())
+				}
+			}
 		})
 	}
 }

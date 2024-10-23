@@ -264,13 +264,13 @@ jobs:
           TEST_TIMEOUT: ${{ needs.set-up-single-test.outputs.test_timeout }}
 
       - name: Upload test results
-        uses: actions/upload-artifact@v4.4.0
+        uses: actions/upload-artifact@v4
         if: ${{ !cancelled() && !inputs.run_single_unit_test }}
         with:
           name: junit-xml--${{github.run_id}}--${{github.run_attempt}}--unit-test
           path: .testoutput
-          retention-days: 14
           include-hidden-files: true
+          retention-days: 28
 
       # Ensure this doesn't contribute to the junit output.
       - name: Flaky Unit Test Detection
@@ -332,13 +332,13 @@ jobs:
         run: make integration-test-coverage
 
       - name: Upload test results
-        uses: actions/upload-artifact@v4.4.0
+        uses: actions/upload-artifact@v4
         if: ${{ !cancelled() }}
         with:
           name: junit-xml--${{github.run_id}}--${{github.run_attempt}}--integration-test
           path: .testoutput
-          retention-days: 14
           include-hidden-files: true
+          retention-days: 28
 
       # Ensure this doesn't contribute to the junit output.
       - name: Flaky Integration Test Detection
@@ -454,13 +454,13 @@ jobs:
           TEST_ARGS: ${{ needs.set-up-single-test.outputs.single_test_args }}
 
       - name: Upload test results
-        uses: actions/upload-artifact@v4.4.0
+        uses: actions/upload-artifact@v4
         if: ${{ !cancelled() && !inputs.run_single_functional_test }}
         with:
           name: junit-xml--${{github.run_id}}--${{github.run_attempt}}--${{matrix.runs-on}}--${{matrix.name}}--${{matrix.shard_index}}--functional-test
           path: .testoutput
-          retention-days: 14
           include-hidden-files: true
+          retention-days: 28
 
       # Ensure this doesn't contribute to the junit output.
       - name: Flaky Functional Test Detection
@@ -550,13 +550,13 @@ jobs:
         run: make functional-test-xdc-coverage
 
       - name: Upload test results
-        uses: actions/upload-artifact@v4.4.0
+        uses: actions/upload-artifact@v4
         if: ${{ !cancelled() }}
         with:
           name: junit-xml--${{github.run_id}}--${{github.run_attempt}}--${{matrix.name}}--functional-test-xdc
           path: .testoutput
-          retention-days: 14
           include-hidden-files: true
+          retention-days: 28
 
       # Ensure this doesn't contribute to the junit output.
       - name: Flaky Functional XDC Test Detection
@@ -647,13 +647,13 @@ jobs:
         run: make functional-test-ndc-coverage
 
       - name: Upload test results
-        uses: actions/upload-artifact@v4.4.0
+        uses: actions/upload-artifact@v4
         if: ${{ !cancelled() }}
         with:
           name: junit-xml--${{github.run_id}}--${{github.run_attempt}}--${{matrix.name}}--functional-test-ndc
           path: .testoutput
-          retention-days: 14
           include-hidden-files: true
+          retention-days: 28
 
       # Ensure this doesn't contribute to the junit output.
       - name: Flaky Functional NDC Test Detection

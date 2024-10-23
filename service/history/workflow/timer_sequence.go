@@ -173,6 +173,7 @@ func (t *timerSequenceImpl) CreateNextActivityTimer() (bool, error) {
 		TimeoutType:         firstTimerTask.TimerType,
 		EventID:             firstTimerTask.EventID,
 		Attempt:             firstTimerTask.Attempt,
+		Stamp:               activityInfo.Stamp,
 	})
 	return true, nil
 }

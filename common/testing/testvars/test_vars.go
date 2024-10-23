@@ -171,9 +171,9 @@ func (tv *TestVars) WorkflowExecution(key ...string) *commonpb.WorkflowExecution
 	}
 }
 
-func (tv *TestVars) UpdateRef() *updatepb.UpdateRef {
+func (tv *TestVars) UpdateRef(key ...string) *updatepb.UpdateRef {
 	return &updatepb.UpdateRef{
-		UpdateId:          tv.UpdateID(),
+		UpdateId:          tv.UpdateID(key...),
 		WorkflowExecution: tv.WorkflowExecution(),
 	}
 }

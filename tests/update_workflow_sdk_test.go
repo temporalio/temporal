@@ -129,11 +129,14 @@ func (s *UpdateWorkflowSdkSuite) TestUpdateWorkflow_TimeoutWorkflowAfterUpdateAc
 	updateHandle, err := s.updateWorkflowWaitAccepted(ctx, tv, "my-update-arg")
 	s.NoError(err)
 
-	var notFound *serviceerror.NotFound
-	s.ErrorAs(updateHandle.Get(ctx, nil), &notFound)
+	err = updateHandle.Get(ctx, nil)
+	var appErr *temporal.ApplicationError
+	s.ErrorAs(err, &appErr)
+	s.Contains("Workflow Update failed because the Workflow completed before the Update completed.", appErr.Message())
 
-	_, pollErr := s.pollUpdate(ctx, tv, &updatepb.WaitPolicy{LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED})
-	s.ErrorAs(pollErr, &notFound)
+	pollFailure, pollErr := s.pollUpdate(ctx, tv, &updatepb.WaitPolicy{LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED})
+	s.NoError(pollErr)
+	s.Equal("Workflow Update failed because the Workflow completed before the Update completed.", pollFailure.GetOutcome().GetFailure().GetMessage())
 
 	var wee *temporal.WorkflowExecutionError
 	s.ErrorAs(wfRun.Get(ctx, nil), &wee)
@@ -184,11 +187,14 @@ func (s *UpdateWorkflowSdkSuite) TestUpdateWorkflow_TerminateWorkflowAfterUpdate
 
 	s.NoError(s.SdkClient().TerminateWorkflow(ctx, tv.WorkflowID(), wfRun.GetRunID(), "reason"))
 
-	var notFound *serviceerror.NotFound
-	s.ErrorAs(updateHandle.Get(ctx, nil), &notFound)
+	err = updateHandle.Get(ctx, nil)
+	var appErr *temporal.ApplicationError
+	s.ErrorAs(err, &appErr)
+	s.Contains("Workflow Update failed because the Workflow completed before the Update completed.", appErr.Message())
 
-	_, pollErr := s.pollUpdate(ctx, tv, &updatepb.WaitPolicy{LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED})
-	s.ErrorAs(pollErr, &notFound)
+	pollFailure, pollErr := s.pollUpdate(ctx, tv, &updatepb.WaitPolicy{LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED})
+	s.NoError(pollErr)
+	s.Equal("Workflow Update failed because the Workflow completed before the Update completed.", pollFailure.GetOutcome().GetFailure().GetMessage())
 
 	var wee *temporal.WorkflowExecutionError
 	s.ErrorAs(wfRun.Get(ctx, nil), &wee)
@@ -318,7 +324,6 @@ func (s *UpdateWorkflowSdkSuite) TestUpdateWorkflow_TimeoutWithRetryAfterUpdateA
 		TaskQueue:          tv.TaskQueue().Name,
 		WorkflowRunTimeout: 1 * time.Second,
 		RetryPolicy: &temporal.RetryPolicy{
-			InitialInterval: time.Nanosecond,
 			MaximumAttempts: 2,
 		},
 	}, workflowFn)
