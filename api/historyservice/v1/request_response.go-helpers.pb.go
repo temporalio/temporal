@@ -5208,3 +5208,77 @@ func (this *UpdateActivityOptionsResponse) Equal(that interface{}) bool {
 
 	return proto.Equal(this, that1)
 }
+
+// Marshal an object of type PauseActivityRequest to the protobuf v3 wire format
+func (val *PauseActivityRequest) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type PauseActivityRequest from the protobuf v3 wire format
+func (val *PauseActivityRequest) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *PauseActivityRequest) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two PauseActivityRequest values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *PauseActivityRequest) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *PauseActivityRequest
+	switch t := that.(type) {
+	case *PauseActivityRequest:
+		that1 = t
+	case PauseActivityRequest:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
+// Marshal an object of type PauseActivityResponse to the protobuf v3 wire format
+func (val *PauseActivityResponse) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type PauseActivityResponse from the protobuf v3 wire format
+func (val *PauseActivityResponse) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *PauseActivityResponse) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two PauseActivityResponse values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *PauseActivityResponse) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *PauseActivityResponse
+	switch t := that.(type) {
+	case *PauseActivityResponse:
+		that1 = t
+	case PauseActivityResponse:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}

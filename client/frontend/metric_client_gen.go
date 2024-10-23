@@ -439,6 +439,20 @@ func (c *metricClient) PatchSchedule(
 	return c.client.PatchSchedule(ctx, request, opts...)
 }
 
+func (c *metricClient) PauseActivityById(
+	ctx context.Context,
+	request *workflowservice.PauseActivityByIdRequest,
+	opts ...grpc.CallOption,
+) (_ *workflowservice.PauseActivityByIdResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, "FrontendClientPauseActivityById")
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.PauseActivityById(ctx, request, opts...)
+}
+
 func (c *metricClient) PollActivityTaskQueue(
 	ctx context.Context,
 	request *workflowservice.PollActivityTaskQueueRequest,
