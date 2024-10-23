@@ -34,9 +34,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"go.uber.org/fx"
-	expmaps "golang.org/x/exp/maps"
-
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	sdkclient "go.temporal.io/sdk/client"
@@ -56,6 +53,8 @@ import (
 	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/util"
 	workercommon "go.temporal.io/server/service/worker/common"
+	"go.uber.org/fx"
+	expmaps "golang.org/x/exp/maps"
 )
 
 const (
