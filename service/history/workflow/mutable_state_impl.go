@@ -4244,6 +4244,7 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionTerminatedEvent(
 	ms.executionInfo.CloseTime = event.GetEventTime()
 	ms.ClearStickyTaskQueue()
 	ms.writeEventToCache(event)
+
 	return ms.processCloseCallbacks()
 }
 
@@ -4991,9 +4992,10 @@ func (ms *MutableStateImpl) AddHistorySize(size int64) {
 // callback tasks.
 func (ms *MutableStateImpl) processCloseCallbacks() error {
 	continuedAsNew := ms.GetExecutionInfo().NewExecutionRunId != ""
-	if continuedAsNew {
+	if continuedAsNew || ms.GetExecutionInfo().GetWorkflowWasReset() {
 		return nil
 	}
+
 	coll := callbacks.MachineCollection(ms.HSM())
 	for _, node := range coll.List() {
 		cb, err := coll.Data(node.Key.ID)

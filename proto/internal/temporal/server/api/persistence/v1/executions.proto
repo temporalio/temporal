@@ -249,6 +249,9 @@ message WorkflowExecutionInfo {
     VersionedTransition signal_request_ids_last_update_versioned_transition = 94;
 
     repeated StateMachineTombstoneBatch sub_state_machine_tombstone_batches = 95;
+
+    // The workflow has been reset.
+    bool workflow_was_reset = 96;
 }
 
 message ExecutionStats {
