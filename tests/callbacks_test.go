@@ -428,6 +428,7 @@ func (s *CallbacksSuite) TestNexusResetWorkflowWithCallback() {
 	})
 	s.NoError(err)
 
+	// Get the description of the run that was reset and ensure that its callback is still in STANDBY state.
 	description, err := sdkClient.DescribeWorkflowExecution(ctx, request.WorkflowId, startResponse.RunId)
 	s.NoError(err)
 	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED, description.WorkflowExecutionInfo.Status)
