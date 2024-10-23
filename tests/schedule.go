@@ -1115,7 +1115,12 @@ func (s *ScheduleFunctionalSuite) TestRateLimit() {
 	s.testCluster.host.workerService.RefreshPerNSWorkerManager()
 }
 
-func (s *ScheduleFunctionalSuite) TestListSchedulesReturnsRunningWorkflows() {
+func (s *ScheduleFunctionalSuite) TestListSchedulesReturnsWorkflowStatus() {
+	// TODO - remove when ActionResultIncludesStatus becomes the active version
+	prevTweakables := scheduler.CurrentTweakablePolicies
+	scheduler.CurrentTweakablePolicies.Version = scheduler.ActionResultIncludesStatus
+	defer func() { scheduler.CurrentTweakablePolicies = prevTweakables }()
+
 	s.testCluster.host.workerService.RefreshPerNSWorkerManager()
 
 	sid := "sched-test-list-running"
@@ -1126,7 +1131,7 @@ func (s *ScheduleFunctionalSuite) TestListSchedulesReturnsRunningWorkflows() {
 	schedule := &schedulepb.Schedule{
 		Spec: &schedulepb.ScheduleSpec{
 			Interval: []*schedulepb.IntervalSpec{
-				{Interval: durationpb.New(1 * time.Hour)},
+				{Interval: durationpb.New(3 * time.Second)},
 			},
 		},
 		Action: &schedulepb.ScheduleAction{
@@ -1143,9 +1148,10 @@ func (s *ScheduleFunctionalSuite) TestListSchedulesReturnsRunningWorkflows() {
 		TriggerImmediately: &schedulepb.TriggerImmediatelyRequest{},
 	}
 
-	// The workflow sits open
+	// The workflow sits open until we've asserted it can be listed as running
+	waitChan := make(chan bool)
 	workflowFn := func(ctx workflow.Context) error {
-		workflow.Sleep(ctx, 1*time.Hour)
+		<-waitChan
 		return nil
 	}
 	s.worker.RegisterWorkflowWithOptions(workflowFn, workflow.RegisterOptions{Name: wt})
@@ -1174,11 +1180,41 @@ func (s *ScheduleFunctionalSuite) TestListSchedulesReturnsRunningWorkflows() {
 		s.Equal(sid, entry.ScheduleId)
 		s.NotNil(entry.Info)
 
-		// ensure we got back a WorkflowExecution
-		s.NotNil(entry.Info.RunningWorkflows)
-		s.Equal(1, len(entry.Info.RunningWorkflows))
-		runningWorkflow := entry.Info.RunningWorkflows[0]
-		s.True(strings.HasPrefix(runningWorkflow.WorkflowId, wid))
+		// validate RecentActions
+		s.NotNil(entry.Info.RecentActions)
+		s.Equal(1, len(entry.Info.RecentActions))
+
+		action := entry.Info.RecentActions[0]
+		s.True(strings.HasPrefix(action.StartWorkflowResult.WorkflowId, wid))
+		s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, action.Status)
+
+		// let the workflow complete
+		waitChan <- true
+
+		return true
+	}, 10*time.Second, 1*time.Second)
+
+	s.Eventually(func() bool { // wait for visibility
+		listResp, err := s.client.ListSchedules(NewContext(), &workflowservice.ListSchedulesRequest{
+			Namespace:       s.namespace,
+			MaximumPageSize: 5,
+		})
+		if err != nil || len(listResp.Schedules) != 1 || listResp.Schedules[0].ScheduleId != sid {
+			return false
+		}
+
+		// wait for status update to make it into visibility
+		entry := listResp.Schedules[0]
+		s.GreaterOrEqual(len(entry.Info.RecentActions), 1)
+		a1 := entry.Info.RecentActions[0]
+		if a1.Status == enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
+			return false
+		}
+
+		s.Equal(2, len(entry.Info.RecentActions))
+		a2 := entry.Info.RecentActions[1]
+		s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, a1.Status)
+		s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, a2.Status)
 
 		return true
 	}, 10*time.Second, 1*time.Second)
