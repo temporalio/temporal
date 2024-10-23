@@ -32,6 +32,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/suite"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
@@ -814,7 +815,7 @@ func (c *hrsuTestCluster) sendUpdateAndWaitUntilStage(ctx context.Context, updat
 }
 
 func (c *hrsuTestCluster) waitUpdateAdmitted(tv *testvars.TestVars, updateID string) {
-	c.t.s.Eventuallyf(func() bool {
+	c.t.s.EventuallyWithTf(func(collectT *assert.CollectT) {
 		pollResp, pollErr := c.testCluster.FrontendClient().PollWorkflowExecutionUpdate(testcore.NewContext(), &workflowservice.PollWorkflowExecutionUpdateRequest{
 			Namespace: tv.NamespaceName().String(),
 			UpdateRef: &updatepb.UpdateRef{
@@ -823,19 +824,9 @@ func (c *hrsuTestCluster) waitUpdateAdmitted(tv *testvars.TestVars, updateID str
 			},
 			WaitPolicy: &updatepb.WaitPolicy{LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_UNSPECIFIED},
 		})
-
-		if pollErr == nil {
-			// This is technically "at least Admitted".
-			c.t.s.GreaterOrEqual(pollResp.Stage, enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ADMITTED)
-			return true
-		}
-		if pollErr.Error() != fmt.Sprintf("update %q not found", updateID) {
-			c.t.s.T().Log("received error from Update poll: ", pollErr)
-			return true
-		}
-
-		// Poll beat send in race - poll again!
-		return false
+		assert.NoError(collectT, pollErr)
+		// This is technically "at least Admitted".
+		assert.GreaterOrEqual(collectT, pollResp.GetStage(), enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ADMITTED)
 	}, 5*time.Second, 10*time.Millisecond, "update %s did not reach Admitted stage", updateID)
 }
 
