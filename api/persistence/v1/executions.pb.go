@@ -320,7 +320,7 @@ type WorkflowExecutionInfo struct {
 	VisibilityLastUpdateVersionedTransition       *VersionedTransition          `protobuf:"bytes,93,opt,name=visibility_last_update_versioned_transition,json=visibilityLastUpdateVersionedTransition,proto3" json:"visibility_last_update_versioned_transition,omitempty"`
 	SignalRequestIdsLastUpdateVersionedTransition *VersionedTransition          `protobuf:"bytes,94,opt,name=signal_request_ids_last_update_versioned_transition,json=signalRequestIdsLastUpdateVersionedTransition,proto3" json:"signal_request_ids_last_update_versioned_transition,omitempty"`
 	SubStateMachineTombstoneBatches               []*StateMachineTombstoneBatch `protobuf:"bytes,95,rep,name=sub_state_machine_tombstone_batches,json=subStateMachineTombstoneBatches,proto3" json:"sub_state_machine_tombstone_batches,omitempty"`
-	// A workflow was reset by the user
+	// The workflow has been reset.
 	WorkflowWasReset bool `protobuf:"varint,96,opt,name=workflow_was_reset,json=workflowWasReset,proto3" json:"workflow_was_reset,omitempty"`
 }
 
