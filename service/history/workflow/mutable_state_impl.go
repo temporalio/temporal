@@ -6813,3 +6813,17 @@ func (ms *MutableStateImpl) applyTombstones(tombstoneBatches []*persistencespb.S
 func (ms *MutableStateImpl) disablingTransitionHistory() bool {
 	return ms.versionedTransitionInDB != nil && len(ms.executionInfo.TransitionHistory) == 0
 }
+
+func (ms *MutableStateImpl) InitTransitionHistory() {
+	versionedTransition := &persistencespb.VersionedTransition{
+		NamespaceFailoverVersion: ms.GetCurrentVersion(),
+		TransitionCount:          1,
+	}
+	ms.GetExecutionInfo().TransitionHistory = []*persistencespb.VersionedTransition{versionedTransition}
+
+	ms.GetExecutionInfo().VisibilityLastUpdateVersionedTransition = versionedTransition
+	ms.GetExecutionState().LastUpdateVersionedTransition = versionedTransition
+	if ms.HasPendingWorkflowTask() {
+		ms.GetExecutionInfo().WorkflowTaskLastUpdateVersionedTransition = versionedTransition
+	}
+}
