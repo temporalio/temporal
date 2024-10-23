@@ -92,6 +92,7 @@ import (
 	"go.temporal.io/server/service/history/api/signalworkflow"
 	"go.temporal.io/server/service/history/api/startworkflow"
 	"go.temporal.io/server/service/history/api/terminateworkflow"
+	"go.temporal.io/server/service/history/api/updateactivityoptions"
 	"go.temporal.io/server/service/history/api/updateworkflow"
 	"go.temporal.io/server/service/history/api/verifychildworkflowcompletionrecorded"
 	"go.temporal.io/server/service/history/api/verifyfirstworkflowtaskscheduled"
@@ -1043,4 +1044,11 @@ func (e *historyEngineImpl) StateMachineEnvironment() hsm.Environment {
 
 func (e *historyEngineImpl) SyncWorkflowState(ctx context.Context, request *historyservice.SyncWorkflowStateRequest) (_ *historyservice.SyncWorkflowStateResponse, retErr error) {
 	return replicationapi.SyncWorkflowState(ctx, request, e.replicationProgressCache, e.syncStateRetriever, e.logger)
+}
+
+func (e *historyEngineImpl) UpdateActivityOptions(
+	ctx context.Context,
+	request *historyservice.UpdateActivityOptionsRequest,
+) (*historyservice.UpdateActivityOptionsResponse, error) {
+	return updateactivityoptions.Invoke(ctx, request, e.shardContext, e.workflowConsistencyChecker)
 }
