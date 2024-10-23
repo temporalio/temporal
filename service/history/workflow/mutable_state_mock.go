@@ -3009,6 +3009,20 @@ func (mr *MockMutableStateMockRecorder) SetUpdateCondition(arg0, arg1 any) *gomo
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetUpdateCondition", reflect.TypeOf((*MockMutableState)(nil).SetUpdateCondition), arg0, arg1)
 }
 
+// ShouldResetActivityTimerTaskMask mocks base method.
+func (m *MockMutableState) ShouldResetActivityTimerTaskMask(current, incoming *persistence.ActivityInfo) bool {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ShouldResetActivityTimerTaskMask", current, incoming)
+	ret0, _ := ret[0].(bool)
+	return ret0
+}
+
+// ShouldResetActivityTimerTaskMask indicates an expected call of ShouldResetActivityTimerTaskMask.
+func (mr *MockMutableStateMockRecorder) ShouldResetActivityTimerTaskMask(current, incoming any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ShouldResetActivityTimerTaskMask", reflect.TypeOf((*MockMutableState)(nil).ShouldResetActivityTimerTaskMask), current, incoming)
+}
+
 // StartTransaction mocks base method.
 func (m *MockMutableState) StartTransaction(entry *namespace.Namespace) (bool, error) {
 	m.ctrl.T.Helper()

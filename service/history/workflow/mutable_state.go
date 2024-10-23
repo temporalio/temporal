@@ -398,5 +398,7 @@ type (
 		NextTransitionCount() int64
 
 		InitTransitionHistory()
+
+		ShouldResetActivityTimerTaskMask(current, incoming *persistencespb.ActivityInfo) bool
 	}
 )

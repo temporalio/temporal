@@ -458,9 +458,7 @@ func NewMutableStateFromDB(
 	mutableState.nextEventIDInDB = dbRecord.NextEventId
 	mutableState.dbRecordVersion = dbRecordVersion
 	mutableState.checksum = dbRecord.Checksum
-	if len(mutableState.executionInfo.TransitionHistory) != 0 {
-		mutableState.versionedTransitionInDB = mutableState.executionInfo.TransitionHistory[len(mutableState.executionInfo.TransitionHistory)-1]
-	}
+	mutableState.initVersionedTransitionInDB()
 
 	if len(dbRecord.Checksum.GetValue()) > 0 {
 		switch {
@@ -6470,6 +6468,19 @@ func (ms *MutableStateImpl) ApplySnapshot(
 	return nil
 }
 
+func (ms *MutableStateImpl) ShouldResetActivityTimerTaskMask(current, incoming *persistencespb.ActivityInfo) bool {
+	// calculate whether to reset the activity timer task status bits
+	// reset timer task status bits if
+	// 1. same source cluster & attempt changes
+	// 2. different source cluster
+	if !ms.clusterMetadata.IsVersionFromSameCluster(current.Version, incoming.Version) {
+		return true
+	} else if current.Attempt != incoming.Attempt {
+		return true
+	}
+	return false
+}
+
 func (ms *MutableStateImpl) applyUpdatesToSubStateMachines(
 	updatedActivityInfos map[int64]*persistencespb.ActivityInfo,
 	updatedTimerInfos map[string]*persistencespb.TimerInfo,
@@ -6479,7 +6490,11 @@ func (ms *MutableStateImpl) applyUpdatesToSubStateMachines(
 	isSnapshot bool,
 ) error {
 	err := applyUpdatesToSubStateMachine(ms, ms.pendingActivityInfoIDs, ms.updateActivityInfos, updatedActivityInfos, isSnapshot, ms.DeleteActivity, func(current, incoming *persistencespb.ActivityInfo) {
-		incoming.TimerTaskStatus = TimerTaskStatusNone
+		if current == nil || ms.ShouldResetActivityTimerTaskMask(current, incoming) {
+			incoming.TimerTaskStatus = TimerTaskStatusNone
+		} else {
+			incoming.TimerTaskStatus = current.TimerTaskStatus
+		}
 	}, func(ai *persistencespb.ActivityInfo) {
 		ms.pendingActivityIDToEventID[ai.ActivityId] = ai.ScheduledEventId
 	})
@@ -6825,5 +6840,11 @@ func (ms *MutableStateImpl) InitTransitionHistory() {
 	ms.GetExecutionState().LastUpdateVersionedTransition = versionedTransition
 	if ms.HasPendingWorkflowTask() {
 		ms.GetExecutionInfo().WorkflowTaskLastUpdateVersionedTransition = versionedTransition
+	}
+}
+
+func (ms *MutableStateImpl) initVersionedTransitionInDB() {
+	if len(ms.executionInfo.TransitionHistory) != 0 {
+		ms.versionedTransitionInDB = ms.executionInfo.TransitionHistory[len(ms.executionInfo.TransitionHistory)-1]
 	}
 }
