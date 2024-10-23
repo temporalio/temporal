@@ -425,6 +425,7 @@ func (t *replicationTaskImpl) splitTask() (_ replicationTask, _ replicationTask,
 			NamespaceFailoverVersion: t.newEvents[0].GetVersion(),
 			TransitionCount:          1,
 		}
+		newRunTask.isStateBased = true
 	}
 
 	t.newEvents = nil
