@@ -69,13 +69,16 @@ type (
 		// is delegated to the defaultQueue.
 		defaultQueue physicalTaskQueueManager
 		// used for non-sticky versioned queues (one for each version)
-		versionedQueues     map[string]physicalTaskQueueManager
-		versionedQueuesLock sync.RWMutex // locks mutation of versionedQueues
-		userDataManager     userDataManager
-		logger              log.Logger
-		throttledLogger     log.ThrottledLogger
-		matchingClient      matchingservice.MatchingServiceClient
-		metricsHandler      metrics.Handler // namespace/taskqueue tagged metric scope
+		versionedQueues                 map[string]physicalTaskQueueManager
+		versionedQueuesLock             sync.RWMutex // locks mutation of versionedQueues
+		userDataManager                 userDataManager
+		logger                          log.Logger
+		throttledLogger                 log.ThrottledLogger
+		matchingClient                  matchingservice.MatchingServiceClient
+		metricsHandler                  metrics.Handler                                                          // namespace/taskqueue tagged metric scope
+		cachedPhysicalInfoByBuildId     map[string]map[enumspb.TaskQueueType]*taskqueuespb.PhysicalTaskQueueInfo // non-nil for root-partition
+		cachedPhysicalInfoByBuildIdLock sync.RWMutex                                                             // locks mutation of cachedPhysicalInfoByBuildId
+		lastFanOut                      int64                                                                    // serves as a TTL for cachedPhysicalInfoByBuildId
 	}
 )
 
@@ -97,7 +100,7 @@ func newTaskQueuePartitionManager(
 		tag.WorkflowTaskQueueName(partition.RpcName()),
 		tag.WorkflowTaskQueueType(partition.TaskType()),
 		tag.WorkflowNamespace(nsName))
-	taggedMetricsHandler := metrics.GetPerTaskQueuePartitionScope(
+	taggedMetricsHandler := metrics.GetPerTaskQueuePartitionIDScope(
 		e.metricsHandler,
 		nsName,
 		partition,
@@ -107,16 +110,17 @@ func newTaskQueuePartitionManager(
 	)
 
 	pm := &taskQueuePartitionManagerImpl{
-		engine:          e,
-		partition:       partition,
-		ns:              ns,
-		config:          tqConfig,
-		logger:          logger,
-		throttledLogger: throttledLogger,
-		matchingClient:  e.matchingRawClient,
-		metricsHandler:  taggedMetricsHandler,
-		versionedQueues: make(map[string]physicalTaskQueueManager),
-		userDataManager: userDataManager,
+		engine:                      e,
+		partition:                   partition,
+		ns:                          ns,
+		config:                      tqConfig,
+		logger:                      logger,
+		throttledLogger:             throttledLogger,
+		matchingClient:              e.matchingRawClient,
+		metricsHandler:              taggedMetricsHandler,
+		versionedQueues:             make(map[string]physicalTaskQueueManager),
+		userDataManager:             userDataManager,
+		cachedPhysicalInfoByBuildId: nil,
 	}
 
 	defaultQ, err := newPhysicalTaskQueueManager(pm, UnversionedQueueKey(partition))
@@ -472,7 +476,7 @@ func (pm *taskQueuePartitionManagerImpl) LegacyDescribeTaskQueue(includeTaskQueu
 func (pm *taskQueuePartitionManagerImpl) Describe(
 	ctx context.Context,
 	buildIds map[string]bool,
-	includeAllActive, reportStats, reportPollers bool) (*matchingservice.DescribeTaskQueuePartitionResponse, error) {
+	includeAllActive, reportStats, reportPollers, internalTaskQueueStatus bool) (*matchingservice.DescribeTaskQueuePartitionResponse, error) {
 	pm.versionedQueuesLock.RLock()
 	// Active means that the physical queue for that version is loaded.
 	// An empty string refers to the unversioned queue, which is always loaded.
@@ -498,6 +502,9 @@ func (pm *taskQueuePartitionManagerImpl) Describe(
 		}
 		if reportStats {
 			vInfo.PhysicalTaskQueueInfo.TaskQueueStats = physicalQueue.GetStats()
+		}
+		if internalTaskQueueStatus {
+			vInfo.PhysicalTaskQueueInfo.InternalTaskQueueStatus = physicalQueue.GetInternalTaskQueueStatus()
 		}
 		versionsInfo[bid] = vInfo
 	}
@@ -569,6 +576,28 @@ func (pm *taskQueuePartitionManagerImpl) ForceLoadAllNonRootPartitions() {
 
 		}()
 	}
+}
+
+func (pm *taskQueuePartitionManagerImpl) TimeSinceLastFanOut() time.Duration {
+	pm.cachedPhysicalInfoByBuildIdLock.RLock()
+	defer pm.cachedPhysicalInfoByBuildIdLock.RUnlock()
+
+	return time.Since(time.Unix(0, pm.lastFanOut))
+}
+
+func (pm *taskQueuePartitionManagerImpl) UpdateTimeSinceLastFanOutAndCache(physicalInfoByBuildId map[string]map[enumspb.TaskQueueType]*taskqueuespb.PhysicalTaskQueueInfo) {
+	pm.cachedPhysicalInfoByBuildIdLock.Lock()
+	defer pm.cachedPhysicalInfoByBuildIdLock.Unlock()
+
+	pm.lastFanOut = time.Now().UnixNano()
+	pm.cachedPhysicalInfoByBuildId = physicalInfoByBuildId
+}
+
+func (pm *taskQueuePartitionManagerImpl) GetPhysicalTaskQueueInfoFromCache() map[string]map[enumspb.TaskQueueType]*taskqueuespb.PhysicalTaskQueueInfo {
+	pm.cachedPhysicalInfoByBuildIdLock.RLock()
+	defer pm.cachedPhysicalInfoByBuildIdLock.RUnlock()
+
+	return pm.cachedPhysicalInfoByBuildId
 }
 
 func (pm *taskQueuePartitionManagerImpl) unloadPhysicalQueue(unloadedDbq physicalTaskQueueManager, unloadCause unloadCause) {

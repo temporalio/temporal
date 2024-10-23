@@ -48,8 +48,7 @@ type (
 
 		definition.WorkflowKey
 		ExecutableTask
-		req                    *historyservice.ReplicateWorkflowStateRequest
-		markPoisonPillAttempts int
+		req *historyservice.ReplicateWorkflowStateRequest
 	}
 )
 
@@ -64,6 +63,7 @@ func NewExecutableWorkflowStateTask(
 	taskCreationTime time.Time,
 	task *replicationspb.SyncWorkflowStateTaskAttributes,
 	sourceClusterName string,
+	sourceShardKey ClusterShardKey,
 	priority enumsspb.TaskPriority,
 	replicationTask *replicationspb.ReplicationTask,
 ) *ExecutableWorkflowStateTask {
@@ -81,6 +81,7 @@ func NewExecutableWorkflowStateTask(
 			taskCreationTime,
 			time.Now().UTC(),
 			sourceClusterName,
+			sourceShardKey,
 			priority,
 			replicationTask,
 		),
@@ -89,7 +90,6 @@ func NewExecutableWorkflowStateTask(
 			WorkflowState: task.GetWorkflowState(),
 			RemoteCluster: sourceClusterName,
 		},
-		markPoisonPillAttempts: 0,
 	}
 }
 
@@ -176,49 +176,15 @@ func (e *ExecutableWorkflowStateTask) HandleErr(err error) error {
 }
 
 func (e *ExecutableWorkflowStateTask) MarkPoisonPill() error {
-	if e.markPoisonPillAttempts >= MarkPoisonPillMaxAttempts {
-		replicationTaskInfo := &persistencespb.ReplicationTaskInfo{
+	if e.ReplicationTask().GetRawTaskInfo() == nil {
+		e.ReplicationTask().RawTaskInfo = &persistencespb.ReplicationTaskInfo{
 			NamespaceId: e.NamespaceID,
 			WorkflowId:  e.WorkflowID,
 			RunId:       e.RunID,
 			TaskId:      e.ExecutableTask.TaskID(),
 			TaskType:    enumsspb.TASK_TYPE_REPLICATION_SYNC_WORKFLOW_STATE,
 		}
-		e.Logger.Error("MarkPoisonPill reached max attempts",
-			tag.SourceCluster(e.SourceClusterName()),
-			tag.ReplicationTask(replicationTaskInfo),
-		)
-		return nil
-	}
-	e.markPoisonPillAttempts++
-
-	shardContext, err := e.ShardController.GetShardByNamespaceWorkflow(
-		namespace.ID(e.NamespaceID),
-		e.WorkflowID,
-	)
-	if err != nil {
-		return err
 	}
 
-	// TODO: GetShardID will break GetDLQReplicationMessages we need to handle DLQ for cross shard replication.
-	taskInfo := &persistencespb.ReplicationTaskInfo{
-		NamespaceId: e.NamespaceID,
-		WorkflowId:  e.WorkflowID,
-		RunId:       e.RunID,
-		TaskId:      e.ExecutableTask.TaskID(),
-		TaskType:    enumsspb.TASK_TYPE_REPLICATION_SYNC_WORKFLOW_STATE,
-	}
-
-	e.Logger.Error("enqueue workflow state replication task to DLQ",
-		tag.ShardID(shardContext.GetShardID()),
-		tag.WorkflowNamespaceID(e.NamespaceID),
-		tag.WorkflowID(e.WorkflowID),
-		tag.WorkflowRunID(e.RunID),
-		tag.TaskID(e.ExecutableTask.TaskID()),
-	)
-
-	ctx, cancel := newTaskContext(e.NamespaceID, e.Config.ReplicationTaskApplyTimeout())
-	defer cancel()
-
-	return writeTaskToDLQ(ctx, e.DLQWriter, shardContext, e.SourceClusterName(), taskInfo)
+	return e.ExecutableTask.MarkPoisonPill()
 }

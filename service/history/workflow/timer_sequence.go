@@ -173,6 +173,7 @@ func (t *timerSequenceImpl) CreateNextActivityTimer() (bool, error) {
 		TimeoutType:         firstTimerTask.TimerType,
 		EventID:             firstTimerTask.EventID,
 		Attempt:             firstTimerTask.Attempt,
+		Stamp:               activityInfo.Stamp,
 	})
 	return true, nil
 }
@@ -291,7 +292,14 @@ func (t *timerSequenceImpl) getActivityScheduleToCloseTimeout(
 		return nil
 	}
 
-	timeoutTime := timestamp.TimeValue(activityInfo.ScheduledTime).Add(scheduleToCloseDuration)
+	var timeoutTime time.Time
+	// for backward compatibility. FirstScheduledTime can be null if mutable state was
+	// restored from the version before this field was introduce
+	if activityInfo.FirstScheduledTime != nil {
+		timeoutTime = timestamp.TimeValue(activityInfo.FirstScheduledTime).Add(scheduleToCloseDuration)
+	} else {
+		timeoutTime = timestamp.TimeValue(activityInfo.ScheduledTime).Add(scheduleToCloseDuration)
+	}
 
 	return &TimerSequenceID{
 		EventID:      activityInfo.ScheduledEventId,

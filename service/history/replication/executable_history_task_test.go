@@ -30,7 +30,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/golang/mock/gomock"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -40,7 +39,6 @@ import (
 	"go.temporal.io/api/serviceerror"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/history/v1"
-	persistencespb "go.temporal.io/server/api/persistence/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	workflowspb "go.temporal.io/server/api/workflow/v1"
 	"go.temporal.io/server/client"
@@ -57,6 +55,7 @@ import (
 	"go.temporal.io/server/common/xdc"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tests"
+	"go.uber.org/mock/gomock"
 )
 
 type (
@@ -79,6 +78,7 @@ type (
 
 		replicationTask   *replicationspb.HistoryTaskAttributes
 		sourceClusterName string
+		sourceShardKey    ClusterShardKey
 
 		taskID                     int64
 		task                       *ExecutableHistoryTask
@@ -191,6 +191,10 @@ func (s *executableHistoryTaskSuite) SetupTest() {
 		EventsBatches: s.eventsBlobs,
 	}
 	s.sourceClusterName = cluster.TestCurrentClusterName
+	s.sourceShardKey = ClusterShardKey{
+		ClusterID: int32(cluster.TestCurrentClusterInitialFailoverVersion),
+		ShardID:   rand.Int31(),
+	}
 
 	s.task = NewExecutableHistoryTask(
 		s.processToolBox,
@@ -198,6 +202,7 @@ func (s *executableHistoryTaskSuite) SetupTest() {
 		time.Unix(0, rand.Int63()),
 		s.replicationTask,
 		s.sourceClusterName,
+		s.sourceShardKey,
 		enumsspb.TASK_PRIORITY_HIGH,
 		nil,
 	)
@@ -332,8 +337,6 @@ func (s *executableHistoryTaskSuite) TestHandleErr_Other() {
 }
 
 func (s *executableHistoryTaskSuite) TestMarkPoisonPill() {
-	events := s.events
-
 	shardID := rand.Int31()
 	shardContext := shard.NewMockContext(s.controller)
 	s.shardController.EXPECT().GetShardByNamespaceWorkflow(
@@ -341,54 +344,19 @@ func (s *executableHistoryTaskSuite) TestMarkPoisonPill() {
 		s.task.WorkflowID,
 	).Return(shardContext, nil).AnyTimes()
 	shardContext.EXPECT().GetShardID().Return(shardID).AnyTimes()
-	s.mockExecutionManager.EXPECT().PutReplicationTaskToDLQ(gomock.Any(), &persistence.PutReplicationTaskToDLQRequest{
-		ShardID:           shardID,
-		SourceClusterName: s.sourceClusterName,
-		TaskInfo: &persistencespb.ReplicationTaskInfo{
-			NamespaceId:  s.task.NamespaceID,
-			WorkflowId:   s.task.WorkflowID,
-			RunId:        s.task.RunID,
-			TaskId:       s.task.ExecutableTask.TaskID(),
-			TaskType:     enumsspb.TASK_TYPE_REPLICATION_HISTORY,
-			FirstEventId: events[0].GetEventId(),
-			NextEventId:  events[len(events)-1].GetEventId() + 1,
-			Version:      events[0].GetVersion(),
+
+	replicationTask := &replicationspb.ReplicationTask{
+		TaskType:     enumsspb.REPLICATION_TASK_TYPE_HISTORY_TASK,
+		SourceTaskId: s.taskID,
+		Attributes: &replicationspb.ReplicationTask_HistoryTaskAttributes{
+			HistoryTaskAttributes: s.replicationTask,
 		},
-	}).Return(nil)
+		RawTaskInfo: nil,
+	}
+	s.executableTask.EXPECT().ReplicationTask().Return(replicationTask).AnyTimes()
+	s.executableTask.EXPECT().MarkPoisonPill().Times(1)
 
 	err := s.task.MarkPoisonPill()
-	s.NoError(err)
-}
-
-func (s *executableHistoryTaskSuite) TestMarkPoisonPill_MaxAttempt_Reached() {
-	s.task.markPoisonPillAttempts = MarkPoisonPillMaxAttempts - 1
-	events := s.events
-
-	shardID := rand.Int31()
-	shardContext := shard.NewMockContext(s.controller)
-	s.shardController.EXPECT().GetShardByNamespaceWorkflow(
-		namespace.ID(s.task.NamespaceID),
-		s.task.WorkflowID,
-	).Return(shardContext, nil).AnyTimes()
-	shardContext.EXPECT().GetShardID().Return(shardID).AnyTimes()
-	s.mockExecutionManager.EXPECT().PutReplicationTaskToDLQ(gomock.Any(), &persistence.PutReplicationTaskToDLQRequest{
-		ShardID:           shardID,
-		SourceClusterName: s.sourceClusterName,
-		TaskInfo: &persistencespb.ReplicationTaskInfo{
-			NamespaceId:  s.task.NamespaceID,
-			WorkflowId:   s.task.WorkflowID,
-			RunId:        s.task.RunID,
-			TaskId:       s.task.ExecutableTask.TaskID(),
-			TaskType:     enumsspb.TASK_TYPE_REPLICATION_HISTORY,
-			FirstEventId: events[0].GetEventId(),
-			NextEventId:  events[len(events)-1].GetEventId() + 1,
-			Version:      events[0].GetVersion(),
-		},
-	}).Return(serviceerror.NewInternal("failed"))
-
-	err := s.task.MarkPoisonPill()
-	s.Error(err)
-	err = s.task.MarkPoisonPill()
 	s.NoError(err)
 }
 
@@ -567,11 +535,10 @@ func (s *executableHistoryTaskSuite) generateTwoBatchableTasks() (*ExecutableHis
 	runId := uuid.NewString()
 	workflowKeyCurrent := definition.NewWorkflowKey(namespaceId, workflowId, runId)
 	workflowKeyIncoming := definition.NewWorkflowKey(namespaceId, workflowId, runId)
-	sourceCluster := uuid.NewString()
 	sourceTaskId := int64(111)
 	incomingTaskId := int64(120)
-	currentTask := s.buildExecutableHistoryTask(currentEvent, nil, "", sourceTaskId, currentVersionHistoryItems, workflowKeyCurrent, sourceCluster)
-	incomingTask := s.buildExecutableHistoryTask(incomingEvent, nil, "", incomingTaskId, incomingVersionHistoryItems, workflowKeyIncoming, sourceCluster)
+	currentTask := s.buildExecutableHistoryTask(currentEvent, nil, "", sourceTaskId, currentVersionHistoryItems, workflowKeyCurrent)
+	incomingTask := s.buildExecutableHistoryTask(incomingEvent, nil, "", incomingTaskId, incomingVersionHistoryItems, workflowKeyIncoming)
 
 	resultTask, batched := currentTask.BatchWith(incomingTask)
 
@@ -600,7 +567,6 @@ func (s *executableHistoryTaskSuite) buildExecutableHistoryTask(
 	taskId int64,
 	versionHistoryItems []*history.VersionHistoryItem,
 	workflowKey definition.WorkflowKey,
-	sourceCluster string,
 ) *ExecutableHistoryTask {
 	eventsBlob, _ := s.eventSerializer.SerializeEvents(events[0], enumspb.ENCODING_TYPE_PROTO3)
 	newRunEventsBlob, _ := s.eventSerializer.SerializeEvents(newRunEvents, enumspb.ENCODING_TYPE_PROTO3)
@@ -616,13 +582,14 @@ func (s *executableHistoryTaskSuite) buildExecutableHistoryTask(
 	}
 	executableTask := NewMockExecutableTask(s.controller)
 	executableTask.EXPECT().TaskID().Return(taskId).AnyTimes()
-	executableTask.EXPECT().SourceClusterName().Return(sourceCluster).AnyTimes()
+	executableTask.EXPECT().SourceClusterName().Return(s.sourceClusterName).AnyTimes()
 	executableHistoryTask := NewExecutableHistoryTask(
 		s.processToolBox,
 		taskId,
 		time.Unix(0, rand.Int63()),
 		replicationTaskAttribute,
-		sourceCluster,
+		s.sourceClusterName,
+		s.sourceShardKey,
 		enumsspb.TASK_PRIORITY_HIGH,
 		nil,
 	)

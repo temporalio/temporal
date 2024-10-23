@@ -42,45 +42,49 @@ import (
 const _ = grpc.SupportPackageIsVersion7
 
 const (
-	AdminService_RebuildMutableState_FullMethodName               = "/temporal.server.api.adminservice.v1.AdminService/RebuildMutableState"
-	AdminService_ImportWorkflowExecution_FullMethodName           = "/temporal.server.api.adminservice.v1.AdminService/ImportWorkflowExecution"
-	AdminService_DescribeMutableState_FullMethodName              = "/temporal.server.api.adminservice.v1.AdminService/DescribeMutableState"
-	AdminService_DescribeHistoryHost_FullMethodName               = "/temporal.server.api.adminservice.v1.AdminService/DescribeHistoryHost"
-	AdminService_GetShard_FullMethodName                          = "/temporal.server.api.adminservice.v1.AdminService/GetShard"
-	AdminService_CloseShard_FullMethodName                        = "/temporal.server.api.adminservice.v1.AdminService/CloseShard"
-	AdminService_ListHistoryTasks_FullMethodName                  = "/temporal.server.api.adminservice.v1.AdminService/ListHistoryTasks"
-	AdminService_RemoveTask_FullMethodName                        = "/temporal.server.api.adminservice.v1.AdminService/RemoveTask"
-	AdminService_GetWorkflowExecutionRawHistoryV2_FullMethodName  = "/temporal.server.api.adminservice.v1.AdminService/GetWorkflowExecutionRawHistoryV2"
-	AdminService_GetWorkflowExecutionRawHistory_FullMethodName    = "/temporal.server.api.adminservice.v1.AdminService/GetWorkflowExecutionRawHistory"
-	AdminService_GetReplicationMessages_FullMethodName            = "/temporal.server.api.adminservice.v1.AdminService/GetReplicationMessages"
-	AdminService_GetNamespaceReplicationMessages_FullMethodName   = "/temporal.server.api.adminservice.v1.AdminService/GetNamespaceReplicationMessages"
-	AdminService_GetDLQReplicationMessages_FullMethodName         = "/temporal.server.api.adminservice.v1.AdminService/GetDLQReplicationMessages"
-	AdminService_ReapplyEvents_FullMethodName                     = "/temporal.server.api.adminservice.v1.AdminService/ReapplyEvents"
-	AdminService_AddSearchAttributes_FullMethodName               = "/temporal.server.api.adminservice.v1.AdminService/AddSearchAttributes"
-	AdminService_RemoveSearchAttributes_FullMethodName            = "/temporal.server.api.adminservice.v1.AdminService/RemoveSearchAttributes"
-	AdminService_GetSearchAttributes_FullMethodName               = "/temporal.server.api.adminservice.v1.AdminService/GetSearchAttributes"
-	AdminService_DescribeCluster_FullMethodName                   = "/temporal.server.api.adminservice.v1.AdminService/DescribeCluster"
-	AdminService_ListClusters_FullMethodName                      = "/temporal.server.api.adminservice.v1.AdminService/ListClusters"
-	AdminService_ListClusterMembers_FullMethodName                = "/temporal.server.api.adminservice.v1.AdminService/ListClusterMembers"
-	AdminService_AddOrUpdateRemoteCluster_FullMethodName          = "/temporal.server.api.adminservice.v1.AdminService/AddOrUpdateRemoteCluster"
-	AdminService_RemoveRemoteCluster_FullMethodName               = "/temporal.server.api.adminservice.v1.AdminService/RemoveRemoteCluster"
-	AdminService_GetDLQMessages_FullMethodName                    = "/temporal.server.api.adminservice.v1.AdminService/GetDLQMessages"
-	AdminService_PurgeDLQMessages_FullMethodName                  = "/temporal.server.api.adminservice.v1.AdminService/PurgeDLQMessages"
-	AdminService_MergeDLQMessages_FullMethodName                  = "/temporal.server.api.adminservice.v1.AdminService/MergeDLQMessages"
-	AdminService_RefreshWorkflowTasks_FullMethodName              = "/temporal.server.api.adminservice.v1.AdminService/RefreshWorkflowTasks"
-	AdminService_ResendReplicationTasks_FullMethodName            = "/temporal.server.api.adminservice.v1.AdminService/ResendReplicationTasks"
-	AdminService_GetTaskQueueTasks_FullMethodName                 = "/temporal.server.api.adminservice.v1.AdminService/GetTaskQueueTasks"
-	AdminService_DeleteWorkflowExecution_FullMethodName           = "/temporal.server.api.adminservice.v1.AdminService/DeleteWorkflowExecution"
-	AdminService_StreamWorkflowReplicationMessages_FullMethodName = "/temporal.server.api.adminservice.v1.AdminService/StreamWorkflowReplicationMessages"
-	AdminService_GetNamespace_FullMethodName                      = "/temporal.server.api.adminservice.v1.AdminService/GetNamespace"
-	AdminService_GetDLQTasks_FullMethodName                       = "/temporal.server.api.adminservice.v1.AdminService/GetDLQTasks"
-	AdminService_PurgeDLQTasks_FullMethodName                     = "/temporal.server.api.adminservice.v1.AdminService/PurgeDLQTasks"
-	AdminService_MergeDLQTasks_FullMethodName                     = "/temporal.server.api.adminservice.v1.AdminService/MergeDLQTasks"
-	AdminService_DescribeDLQJob_FullMethodName                    = "/temporal.server.api.adminservice.v1.AdminService/DescribeDLQJob"
-	AdminService_CancelDLQJob_FullMethodName                      = "/temporal.server.api.adminservice.v1.AdminService/CancelDLQJob"
-	AdminService_AddTasks_FullMethodName                          = "/temporal.server.api.adminservice.v1.AdminService/AddTasks"
-	AdminService_ListQueues_FullMethodName                        = "/temporal.server.api.adminservice.v1.AdminService/ListQueues"
-	AdminService_DeepHealthCheck_FullMethodName                   = "/temporal.server.api.adminservice.v1.AdminService/DeepHealthCheck"
+	AdminService_RebuildMutableState_FullMethodName                 = "/temporal.server.api.adminservice.v1.AdminService/RebuildMutableState"
+	AdminService_ImportWorkflowExecution_FullMethodName             = "/temporal.server.api.adminservice.v1.AdminService/ImportWorkflowExecution"
+	AdminService_DescribeMutableState_FullMethodName                = "/temporal.server.api.adminservice.v1.AdminService/DescribeMutableState"
+	AdminService_DescribeHistoryHost_FullMethodName                 = "/temporal.server.api.adminservice.v1.AdminService/DescribeHistoryHost"
+	AdminService_GetShard_FullMethodName                            = "/temporal.server.api.adminservice.v1.AdminService/GetShard"
+	AdminService_CloseShard_FullMethodName                          = "/temporal.server.api.adminservice.v1.AdminService/CloseShard"
+	AdminService_ListHistoryTasks_FullMethodName                    = "/temporal.server.api.adminservice.v1.AdminService/ListHistoryTasks"
+	AdminService_RemoveTask_FullMethodName                          = "/temporal.server.api.adminservice.v1.AdminService/RemoveTask"
+	AdminService_GetWorkflowExecutionRawHistoryV2_FullMethodName    = "/temporal.server.api.adminservice.v1.AdminService/GetWorkflowExecutionRawHistoryV2"
+	AdminService_GetWorkflowExecutionRawHistory_FullMethodName      = "/temporal.server.api.adminservice.v1.AdminService/GetWorkflowExecutionRawHistory"
+	AdminService_GetReplicationMessages_FullMethodName              = "/temporal.server.api.adminservice.v1.AdminService/GetReplicationMessages"
+	AdminService_GetNamespaceReplicationMessages_FullMethodName     = "/temporal.server.api.adminservice.v1.AdminService/GetNamespaceReplicationMessages"
+	AdminService_GetDLQReplicationMessages_FullMethodName           = "/temporal.server.api.adminservice.v1.AdminService/GetDLQReplicationMessages"
+	AdminService_ReapplyEvents_FullMethodName                       = "/temporal.server.api.adminservice.v1.AdminService/ReapplyEvents"
+	AdminService_AddSearchAttributes_FullMethodName                 = "/temporal.server.api.adminservice.v1.AdminService/AddSearchAttributes"
+	AdminService_RemoveSearchAttributes_FullMethodName              = "/temporal.server.api.adminservice.v1.AdminService/RemoveSearchAttributes"
+	AdminService_GetSearchAttributes_FullMethodName                 = "/temporal.server.api.adminservice.v1.AdminService/GetSearchAttributes"
+	AdminService_DescribeCluster_FullMethodName                     = "/temporal.server.api.adminservice.v1.AdminService/DescribeCluster"
+	AdminService_ListClusters_FullMethodName                        = "/temporal.server.api.adminservice.v1.AdminService/ListClusters"
+	AdminService_ListClusterMembers_FullMethodName                  = "/temporal.server.api.adminservice.v1.AdminService/ListClusterMembers"
+	AdminService_AddOrUpdateRemoteCluster_FullMethodName            = "/temporal.server.api.adminservice.v1.AdminService/AddOrUpdateRemoteCluster"
+	AdminService_RemoveRemoteCluster_FullMethodName                 = "/temporal.server.api.adminservice.v1.AdminService/RemoveRemoteCluster"
+	AdminService_GetDLQMessages_FullMethodName                      = "/temporal.server.api.adminservice.v1.AdminService/GetDLQMessages"
+	AdminService_PurgeDLQMessages_FullMethodName                    = "/temporal.server.api.adminservice.v1.AdminService/PurgeDLQMessages"
+	AdminService_MergeDLQMessages_FullMethodName                    = "/temporal.server.api.adminservice.v1.AdminService/MergeDLQMessages"
+	AdminService_RefreshWorkflowTasks_FullMethodName                = "/temporal.server.api.adminservice.v1.AdminService/RefreshWorkflowTasks"
+	AdminService_ResendReplicationTasks_FullMethodName              = "/temporal.server.api.adminservice.v1.AdminService/ResendReplicationTasks"
+	AdminService_GetTaskQueueTasks_FullMethodName                   = "/temporal.server.api.adminservice.v1.AdminService/GetTaskQueueTasks"
+	AdminService_DeleteWorkflowExecution_FullMethodName             = "/temporal.server.api.adminservice.v1.AdminService/DeleteWorkflowExecution"
+	AdminService_StreamWorkflowReplicationMessages_FullMethodName   = "/temporal.server.api.adminservice.v1.AdminService/StreamWorkflowReplicationMessages"
+	AdminService_GetNamespace_FullMethodName                        = "/temporal.server.api.adminservice.v1.AdminService/GetNamespace"
+	AdminService_GetDLQTasks_FullMethodName                         = "/temporal.server.api.adminservice.v1.AdminService/GetDLQTasks"
+	AdminService_PurgeDLQTasks_FullMethodName                       = "/temporal.server.api.adminservice.v1.AdminService/PurgeDLQTasks"
+	AdminService_MergeDLQTasks_FullMethodName                       = "/temporal.server.api.adminservice.v1.AdminService/MergeDLQTasks"
+	AdminService_DescribeDLQJob_FullMethodName                      = "/temporal.server.api.adminservice.v1.AdminService/DescribeDLQJob"
+	AdminService_CancelDLQJob_FullMethodName                        = "/temporal.server.api.adminservice.v1.AdminService/CancelDLQJob"
+	AdminService_AddTasks_FullMethodName                            = "/temporal.server.api.adminservice.v1.AdminService/AddTasks"
+	AdminService_ListQueues_FullMethodName                          = "/temporal.server.api.adminservice.v1.AdminService/ListQueues"
+	AdminService_DeepHealthCheck_FullMethodName                     = "/temporal.server.api.adminservice.v1.AdminService/DeepHealthCheck"
+	AdminService_SyncWorkflowState_FullMethodName                   = "/temporal.server.api.adminservice.v1.AdminService/SyncWorkflowState"
+	AdminService_GenerateLastHistoryReplicationTasks_FullMethodName = "/temporal.server.api.adminservice.v1.AdminService/GenerateLastHistoryReplicationTasks"
+	AdminService_DescribeTaskQueuePartition_FullMethodName          = "/temporal.server.api.adminservice.v1.AdminService/DescribeTaskQueuePartition"
+	AdminService_ForceUnloadTaskQueuePartition_FullMethodName       = "/temporal.server.api.adminservice.v1.AdminService/ForceUnloadTaskQueuePartition"
 )
 
 // AdminServiceClient is the client API for AdminService service.
@@ -167,6 +171,10 @@ type AdminServiceClient interface {
 	AddTasks(ctx context.Context, in *AddTasksRequest, opts ...grpc.CallOption) (*AddTasksResponse, error)
 	ListQueues(ctx context.Context, in *ListQueuesRequest, opts ...grpc.CallOption) (*ListQueuesResponse, error)
 	DeepHealthCheck(ctx context.Context, in *DeepHealthCheckRequest, opts ...grpc.CallOption) (*DeepHealthCheckResponse, error)
+	SyncWorkflowState(ctx context.Context, in *SyncWorkflowStateRequest, opts ...grpc.CallOption) (*SyncWorkflowStateResponse, error)
+	GenerateLastHistoryReplicationTasks(ctx context.Context, in *GenerateLastHistoryReplicationTasksRequest, opts ...grpc.CallOption) (*GenerateLastHistoryReplicationTasksResponse, error)
+	DescribeTaskQueuePartition(ctx context.Context, in *DescribeTaskQueuePartitionRequest, opts ...grpc.CallOption) (*DescribeTaskQueuePartitionResponse, error)
+	ForceUnloadTaskQueuePartition(ctx context.Context, in *ForceUnloadTaskQueuePartitionRequest, opts ...grpc.CallOption) (*ForceUnloadTaskQueuePartitionResponse, error)
 }
 
 type adminServiceClient struct {
@@ -550,6 +558,42 @@ func (c *adminServiceClient) DeepHealthCheck(ctx context.Context, in *DeepHealth
 	return out, nil
 }
 
+func (c *adminServiceClient) SyncWorkflowState(ctx context.Context, in *SyncWorkflowStateRequest, opts ...grpc.CallOption) (*SyncWorkflowStateResponse, error) {
+	out := new(SyncWorkflowStateResponse)
+	err := c.cc.Invoke(ctx, AdminService_SyncWorkflowState_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *adminServiceClient) GenerateLastHistoryReplicationTasks(ctx context.Context, in *GenerateLastHistoryReplicationTasksRequest, opts ...grpc.CallOption) (*GenerateLastHistoryReplicationTasksResponse, error) {
+	out := new(GenerateLastHistoryReplicationTasksResponse)
+	err := c.cc.Invoke(ctx, AdminService_GenerateLastHistoryReplicationTasks_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *adminServiceClient) DescribeTaskQueuePartition(ctx context.Context, in *DescribeTaskQueuePartitionRequest, opts ...grpc.CallOption) (*DescribeTaskQueuePartitionResponse, error) {
+	out := new(DescribeTaskQueuePartitionResponse)
+	err := c.cc.Invoke(ctx, AdminService_DescribeTaskQueuePartition_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *adminServiceClient) ForceUnloadTaskQueuePartition(ctx context.Context, in *ForceUnloadTaskQueuePartitionRequest, opts ...grpc.CallOption) (*ForceUnloadTaskQueuePartitionResponse, error) {
+	out := new(ForceUnloadTaskQueuePartitionResponse)
+	err := c.cc.Invoke(ctx, AdminService_ForceUnloadTaskQueuePartition_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // AdminServiceServer is the server API for AdminService service.
 // All implementations must embed UnimplementedAdminServiceServer
 // for forward compatibility
@@ -634,6 +678,10 @@ type AdminServiceServer interface {
 	AddTasks(context.Context, *AddTasksRequest) (*AddTasksResponse, error)
 	ListQueues(context.Context, *ListQueuesRequest) (*ListQueuesResponse, error)
 	DeepHealthCheck(context.Context, *DeepHealthCheckRequest) (*DeepHealthCheckResponse, error)
+	SyncWorkflowState(context.Context, *SyncWorkflowStateRequest) (*SyncWorkflowStateResponse, error)
+	GenerateLastHistoryReplicationTasks(context.Context, *GenerateLastHistoryReplicationTasksRequest) (*GenerateLastHistoryReplicationTasksResponse, error)
+	DescribeTaskQueuePartition(context.Context, *DescribeTaskQueuePartitionRequest) (*DescribeTaskQueuePartitionResponse, error)
+	ForceUnloadTaskQueuePartition(context.Context, *ForceUnloadTaskQueuePartitionRequest) (*ForceUnloadTaskQueuePartitionResponse, error)
 	mustEmbedUnimplementedAdminServiceServer()
 }
 
@@ -757,6 +805,18 @@ func (UnimplementedAdminServiceServer) ListQueues(context.Context, *ListQueuesRe
 }
 func (UnimplementedAdminServiceServer) DeepHealthCheck(context.Context, *DeepHealthCheckRequest) (*DeepHealthCheckResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method DeepHealthCheck not implemented")
+}
+func (UnimplementedAdminServiceServer) SyncWorkflowState(context.Context, *SyncWorkflowStateRequest) (*SyncWorkflowStateResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method SyncWorkflowState not implemented")
+}
+func (UnimplementedAdminServiceServer) GenerateLastHistoryReplicationTasks(context.Context, *GenerateLastHistoryReplicationTasksRequest) (*GenerateLastHistoryReplicationTasksResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GenerateLastHistoryReplicationTasks not implemented")
+}
+func (UnimplementedAdminServiceServer) DescribeTaskQueuePartition(context.Context, *DescribeTaskQueuePartitionRequest) (*DescribeTaskQueuePartitionResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method DescribeTaskQueuePartition not implemented")
+}
+func (UnimplementedAdminServiceServer) ForceUnloadTaskQueuePartition(context.Context, *ForceUnloadTaskQueuePartitionRequest) (*ForceUnloadTaskQueuePartitionResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ForceUnloadTaskQueuePartition not implemented")
 }
 func (UnimplementedAdminServiceServer) mustEmbedUnimplementedAdminServiceServer() {}
 
@@ -1481,6 +1541,78 @@ func _AdminService_DeepHealthCheck_Handler(srv interface{}, ctx context.Context,
 	return interceptor(ctx, in, info, handler)
 }
 
+func _AdminService_SyncWorkflowState_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SyncWorkflowStateRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AdminServiceServer).SyncWorkflowState(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AdminService_SyncWorkflowState_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AdminServiceServer).SyncWorkflowState(ctx, req.(*SyncWorkflowStateRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AdminService_GenerateLastHistoryReplicationTasks_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GenerateLastHistoryReplicationTasksRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AdminServiceServer).GenerateLastHistoryReplicationTasks(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AdminService_GenerateLastHistoryReplicationTasks_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AdminServiceServer).GenerateLastHistoryReplicationTasks(ctx, req.(*GenerateLastHistoryReplicationTasksRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AdminService_DescribeTaskQueuePartition_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(DescribeTaskQueuePartitionRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AdminServiceServer).DescribeTaskQueuePartition(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AdminService_DescribeTaskQueuePartition_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AdminServiceServer).DescribeTaskQueuePartition(ctx, req.(*DescribeTaskQueuePartitionRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AdminService_ForceUnloadTaskQueuePartition_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ForceUnloadTaskQueuePartitionRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AdminServiceServer).ForceUnloadTaskQueuePartition(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AdminService_ForceUnloadTaskQueuePartition_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AdminServiceServer).ForceUnloadTaskQueuePartition(ctx, req.(*ForceUnloadTaskQueuePartitionRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // AdminService_ServiceDesc is the grpc.ServiceDesc for AdminService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -1639,6 +1771,22 @@ var AdminService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "DeepHealthCheck",
 			Handler:    _AdminService_DeepHealthCheck_Handler,
+		},
+		{
+			MethodName: "SyncWorkflowState",
+			Handler:    _AdminService_SyncWorkflowState_Handler,
+		},
+		{
+			MethodName: "GenerateLastHistoryReplicationTasks",
+			Handler:    _AdminService_GenerateLastHistoryReplicationTasks_Handler,
+		},
+		{
+			MethodName: "DescribeTaskQueuePartition",
+			Handler:    _AdminService_DescribeTaskQueuePartition_Handler,
+		},
+		{
+			MethodName: "ForceUnloadTaskQueuePartition",
+			Handler:    _AdminService_ForceUnloadTaskQueuePartition_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{

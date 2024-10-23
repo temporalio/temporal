@@ -888,6 +888,16 @@ used when the first cache layer has a miss. Requires server restart for change t
 		32,
 		`MaxCallbacksPerWorkflow is the maximum number of callbacks that can be attached to a workflow.`,
 	)
+	FrontendLinkMaxSize = NewNamespaceIntSetting(
+		"frontend.linkMaxSize",
+		4000, // Links may include a workflow ID and namespace name, both of which are limited to a length of 1000.
+		`Maximum size in bytes of temporal.api.common.v1.Link object in an API request.`,
+	)
+	FrontendMaxLinksPerRequest = NewNamespaceIntSetting(
+		"frontend.maxlinksPerRequest",
+		10,
+		`Maximum number of links allowed to be attached via a single API request.`,
+	)
 	FrontendMaxConcurrentBatchOperationPerNamespace = NewNamespaceIntSetting(
 		"frontend.MaxConcurrentBatchOperationPerNamespace",
 		1,
@@ -1187,6 +1197,11 @@ Set to zero to disable proactive unload.`,
 		0.0,
 		`MatchingQueryWorkflowTaskTimeoutLogRate defines the sampling rate for logs when a query workflow task times out. Since
 these log lines can be noisy, we want to be able to turn on and sample selectively for each affected namespace.`,
+	)
+	TaskQueueInfoByBuildIdTTL = NewTaskQueueDurationSetting(
+		"matching.TaskQueueInfoByBuildIdTTL",
+		time.Second,
+		`TaskQueueInfoByBuildIdTTL serves as a TTL for the cache holding DescribeTaskQueue partition results`,
 	)
 	// for matching testing only:
 
@@ -2167,12 +2182,6 @@ Do not turn this on if you aren't using Cassandra as the history task DLQ is not
 		70, // 70 attempts takes about an hour
 		`HistoryTaskDLQUnexpectedErrorAttempts is the number of task execution attempts before sending the task to DLQ.`,
 	)
-	HistoryTaskDLQInternalErrors = NewGlobalBoolSetting(
-		"history.TaskDLQInternalErrors",
-		false,
-		`HistoryTaskDLQInternalErrors causes history task processing to send tasks failing with serviceerror.Internal to
-the dlq (or will drop them if not enabled)`,
-	)
 	HistoryTaskDLQErrorPattern = NewGlobalStringSetting(
 		"history.TaskDLQErrorPattern",
 		"",
@@ -2524,5 +2533,11 @@ WorkerActivitiesPerSecond, MaxConcurrentActivityTaskPollers.
 		"system.logAllReqErrors",
 		false,
 		`When set to true, logs all RPC/request errors for the namespace, not just unexpected ones.`,
+	)
+
+	ActivityAPIsEnabled = NewNamespaceBoolSetting(
+		"frontend.activityAPIsEnabled",
+		false,
+		`ActivityAPIsEnabled is a "feature enable" flag. `,
 	)
 )

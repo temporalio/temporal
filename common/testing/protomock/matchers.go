@@ -28,8 +28,8 @@ package protomock
 import (
 	"fmt"
 
-	"github.com/golang/mock/gomock"
 	"go.temporal.io/api/temporalproto"
+	"go.uber.org/mock/gomock"
 )
 
 type protoEq struct {

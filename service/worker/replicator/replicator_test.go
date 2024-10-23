@@ -29,10 +29,10 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/persistence"
+	"go.uber.org/mock/gomock"
 )
 
 func TestCleanupAckedMessages_GetAckLevelsError(t *testing.T) {

@@ -30,7 +30,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"go.temporal.io/api/serviceerror"
@@ -41,6 +40,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/xdc"
 	"go.temporal.io/server/service/history/shard"
+	"go.uber.org/mock/gomock"
 )
 
 type (
@@ -101,6 +101,10 @@ func (s *executableNoopTaskSuite) SetupTest() {
 		rand.Int63(),
 		time.Unix(0, rand.Int63()),
 		"sourceCluster",
+		ClusterShardKey{
+			ClusterID: int32(cluster.TestCurrentClusterInitialFailoverVersion),
+			ShardID:   rand.Int31(),
+		},
 	)
 }
 

@@ -34,6 +34,7 @@ import (
 	"github.com/nexus-rpc/sdk-go/nexus"
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
@@ -46,6 +47,7 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/components/callbacks"
 	"go.temporal.io/server/internal/temporalite"
+	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 
@@ -59,7 +61,16 @@ func (h *completionHandler) CompleteOperation(ctx context.Context, request *nexu
 	return <-h.requestCompleteCh
 }
 
-func (s *FunctionalSuite) runNexusCompletionHTTPServer(h *completionHandler, listenAddr string) func() error {
+type CallbacksSuite struct {
+	testcore.FunctionalSuite
+}
+
+func TestCallbacksSuite(t *testing.T) {
+	t.Parallel()
+	suite.Run(t, new(CallbacksSuite))
+}
+
+func (s *CallbacksSuite) runNexusCompletionHTTPServer(h *completionHandler, listenAddr string) func() error {
 	hh := nexus.NewCompletionHTTPHandler(nexus.CompletionHandlerOptions{Handler: h})
 	srv := &http.Server{Addr: listenAddr, Handler: hh}
 	listener, err := net.Listen("tcp", listenAddr)
@@ -84,9 +95,9 @@ func (s *FunctionalSuite) runNexusCompletionHTTPServer(h *completionHandler, lis
 	}
 }
 
-func (s *FunctionalSuite) TestWorkflowCallbacks_InvalidArgument() {
-	ctx := NewContext()
-	taskQueue := s.randomizeStr(s.T().Name())
+func (s *CallbacksSuite) TestWorkflowCallbacks_InvalidArgument() {
+	ctx := testcore.NewContext()
+	taskQueue := testcore.RandomizeStr(s.T().Name())
 	workflowType := "test"
 
 	cases := []struct {
@@ -165,8 +176,8 @@ func (s *FunctionalSuite) TestWorkflowCallbacks_InvalidArgument() {
 			}
 			request := &workflowservice.StartWorkflowExecutionRequest{
 				RequestId:           uuid.New(),
-				Namespace:           s.namespace,
-				WorkflowId:          s.randomizeStr(s.T().Name()),
+				Namespace:           s.Namespace(),
+				WorkflowId:          testcore.RandomizeStr(s.T().Name()),
 				WorkflowType:        &commonpb.WorkflowType{Name: workflowType},
 				TaskQueue:           &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 				Input:               nil,
@@ -175,7 +186,7 @@ func (s *FunctionalSuite) TestWorkflowCallbacks_InvalidArgument() {
 				CompletionCallbacks: cbs,
 			}
 
-			_, err := s.client.StartWorkflowExecution(ctx, request)
+			_, err := s.FrontendClient().StartWorkflowExecution(ctx, request)
 			var invalidArgument *serviceerror.InvalidArgument
 			s.ErrorAs(err, &invalidArgument)
 			s.Equal(tc.message, err.Error())
@@ -183,7 +194,7 @@ func (s *FunctionalSuite) TestWorkflowCallbacks_InvalidArgument() {
 	}
 }
 
-func (s *FunctionalSuite) TestWorkflowNexusCallbacks_CarriedOver() {
+func (s *CallbacksSuite) TestWorkflowNexusCallbacks_CarriedOver() {
 	s.OverrideDynamicConfig(dynamicconfig.EnableNexus, true)
 	s.OverrideDynamicConfig(
 		callbacks.AllowedAddresses,
@@ -233,15 +244,15 @@ func (s *FunctionalSuite) TestWorkflowNexusCallbacks_CarriedOver() {
 
 	for _, tc := range cases {
 		s.T().Run(tc.name, func(t *testing.T) {
-			ctx := NewContext()
+			ctx := testcore.NewContext()
 			sdkClient, err := client.Dial(client.Options{
-				HostPort:  s.testCluster.GetHost().FrontendGRPCAddress(),
-				Namespace: s.namespace,
+				HostPort:  s.FrontendGRPCAddress(),
+				Namespace: s.Namespace(),
 			})
 			s.NoError(err)
 			pp := temporalite.NewPortProvider()
 
-			taskQueue := s.randomizeStr(s.T().Name())
+			taskQueue := testcore.RandomizeStr(s.T().Name())
 			workflowType := "test"
 
 			ch := &completionHandler{
@@ -262,8 +273,8 @@ func (s *FunctionalSuite) TestWorkflowNexusCallbacks_CarriedOver() {
 
 			request := &workflowservice.StartWorkflowExecutionRequest{
 				RequestId:          uuid.New(),
-				Namespace:          s.namespace,
-				WorkflowId:         s.randomizeStr(s.T().Name()),
+				Namespace:          s.Namespace(),
+				WorkflowId:         testcore.RandomizeStr(s.T().Name()),
 				WorkflowType:       &commonpb.WorkflowType{Name: workflowType},
 				TaskQueue:          &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 				Input:              nil,
@@ -285,7 +296,7 @@ func (s *FunctionalSuite) TestWorkflowNexusCallbacks_CarriedOver() {
 				},
 			}
 
-			_, err = s.client.StartWorkflowExecution(ctx, request)
+			_, err = s.FrontendClient().StartWorkflowExecution(ctx, request)
 			s.NoError(err)
 
 			run := sdkClient.GetWorkflow(ctx, request.WorkflowId, "")
@@ -311,6 +322,8 @@ func (s *FunctionalSuite) TestWorkflowNexusCallbacks_CarriedOver() {
 				s.ProtoEqual(request.CompletionCallbacks[0], callbackInfo.Callback)
 				s.ProtoEqual(&workflowpb.CallbackInfo_Trigger{Variant: &workflowpb.CallbackInfo_Trigger_WorkflowClosed{WorkflowClosed: &workflowpb.CallbackInfo_WorkflowClosed{}}}, callbackInfo.Trigger)
 				s.Equal(int32(attempt), callbackInfo.Attempt)
+				// Loose check to see that this is set.
+				s.Greater(callbackInfo.LastAttemptCompleteTime.AsTime(), time.Now().Add(-time.Hour))
 				if attempt < numAttempts {
 					s.Equal(enumspb.CALLBACK_STATE_BACKING_OFF, callbackInfo.State)
 					s.Equal("request failed with: 500 Internal Server Error", callbackInfo.LastAttemptFailure.Message)

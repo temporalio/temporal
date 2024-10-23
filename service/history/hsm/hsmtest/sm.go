@@ -66,11 +66,11 @@ func (d *Data) SetState(s State) {
 func (d *Data) RegenerateTasks(node *hsm.Node) ([]hsm.Task, error) {
 	return []hsm.Task{
 		NewTask(
-			hsm.TaskKindTimer{Deadline: time.Now().Add(time.Hour)},
+			hsm.TaskAttributes{Deadline: time.Now().Add(time.Hour)},
 			false,
 		),
 		NewTask(
-			hsm.TaskKindOutbound{Destination: string(d.state)},
+			hsm.TaskAttributes{Destination: string(d.state)},
 			false,
 		),
 	}, nil

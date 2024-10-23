@@ -136,9 +136,11 @@ service MatchingService {
     // worker which triggered the root partition being loaded in the first place.
     rpc ForceLoadTaskQueuePartition (ForceLoadTaskQueuePartitionRequest) returns (ForceLoadTaskQueuePartitionResponse) {}
     
-
-    // Force unloading a task queue. Used for testing only.
+    // TODO Shivam - remove this in 123. Present for backwards compatibility.
     rpc ForceUnloadTaskQueue (ForceUnloadTaskQueueRequest) returns (ForceUnloadTaskQueueResponse) {}
+
+    // Force unloading a task queue partition.
+    rpc ForceUnloadTaskQueuePartition (ForceUnloadTaskQueuePartitionRequest) returns (ForceUnloadTaskQueuePartitionResponse) {}
 
     // Update task queue user data in owning node for all updates in namespace.
     // All user data updates must first go through the task queue owner using the `UpdateWorkerBuildIdCompatibility`

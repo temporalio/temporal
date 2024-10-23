@@ -28,7 +28,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/golang/mock/gomock"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	commandpb "go.temporal.io/api/command/v1"
@@ -58,6 +57,7 @@ import (
 	"go.temporal.io/server/service/history/tests"
 	"go.temporal.io/server/service/history/workflow"
 	"go.temporal.io/server/service/history/workflow/cache"
+	"go.uber.org/mock/gomock"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 
@@ -241,21 +241,6 @@ func TestValidateStateMachineRef(t *testing.T) {
 			},
 		},
 		{
-			name:                    "WithTransitionHistory/MachineLastUpdateTransitionInequality",
-			enableTransitionHistory: true,
-			mutateRef: func(ref *hsm.Ref) {
-				machineLastUpdateVersionedTransition := ref.StateMachineRef.MachineLastUpdateVersionedTransition
-				ref.StateMachineRef.MachineLastUpdateVersionedTransition = &persistencespb.VersionedTransition{
-					NamespaceFailoverVersion: machineLastUpdateVersionedTransition.NamespaceFailoverVersion,
-					TransitionCount:          machineLastUpdateVersionedTransition.TransitionCount + 1,
-				}
-			},
-			mutateNode: func(node *hsm.Node) {},
-			assertOutcome: func(t *testing.T, err error) {
-				require.ErrorIs(t, err, consts.ErrStaleReference)
-			},
-		},
-		{
 			name:                    "WithoutTransitionHistory/MachineTransitionInequality",
 			enableTransitionHistory: false,
 			mutateRef: func(ref *hsm.Ref) {
@@ -339,11 +324,8 @@ func TestValidateStateMachineRef(t *testing.T) {
 				logger:         s.mockShard.GetLogger(),
 			}
 
-			cbt := task.(*tasks.StateMachineOutboundTask)
-			ref := hsm.Ref{
-				WorkflowKey:     taskWorkflowKey(task),
-				StateMachineRef: cbt.Info.Ref,
-			}
+			ref, _, err := stateMachineTask(s.mockShard, task)
+			require.NoError(t, err)
 			node, err := mutableState.HSM().Child(ref.StateMachinePath())
 			require.NoError(t, err)
 			tc.mutateNode(node)
@@ -459,11 +441,8 @@ func TestAccess(t *testing.T) {
 			}
 
 			task := snapshot.Tasks[tasks.CategoryOutbound][0]
-			cbt := task.(*tasks.StateMachineOutboundTask)
-			ref := hsm.Ref{
-				WorkflowKey:     taskWorkflowKey(task),
-				StateMachineRef: cbt.Info.Ref,
-			}
+			ref, _, err := stateMachineTask(s.mockShard, task)
+			require.NoError(t, err)
 			err = exec.Access(context.Background(), ref, tc.accessType, tc.accessor)
 			tc.assertOutcome(t, err)
 		})

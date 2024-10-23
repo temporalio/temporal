@@ -50,6 +50,7 @@ func NewExecutableNoopTask(
 	taskID int64,
 	taskCreationTime time.Time,
 	sourceClusterName string,
+	sourceShardKey ClusterShardKey,
 ) *ExecutableNoopTask {
 	return &ExecutableNoopTask{
 		ExecutableTask: NewExecutableTask(
@@ -59,6 +60,7 @@ func NewExecutableNoopTask(
 			taskCreationTime,
 			time.Now().UTC(),
 			sourceClusterName,
+			sourceShardKey,
 			enumsspb.TASK_PRIORITY_UNSPECIFIED,
 			nil,
 		),

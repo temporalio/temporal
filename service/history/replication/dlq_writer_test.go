@@ -29,12 +29,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	enumspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
-	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
@@ -44,6 +42,7 @@ import (
 	"go.temporal.io/server/service/history/queues/queuestest"
 	"go.temporal.io/server/service/history/replication"
 	"go.temporal.io/server/service/history/tests"
+	"go.uber.org/mock/gomock"
 )
 
 type (
@@ -61,14 +60,15 @@ func TestNewExecutionManagerDLQWriter(t *testing.T) {
 		TaskId: 21,
 	}
 	err := writer.WriteTaskToDLQ(context.Background(), replication.DLQWriteRequest{
-		ShardID:             13,
+		SourceShardID:       13,
+		TargetShardID:       26,
 		SourceCluster:       "test-source-cluster",
 		ReplicationTaskInfo: replicationTaskInfo,
 	})
 	require.NoError(t, err)
 	require.Len(t, executionManager.requests, 1)
 	request := executionManager.requests[0]
-	assert.Equal(t, 13, int(request.ShardID))
+	assert.Equal(t, 26, int(request.ShardID))
 	assert.Equal(t, "test-source-cluster", request.SourceClusterName)
 	assert.Equal(t, replicationTaskInfo, request.TaskInfo)
 }
@@ -96,16 +96,10 @@ func TestNewDLQWriterAdapter(t *testing.T) {
 			controller := gomock.NewController(t)
 			queueWriter := &queuestest.FakeQueueWriter{}
 			taskSerializer := serialization.NewTaskSerializer()
-			clusterMetadata := cluster.NewMockMetadata(controller)
-			clusterMetadata.EXPECT().GetAllClusterInfo().Return(map[string]cluster.ClusterInformation{
-				"test-source-cluster": {
-					ShardCount: 1,
-				},
-			}).AnyTimes()
 			namespaceRegistry := namespace.NewMockRegistry(controller)
 			namespaceRegistry.EXPECT().GetNamespaceByID(gomock.Any()).Return(&namespace.Namespace{}, nil).AnyTimes()
 			writer := replication.NewDLQWriterAdapter(
-				queues.NewDLQWriter(queueWriter, clusterMetadata, metrics.NoopMetricsHandler, log.NewTestLogger(), namespaceRegistry),
+				queues.NewDLQWriter(queueWriter, metrics.NoopMetricsHandler, log.NewTestLogger(), namespaceRegistry),
 				taskSerializer,
 				"test-current-cluster",
 			)
@@ -118,7 +112,7 @@ func TestNewDLQWriterAdapter(t *testing.T) {
 				TaskId:      21,
 			}
 			err := writer.WriteTaskToDLQ(context.Background(), replication.DLQWriteRequest{
-				ShardID:             13,
+				SourceShardID:       13,
 				SourceCluster:       "test-source-cluster",
 				ReplicationTaskInfo: replicationTaskInfo,
 			})

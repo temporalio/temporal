@@ -315,6 +315,11 @@ message ReplicationTaskInfo {
     string new_run_id = 17;
     temporal.server.api.enums.v1.TaskPriority priority = 18;
     VersionedTransition versioned_transition = 19;
+    // A list of event-based replication tasks that, together, are equivalent
+    // to this state-based task. 
+    // TODO: Remove this field when state-based replication is stable and
+    // doesn't need to be disabled.
+    repeated ReplicationTaskInfo task_equivalents = 20;
 }
 
 // visibility_task_data column
@@ -357,6 +362,9 @@ message TimerTaskInfo {
     // If specified, the task is a for a workflow chain instead of a specific workflow run.
     // A workflow chain is identified by the run_id of the first workflow in the chain.
     string first_run_id = 15;
+
+    // The stamp represents the version of the activity for which the timer task was created.
+    int32 stamp = 16;
 }
 
 message ArchivalTaskInfo {
@@ -452,6 +460,14 @@ message ActivityInfo {
         // workflows redirect_counter value when this activity started last time
         int64 last_redirect_counter = 2;
     }
+
+    // First time the activity was scheduled.
+    google.protobuf.Timestamp first_scheduled_time = 39;
+
+    // Last time an activity failure was recorded by the server.
+    google.protobuf.Timestamp last_attempt_complete_time = 40;
+    // stamp represent "version" of activity during its lifetime. It can be changed with Activity API
+    int32 stamp = 41;
 }
 
 // timer_map column

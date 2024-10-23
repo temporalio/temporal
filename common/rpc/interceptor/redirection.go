@@ -45,6 +45,8 @@ import (
 	"google.golang.org/grpc/metadata"
 )
 
+// Note the nexusoperations component references these headers and adds them to a list of disallowed headers for users to set.
+// If any other headers are added for internal use, they should be added to the disallowed headers list.
 const (
 	DCRedirectionContextHeaderName = "xdc-redirection"
 	DCRedirectionApiHeaderName     = "xdc-redirection-api"
@@ -121,10 +123,11 @@ var (
 		"GetWorkerVersioningRules":         func() any { return &workflowservice.GetWorkerVersioningRulesResponse{} },
 		"GetWorkerTaskReachability":        func() any { return &workflowservice.GetWorkerTaskReachabilityResponse{} },
 
-		"StartBatchOperation":    func() any { return &workflowservice.StartBatchOperationResponse{} },
-		"StopBatchOperation":     func() any { return &workflowservice.StopBatchOperationResponse{} },
-		"DescribeBatchOperation": func() any { return &workflowservice.DescribeBatchOperationResponse{} },
-		"ListBatchOperations":    func() any { return &workflowservice.ListBatchOperationsResponse{} },
+		"StartBatchOperation":       func() any { return &workflowservice.StartBatchOperationResponse{} },
+		"StopBatchOperation":        func() any { return &workflowservice.StopBatchOperationResponse{} },
+		"DescribeBatchOperation":    func() any { return &workflowservice.DescribeBatchOperationResponse{} },
+		"ListBatchOperations":       func() any { return &workflowservice.ListBatchOperationsResponse{} },
+		"UpdateActivityOptionsById": func() any { return &workflowservice.UpdateActivityOptionsByIdResponse{} },
 	}
 )
 

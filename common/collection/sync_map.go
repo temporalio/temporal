@@ -25,13 +25,16 @@
 package collection
 
 import (
+	"maps"
 	"sync"
 )
 
-// SyncMap implements a simple mutex-wrapped map. We've had bugs where we took the wrong lock
-// when reimplementing this pattern, so it's worth having a single canonical implementation.
+// SyncMap implements a simple mutex-wrapped map. SyncMap is copyable like a normal map[K]V.
 type SyncMap[K comparable, V any] struct {
+	// Use a pointer to RWMutex instead of embedding so that the contents of this struct itself
+	// are immutable and copyable, and copies refer to the same RWMutex and map.
 	*sync.RWMutex
+	// For the same reason, contents (the pointer) should not be changed.
 	contents map[K]V
 }
 
@@ -92,7 +95,7 @@ func (m *SyncMap[K, V]) Pop(key K) (value V, ok bool) {
 func (m *SyncMap[K, V]) PopAll() map[K]V {
 	m.Lock()
 	defer m.Unlock()
-	contents := m.contents
-	m.contents = make(map[K]V)
+	contents := maps.Clone(m.contents)
+	clear(m.contents)
 	return contents
 }

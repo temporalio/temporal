@@ -29,7 +29,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
@@ -39,6 +38,7 @@ import (
 	"go.temporal.io/server/common/persistence/mock"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/quotas"
+	"go.uber.org/mock/gomock"
 )
 
 func TestRateLimitedPersistenceClients(t *testing.T) {

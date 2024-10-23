@@ -10,8 +10,9 @@ breaking:
   use:
     - WIRE
   # Uncomment this to temporarily ignore specific files or directories:
-  #ignore:
-  #  - temporal/server/api/...
+  ignore:
+    - temporal/server/api/historyservice/v1/
+
 lint:
   use:
     - DEFAULT

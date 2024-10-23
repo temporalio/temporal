@@ -28,7 +28,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/golang/mock/gomock"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -53,6 +52,7 @@ import (
 	"go.temporal.io/server/service/history/tests"
 	"go.temporal.io/server/service/history/workflow"
 	"go.temporal.io/server/service/history/workflow/cache"
+	"go.uber.org/mock/gomock"
 )
 
 type (
@@ -75,6 +75,7 @@ type (
 		mockExecutionManager    *persistence.MockExecutionManager
 		config                  *configs.Config
 		sourceClusterName       string
+		sourceShardKey          ClusterShardKey
 
 		taskID      int64
 		namespaceID string
@@ -120,6 +121,10 @@ func (s *executableVerifyVersionedTransitionTaskSuite) SetupTest() {
 	s.taskID = rand.Int63()
 
 	s.sourceClusterName = cluster.TestCurrentClusterName
+	s.sourceShardKey = ClusterShardKey{
+		ClusterID: int32(cluster.TestCurrentClusterInitialFailoverVersion),
+		ShardID:   rand.Int31(),
+	}
 	s.mockExecutionManager = persistence.NewMockExecutionManager(s.controller)
 	s.config = tests.NewDynamicConfig()
 
@@ -158,6 +163,7 @@ func (s *executableVerifyVersionedTransitionTaskSuite) SetupTest() {
 		s.taskID,
 		taskCreationTime,
 		s.sourceClusterName,
+		s.sourceShardKey,
 		replicationTask,
 	)
 	s.task.ExecutableTask = s.executableTask
@@ -212,6 +218,7 @@ func (s *executableVerifyVersionedTransitionTaskSuite) TestExecute_CurrentBranch
 		s.taskID,
 		time.Now(),
 		s.sourceClusterName,
+		s.sourceShardKey,
 		replicationTask,
 	)
 	task.ExecutableTask = s.executableTask
@@ -261,6 +268,7 @@ func (s *executableVerifyVersionedTransitionTaskSuite) TestExecute_CurrentBranch
 		s.taskID,
 		time.Now(),
 		s.sourceClusterName,
+		s.sourceShardKey,
 		replicationTask,
 	)
 	task.ExecutableTask = s.executableTask
@@ -338,6 +346,7 @@ func (s *executableVerifyVersionedTransitionTaskSuite) TestExecute_CurrentBranch
 		s.taskID,
 		time.Now(),
 		s.sourceClusterName,
+		s.sourceShardKey,
 		replicationTask,
 	)
 	task.ExecutableTask = s.executableTask
@@ -401,6 +410,7 @@ func (s *executableVerifyVersionedTransitionTaskSuite) TestExecute_NonCurrentBra
 		s.taskID,
 		time.Now(),
 		s.sourceClusterName,
+		s.sourceShardKey,
 		replicationTask,
 	)
 	task.ExecutableTask = s.executableTask
@@ -469,6 +479,7 @@ func (s *executableVerifyVersionedTransitionTaskSuite) TestExecute_NonCurrentBra
 		s.taskID,
 		time.Now(),
 		s.sourceClusterName,
+		s.sourceShardKey,
 		replicationTask,
 	)
 	task.ExecutableTask = s.executableTask

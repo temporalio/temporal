@@ -157,7 +157,7 @@ func (tv *TestVars) WithWorkflowID(workflowID string, key ...string) *TestVars {
 }
 
 func (tv *TestVars) RunID(key ...string) string {
-	return tv.getOrCreate("run_id", key, uuid.New()).(string)
+	return tv.getOrCreate("run_id", key, "").(string)
 }
 
 func (tv *TestVars) WithRunID(runID string, key ...string) *TestVars {
@@ -171,9 +171,9 @@ func (tv *TestVars) WorkflowExecution(key ...string) *commonpb.WorkflowExecution
 	}
 }
 
-func (tv *TestVars) UpdateRef() *updatepb.UpdateRef {
+func (tv *TestVars) UpdateRef(key ...string) *updatepb.UpdateRef {
 	return &updatepb.UpdateRef{
-		UpdateId:          tv.UpdateID(),
+		UpdateId:          tv.UpdateID(key...),
 		WorkflowExecution: tv.WorkflowExecution(),
 	}
 }
@@ -282,8 +282,16 @@ func (tv *TestVars) QueryType(key ...string) string {
 	return tv.getOrCreate("query_type", key).(string)
 }
 
-func (tv *TestVars) WithQueryType(queryTypeID string, key ...string) *TestVars {
-	return tv.cloneSet("query_type", key, queryTypeID)
+func (tv *TestVars) WithQueryType(queryType string, key ...string) *TestVars {
+	return tv.cloneSet("query_type", key, queryType)
+}
+
+func (tv *TestVars) IndexName(key ...string) string {
+	return tv.getOrCreate("index_name", key).(string)
+}
+
+func (tv *TestVars) WithIndexName(indexName string, key ...string) *TestVars {
+	return tv.cloneSet("index_name", key, indexName)
 }
 
 // ----------- Generic methods ------------

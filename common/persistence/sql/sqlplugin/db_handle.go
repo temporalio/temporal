@@ -35,6 +35,7 @@ import (
 
 	"github.com/jmoiron/sqlx"
 	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
@@ -59,6 +60,7 @@ type DatabaseHandle struct {
 	lastRefresh time.Time
 	metrics     metrics.Handler
 	logger      log.Logger
+	timeSource  clock.TimeSource
 	// Ensures only one refresh call happens at a time
 	sync.Mutex
 }
@@ -71,6 +73,7 @@ func NewDatabaseHandle(
 	needsRefresh func(error) bool,
 	logger log.Logger,
 	metricsHandler metrics.Handler,
+	timeSource clock.TimeSource,
 ) *DatabaseHandle {
 	handle := &DatabaseHandle{
 		running:      true,
@@ -78,6 +81,7 @@ func NewDatabaseHandle(
 		needsRefresh: needsRefresh,
 		metrics:      metricsHandler,
 		logger:       logger,
+		timeSource:   timeSource,
 	}
 	handle.reconnect(true)
 	return handle
@@ -108,9 +112,8 @@ func (h *DatabaseHandle) reconnect(force bool) *sqlx.DB {
 
 	metrics.PersistenceSessionRefreshAttempts.With(h.metrics).Record(1)
 
-	now := time.Now()
+	now := h.timeSource.Now()
 	lastRefresh := h.lastRefresh
-	h.lastRefresh = now
 	if now.Sub(lastRefresh) < sessionRefreshMinInternal {
 		h.logger.Warn("sql handle: did not refresh database connection pool because the last refresh was too close",
 			tag.NewDurationTag("min_refresh_interval_seconds", sessionRefreshMinInternal))
@@ -119,6 +122,7 @@ func (h *DatabaseHandle) reconnect(force bool) *sqlx.DB {
 		return nil
 	}
 
+	h.lastRefresh = now
 	newConn, err := h.connect()
 	if err != nil {
 		h.logger.Error("sql handle: unable to refresh database connection pool", tag.Error(err))

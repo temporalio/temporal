@@ -28,7 +28,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -39,6 +38,7 @@ import (
 	"go.temporal.io/server/common/testing/protomock"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/tests"
+	"go.uber.org/mock/gomock"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -325,6 +325,7 @@ func (s *timerSequenceSuite) TestCreateNextActivityTimer_NotCreated_AfterWorkflo
 		Version:                 123,
 		ScheduledEventId:        234,
 		ScheduledTime:           timestamppb.New(now),
+		FirstScheduledTime:      timestamppb.New(now),
 		StartedEventId:          common.EmptyEventID,
 		StartedTime:             nil,
 		ActivityId:              "some random activity ID",
@@ -353,6 +354,7 @@ func (s *timerSequenceSuite) TestCreateNextActivityTimer_NotCreated_BeforeWorkfl
 		Version:                 123,
 		ScheduledEventId:        234,
 		ScheduledTime:           timestamppb.New(now),
+		FirstScheduledTime:      timestamppb.New(now),
 		StartedEventId:          common.EmptyEventID,
 		StartedTime:             nil,
 		ActivityId:              "some random activity ID",
@@ -394,6 +396,7 @@ func (s *timerSequenceSuite) TestCreateNextActivityTimer_NotCreated_NoWorkflowEx
 		Version:                 123,
 		ScheduledEventId:        234,
 		ScheduledTime:           timestamppb.New(now),
+		FirstScheduledTime:      timestamppb.New(now),
 		StartedEventId:          common.EmptyEventID,
 		StartedTime:             nil,
 		ActivityId:              "some random activity ID",
@@ -435,6 +438,7 @@ func (s *timerSequenceSuite) TestCreateNextActivityTimer_HeartbeatTimer_AfterWor
 		Version:                 123,
 		ScheduledEventId:        234,
 		ScheduledTime:           timestamppb.New(now),
+		FirstScheduledTime:      timestamppb.New(now),
 		StartedEventId:          345,
 		StartedTime:             timestamppb.New(now.Add(200 * time.Millisecond)),
 		ActivityId:              "some random activity ID",
@@ -463,6 +467,7 @@ func (s *timerSequenceSuite) TestCreateNextActivityTimer_HeartbeatTimer_BeforeWo
 		Version:                 123,
 		ScheduledEventId:        234,
 		ScheduledTime:           timestamppb.New(now),
+		FirstScheduledTime:      timestamppb.New(now),
 		StartedEventId:          345,
 		StartedTime:             timestamppb.New(now.Add(200 * time.Millisecond)),
 		ActivityId:              "some random activity ID",
@@ -506,6 +511,7 @@ func (s *timerSequenceSuite) TestCreateNextActivityTimer_HeartbeatTimer_NoWorkfl
 		Version:                 123,
 		ScheduledEventId:        234,
 		ScheduledTime:           timestamppb.New(now),
+		FirstScheduledTime:      timestamppb.New(now),
 		StartedEventId:          345,
 		StartedTime:             timestamppb.New(now.Add(200 * time.Millisecond)),
 		ActivityId:              "some random activity ID",
@@ -653,6 +659,7 @@ func (s *timerSequenceSuite) TestLoadAndSortActivityTimers_One_Scheduled_NotStar
 		Version:                 123,
 		ScheduledEventId:        234,
 		ScheduledTime:           timestamppb.New(now),
+		FirstScheduledTime:      timestamppb.New(now),
 		StartedEventId:          common.EmptyEventID,
 		StartedTime:             nil,
 		ActivityId:              "some random activity ID",
@@ -692,6 +699,7 @@ func (s *timerSequenceSuite) TestLoadAndSortActivityTimers_One_Scheduled_Started
 		Version:                 123,
 		ScheduledEventId:        234,
 		ScheduledTime:           timestamppb.New(now),
+		FirstScheduledTime:      timestamppb.New(now),
 		StartedEventId:          345,
 		StartedTime:             timestamppb.New(now.Add(200 * time.Millisecond)),
 		ActivityId:              "some random activity ID",
@@ -738,6 +746,7 @@ func (s *timerSequenceSuite) TestLoadAndSortActivityTimers_One_Scheduled_Started
 		Version:                 123,
 		ScheduledEventId:        234,
 		ScheduledTime:           timestamppb.New(now),
+		FirstScheduledTime:      timestamppb.New(now),
 		StartedEventId:          345,
 		StartedTime:             timestamppb.New(now.Add(200 * time.Millisecond)),
 		ActivityId:              "some random activity ID",
@@ -777,6 +786,7 @@ func (s *timerSequenceSuite) TestLoadAndSortActivityTimers_One_Scheduled_Started
 		Version:                 123,
 		ScheduledEventId:        234,
 		ScheduledTime:           timestamppb.New(now),
+		FirstScheduledTime:      timestamppb.New(now),
 		StartedEventId:          345,
 		StartedTime:             timestamppb.New(now.Add(200 * time.Millisecond)),
 		ActivityId:              "some random activity ID",
@@ -823,6 +833,7 @@ func (s *timerSequenceSuite) TestLoadAndSortActivityTimers_One_Scheduled_Started
 		Version:                 123,
 		ScheduledEventId:        234,
 		ScheduledTime:           timestamppb.New(now),
+		FirstScheduledTime:      timestamppb.New(now),
 		StartedEventId:          345,
 		StartedTime:             timestamppb.New(now.Add(200 * time.Millisecond)),
 		ActivityId:              "some random activity ID",
@@ -862,6 +873,7 @@ func (s *timerSequenceSuite) TestLoadAndSortActivityTimers_Multiple() {
 		Version:                 123,
 		ScheduledEventId:        234,
 		ScheduledTime:           timestamppb.New(now),
+		FirstScheduledTime:      timestamppb.New(now),
 		StartedEventId:          345,
 		StartedTime:             timestamppb.New(now.Add(200 * time.Millisecond)),
 		ActivityId:              "some random activity ID",
@@ -877,6 +889,7 @@ func (s *timerSequenceSuite) TestLoadAndSortActivityTimers_Multiple() {
 		Version:                 123,
 		ScheduledEventId:        2345,
 		ScheduledTime:           timestamppb.New(now),
+		FirstScheduledTime:      timestamppb.New(now),
 		StartedEventId:          common.EmptyEventID,
 		StartedTime:             nil,
 		ActivityId:              "other random activity ID",
@@ -1140,6 +1153,7 @@ func (s *timerSequenceSuite) TestGetActivityScheduleToCloseTimeout_WithTimeout_S
 		Version:                 123,
 		ScheduledEventId:        234,
 		ScheduledTime:           timestamppb.New(now),
+		FirstScheduledTime:      timestamppb.New(now),
 		StartedEventId:          common.EmptyEventID,
 		StartedTime:             nil,
 		ActivityId:              "some random activity ID",
@@ -1569,4 +1583,39 @@ func (s *timerSequenceSuite) TestLess_CompareType() {
 	timerSequenceIDs := TimerSequenceIDs([]TimerSequenceID{timerSequenceID1, timerSequenceID2})
 	s.True(timerSequenceIDs.Less(0, 1))
 	s.False(timerSequenceIDs.Less(1, 0))
+}
+
+func (s *timerSequenceSuite) TestLoadAndSortActivityTimers_FirstScheduledTime() {
+	now := time.Now().UTC()
+	activityInfo := &persistencespb.ActivityInfo{
+		ScheduledEventId:       234,
+		ScheduledTime:          timestamppb.New(now),
+		ScheduleToStartTimeout: timestamp.DurationFromSeconds(10),
+		ScheduleToCloseTimeout: timestamp.DurationFromSeconds(1000),
+		StartToCloseTimeout:    timestamp.DurationFromSeconds(100),
+		HeartbeatTimeout:       timestamp.DurationFromSeconds(1),
+		TimerTaskStatus:        TimerTaskStatusCreatedScheduleToClose | TimerTaskStatusCreatedScheduleToStart,
+		Attempt:                12,
+	}
+	activityInfo.FirstScheduledTime = timestamppb.New(now.Add(1 * time.Second))
+	activityInfos := map[int64]*persistencespb.ActivityInfo{activityInfo.ScheduledEventId: activityInfo}
+	s.mockMutableState.EXPECT().GetPendingActivityInfos().Return(activityInfos)
+
+	timerSequenceIDs := s.timerSequence.LoadAndSortActivityTimers()
+	s.Equal([]TimerSequenceID{
+		{
+			EventID:      activityInfo.ScheduledEventId,
+			Timestamp:    activityInfo.ScheduledTime.AsTime().Add(activityInfo.ScheduleToStartTimeout.AsDuration()),
+			TimerType:    enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START,
+			TimerCreated: true,
+			Attempt:      activityInfo.Attempt,
+		},
+		{
+			EventID:      activityInfo.ScheduledEventId,
+			Timestamp:    activityInfo.FirstScheduledTime.AsTime().Add(activityInfo.ScheduleToCloseTimeout.AsDuration()),
+			TimerType:    enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE,
+			TimerCreated: true,
+			Attempt:      activityInfo.Attempt,
+		},
+	}, timerSequenceIDs)
 }
