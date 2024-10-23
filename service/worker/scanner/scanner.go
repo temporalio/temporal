@@ -173,7 +173,7 @@ func (s *Scanner) Start() error {
 	ctx, s.lifecycleCancel = context.WithCancel(ctx)
 
 	workerOpts := worker.Options{
-		Identity:                               "temporal-system@%s" + s.context.hostInfo.Identity(),
+		Identity:                               "temporal-system@" + s.context.hostInfo.Identity(),
 		MaxConcurrentActivityExecutionSize:     s.context.cfg.MaxConcurrentActivityExecutionSize(),
 		MaxConcurrentWorkflowTaskExecutionSize: s.context.cfg.MaxConcurrentWorkflowTaskExecutionSize(),
 		MaxConcurrentActivityTaskPollers:       s.context.cfg.MaxConcurrentActivityTaskPollers(),

@@ -77,7 +77,7 @@ func (wm *workerManager) Start() {
 	}
 
 	defaultWorkerOptions := sdkworker.Options{
-		Identity: "temporal-system@%s" + wm.hostInfo.Identity(),
+		Identity: "temporal-system@" + wm.hostInfo.Identity(),
 		// TODO: add dynamic config for worker options
 		BackgroundActivityContext: headers.SetCallerType(context.Background(), headers.CallerTypeBackground),
 	}
@@ -91,7 +91,7 @@ func (wm *workerManager) Start() {
 			// use default worker
 			wc.RegisterWorkflow(defaultWorker)
 		} else {
-			wfWorkerOptions.Options.Identity = "temporal-system@%s" + wm.hostInfo.Identity()
+			wfWorkerOptions.Options.Identity = "temporal-system@" + wm.hostInfo.Identity()
 			// this worker component requires a dedicated worker
 			dedicatedWorker := wm.sdkClientFactory.NewWorker(sdkClient, wfWorkerOptions.TaskQueue, wfWorkerOptions.Options)
 			wc.RegisterWorkflow(dedicatedWorker)
@@ -108,7 +108,7 @@ func (wm *workerManager) Start() {
 
 			// this worker component requires a dedicated worker for activities
 			activityWorkerOptions.Options.DisableWorkflowWorker = true
-			activityWorkerOptions.Options.Identity = "temporal-system@%s" + wm.hostInfo.Identity()
+			activityWorkerOptions.Options.Identity = "temporal-system@" + wm.hostInfo.Identity()
 			activityWorker := wm.sdkClientFactory.NewWorker(sdkClient, activityWorkerOptions.TaskQueue, activityWorkerOptions.Options)
 			wc.RegisterActivities(activityWorker)
 			wm.workers = append(wm.workers, activityWorker)

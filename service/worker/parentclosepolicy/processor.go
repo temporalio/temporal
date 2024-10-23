@@ -112,6 +112,6 @@ func getWorkerOptions(p *Processor) worker.Options {
 		MaxConcurrentActivityTaskPollers:       p.cfg.MaxConcurrentActivityTaskPollers(),
 		MaxConcurrentWorkflowTaskPollers:       p.cfg.MaxConcurrentWorkflowTaskPollers(),
 		BackgroundActivityContext:              ctx,
-		Identity:                               "temporal-system@%s" + p.hostInfo.Identity(),
+		Identity:                               "temporal-system@" + p.hostInfo.Identity(),
 	}
 }
