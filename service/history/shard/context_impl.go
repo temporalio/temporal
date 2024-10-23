@@ -923,10 +923,12 @@ func (s *ContextImpl) AppendHistoryEvents(
 		// N.B. - Dual emit here makes sense so that we can see aggregate timer stats across all
 		// namespaces along with the individual namespaces stats
 		handler := s.GetMetricsHandler().WithTags(metrics.OperationTag(metrics.SessionStatsScope))
-		metrics.HistorySize.With(handler).Record(int64(size))
 		if entry, err := s.GetNamespaceRegistry().GetNamespaceByID(namespaceID); err == nil && entry != nil {
 			metrics.HistorySize.With(handler).
 				Record(int64(size), metrics.NamespaceTag(entry.Name().String()))
+		} else {
+			metrics.HistorySize.With(handler).
+				Record(int64(size), metrics.NamespaceUnknownTag())
 		}
 		if size >= historySizeLogThreshold {
 			s.throttledLogger.Warn("history size threshold breached",
