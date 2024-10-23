@@ -760,7 +760,7 @@ func (ms *MutableStateImpl) UpdateCurrentVersion(
 	version int64,
 	forceUpdate bool,
 ) error {
-	if ms.transitionHistoryEnabled && len(ms.executionInfo.TransitionHistory) != 0 {
+	if len(ms.executionInfo.TransitionHistory) != 0 {
 		// this make sure current version >= last write version
 		lastVersionedTransition := ms.executionInfo.TransitionHistory[len(ms.executionInfo.TransitionHistory)-1]
 		ms.currentVersion = lastVersionedTransition.NamespaceFailoverVersion
@@ -852,7 +852,7 @@ func (ms *MutableStateImpl) GetCloseVersion() (int64, error) {
 }
 
 func (ms *MutableStateImpl) GetLastWriteVersion() (int64, error) {
-	if ms.transitionHistoryEnabled && len(ms.executionInfo.TransitionHistory) != 0 {
+	if len(ms.executionInfo.TransitionHistory) != 0 {
 		lastVersionedTransition := ms.executionInfo.TransitionHistory[len(ms.executionInfo.TransitionHistory)-1]
 		return lastVersionedTransition.NamespaceFailoverVersion, nil
 	}
@@ -5059,7 +5059,7 @@ func (ms *MutableStateImpl) isStateDirty() bool {
 		len(ms.updateInfoUpdated) > 0 ||
 		ms.visibilityUpdated ||
 		ms.executionStateUpdated ||
-		ms.workflowTaskUpdated ||
+		(ms.workflowTaskUpdated && ms.GetPendingWorkflowTask() != nil && ms.GetPendingWorkflowTask().Type != enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE) ||
 		ms.executionInfo.CancelRequested ||
 		(ms.stateMachineNode != nil && ms.stateMachineNode.Dirty())
 }
@@ -5473,7 +5473,6 @@ func (ms *MutableStateImpl) closeTransactionHandleUnknownVersionedTransition() {
 	// We are in unknown versioned transition state, clear the transition history.
 	ms.executionInfo.TransitionHistory = nil
 	ms.executionInfo.SubStateMachineTombstoneBatches = nil
-	ms.transitionHistoryEnabled = false
 
 	for _, activityInfo := range ms.updateActivityInfos {
 		activityInfo.LastUpdateVersionedTransition = nil
