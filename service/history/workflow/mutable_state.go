@@ -397,6 +397,8 @@ type (
 		// If state transition history is empty (e.g. when disabled or fresh mutable state), returns 0.
 		NextTransitionCount() int64
 
+		InitTransitionHistory()
+
 		ShouldResetActivityTimerTaskMask(current, incoming *persistencespb.ActivityInfo) bool
 	}
 )

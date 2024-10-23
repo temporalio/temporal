@@ -180,6 +180,7 @@ func (s *replicationTaskSuite) TestSkipDuplicatedEvents_ValidInput_SkipEvents() 
 		nil,
 		"",
 		nil,
+		false,
 	)
 	err := task.skipDuplicatedEvents(1)
 	s.NoError(err)
@@ -221,6 +222,7 @@ func (s *replicationTaskSuite) TestSkipDuplicatedEvents_InvalidInput_ErrorOut() 
 		nil,
 		"",
 		nil,
+		false,
 	)
 	err := task.skipDuplicatedEvents(2)
 	s.Error(err)
@@ -258,6 +260,7 @@ func (s *replicationTaskSuite) TestSkipDuplicatedEvents_ZeroInput_DoNothing() {
 		nil,
 		"",
 		nil,
+		false,
 	)
 	err := task.skipDuplicatedEvents(0)
 	s.NoError(err)
@@ -291,6 +294,7 @@ func (s *replicationTaskSuite) TestResetInfo() {
 		nil,
 		"",
 		nil,
+		false,
 	)
 	info := task.getBaseWorkflowInfo()
 	s.Nil(info)

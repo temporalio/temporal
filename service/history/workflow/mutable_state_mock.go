@@ -2643,6 +2643,18 @@ func (mr *MockMutableStateMockRecorder) HasStartedWorkflowTask() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HasStartedWorkflowTask", reflect.TypeOf((*MockMutableState)(nil).HasStartedWorkflowTask))
 }
 
+// InitTransitionHistory mocks base method.
+func (m *MockMutableState) InitTransitionHistory() {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "InitTransitionHistory")
+}
+
+// InitTransitionHistory indicates an expected call of InitTransitionHistory.
+func (mr *MockMutableStateMockRecorder) InitTransitionHistory() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "InitTransitionHistory", reflect.TypeOf((*MockMutableState)(nil).InitTransitionHistory))
+}
+
 // IsCancelRequested mocks base method.
 func (m *MockMutableState) IsCancelRequested() bool {
 	m.ctrl.T.Helper()
