@@ -26,11 +26,15 @@ package telemetry
 
 import (
 	"context"
+	"fmt"
 
 	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/propagation"
 	"go.opentelemetry.io/otel/trace"
+	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/rpc/interceptor/logtags"
 	"google.golang.org/grpc"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
@@ -52,6 +56,7 @@ type (
 func NewServerTraceInterceptor(
 	tp trace.TracerProvider,
 	tmp propagation.TextMapPropagator,
+	logger log.Logger,
 ) ServerTraceInterceptor {
 	//nolint:staticcheck
 	otelInterceptor := otelgrpc.UnaryServerInterceptor(
@@ -59,25 +64,36 @@ func NewServerTraceInterceptor(
 		otelgrpc.WithTracerProvider(tp),
 	)
 
-	if debugMode() {
-		return func(
-			ctx context.Context,
-			req interface{},
-			info *grpc.UnaryServerInfo,
-			handler grpc.UnaryHandler,
-		) (any, error) {
-			return otelInterceptor(ctx, req, info, debugHandler(handler))
-		}
-	}
+	isDebug := debugMode()
+	tags := logtags.NewWorkflowTags(common.NewProtoTaskTokenSerializer(), logger)
 
-	return ServerTraceInterceptor(otelInterceptor)
-}
+	return func(
+		ctx context.Context,
+		req interface{},
+		info *grpc.UnaryServerInfo,
+		handler grpc.UnaryHandler,
+	) (any, error) {
+		return otelInterceptor(ctx, req, info, func(ctx context.Context, req any) (resp any, err error) {
+			resp, err = handler(ctx, req)
 
-func debugHandler(origHandler grpc.UnaryHandler) grpc.UnaryHandler {
-	return func(ctx context.Context, req any) (resp any, err error) {
-		resp, err = origHandler(ctx, req)
-		span := trace.SpanFromContext(ctx)
-		if span.IsRecording() {
+			span := trace.SpanFromContext(ctx)
+			if !span.IsRecording() {
+				return
+			}
+
+			// annotate span with workflow tags
+			for _, tag := range tags.Extract(req, info.FullMethod) {
+				if v, ok := tag.Value().(string); ok {
+					k := fmt.Sprintf("temporal.%v", tag.Key())
+					span.SetAttributes(attribute.Key(k).String(v))
+				}
+			}
+
+			if !isDebug {
+				return
+			}
+
+			// annotate with gRPC request/response payload
 			//revive:disable-next-line:unchecked-type-assertion
 			reqMsg := req.(proto.Message)
 			payload, _ := protojson.Marshal(reqMsg)
@@ -93,8 +109,9 @@ func debugHandler(origHandler grpc.UnaryHandler) grpc.UnaryHandler {
 				span.SetAttributes(attribute.Key("rpc.response.payload").String(string(payload)))
 				span.SetAttributes(attribute.Key("rpc.response.type").String(msgType))
 			}
-		}
-		return
+
+			return
+		})
 	}
 }
 

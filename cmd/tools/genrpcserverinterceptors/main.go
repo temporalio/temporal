@@ -172,7 +172,6 @@ func writeGrpcServerData(w io.Writer, grpcServerT reflect.Type, tmpl string) {
 	fatalIfErr(template.Must(template.New("code").Parse(tmpl)).Execute(w, sd))
 }
 
-//nolint:revive // cognitive complexity 37 (> max enabled 25)
 func workflowTagGetters(requestT reflect.Type, depth int) requestData {
 	rd := requestData{}
 	if depth > maxRequestDepth {
