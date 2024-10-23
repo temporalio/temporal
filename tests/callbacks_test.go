@@ -366,6 +366,7 @@ func (s *CallbacksSuite) TestNexusResetWorkflowWithCallback() {
 
 	w := worker.New(sdkClient, taskQueue, worker.Options{})
 
+	// A workflow that completes once it has been reset.
 	longRunningWorkflow := func(ctx workflow.Context) error {
 		return workflow.Await(ctx, func() bool {
 			info := workflow.GetInfo(ctx)
