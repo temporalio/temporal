@@ -523,7 +523,7 @@ func (t *timerQueueActiveTaskExecutor) executeActivityRetryTimerTask(
 	}
 
 	if task.Stamp != activityInfo.Stamp {
-		// this timer event is from an old stamp. In this case we ignore the event.
+		// this retry task event is from an old stamp. In this case we should ignore the event.
 		release(nil) // release(nil) so mutable state is not unloaded from cache
 		// I really don't understand why we need this release(nil) call...
 		return nil
@@ -574,6 +574,7 @@ func (t *timerQueueActiveTaskExecutor) executeActivityRetryTimerTask(
 		ScheduleToStartTimeout: durationpb.New(scheduleToStartTimeout),
 		Clock:                  vclock.NewVectorClock(t.shardContext.GetClusterMetadata().GetClusterID(), t.shardContext.GetShardID(), task.TaskID),
 		VersionDirective:       directive,
+		Stamp:                  task.Stamp,
 	})
 	if err != nil {
 		return err

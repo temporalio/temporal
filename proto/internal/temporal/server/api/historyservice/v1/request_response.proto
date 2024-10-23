@@ -274,6 +274,7 @@ message RecordActivityTaskStartedRequest {
     temporal.api.workflowservice.v1.PollActivityTaskQueueRequest poll_request = 6;
     temporal.server.api.clock.v1.VectorClock clock = 7;
     temporal.server.api.taskqueue.v1.BuildIdRedirectInfo build_id_redirect_info = 8;
+    int32 stamp = 9;
 }
 
 message RecordActivityTaskStartedResponse {
