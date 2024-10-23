@@ -263,6 +263,13 @@ jobs:
           TEST_ARGS: ${{ needs.set-up-single-test.outputs.single_test_args }}
           TEST_TIMEOUT: ${{ needs.set-up-single-test.outputs.test_timeout }}
 
+      - name: Generate test summary
+        uses: test-summary/action@v2
+        if: always()
+        with:
+          output: "-"
+          paths: ./.testoutput/*.junit.xml
+
       - name: Upload test results
         uses: actions/upload-artifact@v4
         if: ${{ !cancelled() && !inputs.run_single_unit_test }}
@@ -330,6 +337,13 @@ jobs:
       - name: Run integration test
         timeout-minutes: 15
         run: make integration-test-coverage
+
+      - name: Generate test summary
+        uses: test-summary/action@v2
+        if: always()
+        with:
+          output: "-"
+          paths: ./.testoutput/*.junit.xml
 
       - name: Upload test results
         uses: actions/upload-artifact@v4
@@ -453,6 +467,13 @@ jobs:
         env:
           TEST_ARGS: ${{ needs.set-up-single-test.outputs.single_test_args }}
 
+      - name: Generate test summary
+        uses: test-summary/action@v2
+        if: always()
+        with:
+          output: "-"
+          paths: ./.testoutput/*.junit.xml
+
       - name: Upload test results
         uses: actions/upload-artifact@v4
         if: ${{ !cancelled() && !inputs.run_single_functional_test }}
@@ -548,6 +569,13 @@ jobs:
       - name: Run functional test xdc
         timeout-minutes: 25   # update this to TEST_TIMEOUT+5 if you update the Makefile
         run: make functional-test-xdc-coverage
+
+      - name: Generate test summary
+        uses: test-summary/action@v2
+        if: always()
+        with:
+          output: "-"
+          paths: ./.testoutput/*.junit.xml
 
       - name: Upload test results
         uses: actions/upload-artifact@v4
