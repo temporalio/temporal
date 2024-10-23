@@ -5060,7 +5060,6 @@ func (ms *MutableStateImpl) isStateDirty() bool {
 		ms.visibilityUpdated ||
 		ms.executionStateUpdated ||
 		(ms.workflowTaskUpdated && ms.GetPendingWorkflowTask() != nil && ms.GetPendingWorkflowTask().Type != enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE) ||
-		ms.executionInfo.CancelRequested ||
 		(ms.stateMachineNode != nil && ms.stateMachineNode.Dirty())
 }
 
@@ -5310,7 +5309,7 @@ func (ms *MutableStateImpl) closeTransaction(
 	); err != nil {
 		return closeTransactionResult{}, err
 	}
-
+	ms.closeTransactionHandleUnknownVersionedTransition()
 	ms.closeTransactionTrackLastUpdateVersionedTransition(
 		transactionPolicy,
 	)
