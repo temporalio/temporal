@@ -250,7 +250,7 @@ message WorkflowExecutionInfo {
 
     repeated StateMachineTombstoneBatch sub_state_machine_tombstone_batches = 95;
 
-    // A workflow was reset by the user
+    // The workflow has been reset.
     bool workflow_was_reset = 96;
 }
 
