@@ -458,9 +458,7 @@ func NewMutableStateFromDB(
 	mutableState.nextEventIDInDB = dbRecord.NextEventId
 	mutableState.dbRecordVersion = dbRecordVersion
 	mutableState.checksum = dbRecord.Checksum
-	if len(mutableState.executionInfo.TransitionHistory) != 0 {
-		mutableState.versionedTransitionInDB = mutableState.executionInfo.TransitionHistory[len(mutableState.executionInfo.TransitionHistory)-1]
-	}
+	mutableState.initVersionedTransitionInDB()
 
 	if len(dbRecord.Checksum.GetValue()) > 0 {
 		switch {
@@ -5097,6 +5095,10 @@ func (ms *MutableStateImpl) IsDirty() bool {
 	return ms.hBuilder.IsDirty() || len(ms.InsertTasks) > 0 || (ms.stateMachineNode != nil && ms.stateMachineNode.Dirty())
 }
 
+func (ms *MutableStateImpl) IsTransitionHistoryEnabled() bool {
+	return ms.transitionHistoryEnabled
+}
+
 func (ms *MutableStateImpl) StartTransaction(
 	namespaceEntry *namespace.Namespace,
 ) (bool, error) {
@@ -5596,27 +5598,84 @@ func (ms *MutableStateImpl) closeTransactionPrepareReplicationTasks(
 	eventBatches [][]*historypb.HistoryEvent,
 	clearBufferEvents bool,
 ) error {
+	var replicationTasks []tasks.Task
 	if ms.config.ReplicationMultipleBatches() {
-		if err := ms.eventsToReplicationTask(transactionPolicy, eventBatches); err != nil {
+		task, err := ms.eventsToReplicationTask(transactionPolicy, eventBatches)
+		if err != nil {
 			return err
 		}
+		replicationTasks = append(replicationTasks, task...)
 	} else {
 		for _, historyEvents := range eventBatches {
-			if err := ms.eventsToReplicationTask(transactionPolicy, [][]*historypb.HistoryEvent{historyEvents}); err != nil {
+			task, err := ms.eventsToReplicationTask(transactionPolicy, [][]*historypb.HistoryEvent{historyEvents})
+			if err != nil {
 				return err
 			}
+			replicationTasks = append(replicationTasks, task...)
 		}
 	}
 
-	ms.InsertTasks[tasks.CategoryReplication] = append(
-		ms.InsertTasks[tasks.CategoryReplication],
-		ms.syncActivityToReplicationTask(transactionPolicy)...,
-	)
+	replicationTasks = append(replicationTasks, ms.syncActivityToReplicationTask(transactionPolicy)...)
+	replicationTasks = append(replicationTasks, ms.dirtyHSMToReplicationTask(transactionPolicy, eventBatches, clearBufferEvents)...)
+	if ms.transitionHistoryEnabled {
+		switch transactionPolicy {
+		case TransactionPolicyActive:
+			if ms.generateReplicationTask() {
+				now := time.Now().UTC()
+				workflowKey := definition.NewWorkflowKey(
+					ms.executionInfo.NamespaceId,
+					ms.executionInfo.WorkflowId,
+					ms.executionState.RunId,
+				)
+				var firstEventID, nextEventID int64
+				if len(eventBatches) > 0 {
+					firstEventID = eventBatches[0][0].EventId
+					lastBatch := eventBatches[len(eventBatches)-1]
+					nextEventID = lastBatch[len(lastBatch)-1].EventId + 1
+				} else {
+					currentHistory, err := versionhistory.GetCurrentVersionHistory(ms.executionInfo.VersionHistories)
+					if err != nil {
+						return err
+					}
+					item, err := versionhistory.GetLastVersionHistoryItem(currentHistory)
+					if err != nil {
+						return err
+					}
+					firstEventID = item.EventId
+					nextEventID = item.EventId + 1
+				}
+				transitionHistory := ms.executionInfo.TransitionHistory
+				if len(transitionHistory) > 0 && CompareVersionedTransition(
+					ms.versionedTransitionInDB,
+					ms.executionInfo.TransitionHistory[len(ms.executionInfo.TransitionHistory)-1],
+				) != 0 {
+					syncVersionedTransitionTask := &tasks.SyncVersionedTransitionTask{
+						WorkflowKey:         workflowKey,
+						VisibilityTimestamp: now,
+						Priority:            enumsspb.TASK_PRIORITY_HIGH,
+						VersionedTransition: transitionHistory[len(transitionHistory)-1],
+						FirstEventID:        firstEventID,
+						NextEventID:         nextEventID,
+						TaskEquivalents:     replicationTasks,
+					}
 
-	ms.InsertTasks[tasks.CategoryReplication] = append(
-		ms.InsertTasks[tasks.CategoryReplication],
-		ms.dirtyHSMToReplicationTask(transactionPolicy, eventBatches, clearBufferEvents)...,
-	)
+					// versioned transition updated in the transaction
+					ms.InsertTasks[tasks.CategoryReplication] = append(
+						ms.InsertTasks[tasks.CategoryReplication],
+						syncVersionedTransitionTask,
+					)
+				}
+			}
+		case TransactionPolicyPassive:
+		default:
+			panic(fmt.Sprintf("unknown transaction policy: %v", transactionPolicy))
+		}
+	} else {
+		ms.InsertTasks[tasks.CategoryReplication] = append(
+			ms.InsertTasks[tasks.CategoryReplication],
+			replicationTasks...,
+		)
+	}
 
 	if transactionPolicy == TransactionPolicyPassive &&
 		len(ms.InsertTasks[tasks.CategoryReplication]) > 0 {
@@ -5731,15 +5790,15 @@ func (ms *MutableStateImpl) closeTransactionPrepareEvents(
 func (ms *MutableStateImpl) eventsToReplicationTask(
 	transactionPolicy TransactionPolicy,
 	eventBatches [][]*historypb.HistoryEvent,
-) error {
+) ([]tasks.Task, error) {
 	switch transactionPolicy {
 	case TransactionPolicyActive:
 		if ms.generateReplicationTask() {
 			return ms.taskGenerator.GenerateHistoryReplicationTasks(eventBatches)
 		}
-		return nil
+		return nil, nil
 	case TransactionPolicyPassive:
-		return nil
+		return nil, nil
 	default:
 		panic(fmt.Sprintf("unknown transaction policy: %v", transactionPolicy))
 	}
@@ -6411,6 +6470,19 @@ func (ms *MutableStateImpl) ApplySnapshot(
 	return nil
 }
 
+func (ms *MutableStateImpl) ShouldResetActivityTimerTaskMask(current, incoming *persistencespb.ActivityInfo) bool {
+	// calculate whether to reset the activity timer task status bits
+	// reset timer task status bits if
+	// 1. same source cluster & attempt changes
+	// 2. different source cluster
+	if !ms.clusterMetadata.IsVersionFromSameCluster(current.Version, incoming.Version) {
+		return true
+	} else if current.Attempt != incoming.Attempt {
+		return true
+	}
+	return false
+}
+
 func (ms *MutableStateImpl) applyUpdatesToSubStateMachines(
 	updatedActivityInfos map[int64]*persistencespb.ActivityInfo,
 	updatedTimerInfos map[string]*persistencespb.TimerInfo,
@@ -6420,7 +6492,11 @@ func (ms *MutableStateImpl) applyUpdatesToSubStateMachines(
 	isSnapshot bool,
 ) error {
 	err := applyUpdatesToSubStateMachine(ms, ms.pendingActivityInfoIDs, ms.updateActivityInfos, updatedActivityInfos, isSnapshot, ms.DeleteActivity, func(current, incoming *persistencespb.ActivityInfo) {
-		incoming.TimerTaskStatus = TimerTaskStatusNone
+		if current == nil || ms.ShouldResetActivityTimerTaskMask(current, incoming) {
+			incoming.TimerTaskStatus = TimerTaskStatusNone
+		} else {
+			incoming.TimerTaskStatus = current.TimerTaskStatus
+		}
 	}, func(ai *persistencespb.ActivityInfo) {
 		ms.pendingActivityIDToEventID[ai.ActivityId] = ai.ScheduledEventId
 	})
@@ -6753,4 +6829,24 @@ func (ms *MutableStateImpl) applyTombstones(tombstoneBatches []*persistencespb.S
 
 func (ms *MutableStateImpl) disablingTransitionHistory() bool {
 	return ms.versionedTransitionInDB != nil && len(ms.executionInfo.TransitionHistory) == 0
+}
+
+func (ms *MutableStateImpl) InitTransitionHistory() {
+	versionedTransition := &persistencespb.VersionedTransition{
+		NamespaceFailoverVersion: ms.GetCurrentVersion(),
+		TransitionCount:          1,
+	}
+	ms.GetExecutionInfo().TransitionHistory = []*persistencespb.VersionedTransition{versionedTransition}
+
+	ms.GetExecutionInfo().VisibilityLastUpdateVersionedTransition = versionedTransition
+	ms.GetExecutionState().LastUpdateVersionedTransition = versionedTransition
+	if ms.HasPendingWorkflowTask() {
+		ms.GetExecutionInfo().WorkflowTaskLastUpdateVersionedTransition = versionedTransition
+	}
+}
+
+func (ms *MutableStateImpl) initVersionedTransitionInDB() {
+	if len(ms.executionInfo.TransitionHistory) != 0 {
+		ms.versionedTransitionInDB = ms.executionInfo.TransitionHistory[len(ms.executionInfo.TransitionHistory)-1]
+	}
 }
