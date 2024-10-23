@@ -1111,6 +1111,20 @@ func (mr *MockMutableStateMockRecorder) ApplyExternalWorkflowExecutionSignaled(a
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ApplyExternalWorkflowExecutionSignaled", reflect.TypeOf((*MockMutableState)(nil).ApplyExternalWorkflowExecutionSignaled), arg0)
 }
 
+// ApplyMutation mocks base method.
+func (m *MockMutableState) ApplyMutation(mutation *persistence.WorkflowMutableStateMutation) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ApplyMutation", mutation)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// ApplyMutation indicates an expected call of ApplyMutation.
+func (mr *MockMutableStateMockRecorder) ApplyMutation(mutation any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ApplyMutation", reflect.TypeOf((*MockMutableState)(nil).ApplyMutation), mutation)
+}
+
 // ApplyRequestCancelExternalWorkflowExecutionFailedEvent mocks base method.
 func (m *MockMutableState) ApplyRequestCancelExternalWorkflowExecutionFailedEvent(arg0 *history.HistoryEvent) error {
 	m.ctrl.T.Helper()
@@ -1167,6 +1181,20 @@ func (m *MockMutableState) ApplySignalExternalWorkflowExecutionInitiatedEvent(ar
 func (mr *MockMutableStateMockRecorder) ApplySignalExternalWorkflowExecutionInitiatedEvent(arg0, arg1, arg2 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ApplySignalExternalWorkflowExecutionInitiatedEvent", reflect.TypeOf((*MockMutableState)(nil).ApplySignalExternalWorkflowExecutionInitiatedEvent), arg0, arg1, arg2)
+}
+
+// ApplySnapshot mocks base method.
+func (m *MockMutableState) ApplySnapshot(snapshot *persistence.WorkflowMutableState) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ApplySnapshot", snapshot)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// ApplySnapshot indicates an expected call of ApplySnapshot.
+func (mr *MockMutableStateMockRecorder) ApplySnapshot(snapshot any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ApplySnapshot", reflect.TypeOf((*MockMutableState)(nil).ApplySnapshot), snapshot)
 }
 
 // ApplyStartChildWorkflowExecutionFailedEvent mocks base method.
@@ -2723,6 +2751,20 @@ func (m *MockMutableState) IsTransientWorkflowTask() bool {
 func (mr *MockMutableStateMockRecorder) IsTransientWorkflowTask() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsTransientWorkflowTask", reflect.TypeOf((*MockMutableState)(nil).IsTransientWorkflowTask))
+}
+
+// IsTransitionHistoryEnabled mocks base method.
+func (m *MockMutableState) IsTransitionHistoryEnabled() bool {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "IsTransitionHistoryEnabled")
+	ret0, _ := ret[0].(bool)
+	return ret0
+}
+
+// IsTransitionHistoryEnabled indicates an expected call of IsTransitionHistoryEnabled.
+func (mr *MockMutableStateMockRecorder) IsTransitionHistoryEnabled() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsTransitionHistoryEnabled", reflect.TypeOf((*MockMutableState)(nil).IsTransitionHistoryEnabled))
 }
 
 // IsWorkflowCloseAttempted mocks base method.

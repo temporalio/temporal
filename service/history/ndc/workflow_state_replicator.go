@@ -225,7 +225,6 @@ func (r *WorkflowStateReplicatorImpl) ReplicateVersionedTransition(
 		return serviceerror.NewInvalidArgument(fmt.Sprintf("unknown artifact type %T", artifactType))
 	}
 	executionState, executionInfo := func() (*persistencespb.WorkflowExecutionState, *persistencespb.WorkflowExecutionInfo) {
-
 		if snapshot != nil {
 			return snapshot.State.ExecutionState, snapshot.State.ExecutionInfo
 		}
@@ -387,7 +386,10 @@ func (r *WorkflowStateReplicatorImpl) applyMutation(
 	if err != nil {
 		return err
 	}
-	// TODO: localMutableState.ApplyMutation
+	err = localMutableState.ApplyMutation(mutation.StateMutation)
+	if err != nil {
+		return err
+	}
 
 	var newRunWorkflow Workflow
 	if versionedTransition.NewRunInfo != nil {
@@ -497,7 +499,12 @@ func (r *WorkflowStateReplicatorImpl) applySnapshot(
 	if err != nil {
 		return err
 	}
-	// Todo: localMutableState.ApplySnapshot
+
+	err = localMutableState.ApplySnapshot(snapshot)
+	if err != nil {
+		return err
+	}
+	localMutableState.PopTasks() // tasks are refreshed manually below
 
 	var newRunWorkflow Workflow
 	if versionedTransition.NewRunInfo != nil {
@@ -822,7 +829,7 @@ func (r *WorkflowStateReplicatorImpl) bringLocalEventsUpToSourceCurrentBranch(
 		return nil
 	}
 	// Fill the gap between local last event and request's first event
-	if historyEvents[0][0].EventId > startEventID+1 {
+	if len(historyEvents) > 0 && historyEvents[0][0].EventId > startEventID+1 {
 		err := fetchFromRemoteAndAppend(localLastItem.EventId, localLastItem.Version, historyEvents[0][0].EventId, historyEvents[0][0].Version)
 		if err != nil {
 			return err
