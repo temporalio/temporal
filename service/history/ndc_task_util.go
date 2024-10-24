@@ -95,7 +95,7 @@ func loadMutableStateForTransferTask(
 		tasks.GetTransferTaskEventID,
 		transferTaskMutableStateStaleChecker,
 		metricsHandler.WithTags(metrics.OperationTag(metrics.OperationTransferQueueProcessorScope)),
-		queues.GetActiveTimerTaskTypeTagValue(transferTask),
+		queues.GetActiveTransferTaskTypeTagValue(transferTask),
 		logger,
 	)
 	if err != nil {
