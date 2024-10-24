@@ -115,7 +115,7 @@ func (c *operationContext) capturePanicAndRecordMetrics(ctxPtr *context.Context,
 
 	// Record general telemetry metrics
 	metrics.ServiceRequests.With(c.metricsHandlerForInterceptors).Record(1)
-	c.telemetryInterceptor.RecordLatencyMetrics(*ctxPtr, c.requestStartTime, c.metricsHandlerForInterceptors.WithTags(metrics.NamespaceTag(c.namespaceName)))
+	c.telemetryInterceptor.RecordLatencyMetrics(*ctxPtr, c.requestStartTime, c.metricsHandlerForInterceptors)
 
 	for _, fn := range c.cleanupFunctions {
 		fn(*errPtr)
