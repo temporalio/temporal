@@ -1112,11 +1112,12 @@ func (mr *MockMutableStateMockRecorder) ApplyExternalWorkflowExecutionSignaled(a
 }
 
 // ApplyMutation mocks base method.
-func (m *MockMutableState) ApplyMutation(mutation *persistence.WorkflowMutableStateMutation) error {
+func (m *MockMutableState) ApplyMutation(mutation *persistence.WorkflowMutableStateMutation) ([]DataAndPath, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ApplyMutation", mutation)
-	ret0, _ := ret[0].(error)
-	return ret0
+	ret0, _ := ret[0].([]DataAndPath)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // ApplyMutation indicates an expected call of ApplyMutation.
