@@ -4947,3 +4947,360 @@ func (s *FunctionalSuite) TestUpdateWorkflow_UpdatesAreSentToWorkerInOrderOfAdmi
 	history := s.getHistory(s.namespace, tv.WorkflowExecution())
 	s.EqualHistoryEvents(expectedHistory, history)
 }
+
+func (s *UpdateWorkflowSuite) TestUpdateWorkflow_WaitAccepted_GotCompleted() {
+	tv := testvars.New(s.T())
+	tv = s.startWorkflow(tv)
+
+	poller := &testcore.TaskPoller{
+		Client:    s.FrontendClient(),
+		Namespace: s.Namespace(),
+		TaskQueue: tv.TaskQueue(),
+		Identity:  tv.WorkerIdentity(),
+		WorkflowTaskHandler: func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
+			return s.UpdateAcceptCompleteCommands(tv, "1"), nil
+		},
+		MessageHandler: func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*protocolpb.Message, error) {
+			return s.UpdateAcceptCompleteMessages(tv, task.Messages[0], "1"), nil
+		},
+		Logger: s.Logger,
+		T:      s.T(),
+	}
+
+	// Send Update with intent to wait for Accepted stage only,
+	updateResultCh := s.sendUpdateNoErrorWaitPolicyAccepted(tv, "1")
+	_, err := poller.PollAndProcessWorkflowTask(testcore.WithoutRetries)
+	s.NoError(err)
+	updateResult := <-updateResultCh
+	// but Update was accepted and completed on the same WFT, and outcome was returned.
+	s.Equal(enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED, updateResult.GetStage())
+	s.EqualValues("success-result-of-"+tv.UpdateID("1"), testcore.DecodeString(s.T(), updateResult.GetOutcome().GetSuccess()))
+
+	s.EqualHistoryEvents(`
+	1 WorkflowExecutionStarted
+	2 WorkflowTaskScheduled
+	3 WorkflowTaskStarted
+	4 WorkflowTaskCompleted
+	5 WorkflowExecutionUpdateAccepted
+	6 WorkflowExecutionUpdateCompleted
+	`, s.GetHistory(s.Namespace(), tv.WorkflowExecution()))
+}
+
+func (s *UpdateWorkflowSuite) TestUpdateWorkflow_ContinueAsNew_UpdateIsNotCarriedOver() {
+	tv := testvars.New(s.T())
+	tv = s.startWorkflow(tv)
+	firstRunID := tv.RunID()
+	tv = tv.WithRunID("")
+
+	/*
+		1st Update goes to the 1st run and accepted (but not completed) by Workflow.
+		While this WFT is running, 2nd Update is sent, and WFT is completing with CAN for the 1st run.
+		There are 2 Updates in the registry of the 1st run: 1st is accepted and 2nd is admitted.
+		Both of them are aborted but with different errors:
+		- Admitted Update is aborted with retryable "workflow is closing" error. SDK should retry this error
+		  and new attempt should land on the new run.
+		- Accepted Update is aborted with update failure.
+	*/
+
+	var update2ResponseCh <-chan updateResponseErr
+
+	poller1 := &testcore.TaskPoller{
+		Client:    s.FrontendClient(),
+		Namespace: s.Namespace(),
+		TaskQueue: tv.TaskQueue(),
+		Identity:  tv.WorkerIdentity(),
+		WorkflowTaskHandler: func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
+			// Send 2nd Update while WFT is running.
+			update2ResponseCh = s.sendUpdate(context.Background(), tv, "2")
+			canCommand := &commandpb.Command{
+				CommandType: enumspb.COMMAND_TYPE_CONTINUE_AS_NEW_WORKFLOW_EXECUTION,
+				Attributes: &commandpb.Command_ContinueAsNewWorkflowExecutionCommandAttributes{ContinueAsNewWorkflowExecutionCommandAttributes: &commandpb.ContinueAsNewWorkflowExecutionCommandAttributes{
+					WorkflowType: tv.WorkflowType(),
+					TaskQueue:    tv.TaskQueue("2"),
+				}},
+			}
+			return append(s.UpdateAcceptCommands(tv, "1"), canCommand), nil
+		},
+		MessageHandler: func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*protocolpb.Message, error) {
+			return s.UpdateAcceptMessages(tv, task.Messages[0], "1"), nil
+		},
+		Logger: s.Logger,
+		T:      s.T(),
+	}
+
+	poller2 := &testcore.TaskPoller{
+		Client:    s.FrontendClient(),
+		Namespace: s.Namespace(),
+		TaskQueue: tv.TaskQueue("2"),
+		Identity:  tv.WorkerIdentity(),
+		WorkflowTaskHandler: func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
+			return nil, nil
+		},
+		MessageHandler: func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*protocolpb.Message, error) {
+			s.Empty(task.Messages, "no Updates should be carried over to the 2nd run")
+			return nil, nil
+		},
+		Logger: s.Logger,
+		T:      s.T(),
+	}
+
+	update1ResponseCh := s.sendUpdate(context.Background(), tv, "1")
+	_, err := poller1.PollAndProcessWorkflowTask()
+	s.NoError(err)
+
+	_, err = poller2.PollAndProcessWorkflowTask()
+	s.NoError(err)
+
+	update1Response := <-update1ResponseCh
+	s.NoError(update1Response.err)
+	s.Equal("Workflow Update failed because the Workflow completed before the Update completed.", update1Response.response.GetOutcome().GetFailure().GetMessage())
+
+	update2Response := <-update2ResponseCh
+	s.Error(update2Response.err)
+	var resourceExhausted *serviceerror.ResourceExhausted
+	s.ErrorAs(update2Response.err, &resourceExhausted)
+	s.Equal("workflow operation can not be applied because workflow is closing", update2Response.err.Error())
+
+	s.EqualHistoryEvents(`
+  1 WorkflowExecutionStarted
+  2 WorkflowTaskScheduled
+  3 WorkflowTaskStarted
+  4 WorkflowTaskCompleted
+  5 WorkflowExecutionUpdateAccepted
+  6 WorkflowExecutionContinuedAsNew`, s.GetHistory(s.Namespace(), tv.WithRunID(firstRunID).WorkflowExecution()))
+
+	s.EqualHistoryEvents(`
+  1 WorkflowExecutionStarted
+  2 WorkflowTaskScheduled
+  3 WorkflowTaskStarted
+  4 WorkflowTaskCompleted`, s.GetHistory(s.Namespace(), tv.WorkflowExecution()))
+}
+
+func (s *UpdateWorkflowSuite) TestUpdateWithStart() {
+	// reset reuse minimal interval to allow workflow termination
+	s.OverrideDynamicConfig(dynamicconfig.WorkflowIdReuseMinimalInterval, 0)
+
+	runMultiOp := func(
+		tv *testvars.TestVars,
+		request *workflowservice.ExecuteMultiOperationRequest,
+	) (resp *workflowservice.ExecuteMultiOperationResponse, retErr error) {
+		capture := s.GetTestCluster().Host().CaptureMetricsHandler().StartCapture()
+		defer s.GetTestCluster().Host().CaptureMetricsHandler().StopCapture(capture)
+
+		msgHandlerCalls := 0
+		poller := &testcore.TaskPoller{
+			Client:    s.FrontendClient(),
+			Namespace: s.Namespace(),
+			TaskQueue: tv.TaskQueue(),
+			Identity:  tv.WorkerIdentity(),
+			WorkflowTaskHandler: func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
+				return nil, nil
+			},
+			MessageHandler: func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*protocolpb.Message, error) {
+				if len(task.Messages) > 0 {
+					updRequestMsg := task.Messages[0]
+					msgHandlerCalls += 1
+					switch msgHandlerCalls {
+					case 1:
+						return s.UpdateAcceptCompleteMessages(tv, updRequestMsg, "1"), nil
+					default:
+						s.Failf("msgHandler called too many times", "msgHandler shouldn't be called %d times", msgHandlerCalls)
+					}
+				}
+				return nil, nil
+			},
+			Logger: s.Logger,
+			T:      s.T(),
+		}
+
+		// issue multi operation request
+		done := make(chan struct{})
+		go func() {
+			resp, retErr = s.FrontendClient().ExecuteMultiOperation(testcore.NewContext(), request)
+			done <- struct{}{}
+		}()
+
+		_, err := poller.PollAndProcessWorkflowTask(testcore.WithDumpHistory)
+		s.NoError(err)
+
+		// wait for request to complete
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		select {
+		case <-ctx.Done():
+			s.Fail("timed out waiting for result of ExecuteMultiOperation")
+		case <-done:
+		}
+
+		// make sure there's no lock contention
+		s.Empty(capture.Snapshot()[metrics.TaskWorkflowBusyCounter.Name()])
+
+		return
+	}
+
+	runUpdateWithStart := func(
+		tv *testvars.TestVars,
+		startReq *workflowservice.StartWorkflowExecutionRequest,
+		updateReq *workflowservice.UpdateWorkflowExecutionRequest,
+	) (*workflowservice.ExecuteMultiOperationResponse, error) {
+		resp, err := runMultiOp(tv,
+			&workflowservice.ExecuteMultiOperationRequest{
+				Namespace: s.Namespace(),
+				Operations: []*workflowservice.ExecuteMultiOperationRequest_Operation{
+					{
+						Operation: &workflowservice.ExecuteMultiOperationRequest_Operation_StartWorkflow{
+							StartWorkflow: startReq,
+						},
+					},
+					{
+						Operation: &workflowservice.ExecuteMultiOperationRequest_Operation_UpdateWorkflow{
+							UpdateWorkflow: updateReq,
+						},
+					},
+				},
+			})
+
+		if err == nil {
+			s.Len(resp.Responses, 2)
+
+			startRes := resp.Responses[0].Response.(*workflowservice.ExecuteMultiOperationResponse_Response_StartWorkflow).StartWorkflow
+			s.NotZero(startRes.RunId)
+
+			updateRes := resp.Responses[1].Response.(*workflowservice.ExecuteMultiOperationResponse_Response_UpdateWorkflow).UpdateWorkflow
+			s.NotNil(updateRes.Outcome)
+			s.NotZero(updateRes.Outcome.String())
+		}
+
+		return resp, err
+	}
+
+	startWorkflowReq := func(tv *testvars.TestVars) *workflowservice.StartWorkflowExecutionRequest {
+		return &workflowservice.StartWorkflowExecutionRequest{
+			Namespace:    s.Namespace(),
+			WorkflowId:   tv.WorkflowID(),
+			WorkflowType: tv.WorkflowType(),
+			TaskQueue:    tv.TaskQueue(),
+			Identity:     tv.WorkerIdentity(),
+		}
+	}
+
+	updateWorkflowReq := func(tv *testvars.TestVars) *workflowservice.UpdateWorkflowExecutionRequest {
+		return &workflowservice.UpdateWorkflowExecutionRequest{
+			Namespace: s.Namespace(),
+			Request: &updatepb.Request{
+				Meta:  &updatepb.Meta{UpdateId: tv.UpdateID("1")},
+				Input: &updatepb.Input{Name: tv.Any().String(), Args: tv.Any().Payloads()},
+			},
+			WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: tv.WorkflowID()},
+			WaitPolicy:        &updatepb.WaitPolicy{LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED},
+		}
+	}
+
+	s.Run("workflow is not running", func() {
+
+		s.Run("start workflow and send update", func() {
+			tv := testvars.New(s.T())
+
+			resp, err := runUpdateWithStart(tv, startWorkflowReq(tv), updateWorkflowReq(tv))
+			s.NoError(err)
+			s.True(resp.Responses[0].GetStartWorkflow().Started)
+		})
+
+		s.Run("poll update result after completion", func() {
+			tv := testvars.New(s.T())
+
+			_, err := runUpdateWithStart(tv, startWorkflowReq(tv), updateWorkflowReq(tv))
+			s.NoError(err)
+
+			_, err = s.pollUpdate(tv, "1",
+				&updatepb.WaitPolicy{LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED})
+			s.Nil(err)
+		})
+	})
+
+	s.Run("workflow is running", func() {
+
+		s.Run("workflow id conflict policy use-existing: only send update", func() {
+			tv := testvars.New(s.T())
+
+			_, err := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), startWorkflowReq(tv))
+			s.NoError(err)
+
+			req := startWorkflowReq(tv)
+			req.WorkflowIdConflictPolicy = enumspb.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING
+			resp, err := runUpdateWithStart(tv, req, updateWorkflowReq(tv))
+			s.NoError(err)
+			s.False(resp.Responses[0].GetStartWorkflow().Started)
+		})
+
+		s.Run("workflow id conflict policy terminate-existing: terminate workflow first, then start and update", func() {
+			tv := testvars.New(s.T())
+
+			initReq := startWorkflowReq(tv)
+			initReq.TaskQueue.Name = initReq.TaskQueue.Name + "-init" // avoid race condition with poller
+			initWF, err := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), initReq)
+			s.NoError(err)
+
+			req := startWorkflowReq(tv)
+			req.WorkflowIdConflictPolicy = enumspb.WORKFLOW_ID_CONFLICT_POLICY_TERMINATE_EXISTING
+			resp, err := runUpdateWithStart(tv, req, updateWorkflowReq(tv))
+			s.NoError(err)
+			s.True(resp.Responses[0].GetStartWorkflow().Started)
+
+			descResp, err := s.FrontendClient().DescribeWorkflowExecution(testcore.NewContext(),
+				&workflowservice.DescribeWorkflowExecutionRequest{
+					Namespace: s.Namespace(),
+					Execution: &commonpb.WorkflowExecution{WorkflowId: req.WorkflowId, RunId: initWF.RunId},
+				})
+			s.NoError(err)
+			s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED, descResp.WorkflowExecutionInfo.Status)
+		})
+
+		s.Run("workflow id conflict policy fail: abort multi operation", func() {
+			tv := testvars.New(s.T())
+
+			_, err := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), startWorkflowReq(tv))
+			s.NoError(err)
+
+			req := startWorkflowReq(tv)
+			req.WorkflowIdConflictPolicy = enumspb.WORKFLOW_ID_CONFLICT_POLICY_FAIL
+			_, err = runUpdateWithStart(tv, req, updateWorkflowReq(tv))
+			s.NotNil(err)
+			s.Equal(err.Error(), "MultiOperation could not be executed.")
+			errs := err.(*serviceerror.MultiOperationExecution).OperationErrors()
+			s.Len(errs, 2)
+			s.Contains(errs[0].Error(), "Workflow execution is already running")
+			s.Equal("Operation was aborted.", errs[1].Error())
+		})
+
+		s.Run("poll update result after completion", func() {
+			tv := testvars.New(s.T())
+
+			_, err := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), startWorkflowReq(tv))
+			s.NoError(err)
+
+			req := startWorkflowReq(tv)
+			req.WorkflowIdConflictPolicy = enumspb.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING
+			_, err = runUpdateWithStart(tv, req, updateWorkflowReq(tv))
+			s.NoError(err)
+
+			_, err = s.pollUpdate(tv, "1",
+				&updatepb.WaitPolicy{LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED})
+			s.Nil(err)
+		})
+	})
+}
+
+func (s *UpdateWorkflowSuite) closeShard(wid string) {
+	s.T().Helper()
+
+	resp, err := s.FrontendClient().DescribeNamespace(testcore.NewContext(), &workflowservice.DescribeNamespaceRequest{
+		Namespace: s.Namespace(),
+	})
+	s.NoError(err)
+
+	_, err = s.AdminClient().CloseShard(testcore.NewContext(), &adminservice.CloseShardRequest{
+		ShardId: common.WorkflowIDToHistoryShard(resp.NamespaceInfo.Id, wid, s.GetTestClusterConfig().HistoryConfig.NumHistoryShards),
+	})
+	s.NoError(err)
+}

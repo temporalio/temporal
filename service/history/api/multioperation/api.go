@@ -228,12 +228,16 @@ func startAndUpdateWorkflow(
 		// whereas if the cache write happened and failed *after* a successful persistence write,
 		// it would leave behind a started workflow that will never receive the update.
 		ms := lease.GetMutableState()
-		workflowKey := lease.GetContext().GetWorkflowKey()
+		wfContext := lease.GetContext()
+		// if MutableState isn't set, the next request for it will load it from the database
+		// - but receive a new instance that is inconsistent with this one
+		wfContext.(*workflow.ContextImpl).MutableState = ms
+		workflowKey := wfContext.GetWorkflowKey()
 		workflowCtx, updateErr = workflowConsistencyChecker.GetWorkflowCache().Put(
 			shardContext,
 			ms.GetNamespaceEntry().ID(),
 			&commonpb.WorkflowExecution{WorkflowId: workflowKey.WorkflowID, RunId: workflowKey.RunID},
-			lease.GetContext(),
+			wfContext,
 			shardContext.GetMetricsHandler(),
 		)
 		if updateErr == nil {
