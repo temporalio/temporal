@@ -115,7 +115,7 @@ func (c *operationContext) capturePanicAndRecordMetrics(ctxPtr *context.Context,
 
 	// Record general telemetry metrics
 	metrics.ServiceRequests.With(c.metricsHandlerForInterceptors).Record(1)
-	c.telemetryInterceptor.RecordLatencyMetrics(*ctxPtr, c.requestStartTime, c.metricsHandlerForInterceptors)
+	c.telemetryInterceptor.RecordLatencyMetrics(*ctxPtr, c.requestStartTime, c.metricsHandlerForInterceptors.WithTags(metrics.NamespaceTag(c.namespaceName)))
 
 	for _, fn := range c.cleanupFunctions {
 		fn(*errPtr)
@@ -173,7 +173,6 @@ func (c *operationContext) interceptRequest(ctx context.Context, request *matchi
 			c.metricsHandler = c.metricsHandler.WithTags(metrics.OutcomeTag("request_forwarded"))
 			var forwardStartTime time.Time
 			c.metricsHandlerForInterceptors, forwardStartTime = c.redirectionInterceptor.BeforeCall(c.apiName)
-			c.metricsHandlerForInterceptors = c.metricsHandlerForInterceptors.WithTags(metrics.NamespaceTag(c.namespaceName))
 			c.cleanupFunctions = append(c.cleanupFunctions, func(retErr error) {
 				c.redirectionInterceptor.AfterCall(c.metricsHandlerForInterceptors, forwardStartTime, c.namespace.ActiveClusterName(), retErr)
 			})
