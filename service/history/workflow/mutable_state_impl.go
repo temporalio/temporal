@@ -5043,7 +5043,7 @@ func (ms *MutableStateImpl) PopTasks() map[tasks.Category][]tasks.Task {
 func (ms *MutableStateImpl) isStateDirty() bool {
 	// TODO: we need to track more workflow state changes
 	// e.g. changes to executionInfo.CancelRequested
-	return ms.hBuilder.IsDirty() ||
+	result := ms.hBuilder.IsDirty() ||
 		len(ms.updateActivityInfos) > 0 ||
 		len(ms.deleteActivityInfos) > 0 ||
 		len(ms.updateTimerInfos) > 0 ||
@@ -5061,6 +5061,11 @@ func (ms *MutableStateImpl) isStateDirty() bool {
 		ms.executionStateUpdated ||
 		(ms.workflowTaskUpdated && ms.GetPendingWorkflowTask() != nil && ms.GetPendingWorkflowTask().Type != enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE) ||
 		(ms.stateMachineNode != nil && ms.stateMachineNode.Dirty())
+	if result {
+		println("isStateDirty")
+
+	}
+	return result
 }
 
 func (ms *MutableStateImpl) SetUpdateCondition(
@@ -5437,10 +5442,7 @@ func (ms *MutableStateImpl) closeTransactionUpdateTransitionHistory(
 
 	// TODO: treat changes for transient workflow task or signalRequestID removal as state transition as well.
 	// Those changes are not replicated today.
-	if !ms.HSM().Dirty() &&
-		len(workflowEventsSeq) == 0 &&
-		len(newBufferEvents) == 0 &&
-		len(ms.syncActivityTasks) == 0 {
+	if !ms.HSM().Dirty() && !ms.isStateDirty() {
 		return nil
 	}
 
