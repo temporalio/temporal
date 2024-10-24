@@ -87,9 +87,8 @@ func GetStandbyTransferTaskTypeTagValue(
 }
 
 func GetActiveTimerTaskTypeTagValue(
-	executable Executable,
+	task tasks.Task,
 ) string {
-	task := executable.GetTask()
 	switch t := task.(type) {
 	case *tasks.WorkflowTaskTimeoutTask:
 		if t.InMemory {
