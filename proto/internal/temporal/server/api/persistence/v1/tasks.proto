@@ -50,6 +50,9 @@ message TaskInfo {
     // TaskVersionDirective, which is unversioned.)
     // Deprecated. No need to store this for new versioning [cleanup-old-wv]
     temporal.server.api.taskqueue.v1.TaskVersionDirective version_directive = 8;
+
+    // Stamp field allows to differentiate between different instances of the same task
+    int32 stamp = 9;
 }
 
 // task_queue column

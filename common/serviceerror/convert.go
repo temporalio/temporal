@@ -44,6 +44,8 @@ func FromStatus(st *status.Status) error {
 		switch errDetails := errDetails.(type) {
 		case *errordetails.CurrentBranchChangedFailure:
 			return newCurrentBranchChanged(st, errDetails)
+		case *errordetails.ActivityStampMismatchFailure:
+			return newActivityStampMismatch(st)
 		}
 	case codes.AlreadyExists:
 		switch errDetails.(type) {
