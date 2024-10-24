@@ -332,15 +332,24 @@ func (e *ExecutableTaskImpl) Resend(
 		return false, ErrResendAttemptExceeded
 	}
 
+	var namespaceName string
+	item := e.namespace.Load()
+	if item != nil {
+		namespaceName = item.(namespace.Name).String()
+	}
 	metrics.ClientRequests.With(e.MetricsHandler).Record(
 		1,
 		metrics.OperationTag(e.metricsTag+"Resend"),
+		metrics.NamespaceTag(namespaceName),
+		metrics.ServiceRoleTag(metrics.HistoryRoleTagValue),
 	)
 	startTime := time.Now().UTC()
 	defer func() {
 		metrics.ClientLatency.With(e.MetricsHandler).Record(
 			time.Since(startTime),
 			metrics.OperationTag(e.metricsTag+"Resend"),
+			metrics.NamespaceTag(namespaceName),
+			metrics.ServiceRoleTag(metrics.HistoryRoleTagValue),
 		)
 	}()
 	var resendErr error
