@@ -4920,7 +4920,7 @@ func (ms *MutableStateImpl) RegenerateActivityRetryTask(ai *persistencespb.Activ
 
 	nextScheduledTime := ai.ScheduledTime.AsTime()
 	if ai.Attempt > 1 {
-		//calculate new schedule time
+		// calculate new schedule time
 		interval := ExponentialBackoffAlgorithm(ai.RetryInitialInterval, ai.RetryBackoffCoefficient, ai.Attempt)
 
 		if ai.RetryMaximumInterval.AsDuration() != 0 && (interval <= 0 || interval > ai.RetryMaximumInterval.AsDuration()) {
@@ -4937,10 +4937,7 @@ func (ms *MutableStateImpl) RegenerateActivityRetryTask(ai *persistencespb.Activ
 		ai.Attempt,
 		nil)
 
-	if err := ms.taskGenerator.GenerateActivityRetryTasks(ai); err != nil {
-		return err
-	}
-	return nil
+	return ms.taskGenerator.GenerateActivityRetryTasks(ai)
 }
 
 func (ms *MutableStateImpl) updateActivityInfoForRetries(
