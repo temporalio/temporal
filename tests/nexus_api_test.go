@@ -212,8 +212,8 @@ func (s *NexusApiTestSuite) TestNexusStartOperation_Outcomes() {
 			assertion: func(t *testing.T, res *nexus.ClientStartOperationResult[string], err error) {
 				var unexpectedError *nexus.UnexpectedResponseError
 				require.ErrorAs(t, err, &unexpectedError)
-				require.Equal(t, nexus.StatusDownstreamTimeout, unexpectedError.Response.StatusCode)
-				require.Equal(t, "downstream timeout", unexpectedError.Failure.Message)
+				require.Equal(t, nexus.StatusUpstreamTimeout, unexpectedError.Response.StatusCode)
+				require.Equal(t, "upstream timeout", unexpectedError.Failure.Message)
 			},
 		},
 	}
@@ -654,8 +654,8 @@ func (s *NexusApiTestSuite) TestNexusCancelOperation_Outcomes() {
 			assertion: func(t *testing.T, err error) {
 				var unexpectedError *nexus.UnexpectedResponseError
 				require.ErrorAs(t, err, &unexpectedError)
-				require.Equal(t, nexus.StatusDownstreamTimeout, unexpectedError.Response.StatusCode)
-				require.Equal(t, "downstream timeout", unexpectedError.Failure.Message)
+				require.Equal(t, nexus.StatusUpstreamTimeout, unexpectedError.Response.StatusCode)
+				require.Equal(t, "upstream timeout", unexpectedError.Failure.Message)
 			},
 		},
 	}

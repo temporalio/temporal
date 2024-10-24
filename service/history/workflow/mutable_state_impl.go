@@ -586,7 +586,7 @@ func (ms *MutableStateImpl) GetNexusCompletion(ctx context.Context) (nexus.Opera
 			// Nexus does not support it.
 			p = payloads[0]
 		}
-		completion, err := nexus.NewOperationCompletionSuccessful(p, nexus.OperationCompletionSuccesfulOptions{
+		completion, err := nexus.NewOperationCompletionSuccessful(p, nexus.OperationCompletionSuccessfulOptions{
 			Serializer: commonnexus.PayloadSerializer,
 		})
 		if err != nil {

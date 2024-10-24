@@ -564,7 +564,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletion() {
 		// Use -10 to avoid hitting MaxNexusAPIRequestBodyBytes. Actual payload will still exceed limit because of
 		// additional Content headers. See common/rpc/grpc.go:66
 		s.mustToPayload(strings.Repeat("a", (2*1024*1024)-10)),
-		nexus.OperationCompletionSuccesfulOptions{Serializer: commonnexus.PayloadSerializer},
+		nexus.OperationCompletionSuccessfulOptions{Serializer: commonnexus.PayloadSerializer},
 	)
 	s.NoError(err)
 	res, snap := s.sendNexusCompletionRequest(ctx, s.T(), publicCallbackUrl, largeCompletion, callbackToken)
@@ -572,7 +572,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletion() {
 	s.Equal(1, len(snap["nexus_completion_requests"]))
 	s.Subset(snap["nexus_completion_requests"][0].Tags, map[string]string{"namespace": s.Namespace(), "outcome": "error_bad_request"})
 
-	completion, err := nexus.NewOperationCompletionSuccessful(s.mustToPayload(nil), nexus.OperationCompletionSuccesfulOptions{
+	completion, err := nexus.NewOperationCompletionSuccessful(s.mustToPayload(nil), nexus.OperationCompletionSuccessfulOptions{
 		Serializer: commonnexus.PayloadSerializer,
 	})
 	s.NoError(err)
@@ -621,7 +621,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletion() {
 	s.Subset(snap["nexus_completion_requests"][0].Tags, map[string]string{"namespace": s.Namespace(), "outcome": "error_not_found"})
 
 	// Send a valid - successful completion request.
-	completion, err = nexus.NewOperationCompletionSuccessful(s.mustToPayload("result"), nexus.OperationCompletionSuccesfulOptions{
+	completion, err = nexus.NewOperationCompletionSuccessful(s.mustToPayload("result"), nexus.OperationCompletionSuccessfulOptions{
 		Serializer: commonnexus.PayloadSerializer,
 	})
 	s.NoError(err)
@@ -876,7 +876,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncFailure() {
 func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletionErrors() {
 	ctx := testcore.NewContext()
 
-	completion, err := nexus.NewOperationCompletionSuccessful(s.mustToPayload("result"), nexus.OperationCompletionSuccesfulOptions{
+	completion, err := nexus.NewOperationCompletionSuccessful(s.mustToPayload("result"), nexus.OperationCompletionSuccessfulOptions{
 		Serializer: commonnexus.PayloadSerializer,
 	})
 	s.NoError(err)
@@ -939,7 +939,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletionAuthErrors() {
 	s.GetTestCluster().Host().SetOnAuthorize(onAuthorize)
 	defer s.GetTestCluster().Host().SetOnAuthorize(nil)
 
-	completion, err := nexus.NewOperationCompletionSuccessful(s.mustToPayload("result"), nexus.OperationCompletionSuccesfulOptions{
+	completion, err := nexus.NewOperationCompletionSuccessful(s.mustToPayload("result"), nexus.OperationCompletionSuccessfulOptions{
 		Serializer: commonnexus.PayloadSerializer,
 	})
 	s.NoError(err)
@@ -1377,7 +1377,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletionAfterReset() {
 		}
 	}
 	s.True(seenStartedEvent)
-	completion, err := nexus.NewOperationCompletionSuccessful(s.mustToPayload("result"), nexus.OperationCompletionSuccesfulOptions{
+	completion, err := nexus.NewOperationCompletionSuccessful(s.mustToPayload("result"), nexus.OperationCompletionSuccessfulOptions{
 		Serializer: commonnexus.PayloadSerializer,
 	})
 	s.NoError(err)
