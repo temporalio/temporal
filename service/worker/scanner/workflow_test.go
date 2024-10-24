@@ -85,6 +85,7 @@ func (s *scannerWorkflowTestSuite) TestScavengerActivity() {
 		executionManager: mockResource.GetExecutionManager(),
 		taskManager:      mockResource.GetTaskManager(),
 		historyClient:    mockResource.GetHistoryClient(),
+		hostInfo:         mockResource.GetHostInfo(),
 	}
 	env.SetTestTimeout(time.Second * 5)
 	env.SetWorkerOptions(worker.Options{

@@ -33,6 +33,7 @@ import (
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/sdk"
@@ -51,6 +52,7 @@ type (
 		logger           log.Logger
 		rps              dynamicconfig.IntPropertyFnWithNamespaceFilter
 		concurrency      dynamicconfig.IntPropertyFnWithNamespaceFilter
+		hostInfo         membership.HostInfo
 	}
 )
 
@@ -58,6 +60,7 @@ type (
 func New(
 	metricsHandler metrics.Handler,
 	logger log.Logger,
+	hostInfo membership.HostInfo,
 	sdkClientFactory sdk.ClientFactory,
 	rps dynamicconfig.IntPropertyFnWithNamespaceFilter,
 	concurrency dynamicconfig.IntPropertyFnWithNamespaceFilter,
@@ -68,6 +71,7 @@ func New(
 		logger:           log.With(logger, tag.ComponentBatcher),
 		rps:              rps,
 		concurrency:      concurrency,
+		hostInfo:         hostInfo,
 	}
 }
 
@@ -76,6 +80,7 @@ func (s *Batcher) Start() error {
 	ctx := headers.SetCallerInfo(context.Background(), headers.SystemBackgroundCallerInfo)
 	workerOpts := worker.Options{
 		BackgroundActivityContext: ctx,
+		Identity:                  "temporal-system@" + s.hostInfo.Identity(),
 	}
 	sdkClient := s.sdkClientFactory.GetSystemClient()
 	batchWorker := s.sdkClientFactory.NewWorker(sdkClient, taskQueueName, workerOpts)
