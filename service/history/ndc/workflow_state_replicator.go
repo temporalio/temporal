@@ -386,7 +386,7 @@ func (r *WorkflowStateReplicatorImpl) applyMutation(
 	if err != nil {
 		return err
 	}
-	err = localMutableState.ApplyMutation(mutation.StateMutation)
+	prevStateMachineData, err := localMutableState.ApplyMutation(mutation.StateMutation)
 	if err != nil {
 		return err
 	}
@@ -399,7 +399,7 @@ func (r *WorkflowStateReplicatorImpl) applyMutation(
 		}
 	}
 
-	err = r.taskRefresher.PartialRefresh(ctx, localMutableState, localTransitionHistory[len(localTransitionHistory)-1])
+	err = r.taskRefresher.PartialRefresh(ctx, localMutableState, localTransitionHistory[len(localTransitionHistory)-1], prevStateMachineData, false)
 	if err != nil {
 		return err
 	}
@@ -526,7 +526,8 @@ func (r *WorkflowStateReplicatorImpl) applySnapshot(
 			return err
 		}
 	} else {
-		err = r.taskRefresher.PartialRefresh(ctx, localMutableState, localTransitionHistory[len(localTransitionHistory)-1])
+		// Don't also refresh state machine tasks, that's done in mutable state ApplySnapshot already.
+		err = r.taskRefresher.PartialRefresh(ctx, localMutableState, localTransitionHistory[len(localTransitionHistory)-1], nil, true)
 		if err != nil {
 			return err
 		}

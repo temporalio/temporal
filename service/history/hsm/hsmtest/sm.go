@@ -63,7 +63,7 @@ func (d *Data) SetState(s State) {
 	d.state = s
 }
 
-func (d *Data) RegenerateTasks(node *hsm.Node) ([]hsm.Task, error) {
+func (d *Data) RegenerateTasks(any, *hsm.Node) ([]hsm.Task, error) {
 	return []hsm.Task{
 		NewTask(
 			hsm.TaskAttributes{Deadline: time.Now().Add(time.Hour)},

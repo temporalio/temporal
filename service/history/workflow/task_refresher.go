@@ -37,6 +37,7 @@ import (
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/service/history/hsm"
 	"go.temporal.io/server/service/history/shard"
+	"golang.org/x/exp/slices"
 )
 
 type (
@@ -57,6 +58,8 @@ type (
 			ctx context.Context,
 			mutableState MutableState,
 			minVersionedTransition *persistencespb.VersionedTransition,
+			prevStateMachineData []DataAndPath,
+			skipHSMTaskRefresh bool,
 		) error
 	}
 
@@ -89,13 +92,15 @@ func (r *TaskRefresherImpl) Refresh(
 		mutableState.GetExecutionInfo().TaskGenerationShardClockTimestamp = r.shard.CurrentVectorClock().GetClock()
 	}
 
-	return r.PartialRefresh(ctx, mutableState, EmptyVersionedTransition)
+	return r.PartialRefresh(ctx, mutableState, EmptyVersionedTransition, nil, false)
 }
 
 func (r *TaskRefresherImpl) PartialRefresh(
 	ctx context.Context,
 	mutableState MutableState,
 	minVersionedTransition *persistencespb.VersionedTransition,
+	prevStateMachineData []DataAndPath,
+	skipHSMTaskRefresh bool,
 ) error {
 	if CompareVersionedTransition(minVersionedTransition, EmptyVersionedTransition) != 0 {
 		// Perform a sanity check to make sure that the minVersionedTransition, if provided,
@@ -202,6 +207,8 @@ func (r *TaskRefresherImpl) PartialRefresh(
 	return r.refreshTasksForSubStateMachines(
 		mutableState,
 		minVersionedTransition,
+		prevStateMachineData,
+		skipHSMTaskRefresh,
 	)
 }
 
@@ -609,6 +616,8 @@ func (r *TaskRefresherImpl) refreshTasksForWorkflowSearchAttr(
 func (r *TaskRefresherImpl) refreshTasksForSubStateMachines(
 	mutableState MutableState,
 	minVersionedTransition *persistencespb.VersionedTransition,
+	prevStateMachineData []DataAndPath,
+	skipTaskRefresh bool,
 ) error {
 
 	// NOTE: Not all callers of TaskRefresher goes through the closeTransaction process.
@@ -667,7 +676,17 @@ func (r *TaskRefresherImpl) refreshTasksForSubStateMachines(
 			return err
 		}
 
-		tasks, err := taskRegenerator.RegenerateTasks(node)
+		if skipTaskRefresh {
+			continue
+		}
+		prevStateIdx := slices.IndexFunc(prevStateMachineData, func(dnp DataAndPath) bool {
+			return slices.Equal(dnp.Path, node.Path())
+		})
+		var prevState any
+		if prevStateIdx > -1 {
+			prevState = prevStateMachineData[prevStateIdx].Data
+		}
+		tasks, err := taskRegenerator.RegenerateTasks(prevState, node)
 		if err != nil {
 			return err
 		}

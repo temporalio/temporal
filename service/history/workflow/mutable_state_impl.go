@@ -6386,18 +6386,18 @@ func (ms *MutableStateImpl) currentVersionedTransition() *persistencespb.Version
 
 func (ms *MutableStateImpl) ApplyMutation(
 	mutation *persistencespb.WorkflowMutableStateMutation,
-) error {
+) ([]DataAndPath, error) {
 	prevExecutionInfoSize := ms.executionInfo.Size()
 	currentVersionedTransition := ms.currentVersionedTransition()
 
 	ms.applySignalRequestedIds(mutation.SignalRequestedIds, mutation.ExecutionInfo)
 	err := ms.applyTombstones(mutation.SubStateMachineTombstoneBatches, currentVersionedTransition)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	err = ms.syncExecutionInfo(ms.executionInfo, mutation.ExecutionInfo)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	if mutation.ExecutionInfo.WorkflowTaskType == enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE {
 		ms.workflowTaskManager.deleteWorkflowTask()
@@ -6417,17 +6417,17 @@ func (ms *MutableStateImpl) ApplyMutation(
 		false,
 	)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
-	err = ms.applyUpdatesToStateMachineNodes(mutation.UpdatedSubStateMachines)
+	prevStateMachineData, err := ms.applyUpdatesToStateMachineNodes(mutation.UpdatedSubStateMachines)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	ms.approximateSize += ms.executionInfo.Size() - prevExecutionInfoSize
 
-	return nil
+	return prevStateMachineData, nil
 }
 
 func (ms *MutableStateImpl) ApplySnapshot(
@@ -6534,7 +6534,8 @@ func (ms *MutableStateImpl) applyUpdatesToSubStateMachines(
 
 func (ms *MutableStateImpl) applyUpdatesToStateMachineNodes(
 	nodeMutations []*persistencespb.WorkflowMutableStateMutation_StateMachineNodeMutation,
-) error {
+) ([]DataAndPath, error) {
+	prevs := make([]DataAndPath, 0, len(nodeMutations))
 	root := ms.HSM()
 	// Source cluster uses Walk() to generate node mutations.
 	// Walk() uses pre-order DFS. Updated parent nodes will be added before children.
@@ -6547,7 +6548,7 @@ func (ms *MutableStateImpl) applyUpdatesToStateMachineNodes(
 		currentNode, err := root.Child(incomingPath)
 		if err != nil {
 			if !errors.Is(err, hsm.ErrStateMachineNotFound) {
-				return err
+				return nil, err
 			}
 			parent := incomingPath[:len(incomingPath)-1]
 			if len(parent) == 0 {
@@ -6556,25 +6557,33 @@ func (ms *MutableStateImpl) applyUpdatesToStateMachineNodes(
 			parentNode, err := root.Child(parent)
 			if err != nil {
 				// we don't have enough information to recreate all parents
-				return err
+				return nil, err
 			}
 			newNode, err := parentNode.AddChild(incomingPath[len(incomingPath)-1], nodeMutation.Data)
 			if err != nil {
-				return err
+				return nil, err
 			}
 			internalNode = newNode.InternalRepr()
 		} else {
 			internalNode = currentNode.InternalRepr()
 			if CompareVersionedTransition(nodeMutation.LastUpdateVersionedTransition, internalNode.LastUpdateVersionedTransition) == 0 {
+				// Node is already in sync.
+				// TODO: When would this be true?
 				continue
 			}
+			data, err := hsm.MachineData[any](currentNode)
+			if err != nil {
+				return nil, err
+			}
+			prevs = append(prevs, DataAndPath{Data: data, Path: incomingPath})
 		}
 		internalNode.Data = nodeMutation.Data
 		internalNode.InitialVersionedTransition = nodeMutation.InitialVersionedTransition
 		internalNode.LastUpdateVersionedTransition = nodeMutation.LastUpdateVersionedTransition
 		internalNode.TransitionCount++
+		// TODO: Cache invalidation.
 	}
-	return nil
+	return prevs, nil
 }
 
 func (ms *MutableStateImpl) applySignalRequestedIds(signalRequestedIds []string, incomingExecutionInfo *persistencespb.WorkflowExecutionInfo) {

@@ -73,6 +73,11 @@ func (policy TransactionPolicy) Ptr() *TransactionPolicy {
 
 var emptyTasks = []tasks.Task{}
 
+type DataAndPath struct {
+	Data any
+	Path []hsm.Key
+}
+
 type stateMachineDefinition struct{}
 
 // TODO: Remove this implementation once transition history is fully implemented.
@@ -302,7 +307,7 @@ type (
 		IsWorkflowPendingOnWorkflowTaskBackoff() bool
 		UpdateDuplicatedResource(resourceDedupKey definition.DeduplicationID)
 		UpdateActivityInfo(*historyservice.ActivitySyncInfo, bool) error
-		ApplyMutation(mutation *persistencespb.WorkflowMutableStateMutation) error
+		ApplyMutation(mutation *persistencespb.WorkflowMutableStateMutation) ([]DataAndPath, error)
 		ApplySnapshot(snapshot *persistencespb.WorkflowMutableState) error
 		ApplyActivityTaskCancelRequestedEvent(*historypb.HistoryEvent) error
 		ApplyActivityTaskCanceledEvent(*historypb.HistoryEvent) error

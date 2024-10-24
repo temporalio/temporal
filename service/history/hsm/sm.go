@@ -34,7 +34,7 @@ var ErrInvalidTransition = errors.New("invalid transition")
 // A TaskRegenerator is invoked to regenerate tasks post state-based replication or when refreshing all tasks for a
 // workflow.
 type TaskRegenerator interface {
-	RegenerateTasks(*Node) ([]Task, error)
+	RegenerateTasks(any, *Node) ([]Task, error)
 }
 
 // A StateMachine is anything that can get and set a comparable state S and re-generate tasks based on current state.

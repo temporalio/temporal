@@ -65,7 +65,7 @@ func (sm *Dummy) SetState(state State) {
 	sm.CurrentState = state
 }
 
-func (sm Dummy) RegenerateTasks(*hsm.Node) ([]hsm.Task, error) {
+func (sm Dummy) RegenerateTasks(any, *hsm.Node) ([]hsm.Task, error) {
 	return []hsm.Task{}, nil
 }
 

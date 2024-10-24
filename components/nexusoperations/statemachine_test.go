@@ -171,7 +171,7 @@ func TestRegenerateTasks(t *testing.T) {
 
 			op, err := hsm.MachineData[nexusoperations.Operation](node)
 			require.NoError(t, err)
-			tasks, err := op.RegenerateTasks(node)
+			tasks, err := op.RegenerateTasks(nil, node)
 			require.NoError(t, err)
 			tc.assertTasks(t, tasks)
 		})
