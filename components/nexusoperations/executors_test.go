@@ -302,7 +302,7 @@ func TestProcessInvocationTask(t *testing.T) {
 			onStartOperation: func(ctx context.Context, service, operation string, input *nexus.LazyValue, options nexus.StartOperationOptions) (nexus.HandlerStartOperationResult[any], error) {
 				return nil, nexus.HandlerErrorf(nexus.HandlerErrorTypeInternal, "internal server error")
 			},
-			expectedMetricOutcome: "request-error:500",
+			expectedMetricOutcome: "unknown-error",
 			checkOutcome: func(t *testing.T, op nexusoperations.Operation, events []*historypb.HistoryEvent) {
 				require.Equal(t, enumsspb.NEXUS_OPERATION_STATE_BACKING_OFF, op.State())
 				require.NotNil(t, op.LastAttemptFailure.GetApplicationFailureInfo())
