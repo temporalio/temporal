@@ -422,6 +422,7 @@ func (c *requestContext) interceptRequest(ctx context.Context, request *nexus.Co
 			c.forwarded = true
 			var forwardStartTime time.Time
 			c.metricsHandlerForInterceptors, forwardStartTime = c.RedirectionInterceptor.BeforeCall(methodNameForMetrics)
+			c.metricsHandlerForInterceptors = c.metricsHandlerForInterceptors.WithTags(metrics.NamespaceTag(c.namespace.Name().String()))
 			c.cleanupFunctions = append(c.cleanupFunctions, func(retErr error) {
 				c.RedirectionInterceptor.AfterCall(c.metricsHandlerForInterceptors, forwardStartTime, c.namespace.ActiveClusterName(), retErr)
 			})
