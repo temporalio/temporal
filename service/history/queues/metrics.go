@@ -206,7 +206,7 @@ func getTaskTypeTagValue(
 		return GetStandbyTransferTaskTypeTagValue(task)
 	case tasks.CategoryTimer:
 		if isActive {
-			return GetActiveTimerTaskTypeTagValue(executable.GetTask())
+			return GetActiveTimerTaskTypeTagValue(task)
 		}
 		return GetStandbyTimerTaskTypeTagValue(task)
 	case tasks.CategoryVisibility:
