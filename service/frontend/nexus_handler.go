@@ -173,7 +173,6 @@ func (c *operationContext) interceptRequest(ctx context.Context, request *matchi
 			c.metricsHandler = c.metricsHandler.WithTags(metrics.OutcomeTag("request_forwarded"))
 			var forwardStartTime time.Time
 			c.metricsHandlerForInterceptors, forwardStartTime = c.redirectionInterceptor.BeforeCall(c.apiName)
-			c.metricsHandlerForInterceptors = c.metricsHandlerForInterceptors.WithTags(metrics.NamespaceTag(c.namespaceName))
 			c.cleanupFunctions = append(c.cleanupFunctions, func(retErr error) {
 				c.redirectionInterceptor.AfterCall(c.metricsHandlerForInterceptors, forwardStartTime, c.namespace.ActiveClusterName(), retErr)
 			})
