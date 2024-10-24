@@ -624,22 +624,28 @@ func (m *workflowTaskStateMachine) skipWorkflowTaskCompletedEvent(workflowTaskTy
 
 	if request.GetForceCreateNewWorkflowTask() {
 		// If ForceCreateNewWorkflowTask is set to true, then this is a heartbeat response.
-		// New WT will be created as Normal and WorkflowTaskCompletedEvent for this WT is also must be written.
-		// In the future, if we decide not to write heartbeat of speculative WT to the history, this check should be removed,
-		// and extra logic should be added to create next WT as Speculative. Currently, new heartbeat WT is always created as Normal.
+		// New WFT will be created as Normal and WorkflowTaskCompletedEvent for this WFT is also must be written.
+		// In the future, if we decide not to write heartbeat of speculative WFT to the history, this check should be removed,
+		// and extra logic should be added to create next WFT as Speculative. Currently, new heartbeat WFT is always created as Normal.
 		metrics.SpeculativeWorkflowTaskCommits.With(m.metricsHandler).Record(1,
 			metrics.ReasonTag("force_create_task"))
 		return false
 	}
 
-	// Speculative WFT can only be discarded only if there are no events after previous WFTCompleted event,
+	// Speculative WFT that has only Update rejection messages should be discarded (this function returns `true`).
+	// If speculative WFT also shipped events to the worker and was discarded, then
+	// next WFT will ship these events again. Unfortunately, old SDKs don't support receiving same events more than once.
+	// If SDK supports this, it will set DiscardSpeculativeWorkflowTaskWithEvents to `true`
+	// and server can discard speculative WFT even if it had events.
+
+	// Otherwise, server needs to determinate if there were events on this speculative WFT,
 	// i.e. last event in the history is WFTCompleted event.
 	// It is guaranteed that WFTStarted event is followed by WFTCompleted event and history tail might look like:
 	//   previous WFTStarted
 	//   previous WFTCompleted
 	//   --> NextEventID points here because it doesn't move for speculative WFT.
-	// In this case difference between NextEventID and LastCompletedWorkflowTaskStartedEventId is 2.
-	// If there are other events after WFTCompleted event, then difference is > 2 and speculative WFT can't be dropped.
+	// In this case, the difference between NextEventID and LastCompletedWorkflowTaskStartedEventId is 2.
+	// If there are other events after WFTCompleted event, then the difference is > 2 and speculative WFT can't be discarded.
 	if !request.GetCapabilities().GetDiscardSpeculativeWorkflowTaskWithEvents() &&
 		m.ms.GetNextEventID() > m.ms.GetLastCompletedWorkflowTaskStartedEventId()+2 {
 		metrics.SpeculativeWorkflowTaskCommits.With(m.metricsHandler).Record(1,
@@ -647,7 +653,10 @@ func (m *workflowTaskStateMachine) skipWorkflowTaskCompletedEvent(workflowTaskTy
 		return false
 	}
 
-	// TODO: add comment, fix comment above, fix doc, add tests
+	// Even if worker supports receiving same events more than once,
+	// server still writes speculative WFT if it had too many events.
+	// This is to prevent shipping a big set of events to the worker over and over again,
+	// in case if Updates are constantly rejected.
 	if request.GetCapabilities().GetDiscardSpeculativeWorkflowTaskWithEvents() &&
 		m.ms.GetNextEventID() > m.ms.GetLastCompletedWorkflowTaskStartedEventId()+2+int64(m.ms.config.DiscardSpeculativeWorkflowTaskMaximumEventsCount()) {
 		metrics.SpeculativeWorkflowTaskCommits.With(m.metricsHandler).Record(1,
@@ -663,9 +672,9 @@ func (m *workflowTaskStateMachine) skipWorkflowTaskCompletedEvent(workflowTaskTy
 		}
 	}
 
-	// Speculative WT can be dropped when response contains only rejection messages.
+	// Speculative WFT can be discarded when response contains only rejection messages.
 	// Empty messages list is equivalent to only rejection messages because server will reject all sent updates (if any).
-	//
+
 	// TODO: We should perform a shard ownership check here to prevent the case where the entire speculative workflow task
 	// is done on a stale mutable state and the fact that mutable state is stale caused workflow update requests to be rejected.
 	// NOTE: The AssertShardOwnership persistence API is not implemented in the repo.
