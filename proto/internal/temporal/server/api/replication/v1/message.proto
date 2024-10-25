@@ -165,11 +165,11 @@ message SyncActivityTaskAttributes {
     string last_started_build_id = 16;
     // workflows redirect_counter value when this activity started last time
     int64 last_started_redirect_counter = 17;
-    // First time the activity was scheduled.
+    // The first time the activity was scheduled.
     google.protobuf.Timestamp first_scheduled_time = 18;
     // Last time an activity failure was recorded by the server.
     google.protobuf.Timestamp last_attempt_complete_time = 19;
-    // stamp represent "version" of activity during its lifetime. It can be changed with Activity API
+    // Stamp represents the internal “version” of the activity options and can/will be changed with Activity API.
     int32 stamp = 20;
 }
 

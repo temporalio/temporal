@@ -4917,10 +4917,10 @@ func (ms *MutableStateImpl) RecordLastActivityStarted(ai *persistencespb.Activit
 
 func (ms *MutableStateImpl) RegenerateActivityRetryTask(ai *persistencespb.ActivityInfo) error {
 	// there are two possible cases:
-	//  * this is the first time activity was scheduled
-	//     * in this case we should use current schedule time
-	//	* this is a retry
-	//     * we should recalculate next scheduled time, based on the last time when activity was completed
+	// * this is the first time activity was scheduled
+	//  * in this case we should use current schedule time
+	// * this is a retry
+	//  * we should recalculate next scheduled time, based on the last time when activity was completed
 
 	nextScheduledTime := ai.ScheduledTime.AsTime()
 	if ai.Attempt > 1 {

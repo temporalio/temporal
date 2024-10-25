@@ -55,7 +55,7 @@ func (e *ActivityStampMismatch) Status() *status.Status {
 		return e.st
 	}
 
-	st := status.New(codes.InvalidArgument, e.Message)
+	st := status.New(codes.NotFound, e.Message)
 	st, _ = st.WithDetails(
 		&errordetails.ActivityStampMismatchFailure{},
 	)
