@@ -297,6 +297,8 @@ message TransferTaskInfo {
     oneof task_details {
         CloseExecutionTaskDetails close_execution_task_details = 16;
     }
+
+    int32 stamp = 17;
 }
 
 // replication column

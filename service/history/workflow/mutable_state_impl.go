@@ -1633,6 +1633,10 @@ func (ms *MutableStateImpl) UpdateActivityInfo(
 		ai.TimerTaskStatus = TimerTaskStatusNone
 	}
 
+	ai.FirstScheduledTime = incomingActivityInfo.GetFirstScheduledTime()
+	ai.LastAttemptCompleteTime = incomingActivityInfo.GetLastAttemptCompleteTime()
+	ai.Stamp = incomingActivityInfo.GetStamp()
+
 	ms.updateActivityInfos[ai.ScheduledEventId] = ai
 	ms.approximateSize += ai.Size()
 
@@ -6506,6 +6510,8 @@ func (ms *MutableStateImpl) ShouldResetActivityTimerTaskMask(current, incoming *
 	if !ms.clusterMetadata.IsVersionFromSameCluster(current.Version, incoming.Version) {
 		return true
 	} else if current.Attempt != incoming.Attempt {
+		return true
+	} else if current.Stamp != incoming.Stamp {
 		return true
 	}
 	return false

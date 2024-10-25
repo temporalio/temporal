@@ -230,17 +230,11 @@ func (t *timerQueueActiveTaskExecutor) executeActivityTimeoutTask(
 	if mutableState == nil || !mutableState.IsWorkflowExecutionRunning() {
 		return nil
 	}
-	ai, ok := mutableState.GetActivityInfo(task.EventID)
+	_, ok := mutableState.GetActivityInfo(task.EventID)
 
 	if !ok {
 		// if activity is not found, the timer is invalid.
 		return nil
-	}
-
-	if task.Stamp != ai.Stamp {
-		// if this task is invalid - we want to generate new activity timeout task
-		// it will be done in closeTransactionPrepareTasks call
-		return weContext.UpdateWorkflowExecutionAsActive(ctx, t.shardContext)
 	}
 
 	timerSequence := t.getTimerSequence(mutableState)
