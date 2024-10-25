@@ -275,12 +275,6 @@ func CheckTestShard(t *testing.T, atTestLevel bool) {
 		t.Skipf("Skipping %s in test shard %d/%d (it runs in %d)", t.Name(), index, total, testIndex)
 	}
 	t.Logf("Running %s in test shard %d/%d", t.Name(), index, total)
-
-	start := time.Now()
-	t.Cleanup(func() {
-		// log directly to stdout so it always shows up in output
-		fmt.Printf("### elapsed {%q, %f}\n", t.Name(), time.Since(start).Seconds())
-	})
 }
 
 func (s *FunctionalTestBase) registerNamespaceWithDefaults(name string) error {
