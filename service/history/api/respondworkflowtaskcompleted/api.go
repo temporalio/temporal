@@ -731,6 +731,7 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 			return nil, err
 		}
 	}
+	println(fmt.Sprintf("%+v", ms))
 
 	return resp, nil
 }

@@ -474,6 +474,9 @@ func (s *WorkflowTaskCompletedHandlerSuite) createSentUpdate(tv *testvars.TestVa
 		nil,
 		false,
 	)
+	//_, _, err = ms.CloseTransactionAsMutation(workflow.TransactionPolicyActive)
+	//s.NoError(err)
+
 	taskToken := &tokenspb.Task{
 		Attempt:          1,
 		NamespaceId:      tv.NamespaceID().String(),
