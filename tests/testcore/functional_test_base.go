@@ -31,7 +31,6 @@ import (
 	"fmt"
 	"maps"
 	"os"
-	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -90,9 +89,12 @@ type (
 )
 
 var (
-	smokeTestSuites = []string{
-		"TestAdvancedVisibilitySuite",
-		"TestClientMiscTestSuite",
+	smokeTestSuites = map[string]bool{
+		"TestAdvancedVisibilitySuite": true,
+		"TestClientMiscTestSuite":     true,
+	}
+	shardByTestSuites = map[string]bool{
+		"TestVersioningFunctionalSuite": true,
 	}
 )
 
@@ -164,7 +166,7 @@ func (s *FunctionalTestBase) SetDynamicConfigOverrides(dynamicConfig map[dynamic
 // Furthermore, all test suites in the "tests/" directory that don't inherit
 // from FunctionalTestBase must implement SetupSuite that calls checkTestShard.
 func (s *FunctionalTestBase) SetupSuite(defaultClusterConfigFile string, options ...Option) {
-	CheckTestShard(s.T())
+	CheckTestShard(s.T(), false)
 
 	s.testClusterFactory = NewTestClusterFactory()
 
@@ -215,15 +217,22 @@ func (s *FunctionalTestBase) SetupSuite(defaultClusterConfigFile string, options
 }
 
 func (s *FunctionalTestBase) SetupTest() {
+	CheckTestShard(s.T(), true)
 }
 
 // CheckTestShard supports test sharding based on environment variables.
-func CheckTestShard(t *testing.T) {
+func CheckTestShard(t *testing.T, atTestLevel bool) {
+	suiteName, _, _ := strings.Cut(t.Name(), "/")
+
+	shouldShardAtTestLevel := shardByTestSuites[suiteName]
+	if shouldShardAtTestLevel != atTestLevel {
+		return
+	}
+
 	indexStr := os.Getenv("TEST_SHARD_INDEX")
 	// special value to run only a few suites on the extended set of persistence drivers
 	if indexStr == "smoke_only" {
-		suiteName, _, _ := strings.Cut(t.Name(), "/")
-		if slices.Contains(smokeTestSuites, suiteName) {
+		if smokeTestSuites[suiteName] {
 			t.Logf("Running %s in smoke tests", t.Name())
 			return
 		}
