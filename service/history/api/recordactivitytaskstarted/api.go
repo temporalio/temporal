@@ -26,8 +26,10 @@ package recordactivitytaskstarted
 
 import (
 	"context"
+	"fmt"
 
 	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
@@ -146,7 +148,11 @@ func recordActivityTaskStarted(
 
 	if ai.Stamp != request.Stamp {
 		// activity has changes before task is started.
-		return nil, serviceerrors.NewActivityStampMismatch(ai.ActivityType.Name, request.Stamp, ai.Stamp)
+		// ErrActivityStampMismatch is the error to indicate that requested activity has mismatched stamp
+		errorMessage := fmt.Sprintf(
+			"Activity task with this stamp not found. Id: %s,: type: %s, current stamp: %d",
+			ai.ActivityId, ai.ActivityType.Name, ai.Stamp)
+		return nil, serviceerror.NewNotFound(errorMessage)
 	}
 
 	versioningStamp := worker_versioning.StampFromCapabilities(request.PollRequest.WorkerVersionCapabilities)

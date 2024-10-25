@@ -40,11 +40,6 @@ func FromStatus(st *status.Status) error {
 	errDetails := extractErrorDetails(st)
 
 	switch st.Code() {
-	case codes.NotFound:
-		switch errDetails.(type) {
-		case *errordetails.ActivityStampMismatchFailure:
-			return newActivityStampMismatch(st)
-		}
 	case codes.InvalidArgument:
 		switch errDetails := errDetails.(type) {
 		case *errordetails.CurrentBranchChangedFailure:

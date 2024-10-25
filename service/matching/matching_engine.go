@@ -785,9 +785,6 @@ pollLoop:
 				e.nonRetryableErrorsDropTask(task, taskQueueName, err)
 				// drop the task as otherwise task would be stuck in a retry-loop
 				task.finish(nil, false)
-			case *serviceerrors.ActivityStampMismatch:
-				e.logger.Debug("Activity stamp mismatch, activity was updated before it is started", tag.WorkflowTaskQueueName(taskQueueName), tag.TaskID(task.event.GetTaskId()))
-				task.finish(nil, false)
 			case *serviceerror.NotFound: // mutable state not found, workflow not running or activity info not found
 				e.logger.Info("Activity task not found",
 					tag.WorkflowNamespaceID(task.event.Data.GetNamespaceId()),
