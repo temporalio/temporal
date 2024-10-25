@@ -1392,7 +1392,8 @@ type RecordActivityTaskStartedRequest struct {
 	PollRequest         *v1.PollActivityTaskQueueRequest `protobuf:"bytes,6,opt,name=poll_request,json=pollRequest,proto3" json:"poll_request,omitempty"`
 	Clock               *v15.VectorClock                 `protobuf:"bytes,7,opt,name=clock,proto3" json:"clock,omitempty"`
 	BuildIdRedirectInfo *v110.BuildIdRedirectInfo        `protobuf:"bytes,8,opt,name=build_id_redirect_info,json=buildIdRedirectInfo,proto3" json:"build_id_redirect_info,omitempty"`
-	Stamp               int32                            `protobuf:"varint,9,opt,name=stamp,proto3" json:"stamp,omitempty"`
+	// Stamp represents the internal “version” of the activity options and can/will be changed with Activity API.
+	Stamp int32 `protobuf:"varint,9,opt,name=stamp,proto3" json:"stamp,omitempty"`
 }
 
 func (x *RecordActivityTaskStartedRequest) Reset() {
@@ -4178,11 +4179,11 @@ type SyncActivityRequest struct {
 	LastStartedBuildId string `protobuf:"bytes,16,opt,name=last_started_build_id,json=lastStartedBuildId,proto3" json:"last_started_build_id,omitempty"`
 	// workflows redirect_counter value when this activity started last time
 	LastStartedRedirectCounter int64 `protobuf:"varint,17,opt,name=last_started_redirect_counter,json=lastStartedRedirectCounter,proto3" json:"last_started_redirect_counter,omitempty"`
-	// First time the activity was scheduled.
+	// The first time the activity was scheduled.
 	FirstScheduledTime *timestamppb.Timestamp `protobuf:"bytes,18,opt,name=first_scheduled_time,json=firstScheduledTime,proto3" json:"first_scheduled_time,omitempty"`
-	// Last time an activity failure was recorded by the server.
+	// The last time an activity attempt completion was recorded by the server.
 	LastAttemptCompleteTime *timestamppb.Timestamp `protobuf:"bytes,19,opt,name=last_attempt_complete_time,json=lastAttemptCompleteTime,proto3" json:"last_attempt_complete_time,omitempty"`
-	// stamp represent "version" of activity during its lifetime. It can be changed with Activity API
+	// Stamp represents the internal “version” of the activity options and can/will be changed with Activity API.
 	Stamp int32 `protobuf:"varint,20,opt,name=stamp,proto3" json:"stamp,omitempty"`
 }
 
@@ -4449,11 +4450,11 @@ type ActivitySyncInfo struct {
 	LastStartedBuildId string `protobuf:"bytes,12,opt,name=last_started_build_id,json=lastStartedBuildId,proto3" json:"last_started_build_id,omitempty"`
 	// workflows redirect_counter value when this activity started last time
 	LastStartedRedirectCounter int64 `protobuf:"varint,13,opt,name=last_started_redirect_counter,json=lastStartedRedirectCounter,proto3" json:"last_started_redirect_counter,omitempty"`
-	// First time the activity was scheduled.
+	// The first time the activity was scheduled.
 	FirstScheduledTime *timestamppb.Timestamp `protobuf:"bytes,18,opt,name=first_scheduled_time,json=firstScheduledTime,proto3" json:"first_scheduled_time,omitempty"`
-	// Last time an activity failure was recorded by the server.
+	// The last time an activity attempt completion was recorded by the server.
 	LastAttemptCompleteTime *timestamppb.Timestamp `protobuf:"bytes,19,opt,name=last_attempt_complete_time,json=lastAttemptCompleteTime,proto3" json:"last_attempt_complete_time,omitempty"`
-	// stamp represent "version" of activity during its lifetime. It can be changed with Activity API
+	// Stamp represents the internal “version” of the activity options and can/will be changed with Activity API.
 	Stamp int32 `protobuf:"varint,20,opt,name=stamp,proto3" json:"stamp,omitempty"`
 }
 
