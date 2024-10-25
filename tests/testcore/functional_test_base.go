@@ -250,9 +250,9 @@ func CheckTestShard(t *testing.T) {
 	nameToHash := t.Name() + salt
 	testIndex := int(farm.Fingerprint32([]byte(nameToHash))) % total
 	if testIndex != index {
-		t.Skipf("Skipping %s in test shard %d/%d (it runs in %d)", t.Name(), index+1, total, testIndex+1)
+		t.Skipf("Skipping %s in test shard %d/%d (it runs in %d)", t.Name(), index, total, testIndex)
 	}
-	t.Logf("Running %s in test shard %d/%d", t.Name(), index+1, total)
+	t.Logf("Running %s in test shard %d/%d", t.Name(), index, total)
 }
 
 func (s *FunctionalTestBase) registerNamespaceWithDefaults(name string) error {
