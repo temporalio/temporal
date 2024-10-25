@@ -30,6 +30,7 @@ import (
 	"fmt"
 	"io"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -39,7 +40,6 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
-	uberatomic "go.uber.org/atomic"
 )
 
 const (
@@ -53,7 +53,7 @@ var (
 
 type DatabaseHandle struct {
 	running      bool
-	db           uberatomic.Pointer[sqlx.DB]
+	db           atomic.Pointer[sqlx.DB]
 	connect      func() (*sqlx.DB, error)
 	needsRefresh func(error) bool
 
