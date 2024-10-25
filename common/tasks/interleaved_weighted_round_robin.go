@@ -220,14 +220,15 @@ func (s *InterleavedWeightedRoundRobinScheduler[T, K]) cleanupLoop() {
 	for {
 		select {
 		case <-ch:
-			s.doCleanupLocked()
+			s.doCleanup()
+			ch, _ = s.ts.NewTimer(s.options.InactiveChannelDeletionDelay())
 		case <-s.shutdownChan:
 			return
 		}
 	}
 }
 
-func (s *InterleavedWeightedRoundRobinScheduler[T, K]) doCleanupLocked() {
+func (s *InterleavedWeightedRoundRobinScheduler[T, K]) doCleanup() {
 	s.Lock()
 	defer s.Unlock()
 	var keysToDelete []K
