@@ -167,7 +167,7 @@ message SyncActivityTaskAttributes {
     int64 last_started_redirect_counter = 17;
     // The first time the activity was scheduled.
     google.protobuf.Timestamp first_scheduled_time = 18;
-    // Last time an activity failure was recorded by the server.
+    // The last time an activity attempt completion was recorded by the server.
     google.protobuf.Timestamp last_attempt_complete_time = 19;
     // Stamp represents the internal “version” of the activity options and can/will be changed with Activity API.
     int32 stamp = 20;
