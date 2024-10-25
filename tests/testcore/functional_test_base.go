@@ -164,7 +164,11 @@ func (s *FunctionalTestBase) SetDynamicConfigOverrides(dynamicConfig map[dynamic
 // into partitions. Otherwise, the test suite will be executed multiple times
 // in each partition.
 // Furthermore, all test suites in the "tests/" directory that don't inherit
-// from FunctionalTestBase must implement SetupSuite that calls checkTestShard.
+// from FunctionalTestBase must implement SetupSuite that calls CheckTestShard.
+//
+// Note that most suites are sharded at the suite level to avoid startup overhead,
+// but some large suites may be sharded at the test level, i.e. this call will be a
+// no-op and the determination will be done in SetupTest.
 func (s *FunctionalTestBase) SetupSuite(defaultClusterConfigFile string, options ...Option) {
 	CheckTestShard(s.T(), false)
 
@@ -216,6 +220,13 @@ func (s *FunctionalTestBase) SetupSuite(defaultClusterConfigFile string, options
 	}
 }
 
+// All test suites that inherit FunctionalTestBase and overwrite SetupTest must
+// call this testcore FunctionalTestBase.SetupTest function to distribute the tests
+// into partitions. Otherwise, the test suite will be executed multiple times
+// in each partition.
+//
+// Note that most suites are sharded at the suite level to avoid startup overhead
+// (i.e. this is a no-op), but some large suites may be sharded at the test level.
 func (s *FunctionalTestBase) SetupTest() {
 	CheckTestShard(s.T(), true)
 }
