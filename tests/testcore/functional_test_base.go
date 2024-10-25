@@ -31,8 +31,10 @@ import (
 	"fmt"
 	"maps"
 	"os"
+	"slices"
 	"strconv"
 	"strings"
+	"testing"
 	"time"
 
 	"github.com/dgryski/go-farm"
@@ -85,6 +87,13 @@ type (
 		ServiceOptions map[primitives.ServiceName][]fx.Option
 	}
 	Option func(params *TestClusterParams)
+)
+
+var (
+	smokeTestSuites = []string{
+		"TestAdvancedVisibilitySuite",
+		"TestClientMiscTestSuite",
+	}
 )
 
 // WithFxOptionsForService returns an Option which, when passed as an argument to setupSuite, will append the given list
@@ -148,7 +157,15 @@ func (s *FunctionalTestBase) SetDynamicConfigOverrides(dynamicConfig map[dynamic
 	s.dynamicConfigOverrides = dynamicConfig
 }
 
+// All test suites that inherit FunctionalTestBase and overwrite SetupSuite must
+// call this testcore FunctionalTestBase.SetupSuite function to distribute the suites
+// into partitions. Otherwise, the test suite will be executed multiple times
+// in each partition.
+// Furthermore, all test suites in the "tests/" directory that don't inherit
+// from FunctionalTestBase must implement SetupSuite that calls checkTestShard.
 func (s *FunctionalTestBase) SetupSuite(defaultClusterConfigFile string, options ...Option) {
+	CheckTestShard(s.T())
+
 	s.testClusterFactory = NewTestClusterFactory()
 
 	params := ApplyTestClusterParams(options)
@@ -197,26 +214,18 @@ func (s *FunctionalTestBase) SetupSuite(defaultClusterConfigFile string, options
 	}
 }
 
-// All test suites that inherit FunctionalTestBase and overwrite SetupTest must
-// call this testcore FunctionalTestBase.SetupTest function to distribute the tests
-// into partitions. Otherwise, the test suite will be executed multiple times
-// in each partition.
-// Furthermore, all test suites in the "tests/" directory that don't inherit
-// from FunctionalTestBase must implement SetupTest that calls checkTestShard.
 func (s *FunctionalTestBase) SetupTest() {
-	s.checkTestShard()
 }
 
-// checkTestShard supports test sharding based on environment variables.
-func (s *FunctionalTestBase) checkTestShard() {
+// CheckTestShard supports test sharding based on environment variables.
+func CheckTestShard(t *testing.T) {
 	smokeOnly := os.Getenv("TEST_SMOKE_TESTS_ONLY")
 	if smokeOnly == "true" {
-		suiteName, _, _ := strings.Cut(s.T().Name(), "/")
-		switch suiteName {
-		case "AdvancedVisibilitySuite", "ClientMiscTestSuite":
+		suiteName, _, _ := strings.Cut(t.Name(), "/")
+		if slices.Contains(smokeTestSuites, suiteName) {
 			return
 		}
-		s.T().Skip("Skipping %s, not included in smoke tests", s.T().Name())
+		t.Skipf("Skipping %s, not included in smoke tests", t.Name())
 	}
 
 	totalStr := os.Getenv("TEST_TOTAL_SHARDS")
@@ -226,11 +235,11 @@ func (s *FunctionalTestBase) checkTestShard() {
 	}
 	total, err := strconv.Atoi(totalStr)
 	if err != nil || total < 1 {
-		s.T().Fatal("Couldn't convert TEST_TOTAL_SHARDS")
+		t.Fatal("Couldn't convert TEST_TOTAL_SHARDS")
 	}
 	index, err := strconv.Atoi(indexStr)
 	if err != nil || index < 0 || index >= total {
-		s.T().Fatal("Couldn't convert TEST_SHARD_INDEX")
+		t.Fatal("Couldn't convert TEST_SHARD_INDEX")
 	}
 
 	// This was determined empirically to distribute our existing test names
@@ -238,12 +247,12 @@ func (s *FunctionalTestBase) checkTestShard() {
 	// For parallelism 4, use 11. For 3, use 26. For 2, use 20.
 	const salt = "-salt-26"
 
-	nameToHash := s.T().Name() + salt
+	nameToHash := t.Name() + salt
 	testIndex := int(farm.Fingerprint32([]byte(nameToHash))) % total
 	if testIndex != index {
-		s.T().Skipf("Skipping %s in test shard %d/%d (it runs in %d)", s.T().Name(), index+1, total, testIndex+1)
+		t.Skipf("Skipping %s in test shard %d/%d (it runs in %d)", t.Name(), index+1, total, testIndex+1)
 	}
-	s.T().Logf("Running %s in test shard %d/%d", s.T().Name(), index+1, total)
+	t.Logf("Running %s in test shard %d/%d", t.Name(), index+1, total)
 }
 
 func (s *FunctionalTestBase) registerNamespaceWithDefaults(name string) error {
