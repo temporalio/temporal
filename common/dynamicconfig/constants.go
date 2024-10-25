@@ -1842,10 +1842,23 @@ the outbound standby task failed to be processed due to missing events.`,
 close task has been processed. Must use Elasticsearch as visibility store, otherwise workflow
 data (eg: search attributes) will be lost after workflow is closed.`,
 	)
+	VisibilityProcessorRelocateAttributesMinBlobSize = NewNamespaceIntSetting(
+		"history.visibilityProcessorRelocateAttributesMinBlobSize",
+		0,
+		`VisibilityProcessorRelocateAttributesMinBlobSize is the minimum size in bytes of memo or search
+attributes.`,
+	)
 	VisibilityQueueMaxReaderCount = NewGlobalIntSetting(
 		"history.visibilityQueueMaxReaderCount",
 		2,
 		`VisibilityQueueMaxReaderCount is the max number of readers in one multi-cursor visibility queue`,
+	)
+
+	DisableFetchRelocatableAttributesFromVisibility = NewNamespaceBoolSetting(
+		"history.disableFetchRelocatableAttributesFromVisibility",
+		false,
+		`DisableFetchRelocatableAttributesFromVisibility disables fetching memo and search attributes from
+visibility if they were removed from the mutable state`,
 	)
 
 	ArchivalTaskBatchSize = NewGlobalIntSetting(
