@@ -370,12 +370,12 @@ jobs:
             persistence_driver: cassandra
             containers: [cassandra, elasticsearch]
             es_version: v7
-            parallel_flags: "-parallel=6"
+            parallel_flags: "-parallel=8"
           - name: sqlite
             persistence_type: sql
             persistence_driver: sqlite
             containers: []
-            parallel_flags: "-parallel=6"
+            parallel_flags: "-parallel=8"
           # The rest get smoke tests only:
           - name: cass_es8
             persistence_type: nosql
@@ -480,20 +480,21 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
+        shard_index: [0, 1]
         name: [cass_es, sqlite]
         include:
           - name: cass_es
             persistence_type: nosql
             persistence_driver: elasticsearch
             containers: [cassandra, elasticsearch]
-            parallel_flags: "-parallel=6"
           - name: sqlite
             persistence_type: sql
             persistence_driver: sqlite
             containers: []
-            parallel_flags: "-parallel=6"
     runs-on: ubuntu-20.04
     env:
+      TEST_TOTAL_SHARDS: 2
+      TEST_SHARD_INDEX: ${{ matrix.shard_index }}
       PERSISTENCE_TYPE: ${{ matrix.persistence_type }}
       PERSISTENCE_DRIVER: ${{ matrix.persistence_driver }}
       TEST_PARALLEL_FLAGS: ${{ matrix.parallel_flags }}
@@ -537,7 +538,7 @@ jobs:
         uses: actions/upload-artifact@v4.4.3
         if: ${{ !cancelled() }}
         with:
-          name: junit-xml--${{github.run_id}}--${{github.run_attempt}}--${{matrix.name}}--functional-test-xdc
+          name: junit-xml--${{github.run_id}}--${{github.run_attempt}}--${{matrix.name}}--${{matrix.shard_index}}--functional-test-xdc
           path: .testoutput
           include-hidden-files: true
           retention-days: 28

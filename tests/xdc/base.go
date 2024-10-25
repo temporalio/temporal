@@ -87,6 +87,8 @@ func (s *xdcBaseSuite) clusterReplicationConfig() []*replicationpb.ClusterReplic
 }
 
 func (s *xdcBaseSuite) setupSuite(clusterNames []string, opts ...testcore.Option) {
+	testcore.CheckTestShard(s.T(), false)
+
 	s.testClusterFactory = testcore.NewTestClusterFactory()
 
 	params := testcore.ApplyTestClusterParams(opts)
