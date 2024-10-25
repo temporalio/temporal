@@ -233,8 +233,9 @@ func (s *InterleavedWeightedRoundRobinScheduler[T, K]) doCleanup() {
 	defer s.Unlock()
 	var keysToDelete []K
 	cleanupDelay := s.options.InactiveChannelDeletionDelay()
+	now := s.ts.Now()
 	for k, weightedChan := range s.weightedChannels {
-		if s.ts.Now().Sub(weightedChan.LastActiveTime()) > cleanupDelay &&
+		if now.Sub(weightedChan.LastActiveTime()) > cleanupDelay &&
 			len(weightedChan.Chan()) == 0 {
 
 			keysToDelete = append(keysToDelete, k)
@@ -355,11 +356,12 @@ func (s *InterleavedWeightedRoundRobinScheduler[T, K]) doDispatchTasksWithWeight
 	channels WeightedChannels[T],
 ) {
 	numTasks := int64(0)
+	now := s.ts.Now()
 LoopDispatch:
 	for _, channel := range channels {
 		select {
 		case task := <-channel.Chan():
-			channel.UpdateLastActiveTime(s.ts.Now())
+			channel.UpdateLastActiveTime(now)
 			s.fifoScheduler.Submit(task)
 			numTasks++
 		default:
