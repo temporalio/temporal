@@ -266,8 +266,7 @@ func CheckTestShard(t *testing.T, atTestLevel bool) {
 
 	// This was determined empirically to distribute our existing test names
 	// reasonably well. This can be adjusted from time to time.
-	// For parallelism 4, use 11. For 3, use 26. For 2, use 20.
-	const salt = "-salt-26"
+	const salt = "-salt-107"
 
 	nameToHash := t.Name() + salt
 	testIndex := int(farm.Fingerprint32([]byte(nameToHash))) % total
