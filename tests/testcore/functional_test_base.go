@@ -32,6 +32,7 @@ import (
 	"maps"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/dgryski/go-farm"
@@ -208,6 +209,16 @@ func (s *FunctionalTestBase) SetupTest() {
 
 // checkTestShard supports test sharding based on environment variables.
 func (s *FunctionalTestBase) checkTestShard() {
+	smokeOnly := os.Getenv("TEST_SMOKE_TESTS_ONLY")
+	if smokeOnly == "true" {
+		suiteName, _, _ := strings.Cut(s.T().Name(), "/")
+		switch suiteName {
+		case "AdvancedVisibilitySuite", "ClientMiscTestSuite":
+			return
+		}
+		s.T().Skip("Skipping %s, not included in smoke tests", s.T().Name())
+	}
+
 	totalStr := os.Getenv("TEST_TOTAL_SHARDS")
 	indexStr := os.Getenv("TEST_SHARD_INDEX")
 	if totalStr == "" || indexStr == "" {

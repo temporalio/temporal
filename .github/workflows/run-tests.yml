@@ -60,7 +60,6 @@ env:
   PR_BASE_COMMIT: ${{ github.event.pull_request.base.sha }}
   DOCKER_COMPOSE_FILE: ./develop/github/docker-compose.yml
   TEMPORAL_VERSION_CHECK_DISABLED: 1
-  BUILDKITE_ANALYTICS_TOKEN: ${{ secrets.BUILDKITE_ANALYTICS_TOKEN }}
 
 jobs:
   set-up-single-test:
@@ -82,7 +81,7 @@ jobs:
     steps:
       - id: generate_output
         run: |
-          shards=3
+          shards=6
           timeout=20   # update this to TEST_TIMEOUT if you update the Makefile
           runs_on='["ubuntu-20.04"]'
           if [[ "${{ inputs.run_single_functional_test }}" == "true" || "${{ inputs.run_single_unit_test }}" == "true" ]]; then
@@ -231,7 +230,6 @@ jobs:
       fail-fast: false
     runs-on: ubuntu-20.04
     env:
-      BUILDKITE_MESSAGE: '{"job": "unit-test"}'
     steps:
       - uses: actions/checkout@v4
         with:
@@ -294,7 +292,6 @@ jobs:
       fail-fast: false
     runs-on: ubuntu-20.04
     env:
-      BUILDKITE_MESSAGE: '{"job": "integration-test"}'
     steps:
       - uses: actions/checkout@v4
         with:
@@ -366,50 +363,50 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        runs-on: ${{ fromJson(needs.set-up-single-test.outputs.runs_on) }}
         shard_index: ${{ fromJson(needs.set-up-single-test.outputs.shard_indices) }}
-        name:
-          - cass_es
-          - cass_es8
-          - sqlite
-          - mysql8
-          - postgres12
-          - postgres12_pgx
+        smoke_tests_only: [false]
+        name: [cass_es, sqlite]
         include:
+          # These two get all tests:
           - name: cass_es
             persistence_type: nosql
             persistence_driver: cassandra
             containers: [cassandra, elasticsearch]
             es_version: v7
+          - name: sqlite
+            persistence_type: sql
+            persistence_driver: sqlite
+            containers: []
+          # The rest get smoke tests only:
           - name: cass_es8
             persistence_type: nosql
             persistence_driver: cassandra
             containers: [cassandra, elasticsearch8]
             es_version: v8
-          - name: sqlite
-            persistence_type: sql
-            persistence_driver: sqlite
-            containers: []
+            smoke_tests_only: true
           - name: mysql8
             persistence_type: sql
             persistence_driver: mysql8
             containers: [mysql]
+            smoke_tests_only: true
           - name: postgres12
             persistence_type: sql
             persistence_driver: postgres12
             containers: [postgresql]
+            smoke_tests_only: true
           - name: postgres12_pgx
             persistence_type: sql
             persistence_driver: postgres12_pgx
             containers: [postgresql]
-    runs-on: ${{ matrix.runs-on }}
+            smoke_tests_only: true
+    runs-on: ${{ fromJson(needs.set-up-single-test.outputs.runs_on) }}
     env:
       TEST_TOTAL_SHARDS: ${{ needs.set-up-single-test.outputs.total_shards }}
       TEST_SHARD_INDEX: ${{ matrix.shard_index }}
+      TEST_SMOKE_TESTS_ONLY: ${{ matrix.smoke_tests_only }}
       PERSISTENCE_TYPE: ${{ matrix.persistence_type }}
       PERSISTENCE_DRIVER: ${{ matrix.persistence_driver }}
       TEST_TIMEOUT: ${{ needs.set-up-single-test.outputs.test_timeout }}
-      BUILDKITE_MESSAGE: '{"job": "functional-test", "db": "${{ matrix.persistence_driver }}"}'
     steps:
       - uses: ScribeMD/docker-cache@0.3.7
         if: ${{ inputs.run_single_functional_test != true || (inputs.run_single_functional_test == true && contains(fromJSON(needs.set-up-single-test.outputs.dbs), env.PERSISTENCE_DRIVER)) }}
@@ -484,39 +481,44 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        name: [cass_es, cass_es8, mysql8, postgres12, postgres12_pgx]
+        name: [cass_es, sqlite]
+        # TODO: remote this: name: [cass_es, cass_es8, mysql8, postgres12, postgres12_pgx]
         include:
           - name: cass_es
             persistence_type: nosql
             persistence_driver: elasticsearch
-            parallel_flags: ""
             containers: [cassandra, elasticsearch]
-          - name: cass_es8
-            persistence_type: nosql
-            persistence_driver: elasticsearch
-            parallel_flags: ""
-            containers: [cassandra, elasticsearch8]
-          - name: mysql8
+            # parallel_flags: ""
+          - name: sqlite
             persistence_type: sql
-            persistence_driver: mysql8
-            parallel_flags: ""
-            containers: [mysql]
-          - name: postgres12
-            persistence_type: sql
-            persistence_driver: postgres12
-            parallel_flags: "-parallel=2" # reduce parallelism for postgres
-            containers: [postgresql]
-          - name: postgres12_pgx
-            persistence_type: sql
-            persistence_driver: postgres12_pgx
-            parallel_flags: "-parallel=2" # reduce parallelism for postgres
-            containers: [postgresql]
+            persistence_driver: sqlite
+            containers: []
+            # parallel_flags: ""
+          # - name: cass_es8
+          #   persistence_type: nosql
+          #   persistence_driver: elasticsearch
+          #   parallel_flags: ""
+          #   containers: [cassandra, elasticsearch8]
+          # - name: mysql8
+          #   persistence_type: sql
+          #   persistence_driver: mysql8
+          #   parallel_flags: ""
+          #   containers: [mysql]
+          # - name: postgres12
+          #   persistence_type: sql
+          #   persistence_driver: postgres12
+          #   parallel_flags: "-parallel=2" # reduce parallelism for postgres
+          #   containers: [postgresql]
+          # - name: postgres12_pgx
+          #   persistence_type: sql
+          #   persistence_driver: postgres12_pgx
+          #   parallel_flags: "-parallel=2" # reduce parallelism for postgres
+          #   containers: [postgresql]
     runs-on: ubuntu-20.04
     env:
       PERSISTENCE_TYPE: ${{ matrix.persistence_type }}
       PERSISTENCE_DRIVER: ${{ matrix.persistence_driver }}
-      BUILDKITE_MESSAGE: '{"job": "functional-test-xdc", "db": "${{ matrix.persistence_driver }}"}'
-      TEST_PARALLEL_FLAGS: ${{ matrix.parallel_flags }}
+      # TEST_PARALLEL_FLAGS: ${{ matrix.parallel_flags }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -581,35 +583,35 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        name:
-          - cass_es
-          - cass_es8
-          - mysql8
-          - postgres12
-          - postgres12_pgx
+        name: [cass_es, sqlite]
+        # TODO: remove this: name: [cass_es, cass_es8, mysql8, postgres12, postgres12_pgx]
         include:
           - name: cass_es
             persistence_type: nosql
             persistence_driver: elasticsearch
             containers: [cassandra, elasticsearch]
             es_version: v7
-          - name: cass_es8
-            persistence_type: nosql
-            persistence_driver: elasticsearch
-            containers: [cassandra, elasticsearch8]
-            es_version: v8
-          - name: mysql8
+          - name: sqlite
             persistence_type: sql
-            persistence_driver: mysql8
-            containers: [mysql]
-          - name: postgres12
-            persistence_type: sql
-            persistence_driver: postgres12
-            containers: [postgresql]
-          - name: postgres12_pgx
-            persistence_type: sql
-            persistence_driver: postgres12_pgx
-            containers: [postgresql]
+            persistence_driver: sqlite
+            containers: []
+          # - name: cass_es8
+          #   persistence_type: nosql
+          #   persistence_driver: elasticsearch
+          #   containers: [cassandra, elasticsearch8]
+          #   es_version: v8
+          # - name: mysql8
+          #   persistence_type: sql
+          #   persistence_driver: mysql8
+          #   containers: [mysql]
+          # - name: postgres12
+          #   persistence_type: sql
+          #   persistence_driver: postgres12
+          #   containers: [postgresql]
+          # - name: postgres12_pgx
+          #   persistence_type: sql
+          #   persistence_driver: postgres12_pgx
+          #   containers: [postgresql]
     runs-on: ubuntu-20.04
     env:
       PERSISTENCE_TYPE: ${{ matrix.persistence_type }}
