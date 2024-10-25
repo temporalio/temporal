@@ -31,6 +31,9 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/propagation"
 	"go.opentelemetry.io/otel/trace"
+	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/rpc/interceptor/logtags"
 	"google.golang.org/grpc"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
@@ -52,32 +55,56 @@ type (
 func NewServerTraceInterceptor(
 	tp trace.TracerProvider,
 	tmp propagation.TextMapPropagator,
+	logger log.Logger,
 ) ServerTraceInterceptor {
 	//nolint:staticcheck
 	otelInterceptor := otelgrpc.UnaryServerInterceptor(
 		otelgrpc.WithPropagators(tmp),
 		otelgrpc.WithTracerProvider(tp),
 	)
-
-	if debugMode() {
-		return func(
-			ctx context.Context,
-			req interface{},
-			info *grpc.UnaryServerInfo,
-			handler grpc.UnaryHandler,
-		) (any, error) {
-			return otelInterceptor(ctx, req, info, debugHandler(handler))
-		}
-	}
-
-	return ServerTraceInterceptor(otelInterceptor)
+	return annotationInterceptor(otelInterceptor, logger)
 }
 
-func debugHandler(origHandler grpc.UnaryHandler) grpc.UnaryHandler {
-	return func(ctx context.Context, req any) (resp any, err error) {
-		resp, err = origHandler(ctx, req)
-		span := trace.SpanFromContext(ctx)
-		if span.IsRecording() {
+func annotationInterceptor(
+	otelInterceptor grpc.UnaryServerInterceptor,
+	logger log.Logger,
+) ServerTraceInterceptor {
+	return func(
+		ctx context.Context,
+		req interface{},
+		info *grpc.UnaryServerInfo,
+		handler grpc.UnaryHandler,
+	) (any, error) {
+		isDebug := debugMode()
+		tags := logtags.NewWorkflowTags(common.NewProtoTaskTokenSerializer(), logger)
+
+		return otelInterceptor(ctx, req, info, func(ctx context.Context, req any) (resp any, err error) {
+			resp, err = handler(ctx, req)
+
+			span := trace.SpanFromContext(ctx)
+			if !span.IsRecording() {
+				return
+			}
+
+			// annotate span with workflow tags (same ones the Temporal SDKs use)
+			for _, tag := range tags.Extract(req, info.FullMethod) {
+				var k string
+				switch tag.Key() {
+				case "wf-id":
+					k = "temporalWorkflowID"
+				case "wf-run-id":
+					k = "temporalRunID"
+				default:
+					continue
+				}
+				span.SetAttributes(attribute.Key(k).String(tag.Value().(string)))
+			}
+
+			if !isDebug {
+				return
+			}
+
+			// annotate with gRPC request/response payload
 			//revive:disable-next-line:unchecked-type-assertion
 			reqMsg := req.(proto.Message)
 			payload, _ := protojson.Marshal(reqMsg)
@@ -93,8 +120,9 @@ func debugHandler(origHandler grpc.UnaryHandler) grpc.UnaryHandler {
 				span.SetAttributes(attribute.Key("rpc.response.payload").String(string(payload)))
 				span.SetAttributes(attribute.Key("rpc.response.type").String(msgType))
 			}
-		}
-		return
+
+			return
+		})
 	}
 }
 
