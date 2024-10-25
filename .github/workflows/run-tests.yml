@@ -81,7 +81,7 @@ jobs:
     steps:
       - id: generate_output
         run: |
-          shards=6
+          shards=8
           timeout=20   # update this to TEST_TIMEOUT if you update the Makefile
           runs_on='["ubuntu-20.04"]'
           if [[ "${{ inputs.run_single_functional_test }}" == "true" || "${{ inputs.run_single_unit_test }}" == "true" ]]; then
