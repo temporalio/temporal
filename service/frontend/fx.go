@@ -220,7 +220,7 @@ func GrpcServerOptionsProvider(
 	retryableInterceptor *interceptor.RetryableInterceptor,
 	healthInterceptor *interceptor.HealthInterceptor,
 	rateLimitInterceptor *interceptor.RateLimitInterceptor,
-	traceInterceptor telemetry.ServerTraceInterceptor,
+	traceStatsHandler telemetry.ServerStatsHandler,
 	sdkVersionInterceptor *interceptor.SDKVersionInterceptor,
 	callerInfoInterceptor *interceptor.CallerInfoInterceptor,
 	authInterceptor *authorization.Interceptor,
@@ -263,7 +263,6 @@ func GrpcServerOptionsProvider(
 		utf8Validator.Intercept,
 		namespaceValidatorInterceptor.NamespaceValidateIntercept,
 		namespaceLogInterceptor.Intercept, // TODO: Deprecate this with a outer custom interceptor
-		grpc.UnaryServerInterceptor(traceInterceptor),
 		metrics.NewServerMetricsContextInjectorInterceptor(),
 		authInterceptor.Intercept,
 		redirectionInterceptor.Intercept,
@@ -294,6 +293,9 @@ func GrpcServerOptionsProvider(
 		grpc.ChainUnaryInterceptor(unaryInterceptors...),
 		grpc.ChainStreamInterceptor(streamInterceptor...),
 	)
+	if traceStatsHandler != nil {
+		grpcServerOptions = append(grpcServerOptions, grpc.StatsHandler(traceStatsHandler))
+	}
 	return GrpcServerOptions{Options: grpcServerOptions, UnaryInterceptors: unaryInterceptors}
 }
 
