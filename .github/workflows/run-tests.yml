@@ -229,7 +229,6 @@ jobs:
     strategy:
       fail-fast: false
     runs-on: ubuntu-20.04
-    env:
     steps:
       - uses: actions/checkout@v4
         with:
@@ -291,7 +290,6 @@ jobs:
     strategy:
       fail-fast: false
     runs-on: ubuntu-20.04
-    env:
     steps:
       - uses: actions/checkout@v4
         with:
@@ -457,7 +455,7 @@ jobs:
         uses: actions/upload-artifact@v4.4.3
         if: ${{ !cancelled() && !inputs.run_single_functional_test }}
         with:
-          name: junit-xml--${{github.run_id}}--${{github.run_attempt}}--${{matrix.runs-on}}--${{matrix.name}}--${{matrix.shard_index}}--functional-test
+          name: junit-xml--${{github.run_id}}--${{github.run_attempt}}--${{matrix.name}}--${{matrix.shard_index}}--${{matrix.smoke_tests_only}}--functional-test
           path: .testoutput
           include-hidden-files: true
           retention-days: 28
