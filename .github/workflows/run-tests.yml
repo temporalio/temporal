@@ -370,10 +370,12 @@ jobs:
             persistence_driver: cassandra
             containers: [cassandra, elasticsearch]
             es_version: v7
+            parallel_flags: "-parallel=6"
           - name: sqlite
             persistence_type: sql
             persistence_driver: sqlite
             containers: []
+            parallel_flags: "-parallel=6"
           # The rest get smoke tests only:
           - name: cass_es8
             persistence_type: nosql
@@ -403,6 +405,7 @@ jobs:
       PERSISTENCE_TYPE: ${{ matrix.persistence_type }}
       PERSISTENCE_DRIVER: ${{ matrix.persistence_driver }}
       TEST_TIMEOUT: ${{ needs.set-up-single-test.outputs.test_timeout }}
+      TEST_PARALLEL_FLAGS: ${{ matrix.parallel_flags }}
     steps:
       - uses: ScribeMD/docker-cache@0.3.7
         if: ${{ inputs.run_single_functional_test != true || (inputs.run_single_functional_test == true && contains(fromJSON(needs.set-up-single-test.outputs.dbs), env.PERSISTENCE_DRIVER)) }}
@@ -478,43 +481,22 @@ jobs:
       fail-fast: false
       matrix:
         name: [cass_es, sqlite]
-        # TODO: remote this: name: [cass_es, cass_es8, mysql8, postgres12, postgres12_pgx]
         include:
           - name: cass_es
             persistence_type: nosql
             persistence_driver: elasticsearch
             containers: [cassandra, elasticsearch]
-            # parallel_flags: ""
+            parallel_flags: "-parallel=6"
           - name: sqlite
             persistence_type: sql
             persistence_driver: sqlite
             containers: []
-            # parallel_flags: ""
-          # - name: cass_es8
-          #   persistence_type: nosql
-          #   persistence_driver: elasticsearch
-          #   parallel_flags: ""
-          #   containers: [cassandra, elasticsearch8]
-          # - name: mysql8
-          #   persistence_type: sql
-          #   persistence_driver: mysql8
-          #   parallel_flags: ""
-          #   containers: [mysql]
-          # - name: postgres12
-          #   persistence_type: sql
-          #   persistence_driver: postgres12
-          #   parallel_flags: "-parallel=2" # reduce parallelism for postgres
-          #   containers: [postgresql]
-          # - name: postgres12_pgx
-          #   persistence_type: sql
-          #   persistence_driver: postgres12_pgx
-          #   parallel_flags: "-parallel=2" # reduce parallelism for postgres
-          #   containers: [postgresql]
+            parallel_flags: "-parallel=6"
     runs-on: ubuntu-20.04
     env:
       PERSISTENCE_TYPE: ${{ matrix.persistence_type }}
       PERSISTENCE_DRIVER: ${{ matrix.persistence_driver }}
-      # TEST_PARALLEL_FLAGS: ${{ matrix.parallel_flags }}
+      TEST_PARALLEL_FLAGS: ${{ matrix.parallel_flags }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -580,7 +562,6 @@ jobs:
       fail-fast: false
       matrix:
         name: [cass_es, sqlite]
-        # TODO: remove this: name: [cass_es, cass_es8, mysql8, postgres12, postgres12_pgx]
         include:
           - name: cass_es
             persistence_type: nosql
@@ -591,23 +572,6 @@ jobs:
             persistence_type: sql
             persistence_driver: sqlite
             containers: []
-          # - name: cass_es8
-          #   persistence_type: nosql
-          #   persistence_driver: elasticsearch
-          #   containers: [cassandra, elasticsearch8]
-          #   es_version: v8
-          # - name: mysql8
-          #   persistence_type: sql
-          #   persistence_driver: mysql8
-          #   containers: [mysql]
-          # - name: postgres12
-          #   persistence_type: sql
-          #   persistence_driver: postgres12
-          #   containers: [postgresql]
-          # - name: postgres12_pgx
-          #   persistence_type: sql
-          #   persistence_driver: postgres12_pgx
-          #   containers: [postgresql]
     runs-on: ubuntu-20.04
     env:
       PERSISTENCE_TYPE: ${{ matrix.persistence_type }}
