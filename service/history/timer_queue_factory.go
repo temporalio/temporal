@@ -79,7 +79,7 @@ func NewTimerQueueFactory(
 					WorkerCount:                    params.Config.TimerProcessorSchedulerWorkerCount,
 					ActiveNamespaceWeights:         params.Config.TimerProcessorSchedulerActiveRoundRobinWeights,
 					StandbyNamespaceWeights:        params.Config.TimerProcessorSchedulerStandbyRoundRobinWeights,
-					InactiveNamespaceDeletionDelay: params.Config.TaskSchedulerInactiveNamespaceChannelDeletionDelay,
+					InactiveNamespaceDeletionDelay: params.Config.TaskSchedulerInactiveChannelDeletionDelay,
 				},
 				params.NamespaceRegistry,
 				params.Logger,

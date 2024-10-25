@@ -82,7 +82,7 @@ func NewTransferQueueFactory(
 					WorkerCount:                    params.Config.TransferProcessorSchedulerWorkerCount,
 					ActiveNamespaceWeights:         params.Config.TransferProcessorSchedulerActiveRoundRobinWeights,
 					StandbyNamespaceWeights:        params.Config.TransferProcessorSchedulerStandbyRoundRobinWeights,
-					InactiveNamespaceDeletionDelay: params.Config.TaskSchedulerInactiveNamespaceChannelDeletionDelay,
+					InactiveNamespaceDeletionDelay: params.Config.TaskSchedulerInactiveChannelDeletionDelay,
 				},
 				params.NamespaceRegistry,
 				params.Logger,
