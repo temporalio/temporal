@@ -110,10 +110,20 @@ func Invoke(
 	// workflow was already started, ...
 	if currentWorkflowLease != nil {
 		switch startReq.StartRequest.WorkflowIdConflictPolicy {
-		// ... abort the entire operation
-		case enumspb.WORKFLOW_ID_CONFLICT_POLICY_FAIL:
-			currentWorkflowLease.GetReleaseFn()(nil) // nil since nothing was modified
+		case enumspb.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING:
+			// ... skip the start and only send the update
+			// NOTE: currentWorkflowLease will be released by the function
+			return updateWorkflow(ctx, shardContext, currentWorkflowLease, updater)
 
+		case enumspb.WORKFLOW_ID_CONFLICT_POLICY_FAIL:
+			// ... if same request ID, just send update
+			// NOTE: currentWorkflowLease will be released by the function
+			if dedup(startReq, currentWorkflowLease) {
+				return updateWorkflow(ctx, shardContext, currentWorkflowLease, updater)
+			}
+
+			// ... otherwise, abort the entire operation
+			currentWorkflowLease.GetReleaseFn()(nil) // nil since nothing was modified
 			wfKey := currentWorkflowLease.GetContext().GetWorkflowKey()
 			err = serviceerror.NewWorkflowExecutionAlreadyStarted(
 				fmt.Sprintf("Workflow execution is already running. WorkflowId: %v, RunId: %v.", wfKey.WorkflowID, wfKey.RunID),
@@ -122,21 +132,14 @@ func Invoke(
 			)
 			return nil, newMultiOpError(err, multiOpAbortedErr)
 
-		// ... skip the start and only send the update
-		case enumspb.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING:
-			// NOTE: currentWorkflowLease will be released by the function
-			return updateWorkflow(ctx, shardContext, currentWorkflowLease, updater)
-
-		// ... fail since this policy should have been taken care of earlier already
 		case enumspb.WORKFLOW_ID_CONFLICT_POLICY_TERMINATE_EXISTING:
 			currentWorkflowLease.GetReleaseFn()(nil) // nil since nothing was modified
 
 			return nil, serviceerror.NewInternal("unhandled workflow id conflict policy: terminate-existing")
 
-		// ... fail since this policy is invalid
 		case enumspb.WORKFLOW_ID_CONFLICT_POLICY_UNSPECIFIED:
+			// ... fail since this policy is invalid
 			currentWorkflowLease.GetReleaseFn()(nil) // nil since nothing was modified
-
 			return nil, serviceerror.NewInternal("unhandled workflow id conflict policy: unspecified")
 		}
 	}
@@ -250,11 +253,6 @@ func startAndUpdateWorkflow(
 
 	// start workflow, using the hook to apply the update operation
 	startResp, err := starter.Invoke(ctx, applyUpdateFunc)
-	startOpResp := &historyservice.ExecuteMultiOperationResponse_Response{
-		Response: &historyservice.ExecuteMultiOperationResponse_Response_StartWorkflow{
-			StartWorkflow: startResp,
-		},
-	}
 	if err != nil {
 		// an update error occurred
 		if updateErr != nil {
@@ -280,7 +278,11 @@ func startAndUpdateWorkflow(
 
 	return &historyservice.ExecuteMultiOperationResponse{
 		Responses: []*historyservice.ExecuteMultiOperationResponse_Response{
-			startOpResp,
+			&historyservice.ExecuteMultiOperationResponse_Response{
+				Response: &historyservice.ExecuteMultiOperationResponse_Response_StartWorkflow{
+					StartWorkflow: startResp,
+				},
+			},
 			{
 				Response: &historyservice.ExecuteMultiOperationResponse_Response_UpdateWorkflow{
 					UpdateWorkflow: updateResp,
@@ -292,4 +294,8 @@ func startAndUpdateWorkflow(
 
 func newMultiOpError(errs ...error) error {
 	return serviceerror.NewMultiOperationExecution("MultiOperation could not be executed.", errs)
+}
+
+func dedup(startReq *historyservice.StartWorkflowExecutionRequest, currentWorkflowLease api.WorkflowLease) bool {
+	return startReq.StartRequest.RequestId == currentWorkflowLease.GetMutableState().GetExecutionState().GetCreateRequestId()
 }
