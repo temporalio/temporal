@@ -43,6 +43,7 @@ type LinksSuite struct {
 }
 
 func TestLinksTestSuite(t *testing.T) {
+	t.Parallel()
 	suite.Run(t, new(LinksSuite))
 }
 
