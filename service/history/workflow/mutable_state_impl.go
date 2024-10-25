@@ -6708,7 +6708,7 @@ func (ms *MutableStateImpl) syncExecutionInfo(current *persistencespb.WorkflowEx
 			&info.ParentClock,
 			&info.CloseTransferTaskId,
 			&info.CloseVisibilityTaskId,
-			&info.CloseVisibilityTaskCompleted,
+			&info.RelocatableAttributesRemoved,
 			&info.WorkflowExecutionTimerTaskStatus,
 			&info.SubStateMachinesByType,
 			&info.StateMachineTimers,
