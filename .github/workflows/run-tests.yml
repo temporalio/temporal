@@ -362,7 +362,6 @@ jobs:
       fail-fast: false
       matrix:
         shard_index: ${{ fromJson(needs.set-up-single-test.outputs.shard_indices) }}
-        smoke_tests_only: [false]
         name: [cass_es, sqlite]
         include:
           # These two get all tests:
@@ -381,27 +380,26 @@ jobs:
             persistence_driver: cassandra
             containers: [cassandra, elasticsearch8]
             es_version: v8
-            smoke_tests_only: true
+            shard_index: smoke_only
           - name: mysql8
             persistence_type: sql
             persistence_driver: mysql8
             containers: [mysql]
-            smoke_tests_only: true
+            shard_index: smoke_only
           - name: postgres12
             persistence_type: sql
             persistence_driver: postgres12
             containers: [postgresql]
-            smoke_tests_only: true
+            shard_index: smoke_only
           - name: postgres12_pgx
             persistence_type: sql
             persistence_driver: postgres12_pgx
             containers: [postgresql]
-            smoke_tests_only: true
+            shard_index: smoke_only
     runs-on: ${{ fromJson(needs.set-up-single-test.outputs.runs_on) }}
     env:
       TEST_TOTAL_SHARDS: ${{ needs.set-up-single-test.outputs.total_shards }}
       TEST_SHARD_INDEX: ${{ matrix.shard_index }}
-      TEST_SMOKE_TESTS_ONLY: ${{ matrix.smoke_tests_only }}
       PERSISTENCE_TYPE: ${{ matrix.persistence_type }}
       PERSISTENCE_DRIVER: ${{ matrix.persistence_driver }}
       TEST_TIMEOUT: ${{ needs.set-up-single-test.outputs.test_timeout }}
@@ -455,7 +453,7 @@ jobs:
         uses: actions/upload-artifact@v4.4.3
         if: ${{ !cancelled() && !inputs.run_single_functional_test }}
         with:
-          name: junit-xml--${{github.run_id}}--${{github.run_attempt}}--${{matrix.name}}--${{matrix.shard_index}}--${{matrix.smoke_tests_only}}--functional-test
+          name: junit-xml--${{github.run_id}}--${{github.run_attempt}}--${{matrix.name}}--${{matrix.shard_index}}--functional-test
           path: .testoutput
           include-hidden-files: true
           retention-days: 28

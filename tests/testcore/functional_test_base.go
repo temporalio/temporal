@@ -219,20 +219,22 @@ func (s *FunctionalTestBase) SetupTest() {
 
 // CheckTestShard supports test sharding based on environment variables.
 func CheckTestShard(t *testing.T) {
-	smokeOnly := os.Getenv("TEST_SMOKE_TESTS_ONLY")
-	if smokeOnly == "true" {
+	indexStr := os.Getenv("TEST_SHARD_INDEX")
+	// special value to run only a few suites on the extended set of persistence drivers
+	if indexStr == "smoke_only" {
 		suiteName, _, _ := strings.Cut(t.Name(), "/")
 		if slices.Contains(smokeTestSuites, suiteName) {
+			t.Logf("Running %s in smoke tests", t.Name())
 			return
 		}
 		t.Skipf("Skipping %s, not included in smoke tests", t.Name())
 	}
 
 	totalStr := os.Getenv("TEST_TOTAL_SHARDS")
-	indexStr := os.Getenv("TEST_SHARD_INDEX")
 	if totalStr == "" || indexStr == "" {
 		return
 	}
+
 	total, err := strconv.Atoi(totalStr)
 	if err != nil || total < 1 {
 		t.Fatal("Couldn't convert TEST_TOTAL_SHARDS")
