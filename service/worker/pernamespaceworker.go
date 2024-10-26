@@ -276,7 +276,7 @@ func (w *perNamespaceWorker) getWorkerAllocation(count int) (workerAllocation, e
 	if err != nil {
 		return workerAllocation{}, err
 	}
-	return workerAllocation{w.count, localCount}, nil
+	return workerAllocation{count, localCount}, nil
 }
 
 func (w *perNamespaceWorker) getLocallyDesiredWorkers(count int) (int, error) {
