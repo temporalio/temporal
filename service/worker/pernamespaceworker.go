@@ -334,10 +334,6 @@ func (w *perNamespaceWorker) update(ns *namespace.Namespace, nsDeleted bool, new
 	}
 }
 
-func (w *perNamespaceWorker) refresh(args refreshArgs) {
-	w.handleError(w.tryRefresh(args))
-}
-
 // handleError should be called on errors from worker creation or run. it will attempt to
 // refresh the worker again at a later time.
 func (w *perNamespaceWorker) handleError(err error) {
@@ -380,10 +376,13 @@ func (w *perNamespaceWorker) handleError(err error) {
 	})
 }
 
-// Only call from refresh so that errors are handled properly. Returning an error from here
-// means that we should retry creating/starting the worker. Returning noWorkerNeeded means any
-// existing worker should be stopped.
-func (w *perNamespaceWorker) tryRefresh(args refreshArgs) error {
+// Returning an error from here means that we should retry creating/starting the worker.
+// Returning noWorkerNeeded means any existing worker should be stopped.
+func (w *perNamespaceWorker) refresh(args refreshArgs) (retErr error) {
+	defer func() {
+		w.handleError(retErr)
+	}()
+
 	if !w.wm.Running() ||
 		args.ns.State() == enumspb.NAMESPACE_STATE_DELETED ||
 		!args.ns.ActiveInCluster(w.wm.thisClusterName) {
