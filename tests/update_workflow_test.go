@@ -5173,6 +5173,15 @@ func (s *UpdateWorkflowSuite) TestUpdateWithStart() {
 				&updatepb.WaitPolicy{LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED})
 			s.Nil(err)
 		})
+
+		s.Run("workflow id conflict policy terminate-existing: not supported yet", func() {
+			tv := testvars.New(s.T())
+
+			req := startWorkflowReq(tv)
+			req.WorkflowIdConflictPolicy = enumspb.WORKFLOW_ID_CONFLICT_POLICY_TERMINATE_EXISTING
+			_, err := runUpdateWithStart(tv, req, updateWorkflowReq(tv))
+			s.Error(err)
+		})
 	})
 
 	s.Run("workflow is running", func() {
@@ -5191,6 +5200,7 @@ func (s *UpdateWorkflowSuite) TestUpdateWithStart() {
 		})
 
 		s.Run("workflow id conflict policy terminate-existing: terminate workflow first, then start and update", func() {
+			s.T().Skip("TODO")
 			tv := testvars.New(s.T())
 
 			initReq := startWorkflowReq(tv)

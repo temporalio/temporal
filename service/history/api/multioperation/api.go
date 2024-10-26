@@ -88,10 +88,9 @@ func Invoke(
 		updateReq,
 	)
 
-	// If the workflow id conflict policy is to terminate, it doesn't matter if the workflow is actually running or not:
-	// always attempt to start and update. The start will take care of terminating the workflow, if necessary.
+	// TODO
 	if startReq.StartRequest.WorkflowIdConflictPolicy == enumspb.WORKFLOW_ID_CONFLICT_POLICY_TERMINATE_EXISTING {
-		return startAndUpdateWorkflow(ctx, shardContext, workflowConsistencyChecker, starter, updater)
+		return nil, serviceerror.NewInvalidArgument("workflow id conflict policy terminate-existing is not supported yet")
 	}
 
 	currentWorkflowLease, err := workflowConsistencyChecker.GetWorkflowLease(
