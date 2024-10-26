@@ -171,10 +171,9 @@ func (c *operationContext) interceptRequest(ctx context.Context, request *matchi
 		if c.shouldForwardRequest(ctx, header) {
 			// Handler methods should have special logic to forward requests if this method returns a serviceerror.NamespaceNotActive error.
 			c.metricsHandler = c.metricsHandler.WithTags(metrics.OutcomeTag("request_forwarded"))
-			var forwardStartTime time.Time
-			c.metricsHandlerForInterceptors, forwardStartTime = c.redirectionInterceptor.BeforeCall(c.apiName)
+			handler, forwardStartTime := c.redirectionInterceptor.BeforeCall(c.apiName)
 			c.cleanupFunctions = append(c.cleanupFunctions, func(retErr error) {
-				c.redirectionInterceptor.AfterCall(c.metricsHandlerForInterceptors, forwardStartTime, c.namespace.ActiveClusterName(), retErr)
+				c.redirectionInterceptor.AfterCall(handler, forwardStartTime, c.namespace.ActiveClusterName(), retErr)
 			})
 			return serviceerror.NewNamespaceNotActive(c.namespaceName, c.clusterMetadata.GetCurrentClusterName(), c.namespace.ActiveClusterName())
 		}

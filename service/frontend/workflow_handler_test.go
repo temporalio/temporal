@@ -445,8 +445,9 @@ func (s *WorkflowHandlerSuite) TestStartWorkflowExecution_Failed_InvalidExecutio
 		RequestId: uuid.NewString(),
 	}
 	_, err := wh.StartWorkflowExecution(context.Background(), startWorkflowExecutionRequest)
-	s.Error(err)
-	s.Equal(errInvalidWorkflowExecutionTimeoutSeconds, err)
+	var invalidArg *serviceerror.InvalidArgument
+	s.ErrorAs(err, &invalidArg)
+	s.ErrorContains(err, errInvalidWorkflowExecutionTimeoutSeconds.Error())
 }
 
 func (s *WorkflowHandlerSuite) TestStartWorkflowExecution_Failed_InvalidRunTimeout() {
@@ -474,8 +475,9 @@ func (s *WorkflowHandlerSuite) TestStartWorkflowExecution_Failed_InvalidRunTimeo
 		RequestId: uuid.NewString(),
 	}
 	_, err := wh.StartWorkflowExecution(context.Background(), startWorkflowExecutionRequest)
-	s.Error(err)
-	s.Equal(errInvalidWorkflowRunTimeoutSeconds, err)
+	var invalidArg *serviceerror.InvalidArgument
+	s.ErrorAs(err, &invalidArg)
+	s.ErrorContains(err, errInvalidWorkflowRunTimeoutSeconds.Error())
 }
 
 func (s *WorkflowHandlerSuite) TestStartWorkflowExecution_EnsureNonNilRetryPolicyInitialized() {
@@ -555,8 +557,9 @@ func (s *WorkflowHandlerSuite) TestStartWorkflowExecution_Failed_InvalidTaskTime
 		RequestId: uuid.NewString(),
 	}
 	_, err := wh.StartWorkflowExecution(context.Background(), startWorkflowExecutionRequest)
-	s.Error(err)
-	s.Equal(errInvalidWorkflowTaskTimeoutSeconds, err)
+	var invalidArg *serviceerror.InvalidArgument
+	s.ErrorAs(err, &invalidArg)
+	s.ErrorContains(err, errInvalidWorkflowTaskTimeoutSeconds.Error())
 }
 
 func (s *WorkflowHandlerSuite) TestStartWorkflowExecution_Failed_CronAndStartDelaySet() {
@@ -618,8 +621,9 @@ func (s *WorkflowHandlerSuite) TestStartWorkflowExecution_Failed_InvalidStartDel
 	}
 
 	_, err := wh.StartWorkflowExecution(context.Background(), startWorkflowExecutionRequest)
-
-	s.ErrorIs(err, errInvalidWorkflowStartDelaySeconds)
+	var invalidArg *serviceerror.InvalidArgument
+	s.ErrorAs(err, &invalidArg)
+	s.ErrorContains(err, errInvalidWorkflowStartDelaySeconds.Error())
 }
 
 func (s *WorkflowHandlerSuite) TestStartWorkflowExecution_InvalidWorkflowIdReusePolicy_TerminateIfRunning() {
