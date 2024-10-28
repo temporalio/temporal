@@ -178,6 +178,28 @@ func TestRegenerateTasks(t *testing.T) {
 	}
 }
 
+func TestRegenerateTasksFromPreviousState(t *testing.T) {
+	node := newOperationNode(t, &hsmtest.NodeBackend{}, mustNewScheduledEvent(time.Now(), time.Hour))
+	prevOp, err := hsm.MachineData[nexusoperations.Operation](node)
+	require.NoError(t, err)
+
+	require.NoError(t, hsm.MachineTransition(node, func(op nexusoperations.Operation) (hsm.TransitionOutput, error) {
+		return nexusoperations.TransitionAttemptFailed.Apply(op, nexusoperations.EventAttemptFailed{
+			Time:        time.Now(),
+			Err:         fmt.Errorf("test"), // nolint:goerr113
+			Node:        node,
+			RetryPolicy: backoff.NewExponentialRetryPolicy(time.Second),
+		})
+	}))
+
+	op, err := hsm.MachineData[nexusoperations.Operation](node)
+	require.NoError(t, err)
+	tasks, err := op.RegenerateTasks(prevOp, node)
+	require.NoError(t, err)
+	require.Equal(t, 1, len(tasks))
+	require.Equal(t, nexusoperations.TaskTypeBackoff, tasks[0].Type())
+}
+
 func TestRetry(t *testing.T) {
 	node := newOperationNode(t, &hsmtest.NodeBackend{}, mustNewScheduledEvent(time.Now(), time.Minute))
 	// Reset any outputs generated from nexusoperations.AddChild, we tested those already.
