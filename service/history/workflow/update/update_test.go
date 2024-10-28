@@ -189,6 +189,7 @@ func TestUpdateState(t *testing.T) {
 
 					err := admit(t, readonlyStore, upd) // NOTE the store!
 					require.ErrorIs(t, consts.ErrWorkflowCompleted, err)
+					effects.Apply(context.Background())
 
 					// ensure waiter received response
 					waiterRes := <-ch
@@ -418,6 +419,7 @@ func TestUpdateState(t *testing.T) {
 					// accept update
 					err := accept(t, readonlyStore, upd) // NOTE the store!
 					require.NoError(t, err)
+					effects.Apply(context.Background())
 
 					status, err := upd.WaitLifecycleStage(context.Background(), UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ACCEPTED, 100*time.Millisecond)
 					require.ErrorIs(t, err, consts.ErrWorkflowCompleted)
@@ -705,6 +707,7 @@ func TestUpdateState(t *testing.T) {
 				apply: func() {
 					err := respondSuccess(t, readonlyStore, upd) // NOTE the store!
 					require.NoError(t, err)
+					effects.Apply(context.Background())
 
 					status, err := upd.WaitLifecycleStage(context.Background(), UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED, 100*time.Millisecond)
 					require.NoError(t, err)

@@ -82,8 +82,11 @@ type (
 		// that worker processed (rejected or accepted) all Updates that were delivered on the workflow task.
 		RejectUnprocessed(ctx context.Context, effects effect.Controller) []string
 
-		// Abort all incomplete Updates in the Registry.
+		// Abort immediately aborts all incomplete Updates in the Registry.
 		Abort(reason AbortReason)
+
+		// AbortAccepted aborts all accepted Updates in the Registry.
+		AbortAccepted(reason AbortReason, effects effect.Controller)
 
 		// Clear the Registry and abort all Updates.
 		Clear()
@@ -195,9 +198,10 @@ func NewRegistry(
 				withInstrumentation(&r.instrumentation),
 			)
 			if !r.store.IsWorkflowExecutionRunning() {
-				// If the Workflow is completed, accepted Update will never be completed.
-				// This will return "workflow completed" error to the pollers of outcome of accepted Updates.
-				u.abort(AbortReasonWorkflowCompleted)
+				// If the Workflow is completed, accepted Update will never be completed
+				// and therefore must be aborted.
+				// The corresponding error or failure will be returned as an Update result.
+				u.abort(AbortReasonWorkflowCompleted, effect.Immediate(context.Background()))
 			}
 			r.updates[updID] = u
 		} else if updInfo.GetCompletion() != nil {
@@ -271,7 +275,15 @@ func (r *registry) TryResurrect(_ context.Context, acptOrRejMsg *protocolpb.Mess
 
 func (r *registry) Abort(reason AbortReason) {
 	for _, upd := range r.updates {
-		upd.abort(reason)
+		upd.abort(reason, effect.Immediate(context.Background()))
+	}
+}
+
+func (r *registry) AbortAccepted(reason AbortReason, effects effect.Controller) {
+	for _, upd := range r.updates {
+		if upd.state.Matches(stateSet(stateProvisionallyAccepted | stateAccepted)) {
+			upd.abort(reason, effects)
+		}
 	}
 }
 

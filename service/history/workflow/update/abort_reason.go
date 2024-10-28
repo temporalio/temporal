@@ -65,8 +65,9 @@ var reasonStateMatrix = map[reasonState]failureError{
 	reasonState{r: AbortReasonRegistryCleared, st: stateProvisionallyCompleted}:              {f: nil, err: registryClearedErr},
 	reasonState{r: AbortReasonRegistryCleared, st: stateProvisionallyCompletedAfterAccepted}: {f: nil, err: registryClearedErr},
 	// Completed Updates can't be aborted.
-	reasonState{r: AbortReasonRegistryCleared, st: stateCompleted}: {f: nil, err: nil},
-	reasonState{r: AbortReasonRegistryCleared, st: stateAborted}:   {f: nil, err: nil},
+	reasonState{r: AbortReasonRegistryCleared, st: stateCompleted}:            {f: nil, err: nil},
+	reasonState{r: AbortReasonRegistryCleared, st: stateProvisionallyAborted}: {f: nil, err: nil},
+	reasonState{r: AbortReasonRegistryCleared, st: stateAborted}:              {f: nil, err: nil},
 
 	// If the Workflow is completed, then pre-accepted Updates are aborted with non-retryable ErrWorkflowCompleted error.
 	reasonState{r: AbortReasonWorkflowCompleted, st: stateCreated}:               {f: nil, err: consts.ErrWorkflowCompleted},
@@ -83,8 +84,9 @@ var reasonStateMatrix = map[reasonState]failureError{
 	reasonState{r: AbortReasonWorkflowCompleted, st: stateProvisionallyCompleted}:              {f: acceptedUpdateCompletedWorkflowFailure, err: nil},
 	reasonState{r: AbortReasonWorkflowCompleted, st: stateProvisionallyCompletedAfterAccepted}: {f: acceptedUpdateCompletedWorkflowFailure, err: nil},
 	// Completed Updates can't be aborted.
-	reasonState{r: AbortReasonWorkflowCompleted, st: stateCompleted}: {f: nil, err: nil},
-	reasonState{r: AbortReasonWorkflowCompleted, st: stateAborted}:   {f: nil, err: nil},
+	reasonState{r: AbortReasonWorkflowCompleted, st: stateCompleted}:            {f: nil, err: nil},
+	reasonState{r: AbortReasonWorkflowCompleted, st: stateProvisionallyAborted}: {f: nil, err: nil},
+	reasonState{r: AbortReasonWorkflowCompleted, st: stateAborted}:              {f: nil, err: nil},
 
 	// If Workflow is starting new run, then all Updates are aborted with retryable ErrWorkflowClosing error.
 	// Internal retries will send them to the new run.
@@ -98,8 +100,9 @@ var reasonStateMatrix = map[reasonState]failureError{
 	reasonState{r: AbortReasonWorkflowContinuing, st: stateProvisionallyCompleted}:              {f: acceptedUpdateCompletedWorkflowFailure, err: nil},
 	reasonState{r: AbortReasonWorkflowContinuing, st: stateProvisionallyCompletedAfterAccepted}: {f: acceptedUpdateCompletedWorkflowFailure, err: nil},
 	// Completed Updates can't be aborted.
-	reasonState{r: AbortReasonWorkflowContinuing, st: stateCompleted}: {f: nil, err: nil},
-	reasonState{r: AbortReasonWorkflowContinuing, st: stateAborted}:   {f: nil, err: nil},
+	reasonState{r: AbortReasonWorkflowContinuing, st: stateCompleted}:            {f: nil, err: nil},
+	reasonState{r: AbortReasonWorkflowContinuing, st: stateProvisionallyAborted}: {f: nil, err: nil},
+	reasonState{r: AbortReasonWorkflowContinuing, st: stateAborted}:              {f: nil, err: nil},
 }
 
 // FailureError returns failure or error which will be set on Update futures while aborting Update.
@@ -107,7 +110,7 @@ var reasonStateMatrix = map[reasonState]failureError{
 func (r AbortReason) FailureError(st state) (*failurepb.Failure, error) {
 	fe, ok := reasonStateMatrix[reasonState{r: r, st: st}]
 	if !ok {
-		panic("unknown workflow update abort reason or update state")
+		panic(fmt.Sprintf("unknown workflow update abort reason %s or update state %s", r, st))
 	}
 	return fe.f, fe.err
 }
