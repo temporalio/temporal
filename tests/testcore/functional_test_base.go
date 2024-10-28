@@ -36,6 +36,7 @@ import (
 
 	"github.com/dgryski/go-farm"
 	"github.com/pborman/uuid"
+	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -374,26 +375,32 @@ func (s *FunctionalTestBase) markNamespaceAsDeleted(
 	return err
 }
 
-func (s *FunctionalTestBase) GetHistory(namespace string, execution *commonpb.WorkflowExecution) []*historypb.HistoryEvent {
-	historyResponse, err := s.client.GetWorkflowExecutionHistory(NewContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
-		Namespace:       namespace,
-		Execution:       execution,
-		MaximumPageSize: 5, // Use small page size to force pagination code path
-	})
-	s.Require().NoError(err)
-
-	events := historyResponse.History.Events
-	for historyResponse.NextPageToken != nil {
-		historyResponse, err = s.client.GetWorkflowExecutionHistory(NewContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
-			Namespace:     namespace,
-			Execution:     execution,
-			NextPageToken: historyResponse.NextPageToken,
+func (s *FunctionalTestBase) GetHistoryFunc(namespace string, execution *commonpb.WorkflowExecution) func() []*historypb.HistoryEvent {
+	return func() []*historypb.HistoryEvent {
+		historyResponse, err := s.client.GetWorkflowExecutionHistory(NewContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
+			Namespace:       namespace,
+			Execution:       execution,
+			MaximumPageSize: 5, // Use small page size to force pagination code path
 		})
-		s.Require().NoError(err)
-		events = append(events, historyResponse.History.Events...)
-	}
+		require.NoError(s.T(), err)
 
-	return events
+		events := historyResponse.History.Events
+		for historyResponse.NextPageToken != nil {
+			historyResponse, err = s.client.GetWorkflowExecutionHistory(NewContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
+				Namespace:     namespace,
+				Execution:     execution,
+				NextPageToken: historyResponse.NextPageToken,
+			})
+			require.NoError(s.T(), err)
+			events = append(events, historyResponse.History.Events...)
+		}
+
+		return events
+	}
+}
+
+func (s *FunctionalTestBase) GetHistory(namespace string, execution *commonpb.WorkflowExecution) []*historypb.HistoryEvent {
+	return s.GetHistoryFunc(namespace, execution)()
 }
 
 func (s *FunctionalTestBase) DecodePayloadsString(ps *commonpb.Payloads) string {

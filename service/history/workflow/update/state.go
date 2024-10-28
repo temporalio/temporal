@@ -24,6 +24,10 @@
 
 package update
 
+import (
+	"fmt"
+)
+
 type (
 	state    uint32
 	stateSet uint32
@@ -40,6 +44,7 @@ const (
 	stateCompleted
 	stateAborted
 	stateProvisionallyCompletedAfterAccepted
+	lastState
 )
 
 func (s state) String() string {
@@ -64,8 +69,10 @@ func (s state) String() string {
 		return "Aborted"
 	case stateProvisionallyCompletedAfterAccepted:
 		return "ProvisionallyCompletedAfterAccepted"
+	case lastState:
+		return fmt.Sprintf("invalid state %d", s)
 	}
-	return "unrecognized state"
+	return fmt.Sprintf("unrecognized state %d", s)
 }
 
 func (s state) Matches(mask stateSet) bool {

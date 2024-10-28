@@ -181,11 +181,12 @@ func (mr *MockTaskGeneratorMockRecorder) GenerateDirtySubStateMachineTasks(state
 }
 
 // GenerateHistoryReplicationTasks mocks base method.
-func (m *MockTaskGenerator) GenerateHistoryReplicationTasks(eventBatches [][]*history.HistoryEvent) error {
+func (m *MockTaskGenerator) GenerateHistoryReplicationTasks(eventBatches [][]*history.HistoryEvent) ([]tasks.Task, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GenerateHistoryReplicationTasks", eventBatches)
-	ret0, _ := ret[0].(error)
-	return ret0
+	ret0, _ := ret[0].([]tasks.Task)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // GenerateHistoryReplicationTasks indicates an expected call of GenerateHistoryReplicationTasks.

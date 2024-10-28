@@ -162,7 +162,8 @@ func (e *taskExecutorImpl) handleActivityTask(
 		LastStartedRedirectCounter: attr.LastStartedRedirectCounter,
 		VersionHistory:             attr.GetVersionHistory(),
 	}
-	ctx, cancel := e.newTaskContext(ctx, attr.NamespaceId)
+	namespaceName, _ := e.namespaceRegistry.GetNamespaceName(namespace.ID(attr.NamespaceId))
+	ctx, cancel := e.newTaskContext(ctx, namespaceName)
 	defer cancel()
 
 	// This might be extra cost if the workflow belongs to local shard.
@@ -176,12 +177,16 @@ func (e *taskExecutorImpl) handleActivityTask(
 		metrics.ClientRequests.With(e.metricsHandler).Record(
 			1,
 			metrics.OperationTag(metrics.HistoryRereplicationByActivityReplicationScope),
+			metrics.NamespaceTag(namespaceName.String()),
+			metrics.ServiceRoleTag(metrics.HistoryRoleTagValue),
 		)
 		startTime := time.Now().UTC()
 		defer func() {
 			metrics.ClientLatency.With(e.metricsHandler).Record(
 				time.Since(startTime),
 				metrics.OperationTag(metrics.HistoryRereplicationByActivityReplicationScope),
+				metrics.NamespaceTag(namespaceName.String()),
+				metrics.ServiceRoleTag(metrics.HistoryRoleTagValue),
 			)
 		}()
 
@@ -248,7 +253,8 @@ func (e *taskExecutorImpl) handleHistoryReplicationTask(
 		NewRunEvents: attr.NewRunEvents,
 		NewRunId:     attr.NewRunId,
 	}
-	ctx, cancel := e.newTaskContext(ctx, attr.NamespaceId)
+	namespaceName, _ := e.namespaceRegistry.GetNamespaceName(namespace.ID(attr.NamespaceId))
+	ctx, cancel := e.newTaskContext(ctx, namespaceName)
 	defer cancel()
 
 	// This might be extra cost if the workflow belongs to local shard.
@@ -262,12 +268,16 @@ func (e *taskExecutorImpl) handleHistoryReplicationTask(
 		metrics.ClientRequests.With(e.metricsHandler).Record(
 			1,
 			metrics.OperationTag(metrics.HistoryRereplicationByHistoryReplicationScope),
+			metrics.NamespaceTag(namespaceName.String()),
+			metrics.ServiceRoleTag(metrics.HistoryRoleTagValue),
 		)
 		startTime := time.Now().UTC()
 		defer func() {
 			metrics.ClientLatency.With(e.metricsHandler).Record(
 				time.Since(startTime),
 				metrics.OperationTag(metrics.HistoryRereplicationByHistoryReplicationScope),
+				metrics.NamespaceTag(namespaceName.String()),
+				metrics.ServiceRoleTag(metrics.HistoryRoleTagValue),
 			)
 		}()
 
@@ -318,7 +328,8 @@ func (e *taskExecutorImpl) handleSyncWorkflowStateTask(
 		return err
 	}
 
-	ctx, cancel := e.newTaskContext(ctx, executionInfo.NamespaceId)
+	namespaceName, _ := e.namespaceRegistry.GetNamespaceName(namespace.ID(executionInfo.NamespaceId))
+	ctx, cancel := e.newTaskContext(ctx, namespaceName)
 	defer cancel()
 
 	// This might be extra cost if the workflow belongs to local shard.
@@ -418,12 +429,10 @@ func (e *taskExecutorImpl) cleanupWorkflowExecution(ctx context.Context, namespa
 
 func (e *taskExecutorImpl) newTaskContext(
 	parentCtx context.Context,
-	namespaceID string,
+	namespaceName namespace.Name,
 ) (context.Context, context.CancelFunc) {
 	ctx, cancel := context.WithTimeout(parentCtx, replicationTimeout)
-
-	namespace, _ := e.namespaceRegistry.GetNamespaceName(namespace.ID(namespaceID))
-	ctx = headers.SetCallerName(ctx, namespace.String())
+	ctx = headers.SetCallerName(ctx, namespaceName.String())
 
 	return ctx, cancel
 }

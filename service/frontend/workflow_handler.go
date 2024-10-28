@@ -2780,7 +2780,12 @@ func (wh *WorkflowHandler) DescribeTaskQueue(ctx context.Context, request *workf
 		return nil, err
 	}
 
-	if err := tqid.NormalizeAndValidate(request.TaskQueue, "", wh.config.MaxIDLengthLimit()); err != nil {
+	if request.ApiMode == enumspb.DESCRIBE_TASK_QUEUE_MODE_UNSPECIFIED {
+		err = tqid.NormalizeAndValidatePartition(request.TaskQueue, "", wh.config.MaxIDLengthLimit())
+	} else {
+		err = tqid.NormalizeAndValidate(request.TaskQueue, "", wh.config.MaxIDLengthLimit())
+	}
+	if err != nil {
 		return nil, err
 	}
 
@@ -5165,13 +5170,13 @@ func (wh *WorkflowHandler) UpdateActivityOptionsById(
 		return nil, errActivityIDNotSet
 	}
 
-	namespace_id, err := wh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
+	namespaceId, err := wh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
 	if err != nil {
 		return nil, err
 	}
 
 	response, err := wh.historyClient.UpdateActivityOptions(ctx, &historyservice.UpdateActivityOptionsRequest{
-		NamespaceId:   namespace_id.String(),
+		NamespaceId:   namespaceId.String(),
 		UpdateRequest: request,
 	})
 

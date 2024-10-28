@@ -131,15 +131,6 @@ via `newAccepted()`. Similarly, when an Update is resurrected (see "Update Resur
 also has state `Admitted`. But when an Update cannot be found in the Registry, yet it exists in
 `EventStore` because it is already completed, it is created with state `Completed`.
 
-### Aborting an Update
-An Update is aborted when:
-1. The Workflow is completed or completes itself. Then, a non-retryable `ErrWorkflowCompleted` error 
-is returned to the API caller.
-2. The Update Registry is cleared. Then, a retryable `WorkflowUpdateAbortedErr` error is returned
-(see "Update Registry Lifecycle" below).
-
-An in-flight Update can be aborted at any time. `Aborted` is a terminal state.
-
 ### Update Registry Lifecycle
 Every time the Workflow context is cleared, its Update Registry is cleared as well. Because the
 Workflow context is cleared on every error, a significant effort was - originally - made to keep the
@@ -155,18 +146,66 @@ Update Registry intact. But it proved to be too error-prone.
 
 Instead, the Workflow Update feature relies on internal retries by the history gRPC handler,
 history gRPC client (on the frontend side), and frontend gRPC handler. So if an Update is removed from
-the Registry due to non-related error, a retryable error is returned to the `UpdateWorkflowExecution`
-API caller and subsequent internal retries recreate the Update in the Registry.
+the Registry due to non-related error, a retryable `WorkflowUpdateAbortedErr` error is returned to
+the `UpdateWorkflowExecution` API caller and subsequent internal retries recreate the Update
+in the Registry (see "Aborting an Update" below).
 
 Also, it is important to note that the Workflow context itself is stored in the Workflow cache
 and might be evicted any time. Therefore, the Workflow Update feature relies on a properly
 configured cache size. If the cache is too small, it will evict Workflow contexts too soon and their
-Update Registry will be lost. Then, the `UpdateWorkflowExecutions` API call will time out.
+Update Registry will be cleared. Note that in that case, all in-flight Updates are aborted with a
+retryable error; and the frontend will retry the `UpdateWorkflowExecution` call.
+
+### Aborting an Update
+An Update is aborted when:
+1. The Update Registry is cleared. Then, a retryable `WorkflowUpdateAbortedErr` error is returned
+   (see "Update Registry Lifecycle" above).
+2. The Workflow completes itself (e.g., with `COMPLETE_WORKFLOW_EXECUTION` command) or completed externally
+   (e.g., terminated or timed out). Then, a non-retryable `ErrWorkflowCompleted` error or failure is returned
+   to the API caller depending on an Update state.
+3. The Workflow is continuing (e.g., with `CONTINUE_AS_NEW_WORKFLOW_EXECUTION` command) or is retried after
+   failure or timeout. Then, a retryable `ErrWorkflowClosing` error or failure is returned to the API caller
+   depending on Update state.
+
+Full "Update state" and "Abort reason" matrix is the following:
+
+| Update State / Abort Reason             | (1) RegistryCleared        | (2) WorkflowCompleted                    | (3) WorkflowContinuing                   |
+|-----------------------------------------|----------------------------|------------------------------------------|------------------------------------------|
+| **Created**                             | `WorkflowUpdateAbortedErr` | `ErrWorkflowCompleted`                   | `ErrWorkflowClosing`                     |
+| **ProvisionallyAdmitted**               | `WorkflowUpdateAbortedErr` | `ErrWorkflowCompleted`                   | `ErrWorkflowClosing`                     |
+| **Admitted**                            | `WorkflowUpdateAbortedErr` | `ErrWorkflowCompleted`                   | `ErrWorkflowClosing`                     |
+| **Sent**                                | `WorkflowUpdateAbortedErr` | `ErrWorkflowCompleted`                   | `ErrWorkflowClosing`                     |
+| **ProvisionallyAccepted**               | `WorkflowUpdateAbortedErr` | `acceptedUpdateCompletedWorkflowFailure` | `acceptedUpdateCompletedWorkflowFailure` |
+| **Accepted**                            | `WorkflowUpdateAbortedErr` | `acceptedUpdateCompletedWorkflowFailure` | `acceptedUpdateCompletedWorkflowFailure` |
+| **ProvisionallyCompleted**              | `WorkflowUpdateAbortedErr` | `acceptedUpdateCompletedWorkflowFailure` | `acceptedUpdateCompletedWorkflowFailure` |
+| **ProvisionallyCompletedAfterAccepted** | `WorkflowUpdateAbortedErr` | `acceptedUpdateCompletedWorkflowFailure` | `acceptedUpdateCompletedWorkflowFailure` |
+| **Completed**                           | `nil`                      | `nil`                                    | `nil`                                    |
+| **Aborted**                             | `nil`                      | `nil`                                    | `nil`                                    |
+
+When the Workflow performs a final completion, all in-flight Updates are aborted: admitted Updates get
+`ErrWorkflowCompleted` error on both `accepted` and `completed` futures. Accepted Updates
+are failed with special server `acceptedUpdateCompletedWorkflowFailure` failure because if a client
+knows that Update has been accepted, it expects any following requests to return an Update result
+(or failure) but not an error. This failure is set on the `completed` future only. 
+
+When a Workflow completion command creates a new run, accepted Updates are failed in the same way:
+with the `acceptedUpdateCompletedWorkflowFailure` failure on the `completed` future. Admitted Updates,
+though, are aborted with the retryable `ErrWorkflowClosing` error. The server internally retries this error
+and the next attempt should land on the new run. Because Updates received while the Workflow Task
+was running haven't been seen by the Workflow yet, they can be safely retried on the new run.
+It also provides a better experience for API callers since they will not notice that the Workflow
+started a new run.
+
+`WorkflowUpdateAbortedErr` is also retried internally by the server providing a better experience
+to the API caller: they will not notice that the Update was lost.
+
+`Aborted` is a terminal state. Updates remain in the `Aborted` state in the Registry even after
+the Update Registry is reconstructed from the history.
 
 ## `UpdateWorkflowExecutions` and `PollWorkflowExecutionUpdate` APIs
 The Workflow Update feature exposes two APIs: `UpdateWorkflowExecution` to send Update requests
 to a Workflow and wait for results, and `PollWorkflowExecutionUpdate` to just wait for results.
-These can be thought of as "PUT + GET" and "GET", respectively.
+These can be thought of as "get-or-create" and "get", respectively.
 
 ### Schedule new Workflow Task
 After an Update is added to the Registry, the server schedules a new Workflow Task to deliver the 
@@ -187,42 +226,65 @@ API call is returned. Currently, it can only be `ACCEPTED` or `COMPLETED`.
 > also allow using an Update as a "fire-and-forget" (just like Signal).
 
 ### Waiters
+The server performs a few checks before blocking on corresponding future:
+```mermaid
+flowchart TD
+    updateWorkflowExecution[UpdateWorkflowExecution / PollWorkflowExecutionUpdate] --> wfExists{Workflow exists?}
+    wfExists --> |yes| wfRunning{Workflow running?}
+    wfExists --> |no| notFound(((NotFound)))
+    wfRunning --> |no| updateExists{Update exists?}
+    wfRunning --> |yes| waitFor{Wait stage}
+    updateExists --> |yes| success1(((Update result)))
+    updateExists --> |no| wfCompleted(((ErrWorkflowCompleted)))
+
+    waitFor --> |ACCEPTED| blockAccepted[block on 'accepted' future]
+    waitFor --> |COMPLETED| blockCompleted[block on 'completed' future]
+```
 When the wait stage is `ACCEPTED`, the API caller waits for the `accepted` future to complete
-(type `*failurepb.Failure`). The following results can be returned:
+(type `*failurepb.Failure`). The future can be resolved with the following results:
 
 ```mermaid
 stateDiagram-v2
-    accepted: accepted=(nil,nil)
-    rejected: rejected=(rejectionFailure,nil)
-    notFound: (nil, NotFoundError)
-    unavailable: (nil, UnavailableError)
+    blockAccepted: block on `accepted` future
+    accepted: nil,nil
+    rejected: rejectionFailure,nil
+    notFoundError: nil, NotFoundError
+    wfContinuingError: nil, ErrWorkflowClosing
+    updateAbortedError: nil, WorkflowUpdateAbortedErr
     
-    [*] --> accepted: onAcceptanceMsg()
-    [*] --> rejected: onRejectionMsg()
-    [*] --> rejected: RejectUnprocessed()
-    [*] --> notFound: abort(reason=WorkflowCompleted)
-    [*] --> unavailable: abort(reason=RegistryCleared)
+    blockAccepted --> accepted: onAcceptanceMsg()
+    blockAccepted --> rejected: onRejectionMsg()
+    blockAccepted --> rejected: RejectUnprocessed()
+    blockAccepted --> notFoundError: Workflow completed
+    blockAccepted --> wfContinuingError: Workflow continuing
+    blockAccepted --> updateAbortedError: Registry cleared
 ```
-
 If the wait stage is `COMPLETED`, the API caller waits for the `outcome` future to complete
-(type `*updatepb.Outcome`). The following results can be returned:
+(type `*updatepb.Outcome`). The future can be resolved with the following results:
 
 ```mermaid
 stateDiagram-v2
-    completed: completed=(outcome{payload},nil)
-    failed: failed=(outcome{failure},nil)
-    rejected: failed=(outcome{rejectionFailure},nil)
-    notFound: (nil, NotFoundError)
-    unavailable: (nil, UnavailableError)
+    blockCompleted: block on `completed` future
+    completed: outcome{payload},nil
+    failed: outcome{failure},nil
+    rejected: outcome{rejectionFailure},nil
+    notFoundError: nil, NotFoundError
+    wfContinuingError: nil, ErrWorkflowClosing
+    wfCompletedFailure: workflowCompletedFailure, nil
+    updateAbortedError: nil, WorkflowUpdateAbortedErr
     
-    [*] --> completed: onResponseMsg()
-    [*] --> failed: onResponseMsg()
-    [*] --> rejected: onRejectionMsg()
-    [*] --> rejected: RejectUnprocessed()
-    [*] --> notFound: abort(reason=WorkflowCompleted)
-    [*] --> unavailable: abort(reason=RegistryCleared)
+    blockCompleted --> completed: onResponseMsg()
+    blockCompleted --> failed: onResponseMsg()
+    blockCompleted --> rejected: onRejectionMsg()
+    blockCompleted --> rejected: RejectUnprocessed()
+    blockCompleted --> notFoundError: Workflow completed
+    blockCompleted --> wfContinuingError: Workflow continuing before Update accepted
+    blockCompleted --> wfCompletedFailure: Workflow completed/continuing after Update accepted
+    blockCompleted --> updateAbortedError: Registry cleared
 ```
- 
+`ErrWorkflowClosing` and `WorkflowUpdateAbortedErr` are retryable errors. Even they are set on futures,
+they will not be returned to the API caller but will be retried internally.
+
 ### Timeouts
 The API caller can specify the time it is willing to wait before the specified stage is reached.
 If the timeout expires and the Update has not reached the desired stage yet, a 
@@ -240,7 +302,7 @@ the client should retry the `UpdateWorkflowExecution` API call.
 start polling for the Update result using the `PollWorkflowExecutionUpdate` API.
 
 > #### NOTE
-> When the registry is cleared, though, the behavior is slightly different: Instead of returning
+> When the Registry is cleared, though, the behavior is slightly different: Instead of returning
 > an empty response, the server returns a retryable `Unavailable` error. This error *should* not
 > reach the client, actually, as it is retried internally on the server. But if it does, the client 
 > should behave the same way as for the empty response with `ADMITTED` stage: 
@@ -317,30 +379,10 @@ trying to recreate the Update.
 > #### TODO
 > This might be possible in the future when "Durable Admitted" Update is implemented.
 
-There are two Workflow completion scenarios:
-- final completion, when no new run is created (e.g., with `COMPLETE_WORKFLOW_EXECUTION` command),
-- continued completion, when new run is created (e.g., `CONTINUE_AS_NEW_WORKFLOW_EXECUTION` command).
-
-When the Workflow performs a final completion, all in-flight Updates are aborted: admitted Updates get
-`ErrWorkflowCompleted` error on both `accepted` and `completed` futures, and accepted Updates get
-the same error on the `completed` future only. It is the Workflow's responsibility to complete
-accepted Updates. This behavior is similar to Activities which also can be left abandoned after 
-the Workflow is completed.
-
-When a Workflow completion command creates a new run, accepted Updates are aborted in the same way:
-with the `ErrWorkflowCompleted` error on the `completed` future. Admitted Updates, though, are aborted
-with the retryable `ErrWorkflowClosing` error. The SDK client retries this error and new attempt should
-land on the new run. Because Updates received while the Workflow Task was running haven't
-been seen by the Workflow yet can be safely retried on the new run. It also provides a better
-experience for API callers since they will not notice that the Workflow started a new run.
-
-Aborted accepted (but not completed) Updates remain in the `Aborted` state in the registry even after
-the Update registry is reconstructed from the history.
-
 Update results are available after the Workflow is completed. They can be accessed using the
 `PollWorkflowExecutionUpdate` API. Note that the `UpdateWorkflowExecution` API will return the
 result, too. This provides a consistent experience for API caller: no matter at what stage the 
-Workflow is, the API caller will always get the `ErrWorkflowCompleted` error, when the Update wasn't
+Workflow is, the API caller will always get an error or failure, when the Update wasn't
 processed by the Workflow, or the Update outcome when it was.
 
 > #### NOTE
@@ -401,7 +443,7 @@ exposes methods with exact the same name: `UpdateWorkflowExecution` (which write
 to the database). The method name is also used in the `operation` tag in various metrics.
 
 > #### TODO
-> Because it is unresonable and impossible to rename the `UpdateWorkflowExecution` API,
+> Because it is unreasonable and impossible to rename the `UpdateWorkflowExecution` API,
 > the persistence operation should be renamed to `SaveWorkflowExecution`, `WriteWorkflowExecution`, 
 > `PersistWorkflowExecution`, or something similar.
 

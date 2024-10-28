@@ -40,6 +40,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/api/token/v1"
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
@@ -185,11 +186,18 @@ func (e taskExecutor) executeInvocationTask(ctx context.Context, env hsm.Environ
 		return fmt.Errorf("failed to get a client: %w", err)
 	}
 
+	// Set MachineTransitionCount to 0 since older server versions, which had logic that considers references with
+	// non-zero MachineTransitionCount as "non-concurrent" references, and would fail validation of the reference if the
+	// Operation machine has transitioned.
+	// TODO(bergundy): Remove this before the 1.27 release.
+	smRef := common.CloneProto(ref.StateMachineRef)
+	smRef.MachineTransitionCount = 0
+
 	token, err := e.CallbackTokenGenerator.Tokenize(&token.NexusOperationCompletion{
 		NamespaceId: ref.WorkflowKey.NamespaceID,
 		WorkflowId:  ref.WorkflowKey.WorkflowID,
 		RunId:       ref.WorkflowKey.RunID,
-		Ref:         ref.StateMachineRef,
+		Ref:         smRef,
 		RequestId:   args.requestID,
 	})
 	if err != nil {

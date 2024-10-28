@@ -176,6 +176,7 @@ func (s *visibilityQueueTaskExecutorSuite) SetupTest() {
 		metrics.NoopMetricsHandler,
 		config.VisibilityProcessorEnsureCloseBeforeDelete,
 		func(_ string) bool { return s.enableCloseWorkflowCleanup },
+		config.VisibilityProcessorRelocateAttributesMinBlobSize,
 	)
 }
 
