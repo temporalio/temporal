@@ -173,7 +173,8 @@ func (s *InterleavedWeightedRoundRobinScheduler[T, K]) Submit(
 	// there are tasks pending dispatching, need to respect round roubin weight
 	// or currently unable to submit to fifo scheduler, either due to buffer is full
 	// or exceeding rate limit
-	channel := s.getOrCreateTaskChannel(s.options.TaskChannelKeyFn(task))
+	channel, unlockFn := s.getOrCreateTaskChannel(s.options.TaskChannelKeyFn(task))
+	defer unlockFn()
 	channel.Chan() <- task
 	s.notifyDispatcher()
 }
@@ -187,7 +188,8 @@ func (s *InterleavedWeightedRoundRobinScheduler[T, K]) TrySubmit(
 	}
 
 	// there are tasks pending dispatching, need to respect round roubin weight
-	channel := s.getOrCreateTaskChannel(s.options.TaskChannelKeyFn(task))
+	channel, unlockFn := s.getOrCreateTaskChannel(s.options.TaskChannelKeyFn(task))
+	defer unlockFn()
 	select {
 	case channel.Chan() <- task:
 		s.notifyDispatcher()
@@ -252,21 +254,23 @@ func (s *InterleavedWeightedRoundRobinScheduler[T, K]) doCleanup() {
 
 func (s *InterleavedWeightedRoundRobinScheduler[T, K]) getOrCreateTaskChannel(
 	channelKey K,
-) *WeightedChannel[T] {
+) (*WeightedChannel[T], func()) {
 	s.RLock()
+	unlockFn := func() {
+		s.RUnlock()
+	}
 	channel, ok := s.weightedChannels[channelKey]
 	if ok {
-		s.RUnlock()
-		return channel
+		return channel, unlockFn
 	}
 	s.RUnlock()
 
 	s.Lock()
-	defer s.Unlock()
-
 	channel, ok = s.weightedChannels[channelKey]
 	if ok {
-		return channel
+		s.Unlock()
+		s.RLock()
+		return channel, unlockFn
 	}
 
 	weight := s.options.ChannelWeightFn(channelKey)
@@ -274,7 +278,9 @@ func (s *InterleavedWeightedRoundRobinScheduler[T, K]) getOrCreateTaskChannel(
 	s.weightedChannels[channelKey] = channel
 
 	s.flattenWeightedChannelsLocked()
-	return channel
+	s.Unlock()
+	s.RLock()
+	return channel, unlockFn
 }
 
 func (s *InterleavedWeightedRoundRobinScheduler[T, K]) flattenWeightedChannelsLocked() {
