@@ -301,6 +301,7 @@ func (s *Service) startParentClosePolicyProcessor() {
 		Logger:           s.logger,
 		ClientBean:       s.clientBean,
 		CurrentCluster:   s.clusterMetadata.GetCurrentClusterName(),
+		HostInfo:         s.hostInfo,
 	}
 	processor := parentclosepolicy.New(params)
 	if err := processor.Start(); err != nil {
@@ -315,6 +316,7 @@ func (s *Service) startBatcher() {
 	if err := batcher.New(
 		s.metricsHandler,
 		s.logger,
+		s.hostInfo,
 		s.sdkClientFactory,
 		s.config.BatcherRPS,
 		s.config.BatcherConcurrency,
@@ -346,6 +348,7 @@ func (s *Service) initScanner() error {
 		s.matchingClient,
 		s.namespaceRegistry,
 		currentCluster,
+		s.hostInfo,
 	)
 	return nil
 }
