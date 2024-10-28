@@ -230,12 +230,6 @@ func (t *timerQueueActiveTaskExecutor) executeActivityTimeoutTask(
 	if mutableState == nil || !mutableState.IsWorkflowExecutionRunning() {
 		return nil
 	}
-	_, ok := mutableState.GetActivityInfo(task.EventID)
-
-	if !ok {
-		// if activity is not found, the timer is invalid.
-		return nil
-	}
 
 	timerSequence := t.getTimerSequence(mutableState)
 	referenceTime := t.shardContext.GetTimeSource().Now()
