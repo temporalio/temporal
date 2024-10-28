@@ -1021,6 +1021,7 @@ type SyncActivityTaskAttributes struct {
 	// The last time an activity attempt completion was recorded by the server.
 	LastAttemptCompleteTime *timestamppb.Timestamp `protobuf:"bytes,19,opt,name=last_attempt_complete_time,json=lastAttemptCompleteTime,proto3" json:"last_attempt_complete_time,omitempty"`
 	// Stamp represents the internal “version” of the activity options and can/will be changed with Activity API.
+	// It monotonically increments when the activity options are changed.
 	Stamp int32 `protobuf:"varint,20,opt,name=stamp,proto3" json:"stamp,omitempty"`
 }
 

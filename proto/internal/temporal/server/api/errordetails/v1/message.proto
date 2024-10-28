@@ -67,7 +67,3 @@ message StickyWorkerUnavailableFailure {
 
 message ObsoleteDispatchBuildIdFailure {
 }
-
-message ActivityStampMismatchFailure {
-
-}

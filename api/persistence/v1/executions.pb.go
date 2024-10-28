@@ -1122,7 +1122,10 @@ type TransferTaskInfo struct {
 	//
 	//	*TransferTaskInfo_CloseExecutionTaskDetails_
 	TaskDetails isTransferTaskInfo_TaskDetails `protobuf_oneof:"task_details"`
-	Stamp       int32                          `protobuf:"varint,17,opt,name=stamp,proto3" json:"stamp,omitempty"`
+	// Stamp represents the version of the activity internal state, for which the timer task was created.
+	// It monotonically increments when the activity options are changed.
+	// It is used to check if activity related tasks are still relevant to  their corresponding state machine.
+	Stamp int32 `protobuf:"varint,17,opt,name=stamp,proto3" json:"stamp,omitempty"`
 }
 
 func (x *TransferTaskInfo) Reset() {
@@ -1597,7 +1600,9 @@ type TimerTaskInfo struct {
 	// If specified, the task is a for a workflow chain instead of a specific workflow run.
 	// A workflow chain is identified by the run_id of the first workflow in the chain.
 	FirstRunId string `protobuf:"bytes,15,opt,name=first_run_id,json=firstRunId,proto3" json:"first_run_id,omitempty"`
-	// The stamp represents the version of the activity for which the timer task was created.
+	// Stamp represents the version of the activity internal state, for which the timer task was created.
+	// It monotonically increments when the activity options are changed.
+	// It is used to check if activity related tasks are still relevant to  their corresponding state machine.
 	Stamp int32 `protobuf:"varint,16,opt,name=stamp,proto3" json:"stamp,omitempty"`
 }
 
@@ -2010,7 +2015,9 @@ type ActivityInfo struct {
 	FirstScheduledTime *timestamppb.Timestamp `protobuf:"bytes,39,opt,name=first_scheduled_time,json=firstScheduledTime,proto3" json:"first_scheduled_time,omitempty"`
 	// The last time an activity attempt completion was recorded by the server.
 	LastAttemptCompleteTime *timestamppb.Timestamp `protobuf:"bytes,40,opt,name=last_attempt_complete_time,json=lastAttemptCompleteTime,proto3" json:"last_attempt_complete_time,omitempty"`
-	// Stamp represents the internal “version” of the activity options and can/will be changed with Activity API.
+	// Stamp represents the “version” of the activity internal state (options) and can/will be changed with Activity API.
+	// It monotonically increments when the activity options are changed.
+	// It is used to check if activity related tasks are still relevant to  their corresponding state machine.
 	Stamp int32 `protobuf:"varint,41,opt,name=stamp,proto3" json:"stamp,omitempty"`
 }
 

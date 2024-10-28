@@ -4920,7 +4920,8 @@ func (ms *MutableStateImpl) RegenerateActivityRetryTask(ai *persistencespb.Activ
 	// * this is the first time activity was scheduled
 	//  * in this case we should use current schedule time
 	// * this is a retry
-	//  * we should recalculate next scheduled time, based on the last time when activity was completed
+	//  * next scheduled time will be calculated, based on the retry policy and last time when activity was completed
+	//  * note - if delay interval was provided in the response it will be ignored
 
 	nextScheduledTime := ai.ScheduledTime.AsTime()
 	if ai.Attempt > 1 {
@@ -6506,7 +6507,8 @@ func (ms *MutableStateImpl) ShouldResetActivityTimerTaskMask(current, incoming *
 	// calculate whether to reset the activity timer task status bits
 	// reset timer task status bits if
 	// 1. same source cluster & attempt changes
-	// 2. different source cluster
+	// 2. same activity stamp
+	// 3. different source cluster
 	if !ms.clusterMetadata.IsVersionFromSameCluster(current.Version, incoming.Version) {
 		return true
 	} else if current.Attempt != incoming.Attempt {

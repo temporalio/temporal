@@ -310,6 +310,9 @@ func (t *timerQueueActiveTaskExecutor) processSingleActivityTimeoutTask(
 		return result, nil
 	}
 
+	// Note: we don't need to check activity Stamps.
+	// This is because for the same attempts calls are idempotent.
+
 	failureMsg := fmt.Sprintf("activity %v timeout", timerSequenceID.TimerType.String())
 	timeoutFailure := failure.NewTimeoutFailure(failureMsg, timerSequenceID.TimerType)
 	retryState, err := mutableState.RetryActivity(ai, timeoutFailure)
