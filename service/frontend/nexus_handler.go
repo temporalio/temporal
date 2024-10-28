@@ -38,9 +38,6 @@ import (
 	nexuspb "go.temporal.io/api/nexus/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/taskqueue/v1"
-	"google.golang.org/grpc/metadata"
-	"google.golang.org/protobuf/types/known/timestamppb"
-
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/authorization"
@@ -53,6 +50,8 @@ import (
 	"go.temporal.io/server/common/namespace"
 	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/rpc/interceptor"
+	"google.golang.org/grpc/metadata"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 // user-agent header contains Nexus SDK client info in the form <sdk-name>/v<sdk-version>
