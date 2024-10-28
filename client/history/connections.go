@@ -37,7 +37,7 @@ import (
 type (
 	clientConnection struct {
 		historyClient historyservice.HistoryServiceClient
-		grpcConn      *grpc.ClientConn
+		grpcConn      grpc.ClientConnInterface
 	}
 
 	rpcAddress string
@@ -54,7 +54,7 @@ type (
 
 	// RPCFactory is a subset of the [go.temporal.io/server/common/rpc.RPCFactory] interface to make testing easier.
 	RPCFactory interface {
-		CreateInternodeGRPCConnection(rpcAddress string) *grpc.ClientConn
+		CreateInternodeGRPCConnection(rpcAddress string) grpc.ClientConnInterface
 	}
 
 	connectionPool interface {
@@ -114,5 +114,7 @@ func (c *connectionPoolImpl) getAllClientConns() []clientConnection {
 }
 
 func (c *connectionPoolImpl) resetConnectBackoff(cc clientConnection) {
-	cc.grpcConn.ResetConnectBackoff()
+	if grpcc, ok := cc.grpcConn.(*grpc.ClientConn); ok {
+		grpcc.ResetConnectBackoff()
+	}
 }

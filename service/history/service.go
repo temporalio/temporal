@@ -34,6 +34,8 @@ import (
 	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence/visibility/manager"
+	"go.temporal.io/server/common/rpc/inline"
+	"go.temporal.io/server/service"
 	"go.temporal.io/server/service/history/configs"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/health"
@@ -51,6 +53,7 @@ type (
 		server            *grpc.Server
 		logger            log.Logger
 		grpcListener      net.Listener
+		grpcParams        service.GrpcServerOptionsParams
 		membershipMonitor membership.Monitor
 		metricsHandler    metrics.Handler
 		healthServer      *health.Server
@@ -64,6 +67,7 @@ func NewService(
 	handler *Handler,
 	logger log.Logger,
 	grpcListener net.Listener,
+	grpcParams service.GrpcServerOptionsParams,
 	membershipMonitor membership.Monitor,
 	metricsHandler metrics.Handler,
 	healthServer *health.Server,
@@ -75,6 +79,7 @@ func NewService(
 		config:            serviceConfig,
 		logger:            logger,
 		grpcListener:      grpcListener,
+		grpcParams:        grpcParams,
 		membershipMonitor: membershipMonitor,
 		metricsHandler:    metricsHandler,
 		healthServer:      healthServer,
@@ -94,6 +99,16 @@ func (s *Service) Start() {
 	s.healthServer.SetServingStatus(serviceName, healthpb.HealthCheckResponse_SERVING)
 
 	reflection.Register(s.server)
+
+	inline.RegisterInlineServer(
+		s.handler.hostInfoProvider.HostInfo().GetAddress(),
+		"temporal.server.api.historyservice.v1.HistoryService",
+		s.handler,
+		s.grpcParams.GetUnaryClientInterceptors(),
+		s.grpcParams.GetUnaryServerInterceptors(),
+		metrics.InlineRequests.With(s.metricsHandler),
+		s.handler.namespaceRegistry,
+	)
 
 	go func() {
 		s.logger.Info("Starting to serve on history listener")

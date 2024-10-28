@@ -34,7 +34,6 @@ import (
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
-	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/rpc/interceptor"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
@@ -83,7 +82,7 @@ const (
 // The hostName syntax is defined in
 // https://github.com/grpc/grpc/blob/master/doc/naming.md.
 // dns resolver is used by default
-func Dial(hostName string, tlsConfig *tls.Config, logger log.Logger, interceptors ...grpc.UnaryClientInterceptor) (*grpc.ClientConn, error) {
+func Dial(hostName string, tlsConfig *tls.Config, interceptors []grpc.UnaryClientInterceptor) (*grpc.ClientConn, error) {
 	var grpcSecureOpt grpc.DialOption
 	if tlsConfig == nil {
 		grpcSecureOpt = grpc.WithTransportCredentials(insecure.NewCredentials())
@@ -105,17 +104,8 @@ func Dial(hostName string, tlsConfig *tls.Config, logger log.Logger, interceptor
 	dialOptions := []grpc.DialOption{
 		grpcSecureOpt,
 		grpc.WithDefaultCallOptions(grpc.MaxCallRecvMsgSize(maxInternodeRecvPayloadSize)),
-		grpc.WithChainUnaryInterceptor(
-			append(
-				interceptors,
-				headersInterceptor,
-				metrics.NewClientMetricsTrailerPropagatorInterceptor(logger),
-				errorInterceptor,
-			)...,
-		),
-		grpc.WithChainStreamInterceptor(
-			interceptor.StreamErrorInterceptor,
-		),
+		grpc.WithChainUnaryInterceptor(interceptors...),
+		grpc.WithChainStreamInterceptor(interceptor.StreamErrorInterceptor),
 		grpc.WithDefaultServiceConfig(DefaultServiceConfig),
 		grpc.WithDisableServiceConfig(),
 		grpc.WithConnectParams(cp),

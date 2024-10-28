@@ -59,6 +59,7 @@ type (
 		startWG           sync.WaitGroup
 		throttledLogger   log.Logger
 		namespaceRegistry namespace.Registry
+		hostInfoProvider  membership.HostInfoProvider
 	}
 )
 
@@ -109,6 +110,7 @@ func NewHandler(
 			nexusEndpointManager,
 		),
 		namespaceRegistry: namespaceRegistry,
+		hostInfoProvider:  hostInfoProvider,
 	}
 
 	// prevent from serving requests before matching engine is started and ready

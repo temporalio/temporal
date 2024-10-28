@@ -675,6 +675,10 @@ var (
 		"http_service_requests",
 		WithDescription("The number of HTTP requests received by the service."),
 	)
+	InlineRequests = NewCounterDef(
+		"inline_requests",
+		WithDescription("The number of GRPC requests routed in-process."),
+	)
 	NexusRequests = NewCounterDef(
 		"nexus_requests",
 		WithDescription("The number of Nexus requests received by the service."),

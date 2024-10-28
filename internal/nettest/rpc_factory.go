@@ -58,15 +58,19 @@ func (f *RPCFactory) GetInternodeGRPCServerOptions() ([]grpc.ServerOption, error
 	return nil, nil
 }
 
+func (f *RPCFactory) GetGRPCClientInterceptors() []grpc.UnaryClientInterceptor {
+	return nil
+}
+
 func (f *RPCFactory) GetGRPCListener() net.Listener {
 	return f.listener
 }
 
-func (f *RPCFactory) CreateRemoteFrontendGRPCConnection(rpcAddress string) *grpc.ClientConn {
+func (f *RPCFactory) CreateRemoteFrontendGRPCConnection(rpcAddress string) grpc.ClientConnInterface {
 	return f.dial(rpcAddress)
 }
 
-func (f *RPCFactory) CreateLocalFrontendGRPCConnection() *grpc.ClientConn {
+func (f *RPCFactory) CreateLocalFrontendGRPCConnection() grpc.ClientConnInterface {
 	return f.dial(f.listener.Addr().String())
 }
 
@@ -74,11 +78,11 @@ func (f *RPCFactory) CreateLocalFrontendHTTPClient() (*common.FrontendHTTPClient
 	panic("unimplemented in the nettest package")
 }
 
-func (f *RPCFactory) CreateInternodeGRPCConnection(rpcAddress string) *grpc.ClientConn {
+func (f *RPCFactory) CreateInternodeGRPCConnection(rpcAddress string) grpc.ClientConnInterface {
 	return f.dial(rpcAddress)
 }
 
-func (f *RPCFactory) dial(rpcAddress string) *grpc.ClientConn {
+func (f *RPCFactory) dial(rpcAddress string) grpc.ClientConnInterface {
 	dialOptions := append(f.dialOptions,
 		grpc.WithContextDialer(func(ctx context.Context, s string) (net.Conn, error) {
 			return f.listener.Connect(ctx.Done())
