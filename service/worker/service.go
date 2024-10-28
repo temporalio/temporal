@@ -102,8 +102,8 @@ type (
 		BatcherRPS                           dynamicconfig.IntPropertyFnWithNamespaceFilter
 		BatcherConcurrency                   dynamicconfig.IntPropertyFnWithNamespaceFilter
 		EnableParentClosePolicyWorker        dynamicconfig.BoolPropertyFn
-		PerNamespaceWorkerCount              dynamicconfig.IntPropertyFnWithNamespaceFilter
-		PerNamespaceWorkerOptions            dynamicconfig.TypedPropertyFnWithNamespaceFilter[sdkworker.Options]
+		PerNamespaceWorkerCount              dynamicconfig.TypedSubscribableWithNamespaceFilter[int]
+		PerNamespaceWorkerOptions            dynamicconfig.TypedSubscribableWithNamespaceFilter[sdkworker.Options]
 		PerNamespaceWorkerStartRate          dynamicconfig.FloatPropertyFn
 
 		VisibilityPersistenceMaxReadQPS   dynamicconfig.IntPropertyFn
@@ -213,8 +213,8 @@ func NewConfig(
 		BatcherRPS:                           dynamicconfig.BatcherRPS.Get(dc),
 		BatcherConcurrency:                   dynamicconfig.BatcherConcurrency.Get(dc),
 		EnableParentClosePolicyWorker:        dynamicconfig.EnableParentClosePolicyWorker.Get(dc),
-		PerNamespaceWorkerCount:              dynamicconfig.WorkerPerNamespaceWorkerCount.Get(dc),
-		PerNamespaceWorkerOptions:            dynamicconfig.WorkerPerNamespaceWorkerOptions.Get(dc),
+		PerNamespaceWorkerCount:              dynamicconfig.WorkerPerNamespaceWorkerCount.Subscribe(dc),
+		PerNamespaceWorkerOptions:            dynamicconfig.WorkerPerNamespaceWorkerOptions.Subscribe(dc),
 		PerNamespaceWorkerStartRate:          dynamicconfig.WorkerPerNamespaceWorkerStartRate.Get(dc),
 		ThrottledLogRPS:                      dynamicconfig.WorkerThrottledLogRPS.Get(dc),
 		PersistenceMaxQPS:                    dynamicconfig.WorkerPersistenceMaxQPS.Get(dc),
@@ -301,6 +301,7 @@ func (s *Service) startParentClosePolicyProcessor() {
 		Logger:           s.logger,
 		ClientBean:       s.clientBean,
 		CurrentCluster:   s.clusterMetadata.GetCurrentClusterName(),
+		HostInfo:         s.hostInfo,
 	}
 	processor := parentclosepolicy.New(params)
 	if err := processor.Start(); err != nil {
@@ -315,6 +316,7 @@ func (s *Service) startBatcher() {
 	if err := batcher.New(
 		s.metricsHandler,
 		s.logger,
+		s.hostInfo,
 		s.sdkClientFactory,
 		s.config.BatcherRPS,
 		s.config.BatcherConcurrency,
@@ -346,6 +348,7 @@ func (s *Service) initScanner() error {
 		s.matchingClient,
 		s.namespaceRegistry,
 		currentCluster,
+		s.hostInfo,
 	)
 	return nil
 }
@@ -393,9 +396,4 @@ func (s *Service) ensureSystemNamespaceExists(
 			tag.Error(err),
 		)
 	}
-}
-
-// This is intended for use by integration tests only.
-func (s *Service) RefreshPerNSWorkerManager() {
-	s.perNamespaceWorkerManager.refreshAll()
 }

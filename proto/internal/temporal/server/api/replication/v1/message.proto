@@ -235,6 +235,21 @@ message VerifyVersionedTransitionTaskAttributes {
 }
 
 message SyncVersionedTransitionTaskAttributes {
-    repeated temporal.api.common.v1.DataBlob event_batches = 1;
-    NewRunInfo new_run_info = 2;
+    reserved 1;
+    reserved 2;
+    reserved 3;
+    reserved 4;
+    VersionedTransitionArtifact versioned_transition_artifact = 5;
+    string namespace_id = 6;
+    string workflow_id = 7;
+    string run_id = 8;
+}
+
+message VersionedTransitionArtifact {
+    oneof state_attributes {
+        SyncWorkflowStateMutationAttributes sync_workflow_state_mutation_attributes = 1;
+        SyncWorkflowStateSnapshotAttributes sync_workflow_state_snapshot_attributes = 2;
+    }
+    repeated temporal.api.common.v1.DataBlob event_batches = 3;
+    NewRunInfo new_run_info = 4;
 }

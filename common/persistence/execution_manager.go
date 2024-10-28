@@ -477,12 +477,12 @@ func (m *executionManagerImpl) serializeWorkflowEventBatches(
 		xdcKVs[NewXDCCacheKey(
 			definition.NewWorkflowKey(workflowEvents.NamespaceID, workflowEvents.WorkflowID, workflowEvents.RunID),
 			workflowEvents.Events[0].EventId,
-			workflowEvents.Events[len(workflowEvents.Events)-1].EventId+1,
 			workflowEvents.Events[0].Version,
 		)] = NewXDCCacheValue(
 			baseWorkflowInfo,
 			versionHistoryItems,
 			[]*commonpb.DataBlob{newEvents.Node.Events},
+			workflowEvents.Events[len(workflowEvents.Events)-1].EventId+1,
 		)
 		newEvents.ShardID = shardID
 		workflowNewEvents = append(workflowNewEvents, newEvents)

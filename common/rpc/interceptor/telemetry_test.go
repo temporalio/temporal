@@ -32,6 +32,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	protocolpb "go.temporal.io/api/protocol/v1"
+	"go.temporal.io/api/query/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
@@ -48,7 +49,6 @@ import (
 
 const (
 	startWorkflow = "StartWorkflowExecution"
-	queryWorkflow = "QueryWorkflow"
 )
 
 func TestEmitActionMetric(t *testing.T) {
@@ -76,11 +76,6 @@ func TestEmitActionMetric(t *testing.T) {
 			methodName:        startWorkflow,
 			fullName:          api.WorkflowServicePrefix + startWorkflow,
 			resp:              &workflowservice.StartWorkflowExecutionResponse{Started: true},
-			expectEmitMetrics: true,
-		},
-		{
-			methodName:        queryWorkflow,
-			fullName:          api.WorkflowServicePrefix + queryWorkflow,
 			expectEmitMetrics: true,
 		},
 		{
@@ -141,6 +136,25 @@ func TestEmitActionMetric(t *testing.T) {
 						Id:   "MESSAGE_ID",
 						Body: &updateResponseMessageBody,
 					},
+				},
+			},
+		},
+		{
+			methodName: queryWorkflow,
+			fullName:   api.WorkflowServicePrefix + queryWorkflow,
+			req: &workflowservice.QueryWorkflowRequest{
+				Query: &query.WorkflowQuery{
+					QueryType: "some_type",
+				},
+			},
+			expectEmitMetrics: true,
+		},
+		{
+			methodName: queryWorkflow,
+			fullName:   api.WorkflowServicePrefix + queryWorkflow,
+			req: &workflowservice.QueryWorkflowRequest{
+				Query: &query.WorkflowQuery{
+					QueryType: "__temporal_workflow_metadata",
 				},
 			},
 		},

@@ -117,7 +117,7 @@ func (e taskExecutor) executeInvocationTask(ctx context.Context, env hsm.Environ
 		return fmt.Errorf("failed to get namespace by ID: %w", err)
 	}
 
-	args, err := e.loadOperationArgs(ctx, ns, env, ref, task)
+	args, err := e.loadOperationArgs(ctx, ns, env, ref)
 	if err != nil {
 		return fmt.Errorf("failed to load operation args: %w", err)
 	}
@@ -187,11 +187,11 @@ func (e taskExecutor) executeInvocationTask(ctx context.Context, env hsm.Environ
 		return fmt.Errorf("failed to get a client: %w", err)
 	}
 
+	// Set MachineTransitionCount to 0 since older server versions, which had logic that considers references with
+	// non-zero MachineTransitionCount as "non-concurrent" references, and would fail validation of the reference if the
+	// Operation machine has transitioned.
+	// TODO(bergundy): Remove this before the 1.27 release.
 	smRef := common.CloneProto(ref.StateMachineRef)
-	// Unset the machine last update versioned transition so it is ignored in the completion staleness check.
-	// This is to account for either the operation transitioning to STARTED state after a successful call but also to
-	// account for the task timing out before we get a successful result and a transition to BACKING_OFF.
-	smRef.MachineLastUpdateVersionedTransition = nil
 	smRef.MachineTransitionCount = 0
 
 	token, err := e.CallbackTokenGenerator.Tokenize(&token.NexusOperationCompletion{
@@ -286,13 +286,9 @@ func (e taskExecutor) loadOperationArgs(
 	ns *namespace.Namespace,
 	env hsm.Environment,
 	ref hsm.Ref,
-	task InvocationTask,
 ) (args startArgs, err error) {
 	var eventToken []byte
 	err = env.Access(ctx, ref, hsm.AccessRead, func(node *hsm.Node) error {
-		if err := task.Validate(node); err != nil {
-			return err
-		}
 		operation, err := hsm.MachineData[Operation](node)
 		if err != nil {
 			return err
@@ -334,9 +330,6 @@ func (e taskExecutor) loadOperationArgs(
 
 func (e taskExecutor) saveResult(ctx context.Context, env hsm.Environment, ref hsm.Ref, result *nexus.ClientStartOperationResult[*commonpb.Payload], callErr error) error {
 	return env.Access(ctx, ref, hsm.AccessWrite, func(node *hsm.Node) error {
-		if err := node.CheckRunning(); err != nil {
-			return err
-		}
 		return hsm.MachineTransition(node, func(operation Operation) (hsm.TransitionOutput, error) {
 			if callErr != nil {
 				return e.handleStartOperationError(env, node, operation, callErr)
@@ -458,9 +451,6 @@ func handleNonRetryableStartOperationError(env hsm.Environment, node *hsm.Node, 
 }
 
 func (e taskExecutor) executeBackoffTask(env hsm.Environment, node *hsm.Node, task BackoffTask) error {
-	if err := task.Validate(node); err != nil {
-		return err
-	}
 	return hsm.MachineTransition(node, func(op Operation) (hsm.TransitionOutput, error) {
 		return TransitionRescheduled.Apply(op, EventRescheduled{
 			Node: node,
@@ -469,9 +459,6 @@ func (e taskExecutor) executeBackoffTask(env hsm.Environment, node *hsm.Node, ta
 }
 
 func (e taskExecutor) executeTimeoutTask(env hsm.Environment, node *hsm.Node, task TimeoutTask) error {
-	if err := task.Validate(node); err != nil {
-		return err
-	}
 	return hsm.MachineTransition(node, func(op Operation) (hsm.TransitionOutput, error) {
 		eventID, err := hsm.EventIDFromToken(op.ScheduledEventToken)
 		if err != nil {
@@ -582,9 +569,6 @@ type cancelArgs struct {
 // given reference is pointing to.
 func (e taskExecutor) loadArgsForCancelation(ctx context.Context, env hsm.Environment, ref hsm.Ref) (args cancelArgs, err error) {
 	err = env.Access(ctx, ref, hsm.AccessRead, func(n *hsm.Node) error {
-		if err := n.CheckRunning(); err != nil {
-			return err
-		}
 		op, err := hsm.MachineData[Operation](n.Parent)
 		if err != nil {
 			return err
@@ -606,9 +590,6 @@ func (e taskExecutor) loadArgsForCancelation(ctx context.Context, env hsm.Enviro
 
 func (e taskExecutor) saveCancelationResult(ctx context.Context, env hsm.Environment, ref hsm.Ref, callErr error) error {
 	return env.Access(ctx, ref, hsm.AccessWrite, func(n *hsm.Node) error {
-		if err := n.CheckRunning(); err != nil {
-			return err
-		}
 		return hsm.MachineTransition(n, func(c Cancelation) (hsm.TransitionOutput, error) {
 			if callErr != nil {
 				var unexpectedResponseErr *nexus.UnexpectedResponseError
@@ -640,26 +621,11 @@ func (e taskExecutor) saveCancelationResult(ctx context.Context, env hsm.Environ
 }
 
 func (e taskExecutor) executeCancelationBackoffTask(env hsm.Environment, node *hsm.Node, task CancelationBackoffTask) error {
-	if err := node.CheckRunning(); err != nil {
-		return err
-	}
 	return hsm.MachineTransition(node, func(c Cancelation) (hsm.TransitionOutput, error) {
 		return TransitionCancelationRescheduled.Apply(c, EventCancelationRescheduled{
 			Node: node,
 		})
 	})
-}
-
-func (e taskExecutor) extractEndpointNameFromOperation(ctx context.Context, env hsm.Environment, ref hsm.Ref, getOpNode func(*hsm.Node) *hsm.Node) (endpoint string, err error) {
-	err = env.Access(ctx, ref, hsm.AccessRead, func(n *hsm.Node) error {
-		op, err := hsm.MachineData[Operation](getOpNode(n))
-		if err != nil {
-			return err
-		}
-		endpoint = op.Endpoint
-		return nil
-	})
-	return
 }
 
 // lookupEndpint gets an endpoint from the registry, preferring to look up by ID and falling back to name lookup.

@@ -146,9 +146,6 @@ func (s *scheduledQueueSuite) SetupTest() {
 		func() int {
 			return math.MaxInt
 		},
-		func() bool {
-			return false
-		},
 		func() string {
 			return ""
 		},

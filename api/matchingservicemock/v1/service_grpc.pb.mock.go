@@ -285,6 +285,26 @@ func (mr *MockMatchingServiceClientMockRecorder) ForceUnloadTaskQueue(ctx, in an
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ForceUnloadTaskQueue", reflect.TypeOf((*MockMatchingServiceClient)(nil).ForceUnloadTaskQueue), varargs...)
 }
 
+// ForceUnloadTaskQueuePartition mocks base method.
+func (m *MockMatchingServiceClient) ForceUnloadTaskQueuePartition(ctx context.Context, in *matchingservice.ForceUnloadTaskQueuePartitionRequest, opts ...grpc.CallOption) (*matchingservice.ForceUnloadTaskQueuePartitionResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []any{ctx, in}
+	for _, a := range opts {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "ForceUnloadTaskQueuePartition", varargs...)
+	ret0, _ := ret[0].(*matchingservice.ForceUnloadTaskQueuePartitionResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ForceUnloadTaskQueuePartition indicates an expected call of ForceUnloadTaskQueuePartition.
+func (mr *MockMatchingServiceClientMockRecorder) ForceUnloadTaskQueuePartition(ctx, in any, opts ...any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]any{ctx, in}, opts...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ForceUnloadTaskQueuePartition", reflect.TypeOf((*MockMatchingServiceClient)(nil).ForceUnloadTaskQueuePartition), varargs...)
+}
+
 // GetBuildIdTaskQueueMapping mocks base method.
 func (m *MockMatchingServiceClient) GetBuildIdTaskQueueMapping(ctx context.Context, in *matchingservice.GetBuildIdTaskQueueMappingRequest, opts ...grpc.CallOption) (*matchingservice.GetBuildIdTaskQueueMappingResponse, error) {
 	m.ctrl.T.Helper()
@@ -831,6 +851,21 @@ func (m *MockMatchingServiceServer) ForceUnloadTaskQueue(arg0 context.Context, a
 func (mr *MockMatchingServiceServerMockRecorder) ForceUnloadTaskQueue(arg0, arg1 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ForceUnloadTaskQueue", reflect.TypeOf((*MockMatchingServiceServer)(nil).ForceUnloadTaskQueue), arg0, arg1)
+}
+
+// ForceUnloadTaskQueuePartition mocks base method.
+func (m *MockMatchingServiceServer) ForceUnloadTaskQueuePartition(arg0 context.Context, arg1 *matchingservice.ForceUnloadTaskQueuePartitionRequest) (*matchingservice.ForceUnloadTaskQueuePartitionResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ForceUnloadTaskQueuePartition", arg0, arg1)
+	ret0, _ := ret[0].(*matchingservice.ForceUnloadTaskQueuePartitionResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ForceUnloadTaskQueuePartition indicates an expected call of ForceUnloadTaskQueuePartition.
+func (mr *MockMatchingServiceServerMockRecorder) ForceUnloadTaskQueuePartition(arg0, arg1 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ForceUnloadTaskQueuePartition", reflect.TypeOf((*MockMatchingServiceServer)(nil).ForceUnloadTaskQueuePartition), arg0, arg1)
 }
 
 // GetBuildIdTaskQueueMapping mocks base method.

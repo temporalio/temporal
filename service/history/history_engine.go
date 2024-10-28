@@ -92,6 +92,7 @@ import (
 	"go.temporal.io/server/service/history/api/signalworkflow"
 	"go.temporal.io/server/service/history/api/startworkflow"
 	"go.temporal.io/server/service/history/api/terminateworkflow"
+	"go.temporal.io/server/service/history/api/updateactivityoptions"
 	"go.temporal.io/server/service/history/api/updateworkflow"
 	"go.temporal.io/server/service/history/api/verifychildworkflowcompletionrecorded"
 	"go.temporal.io/server/service/history/api/verifyfirstworkflowtaskscheduled"
@@ -188,6 +189,13 @@ func NewEngineWithShardContext(
 		shard.GetTimeSource(),
 		persistenceVisibilityMgr,
 	)
+	syncStateRetriever := replication.NewSyncStateRetriever(
+		shard,
+		workflowCache,
+		workflowConsistencyChecker,
+		eventBlobCache,
+		shard.GetLogger(),
+	)
 
 	historyEngImpl := &historyEngineImpl{
 		status:                     common.DaemonStatusInitialized,
@@ -220,12 +228,7 @@ func NewEngineWithShardContext(
 			logger:         logger,
 		},
 		replicationProgressCache: replicationProgressCache,
-		syncStateRetriever: replication.NewSyncStateRetriever(
-			shard,
-			workflowCache,
-			workflowConsistencyChecker,
-			shard.GetLogger(),
-		),
+		syncStateRetriever:       syncStateRetriever,
 	}
 
 	historyEngImpl.queueProcessors = make(map[tasks.Category]queues.Queue)
@@ -243,6 +246,7 @@ func NewEngineWithShardContext(
 			eventBlobCache,
 			replicationProgressCache,
 			executionManager,
+			syncStateRetriever,
 			logger,
 		)
 		historyEngImpl.nDCHistoryReplicator = ndc.NewHistoryReplicator(
@@ -768,6 +772,10 @@ func (e *historyEngineImpl) ReplicateWorkflowState(
 	return e.nDCWorkflowStateReplicator.SyncWorkflowState(ctx, request)
 }
 
+func (e *historyEngineImpl) ReplicateVersionedTransition(ctx context.Context, artifact *replicationspb.VersionedTransitionArtifact, sourceClusterName string) error {
+	return e.nDCWorkflowStateReplicator.ReplicateVersionedTransition(ctx, artifact, sourceClusterName)
+}
+
 func (e *historyEngineImpl) ImportWorkflowExecution(
 	ctx context.Context,
 	request *historyservice.ImportWorkflowExecutionRequest,
@@ -1036,4 +1044,11 @@ func (e *historyEngineImpl) StateMachineEnvironment() hsm.Environment {
 
 func (e *historyEngineImpl) SyncWorkflowState(ctx context.Context, request *historyservice.SyncWorkflowStateRequest) (_ *historyservice.SyncWorkflowStateResponse, retErr error) {
 	return replicationapi.SyncWorkflowState(ctx, request, e.replicationProgressCache, e.syncStateRetriever, e.logger)
+}
+
+func (e *historyEngineImpl) UpdateActivityOptions(
+	ctx context.Context,
+	request *historyservice.UpdateActivityOptionsRequest,
+) (*historyservice.UpdateActivityOptionsResponse, error) {
+	return updateactivityoptions.Invoke(ctx, request, e.shardContext, e.workflowConsistencyChecker)
 }

@@ -747,12 +747,39 @@ func (c *ContextImpl) mergeUpdateWithNewReplicationTasks(
 	newRunBranchToken := newRunTask.BranchToken
 	newRunID := newRunTask.RunID
 	taskUpdated := false
+
+	updateTask := func(task interface{}) bool {
+		switch t := task.(type) {
+		case *tasks.HistoryReplicationTask:
+			t.NewRunBranchToken = newRunBranchToken
+			t.NewRunID = newRunID
+			return true
+		case *tasks.SyncVersionedTransitionTask:
+			t.NewRunID = newRunID
+			taskEquivalents := t.TaskEquivalents
+			taskEquivalentsUpdated := false
+			for idx := len(taskEquivalents) - 1; idx >= 0; idx-- {
+				// For state based, we should update a sync versioned transition task and update a history task inside task equivalent.
+				if historyTask, ok := taskEquivalents[idx].(*tasks.HistoryReplicationTask); ok {
+					historyTask.NewRunBranchToken = newRunBranchToken
+					historyTask.NewRunID = newRunID
+					taskEquivalentsUpdated = true
+					break
+				}
+			}
+			if !taskEquivalentsUpdated {
+				c.logger.Error("SyncVersionedTransitionTask has no HistoryReplicationTask equivalent to update")
+			}
+			return taskEquivalentsUpdated
+		default:
+		}
+		return false
+	}
+
 	for idx := numCurrentReplicationTasks - 1; idx >= 0; idx-- {
 		replicationTask := currentWorkflowMutation.Tasks[tasks.CategoryReplication][idx]
-		if task, ok := replicationTask.(*tasks.HistoryReplicationTask); ok {
+		if updateTask(replicationTask) {
 			taskUpdated = true
-			task.NewRunBranchToken = newRunBranchToken
-			task.NewRunID = newRunID
 			break
 		}
 	}
@@ -1096,6 +1123,7 @@ func (c *ContextImpl) forceTerminateWorkflow(
 		nil,
 		consts.IdentityHistoryService,
 		false,
+		nil, // No links necessary.
 	)
 }
 

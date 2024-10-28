@@ -360,7 +360,7 @@ func (c *physicalTaskQueueManagerImpl) PollTask(
 		// history, but this is more efficient.
 		if task.event != nil && IsTaskExpired(task.event.AllocatedTaskInfo) {
 			c.metricsHandler.Counter(metrics.ExpiredTasksPerTaskQueueCounter.Name()).Record(1)
-			task.finish(nil)
+			task.finish(nil, false)
 			continue
 		}
 
@@ -395,7 +395,7 @@ func (c *physicalTaskQueueManagerImpl) ProcessSpooledTask(
 	task *internalTask,
 ) error {
 	if !c.taskValidator.maybeValidate(task.event.AllocatedTaskInfo, c.queue.TaskType()) {
-		task.finish(nil)
+		task.finish(nil, false)
 		c.metricsHandler.Counter(metrics.ExpiredTasksPerTaskQueueCounter.Name()).Record(1)
 		// Don't try to set read level here because it may have been advanced already.
 		return nil

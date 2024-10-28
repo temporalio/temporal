@@ -123,6 +123,7 @@ func (f *visibilityQueueFactory) CreateQueue(
 		f.MetricsHandler,
 		f.Config.VisibilityProcessorEnsureCloseBeforeDelete,
 		f.Config.VisibilityProcessorEnableCloseWorkflowCleanup,
+		f.Config.VisibilityProcessorRelocateAttributesMinBlobSize,
 	)
 	if f.ExecutorWrapper != nil {
 		executor = f.ExecutorWrapper.Wrap(executor)
@@ -141,7 +142,6 @@ func (f *visibilityQueueFactory) CreateQueue(
 		f.DLQWriter,
 		f.Config.TaskDLQEnabled,
 		f.Config.TaskDLQUnexpectedErrorAttempts,
-		f.Config.TaskDLQInternalErrors,
 		f.Config.TaskDLQErrorPattern,
 	)
 	return queues.NewImmediateQueue(

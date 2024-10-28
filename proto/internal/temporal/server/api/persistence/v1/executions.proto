@@ -167,7 +167,9 @@ message WorkflowExecutionInfo {
     // Used to check if visibility close task is processed before deleting the workflow execution.
     int64 close_visibility_task_id = 65;
     google.protobuf.Timestamp close_time = 66;
-    bool close_visibility_task_completed = 67;
+    // Relocatable attributes are memo and search attributes. If they were removed, then they are not
+    // present in the mutable state, and they should be in visibility store.
+    bool relocatable_attributes_removed = 67;
     temporal.server.api.workflow.v1.BaseExecutionInfo base_execution_info = 76;
     // If using build-id based versioning: version stamp of the last worker to complete a
     // workflow tasks for this workflow.
@@ -249,6 +251,9 @@ message WorkflowExecutionInfo {
     VersionedTransition signal_request_ids_last_update_versioned_transition = 94;
 
     repeated StateMachineTombstoneBatch sub_state_machine_tombstone_batches = 95;
+
+    // The workflow has been reset.
+    bool workflow_was_reset = 96;
 }
 
 message ExecutionStats {
@@ -362,6 +367,9 @@ message TimerTaskInfo {
     // If specified, the task is a for a workflow chain instead of a specific workflow run.
     // A workflow chain is identified by the run_id of the first workflow in the chain.
     string first_run_id = 15;
+
+    // The stamp represents the version of the activity for which the timer task was created.
+    int32 stamp = 16;
 }
 
 message ArchivalTaskInfo {
@@ -457,6 +465,14 @@ message ActivityInfo {
         // workflows redirect_counter value when this activity started last time
         int64 last_redirect_counter = 2;
     }
+
+    // First time the activity was scheduled.
+    google.protobuf.Timestamp first_scheduled_time = 39;
+
+    // Last time an activity failure was recorded by the server.
+    google.protobuf.Timestamp last_attempt_complete_time = 40;
+    // stamp represent "version" of activity during its lifetime. It can be changed with Activity API
+    int32 stamp = 41;
 }
 
 // timer_map column

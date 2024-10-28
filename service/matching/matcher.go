@@ -170,6 +170,11 @@ func (tm *TaskMatcher) Offer(ctx context.Context, task *internalTask) (bool, err
 			metrics.SyncThrottlePerTaskQueueCounter.With(tm.metricsHandler).Record(1)
 			return false, err
 		}
+		// because we waited on the rate limiter to offer this task,
+		// attach the rate limiter's RecycleToken func to the task
+		// so that if the task is later determined to be invalid,
+		// we can recycle the token it used.
+		task.recycleToken = tm.rateLimiter.RecycleToken
 	}
 
 	select {
@@ -317,6 +322,12 @@ func (tm *TaskMatcher) MustOffer(ctx context.Context, task *internalTask, interr
 		return err
 	}
 
+	// because we waited on the rate limiter to offer this task,
+	// attach the rate limiter's RecycleToken func to the task
+	// so that if the task is later determined to be invalid,
+	// we can recycle the token it used.
+	task.recycleToken = tm.rateLimiter.RecycleToken
+
 	// attempt a match with local poller first. When that
 	// doesn't succeed, try both local match and remote match
 	select {
@@ -393,9 +404,9 @@ forLoop:
 			}
 			cancel()
 			// at this point, we forwarded the task to a parent partition which
-			// in turn dispatched the task to a poller. Make sure we delete the
-			// task from the database
-			task.finish(nil)
+			// in turn dispatched the task to a poller, because there was no error.
+			// Make sure we delete the task from the database.
+			task.finish(nil, true)
 			tm.emitDispatchLatency(task, true)
 			return nil
 		case <-ctx.Done():
@@ -644,9 +655,7 @@ func (tm *TaskMatcher) getBacklogAge() time.Duration {
 
 	oldest := int64(math.MaxInt64)
 	for createTime := range tm.backlogTasksCreateTime {
-		if createTime < oldest {
-			oldest = createTime
-		}
+		oldest = min(oldest, createTime)
 	}
 
 	return time.Since(time.Unix(0, oldest))

@@ -78,7 +78,7 @@ type (
 		metricsHandler                 metrics.Handler
 		logger                         log.Logger
 		throttledLogger                log.Logger
-		commandAttrValidator           *commandAttrValidator
+		commandAttrValidator           *api.CommandAttrValidator
 		searchAttributesMapperProvider searchattribute.MapperProvider
 		searchAttributesValidator      *searchattribute.Validator
 		persistenceVisibilityMgr       manager.VisibilityManager
@@ -106,7 +106,7 @@ func NewWorkflowTaskCompletedHandler(
 		metricsHandler:             shardContext.GetMetricsHandler(),
 		logger:                     shardContext.GetLogger(),
 		throttledLogger:            shardContext.GetThrottledLogger(),
-		commandAttrValidator: newCommandAttrValidator(
+		commandAttrValidator: api.NewCommandAttrValidator(
 			shardContext.GetNamespaceRegistry(),
 			shardContext.GetConfig(),
 			searchAttributesValidator,
@@ -464,6 +464,7 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 				nil,
 				consts.IdentityHistoryService,
 				false,
+				nil, // No links necessary.
 			)
 			if err != nil {
 				return nil, err
@@ -614,6 +615,7 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 				payloads.EncodeString(updateErr.Error()),
 				consts.IdentityHistoryService,
 				false,
+				nil, // no links necessary.
 			); err != nil {
 				return nil, err
 			}

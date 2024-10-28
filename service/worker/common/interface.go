@@ -61,7 +61,9 @@ type (
 	PerNSWorkerComponent interface {
 		// Register registers Workflow and Activity types provided by this worker component.
 		// The namespace that this worker is running in is also provided.
-		Register(sdkworker.Registry, *namespace.Namespace, RegistrationDetails)
+		// If Register returns a function, that function will be called when the worker is
+		// stopped. This can be used to clean up any state.
+		Register(sdkworker.Registry, *namespace.Namespace, RegistrationDetails) func()
 		// DedicatedWorkerOptions returns a PerNSDedicatedWorkerOptions for this worker component.
 		DedicatedWorkerOptions(*namespace.Namespace) *PerNSDedicatedWorkerOptions
 	}

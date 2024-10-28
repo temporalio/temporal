@@ -38,6 +38,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/service/history/consts"
+	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/vclock"
@@ -94,6 +95,7 @@ func loadMutableStateForTransferTask(
 		tasks.GetTransferTaskEventID,
 		transferTaskMutableStateStaleChecker,
 		metricsHandler.WithTags(metrics.OperationTag(metrics.OperationTransferQueueProcessorScope)),
+		queues.GetActiveTransferTaskTypeTagValue(transferTask),
 		logger,
 	)
 	if err != nil {
@@ -141,6 +143,7 @@ func loadMutableStateForTimerTask(
 		tasks.GetTimerTaskEventID,
 		timerTaskMutableStateStaleChecker,
 		metricsHandler.WithTags(metrics.OperationTag(metrics.OperationTimerQueueProcessorScope)),
+		queues.GetActiveTimerTaskTypeTagValue(timerTask),
 		logger,
 	)
 }
@@ -153,6 +156,7 @@ func loadMutableStateForTask(
 	getEventID taskEventIDGetter,
 	canMutableStateBeStale mutableStateStaleChecker,
 	metricsHandler metrics.Handler,
+	taskTypeTag string,
 	logger log.Logger,
 ) (workflow.MutableState, error) {
 
@@ -209,7 +213,8 @@ func loadMutableStateForTask(
 	}
 	// After reloading mutable state from a database, task's event ID is still not valid,
 	// means that task is obsolete and can be safely skipped.
-	metrics.TaskSkipped.With(metricsHandler).Record(1)
+	getNamespaceTagByID(shardContext.GetNamespaceRegistry(), task.GetNamespaceID())
+	metrics.TaskSkipped.With(metricsHandler).Record(1, getNamespaceTagByID(shardContext.GetNamespaceRegistry(), task.GetNamespaceID()), metrics.TaskTypeTag(taskTypeTag))
 	logger.Info("Task processor skipping task: task event ID >= MS NextEventID.",
 		tag.WorkflowNextEventID(mutableState.GetNextEventID()),
 	)

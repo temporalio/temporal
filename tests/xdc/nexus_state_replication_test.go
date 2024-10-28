@@ -25,12 +25,12 @@ package xdc
 import (
 	"context"
 	"errors"
-	"flag"
 	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"slices"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -47,7 +47,6 @@ import (
 	"go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	sdkclient "go.temporal.io/sdk/client"
-	"go.uber.org/atomic"
 
 	"go.temporal.io/server/common/dynamicconfig"
 	commonnexus "go.temporal.io/server/common/nexus"
@@ -55,7 +54,7 @@ import (
 	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/components/callbacks"
 	"go.temporal.io/server/components/nexusoperations"
-	"go.temporal.io/server/tests"
+	"go.temporal.io/server/tests/testcore"
 )
 
 type NexusStateReplicationSuite struct {
@@ -63,7 +62,7 @@ type NexusStateReplicationSuite struct {
 }
 
 func TestNexusStateReplicationTestSuite(t *testing.T) {
-	flag.Parse()
+	t.Parallel()
 	suite.Run(t, new(NexusStateReplicationSuite))
 }
 
@@ -103,7 +102,8 @@ func (s *NexusStateReplicationSuite) TestNexusOperationEventsReplicated() {
 	var callbackToken string
 	var publicCallbackUrl string
 
-	failStartOperation := atomic.NewBool(true)
+	failStartOperation := atomic.Bool{}
+	failStartOperation.Store(true)
 	h := nexustest.Handler{
 		OnStartOperation: func(ctx context.Context, service, operation string, input *nexus.LazyValue, options nexus.StartOperationOptions) (nexus.HandlerStartOperationResult[any], error) {
 			if failStartOperation.Load() {
@@ -118,21 +118,21 @@ func (s *NexusStateReplicationSuite) TestNexusOperationEventsReplicated() {
 	listenAddr := nexustest.AllocListenAddress(s.T())
 	nexustest.NewNexusServer(s.T(), listenAddr, h)
 
-	ctx := tests.NewContext()
+	ctx := testcore.NewContext()
 	ns := s.createGlobalNamespace()
-	endpointName := tests.RandomizedNexusEndpoint(s.T().Name())
+	endpointName := testcore.RandomizedNexusEndpoint(s.T().Name())
 
 	// Set URL template after httpAPAddress is set, see commonnexus.RouteCompletionCallback.
-	for _, cluster := range []*tests.TestCluster{s.cluster1, s.cluster2} {
+	for _, cluster := range []*testcore.TestCluster{s.cluster1, s.cluster2} {
 		cluster.OverrideDynamicConfig(
 			s.T(),
 			nexusoperations.CallbackURLTemplate,
 			// We'll send the callback to cluster1, when we fail back to it.
-			"http://"+s.cluster1.GetHost().FrontendHTTPAddress()+"/namespaces/{{.NamespaceName}}/nexus/callback")
+			"http://"+s.cluster1.Host().FrontendHTTPAddress()+"/namespaces/{{.NamespaceName}}/nexus/callback")
 	}
 
 	// Nexus endpoints registry isn't replicated yet, manually create the same endpoint in both clusters.
-	for _, cl := range []operatorservice.OperatorServiceClient{s.cluster1.GetOperatorClient(), s.cluster2.GetOperatorClient()} {
+	for _, cl := range []operatorservice.OperatorServiceClient{s.cluster1.OperatorClient(), s.cluster2.OperatorClient()} {
 		_, err := cl.CreateNexusEndpoint(ctx, &operatorservice.CreateNexusEndpointRequest{
 			Spec: &nexuspb.EndpointSpec{
 				Name: endpointName,
@@ -149,12 +149,12 @@ func (s *NexusStateReplicationSuite) TestNexusOperationEventsReplicated() {
 	}
 
 	sdkClient1, err := sdkclient.Dial(sdkclient.Options{
-		HostPort:  s.cluster1.GetHost().FrontendGRPCAddress(),
+		HostPort:  s.cluster1.Host().FrontendGRPCAddress(),
 		Namespace: ns,
 	})
 	s.NoError(err)
 	sdkClient2, err := sdkclient.Dial(sdkclient.Options{
-		HostPort:  s.cluster2.GetHost().FrontendGRPCAddress(),
+		HostPort:  s.cluster2.Host().FrontendGRPCAddress(),
 		Namespace: ns,
 	})
 	s.NoError(err)
@@ -165,8 +165,8 @@ func (s *NexusStateReplicationSuite) TestNexusOperationEventsReplicated() {
 	}, "workflow")
 	s.NoError(err)
 
-	pollRes := s.pollWorkflowTask(ctx, s.cluster1.GetFrontendClient(), ns)
-	_, err = s.cluster1.GetFrontendClient().RespondWorkflowTaskCompleted(ctx, &workflowservice.RespondWorkflowTaskCompletedRequest{
+	pollRes := s.pollWorkflowTask(ctx, s.cluster1.FrontendClient(), ns)
+	_, err = s.cluster1.FrontendClient().RespondWorkflowTaskCompleted(ctx, &workflowservice.RespondWorkflowTaskCompletedRequest{
 		TaskToken: pollRes.TaskToken,
 		Commands: []*commandpb.Command{
 			{
@@ -190,11 +190,11 @@ func (s *NexusStateReplicationSuite) TestNexusOperationEventsReplicated() {
 	s.waitOperationRetry(ctx, sdkClient2, run)
 
 	// Now failover, and let cluster2 be the active.
-	s.failover(ns, s.clusterNames[1], 2, s.cluster1.GetFrontendClient())
+	s.failover(ns, s.clusterNames[1], 2, s.cluster1.FrontendClient())
 
 	s.NoError(sdkClient2.SignalWorkflow(ctx, run.GetID(), run.GetRunID(), "dont-care", nil))
 
-	pollRes = s.pollWorkflowTask(ctx, s.cluster2.GetFrontendClient(), ns)
+	pollRes = s.pollWorkflowTask(ctx, s.cluster2.FrontendClient(), ns)
 
 	// Unblock nexus operation start after failover.
 	failStartOperation.Store(false)
@@ -207,15 +207,15 @@ func (s *NexusStateReplicationSuite) TestNexusOperationEventsReplicated() {
 		return op.State == enumspb.PENDING_NEXUS_OPERATION_STATE_STARTED
 	}, time.Second*20, time.Millisecond*100)
 
-	_, err = s.cluster2.GetFrontendClient().RespondWorkflowTaskCompleted(ctx, &workflowservice.RespondWorkflowTaskCompletedRequest{
+	_, err = s.cluster2.FrontendClient().RespondWorkflowTaskCompleted(ctx, &workflowservice.RespondWorkflowTaskCompletedRequest{
 		TaskToken: pollRes.TaskToken,
 		Commands:  []*commandpb.Command{}, // No need to generate other commands, this "workflow" just waits for the operation to complete.
 	})
 	s.NoError(err)
 
 	// Poll in cluster2 (previously standby) and verify the operation was started.
-	pollRes = s.pollWorkflowTask(ctx, s.cluster2.GetFrontendClient(), ns)
-	_, err = s.cluster2.GetFrontendClient().RespondWorkflowTaskCompleted(ctx, &workflowservice.RespondWorkflowTaskCompletedRequest{
+	pollRes = s.pollWorkflowTask(ctx, s.cluster2.FrontendClient(), ns)
+	_, err = s.cluster2.FrontendClient().RespondWorkflowTaskCompleted(ctx, &workflowservice.RespondWorkflowTaskCompletedRequest{
 		TaskToken: pollRes.TaskToken,
 		Commands:  []*commandpb.Command{}, // No need to generate other commands, this "workflow" just waits for the operation to complete.
 	})
@@ -229,13 +229,13 @@ func (s *NexusStateReplicationSuite) TestNexusOperationEventsReplicated() {
 	s.waitEvent(ctx, sdkClient1, run, enumspb.EVENT_TYPE_NEXUS_OPERATION_STARTED)
 
 	// Fail back to cluster1.
-	s.failover(ns, s.clusterNames[0], 11, s.cluster2.GetFrontendClient())
+	s.failover(ns, s.clusterNames[0], 11, s.cluster2.FrontendClient())
 
 	s.completeNexusOperation(ctx, "result", publicCallbackUrl, callbackToken)
 
 	// Verify completion triggers a new workflow task and that the workflow completes.
-	pollRes = s.pollWorkflowTask(ctx, s.cluster1.GetFrontendClient(), ns)
-	_, err = s.cluster1.GetFrontendClient().RespondWorkflowTaskCompleted(ctx, &workflowservice.RespondWorkflowTaskCompletedRequest{
+	pollRes = s.pollWorkflowTask(ctx, s.cluster1.FrontendClient(), ns)
+	_, err = s.cluster1.FrontendClient().RespondWorkflowTaskCompleted(ctx, &workflowservice.RespondWorkflowTaskCompletedRequest{
 		TaskToken: pollRes.TaskToken,
 		Commands: []*commandpb.Command{
 			{
@@ -264,21 +264,21 @@ func (s *NexusStateReplicationSuite) TestNexusOperationCancelationReplicated() {
 	listenAddr := nexustest.AllocListenAddress(s.T())
 	nexustest.NewNexusServer(s.T(), listenAddr, h)
 
-	ctx := tests.NewContext()
+	ctx := testcore.NewContext()
 	ns := s.createGlobalNamespace()
-	endpointName := tests.RandomizedNexusEndpoint(s.T().Name())
+	endpointName := testcore.RandomizedNexusEndpoint(s.T().Name())
 
 	// Set URL template after httpAPAddress is set, see commonnexus.RouteCompletionCallback.
 	// We don't actually want to deliver callbacks in this test, the config just has to be set for nexus task execution.
-	for _, cluster := range []*tests.TestCluster{s.cluster1, s.cluster2} {
+	for _, cluster := range []*testcore.TestCluster{s.cluster1, s.cluster2} {
 		cluster.OverrideDynamicConfig(
 			s.T(),
 			nexusoperations.CallbackURLTemplate,
-			"http://"+s.cluster1.GetHost().FrontendHTTPAddress()+"/namespaces/{{.NamespaceName}}/nexus/callback")
+			"http://"+s.cluster1.Host().FrontendHTTPAddress()+"/namespaces/{{.NamespaceName}}/nexus/callback")
 	}
 
 	// Nexus endpoints registry isn't replicated yet, manually create the same endpoint in both clusters.
-	for _, cl := range []operatorservice.OperatorServiceClient{s.cluster1.GetOperatorClient(), s.cluster2.GetOperatorClient()} {
+	for _, cl := range []operatorservice.OperatorServiceClient{s.cluster1.OperatorClient(), s.cluster2.OperatorClient()} {
 		_, err := cl.CreateNexusEndpoint(ctx, &operatorservice.CreateNexusEndpointRequest{
 			Spec: &nexuspb.EndpointSpec{
 				Name: endpointName,
@@ -295,12 +295,12 @@ func (s *NexusStateReplicationSuite) TestNexusOperationCancelationReplicated() {
 	}
 
 	sdkClient1, err := sdkclient.Dial(sdkclient.Options{
-		HostPort:  s.cluster1.GetHost().FrontendGRPCAddress(),
+		HostPort:  s.cluster1.Host().FrontendGRPCAddress(),
 		Namespace: ns,
 	})
 	s.NoError(err)
 	sdkClient2, err := sdkclient.Dial(sdkclient.Options{
-		HostPort:  s.cluster2.GetHost().FrontendGRPCAddress(),
+		HostPort:  s.cluster2.Host().FrontendGRPCAddress(),
 		Namespace: ns,
 	})
 	s.NoError(err)
@@ -311,8 +311,8 @@ func (s *NexusStateReplicationSuite) TestNexusOperationCancelationReplicated() {
 	}, "workflow")
 	s.NoError(err)
 
-	pollRes := s.pollWorkflowTask(ctx, s.cluster1.GetFrontendClient(), ns)
-	_, err = s.cluster1.GetFrontendClient().RespondWorkflowTaskCompleted(ctx, &workflowservice.RespondWorkflowTaskCompletedRequest{
+	pollRes := s.pollWorkflowTask(ctx, s.cluster1.FrontendClient(), ns)
+	_, err = s.cluster1.FrontendClient().RespondWorkflowTaskCompleted(ctx, &workflowservice.RespondWorkflowTaskCompletedRequest{
 		TaskToken: pollRes.TaskToken,
 		Commands: []*commandpb.Command{
 			{
@@ -335,8 +335,8 @@ func (s *NexusStateReplicationSuite) TestNexusOperationCancelationReplicated() {
 	// Wake the workflow back up so it can request to cancel the operation.
 	s.NoError(sdkClient1.SignalWorkflow(ctx, run.GetID(), run.GetRunID(), "wake-up", nil))
 
-	pollRes = s.pollWorkflowTask(ctx, s.cluster1.GetFrontendClient(), ns)
-	_, err = s.cluster1.GetFrontendClient().RespondWorkflowTaskCompleted(ctx, &workflowservice.RespondWorkflowTaskCompletedRequest{
+	pollRes = s.pollWorkflowTask(ctx, s.cluster1.FrontendClient(), ns)
+	_, err = s.cluster1.FrontendClient().RespondWorkflowTaskCompleted(ctx, &workflowservice.RespondWorkflowTaskCompletedRequest{
 		TaskToken: pollRes.TaskToken,
 		Commands: []*commandpb.Command{
 			{
@@ -354,8 +354,8 @@ func (s *NexusStateReplicationSuite) TestNexusOperationCancelationReplicated() {
 	// Verify the canceled event is replicated and the passive cluster catches up.
 	s.waitEvent(ctx, sdkClient2, run, enumspb.EVENT_TYPE_NEXUS_OPERATION_CANCELED)
 
-	pollRes = s.pollWorkflowTask(ctx, s.cluster1.GetFrontendClient(), ns)
-	_, err = s.cluster1.GetFrontendClient().RespondWorkflowTaskCompleted(ctx, &workflowservice.RespondWorkflowTaskCompletedRequest{
+	pollRes = s.pollWorkflowTask(ctx, s.cluster1.FrontendClient(), ns)
+	_, err = s.cluster1.FrontendClient().RespondWorkflowTaskCompleted(ctx, &workflowservice.RespondWorkflowTaskCompletedRequest{
 		TaskToken: pollRes.TaskToken,
 		Commands: []*commandpb.Command{
 			{
@@ -381,7 +381,8 @@ func (s *NexusStateReplicationSuite) TestNexusOperationCancelationReplicated() {
 // 5. Failover to cluster2 and unblock the callback by removing the injected error.
 // 6. Wait for the callback to complete on both clusters.
 func (s *NexusStateReplicationSuite) TestNexusCallbackReplicated() {
-	failCallback := atomic.NewBool(true)
+	failCallback := atomic.Bool{}
+	failCallback.Store(true)
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if failCallback.Load() {
 			w.WriteHeader(http.StatusInternalServerError)
@@ -392,16 +393,16 @@ func (s *NexusStateReplicationSuite) TestNexusCallbackReplicated() {
 	}))
 	defer ts.Close()
 
-	ctx := tests.NewContext()
+	ctx := testcore.NewContext()
 	ns := s.createGlobalNamespace()
 
 	sdkClient1, err := sdkclient.Dial(sdkclient.Options{
-		HostPort:  s.cluster1.GetHost().FrontendGRPCAddress(),
+		HostPort:  s.cluster1.Host().FrontendGRPCAddress(),
 		Namespace: ns,
 	})
 	s.NoError(err)
 	sdkClient2, err := sdkclient.Dial(sdkclient.Options{
-		HostPort:  s.cluster2.GetHost().FrontendGRPCAddress(),
+		HostPort:  s.cluster2.Host().FrontendGRPCAddress(),
 		Namespace: ns,
 	})
 	s.NoError(err)
@@ -438,7 +439,7 @@ func (s *NexusStateReplicationSuite) TestNexusCallbackReplicated() {
 	})
 
 	// Failover to cluster2.
-	s.failover(ns, s.clusterNames[1], 2, s.cluster1.GetFrontendClient())
+	s.failover(ns, s.clusterNames[1], 2, s.cluster1.FrontendClient())
 
 	// Unblock callback after failover.
 	failCallback.Store(false)

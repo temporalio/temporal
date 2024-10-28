@@ -749,3 +749,83 @@ func (s *versionHistoriesSuite) TestSplitVersionHistoryToLocalGeneratedAndRemote
 	s.Equal(localItems, past)
 	s.Equal(remoteItems, future)
 }
+
+func (s *versionHistoriesSuite) TestFindLCAVersionHistoryItemFromItems() {
+	s.findLCAVersionHistoryItemFromItemsTestBase(
+		[][]*historyspb.VersionHistoryItem{
+			{
+				{EventId: 3, Version: 1},
+				{EventId: 5, Version: 2},
+				{EventId: 7, Version: 3},
+			},
+			{
+				{EventId: 3, Version: 1},
+				{EventId: 5, Version: 2},
+				{EventId: 7, Version: 4},
+			},
+		},
+		[]*historyspb.VersionHistoryItem{
+			{EventId: 4, Version: 1},
+		},
+		&historyspb.VersionHistoryItem{EventId: 3, Version: 1},
+		0,
+		nil,
+	)
+	s.findLCAVersionHistoryItemFromItemsTestBase(
+		[][]*historyspb.VersionHistoryItem{
+			{
+				{EventId: 3, Version: 1},
+				{EventId: 5, Version: 2},
+				{EventId: 7, Version: 3},
+			},
+			{
+				{EventId: 3, Version: 1},
+				{EventId: 5, Version: 2},
+				{EventId: 7, Version: 4},
+			},
+		},
+		[]*historyspb.VersionHistoryItem{
+			{EventId: 3, Version: 1},
+			{EventId: 5, Version: 2},
+			{EventId: 6, Version: 4},
+		},
+		&historyspb.VersionHistoryItem{EventId: 6, Version: 4},
+		1,
+		nil,
+	)
+	s.findLCAVersionHistoryItemFromItemsTestBase(
+		[][]*historyspb.VersionHistoryItem{
+			{
+				{EventId: 3, Version: 1},
+				{EventId: 5, Version: 2},
+				{EventId: 7, Version: 3},
+			},
+			{
+				{EventId: 3, Version: 1},
+				{EventId: 5, Version: 2},
+				{EventId: 7, Version: 4},
+			},
+		},
+		[]*historyspb.VersionHistoryItem{
+			{EventId: 1, Version: 1},
+			{EventId: 5, Version: 5},
+			{EventId: 6, Version: 6},
+		},
+		&historyspb.VersionHistoryItem{EventId: 1, Version: 1},
+		0,
+		nil,
+	)
+}
+
+func (s *versionHistoriesSuite) findLCAVersionHistoryItemFromItemsTestBase(
+	versionHistoryItemsA [][]*historyspb.VersionHistoryItem,
+	versionHistoryItemsB []*historyspb.VersionHistoryItem,
+	expectedItem *historyspb.VersionHistoryItem,
+	expectedIndex int32,
+	expectedError error,
+) {
+	item, index, err := FindLCAVersionHistoryItemFromItems(versionHistoryItemsA, versionHistoryItemsB)
+	s.Equal(expectedItem, item)
+	s.Equal(expectedIndex, index)
+	s.Equal(expectedError, err)
+}

@@ -224,6 +224,13 @@ $ go build -tags protolegacy ./cmd/server
 
 If you see an error like `grpc: error unmarshalling request: string field contains invalid UTF-8` then you've forgotten to specify this flag.
 
+## Go version update
+
+1. In this repository, update `go` in `go.mod`.
+2. In [docker-builds](https://github.com/temporalio/docker-builds/), update the base images:
+[base-ci-builder](https://github.com/temporalio/docker-builds/blob/main/docker/base-images/base-ci-builder.Dockerfile)
+and [base-builder](https://github.com/temporalio/docker-builds/blob/main/docker/base-images/base-builder.Dockerfile)
+
 ## License
 
 MIT License, please see [LICENSE](LICENSE) for details.
