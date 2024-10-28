@@ -41,6 +41,7 @@ type (
 		EventID             int64
 		Version             int64
 		Attempt             int32
+		Stamp               int32
 	}
 )
 
@@ -78,4 +79,12 @@ func (r *ActivityRetryTimerTask) GetCategory() Category {
 
 func (r *ActivityRetryTimerTask) GetType() enumsspb.TaskType {
 	return enumsspb.TASK_TYPE_ACTIVITY_RETRY_TIMER
+}
+
+func (r *ActivityRetryTimerTask) GetStamp() int32 {
+	return r.Stamp
+}
+
+func (r *ActivityRetryTimerTask) SetStamp(stamp int32) {
+	r.Stamp = stamp
 }

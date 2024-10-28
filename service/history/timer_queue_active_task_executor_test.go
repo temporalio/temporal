@@ -535,7 +535,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestProcessActivityTimeout_NoRetryPo
 		TaskID:              s.mustGenerateTaskID(),
 		TimeoutType:         enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE,
 		VisibilityTimestamp: task.(*tasks.ActivityTimeoutTask).VisibilityTimestamp,
-		EventID:             wt.ScheduledEventID,
+		EventID:             scheduledEvent.EventId,
 	}
 
 	persistenceMutableState := s.createPersistenceMutableState(mutableState, scheduledEvent.GetEventId(), scheduledEvent.GetVersion())
@@ -703,7 +703,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestProcessActivityTimeout_RetryPoli
 		TaskID:              s.mustGenerateTaskID(),
 		TimeoutType:         enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE,
 		VisibilityTimestamp: task.(*tasks.ActivityTimeoutTask).VisibilityTimestamp,
-		EventID:             wt.ScheduledEventID,
+		EventID:             scheduledEvent.EventId,
 	}
 
 	persistenceMutableState := s.createPersistenceMutableState(mutableState, scheduledEvent.GetEventId(), scheduledEvent.GetVersion())
@@ -795,7 +795,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestProcessActivityTimeout_RetryPoli
 		TaskID:              s.mustGenerateTaskID(),
 		TimeoutType:         enumspb.TIMEOUT_TYPE_START_TO_CLOSE,
 		VisibilityTimestamp: task.(*tasks.ActivityTimeoutTask).VisibilityTimestamp,
-		EventID:             wt.ScheduledEventID,
+		EventID:             scheduledEvent.EventId,
 	}
 
 	persistenceMutableState := s.createPersistenceMutableState(mutableState, scheduledEvent.GetEventId(), scheduledEvent.GetVersion())
@@ -893,7 +893,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestProcessActivityTimeout_RetryPoli
 		TaskID:              s.mustGenerateTaskID(),
 		TimeoutType:         enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE,
 		VisibilityTimestamp: task.(*tasks.ActivityTimeoutTask).VisibilityTimestamp,
-		EventID:             wt.ScheduledEventID,
+		EventID:             scheduledEvent.EventId,
 	}
 
 	persistenceMutableState := s.createPersistenceMutableState(mutableState, scheduledEvent.GetEventId(), scheduledEvent.GetVersion())
@@ -2000,4 +2000,102 @@ func (s *timerQueueActiveTaskExecutorSuite) mustGenerateTaskID() int64 {
 	taskID, err := s.mockShard.GenerateTaskID()
 	s.NoError(err)
 	return taskID
+}
+
+func (s *timerQueueActiveTaskExecutorSuite) TestProcessTimeoutTask() {
+	ms := workflow.NewMockMutableState(s.controller)
+
+	testCases := []struct {
+		name                         string
+		ai                           *persistencespb.ActivityInfo
+		timerSequenceID              workflow.TimerSequenceID
+		expectRetryActivity          bool
+		retryState                   enumspb.RetryState
+		retryError                   error
+		expectAddTimedTask           bool
+		expectedUpdateMutableState   bool
+		expectedScheduleWorkflowTask bool
+	}{
+		{
+			name: "Retry Policy Not Set",
+			timerSequenceID: workflow.TimerSequenceID{
+				Attempt: 1,
+			},
+			ai: &persistencespb.ActivityInfo{
+				Attempt: 1,
+				Stamp:   1,
+			},
+			expectRetryActivity:          true,
+			retryState:                   enumspb.RETRY_STATE_RETRY_POLICY_NOT_SET,
+			retryError:                   nil,
+			expectAddTimedTask:           true,
+			expectedUpdateMutableState:   true,
+			expectedScheduleWorkflowTask: true,
+		},
+		{
+			name: "Retry State Timeout",
+			timerSequenceID: workflow.TimerSequenceID{
+				Attempt: 1,
+			},
+			ai: &persistencespb.ActivityInfo{
+				Attempt: 1,
+				Stamp:   1,
+			},
+			expectRetryActivity:          true,
+			retryState:                   enumspb.RETRY_STATE_TIMEOUT,
+			retryError:                   nil,
+			expectAddTimedTask:           true,
+			expectedUpdateMutableState:   true,
+			expectedScheduleWorkflowTask: true,
+		},
+		{
+			name: "Retry State In Progress",
+			timerSequenceID: workflow.TimerSequenceID{
+				Attempt: 1,
+			},
+			ai: &persistencespb.ActivityInfo{
+				Attempt: 1,
+			},
+			expectRetryActivity:          true,
+			retryState:                   enumspb.RETRY_STATE_IN_PROGRESS,
+			retryError:                   nil,
+			expectAddTimedTask:           false,
+			expectedUpdateMutableState:   true,
+			expectedScheduleWorkflowTask: false,
+		},
+		{
+			name: "Attempt dont match",
+			timerSequenceID: workflow.TimerSequenceID{
+				Attempt: 1,
+			},
+			ai: &persistencespb.ActivityInfo{
+				Attempt: 2,
+			},
+			expectRetryActivity:          false,
+			expectAddTimedTask:           false,
+			expectedUpdateMutableState:   false,
+			expectedScheduleWorkflowTask: false,
+		},
+	}
+	info := &persistencespb.WorkflowExecutionInfo{}
+
+	for _, tc := range testCases {
+		s.Run(tc.name, func() {
+			if tc.expectRetryActivity {
+				ms.EXPECT().RetryActivity(gomock.Any(), gomock.Any()).Return(tc.retryState, tc.retryError)
+			}
+
+			if tc.expectAddTimedTask {
+				ms.EXPECT().GetExecutionInfo().Return(info).AnyTimes()
+				ms.EXPECT().AddActivityTaskTimedOutEvent(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, nil)
+			}
+
+			result, err := s.timerQueueActiveTaskExecutor.processSingleActivityTimeoutTask(
+				ms, tc.timerSequenceID, tc.ai)
+
+			s.NoError(err)
+			s.Equal(tc.expectedScheduleWorkflowTask, result.shouldScheduleWorkflowTask, "scheduleWorkflowTask")
+			s.Equal(tc.expectedUpdateMutableState, result.shouldUpdateMutableState, "updateMutableState")
+		})
+	}
 }

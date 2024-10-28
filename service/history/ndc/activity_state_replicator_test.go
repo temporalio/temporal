@@ -126,60 +126,6 @@ func (s *activityReplicatorStateSuite) TearDownTest() {
 	s.mockShard.StopForTest()
 }
 
-func (s *activityReplicatorStateSuite) TestRefreshTask_DiffCluster() {
-	version := int64(99)
-	attempt := int32(1)
-	localActivityInfo := &persistencespb.ActivityInfo{
-		Version: int64(100),
-		Attempt: attempt,
-	}
-
-	s.mockClusterMetadata.EXPECT().IsVersionFromSameCluster(version, localActivityInfo.Version).Return(false)
-
-	shouldReset := s.nDCActivityStateReplicator.shouldResetActivityTimerTaskMask(
-		version,
-		attempt,
-		localActivityInfo,
-	)
-	s.True(shouldReset)
-}
-
-func (s *activityReplicatorStateSuite) TestRefreshTask_SameCluster_DiffAttempt() {
-	version := int64(99)
-	attempt := int32(1)
-	localActivityInfo := &persistencespb.ActivityInfo{
-		Version: version,
-		Attempt: attempt + 1,
-	}
-
-	s.mockClusterMetadata.EXPECT().IsVersionFromSameCluster(version, version).Return(true)
-
-	shouldReset := s.nDCActivityStateReplicator.shouldResetActivityTimerTaskMask(
-		version,
-		attempt,
-		localActivityInfo,
-	)
-	s.True(shouldReset)
-}
-
-func (s *activityReplicatorStateSuite) TestRefreshTask_SameCluster_SameAttempt() {
-	version := int64(99)
-	attempt := int32(1)
-	localActivityInfo := &persistencespb.ActivityInfo{
-		Version: version,
-		Attempt: attempt,
-	}
-
-	s.mockClusterMetadata.EXPECT().IsVersionFromSameCluster(version, version).Return(true)
-
-	shouldReset := s.nDCActivityStateReplicator.shouldResetActivityTimerTaskMask(
-		version,
-		attempt,
-		localActivityInfo,
-	)
-	s.False(shouldReset)
-}
-
 func (s *activityReplicatorStateSuite) TestActivity_LocalVersionLarger() {
 	version := int64(123)
 	attempt := int32(1)
@@ -1035,8 +981,15 @@ func (s *activityReplicatorStateSuite) TestSyncActivity_ActivityFound_Zombie() {
 		ScheduledTime:    timestamppb.New(now),
 		VersionHistory:   incomingVersionHistory,
 	}, false).Return(nil)
+	s.mockMutableState.EXPECT().ShouldResetActivityTimerTaskMask(
+		&persistencespb.ActivityInfo{
+			Version: version,
+		},
+		&persistencespb.ActivityInfo{
+			Version: version,
+			Attempt: 0,
+		}).Return(false)
 	s.mockMutableState.EXPECT().GetPendingActivityInfos().Return(map[int64]*persistencespb.ActivityInfo{})
-	s.mockClusterMetadata.EXPECT().IsVersionFromSameCluster(version, version).Return(true)
 
 	weContext.EXPECT().UpdateWorkflowExecutionWithNew(
 		gomock.Any(),
@@ -1141,8 +1094,15 @@ func (s *activityReplicatorStateSuite) TestSyncActivities_ActivityFound_Zombie()
 		ScheduledTime:    timestamppb.New(now),
 		VersionHistory:   incomingVersionHistory,
 	}, false).Return(nil)
+	s.mockMutableState.EXPECT().ShouldResetActivityTimerTaskMask(
+		&persistencespb.ActivityInfo{
+			Version: version,
+		},
+		&persistencespb.ActivityInfo{
+			Version: version,
+			Attempt: 0,
+		}).Return(false)
 	s.mockMutableState.EXPECT().GetPendingActivityInfos().Return(map[int64]*persistencespb.ActivityInfo{})
-	s.mockClusterMetadata.EXPECT().IsVersionFromSameCluster(version, version).Return(true)
 
 	weContext.EXPECT().UpdateWorkflowExecutionWithNew(
 		gomock.Any(),
@@ -1243,9 +1203,15 @@ func (s *activityReplicatorStateSuite) TestSyncActivity_ActivityFound_NonZombie(
 		ScheduledTime:    timestamppb.New(now),
 		VersionHistory:   incomingVersionHistory,
 	}, false).Return(nil)
+	s.mockMutableState.EXPECT().ShouldResetActivityTimerTaskMask(
+		&persistencespb.ActivityInfo{
+			Version: version,
+		},
+		&persistencespb.ActivityInfo{
+			Version: version,
+			Attempt: 0,
+		}).Return(false)
 	s.mockMutableState.EXPECT().GetPendingActivityInfos().Return(map[int64]*persistencespb.ActivityInfo{})
-
-	s.mockClusterMetadata.EXPECT().IsVersionFromSameCluster(version, version).Return(true)
 
 	weContext.EXPECT().UpdateWorkflowExecutionWithNew(
 		gomock.Any(),
@@ -1350,9 +1316,15 @@ func (s *activityReplicatorStateSuite) TestSyncActivities_ActivityFound_NonZombi
 		ScheduledTime:    timestamppb.New(now),
 		VersionHistory:   incomingVersionHistory,
 	}, false).Return(nil)
+	s.mockMutableState.EXPECT().ShouldResetActivityTimerTaskMask(
+		&persistencespb.ActivityInfo{
+			Version: version,
+		},
+		&persistencespb.ActivityInfo{
+			Version: version,
+			Attempt: 0,
+		}).Return(false)
 	s.mockMutableState.EXPECT().GetPendingActivityInfos().Return(map[int64]*persistencespb.ActivityInfo{})
-
-	s.mockClusterMetadata.EXPECT().IsVersionFromSameCluster(version, version).Return(true)
 
 	weContext.EXPECT().UpdateWorkflowExecutionWithNew(
 		gomock.Any(),

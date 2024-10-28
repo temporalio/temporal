@@ -118,6 +118,7 @@ func Invoke(
 
 			postActions := &api.UpdateWorkflowAction{}
 			failure := request.GetFailure()
+			mutableState.RecordLastActivityStarted(ai)
 			retryState, err := mutableState.RetryActivity(ai, failure)
 			if err != nil {
 				return nil, err

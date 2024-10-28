@@ -48,7 +48,6 @@ import (
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/workflow"
 	"google.golang.org/protobuf/types/known/durationpb"
-	"google.golang.org/protobuf/types/known/emptypb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -168,52 +167,11 @@ func Invoke(
 	}
 
 	for _, ai := range mutableState.GetPendingActivityInfos() {
-		p := &workflowpb.PendingActivityInfo{
-			ActivityId: ai.ActivityId,
-		}
-		if ai.GetUseWorkflowBuildIdInfo() != nil {
-			p.AssignedBuildId = &workflowpb.PendingActivityInfo_UseWorkflowBuildId{UseWorkflowBuildId: &emptypb.Empty{}}
-		} else if ai.GetLastIndependentlyAssignedBuildId() != "" {
-			p.AssignedBuildId = &workflowpb.PendingActivityInfo_LastIndependentlyAssignedBuildId{
-				LastIndependentlyAssignedBuildId: ai.GetLastIndependentlyAssignedBuildId(),
-			}
-		}
-		if ai.CancelRequested {
-			p.State = enumspb.PENDING_ACTIVITY_STATE_CANCEL_REQUESTED
-		} else if ai.StartedEventId != common.EmptyEventID {
-			p.State = enumspb.PENDING_ACTIVITY_STATE_STARTED
-		} else {
-			p.State = enumspb.PENDING_ACTIVITY_STATE_SCHEDULED
-		}
-		if ai.LastHeartbeatUpdateTime != nil && !ai.LastHeartbeatUpdateTime.AsTime().IsZero() {
-			p.LastHeartbeatTime = ai.LastHeartbeatUpdateTime
-			p.HeartbeatDetails = ai.LastHeartbeatDetails
-		}
-		p.ActivityType, err = mutableState.GetActivityType(ctx, ai)
+		p, err := workflow.GetPendingActivityInfo(ctx, shard, mutableState, ai)
 		if err != nil {
 			return nil, err
 		}
-		if p.State == enumspb.PENDING_ACTIVITY_STATE_SCHEDULED {
-			p.ScheduledTime = ai.ScheduledTime
-		} else {
-			p.LastStartedTime = ai.StartedTime
-		}
-		p.LastWorkerIdentity = ai.StartedIdentity
-		if ai.HasRetryPolicy {
-			p.Attempt = ai.Attempt
-			p.ExpirationTime = ai.RetryExpirationTime
-			if ai.RetryMaximumAttempts != 0 {
-				p.MaximumAttempts = ai.RetryMaximumAttempts
-			}
-			if ai.RetryLastFailure != nil {
-				p.LastFailure = ai.RetryLastFailure
-			}
-			if p.LastWorkerIdentity == "" && ai.RetryLastWorkerIdentity != "" {
-				p.LastWorkerIdentity = ai.RetryLastWorkerIdentity
-			}
-		} else {
-			p.Attempt = 1
-		}
+
 		result.PendingActivities = append(result.PendingActivities, p)
 	}
 
@@ -241,7 +199,11 @@ func Invoke(
 		}
 	}
 
-	relocatableAttributes, err := workflow.RelocatableAttributesFetcherProvider(persistenceVisibilityMgr).Fetch(ctx, mutableState)
+	relocatableAttrsFetcher := workflow.RelocatableAttributesFetcherProvider(
+		shard.GetConfig(),
+		persistenceVisibilityMgr,
+	)
+	relocatableAttributes, err := relocatableAttrsFetcher.Fetch(ctx, mutableState)
 	if err != nil {
 		shard.GetLogger().Error(
 			"Failed to fetch relocatable attributes",

@@ -118,6 +118,7 @@ func (s *mutableStateMapperSuite) TestGetOrCreateHistoryBranch_ValidEventBatch_N
 		nil,
 		"",
 		nil,
+		false,
 	)
 	s.mockBranchMgr.EXPECT().
 		GetOrCreate(gomock.Any(), gomock.Any(), int64(11), gomock.Any()).Return(true, int32(0), nil).Times(1)
@@ -162,6 +163,7 @@ func (s *mutableStateMapperSuite) TestGetOrCreateHistoryBranch_ValidEventBatch_F
 		nil,
 		"",
 		nil,
+		false,
 	)
 	s.mockBranchMgr.EXPECT().
 		GetOrCreate(gomock.Any(), gomock.Any(), int64(11), gomock.Any()).Return(false, int32(0), nil).Times(1)
@@ -207,6 +209,7 @@ func (s *mutableStateMapperSuite) TestGetOrCreateHistoryBranch_ValidEventBatch_A
 		nil,
 		"",
 		nil,
+		false,
 	)
 	s.mockBranchMgr.EXPECT().
 		GetOrCreate(gomock.Any(), gomock.Any(), int64(11), gomock.Any()).Return(false, int32(0), nil).Times(1)
