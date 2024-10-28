@@ -65,17 +65,17 @@ func (m *MockTaskRefresher) EXPECT() *MockTaskRefresherMockRecorder {
 }
 
 // PartialRefresh mocks base method.
-func (m *MockTaskRefresher) PartialRefresh(ctx context.Context, mutableState MutableState, minVersionedTransition *persistence.VersionedTransition, prevStateMachineData []DataAndPath, skipHSMTaskRefresh bool) error {
+func (m *MockTaskRefresher) PartialRefresh(ctx context.Context, mutableState MutableState, minVersionedTransition *persistence.VersionedTransition) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "PartialRefresh", ctx, mutableState, minVersionedTransition, prevStateMachineData, skipHSMTaskRefresh)
+	ret := m.ctrl.Call(m, "PartialRefresh", ctx, mutableState, minVersionedTransition)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // PartialRefresh indicates an expected call of PartialRefresh.
-func (mr *MockTaskRefresherMockRecorder) PartialRefresh(ctx, mutableState, minVersionedTransition, prevStateMachineData, skipHSMTaskRefresh any) *gomock.Call {
+func (mr *MockTaskRefresherMockRecorder) PartialRefresh(ctx, mutableState, minVersionedTransition any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PartialRefresh", reflect.TypeOf((*MockTaskRefresher)(nil).PartialRefresh), ctx, mutableState, minVersionedTransition, prevStateMachineData, skipHSMTaskRefresh)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PartialRefresh", reflect.TypeOf((*MockTaskRefresher)(nil).PartialRefresh), ctx, mutableState, minVersionedTransition)
 }
 
 // Refresh mocks base method.

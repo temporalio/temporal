@@ -694,7 +694,7 @@ func (s *workflowReplicatorSuite) Test_ReplicateVersionedTransition_SameBranch_S
 		PartialRefresh(gomock.Any(), gomock.Any(), EqVersionedTransition(&persistencespb.VersionedTransition{
 			NamespaceFailoverVersion: 2,
 			TransitionCount:          18,
-		}), nil, false, // TODO
+		}),
 		).Return(nil).Times(1)
 
 	err := workflowStateReplicator.ReplicateVersionedTransition(context.Background(), versionedTransitionArtifact, "test")
@@ -868,7 +868,7 @@ func (s *workflowReplicatorSuite) Test_ReplicateVersionedTransition_SameBranch_S
 		PartialRefresh(gomock.Any(), gomock.Any(), EqVersionedTransition(&persistencespb.VersionedTransition{
 			NamespaceFailoverVersion: 2,
 			TransitionCount:          18,
-		}), nil, false, // TODO
+		}),
 		).Return(nil).Times(1)
 
 	err := workflowStateReplicator.ReplicateVersionedTransition(context.Background(), versionedTransitionArtifact, "test")

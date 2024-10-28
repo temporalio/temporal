@@ -3682,7 +3682,7 @@ func (s *mutableStateSuite) TestApplyMutation() {
 	targetMS.closeTransactionTrackLastUpdateVersionedTransition(TransactionPolicyActive)
 
 	mutation := s.buildMutation(targetMS)
-	_, err = currentMS.ApplyMutation(mutation)
+	err = currentMS.ApplyMutation(mutation)
 	s.NoError(err)
 
 	s.verifyMutableState(currentMS, targetMS, originMS)

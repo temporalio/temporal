@@ -1065,8 +1065,7 @@ func (s *taskRefresherSuite) TestRefreshSubStateMachineTasks() {
 	s.NoError(err)
 	hsmRoot.ClearTransactionState()
 
-	// TODO
-	err = s.taskRefresher.refreshTasksForSubStateMachines(s.mutableState, nil, nil, false)
+	err = s.taskRefresher.refreshTasksForSubStateMachines(s.mutableState, nil)
 	s.NoError(err)
 	refreshedTasks := s.mutableState.PopTasks()
 	s.Len(refreshedTasks[tasks.CategoryOutbound], 3)
@@ -1080,7 +1079,6 @@ func (s *taskRefresherSuite) TestRefreshSubStateMachineTasks() {
 			NamespaceFailoverVersion: s.namespaceEntry.FailoverVersion(),
 			TransitionCount:          4,
 		},
-		nil, false, // TODO
 	)
 	s.NoError(err)
 	refreshedTasks = s.mutableState.PopTasks()
