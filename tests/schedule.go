@@ -1121,8 +1121,6 @@ func (s *ScheduleFunctionalSuite) TestListSchedulesReturnsWorkflowStatus() {
 	scheduler.CurrentTweakablePolicies.Version = scheduler.ActionResultIncludesStatus
 	defer func() { scheduler.CurrentTweakablePolicies = prevTweakables }()
 
-	s.testCluster.host.workerService.RefreshPerNSWorkerManager()
-
 	sid := "sched-test-list-running"
 	wid := "sched-test-list-running-wf"
 	wt := "sched-test-list-running-wt"

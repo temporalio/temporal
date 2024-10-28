@@ -828,7 +828,7 @@ func (s *scheduler) processWatcherResult(id string, f workflow.Future, long bool
 	}
 
 	// now we know it's not running, remove from running workflow list
-	matchRunning := func(ex *commonpb.WorkflowExecution) bool { return ex.WorkflowId == id }
+	matchRunning := func(ex *commonpb.WorkflowExecution) bool { return ex.GetWorkflowId() == id }
 	if idx := slices.IndexFunc(s.Info.RunningWorkflows, matchRunning); idx >= 0 {
 		// We could also immediately update visibility, with updateMemoAndSearchAttributes,
 		// but the wakeup here will trigger a write after anyways (after processing the buffer).
@@ -842,7 +842,7 @@ func (s *scheduler) processWatcherResult(id string, f workflow.Future, long bool
 
 	// update workflow execution status in RecentActions
 	if s.hasMinVersion(ActionResultIncludesStatus) {
-		matchRecent := func(a *schedpb.ScheduleActionResult) bool { return a.StartWorkflowResult.WorkflowId == id }
+		matchRecent := func(a *schedpb.ScheduleActionResult) bool { return a.GetStartWorkflowResult().GetWorkflowId() == id }
 		if idx := slices.IndexFunc(s.Info.RecentActions, matchRecent); idx >= 0 {
 			s.Info.RecentActions[idx].Status = res.Status
 		}
