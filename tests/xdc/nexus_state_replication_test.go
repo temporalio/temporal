@@ -30,6 +30,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"slices"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -46,7 +47,6 @@ import (
 	"go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	sdkclient "go.temporal.io/sdk/client"
-	"go.uber.org/atomic"
 
 	"go.temporal.io/server/common/dynamicconfig"
 	commonnexus "go.temporal.io/server/common/nexus"
@@ -102,7 +102,8 @@ func (s *NexusStateReplicationSuite) TestNexusOperationEventsReplicated() {
 	var callbackToken string
 	var publicCallbackUrl string
 
-	failStartOperation := atomic.NewBool(true)
+	failStartOperation := atomic.Bool{}
+	failStartOperation.Store(true)
 	h := nexustest.Handler{
 		OnStartOperation: func(ctx context.Context, service, operation string, input *nexus.LazyValue, options nexus.StartOperationOptions) (nexus.HandlerStartOperationResult[any], error) {
 			if failStartOperation.Load() {
@@ -380,7 +381,8 @@ func (s *NexusStateReplicationSuite) TestNexusOperationCancelationReplicated() {
 // 5. Failover to cluster2 and unblock the callback by removing the injected error.
 // 6. Wait for the callback to complete on both clusters.
 func (s *NexusStateReplicationSuite) TestNexusCallbackReplicated() {
-	failCallback := atomic.NewBool(true)
+	failCallback := atomic.Bool{}
+	failCallback.Store(true)
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if failCallback.Load() {
 			w.WriteHeader(http.StatusInternalServerError)
