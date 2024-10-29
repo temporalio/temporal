@@ -429,8 +429,8 @@ func (r *WorkflowStateReplicatorImpl) applySnapshot(
 	versionedTransition *repication.VersionedTransitionArtifact,
 	sourceClusterName string,
 ) error {
-	snapshot := versionedTransition.GetSyncWorkflowStateSnapshotAttributes().State
-	if snapshot == nil {
+	attribute := versionedTransition.GetSyncWorkflowStateSnapshotAttributes()
+	if attribute == nil || attribute.State == nil {
 		var versionHistories *history.VersionHistories
 		if localMutableState != nil {
 			versionHistories = localMutableState.GetExecutionInfo().VersionHistories
@@ -444,6 +444,7 @@ func (r *WorkflowStateReplicatorImpl) applySnapshot(
 			versionHistories,
 		)
 	}
+	snapshot := attribute.State
 	if localMutableState == nil {
 		return r.applySnapshotWhenWorkflowNotExist(ctx, namespaceID, workflowID, runID, wfCtx, releaseFn, snapshot, sourceClusterName, versionedTransition.NewRunInfo, true)
 	}
