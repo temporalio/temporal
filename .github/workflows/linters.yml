@@ -59,8 +59,8 @@ jobs:
         run: |
           make lint-api
 
-  lint-imports:
-    name: lint-imports
+  fmt-imports:
+    name: fmt-imports
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -74,7 +74,7 @@ jobs:
 
       - name: lint golang import statements
         run: |
-          make lint-imports
+          make fmt-imports
 
       - name: check-is-dirty
         run: |
@@ -91,7 +91,7 @@ jobs:
       - lint-api
       - lint-protos
       - lint-actions
-      - lint-imports
+      - fmt-imports
     runs-on: ubuntu-latest
     if: always()
     env:
