@@ -297,7 +297,7 @@ func (s *NexusApiTestSuite) TestNexusStartOperation_WithNamespaceAndTaskQueue_Na
 	capture := s.GetTestCluster().Host().CaptureMetricsHandler().StartCapture()
 	defer s.GetTestCluster().Host().CaptureMetricsHandler().StopCapture(capture)
 	_, err = nexus.StartOperation(ctx, client, op, "input", nexus.StartOperationOptions{})
-	var unexpectedResponse *nexus.HandlerError
+	var handlerError *nexus.HandlerError
 	s.ErrorAs(err, &unexpectedResponse)
 	s.Equal(nexus.HandlerErrorTypeNotFound, unexpectedResponse.Type)
 	s.Equal(fmt.Sprintf("namespace not found: %q", namespace), unexpectedResponse.Failure.Message)
