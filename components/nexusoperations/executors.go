@@ -642,7 +642,7 @@ func nexusOperationFailure(operation Operation, scheduledEventID int64, cause *f
 }
 
 func startCallOutcomeTag(callCtx context.Context, result *nexus.ClientStartOperationResult[*nexus.LazyValue], callErr error) string {
-	var unexpectedResponseError *nexus.HandlerError
+	var handlerError *nexus.HandlerError
 	var opFailedError *nexus.UnsuccessfulOperationError
 
 	if callErr != nil {
