@@ -36,6 +36,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/namespace/namespacegetter"
 	"go.temporal.io/server/common/quotas/calculator"
 	"google.golang.org/grpc"
 )
@@ -96,7 +97,7 @@ func (ni *ConcurrentRequestLimitInterceptor) Intercept(
 	info *grpc.UnaryServerInfo,
 	handler grpc.UnaryHandler,
 ) (interface{}, error) {
-	nsName := MustGetNamespaceName(ni.namespaceRegistry, req)
+	nsName := namespacegetter.MustGetNamespaceName(ni.namespaceRegistry, req)
 	mh := GetMetricsHandlerFromContext(ctx, ni.logger)
 	cleanup, err := ni.Allow(nsName, info.FullMethod, mh, req)
 	defer cleanup()

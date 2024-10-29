@@ -32,6 +32,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/namespace/namespacegetter"
 	"go.temporal.io/server/common/quotas"
 	"google.golang.org/grpc"
 )
@@ -76,7 +77,7 @@ func (ni *NamespaceRateLimitInterceptor) Intercept(
 	info *grpc.UnaryServerInfo,
 	handler grpc.UnaryHandler,
 ) (interface{}, error) {
-	if ns := MustGetNamespaceName(ni.namespaceRegistry, req); ns != namespace.EmptyName {
+	if ns := namespacegetter.MustGetNamespaceName(ni.namespaceRegistry, req); ns != namespace.EmptyName {
 		if err := ni.Allow(ns, info.FullMethod, headers.NewGRPCHeaderGetter(ctx)); err != nil {
 			return nil, err
 		}

@@ -30,6 +30,7 @@ import (
 	"go.temporal.io/server/common/api"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/namespace/namespacegetter"
 	"google.golang.org/grpc"
 )
 
@@ -57,7 +58,7 @@ func (i *CallerInfoInterceptor) Intercept(
 ) (interface{}, error) {
 	ctx = PopulateCallerInfo(
 		ctx,
-		func() string { return string(MustGetNamespaceName(i.namespaceRegistry, req)) },
+		func() string { return string(namespacegetter.MustGetNamespaceName(i.namespaceRegistry, req)) },
 		func() string { return api.MethodName(info.FullMethod) },
 	)
 

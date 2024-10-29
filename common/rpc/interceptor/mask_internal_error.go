@@ -32,6 +32,7 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/namespace/namespacegetter"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -71,7 +72,7 @@ func (i *MaskInternalErrorDetailsInterceptor) Intercept(
 }
 
 func (i *MaskInternalErrorDetailsInterceptor) shouldMaskErrors(req any) bool {
-	ns := MustGetNamespaceName(i.namespaceRegistry, req)
+	ns := namespacegetter.MustGetNamespaceName(i.namespaceRegistry, req)
 	if ns.IsEmpty() {
 		return false
 	}

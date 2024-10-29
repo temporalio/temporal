@@ -340,7 +340,7 @@ func (p *NormalPartition) ParentPartition(degree int) (*NormalPartition, error) 
 
 func (p *NormalPartition) RpcName() string {
 	if p.IsRoot() {
-		return p.TaskQueue().family.Name()
+		return p.TaskQueue().Name()
 	}
 	return nonRootPartitionPrefix + p.TaskQueue().Name() + partitionDelimiter + strconv.Itoa(p.partitionId)
 }
@@ -356,6 +356,13 @@ func (p *NormalPartition) Key() PartitionKey {
 
 func (p *NormalPartition) RoutingKey() string {
 	return fmt.Sprintf("%s:%s:%d", p.NamespaceId(), p.RpcName(), p.TaskType())
+}
+
+func (p *NormalPartition) RoutingKeyWithoutPartition() string {
+	// We have to use the rpc name of the root partition here for compatibility, to match
+	// StickyPartition.RoutingKey, since we can't always tell if an rpc name is sticky or
+	// the root of a normal queue.
+	return fmt.Sprintf("%s:%s:%d", p.NamespaceId(), p.TaskQueue().Name(), p.TaskType())
 }
 
 // parseRpcName takes the rpc name of a task queue partition and returns a ParseTaskQueuePartition.

@@ -1203,6 +1203,25 @@ these log lines can be noisy, we want to be able to turn on and sample selective
 		time.Second,
 		`TaskQueueInfoByBuildIdTTL serves as a TTL for the cache holding DescribeTaskQueue partition results`,
 	)
+	MatchingSpreadPartitions = NewTaskQueueBoolSetting(
+		"matching.spreadPartitions",
+		false,
+		`Use LookupN instead of Lookup to spread partitions evenly across matching nodes.
+Note: Enabling on an active queue will cause temporarily disruption.`,
+	)
+	MatchingLocalBalancing = NewTaskQueueBoolSetting(
+		"matching.localBalancing",
+		false,
+		`Try to send tasks to matching nodes in the same process as history.
+This also requires matching.spreadPartitions to be set.`,
+	)
+	MatchingLocalBalancingCacheSize = NewGlobalIntSetting(
+		"matching.localBalancingCacheSize",
+		1000,
+		`Size of cache for matching.localBalancing. This should be more than the number of
+task queues using local balancing.`,
+	)
+
 	// for matching testing only:
 
 	TestMatchingDisableSyncMatch = NewGlobalBoolSetting(

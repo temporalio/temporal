@@ -7,7 +7,7 @@ import (
 
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
-	"go.temporal.io/server/common/rpc/interceptor"
+	"go.temporal.io/server/common/namespace/namespacegetter"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
@@ -136,7 +136,7 @@ func (icc *inlineClientConn) Invoke(
 
 	// Add metric
 	var namespaceTag metrics.Tag
-	if namespaceName := interceptor.MustGetNamespaceName(serviceMethod.namespaceRegistry, args); namespaceName != "" {
+	if namespaceName := namespacegetter.MustGetNamespaceName(serviceMethod.namespaceRegistry, args); namespaceName != "" {
 		namespaceTag = metrics.NamespaceTag(namespaceName.String())
 	} else {
 		namespaceTag = metrics.NamespaceUnknownTag()
