@@ -332,49 +332,64 @@ func (r *workflowResetterImpl) persistToDB(
 	currentWorkflowEventsSeq []*persistence.WorkflowEvents,
 	resetWorkflow Workflow,
 ) error {
-
-	if baseWorkflow != currentWorkflow && currentWorkflow != nil {
-		// Write to all three executions - base, current & reset (i.e new)
-		return baseWorkflow.GetContext().ConflictResolveWorkflowExecution(
-			ctx,
-			r.shardContext,
-			persistence.ConflictResolveWorkflowModeUpdateCurrent,
-			baseWorkflow.GetMutableState(),
-			resetWorkflow.GetContext(),
-			resetWorkflow.GetMutableState(),
-			currentWorkflow.GetContext(),
-			currentWorkflow.GetMutableState(),
-			workflow.TransactionPolicyPassive,
-			nil,
-			nil,
-		)
+	currentRunID := ""
+	if currentWorkflow != nil {
+		currentRunID = currentWorkflow.GetMutableState().GetExecutionState().GetRunId()
 	}
+	baseRunID := baseWorkflow.GetMutableState().GetExecutionState().GetRunId()
 
-	return baseWorkflow.GetContext().UpdateWorkflowExecutionWithNew(
-		ctx,
-		r.shardContext,
-		persistence.UpdateWorkflowModeUpdateCurrent,
-		resetWorkflow.GetContext(),
-		resetWorkflow.GetMutableState(),
-		workflow.TransactionPolicyPassive,
-		workflow.TransactionPolicyActive.Ptr(),
-	)
+	// if currentRunID != baseRunID {
+	// 	// Write to all three executions - base, current & reset (i.e new)
+	// 	return baseWorkflow.GetContext().ConflictResolveWorkflowExecution(
+	// 		ctx,
+	// 		r.shardContext,
+	// 		persistence.ConflictResolveWorkflowModeUpdateCurrent,
+	// 		baseWorkflow.GetMutableState(),
+	// 		resetWorkflow.GetContext(),
+	// 		resetWorkflow.GetMutableState(),
+	// 		currentWorkflow.GetContext(),
+	// 		currentWorkflow.GetMutableState(),
+	// 		workflow.TransactionPolicyPassive,
+	// 		nil,
+	// 		nil,
+	// 	)
+	// }
+
+	// return baseWorkflow.GetContext().UpdateWorkflowExecutionWithNew(
+	// 	ctx,
+	// 	r.shardContext,
+	// 	persistence.UpdateWorkflowModeUpdateCurrent,
+	// 	resetWorkflow.GetContext(),
+	// 	resetWorkflow.GetMutableState(),
+	// 	workflow.TransactionPolicyPassive,
+	// 	workflow.TransactionPolicyActive.Ptr(),
+	// )
 	//////////////////////////////////////////////////////////////////////////
 
-	resetWorkflowSnapshot, resetWorkflowEventsSeq, err := resetWorkflow.GetMutableState().CloseTransactionAsSnapshot(
-		workflow.TransactionPolicyActive,
-	)
-	if err != nil {
-		return err
-	}
+	// There are just 2 runs to update - the current run (same as base) and the new run.
+	if currentRunID == baseRunID {
+		// if currentWorkflowMutation != nil {
+		resetWorkflowSnapshot, resetWorkflowEventsSeq, err := resetWorkflow.GetMutableState().CloseTransactionAsSnapshot(
+			workflow.TransactionPolicyActive,
+		)
+		if err != nil {
+			return err
+		}
 
-	if currentWorkflowMutation != nil {
+		// baseMutation, baseEventsSeq, err := baseWorkflow.GetMutableState().CloseTransactionAsMutation(
+		// 	workflow.TransactionPolicyActive,
+		// )
+		// if err != nil {
+		// 	return err
+		// }
 		if _, _, err := r.transaction.UpdateWorkflowExecution(
 			ctx,
 			persistence.UpdateWorkflowModeUpdateCurrent,
 			currentWorkflow.GetMutableState().GetCurrentVersion(),
 			currentWorkflowMutation,
 			currentWorkflowEventsSeq,
+			// baseMutation,
+			// baseEventsSeq,
 			workflow.MutableStateFailoverVersion(resetWorkflow.GetMutableState()),
 			resetWorkflowSnapshot,
 			resetWorkflowEventsSeq,
@@ -384,23 +399,40 @@ func (r *workflowResetterImpl) persistToDB(
 		return nil
 	}
 
-	currentMutableState := currentWorkflow.GetMutableState()
-	currentRunID := currentMutableState.GetExecutionState().GetRunId()
-	currentCloseVersion, err := currentMutableState.GetCloseVersion()
-	if err != nil {
-		return err
-	}
-
-	return resetWorkflow.GetContext().CreateWorkflowExecution(
+	// We have 3 runs to update here - the base run, current run & the new run.
+	return currentWorkflow.GetContext().ConflictResolveWorkflowExecution(
 		ctx,
 		r.shardContext,
-		persistence.CreateWorkflowModeUpdateCurrent,
-		currentRunID,
-		currentCloseVersion,
+		persistence.ConflictResolveWorkflowModeUpdateCurrent,
+		baseWorkflow.GetMutableState(),
+		resetWorkflow.GetContext(),
 		resetWorkflow.GetMutableState(),
-		resetWorkflowSnapshot,
-		resetWorkflowEventsSeq,
+		currentWorkflow.GetContext(),
+		currentWorkflow.GetMutableState(),
+		workflow.TransactionPolicyPassive,
+		workflow.TransactionPolicyActive.Ptr(),
+		workflow.TransactionPolicyPassive.Ptr(),
+		// nil,
+		// nil,
 	)
+
+	// currentMutableState := currentWorkflow.GetMutableState()
+	// // currentRunID = currentMutableState.GetExecutionState().GetRunId()
+	// currentCloseVersion, err := currentMutableState.GetCloseVersion()
+	// if err != nil {
+	// 	return err
+	// }
+
+	// return resetWorkflow.GetContext().CreateWorkflowExecution(
+	// 	ctx,
+	// 	r.shardContext,
+	// 	persistence.CreateWorkflowModeUpdateCurrent,
+	// 	currentRunID,
+	// 	currentCloseVersion,
+	// 	resetWorkflow.GetMutableState(),
+	// 	resetWorkflowSnapshot,
+	// 	resetWorkflowEventsSeq,
+	// )
 }
 
 func (r *workflowResetterImpl) replayResetWorkflow(
