@@ -6609,6 +6609,7 @@ func (ms *MutableStateImpl) applyUpdatesToStateMachineNodes(
 		internalNode.InitialVersionedTransition = nodeMutation.InitialVersionedTransition
 		internalNode.LastUpdateVersionedTransition = nodeMutation.LastUpdateVersionedTransition
 		internalNode.TransitionCount++
+		// TODO: Cache invalidation. This must be fixed before state based replication is enabled.
 	}
 	return nil
 }
