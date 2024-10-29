@@ -1046,6 +1046,88 @@ func (s *ScheduleFunctionalSuite) TestRateLimit() {
 	s.Less(atomic.LoadInt32(&runs), int32(10))
 }
 
+func (s *ScheduleFunctionalSuite) TestListSchedulesReturnsWorkflowStatus() {
+	// TODO - remove when ActionResultIncludesStatus becomes the active version
+	prevTweakables := scheduler.CurrentTweakablePolicies
+	scheduler.CurrentTweakablePolicies.Version = scheduler.ActionResultIncludesStatus
+	defer func() { scheduler.CurrentTweakablePolicies = prevTweakables }()
+
+	sid := "sched-test-list-running"
+	wid := "sched-test-list-running-wf"
+	wt := "sched-test-list-running-wt"
+
+	// Set up a schedule that immediately starts a single running workflow
+	schedule := &schedulepb.Schedule{
+		Spec: &schedulepb.ScheduleSpec{
+			Interval: []*schedulepb.IntervalSpec{
+				{Interval: durationpb.New(3 * time.Second)},
+			},
+		},
+		Action: &schedulepb.ScheduleAction{
+			Action: &schedulepb.ScheduleAction_StartWorkflow{
+				StartWorkflow: &workflowpb.NewWorkflowExecutionInfo{
+					WorkflowId:   wid,
+					WorkflowType: &commonpb.WorkflowType{Name: wt},
+					TaskQueue:    &taskqueuepb.TaskQueue{Name: s.taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+				},
+			},
+		},
+	}
+	patch := &schedulepb.SchedulePatch{
+		TriggerImmediately: &schedulepb.TriggerImmediatelyRequest{},
+	}
+
+	// The workflow sits open until we've asserted it can be listed as running
+	waitChan := make(chan bool)
+	workflowFn := func(ctx workflow.Context) error {
+		<-waitChan
+		return nil
+	}
+	s.worker.RegisterWorkflowWithOptions(workflowFn, workflow.RegisterOptions{Name: wt})
+
+	req := &workflowservice.CreateScheduleRequest{
+		Namespace:    s.Namespace(),
+		ScheduleId:   sid,
+		Schedule:     schedule,
+		InitialPatch: patch,
+		Identity:     "test",
+		RequestId:    uuid.New(),
+	}
+	_, err := s.FrontendClient().CreateSchedule(testcore.NewContext(), req)
+	s.NoError(err)
+	defer s.cleanup(sid)
+
+	// validate RecentActions made it to visibility
+	listResp := s.getScheduleEntryFomVisibility(sid, nil)
+	s.NotNil(listResp.Info.RecentActions)
+	s.Equal(1, len(listResp.Info.RecentActions))
+
+	a1 := listResp.Info.RecentActions[0]
+	s.True(strings.HasPrefix(a1.StartWorkflowResult.WorkflowId, wid))
+	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, a1.Status)
+
+	// let the started workflow complete
+	waitChan <- true
+
+	// now wait for second recent action to land in visbility
+	listResp = s.getScheduleEntryFomVisibility(sid, func(listResp *schedulepb.ScheduleListEntry) bool {
+		return len(listResp.Info.RecentActions) >= 2
+	})
+
+	a1 = listResp.Info.RecentActions[0]
+	a2 := listResp.Info.RecentActions[1]
+	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, a1.Status)
+	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, a2.Status)
+
+	// Also verify that DescribeSchedule's output matches
+	descResp, err := s.FrontendClient().DescribeSchedule(testcore.NewContext(), &workflowservice.DescribeScheduleRequest{
+		Namespace:  s.Namespace(),
+		ScheduleId: sid,
+	})
+	s.NoError(err)
+	s.assertSameRecentActions(descResp, listResp)
+}
+
 func (s *ScheduleFunctionalSuite) TestNextTimeCache() {
 	sid := "sched-test-next-time-cache"
 	wid := "sched-test-next-time-cache-wf"
