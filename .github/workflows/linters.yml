@@ -58,6 +58,31 @@ jobs:
       - name: lint protobuf API definitions
         run: |
           make lint-api
+  lint-imports:
+    name: lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: 'go.mod'
+          check-latest: true
+
+      - name: lint golang import statements
+        run: |
+          make lint-imports
+
+      - name: check-is-dirty
+        run: |
+          if [[ -n $(git status --porcelain) ]]; then
+            echo "Detected uncommitted changes."
+            git status
+            git diff
+            exit 1
+          fi
 
   linters-succeed:
     name: All Linters Succeed
@@ -65,6 +90,7 @@ jobs:
       - lint-api
       - lint-protos
       - lint-actions
+      - lint-imports
     runs-on: ubuntu-latest
     if: always()
     env:

@@ -163,6 +163,12 @@ GOLANGCI_LINT_VERSION := v1.60.3
 GOLANGCI_LINT := $(LOCALBIN)/golangci-lint-$(GOLANGCI_LINT_VERSION)
 $(GOLANGCI_LINT): $(LOCALBIN)
 	$(call go-install-tool,$(GOLANGCI_LINT),github.com/golangci/golangci-lint/cmd/golangci-lint,$(GOLANGCI_LINT_VERSION))
+	
+# Don't get confused, there is a single linter called gci, and the mega linter we use is called golangci-lint.
+GCI_LINT_VERSION := v0.13.4
+GCI_LINT := $(LOCALBIN)/gci-$(GCI_LINT_VERSION)
+$(GCI_LINT): $(LOCALBIN)
+	$(call go-install-tool,$(GCI_LINT),github.com/daixiang0/gci,$(GCI_LINT_VERSION))
 
 GOTESTSUM_VER := v1.11
 GOTESTSUM := $(LOCALBIN)/gotestsum-$(GOTESTSUM_VER)
@@ -335,6 +341,10 @@ lint-actions: $(ACTIONLINT)
 lint-code: $(GOLANGCI_LINT)
 	@printf $(COLOR) "Linting code..."
 	@$(GOLANGCI_LINT) run --verbose --timeout 10m --fix=$(GOLANGCI_LINT_FIX) --new-from-rev=$(GOLANGCI_LINT_BASE_REV) --config=.golangci.yml
+
+lint-imports: $(GCI_LINT) # Don't get confused, there is a single linter called gci, and the mega linter we use is called golangci-lint.
+	@printf $(COLOR) "Linting imports..."
+	@$(GCI_LINT) write --skip-generated -s standard -s default ./*
 
 lint: lint-code lint-actions lint-api lint-protos
 	@printf $(COLOR) "Run linters..."
