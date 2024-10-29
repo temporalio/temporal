@@ -31,7 +31,6 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/suite"
-
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/sdk/client"
