@@ -375,7 +375,7 @@ func (e taskExecutor) saveResult(ctx context.Context, env hsm.Environment, ref h
 }
 
 func (e taskExecutor) handleStartOperationError(env hsm.Environment, node *hsm.Node, operation Operation, callErr error) (hsm.TransitionOutput, error) {
-	var unexpectedResponseError *nexus.HandlerError
+	var handlerError *nexus.HandlerError
 	var opFailedError *nexus.UnsuccessfulOperationError
 
 	if errors.As(callErr, &opFailedError) {
