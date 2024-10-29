@@ -151,6 +151,9 @@ func (r *ActivityStateReplicatorImpl) SyncActivityState(
 			LastStartedBuildId:         request.LastStartedBuildId,
 			LastStartedRedirectCounter: request.LastStartedRedirectCounter,
 			VersionHistory:             request.VersionHistory,
+			FirstScheduledTime:         request.FirstScheduledTime,
+			LastAttemptCompleteTime:    request.LastAttemptCompleteTime,
+			Stamp:                      request.Stamp,
 		},
 	)
 	if err != nil {
@@ -311,6 +314,7 @@ func (r *ActivityStateReplicatorImpl) syncSingleActivityState(
 			EventID:             activitySyncInfo.GetScheduledEventId(),
 			Version:             activitySyncInfo.GetVersion(),
 			Attempt:             activitySyncInfo.GetAttempt(),
+			Stamp:               activitySyncInfo.GetStamp(),
 		})
 	}
 

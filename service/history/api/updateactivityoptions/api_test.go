@@ -260,7 +260,7 @@ type (
 	}
 )
 
-func TestStateBuilderSuite(t *testing.T) {
+func TestActivityOptionsSuite(t *testing.T) {
 	s := new(activityOptionsSuite)
 	suite.Run(t, s)
 }
@@ -394,6 +394,7 @@ func (s *activityOptionsSuite) Test_updateActivityOptionsAcceptance() {
 
 	s.mockMutableState.EXPECT().IsWorkflowExecutionRunning().Return(true)
 	s.mockMutableState.EXPECT().GetActivityByActivityID(gomock.Any()).Return(fullActivityInfo, true)
+	s.mockMutableState.EXPECT().RegenerateActivityRetryTask(gomock.Any()).Return(nil)
 	s.mockMutableState.EXPECT().UpdateActivity(gomock.Any()).Return(nil)
 
 	request := &historyservice.UpdateActivityOptionsRequest{

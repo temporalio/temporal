@@ -1633,6 +1633,10 @@ func (ms *MutableStateImpl) UpdateActivityInfo(
 		ai.TimerTaskStatus = TimerTaskStatusNone
 	}
 
+	ai.FirstScheduledTime = incomingActivityInfo.GetFirstScheduledTime()
+	ai.LastAttemptCompleteTime = incomingActivityInfo.GetLastAttemptCompleteTime()
+	ai.Stamp = incomingActivityInfo.GetStamp()
+
 	ms.updateActivityInfos[ai.ScheduledEventId] = ai
 	ms.approximateSize += ai.Size()
 
@@ -4879,7 +4883,6 @@ func (ms *MutableStateImpl) RetryActivity(
 	}
 
 	now := ms.timeSource.Now().In(time.UTC)
-	// TODO retry should start from last failure time, not from now
 	retryBackoff, retryState := nextBackoffInterval(
 		ms.timeSource.Now().In(time.UTC),
 		ai.Attempt,
@@ -4910,6 +4913,36 @@ func (ms *MutableStateImpl) RecordLastActivityStarted(ai *persistencespb.Activit
 		ai.LastAttemptCompleteTime = timestamppb.New(ms.shard.GetTimeSource().Now().UTC())
 		return ai
 	})
+}
+
+func (ms *MutableStateImpl) RegenerateActivityRetryTask(ai *persistencespb.ActivityInfo) error {
+	// there are two possible cases:
+	// * this is the first time activity was scheduled
+	//  * in this case we should use current schedule time
+	// * this is a retry
+	//  * next scheduled time will be calculated, based on the retry policy and last time when activity was completed
+	//  * note - if delay interval was provided in the response it will be ignored
+
+	nextScheduledTime := ai.ScheduledTime.AsTime()
+	if ai.Attempt > 1 {
+		// calculate new schedule time
+		interval := ExponentialBackoffAlgorithm(ai.RetryInitialInterval, ai.RetryBackoffCoefficient, ai.Attempt)
+
+		if ai.RetryMaximumInterval.AsDuration() != 0 && (interval <= 0 || interval > ai.RetryMaximumInterval.AsDuration()) {
+			interval = ai.RetryMaximumInterval.AsDuration()
+		}
+
+		if interval > 0 {
+			nextScheduledTime = ai.LastAttemptCompleteTime.AsTime().Add(interval)
+		}
+	}
+
+	ms.updateActivityInfoForRetries(ai,
+		nextScheduledTime,
+		ai.Attempt,
+		nil)
+
+	return ms.taskGenerator.GenerateActivityRetryTasks(ai)
 }
 
 func (ms *MutableStateImpl) updateActivityInfoForRetries(
@@ -6474,10 +6507,13 @@ func (ms *MutableStateImpl) ShouldResetActivityTimerTaskMask(current, incoming *
 	// calculate whether to reset the activity timer task status bits
 	// reset timer task status bits if
 	// 1. same source cluster & attempt changes
-	// 2. different source cluster
+	// 2. same activity stamp
+	// 3. different source cluster
 	if !ms.clusterMetadata.IsVersionFromSameCluster(current.Version, incoming.Version) {
 		return true
 	} else if current.Attempt != incoming.Attempt {
+		return true
+	} else if current.Stamp != incoming.Stamp {
 		return true
 	}
 	return false

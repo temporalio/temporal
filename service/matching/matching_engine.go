@@ -508,6 +508,7 @@ func (e *matchingEngineImpl) AddActivityTask(
 		CreateTime:       timestamppb.New(now),
 		ExpiryTime:       expirationTime,
 		VersionDirective: addRequest.VersionDirective,
+		Stamp:            addRequest.Stamp,
 	}
 
 	return pm.AddTask(ctx, addTaskParams{
@@ -2257,6 +2258,7 @@ func (e *matchingEngineImpl) recordActivityTaskStarted(
 		RequestId:           uuid.New(),
 		PollRequest:         pollReq,
 		BuildIdRedirectInfo: task.redirectInfo,
+		Stamp:               task.event.Data.GetStamp(),
 	})
 }
 
