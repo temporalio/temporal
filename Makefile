@@ -164,7 +164,7 @@ GOLANGCI_LINT := $(LOCALBIN)/golangci-lint-$(GOLANGCI_LINT_VERSION)
 $(GOLANGCI_LINT): $(LOCALBIN)
 	$(call go-install-tool,$(GOLANGCI_LINT),github.com/golangci/golangci-lint/cmd/golangci-lint,$(GOLANGCI_LINT_VERSION))
 	
-# Don't get confused, there is a single linter called gci, and the mega linter we use is called golangci-lint.
+# Don't get confused, there is a single linter called gci, which is a part of the mega linter we use is called golangci-lint.
 GCI_VERSION := v0.13.4
 GCI := $(LOCALBIN)/gci-$(GCI_VERSION)
 $(GCI): $(LOCALBIN)
@@ -335,7 +335,7 @@ lint-code: $(GOLANGCI_LINT)
 	@printf $(COLOR) "Linting code..."
 	@$(GOLANGCI_LINT) run --verbose --timeout 10m --fix=$(GOLANGCI_LINT_FIX) --new-from-rev=$(GOLANGCI_LINT_BASE_REV) --config=.golangci.yml
 
-fmt-imports: $(GCI) # Don't get confused, there is a single linter called gci, and the mega linter we use is called golangci-lint.
+fmt-imports: $(GCI) # Don't get confused, there is a single linter called gci, which is a part of the mega linter we use is called golangci-lint.
 	@printf $(COLOR) "Formatting imports..."
 	@$(GCI) write --skip-generated -s standard -s default ./*
 
