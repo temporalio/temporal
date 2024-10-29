@@ -45,6 +45,8 @@ func TestTrackStateMachineTimer_MaintainsSortedSlice(t *testing.T) {
 	ms.EXPECT().NextTransitionCount().Return(int64(3)).AnyTimes()
 
 	workflow.TrackStateMachineTimer(ms, now, &persistencespb.StateMachineTaskInfo{Type: "0"})
+	// This should be deduped.
+	workflow.TrackStateMachineTimer(ms, now, &persistencespb.StateMachineTaskInfo{Type: "0"})
 	workflow.TrackStateMachineTimer(ms, now.Add(time.Hour), &persistencespb.StateMachineTaskInfo{Type: "1"})
 	workflow.TrackStateMachineTimer(ms, now.Add(time.Hour), &persistencespb.StateMachineTaskInfo{Type: "2"})
 	workflow.TrackStateMachineTimer(ms, now.Add(-time.Hour), &persistencespb.StateMachineTaskInfo{Type: "3"})

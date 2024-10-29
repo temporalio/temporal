@@ -30,6 +30,7 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/service/history/hsm"
 	"go.temporal.io/server/service/history/tasks"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -55,16 +56,23 @@ func AddNextStateMachineTimerTask(ms MutableState) {
 
 // TrackStateMachineTimer tracks a timer task in the mutable state's StateMachineTimers slice sorted and grouped by
 // deadline.
+// Tasks are deduplicated using proto equality.
 func TrackStateMachineTimer(ms MutableState, deadline time.Time, taskInfo *persistencespb.StateMachineTaskInfo) {
 	execInfo := ms.GetExecutionInfo()
 	group := &persistencespb.StateMachineTimerGroup{
 		Deadline: timestamppb.New(deadline),
 		Infos:    []*persistencespb.StateMachineTaskInfo{taskInfo},
 	}
-	idx, found := slices.BinarySearchFunc(execInfo.StateMachineTimers, group, func(a, b *persistencespb.StateMachineTimerGroup) int {
+	idx, groupFound := slices.BinarySearchFunc(execInfo.StateMachineTimers, group, func(a, b *persistencespb.StateMachineTimerGroup) int {
 		return a.Deadline.AsTime().Compare(b.Deadline.AsTime())
 	})
-	if found {
+	if groupFound {
+		taskFound := slices.ContainsFunc(execInfo.StateMachineTimers[idx].Infos, func(info *persistencespb.StateMachineTaskInfo) bool {
+			return proto.Equal(info, taskInfo)
+		})
+		if taskFound {
+			return
+		}
 		execInfo.StateMachineTimers[idx].Infos = append(execInfo.StateMachineTimers[idx].Infos, taskInfo)
 	} else {
 		execInfo.StateMachineTimers = slices.Insert(execInfo.StateMachineTimers, idx, group)
