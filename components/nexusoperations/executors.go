@@ -689,7 +689,7 @@ func isRetryableHTTPResponse(eType nexus.HandlerErrorType) bool {
 }
 
 func isDestinationDown(err error) bool {
-	var unexpectedErr *nexus.HandlerError
+	var handlerError *nexus.HandlerError
 	var opFailedErr *nexus.UnsuccessfulOperationError
 	if errors.As(err, &opFailedErr) {
 		return false
