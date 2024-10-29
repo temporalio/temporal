@@ -58,6 +58,7 @@ jobs:
       - name: lint protobuf API definitions
         run: |
           make lint-api
+
   lint-imports:
     name: lint-imports
     runs-on: ubuntu-latest
