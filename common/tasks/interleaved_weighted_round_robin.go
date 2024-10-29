@@ -153,7 +153,9 @@ func (s *InterleavedWeightedRoundRobinScheduler[T, K]) Stop() {
 
 	s.fifoScheduler.Stop()
 
-	s.abortTasks()
+	s.RLock()
+	s.abortTasksLocked()
+	s.RUnlock()
 
 	if success := common.AwaitWaitGroup(&s.shutdownWG, time.Minute); !success {
 		s.logger.Warn("interleaved weighted round robin task scheduler timed out on shutdown.")
@@ -173,9 +175,7 @@ func (s *InterleavedWeightedRoundRobinScheduler[T, K]) Submit(
 	// there are tasks pending dispatching, need to respect round roubin weight
 	// or currently unable to submit to fifo scheduler, either due to buffer is full
 	// or exceeding rate limit
-	channel := s.getOrCreateTaskChannel(s.options.TaskChannelKeyFn(task))
-	channel.Chan() <- task
-	s.notifyDispatcher()
+	_ = s.sendToChannel(s.options.TaskChannelKeyFn(task), task, false)
 }
 
 func (s *InterleavedWeightedRoundRobinScheduler[T, K]) TrySubmit(
@@ -187,15 +187,11 @@ func (s *InterleavedWeightedRoundRobinScheduler[T, K]) TrySubmit(
 	}
 
 	// there are tasks pending dispatching, need to respect round roubin weight
-	channel := s.getOrCreateTaskChannel(s.options.TaskChannelKeyFn(task))
-	select {
-	case channel.Chan() <- task:
-		s.notifyDispatcher()
-		return true
-	default:
+	sent := s.sendToChannel(s.options.TaskChannelKeyFn(task), task, true)
+	if !sent {
 		atomic.AddInt64(&s.numInflightTask, -1)
-		return false
 	}
+	return sent
 }
 
 func (s *InterleavedWeightedRoundRobinScheduler[T, K]) eventLoop() {
@@ -250,14 +246,16 @@ func (s *InterleavedWeightedRoundRobinScheduler[T, K]) doCleanup() {
 	}
 }
 
-func (s *InterleavedWeightedRoundRobinScheduler[T, K]) getOrCreateTaskChannel(
+func (s *InterleavedWeightedRoundRobinScheduler[T, K]) sendToChannel(
 	channelKey K,
-) *WeightedChannel[T] {
+	task T,
+	nonBlocking bool,
+) bool {
 	s.RLock()
 	channel, ok := s.weightedChannels[channelKey]
 	if ok {
-		s.RUnlock()
-		return channel
+		defer s.RUnlock()
+		return s.sendAndNotify(channel, task, nonBlocking)
 	}
 	s.RUnlock()
 
@@ -266,7 +264,7 @@ func (s *InterleavedWeightedRoundRobinScheduler[T, K]) getOrCreateTaskChannel(
 
 	channel, ok = s.weightedChannels[channelKey]
 	if ok {
-		return channel
+		return s.sendAndNotify(channel, task, nonBlocking)
 	}
 
 	weight := s.options.ChannelWeightFn(channelKey)
@@ -274,7 +272,26 @@ func (s *InterleavedWeightedRoundRobinScheduler[T, K]) getOrCreateTaskChannel(
 	s.weightedChannels[channelKey] = channel
 
 	s.flattenWeightedChannelsLocked()
-	return channel
+	return s.sendAndNotify(channel, task, nonBlocking)
+}
+
+func (s *InterleavedWeightedRoundRobinScheduler[T, K]) sendAndNotify(
+	channel *WeightedChannel[T],
+	task T,
+	nonBlocking bool,
+) bool {
+	if nonBlocking {
+		select {
+		case channel.Chan() <- task:
+			s.notifyDispatcher()
+			return true
+		default:
+			return false
+		}
+	}
+	channel.Chan() <- task
+	s.notifyDispatcher()
+	return true
 }
 
 func (s *InterleavedWeightedRoundRobinScheduler[T, K]) flattenWeightedChannelsLocked() {
@@ -300,7 +317,7 @@ func (s *InterleavedWeightedRoundRobinScheduler[T, K]) channels() WeightedChanne
 
 func (s *InterleavedWeightedRoundRobinScheduler[T, K]) notifyDispatcher() {
 	if s.isStopped() {
-		s.abortTasks()
+		s.abortTasksLocked()
 		return
 	}
 
@@ -391,10 +408,7 @@ func (s *InterleavedWeightedRoundRobinScheduler[T, K]) hasRemainingTasks() bool 
 	return numTasks > 0
 }
 
-func (s *InterleavedWeightedRoundRobinScheduler[T, K]) abortTasks() {
-	s.RLock()
-	defer s.RUnlock()
-
+func (s *InterleavedWeightedRoundRobinScheduler[T, K]) abortTasksLocked() {
 	numTasks := int64(0)
 DrainLoop:
 	for _, channel := range s.weightedChannels {
