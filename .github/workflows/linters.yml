@@ -72,7 +72,7 @@ jobs:
           go-version-file: 'go.mod'
           check-latest: true
 
-      - name: lint golang import statements
+      - name: format golang import statements
         run: |
           make fmt-imports
 
