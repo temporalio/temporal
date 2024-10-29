@@ -844,7 +844,7 @@ func (s *scheduler) processWatcherResult(id string, f workflow.Future, long bool
 	if s.hasMinVersion(ActionResultIncludesStatus) {
 		matchRecent := func(a *schedpb.ScheduleActionResult) bool { return a.GetStartWorkflowResult().GetWorkflowId() == id }
 		if idx := slices.IndexFunc(s.Info.RecentActions, matchRecent); idx >= 0 {
-			s.Info.RecentActions[idx].Status = res.Status
+			s.Info.RecentActions[idx].StartWorkflowStatus = res.Status
 		}
 	}
 
@@ -1383,7 +1383,7 @@ func (s *scheduler) startWorkflow(
 		}
 
 		if s.hasMinVersion(ActionResultIncludesStatus) {
-			actionResult.Status = enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING
+			actionResult.StartWorkflowStatus = enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING
 		}
 
 		return actionResult, nil

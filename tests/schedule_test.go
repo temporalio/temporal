@@ -1104,7 +1104,7 @@ func (s *ScheduleFunctionalSuite) TestListSchedulesReturnsWorkflowStatus() {
 
 	a1 := listResp.Info.RecentActions[0]
 	s.True(strings.HasPrefix(a1.StartWorkflowResult.WorkflowId, wid))
-	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, a1.Status)
+	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, a1.StartWorkflowStatus)
 
 	// let the started workflow complete
 	waitChan <- true
@@ -1116,8 +1116,8 @@ func (s *ScheduleFunctionalSuite) TestListSchedulesReturnsWorkflowStatus() {
 
 	a1 = listResp.Info.RecentActions[0]
 	a2 := listResp.Info.RecentActions[1]
-	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, a1.Status)
-	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, a2.Status)
+	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, a1.StartWorkflowStatus)
+	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, a2.StartWorkflowStatus)
 
 	// Also verify that DescribeSchedule's output matches
 	descResp, err := s.FrontendClient().DescribeSchedule(testcore.NewContext(), &workflowservice.DescribeScheduleRequest{
