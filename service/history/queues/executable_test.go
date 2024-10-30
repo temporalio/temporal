@@ -567,7 +567,7 @@ func (s *executableSuite) TestExecute_SendsInternalErrorsToDLQ_WhenEnabled() {
 func (s *executableSuite) TestExecute_DoesntSendInternalErrorsToDLQ_WhenDisabled() {
 	queueWriter := &queuestest.FakeQueueWriter{}
 	executable := s.newTestExecutable(func(p *params) {
-		p.dlqWriter = queues.NewDLQWriter(queueWriter, metrics.NoopMetricsHandler, log.NewTestLogger(), s.mockNamespaceRegistry)
+		p.dlqWriter = queues.NewDLQWriter(queueWriter, s.mockClusterMetadata, metrics.NoopMetricsHandler, log.NewTestLogger(), s.mockNamespaceRegistry)
 		p.dlqEnabled = func() bool {
 			return true
 		}
