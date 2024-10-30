@@ -143,6 +143,9 @@ func (s *workflowResetterSuite) TestPersistToDB_CurrentTerminated() {
 	currentWorkflow.EXPECT().GetContext().Return(currentContext).AnyTimes()
 	currentWorkflow.EXPECT().GetMutableState().Return(currentMutableState).AnyTimes()
 	currentWorkflow.EXPECT().GetReleaseFn().Return(currentReleaseFn).AnyTimes()
+	currentMutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{
+		RunId: s.currentRunID,
+	}).AnyTimes()
 
 	currentMutableState.EXPECT().GetCurrentVersion().Return(int64(0)).AnyTimes()
 	currentNewEventsSize := int64(3444)
@@ -211,7 +214,7 @@ func (s *workflowResetterSuite) TestPersistToDB_CurrentTerminated() {
 		resetEventsSeq,
 	).Return(currentNewEventsSize, resetNewEventsSize, nil)
 
-	err := s.workflowResetter.persistToDB(context.Background(), currentWorkflow, currentMutation, currentEventsSeq, resetWorkflow)
+	err := s.workflowResetter.persistToDB(context.Background(), currentWorkflow, currentWorkflow, currentMutation, currentEventsSeq, resetWorkflow)
 	s.NoError(err)
 	// persistToDB function is not charged of releasing locks
 	s.False(currentReleaseCalled)
@@ -219,8 +222,6 @@ func (s *workflowResetterSuite) TestPersistToDB_CurrentTerminated() {
 }
 
 func (s *workflowResetterSuite) TestPersistToDB_CurrentNotTerminated() {
-	currentCloseVersion := int64(1234)
-
 	currentWorkflow := NewMockWorkflow(s.controller)
 	currentReleaseCalled := false
 	currentContext := workflow.NewMockContext(s.controller)
@@ -233,12 +234,17 @@ func (s *workflowResetterSuite) TestPersistToDB_CurrentNotTerminated() {
 		RunId: s.currentRunID,
 	}).AnyTimes()
 
-	currentMutableState.EXPECT().GetCloseVersion().Return(currentCloseVersion, nil).AnyTimes()
+	// currentMutableState.EXPECT().GetCloseVersion().Return(currentCloseVersion, nil).AnyTimes()
+	currentMutation := &persistence.WorkflowMutation{}
+	currentEventsSeq := []*persistence.WorkflowEvents{{}}
+	currentMutableState.EXPECT().GetCurrentVersion().Return(int64(0)).AnyTimes()
+	currentMutableState.EXPECT().CloseTransactionAsMutation(workflow.TransactionPolicyActive).Return(currentMutation, currentEventsSeq, nil)
 
 	resetWorkflow := NewMockWorkflow(s.controller)
 	resetReleaseCalled := false
 	resetContext := workflow.NewMockContext(s.controller)
 	resetMutableState := workflow.NewMockMutableState(s.controller)
+	resetMutableState.EXPECT().GetCurrentVersion().Return(int64(0)).AnyTimes()
 	var tarGetReleaseFn wcache.ReleaseCacheFunc = func(error) { resetReleaseCalled = true }
 	resetWorkflow.EXPECT().GetContext().Return(resetContext).AnyTimes()
 	resetWorkflow.EXPECT().GetMutableState().Return(resetMutableState).AnyTimes()
@@ -259,18 +265,19 @@ func (s *workflowResetterSuite) TestPersistToDB_CurrentNotTerminated() {
 	resetMutableState.EXPECT().CloseTransactionAsSnapshot(
 		workflow.TransactionPolicyActive,
 	).Return(resetSnapshot, resetEventsSeq, nil)
-	resetContext.EXPECT().CreateWorkflowExecution(
+
+	s.mockTransaction.EXPECT().UpdateWorkflowExecution(
 		gomock.Any(),
-		s.mockShard,
-		persistence.CreateWorkflowModeUpdateCurrent,
-		s.currentRunID,
-		currentCloseVersion,
-		resetMutableState,
+		persistence.UpdateWorkflowModeUpdateCurrent,
+		int64(0),
+		currentMutation,
+		currentEventsSeq,
+		util.Ptr(int64(0)),
 		resetSnapshot,
 		resetEventsSeq,
-	).Return(nil)
+	).Return(int64(0), int64(0), nil)
 
-	err := s.workflowResetter.persistToDB(context.Background(), currentWorkflow, nil, nil, resetWorkflow)
+	err := s.workflowResetter.persistToDB(context.Background(), currentWorkflow, currentWorkflow, nil, nil, resetWorkflow)
 	s.NoError(err)
 	// persistToDB function is not charged of releasing locks
 	s.False(currentReleaseCalled)
