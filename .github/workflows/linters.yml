@@ -60,7 +60,6 @@ jobs:
           make lint-api
 
   fmt-imports:
-    name: fmt-imports
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -85,6 +84,31 @@ jobs:
             exit 1
           fi
 
+  golangci:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: 'go.mod'
+          check-latest: true
+
+      - name: lint code
+        run: |
+          make GOLANGCI_LINT_FIX=false GOLANGCI_LINT_BASE_REV=HEAD~ lint-code
+
+      - name: check-is-dirty
+        run: |
+          if [[ -n $(git status --porcelain) ]]; then
+            echo "Detected uncommitted changes."
+            git status
+            git diff
+            exit 1
+          fi
+
   linters-succeed:
     name: All Linters Succeed
     needs:
@@ -92,6 +116,7 @@ jobs:
       - lint-protos
       - lint-actions
       - fmt-imports
+      - golangci
     runs-on: ubuntu-latest
     if: always()
     env:
