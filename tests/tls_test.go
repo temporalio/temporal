@@ -26,14 +26,12 @@ package tests
 
 import (
 	"context"
-	"testing"
-
 	"net/http"
 	"sync"
+	"testing"
 	"time"
 
 	"github.com/stretchr/testify/suite"
-
 	"go.temporal.io/api/workflowservice/v1"
 	sdkclient "go.temporal.io/sdk/client"
 	"go.temporal.io/server/common/authorization"

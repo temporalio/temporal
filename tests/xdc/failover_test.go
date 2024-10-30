@@ -50,8 +50,6 @@ import (
 	"go.temporal.io/sdk/temporal"
 	sdkworker "go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
-	"google.golang.org/protobuf/types/known/durationpb"
-
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/convert"
@@ -61,6 +59,7 @@ import (
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/service/worker/migration"
 	"go.temporal.io/server/tests/testcore"
+	"google.golang.org/protobuf/types/known/durationpb"
 )
 
 type (
