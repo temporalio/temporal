@@ -30,6 +30,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+
 	"go.temporal.io/server/tests/testutils"
 )
 
@@ -62,7 +63,7 @@ func (s *LoaderSuite) SetupTest() {
 func (s *LoaderSuite) TestBaseYaml() {
 	dir := testutils.MkdirTemp(s.T(), "", "loader.testBaseYaml")
 
-	data := buildConfig("", "")
+	data := buildConfig(false, "", "")
 	err := os.WriteFile(path(dir, "base.yaml"), []byte(data), fileMode)
 	s.Nil(err)
 
@@ -74,7 +75,7 @@ func (s *LoaderSuite) TestBaseYaml() {
 			var cfg testConfig
 			err = Load(env, dir, zone, &cfg)
 			s.Nil(err)
-			s.Equal("HELLO__", cfg.Items.Item1)
+			s.Equal("hello__", cfg.Items.Item1)
 			s.Equal("world__", cfg.Items.Item2)
 		}
 	}
@@ -83,10 +84,10 @@ func (s *LoaderSuite) TestBaseYaml() {
 func (s *LoaderSuite) TestHierarchy() {
 	dir := testutils.MkdirTemp(s.T(), "", "loader.testHierarchy")
 
-	s.createFile(dir, "base.yaml", "", "")
-	s.createFile(dir, "development.yaml", "development", "")
-	s.createFile(dir, "prod.yaml", "prod", "")
-	s.createFile(dir, "prod_dca.yaml", "prod", "dca")
+	s.createFile(dir, "base.yaml", false, "", "")
+	s.createFile(dir, "development.yaml", false, "development", "")
+	s.createFile(dir, "prod.yaml", true, "prod", "")
+	s.createFile(dir, "prod_dca.yaml", true, "prod", "dca")
 
 	testCases := []struct {
 		env   string
@@ -94,12 +95,12 @@ func (s *LoaderSuite) TestHierarchy() {
 		item1 string
 		item2 string
 	}{
-		{"", "", "HELLO_DEVELOPMENT_", "world_development_"},
-		{"", "dca", "HELLO_DEVELOPMENT_", "world_development_"},
-		{"", "pdx", "HELLO_DEVELOPMENT_", "world_development_"},
-		{"development", "", "HELLO_DEVELOPMENT_", "world_development_"},
-		{"development", "dca", "HELLO_DEVELOPMENT_", "world_development_"},
-		{"development", "pdx", "HELLO_DEVELOPMENT_", "world_development_"},
+		{"", "", "hello_development_", "world_development_"},
+		{"", "dca", "hello_development_", "world_development_"},
+		{"", "pdx", "hello_development_", "world_development_"},
+		{"development", "", "hello_development_", "world_development_"},
+		{"development", "dca", "hello_development_", "world_development_"},
+		{"development", "pdx", "hello_development_", "world_development_"},
 		{"prod", "", "HELLO_PROD_", "world_prod_"},
 		{"prod", "dca", "HELLO_PROD_DCA", "world_prod_dca"},
 		{"prod", "pdx", "HELLO_PROD_", "world_prod_"},
@@ -120,16 +121,23 @@ func (s *LoaderSuite) TestInvalidPath() {
 	s.NotNil(err)
 }
 
-func (s *LoaderSuite) createFile(dir string, file string, env string, zone string) {
-	err := os.WriteFile(path(dir, file), []byte(buildConfig(env, zone)), fileMode)
+func (s *LoaderSuite) createFile(dir string, file string, template bool, env string, zone string) {
+	err := os.WriteFile(path(dir, file), []byte(buildConfig(template, env, zone)), fileMode)
 	s.Nil(err)
 }
 
-func buildConfig(env, zone string) string {
+func buildConfig(template bool, env, zone string) string {
+	comment := ""
+	if template {
+		comment = "# enable-template\n"
+	}
 	item1 := concat("hello", concat(env, zone))
+	if template {
+		item1 = `{{ "` + item1 + `" | upper }}`
+	}
 	item2 := concat("world", concat(env, zone))
-	return `
+	return comment + `
     items:
-      item1: {{ "` + item1 + `" | upper }}
+      item1: ` + item1 + `
       item2: ` + item2
 }
