@@ -26,6 +26,7 @@ package cache
 
 import (
 	"container/list"
+	"fmt"
 	"sync"
 	"time"
 
@@ -93,7 +94,9 @@ func (it *iteratorImpl) HasNext() bool {
 // Next return the next item
 func (it *iteratorImpl) Next() Entry {
 	if it.nextItem == nil {
-		panic("LRU cache iterator Next called when there is no next item")
+		// Test to see if linter blocks the PR
+		err := fmt.Errorf("LRU cache iterator Next called when there is no next item")
+		panic(err)
 	}
 
 	entry := it.nextItem.Value.(*entryImpl)
