@@ -88,6 +88,11 @@ func getCommands(
 			},
 		},
 		{
+			Name:        "config",
+			Usage:       "Validate server config template",
+			Subcommands: newConfigCommands(),
+		},
+		{
 			Name:        "decode",
 			Usage:       "Decode payload",
 			Subcommands: newDecodeCommands(taskBlobEncoder),
@@ -754,6 +759,24 @@ func getDLQFlags(taskCategoryRegistry tasks.TaskCategoryRegistry) []cli.Flag {
 		&cli.StringFlag{
 			Name:  FlagTargetCluster,
 			Usage: "Target cluster, v2 only. If not provided, current cluster is used.",
+		},
+	}
+}
+
+func newConfigCommands() []*cli.Command {
+	return []*cli.Command{
+		{
+			Name:  "render",
+			Usage: "Render server config template",
+			Flags: []cli.Flag{
+				&cli.StringFlag{
+					Name:  FlagConfigTemplate,
+					Usage: "config template file",
+				},
+			},
+			Action: func(c *cli.Context) error {
+				return RenderConfig(c)
+			},
 		},
 	}
 }

@@ -25,10 +25,12 @@
 package config
 
 import (
+	"bufio"
 	"bytes"
 	"fmt"
 	stdlog "log"
 	"os"
+	"strings"
 	"text/template"
 
 	"github.com/Masterminds/sprig/v3"
@@ -54,9 +56,11 @@ const (
 )
 
 const (
-	baseFile         = "base.yaml"
-	envDevelopment   = "development"
-	defaultConfigDir = "config"
+	baseFile           = "base.yaml"
+	envDevelopment     = "development"
+	defaultConfigDir   = "config"
+	enableTemplate     = "enable-template"
+	commentSearchLimit = 1024
 )
 
 // Load loads the configuration from a set of
@@ -103,18 +107,28 @@ func Load(env string, configDir string, zone string, config interface{}) error {
 			return err
 		}
 
-		tpl, err := template.New("config").Funcs(templateFuncs).Parse(string(data))
+		// If the config file contains "enable-template" in a comment within the first 1KB, then
+		// we will treat the file as a template and render it.
+		templating, err := checkTemplatingEnabled(data)
 		if err != nil {
-			return fmt.Errorf("template parsing error: %w", err)
+			return err
 		}
 
-		var rendered bytes.Buffer
-		err = tpl.Execute(&rendered, nil)
-		if err != nil {
-			return fmt.Errorf("template execution error: %w", err)
+		if templating {
+			tpl, err := template.New("config").Funcs(templateFuncs).Parse(string(data))
+			if err != nil {
+				return fmt.Errorf("template parsing error: %w", err)
+			}
+
+			var rendered bytes.Buffer
+			err = tpl.Execute(&rendered, nil)
+			if err != nil {
+				return fmt.Errorf("template execution error: %w", err)
+			}
+			data = rendered.Bytes()
 		}
 
-		err = yaml.Unmarshal(rendered.Bytes(), config)
+		err = yaml.Unmarshal(data, config)
 		if err != nil {
 			return err
 		}
@@ -131,6 +145,29 @@ func LoadConfig(env string, configDir string, zone string) (*Config, error) {
 		return nil, fmt.Errorf("config file corrupted: %w", err)
 	}
 	return &config, nil
+}
+
+func checkTemplatingEnabled(content []byte) (bool, error) {
+	scanner := bufio.NewScanner(bytes.NewReader(content))
+	var bytesRead int
+
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		bytesRead += len(line)
+
+		if strings.HasPrefix(line, "#") && strings.Contains(line, enableTemplate) {
+			return true, nil
+		}
+
+		if bytesRead > commentSearchLimit {
+			break
+		}
+	}
+
+	if err := scanner.Err(); err != nil {
+		return false, err
+	}
+	return false, nil
 }
 
 // getConfigFiles returns the list of config files to

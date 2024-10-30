@@ -1,3 +1,5 @@
+# enable-template
+
 log:
     stdout: true
     level: {{ default "info" (env "LOG_LEVEL") }}
@@ -8,7 +10,8 @@ persistence:
     defaultStore: default
     visibilityStore: visibility
 
-    {{- if not (eq (env "DB") "cassandra" "mysql8" "postgres12" "postgres12_pgx") -}}
+    {{- $db := env "DB" -}}
+    {{- if not (eq $db "cassandra" "mysql8" "postgres12" "postgres12_pgx") -}}
       {{- fail "Invalid DB value. Supported values are cassandra, mysql8, postgres12, postgres12_pgx" -}}
     {{- end }}
 
@@ -104,9 +107,9 @@ persistence:
             {{- else if eq $db "mysql8" }}
             sql:
                 {{ $visibility_seeds := coalesce (env "VISIBILITY_MYSQL_SEEDS") (env "MYSQL_SEEDS") }}
-                {{ $visibility_port := coalesce (env "VISIBILITY_DB_PORT") (ENV "DB_PORT") "3306" }}
-                {{ $visibility_user_:= coalesce (env "VISIBILITY_MYSQL_USER") (env "MYSQL_USER") }}
-                {{ $visibility_pwd_:= coalesce (env "VISIBILITY_MYSQL_PWD") (env "MYSQL_PWD") }}
+                {{ $visibility_port := coalesce (env "VISIBILITY_DB_PORT") (env "DB_PORT") "3306" }}
+                {{ $visibility_user := coalesce (env "VISIBILITY_MYSQL_USER") (env "MYSQL_USER") }}
+                {{ $visibility_pwd := coalesce (env "VISIBILITY_MYSQL_PWD") (env "MYSQL_PWD") }}
                 pluginName: {{ $db }}
                 databaseName: {{ default "temporal_visibility" (env "VISIBILITY_DBNAME") | quote }}
                 connectAddr: {{ $visibility_seeds }}:{{ $visibility_port }}
@@ -174,7 +177,7 @@ global:
 
                 certFile: {{ env "TEMPORAL_TLS_SERVER_CERT" }}
                 keyFile: {{ env "TEMPORAL_TLS_SERVER_KEY" }}
-                {{- with "TEMPORAL_TLS_SERVER_CA_CERT" }}
+                {{- with env "TEMPORAL_TLS_SERVER_CA_CERT" }}
                 clientCaFiles:
                     - {{ . }}
                 {{- end }}
@@ -239,6 +242,7 @@ global:
         statsd:
             hostPort: {{ . }}
             prefix: "temporal"
+    {{- end }}
     {{- with env "PROMETHEUS_ENDPOINT" }}
     metrics:
         prometheus:
