@@ -171,12 +171,14 @@ type (
 		terminalFailureCause       error
 		unexpectedErrorAttempts    int
 		maxUnexpectedErrorAttempts dynamicconfig.IntPropertyFn
+		dlqInternalErrors          dynamicconfig.BoolPropertyFn
 		dlqErrorPattern            dynamicconfig.StringPropertyFn
 	}
 	ExecutableParams struct {
 		DLQEnabled                 dynamicconfig.BoolPropertyFn
 		DLQWriter                  *DLQWriter
 		MaxUnexpectedErrorAttempts dynamicconfig.IntPropertyFn
+		DLQInternalErrors          dynamicconfig.BoolPropertyFn
 		DLQErrorPattern            dynamicconfig.StringPropertyFn
 	}
 	ExecutableOption func(*ExecutableParams)
@@ -203,6 +205,9 @@ func NewExecutable(
 		DLQWriter: nil,
 		MaxUnexpectedErrorAttempts: func() int {
 			return math.MaxInt
+		},
+		DLQInternalErrors: func() bool {
+			return false
 		},
 		DLQErrorPattern: func() string {
 			return ""
@@ -235,6 +240,7 @@ func NewExecutable(
 		dlqWriter:                  params.DLQWriter,
 		dlqEnabled:                 params.DLQEnabled,
 		maxUnexpectedErrorAttempts: params.MaxUnexpectedErrorAttempts,
+		dlqInternalErrors:          params.DLQInternalErrors,
 		dlqErrorPattern:            params.DLQErrorPattern,
 	}
 	executable.updatePriority()
@@ -446,14 +452,14 @@ func (e *executableImpl) isUnexpectedNonRetryableError(err error) bool {
 	}
 
 	if _, isDataLoss := err.(*serviceerror.DataLoss); isDataLoss {
-		metrics.TaskCorruptionCounter.With(e.taggedMetricsHandler).Record(1)
 		return true
 	}
 
 	isInternalError := common.IsInternalError(err)
 	if isInternalError {
 		metrics.TaskInternalErrorCounter.With(e.taggedMetricsHandler).Record(1)
-		return true
+		// Only DQL/drop when configured to
+		return e.dlqInternalErrors()
 	}
 
 	return false
@@ -520,8 +526,10 @@ func (e *executableImpl) HandleErr(err error) (retErr error) {
 	e.logger.Warn("Fail to process task", tag.Error(err), tag.ErrorType(err), tag.UnexpectedErrorAttempts(int32(e.unexpectedErrorAttempts)), tag.LifeCycleProcessingFailed)
 
 	if e.isUnexpectedNonRetryableError(err) {
+		// Terminal errors are likely due to data corruption.
 		// Drop the task by returning nil so that task will be marked as completed,
 		// or send it to the DLQ if that is enabled.
+		metrics.TaskCorruptionCounter.With(e.taggedMetricsHandler).Record(1)
 		if e.dlqEnabled() {
 			// Keep this message in sync with the log line mentioned in Investigation section of docs/admin/dlq.md
 			e.logger.Error("Marking task as terminally failed, will send to DLQ", tag.Error(err), tag.ErrorType(err))
