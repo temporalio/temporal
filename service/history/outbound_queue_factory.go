@@ -34,6 +34,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/quotas"
 	ctasks "go.temporal.io/server/common/tasks"
+	"go.temporal.io/server/service/history/circuitbreakerpool"
 	"go.temporal.io/server/service/history/hsm"
 	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/shard"
@@ -120,7 +121,7 @@ func NewOutboundQueueFactory(params outboundQueueFactoryParams) QueueFactory {
 		},
 	)
 
-	circuitBreakerPool := collection.NewOnceMap(
+	circuitbreakerpool.InitOutboundQueueCircuitBreakerPool(
 		func(key tasks.TaskGroupNamespaceIDAndDestination) circuitbreaker.TwoStepCircuitBreaker {
 			// This is intentionally not failing the function in case of error. The circuit breaker is
 			// agnostic to Task implementation, and thus the settings function is not expected to return
@@ -184,7 +185,7 @@ func NewOutboundQueueFactory(params outboundQueueFactoryParams) QueueFactory {
 							ctasks.RunnableTask{
 								Task: queues.NewCircuitBreakerExecutable(
 									e,
-									circuitBreakerPool.Get(key),
+									circuitbreakerpool.OutboundQueueCircuitBreaker(key),
 									taggedMetricsHandler,
 								),
 							},
