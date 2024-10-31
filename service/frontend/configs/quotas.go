@@ -205,7 +205,7 @@ func NewNamespaceRateBurst(
 		namespaceName: namespaceName,
 		rateFn:        rateFn,
 		burstFn: func(namespace string) int {
-			return max(1, math.Ceil(rateFn(namespace)*burstRatioFn(namespace)))
+			return max(1, int(math.Ceil(rateFn(namespace)*burstRatioFn(namespace))))
 		},
 	}
 }
