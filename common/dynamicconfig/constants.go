@@ -1203,6 +1203,11 @@ these log lines can be noisy, we want to be able to turn on and sample selective
 		time.Second,
 		`TaskQueueInfoByBuildIdTTL serves as a TTL for the cache holding DescribeTaskQueue partition results`,
 	)
+	MatchingDropNonRetryableTasks = NewGlobalBoolSetting(
+		"matching.dropNonRetryableTasks",
+		false,
+		`MatchingDropNonRetryableTasks states if we should drop matching tasks with Internal/Dataloss errors`,
+	)
 	// for matching testing only:
 
 	TestMatchingDisableSyncMatch = NewGlobalBoolSetting(

@@ -617,9 +617,19 @@ pollLoop:
 		if err != nil {
 			switch err.(type) {
 			case *serviceerror.Internal, *serviceerror.DataLoss:
-				e.nonRetryableErrorsDropTask(task, taskQueueName, err)
-				// drop the task as otherwise task would be stuck in a retry-loop
-				task.finish(nil, false)
+				if e.config.MatchingDropNonRetryableTasks() {
+					e.nonRetryableErrorsDropTask(task, taskQueueName, err)
+					// drop the task as otherwise task would be stuck in a retry-loop
+					task.finish(nil, false)
+				} else {
+					// default case
+					task.finish(err, false)
+					if err.Error() == common.ErrNamespaceHandover.Error() {
+						// do not keep polling new tasks when namespace is in handover state
+						// as record start request will be rejected by history service
+						return nil, err
+					}
+				}
 			case *serviceerror.NotFound: // mutable state not found, workflow not running or workflow task not found
 				e.logger.Info("Workflow task not found",
 					tag.WorkflowTaskQueueName(taskQueueName),
@@ -782,9 +792,19 @@ pollLoop:
 		if err != nil {
 			switch err.(type) {
 			case *serviceerror.Internal, *serviceerror.DataLoss:
-				e.nonRetryableErrorsDropTask(task, taskQueueName, err)
-				// drop the task as otherwise task would be stuck in a retry-loop
-				task.finish(nil, false)
+				if e.config.MatchingDropNonRetryableTasks() {
+					e.nonRetryableErrorsDropTask(task, taskQueueName, err)
+					// drop the task as otherwise task would be stuck in a retry-loop
+					task.finish(nil, false)
+				} else {
+					// default case
+					task.finish(err, false)
+					if err.Error() == common.ErrNamespaceHandover.Error() {
+						// do not keep polling new tasks when namespace is in handover state
+						// as record start request will be rejected by history service
+						return nil, err
+					}
+				}
 			case *serviceerror.NotFound: // mutable state not found, workflow not running or activity info not found
 				e.logger.Info("Activity task not found",
 					tag.WorkflowNamespaceID(task.event.Data.GetNamespaceId()),
