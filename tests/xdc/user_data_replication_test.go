@@ -153,6 +153,110 @@ func (s *UserDataReplicationTestSuite) TestUserDataIsReplicatedFromActiveToPassi
 	}, 15*time.Second, 500*time.Millisecond)
 }
 
+func (s *UserDataReplicationTestSuite) TestUserDataIsReplicatedFromActiveToPassiveV2() {
+	namespace := s.T().Name() + "-" + common.GenerateRandomString(5)
+	taskQueue := "versioned"
+	ctx := testcore.NewContext()
+	activeFrontendClient := s.cluster1.FrontendClient()
+	standbyMatchingClient := s.cluster2.MatchingClient()
+	regReq := &workflowservice.RegisterNamespaceRequest{
+		Namespace:                        namespace,
+		IsGlobalNamespace:                true,
+		Clusters:                         s.clusterReplicationConfig(),
+		ActiveClusterName:                s.clusterNames[0],
+		WorkflowExecutionRetentionPeriod: durationpb.New(7 * time.Hour * 24),
+	}
+	_, err := activeFrontendClient.RegisterNamespace(ctx, regReq)
+	s.NoError(err)
+
+	description, err := activeFrontendClient.DescribeNamespace(ctx, &workflowservice.DescribeNamespaceRequest{Namespace: namespace})
+	s.Require().NoError(err)
+
+	rules, err := activeFrontendClient.GetWorkerVersioningRules(ctx, &workflowservice.GetWorkerVersioningRulesRequest{
+		Namespace: namespace,
+		TaskQueue: taskQueue,
+	})
+	s.NoError(err)
+	s.NotNil(rules)
+
+	_, err = activeFrontendClient.UpdateWorkerVersioningRules(ctx, &workflowservice.UpdateWorkerVersioningRulesRequest{
+		Namespace:     namespace,
+		TaskQueue:     taskQueue,
+		ConflictToken: rules.ConflictToken,
+		Operation: &workflowservice.UpdateWorkerVersioningRulesRequest_InsertAssignmentRule{
+			InsertAssignmentRule: &workflowservice.UpdateWorkerVersioningRulesRequest_InsertBuildIdAssignmentRule{
+				Rule: &taskqueuepb.BuildIdAssignmentRule{
+					TargetBuildId: "asdf",
+				},
+			},
+		},
+	})
+	s.NoError(err)
+
+	s.Eventually(func() bool {
+		// Call matching directly in case frontend is configured to redirect API calls to the active cluster
+		response, err := standbyMatchingClient.GetWorkerVersioningRules(ctx, &matchingservice.GetWorkerVersioningRulesRequest{
+			NamespaceId: description.GetNamespaceInfo().Id,
+			TaskQueue:   taskQueue,
+			Command: &matchingservice.GetWorkerVersioningRulesRequest_Request{
+				Request: &workflowservice.GetWorkerVersioningRulesRequest{
+					Namespace: namespace,
+					TaskQueue: taskQueue,
+				},
+			},
+		})
+		if err != nil {
+			return false
+		}
+		return len(response.GetResponse().GetAssignmentRules()) == 1
+	}, 15*time.Second, 500*time.Millisecond)
+
+	// make another change to test that merging works
+
+	/* TODO: enable this after fixing bug
+	rules, err = activeFrontendClient.GetWorkerVersioningRules(ctx, &workflowservice.GetWorkerVersioningRulesRequest{
+		Namespace: namespace,
+		TaskQueue: taskQueue,
+	})
+	s.NoError(err)
+	s.NotNil(rules)
+
+	_, err = activeFrontendClient.UpdateWorkerVersioningRules(ctx, &workflowservice.UpdateWorkerVersioningRulesRequest{
+		Namespace:     namespace,
+		TaskQueue:     taskQueue,
+		ConflictToken: rules.ConflictToken,
+		Operation: &workflowservice.UpdateWorkerVersioningRulesRequest_AddCompatibleRedirectRule{
+			AddCompatibleRedirectRule: &workflowservice.UpdateWorkerVersioningRulesRequest_AddCompatibleBuildIdRedirectRule{
+				Rule: &taskqueuepb.CompatibleBuildIdRedirectRule{
+					SourceBuildId: "asdf",
+					TargetBuildId: "uiop",
+				},
+			},
+		},
+	})
+	s.NoError(err)
+
+	s.Eventually(func() bool {
+		// Call matching directly in case frontend is configured to redirect API calls to the active cluster
+		response, err := standbyMatchingClient.GetWorkerVersioningRules(ctx, &matchingservice.GetWorkerVersioningRulesRequest{
+			NamespaceId: description.GetNamespaceInfo().Id,
+			TaskQueue:   taskQueue,
+			Command: &matchingservice.GetWorkerVersioningRulesRequest_Request{
+				Request: &workflowservice.GetWorkerVersioningRulesRequest{
+					Namespace: namespace,
+					TaskQueue: taskQueue,
+				},
+			},
+		})
+		if err != nil {
+			return false
+		}
+		return len(response.GetResponse().GetAssignmentRules()) == 1 &&
+			len(response.GetResponse().GetCompatibleRedirectRules()) == 1
+	}, 15*time.Second, 500*time.Millisecond)
+	*/
+}
+
 func (s *UserDataReplicationTestSuite) TestUserDataIsReplicatedFromPassiveToActive() {
 	namespace := s.T().Name() + "-" + common.GenerateRandomString(5)
 	taskQueue := "versioned"
