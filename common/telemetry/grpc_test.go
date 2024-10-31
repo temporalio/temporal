@@ -15,12 +15,14 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/common/api"
 	"go.temporal.io/server/common/telemetry"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/stats"
+	"google.golang.org/grpc/status"
 )
 
 func Test_ServerStatsHandler(t *testing.T) {
 
-	makeRequest := func() map[string]attribute.KeyValue {
+	makeRequest := func(responseErr error) map[string]attribute.KeyValue {
 		t.Helper()
 
 		exporter := tracetest.NewInMemoryExporter()
@@ -39,10 +41,14 @@ func Test_ServerStatsHandler(t *testing.T) {
 				},
 			},
 		})
-		otelStatsHandler.HandleRPC(ctx, &stats.OutPayload{
-			Payload: &workflowservice.TerminateWorkflowExecutionResponse{},
+		if responseErr == nil {
+			otelStatsHandler.HandleRPC(ctx, &stats.OutPayload{
+				Payload: &workflowservice.TerminateWorkflowExecutionResponse{},
+			})
+		}
+		otelStatsHandler.HandleRPC(ctx, &stats.End{
+			Error: responseErr,
 		})
-		otelStatsHandler.HandleRPC(ctx, &stats.End{})
 
 		exportedSpans := exporter.GetSpans()
 		require.Len(t, exportedSpans, 2) // first one is the "check-span"
@@ -54,7 +60,7 @@ func Test_ServerStatsHandler(t *testing.T) {
 	}
 
 	t.Run("annotate span with workflow tags", func(t *testing.T) {
-		spanAttrsByKey := makeRequest()
+		spanAttrsByKey := makeRequest(nil)
 
 		require.Equal(t, "WF-ID", spanAttrsByKey["temporalWorkflowID"].Value.AsString())
 		require.Equal(t, "RUN-ID", spanAttrsByKey["temporalRunID"].Value.AsString())
@@ -68,12 +74,23 @@ func Test_ServerStatsHandler(t *testing.T) {
 		os.Setenv("TEMPORAL_OTEL_DEBUG", "true")
 		defer os.Unsetenv("TEMPORAL_OTEL_DEBUG")
 
-		spanAttrsByKey := makeRequest()
+		spanAttrsByKey := makeRequest(nil)
 
 		require.Equal(t,
-			`{"workflowExecution":{"workflowId":"WF-ID","runId":"RUN-ID"}}`,
+			`{"workflowExecution":{"workflowId":"WF-ID", "runId":"RUN-ID"}}`,
 			spanAttrsByKey["rpc.request.payload"].Value.AsString())
 		require.Equal(t, "{}", spanAttrsByKey["rpc.response.payload"].Value.AsString())
+	})
+
+	t.Run("annotate span with response error payload in debug mode", func(t *testing.T) {
+		os.Setenv("TEMPORAL_OTEL_DEBUG", "true")
+		defer os.Unsetenv("TEMPORAL_OTEL_DEBUG")
+
+		spanAttrsByKey := makeRequest(status.Errorf(codes.Internal, "Something went wrong"))
+
+		require.Equal(t,
+			`{"code":13, "message":"Something went wrong"}`,
+			spanAttrsByKey["rpc.response.error"].Value.AsString())
 	})
 
 	t.Run("skip if noop trace provider", func(t *testing.T) {

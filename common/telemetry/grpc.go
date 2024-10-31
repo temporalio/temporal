@@ -35,6 +35,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/rpc/interceptor/logtags"
 	"google.golang.org/grpc/stats"
+	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
 )
@@ -119,6 +120,22 @@ func (c *customServerStatsHandler) TagRPC(ctx context.Context, info *stats.RPCTa
 }
 
 func (c *customServerStatsHandler) HandleRPC(ctx context.Context, stat stats.RPCStats) {
+	// handling `End` before wrapped stats.Handler since it closes the span
+	switch s := stat.(type) {
+	case *stats.End:
+		// annotate with gRPC error payload
+		if c.isDebug {
+			span := trace.SpanFromContext(ctx)
+
+			//revive:disable-next-line:unchecked-type-assertion
+			statusErr, ok := status.FromError(s.Error)
+			if ok && statusErr != nil {
+				payload, _ := protojson.Marshal(statusErr.Proto())
+				span.SetAttributes(attribute.Key("rpc.response.error").String(string(payload)))
+			}
+		}
+	}
+
 	c.wrapped.HandleRPC(ctx, stat)
 
 	switch s := stat.(type) {
