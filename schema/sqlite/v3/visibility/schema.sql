@@ -29,6 +29,7 @@ CREATE TABLE executions_visibility (
   TemporalSchedulePaused        BOOLEAN       GENERATED ALWAYS AS (JSON_EXTRACT(search_attributes, "$.TemporalSchedulePaused")),
   TemporalNamespaceDivision     VARCHAR(255)  GENERATED ALWAYS AS (JSON_EXTRACT(search_attributes, "$.TemporalNamespaceDivision")),
   BuildIds                      TEXT          GENERATED ALWAYS AS (JSON_EXTRACT(search_attributes, "$.BuildIds"))              STORED,
+  PauseActivityTypes            TEXT          GENERATED ALWAYS AS (JSON_EXTRACT(search_attributes, "$.PauseActivityTypes"))    STORED,
 
   -- Pre-allocated custom search attributes
   Bool01          BOOLEAN         GENERATED ALWAYS AS (JSON_EXTRACT(search_attributes, "$.Bool01")),
@@ -128,6 +129,7 @@ CREATE VIRTUAL TABLE executions_visibility_fts_keyword_list USING fts5 (
   TemporalChangeVersion,
   BinaryChecksums,
   BuildIds,
+  PauseActivityTypes,
   KeywordList01,
   KeywordList02,
   KeywordList03,
@@ -155,6 +157,7 @@ BEGIN
     TemporalChangeVersion,
     BinaryChecksums,
     BuildIds,
+    PauseActivityTypes,
     KeywordList01,
     KeywordList02,
     KeywordList03
@@ -163,6 +166,7 @@ BEGIN
     NEW.TemporalChangeVersion,
     NEW.BinaryChecksums,
     NEW.BuildIds,
+    NEW.PauseActivityTypes,
     NEW.KeywordList01,
     NEW.KeywordList02,
     NEW.KeywordList03
@@ -192,6 +196,7 @@ BEGIN
     TemporalChangeVersion,
     BinaryChecksums,
     BuildIds,
+    PauseActivityTypes,
     KeywordList01,
     KeywordList02,
     KeywordList03
@@ -201,6 +206,7 @@ BEGIN
     OLD.TemporalChangeVersion,
     OLD.BinaryChecksums,
     OLD.BuildIds,
+    OLD.PauseActivityTypes,
     OLD.KeywordList01,
     OLD.KeywordList02,
     OLD.KeywordList03
@@ -241,6 +247,7 @@ BEGIN
     TemporalChangeVersion,
     BinaryChecksums,
     BuildIds,
+    PauseActivityTypes,
     KeywordList01,
     KeywordList02,
     KeywordList03
@@ -250,6 +257,7 @@ BEGIN
     OLD.TemporalChangeVersion,
     OLD.BinaryChecksums,
     OLD.BuildIds,
+    OLD.PauseActivityTypes,
     OLD.KeywordList01,
     OLD.KeywordList02,
     OLD.KeywordList03
@@ -259,6 +267,7 @@ BEGIN
     TemporalChangeVersion,
     BinaryChecksums,
     BuildIds,
+    PauseActivityTypes,
     KeywordList01,
     KeywordList02,
     KeywordList03
@@ -267,6 +276,7 @@ BEGIN
     NEW.TemporalChangeVersion,
     NEW.BinaryChecksums,
     NEW.BuildIds,
+    NEW.PauseActivityTypes,
     NEW.KeywordList01,
     NEW.KeywordList02,
     NEW.KeywordList03

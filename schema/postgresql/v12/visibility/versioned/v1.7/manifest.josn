@@ -1,0 +1,8 @@
+{
+  "CurrVersion": "1.7",
+  "MinCompatibleVersion": "0.1",
+  "Description": "add PauseActivityTypes column",
+  "SchemaUpdateCqlFiles": [
+    "add_pause_activity_types_search_attribute.sql"
+  ]
+}
