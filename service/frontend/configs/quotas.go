@@ -107,6 +107,9 @@ var (
 		"/temporal.api.workflowservice.v1.WorkflowService/DeleteSchedule":                 2,
 		"/temporal.api.workflowservice.v1.WorkflowService/StopBatchOperation":             2,
 		"/temporal.api.workflowservice.v1.WorkflowService/UpdateActivityOptionsById":      2,
+		"/temporal.api.workflowservice.v1.WorkflowService/PauseActivityById":              2,
+		"/temporal.api.workflowservice.v1.WorkflowService/UnpauseActivityById":            2,
+		"/temporal.api.workflowservice.v1.WorkflowService/ResetActivityById":              2,
 
 		// P3: Status Querying APIs
 		"/temporal.api.workflowservice.v1.WorkflowService/DescribeWorkflowExecution":     3,

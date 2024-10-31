@@ -1165,3 +1165,39 @@ message UpdateActivityOptionsResponse {
     // Activity options after an update
     temporal.api.activity.v1.ActivityOptions activity_options = 1;
 }
+
+message PauseActivityRequest {
+    option (routing).workflow_id = "frontend_request.workflow_id";
+
+    // Namespace ID of the workflow which scheduled this activity
+    string namespace_id = 1;
+
+    temporal.api.workflowservice.v1.PauseActivityByIdRequest frontend_request = 2;
+}
+
+message PauseActivityResponse {
+}
+
+message UnpauseActivityRequest {
+    option (routing).workflow_id = "frontend_request.workflow_id";
+
+    // Namespace ID of the workflow which scheduled this activity
+    string namespace_id = 1;
+
+    temporal.api.workflowservice.v1.UnpauseActivityByIdRequest frontend_request = 2;
+}
+
+message UnpauseActivityResponse {
+}
+
+message ResetActivityRequest {
+    option (routing).workflow_id = "frontend_request.workflow_id";
+
+    // Namespace ID of the workflow which scheduled this activity
+    string namespace_id = 1;
+
+    temporal.api.workflowservice.v1.ResetActivityByIdRequest frontend_request = 2;
+}
+
+message ResetActivityResponse {
+}
