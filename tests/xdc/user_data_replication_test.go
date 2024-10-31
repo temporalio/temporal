@@ -129,7 +129,28 @@ func (s *UserDataReplicationTestSuite) TestUserDataIsReplicatedFromActiveToPassi
 		return len(response.GetResponse().GetMajorVersionSets()) == 1
 	}, 15*time.Second, 500*time.Millisecond)
 
-	// TODO: make more changes here and let them also get replicated to test merge
+	// make another change to test that merging works
+
+	_, err = activeFrontendClient.UpdateWorkerBuildIdCompatibility(testcore.NewContext(), &workflowservice.UpdateWorkerBuildIdCompatibilityRequest{
+		Namespace: namespace,
+		TaskQueue: taskQueue,
+		Operation: &workflowservice.UpdateWorkerBuildIdCompatibilityRequest_AddNewBuildIdInNewDefaultSet{AddNewBuildIdInNewDefaultSet: "0.2"},
+	})
+	s.Require().NoError(err)
+
+	s.Eventually(func() bool {
+		response, err := standbyMatchingClient.GetWorkerBuildIdCompatibility(testcore.NewContext(), &matchingservice.GetWorkerBuildIdCompatibilityRequest{
+			NamespaceId: description.GetNamespaceInfo().Id,
+			Request: &workflowservice.GetWorkerBuildIdCompatibilityRequest{
+				Namespace: namespace,
+				TaskQueue: taskQueue,
+			},
+		})
+		if err != nil {
+			return false
+		}
+		return len(response.GetResponse().GetMajorVersionSets()) == 2
+	}, 15*time.Second, 500*time.Millisecond)
 }
 
 func (s *UserDataReplicationTestSuite) TestUserDataIsReplicatedFromPassiveToActive() {
