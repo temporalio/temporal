@@ -43,4 +43,13 @@ var (
 			NonRetryable: true,
 		}},
 	}
+
+	acceptedUpdateCompletedWorkflowFailure = &failurepb.Failure{
+		Message: "Workflow Update failed because the Workflow completed before the Update completed.",
+		Source:  "Server",
+		FailureInfo: &failurepb.Failure_ApplicationFailureInfo{ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{
+			Type:         "AcceptedUpdateCompletedWorkflow",
+			NonRetryable: true,
+		}},
+	}
 )

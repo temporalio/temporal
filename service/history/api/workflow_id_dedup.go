@@ -124,7 +124,7 @@ func resolveDuplicateWorkflowStart(
 	nsName := namespaceEntry.Name().String()
 	minimalReuseInterval := shardContext.GetConfig().WorkflowIdReuseMinimalInterval(nsName)
 
-	now := shardContext.GetTimeSource().Now().UTC()
+	now := shardContext.GetTimeSource().Now()
 	timeSinceStart := now.Sub(currentWorkflowStartTime.UTC())
 
 	if minimalReuseInterval == 0 || minimalReuseInterval < timeSinceStart {
@@ -161,6 +161,7 @@ func terminateWorkflowAction(
 			payloads.EncodeString(fmt.Sprintf("terminated by new runID: %s", newRunID)),
 			consts.IdentityHistoryService,
 			false,
+			nil, // No links necessary.
 		)
 	}, nil
 }

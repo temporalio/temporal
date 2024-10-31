@@ -63,6 +63,7 @@ func NewExecutableVerifyVersionedTransitionTask(
 	taskID int64,
 	taskCreationTime time.Time,
 	sourceClusterName string,
+	sourceShardKey ClusterShardKey,
 	replicationTask *replicationspb.ReplicationTask,
 ) *ExecutableVerifyVersionedTransitionTask {
 	task := replicationTask.GetVerifyVersionedTransitionTaskAttributes()
@@ -77,6 +78,7 @@ func NewExecutableVerifyVersionedTransitionTask(
 			taskCreationTime,
 			time.Now().UTC(),
 			sourceClusterName,
+			sourceShardKey,
 			replicationTask.Priority,
 			replicationTask,
 		),
@@ -126,7 +128,8 @@ func (e *ExecutableVerifyVersionedTransitionTask) Execute() error {
 				e.NamespaceID,
 				e.WorkflowID,
 				e.RunID,
-				e.ReplicationTask().VersionedTransition,
+				nil,
+				nil,
 			)
 		default:
 			return err
@@ -134,6 +137,9 @@ func (e *ExecutableVerifyVersionedTransitionTask) Execute() error {
 	}
 
 	transitionHistory := ms.GetExecutionInfo().TransitionHistory
+	if len(transitionHistory) == 0 {
+		return nil
+	}
 	err = workflow.TransitionHistoryStalenessCheck(transitionHistory, e.ReplicationTask().VersionedTransition)
 
 	// case 1: VersionedTransition is up-to-date on current mutable state
@@ -152,7 +158,8 @@ func (e *ExecutableVerifyVersionedTransitionTask) Execute() error {
 			e.NamespaceID,
 			e.WorkflowID,
 			e.RunID,
-			e.ReplicationTask().VersionedTransition,
+			transitionHistory[len(transitionHistory)-1],
+			ms.GetExecutionInfo().VersionHistories,
 		)
 	}
 	// case 3: state transition is not on non-current branch, but no event to verify
@@ -248,10 +255,19 @@ func (e *ExecutableVerifyVersionedTransitionTask) HandleErr(err error) error {
 
 		if doContinue, syncStateErr := e.SyncState(
 			ctx,
-			e.ExecutableTask.SourceClusterName(),
 			taskErr,
 			ResendAttempt,
 		); syncStateErr != nil || !doContinue {
+			if syncStateErr != nil {
+				e.Logger.Error("VerifyVersionedTransition replication task encountered error during sync state",
+					tag.WorkflowNamespaceID(e.NamespaceID),
+					tag.WorkflowID(e.WorkflowID),
+					tag.WorkflowRunID(e.RunID),
+					tag.TaskID(e.ExecutableTask.TaskID()),
+					tag.Error(syncStateErr),
+				)
+			}
+			// return original task processing error
 			return err
 		}
 		return e.Execute()

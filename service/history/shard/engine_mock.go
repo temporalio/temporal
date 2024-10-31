@@ -664,6 +664,20 @@ func (mr *MockEngineMockRecorder) ReplicateHistoryEvents(ctx, workflowKey, baseE
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReplicateHistoryEvents", reflect.TypeOf((*MockEngine)(nil).ReplicateHistoryEvents), ctx, workflowKey, baseExecutionInfo, versionHistoryItems, historyEvents, newEvents, newRunID)
 }
 
+// ReplicateVersionedTransition mocks base method.
+func (m *MockEngine) ReplicateVersionedTransition(ctx context.Context, artifact *repication.VersionedTransitionArtifact, sourceClusterName string) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ReplicateVersionedTransition", ctx, artifact, sourceClusterName)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// ReplicateVersionedTransition indicates an expected call of ReplicateVersionedTransition.
+func (mr *MockEngineMockRecorder) ReplicateVersionedTransition(ctx, artifact, sourceClusterName any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReplicateVersionedTransition", reflect.TypeOf((*MockEngine)(nil).ReplicateVersionedTransition), ctx, artifact, sourceClusterName)
+}
+
 // ReplicateWorkflowState mocks base method.
 func (m *MockEngine) ReplicateWorkflowState(ctx context.Context, request *historyservice.ReplicateWorkflowStateRequest) error {
 	m.ctrl.T.Helper()
@@ -1005,6 +1019,21 @@ func (m *MockEngine) UnsubscribeReplicationNotification(arg0 string) {
 func (mr *MockEngineMockRecorder) UnsubscribeReplicationNotification(arg0 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UnsubscribeReplicationNotification", reflect.TypeOf((*MockEngine)(nil).UnsubscribeReplicationNotification), arg0)
+}
+
+// UpdateActivityOptions mocks base method.
+func (m *MockEngine) UpdateActivityOptions(ctx context.Context, request *historyservice.UpdateActivityOptionsRequest) (*historyservice.UpdateActivityOptionsResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdateActivityOptions", ctx, request)
+	ret0, _ := ret[0].(*historyservice.UpdateActivityOptionsResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UpdateActivityOptions indicates an expected call of UpdateActivityOptions.
+func (mr *MockEngineMockRecorder) UpdateActivityOptions(ctx, request any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateActivityOptions", reflect.TypeOf((*MockEngine)(nil).UpdateActivityOptions), ctx, request)
 }
 
 // UpdateWorkflowExecution mocks base method.

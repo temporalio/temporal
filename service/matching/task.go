@@ -78,6 +78,7 @@ type (
 		// redirectInfo is only set when redirect rule is applied on the task. for forwarded tasks, this is populated
 		// based on forwardInfo.
 		redirectInfo *taskqueuespb.BuildIdRedirectInfo
+		recycleToken func()
 	}
 )
 
@@ -234,7 +235,16 @@ func (task *internalTask) pollNexusTaskQueueResponse() *matchingservice.PollNexu
 // finish marks a task as finished. Should be called after a poller picks up a task
 // and marks it as started. If the task is unable to marked as started, then this
 // method should be called with a non-nil error argument.
-func (task *internalTask) finish(err error) {
+//
+// If the task took a rate limit token and didn't "use" it by actually dispatching the task,
+// finish will be called with wasValid=false and task.recycleToken=clockedRateLimiter.RecycleToken,
+// so finish will call the rate limiter's RecycleToken to give the unused token back to any process
+// that is waiting on the token, if one exists.
+func (task *internalTask) finish(err error, wasValid bool) {
+	if !wasValid && task.recycleToken != nil {
+		task.recycleToken()
+	}
+
 	switch {
 	case task.responseC != nil:
 		task.responseC <- err

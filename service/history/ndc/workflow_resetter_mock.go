@@ -67,7 +67,7 @@ func (m *MockWorkflowResetter) EXPECT() *MockWorkflowResetterMockRecorder {
 }
 
 // ResetWorkflow mocks base method.
-func (m *MockWorkflowResetter) ResetWorkflow(ctx context.Context, namespaceID namespace.ID, workflowID, baseRunID string, baseBranchToken []byte, baseRebuildLastEventID, baseRebuildLastEventVersion, baseNextEventID int64, resetRunID, resetRequestID string, currentWorkflow Workflow, resetReason string, additionalReapplyEvents []*history.HistoryEvent, resetReapplyExcludeTypes map[enums.ResetReapplyExcludeType]bool) error {
+func (m *MockWorkflowResetter) ResetWorkflow(ctx context.Context, namespaceID namespace.ID, workflowID, baseRunID string, baseBranchToken []byte, baseRebuildLastEventID, baseRebuildLastEventVersion, baseNextEventID int64, resetRunID, resetRequestID string, currentWorkflow Workflow, resetReason string, additionalReapplyEvents []*history.HistoryEvent, resetReapplyExcludeTypes map[enums.ResetReapplyExcludeType]struct{}) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ResetWorkflow", ctx, namespaceID, workflowID, baseRunID, baseBranchToken, baseRebuildLastEventID, baseRebuildLastEventVersion, baseNextEventID, resetRunID, resetRequestID, currentWorkflow, resetReason, additionalReapplyEvents, resetReapplyExcludeTypes)
 	ret0, _ := ret[0].(error)

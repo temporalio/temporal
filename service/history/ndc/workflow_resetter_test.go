@@ -51,13 +51,13 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/util"
+	"go.temporal.io/server/components/nexusoperations"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/hsm"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tests"
 	"go.temporal.io/server/service/history/workflow"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
-	"go.temporal.io/server/service/history/workflow/update"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -461,15 +461,17 @@ func (s *workflowResetterSuite) TestFailInflightActivity() {
 		Version:              12,
 		ScheduledEventId:     123,
 		ScheduledTime:        timestamppb.New(now.Add(-10 * time.Second)),
+		FirstScheduledTime:   timestamppb.New(now.Add(-10 * time.Second)),
 		StartedEventId:       124,
 		LastHeartbeatDetails: payloads.EncodeString("some random activity 1 details"),
 		StartedIdentity:      "some random activity 1 started identity",
 	}
 	activity2 := &persistencespb.ActivityInfo{
-		Version:          12,
-		ScheduledEventId: 456,
-		ScheduledTime:    timestamppb.New(now.Add(-10 * time.Second)),
-		StartedEventId:   common.EmptyEventID,
+		Version:            12,
+		ScheduledEventId:   456,
+		ScheduledTime:      timestamppb.New(now.Add(-10 * time.Second)),
+		FirstScheduledTime: timestamppb.New(now.Add(-10 * time.Second)),
+		StartedEventId:     common.EmptyEventID,
 	}
 	mutableState.EXPECT().GetPendingActivityInfos().Return(map[int64]*persistencespb.ActivityInfo{
 		activity1.ScheduledEventId: activity1,
@@ -486,10 +488,11 @@ func (s *workflowResetterSuite) TestFailInflightActivity() {
 	).Return(&historypb.HistoryEvent{}, nil)
 
 	mutableState.EXPECT().UpdateActivity(&persistencespb.ActivityInfo{
-		Version:          activity2.Version,
-		ScheduledEventId: activity2.ScheduledEventId,
-		ScheduledTime:    timestamppb.New(now),
-		StartedEventId:   activity2.StartedEventId,
+		Version:            activity2.Version,
+		ScheduledEventId:   activity2.ScheduledEventId,
+		ScheduledTime:      timestamppb.New(now),
+		FirstScheduledTime: timestamppb.New(now),
+		StartedEventId:     activity2.StartedEventId,
 	}).Return(nil)
 
 	err := s.workflowResetter.failInflightActivity(now, mutableState, terminateReason)
@@ -551,6 +554,7 @@ func (s *workflowResetterSuite) TestTerminateWorkflow() {
 		nil,
 		consts.IdentityResetter,
 		false,
+		nil,
 	).Return(&historypb.HistoryEvent{}, nil)
 
 	err := s.workflowResetter.terminateWorkflow(mutableState, terminateReason)
@@ -599,9 +603,6 @@ func (s *workflowResetterSuite) TestReapplyContinueAsNewWorkflowEvents_WithOutCo
 	}, nil)
 
 	mutableState := workflow.NewMockMutableState(s.controller)
-	mutableState.EXPECT().VisitUpdates(gomock.Any()).Return()
-	mutableState.EXPECT().GetCurrentVersion().Return(int64(0))
-	currentUpdateRegistry := update.NewRegistry(mutableState)
 	currentWorkflow := NewMockWorkflow(s.controller)
 	smReg := hsm.NewRegistry()
 	s.NoError(workflow.RegisterStateMachine(smReg))
@@ -612,7 +613,6 @@ func (s *workflowResetterSuite) TestReapplyContinueAsNewWorkflowEvents_WithOutCo
 	lastVisitedRunID, err := s.workflowResetter.reapplyContinueAsNewWorkflowEvents(
 		ctx,
 		mutableState,
-		currentUpdateRegistry,
 		currentWorkflow,
 		s.namespaceID,
 		s.workflowID,
@@ -729,10 +729,7 @@ func (s *workflowResetterSuite) TestReapplyContinueAsNewWorkflowEvents_WithConti
 	s.NoError(err)
 
 	mutableState := workflow.NewMockMutableState(s.controller)
-	mutableState.EXPECT().VisitUpdates(gomock.Any()).Return()
-	mutableState.EXPECT().GetCurrentVersion().Return(int64(0))
 	mutableState.EXPECT().GetWorkflowKey().Return(definition.WorkflowKey{RunID: "random-run-id"})
-	currentUpdateRegistry := update.NewRegistry(mutableState)
 	currentWorkflow := NewMockWorkflow(s.controller)
 	currentWorkflow.EXPECT().GetMutableState().Return(mutableState)
 	smReg := hsm.NewRegistry()
@@ -744,7 +741,6 @@ func (s *workflowResetterSuite) TestReapplyContinueAsNewWorkflowEvents_WithConti
 	lastVisitedRunID, err := s.workflowResetter.reapplyContinueAsNewWorkflowEvents(
 		ctx,
 		mutableState,
-		currentUpdateRegistry,
 		currentWorkflow,
 		s.namespaceID,
 		s.workflowID,
@@ -896,6 +892,7 @@ func (s *workflowResetterSuite) TestReapplyEvents() {
 				attr.GetIdentity(),
 				attr.GetHeader(),
 				attr.GetSkipGenerateWorkflowTask(),
+				event.Links,
 			).Return(&historypb.HistoryEvent{}, nil)
 		case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ADMITTED:
 			attr := event.GetWorkflowExecutionUpdateAdmittedEventAttributes()
@@ -920,6 +917,108 @@ func (s *workflowResetterSuite) TestReapplyEvents() {
 
 	_, err = reapplyEvents(context.Background(), ms, nil, smReg, events, nil, "")
 	s.NoError(err)
+}
+func (s *workflowResetterSuite) TestReapplyEvents_Excludes() {
+	event1 := &historypb.HistoryEvent{
+		EventId:   101,
+		EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED,
+		Attributes: &historypb.HistoryEvent_WorkflowExecutionSignaledEventAttributes{WorkflowExecutionSignaledEventAttributes: &historypb.WorkflowExecutionSignaledEventAttributes{
+			SignalName: "signal-name-1",
+			Input:      payloads.EncodeString("signal-input-1"),
+			Identity:   "signal-identity-1",
+			Header:     &commonpb.Header{Fields: map[string]*commonpb.Payload{"myheader": {Data: []byte("myheader")}}},
+		}},
+	}
+	event2 := &historypb.HistoryEvent{
+		EventId:   102,
+		EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ADMITTED,
+		Attributes: &historypb.HistoryEvent_WorkflowExecutionUpdateAdmittedEventAttributes{
+			WorkflowExecutionUpdateAdmittedEventAttributes: &historypb.WorkflowExecutionUpdateAdmittedEventAttributes{
+				Request: &updatepb.Request{Input: &updatepb.Input{Args: payloads.EncodeString("update-request-payload-1")}},
+				Origin:  enumspb.UPDATE_ADMITTED_EVENT_ORIGIN_UNSPECIFIED,
+			},
+		},
+	}
+	event3 := &historypb.HistoryEvent{
+		EventId:   103,
+		EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ACCEPTED,
+		Attributes: &historypb.HistoryEvent_WorkflowExecutionUpdateAcceptedEventAttributes{
+			WorkflowExecutionUpdateAcceptedEventAttributes: &historypb.WorkflowExecutionUpdateAcceptedEventAttributes{
+				AcceptedRequest: &updatepb.Request{Input: &updatepb.Input{Args: payloads.EncodeString("update-request-payload-1")}},
+			},
+		},
+	}
+	event4 := &historypb.HistoryEvent{
+		EventId:   104,
+		EventType: enumspb.EVENT_TYPE_NEXUS_OPERATION_STARTED,
+	}
+	event5 := &historypb.HistoryEvent{
+		EventId:   105,
+		EventType: enumspb.EVENT_TYPE_NEXUS_OPERATION_COMPLETED,
+	}
+	event6 := &historypb.HistoryEvent{
+		EventId:   106,
+		EventType: enumspb.EVENT_TYPE_NEXUS_OPERATION_CANCELED,
+	}
+	events := []*historypb.HistoryEvent{event1, event2, event3, event4, event5, event6}
+
+	ms := workflow.NewMockMutableState(s.controller)
+	// Assert that none of these following methods are invoked.
+	arg := gomock.Any()
+	ms.EXPECT().AddWorkflowExecutionSignaled(arg, arg, arg, arg, arg, arg).Times(0)
+	ms.EXPECT().AddWorkflowExecutionUpdateAdmittedEvent(arg, arg).Times(0)
+	ms.EXPECT().AddHistoryEvent(arg, arg).Times(0)
+
+	smReg := hsm.NewRegistry()
+	s.NoError(smReg.RegisterEventDefinition(nexusoperations.StartedEventDefinition{}))
+	s.NoError(workflow.RegisterStateMachine(smReg))
+	root, err := hsm.NewRoot(smReg, workflow.StateMachineType, nil, make(map[string]*persistencespb.StateMachineMap), nil)
+	s.NoError(err)
+	ms.EXPECT().HSM().Return(root).AnyTimes()
+
+	excludes := map[enumspb.ResetReapplyExcludeType]struct{}{
+		enumspb.RESET_REAPPLY_EXCLUDE_TYPE_SIGNAL: {},
+		enumspb.RESET_REAPPLY_EXCLUDE_TYPE_UPDATE: {},
+		enumspb.RESET_REAPPLY_EXCLUDE_TYPE_NEXUS:  {},
+	}
+	reappliedEvents, err := reapplyEvents(context.Background(), ms, nil, smReg, events, excludes, "")
+	s.Empty(reappliedEvents)
+	s.NoError(err)
+}
+
+func (s *workflowResetterSuite) TestReapplyContinueAsNewWorkflowEvents_ExcludeAllEvents() {
+	ctx := context.Background()
+	baseFirstEventID := int64(123)
+	baseNextEventID := int64(456)
+	baseBranchToken := []byte("some random base branch token")
+	optionExcludeAllReapplyEvents := map[enumspb.ResetReapplyExcludeType]struct{}{
+		enumspb.RESET_REAPPLY_EXCLUDE_TYPE_SIGNAL: {},
+		enumspb.RESET_REAPPLY_EXCLUDE_TYPE_UPDATE: {},
+		enumspb.RESET_REAPPLY_EXCLUDE_TYPE_NEXUS:  {},
+	}
+
+	mutableState := workflow.NewMockMutableState(s.controller)
+	currentWorkflow := NewMockWorkflow(s.controller)
+
+	// Assert that we don't read any history events when we are asked to exclude all reapply events.
+	s.mockExecutionMgr.EXPECT().ReadHistoryBranchByBatch(gomock.Any(), gomock.Any()).Times(0)
+	// Make sure that we don't access the mutable state of the current workflow since there is nothing to update in this case.
+	currentWorkflow.EXPECT().GetMutableState().Times(0)
+
+	lastVisitedRunID, err := s.workflowResetter.reapplyContinueAsNewWorkflowEvents(
+		ctx,
+		mutableState,
+		currentWorkflow,
+		s.namespaceID,
+		s.workflowID,
+		s.baseRunID,
+		baseBranchToken,
+		baseFirstEventID,
+		baseNextEventID,
+		optionExcludeAllReapplyEvents,
+	)
+	s.NoError(err)
+	s.Equal(s.baseRunID, lastVisitedRunID)
 }
 
 func (s *workflowResetterSuite) TestPagination() {

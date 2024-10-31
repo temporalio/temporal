@@ -151,6 +151,9 @@ func (r *ActivityStateReplicatorImpl) SyncActivityState(
 			LastStartedBuildId:         request.LastStartedBuildId,
 			LastStartedRedirectCounter: request.LastStartedRedirectCounter,
 			VersionHistory:             request.VersionHistory,
+			FirstScheduledTime:         request.FirstScheduledTime,
+			LastAttemptCompleteTime:    request.LastAttemptCompleteTime,
+			Stamp:                      request.Stamp,
 		},
 	)
 	if err != nil {
@@ -311,39 +314,24 @@ func (r *ActivityStateReplicatorImpl) syncSingleActivityState(
 			EventID:             activitySyncInfo.GetScheduledEventId(),
 			Version:             activitySyncInfo.GetVersion(),
 			Attempt:             activitySyncInfo.GetAttempt(),
+			Stamp:               activitySyncInfo.GetStamp(),
 		})
 	}
 
 	if err := mutableState.UpdateActivityInfo(
 		activitySyncInfo,
-		r.shouldResetActivityTimerTaskMask(
-			activitySyncInfo.GetVersion(),
-			activitySyncInfo.GetAttempt(),
+		mutableState.ShouldResetActivityTimerTaskMask(
 			activityInfo,
+			&persistencespb.ActivityInfo{
+				Version: activitySyncInfo.GetVersion(),
+				Attempt: activitySyncInfo.GetAttempt(),
+			},
 		),
 	); err != nil {
 		return false, err
 	}
 
 	return true, nil
-}
-
-func (r *ActivityStateReplicatorImpl) shouldResetActivityTimerTaskMask(
-	version int64,
-	attempt int32,
-	activityInfo *persistencespb.ActivityInfo,
-) bool {
-
-	// calculate whether to reset the activity timer task status bits
-	// reset timer task status bits if
-	// 1. same source cluster & attempt changes
-	// 2. different source cluster
-	if !r.shardContext.GetClusterMetadata().IsVersionFromSameCluster(version, activityInfo.Version) {
-		return true
-	} else if activityInfo.Attempt != attempt {
-		return true
-	}
-	return false
 }
 
 func (r *ActivityStateReplicatorImpl) compareActivity(

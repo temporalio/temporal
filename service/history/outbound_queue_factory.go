@@ -347,7 +347,7 @@ func stateMachineTask(shardContext shard.Context, task tasks.Task) (hsm.Ref, hsm
 				fmt.Sprintf("deserializer not registered for task type %v", cbt.Info.Type),
 			)
 	}
-	smt, err := def.Deserialize(cbt.Info.Data, hsm.TaskKindOutbound{Destination: cbt.Destination})
+	smt, err := def.Deserialize(cbt.Info.Data, hsm.TaskAttributes{Destination: cbt.Destination})
 	if err != nil {
 		return hsm.Ref{},
 			nil,
@@ -361,6 +361,7 @@ func stateMachineTask(shardContext shard.Context, task tasks.Task) (hsm.Ref, hsm
 		WorkflowKey:     taskWorkflowKey(task),
 		StateMachineRef: cbt.Info.Ref,
 		TaskID:          task.GetTaskID(),
+		Validate:        smt.Validate,
 	}, smt, nil
 }
 

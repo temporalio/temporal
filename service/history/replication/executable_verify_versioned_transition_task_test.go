@@ -75,6 +75,7 @@ type (
 		mockExecutionManager    *persistence.MockExecutionManager
 		config                  *configs.Config
 		sourceClusterName       string
+		sourceShardKey          ClusterShardKey
 
 		taskID      int64
 		namespaceID string
@@ -120,6 +121,10 @@ func (s *executableVerifyVersionedTransitionTaskSuite) SetupTest() {
 	s.taskID = rand.Int63()
 
 	s.sourceClusterName = cluster.TestCurrentClusterName
+	s.sourceShardKey = ClusterShardKey{
+		ClusterID: int32(cluster.TestCurrentClusterInitialFailoverVersion),
+		ShardID:   rand.Int31(),
+	}
 	s.mockExecutionManager = persistence.NewMockExecutionManager(s.controller)
 	s.config = tests.NewDynamicConfig()
 
@@ -158,6 +163,7 @@ func (s *executableVerifyVersionedTransitionTaskSuite) SetupTest() {
 		s.taskID,
 		taskCreationTime,
 		s.sourceClusterName,
+		s.sourceShardKey,
 		replicationTask,
 	)
 	s.task.ExecutableTask = s.executableTask
@@ -212,6 +218,7 @@ func (s *executableVerifyVersionedTransitionTaskSuite) TestExecute_CurrentBranch
 		s.taskID,
 		time.Now(),
 		s.sourceClusterName,
+		s.sourceShardKey,
 		replicationTask,
 	)
 	task.ExecutableTask = s.executableTask
@@ -261,6 +268,7 @@ func (s *executableVerifyVersionedTransitionTaskSuite) TestExecute_CurrentBranch
 		s.taskID,
 		time.Now(),
 		s.sourceClusterName,
+		s.sourceShardKey,
 		replicationTask,
 	)
 	task.ExecutableTask = s.executableTask
@@ -324,11 +332,12 @@ func (s *executableVerifyVersionedTransitionTaskSuite) TestExecute_CurrentBranch
 
 	mu := workflow.NewMockMutableState(s.controller)
 	mu.EXPECT().GetNextEventID().Return(taskNextEvent).AnyTimes()
+	transitionHistory := []*persistencepb.VersionedTransition{
+		{NamespaceFailoverVersion: 1, TransitionCount: 3},
+		{NamespaceFailoverVersion: 3, TransitionCount: 6},
+	}
 	mu.EXPECT().GetExecutionInfo().Return(&persistencepb.WorkflowExecutionInfo{
-		TransitionHistory: []*persistencepb.VersionedTransition{
-			{NamespaceFailoverVersion: 1, TransitionCount: 3},
-			{NamespaceFailoverVersion: 3, TransitionCount: 6},
-		},
+		TransitionHistory: transitionHistory,
 	}).AnyTimes()
 
 	s.mockGetMutableState(s.namespaceID, s.workflowID, s.runID, mu, nil)
@@ -338,12 +347,14 @@ func (s *executableVerifyVersionedTransitionTaskSuite) TestExecute_CurrentBranch
 		s.taskID,
 		time.Now(),
 		s.sourceClusterName,
+		s.sourceShardKey,
 		replicationTask,
 	)
 	task.ExecutableTask = s.executableTask
 
 	err := task.Execute()
 	s.IsType(&serviceerrors.SyncState{}, err)
+	s.Equal(transitionHistory[1], err.(*serviceerrors.SyncState).VersionedTransition)
 }
 
 func (s *executableVerifyVersionedTransitionTaskSuite) TestExecute_NonCurrentBranch_VerifySuccess() {
@@ -401,6 +412,7 @@ func (s *executableVerifyVersionedTransitionTaskSuite) TestExecute_NonCurrentBra
 		s.taskID,
 		time.Now(),
 		s.sourceClusterName,
+		s.sourceShardKey,
 		replicationTask,
 	)
 	task.ExecutableTask = s.executableTask
@@ -469,6 +481,7 @@ func (s *executableVerifyVersionedTransitionTaskSuite) TestExecute_NonCurrentBra
 		s.taskID,
 		time.Now(),
 		s.sourceClusterName,
+		s.sourceShardKey,
 		replicationTask,
 	)
 	task.ExecutableTask = s.executableTask

@@ -241,6 +241,7 @@ func (r *HistoryReplicatorImpl) BackfillHistoryEvents(
 		request.NewEvents,
 		request.NewRunID,
 		request.VersionedHistory,
+		true,
 	)
 	if err != nil {
 		return err
@@ -283,6 +284,7 @@ func (r *HistoryReplicatorImpl) doApplyBackfillEvents(
 			task.getWorkflowID(),
 			task.getRunID(),
 			task.getVersionedTransition(),
+			nil,
 		)
 	default:
 		return err
@@ -313,6 +315,7 @@ func (r *HistoryReplicatorImpl) applyBackfillEvents(
 			task.getWorkflowID(),
 			task.getRunID(),
 			task.getVersionedTransition(),
+			mutableState.GetExecutionInfo().VersionHistories,
 		)
 	}
 
@@ -431,6 +434,7 @@ func (r *HistoryReplicatorImpl) ReplicateHistoryEvents(
 		newEvents,
 		newRunID,
 		nil,
+		false,
 	)
 	if err != nil {
 		return err
@@ -551,6 +555,10 @@ func (r *HistoryReplicatorImpl) applyStartEvents(
 			"HistoryReplicator::applyStartEvents encountered create workflow with continue as new case",
 			tag.Error(err),
 		)
+	}
+
+	if task.stateBased() {
+		mutableState.InitTransitionHistory()
 	}
 
 	err = r.transactionMgr.CreateWorkflow(

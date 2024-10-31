@@ -154,9 +154,11 @@ func (mr *MockPerNSWorkerComponentMockRecorder) DedicatedWorkerOptions(arg0 any)
 }
 
 // Register mocks base method.
-func (m *MockPerNSWorkerComponent) Register(arg0 worker.Registry, arg1 *namespace.Namespace, arg2 RegistrationDetails) {
+func (m *MockPerNSWorkerComponent) Register(arg0 worker.Registry, arg1 *namespace.Namespace, arg2 RegistrationDetails) func() {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "Register", arg0, arg1, arg2)
+	ret := m.ctrl.Call(m, "Register", arg0, arg1, arg2)
+	ret0, _ := ret[0].(func())
+	return ret0
 }
 
 // Register indicates an expected call of Register.

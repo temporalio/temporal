@@ -67,6 +67,10 @@ func NewExecutableUnknownTask(
 			taskCreationTime,
 			time.Now().UTC(),
 			"sourceCluster",
+			ClusterShardKey{
+				ClusterID: 0,
+				ShardID:   0,
+			},
 			enumsspb.TASK_PRIORITY_UNSPECIFIED,
 			nil,
 		),

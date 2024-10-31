@@ -25,7 +25,6 @@ package xdc
 import (
 	"context"
 	"encoding/json"
-	"flag"
 	"fmt"
 	"io"
 	"net/http"
@@ -47,7 +46,6 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/converter"
-
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
@@ -56,7 +54,7 @@ import (
 	"go.temporal.io/server/common/nexus/nexustest"
 	"go.temporal.io/server/components/callbacks"
 	"go.temporal.io/server/components/nexusoperations"
-	"go.temporal.io/server/tests"
+	"go.temporal.io/server/tests/testcore"
 )
 
 var op = nexus.NewOperationReference[string, string]("my-operation")
@@ -66,7 +64,7 @@ type NexusRequestForwardingSuite struct {
 }
 
 func TestNexusRequestForwardingTestSuite(t *testing.T) {
-	flag.Parse()
+	t.Parallel()
 	suite.Run(t, new(NexusRequestForwardingSuite))
 }
 
@@ -196,24 +194,24 @@ func (s *NexusRequestForwardingSuite) TestStartOperationForwardedFromStandbyToAc
 	for _, tc := range testCases {
 		tc := tc
 		s.T().Run(tc.name, func(t *testing.T) {
-			dispatchURL := fmt.Sprintf("http://%s/%s", s.cluster2.GetHost().FrontendHTTPAddress(), cnexus.RouteDispatchNexusTaskByNamespaceAndTaskQueue.Path(cnexus.NamespaceAndTaskQueue{Namespace: ns, TaskQueue: tc.taskQueue}))
+			dispatchURL := fmt.Sprintf("http://%s/%s", s.cluster2.Host().FrontendHTTPAddress(), cnexus.RouteDispatchNexusTaskByNamespaceAndTaskQueue.Path(cnexus.NamespaceAndTaskQueue{Namespace: ns, TaskQueue: tc.taskQueue}))
 			nexusClient, err := nexus.NewClient(nexus.ClientOptions{BaseURL: dispatchURL, Service: "test-service"})
 			s.NoError(err)
 
-			activeMetricsHandler, ok := s.cluster1.GetHost().GetMetricsHandler().(*metricstest.CaptureHandler)
+			activeMetricsHandler, ok := s.cluster1.Host().GetMetricsHandler().(*metricstest.CaptureHandler)
 			s.True(ok)
 			activeCapture := activeMetricsHandler.StartCapture()
 			defer activeMetricsHandler.StopCapture(activeCapture)
 
-			passiveMetricsHandler, ok := s.cluster2.GetHost().GetMetricsHandler().(*metricstest.CaptureHandler)
+			passiveMetricsHandler, ok := s.cluster2.Host().GetMetricsHandler().(*metricstest.CaptureHandler)
 			s.True(ok)
 			passiveCapture := passiveMetricsHandler.StartCapture()
 			defer passiveMetricsHandler.StopCapture(passiveCapture)
 
-			ctx, cancel := context.WithCancel(tests.NewContext())
+			ctx, cancel := context.WithCancel(testcore.NewContext())
 			defer cancel()
 
-			go s.nexusTaskPoller(ctx, s.cluster1.GetFrontendClient(), ns, tc.taskQueue, tc.handler)
+			go s.nexusTaskPoller(ctx, s.cluster1.FrontendClient(), ns, tc.taskQueue, tc.handler)
 
 			startResult, err := nexus.StartOperation(ctx, nexusClient, op, "input", nexus.StartOperationOptions{
 				CallbackURL: "http://localhost/callback",
@@ -297,24 +295,24 @@ func (s *NexusRequestForwardingSuite) TestCancelOperationForwardedFromStandbyToA
 	for _, tc := range testCases {
 		tc := tc
 		s.T().Run(tc.name, func(t *testing.T) {
-			dispatchURL := fmt.Sprintf("http://%s/%s", s.cluster2.GetHost().FrontendHTTPAddress(), cnexus.RouteDispatchNexusTaskByNamespaceAndTaskQueue.Path(cnexus.NamespaceAndTaskQueue{Namespace: ns, TaskQueue: tc.taskQueue}))
+			dispatchURL := fmt.Sprintf("http://%s/%s", s.cluster2.Host().FrontendHTTPAddress(), cnexus.RouteDispatchNexusTaskByNamespaceAndTaskQueue.Path(cnexus.NamespaceAndTaskQueue{Namespace: ns, TaskQueue: tc.taskQueue}))
 			nexusClient, err := nexus.NewClient(nexus.ClientOptions{BaseURL: dispatchURL, Service: "test-service"})
 			s.NoError(err)
 
-			activeMetricsHandler, ok := s.cluster1.GetHost().GetMetricsHandler().(*metricstest.CaptureHandler)
+			activeMetricsHandler, ok := s.cluster1.Host().GetMetricsHandler().(*metricstest.CaptureHandler)
 			s.True(ok)
 			activeCapture := activeMetricsHandler.StartCapture()
 			defer activeMetricsHandler.StopCapture(activeCapture)
 
-			passiveMetricsHandler, ok := s.cluster2.GetHost().GetMetricsHandler().(*metricstest.CaptureHandler)
+			passiveMetricsHandler, ok := s.cluster2.Host().GetMetricsHandler().(*metricstest.CaptureHandler)
 			s.True(ok)
 			passiveCapture := passiveMetricsHandler.StartCapture()
 			defer passiveMetricsHandler.StopCapture(passiveCapture)
 
-			ctx, cancel := context.WithCancel(tests.NewContext())
+			ctx, cancel := context.WithCancel(testcore.NewContext())
 			defer cancel()
 
-			go s.nexusTaskPoller(ctx, s.cluster1.GetFrontendClient(), ns, tc.taskQueue, tc.handler)
+			go s.nexusTaskPoller(ctx, s.cluster1.FrontendClient(), ns, tc.taskQueue, tc.handler)
 
 			handle, err := nexusClient.NewHandle("operation", "id")
 			require.NoError(t, err)
@@ -326,19 +324,19 @@ func (s *NexusRequestForwardingSuite) TestCancelOperationForwardedFromStandbyToA
 
 func (s *NexusRequestForwardingSuite) TestCompleteOperationForwardedFromStandbyToActive() {
 	// Override templates to always return passive cluster in callback URL
-	s.cluster1.GetHost().OverrideDCValue(
+	s.cluster1.OverrideDynamicConfig(
 		s.T(),
 		nexusoperations.CallbackURLTemplate,
-		"http://"+s.cluster2.GetHost().FrontendHTTPAddress()+"/namespaces/{{.NamespaceName}}/nexus/callback")
-	s.cluster2.GetHost().OverrideDCValue(
+		"http://"+s.cluster2.Host().FrontendHTTPAddress()+"/namespaces/{{.NamespaceName}}/nexus/callback")
+	s.cluster2.OverrideDynamicConfig(
 		s.T(),
 		nexusoperations.CallbackURLTemplate,
-		"http://"+s.cluster2.GetHost().FrontendHTTPAddress()+"/namespaces/{{.NamespaceName}}/nexus/callback")
+		"http://"+s.cluster2.Host().FrontendHTTPAddress()+"/namespaces/{{.NamespaceName}}/nexus/callback")
 
-	ctx := tests.NewContext()
+	ctx := testcore.NewContext()
 	ns := s.createGlobalNamespace()
 	taskQueue := fmt.Sprintf("%v-%v", "test-task-queue", uuid.New())
-	endpointName := tests.RandomizedNexusEndpoint(s.T().Name())
+	endpointName := testcore.RandomizedNexusEndpoint(s.T().Name())
 
 	var callbackToken, publicCallbackUrl string
 
@@ -365,14 +363,14 @@ func (s *NexusRequestForwardingSuite) TestCompleteOperationForwardedFromStandbyT
 		},
 	}
 
-	_, err := s.cluster1.GetOperatorClient().CreateNexusEndpoint(ctx, createEndpointReq)
+	_, err := s.cluster1.OperatorClient().CreateNexusEndpoint(ctx, createEndpointReq)
 	s.NoError(err)
 
-	_, err = s.cluster2.GetOperatorClient().CreateNexusEndpoint(ctx, createEndpointReq)
+	_, err = s.cluster2.OperatorClient().CreateNexusEndpoint(ctx, createEndpointReq)
 	s.NoError(err)
 
 	activeSDKClient, err := client.Dial(client.Options{
-		HostPort:  s.cluster1.GetHost().FrontendGRPCAddress(),
+		HostPort:  s.cluster1.Host().FrontendGRPCAddress(),
 		Namespace: ns,
 		Logger:    log.NewSdkLogger(s.logger),
 	})
@@ -383,8 +381,8 @@ func (s *NexusRequestForwardingSuite) TestCompleteOperationForwardedFromStandbyT
 	}, "workflow")
 	s.NoError(err)
 
-	feClient1 := s.cluster1.GetFrontendClient()
-	feClient2 := s.cluster2.GetFrontendClient()
+	feClient1 := s.cluster1.FrontendClient()
+	feClient2 := s.cluster2.FrontendClient()
 
 	pollResp, err := feClient1.PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
 		Namespace: ns,
@@ -512,7 +510,7 @@ func (s *NexusRequestForwardingSuite) TestCompleteOperationForwardedFromStandbyT
 	s.Equal("result", result)
 }
 
-func (s *NexusRequestForwardingSuite) nexusTaskPoller(ctx context.Context, frontendClient tests.FrontendClient, ns string, taskQueue string, handler func(*workflowservice.PollNexusTaskQueueResponse) (*nexuspb.Response, *nexuspb.HandlerError)) {
+func (s *NexusRequestForwardingSuite) nexusTaskPoller(ctx context.Context, frontendClient workflowservice.WorkflowServiceClient, ns string, taskQueue string, handler func(*workflowservice.PollNexusTaskQueueResponse) (*nexuspb.Response, *nexuspb.HandlerError)) {
 	res, err := frontendClient.PollNexusTaskQueue(ctx, &workflowservice.PollNexusTaskQueueRequest{
 		Namespace: ns,
 		Identity:  uuid.NewString(),
@@ -553,12 +551,12 @@ func (s *NexusRequestForwardingSuite) nexusTaskPoller(ctx context.Context, front
 func (s *NexusRequestForwardingSuite) sendNexusCompletionRequest(
 	ctx context.Context,
 	t *testing.T,
-	testCluster *tests.TestCluster,
+	testCluster *testcore.TestCluster,
 	url string,
 	completion nexus.OperationCompletion,
 	callbackToken string,
 ) (*http.Response, map[string][]*metricstest.CapturedRecording) {
-	metricsHandler, ok := testCluster.GetHost().GetMetricsHandler().(*metricstest.CaptureHandler)
+	metricsHandler, ok := testCluster.Host().GetMetricsHandler().(*metricstest.CaptureHandler)
 	s.True(ok)
 	capture := metricsHandler.StartCapture()
 	defer metricsHandler.StopCapture(capture)

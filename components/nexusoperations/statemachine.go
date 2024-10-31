@@ -151,7 +151,7 @@ func (o Operation) CancelationNode(node *hsm.Node) (*hsm.Node, error) {
 func (o Operation) transitionTasks() ([]hsm.Task, error) {
 	switch o.State() { // nolint:exhaustive
 	case enumsspb.NEXUS_OPERATION_STATE_BACKING_OFF:
-		return []hsm.Task{BackoffTask{Deadline: o.NextAttemptScheduleTime.AsTime()}}, nil
+		return []hsm.Task{BackoffTask{deadline: o.NextAttemptScheduleTime.AsTime()}}, nil
 	case enumsspb.NEXUS_OPERATION_STATE_SCHEDULED:
 		return []hsm.Task{InvocationTask{EndpointName: o.Endpoint}}, nil
 	default:
@@ -166,21 +166,24 @@ func (o Operation) creationTasks(node *hsm.Node) ([]hsm.Task, error) {
 	}
 
 	if o.ScheduleToCloseTimeout.AsDuration() != 0 {
-		return []hsm.Task{TimeoutTask{Deadline: o.ScheduledTime.AsTime().Add(o.ScheduleToCloseTimeout.AsDuration())}}, nil
+		return []hsm.Task{TimeoutTask{deadline: o.ScheduledTime.AsTime().Add(o.ScheduleToCloseTimeout.AsDuration())}}, nil
 	}
 	return nil, nil
 }
 
-func (o Operation) RegenerateTasks(node *hsm.Node) ([]hsm.Task, error) {
-	transitionTasks, err := o.transitionTasks()
+func (o Operation) RegenerateTasks(prevData any, node *hsm.Node) ([]hsm.Task, error) {
+	tasks, err := o.transitionTasks()
 	if err != nil {
 		return nil, err
 	}
-	creationTasks, err := o.creationTasks(node)
-	if err != nil {
-		return nil, err
+	if prevData == nil {
+		creationTasks, err := o.creationTasks(node)
+		if err != nil {
+			return nil, err
+		}
+		tasks = append(tasks, creationTasks...)
 	}
-	return append(transitionTasks, creationTasks...), nil
+	return tasks, nil
 }
 
 func (o Operation) output() (hsm.TransitionOutput, error) {
@@ -575,7 +578,7 @@ func (c Cancelation) recordAttempt(ts time.Time) {
 	c.NexusOperationCancellationInfo.LastAttemptFailure = nil
 }
 
-func (c Cancelation) RegenerateTasks(node *hsm.Node) ([]hsm.Task, error) {
+func (c Cancelation) RegenerateTasks(_ any, node *hsm.Node) ([]hsm.Task, error) {
 	op, err := hsm.MachineData[Operation](node.Parent)
 	if err != nil {
 		return nil, err
@@ -584,14 +587,14 @@ func (c Cancelation) RegenerateTasks(node *hsm.Node) ([]hsm.Task, error) {
 	case enumspb.NEXUS_OPERATION_CANCELLATION_STATE_SCHEDULED:
 		return []hsm.Task{CancelationTask{EndpointName: op.Endpoint}}, nil
 	case enumspb.NEXUS_OPERATION_CANCELLATION_STATE_BACKING_OFF:
-		return []hsm.Task{CancelationBackoffTask{Deadline: c.NextAttemptScheduleTime.AsTime()}}, nil
+		return []hsm.Task{CancelationBackoffTask{deadline: c.NextAttemptScheduleTime.AsTime()}}, nil
 	default:
 		return nil, nil
 	}
 }
 
 func (c Cancelation) output(node *hsm.Node) (hsm.TransitionOutput, error) {
-	tasks, err := c.RegenerateTasks(node)
+	tasks, err := c.RegenerateTasks(nil, node)
 	if err != nil {
 		return hsm.TransitionOutput{}, err
 	}

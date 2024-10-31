@@ -51,6 +51,7 @@ type (
 		GetTaskQueueUserData(ctx context.Context, request *matchingservice.GetTaskQueueUserDataRequest) (*matchingservice.GetTaskQueueUserDataResponse, error)
 		ApplyTaskQueueUserDataReplicationEvent(ctx context.Context, request *matchingservice.ApplyTaskQueueUserDataReplicationEventRequest) (*matchingservice.ApplyTaskQueueUserDataReplicationEventResponse, error)
 		GetBuildIdTaskQueueMapping(ctx context.Context, request *matchingservice.GetBuildIdTaskQueueMappingRequest) (*matchingservice.GetBuildIdTaskQueueMappingResponse, error)
+		ForceUnloadTaskQueuePartition(ctx context.Context, request *matchingservice.ForceUnloadTaskQueuePartitionRequest) (*matchingservice.ForceUnloadTaskQueuePartitionResponse, error)
 		ForceUnloadTaskQueue(ctx context.Context, request *matchingservice.ForceUnloadTaskQueueRequest) (*matchingservice.ForceUnloadTaskQueueResponse, error)
 		ForceLoadTaskQueuePartition(ctx context.Context, request *matchingservice.ForceLoadTaskQueuePartitionRequest) (*matchingservice.ForceLoadTaskQueuePartitionResponse, error)
 		UpdateTaskQueueUserData(ctx context.Context, request *matchingservice.UpdateTaskQueueUserDataRequest) (*matchingservice.UpdateTaskQueueUserDataResponse, error)

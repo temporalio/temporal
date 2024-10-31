@@ -29,6 +29,7 @@ import (
 	"errors"
 	"fmt"
 	"math/rand"
+	"reflect"
 	"strings"
 	"sync"
 	"time"
@@ -712,4 +713,52 @@ func DiscardUnknownProto(m proto.Message) error {
 		}
 		return nil
 	})
+}
+
+// MergeProtoExcludingFields merges fields from source into target, excluding specific fields.
+// The fields to exclude are specified as pointers to fields in the target struct.
+func MergeProtoExcludingFields(target, source proto.Message, doNotSyncFunc func(v any) []interface{}) error {
+	if target == nil || source == nil {
+		return serviceerror.NewInvalidArgument("target and source cannot be nil")
+	}
+
+	if reflect.TypeOf(target) != reflect.TypeOf(source) {
+		return serviceerror.NewInvalidArgument("target and source must be of the same type")
+	}
+
+	excludeFields := doNotSyncFunc(target)
+	excludeSet := make(map[string]struct{}, len(excludeFields))
+	for _, fieldPtr := range excludeFields {
+		fieldName, err := getFieldNameFromStruct(target, fieldPtr)
+		if err != nil {
+			return err
+		}
+		excludeSet[fieldName] = struct{}{}
+	}
+
+	srcVal := reflect.ValueOf(source).Elem()
+	dstVal := reflect.ValueOf(target).Elem()
+	for i := 0; i < srcVal.NumField(); i++ {
+		field := srcVal.Type().Field(i)
+		if _, exclude := excludeSet[field.Name]; !exclude {
+			srcField := srcVal.Field(i)
+			dstField := dstVal.Field(i)
+			if dstField.CanSet() {
+				dstField.Set(srcField)
+			}
+		}
+	}
+
+	return nil
+}
+
+func getFieldNameFromStruct(structPtr interface{}, fieldPtr interface{}) (string, error) {
+	structVal := reflect.ValueOf(structPtr).Elem()
+	for i := 0; i < structVal.NumField(); i++ {
+		field := structVal.Field(i)
+		if field.CanSet() && field.Addr().Interface() == fieldPtr {
+			return structVal.Type().Field(i).Name, nil
+		}
+	}
+	return "", serviceerror.NewInternal("field not found in the struct")
 }

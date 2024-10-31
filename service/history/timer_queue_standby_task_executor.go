@@ -321,6 +321,11 @@ func (t *timerQueueStandbyTaskExecutor) executeActivityRetryTimerTask(
 			return nil, nil
 		}
 
+		if activityInfo.Stamp != task.Stamp {
+			// this retry task is from old Stamp. In this case we should ignore it
+			return nil, nil
+		}
+
 		if activityInfo.StartedEventId != common.EmptyEventID {
 			return nil, nil
 		}
@@ -520,15 +525,9 @@ func (t *timerQueueStandbyTaskExecutor) executeStateMachineTimerTask(
 			wfContext,
 			mutableState,
 			func(node *hsm.Node, task hsm.Task) error {
-				if task.Concurrent() {
-					//nolint:revive // concurrent tasks implements hsm.ConcurrentTask interface
-					concurrentTask := task.(hsm.ConcurrentTask)
-					if err := concurrentTask.Validate(node); err != nil {
-						return err
-					}
-				}
-				// If the timer fired and the task is still valid in the standby queue, wait for the active cluster to
-				// transition and invalidate the task.
+				// If this line of code is reached, the task's Validate() function returned no error, which indicates
+				// that it is still expected to run. Return ErrTaskRetry to wait the machine to transition on the active
+				// cluster.
 				return consts.ErrTaskRetry
 			},
 		)
@@ -747,6 +746,7 @@ func (t *timerQueueStandbyTaskExecutor) pushActivity(
 		ScheduleToStartTimeout: durationpb.New(activityScheduleToStartTimeout),
 		Clock:                  vclock.NewVectorClock(t.shardContext.GetClusterMetadata().GetClusterID(), t.shardContext.GetShardID(), activityTask.TaskID),
 		VersionDirective:       pushActivityInfo.versionDirective,
+		Stamp:                  activityTask.Stamp,
 	})
 
 	if err != nil {

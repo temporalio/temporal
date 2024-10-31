@@ -90,22 +90,21 @@ func (c Callback) recordAttempt(ts time.Time) {
 	c.CallbackInfo.LastAttemptCompleteTime = timestamppb.New(ts)
 }
 
-func (c Callback) RegenerateTasks(*hsm.Node) ([]hsm.Task, error) {
+func (c Callback) RegenerateTasks(any, *hsm.Node) ([]hsm.Task, error) {
 	switch c.CallbackInfo.State {
 	case enumsspb.CALLBACK_STATE_BACKING_OFF:
-		return []hsm.Task{BackoffTask{Deadline: c.NextAttemptScheduleTime.AsTime()}}, nil
+		return []hsm.Task{BackoffTask{deadline: c.NextAttemptScheduleTime.AsTime()}}, nil
 	case enumsspb.CALLBACK_STATE_SCHEDULED:
 		switch v := c.Callback.GetVariant().(type) {
 		case *persistencespb.Callback_Nexus_:
-			var baseURL string
 			u, err := url.Parse(c.Callback.GetNexus().Url)
 			if err != nil {
 				return nil, fmt.Errorf("failed to parse URL: %v: %w", &c, err)
 			}
-			baseURL = u.Scheme + "://" + u.Host
-			return []hsm.Task{InvocationTask{Destination: baseURL}}, nil
+			return []hsm.Task{InvocationTask{destination: u.Scheme + "://" + u.Host}}, nil
 		case *persistencespb.Callback_Hsm:
-			return []hsm.Task{InvocationTask{Destination: ""}}, nil
+			// Destination is empty on the internal queue.
+			return []hsm.Task{InvocationTask{"TODO(bergundy): make this empty"}}, nil
 
 		default:
 			return nil, fmt.Errorf("unsupported callback variant %v", v) // nolint:goerr113
@@ -117,7 +116,7 @@ func (c Callback) RegenerateTasks(*hsm.Node) ([]hsm.Task, error) {
 func (c Callback) output() (hsm.TransitionOutput, error) {
 	// Task logic is the same when regenerating tasks for a given state and when transitioning to that state.
 	// Node is ignored here.
-	tasks, err := c.RegenerateTasks(nil)
+	tasks, err := c.RegenerateTasks(nil, nil)
 	return hsm.TransitionOutput{Tasks: tasks}, err
 }
 

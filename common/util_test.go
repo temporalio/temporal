@@ -36,8 +36,10 @@ import (
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 	enumsspb "go.temporal.io/server/api/enums/v1"
+	historyspb "go.temporal.io/server/api/history/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/primitives/timestamp"
 	"google.golang.org/protobuf/testing/protopack"
 )
 
@@ -417,4 +419,146 @@ func TestDiscardUnknownProto(t *testing.T) {
 	dataWithoutUnknown, err := msRecord.Marshal()
 	require.NoError(t, err)
 	require.Equal(t, data, dataWithoutUnknown)
+}
+
+func generateExecutionInfo() (a, b *persistencespb.WorkflowExecutionInfo) {
+	a = &persistencespb.WorkflowExecutionInfo{
+		NamespaceId:                             "deadbeef-0123-4567-890a-bcdef0123456",
+		WorkflowId:                              "wId",
+		TaskQueue:                               "testTaskQueue",
+		WorkflowTypeName:                        "wType",
+		WorkflowRunTimeout:                      timestamp.DurationPtr(time.Second * 200),
+		DefaultWorkflowTaskTimeout:              timestamp.DurationPtr(time.Second * 100),
+		LastCompletedWorkflowTaskStartedEventId: 99,
+		WorkflowTaskVersion:                     1234,
+		WorkflowTaskScheduledEventId:            101,
+		WorkflowTaskStartedEventId:              102,
+		WorkflowTaskTimeout:                     timestamp.DurationPtr(time.Second * 100),
+		WorkflowTaskAttempt:                     1,
+		WorkflowTaskType:                        enumsspb.WORKFLOW_TASK_TYPE_NORMAL,
+		VersionHistories: &historyspb.VersionHistories{
+			Histories: []*historyspb.VersionHistory{
+				{
+					BranchToken: []byte("token#1"),
+					Items: []*historyspb.VersionHistoryItem{
+						{EventId: 102, Version: 1234},
+					},
+				},
+			},
+		},
+		TransitionHistory: []*persistencespb.VersionedTransition{
+			{NamespaceFailoverVersion: 1234, TransitionCount: 1024},
+			{TransitionCount: 1025},
+		},
+		SignalRequestIdsLastUpdateVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 1025},
+	}
+
+	b = &persistencespb.WorkflowExecutionInfo{
+		NamespaceId:                             "deadbeef-0123-4567-890a-bcdef0123456",
+		WorkflowId:                              "wId",
+		TaskQueue:                               "testTaskQueue",
+		WorkflowTypeName:                        "wType",
+		WorkflowRunTimeout:                      timestamp.DurationPtr(time.Second * 200),
+		DefaultWorkflowTaskTimeout:              timestamp.DurationPtr(time.Second*100 + time.Second),
+		LastCompletedWorkflowTaskStartedEventId: 99,
+		WorkflowTaskVersion:                     1234 + 1,
+		WorkflowTaskScheduledEventId:            101 + 1,
+		WorkflowTaskStartedEventId:              102 + 1,
+		WorkflowTaskTimeout:                     timestamp.DurationPtr(time.Second * 100),
+		WorkflowTaskAttempt:                     1,
+		WorkflowTaskType:                        enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE,
+		VersionHistories: &historyspb.VersionHistories{
+			Histories: []*historyspb.VersionHistory{
+				{
+					BranchToken: []byte("token#1"),
+					Items: []*historyspb.VersionHistoryItem{
+						{EventId: 102, Version: 1234},
+					},
+				},
+			},
+		},
+		TransitionHistory: []*persistencespb.VersionedTransition{
+			{NamespaceFailoverVersion: 1234, TransitionCount: 1024},
+			{TransitionCount: 1025},
+		},
+		SignalRequestIdsLastUpdateVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 1025},
+	}
+	return
+}
+
+func TestMergeProtoExcludingFields(t *testing.T) {
+	source := &persistencespb.WorkflowExecutionInfo{
+		NamespaceId: uuid.New(),
+		WorkflowId:  uuid.New(),
+	}
+
+	target := &persistencespb.WorkflowExecutionInfo{
+		NamespaceId: source.NamespaceId + "_target",
+		WorkflowId:  source.WorkflowId + "_target",
+	}
+
+	doNotSync := func(v any) []interface{} {
+		info, ok := v.(*persistencespb.WorkflowExecutionInfo)
+		if !ok || info == nil {
+			return nil
+		}
+		return []interface{}{
+			&info.NamespaceId,
+		}
+	}
+
+	err := MergeProtoExcludingFields(target, source, doNotSync)
+	require.NoError(t, err)
+
+	require.NotEqual(t, source.NamespaceId, target.NamespaceId)
+	require.Equal(t, source.WorkflowId, target.WorkflowId)
+
+	msRecord := &persistencespb.WorkflowMutableState{}
+	err = MergeProtoExcludingFields(target, msRecord, doNotSync)
+	require.Error(t, err)
+
+	msRecord = &persistencespb.WorkflowMutableState{}
+	err = MergeProtoExcludingFields(target, msRecord, doNotSync)
+	require.Error(t, err)
+
+	source, target = generateExecutionInfo()
+	doNotSync = func(v any) []interface{} {
+		info, ok := v.(*persistencespb.WorkflowExecutionInfo)
+		if !ok || info == nil {
+			return nil
+		}
+		return []interface{}{
+			&info.WorkflowTaskVersion,
+			&info.WorkflowTaskScheduledEventId,
+			&info.WorkflowTaskStartedEventId,
+			&info.WorkflowTaskRequestId,
+			&info.WorkflowTaskTimeout,
+			&info.WorkflowTaskAttempt,
+			&info.WorkflowTaskStartedTime,
+			&info.WorkflowTaskScheduledTime,
+			&info.WorkflowTaskOriginalScheduledTime,
+			&info.WorkflowTaskType,
+			&info.WorkflowTaskSuggestContinueAsNew,
+			&info.WorkflowTaskHistorySizeBytes,
+			&info.WorkflowTaskBuildId,
+			&info.WorkflowTaskBuildIdRedirectCounter,
+			&info.VersionHistories,
+			&info.ExecutionStats,
+			&info.LastFirstEventTxnId,
+			&info.ParentClock,
+			&info.CloseTransferTaskId,
+			&info.CloseVisibilityTaskId,
+			&info.RelocatableAttributesRemoved,
+			&info.WorkflowExecutionTimerTaskStatus,
+			&info.SubStateMachinesByType,
+			&info.StateMachineTimers,
+			&info.TaskGenerationShardClockTimestamp,
+			&info.UpdateInfos,
+		}
+	}
+	err = MergeProtoExcludingFields(target, source, doNotSync)
+	require.NoError(t, err)
+
+	require.NotEqual(t, source.WorkflowTaskVersion, target.WorkflowTaskVersion)
+	require.Equal(t, source.WorkflowId, target.WorkflowId)
 }

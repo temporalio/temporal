@@ -171,11 +171,33 @@ func TestRegenerateTasks(t *testing.T) {
 
 			op, err := hsm.MachineData[nexusoperations.Operation](node)
 			require.NoError(t, err)
-			tasks, err := op.RegenerateTasks(node)
+			tasks, err := op.RegenerateTasks(nil, node)
 			require.NoError(t, err)
 			tc.assertTasks(t, tasks)
 		})
 	}
+}
+
+func TestRegenerateTasksFromPreviousState(t *testing.T) {
+	node := newOperationNode(t, &hsmtest.NodeBackend{}, mustNewScheduledEvent(time.Now(), time.Hour))
+	prevOp, err := hsm.MachineData[nexusoperations.Operation](node)
+	require.NoError(t, err)
+
+	require.NoError(t, hsm.MachineTransition(node, func(op nexusoperations.Operation) (hsm.TransitionOutput, error) {
+		return nexusoperations.TransitionAttemptFailed.Apply(op, nexusoperations.EventAttemptFailed{
+			Time:        time.Now(),
+			Err:         fmt.Errorf("test"), // nolint:goerr113
+			Node:        node,
+			RetryPolicy: backoff.NewExponentialRetryPolicy(time.Second),
+		})
+	}))
+
+	op, err := hsm.MachineData[nexusoperations.Operation](node)
+	require.NoError(t, err)
+	tasks, err := op.RegenerateTasks(prevOp, node)
+	require.NoError(t, err)
+	require.Equal(t, 1, len(tasks))
+	require.Equal(t, nexusoperations.TaskTypeBackoff, tasks[0].Type())
 }
 
 func TestRetry(t *testing.T) {
@@ -199,7 +221,7 @@ func TestRetry(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, enumsspb.NEXUS_OPERATION_STATE_BACKING_OFF, op.State())
 	require.Equal(t, int32(1), op.Attempt)
-	require.Equal(t, op.NextAttemptScheduleTime.AsTime(), boTask.Deadline)
+	require.Equal(t, op.NextAttemptScheduleTime.AsTime(), boTask.Deadline())
 	require.NotNil(t, op.LastAttemptFailure)
 
 	node.ClearTransactionState()
@@ -509,7 +531,7 @@ func TestCancelationValidTransitions(t *testing.T) {
 	// Assert backoff task is generated
 	require.Equal(t, 1, len(out.Tasks))
 	boTask := out.Tasks[0].(nexusoperations.CancelationBackoffTask) // nolint:revive
-	require.Equal(t, cancelation.NextAttemptScheduleTime.AsTime(), boTask.Deadline)
+	require.Equal(t, cancelation.NextAttemptScheduleTime.AsTime(), boTask.Deadline())
 
 	// Rescheduled
 	out, err = nexusoperations.TransitionCancelationRescheduled.Apply(cancelation, nexusoperations.EventCancelationRescheduled{

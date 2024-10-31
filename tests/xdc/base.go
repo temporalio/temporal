@@ -22,15 +22,10 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-//go:build !race
-
-// need to run xdc tests with race detector off because of ringpop bug causing data race issue
-
 package xdc
 
 import (
 	"context"
-	"fmt"
 	"os"
 	"sync"
 	"time"
@@ -43,9 +38,6 @@ import (
 	replicationpb "go.temporal.io/api/replication/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/converter"
-	"google.golang.org/protobuf/types/known/durationpb"
-	"gopkg.in/yaml.v3"
-
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common/cluster"
@@ -56,7 +48,9 @@ import (
 	"go.temporal.io/server/common/testing/historyrequire"
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/environment"
-	"go.temporal.io/server/tests"
+	"go.temporal.io/server/tests/testcore"
+	"google.golang.org/protobuf/types/known/durationpb"
+	"gopkg.in/yaml.v3"
 )
 
 type (
@@ -69,10 +63,10 @@ type (
 		clusterNames []string
 		suite.Suite
 
-		testClusterFactory tests.TestClusterFactory
+		testClusterFactory testcore.TestClusterFactory
 
-		cluster1               *tests.TestCluster
-		cluster2               *tests.TestCluster
+		cluster1               *testcore.TestCluster
+		cluster2               *testcore.TestCluster
 		logger                 log.Logger
 		dynamicConfigOverrides map[dynamicconfig.Key]interface{}
 
@@ -91,10 +85,10 @@ func (s *xdcBaseSuite) clusterReplicationConfig() []*replicationpb.ClusterReplic
 	return config
 }
 
-func (s *xdcBaseSuite) setupSuite(clusterNames []string, opts ...tests.Option) {
-	s.testClusterFactory = tests.NewTestClusterFactory()
+func (s *xdcBaseSuite) setupSuite(clusterNames []string, opts ...testcore.Option) {
+	s.testClusterFactory = testcore.NewTestClusterFactory()
 
-	params := tests.ApplyTestClusterParams(opts)
+	params := testcore.ApplyTestClusterParams(opts)
 
 	s.clusterNames = clusterNames
 	if s.logger == nil {
@@ -106,8 +100,8 @@ func (s *xdcBaseSuite) setupSuite(clusterNames []string, opts ...tests.Option) {
 	s.dynamicConfigOverrides[dynamicconfig.ClusterMetadataRefreshInterval.Key()] = time.Second * 5
 
 	fileName := "../testdata/xdc_clusters.yaml"
-	if tests.TestFlags.TestClusterConfigFile != "" {
-		fileName = tests.TestFlags.TestClusterConfigFile
+	if testcore.TestFlags.TestClusterConfigFile != "" {
+		fileName = testcore.TestFlags.TestClusterConfigFile
 	}
 	environment.SetupEnv()
 
@@ -115,22 +109,19 @@ func (s *xdcBaseSuite) setupSuite(clusterNames []string, opts ...tests.Option) {
 	s.Require().NoError(err)
 	confContent = []byte(os.ExpandEnv(string(confContent)))
 
-	var clusterConfigs []*tests.TestClusterConfig
+	var clusterConfigs []*testcore.TestClusterConfig
 	s.Require().NoError(yaml.Unmarshal(confContent, &clusterConfigs))
 	for i, config := range clusterConfigs {
 		config.DynamicConfigOverrides = s.dynamicConfigOverrides
 		clusterConfigs[i].ClusterMetadata.MasterClusterName = s.clusterNames[i]
 		clusterConfigs[i].ClusterMetadata.CurrentClusterName = s.clusterNames[i]
 		clusterConfigs[i].Persistence.DBName = "func_" + s.clusterNames[i]
-		clusterConfigs[i].ClusterMetadata.ClusterInformation = make(map[string]cluster.ClusterInformation)
-		// TODO: make tests.temporalImpl actually use these ports. Right now, we're just setting these to the values
-		// that the tests.temporalImpl uses by default, so that our info here is right, but these aren't actually used
-		// by NewCluster.
-		clusterConfigs[i].ClusterMetadata.ClusterInformation[s.clusterNames[i]] = cluster.ClusterInformation{
-			Enabled:                true,
-			InitialFailoverVersion: int64(i + 1),
-			RPCAddress:             fmt.Sprintf("127.0.0.1:%d134", 7+i),
-			HTTPAddress:            fmt.Sprintf("127.0.0.1:%d144", 7+i),
+		clusterConfigs[i].ClusterMetadata.ClusterInformation = map[string]cluster.ClusterInformation{
+			s.clusterNames[i]: cluster.ClusterInformation{
+				Enabled:                true,
+				InitialFailoverVersion: int64(i + 1),
+				// RPCAddress and HTTPAddress will be filled in
+			},
 		}
 		clusterConfigs[i].ServiceFxOptions = params.ServiceOptions
 		clusterConfigs[i].EnableMetricsCapture = true
@@ -146,22 +137,20 @@ func (s *xdcBaseSuite) setupSuite(clusterNames []string, opts ...tests.Option) {
 
 	s.startTime = time.Now()
 
-	cluster1Info := clusterConfigs[0].ClusterMetadata.ClusterInformation[clusterConfigs[0].ClusterMetadata.CurrentClusterName]
-	cluster2Info := clusterConfigs[1].ClusterMetadata.ClusterInformation[clusterConfigs[1].ClusterMetadata.CurrentClusterName]
-	_, err = s.cluster1.GetAdminClient().AddOrUpdateRemoteCluster(
-		tests.NewContext(),
+	_, err = s.cluster1.AdminClient().AddOrUpdateRemoteCluster(
+		testcore.NewContext(),
 		&adminservice.AddOrUpdateRemoteClusterRequest{
-			FrontendAddress:               cluster2Info.RPCAddress,
-			FrontendHttpAddress:           cluster2Info.HTTPAddress,
+			FrontendAddress:               s.cluster2.Host().RemoteFrontendGRPCAddress(),
+			FrontendHttpAddress:           s.cluster2.Host().FrontendHTTPAddress(),
 			EnableRemoteClusterConnection: true,
 		})
 	s.Require().NoError(err)
 
-	_, err = s.cluster2.GetAdminClient().AddOrUpdateRemoteCluster(
-		tests.NewContext(),
+	_, err = s.cluster2.AdminClient().AddOrUpdateRemoteCluster(
+		testcore.NewContext(),
 		&adminservice.AddOrUpdateRemoteClusterRequest{
-			FrontendAddress:               cluster1Info.RPCAddress,
-			FrontendHttpAddress:           cluster1Info.HTTPAddress,
+			FrontendAddress:               s.cluster1.Host().RemoteFrontendGRPCAddress(),
+			FrontendHttpAddress:           s.cluster1.Host().FrontendHTTPAddress(),
 			EnableRemoteClusterConnection: true,
 		})
 	s.Require().NoError(err)
@@ -172,7 +161,7 @@ func (s *xdcBaseSuite) setupSuite(clusterNames []string, opts ...tests.Option) {
 func waitForClusterConnected(
 	s *require.Assertions,
 	logger log.Logger,
-	sourceCluster *tests.TestCluster,
+	sourceCluster *testcore.TestCluster,
 	source string,
 	target string,
 	startTime time.Time,
@@ -180,7 +169,7 @@ func waitForClusterConnected(
 	logger.Info("wait for clusters to be synced", tag.SourceCluster(source), tag.TargetCluster(target))
 	s.EventuallyWithT(func(c *assert.CollectT) {
 		logger.Info("check if clusters are synced", tag.SourceCluster(source), tag.TargetCluster(target))
-		resp, err := sourceCluster.GetHistoryClient().GetReplicationStatus(context.Background(), &historyservice.GetReplicationStatusRequest{})
+		resp, err := sourceCluster.HistoryClient().GetReplicationStatus(context.Background(), &historyservice.GetReplicationStatusRequest{})
 		if !assert.NoError(c, err) {
 			return
 		}
@@ -224,7 +213,7 @@ func (s *xdcBaseSuite) setupTest() {
 }
 
 func (s *xdcBaseSuite) createGlobalNamespace() string {
-	ctx := tests.NewContext()
+	ctx := testcore.NewContext()
 	ns := "test-namespace-" + uuid.NewString()
 
 	regReq := &workflowservice.RegisterNamespaceRequest{
@@ -234,13 +223,15 @@ func (s *xdcBaseSuite) createGlobalNamespace() string {
 		ActiveClusterName:                s.clusterNames[0],
 		WorkflowExecutionRetentionPeriod: durationpb.New(7 * time.Hour * 24),
 	}
-	_, err := s.cluster1.GetFrontendClient().RegisterNamespace(ctx, regReq)
+	_, err := s.cluster1.FrontendClient().RegisterNamespace(ctx, regReq)
 	s.NoError(err)
 
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		// Wait for namespace record to be replicated and loaded into memory.
-		_, err := s.cluster2.GetHost().GetFrontendNamespaceRegistry().GetNamespace(namespace.Name(ns))
-		assert.NoError(t, err)
+		for _, r := range s.cluster2.Host().FrontendNamespaceRegistries() {
+			_, err := r.GetNamespace(namespace.Name(ns))
+			assert.NoError(t, err)
+		}
 	}, 15*time.Second, 500*time.Millisecond)
 
 	return ns
@@ -250,7 +241,7 @@ func (s *xdcBaseSuite) failover(
 	namespace string,
 	targetCluster string,
 	targetFailoverVersion int64,
-	client tests.FrontendClient,
+	client workflowservice.WorkflowServiceClient,
 ) {
 	// wait for replication task propagation
 	time.Sleep(4 * time.Second)
@@ -262,7 +253,7 @@ func (s *xdcBaseSuite) failover(
 			ActiveClusterName: targetCluster,
 		},
 	}
-	updateResp, err := client.UpdateNamespace(tests.NewContext(), updateReq)
+	updateResp, err := client.UpdateNamespace(testcore.NewContext(), updateReq)
 	s.NoError(err)
 	s.Equal(targetCluster, updateResp.ReplicationConfig.GetActiveClusterName())
 	s.Equal(targetFailoverVersion, updateResp.GetFailoverVersion())
