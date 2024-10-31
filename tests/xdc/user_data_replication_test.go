@@ -298,7 +298,16 @@ func (s *UserDataReplicationTestSuite) TestUserDataEntriesAreReplicatedOnDemand(
 	ctx := testcore.NewContext()
 	namespace := s.T().Name() + "-" + common.GenerateRandomString(5)
 	activeFrontendClient := s.cluster1.FrontendClient()
+	adminClient := s.cluster1.AdminClient()
 	numTaskQueues := 10
+
+	replicationResponse, err := adminClient.GetNamespaceReplicationMessages(ctx, &adminservice.GetNamespaceReplicationMessagesRequest{
+		ClusterName:            "follower",
+		LastRetrievedMessageId: -1,
+		LastProcessedMessageId: -1,
+	})
+	s.NoError(err)
+	lastMessageId := replicationResponse.GetMessages().GetLastRetrievedMessageId()
 
 	regReq := &workflowservice.RegisterNamespaceRequest{
 		Namespace:         namespace,
@@ -309,7 +318,7 @@ func (s *UserDataReplicationTestSuite) TestUserDataEntriesAreReplicatedOnDemand(
 		ActiveClusterName:                s.clusterNames[0],
 		WorkflowExecutionRetentionPeriod: durationpb.New(7 * time.Hour * 24),
 	}
-	_, err := activeFrontendClient.RegisterNamespace(testcore.NewContext(), regReq)
+	_, err = activeFrontendClient.RegisterNamespace(testcore.NewContext(), regReq)
 	s.NoError(err)
 	// Wait for namespace cache to pick the change
 	time.Sleep(cacheRefreshInterval)
@@ -354,7 +363,6 @@ func (s *UserDataReplicationTestSuite) TestUserDataEntriesAreReplicatedOnDemand(
 		s.NotNil(rulesRes)
 		expectedReplicatedTaskQueues[taskQueue2] = struct{}{}
 	}
-	adminClient := s.cluster1.AdminClient()
 
 	// update namespace to cross clusters
 	_, err = activeFrontendClient.UpdateNamespace(ctx, &workflowservice.UpdateNamespaceRequest{
@@ -366,13 +374,14 @@ func (s *UserDataReplicationTestSuite) TestUserDataEntriesAreReplicatedOnDemand(
 	s.NoError(err)
 	time.Sleep(cacheRefreshInterval) // nolint:forbidigo
 
-	// we should see one namespace task in the replication queue
-	replicationResponse, err := adminClient.GetNamespaceReplicationMessages(ctx, &adminservice.GetNamespaceReplicationMessagesRequest{
+	// we should see one new namespace task in the replication queue
+	replicationResponse, err = adminClient.GetNamespaceReplicationMessages(ctx, &adminservice.GetNamespaceReplicationMessagesRequest{
 		ClusterName:            "follower",
-		LastRetrievedMessageId: -1,
+		LastRetrievedMessageId: lastMessageId,
 		LastProcessedMessageId: -1,
 	})
 	s.NoError(err)
+	lastMessageId = replicationResponse.GetMessages().GetLastRetrievedMessageId()
 	s.Equal(1, len(replicationResponse.GetMessages().ReplicationTasks))
 	task := replicationResponse.GetMessages().ReplicationTasks[0]
 	s.Equal(namespace, task.GetNamespaceTaskAttributes().GetInfo().GetName())
@@ -397,7 +406,7 @@ func (s *UserDataReplicationTestSuite) TestUserDataEntriesAreReplicatedOnDemand(
 
 	replicationResponse, err = adminClient.GetNamespaceReplicationMessages(ctx, &adminservice.GetNamespaceReplicationMessagesRequest{
 		ClusterName:            "follower",
-		LastRetrievedMessageId: -1,
+		LastRetrievedMessageId: lastMessageId,
 		LastProcessedMessageId: -1,
 	})
 	s.NoError(err)
@@ -442,7 +451,26 @@ func (s *UserDataReplicationTestSuite) TestUserDataTombstonesAreReplicated() {
 	ctx := testcore.NewContext()
 	namespace := s.T().Name() + "-" + common.GenerateRandomString(5)
 	activeFrontendClient := s.cluster1.FrontendClient()
+	activeAdminClient := s.cluster1.AdminClient()
+	standbyAdminClient := s.cluster2.AdminClient()
 	taskQueue := "test-task-queue"
+
+	replicationResponse, err := activeAdminClient.GetNamespaceReplicationMessages(ctx, &adminservice.GetNamespaceReplicationMessagesRequest{
+		ClusterName:            "follower",
+		LastRetrievedMessageId: -1,
+		LastProcessedMessageId: -1,
+	})
+	s.NoError(err)
+	lastMessageIdActive := replicationResponse.GetMessages().GetLastRetrievedMessageId()
+
+	replicationResponse, err = standbyAdminClient.GetNamespaceReplicationMessages(ctx, &adminservice.GetNamespaceReplicationMessagesRequest{
+		ClusterName:            "follower",
+		LastRetrievedMessageId: -1,
+		LastProcessedMessageId: -1,
+	})
+	s.NoError(err)
+	lastMessageIdStandby := replicationResponse.GetMessages().GetLastRetrievedMessageId()
+
 	regReq := &workflowservice.RegisterNamespaceRequest{
 		Namespace:                        namespace,
 		IsGlobalNamespace:                true,
@@ -450,7 +478,7 @@ func (s *UserDataReplicationTestSuite) TestUserDataTombstonesAreReplicated() {
 		ActiveClusterName:                s.clusterNames[0],
 		WorkflowExecutionRetentionPeriod: durationpb.New(7 * time.Hour * 24),
 	}
-	_, err := activeFrontendClient.RegisterNamespace(testcore.NewContext(), regReq)
+	_, err = activeFrontendClient.RegisterNamespace(testcore.NewContext(), regReq)
 	s.NoError(err)
 	// Wait for namespace cache to pick the change
 	time.Sleep(cacheRefreshInterval)
@@ -468,7 +496,6 @@ func (s *UserDataReplicationTestSuite) TestUserDataTombstonesAreReplicated() {
 		})
 		s.NoError(err)
 	}
-	activeAdminClient := s.cluster1.AdminClient()
 
 	// start build ID scavenger workflow
 	sysClient, err := sdkclient.Dial(sdkclient.Options{
@@ -488,9 +515,9 @@ func (s *UserDataReplicationTestSuite) TestUserDataTombstonesAreReplicated() {
 	err = run.Get(ctx, nil)
 	s.NoError(err)
 
-	replicationResponse, err := activeAdminClient.GetNamespaceReplicationMessages(ctx, &adminservice.GetNamespaceReplicationMessagesRequest{
+	replicationResponse, err = activeAdminClient.GetNamespaceReplicationMessages(ctx, &adminservice.GetNamespaceReplicationMessagesRequest{
 		ClusterName:            "follower",
-		LastRetrievedMessageId: -1,
+		LastRetrievedMessageId: lastMessageIdActive,
 		LastProcessedMessageId: -1,
 	})
 	s.NoError(err)
@@ -521,7 +548,7 @@ func (s *UserDataReplicationTestSuite) TestUserDataTombstonesAreReplicated() {
 
 	replicationResponse, err = activeAdminClient.GetNamespaceReplicationMessages(ctx, &adminservice.GetNamespaceReplicationMessagesRequest{
 		ClusterName:            "follower",
-		LastRetrievedMessageId: -1,
+		LastRetrievedMessageId: lastMessageIdActive,
 		LastProcessedMessageId: -1,
 	})
 	s.NoError(err)
@@ -562,10 +589,9 @@ func (s *UserDataReplicationTestSuite) TestUserDataTombstonesAreReplicated() {
 	})
 	s.Require().NoError(err)
 
-	standbyAdminClient := s.cluster2.AdminClient()
 	replicationResponse, err = standbyAdminClient.GetNamespaceReplicationMessages(ctx, &adminservice.GetNamespaceReplicationMessagesRequest{
 		ClusterName:            "follower",
-		LastRetrievedMessageId: -1,
+		LastRetrievedMessageId: lastMessageIdStandby,
 		LastProcessedMessageId: -1,
 	})
 	s.NoError(err)
