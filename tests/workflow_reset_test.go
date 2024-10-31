@@ -43,6 +43,7 @@ import (
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 
+// Tests workflow reset feature
 type WorkflowResetSuite struct {
 	testcore.ClientFunctionalSuite
 }

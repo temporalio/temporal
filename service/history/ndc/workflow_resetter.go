@@ -343,8 +343,9 @@ func (r *workflowResetterImpl) persistToDB(
 	}
 	baseRunID := baseWorkflow.GetMutableState().GetExecutionState().GetRunId()
 
-	// There are just 2 runs to update - base & new run.
 	if currentRunID == baseRunID {
+		// There are just 2 runs to update - base & new run.
+		// Additionally since base is the same as current, we should ensure that we close one of them only once (to avoid DBRecordVersion conflict)
 		resetWorkflowSnapshot, resetWorkflowEventsSeq, err := resetWorkflow.GetMutableState().CloseTransactionAsSnapshot(
 			workflow.TransactionPolicyActive,
 		)
@@ -352,7 +353,7 @@ func (r *workflowResetterImpl) persistToDB(
 			return err
 		}
 
-		// currentMutation (same as base) was already closed since it was running. So use that.
+		// currentMutation (same as base) was already closed since it was running. So use that. Ok to discard base here.
 		if currentWorkflowMutation != nil {
 			if _, _, err := r.transaction.UpdateWorkflowExecution(
 				ctx,
@@ -379,7 +380,7 @@ func (r *workflowResetterImpl) persistToDB(
 		if _, _, err := r.transaction.UpdateWorkflowExecution(
 			ctx,
 			persistence.UpdateWorkflowModeUpdateCurrent,
-			currentWorkflow.GetMutableState().GetCurrentVersion(),
+			baseWorkflow.GetMutableState().GetCurrentVersion(),
 			baseMutation,
 			baseEventsSeq,
 			workflow.MutableStateFailoverVersion(resetWorkflow.GetMutableState()),
@@ -391,7 +392,7 @@ func (r *workflowResetterImpl) persistToDB(
 		return nil
 	}
 
-	// We have 3 runs to update here - the base run, current run & the new run.
+	// We have 3 different runs to update here - the base run, current run & the new run. But current is not yet closed.
 	if currentWorkflowMutation == nil {
 		return currentWorkflow.GetContext().ConflictResolveWorkflowExecution(
 			ctx,
@@ -408,7 +409,7 @@ func (r *workflowResetterImpl) persistToDB(
 		)
 	}
 
-	// we are here because currentMutation is closed and we need to still close the base and reset run.
+	// we are here because currentMutation is closed. So we just need to close base and the new run and perform the transaction.
 	resetWorkflowSnapshot, resetWorkflowEventsSeq, err := resetWorkflow.GetMutableState().CloseTransactionAsSnapshot(
 		workflow.TransactionPolicyActive,
 	)
