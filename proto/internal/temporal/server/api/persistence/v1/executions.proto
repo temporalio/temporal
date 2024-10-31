@@ -297,6 +297,10 @@ message TransferTaskInfo {
     oneof task_details {
         CloseExecutionTaskDetails close_execution_task_details = 16;
     }
+    // Stamp represents the version of the activity internal state, for which the timer task was created.
+    // It monotonically increments when the activity options are changed.
+    // It is used to check if activity related tasks are still relevant to  their corresponding state machine.
+    int32 stamp = 17;
 }
 
 // replication column
@@ -368,7 +372,9 @@ message TimerTaskInfo {
     // A workflow chain is identified by the run_id of the first workflow in the chain.
     string first_run_id = 15;
 
-    // The stamp represents the version of the activity for which the timer task was created.
+    // Stamp represents the version of the activity internal state, for which the timer task was created.
+    // It monotonically increments when the activity options are changed.
+    // It is used to check if activity related tasks are still relevant to  their corresponding state machine.
     int32 stamp = 16;
 }
 
@@ -466,12 +472,15 @@ message ActivityInfo {
         int64 last_redirect_counter = 2;
     }
 
-    // First time the activity was scheduled.
+    // The first time the activity was scheduled.
     google.protobuf.Timestamp first_scheduled_time = 39;
-
-    // Last time an activity failure was recorded by the server.
+    // The last time an activity attempt completion was recorded by the server.
     google.protobuf.Timestamp last_attempt_complete_time = 40;
-    // stamp represent "version" of activity during its lifetime. It can be changed with Activity API
+
+
+    // Stamp represents the “version” of the activity internal state (options) and can/will be changed with Activity API.
+    // It monotonically increments when the activity options are changed.
+    // It is used to check if activity related tasks are still relevant to  their corresponding state machine.
     int32 stamp = 41;
 }
 

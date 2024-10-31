@@ -128,7 +128,7 @@ func (e *ExecutableVerifyVersionedTransitionTask) Execute() error {
 				e.NamespaceID,
 				e.WorkflowID,
 				e.RunID,
-				e.ReplicationTask().VersionedTransition,
+				nil,
 				nil,
 			)
 		default:
@@ -137,6 +137,9 @@ func (e *ExecutableVerifyVersionedTransitionTask) Execute() error {
 	}
 
 	transitionHistory := ms.GetExecutionInfo().TransitionHistory
+	if len(transitionHistory) == 0 {
+		return nil
+	}
 	err = workflow.TransitionHistoryStalenessCheck(transitionHistory, e.ReplicationTask().VersionedTransition)
 
 	// case 1: VersionedTransition is up-to-date on current mutable state
@@ -155,7 +158,7 @@ func (e *ExecutableVerifyVersionedTransitionTask) Execute() error {
 			e.NamespaceID,
 			e.WorkflowID,
 			e.RunID,
-			e.ReplicationTask().VersionedTransition,
+			transitionHistory[len(transitionHistory)-1],
 			ms.GetExecutionInfo().VersionHistories,
 		)
 	}

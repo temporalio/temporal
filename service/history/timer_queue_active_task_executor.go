@@ -28,8 +28,6 @@ import (
 	"context"
 	"fmt"
 
-	persistencespb "go.temporal.io/server/api/persistence/v1"
-
 	"github.com/pborman/uuid"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -37,6 +35,7 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/definition"
@@ -230,18 +229,6 @@ func (t *timerQueueActiveTaskExecutor) executeActivityTimeoutTask(
 	if mutableState == nil || !mutableState.IsWorkflowExecutionRunning() {
 		return nil
 	}
-	ai, ok := mutableState.GetActivityInfo(task.EventID)
-
-	if !ok {
-		// if activity is not found, the timer is invalid.
-		return nil
-	}
-
-	if task.Stamp != ai.Stamp {
-		// if this task is invalid - we want to generate new activity timeout task
-		// it will be done in closeTransactionPrepareTasks call
-		return weContext.UpdateWorkflowExecutionAsActive(ctx, t.shardContext)
-	}
 
 	timerSequence := t.getTimerSequence(mutableState)
 	referenceTime := t.shardContext.GetTimeSource().Now()
@@ -315,6 +302,9 @@ func (t *timerQueueActiveTaskExecutor) processSingleActivityTimeoutTask(
 		//  The RetryActivity call below could update activity attempt, in which case we do not want to apply a timeout for the previous attempt.
 		return result, nil
 	}
+
+	// Note: we don't need to check activity Stamps.
+	// This is because for the same attempts calls are idempotent.
 
 	failureMsg := fmt.Sprintf("activity %v timeout", timerSequenceID.TimerType.String())
 	timeoutFailure := failure.NewTimeoutFailure(failureMsg, timerSequenceID.TimerType)
@@ -523,7 +513,7 @@ func (t *timerQueueActiveTaskExecutor) executeActivityRetryTimerTask(
 	}
 
 	if task.Stamp != activityInfo.Stamp {
-		// this timer event is from an old stamp. In this case we ignore the event.
+		// this retry task event is from an old stamp. In this case we should ignore the event.
 		release(nil) // release(nil) so mutable state is not unloaded from cache
 		// I really don't understand why we need this release(nil) call...
 		return nil
@@ -574,6 +564,7 @@ func (t *timerQueueActiveTaskExecutor) executeActivityRetryTimerTask(
 		ScheduleToStartTimeout: durationpb.New(scheduleToStartTimeout),
 		Clock:                  vclock.NewVectorClock(t.shardContext.GetClusterMetadata().GetClusterID(), t.shardContext.GetShardID(), task.TaskID),
 		VersionDirective:       directive,
+		Stamp:                  task.Stamp,
 	})
 	if err != nil {
 		return err

@@ -68,6 +68,7 @@ import (
 	"go.temporal.io/server/service/history/api/isworkflowtaskvalid"
 	"go.temporal.io/server/service/history/api/listtasks"
 	"go.temporal.io/server/service/history/api/multioperation"
+	"go.temporal.io/server/service/history/api/pauseactivity"
 	"go.temporal.io/server/service/history/api/pollupdate"
 	"go.temporal.io/server/service/history/api/queryworkflow"
 	"go.temporal.io/server/service/history/api/reapplyevents"
@@ -80,6 +81,7 @@ import (
 	replicationapi "go.temporal.io/server/service/history/api/replication"
 	"go.temporal.io/server/service/history/api/replicationadmin"
 	"go.temporal.io/server/service/history/api/requestcancelworkflow"
+	"go.temporal.io/server/service/history/api/resetactivity"
 	"go.temporal.io/server/service/history/api/resetstickytaskqueue"
 	"go.temporal.io/server/service/history/api/resetworkflow"
 	"go.temporal.io/server/service/history/api/respondactivitytaskcanceled"
@@ -92,6 +94,7 @@ import (
 	"go.temporal.io/server/service/history/api/signalworkflow"
 	"go.temporal.io/server/service/history/api/startworkflow"
 	"go.temporal.io/server/service/history/api/terminateworkflow"
+	"go.temporal.io/server/service/history/api/unpauseactivity"
 	"go.temporal.io/server/service/history/api/updateactivityoptions"
 	"go.temporal.io/server/service/history/api/updateworkflow"
 	"go.temporal.io/server/service/history/api/verifychildworkflowcompletionrecorded"
@@ -1051,4 +1054,25 @@ func (e *historyEngineImpl) UpdateActivityOptions(
 	request *historyservice.UpdateActivityOptionsRequest,
 ) (*historyservice.UpdateActivityOptionsResponse, error) {
 	return updateactivityoptions.Invoke(ctx, request, e.shardContext, e.workflowConsistencyChecker)
+}
+
+func (e *historyEngineImpl) PauseActivity(
+	ctx context.Context,
+	request *historyservice.PauseActivityRequest,
+) (*historyservice.PauseActivityResponse, error) {
+	return pauseactivity.Invoke(ctx, request, e.shardContext, e.workflowConsistencyChecker)
+}
+
+func (e *historyEngineImpl) UnpauseActivity(
+	ctx context.Context,
+	request *historyservice.UnpauseActivityRequest,
+) (*historyservice.UnpauseActivityResponse, error) {
+	return unpauseactivity.Invoke(ctx, request, e.shardContext, e.workflowConsistencyChecker)
+}
+
+func (e *historyEngineImpl) ResetActivity(
+	ctx context.Context,
+	request *historyservice.ResetActivityRequest,
+) (*historyservice.ResetActivityResponse, error) {
+	return resetactivity.Invoke(ctx, request, e.shardContext, e.workflowConsistencyChecker)
 }

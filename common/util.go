@@ -343,7 +343,8 @@ func IsServiceHandlerRetryableError(err error) bool {
 	}
 
 	switch err.(type) {
-	case *serviceerror.Unavailable:
+	case *serviceerror.Internal,
+		*serviceerror.Unavailable:
 		return true
 	}
 
