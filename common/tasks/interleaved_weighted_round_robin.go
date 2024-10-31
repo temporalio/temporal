@@ -260,10 +260,13 @@ func (s *InterleavedWeightedRoundRobinScheduler[T, K]) sendToChannel(
 	s.RUnlock()
 
 	s.Lock()
-	defer s.Unlock()
 
 	channel, ok = s.weightedChannels[channelKey]
 	if ok {
+		s.Unlock()
+		// Making sure sendAndNotify is called with ReadLock since it can block.
+		s.RLock()
+		defer s.RUnlock()
 		return s.sendAndNotify(channel, task, nonBlocking)
 	}
 
@@ -272,6 +275,11 @@ func (s *InterleavedWeightedRoundRobinScheduler[T, K]) sendToChannel(
 	s.weightedChannels[channelKey] = channel
 
 	s.flattenWeightedChannelsLocked()
+	s.Unlock()
+
+	// Making sure sendAndNotify is called with ReadLock since it can block.
+	s.RLock()
+	defer s.RUnlock()
 	return s.sendAndNotify(channel, task, nonBlocking)
 }
 
