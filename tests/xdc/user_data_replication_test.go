@@ -213,7 +213,6 @@ func (s *UserDataReplicationTestSuite) TestUserDataIsReplicatedFromActiveToPassi
 
 	// make another change to test that merging works
 
-	/* TODO: enable this after fixing bug
 	rules, err = activeFrontendClient.GetWorkerVersioningRules(ctx, &workflowservice.GetWorkerVersioningRulesRequest{
 		Namespace: namespace,
 		TaskQueue: taskQueue,
@@ -254,7 +253,6 @@ func (s *UserDataReplicationTestSuite) TestUserDataIsReplicatedFromActiveToPassi
 		return len(response.GetResponse().GetAssignmentRules()) == 1 &&
 			len(response.GetResponse().GetCompatibleRedirectRules()) == 1
 	}, 15*time.Second, 500*time.Millisecond)
-	*/
 }
 
 func (s *UserDataReplicationTestSuite) TestUserDataIsReplicatedFromPassiveToActive() {
@@ -332,7 +330,6 @@ func (s *UserDataReplicationTestSuite) TestUserDataEntriesAreReplicatedOnDemand(
 		s.NotNil(res)
 		expectedReplicatedTaskQueues[taskQueue] = struct{}{}
 
-		/* TODO: enable after fixing merge
 		taskQueue2 := fmt.Sprintf("v2q%v", i)
 		rules, err := activeFrontendClient.GetWorkerVersioningRules(ctx, &workflowservice.GetWorkerVersioningRulesRequest{
 			Namespace: namespace,
@@ -356,7 +353,6 @@ func (s *UserDataReplicationTestSuite) TestUserDataEntriesAreReplicatedOnDemand(
 		s.NoError(err)
 		s.NotNil(rulesRes)
 		expectedReplicatedTaskQueues[taskQueue2] = struct{}{}
-		*/
 	}
 	adminClient := s.cluster1.AdminClient()
 
@@ -431,7 +427,6 @@ func (s *UserDataReplicationTestSuite) TestUserDataEntriesAreReplicatedOnDemand(
 
 		s.NotEmpty(get.MajorVersionSets)
 
-		/* TODO: enable after fixing merge
 		taskQueue2 := fmt.Sprintf("v2q%v", i)
 		rules, err := activeFrontendClient.GetWorkerVersioningRules(ctx, &workflowservice.GetWorkerVersioningRulesRequest{
 			Namespace: namespace,
@@ -440,7 +435,6 @@ func (s *UserDataReplicationTestSuite) TestUserDataEntriesAreReplicatedOnDemand(
 		s.NoError(err)
 		s.NotNil(rules)
 		s.NotEmpty(rules.AssignmentRules)
-		*/
 	}
 }
 
