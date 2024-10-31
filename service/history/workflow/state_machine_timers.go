@@ -30,7 +30,6 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/service/history/hsm"
 	"go.temporal.io/server/service/history/tasks"
-	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -56,7 +55,8 @@ func AddNextStateMachineTimerTask(ms MutableState) {
 
 // TrackStateMachineTimer tracks a timer task in the mutable state's StateMachineTimers slice sorted and grouped by
 // deadline.
-// Tasks are deduplicated using proto equality.
+// Only a single task for a given type can be tracked for a given machine. If a task of the same type is already
+// tracked, it will be overridden.
 func TrackStateMachineTimer(ms MutableState, deadline time.Time, taskInfo *persistencespb.StateMachineTaskInfo) {
 	execInfo := ms.GetExecutionInfo()
 	group := &persistencespb.StateMachineTimerGroup{
@@ -67,13 +67,16 @@ func TrackStateMachineTimer(ms MutableState, deadline time.Time, taskInfo *persi
 		return a.Deadline.AsTime().Compare(b.Deadline.AsTime())
 	})
 	if groupFound {
-		taskFound := slices.ContainsFunc(execInfo.StateMachineTimers[idx].Infos, func(info *persistencespb.StateMachineTaskInfo) bool {
-			return proto.Equal(info, taskInfo)
+		groupIdx := slices.IndexFunc(execInfo.StateMachineTimers[idx].Infos, func(info *persistencespb.StateMachineTaskInfo) bool {
+			return info.GetType() == taskInfo.GetType() && slices.EqualFunc(info.GetRef().GetPath(), taskInfo.GetRef().GetPath(), func(a, b *persistencespb.StateMachineKey) bool {
+				return a.GetType() == b.GetType() && a.GetId() == b.GetId()
+			})
 		})
-		if taskFound {
-			return
+		if groupIdx == -1 {
+			execInfo.StateMachineTimers[idx].Infos = append(execInfo.StateMachineTimers[idx].Infos, taskInfo)
+		} else {
+			execInfo.StateMachineTimers[idx].Infos[groupIdx] = taskInfo
 		}
-		execInfo.StateMachineTimers[idx].Infos = append(execInfo.StateMachineTimers[idx].Infos, taskInfo)
 	} else {
 		execInfo.StateMachineTimers = slices.Insert(execInfo.StateMachineTimers, idx, group)
 	}
