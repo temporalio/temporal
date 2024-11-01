@@ -302,6 +302,11 @@ func (s *InterleavedWeightedRoundRobinScheduler[T, K]) flattenWeightedChannelsLo
 	sort.Sort(weightedChannels)
 
 	iwrrChannels := make(WeightedChannels[T], 0, len(weightedChannels))
+	if len(weightedChannels) == 0 {
+		s.iwrrChannels.Store(iwrrChannels)
+		return
+	}
+
 	maxWeight := weightedChannels[len(weightedChannels)-1].Weight()
 	for round := maxWeight - 1; round > -1; round-- {
 		for index := len(weightedChannels) - 1; index > -1 && weightedChannels[index].Weight() > round; index-- {

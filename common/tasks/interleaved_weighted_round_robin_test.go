@@ -516,6 +516,7 @@ func (s *interleavedWeightedRoundRobinSchedulerSuite) TestInactiveChannelDeletio
 	// But this time, those channels should not be deleted as we haven't provided InactiveChannelDeletionDelay
 	s.ts.Advance(31 * time.Minute)
 
+	// nolint:revive
 	time.Sleep(100 * time.Millisecond)
 	channelWeights = []int{}
 	for _, channel := range s.scheduler.channels() {
@@ -527,6 +528,63 @@ func (s *interleavedWeightedRoundRobinSchedulerSuite) TestInactiveChannelDeletio
 
 	// set the number of pending task back
 	atomic.AddInt64(&s.scheduler.numInflightTask, -1)
+}
+
+func (s *interleavedWeightedRoundRobinSchedulerSuite) TestInactiveChannelDeletionRace() {
+	s.scheduler = NewInterleavedWeightedRoundRobinScheduler(
+		InterleavedWeightedRoundRobinSchedulerOptions[*testTask, int]{
+			TaskChannelKeyFn:      func(task *testTask) int { return task.channelKey },
+			ChannelWeightFn:       func(key int) int { return s.channelKeyToWeight[key] },
+			ChannelWeightUpdateCh: s.channelWeightUpdateCh,
+			InactiveChannelDeletionDelay: func() time.Duration {
+				return 0
+			},
+		},
+		Scheduler[*testTask](s.mockFIFOScheduler),
+		log.NewTestLogger(),
+	)
+	s.mockFIFOScheduler.EXPECT().Start()
+	s.scheduler.Start()
+	s.mockFIFOScheduler.EXPECT().Stop()
+
+	var taskWG sync.WaitGroup
+	s.mockFIFOScheduler.EXPECT().Submit(gomock.Any()).Do(func(task Task) {
+		taskWG.Done()
+	}).AnyTimes()
+
+	// need to manually set the number of pending task to 1
+	// so schedule by task priority logic will execute
+	atomic.AddInt64(&s.scheduler.numInflightTask, 1)
+	defer func() {
+		atomic.AddInt64(&s.scheduler.numInflightTask, -1)
+	}()
+
+	mockTask0 := newTestTask(s.controller, 0)
+	mockTask1 := newTestTask(s.controller, 1)
+	mockTask2 := newTestTask(s.controller, 2)
+	mockTask3 := newTestTask(s.controller, 3)
+
+	for i := 0; i < 1000; i++ {
+		taskWG.Add(1)
+		s.scheduler.Submit(mockTask0)
+		taskWG.Wait()
+
+		taskWG.Add(1)
+		s.scheduler.Submit(mockTask1)
+		taskWG.Wait()
+
+		taskWG.Add(1)
+		s.scheduler.Submit(mockTask2)
+		taskWG.Wait()
+
+		taskWG.Add(1)
+		s.scheduler.Submit(mockTask3)
+		taskWG.Wait()
+	}
+
+	// nolint:revive
+	time.Sleep(100 * time.Millisecond)
+	s.Empty(s.scheduler.channels())
 }
 
 func newTestTask(
