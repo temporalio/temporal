@@ -31,6 +31,7 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/propagation"
 	"go.opentelemetry.io/otel/trace"
+	"go.opentelemetry.io/otel/trace/noop"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -60,7 +61,7 @@ type (
 // NewServerStatsHandler creates a new gRPC stats handler that tracks each request with an encapsulating span
 // using the provided TracerProvider and TextMapPropagator.
 //
-// NOTE: If the TracerProvider is not recording (i.e. is a noop provider), it returns `nil`.
+// NOTE: If the TracerProvider is `noop.TracerProvider`, it returns `nil`.
 func NewServerStatsHandler(
 	tp trace.TracerProvider,
 	tmp propagation.TextMapPropagator,
@@ -81,7 +82,7 @@ func NewServerStatsHandler(
 // NewClientStatsHandler creates a new gRPC stats handler that tracks each request with an encapsulating span
 // using the provided TracerProvider and TextMapPropagator.
 //
-// NOTE: If the TracerProvider is not recording (i.e. is a noop provider), it returns `nil`.
+// NOTE: If the TracerProvider is `noop.TracerProvider`, it returns `nil`.
 func NewClientStatsHandler(
 	tp trace.TracerProvider,
 	tmp propagation.TextMapPropagator,
@@ -97,10 +98,8 @@ func NewClientStatsHandler(
 }
 
 func isEnabled(tp trace.TracerProvider) bool {
-	tracer := tp.Tracer("check-tracer")
-	_, span := tracer.Start(context.Background(), "check-span")
-	defer span.End()
-	return span.IsRecording()
+	_, isNoop := tp.(noop.TracerProvider)
+	return !isNoop
 }
 
 func newCustomServerStatsHandler(

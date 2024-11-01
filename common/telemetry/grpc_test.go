@@ -51,9 +51,9 @@ func Test_ServerStatsHandler(t *testing.T) {
 		})
 
 		exportedSpans := exporter.GetSpans()
-		require.Len(t, exportedSpans, 2) // first one is the "check-span"
+		require.Len(t, exportedSpans, 1)
 		attrByKey := map[string]attribute.KeyValue{}
-		for _, a := range exportedSpans[1].Attributes {
+		for _, a := range exportedSpans[0].Attributes {
 			attrByKey[string(a.Key)] = a
 		}
 		return attrByKey
