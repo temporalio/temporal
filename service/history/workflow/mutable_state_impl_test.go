@@ -3701,8 +3701,6 @@ func (s *mutableStateSuite) TestApplyMutation() {
 	mutation := s.buildMutation(targetMS, tombstonesToAdd)
 	err = currentMS.ApplyMutation(mutation)
 	s.NoError(err)
-	println(fmt.Sprintf("%v", currentMS.GetExecutionInfo().SubStateMachineTombstoneBatches))
-
 	s.verifyMutableState(currentMS, targetMS, originMS)
 }
 
