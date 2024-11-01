@@ -173,7 +173,8 @@ func (s *InterleavedWeightedRoundRobinScheduler[T, K]) Submit(
 	// there are tasks pending dispatching, need to respect round roubin weight
 	// or currently unable to submit to fifo scheduler, either due to buffer is full
 	// or exceeding rate limit
-	channel := s.getOrCreateTaskChannel(s.options.TaskChannelKeyFn(task))
+	channel, releaseFn := s.getOrCreateTaskChannel(s.options.TaskChannelKeyFn(task))
+	defer releaseFn()
 	channel.Chan() <- task
 	s.notifyDispatcher()
 }
@@ -187,7 +188,8 @@ func (s *InterleavedWeightedRoundRobinScheduler[T, K]) TrySubmit(
 	}
 
 	// there are tasks pending dispatching, need to respect round roubin weight
-	channel := s.getOrCreateTaskChannel(s.options.TaskChannelKeyFn(task))
+	channel, releaseFn := s.getOrCreateTaskChannel(s.options.TaskChannelKeyFn(task))
+	defer releaseFn()
 	select {
 	case channel.Chan() <- task:
 		s.notifyDispatcher()
@@ -235,7 +237,10 @@ func (s *InterleavedWeightedRoundRobinScheduler[T, K]) doCleanup() {
 	cleanupDelay := s.options.InactiveChannelDeletionDelay()
 	now := s.ts.Now()
 	for k, weightedChan := range s.weightedChannels {
-		if now.Sub(weightedChan.LastActiveTime()) > cleanupDelay && len(weightedChan.Chan()) == 0 {
+		if now.Sub(weightedChan.LastActiveTime()) > cleanupDelay &&
+			len(weightedChan.Chan()) == 0 &&
+			weightedChan.RefCount() == 0 {
+
 			keysToDelete = append(keysToDelete, k)
 			continue
 		}
@@ -252,12 +257,16 @@ func (s *InterleavedWeightedRoundRobinScheduler[T, K]) doCleanup() {
 
 func (s *InterleavedWeightedRoundRobinScheduler[T, K]) getOrCreateTaskChannel(
 	channelKey K,
-) *WeightedChannel[T] {
+) (*WeightedChannel[T], func()) {
 	s.RLock()
 	channel, ok := s.weightedChannels[channelKey]
 	if ok {
+		channel.IncrementRefCount()
+		releaseFn := func() {
+			channel.DecrementRefCount()
+		}
 		s.RUnlock()
-		return channel
+		return channel, releaseFn
 	}
 	s.RUnlock()
 
@@ -266,7 +275,11 @@ func (s *InterleavedWeightedRoundRobinScheduler[T, K]) getOrCreateTaskChannel(
 
 	channel, ok = s.weightedChannels[channelKey]
 	if ok {
-		return channel
+		channel.IncrementRefCount()
+		releaseFn := func() {
+			channel.DecrementRefCount()
+		}
+		return channel, releaseFn
 	}
 
 	weight := s.options.ChannelWeightFn(channelKey)
@@ -274,7 +287,11 @@ func (s *InterleavedWeightedRoundRobinScheduler[T, K]) getOrCreateTaskChannel(
 	s.weightedChannels[channelKey] = channel
 
 	s.flattenWeightedChannelsLocked()
-	return channel
+	channel.IncrementRefCount()
+	releaseFn := func() {
+		channel.DecrementRefCount()
+	}
+	return channel, releaseFn
 }
 
 func (s *InterleavedWeightedRoundRobinScheduler[T, K]) flattenWeightedChannelsLocked() {

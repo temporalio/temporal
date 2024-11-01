@@ -24,7 +24,10 @@
 
 package tasks
 
-import "time"
+import (
+	"sync/atomic"
+	"time"
+)
 
 const (
 	WeightedChannelDefaultSize = 1000
@@ -37,6 +40,7 @@ type (
 		weight         int
 		channel        chan T
 		lastActiveTime time.Time
+		refCount       atomic.Int32
 	}
 )
 
@@ -70,6 +74,18 @@ func (c *WeightedChannel[T]) LastActiveTime() time.Time {
 
 func (c *WeightedChannel[T]) UpdateLastActiveTime(now time.Time) {
 	c.lastActiveTime = now
+}
+
+func (c *WeightedChannel[T]) IncrementRefCount() {
+	c.refCount.Add(1)
+}
+
+func (c *WeightedChannel[T]) DecrementRefCount() {
+	c.refCount.Add(-1)
+}
+
+func (c *WeightedChannel[T]) RefCount() int32 {
+	return c.refCount.Load()
 }
 
 func (c *WeightedChannel[T]) Len() int {
