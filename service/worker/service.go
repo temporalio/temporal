@@ -45,7 +45,6 @@ import (
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/sdk"
-	"go.temporal.io/server/service/worker/batcher"
 	"go.temporal.io/server/service/worker/parentclosepolicy"
 	"go.temporal.io/server/service/worker/replicator"
 	"go.temporal.io/server/service/worker/scanner"
@@ -209,7 +208,6 @@ func NewConfig(
 			RemovableBuildIdDurationSinceDefault:    dynamicconfig.RemovableBuildIdDurationSinceDefault.Get(dc),
 			BuildIdScavengerVisibilityRPS:           dynamicconfig.BuildIdScavengerVisibilityRPS.Get(dc),
 		},
-		EnableBatcher:                        dynamicconfig.EnableBatcherGlobal.Get(dc),
 		BatcherRPS:                           dynamicconfig.BatcherRPS.Get(dc),
 		BatcherConcurrency:                   dynamicconfig.BatcherConcurrency.Get(dc),
 		EnableParentClosePolicyWorker:        dynamicconfig.EnableParentClosePolicyWorker.Get(dc),
@@ -259,9 +257,6 @@ func (s *Service) Start() {
 	if s.config.EnableParentClosePolicyWorker() {
 		s.startParentClosePolicyProcessor()
 	}
-	if s.config.EnableBatcher() {
-		s.startBatcher()
-	}
 
 	s.workerManager.Start()
 	s.perNamespaceWorkerManager.Start(
@@ -307,22 +302,6 @@ func (s *Service) startParentClosePolicyProcessor() {
 	if err := processor.Start(); err != nil {
 		s.logger.Fatal(
 			"error starting parentclosepolicy processor",
-			tag.Error(err),
-		)
-	}
-}
-
-func (s *Service) startBatcher() {
-	if err := batcher.New(
-		s.metricsHandler,
-		s.logger,
-		s.hostInfo,
-		s.sdkClientFactory,
-		s.config.BatcherRPS,
-		s.config.BatcherConcurrency,
-	).Start(); err != nil {
-		s.logger.Fatal(
-			"error starting batcher worker",
 			tag.Error(err),
 		)
 	}
