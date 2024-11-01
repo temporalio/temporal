@@ -1097,8 +1097,9 @@ func (s *ScheduleFunctionalSuite) TestListSchedulesReturnsWorkflowStatus() {
 	defer s.cleanup(sid)
 
 	// validate RecentActions made it to visibility
-	listResp := s.getScheduleEntryFomVisibility(sid, nil)
-	s.NotNil(listResp.Info.RecentActions)
+	listResp := s.getScheduleEntryFomVisibility(sid, func(listResp *schedulepb.ScheduleListEntry) bool {
+		return len(listResp.Info.RecentActions) >= 1
+	})
 	s.Equal(1, len(listResp.Info.RecentActions))
 
 	a1 := listResp.Info.RecentActions[0]
