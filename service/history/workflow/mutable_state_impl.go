@@ -5043,113 +5043,24 @@ func (ms *MutableStateImpl) PopTasks() map[tasks.Category][]tasks.Task {
 func (ms *MutableStateImpl) isStateDirty() bool {
 	//// TODO: we need to track more workflow state changes
 	//// e.g. changes to executionInfo.CancelRequested
-	//result := ms.hBuilder.IsDirty() ||
-	//	len(ms.updateActivityInfos) > 0 ||
-	//	len(ms.deleteActivityInfos) > 0 ||
-	//	len(ms.updateTimerInfos) > 0 ||
-	//	len(ms.deleteTimerInfos) > 0 ||
-	//	len(ms.updateChildExecutionInfos) > 0 ||
-	//	len(ms.deleteChildExecutionInfos) > 0 ||
-	//	len(ms.updateRequestCancelInfos) > 0 ||
-	//	len(ms.deleteRequestCancelInfos) > 0 ||
-	//	len(ms.updateSignalInfos) > 0 ||
-	//	len(ms.deleteSignalInfos) > 0 ||
-	//	len(ms.updateSignalRequestedIDs) > 0 ||
-	//	len(ms.deleteSignalRequestedIDs) > 0 ||
-	//	len(ms.updateInfoUpdated) > 0 ||
-	//	ms.visibilityUpdated ||
-	//	ms.executionStateUpdated ||
-	//	(ms.workflowTaskUpdated && ms.GetPendingWorkflowTask() != nil && ms.GetPendingWorkflowTask().Type != enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE) ||
-	//	(ms.stateMachineNode != nil && ms.stateMachineNode.Dirty())
-	//if result {
-	//	println("isStateDirty")
-	//
-	//}
-	//return result
-	var result bool
-
-	if ms.GetPendingWorkflowTask() != nil && ms.GetPendingWorkflowTask().Type == enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE {
-		return false
-	}
-
-	if ms.hBuilder.IsDirty() {
-		println("hBuilder.IsDirty() is true")
-		result = true
-	}
-	if len(ms.updateActivityInfos) > 0 {
-		println("len(ms.updateActivityInfos) > 0 is true")
-		result = true
-	}
-	if len(ms.deleteActivityInfos) > 0 {
-		println("len(ms.deleteActivityInfos) > 0 is true")
-		result = true
-	}
-	if len(ms.updateTimerInfos) > 0 {
-		println("len(ms.updateTimerInfos) > 0 is true")
-		result = true
-	}
-	if len(ms.deleteTimerInfos) > 0 {
-		println("len(ms.deleteTimerInfos) > 0 is true")
-		result = true
-	}
-	if len(ms.updateChildExecutionInfos) > 0 {
-		println("len(ms.updateChildExecutionInfos) > 0 is true")
-		result = true
-	}
-	if len(ms.deleteChildExecutionInfos) > 0 {
-		println("len(ms.deleteChildExecutionInfos) > 0 is true")
-		result = true
-	}
-	if len(ms.updateRequestCancelInfos) > 0 {
-		println("len(ms.updateRequestCancelInfos) > 0 is true")
-		result = true
-	}
-	if len(ms.deleteRequestCancelInfos) > 0 {
-		println("len(ms.deleteRequestCancelInfos) > 0 is true")
-		result = true
-	}
-	if len(ms.updateSignalInfos) > 0 {
-		println("len(ms.updateSignalInfos) > 0 is true")
-		result = true
-	}
-	if len(ms.deleteSignalInfos) > 0 {
-		println("len(ms.deleteSignalInfos) > 0 is true")
-		result = true
-	}
-	if len(ms.updateSignalRequestedIDs) > 0 {
-		println("len(ms.updateSignalRequestedIDs) > 0 is true")
-		result = true
-	}
-	if len(ms.deleteSignalRequestedIDs) > 0 {
-		println("len(ms.deleteSignalRequestedIDs) > 0 is true")
-		result = true
-	}
-	if len(ms.updateInfoUpdated) > 0 {
-		println("len(ms.updateInfoUpdated) > 0 is true")
-		result = true
-	}
-	if ms.visibilityUpdated {
-		println("ms.visibilityUpdated is true")
-		result = true
-	}
-	if ms.executionStateUpdated {
-		println("ms.executionStateUpdated is true")
-		result = true
-	}
-	if ms.workflowTaskUpdated {
-		println("ms.workflowTaskUpdated with non-speculative task is true")
-		result = true
-	}
-	if ms.stateMachineNode != nil && ms.stateMachineNode.Dirty() {
-		println("ms.stateMachineNode.Dirty() is true")
-		result = true
-	}
-
-	if result {
-		println("isStateDirty: returning true")
-	}
-
-	return result
+	return ms.hBuilder.IsDirty() ||
+		len(ms.updateActivityInfos) > 0 ||
+		len(ms.deleteActivityInfos) > 0 ||
+		len(ms.updateTimerInfos) > 0 ||
+		len(ms.deleteTimerInfos) > 0 ||
+		len(ms.updateChildExecutionInfos) > 0 ||
+		len(ms.deleteChildExecutionInfos) > 0 ||
+		len(ms.updateRequestCancelInfos) > 0 ||
+		len(ms.deleteRequestCancelInfos) > 0 ||
+		len(ms.updateSignalInfos) > 0 ||
+		len(ms.deleteSignalInfos) > 0 ||
+		len(ms.updateSignalRequestedIDs) > 0 ||
+		len(ms.deleteSignalRequestedIDs) > 0 ||
+		len(ms.updateInfoUpdated) > 0 ||
+		ms.visibilityUpdated ||
+		ms.executionStateUpdated ||
+		(ms.workflowTaskUpdated && ms.GetPendingWorkflowTask() != nil && ms.GetPendingWorkflowTask().Type != enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE) ||
+		(ms.stateMachineNode != nil && ms.stateMachineNode.Dirty())
 }
 
 func (ms *MutableStateImpl) SetUpdateCondition(
@@ -5207,7 +5118,7 @@ func (ms *MutableStateImpl) UpdateWorkflowStateStatus(
 }
 
 func (ms *MutableStateImpl) IsDirty() bool {
-	return len(ms.InsertTasks) > 0 || ms.isStateDirty()
+	return ms.hBuilder.IsDirty() || len(ms.InsertTasks) > 0 || (ms.stateMachineNode != nil && ms.stateMachineNode.Dirty())
 }
 
 func (ms *MutableStateImpl) IsTransitionHistoryEnabled() bool {
