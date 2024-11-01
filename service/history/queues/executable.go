@@ -104,7 +104,7 @@ var (
 	dependencyTaskNotCompletedReschedulePolicy = common.CreateDependencyTaskNotCompletedReschedulePolicy()
 )
 
-var defaultTaskMetricsTags = []metrics.Tag{
+var defaultExecutableMetricsTags = []metrics.Tag{
 	metrics.NamespaceUnknownTag(),
 	metrics.TaskTypeTag("__unknown__"),
 	metrics.OperationTag("__unknown__"),
@@ -240,7 +240,7 @@ func NewExecutable(
 				return tasks.Tags(task)
 			},
 		),
-		metricsHandler:             metricsHandler.WithTags(defaultTaskMetricsTags...),
+		metricsHandler:             metricsHandler,
 		dlqWriter:                  params.DLQWriter,
 		dlqEnabled:                 params.DLQEnabled,
 		maxUnexpectedErrorAttempts: params.MaxUnexpectedErrorAttempts,
