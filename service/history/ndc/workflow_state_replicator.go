@@ -746,7 +746,7 @@ func (r *WorkflowStateReplicatorImpl) bringLocalEventsUpToSourceCurrentBranch(
 
 		return newVersionHistoryIndex, true, nil
 	}()
-
+	localVersionHistories.CurrentVersionHistoryIndex = index
 	if err != nil {
 		return err
 	}
