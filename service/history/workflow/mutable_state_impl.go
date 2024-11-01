@@ -5129,8 +5129,8 @@ func (ms *MutableStateImpl) IsDirty() bool {
 }
 
 func (ms *MutableStateImpl) isStateDirty() bool {
-	//// TODO: we need to track more workflow state changes
-	//// e.g. changes to executionInfo.CancelRequested
+	// TODO: we need to track more workflow state changes
+	// e.g. changes to executionInfo.CancelRequested
 	return ms.hBuilder.IsDirty() ||
 		len(ms.updateActivityInfos) > 0 ||
 		len(ms.deleteActivityInfos) > 0 ||

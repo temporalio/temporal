@@ -2454,6 +2454,7 @@ func (s *mutableStateSuite) TestCloseTransactionHandleUnknownVersionedTransition
 			execInfo, err := tc.txFunc(s.mutableState)
 
 			s.Nil(execInfo.TransitionHistory)
+			s.Nil(err)
 		})
 	}
 }
