@@ -530,6 +530,8 @@ func (s *interleavedWeightedRoundRobinSchedulerSuite) TestInactiveChannelDeletio
 	atomic.AddInt64(&s.scheduler.numInflightTask, -1)
 }
 
+// Test to verify that there is no race condition when a chancel reference is returned by
+// getOrCreateTaskChannel to submit a task and cleanup loop deletes this channel before that happens.
 func (s *interleavedWeightedRoundRobinSchedulerSuite) TestInactiveChannelDeletionRace() {
 	s.scheduler = NewInterleavedWeightedRoundRobinScheduler(
 		InterleavedWeightedRoundRobinSchedulerOptions[*testTask, int]{
@@ -537,7 +539,7 @@ func (s *interleavedWeightedRoundRobinSchedulerSuite) TestInactiveChannelDeletio
 			ChannelWeightFn:       func(key int) int { return s.channelKeyToWeight[key] },
 			ChannelWeightUpdateCh: s.channelWeightUpdateCh,
 			InactiveChannelDeletionDelay: func() time.Duration {
-				return 0
+				return 0 // Setting cleanup delay to 0 to continuously delete channels.
 			},
 		},
 		Scheduler[*testTask](s.mockFIFOScheduler),

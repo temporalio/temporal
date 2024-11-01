@@ -262,11 +262,8 @@ func (s *InterleavedWeightedRoundRobinScheduler[T, K]) getOrCreateTaskChannel(
 	channel, ok := s.weightedChannels[channelKey]
 	if ok {
 		channel.IncrementRefCount()
-		releaseFn := func() {
-			channel.DecrementRefCount()
-		}
 		s.RUnlock()
-		return channel, releaseFn
+		return channel, channel.DecrementRefCount
 	}
 	s.RUnlock()
 
@@ -276,10 +273,7 @@ func (s *InterleavedWeightedRoundRobinScheduler[T, K]) getOrCreateTaskChannel(
 	channel, ok = s.weightedChannels[channelKey]
 	if ok {
 		channel.IncrementRefCount()
-		releaseFn := func() {
-			channel.DecrementRefCount()
-		}
-		return channel, releaseFn
+		return channel, channel.DecrementRefCount
 	}
 
 	weight := s.options.ChannelWeightFn(channelKey)
@@ -288,10 +282,7 @@ func (s *InterleavedWeightedRoundRobinScheduler[T, K]) getOrCreateTaskChannel(
 
 	s.flattenWeightedChannelsLocked()
 	channel.IncrementRefCount()
-	releaseFn := func() {
-		channel.DecrementRefCount()
-	}
-	return channel, releaseFn
+	return channel, channel.DecrementRefCount
 }
 
 func (s *InterleavedWeightedRoundRobinScheduler[T, K]) flattenWeightedChannelsLocked() {
