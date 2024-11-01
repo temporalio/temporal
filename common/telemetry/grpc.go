@@ -33,6 +33,7 @@ import (
 	"go.opentelemetry.io/otel/trace"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/rpc/interceptor/logtags"
 	"google.golang.org/grpc/stats"
 	"google.golang.org/grpc/status"
@@ -148,17 +149,17 @@ func (c *customServerStatsHandler) HandleRPC(ctx context.Context, stat stats.RPC
 		}
 
 		// annotate span with workflow tags (same ones the Temporal SDKs use)
-		for _, tag := range c.tags.Extract(s.Payload, methodName) {
+		for _, logTag := range c.tags.Extract(s.Payload, methodName) {
 			var k string
-			switch tag.Key() {
-			case "wf-id":
+			switch logTag.Key() {
+			case tag.WorkflowIDKey:
 				k = "temporalWorkflowID"
-			case "wf-run-id":
+			case tag.WorkflowRunIDKey:
 				k = "temporalRunID"
 			default:
 				continue
 			}
-			span.SetAttributes(attribute.Key(k).String(tag.Value().(string)))
+			span.SetAttributes(attribute.Key(k).String(logTag.Value().(string)))
 		}
 
 		// annotate with gRPC request payload

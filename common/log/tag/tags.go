@@ -46,6 +46,8 @@ import (
 // LoggingCallAtKey is reserved tag
 const (
 	LoggingCallAtKey = "logging-call-at"
+	WorkflowIDKey    = "wf-id"
+	WorkflowRunIDKey = "wf-run-id"
 )
 
 // ==========  Common tags defined here ==========
@@ -114,7 +116,7 @@ func WorkflowHandlerName(handlerName string) ZapTag {
 
 // WorkflowID returns tag for WorkflowID
 func WorkflowID(workflowID string) ZapTag {
-	return NewStringTag("wf-id", workflowID)
+	return NewStringTag(WorkflowIDKey, workflowID)
 }
 
 // WorkflowType returns tag for WorkflowType
@@ -129,7 +131,7 @@ func WorkflowState(s enumsspb.WorkflowExecutionState) ZapTag {
 
 // WorkflowRunID returns tag for WorkflowRunID
 func WorkflowRunID(runID string) ZapTag {
-	return NewStringTag("wf-run-id", runID)
+	return NewStringTag(WorkflowRunIDKey, runID)
 }
 
 // WorkflowNewRunID returns tag for WorkflowNewRunID
