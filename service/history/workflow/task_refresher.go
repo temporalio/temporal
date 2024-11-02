@@ -667,7 +667,8 @@ func (r *TaskRefresherImpl) refreshTasksForSubStateMachines(
 			return err
 		}
 
-		tasks, err := taskRegenerator.RegenerateTasks(node)
+		// TODO: This may generate redundant tasks, needs to be fixed before enabling state replication.
+		tasks, err := taskRegenerator.RegenerateTasks(nil, node)
 		if err != nil {
 			return err
 		}

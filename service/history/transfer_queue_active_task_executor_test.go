@@ -2420,6 +2420,7 @@ func (s *transferQueueActiveTaskExecutorSuite) createAddActivityTaskRequest(
 		ScheduleToStartTimeout: ai.ScheduleToStartTimeout,
 		Clock:                  vclock.NewVectorClock(s.mockClusterMetadata.GetClusterID(), s.mockShard.GetShardID(), task.TaskID),
 		VersionDirective:       worker_versioning.MakeUseAssignmentRulesDirective(),
+		Stamp:                  ai.Stamp,
 	}
 }
 

@@ -3304,7 +3304,7 @@ func (s *mutableStateSuite) verifyExecutionInfo(current, target, origin *persist
 	s.True(proto.Equal(origin.ParentClock, current.ParentClock), "ParentClock mismatch")
 	s.Equal(origin.CloseTransferTaskId, current.CloseTransferTaskId, "CloseTransferTaskId mismatch")
 	s.Equal(origin.CloseVisibilityTaskId, current.CloseVisibilityTaskId, "CloseVisibilityTaskId mismatch")
-	s.Equal(origin.CloseVisibilityTaskCompleted, current.CloseVisibilityTaskCompleted, "CloseVisibilityTaskCompleted mismatch")
+	s.Equal(origin.RelocatableAttributesRemoved, current.RelocatableAttributesRemoved, "RelocatableAttributesRemoved mismatch")
 	s.Equal(origin.WorkflowExecutionTimerTaskStatus, current.WorkflowExecutionTimerTaskStatus, "WorkflowExecutionTimerTaskStatus mismatch")
 	s.Equal(origin.SubStateMachinesByType, current.SubStateMachinesByType, "SubStateMachinesByType mismatch")
 	s.Equal(origin.StateMachineTimers, current.StateMachineTimers, "StateMachineTimers mismatch")
@@ -3579,10 +3579,68 @@ func (s *mutableStateSuite) TestApplySnapshot() {
 	s.verifyMutableState(currentMS, targetMS, originMS)
 }
 
-func (s *mutableStateSuite) buildMutation(state *MutableStateImpl) *persistencespb.WorkflowMutableStateMutation {
+func (s *mutableStateSuite) buildMutation(state *MutableStateImpl, tombstones []*persistencespb.StateMachineTombstoneBatch) *persistencespb.WorkflowMutableStateMutation {
+	stateClone := state.CloneToProto()
+	stateClone.ExecutionInfo.SubStateMachineTombstoneBatches = nil
+	mutation := &persistencespb.WorkflowMutableStateMutation{
+		UpdatedActivityInfos:            state.pendingActivityInfoIDs,
+		UpdatedTimerInfos:               state.pendingTimerInfoIDs,
+		UpdatedChildExecutionInfos:      state.pendingChildExecutionInfoIDs,
+		UpdatedRequestCancelInfos:       state.pendingRequestCancelInfoIDs,
+		UpdatedSignalInfos:              state.pendingSignalInfoIDs,
+		SignalRequestedIds:              state.GetPendingSignalRequestedIds(),
+		SubStateMachineTombstoneBatches: tombstones,
+		ExecutionInfo:                   stateClone.ExecutionInfo,
+		ExecutionState:                  state.executionState,
+	}
+	return mutation
+}
+
+func (s *mutableStateSuite) TestApplyMutation() {
+	state := s.buildWorkflowMutableState()
+	s.addChangesForStateReplication(state)
+
+	originMS, err := NewMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, tests.LocalNamespaceEntry, state, 123)
+	s.NoError(err)
 	tombstones := []*persistencespb.StateMachineTombstoneBatch{
 		{
-			VersionedTransition: state.currentVersionedTransition(),
+			VersionedTransition: &persistencespb.VersionedTransition{NamespaceFailoverVersion: 1, TransitionCount: 1},
+			StateMachineTombstones: []*persistencespb.StateMachineTombstone{
+				{
+					StateMachineKey: &persistencespb.StateMachineTombstone_ActivityScheduledEventId{
+						ActivityScheduledEventId: 10,
+					},
+				},
+			},
+		},
+	}
+	originMS.GetExecutionInfo().SubStateMachineTombstoneBatches = tombstones
+
+	currentMS, err := NewMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, tests.LocalNamespaceEntry, state, 123)
+	s.NoError(err)
+	currentMS.GetExecutionInfo().SubStateMachineTombstoneBatches = tombstones
+
+	state = s.buildWorkflowMutableState()
+
+	targetMS, err := NewMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, tests.LocalNamespaceEntry, state, 123)
+	s.NoError(err)
+
+	transitionHistory := targetMS.executionInfo.TransitionHistory
+	failoverVersion := transitionHistory[len(transitionHistory)-1].NamespaceFailoverVersion
+	targetMS.executionInfo.TransitionHistory = UpdatedTransitionHistory(transitionHistory, failoverVersion)
+
+	// set updateXXX so LastUpdateVersionedTransition will be updated
+	targetMS.updateActivityInfos = targetMS.pendingActivityInfoIDs
+	targetMS.updateTimerInfos = targetMS.pendingTimerInfoIDs
+	targetMS.updateChildExecutionInfos = targetMS.pendingChildExecutionInfoIDs
+	targetMS.updateRequestCancelInfos = targetMS.pendingRequestCancelInfoIDs
+	targetMS.updateSignalInfos = targetMS.pendingSignalInfoIDs
+	targetMS.updateSignalRequestedIDs = targetMS.pendingSignalRequestedIDs
+	targetMS.closeTransactionTrackLastUpdateVersionedTransition(TransactionPolicyActive)
+
+	tombstonesToAdd := []*persistencespb.StateMachineTombstoneBatch{
+		{
+			VersionedTransition: targetMS.currentVersionedTransition(),
 			StateMachineTombstones: []*persistencespb.StateMachineTombstone{
 				{
 					StateMachineKey: &persistencespb.StateMachineTombstone_ActivityScheduledEventId{
@@ -3638,53 +3696,11 @@ func (s *mutableStateSuite) buildMutation(state *MutableStateImpl) *persistences
 			},
 		},
 	}
-	mutation := &persistencespb.WorkflowMutableStateMutation{
-		UpdatedActivityInfos:            state.pendingActivityInfoIDs,
-		UpdatedTimerInfos:               state.pendingTimerInfoIDs,
-		UpdatedChildExecutionInfos:      state.pendingChildExecutionInfoIDs,
-		UpdatedRequestCancelInfos:       state.pendingRequestCancelInfoIDs,
-		UpdatedSignalInfos:              state.pendingSignalInfoIDs,
-		SignalRequestedIds:              state.GetPendingSignalRequestedIds(),
-		SubStateMachineTombstoneBatches: tombstones,
-		ExecutionInfo:                   state.executionInfo,
-		ExecutionState:                  state.executionState,
-	}
-	state.totalTombstones += len(tombstones[0].StateMachineTombstones)
-	return mutation
-}
-
-func (s *mutableStateSuite) TestApplyMutation() {
-	state := s.buildWorkflowMutableState()
-	s.addChangesForStateReplication(state)
-
-	originMS, err := NewMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, tests.LocalNamespaceEntry, state, 123)
-	s.NoError(err)
-
-	currentMS, err := NewMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, tests.LocalNamespaceEntry, state, 123)
-	s.NoError(err)
-
-	state = s.buildWorkflowMutableState()
-
-	targetMS, err := NewMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, tests.LocalNamespaceEntry, state, 123)
-	s.NoError(err)
-
-	transitionHistory := targetMS.executionInfo.TransitionHistory
-	failoverVersion := transitionHistory[len(transitionHistory)-1].NamespaceFailoverVersion
-	targetMS.executionInfo.TransitionHistory = UpdatedTransitionHistory(transitionHistory, failoverVersion)
-
-	// set updateXXX so LastUpdateVersionedTransition will be updated
-	targetMS.updateActivityInfos = targetMS.pendingActivityInfoIDs
-	targetMS.updateTimerInfos = targetMS.pendingTimerInfoIDs
-	targetMS.updateChildExecutionInfos = targetMS.pendingChildExecutionInfoIDs
-	targetMS.updateRequestCancelInfos = targetMS.pendingRequestCancelInfoIDs
-	targetMS.updateSignalInfos = targetMS.pendingSignalInfoIDs
-	targetMS.updateSignalRequestedIDs = targetMS.pendingSignalRequestedIDs
-	targetMS.closeTransactionTrackLastUpdateVersionedTransition(TransactionPolicyActive)
-
-	mutation := s.buildMutation(targetMS)
+	targetMS.GetExecutionInfo().SubStateMachineTombstoneBatches = append(tombstones, tombstonesToAdd...)
+	targetMS.totalTombstones = len(tombstones[0].StateMachineTombstones) + len(tombstonesToAdd[0].StateMachineTombstones)
+	mutation := s.buildMutation(targetMS, tombstonesToAdd)
 	err = currentMS.ApplyMutation(mutation)
 	s.NoError(err)
-
 	s.verifyMutableState(currentMS, targetMS, originMS)
 }
 

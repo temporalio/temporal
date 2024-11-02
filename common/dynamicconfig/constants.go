@@ -1847,10 +1847,23 @@ the outbound standby task failed to be processed due to missing events.`,
 close task has been processed. Must use Elasticsearch as visibility store, otherwise workflow
 data (eg: search attributes) will be lost after workflow is closed.`,
 	)
+	VisibilityProcessorRelocateAttributesMinBlobSize = NewNamespaceIntSetting(
+		"history.visibilityProcessorRelocateAttributesMinBlobSize",
+		0,
+		`VisibilityProcessorRelocateAttributesMinBlobSize is the minimum size in bytes of memo or search
+attributes.`,
+	)
 	VisibilityQueueMaxReaderCount = NewGlobalIntSetting(
 		"history.visibilityQueueMaxReaderCount",
 		2,
 		`VisibilityQueueMaxReaderCount is the max number of readers in one multi-cursor visibility queue`,
+	)
+
+	DisableFetchRelocatableAttributesFromVisibility = NewNamespaceBoolSetting(
+		"history.disableFetchRelocatableAttributesFromVisibility",
+		false,
+		`DisableFetchRelocatableAttributesFromVisibility disables fetching memo and search attributes from
+visibility if they were removed from the mutable state`,
 	)
 
 	ArchivalTaskBatchSize = NewGlobalIntSetting(
@@ -2187,6 +2200,12 @@ Do not turn this on if you aren't using Cassandra as the history task DLQ is not
 		70, // 70 attempts takes about an hour
 		`HistoryTaskDLQUnexpectedErrorAttempts is the number of task execution attempts before sending the task to DLQ.`,
 	)
+	HistoryTaskDLQInternalErrors = NewGlobalBoolSetting(
+		"history.TaskDLQInternalErrors",
+		false,
+		`HistoryTaskDLQInternalErrors causes history task processing to send tasks failing with serviceerror.Internal to
+the dlq (or will drop them if not enabled)`,
+	)
 	HistoryTaskDLQErrorPattern = NewGlobalStringSetting(
 		"history.TaskDLQErrorPattern",
 		"",
@@ -2436,11 +2455,6 @@ Should be at least WorkerESProcessorFlushInterval+<time to process request>.`,
 		true,
 		`HistoryScannerVerifyRetention indicates the history scanner verify data retention.
 If the service configures with archival feature enabled, update worker.historyScannerVerifyRetention to be double of the data retention.`,
-	)
-	EnableBatcherGlobal = NewGlobalBoolSetting(
-		"worker.enableBatcher",
-		true,
-		`EnableBatcher decides whether to start old (system namespace) batcher in our worker`,
 	)
 	EnableBatcherNamespace = NewNamespaceBoolSetting(
 		"worker.enableNamespaceBatcher",

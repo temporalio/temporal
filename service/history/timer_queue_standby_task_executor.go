@@ -321,6 +321,11 @@ func (t *timerQueueStandbyTaskExecutor) executeActivityRetryTimerTask(
 			return nil, nil
 		}
 
+		if activityInfo.Stamp != task.Stamp {
+			// this retry task is from old Stamp. In this case we should ignore it
+			return nil, nil
+		}
+
 		if activityInfo.StartedEventId != common.EmptyEventID {
 			return nil, nil
 		}
@@ -741,6 +746,7 @@ func (t *timerQueueStandbyTaskExecutor) pushActivity(
 		ScheduleToStartTimeout: durationpb.New(activityScheduleToStartTimeout),
 		Clock:                  vclock.NewVectorClock(t.shardContext.GetClusterMetadata().GetClusterID(), t.shardContext.GetShardID(), activityTask.TaskID),
 		VersionDirective:       pushActivityInfo.versionDirective,
+		Stamp:                  activityTask.Stamp,
 	})
 
 	if err != nil {

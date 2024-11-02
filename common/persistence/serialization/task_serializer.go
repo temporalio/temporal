@@ -363,6 +363,7 @@ func (s *TaskSerializer) transferActivityTaskToProto(
 		Version:                 activityTask.Version,
 		TaskId:                  activityTask.TaskID,
 		VisibilityTime:          timestamppb.New(activityTask.VisibilityTimestamp),
+		Stamp:                   activityTask.Stamp,
 	}
 }
 
@@ -380,6 +381,7 @@ func (s *TaskSerializer) transferActivityTaskFromProto(
 		TaskQueue:           activityTask.TaskQueue,
 		ScheduledEventID:    activityTask.ScheduledEventId,
 		Version:             activityTask.Version,
+		Stamp:               activityTask.Stamp,
 	}
 }
 
