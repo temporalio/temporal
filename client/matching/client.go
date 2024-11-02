@@ -36,9 +36,11 @@ import (
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/debug"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/tqid"
 	"google.golang.org/grpc"
 )
@@ -53,15 +55,17 @@ const (
 )
 
 type clientImpl struct {
-	timeout         time.Duration
-	longPollTimeout time.Duration
-	clients         common.ClientCache
-	metricsHandler  metrics.Handler
-	logger          log.Logger
-	loadBalancer    LoadBalancer
+	timeout           time.Duration
+	longPollTimeout   time.Duration
+	clients           common.ClientCache
+	metricsHandler    metrics.Handler
+	logger            log.Logger
+	loadBalancer      LoadBalancer
+	namespaceIDToName func(id namespace.ID) (namespace.Name, error)
+	spreadPartitions  dynamicconfig.BoolPropertyFnWithTaskQueueFilter
 }
 
-// NewClient creates a new history service gRPC client
+// NewClient creates a new matching service gRPC client
 func NewClient(
 	timeout time.Duration,
 	longPollTimeout time.Duration,
@@ -69,14 +73,18 @@ func NewClient(
 	metricsHandler metrics.Handler,
 	logger log.Logger,
 	lb LoadBalancer,
+	namespaceIDToName func(id namespace.ID) (namespace.Name, error),
+	spreadPartitions dynamicconfig.BoolPropertyFnWithTaskQueueFilter,
 ) matchingservice.MatchingServiceClient {
 	return &clientImpl{
-		timeout:         timeout,
-		longPollTimeout: longPollTimeout,
-		clients:         clients,
-		metricsHandler:  metricsHandler,
-		logger:          logger,
-		loadBalancer:    lb,
+		timeout:           timeout,
+		longPollTimeout:   longPollTimeout,
+		clients:           clients,
+		metricsHandler:    metricsHandler,
+		logger:            logger,
+		loadBalancer:      lb,
+		namespaceIDToName: namespaceIDToName,
+		spreadPartitions:  spreadPartitions,
 	}
 }
 
@@ -221,6 +229,17 @@ func (c *clientImpl) createLongPollContext(parent context.Context) (context.Cont
 func (c *clientImpl) getClientForTaskQueuePartition(
 	partition tqid.Partition,
 ) (matchingservice.MatchingServiceClient, error) {
+	if nsName, err := c.namespaceIDToName(namespace.ID(partition.NamespaceId())); err == nil {
+		if c.spreadPartitions(nsName.String(), partition.TaskQueue().Name(), partition.TaskType()) {
+			if np, ok := partition.(*tqid.NormalPartition); ok {
+				client, err := c.clients.GetClientForKeyN(np.RoutingKeyWithoutPartition(), np.PartitionId())
+				if err != nil {
+					return nil, err
+				}
+				return client.(matchingservice.MatchingServiceClient), nil
+			}
+		}
+	}
 	client, err := c.clients.GetClientForKey(partition.RoutingKey())
 	if err != nil {
 		return nil, err

@@ -143,23 +143,35 @@ func (cf *rpcClientFactory) NewMatchingClientWithTimeout(
 	timeout time.Duration,
 	longPollTimeout time.Duration,
 ) (matchingservice.MatchingServiceClient, error) {
-	resolver, err := cf.monitor.GetResolver(primitives.MatchingService)
+	matchingResolver, err := cf.monitor.GetResolver(primitives.MatchingService)
+	if err != nil {
+		return nil, err
+	}
+	historyResolver, err := cf.monitor.GetResolver(primitives.HistoryService)
 	if err != nil {
 		return nil, err
 	}
 
-	keyResolver := newServiceKeyResolver(resolver)
+	keyResolver := newServiceKeyResolver(matchingResolver)
 	clientProvider := func(clientKey string) (interface{}, error) {
 		connection := cf.rpcFactory.CreateInternodeGRPCConnection(clientKey)
 		return matchingservice.NewMatchingServiceClient(connection), nil
 	}
+	lb := matching.NewLoadBalancer(
+		namespaceIDToName,
+		matchingResolver,
+		historyResolver,
+		cf.dynConfig,
+	)
 	client := matching.NewClient(
 		timeout,
 		longPollTimeout,
 		common.NewClientCache(keyResolver, clientProvider),
 		cf.metricsHandler,
 		cf.logger,
-		matching.NewLoadBalancer(namespaceIDToName, cf.dynConfig),
+		lb,
+		namespaceIDToName,
+		dynamicconfig.MatchingSpreadPartitions.Get(cf.dynConfig),
 	)
 
 	if cf.metricsHandler != nil {
@@ -243,6 +255,14 @@ func (r *serviceKeyResolverImpl) Lookup(key string) (string, error) {
 		return "", err
 	}
 	return host.GetAddress(), nil
+}
+
+func (r *serviceKeyResolverImpl) LookupN(key string, n int) (string, error) {
+	hosts := r.resolver.LookupN(key, n)
+	if len(hosts) == 0 {
+		return "", membership.ErrInsufficientHosts
+	}
+	return hosts[n%len(hosts)].GetAddress(), nil
 }
 
 func (r *serviceKeyResolverImpl) GetAllAddresses() ([]string, error) {

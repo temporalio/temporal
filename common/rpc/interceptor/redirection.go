@@ -41,6 +41,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/namespace/namespacegetter"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
 )
@@ -200,7 +201,7 @@ func (i *Redirection) Intercept(
 		return i.handleLocalAPIInvocation(ctx, req, handler, methodName)
 	}
 	if raFn, ok := globalAPIResponses[methodName]; ok {
-		namespaceName, err := GetNamespaceName(i.namespaceCache, req)
+		namespaceName, err := namespacegetter.GetNamespaceName(i.namespaceCache, req)
 		if err != nil {
 			return nil, err
 		}

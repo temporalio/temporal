@@ -62,7 +62,7 @@ func TestRPCFactory_CreateInternodeGRPCConnection(t *testing.T) {
 func TestRPCFactory_CreateLocalFrontendGRPCConnection(t *testing.T) {
 	t.Parallel()
 
-	testDialer(t, ":0", func(rpcFactory *nettest.RPCFactory) *grpc.ClientConn {
+	testDialer(t, ":0", func(rpcFactory *nettest.RPCFactory) grpc.ClientConnInterface {
 		return rpcFactory.CreateLocalFrontendGRPCConnection()
 	})
 }
@@ -70,7 +70,7 @@ func TestRPCFactory_CreateLocalFrontendGRPCConnection(t *testing.T) {
 func TestRPCFactory_CreateRemoteFrontendGRPCConnection(t *testing.T) {
 	t.Parallel()
 
-	testDialer(t, "localhost", func(rpcFactory *nettest.RPCFactory) *grpc.ClientConn {
+	testDialer(t, "localhost", func(rpcFactory *nettest.RPCFactory) grpc.ClientConnInterface {
 		return rpcFactory.CreateRemoteFrontendGRPCConnection("localhost")
 	})
 }

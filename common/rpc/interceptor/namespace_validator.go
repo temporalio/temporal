@@ -36,6 +36,7 @@ import (
 	"go.temporal.io/server/common/api"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/namespace/namespacegetter"
 	"google.golang.org/grpc"
 )
 
@@ -131,7 +132,7 @@ func (ni *NamespaceValidatorInterceptor) NamespaceValidateIntercept(
 	if err != nil {
 		return nil, err
 	}
-	reqWithNamespace, hasNamespace := req.(NamespaceNameGetter)
+	reqWithNamespace, hasNamespace := req.(namespacegetter.NamespaceNameGetter)
 	if hasNamespace {
 		if err := ni.ValidateName(reqWithNamespace.GetNamespace()); err != nil {
 			return nil, err
@@ -153,7 +154,7 @@ func (ni *NamespaceValidatorInterceptor) setNamespaceIfNotPresent(
 	req interface{},
 ) error {
 	switch request := req.(type) {
-	case NamespaceNameGetter:
+	case namespacegetter.NamespaceNameGetter:
 		if request.GetNamespace() == "" {
 			namespaceEntry, err := ni.extractNamespaceFromTaskToken(req)
 			if err != nil {
@@ -270,7 +271,7 @@ func (ni *NamespaceValidatorInterceptor) extractNamespace(req interface{}) (*nam
 }
 
 func (ni *NamespaceValidatorInterceptor) extractNamespaceFromRequest(req interface{}) (*namespace.Namespace, error) {
-	reqWithNamespace, hasNamespace := req.(NamespaceNameGetter)
+	reqWithNamespace, hasNamespace := req.(namespacegetter.NamespaceNameGetter)
 	if !hasNamespace {
 		return nil, nil
 	}

@@ -31,6 +31,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"slices"
 	"sync"
 	"time"
 
@@ -42,8 +43,10 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/membership"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/rpc/encryption"
+	"go.temporal.io/server/common/rpc/inline"
 	"go.temporal.io/server/environment"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
@@ -85,6 +88,12 @@ func NewFactory(
 	clientInterceptors []grpc.UnaryClientInterceptor,
 	monitor membership.Monitor,
 ) *RPCFactory {
+	clientInterceptors = append(
+		slices.Clone(clientInterceptors),
+		headersInterceptor,
+		metrics.NewClientMetricsTrailerPropagatorInterceptor(logger),
+		errorInterceptor,
+	)
 	f := &RPCFactory{
 		config:             cfg,
 		serviceName:        sName,
@@ -161,6 +170,10 @@ func (d *RPCFactory) GetInternodeClientTlsConfig() (*tls.Config, error) {
 	return nil, nil
 }
 
+func (d *RPCFactory) GetGRPCClientInterceptors() []grpc.UnaryClientInterceptor {
+	return d.clientInterceptors
+}
+
 // GetGRPCListener returns cached dispatcher for gRPC inbound or creates one
 func (d *RPCFactory) GetGRPCListener() net.Listener {
 	return d.grpcListener()
@@ -206,7 +219,7 @@ func getListenIP(cfg *config.RPC, logger log.Logger) net.IP {
 }
 
 // CreateRemoteFrontendGRPCConnection creates connection for gRPC calls
-func (d *RPCFactory) CreateRemoteFrontendGRPCConnection(rpcAddress string) *grpc.ClientConn {
+func (d *RPCFactory) CreateRemoteFrontendGRPCConnection(rpcAddress string) grpc.ClientConnInterface {
 	var tlsClientConfig *tls.Config
 	var err error
 	if d.tlsFactory != nil {
@@ -226,14 +239,18 @@ func (d *RPCFactory) CreateRemoteFrontendGRPCConnection(rpcAddress string) *grpc
 }
 
 // CreateLocalFrontendGRPCConnection creates connection for internal frontend calls
-func (d *RPCFactory) CreateLocalFrontendGRPCConnection() *grpc.ClientConn {
+func (d *RPCFactory) CreateLocalFrontendGRPCConnection() grpc.ClientConnInterface {
 	return d.dial(d.frontendURL, d.frontendTLSConfig)
 }
 
 // CreateInternodeGRPCConnection creates connection for gRPC calls
-func (d *RPCFactory) CreateInternodeGRPCConnection(hostName string) *grpc.ClientConn {
+func (d *RPCFactory) CreateInternodeGRPCConnection(hostName string) grpc.ClientConnInterface {
 	if c, ok := d.interNodeGrpcConnections.Get(hostName).(*grpc.ClientConn); ok {
 		return c
+	}
+	if cc := inline.GetInlineConn(hostName); cc != nil {
+		d.interNodeGrpcConnections.Put(hostName, cc)
+		return cc
 	}
 	var tlsClientConfig *tls.Config
 	var err error
@@ -250,7 +267,7 @@ func (d *RPCFactory) CreateInternodeGRPCConnection(hostName string) *grpc.Client
 }
 
 func (d *RPCFactory) dial(hostName string, tlsClientConfig *tls.Config) *grpc.ClientConn {
-	connection, err := Dial(hostName, tlsClientConfig, d.logger, d.clientInterceptors...)
+	connection, err := Dial(hostName, tlsClientConfig, d.clientInterceptors)
 	if err != nil {
 		d.logger.Fatal("Failed to create gRPC connection", tag.Error(err))
 		return nil

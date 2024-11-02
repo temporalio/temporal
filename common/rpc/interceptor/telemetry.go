@@ -41,6 +41,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/namespace/namespacegetter"
 	"go.temporal.io/server/common/rpc/interceptor/logtags"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"google.golang.org/grpc"
@@ -179,7 +180,7 @@ func (ti *TelemetryInterceptor) UnaryIntercept(
 	handler grpc.UnaryHandler,
 ) (any, error) {
 	methodName := api.MethodName(info.FullMethod)
-	nsName := MustGetNamespaceName(ti.namespaceRegistry, req)
+	nsName := namespacegetter.MustGetNamespaceName(ti.namespaceRegistry, req)
 
 	metricsHandler, logTags := ti.unaryMetricsHandlerLogTags(req, info.FullMethod, methodName, nsName)
 
