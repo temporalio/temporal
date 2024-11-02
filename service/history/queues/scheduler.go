@@ -70,9 +70,10 @@ type (
 	ChannelWeightFn  = tasks.ChannelWeightFn[TaskChannelKey]
 
 	SchedulerOptions struct {
-		WorkerCount             dynamicconfig.TypedSubscribable[int]
-		ActiveNamespaceWeights  dynamicconfig.MapPropertyFnWithNamespaceFilter
-		StandbyNamespaceWeights dynamicconfig.MapPropertyFnWithNamespaceFilter
+		WorkerCount                    dynamicconfig.TypedSubscribable[int]
+		ActiveNamespaceWeights         dynamicconfig.MapPropertyFnWithNamespaceFilter
+		StandbyNamespaceWeights        dynamicconfig.MapPropertyFnWithNamespaceFilter
+		InactiveNamespaceDeletionDelay dynamicconfig.DurationPropertyFn
 	}
 
 	RateLimitedSchedulerOptions struct {
@@ -142,9 +143,10 @@ func NewScheduler(
 
 	scheduler = tasks.NewInterleavedWeightedRoundRobinScheduler(
 		tasks.InterleavedWeightedRoundRobinSchedulerOptions[Executable, TaskChannelKey]{
-			TaskChannelKeyFn:      taskChannelKeyFn,
-			ChannelWeightFn:       channelWeightFn,
-			ChannelWeightUpdateCh: channelWeightUpdateCh,
+			TaskChannelKeyFn:             taskChannelKeyFn,
+			ChannelWeightFn:              channelWeightFn,
+			ChannelWeightUpdateCh:        channelWeightUpdateCh,
+			InactiveChannelDeletionDelay: options.InactiveNamespaceDeletionDelay,
 		},
 		tasks.Scheduler[Executable](tasks.NewFIFOScheduler[Executable](
 			fifoSchedulerOptions,
