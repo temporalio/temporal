@@ -516,8 +516,7 @@ func (s *interleavedWeightedRoundRobinSchedulerSuite) TestInactiveChannelDeletio
 	// But this time, those channels should not be deleted as we haven't provided InactiveChannelDeletionDelay
 	s.ts.Advance(31 * time.Minute)
 
-	// nolint:revive
-	time.Sleep(100 * time.Millisecond)
+	time.Sleep(100 * time.Millisecond) //nolint:forbidigo
 	channelWeights = []int{}
 	for _, channel := range s.scheduler.channels() {
 		channelWeights = append(channelWeights, channel.Weight())
@@ -584,8 +583,7 @@ func (s *interleavedWeightedRoundRobinSchedulerSuite) TestInactiveChannelDeletio
 		taskWG.Wait()
 	}
 
-	// nolint:revive
-	time.Sleep(100 * time.Millisecond)
+	time.Sleep(100 * time.Millisecond) //nolint:forbidigo
 	s.Empty(s.scheduler.channels())
 }
 
