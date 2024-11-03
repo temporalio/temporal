@@ -28,12 +28,14 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"regexp"
 	"sync"
 	"time"
 
 	"go.temporal.io/api/operatorservice/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/adminservice/v1"
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -211,6 +213,8 @@ type Config struct {
 	EnableEagerWorkflowStart dynamicconfig.BoolPropertyFnWithNamespaceFilter
 
 	ActivityAPIsEnabled dynamicconfig.BoolPropertyFnWithNamespaceFilter
+
+	HTTPAllowedHosts *dynamicconfig.GlobalCachedTypedValue[[]*regexp.Regexp]
 }
 
 // NewConfig returns new service config with default values
@@ -330,6 +334,8 @@ func NewConfig(
 		LogAllReqErrors:            dynamicconfig.LogAllReqErrors.Get(dc),
 		EnableEagerWorkflowStart:   dynamicconfig.EnableEagerWorkflowStart.Get(dc),
 		ActivityAPIsEnabled:        dynamicconfig.ActivityAPIsEnabled.Get(dc),
+
+		HTTPAllowedHosts: dynamicconfig.NewGlobalCachedTypedValue(dc, dynamicconfig.FrontendHTTPAllowedHosts, common.WildCardStringsToRegexps),
 	}
 }
 
