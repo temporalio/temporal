@@ -43,7 +43,7 @@ CREATE TABLE executions_visibility (
   TemporalSchedulePaused        BOOLEAN       GENERATED ALWAYS AS ((search_attributes->'TemporalSchedulePaused')::boolean)        STORED,
   TemporalNamespaceDivision     VARCHAR(255)  GENERATED ALWAYS AS (search_attributes->>'TemporalNamespaceDivision')               STORED,
   BuildIds                      JSONB         GENERATED ALWAYS AS (search_attributes->'BuildIds')                                 STORED,
-  PauseActivityTypes            JSONB         GENERATED ALWAYS AS (search_attributes->'PauseActivityTypes')                       STORED,
+  PausedEntities                JSONB         GENERATED ALWAYS AS (search_attributes->'PausedEntities')                           STORED,
 
   -- Pre-allocated custom search attributes
   Bool01          BOOLEAN         GENERATED ALWAYS AS ((search_attributes->'Bool01')::boolean)        STORED,
