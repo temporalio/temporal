@@ -84,10 +84,11 @@ const (
 
 	// PausedEntities is a search attribute that stores the list paused entities in the workflow.
 	// Format of a single paused entity: "<entity_type>:<entity_id>:<policy_id>".
-	//  * entity_type can be activity, workflow, etc.
-	//  * entity_id is based on type. For activity it will be activity type, for workflow it will be workflow id.
+	//  * entity_type can be activity, workflow, etc. See PausedWorkflowEntityType enum for the list of supported entities.
+	//  * entity_id is used to differentiate entities and based on type. For activity it will be activity type.
+	//      note: it may not be unique across different entities.
 	//  * policy_id is an arbitrary string.
-	// example for paused activities, manual pause: "activity:MyCoolActivityType:MANUAL"
+	// example for paused activities, manual pause: "Activity:MyCoolActivityType:MANUAL"
 	PausedEntities = "PausedEntities"
 )
 

@@ -44,7 +44,7 @@ CREATE TABLE executions_visibility (
   TemporalSchedulePaused        BOOLEAN       GENERATED ALWAYS AS (search_attributes->"$.TemporalSchedulePaused"),
   TemporalNamespaceDivision     VARCHAR(255)  GENERATED ALWAYS AS (search_attributes->>"$.TemporalNamespaceDivision"),
   BuildIds                      JSON          GENERATED ALWAYS AS (search_attributes->"$.BuildIds"),
-  PauseActivityTypes            JSON          GENERATED ALWAYS AS (search_attributes->"$.PauseActivityTypes"),
+  PausedEntities                JSON          GENERATED ALWAYS AS (search_attributes->"$.PausedEntities"),
 
   PRIMARY KEY (namespace_id, run_id)
 );

@@ -92,6 +92,9 @@
       },
       "RootRunId": {
         "type": "keyword"
+      },
+      "PausedEntities": {
+        "type": "keyword"
       }
     }
   },

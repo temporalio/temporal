@@ -129,7 +129,7 @@ CREATE VIRTUAL TABLE executions_visibility_fts_keyword_list USING fts5 (
   TemporalChangeVersion,
   BinaryChecksums,
   BuildIds,
-  PauseActivityTypes,
+  PausedEntities,
   KeywordList01,
   KeywordList02,
   KeywordList03,
@@ -157,7 +157,7 @@ BEGIN
     TemporalChangeVersion,
     BinaryChecksums,
     BuildIds,
-    PauseActivityTypes,
+    PausedEntities,
     KeywordList01,
     KeywordList02,
     KeywordList03
@@ -166,7 +166,7 @@ BEGIN
     NEW.TemporalChangeVersion,
     NEW.BinaryChecksums,
     NEW.BuildIds,
-    NEW.PauseActivityTypes,
+    NEW.PausedEntities,
     NEW.KeywordList01,
     NEW.KeywordList02,
     NEW.KeywordList03
@@ -196,7 +196,7 @@ BEGIN
     TemporalChangeVersion,
     BinaryChecksums,
     BuildIds,
-    PauseActivityTypes,
+    PausedEntities,
     KeywordList01,
     KeywordList02,
     KeywordList03
@@ -206,7 +206,7 @@ BEGIN
     OLD.TemporalChangeVersion,
     OLD.BinaryChecksums,
     OLD.BuildIds,
-    OLD.PauseActivityTypes,
+    OLD.PausedEntities,
     OLD.KeywordList01,
     OLD.KeywordList02,
     OLD.KeywordList03
@@ -247,7 +247,7 @@ BEGIN
     TemporalChangeVersion,
     BinaryChecksums,
     BuildIds,
-    PauseActivityTypes,
+    PausedEntities,
     KeywordList01,
     KeywordList02,
     KeywordList03
@@ -257,7 +257,7 @@ BEGIN
     OLD.TemporalChangeVersion,
     OLD.BinaryChecksums,
     OLD.BuildIds,
-    OLD.PauseActivityTypes,
+    OLD.PausedEntities,
     OLD.KeywordList01,
     OLD.KeywordList02,
     OLD.KeywordList03
@@ -267,7 +267,7 @@ BEGIN
     TemporalChangeVersion,
     BinaryChecksums,
     BuildIds,
-    PauseActivityTypes,
+    PausedEntities,
     KeywordList01,
     KeywordList02,
     KeywordList03
@@ -276,7 +276,7 @@ BEGIN
     NEW.TemporalChangeVersion,
     NEW.BinaryChecksums,
     NEW.BuildIds,
-    NEW.PauseActivityTypes,
+    NEW.PausedEntities,
     NEW.KeywordList01,
     NEW.KeywordList02,
     NEW.KeywordList03
