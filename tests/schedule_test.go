@@ -1077,9 +1077,13 @@ func (s *ScheduleFunctionalSuite) TestListSchedulesReturnsWorkflowStatus() {
 	}
 
 	// The workflow sits open until we've asserted it can be listed as running
-	waitChan := make(chan bool)
+	resumeSignal := "resume"
 	workflowFn := func(ctx workflow.Context) error {
-		<-waitChan
+		selector := workflow.NewSelector(ctx)
+		selector.AddReceive(workflow.GetSignalChannel(ctx, resumeSignal), func(c workflow.ReceiveChannel, more bool) {
+			// nothing to do
+		})
+		selector.Select(ctx)
 		return nil
 	}
 	s.worker.RegisterWorkflowWithOptions(workflowFn, workflow.RegisterOptions{Name: wt})
@@ -1089,12 +1093,11 @@ func (s *ScheduleFunctionalSuite) TestListSchedulesReturnsWorkflowStatus() {
 		ScheduleId:   sid,
 		Schedule:     schedule,
 		InitialPatch: patch,
-		Identity:     "test",
 		RequestId:    uuid.New(),
 	}
 	_, err := s.FrontendClient().CreateSchedule(testcore.NewContext(), req)
 	s.NoError(err)
-	defer s.cleanup(sid)
+	s.cleanup(sid)
 
 	// validate RecentActions made it to visibility
 	listResp := s.getScheduleEntryFomVisibility(sid, func(listResp *schedulepb.ScheduleListEntry) bool {
@@ -1107,7 +1110,15 @@ func (s *ScheduleFunctionalSuite) TestListSchedulesReturnsWorkflowStatus() {
 	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, a1.StartWorkflowStatus)
 
 	// let the started workflow complete
-	waitChan <- true
+	_, err = s.FrontendClient().SignalWorkflowExecution(testcore.NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
+		Namespace: s.Namespace(),
+		WorkflowExecution: &commonpb.WorkflowExecution{
+			WorkflowId: a1.StartWorkflowResult.WorkflowId,
+			RunId:      a1.StartWorkflowResult.RunId,
+		},
+		SignalName: resumeSignal,
+	})
+	s.NoError(err)
 
 	// now wait for second recent action to land in visbility
 	listResp = s.getScheduleEntryFomVisibility(sid, func(listResp *schedulepb.ScheduleListEntry) bool {
