@@ -51,8 +51,6 @@ import (
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -194,20 +192,6 @@ func (s *StreamSenderImpl) recvEventLoop() (retErr error) {
 		}
 		req, err := s.server.Recv()
 		if err != nil {
-			println("xinwduan1", status.Code(err))
-			grpcStatus, ok := status.FromError(err)
-			if ok {
-				// Get the gRPC status code
-				code := grpcStatus.Code()
-				if code == codes.NotFound {
-					fmt.Println("Resource not found")
-				} else {
-					fmt.Printf("Received gRPC error code: %v\n", code)
-				}
-			} else {
-				// Handle non-gRPC errors
-				fmt.Println("Non-gRPC error:", err)
-			}
 			return NewStreamError("StreamSender failed to receive", err)
 		}
 		switch attr := req.GetAttributes().(type) {
