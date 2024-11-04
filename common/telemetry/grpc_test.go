@@ -26,6 +26,7 @@ package telemetry_test
 
 import (
 	"context"
+	"encoding/json"
 	"os"
 	"testing"
 
@@ -101,8 +102,8 @@ func Test_ServerStatsHandler(t *testing.T) {
 		spanAttrsByKey := makeRequest(nil)
 
 		require.Equal(t,
-			`{"workflowExecution":{"workflowId":"WF-ID", "runId":"RUN-ID"}}`,
-			spanAttrsByKey["rpc.request.payload"].Value.AsString())
+			`{"workflowExecution":{"workflowId":"WF-ID","runId":"RUN-ID"}}`,
+			toStr(t, spanAttrsByKey["rpc.request.payload"].Value))
 		require.Equal(t, "{}", spanAttrsByKey["rpc.response.payload"].Value.AsString())
 	})
 
@@ -113,8 +114,8 @@ func Test_ServerStatsHandler(t *testing.T) {
 		spanAttrsByKey := makeRequest(status.Errorf(codes.Internal, "Something went wrong"))
 
 		require.Equal(t,
-			`{"code":13, "message":"Something went wrong"}`,
-			spanAttrsByKey["rpc.response.error"].Value.AsString())
+			`{"code":13,"message":"Something went wrong"}`,
+			toStr(t, spanAttrsByKey["rpc.response.error"].Value))
 	})
 
 	t.Run("skip if noop trace provider", func(t *testing.T) {
@@ -133,4 +134,16 @@ func Test_ClientStatsHandler(t *testing.T) {
 		otelStatsHandler := telemetry.NewClientStatsHandler(tp, tmp)
 		require.Nil(t, otelStatsHandler)
 	})
+}
+
+func toStr(t *testing.T, v attribute.Value) string {
+	t.Helper()
+	var payload map[string]json.RawMessage
+	payloadStr := v.AsString()
+	// protobuf adds random whitespaces when encoding output;
+	// therefore we need to unmarshal and marshal again to get a consistent result
+	require.NoError(t, json.Unmarshal([]byte(payloadStr), &payload))
+	m, err := json.Marshal(payload)
+	require.NoError(t, err)
+	return string(m)
 }
