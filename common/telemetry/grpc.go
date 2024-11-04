@@ -31,84 +31,164 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/propagation"
 	"go.opentelemetry.io/otel/trace"
-	"google.golang.org/grpc"
+	"go.opentelemetry.io/otel/trace/noop"
+	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/rpc/interceptor/logtags"
+	"google.golang.org/grpc/stats"
+	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
 )
 
-type (
-	// ServerTraceInterceptor gives a named type to the
-	// grpc.UnaryServerInterceptor implementation provided by otelgrpc
-	ServerTraceInterceptor grpc.UnaryServerInterceptor
+type methodNameKey struct{}
 
-	// ClientTraceInterceptor gives a named type to the
-	// grpc.UnaryClientInterceptor implementation provided by otelgrpc
-	ClientTraceInterceptor grpc.UnaryClientInterceptor
+type (
+	// ServerStatsHandler gives a named type to the stats.Handler implementation provided by otelgrpc.
+	ServerStatsHandler stats.Handler
+
+	// ClientStatsHandler gives a named type to the grpc.UnaryClientInterceptor implementation provided by otelgrpc.
+	ClientStatsHandler stats.Handler
+
+	customServerStatsHandler struct {
+		isDebug bool
+		wrapped stats.Handler
+		tags    *logtags.WorkflowTags
+	}
 )
 
-// NewServerTraceInterceptor creates a new gRPC server interceptor that tracks
-// each request with an encapsulating span using the provided TracerProvider and
-// TextMapPropagator.
-func NewServerTraceInterceptor(
+// NewServerStatsHandler creates a new gRPC stats handler that tracks each request with an encapsulating span
+// using the provided TracerProvider and TextMapPropagator.
+//
+// NOTE: If the TracerProvider is `noop.TracerProvider`, it returns `nil`.
+func NewServerStatsHandler(
 	tp trace.TracerProvider,
 	tmp propagation.TextMapPropagator,
-) ServerTraceInterceptor {
-	//nolint:staticcheck
-	otelInterceptor := otelgrpc.UnaryServerInterceptor(
+	logger log.Logger,
+) ServerStatsHandler {
+	if !isEnabled(tp) {
+		return nil
+	}
+
+	return newCustomServerStatsHandler(
+		otelgrpc.NewServerHandler(
+			otelgrpc.WithPropagators(tmp),
+			otelgrpc.WithTracerProvider(tp),
+		),
+		logger)
+}
+
+// NewClientStatsHandler creates a new gRPC stats handler that tracks each request with an encapsulating span
+// using the provided TracerProvider and TextMapPropagator.
+//
+// NOTE: If the TracerProvider is `noop.TracerProvider`, it returns `nil`.
+func NewClientStatsHandler(
+	tp trace.TracerProvider,
+	tmp propagation.TextMapPropagator,
+) ClientStatsHandler {
+	if !isEnabled(tp) {
+		return nil
+	}
+
+	return otelgrpc.NewClientHandler(
 		otelgrpc.WithPropagators(tmp),
 		otelgrpc.WithTracerProvider(tp),
 	)
+}
 
-	if debugMode() {
-		return func(
-			ctx context.Context,
-			req interface{},
-			info *grpc.UnaryServerInfo,
-			handler grpc.UnaryHandler,
-		) (any, error) {
-			return otelInterceptor(ctx, req, info, debugHandler(handler))
+func isEnabled(tp trace.TracerProvider) bool {
+	_, isNoop := tp.(noop.TracerProvider)
+	return !isNoop
+}
+
+func newCustomServerStatsHandler(
+	handler stats.Handler,
+	logger log.Logger,
+) *customServerStatsHandler {
+	return &customServerStatsHandler{
+		wrapped: handler,
+		isDebug: debugMode(),
+		tags:    logtags.NewWorkflowTags(common.NewProtoTaskTokenSerializer(), logger),
+	}
+}
+
+func (c *customServerStatsHandler) TagRPC(ctx context.Context, info *stats.RPCTagInfo) context.Context {
+	return c.wrapped.TagRPC(
+		context.WithValue(ctx, methodNameKey{}, info.FullMethodName),
+		info)
+}
+
+func (c *customServerStatsHandler) HandleRPC(ctx context.Context, stat stats.RPCStats) {
+	// handling `End` before wrapped stats.Handler since it closes the span
+	switch s := stat.(type) {
+	case *stats.End:
+		// annotate with gRPC error payload
+		if c.isDebug {
+			span := trace.SpanFromContext(ctx)
+
+			//revive:disable-next-line:unchecked-type-assertion
+			statusErr, ok := status.FromError(s.Error)
+			if ok && statusErr != nil {
+				payload, _ := protojson.Marshal(statusErr.Proto())
+				span.SetAttributes(attribute.Key("rpc.response.error").String(string(payload)))
+			}
 		}
 	}
 
-	return ServerTraceInterceptor(otelInterceptor)
-}
+	c.wrapped.HandleRPC(ctx, stat)
 
-func debugHandler(origHandler grpc.UnaryHandler) grpc.UnaryHandler {
-	return func(ctx context.Context, req any) (resp any, err error) {
-		resp, err = origHandler(ctx, req)
+	switch s := stat.(type) {
+	case *stats.InPayload:
 		span := trace.SpanFromContext(ctx)
-		if span.IsRecording() {
+
+		methodName, ok := ctx.Value(methodNameKey{}).(string)
+		if !ok {
+			methodName = "unknown"
+		}
+
+		// annotate span with workflow tags (same ones the Temporal SDKs use)
+		for _, logTag := range c.tags.Extract(s.Payload, methodName) {
+			var k string
+			switch logTag.Key() {
+			case tag.WorkflowIDKey:
+				k = "temporalWorkflowID"
+			case tag.WorkflowRunIDKey:
+				k = "temporalRunID"
+			default:
+				continue
+			}
+			span.SetAttributes(attribute.Key(k).String(logTag.Value().(string)))
+		}
+
+		// annotate with gRPC request payload
+		if c.isDebug {
 			//revive:disable-next-line:unchecked-type-assertion
-			reqMsg := req.(proto.Message)
+			reqMsg := s.Payload.(proto.Message)
 			payload, _ := protojson.Marshal(reqMsg)
 			msgType := string(proto.MessageName(reqMsg).Name())
 			span.SetAttributes(attribute.Key("rpc.request.payload").String(string(payload)))
 			span.SetAttributes(attribute.Key("rpc.request.type").String(msgType))
-
-			if err == nil {
-				//revive:disable-next-line:unchecked-type-assertion
-				respMsg := resp.(proto.Message)
-				payload, _ = protojson.Marshal(respMsg)
-				msgType = string(proto.MessageName(respMsg).Name())
-				span.SetAttributes(attribute.Key("rpc.response.payload").String(string(payload)))
-				span.SetAttributes(attribute.Key("rpc.response.type").String(msgType))
-			}
 		}
-		return
+	case *stats.OutPayload:
+		// annotate with gRPC response payload
+		if c.isDebug {
+			span := trace.SpanFromContext(ctx)
+
+			//revive:disable-next-line:unchecked-type-assertion
+			respMsg := s.Payload.(proto.Message)
+			payload, _ := protojson.Marshal(respMsg)
+			msgType := string(proto.MessageName(respMsg).Name())
+			span.SetAttributes(attribute.Key("rpc.response.payload").String(string(payload)))
+			span.SetAttributes(attribute.Key("rpc.response.type").String(msgType))
+		}
 	}
 }
 
-// NewClientTraceInterceptor creates a new gRPC client interceptor that tracks
-// each request with an encapsulating span using the provided TracerProvider and
-// TextMapPropagator.
-func NewClientTraceInterceptor(
-	tp trace.TracerProvider,
-	tmp propagation.TextMapPropagator,
-) ClientTraceInterceptor {
-	return ClientTraceInterceptor(
-		otelgrpc.UnaryClientInterceptor(
-			otelgrpc.WithPropagators(tmp),
-			otelgrpc.WithTracerProvider(tp),
-		),
-	)
+func (c *customServerStatsHandler) TagConn(ctx context.Context, info *stats.ConnTagInfo) context.Context {
+	return c.wrapped.TagConn(ctx, info)
+}
+
+func (c *customServerStatsHandler) HandleConn(ctx context.Context, stat stats.ConnStats) {
+	c.wrapped.HandleConn(ctx, stat)
 }

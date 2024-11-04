@@ -67,7 +67,7 @@ type (
 		RetryableInterceptor   *interceptor.RetryableInterceptor
 		TelemetryInterceptor   *interceptor.TelemetryInterceptor
 		RateLimitInterceptor   *interceptor.RateLimitInterceptor
-		TracingInterceptor     telemetry.ServerTraceInterceptor
+		TracingStatsHandler    telemetry.ServerStatsHandler
 		AdditionalInterceptors []grpc.UnaryServerInterceptor `optional:"true"`
 	}
 )
@@ -149,6 +149,10 @@ func GrpcServerOptionsProvider(
 		params.Logger.Fatal("creating gRPC server options failed", tag.Error(err))
 	}
 
+	if params.TracingStatsHandler != nil {
+		grpcServerOptions = append(grpcServerOptions, grpc.StatsHandler(params.TracingStatsHandler))
+	}
+
 	return append(
 		grpcServerOptions,
 		grpc.ChainUnaryInterceptor(getUnaryInterceptors(params)...),
@@ -159,7 +163,6 @@ func GrpcServerOptionsProvider(
 func getUnaryInterceptors(params GrpcServerOptionsParams) []grpc.UnaryServerInterceptor {
 	interceptors := []grpc.UnaryServerInterceptor{
 		rpc.ServiceErrorInterceptor,
-		grpc.UnaryServerInterceptor(params.TracingInterceptor),
 		metrics.NewServerMetricsContextInjectorInterceptor(),
 		metrics.NewServerMetricsTrailerPropagatorInterceptor(params.Logger),
 		params.TelemetryInterceptor.UnaryIntercept,
