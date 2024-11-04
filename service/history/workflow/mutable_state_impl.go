@@ -6428,7 +6428,7 @@ func (ms *MutableStateImpl) ApplyMutation(
 	if err != nil {
 		return err
 	}
-	err = ms.syncExecutionInfo(ms.executionInfo, mutation.ExecutionInfo)
+	err = ms.syncExecutionInfo(ms.executionInfo, mutation.ExecutionInfo, false)
 	if err != nil {
 		return err
 	}
@@ -6469,7 +6469,7 @@ func (ms *MutableStateImpl) ApplySnapshot(
 	prevExecutionInfoSize := ms.executionInfo.Size()
 
 	ms.applySignalRequestedIds(snapshot.SignalRequestedIds, snapshot.ExecutionInfo)
-	err := ms.syncExecutionInfo(ms.executionInfo, snapshot.ExecutionInfo)
+	err := ms.syncExecutionInfo(ms.executionInfo, snapshot.ExecutionInfo, true)
 	if err != nil {
 		return err
 	}
@@ -6718,13 +6718,13 @@ func (ms *MutableStateImpl) applyUpdatesToUpdateInfos(
 	}
 }
 
-func (ms *MutableStateImpl) syncExecutionInfo(current *persistencespb.WorkflowExecutionInfo, incoming *persistencespb.WorkflowExecutionInfo) error {
+func (ms *MutableStateImpl) syncExecutionInfo(current *persistencespb.WorkflowExecutionInfo, incoming *persistencespb.WorkflowExecutionInfo, isSnapshot bool) error {
 	doNotSync := func(v any) []interface{} {
 		info, ok := v.(*persistencespb.WorkflowExecutionInfo)
 		if !ok || info == nil {
 			return nil
 		}
-		return []interface{}{
+		ignoreFields := []interface{}{
 			&info.WorkflowTaskVersion,
 			&info.WorkflowTaskScheduledEventId,
 			&info.WorkflowTaskStartedEventId,
@@ -6752,6 +6752,10 @@ func (ms *MutableStateImpl) syncExecutionInfo(current *persistencespb.WorkflowEx
 			&info.TaskGenerationShardClockTimestamp,
 			&info.UpdateInfos,
 		}
+		if !isSnapshot {
+			ignoreFields = append(ignoreFields, &info.SubStateMachineTombstoneBatches)
+		}
+		return ignoreFields
 	}
 	err := common.MergeProtoExcludingFields(current, incoming, doNotSync)
 	if err != nil {
