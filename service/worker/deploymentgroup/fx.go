@@ -1,8 +1,8 @@
 // The MIT License
 //
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
+// Copyright (c) 2024 Temporal Technologies Inc.  All rights reserved.
 //
-// Copyright (c) 2020 Uber Technologies, Inc.
+// Copyright (c) 2024 Uber Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -22,32 +22,28 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package scheduler
+package deploymentgroup
 
 import (
 	"fmt"
-	"math"
-	"time"
+	"log"
 
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	sdkworker "go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
-	schedspb "go.temporal.io/server/api/schedule/v1"
 	"go.temporal.io/server/common/dynamicconfig"
-	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
-	"go.temporal.io/server/common/quotas"
-	"go.temporal.io/server/common/resource"
+	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/searchattribute"
 	workercommon "go.temporal.io/server/service/worker/common"
 	"go.uber.org/fx"
 )
 
 const (
-	WorkflowType      = "temporal-sys-scheduler-workflow"
-	NamespaceDivision = "TemporalScheduler"
+	WorkflowType      = "temporal-sys-deployment-group-workflow"
+	NamespaceDivision = "TemporalDeploymentGroup"
 )
 
 var (
@@ -64,7 +60,6 @@ var (
 
 type (
 	workerComponent struct {
-		specBuilder              *SpecBuilder // workflow dep
 		activityDeps             activityDeps
 		enabledForNs             dynamicconfig.BoolPropertyFnWithNamespaceFilter
 		globalNSStartWorkflowRPS dynamicconfig.TypedSubscribableWithNamespaceFilter[float64]
@@ -76,7 +71,7 @@ type (
 		fx.In
 		MetricsHandler metrics.Handler
 		Logger         log.Logger
-		HistoryClient  resource.HistoryClient
+		ClientFactory  sdk.ClientFactory
 		FrontendClient workflowservice.WorkflowServiceClient
 	}
 
@@ -92,17 +87,15 @@ var Module = fx.Options(
 
 func NewResult(
 	dc *dynamicconfig.Collection,
-	specBuilder *SpecBuilder,
 	params activityDeps,
 ) fxResult {
 	return fxResult{
 		Component: &workerComponent{
-			specBuilder:              specBuilder,
 			activityDeps:             params,
-			enabledForNs:             dynamicconfig.WorkerEnableScheduler.Get(dc),
-			globalNSStartWorkflowRPS: dynamicconfig.SchedulerNamespaceStartWorkflowRPS.Subscribe(dc),
+			enabledForNs:             dynamicconfig.WorkerEnableDeploymentGroup.Get(dc),
+			globalNSStartWorkflowRPS: dynamicconfig.DeploymentGroupNamespaceStartWorkflowRPS.Subscribe(dc),
 			maxBlobSize:              dynamicconfig.BlobSizeLimitError.Get(dc),
-			localActivitySleepLimit:  dynamicconfig.SchedulerLocalActivitySleepLimit.Get(dc),
+			localActivitySleepLimit:  dynamicconfig.SchedulerLocalActivitySleepLimit.Get(dc), // TODO Shivam: Change this after implementing local activities
 		},
 	}
 }
@@ -114,34 +107,9 @@ func (s *workerComponent) DedicatedWorkerOptions(ns *namespace.Namespace) *worke
 }
 
 func (s *workerComponent) Register(registry sdkworker.Registry, ns *namespace.Namespace, details workercommon.RegistrationDetails) func() {
-	wfFunc := func(ctx workflow.Context, args *schedspb.StartScheduleArgs) error {
-		return schedulerWorkflowWithSpecBuilder(ctx, args, s.specBuilder)
-	}
-	registry.RegisterWorkflowWithOptions(wfFunc, workflow.RegisterOptions{Name: WorkflowType})
+	// TODO Shivam: Create .pb files for supplying args (DG, buildID, task-queue) to the workflow function
+	registry.RegisterWorkflowWithOptions(DeploymentWorkflow, workflow.RegisterOptions{Name: WorkflowType})
 
-	activities, cleanup := s.newActivities(ns.Name(), ns.ID(), details)
-	registry.RegisterActivity(activities)
-	return cleanup
-}
-
-func (s *workerComponent) newActivities(name namespace.Name, id namespace.ID, details workercommon.RegistrationDetails) (*activities, func()) {
-	const burstRatio = 1.0
-
-	lim := quotas.NewRateLimiter(1, 1)
-	cb := func(rps float64) {
-		localRPS := rps * float64(details.Multiplicity) / float64(details.TotalWorkers)
-		burst := max(1, int(math.Ceil(localRPS*burstRatio)))
-		lim.SetRateBurst(localRPS, burst)
-	}
-	initialRPS, cancel := s.globalNSStartWorkflowRPS(name.String(), cb)
-	cb(initialRPS)
-
-	return &activities{
-		activityDeps:             s.activityDeps,
-		namespace:                name,
-		namespaceID:              id,
-		startWorkflowRateLimiter: lim,
-		maxBlobSize:              func() int { return s.maxBlobSize(name.String()) },
-		localActivitySleepLimit:  func() time.Duration { return s.localActivitySleepLimit(name.String()) },
-	}, cancel
+	// TODO Shivam: Register activities and return a cleanup function
+	return nil
 }
