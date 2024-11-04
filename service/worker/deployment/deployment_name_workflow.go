@@ -60,7 +60,7 @@ func DeploymentNameWorkflow(ctx workflow.Context, deploymentNameArgs DeploymentN
 		ctx:            ctx,
 		logger:         sdklog.With(workflow.GetLogger(ctx), "wf-namespace", deploymentNameArgs.NamespaceName),
 		metrics:        workflow.GetMetricsHandler(ctx).WithTags(map[string]string{"namespace": deploymentNameArgs.NamespaceName}),
-		defaultBuildID: "", // TODO Shivam - extract buildID from the workflowID
+		defaultBuildID: "", // TODO Shivam - I wonder if this will be nil everytime we start a deploymentName workflow
 	}
 	return deploymentWorkflowNameRunner.run()
 }

@@ -31,9 +31,11 @@ import (
 	"fmt"
 	"math"
 	"math/rand"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
+	"unicode"
 
 	"github.com/nexus-rpc/sdk-go/nexus"
 	"github.com/pborman/uuid"
@@ -61,16 +63,21 @@ import (
 	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/visibility/manager"
+	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/resource"
+	"go.temporal.io/server/common/sdk"
+	"go.temporal.io/server/common/searchattribute"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/tasktoken"
 	"go.temporal.io/server/common/tqid"
 	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/common/worker_versioning"
+	"go.temporal.io/server/service/worker/deployment"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -84,6 +91,11 @@ const (
 	versioningPollerSeenWindow        = 70 * time.Second
 	recordTaskStartedDefaultTimeout   = 10 * time.Second
 	recordTaskStartedSyncMatchTimeout = 1 * time.Second
+)
+
+var (
+	errWorkflowIDNotSet  = serviceerror.NewInvalidArgument("WorkflowId is not set on request.")
+	errWorkflowIDTooLong = serviceerror.NewInvalidArgument("WorkflowId length exceeds limit.")
 )
 
 type (
@@ -114,6 +126,11 @@ type (
 		loadedTaskQueuePartitionCount map[taskQueueCounterKey]int
 		loadedPhysicalTaskQueueCount  map[taskQueueCounterKey]int
 		lock                          sync.Mutex
+	}
+
+	dedupDeploymentsKey struct {
+		taskQueue *deployment.TaskQueue
+		buildID   string
 	}
 
 	// Implements matching.Engine
@@ -163,6 +180,8 @@ type (
 		namespaceUpdateLockMapLock sync.Mutex
 		// Stores results of reachability queries to visibility
 		reachabilityCache reachabilityCache
+		// De-duping poll requests when starting/signaling deployment workflows
+		dedupDeployments map[dedupDeploymentsKey]string
 	}
 )
 
@@ -233,6 +252,7 @@ func NewEngine(
 		outstandingPollers:        collection.NewSyncMap[string, context.CancelFunc](),
 		namespaceReplicationQueue: namespaceReplicationQueue,
 		namespaceUpdateLockMap:    make(map[string]*namespaceUpdateLocks),
+		dedupDeployments:          make(map[dedupDeploymentsKey]string),
 	}
 	e.reachabilityCache = newReachabilityCache(
 		metrics.NoopMetricsHandler,
@@ -369,6 +389,8 @@ func (e *matchingEngineImpl) getTaskQueuePartitionManager(
 	create bool,
 	loadCause loadCause,
 ) (retPM taskQueuePartitionManager, retCreated bool, retErr error) {
+	// Call deployment from here?
+
 	defer func() {
 		if retErr != nil || retPM == nil {
 			return
@@ -544,6 +566,38 @@ pollLoop:
 		pollMetadata := &pollMetadata{
 			workerVersionCapabilities: request.WorkerVersionCapabilities,
 			forwardedFrom:             req.GetForwardedSource(),
+		}
+		if e.config.EnableDeployments(req.PollRequest.Namespace) && req.PollRequest.WorkerVersionCapabilities.UseVersioning {
+			taskQueueStruct := &deployment.TaskQueue{
+				Name:          req.PollRequest.TaskQueue.Name,
+				TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+			}
+			deploymenTaskQueueStruct := &deployment.DeploymentTaskQueue{
+				FirstPollerTimeStamp: nil,
+				TaskQueue:            taskQueueStruct,
+			}
+			buildID := req.PollRequest.WorkerVersionCapabilities.BuildId
+			deploymentName := req.PollRequest.WorkerVersionCapabilities.DeploymentName
+
+			// checking for duplicate request
+			dedupDeploymentKey := dedupDeploymentsKey{
+				taskQueue: taskQueueStruct,
+				buildID:   buildID,
+			}
+			if _, found := e.dedupDeployments[dedupDeploymentKey]; !found {
+				startDeploymentWorkflowArgs := deployment.DeploymentWorkflowArgs{
+					NamespaceName: req.PollRequest.Namespace,
+					NamespaceID:   req.NamespaceId,
+					TaskQueues:    []*deployment.DeploymentTaskQueue{deploymenTaskQueueStruct},
+				}
+				_, err := e.startAndSignalDeploymentWorkflow(ctx, &startDeploymentWorkflowArgs, deploymentName, buildID, req.PollRequest.Identity)
+				if err != nil {
+					return nil, err
+				}
+
+				// adding to the map to prevent multiple duplicate requests from starting workflow execution
+				e.dedupDeployments[dedupDeploymentKey] = req.PollRequest.WorkerVersionCapabilities.DeploymentName
+			}
 		}
 		task, versionSetUsed, err := e.pollTask(pollerCtx, partition, pollMetadata)
 		if err != nil {
@@ -756,6 +810,37 @@ pollLoop:
 		}
 		if request.TaskQueueMetadata != nil && request.TaskQueueMetadata.MaxTasksPerSecond != nil {
 			pollMetadata.ratePerSecond = &request.TaskQueueMetadata.MaxTasksPerSecond.Value
+		}
+		if e.config.EnableDeployments(req.PollRequest.Namespace) && req.PollRequest.WorkerVersionCapabilities.UseVersioning {
+			taskQueueStruct := &deployment.TaskQueue{
+				Name:          req.PollRequest.TaskQueue.Name,
+				TaskQueueType: enumspb.TASK_QUEUE_TYPE_ACTIVITY,
+			}
+			deploymenTaskQueueStruct := &deployment.DeploymentTaskQueue{
+				FirstPollerTimeStamp: nil,
+				TaskQueue:            taskQueueStruct,
+			}
+			buildID := req.PollRequest.WorkerVersionCapabilities.BuildId
+
+			// checking for duplicate request
+			dedupDeploymentKey := dedupDeploymentsKey{
+				taskQueue: taskQueueStruct,
+				buildID:   buildID,
+			}
+			if _, found := e.dedupDeployments[dedupDeploymentKey]; !found {
+				startDeploymentWorkflowArgs := deployment.DeploymentWorkflowArgs{
+					NamespaceName: req.PollRequest.Namespace,
+					NamespaceID:   req.NamespaceId,
+					TaskQueues:    []*deployment.DeploymentTaskQueue{deploymenTaskQueueStruct},
+				}
+				_, err := e.startAndSignalDeploymentWorkflow(ctx, &startDeploymentWorkflowArgs, req.PollRequest.WorkerVersionCapabilities.DeploymentName, req.PollRequest.WorkerVersionCapabilities.BuildId, req.PollRequest.Identity)
+				if err != nil {
+					return nil, err
+				}
+
+				// adding to the map to prevent multiple duplicate requests from starting workflow execution
+				e.dedupDeployments[dedupDeploymentKey] = req.PollRequest.WorkerVersionCapabilities.DeploymentName
+			}
 		}
 		task, versionSetUsed, err := e.pollTask(pollerCtx, partition, pollMetadata)
 		if err != nil {
@@ -1742,6 +1827,37 @@ pollLoop:
 			workerVersionCapabilities: request.WorkerVersionCapabilities,
 			forwardedFrom:             req.GetForwardedSource(),
 		}
+		if e.config.EnableDeployments(req.Request.Namespace) && req.Request.WorkerVersionCapabilities.UseVersioning {
+			taskQueueStruct := &deployment.TaskQueue{
+				Name:          req.Request.TaskQueue.Name,
+				TaskQueueType: enumspb.TASK_QUEUE_TYPE_NEXUS,
+			}
+			deploymenTaskQueueStruct := &deployment.DeploymentTaskQueue{
+				FirstPollerTimeStamp: nil,
+				TaskQueue:            taskQueueStruct,
+			}
+			buildID := req.Request.WorkerVersionCapabilities.BuildId
+
+			// checking for duplicate request
+			dedupDeploymentKey := dedupDeploymentsKey{
+				taskQueue: taskQueueStruct,
+				buildID:   buildID,
+			}
+			if _, found := e.dedupDeployments[dedupDeploymentKey]; !found {
+				startDeploymentWorkflowArgs := deployment.DeploymentWorkflowArgs{
+					NamespaceName: req.Request.Namespace,
+					NamespaceID:   req.NamespaceId,
+					TaskQueues:    []*deployment.DeploymentTaskQueue{deploymenTaskQueueStruct},
+				}
+				_, err := e.startAndSignalDeploymentWorkflow(ctx, &startDeploymentWorkflowArgs, req.Request.WorkerVersionCapabilities.DeploymentName, req.Request.WorkerVersionCapabilities.BuildId, req.Request.Identity)
+				if err != nil {
+					return nil, err
+				}
+
+				// adding to the map to prevent multiple duplicate requests from starting workflow execution
+				e.dedupDeployments[dedupDeploymentKey] = req.Request.WorkerVersionCapabilities.DeploymentName
+			}
+		}
 		task, _, err := e.pollTask(pollerCtx, partition, pollMetadata)
 		if err != nil {
 			if errors.Is(err, errNoTasks) {
@@ -1985,6 +2101,113 @@ func (e *matchingEngineImpl) pollTask(
 		defer e.outstandingPollers.Delete(pollerID)
 	}
 	return pm.PollTask(ctx, pollMetadata)
+}
+
+func isValidName(input string) bool {
+	for _, char := range input {
+		// Validate if each character is a letter/number
+		if !unicode.IsLetter(char) && !unicode.IsDigit(char) {
+			return false
+		}
+	}
+	return true
+}
+
+func (e *matchingEngineImpl) validateDeploymentWfParams(deploymentName string, buildID string) error {
+	// Length check
+	if deploymentName == "" || buildID == "" {
+		return serviceerror.NewInvalidArgument("DeploymentName/BuildID cannot be empty")
+	}
+
+	// Prefix check
+	if strings.HasPrefix(deploymentName, deployment.DeploymentWorkflowIDPrefix) ||
+		strings.HasPrefix(buildID, deployment.DeploymentWorkflowIDPrefix) {
+		return serviceerror.NewInvalidArgument(fmt.Sprintf("DeploymentName/BuildID cannot begin with reserved prefix %v", deployment.DeploymentWorkflowIDPrefix))
+	}
+	if strings.HasPrefix(deploymentName, deployment.DeploymentNameWorkflowIDPrefix) ||
+		strings.HasPrefix(buildID, deployment.DeploymentNameWorkflowIDPrefix) {
+		return serviceerror.NewInvalidArgument(fmt.Sprintf("DeploymentName/BuildID cannot begin with reserved prefix %v", deployment.DeploymentNameWorkflowIDPrefix))
+	}
+
+	// Special characters check
+	if !isValidName(deploymentName) || !isValidName(buildID) {
+		return serviceerror.NewInvalidArgument("DeploymentName/BuildID cannot contain a non alphanumerical character")
+	}
+
+	return nil
+}
+
+func (e *matchingEngineImpl) validateWorkflowID(workflowID string) error {
+	if workflowID == "" {
+		return errWorkflowIDNotSet
+	}
+	if err := common.ValidateUTF8String("WorkflowId", workflowID); err != nil {
+		return err
+	}
+	if len(workflowID) > e.config.MaxIDLengthLimit() {
+		return errWorkflowIDTooLong
+	}
+	return nil
+}
+
+func (e *matchingEngineImpl) startAndSignalDeploymentWorkflow(
+	ctx context.Context,
+	args *deployment.DeploymentWorkflowArgs,
+	deploymentName string,
+	buildID string,
+	identity string,
+) (*historyservice.SignalWithStartWorkflowExecutionResponse, error) {
+	// Adding namespace division as a SA
+	sa := &commonpb.SearchAttributes{}
+	searchattribute.AddSearchAttribute(&sa, searchattribute.TemporalNamespaceDivision, payload.EncodeString(deployment.DeploymentNamespaceDivision))
+
+	// validate workflowID params
+	err := e.validateDeploymentWfParams(deploymentName, buildID)
+	if err != nil {
+		return nil, err
+	}
+	workflowID := deployment.DeploymentWorkflowIDPrefix + deploymentName + "-" + buildID
+	err = e.validateWorkflowID(workflowID)
+	if err != nil {
+		return nil, err
+	}
+
+	// workflow input
+	workflowInputPayloads, err := sdk.PreferProtoDataConverter.ToPayloads(args)
+	if err != nil {
+		return nil, err
+	}
+
+	// signal input
+	signalInputPayload, err := sdk.PreferProtoDataConverter.ToPayloads(args.TaskQueues[0])
+	if err != nil {
+		return nil, err
+	}
+
+	// Create SignalWithStartWorkflowExecutionRequest
+	startReq := &workflowservice.SignalWithStartWorkflowExecutionRequest{
+		Namespace:                args.NamespaceName,
+		WorkflowId:               workflowID,
+		WorkflowType:             &commonpb.WorkflowType{Name: deployment.DeploymentWorkflowType},
+		TaskQueue:                &taskqueuepb.TaskQueue{Name: primitives.PerNSWorkerTaskQueue},
+		Input:                    workflowInputPayloads,
+		Identity:                 identity,
+		WorkflowIdReusePolicy:    enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
+		WorkflowIdConflictPolicy: enumspb.WORKFLOW_ID_CONFLICT_POLICY_FAIL,
+		SignalName:               deployment.UpdateDeploymentSignalName,
+		SignalInput:              signalInputPayload,
+		SearchAttributes:         sa,
+	}
+	resp, err := e.historyClient.SignalWithStartWorkflowExecution(ctx, &historyservice.SignalWithStartWorkflowExecutionRequest{
+		NamespaceId:            args.NamespaceID,
+		SignalWithStartRequest: startReq,
+	})
+
+	if err != nil {
+		return nil, err
+	}
+
+	return resp, nil
 }
 
 // Unloads the given task queue partition. If it has already been unloaded (i.e. it's not present in the loaded

@@ -7,10 +7,7 @@ retract (
 	v1.26.0 // Published accidentally.
 )
 
-replace (
-	go.temporal.io/api => github.com/temporalio/api-go v1.39.1-0.20241014184314-2fb1df995c55
-	go.temporal.io/sdk => github.com/temporalio/sdk-go v1.29.2-0.20241017230629-cc508c6fe7a9
-)
+replace go.temporal.io/sdk => github.com/temporalio/sdk-go v1.29.2-0.20241017230629-cc508c6fe7a9
 
 require (
 	cloud.google.com/go/storage v1.41.0
@@ -156,3 +153,5 @@ require (
 	modernc.org/strutil v1.2.0 // indirect
 	modernc.org/token v1.1.0 // indirect
 )
+
+replace go.temporal.io/api => github.com/temporalio/api-go v1.39.1-0.20241105210922-387c25fd10b7

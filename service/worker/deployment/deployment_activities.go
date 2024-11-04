@@ -25,6 +25,9 @@
 package deployment
 
 import (
+	"context"
+
+	"go.temporal.io/sdk/activity"
 	"go.temporal.io/server/common/namespace"
 )
 
@@ -34,4 +37,30 @@ type (
 		namespace   namespace.Name
 		namespaceID namespace.ID
 	}
+
+	StartDeploymentNameWorkflowActivityInput struct {
+		NamespaceName  string
+		NamespaceID    string
+		DeploymentName string
+		// TODO Shivam - confirm if we need a buildID to be passed or not?
+	}
 )
+
+// StartDeploymentNameWorkflow activity starts a DeploymentName workflow
+func (a *DeploymentActivities) StartDeploymentNameWorkflow(ctx context.Context, input StartDeploymentNameWorkflowActivityInput) error {
+	logger := activity.GetLogger(ctx)
+	logger.Info("activity to start DeploymentName workflow started")
+
+
+	// Workflow options for inputting workflowID and memo and duplication policy
+	workflowID := DeploymentWorkflowIDPrefix + ":" + input.DeploymentName
+	// TODO Shivam - validate the workflowID?
+
+	workflowOptions := 
+
+	// Making workflow args
+
+	// Calling the workflow
+
+	return nil
+}

@@ -25,6 +25,8 @@
 package deployment
 
 import (
+	"errors"
+	"strings"
 	"time"
 
 	enumspb "go.temporal.io/api/enums/v1"
@@ -43,7 +45,7 @@ type (
 	// DeploymentTaskQueue holds relevant information for a task-queue present in a Deployment
 	DeploymentTaskQueue struct {
 		FirstPollerTimeStamp *timestamppb.Timestamp
-		TaskQueue            TaskQueue
+		TaskQueue            *TaskQueue
 	}
 
 	// DeploymentWorkflowArgs represents the arguments passed for a DeploymentWorkflow
@@ -89,14 +91,41 @@ const (
 	DeploymentWorkflowIDPrefix = "temporal-sys-deployment:"
 )
 
+// parseDeploymentWorkflowID parses the workflowID, to extract DeploymentName and BuildID,
+// for the execution of a Deployment workflow.
+func parseDeploymentWorkflowID(workflowID string) (string, string, error) {
+	// Split by ":"
+	parts := strings.Split(workflowID, ":")
+	if len(parts) != 2 {
+		return "", "", errors.New("invalid format for workflowID")
+	}
+
+	deploymentBuildIDWorkflowID := strings.Split(parts[1], "-")
+	if len(deploymentBuildIDWorkflowID) != 2 {
+		return "", "", errors.New("invalid format for workflowID")
+	}
+
+	deploymentName := deploymentBuildIDWorkflowID[0]
+	buildID := deploymentBuildIDWorkflowID[1]
+	return deploymentName, buildID, nil
+}
+
 func DeploymentWorkflow(ctx workflow.Context, deploymentWorkflowArgs DeploymentWorkflowArgs) error {
+	// Extract buildID and deploymentName from workflowID
+	info := workflow.GetInfo(ctx)
+	workflowID := info.WorkflowExecution.ID
+
+	deploymentName, buildID, err := parseDeploymentWorkflowID(workflowID)
+	if err != nil {
+		return err
+	}
+
 	deploymentWorkflowRunner := &DeploymentWorkflowRunner{
 		deploymentlocalState: &DeploymentLocalState{
 			NamespaceName:  deploymentWorkflowArgs.NamespaceName,
 			NamespaceID:    deploymentWorkflowArgs.NamespaceID,
-			DeploymentName: "", // TODO Shivam - extract the Deployment
-			BuildID:        "", // TODO Shivam - extract BuildID from the workflowID
-			TaskQueues:     deploymentWorkflowArgs.TaskQueues,
+			DeploymentName: deploymentName,
+			BuildID:        buildID,
 		},
 		ctx:     ctx,
 		logger:  sdklog.With(workflow.GetLogger(ctx), "wf-namespace", deploymentWorkflowArgs.NamespaceName),
@@ -115,7 +144,14 @@ func (d *DeploymentWorkflowRunner) run() error {
 
 	selector := workflow.NewSelector(d.ctx)
 	selector.AddReceive(updateDeploymentSignalChannel, func(c workflow.ReceiveChannel, more bool) {
-		// Process Signal
+		// fetch the input from the signal
+		var inputDeploymentTaskQueue *DeploymentTaskQueue
+		updateDeploymentSignalChannel.Receive(d.ctx, &inputDeploymentTaskQueue)
+
+		// add the task queue to the local state
+		d.deploymentlocalState.TaskQueues = append(d.deploymentlocalState.TaskQueues, inputDeploymentTaskQueue)
+
+		// Call activity which starts "DeploymentName" workflow
 
 	})
 	selector.AddReceive(updateBuildIDSignalChannel, func(c workflow.ReceiveChannel, more bool) {
