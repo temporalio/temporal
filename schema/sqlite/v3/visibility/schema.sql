@@ -29,7 +29,7 @@ CREATE TABLE executions_visibility (
   TemporalSchedulePaused        BOOLEAN       GENERATED ALWAYS AS (JSON_EXTRACT(search_attributes, "$.TemporalSchedulePaused")),
   TemporalNamespaceDivision     VARCHAR(255)  GENERATED ALWAYS AS (JSON_EXTRACT(search_attributes, "$.TemporalNamespaceDivision")),
   BuildIds                      TEXT          GENERATED ALWAYS AS (JSON_EXTRACT(search_attributes, "$.BuildIds"))              STORED,
-  PauseActivityTypes            TEXT          GENERATED ALWAYS AS (JSON_EXTRACT(search_attributes, "$.PauseActivityTypes"))    STORED,
+  PausedEntities                TEXT          GENERATED ALWAYS AS (JSON_EXTRACT(search_attributes, "$.PausedEntities"))        STORED,
 
   -- Pre-allocated custom search attributes
   Bool01          BOOLEAN         GENERATED ALWAYS AS (JSON_EXTRACT(search_attributes, "$.Bool01")),

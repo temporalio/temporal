@@ -36,6 +36,9 @@ new_mapping='
     },
     "RootRunId": {
       "type": "keyword"
+    },
+    "PausedEntities": {
+      "type": "keyword"
     }
   }
 }

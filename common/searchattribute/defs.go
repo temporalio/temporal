@@ -82,9 +82,13 @@ const (
 	// any other custom search attribute.
 	ScheduleID = "ScheduleId"
 
-	// PausedActivityTypes is a search attribute that stores the list of activity types that are paused for a given workflow.
-	// Note: there can be multiple activities with the same type but different activity IDs. In this case there will be only one entry in the list.
-	PausedActivityTypes = "PausedActivityTypes"
+	// PausedEntities is a search attribute that stores the list paused entities in the workflow.
+	// Format of a single paused entity: "<entity_type>:<entity_id>:<policy_id>".
+	//  * entity_type can be activity, workflow, etc.
+	//  * entity_id is based on type. For activity it will be activity type, for workflow it will be workflow id.
+	//  * policy_id is an arbitrary string.
+	// example for paused activities, manual pause: "activity:MyCoolActivityType:MANUAL"
+	PausedEntities = "PausedEntities"
 )
 
 var (
@@ -119,7 +123,7 @@ var (
 		TemporalScheduledById:      enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 		TemporalSchedulePaused:     enumspb.INDEXED_VALUE_TYPE_BOOL,
 		TemporalNamespaceDivision:  enumspb.INDEXED_VALUE_TYPE_KEYWORD,
-		PausedActivityTypes:        enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST,
+		PausedEntities:             enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST,
 	}
 
 	// reserved are internal field names that can't be used as search attribute names.
