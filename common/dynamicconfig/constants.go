@@ -1523,6 +1523,11 @@ If value less or equal to 0, will fall back to TaskSchedulerNamespaceMaxQPS`,
 		`TaskSchedulerNamespaceMaxQPS is the max qps task schedulers on a host can schedule tasks for a certain namespace
 If value less or equal to 0, will fall back to HistoryPersistenceNamespaceMaxQPS`,
 	)
+	TaskSchedulerInactiveChannelDeletionDelay = NewGlobalDurationSetting(
+		"history.taskSchedulerInactiveChannelDeletionDelay",
+		time.Hour,
+		`TaskSchedulerInactiveChannelDeletionDelay the time delay before a namespace's' channel is removed from the scheduler`,
+	)
 
 	TimerTaskBatchSize = NewGlobalIntSetting(
 		"history.timerTaskBatchSize",

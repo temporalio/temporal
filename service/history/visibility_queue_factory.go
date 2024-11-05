@@ -64,9 +64,10 @@ func NewVisibilityQueueFactory(
 			HostScheduler: queues.NewScheduler(
 				params.ClusterMetadata.GetCurrentClusterName(),
 				queues.SchedulerOptions{
-					WorkerCount:             params.Config.VisibilityProcessorSchedulerWorkerCount,
-					ActiveNamespaceWeights:  params.Config.VisibilityProcessorSchedulerActiveRoundRobinWeights,
-					StandbyNamespaceWeights: params.Config.VisibilityProcessorSchedulerStandbyRoundRobinWeights,
+					WorkerCount:                    params.Config.VisibilityProcessorSchedulerWorkerCount,
+					ActiveNamespaceWeights:         params.Config.VisibilityProcessorSchedulerActiveRoundRobinWeights,
+					StandbyNamespaceWeights:        params.Config.VisibilityProcessorSchedulerStandbyRoundRobinWeights,
+					InactiveNamespaceDeletionDelay: params.Config.TaskSchedulerInactiveChannelDeletionDelay,
 				},
 				params.NamespaceRegistry,
 				params.Logger,

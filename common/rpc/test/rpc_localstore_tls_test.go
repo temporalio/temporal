@@ -40,7 +40,6 @@ import (
 	"go.temporal.io/server/common/rpc/encryption"
 	"go.temporal.io/server/tests/testutils"
 	"go.uber.org/mock/gomock"
-	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 )
 
@@ -50,9 +49,8 @@ const (
 )
 
 var (
-	frontendURL         = "dummy://" // not needed for test
-	frontendHTTPURL     = "dummy://" // not needed for test
-	noExtraInterceptors = []grpc.UnaryClientInterceptor{}
+	frontendURL     = "dummy://" // not needed for test
+	frontendHTTPURL = "dummy://" // not needed for test
 )
 
 type localStoreRPCSuite struct {
@@ -136,7 +134,7 @@ func (s *localStoreRPCSuite) SetupSuite() {
 
 	provider, err := encryption.NewTLSConfigProviderFromConfig(serverCfgInsecure.TLS, metrics.NoopMetricsHandler, s.logger, nil)
 	s.NoError(err)
-	insecureFactory := rpc.NewFactory(rpcTestCfgDefault, "tester", s.logger, provider, frontendURL, frontendHTTPURL, 0, nil, noExtraInterceptors, nil)
+	insecureFactory := rpc.NewFactory(rpcTestCfgDefault, "tester", s.logger, provider, frontendURL, frontendHTTPURL, 0, nil, nil, nil)
 	s.NotNil(insecureFactory)
 	s.insecureRPCFactory = i(insecureFactory)
 
@@ -346,26 +344,26 @@ func (s *localStoreRPCSuite) setupFrontend() {
 	s.NoError(err)
 	tlsConfig, err := provider.GetFrontendClientConfig()
 	s.NoError(err)
-	frontendMutualTLSFactory := rpc.NewFactory(rpcTestCfgDefault, "tester", s.logger, provider, frontendURL, frontendHTTPURL, 0, tlsConfig, noExtraInterceptors, nil)
+	frontendMutualTLSFactory := rpc.NewFactory(rpcTestCfgDefault, "tester", s.logger, provider, frontendURL, frontendHTTPURL, 0, tlsConfig, nil, nil)
 	s.NotNil(frontendMutualTLSFactory)
 
 	provider, err = encryption.NewTLSConfigProviderFromConfig(localStoreServerTLS.TLS, metrics.NoopMetricsHandler, s.logger, nil)
 	s.NoError(err)
-	frontendServerTLSFactory := rpc.NewFactory(rpcTestCfgDefault, "tester", s.logger, provider, frontendURL, frontendHTTPURL, 0, nil, noExtraInterceptors, nil)
+	frontendServerTLSFactory := rpc.NewFactory(rpcTestCfgDefault, "tester", s.logger, provider, frontendURL, frontendHTTPURL, 0, nil, nil, nil)
 	s.NotNil(frontendServerTLSFactory)
 
 	provider, err = encryption.NewTLSConfigProviderFromConfig(localStoreMutualTLSSystemWorker.TLS, metrics.NoopMetricsHandler, s.logger, nil)
 	s.NoError(err)
 	tlsConfig, err = provider.GetFrontendClientConfig()
 	s.NoError(err)
-	frontendSystemWorkerMutualTLSFactory := rpc.NewFactory(rpcTestCfgDefault, "tester", s.logger, provider, frontendURL, frontendHTTPURL, 0, tlsConfig, noExtraInterceptors, nil)
+	frontendSystemWorkerMutualTLSFactory := rpc.NewFactory(rpcTestCfgDefault, "tester", s.logger, provider, frontendURL, frontendHTTPURL, 0, tlsConfig, nil, nil)
 	s.NotNil(frontendSystemWorkerMutualTLSFactory)
 
 	provider, err = encryption.NewTLSConfigProviderFromConfig(localStoreMutualTLSWithRefresh.TLS, metrics.NoopMetricsHandler, s.logger, nil)
 	s.NoError(err)
 	tlsConfig, err = provider.GetFrontendClientConfig()
 	s.NoError(err)
-	frontendMutualTLSRefreshFactory := rpc.NewFactory(rpcTestCfgDefault, "tester", s.logger, provider, frontendURL, frontendHTTPURL, 0, tlsConfig, noExtraInterceptors, nil)
+	frontendMutualTLSRefreshFactory := rpc.NewFactory(rpcTestCfgDefault, "tester", s.logger, provider, frontendURL, frontendHTTPURL, 0, tlsConfig, nil, nil)
 	s.NotNil(frontendMutualTLSRefreshFactory)
 
 	s.frontendMutualTLSRPCFactory = f(frontendMutualTLSFactory)
@@ -382,7 +380,7 @@ func (s *localStoreRPCSuite) setupFrontend() {
 	s.NoError(err)
 	tlsConfig, err = s.dynamicConfigProvider.GetFrontendClientConfig()
 	s.NoError(err)
-	dynamicServerTLSFactory := rpc.NewFactory(rpcTestCfgDefault, "tester", s.logger, s.dynamicConfigProvider, frontendURL, frontendHTTPURL, 0, tlsConfig, noExtraInterceptors, nil)
+	dynamicServerTLSFactory := rpc.NewFactory(rpcTestCfgDefault, "tester", s.logger, s.dynamicConfigProvider, frontendURL, frontendHTTPURL, 0, tlsConfig, nil, nil)
 	s.frontendDynamicTLSFactory = f(dynamicServerTLSFactory)
 	s.internodeDynamicTLSFactory = i(dynamicServerTLSFactory)
 
@@ -392,7 +390,7 @@ func (s *localStoreRPCSuite) setupFrontend() {
 	s.NoError(err)
 	tlsConfig, err = provider.GetFrontendClientConfig()
 	s.NoError(err)
-	frontendRootCAForceTLSFactory := rpc.NewFactory(rpcTestCfgDefault, "tester", s.logger, provider, frontendURL, frontendHTTPURL, 0, tlsConfig, noExtraInterceptors, nil)
+	frontendRootCAForceTLSFactory := rpc.NewFactory(rpcTestCfgDefault, "tester", s.logger, provider, frontendURL, frontendHTTPURL, 0, tlsConfig, nil, nil)
 	s.NotNil(frontendServerTLSFactory)
 	s.frontendConfigRootCAForceTLSFactory = f(frontendRootCAForceTLSFactory)
 
@@ -400,7 +398,7 @@ func (s *localStoreRPCSuite) setupFrontend() {
 	s.NoError(err)
 	tlsConfig, err = provider.GetFrontendClientConfig()
 	s.NoError(err)
-	remoteClusterMutualTLSRPCFactory := rpc.NewFactory(rpcTestCfgDefault, "tester", s.logger, provider, frontendURL, frontendHTTPURL, 0, tlsConfig, noExtraInterceptors, nil)
+	remoteClusterMutualTLSRPCFactory := rpc.NewFactory(rpcTestCfgDefault, "tester", s.logger, provider, frontendURL, frontendHTTPURL, 0, tlsConfig, nil, nil)
 	s.NotNil(remoteClusterMutualTLSRPCFactory)
 	s.remoteClusterMutualTLSRPCFactory = r(remoteClusterMutualTLSRPCFactory)
 }
@@ -438,28 +436,28 @@ func (s *localStoreRPCSuite) setupInternode() {
 	s.NoError(err)
 	tlsConfig, err := provider.GetFrontendClientConfig()
 	s.NoError(err)
-	internodeMutualTLSFactory := rpc.NewFactory(rpcTestCfgDefault, "tester", s.logger, provider, frontendURL, frontendHTTPURL, 0, tlsConfig, noExtraInterceptors, nil)
+	internodeMutualTLSFactory := rpc.NewFactory(rpcTestCfgDefault, "tester", s.logger, provider, frontendURL, frontendHTTPURL, 0, tlsConfig, nil, nil)
 	s.NotNil(internodeMutualTLSFactory)
 
 	provider, err = encryption.NewTLSConfigProviderFromConfig(localStoreServerTLS.TLS, metrics.NoopMetricsHandler, s.logger, nil)
 	s.NoError(err)
 	tlsConfig, err = provider.GetFrontendClientConfig()
 	s.NoError(err)
-	internodeServerTLSFactory := rpc.NewFactory(rpcTestCfgDefault, "tester", s.logger, provider, frontendURL, frontendHTTPURL, 0, tlsConfig, noExtraInterceptors, nil)
+	internodeServerTLSFactory := rpc.NewFactory(rpcTestCfgDefault, "tester", s.logger, provider, frontendURL, frontendHTTPURL, 0, tlsConfig, nil, nil)
 	s.NotNil(internodeServerTLSFactory)
 
 	provider, err = encryption.NewTLSConfigProviderFromConfig(localStoreAltMutualTLS.TLS, metrics.NoopMetricsHandler, s.logger, nil)
 	s.NoError(err)
 	tlsConfig, err = provider.GetFrontendClientConfig()
 	s.NoError(err)
-	internodeMutualAltTLSFactory := rpc.NewFactory(rpcTestCfgDefault, "tester", s.logger, provider, frontendURL, frontendHTTPURL, 0, tlsConfig, noExtraInterceptors, nil)
+	internodeMutualAltTLSFactory := rpc.NewFactory(rpcTestCfgDefault, "tester", s.logger, provider, frontendURL, frontendHTTPURL, 0, tlsConfig, nil, nil)
 	s.NotNil(internodeMutualAltTLSFactory)
 
 	provider, err = encryption.NewTLSConfigProviderFromConfig(localStoreMutualTLSWithRefresh.TLS, metrics.NoopMetricsHandler, s.logger, nil)
 	s.NoError(err)
 	tlsConfig, err = provider.GetFrontendClientConfig()
 	s.NoError(err)
-	internodeMutualTLSRefreshFactory := rpc.NewFactory(rpcTestCfgDefault, "tester", s.logger, provider, frontendURL, frontendHTTPURL, 0, tlsConfig, noExtraInterceptors, nil)
+	internodeMutualTLSRefreshFactory := rpc.NewFactory(rpcTestCfgDefault, "tester", s.logger, provider, frontendURL, frontendHTTPURL, 0, tlsConfig, nil, nil)
 	s.NotNil(internodeMutualTLSRefreshFactory)
 
 	s.internodeMutualTLSRPCFactory = i(internodeMutualTLSFactory)
