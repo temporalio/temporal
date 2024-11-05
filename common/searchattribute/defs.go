@@ -95,7 +95,9 @@ const (
 	//   - for paused workflows, we may have the following <key>:<value> pairs:
 	//     * "Workflow:WorkflowID"
 	//     * "Reason:ManualWorkflowPause"
-	//   - for paused taskques by some , we may have single <key>:<value> pair:
+	//   - for paused taskqueues:
+	//     * "TaskQueue:TaskQueueName"
+	//     * "Reason:ManualTaskQueuePause"
 	PausedInfo = "PausedInfo"
 )
 
