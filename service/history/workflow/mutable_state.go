@@ -384,7 +384,7 @@ type (
 
 		IsDirty() bool
 		IsTransitionHistoryEnabled() bool
-		// StartTransaction setsup the mutable state for transacting.
+		// StartTransaction sets up the mutable state for transacting.
 		StartTransaction(entry *namespace.Namespace) (bool, error)
 		// CloseTransactionAsMutation closes the mutable state transaction (different from DB transaction) and prepares the whole state mutation to be persisted and bumps the DBRecordVersion.
 		// You should ideally not make any changes to the mutable state after this call.
