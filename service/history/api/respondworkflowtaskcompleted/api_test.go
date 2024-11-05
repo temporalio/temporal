@@ -42,36 +42,34 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	updatepb "go.temporal.io/api/update/v1"
 	"go.temporal.io/api/workflowservice/v1"
-	"google.golang.org/protobuf/types/known/durationpb"
-
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
-	tokenspb "go.temporal.io/server/api/token/v1"
-	"go.temporal.io/server/common/cluster"
-	"go.temporal.io/server/common/testing/historyrequire"
-	"go.temporal.io/server/common/testing/protorequire"
-	"go.temporal.io/server/common/testing/protoutils"
-	"go.temporal.io/server/common/testing/testvars"
-	"go.temporal.io/server/common/testing/updateutils"
-	"go.temporal.io/server/internal/effect"
-	"go.temporal.io/server/service/history/hsm"
-	wcache "go.temporal.io/server/service/history/workflow/cache"
-	"go.temporal.io/server/service/history/workflow/update"
-
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	tokenspb "go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
+	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/testing/historyrequire"
+	"go.temporal.io/server/common/testing/protorequire"
+	"go.temporal.io/server/common/testing/protoutils"
+	"go.temporal.io/server/common/testing/testvars"
+	"go.temporal.io/server/common/testing/updateutils"
+	"go.temporal.io/server/internal/effect"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/events"
+	"go.temporal.io/server/service/history/hsm"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tests"
 	"go.temporal.io/server/service/history/workflow"
+	wcache "go.temporal.io/server/service/history/workflow/cache"
+	"go.temporal.io/server/service/history/workflow/update"
+	"google.golang.org/protobuf/types/known/durationpb"
 )
 
 type (
@@ -184,6 +182,7 @@ func (s *WorkflowTaskCompletedHandlerSuite) TestUpdateWorkflow() {
 
 	s.Run("Accept Complete", func() {
 		tv := testvars.New(s.T())
+		tv = tv.WithRunID(tv.Any().RunID())
 		s.mockNamespaceCache.EXPECT().GetNamespaceByID(tv.NamespaceID()).Return(tv.Namespace(), nil).AnyTimes()
 		wfContext := s.createStartedWorkflow(tv)
 		writtenHistoryCh := createWrittenHistoryCh(1)
@@ -217,6 +216,7 @@ func (s *WorkflowTaskCompletedHandlerSuite) TestUpdateWorkflow() {
 
 	s.Run("Reject", func() {
 		tv := testvars.New(s.T())
+		tv = tv.WithRunID(tv.Any().RunID())
 		s.mockNamespaceCache.EXPECT().GetNamespaceByID(tv.NamespaceID()).Return(tv.Namespace(), nil).AnyTimes()
 		wfContext := s.createStartedWorkflow(tv)
 
@@ -241,6 +241,7 @@ func (s *WorkflowTaskCompletedHandlerSuite) TestUpdateWorkflow() {
 
 	s.Run("Write failed on normal task queue", func() {
 		tv := testvars.New(s.T())
+		tv = tv.WithRunID(tv.Any().RunID())
 		s.mockNamespaceCache.EXPECT().GetNamespaceByID(tv.NamespaceID()).Return(tv.Namespace(), nil).AnyTimes()
 		wfContext := s.createStartedWorkflow(tv)
 
@@ -266,6 +267,7 @@ func (s *WorkflowTaskCompletedHandlerSuite) TestUpdateWorkflow() {
 
 	s.Run("Write failed on sticky task queue", func() {
 		tv := testvars.New(s.T())
+		tv = tv.WithRunID(tv.Any().RunID())
 		s.mockNamespaceCache.EXPECT().GetNamespaceByID(tv.NamespaceID()).Return(tv.Namespace(), nil).AnyTimes()
 		wfContext := s.createStartedWorkflow(tv)
 
@@ -298,6 +300,7 @@ func (s *WorkflowTaskCompletedHandlerSuite) TestUpdateWorkflow() {
 
 	s.Run("GetHistory failed", func() {
 		tv := testvars.New(s.T())
+		tv = tv.WithRunID(tv.Any().RunID())
 		s.mockNamespaceCache.EXPECT().GetNamespaceByID(tv.NamespaceID()).Return(tv.Namespace(), nil).AnyTimes()
 		wfContext := s.createStartedWorkflow(tv)
 		writtenHistoryCh := createWrittenHistoryCh(1)
