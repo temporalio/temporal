@@ -130,7 +130,7 @@ func (s *Scheduler) SetState(state enumsspb.SchedulerState) {
 	s.HsmSchedulerState.HsmState = state
 }
 
-func (s *Scheduler) RegenerateTasks(any, *hsm.Node) ([]hsm.Task, error) {
+func (s *Scheduler) RegenerateTasks(*hsm.Node) ([]hsm.Task, error) {
 	switch s.HsmState { // nolint:exhaustive
 	case enumsspb.SCHEDULER_STATE_WAITING:
 		return []hsm.Task{SchedulerWaitTask{deadline: s.NextInvocationTime.AsTime()}}, nil
@@ -183,7 +183,7 @@ var TransitionSchedulerActivate = hsm.NewTransition(
 	[]enumsspb.SchedulerState{enumsspb.SCHEDULER_STATE_WAITING},
 	enumsspb.SCHEDULER_STATE_EXECUTING,
 	func(scheduler *Scheduler, event EventSchedulerActivate) (hsm.TransitionOutput, error) {
-		tasks, err := scheduler.RegenerateTasks(nil, nil)
+		tasks, err := scheduler.RegenerateTasks(nil)
 		return hsm.TransitionOutput{Tasks: tasks}, err
 	})
 
@@ -194,6 +194,6 @@ var TransitionSchedulerWait = hsm.NewTransition(
 	[]enumsspb.SchedulerState{enumsspb.SCHEDULER_STATE_EXECUTING},
 	enumsspb.SCHEDULER_STATE_WAITING,
 	func(scheduler *Scheduler, event EventSchedulerWait) (hsm.TransitionOutput, error) {
-		tasks, err := scheduler.RegenerateTasks(nil, nil)
+		tasks, err := scheduler.RegenerateTasks(nil)
 		return hsm.TransitionOutput{Tasks: tasks}, err
 	})
