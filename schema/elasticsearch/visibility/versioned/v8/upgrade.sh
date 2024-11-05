@@ -31,7 +31,7 @@ echo "=== Step 1. Add new builtin search attributes ==="
 new_mapping='
 {
   "properties": {
-    "PausedEntities": {
+    "PausedInfo": {
       "type": "keyword"
     }
   }

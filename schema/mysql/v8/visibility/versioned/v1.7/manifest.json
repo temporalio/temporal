@@ -1,8 +1,8 @@
 {
   "CurrVersion": "1.7",
   "MinCompatibleVersion": "0.1",
-  "Description": "add PausedEntities column",
+  "Description": "add PausedInfo column",
   "SchemaUpdateCqlFiles": [
-    "add_paused_entities_search_attribute.sql"
+    "add_paused_info_info_attribute.sql"
   ]
 }

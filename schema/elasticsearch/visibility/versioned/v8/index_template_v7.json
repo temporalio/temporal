@@ -93,7 +93,7 @@
       "RootRunId": {
         "type": "keyword"
       },
-      "PausedEntities": {
+      "PausedInfo": {
         "type": "keyword"
       }
     }

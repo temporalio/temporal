@@ -82,14 +82,21 @@ const (
 	// any other custom search attribute.
 	ScheduleID = "ScheduleId"
 
-	// PausedEntities is a search attribute that stores the list paused entities in the workflow.
-	// Format of a single paused entity: "<entity_type>:<entity_id>:<policy_id>".
-	//  * entity_type can be activity, workflow, etc. See PausedWorkflowEntityType enum for the list of supported entities.
-	//  * entity_id is used to differentiate entities and based on type. For activity it will be activity type.
-	//      note: it may not be unique across different entities.
-	//  * policy_id is an arbitrary string.
-	// example for paused activities, manual pause: "Activity:MyCoolActivityType:MANUAL"
-	PausedEntities = "PausedEntities"
+	// PausedInfo is a search attribute that stores the information about paused entities in the workflow.
+	// Format of a single paused entity: "<key>:<value>".
+	//  * <key> is something that can be used to identify the filtering condition
+	//  * <value> is the value of the corresponding filtering condition.
+	// examples:
+	//	for paused activities, manual pause, we may have 2 <key>:<value> pairs:
+	//	 * "Activity:MyCoolActivityType"
+	//	 * "Reason:ManualActivityPause"
+	// 	 * or
+	//	 * "Policy:<some policy id>"
+	//	for paused workflows, we may have the following <key>:<value> pairs:
+	//	 * "Workflow:WorkflowID"
+	//	 * "Reason:ManualWorkflowPause"
+	//	for paused taskques by some , we may have single <key>:<value> pair:
+	PausedInfo = "PausedInfo"
 )
 
 var (
@@ -124,7 +131,7 @@ var (
 		TemporalScheduledById:      enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 		TemporalSchedulePaused:     enumspb.INDEXED_VALUE_TYPE_BOOL,
 		TemporalNamespaceDivision:  enumspb.INDEXED_VALUE_TYPE_KEYWORD,
-		PausedEntities:             enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST,
+		PausedInfo:                 enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST,
 	}
 
 	// reserved are internal field names that can't be used as search attribute names.
