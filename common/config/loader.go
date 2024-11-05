@@ -28,6 +28,7 @@ import (
 	"bufio"
 	"bytes"
 	"fmt"
+	"io"
 	stdlog "log"
 	"os"
 	"strings"
@@ -148,19 +149,12 @@ func LoadConfig(env string, configDir string, zone string) (*Config, error) {
 }
 
 func checkTemplatingEnabled(content []byte) (bool, error) {
-	scanner := bufio.NewScanner(bytes.NewReader(content))
-	var bytesRead int
-
+	scanner := bufio.NewScanner(io.LimitReader(bytes.NewReader(content), commentSearchLimit))
 	for scanner.Scan() {
 		line := strings.TrimSpace(scanner.Text())
-		bytesRead += len(line)
 
 		if strings.HasPrefix(line, "#") && strings.Contains(line, enableTemplate) {
 			return true, nil
-		}
-
-		if bytesRead > commentSearchLimit {
-			break
 		}
 	}
 
