@@ -58,7 +58,7 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-// TransactionPolicy indicates whether a mutable state transaction is happening in an active cluster or passive cluster.
+// TransactionPolicy indicates whether a mutable state transaction is happening for an active namespace or passive namespace.
 type TransactionPolicy int
 
 const (
