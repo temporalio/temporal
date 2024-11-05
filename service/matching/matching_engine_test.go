@@ -471,6 +471,7 @@ func (s *matchingEngineSuite) TestFailAddTaskWithHistoryExhausted() {
 }
 
 func (s *matchingEngineSuite) TestFailAddTaskWithHistoryError() {
+	s.matchingEngine.config.MatchingDropNonRetryableTasks = dynamicconfig.GetBoolPropertyFn(true)
 	historyError := serviceerror.NewInternal("nothing to start")
 	tqName := "testFailAddTaskWithHistoryError"
 	s.testFailAddTaskWithHistoryError(tqName, true, historyError, nil) // expectedError shall be nil since history drops the task
