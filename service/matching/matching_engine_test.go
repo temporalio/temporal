@@ -691,6 +691,7 @@ func (s *matchingEngineSuite) TestPollWorkflowTaskQueues_NamespaceHandover() {
 }
 
 func (s *matchingEngineSuite) TestPollActivityTaskQueues_InternalError() {
+	s.matchingEngine.config.MatchingDropNonRetryableTasks = dynamicconfig.GetBoolPropertyFn(true)
 	namespaceId := uuid.New()
 	tl := "queue"
 	taskQueue := &taskqueuepb.TaskQueue{Name: "queue", Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
@@ -723,6 +724,8 @@ func (s *matchingEngineSuite) TestPollActivityTaskQueues_InternalError() {
 }
 
 func (s *matchingEngineSuite) TestPollActivityTaskQueues_DataLossError() {
+	s.matchingEngine.config.MatchingDropNonRetryableTasks = dynamicconfig.GetBoolPropertyFn(true)
+
 	namespaceId := uuid.New()
 	tl := "queue"
 	taskQueue := &taskqueuepb.TaskQueue{Name: "queue", Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
@@ -756,6 +759,8 @@ func (s *matchingEngineSuite) TestPollActivityTaskQueues_DataLossError() {
 }
 
 func (s *matchingEngineSuite) TestPollWorkflowTaskQueues_InternalError() {
+	s.matchingEngine.config.MatchingDropNonRetryableTasks = dynamicconfig.GetBoolPropertyFn(true)
+
 	tqName := "queue"
 	taskQueue := &taskqueuepb.TaskQueue{Name: tqName, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 	wfExecution := &commonpb.WorkflowExecution{WorkflowId: "workflowID", RunId: uuid.NewRandom().String()}
@@ -780,6 +785,8 @@ func (s *matchingEngineSuite) TestPollWorkflowTaskQueues_InternalError() {
 }
 
 func (s *matchingEngineSuite) TestPollWorkflowTaskQueues_DataLossError() {
+	s.matchingEngine.config.MatchingDropNonRetryableTasks = dynamicconfig.GetBoolPropertyFn(true)
+
 	tqName := "queue"
 	taskQueue := &taskqueuepb.TaskQueue{Name: tqName, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 	wfExecution := &commonpb.WorkflowExecution{WorkflowId: "workflowID", RunId: uuid.NewRandom().String()}
@@ -3927,7 +3934,7 @@ func defaultTestConfig() *Config {
 	config := NewConfig(dynamicconfig.NewNoopCollection())
 	config.LongPollExpirationInterval = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueue(100 * time.Millisecond)
 	config.MaxTaskDeleteBatchSize = dynamicconfig.GetIntPropertyFnFilteredByTaskQueue(1)
-	config.MatchingDropNonRetryableTasks = dynamicconfig.GetBoolPropertyFn(true) // for tests testing matching non-retryable tasks being dropped
+	// config.MatchingDropNonRetryableTasks = dynamicconfig.GetBoolPropertyFn(true) // for tests testing matching non-retryable tasks being dropped
 	return config
 }
 
