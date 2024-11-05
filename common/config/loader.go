@@ -164,10 +164,7 @@ func checkTemplatingEnabled(content []byte) (bool, error) {
 		}
 	}
 
-	if err := scanner.Err(); err != nil {
-		return false, err
-	}
-	return false, nil
+	return false, scanner.Err()
 }
 
 // getConfigFiles returns the list of config files to
