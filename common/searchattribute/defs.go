@@ -87,15 +87,15 @@ const (
 	//  * <key> is something that can be used to identify the filtering condition
 	//  * <value> is the value of the corresponding filtering condition.
 	// examples:
-	//	for paused activities, manual pause, we may have 2 <key>:<value> pairs:
-	//	 * "Activity:MyCoolActivityType"
-	//	 * "Reason:ManualActivityPause"
-	// 	 * or
-	//	 * "Policy:<some policy id>"
-	//	for paused workflows, we may have the following <key>:<value> pairs:
-	//	 * "Workflow:WorkflowID"
-	//	 * "Reason:ManualWorkflowPause"
-	//	for paused taskques by some , we may have single <key>:<value> pair:
+	//   - for paused activities, manual pause, we may have 2 <key>:<value> pairs:
+	//     * "Activity:MyCoolActivityType"
+	//     * "Reason:ManualActivityPause"
+	//     * or
+	//     * "Policy:<some policy id>"
+	//   - for paused workflows, we may have the following <key>:<value> pairs:
+	//     * "Workflow:WorkflowID"
+	//     * "Reason:ManualWorkflowPause"
+	//   - for paused taskques by some , we may have single <key>:<value> pair:
 	PausedInfo = "PausedInfo"
 )
 
