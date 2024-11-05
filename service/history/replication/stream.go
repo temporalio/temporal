@@ -33,6 +33,7 @@ import (
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/service/history/shard"
 )
@@ -78,14 +79,15 @@ func WrapEventLoop(
 		if err == nil { // shutdown case
 			return
 		}
-
-		if streamError, ok := err.(*StreamError); ok {
+		var streamError *StreamError
+		if errors.As(err, &streamError) {
 			metrics.ReplicationStreamError.With(metricsHandler).Record(
 				int64(1),
 				metrics.ServiceErrorTypeTag(streamError.cause),
 				metrics.FromClusterIDTag(fromClusterKey.ClusterID),
 				metrics.ToClusterIDTag(toClusterKey.ClusterID),
 			)
+			logger.Error("ReplicationStreamError", tag.Error(err))
 		} else {
 			metrics.ReplicationServiceError.With(metricsHandler).Record(
 				int64(1),
@@ -93,6 +95,7 @@ func WrapEventLoop(
 				metrics.FromClusterIDTag(fromClusterKey.ClusterID),
 				metrics.ToClusterIDTag(toClusterKey.ClusterID),
 			)
+			logger.Error("ReplicationServiceError", tag.Error(err))
 		}
 		// if it is not a retryable error, we will not retry and terminate the stream, then let the stream_receiver_monitor to restart it
 		if !IsRetryableError(err) {
