@@ -337,52 +337,35 @@ func (r *workflowResetterImpl) persistToDB(
 	currentWorkflowEventsSeq []*persistence.WorkflowEvents,
 	resetWorkflow Workflow,
 ) error {
-	currentRunID := ""
-	if currentWorkflow != nil {
-		currentRunID = currentWorkflow.GetMutableState().GetExecutionState().GetRunId()
-	}
+	currentRunID := currentWorkflow.GetMutableState().GetExecutionState().GetRunId()
 	baseRunID := baseWorkflow.GetMutableState().GetExecutionState().GetRunId()
+	resetWorkflowSnapshot, resetWorkflowEventsSeq, err := resetWorkflow.GetMutableState().CloseTransactionAsSnapshot(
+		workflow.TransactionPolicyActive,
+	)
+	if err != nil {
+		return err
+	}
 
 	if currentRunID == baseRunID {
 		// There are just 2 runs to update - base & new run.
-		// Additionally since base is the same as current, we should ensure that we close one of them only once (to avoid DBRecordVersion conflict)
-		resetWorkflowSnapshot, resetWorkflowEventsSeq, err := resetWorkflow.GetMutableState().CloseTransactionAsSnapshot(
-			workflow.TransactionPolicyActive,
-		)
-		if err != nil {
-			return err
-		}
-
-		// currentMutation (same as base) was already closed since it was running. So use that. Ok to discard base here.
-		if currentWorkflowMutation != nil {
-			if _, _, err := r.transaction.UpdateWorkflowExecution(
-				ctx,
-				persistence.UpdateWorkflowModeUpdateCurrent,
-				currentWorkflow.GetMutableState().GetCurrentVersion(),
-				currentWorkflowMutation,
-				currentWorkflowEventsSeq,
-				workflow.MutableStateFailoverVersion(resetWorkflow.GetMutableState()),
-				resetWorkflowSnapshot,
-				resetWorkflowEventsSeq,
-			); err != nil {
+		// Additionally since base is the same as current, we should ensure that we prepare only one of them for transaction and do it only once (to avoid DBRecordVersion conflict)
+		// So check if current was already prepared for transaction. If not prepare the mutation for transaction.
+		if currentWorkflowMutation == nil {
+			currentWorkflowMutation, currentWorkflowEventsSeq, err = currentWorkflow.GetMutableState().CloseTransactionAsMutation(
+				workflow.TransactionPolicyActive,
+			)
+			if err != nil {
 				return err
 			}
-			return nil
+
 		}
 
-		// currentMutation is nil here because it was not running. So we need to close the base mutation and include it in the transaction.
-		baseMutation, baseEventsSeq, err := baseWorkflow.GetMutableState().CloseTransactionAsMutation(
-			workflow.TransactionPolicyActive,
-		)
-		if err != nil {
-			return err
-		}
 		if _, _, err := r.transaction.UpdateWorkflowExecution(
 			ctx,
 			persistence.UpdateWorkflowModeUpdateCurrent,
-			baseWorkflow.GetMutableState().GetCurrentVersion(),
-			baseMutation,
-			baseEventsSeq,
+			currentWorkflow.GetMutableState().GetCurrentVersion(),
+			currentWorkflowMutation,
+			currentWorkflowEventsSeq,
 			workflow.MutableStateFailoverVersion(resetWorkflow.GetMutableState()),
 			resetWorkflowSnapshot,
 			resetWorkflowEventsSeq,
@@ -390,32 +373,22 @@ func (r *workflowResetterImpl) persistToDB(
 			return err
 		}
 		return nil
+
 	}
 
-	// We have 3 different runs to update here - the base run, current run & the new run. But current is not yet closed.
 	if currentWorkflowMutation == nil {
-		return currentWorkflow.GetContext().ConflictResolveWorkflowExecution(
-			ctx,
-			r.shardContext,
-			persistence.ConflictResolveWorkflowModeUpdateCurrent,
-			baseWorkflow.GetMutableState(),
-			resetWorkflow.GetContext(),
-			resetWorkflow.GetMutableState(),
-			currentWorkflow.GetContext(),
-			currentWorkflow.GetMutableState(),
+		// We have 2 different runs to update here - the base run & the new run. There were no changes to current.
+		// However we are still preparing current for transaction only to be able to use transaction.ConflictResolveWorkflowExecution() method below.
+		currentWorkflowMutation, currentWorkflowEventsSeq, err = currentWorkflow.GetMutableState().CloseTransactionAsMutation(
 			workflow.TransactionPolicyActive,
-			workflow.TransactionPolicyActive.Ptr(),
-			workflow.TransactionPolicyActive.Ptr(),
 		)
+		if err != nil {
+			return err
+		}
 	}
 
-	// we are here because currentMutation is closed. So we just need to close base and the new run and perform the transaction.
-	resetWorkflowSnapshot, resetWorkflowEventsSeq, err := resetWorkflow.GetMutableState().CloseTransactionAsSnapshot(
-		workflow.TransactionPolicyActive,
-	)
-	if err != nil {
-		return err
-	}
+	// We have 3 different runs to update here. However we have to prepare the snapshot of the base for transaction to be used in transaction.ConflictResolveWorkflowExecution() method.
+	// We use this method since it allows us to commit changes from all 3 different runs in the same DB transaction.
 	baseSnapshot, baseEventsSeq, err := baseWorkflow.GetMutableState().CloseTransactionAsSnapshot(
 		workflow.TransactionPolicyActive,
 	)

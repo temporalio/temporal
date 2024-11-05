@@ -123,7 +123,7 @@ func (s *WorkflowResetSuite) TestSameBaseCurrentRunning() {
 	s.assertMutableStateStatus(ctx, workflowID, currentRunID, enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED)
 }
 
-// Explicit base run is provided. Its the same as current and is in running state.
+// Explicit base run is provided. Its the same as current and is in closed state.
 func (s *WorkflowResetSuite) TestSameBaseCurrentClosed() {
 	workflowID := "test-reset" + uuid.NewString()
 	ctx := testcore.NewContext()
@@ -149,7 +149,7 @@ func (s *WorkflowResetSuite) TestDifferentBaseCurrentRunning() {
 	s.assertMutableStateStatus(ctx, workflowID, currentRunID, enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED)
 }
 
-// Explicit base run is provided. It is different from the currently run which in closed state.
+// Explicit base run is provided. It is different from the current run which in closed state.
 func (s *WorkflowResetSuite) TestDifferentBaseCurrentClosed() {
 	workflowID := "test-reset" + uuid.NewString()
 	ctx := testcore.NewContext()
