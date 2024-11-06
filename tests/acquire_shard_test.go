@@ -31,7 +31,6 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/suite"
-
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/tests/testcore"

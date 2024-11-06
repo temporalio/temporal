@@ -76,9 +76,10 @@ func NewTimerQueueFactory(
 			HostScheduler: queues.NewScheduler(
 				params.ClusterMetadata.GetCurrentClusterName(),
 				queues.SchedulerOptions{
-					WorkerCount:             params.Config.TimerProcessorSchedulerWorkerCount,
-					ActiveNamespaceWeights:  params.Config.TimerProcessorSchedulerActiveRoundRobinWeights,
-					StandbyNamespaceWeights: params.Config.TimerProcessorSchedulerStandbyRoundRobinWeights,
+					WorkerCount:                    params.Config.TimerProcessorSchedulerWorkerCount,
+					ActiveNamespaceWeights:         params.Config.TimerProcessorSchedulerActiveRoundRobinWeights,
+					StandbyNamespaceWeights:        params.Config.TimerProcessorSchedulerStandbyRoundRobinWeights,
+					InactiveNamespaceDeletionDelay: params.Config.TaskSchedulerInactiveChannelDeletionDelay,
 				},
 				params.NamespaceRegistry,
 				params.Logger,
@@ -242,6 +243,7 @@ func (f *timerQueueFactory) CreateQueue(
 		f.DLQWriter,
 		f.Config.TaskDLQEnabled,
 		f.Config.TaskDLQUnexpectedErrorAttempts,
+		f.Config.TaskDLQInternalErrors,
 		f.Config.TaskDLQErrorPattern,
 	)
 	return queues.NewScheduledQueue(

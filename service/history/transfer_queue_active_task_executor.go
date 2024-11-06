@@ -1021,6 +1021,7 @@ func (t *transferQueueActiveTaskExecutor) processResetWorkflow(
 		task,
 		reason,
 		resetPoint,
+		baseContext,
 		baseMutableState,
 		currentContext,
 		currentMutableState,
@@ -1396,6 +1397,7 @@ func (t *transferQueueActiveTaskExecutor) resetWorkflow(
 	task *tasks.ResetWorkflowTask,
 	reason string,
 	resetPoint *workflowpb.ResetPointInfo,
+	baseContext workflow.Context,
 	baseMutableState workflow.MutableState,
 	currentContext workflow.Context,
 	currentMutableState workflow.MutableState,
@@ -1425,6 +1427,12 @@ func (t *transferQueueActiveTaskExecutor) resetWorkflow(
 	baseCurrentBranchToken := baseCurrentVersionHistory.GetBranchToken()
 	baseNextEventID := baseMutableState.GetNextEventID()
 
+	baseWorkflow := ndc.NewWorkflow(
+		t.shardContext.GetClusterMetadata(),
+		baseContext,
+		baseMutableState,
+		wcache.NoopReleaseFn, // this is fine since caller will defer on release
+	)
 	err = t.workflowResetter.ResetWorkflow(
 		resetWorkflowCtx,
 		namespaceID,
@@ -1436,6 +1444,7 @@ func (t *transferQueueActiveTaskExecutor) resetWorkflow(
 		baseNextEventID,
 		resetRunID,
 		uuid.New(),
+		baseWorkflow,
 		ndc.NewWorkflow(
 			t.shardContext.GetClusterMetadata(),
 			currentContext,

@@ -30,7 +30,6 @@ import (
 	"errors"
 	"fmt"
 	"maps"
-	"os"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -488,7 +487,7 @@ func (w *perNamespaceWorker) startWorker(
 	sdkoptions.StickyScheduleToStartTimeout = w.opts.StickyScheduleToStartTimeout
 
 	sdkoptions.BackgroundActivityContext = headers.SetCallerInfo(context.Background(), headers.NewBackgroundCallerInfo(nsName))
-	sdkoptions.Identity = fmt.Sprintf("server-worker@%d@%s@%s", os.Getpid(), w.wm.hostName, nsName)
+	sdkoptions.Identity = fmt.Sprintf("temporal-system@%s@%s", w.wm.hostName, nsName)
 	// increase these if we're supposed to run with more allocation
 	sdkoptions.MaxConcurrentWorkflowTaskPollers *= allocation.Local
 	sdkoptions.MaxConcurrentActivityTaskPollers *= allocation.Local
