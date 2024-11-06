@@ -5147,7 +5147,7 @@ func (ms *MutableStateImpl) isStateDirty() bool {
 		len(ms.updateInfoUpdated) > 0 ||
 		ms.visibilityUpdated ||
 		ms.executionStateUpdated ||
-		(ms.workflowTaskUpdated && ms.GetPendingWorkflowTask() != nil && ms.GetPendingWorkflowTask().Type != enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE) ||
+		ms.workflowTaskUpdated ||
 		(ms.stateMachineNode != nil && ms.stateMachineNode.Dirty())
 }
 
@@ -5471,7 +5471,7 @@ func (ms *MutableStateImpl) closeTransactionUpdateTransitionHistory(
 
 	// TODO: treat changes for transient workflow task or signalRequestID removal as state transition as well.
 	// Those changes are not replicated today.
-	if !ms.HSM().Dirty() && !ms.isStateDirty() {
+	if !ms.isStateDirty() {
 		return nil
 	}
 
@@ -5498,10 +5498,6 @@ func (ms *MutableStateImpl) closeTransactionTrackLastUpdateVersionedTransition(
 	}
 
 	transitionHistory := ms.executionInfo.TransitionHistory
-	if len(transitionHistory) == 0 {
-		// entered unknown state
-		return
-	}
 	currentVersionedTransition := transitionHistory[len(transitionHistory)-1]
 	for _, activityInfo := range ms.updateActivityInfos {
 		activityInfo.LastUpdateVersionedTransition = currentVersionedTransition
