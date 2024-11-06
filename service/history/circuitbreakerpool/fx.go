@@ -37,7 +37,7 @@ var Module = fx.Options(
 )
 
 type OutboundQueueCircuitBreakerPool struct {
-	*CircuitBreakerPool[tasks.TaskGroupNamespaceIDAndDestination, circuitbreaker.TwoStepCircuitBreaker]
+	*CircuitBreakerPool[tasks.TaskGroupNamespaceIDAndDestination]
 }
 
 func OutboundQueueCircuitBreakerPoolProvider(

@@ -23,19 +23,22 @@
 package circuitbreakerpool
 
 import (
+	"go.temporal.io/server/common/circuitbreaker"
 	"go.temporal.io/server/common/collection"
 )
 
-type CircuitBreakerPool[K comparable, T any] struct {
-	m *collection.OnceMap[K, T]
+type CircuitBreakerPool[K comparable] struct {
+	m *collection.OnceMap[K, circuitbreaker.TwoStepCircuitBreaker]
 }
 
-func (p *CircuitBreakerPool[K, T]) Get(key K) T {
+func (p *CircuitBreakerPool[K]) Get(key K) circuitbreaker.TwoStepCircuitBreaker {
 	return p.m.Get(key)
 }
 
-func NewCircuitBreakerPool[K comparable, T any](constructor func(K) T) *CircuitBreakerPool[K, T] {
-	return &CircuitBreakerPool[K, T]{
+func NewCircuitBreakerPool[K comparable](
+	constructor func(key K) circuitbreaker.TwoStepCircuitBreaker,
+) *CircuitBreakerPool[K] {
+	return &CircuitBreakerPool[K]{
 		m: collection.NewOnceMap(constructor),
 	}
 }
