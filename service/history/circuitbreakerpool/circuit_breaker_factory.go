@@ -23,22 +23,19 @@
 package circuitbreakerpool
 
 import (
-	"go.temporal.io/server/common/circuitbreaker"
 	"go.temporal.io/server/common/collection"
-	"go.temporal.io/server/service/history/tasks"
 )
 
-var outboundQueueCircuitBreakerPool *collection.OnceMap[
-	tasks.TaskGroupNamespaceIDAndDestination,
-	circuitbreaker.TwoStepCircuitBreaker,
-]
-
-func InitOutboundQueueCircuitBreakerPool(
-	constructor func(tasks.TaskGroupNamespaceIDAndDestination) circuitbreaker.TwoStepCircuitBreaker,
-) {
-	outboundQueueCircuitBreakerPool = collection.NewOnceMap(constructor)
+type CircuitBreakerPool[K comparable, T any] struct {
+	m *collection.OnceMap[K, T]
 }
 
-func OutboundQueueCircuitBreaker(key tasks.TaskGroupNamespaceIDAndDestination) circuitbreaker.TwoStepCircuitBreaker {
-	return outboundQueueCircuitBreakerPool.Get(key)
+func (p *CircuitBreakerPool[K, T]) Get(key K) T {
+	return p.m.Get(key)
+}
+
+func NewCircuitBreakerPool[K comparable, T any](constructor func(K) T) *CircuitBreakerPool[K, T] {
+	return &CircuitBreakerPool[K, T]{
+		m: collection.NewOnceMap(constructor),
+	}
 }

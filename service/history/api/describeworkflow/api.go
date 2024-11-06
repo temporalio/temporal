@@ -83,6 +83,7 @@ func Invoke(
 	shard shard.Context,
 	workflowConsistencyChecker api.WorkflowConsistencyChecker,
 	persistenceVisibilityMgr manager.VisibilityManager,
+	outboundQueueCBPool *circuitbreakerpool.OutboundQueueCircuitBreakerPool,
 ) (_ *historyservice.DescribeWorkflowExecutionResponse, retError error) {
 	namespaceID := namespace.ID(req.GetNamespaceId())
 	err := api.ValidateNamespaceUUID(namespaceID)
@@ -248,7 +249,7 @@ func Invoke(
 			return nil, serviceerror.NewInternal("failed to construct describe response")
 		}
 
-		callbackInfo, err := buildCallbackInfo(namespaceID, callback)
+		callbackInfo, err := buildCallbackInfo(namespaceID, callback, outboundQueueCBPool)
 		if err != nil {
 			shard.GetLogger().Error(
 				"failed to build callback info while building describe response",
@@ -281,7 +282,7 @@ func Invoke(
 			return nil, serviceerror.NewInternal("failed to construct describe response")
 		}
 
-		operationInfo, err := buildPendingNexusOperationInfo(namespaceID, node, op)
+		operationInfo, err := buildPendingNexusOperationInfo(namespaceID, node, op, outboundQueueCBPool)
 		if err != nil {
 			shard.GetLogger().Error(
 				"failed to build Nexus operation info while building describe response",
@@ -305,6 +306,7 @@ func Invoke(
 func buildCallbackInfo(
 	namespaceID namespace.ID,
 	callback callbacks.Callback,
+	outboundQueueCBPool *circuitbreakerpool.OutboundQueueCircuitBreakerPool,
 ) (*workflowpb.CallbackInfo, error) {
 	destination := ""
 	cbSpec := &commonpb.Callback{}
@@ -339,8 +341,8 @@ func buildCallbackInfo(
 	}
 
 	blockedReason := ""
-	if state == enumspb.CALLBACK_STATE_SCHEDULED || state == enumspb.CALLBACK_STATE_BACKING_OFF {
-		cb := circuitbreakerpool.OutboundQueueCircuitBreaker(tasks.TaskGroupNamespaceIDAndDestination{
+	if state == enumspb.CALLBACK_STATE_SCHEDULED {
+		cb := outboundQueueCBPool.Get(tasks.TaskGroupNamespaceIDAndDestination{
 			TaskGroup:   callbacks.TaskTypeInvocation,
 			NamespaceID: namespaceID.String(),
 			Destination: destination,
@@ -374,6 +376,7 @@ func buildPendingNexusOperationInfo(
 	namespaceID namespace.ID,
 	node *hsm.Node,
 	op nexusoperations.Operation,
+	outboundQueueCBPool *circuitbreakerpool.OutboundQueueCircuitBreakerPool,
 ) (*workflowpb.PendingNexusOperationInfo, error) {
 	var state enumspb.PendingNexusOperationState
 	switch op.State() {
@@ -394,9 +397,8 @@ func buildPendingNexusOperationInfo(
 	}
 
 	blockedReason := ""
-	if state == enumspb.PENDING_NEXUS_OPERATION_STATE_SCHEDULED ||
-		state == enumspb.PENDING_NEXUS_OPERATION_STATE_BACKING_OFF {
-		cb := circuitbreakerpool.OutboundQueueCircuitBreaker(tasks.TaskGroupNamespaceIDAndDestination{
+	if state == enumspb.PENDING_NEXUS_OPERATION_STATE_SCHEDULED {
+		cb := outboundQueueCBPool.Get(tasks.TaskGroupNamespaceIDAndDestination{
 			TaskGroup:   nexusoperations.TaskTypeInvocation,
 			NamespaceID: namespaceID.String(),
 			Destination: op.Endpoint,
@@ -407,7 +409,7 @@ func buildPendingNexusOperationInfo(
 		}
 	}
 
-	cancellationInfo, err := buildNexusOperationCancellationInfo(namespaceID, node, op)
+	cancellationInfo, err := buildNexusOperationCancellationInfo(namespaceID, node, op, outboundQueueCBPool)
 	if err != nil {
 		return nil, err
 	}
@@ -440,6 +442,7 @@ func buildNexusOperationCancellationInfo(
 	namespaceID namespace.ID,
 	node *hsm.Node,
 	op nexusoperations.Operation,
+	outboundQueueCBPool *circuitbreakerpool.OutboundQueueCircuitBreakerPool,
 ) (*workflowpb.NexusOperationCancellationInfo, error) {
 	cancelation, err := op.Cancelation(node)
 	if err != nil {
@@ -451,9 +454,8 @@ func buildNexusOperationCancellationInfo(
 
 	state := cancelation.State()
 	blockedReason := ""
-	if state == enumspb.NEXUS_OPERATION_CANCELLATION_STATE_SCHEDULED ||
-		state == enumspb.NEXUS_OPERATION_CANCELLATION_STATE_BACKING_OFF {
-		cb := circuitbreakerpool.OutboundQueueCircuitBreaker(tasks.TaskGroupNamespaceIDAndDestination{
+	if state == enumspb.NEXUS_OPERATION_CANCELLATION_STATE_SCHEDULED {
+		cb := outboundQueueCBPool.Get(tasks.TaskGroupNamespaceIDAndDestination{
 			TaskGroup:   nexusoperations.TaskTypeCancelation,
 			NamespaceID: namespaceID.String(),
 			Destination: op.Endpoint,
