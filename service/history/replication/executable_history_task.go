@@ -119,6 +119,8 @@ func (e *ExecutableHistoryTask) QueueID() interface{} {
 }
 
 func (e *ExecutableHistoryTask) Execute() error {
+	return serviceerror.NewInvalidArgument("forced replication error")
+
 	if e.TerminalState() {
 		return nil
 	}
