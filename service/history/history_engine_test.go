@@ -686,7 +686,6 @@ func (s *engineSuite) TestQueryWorkflow_ConsistentQueryBufferFull() {
 	gweResponse := &persistence.GetWorkflowExecutionResponse{State: wfMs}
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(gweResponse, nil)
 
-	// buffer query so that when history.QueryWorkflow is called buffer is already full
 	ctx, release, err := s.workflowCache.GetOrCreateWorkflowExecution(
 		context.Background(),
 		s.mockShard,
@@ -697,8 +696,10 @@ func (s *engineSuite) TestQueryWorkflow_ConsistentQueryBufferFull() {
 	s.NoError(err)
 	loadedMS, err := ctx.LoadMutableState(context.Background(), s.mockShard)
 	s.NoError(err)
+
+	// buffer query so that when historyEngine.QueryWorkflow() is called buffer is already full
 	qr := workflow.NewQueryRegistry()
-	qr.BufferQuery(&querypb.WorkflowQuery{})
+	queryId, _ := qr.BufferQuery(&querypb.WorkflowQuery{})
 	loadedMS.(*workflow.MutableStateImpl).QueryRegistry = qr
 	release(nil)
 
@@ -712,6 +713,11 @@ func (s *engineSuite) TestQueryWorkflow_ConsistentQueryBufferFull() {
 	resp, err := s.mockHistoryEngine.QueryWorkflow(context.Background(), request)
 	s.Nil(resp)
 	s.Equal(consts.ErrConsistentQueryBufferExceeded, err)
+
+	// verify that after last query error, the previous pending query is still in the buffer
+	pendingBufferedQueries := qr.GetBufferedIDs()
+	s.Equal(1, len(pendingBufferedQueries))
+	s.Equal(queryId, pendingBufferedQueries[0])
 }
 
 func (s *engineSuite) TestQueryWorkflow_WorkflowTaskDispatch_Complete() {
