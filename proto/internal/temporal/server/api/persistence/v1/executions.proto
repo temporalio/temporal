@@ -254,6 +254,9 @@ message WorkflowExecutionInfo {
 
     // The workflow has been reset.
     bool workflow_was_reset = 96;
+
+    // Reset Run ID points to the new nun when this execution is reset. If the execution is reset multiple times, it points to the latest run.
+    string reset_run_id = 97;
 }
 
 message ExecutionStats {
@@ -297,6 +300,10 @@ message TransferTaskInfo {
     oneof task_details {
         CloseExecutionTaskDetails close_execution_task_details = 16;
     }
+    // Stamp represents the version of the activity internal state, for which the timer task was created.
+    // It monotonically increments when the activity options are changed.
+    // It is used to check if activity related tasks are still relevant to  their corresponding state machine.
+    int32 stamp = 17;
 }
 
 // replication column
@@ -321,7 +328,7 @@ message ReplicationTaskInfo {
     temporal.server.api.enums.v1.TaskPriority priority = 18;
     VersionedTransition versioned_transition = 19;
     // A list of event-based replication tasks that, together, are equivalent
-    // to this state-based task. 
+    // to this state-based task.
     // TODO: Remove this field when state-based replication is stable and
     // doesn't need to be disabled.
     repeated ReplicationTaskInfo task_equivalents = 20;
@@ -368,7 +375,9 @@ message TimerTaskInfo {
     // A workflow chain is identified by the run_id of the first workflow in the chain.
     string first_run_id = 15;
 
-    // The stamp represents the version of the activity for which the timer task was created.
+    // Stamp represents the version of the activity internal state, for which the timer task was created.
+    // It monotonically increments when the activity options are changed.
+    // It is used to check if activity related tasks are still relevant to  their corresponding state machine.
     int32 stamp = 16;
 }
 
@@ -466,12 +475,15 @@ message ActivityInfo {
         int64 last_redirect_counter = 2;
     }
 
-    // First time the activity was scheduled.
+    // The first time the activity was scheduled.
     google.protobuf.Timestamp first_scheduled_time = 39;
-
-    // Last time an activity failure was recorded by the server.
+    // The last time an activity attempt completion was recorded by the server.
     google.protobuf.Timestamp last_attempt_complete_time = 40;
-    // stamp represent "version" of activity during its lifetime. It can be changed with Activity API
+
+
+    // Stamp represents the “version” of the activity internal state (options) and can/will be changed with Activity API.
+    // It monotonically increments when the activity options are changed.
+    // It is used to check if activity related tasks are still relevant to  their corresponding state machine.
     int32 stamp = 41;
 }
 
@@ -609,7 +621,7 @@ message CallbackInfo {
 
 // NexusOperationInfo contains the state of a nexus operation.
 message NexusOperationInfo {
-    // Endpoint name. 
+    // Endpoint name.
     // Resolved the endpoint registry for this workflow's namespace.
     string endpoint = 1;
 
