@@ -572,9 +572,9 @@ is currently processing a task.
 	// keys for frontend
 	FrontendHTTPAllowedHosts = NewGlobalTypedSetting(
 		"frontend.httpAllowedHosts",
-		[]string(nil),
-		`HTTP API Requests with "Host" header matching the allowed hosts will be processed, otherwise rejected.
-Wildcards (*) are expanded to allow any substring.`,
+		[]string{"*"},
+		`HTTP API Requests with a "Host" header matching the allowed hosts will be processed, otherwise rejected.
+Wildcards (*) are expanded to allow any substring. By default any Host header is allowed.`,
 	)
 	FrontendPersistenceMaxQPS = NewGlobalIntSetting(
 		"frontend.persistenceMaxQPS",
