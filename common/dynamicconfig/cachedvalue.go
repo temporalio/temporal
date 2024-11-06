@@ -8,7 +8,7 @@ import (
 )
 
 // GlobalCachedTypedValue holds a cached value of a GlobalTypedSetting after applying a supplied convert function.
-// This type should be deleted after caching is added to GlobalTypedSettingWithConverter.
+// This type should be deleted after dynamicconfig handles conversion more efficiently.
 type GlobalCachedTypedValue[T any] struct {
 	ptr    *atomic.Pointer[T]
 	cancel func()
