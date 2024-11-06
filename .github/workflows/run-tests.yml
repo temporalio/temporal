@@ -213,6 +213,8 @@ jobs:
 
       - uses: arduino/setup-protoc@v3
         if: ${{ !inputs.run_single_functional_test && !inputs.run_single_unit_test }}
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
 
       - run: GOOS=windows GOARCH=amd64 make clean-bins bins
         if: ${{ !inputs.run_single_functional_test && !inputs.run_single_unit_test }}
