@@ -1,6 +1,8 @@
 // The MIT License
 //
-// Copyright (c) 2020 Temporal Technologies, Inc.
+// Copyright (c) 2024 Temporal Technologies Inc.  All rights reserved.
+//
+// Copyright (c) 2024 Uber Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -20,18 +22,28 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-syntax = "proto3";
+package deploymentName
 
-package temporal.server.api.deployment_group.v1;
+import (
+	"fmt"
 
-option go_package = "go.temporal.io/server/api/deployment_group/v1;deployment_group";
+	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/server/common/searchattribute"
+)
 
-import "temporal/api/taskqueue/v1/message.proto";
+const (
+	WorkflowType      = "temporal-sys-deployment-name-workflow"
+	NamespaceDivision = "TemporalDeploymentName"
+)
 
-
-message DeploymentWorkflowArgs {
-    string namespace = 1;
-    string deployment_name = 2;
-    temporal.api.taskqueue.v1.TaskQueue task_queue = 3;
-    string build_id = 4;
-}
+var (
+	VisibilityBaseListQuery = fmt.Sprintf(
+		"%s = '%s' AND %s = '%s' AND %s = '%s'",
+		searchattribute.WorkflowType,
+		WorkflowType,
+		searchattribute.TemporalNamespaceDivision,
+		NamespaceDivision,
+		searchattribute.ExecutionStatus,
+		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING.String(),
+	)
+)

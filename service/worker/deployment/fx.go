@@ -22,7 +22,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package deploymentgroup
+package deployment
 
 import (
 	"fmt"
@@ -32,6 +32,7 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	sdkworker "go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
+	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
@@ -42,8 +43,8 @@ import (
 )
 
 const (
-	WorkflowType      = "temporal-sys-deployment-group-workflow"
-	NamespaceDivision = "TemporalDeploymentGroup"
+	WorkflowType      = "temporal-sys-deployment-workflow"
+	NamespaceDivision = "TemporalDeployment"
 )
 
 var (
@@ -72,7 +73,8 @@ type (
 		MetricsHandler metrics.Handler
 		Logger         log.Logger
 		ClientFactory  sdk.ClientFactory
-		FrontendClient workflowservice.WorkflowServiceClient
+		FrontendClient workflowservice.WorkflowServiceClient //  TODO Shivam - may not require this since deployment activities only use matching client
+		MatchingClient matchingservice.MatchingServiceClient
 	}
 
 	fxResult struct {
@@ -107,9 +109,19 @@ func (s *workerComponent) DedicatedWorkerOptions(ns *namespace.Namespace) *worke
 }
 
 func (s *workerComponent) Register(registry sdkworker.Registry, ns *namespace.Namespace, details workercommon.RegistrationDetails) func() {
-	// TODO Shivam: Create .pb files for supplying args (DG, buildID, task-queue) to the workflow function
 	registry.RegisterWorkflowWithOptions(DeploymentWorkflow, workflow.RegisterOptions{Name: WorkflowType})
 
 	// TODO Shivam: Register activities and return a cleanup function
+	activities := s.newActivities(ns.Name(), ns.ID())
+	registry.RegisterActivity(activities)
 	return nil
+}
+
+// TODO Shivam - place holder for now but initializes activities struct
+func (s *workerComponent) newActivities(name namespace.Name, id namespace.ID) *activities {
+	return &activities{
+		activityDeps: s.activityDeps,
+		namespace:    name,
+		namespaceID:  id,
+	}
 }

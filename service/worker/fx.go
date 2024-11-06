@@ -49,7 +49,7 @@ import (
 	"go.temporal.io/server/service/worker/batcher"
 	workercommon "go.temporal.io/server/service/worker/common"
 	"go.temporal.io/server/service/worker/deletenamespace"
-	"go.temporal.io/server/service/worker/deploymentgroup"
+	deployment "go.temporal.io/server/service/worker/deployment"
 	"go.temporal.io/server/service/worker/dlq"
 	"go.temporal.io/server/service/worker/migration"
 	"go.temporal.io/server/service/worker/scheduler"
@@ -63,7 +63,7 @@ var Module = fx.Options(
 	deletenamespace.Module,
 	scheduler.Module,
 	batcher.Module,
-	deploymentgroup.Module,
+	deployment.Module,
 	dlq.Module,
 	dynamicconfig.Module,
 	fx.Provide(
