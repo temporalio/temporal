@@ -269,6 +269,9 @@ func (e *stateMachineEnvironment) validateStateMachineRef(
 
 	if ref.StateMachineRef.GetMachineLastUpdateVersionedTransition().GetTransitionCount() == 0 {
 		// Transition history was disabled when the node was last updated.
+		if ref.Validate == nil {
+			return nil
+		}
 		return ref.Validate(ref.StateMachineRef, node)
 	}
 
@@ -277,7 +280,9 @@ func (e *stateMachineEnvironment) validateStateMachineRef(
 		// fallback to the old validation logic.
 		return e.validateStateMachineRefWithoutTransitionHistory(ms, ref, potentialStaleState)
 	}
-
+	if ref.Validate == nil {
+		return nil
+	}
 	return ref.Validate(ref.StateMachineRef, node)
 }
 
