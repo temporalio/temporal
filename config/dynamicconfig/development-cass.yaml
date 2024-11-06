@@ -52,3 +52,10 @@ history.enableWorkflowExecutionTimeoutTimer:
   - value: true
 history.hostLevelCacheMaxSize:
   - value: 8192
+
+history.shouldFailReplicationTask:     # The test switch to make all replication tasks go to the DLQ
+  - value: true
+history.enableReplicationStream:       # We use streaming for replication in production
+  - value: true
+history.enableHistoryReplicationDLQV2: # This turns on the replication DLQ V2 in production
+  - value: true
