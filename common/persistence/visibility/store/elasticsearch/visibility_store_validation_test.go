@@ -22,30 +22,31 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package store
+package elasticsearch
 
 import (
-	"strings"
+	"math"
+	"testing"
+	"time"
 
+	"github.com/stretchr/testify/assert"
 	"go.temporal.io/api/serviceerror"
 )
 
-var (
-	// OperationNotSupportedErr is returned when visibility operation in not supported.
-	OperationNotSupportedErr = serviceerror.NewInvalidArgument("Operation not supported. Please use on Elasticsearch")
-)
+func TestValidationDatetime(t *testing.T) {
+	store := VisibilityStore{}
 
-func NewVisibilityStoreInvalidValuesError(errs []error) error {
-	var sb strings.Builder
-	sb.WriteString("Visibility store validation errors: ")
-	for i, err := range errs {
-		if i > 0 {
-			sb.WriteString(", ")
-		}
-		sb.WriteString("[")
-		sb.WriteString(err.Error())
-		sb.WriteString("]")
-	}
+	// valid datetime
+	_, err := store.ValidateCustomSearchAttributes(map[string]any{
+		"CustomDatetimeField": time.Now(),
+	})
+	assert.NoError(t, err)
 
-	return serviceerror.NewInvalidArgument(sb.String())
+	// invalid out of range datetime
+	_, err = store.ValidateCustomSearchAttributes(map[string]any{
+		"CustomDatetimeField": time.Unix(0, math.MaxInt64).Add(time.Hour),
+	})
+	assert.Error(t, err)
+	assert.IsType(t, &serviceerror.InvalidArgument{}, err)
+	assert.Contains(t, err.Error(), "Visibility store validation errors")
 }
