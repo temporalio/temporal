@@ -172,7 +172,7 @@ message SyncActivityTaskAttributes {
     // Stamp represents the internal “version” of the activity options and can/will be changed with Activity API.
     // It monotonically increments when the activity options are changed.
     int32 stamp = 20;
-    // Indicates if the activity is paused.
+    // Flag indicating whether the activity is currently paused.
     bool paused = 21;
 }
 

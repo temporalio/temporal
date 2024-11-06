@@ -4979,16 +4979,16 @@ func (ms *MutableStateImpl) UpdatePausedEntitiesSearchAttribute() error {
 	// TODO: search attributes are coupled with mutable state.
 	// This should be refactored so we don't add new function to MutableState interface every time we want to work with search attributes.
 
-	var pausedActivityTypesMap map[string]struct{}
+	pausedInfoMap := make(map[string]struct{})
 
 	for _, ai := range ms.GetPendingActivityInfos() {
 		if !ai.Paused {
 			continue
 		}
-		pausedActivityTypesMap[ai.ActivityType.Name] = struct{}{}
+		pausedInfoMap[ai.ActivityType.Name] = struct{}{}
 	}
-	pausedInfo := make([]string, 0, len(pausedActivityTypesMap))
-	for activityType := range pausedActivityTypesMap {
+	pausedInfo := make([]string, 0, len(pausedInfoMap))
+	for activityType := range pausedInfoMap {
 		activityType = url.QueryEscape(activityType)
 		pausedEntity := fmt.Sprintf("activity::%s:MANUAL", activityType)
 		pausedInfo = append(pausedInfo, pausedEntity)
