@@ -65,7 +65,6 @@ type (
 		enabledForNs             dynamicconfig.BoolPropertyFnWithNamespaceFilter
 		globalNSStartWorkflowRPS dynamicconfig.TypedSubscribableWithNamespaceFilter[float64]
 		maxBlobSize              dynamicconfig.IntPropertyFnWithNamespaceFilter
-		localActivitySleepLimit  dynamicconfig.DurationPropertyFnWithNamespaceFilter
 	}
 
 	activityDeps struct {
@@ -94,10 +93,9 @@ func NewResult(
 	return fxResult{
 		Component: &workerComponent{
 			activityDeps:             params,
-			enabledForNs:             dynamicconfig.WorkerEnableDeploymentGroup.Get(dc),
-			globalNSStartWorkflowRPS: dynamicconfig.DeploymentGroupNamespaceStartWorkflowRPS.Subscribe(dc),
+			enabledForNs:             dynamicconfig.WorkerEnableDeployment.Get(dc),
+			globalNSStartWorkflowRPS: dynamicconfig.DeploymentNamespaceStartWorkflowRPS.Subscribe(dc),
 			maxBlobSize:              dynamicconfig.BlobSizeLimitError.Get(dc),
-			localActivitySleepLimit:  dynamicconfig.SchedulerLocalActivitySleepLimit.Get(dc), // TODO Shivam: Change this after implementing local activities
 		},
 	}
 }
@@ -111,13 +109,13 @@ func (s *workerComponent) DedicatedWorkerOptions(ns *namespace.Namespace) *worke
 func (s *workerComponent) Register(registry sdkworker.Registry, ns *namespace.Namespace, details workercommon.RegistrationDetails) func() {
 	registry.RegisterWorkflowWithOptions(DeploymentWorkflow, workflow.RegisterOptions{Name: WorkflowType})
 
-	// TODO Shivam: Register activities and return a cleanup function
+	// TODO Shivam: Might need a cleanup function upon activity registration
 	activities := s.newActivities(ns.Name(), ns.ID())
 	registry.RegisterActivity(activities)
 	return nil
 }
 
-// TODO Shivam - place holder for now but initializes activities struct
+// TODO Shivam - place holder for now but will initialize activity rate limits (if any) amongst other things
 func (s *workerComponent) newActivities(name namespace.Name, id namespace.ID) *activities {
 	return &activities{
 		activityDeps: s.activityDeps,

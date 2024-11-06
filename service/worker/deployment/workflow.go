@@ -35,7 +35,6 @@ import (
 	"go.temporal.io/sdk/workflow"
 )
 
-// Define types required by local state here
 type (
 	TaskQueue struct {
 		Name          string
@@ -44,26 +43,24 @@ type (
 	Deployment struct {
 		Namespace      string
 		DeploymentName string
-		TaskQueue      []*TaskQueue // All the task queues associated with this WD and buildID (key)
+		TaskQueue      []*TaskQueue // All the task queues associated with this buildID/deployment
 		BuildID        string
 	}
 	DeploymentName struct {
 		Name           string
-		CurrentBuildID string // denotes the current "default" build-ID of the deploymentName
+		CurrentBuildID string // denotes the current "default" build-ID of a deploymentName
 	}
 
-	// local state while running the deployment workflow
+	// DeploymentWorkflowRunner holds the local state while running a deployment workflow
 	DeploymentWorkflowRunner struct {
 		deployment Deployment
-
-		ctx     workflow.Context
-		a       *activities
-		logger  sdklog.Logger
-		metrics sdkclient.MetricsHandler
+		ctx        workflow.Context
+		a          *activities
+		logger     sdklog.Logger
+		metrics    sdkclient.MetricsHandler
 	}
 )
 
-// Do we need local/non-local activities?
 var (
 	defaultActivityOptions = workflow.ActivityOptions{
 		ScheduleToCloseTimeout: 1 * time.Hour,
@@ -76,8 +73,6 @@ var (
 )
 
 const continueAsNewThreshold = 1000
-
-// The skeleton of the workflow shall go in here
 
 func DeploymentWorkflow(ctx workflow.Context, deploymentWorkflowArgs Deployment) error {
 	deploymentWorkflowRunner := &DeploymentWorkflowRunner{
@@ -92,9 +87,6 @@ func DeploymentWorkflow(ctx workflow.Context, deploymentWorkflowArgs Deployment)
 }
 
 func (d *DeploymentWorkflowRunner) run() error {
-	// When using SignalWithStart, care has to be taken to pass empty an `deploymentWorkflowArgs`. This is because
-	// the signal method will handle updating local state. This is critical for preventing duplicates TaskQueues in
-	// the local state
 
 	// Query Handler
 	err := workflow.SetQueryHandler(d.ctx, "list-task-queues", func(input []byte) ([]*TaskQueue, error) {

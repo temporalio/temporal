@@ -2528,15 +2528,15 @@ If the service configures with archival feature enabled, update worker.historySc
 		`How long to sleep within a local activity before pushing to workflow level sleep (don't make this
 close to or more than the workflow task timeout)`,
 	)
-	WorkerEnableDeploymentGroup = NewNamespaceBoolSetting(
-		"worker.enableDeploymentGroup",
+	WorkerEnableDeployment = NewNamespaceBoolSetting(
+		"worker.enableDeployment",
 		false,
-		`WorkerEnableDeploymentGroup controls whether to start the worker for deployment group workflows`,
+		`WorkerEnableDeploymentGroup controls whether to start the worker for deployment and deployment-name workflows`,
 	)
-	DeploymentGroupNamespaceStartWorkflowRPS = NewNamespaceFloatSetting(
-		"worker.deploymentGroupNamespaceStartWorkflowRPS",
+	DeploymentNamespaceStartWorkflowRPS = NewNamespaceFloatSetting(
+		"worker.deploymentNamespaceStartWorkflowRPS",
 		30.0,
-		`DeploymentGroupNamespaceStartWorkflowRPS is the per-namespace limit for starting deployment group workflows`,
+		`DeploymentNamespaceStartWorkflowRPS is the per-namespace limit for starting deployment and deployment-name workflows`,
 	)
 	WorkerDeleteNamespaceActivityLimits = NewGlobalTypedSetting(
 		"worker.deleteNamespaceActivityLimitsConfig",
