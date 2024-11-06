@@ -2852,16 +2852,16 @@ func (mr *MockMutableStateMockRecorder) PopTasks() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PopTasks", reflect.TypeOf((*MockMutableState)(nil).PopTasks))
 }
 
-// RecordLastActivityStarted mocks base method.
-func (m *MockMutableState) RecordLastActivityStarted(ai *persistence.ActivityInfo) {
+// RecordLastActivityCompleteTime mocks base method.
+func (m *MockMutableState) RecordLastActivityCompleteTime(ai *persistence.ActivityInfo) {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "RecordLastActivityStarted", ai)
+	m.ctrl.Call(m, "RecordLastActivityCompleteTime", ai)
 }
 
-// RecordLastActivityStarted indicates an expected call of RecordLastActivityStarted.
-func (mr *MockMutableStateMockRecorder) RecordLastActivityStarted(ai any) *gomock.Call {
+// RecordLastActivityCompleteTime indicates an expected call of RecordLastActivityCompleteTime.
+func (mr *MockMutableStateMockRecorder) RecordLastActivityCompleteTime(ai any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RecordLastActivityStarted", reflect.TypeOf((*MockMutableState)(nil).RecordLastActivityStarted), ai)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RecordLastActivityCompleteTime", reflect.TypeOf((*MockMutableState)(nil).RecordLastActivityCompleteTime), ai)
 }
 
 // RefreshExpirationTimeoutTask mocks base method.
@@ -3107,6 +3107,18 @@ func (mr *MockMutableStateMockRecorder) UpdateActivityProgress(ai, request any) 
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateActivityProgress", reflect.TypeOf((*MockMutableState)(nil).UpdateActivityProgress), ai, request)
 }
 
+// UpdateActivityWithCallback mocks base method.
+func (m *MockMutableState) UpdateActivityWithCallback(arg0 *persistence.ActivityInfo, arg1 UpdateActivityCallback) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "UpdateActivityWithCallback", arg0, arg1)
+}
+
+// UpdateActivityWithCallback indicates an expected call of UpdateActivityWithCallback.
+func (mr *MockMutableStateMockRecorder) UpdateActivityWithCallback(arg0, arg1 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateActivityWithCallback", reflect.TypeOf((*MockMutableState)(nil).UpdateActivityWithCallback), arg0, arg1)
+}
+
 // UpdateActivityWithTimerHeartbeat mocks base method.
 func (m *MockMutableState) UpdateActivityWithTimerHeartbeat(arg0 *persistence.ActivityInfo, arg1 time.Time) error {
 	m.ctrl.T.Helper()
@@ -3159,6 +3171,20 @@ func (m *MockMutableState) UpdateDuplicatedResource(resourceDedupKey definition.
 func (mr *MockMutableStateMockRecorder) UpdateDuplicatedResource(resourceDedupKey any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateDuplicatedResource", reflect.TypeOf((*MockMutableState)(nil).UpdateDuplicatedResource), resourceDedupKey)
+}
+
+// UpdatePausedEntitiesSearchAttribute mocks base method.
+func (m *MockMutableState) UpdatePausedEntitiesSearchAttribute() error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdatePausedEntitiesSearchAttribute")
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// UpdatePausedEntitiesSearchAttribute indicates an expected call of UpdatePausedEntitiesSearchAttribute.
+func (mr *MockMutableStateMockRecorder) UpdatePausedEntitiesSearchAttribute() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdatePausedEntitiesSearchAttribute", reflect.TypeOf((*MockMutableState)(nil).UpdatePausedEntitiesSearchAttribute))
 }
 
 // UpdateResetRunID mocks base method.

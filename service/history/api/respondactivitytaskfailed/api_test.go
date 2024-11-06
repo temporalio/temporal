@@ -538,7 +538,7 @@ func (s *workflowSuite) setupMutableState(uc UsecaseConfig, ai *persistencepb.Ac
 
 	currentMutableState.EXPECT().GetWorkflowType().Return(uc.wfType).AnyTimes()
 	if uc.expectRetryActivity {
-		currentMutableState.EXPECT().RecordLastActivityStarted(gomock.Any())
+		currentMutableState.EXPECT().RecordLastActivityCompleteTime(gomock.Any())
 		currentMutableState.EXPECT().RetryActivity(ai, gomock.Any()).Return(uc.retryActivityState, uc.retryActivityError)
 		currentMutableState.EXPECT().HasPendingWorkflowTask().Return(false).AnyTimes()
 	}

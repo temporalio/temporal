@@ -25,17 +25,73 @@ package pauseactivity
 import (
 	"context"
 
-	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/api/historyservice/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/service/history/api"
+	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/shard"
+	"go.temporal.io/server/service/history/workflow"
 )
 
 func Invoke(
-	_ context.Context,
-	_ *historyservice.PauseActivityRequest,
-	_ shard.Context,
-	_ api.WorkflowConsistencyChecker,
+	ctx context.Context,
+	request *historyservice.PauseActivityRequest,
+	shardContext shard.Context,
+	workflowConsistencyChecker api.WorkflowConsistencyChecker,
 ) (resp *historyservice.PauseActivityResponse, retError error) {
-	return nil, serviceerror.NewUnimplemented("PauseActivity is not supported yet")
+	err := api.GetAndUpdateWorkflowWithNew(
+		ctx,
+		nil,
+		definition.NewWorkflowKey(
+			request.NamespaceId,
+			request.GetFrontendRequest().WorkflowId,
+			request.GetFrontendRequest().RunId,
+		),
+		func(workflowLease api.WorkflowLease) (*api.UpdateWorkflowAction, error) {
+			mutableState := workflowLease.GetMutableState()
+			var err error
+			err = pauseActivity(mutableState, request)
+			if err != nil {
+				return nil, err
+			}
+			return &api.UpdateWorkflowAction{
+				Noop:               false,
+				CreateWorkflowTask: false,
+			}, nil
+		},
+		nil,
+		shardContext,
+		workflowConsistencyChecker,
+	)
+
+	if err != nil {
+		return nil, err
+	}
+
+	return &historyservice.PauseActivityResponse{}, nil
+}
+
+func pauseActivity(mutableState workflow.MutableState, request *historyservice.PauseActivityRequest) error {
+	if !mutableState.IsWorkflowExecutionRunning() {
+		return consts.ErrWorkflowCompleted
+	}
+	frontendRequest := request.GetFrontendRequest()
+	activityId := frontendRequest.GetActivityId()
+
+	ai, activityFound := mutableState.GetActivityByActivityID(activityId)
+
+	if !activityFound {
+		return consts.ErrActivityNotFound
+	}
+	if ai.Paused {
+		// do nothing
+		return nil
+	}
+
+	mutableState.UpdateActivityWithCallback(ai, func(activityInfo *persistencespb.ActivityInfo, _ workflow.MutableState) {
+		activityInfo.Paused = true
+	})
+
+	return mutableState.UpdatePausedEntitiesSearchAttribute()
 }

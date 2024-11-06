@@ -314,6 +314,8 @@ func (t *timerQueueActiveTaskExecutor) processSingleActivityTimeoutTask(
 	}
 
 	if retryState == enumspb.RETRY_STATE_IN_PROGRESS {
+		// TODO uncommment once RETRY_STATE_PAUSED is supported
+		// || retryState == enumspb.RETRY_STATE_PAUSED {
 		result.shouldUpdateMutableState = true
 		return result, nil
 	}
