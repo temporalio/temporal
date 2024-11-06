@@ -30,11 +30,6 @@ import (
 	"go.temporal.io/api/serviceerror"
 )
 
-var (
-	// OperationNotSupportedErr is returned when visibility operation in not supported.
-	OperationNotSupportedErr = serviceerror.NewInvalidArgument("Operation not supported. Please use on Elasticsearch")
-)
-
 func NewVisibilityStoreInvalidValuesError(errs []error) error {
 	var sb strings.Builder
 	sb.WriteString("Visibility store validation errors: ")
