@@ -99,6 +99,7 @@ import (
 	"go.temporal.io/server/service/history/api/updateworkflow"
 	"go.temporal.io/server/service/history/api/verifychildworkflowcompletionrecorded"
 	"go.temporal.io/server/service/history/api/verifyfirstworkflowtaskscheduled"
+	"go.temporal.io/server/service/history/circuitbreakerpool"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/deletemanager"
@@ -154,6 +155,7 @@ type (
 		stateMachineEnvironment    *stateMachineEnvironment
 		replicationProgressCache   replication.ProgressCache
 		syncStateRetriever         replication.SyncStateRetriever
+		outboundQueueCBPool        *circuitbreakerpool.OutboundQueueCircuitBreakerPool
 	}
 )
 
@@ -179,6 +181,7 @@ func NewEngineWithShardContext(
 	taskCategoryRegistry tasks.TaskCategoryRegistry,
 	dlqWriter replication.DLQWriter,
 	commandHandlerRegistry *workflow.CommandHandlerRegistry,
+	outboundQueueCBPool *circuitbreakerpool.OutboundQueueCircuitBreakerPool,
 ) shard.Engine {
 	currentClusterName := shard.GetClusterMetadata().GetCurrentClusterName()
 
@@ -232,6 +235,7 @@ func NewEngineWithShardContext(
 		},
 		replicationProgressCache: replicationProgressCache,
 		syncStateRetriever:       syncStateRetriever,
+		outboundQueueCBPool:      outboundQueueCBPool,
 	}
 
 	historyEngImpl.queueProcessors = make(map[tasks.Category]queues.Queue)
@@ -514,6 +518,7 @@ func (e *historyEngineImpl) DescribeWorkflowExecution(
 		e.shardContext,
 		e.workflowConsistencyChecker,
 		e.persistenceVisibilityMgr,
+		e.outboundQueueCBPool,
 	)
 }
 
