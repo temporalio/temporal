@@ -198,6 +198,11 @@ func (s *xdcBaseSuite) tearDownSuite() {
 	s.NoError(s.cluster2.TearDownCluster())
 }
 
+func (s *xdcBaseSuite) waitForClusterSynced() {
+	waitForClusterConnected(s.Assertions, s.logger, s.cluster1, s.clusterNames[0], s.clusterNames[1], s.startTime)
+	waitForClusterConnected(s.Assertions, s.logger, s.cluster2, s.clusterNames[1], s.clusterNames[0], s.startTime)
+}
+
 func (s *xdcBaseSuite) setupTest() {
 	// Have to define our overridden assertions in the test setup. If we did it earlier, s.T() will return nil
 	s.Assertions = require.New(s.T())
@@ -205,8 +210,7 @@ func (s *xdcBaseSuite) setupTest() {
 	s.HistoryRequire = historyrequire.New(s.T())
 
 	s.onceClusterConnect.Do(func() {
-		waitForClusterConnected(s.Assertions, s.logger, s.cluster1, s.clusterNames[0], s.clusterNames[1], s.startTime)
-		waitForClusterConnected(s.Assertions, s.logger, s.cluster2, s.clusterNames[1], s.clusterNames[0], s.startTime)
+		s.waitForClusterSynced()
 	})
 }
 
