@@ -1904,6 +1904,30 @@ func (s *mutableStateSuite) TestCloseTransactionUpdateTransition() {
 			},
 			versionedTransitionUpdated: true,
 		},
+		{
+			name: "SignalWorkflow",
+			dbStateMutationFn: func(dbState *persistencespb.WorkflowMutableState) {
+				dbState.BufferedEvents = nil
+			},
+			txFunc: func(ms MutableState) (*persistencespb.WorkflowExecutionInfo, error) {
+				_, err := ms.AddWorkflowExecutionSignaledEvent(
+					"signalName",
+					&commonpb.Payloads{},
+					"identity",
+					&commonpb.Header{},
+					false,
+					nil,
+					nil,
+				)
+
+				mutation, _, err := ms.CloseTransactionAsMutation(TransactionPolicyActive)
+				if err != nil {
+					return nil, err
+				}
+				return mutation.ExecutionInfo, err
+			},
+			versionedTransitionUpdated: true,
+		},
 		// TODO: add a test for flushing buffered events using last event version.
 	}
 
@@ -1926,7 +1950,7 @@ func (s *mutableStateSuite) TestCloseTransactionUpdateTransition() {
 			).Return(cluster.TestCurrentClusterName).AnyTimes()
 			s.mockShard.Resource.ClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 
-			expectedTransitionHistory := s.mutableState.executionInfo.TransitionHistory
+			expectedTransitionHistory := CopyVersionedTransitions(s.mutableState.executionInfo.TransitionHistory)
 			if tc.versionedTransitionUpdated {
 				expectedTransitionHistory = UpdatedTransitionHistory(expectedTransitionHistory, namespaceEntry.FailoverVersion())
 			}
