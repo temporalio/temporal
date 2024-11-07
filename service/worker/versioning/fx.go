@@ -44,10 +44,8 @@ import (
 
 const (
 	DeploymentWorkflowType      = "temporal-sys-deployment-workflow"
+	DeploymentNameWorkflowType  = "temporal-sys-deployment-name-workflow"
 	DeploymentNamespaceDivision = "TemporalDeployment"
-
-	DeploymentNameWorkflowType      = "temporal-sys-deployment-name-workflow"
-	DeploymentNameNamespaceDivision = "TemporalDeploymentName"
 )
 
 var (
@@ -66,7 +64,7 @@ var (
 		searchattribute.WorkflowType,
 		DeploymentNameWorkflowType,
 		searchattribute.TemporalNamespaceDivision,
-		DeploymentNameNamespaceDivision,
+		DeploymentNamespaceDivision,
 		searchattribute.ExecutionStatus,
 		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING.String(),
 	)
