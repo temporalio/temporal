@@ -5339,16 +5339,15 @@ func (ms *MutableStateImpl) closeTransaction(
 	); err != nil {
 		return closeTransactionResult{}, err
 	}
+	ms.closeTransactionHandleUnknownVersionedTransition()
+	ms.closeTransactionTrackLastUpdateVersionedTransition(
+		transactionPolicy,
+	)
 
 	workflowEventsSeq, eventBatches, bufferEvents, clearBuffer, err := ms.closeTransactionPrepareEvents(transactionPolicy)
 	if err != nil {
 		return closeTransactionResult{}, err
 	}
-
-	ms.closeTransactionHandleUnknownVersionedTransition()
-	ms.closeTransactionTrackLastUpdateVersionedTransition(
-		transactionPolicy,
-	)
 
 	ms.closeTransactionTrackTombstones(transactionPolicy)
 
