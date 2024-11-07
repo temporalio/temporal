@@ -52,7 +52,7 @@ import (
 	"go.temporal.io/server/service/worker/dlq"
 	"go.temporal.io/server/service/worker/migration"
 	"go.temporal.io/server/service/worker/scheduler"
-	versioning "go.temporal.io/server/service/worker/versioning"
+	"go.temporal.io/server/service/worker/versioning"
 	"go.uber.org/fx"
 )
 
