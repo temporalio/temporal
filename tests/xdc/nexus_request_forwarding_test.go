@@ -163,10 +163,10 @@ func (s *NexusRequestForwardingSuite) TestStartOperationForwardedFromStandbyToAc
 				}
 			},
 			assertion: func(t *testing.T, result *nexus.ClientStartOperationResult[string], retErr error, activeSnap map[string][]*metricstest.CapturedRecording, passiveSnap map[string][]*metricstest.CapturedRecording) {
-				var unexpectedError *nexus.HandlerError
-				require.ErrorAs(t, retErr, &unexpectedError)
-				require.Equal(t, nexus.HandlerErrorTypeInternal, unexpectedError.Type)
-				require.Equal(t, "deliberate internal failure", unexpectedError.Failure.Message)
+				var handlerErr *nexus.HandlerError
+				require.ErrorAs(t, retErr, &handlerErr)
+				require.Equal(t, nexus.HandlerErrorTypeInternal, handlerErr.Type)
+				require.Equal(t, "deliberate internal failure", handlerErr.Failure.Message)
 				requireExpectedMetricsCaptured(t, activeSnap, ns, "StartNexusOperation", "handler_error")
 				requireExpectedMetricsCaptured(t, passiveSnap, ns, "StartNexusOperation", "forwarded_request_error")
 			},
@@ -183,10 +183,10 @@ func (s *NexusRequestForwardingSuite) TestStartOperationForwardedFromStandbyToAc
 				}
 			},
 			assertion: func(t *testing.T, result *nexus.ClientStartOperationResult[string], retErr error, activeSnap map[string][]*metricstest.CapturedRecording, passiveSnap map[string][]*metricstest.CapturedRecording) {
-				var unexpectedError *nexus.HandlerError
-				require.ErrorAs(t, retErr, &unexpectedError)
-				require.Equal(t, nexus.HandlerErrorTypeUnavailable, unexpectedError.Type)
-				require.Equal(t, "cluster inactive", unexpectedError.Failure.Message)
+				var handlerErr *nexus.HandlerError
+				require.ErrorAs(t, retErr, &handlerErr)
+				require.Equal(t, nexus.HandlerErrorTypeUnavailable, handlerErr.Type)
+				require.Equal(t, "cluster inactive", handlerErr.Failure.Message)
 				requireExpectedMetricsCaptured(t, passiveSnap, ns, "StartNexusOperation", "namespace_inactive_forwarding_disabled")
 			},
 		},
@@ -264,10 +264,10 @@ func (s *NexusRequestForwardingSuite) TestCancelOperationForwardedFromStandbyToA
 				}
 			},
 			assertion: func(t *testing.T, retErr error, activeSnap map[string][]*metricstest.CapturedRecording, passiveSnap map[string][]*metricstest.CapturedRecording) {
-				var unexpectedError *nexus.HandlerError
-				require.ErrorAs(t, retErr, &unexpectedError)
-				require.Equal(t, nexus.HandlerErrorTypeUnavailable, unexpectedError.Type)
-				require.Equal(t, "deliberate internal failure", unexpectedError.Failure.Message)
+				var handlerErr *nexus.HandlerError
+				require.ErrorAs(t, retErr, &handlerErr)
+				require.Equal(t, nexus.HandlerErrorTypeUnavailable, handlerErr.Type)
+				require.Equal(t, "deliberate internal failure", handlerErr.Failure.Message)
 				requireExpectedMetricsCaptured(t, activeSnap, ns, "CancelNexusOperation", "handler_error")
 				requireExpectedMetricsCaptured(t, passiveSnap, ns, "CancelNexusOperation", "forwarded_request_error")
 			},
@@ -284,10 +284,10 @@ func (s *NexusRequestForwardingSuite) TestCancelOperationForwardedFromStandbyToA
 				}
 			},
 			assertion: func(t *testing.T, retErr error, activeSnap map[string][]*metricstest.CapturedRecording, passiveSnap map[string][]*metricstest.CapturedRecording) {
-				var unexpectedError *nexus.HandlerError
-				require.ErrorAs(t, retErr, &unexpectedError)
-				require.Equal(t, nexus.HandlerErrorTypeUnavailable, unexpectedError.Type)
-				require.Equal(t, "cluster inactive", unexpectedError.Failure.Message)
+				var handlerErr *nexus.HandlerError
+				require.ErrorAs(t, retErr, &handlerErr)
+				require.Equal(t, nexus.HandlerErrorTypeUnavailable, handlerErr.Type)
+				require.Equal(t, "cluster inactive", handlerErr.Failure.Message)
 				requireExpectedMetricsCaptured(t, passiveSnap, ns, "CancelNexusOperation", "namespace_inactive_forwarding_disabled")
 			},
 		},
