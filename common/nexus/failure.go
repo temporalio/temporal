@@ -181,7 +181,7 @@ func ConvertGRPCError(err error, exposeDetails bool) error {
 		if !exposeDetails {
 			errMessage = "request timeout"
 		}
-		return nexus.HandlerErrorf(nexus.HandlerErrorTypeUpstreamTimeout, errMessage)
+		return nexus.HandlerErrorf(nexus.HandlerErrorTypeUpstreamTimeout, errMessage) //nolint:govet
 	case codes.OK:
 		return nil
 	}
