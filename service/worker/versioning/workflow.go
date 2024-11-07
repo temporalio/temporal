@@ -22,7 +22,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package deployment
+package versioning
 
 import (
 	"time"
@@ -31,7 +31,6 @@ import (
 	sdkclient "go.temporal.io/sdk/client"
 	sdklog "go.temporal.io/sdk/log"
 	"go.temporal.io/sdk/temporal"
-
 	"go.temporal.io/sdk/workflow"
 )
 
@@ -72,7 +71,10 @@ var (
 	}
 )
 
-const continueAsNewThreshold = 1000
+const (
+	UpdateDeploymentSignalChannelName = "update_deployment"
+	updateBuildIDSignalChannelName    = "update_task_queue_build_id"
+)
 
 func DeploymentWorkflow(ctx workflow.Context, deploymentWorkflowArgs Deployment) error {
 	deploymentWorkflowRunner := &DeploymentWorkflowRunner{
@@ -97,8 +99,8 @@ func (d *DeploymentWorkflowRunner) run() error {
 		return err
 	}
 
-	updateDeploymentSignalChannel := workflow.GetSignalChannel(d.ctx, "update_deployment")
-	updateBuildIDSignalChannel := workflow.GetSignalChannel(d.ctx, "update_task_queue_build_id")
+	updateDeploymentSignalChannel := workflow.GetSignalChannel(d.ctx, UpdateDeploymentSignalChannelName)
+	updateBuildIDSignalChannel := workflow.GetSignalChannel(d.ctx, updateBuildIDSignalChannelName)
 	var signalCount int
 
 	selector := workflow.NewSelector(d.ctx)
@@ -142,7 +144,7 @@ func (d *DeploymentWorkflowRunner) run() error {
 	})
 
 	// async draining before CAN
-	for signalCount < continueAsNewThreshold || selector.HasPending() {
+	for !workflow.GetInfo(d.ctx).GetContinueAsNewSuggested() || selector.HasPending() {
 		selector.Select(d.ctx)
 	}
 
@@ -172,3 +174,5 @@ func (d *DeploymentWorkflowRunner) run() error {
 	return workflow.NewContinueAsNewError(d.ctx, DeploymentWorkflow, d.deployment)
 
 }
+
+// TODO Shivam - Define workflow for DeploymentName

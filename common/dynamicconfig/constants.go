@@ -2533,11 +2533,6 @@ close to or more than the workflow task timeout)`,
 		false,
 		`WorkerEnableDeploymentGroup controls whether to start the worker for deployment and deployment-name workflows`,
 	)
-	DeploymentNamespaceStartWorkflowRPS = NewNamespaceFloatSetting(
-		"worker.deploymentNamespaceStartWorkflowRPS",
-		30.0,
-		`DeploymentNamespaceStartWorkflowRPS is the per-namespace limit for starting deployment and deployment-name workflows`,
-	)
 	WorkerDeleteNamespaceActivityLimits = NewGlobalTypedSetting(
 		"worker.deleteNamespaceActivityLimitsConfig",
 		sdkworker.Options{},

@@ -22,11 +22,10 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package deployment
+package versioning
 
 import (
 	"fmt"
-	"log"
 
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/workflowservice/v1"
@@ -34,6 +33,7 @@ import (
 	"go.temporal.io/sdk/workflow"
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/sdk"
@@ -43,17 +43,30 @@ import (
 )
 
 const (
-	WorkflowType      = "temporal-sys-deployment-workflow"
-	NamespaceDivision = "TemporalDeployment"
+	DeploymentWorkflowType      = "temporal-sys-deployment-workflow"
+	DeploymentNamespaceDivision = "TemporalDeployment"
+
+	DeploymentNameWorkflowType      = "temporal-sys-deployment-name-workflow"
+	DeploymentNameNamespaceDivision = "TemporalDeploymentName"
 )
 
 var (
-	VisibilityBaseListQuery = fmt.Sprintf(
+	DeploymentVisibilityBaseListQuery = fmt.Sprintf(
 		"%s = '%s' AND %s = '%s' AND %s = '%s'",
 		searchattribute.WorkflowType,
-		WorkflowType,
+		DeploymentWorkflowType,
 		searchattribute.TemporalNamespaceDivision,
-		NamespaceDivision,
+		DeploymentNamespaceDivision,
+		searchattribute.ExecutionStatus,
+		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING.String(),
+	)
+
+	DeploymentNameVisibilityBaseListQuery = fmt.Sprintf(
+		"%s = '%s' AND %s = '%s' AND %s = '%s'",
+		searchattribute.WorkflowType,
+		DeploymentNameWorkflowType,
+		searchattribute.TemporalNamespaceDivision,
+		DeploymentNameNamespaceDivision,
 		searchattribute.ExecutionStatus,
 		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING.String(),
 	)
@@ -61,10 +74,9 @@ var (
 
 type (
 	workerComponent struct {
-		activityDeps             activityDeps
-		enabledForNs             dynamicconfig.BoolPropertyFnWithNamespaceFilter
-		globalNSStartWorkflowRPS dynamicconfig.TypedSubscribableWithNamespaceFilter[float64]
-		maxBlobSize              dynamicconfig.IntPropertyFnWithNamespaceFilter
+		activityDeps activityDeps
+		enabledForNs dynamicconfig.BoolPropertyFnWithNamespaceFilter
+		maxBlobSize  dynamicconfig.IntPropertyFnWithNamespaceFilter
 	}
 
 	activityDeps struct {
@@ -92,10 +104,9 @@ func NewResult(
 ) fxResult {
 	return fxResult{
 		Component: &workerComponent{
-			activityDeps:             params,
-			enabledForNs:             dynamicconfig.WorkerEnableDeployment.Get(dc),
-			globalNSStartWorkflowRPS: dynamicconfig.DeploymentNamespaceStartWorkflowRPS.Subscribe(dc),
-			maxBlobSize:              dynamicconfig.BlobSizeLimitError.Get(dc),
+			activityDeps: params,
+			enabledForNs: dynamicconfig.WorkerEnableDeployment.Get(dc),
+			maxBlobSize:  dynamicconfig.BlobSizeLimitError.Get(dc),
 		},
 	}
 }
@@ -107,7 +118,8 @@ func (s *workerComponent) DedicatedWorkerOptions(ns *namespace.Namespace) *worke
 }
 
 func (s *workerComponent) Register(registry sdkworker.Registry, ns *namespace.Namespace, details workercommon.RegistrationDetails) func() {
-	registry.RegisterWorkflowWithOptions(DeploymentWorkflow, workflow.RegisterOptions{Name: WorkflowType})
+	registry.RegisterWorkflowWithOptions(DeploymentWorkflow, workflow.RegisterOptions{Name: DeploymentWorkflowType})
+	// TODO Shivam: Register DeploymentName Workflow
 
 	// TODO Shivam: Might need a cleanup function upon activity registration
 	activities := s.newActivities(ns.Name(), ns.ID())
