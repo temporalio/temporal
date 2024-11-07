@@ -46,6 +46,7 @@ type (
 		BuildID        string
 	}
 	DeploymentName struct {
+		Namespace      string
 		Name           string
 		CurrentBuildID string // denotes the current "default" build-ID of a deploymentName
 	}
@@ -57,6 +58,14 @@ type (
 		a          *activities
 		logger     sdklog.Logger
 		metrics    sdkclient.MetricsHandler
+	}
+	// DeploymentWorkflowRunner holds the local state while running a deployment name workflow
+	DeploymentNameWorkflowRunner struct {
+		deploymentName DeploymentName
+		ctx            workflow.Context
+		a              *activities
+		logger         sdklog.Logger
+		metrics        sdkclient.MetricsHandler
 	}
 )
 
@@ -90,15 +99,9 @@ func DeploymentWorkflow(ctx workflow.Context, deploymentWorkflowArgs Deployment)
 
 func (d *DeploymentWorkflowRunner) run() error {
 
-	// Query Handler
-	err := workflow.SetQueryHandler(d.ctx, "list-task-queues", func(input []byte) ([]*TaskQueue, error) {
-		return d.deployment.TaskQueue, nil
-	})
-	if err != nil {
-		d.logger.Info("SetQueryHandler failed for list-task-queue with the error: " + err.Error())
-		return err
-	}
+	// Set up Query Handlers here:
 
+	// Fetch signal channels
 	updateDeploymentSignalChannel := workflow.GetSignalChannel(d.ctx, UpdateDeploymentSignalChannelName)
 	updateBuildIDSignalChannel := workflow.GetSignalChannel(d.ctx, updateBuildIDSignalChannelName)
 	var signalCount int
@@ -106,41 +109,12 @@ func (d *DeploymentWorkflowRunner) run() error {
 	selector := workflow.NewSelector(d.ctx)
 	selector.AddReceive(updateDeploymentSignalChannel, func(c workflow.ReceiveChannel, more bool) {
 		signalCount++
-		var signalTaskQueue TaskQueue
-		updateDeploymentSignalChannel.Receive(d.ctx, &signalTaskQueue)
-		d.logger.Info("Received Signal to update Deployment!", "signal", signalTaskQueue)
-
 		// Process Signal
-		d.deployment.TaskQueue = append(d.deployment.TaskQueue, &signalTaskQueue)
-
-		// TODO Shivam: Start an entity workflow for DeploymentName:
 
 	})
 	selector.AddReceive(updateBuildIDSignalChannel, func(c workflow.ReceiveChannel, more bool) {
 		signalCount++
 		// Process Signal
-
-		var new_buildID string
-		updateBuildIDSignalChannel.Receive(d.ctx, &new_buildID)
-
-		ctx := workflow.WithActivityOptions(d.ctx, defaultActivityOptions)
-		var updatedTaskQueues []*TaskQueue
-		err := workflow.ExecuteActivity(ctx, d.a.VerifyTaskQueueDefaultBuildID, d.deployment, d.deployment.BuildID).Get(d.ctx, &updatedTaskQueues)
-		if err != nil {
-			d.logger.Error("Task Queue default buildID verification activity failed with error : %s", err.Error())
-			return
-		}
-		// update taskQueue list for the deployment as some task queues might have moved to a different buildID
-		d.deployment.TaskQueue = updatedTaskQueues
-
-		// Updating buildID of the task queues in consideration
-		var res bool
-		err = workflow.ExecuteActivity(ctx, d.a.UpdateTaskQueueDefaultBuildID, d.deployment, new_buildID).Get(d.ctx, &res)
-		if err != nil {
-			d.logger.Error("Task Queue update buildID activity failed with error : %s", err.Error())
-			return
-		}
-
 	})
 
 	// async draining before CAN
@@ -158,16 +132,6 @@ func (d *DeploymentWorkflowRunner) run() error {
 			drain and no futures to wait on. If signals come in faster than processed or futures wait so long there is no idle
 			period, `ContinueAsNew` will not happen in a timely manner and history will grow.
 
-			Since this sample is a long-running workflow, once the request count reaches a certain size, we perform a
-			`ContinueAsNew`. To not lose any data, we only send this if there are no in-flight signal requests or executing
-			activities. An executing activity can mean it is busy retrying. Care must be taken designing these systems where they do
-			not receive requests so frequent that they can never have a idle period to return a `ContinueAsNew`. Signals are usually
-			fast to receive, so they are less of a problem. Waiting on activities (as a response to the request or as a response
-			callback activity) can be a tougher problem. Since we rely on the response of the activity, activity must complete
-			including all retries. Retry policies of these activities should be set balancing the resiliency needs with the need to
-			have a period of idleness at some point.
-
-
 	*/
 
 	d.logger.Debug("Deployment doing continue-as-new")
@@ -176,3 +140,28 @@ func (d *DeploymentWorkflowRunner) run() error {
 }
 
 // TODO Shivam - Define workflow for DeploymentName
+func DeploymentNameWorkflow(ctx workflow.Context, deploymentNameArgs DeploymentName) error {
+	deploymentWorkflowNameRunner := &DeploymentNameWorkflowRunner{
+		deploymentName: deploymentNameArgs,
+		ctx:            ctx,
+		logger:         sdklog.With(workflow.GetLogger(ctx), "wf-namespace", deploymentNameArgs.Namespace),
+		metrics:        workflow.GetMetricsHandler(ctx).WithTags(map[string]string{"namespace": deploymentNameArgs.Namespace}),
+	}
+	// TQ should be set to nil here since signal handler updates it
+	return deploymentWorkflowNameRunner.run()
+}
+
+func (d *DeploymentNameWorkflowRunner) run() error {
+	/* TODO Shivam:
+
+	Implement this workflow to be an infinitely long running workflow
+
+	Query handlers to return current default buildID of the deployment name
+
+	Signal handler(s) to:
+	signal DeploymentWorkflow and update the buildID of all task-queues in the deployment name.
+	update default buildID of the deployment name.
+
+	*/
+	return nil
+}

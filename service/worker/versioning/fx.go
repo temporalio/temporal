@@ -119,7 +119,7 @@ func (s *workerComponent) DedicatedWorkerOptions(ns *namespace.Namespace) *worke
 
 func (s *workerComponent) Register(registry sdkworker.Registry, ns *namespace.Namespace, details workercommon.RegistrationDetails) func() {
 	registry.RegisterWorkflowWithOptions(DeploymentWorkflow, workflow.RegisterOptions{Name: DeploymentWorkflowType})
-	// TODO Shivam: Register DeploymentName Workflow
+	registry.RegisterWorkflowWithOptions(DeploymentNameWorkflow, workflow.RegisterOptions{Name: DeploymentNameWorkflowType})
 
 	// TODO Shivam: Might need a cleanup function upon activity registration
 	activities := s.newActivities(ns.Name(), ns.ID())
