@@ -1205,4 +1205,5 @@ func (s *workflowReplicatorSuite) Test_bringLocalEventsUpToSourceCurrentBranch_C
 	s.NoError(err)
 
 	s.Equal(forkedBranchToken, localVersionHistoryies.Histories[2].BranchToken)
+	s.Equal(int32(2), localVersionHistoryies.CurrentVersionHistoryIndex)
 }

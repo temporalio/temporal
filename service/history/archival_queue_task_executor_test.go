@@ -291,13 +291,13 @@ func TestArchivalQueueTaskExecutor(t *testing.T) {
 		{
 			Name: "close visibility task complete",
 			Configure: func(p *params) {
-				p.CloseVisibilityTaskCompleted = true
+				p.RelocatableAttributesRemoved = true
 			},
 		},
 		{
 			Name: "get workflow execution from visibility error",
 			Configure: func(p *params) {
-				p.CloseVisibilityTaskCompleted = true
+				p.RelocatableAttributesRemoved = true
 				p.GetWorkflowExecutionError = errors.New("get workflow execution error")
 				p.ExpectedErrorSubstrings = []string{"get workflow execution error"}
 				p.ExpectArchive = false
@@ -431,7 +431,7 @@ func TestArchivalQueueTaskExecutor(t *testing.T) {
 					NamespaceId:                  tests.NamespaceID.String(),
 					ExecutionTime:                timestamppb.New(p.ExecutionTime),
 					CloseTime:                    timestamppb.New(p.CloseTime),
-					CloseVisibilityTaskCompleted: p.CloseVisibilityTaskCompleted,
+					RelocatableAttributesRemoved: p.RelocatableAttributesRemoved,
 				}
 				mutableState.EXPECT().GetExecutionInfo().Return(executionInfo).AnyTimes()
 				executionState := &persistence.WorkflowExecutionState{
@@ -505,7 +505,7 @@ func TestArchivalQueueTaskExecutor(t *testing.T) {
 			}
 
 			visibilityManager := manager.NewMockVisibilityManager(p.Controller)
-			if p.CloseVisibilityTaskCompleted {
+			if p.RelocatableAttributesRemoved {
 				visibilityManager.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(
 					&manager.GetWorkflowExecutionResponse{Execution: &workflowpb.WorkflowExecutionInfo{
 						Memo:             nil,
@@ -519,7 +519,7 @@ func TestArchivalQueueTaskExecutor(t *testing.T) {
 				a,
 				shardContext,
 				workflowCache,
-				workflow.RelocatableAttributesFetcherProvider(visibilityManager),
+				workflow.RelocatableAttributesFetcherProvider(shardContext.GetConfig(), visibilityManager),
 				p.MetricsHandler,
 				logger,
 			)
@@ -584,7 +584,7 @@ type params struct {
 	GetWorkflowCloseTimeError          error
 	GetWorkflowExecutionDurationError  error
 	GetCurrentBranchTokenError         error
-	CloseVisibilityTaskCompleted       bool
+	RelocatableAttributesRemoved       bool
 	ExpectGetWorkflowExecution         bool
 	GetWorkflowExecutionError          error
 	LoadMutableStateError              error

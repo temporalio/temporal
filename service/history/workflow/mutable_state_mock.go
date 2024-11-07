@@ -2878,6 +2878,20 @@ func (mr *MockMutableStateMockRecorder) RefreshExpirationTimeoutTask(ctx any) *g
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RefreshExpirationTimeoutTask", reflect.TypeOf((*MockMutableState)(nil).RefreshExpirationTimeoutTask), ctx)
 }
 
+// RegenerateActivityRetryTask mocks base method.
+func (m *MockMutableState) RegenerateActivityRetryTask(ai *persistence.ActivityInfo) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "RegenerateActivityRetryTask", ai)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// RegenerateActivityRetryTask indicates an expected call of RegenerateActivityRetryTask.
+func (mr *MockMutableStateMockRecorder) RegenerateActivityRetryTask(ai any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RegenerateActivityRetryTask", reflect.TypeOf((*MockMutableState)(nil).RegenerateActivityRetryTask), ai)
+}
+
 // RejectWorkflowExecutionUpdate mocks base method.
 func (m *MockMutableState) RejectWorkflowExecutionUpdate(protocolInstanceID string, updRejection *update.Rejection) error {
 	m.ctrl.T.Helper()
@@ -3145,6 +3159,18 @@ func (m *MockMutableState) UpdateDuplicatedResource(resourceDedupKey definition.
 func (mr *MockMutableStateMockRecorder) UpdateDuplicatedResource(resourceDedupKey any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateDuplicatedResource", reflect.TypeOf((*MockMutableState)(nil).UpdateDuplicatedResource), resourceDedupKey)
+}
+
+// UpdateResetRunID mocks base method.
+func (m *MockMutableState) UpdateResetRunID(runID string) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "UpdateResetRunID", runID)
+}
+
+// UpdateResetRunID indicates an expected call of UpdateResetRunID.
+func (mr *MockMutableStateMockRecorder) UpdateResetRunID(runID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateResetRunID", reflect.TypeOf((*MockMutableState)(nil).UpdateResetRunID), runID)
 }
 
 // UpdateUserTimer mocks base method.

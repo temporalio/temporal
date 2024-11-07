@@ -46,12 +46,15 @@ func TestArchivalQueueFactory(t *testing.T) {
 	defer ctrl.Finish()
 
 	metricsHandler := metrics.NewMockHandler(ctrl)
-	metricsHandler.EXPECT().WithTags(gomock.Any()).Do(func(tags ...metrics.Tag) metrics.Handler {
-		require.Len(t, tags, 1)
-		assert.Equal(t, metrics.OperationTagName, tags[0].Key())
-		assert.Equal(t, "ArchivalQueueProcessor", tags[0].Value())
-		return metricsHandler
-	}).Times(1)
+	metricsHandler.EXPECT().WithTags(gomock.Any()).DoAndReturn(
+		func(tags ...metrics.Tag) metrics.Handler {
+			require.Len(t, tags, 1)
+			assert.Equal(t, metrics.OperationTagName, tags[0].Key())
+			assert.Equal(t, "ArchivalQueueProcessor", tags[0].Value())
+			return metricsHandler
+		},
+	).Times(1)
+	metricsHandler.EXPECT().WithTags(gomock.Any()).Return(metricsHandler).Times(1)
 
 	mockShard := shard.NewTestContext(
 		ctrl,

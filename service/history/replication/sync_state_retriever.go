@@ -418,7 +418,7 @@ func (s *SyncStateRetrieverImpl) getEventsBlob(
 				break
 			}
 			left := endEventId - startEventId
-			if !isNewRun && int64(len(xdcCacheValue.EventBlobs)) >= left {
+			if !isNewRun && int64(len(xdcCacheValue.EventBlobs)) > left {
 				s.logger.Error(
 					fmt.Sprintf("xdc cached events are truncated, want [%d, %d), got [%d, %d) from cache",
 						startEventId, endEventId, startEventId, xdcCacheValue.NextEventID),

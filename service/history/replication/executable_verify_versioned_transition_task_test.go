@@ -332,11 +332,12 @@ func (s *executableVerifyVersionedTransitionTaskSuite) TestExecute_CurrentBranch
 
 	mu := workflow.NewMockMutableState(s.controller)
 	mu.EXPECT().GetNextEventID().Return(taskNextEvent).AnyTimes()
+	transitionHistory := []*persistencepb.VersionedTransition{
+		{NamespaceFailoverVersion: 1, TransitionCount: 3},
+		{NamespaceFailoverVersion: 3, TransitionCount: 6},
+	}
 	mu.EXPECT().GetExecutionInfo().Return(&persistencepb.WorkflowExecutionInfo{
-		TransitionHistory: []*persistencepb.VersionedTransition{
-			{NamespaceFailoverVersion: 1, TransitionCount: 3},
-			{NamespaceFailoverVersion: 3, TransitionCount: 6},
-		},
+		TransitionHistory: transitionHistory,
 	}).AnyTimes()
 
 	s.mockGetMutableState(s.namespaceID, s.workflowID, s.runID, mu, nil)
@@ -353,6 +354,7 @@ func (s *executableVerifyVersionedTransitionTaskSuite) TestExecute_CurrentBranch
 
 	err := task.Execute()
 	s.IsType(&serviceerrors.SyncState{}, err)
+	s.Equal(transitionHistory[1], err.(*serviceerrors.SyncState).VersionedTransition)
 }
 
 func (s *executableVerifyVersionedTransitionTaskSuite) TestExecute_NonCurrentBranch_VerifySuccess() {

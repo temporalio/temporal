@@ -741,11 +741,23 @@ func (c *ContextImpl) mergeUpdateWithNewReplicationTasks(
 	// so that they can be applied transactionally in the standby cluster.
 	// TODO: this logic should be more generic so that the first replication task
 	// in the new run doesn't have to be HistoryReplicationTask
-	newRunTask := newWorkflowSnapshot.Tasks[tasks.CategoryReplication][0].(*tasks.HistoryReplicationTask)
+	var newRunBranchToken []byte
+	var newRunID string
+	newRunTask := newWorkflowSnapshot.Tasks[tasks.CategoryReplication][0]
 	delete(newWorkflowSnapshot.Tasks, tasks.CategoryReplication)
 
-	newRunBranchToken := newRunTask.BranchToken
-	newRunID := newRunTask.RunID
+	switch task := newRunTask.(type) {
+	case *tasks.HistoryReplicationTask:
+		// Handle HistoryReplicationTask specifically
+		newRunBranchToken = task.BranchToken
+		newRunID = task.RunID
+	case *tasks.SyncVersionedTransitionTask:
+		// Handle SyncVersionedTransitionTask specifically
+		newRunID = task.RunID
+	default:
+		// Handle unexpected types or log an error if this case is not expected
+		return serviceerror.NewInternal(fmt.Sprintf("unexpected replication task type for new run task %T", newRunTask))
+	}
 	taskUpdated := false
 
 	updateTask := func(task interface{}) bool {

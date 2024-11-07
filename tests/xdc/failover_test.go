@@ -50,8 +50,6 @@ import (
 	"go.temporal.io/sdk/temporal"
 	sdkworker "go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
-	"google.golang.org/protobuf/types/known/durationpb"
-
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/convert"
@@ -61,6 +59,7 @@ import (
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/service/worker/migration"
 	"go.temporal.io/server/tests/testcore"
+	"google.golang.org/protobuf/types/known/durationpb"
 )
 
 type (
@@ -2233,7 +2232,7 @@ func (s *FunctionalClustersTestSuite) TestWorkflowRetryFailAndFailover() {
 
 func (s *FunctionalClustersTestSuite) TestActivityHeartbeatFailover() {
 	namespace := "test-activity-heartbeat-workflow-failover-" + common.GenerateRandomString(5)
-	s.registerNamespace(namespace, true)
+	s.registerNamespace(namespace, true, true)
 
 	taskqueue := "functional-activity-heartbeat-workflow-failover-test-taskqueue"
 	client1, worker1 := s.newClientAndWorker(s.cluster1.Host().FrontendGRPCAddress(), namespace, taskqueue, "worker1")
@@ -2353,7 +2352,7 @@ func (s *FunctionalClustersTestSuite) TestLocalNamespaceMigration() {
 	defer cancel()
 
 	namespace := "local-ns-to-be-promote-" + common.GenerateRandomString(5)
-	s.registerNamespace(namespace, false)
+	s.registerNamespace(namespace, false, false)
 
 	taskqueue := "functional-local-ns-to-be-promote-taskqueue"
 	client1, worker1 := s.newClientAndWorker(s.cluster1.Host().FrontendGRPCAddress(), namespace, taskqueue, "worker1")
@@ -2709,7 +2708,7 @@ func (s *FunctionalClustersTestSuite) TestForceMigration_ClosedWorkflow() {
 	defer cancel()
 
 	namespace := "force-replication" + common.GenerateRandomString(5)
-	s.registerNamespace(namespace, true)
+	s.registerNamespace(namespace, true, false)
 
 	taskqueue := "functional-local-force-replication-task-queue"
 	client1, worker1 := s.newClientAndWorker(s.cluster1.Host().FrontendGRPCAddress(), namespace, taskqueue, "worker1")
@@ -2835,7 +2834,7 @@ func (s *FunctionalClustersTestSuite) TestForceMigration_ResetWorkflow() {
 	defer cancel()
 
 	namespace := "force-replication" + common.GenerateRandomString(5)
-	s.registerNamespace(namespace, true)
+	s.registerNamespace(namespace, true, false)
 
 	taskqueue := "functional-force-replication-reset-task-queue"
 	client1, worker1 := s.newClientAndWorker(s.cluster1.Host().FrontendGRPCAddress(), namespace, taskqueue, "worker1")
@@ -2958,9 +2957,9 @@ func (s *FunctionalClustersTestSuite) getHistory(client workflowservice.Workflow
 	return events
 }
 
-func (s *FunctionalClustersTestSuite) registerNamespace(namespace string, isGlobalNamespace bool) {
+func (s *FunctionalClustersTestSuite) registerNamespace(namespace string, isGlobalNamespace, initialReplicated bool) {
 	clusters := s.clusterReplicationConfig()
-	if !isGlobalNamespace {
+	if !isGlobalNamespace || !initialReplicated {
 		clusters = s.clusterReplicationConfig()[0:1]
 	}
 	client1 := s.cluster1.FrontendClient() // active
