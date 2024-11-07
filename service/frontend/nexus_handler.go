@@ -383,9 +383,6 @@ func (h *nexusHandler) StartOperation(
 		oc.nexusContext.responseHeadersMutex.Lock()
 		defer oc.nexusContext.responseHeadersMutex.Unlock()
 
-		if oc.responseHeaders == nil {
-			oc.responseHeaders = make(map[string]string)
-		}
 		oc.responseHeaders[nexusFailureSourceHeaderName] = failureSourceWorker
 
 		err := h.convertOutcomeToNexusHandlerError(t)
@@ -425,9 +422,6 @@ func (h *nexusHandler) StartOperation(
 			oc.nexusContext.responseHeadersMutex.Lock()
 			defer oc.nexusContext.responseHeadersMutex.Unlock()
 
-			if oc.responseHeaders == nil {
-				oc.responseHeaders = make(map[string]string)
-			}
 			oc.responseHeaders[nexusFailureSourceHeaderName] = failureSourceWorker
 
 			err := &nexus.UnsuccessfulOperationError{
@@ -442,9 +436,6 @@ func (h *nexusHandler) StartOperation(
 	oc.nexusContext.responseHeadersMutex.Lock()
 	defer oc.nexusContext.responseHeadersMutex.Unlock()
 
-	if oc.responseHeaders == nil {
-		oc.responseHeaders = make(map[string]string)
-	}
 	oc.responseHeaders[nexusFailureSourceHeaderName] = failureSourceWorker
 
 	return nil, nexus.HandlerErrorf(nexus.HandlerErrorTypeInternal, "empty outcome")
@@ -526,9 +517,6 @@ func (h *nexusHandler) CancelOperation(ctx context.Context, service, operation, 
 		oc.nexusContext.responseHeadersMutex.Lock()
 		defer oc.nexusContext.responseHeadersMutex.Unlock()
 
-		if oc.responseHeaders == nil {
-			oc.responseHeaders = make(map[string]string)
-		}
 		oc.responseHeaders[nexusFailureSourceHeaderName] = failureSourceWorker
 
 		err := h.convertOutcomeToNexusHandlerError(t)
@@ -543,9 +531,6 @@ func (h *nexusHandler) CancelOperation(ctx context.Context, service, operation, 
 	oc.nexusContext.responseHeadersMutex.Lock()
 	defer oc.nexusContext.responseHeadersMutex.Unlock()
 
-	if oc.responseHeaders == nil {
-		oc.responseHeaders = make(map[string]string)
-	}
 	oc.responseHeaders[nexusFailureSourceHeaderName] = failureSourceWorker
 
 	return nexus.HandlerErrorf(nexus.HandlerErrorTypeInternal, "empty outcome")
@@ -600,9 +585,6 @@ func (h *nexusHandler) nexusClientForActiveCluster(oc *operationContext, service
 			oc.nexusContext.responseHeadersMutex.Lock()
 			defer oc.nexusContext.responseHeadersMutex.Unlock()
 
-			if oc.responseHeaders == nil {
-				oc.responseHeaders = make(map[string]string)
-			}
 			oc.responseHeaders[nexusFailureSourceHeaderName] = failureSource
 		}
 

@@ -575,9 +575,9 @@ func (e taskExecutor) saveCancelationResult(ctx context.Context, env hsm.Environ
 	return env.Access(ctx, ref, hsm.AccessWrite, func(n *hsm.Node) error {
 		return hsm.MachineTransition(n, func(c Cancelation) (hsm.TransitionOutput, error) {
 			if callErr != nil {
-				var unexpectedResponseErr *nexus.HandlerError
-				if errors.As(callErr, &unexpectedResponseErr) {
-					if !isRetryableHandlerError(unexpectedResponseErr.Type) {
+				var handlerErr *nexus.HandlerError
+				if errors.As(callErr, &handlerErr) {
+					if !isRetryableHandlerError(handlerErr.Type) {
 						return TransitionCancelationFailed.Apply(c, EventCancelationFailed{
 							Time: env.Now(),
 							Err:  callErr,
@@ -664,13 +664,13 @@ func startCallOutcomeTag(callCtx context.Context, result *nexus.ClientStartOpera
 }
 
 func cancelCallOutcomeTag(callCtx context.Context, callErr error) string {
-	var unexpectedResponseError *nexus.UnexpectedResponseError
+	var handlerErr *nexus.HandlerError
 	if callErr != nil {
 		if callCtx.Err() != nil {
 			return "request-timeout"
 		}
-		if errors.As(callErr, &unexpectedResponseError) {
-			return fmt.Sprintf("request-error:%d", unexpectedResponseError.Response.StatusCode)
+		if errors.As(callErr, &handlerErr) {
+			return fmt.Sprintf("handler-error:%s", handlerErr.Type)
 		}
 		return "unknown-error"
 	}

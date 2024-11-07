@@ -267,9 +267,21 @@ func (h *completionHandler) forwardCompleteOperation(ctx context.Context, r *nex
 	err = json.Unmarshal(body, &failure)
 	if err != nil {
 		h.Logger.Error("failed to deserialize Nexus Failure from HTTP response to forwarded request", tag.Operation(apiName), tag.WorkflowNamespace(rCtx.namespace.Name().String()), tag.Error(err))
+		return nexus.HandlerErrorf(nexus.HandlerErrorTypeInternal, "internal error")
 	}
 
-	return nexus.HandlerErrorf(nexus.HandlerErrorTypeInternal, "internal error")
+	// TODO: Upgrade Nexus SDK in order to reduce HTTP exposure
+	handlerErr := &nexus.HandlerError{
+		Type:    commonnexus.HandlerErrorTypeFromHTTPStatus(resp.StatusCode),
+		Failure: &failure,
+	}
+
+	if handlerErr.Type == nexus.HandlerErrorTypeInternal && resp.StatusCode != http.StatusInternalServerError {
+		h.Logger.Warn("received unknown status code on Nexus client unexpected response error", tag.Value(resp.StatusCode))
+		handlerErr.Failure.Message = "internal error"
+	}
+
+	return handlerErr
 }
 
 // readAndReplaceBody reads the response body in its entirety and closes it, and then replaces the original response
