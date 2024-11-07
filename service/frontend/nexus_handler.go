@@ -380,10 +380,7 @@ func (h *nexusHandler) StartOperation(
 	case *matchingservice.DispatchNexusTaskResponse_HandlerError:
 		oc.metricsHandler = oc.metricsHandler.WithTags(metrics.OutcomeTag("handler_error"))
 
-		oc.nexusContext.responseHeadersMutex.Lock()
-		defer oc.nexusContext.responseHeadersMutex.Unlock()
-
-		oc.responseHeaders[nexusFailureSourceHeaderName] = failureSourceWorker
+		oc.nexusContext.setFailureSource(failureSourceWorker)
 
 		err := h.convertOutcomeToNexusHandlerError(t)
 		return nil, err
@@ -419,10 +416,8 @@ func (h *nexusHandler) StartOperation(
 
 		case *nexuspb.StartOperationResponse_OperationError:
 			oc.metricsHandler = oc.metricsHandler.WithTags(metrics.OutcomeTag("operation_error"))
-			oc.nexusContext.responseHeadersMutex.Lock()
-			defer oc.nexusContext.responseHeadersMutex.Unlock()
 
-			oc.responseHeaders[nexusFailureSourceHeaderName] = failureSourceWorker
+			oc.nexusContext.setFailureSource(failureSourceWorker)
 
 			err := &nexus.UnsuccessfulOperationError{
 				State:   nexus.OperationState(t.OperationError.GetOperationState()),
@@ -433,10 +428,8 @@ func (h *nexusHandler) StartOperation(
 	}
 	// This is the worker's fault.
 	oc.metricsHandler = oc.metricsHandler.WithTags(metrics.OutcomeTag("handler_error"))
-	oc.nexusContext.responseHeadersMutex.Lock()
-	defer oc.nexusContext.responseHeadersMutex.Unlock()
 
-	oc.responseHeaders[nexusFailureSourceHeaderName] = failureSourceWorker
+	oc.nexusContext.setFailureSource(failureSourceWorker)
 
 	return nil, nexus.HandlerErrorf(nexus.HandlerErrorTypeInternal, "empty outcome")
 }
@@ -514,10 +507,7 @@ func (h *nexusHandler) CancelOperation(ctx context.Context, service, operation, 
 	case *matchingservice.DispatchNexusTaskResponse_HandlerError:
 		oc.metricsHandler = oc.metricsHandler.WithTags(metrics.OutcomeTag("handler_error"))
 
-		oc.nexusContext.responseHeadersMutex.Lock()
-		defer oc.nexusContext.responseHeadersMutex.Unlock()
-
-		oc.responseHeaders[nexusFailureSourceHeaderName] = failureSourceWorker
+		oc.nexusContext.setFailureSource(failureSourceWorker)
 
 		err := h.convertOutcomeToNexusHandlerError(t)
 		return err
@@ -528,10 +518,7 @@ func (h *nexusHandler) CancelOperation(ctx context.Context, service, operation, 
 	// This is the worker's fault.
 	oc.metricsHandler = oc.metricsHandler.WithTags(metrics.OutcomeTag("handler_error"))
 
-	oc.nexusContext.responseHeadersMutex.Lock()
-	defer oc.nexusContext.responseHeadersMutex.Unlock()
-
-	oc.responseHeaders[nexusFailureSourceHeaderName] = failureSourceWorker
+	oc.nexusContext.setFailureSource(failureSourceWorker)
 
 	return nexus.HandlerErrorf(nexus.HandlerErrorTypeInternal, "empty outcome")
 }
@@ -582,10 +569,7 @@ func (h *nexusHandler) nexusClientForActiveCluster(oc *operationContext, service
 		}
 
 		if failureSource := response.Header.Get(nexusFailureSourceHeaderName); failureSource != "" {
-			oc.nexusContext.responseHeadersMutex.Lock()
-			defer oc.nexusContext.responseHeadersMutex.Unlock()
-
-			oc.responseHeaders[nexusFailureSourceHeaderName] = failureSource
+			oc.nexusContext.setFailureSource(failureSource)
 		}
 
 		return response, nil
@@ -631,4 +615,10 @@ func (h *nexusHandler) convertOutcomeToNexusHandlerError(resp *matchingservice.D
 		h.logger.Warn("received unknown or unset Nexus handler error type", tag.Value(handlerError.Type))
 		return nexus.HandlerErrorf(nexus.HandlerErrorTypeInternal, "internal error")
 	}
+}
+
+func (nc *nexusContext) setFailureSource(source string) {
+	nc.responseHeadersMutex.Lock()
+	defer nc.responseHeadersMutex.Unlock()
+	nc.responseHeaders[nexusFailureSourceHeaderName] = source
 }
