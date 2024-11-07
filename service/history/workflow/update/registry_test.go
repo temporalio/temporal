@@ -493,8 +493,7 @@ func TestRejectUnprocessed(t *testing.T) {
 	)
 
 	t.Run("empty registry has no updates to reject", func(t *testing.T) {
-		rejectedIDs, err := reg.RejectUnprocessed(context.Background(), evStore)
-		require.NoError(t, err)
+		rejectedIDs := reg.RejectUnprocessed(context.Background(), evStore)
 		require.Empty(t, rejectedIDs)
 	})
 
@@ -505,8 +504,7 @@ func TestRejectUnprocessed(t *testing.T) {
 		upd2, _, err = reg.FindOrCreate(context.Background(), tv.UpdateID("2"))
 		require.NoError(t, err)
 
-		rejectedIDs, err := reg.RejectUnprocessed(context.Background(), evStore)
-		require.NoError(t, err)
+		rejectedIDs := reg.RejectUnprocessed(context.Background(), evStore)
 		require.Empty(t, rejectedIDs)
 	})
 
@@ -514,8 +512,7 @@ func TestRejectUnprocessed(t *testing.T) {
 		mustAdmit(t, evStore, upd1)
 		mustAdmit(t, evStore, upd2)
 
-		rejectedIDs, err := reg.RejectUnprocessed(context.Background(), evStore)
-		require.NoError(t, err)
+		rejectedIDs := reg.RejectUnprocessed(context.Background(), evStore)
 		require.Empty(t, rejectedIDs)
 	})
 
@@ -523,13 +520,11 @@ func TestRejectUnprocessed(t *testing.T) {
 		t.Helper()
 		require.NotNil(t, send(t, upd1, includeAlreadySent), "update should be sent")
 
-		rejectedIDs, err := reg.RejectUnprocessed(context.Background(), evStore)
-		require.NoError(t, err)
+		rejectedIDs := reg.RejectUnprocessed(context.Background(), evStore)
 		require.Len(t, rejectedIDs, 1, "only update #1 in stateSent should be rejected")
 		require.Equal(t, rejectedIDs[0], upd1.ID(), "update #1 should be rejected")
 
-		rejectedIDs, err = reg.RejectUnprocessed(context.Background(), evStore)
-		require.NoError(t, err)
+		rejectedIDs = reg.RejectUnprocessed(context.Background(), evStore)
 		require.Empty(t, rejectedIDs, "rejected update #1 should not be rejected again")
 	})
 
@@ -538,8 +533,7 @@ func TestRejectUnprocessed(t *testing.T) {
 		require.NotNil(t, send(t, upd2, includeAlreadySent), "update should be sent")
 		mustAccept(t, evStore, upd2)
 
-		rejectedIDs, err := reg.RejectUnprocessed(context.Background(), evStore)
-		require.NoError(t, err)
+		rejectedIDs := reg.RejectUnprocessed(context.Background(), evStore)
 		require.Empty(t, rejectedIDs)
 	})
 
@@ -548,8 +542,7 @@ func TestRejectUnprocessed(t *testing.T) {
 		require.NoError(t, respondSuccess(t, evStore, upd2), "update should be completed")
 		assertCompleted(t, upd2, successOutcome)
 
-		rejectedIDs, err := reg.RejectUnprocessed(context.Background(), evStore)
-		require.NoError(t, err)
+		rejectedIDs := reg.RejectUnprocessed(context.Background(), evStore)
 		require.Empty(t, rejectedIDs)
 	})
 }
