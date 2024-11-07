@@ -684,6 +684,14 @@ func isRetryableHandlerError(eType nexus.HandlerErrorType) bool {
 	case nexus.HandlerErrorTypeUnavailable:
 	case nexus.HandlerErrorTypeUpstreamTimeout:
 		return true
+	case nexus.HandlerErrorTypeBadRequest:
+	case nexus.HandlerErrorTypeUnauthenticated:
+	case nexus.HandlerErrorTypeUnauthorized:
+	case nexus.HandlerErrorTypeNotFound:
+	case nexus.HandlerErrorTypeNotImplemented:
+		return false
+	default:
+		return false
 	}
 
 	return false
