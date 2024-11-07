@@ -5500,6 +5500,10 @@ func (ms *MutableStateImpl) closeTransactionTrackLastUpdateVersionedTransition(
 		// transition history is not enabled
 		return
 	}
+	// transaction closed without any state change
+	if len(ms.executionInfo.TransitionHistory) == 0 {
+		return
+	}
 
 	transitionHistory := ms.executionInfo.TransitionHistory
 	currentVersionedTransition := transitionHistory[len(transitionHistory)-1]
