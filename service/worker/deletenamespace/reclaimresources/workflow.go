@@ -161,22 +161,28 @@ func deleteWorkflowExecutions(ctx workflow.Context, params ReclaimResourcesParam
 	var result ReclaimResourcesResult
 
 	ctx1 := workflow.WithLocalActivityOptions(ctx, localActivityOptions)
-	var isAdvancedVisibility bool
-	err := workflow.ExecuteLocalActivity(ctx1, la.IsAdvancedVisibilityActivity, params.Namespace).Get(ctx, &isAdvancedVisibility)
-	if err != nil {
-		return result, fmt.Errorf("%w: IsAdvancedVisibilityActivity: %v", errors.ErrUnableToExecuteActivity, err)
+
+	// TODO: remove this code branch after v1.26 release
+	v := workflow.GetVersion(ctx, "remove-std-vis", workflow.DefaultVersion, 0)
+	if v == workflow.DefaultVersion {
+		// Standard visibility was removed from server codebase since v1.24 release. We don't need to call this local
+		// activity to know if it is advanced visibility, we know it is true. However, we need to keep it here so that
+		// it can replay workflow history generated before this change.
+		var isAdvancedVisibility bool
+		err := workflow.ExecuteLocalActivity(ctx1, la.IsAdvancedVisibilityActivity, params.Namespace).Get(ctx, &isAdvancedVisibility)
+		if err != nil {
+			return result, fmt.Errorf("%w: IsAdvancedVisibilityActivity: %v", errors.ErrUnableToExecuteActivity, err)
+		}
 	}
 
-	if isAdvancedVisibility {
-		ctx4 := workflow.WithLocalActivityOptions(ctx, localActivityOptions)
-		var executionsCount int64
-		err = workflow.ExecuteLocalActivity(ctx4, la.CountExecutionsAdvVisibilityActivity, params.NamespaceID, params.Namespace).Get(ctx, &executionsCount)
-		if err != nil {
-			return result, fmt.Errorf("%w: CountExecutionsAdvVisibilityActivity: %v", errors.ErrUnableToExecuteActivity, err)
-		}
-		if executionsCount == 0 {
-			return result, nil
-		}
+	ctx4 := workflow.WithLocalActivityOptions(ctx, localActivityOptions)
+	var executionsCount int64
+	err := workflow.ExecuteLocalActivity(ctx4, la.CountExecutionsAdvVisibilityActivity, params.NamespaceID, params.Namespace).Get(ctx, &executionsCount)
+	if err != nil {
+		return result, fmt.Errorf("%w: CountExecutionsAdvVisibilityActivity: %v", errors.ErrUnableToExecuteActivity, err)
+	}
+	if executionsCount == 0 {
+		return result, nil
 	}
 
 	ctx2 := workflow.WithChildOptions(ctx, deleteExecutionsWorkflowOptions)
@@ -190,13 +196,8 @@ func deleteWorkflowExecutions(ctx workflow.Context, params ReclaimResourcesParam
 	result.DeleteSuccessCount = der.SuccessCount
 	result.DeleteErrorCount = der.ErrorCount
 
-	if isAdvancedVisibility {
-		ctx3 := workflow.WithActivityOptions(ctx, ensureNoExecutionsAdvVisibilityActivityOptions)
-		err = workflow.ExecuteActivity(ctx3, a.EnsureNoExecutionsAdvVisibilityActivity, params.NamespaceID, params.Namespace, der.ErrorCount).Get(ctx, nil)
-	} else {
-		ctx3 := workflow.WithActivityOptions(ctx, ensureNoExecutionsStdVisibilityOptionsActivity)
-		err = workflow.ExecuteActivity(ctx3, a.EnsureNoExecutionsStdVisibilityActivity, params.NamespaceID, params.Namespace).Get(ctx, nil)
-	}
+	ctx3 := workflow.WithActivityOptions(ctx, ensureNoExecutionsAdvVisibilityActivityOptions)
+	err = workflow.ExecuteActivity(ctx3, a.EnsureNoExecutionsAdvVisibilityActivity, params.NamespaceID, params.Namespace, der.ErrorCount).Get(ctx, nil)
 	if err != nil {
 		var appErr *temporal.ApplicationError
 		if stderrors.As(err, &appErr) {

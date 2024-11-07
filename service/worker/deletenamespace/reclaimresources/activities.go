@@ -34,11 +34,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
-	"go.temporal.io/server/common/persistence/sql/sqlplugin/mysql"
-	"go.temporal.io/server/common/persistence/sql/sqlplugin/postgresql"
-	"go.temporal.io/server/common/persistence/sql/sqlplugin/sqlite"
 	"go.temporal.io/server/common/persistence/visibility/manager"
-	"go.temporal.io/server/common/persistence/visibility/store/elasticsearch"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/service/worker/deletenamespace/errors"
 )
@@ -85,12 +81,7 @@ func NewLocalActivities(
 }
 
 func (a *LocalActivities) IsAdvancedVisibilityActivity(_ context.Context, nsName namespace.Name) (bool, error) {
-	switch a.visibilityManager.GetReadStoreName(nsName) {
-	case elasticsearch.PersistenceName, mysql.PluginName, postgresql.PluginName, postgresql.PluginNamePGX, sqlite.PluginName:
-		return true, nil
-	default:
-		return false, nil
-	}
+	return true, nil
 }
 
 func (a *LocalActivities) CountExecutionsAdvVisibilityActivity(ctx context.Context, nsID namespace.ID, nsName namespace.Name) (int64, error) {
@@ -158,36 +149,6 @@ func (a *Activities) EnsureNoExecutionsAdvVisibilityActivity(ctx context.Context
 	if notDeletedCount > 0 {
 		a.logger.Warn("Some workflow executions were not deleted and still exist.", tag.WorkflowNamespace(nsName.String()), tag.Counter(notDeletedCount))
 		return errors.NewNotDeletedExecutionsStillExistError(notDeletedCount)
-	}
-
-	a.logger.Info("All workflow executions are deleted successfully.", tag.WorkflowNamespace(nsName.String()))
-	return nil
-}
-
-func (a *Activities) EnsureNoExecutionsStdVisibilityActivity(ctx context.Context, nsID namespace.ID, nsName namespace.Name) error {
-	// Standard visibility does not support CountWorkflowExecutions but only supports ListWorkflowExecutions.
-	// To prevent read of many records from DB, set PageSize to 1 and use this single record as indicator of workflow executions existence.
-	// Unfortunately, this doesn't allow to report progress and retry is limited only by timeout.
-	// TODO: remove this activity after CountWorkflowExecutions is implemented in standard visibility.
-
-	ctx = headers.SetCallerName(ctx, nsName.String())
-
-	req := &manager.ListWorkflowExecutionsRequestV2{
-		NamespaceID: nsID,
-		Namespace:   nsName,
-		PageSize:    1,
-		Query:       searchattribute.QueryWithAnyNamespaceDivision(""),
-	}
-	resp, err := a.visibilityManager.ListWorkflowExecutions(ctx, req)
-	if err != nil {
-		metrics.ListExecutionsFailuresCount.With(a.metricsHandler).Record(1)
-		a.logger.Error("Unable to count workflow executions using list.", tag.WorkflowNamespace(nsName.String()), tag.Error(err))
-		return err
-	}
-
-	if len(resp.Executions) > 0 {
-		a.logger.Warn("Some workflow executions still exist.", tag.WorkflowNamespace(nsName.String()))
-		return errors.NewSomeExecutionsStillExistError()
 	}
 
 	a.logger.Info("All workflow executions are deleted successfully.", tag.WorkflowNamespace(nsName.String()))
