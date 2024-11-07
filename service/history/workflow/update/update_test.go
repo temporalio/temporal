@@ -58,8 +58,8 @@ var (
 	rejectionOutcome = &updatepb.Outcome{Value: &updatepb.Outcome_Failure{Failure: rejectionFailure}}
 	failureOutcome   = &updatepb.Outcome{Value: &updatepb.Outcome_Failure{Failure: &failurepb.Failure{Message: "outcome failure"}}}
 	successOutcome   = &updatepb.Outcome{Value: &updatepb.Outcome_Success{Success: payloads.EncodeString("success")}}
-	immedateTimeout  = time.Duration(0)
-	immediateCtx, _  = context.WithTimeout(context.Background(), immedateTimeout)
+	immediateTimeout = time.Duration(0)
+	immediateCtx, _  = context.WithTimeout(context.Background(), immediateTimeout)
 )
 
 func TestUpdateState(t *testing.T) {
@@ -780,7 +780,7 @@ func TestUpdateState(t *testing.T) {
 						UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED,
 					} {
 						t.Logf("testing stage %v", UpdateWorkflowExecutionLifecycleStage.String(stage))
-						status, err := upd.WaitLifecycleStage(immediateCtx, stage, immedateTimeout)
+						status, err := upd.WaitLifecycleStage(immediateCtx, stage, immediateTimeout)
 						require.NoError(t, err)
 						require.Equal(t, UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED, status.Stage)
 						require.EqualExportedValues(t, successOutcome, status.Outcome)
@@ -862,12 +862,12 @@ func mustAdmit(t *testing.T, store mockEventStore, upd *update.Update) {
 func assertAdmitted(t *testing.T, upd *update.Update) {
 	t.Helper()
 
-	status, err := upd.WaitLifecycleStage(context.Background(), UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_UNSPECIFIED, immedateTimeout)
+	status, err := upd.WaitLifecycleStage(context.Background(), UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_UNSPECIFIED, immediateTimeout)
 	require.NoError(t, err)
 	require.Equal(t, UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ADMITTED, status.Stage)
 	require.Nil(t, status.Outcome, "outcome should not be available yet")
 
-	status, err = upd.WaitLifecycleStage(context.Background(), UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ADMITTED, immedateTimeout)
+	status, err = upd.WaitLifecycleStage(context.Background(), UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ADMITTED, immediateTimeout)
 	require.NoError(t, err)
 	require.Equal(t, UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ADMITTED, status.Stage)
 	require.Nil(t, status.Outcome, "outcome should not be available yet")
@@ -921,7 +921,7 @@ func assertAccepted(t *testing.T, upd *update.Update) {
 		UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ACCEPTED,
 	} {
 		t.Logf("testing stage %v", UpdateWorkflowExecutionLifecycleStage.String(stage))
-		status, err := upd.WaitLifecycleStage(immediateCtx, stage, immedateTimeout)
+		status, err := upd.WaitLifecycleStage(immediateCtx, stage, immediateTimeout)
 		require.NoError(t, err)
 		require.Equal(t, UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ACCEPTED, status.Stage)
 		require.Nil(t, status.Outcome, "outcome should not be available yet")
@@ -938,7 +938,7 @@ func assertNotAcceptedYet(t *testing.T, upd *update.Update) {
 	require.ErrorIs(t, err, context.DeadlineExceeded)
 
 	// on server timeout
-	status, err := upd.WaitLifecycleStage(context.Background(), UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ACCEPTED, immedateTimeout)
+	status, err := upd.WaitLifecycleStage(context.Background(), UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ACCEPTED, immediateTimeout)
 	require.NoError(t, err)
 	require.Equal(t, UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ADMITTED, status.Stage)
 	require.Nil(t, status.Outcome, "outcome should not be available yet")
@@ -971,7 +971,7 @@ func assertCompleted(t *testing.T, upd *update.Update, outcome *updatepb.Outcome
 		UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED,
 	} {
 		t.Logf("testing stage %v", UpdateWorkflowExecutionLifecycleStage.String(stage))
-		status, err := upd.WaitLifecycleStage(immediateCtx, stage, immedateTimeout)
+		status, err := upd.WaitLifecycleStage(immediateCtx, stage, immediateTimeout)
 		require.NoError(t, err)
 		require.Equal(t, UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED, status.Stage)
 		require.EqualExportedValues(t, outcome, status.Outcome)
@@ -988,7 +988,7 @@ func assertNotCompletedYet(t *testing.T, upd *update.Update) {
 	require.ErrorIs(t, err, context.DeadlineExceeded)
 
 	// on server timeout
-	status, err := upd.WaitLifecycleStage(context.Background(), UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED, immedateTimeout)
+	status, err := upd.WaitLifecycleStage(context.Background(), UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED, immediateTimeout)
 	require.NoError(t, err)
 	require.NotEqual(t, UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED, status.Stage)
 	require.Nil(t, status.Outcome, "outcome should not be available yet")
