@@ -42,13 +42,13 @@ type (
 
 // VerifyTaskQueueDefaultBuildID verifies if buildID is the default buildID for taskQueues in a deployment. Returns
 // a list of all the task queues that have their default buildID as buildID.
-func (a *activities) VerifyTaskQueueDefaultBuildID(ctx context.Context, deployment Deployment, buildID string) ([]*TaskQueue, error) {
+func (a *activities) VerifyTaskQueueDefaultBuildID(ctx context.Context, args DeploymentBuildIDArgs) ([]*TaskQueue, error) {
 	// TODO Shivam - pending implementation
 	return nil, nil
 }
 
 // UpdateTaskQueueDefaultBuildID updates the default buildID for taskQueues in a deployment
-func (a *activities) UpdateTaskQueueDefaultBuildID(ctx context.Context, deployment Deployment, buildID string) error {
+func (a *activities) UpdateTaskQueueDefaultBuildID(ctx context.Context, args DeploymentBuildIDArgs) error {
 	// TODO Shivam - pending implementation
 	return nil
 }

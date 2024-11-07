@@ -67,6 +67,11 @@ type (
 		logger         sdklog.Logger
 		metrics        sdkclient.MetricsHandler
 	}
+	// DeploymentBuildIDArgs holds the arguments used while calling activities associated with a deployment
+	DeploymentBuildIDArgs struct {
+		deployment Deployment
+		buildID    string // used for verifying/updating the buildID of all the task queues in a deployment
+	}
 )
 
 var (
