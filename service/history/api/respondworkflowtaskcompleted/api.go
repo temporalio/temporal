@@ -406,15 +406,13 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 		// message that were delivered on specific WT, when completing this WT.
 		// If worker ignored the update request (old SDK or SDK bug), then server rejects this update.
 		// Otherwise, this update will be delivered (and new WT created) again and again.
-		if err = workflowTaskHandler.rejectUnprocessedUpdates(
+		workflowTaskHandler.rejectUnprocessedUpdates(
 			ctx,
 			currentWorkflowTask.ScheduledEventID,
 			request.GetForceCreateNewWorkflowTask(),
 			weContext.GetWorkflowKey(),
 			request.GetIdentity(),
-		); err != nil {
-			return nil, err
-		}
+		)
 
 		// set the vars used by following logic
 		// further refactor should also clean up the vars used below
