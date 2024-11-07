@@ -59,7 +59,7 @@ func getCommands(
 		},
 		{
 			Name:        "history-host",
-			Aliases:     []string{"his"},
+			Aliases:     []string{"hh"},
 			Usage:       "Run admin operation on history host",
 			Subcommands: newAdminHistoryHostCommands(clientFactory),
 		},
