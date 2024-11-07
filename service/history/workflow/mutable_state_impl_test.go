@@ -1919,6 +1919,9 @@ func (s *mutableStateSuite) TestCloseTransactionUpdateTransition() {
 					nil,
 					nil,
 				)
+				if err != nil {
+					return nil, err
+				}
 
 				mutation, _, err := ms.CloseTransactionAsMutation(TransactionPolicyActive)
 				if err != nil {
