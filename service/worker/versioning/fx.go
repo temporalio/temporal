@@ -76,7 +76,6 @@ type (
 	workerComponent struct {
 		activityDeps activityDeps
 		enabledForNs dynamicconfig.BoolPropertyFnWithNamespaceFilter
-		maxBlobSize  dynamicconfig.IntPropertyFnWithNamespaceFilter
 	}
 
 	activityDeps struct {
@@ -106,7 +105,6 @@ func NewResult(
 		Component: &workerComponent{
 			activityDeps: params,
 			enabledForNs: dynamicconfig.WorkerEnableDeployment.Get(dc),
-			maxBlobSize:  dynamicconfig.BlobSizeLimitError.Get(dc),
 		},
 	}
 }
