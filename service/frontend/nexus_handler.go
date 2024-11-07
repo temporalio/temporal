@@ -31,6 +31,7 @@ import (
 	"runtime/debug"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/nexus-rpc/sdk-go/nexus"
@@ -72,6 +73,7 @@ type nexusContext struct {
 	namespaceConcurrencyLimitInterceptor *interceptor.ConcurrentRequestLimitInterceptor
 	rateLimitInterceptor                 *interceptor.RateLimitInterceptor
 	responseHeaders                      map[string]string
+	responseHeadersMutex                 sync.RWMutex
 }
 
 // Context for a specific Nexus operation, includes a resolved namespace, and a bound metrics handler and logger.
@@ -377,8 +379,17 @@ func (h *nexusHandler) StartOperation(
 	switch t := response.GetOutcome().(type) {
 	case *matchingservice.DispatchNexusTaskResponse_HandlerError:
 		oc.metricsHandler = oc.metricsHandler.WithTags(metrics.OutcomeTag("handler_error"))
+
+		oc.nexusContext.responseHeadersMutex.Lock()
+		defer oc.nexusContext.responseHeadersMutex.Unlock()
+
+		if oc.responseHeaders == nil {
+			oc.responseHeaders = make(map[string]string)
+		}
 		oc.responseHeaders[nexusFailureSourceHeaderName] = failureSourceWorker
-		return nil, h.convertOutcomeToNexusHandlerError(t)
+
+		err := h.convertOutcomeToNexusHandlerError(t)
+		return nil, err
 
 	case *matchingservice.DispatchNexusTaskResponse_Response:
 		switch t := t.Response.GetStartOperation().GetVariant().(type) {
@@ -411,16 +422,31 @@ func (h *nexusHandler) StartOperation(
 
 		case *nexuspb.StartOperationResponse_OperationError:
 			oc.metricsHandler = oc.metricsHandler.WithTags(metrics.OutcomeTag("operation_error"))
+			oc.nexusContext.responseHeadersMutex.Lock()
+			defer oc.nexusContext.responseHeadersMutex.Unlock()
+
+			if oc.responseHeaders == nil {
+				oc.responseHeaders = make(map[string]string)
+			}
 			oc.responseHeaders[nexusFailureSourceHeaderName] = failureSourceWorker
-			return nil, &nexus.UnsuccessfulOperationError{
+
+			err := &nexus.UnsuccessfulOperationError{
 				State:   nexus.OperationState(t.OperationError.GetOperationState()),
 				Failure: *commonnexus.ProtoFailureToNexusFailure(t.OperationError.GetFailure()),
 			}
+			return nil, err
 		}
 	}
 	// This is the worker's fault.
 	oc.metricsHandler = oc.metricsHandler.WithTags(metrics.OutcomeTag("handler_error"))
+	oc.nexusContext.responseHeadersMutex.Lock()
+	defer oc.nexusContext.responseHeadersMutex.Unlock()
+
+	if oc.responseHeaders == nil {
+		oc.responseHeaders = make(map[string]string)
+	}
 	oc.responseHeaders[nexusFailureSourceHeaderName] = failureSourceWorker
+
 	return nil, nexus.HandlerErrorf(nexus.HandlerErrorTypeInternal, "empty outcome")
 }
 
@@ -445,9 +471,7 @@ func (h *nexusHandler) forwardStartOperation(
 	if err != nil {
 		oc.logger.Error("received error from remote cluster for forwarded Nexus start operation request.", tag.Error(err))
 		oc.metricsHandler = oc.metricsHandler.WithTags(metrics.OutcomeTag("forwarded_request_error"))
-		failureSource, handlerErr := handlerErrorFromClientError(err, h.logger)
-		oc.responseHeaders[nexusFailureSourceHeaderName] = failureSource
-		return nil, handlerErr
+		return nil, err
 	}
 
 	if resp.Successful != nil {
@@ -498,15 +522,32 @@ func (h *nexusHandler) CancelOperation(ctx context.Context, service, operation, 
 	switch t := response.GetOutcome().(type) {
 	case *matchingservice.DispatchNexusTaskResponse_HandlerError:
 		oc.metricsHandler = oc.metricsHandler.WithTags(metrics.OutcomeTag("handler_error"))
+
+		oc.nexusContext.responseHeadersMutex.Lock()
+		defer oc.nexusContext.responseHeadersMutex.Unlock()
+
+		if oc.responseHeaders == nil {
+			oc.responseHeaders = make(map[string]string)
+		}
 		oc.responseHeaders[nexusFailureSourceHeaderName] = failureSourceWorker
-		return h.convertOutcomeToNexusHandlerError(t)
+
+		err := h.convertOutcomeToNexusHandlerError(t)
+		return err
 	case *matchingservice.DispatchNexusTaskResponse_Response:
 		oc.metricsHandler = oc.metricsHandler.WithTags(metrics.OutcomeTag("success"))
 		return nil
 	}
 	// This is the worker's fault.
 	oc.metricsHandler = oc.metricsHandler.WithTags(metrics.OutcomeTag("handler_error"))
+
+	oc.nexusContext.responseHeadersMutex.Lock()
+	defer oc.nexusContext.responseHeadersMutex.Unlock()
+
+	if oc.responseHeaders == nil {
+		oc.responseHeaders = make(map[string]string)
+	}
 	oc.responseHeaders[nexusFailureSourceHeaderName] = failureSourceWorker
+
 	return nexus.HandlerErrorf(nexus.HandlerErrorTypeInternal, "empty outcome")
 }
 
@@ -535,9 +576,7 @@ func (h *nexusHandler) forwardCancelOperation(
 	if err != nil {
 		oc.logger.Error("received error from remote cluster for forwarded Nexus cancel operation request.", tag.Error(err))
 		oc.metricsHandler = oc.metricsHandler.WithTags(metrics.OutcomeTag("forwarded_request_error"))
-		failureSource, handlerErr := handlerErrorFromClientError(err, h.logger)
-		oc.responseHeaders[nexusFailureSourceHeaderName] = failureSource
-		return handlerErr
+		return err
 	}
 
 	return nil
@@ -549,6 +588,25 @@ func (h *nexusHandler) nexusClientForActiveCluster(oc *operationContext, service
 		oc.logger.Error("failed to forward Nexus request. error creating HTTP client", tag.Error(err), tag.SourceCluster(oc.namespace.ActiveClusterName()), tag.TargetCluster(oc.namespace.ActiveClusterName()))
 		oc.metricsHandler = oc.metricsHandler.WithTags(metrics.OutcomeTag("request_forwarding_failed"))
 		return nil, nexus.HandlerErrorf(nexus.HandlerErrorTypeInternal, "request forwarding failed")
+	}
+
+	wrappedHttpDo := func(req *http.Request) (*http.Response, error) {
+		response, err := httpClient.Do(req)
+		if err != nil {
+			return nil, err
+		}
+
+		if failureSource := response.Header.Get(nexusFailureSourceHeaderName); failureSource != "" {
+			oc.nexusContext.responseHeadersMutex.Lock()
+			defer oc.nexusContext.responseHeadersMutex.Unlock()
+
+			if oc.responseHeaders == nil {
+				oc.responseHeaders = make(map[string]string)
+			}
+			oc.responseHeaders[nexusFailureSourceHeaderName] = failureSource
+		}
+
+		return response, nil
 	}
 
 	baseURL, err := url.JoinPath(
@@ -564,7 +622,7 @@ func (h *nexusHandler) nexusClientForActiveCluster(oc *operationContext, service
 	}
 
 	return nexus.NewClient(nexus.ClientOptions{
-		HTTPCaller: httpClient.Do,
+		HTTPCaller: wrappedHttpDo,
 		BaseURL:    baseURL,
 		Service:    service,
 	})
@@ -591,30 +649,4 @@ func (h *nexusHandler) convertOutcomeToNexusHandlerError(resp *matchingservice.D
 		h.logger.Warn("received unknown or unset Nexus handler error type", tag.Value(handlerError.Type))
 		return nexus.HandlerErrorf(nexus.HandlerErrorTypeInternal, "internal error")
 	}
-}
-
-func handlerErrorFromClientError(err error, logger log.Logger) (string, error) {
-	var unexpectedRespErr *nexus.UnexpectedResponseError
-	if errors.As(err, &unexpectedRespErr) {
-		failure := unexpectedRespErr.Failure
-		if unexpectedRespErr.Failure == nil {
-			failure = &nexus.Failure{
-				Message: unexpectedRespErr.Error(),
-			}
-		}
-
-		handlerErr := &nexus.HandlerError{
-			Type:    commonnexus.HandlerErrorTypeFromHTTPStatus(unexpectedRespErr.Response.StatusCode),
-			Failure: failure,
-		}
-		if handlerErr.Type == nexus.HandlerErrorTypeInternal && unexpectedRespErr.Response.StatusCode != http.StatusInternalServerError {
-			logger.Warn("received unknown status code on Nexus client unexpected response error", tag.Value(unexpectedRespErr.Response.StatusCode))
-			handlerErr.Failure.Message = "internal error"
-		}
-
-		return unexpectedRespErr.Response.Header.Get(nexusFailureSourceHeaderName), handlerErr
-	}
-
-	// Let the nexus SDK handle this for us (log and convert to an internal error).
-	return "", err
 }

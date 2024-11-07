@@ -380,10 +380,11 @@ func (e taskExecutor) handleStartOperationError(env hsm.Environment, node *hsm.N
 
 	if errors.As(callErr, &opFailedError) {
 		return handleUnsuccessfulOperationError(node, operation, opFailedError, CompletionSourceResponse)
-	} else if errors.As(callErr, &unexpectedResponseError) {
-		if !isRetryableHTTPResponse(unexpectedResponseError.Type) {
+	} else if errors.As(callErr, &handlerError) {
+		if !isRetryableHandlerError(handlerError.Type) {
 			// The StartOperation request got an unexpected response that is not retryable, fail the operation.
-			return handleNonRetryableStartOperationError(env, node, operation, unexpectedResponseError.Failure.Message)
+			// Although Failure is nullable, Nexus SDK is expected to always populate this field
+			return handleNonRetryableStartOperationError(env, node, operation, handlerError.Failure.Message)
 		}
 		// Fall through to the AttemptFailed transition.
 	} else if errors.Is(callErr, ErrResponseBodyTooLarge) {
@@ -576,7 +577,7 @@ func (e taskExecutor) saveCancelationResult(ctx context.Context, env hsm.Environ
 			if callErr != nil {
 				var unexpectedResponseErr *nexus.HandlerError
 				if errors.As(callErr, &unexpectedResponseErr) {
-					if !isRetryableHTTPResponse(unexpectedResponseErr.Type) {
+					if !isRetryableHandlerError(unexpectedResponseErr.Type) {
 						return TransitionCancelationFailed.Apply(c, EventCancelationFailed{
 							Time: env.Now(),
 							Err:  callErr,
@@ -651,8 +652,8 @@ func startCallOutcomeTag(callCtx context.Context, result *nexus.ClientStartOpera
 		}
 		if errors.As(callErr, &opFailedError) {
 			return "operation-unsuccessful:" + string(opFailedError.State)
-		} else if errors.As(callErr, &unexpectedResponseError) {
-			return fmt.Sprintf("request-error:%s", unexpectedResponseError.Error())
+		} else if errors.As(callErr, &handlerError) {
+			return "handler-error:" + string(handlerError.Type)
 		}
 		return "unknown-error"
 	}
@@ -676,7 +677,7 @@ func cancelCallOutcomeTag(callCtx context.Context, callErr error) string {
 	return "successful"
 }
 
-func isRetryableHTTPResponse(eType nexus.HandlerErrorType) bool {
+func isRetryableHandlerError(eType nexus.HandlerErrorType) bool {
 	switch eType {
 	case nexus.HandlerErrorTypeResourceExhausted:
 	case nexus.HandlerErrorTypeInternal:
@@ -694,8 +695,8 @@ func isDestinationDown(err error) bool {
 	if errors.As(err, &opFailedErr) {
 		return false
 	}
-	if errors.As(err, &unexpectedErr) {
-		return isRetryableHTTPResponse(unexpectedErr.Type)
+	if errors.As(err, &handlerError) {
+		return isRetryableHandlerError(handlerError.Type)
 	}
 	if errors.Is(err, ErrResponseBodyTooLarge) {
 		return false
