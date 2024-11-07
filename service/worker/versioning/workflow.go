@@ -109,16 +109,13 @@ func (d *DeploymentWorkflowRunner) run() error {
 	// Fetch signal channels
 	updateDeploymentSignalChannel := workflow.GetSignalChannel(d.ctx, UpdateDeploymentSignalChannelName)
 	updateBuildIDSignalChannel := workflow.GetSignalChannel(d.ctx, updateBuildIDSignalChannelName)
-	var signalCount int
 
 	selector := workflow.NewSelector(d.ctx)
 	selector.AddReceive(updateDeploymentSignalChannel, func(c workflow.ReceiveChannel, more bool) {
-		signalCount++
 		// Process Signal
 
 	})
 	selector.AddReceive(updateBuildIDSignalChannel, func(c workflow.ReceiveChannel, more bool) {
-		signalCount++
 		// Process Signal
 	})
 
