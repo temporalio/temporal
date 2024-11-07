@@ -98,7 +98,7 @@ const (
 	//   - for paused taskqueues:
 	//     * "TaskQueue:TaskQueueName"
 	//     * "Reason:ManualTaskQueuePause"
-	PausedInfo = "PausedInfo"
+	TemporalPausedInfo = "TemporalPausedInfo"
 )
 
 var (
@@ -133,7 +133,7 @@ var (
 		TemporalScheduledById:      enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 		TemporalSchedulePaused:     enumspb.INDEXED_VALUE_TYPE_BOOL,
 		TemporalNamespaceDivision:  enumspb.INDEXED_VALUE_TYPE_KEYWORD,
-		PausedInfo:                 enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST,
+		TemporalPausedInfo:         enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST,
 	}
 
 	// reserved are internal field names that can't be used as search attribute names.

@@ -1,7 +1,7 @@
 {
   "CurrVersion": "1.7",
   "MinCompatibleVersion": "0.1",
-  "Description": "add PausedInfo column",
+  "Description": "add TemporalPausedInfo column",
   "SchemaUpdateCqlFiles": [
     "add_paused_info_info_attribute.sql"
   ]
