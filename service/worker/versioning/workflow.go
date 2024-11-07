@@ -86,8 +86,12 @@ var (
 )
 
 const (
-	UpdateDeploymentSignalChannelName = "update_deployment"
-	updateBuildIDSignalChannelName    = "update_task_queue_build_id"
+	UpdateDeploymentSignalName            = "update_deployment"
+	UpdateDeploymentBuildIDSignalName     = "update_deployment_build_id"
+	UpdateDeploymentNameBuildIDSignalName = "update-deployment-name-buildID"
+
+	DeploymentWorkflowIDPrefix     = "temporal-sys-deployment:"
+	DeploymentNameWorkflowIDPrefix = "temporal-sys-deployment-name:"
 )
 
 func DeploymentWorkflow(ctx workflow.Context, deploymentWorkflowArgs Deployment) error {
@@ -107,8 +111,8 @@ func (d *DeploymentWorkflowRunner) run() error {
 	// Set up Query Handlers here:
 
 	// Fetch signal channels
-	updateDeploymentSignalChannel := workflow.GetSignalChannel(d.ctx, UpdateDeploymentSignalChannelName)
-	updateBuildIDSignalChannel := workflow.GetSignalChannel(d.ctx, updateBuildIDSignalChannelName)
+	updateDeploymentSignalChannel := workflow.GetSignalChannel(d.ctx, UpdateDeploymentSignalName)
+	updateBuildIDSignalChannel := workflow.GetSignalChannel(d.ctx, UpdateDeploymentBuildIDSignalName)
 
 	selector := workflow.NewSelector(d.ctx)
 	selector.AddReceive(updateDeploymentSignalChannel, func(c workflow.ReceiveChannel, more bool) {
