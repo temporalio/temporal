@@ -169,6 +169,7 @@ func (s *streamBasedReplicationTestSuite) TestReplicateHistoryEvents_ForceReplic
 
 	var versions []int64
 	if s.enableTransitionHistory {
+		// Use versions for cluster1 (active) so we can update workflows
 		versions = []int64{1, 31, 21, 61, 41, 101, 91, 71, 81}
 	} else {
 		versions = []int64{2, 12, 22, 32, 2, 1, 5, 8, 9}

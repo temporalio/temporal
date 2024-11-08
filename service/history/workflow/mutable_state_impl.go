@@ -5459,9 +5459,7 @@ func (ms *MutableStateImpl) closeTransactionUpdateTransitionHistory(
 
 	// TODO: treat changes for transient workflow task or signalRequestID removal as state transition as well.
 	// Those changes are not replicated today.
-	if !ms.isStateDirty() &&
-		len(workflowEventsSeq) == 0 &&
-		len(newBufferEvents) == 0 {
+	if !ms.isStateDirty() {
 		return nil
 	}
 
