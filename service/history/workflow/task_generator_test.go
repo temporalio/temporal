@@ -377,7 +377,7 @@ func TestTaskGenerator_GenerateDirtySubStateMachineTasks(t *testing.T) {
 	err = coll.Transition("backoff", func(cb callbacks.Callback) (hsm.TransitionOutput, error) {
 		return callbacks.TransitionAttemptFailed.Apply(cb, callbacks.EventAttemptFailed{
 			Time:        time.Now(),
-			Err:         fmt.Errorf("test"), // nolint:goerr113
+			Err:         fmt.Errorf("test"),
 			RetryPolicy: backoff.NewExponentialRetryPolicy(time.Second),
 		})
 	})

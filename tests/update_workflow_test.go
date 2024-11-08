@@ -2339,7 +2339,7 @@ func (s *UpdateWorkflowSuite) TestUpdateWorkflow_SpeculativeWorkflowTask_Fail() 
 			wtHandlerCalls++ // because it won't be called for case 3 but counter should be in sync.
 			// Fail WT one more time. Although 2nd attempt is normal WT, it is also transient and shouldn't appear in the history.
 			// Returning error will cause the poller to fail WT.
-			return nil, errors.New("malformed request") //nolint:goerr113
+			return nil, errors.New("malformed request")
 		case 4:
 			// 3rd attempt UpdateWorkflowExecution call has timed out but the
 			// update is still running
@@ -2348,7 +2348,7 @@ func (s *UpdateWorkflowSuite) TestUpdateWorkflow_SpeculativeWorkflowTask_Fail() 
 			wtHandlerCalls++ // because it won't be called for case 4 but counter should be in sync.
 			// Fail WT one more time. This is transient WT and shouldn't appear in the history.
 			// Returning error will cause the poller to fail WT.
-			return nil, errors.New("malformed request") //nolint:goerr113
+			return nil, errors.New("malformed request")
 		case 5:
 			return nil, nil
 		default:
