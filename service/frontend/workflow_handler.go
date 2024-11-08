@@ -5144,6 +5144,13 @@ func getBatchOperationState(workflowState enumspb.WorkflowExecutionStatus) enums
 	return operationState
 }
 
+func (wh *WorkflowHandler) UpdateWorkflowExecutionOptions(
+	ctx context.Context,
+	request *workflowservice.UpdateWorkflowExecutionOptionsRequest,
+) (*workflowservice.UpdateWorkflowExecutionOptionsResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method UpdateWorkflowExecutionOptions not implemented")
+}
+
 func (wh *WorkflowHandler) UpdateActivityOptionsById(
 	ctx context.Context,
 	request *workflowservice.UpdateActivityOptionsByIdRequest,

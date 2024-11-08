@@ -8,7 +8,7 @@ retract (
 )
 
 replace (
-	go.temporal.io/api => github.com/temporalio/api-go v1.39.1-0.20241014184314-2fb1df995c55
+	go.temporal.io/api => github.com/temporalio/api-go v1.39.1-0.20241108222619-3353ecc45b37
 	go.temporal.io/sdk => github.com/temporalio/sdk-go v1.29.2-0.20241017230629-cc508c6fe7a9
 )
 
