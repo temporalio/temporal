@@ -3,6 +3,6 @@
   "MinCompatibleVersion": "0.1",
   "Description": "add TemporalPauseInfo column",
   "SchemaUpdateCqlFiles": [
-    "add_pause_info_info_attribute.sql"
+    "add_pause_info_search_attribute.sql"
   ]
 }
