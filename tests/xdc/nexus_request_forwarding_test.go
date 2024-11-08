@@ -265,7 +265,7 @@ func (s *NexusRequestForwardingSuite) TestCancelOperationForwardedFromStandbyToA
 			assertion: func(t *testing.T, retErr error, activeSnap map[string][]*metricstest.CapturedRecording, passiveSnap map[string][]*metricstest.CapturedRecording) {
 				var handlerErr *nexus.HandlerError
 				require.ErrorAs(t, retErr, &handlerErr)
-				require.Equal(t, nexus.HandlerErrorTypeUnavailable, handlerErr.Type)
+				require.Equal(t, nexus.HandlerErrorTypeInternal, handlerErr.Type)
 				require.Equal(t, "deliberate internal failure", handlerErr.Failure.Message)
 				requireExpectedMetricsCaptured(t, activeSnap, ns, "CancelNexusOperation", "handler_error")
 				requireExpectedMetricsCaptured(t, passiveSnap, ns, "CancelNexusOperation", "forwarded_request_error")
