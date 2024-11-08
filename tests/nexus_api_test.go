@@ -785,9 +785,8 @@ func (s *NexusApiTestSuite) TestNexusStartOperation_WithNamespaceAndTaskQueue_Su
 	defer cancel()
 	_, err = nexus.StartOperation(ctx, client, op, "input", nexus.StartOperationOptions{})
 	if !errors.Is(err, context.DeadlineExceeded) {
-		var unexpectedError *nexus.UnexpectedResponseError
-		// TODO(justinp-tt): Change this to HandlerError when upgrading the Nexus SDK.
-		if !errors.As(err, &unexpectedError) || unexpectedError.Response.StatusCode != nexus.StatusDownstreamTimeout {
+		var handlerErr *nexus.HandlerError
+		if !errors.As(err, &handlerErr) || handlerErr.Type != nexus.HandlerErrorTypeUpstreamTimeout {
 			s.T().Fatal("expected a DeadlineExceeded or upstream timeout error")
 		}
 	}
