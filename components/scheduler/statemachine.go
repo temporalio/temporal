@@ -161,7 +161,7 @@ func (stateMachineDefinition) Serialize(state any) ([]byte, error) {
 	if state, ok := state.(*Scheduler); ok {
 		return proto.Marshal(state.HsmSchedulerState)
 	}
-	return nil, fmt.Errorf("invalid scheduler state provided: %v", state) // nolint:goerr113
+	return nil, fmt.Errorf("invalid scheduler state provided: %v", state)
 }
 
 // CompareState is required for the temporary state sync solution to work.

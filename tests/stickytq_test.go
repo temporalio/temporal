@@ -117,7 +117,7 @@ func (s *StickyTqTestSuite) TestStickyTimeout_NonTransientWorkflowTask() {
 				}
 			*/
 			failureCount--
-			return nil, errors.New("non deterministic error") //nolint:goerr113
+			return nil, errors.New("non deterministic error")
 		}
 
 		return []*commandpb.Command{{
@@ -298,7 +298,7 @@ func (s *StickyTqTestSuite) TestStickyTaskqueueResetThenTimeout() {
 
 		if failureCount > 0 {
 			failureCount--
-			return nil, errors.New("non deterministic error") //nolint:goerr113
+			return nil, errors.New("non deterministic error")
 		}
 
 		return []*commandpb.Command{{

@@ -747,7 +747,7 @@ func (s *ScheduleFunctionalSuite) TestLastCompletionAndError() {
 		case 2:
 			s.NoError(lastErr)
 			s.Equal("this one succeeds", lcr)
-			return "", errors.New("this one fails") //nolint:goerr113
+			return "", errors.New("this one fails")
 		case 3:
 			s.Equal("this one succeeds", lcr)
 			s.ErrorContains(lastErr, "this one fails")
@@ -822,7 +822,7 @@ func (s *ScheduleFunctionalSuite) TestExperimentalHsmLastCompletionAndError() {
 		case 2:
 			s.NoError(lastErr)
 			s.Equal("this one succeeds", lcr)
-			return "", errors.New("this one fails") //nolint:goerr113
+			return "", errors.New("this one fails")
 		case 3:
 			s.Equal("this one succeeds", lcr)
 			s.ErrorContains(lastErr, "this one fails")

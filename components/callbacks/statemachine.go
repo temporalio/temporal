@@ -107,7 +107,7 @@ func (c Callback) RegenerateTasks(*hsm.Node) ([]hsm.Task, error) {
 			return []hsm.Task{InvocationTask{"TODO(bergundy): make this empty"}}, nil
 
 		default:
-			return nil, fmt.Errorf("unsupported callback variant %v", v) // nolint:goerr113
+			return nil, fmt.Errorf("unsupported callback variant %v", v)
 		}
 	}
 	return nil, nil
@@ -159,7 +159,7 @@ func (stateMachineDefinition) Serialize(state any) ([]byte, error) {
 	if state, ok := state.(Callback); ok {
 		return proto.Marshal(state.CallbackInfo)
 	}
-	return nil, fmt.Errorf("invalid callback provided: %v", state) // nolint:goerr113
+	return nil, fmt.Errorf("invalid callback provided: %v", state)
 }
 
 // CompareState compares the progress of two Callback state machines to determine whether to sync machine state while

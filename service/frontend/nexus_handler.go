@@ -100,7 +100,7 @@ func (c *operationContext) capturePanicAndRecordMetrics(ctxPtr *context.Context,
 	if recovered != nil {
 		err, ok := recovered.(error)
 		if !ok {
-			err = fmt.Errorf("panic: %v", recovered) //nolint:goerr113
+			err = fmt.Errorf("panic: %v", recovered)
 		}
 
 		st := string(debug.Stack())
@@ -264,7 +264,7 @@ type nexusHandler struct {
 func (h *nexusHandler) getOperationContext(ctx context.Context, method string) (*operationContext, error) {
 	nc, ok := ctx.Value(nexusContextKey{}).(*nexusContext)
 	if !ok {
-		return nil, errors.New("no nexus context set on context") //nolint:goerr113
+		return nil, errors.New("no nexus context set on context")
 	}
 	oc := operationContext{
 		nexusContext:                  nc,

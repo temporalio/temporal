@@ -2,7 +2,6 @@
 linters:
   disable-all: true
   enable:
-    - err113
     - errcheck
     - goimports
     # - paralleltest # missing the call to method parallel, but testify does not seem to work well with parallel test: https://github.com/stretchr/testify/issues/187
@@ -30,12 +29,8 @@ issues:
       text: "dot-imports"  # helpful in tests
       linters:
         - revive
-    - path: _test\.go|tests/.+\.go
-      linters:
-        - goerr113  # like err = errors.New("test error")
     - path: ^tools\/.+\.go
       linters:
-        - goerr113
         - revive
 linters-settings:
   godox:
