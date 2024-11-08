@@ -4990,27 +4990,28 @@ func (ms *MutableStateImpl) UpdatePausedEntitiesSearchAttribute() error {
 	pausedInfo := make([]string, 0, len(pausedInfoMap))
 	for activityType := range pausedInfoMap {
 		activityType = url.QueryEscape(activityType)
-		pausedEntity := fmt.Sprintf("activity::%s:MANUAL", activityType)
-		pausedInfo = append(pausedInfo, pausedEntity)
+		pausedInfo = append(pausedInfo, fmt.Sprintf("activity::%s", activityType))
 	}
-	_, err := searchattribute.EncodeValue(pausedInfo, enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST)
+	if len(pausedInfo) > 0 {
+		pausedInfo = append(pausedInfo, "policy::ManualActivityPause")
+	}
+
+	pauseInfoPayload, err := searchattribute.EncodeValue(pausedInfo, enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST)
 	if err != nil {
 		return err
 	}
-	return nil
 
-	// TODO uncomment once PausedInfo search attrobute is supported
-	/*
-		exeInfo := ms.executionInfo
-		if exeInfo.SearchAttributes == nil {
-			exeInfo.SearchAttributes = make(map[string]*commonpb.Payload, 1)
-		}
-		if proto.Equal(exeInfo.SearchAttributes[searchattribute.PausedInfo], pausedEntitiesPayload) {
-			return nil // unchanged
-		}
-		ms.updateSearchAttributes(map[string]*commonpb.Payload{searchattribute.PausedInfo: pausedEntitiesPayload})
-		return ms.taskGenerator.GenerateUpsertVisibilityTask()
-	*/
+	exeInfo := ms.executionInfo
+	if exeInfo.SearchAttributes == nil {
+		exeInfo.SearchAttributes = make(map[string]*commonpb.Payload, 1)
+	}
+
+	if proto.Equal(exeInfo.SearchAttributes[searchattribute.TemporalPauseInfo], pauseInfoPayload) {
+		return nil // unchanged
+	}
+
+	ms.updateSearchAttributes(map[string]*commonpb.Payload{searchattribute.TemporalPauseInfo: pauseInfoPayload})
+	return ms.taskGenerator.GenerateUpsertVisibilityTask()
 }
 
 func (ms *MutableStateImpl) truncateRetryableActivityFailure(
