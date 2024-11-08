@@ -5155,33 +5155,31 @@ func (s *UpdateWorkflowSuite) TestUpdateWithStart() {
 
 	s.Run("workflow is not running", func() {
 
-		s.Run("start workflow and send update", func() {
-			tv := testvars.New(s.T())
+		for _, p := range []enumspb.WorkflowIdConflictPolicy{
+			enumspb.WORKFLOW_ID_CONFLICT_POLICY_TERMINATE_EXISTING,
+			enumspb.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING,
+			enumspb.WORKFLOW_ID_CONFLICT_POLICY_FAIL,
+		} {
+			s.Run(fmt.Sprintf("start workflow and send update (with conflict policy %v)", p), func() {
+				tv := testvars.New(s.T())
 
-			resp, err := runUpdateWithStart(tv, startWorkflowReq(tv), updateWorkflowReq(tv))
-			s.NoError(err)
-			s.True(resp.Responses[0].GetStartWorkflow().Started)
-		})
+				req := startWorkflowReq(tv)
+				req.WorkflowIdConflictPolicy = p
+				resp, err := runUpdateWithStart(tv, req, updateWorkflowReq(tv))
+				s.NoError(err)
 
-		s.Run("poll update result after completion", func() {
-			tv := testvars.New(s.T())
+				startResponse := resp.Responses[0].GetStartWorkflow()
+				updateResponse := resp.Responses[1].GetUpdateWorkflow()
+				s.True(startResponse.Started)
+				s.EqualValues("success-result-of-"+tv.UpdateID("1"), testcore.DecodeString(s.T(), updateResponse.GetOutcome().GetSuccess()))
 
-			_, err := runUpdateWithStart(tv, startWorkflowReq(tv), updateWorkflowReq(tv))
-			s.NoError(err)
-
-			_, err = s.pollUpdate(tv, "1",
-				&updatepb.WaitPolicy{LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED})
-			s.Nil(err)
-		})
-
-		s.Run("workflow id conflict policy terminate-existing: not supported yet", func() {
-			tv := testvars.New(s.T())
-
-			req := startWorkflowReq(tv)
-			req.WorkflowIdConflictPolicy = enumspb.WORKFLOW_ID_CONFLICT_POLICY_TERMINATE_EXISTING
-			_, err := runUpdateWithStart(tv, req, updateWorkflowReq(tv))
-			s.Error(err)
-		})
+				// poll update to ensure same outcome is returned
+				pollRes, err := s.pollUpdate(tv, "1",
+					&updatepb.WaitPolicy{LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED})
+				s.Nil(err)
+				s.Equal(updateResponse.Outcome.String(), pollRes.Outcome.String())
+			})
+		}
 	})
 
 	s.Run("workflow is running", func() {
@@ -5196,11 +5194,20 @@ func (s *UpdateWorkflowSuite) TestUpdateWithStart() {
 			req.WorkflowIdConflictPolicy = enumspb.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING
 			resp, err := runUpdateWithStart(tv, req, updateWorkflowReq(tv))
 			s.NoError(err)
-			s.False(resp.Responses[0].GetStartWorkflow().Started)
+
+			startResponse := resp.Responses[0].GetStartWorkflow()
+			updateResponse := resp.Responses[1].GetUpdateWorkflow()
+			s.False(startResponse.Started)
+			s.EqualValues("success-result-of-"+tv.UpdateID("1"), testcore.DecodeString(s.T(), updateResponse.GetOutcome().GetSuccess()))
+
+			// poll update to ensure same outcome is returned
+			pollRes, err := s.pollUpdate(tv, "1",
+				&updatepb.WaitPolicy{LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED})
+			s.Nil(err)
+			s.Equal(updateResponse.Outcome.String(), pollRes.Outcome.String())
 		})
 
 		s.Run("workflow id conflict policy terminate-existing: terminate workflow first, then start and update", func() {
-			s.T().Skip("TODO")
 			tv := testvars.New(s.T())
 
 			initReq := startWorkflowReq(tv)
@@ -5212,8 +5219,14 @@ func (s *UpdateWorkflowSuite) TestUpdateWithStart() {
 			req.WorkflowIdConflictPolicy = enumspb.WORKFLOW_ID_CONFLICT_POLICY_TERMINATE_EXISTING
 			resp, err := runUpdateWithStart(tv, req, updateWorkflowReq(tv))
 			s.NoError(err)
-			s.True(resp.Responses[0].GetStartWorkflow().Started)
 
+			startResponse := resp.Responses[0].GetStartWorkflow()
+			updateResponse := resp.Responses[1].GetUpdateWorkflow()
+			s.True(startResponse.Started)
+			s.Equal(startResponse.RunId, updateResponse.UpdateRef.GetWorkflowExecution().RunId)
+			s.EqualValues("success-result-of-"+tv.UpdateID("1"), testcore.DecodeString(s.T(), updateResponse.GetOutcome().GetSuccess()))
+
+			// ensure workflow was terminated
 			descResp, err := s.FrontendClient().DescribeWorkflowExecution(testcore.NewContext(),
 				&workflowservice.DescribeWorkflowExecutionRequest{
 					Namespace: s.Namespace(),
@@ -5221,6 +5234,12 @@ func (s *UpdateWorkflowSuite) TestUpdateWithStart() {
 				})
 			s.NoError(err)
 			s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED, descResp.WorkflowExecutionInfo.Status)
+
+			// poll update to ensure same outcome is returned
+			pollRes, err := s.pollUpdate(tv, "1",
+				&updatepb.WaitPolicy{LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED})
+			s.Nil(err)
+			s.Equal(updateResponse.Outcome.String(), pollRes.Outcome.String())
 		})
 
 		s.Run("workflow id conflict policy fail: abort multi operation", func() {
@@ -5240,78 +5259,39 @@ func (s *UpdateWorkflowSuite) TestUpdateWithStart() {
 			s.Equal("Operation was aborted.", errs[1].Error())
 		})
 
-		s.Run("poll update result after completion", func() {
-			tv := testvars.New(s.T())
+		s.Run("dedupes retry", func() {
 
-			_, err := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), startWorkflowReq(tv))
-			s.NoError(err)
+			for _, p := range []enumspb.WorkflowIdConflictPolicy{
+				enumspb.WORKFLOW_ID_CONFLICT_POLICY_TERMINATE_EXISTING,
+				enumspb.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING,
+				enumspb.WORKFLOW_ID_CONFLICT_POLICY_FAIL,
+			} {
+				s.Run(fmt.Sprintf("for workflow id conflict policy %v", p), func() {
+					tv := testvars.New(s.T())
 
-			req := startWorkflowReq(tv)
-			req.WorkflowIdConflictPolicy = enumspb.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING
-			_, err = runUpdateWithStart(tv, req, updateWorkflowReq(tv))
-			s.NoError(err)
+					startReq := startWorkflowReq(tv)
+					startReq.RequestId = "request_id"
+					startReq.WorkflowIdConflictPolicy = p
+					updReq := updateWorkflowReq(tv)
 
-			_, err = s.pollUpdate(tv, "1",
-				&updatepb.WaitPolicy{LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED})
-			s.Nil(err)
-		})
-	})
+					// 1st
+					resp1, err := runUpdateWithStart(tv, startReq, updReq)
+					s.NoError(err)
 
-	s.Run("dedupes both operations", func() {
+					// 2nd (using same RequestID and UpdateID)
+					resp2, err := runUpdateWithStart(tv, startReq, updReq)
+					s.NoError(err)
 
-		s.Run("for workflow id conflict policy fail", func() {
-			tv := testvars.New(s.T())
+					s.Equal(resp1.Responses[0].GetStartWorkflow().RunId, resp2.Responses[0].GetStartWorkflow().RunId)
+					s.Equal(resp1.Responses[1].GetUpdateWorkflow().Outcome.String(), resp2.Responses[1].GetUpdateWorkflow().Outcome.String())
 
-			startReq := startWorkflowReq(tv)
-			startReq.RequestId = "request_id"
-			startReq.WorkflowIdConflictPolicy = enumspb.WORKFLOW_ID_CONFLICT_POLICY_FAIL
-			updReq := updateWorkflowReq(tv)
-
-			resp1, err := runUpdateWithStart(tv, startReq, updReq)
-			s.NoError(err)
-
-			resp2, err := runUpdateWithStart(tv, startReq, updReq)
-			s.NoError(err)
-
-			s.Equal(resp1.Responses[0].GetStartWorkflow().RunId, resp2.Responses[0].GetStartWorkflow().RunId)
-			s.Equal(resp1.Responses[1].GetUpdateWorkflow().Outcome.GetSuccess(), resp2.Responses[1].GetUpdateWorkflow().Outcome.GetSuccess())
-		})
-
-		s.Run("for workflow id conflict policy use existing", func() {
-			tv := testvars.New(s.T())
-
-			startReq := startWorkflowReq(tv)
-			startReq.RequestId = "request_id"
-			startReq.WorkflowIdConflictPolicy = enumspb.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING
-			updReq := updateWorkflowReq(tv)
-
-			resp1, err := runUpdateWithStart(tv, startReq, updReq)
-			s.NoError(err)
-
-			resp2, err := runUpdateWithStart(tv, startReq, updReq)
-			s.NoError(err)
-
-			s.Equal(resp1.Responses[0].GetStartWorkflow().RunId, resp2.Responses[0].GetStartWorkflow().RunId)
-			s.Equal(resp1.Responses[1].GetUpdateWorkflow().Outcome.GetSuccess(), resp2.Responses[1].GetUpdateWorkflow().Outcome.GetSuccess())
-		})
-
-		s.Run("for workflow id conflict policy terminate", func() {
-			s.T().Skip("TODO")
-			tv := testvars.New(s.T())
-
-			startReq := startWorkflowReq(tv)
-			startReq.RequestId = "request_id"
-			startReq.WorkflowIdConflictPolicy = enumspb.WORKFLOW_ID_CONFLICT_POLICY_TERMINATE_EXISTING
-			updReq := updateWorkflowReq(tv)
-
-			resp1, err := runUpdateWithStart(tv, startReq, updReq)
-			s.NoError(err)
-
-			resp2, err := runUpdateWithStart(tv, startReq, updReq)
-			s.NoError(err)
-
-			s.Equal(resp1.Responses[0].GetStartWorkflow().RunId, resp2.Responses[0].GetStartWorkflow().RunId)
-			s.Equal(resp1.Responses[1].GetUpdateWorkflow().Outcome.GetSuccess(), resp2.Responses[1].GetUpdateWorkflow().Outcome.GetSuccess())
+					// poll update to ensure same outcome is returned
+					pollRes, err := s.pollUpdate(tv, "1",
+						&updatepb.WaitPolicy{LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED})
+					s.Nil(err)
+					s.Equal(resp1.Responses[1].GetUpdateWorkflow().Outcome.String(), pollRes.Outcome.String())
+				})
+			}
 		})
 	})
 }
