@@ -5334,23 +5334,20 @@ func (ms *MutableStateImpl) closeTransaction(
 		return closeTransactionResult{}, err
 	}
 
-	workflowEventsSeq, eventBatches, bufferEvents, clearBuffer, err := ms.closeTransactionPrepareEvents(transactionPolicy)
-	if err != nil {
-		return closeTransactionResult{}, err
-	}
-
 	if err := ms.closeTransactionUpdateTransitionHistory(
 		transactionPolicy,
-		workflowEventsSeq,
-		bufferEvents,
 	); err != nil {
 		return closeTransactionResult{}, err
 	}
-
 	ms.closeTransactionHandleUnknownVersionedTransition()
 	ms.closeTransactionTrackLastUpdateVersionedTransition(
 		transactionPolicy,
 	)
+
+	workflowEventsSeq, eventBatches, bufferEvents, clearBuffer, err := ms.closeTransactionPrepareEvents(transactionPolicy)
+	if err != nil {
+		return closeTransactionResult{}, err
+	}
 
 	ms.closeTransactionTrackTombstones(transactionPolicy)
 
@@ -5449,20 +5446,7 @@ func (ms *MutableStateImpl) closeTransactionHandleSpeculativeWorkflowTask(
 
 func (ms *MutableStateImpl) closeTransactionUpdateTransitionHistory(
 	transactionPolicy TransactionPolicy,
-	workflowEventsSeq []*persistence.WorkflowEvents,
-	newBufferEvents []*historypb.HistoryEvent,
 ) error {
-	if len(workflowEventsSeq) > 0 {
-		lastEvents := workflowEventsSeq[len(workflowEventsSeq)-1].Events
-		lastEvent := lastEvents[len(lastEvents)-1]
-		if err := ms.updateWithLastWriteEvent(
-			lastEvent,
-			transactionPolicy,
-		); err != nil {
-			return err
-		}
-	}
-
 	if transactionPolicy != TransactionPolicyActive {
 		// TODO: replication/standby logic will need a different way for updating transition history
 		// when not syncing mutable state
@@ -5911,6 +5895,17 @@ func (ms *MutableStateImpl) closeTransactionPrepareEvents(
 		workflowEventsSeq,
 	); err != nil {
 		return nil, nil, nil, false, err
+	}
+
+	if len(workflowEventsSeq) > 0 {
+		lastEvents := workflowEventsSeq[len(workflowEventsSeq)-1].Events
+		lastEvent := lastEvents[len(lastEvents)-1]
+		if err := ms.updateWithLastWriteEvent(
+			lastEvent,
+			transactionPolicy,
+		); err != nil {
+			return nil, nil, nil, false, err
+		}
 	}
 
 	return workflowEventsSeq, newEventsBatches, newBufferBatch, clearBuffer, nil
