@@ -103,6 +103,14 @@ func (ts *TestServer) GetDefaultNamespace() string {
 	return ts.defaultTestNamespace
 }
 
+// GetFrontendHostPort returns the host:port for this server.
+//
+// When constructing a Temporal client from within the same process,
+// GetDefaultClient or NewClientWithOptions should be used instead.
+func (ts *TestServer) GetFrontendHostPort() string {
+	return ts.server.FrontendHostPort()
+}
+
 // NewClientWithOptions returns a new Temporal client configured for making requests to the server.
 //
 // If no namespace option is set it will use a pre-registered test namespace.
