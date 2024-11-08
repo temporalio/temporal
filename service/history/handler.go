@@ -2337,7 +2337,7 @@ func (h *Handler) CompleteNexusOperation(ctx context.Context, request *historyse
 	}
 	err = nexusoperations.CompletionHandler(
 		ctx,
-		engine.StateMachineEnvironment(),
+		engine.StateMachineEnvironment(metrics.OperationTag(metrics.HistoryCompleteNexusOperationScope)),
 		ref,
 		request.Completion.RequestId,
 		request.GetSuccess(),
@@ -2405,7 +2405,13 @@ func (h *Handler) InvokeStateMachineMethod(ctx context.Context, request *history
 		StateMachineRef: request.Ref,
 	}
 
-	bytes, err := registry.ExecuteRemoteMethod(ctx, engine.StateMachineEnvironment(), ref, request.MethodName, request.Input)
+	bytes, err := registry.ExecuteRemoteMethod(
+		ctx,
+		engine.StateMachineEnvironment(metrics.OperationTag(request.MethodName)),
+		ref,
+		request.MethodName,
+		request.Input,
+	)
 	if err != nil {
 		return nil, err
 	}

@@ -151,7 +151,7 @@ type (
 		tracer                     trace.Tracer
 		taskCategoryRegistry       tasks.TaskCategoryRegistry
 		commandHandlerRegistry     *workflow.CommandHandlerRegistry
-		stateMachineEnvironment    *stateMachineEnvironment
+		workflowCache              wcache.Cache
 		replicationProgressCache   replication.ProgressCache
 		syncStateRetriever         replication.SyncStateRetriever
 	}
@@ -224,14 +224,9 @@ func NewEngineWithShardContext(
 		tracer:                     tracerProvider.Tracer(consts.LibraryName),
 		taskCategoryRegistry:       taskCategoryRegistry,
 		commandHandlerRegistry:     commandHandlerRegistry,
-		stateMachineEnvironment: &stateMachineEnvironment{
-			shardContext:   shard,
-			cache:          workflowCache,
-			metricsHandler: shard.GetMetricsHandler(),
-			logger:         logger,
-		},
-		replicationProgressCache: replicationProgressCache,
-		syncStateRetriever:       syncStateRetriever,
+		workflowCache:              workflowCache,
+		replicationProgressCache:   replicationProgressCache,
+		syncStateRetriever:         syncStateRetriever,
 	}
 
 	historyEngImpl.queueProcessors = make(map[tasks.Category]queues.Queue)
@@ -1041,8 +1036,15 @@ func (e *historyEngineImpl) ListTasks(
 }
 
 // StateMachineEnvironment implements shard.Engine.
-func (e *historyEngineImpl) StateMachineEnvironment() hsm.Environment {
-	return e.stateMachineEnvironment
+func (e *historyEngineImpl) StateMachineEnvironment(
+	operationTag metrics.Tag,
+) hsm.Environment {
+	return &stateMachineEnvironment{
+		shardContext:   e.shardContext,
+		cache:          e.workflowCache,
+		metricsHandler: e.metricsHandler.WithTags(operationTag),
+		logger:         e.logger,
+	}
 }
 
 func (e *historyEngineImpl) SyncWorkflowState(ctx context.Context, request *historyservice.SyncWorkflowStateRequest) (_ *historyservice.SyncWorkflowStateResponse, retErr error) {
