@@ -27,6 +27,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
 	"strings"
 	"testing"
 	"time"
@@ -51,6 +52,22 @@ import (
 	"go.temporal.io/server/service/frontend/configs"
 	"go.temporal.io/server/tests/testcore"
 )
+
+type headerCapture struct {
+	lastHeaders http.Header
+}
+
+func newHeaderCaptureCaller() (func(*http.Request) (*http.Response, error), *headerCapture) {
+	capture := &headerCapture{}
+	caller := func(req *http.Request) (*http.Response, error) {
+		resp, err := http.DefaultClient.Do(req)
+		if resp != nil {
+			capture.lastHeaders = resp.Header
+		}
+		return resp, err
+	}
+	return caller, capture
+}
 
 var op = nexus.NewOperationReference[string, string]("my-operation")
 
@@ -95,7 +112,7 @@ func (s *NexusApiTestSuite) TestNexusStartOperation_Outcomes() {
 		endpoint  *nexuspb.Endpoint
 		timeout   time.Duration
 		handler   func(*workflowservice.PollNexusTaskQueueResponse) (*nexuspb.Response, *nexuspb.HandlerError)
-		assertion func(*testing.T, *nexus.ClientStartOperationResult[string], error)
+		assertion func(*testing.T, *nexus.ClientStartOperationResult[string], error, http.Header)
 	}
 
 	testCases := []testcase{
@@ -103,7 +120,7 @@ func (s *NexusApiTestSuite) TestNexusStartOperation_Outcomes() {
 			outcome:  "sync_success",
 			endpoint: s.createNexusEndpoint(testcore.RandomizeStr("test-endpoint"), testcore.RandomizeStr("task-queue")),
 			handler:  nexusEchoHandler,
-			assertion: func(t *testing.T, res *nexus.ClientStartOperationResult[string], err error) {
+			assertion: func(t *testing.T, res *nexus.ClientStartOperationResult[string], err error, headers http.Header) {
 				require.NoError(t, err)
 				require.Equal(t, "input", res.Successful)
 			},
@@ -138,7 +155,7 @@ func (s *NexusApiTestSuite) TestNexusStartOperation_Outcomes() {
 					},
 				}, nil
 			},
-			assertion: func(t *testing.T, res *nexus.ClientStartOperationResult[string], err error) {
+			assertion: func(t *testing.T, res *nexus.ClientStartOperationResult[string], err error, headers http.Header) {
 				require.NoError(t, err)
 				require.Equal(t, "test-id", res.Pending.ID)
 				require.Len(t, res.Links, 1)
@@ -167,7 +184,7 @@ func (s *NexusApiTestSuite) TestNexusStartOperation_Outcomes() {
 					},
 				}, nil
 			},
-			assertion: func(t *testing.T, res *nexus.ClientStartOperationResult[string], err error) {
+			assertion: func(t *testing.T, res *nexus.ClientStartOperationResult[string], err error, headers http.Header) {
 				var operationError *nexus.UnsuccessfulOperationError
 				require.ErrorAs(t, err, &operationError)
 				require.Equal(t, nexus.OperationStateFailed, operationError.State)
@@ -188,11 +205,11 @@ func (s *NexusApiTestSuite) TestNexusStartOperation_Outcomes() {
 					Failure:   &nexuspb.Failure{Message: "deliberate internal failure"},
 				}
 			},
-			assertion: func(t *testing.T, res *nexus.ClientStartOperationResult[string], err error) {
+			assertion: func(t *testing.T, res *nexus.ClientStartOperationResult[string], err error, headers http.Header) {
 				var handlerErr *nexus.HandlerError
 				require.ErrorAs(t, err, &handlerErr)
 				require.Equal(t, nexus.HandlerErrorTypeInternal, handlerErr.Type)
-				require.Equal(t, "worker", handlerErr.Failure.Metadata["Temporal-Nexus-Failure-Source"])
+				require.Equal(t, "worker", headers.Get("Temporal-Nexus-Failure-Source"))
 				require.Equal(t, "deliberate internal failure", handlerErr.Failure.Message)
 			},
 		},
@@ -208,7 +225,7 @@ func (s *NexusApiTestSuite) TestNexusStartOperation_Outcomes() {
 				time.Sleep(timeout) //nolint:forbidigo // Allow time.Sleep for timeout tests
 				return nil, nil
 			},
-			assertion: func(t *testing.T, res *nexus.ClientStartOperationResult[string], err error) {
+			assertion: func(t *testing.T, res *nexus.ClientStartOperationResult[string], err error, header http.Header) {
 				var handlerErr *nexus.HandlerError
 				require.ErrorAs(t, err, &handlerErr)
 				require.Equal(t, nexus.HandlerErrorTypeUpstreamTimeout, handlerErr.Type)
@@ -221,7 +238,12 @@ func (s *NexusApiTestSuite) TestNexusStartOperation_Outcomes() {
 		ctx, cancel := context.WithCancel(testcore.NewContext())
 		defer cancel()
 
-		client, err := nexus.NewClient(nexus.ClientOptions{BaseURL: dispatchURL, Service: "test-service"})
+		httpCaller, headerCapture := newHeaderCaptureCaller()
+		client, err := nexus.NewClient(nexus.ClientOptions{
+			BaseURL:    dispatchURL,
+			Service:    "test-service",
+			HTTPCaller: httpCaller,
+		})
 		require.NoError(t, err)
 		capture := s.GetTestCluster().Host().CaptureMetricsHandler().StartCapture()
 		defer s.GetTestCluster().Host().CaptureMetricsHandler().StopCapture(capture)
@@ -249,7 +271,7 @@ func (s *NexusApiTestSuite) TestNexusStartOperation_Outcomes() {
 			return err == nil || !(errors.As(err, &handlerErr) && handlerErr.Type == nexus.HandlerErrorTypeNotFound)
 		}, 10*time.Second, eventuallyTick)
 
-		tc.assertion(t, result, err)
+		tc.assertion(t, result, err, headerCapture.lastHeaders)
 
 		snap := capture.Snapshot()
 
@@ -597,7 +619,7 @@ func (s *NexusApiTestSuite) TestNexusCancelOperation_Outcomes() {
 		endpoint  *nexuspb.Endpoint
 		timeout   time.Duration
 		handler   func(*workflowservice.PollNexusTaskQueueResponse) (*nexuspb.Response, *nexuspb.HandlerError)
-		assertion func(*testing.T, error)
+		assertion func(*testing.T, error, http.Header)
 	}
 
 	testCases := []testcase{
@@ -617,7 +639,7 @@ func (s *NexusApiTestSuite) TestNexusCancelOperation_Outcomes() {
 					},
 				}, nil
 			},
-			assertion: func(t *testing.T, err error) {
+			assertion: func(t *testing.T, err error, headers http.Header) {
 				require.NoError(t, err)
 			},
 		},
@@ -630,11 +652,11 @@ func (s *NexusApiTestSuite) TestNexusCancelOperation_Outcomes() {
 					Failure:   &nexuspb.Failure{Message: "deliberate internal failure"},
 				}
 			},
-			assertion: func(t *testing.T, err error) {
+			assertion: func(t *testing.T, err error, headers http.Header) {
 				var handlerErr *nexus.HandlerError
 				require.ErrorAs(t, err, &handlerErr)
 				require.Equal(t, nexus.HandlerErrorTypeInternal, handlerErr.Type)
-				require.Equal(t, "worker", handlerErr.Failure.Metadata["Temporal-Nexus-Failure-Source"])
+				require.Equal(t, "worker", headers.Get("Temporal-Nexus-Failure-Source"))
 				require.Equal(t, "deliberate internal failure", handlerErr.Failure.Message)
 			},
 		},
@@ -650,7 +672,7 @@ func (s *NexusApiTestSuite) TestNexusCancelOperation_Outcomes() {
 				time.Sleep(timeout) //nolint:forbidigo // Allow time.Sleep for timeout tests
 				return nil, nil
 			},
-			assertion: func(t *testing.T, err error) {
+			assertion: func(t *testing.T, err error, headers http.Header) {
 				var handlerErr *nexus.HandlerError
 				require.ErrorAs(t, err, &handlerErr)
 				require.Equal(t, nexus.HandlerErrorTypeUpstreamTimeout, handlerErr.Type)
@@ -663,7 +685,12 @@ func (s *NexusApiTestSuite) TestNexusCancelOperation_Outcomes() {
 		ctx, cancel := context.WithCancel(testcore.NewContext())
 		defer cancel()
 
-		client, err := nexus.NewClient(nexus.ClientOptions{BaseURL: dispatchURL, Service: "test-service"})
+		httpCaller, headerCapture := newHeaderCaptureCaller()
+		client, err := nexus.NewClient(nexus.ClientOptions{
+			BaseURL:    dispatchURL,
+			Service:    "test-service",
+			HTTPCaller: httpCaller,
+		})
 		require.NoError(t, err)
 		capture := s.GetTestCluster().Host().CaptureMetricsHandler().StartCapture()
 		defer s.GetTestCluster().Host().CaptureMetricsHandler().StopCapture(capture)
@@ -687,7 +714,7 @@ func (s *NexusApiTestSuite) TestNexusCancelOperation_Outcomes() {
 			return err == nil || !(errors.As(err, &handlerErr) && handlerErr.Type == nexus.HandlerErrorTypeNotFound)
 		}, 10*time.Second, eventuallyTick)
 
-		tc.assertion(t, err)
+		tc.assertion(t, err, headerCapture.lastHeaders)
 
 		snap := capture.Snapshot()
 
