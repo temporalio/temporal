@@ -336,8 +336,9 @@ lint-code: $(GOLANGCI_LINT)
 	@$(GOLANGCI_LINT) run --verbose --timeout 10m --fix=$(GOLANGCI_LINT_FIX) --new-from-rev=$(GOLANGCI_LINT_BASE_REV) --config=.golangci.yml
 
 fmt-imports: $(GCI) # Don't get confused, there is a single linter called gci, which is a part of the mega linter we use is called golangci-lint.
-	@printf $(COLOR) "Formatting imports..."
-	@$(GCI) write --skip-generated -s standard -s default ./*
+	# @printf $(COLOR) "Formatting imports..."
+	# @$(GCI) write --skip-generated -s standard -s default ./*
+	@printf $(COLOR) "Formatting imports is disabled..."
 
 lint: lint-code lint-actions lint-api lint-protos
 	@printf $(COLOR) "Run linters..."
