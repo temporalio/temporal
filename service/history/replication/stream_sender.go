@@ -555,7 +555,7 @@ Loop:
 			WithExpirationInterval(3 * time.Minute)
 
 		if err := backoff.ThrottleRetry(operation, retryPolicy, IsRetryableError); err != nil {
-			return err
+			return fmt.Errorf("failed to send task: %v, cause: %w", item, err)
 		}
 	}
 	return s.sendToStream(&historyservice.StreamWorkflowReplicationMessagesResponse{
