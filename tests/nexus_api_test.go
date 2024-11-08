@@ -488,7 +488,7 @@ func (s *NexusApiTestSuite) TestNexusStartOperation_Claims() {
 			assertion: func(t *testing.T, res *nexus.ClientStartOperationResult[string], err error, snap map[string][]*metricstest.CapturedRecording) {
 				var handlerErr *nexus.HandlerError
 				require.ErrorAs(t, err, &handlerErr)
-				require.Equal(t, nexus.HandlerErrorTypeUnauthorized, handlerErr.Type)
+				require.Equal(t, nexus.HandlerErrorTypeUnauthenticated, handlerErr.Type)
 				require.Equal(t, "unauthorized", handlerErr.Failure.Message)
 				require.Equal(t, 1, len(snap["nexus_request_preprocess_errors"]))
 			},
