@@ -808,7 +808,6 @@ func (r *TaskGeneratorImpl) GenerateMigrationTasks() ([]tasks.Task, int64, error
 		}}, 1, nil
 	}
 	return replicationTasks, executionInfo.StateTransitionCount, nil
-
 }
 
 func (r *TaskGeneratorImpl) getTimerSequence() TimerSequence {
