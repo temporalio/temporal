@@ -1364,3 +1364,23 @@ func (mr *MockWorkflowServiceClientMockRecorder) UpdateWorkflowExecution(arg0, a
 	varargs := append([]any{arg0, arg1}, arg2...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateWorkflowExecution", reflect.TypeOf((*MockWorkflowServiceClient)(nil).UpdateWorkflowExecution), varargs...)
 }
+
+// UpdateWorkflowExecutionOptions mocks base method.
+func (m *MockWorkflowServiceClient) UpdateWorkflowExecutionOptions(arg0 context.Context, arg1 *workflowservice.UpdateWorkflowExecutionOptionsRequest, arg2 ...grpc.CallOption) (*workflowservice.UpdateWorkflowExecutionOptionsResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []any{arg0, arg1}
+	for _, a := range arg2 {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "UpdateWorkflowExecutionOptions", varargs...)
+	ret0, _ := ret[0].(*workflowservice.UpdateWorkflowExecutionOptionsResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UpdateWorkflowExecutionOptions indicates an expected call of UpdateWorkflowExecutionOptions.
+func (mr *MockWorkflowServiceClientMockRecorder) UpdateWorkflowExecutionOptions(arg0, arg1 any, arg2 ...any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]any{arg0, arg1}, arg2...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateWorkflowExecutionOptions", reflect.TypeOf((*MockWorkflowServiceClient)(nil).UpdateWorkflowExecutionOptions), varargs...)
+}

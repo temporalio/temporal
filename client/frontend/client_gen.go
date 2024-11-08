@@ -682,3 +682,13 @@ func (c *clientImpl) UpdateWorkflowExecution(
 	defer cancel()
 	return c.client.UpdateWorkflowExecution(ctx, request, opts...)
 }
+
+func (c *clientImpl) UpdateWorkflowExecutionOptions(
+	ctx context.Context,
+	request *workflowservice.UpdateWorkflowExecutionOptionsRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.UpdateWorkflowExecutionOptionsResponse, error) {
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return c.client.UpdateWorkflowExecutionOptions(ctx, request, opts...)
+}
