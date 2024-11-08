@@ -180,6 +180,7 @@ Full "Update state" and "Abort reason" matrix is the following:
 | **ProvisionallyCompleted**              | `WorkflowUpdateAbortedErr` | `acceptedUpdateCompletedWorkflowFailure` | `acceptedUpdateCompletedWorkflowFailure` |
 | **ProvisionallyCompletedAfterAccepted** | `WorkflowUpdateAbortedErr` | `acceptedUpdateCompletedWorkflowFailure` | `acceptedUpdateCompletedWorkflowFailure` |
 | **Completed**                           | `nil`                      | `nil`                                    | `nil`                                    |
+| **ProvisionallyAborted**                | `nil`                      | `nil`                                    | `nil`                                    |
 | **Aborted**                             | `nil`                      | `nil`                                    | `nil`                                    |
 
 When the Workflow performs a final completion, all in-flight Updates are aborted: admitted Updates get
@@ -430,6 +431,14 @@ Sent -> ProvisionalyAccepted -> ProvisionalyCompleted -> ProvisionalyCompletedAf
 The `ProvisionalyCompletedAfterAccepted` in-between state is necessary to unblock `completed` future before
 `accepted`. This allows returning Update results to the API caller even it was waiting for `ACCEPTED`
 stage.
+
+If a Workflow Update is accepted and **Workflow** is completed in the same Workflow Task, it goes through the
+similar chain of state transitions:
+```
+Sent -> ProvisionalyAccepted -> ProvisionalyAborted -> ProvisionalyCompletedAfterAccepted -> Aborted
+```
+The `ProvisionalyCompletedAfterAccepted` state is reused here as `ProvisionalyAbortedAfterAccepted` because
+behavior is exactly the same.
 
 > #### NOTE
 > Because the `Cancel()` method is called in a `defer` block in case of error, the `Apply()` method
