@@ -32,6 +32,7 @@ import (
 	sdklog "go.temporal.io/sdk/log"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type (
@@ -39,33 +40,44 @@ type (
 		Name          string
 		TaskQueueType enumspb.TaskQueueType
 	}
-	Deployment struct {
-		Namespace      string
-		DeploymentName string
-		TaskQueue      []*TaskQueue // All the task queues associated with this buildID/deployment
-		BuildID        string
+	// DeploymentTaskQueue holds relevant information for a task-queue present in a Deployment.
+	DeploymentTaskQueue struct {
+		FirstPollerTimeStamp *timestamppb.Timestamp
+		TaskQueue            TaskQueue
 	}
+
+	DeploymentWorkflowArgs struct {
+		NamespaceName string
+		NamespaceID   string
+		TaskQueue     []*DeploymentTaskQueue // required for CAN
+	}
+
+	// DeploymentWorkflowRunner holds the local state while running a deployment workflow
+	DeploymentWorkflowRunner struct {
+		// Local State of a workflow
+		DeploymentName string
+		BuildID        string
+		TaskQueue      []*DeploymentTaskQueue // All the task queues associated with this buildID/deployment
+
+		ctx     workflow.Context
+		a       *activities
+		logger  sdklog.Logger
+		metrics sdkclient.MetricsHandler
+	}
+
 	DeploymentName struct {
 		Namespace      string
 		Name           string
 		CurrentBuildID string // denotes the current "default" build-ID of a deploymentName
 	}
 
-	// DeploymentWorkflowRunner holds the local state while running a deployment workflow
-	DeploymentWorkflowRunner struct {
-		deployment Deployment
-		ctx        workflow.Context
-		a          *activities
-		logger     sdklog.Logger
-		metrics    sdkclient.MetricsHandler
-	}
 	// DeploymentWorkflowRunner holds the local state while running a deployment name workflow
 	DeploymentNameWorkflowRunner struct {
-		deploymentName DeploymentName
-		ctx            workflow.Context
-		a              *activities
-		logger         sdklog.Logger
-		metrics        sdkclient.MetricsHandler
+		// Local State of a DeploymentName Workflow
+		ctx     workflow.Context
+		a       *activities
+		logger  sdklog.Logger
+		metrics sdkclient.MetricsHandler
 	}
 	// DeploymentBuildIDArgs holds the arguments used while calling activities associated with a deployment
 	DeploymentBuildIDArgs struct {
@@ -103,6 +115,7 @@ func DeploymentWorkflow(ctx workflow.Context, deploymentWorkflowArgs Deployment)
 	}
 	// TQ should be set to nil here since signal handler updates it
 	deploymentWorkflowRunner.deployment.TaskQueue = nil
+	workflow.GetInfo()
 	return deploymentWorkflowRunner.run()
 }
 
