@@ -261,7 +261,7 @@ func (f *factoryImpl) Close() {
 
 func IsPersistenceTransientError(err error) bool {
 	switch err.(type) {
-	case *serviceerror.Unavailable:
+	case *serviceerror.Unavailable, *serviceerror.DataLoss:
 		return true
 	}
 
