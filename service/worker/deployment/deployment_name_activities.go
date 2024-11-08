@@ -2,7 +2,7 @@
 //
 // Copyright (c) 2024 Temporal Technologies Inc.  All rights reserved.
 //
-// Copyright (c) 2020 Uber Technologies, Inc.
+// Copyright (c) 2024 Uber Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -22,46 +22,16 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package versioning
+package deployment
 
 import (
-	"testing"
-
-	"github.com/stretchr/testify/mock"
-	"github.com/stretchr/testify/suite"
-	"go.temporal.io/sdk/testsuite"
-	"go.uber.org/mock/gomock"
+	"go.temporal.io/server/common/namespace"
 )
 
-type versioningSuite struct {
-	suite.Suite
-	testsuite.WorkflowTestSuite
-	controller *gomock.Controller
-	env        *testsuite.TestWorkflowEnvironment
-}
-
-func (s *versioningSuite) SetupTest() {
-	s.controller = gomock.NewController(s.T())
-	s.env = s.WorkflowTestSuite.NewTestWorkflowEnvironment()
-	s.env.RegisterWorkflow(DeploymentWorkflow)
-}
-
-func (s *versioningSuite) TearDownTest() {
-	s.controller.Finish()
-	s.env.AssertExpectations(s.T())
-}
-
-func TestVersioningSuite(t *testing.T) {
-	suite.Run(t, new(versioningSuite))
-}
-
-func (v *versioningSuite) TestDeploymentWorkflowCreation() {
-	// Mocking the activity which starts a DeploymentName workflow
-	var a *activities
-	v.env.OnActivity(a, mock.Anything, mock.Anything).Return(nil, nil)
-
-	// Mimicking SignalWithStart using RegisterDelayedCallback
-	v.env.RegisterDelayedCallback(func() {
-		v.env.SignalWorkflow(UpdateDeploymentSignalName, Deployment{})
-	}, 0)
-}
+type (
+	DeploymentNameActivities struct {
+		activityDeps
+		namespace   namespace.Name
+		namespaceID namespace.ID
+	}
+)

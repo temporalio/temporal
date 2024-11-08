@@ -22,7 +22,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package versioning
+package deployment
 
 import (
 	"time"
@@ -40,49 +40,34 @@ type (
 		Name          string
 		TaskQueueType enumspb.TaskQueueType
 	}
-	// DeploymentTaskQueue holds relevant information for a task-queue present in a Deployment.
+	// DeploymentTaskQueue holds relevant information for a task-queue present in a Deployment
 	DeploymentTaskQueue struct {
 		FirstPollerTimeStamp *timestamppb.Timestamp
 		TaskQueue            TaskQueue
 	}
 
+	// DeploymentWorkflowArgs represents the arguments passed for a DeploymentWorkflow
 	DeploymentWorkflowArgs struct {
 		NamespaceName string
 		NamespaceID   string
-		TaskQueue     []*DeploymentTaskQueue // required for CAN
+		TaskQueues    []*DeploymentTaskQueue // required for CAN
 	}
 
-	// DeploymentWorkflowRunner holds the local state while running a deployment workflow
-	DeploymentWorkflowRunner struct {
-		// Local State of a workflow
+	DeploymentLocalState struct {
+		NamespaceName  string
+		NamespaceID    string
 		DeploymentName string
 		BuildID        string
-		TaskQueue      []*DeploymentTaskQueue // All the task queues associated with this buildID/deployment
-
-		ctx     workflow.Context
-		a       *activities
-		logger  sdklog.Logger
-		metrics sdkclient.MetricsHandler
+		TaskQueues     []*DeploymentTaskQueue // All the task queues associated with this buildID/deployment
 	}
 
-	DeploymentName struct {
-		Namespace      string
-		Name           string
-		CurrentBuildID string // denotes the current "default" build-ID of a deploymentName
-	}
-
-	// DeploymentWorkflowRunner holds the local state while running a deployment name workflow
-	DeploymentNameWorkflowRunner struct {
-		// Local State of a DeploymentName Workflow
-		ctx     workflow.Context
-		a       *activities
-		logger  sdklog.Logger
-		metrics sdkclient.MetricsHandler
-	}
-	// DeploymentBuildIDArgs holds the arguments used while calling activities associated with a deployment
-	DeploymentBuildIDArgs struct {
-		deployment Deployment
-		buildID    string // used for verifying/updating the buildID of all the task queues in a deployment
+	// DeploymentWorkflowRunner holds the local state for a deployment workflow
+	DeploymentWorkflowRunner struct {
+		ctx                  workflow.Context
+		a                    *DeploymentActivities
+		logger               sdklog.Logger
+		metrics              sdkclient.MetricsHandler
+		deploymentlocalState *DeploymentLocalState
 	}
 )
 
@@ -98,24 +83,25 @@ var (
 )
 
 const (
-	UpdateDeploymentSignalName            = "update_deployment"
-	UpdateDeploymentBuildIDSignalName     = "update_deployment_build_id"
-	UpdateDeploymentNameBuildIDSignalName = "update-deployment-name-buildID"
+	UpdateDeploymentSignalName        = "update_deployment"
+	UpdateDeploymentBuildIDSignalName = "update_deployment_build_id"
 
-	DeploymentWorkflowIDPrefix     = "temporal-sys-deployment:"
-	DeploymentNameWorkflowIDPrefix = "temporal-sys-deployment-name:"
+	DeploymentWorkflowIDPrefix = "temporal-sys-deployment:"
 )
 
-func DeploymentWorkflow(ctx workflow.Context, deploymentWorkflowArgs Deployment) error {
+func DeploymentWorkflow(ctx workflow.Context, deploymentWorkflowArgs DeploymentWorkflowArgs) error {
 	deploymentWorkflowRunner := &DeploymentWorkflowRunner{
-		deployment: deploymentWorkflowArgs,
-		ctx:        ctx,
-		logger:     sdklog.With(workflow.GetLogger(ctx), "wf-namespace", deploymentWorkflowArgs.Namespace),
-		metrics:    workflow.GetMetricsHandler(ctx).WithTags(map[string]string{"namespace": deploymentWorkflowArgs.Namespace}),
+		deploymentlocalState: &DeploymentLocalState{
+			NamespaceName:  deploymentWorkflowArgs.NamespaceName,
+			NamespaceID:    deploymentWorkflowArgs.NamespaceID,
+			DeploymentName: "", // TODO Shivam - extract the Deployment
+			BuildID:        "", // TODO Shivam - extract BuildID from the workflowID
+			TaskQueues:     deploymentWorkflowArgs.TaskQueues,
+		},
+		ctx:     ctx,
+		logger:  sdklog.With(workflow.GetLogger(ctx), "wf-namespace", deploymentWorkflowArgs.NamespaceName),
+		metrics: workflow.GetMetricsHandler(ctx).WithTags(map[string]string{"namespace": deploymentWorkflowArgs.NamespaceName}),
 	}
-	// TQ should be set to nil here since signal handler updates it
-	deploymentWorkflowRunner.deployment.TaskQueue = nil
-	workflow.GetInfo()
 	return deploymentWorkflowRunner.run()
 }
 
@@ -154,33 +140,11 @@ func (d *DeploymentWorkflowRunner) run() error {
 	*/
 
 	d.logger.Debug("Deployment doing continue-as-new")
-	return workflow.NewContinueAsNewError(d.ctx, DeploymentWorkflow, d.deployment)
-
-}
-
-// TODO Shivam - Define workflow for DeploymentName
-func DeploymentNameWorkflow(ctx workflow.Context, deploymentNameArgs DeploymentName) error {
-	deploymentWorkflowNameRunner := &DeploymentNameWorkflowRunner{
-		deploymentName: deploymentNameArgs,
-		ctx:            ctx,
-		logger:         sdklog.With(workflow.GetLogger(ctx), "wf-namespace", deploymentNameArgs.Namespace),
-		metrics:        workflow.GetMetricsHandler(ctx).WithTags(map[string]string{"namespace": deploymentNameArgs.Namespace}),
+	workflowArgs := DeploymentWorkflowArgs{
+		NamespaceName: d.deploymentlocalState.NamespaceName,
+		NamespaceID:   d.deploymentlocalState.NamespaceID,
+		TaskQueues:    d.deploymentlocalState.TaskQueues,
 	}
-	// TQ should be set to nil here since signal handler updates it
-	return deploymentWorkflowNameRunner.run()
-}
+	return workflow.NewContinueAsNewError(d.ctx, DeploymentWorkflow, workflowArgs)
 
-func (d *DeploymentNameWorkflowRunner) run() error {
-	/* TODO Shivam:
-
-	Implement this workflow to be an infinitely long running workflow
-
-	Query handlers to return current default buildID of the deployment name
-
-	Signal handler(s) to:
-	signal DeploymentWorkflow and update the buildID of all task-queues in the deployment name.
-	update default buildID of the deployment name.
-
-	*/
-	return nil
 }

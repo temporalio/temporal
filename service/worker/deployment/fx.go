@@ -22,13 +22,12 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package versioning
+package deployment
 
 import (
 	"fmt"
 
 	enumspb "go.temporal.io/api/enums/v1"
-	"go.temporal.io/api/workflowservice/v1"
 	sdkworker "go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -81,7 +80,6 @@ type (
 		MetricsHandler metrics.Handler
 		Logger         log.Logger
 		ClientFactory  sdk.ClientFactory
-		FrontendClient workflowservice.WorkflowServiceClient //  TODO Shivam - may not require this since deployment activities only use matching client
 		MatchingClient resource.MatchingClient
 	}
 
@@ -118,14 +116,25 @@ func (s *workerComponent) Register(registry sdkworker.Registry, ns *namespace.Na
 	registry.RegisterWorkflowWithOptions(DeploymentNameWorkflow, workflow.RegisterOptions{Name: DeploymentNameWorkflowType})
 
 	// TODO Shivam: Might need a cleanup function upon activity registration
-	activities := s.newActivities(ns.Name(), ns.ID())
-	registry.RegisterActivity(activities)
+	deploymentActivities := s.newDeploymentActivities(ns.Name(), ns.ID())
+	deploymentNameActivities := s.newDeploymentNameActivities(ns.Name(), ns.ID())
+	registry.RegisterActivity(deploymentActivities)
+	registry.RegisterActivity(deploymentNameActivities)
 	return nil
 }
 
 // TODO Shivam - place holder for now but will initialize activity rate limits (if any) amongst other things
-func (s *workerComponent) newActivities(name namespace.Name, id namespace.ID) *activities {
-	return &activities{
+func (s *workerComponent) newDeploymentActivities(name namespace.Name, id namespace.ID) *DeploymentActivities {
+	return &DeploymentActivities{
+		activityDeps: s.activityDeps,
+		namespace:    name,
+		namespaceID:  id,
+	}
+}
+
+// TODO Shivam - place holder for now but will initialize activity rate limits (if any) amongst other things
+func (s *workerComponent) newDeploymentNameActivities(name namespace.Name, id namespace.ID) *DeploymentNameActivities {
+	return &DeploymentNameActivities{
 		activityDeps: s.activityDeps,
 		namespace:    name,
 		namespaceID:  id,
