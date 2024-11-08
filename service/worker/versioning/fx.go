@@ -31,7 +31,8 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	sdkworker "go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
-	"go.temporal.io/server/api/matchingservice/v1"
+	"go.temporal.io/server/common/resource"
+
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
@@ -82,7 +83,7 @@ type (
 		Logger         log.Logger
 		ClientFactory  sdk.ClientFactory
 		FrontendClient workflowservice.WorkflowServiceClient //  TODO Shivam - may not require this since deployment activities only use matching client
-		MatchingClient matchingservice.MatchingServiceClient
+		MatchingClient resource.MatchingClient
 	}
 
 	fxResult struct {
