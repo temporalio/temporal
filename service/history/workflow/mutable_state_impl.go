@@ -6786,6 +6786,9 @@ func (ms *MutableStateImpl) applyUpdatesToUpdateInfos(
 	updatedUpdateInfos map[string]*persistencespb.UpdateInfo,
 	isSnapshot bool,
 ) {
+	if ms.executionInfo.UpdateInfos == nil {
+		ms.executionInfo.UpdateInfos = make(map[string]*persistencespb.UpdateInfo, len(updatedUpdateInfos))
+	}
 	if isSnapshot {
 		for updateID := range ms.executionInfo.UpdateInfos {
 			if _, ok := updatedUpdateInfos[updateID]; !ok {
@@ -6794,6 +6797,7 @@ func (ms *MutableStateImpl) applyUpdatesToUpdateInfos(
 			}
 		}
 	}
+
 	for updateID, ui := range updatedUpdateInfos {
 		if existing, ok := ms.executionInfo.UpdateInfos[updateID]; ok {
 			if CompareVersionedTransition(existing.GetLastUpdateVersionedTransition(), ui.GetLastUpdateVersionedTransition()) == 0 {
