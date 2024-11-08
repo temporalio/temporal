@@ -93,7 +93,7 @@
       "RootRunId": {
         "type": "keyword"
       },
-      "TemporalPausedInfo": {
+      "TemporalPauseInfo": {
         "type": "keyword"
       }
     }
