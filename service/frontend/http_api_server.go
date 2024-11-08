@@ -299,7 +299,7 @@ func (h *HTTPAPIServer) serveHTTP(w http.ResponseWriter, r *http.Request) {
 func (h *HTTPAPIServer) allowedHostsMiddleware(hf runtime.HandlerFunc) runtime.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request, pathParams map[string]string) {
 		allowedHosts := h.allowedHosts.Get()
-		if allowedHost.MatchString(r.Host) {
+		if allowedHosts.MatchString(r.Host) {
 			hf(w, r, pathParams)
 			return
 		}

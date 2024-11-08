@@ -50,6 +50,8 @@ import (
 	"google.golang.org/grpc/reflection"
 )
 
+var matchAny = regexp.MustCompile(".*")
+
 // Config represents configuration for frontend service
 type Config struct {
 	NumHistoryShards                     int32
@@ -335,7 +337,12 @@ func NewConfig(
 		EnableEagerWorkflowStart:   dynamicconfig.EnableEagerWorkflowStart.Get(dc),
 		ActivityAPIsEnabled:        dynamicconfig.ActivityAPIsEnabled.Get(dc),
 
-		HTTPAllowedHosts: dynamicconfig.NewGlobalCachedTypedValue(dc, dynamicconfig.FrontendHTTPAllowedHosts, util.WildCardStringsToRegexp),
+		HTTPAllowedHosts: dynamicconfig.NewGlobalCachedTypedValue(dc, dynamicconfig.FrontendHTTPAllowedHosts, func(patterns []string) (*regexp.Regexp, error) {
+			if len(patterns) == 0 {
+				return matchAny, nil
+			}
+			return util.WildCardStringsToRegexp(patterns)
+		}),
 	}
 }
 

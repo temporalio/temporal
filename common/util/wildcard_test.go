@@ -20,42 +20,37 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package util
+package util_test
 
 import (
-	"errors"
-	"regexp"
-	"strings"
+	"testing"
+
+	"github.com/stretchr/testify/require"
+	"go.temporal.io/server/common/util"
 )
 
-// WildCardStringToRegexp converts a given string pattern to a regular expression matching wildcards (*) with any
-// substring.
-func WildCardStringToRegexp(pattern string) (*regexp.Regexp, error) {
-	if pattern == "" {
-		return nil, errors.New("pattern cannot be empty")
-	}
-	return WildCardStringsToRegexp([]string{pattern})
+func TestWildCardStringToRegexp(t *testing.T) {
+	re, err := util.WildCardStringToRegexp("a*z")
+	require.NoError(t, err)
+	require.Regexp(t, re, "az")
+	require.Regexp(t, re, "abz")
+	require.NotRegexp(t, re, "ab")
+
+	_, err = util.WildCardStringToRegexp("")
+	require.ErrorContains(t, err, "pattern cannot be empty")
 }
 
-// WildCardStringToRegexps converts a given slices of string patterns to a slice of regular expressions matching
-// wildcards (*) with any substring.
-func WildCardStringsToRegexp(patterns []string) (*regexp.Regexp, error) {
-	var result strings.Builder
-	result.WriteRune('^')
-	for i, pattern := range patterns {
-		result.WriteRune('(')
-		for i, literal := range strings.Split(pattern, "*") {
-			if i > 0 {
-				// Replace * with .*
-				result.WriteString(".*")
-			}
-			result.WriteString(regexp.QuoteMeta(literal))
-		}
-		result.WriteRune(')')
-		if i < len(patterns)-1 {
-			result.WriteRune('|')
-		}
-	}
-	result.WriteRune('$')
-	return regexp.Compile(result.String())
+func TestWildCardStringsToRegexp(t *testing.T) {
+	re, err := util.WildCardStringsToRegexp([]string{"a*z", "b*d"})
+	require.NoError(t, err)
+	require.Regexp(t, re, "az")
+	require.Regexp(t, re, "abz")
+	require.NotRegexp(t, re, "ab")
+	require.Regexp(t, re, "bd")
+	require.Regexp(t, re, "bcd")
+	require.NotRegexp(t, re, "bc")
+
+	re, err = util.WildCardStringsToRegexp([]string{})
+	require.NoError(t, err)
+	require.NotRegexp(t, re, "a")
 }
