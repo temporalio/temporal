@@ -679,22 +679,20 @@ func cancelCallOutcomeTag(callCtx context.Context, callErr error) string {
 
 func isRetryableHandlerError(eType nexus.HandlerErrorType) bool {
 	switch eType {
-	case nexus.HandlerErrorTypeResourceExhausted:
-	case nexus.HandlerErrorTypeInternal:
-	case nexus.HandlerErrorTypeUnavailable:
-	case nexus.HandlerErrorTypeUpstreamTimeout:
+	case nexus.HandlerErrorTypeResourceExhausted,
+		nexus.HandlerErrorTypeInternal,
+		nexus.HandlerErrorTypeUnavailable,
+		nexus.HandlerErrorTypeUpstreamTimeout:
 		return true
-	case nexus.HandlerErrorTypeBadRequest:
-	case nexus.HandlerErrorTypeUnauthenticated:
-	case nexus.HandlerErrorTypeUnauthorized:
-	case nexus.HandlerErrorTypeNotFound:
-	case nexus.HandlerErrorTypeNotImplemented:
+	case nexus.HandlerErrorTypeBadRequest,
+		nexus.HandlerErrorTypeUnauthenticated,
+		nexus.HandlerErrorTypeUnauthorized,
+		nexus.HandlerErrorTypeNotFound,
+		nexus.HandlerErrorTypeNotImplemented:
 		return false
 	default:
 		return true
 	}
-
-	return true
 }
 
 func isDestinationDown(err error) bool {
