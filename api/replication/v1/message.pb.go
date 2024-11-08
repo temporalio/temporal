@@ -1023,7 +1023,7 @@ type SyncActivityTaskAttributes struct {
 	// Stamp represents the internal “version” of the activity options and can/will be changed with Activity API.
 	// It monotonically increments when the activity options are changed.
 	Stamp int32 `protobuf:"varint,20,opt,name=stamp,proto3" json:"stamp,omitempty"`
-	// Indicates if the activity is paused.
+	// Flag indicating whether the activity is currently paused.
 	Paused bool `protobuf:"varint,21,opt,name=paused,proto3" json:"paused,omitempty"`
 }
 
