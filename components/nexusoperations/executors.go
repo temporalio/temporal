@@ -691,10 +691,10 @@ func isRetryableHandlerError(eType nexus.HandlerErrorType) bool {
 	case nexus.HandlerErrorTypeNotImplemented:
 		return false
 	default:
-		return false
+		return true
 	}
 
-	return false
+	return true
 }
 
 func isDestinationDown(err error) bool {
