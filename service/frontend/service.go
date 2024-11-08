@@ -25,7 +25,9 @@
 package frontend
 
 import (
+	"fmt"
 	"net"
+	"os"
 	"sync"
 	"time"
 
@@ -414,6 +416,15 @@ func (s *Service) Start() {
 				s.logger.Fatal("Failed to serve HTTP API server", tag.Error(err))
 			}
 		}()
+	} else if s.config.EnableNexusAPIs() {
+		var action string
+		if os.Args[0] == "temporal" {
+			action = "To enable Nexus, start the server with: `temporal server start-dev --http-port 7243 --dynamic-config-value system.enableNexus=true`."
+		} else {
+			action = "To enable Nexus, follow these instructions: https://github.com/temporalio/temporal/blob/main/docs/architecture/nexus.md#enabling-nexus."
+		}
+
+		s.logger.Warn(fmt.Sprintf("system.enableNexus dynamic config is enabled but the HTTP API port has not been set. Starting with Nexus disabled. %s", action))
 	}
 
 	go s.membershipMonitor.Start()
