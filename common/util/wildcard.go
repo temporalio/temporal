@@ -20,7 +20,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package common
+package util
 
 import (
 	"errors"
@@ -28,11 +28,9 @@ import (
 	"strings"
 )
 
-// WildCardStringToRegexp converts a given string pattern to a regular expression matching wildcards (*) with any
-// substring.
-func WildCardStringToRegexp(pattern string) (*regexp.Regexp, error) {
+func wildCardStringToRegexpString(pattern string) (string, error) {
 	if pattern == "" {
-		return nil, errors.New("pattern cannot be empty")
+		return "", errors.New("pattern cannot be empty")
 	}
 	var result strings.Builder
 	result.WriteString("^")
@@ -44,24 +42,38 @@ func WildCardStringToRegexp(pattern string) (*regexp.Regexp, error) {
 		result.WriteString(regexp.QuoteMeta(literal))
 	}
 	result.WriteString("$")
-	return regexp.Compile(result.String())
+	return result.String(), nil
+}
+
+// WildCardStringToRegexp converts a given string pattern to a regular expression matching wildcards (*) with any
+// substring.
+func WildCardStringToRegexp(pattern string) (*regexp.Regexp, error) {
+	s, err := wildCardStringToRegexpString(pattern)
+	if err != nil {
+		return nil, err
+	}
+	return regexp.Compile(s)
 }
 
 // WildCardStringToRegexps converts a given slices of string patterns to a slice of regular expressions matching
 // wildcards (*) with any substring.
-func WildCardStringsToRegexps(patterns []string) ([]*regexp.Regexp, error) {
+func WildCardStringsToRegexp(patterns []string) (*regexp.Regexp, error) {
+	var result strings.Builder
 	var errs []error
-	regexps := make([]*regexp.Regexp, len(patterns))
+
 	for i, pattern := range patterns {
-		re, err := WildCardStringToRegexp(pattern)
+		s, err := wildCardStringToRegexpString(pattern)
 		if err != nil {
 			errs = append(errs, err)
 			continue
 		}
-		regexps[i] = re
+		result.WriteString(s)
+		if i < len(pattern)-1 {
+			result.WriteRune('|')
+		}
 	}
 	if len(errs) > 0 {
 		return nil, errors.Join(errs...)
 	}
-	return regexps, nil
+	return regexp.Compile(result.String())
 }

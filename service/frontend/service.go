@@ -35,7 +35,6 @@ import (
 	"go.temporal.io/api/operatorservice/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/adminservice/v1"
-	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -43,6 +42,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/retrypolicy"
+	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/components/callbacks"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/health"
@@ -214,7 +214,7 @@ type Config struct {
 
 	ActivityAPIsEnabled dynamicconfig.BoolPropertyFnWithNamespaceFilter
 
-	HTTPAllowedHosts *dynamicconfig.GlobalCachedTypedValue[[]*regexp.Regexp]
+	HTTPAllowedHosts *dynamicconfig.GlobalCachedTypedValue[*regexp.Regexp]
 }
 
 // NewConfig returns new service config with default values
@@ -335,7 +335,7 @@ func NewConfig(
 		EnableEagerWorkflowStart:   dynamicconfig.EnableEagerWorkflowStart.Get(dc),
 		ActivityAPIsEnabled:        dynamicconfig.ActivityAPIsEnabled.Get(dc),
 
-		HTTPAllowedHosts: dynamicconfig.NewGlobalCachedTypedValue(dc, dynamicconfig.FrontendHTTPAllowedHosts, common.WildCardStringsToRegexps),
+		HTTPAllowedHosts: dynamicconfig.NewGlobalCachedTypedValue(dc, dynamicconfig.FrontendHTTPAllowedHosts, util.WildCardStringsToRegexp),
 	}
 }
 

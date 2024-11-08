@@ -69,7 +69,7 @@ type HTTPAPIServer struct {
 	logger                        log.Logger
 	serveMux                      *runtime.ServeMux
 	stopped                       chan struct{}
-	allowedHosts                  *dynamicconfig.GlobalCachedTypedValue[[]*regexp.Regexp]
+	allowedHosts                  *dynamicconfig.GlobalCachedTypedValue[*regexp.Regexp]
 	matchAdditionalHeaders        map[string]bool
 	matchAdditionalHeaderPrefixes []string
 }
@@ -299,11 +299,9 @@ func (h *HTTPAPIServer) serveHTTP(w http.ResponseWriter, r *http.Request) {
 func (h *HTTPAPIServer) allowedHostsMiddleware(hf runtime.HandlerFunc) runtime.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request, pathParams map[string]string) {
 		allowedHosts := h.allowedHosts.Get()
-		for _, allowedHost := range allowedHosts {
-			if allowedHost.MatchString(r.Host) {
-				hf(w, r, pathParams)
-				return
-			}
+		if allowedHost.MatchString(r.Host) {
+			hf(w, r, pathParams)
+			return
 		}
 		w.WriteHeader(http.StatusForbidden)
 		// PermissionDenied gRPC code is 7.
