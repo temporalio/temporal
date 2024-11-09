@@ -65,7 +65,6 @@ type (
 		deleteManager      deletemanager.DeleteManager
 		matchingRawClient  resource.MatchingRawClient
 		config             *configs.Config
-		metricHandler      metrics.Handler
 		isActive           bool
 	}
 )
@@ -92,7 +91,6 @@ func newTimerQueueTaskExecutorBase(
 		deleteManager:      deleteManager,
 		matchingRawClient:  matchingRawClient,
 		config:             config,
-		metricHandler:      metricsHandler,
 		isActive:           isActive,
 	}
 }
@@ -296,7 +294,7 @@ func (t *timerQueueTaskExecutorBase) executeStateMachineTimers(
 			if err != nil {
 				// This includes errors such as ErrStaleReference and ErrWorkflowCompleted.
 				if !errors.As(err, new(*serviceerror.NotFound)) {
-					metrics.StateMachineTimerProcessingFailuresCounter.With(t.metricHandler).Record(
+					metrics.StateMachineTimerProcessingFailuresCounter.With(t.metricsHandler).Record(
 						1,
 						metrics.OperationTag(queues.GetTimerStateMachineTaskTypeTagValue(timer.GetType(), t.isActive)),
 						metrics.ServiceErrorTypeTag(err),
@@ -306,7 +304,7 @@ func (t *timerQueueTaskExecutorBase) executeStateMachineTimers(
 					// tasks to be stuck. We'll accept this limitation for now.
 					return 0, err
 				}
-				metrics.StateMachineTimerSkipsCounter.With(t.metricHandler).Record(
+				metrics.StateMachineTimerSkipsCounter.With(t.metricsHandler).Record(
 					1,
 					metrics.OperationTag(queues.GetTimerStateMachineTaskTypeTagValue(timer.GetType(), t.isActive)),
 				)

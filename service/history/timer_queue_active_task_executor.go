@@ -468,7 +468,7 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowBackoffTimerTask(
 	}
 
 	nsName := mutableState.GetNamespaceEntry().Name().String()
-	metrics.WorkflowBackoffCount.With(t.metricHandler).Record(
+	metrics.WorkflowBackoffCount.With(t.metricsHandler).Record(
 		1,
 		metrics.NamespaceTag(nsName),
 		metrics.StringTag("backoff_type", task.WorkflowBackoffType.String()))
@@ -582,7 +582,7 @@ func (t *timerQueueActiveTaskExecutor) executeActivityRetryTimerTask(
 		t.shardContext,
 		workflow.TransactionPolicyActive,
 		t.cache,
-		t.metricHandler,
+		t.metricsHandler,
 		t.logger,
 	)
 }

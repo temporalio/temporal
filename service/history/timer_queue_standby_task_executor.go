@@ -765,7 +765,7 @@ func (t *timerQueueStandbyTaskExecutor) pushActivity(
 		t.shardContext,
 		workflow.TransactionPolicyPassive,
 		t.cache,
-		t.metricHandler,
+		t.metricsHandler,
 		t.logger,
 	)
 }
