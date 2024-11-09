@@ -760,6 +760,7 @@ func (r *TaskGeneratorImpl) GenerateMigrationTasks() ([]tasks.Task, int64, error
 				Priority:            enumsspb.TASK_PRIORITY_LOW,
 				VersionedTransition: transitionHistory[len(transitionHistory)-1],
 				FirstEventID:        executionInfo.LastFirstEventId,
+				FirstEventVersion:   lastItem.Version,
 				NextEventID:         lastItem.GetEventId() + 1,
 				TaskEquivalents:     syncWorkflowStateTask,
 			}}, 1, nil
@@ -803,6 +804,7 @@ func (r *TaskGeneratorImpl) GenerateMigrationTasks() ([]tasks.Task, int64, error
 			Priority:            enumsspb.TASK_PRIORITY_LOW,
 			VersionedTransition: transitionHistory[len(transitionHistory)-1],
 			FirstEventID:        executionInfo.LastFirstEventId,
+			FirstEventVersion:   lastItem.GetVersion(),
 			NextEventID:         lastItem.GetEventId() + 1,
 			TaskEquivalents:     replicationTasks,
 		}}, 1, nil

@@ -719,7 +719,7 @@ func (c *syncVersionedTransitionTaskConverter) generateVerifyVersionedTransition
 		mutableState.GetExecutionInfo().VersionHistories,
 		versionhistory.NewVersionHistoryItem(
 			taskInfo.FirstEventID,
-			taskInfo.VersionedTransition.NamespaceFailoverVersion,
+			taskInfo.FirstEventVersion,
 		),
 	)
 	if err != nil {
@@ -753,7 +753,7 @@ func (c *syncVersionedTransitionTaskConverter) generateBackfillHistoryTask(
 		c.shardContext,
 		c.shardID,
 		definition.NewWorkflowKey(taskInfo.NamespaceID, taskInfo.WorkflowID, taskInfo.RunID),
-		taskInfo.VersionedTransition.NamespaceFailoverVersion,
+		taskInfo.FirstEventVersion,
 		taskInfo.FirstEventID,
 		taskInfo.NextEventID,
 		taskInfo.NewRunID,
