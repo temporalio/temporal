@@ -737,6 +737,10 @@ func (ms *MutableStateImpl) SetBaseWorkflow(
 	}
 }
 
+func (ms *MutableStateImpl) UpdateResetRunID(runID string) {
+	ms.executionInfo.ResetRunId = runID
+}
+
 func (ms *MutableStateImpl) GetBaseWorkflowInfo() *workflowspb.BaseExecutionInfo {
 	return ms.executionInfo.BaseExecutionInfo
 }
@@ -5128,6 +5132,29 @@ func (ms *MutableStateImpl) IsDirty() bool {
 	return ms.hBuilder.IsDirty() || len(ms.InsertTasks) > 0 || (ms.stateMachineNode != nil && ms.stateMachineNode.Dirty())
 }
 
+func (ms *MutableStateImpl) isStateDirty() bool {
+	// TODO: we need to track more workflow state changes
+	// e.g. changes to executionInfo.CancelRequested
+	return ms.hBuilder.IsDirty() ||
+		len(ms.updateActivityInfos) > 0 ||
+		len(ms.deleteActivityInfos) > 0 ||
+		len(ms.updateTimerInfos) > 0 ||
+		len(ms.deleteTimerInfos) > 0 ||
+		len(ms.updateChildExecutionInfos) > 0 ||
+		len(ms.deleteChildExecutionInfos) > 0 ||
+		len(ms.updateRequestCancelInfos) > 0 ||
+		len(ms.deleteRequestCancelInfos) > 0 ||
+		len(ms.updateSignalInfos) > 0 ||
+		len(ms.deleteSignalInfos) > 0 ||
+		len(ms.updateSignalRequestedIDs) > 0 ||
+		len(ms.deleteSignalRequestedIDs) > 0 ||
+		len(ms.updateInfoUpdated) > 0 ||
+		ms.visibilityUpdated ||
+		ms.executionStateUpdated ||
+		ms.workflowTaskUpdated ||
+		(ms.stateMachineNode != nil && ms.stateMachineNode.Dirty())
+}
+
 func (ms *MutableStateImpl) IsTransitionHistoryEnabled() bool {
 	return ms.transitionHistoryEnabled
 }
@@ -5307,22 +5334,20 @@ func (ms *MutableStateImpl) closeTransaction(
 		return closeTransactionResult{}, err
 	}
 
+	if err := ms.closeTransactionUpdateTransitionHistory(
+		transactionPolicy,
+	); err != nil {
+		return closeTransactionResult{}, err
+	}
+	ms.closeTransactionHandleUnknownVersionedTransition()
+	ms.closeTransactionTrackLastUpdateVersionedTransition(
+		transactionPolicy,
+	)
+
 	workflowEventsSeq, eventBatches, bufferEvents, clearBuffer, err := ms.closeTransactionPrepareEvents(transactionPolicy)
 	if err != nil {
 		return closeTransactionResult{}, err
 	}
-
-	if err := ms.closeTransactionUpdateTransitionHistory(
-		transactionPolicy,
-		workflowEventsSeq,
-		bufferEvents,
-	); err != nil {
-		return closeTransactionResult{}, err
-	}
-
-	ms.closeTransactionTrackLastUpdateVersionedTransition(
-		transactionPolicy,
-	)
 
 	ms.closeTransactionTrackTombstones(transactionPolicy)
 
@@ -5421,20 +5446,7 @@ func (ms *MutableStateImpl) closeTransactionHandleSpeculativeWorkflowTask(
 
 func (ms *MutableStateImpl) closeTransactionUpdateTransitionHistory(
 	transactionPolicy TransactionPolicy,
-	workflowEventsSeq []*persistence.WorkflowEvents,
-	newBufferEvents []*historypb.HistoryEvent,
 ) error {
-	if len(workflowEventsSeq) > 0 {
-		lastEvents := workflowEventsSeq[len(workflowEventsSeq)-1].Events
-		lastEvent := lastEvents[len(lastEvents)-1]
-		if err := ms.updateWithLastWriteEvent(
-			lastEvent,
-			transactionPolicy,
-		); err != nil {
-			return err
-		}
-	}
-
 	if transactionPolicy != TransactionPolicyActive {
 		// TODO: replication/standby logic will need a different way for updating transition history
 		// when not syncing mutable state
@@ -5447,10 +5459,7 @@ func (ms *MutableStateImpl) closeTransactionUpdateTransitionHistory(
 
 	// TODO: treat changes for transient workflow task or signalRequestID removal as state transition as well.
 	// Those changes are not replicated today.
-	if !ms.HSM().Dirty() &&
-		len(workflowEventsSeq) == 0 &&
-		len(newBufferEvents) == 0 &&
-		len(ms.syncActivityTasks) == 0 {
+	if !ms.isStateDirty() {
 		return nil
 	}
 
@@ -5473,6 +5482,10 @@ func (ms *MutableStateImpl) closeTransactionTrackLastUpdateVersionedTransition(
 
 	if !ms.transitionHistoryEnabled {
 		// transition history is not enabled
+		return
+	}
+	// transaction closed without any state change
+	if len(ms.executionInfo.TransitionHistory) == 0 {
 		return
 	}
 
@@ -5520,6 +5533,68 @@ func (ms *MutableStateImpl) closeTransactionTrackLastUpdateVersionedTransition(
 	// LastUpdateVersionTransition for HSM nodes already updated when transitioning the nodes.
 }
 
+func (ms *MutableStateImpl) closeTransactionHandleUnknownVersionedTransition() {
+	if len(ms.executionInfo.TransitionHistory) != 0 {
+		if CompareVersionedTransition(
+			ms.versionedTransitionInDB,
+			ms.executionInfo.TransitionHistory[len(ms.executionInfo.TransitionHistory)-1],
+		) != 0 {
+			// versioned transition updated in the transaction
+			return
+		}
+	}
+	// already in unknown state or
+	// in an old state that didn't get updated
+	if !ms.isStateDirty() {
+		// no state change in the transaction
+		return
+	}
+	// State changed but transition history not updated.
+	// We are in unknown versioned transition state, clear the transition history.
+	ms.executionInfo.TransitionHistory = nil
+	ms.executionInfo.SubStateMachineTombstoneBatches = nil
+
+	for _, activityInfo := range ms.updateActivityInfos {
+		activityInfo.LastUpdateVersionedTransition = nil
+	}
+	for _, timerInfo := range ms.updateTimerInfos {
+		timerInfo.LastUpdateVersionedTransition = nil
+	}
+	for _, childInfo := range ms.updateChildExecutionInfos {
+		childInfo.LastUpdateVersionedTransition = nil
+	}
+	for _, requestCancelInfo := range ms.updateRequestCancelInfos {
+		requestCancelInfo.LastUpdateVersionedTransition = nil
+	}
+	for _, signalInfo := range ms.updateSignalInfos {
+		signalInfo.LastUpdateVersionedTransition = nil
+	}
+	for updateID := range ms.updateInfoUpdated {
+		ms.executionInfo.UpdateInfos[updateID].LastUpdateVersionedTransition = nil
+	}
+	if len(ms.updateSignalRequestedIDs) > 0 || len(ms.deleteSignalRequestedIDs) > 0 {
+		ms.executionInfo.SignalRequestIdsLastUpdateVersionedTransition = nil
+	}
+	if ms.visibilityUpdated {
+		ms.executionInfo.VisibilityLastUpdateVersionedTransition = nil
+	}
+	if ms.executionStateUpdated {
+		ms.executionState.LastUpdateVersionedTransition = nil
+	}
+	if ms.workflowTaskUpdated {
+		ms.executionInfo.WorkflowTaskLastUpdateVersionedTransition = nil
+	}
+	if ms.stateMachineNode != nil {
+		// the error must be nil here since the fn passed into Walk() always returns nil
+		_ = ms.stateMachineNode.Walk(func(node *hsm.Node) error {
+			persistenceRepr := node.InternalRepr()
+			persistenceRepr.LastUpdateVersionedTransition.TransitionCount = 0
+			persistenceRepr.InitialVersionedTransition.TransitionCount = 0
+			return nil
+		})
+	}
+}
+
 func (ms *MutableStateImpl) closeTransactionTrackTombstones(
 	transactionPolicy TransactionPolicy,
 ) {
@@ -5531,6 +5606,11 @@ func (ms *MutableStateImpl) closeTransactionTrackTombstones(
 
 	if !ms.transitionHistoryEnabled {
 		// transition history is not enabled
+		return
+	}
+
+	if len(ms.executionInfo.TransitionHistory) == 0 {
+		// in an unknown state
 		return
 	}
 
@@ -5815,6 +5895,17 @@ func (ms *MutableStateImpl) closeTransactionPrepareEvents(
 		workflowEventsSeq,
 	); err != nil {
 		return nil, nil, nil, false, err
+	}
+
+	if len(workflowEventsSeq) > 0 {
+		lastEvents := workflowEventsSeq[len(workflowEventsSeq)-1].Events
+		lastEvent := lastEvents[len(lastEvents)-1]
+		if err := ms.updateWithLastWriteEvent(
+			lastEvent,
+			transactionPolicy,
+		); err != nil {
+			return nil, nil, nil, false, err
+		}
 	}
 
 	return workflowEventsSeq, newEventsBatches, newBufferBatch, clearBuffer, nil
@@ -6428,7 +6519,7 @@ func (ms *MutableStateImpl) ApplyMutation(
 	if err != nil {
 		return err
 	}
-	err = ms.syncExecutionInfo(ms.executionInfo, mutation.ExecutionInfo)
+	err = ms.syncExecutionInfo(ms.executionInfo, mutation.ExecutionInfo, false)
 	if err != nil {
 		return err
 	}
@@ -6469,7 +6560,7 @@ func (ms *MutableStateImpl) ApplySnapshot(
 	prevExecutionInfoSize := ms.executionInfo.Size()
 
 	ms.applySignalRequestedIds(snapshot.SignalRequestedIds, snapshot.ExecutionInfo)
-	err := ms.syncExecutionInfo(ms.executionInfo, snapshot.ExecutionInfo)
+	err := ms.syncExecutionInfo(ms.executionInfo, snapshot.ExecutionInfo, true)
 	if err != nil {
 		return err
 	}
@@ -6609,7 +6700,6 @@ func (ms *MutableStateImpl) applyUpdatesToStateMachineNodes(
 		internalNode.InitialVersionedTransition = nodeMutation.InitialVersionedTransition
 		internalNode.LastUpdateVersionedTransition = nodeMutation.LastUpdateVersionedTransition
 		internalNode.TransitionCount++
-		// TODO: Cache invalidation. This must be fixed before state based replication is enabled.
 	}
 	return nil
 }
@@ -6696,6 +6786,9 @@ func (ms *MutableStateImpl) applyUpdatesToUpdateInfos(
 	updatedUpdateInfos map[string]*persistencespb.UpdateInfo,
 	isSnapshot bool,
 ) {
+	if ms.executionInfo.UpdateInfos == nil {
+		ms.executionInfo.UpdateInfos = make(map[string]*persistencespb.UpdateInfo, len(updatedUpdateInfos))
+	}
 	if isSnapshot {
 		for updateID := range ms.executionInfo.UpdateInfos {
 			if _, ok := updatedUpdateInfos[updateID]; !ok {
@@ -6704,6 +6797,7 @@ func (ms *MutableStateImpl) applyUpdatesToUpdateInfos(
 			}
 		}
 	}
+
 	for updateID, ui := range updatedUpdateInfos {
 		if existing, ok := ms.executionInfo.UpdateInfos[updateID]; ok {
 			if CompareVersionedTransition(existing.GetLastUpdateVersionedTransition(), ui.GetLastUpdateVersionedTransition()) == 0 {
@@ -6718,13 +6812,13 @@ func (ms *MutableStateImpl) applyUpdatesToUpdateInfos(
 	}
 }
 
-func (ms *MutableStateImpl) syncExecutionInfo(current *persistencespb.WorkflowExecutionInfo, incoming *persistencespb.WorkflowExecutionInfo) error {
+func (ms *MutableStateImpl) syncExecutionInfo(current *persistencespb.WorkflowExecutionInfo, incoming *persistencespb.WorkflowExecutionInfo, isSnapshot bool) error {
 	doNotSync := func(v any) []interface{} {
 		info, ok := v.(*persistencespb.WorkflowExecutionInfo)
 		if !ok || info == nil {
 			return nil
 		}
-		return []interface{}{
+		ignoreFields := []interface{}{
 			&info.WorkflowTaskVersion,
 			&info.WorkflowTaskScheduledEventId,
 			&info.WorkflowTaskStartedEventId,
@@ -6752,6 +6846,10 @@ func (ms *MutableStateImpl) syncExecutionInfo(current *persistencespb.WorkflowEx
 			&info.TaskGenerationShardClockTimestamp,
 			&info.UpdateInfos,
 		}
+		if !isSnapshot {
+			ignoreFields = append(ignoreFields, &info.SubStateMachineTombstoneBatches)
+		}
+		return ignoreFields
 	}
 	err := common.MergeProtoExcludingFields(current, incoming, doNotSync)
 	if err != nil {

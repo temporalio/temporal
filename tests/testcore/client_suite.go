@@ -174,7 +174,6 @@ func (s *ClientFunctionalSuite) HistoryContainsFailureCausedBy(
 				}
 			}
 		}
-		// nolint:goerr113
 		return fmt.Errorf("did not find a failed task whose cause was %q", cause)
 	})
 }

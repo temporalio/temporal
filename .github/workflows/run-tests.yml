@@ -213,6 +213,8 @@ jobs:
 
       - uses: arduino/setup-protoc@v3
         if: ${{ !inputs.run_single_functional_test && !inputs.run_single_unit_test }}
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
 
       - run: GOOS=windows GOARCH=amd64 make clean-bins bins
         if: ${{ !inputs.run_single_functional_test && !inputs.run_single_unit_test }}
@@ -262,6 +264,16 @@ jobs:
           UNIT_TEST_DIRS: ${{ inputs.unit_test_directory }}
           TEST_ARGS: ${{ needs.set-up-single-test.outputs.single_test_args }}
           TEST_TIMEOUT: ${{ needs.set-up-single-test.outputs.test_timeout }}
+
+      - name: Generate test summary
+        uses: mikepenz/action-junit-report@v5.0.0-rc01
+        if: failure()
+        with:
+          report_paths: ./.testoutput/*.junit.xml
+          detailed_summary: true
+          check_annotations: false
+          annotate_only: true
+          skip_annotations: true
 
       - name: Upload test results
         # Can't pin to major because the action linter doesn't recognize the include-hidden-files flag.
@@ -331,6 +343,16 @@ jobs:
       - name: Run integration test
         timeout-minutes: 15
         run: make integration-test-coverage
+
+      - name: Generate test summary
+        uses: mikepenz/action-junit-report@v5.0.0-rc01
+        if: failure()
+        with:
+          report_paths: ./.testoutput/*.junit.xml
+          detailed_summary: true
+          check_annotations: false
+          annotate_only: true
+          skip_annotations: true
 
       - name: Upload test results
         # Can't pin to major because the action linter doesn't recognize the include-hidden-files flag.
@@ -455,6 +477,16 @@ jobs:
         env:
           TEST_ARGS: ${{ needs.set-up-single-test.outputs.single_test_args }}
 
+      - name: Generate test summary
+        uses: mikepenz/action-junit-report@v5.0.0-rc01
+        if: failure()
+        with:
+          report_paths: ./.testoutput/*.junit.xml
+          detailed_summary: true
+          check_annotations: false
+          annotate_only: true
+          skip_annotations: true
+
       - name: Upload test results
         # Can't pin to major because the action linter doesn't recognize the include-hidden-files flag.
         uses: actions/upload-artifact@v4.4.3
@@ -551,6 +583,16 @@ jobs:
       - name: Run functional test xdc
         timeout-minutes: 25   # update this to TEST_TIMEOUT+5 if you update the Makefile
         run: make functional-test-xdc-coverage
+
+      - name: Generate test summary
+        uses: mikepenz/action-junit-report@v5.0.0-rc01
+        if: failure()
+        with:
+          report_paths: ./.testoutput/*.junit.xml
+          detailed_summary: true
+          check_annotations: false
+          annotate_only: true
+          skip_annotations: true
 
       - name: Upload test results
         # Can't pin to major because the action linter doesn't recognize the include-hidden-files flag.

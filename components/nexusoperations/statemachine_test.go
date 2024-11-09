@@ -162,7 +162,7 @@ func TestRegenerateTasks(t *testing.T) {
 				require.NoError(t, hsm.MachineTransition(node, func(op nexusoperations.Operation) (hsm.TransitionOutput, error) {
 					return nexusoperations.TransitionAttemptFailed.Apply(op, nexusoperations.EventAttemptFailed{
 						Time:        time.Now(),
-						Err:         fmt.Errorf("test"), // nolint:goerr113
+						Err:         fmt.Errorf("test"),
 						Node:        node,
 						RetryPolicy: backoff.NewExponentialRetryPolicy(time.Second),
 					})
@@ -171,33 +171,11 @@ func TestRegenerateTasks(t *testing.T) {
 
 			op, err := hsm.MachineData[nexusoperations.Operation](node)
 			require.NoError(t, err)
-			tasks, err := op.RegenerateTasks(nil, node)
+			tasks, err := op.RegenerateTasks(node)
 			require.NoError(t, err)
 			tc.assertTasks(t, tasks)
 		})
 	}
-}
-
-func TestRegenerateTasksFromPreviousState(t *testing.T) {
-	node := newOperationNode(t, &hsmtest.NodeBackend{}, mustNewScheduledEvent(time.Now(), time.Hour))
-	prevOp, err := hsm.MachineData[nexusoperations.Operation](node)
-	require.NoError(t, err)
-
-	require.NoError(t, hsm.MachineTransition(node, func(op nexusoperations.Operation) (hsm.TransitionOutput, error) {
-		return nexusoperations.TransitionAttemptFailed.Apply(op, nexusoperations.EventAttemptFailed{
-			Time:        time.Now(),
-			Err:         fmt.Errorf("test"), // nolint:goerr113
-			Node:        node,
-			RetryPolicy: backoff.NewExponentialRetryPolicy(time.Second),
-		})
-	}))
-
-	op, err := hsm.MachineData[nexusoperations.Operation](node)
-	require.NoError(t, err)
-	tasks, err := op.RegenerateTasks(prevOp, node)
-	require.NoError(t, err)
-	require.Equal(t, 1, len(tasks))
-	require.Equal(t, nexusoperations.TaskTypeBackoff, tasks[0].Type())
 }
 
 func TestRetry(t *testing.T) {
@@ -207,7 +185,7 @@ func TestRetry(t *testing.T) {
 	require.NoError(t, hsm.MachineTransition(node, func(op nexusoperations.Operation) (hsm.TransitionOutput, error) {
 		return nexusoperations.TransitionAttemptFailed.Apply(op, nexusoperations.EventAttemptFailed{
 			Time:        time.Now(),
-			Err:         fmt.Errorf("test"), // nolint:goerr113
+			Err:         fmt.Errorf("test"),
 			Node:        node,
 			RetryPolicy: backoff.NewExponentialRetryPolicy(time.Second),
 		})
@@ -367,7 +345,7 @@ func TestCompleteExternally(t *testing.T) {
 					return nexusoperations.TransitionAttemptFailed.Apply(op, nexusoperations.EventAttemptFailed{
 						Node:        node,
 						Time:        time.Now(),
-						Err:         fmt.Errorf("test"), // nolint:goerr113
+						Err:         fmt.Errorf("test"),
 						RetryPolicy: backoff.NewExponentialRetryPolicy(time.Second),
 					})
 				}))

@@ -1203,6 +1203,11 @@ these log lines can be noisy, we want to be able to turn on and sample selective
 		time.Second,
 		`TaskQueueInfoByBuildIdTTL serves as a TTL for the cache holding DescribeTaskQueue partition results`,
 	)
+	MatchingDropNonRetryableTasks = NewGlobalBoolSetting(
+		"matching.dropNonRetryableTasks",
+		false,
+		`MatchingDropNonRetryableTasks states if we should drop matching tasks with Internal/Dataloss errors`,
+	)
 	// for matching testing only:
 
 	TestMatchingDisableSyncMatch = NewGlobalBoolSetting(
@@ -1522,6 +1527,11 @@ If value less or equal to 0, will fall back to TaskSchedulerNamespaceMaxQPS`,
 		0,
 		`TaskSchedulerNamespaceMaxQPS is the max qps task schedulers on a host can schedule tasks for a certain namespace
 If value less or equal to 0, will fall back to HistoryPersistenceNamespaceMaxQPS`,
+	)
+	TaskSchedulerInactiveChannelDeletionDelay = NewGlobalDurationSetting(
+		"history.taskSchedulerInactiveChannelDeletionDelay",
+		time.Hour,
+		`TaskSchedulerInactiveChannelDeletionDelay the time delay before a namespace's' channel is removed from the scheduler`,
 	)
 
 	TimerTaskBatchSize = NewGlobalIntSetting(

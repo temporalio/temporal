@@ -1293,7 +1293,7 @@ func (s *VersioningIntegSuite) independentActivityTaskAssignmentSyncMatch(versio
 	failedTask := make(chan struct{})
 	act1 := func() (string, error) {
 		close(failedTask)
-		return "", errors.New("failing activity task intentionally") //nolint:goerr113
+		return "", errors.New("failing activity task intentionally")
 	}
 
 	w1 := worker.New(s.sdkClient, actTq, worker.Options{
@@ -1883,7 +1883,7 @@ func (s *VersioningIntegSuite) dispatchActivity(failMode activityFailMode, newVe
 		if state.Add(1) == 1 {
 			switch failMode {
 			case failActivity:
-				return "", errors.New("try again") //nolint:goerr113
+				return "", errors.New("try again")
 			case timeoutActivity:
 				time.Sleep(5 * time.Second) //nolint:forbidigo
 				return "ignored", nil
@@ -2227,7 +2227,7 @@ func (s *VersioningIntegSuite) TestRedirectWithConcurrentActivities() {
 			lastRedirectTarget.CompareAndSwap(version+" observed", version+" redirect cleaned")
 		}
 		if rand.Float64() < activityErrorRate {
-			return "", errors.New("intentionally failing activity") //nolint:goerr113
+			return "", errors.New("intentionally failing activity")
 		}
 		if triggerRedirectAtActivityRun.Load() == runId {
 			// When enough activities are run using the current version, add redirect rule to the next version.

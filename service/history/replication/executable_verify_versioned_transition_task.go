@@ -232,10 +232,10 @@ func (e *ExecutableVerifyVersionedTransitionTask) getMutableState(ctx context.Co
 		},
 		locks.PriorityLow,
 	)
-	defer func() { release(retError) }()
 	if err != nil {
 		return nil, err
 	}
+	defer func() { release(retError) }()
 
 	return wfContext.LoadMutableState(ctx, shardContext)
 }

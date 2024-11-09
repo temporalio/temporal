@@ -229,34 +229,30 @@ func (handler *workflowTaskCompletedHandler) rejectUnprocessedUpdates(
 	wtHeartbeat bool,
 	wfKey definition.WorkflowKey,
 	workerIdentity string,
-) error {
+) {
 
 	// If server decided to fail WT (instead of completing), don't reject updates.
 	// New WT will be created, and it will deliver these updates again to the worker.
 	// Worker will do full history replay, and updates should be delivered again.
 	if handler.workflowTaskFailedCause != nil {
-		return nil
+		return
 	}
 
 	// If WT is a heartbeat WT, then it doesn't have to have messages.
 	if wtHeartbeat {
-		return nil
+		return
 	}
 
 	// If worker has just completed workflow with one of the WF completion command,
 	// then it might skip processing some updates. In this case, it doesn't indicate old SDK or bug.
-	// All unprocessed updates will be rejected with "workflow is closing" reason though.
+	// All unprocessed updates will be aborted later though.
 	if !handler.mutableState.IsWorkflowExecutionRunning() {
-		return nil
+		return
 	}
 
-	rejectedUpdateIDs, err := handler.updateRegistry.RejectUnprocessed(
+	rejectedUpdateIDs := handler.updateRegistry.RejectUnprocessed(
 		ctx,
 		handler.effects)
-
-	if err != nil {
-		return err
-	}
 
 	if len(rejectedUpdateIDs) > 0 {
 		handler.logger.Warn(
@@ -272,7 +268,6 @@ func (handler *workflowTaskCompletedHandler) rejectUnprocessedUpdates(
 
 	// At this point there must not be any updates in a Sent state.
 	// All updates which were sent on this WT are processed by worker or rejected by server.
-	return nil
 }
 
 //revive:disable:cyclomatic grandfathered

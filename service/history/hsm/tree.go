@@ -415,10 +415,6 @@ func (n *Node) CompareState(incomingNode *Node) (int, error) {
 // Sync updates the state of the current node to that of the incoming node.
 // Meant to be used by the framework, **not** by components.
 func (n *Node) Sync(incomingNode *Node) error {
-	prevData, err := MachineData[any](n)
-	if err != nil {
-		return err
-	}
 	incomingInternalRepr := incomingNode.InternalRepr()
 
 	currentInitialVersionedTransition := n.InternalRepr().InitialVersionedTransition
@@ -446,7 +442,7 @@ func (n *Node) Sync(incomingNode *Node) error {
 	// - generate transition outputs (tasks)
 	// - update transition count
 	if err := MachineTransition(n, func(taskRegenerator TaskRegenerator) (TransitionOutput, error) {
-		tasks, err := taskRegenerator.RegenerateTasks(prevData, n)
+		tasks, err := taskRegenerator.RegenerateTasks(n)
 		return TransitionOutput{
 			Tasks: tasks,
 		}, err

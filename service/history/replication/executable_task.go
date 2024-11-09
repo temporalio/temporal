@@ -629,7 +629,7 @@ func (e *ExecutableTaskImpl) MarkPoisonPill() error {
 		tag.SourceShardID(e.sourceShardKey.ShardID),
 		tag.WorkflowNamespaceID(e.replicationTask.RawTaskInfo.NamespaceId),
 		tag.WorkflowID(e.replicationTask.RawTaskInfo.WorkflowId),
-		tag.WorkflowRunID(e.replicationTask.RawTaskInfo.NamespaceId),
+		tag.WorkflowRunID(e.replicationTask.RawTaskInfo.RunId),
 		tag.TaskID(e.taskID),
 		tag.SourceCluster(e.SourceClusterName()),
 		tag.ReplicationTask(taskInfo),

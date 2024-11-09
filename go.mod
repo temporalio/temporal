@@ -18,7 +18,7 @@ require (
 	github.com/go-faker/faker/v4 v4.4.1
 	github.com/go-sql-driver/mysql v1.5.0
 	github.com/gocql/gocql v1.6.0
-	github.com/golang-jwt/jwt/v4 v4.5.0
+	github.com/golang-jwt/jwt/v4 v4.5.1
 	github.com/google/go-cmp v0.6.0
 	github.com/google/uuid v1.6.0
 	github.com/gorilla/mux v1.8.1
@@ -55,7 +55,7 @@ require (
 	go.opentelemetry.io/otel/sdk v1.31.0
 	go.opentelemetry.io/otel/sdk/metric v1.31.0
 	go.opentelemetry.io/otel/trace v1.31.0
-	go.temporal.io/api v1.40.1-0.20241031192544-7546c1f8bd05
+	go.temporal.io/api v1.41.1-0.20241106230151-fd920b39031f
 	go.temporal.io/sdk v1.29.2-0.20241008230001-c82a8ac11cc6
 	go.temporal.io/version v0.3.0
 	go.uber.org/automaxprocs v1.5.3

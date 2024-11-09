@@ -758,7 +758,13 @@ func (s *NexusApiTestSuite) TestNexusStartOperation_WithNamespaceAndTaskQueue_Su
 	ctx, cancel = context.WithTimeout(ctx, time.Second*2)
 	defer cancel()
 	_, err = nexus.StartOperation(ctx, client, op, "input", nexus.StartOperationOptions{})
-	s.ErrorIs(err, context.DeadlineExceeded)
+	if !errors.Is(err, context.DeadlineExceeded) {
+		var unexpectedError *nexus.UnexpectedResponseError
+		// TODO(justinp-tt): Change this to HandlerError when upgrading the Nexus SDK.
+		if !errors.As(err, &unexpectedError) || unexpectedError.Response.StatusCode != nexus.StatusDownstreamTimeout {
+			s.T().Fatal("expected a DeadlineExceeded or upstream timeout error")
+		}
+	}
 }
 
 func (s *NexusApiTestSuite) TestNexus_RespondNexusTaskMethods_VerifiesTaskTokenMatchesRequestNamespace() {
