@@ -197,6 +197,13 @@ func (tv *TestVars) StickyTaskQueue(key ...string) *taskqueuepb.TaskQueue {
 	}
 }
 
+func (tv *TestVars) StickyExecutionAttributes(timeout time.Duration, key ...string) *taskqueuepb.StickyExecutionAttributes {
+	return &taskqueuepb.StickyExecutionAttributes{
+		WorkerTaskQueue:        tv.StickyTaskQueue(),
+		ScheduleToStartTimeout: durationpb.New(timeout),
+	}
+}
+
 func (tv *TestVars) WithStickyTaskQueue(stickyTaskQueue string, key ...string) *TestVars {
 	return tv.cloneSet("sticky_task_queue", key, stickyTaskQueue)
 }

@@ -33,6 +33,7 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/testing/historyrequire"
 	"go.temporal.io/server/common/testing/protorequire"
+	"go.temporal.io/server/common/testing/taskpoller"
 	"go.temporal.io/server/common/testing/updateutils"
 )
 
@@ -44,6 +45,7 @@ type (
 		protorequire.ProtoAssertions
 		historyrequire.HistoryRequire
 		updateutils.UpdateUtils
+		taskpoller.TaskPoller
 		FunctionalTestBase
 	}
 )
@@ -70,6 +72,7 @@ func (s *FunctionalSuite) SetupTest() {
 	s.ProtoAssertions = protorequire.New(s.T())
 	s.HistoryRequire = historyrequire.New(s.T())
 	s.UpdateUtils = updateutils.New(s.T())
+	s.TaskPoller = taskpoller.New(s.T(), s.client, s.namespace, s.Logger)
 }
 
 func (s *FunctionalSuite) SendSignal(namespace string, execution *commonpb.WorkflowExecution, signalName string,
