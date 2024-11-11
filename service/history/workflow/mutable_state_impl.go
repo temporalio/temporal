@@ -6753,6 +6753,9 @@ func (ms *MutableStateImpl) GetVersioningBehavior() enumspb.VersioningBehavior {
 	versioningInfo := ms.GetExecutionInfo().GetVersioningInfo()
 	if versioningInfo == nil {
 		return enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED
+	} else if redirectInfo := versioningInfo.GetRedirectInfo(); redirectInfo != nil &&
+		redirectInfo.GetBehaviorOverride() != enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED {
+		return redirectInfo.GetBehaviorOverride()
 	} else if versioningInfo.GetBehaviorOverride() != enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED {
 		return versioningInfo.GetBehaviorOverride()
 	} else {

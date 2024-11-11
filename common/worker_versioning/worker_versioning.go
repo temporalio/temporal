@@ -200,3 +200,6 @@ func StampFromCapabilities(cap *commonpb.WorkerVersionCapabilities) *commonpb.Wo
 func StampForBuildId(buildId string) *commonpb.WorkerVersionStamp {
 	return &commonpb.WorkerVersionStamp{UseVersioning: true, BuildId: buildId}
 }
+func StampForDeployment(deployment *commonpb.WorkerDeployment) *commonpb.WorkerVersionStamp {
+	return &commonpb.WorkerVersionStamp{UseVersioning: true, BuildId: deployment.BuildId, DeploymentName: deployment.DeploymentName}
+}

@@ -107,7 +107,23 @@ var (
 		},
 		Data: []byte("random data"),
 	}
-	testPayloads = &commonpb.Payloads{Payloads: []*commonpb.Payload{testPayload}}
+	testPayloads                 = &commonpb.Payloads{Payloads: []*commonpb.Payload{testPayload}}
+	workflowTaskCompletionLimits = WorkflowTaskCompletionLimits{
+		MaxResetPoints:              10,
+		MaxSearchAttributeValueSize: 1024,
+	}
+	deployment1 = &commonpb.WorkerDeployment{
+		DeploymentName: "my_app",
+		BuildId:        "build_1",
+	}
+	deployment2 = &commonpb.WorkerDeployment{
+		DeploymentName: "my_app",
+		BuildId:        "build_2",
+	}
+	deployment3 = &commonpb.WorkerDeployment{
+		DeploymentName: "my_app",
+		BuildId:        "build_3",
+	}
 )
 
 func TestMutableStateSuite(t *testing.T) {
@@ -294,7 +310,6 @@ func (s *mutableStateSuite) TestRedirectInfoValidation_Valid() {
 		tq,
 		"",
 		worker_versioning.StampForBuildId("b2"),
-		nil,
 		&taskqueue.BuildIdRedirectInfo{AssignedBuildId: "b1"},
 		false,
 	)
@@ -318,7 +333,6 @@ func (s *mutableStateSuite) TestRedirectInfoValidation_Invalid() {
 		tq,
 		"",
 		worker_versioning.StampForBuildId("b2"),
-		nil,
 		&taskqueue.BuildIdRedirectInfo{AssignedBuildId: "b0"},
 		false,
 	)
@@ -341,7 +355,6 @@ func (s *mutableStateSuite) TestRedirectInfoValidation_EmptyRedirectInfo() {
 		"",
 		worker_versioning.StampForBuildId("b2"),
 		nil,
-		nil,
 		false,
 	)
 	expectedErr := &serviceerror2.ObsoleteDispatchBuildId{}
@@ -361,7 +374,6 @@ func (s *mutableStateSuite) TestRedirectInfoValidation_EmptyStamp() {
 		"",
 		tq,
 		"",
-		nil,
 		nil,
 		&taskqueue.BuildIdRedirectInfo{AssignedBuildId: "b1"},
 		false,
@@ -385,7 +397,6 @@ func (s *mutableStateSuite) TestRedirectInfoValidation_Sticky() {
 		"",
 		sticky,
 		"",
-		nil,
 		nil,
 		nil,
 		false,
@@ -413,7 +424,6 @@ func (s *mutableStateSuite) TestRedirectInfoValidation_StickyInvalid() {
 		"",
 		nil,
 		nil,
-		nil,
 		false,
 	)
 	expectedErr := &serviceerror2.ObsoleteDispatchBuildId{}
@@ -429,7 +439,15 @@ func (s *mutableStateSuite) TestRedirectInfoValidation_UnexpectedSticky() {
 
 	wft, err := s.mutableState.AddWorkflowTaskScheduledEvent(true, enumsspb.WORKFLOW_TASK_TYPE_NORMAL)
 	s.NoError(err)
-	_, _, err = s.mutableState.AddWorkflowTaskStartedEvent(wft.ScheduledEventID, "", sticky, "", nil, nil, nil, false)
+	_, _, err = s.mutableState.AddWorkflowTaskStartedEvent(
+		wft.ScheduledEventID,
+		"",
+		sticky,
+		"",
+		nil,
+		nil,
+		false,
+	)
 	expectedErr := &serviceerror2.ObsoleteDispatchBuildId{}
 	s.ErrorAs(err, &expectedErr)
 	s.Equal("b1", s.mutableState.GetAssignedBuildId())
@@ -459,7 +477,6 @@ func (s *mutableStateSuite) createVersionedMutableStateWithCompletedWFT(tq *task
 		"",
 		worker_versioning.StampForBuildId("b1"),
 		nil,
-		nil,
 		false,
 	)
 	s.NoError(err)
@@ -471,12 +488,239 @@ func (s *mutableStateSuite) createVersionedMutableStateWithCompletedWFT(tq *task
 	_, err = s.mutableState.AddWorkflowTaskCompletedEvent(
 		wft,
 		&workflowservice.RespondWorkflowTaskCompletedRequest{},
-		WorkflowTaskCompletionLimits{
-			MaxResetPoints:              10,
-			MaxSearchAttributeValueSize: 1024,
-		},
+		workflowTaskCompletionLimits,
 	)
 	s.NoError(err)
+}
+
+func (s *mutableStateSuite) TestCurrentDeployment() {
+	ms := TestGlobalMutableState(
+		s.mockShard,
+		s.mockEventsCache,
+		s.logger,
+		int64(12),
+		"some random workflow ID",
+		uuid.New(),
+	)
+	s.Nil(ms.executionInfo.VersioningInfo)
+	s.mutableState = ms
+	s.verifyCurrentDeployment(nil, enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED)
+
+	versioningInfo := &persistencespb.WorkflowExecutionInfo_VersioningInfo{}
+	ms.executionInfo.VersioningInfo = versioningInfo
+	s.verifyCurrentDeployment(nil, enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED)
+
+	d1 := &commonpb.WorkerDeployment{
+		DeploymentName: "my_app",
+		BuildId:        "build_1",
+	}
+	versioningInfo.Deployment = d1
+	versioningInfo.Behavior = enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE
+	s.verifyCurrentDeployment(d1, enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE)
+
+	d2 := &commonpb.WorkerDeployment{
+		DeploymentName: "my_app",
+		BuildId:        "build_2",
+	}
+	versioningInfo.DeploymentOverride = d2
+	versioningInfo.Behavior = enumspb.VERSIONING_BEHAVIOR_PINNED
+	s.verifyCurrentDeployment(d2, enumspb.VERSIONING_BEHAVIOR_PINNED)
+
+	d3 := &commonpb.WorkerDeployment{
+		DeploymentName: "my_app",
+		BuildId:        "build_3",
+	}
+	versioningInfo.RedirectInfo = &persistencespb.WorkflowExecutionInfo_VersioningInfo_RedirectInfo{
+		Deployment: d3,
+	}
+	s.verifyCurrentDeployment(d3, enumspb.VERSIONING_BEHAVIOR_PINNED)
+
+	// Redirect to unversioned
+	versioningInfo.RedirectInfo.Deployment = nil
+	s.verifyCurrentDeployment(nil, enumspb.VERSIONING_BEHAVIOR_PINNED)
+
+	versioningInfo.RedirectInfo.BehaviorOverride = enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE
+	s.verifyCurrentDeployment(nil, enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE)
+}
+
+func (s *mutableStateSuite) verifyCurrentDeployment(
+	expectedDeployment *commonpb.WorkerDeployment,
+	expectedBehavior enumspb.VersioningBehavior,
+) {
+	s.True(s.mutableState.GetCurrentDeployment().Equal(expectedDeployment))
+	s.Equal(expectedBehavior, s.mutableState.GetVersioningBehavior())
+}
+
+// creates a mutable state with first WFT completed on deployment "my_app:build_1" and behavior set
+// to the passed value.
+func (s *mutableStateSuite) createMutableStateWithVersioningBehavior(
+	behavior enumspb.VersioningBehavior,
+	deployment *commonpb.WorkerDeployment,
+	tq *taskqueuepb.TaskQueue,
+) {
+	version := int64(12)
+	workflowID := "some random workflow ID"
+	runID := uuid.New()
+
+	s.mutableState = TestGlobalMutableState(
+		s.mockShard,
+		s.mockEventsCache,
+		s.logger,
+		version,
+		workflowID,
+		runID,
+	)
+
+	wft, err := s.mutableState.AddWorkflowTaskScheduledEvent(true, enumsspb.WORKFLOW_TASK_TYPE_NORMAL)
+	s.NoError(err)
+	s.verifyCurrentDeployment(nil, enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED)
+
+	redirectStarted := s.mutableState.StartDeploymentRedirect(deployment, enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED)
+	s.True(redirectStarted)
+	s.verifyCurrentDeployment(deployment, enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED)
+
+	_, wft, err = s.mutableState.AddWorkflowTaskStartedEvent(
+		wft.ScheduledEventID,
+		"",
+		tq,
+		"",
+		nil,
+		nil,
+		false,
+	)
+	s.NoError(err)
+	s.verifyCurrentDeployment(deployment, enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED)
+
+	_, err = s.mutableState.AddWorkflowTaskCompletedEvent(
+		wft,
+		&workflowservice.RespondWorkflowTaskCompletedRequest{
+			VersioningBehavior: behavior,
+			WorkerVersionStamp: worker_versioning.StampForDeployment(deployment),
+		},
+		workflowTaskCompletionLimits,
+	)
+	s.verifyCurrentDeployment(deployment, behavior)
+	s.NoError(err)
+}
+
+func (s *mutableStateSuite) TestPinnedFirstWorkflowTask() {
+	tq := &taskqueuepb.TaskQueue{Name: "tq"}
+	s.createMutableStateWithVersioningBehavior(enumspb.VERSIONING_BEHAVIOR_PINNED, deployment1, tq)
+	s.verifyCurrentDeployment(deployment1, enumspb.VERSIONING_BEHAVIOR_PINNED)
+}
+
+func (s *mutableStateSuite) TestUnpinnedFirstWorkflowTask() {
+	tq := &taskqueuepb.TaskQueue{Name: "tq"}
+	s.createMutableStateWithVersioningBehavior(enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE, deployment1, tq)
+	s.verifyCurrentDeployment(deployment1, enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE)
+}
+
+func (s *mutableStateSuite) TestUnpinnedRedirected() {
+	tq := &taskqueuepb.TaskQueue{Name: "tq"}
+	behavior := enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE
+	s.createMutableStateWithVersioningBehavior(behavior, deployment1, tq)
+
+	wft, err := s.mutableState.AddWorkflowTaskScheduledEvent(true, enumsspb.WORKFLOW_TASK_TYPE_NORMAL)
+	s.NoError(err)
+	s.verifyCurrentDeployment(deployment1, behavior)
+
+	redirectStarted := s.mutableState.StartDeploymentRedirect(deployment2, enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED)
+	s.True(redirectStarted)
+	s.verifyCurrentDeployment(deployment2, behavior)
+
+	_, wft, err = s.mutableState.AddWorkflowTaskStartedEvent(
+		wft.ScheduledEventID,
+		"",
+		tq,
+		"",
+		nil,
+		nil,
+		false,
+	)
+	s.NoError(err)
+	s.verifyCurrentDeployment(deployment2, behavior)
+
+	_, err = s.mutableState.AddWorkflowTaskCompletedEvent(
+		wft,
+		&workflowservice.RespondWorkflowTaskCompletedRequest{
+			// wf is pinned in the new build
+			VersioningBehavior: enumspb.VERSIONING_BEHAVIOR_PINNED,
+			WorkerVersionStamp: worker_versioning.StampForDeployment(deployment2),
+		},
+		workflowTaskCompletionLimits,
+	)
+	s.verifyCurrentDeployment(deployment2, enumspb.VERSIONING_BEHAVIOR_PINNED)
+	s.NoError(err)
+}
+
+func (s *mutableStateSuite) TestUnpinnedRedirectFailed() {
+	tq := &taskqueuepb.TaskQueue{Name: "tq"}
+	behavior := enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE
+	s.createMutableStateWithVersioningBehavior(behavior, deployment1, tq)
+
+	wft, err := s.mutableState.AddWorkflowTaskScheduledEvent(true, enumsspb.WORKFLOW_TASK_TYPE_NORMAL)
+	s.NoError(err)
+	s.verifyCurrentDeployment(deployment1, behavior)
+
+	redirectStarted := s.mutableState.StartDeploymentRedirect(deployment2, enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED)
+	s.True(redirectStarted)
+	s.verifyCurrentDeployment(deployment2, behavior)
+
+	_, wft, err = s.mutableState.AddWorkflowTaskStartedEvent(
+		wft.ScheduledEventID,
+		"",
+		tq,
+		"",
+		nil,
+		nil,
+		false,
+	)
+	s.NoError(err)
+	s.verifyCurrentDeployment(deployment2, behavior)
+
+	_, err = s.mutableState.AddWorkflowTaskFailedEvent(
+		wft,
+		enumspb.WORKFLOW_TASK_FAILED_CAUSE_WORKFLOW_WORKER_UNHANDLED_FAILURE,
+		failure.NewServerFailure("some random workflow task failure details", false),
+		"some random workflow task failure identity",
+		nil,
+		"",
+		"",
+		"",
+		0,
+	)
+	s.NoError(err)
+	s.verifyCurrentDeployment(deployment1, behavior)
+}
+
+func (s *mutableStateSuite) TestUnpinnedRedirectTimeout() {
+	tq := &taskqueuepb.TaskQueue{Name: "tq"}
+	behavior := enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE
+	s.createMutableStateWithVersioningBehavior(behavior, deployment1, tq)
+
+	wft, err := s.mutableState.AddWorkflowTaskScheduledEvent(true, enumsspb.WORKFLOW_TASK_TYPE_NORMAL)
+	s.NoError(err)
+	s.verifyCurrentDeployment(deployment1, behavior)
+
+	redirectStarted := s.mutableState.StartDeploymentRedirect(deployment2, enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED)
+	s.True(redirectStarted)
+	s.verifyCurrentDeployment(deployment2, behavior)
+
+	_, wft, err = s.mutableState.AddWorkflowTaskStartedEvent(
+		wft.ScheduledEventID,
+		"",
+		tq,
+		"",
+		nil,
+		nil,
+		false,
+	)
+	s.NoError(err)
+	s.verifyCurrentDeployment(deployment2, behavior)
+
+	_, err = s.mutableState.AddWorkflowTaskTimedOutEvent(wft)
+	s.NoError(err)
+	s.verifyCurrentDeployment(deployment1, behavior)
 }
 
 func (s *mutableStateSuite) TestChecksum() {
@@ -740,7 +984,6 @@ func (s *mutableStateSuite) TestTransientWorkflowTaskStart_CurrentVersionChanged
 		uuid.New(),
 		&taskqueuepb.TaskQueue{Name: f.TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW).NormalPartition(5).RpcName()},
 		"random identity",
-		nil,
 		nil,
 		nil,
 		false,
@@ -1326,10 +1569,7 @@ func (s *mutableStateSuite) TestAddContinueAsNewEvent_Default() {
 	workflowTaskCompletedEvent, err := s.mutableState.AddWorkflowTaskCompletedEvent(
 		workflowTaskInfo,
 		&workflowservice.RespondWorkflowTaskCompletedRequest{},
-		WorkflowTaskCompletionLimits{
-			MaxResetPoints:              10,
-			MaxSearchAttributeValueSize: 1024,
-		},
+		workflowTaskCompletionLimits,
 	)
 	s.NoError(err)
 
@@ -1680,7 +1920,7 @@ func (s *mutableStateSuite) TestAddResetPointFromCompletion() {
 
 	s.Nil(s.cleanedResetPoints().GetPoints())
 
-	s.mutableState.addResetPointFromCompletion("checksum1", "buildid1", nil, 32, 10)
+	s.mutableState.addResetPointFromCompletion("checksum1", "buildid1", 32, 10)
 	p1 := &workflowpb.ResetPointInfo{
 		BuildId:                      "buildid1",
 		BinaryChecksum:               "checksum1",
@@ -1690,7 +1930,7 @@ func (s *mutableStateSuite) TestAddResetPointFromCompletion() {
 	s.Equal([]*workflowpb.ResetPointInfo{p1}, s.cleanedResetPoints().GetPoints())
 
 	// new checksum + buildid
-	s.mutableState.addResetPointFromCompletion("checksum2", "buildid2", nil, 35, 10)
+	s.mutableState.addResetPointFromCompletion("checksum2", "buildid2", 35, 10)
 	p2 := &workflowpb.ResetPointInfo{
 		BuildId:                      "buildid2",
 		BinaryChecksum:               "checksum2",
@@ -1700,15 +1940,15 @@ func (s *mutableStateSuite) TestAddResetPointFromCompletion() {
 	s.Equal([]*workflowpb.ResetPointInfo{p1, p2}, s.cleanedResetPoints().GetPoints())
 
 	// same checksum + buildid, does not add new point
-	s.mutableState.addResetPointFromCompletion("checksum2", "buildid2", nil, 42, 10)
+	s.mutableState.addResetPointFromCompletion("checksum2", "buildid2", 42, 10)
 	s.Equal([]*workflowpb.ResetPointInfo{p1, p2}, s.cleanedResetPoints().GetPoints())
 
 	// back to 1, does not add new point
-	s.mutableState.addResetPointFromCompletion("checksum1", "buildid1", nil, 48, 10)
+	s.mutableState.addResetPointFromCompletion("checksum1", "buildid1", 48, 10)
 	s.Equal([]*workflowpb.ResetPointInfo{p1, p2}, s.cleanedResetPoints().GetPoints())
 
 	// buildid changes
-	s.mutableState.addResetPointFromCompletion("checksum2", "buildid3", nil, 53, 10)
+	s.mutableState.addResetPointFromCompletion("checksum2", "buildid3", 53, 10)
 	p3 := &workflowpb.ResetPointInfo{
 		BuildId:                      "buildid3",
 		BinaryChecksum:               "checksum2",
@@ -1718,7 +1958,7 @@ func (s *mutableStateSuite) TestAddResetPointFromCompletion() {
 	s.Equal([]*workflowpb.ResetPointInfo{p1, p2, p3}, s.cleanedResetPoints().GetPoints())
 
 	// limit to 3, p1 gets dropped
-	s.mutableState.addResetPointFromCompletion("checksum2", "buildid4", nil, 55, 3)
+	s.mutableState.addResetPointFromCompletion("checksum2", "buildid4", 55, 3)
 	p4 := &workflowpb.ResetPointInfo{
 		BuildId:                      "buildid4",
 		BinaryChecksum:               "checksum2",
@@ -1792,10 +2032,7 @@ func (s *mutableStateSuite) TestCloseTransactionUpdateTransition() {
 		_, err := ms.AddWorkflowTaskCompletedEvent(
 			workflowTaskInfo,
 			&workflowservice.RespondWorkflowTaskCompletedRequest{},
-			WorkflowTaskCompletionLimits{
-				MaxResetPoints:              10,
-				MaxSearchAttributeValueSize: 1024,
-			},
+			workflowTaskCompletionLimits,
 		)
 		s.NoError(err)
 	}
@@ -1968,10 +2205,7 @@ func (s *mutableStateSuite) TestCloseTransactionTrackLastUpdateVersionedTransiti
 		completedEvent, err := ms.AddWorkflowTaskCompletedEvent(
 			workflowTaskInfo,
 			&workflowservice.RespondWorkflowTaskCompletedRequest{},
-			WorkflowTaskCompletionLimits{
-				MaxResetPoints:              10,
-				MaxSearchAttributeValueSize: 1024,
-			},
+			workflowTaskCompletionLimits,
 		)
 		s.NoError(err)
 		return completedEvent
@@ -3178,6 +3412,8 @@ func (s *mutableStateSuite) verifyActivityInfos(expectedMap, actualMap map[int64
 		s.Equal(expected.UseCompatibleVersion, actual.UseCompatibleVersion, "UseCompatibleVersion mismatch")
 		s.True(proto.Equal(expected.ActivityType, actual.ActivityType), "ActivityType mismatch")
 		s.True(proto.Equal(expected.LastWorkerVersionStamp, actual.LastWorkerVersionStamp), "LastWorkerVersionStamp mismatch")
+		s.True(proto.Equal(expected.LastStartedDeployment, actual.LastStartedDeployment), "LastStartedDeployment mismatch")
+		s.Equal(expected.DroppedTask, actual.DroppedTask, "DroppedTask mismatch")
 		s.True(proto.Equal(expected.LastUpdateVersionedTransition, actual.LastUpdateVersionedTransition), "LastUpdateVersionedTransition mismatch")
 
 		// special handled fields
@@ -3201,6 +3437,7 @@ func (s *mutableStateSuite) verifyExecutionInfo(current, target, origin *persist
 	s.Equal(origin.WorkflowTaskHistorySizeBytes, current.WorkflowTaskHistorySizeBytes, "WorkflowTaskHistorySizeBytes mismatch")
 	s.Equal(origin.WorkflowTaskBuildId, current.WorkflowTaskBuildId, "WorkflowTaskBuildId mismatch")
 	s.Equal(origin.WorkflowTaskBuildIdRedirectCounter, current.WorkflowTaskBuildIdRedirectCounter, "WorkflowTaskBuildIdRedirectCounter mismatch")
+	s.True(proto.Equal(origin.VersioningInfo, current.VersioningInfo), "VersioningInfo mismatch")
 	s.True(proto.Equal(origin.VersionHistories, current.VersionHistories), "VersionHistories mismatch")
 	s.True(proto.Equal(origin.ExecutionStats, current.ExecutionStats), "ExecutionStats mismatch")
 	s.Equal(origin.LastFirstEventTxnId, current.LastFirstEventTxnId, "LastFirstEventTxnId mismatch")
