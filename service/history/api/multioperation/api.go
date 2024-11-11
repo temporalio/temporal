@@ -144,13 +144,14 @@ func Invoke(
 	}
 
 	// workflow hasn't been started yet: start and then apply update
-	return startAndUpdateWorkflow(
+	resp, _, err := startAndUpdateWorkflow(
 		ctx,
 		shardContext,
 		workflowConsistencyChecker,
 		starter,
 		updater,
 	)
+	return resp, err
 }
 
 func updateWorkflow(
@@ -159,15 +160,6 @@ func updateWorkflow(
 	currentWorkflowLease api.WorkflowLease,
 	updater *updateworkflow.Updater,
 ) (*historyservice.ExecuteMultiOperationResponse, error) {
-	startOpResp := &historyservice.ExecuteMultiOperationResponse_Response{
-		Response: &historyservice.ExecuteMultiOperationResponse_Response_StartWorkflow{
-			StartWorkflow: &historyservice.StartWorkflowExecutionResponse{
-				RunId:   currentWorkflowLease.GetContext().GetWorkflowKey().RunID,
-				Started: false,
-			},
-		},
-	}
-
 	// apply update to workflow
 	err := api.UpdateWorkflowWithNew(
 		shardContext,
@@ -196,7 +188,14 @@ func updateWorkflow(
 
 	return &historyservice.ExecuteMultiOperationResponse{
 		Responses: []*historyservice.ExecuteMultiOperationResponse_Response{
-			startOpResp,
+			{
+				Response: &historyservice.ExecuteMultiOperationResponse_Response_StartWorkflow{
+					StartWorkflow: &historyservice.StartWorkflowExecutionResponse{
+						RunId:   currentWorkflowLease.GetContext().GetWorkflowKey().RunID,
+						Started: false, // set explicitly for emphasis
+					},
+				},
+			},
 			{
 				Response: &historyservice.ExecuteMultiOperationResponse_Response_UpdateWorkflow{
 					UpdateWorkflow: updateResp,
@@ -212,7 +211,7 @@ func startAndUpdateWorkflow(
 	workflowConsistencyChecker api.WorkflowConsistencyChecker,
 	starter *startworkflow.Starter,
 	updater *updateworkflow.Updater,
-) (*historyservice.ExecuteMultiOperationResponse, error) {
+) (*historyservice.ExecuteMultiOperationResponse, startworkflow.StartOutcome, error) {
 	var updateErr error
 
 	// hook is invoked before workflow is persisted
@@ -251,33 +250,38 @@ func startAndUpdateWorkflow(
 	}
 
 	// start workflow, using the hook to apply the update operation
-	startResp, err := starter.Invoke(ctx, applyUpdateFunc)
+	startResp, startOutcome, err := starter.Invoke(ctx, applyUpdateFunc)
 	if err != nil {
 		// an update error occurred
 		if updateErr != nil {
-			return nil, newMultiOpError(multiOpAbortedErr, updateErr)
+			return nil, startOutcome, newMultiOpError(multiOpAbortedErr, updateErr)
 		}
 
 		// a start error occurred
-		return nil, newMultiOpError(err, multiOpAbortedErr)
+		return nil, startOutcome, newMultiOpError(err, multiOpAbortedErr)
 	}
 
-	if !startResp.Started {
-		// The workflow was meant to be started - but was actually not started since it's already running.
+	switch startOutcome {
+	case startworkflow.StartNew:
+	case startworkflow.StartReused:
+		// The workflow was meant to be *started* - but was actually *not* started since it's already running.
 		// The best way forward is to exit and retry from the top.
 		// By returning an Unavailable service error, the entire MultiOperation will be retried.
-		return nil, serviceerror.NewUnavailable("Workflow could not be started as it is already running")
+		return nil, startOutcome, newMultiOpError(err,
+			serviceerror.NewUnavailable("Workflow could not be started as it is already running"))
+	case startworkflow.StartDeduped:
+		panic("unreachable")
 	}
 
 	// wait for the update to complete
 	updateResp, err := updater.OnSuccess(ctx)
 	if err != nil {
-		return nil, newMultiOpError(nil, err) // `nil` for start since it succeeded
+		return nil, startOutcome, newMultiOpError(nil, err) // `nil` for start since it succeeded
 	}
 
 	return &historyservice.ExecuteMultiOperationResponse{
 		Responses: []*historyservice.ExecuteMultiOperationResponse_Response{
-			&historyservice.ExecuteMultiOperationResponse_Response{
+			{
 				Response: &historyservice.ExecuteMultiOperationResponse_Response_StartWorkflow{
 					StartWorkflow: startResp,
 				},
@@ -288,7 +292,7 @@ func startAndUpdateWorkflow(
 				},
 			},
 		},
-	}, nil
+	}, startOutcome, nil
 }
 
 func newMultiOpError(errs ...error) error {

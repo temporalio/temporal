@@ -56,12 +56,19 @@ import (
 type (
 	eagerStartDeniedReason metrics.ReasonString
 	BeforeCreateHookFunc   func(lease api.WorkflowLease) error
+	StartOutcome           int
 )
 
 const (
 	eagerStartDeniedReasonDynamicConfigDisabled    eagerStartDeniedReason = "dynamic_config_disabled"
 	eagerStartDeniedReasonFirstWorkflowTaskBackoff eagerStartDeniedReason = "first_workflow_task_backoff"
 	eagerStartDeniedReasonTaskAlreadyDispatched    eagerStartDeniedReason = "task_already_dispatched"
+)
+
+const (
+	StartNew StartOutcome = iota + 1
+	StartReused
+	StartDeduped
 )
 
 var (
@@ -184,36 +191,41 @@ func (s *Starter) requestEagerStart() bool {
 func (s *Starter) Invoke(
 	ctx context.Context,
 	beforeCreateHook BeforeCreateHookFunc,
-) (resp *historyservice.StartWorkflowExecutionResponse, retError error) {
+) (resp *historyservice.StartWorkflowExecutionResponse, startOutcome StartOutcome, retError error) {
 	request := s.request.StartRequest
 	if err := s.prepare(ctx); err != nil {
-		return nil, err
+		return nil, startOutcome, err
 	}
 
 	creationParams, err := s.createNewMutableState(request.GetWorkflowId())
 	if err != nil {
-		return nil, err
+		return nil, startOutcome, err
 	}
 
 	// grab current workflow context as a lock so that user latency can be computed
 	currentRelease, err := s.lockCurrentWorkflowExecution(ctx)
 	if err != nil {
-		return nil, err
+		return nil, startOutcome, err
 	}
 	defer func() { currentRelease(retError) }()
 
 	if err = beforeCreateHook(creationParams.workflowLease); err != nil {
-		return nil, err
+		return nil, startOutcome, err
 	}
 
 	err = s.createBrandNew(ctx, creationParams)
 	if err == nil {
-		return s.generateResponse(creationParams.runID, creationParams.workflowTaskInfo, extractHistoryEvents(creationParams.workflowEventBatches))
+		resp, err = s.generateResponse(
+			creationParams.runID,
+			creationParams.workflowTaskInfo,
+			extractHistoryEvents(creationParams.workflowEventBatches),
+		)
+		return resp, StartNew, err
 	}
 	var currentWorkflowConditionFailedError *persistence.CurrentWorkflowConditionFailedError
 	if !errors.As(err, &currentWorkflowConditionFailedError) ||
 		len(currentWorkflowConditionFailedError.RunID) == 0 {
-		return nil, err
+		return nil, startOutcome, err
 	}
 
 	// The history and mutable state we generated above will be deleted by a background process.
@@ -299,32 +311,34 @@ func (s *Starter) handleConflict(
 	creationParams *creationParams,
 	beforeCreateHook BeforeCreateHookFunc,
 	currentWorkflowConditionFailed *persistence.CurrentWorkflowConditionFailedError,
-) (*historyservice.StartWorkflowExecutionResponse, error) {
+) (*historyservice.StartWorkflowExecutionResponse, StartOutcome, error) {
 	request := s.request.StartRequest
 	if currentWorkflowConditionFailed.RequestID == request.GetRequestId() {
-		return s.respondToRetriedRequest(ctx, currentWorkflowConditionFailed.RunID)
+		resp, err := s.respondToRetriedRequest(ctx, currentWorkflowConditionFailed.RunID)
+		return resp, StartDeduped, err
 	}
 
 	if err := s.verifyNamespaceActive(creationParams, currentWorkflowConditionFailed); err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 
-	response, err := s.resolveDuplicateWorkflowID(ctx, creationParams, beforeCreateHook, currentWorkflowConditionFailed)
+	response, startOutcome, err := s.resolveDuplicateWorkflowID(ctx, creationParams, beforeCreateHook, currentWorkflowConditionFailed)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	} else if response != nil {
-		return response, nil
+		return response, startOutcome, nil
 	}
 
 	if err := s.createAsCurrent(ctx, creationParams, currentWorkflowConditionFailed); err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 
-	return s.generateResponse(
+	resp, err := s.generateResponse(
 		creationParams.runID,
 		creationParams.workflowTaskInfo,
 		extractHistoryEvents(creationParams.workflowEventBatches),
 	)
+	return resp, startOutcome, err
 }
 
 // createAsCurrent creates a new workflow execution and sets it to "current".
@@ -368,7 +382,7 @@ func (s *Starter) resolveDuplicateWorkflowID(
 	creationParams *creationParams,
 	beforeCreateHook BeforeCreateHookFunc,
 	currentWorkflowConditionFailed *persistence.CurrentWorkflowConditionFailedError,
-) (*historyservice.StartWorkflowExecutionResponse, error) {
+) (*historyservice.StartWorkflowExecutionResponse, StartOutcome, error) {
 	workflowID := s.request.StartRequest.WorkflowId
 
 	currentWorkflowStartTime := time.Time{}
@@ -398,14 +412,15 @@ func (s *Starter) resolveDuplicateWorkflowID(
 
 	switch {
 	case errors.Is(err, api.ErrUseCurrentExecution):
-		return &historyservice.StartWorkflowExecutionResponse{
+		resp := &historyservice.StartWorkflowExecutionResponse{
 			RunId:   currentWorkflowConditionFailed.RunID,
 			Started: false, // set explicitly for emphasis
-		}, nil
+		}
+		return resp, StartReused, nil
 	case err != nil:
-		return nil, err
+		return nil, 0, err
 	case currentExecutionUpdateAction == nil:
-		return nil, nil
+		return nil, 0, nil
 	}
 
 	var mutableStateInfo *mutableStateInfo
@@ -456,26 +471,27 @@ func (s *Starter) resolveDuplicateWorkflowID(
 			return &historyservice.StartWorkflowExecutionResponse{
 				RunId:   creationParams.runID,
 				Started: true,
-			}, nil
+			}, StartNew, nil
 		}
 		events, err := s.getWorkflowHistory(ctx, mutableStateInfo)
 		if err != nil {
-			return nil, err
+			return nil, 0, err
 		}
-		return s.generateResponse(creationParams.runID, mutableStateInfo.workflowTask, events)
+		resp, err := s.generateResponse(creationParams.runID, mutableStateInfo.workflowTask, events)
+		return resp, StartNew, err
 	case consts.ErrWorkflowCompleted:
 		// current workflow already closed
 		// fallthough to the logic for only creating the new workflow below
-		return nil, nil
+		return nil, 0, nil
 	default:
-		return nil, err
+		return nil, 0, err
 	}
 }
 
 // respondToRetriedRequest provides a response in case a start request is retried.
 //
 // NOTE: Workflow is marked as "started" even though the client re-issued a request with the same ID,
-// as it's most likely that the response didn't leave the Server and wasn't metered appropriately
+// as that provides a consistent response to the client.
 func (s *Starter) respondToRetriedRequest(
 	ctx context.Context,
 	runID string,
