@@ -470,7 +470,7 @@ func (r *workflowResetterImpl) failWorkflowTask(
 			consts.IdentityHistoryService,
 			nil,
 			nil,
-			// skipping versioning checks because this task is not actually dispatched but will fail immediately.
+			nil,
 			true,
 		)
 		if err != nil {

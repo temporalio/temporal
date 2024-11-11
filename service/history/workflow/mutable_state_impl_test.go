@@ -294,6 +294,7 @@ func (s *mutableStateSuite) TestRedirectInfoValidation_Valid() {
 		tq,
 		"",
 		worker_versioning.StampForBuildId("b2"),
+		nil,
 		&taskqueue.BuildIdRedirectInfo{AssignedBuildId: "b1"},
 		false,
 	)
@@ -317,6 +318,7 @@ func (s *mutableStateSuite) TestRedirectInfoValidation_Invalid() {
 		tq,
 		"",
 		worker_versioning.StampForBuildId("b2"),
+		nil,
 		&taskqueue.BuildIdRedirectInfo{AssignedBuildId: "b0"},
 		false,
 	)
@@ -339,6 +341,7 @@ func (s *mutableStateSuite) TestRedirectInfoValidation_EmptyRedirectInfo() {
 		"",
 		worker_versioning.StampForBuildId("b2"),
 		nil,
+		nil,
 		false,
 	)
 	expectedErr := &serviceerror2.ObsoleteDispatchBuildId{}
@@ -358,6 +361,7 @@ func (s *mutableStateSuite) TestRedirectInfoValidation_EmptyStamp() {
 		"",
 		tq,
 		"",
+		nil,
 		nil,
 		&taskqueue.BuildIdRedirectInfo{AssignedBuildId: "b1"},
 		false,
@@ -381,6 +385,7 @@ func (s *mutableStateSuite) TestRedirectInfoValidation_Sticky() {
 		"",
 		sticky,
 		"",
+		nil,
 		nil,
 		nil,
 		false,
@@ -408,6 +413,7 @@ func (s *mutableStateSuite) TestRedirectInfoValidation_StickyInvalid() {
 		"",
 		nil,
 		nil,
+		nil,
 		false,
 	)
 	expectedErr := &serviceerror2.ObsoleteDispatchBuildId{}
@@ -423,15 +429,7 @@ func (s *mutableStateSuite) TestRedirectInfoValidation_UnexpectedSticky() {
 
 	wft, err := s.mutableState.AddWorkflowTaskScheduledEvent(true, enumsspb.WORKFLOW_TASK_TYPE_NORMAL)
 	s.NoError(err)
-	_, _, err = s.mutableState.AddWorkflowTaskStartedEvent(
-		wft.ScheduledEventID,
-		"",
-		sticky,
-		"",
-		nil,
-		nil,
-		false,
-	)
+	_, _, err = s.mutableState.AddWorkflowTaskStartedEvent(wft.ScheduledEventID, "", sticky, "", nil, nil, nil, false)
 	expectedErr := &serviceerror2.ObsoleteDispatchBuildId{}
 	s.ErrorAs(err, &expectedErr)
 	s.Equal("b1", s.mutableState.GetAssignedBuildId())
@@ -460,6 +458,7 @@ func (s *mutableStateSuite) createVersionedMutableStateWithCompletedWFT(tq *task
 		tq,
 		"",
 		worker_versioning.StampForBuildId("b1"),
+		nil,
 		nil,
 		false,
 	)
@@ -741,6 +740,7 @@ func (s *mutableStateSuite) TestTransientWorkflowTaskStart_CurrentVersionChanged
 		uuid.New(),
 		&taskqueuepb.TaskQueue{Name: f.TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW).NormalPartition(5).RpcName()},
 		"random identity",
+		nil,
 		nil,
 		nil,
 		false,
@@ -1575,6 +1575,7 @@ func (s *mutableStateSuite) TestRetryActivity_TruncateRetryableFailure() {
 		"worker-identity",
 		nil,
 		nil,
+		nil,
 	)
 	s.NoError(err)
 
@@ -1679,7 +1680,7 @@ func (s *mutableStateSuite) TestAddResetPointFromCompletion() {
 
 	s.Nil(s.cleanedResetPoints().GetPoints())
 
-	s.mutableState.addResetPointFromCompletion("checksum1", "buildid1", 32, 10)
+	s.mutableState.addResetPointFromCompletion("checksum1", "buildid1", nil, 32, 10)
 	p1 := &workflowpb.ResetPointInfo{
 		BuildId:                      "buildid1",
 		BinaryChecksum:               "checksum1",
@@ -1689,7 +1690,7 @@ func (s *mutableStateSuite) TestAddResetPointFromCompletion() {
 	s.Equal([]*workflowpb.ResetPointInfo{p1}, s.cleanedResetPoints().GetPoints())
 
 	// new checksum + buildid
-	s.mutableState.addResetPointFromCompletion("checksum2", "buildid2", 35, 10)
+	s.mutableState.addResetPointFromCompletion("checksum2", "buildid2", nil, 35, 10)
 	p2 := &workflowpb.ResetPointInfo{
 		BuildId:                      "buildid2",
 		BinaryChecksum:               "checksum2",
@@ -1699,15 +1700,15 @@ func (s *mutableStateSuite) TestAddResetPointFromCompletion() {
 	s.Equal([]*workflowpb.ResetPointInfo{p1, p2}, s.cleanedResetPoints().GetPoints())
 
 	// same checksum + buildid, does not add new point
-	s.mutableState.addResetPointFromCompletion("checksum2", "buildid2", 42, 10)
+	s.mutableState.addResetPointFromCompletion("checksum2", "buildid2", nil, 42, 10)
 	s.Equal([]*workflowpb.ResetPointInfo{p1, p2}, s.cleanedResetPoints().GetPoints())
 
 	// back to 1, does not add new point
-	s.mutableState.addResetPointFromCompletion("checksum1", "buildid1", 48, 10)
+	s.mutableState.addResetPointFromCompletion("checksum1", "buildid1", nil, 48, 10)
 	s.Equal([]*workflowpb.ResetPointInfo{p1, p2}, s.cleanedResetPoints().GetPoints())
 
 	// buildid changes
-	s.mutableState.addResetPointFromCompletion("checksum2", "buildid3", 53, 10)
+	s.mutableState.addResetPointFromCompletion("checksum2", "buildid3", nil, 53, 10)
 	p3 := &workflowpb.ResetPointInfo{
 		BuildId:                      "buildid3",
 		BinaryChecksum:               "checksum2",
@@ -1717,7 +1718,7 @@ func (s *mutableStateSuite) TestAddResetPointFromCompletion() {
 	s.Equal([]*workflowpb.ResetPointInfo{p1, p2, p3}, s.cleanedResetPoints().GetPoints())
 
 	// limit to 3, p1 gets dropped
-	s.mutableState.addResetPointFromCompletion("checksum2", "buildid4", 55, 3)
+	s.mutableState.addResetPointFromCompletion("checksum2", "buildid4", nil, 55, 3)
 	p4 := &workflowpb.ResetPointInfo{
 		BuildId:                      "buildid4",
 		BinaryChecksum:               "checksum2",

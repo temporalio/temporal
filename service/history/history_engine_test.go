@@ -6332,6 +6332,7 @@ func addWorkflowTaskStartedEventWithRequestID(ms workflow.MutableState, schedule
 		identity,
 		nil,
 		nil,
+		nil,
 		false,
 	)
 
@@ -6409,7 +6410,15 @@ func addActivityTaskScheduledEventWithRetry(
 
 func addActivityTaskStartedEvent(ms workflow.MutableState, scheduledEventID int64, identity string) *historypb.HistoryEvent {
 	ai, _ := ms.GetActivityInfo(scheduledEventID)
-	event, _ := ms.AddActivityTaskStartedEvent(ai, scheduledEventID, tests.RunID, identity, nil, nil)
+	event, _ := ms.AddActivityTaskStartedEvent(
+		ai,
+		scheduledEventID,
+		tests.RunID,
+		identity,
+		nil,
+		nil,
+		nil,
+	)
 	return event
 }
 

@@ -111,10 +111,14 @@ func Invoke(
 			// we need to force complete an activity
 			fabricateStartedEvent = ai.StartedEventId == common.EmptyEventID
 			if fabricateStartedEvent {
-				_, err := mutableState.AddActivityTaskStartedEvent(ai, scheduledEventID,
+				_, err := mutableState.AddActivityTaskStartedEvent(
+					ai,
+					scheduledEventID,
 					"",
 					req.GetCompleteRequest().GetIdentity(),
 					nil,
+					nil,
+					//TODO: implement workflow redirect
 					nil,
 				)
 				if err != nil {

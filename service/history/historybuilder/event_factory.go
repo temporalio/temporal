@@ -144,7 +144,6 @@ func (b *EventFactory) CreateWorkflowTaskStartedEvent(
 			BuildIdRedirectCounter: buildIdRedirectCounter,
 		},
 	}
-
 	return event
 }
 
@@ -156,17 +155,19 @@ func (b *EventFactory) CreateWorkflowTaskCompletedEvent(
 	workerVersionStamp *commonpb.WorkerVersionStamp,
 	sdkMetadata *sdkpb.WorkflowTaskCompletedMetadata,
 	meteringMetadata *commonpb.MeteringMetadata,
+	completedRedirect *historypb.CompletedDeploymentRedirectInfo,
 ) *historypb.HistoryEvent {
 	event := b.createHistoryEvent(enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED, b.timeSource.Now())
 	event.Attributes = &historypb.HistoryEvent_WorkflowTaskCompletedEventAttributes{
 		WorkflowTaskCompletedEventAttributes: &historypb.WorkflowTaskCompletedEventAttributes{
-			ScheduledEventId: scheduledEventID,
-			StartedEventId:   startedEventID,
-			Identity:         identity,
-			BinaryChecksum:   checksum,
-			WorkerVersion:    workerVersionStamp,
-			SdkMetadata:      sdkMetadata,
-			MeteringMetadata: meteringMetadata,
+			ScheduledEventId:  scheduledEventID,
+			StartedEventId:    startedEventID,
+			Identity:          identity,
+			BinaryChecksum:    checksum,
+			WorkerVersion:     workerVersionStamp,
+			SdkMetadata:       sdkMetadata,
+			MeteringMetadata:  meteringMetadata,
+			CompletedRedirect: completedRedirect,
 		},
 	}
 

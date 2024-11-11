@@ -128,6 +128,37 @@ func BuildIdIfUsingVersioning(stamp *commonpb.WorkerVersionStamp) string {
 	return ""
 }
 
+// DeploymentFromStamp returns the given WorkerVersionStamp if it is using versioning V3,
+// otherwise returns nil.
+func DeploymentFromStamp(stamp *commonpb.WorkerVersionStamp) *commonpb.WorkerDeployment {
+	if stamp.GetUseVersioning() && stamp.GetDeploymentName() != "" && stamp.GetBuildId() != "" {
+		return &commonpb.WorkerDeployment{
+			DeploymentName: stamp.GetDeploymentName(),
+			BuildId:        stamp.GetBuildId(),
+		}
+	}
+	return (*commonpb.WorkerDeployment)(nil)
+}
+
+// DeploymentFromCapabilities returns the given WorkerVersionCapabilities if it is using versioning
+// V3, otherwise returns nil.
+func DeploymentFromCapabilities(stamp *commonpb.WorkerVersionCapabilities) *commonpb.WorkerDeployment {
+	if stamp.GetUseVersioning() && stamp.GetDeploymentName() != "" && stamp.GetBuildId() != "" {
+		return &commonpb.WorkerDeployment{
+			DeploymentName: stamp.GetDeploymentName(),
+			BuildId:        stamp.GetBuildId(),
+		}
+	}
+	return (*commonpb.WorkerDeployment)(nil)
+}
+
+func DeploymentToString(deployment *commonpb.WorkerDeployment) string {
+	if deployment == nil {
+		return "UNVERSIONED"
+	}
+	return deployment.DeploymentName + ":" + deployment.GetBuildId()
+}
+
 // MakeDirectiveForWorkflowTask returns a versioning directive based on the following parameters:
 // - inheritedBuildId: build ID inherited from a past/previous wf execution (for Child WF or CaN)
 // - assignedBuildId: the build ID to which the WF is currently assigned (i.e. mutable state's AssginedBuildId)

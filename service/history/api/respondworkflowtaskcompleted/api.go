@@ -54,6 +54,7 @@ import (
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/tasktoken"
+	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/internal/effect"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/api/recordworkflowtaskstarted"
@@ -214,6 +215,12 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 		return nil, serviceerror.NewNotFound("Workflow task not found.")
 	}
 
+	if err = handler.validateVersioningInfo(request, ms); err != nil {
+		// Mutable state wasn't changed yet and doesn't have to be cleared.
+		releaseLeaseWithError = false
+		return nil, err
+	}
+
 	assignedBuildId := ms.GetAssignedBuildId()
 	wftCompletedBuildId := request.GetWorkerVersionStamp().GetBuildId()
 	if assignedBuildId != "" && !ms.IsStickyTaskQueueSet() {
@@ -319,6 +326,7 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 			1,
 			metrics.OperationTag(metrics.HistoryRespondWorkflowTaskCompletedScope))
 		if assignedBuildId == "" || assignedBuildId == wftCompletedBuildId {
+			// TODO: clean up. this is not applicable to V3
 			// For versioned workflows, only set sticky queue if the WFT is completed by the WF's current build ID.
 			// It is possible that the WF has been redirected to another build ID since this WFT started, in that case
 			// we should not set sticky queue of the old build ID and keep the normal queue to let Matching send the
@@ -1038,6 +1046,27 @@ func (handler *WorkflowTaskCompletedHandler) clearStickyTaskQueue(ctx context.Co
 	err = wfContext.UpdateWorkflowExecutionAsActive(ctx, handler.shardContext)
 	if err != nil {
 		return err
+	}
+	return nil
+}
+
+func (handler *WorkflowTaskCompletedHandler) validateVersioningInfo(
+	request *workflowservice.RespondWorkflowTaskCompletedRequest,
+	ms workflow.MutableState,
+) error {
+	taskDeployment := worker_versioning.DeploymentFromStamp(request.GetWorkerVersionStamp())
+	wfDeployment := ms.GetCurrentDeployment()
+	if taskDeployment.Equal(wfDeployment) {
+		return serviceerror.NewNotFound(fmt.Sprintf(
+			"execution is not assigned to deployment %q, current deployment is %q",
+			worker_versioning.DeploymentToString(wfDeployment),
+			worker_versioning.DeploymentToString(taskDeployment),
+		))
+	}
+
+	behavior := request.GetVersioningBehavior()
+	if taskDeployment != nil && behavior == enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED {
+		return serviceerror.NewInvalidArgument("versioning behavior must be set for workflow tasks completed by versioned workers")
 	}
 	return nil
 }

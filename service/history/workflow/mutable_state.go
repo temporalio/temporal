@@ -155,7 +155,15 @@ type (
 		AddActivityTaskCompletedEvent(int64, int64, *workflowservice.RespondActivityTaskCompletedRequest) (*historypb.HistoryEvent, error)
 		AddActivityTaskFailedEvent(int64, int64, *failurepb.Failure, enumspb.RetryState, string, *commonpb.WorkerVersionStamp) (*historypb.HistoryEvent, error)
 		AddActivityTaskScheduledEvent(int64, *commandpb.ScheduleActivityTaskCommandAttributes, bool) (*historypb.HistoryEvent, *persistencespb.ActivityInfo, error)
-		AddActivityTaskStartedEvent(*persistencespb.ActivityInfo, int64, string, string, *commonpb.WorkerVersionStamp, *taskqueuespb.BuildIdRedirectInfo) (*historypb.HistoryEvent, error)
+		AddActivityTaskStartedEvent(
+			*persistencespb.ActivityInfo,
+			int64,
+			string,
+			string,
+			*commonpb.WorkerVersionStamp,
+			*commonpb.WorkerDeployment,
+			*taskqueuespb.BuildIdRedirectInfo,
+		) (*historypb.HistoryEvent, error)
 		AddActivityTaskTimedOutEvent(int64, int64, *failurepb.Failure, enumspb.RetryState) (*historypb.HistoryEvent, error)
 		AddChildWorkflowExecutionCanceledEvent(int64, *commonpb.WorkflowExecution, *historypb.WorkflowExecutionCanceledEventAttributes) (*historypb.HistoryEvent, error)
 		AddChildWorkflowExecutionCompletedEvent(int64, *commonpb.WorkflowExecution, *historypb.WorkflowExecutionCompletedEventAttributes) (*historypb.HistoryEvent, error)
@@ -392,5 +400,16 @@ type (
 		// NextTransitionCount returns the next state transition count from the state transition history.
 		// If state transition history is empty (e.g. when disabled or fresh mutable state), returns 0.
 		NextTransitionCount() int64
+		// GetCurrentDeployment returns the current effective deployment in the following order:
+		// RedirectInfo.Deployment takes precedence over DeploymentOverride, over Deployment.
+		GetCurrentDeployment() *commonpb.WorkerDeployment
+		GetVersioningBehavior() enumspb.VersioningBehavior
+		GetRedirectInfo() *persistencespb.WorkflowExecutionInfo_VersioningInfo_RedirectInfo
+		StartDeploymentRedirect(
+			deployment *commonpb.WorkerDeployment,
+			behaviorOverride enumspb.VersioningBehavior,
+		) bool
+		CompleteDeploymentRedirect(behavior enumspb.VersioningBehavior) error
+		FailDeploymentRedirect() error
 	}
 )
