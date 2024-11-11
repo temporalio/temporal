@@ -4964,7 +4964,7 @@ func (s *UpdateWorkflowSuite) TestUpdateWithStart() {
 	s.Run("workflow is not running", func() {
 
 		for _, p := range []enumspb.WorkflowIdConflictPolicy{
-			// TODO: enumspb.WORKFLOW_ID_CONFLICT_POLICY_TERMINATE_EXISTING,
+			enumspb.WORKFLOW_ID_CONFLICT_POLICY_TERMINATE_EXISTING,
 			enumspb.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING,
 			enumspb.WORKFLOW_ID_CONFLICT_POLICY_FAIL,
 		} {
@@ -5046,16 +5046,6 @@ func (s *UpdateWorkflowSuite) TestUpdateWithStart() {
 				})
 			})
 		}
-
-		s.Run("workflow id conflict policy terminate-existing: not supported yet", func() {
-			tv := testvars.New(s.T())
-
-			startReq := startWorkflowReq(tv)
-			startReq.WorkflowIdConflictPolicy = enumspb.WORKFLOW_ID_CONFLICT_POLICY_TERMINATE_EXISTING
-			uwsRes := <-sendUpdateWithStart(testcore.NewContext(), startReq, s.updateWorkflowRequest(tv,
-				&updatepb.WaitPolicy{LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED}, "1"))
-			s.Error(uwsRes.err)
-		})
 	})
 
 	s.Run("workflow is running", func() {
@@ -5152,7 +5142,6 @@ func (s *UpdateWorkflowSuite) TestUpdateWithStart() {
 
 		s.Run("workflow id conflict policy terminate-existing: terminate workflow first, then start and update", func() {
 			tv := testvars.New(s.T())
-			s.T().Skip()
 
 			// start workflow
 			initReq := startWorkflowReq(tv)
@@ -5231,7 +5220,7 @@ func (s *UpdateWorkflowSuite) TestUpdateWithStart() {
 		s.Run("dedupes retry", func() {
 
 			for _, p := range []enumspb.WorkflowIdConflictPolicy{
-				// TODO: enumspb.WORKFLOW_ID_CONFLICT_POLICY_TERMINATE_EXISTING,
+				enumspb.WORKFLOW_ID_CONFLICT_POLICY_TERMINATE_EXISTING,
 				enumspb.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING,
 				enumspb.WORKFLOW_ID_CONFLICT_POLICY_FAIL,
 			} {
