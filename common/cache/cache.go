@@ -30,6 +30,10 @@ import (
 	"go.temporal.io/server/common/clock"
 )
 
+type Debug interface {
+	Debug() string
+}
+
 // A Cache is a generalized interface to a cache.  See cache.LRU for a specific
 // implementation (bounded cache with LRU eviction)
 type Cache interface {

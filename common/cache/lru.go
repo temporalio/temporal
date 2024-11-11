@@ -26,6 +26,7 @@ package cache
 
 import (
 	"container/list"
+	"fmt"
 	"sync"
 	"time"
 
@@ -239,6 +240,7 @@ func (c *lru) PutIfNotExist(key interface{}, value interface{}) (interface{}, er
 		return value, err
 	}
 
+	fmt.Println("... cache item already exists")
 	return existing, err
 }
 
@@ -309,6 +311,10 @@ func (c *lru) putInternal(key interface{}, value interface{}, allowUpdate bool) 
 	c.mut.Lock()
 	defer c.mut.Unlock()
 
+	//if d, ok := interface{}(value).(Debug); ok {
+	//	spew.Dump("CACHE PUT", key, d.Debug())
+	//}
+
 	elt := c.byKey[key]
 	// If the entry exists, check if it has expired or update the value
 	if elt != nil {
@@ -317,6 +323,7 @@ func (c *lru) putInternal(key interface{}, value interface{}, allowUpdate bool) 
 			existingVal := existingEntry.value
 
 			if allowUpdate {
+				//fmt.Println("CACHE PUT (UPDATE)", key)
 				newCacheSize := c.calculateNewCacheSize(newEntrySize, existingEntry.Size())
 				if newCacheSize > c.maxSize {
 					c.tryEvictUntilEnoughSpaceWithSkipEntry(newEntrySize, existingEntry)
@@ -349,6 +356,8 @@ func (c *lru) putInternal(key interface{}, value interface{}, allowUpdate bool) 
 		// Entry has expired
 		c.deleteInternal(elt)
 	}
+
+	//fmt.Println("CACHE PUT", key)
 
 	c.tryEvictUntilEnoughSpaceWithSkipEntry(newEntrySize, nil)
 

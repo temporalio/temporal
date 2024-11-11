@@ -26,7 +26,10 @@ package startworkflow
 
 import (
 	"context"
+	"encoding/binary"
 	"errors"
+	"fmt"
+	"sync/atomic"
 	"time"
 
 	"github.com/google/uuid"
@@ -72,6 +75,7 @@ const (
 )
 
 var (
+	invocation           atomic.Int32
 	BeforeCreateHookNoop = func(lease api.WorkflowLease) error { return nil }
 )
 
@@ -213,6 +217,7 @@ func (s *Starter) Invoke(
 		return nil, startOutcome, err
 	}
 
+	fmt.Println("createBrandNew", creationParams.runID)
 	err = s.createBrandNew(ctx, creationParams)
 	if err == nil {
 		resp, err = s.generateResponse(
@@ -251,12 +256,19 @@ func (s *Starter) lockCurrentWorkflowExecution(
 // createNewMutableState creates a new workflow context, and closes its mutable state transaction as snapshot.
 // It returns the creationContext which can later be used to insert into the executions table.
 func (s *Starter) createNewMutableState(workflowID string) (*creationParams, error) {
-	runID := uuid.NewString()
+	var runID uuid.UUID
+	counterBytes := make([]byte, 8)
+	binary.BigEndian.PutUint64(counterBytes, uint64(invocation.Add(1)))
+	copy(runID[:8], counterBytes)
+	for i := 8; i < 16; i++ {
+		runID[i] = 0xAB
+	}
+
 	workflowLease, err := api.NewWorkflowWithSignal(
 		s.shardContext,
 		s.namespace,
 		workflowID,
-		runID,
+		runID.String(),
 		s.request,
 		nil,
 	)
@@ -281,7 +293,7 @@ func (s *Starter) createNewMutableState(workflowID string) (*creationParams, err
 
 	return &creationParams{
 		workflowID:           workflowID,
-		runID:                runID,
+		runID:                runID.String(),
 		workflowLease:        workflowLease,
 		workflowTaskInfo:     workflowTaskInfo,
 		workflowSnapshot:     workflowSnapshot,
@@ -422,6 +434,8 @@ func (s *Starter) resolveDuplicateWorkflowID(
 	case currentExecutionUpdateAction == nil:
 		return nil, 0, nil
 	}
+
+	fmt.Println("createAndUpdate", creationParams.runID)
 
 	var mutableStateInfo *mutableStateInfo
 	// update current execution and create new execution in one transaction

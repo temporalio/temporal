@@ -131,6 +131,7 @@ var (
 
 type (
 	MutableStateImpl struct {
+		uuid                           string
 		pendingActivityTimerHeartbeats map[int64]time.Time                    // Scheduled Event ID -> LastHeartbeatTimeoutVisibilityInSeconds.
 		pendingActivityInfoIDs         map[int64]*persistencespb.ActivityInfo // Scheduled Event ID -> Activity Info.
 		pendingActivityIDToEventID     map[string]int64                       // Activity ID -> Scheduled Event ID of the activity.
@@ -253,6 +254,7 @@ func NewMutableState(
 	startTime time.Time,
 ) *MutableStateImpl {
 	s := &MutableStateImpl{
+		uuid:                           uuid.New(),
 		updateActivityInfos:            make(map[int64]*persistencespb.ActivityInfo),
 		pendingActivityTimerHeartbeats: make(map[int64]time.Time),
 		pendingActivityInfoIDs:         make(map[int64]*persistencespb.ActivityInfo),
@@ -306,6 +308,11 @@ func NewMutableState(
 		timeSource:      shard.GetTimeSource(),
 		logger:          logger,
 		metricsHandler:  shard.GetMetricsHandler().WithTags(metrics.OperationTag(metrics.WorkflowContextScope)),
+	}
+
+	zero := time.Time{}
+	if startTime != zero {
+		fmt.Println("NEW MS", s.uuid)
 	}
 
 	s.executionInfo = &persistencespb.WorkflowExecutionInfo{
@@ -376,6 +383,12 @@ func NewMutableStateFromDB(
 		dbRecord.ExecutionState.RunId,
 		startTime,
 	)
+
+	if dbRecord.ExecutionState.RunId == "00000000-0000-0001-abab-abababababab" {
+		fmt.Println("LOAD MS", dbRecord.ExecutionState.RunId, mutableState.uuid)
+	} else {
+		fmt.Println("LOAD MS", dbRecord.ExecutionState.RunId, mutableState.uuid)
+	}
 
 	if dbRecord.ActivityInfos != nil {
 		mutableState.pendingActivityInfoIDs = dbRecord.ActivityInfos
@@ -1047,6 +1060,7 @@ func (ms *MutableStateImpl) GetUpdateOutcome(
 	updateID string,
 ) (*updatepb.Outcome, error) {
 	if ms.executionInfo.UpdateInfos == nil {
+		fmt.Println("MS GET UPDATE [404]", ms.executionState.RunId, ms.uuid)
 		return nil, serviceerror.NewNotFound("update not found")
 	}
 	ui, ok := ms.executionInfo.UpdateInfos[updateID]
@@ -1076,6 +1090,7 @@ func (ms *MutableStateImpl) GetUpdateOutcome(
 	if attrs == nil {
 		return nil, serviceerror.NewInternal("event pointer does not reference an update completed event")
 	}
+	fmt.Println("MS GET UPDATE [200]", ms.executionState.RunId, ms.uuid)
 	return attrs.GetOutcome(), nil
 }
 
@@ -4203,6 +4218,8 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionUpdateCompletedEvent(
 	event *historypb.HistoryEvent,
 	batchID int64,
 ) error {
+	fmt.Println("MS ADD UPDATE", ms.uuid)
+
 	attrs := event.GetWorkflowExecutionUpdateCompletedEventAttributes()
 	if attrs == nil {
 		return serviceerror.NewInternal("wrong event type in call to ApplyWorkflowExecutionUpdateCompletedEvent")

@@ -28,6 +28,7 @@ package cache
 
 import (
 	"context"
+	"fmt"
 	"sync/atomic"
 	"time"
 	"unicode/utf8"
@@ -209,6 +210,10 @@ func newCache(
 	}
 }
 
+func (i *cacheItem) Debug() string {
+	return i.wfContext.Debug()
+}
+
 func (c *cacheImpl) GetOrCreateCurrentWorkflowExecution(
 	ctx context.Context,
 	shardContext shard.Context,
@@ -298,13 +303,33 @@ func (c *cacheImpl) Put(
 ) (workflow.Context, error) {
 	cacheKey := makeCacheKey(shardContext, namespaceID, execution)
 	item := &cacheItem{shardId: shardContext.GetShardID(), wfContext: workflowCtx, finalizer: shardContext.GetFinalizer()}
-	existing, err := c.PutIfNotExist(cacheKey, item)
+
+	fmt.Println("CACHE put context", cacheKey.WorkflowKey.RunID)
+	if workflowCtx.(*workflow.ContextImpl).MutableState == nil {
+		if cacheKey.WorkflowKey.RunID == "00000000-0000-0002-abab-abababababab" {
+			fmt.Println("... nil MS", cacheKey.WorkflowKey.RunID)
+		}
+	} else {
+		if cacheKey.WorkflowKey.RunID == "00000000-0000-0002-abab-abababababab" {
+			fmt.Println("... non-nil MS", cacheKey.WorkflowKey.RunID)
+		}
+	}
+
+	c.Cache.Delete(cacheKey)
+	existing, err := c.Cache.PutIfNotExist(cacheKey, item)
 	if err != nil {
 		metrics.CacheFailures.With(handler).Record(1)
 		return nil, err
 	}
+
 	//nolint:revive
-	return existing.(*cacheItem).wfContext, nil
+	existingWorkflowCtx := existing.(*cacheItem).wfContext
+	if existingWorkflowCtx.(*workflow.ContextImpl).MutableState == nil {
+		if cacheKey.WorkflowKey.RunID == "00000000-0000-0002-abab-abababababab" {
+			fmt.Println("... but already nil MS", cacheKey.WorkflowKey.RunID)
+		}
+	}
+	return existingWorkflowCtx, nil
 }
 
 func (c *cacheImpl) getOrCreateWorkflowExecutionInternal(
@@ -320,8 +345,14 @@ func (c *cacheImpl) getOrCreateWorkflowExecutionInternal(
 	item, cacheHit := c.Get(cacheKey).(*cacheItem)
 	var workflowCtx workflow.Context
 	if cacheHit {
+		if cacheKey.WorkflowKey.RunID == "00000000-0000-0001-abab-abababababab" {
+			fmt.Println("CACHE load Context", cacheKey.WorkflowKey.RunID)
+		} else {
+			fmt.Println("CACHE load Context", cacheKey.WorkflowKey.RunID)
+		}
 		workflowCtx = item.wfContext
 	} else {
+		fmt.Println("New Context", cacheKey.WorkflowKey.RunID)
 		metrics.CacheMissCounter.With(handler).Record(1)
 		workflowCtx = workflow.NewContext(
 			shardContext.GetConfig(),

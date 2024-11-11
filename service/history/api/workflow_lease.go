@@ -78,10 +78,20 @@ func NewWorkflowLease(
 }
 
 func (w *workflowLease) GetContext() workflow.Context {
+	if ms := w.context.(*workflow.ContextImpl).MutableState; ms != nil {
+		if ms != w.mutableState {
+			panic("not the same")
+		}
+	}
 	return w.context
 }
 
 func (w *workflowLease) GetMutableState() workflow.MutableState {
+	if ms := w.context.(*workflow.ContextImpl).MutableState; ms != nil {
+		if ms != w.mutableState {
+			panic("not the same")
+		}
+	}
 	return w.mutableState
 }
 

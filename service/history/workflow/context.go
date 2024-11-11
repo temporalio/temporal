@@ -58,6 +58,8 @@ type (
 	Context interface {
 		GetWorkflowKey() definition.WorkflowKey
 
+		Debug() string
+
 		LoadMutableState(ctx context.Context, shardContext shard.Context) (MutableState, error)
 		LoadExecutionStats(ctx context.Context, shardContext shard.Context) (*persistencespb.ExecutionStats, error)
 		Clear()
@@ -196,6 +198,10 @@ func NewContext(
 	}
 }
 
+func (c *ContextImpl) Debug() string {
+	return c.workflowKey.String()
+}
+
 func (c *ContextImpl) Lock(
 	ctx context.Context,
 	lockPriority locks.Priority,
@@ -219,6 +225,9 @@ func (c *ContextImpl) Clear() {
 	if c.MutableState != nil {
 		c.MutableState.GetQueryRegistry().Clear()
 		c.MutableState.RemoveSpeculativeWorkflowTaskTimeoutTask()
+		if c.workflowKey.RunID == "00000000-0000-0002-abab-abababababab" {
+			fmt.Println("CLEAR MS in context", c.workflowKey.RunID, c.MutableState.(*MutableStateImpl).uuid)
+		}
 		c.MutableState = nil
 	}
 	if c.updateRegistry != nil {
@@ -279,6 +288,7 @@ func (c *ContextImpl) LoadMutableState(ctx context.Context, shardContext shard.C
 		if err != nil {
 			return nil, err
 		}
+		fmt.Println("Context loaded MS", c.workflowKey.RunID, c.MutableState.(*MutableStateImpl).uuid)
 	}
 
 	flushBeforeReady, err := c.MutableState.StartTransaction(namespaceEntry)

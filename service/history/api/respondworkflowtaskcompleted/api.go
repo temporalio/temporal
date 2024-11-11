@@ -140,6 +140,7 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 		return nil, consts.ErrDeserializingToken
 	}
 
+	fmt.Println("WorkflowTaskCompletedHandler")
 	workflowLease, err := handler.workflowConsistencyChecker.GetWorkflowLeaseWithConsistencyCheck(
 		ctx,
 		token.Clock,
