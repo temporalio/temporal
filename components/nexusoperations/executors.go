@@ -691,6 +691,8 @@ func isRetryableHandlerError(eType nexus.HandlerErrorType) bool {
 		nexus.HandlerErrorTypeNotImplemented:
 		return false
 	default:
+		// Default to retryable in case other error types are added in the future.
+		// It's better to retry than unexpectedly fail.
 		return true
 	}
 }
