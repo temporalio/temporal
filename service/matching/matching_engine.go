@@ -2161,13 +2161,13 @@ func (e *matchingEngineImpl) startAndSignalDeploymentWorkflow(
 	sa := &commonpb.SearchAttributes{}
 	searchattribute.AddSearchAttribute(&sa, searchattribute.TemporalNamespaceDivision, payload.EncodeString(deployment.DeploymentNamespaceDivision))
 
-	// validate workflowID params
+	// validate params which are used for building workflowID's
 	err := e.validateDeploymentWfParams(deploymentName, buildID)
 	if err != nil {
 		return nil, err
 	}
-	workflowID := deployment.DeploymentWorkflowIDPrefix + deploymentName + "-" + buildID
-	err = e.validateWorkflowID(workflowID)
+	deploymentWorkflowID := deployment.DeploymentWorkflowIDPrefix + deploymentName + "-" + buildID
+	err = e.validateWorkflowID(deploymentWorkflowID)
 	if err != nil {
 		return nil, err
 	}
@@ -2187,7 +2187,7 @@ func (e *matchingEngineImpl) startAndSignalDeploymentWorkflow(
 	// Create SignalWithStartWorkflowExecutionRequest
 	startReq := &workflowservice.SignalWithStartWorkflowExecutionRequest{
 		Namespace:                args.NamespaceName,
-		WorkflowId:               workflowID,
+		WorkflowId:               deploymentWorkflowID,
 		WorkflowType:             &commonpb.WorkflowType{Name: deployment.DeploymentWorkflowType},
 		TaskQueue:                &taskqueuepb.TaskQueue{Name: primitives.PerNSWorkerTaskQueue},
 		Input:                    workflowInputPayloads,

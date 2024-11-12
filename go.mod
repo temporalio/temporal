@@ -7,8 +7,6 @@ retract (
 	v1.26.0 // Published accidentally.
 )
 
-replace go.temporal.io/sdk => github.com/temporalio/sdk-go v1.29.2-0.20241017230629-cc508c6fe7a9
-
 require (
 	cloud.google.com/go/storage v1.41.0
 	github.com/aws/aws-sdk-go v1.53.15
@@ -30,7 +28,7 @@ require (
 	github.com/jmoiron/sqlx v1.3.4
 	github.com/lib/pq v1.10.9
 	github.com/mitchellh/mapstructure v1.5.0
-	github.com/nexus-rpc/sdk-go v0.0.10
+	github.com/nexus-rpc/sdk-go v0.0.11
 	github.com/olekukonko/tablewriter v0.0.5
 	github.com/olivere/elastic/v7 v7.0.32
 	github.com/pborman/uuid v1.2.1
@@ -57,7 +55,7 @@ require (
 	go.opentelemetry.io/otel/sdk v1.27.0
 	go.opentelemetry.io/otel/sdk/metric v1.27.0
 	go.opentelemetry.io/otel/trace v1.27.0
-	go.temporal.io/api v1.39.1-0.20241014184314-2fb1df995c55
+	go.temporal.io/api v1.40.0
 	go.temporal.io/sdk v1.29.2-0.20241008230001-c82a8ac11cc6
 	go.temporal.io/version v0.3.0
 	go.uber.org/atomic v1.11.0
@@ -155,3 +153,5 @@ require (
 )
 
 replace go.temporal.io/api => github.com/temporalio/api-go v1.39.1-0.20241105210922-387c25fd10b7
+
+replace go.temporal.io/sdk => ../sdk-go

@@ -34,7 +34,7 @@ type (
 	DeploymentNameWorkflowArgs struct {
 		NamespaceName  string
 		NamespaceID    string
-		DefaultBuildID string
+		DefaultBuildID string // required for CAN to preserve local state
 	}
 
 	// DeploymentWorkflowRunner holds the local state while running a deployment name workflow
@@ -49,17 +49,18 @@ type (
 )
 
 const (
-	UpdateDeploymentNameBuildIDSignalName = "update-deployment-name-buildID"
+	UpdateDeploymentNameDefaultBuildIDSignalName = "update-deployment-name-default-buildID"
 
 	DeploymentNameWorkflowIDPrefix = "temporal-sys-deployment-name:"
 )
 
 // TODO Shivam - Define workflow for DeploymentName
-func DeploymentNameWorkflow(ctx workflow.Context, deploymentNameArgs DeploymentNameWorkflowArgs) error {
+func DeploymentNameWorkflow(ctx workflow.Context, deploymentNameWorkflowArgs DeploymentNameWorkflowArgs) error {
 	deploymentWorkflowNameRunner := &DeploymentNameWorkflowRunner{
 		ctx:            ctx,
-		logger:         sdklog.With(workflow.GetLogger(ctx), "wf-namespace", deploymentNameArgs.NamespaceName),
-		metrics:        workflow.GetMetricsHandler(ctx).WithTags(map[string]string{"namespace": deploymentNameArgs.NamespaceName}),
+		a:              nil,
+		logger:         sdklog.With(workflow.GetLogger(ctx), "wf-namespace", deploymentNameWorkflowArgs.NamespaceName),
+		metrics:        workflow.GetMetricsHandler(ctx).WithTags(map[string]string{"namespace": deploymentNameWorkflowArgs.NamespaceName}),
 		defaultBuildID: "", // TODO Shivam - I wonder if this will be nil everytime we start a deploymentName workflow
 	}
 	return deploymentWorkflowNameRunner.run()
@@ -77,5 +78,13 @@ func (d *DeploymentNameWorkflowRunner) run() error {
 	update default buildID of the deployment name.
 
 	*/
+
+	// Fetch signal handlers
+	selector := workflow.NewSelector(d.ctx)
+
+	// async draining before CAN
+	for !workflow.GetInfo(d.ctx).GetContinueAsNewSuggested() || selector.HasPending() {
+		selector.Select(d.ctx)
+	}
 	return nil
 }

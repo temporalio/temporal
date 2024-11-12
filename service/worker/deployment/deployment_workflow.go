@@ -25,11 +25,11 @@
 package deployment
 
 import (
-	"errors"
 	"strings"
 	"time"
 
 	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/api/serviceerror"
 	sdkclient "go.temporal.io/sdk/client"
 	sdklog "go.temporal.io/sdk/log"
 	"go.temporal.io/sdk/temporal"
@@ -97,14 +97,15 @@ func parseDeploymentWorkflowID(workflowID string) (string, string, error) {
 	// Split by ":"
 	parts := strings.Split(workflowID, ":")
 	if len(parts) != 2 {
-		return "", "", errors.New("invalid format for workflowID")
+		return "", "", serviceerror.NewInvalidArgument("invalid format for workflowID")
 	}
 
 	deploymentBuildIDWorkflowID := strings.Split(parts[1], "-")
 	if len(deploymentBuildIDWorkflowID) != 2 {
-		return "", "", errors.New("invalid format for workflowID")
+		return "", "", serviceerror.NewInvalidArgument("invalid format for workflowID")
 	}
 
+	// Length and character checks for deploymentName and buildID are performed in matching
 	deploymentName := deploymentBuildIDWorkflowID[0]
 	buildID := deploymentBuildIDWorkflowID[1]
 	return deploymentName, buildID, nil
@@ -128,6 +129,7 @@ func DeploymentWorkflow(ctx workflow.Context, deploymentWorkflowArgs DeploymentW
 			BuildID:        buildID,
 		},
 		ctx:     ctx,
+		a:       nil,
 		logger:  sdklog.With(workflow.GetLogger(ctx), "wf-namespace", deploymentWorkflowArgs.NamespaceName),
 		metrics: workflow.GetMetricsHandler(ctx).WithTags(map[string]string{"namespace": deploymentWorkflowArgs.NamespaceName}),
 	}
@@ -137,6 +139,13 @@ func DeploymentWorkflow(ctx workflow.Context, deploymentWorkflowArgs DeploymentW
 func (d *DeploymentWorkflowRunner) run() error {
 
 	// Set up Query Handlers here:
+	err := workflow.SetQueryHandler(d.ctx, "deploymentTaskQueues", func(input []byte) ([]*DeploymentTaskQueue, error) {
+		return d.deploymentlocalState.TaskQueues, nil
+	})
+	if err != nil {
+		d.logger.Error("Failed while setting up query handler")
+		return err
+	}
 
 	// Fetch signal channels
 	updateDeploymentSignalChannel := workflow.GetSignalChannel(d.ctx, UpdateDeploymentSignalName)
@@ -145,14 +154,20 @@ func (d *DeploymentWorkflowRunner) run() error {
 	selector := workflow.NewSelector(d.ctx)
 	selector.AddReceive(updateDeploymentSignalChannel, func(c workflow.ReceiveChannel, more bool) {
 		// fetch the input from the signal
+
 		var inputDeploymentTaskQueue *DeploymentTaskQueue
 		updateDeploymentSignalChannel.Receive(d.ctx, &inputDeploymentTaskQueue)
-
 		// add the task queue to the local state
 		d.deploymentlocalState.TaskQueues = append(d.deploymentlocalState.TaskQueues, inputDeploymentTaskQueue)
 
 		// Call activity which starts "DeploymentName" workflow
-
+		activityInput := StartDeploymentNameWorkflowActivityInput{
+			NamespaceName:  d.deploymentlocalState.NamespaceName,
+			NamespaceID:    d.deploymentlocalState.NamespaceID,
+			DeploymentName: d.deploymentlocalState.DeploymentName,
+		}
+		activityCtx := workflow.WithActivityOptions(d.ctx, defaultActivityOptions)
+		workflow.ExecuteActivity(activityCtx, d.a.StartDeploymentNameWorkflow, activityInput)
 	})
 	selector.AddReceive(updateBuildIDSignalChannel, func(c workflow.ReceiveChannel, more bool) {
 		// Process Signal
