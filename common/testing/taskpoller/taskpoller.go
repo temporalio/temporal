@@ -40,7 +40,6 @@ import (
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/debug"
-	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/rpc"
 	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/service/history/consts"
@@ -49,7 +48,6 @@ import (
 type (
 	TaskPoller struct {
 		t         *testing.T
-		logger    log.Logger
 		client    workflowservice.WorkflowServiceClient
 		namespace string
 	}
@@ -84,13 +82,11 @@ func New(
 	t *testing.T,
 	client workflowservice.WorkflowServiceClient,
 	namespace string,
-	logger log.Logger,
 ) TaskPoller {
 	return TaskPoller{
 		t:         t,
 		client:    client,
 		namespace: namespace,
-		logger:    logger,
 	}
 }
 
