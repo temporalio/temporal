@@ -45,6 +45,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	deployspb "go.temporal.io/server/api/deployment/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
@@ -129,8 +130,9 @@ type (
 	}
 
 	dedupDeploymentsKey struct {
-		taskQueue *deployment.TaskQueue
-		buildID   string
+		taskQueueName string
+		taskQueueType enumspb.TaskQueueType
+		buildID       string
 	}
 
 	// Implements matching.Engine
@@ -568,29 +570,32 @@ pollLoop:
 			forwardedFrom:             req.GetForwardedSource(),
 		}
 		if e.config.EnableDeployments(req.PollRequest.Namespace) && req.PollRequest.WorkerVersionCapabilities.UseVersioning {
-			taskQueueStruct := &deployment.TaskQueue{
-				Name:          req.PollRequest.TaskQueue.Name,
-				TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
-			}
-			deploymenTaskQueueStruct := &deployment.DeploymentTaskQueue{
-				FirstPollerTimeStamp: nil,
-				TaskQueue:            taskQueueStruct,
-			}
 			buildID := req.PollRequest.WorkerVersionCapabilities.BuildId
 			deploymentName := req.PollRequest.WorkerVersionCapabilities.DeploymentName
 
 			// checking for duplicate request
 			dedupDeploymentKey := dedupDeploymentsKey{
-				taskQueue: taskQueueStruct,
-				buildID:   buildID,
+				taskQueueName: req.PollRequest.TaskQueue.Name,
+				taskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+				buildID:       buildID,
 			}
 			if _, found := e.dedupDeployments[dedupDeploymentKey]; !found {
-				startDeploymentWorkflowArgs := deployment.DeploymentWorkflowArgs{
-					NamespaceName: req.PollRequest.Namespace,
-					NamespaceID:   req.NamespaceId,
-					TaskQueues:    []*deployment.DeploymentTaskQueue{deploymenTaskQueueStruct},
+
+				// make signal input
+				updateDeploymentSignalInput := &deployspb.UpdateDeploymentSignalInput{
+					Name: req.PollRequest.TaskQueue.Name,
+					TaskQueueInfo: &deployspb.DeploymentWorkflowArgs_TaskQueueFamilyInfo_TaskQueueInfo{
+						TaskQueueType:   enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+						FirstPollerTime: nil,
+					},
 				}
-				_, err := e.startAndSignalDeploymentWorkflow(ctx, &startDeploymentWorkflowArgs, deploymentName, buildID, req.PollRequest.Identity)
+
+				startDeploymentWorkflowArgs := &deployspb.DeploymentWorkflowArgs{
+					NamespaceName:     req.PollRequest.Namespace,
+					NamespaceId:       req.NamespaceId,
+					TaskQueueFamilies: nil,
+				}
+				_, err := e.startAndSignalDeploymentWorkflow(ctx, startDeploymentWorkflowArgs, updateDeploymentSignalInput, deploymentName, buildID, req.PollRequest.Identity)
 				if err != nil {
 					return nil, err
 				}
@@ -812,28 +817,32 @@ pollLoop:
 			pollMetadata.ratePerSecond = &request.TaskQueueMetadata.MaxTasksPerSecond.Value
 		}
 		if e.config.EnableDeployments(req.PollRequest.Namespace) && req.PollRequest.WorkerVersionCapabilities.UseVersioning {
-			taskQueueStruct := &deployment.TaskQueue{
-				Name:          req.PollRequest.TaskQueue.Name,
-				TaskQueueType: enumspb.TASK_QUEUE_TYPE_ACTIVITY,
-			}
-			deploymenTaskQueueStruct := &deployment.DeploymentTaskQueue{
-				FirstPollerTimeStamp: nil,
-				TaskQueue:            taskQueueStruct,
-			}
 			buildID := req.PollRequest.WorkerVersionCapabilities.BuildId
+			deploymentName := req.PollRequest.WorkerVersionCapabilities.DeploymentName
 
 			// checking for duplicate request
 			dedupDeploymentKey := dedupDeploymentsKey{
-				taskQueue: taskQueueStruct,
-				buildID:   buildID,
+				taskQueueName: req.PollRequest.TaskQueue.Name,
+				taskQueueType: enumspb.TASK_QUEUE_TYPE_ACTIVITY,
+				buildID:       buildID,
 			}
 			if _, found := e.dedupDeployments[dedupDeploymentKey]; !found {
-				startDeploymentWorkflowArgs := deployment.DeploymentWorkflowArgs{
-					NamespaceName: req.PollRequest.Namespace,
-					NamespaceID:   req.NamespaceId,
-					TaskQueues:    []*deployment.DeploymentTaskQueue{deploymenTaskQueueStruct},
+
+				// make signal input
+				updateDeploymentSignalInput := &deployspb.UpdateDeploymentSignalInput{
+					Name: req.PollRequest.TaskQueue.Name,
+					TaskQueueInfo: &deployspb.DeploymentWorkflowArgs_TaskQueueFamilyInfo_TaskQueueInfo{
+						TaskQueueType:   enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+						FirstPollerTime: nil,
+					},
 				}
-				_, err := e.startAndSignalDeploymentWorkflow(ctx, &startDeploymentWorkflowArgs, req.PollRequest.WorkerVersionCapabilities.DeploymentName, req.PollRequest.WorkerVersionCapabilities.BuildId, req.PollRequest.Identity)
+
+				startDeploymentWorkflowArgs := &deployspb.DeploymentWorkflowArgs{
+					NamespaceName:     req.PollRequest.Namespace,
+					NamespaceId:       req.NamespaceId,
+					TaskQueueFamilies: nil,
+				}
+				_, err := e.startAndSignalDeploymentWorkflow(ctx, startDeploymentWorkflowArgs, updateDeploymentSignalInput, deploymentName, buildID, req.PollRequest.Identity)
 				if err != nil {
 					return nil, err
 				}
@@ -1828,28 +1837,32 @@ pollLoop:
 			forwardedFrom:             req.GetForwardedSource(),
 		}
 		if e.config.EnableDeployments(req.Request.Namespace) && req.Request.WorkerVersionCapabilities.UseVersioning {
-			taskQueueStruct := &deployment.TaskQueue{
-				Name:          req.Request.TaskQueue.Name,
-				TaskQueueType: enumspb.TASK_QUEUE_TYPE_NEXUS,
-			}
-			deploymenTaskQueueStruct := &deployment.DeploymentTaskQueue{
-				FirstPollerTimeStamp: nil,
-				TaskQueue:            taskQueueStruct,
-			}
 			buildID := req.Request.WorkerVersionCapabilities.BuildId
+			deploymentName := req.Request.WorkerVersionCapabilities.DeploymentName
 
 			// checking for duplicate request
 			dedupDeploymentKey := dedupDeploymentsKey{
-				taskQueue: taskQueueStruct,
-				buildID:   buildID,
+				taskQueueName: req.Request.TaskQueue.Name,
+				taskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+				buildID:       buildID,
 			}
 			if _, found := e.dedupDeployments[dedupDeploymentKey]; !found {
-				startDeploymentWorkflowArgs := deployment.DeploymentWorkflowArgs{
-					NamespaceName: req.Request.Namespace,
-					NamespaceID:   req.NamespaceId,
-					TaskQueues:    []*deployment.DeploymentTaskQueue{deploymenTaskQueueStruct},
+
+				// make signal input
+				updateDeploymentSignalInput := &deployspb.UpdateDeploymentSignalInput{
+					Name: req.Request.TaskQueue.Name,
+					TaskQueueInfo: &deployspb.DeploymentWorkflowArgs_TaskQueueFamilyInfo_TaskQueueInfo{
+						TaskQueueType:   enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+						FirstPollerTime: nil,
+					},
 				}
-				_, err := e.startAndSignalDeploymentWorkflow(ctx, &startDeploymentWorkflowArgs, req.Request.WorkerVersionCapabilities.DeploymentName, req.Request.WorkerVersionCapabilities.BuildId, req.Request.Identity)
+
+				startDeploymentWorkflowArgs := &deployspb.DeploymentWorkflowArgs{
+					NamespaceName:     req.Request.Namespace,
+					NamespaceId:       req.NamespaceId,
+					TaskQueueFamilies: nil,
+				}
+				_, err := e.startAndSignalDeploymentWorkflow(ctx, startDeploymentWorkflowArgs, updateDeploymentSignalInput, deploymentName, buildID, req.Request.Identity)
 				if err != nil {
 					return nil, err
 				}
@@ -2152,7 +2165,8 @@ func (e *matchingEngineImpl) validateWorkflowID(workflowID string) error {
 
 func (e *matchingEngineImpl) startAndSignalDeploymentWorkflow(
 	ctx context.Context,
-	args *deployment.DeploymentWorkflowArgs,
+	args *deployspb.DeploymentWorkflowArgs,
+	signalInput *deployspb.UpdateDeploymentSignalInput,
 	deploymentName string,
 	buildID string,
 	identity string,
@@ -2179,7 +2193,7 @@ func (e *matchingEngineImpl) startAndSignalDeploymentWorkflow(
 	}
 
 	// signal input
-	signalInputPayload, err := sdk.PreferProtoDataConverter.ToPayloads(args.TaskQueues[0])
+	signalInputPayload, err := sdk.PreferProtoDataConverter.ToPayloads(signalInput)
 	if err != nil {
 		return nil, err
 	}
@@ -2199,7 +2213,7 @@ func (e *matchingEngineImpl) startAndSignalDeploymentWorkflow(
 		SearchAttributes:         sa,
 	}
 	resp, err := e.historyClient.SignalWithStartWorkflowExecution(ctx, &historyservice.SignalWithStartWorkflowExecutionRequest{
-		NamespaceId:            args.NamespaceID,
+		NamespaceId:            args.NamespaceId,
 		SignalWithStartRequest: startReq,
 	})
 

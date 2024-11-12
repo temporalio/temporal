@@ -30,6 +30,7 @@ import (
 
 	"go.temporal.io/sdk/activity"
 	sdkclient "go.temporal.io/sdk/client"
+	deployspb "go.temporal.io/server/api/deployment/v1"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/sdk"
@@ -67,10 +68,10 @@ func (a *DeploymentActivities) StartDeploymentNameWorkflow(ctx context.Context, 
 	}
 
 	// Build workflow args
-	deploymentNameWorkflowArgs := &DeploymentNameWorkflowArgs{
+	deploymentNameWorkflowArgs := &deployspb.DeploymentNameWorkflowArgs{
 		NamespaceName:  input.NamespaceName,
-		NamespaceID:    input.NamespaceID,
-		DefaultBuildID: "",
+		NamespaceId:    input.NamespaceID,
+		DefaultBuildId: "",
 	}
 
 	fmt.Println("going to execute the activity")

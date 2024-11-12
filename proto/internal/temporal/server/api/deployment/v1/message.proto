@@ -1,0 +1,57 @@
+// The MIT License
+//
+// Copyright (c) 2024 Temporal Technologies, Inc.
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+// THE SOFTWARE.
+
+syntax = "proto3";
+
+package temporal.server.api.deployment.v1;
+
+option go_package = "go.temporal.io/server/api/deployment/v1;deployment";
+
+import "temporal/api/enums/v1/task_queue.proto";
+import "google/protobuf/timestamp.proto";
+
+message DeploymentWorkflowArgs {
+    string namespace_name = 1;
+    string namespace_id = 2;
+    map<string, TaskQueueFamilyInfo> task_queue_families = 3;
+    
+    message TaskQueueFamilyInfo {
+        repeated TaskQueueInfo task_queues = 1;
+        
+        message TaskQueueInfo {
+            temporal.api.enums.v1.TaskQueueType task_queue_type = 1;
+            google.protobuf.Timestamp first_poller_time = 2;
+        }
+    }
+}
+
+message DeploymentNameWorkflowArgs {
+    string namespace_name = 1;
+    string namespace_id = 2;
+    string default_build_id = 3;
+}
+
+// TODO Shivam - ponder on signal message name
+message UpdateDeploymentSignalInput{
+    string name = 1;
+    DeploymentWorkflowArgs.TaskQueueFamilyInfo.TaskQueueInfo task_queue_info = 2;
+}
