@@ -199,7 +199,7 @@ func (tv *TestVars) StickyTaskQueue(key ...string) *taskqueuepb.TaskQueue {
 
 func (tv *TestVars) StickyExecutionAttributes(timeout time.Duration, key ...string) *taskqueuepb.StickyExecutionAttributes {
 	return &taskqueuepb.StickyExecutionAttributes{
-		WorkerTaskQueue:        tv.StickyTaskQueue(),
+		WorkerTaskQueue:        tv.StickyTaskQueue(key...),
 		ScheduleToStartTimeout: durationpb.New(timeout),
 	}
 }
