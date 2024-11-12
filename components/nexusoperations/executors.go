@@ -670,7 +670,7 @@ func cancelCallOutcomeTag(callCtx context.Context, callErr error) string {
 			return "request-timeout"
 		}
 		if errors.As(callErr, &handlerErr) {
-			return fmt.Sprintf("handler-error:%s", handlerErr.Type)
+			return "handler-error:" + string(handlerErr.Type)
 		}
 		return "unknown-error"
 	}
