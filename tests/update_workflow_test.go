@@ -3328,7 +3328,7 @@ func (s *UpdateWorkflowSuite) TestUpdateWorkflow_SpeculativeWorkflowTask_Heartbe
 			return &workflowservice.RespondWorkflowTaskCompletedRequest{
 				ForceCreateNewWorkflowTask: true,
 			}, nil
-		}, taskpoller.WithoutPollRetries)
+		})
 	s.NoError(err)
 
 	// Reject update from workflow.
