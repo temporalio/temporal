@@ -79,6 +79,7 @@ import (
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/searchattribute"
+	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/utf8validator"
 	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/common/xdc"
@@ -1884,6 +1885,13 @@ func (adh *AdminHandler) StreamWorkflowReplicationMessages(
 			resp, err := serverCluster.Recv()
 			if err != nil {
 				logger.Info("AdminStreamReplicationMessages server -> client encountered error", tag.Error(err))
+				var solErr *serviceerrors.ShardOwnershipLost
+				var suErr *serviceerror.Unavailable
+				if errors.As(err, &solErr) || errors.As(err, &suErr) {
+					ctx, cl := context.WithTimeout(context.Background(), 2*time.Second)
+					adh.historyClient.DescribeHistoryHost(ctx, &historyservice.DescribeHistoryHostRequest{})
+					cl()
+				}
 				return
 			}
 			switch attr := resp.GetAttributes().(type) {
