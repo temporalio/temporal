@@ -78,10 +78,6 @@ var (
 	WithPollSticky OptionFunc = func(o *Options) {
 		o.pollStickyTaskQueue = true
 	}
-	// WithoutPollRetries disables any polling retries
-	WithoutPollRetries OptionFunc = func(o *Options) {
-		o.maxRetries = 1
-	}
 )
 
 func New(
