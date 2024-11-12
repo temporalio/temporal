@@ -1653,7 +1653,7 @@ func (s *UpdateWorkflowSuite) TestUpdateWorkflow_EmptySpeculativeWorkflowTask_Re
 
 	tv = s.startWorkflow(tv)
 
-	_, err := s.PollAndProcessWorkflowTask(tv, taskpoller.DrainTaskFunc)
+	_, err := s.PollAndProcessWorkflowTask(tv, taskpoller.DrainWorkflowTask)
 	s.NoError(err)
 
 	updateResultCh := s.sendUpdateNoError(tv, "1")
@@ -3303,7 +3303,7 @@ func (s *UpdateWorkflowSuite) TestUpdateWorkflow_SpeculativeWorkflowTask_Heartbe
 	tv = s.startWorkflow(tv)
 
 	// Drain first WT.
-	_, err := s.PollAndProcessWorkflowTask(tv, taskpoller.DrainTaskFunc)
+	_, err := s.PollAndProcessWorkflowTask(tv, taskpoller.DrainWorkflowTask)
 	s.NoError(err)
 
 	updateResultCh := s.sendUpdateNoError(tv, "1")

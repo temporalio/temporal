@@ -64,8 +64,8 @@ type (
 )
 
 var (
-	// DrainTaskFunc returns an empty RespondWorkflowTaskCompletedRequest response
-	DrainTaskFunc = func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+	// DrainWorkflowTask returns an empty RespondWorkflowTaskCompletedRequest response
+	DrainWorkflowTask = func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
 		return &workflowservice.RespondWorkflowTaskCompletedRequest{}, nil
 	}
 	// WithTimeout defines a timeout for a task poller method (includes *all* RPC calls it has to make)
