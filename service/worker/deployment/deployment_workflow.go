@@ -27,47 +27,21 @@ package deployment
 import (
 	"time"
 
-	enumspb "go.temporal.io/api/enums/v1"
 	sdkclient "go.temporal.io/sdk/client"
 	sdklog "go.temporal.io/sdk/log"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
-	"google.golang.org/protobuf/types/known/timestamppb"
+	deployspb "go.temporal.io/server/api/deployment/v1"
 )
 
 type (
-	TaskQueue struct {
-		Name          string
-		TaskQueueType enumspb.TaskQueueType
-	}
-	// DeploymentTaskQueue holds relevant information for a task-queue present in a Deployment
-	DeploymentTaskQueue struct {
-		FirstPollerTimeStamp *timestamppb.Timestamp
-		TaskQueue            TaskQueue
-	}
-
-	// DeploymentWorkflowArgs represents the arguments passed for a DeploymentWorkflow
-	DeploymentWorkflowArgs struct {
-		NamespaceName string
-		NamespaceID   string
-		TaskQueues    []*DeploymentTaskQueue // required for CAN
-	}
-
-	DeploymentLocalState struct {
-		NamespaceName  string
-		NamespaceID    string
-		DeploymentName string
-		BuildID        string
-		TaskQueues     []*DeploymentTaskQueue // All the task queues associated with this buildID/deployment
-	}
-
 	// DeploymentWorkflowRunner holds the local state for a deployment workflow
 	DeploymentWorkflowRunner struct {
-		ctx                  workflow.Context
-		a                    *DeploymentActivities
-		logger               sdklog.Logger
-		metrics              sdkclient.MetricsHandler
-		deploymentlocalState *DeploymentLocalState
+		*deployspb.DeploymentLocalState
+		ctx     workflow.Context
+		a       *DeploymentActivities
+		logger  sdklog.Logger
+		metrics sdkclient.MetricsHandler
 	}
 )
 
@@ -85,20 +59,22 @@ var (
 const (
 	UpdateDeploymentSignalName        = "update_deployment"
 	UpdateDeploymentBuildIDSignalName = "update_deployment_build_id"
+	ForceCANSignalName                = "force-continue-as-new"
 
 	DeploymentWorkflowIDPrefix = "temporal-sys-deployment:"
 )
 
-func DeploymentWorkflow(ctx workflow.Context, deploymentWorkflowArgs DeploymentWorkflowArgs) error {
+func DeploymentWorkflow(ctx workflow.Context, deploymentWorkflowArgs *deployspb.DeploymentWorkflowArgs) error {
 	deploymentWorkflowRunner := &DeploymentWorkflowRunner{
-		deploymentlocalState: &DeploymentLocalState{
-			NamespaceName:  deploymentWorkflowArgs.NamespaceName,
-			NamespaceID:    deploymentWorkflowArgs.NamespaceID,
-			DeploymentName: "", // TODO Shivam - extract the Deployment
-			BuildID:        "", // TODO Shivam - extract BuildID from the workflowID
-			TaskQueues:     deploymentWorkflowArgs.TaskQueues,
+		DeploymentLocalState: &deployspb.DeploymentLocalState{
+			NamespaceName:        deploymentWorkflowArgs.NamespaceName,
+			NamespaceId:          deploymentWorkflowArgs.NamespaceId,
+			DeploymentName:       "", // TODO Shivam - extract the Deployment
+			BuildId:              "", // TODO Shivam - extract BuildID from the workflowID
+			DeploymentTaskQueues: deploymentWorkflowArgs.DeploymentTaskQueues,
 		},
 		ctx:     ctx,
+		a:       nil,
 		logger:  sdklog.With(workflow.GetLogger(ctx), "wf-namespace", deploymentWorkflowArgs.NamespaceName),
 		metrics: workflow.GetMetricsHandler(ctx).WithTags(map[string]string{"namespace": deploymentWorkflowArgs.NamespaceName}),
 	}
@@ -112,18 +88,23 @@ func (d *DeploymentWorkflowRunner) run() error {
 	// Fetch signal channels
 	updateDeploymentSignalChannel := workflow.GetSignalChannel(d.ctx, UpdateDeploymentSignalName)
 	updateBuildIDSignalChannel := workflow.GetSignalChannel(d.ctx, UpdateDeploymentBuildIDSignalName)
+	forceCANSignalChannel := workflow.GetSignalChannel(d.ctx, ForceCANSignalName)
+	forceCAN := false
 
 	selector := workflow.NewSelector(d.ctx)
 	selector.AddReceive(updateDeploymentSignalChannel, func(c workflow.ReceiveChannel, more bool) {
 		// Process Signal
-
+		forceCAN = true
 	})
 	selector.AddReceive(updateBuildIDSignalChannel, func(c workflow.ReceiveChannel, more bool) {
 		// Process Signal
 	})
+	selector.AddReceive(forceCANSignalChannel, func(c workflow.ReceiveChannel, more bool) {
+		// Process Signal
+	})
 
 	// async draining before CAN
-	for !workflow.GetInfo(d.ctx).GetContinueAsNewSuggested() || selector.HasPending() {
+	for (!workflow.GetInfo(d.ctx).GetContinueAsNewSuggested() && !forceCAN) || selector.HasPending() {
 		selector.Select(d.ctx)
 	}
 
@@ -140,10 +121,10 @@ func (d *DeploymentWorkflowRunner) run() error {
 	*/
 
 	d.logger.Debug("Deployment doing continue-as-new")
-	workflowArgs := DeploymentWorkflowArgs{
-		NamespaceName: d.deploymentlocalState.NamespaceName,
-		NamespaceID:   d.deploymentlocalState.NamespaceID,
-		TaskQueues:    d.deploymentlocalState.TaskQueues,
+	workflowArgs := &deployspb.DeploymentWorkflowArgs{
+		NamespaceName:        d.DeploymentLocalState.NamespaceName,
+		NamespaceId:          d.DeploymentLocalState.NamespaceId,
+		DeploymentTaskQueues: d.DeploymentLocalState.DeploymentTaskQueues,
 	}
 	return workflow.NewContinueAsNewError(d.ctx, DeploymentWorkflow, workflowArgs)
 

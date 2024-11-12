@@ -28,15 +28,10 @@ import (
 	sdkclient "go.temporal.io/sdk/client"
 	sdklog "go.temporal.io/sdk/log"
 	"go.temporal.io/sdk/workflow"
+	deployspb "go.temporal.io/server/api/deployment/v1"
 )
 
 type (
-	DeploymentNameWorkflowArgs struct {
-		NamespaceName  string
-		NamespaceID    string
-		DefaultBuildID string
-	}
-
 	// DeploymentWorkflowRunner holds the local state while running a deployment name workflow
 	DeploymentNameWorkflowRunner struct {
 		ctx     workflow.Context
@@ -55,9 +50,10 @@ const (
 )
 
 // TODO Shivam - Define workflow for DeploymentName
-func DeploymentNameWorkflow(ctx workflow.Context, deploymentNameArgs DeploymentNameWorkflowArgs) error {
+func DeploymentNameWorkflow(ctx workflow.Context, deploymentNameArgs *deployspb.DeploymentNameWorkflowArgs) error {
 	deploymentWorkflowNameRunner := &DeploymentNameWorkflowRunner{
 		ctx:            ctx,
+		a:              nil,
 		logger:         sdklog.With(workflow.GetLogger(ctx), "wf-namespace", deploymentNameArgs.NamespaceName),
 		metrics:        workflow.GetMetricsHandler(ctx).WithTags(map[string]string{"namespace": deploymentNameArgs.NamespaceName}),
 		defaultBuildID: "", // TODO Shivam - extract buildID from the workflowID
