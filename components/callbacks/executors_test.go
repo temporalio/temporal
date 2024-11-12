@@ -443,7 +443,7 @@ func TestProcessBackoffTask(t *testing.T) {
 }
 
 func newMutableState(t *testing.T) mutableState {
-	completionNexus, err := nexus.NewOperationCompletionSuccessful(nil, nexus.OperationCompletionSuccesfulOptions{})
+	completionNexus, err := nexus.NewOperationCompletionSuccessful(nil, nexus.OperationCompletionSuccessfulOptions{})
 	require.NoError(t, err)
 	hsmCallbackArg := &persistencespb.HSMCompletionCallbackArg{
 		NamespaceId: "mynsid",
