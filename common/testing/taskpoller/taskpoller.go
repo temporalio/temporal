@@ -107,9 +107,9 @@ func (p *TaskPoller) PollWorkflowTask(
 	return p.pollWorkflowTask(newOptions(tv, funcs))
 }
 
-// PollAndProcessWorkflowTask issues PollWorkflowTaskQueueRequests to obtain a new workflow task,
+// PollAndHandleWorkflowTask issues PollWorkflowTaskQueueRequests to obtain a new workflow task,
 // invokes the handler with the task, and completes/fails the task accordingly.
-func (p *TaskPoller) PollAndProcessWorkflowTask(
+func (p *TaskPoller) PollAndHandleWorkflowTask(
 	tv *testvars.TestVars,
 	handler func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error),
 	funcs ...OptionFunc,
@@ -118,16 +118,16 @@ func (p *TaskPoller) PollAndProcessWorkflowTask(
 	return p.pollAndProcessWorkflowTask(newOptions(tv, funcs), handler)
 }
 
-// ProcessWorkflowTask invokes the provided handler with the provided task,
+// HandleWorkflowTask invokes the provided handler with the provided task,
 // and completes/fails the task accordingly.
-func (p *TaskPoller) ProcessWorkflowTask(
+func (p *TaskPoller) HandleWorkflowTask(
 	tv *testvars.TestVars,
 	task *workflowservice.PollWorkflowTaskQueueResponse,
 	handler func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error),
 	funcs ...OptionFunc,
 ) (*workflowservice.RespondWorkflowTaskCompletedResponse, error) {
 	p.t.Helper()
-	return p.processWorkflowTask(newOptions(tv, funcs), task, handler)
+	return p.handleWorkflowTask(newOptions(tv, funcs), task, handler)
 }
 
 //revive:disable-next-line
@@ -212,10 +212,10 @@ func (p *TaskPoller) pollAndProcessWorkflowTask(
 	if err != nil {
 		return nil, fmt.Errorf("failed to poll workflow task: %v", err)
 	}
-	return p.processWorkflowTask(opts, task, handler)
+	return p.handleWorkflowTask(opts, task, handler)
 }
 
-func (p *TaskPoller) processWorkflowTask(
+func (p *TaskPoller) handleWorkflowTask(
 	opts *Options,
 	task *workflowservice.PollWorkflowTaskQueueResponse,
 	handler func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error),
