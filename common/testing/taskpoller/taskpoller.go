@@ -131,17 +131,11 @@ func (p *TaskPoller) pollWorkflowTask(
 	opts *Options,
 ) (*workflowservice.PollWorkflowTaskQueueResponse, error) {
 	p.t.Helper()
-	var attempt int
 	for {
 		select {
 		case <-opts.ctx.Done():
 			return nil, opts.ctx.Err()
 		default:
-			attempt++
-			if opts.maxRetries > 0 && attempt-1 >= opts.maxRetries {
-				return nil, fmt.Errorf("max retries (%v) exhausted", opts.maxRetries)
-			}
-
 			taskQueue := opts.tv.TaskQueue()
 			if opts.pollStickyTaskQueue {
 				taskQueue = opts.tv.StickyTaskQueue()
