@@ -35,9 +35,17 @@ import (
 )
 
 type (
+	DeploymentLocalState struct {
+		NamespaceName     string
+		NamespaceID       string
+		DeploymentName    string
+		BuildID           string
+		TaskQueueFamilies map[string]*deployspb.DeploymentWorkflowArgs_TaskQueueFamilyInfo // All the task queues associated with this buildID/deployment
+	}
+
 	// DeploymentWorkflowRunner holds the local state for a deployment workflow
 	DeploymentWorkflowRunner struct {
-		*deployspb.DeploymentLocalState
+		*DeploymentLocalState
 		ctx     workflow.Context
 		a       *DeploymentActivities
 		logger  sdklog.Logger
@@ -66,12 +74,12 @@ const (
 
 func DeploymentWorkflow(ctx workflow.Context, deploymentWorkflowArgs *deployspb.DeploymentWorkflowArgs) error {
 	deploymentWorkflowRunner := &DeploymentWorkflowRunner{
-		DeploymentLocalState: &deployspb.DeploymentLocalState{
-			NamespaceName:        deploymentWorkflowArgs.NamespaceName,
-			NamespaceId:          deploymentWorkflowArgs.NamespaceId,
-			DeploymentName:       "", // TODO Shivam - extract the Deployment
-			BuildId:              "", // TODO Shivam - extract BuildID from the workflowID
-			DeploymentTaskQueues: deploymentWorkflowArgs.DeploymentTaskQueues,
+		DeploymentLocalState: &DeploymentLocalState{
+			NamespaceName:     deploymentWorkflowArgs.NamespaceName,
+			NamespaceID:       deploymentWorkflowArgs.NamespaceId,
+			DeploymentName:    "", // TODO Shivam - extract the Deployment
+			BuildID:           "", // TODO Shivam - extract BuildID from the workflowID
+			TaskQueueFamilies: deploymentWorkflowArgs.TaskQueueFamilies,
 		},
 		ctx:     ctx,
 		a:       nil,
@@ -122,9 +130,9 @@ func (d *DeploymentWorkflowRunner) run() error {
 
 	d.logger.Debug("Deployment doing continue-as-new")
 	workflowArgs := &deployspb.DeploymentWorkflowArgs{
-		NamespaceName:        d.DeploymentLocalState.NamespaceName,
-		NamespaceId:          d.DeploymentLocalState.NamespaceId,
-		DeploymentTaskQueues: d.DeploymentLocalState.DeploymentTaskQueues,
+		NamespaceName:     d.DeploymentLocalState.NamespaceName,
+		NamespaceId:       d.DeploymentLocalState.NamespaceID,
+		TaskQueueFamilies: d.DeploymentLocalState.TaskQueueFamilies,
 	}
 	return workflow.NewContinueAsNewError(d.ctx, DeploymentWorkflow, workflowArgs)
 

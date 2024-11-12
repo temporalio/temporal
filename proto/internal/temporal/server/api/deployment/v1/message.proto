@@ -29,28 +29,19 @@ option go_package = "go.temporal.io/server/api/deployment/v1;deployment";
 import "temporal/api/enums/v1/task_queue.proto";
 import "google/protobuf/timestamp.proto";
 
-message TaskQueue{
-    string name = 1;
-    temporal.api.enums.v1.TaskQueueType task_queue_type = 2;
-}
-
-message DeploymentTaskQueue{
-    google.protobuf.Timestamp first_poller_time = 1;
-    TaskQueue task_queue = 2;
-}
-
 message DeploymentWorkflowArgs {
     string namespace_name = 1;
     string namespace_id = 2;
-    repeated DeploymentTaskQueue deployment_task_queues = 3;
-}
-
-message DeploymentLocalState {
-    string namespace_name = 1;
-    string namespace_id = 2;
-    string deployment_name = 3;
-    string build_id = 4;
-    repeated DeploymentTaskQueue deployment_task_queues = 5;
+    map<string, TaskQueueFamilyInfo> task_queue_families = 3;
+    
+    message TaskQueueFamilyInfo {
+        repeated TaskQueueInfo task_queues = 1;
+        
+        message TaskQueueInfo {
+            temporal.api.enums.v1.TaskQueueType task_queue_type = 1;
+            google.protobuf.Timestamp first_poller_time = 2;
+        }
+    }
 }
 
 message DeploymentNameWorkflowArgs {
