@@ -73,7 +73,7 @@ type nexusContext struct {
 	namespaceConcurrencyLimitInterceptor *interceptor.ConcurrentRequestLimitInterceptor
 	rateLimitInterceptor                 *interceptor.RateLimitInterceptor
 	responseHeaders                      map[string]string
-	responseHeadersMutex                 sync.RWMutex
+	responseHeadersMutex                 sync.Mutex
 }
 
 // Context for a specific Nexus operation, includes a resolved namespace, and a bound metrics handler and logger.
