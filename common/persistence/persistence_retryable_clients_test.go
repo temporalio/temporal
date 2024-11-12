@@ -35,7 +35,7 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/client"
 	"go.temporal.io/server/common/persistence/mock"
-	gomock "go.uber.org/mock/gomock"
+	"go.uber.org/mock/gomock"
 )
 
 // Tests retries on data loss errors from the persistence layer. It configures the clients with
