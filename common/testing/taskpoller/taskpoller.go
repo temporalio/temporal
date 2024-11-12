@@ -48,10 +48,10 @@ import (
 
 type (
 	TaskPoller struct {
-		t          *testing.T
-		_logger    log.Logger
-		_client    workflowservice.WorkflowServiceClient
-		_namespace string
+		t         *testing.T
+		logger    log.Logger
+		client    workflowservice.WorkflowServiceClient
+		namespace string
 	}
 	Options struct {
 		ctx                 context.Context
@@ -91,10 +91,10 @@ func New(
 	logger log.Logger,
 ) TaskPoller {
 	return TaskPoller{
-		t:          t,
-		_client:    client,
-		_namespace: namespace,
-		_logger:    logger,
+		t:         t,
+		client:    client,
+		namespace: namespace,
+		logger:    logger,
 	}
 }
 
@@ -151,10 +151,10 @@ func (p *TaskPoller) pollWorkflowTask(
 				taskQueue = opts.tv.StickyTaskQueue()
 			}
 
-			resp, err := p._client.PollWorkflowTaskQueue(
+			resp, err := p.client.PollWorkflowTaskQueue(
 				opts.ctx,
 				&workflowservice.PollWorkflowTaskQueueRequest{
-					Namespace: p._namespace,
+					Namespace: p.namespace,
 					TaskQueue: taskQueue,
 					Identity:  opts.tv.WorkerIdentity(),
 				})
@@ -184,10 +184,10 @@ func (p *TaskPoller) pollWorkflowTask(
 
 			nextPageToken := resp.NextPageToken
 			for nextPageToken != nil {
-				resp, err := p._client.GetWorkflowExecutionHistory(
+				resp, err := p.client.GetWorkflowExecutionHistory(
 					opts.ctx,
 					&workflowservice.GetWorkflowExecutionHistoryRequest{
-						Namespace:     p._namespace,
+						Namespace:     p.namespace,
 						Execution:     resp.WorkflowExecution,
 						NextPageToken: nextPageToken,
 					})
@@ -244,7 +244,7 @@ func (p *TaskPoller) respondWorkflowTaskCompleted(
 		return nil, errors.New("missing RespondWorkflowTaskCompletedRequest return")
 	}
 	if reply.Namespace == "" {
-		reply.Namespace = p._namespace
+		reply.Namespace = p.namespace
 	}
 	if len(reply.TaskToken) == 0 {
 		reply.TaskToken = task.TaskToken
@@ -254,7 +254,7 @@ func (p *TaskPoller) respondWorkflowTaskCompleted(
 	}
 	reply.ReturnNewWorkflowTask = true
 
-	return p._client.RespondWorkflowTaskCompleted(opts.ctx, reply)
+	return p.client.RespondWorkflowTaskCompleted(opts.ctx, reply)
 }
 
 func (p *TaskPoller) respondWorkflowTaskFailed(
@@ -263,10 +263,10 @@ func (p *TaskPoller) respondWorkflowTaskFailed(
 	taskErr error,
 ) error {
 	p.t.Helper()
-	_, err := p._client.RespondWorkflowTaskFailed(
+	_, err := p.client.RespondWorkflowTaskFailed(
 		opts.ctx,
 		&workflowservice.RespondWorkflowTaskFailedRequest{
-			Namespace: p._namespace,
+			Namespace: p.namespace,
 			TaskToken: taskToken,
 			Cause:     enumspb.WORKFLOW_TASK_FAILED_CAUSE_WORKFLOW_WORKER_UNHANDLED_FAILURE,
 			Failure:   newApplicationFailure(taskErr, false, nil),

@@ -1653,13 +1653,13 @@ func (s *UpdateWorkflowSuite) TestUpdateWorkflow_EmptySpeculativeWorkflowTask_Re
 
 	tv = s.startWorkflow(tv)
 
-	_, err := s.PollAndHandleWorkflowTask(tv, taskpoller.DrainWorkflowTask)
+	_, err := s.TaskPoller.PollAndHandleWorkflowTask(tv, taskpoller.DrainWorkflowTask)
 	s.NoError(err)
 
 	updateResultCh := s.sendUpdateNoError(tv, "1")
 
 	// Process update in workflow.
-	res, err := s.PollAndHandleWorkflowTask(tv,
+	res, err := s.TaskPoller.PollAndHandleWorkflowTask(tv,
 		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
 			s.EqualHistory(`
 			 1 WorkflowExecutionStarted
@@ -1691,7 +1691,7 @@ func (s *UpdateWorkflowSuite) TestUpdateWorkflow_EmptySpeculativeWorkflowTask_Re
 	s.NoError(err)
 
 	// Process signal and complete workflow.
-	res, err = s.PollAndHandleWorkflowTask(tv,
+	res, err = s.TaskPoller.PollAndHandleWorkflowTask(tv,
 		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
 			s.EqualHistory(`
 			 1 WorkflowExecutionStarted
@@ -2766,7 +2766,7 @@ func (s *UpdateWorkflowSuite) TestUpdateWorkflow_SpeculativeWorkflowTask_Schedul
 
 	// Drain first WT and respond with sticky enabled response to enable sticky task queue.
 	stickyScheduleToStartTimeout := 1 * time.Second
-	_, err := s.PollAndHandleWorkflowTask(tv,
+	_, err := s.TaskPoller.PollAndHandleWorkflowTask(tv,
 		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
 			return &workflowservice.RespondWorkflowTaskCompletedRequest{
 				StickyAttributes: tv.StickyExecutionAttributes(stickyScheduleToStartTimeout),
@@ -2781,7 +2781,7 @@ func (s *UpdateWorkflowSuite) TestUpdateWorkflow_SpeculativeWorkflowTask_Schedul
 	s.Logger.Info("Sleep is done.")
 
 	// Try to process update in workflow, poll from normal task queue.
-	res, err := s.PollAndHandleWorkflowTask(tv,
+	res, err := s.TaskPoller.PollAndHandleWorkflowTask(tv,
 		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
 			// Speculative WFT timed out on sticky task queue. Server sent full history with sticky timeout event.
 			s.EqualHistory(`
@@ -3303,14 +3303,14 @@ func (s *UpdateWorkflowSuite) TestUpdateWorkflow_SpeculativeWorkflowTask_Heartbe
 	tv = s.startWorkflow(tv)
 
 	// Drain first WT.
-	_, err := s.PollAndHandleWorkflowTask(tv, taskpoller.DrainWorkflowTask)
+	_, err := s.TaskPoller.PollAndHandleWorkflowTask(tv, taskpoller.DrainWorkflowTask)
 	s.NoError(err)
 
 	updateResultCh := s.sendUpdateNoError(tv, "1")
 
 	// Heartbeat from speculative WT (no messages, no commands).
 	var updRequestMsg *protocolpb.Message
-	res, err := s.PollAndHandleWorkflowTask(tv,
+	res, err := s.TaskPoller.PollAndHandleWorkflowTask(tv,
 		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
 			s.EqualHistory(`
 			  1 WorkflowExecutionStarted
@@ -3332,7 +3332,7 @@ func (s *UpdateWorkflowSuite) TestUpdateWorkflow_SpeculativeWorkflowTask_Heartbe
 	s.NoError(err)
 
 	// Reject update from workflow.
-	updateResp, err := s.HandleWorkflowTask(tv,
+	updateResp, err := s.TaskPoller.HandleWorkflowTask(tv,
 		res.GetWorkflowTask(),
 		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
 			s.EqualHistory(`

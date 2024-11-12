@@ -45,8 +45,9 @@ type (
 		protorequire.ProtoAssertions
 		historyrequire.HistoryRequire
 		updateutils.UpdateUtils
-		taskpoller.TaskPoller
 		FunctionalTestBase
+
+		TaskPoller taskpoller.TaskPoller
 	}
 )
 
