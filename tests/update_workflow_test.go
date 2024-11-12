@@ -1653,7 +1653,6 @@ func (s *UpdateWorkflowSuite) TestUpdateWorkflow_EmptySpeculativeWorkflowTask_Re
 
 	tv = s.startWorkflow(tv)
 
-	// Drain first WFT.
 	_, err := s.PollAndProcessWorkflowTask(tv, taskpoller.DrainTaskFunc)
 	s.NoError(err)
 
