@@ -111,7 +111,7 @@ func (p *TaskPoller) PollAndHandleWorkflowTask(
 	funcs ...OptionFunc,
 ) (*workflowservice.RespondWorkflowTaskCompletedResponse, error) {
 	p.t.Helper()
-	return p.pollAndProcessWorkflowTask(newOptions(tv, funcs), handler)
+	return p.pollAndHandleWorkflowTask(newOptions(tv, funcs), handler)
 }
 
 // HandleWorkflowTask invokes the provided handler with the provided task,
@@ -193,7 +193,7 @@ func (p *TaskPoller) pollWorkflowTask(
 	}
 }
 
-func (p *TaskPoller) pollAndProcessWorkflowTask(
+func (p *TaskPoller) pollAndHandleWorkflowTask(
 	opts *Options,
 	handler func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error),
 ) (*workflowservice.RespondWorkflowTaskCompletedResponse, error) {
