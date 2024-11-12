@@ -210,7 +210,7 @@ func (p *TaskPoller) pollAndProcessWorkflowTask(
 	p.t.Helper()
 	task, err := p.pollWorkflowTask(opts)
 	if err != nil {
-		return nil, fmt.Errorf("failed to poll workflow task: %v", err)
+		return nil, fmt.Errorf("failed to poll workflow task: %w", err)
 	}
 	return p.handleWorkflowTask(opts, task, handler)
 }
