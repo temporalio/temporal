@@ -29,9 +29,9 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
+	"testing"
 	"time"
 
-	"github.com/stretchr/testify/require"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
@@ -48,7 +48,7 @@ import (
 
 type (
 	TaskPoller struct {
-		t          require.TestingT
+		t          *testing.T
 		_logger    log.Logger
 		_client    workflowservice.WorkflowServiceClient
 		_namespace string
@@ -85,7 +85,7 @@ var (
 )
 
 func New(
-	t require.TestingT,
+	t *testing.T,
 	client workflowservice.WorkflowServiceClient,
 	namespace string,
 	logger log.Logger,
@@ -103,6 +103,7 @@ func (p *TaskPoller) PollWorkflowTask(
 	tv *testvars.TestVars,
 	funcs ...OptionFunc,
 ) (*workflowservice.PollWorkflowTaskQueueResponse, error) {
+	p.t.Helper()
 	return p.pollWorkflowTask(newOptions(tv, funcs))
 }
 
@@ -113,6 +114,7 @@ func (p *TaskPoller) PollAndProcessWorkflowTask(
 	handler func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error),
 	funcs ...OptionFunc,
 ) (*workflowservice.RespondWorkflowTaskCompletedResponse, error) {
+	p.t.Helper()
 	return p.pollAndProcessWorkflowTask(newOptions(tv, funcs), handler)
 }
 
@@ -124,6 +126,7 @@ func (p *TaskPoller) ProcessWorkflowTask(
 	handler func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error),
 	funcs ...OptionFunc,
 ) (*workflowservice.RespondWorkflowTaskCompletedResponse, error) {
+	p.t.Helper()
 	return p.processWorkflowTask(newOptions(tv, funcs), task, handler)
 }
 
@@ -131,6 +134,7 @@ func (p *TaskPoller) ProcessWorkflowTask(
 func (p *TaskPoller) pollWorkflowTask(
 	opts *Options,
 ) (*workflowservice.PollWorkflowTaskQueueResponse, error) {
+	p.t.Helper()
 	var attempt int
 	for {
 		select {
@@ -203,6 +207,7 @@ func (p *TaskPoller) pollAndProcessWorkflowTask(
 	opts *Options,
 	handler func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error),
 ) (*workflowservice.RespondWorkflowTaskCompletedResponse, error) {
+	p.t.Helper()
 	task, err := p.pollWorkflowTask(opts)
 	if err != nil {
 		return nil, fmt.Errorf("failed to poll workflow task: %v", err)
@@ -215,6 +220,7 @@ func (p *TaskPoller) processWorkflowTask(
 	task *workflowservice.PollWorkflowTaskQueueResponse,
 	handler func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error),
 ) (*workflowservice.RespondWorkflowTaskCompletedResponse, error) {
+	p.t.Helper()
 	reply, err := handler(task)
 	if err != nil {
 		return nil, p.respondWorkflowTaskFailed(opts, task.TaskToken, err)
@@ -233,6 +239,7 @@ func (p *TaskPoller) respondWorkflowTaskCompleted(
 	task *workflowservice.PollWorkflowTaskQueueResponse,
 	reply *workflowservice.RespondWorkflowTaskCompletedRequest,
 ) (*workflowservice.RespondWorkflowTaskCompletedResponse, error) {
+	p.t.Helper()
 	if reply == nil {
 		return nil, errors.New("missing RespondWorkflowTaskCompletedRequest return")
 	}
@@ -255,6 +262,7 @@ func (p *TaskPoller) respondWorkflowTaskFailed(
 	taskToken []byte,
 	taskErr error,
 ) error {
+	p.t.Helper()
 	_, err := p._client.RespondWorkflowTaskFailed(
 		opts.ctx,
 		&workflowservice.RespondWorkflowTaskFailedRequest{
