@@ -33,6 +33,7 @@ import (
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/shard"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/emptypb"
@@ -191,4 +192,27 @@ func GetNextScheduledTime(ai *persistence.ActivityInfo) time.Time {
 		}
 	}
 	return nextScheduledTime
+}
+
+func PauseActivity(mutableState MutableState, activityId string) error {
+	if !mutableState.IsWorkflowExecutionRunning() {
+		return consts.ErrWorkflowCompleted
+	}
+
+	ai, activityFound := mutableState.GetActivityByActivityID(activityId)
+
+	if !activityFound {
+		return consts.ErrActivityNotFound
+	}
+
+	if ai.Paused {
+		// do nothing
+		return nil
+	}
+
+	mutableState.UpdateActivityWithCallback(ai, func(activityInfo *persistence.ActivityInfo, _ MutableState) {
+		activityInfo.Paused = true
+	})
+
+	return mutableState.UpdatePauseInfoSearchAttribute()
 }

@@ -4975,7 +4975,7 @@ func (ms *MutableStateImpl) UpdateActivityWithCallback(
 	ms.syncActivityTasks[ai.ScheduledEventId] = struct{}{}
 }
 
-func (ms *MutableStateImpl) UpdatePausedEntitiesSearchAttribute() error {
+func (ms *MutableStateImpl) UpdatePauseInfoSearchAttribute() error {
 	// TODO: search attributes are coupled with mutable state.
 	// This should be refactored so we don't add new function to MutableState interface every time we want to work with search attributes.
 
@@ -4990,7 +4990,7 @@ func (ms *MutableStateImpl) UpdatePausedEntitiesSearchAttribute() error {
 	pausedInfo := make([]string, 0, len(pausedInfoMap))
 	for activityType := range pausedInfoMap {
 		activityType = url.QueryEscape(activityType)
-		pausedInfo = append(pausedInfo, fmt.Sprintf("activity::%s", activityType))
+		pausedInfo = append(pausedInfo, fmt.Sprintf("activity:%s", activityType))
 	}
 	if len(pausedInfo) > 0 {
 		pausedInfo = append(pausedInfo, "policy::ManualActivityPause")

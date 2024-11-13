@@ -122,9 +122,10 @@ func (s *pauseActivitySuite) TearDownTest() {
 }
 
 func (s *pauseActivitySuite) TestPauseActivityAcceptance() {
+	activityId := "activity_id"
 	activityInfo := &persistencespb.ActivityInfo{
 		TaskQueue:  "task_queue_name",
-		ActivityId: "activity_id",
+		ActivityId: activityId,
 		ActivityType: &commonpb.ActivityType{
 			Name: "activity_type",
 		},
@@ -136,9 +137,9 @@ func (s *pauseActivitySuite) TestPauseActivityAcceptance() {
 
 	s.mockMutableState.EXPECT().IsWorkflowExecutionRunning().Return(true)
 	s.mockMutableState.EXPECT().GetActivityByActivityID(gomock.Any()).Return(activityInfo, true)
-	s.mockMutableState.EXPECT().UpdatePausedEntitiesSearchAttribute().Return(nil)
+	s.mockMutableState.EXPECT().UpdatePauseInfoSearchAttribute().Return(nil)
 	s.mockMutableState.EXPECT().UpdateActivityWithCallback(gomock.Any(), gomock.Any())
 
-	err := pauseActivity(s.mockMutableState, request)
+	err := workflow.PauseActivity(s.mockMutableState, request)
 	s.NoError(err)
 }
