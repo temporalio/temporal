@@ -218,6 +218,11 @@ func (wt *WorkflowTags) extractFromWorkflowServiceServerRequest(req any) []tag.T
 			tag.WorkflowID(r.GetWorkflowExecution().GetWorkflowId()),
 			tag.WorkflowRunID(r.GetWorkflowExecution().GetRunId()),
 		}
+	case *workflowservice.UpdateWorkflowExecutionOptionsRequest:
+		return []tag.Tag{
+			tag.WorkflowID(r.GetWorkflowExecution().GetWorkflowId()),
+			tag.WorkflowRunID(r.GetWorkflowExecution().GetRunId()),
+		}
 	default:
 		return nil
 	}
