@@ -32,6 +32,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/sdk/testsuite"
+	deployspb "go.temporal.io/server/api/deployment/v1"
 	"go.uber.org/mock/gomock"
 )
 
@@ -86,10 +87,10 @@ func (s *deploymentSuite) TestDeploymentWorkflow_InvalidWorkflowIDs() {
 
 	for _, test := range testCases {
 		s.env.SetWorkflowID(test.workflowID)
-		s.env.ExecuteWorkflow(DeploymentWorkflow, DeploymentWorkflowArgs{
-			NamespaceName: "default-NamespaceName",
-			NamespaceID:   "default-NamespaceID",
-			TaskQueues:    nil,
+		s.env.ExecuteWorkflow(DeploymentWorkflow, &deployspb.DeploymentWorkflowArgs{
+			NamespaceName:     "default-NamespaceName",
+			NamespaceId:       "default-NamespaceID",
+			TaskQueueFamilies: nil,
 		})
 		err := s.env.GetWorkflowError()
 		s.ErrorContains(err, test.expectedError.Error())
