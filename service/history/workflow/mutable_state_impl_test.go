@@ -1442,7 +1442,6 @@ func (s *mutableStateSuite) TestTotalEntitiesCount() {
 		&commonpb.Payloads{},
 		"identity",
 		&commonpb.Header{},
-		false,
 		nil,
 	)
 	s.NoError(err)
@@ -1915,7 +1914,6 @@ func (s *mutableStateSuite) TestCloseTransactionUpdateTransition() {
 					&commonpb.Payloads{},
 					"identity",
 					&commonpb.Header{},
-					false,
 					nil,
 					nil,
 				)
