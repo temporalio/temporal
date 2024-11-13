@@ -28,13 +28,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"reflect"
 	"testing"
 	"time"
 
-	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
-	failurepb "go.temporal.io/api/failure/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/temporal"
@@ -268,7 +265,7 @@ func (p *TaskPoller) respondWorkflowTaskFailed(
 			Namespace: p.namespace,
 			TaskToken: taskToken,
 			Cause:     enumspb.WORKFLOW_TASK_FAILED_CAUSE_WORKFLOW_WORKER_UNHANDLED_FAILURE,
-			Failure:   newApplicationFailure(taskErr, false, nil),
+			Failure:   temporal.GetDefaultFailureConverter().ErrorToFailure(taskErr),
 			Identity:  opts.tv.WorkerIdentity(),
 		})
 	return err
@@ -295,32 +292,4 @@ func newOptions(
 
 func newContext(opts *Options) (context.Context, context.CancelFunc) {
 	return rpc.NewContextWithTimeoutAndVersionHeaders(opts.timeout * debug.TimeoutMultiplier)
-}
-
-func newApplicationFailure(
-	err error,
-	nonRetryable bool,
-	details *commonpb.Payloads,
-) *failurepb.Failure {
-	var applicationErr *temporal.ApplicationError
-	if errors.As(err, &applicationErr) {
-		nonRetryable = applicationErr.NonRetryable()
-	}
-
-	return &failurepb.Failure{
-		Message: err.Error(),
-		Source:  "Functional Tests",
-		FailureInfo: &failurepb.Failure_ApplicationFailureInfo{ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{
-			Type:         getErrorType(err),
-			NonRetryable: nonRetryable,
-			Details:      details,
-		}},
-	}
-}
-
-func getErrorType(err error) string {
-	var t reflect.Type
-	for t = reflect.TypeOf(err); t.Kind() == reflect.Ptr; t = t.Elem() {
-	}
-	return t.Name()
 }

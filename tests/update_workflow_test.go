@@ -2234,111 +2234,7 @@ func (s *UpdateWorkflowSuite) TestUpdateWorkflow_SpeculativeWorkflowTask_Fail() 
 
 	tv = s.startWorkflow(tv)
 
-	wtHandlerCalls := 0
-	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
-		wtHandlerCalls++
-		switch wtHandlerCalls {
-		case 1:
-			// Completes first WT with empty command list.
-			return nil, nil
-		case 2:
-			s.EqualHistory(`
-  1 WorkflowExecutionStarted
-  2 WorkflowTaskScheduled
-  3 WorkflowTaskStarted
-  4 WorkflowTaskCompleted
-  5 WorkflowTaskScheduled // Speculative WT.
-  6 WorkflowTaskStarted
-`, task.History)
-			return s.UpdateAcceptCommands(tv, "1"), nil
-		case 3:
-			s.Fail("should not be called because messageHandler returns error")
-			return nil, nil
-		case 4:
-			s.Fail("should not be called because messageHandler returns error")
-			return nil, nil
-		case 5:
-			s.EqualHistory(`
-  1 WorkflowExecutionStarted
-  2 WorkflowTaskScheduled
-  3 WorkflowTaskStarted
-  4 WorkflowTaskCompleted
-  5 WorkflowTaskScheduled
-  6 WorkflowTaskStarted
-  7 WorkflowTaskFailed
-  8 WorkflowTaskScheduled
-  9 WorkflowTaskStarted`, task.History)
-			return []*commandpb.Command{{
-				CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
-				Attributes:  &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{}},
-			}}, nil
-		default:
-			s.Failf("wtHandler called too many times", "wtHandler shouldn't be called %d times", wtHandlerCalls)
-			return nil, nil
-		}
-	}
-
-	msgHandlerCalls := 0
-	msgHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*protocolpb.Message, error) {
-		msgHandlerCalls++
-		switch msgHandlerCalls {
-		case 1:
-			return nil, nil
-		case 2:
-			updRequestMsg := task.Messages[0]
-			s.EqualValues(5, updRequestMsg.GetEventId())
-
-			// Emulate bug in worker/SDK update handler code. Return malformed acceptance response.
-			return []*protocolpb.Message{
-				{
-					Id:                 tv.MessageID("update-accepted", "1"),
-					ProtocolInstanceId: tv.Any().String(),
-					SequencingId:       nil,
-					Body: protoutils.MarshalAny(s.T(), &updatepb.Acceptance{
-						AcceptedRequestMessageId:         updRequestMsg.GetId(),
-						AcceptedRequestSequencingEventId: updRequestMsg.GetEventId(),
-						AcceptedRequest:                  nil, // must not be nil.
-					}),
-				},
-			}, nil
-		case 3:
-			// 2nd attempt has same updates attached to it.
-			updRequestMsg := task.Messages[0]
-			s.EqualValues(8, updRequestMsg.GetEventId())
-			wtHandlerCalls++ // because it won't be called for case 3 but counter should be in sync.
-			// Fail WT one more time. Although 2nd attempt is normal WT, it is also transient and shouldn't appear in the history.
-			// Returning error will cause the poller to fail WT.
-			return nil, errors.New("malformed request")
-		case 4:
-			// 3rd attempt UpdateWorkflowExecution call has timed out but the
-			// update is still running
-			updRequestMsg := task.Messages[0]
-			s.EqualValues(8, updRequestMsg.GetEventId())
-			wtHandlerCalls++ // because it won't be called for case 4 but counter should be in sync.
-			// Fail WT one more time. This is transient WT and shouldn't appear in the history.
-			// Returning error will cause the poller to fail WT.
-			return nil, errors.New("malformed request")
-		case 5:
-			return nil, nil
-		default:
-			s.Failf("msgHandler called too many times", "msgHandler shouldn't be called %d times", msgHandlerCalls)
-			return nil, nil
-		}
-	}
-
-	poller := &testcore.TaskPoller{
-		Client:              s.FrontendClient(),
-		Namespace:           s.Namespace(),
-		TaskQueue:           tv.TaskQueue(),
-		Identity:            tv.WorkerIdentity(),
-		WorkflowTaskHandler: wtHandler,
-		MessageHandler:      msgHandler,
-		Logger:              s.Logger,
-		T:                   s.T(),
-	}
-
-	// Drain first WT.
-	_, err := poller.PollAndProcessWorkflowTask()
+	_, err := s.TaskPoller.PollAndHandleWorkflowTask(tv, taskpoller.DrainWorkflowTask)
 	s.NoError(err)
 
 	timeoutCtx, cancel := context.WithTimeout(testcore.NewContext(), 2*time.Second)
@@ -2346,14 +2242,51 @@ func (s *UpdateWorkflowSuite) TestUpdateWorkflow_SpeculativeWorkflowTask_Fail() 
 	updateResultCh := s.sendUpdate(timeoutCtx, tv, "1")
 
 	// Try to accept update in workflow: get malformed response.
-	_, err = poller.PollAndProcessWorkflowTask()
+	_, err = s.TaskPoller.PollAndHandleWorkflowTask(tv,
+		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+			s.EqualHistory(`
+			  1 WorkflowExecutionStarted
+			  2 WorkflowTaskScheduled
+			  3 WorkflowTaskStarted
+			  4 WorkflowTaskCompleted
+			  5 WorkflowTaskScheduled // Speculative WT.
+			  6 WorkflowTaskStarted
+			`, task.History)
+
+			updRequestMsg := task.Messages[0]
+			return &workflowservice.RespondWorkflowTaskCompletedRequest{
+				Commands: s.UpdateAcceptCommands(tv, "1"),
+				// Emulate bug in worker/SDK update handler code. Return malformed acceptance response.
+				Messages: []*protocolpb.Message{
+					{
+						Id:                 tv.MessageID("update-accepted", "1"),
+						ProtocolInstanceId: tv.Any().String(),
+						SequencingId:       nil,
+						Body: protoutils.MarshalAny(s.T(), &updatepb.Acceptance{
+							AcceptedRequestMessageId:         updRequestMsg.GetId(),
+							AcceptedRequestSequencingEventId: updRequestMsg.GetEventId(),
+							AcceptedRequest:                  nil, // must not be nil!
+						}),
+					},
+				},
+			}, nil
+		})
 	s.Error(err)
 	s.Contains(err.Error(), "wasn't found")
 	// New normal (but transient) WT will be created but not returned.
 
 	s.waitUpdateAdmitted(tv, "1")
+
 	// Try to accept update in workflow 2nd time: get error. Poller will fail WT.
-	_, err = poller.PollAndProcessWorkflowTask()
+	_, err = s.TaskPoller.PollAndHandleWorkflowTask(tv,
+		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+			// 2nd attempt has same updates attached to it.
+			updRequestMsg := task.Messages[0]
+			s.EqualValues(8, updRequestMsg.GetEventId())
+			// Fail WT one more time. Although 2nd attempt is normal WT, it is also transient and shouldn't appear in the history.
+			// Returning error will cause the poller to fail WT.
+			return nil, errors.New("malformed request")
+		})
 	// The error is from RespondWorkflowTaskFailed, which should go w/o error.
 	s.NoError(err)
 
@@ -2365,16 +2298,43 @@ func (s *UpdateWorkflowSuite) TestUpdateWorkflow_SpeculativeWorkflowTask_Fail() 
 	s.Nil(updateResult.response)
 
 	// Try to accept update in workflow 3rd time: get error. Poller will fail WT.
-	_, err = poller.PollAndProcessWorkflowTask()
+	_, err = s.TaskPoller.PollAndHandleWorkflowTask(tv,
+		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+			// 3rd attempt UpdateWorkflowExecution call has timed out but the
+			// update is still running
+			updRequestMsg := task.Messages[0]
+			s.EqualValues(8, updRequestMsg.GetEventId())
+			// Fail WT one more time. This is transient WT and shouldn't appear in the history.
+			// Returning error will cause the poller to fail WT.
+			return nil, errors.New("malformed request")
+		})
 	// The error is from RespondWorkflowTaskFailed, which should go w/o error.
 	s.NoError(err)
 
 	// Complete workflow.
-	_, err = poller.PollAndProcessWorkflowTask()
-	s.NoError(err)
+	_, err = s.TaskPoller.PollAndHandleWorkflowTask(tv,
+		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+			s.EqualHistory(`
+			  1 WorkflowExecutionStarted
+			  2 WorkflowTaskScheduled
+			  3 WorkflowTaskStarted
+			  4 WorkflowTaskCompleted
+			  5 WorkflowTaskScheduled
+			  6 WorkflowTaskStarted
+			  7 WorkflowTaskFailed
+			  8 WorkflowTaskScheduled
+			  9 WorkflowTaskStarted`, task.History)
 
-	s.Equal(5, wtHandlerCalls)
-	s.Equal(5, msgHandlerCalls)
+			return &workflowservice.RespondWorkflowTaskCompletedRequest{
+				Commands: []*commandpb.Command{
+					{
+						CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
+						Attributes:  &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{}},
+					},
+				},
+			}, nil
+		})
+	s.NoError(err)
 
 	events := s.GetHistory(s.Namespace(), tv.WorkflowExecution())
 	s.EqualHistoryEvents(`
