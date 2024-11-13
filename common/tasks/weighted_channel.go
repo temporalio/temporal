@@ -70,7 +70,7 @@ func (c *WeightedChannel[T]) SetWeight(newWeight int) {
 }
 
 func (c *WeightedChannel[T]) LastActiveTime() time.Time {
-	return c.lastActiveTime.Load().(time.Time)
+	return c.lastActiveTime.Load().(time.Time) // nolint:revive
 }
 
 func (c *WeightedChannel[T]) UpdateLastActiveTime(now time.Time) {
