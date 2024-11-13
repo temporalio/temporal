@@ -1046,11 +1046,6 @@ func (s *ScheduleFunctionalSuite) TestRateLimit() {
 }
 
 func (s *ScheduleFunctionalSuite) TestListSchedulesReturnsWorkflowStatus() {
-	// TODO - remove when ActionResultIncludesStatus becomes the active version
-	prevTweakables := scheduler.CurrentTweakablePolicies
-	scheduler.CurrentTweakablePolicies.Version = scheduler.ActionResultIncludesStatus
-	defer func() { scheduler.CurrentTweakablePolicies = prevTweakables }()
-
 	sid := "sched-test-list-running"
 	wid := "sched-test-list-running-wf"
 	wt := "sched-test-list-running-wt"
