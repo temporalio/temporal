@@ -426,18 +426,18 @@ rollback - the transition after successful persistence write. Check the
 If a Workflow Update is accepted and completed in the same Workflow Task, it goes through the
 following chain of state transitions:
 ```
-Sent -> ProvisionalyAccepted -> ProvisionalyCompleted -> ProvisionalyCompletedAfterAccepted -> Completed
+Sent -> ProvisionallyAccepted -> ProvisionallyCompleted -> ProvisionallyCompletedAfterAccepted -> Completed
 ```
-The `ProvisionalyCompletedAfterAccepted` in-between state is necessary to unblock `completed` future before
+The `ProvisionallyCompletedAfterAccepted` in-between state is necessary to unblock `completed` future before
 `accepted`. This allows returning Update results to the API caller even it was waiting for `ACCEPTED`
 stage.
 
-If a Workflow Update is accepted and **Workflow** is completed in the same Workflow Task, it goes through the
+If a Workflow Update is accepted and the **Workflow** is completed in the same Workflow Task, it goes through a
 similar chain of state transitions:
 ```
-Sent -> ProvisionalyAccepted -> ProvisionalyAborted -> ProvisionalyCompletedAfterAccepted -> Aborted
+Sent -> ProvisionallyAccepted -> ProvisionallyAborted -> ProvisionallyCompletedAfterAccepted -> Aborted
 ```
-The `ProvisionalyCompletedAfterAccepted` state is reused here as `ProvisionalyAbortedAfterAccepted` because
+The `ProvisionallyCompletedAfterAccepted` state is reused here as `ProvisionallyAbortedAfterAccepted` because
 behavior is exactly the same.
 
 > #### NOTE

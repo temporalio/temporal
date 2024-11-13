@@ -1184,10 +1184,12 @@ func assertNotCompletedYet(t *testing.T, upd *update.Update) {
 	require.NotEqual(t, UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED, status.Stage)
 	require.Nil(t, status.Outcome, "outcome should not be available yet")
 }
+
 func abort(t *testing.T, store mockEventStore, upd *update.Update, reason update.AbortReason) {
 	t.Helper()
 	upd.Abort(reason, store)
 }
+
 func assertAborted(t *testing.T, upd *update.Update, expectedErr error) {
 	t.Helper()
 
