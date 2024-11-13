@@ -2263,7 +2263,6 @@ func (s *historyBuilderSuite) TestBufferEvent() {
 
 	// events corresponding to message from client will be assigned an event ID immediately
 	messageEvents := map[enumspb.EventType]bool{
-		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_REJECTED:  true,
 		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ACCEPTED:  true,
 		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_COMPLETED: true,
 	}

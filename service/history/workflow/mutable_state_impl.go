@@ -586,7 +586,7 @@ func (ms *MutableStateImpl) GetNexusCompletion(ctx context.Context) (nexus.Opera
 			// Nexus does not support it.
 			p = payloads[0]
 		}
-		completion, err := nexus.NewOperationCompletionSuccessful(p, nexus.OperationCompletionSuccesfulOptions{
+		completion, err := nexus.NewOperationCompletionSuccessful(p, nexus.OperationCompletionSuccessfulOptions{
 			Serializer: commonnexus.PayloadSerializer,
 		})
 		if err != nil {
@@ -5740,9 +5740,10 @@ func (ms *MutableStateImpl) closeTransactionPrepareReplicationTasks(
 					ms.executionInfo.WorkflowId,
 					ms.executionState.RunId,
 				)
-				var firstEventID, nextEventID int64
+				var firstEventID, firstEventVersion, nextEventID int64
 				if len(eventBatches) > 0 {
 					firstEventID = eventBatches[0][0].EventId
+					firstEventVersion = eventBatches[0][0].Version
 					lastBatch := eventBatches[len(eventBatches)-1]
 					nextEventID = lastBatch[len(lastBatch)-1].EventId + 1
 				} else {
@@ -5755,6 +5756,7 @@ func (ms *MutableStateImpl) closeTransactionPrepareReplicationTasks(
 						return err
 					}
 					firstEventID = item.EventId
+					firstEventVersion = item.Version
 					nextEventID = item.EventId + 1
 				}
 				transitionHistory := ms.executionInfo.TransitionHistory
@@ -5768,6 +5770,7 @@ func (ms *MutableStateImpl) closeTransactionPrepareReplicationTasks(
 						Priority:            enumsspb.TASK_PRIORITY_HIGH,
 						VersionedTransition: transitionHistory[len(transitionHistory)-1],
 						FirstEventID:        firstEventID,
+						FirstEventVersion:   firstEventVersion,
 						NextEventID:         nextEventID,
 						TaskEquivalents:     replicationTasks,
 					}
