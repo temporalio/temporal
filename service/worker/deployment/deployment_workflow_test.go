@@ -31,6 +31,7 @@ import (
 	"github.com/stretchr/testify/suite"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
+	sdkclient "go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/testsuite"
 	deployspb "go.temporal.io/server/api/deployment/v1"
 	"go.uber.org/mock/gomock"
@@ -86,7 +87,10 @@ func (s *deploymentSuite) TestDeploymentWorkflow_InvalidWorkflowIDs() {
 	}
 
 	for _, test := range testCases {
-		s.env.SetWorkflowID(test.workflowID)
+		// s.env.SetWorkflowID(test.workflowID)
+		s.env.SetStartWorkflowOptions(sdkclient.StartWorkflowOptions{
+			ID: test.workflowID,
+		})
 		s.env.ExecuteWorkflow(DeploymentWorkflow, &deployspb.DeploymentWorkflowArgs{
 			NamespaceName:     "default-NamespaceName",
 			NamespaceId:       "default-NamespaceID",
@@ -122,7 +126,9 @@ func (s *deploymentSuite) TestDeploymentWorkflow_AddDeploymentTaskQueue() {
 	}
 
 	workflowID := DeploymentWorkflowIDPrefix + "A-xyz"
-	s.env.SetWorkflowID(workflowID)
+	s.env.SetStartWorkflowOptions(sdkclient.StartWorkflowOptions{
+		ID: workflowID,
+	})
 
 	// Mocking the activity call
 	s.env.OnActivity(new(DeploymentActivities).StartDeploymentNameWorkflow, mock.Anything, mock.Anything).Return(nil)
