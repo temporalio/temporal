@@ -38,11 +38,9 @@ import (
 
 type (
 	DeploymentLocalState struct {
-		NamespaceName     string
-		NamespaceID       string
-		DeploymentName    string
-		BuildID           string
-		TaskQueueFamilies map[string]*deployspb.DeploymentWorkflowArgs_TaskQueueFamilyInfo // All the task queues associated with this buildID/deployment
+		*deployspb.DeploymentWorkflowArgs
+		DeploymentName string
+		BuildID        string
 	}
 
 	// DeploymentWorkflowRunner holds the local state for a deployment workflow
@@ -106,11 +104,9 @@ func DeploymentWorkflow(ctx workflow.Context, deploymentWorkflowArgs *deployspb.
 
 	deploymentWorkflowRunner := &DeploymentWorkflowRunner{
 		DeploymentLocalState: &DeploymentLocalState{
-			NamespaceName:     deploymentWorkflowArgs.NamespaceName,
-			NamespaceID:       deploymentWorkflowArgs.NamespaceId,
-			DeploymentName:    deploymentName,
-			BuildID:           buildID,
-			TaskQueueFamilies: nil,
+			DeploymentWorkflowArgs: deploymentWorkflowArgs,
+			DeploymentName:         deploymentName,
+			BuildID:                buildID,
 		},
 		ctx:     ctx,
 		a:       nil,
@@ -151,7 +147,7 @@ func (d *DeploymentWorkflowRunner) run() error {
 		// Call activity which starts "DeploymentName" workflow
 		activityInput := StartDeploymentNameWorkflowActivityInput{
 			NamespaceName:  d.DeploymentLocalState.NamespaceName,
-			NamespaceID:    d.DeploymentLocalState.NamespaceID,
+			NamespaceID:    d.DeploymentLocalState.NamespaceId,
 			DeploymentName: d.DeploymentLocalState.DeploymentName,
 		}
 		activityCtx := workflow.WithActivityOptions(d.ctx, defaultActivityOptions)
@@ -185,7 +181,7 @@ func (d *DeploymentWorkflowRunner) run() error {
 	d.logger.Debug("Deployment doing continue-as-new")
 	workflowArgs := &deployspb.DeploymentWorkflowArgs{
 		NamespaceName:     d.DeploymentLocalState.NamespaceName,
-		NamespaceId:       d.DeploymentLocalState.NamespaceID,
+		NamespaceId:       d.DeploymentLocalState.NamespaceId,
 		TaskQueueFamilies: d.DeploymentLocalState.TaskQueueFamilies,
 	}
 	return workflow.NewContinueAsNewError(d.ctx, DeploymentWorkflow, workflowArgs)
