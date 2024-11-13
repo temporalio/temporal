@@ -136,10 +136,13 @@ func (d *DeploymentWorkflowRunner) run() error {
 	selector := workflow.NewSelector(d.ctx)
 	selector.AddReceive(updateDeploymentSignalChannel, func(c workflow.ReceiveChannel, more bool) {
 		// fetch the input from the signal
-
 		var signalInput *deployspb.UpdateDeploymentSignalInput
 		updateDeploymentSignalChannel.Receive(d.ctx, &signalInput)
 
+		if d.DeploymentLocalState.TaskQueueFamilies == nil {
+			d.DeploymentLocalState.TaskQueueFamilies = make(map[string]*deployspb.DeploymentWorkflowArgs_TaskQueueFamilyInfo)
+			d.DeploymentLocalState.TaskQueueFamilies[signalInput.Name] = &deployspb.DeploymentWorkflowArgs_TaskQueueFamilyInfo{}
+		}
 		// add the task queue to the local state
 		d.DeploymentLocalState.TaskQueueFamilies[signalInput.Name].TaskQueues =
 			append(d.DeploymentLocalState.TaskQueueFamilies[signalInput.Name].TaskQueues, signalInput.TaskQueueInfo)

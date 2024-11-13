@@ -102,16 +102,25 @@ func (s *deploymentSuite) TestDeploymentWorkflow_InvalidWorkflowIDs() {
 }
 
 func (s *deploymentSuite) TestDeploymentWorkflow_AddDeploymentTaskQueue() {
-	deploymentTaskQueueInput := &DeploymentTaskQueue{
-		FirstPollerTimeStamp: nil, // TODO Shivam - change this when implementation gets altered
-		TaskQueue: &TaskQueue{
-			Name:          "A",
-			TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+	updateDeploymentSignalInput := &deployspb.UpdateDeploymentSignalInput{
+		Name: "A", // TODO Shivam - change this when implementation gets altered
+		TaskQueueInfo: &deployspb.DeploymentWorkflowArgs_TaskQueueFamilyInfo_TaskQueueInfo{
+			TaskQueueType:   enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+			FirstPollerTime: nil,
 		},
 	}
-	expectedLocalState := []*DeploymentTaskQueue{
-		deploymentTaskQueueInput,
+
+	expectedLocalState := map[string]*deployspb.DeploymentWorkflowArgs_TaskQueueFamilyInfo{
+		"A": {
+			TaskQueues: []*deployspb.DeploymentWorkflowArgs_TaskQueueFamilyInfo_TaskQueueInfo{
+				{
+					TaskQueueType:   enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+					FirstPollerTime: nil,
+				},
+			},
+		},
 	}
+
 	workflowID := DeploymentWorkflowIDPrefix + "A-xyz"
 	s.env.SetWorkflowID(workflowID)
 
@@ -119,14 +128,14 @@ func (s *deploymentSuite) TestDeploymentWorkflow_AddDeploymentTaskQueue() {
 	s.env.OnActivity(new(DeploymentActivities).StartDeploymentNameWorkflow, mock.Anything, mock.Anything).Return(nil)
 
 	s.env.RegisterDelayedCallback(func() {
-		s.env.SignalWorkflow(UpdateDeploymentSignalName, deploymentTaskQueueInput)
+		s.env.SignalWorkflow(UpdateDeploymentSignalName, updateDeploymentSignalInput)
 		s.env.SetContinueAsNewSuggested(true)
 	}, 0)
 
-	s.env.ExecuteWorkflow(DeploymentWorkflow, DeploymentWorkflowArgs{
-		NamespaceName: "default-NamespaceName",
-		NamespaceID:   "default-NamespaceID",
-		TaskQueues:    nil,
+	s.env.ExecuteWorkflow(DeploymentWorkflow, &deployspb.DeploymentWorkflowArgs{
+		NamespaceName:     "default-NamespaceName",
+		NamespaceId:       "default-NamespaceID",
+		TaskQueueFamilies: nil,
 	})
 
 	err := s.env.GetWorkflowError()
@@ -135,10 +144,10 @@ func (s *deploymentSuite) TestDeploymentWorkflow_AddDeploymentTaskQueue() {
 	s.queryAndVerify(expectedLocalState)
 }
 
-func (s *deploymentSuite) queryAndVerify(expectedState []*DeploymentTaskQueue) {
+func (s *deploymentSuite) queryAndVerify(expectedState map[string]*deployspb.DeploymentWorkflowArgs_TaskQueueFamilyInfo) {
 	result, err := s.env.QueryWorkflow("deploymentTaskQueues")
 	s.NoError(err)
-	var localState []*DeploymentTaskQueue
+	var localState map[string]*deployspb.DeploymentWorkflowArgs_TaskQueueFamilyInfo
 	err = result.Get(&localState)
 	s.NoError(err)
 	s.Equal(expectedState, localState)
