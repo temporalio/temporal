@@ -103,7 +103,7 @@ func (s *deploymentSuite) TestDeploymentWorkflow_InvalidWorkflowIDs() {
 
 func (s *deploymentSuite) TestDeploymentWorkflow_AddDeploymentTaskQueue() {
 	updateDeploymentSignalInput := &deployspb.UpdateDeploymentSignalInput{
-		Name: "A", // TODO Shivam - change this when implementation gets altered
+		Name: "A",
 		TaskQueueInfo: &deployspb.DeploymentWorkflowArgs_TaskQueueFamilyInfo_TaskQueueInfo{
 			TaskQueueType:   enumspb.TASK_QUEUE_TYPE_WORKFLOW,
 			FirstPollerTime: nil,
