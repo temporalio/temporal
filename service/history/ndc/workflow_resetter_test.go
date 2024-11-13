@@ -897,7 +897,6 @@ func (s *workflowResetterSuite) TestReapplyEvents() {
 				attr.GetInput(),
 				attr.GetIdentity(),
 				attr.GetHeader(),
-				attr.GetSkipGenerateWorkflowTask(),
 				event.Links,
 			).Return(&historypb.HistoryEvent{}, nil)
 		case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ADMITTED:

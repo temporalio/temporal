@@ -1712,16 +1712,11 @@ func (s *engineSuite) TestRespondWorkflowTaskCompletedSingleActivityScheduledWor
 }
 
 func (s *engineSuite) TestRespondWorkflowTaskCompleted_SignalTaskGeneration() {
-	resp := s.testRespondWorkflowTaskCompletedSignalGeneration(false)
+	resp := s.testRespondWorkflowTaskCompletedSignalGeneration()
 	s.NotNil(resp.GetStartedResponse())
 }
 
-func (s *engineSuite) TestRespondWorkflowTaskCompleted_SkipSignalTaskGeneration() {
-	resp := s.testRespondWorkflowTaskCompletedSignalGeneration(true)
-	s.Nil(resp.GetStartedResponse())
-}
-
-func (s *engineSuite) testRespondWorkflowTaskCompletedSignalGeneration(skipGenerateTask bool) *historyservice.RespondWorkflowTaskCompletedResponse {
+func (s *engineSuite) testRespondWorkflowTaskCompletedSignalGeneration() *historyservice.RespondWorkflowTaskCompletedResponse {
 	we := commonpb.WorkflowExecution{
 		WorkflowId: tests.WorkflowID,
 		RunId:      tests.RunID,
@@ -1738,13 +1733,12 @@ func (s *engineSuite) testRespondWorkflowTaskCompletedSignalGeneration(skipGener
 	identity := "testIdentity"
 
 	signal := workflowservice.SignalWorkflowExecutionRequest{
-		Namespace:                tests.NamespaceID.String(),
-		WorkflowExecution:        &we,
-		Identity:                 identity,
-		SignalName:               "test signal name",
-		Input:                    payloads.EncodeString("test input"),
-		SkipGenerateWorkflowTask: skipGenerateTask,
-		RequestId:                uuid.New(),
+		Namespace:         tests.NamespaceID.String(),
+		WorkflowExecution: &we,
+		Identity:          identity,
+		SignalName:        "test signal name",
+		Input:             payloads.EncodeString("test input"),
+		RequestId:         uuid.New(),
 	}
 	signalRequest := &historyservice.SignalWorkflowExecutionRequest{
 		NamespaceId:   tests.NamespaceID.String(),
