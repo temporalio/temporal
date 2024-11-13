@@ -171,7 +171,6 @@ func (x *DeploymentNameWorkflowArgs) GetDefaultBuildId() string {
 	return ""
 }
 
-// TODO Shivam - ponder on signal message name
 type UpdateDeploymentSignalInput struct {
 	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache

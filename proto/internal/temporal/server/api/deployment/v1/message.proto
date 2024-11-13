@@ -50,7 +50,6 @@ message DeploymentNameWorkflowArgs {
     string default_build_id = 3;
 }
 
-// TODO Shivam - ponder on signal message name
 message UpdateDeploymentSignalInput{
     string name = 1;
     DeploymentWorkflowArgs.TaskQueueFamilyInfo.TaskQueueInfo task_queue_info = 2;
