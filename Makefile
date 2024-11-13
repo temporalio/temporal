@@ -54,7 +54,8 @@ TEST_TIMEOUT ?= 20m
 # Number of retries for *-coverage targets.
 # NOTE: This is incompatible with TEST_ARGS which specify the `-run` flag due to how gotestsum selects which tests to
 # retry.
-FAILED_TEST_RETRIES ?= 2
+# *WARNING*: This is disabled for now; see https://github.com/gotestyourself/gotestsum/issues/423
+FAILED_TEST_RETRIES ?= 0
 
 # Whether or not to test with the race detector. All of (1 on y yes t true) are true values.
 TEST_RACE_FLAG ?= on
