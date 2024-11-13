@@ -35,11 +35,9 @@ import (
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/temporal"
-	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/debug"
 	"go.temporal.io/server/common/rpc"
 	"go.temporal.io/server/common/testing/testvars"
-	"go.temporal.io/server/service/history/consts"
 )
 
 type (
@@ -133,66 +131,53 @@ func (p *TaskPoller) pollWorkflowTask(
 	opts *Options,
 ) (*workflowservice.PollWorkflowTaskQueueResponse, error) {
 	p.t.Helper()
-	for {
-		select {
-		case <-ctx.Done():
-			return nil, ctx.Err()
-		default:
-			taskQueue := opts.tv.TaskQueue()
-			if opts.pollStickyTaskQueue {
-				taskQueue = opts.tv.StickyTaskQueue()
-			}
-
-			resp, err := p.client.PollWorkflowTaskQueue(
-				ctx,
-				&workflowservice.PollWorkflowTaskQueueRequest{
-					Namespace: p.namespace,
-					TaskQueue: taskQueue,
-					Identity:  opts.tv.WorkerIdentity(),
-				})
-			if err != nil {
-				if common.IsServiceTransientError(err) {
-					continue
-				}
-				if err == consts.ErrDuplicate {
-					continue
-				}
-				return nil, err
-			}
-			if resp == nil || len(resp.TaskToken) == 0 {
-				continue
-			}
-
-			var events []*historypb.HistoryEvent
-			history := resp.History
-			if history == nil {
-				return nil, errors.New("history is nil")
-			}
-
-			events = history.Events
-			if len(events) == 0 {
-				return nil, errors.New("history events are empty")
-			}
-
-			nextPageToken := resp.NextPageToken
-			for nextPageToken != nil {
-				resp, err := p.client.GetWorkflowExecutionHistory(
-					ctx,
-					&workflowservice.GetWorkflowExecutionHistoryRequest{
-						Namespace:     p.namespace,
-						Execution:     resp.WorkflowExecution,
-						NextPageToken: nextPageToken,
-					})
-				if err != nil {
-					return nil, err
-				}
-				events = append(events, resp.History.Events...)
-				nextPageToken = resp.NextPageToken
-			}
-
-			return resp, err
-		}
+	taskQueue := opts.tv.TaskQueue()
+	if opts.pollStickyTaskQueue {
+		taskQueue = opts.tv.StickyTaskQueue()
 	}
+
+	resp, err := p.client.PollWorkflowTaskQueue(
+		ctx,
+		&workflowservice.PollWorkflowTaskQueueRequest{
+			Namespace: p.namespace,
+			TaskQueue: taskQueue,
+			Identity:  opts.tv.WorkerIdentity(),
+		})
+	if err != nil {
+		return nil, err
+	}
+	if resp == nil || len(resp.TaskToken) == 0 {
+		return nil, errors.New("no task available")
+	}
+
+	var events []*historypb.HistoryEvent
+	history := resp.History
+	if history == nil {
+		return nil, errors.New("history is nil")
+	}
+
+	events = history.Events
+	if len(events) == 0 {
+		return nil, errors.New("history events are empty")
+	}
+
+	nextPageToken := resp.NextPageToken
+	for nextPageToken != nil {
+		resp, err := p.client.GetWorkflowExecutionHistory(
+			ctx,
+			&workflowservice.GetWorkflowExecutionHistoryRequest{
+				Namespace:     p.namespace,
+				Execution:     resp.WorkflowExecution,
+				NextPageToken: nextPageToken,
+			})
+		if err != nil {
+			return nil, err
+		}
+		events = append(events, resp.History.Events...)
+		nextPageToken = resp.NextPageToken
+	}
+
+	return resp, err
 }
 
 func (p *TaskPoller) pollAndHandleWorkflowTask(
