@@ -36,11 +36,9 @@ import (
 
 type (
 	DeploymentLocalState struct {
-		NamespaceName     string
-		NamespaceID       string
-		DeploymentName    string
-		BuildID           string
-		TaskQueueFamilies map[string]*deployspb.DeploymentWorkflowArgs_TaskQueueFamilyInfo // All the task queues associated with this buildID/deployment
+		*deployspb.DeploymentWorkflowArgs
+		DeploymentName string
+		BuildID        string
 	}
 
 	// DeploymentWorkflowRunner holds the local state for a deployment workflow
@@ -75,11 +73,9 @@ const (
 func DeploymentWorkflow(ctx workflow.Context, deploymentWorkflowArgs *deployspb.DeploymentWorkflowArgs) error {
 	deploymentWorkflowRunner := &DeploymentWorkflowRunner{
 		DeploymentLocalState: &DeploymentLocalState{
-			NamespaceName:     deploymentWorkflowArgs.NamespaceName,
-			NamespaceID:       deploymentWorkflowArgs.NamespaceId,
-			DeploymentName:    "", // TODO Shivam - extract the Deployment
-			BuildID:           "", // TODO Shivam - extract BuildID from the workflowID
-			TaskQueueFamilies: deploymentWorkflowArgs.TaskQueueFamilies,
+			DeploymentWorkflowArgs: deploymentWorkflowArgs,
+			DeploymentName:         "", // TODO Shivam - extract the Deployment
+			BuildID:                "", // TODO Shivam - extract BuildID from the workflowID
 		},
 		ctx:     ctx,
 		a:       nil,
@@ -131,7 +127,7 @@ func (d *DeploymentWorkflowRunner) run() error {
 	d.logger.Debug("Deployment doing continue-as-new")
 	workflowArgs := &deployspb.DeploymentWorkflowArgs{
 		NamespaceName:     d.DeploymentLocalState.NamespaceName,
-		NamespaceId:       d.DeploymentLocalState.NamespaceID,
+		NamespaceId:       d.DeploymentLocalState.NamespaceId,
 		TaskQueueFamilies: d.DeploymentLocalState.TaskQueueFamilies,
 	}
 	return workflow.NewContinueAsNewError(d.ctx, DeploymentWorkflow, workflowArgs)
