@@ -590,6 +590,7 @@ pollLoop:
 					},
 				}
 
+				// make workflow args
 				startDeploymentWorkflowArgs := &deployspb.DeploymentWorkflowArgs{
 					NamespaceName:     req.PollRequest.Namespace,
 					NamespaceId:       req.NamespaceId,
@@ -832,7 +833,7 @@ pollLoop:
 				updateDeploymentSignalInput := &deployspb.UpdateDeploymentSignalInput{
 					Name: req.PollRequest.TaskQueue.Name,
 					TaskQueueInfo: &deployspb.DeploymentWorkflowArgs_TaskQueueFamilyInfo_TaskQueueInfo{
-						TaskQueueType:   enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+						TaskQueueType:   enumspb.TASK_QUEUE_TYPE_ACTIVITY,
 						FirstPollerTime: nil,
 					},
 				}
@@ -1843,7 +1844,7 @@ pollLoop:
 			// checking for duplicate request
 			dedupDeploymentKey := dedupDeploymentsKey{
 				taskQueueName: req.Request.TaskQueue.Name,
-				taskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+				taskQueueType: enumspb.TASK_QUEUE_TYPE_NEXUS,
 				buildID:       buildID,
 			}
 			if _, found := e.dedupDeployments[dedupDeploymentKey]; !found {
@@ -1852,7 +1853,7 @@ pollLoop:
 				updateDeploymentSignalInput := &deployspb.UpdateDeploymentSignalInput{
 					Name: req.Request.TaskQueue.Name,
 					TaskQueueInfo: &deployspb.DeploymentWorkflowArgs_TaskQueueFamilyInfo_TaskQueueInfo{
-						TaskQueueType:   enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+						TaskQueueType:   enumspb.TASK_QUEUE_TYPE_NEXUS,
 						FirstPollerTime: nil,
 					},
 				}
@@ -2187,6 +2188,7 @@ func (e *matchingEngineImpl) startAndSignalDeploymentWorkflow(
 	}
 
 	// workflow input
+	// TODO Shivam - why do we use sdk.PreferProtoDataConverter
 	workflowInputPayloads, err := sdk.PreferProtoDataConverter.ToPayloads(args)
 	if err != nil {
 		return nil, err

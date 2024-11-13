@@ -49,6 +49,7 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	clockspb "go.temporal.io/server/api/clock/v1"
+	deployspb "go.temporal.io/server/api/deployment/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/historyservicemock/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
@@ -76,11 +77,15 @@ import (
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/quotas"
+	"go.temporal.io/server/common/sdk"
+	"go.temporal.io/server/common/searchattribute"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/tqid"
 	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/service/history/consts"
+	"go.temporal.io/server/service/worker/deployment"
 	"go.uber.org/mock/gomock"
+	"google.golang.org/grpc"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 	"google.golang.org/protobuf/types/known/wrapperspb"
@@ -233,6 +238,7 @@ func newMatchingEngine(
 		timeSource:                    clock.NewRealTimeSource(),
 		visibilityManager:             mockVisibilityManager,
 		nexusEndpointsOwnershipLostCh: make(chan struct{}),
+		dedupDeployments:              make(map[dedupDeploymentsKey]string),
 	}
 }
 
@@ -347,6 +353,249 @@ func (s *matchingEngineSuite) TestAckManager_Sort() {
 
 	m.completeTask(t3)
 	s.EqualValues(t5, m.getAckLevel())
+}
+
+func (s *matchingEngineSuite) TestValidateDeploymentWfParams() {
+	testCases := []struct {
+		Name          string
+		Input         []string
+		ExpectedError error
+	}{
+		{
+			Name:          "Empty DeploymentName and BuildID",
+			Input:         []string{"", ""},
+			ExpectedError: serviceerror.NewInvalidArgument("DeploymentName/BuildID cannot be empty"),
+		},
+		{
+			Name:          "System prefix present in DeploymentName",
+			Input:         []string{deployment.DeploymentWorkflowIDPrefix, "xyz"},
+			ExpectedError: serviceerror.NewInvalidArgument(fmt.Sprintf("DeploymentName/BuildID cannot begin with reserved prefix %v", deployment.DeploymentWorkflowIDPrefix)),
+		},
+		{
+			Name:          "System prefix present in BuildID",
+			Input:         []string{"A", deployment.DeploymentWorkflowIDPrefix},
+			ExpectedError: serviceerror.NewInvalidArgument(fmt.Sprintf("DeploymentName/BuildID cannot begin with reserved prefix %v", deployment.DeploymentWorkflowIDPrefix)),
+		},
+		{
+			Name:          "Special Characters present",
+			Input:         []string{"A!@", "!xyz"},
+			ExpectedError: serviceerror.NewInvalidArgument("DeploymentName/BuildID cannot contain a non alphanumerical character"),
+		},
+		{
+			Name:          "Valid DeploymentName and BuildID",
+			Input:         []string{"A", "xyz"},
+			ExpectedError: nil,
+		},
+	}
+
+	for _, test := range testCases {
+		deploymentNameInput := test.Input[0]
+		buildIdInput := test.Input[1]
+		err := s.matchingEngine.validateDeploymentWfParams(deploymentNameInput, buildIdInput)
+
+		if test.ExpectedError == nil {
+			s.NoError(err)
+			continue
+		}
+
+		var invalidArgument *serviceerror.InvalidArgument
+		s.ErrorAs(err, &invalidArgument)
+		s.Equal(test.ExpectedError.Error(), err.Error())
+	}
+}
+
+// buildDeploymentWorkflowArgsAndSignal is a helper which builds input and signal arguments for deployment workflows
+func (s *matchingEngineSuite) buildDeploymentWorkflowArgsAndSignal(buildID string, deploymentName string, taskQueueType enumspb.TaskQueueType) (string, *commonpb.Payloads, *commonpb.Payloads) {
+	expectedWorkflowID := deployment.DeploymentWorkflowIDPrefix + deploymentName + "-" + buildID
+
+	startDeploymentWorkflowArgs := &deployspb.DeploymentWorkflowArgs{
+		NamespaceName:     namespaceName,
+		NamespaceId:       namespaceId,
+		TaskQueueFamilies: nil,
+	}
+	expectedWorkflowInput, err := sdk.PreferProtoDataConverter.ToPayloads(startDeploymentWorkflowArgs)
+	s.NoError(err)
+
+	// signal input for validating signalWithStart signal input
+	updateDeploymentSignalInput := &deployspb.UpdateDeploymentSignalInput{
+		Name: taskQueueName,
+		TaskQueueInfo: &deployspb.DeploymentWorkflowArgs_TaskQueueFamilyInfo_TaskQueueInfo{
+			TaskQueueType:   taskQueueType,
+			FirstPollerTime: nil,
+		},
+	}
+	expectedSignalInput, err := sdk.PreferProtoDataConverter.ToPayloads(updateDeploymentSignalInput)
+	s.NoError(err)
+
+	return expectedWorkflowID, expectedWorkflowInput, expectedSignalInput
+}
+
+func (s *matchingEngineSuite) TestPollWorkflowTaskQueue_StartDeploymentWorkflow() {
+	s.matchingEngine.config.EnableDeployments = dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true)
+
+	buildID := "xyz"
+	deploymentName := "A"
+	identity := "random"
+	taskQueue := &taskqueuepb.TaskQueue{
+		Name: taskQueueName,
+		Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
+	}
+	expectedWorkflowID, expectedWorkflowInput, expectedSignalInput := s.buildDeploymentWorkflowArgsAndSignal(buildID, deploymentName, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
+
+	s.mockHistoryClient.EXPECT().SignalWithStartWorkflowExecution(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(
+			_ context.Context,
+			request *historyservice.SignalWithStartWorkflowExecutionRequest,
+			_ ...grpc.CallOption,
+		) (*historyservice.SignalWithStartWorkflowExecutionResponse, error) {
+			s.Equal(namespaceId, request.NamespaceId)
+			s.Equal(deployment.DeploymentWorkflowType, request.SignalWithStartRequest.WorkflowType.Name)
+			s.Equal(expectedWorkflowID, request.SignalWithStartRequest.WorkflowId)
+			s.Equal(primitives.PerNSWorkerTaskQueue, request.SignalWithStartRequest.TaskQueue.Name)
+			s.Equal(enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE, request.SignalWithStartRequest.WorkflowIdReusePolicy)
+			s.Equal(enumspb.WORKFLOW_ID_CONFLICT_POLICY_FAIL, request.SignalWithStartRequest.WorkflowIdConflictPolicy)
+			s.Equal(identity, request.SignalWithStartRequest.Identity)
+
+			// Payload verification
+			s.Equal(expectedWorkflowInput, request.SignalWithStartRequest.Input)
+			s.Equal(expectedSignalInput, request.SignalWithStartRequest.SignalInput)
+			s.Equal(payload.EncodeString(deployment.DeploymentNamespaceDivision), request.SignalWithStartRequest.SearchAttributes.IndexedFields[searchattribute.TemporalNamespaceDivision])
+
+			return &historyservice.SignalWithStartWorkflowExecutionResponse{}, nil
+		},
+	)
+
+	// pollRequest with DeploymentName and BuildID set
+	_, err := s.matchingEngine.PollWorkflowTaskQueue(context.Background(), &matchingservice.PollWorkflowTaskQueueRequest{
+		NamespaceId: namespaceId,
+		PollRequest: &workflowservice.PollWorkflowTaskQueueRequest{
+			Namespace: namespaceName,
+			TaskQueue: taskQueue,
+			Identity:  identity,
+			WorkerVersionCapabilities: &commonpb.WorkerVersionCapabilities{
+				BuildId:        buildID,
+				DeploymentName: deploymentName,
+				UseVersioning:  true,
+			},
+		},
+	}, metrics.NoopMetricsHandler)
+	s.NoError(err)
+	s.verifyDeploymentDedupEntries(1, buildID, deploymentName, taskQueueName, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
+}
+
+func (s *matchingEngineSuite) TestPollActivityTaskQueue_StartDeploymentWorkflow() {
+	s.matchingEngine.config.EnableDeployments = dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true)
+
+	buildID := "xyz"
+	deploymentName := "A"
+	identity := "random"
+	taskQueue := &taskqueuepb.TaskQueue{
+		Name: taskQueueName,
+		Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
+	}
+	expectedWorkflowID, expectedWorkflowInput, expectedSignalInput := s.buildDeploymentWorkflowArgsAndSignal(buildID, deploymentName, enumspb.TASK_QUEUE_TYPE_ACTIVITY)
+
+	s.mockHistoryClient.EXPECT().SignalWithStartWorkflowExecution(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(
+			_ context.Context,
+			request *historyservice.SignalWithStartWorkflowExecutionRequest,
+			_ ...grpc.CallOption,
+		) (*historyservice.SignalWithStartWorkflowExecutionResponse, error) {
+			s.Equal(namespaceId, request.NamespaceId)
+			s.Equal(deployment.DeploymentWorkflowType, request.SignalWithStartRequest.WorkflowType.Name)
+			s.Equal(expectedWorkflowID, request.SignalWithStartRequest.WorkflowId)
+			s.Equal(primitives.PerNSWorkerTaskQueue, request.SignalWithStartRequest.TaskQueue.Name)
+			s.Equal(enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE, request.SignalWithStartRequest.WorkflowIdReusePolicy)
+			s.Equal(enumspb.WORKFLOW_ID_CONFLICT_POLICY_FAIL, request.SignalWithStartRequest.WorkflowIdConflictPolicy)
+			s.Equal(identity, request.SignalWithStartRequest.Identity)
+
+			// Payload verification
+			s.Equal(expectedWorkflowInput, request.SignalWithStartRequest.Input)
+			s.Equal(expectedSignalInput, request.SignalWithStartRequest.SignalInput)
+			s.Equal(payload.EncodeString(deployment.DeploymentNamespaceDivision), request.SignalWithStartRequest.SearchAttributes.IndexedFields[searchattribute.TemporalNamespaceDivision])
+
+			return &historyservice.SignalWithStartWorkflowExecutionResponse{}, nil
+		},
+	)
+
+	// pollRequest with DeploymentName and BuildID set
+	_, err := s.matchingEngine.PollActivityTaskQueue(context.Background(), &matchingservice.PollActivityTaskQueueRequest{
+		NamespaceId: namespaceId,
+		PollRequest: &workflowservice.PollActivityTaskQueueRequest{
+			Namespace: namespaceName,
+			TaskQueue: taskQueue,
+			Identity:  identity,
+			WorkerVersionCapabilities: &commonpb.WorkerVersionCapabilities{
+				BuildId:        buildID,
+				DeploymentName: deploymentName,
+				UseVersioning:  true,
+			},
+		},
+	}, metrics.NoopMetricsHandler)
+	s.NoError(err)
+	s.verifyDeploymentDedupEntries(1, buildID, deploymentName, taskQueueName, enumspb.TASK_QUEUE_TYPE_ACTIVITY)
+}
+
+func (s *matchingEngineSuite) TestPollNexusTaskQueue_StartDeploymentWorkflow() {
+	s.matchingEngine.config.EnableDeployments = dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true)
+
+	buildID := "xyz"
+	deploymentName := "A"
+	identity := "random"
+	taskQueue := &taskqueuepb.TaskQueue{
+		Name: taskQueueName,
+		Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
+	}
+	expectedWorkflowID, expectedWorkflowInput, expectedSignalInput := s.buildDeploymentWorkflowArgsAndSignal(buildID, deploymentName, enumspb.TASK_QUEUE_TYPE_NEXUS)
+
+	s.mockHistoryClient.EXPECT().SignalWithStartWorkflowExecution(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(
+			_ context.Context,
+			request *historyservice.SignalWithStartWorkflowExecutionRequest,
+			_ ...grpc.CallOption,
+		) (*historyservice.SignalWithStartWorkflowExecutionResponse, error) {
+			s.Equal(namespaceId, request.NamespaceId)
+			s.Equal(deployment.DeploymentWorkflowType, request.SignalWithStartRequest.WorkflowType.Name)
+			s.Equal(expectedWorkflowID, request.SignalWithStartRequest.WorkflowId)
+			s.Equal(primitives.PerNSWorkerTaskQueue, request.SignalWithStartRequest.TaskQueue.Name)
+			s.Equal(enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE, request.SignalWithStartRequest.WorkflowIdReusePolicy)
+			s.Equal(enumspb.WORKFLOW_ID_CONFLICT_POLICY_FAIL, request.SignalWithStartRequest.WorkflowIdConflictPolicy)
+			s.Equal(identity, request.SignalWithStartRequest.Identity)
+
+			// Payload verification
+			s.Equal(expectedWorkflowInput, request.SignalWithStartRequest.Input)
+			s.Equal(expectedSignalInput, request.SignalWithStartRequest.SignalInput)
+			s.Equal(payload.EncodeString(deployment.DeploymentNamespaceDivision), request.SignalWithStartRequest.SearchAttributes.IndexedFields[searchattribute.TemporalNamespaceDivision])
+
+			return &historyservice.SignalWithStartWorkflowExecutionResponse{}, nil
+		},
+	)
+
+	// pollRequest with DeploymentName and BuildID set
+	_, err := s.matchingEngine.PollNexusTaskQueue(context.Background(), &matchingservice.PollNexusTaskQueueRequest{
+		NamespaceId: namespaceId,
+		Request: &workflowservice.PollNexusTaskQueueRequest{
+			Namespace: namespaceName,
+			TaskQueue: taskQueue,
+			Identity:  identity,
+			WorkerVersionCapabilities: &commonpb.WorkerVersionCapabilities{
+				BuildId:        buildID,
+				DeploymentName: deploymentName,
+				UseVersioning:  true,
+			},
+		},
+	}, metrics.NoopMetricsHandler)
+	s.NoError(err)
+	s.verifyDeploymentDedupEntries(1, buildID, deploymentName, taskQueueName, enumspb.TASK_QUEUE_TYPE_NEXUS)
+}
+
+func (s *matchingEngineSuite) verifyDeploymentDedupEntries(expectedSize int, buildID string, deploymentName string, taskQueue string, taskQueueType enumspb.TaskQueueType) {
+	s.Equal(expectedSize, len(s.matchingEngine.dedupDeployments))
+	s.Equal(deploymentName, s.matchingEngine.dedupDeployments[dedupDeploymentsKey{
+		taskQueueName: taskQueue,
+		taskQueueType: taskQueueType,
+		buildID:       buildID,
+	}])
 }
 
 func (s *matchingEngineSuite) TestPollActivityTaskQueuesEmptyResult() {
