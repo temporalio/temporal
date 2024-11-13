@@ -39,7 +39,7 @@ type (
 	WeightedChannel[T Task] struct {
 		weight         int
 		channel        chan T
-		lastActiveTime atomic.Value
+		lastActiveTime atomic.Value // time.Time
 		refCount       atomic.Int32
 	}
 )
