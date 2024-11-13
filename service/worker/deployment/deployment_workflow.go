@@ -74,7 +74,7 @@ const (
 
 // parseDeploymentWorkflowID parses the workflowID, to extract DeploymentName and BuildID,
 // for the execution of a Deployment workflow.
-func parseDeploymentWorkflowID(workflowID string) (string, string, error) {
+func parseDeploymentWorkflowID(workflowID string) (deploymentName string, buildID string, err error) {
 	// Split by ":"
 	parts := strings.Split(workflowID, ":")
 	if len(parts) != 2 {
@@ -87,8 +87,8 @@ func parseDeploymentWorkflowID(workflowID string) (string, string, error) {
 	}
 
 	// Length and character checks for deploymentName and buildID are performed in matching
-	deploymentName := deploymentBuildIDWorkflowID[0]
-	buildID := deploymentBuildIDWorkflowID[1]
+	deploymentName = deploymentBuildIDWorkflowID[0]
+	buildID = deploymentBuildIDWorkflowID[1]
 	return deploymentName, buildID, nil
 }
 

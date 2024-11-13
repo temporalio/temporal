@@ -573,7 +573,7 @@ pollLoop:
 			buildID := req.PollRequest.WorkerVersionCapabilities.BuildId
 			deploymentName := req.PollRequest.WorkerVersionCapabilities.DeploymentName
 
-			// checking for duplicate request
+			// check for duplicate request
 			dedupDeploymentKey := dedupDeploymentsKey{
 				taskQueueName: req.PollRequest.TaskQueue.Name,
 				taskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
@@ -581,7 +581,7 @@ pollLoop:
 			}
 			if _, found := e.dedupDeployments[dedupDeploymentKey]; !found {
 
-				// make signal input
+				// signal input
 				updateDeploymentSignalInput := &deployspb.UpdateDeploymentSignalInput{
 					Name: req.PollRequest.TaskQueue.Name,
 					TaskQueueInfo: &deployspb.DeploymentWorkflowArgs_TaskQueueFamilyInfo_TaskQueueInfo{
@@ -590,7 +590,7 @@ pollLoop:
 					},
 				}
 
-				// make workflow args
+				// workflow input
 				startDeploymentWorkflowArgs := &deployspb.DeploymentWorkflowArgs{
 					NamespaceName:     req.PollRequest.Namespace,
 					NamespaceId:       req.NamespaceId,
@@ -601,7 +601,7 @@ pollLoop:
 					return nil, err
 				}
 
-				// adding to the map to prevent multiple duplicate requests from starting workflow execution
+				// adds to map to prevent multiple duplicate requests from starting workflow execution
 				e.dedupDeployments[dedupDeploymentKey] = req.PollRequest.WorkerVersionCapabilities.DeploymentName
 			}
 		}
@@ -821,7 +821,7 @@ pollLoop:
 			buildID := req.PollRequest.WorkerVersionCapabilities.BuildId
 			deploymentName := req.PollRequest.WorkerVersionCapabilities.DeploymentName
 
-			// checking for duplicate request
+			// checks for duplicate request
 			dedupDeploymentKey := dedupDeploymentsKey{
 				taskQueueName: req.PollRequest.TaskQueue.Name,
 				taskQueueType: enumspb.TASK_QUEUE_TYPE_ACTIVITY,
@@ -829,7 +829,7 @@ pollLoop:
 			}
 			if _, found := e.dedupDeployments[dedupDeploymentKey]; !found {
 
-				// make signal input
+				// signal input
 				updateDeploymentSignalInput := &deployspb.UpdateDeploymentSignalInput{
 					Name: req.PollRequest.TaskQueue.Name,
 					TaskQueueInfo: &deployspb.DeploymentWorkflowArgs_TaskQueueFamilyInfo_TaskQueueInfo{
@@ -838,6 +838,7 @@ pollLoop:
 					},
 				}
 
+				// workflow input
 				startDeploymentWorkflowArgs := &deployspb.DeploymentWorkflowArgs{
 					NamespaceName:     req.PollRequest.Namespace,
 					NamespaceId:       req.NamespaceId,
@@ -848,7 +849,7 @@ pollLoop:
 					return nil, err
 				}
 
-				// adding to the map to prevent multiple duplicate requests from starting workflow execution
+				// adds to the map to prevent multiple duplicate requests from starting workflow execution
 				e.dedupDeployments[dedupDeploymentKey] = req.PollRequest.WorkerVersionCapabilities.DeploymentName
 			}
 		}
@@ -1841,7 +1842,7 @@ pollLoop:
 			buildID := req.Request.WorkerVersionCapabilities.BuildId
 			deploymentName := req.Request.WorkerVersionCapabilities.DeploymentName
 
-			// checking for duplicate request
+			// checks for duplicate request
 			dedupDeploymentKey := dedupDeploymentsKey{
 				taskQueueName: req.Request.TaskQueue.Name,
 				taskQueueType: enumspb.TASK_QUEUE_TYPE_NEXUS,
@@ -1849,7 +1850,7 @@ pollLoop:
 			}
 			if _, found := e.dedupDeployments[dedupDeploymentKey]; !found {
 
-				// make signal input
+				// signal input
 				updateDeploymentSignalInput := &deployspb.UpdateDeploymentSignalInput{
 					Name: req.Request.TaskQueue.Name,
 					TaskQueueInfo: &deployspb.DeploymentWorkflowArgs_TaskQueueFamilyInfo_TaskQueueInfo{
@@ -1858,6 +1859,7 @@ pollLoop:
 					},
 				}
 
+				// workflow input
 				startDeploymentWorkflowArgs := &deployspb.DeploymentWorkflowArgs{
 					NamespaceName:     req.Request.Namespace,
 					NamespaceId:       req.NamespaceId,
@@ -1868,7 +1870,7 @@ pollLoop:
 					return nil, err
 				}
 
-				// adding to the map to prevent multiple duplicate requests from starting workflow execution
+				// adds to the map to prevent multiple duplicate requests from starting workflow execution
 				e.dedupDeployments[dedupDeploymentKey] = req.Request.WorkerVersionCapabilities.DeploymentName
 			}
 		}
@@ -2117,9 +2119,9 @@ func (e *matchingEngineImpl) pollTask(
 	return pm.PollTask(ctx, pollMetadata)
 }
 
+// isValidName checks if each character is a letter/number in the input string
 func isValidName(input string) bool {
 	for _, char := range input {
-		// Validate if each character is a letter/number
 		if !unicode.IsLetter(char) && !unicode.IsDigit(char) {
 			return false
 		}
@@ -2188,7 +2190,6 @@ func (e *matchingEngineImpl) startAndSignalDeploymentWorkflow(
 	}
 
 	// workflow input
-	// TODO Shivam - why do we use sdk.PreferProtoDataConverter
 	workflowInputPayloads, err := sdk.PreferProtoDataConverter.ToPayloads(args)
 	if err != nil {
 		return nil, err
