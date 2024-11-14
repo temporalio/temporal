@@ -27,6 +27,9 @@
 package sqlite
 
 import (
+	"context"
+	"database/sql"
+	"database/sql/driver"
 	"errors"
 	"regexp"
 
@@ -35,10 +38,43 @@ import (
 )
 
 const (
-	goSqlDriverName       = "sqlite"
+	goSqlDriverName       = "sqlite_temporal"
 	sqlConstraintCodes    = sqlite3.SQLITE_CONSTRAINT | sqlite3.SQLITE_CONSTRAINT_PRIMARYKEY | sqlite3.SQLITE_CONSTRAINT_UNIQUE
 	sqlTableExistsPattern = "SQL logic error: table .* already exists \\(1\\)"
 )
+
+// Driver implements a sql driver that return a custom connection conn. conn implements ResetSession() and IsValid()
+// so that the sql library does not close the connection when a transaction context times out.
+type Driver struct {
+	sqlite.Driver
+}
+
+type conn struct {
+	driver.Conn
+}
+
+func newDriver() driver.Driver {
+	return &Driver{sqlite.Driver{}}
+}
+
+func (d *Driver) Open(name string) (driver.Conn, error) {
+	c, err := d.Driver.Open(name)
+	return &conn{c}, err
+}
+
+// ResetSession does nothing.
+func (c *conn) ResetSession(ctx context.Context) error {
+	return nil
+}
+
+// IsValid always returns true. We only have one connection to the sqlite db. It should always be valid. Otherwise, we would have lost the database.
+func (c *conn) IsValid() bool {
+	return true
+}
+
+func init() {
+	sql.Register(goSqlDriverName, newDriver())
+}
 
 var sqlTableExistsRegex = regexp.MustCompile(sqlTableExistsPattern)
 
