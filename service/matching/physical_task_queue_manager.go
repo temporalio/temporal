@@ -481,7 +481,10 @@ func (c *physicalTaskQueueManagerImpl) PollTask(
 			}
 
 			// Start the deployment workflow
-			c.startAndUpdateDeploymentWorkflow(ctx, workflowArgs, updateArgs)
+			_, err := c.startAndUpdateDeploymentWorkflow(ctx, workflowArgs, updateArgs)
+			if err != nil {
+				return nil, err
+			}
 
 			c.isDeploymentWorkflowStarted.Store(true)
 		}
