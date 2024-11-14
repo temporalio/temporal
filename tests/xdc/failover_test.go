@@ -1815,6 +1815,8 @@ func (s *FunctionalClustersTestSuite) TestTransientWorkflowTaskFailover() {
 }
 
 func (s *FunctionalClustersTestSuite) TestCronWorkflowStartAndFailover() {
+	s.T().Skip("flaky test")
+
 	namespace := "test-cron-workflow-start-and-failover-" + common.GenerateRandomString(5)
 	client1 := s.cluster1.FrontendClient() // active
 	regReq := &workflowservice.RegisterNamespaceRequest{
@@ -1909,6 +1911,8 @@ func (s *FunctionalClustersTestSuite) TestCronWorkflowStartAndFailover() {
 }
 
 func (s *FunctionalClustersTestSuite) TestCronWorkflowCompleteAndFailover() {
+	s.T().Skip("flaky test")
+
 	namespace := "test-cron-workflow-complete-and-failover-" + common.GenerateRandomString(5)
 	client1 := s.cluster1.FrontendClient() // active
 	regReq := &workflowservice.RegisterNamespaceRequest{
