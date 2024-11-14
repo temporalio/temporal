@@ -1,8 +1,6 @@
 // The MIT License
 //
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
+// Copyright (c) 2024 Temporal Technologies Inc.  All rights reserved.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -22,30 +20,42 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package update
+package util
 
 import (
-	"go.temporal.io/server/internal/effect"
+	"errors"
+	"regexp"
+	"strings"
 )
 
-var (
-	// while we *could* write the unit test code to walk an Update through a
-	// series of message deliveries to get to the right state, it's much faster
-	// just to instantiate directly into the desired state.
-	NewAccepted  = newAccepted
-	NewCompleted = newCompleted
-	AbortFailure = acceptedUpdateCompletedWorkflowFailure
-)
-
-// ObserveCompletion exports withOnComplete to unit tests
-func ObserveCompletion(b *bool) updateOpt {
-	return withCompletionCallback(func() { *b = true })
+// WildCardStringToRegexp converts a given string pattern to a regular expression matching wildcards (*) with any
+// substring.
+func WildCardStringToRegexp(pattern string) (*regexp.Regexp, error) {
+	if pattern == "" {
+		return nil, errors.New("pattern cannot be empty")
+	}
+	return WildCardStringsToRegexp([]string{pattern})
 }
 
-func (u *Update) IsSent() bool { return u.isSent() }
-
-func (u *Update) ID() string { return u.id }
-
-func CompletedCount(r Registry) int { return r.(*registry).completedCount }
-
-func (u *Update) Abort(reason AbortReason, effects effect.Controller) { u.abort(reason, effects) }
+// WildCardStringToRegexps converts a given slices of string patterns to a slice of regular expressions matching
+// wildcards (*) with any substring.
+func WildCardStringsToRegexp(patterns []string) (*regexp.Regexp, error) {
+	var result strings.Builder
+	result.WriteRune('^')
+	for i, pattern := range patterns {
+		result.WriteRune('(')
+		for i, literal := range strings.Split(pattern, "*") {
+			if i > 0 {
+				// Replace * with .*
+				result.WriteString(".*")
+			}
+			result.WriteString(regexp.QuoteMeta(literal))
+		}
+		result.WriteRune(')')
+		if i < len(patterns)-1 {
+			result.WriteRune('|')
+		}
+	}
+	result.WriteRune('$')
+	return regexp.Compile(result.String())
+}

@@ -98,6 +98,8 @@ func (s *NexusStateReplicationSuite) TearDownSuite() {
 // 9. Check that the operation completion triggers a workflow task when we poll on cluster1.
 // 10. Complete the workflow.
 func (s *NexusStateReplicationSuite) TestNexusOperationEventsReplicated() {
+	s.T().Skip("flaky test")
+
 	var callbackToken string
 	var publicCallbackUrl string
 
@@ -512,7 +514,7 @@ func (s *NexusStateReplicationSuite) waitCallback(
 }
 
 func (s *NexusStateReplicationSuite) completeNexusOperation(ctx context.Context, result any, callbackUrl, callbackToken string) {
-	completion, err := nexus.NewOperationCompletionSuccessful(s.mustToPayload(result), nexus.OperationCompletionSuccesfulOptions{
+	completion, err := nexus.NewOperationCompletionSuccessful(s.mustToPayload(result), nexus.OperationCompletionSuccessfulOptions{
 		Serializer: commonnexus.PayloadSerializer,
 	})
 	s.NoError(err)

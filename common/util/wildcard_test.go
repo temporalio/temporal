@@ -1,8 +1,6 @@
 // The MIT License
 //
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
+// Copyright (c) 2024 Temporal Technologies Inc.  All rights reserved.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -22,30 +20,37 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package update
+package util_test
 
 import (
-	"go.temporal.io/server/internal/effect"
+	"testing"
+
+	"github.com/stretchr/testify/require"
+	"go.temporal.io/server/common/util"
 )
 
-var (
-	// while we *could* write the unit test code to walk an Update through a
-	// series of message deliveries to get to the right state, it's much faster
-	// just to instantiate directly into the desired state.
-	NewAccepted  = newAccepted
-	NewCompleted = newCompleted
-	AbortFailure = acceptedUpdateCompletedWorkflowFailure
-)
+func TestWildCardStringToRegexp(t *testing.T) {
+	re, err := util.WildCardStringToRegexp("a*z")
+	require.NoError(t, err)
+	require.Regexp(t, re, "az")
+	require.Regexp(t, re, "abz")
+	require.NotRegexp(t, re, "ab")
 
-// ObserveCompletion exports withOnComplete to unit tests
-func ObserveCompletion(b *bool) updateOpt {
-	return withCompletionCallback(func() { *b = true })
+	_, err = util.WildCardStringToRegexp("")
+	require.ErrorContains(t, err, "pattern cannot be empty")
 }
 
-func (u *Update) IsSent() bool { return u.isSent() }
+func TestWildCardStringsToRegexp(t *testing.T) {
+	re, err := util.WildCardStringsToRegexp([]string{"a*z", "b*d"})
+	require.NoError(t, err)
+	require.Regexp(t, re, "az")
+	require.Regexp(t, re, "abz")
+	require.NotRegexp(t, re, "ab")
+	require.Regexp(t, re, "bd")
+	require.Regexp(t, re, "bcd")
+	require.NotRegexp(t, re, "bc")
 
-func (u *Update) ID() string { return u.id }
-
-func CompletedCount(r Registry) int { return r.(*registry).completedCount }
-
-func (u *Update) Abort(reason AbortReason, effects effect.Controller) { u.abort(reason, effects) }
+	re, err = util.WildCardStringsToRegexp([]string{})
+	require.NoError(t, err)
+	require.NotRegexp(t, re, "a")
+}

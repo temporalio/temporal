@@ -414,6 +414,14 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 			request.GetIdentity(),
 		)
 
+		// If the Workflow completed itself, but there are still accepted
+		// (but not completed) Updates, they need to be aborted.
+		// Reason is always "WorkflowCompleted" because accepted Updates
+		// are not moving to continuing runs (if any).
+		if !ms.IsWorkflowExecutionRunning() {
+			updateRegistry.AbortAccepted(update.AbortReasonWorkflowCompleted, &effects)
+		}
+
 		// set the vars used by following logic
 		// further refactor should also clean up the vars used below
 		wtFailedCause = workflowTaskHandler.workflowTaskFailedCause
@@ -634,11 +642,13 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 	effects.Apply(ctx)
 
 	if !ms.IsWorkflowExecutionRunning() {
-		// NOTE: It is important to call this *after* applying effects to be sure there are no pending effects.
+		// NOTE: It is important to call this *after* applying effects to be sure there are no
+		// Updates in ProvisionallyCompleted state.
 
-		// Because all unprocessed Updates were already rejected, the registry only has:
-		//   (1) Updates that were received while this WFT was running,
-		//   (2) Updates that were accepted but not yet completed.
+		// Because:
+		//  (1) all unprocessed Updates were already rejected
+		//  (2) all accepted Updates were aborted
+		// the registry only has: Updates received while this WFT was running (new Updates).
 		hasNewRun := newMutableState != nil
 		if hasNewRun {
 			// If a new run was created (e.g. ContinueAsNew, Retry, Cron), then Updates that were

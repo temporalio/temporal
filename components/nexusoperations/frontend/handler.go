@@ -270,6 +270,7 @@ func (h *completionHandler) forwardCompleteOperation(ctx context.Context, r *nex
 		return nexus.HandlerErrorf(nexus.HandlerErrorTypeInternal, "internal error")
 	}
 
+	// TODO: Upgrade Nexus SDK in order to reduce HTTP exposure
 	handlerErr := &nexus.HandlerError{
 		Type:    commonnexus.HandlerErrorTypeFromHTTPStatus(resp.StatusCode),
 		Failure: &failure,
