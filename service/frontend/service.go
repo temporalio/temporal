@@ -28,6 +28,7 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"regexp"
 	"sync"
 	"time"
 
@@ -41,12 +42,15 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/retrypolicy"
+	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/components/callbacks"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/health"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 	"google.golang.org/grpc/reflection"
 )
+
+var matchAny = regexp.MustCompile(".*")
 
 // Config represents configuration for frontend service
 type Config struct {
@@ -211,6 +215,8 @@ type Config struct {
 	EnableEagerWorkflowStart dynamicconfig.BoolPropertyFnWithNamespaceFilter
 
 	ActivityAPIsEnabled dynamicconfig.BoolPropertyFnWithNamespaceFilter
+
+	HTTPAllowedHosts *dynamicconfig.GlobalCachedTypedValue[*regexp.Regexp]
 }
 
 // NewConfig returns new service config with default values
@@ -330,6 +336,13 @@ func NewConfig(
 		LogAllReqErrors:            dynamicconfig.LogAllReqErrors.Get(dc),
 		EnableEagerWorkflowStart:   dynamicconfig.EnableEagerWorkflowStart.Get(dc),
 		ActivityAPIsEnabled:        dynamicconfig.ActivityAPIsEnabled.Get(dc),
+
+		HTTPAllowedHosts: dynamicconfig.NewGlobalCachedTypedValue(dc, dynamicconfig.FrontendHTTPAllowedHosts, func(patterns []string) (*regexp.Regexp, error) {
+			if len(patterns) == 0 {
+				return matchAny, nil
+			}
+			return util.WildCardStringsToRegexp(patterns)
+		}),
 	}
 }
 
