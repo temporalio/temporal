@@ -261,7 +261,7 @@ message WorkflowExecutionInfo {
 
     message VersioningInfo {
         // Determines how server should treat this execution when workers are upgraded.
-        // When present it means that this workflow is versioned. This is not set until an execution
+        // When present it means that this workflow is versioned. This is set after an execution
         // completes its first workflow task on a versioned worker.
         temporal.api.enums.v1.VersioningBehavior behavior = 1;
         // The worker deployment to which this workflow is assigned currently.
@@ -269,11 +269,11 @@ message WorkflowExecutionInfo {
         temporal.api.common.v1.WorkerDeployment deployment = 2;
         // Manual override for execution's versioning behavior. Takes precedence over `behavior`.
         temporal.api.enums.v1.VersioningBehavior behavior_override = 3;
-        // Used to manually pin the execution to a deployment. Must be set when if and only if
+        // Used to manually pin the execution to a deployment. Must be set if and only if
         // `behavior_override` is PINNED. Takes precedence over `deployment`.
         temporal.api.common.v1.WorkerDeployment deployment_override = 4;
         // When present, indicates the workflow is being redirected to a different deployment.
-        // A deployment redirect can only exist during the life time of a pending workflow task.
+        // A redirect can only exist during the lifetime of a pending workflow task.
         // If the pending workflow task completes (at the next WorkflowTaskCompleted event), the
         // redirect is considered complete and the workflow's deployment is updated. If the pending
         // workflow task fails or times out, then the redirect is canceled and workflow remains on
@@ -511,12 +511,6 @@ message ActivityInfo {
     // The deployment this activity was dispatched to most recently. Present only if the activity
     // was dispatched to a versioned worker.
     temporal.api.common.v1.WorkerDeployment last_started_deployment = 40;
-
-    // If this activity was attempted to start during an ongoing redirect of the workflow, we set
-    // this flag so we remember after completion of the activity to reschedule the dropped task.
-    // History rejects the start of activities when a workflow is redirecting to a different
-    // deployment. Those rejected starts will cause the task to be dropped by Matching.
-    bool dropped_task = 41;
 }
 
 // timer_map column

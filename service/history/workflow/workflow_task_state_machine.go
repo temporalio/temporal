@@ -864,7 +864,8 @@ func (m *workflowTaskStateMachine) failWorkflowTask(
 		m.ms.ClearStickyTaskQueue()
 	}
 
-	m.ms.FailDeploymentRedirect()
+	// TODO (shahab): should fail the deployment redirect here?
+	// m.ms.FailDeploymentRedirect()
 
 	failWorkflowTaskInfo := &WorkflowTaskInfo{
 		Version:               common.EmptyVersion,

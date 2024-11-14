@@ -1056,7 +1056,7 @@ func (handler *WorkflowTaskCompletedHandler) validateVersioningInfo(
 ) error {
 	taskDeployment := worker_versioning.DeploymentFromStamp(request.GetWorkerVersionStamp())
 	wfDeployment := ms.GetCurrentDeployment()
-	if taskDeployment.Equal(wfDeployment) {
+	if !taskDeployment.Equal(wfDeployment) {
 		return serviceerror.NewNotFound(fmt.Sprintf(
 			"execution is not assigned to deployment %q, current deployment is %q",
 			worker_versioning.DeploymentToString(wfDeployment),

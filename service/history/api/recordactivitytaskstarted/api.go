@@ -119,9 +119,8 @@ func Invoke(
 
 			if mutableState.GetRedirectInfo() != nil {
 				// Can't start activity during a redirect. We reject this request so Matching drops
-				// the task. But remember in the activity ingo that this task is dropped so it is
-				// rescheduled again when redirect finishes.
-				ai.DroppedTask = true
+				// the task. The activity will be rescheduled when the redirect completes/fails.
+
 				// Not returning error so the mutable state is updated. Just setting this flag to
 				// return error at a higher level.
 				dropTask = true
@@ -176,7 +175,8 @@ func Invoke(
 	}
 
 	if dropTask {
-		return nil, serviceerrors.NewObsoleteDispatchBuildId("cannot start activity during a redirect")
+		// TODO: Log that the activity is dropped. Maybe on Matching side.
+		return nil, serviceerrors.NewObsoleteDispatchBuildId("cannot start activity during a redirect. Activity will be rescheduled when redirect completes")
 	}
 	return response, err
 }

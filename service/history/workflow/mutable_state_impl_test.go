@@ -551,8 +551,8 @@ func (s *mutableStateSuite) verifyCurrentDeployment(
 	s.Equal(expectedBehavior, s.mutableState.GetVersioningBehavior())
 }
 
-// creates a mutable state with first WFT completed on deployment "my_app:build_1" and behavior set
-// to the passed value.
+// Creates a mutable state with first WFT completed on the given deployment and behavior set
+// to the given behavior, testing expected output after Add, Start, and Complete Workflow Task.
 func (s *mutableStateSuite) createMutableStateWithVersioningBehavior(
 	behavior enumspb.VersioningBehavior,
 	deployment *commonpb.WorkerDeployment,
@@ -3413,7 +3413,6 @@ func (s *mutableStateSuite) verifyActivityInfos(expectedMap, actualMap map[int64
 		s.True(proto.Equal(expected.ActivityType, actual.ActivityType), "ActivityType mismatch")
 		s.True(proto.Equal(expected.LastWorkerVersionStamp, actual.LastWorkerVersionStamp), "LastWorkerVersionStamp mismatch")
 		s.True(proto.Equal(expected.LastStartedDeployment, actual.LastStartedDeployment), "LastStartedDeployment mismatch")
-		s.Equal(expected.DroppedTask, actual.DroppedTask, "DroppedTask mismatch")
 		s.True(proto.Equal(expected.LastUpdateVersionedTransition, actual.LastUpdateVersionedTransition), "LastUpdateVersionedTransition mismatch")
 
 		// special handled fields

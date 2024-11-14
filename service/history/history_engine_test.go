@@ -6332,7 +6332,6 @@ func addWorkflowTaskStartedEventWithRequestID(ms workflow.MutableState, schedule
 		identity,
 		nil,
 		nil,
-		nil,
 		false,
 	)
 

@@ -118,7 +118,8 @@ func Invoke(
 					req.GetCompleteRequest().GetIdentity(),
 					nil,
 					nil,
-					//TODO: implement workflow redirect
+					// TODO (shahab): do we need to do anything with wf redirect in this case or any
+					// other case where an activity starts?
 					nil,
 				)
 				if err != nil {

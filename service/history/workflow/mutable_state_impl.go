@@ -6740,15 +6740,15 @@ func (ms *MutableStateImpl) GetCurrentDeployment() *commonpb.WorkerDeployment {
 		return redirectInfo.GetDeployment()
 	} else if override := versioningInfo.GetDeploymentOverride(); override != nil {
 		return override
-	} else {
-		return versioningInfo.GetDeployment()
 	}
+	return versioningInfo.GetDeployment()
 }
 
 func (ms *MutableStateImpl) GetRedirectInfo() *persistencespb.WorkflowExecutionInfo_VersioningInfo_RedirectInfo {
 	return ms.GetExecutionInfo().GetVersioningInfo().GetRedirectInfo()
 }
 
+// GetVersioningBehavior returns the effective versioning behavior for the workflow.
 func (ms *MutableStateImpl) GetVersioningBehavior() enumspb.VersioningBehavior {
 	versioningInfo := ms.GetExecutionInfo().GetVersioningInfo()
 	if versioningInfo == nil {
@@ -6758,14 +6758,14 @@ func (ms *MutableStateImpl) GetVersioningBehavior() enumspb.VersioningBehavior {
 		return redirectInfo.GetBehaviorOverride()
 	} else if versioningInfo.GetBehaviorOverride() != enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED {
 		return versioningInfo.GetBehaviorOverride()
-	} else {
-		return versioningInfo.GetBehavior()
 	}
+	return versioningInfo.GetBehavior()
 }
 
-// StartDeploymentRedirect starts a redirect to the given deployment. If a redirect is already
-// happening, it may be replaced by the new redirect depending on which redirect was made byt a
-// user override. Return's true if the requested redirect is started.
+// StartDeploymentRedirect starts a redirect to the given deployment. If the workflow is pinned,
+// the redirect will be rejected unless it's initiated by an override. Returns true if the requested
+// redirect is started. Starting a new redirect replaces possible existing redirect without
+// rescheduling activities.
 // TODO: validate source deployment
 func (ms *MutableStateImpl) StartDeploymentRedirect(
 	deployment *commonpb.WorkerDeployment,
@@ -6776,11 +6776,13 @@ func (ms *MutableStateImpl) StartDeploymentRedirect(
 		return false
 	}
 
-	if redirectInfo := ms.GetRedirectInfo(); redirectInfo != nil {
-		if behaviorOverride == enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED &&
-			redirectInfo.GetBehaviorOverride() != enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED {
-			return false
-		}
+	wfBehavior := ms.GetVersioningBehavior()
+	if wfBehavior == enumspb.VERSIONING_BEHAVIOR_PINNED &&
+		behaviorOverride == enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED {
+		// WF is pinned and the redirect is not from a manual override, so we reject it.
+		// It's possible that a backlogged task in matching from an earlier time that this wf was
+		// unpinned is being dispatched now and wants to redirect the wf. Such task should be dropped.
+		return false
 	}
 
 	versioningInfo := ms.GetExecutionInfo().GetVersioningInfo()
@@ -6805,8 +6807,7 @@ func (ms *MutableStateImpl) StartDeploymentRedirect(
 
 // CompleteDeploymentRedirect completes the ongoing redirect for this workflow if it exists.
 // Completing a redirect updates the workflow's deployment and possibly versioning behavior.
-// All activities that could not start during the redirect will be rescheduled to be dispatched
-// to the new deployment.
+// All activities that are not started yet will be rescheduled to be dispatched the new deployment.
 func (ms *MutableStateImpl) CompleteDeploymentRedirect(
 	behavior enumspb.VersioningBehavior,
 ) error {
@@ -6824,32 +6825,36 @@ func (ms *MutableStateImpl) CompleteDeploymentRedirect(
 			versioningInfo.DeploymentOverride = redirectInfo.GetDeployment()
 		}
 	}
-	return ms.rescheduleActivitiesAttemptedDuringRedirect()
+	return ms.reschedulePendingActivities()
 }
 
 // FailDeploymentRedirect fails the ongoing redirect for this workflow if it exists.
 // A failed redirect does not change the workflow's deployment and behavior overrides. All
-// activities that could not start during the redirect will be rescheduled to be dispatched the
-// current deployment.
+// activities that are not started yet will be rescheduled to be dispatched the current deployment.
 func (ms *MutableStateImpl) FailDeploymentRedirect() error {
 	versioningInfo := ms.GetExecutionInfo().GetVersioningInfo()
 	if versioningInfo.GetRedirectInfo() == nil {
 		return nil
 	}
 	versioningInfo.RedirectInfo = nil
-	return ms.rescheduleActivitiesAttemptedDuringRedirect()
+	// Even though the wfs deployment is not changed rescheduling activities is still needed because
+	// activity tasks that were attempted during redirect are dropped by Matching.
+	return ms.reschedulePendingActivities()
 }
 
-// reschedulePendingTasks rescheduled all the activities whose matching tasks were dropped because
-// they wanted to start during a redirect.
-func (ms *MutableStateImpl) rescheduleActivitiesAttemptedDuringRedirect() error {
+// reschedulePendingActivities reschedules all the activities that are not started, so they are
+// scheduled against the right queue in matching.
+func (ms *MutableStateImpl) reschedulePendingActivities() error {
 	for _, ai := range ms.GetPendingActivityInfos() {
-		if ai.GetDroppedTask() {
-			// we only need to resend the activities to matching, no need to update timer tasks.
-			err := ms.taskGenerator.GenerateActivityTasks(ai.ScheduledEventId)
-			if err != nil {
-				return err
-			}
+		if ai.StartedEventId != common.EmptyEventID {
+			// TODO: skip task generation also when activity is in backoff period
+			// activity already started
+			continue
+		}
+		// we only need to resend the activities to matching, no need to update timer tasks.
+		err := ms.taskGenerator.GenerateActivityTasks(ai.ScheduledEventId)
+		if err != nil {
+			return err
 		}
 	}
 

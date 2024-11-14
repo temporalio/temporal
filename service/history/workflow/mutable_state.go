@@ -405,6 +405,7 @@ type (
 		// GetCurrentDeployment returns the current effective deployment in the following order:
 		// RedirectInfo.Deployment takes precedence over DeploymentOverride, over Deployment.
 		GetCurrentDeployment() *commonpb.WorkerDeployment
+		// GetVersioningBehavior returns the effective versioning behavior for the workflow.
 		GetVersioningBehavior() enumspb.VersioningBehavior
 		GetRedirectInfo() *persistencespb.WorkflowExecutionInfo_VersioningInfo_RedirectInfo
 		StartDeploymentRedirect(

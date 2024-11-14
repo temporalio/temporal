@@ -107,7 +107,6 @@ func Invoke(
 	if err != nil {
 		return nil, err
 	}
-
 	result := &historyservice.DescribeWorkflowExecutionResponse{
 		ExecutionConfig: &workflowpb.WorkflowExecutionConfig{
 			TaskQueue: &taskqueuepb.TaskQueue{

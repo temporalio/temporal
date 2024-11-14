@@ -470,7 +470,6 @@ func (r *workflowResetterImpl) failWorkflowTask(
 			consts.IdentityHistoryService,
 			nil,
 			nil,
-			nil,
 			true,
 		)
 		if err != nil {
