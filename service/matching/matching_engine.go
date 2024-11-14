@@ -34,7 +34,6 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
-	"unicode"
 
 	"github.com/nexus-rpc/sdk-go/nexus"
 	"github.com/pborman/uuid"
@@ -87,11 +86,6 @@ const (
 	recordTaskStartedSyncMatchTimeout = 1 * time.Second
 )
 
-var (
-	errWorkflowIDNotSet  = serviceerror.NewInvalidArgument("WorkflowId is not set on request.")
-	errWorkflowIDTooLong = serviceerror.NewInvalidArgument("WorkflowId length exceeds limit.")
-)
-
 type (
 	pollerIDCtxKey string
 	identityCtxKey string
@@ -120,12 +114,6 @@ type (
 		loadedTaskQueuePartitionCount map[taskQueueCounterKey]int
 		loadedPhysicalTaskQueueCount  map[taskQueueCounterKey]int
 		lock                          sync.Mutex
-	}
-
-	dedupDeploymentsKey struct {
-		taskQueueName string
-		taskQueueType enumspb.TaskQueueType
-		buildID       string
 	}
 
 	// Implements matching.Engine
@@ -175,8 +163,6 @@ type (
 		namespaceUpdateLockMapLock sync.Mutex
 		// Stores results of reachability queries to visibility
 		reachabilityCache reachabilityCache
-		// De-duping poll requests when starting/signaling deployment workflows
-		dedupDeployments map[dedupDeploymentsKey]string
 	}
 )
 
@@ -247,7 +233,6 @@ func NewEngine(
 		outstandingPollers:        collection.NewSyncMap[string, context.CancelFunc](),
 		namespaceReplicationQueue: namespaceReplicationQueue,
 		namespaceUpdateLockMap:    make(map[string]*namespaceUpdateLocks),
-		dedupDeployments:          make(map[dedupDeploymentsKey]string),
 	}
 	e.reachabilityCache = newReachabilityCache(
 		metrics.NoopMetricsHandler,
@@ -2001,16 +1986,6 @@ func (e *matchingEngineImpl) pollTask(
 		defer e.outstandingPollers.Delete(pollerID)
 	}
 	return pm.PollTask(ctx, pollMetadata)
-}
-
-// isValidName checks if each character is a letter/number in the input string
-func isValidName(input string) bool {
-	for _, char := range input {
-		if !unicode.IsLetter(char) && !unicode.IsDigit(char) {
-			return false
-		}
-	}
-	return true
 }
 
 // Unloads the given task queue partition. If it has already been unloaded (i.e. it's not present in the loaded
