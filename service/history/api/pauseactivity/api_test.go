@@ -30,7 +30,6 @@ import (
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
-	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/log"
@@ -131,15 +130,11 @@ func (s *pauseActivitySuite) TestPauseActivityAcceptance() {
 		},
 	}
 
-	request := &historyservice.PauseActivityRequest{
-		NamespaceId: "NamespaceID",
-	}
-
 	s.mockMutableState.EXPECT().IsWorkflowExecutionRunning().Return(true)
 	s.mockMutableState.EXPECT().GetActivityByActivityID(gomock.Any()).Return(activityInfo, true)
 	s.mockMutableState.EXPECT().UpdatePauseInfoSearchAttribute().Return(nil)
 	s.mockMutableState.EXPECT().UpdateActivityWithCallback(gomock.Any(), gomock.Any())
 
-	err := workflow.PauseActivity(s.mockMutableState, request)
+	err := workflow.PauseActivityById(s.mockMutableState, activityId)
 	s.NoError(err)
 }
