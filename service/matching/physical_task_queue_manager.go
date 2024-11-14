@@ -350,11 +350,7 @@ func (c *physicalTaskQueueManagerImpl) validateDeploymentWfParams(fieldName stri
 	}
 
 	// UTF-8 check
-	if err := common.ValidateUTF8String(fieldName, field); err != nil {
-		return err
-	}
-
-	return nil
+	return common.ValidateUTF8String(fieldName, field)
 }
 
 func (c *physicalTaskQueueManagerImpl) startAndUpdateDeploymentWorkflow(
