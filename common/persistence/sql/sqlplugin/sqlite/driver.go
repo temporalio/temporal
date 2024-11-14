@@ -59,7 +59,10 @@ func newDriver() driver.Driver {
 
 func (d *Driver) Open(name string) (driver.Conn, error) {
 	c, err := d.Driver.Open(name)
-	return &conn{c}, err
+	if err != nil {
+		return nil, err
+	}
+	return &conn{c}, nil
 }
 
 // ResetSession does nothing.
