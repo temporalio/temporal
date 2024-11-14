@@ -26,11 +26,10 @@ package tests
 
 import (
 	"context"
+	gosql "database/sql"
 	"os"
 	"path"
 	"testing"
-
-	gosql "database/sql"
 
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/assert"
