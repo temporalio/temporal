@@ -49,10 +49,6 @@ type Driver struct {
 	sqlite.Driver
 }
 
-type conn struct {
-	driver.Conn
-}
-
 func newDriver() driver.Driver {
 	return &Driver{sqlite.Driver{}}
 }
@@ -63,6 +59,10 @@ func (d *Driver) Open(name string) (driver.Conn, error) {
 		return nil, err
 	}
 	return &conn{c}, nil
+}
+
+type conn struct {
+	driver.Conn
 }
 
 // ResetSession does nothing.
