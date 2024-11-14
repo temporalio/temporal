@@ -4952,7 +4952,7 @@ func (ms *MutableStateImpl) updateActivityInfoForRetries(
 	nextAttempt int32,
 	activityFailure *failurepb.Failure,
 ) {
-	ms.UpdateActivityWithCallback(ai, func(info *persistencespb.ActivityInfo, mutableState MutableState) {
+	_ = ms.UpdateActivityWithCallback(ai, func(info *persistencespb.ActivityInfo, mutableState MutableState) {
 		mutableStateImpl, ok := mutableState.(*MutableStateImpl)
 		if ok {
 			ai = UpdateActivityInfoForRetries(
