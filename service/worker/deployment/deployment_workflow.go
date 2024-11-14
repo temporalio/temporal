@@ -48,10 +48,10 @@ type (
 
 const (
 	// Updates
-	RegisterWorkerInDeployment = "register_worker"
+	RegisterWorkerInDeployment = "register-worker"
 
 	// Signals
-	UpdateDeploymentBuildIDSignalName = "update_deployment_build_id"
+	UpdateDeploymentBuildIDSignalName = "update-deployment-build-id"
 	ForceCANSignalName                = "force-continue-as-new"
 
 	DeploymentWorkflowIDPrefix      = "temporal-sys-deployment"
