@@ -1617,6 +1617,7 @@ func (ms *MutableStateImpl) UpdateActivityInfo(
 	}
 
 	ms.approximateSize -= ai.Size()
+	oldPaused := ai.Paused
 
 	ai.Version = incomingActivityInfo.GetVersion()
 	ai.ScheduledTime = incomingActivityInfo.GetScheduledTime()
@@ -1641,10 +1642,20 @@ func (ms *MutableStateImpl) UpdateActivityInfo(
 	ai.LastAttemptCompleteTime = incomingActivityInfo.GetLastAttemptCompleteTime()
 	ai.Stamp = incomingActivityInfo.GetStamp()
 
+	ai.Paused = incomingActivityInfo.GetPaused()
+
 	ms.updateActivityInfos[ai.ScheduledEventId] = ai
 	ms.approximateSize += ai.Size()
 
 	err := ms.applyActivityBuildIdRedirect(ai, incomingActivityInfo.GetLastStartedBuildId(), incomingActivityInfo.GetLastStartedRedirectCounter())
+	if err != nil {
+		return err
+	}
+
+	if oldPaused != ai.Paused {
+		err = ms.UpdatePauseInfoSearchAttribute()
+	}
+
 	return err
 }
 
