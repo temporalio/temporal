@@ -30,7 +30,6 @@ import (
 	"errors"
 	"fmt"
 	"math/rand"
-	"net/url"
 	"reflect"
 	"slices"
 	"time"
@@ -4959,26 +4958,34 @@ func (ms *MutableStateImpl) updateActivityInfoForRetries(
 func (ms *MutableStateImpl) UpdateActivityWithCallback(
 	ai *persistencespb.ActivityInfo,
 	updateCallback UpdateActivityCallback,
-) {
+) error {
 	// incoming activity info can be a pointer to the activity info in pendingActivityInfoIDs
 	// we need to store activity info size since pendingActivityInfoIDs holds pointers to activity info
 	// if prev found it can point to the same activity info as incoming activity info,
+	prevPause := ai.Paused
 	var originalSize int
 	if prev, ok := ms.pendingActivityInfoIDs[ai.ScheduledEventId]; ok {
 		originalSize = prev.Size()
+		prevPause = prev.Paused
 	}
 
 	updateCallback(ai, ms)
 
+	if prevPause != ai.Paused {
+		err := ms.UpdatePauseInfoSearchAttribute()
+		if err != nil {
+			return err
+		}
+	}
+
 	ms.approximateSize += ai.Size() - originalSize
 	ms.updateActivityInfos[ai.ScheduledEventId] = ai
 	ms.syncActivityTasks[ai.ScheduledEventId] = struct{}{}
+
+	return nil
 }
 
 func (ms *MutableStateImpl) UpdatePauseInfoSearchAttribute() error {
-	// TODO: search attributes are coupled with mutable state.
-	// This should be refactored so we don't add new function to MutableState interface every time we want to work with search attributes.
-
 	pausedInfoMap := make(map[string]struct{})
 
 	for _, ai := range ms.GetPendingActivityInfos() {
@@ -4989,11 +4996,7 @@ func (ms *MutableStateImpl) UpdatePauseInfoSearchAttribute() error {
 	}
 	pausedInfo := make([]string, 0, len(pausedInfoMap))
 	for activityType := range pausedInfoMap {
-		activityType = url.QueryEscape(activityType)
-		pausedInfo = append(pausedInfo, fmt.Sprintf("activity:%s", activityType))
-	}
-	if len(pausedInfo) > 0 {
-		pausedInfo = append(pausedInfo, "policy::ManualActivityPause")
+		pausedInfo = append(pausedInfo, fmt.Sprintf("entityType.activity:%s", activityType))
 	}
 
 	pauseInfoPayload, err := searchattribute.EncodeValue(pausedInfo, enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST)

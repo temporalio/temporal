@@ -194,7 +194,7 @@ func GetNextScheduledTime(ai *persistence.ActivityInfo) time.Time {
 	return nextScheduledTime
 }
 
-func PauseActivity(mutableState MutableState, activityId string) error {
+func PauseActivityById(mutableState MutableState, activityId string) error {
 	if !mutableState.IsWorkflowExecutionRunning() {
 		return consts.ErrWorkflowCompleted
 	}
@@ -210,9 +210,7 @@ func PauseActivity(mutableState MutableState, activityId string) error {
 		return nil
 	}
 
-	mutableState.UpdateActivityWithCallback(ai, func(activityInfo *persistence.ActivityInfo, _ MutableState) {
+	return mutableState.UpdateActivityWithCallback(ai, func(activityInfo *persistence.ActivityInfo, _ MutableState) {
 		activityInfo.Paused = true
 	})
-
-	return mutableState.UpdatePauseInfoSearchAttribute()
 }

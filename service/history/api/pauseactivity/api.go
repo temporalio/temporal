@@ -43,8 +43,8 @@ func Invoke(
 		nil,
 		definition.NewWorkflowKey(
 			request.NamespaceId,
-			request.GetFrontendRequest().WorkflowId,
-			request.GetFrontendRequest().RunId,
+			request.GetFrontendRequest().GetWorkflowId(),
+			request.GetFrontendRequest().GetRunId(),
 		),
 		func(workflowLease api.WorkflowLease) (*api.UpdateWorkflowAction, error) {
 			mutableState := workflowLease.GetMutableState()
@@ -53,7 +53,7 @@ func Invoke(
 
 			var err error
 
-			err = workflow.PauseActivity(mutableState, activityId)
+			err = workflow.PauseActivityById(mutableState, activityId)
 			if err != nil {
 				return nil, err
 			}

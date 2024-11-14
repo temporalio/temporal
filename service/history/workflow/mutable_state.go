@@ -362,7 +362,7 @@ type (
 		)
 		UpdateActivity(*persistencespb.ActivityInfo) error
 		UpdateActivityWithTimerHeartbeat(*persistencespb.ActivityInfo, time.Time) error
-		UpdateActivityWithCallback(*persistencespb.ActivityInfo, UpdateActivityCallback)
+		UpdateActivityWithCallback(*persistencespb.ActivityInfo, UpdateActivityCallback) error
 		UpdatePauseInfoSearchAttribute() error
 		UpdateActivityProgress(ai *persistencespb.ActivityInfo, request *workflowservice.RecordActivityTaskHeartbeatRequest)
 		UpdateUserTimer(*persistencespb.TimerInfo) error
