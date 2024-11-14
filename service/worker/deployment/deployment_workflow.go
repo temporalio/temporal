@@ -142,7 +142,7 @@ func (d *DeploymentWorkflowRunner) run() error {
 		return err
 	}
 
-	// Wait on any pending updates.
+	// Wait on any pending signals and updates.
 	err = workflow.Await(d.ctx, func() bool { return pendingUpdates == 0 && a.SignalsCompleted })
 	if err != nil {
 		return err
