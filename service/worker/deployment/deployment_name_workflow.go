@@ -46,7 +46,7 @@ type (
 const (
 	UpdateDeploymentNameDefaultBuildIDSignalName = "update-deployment-name-default-buildID"
 
-	DeploymentNameWorkflowIDPrefix = "temporal-sys-deployment-name:"
+	DeploymentNameWorkflowIDPrefix = "temporal-sys-deployment-name"
 )
 
 // TODO Shivam - Define workflow for DeploymentName

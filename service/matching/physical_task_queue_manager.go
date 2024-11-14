@@ -29,14 +29,19 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
 
+	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
+	updatepb "go.temporal.io/api/update/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	deployspb "go.temporal.io/server/api/deployment/v1"
+	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
@@ -48,6 +53,11 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/payload"
+	"go.temporal.io/server/common/primitives"
+	"go.temporal.io/server/common/sdk"
+	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/service/worker/deployment"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 
@@ -99,6 +109,9 @@ type (
 		taskValidator              taskValidator
 		tasksAddedInIntervals      *taskTracker
 		tasksDispatchedInIntervals *taskTracker
+		// isDeploymentWorkflowStarted keeps track if we have started a deployment workflow for this
+		// physicalTaskQueue
+		isDeploymentWorkflowStarted atomic.Bool
 	}
 )
 
@@ -317,6 +330,122 @@ func (c *physicalTaskQueueManagerImpl) SpoolTask(taskInfo *persistencespb.TaskIn
 	return c.backlogMgr.SpoolTask(taskInfo)
 }
 
+func (c *physicalTaskQueueManagerImpl) validateDeploymentWfParams(fieldName string, field string) error {
+	// Length checks
+	if field == "" {
+		return serviceerror.NewInvalidArgument(fmt.Sprintf("%v cannot be empty", fieldName))
+	}
+
+	// Length of each field should be: (MaxIDLengthLimit - prefix and delimeter length) / 2
+	if len(field) > (c.partitionMgr.engine.config.MaxIDLengthLimit()-deployment.DeploymentWorkflowIDInitialSize)/2 {
+		return serviceerror.NewInvalidArgument(fmt.Sprintf("size of %v larger than the maximum allowed", fieldName))
+	}
+
+	// Invalid character check - Cannot contain the reserved delimeters ("|" or "?") since they are used for building deployment workflowID
+	if strings.Contains(field, deployment.DeploymentWorkflowIDDelimeter) {
+		return serviceerror.NewInvalidArgument(fmt.Sprintf("%v cannot contain reserved prefix %v", fieldName, deployment.DeploymentWorkflowIDDelimeter))
+	}
+	if strings.Contains(field, deployment.DeploymentBuildIdDelimeter) {
+		return serviceerror.NewInvalidArgument(fmt.Sprintf("%v cannot contain reserved prefix %v", fieldName, deployment.DeploymentBuildIdDelimeter))
+	}
+
+	// UTF-8 check
+	if err := common.ValidateUTF8String(fieldName, field); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (c *physicalTaskQueueManagerImpl) startAndUpdateDeploymentWorkflow(
+	ctx context.Context,
+	workflowArgs *deployspb.DeploymentWorkflowArgs,
+	updateArgs *deployspb.RegisterWorkerInDeploymentArgs,
+	deploymentName string,
+	buildID string,
+) (*historyservice.ExecuteMultiOperationResponse, error) {
+	// Adding namespace division as a SA
+	sa := &commonpb.SearchAttributes{}
+	searchattribute.AddSearchAttribute(&sa, searchattribute.TemporalNamespaceDivision, payload.EncodeString(deployment.DeploymentNamespaceDivision))
+
+	// validate params which are used for building workflowID's
+	err := c.validateDeploymentWfParams("DeploymentName", deploymentName)
+	if err != nil {
+		return nil, err
+	}
+	err = c.validateDeploymentWfParams("BuildID", buildID)
+	if err != nil {
+		return nil, err
+	}
+
+	deploymentWorkflowID := deployment.DeploymentWorkflowIDPrefix + deployment.DeploymentWorkflowIDDelimeter + deploymentName + deployment.DeploymentBuildIdDelimeter + buildID
+
+	// workflow input
+	workflowInputPayloads, err := sdk.PreferProtoDataConverter.ToPayloads(workflowArgs)
+	if err != nil {
+		return nil, err
+	}
+
+	// update input
+	updatePayload, err := sdk.PreferProtoDataConverter.ToPayloads(updateArgs)
+	if err != nil {
+		return nil, err
+	}
+
+	// Start workflow execution, if it hasn't already
+	startReq := &workflowservice.StartWorkflowExecutionRequest{
+		Namespace:                workflowArgs.NamespaceName,
+		WorkflowId:               deploymentWorkflowID,
+		WorkflowType:             &commonpb.WorkflowType{Name: deployment.DeploymentWorkflowType},
+		TaskQueue:                &taskqueuepb.TaskQueue{Name: primitives.PerNSWorkerTaskQueue},
+		Input:                    workflowInputPayloads,
+		WorkflowIdReusePolicy:    enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
+		WorkflowIdConflictPolicy: enumspb.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING,
+		SearchAttributes:         sa,
+	}
+
+	updateReq := &workflowservice.UpdateWorkflowExecutionRequest{
+		Namespace: workflowArgs.NamespaceName,
+		WorkflowExecution: &commonpb.WorkflowExecution{
+			WorkflowId: deploymentWorkflowID,
+		},
+		Request: &updatepb.Request{
+			Input: &updatepb.Input{Name: deployment.RegisterWorkerInDeployment, Args: updatePayload},
+		},
+		WaitPolicy: &updatepb.WaitPolicy{LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED},
+	}
+
+	// Experimenting with multi-operation
+	resp, err := c.partitionMgr.engine.historyClient.ExecuteMultiOperation(ctx, &historyservice.ExecuteMultiOperationRequest{
+		NamespaceId: workflowArgs.NamespaceId,
+		WorkflowId:  deploymentWorkflowID,
+		Operations: []*historyservice.ExecuteMultiOperationRequest_Operation{
+			{
+				Operation: &historyservice.ExecuteMultiOperationRequest_Operation_StartWorkflow{
+					StartWorkflow: &historyservice.StartWorkflowExecutionRequest{
+						NamespaceId:  workflowArgs.NamespaceId,
+						StartRequest: startReq,
+					},
+				},
+			},
+			{
+				Operation: &historyservice.ExecuteMultiOperationRequest_Operation_UpdateWorkflow{
+					UpdateWorkflow: &historyservice.UpdateWorkflowExecutionRequest{
+						NamespaceId: workflowArgs.NamespaceId,
+						Request:     updateReq,
+					},
+				},
+			},
+		},
+	})
+
+	if err != nil {
+		return nil, err
+	}
+
+	return resp, nil
+}
+
 // PollTask blocks waiting for a task.
 // Returns error when context deadline is exceeded
 // maxDispatchPerSecond is the max rate at which tasks are allowed
@@ -330,9 +459,37 @@ func (c *physicalTaskQueueManagerImpl) PollTask(
 	c.currentPolls.Add(1)
 	defer c.currentPolls.Add(-1)
 
-	namespaceEntry, err := c.namespaceRegistry.GetNamespaceByID(namespace.ID(c.queue.NamespaceId()))
+	namespaceId := namespace.ID(c.queue.NamespaceId())
+	namespaceEntry, err := c.namespaceRegistry.GetNamespaceByID(namespaceId)
 	if err != nil {
 		return nil, err
+	}
+
+	if c.partitionMgr.engine.config.EnableDeployments(namespaceEntry.Name().String()) && pollMetadata.workerVersionCapabilities.UseVersioning {
+		if !c.isDeploymentWorkflowStarted.Load() {
+
+			// update workflow input
+			updateArgs := &deployspb.RegisterWorkerInDeploymentArgs{
+				Name: c.queue.TaskQueueFamily().Name(),
+				TaskQueueInfo: &deployspb.DeploymentWorkflowArgs_TaskQueueFamilyInfo_TaskQueueInfo{
+					TaskQueueType:   enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+					FirstPollerTime: nil,
+				},
+			}
+
+			// start workflow input
+			workflowArgs := &deployspb.DeploymentWorkflowArgs{
+				NamespaceName:     namespaceEntry.Name().String(),
+				NamespaceId:       namespaceId.String(),
+				TaskQueueFamilies: nil,
+			}
+
+			// Start the deployment workflow
+			c.startAndUpdateDeploymentWorkflow(ctx, workflowArgs, updateArgs,
+				pollMetadata.workerVersionCapabilities.DeploymentName, pollMetadata.workerVersionCapabilities.BuildId)
+
+			c.isDeploymentWorkflowStarted.Store(true)
+		}
 	}
 
 	// the desired global rate limit for the task queue comes from the

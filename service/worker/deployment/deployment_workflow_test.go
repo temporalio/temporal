@@ -27,13 +27,8 @@ package deployment
 import (
 	"testing"
 
-	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/suite"
-	enumspb "go.temporal.io/api/enums/v1"
-	"go.temporal.io/api/serviceerror"
-	sdkclient "go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/testsuite"
-	deployspb "go.temporal.io/server/api/deployment/v1"
 	"go.uber.org/mock/gomock"
 )
 
@@ -42,12 +37,6 @@ type deploymentSuite struct {
 	testsuite.WorkflowTestSuite
 	controller *gomock.Controller
 	env        *testsuite.TestWorkflowEnvironment
-}
-
-type invalidWorkflowID struct {
-	testName      string
-	workflowID    string
-	expectedError error
 }
 
 func TestDeploymentSuite(t *testing.T) {
@@ -65,96 +54,6 @@ func (s *deploymentSuite) TearDownTest() {
 	s.env.AssertExpectations(s.T())
 }
 
-func (s *deploymentSuite) TestDeploymentWorkflow_InvalidWorkflowIDs() {
-
-	// Making a structure consisting of all the invalid workflowIDs for ease in testing
-	testCases := []invalidWorkflowID{
-		{
-			testName:      "missing colon delimeter",
-			workflowID:    "",
-			expectedError: serviceerror.NewInvalidArgument("invalid format for workflowID"),
-		},
-		{
-			testName:      "missing DeploymentName and BuildID",
-			workflowID:    DeploymentWorkflowIDPrefix,
-			expectedError: serviceerror.NewInvalidArgument("invalid format for workflowID"),
-		},
-		{
-			testName:      "missing DeploymentWorkflowPrefix",
-			workflowID:    "a-xyz",
-			expectedError: serviceerror.NewInvalidArgument("invalid format for workflowID"),
-		},
-	}
-
-	for _, test := range testCases {
-		// s.env.SetWorkflowID(test.workflowID)
-		s.env.SetStartWorkflowOptions(sdkclient.StartWorkflowOptions{
-			ID: test.workflowID,
-		})
-		s.env.ExecuteWorkflow(DeploymentWorkflow, &deployspb.DeploymentWorkflowArgs{
-			NamespaceName:     "default-NamespaceName",
-			NamespaceId:       "default-NamespaceID",
-			TaskQueueFamilies: nil,
-		})
-		err := s.env.GetWorkflowError()
-		s.ErrorContains(err, test.expectedError.Error())
-
-		// Creating a new test environment is required to run the deployment workflow again
-		s.env = s.WorkflowTestSuite.NewTestWorkflowEnvironment()
-		s.env.RegisterWorkflow(DeploymentWorkflow)
-	}
-}
-
-func (s *deploymentSuite) TestDeploymentWorkflow_AddDeploymentTaskQueue() {
-	updateDeploymentSignalInput := &deployspb.UpdateDeploymentSignalInput{
-		Name: "A",
-		TaskQueueInfo: &deployspb.DeploymentWorkflowArgs_TaskQueueFamilyInfo_TaskQueueInfo{
-			TaskQueueType:   enumspb.TASK_QUEUE_TYPE_WORKFLOW,
-			FirstPollerTime: nil,
-		},
-	}
-
-	expectedLocalState := map[string]*deployspb.DeploymentWorkflowArgs_TaskQueueFamilyInfo{
-		"A": {
-			TaskQueues: []*deployspb.DeploymentWorkflowArgs_TaskQueueFamilyInfo_TaskQueueInfo{
-				{
-					TaskQueueType:   enumspb.TASK_QUEUE_TYPE_WORKFLOW,
-					FirstPollerTime: nil,
-				},
-			},
-		},
-	}
-
-	workflowID := DeploymentWorkflowIDPrefix + "A-xyz"
-	s.env.SetStartWorkflowOptions(sdkclient.StartWorkflowOptions{
-		ID: workflowID,
-	})
-
-	// Mocking the activity call
-	s.env.OnActivity(new(DeploymentActivities).StartDeploymentNameWorkflow, mock.Anything, mock.Anything).Return(nil)
-
-	s.env.RegisterDelayedCallback(func() {
-		s.env.SignalWorkflow(UpdateDeploymentSignalName, updateDeploymentSignalInput)
-		s.env.SetContinueAsNewSuggested(true)
-	}, 0)
-
-	s.env.ExecuteWorkflow(DeploymentWorkflow, &deployspb.DeploymentWorkflowArgs{
-		NamespaceName:     "default-NamespaceName",
-		NamespaceId:       "default-NamespaceID",
-		TaskQueueFamilies: nil,
-	})
-
-	err := s.env.GetWorkflowError()
-	s.Error(err)
-	s.ErrorContains(err, "continue as new")
-	s.queryAndVerify(expectedLocalState)
-}
-
-func (s *deploymentSuite) queryAndVerify(expectedState map[string]*deployspb.DeploymentWorkflowArgs_TaskQueueFamilyInfo) {
-	result, err := s.env.QueryWorkflow("deploymentTaskQueues")
-	s.NoError(err)
-	var localState map[string]*deployspb.DeploymentWorkflowArgs_TaskQueueFamilyInfo
-	err = result.Get(&localState)
-	s.NoError(err)
-	s.Equal(expectedState, localState)
-}
+// func (s *deploymentSuite) TestDeploymentWorkflow_RegisterDeploymentTaskQueue() {
+// )
+// }

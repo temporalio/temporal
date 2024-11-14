@@ -32,7 +32,9 @@ import "google/protobuf/timestamp.proto";
 message DeploymentWorkflowArgs {
     string namespace_name = 1;
     string namespace_id = 2;
-    map<string, TaskQueueFamilyInfo> task_queue_families = 3;
+    string deployment_name = 3;
+    string build_id = 4;
+    map<string, TaskQueueFamilyInfo> task_queue_families = 5;
     
     message TaskQueueFamilyInfo {
         repeated TaskQueueInfo task_queues = 1;
@@ -50,7 +52,7 @@ message DeploymentNameWorkflowArgs {
     string default_build_id = 3;
 }
 
-message UpdateDeploymentSignalInput{
+message RegisterWorkerInDeploymentArgs{
     string name = 1;
     DeploymentWorkflowArgs.TaskQueueFamilyInfo.TaskQueueInfo task_queue_info = 2;
 }
