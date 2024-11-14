@@ -4927,7 +4927,7 @@ func (ms *MutableStateImpl) RetryActivity(
 }
 
 func (ms *MutableStateImpl) RecordLastActivityCompleteTime(ai *persistencespb.ActivityInfo) {
-	ms.UpdateActivityWithCallback(ai, func(info *persistencespb.ActivityInfo, _ MutableState) {
+	_ = ms.UpdateActivityWithCallback(ai, func(info *persistencespb.ActivityInfo, _ MutableState) {
 		ai.LastAttemptCompleteTime = timestamppb.New(ms.shard.GetTimeSource().Now().UTC())
 	})
 }
