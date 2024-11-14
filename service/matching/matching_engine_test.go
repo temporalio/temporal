@@ -233,7 +233,6 @@ func newMatchingEngine(
 		timeSource:                    clock.NewRealTimeSource(),
 		visibilityManager:             mockVisibilityManager,
 		nexusEndpointsOwnershipLostCh: make(chan struct{}),
-		dedupDeployments:              make(map[dedupDeploymentsKey]string),
 	}
 }
 

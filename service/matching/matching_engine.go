@@ -369,7 +369,6 @@ func (e *matchingEngineImpl) getTaskQueuePartitionManager(
 	create bool,
 	loadCause loadCause,
 ) (retPM taskQueuePartitionManager, retCreated bool, retErr error) {
-
 	defer func() {
 		if retErr != nil || retPM == nil {
 			return
