@@ -529,9 +529,6 @@ func CreateMatchingPollWorkflowTaskQueueResponse(historyResponse *historyservice
 }
 
 // CreateHistoryStartWorkflowRequest create a start workflow request for history.
-// Note: this mutates startRequest by unsetting the fields ContinuedFailure and
-// LastCompletionResult (these should only be set on workflows created by the scheduler
-// worker).
 // Assumes startRequest is valid. See frontend workflow_handler for detailed validation logic.
 func CreateHistoryStartWorkflowRequest(
 	namespaceID string,
@@ -540,6 +537,12 @@ func CreateHistoryStartWorkflowRequest(
 	rootExecutionInfo *workflowspb.RootExecutionInfo,
 	now time.Time,
 ) *historyservice.StartWorkflowExecutionRequest {
+	// We include the original startRequest in the forwarded request to History, but
+	// we don't want to send workflow payloads twice. We deep copy to a new struct,
+	// rather than mutate the request, to accommodate internal retries.
+	if startRequest.ContinuedFailure != nil || startRequest.LastCompletionResult != nil {
+		startRequest = CloneProto(startRequest)
+	}
 	histRequest := &historyservice.StartWorkflowExecutionRequest{
 		NamespaceId:              namespaceID,
 		StartRequest:             startRequest,

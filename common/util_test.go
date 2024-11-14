@@ -33,13 +33,15 @@ import (
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
 	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/api/failure/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
-	"google.golang.org/protobuf/testing/protopack"
-
+	"go.temporal.io/api/workflowservice/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/payloads"
+	"google.golang.org/protobuf/testing/protopack"
 )
 
 func TestIsContextDeadlineExceededErr(t *testing.T) {
@@ -418,4 +420,29 @@ func TestDiscardUnknownProto(t *testing.T) {
 	dataWithoutUnknown, err := msRecord.Marshal()
 	require.NoError(t, err)
 	require.Equal(t, data, dataWithoutUnknown)
+}
+
+// Tests that CreateHistoryStartWorkflowRequest doesn't mutate the request
+// parameter when creating a history request with payloads set.
+func TestCreateHistoryStartWorkflowRequestPayloads(t *testing.T) {
+	failurePayload := &failure.Failure{}
+	resultPayload := payloads.EncodeString("result")
+	startRequest := &workflowservice.StartWorkflowExecutionRequest{
+		Namespace:            uuid.New(),
+		WorkflowId:           uuid.New(),
+		ContinuedFailure:     failurePayload,
+		LastCompletionResult: resultPayload,
+	}
+	startRequestClone := CloneProto(startRequest)
+
+	histRequest := CreateHistoryStartWorkflowRequest(startRequest.Namespace, startRequest, nil, nil, time.Now())
+
+	// ensure we aren't copying the payloads into the history request twice
+	require.Equal(t, failurePayload, histRequest.ContinuedFailure)
+	require.Equal(t, resultPayload, histRequest.LastCompletionResult)
+	require.Nil(t, histRequest.StartRequest.ContinuedFailure)
+	require.Nil(t, histRequest.StartRequest.LastCompletionResult)
+
+	// ensure the original request object is unmodified
+	require.Equal(t, startRequestClone, startRequest)
 }
