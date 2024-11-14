@@ -46,6 +46,7 @@ const (
 // Driver implements a SQL driver that returns a custom connection.
 // The custom connection provides ResetSession() and IsValid() methods,
 // preventing the SQL library from closing the connection when a transaction context is canceled.
+// TODO prathyushpv: Remove this if connection in modernc.org/sqlite implement ResetSession() and IsValid() methods.
 type Driver struct {
 	sqlite.Driver
 }
@@ -66,7 +67,9 @@ type conn struct {
 	driver.Conn
 }
 
-// ResetSession does nothing.
+// ResetSession does nothing. If the connection is not valid for some reason, we must have lost the database already.
+// And there is nothing we can do to create a new connection. Because of this it is safe to return valid in all cases.
+// We can let the next database operation fail if connection is not valid.
 func (c *conn) ResetSession(ctx context.Context) error {
 	return nil
 }
