@@ -1,4 +1,4 @@
-orkflow.PauseActivit// The MIT License
+// The MIT License
 //
 // Copyright (c) 2024 Temporal Technologies Inc.  All rights reserved.
 //
