@@ -43,8 +43,8 @@ const (
 	sqlTableExistsPattern = "SQL logic error: table .* already exists \\(1\\)"
 )
 
-// Driver implements a sql driver that return a custom connection conn. conn implements ResetSession() and IsValid()
-// so that the sql library does not close the connection when a transaction context times out.
+// Driver implements a sql driver that return a custom connection which implements ResetSession() and IsValid().
+// In which case sql library will not close the connection when a transaction context times out.
 type Driver struct {
 	sqlite.Driver
 }
