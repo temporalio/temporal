@@ -6766,7 +6766,7 @@ func (ms *MutableStateImpl) GetVersioningBehavior() enumspb.VersioningBehavior {
 // the redirect will be rejected unless it's initiated by an override. Returns true if the requested
 // redirect is started. Starting a new redirect replaces possible existing redirect without
 // rescheduling activities.
-// TODO: validate source deployment
+// TODO (shahab): validate source deployment
 func (ms *MutableStateImpl) StartDeploymentRedirect(
 	deployment *commonpb.WorkerDeployment,
 	behaviorOverride enumspb.VersioningBehavior,
@@ -6796,8 +6796,8 @@ func (ms *MutableStateImpl) StartDeploymentRedirect(
 		BehaviorOverride: behaviorOverride,
 	}
 
-	// TODO: fail the existing wf task if it is started already
-	// TODO: reschedule the existing wf task if it is not yet started so it goes to the right queue
+	// TODO (shahab): fail the existing wf task if it is started already
+	// TODO (shahab): reschedule or fail the existing wf task if it is not yet started
 
 	// Because deployment is changed, we clear sticky queue to make sure the next wf task does not
 	// go to the old deployment.

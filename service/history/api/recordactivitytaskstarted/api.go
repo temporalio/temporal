@@ -114,7 +114,7 @@ func Invoke(
 			}
 
 			deployment := worker_versioning.DeploymentFromCapabilities(request.PollRequest.WorkerVersionCapabilities)
-			// TODO: support independent deployments
+			// TODO (shahab): support independent deployments
 			activityInitiatedRedirect := mutableState.StartDeploymentRedirect(deployment, enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED)
 
 			if mutableState.GetRedirectInfo() != nil {
@@ -175,7 +175,7 @@ func Invoke(
 	}
 
 	if dropTask {
-		// TODO: Log that the activity is dropped. Maybe on Matching side.
+		// TODO (shahab): Log that the activity is dropped. Maybe on Matching side.
 		return nil, serviceerrors.NewObsoleteDispatchBuildId("cannot start activity during a redirect. Activity will be rescheduled when redirect completes")
 	}
 	return response, err
