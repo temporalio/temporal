@@ -202,10 +202,12 @@ type (
 		transitionHistoryEnabled bool
 		// following fields are for tracking if sub state machines are updated
 		// in a transaction. They are similar to field like updateActivityInfos
-		visibilityUpdated     bool
-		executionStateUpdated bool
-		workflowTaskUpdated   bool
-		updateInfoUpdated     map[string]struct{}
+		visibilityUpdated                  bool
+		executionStateUpdated              bool
+		workflowTaskUpdated                bool
+		updateInfoUpdated                  map[string]struct{}
+		updateActivityInfosUserDataUpdated map[int64]struct{}
+		updateTimerInfosUserDataUpdated    map[string]struct{}
 
 		InsertTasks map[tasks.Category][]tasks.Task
 
@@ -281,21 +283,23 @@ func NewMutableState(
 		pendingSignalRequestedIDs: make(map[string]struct{}),
 		deleteSignalRequestedIDs:  make(map[string]struct{}),
 
-		approximateSize:          0,
-		totalTombstones:          0,
-		currentVersion:           namespaceEntry.FailoverVersion(),
-		bufferEventsInDB:         nil,
-		stateInDB:                enumsspb.WORKFLOW_EXECUTION_STATE_VOID,
-		nextEventIDInDB:          common.FirstEventID,
-		dbRecordVersion:          1,
-		namespaceEntry:           namespaceEntry,
-		appliedEvents:            make(map[string]struct{}),
-		InsertTasks:              make(map[tasks.Category][]tasks.Task),
-		transitionHistoryEnabled: shard.GetConfig().EnableTransitionHistory(),
-		visibilityUpdated:        false,
-		executionStateUpdated:    false,
-		workflowTaskUpdated:      false,
-		updateInfoUpdated:        make(map[string]struct{}),
+		approximateSize:                    0,
+		totalTombstones:                    0,
+		currentVersion:                     namespaceEntry.FailoverVersion(),
+		bufferEventsInDB:                   nil,
+		stateInDB:                          enumsspb.WORKFLOW_EXECUTION_STATE_VOID,
+		nextEventIDInDB:                    common.FirstEventID,
+		dbRecordVersion:                    1,
+		namespaceEntry:                     namespaceEntry,
+		appliedEvents:                      make(map[string]struct{}),
+		InsertTasks:                        make(map[tasks.Category][]tasks.Task),
+		transitionHistoryEnabled:           shard.GetConfig().EnableTransitionHistory(),
+		visibilityUpdated:                  false,
+		executionStateUpdated:              false,
+		workflowTaskUpdated:                false,
+		updateInfoUpdated:                  make(map[string]struct{}),
+		updateTimerInfosUserDataUpdated:    make(map[string]struct{}),
+		updateActivityInfosUserDataUpdated: map[int64]struct{}{},
 
 		QueryRegistry: NewQueryRegistry(),
 
@@ -1597,7 +1601,7 @@ func (ms *MutableStateImpl) UpdateActivityProgress(
 	ai.LastHeartbeatDetails = request.Details
 	now := ms.timeSource.Now()
 	ai.LastHeartbeatUpdateTime = timestamppb.New(now)
-	ms.updateActivityInfos[ai.ScheduledEventId] = ai
+	ms.insertUpdateActivityInfo(ai, true)
 	ms.approximateSize += ai.Size()
 	ms.syncActivityTasks[ai.ScheduledEventId] = struct{}{}
 }
@@ -1641,7 +1645,7 @@ func (ms *MutableStateImpl) UpdateActivityInfo(
 	ai.LastAttemptCompleteTime = incomingActivityInfo.GetLastAttemptCompleteTime()
 	ai.Stamp = incomingActivityInfo.GetStamp()
 
-	ms.updateActivityInfos[ai.ScheduledEventId] = ai
+	ms.insertUpdateActivityInfo(ai, true)
 	ms.approximateSize += ai.Size()
 
 	err := ms.applyActivityBuildIdRedirect(ai, incomingActivityInfo.GetLastStartedBuildId(), incomingActivityInfo.GetLastStartedRedirectCounter())
@@ -1662,8 +1666,25 @@ func (ms *MutableStateImpl) UpdateActivity(
 	}
 
 	ms.pendingActivityInfoIDs[ai.ScheduledEventId] = ai
-	ms.updateActivityInfos[ai.ScheduledEventId] = ai
+	ms.insertUpdateActivityInfo(ai, true)
 	ms.approximateSize += ai.Size() - prev.Size()
+	return nil
+}
+func (ms *MutableStateImpl) UpdateActivityTimerTaskStatus(
+	scheduleEventID int64,
+	status int32,
+) error {
+	ai, ok := ms.pendingActivityInfoIDs[scheduleEventID]
+	if !ok {
+		ms.logError(
+			fmt.Sprintf("unable to find activity event ID: %v in mutable state", scheduleEventID),
+			tag.ErrorTypeInvalidMutableStateAction,
+		)
+		return ErrMissingActivityInfo
+	}
+
+	ai.TimerTaskStatus = status
+	ms.insertUpdateActivityInfo(ai, false)
 	return nil
 }
 
@@ -1710,6 +1731,7 @@ func (ms *MutableStateImpl) DeleteActivity(
 	}
 
 	delete(ms.updateActivityInfos, scheduledEventID)
+	delete(ms.updateActivityInfosUserDataUpdated, scheduledEventID)
 	delete(ms.syncActivityTasks, scheduledEventID)
 	ms.deleteActivityInfos[scheduledEventID] = struct{}{}
 	return nil
@@ -1756,7 +1778,20 @@ func (ms *MutableStateImpl) UpdateUserTimer(
 	}
 
 	ms.pendingTimerInfoIDs[ti.TimerId] = ti
-	ms.updateTimerInfos[ti.TimerId] = ti
+	ms.insertUpdateTimerInfo(ti, true)
+	return nil
+}
+func (ms *MutableStateImpl) UpdateUserTimerTaskStatus(timerID string, status int64) error {
+	timerInfo, ok := ms.pendingTimerInfoIDs[timerID]
+	if !ok {
+		ms.logError(
+			fmt.Sprintf("unable to find timer ID: %v in mutable state", timerID),
+			tag.ErrorTypeInvalidMutableStateAction,
+		)
+		return ErrMissingTimerInfo
+	}
+	timerInfo.TaskStatus = status
+	ms.insertUpdateTimerInfo(timerInfo, false)
 	return nil
 }
 
@@ -1788,6 +1823,7 @@ func (ms *MutableStateImpl) DeleteUserTimer(
 	}
 
 	delete(ms.updateTimerInfos, timerID)
+	delete(ms.updateTimerInfosUserDataUpdated, timerID)
 	ms.deleteTimerInfos[timerID] = struct{}{}
 	return nil
 }
@@ -2931,7 +2967,7 @@ func (ms *MutableStateImpl) ApplyActivityTaskScheduledEvent(
 
 	ms.pendingActivityInfoIDs[ai.ScheduledEventId] = ai
 	ms.pendingActivityIDToEventID[ai.ActivityId] = ai.ScheduledEventId
-	ms.updateActivityInfos[ai.ScheduledEventId] = ai
+	ms.insertUpdateActivityInfo(ai, true)
 	ms.approximateSize += ai.Size() + int64SizeBytes
 	ms.executionInfo.ActivityCount++
 
@@ -3068,7 +3104,7 @@ func (ms *MutableStateImpl) ApplyActivityTaskStartedEvent(
 	ai.StartedEventId = event.GetEventId()
 	ai.RequestId = attributes.GetRequestId()
 	ai.StartedTime = event.GetEventTime()
-	ms.updateActivityInfos[ai.ScheduledEventId] = ai
+	ms.insertUpdateActivityInfo(ai, true)
 	ms.approximateSize += ai.Size()
 
 	err := ms.applyActivityBuildIdRedirect(ai, worker_versioning.BuildIdIfUsingVersioning(attributes.GetWorkerVersion()), attributes.GetBuildIdRedirectCounter())
@@ -3310,7 +3346,7 @@ func (ms *MutableStateImpl) ApplyActivityTaskCancelRequestedEvent(
 	ai.CancelRequested = true
 
 	ai.CancelRequestId = event.GetEventId()
-	ms.updateActivityInfos[ai.ScheduledEventId] = ai
+	ms.insertUpdateActivityInfo(ai, true)
 	ms.approximateSize += ai.Size()
 	return nil
 }
@@ -3956,7 +3992,7 @@ func (ms *MutableStateImpl) ApplyTimerStartedEvent(
 
 	ms.pendingTimerInfoIDs[ti.TimerId] = ti
 	ms.pendingTimerEventIDToID[ti.StartedEventId] = ti.TimerId
-	ms.updateTimerInfos[ti.TimerId] = ti
+	ms.insertUpdateTimerInfo(ti, true)
 	ms.approximateSize += ti.Size() + len(ti.TimerId)
 	ms.executionInfo.UserTimerCount++
 
@@ -4978,7 +5014,7 @@ func (ms *MutableStateImpl) updateActivity(ai *persistencespb.ActivityInfo, upda
 	updateCallback(ai, ms)
 
 	ms.approximateSize += ai.Size() - originalSize
-	ms.updateActivityInfos[ai.ScheduledEventId] = ai
+	ms.insertUpdateActivityInfo(ai, true)
 	ms.syncActivityTasks[ai.ScheduledEventId] = struct{}{}
 }
 
@@ -5136,9 +5172,9 @@ func (ms *MutableStateImpl) isStateDirty() bool {
 	// TODO: we need to track more workflow state changes
 	// e.g. changes to executionInfo.CancelRequested
 	return ms.hBuilder.IsDirty() ||
-		len(ms.updateActivityInfos) > 0 ||
+		len(ms.updateActivityInfosUserDataUpdated) > 0 ||
 		len(ms.deleteActivityInfos) > 0 ||
-		len(ms.updateTimerInfos) > 0 ||
+		len(ms.updateTimerInfosUserDataUpdated) > 0 ||
 		len(ms.deleteTimerInfos) > 0 ||
 		len(ms.updateChildExecutionInfos) > 0 ||
 		len(ms.deleteChildExecutionInfos) > 0 ||
@@ -5825,6 +5861,8 @@ func (ms *MutableStateImpl) cleanupTransaction() error {
 	ms.executionStateUpdated = false
 	ms.workflowTaskUpdated = false
 	ms.updateInfoUpdated = make(map[string]struct{})
+	ms.updateTimerInfosUserDataUpdated = make(map[string]struct{})
+	ms.updateActivityInfosUserDataUpdated = make(map[int64]struct{})
 
 	ms.stateInDB = ms.executionState.State
 	ms.nextEventIDInDB = ms.GetNextEventID()
@@ -6014,7 +6052,7 @@ func (ms *MutableStateImpl) updatePendingEventIDs(
 	for scheduledEventID, startedEventID := range scheduledIDToStartedID {
 		if activityInfo, ok := ms.GetActivityInfo(scheduledEventID); ok {
 			activityInfo.StartedEventId = startedEventID
-			ms.updateActivityInfos[activityInfo.ScheduledEventId] = activityInfo
+			ms.insertUpdateActivityInfo(activityInfo, true)
 			continue
 		}
 		if childInfo, ok := ms.GetChildExecutionInfo(scheduledEventID); ok {
@@ -6986,5 +7024,19 @@ func (ms *MutableStateImpl) InitTransitionHistory() {
 func (ms *MutableStateImpl) initVersionedTransitionInDB() {
 	if len(ms.executionInfo.TransitionHistory) != 0 {
 		ms.versionedTransitionInDB = ms.executionInfo.TransitionHistory[len(ms.executionInfo.TransitionHistory)-1]
+	}
+}
+
+func (ms *MutableStateImpl) insertUpdateActivityInfo(activityInfo *persistencespb.ActivityInfo, isUserDataUpdated bool) {
+	ms.updateActivityInfos[activityInfo.ScheduledEventId] = activityInfo
+	if isUserDataUpdated {
+		ms.updateActivityInfosUserDataUpdated[activityInfo.ScheduledEventId] = struct{}{}
+	}
+}
+
+func (ms *MutableStateImpl) insertUpdateTimerInfo(timerInfo *persistencespb.TimerInfo, isUserDataUpdated bool) {
+	ms.updateTimerInfos[timerInfo.TimerId] = timerInfo
+	if isUserDataUpdated {
+		ms.updateTimerInfosUserDataUpdated[timerInfo.TimerId] = struct{}{}
 	}
 }

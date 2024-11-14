@@ -3107,6 +3107,20 @@ func (mr *MockMutableStateMockRecorder) UpdateActivityProgress(ai, request any) 
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateActivityProgress", reflect.TypeOf((*MockMutableState)(nil).UpdateActivityProgress), ai, request)
 }
 
+// UpdateActivityTimerTaskStatus mocks base method.
+func (m *MockMutableState) UpdateActivityTimerTaskStatus(activityId int64, status int32) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdateActivityTimerTaskStatus", activityId, status)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// UpdateActivityTimerTaskStatus indicates an expected call of UpdateActivityTimerTaskStatus.
+func (mr *MockMutableStateMockRecorder) UpdateActivityTimerTaskStatus(activityId, status any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateActivityTimerTaskStatus", reflect.TypeOf((*MockMutableState)(nil).UpdateActivityTimerTaskStatus), activityId, status)
+}
+
 // UpdateActivityWithTimerHeartbeat mocks base method.
 func (m *MockMutableState) UpdateActivityWithTimerHeartbeat(arg0 *persistence.ActivityInfo, arg1 time.Time) error {
 	m.ctrl.T.Helper()
@@ -3185,6 +3199,20 @@ func (m *MockMutableState) UpdateUserTimer(arg0 *persistence.TimerInfo) error {
 func (mr *MockMutableStateMockRecorder) UpdateUserTimer(arg0 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateUserTimer", reflect.TypeOf((*MockMutableState)(nil).UpdateUserTimer), arg0)
+}
+
+// UpdateUserTimerTaskStatus mocks base method.
+func (m *MockMutableState) UpdateUserTimerTaskStatus(timerId string, status int64) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdateUserTimerTaskStatus", timerId, status)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// UpdateUserTimerTaskStatus indicates an expected call of UpdateUserTimerTaskStatus.
+func (mr *MockMutableStateMockRecorder) UpdateUserTimerTaskStatus(timerId, status any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateUserTimerTaskStatus", reflect.TypeOf((*MockMutableState)(nil).UpdateUserTimerTaskStatus), timerId, status)
 }
 
 // UpdateWorkflowStateStatus mocks base method.

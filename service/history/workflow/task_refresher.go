@@ -450,12 +450,12 @@ func (r *TaskRefresherImpl) refreshTasksForTimer(
 		}
 
 		// clear timer task mask for later timer task re-generation
-		timerInfo.TaskStatus = TimerTaskStatusNone
 		refreshUserTimerTask = true
 
 		// need to update user timer task mask for which task is generated
-		if err := mutableState.UpdateUserTimer(
-			timerInfo,
+		if err := mutableState.UpdateUserTimerTaskStatus(
+			timerInfo.TimerId,
+			TimerTaskStatusNone,
 		); err != nil {
 			return err
 		}
