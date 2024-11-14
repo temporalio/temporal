@@ -113,10 +113,10 @@ func (d *DeploymentWorkflowRunner) run() error {
 		return err
 	}
 
-	// Listen to signals in a different go-routine to make business logic clearer.
+	// Listen to signals in a different go-routine to make business logic clearer
 	workflow.Go(d.ctx, a.ListenToSignals)
 
-	// Setting an update handler for updating deployment task-queues.
+	// Setting an update handler for updating deployment task-queues
 	if err := workflow.SetUpdateHandler(
 		d.ctx,
 		RegisterWorkerInDeployment,
@@ -129,11 +129,11 @@ func (d *DeploymentWorkflowRunner) run() error {
 				d.DeploymentLocalState.TaskQueueFamilies = make(map[string]*deployspb.DeploymentWorkflowArgs_TaskQueueFamilyInfo)
 				d.DeploymentLocalState.TaskQueueFamilies[updateInput.Name] = &deployspb.DeploymentWorkflowArgs_TaskQueueFamilyInfo{}
 			}
-			// Add the task queue to the local state.
+			// Add the task queue to the local state
 			d.DeploymentLocalState.TaskQueueFamilies[updateInput.Name].TaskQueues =
 				append(d.DeploymentLocalState.TaskQueueFamilies[updateInput.Name].TaskQueues, updateInput.TaskQueueInfo)
 
-			// Call activity which starts "DeploymentName" workflow.
+			// Call activity which starts "DeploymentName" workflow
 
 			return nil
 		},

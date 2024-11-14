@@ -361,24 +361,22 @@ func (c *physicalTaskQueueManagerImpl) startAndUpdateDeploymentWorkflow(
 	ctx context.Context,
 	workflowArgs *deployspb.DeploymentWorkflowArgs,
 	updateArgs *deployspb.RegisterWorkerInDeploymentArgs,
-	deploymentName string,
-	buildID string,
 ) (*historyservice.ExecuteMultiOperationResponse, error) {
 	// Adding namespace division as a SA
 	sa := &commonpb.SearchAttributes{}
 	searchattribute.AddSearchAttribute(&sa, searchattribute.TemporalNamespaceDivision, payload.EncodeString(deployment.DeploymentNamespaceDivision))
 
 	// validate params which are used for building workflowID's
-	err := c.validateDeploymentWfParams("DeploymentName", deploymentName)
+	err := c.validateDeploymentWfParams("DeploymentName", workflowArgs.DeploymentName)
 	if err != nil {
 		return nil, err
 	}
-	err = c.validateDeploymentWfParams("BuildID", buildID)
+	err = c.validateDeploymentWfParams("BuildID", workflowArgs.BuildId)
 	if err != nil {
 		return nil, err
 	}
 
-	deploymentWorkflowID := deployment.DeploymentWorkflowIDPrefix + deployment.DeploymentWorkflowIDDelimeter + deploymentName + deployment.DeploymentBuildIdDelimeter + buildID
+	deploymentWorkflowID := deployment.DeploymentWorkflowIDPrefix + deployment.DeploymentWorkflowIDDelimeter + workflowArgs.DeploymentName + deployment.DeploymentBuildIdDelimeter + workflowArgs.BuildId
 
 	// workflow input
 	workflowInputPayloads, err := sdk.PreferProtoDataConverter.ToPayloads(workflowArgs)
@@ -481,12 +479,13 @@ func (c *physicalTaskQueueManagerImpl) PollTask(
 			workflowArgs := &deployspb.DeploymentWorkflowArgs{
 				NamespaceName:     namespaceEntry.Name().String(),
 				NamespaceId:       namespaceId.String(),
+				DeploymentName:    pollMetadata.workerVersionCapabilities.DeploymentName,
+				BuildId:           pollMetadata.workerVersionCapabilities.BuildId,
 				TaskQueueFamilies: nil,
 			}
 
 			// Start the deployment workflow
-			c.startAndUpdateDeploymentWorkflow(ctx, workflowArgs, updateArgs,
-				pollMetadata.workerVersionCapabilities.DeploymentName, pollMetadata.workerVersionCapabilities.BuildId)
+			c.startAndUpdateDeploymentWorkflow(ctx, workflowArgs, updateArgs)
 
 			c.isDeploymentWorkflowStarted.Store(true)
 		}
