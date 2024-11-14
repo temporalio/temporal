@@ -39,7 +39,7 @@ type (
 	WeightedChannel[T Task] struct {
 		weight         int
 		channel        chan T
-		lastActiveTime time.Time
+		lastActiveTime atomic.Value // time.Time
 		refCount       atomic.Int32
 	}
 )
@@ -49,11 +49,12 @@ func NewWeightedChannel[T Task](
 	size int,
 	now time.Time,
 ) *WeightedChannel[T] {
-	return &WeightedChannel[T]{
-		weight:         weight,
-		channel:        make(chan T, size),
-		lastActiveTime: now,
+	c := &WeightedChannel[T]{
+		weight:  weight,
+		channel: make(chan T, size),
 	}
+	c.UpdateLastActiveTime(now)
+	return c
 }
 
 func (c *WeightedChannel[T]) Chan() chan T {
@@ -69,11 +70,11 @@ func (c *WeightedChannel[T]) SetWeight(newWeight int) {
 }
 
 func (c *WeightedChannel[T]) LastActiveTime() time.Time {
-	return c.lastActiveTime
+	return c.lastActiveTime.Load().(time.Time) // nolint:revive
 }
 
 func (c *WeightedChannel[T]) UpdateLastActiveTime(now time.Time) {
-	c.lastActiveTime = now
+	c.lastActiveTime.Store(now)
 }
 
 func (c *WeightedChannel[T]) IncrementRefCount() {
