@@ -188,8 +188,7 @@ func (policy *SelectedAPIsForwardingRedirectionPolicy) getTargetClusterAndIsName
 	}
 
 	if len(namespaceEntry.ClusterNames()) == 1 {
-		// do not do dc redirection if namespace is only targeting at 1 dc (effectively local namespace)
-		return policy.currentClusterName, false
+		return namespaceEntry.ActiveClusterName(), true
 	}
 
 	if !policy.enabledForNS(namespaceEntry.Name().String()) {

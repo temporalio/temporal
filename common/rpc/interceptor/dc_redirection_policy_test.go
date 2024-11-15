@@ -269,6 +269,48 @@ func (s *selectedAPIsForwardingRedirectionPolicySuite) TestGetTargetDataCenter_G
 	s.Equal(2*len(selectedAPIsForwardingRedirectionPolicyWhitelistedAPIs), callCount)
 }
 
+func (s *selectedAPIsForwardingRedirectionPolicySuite) TestGetTargetDataCenter_GlobalNamespace_OneCluster_Forwarding_CurrentCluster() {
+	s.setupGlobalNamespaceWithOneCluster(true)
+
+	callCount := 0
+	callFn := func(targetCluster string) error {
+		callCount++
+		s.Equal(s.currentClusterName, targetCluster)
+		return nil
+	}
+
+	for apiName := range selectedAPIsForwardingRedirectionPolicyWhitelistedAPIs {
+		err := s.policy.WithNamespaceIDRedirect(context.Background(), s.namespaceID, apiName, callFn)
+		s.Nil(err)
+
+		err = s.policy.WithNamespaceRedirect(context.Background(), s.namespace, apiName, callFn)
+		s.Nil(err)
+	}
+
+	s.Equal(2*len(selectedAPIsForwardingRedirectionPolicyWhitelistedAPIs), callCount)
+}
+
+func (s *selectedAPIsForwardingRedirectionPolicySuite) TestGetTargetDataCenter_GlobalNamespace__OneCluster_Forwarding_AlternativeCluster() {
+	s.setupGlobalNamespaceWithOneCluster(false)
+
+	callCount := 0
+	callFn := func(targetCluster string) error {
+		callCount++
+		s.Equal(s.alternativeClusterName, targetCluster)
+		return nil
+	}
+
+	for apiName := range selectedAPIsForwardingRedirectionPolicyWhitelistedAPIs {
+		err := s.policy.WithNamespaceIDRedirect(context.Background(), s.namespaceID, apiName, callFn)
+		s.Nil(err)
+
+		err = s.policy.WithNamespaceRedirect(context.Background(), s.namespace, apiName, callFn)
+		s.Nil(err)
+	}
+
+	s.Equal(2*len(selectedAPIsForwardingRedirectionPolicyWhitelistedAPIs), callCount)
+}
+
 func (s *selectedAPIsForwardingRedirectionPolicySuite) TestGetTargetDataCenter_GlobalNamespace_Forwarding_CurrentClusterToAlternativeCluster() {
 	s.setupGlobalNamespaceWithTwoReplicationCluster(true, true)
 
@@ -409,4 +451,25 @@ func (s *selectedAPIsForwardingRedirectionPolicySuite) setupGlobalNamespaceWithT
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(s.namespaceID).Return(namespaceEntry, nil).AnyTimes()
 	s.mockNamespaceCache.EXPECT().GetNamespace(s.namespace).Return(namespaceEntry, nil).AnyTimes()
 	s.forwardingEnabled = dynamicconfig.GetBoolPropertyFnFilteredByNamespace(forwardingEnabled)
+}
+
+func (s *selectedAPIsForwardingRedirectionPolicySuite) setupGlobalNamespaceWithOneCluster(isRecordActive bool) {
+	activeCluster := s.alternativeClusterName
+	if isRecordActive {
+		activeCluster = s.currentClusterName
+	}
+	namespaceEntry := namespace.NewGlobalNamespaceForTest(
+		&persistencespb.NamespaceInfo{Id: s.namespaceID.String(), Name: s.namespace.String()},
+		&persistencespb.NamespaceConfig{Retention: timestamp.DurationFromDays(1)},
+		&persistencespb.NamespaceReplicationConfig{
+			ActiveClusterName: activeCluster,
+			Clusters: []string{
+				activeCluster,
+			},
+		},
+		1234, // not used
+	)
+
+	s.mockNamespaceCache.EXPECT().GetNamespaceByID(s.namespaceID).Return(namespaceEntry, nil).AnyTimes()
+	s.mockNamespaceCache.EXPECT().GetNamespace(s.namespace).Return(namespaceEntry, nil).AnyTimes()
 }
