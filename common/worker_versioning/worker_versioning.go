@@ -128,6 +128,35 @@ func BuildIdIfUsingVersioning(stamp *commonpb.WorkerVersionStamp) string {
 	return ""
 }
 
+// DeploymentFromStamp returns the deployment if it is using versioning V3, otherwise nil.
+func DeploymentFromStamp(stamp *commonpb.WorkerVersionStamp) *commonpb.WorkerDeployment {
+	if stamp.GetUseVersioning() && stamp.GetDeploymentName() != "" && stamp.GetBuildId() != "" {
+		return &commonpb.WorkerDeployment{
+			DeploymentName: stamp.GetDeploymentName(),
+			BuildId:        stamp.GetBuildId(),
+		}
+	}
+	return (*commonpb.WorkerDeployment)(nil)
+}
+
+// DeploymentFromCapabilities returns the deployment if it is using versioning V3, otherwise nil.
+func DeploymentFromCapabilities(capabilities *commonpb.WorkerVersionCapabilities) *commonpb.WorkerDeployment {
+	if capabilities.GetUseVersioning() && capabilities.GetDeploymentName() != "" && capabilities.GetBuildId() != "" {
+		return &commonpb.WorkerDeployment{
+			DeploymentName: capabilities.GetDeploymentName(),
+			BuildId:        capabilities.GetBuildId(),
+		}
+	}
+	return (*commonpb.WorkerDeployment)(nil)
+}
+
+func DeploymentToString(deployment *commonpb.WorkerDeployment) string {
+	if deployment == nil {
+		return "UNVERSIONED"
+	}
+	return deployment.DeploymentName + ":" + deployment.GetBuildId()
+}
+
 // MakeDirectiveForWorkflowTask returns a versioning directive based on the following parameters:
 // - inheritedBuildId: build ID inherited from a past/previous wf execution (for Child WF or CaN)
 // - assignedBuildId: the build ID to which the WF is currently assigned (i.e. mutable state's AssginedBuildId)
@@ -166,6 +195,10 @@ func StampFromCapabilities(cap *commonpb.WorkerVersionCapabilities) *commonpb.Wo
 	return nil
 }
 
-func StampForBuildId(buildId string) *commonpb.WorkerVersionStamp {
+func StampFromBuildId(buildId string) *commonpb.WorkerVersionStamp {
 	return &commonpb.WorkerVersionStamp{UseVersioning: true, BuildId: buildId}
+}
+
+func StampFromDeployment(deployment *commonpb.WorkerDeployment) *commonpb.WorkerVersionStamp {
+	return &commonpb.WorkerVersionStamp{UseVersioning: true, BuildId: deployment.BuildId, DeploymentName: deployment.DeploymentName}
 }

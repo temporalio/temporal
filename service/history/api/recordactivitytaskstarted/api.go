@@ -54,6 +54,7 @@ func Invoke(
 	namespace := namespaceEntry.Name()
 
 	response := &historyservice.RecordActivityTaskStartedResponse{}
+	var dropTask bool
 	err = api.GetAndUpdateWorkflowWithNew(
 		ctx,
 		request.Clock,
@@ -112,10 +113,29 @@ func Invoke(
 				return nil, serviceerrors.NewTaskAlreadyStarted("Activity")
 			}
 
+			deployment := worker_versioning.DeploymentFromCapabilities(request.PollRequest.WorkerVersionCapabilities)
+			// TODO (shahab): support independent deployments
+			activityInitiatedRedirect := mutableState.StartDeploymentRedirect(deployment, enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED)
+
+			if mutableState.GetRedirectInfo() != nil {
+				// Can't start activity during a redirect. We reject this request so Matching drops
+				// the task. The activity will be rescheduled when the redirect completes/fails.
+
+				// Not returning error so the mutable state is updated. Just setting this flag to
+				// return error at a higher level.
+				dropTask = true
+				return &api.UpdateWorkflowAction{
+					Noop: false,
+					// If the redirect was initiated by this activity we must create a workflow task
+					// to ensure the workflow won't be stuck.
+					CreateWorkflowTask: activityInitiatedRedirect,
+				}, nil
+			}
+
 			versioningStamp := worker_versioning.StampFromCapabilities(request.PollRequest.WorkerVersionCapabilities)
 			if _, err := mutableState.AddActivityTaskStartedEvent(
 				ai, scheduledEventID, requestID, request.PollRequest.GetIdentity(),
-				versioningStamp, request.GetBuildIdRedirectInfo(),
+				versioningStamp, deployment, request.GetBuildIdRedirectInfo(),
 			); err != nil {
 				return nil, err
 			}
@@ -154,5 +174,9 @@ func Invoke(
 		return nil, err
 	}
 
+	if dropTask {
+		// TODO (shahab): Log that the activity is dropped. Maybe on Matching side.
+		return nil, serviceerrors.NewObsoleteDispatchBuildId("cannot start activity during a redirect. Activity will be rescheduled when redirect completes")
+	}
 	return response, err
 }
