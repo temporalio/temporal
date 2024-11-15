@@ -517,7 +517,7 @@ func (t *timerQueueActiveTaskExecutor) executeActivityRetryTimerTask(
 	if task.Stamp != activityInfo.Stamp || activityInfo.Paused {
 		// if retry task event is from an old stamp of if activity is paused we should ignore the event.
 		release(nil) // release(nil) so mutable state is not unloaded from cache
-		return nil
+		return consts.ErrActivityTaskNotFound
 	}
 
 	if task.Attempt < activityInfo.Attempt || activityInfo.StartedEventId != common.EmptyEventID {

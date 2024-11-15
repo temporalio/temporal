@@ -4927,7 +4927,7 @@ func (ms *MutableStateImpl) RetryActivity(
 }
 
 func (ms *MutableStateImpl) RecordLastActivityCompleteTime(ai *persistencespb.ActivityInfo) {
-	_ = ms.UpdateActivityWithCallback(ai, func(info *persistencespb.ActivityInfo, _ MutableState) {
+	_ = ms.UpdateActivityWithCallback(ai.ActivityId, func(info *persistencespb.ActivityInfo, _ MutableState) {
 		ai.LastAttemptCompleteTime = timestamppb.New(ms.shard.GetTimeSource().Now().UTC())
 	})
 }
@@ -4952,7 +4952,7 @@ func (ms *MutableStateImpl) updateActivityInfoForRetries(
 	nextAttempt int32,
 	activityFailure *failurepb.Failure,
 ) {
-	_ = ms.UpdateActivityWithCallback(ai, func(info *persistencespb.ActivityInfo, mutableState MutableState) {
+	_ = ms.UpdateActivityWithCallback(ai.ActivityId, func(info *persistencespb.ActivityInfo, mutableState MutableState) {
 		mutableStateImpl, ok := mutableState.(*MutableStateImpl)
 		if ok {
 			ai = UpdateActivityInfoForRetries(
@@ -4967,12 +4967,15 @@ func (ms *MutableStateImpl) updateActivityInfoForRetries(
 }
 
 func (ms *MutableStateImpl) UpdateActivityWithCallback(
-	ai *persistencespb.ActivityInfo,
+	activityId string,
 	updateCallback UpdateActivityCallback,
 ) error {
 	// Incoming activity info can be a pointer to the activity info in pendingActivityInfoIDs.
 	// We need to store activity info size since pendingActivityInfoIDs holds pointers to activity info.
 	// If prev found it can point to the same activity info as incoming activity info.
+	ai := ms.GetActivityByActivityID(activityId)
+	ai2, ok := ms2.GetActivityByActivityID("activity2")
+
 	prevPause := ai.Paused
 	var originalSize int
 	if prev, ok := ms.pendingActivityInfoIDs[ai.ScheduledEventId]; ok {
@@ -5007,7 +5010,7 @@ func (ms *MutableStateImpl) updatePauseInfoSearchAttribute() error {
 	}
 	pausedInfo := make([]string, 0, len(pausedInfoMap))
 	for activityType := range pausedInfoMap {
-		pausedInfo = append(pausedInfo, fmt.Sprintf("entityType.activity:%s", activityType))
+		pausedInfo = append(pausedInfo, fmt.Sprintf("property.activityType=%s", activityType))
 	}
 
 	pauseInfoPayload, err := searchattribute.EncodeValue(pausedInfo, enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST)
