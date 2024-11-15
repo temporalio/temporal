@@ -323,8 +323,8 @@ func (t *timerQueueStandbyTaskExecutor) executeActivityRetryTimerTask(
 		// * activity is already started.
 		if activityInfo.Attempt > task.Attempt ||
 			activityInfo.Stamp != task.Stamp ||
-			activityInfo.StartedEventId != common.EmptyEventID {
-
+			activityInfo.StartedEventId != common.EmptyEventID ||
+			activityInfo.Paused {
 			return nil, nil
 		}
 
