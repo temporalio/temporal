@@ -29,7 +29,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -321,26 +320,6 @@ func (c *physicalTaskQueueManagerImpl) WaitUntilInitialized(ctx context.Context)
 func (c *physicalTaskQueueManagerImpl) SpoolTask(taskInfo *persistencespb.TaskInfo) error {
 	c.liveness.markAlive()
 	return c.backlogMgr.SpoolTask(taskInfo)
-}
-
-func (c *physicalTaskQueueManagerImpl) validateDeploymentWfParams(fieldName string, field string) error {
-	// Length checks
-	if field == "" {
-		return serviceerror.NewInvalidArgument(fmt.Sprintf("%v cannot be empty", fieldName))
-	}
-
-	// Length of each field should be: (MaxIDLengthLimit - prefix and delimeter length) / 2
-	if len(field) > (c.partitionMgr.engine.config.MaxIDLengthLimit()-deployment.DeploymentWorkflowIDInitialSize)/2 {
-		return serviceerror.NewInvalidArgument(fmt.Sprintf("size of %v larger than the maximum allowed", fieldName))
-	}
-
-	// Invalid character check - Cannot contain the reserved delimeter ("|") since its being used for building deployment workflowID
-	if strings.Contains(field, deployment.DeploymentWorkflowIDDelimeter) {
-		return serviceerror.NewInvalidArgument(fmt.Sprintf("%v cannot contain reserved prefix %v", fieldName, deployment.DeploymentWorkflowIDDelimeter))
-	}
-
-	// UTF-8 check
-	return common.ValidateUTF8String(fieldName, field)
 }
 
 // PollTask blocks waiting for a task.

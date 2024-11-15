@@ -59,9 +59,9 @@ type DeploymentClient interface {
 
 // implements DeploymentClient
 type DeploymentWorkflowClient struct {
-	namespace     *namespace.Namespace
-	deployment    *commonpb.WorkerDeployment
-	historyClient resource.HistoryClient
+	namespaceEntry *namespace.Namespace
+	deployment     *commonpb.WorkerDeployment
+	historyClient  resource.HistoryClient
 }
 
 func NewDeploymentWorkflowClient(
@@ -70,9 +70,9 @@ func NewDeploymentWorkflowClient(
 	historyClient resource.HistoryClient,
 ) *DeploymentWorkflowClient {
 	return &DeploymentWorkflowClient{
-		namespace:     namespace,
-		deployment:    deployment,
-		historyClient: historyClient,
+		namespaceEntry: namespace,
+		deployment:     deployment,
+		historyClient:  historyClient,
 	}
 }
 
@@ -112,7 +112,7 @@ func (d *DeploymentWorkflowClient) RegisterTaskQueueWorker(
 
 	// Start workflow execution, if it hasn't already
 	startReq := &workflowservice.StartWorkflowExecutionRequest{
-		Namespace:                d.namespace.Name().String(),
+		Namespace:                d.namespaceEntry.Name().String(),
 		WorkflowId:               deploymentWorkflowID,
 		WorkflowType:             &commonpb.WorkflowType{Name: DeploymentWorkflowType},
 		TaskQueue:                &taskqueuepb.TaskQueue{Name: primitives.PerNSWorkerTaskQueue},
@@ -123,7 +123,7 @@ func (d *DeploymentWorkflowClient) RegisterTaskQueueWorker(
 	}
 
 	updateReq := &workflowservice.UpdateWorkflowExecutionRequest{
-		Namespace: d.namespace.Name().String(),
+		Namespace: d.namespaceEntry.Name().String(),
 		WorkflowExecution: &commonpb.WorkflowExecution{
 			WorkflowId: deploymentWorkflowID,
 		},
@@ -135,13 +135,13 @@ func (d *DeploymentWorkflowClient) RegisterTaskQueueWorker(
 
 	// This is an atomic operation; if one operation fails, both will.
 	_, err = d.historyClient.ExecuteMultiOperation(ctx, &historyservice.ExecuteMultiOperationRequest{
-		NamespaceId: d.namespace.ID().String(),
+		NamespaceId: d.namespaceEntry.ID().String(),
 		WorkflowId:  deploymentWorkflowID,
 		Operations: []*historyservice.ExecuteMultiOperationRequest_Operation{
 			{
 				Operation: &historyservice.ExecuteMultiOperationRequest_Operation_StartWorkflow{
 					StartWorkflow: &historyservice.StartWorkflowExecutionRequest{
-						NamespaceId:  d.namespace.ID().String(),
+						NamespaceId:  d.namespaceEntry.ID().String(),
 						StartRequest: startReq,
 					},
 				},
@@ -149,7 +149,7 @@ func (d *DeploymentWorkflowClient) RegisterTaskQueueWorker(
 			{
 				Operation: &historyservice.ExecuteMultiOperationRequest_Operation_UpdateWorkflow{
 					UpdateWorkflow: &historyservice.UpdateWorkflowExecutionRequest{
-						NamespaceId: d.namespace.ID().String(),
+						NamespaceId: d.namespaceEntry.ID().String(),
 						Request:     updateReq,
 					},
 				},
@@ -173,8 +173,8 @@ func (d *DeploymentWorkflowClient) GenerateDeploymentWorkflowID() string {
 // GenerateStartWorkflowPayload generates start workflow execution payload
 func (d *DeploymentWorkflowClient) GenerateStartWorkflowPayload() (*commonpb.Payloads, error) {
 	workflowArgs := &deployspb.DeploymentWorkflowArgs{
-		NamespaceName:     d.namespace.Name().String(),
-		NamespaceId:       d.namespace.ID().String(),
+		NamespaceName:     d.namespaceEntry.Name().String(),
+		NamespaceId:       d.namespaceEntry.ID().String(),
 		DeploymentName:    d.deployment.DeploymentName,
 		BuildId:           d.deployment.BuildId,
 		TaskQueueFamilies: nil,
@@ -212,11 +212,6 @@ func (d *DeploymentWorkflowClient) ValidateDeploymentWfParams(fieldName string, 
 	// Length of each field should be: (MaxIDLengthLimit - prefix and delimeter length) / 2
 	if len(field) > (maxIDLengthLimit-DeploymentWorkflowIDInitialSize)/2 {
 		return serviceerror.NewInvalidArgument(fmt.Sprintf("size of %v larger than the maximum allowed", fieldName))
-	}
-
-	// Invalid character check - Cannot contain the reserved delimeter ("|") since its being used for building deployment workflowID
-	if strings.Contains(field, DeploymentWorkflowIDDelimeter) {
-		return serviceerror.NewInvalidArgument(fmt.Sprintf("%v cannot contain reserved prefix %v", fieldName, DeploymentWorkflowIDDelimeter))
 	}
 
 	// UTF-8 check

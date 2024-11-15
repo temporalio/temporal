@@ -25,7 +25,6 @@
 package deployment
 
 import (
-	"fmt"
 	"strings"
 	"sync"
 	"testing"
@@ -117,12 +116,6 @@ func (d *deploymentWorkflowClientSuite) TestValidateDeploymentWfParams() {
 			FieldName:     "DeploymentName",
 			Input:         strings.Repeat("s", 1000),
 			ExpectedError: serviceerror.NewInvalidArgument("size of DeploymentName larger than the maximum allowed"),
-		},
-		{
-			Description:   "Invalid character (|) in Field",
-			FieldName:     "DeploymentName",
-			Input:         "A" + DeploymentWorkflowIDDelimeter,
-			ExpectedError: serviceerror.NewInvalidArgument(fmt.Sprintf("DeploymentName cannot contain reserved prefix %v", DeploymentWorkflowIDDelimeter)),
 		},
 		{
 			Description:   "Valid field",
