@@ -211,6 +211,7 @@ func PauseActivityById(mutableState MutableState, activityId string) error {
 	}
 
 	return mutableState.UpdateActivityWithCallback(ai, func(activityInfo *persistence.ActivityInfo, _ MutableState) {
+		activityInfo.Stamp++
 		activityInfo.Paused = true
 	})
 }

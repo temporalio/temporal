@@ -3175,20 +3175,6 @@ func (mr *MockMutableStateMockRecorder) UpdateDuplicatedResource(resourceDedupKe
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateDuplicatedResource", reflect.TypeOf((*MockMutableState)(nil).UpdateDuplicatedResource), resourceDedupKey)
 }
 
-// UpdatePauseInfoSearchAttribute mocks base method.
-func (m *MockMutableState) UpdatePauseInfoSearchAttribute() error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "UpdatePauseInfoSearchAttribute")
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// UpdatePauseInfoSearchAttribute indicates an expected call of UpdatePauseInfoSearchAttribute.
-func (mr *MockMutableStateMockRecorder) UpdatePauseInfoSearchAttribute() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdatePauseInfoSearchAttribute", reflect.TypeOf((*MockMutableState)(nil).UpdatePauseInfoSearchAttribute))
-}
-
 // UpdateResetRunID mocks base method.
 func (m *MockMutableState) UpdateResetRunID(runID string) {
 	m.ctrl.T.Helper()

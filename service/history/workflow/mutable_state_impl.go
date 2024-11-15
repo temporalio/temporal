@@ -1653,7 +1653,7 @@ func (ms *MutableStateImpl) UpdateActivityInfo(
 	}
 
 	if oldPaused != ai.Paused {
-		err = ms.UpdatePauseInfoSearchAttribute()
+		err = ms.updatePauseInfoSearchAttribute()
 	}
 
 	return err
@@ -4970,9 +4970,9 @@ func (ms *MutableStateImpl) UpdateActivityWithCallback(
 	ai *persistencespb.ActivityInfo,
 	updateCallback UpdateActivityCallback,
 ) error {
-	// incoming activity info can be a pointer to the activity info in pendingActivityInfoIDs
-	// we need to store activity info size since pendingActivityInfoIDs holds pointers to activity info
-	// if prev found it can point to the same activity info as incoming activity info,
+	// Incoming activity info can be a pointer to the activity info in pendingActivityInfoIDs.
+	// We need to store activity info size since pendingActivityInfoIDs holds pointers to activity info.
+	// If prev found it can point to the same activity info as incoming activity info.
 	prevPause := ai.Paused
 	var originalSize int
 	if prev, ok := ms.pendingActivityInfoIDs[ai.ScheduledEventId]; ok {
@@ -4983,7 +4983,7 @@ func (ms *MutableStateImpl) UpdateActivityWithCallback(
 	updateCallback(ai, ms)
 
 	if prevPause != ai.Paused {
-		err := ms.UpdatePauseInfoSearchAttribute()
+		err := ms.updatePauseInfoSearchAttribute()
 		if err != nil {
 			return err
 		}
@@ -4996,7 +4996,7 @@ func (ms *MutableStateImpl) UpdateActivityWithCallback(
 	return nil
 }
 
-func (ms *MutableStateImpl) UpdatePauseInfoSearchAttribute() error {
+func (ms *MutableStateImpl) updatePauseInfoSearchAttribute() error {
 	pausedInfoMap := make(map[string]struct{})
 
 	for _, ai := range ms.GetPendingActivityInfos() {

@@ -422,7 +422,6 @@ func (t *MatcherTestSuite) TestAvoidForwardingWhenBacklogIsOldButReconsider() {
 func (t *MatcherTestSuite) TestBacklogAge() {
 	t.T().Skip("flaky test")
 	t.Equal(emptyBacklogAge, t.rootMatcher.getBacklogAge())
-	t.Equal(emptyBacklogAge, t.rootMatcher.getBacklogAge())
 
 	youngBacklogTask := newInternalTaskFromBacklog(randomTaskInfoWithAge(time.Second), nil)
 

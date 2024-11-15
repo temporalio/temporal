@@ -51,9 +51,7 @@ func Invoke(
 			frontendRequest := request.GetFrontendRequest()
 			activityId := frontendRequest.GetActivityId()
 
-			var err error
-
-			err = workflow.PauseActivityById(mutableState, activityId)
+			err := workflow.PauseActivityById(mutableState, activityId)
 			if err != nil {
 				return nil, err
 			}
