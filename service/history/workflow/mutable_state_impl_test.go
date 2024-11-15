@@ -3739,11 +3739,11 @@ func (s *mutableStateSuite) TestApplySnapshot() {
 	// set updateXXX so LastUpdateVersionedTransition will be updated
 	targetMS.updateActivityInfos = targetMS.pendingActivityInfoIDs
 	for key := range targetMS.updateActivityInfos {
-		targetMS.updateActivityInfosUserDataUpdated[key] = struct{}{}
+		targetMS.activityInfosUserDataUpdated[key] = struct{}{}
 	}
 	targetMS.updateTimerInfos = targetMS.pendingTimerInfoIDs
 	for key := range targetMS.updateTimerInfos {
-		targetMS.updateTimerInfosUserDataUpdated[key] = struct{}{}
+		targetMS.timerInfosUserDataUpdated[key] = struct{}{}
 	}
 	targetMS.updateChildExecutionInfos = targetMS.pendingChildExecutionInfoIDs
 	targetMS.updateRequestCancelInfos = targetMS.pendingRequestCancelInfoIDs
@@ -3811,11 +3811,11 @@ func (s *mutableStateSuite) TestApplyMutation() {
 	// set updateXXX so LastUpdateVersionedTransition will be updated
 	targetMS.updateActivityInfos = targetMS.pendingActivityInfoIDs
 	for key := range targetMS.updateActivityInfos {
-		targetMS.updateActivityInfosUserDataUpdated[key] = struct{}{}
+		targetMS.activityInfosUserDataUpdated[key] = struct{}{}
 	}
 	targetMS.updateTimerInfos = targetMS.pendingTimerInfoIDs
 	for key := range targetMS.updateTimerInfos {
-		targetMS.updateTimerInfosUserDataUpdated[key] = struct{}{}
+		targetMS.timerInfosUserDataUpdated[key] = struct{}{}
 	}
 	targetMS.updateChildExecutionInfos = targetMS.pendingChildExecutionInfoIDs
 	targetMS.updateRequestCancelInfos = targetMS.pendingRequestCancelInfoIDs

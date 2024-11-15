@@ -389,12 +389,11 @@ func (r *TaskRefresherImpl) refreshTasksForActivity(
 		}
 
 		if CompareVersionedTransition(minVersionedTransition, EmptyVersionedTransition) == 0 { // Full refresh
-			// clear activity timer task mask for later activity timer task re-generation
-			activityInfo.TimerTaskStatus = TimerTaskStatusNone
 
 			// need to update activity timer task mask for which task is generated
-			if err := mutableState.UpdateActivity(
-				activityInfo,
+			if err := mutableState.UpdateActivityTimerTaskStatus(
+				activityInfo.ScheduledEventId,
+				TimerTaskStatusNone, // clear activity timer task mask for later activity timer task re-generation
 			); err != nil {
 				return err
 			}
@@ -449,13 +448,12 @@ func (r *TaskRefresherImpl) refreshTasksForTimer(
 			continue
 		}
 
-		// clear timer task mask for later timer task re-generation
 		refreshUserTimerTask = true
 
 		// need to update user timer task mask for which task is generated
 		if err := mutableState.UpdateUserTimerTaskStatus(
 			timerInfo.TimerId,
-			TimerTaskStatusNone,
+			TimerTaskStatusNone, // clear timer task mask for later timer task re-generation
 		); err != nil {
 			return err
 		}
