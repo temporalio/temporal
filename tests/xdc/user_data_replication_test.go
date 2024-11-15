@@ -448,7 +448,7 @@ func (s *UserDataReplicationTestSuite) TestUserDataEntriesAreReplicatedOnDemand(
 }
 
 func (s *UserDataReplicationTestSuite) TestUserDataTombstonesAreReplicated() {
-	s.T().SkipNow() //flaky test
+	s.T().SkipNow() // flaky test
 	ctx := testcore.NewContext()
 	namespace := s.T().Name() + "-" + common.GenerateRandomString(5)
 	activeFrontendClient := s.cluster1.FrontendClient()

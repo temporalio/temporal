@@ -77,7 +77,7 @@ type (
 )
 
 func TestStreamBasedReplicationTestSuite(t *testing.T) {
-	t.SkipNow() //flaky test (EnableTransitionHistory)
+	t.SkipNow() // flaky test (EnableTransitionHistory)
 	for _, tc := range []struct {
 		name                    string
 		enableTransitionHistory bool
