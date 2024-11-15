@@ -1868,6 +1868,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestExecuteStateMachineTimerTask_Exe
 		ms,
 		make(map[string]*persistencespb.StateMachineMap),
 		ms,
+		s.mockShard.GetLogger(),
 	)
 	s.NoError(err)
 	ms.EXPECT().GetCurrentVersion().Return(int64(2)).AnyTimes()

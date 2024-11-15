@@ -82,7 +82,12 @@ func (s *nDCEventReapplicationSuite) SetupTest() {
 
 	smReg := hsm.NewRegistry()
 	s.NoError(workflow.RegisterStateMachine(smReg))
-	root, err := hsm.NewRoot(smReg, workflow.StateMachineType, nil, make(map[string]*persistencespb.StateMachineMap), &hsmtest.NodeBackend{})
+	root, err := hsm.NewRoot(smReg,
+		workflow.StateMachineType,
+		nil,
+		make(map[string]*persistencespb.StateMachineMap),
+		&hsmtest.NodeBackend{},
+		logger)
 	s.NoError(err)
 	s.hsmNode = root
 }

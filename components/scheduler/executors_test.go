@@ -210,7 +210,12 @@ func newRoot(t *testing.T) *hsm.Node {
 	mutableState := newMutableState(t)
 
 	// Backend is nil because we don't need to generate history events for this test.
-	root, err := hsm.NewRoot(reg, workflow.StateMachineType, mutableState, make(map[string]*persistencespb.StateMachineMap), &hsmtest.NodeBackend{})
+	root, err := hsm.NewRoot(reg,
+		workflow.StateMachineType,
+		mutableState,
+		make(map[string]*persistencespb.StateMachineMap),
+		&hsmtest.NodeBackend{},
+		log.NewNoopLogger())
 	require.NoError(t, err)
 	return root
 }

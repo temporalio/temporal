@@ -398,3 +398,77 @@ func (this *StateMachinePath) Equal(that interface{}) bool {
 
 	return proto.Equal(this, that1)
 }
+
+// Marshal an object of type StateMachineOperation to the protobuf v3 wire format
+func (val *StateMachineOperation) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type StateMachineOperation from the protobuf v3 wire format
+func (val *StateMachineOperation) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *StateMachineOperation) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two StateMachineOperation values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *StateMachineOperation) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *StateMachineOperation
+	switch t := that.(type) {
+	case *StateMachineOperation:
+		that1 = t
+	case StateMachineOperation:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
+// Marshal an object of type OperationLog to the protobuf v3 wire format
+func (val *OperationLog) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type OperationLog from the protobuf v3 wire format
+func (val *OperationLog) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *OperationLog) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two OperationLog values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *OperationLog) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *OperationLog
+	switch t := that.(type) {
+	case *OperationLog:
+		that1 = t
+	case OperationLog:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}

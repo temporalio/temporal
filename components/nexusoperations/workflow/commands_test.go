@@ -37,6 +37,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/nexus/nexustest"
 	"go.temporal.io/server/components/nexusoperations"
@@ -93,7 +94,12 @@ func newTestContext(t *testing.T, cfg *nexusoperations.Config) testContext {
 	require.NoError(t, nexusoperations.RegisterStateMachines(smReg))
 	require.NoError(t, nexusoperations.RegisterEventDefinitions(smReg))
 	ms := workflow.NewMockMutableState(gomock.NewController(t))
-	node, err := hsm.NewRoot(smReg, workflow.StateMachineType, ms, make(map[string]*persistencespb.StateMachineMap), ms)
+	node, err := hsm.NewRoot(smReg,
+		workflow.StateMachineType,
+		ms,
+		make(map[string]*persistencespb.StateMachineMap),
+		ms,
+		log.NewNoopLogger())
 	require.NoError(t, err)
 	ms.EXPECT().HSM().Return(node).AnyTimes()
 	lastEventID := int64(4)

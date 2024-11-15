@@ -333,6 +333,7 @@ func TestTaskGeneratorImpl_GenerateWorkflowCloseTasks(t *testing.T) {
 
 func TestTaskGenerator_GenerateDirtySubStateMachineTasks(t *testing.T) {
 	ctrl := gomock.NewController(t)
+	logger := log.NewTestLogger()
 	namespaceRegistry := namespace.NewMockRegistry(ctrl)
 
 	mutableState := NewMockMutableState(ctrl)
@@ -346,7 +347,7 @@ func TestTaskGenerator_GenerateDirtySubStateMachineTasks(t *testing.T) {
 	require.NoError(t, callbacks.RegisterTaskSerializers(reg))
 	require.NoError(t, nexusoperations.RegisterStateMachines(reg))
 	require.NoError(t, nexusoperations.RegisterTaskSerializers(reg))
-	node, err := hsm.NewRoot(reg, StateMachineType, nil, subStateMachinesByType, mutableState)
+	node, err := hsm.NewRoot(reg, StateMachineType, nil, subStateMachinesByType, mutableState, logger)
 	require.NoError(t, err)
 	coll := callbacks.MachineCollection(node)
 

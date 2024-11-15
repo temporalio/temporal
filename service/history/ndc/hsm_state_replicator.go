@@ -167,6 +167,7 @@ func (r *HSMStateReplicatorImpl) syncHSMNode(
 		mutableState,
 		request.StateMachineNode.Children,
 		mutableState,
+		r.logger,
 	)
 	if err != nil {
 		return false, err

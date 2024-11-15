@@ -1642,6 +1642,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestExecuteStateMachineTimerTask_Ex
 		ms,
 		make(map[string]*persistencespb.StateMachineMap),
 		ms,
+		s.mockShard.GetLogger(),
 	)
 	s.NoError(err)
 
@@ -1776,6 +1777,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestExecuteStateMachineTimerTask_Va
 		ms,
 		make(map[string]*persistencespb.StateMachineMap),
 		ms,
+		s.mockShard.GetLogger(),
 	)
 	s.NoError(err)
 
@@ -1885,6 +1887,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestExecuteStateMachineTimerTask_St
 		ms,
 		make(map[string]*persistencespb.StateMachineMap),
 		ms,
+		s.mockShard.GetLogger(),
 	)
 	s.NoError(err)
 

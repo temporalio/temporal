@@ -351,7 +351,7 @@ func NewMutableState(
 	s.taskGenerator = taskGeneratorProvider.NewTaskGenerator(shard, s)
 	s.workflowTaskManager = newWorkflowTaskStateMachine(s, s.metricsHandler)
 
-	s.mustInitHSM()
+	s.mustInitHSM(logger)
 
 	return s
 }
@@ -476,7 +476,7 @@ func NewMutableStateFromDB(
 		}
 	}
 
-	mutableState.mustInitHSM()
+	mutableState.mustInitHSM(nil)
 
 	return mutableState, nil
 }
@@ -555,9 +555,9 @@ func NewMutableStateInChain(
 	return newMutableState, nil
 }
 
-func (ms *MutableStateImpl) mustInitHSM() {
+func (ms *MutableStateImpl) mustInitHSM(logger log.Logger) {
 	// Error only occurs if some initialization path forgets to register the workflow state machine.
-	stateMachineNode, err := hsm.NewRoot(ms.shard.StateMachineRegistry(), StateMachineType, ms, ms.executionInfo.SubStateMachinesByType, ms)
+	stateMachineNode, err := hsm.NewRoot(ms.shard.StateMachineRegistry(), StateMachineType, ms, ms.executionInfo.SubStateMachinesByType, ms, logger)
 	if err != nil {
 		panic(err)
 	}
@@ -6569,7 +6569,7 @@ func (ms *MutableStateImpl) ApplySnapshot(
 
 	ms.applyUpdatesToUpdateInfos(snapshot.ExecutionInfo.UpdateInfos, true)
 
-	err = ms.syncSubStateMachinesByType(snapshot.ExecutionInfo.SubStateMachinesByType)
+	err = ms.syncSubStateMachinesByType(snapshot.ExecutionInfo.SubStateMachinesByType, ms.logger)
 	if err != nil {
 		return err
 	}
@@ -6879,7 +6879,7 @@ func (ms *MutableStateImpl) syncExecutionInfo(current *persistencespb.WorkflowEx
 	return nil
 }
 
-func (ms *MutableStateImpl) syncSubStateMachinesByType(incoming map[string]*persistencespb.StateMachineMap) error {
+func (ms *MutableStateImpl) syncSubStateMachinesByType(incoming map[string]*persistencespb.StateMachineMap, logger log.Logger) error {
 	currentHSM := ms.HSM()
 
 	// we don't care about the root here which is the entire mutable state
@@ -6889,6 +6889,7 @@ func (ms *MutableStateImpl) syncSubStateMachinesByType(incoming map[string]*pers
 		ms,
 		incoming,
 		ms,
+		logger,
 	)
 	if err != nil {
 		return err
