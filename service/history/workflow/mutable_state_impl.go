@@ -29,6 +29,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"google.golang.org/protobuf/types/known/fieldmaskpb"
 	"math/rand"
 	"reflect"
 	"slices"
@@ -4232,6 +4233,14 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionUpdateCompletedEvent(
 func (ms *MutableStateImpl) RejectWorkflowExecutionUpdate(_ string, _ *updatepb.Rejection) error {
 	// TODO (alex-update): This method is noop because we don't currently write rejections to the history.
 	return nil
+}
+
+func (ms *MutableStateImpl) AddWorkflowExecutionOptionsUpdatedEvent(
+	options *workflowpb.WorkflowExecutionOptions,
+	mask *fieldmaskpb.FieldMask,
+) (*historypb.HistoryEvent, error) {
+	// todo carly
+	return nil, fmt.Errorf("unimplemented")
 }
 
 func (ms *MutableStateImpl) ApplyWorkflowExecutionTerminatedEvent(

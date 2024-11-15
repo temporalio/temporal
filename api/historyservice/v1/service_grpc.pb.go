@@ -63,6 +63,7 @@ const (
 	HistoryService_TerminateWorkflowExecution_FullMethodName             = "/temporal.server.api.historyservice.v1.HistoryService/TerminateWorkflowExecution"
 	HistoryService_DeleteWorkflowExecution_FullMethodName                = "/temporal.server.api.historyservice.v1.HistoryService/DeleteWorkflowExecution"
 	HistoryService_ResetWorkflowExecution_FullMethodName                 = "/temporal.server.api.historyservice.v1.HistoryService/ResetWorkflowExecution"
+	HistoryService_UpdateWorkflowExecutionOptions_FullMethodName         = "/temporal.server.api.historyservice.v1.HistoryService/UpdateWorkflowExecutionOptions"
 	HistoryService_RequestCancelWorkflowExecution_FullMethodName         = "/temporal.server.api.historyservice.v1.HistoryService/RequestCancelWorkflowExecution"
 	HistoryService_ScheduleWorkflowTask_FullMethodName                   = "/temporal.server.api.historyservice.v1.HistoryService/ScheduleWorkflowTask"
 	HistoryService_VerifyFirstWorkflowTaskScheduled_FullMethodName       = "/temporal.server.api.historyservice.v1.HistoryService/VerifyFirstWorkflowTaskScheduled"
@@ -209,6 +210,11 @@ type HistoryServiceClient interface {
 	// in the history and immediately terminating the current execution instance.
 	// After reset, the history will grow from nextFirstEventId.
 	ResetWorkflowExecution(ctx context.Context, in *ResetWorkflowExecutionRequest, opts ...grpc.CallOption) (*ResetWorkflowExecutionResponse, error)
+	// UpdateWorkflowExecutionOptions modifies the options of an existing workflow execution.
+	// Currently the option that can be updated is setting and unsetting a versioning behavior override.
+	// (-- api-linter: core::0134::method-signature=disabled
+	// (-- api-linter: core::0134::response-message-name=disabled
+	UpdateWorkflowExecutionOptions(ctx context.Context, in *UpdateWorkflowExecutionOptionsRequest, opts ...grpc.CallOption) (*UpdateWorkflowExecutionOptionsResponse, error)
 	// RequestCancelWorkflowExecution is called by application worker when it wants to request cancellation of a workflow instance.
 	// It will result in a new 'WorkflowExecutionCancelRequested' event being written to the workflow history and a new WorkflowTask
 	// created for the workflow instance so new commands could be made. It fails with 'EntityNotExistsError' if the workflow is not valid
@@ -520,6 +526,15 @@ func (c *historyServiceClient) DeleteWorkflowExecution(ctx context.Context, in *
 func (c *historyServiceClient) ResetWorkflowExecution(ctx context.Context, in *ResetWorkflowExecutionRequest, opts ...grpc.CallOption) (*ResetWorkflowExecutionResponse, error) {
 	out := new(ResetWorkflowExecutionResponse)
 	err := c.cc.Invoke(ctx, HistoryService_ResetWorkflowExecution_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *historyServiceClient) UpdateWorkflowExecutionOptions(ctx context.Context, in *UpdateWorkflowExecutionOptionsRequest, opts ...grpc.CallOption) (*UpdateWorkflowExecutionOptionsResponse, error) {
+	out := new(UpdateWorkflowExecutionOptionsResponse)
+	err := c.cc.Invoke(ctx, HistoryService_UpdateWorkflowExecutionOptions_FullMethodName, in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -1060,6 +1075,11 @@ type HistoryServiceServer interface {
 	// in the history and immediately terminating the current execution instance.
 	// After reset, the history will grow from nextFirstEventId.
 	ResetWorkflowExecution(context.Context, *ResetWorkflowExecutionRequest) (*ResetWorkflowExecutionResponse, error)
+	// UpdateWorkflowExecutionOptions modifies the options of an existing workflow execution.
+	// Currently the option that can be updated is setting and unsetting a versioning behavior override.
+	// (-- api-linter: core::0134::method-signature=disabled
+	// (-- api-linter: core::0134::response-message-name=disabled
+	UpdateWorkflowExecutionOptions(context.Context, *UpdateWorkflowExecutionOptionsRequest) (*UpdateWorkflowExecutionOptionsResponse, error)
 	// RequestCancelWorkflowExecution is called by application worker when it wants to request cancellation of a workflow instance.
 	// It will result in a new 'WorkflowExecutionCancelRequested' event being written to the workflow history and a new WorkflowTask
 	// created for the workflow instance so new commands could be made. It fails with 'EntityNotExistsError' if the workflow is not valid
@@ -1247,6 +1267,9 @@ func (UnimplementedHistoryServiceServer) DeleteWorkflowExecution(context.Context
 }
 func (UnimplementedHistoryServiceServer) ResetWorkflowExecution(context.Context, *ResetWorkflowExecutionRequest) (*ResetWorkflowExecutionResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ResetWorkflowExecution not implemented")
+}
+func (UnimplementedHistoryServiceServer) UpdateWorkflowExecutionOptions(context.Context, *UpdateWorkflowExecutionOptionsRequest) (*UpdateWorkflowExecutionOptionsResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method UpdateWorkflowExecutionOptions not implemented")
 }
 func (UnimplementedHistoryServiceServer) RequestCancelWorkflowExecution(context.Context, *RequestCancelWorkflowExecutionRequest) (*RequestCancelWorkflowExecutionResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method RequestCancelWorkflowExecution not implemented")
@@ -1773,6 +1796,24 @@ func _HistoryService_ResetWorkflowExecution_Handler(srv interface{}, ctx context
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(HistoryServiceServer).ResetWorkflowExecution(ctx, req.(*ResetWorkflowExecutionRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _HistoryService_UpdateWorkflowExecutionOptions_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(UpdateWorkflowExecutionOptionsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(HistoryServiceServer).UpdateWorkflowExecutionOptions(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: HistoryService_UpdateWorkflowExecutionOptions_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(HistoryServiceServer).UpdateWorkflowExecutionOptions(ctx, req.(*UpdateWorkflowExecutionOptionsRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -2703,6 +2744,10 @@ var HistoryService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ResetWorkflowExecution",
 			Handler:    _HistoryService_ResetWorkflowExecution_Handler,
+		},
+		{
+			MethodName: "UpdateWorkflowExecutionOptions",
+			Handler:    _HistoryService_UpdateWorkflowExecutionOptions_Handler,
 		},
 		{
 			MethodName: "RequestCancelWorkflowExecution",

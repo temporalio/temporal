@@ -26,6 +26,7 @@ package history
 
 import (
 	"context"
+	"go.temporal.io/server/service/history/api/updateworkflowoptions"
 	"sync/atomic"
 	"time"
 
@@ -829,6 +830,15 @@ func (e *historyEngineImpl) ResetWorkflowExecution(
 	req *historyservice.ResetWorkflowExecutionRequest,
 ) (*historyservice.ResetWorkflowExecutionResponse, error) {
 	return resetworkflow.Invoke(ctx, req, e.shardContext, e.workflowConsistencyChecker)
+}
+
+// UpdateWorkflowExecutionOptions updates the options of a specific workflow execution.
+// Can be used to set and unset versioning behavior override.
+func (e *historyEngineImpl) UpdateWorkflowExecutionOptions(
+	ctx context.Context,
+	req *historyservice.UpdateWorkflowExecutionOptionsRequest,
+) (*historyservice.UpdateWorkflowExecutionOptionsResponse, error) {
+	return updateworkflowoptions.Invoke(ctx, req, e.shardContext, e.workflowConsistencyChecker)
 }
 
 func (e *historyEngineImpl) NotifyNewHistoryEvent(

@@ -1366,6 +1366,26 @@ func (mr *MockHistoryServiceClientMockRecorder) UpdateWorkflowExecution(ctx, in 
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateWorkflowExecution", reflect.TypeOf((*MockHistoryServiceClient)(nil).UpdateWorkflowExecution), varargs...)
 }
 
+// UpdateWorkflowExecutionOptions mocks base method.
+func (m *MockHistoryServiceClient) UpdateWorkflowExecutionOptions(ctx context.Context, in *historyservice.UpdateWorkflowExecutionOptionsRequest, opts ...grpc.CallOption) (*historyservice.UpdateWorkflowExecutionOptionsResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []any{ctx, in}
+	for _, a := range opts {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "UpdateWorkflowExecutionOptions", varargs...)
+	ret0, _ := ret[0].(*historyservice.UpdateWorkflowExecutionOptionsResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UpdateWorkflowExecutionOptions indicates an expected call of UpdateWorkflowExecutionOptions.
+func (mr *MockHistoryServiceClientMockRecorder) UpdateWorkflowExecutionOptions(ctx, in any, opts ...any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]any{ctx, in}, opts...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateWorkflowExecutionOptions", reflect.TypeOf((*MockHistoryServiceClient)(nil).UpdateWorkflowExecutionOptions), varargs...)
+}
+
 // VerifyChildExecutionCompletionRecorded mocks base method.
 func (m *MockHistoryServiceClient) VerifyChildExecutionCompletionRecorded(ctx context.Context, in *historyservice.VerifyChildExecutionCompletionRecordedRequest, opts ...grpc.CallOption) (*historyservice.VerifyChildExecutionCompletionRecordedResponse, error) {
 	m.ctrl.T.Helper()
@@ -2538,6 +2558,21 @@ func (m *MockHistoryServiceServer) UpdateWorkflowExecution(arg0 context.Context,
 func (mr *MockHistoryServiceServerMockRecorder) UpdateWorkflowExecution(arg0, arg1 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateWorkflowExecution", reflect.TypeOf((*MockHistoryServiceServer)(nil).UpdateWorkflowExecution), arg0, arg1)
+}
+
+// UpdateWorkflowExecutionOptions mocks base method.
+func (m *MockHistoryServiceServer) UpdateWorkflowExecutionOptions(arg0 context.Context, arg1 *historyservice.UpdateWorkflowExecutionOptionsRequest) (*historyservice.UpdateWorkflowExecutionOptionsResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdateWorkflowExecutionOptions", arg0, arg1)
+	ret0, _ := ret[0].(*historyservice.UpdateWorkflowExecutionOptionsResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UpdateWorkflowExecutionOptions indicates an expected call of UpdateWorkflowExecutionOptions.
+func (mr *MockHistoryServiceServerMockRecorder) UpdateWorkflowExecutionOptions(arg0, arg1 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateWorkflowExecutionOptions", reflect.TypeOf((*MockHistoryServiceServer)(nil).UpdateWorkflowExecutionOptions), arg0, arg1)
 }
 
 // VerifyChildExecutionCompletionRecorded mocks base method.
