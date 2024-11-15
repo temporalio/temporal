@@ -170,7 +170,7 @@ func GetPendingActivityInfo(
 	return p, nil
 }
 
-func GetNextScheduleTime(ai *persistence.ActivityInfo) time.Time {
+func GetNextScheduledTime(ai *persistence.ActivityInfo) time.Time {
 	// there are two possible cases:
 	// * this is the first time activity was scheduled
 	//  * in this case we should use current schedule time

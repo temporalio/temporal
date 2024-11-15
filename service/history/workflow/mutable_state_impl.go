@@ -4916,8 +4916,9 @@ func (ms *MutableStateImpl) RecordLastActivityStarted(ai *persistencespb.Activit
 }
 
 func (ms *MutableStateImpl) RegenerateActivityRetryTask(ai *persistencespb.ActivityInfo, nextScheduledTime time.Time) error {
+
 	if nextScheduledTime.IsZero() {
-		nextScheduledTime = GetNextScheduleTime(ai)
+		nextScheduledTime = GetNextScheduledTime(ai)
 	}
 
 	ms.updateActivityInfoForRetries(ai,

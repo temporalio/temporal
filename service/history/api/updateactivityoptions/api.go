@@ -174,7 +174,7 @@ func updateActivityOptions(
 		// 		history service will return error based on stamp. Task will be dropped
 
 		nextScheduledTime := workflow.GetNextScheduledTime(ai)
-		err = mutableState.RegenerateActivityRetryTask(ai, nextScheduleTime)
+		err = mutableState.RegenerateActivityRetryTask(ai, nextScheduledTime)
 		if err != nil {
 			return nil, err
 		}
