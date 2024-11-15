@@ -74,9 +74,9 @@ func (s *UpdateWorkflowSdkSuite) TestUpdateWorkflow_TerminateWorkflowAfterUpdate
 	run := s.startWorkflow(ctx, tv, workflowFn)
 	s.updateWorkflowWaitAdmitted(ctx, tv, "update-arg")
 
-	s.Worker().RegisterWorkflow(workflowFn)
-
 	s.NoError(s.SdkClient().TerminateWorkflow(ctx, tv.WorkflowID(), run.GetRunID(), "reason"))
+
+	s.Worker().RegisterWorkflow(workflowFn)
 
 	_, err := s.pollUpdate(ctx, tv, &updatepb.WaitPolicy{LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ACCEPTED})
 	var notFound *serviceerror.NotFound
