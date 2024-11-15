@@ -60,6 +60,7 @@ import (
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 var apiName = configs.CompleteNexusOperation
@@ -205,6 +206,7 @@ func (h *completionHandler) CompleteOperation(ctx context.Context, r *nexus.Comp
 		Completion:  completion,
 		State:       string(r.State),
 		OperationId: r.OperationID,
+		StartTime:   timestamppb.New(r.StartTime),
 		Links:       links,
 	}
 	switch r.State { // nolint:exhaustive

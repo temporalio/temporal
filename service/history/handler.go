@@ -2341,6 +2341,7 @@ func (h *Handler) CompleteNexusOperation(ctx context.Context, request *historyse
 		ref,
 		request.Completion.RequestId,
 		request.OperationId,
+		request.StartTime,
 		request.Links,
 		request.GetSuccess(),
 		opErr,

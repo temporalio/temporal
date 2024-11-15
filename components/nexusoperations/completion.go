@@ -35,6 +35,7 @@ import (
 	"go.temporal.io/server/api/enums/v1"
 	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/service/history/hsm"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 func handleSuccessfulOperationResult(
@@ -134,6 +135,7 @@ func fabricateStartedEventIfMissing(
 	node *hsm.Node,
 	requestID string,
 	operationID string,
+	startTime *timestamppb.Timestamp,
 	links []*commonpb.Link,
 ) error {
 	data, err := hsm.MachineData[Operation](node)
@@ -160,6 +162,9 @@ func fabricateStartedEventIfMissing(
 				},
 			}
 			e.Links = links
+			if startTime != nil {
+				e.EventTime = startTime
+			}
 		})
 
 		data.OperationId = operationID
@@ -175,6 +180,7 @@ func CompletionHandler(
 	ref hsm.Ref,
 	requestID string,
 	operationID string,
+	startTime *timestamppb.Timestamp,
 	links []*commonpb.Link,
 	result *commonpb.Payload,
 	opFailedError *nexus.UnsuccessfulOperationError,
@@ -186,7 +192,7 @@ func CompletionHandler(
 		if err := node.CheckRunning(); err != nil {
 			return serviceerror.NewNotFound("operation not found")
 		}
-		if err := fabricateStartedEventIfMissing(node, requestID, operationID, links); err != nil {
+		if err := fabricateStartedEventIfMissing(node, requestID, operationID, startTime, links); err != nil {
 			return err
 		}
 		err := hsm.MachineTransition(node, func(operation Operation) (hsm.TransitionOutput, error) {
@@ -209,7 +215,7 @@ func CompletionHandler(
 	if errors.As(err, new(*serviceerror.NotFound)) && isRetryableNotFoundErr && ref.WorkflowKey.RunID != "" {
 		// Try again without a run ID in case the original run was reset.
 		ref.WorkflowKey.RunID = ""
-		return CompletionHandler(ctx, env, ref, requestID, operationID, links, result, opFailedError)
+		return CompletionHandler(ctx, env, ref, requestID, operationID, startTime, links, result, opFailedError)
 	}
 	return err
 }
