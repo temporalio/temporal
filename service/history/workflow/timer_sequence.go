@@ -116,9 +116,9 @@ func (t *timerSequenceImpl) CreateNextUserTimer() (bool, error) {
 	}
 	// mark timer task mask as indication that timer task is generated
 	// here TaskID is misleading attr, should be called timer created flag or something
-	timerInfo.TaskStatus = TimerTaskStatusCreated
-	if err := t.mutableState.UpdateUserTimer(timerInfo); err != nil {
+	if err := t.mutableState.UpdateUserTimerTaskStatus(timerInfo.TimerId, TimerTaskStatusCreated); err != nil {
 		return false, err
+
 	}
 	t.mutableState.AddTasks(&tasks.UserTimerTask{
 		// TaskID is set by shard
@@ -160,7 +160,7 @@ func (t *timerSequenceImpl) CreateNextActivityTimer() (bool, error) {
 	if firstTimerTask.TimerType == enumspb.TIMEOUT_TYPE_HEARTBEAT {
 		err = t.mutableState.UpdateActivityWithTimerHeartbeat(activityInfo, firstTimerTask.Timestamp)
 	} else {
-		err = t.mutableState.UpdateActivity(activityInfo)
+		err = t.mutableState.UpdateActivityTimerTaskStatus(activityInfo.ScheduledEventId, activityInfo.TimerTaskStatus)
 	}
 
 	if err != nil {

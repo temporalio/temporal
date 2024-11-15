@@ -190,7 +190,7 @@ func (s *timerSequenceSuite) TestCreateNextUserTimer_NotCreated_BeforeWorkflowEx
 
 	var timerInfoUpdated = common.CloneProto(timerInfo) // make a copy
 	timerInfoUpdated.TaskStatus = TimerTaskStatusCreated
-	s.mockMutableState.EXPECT().UpdateUserTimer(protomock.Eq(timerInfoUpdated)).Return(nil)
+	s.mockMutableState.EXPECT().UpdateUserTimerTaskStatus(timerInfoUpdated.TimerId, timerInfoUpdated.TaskStatus).Return(nil)
 	s.mockMutableState.EXPECT().AddTasks(&tasks.UserTimerTask{
 		// TaskID is set by shard
 		WorkflowKey:         s.workflowKey,
@@ -222,7 +222,7 @@ func (s *timerSequenceSuite) TestCreateNextUserTimer_NotCreated_NoWorkflowExpiry
 
 	var timerInfoUpdated = common.CloneProto(timerInfo) // make a copy
 	timerInfoUpdated.TaskStatus = TimerTaskStatusCreated
-	s.mockMutableState.EXPECT().UpdateUserTimer(protomock.Eq(timerInfoUpdated)).Return(nil)
+	s.mockMutableState.EXPECT().UpdateUserTimerTaskStatus(timerInfoUpdated.TimerId, timerInfoUpdated.TaskStatus).Return(nil)
 	s.mockMutableState.EXPECT().AddTasks(&tasks.UserTimerTask{
 		// TaskID is set by shard
 		WorkflowKey:         s.workflowKey,
@@ -375,7 +375,7 @@ func (s *timerSequenceSuite) TestCreateNextActivityTimer_NotCreated_BeforeWorkfl
 
 	var activityInfoUpdated = common.CloneProto(activityInfo) // make a copy
 	activityInfoUpdated.TimerTaskStatus = TimerTaskStatusCreatedScheduleToStart
-	s.mockMutableState.EXPECT().UpdateActivity(protomock.Eq(activityInfoUpdated)).Return(nil)
+	s.mockMutableState.EXPECT().UpdateActivityTimerTaskStatus(activityInfoUpdated.ScheduledEventId, activityInfoUpdated.TimerTaskStatus).Return(nil)
 	s.mockMutableState.EXPECT().AddTasks(&tasks.ActivityTimeoutTask{
 		// TaskID is set by shard
 		WorkflowKey:         s.workflowKey,
@@ -417,7 +417,7 @@ func (s *timerSequenceSuite) TestCreateNextActivityTimer_NotCreated_NoWorkflowEx
 
 	var activityInfoUpdated = common.CloneProto(activityInfo) // make a copy
 	activityInfoUpdated.TimerTaskStatus = TimerTaskStatusCreatedScheduleToStart
-	s.mockMutableState.EXPECT().UpdateActivity(protomock.Eq(activityInfoUpdated)).Return(nil)
+	s.mockMutableState.EXPECT().UpdateActivityTimerTaskStatus(activityInfoUpdated.ScheduledEventId, activityInfoUpdated.TimerTaskStatus).Return(nil)
 	s.mockMutableState.EXPECT().AddTasks(&tasks.ActivityTimeoutTask{
 		// TaskID is set by shard
 		WorkflowKey:         s.workflowKey,
