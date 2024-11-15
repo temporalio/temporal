@@ -28,13 +28,11 @@ option go_package = "go.temporal.io/server/api/deployment/v1;deployment";
 
 import "temporal/api/enums/v1/task_queue.proto";
 import "google/protobuf/timestamp.proto";
+import "temporal/api/common/v1/message.proto";
 
-message DeploymentWorkflowArgs {
-    string namespace_name = 1;
-    string namespace_id = 2;
-    string deployment_name = 3;
-    string build_id = 4;
-    map<string, TaskQueueFamilyInfo> task_queue_families = 5;
+message DeploymentLocalState {
+    temporal.api.common.v1.WorkerDeployment worker_deployment = 1;
+    map<string, TaskQueueFamilyInfo> task_queue_families = 2;
     
     message TaskQueueFamilyInfo {
         repeated TaskQueueInfo task_queues = 1;
@@ -44,6 +42,12 @@ message DeploymentWorkflowArgs {
             google.protobuf.Timestamp first_poller_time = 2;
         }
     }
+}
+
+message DeploymentWorkflowArgs {
+    string namespace_name = 1;
+    string namespace_id = 2;
+    DeploymentLocalState deployment_local_state = 3;
 }
 
 message DeploymentNameWorkflowArgs {

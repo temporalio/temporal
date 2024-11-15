@@ -83,32 +83,32 @@ func (d *DeploymentWorkflowClient) RegisterTaskQueueWorker(
 	pollTimestamp *timestamppb.Timestamp,
 	maxIDLengthLimit int,
 ) error {
-	sa := &commonpb.SearchAttributes{}
-	searchattribute.AddSearchAttribute(&sa, searchattribute.TemporalNamespaceDivision, payload.EncodeString(DeploymentNamespaceDivision))
-
 	// escaping the reserved workflow delimiter (|) from the inputs, if present
-	d.deployment.DeploymentName = d.EscapeChar(d.deployment.DeploymentName)
-	d.deployment.BuildId = d.EscapeChar(d.deployment.BuildId)
+	escapedDeploymentName := d.escapeChar(d.deployment.DeploymentName)
+	escapedBuildId := d.escapeChar(d.deployment.BuildId)
 
 	// validate params which are used for building workflowID's
-	err := d.ValidateDeploymentWfParams("DeploymentName", d.deployment.DeploymentName, maxIDLengthLimit)
+	err := d.validateDeploymentWfParams("DeploymentName", d.deployment.DeploymentName, maxIDLengthLimit)
 	if err != nil {
 		return err
 	}
-	err = d.ValidateDeploymentWfParams("BuildID", d.deployment.BuildId, maxIDLengthLimit)
+	err = d.validateDeploymentWfParams("BuildID", d.deployment.BuildId, maxIDLengthLimit)
 	if err != nil {
 		return err
 	}
 
-	deploymentWorkflowID := d.GenerateDeploymentWorkflowID()
-	workflowInputPayloads, err := d.GenerateStartWorkflowPayload()
+	deploymentWorkflowID := d.generateDeploymentWorkflowID(escapedDeploymentName, escapedBuildId)
+	workflowInputPayloads, err := d.generateStartWorkflowPayload()
 	if err != nil {
 		return err
 	}
-	updatePayload, err := d.GenerateUpdateDeploymentPayload(taskQueueName, taskQueueType, pollTimestamp)
+	updatePayload, err := d.generateRegisterWorkerInDeploymentArgs(taskQueueName, taskQueueType, pollTimestamp)
 	if err != nil {
 		return err
 	}
+
+	sa := &commonpb.SearchAttributes{}
+	searchattribute.AddSearchAttribute(&sa, searchattribute.TemporalNamespaceDivision, payload.EncodeString(DeploymentNamespaceDivision))
 
 	// Start workflow execution, if it hasn't already
 	startReq := &workflowservice.StartWorkflowExecutionRequest{
@@ -166,19 +166,19 @@ func (d *DeploymentWorkflowClient) RegisterTaskQueueWorker(
 
 // GenerateDeploymentWorkflowID is a helper that generates a system accepted
 // workflowID which are used in our deployment workflows
-func (d *DeploymentWorkflowClient) GenerateDeploymentWorkflowID() string {
-	deploymentWorkflowID := DeploymentWorkflowIDPrefix + DeploymentWorkflowIDDelimeter + d.deployment.DeploymentName + DeploymentWorkflowIDDelimeter + d.deployment.BuildId
-	return d.EscapeChar(deploymentWorkflowID)
+func (d *DeploymentWorkflowClient) generateDeploymentWorkflowID(escapedDeploymentName string, escapedBuildID string) string {
+	return DeploymentWorkflowIDPrefix + DeploymentWorkflowIDDelimeter + escapedDeploymentName + DeploymentWorkflowIDDelimeter + escapedBuildID
 }
 
 // GenerateStartWorkflowPayload generates start workflow execution payload
-func (d *DeploymentWorkflowClient) GenerateStartWorkflowPayload() (*commonpb.Payloads, error) {
+func (d *DeploymentWorkflowClient) generateStartWorkflowPayload() (*commonpb.Payloads, error) {
 	workflowArgs := &deployspb.DeploymentWorkflowArgs{
-		NamespaceName:     d.namespaceEntry.Name().String(),
-		NamespaceId:       d.namespaceEntry.ID().String(),
-		DeploymentName:    d.deployment.DeploymentName,
-		BuildId:           d.deployment.BuildId,
-		TaskQueueFamilies: nil,
+		NamespaceName: d.namespaceEntry.Name().String(),
+		NamespaceId:   d.namespaceEntry.ID().String(),
+		DeploymentLocalState: &deployspb.DeploymentLocalState{
+			WorkerDeployment:  d.deployment,
+			TaskQueueFamilies: nil,
+		},
 	}
 	workflowInputPayloads, err := sdk.PreferProtoDataConverter.ToPayloads(workflowArgs)
 	if err != nil {
@@ -188,7 +188,7 @@ func (d *DeploymentWorkflowClient) GenerateStartWorkflowPayload() (*commonpb.Pay
 }
 
 // GenerateUpdateDeploymentPayload generates update workflow payload
-func (d *DeploymentWorkflowClient) GenerateUpdateDeploymentPayload(taskQueueName string, taskQueueType enumspb.TaskQueueType,
+func (d *DeploymentWorkflowClient) generateRegisterWorkerInDeploymentArgs(taskQueueName string, taskQueueType enumspb.TaskQueueType,
 	pollTimestamp *timestamppb.Timestamp) (*commonpb.Payloads, error) {
 	updateArgs := &deployspb.RegisterWorkerInDeploymentArgs{
 		TaskQueueName:   taskQueueName,
@@ -204,7 +204,7 @@ func (d *DeploymentWorkflowClient) GenerateUpdateDeploymentPayload(taskQueueName
 
 // ValidateDeploymentWfParams is a helper that verifies if the fields used for generating
 // deployment related workflowID's are valid
-func (d *DeploymentWorkflowClient) ValidateDeploymentWfParams(fieldName string, field string, maxIDLengthLimit int) error {
+func (d *DeploymentWorkflowClient) validateDeploymentWfParams(fieldName string, field string, maxIDLengthLimit int) error {
 	// Length checks
 	if field == "" {
 		return serviceerror.NewInvalidArgument(fmt.Sprintf("%v cannot be empty", fieldName))
@@ -219,7 +219,7 @@ func (d *DeploymentWorkflowClient) ValidateDeploymentWfParams(fieldName string, 
 	return common.ValidateUTF8String(fieldName, field)
 }
 
-func (d *DeploymentWorkflowClient) EscapeChar(s string) string {
+func (d *DeploymentWorkflowClient) escapeChar(s string) string {
 	s = strings.Replace(s, `\`, `\\`, -1)
 	s = strings.Replace(s, DeploymentWorkflowIDDelimeter, `\`+DeploymentWorkflowIDDelimeter, -1)
 	return s

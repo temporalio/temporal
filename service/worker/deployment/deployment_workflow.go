@@ -25,8 +25,6 @@
 package deployment
 
 import (
-	"sync"
-
 	sdkclient "go.temporal.io/sdk/client"
 	sdklog "go.temporal.io/sdk/log"
 	"go.temporal.io/sdk/workflow"
@@ -34,14 +32,9 @@ import (
 )
 
 type (
-	DeploymentLocalState struct {
-		*deployspb.DeploymentWorkflowArgs
-		lock sync.Mutex // preventing concurrent updates
-	}
-
 	// DeploymentWorkflowRunner holds the local state for a deployment workflow
 	DeploymentWorkflowRunner struct {
-		*DeploymentLocalState
+		*deployspb.DeploymentWorkflowArgs
 		ctx     workflow.Context
 		a       *DeploymentActivities
 		logger  sdklog.Logger
@@ -68,13 +61,11 @@ type AwaitSignals struct {
 
 func DeploymentWorkflow(ctx workflow.Context, deploymentWorkflowArgs *deployspb.DeploymentWorkflowArgs) error {
 	deploymentWorkflowRunner := &DeploymentWorkflowRunner{
-		DeploymentLocalState: &DeploymentLocalState{
-			DeploymentWorkflowArgs: deploymentWorkflowArgs,
-		},
-		ctx:     ctx,
-		a:       nil,
-		logger:  sdklog.With(workflow.GetLogger(ctx), "wf-namespace", deploymentWorkflowArgs.NamespaceName),
-		metrics: workflow.GetMetricsHandler(ctx).WithTags(map[string]string{"namespace": deploymentWorkflowArgs.NamespaceName}),
+		DeploymentWorkflowArgs: deploymentWorkflowArgs,
+		ctx:                    ctx,
+		a:                      nil,
+		logger:                 sdklog.With(workflow.GetLogger(ctx), "wf-namespace", deploymentWorkflowArgs.NamespaceName),
+		metrics:                workflow.GetMetricsHandler(ctx).WithTags(map[string]string{"namespace": deploymentWorkflowArgs.NamespaceName}),
 	}
 	return deploymentWorkflowRunner.run()
 }
@@ -107,7 +98,7 @@ func (d *DeploymentWorkflowRunner) run() error {
 	var pendingUpdates int
 
 	// Set up Query Handlers here:
-	err := workflow.SetQueryHandler(d.ctx, "deploymentTaskQueues", func(input []byte) (map[string]*deployspb.DeploymentWorkflowArgs_TaskQueueFamilyInfo, error) {
+	err := workflow.SetQueryHandler(d.ctx, "deploymentTaskQueues", func(input []byte) (map[string]*deployspb.DeploymentLocalState_TaskQueueFamilyInfo, error) {
 		return d.DeploymentLocalState.TaskQueueFamilies, nil
 	})
 	if err != nil {
@@ -123,22 +114,20 @@ func (d *DeploymentWorkflowRunner) run() error {
 		d.ctx,
 		RegisterWorkerInDeployment,
 		func(ctx workflow.Context, updateInput *deployspb.RegisterWorkerInDeploymentArgs) error {
-			d.DeploymentLocalState.lock.Lock()
 			pendingUpdates++
 			defer func() {
 				pendingUpdates--
-				d.DeploymentLocalState.lock.Unlock()
 			}()
 
 			if d.DeploymentLocalState.TaskQueueFamilies == nil {
-				d.DeploymentLocalState.TaskQueueFamilies = make(map[string]*deployspb.DeploymentWorkflowArgs_TaskQueueFamilyInfo)
+				d.DeploymentLocalState.TaskQueueFamilies = make(map[string]*deployspb.DeploymentLocalState_TaskQueueFamilyInfo)
 			}
 			if d.DeploymentLocalState.TaskQueueFamilies[updateInput.TaskQueueName] == nil {
-				d.DeploymentLocalState.TaskQueueFamilies[updateInput.TaskQueueName] = &deployspb.DeploymentWorkflowArgs_TaskQueueFamilyInfo{}
+				d.DeploymentLocalState.TaskQueueFamilies[updateInput.TaskQueueName] = &deployspb.DeploymentLocalState_TaskQueueFamilyInfo{}
 			}
 
 			// Add the task queue to the local state
-			newTaskQueueWorkerInfo := &deployspb.DeploymentWorkflowArgs_TaskQueueFamilyInfo_TaskQueueInfo{
+			newTaskQueueWorkerInfo := &deployspb.DeploymentLocalState_TaskQueueFamilyInfo_TaskQueueInfo{
 				TaskQueueType:   updateInput.TaskQueueType,
 				FirstPollerTime: updateInput.FirstPollerTime,
 			}
@@ -174,11 +163,9 @@ func (d *DeploymentWorkflowRunner) run() error {
 
 	d.logger.Debug("Deployment doing continue-as-new")
 	workflowArgs := &deployspb.DeploymentWorkflowArgs{
-		NamespaceName:     d.DeploymentLocalState.NamespaceName,
-		NamespaceId:       d.DeploymentLocalState.NamespaceId,
-		DeploymentName:    d.DeploymentLocalState.DeploymentName,
-		BuildId:           d.DeploymentLocalState.BuildId,
-		TaskQueueFamilies: d.DeploymentLocalState.TaskQueueFamilies,
+		NamespaceName:        d.NamespaceName,
+		NamespaceId:          d.NamespaceId,
+		DeploymentLocalState: d.DeploymentLocalState,
 	}
 	return workflow.NewContinueAsNewError(d.ctx, DeploymentWorkflow, workflowArgs)
 

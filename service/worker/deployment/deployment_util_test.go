@@ -128,7 +128,7 @@ func (d *deploymentWorkflowClientSuite) TestValidateDeploymentWfParams() {
 	for _, test := range testCases {
 		fieldName := test.FieldName
 		field := test.Input
-		err := d.deploymentWorkflowClient.ValidateDeploymentWfParams(fieldName, field, testMaxIDLengthLimit)
+		err := d.deploymentWorkflowClient.validateDeploymentWfParams(fieldName, field, testMaxIDLengthLimit)
 
 		if test.ExpectedError == nil {
 			d.NoError(err)
@@ -165,7 +165,7 @@ func (d *deploymentWorkflowClientSuite) TestEscapeChar() {
 	}
 
 	for _, test := range testCases {
-		escapedValue := d.deploymentWorkflowClient.EscapeChar(test.value)
+		escapedValue := d.deploymentWorkflowClient.escapeChar(test.value)
 		d.Equal(test.escapedExpectedValue, escapedValue)
 	}
 }
