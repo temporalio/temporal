@@ -106,6 +106,7 @@ func NewExecutableActivityStateTask(
 			FirstScheduledTime:         task.FirstScheduledTime,
 			LastAttemptCompleteTime:    task.LastAttemptCompleteTime,
 			Stamp:                      task.Stamp,
+			Paused:                     task.Paused,
 		},
 
 		batchable: true,
@@ -126,6 +127,7 @@ func NewExecutableActivityStateTask(
 			FirstScheduledTime:         task.FirstScheduledTime,
 			LastAttemptCompleteTime:    task.LastAttemptCompleteTime,
 			Stamp:                      task.Stamp,
+			Paused:                     task.Paused,
 		}),
 	}
 }

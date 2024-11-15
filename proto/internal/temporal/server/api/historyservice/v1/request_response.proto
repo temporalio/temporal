@@ -613,6 +613,8 @@ message SyncActivityRequest {
     google.protobuf.Timestamp last_attempt_complete_time = 19;
     // Stamp represents the internal “version” of the activity options and can/will be changed with Activity API.
     int32 stamp = 20;
+    // Indicates if the activity is paused.
+    bool paused = 21;
 }
 
 message SyncActivitiesRequest {
@@ -647,6 +649,9 @@ message ActivitySyncInfo {
     google.protobuf.Timestamp last_attempt_complete_time = 19;
     // Stamp represents the internal “version” of the activity options and can/will be changed with Activity API.
     int32 stamp = 20;
+    // Indicates if the activity is paused.
+    bool paused = 21;
+
 }
 
 message SyncActivityResponse {

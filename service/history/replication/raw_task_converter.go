@@ -196,6 +196,7 @@ func convertActivityStateReplicationTask(
 						FirstScheduledTime:         activityInfo.FirstScheduledTime,
 						LastAttemptCompleteTime:    activityInfo.LastAttemptCompleteTime,
 						Stamp:                      activityInfo.Stamp,
+						Paused:                     activityInfo.Paused,
 					},
 				},
 				VisibilityTime: timestamppb.New(taskInfo.VisibilityTimestamp),

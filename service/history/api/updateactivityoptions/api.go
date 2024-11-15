@@ -66,7 +66,7 @@ func Invoke(
 		func(workflowLease api.WorkflowLease) (*api.UpdateWorkflowAction, error) {
 			mutableState := workflowLease.GetMutableState()
 			var err error
-			response, err = updateActivityOptions(shardContext, validator, mutableState, request)
+			response, err = updateActivityOptions(validator, mutableState, request)
 			if err != nil {
 				return nil, err
 			}
@@ -88,7 +88,6 @@ func Invoke(
 }
 
 func updateActivityOptions(
-	shardContext shard.Context,
 	validator *api.CommandAttrValidator,
 	mutableState workflow.MutableState,
 	request *historyservice.UpdateActivityOptionsRequest,

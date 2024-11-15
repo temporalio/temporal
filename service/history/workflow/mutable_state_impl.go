@@ -1617,6 +1617,7 @@ func (ms *MutableStateImpl) UpdateActivityInfo(
 	}
 
 	ms.approximateSize -= ai.Size()
+	oldPaused := ai.Paused
 
 	ai.Version = incomingActivityInfo.GetVersion()
 	ai.ScheduledTime = incomingActivityInfo.GetScheduledTime()
@@ -1641,10 +1642,20 @@ func (ms *MutableStateImpl) UpdateActivityInfo(
 	ai.LastAttemptCompleteTime = incomingActivityInfo.GetLastAttemptCompleteTime()
 	ai.Stamp = incomingActivityInfo.GetStamp()
 
+	ai.Paused = incomingActivityInfo.GetPaused()
+
 	ms.updateActivityInfos[ai.ScheduledEventId] = ai
 	ms.approximateSize += ai.Size()
 
 	err := ms.applyActivityBuildIdRedirect(ai, incomingActivityInfo.GetLastStartedBuildId(), incomingActivityInfo.GetLastStartedRedirectCounter())
+	if err != nil {
+		return err
+	}
+
+	if oldPaused != ai.Paused {
+		err = ms.updatePauseInfoSearchAttribute()
+	}
+
 	return err
 }
 
@@ -4875,6 +4886,13 @@ func (ms *MutableStateImpl) RetryActivity(
 		return enumspb.RETRY_STATE_NON_RETRYABLE_FAILURE, nil
 	}
 
+	// if activity is paused
+	if ai.Paused {
+		// TODO: uncomment once RETRY_STATE_PAUSED is supported
+		// return enumspb.RETRY_STATE_PAUSED, nil
+		return enumspb.RETRY_STATE_IN_PROGRESS, nil
+	}
+
 	retryMaxInterval := ai.RetryMaximumInterval
 	// if a delay is specified by the application it should override the maximum interval set by the retry policy.
 	delay := nextRetryDelayFrom(activityFailure)
@@ -4908,10 +4926,9 @@ func (ms *MutableStateImpl) RetryActivity(
 	return enumspb.RETRY_STATE_IN_PROGRESS, nil
 }
 
-func (ms *MutableStateImpl) RecordLastActivityStarted(ai *persistencespb.ActivityInfo) {
-	ms.updateActivity(ai, func(info *persistencespb.ActivityInfo, impl *MutableStateImpl) *persistencespb.ActivityInfo {
+func (ms *MutableStateImpl) RecordLastActivityCompleteTime(ai *persistencespb.ActivityInfo) {
+	_ = ms.UpdateActivityWithCallback(ai.ActivityId, func(info *persistencespb.ActivityInfo, _ MutableState) {
 		ai.LastAttemptCompleteTime = timestamppb.New(ms.shard.GetTimeSource().Now().UTC())
-		return ai
 	})
 }
 
@@ -4935,31 +4952,79 @@ func (ms *MutableStateImpl) updateActivityInfoForRetries(
 	nextAttempt int32,
 	activityFailure *failurepb.Failure,
 ) {
-	ms.updateActivity(ai, func(info *persistencespb.ActivityInfo, impl *MutableStateImpl) *persistencespb.ActivityInfo {
-		ai = UpdateActivityInfoForRetries(
-			ai,
-			ms.GetCurrentVersion(),
-			nextAttempt,
-			ms.truncateRetryableActivityFailure(activityFailure),
-			timestamppb.New(nextScheduledTime),
-		)
-		return ai
+	_ = ms.UpdateActivityWithCallback(ai.ActivityId, func(info *persistencespb.ActivityInfo, mutableState MutableState) {
+		mutableStateImpl, ok := mutableState.(*MutableStateImpl)
+		if ok {
+			ai = UpdateActivityInfoForRetries(
+				ai,
+				mutableStateImpl.GetCurrentVersion(),
+				nextAttempt,
+				mutableStateImpl.truncateRetryableActivityFailure(activityFailure),
+				timestamppb.New(nextScheduledTime),
+			)
+		}
 	})
 }
 
-func (ms *MutableStateImpl) updateActivity(ai *persistencespb.ActivityInfo, updateCallback func(*persistencespb.ActivityInfo, *MutableStateImpl) *persistencespb.ActivityInfo) {
-	// we need to store activity info size since pendingActivityInfoIDs holds pointers to activity
-	// info and if prev found it points to the same activity info as ai, so updating ai will cause
-	// size of prev change.
+func (ms *MutableStateImpl) UpdateActivityWithCallback(activityId string, updateCallback UpdateActivityCallback) error {
+	ai, activityFound := ms.GetActivityByActivityID(activityId)
+	if !activityFound {
+		return consts.ErrActivityNotFound
+	}
+
+	prevPause := ai.Paused
 	var originalSize int
 	if prev, ok := ms.pendingActivityInfoIDs[ai.ScheduledEventId]; ok {
 		originalSize = prev.Size()
+		prevPause = prev.Paused
 	}
+
 	updateCallback(ai, ms)
+
+	if prevPause != ai.Paused {
+		err := ms.updatePauseInfoSearchAttribute()
+		if err != nil {
+			return err
+		}
+	}
 
 	ms.approximateSize += ai.Size() - originalSize
 	ms.updateActivityInfos[ai.ScheduledEventId] = ai
 	ms.syncActivityTasks[ai.ScheduledEventId] = struct{}{}
+
+	return nil
+}
+
+func (ms *MutableStateImpl) updatePauseInfoSearchAttribute() error {
+	pausedInfoMap := make(map[string]struct{})
+
+	for _, ai := range ms.GetPendingActivityInfos() {
+		if !ai.Paused {
+			continue
+		}
+		pausedInfoMap[ai.ActivityType.Name] = struct{}{}
+	}
+	pausedInfo := make([]string, 0, len(pausedInfoMap))
+	for activityType := range pausedInfoMap {
+		pausedInfo = append(pausedInfo, fmt.Sprintf("property.activityType=%s", activityType))
+	}
+
+	pauseInfoPayload, err := searchattribute.EncodeValue(pausedInfo, enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST)
+	if err != nil {
+		return err
+	}
+
+	exeInfo := ms.executionInfo
+	if exeInfo.SearchAttributes == nil {
+		exeInfo.SearchAttributes = make(map[string]*commonpb.Payload, 1)
+	}
+
+	if proto.Equal(exeInfo.SearchAttributes[searchattribute.TemporalPauseInfo], pauseInfoPayload) {
+		return nil // unchanged
+	}
+
+	ms.updateSearchAttributes(map[string]*commonpb.Payload{searchattribute.TemporalPauseInfo: pauseInfoPayload})
+	return ms.taskGenerator.GenerateUpsertVisibilityTask()
 }
 
 func (ms *MutableStateImpl) truncateRetryableActivityFailure(
@@ -6263,8 +6328,6 @@ func (ms *MutableStateImpl) closeTransactionHandleWorkflowResetTask(
 		!ms.IsWorkflowExecutionRunning() {
 		return nil
 	}
-
-	// compare with bad client binary checksum and schedule a reset task
 
 	// only schedule reset task if current doesn't have childWFs.
 	// TODO: This will be removed once our reset allows childWFs

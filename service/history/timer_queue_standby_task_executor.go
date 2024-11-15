@@ -317,16 +317,14 @@ func (t *timerQueueStandbyTaskExecutor) executeActivityRetryTimerTask(
 			return nil, err
 		}
 
-		if activityInfo.Attempt > task.Attempt {
-			return nil, nil
-		}
-
-		if activityInfo.Stamp != task.Stamp {
-			// this retry task is from old Stamp. In this case we should ignore it
-			return nil, nil
-		}
-
-		if activityInfo.StartedEventId != common.EmptyEventID {
+		// we ignore retry timer task if:
+		// * this retry task is from old Stamp.
+		// * attempts is not the same as recorded in activity info.
+		// * activity is already started.
+		if activityInfo.Attempt > task.Attempt ||
+			activityInfo.Stamp != task.Stamp ||
+			activityInfo.StartedEventId != common.EmptyEventID ||
+			activityInfo.Paused {
 			return nil, nil
 		}
 
