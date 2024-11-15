@@ -83,10 +83,6 @@ func (d *DeploymentWorkflowClient) RegisterTaskQueueWorker(
 	pollTimestamp *timestamppb.Timestamp,
 	maxIDLengthLimit int,
 ) error {
-	// escaping the reserved workflow delimiter (|) from the inputs, if present
-	escapedDeploymentName := d.escapeChar(d.deployment.DeploymentName)
-	escapedBuildId := d.escapeChar(d.deployment.BuildId)
-
 	// validate params which are used for building workflowID's
 	err := d.validateDeploymentWfParams("DeploymentName", d.deployment.DeploymentName, maxIDLengthLimit)
 	if err != nil {
@@ -97,7 +93,7 @@ func (d *DeploymentWorkflowClient) RegisterTaskQueueWorker(
 		return err
 	}
 
-	deploymentWorkflowID := d.generateDeploymentWorkflowID(escapedDeploymentName, escapedBuildId)
+	deploymentWorkflowID := d.generateDeploymentWorkflowID()
 	workflowInputPayloads, err := d.generateStartWorkflowPayload()
 	if err != nil {
 		return err
@@ -166,8 +162,12 @@ func (d *DeploymentWorkflowClient) RegisterTaskQueueWorker(
 
 // GenerateDeploymentWorkflowID is a helper that generates a system accepted
 // workflowID which are used in our deployment workflows
-func (d *DeploymentWorkflowClient) generateDeploymentWorkflowID(escapedDeploymentName string, escapedBuildID string) string {
-	return DeploymentWorkflowIDPrefix + DeploymentWorkflowIDDelimeter + escapedDeploymentName + DeploymentWorkflowIDDelimeter + escapedBuildID
+func (d *DeploymentWorkflowClient) generateDeploymentWorkflowID() string {
+	// escaping the reserved workflow delimiter (|) from the inputs, if present
+	escapedDeploymentName := d.escapeChar(d.deployment.DeploymentName)
+	escapedBuildId := d.escapeChar(d.deployment.BuildId)
+
+	return DeploymentWorkflowIDPrefix + DeploymentWorkflowIDDelimeter + escapedDeploymentName + DeploymentWorkflowIDDelimeter + escapedBuildId
 }
 
 // GenerateStartWorkflowPayload generates start workflow execution payload
@@ -180,11 +180,7 @@ func (d *DeploymentWorkflowClient) generateStartWorkflowPayload() (*commonpb.Pay
 			TaskQueueFamilies: nil,
 		},
 	}
-	workflowInputPayloads, err := sdk.PreferProtoDataConverter.ToPayloads(workflowArgs)
-	if err != nil {
-		return nil, err
-	}
-	return workflowInputPayloads, nil
+	return sdk.PreferProtoDataConverter.ToPayloads(workflowArgs)
 }
 
 // GenerateUpdateDeploymentPayload generates update workflow payload
@@ -195,11 +191,7 @@ func (d *DeploymentWorkflowClient) generateRegisterWorkerInDeploymentArgs(taskQu
 		TaskQueueType:   taskQueueType,
 		FirstPollerTime: nil, // TODO Shivam - come back to this
 	}
-	updatePayload, err := sdk.PreferProtoDataConverter.ToPayloads(updateArgs)
-	if err != nil {
-		return nil, err
-	}
-	return updatePayload, nil
+	return sdk.PreferProtoDataConverter.ToPayloads(updateArgs)
 }
 
 // ValidateDeploymentWfParams is a helper that verifies if the fields used for generating

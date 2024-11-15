@@ -126,6 +126,8 @@ func (d *DeploymentWorkflowRunner) run() error {
 				d.DeploymentLocalState.TaskQueueFamilies[updateInput.TaskQueueName] = &deployspb.DeploymentLocalState_TaskQueueFamilyInfo{}
 			}
 
+			// TODO Shivam - make UpdateHandler idempotent
+
 			// Add the task queue to the local state
 			newTaskQueueWorkerInfo := &deployspb.DeploymentLocalState_TaskQueueFamilyInfo_TaskQueueInfo{
 				TaskQueueType:   updateInput.TaskQueueType,
