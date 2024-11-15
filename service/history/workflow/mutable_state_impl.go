@@ -4261,7 +4261,6 @@ func (ms *MutableStateImpl) AddWorkflowExecutionSignaled(
 	input *commonpb.Payloads,
 	identity string,
 	header *commonpb.Header,
-	skipGenerateWorkflowTask bool,
 	links []*commonpb.Link,
 ) (*historypb.HistoryEvent, error) {
 	return ms.AddWorkflowExecutionSignaledEvent(
@@ -4269,7 +4268,6 @@ func (ms *MutableStateImpl) AddWorkflowExecutionSignaled(
 		input,
 		identity,
 		header,
-		skipGenerateWorkflowTask,
 		nil,
 		links,
 	)
@@ -4280,7 +4278,6 @@ func (ms *MutableStateImpl) AddWorkflowExecutionSignaledEvent(
 	input *commonpb.Payloads,
 	identity string,
 	header *commonpb.Header,
-	skipGenerateWorkflowTask bool,
 	externalWorkflowExecution *commonpb.WorkflowExecution,
 	links []*commonpb.Link,
 ) (*historypb.HistoryEvent, error) {
@@ -4294,7 +4291,6 @@ func (ms *MutableStateImpl) AddWorkflowExecutionSignaledEvent(
 		input,
 		identity,
 		header,
-		skipGenerateWorkflowTask,
 		externalWorkflowExecution,
 		links,
 	)

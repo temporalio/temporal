@@ -1712,16 +1712,11 @@ func (s *engineSuite) TestRespondWorkflowTaskCompletedSingleActivityScheduledWor
 }
 
 func (s *engineSuite) TestRespondWorkflowTaskCompleted_SignalTaskGeneration() {
-	resp := s.testRespondWorkflowTaskCompletedSignalGeneration(false)
+	resp := s.testRespondWorkflowTaskCompletedSignalGeneration()
 	s.NotNil(resp.GetStartedResponse())
 }
 
-func (s *engineSuite) TestRespondWorkflowTaskCompleted_SkipSignalTaskGeneration() {
-	resp := s.testRespondWorkflowTaskCompletedSignalGeneration(true)
-	s.Nil(resp.GetStartedResponse())
-}
-
-func (s *engineSuite) testRespondWorkflowTaskCompletedSignalGeneration(skipGenerateTask bool) *historyservice.RespondWorkflowTaskCompletedResponse {
+func (s *engineSuite) testRespondWorkflowTaskCompletedSignalGeneration() *historyservice.RespondWorkflowTaskCompletedResponse {
 	we := commonpb.WorkflowExecution{
 		WorkflowId: tests.WorkflowID,
 		RunId:      tests.RunID,
@@ -1738,13 +1733,12 @@ func (s *engineSuite) testRespondWorkflowTaskCompletedSignalGeneration(skipGener
 	identity := "testIdentity"
 
 	signal := workflowservice.SignalWorkflowExecutionRequest{
-		Namespace:                tests.NamespaceID.String(),
-		WorkflowExecution:        &we,
-		Identity:                 identity,
-		SignalName:               "test signal name",
-		Input:                    payloads.EncodeString("test input"),
-		SkipGenerateWorkflowTask: skipGenerateTask,
-		RequestId:                uuid.New(),
+		Namespace:         tests.NamespaceID.String(),
+		WorkflowExecution: &we,
+		Identity:          identity,
+		SignalName:        "test signal name",
+		Input:             payloads.EncodeString("test input"),
+		RequestId:         uuid.New(),
 	}
 	signalRequest := &historyservice.SignalWorkflowExecutionRequest{
 		NamespaceId:   tests.NamespaceID.String(),
@@ -1765,13 +1759,11 @@ func (s *engineSuite) testRespondWorkflowTaskCompletedSignalGeneration(skipGener
 	_, err := s.historyEngine.SignalWorkflowExecution(context.Background(), signalRequest)
 	s.NoError(err)
 
-	if !skipGenerateTask {
-		s.mockSearchAttributesProvider.EXPECT().GetSearchAttributes(gomock.Any(), false).Return(searchattribute.TestNameTypeMap, nil)
-		s.mockSearchAttributesMapperProvider.EXPECT().GetMapper(tests.Namespace).Return(&searchattribute.TestMapper{Namespace: tests.Namespace.String()}, nil).AnyTimes()
-		s.mockNamespaceCache.EXPECT().GetNamespaceName(tests.NamespaceID).Return(tests.Namespace, nil)
-		s.mockVisibilityMgr.EXPECT().GetIndexName().Return(esIndexName).AnyTimes()
-		s.mockExecutionMgr.EXPECT().ReadHistoryBranch(gomock.Any(), gomock.Any()).Return(&persistence.ReadHistoryBranchResponse{HistoryEvents: []*historypb.HistoryEvent{}}, nil)
-	}
+	s.mockSearchAttributesProvider.EXPECT().GetSearchAttributes(gomock.Any(), false).Return(searchattribute.TestNameTypeMap, nil)
+	s.mockSearchAttributesMapperProvider.EXPECT().GetMapper(tests.Namespace).Return(&searchattribute.TestMapper{Namespace: tests.Namespace.String()}, nil).AnyTimes()
+	s.mockNamespaceCache.EXPECT().GetNamespaceName(tests.NamespaceID).Return(tests.Namespace, nil)
+	s.mockVisibilityMgr.EXPECT().GetIndexName().Return(esIndexName).AnyTimes()
+	s.mockExecutionMgr.EXPECT().ReadHistoryBranch(gomock.Any(), gomock.Any()).Return(&persistence.ReadHistoryBranchResponse{HistoryEvents: []*historypb.HistoryEvent{}}, nil)
 
 	var commands []*commandpb.Command
 	resp, err := s.historyEngine.RespondWorkflowTaskCompleted(context.Background(), &historyservice.RespondWorkflowTaskCompletedRequest{

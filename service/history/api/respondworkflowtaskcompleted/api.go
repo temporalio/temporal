@@ -480,16 +480,11 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 		}
 	}
 
-	bufferedEventShouldCreateNewTask := hasBufferedEventsOrMessages && ms.HasAnyBufferedEvent(eventShouldGenerateNewTaskFilter)
-	if hasBufferedEventsOrMessages && !bufferedEventShouldCreateNewTask {
-		// Make sure tasks that should not create a new event don't get stuck in ms forever
-		ms.FlushBufferedEvents()
-	}
 	newWorkflowTaskType := enumsspb.WORKFLOW_TASK_TYPE_UNSPECIFIED
 	if ms.IsWorkflowExecutionRunning() {
 		if request.GetForceCreateNewWorkflowTask() || // Heartbeat WT is always of Normal type.
 			wtFailedShouldCreateNewTask ||
-			bufferedEventShouldCreateNewTask ||
+			hasBufferedEventsOrMessages ||
 			activityNotStartedCancelled {
 
 			newWorkflowTaskType = enumsspb.WORKFLOW_TASK_TYPE_NORMAL
@@ -1048,14 +1043,4 @@ func (handler *WorkflowTaskCompletedHandler) clearStickyTaskQueue(ctx context.Co
 		return err
 	}
 	return nil
-}
-
-// Filter function to be passed to mutable_state.HasAnyBufferedEvent
-// Returns true if the event should generate a new workflow task
-// Currently only signal events with SkipGenerateWorkflowTask=true flag set do not generate tasks
-func eventShouldGenerateNewTaskFilter(event *historypb.HistoryEvent) bool {
-	if event.GetEventType() != enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED {
-		return true
-	}
-	return !event.GetWorkflowExecutionSignaledEventAttributes().GetSkipGenerateWorkflowTask()
 }

@@ -198,7 +198,6 @@ type (
 			input *commonpb.Payloads,
 			identity string,
 			header *commonpb.Header,
-			skipGenerateWorkflowTask bool,
 			links []*commonpb.Link,
 		) (*historypb.HistoryEvent, error)
 		AddWorkflowExecutionSignaledEvent(
@@ -206,7 +205,6 @@ type (
 			input *commonpb.Payloads,
 			identity string,
 			header *commonpb.Header,
-			skipGenerateWorkflowTask bool,
 			externalWorkflowExecution *commonpb.WorkflowExecution,
 			links []*commonpb.Link,
 		) (*historypb.HistoryEvent, error)
