@@ -544,6 +544,7 @@ func (handler *workflowTaskCompletedHandler) handlePostCommandEagerExecuteActivi
 		handler.identity,
 		stamp,
 		nil,
+		nil,
 	); err != nil {
 		return nil, err
 	}
