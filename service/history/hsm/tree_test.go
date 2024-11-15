@@ -319,6 +319,7 @@ func TestNode_Walk(t *testing.T) {
 }
 
 func TestNode_Sync(t *testing.T) {
+	ctx := context.Background()
 	logger := log.NewTestLogger()
 	currentState := hsmtest.State2
 	currentInitialVersionedTransition := &persistencespb.VersionedTransition{
@@ -409,7 +410,7 @@ func TestNode_Sync(t *testing.T) {
 				node.InternalRepr().InitialVersionedTransition = initialVersionedTransition
 				node.InternalRepr().LastUpdateVersionedTransition = lastUpdateVersionedTransition
 
-				return node
+				return node.Data()
 			}
 
 			currentNode := initNode(currentState, currentInitialVersionedTransition, currentLastUpdateVersionedTransition)
@@ -417,7 +418,7 @@ func TestNode_Sync(t *testing.T) {
 
 			currentNodeTransitionCount := currentNode.InternalRepr().TransitionCount
 
-			err := currentNode.Sync(incomingNode)
+			err := currentNode.Sync(ctx, incomingNode)
 			if tc.expectedErr != nil {
 				require.ErrorIs(t, err, tc.expectedErr)
 				return
@@ -515,7 +516,7 @@ func TestCollection(t *testing.T) {
 		logger)
 	require.NoError(t, err)
 
-	coll := hsm.NewCollection[*hsmtest.Data](root, def1.Type())
+	coll := hsm.NewCollection[*hsmtest.Data](root.Data(), def1.Type())
 	a, err := coll.Add("a", hsmtest.NewData(hsmtest.State1))
 	require.NoError(t, err)
 	b, err := coll.Add("b", hsmtest.NewData(hsmtest.State2))

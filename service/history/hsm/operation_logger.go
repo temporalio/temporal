@@ -94,10 +94,6 @@ func NewOpLog(config *Config) (*OpLog, error) {
 		return nil, fmt.Errorf("logger must be provided")
 	}
 
-	config.Logger.Info("Initializing operation log",
-		tag.Name("oplog"),
-		tag.Value("initialize"))
-
 	l := &OpLog{
 		operations:    make([]*persistencespb.StateMachineOperation, 0),
 		maxOperations: config.MaxOperations,
@@ -107,12 +103,20 @@ func NewOpLog(config *Config) (*OpLog, error) {
 		logger:        config.Logger,
 	}
 
-	// Start pruneLoop and wait for it to be ready
 	ready := make(chan struct{})
+	errCh := make(chan error, 1) // Buffer of 1 to avoid goroutine leak if initialization fails
+
 	go func() {
-		l.pruneLoop(ready)
+		defer close(errCh)
+		close(ready)
+		l.pruneLoop()
 	}()
+
 	<-ready
+
+	config.Logger.Debug("Initializing operation log",
+		tag.Name("oplog"),
+		tag.Value("initialize"))
 
 	return l, nil
 }
@@ -271,11 +275,16 @@ func (l *OpLog) Close() error {
 	return nil
 }
 
-func (l *OpLog) pruneLoop(ready chan<- struct{}) {
+func (l *OpLog) pruneLoop() {
 	ticker := time.NewTicker(l.pruneInterval)
 	defer ticker.Stop()
 
-	close(ready)
+	// Check if we're closed before starting loop
+	select {
+	case <-l.stopCh:
+		return
+	default:
+	}
 
 	for {
 		select {

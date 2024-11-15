@@ -118,7 +118,7 @@ func (r *HSMStateReplicatorImpl) SyncHSMState(
 		return err
 	}
 
-	synced, err := r.syncHSMNode(mutableState, request)
+	synced, err := r.syncHSMNode(ctx, mutableState, request)
 	if err != nil || !synced {
 		return err
 	}
@@ -149,6 +149,7 @@ func (r *HSMStateReplicatorImpl) SyncHSMState(
 }
 
 func (r *HSMStateReplicatorImpl) syncHSMNode(
+	ctx context.Context,
 	mutableState workflow.MutableState,
 	request *shard.SyncHSMRequest,
 ) (bool, error) {
@@ -199,7 +200,7 @@ func (r *HSMStateReplicatorImpl) syncHSMNode(
 		}
 
 		synced = true
-		return currentNode.Sync(incomingNode)
+		return currentNode.Sync(ctx, incomingNode)
 	}); err != nil {
 		return false, err
 	}

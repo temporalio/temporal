@@ -3702,6 +3702,7 @@ func (s *mutableStateSuite) buildSnapshot(state *MutableStateImpl) *persistences
 }
 
 func (s *mutableStateSuite) TestApplySnapshot() {
+	ctx := context.Background()
 	state := s.buildWorkflowMutableState()
 	s.addChangesForStateReplication(state)
 
@@ -3744,7 +3745,7 @@ func (s *mutableStateSuite) TestApplySnapshot() {
 	targetMS.closeTransactionTrackLastUpdateVersionedTransition(TransactionPolicyActive)
 
 	snapshot := s.buildSnapshot(targetMS)
-	err = currentMS.ApplySnapshot(snapshot)
+	err = currentMS.ApplySnapshot(ctx, snapshot)
 	s.NoError(err)
 
 	s.verifyMutableState(currentMS, targetMS, originMS)

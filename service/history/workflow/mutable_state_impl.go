@@ -561,7 +561,7 @@ func (ms *MutableStateImpl) mustInitHSM(logger log.Logger) {
 	if err != nil {
 		panic(err)
 	}
-	ms.stateMachineNode = stateMachineNode
+	ms.stateMachineNode = stateMachineNode.Node
 }
 
 func (ms *MutableStateImpl) HSM() *hsm.Node {
@@ -6554,6 +6554,7 @@ func (ms *MutableStateImpl) ApplyMutation(
 }
 
 func (ms *MutableStateImpl) ApplySnapshot(
+	ctx context.Context,
 	snapshot *persistencespb.WorkflowMutableState,
 ) error {
 	prevExecutionInfoSize := ms.executionInfo.Size()
@@ -6569,7 +6570,7 @@ func (ms *MutableStateImpl) ApplySnapshot(
 
 	ms.applyUpdatesToUpdateInfos(snapshot.ExecutionInfo.UpdateInfos, true)
 
-	err = ms.syncSubStateMachinesByType(snapshot.ExecutionInfo.SubStateMachinesByType, ms.logger)
+	err = ms.syncSubStateMachinesByType(ctx, snapshot.ExecutionInfo.SubStateMachinesByType, ms.logger)
 	if err != nil {
 		return err
 	}
@@ -6879,7 +6880,9 @@ func (ms *MutableStateImpl) syncExecutionInfo(current *persistencespb.WorkflowEx
 	return nil
 }
 
-func (ms *MutableStateImpl) syncSubStateMachinesByType(incoming map[string]*persistencespb.StateMachineMap, logger log.Logger) error {
+func (ms *MutableStateImpl) syncSubStateMachinesByType(ctx context.Context,
+	incoming map[string]*persistencespb.StateMachineMap,
+	logger log.Logger) error {
 	currentHSM := ms.HSM()
 
 	// we don't care about the root here which is the entire mutable state
@@ -6911,7 +6914,7 @@ func (ms *MutableStateImpl) syncSubStateMachinesByType(incoming map[string]*pers
 			return err
 		}
 
-		return currentNode.Sync(incomingNode)
+		return currentNode.Sync(ctx, incomingNode)
 	}); err != nil {
 		return err
 	}
