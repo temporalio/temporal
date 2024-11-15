@@ -54,6 +54,32 @@ func (s *deploymentSuite) TearDownTest() {
 	s.env.AssertExpectations(s.T())
 }
 
-// func (s *deploymentSuite) TestDeploymentWorkflow_RegisterDeploymentTaskQueue() {
+// TestRegisterTaskQueueInDeployment tests the case when a task-queue
+// is registered in a deployment
+// func (s *deploymentSuite) TestRegisterTaskQueueInDeployment() {
+// )
+// }
+
+// TestRegisterTaskQueuesInDeployment tests the case when multiple task-queues
+// are registered (non-concurrently) in a deployment
+// func (s *deploymentSuite) TestRegisterTaskQueuesInDeployment() {
+// )
+// }
+
+// TestRegisterTaskQueuesInDeploymentConcurrent tests the case when multiple task-queues
+// are registered concurrently in a deployment
+// func (s *deploymentSuite) TestRegisterTaskQueuesInDeploymentConcurrent() {
+// )
+// }
+
+// TestRegisterTaskQueuesExceedLimit tests the case when the number of registered task-queues
+// exceed the allowed per-deployment limit
+// func (s *deploymentSuite) TestRegisterTaskQueuesExceedLimit() {
+// )
+// }
+
+// TestStartDeploymentWorkflowExceedLimit tests the case when the number of
+// deployment workflow executions exceed the allowed namespace limit
+// func (s *deploymentSuite) TestRegisterTaskQueuesExceedLimit() {
 // )
 // }

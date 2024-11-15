@@ -25,6 +25,8 @@
 package deployment
 
 import (
+	"sync"
+
 	sdkclient "go.temporal.io/sdk/client"
 	sdklog "go.temporal.io/sdk/log"
 	"go.temporal.io/sdk/workflow"
@@ -34,6 +36,7 @@ import (
 type (
 	DeploymentLocalState struct {
 		*deployspb.DeploymentWorkflowArgs
+		lock sync.Mutex // preventing concurrent updates
 	}
 
 	// DeploymentWorkflowRunner holds the local state for a deployment workflow
@@ -56,8 +59,7 @@ const (
 
 	DeploymentWorkflowIDPrefix      = "temporal-sys-deployment"
 	DeploymentWorkflowIDDelimeter   = "|"
-	DeploymentBuildIdDelimeter      = "?"
-	DeploymentWorkflowIDInitialSize = len(DeploymentWorkflowIDDelimeter) + len(DeploymentBuildIdDelimeter) + len(DeploymentWorkflowIDPrefix)
+	DeploymentWorkflowIDInitialSize = (2 * len(DeploymentWorkflowIDDelimeter)) + len(DeploymentWorkflowIDPrefix)
 )
 
 type AwaitSignals struct {
@@ -121,17 +123,19 @@ func (d *DeploymentWorkflowRunner) run() error {
 		d.ctx,
 		RegisterWorkerInDeployment,
 		func(ctx workflow.Context, updateInput *deployspb.RegisterWorkerInDeploymentArgs) error {
+			d.DeploymentLocalState.lock.Lock()
 			pendingUpdates++
 			defer func() {
 				pendingUpdates--
+				d.DeploymentLocalState.lock.Unlock()
 			}()
 			if d.DeploymentLocalState.TaskQueueFamilies == nil {
 				d.DeploymentLocalState.TaskQueueFamilies = make(map[string]*deployspb.DeploymentWorkflowArgs_TaskQueueFamilyInfo)
-				d.DeploymentLocalState.TaskQueueFamilies[updateInput.Name] = &deployspb.DeploymentWorkflowArgs_TaskQueueFamilyInfo{}
+				d.DeploymentLocalState.TaskQueueFamilies[updateInput.TaskQueueName] = &deployspb.DeploymentWorkflowArgs_TaskQueueFamilyInfo{}
 			}
 			// Add the task queue to the local state
-			d.DeploymentLocalState.TaskQueueFamilies[updateInput.Name].TaskQueues =
-				append(d.DeploymentLocalState.TaskQueueFamilies[updateInput.Name].TaskQueues, updateInput.TaskQueueInfo)
+			d.DeploymentLocalState.TaskQueueFamilies[updateInput.TaskQueueName].TaskQueues =
+				append(d.DeploymentLocalState.TaskQueueFamilies[updateInput.TaskQueueName].TaskQueues, updateInput.TaskQueueInfo)
 
 			// Call activity which starts "DeploymentName" workflow
 

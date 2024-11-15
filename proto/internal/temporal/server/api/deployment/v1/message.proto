@@ -53,6 +53,6 @@ message DeploymentNameWorkflowArgs {
 }
 
 message RegisterWorkerInDeploymentArgs{
-    string name = 1;
+    string task_queue_name = 1;
     DeploymentWorkflowArgs.TaskQueueFamilyInfo.TaskQueueInfo task_queue_info = 2;
 }

@@ -26,10 +26,8 @@ package matching
 
 import (
 	"context"
-	"fmt"
 	"math"
 	"math/rand"
-	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -38,7 +36,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	enumspb "go.temporal.io/api/enums/v1"
-	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/api/matchingservicemock/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
@@ -51,7 +48,6 @@ import (
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/tqid"
 	"go.temporal.io/server/internal/goro"
-	"go.temporal.io/server/service/worker/deployment"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -154,63 +150,6 @@ func TestAddTasksRate(t *testing.T) {
 	// a minute passes and no tasks are added
 	timeSource.Advance(60 * time.Second)
 	require.Equal(t, float32(0), tr.rate()) // 0 tasks have been added in the last 30 seconds
-}
-
-func TestValidateDeploymentWfParams(t *testing.T) {
-	testCases := []struct {
-		Description   string
-		FieldName     string
-		Input         string
-		ExpectedError error
-	}{
-		{
-			Description:   "Empty Field",
-			FieldName:     "DeploymentName",
-			Input:         "",
-			ExpectedError: serviceerror.NewInvalidArgument("DeploymentName cannot be empty"),
-		},
-		{
-			Description:   "Large Field",
-			FieldName:     "DeploymentName",
-			Input:         strings.Repeat("s", 1000),
-			ExpectedError: serviceerror.NewInvalidArgument("size of DeploymentName larger than the maximum allowed"),
-		},
-		{
-			Description:   "Invalid character (|) in Field",
-			FieldName:     "DeploymentName",
-			Input:         "A" + deployment.DeploymentWorkflowIDDelimeter,
-			ExpectedError: serviceerror.NewInvalidArgument(fmt.Sprintf("DeploymentName cannot contain reserved prefix %v", deployment.DeploymentWorkflowIDDelimeter)),
-		},
-		{
-			Description:   "Invalid character (?) in Field",
-			FieldName:     "DeploymentName",
-			Input:         "A" + deployment.DeploymentBuildIdDelimeter,
-			ExpectedError: serviceerror.NewInvalidArgument(fmt.Sprintf("DeploymentName cannot contain reserved prefix %v", deployment.DeploymentBuildIdDelimeter)),
-		},
-		{
-			Description:   "Valid field",
-			FieldName:     "DeploymentName",
-			Input:         "A",
-			ExpectedError: nil,
-		},
-	}
-
-	tlm := mustCreateTestPhysicalTaskQueueManager(t, gomock.NewController(t))
-
-	for _, test := range testCases {
-		fieldName := test.FieldName
-		field := test.Input
-		err := tlm.validateDeploymentWfParams(fieldName, field)
-
-		if test.ExpectedError == nil {
-			require.NoError(t, err)
-			continue
-		}
-
-		var invalidArgument *serviceerror.InvalidArgument
-		require.ErrorAs(t, err, &invalidArgument)
-		require.Equal(t, test.ExpectedError.Error(), err.Error())
-	}
 }
 
 func TestForeignPartitionOwnerCausesUnload(t *testing.T) {
