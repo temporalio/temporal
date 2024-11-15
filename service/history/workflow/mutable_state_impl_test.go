@@ -309,7 +309,7 @@ func (s *mutableStateSuite) TestRedirectInfoValidation_Valid() {
 		"",
 		tq,
 		"",
-		worker_versioning.StampForBuildId("b2"),
+		worker_versioning.StampFromBuildId("b2"),
 		&taskqueue.BuildIdRedirectInfo{AssignedBuildId: "b1"},
 		false,
 	)
@@ -332,7 +332,7 @@ func (s *mutableStateSuite) TestRedirectInfoValidation_Invalid() {
 		"",
 		tq,
 		"",
-		worker_versioning.StampForBuildId("b2"),
+		worker_versioning.StampFromBuildId("b2"),
 		&taskqueue.BuildIdRedirectInfo{AssignedBuildId: "b0"},
 		false,
 	)
@@ -353,7 +353,7 @@ func (s *mutableStateSuite) TestRedirectInfoValidation_EmptyRedirectInfo() {
 		"",
 		tq,
 		"",
-		worker_versioning.StampForBuildId("b2"),
+		worker_versioning.StampFromBuildId("b2"),
 		nil,
 		false,
 	)
@@ -475,7 +475,7 @@ func (s *mutableStateSuite) createVersionedMutableStateWithCompletedWFT(tq *task
 		"",
 		tq,
 		"",
-		worker_versioning.StampForBuildId("b1"),
+		worker_versioning.StampFromBuildId("b1"),
 		nil,
 		false,
 	)
@@ -595,7 +595,7 @@ func (s *mutableStateSuite) createMutableStateWithVersioningBehavior(
 		wft,
 		&workflowservice.RespondWorkflowTaskCompletedRequest{
 			VersioningBehavior: behavior,
-			WorkerVersionStamp: worker_versioning.StampForDeployment(deployment),
+			WorkerVersionStamp: worker_versioning.StampFromDeployment(deployment),
 		},
 		workflowTaskCompletionLimits,
 	)
@@ -645,7 +645,7 @@ func (s *mutableStateSuite) TestUnpinnedRedirected() {
 		&workflowservice.RespondWorkflowTaskCompletedRequest{
 			// wf is pinned in the new build
 			VersioningBehavior: enumspb.VERSIONING_BEHAVIOR_PINNED,
-			WorkerVersionStamp: worker_versioning.StampForDeployment(deployment2),
+			WorkerVersionStamp: worker_versioning.StampFromDeployment(deployment2),
 		},
 		workflowTaskCompletionLimits,
 	)
