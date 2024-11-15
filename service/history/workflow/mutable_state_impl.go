@@ -2982,6 +2982,7 @@ func (ms *MutableStateImpl) AddActivityTaskStartedEvent(
 	requestID string,
 	identity string,
 	versioningStamp *commonpb.WorkerVersionStamp,
+	deployment *commonpb.WorkerDeployment,
 	redirectInfo *taskqueue.BuildIdRedirectInfo,
 ) (*historypb.HistoryEvent, error) {
 	opTag := tag.WorkflowActionActivityTaskStarted
@@ -3005,6 +3006,8 @@ func (ms *MutableStateImpl) AddActivityTaskStartedEvent(
 			}
 		}
 	}
+
+	ai.LastStartedDeployment = deployment
 
 	if !ai.HasRetryPolicy {
 		event := ms.hBuilder.AddActivityTaskStartedEvent(
@@ -6725,4 +6728,135 @@ func (ms *MutableStateImpl) applyTombstones(tombstoneBatches []*persistencespb.S
 
 func (ms *MutableStateImpl) disablingTransitionHistory() bool {
 	return ms.versionedTransitionInDB != nil && len(ms.executionInfo.TransitionHistory) == 0
+}
+
+// GetCurrentDeployment returns the current effective deployment in the following order:
+// RedirectingDeployment takes precedence over DeploymentOverride, over Deployment.
+func (ms *MutableStateImpl) GetCurrentDeployment() *commonpb.WorkerDeployment {
+	versioningInfo := ms.GetExecutionInfo().GetVersioningInfo()
+	if versioningInfo == nil {
+		return nil
+	} else if redirectInfo := versioningInfo.GetRedirectInfo(); redirectInfo != nil {
+		return redirectInfo.GetDeployment()
+	} else if override := versioningInfo.GetDeploymentOverride(); override != nil {
+		return override
+	}
+	return versioningInfo.GetDeployment()
+}
+
+func (ms *MutableStateImpl) GetRedirectInfo() *persistencespb.WorkflowExecutionInfo_VersioningInfo_RedirectInfo {
+	return ms.GetExecutionInfo().GetVersioningInfo().GetRedirectInfo()
+}
+
+// GetVersioningBehavior returns the effective versioning behavior for the workflow.
+func (ms *MutableStateImpl) GetVersioningBehavior() enumspb.VersioningBehavior {
+	versioningInfo := ms.GetExecutionInfo().GetVersioningInfo()
+	if versioningInfo == nil {
+		return enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED
+	} else if redirectInfo := versioningInfo.GetRedirectInfo(); redirectInfo != nil &&
+		redirectInfo.GetBehaviorOverride() != enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED {
+		return redirectInfo.GetBehaviorOverride()
+	} else if versioningInfo.GetBehaviorOverride() != enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED {
+		return versioningInfo.GetBehaviorOverride()
+	}
+	return versioningInfo.GetBehavior()
+}
+
+// StartDeploymentRedirect starts a redirect to the given deployment. If the workflow is pinned,
+// the redirect will be rejected unless it's initiated by an override. Returns true if the requested
+// redirect is started. Starting a new redirect replaces possible existing redirect without
+// rescheduling activities.
+// TODO (shahab): validate source deployment
+func (ms *MutableStateImpl) StartDeploymentRedirect(
+	deployment *commonpb.WorkerDeployment,
+	behaviorOverride enumspb.VersioningBehavior,
+) bool {
+	if deployment.Equal(ms.GetCurrentDeployment()) {
+		// Not a deployment change.
+		return false
+	}
+
+	wfBehavior := ms.GetVersioningBehavior()
+	if wfBehavior == enumspb.VERSIONING_BEHAVIOR_PINNED &&
+		behaviorOverride == enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED {
+		// WF is pinned and the redirect is not from a manual override, so we reject it.
+		// It's possible that a backlogged task in matching from an earlier time that this wf was
+		// unpinned is being dispatched now and wants to redirect the wf. Such task should be dropped.
+		return false
+	}
+
+	versioningInfo := ms.GetExecutionInfo().GetVersioningInfo()
+	if versioningInfo == nil {
+		versioningInfo = &persistencespb.WorkflowExecutionInfo_VersioningInfo{}
+		ms.GetExecutionInfo().VersioningInfo = versioningInfo
+	}
+
+	versioningInfo.RedirectInfo = &persistencespb.WorkflowExecutionInfo_VersioningInfo_RedirectInfo{
+		Deployment:       deployment,
+		BehaviorOverride: behaviorOverride,
+	}
+
+	// TODO (shahab): fail the existing wf task if it is started already
+	// TODO (shahab): reschedule or fail the existing wf task if it is not yet started
+
+	// Because deployment is changed, we clear sticky queue to make sure the next wf task does not
+	// go to the old deployment.
+	ms.ClearStickyTaskQueue()
+	return true
+}
+
+// CompleteDeploymentRedirect completes the ongoing redirect for this workflow if it exists.
+// Completing a redirect updates the workflow's deployment and possibly versioning behavior.
+// All activities that are not started yet will be rescheduled to be dispatched the new deployment.
+func (ms *MutableStateImpl) CompleteDeploymentRedirect(
+	behavior enumspb.VersioningBehavior,
+) error {
+	versioningInfo := ms.GetExecutionInfo().GetVersioningInfo()
+	redirectInfo := versioningInfo.GetRedirectInfo()
+	if redirectInfo == nil {
+		return nil
+	}
+	versioningInfo.RedirectInfo = nil
+	versioningInfo.Deployment = redirectInfo.GetDeployment()
+	versioningInfo.Behavior = behavior
+	if override := redirectInfo.GetBehaviorOverride(); override != enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED {
+		versioningInfo.BehaviorOverride = override
+		if override == enumspb.VERSIONING_BEHAVIOR_PINNED {
+			versioningInfo.DeploymentOverride = redirectInfo.GetDeployment()
+		}
+	}
+	return ms.reschedulePendingActivities()
+}
+
+// FailDeploymentRedirect fails the ongoing redirect for this workflow if it exists.
+// A failed redirect does not change the workflow's deployment and behavior overrides. All
+// activities that are not started yet will be rescheduled to be dispatched the current deployment.
+func (ms *MutableStateImpl) FailDeploymentRedirect() error {
+	versioningInfo := ms.GetExecutionInfo().GetVersioningInfo()
+	if versioningInfo.GetRedirectInfo() == nil {
+		return nil
+	}
+	versioningInfo.RedirectInfo = nil
+	// Even though the wfs deployment is not changed rescheduling activities is still needed because
+	// activity tasks that were attempted during redirect are dropped by Matching.
+	return ms.reschedulePendingActivities()
+}
+
+// reschedulePendingActivities reschedules all the activities that are not started, so they are
+// scheduled against the right queue in matching.
+func (ms *MutableStateImpl) reschedulePendingActivities() error {
+	for _, ai := range ms.GetPendingActivityInfos() {
+		if ai.StartedEventId != common.EmptyEventID {
+			// TODO: skip task generation also when activity is in backoff period
+			// activity already started
+			continue
+		}
+		// we only need to resend the activities to matching, no need to update timer tasks.
+		err := ms.taskGenerator.GenerateActivityTasks(ai.ScheduledEventId)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
 }

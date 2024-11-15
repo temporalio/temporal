@@ -142,13 +142,22 @@ func Invoke(
 				// For versioned workflows we additionally check for the poller queue to not be a sticky queue itself.
 				// Although it's ideal to check this for unversioned workflows as well, we can't rely on older clients
 				// setting the poller TQ kind.
-				if mutableState.GetAssignedBuildId() != "" && req.PollRequest.TaskQueue.Kind == enumspb.TASK_QUEUE_KIND_STICKY {
+				if (mutableState.GetAssignedBuildId() != "" || mutableState.GetCurrentDeployment() != nil) &&
+					req.PollRequest.TaskQueue.Kind == enumspb.TASK_QUEUE_KIND_STICKY {
 					return nil, serviceerrors.NewObsoleteDispatchBuildId("wrong sticky queue")
 				}
-				//
 				// req.PollRequest.TaskQueue.GetName() may include partition, but we only check when sticky is enabled,
 				// and sticky queue never has partition, so it does not matter.
 				mutableState.ClearStickyTaskQueue()
+			}
+
+			deployment := worker_versioning.DeploymentFromCapabilities(req.PollRequest.WorkerVersionCapabilities)
+			wfDeployment := mutableState.GetCurrentDeployment()
+			if !deployment.Equal(wfDeployment) {
+				// Try starting a redirect. If it doesn't happen, it means this task is obsolete.
+				if !mutableState.StartDeploymentRedirect(deployment, enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED) {
+					return nil, serviceerrors.NewObsoleteDispatchBuildId("poller's deployment does not match workflow's current deployment")
+				}
 			}
 
 			_, workflowTask, err = mutableState.AddWorkflowTaskStartedEvent(
