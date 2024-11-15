@@ -265,7 +265,7 @@ func newOptions(
 	}
 
 	// default options
-	WithTimeout(10 * time.Second)(res)
+	WithTimeout(21 * time.Second)(res) // Server logs warning if long poll is less than 20s
 
 	// custom options
 	for _, f := range funcs {
