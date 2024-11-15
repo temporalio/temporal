@@ -51,7 +51,7 @@ type (
 
 const (
 	// Updates
-	RegisterWorkerInDeployment = "register-worker"
+	RegisterWorkerInDeployment = "register-task-queue-worker"
 
 	// Signals
 	UpdateDeploymentBuildIDSignalName = "update-deployment-build-id"
@@ -129,13 +129,21 @@ func (d *DeploymentWorkflowRunner) run() error {
 				pendingUpdates--
 				d.DeploymentLocalState.lock.Unlock()
 			}()
+
 			if d.DeploymentLocalState.TaskQueueFamilies == nil {
 				d.DeploymentLocalState.TaskQueueFamilies = make(map[string]*deployspb.DeploymentWorkflowArgs_TaskQueueFamilyInfo)
+			}
+			if d.DeploymentLocalState.TaskQueueFamilies[updateInput.TaskQueueName] == nil {
 				d.DeploymentLocalState.TaskQueueFamilies[updateInput.TaskQueueName] = &deployspb.DeploymentWorkflowArgs_TaskQueueFamilyInfo{}
 			}
+
 			// Add the task queue to the local state
+			newTaskQueueWorkerInfo := &deployspb.DeploymentWorkflowArgs_TaskQueueFamilyInfo_TaskQueueInfo{
+				TaskQueueType:   updateInput.TaskQueueType,
+				FirstPollerTime: updateInput.FirstPollerTime,
+			}
 			d.DeploymentLocalState.TaskQueueFamilies[updateInput.TaskQueueName].TaskQueues =
-				append(d.DeploymentLocalState.TaskQueueFamilies[updateInput.TaskQueueName].TaskQueues, updateInput.TaskQueueInfo)
+				append(d.DeploymentLocalState.TaskQueueFamilies[updateInput.TaskQueueName].TaskQueues, newTaskQueueWorkerInfo)
 
 			// Call activity which starts "DeploymentName" workflow
 

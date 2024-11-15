@@ -34,11 +34,11 @@ import (
 	"sync/atomic"
 	"time"
 
+	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
-	deployspb "go.temporal.io/server/api/deployment/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
@@ -102,8 +102,8 @@ type (
 		taskValidator              taskValidator
 		tasksAddedInIntervals      *taskTracker
 		tasksDispatchedInIntervals *taskTracker
-		// isDeploymentWorkflowStarted keeps track if we have started a deployment workflow for this
-		// physicalTaskQueue
+		// isDeploymentWorkflowStarted keeps track if we have already registered the task queue worker
+		// in the deployment.
 		isDeploymentWorkflowStarted atomic.Bool
 	}
 )
@@ -365,26 +365,13 @@ func (c *physicalTaskQueueManagerImpl) PollTask(
 	if c.partitionMgr.engine.config.EnableDeployments(namespaceEntry.Name().String()) && pollMetadata.workerVersionCapabilities.UseVersioning {
 		if !c.isDeploymentWorkflowStarted.Load() {
 
-			// update workflow input
-			updateArgs := &deployspb.RegisterWorkerInDeploymentArgs{
-				TaskQueueName: c.queue.TaskQueueFamily().Name(),
-				TaskQueueInfo: &deployspb.DeploymentWorkflowArgs_TaskQueueFamilyInfo_TaskQueueInfo{
-					TaskQueueType:   enumspb.TASK_QUEUE_TYPE_WORKFLOW,
-					FirstPollerTime: nil,
-				},
+			workerDeployment := &commonpb.WorkerDeployment{
+				DeploymentName: pollMetadata.workerVersionCapabilities.DeploymentName,
+				BuildId:        pollMetadata.workerVersionCapabilities.BuildId,
 			}
+			d := deployment.NewDeploymentWorkflowClient(namespaceEntry, workerDeployment, c.partitionMgr.engine.historyClient)
+			err := d.RegisterTaskQueueWorker(ctx, c.queue.TaskQueueFamily().Name(), c.queue.TaskType(), nil, c.partitionMgr.engine.config.MaxIDLengthLimit())
 
-			// start workflow input
-			workflowArgs := &deployspb.DeploymentWorkflowArgs{
-				NamespaceName:     namespaceEntry.Name().String(),
-				NamespaceId:       namespaceId.String(),
-				DeploymentName:    pollMetadata.workerVersionCapabilities.DeploymentName,
-				BuildId:           pollMetadata.workerVersionCapabilities.BuildId,
-				TaskQueueFamilies: nil,
-			}
-
-			// Start the deployment workflow
-			_, err := deployment.StartAndUpdateDeploymentWorkflow(ctx, workflowArgs, updateArgs, c.partitionMgr.engine.config.MaxIDLengthLimit(), c.partitionMgr.engine.historyClient)
 			if err != nil {
 				return nil, err
 			}

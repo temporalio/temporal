@@ -54,5 +54,6 @@ message DeploymentNameWorkflowArgs {
 
 message RegisterWorkerInDeploymentArgs{
     string task_queue_name = 1;
-    DeploymentWorkflowArgs.TaskQueueFamilyInfo.TaskQueueInfo task_queue_info = 2;
+    temporal.api.enums.v1.TaskQueueType task_queue_type = 2;
+    google.protobuf.Timestamp first_poller_time = 3;
 }

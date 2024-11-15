@@ -27,17 +27,79 @@ package deployment
 import (
 	"fmt"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
+	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/server/api/historyservicemock/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/common/namespace"
+	"go.uber.org/mock/gomock"
 )
 
 // testMaxIDLengthLimit is the current default value used by dynamic config for
 // MaxIDLengthLimit
-const testMaxIDLengthLimit = 1000
+const (
+	testNamespace        = "deployment-test"
+	testDeployment       = "A"
+	testBuildID          = "xyz"
+	testMaxIDLengthLimit = 1000
+)
 
-func TestValidateDeploymentWfParams(t *testing.T) {
+type (
+	deploymentWorkflowClientSuite struct {
+		suite.Suite
+		*require.Assertions
+		controller *gomock.Controller
+
+		ns                       *namespace.Namespace
+		mockNamespaceCache       *namespace.MockRegistry
+		mockHistoryClient        *historyservicemock.MockHistoryServiceClient
+		workerDeployment         *commonpb.WorkerDeployment
+		deploymentWorkflowClient *DeploymentWorkflowClient
+		sync.Mutex
+	}
+)
+
+func (d *deploymentWorkflowClientSuite) SetupSuite() {
+}
+
+func (d *deploymentWorkflowClientSuite) TearDownSuite() {
+}
+
+func (d *deploymentWorkflowClientSuite) SetupTest() {
+	d.Assertions = require.New(d.T())
+	d.Lock()
+	defer d.Unlock()
+	d.controller = gomock.NewController(d.T())
+	d.controller = gomock.NewController(d.T())
+	d.ns, d.mockNamespaceCache = createMockNamespaceCache(d.controller, testNamespace)
+	d.mockHistoryClient = historyservicemock.NewMockHistoryServiceClient(d.controller)
+	d.workerDeployment = &commonpb.WorkerDeployment{
+		DeploymentName: testDeployment,
+		BuildId:        testBuildID,
+	}
+	d.deploymentWorkflowClient = NewDeploymentWorkflowClient(d.ns, d.workerDeployment, d.mockHistoryClient)
+
+}
+
+func createMockNamespaceCache(controller *gomock.Controller, nsName namespace.Name) (*namespace.Namespace, *namespace.MockRegistry) {
+	ns := namespace.NewLocalNamespaceForTest(&persistencespb.NamespaceInfo{Name: nsName.String()}, nil, "")
+	mockNamespaceCache := namespace.NewMockRegistry(controller)
+	mockNamespaceCache.EXPECT().GetNamespaceByID(gomock.Any()).Return(ns, nil).AnyTimes()
+	mockNamespaceCache.EXPECT().GetNamespaceName(gomock.Any()).Return(ns.Name(), nil).AnyTimes()
+	return ns, mockNamespaceCache
+}
+
+func TestDeploymentWorkflowClientSuite(t *testing.T) {
+	d := new(deploymentWorkflowClientSuite)
+	suite.Run(t, d)
+}
+
+func (d *deploymentWorkflowClientSuite) TestValidateDeploymentWfParams() {
 	testCases := []struct {
 		Description   string
 		FieldName     string
@@ -73,15 +135,45 @@ func TestValidateDeploymentWfParams(t *testing.T) {
 	for _, test := range testCases {
 		fieldName := test.FieldName
 		field := test.Input
-		err := ValidateDeploymentWfParams(fieldName, field, testMaxIDLengthLimit)
+		err := d.deploymentWorkflowClient.ValidateDeploymentWfParams(fieldName, field, testMaxIDLengthLimit)
 
 		if test.ExpectedError == nil {
-			require.NoError(t, err)
+			d.NoError(err)
 			continue
 		}
 
 		var invalidArgument *serviceerror.InvalidArgument
-		require.ErrorAs(t, err, &invalidArgument)
-		require.Equal(t, test.ExpectedError.Error(), err.Error())
+		d.ErrorAs(err, &invalidArgument)
+		d.Equal(test.ExpectedError.Error(), err.Error())
+	}
+}
+
+func (d *deploymentWorkflowClientSuite) TestEscapeChar() {
+	testCases := []struct {
+		value                string
+		escapedExpectedValue string
+	}{
+		{
+			value:                "test" + DeploymentWorkflowIDDelimeter + "value",
+			escapedExpectedValue: "test\\value", // replacing the | with /
+		},
+		{
+			value:                "test/a/a" + DeploymentWorkflowIDDelimeter + "value",
+			escapedExpectedValue: "test/a/a\\value",
+		},
+		{
+			value:                "test/a/a\b" + DeploymentWorkflowIDDelimeter + "value",
+			escapedExpectedValue: "test/a/a\b\\value",
+		},
+		{
+			value:                "\b" + DeploymentWorkflowIDDelimeter + "\test",
+			escapedExpectedValue: "\b\\\test",
+		},
+	}
+
+	for _, test := range testCases {
+		escapedValue := d.deploymentWorkflowClient.EscapeChar(test.value)
+		d.Equal(test.escapedExpectedValue, escapedValue)
+		d.Equal(len(test.value), len(escapedValue))
 	}
 }
