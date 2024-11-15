@@ -41,6 +41,7 @@ import (
 	"github.com/nexus-rpc/sdk-go/nexus"
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/sdk/temporalnexus"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common/authorization"
 	"go.temporal.io/server/common/cluster"
@@ -176,9 +177,35 @@ func (h *completionHandler) CompleteOperation(ctx context.Context, r *nexus.Comp
 		)
 		return nexus.HandlerErrorf(nexus.HandlerErrorTypeBadRequest, "invalid callback token")
 	}
+	var links []*commonpb.Link
+	for _, nexusLink := range r.StartLinks {
+		switch nexusLink.Type {
+		case string((&commonpb.Link_WorkflowEvent{}).ProtoReflect().Descriptor().FullName()):
+			link, err := temporalnexus.ConvertNexusLinkToLinkWorkflowEvent(nexusLink)
+			if err != nil {
+				// TODO(rodrigozhou): links are non-essential for the execution of the workflow,
+				// so ignoring the error for now; we will revisit how to handle these errors later.
+				h.Logger.Error(
+					fmt.Sprintf("failed to parse link to %q: %s", nexusLink.Type, nexusLink.URL),
+					tag.Error(err),
+				)
+				continue
+			}
+			links = append(links, &commonpb.Link{
+				Variant: &commonpb.Link_WorkflowEvent_{
+					WorkflowEvent: link,
+				},
+			})
+		default:
+			// If the link data type is unsupported, just ignore it for now.
+			h.Logger.Error(fmt.Sprintf("invalid link data type: %q", nexusLink.Type))
+		}
+	}
 	hr := &historyservice.CompleteNexusOperationRequest{
-		Completion: completion,
-		State:      string(r.State),
+		Completion:  completion,
+		State:       string(r.State),
+		OperationId: r.OperationID,
+		Links:       links,
 	}
 	switch r.State { // nolint:exhaustive
 	case nexus.OperationStateFailed, nexus.OperationStateCanceled:

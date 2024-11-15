@@ -32,6 +32,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/server/api/enums/v1"
 	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/service/history/hsm"
 )
@@ -127,11 +128,54 @@ func handleUnsuccessfulOperationError(
 	}
 }
 
+// Adds a NEXUS_OPERATION_STARTED history event and sets the operation state machine to NEXUS_OPERATION_STATE_STARTED.
+// Necessary if the completion is received before the start response.
+func fabricateStartedEventIfMissing(
+	node *hsm.Node,
+	requestID string,
+	operationID string,
+	links []*commonpb.Link,
+) error {
+	data, err := hsm.MachineData[Operation](node)
+	if err != nil {
+		return err
+	}
+
+	if TransitionStarted.Possible(data) {
+		if operationID == "" {
+			return serviceerror.NewNotFound("operation not found")
+		}
+
+		eventID, err := hsm.EventIDFromToken(data.ScheduledEventToken)
+		if err != nil {
+			return err
+		}
+
+		node.AddHistoryEvent(enumspb.EVENT_TYPE_NEXUS_OPERATION_STARTED, func(e *historypb.HistoryEvent) {
+			e.Attributes = &historypb.HistoryEvent_NexusOperationStartedEventAttributes{
+				NexusOperationStartedEventAttributes: &historypb.NexusOperationStartedEventAttributes{
+					ScheduledEventId: eventID,
+					OperationId:      operationID,
+					RequestId:        requestID,
+				},
+			}
+			e.Links = links
+		})
+
+		data.OperationId = operationID
+		data.SetState(enums.NEXUS_OPERATION_STATE_STARTED)
+	}
+
+	return nil
+}
+
 func CompletionHandler(
 	ctx context.Context,
 	env hsm.Environment,
 	ref hsm.Ref,
 	requestID string,
+	operationID string,
+	links []*commonpb.Link,
 	result *commonpb.Payload,
 	opFailedError *nexus.UnsuccessfulOperationError,
 ) error {
@@ -141,6 +185,9 @@ func CompletionHandler(
 	err := env.Access(ctx, ref, hsm.AccessWrite, func(node *hsm.Node) error {
 		if err := node.CheckRunning(); err != nil {
 			return serviceerror.NewNotFound("operation not found")
+		}
+		if err := fabricateStartedEventIfMissing(node, requestID, operationID, links); err != nil {
+			return err
 		}
 		err := hsm.MachineTransition(node, func(operation Operation) (hsm.TransitionOutput, error) {
 			if requestID != "" && operation.RequestId != requestID {
@@ -162,7 +209,7 @@ func CompletionHandler(
 	if errors.As(err, new(*serviceerror.NotFound)) && isRetryableNotFoundErr && ref.WorkflowKey.RunID != "" {
 		// Try again without a run ID in case the original run was reset.
 		ref.WorkflowKey.RunID = ""
-		return CompletionHandler(ctx, env, ref, requestID, result, opFailedError)
+		return CompletionHandler(ctx, env, ref, requestID, operationID, links, result, opFailedError)
 	}
 	return err
 }

@@ -1089,6 +1089,10 @@ message CompleteNexusOperationRequest {
         // Operation failure, only set if state != successful.
         temporal.api.nexus.v1.Failure failure = 4;
     }
+    // Operation ID - used when the completion is received before the started response.
+    string operation_id = 5;
+    // Links to be attached to a fabricated start event if completion is received before started response.
+    repeated temporal.api.common.v1.Link links = 6;
 }
 
 message CompleteNexusOperationResponse {
