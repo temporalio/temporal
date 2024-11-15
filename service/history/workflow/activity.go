@@ -33,6 +33,7 @@ import (
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/shard"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/emptypb"
@@ -168,4 +169,53 @@ func GetPendingActivityInfo(
 	}
 
 	return p, nil
+}
+
+func GetNextScheduledTime(ai *persistence.ActivityInfo) time.Time {
+	// there are two possible cases:
+	// * this is the first time activity was scheduled
+	//  * in this case we should use current schedule time
+	// * this is a retry
+	//  * next scheduled time will be calculated, based on the retry policy and last time when activity was completed
+
+	nextScheduledTime := ai.ScheduledTime.AsTime()
+	if ai.Attempt > 1 {
+		// calculate new schedule time
+		interval := ExponentialBackoffAlgorithm(ai.RetryInitialInterval, ai.RetryBackoffCoefficient, ai.Attempt)
+
+		if ai.RetryMaximumInterval.AsDuration() != 0 && (interval <= 0 || interval > ai.RetryMaximumInterval.AsDuration()) {
+			interval = ai.RetryMaximumInterval.AsDuration()
+		}
+
+		if interval > 0 {
+			nextScheduledTime = ai.LastAttemptCompleteTime.AsTime().Add(interval)
+		}
+	}
+	return nextScheduledTime
+}
+
+func PauseActivityById(mutableState MutableState, activityId string) error {
+	if !mutableState.IsWorkflowExecutionRunning() {
+		return consts.ErrWorkflowCompleted
+	}
+
+	ai, activityFound := mutableState.GetActivityByActivityID(activityId)
+
+	if !activityFound {
+		return consts.ErrActivityNotFound
+	}
+
+	if ai.Paused {
+		// do nothing
+		return nil
+	}
+
+	return mutableState.UpdateActivityWithCallback(ai.ActivityId, func(activityInfo *persistence.ActivityInfo, _ MutableState) {
+		// note - we are not increasing the stamp of the activity if it is running.
+		// this is because if activity is actually running we should let it finish
+		if GetActivityState(activityInfo) == enumspb.PENDING_ACTIVITY_STATE_SCHEDULED {
+			activityInfo.Stamp++
+		}
+		activityInfo.Paused = true
+	})
 }

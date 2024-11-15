@@ -406,6 +406,10 @@ func (r *TaskRefresherImpl) refreshTasksForActivity(
 			continue
 		}
 
+		if activityInfo.Paused {
+			continue
+		}
+
 		scheduleEvent, err := mutableState.GetActivityScheduledEvent(ctx, activityInfo.ScheduledEventId)
 		if err != nil {
 			return err

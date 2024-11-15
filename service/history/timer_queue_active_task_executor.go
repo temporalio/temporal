@@ -314,6 +314,8 @@ func (t *timerQueueActiveTaskExecutor) processSingleActivityTimeoutTask(
 	}
 
 	if retryState == enumspb.RETRY_STATE_IN_PROGRESS {
+		// TODO uncommment once RETRY_STATE_PAUSED is supported
+		// || retryState == enumspb.RETRY_STATE_PAUSED {
 		result.shouldUpdateMutableState = true
 		return result, nil
 	}
@@ -512,11 +514,10 @@ func (t *timerQueueActiveTaskExecutor) executeActivityRetryTimerTask(
 		return consts.ErrActivityTaskNotFound
 	}
 
-	if task.Stamp != activityInfo.Stamp {
-		// this retry task event is from an old stamp. In this case we should ignore the event.
+	if task.Stamp != activityInfo.Stamp || activityInfo.Paused {
+		// if retry task event is from an old stamp of if activity is paused we should ignore the event.
 		release(nil) // release(nil) so mutable state is not unloaded from cache
-		// I really don't understand why we need this release(nil) call...
-		return nil
+		return consts.ErrActivityTaskNotFound
 	}
 
 	if task.Attempt < activityInfo.Attempt || activityInfo.StartedEventId != common.EmptyEventID {

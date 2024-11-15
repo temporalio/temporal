@@ -203,7 +203,10 @@ func (t *timerSequenceImpl) LoadAndSortActivityTimers() []TimerSequenceID {
 	activityTimers := make(TimerSequenceIDs, 0, len(pendingActivities)*4)
 
 	for _, activityInfo := range pendingActivities {
-
+		// skip activities that are paused
+		if activityInfo.Paused {
+			continue
+		}
 		if sequenceID := t.getActivityScheduleToCloseTimeout(
 			activityInfo,
 		); sequenceID != nil {

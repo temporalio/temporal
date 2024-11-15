@@ -815,7 +815,6 @@ func reapplyEvents(
 				attr.GetInput(),
 				attr.GetIdentity(),
 				attr.GetHeader(),
-				attr.GetSkipGenerateWorkflowTask(),
 				event.Links,
 			); err != nil {
 				return reappliedEvents, err
