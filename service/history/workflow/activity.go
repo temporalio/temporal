@@ -210,7 +210,7 @@ func PauseActivityById(mutableState MutableState, activityId string) error {
 		return nil
 	}
 
-	return mutableState.UpdateActivityWithCallback(activityId, func(activityInfo *persistence.ActivityInfo, _ MutableState) {
+	return mutableState.UpdateActivityWithCallback(ai, func(activityInfo *persistence.ActivityInfo, _ MutableState) {
 		// note - we are not increasing the stamp of the activity if it is running.
 		// this is because if activity is actually running we should let it finish
 		if GetActivityState(activityInfo) == enumspb.PENDING_ACTIVITY_STATE_SCHEDULED {

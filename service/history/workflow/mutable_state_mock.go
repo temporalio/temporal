@@ -3108,7 +3108,7 @@ func (mr *MockMutableStateMockRecorder) UpdateActivityProgress(ai, request any) 
 }
 
 // UpdateActivityWithCallback mocks base method.
-func (m *MockMutableState) UpdateActivityWithCallback(arg0 *persistence.ActivityInfo, arg1 UpdateActivityCallback) error {
+func (m *MockMutableState) UpdateActivityWithCallback(arg0 string, arg1 UpdateActivityCallback) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "UpdateActivityWithCallback", arg0, arg1)
 	ret0, _ := ret[0].(error)
