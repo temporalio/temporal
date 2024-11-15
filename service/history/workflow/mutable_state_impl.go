@@ -4916,13 +4916,6 @@ func (ms *MutableStateImpl) RecordLastActivityStarted(ai *persistencespb.Activit
 }
 
 func (ms *MutableStateImpl) RegenerateActivityRetryTask(ai *persistencespb.ActivityInfo, nextScheduledTime time.Time) error {
-	// there are two possible cases:
-	// * this is the first time activity was scheduled
-	//  * in this case we should use current schedule time
-	// * this is a retry
-	//  * next scheduled time will be calculated, based on the retry policy and last time when activity was completed
-	//  * note - if delay interval was provided in the response it will be ignored
-
 	if nextScheduledTime.IsZero() {
 		nextScheduledTime = GetNextScheduleTime(ai)
 	}
