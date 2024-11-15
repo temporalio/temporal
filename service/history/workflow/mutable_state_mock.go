@@ -63,6 +63,7 @@ import (
 	tasks "go.temporal.io/server/service/history/tasks"
 	gomock "go.uber.org/mock/gomock"
 	durationpb "google.golang.org/protobuf/types/known/durationpb"
+	fieldmaskpb "google.golang.org/protobuf/types/known/fieldmaskpb"
 	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -643,6 +644,21 @@ func (m *MockMutableState) AddWorkflowExecutionCanceledEvent(arg0 int64, arg1 *c
 func (mr *MockMutableStateMockRecorder) AddWorkflowExecutionCanceledEvent(arg0, arg1 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddWorkflowExecutionCanceledEvent", reflect.TypeOf((*MockMutableState)(nil).AddWorkflowExecutionCanceledEvent), arg0, arg1)
+}
+
+// AddWorkflowExecutionOptionsUpdatedEvent mocks base method.
+func (m *MockMutableState) AddWorkflowExecutionOptionsUpdatedEvent(options *workflow.WorkflowExecutionOptions, mask *fieldmaskpb.FieldMask) (*history.HistoryEvent, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "AddWorkflowExecutionOptionsUpdatedEvent", options, mask)
+	ret0, _ := ret[0].(*history.HistoryEvent)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// AddWorkflowExecutionOptionsUpdatedEvent indicates an expected call of AddWorkflowExecutionOptionsUpdatedEvent.
+func (mr *MockMutableStateMockRecorder) AddWorkflowExecutionOptionsUpdatedEvent(options, mask any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddWorkflowExecutionOptionsUpdatedEvent", reflect.TypeOf((*MockMutableState)(nil).AddWorkflowExecutionOptionsUpdatedEvent), options, mask)
 }
 
 // AddWorkflowExecutionSignaled mocks base method.
