@@ -44,9 +44,9 @@ type (
 )
 
 const (
-	UpdateDeploymentNameBuildIDSignalName = "update-deployment-name-buildID"
+	UpdateDeploymentNameDefaultBuildIDSignalName = "update-deployment-name-default-buildID"
 
-	DeploymentNameWorkflowIDPrefix = "temporal-sys-deployment-name:"
+	DeploymentNameWorkflowIDPrefix = "temporal-sys-deployment-name"
 )
 
 // TODO Shivam - Define workflow for DeploymentName
@@ -73,5 +73,13 @@ func (d *DeploymentNameWorkflowRunner) run() error {
 	update default buildID of the deployment name.
 
 	*/
+
+	// Fetch signal handlers
+	selector := workflow.NewSelector(d.ctx)
+
+	// async draining before CAN
+	for !workflow.GetInfo(d.ctx).GetContinueAsNewSuggested() || selector.HasPending() {
+		selector.Select(d.ctx)
+	}
 	return nil
 }
