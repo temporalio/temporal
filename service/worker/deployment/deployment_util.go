@@ -65,12 +65,12 @@ type DeploymentWorkflowClient struct {
 }
 
 func NewDeploymentWorkflowClient(
-	namespace *namespace.Namespace,
+	namespaceEntry *namespace.Namespace,
 	deployment *commonpb.WorkerDeployment,
 	historyClient resource.HistoryClient,
 ) *DeploymentWorkflowClient {
 	return &DeploymentWorkflowClient{
-		namespaceEntry: namespace,
+		namespaceEntry: namespaceEntry,
 		deployment:     deployment,
 		historyClient:  historyClient,
 	}
