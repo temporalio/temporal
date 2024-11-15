@@ -33,6 +33,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
@@ -48,6 +49,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/service/worker/deployment"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 
@@ -99,6 +101,9 @@ type (
 		taskValidator              taskValidator
 		tasksAddedInIntervals      *taskTracker
 		tasksDispatchedInIntervals *taskTracker
+		// isDeploymentWorkflowStarted keeps track if we have already registered the task queue worker
+		// in the deployment.
+		isDeploymentWorkflowStarted atomic.Bool
 	}
 )
 
@@ -330,9 +335,28 @@ func (c *physicalTaskQueueManagerImpl) PollTask(
 	c.currentPolls.Add(1)
 	defer c.currentPolls.Add(-1)
 
-	namespaceEntry, err := c.namespaceRegistry.GetNamespaceByID(namespace.ID(c.queue.NamespaceId()))
+	namespaceId := namespace.ID(c.queue.NamespaceId())
+	namespaceEntry, err := c.namespaceRegistry.GetNamespaceByID(namespaceId)
 	if err != nil {
 		return nil, err
+	}
+
+	if c.partitionMgr.engine.config.EnableDeployments(namespaceEntry.Name().String()) && pollMetadata.workerVersionCapabilities.UseVersioning {
+		if !c.isDeploymentWorkflowStarted.Load() {
+
+			workerDeployment := &commonpb.WorkerDeployment{
+				DeploymentName: pollMetadata.workerVersionCapabilities.DeploymentName,
+				BuildId:        pollMetadata.workerVersionCapabilities.BuildId,
+			}
+			d := deployment.NewDeploymentWorkflowClient(namespaceEntry, workerDeployment, c.partitionMgr.engine.historyClient)
+			err := d.RegisterTaskQueueWorker(ctx, c.queue.TaskQueueFamily().Name(), c.queue.TaskType(), nil, c.partitionMgr.engine.config.MaxIDLengthLimit())
+
+			if err != nil {
+				return nil, err
+			}
+
+			c.isDeploymentWorkflowStarted.Store(true)
+		}
 	}
 
 	// the desired global rate limit for the task queue comes from the

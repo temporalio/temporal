@@ -25,25 +25,16 @@
 package deployment
 
 import (
-	"time"
-
 	sdkclient "go.temporal.io/sdk/client"
 	sdklog "go.temporal.io/sdk/log"
-	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
 	deployspb "go.temporal.io/server/api/deployment/v1"
 )
 
 type (
-	DeploymentLocalState struct {
-		*deployspb.DeploymentWorkflowArgs
-		DeploymentName string
-		BuildID        string
-	}
-
 	// DeploymentWorkflowRunner holds the local state for a deployment workflow
 	DeploymentWorkflowRunner struct {
-		*DeploymentLocalState
+		*deployspb.DeploymentWorkflowArgs
 		ctx     workflow.Context
 		a       *DeploymentActivities
 		logger  sdklog.Logger
@@ -51,65 +42,113 @@ type (
 	}
 )
 
-var (
-	defaultActivityOptions = workflow.ActivityOptions{
-		ScheduleToCloseTimeout: 1 * time.Hour,
-		StartToCloseTimeout:    30 * time.Second,
-		RetryPolicy: &temporal.RetryPolicy{
-			InitialInterval: 1 * time.Second,
-			MaximumInterval: 60 * time.Second,
-		},
-	}
-)
-
 const (
-	UpdateDeploymentSignalName        = "update_deployment"
-	UpdateDeploymentBuildIDSignalName = "update_deployment_build_id"
+	// Updates
+	RegisterWorkerInDeployment = "register-task-queue-worker"
+
+	// Signals
+	UpdateDeploymentBuildIDSignalName = "update-deployment-build-id"
 	ForceCANSignalName                = "force-continue-as-new"
 
-	DeploymentWorkflowIDPrefix = "temporal-sys-deployment:"
+	DeploymentWorkflowIDPrefix      = "temporal-sys-deployment"
+	DeploymentWorkflowIDDelimeter   = "|"
+	DeploymentWorkflowIDInitialSize = (2 * len(DeploymentWorkflowIDDelimeter)) + len(DeploymentWorkflowIDPrefix)
 )
+
+type AwaitSignals struct {
+	SignalsCompleted bool
+}
 
 func DeploymentWorkflow(ctx workflow.Context, deploymentWorkflowArgs *deployspb.DeploymentWorkflowArgs) error {
 	deploymentWorkflowRunner := &DeploymentWorkflowRunner{
-		DeploymentLocalState: &DeploymentLocalState{
-			DeploymentWorkflowArgs: deploymentWorkflowArgs,
-			DeploymentName:         "", // TODO Shivam - extract the Deployment
-			BuildID:                "", // TODO Shivam - extract BuildID from the workflowID
-		},
-		ctx:     ctx,
-		a:       nil,
-		logger:  sdklog.With(workflow.GetLogger(ctx), "wf-namespace", deploymentWorkflowArgs.NamespaceName),
-		metrics: workflow.GetMetricsHandler(ctx).WithTags(map[string]string{"namespace": deploymentWorkflowArgs.NamespaceName}),
+		DeploymentWorkflowArgs: deploymentWorkflowArgs,
+		ctx:                    ctx,
+		a:                      nil,
+		logger:                 sdklog.With(workflow.GetLogger(ctx), "wf-namespace", deploymentWorkflowArgs.NamespaceName),
+		metrics:                workflow.GetMetricsHandler(ctx).WithTags(map[string]string{"namespace": deploymentWorkflowArgs.NamespaceName}),
 	}
 	return deploymentWorkflowRunner.run()
 }
 
-func (d *DeploymentWorkflowRunner) run() error {
-
-	// Set up Query Handlers here:
-
+func (a *AwaitSignals) ListenToSignals(ctx workflow.Context) {
 	// Fetch signal channels
-	updateDeploymentSignalChannel := workflow.GetSignalChannel(d.ctx, UpdateDeploymentSignalName)
-	updateBuildIDSignalChannel := workflow.GetSignalChannel(d.ctx, UpdateDeploymentBuildIDSignalName)
-	forceCANSignalChannel := workflow.GetSignalChannel(d.ctx, ForceCANSignalName)
+	updateBuildIDSignalChannel := workflow.GetSignalChannel(ctx, UpdateDeploymentBuildIDSignalName)
+	forceCANSignalChannel := workflow.GetSignalChannel(ctx, ForceCANSignalName)
 	forceCAN := false
 
-	selector := workflow.NewSelector(d.ctx)
-	selector.AddReceive(updateDeploymentSignalChannel, func(c workflow.ReceiveChannel, more bool) {
-		// Process Signal
-		forceCAN = true
-	})
+	selector := workflow.NewSelector(ctx)
 	selector.AddReceive(updateBuildIDSignalChannel, func(c workflow.ReceiveChannel, more bool) {
 		// Process Signal
 	})
 	selector.AddReceive(forceCANSignalChannel, func(c workflow.ReceiveChannel, more bool) {
 		// Process Signal
+		forceCAN = true
 	})
 
-	// async draining before CAN
-	for (!workflow.GetInfo(d.ctx).GetContinueAsNewSuggested() && !forceCAN) || selector.HasPending() {
-		selector.Select(d.ctx)
+	for (!workflow.GetInfo(ctx).GetContinueAsNewSuggested() && !forceCAN) || selector.HasPending() {
+		selector.Select(ctx)
+	}
+
+	// Done processing signals before CAN
+	a.SignalsCompleted = true
+}
+
+func (d *DeploymentWorkflowRunner) run() error {
+	var a AwaitSignals
+	var pendingUpdates int
+
+	// Set up Query Handlers here:
+	err := workflow.SetQueryHandler(d.ctx, "deploymentTaskQueues", func(input []byte) (map[string]*deployspb.DeploymentLocalState_TaskQueueFamilyInfo, error) {
+		return d.DeploymentLocalState.TaskQueueFamilies, nil
+	})
+	if err != nil {
+		d.logger.Error("Failed while setting up query handler")
+		return err
+	}
+
+	// Listen to signals in a different go-routine to make business logic clearer
+	workflow.Go(d.ctx, a.ListenToSignals)
+
+	// Setting an update handler for updating deployment task-queues
+	if err := workflow.SetUpdateHandler(
+		d.ctx,
+		RegisterWorkerInDeployment,
+		func(ctx workflow.Context, updateInput *deployspb.RegisterWorkerInDeploymentArgs) error {
+			pendingUpdates++
+			defer func() {
+				pendingUpdates--
+			}()
+
+			if d.DeploymentLocalState.TaskQueueFamilies == nil {
+				d.DeploymentLocalState.TaskQueueFamilies = make(map[string]*deployspb.DeploymentLocalState_TaskQueueFamilyInfo)
+			}
+			if d.DeploymentLocalState.TaskQueueFamilies[updateInput.TaskQueueName] == nil {
+				d.DeploymentLocalState.TaskQueueFamilies[updateInput.TaskQueueName] = &deployspb.DeploymentLocalState_TaskQueueFamilyInfo{}
+			}
+
+			// TODO Shivam - make UpdateHandler idempotent
+
+			// Add the task queue to the local state
+			newTaskQueueWorkerInfo := &deployspb.DeploymentLocalState_TaskQueueFamilyInfo_TaskQueueInfo{
+				TaskQueueType:   updateInput.TaskQueueType,
+				FirstPollerTime: updateInput.FirstPollerTime,
+			}
+			d.DeploymentLocalState.TaskQueueFamilies[updateInput.TaskQueueName].TaskQueues =
+				append(d.DeploymentLocalState.TaskQueueFamilies[updateInput.TaskQueueName].TaskQueues, newTaskQueueWorkerInfo)
+
+			// Call activity which starts "DeploymentName" workflow
+
+			return nil
+		},
+		// TODO Shivam - have a validator which backsoff updates if we are scheduled to have a CAN
+	); err != nil {
+		return err
+	}
+
+	// Wait on any pending signals and updates.
+	err = workflow.Await(d.ctx, func() bool { return pendingUpdates == 0 && a.SignalsCompleted })
+	if err != nil {
+		return err
 	}
 
 	/*
@@ -126,9 +165,9 @@ func (d *DeploymentWorkflowRunner) run() error {
 
 	d.logger.Debug("Deployment doing continue-as-new")
 	workflowArgs := &deployspb.DeploymentWorkflowArgs{
-		NamespaceName:     d.DeploymentLocalState.NamespaceName,
-		NamespaceId:       d.DeploymentLocalState.NamespaceId,
-		TaskQueueFamilies: d.DeploymentLocalState.TaskQueueFamilies,
+		NamespaceName:        d.NamespaceName,
+		NamespaceId:          d.NamespaceId,
+		DeploymentLocalState: d.DeploymentLocalState,
 	}
 	return workflow.NewContinueAsNewError(d.ctx, DeploymentWorkflow, workflowArgs)
 
