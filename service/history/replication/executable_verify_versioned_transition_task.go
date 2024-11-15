@@ -30,6 +30,7 @@ import (
 	"go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
 	historyspb "go.temporal.io/server/api/history/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	common2 "go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
@@ -144,7 +145,7 @@ func (e *ExecutableVerifyVersionedTransitionTask) Execute() error {
 
 	// case 1: VersionedTransition is up-to-date on current mutable state
 	if err == nil {
-		if ms.GetNextEventID() < e.taskAttr.NextEventId {
+		if ms.GetNextEventId() < e.taskAttr.NextEventId {
 			return serviceerror.NewDataLoss(fmt.Sprintf("Workflow event missed. NamespaceId: %v, workflowId: %v, runId: %v, expected last eventId: %v, versionedTransition: %v",
 				e.NamespaceID, e.WorkflowID, e.RunID, e.taskAttr.NextEventId-1, e.ReplicationTask().VersionedTransition))
 		}
@@ -214,7 +215,7 @@ func (e *ExecutableVerifyVersionedTransitionTask) verifyNewRunExist(ctx context.
 	}
 }
 
-func (e *ExecutableVerifyVersionedTransitionTask) getMutableState(ctx context.Context, runId string) (_ workflow.MutableState, retError error) {
+func (e *ExecutableVerifyVersionedTransitionTask) getMutableState(ctx context.Context, runId string) (_ *persistencespb.WorkflowMutableState, retError error) {
 	shardContext, err := e.ShardController.GetShardByNamespaceWorkflow(
 		namespace.ID(e.NamespaceID),
 		e.WorkflowID,
@@ -236,8 +237,12 @@ func (e *ExecutableVerifyVersionedTransitionTask) getMutableState(ctx context.Co
 		return nil, err
 	}
 	defer func() { release(retError) }()
+	ms, err := wfContext.LoadMutableState(ctx, shardContext)
+	if err != nil {
+		return nil, err
+	}
 
-	return wfContext.LoadMutableState(ctx, shardContext)
+	return ms.CloneToProto(), nil
 }
 
 func (e *ExecutableVerifyVersionedTransitionTask) HandleErr(err error) error {
