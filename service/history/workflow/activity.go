@@ -169,3 +169,20 @@ func GetPendingActivityInfo(
 
 	return p, nil
 }
+
+func GetNextScheduleTime(ai *persistence.ActivityInfo) time.Time {
+	nextScheduledTime := ai.ScheduledTime.AsTime()
+	if ai.Attempt > 1 {
+		// calculate new schedule time
+		interval := ExponentialBackoffAlgorithm(ai.RetryInitialInterval, ai.RetryBackoffCoefficient, ai.Attempt)
+
+		if ai.RetryMaximumInterval.AsDuration() != 0 && (interval <= 0 || interval > ai.RetryMaximumInterval.AsDuration()) {
+			interval = ai.RetryMaximumInterval.AsDuration()
+		}
+
+		if interval > 0 {
+			nextScheduledTime = ai.LastAttemptCompleteTime.AsTime().Add(interval)
+		}
+	}
+	return nextScheduledTime
+}

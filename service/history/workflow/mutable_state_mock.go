@@ -2879,17 +2879,17 @@ func (mr *MockMutableStateMockRecorder) RefreshExpirationTimeoutTask(ctx any) *g
 }
 
 // RegenerateActivityRetryTask mocks base method.
-func (m *MockMutableState) RegenerateActivityRetryTask(ai *persistence.ActivityInfo) error {
+func (m *MockMutableState) RegenerateActivityRetryTask(ai *persistence.ActivityInfo, newScheduledTime time.Time) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "RegenerateActivityRetryTask", ai)
+	ret := m.ctrl.Call(m, "RegenerateActivityRetryTask", ai, newScheduledTime)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // RegenerateActivityRetryTask indicates an expected call of RegenerateActivityRetryTask.
-func (mr *MockMutableStateMockRecorder) RegenerateActivityRetryTask(ai any) *gomock.Call {
+func (mr *MockMutableStateMockRecorder) RegenerateActivityRetryTask(ai, newScheduledTime any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RegenerateActivityRetryTask", reflect.TypeOf((*MockMutableState)(nil).RegenerateActivityRetryTask), ai)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RegenerateActivityRetryTask", reflect.TypeOf((*MockMutableState)(nil).RegenerateActivityRetryTask), ai, newScheduledTime)
 }
 
 // RejectWorkflowExecutionUpdate mocks base method.
