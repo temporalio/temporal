@@ -148,25 +148,24 @@ func (d *deploymentWorkflowClientSuite) TestEscapeChar() {
 	}{
 		{
 			value:                "test" + DeploymentWorkflowIDDelimeter + "value",
-			escapedExpectedValue: "test\\value", // replacing the | with /
+			escapedExpectedValue: "test\\|value",
 		},
 		{
 			value:                "test/a/a" + DeploymentWorkflowIDDelimeter + "value",
-			escapedExpectedValue: "test/a/a\\value",
+			escapedExpectedValue: "test/a/a\\|value",
 		},
 		{
 			value:                "test/a/a\b" + DeploymentWorkflowIDDelimeter + "value",
-			escapedExpectedValue: "test/a/a\b\\value",
+			escapedExpectedValue: "test/a/a\b\\|value",
 		},
 		{
 			value:                "\b" + DeploymentWorkflowIDDelimeter + "\test",
-			escapedExpectedValue: "\b\\\test",
+			escapedExpectedValue: "\b\\|\test",
 		},
 	}
 
 	for _, test := range testCases {
 		escapedValue := d.deploymentWorkflowClient.EscapeChar(test.value)
 		d.Equal(test.escapedExpectedValue, escapedValue)
-		d.Equal(len(test.value), len(escapedValue))
 	}
 }

@@ -167,7 +167,8 @@ func (d *DeploymentWorkflowClient) RegisterTaskQueueWorker(
 // GenerateDeploymentWorkflowID is a helper that generates a system accepted
 // workflowID which are used in our deployment workflows
 func (d *DeploymentWorkflowClient) GenerateDeploymentWorkflowID() string {
-	return DeploymentWorkflowIDPrefix + DeploymentWorkflowIDDelimeter + d.deployment.DeploymentName + DeploymentWorkflowIDDelimeter + d.deployment.BuildId
+	deploymentWorkflowID := DeploymentWorkflowIDPrefix + DeploymentWorkflowIDDelimeter + d.deployment.DeploymentName + DeploymentWorkflowIDDelimeter + d.deployment.BuildId
+	return d.EscapeChar(deploymentWorkflowID)
 }
 
 // GenerateStartWorkflowPayload generates start workflow execution payload
@@ -220,6 +221,6 @@ func (d *DeploymentWorkflowClient) ValidateDeploymentWfParams(fieldName string, 
 
 func (d *DeploymentWorkflowClient) EscapeChar(s string) string {
 	s = strings.Replace(s, `\`, `\\`, -1)
-	s = strings.Replace(s, DeploymentWorkflowIDDelimeter, `\`, -1)
+	s = strings.Replace(s, DeploymentWorkflowIDDelimeter, `\`+DeploymentWorkflowIDDelimeter, -1)
 	return s
 }
