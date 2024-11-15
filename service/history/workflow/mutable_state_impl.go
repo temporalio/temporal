@@ -299,7 +299,7 @@ func NewMutableState(
 		workflowTaskUpdated:                false,
 		updateInfoUpdated:                  make(map[string]struct{}),
 		updateTimerInfosUserDataUpdated:    make(map[string]struct{}),
-		updateActivityInfosUserDataUpdated: map[int64]struct{}{},
+		updateActivityInfosUserDataUpdated: make(map[int64]struct{}),
 
 		QueryRegistry: NewQueryRegistry(),
 
