@@ -39,6 +39,7 @@ type (
 		a       *DeploymentActivities
 		logger  sdklog.Logger
 		metrics sdkclient.MetricsHandler
+		lock    workflow.Mutex
 	}
 )
 
@@ -66,6 +67,7 @@ func DeploymentWorkflow(ctx workflow.Context, deploymentWorkflowArgs *deployspb.
 		a:                      nil,
 		logger:                 sdklog.With(workflow.GetLogger(ctx), "wf-namespace", deploymentWorkflowArgs.NamespaceName),
 		metrics:                workflow.GetMetricsHandler(ctx).WithTags(map[string]string{"namespace": deploymentWorkflowArgs.NamespaceName}),
+		lock:                   workflow.NewMutex(ctx),
 	}
 	return deploymentWorkflowRunner.run()
 }
@@ -114,9 +116,14 @@ func (d *DeploymentWorkflowRunner) run() error {
 		d.ctx,
 		RegisterWorkerInDeployment,
 		func(ctx workflow.Context, updateInput *deployspb.RegisterWorkerInDeploymentArgs) error {
+			err = d.lock.Lock(ctx)
+			if err != nil {
+				return err
+			}
 			pendingUpdates++
 			defer func() {
 				pendingUpdates--
+				d.lock.Unlock()
 			}()
 
 			if d.DeploymentLocalState.TaskQueueFamilies == nil {
@@ -136,7 +143,7 @@ func (d *DeploymentWorkflowRunner) run() error {
 			d.DeploymentLocalState.TaskQueueFamilies[updateInput.TaskQueueName].TaskQueues =
 				append(d.DeploymentLocalState.TaskQueueFamilies[updateInput.TaskQueueName].TaskQueues, newTaskQueueWorkerInfo)
 
-			// Call activity which starts "DeploymentName" workflow
+			// Call a blocking-activity which starts "DeploymentName" workflow
 
 			return nil
 		},

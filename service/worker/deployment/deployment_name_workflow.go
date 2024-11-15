@@ -25,6 +25,7 @@
 package deployment
 
 import (
+	"github.com/docker/docker/daemon/logger"
 	sdkclient "go.temporal.io/sdk/client"
 	sdklog "go.temporal.io/sdk/log"
 	"go.temporal.io/sdk/workflow"
@@ -34,52 +35,67 @@ import (
 type (
 	// DeploymentWorkflowRunner holds the local state while running a deployment name workflow
 	DeploymentNameWorkflowRunner struct {
-		ctx     workflow.Context
-		a       *DeploymentNameActivities
-		logger  sdklog.Logger
-		metrics sdkclient.MetricsHandler
-		// local state denoting the current "default" build-ID of a deploymentName (can be nil)
-		defaultBuildID string
+		*deployspb.DeploymentNameWorkflowArgs
+		ctx                         workflow.Context
+		a                           *DeploymentNameActivities
+		logger                      sdklog.Logger
+		metrics                     sdkclient.MetricsHandler
+		requestsBeforeContinueAsNew int
 	}
 )
 
 const (
-	UpdateDeploymentNameDefaultBuildIDSignalName = "update-deployment-name-default-buildID"
+	// Updates
+	UpdateDeploymentNameDefaultBuildIDName = "update-deployment-name-default-buildID"
 
 	DeploymentNameWorkflowIDPrefix = "temporal-sys-deployment-name"
+	RequestsBeforeContinueAsNew    = 500
 )
 
 // TODO Shivam - Define workflow for DeploymentName
 func DeploymentNameWorkflow(ctx workflow.Context, deploymentNameArgs *deployspb.DeploymentNameWorkflowArgs) error {
 	deploymentWorkflowNameRunner := &DeploymentNameWorkflowRunner{
-		ctx:            ctx,
-		a:              nil,
-		logger:         sdklog.With(workflow.GetLogger(ctx), "wf-namespace", deploymentNameArgs.NamespaceName),
-		metrics:        workflow.GetMetricsHandler(ctx).WithTags(map[string]string{"namespace": deploymentNameArgs.NamespaceName}),
-		defaultBuildID: "", // TODO Shivam - extract buildID from the workflowID
+		DeploymentNameWorkflowArgs:  deploymentNameArgs,
+		ctx:                         ctx,
+		a:                           nil,
+		logger:                      sdklog.With(workflow.GetLogger(ctx), "wf-namespace", deploymentNameArgs.NamespaceName),
+		metrics:                     workflow.GetMetricsHandler(ctx).WithTags(map[string]string{"namespace": deploymentNameArgs.NamespaceName}),
+		requestsBeforeContinueAsNew: RequestsBeforeContinueAsNew,
 	}
 	return deploymentWorkflowNameRunner.run()
 }
 
 func (d *DeploymentNameWorkflowRunner) run() error {
+	var requestCount int
+	var pendingUpdates int
+
 	/* TODO Shivam:
 
 	Implement this workflow to be an infinitely long running workflow
 
-	Query handlers to return current default buildID of the deployment name
-
-	Signal handler(s) to:
-	signal DeploymentWorkflow and update the buildID of all task-queues in the deployment name.
-	update default buildID of the deployment name.
+	Update handler(s) to:
+		- signal/update/have an activity DeploymentWorkflow and update the buildID of all task-queues in the deployment name && update default buildID of the deployment name.
 
 	*/
-
-	// Fetch signal handlers
-	selector := workflow.NewSelector(d.ctx)
-
-	// async draining before CAN
-	for !workflow.GetInfo(d.ctx).GetContinueAsNewSuggested() || selector.HasPending() {
-		selector.Select(d.ctx)
+	err := workflow.SetQueryHandler(d.ctx, "DefaultBuildID", func(input []byte) (string, error) {
+		return d.DefaultBuildId, nil
+	})
+	if err != nil {
+		logger.Info("SetQueryHandler failed for DeploymentName workflow with error: " + err.Error())
+		return err
 	}
-	return nil
+
+	// Updatehandler for updating default-buildID
+
+	// Wait until we can continue as new or are cancelled.
+	err = workflow.Await(d.ctx, func() bool { return requestCount >= d.requestsBeforeContinueAsNew && pendingUpdates == 0 })
+	if err != nil {
+		return err
+	}
+
+	// Continue as new when there are no pending updates and history size is greater than requestsBeforeContinueAsNew.
+	// Note, if update requests come in faster than they
+	// are handled, there will not be a moment where the workflow has
+	// nothing pending which means this will run forever.
+	return workflow.NewContinueAsNewError(d.ctx, DeploymentNameWorkflow, d.DeploymentNameWorkflowArgs)
 }

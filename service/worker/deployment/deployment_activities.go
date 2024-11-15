@@ -27,7 +27,12 @@ package deployment
 import (
 	"context"
 
+	"go.temporal.io/sdk/activity"
+	sdkclient "go.temporal.io/sdk/client"
+	deployspb "go.temporal.io/server/api/deployment/v1"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/primitives"
+	"go.temporal.io/server/common/sdk"
 )
 
 type (
@@ -47,6 +52,32 @@ type (
 
 // StartDeploymentNameWorkflow activity starts a DeploymentName workflow
 func (a *DeploymentActivities) StartDeploymentNameWorkflow(ctx context.Context, input StartDeploymentNameWorkflowActivityInput) error {
-	// TODO Shivam: Fill in the implementation to start DeploymentName Workflow
+	logger := activity.GetLogger(ctx)
+	logger.Info("activity to start DeploymentName workflow started")
+
+	sdkClient := a.ClientFactory.NewClient(sdkclient.Options{
+		Namespace:     input.NamespaceName,
+		DataConverter: sdk.PreferProtoDataConverter,
+	})
+	// Workflow options for inputting workflowID and memo and duplication policy
+	workflowID := DeploymentWorkflowIDPrefix + ":" + input.DeploymentName
+	workflowOptions := sdkclient.StartWorkflowOptions{
+		ID:        workflowID,
+		TaskQueue: primitives.PerNSWorkerTaskQueue,
+	}
+
+	// Build workflow args
+	deploymentNameWorkflowArgs := &deployspb.DeploymentNameWorkflowArgs{
+		NamespaceName:  input.NamespaceName,
+		NamespaceId:    input.NamespaceID,
+		DefaultBuildId: "",
+	}
+
+	// Calling the workflow with the args
+	_, err := sdkClient.ExecuteWorkflow(ctx, workflowOptions, DeploymentNameWorkflow, deploymentNameWorkflowArgs)
+	if err != nil {
+		return err
+	}
+
 	return nil
 }
