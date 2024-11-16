@@ -262,6 +262,8 @@ func startAndUpdateWorkflow(
 	}
 
 	switch startOutcome {
+	case startworkflow.NoStart:
+		panic("unreachable")
 	case startworkflow.StartNew:
 	case startworkflow.StartReused:
 		// The workflow was meant to be *started* - but was actually *not* started since it's already running.

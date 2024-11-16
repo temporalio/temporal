@@ -66,7 +66,8 @@ const (
 )
 
 const (
-	StartNew StartOutcome = iota + 1
+	NoStart StartOutcome = iota
+	StartNew
 	StartReused
 	StartDeduped
 )
@@ -319,18 +320,18 @@ func (s *Starter) handleConflict(
 	}
 
 	if err := s.verifyNamespaceActive(creationParams, currentWorkflowConditionFailed); err != nil {
-		return nil, 0, err
+		return nil, NoStart, err
 	}
 
 	response, startOutcome, err := s.resolveDuplicateWorkflowID(ctx, creationParams, beforeCreateHook, currentWorkflowConditionFailed)
 	if err != nil {
-		return nil, 0, err
+		return nil, NoStart, err
 	} else if response != nil {
 		return response, startOutcome, nil
 	}
 
 	if err := s.createAsCurrent(ctx, creationParams, currentWorkflowConditionFailed); err != nil {
-		return nil, 0, err
+		return nil, NoStart, err
 	}
 
 	resp, err := s.generateResponse(
@@ -418,9 +419,9 @@ func (s *Starter) resolveDuplicateWorkflowID(
 		}
 		return resp, StartReused, nil
 	case err != nil:
-		return nil, 0, err
+		return nil, NoStart, err
 	case currentExecutionUpdateAction == nil:
-		return nil, 0, nil
+		return nil, NoStart, nil
 	}
 
 	var mutableStateInfo *mutableStateInfo
@@ -475,16 +476,16 @@ func (s *Starter) resolveDuplicateWorkflowID(
 		}
 		events, err := s.getWorkflowHistory(ctx, mutableStateInfo)
 		if err != nil {
-			return nil, 0, err
+			return nil, NoStart, err
 		}
 		resp, err := s.generateResponse(creationParams.runID, mutableStateInfo.workflowTask, events)
 		return resp, StartNew, err
 	case consts.ErrWorkflowCompleted:
 		// current workflow already closed
 		// fallthough to the logic for only creating the new workflow below
-		return nil, 0, nil
+		return nil, NoStart, nil
 	default:
-		return nil, 0, err
+		return nil, NoStart, err
 	}
 }
 
