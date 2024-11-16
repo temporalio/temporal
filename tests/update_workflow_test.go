@@ -4904,109 +4904,51 @@ func (s *UpdateWorkflowSuite) TestUpdateWithStart() {
 		err      error
 	}
 
-	runMultiOp := func(
-		tv *testvars.TestVars,
-		request *workflowservice.ExecuteMultiOperationRequest,
-		responseHandler func(tv *testvars.TestVars) testcore.MessageHandler,
-	) (*workflowservice.ExecuteMultiOperationResponse, error) {
+	sendUpdateWithStart := func(
+		ctx context.Context,
+		startReq *workflowservice.StartWorkflowExecutionRequest,
+		updateReq *workflowservice.UpdateWorkflowExecutionRequest,
+	) chan multiopsResponseErr {
 		capture := s.GetTestCluster().Host().CaptureMetricsHandler().StartCapture()
 		defer s.GetTestCluster().Host().CaptureMetricsHandler().StopCapture(capture)
 
-		poller := &testcore.TaskPoller{
-			Client:    s.FrontendClient(),
-			Namespace: s.Namespace(),
-			TaskQueue: tv.TaskQueue(),
-			Identity:  tv.WorkerIdentity(),
-			WorkflowTaskHandler: func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
-				return nil, nil
-			},
-			MessageHandler: responseHandler(tv),
-			Logger:         s.Logger,
-			T:              s.T(),
-		}
-
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-
 		retCh := make(chan multiopsResponseErr)
 		go func() {
-			resp, err := s.FrontendClient().ExecuteMultiOperation(ctx, request)
+			resp, err := s.FrontendClient().ExecuteMultiOperation(
+				ctx,
+				&workflowservice.ExecuteMultiOperationRequest{
+					Namespace: s.Namespace(),
+					Operations: []*workflowservice.ExecuteMultiOperationRequest_Operation{
+						{
+							Operation: &workflowservice.ExecuteMultiOperationRequest_Operation_StartWorkflow{
+								StartWorkflow: startReq,
+							},
+						},
+						{
+							Operation: &workflowservice.ExecuteMultiOperationRequest_Operation_UpdateWorkflow{
+								UpdateWorkflow: updateReq,
+							},
+						},
+					},
+				})
+
+			if err == nil {
+				s.Len(resp.Responses, 2)
+
+				startRes := resp.Responses[0].Response.(*workflowservice.ExecuteMultiOperationResponse_Response_StartWorkflow).StartWorkflow
+				s.NotZero(startRes.RunId)
+
+				updateRes := resp.Responses[1].Response.(*workflowservice.ExecuteMultiOperationResponse_Response_UpdateWorkflow).UpdateWorkflow
+				s.NotNil(updateRes.Outcome)
+				s.NotZero(updateRes.Outcome.String())
+			}
+
+			// make sure there's no lock contention
+			s.Empty(capture.Snapshot()[metrics.TaskWorkflowBusyCounter.Name()])
+
 			retCh <- multiopsResponseErr{resp, err}
 		}()
-
-		go func() {
-			// TODO: handle error
-			_, _ = poller.PollAndProcessWorkflowTask(testcore.WithDumpHistory)
-		}()
-
-		ret := <-retCh
-		return ret.response, ret.err
-	}
-
-	acceptCompleteMessage := func(
-		tv *testvars.TestVars,
-	) testcore.MessageHandler {
-		return func(
-			task *workflowservice.PollWorkflowTaskQueueResponse,
-		) ([]*protocolpb.Message, error) {
-			if len(task.Messages) > 0 {
-				updRequestMsg := task.Messages[0]
-				return s.UpdateAcceptCompleteMessages(tv, updRequestMsg, "1"), nil
-			}
-			return nil, nil
-		}
-	}
-
-	rejectMessage := func(
-		tv *testvars.TestVars,
-	) testcore.MessageHandler {
-		return func(
-			task *workflowservice.PollWorkflowTaskQueueResponse,
-		) ([]*protocolpb.Message, error) {
-			if len(task.Messages) > 0 {
-				updRequestMsg := task.Messages[0]
-				return s.UpdateRejectMessages(tv, updRequestMsg, "1"), nil
-			}
-			return nil, nil
-		}
-	}
-
-	runUpdateWithStart := func(
-		tv *testvars.TestVars,
-		startReq *workflowservice.StartWorkflowExecutionRequest,
-		updateReq *workflowservice.UpdateWorkflowExecutionRequest,
-		responseHandler func(tv *testvars.TestVars) testcore.MessageHandler,
-	) (*workflowservice.ExecuteMultiOperationResponse, error) {
-		resp, err := runMultiOp(tv,
-			&workflowservice.ExecuteMultiOperationRequest{
-				Namespace: s.Namespace(),
-				Operations: []*workflowservice.ExecuteMultiOperationRequest_Operation{
-					{
-						Operation: &workflowservice.ExecuteMultiOperationRequest_Operation_StartWorkflow{
-							StartWorkflow: startReq,
-						},
-					},
-					{
-						Operation: &workflowservice.ExecuteMultiOperationRequest_Operation_UpdateWorkflow{
-							UpdateWorkflow: updateReq,
-						},
-					},
-				},
-			},
-			responseHandler)
-
-		if err == nil {
-			s.Len(resp.Responses, 2)
-
-			startRes := resp.Responses[0].Response.(*workflowservice.ExecuteMultiOperationResponse_Response_StartWorkflow).StartWorkflow
-			s.NotZero(startRes.RunId)
-
-			updateRes := resp.Responses[1].Response.(*workflowservice.ExecuteMultiOperationResponse_Response_UpdateWorkflow).UpdateWorkflow
-			s.NotNil(updateRes.Outcome)
-			s.NotZero(updateRes.Outcome.String())
-		}
-
-		return resp, err
+		return retCh
 	}
 
 	startWorkflowReq := func(tv *testvars.TestVars) *workflowservice.StartWorkflowExecutionRequest {
@@ -5016,18 +4958,6 @@ func (s *UpdateWorkflowSuite) TestUpdateWithStart() {
 			WorkflowType: tv.WorkflowType(),
 			TaskQueue:    tv.TaskQueue(),
 			Identity:     tv.WorkerIdentity(),
-		}
-	}
-
-	updateWorkflowReq := func(tv *testvars.TestVars) *workflowservice.UpdateWorkflowExecutionRequest {
-		return &workflowservice.UpdateWorkflowExecutionRequest{
-			Namespace: s.Namespace(),
-			Request: &updatepb.Request{
-				Meta:  &updatepb.Meta{UpdateId: tv.UpdateID("1")},
-				Input: &updatepb.Input{Name: tv.Any().String(), Args: tv.Any().Payloads()},
-			},
-			WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: tv.WorkflowID()},
-			WaitPolicy:        &updatepb.WaitPolicy{LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED},
 		}
 	}
 
@@ -5043,21 +4973,32 @@ func (s *UpdateWorkflowSuite) TestUpdateWithStart() {
 				s.Run("and accept", func() {
 					tv := testvars.New(s.T())
 
-					req := startWorkflowReq(tv)
-					req.WorkflowIdConflictPolicy = p
-					resp, err := runUpdateWithStart(tv, req, updateWorkflowReq(tv), acceptCompleteMessage)
+					startReq := startWorkflowReq(tv)
+					startReq.WorkflowIdConflictPolicy = p
+					updateReq := s.updateWorkflowRequest(tv,
+						&updatepb.WaitPolicy{LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED}, "1")
+					uwsCh := sendUpdateWithStart(testcore.NewContext(), startReq, updateReq)
+
+					_, err := s.TaskPoller.PollAndHandleWorkflowTask(tv,
+						func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+							return &workflowservice.RespondWorkflowTaskCompletedRequest{
+								Messages: s.UpdateAcceptCompleteMessages(tv, task.Messages[0], "1"),
+							}, nil
+						})
 					s.NoError(err)
 
-					startResponse := resp.Responses[0].GetStartWorkflow()
-					updateResponse := resp.Responses[1].GetUpdateWorkflow()
-					s.True(startResponse.Started)
-					s.EqualValues("success-result-of-"+tv.UpdateID("1"), testcore.DecodeString(s.T(), updateResponse.GetOutcome().GetSuccess()))
+					uwsRes := <-uwsCh
+					s.NoError(err)
+					startResp := uwsRes.response.Responses[0].GetStartWorkflow()
+					updateRep := uwsRes.response.Responses[1].GetUpdateWorkflow()
+					s.True(startResp.Started)
+					s.EqualValues("success-result-of-"+tv.UpdateID("1"), testcore.DecodeString(s.T(), updateRep.GetOutcome().GetSuccess()))
 
 					// poll update to ensure same outcome is returned
 					pollRes, err := s.pollUpdate(tv, "1",
 						&updatepb.WaitPolicy{LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED})
 					s.Nil(err)
-					s.Equal(updateResponse.Outcome.String(), pollRes.Outcome.String())
+					s.Equal(updateRep.Outcome.String(), pollRes.Outcome.String())
 
 					s.EqualHistoryEvents(`
 					  1 WorkflowExecutionStarted
@@ -5071,18 +5012,25 @@ func (s *UpdateWorkflowSuite) TestUpdateWithStart() {
 				s.Run("and reject", func() {
 					tv := testvars.New(s.T())
 
-					_, err := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), startWorkflowReq(tv))
+					startReq := startWorkflowReq(tv)
+					updateReq := s.updateWorkflowRequest(tv,
+						&updatepb.WaitPolicy{LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED}, "1")
+					uwsCh := sendUpdateWithStart(testcore.NewContext(), startReq, updateReq)
+
+					_, err := s.TaskPoller.PollAndHandleWorkflowTask(tv,
+						func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+							return &workflowservice.RespondWorkflowTaskCompletedRequest{
+								Messages: s.UpdateRejectMessages(tv, task.Messages[0], "1"),
+							}, nil
+						})
 					s.NoError(err)
 
-					req := startWorkflowReq(tv)
-					req.WorkflowIdConflictPolicy = enumspb.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING
-					resp, err := runUpdateWithStart(tv, req, updateWorkflowReq(tv), rejectMessage)
-					s.NoError(err)
-
-					startResponse := resp.Responses[0].GetStartWorkflow()
-					updateResponse := resp.Responses[1].GetUpdateWorkflow()
-					s.False(startResponse.Started)
-					s.Equal("rejection-of-"+tv.UpdateID("1"), updateResponse.GetOutcome().GetFailure().GetMessage())
+					uwsRes := <-uwsCh
+					s.NoError(uwsRes.err)
+					startResp := uwsRes.response.Responses[0].GetStartWorkflow()
+					updateRep := uwsRes.response.Responses[1].GetUpdateWorkflow()
+					s.True(startResp.Started)
+					s.Equal("rejection-of-"+tv.UpdateID("1"), updateRep.GetOutcome().GetFailure().GetMessage())
 
 					// poll update to ensure same outcome is returned
 					_, err = s.pollUpdate(tv, "1",
@@ -5102,10 +5050,11 @@ func (s *UpdateWorkflowSuite) TestUpdateWithStart() {
 		s.Run("workflow id conflict policy terminate-existing: not supported yet", func() {
 			tv := testvars.New(s.T())
 
-			req := startWorkflowReq(tv)
-			req.WorkflowIdConflictPolicy = enumspb.WORKFLOW_ID_CONFLICT_POLICY_TERMINATE_EXISTING
-			_, err := runUpdateWithStart(tv, req, updateWorkflowReq(tv), acceptCompleteMessage)
-			s.Error(err)
+			startReq := startWorkflowReq(tv)
+			startReq.WorkflowIdConflictPolicy = enumspb.WORKFLOW_ID_CONFLICT_POLICY_TERMINATE_EXISTING
+			uwsRes := <-sendUpdateWithStart(testcore.NewContext(), startReq, s.updateWorkflowRequest(tv,
+				&updatepb.WaitPolicy{LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED}, "1"))
+			s.Error(uwsRes.err)
 		})
 	})
 
@@ -5116,24 +5065,37 @@ func (s *UpdateWorkflowSuite) TestUpdateWithStart() {
 			s.Run("and accept", func() {
 				tv := testvars.New(s.T())
 
+				// start workflow
 				_, err := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), startWorkflowReq(tv))
 				s.NoError(err)
 
-				req := startWorkflowReq(tv)
-				req.WorkflowIdConflictPolicy = enumspb.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING
-				resp, err := runUpdateWithStart(tv, req, updateWorkflowReq(tv), acceptCompleteMessage)
+				// update-with-start
+				startReq := startWorkflowReq(tv)
+				startReq.WorkflowIdConflictPolicy = enumspb.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING
+				updateReq := s.updateWorkflowRequest(tv,
+					&updatepb.WaitPolicy{LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED}, "1")
+				uwsCh := sendUpdateWithStart(testcore.NewContext(), startReq, updateReq)
+
+				_, err = s.TaskPoller.PollAndHandleWorkflowTask(tv,
+					func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+						return &workflowservice.RespondWorkflowTaskCompletedRequest{
+							Messages: s.UpdateAcceptCompleteMessages(tv, task.Messages[0], "1"),
+						}, nil
+					})
 				s.NoError(err)
 
-				startResponse := resp.Responses[0].GetStartWorkflow()
-				updateResponse := resp.Responses[1].GetUpdateWorkflow()
-				s.False(startResponse.Started)
-				s.EqualValues("success-result-of-"+tv.UpdateID("1"), testcore.DecodeString(s.T(), updateResponse.GetOutcome().GetSuccess()))
+				uwsRes := <-uwsCh
+				s.NoError(uwsRes.err)
+				startResp := uwsRes.response.Responses[0].GetStartWorkflow()
+				updateRep := uwsRes.response.Responses[1].GetUpdateWorkflow()
+				s.False(startResp.Started)
+				s.EqualValues("success-result-of-"+tv.UpdateID("1"), testcore.DecodeString(s.T(), updateRep.GetOutcome().GetSuccess()))
 
 				// poll update to ensure same outcome is returned
 				pollRes, err := s.pollUpdate(tv, "1",
 					&updatepb.WaitPolicy{LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED})
 				s.Nil(err)
-				s.Equal(updateResponse.Outcome.String(), pollRes.Outcome.String())
+				s.Equal(updateRep.Outcome.String(), pollRes.Outcome.String())
 
 				s.EqualHistoryEvents(`
 				  1 WorkflowExecutionStarted
@@ -5147,18 +5109,31 @@ func (s *UpdateWorkflowSuite) TestUpdateWithStart() {
 			s.Run("and reject", func() {
 				tv := testvars.New(s.T())
 
+				// start workflow
 				_, err := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), startWorkflowReq(tv))
 				s.NoError(err)
 
-				req := startWorkflowReq(tv)
-				req.WorkflowIdConflictPolicy = enumspb.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING
-				resp, err := runUpdateWithStart(tv, req, updateWorkflowReq(tv), rejectMessage)
+				// update-with-start
+				startReq := startWorkflowReq(tv)
+				startReq.WorkflowIdConflictPolicy = enumspb.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING
+				updateReq := s.updateWorkflowRequest(tv,
+					&updatepb.WaitPolicy{LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED}, "1")
+				uwsCh := sendUpdateWithStart(testcore.NewContext(), startReq, updateReq)
+
+				_, err = s.TaskPoller.PollAndHandleWorkflowTask(tv,
+					func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+						return &workflowservice.RespondWorkflowTaskCompletedRequest{
+							Messages: s.UpdateRejectMessages(tv, task.Messages[0], "1"),
+						}, nil
+					})
 				s.NoError(err)
 
-				startResponse := resp.Responses[0].GetStartWorkflow()
-				updateResponse := resp.Responses[1].GetUpdateWorkflow()
-				s.False(startResponse.Started)
-				s.Equal("rejection-of-"+tv.UpdateID("1"), updateResponse.GetOutcome().GetFailure().GetMessage())
+				uwsRes := <-uwsCh
+				s.NoError(uwsRes.err)
+				startResp := uwsRes.response.Responses[0].GetStartWorkflow()
+				updateRep := uwsRes.response.Responses[1].GetUpdateWorkflow()
+				s.False(startResp.Started)
+				s.Equal("rejection-of-"+tv.UpdateID("1"), updateRep.GetOutcome().GetFailure().GetMessage())
 
 				// poll update to ensure same outcome is returned
 				_, err = s.pollUpdate(tv, "1",
@@ -5179,27 +5154,44 @@ func (s *UpdateWorkflowSuite) TestUpdateWithStart() {
 			tv := testvars.New(s.T())
 			s.T().Skip()
 
+			// start workflow
 			initReq := startWorkflowReq(tv)
 			initReq.TaskQueue.Name = initReq.TaskQueue.Name + "-init" // avoid race condition with poller
 			initWF, err := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), initReq)
 			s.NoError(err)
 
-			req := startWorkflowReq(tv)
-			req.WorkflowIdConflictPolicy = enumspb.WORKFLOW_ID_CONFLICT_POLICY_TERMINATE_EXISTING
-			resp, err := runUpdateWithStart(tv, req, updateWorkflowReq(tv), acceptCompleteMessage)
+			_, err = s.TaskPoller.PollAndHandleWorkflowTask(tv, taskpoller.DrainWorkflowTask)
 			s.NoError(err)
 
-			startResponse := resp.Responses[0].GetStartWorkflow()
-			updateResponse := resp.Responses[1].GetUpdateWorkflow()
-			s.True(startResponse.Started)
-			s.Equal(startResponse.RunId, updateResponse.UpdateRef.GetWorkflowExecution().RunId)
-			s.EqualValues("success-result-of-"+tv.UpdateID("1"), testcore.DecodeString(s.T(), updateResponse.GetOutcome().GetSuccess()))
+			// update-with-start
+			startReq := startWorkflowReq(tv)
+			startReq.WorkflowIdConflictPolicy = enumspb.WORKFLOW_ID_CONFLICT_POLICY_TERMINATE_EXISTING
+			updateReq := s.updateWorkflowRequest(tv,
+				&updatepb.WaitPolicy{LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED}, "1")
+			uwsCh := sendUpdateWithStart(testcore.NewContext(), startReq, updateReq)
+			s.NoError(err)
+
+			_, err = s.TaskPoller.PollAndHandleWorkflowTask(tv,
+				func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+					return &workflowservice.RespondWorkflowTaskCompletedRequest{
+						Messages: s.UpdateAcceptCompleteMessages(tv, task.Messages[0], "1"),
+					}, nil
+				})
+			s.NoError(err)
+
+			uwsRes := <-uwsCh
+			s.NoError(uwsRes.err)
+			startResp := uwsRes.response.Responses[0].GetStartWorkflow()
+			updateRep := uwsRes.response.Responses[1].GetUpdateWorkflow()
+			s.True(startResp.Started)
+			s.Equal(startResp.RunId, updateRep.UpdateRef.GetWorkflowExecution().RunId)
+			s.EqualValues("success-result-of-"+tv.UpdateID("1"), testcore.DecodeString(s.T(), updateRep.GetOutcome().GetSuccess()))
 
 			// ensure workflow was terminated
 			descResp, err := s.FrontendClient().DescribeWorkflowExecution(testcore.NewContext(),
 				&workflowservice.DescribeWorkflowExecutionRequest{
 					Namespace: s.Namespace(),
-					Execution: &commonpb.WorkflowExecution{WorkflowId: req.WorkflowId, RunId: initWF.RunId},
+					Execution: &commonpb.WorkflowExecution{WorkflowId: startReq.WorkflowId, RunId: initWF.RunId},
 				})
 			s.NoError(err)
 			s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED, descResp.WorkflowExecutionInfo.Status)
@@ -5208,7 +5200,7 @@ func (s *UpdateWorkflowSuite) TestUpdateWithStart() {
 			pollRes, err := s.pollUpdate(tv, "1",
 				&updatepb.WaitPolicy{LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED})
 			s.Nil(err)
-			s.Equal(updateResponse.Outcome.String(), pollRes.Outcome.String())
+			s.Equal(updateRep.Outcome.String(), pollRes.Outcome.String())
 		})
 
 		s.Run("workflow id conflict policy fail: abort multi operation", func() {
@@ -5217,12 +5209,20 @@ func (s *UpdateWorkflowSuite) TestUpdateWithStart() {
 			_, err := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), startWorkflowReq(tv))
 			s.NoError(err)
 
-			req := startWorkflowReq(tv)
-			req.WorkflowIdConflictPolicy = enumspb.WORKFLOW_ID_CONFLICT_POLICY_FAIL
-			_, err = runUpdateWithStart(tv, req, updateWorkflowReq(tv), acceptCompleteMessage)
-			s.Error(err)
-			s.Equal(err.Error(), "MultiOperation could not be executed.")
-			errs := err.(*serviceerror.MultiOperationExecution).OperationErrors()
+			// start workflow
+			startWorkflowReq(tv)
+			_, err = s.TaskPoller.PollAndHandleWorkflowTask(tv, taskpoller.DrainWorkflowTask)
+			s.NoError(err)
+
+			// update-with-start
+			startReq := startWorkflowReq(tv)
+			startReq.WorkflowIdConflictPolicy = enumspb.WORKFLOW_ID_CONFLICT_POLICY_FAIL
+			updateReq := s.updateWorkflowRequest(tv, &updatepb.WaitPolicy{LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED}, "1")
+			uwsCh := sendUpdateWithStart(testcore.NewContext(), startReq, updateReq)
+			uwsRes := <-uwsCh
+			s.Error(uwsRes.err)
+			s.Equal(uwsRes.err.Error(), "MultiOperation could not be executed.")
+			errs := uwsRes.err.(*serviceerror.MultiOperationExecution).OperationErrors()
 			s.Len(errs, 2)
 			s.Contains(errs[0].Error(), "Workflow execution is already running")
 			s.Equal("Operation was aborted.", errs[1].Error())
@@ -5241,24 +5241,33 @@ func (s *UpdateWorkflowSuite) TestUpdateWithStart() {
 					startReq := startWorkflowReq(tv)
 					startReq.RequestId = "request_id"
 					startReq.WorkflowIdConflictPolicy = p
-					updReq := updateWorkflowReq(tv)
+					updReq := s.updateWorkflowRequest(tv,
+						&updatepb.WaitPolicy{LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED}, "1")
 
 					// 1st
-					resp1, err := runUpdateWithStart(tv, startReq, updReq, acceptCompleteMessage)
+					uwsCh1 := sendUpdateWithStart(testcore.NewContext(), startReq, updReq)
+					_, err := s.TaskPoller.PollAndHandleWorkflowTask(tv,
+						func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+							return &workflowservice.RespondWorkflowTaskCompletedRequest{
+								Messages: s.UpdateAcceptCompleteMessages(tv, task.Messages[0], "1"),
+							}, nil
+						})
 					s.NoError(err)
+					uwsRes1 := <-uwsCh1
+					s.NoError(uwsRes1.err)
 
 					// 2nd (using same RequestID and UpdateID)
-					resp2, err := runUpdateWithStart(tv, startReq, updReq, acceptCompleteMessage)
-					s.NoError(err)
+					uwsRes2 := <-sendUpdateWithStart(testcore.NewContext(), startReq, updReq)
+					s.NoError(uwsRes2.err)
 
-					s.Equal(resp1.Responses[0].GetStartWorkflow().RunId, resp2.Responses[0].GetStartWorkflow().RunId)
-					s.Equal(resp1.Responses[1].GetUpdateWorkflow().Outcome.String(), resp2.Responses[1].GetUpdateWorkflow().Outcome.String())
+					s.Equal(uwsRes1.response.Responses[0].GetStartWorkflow().RunId, uwsRes1.response.Responses[0].GetStartWorkflow().RunId)
+					s.Equal(uwsRes1.response.Responses[1].GetUpdateWorkflow().Outcome.String(), uwsRes1.response.Responses[1].GetUpdateWorkflow().Outcome.String())
 
 					// poll update to ensure same outcome is returned
 					pollRes, err := s.pollUpdate(tv, "1",
 						&updatepb.WaitPolicy{LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED})
 					s.Nil(err)
-					s.Equal(resp1.Responses[1].GetUpdateWorkflow().Outcome.String(), pollRes.Outcome.String())
+					s.Equal(uwsRes1.response.Responses[1].GetUpdateWorkflow().Outcome.String(), pollRes.Outcome.String())
 				})
 			}
 		})
