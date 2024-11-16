@@ -35,7 +35,8 @@ message DeploymentLocalState {
     map<string, TaskQueueFamilyInfo> task_queue_families = 2;
     
     message TaskQueueFamilyInfo {
-        repeated TaskQueueInfo task_queues = 1;
+        // key: taskQueueType, val: TaskQueueInfo
+        map<int32,TaskQueueInfo> task_queues = 1;
         
         message TaskQueueInfo {
             temporal.api.enums.v1.TaskQueueType task_queue_type = 1;
