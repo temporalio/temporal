@@ -493,13 +493,7 @@ func (s *workflowResetterSuite) TestFailInflightActivity() {
 		activity1.LastWorkerVersionStamp,
 	).Return(&historypb.HistoryEvent{}, nil)
 
-	mutableState.EXPECT().UpdateActivity(&persistencespb.ActivityInfo{
-		Version:            activity2.Version,
-		ScheduledEventId:   activity2.ScheduledEventId,
-		ScheduledTime:      timestamppb.New(now),
-		FirstScheduledTime: timestamppb.New(now),
-		StartedEventId:     activity2.StartedEventId,
-	}).Return(nil)
+	mutableState.EXPECT().UpdateActivity(gomock.Any(), gomock.Any()).Return(nil)
 
 	err := s.workflowResetter.failInflightActivity(now, mutableState, terminateReason)
 	s.NoError(err)

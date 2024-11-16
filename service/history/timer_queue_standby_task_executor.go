@@ -36,6 +36,7 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -243,10 +244,12 @@ func (t *timerQueueStandbyTaskExecutor) executeActivityTimeoutTask(
 		// for updating workflow execution. In that case, only one new heartbeat timeout task should be
 		// created.
 		isHeartBeatTask := timerTask.TimeoutType == enumspb.TIMEOUT_TYPE_HEARTBEAT
-		activityInfo, heartbeatTimeoutVis, ok := mutableState.GetActivityInfoWithTimerHeartbeat(timerTask.EventID)
+		ai, heartbeatTimeoutVis, ok := mutableState.GetActivityInfoWithTimerHeartbeat(timerTask.EventID)
 		if isHeartBeatTask && ok && queues.IsTimeExpired(timerTask.GetVisibilityTime(), heartbeatTimeoutVis) {
-			activityInfo.TimerTaskStatus = activityInfo.TimerTaskStatus &^ workflow.TimerTaskStatusCreatedHeartbeat
-			if err := mutableState.UpdateActivity(activityInfo); err != nil {
+			err := mutableState.UpdateActivity(ai.ActivityId, func(activityInfo *persistencespb.ActivityInfo, _ workflow.MutableState) {
+				activityInfo.TimerTaskStatus = activityInfo.TimerTaskStatus &^ workflow.TimerTaskStatusCreatedHeartbeat
+			})
+			if err != nil {
 				return nil, err
 			}
 			updateMutableState = true

@@ -32,6 +32,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/server/api/historyservice/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/util"
@@ -141,23 +142,24 @@ func updateActivityOptions(
 		return nil, err
 	}
 
-	// update activity info with new options
-	ai.TaskQueue = adjustedOptions.TaskQueue.Name
-	ai.ScheduleToCloseTimeout = adjustedOptions.ScheduleToCloseTimeout
-	ai.ScheduleToStartTimeout = adjustedOptions.ScheduleToStartTimeout
-	ai.StartToCloseTimeout = adjustedOptions.StartToCloseTimeout
-	ai.HeartbeatTimeout = adjustedOptions.HeartbeatTimeout
-	ai.RetryMaximumInterval = adjustedOptions.RetryPolicy.MaximumInterval
-	ai.RetryBackoffCoefficient = adjustedOptions.RetryPolicy.BackoffCoefficient
-	ai.RetryMaximumInterval = adjustedOptions.RetryPolicy.MaximumInterval
-	ai.RetryMaximumAttempts = adjustedOptions.RetryPolicy.MaximumAttempts
+	if err := mutableState.UpdateActivity(ai.ActivityId, func(activityInfo *persistencespb.ActivityInfo, _ workflow.MutableState) {
+		// update activity info with new options
+		activityInfo.TaskQueue = adjustedOptions.TaskQueue.Name
+		activityInfo.ScheduleToCloseTimeout = adjustedOptions.ScheduleToCloseTimeout
+		activityInfo.ScheduleToStartTimeout = adjustedOptions.ScheduleToStartTimeout
+		activityInfo.StartToCloseTimeout = adjustedOptions.StartToCloseTimeout
+		activityInfo.HeartbeatTimeout = adjustedOptions.HeartbeatTimeout
+		activityInfo.RetryMaximumInterval = adjustedOptions.RetryPolicy.MaximumInterval
+		activityInfo.RetryBackoffCoefficient = adjustedOptions.RetryPolicy.BackoffCoefficient
+		activityInfo.RetryMaximumInterval = adjustedOptions.RetryPolicy.MaximumInterval
+		activityInfo.RetryMaximumAttempts = adjustedOptions.RetryPolicy.MaximumAttempts
 
-	// move forward activity version
-	ai.Stamp++
+		// move forward activity version
+		activityInfo.Stamp++
 
-	// invalidate timers
-	ai.TimerTaskStatus = workflow.TimerTaskStatusNone
-	if err := mutableState.UpdateActivity(ai); err != nil {
+		// invalidate timers
+		activityInfo.TimerTaskStatus = workflow.TimerTaskStatusNone
+	}); err != nil {
 		return nil, err
 	}
 

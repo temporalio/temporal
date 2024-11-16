@@ -132,7 +132,7 @@ func (s *pauseActivitySuite) TestPauseActivityAcceptance() {
 
 	s.mockMutableState.EXPECT().IsWorkflowExecutionRunning().Return(true)
 	s.mockMutableState.EXPECT().GetActivityByActivityID(gomock.Any()).Return(activityInfo, true)
-	s.mockMutableState.EXPECT().UpdateActivityWithCallback(gomock.Any(), gomock.Any())
+	s.mockMutableState.EXPECT().UpdateActivity(gomock.Any(), gomock.Any())
 
 	err := workflow.PauseActivityById(s.mockMutableState, activityId)
 	s.NoError(err)
