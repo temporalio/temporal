@@ -1390,25 +1390,27 @@ func (s *UpdateWorkflowSuite) TestUpdateWorkflow_StickySpeculativeWorkflowTask_A
 
 			go func() {
 				// Process update in workflow task (it is sticky).
-				res, err := s.TaskPoller.PollAndHandleWorkflowTask(tv,
-					func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
-						// This WT contains partial history because sticky was enabled.
-						s.EqualHistory(`
+				res, err := s.TaskPoller.
+					PollWorkflowTask(&workflowservice.PollWorkflowTaskQueueRequest{TaskQueue: tv.StickyTaskQueue()}).
+					HandleTask(tv,
+						func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+							// This WT contains partial history because sticky was enabled.
+							s.EqualHistory(`
 						  4 WorkflowTaskCompleted
 						  5 WorkflowTaskScheduled // Speculative WT.
 						  6 WorkflowTaskStarted`, task.History)
 
-						updRequestMsg := task.Messages[0]
-						updRequest := protoutils.UnmarshalAny[*updatepb.Request](s.T(), updRequestMsg.GetBody())
-						s.Equal("args-value-of-"+tv.UpdateID("1"), testcore.DecodeString(s.T(), updRequest.GetInput().GetArgs()))
-						s.Equal(tv.HandlerName(), updRequest.GetInput().GetName())
-						s.EqualValues(5, updRequestMsg.GetEventId())
+							updRequestMsg := task.Messages[0]
+							updRequest := protoutils.UnmarshalAny[*updatepb.Request](s.T(), updRequestMsg.GetBody())
+							s.Equal("args-value-of-"+tv.UpdateID("1"), testcore.DecodeString(s.T(), updRequest.GetInput().GetArgs()))
+							s.Equal(tv.HandlerName(), updRequest.GetInput().GetName())
+							s.EqualValues(5, updRequestMsg.GetEventId())
 
-						return &workflowservice.RespondWorkflowTaskCompletedRequest{
-							Commands: s.UpdateAcceptCompleteCommands(tv, "1"),
-							Messages: s.UpdateAcceptCompleteMessages(tv, updRequestMsg, "1"),
-						}, nil
-					}, taskpoller.WithWorkflowTaskPollRequest(&workflowservice.PollWorkflowTaskQueueRequest{TaskQueue: tv.StickyTaskQueue()}))
+							return &workflowservice.RespondWorkflowTaskCompletedRequest{
+								Commands: s.UpdateAcceptCompleteCommands(tv, "1"),
+								Messages: s.UpdateAcceptCompleteMessages(tv, updRequestMsg, "1"),
+							}, nil
+						})
 				require.NoError(s.T(), err)
 				require.NotNil(s.T(), res)
 				require.EqualValues(s.T(), 0, res.ResetHistoryEventId)

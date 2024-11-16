@@ -47,14 +47,19 @@ type (
 		client    workflowservice.WorkflowServiceClient
 		namespace string
 	}
-	Options struct {
-		tv                      *testvars.TestVars
-		timeout                 time.Duration
-		pollActivityTaskRequest *workflowservice.PollActivityTaskQueueRequest
-		pollworkflowTaskRequest *workflowservice.PollWorkflowTaskQueueRequest
+	workflowTaskPoller struct {
+		*TaskPoller
+		pollWorkflowTaskRequest *workflowservice.PollWorkflowTaskQueueRequest
 	}
-	// OptionFunc is a function to change an Options instance
-	OptionFunc func(*Options)
+	activityTaskPoller struct {
+		*TaskPoller
+		pollActivityTaskRequest *workflowservice.PollActivityTaskQueueRequest
+	}
+	options struct {
+		tv      *testvars.TestVars
+		timeout time.Duration
+	}
+	optionFunc func(*options)
 )
 
 var (
@@ -70,21 +75,9 @@ var (
 			}, nil
 		}
 	}
-	// WithActivityTaskPollRequest defines the PollActivityTaskQueueRequest to use for polling
-	WithActivityTaskPollRequest = func(req *workflowservice.PollActivityTaskQueueRequest) OptionFunc {
-		return func(o *Options) {
-			o.pollActivityTaskRequest = req
-		}
-	}
-	// WithWorkflowTaskPollRequest defines the PollWorkflowTaskQueueRequest to use for polling
-	WithWorkflowTaskPollRequest = func(req *workflowservice.PollWorkflowTaskQueueRequest) OptionFunc {
-		return func(o *Options) {
-			o.pollworkflowTaskRequest = req
-		}
-	}
 	// WithTimeout defines a timeout for a task poller method (includes *all* RPC calls it has to make)
-	WithTimeout = func(timeout time.Duration) OptionFunc {
-		return func(o *Options) {
+	WithTimeout = func(timeout time.Duration) optionFunc {
+		return func(o *options) {
 			o.timeout = timeout
 		}
 	}
@@ -103,74 +96,124 @@ func New(
 	}
 }
 
+// PollWorkflowTask creates a workflow task poller that uses the given PollWorkflowTaskQueueRequest.
+func (p *TaskPoller) PollWorkflowTask(
+	req *workflowservice.PollWorkflowTaskQueueRequest,
+) *workflowTaskPoller {
+	return &workflowTaskPoller{TaskPoller: p, pollWorkflowTaskRequest: req}
+}
+
 // PollAndHandleWorkflowTask issues a PollWorkflowTaskQueueRequest to obtain a new workflow task,
 // invokes the handler with the task, and completes/fails the task accordingly.
+// Any unspecified but required request and response fields are automatically generated using `tv`.
+// Returning an error from `handler` fails the task.
 // If no task is available, it returns NoTaskAvailable.
 func (p *TaskPoller) PollAndHandleWorkflowTask(
 	tv *testvars.TestVars,
 	handler func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error),
-	funcs ...OptionFunc,
+	funcs ...optionFunc,
+) (*workflowservice.RespondWorkflowTaskCompletedResponse, error) {
+	return p.
+		PollWorkflowTask(&workflowservice.PollWorkflowTaskQueueRequest{}).
+		HandleTask(tv, handler, funcs...)
+}
+
+// HandleTask invokes the provided handler with the task poll result, and completes/fails the task accordingly.
+// Any unspecified but required request and response fields are automatically generated using `tv`.
+// Returning an error from `handler` fails the task.
+// If no task is available, it returns NoTaskAvailable.
+func (p *workflowTaskPoller) HandleTask(
+	tv *testvars.TestVars,
+	handler func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error),
+	funcs ...optionFunc,
 ) (*workflowservice.RespondWorkflowTaskCompletedResponse, error) {
 	p.t.Helper()
 	options := newOptions(tv, funcs)
 	ctx, cancel := newContext(options)
 	defer cancel()
-	return p.pollAndHandleWorkflowTask(ctx, options, handler)
+	return p.pollAndHandleTask(ctx, options, handler)
 }
 
-// HandleWorkflowTask invokes the provided handler with the provided task,
-// and completes/fails the task accordingly.
+// HandleWorkflowTask invokes the provided handler with the provided task, and completes/fails the task accordingly.
+// Any unspecified but required request and response fields are automatically generated using `tv`.
+// Returning an error from `handler` fails the task.
 func (p *TaskPoller) HandleWorkflowTask(
 	tv *testvars.TestVars,
 	task *workflowservice.PollWorkflowTaskQueueResponse,
 	handler func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error),
-	funcs ...OptionFunc,
+	funcs ...optionFunc,
 ) (*workflowservice.RespondWorkflowTaskCompletedResponse, error) {
 	p.t.Helper()
 	options := newOptions(tv, funcs)
 	ctx, cancel := newContext(options)
 	defer cancel()
-	return p.handleWorkflowTask(ctx, options, task, handler)
+	wp := workflowTaskPoller{TaskPoller: p}
+	return wp.handleTask(ctx, options, task, handler)
+}
+
+// PollActivityTask creates an activity task poller that uses the given PollActivityTaskQueueRequest.
+func (p *TaskPoller) PollActivityTask(
+	req *workflowservice.PollActivityTaskQueueRequest,
+) *activityTaskPoller {
+	return &activityTaskPoller{TaskPoller: p, pollActivityTaskRequest: req}
 }
 
 // PollAndHandleActivityTask issues a PollActivityTaskQueueRequest to obtain a new activity task,
 // invokes the handler with the task, and completes/fails the task accordingly.
+// Any unspecified but required request and response fields are automatically generated using `tv`.
+// Returning an error from `handler` fails the task.
 // If no task is available, it returns NoTaskAvailable.
 func (p *TaskPoller) PollAndHandleActivityTask(
 	tv *testvars.TestVars,
 	handler func(task *workflowservice.PollActivityTaskQueueResponse) (*workflowservice.RespondActivityTaskCompletedRequest, error),
-	funcs ...OptionFunc,
+	funcs ...optionFunc,
 ) (*workflowservice.RespondActivityTaskCompletedResponse, error) {
-	p.t.Helper()
-	options := newOptions(tv, funcs)
-	ctx, cancel := newContext(options)
-	defer cancel()
-	return p.pollAndHandleActivityTask(ctx, options, handler)
+	return p.
+		PollActivityTask(&workflowservice.PollActivityTaskQueueRequest{}).
+		HandleTask(tv, handler, funcs...)
 }
 
-// HandleActivityTask invokes the provided handler with the provided task,
-// and completes/fails the task accordingly.
+// HandleActivityTask invokes the provided handler with the provided task, and completes/fails the task accordingly.
+// Any unspecified but required request and response fields are automatically generated using `tv`.
+// Returning an error from `handler` fails the task.
 func (p *TaskPoller) HandleActivityTask(
 	tv *testvars.TestVars,
 	task *workflowservice.PollActivityTaskQueueResponse,
 	handler func(task *workflowservice.PollActivityTaskQueueResponse) (*workflowservice.RespondActivityTaskCompletedRequest, error),
-	funcs ...OptionFunc,
+	funcs ...optionFunc,
 ) (*workflowservice.RespondActivityTaskCompletedResponse, error) {
 	p.t.Helper()
 	options := newOptions(tv, funcs)
 	ctx, cancel := newContext(options)
 	defer cancel()
-	return p.handleActivityTask(ctx, options, task, handler)
+	ap := activityTaskPoller{TaskPoller: p}
+	return ap.handleTask(ctx, options, task, handler)
+}
+
+// HandleTask invokes the provided handler with the task poll result, and completes/fails the task accordingly.
+// Any unspecified but required request and response fields are automatically generated using `tv`.
+// Returning an error from `handler` fails the task.
+// If no task is available, it returns NoTaskAvailable.
+func (p *activityTaskPoller) HandleTask(
+	tv *testvars.TestVars,
+	handler func(task *workflowservice.PollActivityTaskQueueResponse) (*workflowservice.RespondActivityTaskCompletedRequest, error),
+	funcs ...optionFunc,
+) (*workflowservice.RespondActivityTaskCompletedResponse, error) {
+	p.t.Helper()
+	options := newOptions(tv, funcs)
+	ctx, cancel := newContext(options)
+	defer cancel()
+	return p.pollAndHandleTask(ctx, options, handler)
 }
 
 //revive:disable-next-line:cognitive-complexity
-func (p *TaskPoller) pollWorkflowTask(
+func (p *workflowTaskPoller) pollTask(
 	ctx context.Context,
-	opts *Options,
+	opts *options,
 ) (*workflowservice.PollWorkflowTaskQueueResponse, error) {
 	p.t.Helper()
 
-	req := common.CloneProto(opts.pollworkflowTaskRequest)
+	req := common.CloneProto(p.pollWorkflowTaskRequest)
 	if req.Namespace == "" {
 		req.Namespace = p.namespace
 	}
@@ -218,32 +261,32 @@ func (p *TaskPoller) pollWorkflowTask(
 	return resp, err
 }
 
-func (p *TaskPoller) pollAndHandleWorkflowTask(
+func (p *workflowTaskPoller) pollAndHandleTask(
 	ctx context.Context,
-	opts *Options,
+	opts *options,
 	handler func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error),
 ) (*workflowservice.RespondWorkflowTaskCompletedResponse, error) {
 	p.t.Helper()
-	task, err := p.pollWorkflowTask(ctx, opts)
+	task, err := p.pollTask(ctx, opts)
 	if err != nil {
 		return nil, fmt.Errorf("failed to poll workflow task: %w", err)
 	}
-	return p.handleWorkflowTask(ctx, opts, task, handler)
+	return p.handleTask(ctx, opts, task, handler)
 }
 
-func (p *TaskPoller) handleWorkflowTask(
+func (p *workflowTaskPoller) handleTask(
 	ctx context.Context,
-	opts *Options,
+	opts *options,
 	task *workflowservice.PollWorkflowTaskQueueResponse,
 	handler func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error),
 ) (*workflowservice.RespondWorkflowTaskCompletedResponse, error) {
 	p.t.Helper()
 	reply, err := handler(task)
 	if err != nil {
-		return nil, p.respondWorkflowTaskFailed(ctx, opts, task.TaskToken, err)
+		return nil, p.respondTaskFailed(ctx, opts, task.TaskToken, err)
 	}
 
-	resp, err := p.respondWorkflowTaskCompleted(ctx, opts, task, reply)
+	resp, err := p.respondTaskCompleted(ctx, opts, task, reply)
 	if err != nil {
 		return nil, err
 	}
@@ -251,9 +294,9 @@ func (p *TaskPoller) handleWorkflowTask(
 	return resp, nil
 }
 
-func (p *TaskPoller) respondWorkflowTaskCompleted(
+func (p *workflowTaskPoller) respondTaskCompleted(
 	ctx context.Context,
-	opts *Options,
+	opts *options,
 	task *workflowservice.PollWorkflowTaskQueueResponse,
 	reply *workflowservice.RespondWorkflowTaskCompletedRequest,
 ) (*workflowservice.RespondWorkflowTaskCompletedResponse, error) {
@@ -275,9 +318,9 @@ func (p *TaskPoller) respondWorkflowTaskCompleted(
 	return p.client.RespondWorkflowTaskCompleted(ctx, reply)
 }
 
-func (p *TaskPoller) respondWorkflowTaskFailed(
+func (p *workflowTaskPoller) respondTaskFailed(
 	ctx context.Context,
-	opts *Options,
+	opts *options,
 	taskToken []byte,
 	taskErr error,
 ) error {
@@ -294,13 +337,13 @@ func (p *TaskPoller) respondWorkflowTaskFailed(
 	return err
 }
 
-func (p *TaskPoller) pollActivityTask(
+func (p *activityTaskPoller) pollActivityTask(
 	ctx context.Context,
-	opts *Options,
+	opts *options,
 ) (*workflowservice.PollActivityTaskQueueResponse, error) {
 	p.t.Helper()
 
-	req := common.CloneProto(opts.pollActivityTaskRequest)
+	req := common.CloneProto(p.pollActivityTaskRequest)
 	if req.Namespace == "" {
 		req.Namespace = p.namespace
 	}
@@ -321,9 +364,9 @@ func (p *TaskPoller) pollActivityTask(
 	return resp, err
 }
 
-func (p *TaskPoller) pollAndHandleActivityTask(
+func (p *activityTaskPoller) pollAndHandleTask(
 	ctx context.Context,
-	opts *Options,
+	opts *options,
 	handler func(task *workflowservice.PollActivityTaskQueueResponse) (*workflowservice.RespondActivityTaskCompletedRequest, error),
 ) (*workflowservice.RespondActivityTaskCompletedResponse, error) {
 	p.t.Helper()
@@ -331,23 +374,23 @@ func (p *TaskPoller) pollAndHandleActivityTask(
 	if err != nil {
 		return nil, fmt.Errorf("failed to poll workflow task: %w", err)
 	}
-	return p.handleActivityTask(ctx, opts, task, handler)
+	return p.handleTask(ctx, opts, task, handler)
 }
 
 // TODO: support cancelling activity task
-func (p *TaskPoller) handleActivityTask(
+func (p *activityTaskPoller) handleTask(
 	ctx context.Context,
-	opts *Options,
+	opts *options,
 	task *workflowservice.PollActivityTaskQueueResponse,
 	handler func(task *workflowservice.PollActivityTaskQueueResponse) (*workflowservice.RespondActivityTaskCompletedRequest, error),
 ) (*workflowservice.RespondActivityTaskCompletedResponse, error) {
 	p.t.Helper()
 	reply, err := handler(task)
 	if err != nil {
-		return nil, p.respondActivityTaskFailed(ctx, opts, task, err)
+		return nil, p.respondTaskFailed(ctx, opts, task, err)
 	}
 
-	resp, err := p.respondActivityTaskCompleted(ctx, opts, task, reply)
+	resp, err := p.respondTaskCompleted(ctx, opts, task, reply)
 	if err != nil {
 		return nil, err
 	}
@@ -355,9 +398,9 @@ func (p *TaskPoller) handleActivityTask(
 	return resp, nil
 }
 
-func (p *TaskPoller) respondActivityTaskCompleted(
+func (p *activityTaskPoller) respondTaskCompleted(
 	ctx context.Context,
-	opts *Options,
+	opts *options,
 	task *workflowservice.PollActivityTaskQueueResponse,
 	reply *workflowservice.RespondActivityTaskCompletedRequest,
 ) (*workflowservice.RespondActivityTaskCompletedResponse, error) {
@@ -378,9 +421,9 @@ func (p *TaskPoller) respondActivityTaskCompleted(
 	return p.client.RespondActivityTaskCompleted(ctx, reply)
 }
 
-func (p *TaskPoller) respondActivityTaskFailed(
+func (p *activityTaskPoller) respondTaskFailed(
 	ctx context.Context,
-	opts *Options,
+	opts *options,
 	task *workflowservice.PollActivityTaskQueueResponse,
 	taskErr error,
 ) error {
@@ -398,13 +441,9 @@ func (p *TaskPoller) respondActivityTaskFailed(
 
 func newOptions(
 	tv *testvars.TestVars,
-	funcs []OptionFunc,
-) *Options {
-	res := &Options{
-		tv:                      tv,
-		pollActivityTaskRequest: &workflowservice.PollActivityTaskQueueRequest{},
-		pollworkflowTaskRequest: &workflowservice.PollWorkflowTaskQueueRequest{},
-	}
+	funcs []optionFunc,
+) *options {
+	res := &options{tv: tv}
 
 	// default options
 	WithTimeout(21 * time.Second)(res) // Server logs warning if long poll is less than 20s
@@ -417,6 +456,6 @@ func newOptions(
 	return res
 }
 
-func newContext(opts *Options) (context.Context, context.CancelFunc) {
+func newContext(opts *options) (context.Context, context.CancelFunc) {
 	return rpc.NewContextWithTimeoutAndVersionHeaders(opts.timeout * debug.TimeoutMultiplier)
 }
