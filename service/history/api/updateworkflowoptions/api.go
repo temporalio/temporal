@@ -1,30 +1,41 @@
+// The MIT License
+//
+// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
+//
+// Copyright (c) 2020 Uber Technologies, Inc.
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+// THE SOFTWARE.
+
 package updateworkflowoptions
 
 import (
 	"context"
-	fieldmask_utils "github.com/mennanov/fieldmask-utils"
-	commonpb "go.temporal.io/api/common/v1"
-	enumspb "go.temporal.io/api/enums/v1"
-	workflowpb "go.temporal.io/api/workflow/v1"
-	"google.golang.org/protobuf/proto"
-
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/rpc/fieldmask"
 	"go.temporal.io/server/service/history/api"
+	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/workflow"
+	"google.golang.org/protobuf/proto"
 )
-
-// A function that maps field mask field names to the names used in Go structs.
-// This can be replaced by a generic CamelCase function at some point.
-// Using this for now to be simple.
-func naming(s string) string {
-	if s == "versioning_behavior_override" {
-		return "VersioningBehaviorOverride"
-	}
-	return s
-}
 
 func Invoke(
 	ctx context.Context,
@@ -36,8 +47,9 @@ func Invoke(
 	if err != nil {
 		return nil, err
 	}
-
 	req := request.GetUpdateRequest()
+	ret := &historyservice.UpdateWorkflowExecutionOptionsResponse{}
+
 	err = api.GetAndUpdateWorkflowWithNew(
 		ctx,
 		nil,
@@ -50,45 +62,39 @@ func Invoke(
 			mutableState := workflowLease.GetMutableState()
 			defer func() { workflowLease.GetReleaseFn()(updateError) }()
 
-			// todo carly: dedupe by requestID?
+			if !mutableState.IsWorkflowExecutionRunning() {
+				// in-memory mutable state is still clean, let updateError=nil in the defer func()
+				// to prevent clearing and reloading mutable state while releasing the lock
+				return nil, consts.ErrWorkflowCompleted
+			}
+
+			// todo carly: dedupe by requestID
 			_ = req.GetRequestId()
 
-			// Merge the requested fields mentioned in the field mask with the current fields
-			mergedOpts := workflowExecutionOptionsFromMutableState(mutableState)
-			mask, _ := fieldmask_utils.MaskFromPaths(req.GetUpdateMask().GetPaths(), naming)
-			_ = fieldmask_utils.StructToStruct(mask, req.GetWorkflowExecutionOptions(), mergedOpts)
+			// Merge the requested options mentioned in the field mask with the current options in the mutable state
+			mergedOpts, updateError := fieldmask.MergeOptions(req.GetUpdateMask(), req.GetWorkflowExecutionOptions(), workflow.GetOptionsFromMutableState(mutableState))
+			if updateError != nil {
+				return nil, updateError
+			}
+			ret.WorkflowExecutionOptions = mergedOpts
 
-			// Compare with current options
-			currOpts := workflowExecutionOptionsFromMutableState(mutableState)
-			if proto.Equal(currOpts, mergedOpts) {
-				// nothing to update
+			// If there is no mutable state change at all, return with no new history event and Noop=true
+			if proto.Equal(mergedOpts, workflow.GetOptionsFromMutableState(mutableState)) {
 				return &api.UpdateWorkflowAction{
 					Noop:               true,
 					CreateWorkflowTask: false,
 				}, nil
 			}
 
-			_, err := mutableState.AddWorkflowExecutionOptionsUpdatedEvent(req.GetWorkflowExecutionOptions(), req.GetUpdateMask())
-			if err != nil {
-				return nil, err
+			_, updateError = mutableState.AddWorkflowExecutionOptionsUpdatedEvent(req.GetWorkflowExecutionOptions(), req.GetUpdateMask())
+			if updateError != nil {
+				return nil, updateError
 			}
 
-			if sameDeployment(mergedOpts, mutableState) {
-				applyWorkflowExecutionOptionsToMutableState(mergedOpts, mutableState)
-				return &api.UpdateWorkflowAction{
-					Noop:               false,
-					CreateWorkflowTask: false, // todo carly: I dont think we want to create a WFT?
-				}, nil
-			}
-
-			// Deployment has changed due to update
-			applyWorkflowExecutionOptionsToMutableState(mergedOpts, mutableState)
-			// todo carly: handle deployment change (ie. pending tasks)
-			// todo carly part 2: handle safe deployment change
-
+			// todo carly part 2: handle safe deployment change --> CreateWorkflowTask=true
 			return &api.UpdateWorkflowAction{
 				Noop:               false,
-				CreateWorkflowTask: false, // todo carly: I dont think we want to create a WFT?
+				CreateWorkflowTask: false,
 			}, nil
 		},
 		nil,
@@ -98,37 +104,5 @@ func Invoke(
 	if err != nil {
 		return nil, err
 	}
-
-	/*
-		0. Do some verifications
-		1. Add the event to the history
-		2. Apply the event, which does the side effects
-			- update MS (we will make this automatically update visibility)
-			- create wf tasks? i.e. if there is a pending wf task / transient wf task, possibly need to recreate and reschedule it, invalidate old one
-	*/
-	return nil, nil
-}
-
-func workflowExecutionOptionsFromMutableState(ms workflow.MutableState) *workflowpb.WorkflowExecutionOptions {
-	opts := &workflowpb.WorkflowExecutionOptions{}
-	if versioningInfo := ms.GetExecutionInfo().GetVersioningInfo(); versioningInfo != nil {
-		if behaviorOverride := versioningInfo.GetBehaviorOverride(); behaviorOverride != enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED {
-			opts.VersioningBehaviorOverride = &commonpb.VersioningBehaviorOverride{
-				Behavior:         behaviorOverride,
-				WorkerDeployment: versioningInfo.GetDeploymentOverride(),
-			}
-		}
-	}
-	return opts
-}
-
-func sameDeployment(mergedOpts *workflowpb.WorkflowExecutionOptions, ms workflow.MutableState) bool {
-	// todo carly
-	return false
-}
-
-func applyWorkflowExecutionOptionsToMutableState(opts *workflowpb.WorkflowExecutionOptions, ms workflow.MutableState) workflow.MutableState {
-	ms.GetExecutionInfo().VersioningInfo.BehaviorOverride = opts.VersioningBehaviorOverride.Behavior
-	ms.GetExecutionInfo().VersioningInfo.DeploymentOverride = opts.VersioningBehaviorOverride.WorkerDeployment
-	return ms
+	return ret, nil
 }

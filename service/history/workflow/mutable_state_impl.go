@@ -29,6 +29,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"go.temporal.io/server/common/rpc/fieldmask"
 	"google.golang.org/protobuf/types/known/fieldmaskpb"
 	"math/rand"
 	"reflect"
@@ -4240,7 +4241,54 @@ func (ms *MutableStateImpl) AddWorkflowExecutionOptionsUpdatedEvent(
 	mask *fieldmaskpb.FieldMask,
 ) (*historypb.HistoryEvent, error) {
 	// todo carly
-	return nil, fmt.Errorf("unimplemented")
+	if err := ms.checkMutability(tag.WorkflowActionWorkflowOptionsUpdated); err != nil {
+		return nil, err
+	}
+
+	// Deployment has changed due to update, need to:
+	//   - Reschedule pending WFT on new deployment
+	//   - Reschedule pending Activities on a new deployment
+
+	event := ms.hBuilder.AddWorkflowExecutionOptionsUpdatedEvent(options, mask)
+	if err := ms.ApplyWorkflowExecutionOptionsUpdatedEvent(event); err != nil {
+		return nil, err
+	}
+	return event, nil
+}
+
+func (ms *MutableStateImpl) ApplyWorkflowExecutionOptionsUpdatedEvent(event *historypb.HistoryEvent) error {
+	attributes := event.GetWorkflowExecutionOptionsUpdatedEventAttributes()
+
+	// Merge the requested fields mentioned in the field mask with the current fields
+	mergedOpts, err := fieldmask.MergeOptions(
+		attributes.GetUpdateMask(),
+		attributes.GetOptions(),
+		GetOptionsFromMutableState(ms),
+	)
+	if err != nil {
+		return err
+	}
+	// todo carly part 2: do replay test on new deployment if deployment changed
+
+	// todo carly: instead of merging the MS with the field-masked update and then applying everything, would it be better/worse to go through each field separately, and only set it if it exists in the field mask?
+	ms.GetExecutionInfo().VersioningInfo.BehaviorOverride = mergedOpts.GetVersioningBehaviorOverride().GetBehavior()
+	ms.GetExecutionInfo().VersioningInfo.DeploymentOverride = mergedOpts.GetVersioningBehaviorOverride().GetWorkerDeployment()
+
+	ms.writeEventToCache(event)
+	return nil
+}
+
+func GetOptionsFromMutableState(ms MutableState) *workflowpb.WorkflowExecutionOptions {
+	opts := &workflowpb.WorkflowExecutionOptions{}
+	if versioningInfo := ms.GetExecutionInfo().GetVersioningInfo(); versioningInfo != nil {
+		if behaviorOverride := versioningInfo.GetBehaviorOverride(); behaviorOverride != enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED {
+			opts.VersioningBehaviorOverride = &commonpb.VersioningBehaviorOverride{
+				Behavior:         behaviorOverride,
+				WorkerDeployment: versioningInfo.GetDeploymentOverride(),
+			}
+		}
+	}
+	return opts
 }
 
 func (ms *MutableStateImpl) ApplyWorkflowExecutionTerminatedEvent(
@@ -4314,6 +4362,7 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionSignaled(
 ) error {
 	// Increment signal count in mutable state for this workflow execution
 	ms.executionInfo.SignalCount++
+	// todo carly: why is there no ms.writeEventToCache(event) here?
 	return nil
 }
 

@@ -25,6 +25,7 @@
 package historybuilder
 
 import (
+	"google.golang.org/protobuf/types/known/fieldmaskpb"
 	"time"
 
 	commandpb "go.temporal.io/api/command/v1"
@@ -386,6 +387,20 @@ func (b *EventFactory) CreateWorkflowExecutionTerminatedEvent(
 		},
 	}
 	event.Links = links
+	return event
+}
+
+func (b *EventFactory) CreateWorkflowExecutionOptionsUpdatedEvent(
+	options *workflowpb.WorkflowExecutionOptions,
+	mask *fieldmaskpb.FieldMask,
+) *historypb.HistoryEvent {
+	event := b.createHistoryEvent(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED, b.timeSource.Now())
+	event.Attributes = &historypb.HistoryEvent_WorkflowExecutionOptionsUpdatedEventAttributes{
+		WorkflowExecutionOptionsUpdatedEventAttributes: &historypb.WorkflowExecutionOptionsUpdatedEventAttributes{
+			Options:    options,
+			UpdateMask: mask,
+		},
+	}
 	return event
 }
 
