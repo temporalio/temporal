@@ -462,14 +462,15 @@ func (e *matchingEngineImpl) AddWorkflowTask(
 		expirationTime = timestamppb.New(now.Add(expirationDuration))
 	}
 	taskInfo := &persistencespb.TaskInfo{
-		NamespaceId:      addRequest.NamespaceId,
-		RunId:            addRequest.Execution.GetRunId(),
-		WorkflowId:       addRequest.Execution.GetWorkflowId(),
-		ScheduledEventId: addRequest.GetScheduledEventId(),
-		Clock:            addRequest.GetClock(),
-		ExpiryTime:       expirationTime,
-		CreateTime:       timestamppb.New(now),
-		VersionDirective: addRequest.VersionDirective,
+		NamespaceId:            addRequest.NamespaceId,
+		RunId:                  addRequest.Execution.GetRunId(),
+		WorkflowId:             addRequest.Execution.GetWorkflowId(),
+		ScheduledEventId:       addRequest.GetScheduledEventId(),
+		Clock:                  addRequest.GetClock(),
+		ExpiryTime:             expirationTime,
+		CreateTime:             timestamppb.New(now),
+		VersionDirective:       addRequest.VersionDirective,
+		WorkflowVersioningInfo: addRequest.GetWorkflowVersioningInfo(),
 	}
 
 	return pm.AddTask(ctx, addTaskParams{
@@ -500,14 +501,15 @@ func (e *matchingEngineImpl) AddActivityTask(
 		expirationTime = timestamppb.New(now.Add(expirationDuration))
 	}
 	taskInfo := &persistencespb.TaskInfo{
-		NamespaceId:      addRequest.NamespaceId,
-		RunId:            addRequest.Execution.GetRunId(),
-		WorkflowId:       addRequest.Execution.GetWorkflowId(),
-		ScheduledEventId: addRequest.GetScheduledEventId(),
-		Clock:            addRequest.GetClock(),
-		CreateTime:       timestamppb.New(now),
-		ExpiryTime:       expirationTime,
-		VersionDirective: addRequest.VersionDirective,
+		NamespaceId:            addRequest.NamespaceId,
+		RunId:                  addRequest.Execution.GetRunId(),
+		WorkflowId:             addRequest.Execution.GetWorkflowId(),
+		ScheduledEventId:       addRequest.GetScheduledEventId(),
+		Clock:                  addRequest.GetClock(),
+		CreateTime:             timestamppb.New(now),
+		ExpiryTime:             expirationTime,
+		VersionDirective:       addRequest.VersionDirective,
+		WorkflowVersioningInfo: addRequest.GetWorkflowVersioningInfo(),
 	}
 
 	return pm.AddTask(ctx, addTaskParams{
@@ -2019,9 +2021,9 @@ func (e *matchingEngineImpl) unloadTaskQueuePartitionByKey(
 func (e *matchingEngineImpl) updatePhysicalTaskQueueGauge(pqm *physicalTaskQueueManagerImpl, delta int) {
 	// calculating versioned to be one of: “unversioned” or "buildId” or “versionSet”
 	versioned := "unversioned"
-	if buildID := pqm.queue.BuildId(); buildID != "" {
+	if buildID := pqm.queue.Version().BuildId(); buildID != "" {
 		versioned = "buildId"
-	} else if versionSet := pqm.queue.VersionSet(); versionSet != "" {
+	} else if versionSet := pqm.queue.Version().VersionSet(); versionSet != "" {
 		versioned = "versionSet"
 	}
 

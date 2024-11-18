@@ -205,7 +205,7 @@ func (s *PartitionManagerTestSuite) TestDescribeTaskQueuePartition_UnloadedVersi
 	buildIds[bld] = true
 
 	// task is backlogged in the source queue so it is loaded by now
-	sourceQ, err := s.partitionMgr.getVersionedQueue(ctx, "", bld, false)
+	sourceQ, err := s.partitionMgr.getVersionedQueue(ctx, "", bld, nil, false)
 	s.Assert().NoError(err)
 	s.Assert().NotNil(sourceQ)
 
@@ -274,7 +274,7 @@ func (s *PartitionManagerTestSuite) TestRedirectRuleLoadUpstream() {
 	s.validateAddTask("", false, versioningData, worker_versioning.MakeBuildIdDirective(source))
 
 	// task is backlogged in the source queue so it is loaded by now
-	sourceQ, err := s.partitionMgr.getVersionedQueue(ctx, "", source, false)
+	sourceQ, err := s.partitionMgr.getVersionedQueue(ctx, "", source, nil, false)
 	s.Assert().NoError(err)
 	s.Assert().NotNil(sourceQ)
 
@@ -285,7 +285,7 @@ func (s *PartitionManagerTestSuite) TestRedirectRuleLoadUpstream() {
 	s.validatePollTask(target, true)
 
 	// polling from target should've loaded the source as well
-	sourceQ, err = s.partitionMgr.getVersionedQueue(ctx, "", source, false)
+	sourceQ, err = s.partitionMgr.getVersionedQueue(ctx, "", source, nil, false)
 	s.Assert().NoError(err)
 	s.Assert().NotNil(sourceQ)
 }

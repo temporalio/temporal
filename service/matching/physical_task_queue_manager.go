@@ -220,10 +220,7 @@ func newPhysicalTaskQueueManager(
 ) (*physicalTaskQueueManagerImpl, error) {
 	e := partitionMgr.engine
 	config := partitionMgr.config
-	buildIdTagValue := queue.VersionSet()
-	if buildIdTagValue == "" {
-		buildIdTagValue = queue.BuildId()
-	}
+	buildIdTagValue := queue.Version().MetricsTagValue()
 	logger := log.With(partitionMgr.logger, tag.WorkerBuildId(buildIdTagValue))
 	throttledLogger := log.With(partitionMgr.throttledLogger, tag.WorkerBuildId(buildIdTagValue))
 	taggedMetricsHandler := partitionMgr.metricsHandler.WithTags(
@@ -424,7 +421,7 @@ func (c *physicalTaskQueueManagerImpl) ProcessSpooledTask(
 		// Don't try to set read level here because it may have been advanced already.
 		return nil
 	}
-	return c.partitionMgr.ProcessSpooledTask(ctx, task, c.queue.BuildId())
+	return c.partitionMgr.ProcessSpooledTask(ctx, task, c.queue.Version().BuildId())
 }
 
 // DispatchQueryTask will dispatch query to local or remote poller. If forwarded then result or error is returned,

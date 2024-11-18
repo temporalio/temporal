@@ -2969,7 +2969,12 @@ func (s *matchingEngineSuite) TestUpdatePhysicalTaskQueueGauge_VersionSet() {
 	// the size of the map to 1 and it's counter to 1.
 	s.PhysicalQueueMetricValidator(capture, 1, 1)
 
-	Vqtpm, err := tqm.(*taskQueuePartitionManagerImpl).getVersionedQueueNoWait(versionSet, "", true)
+	Vqtpm, err := tqm.(*taskQueuePartitionManagerImpl).getVersionedQueueNoWait(
+		versionSet,
+		"",
+		true,
+		nil,
+	)
 	s.Require().NoError(err)
 
 	// Creating a VersionedQueue results in increasing the size of the map to 2, due to 2 entries now,
@@ -3006,7 +3011,12 @@ func (s *matchingEngineSuite) TestUpdatePhysicalTaskQueueGauge_BuildID() {
 	// the size of the map to 1 and it's counter to 1.
 	s.PhysicalQueueMetricValidator(capture, 1, 1)
 
-	Vqtpm, err := tqm.(*taskQueuePartitionManagerImpl).getVersionedQueueNoWait("", buildID, true)
+	Vqtpm, err := tqm.(*taskQueuePartitionManagerImpl).getVersionedQueueNoWait(
+		"",
+		buildID,
+		true,
+		nil,
+	)
 	s.Require().NoError(err)
 
 	// Creating a VersionedQueue results in increasing the size of the map to 2, due to 2 entries now,

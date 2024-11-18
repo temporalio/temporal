@@ -31,6 +31,7 @@ import (
 
 	"github.com/temporalio/sqlparser"
 	commonpb "go.temporal.io/api/common/v1"
+	"go.temporal.io/api/serviceerror"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	"go.temporal.io/server/common/namespace"
@@ -201,4 +202,19 @@ func StampFromBuildId(buildId string) *commonpb.WorkerVersionStamp {
 
 func StampFromDeployment(deployment *commonpb.WorkerDeployment) *commonpb.WorkerVersionStamp {
 	return &commonpb.WorkerVersionStamp{UseVersioning: true, BuildId: deployment.BuildId, DeploymentName: deployment.DeploymentName}
+}
+
+// ValidateDeployment returns error if the deployment is nil or it has empty build ID or deployment
+// name.
+func ValidateDeployment(deployment *commonpb.WorkerDeployment) error {
+	if deployment == nil {
+		return serviceerror.NewInvalidArgument("deployment cannot be nil")
+	}
+	if deployment.GetDeploymentName() == "" {
+		return serviceerror.NewInvalidArgument("deployment name cannot be empty")
+	}
+	if deployment.GetBuildId() == "" {
+		return serviceerror.NewInvalidArgument("deployment build ID cannot be empty")
+	}
+	return nil
 }

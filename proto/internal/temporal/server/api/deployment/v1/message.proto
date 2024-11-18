@@ -27,6 +27,7 @@ package temporal.server.api.deployment.v1;
 option go_package = "go.temporal.io/server/api/deployment/v1;deployment";
 
 import "temporal/api/enums/v1/task_queue.proto";
+import "temporal/api/enums/v1/workflow.proto";
 import "google/protobuf/timestamp.proto";
 import "temporal/api/common/v1/message.proto";
 
@@ -61,4 +62,19 @@ message RegisterWorkerInDeploymentArgs{
     string task_queue_name = 1;
     temporal.api.enums.v1.TaskQueueType task_queue_type = 2;
     google.protobuf.Timestamp first_poller_time = 3;
+}
+
+// Used in internal APIs to pass versioning info about a versioned workflow.
+message WorkflowVersioningInfo {
+    temporal.api.enums.v1.VersioningBehavior behavior = 1;
+    temporal.api.common.v1.WorkerDeployment deployment = 2;
+}
+
+// Information about task redirect done by Matching.
+message TaskRedirectInfo {
+    // Deployment sent in WorkflowVersioningInfo when the task was scheduled.
+    temporal.api.common.v1.WorkerDeployment source_deployment = 1;
+    // Whether the source deployment contains the task's task queue. Used by history to determine
+    // if the task redirect should affect the workflow.
+    temporal.api.common.v1.WorkerDeployment source_deployment_contains_task_queue = 2;
 }

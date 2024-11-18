@@ -422,7 +422,8 @@ func (*TaskQueuePartition_NormalPartitionId) isTaskQueuePartition_PartitionId() 
 
 func (*TaskQueuePartition_StickyName) isTaskQueuePartition_PartitionId() {}
 
-// Information about redirect intention sent by Matching to History in Record*TaskStarted calls
+// Information about redirect intention sent by Matching to History in Record*TaskStarted calls.
+// Deprecated.
 type BuildIdRedirectInfo struct {
 	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache
@@ -473,10 +474,7 @@ func (x *BuildIdRedirectInfo) GetAssignedBuildId() string {
 	return ""
 }
 
-// Information about task forwarding from one partition to its parent. Versioning decisions for activity/workflow
-// tasks are made at the source partition and sent to the parent partition in this message so that parent partition
-// does not have to make versioning decision again. For Query/Nexus tasks, this works differently as the child's
-// versioning decision is ignored and the parent partition makes a fresh decision.
+// Information about task forwarding from one partition to its parent.
 type TaskForwardInfo struct {
 	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache
@@ -486,11 +484,17 @@ type TaskForwardInfo struct {
 	// In case of multiple hops, this is the source partition of the last hop.
 	SourcePartition string         `protobuf:"bytes,1,opt,name=source_partition,json=sourcePartition,proto3" json:"source_partition,omitempty"`
 	TaskSource      v12.TaskSource `protobuf:"varint,2,opt,name=task_source,json=taskSource,proto3,enum=temporal.server.api.enums.v1.TaskSource" json:"task_source,omitempty"`
-	// Redirect info is not present for Query and Nexus tasks.
+	// Redirect info is not present for Query and Nexus tasks. Versioning decisions for activity/workflow
+	// tasks are made at the source partition and sent to the parent partition in this message so that parent partition
+	// does not have to make versioning decision again. For Query/Nexus tasks, this works differently as the child's
+	// versioning decision is ignored and the parent partition makes a fresh decision.
+	// Deprecated. [cleanup-old-wv]
 	RedirectInfo *BuildIdRedirectInfo `protobuf:"bytes,3,opt,name=redirect_info,json=redirectInfo,proto3" json:"redirect_info,omitempty"`
 	// Build ID that should be used to dispatch the task to. Ignored in Query and Nexus tasks.
+	// Deprecated. [cleanup-old-wv]
 	DispatchBuildId string `protobuf:"bytes,4,opt,name=dispatch_build_id,json=dispatchBuildId,proto3" json:"dispatch_build_id,omitempty"`
 	// Only used for old versioning. [cleanup-old-wv]
+	// Deprecated. [cleanup-old-wv]
 	DispatchVersionSet string `protobuf:"bytes,5,opt,name=dispatch_version_set,json=dispatchVersionSet,proto3" json:"dispatch_version_set,omitempty"`
 }
 

@@ -40,6 +40,7 @@ import "temporal/server/api/history/v1/message.proto";
 import "temporal/server/api/persistence/v1/nexus.proto";
 import "temporal/server/api/persistence/v1/task_queues.proto";
 import "temporal/server/api/taskqueue/v1/message.proto";
+import "temporal/server/api/deployment/v1/message.proto";
 
 import "temporal/api/workflowservice/v1/request_response.proto";
 import "temporal/api/nexus/v1/message.proto";
@@ -120,10 +121,14 @@ message AddWorkflowTaskRequest {
     // for TaskVersionDirective, which is unversioned.)
     temporal.server.api.taskqueue.v1.TaskVersionDirective version_directive = 10;
     temporal.server.api.taskqueue.v1.TaskForwardInfo forward_info = 11;
+    // Presence of this field means the workflow is versioned. Not set for tasks added to sticky
+    // queues.
+    temporal.server.api.deployment.v1.WorkflowVersioningInfo workflow_versioning_info = 12;
 }
 
 message AddWorkflowTaskResponse {
     // When present, it means that the task is spooled to a versioned queue of this build ID
+    // Deprecated. [cleanup-old-wv]
     string assigned_build_id = 1;
 }
 
@@ -141,10 +146,14 @@ message AddActivityTaskRequest {
     // for TaskVersionDirective, which is unversioned.)
     temporal.server.api.taskqueue.v1.TaskVersionDirective version_directive = 10;
     temporal.server.api.taskqueue.v1.TaskForwardInfo forward_info = 11;
+    // Presence of this field means the workflow is versioned. Not set for tasks added to sticky
+    // queues.
+    temporal.server.api.deployment.v1.WorkflowVersioningInfo workflow_versioning_info = 12;
 }
 
 message AddActivityTaskResponse {
     // When present, it means that the task is spooled to a versioned queue of this build ID
+    // Deprecated. [cleanup-old-wv]
     string assigned_build_id = 1;
 }
 
@@ -156,6 +165,9 @@ message QueryWorkflowRequest {
     // for TaskVersionDirective, which is unversioned.)
     temporal.server.api.taskqueue.v1.TaskVersionDirective version_directive = 5;
     temporal.server.api.taskqueue.v1.TaskForwardInfo forward_info = 6;
+    // Presence of this field means the workflow is versioned. Not set for tasks added to sticky
+    // queues.
+    temporal.server.api.deployment.v1.WorkflowVersioningInfo workflow_versioning_info = 7;
 }
 
 message QueryWorkflowResponse {
