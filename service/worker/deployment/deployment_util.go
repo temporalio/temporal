@@ -245,27 +245,10 @@ func (d *DeploymentWorkflowClient) escapeChar(s string) string {
 	return s
 }
 
-type DeploymentNameWorkflowClient struct {
-	deploymentName string
-}
+func generateDeploymentNameWorkflowID(deploymentName string) string {
+	var d *DeploymentWorkflowClient
 
-func NewDeploymentNameWorkflowClient(
-	deploymentName string,
-) *DeploymentNameWorkflowClient {
-	return &DeploymentNameWorkflowClient{
-		deploymentName: deploymentName,
-	}
-}
-
-func (dn *DeploymentNameWorkflowClient) escapeChar(s string) string {
-	s = strings.Replace(s, `\`, `\\`, -1)
-	s = strings.Replace(s, DeploymentWorkflowIDDelimeter, `\`+DeploymentWorkflowIDDelimeter, -1)
-	return s
-}
-
-func (dn *DeploymentNameWorkflowClient) generateDeploymentWorkflowID() string {
 	// escaping the reserved workflow delimiter (|) from the inputs, if present
-	escapedDeploymentName := dn.escapeChar(dn.deploymentName)
-
+	escapedDeploymentName := d.escapeChar(deploymentName)
 	return DeploymentNameWorkflowIDPrefix + DeploymentWorkflowIDDelimeter + escapedDeploymentName
 }
