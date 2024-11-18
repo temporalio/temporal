@@ -3017,7 +3017,7 @@ func (ms *MutableStateImpl) AddActivityTaskStartedEvent(
 		return nil, err
 	}
 
-	if err := ms.UpdateActivity(ai.ActivityId, func(activityInfo *persistencespb.ActivityInfo, _ MutableState) {
+	if err := ms.UpdateActivity(ai.ScheduledEventId, func(activityInfo *persistencespb.ActivityInfo, _ MutableState) {
 		// we might need to retry, so do not append started event just yet,
 		// instead update mutable state and will record started event when activity task is closed
 		activityInfo.Version = ms.GetCurrentVersion()
@@ -4901,7 +4901,7 @@ func (ms *MutableStateImpl) RetryActivity(
 }
 
 func (ms *MutableStateImpl) RecordLastActivityCompleteTime(ai *persistencespb.ActivityInfo) {
-	_ = ms.UpdateActivity(ai.ActivityId, func(info *persistencespb.ActivityInfo, _ MutableState) {
+	_ = ms.UpdateActivity(ai.ScheduledEventId, func(info *persistencespb.ActivityInfo, _ MutableState) {
 		ai.LastAttemptCompleteTime = timestamppb.New(ms.shard.GetTimeSource().Now().UTC())
 	})
 }
@@ -4926,11 +4926,11 @@ func (ms *MutableStateImpl) updateActivityInfoForRetries(
 	nextAttempt int32,
 	activityFailure *failurepb.Failure,
 ) {
-	_ = ms.UpdateActivity(ai.ActivityId, func(info *persistencespb.ActivityInfo, mutableState MutableState) {
+	_ = ms.UpdateActivity(ai.ScheduledEventId, func(activityInfo *persistencespb.ActivityInfo, mutableState MutableState) {
 		mutableStateImpl, ok := mutableState.(*MutableStateImpl)
 		if ok {
 			ai = UpdateActivityInfoForRetries(
-				ai,
+				activityInfo,
 				mutableStateImpl.GetCurrentVersion(),
 				nextAttempt,
 				mutableStateImpl.truncateRetryableActivityFailure(activityFailure),
@@ -4950,8 +4950,8 @@ To update an activity, we need to do the following steps:
 	* respond to the changes of the activity state (like changes to pause)
 */
 
-func (ms *MutableStateImpl) UpdateActivity(activityId string, updater ActivityUpdater) error {
-	ai, activityFound := ms.GetActivityByActivityID(activityId)
+func (ms *MutableStateImpl) UpdateActivity(scheduledEventId int64, updater ActivityUpdater) error {
+	ai, activityFound := ms.GetActivityInfo(scheduledEventId)
 	if !activityFound {
 		return consts.ErrActivityNotFound
 	}

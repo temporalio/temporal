@@ -142,7 +142,7 @@ func updateActivityOptions(
 		return nil, err
 	}
 
-	if err := mutableState.UpdateActivity(ai.ActivityId, func(activityInfo *persistencespb.ActivityInfo, _ workflow.MutableState) {
+	if err := mutableState.UpdateActivity(ai.ScheduledEventId, func(activityInfo *persistencespb.ActivityInfo, _ workflow.MutableState) {
 		// update activity info with new options
 		activityInfo.TaskQueue = adjustedOptions.TaskQueue.Name
 		activityInfo.ScheduleToCloseTimeout = adjustedOptions.ScheduleToCloseTimeout

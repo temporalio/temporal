@@ -360,7 +360,7 @@ type (
 			baseRunLowestCommonAncestorEventID int64,
 			baseRunLowestCommonAncestorEventVersion int64,
 		)
-		UpdateActivity(string, ActivityUpdater) error
+		UpdateActivity(int64, ActivityUpdater) error
 		UpdateActivityTimerHeartbeat(int64, time.Time)
 		UpdateActivityProgress(ai *persistencespb.ActivityInfo, request *workflowservice.RecordActivityTaskHeartbeatRequest)
 		UpdateUserTimer(*persistencespb.TimerInfo) error

@@ -3068,7 +3068,7 @@ func (mr *MockMutableStateMockRecorder) TaskQueueScheduleToStartTimeout(name any
 }
 
 // UpdateActivity mocks base method.
-func (m *MockMutableState) UpdateActivity(arg0 string, arg1 ActivityUpdater) error {
+func (m *MockMutableState) UpdateActivity(arg0 int64, arg1 ActivityUpdater) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "UpdateActivity", arg0, arg1)
 	ret0, _ := ret[0].(error)

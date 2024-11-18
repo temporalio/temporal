@@ -243,7 +243,7 @@ func (t *timerQueueActiveTaskExecutor) executeActivityTimeoutTask(
 	isHeartBeatTask := task.TimeoutType == enumspb.TIMEOUT_TYPE_HEARTBEAT
 	ai, heartbeatTimeoutVis, ok := mutableState.GetActivityInfoWithTimerHeartbeat(task.EventID)
 	if isHeartBeatTask && ok && queues.IsTimeExpired(task.GetVisibilityTime(), heartbeatTimeoutVis) {
-		err := mutableState.UpdateActivity(ai.ActivityId, func(activityInfo *persistencespb.ActivityInfo, _ workflow.MutableState) {
+		err := mutableState.UpdateActivity(ai.ScheduledEventId, func(activityInfo *persistencespb.ActivityInfo, _ workflow.MutableState) {
 			activityInfo.TimerTaskStatus = activityInfo.TimerTaskStatus &^ workflow.TimerTaskStatusCreatedHeartbeat
 		})
 		if err != nil {

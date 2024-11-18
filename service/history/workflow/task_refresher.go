@@ -392,7 +392,7 @@ func (r *TaskRefresherImpl) refreshTasksForActivity(
 
 			// need to update activity timer task mask for which task is generated
 			if err := mutableState.UpdateActivity(
-				activityInfo.ActivityId, func(ai *persistencespb.ActivityInfo, _ MutableState) {
+				activityInfo.ScheduledEventId, func(ai *persistencespb.ActivityInfo, _ MutableState) {
 					// clear activity timer task mask for later activity timer task re-generation
 					activityInfo.TimerTaskStatus = TimerTaskStatusNone
 				},
