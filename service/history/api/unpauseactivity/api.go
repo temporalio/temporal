@@ -104,7 +104,7 @@ func unpauseActivity(
 		return workflow.UnpauseActivityWithResume(shardContext, mutableState, ai, op.Resume.NoWait)
 
 	case *workflowservice.UnpauseActivityByIdRequest_Reset_:
-		return workflow.UnpauseActivityWithReset(mutableState, ai, op.Reset_.NoWait, op.Reset_.ResetHeartbeat)
+		return workflow.UnpauseActivityWithReset(shardContext, mutableState, ai, op.Reset_.NoWait, op.Reset_.ResetHeartbeat)
 	default:
 		return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("The operation type %T is not supported", op))
 	}
