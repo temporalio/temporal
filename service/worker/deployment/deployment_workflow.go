@@ -116,34 +116,34 @@ func (d *DeploymentWorkflowRunner) run() error {
 		d.ctx,
 		RegisterWorkerInDeployment,
 		func(ctx workflow.Context, updateInput *deployspb.RegisterWorkerInDeploymentArgs) error {
-			err = d.lock.Lock(ctx)
-			if err != nil {
-				return err
-			}
+			// need a lock here
 			pendingUpdates++
 			defer func() {
 				pendingUpdates--
-				d.lock.Unlock()
 			}()
 
+			// if no TaskQueueFamilies have been registered for the deployment
 			if d.DeploymentLocalState.TaskQueueFamilies == nil {
 				d.DeploymentLocalState.TaskQueueFamilies = make(map[string]*deployspb.DeploymentLocalState_TaskQueueFamilyInfo)
 			}
-			if d.DeploymentLocalState.TaskQueueFamilies[updateInput.TaskQueueName] == nil {
-				d.DeploymentLocalState.TaskQueueFamilies[updateInput.TaskQueueName] = &deployspb.DeploymentLocalState_TaskQueueFamilyInfo{}
+			// if no TaskQueues have been registered for the TaskQueueName
+			if d.DeploymentLocalState.TaskQueueFamilies[updateInput.TaskQueueName].TaskQueues == nil {
+				d.DeploymentLocalState.TaskQueueFamilies[updateInput.TaskQueueName].TaskQueues = make(map[int32]*deployspb.DeploymentLocalState_TaskQueueFamilyInfo_TaskQueueInfo)
 			}
 
-			// TODO Shivam - make UpdateHandler idempotent
+			// idempotency check
+			if _, ok := d.DeploymentLocalState.TaskQueueFamilies[updateInput.TaskQueueName].TaskQueues[int32(updateInput.TaskQueueType)]; ok {
+				return nil
+			}
 
 			// Add the task queue to the local state
 			newTaskQueueWorkerInfo := &deployspb.DeploymentLocalState_TaskQueueFamilyInfo_TaskQueueInfo{
 				TaskQueueType:   updateInput.TaskQueueType,
 				FirstPollerTime: updateInput.FirstPollerTime,
 			}
-			d.DeploymentLocalState.TaskQueueFamilies[updateInput.TaskQueueName].TaskQueues =
-				append(d.DeploymentLocalState.TaskQueueFamilies[updateInput.TaskQueueName].TaskQueues, newTaskQueueWorkerInfo)
+			d.DeploymentLocalState.TaskQueueFamilies[updateInput.TaskQueueName].TaskQueues[int32(updateInput.TaskQueueType)] = newTaskQueueWorkerInfo
 
-			// Call a blocking-activity which starts "DeploymentName" workflow
+			// Call activity which starts "DeploymentName" workflow
 
 			return nil
 		},

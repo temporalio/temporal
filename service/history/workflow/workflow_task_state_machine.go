@@ -706,6 +706,15 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskCompletedEvent(
 		workflowTask.StartedEventID = startedEvent.GetEventId()
 	}
 
+	var completedRedirect *historypb.CompletedDeploymentRedirectInfo
+	if redirectInfo := m.ms.GetRedirectInfo(); redirectInfo != nil {
+		completedRedirect = &historypb.CompletedDeploymentRedirectInfo{
+			Deployment:                 redirectInfo.GetDeployment(),
+			VersioningBehavior:         request.GetVersioningBehavior(),
+			VersioningBehaviorOverride: redirectInfo.GetBehaviorOverride(),
+		}
+	}
+
 	// Now write the completed event
 	event := m.ms.hBuilder.AddWorkflowTaskCompletedEvent(
 		workflowTask.ScheduledEventID,
@@ -715,6 +724,7 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskCompletedEvent(
 		request.WorkerVersionStamp,
 		request.SdkMetadata,
 		request.MeteringMetadata,
+		completedRedirect,
 	)
 
 	err := m.afterAddWorkflowTaskCompletedEvent(event, limits)
@@ -853,6 +863,9 @@ func (m *workflowTaskStateMachine) failWorkflowTask(
 		incrementAttempt = false
 		m.ms.ClearStickyTaskQueue()
 	}
+
+	// TODO (shahab): should fail the deployment redirect here?
+	// m.ms.FailDeploymentRedirect()
 
 	failWorkflowTaskInfo := &WorkflowTaskInfo{
 		Version:               common.EmptyVersion,
@@ -1077,6 +1090,12 @@ func (m *workflowTaskStateMachine) afterAddWorkflowTaskCompletedEvent(
 	attrs := event.GetWorkflowTaskCompletedEventAttributes()
 	m.ms.executionInfo.LastCompletedWorkflowTaskStartedEventId = attrs.GetStartedEventId()
 	m.ms.executionInfo.MostRecentWorkerVersionStamp = attrs.GetWorkerVersion()
+
+	if err := m.ms.CompleteDeploymentRedirect(attrs.GetCompletedRedirect().GetVersioningBehavior()); err != nil {
+		return err
+	}
+
+	// TODO: create reset point based on attr.CompletedRedirect instead of the build ID.
 	addedResetPoint := m.ms.addResetPointFromCompletion(
 		attrs.GetBinaryChecksum(),
 		attrs.GetWorkerVersion().GetBuildId(),
