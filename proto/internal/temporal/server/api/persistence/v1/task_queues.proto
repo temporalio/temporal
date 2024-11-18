@@ -27,6 +27,7 @@ option go_package = "go.temporal.io/server/api/persistence/v1;persistence";
 
 import "temporal/server/api/clock/v1/message.proto";
 import "temporal/api/taskqueue/v1/message.proto";
+import "temporal/api/common/v1/message.proto";
 
 // BuildId is an identifier with a timestamped status used to identify workers for task queue versioning purposes.
 message BuildId {
@@ -125,7 +126,7 @@ message VersioningData {
     message DeploymentInfo {
         string default_build_id = 1;
         // key: buildID -> value: WorkerDeployment
-        map<string,temporal.api.common.v1.message.WorkerDeployment> deployment_mapping = 2; 
+        map<string,temporal.api.common.v1.WorkerDeployment> deployment_mapping = 2; 
     }
 }
 
