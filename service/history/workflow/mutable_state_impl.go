@@ -4940,7 +4940,7 @@ func (ms *MutableStateImpl) updateActivityInfoForRetries(
 	})
 }
 
-func (ms *MutableStateImpl) UpdateActivity(activityId string, updateCallback UpdateActivityCallback) error {
+func (ms *MutableStateImpl) UpdateActivity(activityId string, updater ActivityUpdater) error {
 	ai, activityFound := ms.GetActivityByActivityID(activityId)
 	if !activityFound {
 		return consts.ErrActivityNotFound
