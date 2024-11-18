@@ -47,7 +47,6 @@ const (
 	UpdateDeploymentNameDefaultBuildIDName = "update-deployment-name-default-buildID"
 
 	DeploymentNameWorkflowIDPrefix = "temporal-sys-deployment-name"
-	RequestsBeforeContinueAsNew    = 500
 )
 
 func DeploymentNameWorkflow(ctx workflow.Context, deploymentNameArgs *deployspb.DeploymentNameWorkflowArgs) error {
