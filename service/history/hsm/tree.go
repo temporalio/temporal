@@ -76,10 +76,6 @@ type StateMachineDefinition interface {
 	CompareState(any, any) (int, error)
 }
 
-type NodeData interface {
-	Data() *Node
-}
-
 // cachedMachine contains deserialized data and state for a state machine in a [Node].
 type cachedMachine struct {
 	// An indicator that the data has not yet been loaded or has been marked stale and should be deserialized again.
@@ -142,14 +138,6 @@ type stateUpdate struct {
 	cache       *cachedMachine
 	dirty       bool
 	deleted     bool
-}
-
-func (n *Node) Data() *Node {
-	return n
-}
-
-func (r *RootNode) Data() *Node {
-	return r.Node
 }
 
 // NewRoot creates a new root [RootNode].
@@ -280,13 +268,40 @@ func (n *Node) Walk(fn func(*Node) error) error {
 	return nil
 }
 
+// Child recursively gets a child for the given path.
 func (n *Node) Child(path []Key) (*Node, error) {
 	if len(path) == 0 {
 		return n, nil
 	}
-
-	// Build the entire path under one lock
-	return n.childLocked(path)
+	key, rest := path[0], path[1:]
+	if child, ok := n.cache.children[key]; ok {
+		return child.Child(rest)
+	}
+	def, ok := n.registry.Machine(key.Type)
+	if !ok {
+		return nil, fmt.Errorf("%w: state machine for type: %v", ErrNotRegistered, key.Type)
+	}
+	machines, ok := n.persistence.Children[key.Type]
+	if !ok {
+		return nil, fmt.Errorf("%w: %v", ErrStateMachineNotFound, key)
+	}
+	machine, ok := machines.MachinesById[key.ID]
+	if !ok {
+		return nil, fmt.Errorf("%w: %v", ErrStateMachineNotFound, key)
+	}
+	child := &Node{
+		Key:        key,
+		Parent:     n,
+		registry:   n.registry,
+		definition: def,
+		cache: &cachedMachine{
+			children: make(map[Key]*Node),
+		},
+		persistence: machine,
+		backend:     n.backend,
+	}
+	n.cache.children[key] = child
+	return child.Child(rest)
 }
 
 // AddChild adds an immediate child to a node, serializing the given data.
@@ -296,7 +311,9 @@ func (n *Node) AddChild(key Key, data any) (*Node, error) {
 	machines, ok := n.persistence.Children[key.Type]
 	if ok {
 		if _, ok = machines.MachinesById[key.ID]; ok {
-			return nil, fmt.Errorf("%w: %v", ErrStateMachineAlreadyExists, key)
+			if ok {
+				return nil, fmt.Errorf("%w: %v", ErrStateMachineAlreadyExists, key)
+			}
 		}
 	}
 	def, ok := n.registry.Machine(key.Type)
@@ -347,7 +364,6 @@ func (n *Node) AddChild(key Key, data any) (*Node, error) {
 		n.persistence.Children[key.Type] = children
 	}
 	children.MachinesById[key.ID] = node.persistence
-
 	return node, nil
 }
 
@@ -436,21 +452,20 @@ func (n *Node) LoadHistoryEvent(ctx context.Context, token []byte) (*historypb.H
 
 // MachineData deserializes the persistent state machine's data, casts it to type T, and returns it.
 // Returns an error when deserialization or casting fails.
-func MachineData[T any](n NodeData) (T, error) {
-	node := n.Data()
+func MachineData[T any](n *Node) (T, error) {
 	var t T
-	if node.cache.dataLoaded {
-		if t, ok := node.cache.data.(T); ok {
+	if n.cache.dataLoaded {
+		if t, ok := n.cache.data.(T); ok {
 			return t, nil
 		}
 		return t, ErrIncompatibleType
 	}
-	a, err := node.definition.Deserialize(node.persistence.Data)
+	a, err := n.definition.Deserialize(n.persistence.Data)
 	if err != nil {
 		return t, err
 	}
-	node.cache.data = a
-	node.cache.dataLoaded = true
+	n.cache.data = a
+	n.cache.dataLoaded = true
 
 	if t, ok := a.(T); ok {
 		return t, nil
@@ -517,25 +532,28 @@ func (n *Node) Sync(ctx context.Context, incomingNode *Node) error {
 
 	incomingInternalRepr := incomingNode.InternalRepr()
 
-	update := stateUpdate{
-		persistence: &persistencespb.StateMachineNode{
-			Data:                          incomingInternalRepr.Data,
-			Children:                      n.persistence.Children, // don't sync children
-			InitialVersionedTransition:    n.persistence.InitialVersionedTransition,
-			LastUpdateVersionedTransition: incomingInternalRepr.LastUpdateVersionedTransition,
-			TransitionCount:               n.persistence.TransitionCount + 1,
-			Deleted:                       incomingInternalRepr.Deleted,
-		},
-		cache: &cachedMachine{
-			dataLoaded: false, // force reload
-			children:   n.cache.children,
-			dirty:      true,
-		},
-	}
+	n.persistence.Data = incomingInternalRepr.Data
+	// do not sync children, we are just syncing the current node
+	// do not sync transitionCount, that is cluster local information
 
-	if err := n.applyStateUpdate(update); err != nil {
+	// force reload data
+	n.cache.dataLoaded = false
+
+	// reuse MachineTransition for
+	// - marking the node as dirty
+	// - generate transition outputs (tasks)
+	// - update transition count
+	if err := MachineTransition(n, func(taskRegenerator TaskRegenerator) (TransitionOutput, error) {
+		tasks, err := taskRegenerator.RegenerateTasks(n)
+		return TransitionOutput{
+			Tasks: tasks,
+		}, err
+	}); err != nil {
 		return err
 	}
+
+	// sync LastUpdateVersionedTransition last as MachineTransition can't correctly handle it.
+	n.persistence.LastUpdateVersionedTransition = incomingInternalRepr.LastUpdateVersionedTransition
 
 	if incomingInternalRepr.Deleted {
 		return n.SyncDeleted(ctx, incomingNode)
@@ -583,48 +601,47 @@ func (r *RootNode) Close() error {
 // MachineTransition runs the given transitionFn on a machine's data for the given key.
 // It updates the state machine's metadata and marks the entry as dirty in the node's cache.
 // If the transition fails, the changes are rolled back and no state is mutated.
-func MachineTransition[T any](n NodeData, transitionFn func(T) (TransitionOutput, error)) (retErr error) {
-	node := n.Data()
+func MachineTransition[T any](n *Node, transitionFn func(T) (TransitionOutput, error)) (retErr error) {
 	data, err := MachineData[T](n)
 	if err != nil {
 		return err
 	}
-
+	// Update the transition counts before applying the transition function in case the transition function needs to
+	// generate references to this node.
+	n.persistence.TransitionCount++
+	prevLastUpdatedVersionedTransition := n.persistence.LastUpdateVersionedTransition
+	n.persistence.LastUpdateVersionedTransition = &persistencespb.VersionedTransition{
+		NamespaceFailoverVersion: n.backend.GetCurrentVersion(),
+		// The transition count for the backend is only incremented when closing the current transaction,
+		// but any change to state machine node is a state transtion,
+		// so we can safely using next transition count here is safe.
+		TransitionCount: n.backend.NextTransitionCount(),
+	}
+	// Rollback on error
+	defer func() {
+		if retErr != nil {
+			n.persistence.TransitionCount--
+			n.persistence.LastUpdateVersionedTransition = prevLastUpdatedVersionedTransition
+			// Force reloading data.
+			n.cache.dataLoaded = false
+		}
+	}()
 	output, err := transitionFn(data)
 	if err != nil {
 		return err
 	}
-
-	serialized, err := node.definition.Serialize(data)
+	serialized, err := n.definition.Serialize(data)
 	if err != nil {
 		return err
 	}
-
-	update := stateUpdate{
-		persistence: &persistencespb.StateMachineNode{
-			Data:            serialized,
-			Children:        node.persistence.Children,
-			TransitionCount: node.persistence.TransitionCount + 1,
-			LastUpdateVersionedTransition: &persistencespb.VersionedTransition{
-				NamespaceFailoverVersion: node.backend.GetCurrentVersion(),
-				TransitionCount:          node.backend.NextTransitionCount(),
-			},
-			InitialVersionedTransition: node.persistence.InitialVersionedTransition,
-			Deleted:                    node.persistence.Deleted,
-		},
-		cache: &cachedMachine{
-			dataLoaded: true,
-			data:       data,
-			children:   node.cache.children,
-			dirty:      true,
-			outputs: append(node.cache.outputs, TransitionOutputWithCount{
-				TransitionOutput: output,
-				TransitionCount:  node.persistence.TransitionCount + 1,
-			}),
-		},
+	n.persistence.Data = serialized
+	n.cache.dirty = true
+	outputWithCount := TransitionOutputWithCount{
+		TransitionOutput: output,
+		TransitionCount:  n.persistence.TransitionCount,
 	}
-
-	return node.applyStateUpdate(update)
+	n.cache.outputs = append(n.cache.outputs, outputWithCount)
+	return nil
 }
 
 // A Collection of similarly typed sibling state machines.
@@ -734,55 +751,6 @@ func GenerateEventLoadToken(event *historypb.HistoryEvent) ([]byte, error) {
 		EventBatchId: eventBatchID,
 	}
 	return proto.Marshal(ref)
-}
-
-func (n *Node) childLocked(path []Key) (*Node, error) {
-	n.Lock()
-	defer n.Unlock()
-
-	if len(path) == 0 {
-		return n, nil
-	}
-
-	key, rest := path[0], path[1:]
-
-	child, ok := n.cache.children[key]
-	if ok {
-		return child.childLocked(rest)
-	}
-
-	def, ok := n.registry.Machine(key.Type)
-	if !ok {
-		return nil, fmt.Errorf("%w: state machine for type: %v", ErrNotRegistered, key.Type)
-	}
-
-	machines, ok := n.persistence.Children[key.Type]
-	if !ok {
-		return nil, fmt.Errorf("%w: %v", ErrStateMachineNotFound, key)
-	}
-
-	machine, ok := machines.MachinesById[key.ID]
-	if !ok {
-		return nil, fmt.Errorf("%w: %v", ErrStateMachineNotFound, key)
-	}
-
-	child = &Node{
-		Key:        key,
-		Parent:     n,
-		registry:   n.registry,
-		definition: def,
-		cache: &cachedMachine{
-			children: make(map[Key]*Node),
-		},
-		persistence: machine,
-		backend:     n.backend,
-	}
-	n.cache.children[key] = child
-
-	if len(rest) == 0 {
-		return child, nil
-	}
-	return child.childLocked(rest)
 }
 
 // markDeleted marks a single node as deleted

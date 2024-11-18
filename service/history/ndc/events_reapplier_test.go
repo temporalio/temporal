@@ -89,7 +89,7 @@ func (s *nDCEventReapplicationSuite) SetupTest() {
 		&hsmtest.NodeBackend{},
 		logger)
 	s.NoError(err)
-	s.hsmNode = root
+	s.hsmNode = root.Node
 }
 
 func (s *nDCEventReapplicationSuite) TearDownTest() {

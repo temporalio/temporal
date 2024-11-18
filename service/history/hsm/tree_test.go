@@ -83,13 +83,13 @@ func TestNode_MaintainsCachedData(t *testing.T) {
 		logger)
 	require.NoError(t, err)
 
-	v1, err := hsm.MachineData[*hsmtest.Data](root)
+	v1, err := hsm.MachineData[*hsmtest.Data](root.Node)
 	require.NoError(t, err)
 
 	require.False(t, root.Dirty())
 	require.Equal(t, 0, len(root.Outputs()))
 
-	err = hsm.MachineTransition(root, func(d *hsmtest.Data) (hsm.TransitionOutput, error) {
+	err = hsm.MachineTransition(root.Node, func(d *hsmtest.Data) (hsm.TransitionOutput, error) {
 		d.SetState(hsmtest.State2)
 		return hsm.TransitionOutput{}, nil
 	})
@@ -410,7 +410,7 @@ func TestNode_Sync(t *testing.T) {
 				node.InternalRepr().InitialVersionedTransition = initialVersionedTransition
 				node.InternalRepr().LastUpdateVersionedTransition = lastUpdateVersionedTransition
 
-				return node.Data()
+				return node.Node
 			}
 
 			currentNode := initNode(currentState, currentInitialVersionedTransition, currentLastUpdateVersionedTransition)
@@ -452,11 +452,11 @@ func TestMachineData(t *testing.T) {
 		logger)
 	require.NoError(t, err)
 
-	_, err = hsm.MachineData[string](root)
+	_, err = hsm.MachineData[string](root.Node)
 	require.ErrorIs(t, err, hsm.ErrIncompatibleType)
 
 	// OK.
-	value, err := hsm.MachineData[*hsmtest.Data](root)
+	value, err := hsm.MachineData[*hsmtest.Data](root.Node)
 	require.NoError(t, err)
 	require.Equal(t, hsmtest.NewData(hsmtest.State1), value)
 }
@@ -471,13 +471,13 @@ func TestMachineTransition(t *testing.T) {
 		logger)
 	require.NoError(t, err)
 
-	err = hsm.MachineTransition(root, func(string) (hsm.TransitionOutput, error) {
+	err = hsm.MachineTransition(root.Node, func(string) (hsm.TransitionOutput, error) {
 		return hsm.TransitionOutput{}, nil
 	})
 	require.ErrorIs(t, err, hsm.ErrIncompatibleType)
 
 	// Transition fails.
-	err = hsm.MachineTransition(root, func(d *hsmtest.Data) (hsm.TransitionOutput, error) {
+	err = hsm.MachineTransition(root.Node, func(d *hsmtest.Data) (hsm.TransitionOutput, error) {
 		// Mutate state and make sure the cache is marked stale.
 		d.SetState(hsmtest.State2)
 		return hsm.TransitionOutput{}, fmt.Errorf("test")
@@ -485,13 +485,13 @@ func TestMachineTransition(t *testing.T) {
 	require.ErrorContains(t, err, "test")
 	require.Equal(t, int64(0), root.InternalRepr().TransitionCount)
 	protorequire.ProtoEqual(t, &persistencespb.VersionedTransition{}, root.InternalRepr().LastUpdateVersionedTransition)
-	d, err := hsm.MachineData[*hsmtest.Data](root)
+	d, err := hsm.MachineData[*hsmtest.Data](root.Node)
 	require.NoError(t, err)
 	// Got the pre-mutation value back.
 	require.Equal(t, hsmtest.State1, d.State())
 	require.False(t, root.Dirty())
 
-	err = hsm.MachineTransition(root, func(d *hsmtest.Data) (hsm.TransitionOutput, error) {
+	err = hsm.MachineTransition(root.Node, func(d *hsmtest.Data) (hsm.TransitionOutput, error) {
 		d.SetState(hsmtest.State2)
 		return hsm.TransitionOutput{}, nil
 	})
@@ -501,7 +501,7 @@ func TestMachineTransition(t *testing.T) {
 		NamespaceFailoverVersion: 1,
 		TransitionCount:          3,
 	}, root.InternalRepr().LastUpdateVersionedTransition)
-	d, err = hsm.MachineData[*hsmtest.Data](root)
+	d, err = hsm.MachineData[*hsmtest.Data](root.Node)
 	require.NoError(t, err)
 	require.Equal(t, hsmtest.State2, d.State())
 }
@@ -516,7 +516,7 @@ func TestCollection(t *testing.T) {
 		logger)
 	require.NoError(t, err)
 
-	coll := hsm.NewCollection[*hsmtest.Data](root.Data(), def1.Type())
+	coll := hsm.NewCollection[*hsmtest.Data](root.Node, def1.Type())
 	a, err := coll.Add("a", hsmtest.NewData(hsmtest.State1))
 	require.NoError(t, err)
 	b, err := coll.Add("b", hsmtest.NewData(hsmtest.State2))

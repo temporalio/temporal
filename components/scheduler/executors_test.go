@@ -217,5 +217,5 @@ func newRoot(t *testing.T) *hsm.Node {
 		&hsmtest.NodeBackend{},
 		log.NewNoopLogger())
 	require.NoError(t, err)
-	return root
+	return root.Node
 }

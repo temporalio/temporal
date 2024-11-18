@@ -78,7 +78,7 @@ func newRoot(t *testing.T, backend *hsmtest.NodeBackend) *hsm.Node {
 		backend,
 		log.NewNoopLogger())
 	require.NoError(t, err)
-	return root
+	return root.Node
 }
 
 func newOperationNode(t *testing.T, backend *hsmtest.NodeBackend, event *historypb.HistoryEvent) *hsm.Node {

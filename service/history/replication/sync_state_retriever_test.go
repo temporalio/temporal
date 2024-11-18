@@ -550,7 +550,7 @@ func (s *syncWorkflowStateSuite) TestGetUpdatedSubStateMachine() {
 	s.Nil(err)
 	child2.InternalRepr().LastUpdateVersionedTransition = &persistencespb.VersionedTransition{NamespaceFailoverVersion: 1, TransitionCount: 10}
 
-	result, err := s.syncStateRetriever.getUpdatedSubStateMachine(root, &persistencespb.VersionedTransition{NamespaceFailoverVersion: 1, TransitionCount: 9})
+	result, err := s.syncStateRetriever.getUpdatedSubStateMachine(root.Node, &persistencespb.VersionedTransition{NamespaceFailoverVersion: 1, TransitionCount: 9})
 	s.NoError(err)
 	s.Equal(1, len(result))
 	s.Equal(len(child2.Path()), len(result[0].Path.Path))
