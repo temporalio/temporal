@@ -27,26 +27,60 @@ package deployment
 import (
 	"context"
 
+	"go.temporal.io/api/enums/v1"
+	"go.temporal.io/sdk/activity"
+	sdkclient "go.temporal.io/sdk/client"
+	deployspb "go.temporal.io/server/api/deployment/v1"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/primitives"
+	"go.temporal.io/server/common/sdk"
 )
 
 type (
 	DeploymentActivities struct {
 		activityDeps
-		namespace   namespace.Name
-		namespaceID namespace.ID
+		namespaceName namespace.Name
+		namespaceID   namespace.ID
 	}
 
-	StartDeploymentNameWorkflowActivityInput struct {
-		NamespaceName  string
-		NamespaceID    string
+	DeploymentNameWorkflowActivityInput struct {
 		DeploymentName string
-		// TODO Shivam - confirm if we need a buildID to be passed or not?
 	}
 )
 
 // StartDeploymentNameWorkflow activity starts a DeploymentName workflow
-func (a *DeploymentActivities) StartDeploymentNameWorkflow(ctx context.Context, input StartDeploymentNameWorkflowActivityInput) error {
-	// TODO Shivam: Fill in the implementation to start DeploymentName Workflow
+func (a *DeploymentActivities) StartDeploymentNameWorkflow(ctx context.Context, input DeploymentNameWorkflowActivityInput) error {
+	logger := activity.GetLogger(ctx)
+	logger.Info("activity to start DeploymentName workflow started")
+
+	sdkClient := a.ClientFactory.NewClient(sdkclient.Options{
+		Namespace:     a.namespaceName.String(),
+		DataConverter: sdk.PreferProtoDataConverter,
+	})
+
+	workflowID := generateDeploymentNameWorkflowID(input.DeploymentName)
+
+	workflowOptions := sdkclient.StartWorkflowOptions{
+		ID:        workflowID,
+		TaskQueue: primitives.PerNSWorkerTaskQueue,
+		Memo: map[string]interface{}{
+			BuildIDMemoKey: "",
+		},
+		WorkflowIDReusePolicy:    enums.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
+		WorkflowIDConflictPolicy: enums.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING,
+	}
+
+	// Build workflow args
+	deploymentNameWorkflowArgs := &deployspb.DeploymentNameWorkflowArgs{
+		NamespaceName: a.namespaceName.String(),
+		NamespaceId:   a.namespaceID.String(),
+	}
+
+	// Calling the workflow with the args
+	_, err := sdkClient.ExecuteWorkflow(ctx, workflowOptions, DeploymentNameWorkflow, deploymentNameWorkflowArgs)
+	if err != nil {
+		return err
+	}
+
 	return nil
 }
