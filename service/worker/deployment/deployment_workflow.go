@@ -174,8 +174,10 @@ func (d *DeploymentWorkflowRunner) run() error {
 func (d *DeploymentWorkflowRunner) invokeDeploymentNameActivity(ctx workflow.Context, deploymentName string) error {
 
 	activityCtx := workflow.WithActivityOptions(ctx, defaultActivityOptions)
+	deploymentNameWorkflowClient := NewDeploymentNameWorkflowClient(deploymentName)
 	activityArgs := &DeploymentNameWorkflowActivityInput{
-		DeploymentName: deploymentName,
+		deploymentName: deploymentName,
+		client:         deploymentNameWorkflowClient,
 	}
 	return workflow.ExecuteActivity(activityCtx, d.a.StartDeploymentNameWorkflow, activityArgs).Get(ctx, nil)
 }

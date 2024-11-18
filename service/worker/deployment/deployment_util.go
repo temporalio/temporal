@@ -59,6 +59,7 @@ const (
 	ForceCANSignalName                = "force-continue-as-new"
 
 	DeploymentWorkflowIDPrefix      = "temporal-sys-deployment"
+	DeploymentNameWorkflowIDPrefix  = "temporal-sys-deployment-name"
 	DeploymentWorkflowIDDelimeter   = "|"
 	DeploymentWorkflowIDInitialSize = (2 * len(DeploymentWorkflowIDDelimeter)) + len(DeploymentWorkflowIDPrefix)
 	BuildIDMemoKey                  = "DefaultBuildID"
@@ -242,4 +243,29 @@ func (d *DeploymentWorkflowClient) escapeChar(s string) string {
 	s = strings.Replace(s, `\`, `\\`, -1)
 	s = strings.Replace(s, DeploymentWorkflowIDDelimeter, `\`+DeploymentWorkflowIDDelimeter, -1)
 	return s
+}
+
+type DeploymentNameWorkflowClient struct {
+	deploymentName string
+}
+
+func NewDeploymentNameWorkflowClient(
+	deploymentName string,
+) *DeploymentNameWorkflowClient {
+	return &DeploymentNameWorkflowClient{
+		deploymentName: deploymentName,
+	}
+}
+
+func (dn *DeploymentNameWorkflowClient) escapeChar(s string) string {
+	s = strings.Replace(s, `\`, `\\`, -1)
+	s = strings.Replace(s, DeploymentWorkflowIDDelimeter, `\`+DeploymentWorkflowIDDelimeter, -1)
+	return s
+}
+
+func (dn *DeploymentNameWorkflowClient) generateDeploymentWorkflowID() string {
+	// escaping the reserved workflow delimiter (|) from the inputs, if present
+	escapedDeploymentName := dn.escapeChar(dn.deploymentName)
+
+	return DeploymentNameWorkflowIDPrefix + DeploymentWorkflowIDDelimeter + escapedDeploymentName
 }

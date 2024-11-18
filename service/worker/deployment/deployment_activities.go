@@ -44,7 +44,8 @@ type (
 	}
 
 	DeploymentNameWorkflowActivityInput struct {
-		DeploymentName string
+		deploymentName string
+		client         *DeploymentNameWorkflowClient
 	}
 )
 
@@ -57,8 +58,9 @@ func (a *DeploymentActivities) StartDeploymentNameWorkflow(ctx context.Context, 
 		Namespace:     a.namespaceName.String(),
 		DataConverter: sdk.PreferProtoDataConverter,
 	})
-	// Workflow options for inputting workflowID and memo and duplication policy
-	workflowID := DeploymentWorkflowIDPrefix + DeploymentWorkflowIDDelimeter + input.DeploymentName
+
+	workflowID := input.client.generateDeploymentWorkflowID()
+
 	workflowOptions := sdkclient.StartWorkflowOptions{
 		ID:        workflowID,
 		TaskQueue: primitives.PerNSWorkerTaskQueue,

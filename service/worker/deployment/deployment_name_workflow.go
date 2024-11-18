@@ -45,8 +45,6 @@ type (
 const (
 	// Updates
 	UpdateDeploymentNameDefaultBuildIDName = "update-deployment-name-default-buildID"
-
-	DeploymentNameWorkflowIDPrefix = "temporal-sys-deployment-name"
 )
 
 func DeploymentNameWorkflow(ctx workflow.Context, deploymentNameArgs *deployspb.DeploymentNameWorkflowArgs) error {
