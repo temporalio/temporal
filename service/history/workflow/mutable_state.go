@@ -145,7 +145,7 @@ type (
 		MaxSearchAttributeValueSize int
 	}
 
-	UpdateActivityCallback func(*persistencespb.ActivityInfo, MutableState)
+	ActivityUpdater func(*persistencespb.ActivityInfo, MutableState)
 
 	MutableState interface {
 		callbacks.CanGetNexusCompletion
@@ -360,7 +360,7 @@ type (
 			baseRunLowestCommonAncestorEventID int64,
 			baseRunLowestCommonAncestorEventVersion int64,
 		)
-		UpdateActivity(string, UpdateActivityCallback) error
+		UpdateActivity(string, ActivityUpdater) error
 		UpdateActivityTimerHeartbeat(int64, time.Time)
 		UpdateActivityProgress(ai *persistencespb.ActivityInfo, request *workflowservice.RecordActivityTaskHeartbeatRequest)
 		UpdateUserTimer(*persistencespb.TimerInfo) error

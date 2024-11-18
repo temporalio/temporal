@@ -4940,6 +4940,16 @@ func (ms *MutableStateImpl) updateActivityInfoForRetries(
 	})
 }
 
+/*
+UpdateActivity function updates the existing pending activity via the updater callback.
+To update an activity, we need to do the following steps:
+	* preserve the original size of the activity
+	* preserve the original state of the activity
+	* call the updater callback to update the activity
+	* calculate new size of the activity
+	* respond to the changes of the activity state (like changes to pause)
+*/
+
 func (ms *MutableStateImpl) UpdateActivity(activityId string, updater ActivityUpdater) error {
 	ai, activityFound := ms.GetActivityByActivityID(activityId)
 	if !activityFound {
@@ -4953,7 +4963,7 @@ func (ms *MutableStateImpl) UpdateActivity(activityId string, updater ActivityUp
 		prevPause = prev.Paused
 	}
 
-	updateCallback(ai, ms)
+	updater(ai, ms)
 
 	if prevPause != ai.Paused {
 		err := ms.updatePauseInfoSearchAttribute()
