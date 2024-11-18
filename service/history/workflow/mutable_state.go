@@ -264,6 +264,7 @@ type (
 		GetNextEventID() int64
 		GetLastCompletedWorkflowTaskStartedEventId() int64
 		GetPendingActivityInfos() map[int64]*persistencespb.ActivityInfo
+		AddPendingActivityInfo(*persistencespb.ActivityInfo)
 		GetPendingTimerInfos() map[string]*persistencespb.TimerInfo
 		GetPendingChildExecutionInfos() map[int64]*persistencespb.ChildExecutionInfo
 		GetPendingRequestCancelExternalInfos() map[int64]*persistencespb.RequestCancelInfo

@@ -25,17 +25,55 @@ package resetactivity
 import (
 	"context"
 
-	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/api/historyservice/v1"
+	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/shard"
+	"go.temporal.io/server/service/history/workflow"
 )
 
 func Invoke(
-	_ context.Context,
-	_ *historyservice.ResetActivityRequest,
-	_ shard.Context,
-	_ api.WorkflowConsistencyChecker,
+	ctx context.Context,
+	req *historyservice.ResetActivityRequest,
+	shardContext shard.Context,
+	workflowConsistencyChecker api.WorkflowConsistencyChecker,
 ) (resp *historyservice.ResetActivityResponse, retError error) {
-	return nil, serviceerror.NewUnimplemented("PauseActivity is not supported yet")
+	request := req.GetFrontendRequest()
+	workflowKey := definition.NewWorkflowKey(
+		req.NamespaceId,
+		request.GetWorkflowId(),
+		request.GetRunId(),
+	)
+
+	err := api.GetAndUpdateWorkflowWithNew(
+		ctx,
+		nil,
+		workflowKey,
+		func(workflowLease api.WorkflowLease) (*api.UpdateWorkflowAction, error) {
+			mutableState := workflowLease.GetMutableState()
+			activityId := request.GetActivityId()
+
+			var err error
+
+			err = workflow.ResetActivityById(
+				shardContext, mutableState, activityId, request.NoWait, request.ResetHeartbeat,
+			)
+			if err != nil {
+				return nil, err
+			}
+			return &api.UpdateWorkflowAction{
+				Noop:               false,
+				CreateWorkflowTask: false,
+			}, nil
+		},
+		nil,
+		shardContext,
+		workflowConsistencyChecker,
+	)
+
+	if err != nil {
+		return nil, err
+	}
+
+	return &historyservice.ResetActivityResponse{}, nil
 }

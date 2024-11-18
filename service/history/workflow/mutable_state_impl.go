@@ -2912,14 +2912,17 @@ func (ms *MutableStateImpl) ApplyActivityTaskScheduledEvent(
 		}
 	}
 
+	ms.AddPendingActivityInfo(ai)
+	ms.writeEventToCache(event)
+	return ai, nil
+}
+
+func (ms *MutableStateImpl) AddPendingActivityInfo(ai *persistencespb.ActivityInfo) {
 	ms.pendingActivityInfoIDs[ai.ScheduledEventId] = ai
 	ms.pendingActivityIDToEventID[ai.ActivityId] = ai.ScheduledEventId
 	ms.updateActivityInfos[ai.ScheduledEventId] = ai
 	ms.approximateSize += ai.Size() + int64SizeBytes
 	ms.executionInfo.ActivityCount++
-
-	ms.writeEventToCache(event)
-	return ai, nil
 }
 
 func (ms *MutableStateImpl) addStartedEventForTransientActivity(
