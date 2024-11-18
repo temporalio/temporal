@@ -103,6 +103,30 @@ message VersioningData {
     repeated AssignmentRule assignment_rules = 2;
     // Unordered list of redirect rules. Also contains recently-deleted rules.
     repeated RedirectRule redirect_rules = 3;
+
+    // TaskQueueType based versioning info. This will be used for routing-related purposes
+    // for worker-versioning 3.
+    WorkflowTaskQueueBuildIDInfo workflow_task_queue_build_id_info = 4;
+    ActivityTaskQueueBuildIDInfo activity_task_queue_build_id_info = 5;
+    NexusTaskQueueBuildIDInfo nexus_task_queue_build_id_info = 6;
+
+    message WorkflowTaskQueueBuildIDInfo {
+        DeploymentInfo info = 1;
+    }
+
+    message ActivityTaskQueueBuildIDInfo {
+        DeploymentInfo info = 1;
+    }
+
+    message NexusTaskQueueBuildIDInfo {
+        DeploymentInfo info = 1;
+    }
+
+    message DeploymentInfo {
+        string default_build_id = 1;
+        // key: buildID -> value: WorkerDeployment
+        map<string,temporal.api.common.v1.message.WorkerDeployment> deployment_mapping = 2; 
+    }
 }
 
 // Container for all persistent user provided data for a task queue.
