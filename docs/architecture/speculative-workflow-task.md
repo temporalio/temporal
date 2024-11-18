@@ -107,17 +107,17 @@ this Workflow Task didn't change the Workflow state. Currently, the conditions a
  - response doesn't have any commands,
  - response has only Update rejection messages.
 
-Also, the speculative Workflow Task can ship other events (e.g. `ActivityTaskScheduled` or `TimerStarted`)
-generated from previous Workflow Task commands (also known as command-events).
-Unfortunately, old SDKs don't support receiving same events more
+The speculative Workflow Task can also ship other events (e.g. `ActivityTaskScheduled` or `TimerStarted`)
+that were generated from previous Workflow Task commands (also known as command-events).
+Unfortunately, older SDKs don't support receiving same events more
 than once. If SDK supports this, it will set `DiscardSpeculativeWorkflowTaskWithEvents` flag to `true`
-and the server discards speculative Workflow Task even if it had events. These events can be shipped
-multiply times if Updates are kept rejected. To prevent shipping a big set of events to the worker over
+and the server will discard speculative Workflow Task even if it had events. These events can be shipped
+multiply times if Updates keep being rejected. To prevent shipping a large set of events to the worker over
 and over again, the server persists speculative Workflow Task if a number of events exceed
 `DiscardSpeculativeWorkflowTaskMaximumEventsCount` threshold.
 
 > #### NOTE
-> This is possible because of important server invariant: Workflow history can only end with:
+> This is possible because of an important server invariant: the Workflow history can only end with:
 > - Workflow Task event (Scheduled, Started, Completed, Failed, Timeout),
 > 
 > or
