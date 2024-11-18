@@ -214,7 +214,7 @@ Update to the worker. This Workflow Task is always speculative, unless there is 
 already-scheduled-but-not-yet-started Workflow Task present.
 
 Later, when handling a worker response in the `RespondWorkflowTaskCompleted` API handler, the server
-might write or drop events for this Workflow Task. Read
+might write or discard events for this Workflow Task. Read
 [Speculative Workflow Tasks](./speculative-workflow-task.md) for more details.
 
 ### Lifecycle Stage

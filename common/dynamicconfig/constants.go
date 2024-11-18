@@ -2072,6 +2072,11 @@ the number of children greater than or equal to this threshold`,
 		time.Minute*10,
 		`WorkflowTaskRetryMaxInterval is the maximum interval added to a workflow task's startToClose timeout for slowing down retry`,
 	)
+	DiscardSpeculativeWorkflowTaskMaximumEventsCount = NewGlobalIntSetting(
+		"history.discardSpeculativeWorkflowTaskMaximumEventsCount",
+		10,
+		`If speculative workflow task shipped more than DiscardSpeculativeWorkflowTaskMaximumEventsCount events, it can't be discarded`,
+	)
 	DefaultWorkflowTaskTimeout = NewNamespaceDurationSetting(
 		"history.defaultWorkflowTaskTimeout",
 		primitives.DefaultWorkflowTaskTimeout,
