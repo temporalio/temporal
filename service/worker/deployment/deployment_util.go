@@ -36,6 +36,8 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	updatepb "go.temporal.io/api/update/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/sdk/temporal"
+	"go.temporal.io/sdk/workflow"
 	deployspb "go.temporal.io/server/api/deployment/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common"
@@ -46,6 +48,31 @@ import (
 	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/searchattribute"
 	"google.golang.org/protobuf/types/known/timestamppb"
+)
+
+const (
+	// Updates
+	RegisterWorkerInDeployment = "register-task-queue-worker"
+
+	// Signals
+	UpdateDeploymentBuildIDSignalName = "update-deployment-build-id"
+	ForceCANSignalName                = "force-continue-as-new"
+
+	DeploymentWorkflowIDPrefix      = "temporal-sys-deployment"
+	DeploymentWorkflowIDDelimeter   = "|"
+	DeploymentWorkflowIDInitialSize = (2 * len(DeploymentWorkflowIDDelimeter)) + len(DeploymentWorkflowIDPrefix)
+	BuildIDMemoKey                  = "DefaultBuildID"
+)
+
+var (
+	defaultActivityOptions = workflow.ActivityOptions{
+		ScheduleToCloseTimeout: 1 * time.Hour,
+		StartToCloseTimeout:    1 * time.Minute,
+		RetryPolicy: &temporal.RetryPolicy{
+			InitialInterval: 1 * time.Second,
+			MaximumInterval: 60 * time.Second,
+		},
+	}
 )
 
 type DeploymentClient interface {

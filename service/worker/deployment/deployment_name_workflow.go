@@ -35,11 +35,10 @@ type (
 	// DeploymentWorkflowRunner holds the local state while running a deployment name workflow
 	DeploymentNameWorkflowRunner struct {
 		*deployspb.DeploymentNameWorkflowArgs
-		ctx                         workflow.Context
-		a                           *DeploymentNameActivities
-		logger                      sdklog.Logger
-		metrics                     sdkclient.MetricsHandler
-		requestsBeforeContinueAsNew int
+		ctx     workflow.Context
+		a       *DeploymentNameActivities
+		logger  sdklog.Logger
+		metrics sdkclient.MetricsHandler
 	}
 )
 
@@ -53,18 +52,16 @@ const (
 
 func DeploymentNameWorkflow(ctx workflow.Context, deploymentNameArgs *deployspb.DeploymentNameWorkflowArgs) error {
 	deploymentWorkflowNameRunner := &DeploymentNameWorkflowRunner{
-		DeploymentNameWorkflowArgs:  deploymentNameArgs,
-		ctx:                         ctx,
-		a:                           nil,
-		logger:                      sdklog.With(workflow.GetLogger(ctx), "wf-namespace", deploymentNameArgs.NamespaceName),
-		metrics:                     workflow.GetMetricsHandler(ctx).WithTags(map[string]string{"namespace": deploymentNameArgs.NamespaceName}),
-		requestsBeforeContinueAsNew: RequestsBeforeContinueAsNew,
+		DeploymentNameWorkflowArgs: deploymentNameArgs,
+		ctx:                        ctx,
+		a:                          nil,
+		logger:                     sdklog.With(workflow.GetLogger(ctx), "wf-namespace", deploymentNameArgs.NamespaceName),
+		metrics:                    workflow.GetMetricsHandler(ctx).WithTags(map[string]string{"namespace": deploymentNameArgs.NamespaceName}),
 	}
 	return deploymentWorkflowNameRunner.run()
 }
 
 func (d *DeploymentNameWorkflowRunner) run() error {
-	var requestCount int
 	var pendingUpdates int
 
 	err := workflow.SetQueryHandler(d.ctx, "DefaultBuildID", func(input []byte) (string, error) {
@@ -80,7 +77,7 @@ func (d *DeploymentNameWorkflowRunner) run() error {
 	//  - an update operation on a deployment which shall update all the task-queue's default buildID and the local state of the current deployment
 
 	// Wait until we can continue as new or are cancelled.
-	err = workflow.Await(d.ctx, func() bool { return requestCount >= d.requestsBeforeContinueAsNew && pendingUpdates == 0 })
+	err = workflow.Await(d.ctx, func() bool { return workflow.GetInfo(d.ctx).GetContinueAsNewSuggested() && pendingUpdates == 0 })
 	if err != nil {
 		return err
 	}

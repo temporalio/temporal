@@ -63,7 +63,7 @@ func (a *DeploymentActivities) StartDeploymentNameWorkflow(ctx context.Context, 
 		ID:        workflowID,
 		TaskQueue: primitives.PerNSWorkerTaskQueue,
 		Memo: map[string]interface{}{
-			"DefaultBuildID": "",
+			BuildIDMemoKey: "",
 		},
 		WorkflowIDReusePolicy:    enums.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
 		WorkflowIDConflictPolicy: enums.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING,
