@@ -52,10 +52,7 @@ TEST_TAG_FLAG := -tags $(ALL_TEST_TAGS)
 TEST_TIMEOUT ?= 20m
 
 # Number of retries for *-coverage targets.
-# NOTE: This is incompatible with TEST_ARGS which specify the `-run` flag due to how gotestsum selects which tests to
-# retry.
-# *WARNING*: This is disabled for now; see https://github.com/gotestyourself/gotestsum/issues/423
-FAILED_TEST_RETRIES ?= 0
+FAILED_TEST_RETRIES ?= 2
 
 # Whether or not to test with the race detector. All of (1 on y yes t true) are true values.
 TEST_RACE_FLAG ?= on
@@ -405,13 +402,13 @@ prepare-coverage-test: $(GOTESTSUM) $(TEST_OUTPUT_ROOT)
 
 unit-test-coverage: prepare-coverage-test
 	@printf $(COLOR) "Run unit tests with coverage..."
-	$(GOTESTSUM) --rerun-fails=$(FAILED_TEST_RETRIES) --rerun-fails-max-failures=10 --junitfile $(NEW_REPORT) --packages $(UNIT_TEST_DIRS) -- \
+	go run ./cmd/tools/test-runner $(GOTESTSUM) -retries $(FAILED_TEST_RETRIES) --junitfile $(NEW_REPORT) --packages $(UNIT_TEST_DIRS) -- \
 		$(COMPILED_TEST_ARGS) \
 		-coverprofile=$(NEW_COVER_PROFILE)
 
 integration-test-coverage: prepare-coverage-test
 	@printf $(COLOR) "Run integration tests with coverage..."
-	$(GOTESTSUM) --rerun-fails=$(FAILED_TEST_RETRIES) --rerun-fails-max-failures=10 --junitfile $(NEW_REPORT) --packages $(INTEGRATION_TEST_DIRS) -- \
+	go run ./cmd/tools/test-runner $(GOTESTSUM) -retries $(FAILED_TEST_RETRIES) --junitfile $(NEW_REPORT) --packages $(INTEGRATION_TEST_DIRS) -- \
 		$(COMPILED_TEST_ARGS) \
 		-coverprofile=$(NEW_COVER_PROFILE) $(INTEGRATION_TEST_COVERPKG)
 
@@ -421,21 +418,21 @@ pre-build-functional-test-coverage: prepare-coverage-test
 
 functional-test-coverage: prepare-coverage-test
 	@printf $(COLOR) "Run functional tests with coverage with $(PERSISTENCE_DRIVER) driver..."
-	$(GOTESTSUM) --rerun-fails=$(FAILED_TEST_RETRIES) --rerun-fails-max-failures=10 --junitfile $(NEW_REPORT) --packages $(FUNCTIONAL_TEST_ROOT) -- \
+	go run ./cmd/tools/test-runner $(GOTESTSUM) -retries $(FAILED_TEST_RETRIES) --junitfile $(NEW_REPORT) --packages $(FUNCTIONAL_TEST_ROOT) -- \
 		$(COMPILED_TEST_ARGS) \
 		-coverprofile=$(NEW_COVER_PROFILE) $(FUNCTIONAL_TEST_COVERPKG) \
 		-args -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER)
 
 functional-test-xdc-coverage: prepare-coverage-test
 	@printf $(COLOR) "Run functional test for cross DC with coverage with $(PERSISTENCE_DRIVER) driver..."
-	$(GOTESTSUM) --rerun-fails=$(FAILED_TEST_RETRIES) --rerun-fails-max-failures=10 --junitfile $(NEW_REPORT) --packages $(FUNCTIONAL_TEST_XDC_ROOT) -- \
+	go run ./cmd/tools/test-runner $(GOTESTSUM) -retries $(FAILED_TEST_RETRIES) --junitfile $(NEW_REPORT) --packages $(FUNCTIONAL_TEST_XDC_ROOT) -- \
 		$(COMPILED_TEST_ARGS) \
 		-coverprofile=$(NEW_COVER_PROFILE) $(FUNCTIONAL_TEST_COVERPKG) \
 		-args -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER)
 
 functional-test-ndc-coverage: prepare-coverage-test
 	@printf $(COLOR) "Run functional test for NDC with coverage with $(PERSISTENCE_DRIVER) driver..."
-	$(GOTESTSUM) --rerun-fails=$(FAILED_TEST_RETRIES) --rerun-fails-max-failures=10 --junitfile $(NEW_REPORT) --packages $(FUNCTIONAL_TEST_NDC_ROOT) -- \
+	go run ./cmd/tools/test-runner $(GOTESTSUM) -retries $(FAILED_TEST_RETRIES) --junitfile $(NEW_REPORT) --packages $(FUNCTIONAL_TEST_NDC_ROOT) -- \
 		$(COMPILED_TEST_ARGS) \
 		-coverprofile=$(NEW_COVER_PROFILE) $(FUNCTIONAL_TEST_COVERPKG) \
 		-args -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER)
