@@ -1659,37 +1659,9 @@ func (ms *MutableStateImpl) UpdateActivityInfo(
 	return err
 }
 
-// UpdateActivity updates an activity
-func (ms *MutableStateImpl) UpdateActivity(
-	ai *persistencespb.ActivityInfo,
-) error {
-	prev, ok := ms.pendingActivityInfoIDs[ai.ScheduledEventId]
-	if !ok {
-		ms.logError(
-			fmt.Sprintf("unable to find activity ID: %v in mutable state", ai.ActivityId),
-			tag.ErrorTypeInvalidMutableStateAction,
-		)
-		return ErrMissingActivityInfo
-	}
-
-	ms.pendingActivityInfoIDs[ai.ScheduledEventId] = ai
-	ms.updateActivityInfos[ai.ScheduledEventId] = ai
-	ms.approximateSize += ai.Size() - prev.Size()
-	return nil
-}
-
 // UpdateActivityWithTimerHeartbeat updates an activity
-func (ms *MutableStateImpl) UpdateActivityWithTimerHeartbeat(
-	ai *persistencespb.ActivityInfo,
-	timerTimeoutVisibility time.Time,
-) error {
-	err := ms.UpdateActivity(ai)
-	if err != nil {
-		return err
-	}
-
-	ms.pendingActivityTimerHeartbeats[ai.ScheduledEventId] = timerTimeoutVisibility
-	return nil
+func (ms *MutableStateImpl) UpdateActivityTimerHeartbeat(scheduledEventId int64, timerTimeoutVisibility time.Time) {
+	ms.pendingActivityTimerHeartbeats[scheduledEventId] = timerTimeoutVisibility
 }
 
 // DeleteActivity deletes details about an activity.
@@ -3045,14 +3017,16 @@ func (ms *MutableStateImpl) AddActivityTaskStartedEvent(
 		return nil, err
 	}
 
-	// we might need to retry, so do not append started event just yet,
-	// instead update mutable state and will record started event when activity task is closed
-	ai.Version = ms.GetCurrentVersion()
-	ai.StartedEventId = common.TransientEventID
-	ai.RequestId = requestID
-	ai.StartedTime = timestamppb.New(ms.timeSource.Now())
-	ai.StartedIdentity = identity
-	if err := ms.UpdateActivity(ai); err != nil {
+	if err := ms.UpdateActivity(ai.ScheduledEventId, func(activityInfo *persistencespb.ActivityInfo, _ MutableState) {
+		// we might need to retry, so do not append started event just yet,
+		// instead update mutable state and will record started event when activity task is closed
+		activityInfo.Version = ms.GetCurrentVersion()
+		activityInfo.StartedEventId = common.TransientEventID
+		activityInfo.RequestId = requestID
+		activityInfo.StartedTime = timestamppb.New(ms.timeSource.Now())
+		activityInfo.StartedIdentity = identity
+
+	}); err != nil {
 		return nil, err
 	}
 	ms.syncActivityTasks[ai.ScheduledEventId] = struct{}{}
@@ -4927,7 +4901,7 @@ func (ms *MutableStateImpl) RetryActivity(
 }
 
 func (ms *MutableStateImpl) RecordLastActivityCompleteTime(ai *persistencespb.ActivityInfo) {
-	_ = ms.UpdateActivityWithCallback(ai.ActivityId, func(info *persistencespb.ActivityInfo, _ MutableState) {
+	_ = ms.UpdateActivity(ai.ScheduledEventId, func(info *persistencespb.ActivityInfo, _ MutableState) {
 		ai.LastAttemptCompleteTime = timestamppb.New(ms.shard.GetTimeSource().Now().UTC())
 	})
 }
@@ -4952,11 +4926,11 @@ func (ms *MutableStateImpl) updateActivityInfoForRetries(
 	nextAttempt int32,
 	activityFailure *failurepb.Failure,
 ) {
-	_ = ms.UpdateActivityWithCallback(ai.ActivityId, func(info *persistencespb.ActivityInfo, mutableState MutableState) {
+	_ = ms.UpdateActivity(ai.ScheduledEventId, func(activityInfo *persistencespb.ActivityInfo, mutableState MutableState) {
 		mutableStateImpl, ok := mutableState.(*MutableStateImpl)
 		if ok {
 			ai = UpdateActivityInfoForRetries(
-				ai,
+				activityInfo,
 				mutableStateImpl.GetCurrentVersion(),
 				nextAttempt,
 				mutableStateImpl.truncateRetryableActivityFailure(activityFailure),
@@ -4966,8 +4940,18 @@ func (ms *MutableStateImpl) updateActivityInfoForRetries(
 	})
 }
 
-func (ms *MutableStateImpl) UpdateActivityWithCallback(activityId string, updateCallback UpdateActivityCallback) error {
-	ai, activityFound := ms.GetActivityByActivityID(activityId)
+/*
+UpdateActivity function updates the existing pending activity via the updater callback.
+To update an activity, we need to do the following steps:
+	* preserve the original size of the activity
+	* preserve the original state of the activity
+	* call the updater callback to update the activity
+	* calculate new size of the activity
+	* respond to the changes of the activity state (like changes to pause)
+*/
+
+func (ms *MutableStateImpl) UpdateActivity(scheduledEventId int64, updater ActivityUpdater) error {
+	ai, activityFound := ms.GetActivityInfo(scheduledEventId)
 	if !activityFound {
 		return consts.ErrActivityNotFound
 	}
@@ -4979,7 +4963,7 @@ func (ms *MutableStateImpl) UpdateActivityWithCallback(activityId string, update
 		prevPause = prev.Paused
 	}
 
-	updateCallback(ai, ms)
+	updater(ai, ms)
 
 	if prevPause != ai.Paused {
 		err := ms.updatePauseInfoSearchAttribute()
