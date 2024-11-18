@@ -25,8 +25,11 @@
 package deployment
 
 import (
+	"time"
+
 	sdkclient "go.temporal.io/sdk/client"
 	sdklog "go.temporal.io/sdk/log"
+	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
 	deployspb "go.temporal.io/server/api/deployment/v1"
 )
@@ -54,6 +57,17 @@ const (
 	DeploymentWorkflowIDPrefix      = "temporal-sys-deployment"
 	DeploymentWorkflowIDDelimeter   = "|"
 	DeploymentWorkflowIDInitialSize = (2 * len(DeploymentWorkflowIDDelimeter)) + len(DeploymentWorkflowIDPrefix)
+)
+
+var (
+	defaultActivityOptions = workflow.ActivityOptions{
+		ScheduleToCloseTimeout: 1 * time.Hour,
+		StartToCloseTimeout:    1 * time.Minute,
+		RetryPolicy: &temporal.RetryPolicy{
+			InitialInterval: 1 * time.Second,
+			MaximumInterval: 60 * time.Second,
+		},
+	}
 )
 
 type AwaitSignals struct {
@@ -116,10 +130,11 @@ func (d *DeploymentWorkflowRunner) run() error {
 		d.ctx,
 		RegisterWorkerInDeployment,
 		func(ctx workflow.Context, updateInput *deployspb.RegisterWorkerInDeploymentArgs) error {
-			// need a lock here
+			d.lock.Lock(d.ctx)
 			pendingUpdates++
 			defer func() {
 				pendingUpdates--
+				d.lock.Unlock()
 			}()
 
 			// if no TaskQueueFamilies have been registered for the deployment
@@ -143,8 +158,8 @@ func (d *DeploymentWorkflowRunner) run() error {
 			}
 			d.DeploymentLocalState.TaskQueueFamilies[updateInput.TaskQueueName].TaskQueues[int32(updateInput.TaskQueueType)] = newTaskQueueWorkerInfo
 
-			// Call activity which starts "DeploymentName" workflow
-
+			// Call activity which starts a "DeploymentName" workflow
+			d.invokeDeploymentNameActivity(ctx, d.DeploymentLocalState.WorkerDeployment.DeploymentName)
 			return nil
 		},
 		// TODO Shivam - have a validator which backsoff updates if we are scheduled to have a CAN
@@ -178,4 +193,17 @@ func (d *DeploymentWorkflowRunner) run() error {
 	}
 	return workflow.NewContinueAsNewError(d.ctx, DeploymentWorkflow, workflowArgs)
 
+}
+
+func (d *DeploymentWorkflowRunner) invokeDeploymentNameActivity(ctx workflow.Context, deploymentName string) error {
+
+	activityCtx := workflow.WithActivityOptions(ctx, defaultActivityOptions)
+	activityArgs := &DeploymentNameWorkflowActivityInput{
+		DeploymentName: deploymentName,
+	}
+	err := workflow.ExecuteActivity(activityCtx, d.a.StartDeploymentNameWorkflow, activityArgs).Get(ctx, nil)
+	if err != nil {
+		return err
+	}
+	return nil
 }

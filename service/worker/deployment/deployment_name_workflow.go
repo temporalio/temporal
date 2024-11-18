@@ -25,7 +25,6 @@
 package deployment
 
 import (
-	"github.com/docker/docker/daemon/logger"
 	sdkclient "go.temporal.io/sdk/client"
 	sdklog "go.temporal.io/sdk/log"
 	"go.temporal.io/sdk/workflow"
@@ -52,7 +51,6 @@ const (
 	RequestsBeforeContinueAsNew    = 500
 )
 
-// TODO Shivam - Define workflow for DeploymentName
 func DeploymentNameWorkflow(ctx workflow.Context, deploymentNameArgs *deployspb.DeploymentNameWorkflowArgs) error {
 	deploymentWorkflowNameRunner := &DeploymentNameWorkflowRunner{
 		DeploymentNameWorkflowArgs:  deploymentNameArgs,
@@ -69,23 +67,17 @@ func (d *DeploymentNameWorkflowRunner) run() error {
 	var requestCount int
 	var pendingUpdates int
 
-	/* TODO Shivam:
-
-	Implement this workflow to be an infinitely long running workflow
-
-	Update handler(s) to:
-		- signal/update/have an activity DeploymentWorkflow and update the buildID of all task-queues in the deployment name && update default buildID of the deployment name.
-
-	*/
 	err := workflow.SetQueryHandler(d.ctx, "DefaultBuildID", func(input []byte) (string, error) {
 		return d.DefaultBuildId, nil
 	})
 	if err != nil {
-		logger.Info("SetQueryHandler failed for DeploymentName workflow with error: " + err.Error())
+		d.logger.Info("SetQueryHandler failed for DeploymentName workflow with error: " + err.Error())
 		return err
 	}
 
-	// Updatehandler for updating default-buildID
+	// TODO Shivam (later) -  Updatehandler for updating default-buildID of a deployment.
+	// This shall be responsible for:
+	//  - an update operation on a deployment which shall update all the task-queue's default buildID and the local state of the current deployment
 
 	// Wait until we can continue as new or are cancelled.
 	err = workflow.Await(d.ctx, func() bool { return requestCount >= d.requestsBeforeContinueAsNew && pendingUpdates == 0 })

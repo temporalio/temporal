@@ -126,9 +126,9 @@ func (s *workerComponent) Register(registry sdkworker.Registry, ns *namespace.Na
 // TODO Shivam - place holder for now but will initialize activity rate limits (if any) amongst other things
 func (s *workerComponent) newDeploymentActivities(name namespace.Name, id namespace.ID) *DeploymentActivities {
 	return &DeploymentActivities{
-		activityDeps: s.activityDeps,
-		namespace:    name,
-		namespaceID:  id,
+		activityDeps:  s.activityDeps,
+		namespaceName: name,
+		namespaceID:   id,
 	}
 }
 
