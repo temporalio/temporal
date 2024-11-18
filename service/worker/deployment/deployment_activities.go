@@ -27,6 +27,7 @@ package deployment
 import (
 	"context"
 
+	"go.temporal.io/api/enums/v1"
 	"go.temporal.io/sdk/activity"
 	sdkclient "go.temporal.io/sdk/client"
 	deployspb "go.temporal.io/server/api/deployment/v1"
@@ -64,13 +65,14 @@ func (a *DeploymentActivities) StartDeploymentNameWorkflow(ctx context.Context, 
 		Memo: map[string]interface{}{
 			"DefaultBuildID": "",
 		},
+		WorkflowIDReusePolicy:    enums.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
+		WorkflowIDConflictPolicy: enums.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING,
 	}
 
 	// Build workflow args
 	deploymentNameWorkflowArgs := &deployspb.DeploymentNameWorkflowArgs{
-		NamespaceName:  a.namespaceName.String(),
-		NamespaceId:    a.namespaceID.String(),
-		DefaultBuildId: "",
+		NamespaceName: a.namespaceName.String(),
+		NamespaceId:   a.namespaceID.String(),
 	}
 
 	// Calling the workflow with the args
