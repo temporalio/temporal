@@ -312,7 +312,7 @@ func TestGetReachability_WithVisibility_WithDeletedRules(t *testing.T) {
 // test reachability via deleted rules within the rule propagation delay
 func TestGetReachability_WithoutVisibility_WithDeletedRules(t *testing.T) {
 	t.Skip()
-	// todo carly
+	// TODO (carly)
 }
 
 func checkReachability(ctx context.Context,

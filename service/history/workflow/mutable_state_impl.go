@@ -4261,8 +4261,8 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionOptionsUpdatedEvent(event *his
 	if err != nil {
 		return err
 	}
-	// todo carly: if deployment changed, do I need to do anything with pending activities / WFTs in unsafe mode?
-	// todo carly part 2: do replay test on new deployment if deployment changed
+	// TODO (carly): if deployment changed, do I need to do anything with pending activities / WFTs in unsafe mode?
+	// TODO (carly) part 2: do replay test on new deployment if deployment changed
 	ms.GetExecutionInfo().VersioningInfo.BehaviorOverride = mergedOpts.GetVersioningBehaviorOverride().GetBehavior()
 	ms.GetExecutionInfo().VersioningInfo.DeploymentOverride = mergedOpts.GetVersioningBehaviorOverride().GetWorkerDeployment()
 	return nil
@@ -6860,7 +6860,7 @@ func (ms *MutableStateImpl) CompleteDeploymentRedirect(
 ) error {
 	versioningInfo := ms.GetExecutionInfo().GetVersioningInfo()
 	redirectInfo := versioningInfo.GetRedirectInfo()
-	if redirectInfo == nil { // todo:  we want to update base deployment/behavior when there is an override
+	if redirectInfo == nil { // TODO (shahab):  we want to update base deployment/behavior when there is an override
 		return nil
 	}
 	versioningInfo.RedirectInfo = nil

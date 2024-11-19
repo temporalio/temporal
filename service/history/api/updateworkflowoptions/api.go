@@ -68,7 +68,7 @@ func Invoke(
 				return nil, consts.ErrWorkflowCompleted
 			}
 
-			// todo carly: dedupe by requestID
+			// TODO (carly): dedupe by requestID
 			_ = req.GetRequestId()
 
 			// Merge the requested options mentioned in the field mask with the current options in the mutable state
@@ -95,7 +95,7 @@ func Invoke(
 				return nil, updateError
 			}
 
-			// todo carly part 2: handle safe deployment change --> CreateWorkflowTask=true
+			// TODO (carly) part 2: handle safe deployment change --> CreateWorkflowTask=true
 			return &api.UpdateWorkflowAction{
 				Noop:               false,
 				CreateWorkflowTask: false,
