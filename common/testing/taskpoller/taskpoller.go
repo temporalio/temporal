@@ -81,7 +81,8 @@ var (
 			o.timeout = timeout
 		}
 	}
-	NoTaskAvailable = errors.New("no task available")
+	NoWorkflowTaskAvailable = errors.New("taskpoller test helper timed out while waiting for the PollWorkflowTaskQueue API response, meaning no workflow task was ever created")
+	NoActivityTaskAvailable = errors.New("taskpoller test helper timed out while waiting for the PollActivityTaskQueue API response, meaning no activity task was ever created")
 )
 
 func New(
@@ -228,7 +229,7 @@ func (p *workflowTaskPoller) pollTask(
 		return nil, err
 	}
 	if resp == nil {
-		return nil, NoTaskAvailable
+		return nil, NoWorkflowTaskAvailable
 	}
 
 	var events []*historypb.HistoryEvent
@@ -358,7 +359,7 @@ func (p *activityTaskPoller) pollActivityTask(
 		return nil, err
 	}
 	if resp == nil || len(resp.TaskToken) == 0 {
-		return nil, NoTaskAvailable
+		return nil, NoActivityTaskAvailable
 	}
 
 	return resp, err
