@@ -187,10 +187,6 @@ func (policy *SelectedAPIsForwardingRedirectionPolicy) getTargetClusterAndIsName
 		return policy.currentClusterName, false
 	}
 
-	if len(namespaceEntry.ClusterNames()) == 1 {
-		return namespaceEntry.ActiveClusterName(), true
-	}
-
 	if !policy.enabledForNS(namespaceEntry.Name().String()) {
 		// do not do dc redirection if auto-forwarding dynamic config flag is not enabled
 		return policy.currentClusterName, false

@@ -269,46 +269,66 @@ func (s *selectedAPIsForwardingRedirectionPolicySuite) TestGetTargetDataCenter_G
 	s.Equal(2*len(selectedAPIsForwardingRedirectionPolicyWhitelistedAPIs), callCount)
 }
 
-func (s *selectedAPIsForwardingRedirectionPolicySuite) TestGetTargetDataCenter_GlobalNamespace_OneCluster_Forwarding_CurrentCluster() {
-	s.setupGlobalNamespaceWithOneCluster(true)
-
-	callCount := 0
-	callFn := func(targetCluster string) error {
-		callCount++
-		s.Equal(s.currentClusterName, targetCluster)
-		return nil
-	}
-
-	for apiName := range selectedAPIsForwardingRedirectionPolicyWhitelistedAPIs {
-		err := s.policy.WithNamespaceIDRedirect(context.Background(), s.namespaceID, apiName, callFn)
-		s.Nil(err)
-
-		err = s.policy.WithNamespaceRedirect(context.Background(), s.namespace, apiName, callFn)
-		s.Nil(err)
-	}
-
-	s.Equal(2*len(selectedAPIsForwardingRedirectionPolicyWhitelistedAPIs), callCount)
-}
-
-func (s *selectedAPIsForwardingRedirectionPolicySuite) TestGetTargetDataCenter_GlobalNamespace__OneCluster_Forwarding_AlternativeCluster() {
+func (s *selectedAPIsForwardingRedirectionPolicySuite) TestGetTargetDataCenter_GlobalNamespace_OneCluster() {
 	s.setupGlobalNamespaceWithOneCluster(false)
+	callCount := len(selectedAPIsForwardingRedirectionPolicyWhitelistedAPIs) * 2
 
-	callCount := 0
-	callFn := func(targetCluster string) error {
-		callCount++
-		s.Equal(s.alternativeClusterName, targetCluster)
-		return nil
+	testcases := []struct {
+		name              string
+		forwardingEnabled bool
+		enableForAllAPIs  bool
+		apiWhitelisted    bool
+		expectedCallCount map[string]int
+	}{
+		{
+			name:              "Forwarding disabled",
+			expectedCallCount: map[string]int{s.currentClusterName: callCount},
+		},
+		{
+			name:              "Forwarding enabled, all APIs enabled",
+			forwardingEnabled: true,
+			enableForAllAPIs:  true,
+			expectedCallCount: map[string]int{s.alternativeClusterName: callCount},
+		},
+		{
+			name:              "Forwarding enabled, all APIs disabled, API not whitelisted",
+			forwardingEnabled: true,
+			expectedCallCount: map[string]int{s.currentClusterName: callCount},
+		},
+		{
+			name:              "Forwarding enabled, all APIs disabled, API whitelisted",
+			forwardingEnabled: true,
+			apiWhitelisted:    true,
+			expectedCallCount: map[string]int{s.alternativeClusterName: callCount},
+		},
 	}
 
-	for apiName := range selectedAPIsForwardingRedirectionPolicyWhitelistedAPIs {
-		err := s.policy.WithNamespaceIDRedirect(context.Background(), s.namespaceID, apiName, callFn)
-		s.Nil(err)
+	for _, tc := range testcases {
+		s.T().Run(tc.name, func(t *testing.T) {
+			s.forwardingEnabled = dynamicconfig.GetBoolPropertyFnFilteredByNamespace(tc.forwardingEnabled)
+			s.policy.enableForAllAPIs = tc.enableForAllAPIs
 
-		err = s.policy.WithNamespaceRedirect(context.Background(), s.namespace, apiName, callFn)
-		s.Nil(err)
+			callCountByCluster := make(map[string]int)
+			callFn := func(targetCluster string) error {
+				callCountByCluster[targetCluster]++
+				return nil
+			}
+
+			apis := selectedAPIsForwardingRedirectionPolicyWhitelistedAPIs
+			for api := range apis {
+				if !tc.apiWhitelisted {
+					api = api + "_notwhitelisted"
+				}
+				err := s.policy.WithNamespaceIDRedirect(context.Background(), s.namespaceID, api, callFn)
+				s.Nil(err)
+
+				err = s.policy.WithNamespaceRedirect(context.Background(), s.namespace, api, callFn)
+				s.Nil(err)
+			}
+
+			s.Equal(tc.expectedCallCount, callCountByCluster)
+		})
 	}
-
-	s.Equal(2*len(selectedAPIsForwardingRedirectionPolicyWhitelistedAPIs), callCount)
 }
 
 func (s *selectedAPIsForwardingRedirectionPolicySuite) TestGetTargetDataCenter_GlobalNamespace_Forwarding_CurrentClusterToAlternativeCluster() {
