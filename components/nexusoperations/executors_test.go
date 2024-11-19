@@ -172,7 +172,7 @@ func TestProcessInvocationTask(t *testing.T) {
 			name:                "sync start",
 			requestTimeout:      time.Hour,
 			schedToCloseTimeout: time.Hour,
-			headers:             nexus.Header{"Operation-Timeout": time.Microsecond.String()}, // to test this value is ignored when ScheduleToCloseTimeout is set
+			headers:             nexus.Header{nexus.HeaderOperationTimeout: time.Microsecond.String()}, // to test this value is ignored when ScheduleToCloseTimeout is set
 			destinationDown:     false,
 			onStartOperation: func(ctx context.Context, service, operation string, input *nexus.LazyValue, options nexus.StartOperationOptions) (nexus.HandlerStartOperationResult[any], error) {
 				// Also use this test case to check the input and options provided.
@@ -335,23 +335,6 @@ func TestProcessInvocationTask(t *testing.T) {
 			name:                  "invocation timeout by ScheduleToCloseTimeout",
 			requestTimeout:        time.Hour,
 			schedToCloseTimeout:   time.Microsecond,
-			destinationDown:       true,
-			expectedMetricOutcome: "request-timeout",
-			onStartOperation: func(ctx context.Context, service, operation string, input *nexus.LazyValue, options nexus.StartOperationOptions) (nexus.HandlerStartOperationResult[any], error) {
-				time.Sleep(time.Millisecond * 100)
-				return &nexus.HandlerStartOperationResultAsync{OperationID: "op-id"}, nil
-			},
-			checkOutcome: func(t *testing.T, op nexusoperations.Operation, events []*historypb.HistoryEvent) {
-				require.Equal(t, enumsspb.NEXUS_OPERATION_STATE_BACKING_OFF, op.State())
-				require.NotNil(t, op.LastAttemptFailure.GetApplicationFailureInfo())
-				require.Regexp(t, "Post \"http://localhost:\\d+/service/operation\\?callback=http%3A%2F%2Flocalhost%2Fcallback\": context deadline exceeded", op.LastAttemptFailure.Message)
-				require.Equal(t, 0, len(events))
-			},
-		},
-		{
-			name:                  "invocation timeout by Operation-Timeout header",
-			requestTimeout:        time.Hour,
-			headers:               nexus.Header{"Operation-Timeout": time.Microsecond.String()},
 			destinationDown:       true,
 			expectedMetricOutcome: "request-timeout",
 			onStartOperation: func(ctx context.Context, service, operation string, input *nexus.LazyValue, options nexus.StartOperationOptions) (nexus.HandlerStartOperationResult[any], error) {

@@ -189,34 +189,19 @@ func (e taskExecutor) executeInvocationTask(ctx context.Context, env hsm.Environ
 		return fmt.Errorf("%w: %w", queues.NewUnprocessableTaskError("failed to generate a callback token"), err)
 	}
 
-	// The following logic handles the operation ScheduleToCloseTimout parameter and Operation-Timeout header.
-	// The minimum of the resolved operation timeout and the configured request timeout is used for the context timeout
-	// when making the StartOperation request, according to the following logic:
-	// (ScheduleToClose set, Operation-Timeout set) -> no changes, use ScheduleToClose
-	// (ScheduleToClose set, Operation-Timeout unset) -> set Operation-Timeout to ScheduleToClose, use ScheduleToClose
-	// (ScheduleToClose unset, Operation-Timeout set) -> no changes, use Operation-Timeout
 	header := nexus.Header(args.header)
-	opTimeout := args.scheduleToCloseTimeout
-	opTimeoutHeader, set := header["Operation-Timeout"]
-	if !set && args.scheduleToCloseTimeout > 0 {
-		if header == nil {
-			header = make(nexus.Header, 1)
-		}
-		header["Operation-Timeout"] = args.scheduleToCloseTimeout.String()
-	} else if set && args.scheduleToCloseTimeout == 0 {
-		parsedTimeout, parseErr := time.ParseDuration(opTimeoutHeader)
-		if parseErr != nil {
-			// ScheduleToCloseTimeout is not required, so do not fail task on parsing error.
-			e.Logger.Warn(fmt.Sprintf("unable to parse Operation-Timeout header: %v", opTimeoutHeader), tag.Error(parseErr))
-		} else {
-			opTimeout = parsedTimeout
+	callTimeout := e.Config.RequestTimeout(ns.Name().String(), task.EndpointName)
+	if args.scheduleToCloseTimeout > 0 {
+		opTimeout := max(time.Duration(0), args.scheduleToCloseTimeout-time.Since(args.scheduledTime))
+		callTimeout = min(callTimeout, opTimeout)
+		if opTimeoutHeader := header.Get(nexus.HeaderOperationTimeout); opTimeoutHeader == "" {
+			if header == nil {
+				header = make(nexus.Header, 1)
+			}
+			header[nexus.HeaderOperationTimeout] = opTimeout.String()
 		}
 	}
 
-	callTimeout := e.Config.RequestTimeout(ns.Name().String(), task.EndpointName)
-	if opTimeout > 0 {
-		callTimeout = min(callTimeout, opTimeout)
-	}
 	callCtx, cancel := context.WithTimeout(ctx, callTimeout)
 	defer cancel()
 
@@ -283,6 +268,7 @@ type startArgs struct {
 	requestID                string
 	endpointName             string
 	endpointID               string
+	scheduledTime            time.Time
 	scheduleToCloseTimeout   time.Duration
 	header                   map[string]string
 	payload                  *commonpb.Payload
@@ -319,6 +305,7 @@ func (e taskExecutor) loadOperationArgs(
 		if err != nil {
 			return nil
 		}
+		args.scheduledTime = event.EventTime.AsTime()
 		args.scheduleToCloseTimeout = event.GetNexusOperationScheduledEventAttributes().GetScheduleToCloseTimeout().AsDuration()
 		args.payload = event.GetNexusOperationScheduledEventAttributes().GetInput()
 		args.header = event.GetNexusOperationScheduledEventAttributes().GetNexusHeader()
