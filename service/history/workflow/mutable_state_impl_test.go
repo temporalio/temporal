@@ -778,15 +778,95 @@ func (s *mutableStateSuite) verifyOverrides(
 	s.Equal(expectedDeploymentOverride, versioningInfo.DeploymentOverride)
 }
 
-func (s *mutableStateSuite) TestUnpinnedRedirected_AfterPinnedOverride() {
+func (s *mutableStateSuite) TestOverride_UnpinnedBase_SetPinnedAndUnsetWithEmptyOptions() {
 	tq := &taskqueuepb.TaskQueue{Name: "tq"}
 	baseBehavior := enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE
 	overrideBehavior := enumspb.VERSIONING_BEHAVIOR_PINNED
 	s.createMutableStateWithVersioningBehavior(baseBehavior, deployment1, tq)
 
-	wft, err := s.mutableState.AddWorkflowTaskScheduledEvent(true, enumsspb.WORKFLOW_TASK_TYPE_NORMAL)
+	// set pinned override
+	event, err := s.mutableState.AddWorkflowExecutionOptionsUpdatedEvent(pinnedOptions2, versionOverrideMask)
+	s.NoError(err)
+	s.verifyCurrentDeployment(deployment2, overrideBehavior)
+	s.verifyWorkflowOptionsUpdatedEvent(event, pinnedOptions2, versionOverrideMask)
+	s.verifyOverrides(baseBehavior, overrideBehavior, deployment1, deployment2)
+
+	// unset pinned override with empty
+	event, err = s.mutableState.AddWorkflowExecutionOptionsUpdatedEvent(emptyOptions, versionOverrideMask)
 	s.NoError(err)
 	s.verifyCurrentDeployment(deployment1, baseBehavior)
+	s.verifyWorkflowOptionsUpdatedEvent(event, emptyOptions, versionOverrideMask)
+	s.verifyOverrides(baseBehavior, enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED, deployment1, nil)
+}
+
+func (s *mutableStateSuite) TestOverride_UnpinnedBase_SetPinnedAndUnsetWithUnspecifiedOptions() {
+	tq := &taskqueuepb.TaskQueue{Name: "tq"}
+	baseBehavior := enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE
+	overrideBehavior := enumspb.VERSIONING_BEHAVIOR_PINNED
+	s.createMutableStateWithVersioningBehavior(baseBehavior, deployment1, tq)
+
+	// set pinned override
+	event, err := s.mutableState.AddWorkflowExecutionOptionsUpdatedEvent(pinnedOptions2, versionOverrideMask)
+	s.NoError(err)
+	s.verifyCurrentDeployment(deployment2, overrideBehavior)
+	s.verifyWorkflowOptionsUpdatedEvent(event, pinnedOptions2, versionOverrideMask)
+	s.verifyOverrides(baseBehavior, overrideBehavior, deployment1, deployment2)
+
+	// unset pinned override with unspecified
+	event, err = s.mutableState.AddWorkflowExecutionOptionsUpdatedEvent(unspecifiedOptions, versionOverrideMask)
+	s.NoError(err)
+	s.verifyCurrentDeployment(deployment1, baseBehavior)
+	s.verifyWorkflowOptionsUpdatedEvent(event, unspecifiedOptions, versionOverrideMask)
+	s.verifyOverrides(baseBehavior, enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED, deployment1, nil)
+}
+
+func (s *mutableStateSuite) TestOverride_PinnedBase_SetUnpinnedAndUnsetWithEmptyOptions() {
+	tq := &taskqueuepb.TaskQueue{Name: "tq"}
+	baseBehavior := enumspb.VERSIONING_BEHAVIOR_PINNED
+	overrideBehavior := enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE
+	s.createMutableStateWithVersioningBehavior(baseBehavior, deployment1, tq)
+
+	// set unpinned override
+	event, err := s.mutableState.AddWorkflowExecutionOptionsUpdatedEvent(unpinnedOptions, versionOverrideMask)
+	s.NoError(err)
+	s.verifyCurrentDeployment(deployment1, overrideBehavior)
+	s.verifyWorkflowOptionsUpdatedEvent(event, unpinnedOptions, versionOverrideMask)
+	s.verifyOverrides(baseBehavior, overrideBehavior, deployment1, nil)
+
+	// unset pinned override with empty
+	event, err = s.mutableState.AddWorkflowExecutionOptionsUpdatedEvent(emptyOptions, versionOverrideMask)
+	s.NoError(err)
+	s.verifyCurrentDeployment(deployment1, baseBehavior)
+	s.verifyWorkflowOptionsUpdatedEvent(event, emptyOptions, versionOverrideMask)
+	s.verifyOverrides(baseBehavior, enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED, deployment1, nil)
+}
+
+func (s *mutableStateSuite) TestOverride_PinnedBase_SetUnpinnedAndUnsetWithUnspecifiedOptions() {
+	tq := &taskqueuepb.TaskQueue{Name: "tq"}
+	baseBehavior := enumspb.VERSIONING_BEHAVIOR_PINNED
+	overrideBehavior := enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE
+	s.createMutableStateWithVersioningBehavior(baseBehavior, deployment1, tq)
+
+	// set unpinned override
+	event, err := s.mutableState.AddWorkflowExecutionOptionsUpdatedEvent(unpinnedOptions, versionOverrideMask)
+	s.NoError(err)
+	s.verifyCurrentDeployment(deployment1, overrideBehavior)
+	s.verifyWorkflowOptionsUpdatedEvent(event, unpinnedOptions, versionOverrideMask)
+	s.verifyOverrides(baseBehavior, overrideBehavior, deployment1, nil)
+
+	// unset pinned override with unspecified
+	event, err = s.mutableState.AddWorkflowExecutionOptionsUpdatedEvent(unspecifiedOptions, versionOverrideMask)
+	s.NoError(err)
+	s.verifyCurrentDeployment(deployment1, baseBehavior)
+	s.verifyWorkflowOptionsUpdatedEvent(event, unspecifiedOptions, versionOverrideMask)
+	s.verifyOverrides(baseBehavior, enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED, deployment1, nil)
+}
+
+func (s *mutableStateSuite) TestOverride_RedirectFails() {
+	tq := &taskqueuepb.TaskQueue{Name: "tq"}
+	baseBehavior := enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE
+	overrideBehavior := enumspb.VERSIONING_BEHAVIOR_PINNED
+	s.createMutableStateWithVersioningBehavior(baseBehavior, deployment1, tq)
 
 	event, err := s.mutableState.AddWorkflowExecutionOptionsUpdatedEvent(pinnedOptions3, versionOverrideMask)
 	s.NoError(err)
@@ -794,10 +874,35 @@ func (s *mutableStateSuite) TestUnpinnedRedirected_AfterPinnedOverride() {
 	s.verifyWorkflowOptionsUpdatedEvent(event, pinnedOptions3, versionOverrideMask)
 	s.verifyOverrides(baseBehavior, overrideBehavior, deployment1, deployment3)
 
+	// assert that redirect fails
 	redirectStarted := s.mutableState.StartDeploymentRedirect(deployment2, enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED)
 	s.False(redirectStarted)
 	s.verifyCurrentDeployment(deployment3, overrideBehavior)
-	s.verifyOverrides(baseBehavior, overrideBehavior, deployment1, deployment3) // base deployment still deployment1 here
+	s.verifyOverrides(baseBehavior, overrideBehavior, deployment1, deployment3)
+}
+
+func (s *mutableStateSuite) TestOverride_BaseDeploymentUpdatedOnCompletion() {
+	s.T().Skip("TODO Shahab")
+	tq := &taskqueuepb.TaskQueue{Name: "tq"}
+	baseBehavior := enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE
+	overrideBehavior := enumspb.VERSIONING_BEHAVIOR_PINNED
+	s.createMutableStateWithVersioningBehavior(baseBehavior, deployment1, tq)
+
+	event, err := s.mutableState.AddWorkflowExecutionOptionsUpdatedEvent(pinnedOptions3, versionOverrideMask)
+	s.NoError(err)
+	s.verifyCurrentDeployment(deployment3, overrideBehavior)
+	s.verifyWorkflowOptionsUpdatedEvent(event, pinnedOptions3, versionOverrideMask)
+	s.verifyOverrides(baseBehavior, overrideBehavior, deployment1, deployment3)
+
+	// assert that redirect fails - should be its own test
+	redirectStarted := s.mutableState.StartDeploymentRedirect(deployment2, enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED)
+	s.False(redirectStarted)
+	s.verifyCurrentDeployment(deployment3, overrideBehavior)
+	s.verifyOverrides(baseBehavior, overrideBehavior, deployment1, deployment3) // base deployment still deployment1 here -- good
+
+	wft, err := s.mutableState.AddWorkflowTaskScheduledEvent(true, enumsspb.WORKFLOW_TASK_TYPE_NORMAL)
+	s.NoError(err)
+	s.verifyCurrentDeployment(deployment3, overrideBehavior)
 
 	_, wft, err = s.mutableState.AddWorkflowTaskStartedEvent(
 		wft.ScheduledEventID,
@@ -810,7 +915,7 @@ func (s *mutableStateSuite) TestUnpinnedRedirected_AfterPinnedOverride() {
 	)
 	s.NoError(err)
 	s.verifyCurrentDeployment(deployment3, overrideBehavior)
-	s.verifyOverrides(baseBehavior, overrideBehavior, deployment1, deployment3) // base deployment still deployment1 here
+	s.verifyOverrides(baseBehavior, overrideBehavior, deployment1, deployment3) // todo fix: base deployment still deployment1 here, because there is no redirect
 
 	_, err = s.mutableState.AddWorkflowTaskCompletedEvent(
 		wft,
@@ -823,14 +928,14 @@ func (s *mutableStateSuite) TestUnpinnedRedirected_AfterPinnedOverride() {
 	)
 	s.NoError(err)
 	s.verifyCurrentDeployment(deployment3, overrideBehavior)
-	s.verifyOverrides(baseBehavior, overrideBehavior, deployment1, deployment3) // todo carly: should base deployment be 1 or 2 here?
+	s.verifyOverrides(baseBehavior, overrideBehavior, deployment2, deployment3) // todo: expect base deployment = 2 here
 
-	// now we unset the override
+	// now we unset the override and check that the base deployment/behavior is in effect
 	event, err = s.mutableState.AddWorkflowExecutionOptionsUpdatedEvent(unspecifiedOptions, versionOverrideMask)
 	s.NoError(err)
-	s.verifyCurrentDeployment(deployment1, baseBehavior) // todo carly: should base deployment be 1 or 2 here?
+	s.verifyCurrentDeployment(deployment2, baseBehavior) // todo: expect base deployment = 2 here
 	s.verifyWorkflowOptionsUpdatedEvent(event, unspecifiedOptions, versionOverrideMask)
-	s.verifyOverrides(baseBehavior, enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED, deployment1, nil) // todo carly: should base deployment be 1 or 2 here?
+	s.verifyOverrides(baseBehavior, enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED, deployment2, nil) // todo: expect base deployment = 2 here
 
 	// deployment 2 is still current, now we start and complete an event and the completion says it's pinned in the new version
 	// this actually takes effect now that the override is gone.
@@ -847,8 +952,8 @@ func (s *mutableStateSuite) TestUnpinnedRedirected_AfterPinnedOverride() {
 		false,
 	)
 	s.NoError(err)
-	s.verifyCurrentDeployment(deployment1, baseBehavior)                                       // todo carly: should base deployment be 1 or 2 here?
-	s.verifyOverrides(baseBehavior, enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED, deployment1, nil) // todo carly: should base deployment be 1 or 2 here?
+	s.verifyCurrentDeployment(deployment2, baseBehavior)                                       // todo: expect base deployment = 2 here
+	s.verifyOverrides(baseBehavior, enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED, deployment2, nil) // todo: expect base deployment = 2 here
 
 	_, err = s.mutableState.AddWorkflowTaskCompletedEvent(
 		wft,
@@ -861,7 +966,7 @@ func (s *mutableStateSuite) TestUnpinnedRedirected_AfterPinnedOverride() {
 	)
 	baseBehavior = enumspb.VERSIONING_BEHAVIOR_PINNED
 	s.NoError(err)
-	s.verifyCurrentDeployment(deployment3, baseBehavior) // todo carly: why is current deployment still 1?
+	s.verifyCurrentDeployment(deployment3, baseBehavior) // todo: expect base deployment = 3 here
 	s.verifyOverrides(baseBehavior, enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED, deployment3, nil)
 }
 

@@ -6863,7 +6863,7 @@ func (ms *MutableStateImpl) CompleteDeploymentRedirect(
 ) error {
 	versioningInfo := ms.GetExecutionInfo().GetVersioningInfo()
 	redirectInfo := versioningInfo.GetRedirectInfo()
-	if redirectInfo == nil {
+	if redirectInfo == nil { // todo:  we want to update base deployment/behavior when there is an override
 		return nil
 	}
 	versioningInfo.RedirectInfo = nil
