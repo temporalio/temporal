@@ -163,7 +163,7 @@ $(GOLANGCI_LINT): $(LOCALBIN)
 	$(call go-install-tool,$(GOLANGCI_LINT),github.com/golangci/golangci-lint/cmd/golangci-lint,$(GOLANGCI_LINT_VERSION))
 	
 # Don't get confused, there is a single linter called gci, which is a part of the mega linter we use is called golangci-lint.
-GCI_VERSION := v0.13.4
+GCI_VERSION := v0.13.5
 GCI := $(LOCALBIN)/gci-$(GCI_VERSION)
 $(GCI): $(LOCALBIN)
 	$(call go-install-tool,$(GCI),github.com/daixiang0/gci,$(GCI_VERSION))
