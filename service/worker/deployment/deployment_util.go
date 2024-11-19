@@ -60,13 +60,17 @@ const (
 	ForceCANSignalName                = "force-continue-as-new"
 
 	// Queries
-	QueryNameDescribeDeployment = "describe-deployment"
+	QueryDescribeDeployment = "describe-deployment"
+	QueryCurrentDeployment  = "current-deployment"
 
-	DeploymentWorkflowIDPrefix      = "temporal-sys-deployment"
-	DeploymentNameWorkflowIDPrefix  = "temporal-sys-deployment-name"
-	DeploymentWorkflowIDDelimeter   = "|"
-	DeploymentWorkflowIDInitialSize = (2 * len(DeploymentWorkflowIDDelimeter)) + len(DeploymentWorkflowIDPrefix)
-	BuildIDMemoKey                  = "DefaultBuildID"
+	// Prefixes, Delimeters and Keys
+	DeploymentWorkflowIDPrefix       = "temporal-sys-deployment"
+	DeploymentSeriesWorkflowIDPrefix = "temporal-sys-deployment-series"
+	DeploymentWorkflowIDDelimeter    = "|"
+	DeploymentWorkflowIDInitialSize  = (2 * len(DeploymentWorkflowIDDelimeter)) + len(DeploymentWorkflowIDPrefix)
+	BuildIDMemoKey                   = "DefaultBuildID"
+	SeriesFieldName                  = "Series"
+	BuildIDFieldName                 = "BuildID"
 )
 
 var (
@@ -116,16 +120,16 @@ func (d *DeploymentWorkflowClient) RegisterTaskQueueWorker(
 	maxIDLengthLimit int,
 ) error {
 	// validate params which are used for building workflowID's
-	err := d.validateDeploymentWfParams("SeriesName", d.deployment.SeriesName, maxIDLengthLimit)
+	err := ValidateDeploymentWfParams(SeriesFieldName, d.deployment.SeriesName, maxIDLengthLimit)
 	if err != nil {
 		return err
 	}
-	err = d.validateDeploymentWfParams("BuildID", d.deployment.BuildId, maxIDLengthLimit)
+	err = ValidateDeploymentWfParams(BuildIDFieldName, d.deployment.BuildId, maxIDLengthLimit)
 	if err != nil {
 		return err
 	}
 
-	deploymentWorkflowID := d.GenerateDeploymentWorkflowID()
+	deploymentWorkflowID := GenerateDeploymentWorkflowID(d.deployment.SeriesName, d.deployment.BuildId)
 	workflowInputPayloads, err := d.generateStartWorkflowPayload()
 	if err != nil {
 		return err
@@ -192,16 +196,6 @@ func (d *DeploymentWorkflowClient) RegisterTaskQueueWorker(
 	return nil
 }
 
-// GenerateDeploymentWorkflowID is a helper that generates a system accepted
-// workflowID which are used in our deployment workflows
-func (d *DeploymentWorkflowClient) GenerateDeploymentWorkflowID() string {
-	// escaping the reserved workflow delimiter (|) from the inputs, if present
-	escapedSeriesName := EscapeChar(d.deployment.SeriesName)
-	escapedBuildId := EscapeChar(d.deployment.BuildId)
-
-	return DeploymentWorkflowIDPrefix + DeploymentWorkflowIDDelimeter + escapedSeriesName + DeploymentWorkflowIDDelimeter + escapedBuildId
-}
-
 // GenerateStartWorkflowPayload generates start workflow execution payload
 func (d *DeploymentWorkflowClient) generateStartWorkflowPayload() (*commonpb.Payloads, error) {
 	workflowArgs := &deployspb.DeploymentWorkflowArgs{
@@ -228,7 +222,7 @@ func (d *DeploymentWorkflowClient) generateRegisterWorkerInDeploymentArgs(taskQu
 
 // ValidateDeploymentWfParams is a helper that verifies if the fields used for generating
 // deployment related workflowID's are valid
-func (d *DeploymentWorkflowClient) validateDeploymentWfParams(fieldName string, field string, maxIDLengthLimit int) error {
+func ValidateDeploymentWfParams(fieldName string, field string, maxIDLengthLimit int) error {
 	// Length checks
 	if field == "" {
 		return serviceerror.NewInvalidArgument(fmt.Sprintf("%v cannot be empty", fieldName))
@@ -245,14 +239,24 @@ func (d *DeploymentWorkflowClient) validateDeploymentWfParams(fieldName string, 
 
 // EscapeChar is a helper which escapes the DeploymentWorkflowIDDelimeter character
 // in the input string
-func EscapeChar(s string) string {
+func escapeChar(s string) string {
 	s = strings.Replace(s, `\`, `\\`, -1)
 	s = strings.Replace(s, DeploymentWorkflowIDDelimeter, `\`+DeploymentWorkflowIDDelimeter, -1)
 	return s
 }
 
-func generateDeploymentNameWorkflowID(deploymentName string) string {
+func GenerateDeploymentSeriesWorkflowID(deploymentSeriesName string) string {
 	// escaping the reserved workflow delimiter (|) from the inputs, if present
-	escapedDeploymentName := EscapeChar(deploymentName)
-	return DeploymentNameWorkflowIDPrefix + DeploymentWorkflowIDDelimeter + escapedDeploymentName
+	escapedSeriesName := escapeChar(deploymentSeriesName)
+	return DeploymentNameWorkflowIDPrefix + DeploymentWorkflowIDDelimeter + escapedSeriesName
+}
+
+// GenerateDeploymentWorkflowID is a helper that generates a system accepted
+// workflowID which are used in our deployment workflows
+func GenerateDeploymentWorkflowID(seriesName string, buildID string) string {
+	// escaping the reserved workflow delimiter (|) from the inputs, if present
+	escapedSeriesName := escapeChar(seriesName)
+	escapedBuildId := escapeChar(buildID)
+
+	return DeploymentWorkflowIDPrefix + DeploymentWorkflowIDDelimeter + escapedSeriesName + DeploymentWorkflowIDDelimeter + escapedBuildId
 }

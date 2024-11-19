@@ -3132,8 +3132,18 @@ func (wh *WorkflowHandler) DescribeDeployment(ctx context.Context, request *work
 	}
 	namespaceID := namespaceEntry.ID()
 
-	d := deployment.NewDeploymentWorkflowClient(namespaceEntry, request.Deployment, wh.historyClient)
-	deploymentWorkflowID := d.GenerateDeploymentWorkflowID()
+	// validating params
+	maxIDLengthLimit := wh.config.MaxIDLengthLimit()
+	err = deployment.ValidateDeploymentWfParams(deployment.SeriesFieldName, request.Deployment.SeriesName, maxIDLengthLimit)
+	if err != nil {
+		return nil, err
+	}
+	err = deployment.ValidateDeploymentWfParams(deployment.BuildIDFieldName, request.Deployment.BuildId, maxIDLengthLimit)
+	if err != nil {
+		return nil, err
+	}
+
+	deploymentWorkflowID := deployment.GenerateDeploymentWorkflowID(request.Deployment.SeriesName, request.Deployment.BuildId)
 
 	req := &historyservice.QueryWorkflowRequest{
 		NamespaceId: namespaceID.String(),
@@ -3142,7 +3152,7 @@ func (wh *WorkflowHandler) DescribeDeployment(ctx context.Context, request *work
 			Execution: &commonpb.WorkflowExecution{
 				WorkflowId: deploymentWorkflowID,
 			},
-			Query: &querypb.WorkflowQuery{QueryType: deployment.QueryNameDescribeDeployment},
+			Query: &querypb.WorkflowQuery{QueryType: deployment.QueryDescribeDeployment},
 		},
 	}
 
@@ -3162,22 +3172,16 @@ func (wh *WorkflowHandler) DescribeDeployment(ctx context.Context, request *work
 	deploymentLocalState := queryResponse.DeploymentLocalState
 
 	for taskQueueName, taskQueueFamilyInfo := range deploymentLocalState.TaskQueueFamilies {
-		for taskQueueType, taskQueueInfo := range taskQueueFamilyInfo.TaskQueues {
+		for _, taskQueueInfo := range taskQueueFamilyInfo.TaskQueues {
 			element := &deploypb.DeploymentInfo_TaskQueueInfo{
 				Name:            taskQueueName,
-				Type:            enumspb.TaskQueueType(taskQueueType),
+				Type:            enumspb.TaskQueueType(taskQueueInfo.TaskQueueType),
 				FirstPollerTime: taskQueueInfo.FirstPollerTime,
 			}
 			taskQueues = append(taskQueues, element)
 		}
 	}
 
-	// parse the response to get the desired output + think about what we want in the response based on the proto changes
-
-	/*
-		1. Develop the right workflowID to query based on worker deployment information
-			- user might give random information pertaining to a deployment - how do we wanna tackle? (not being done in schedules/batchers but think if we wanna do )
-	*/
 	return &workflowservice.DescribeDeploymentResponse{
 		DeploymentInfo: &deploypb.DeploymentInfo{
 			Deployment:            deploymentLocalState.WorkerDeployment,
@@ -3187,6 +3191,79 @@ func (wh *WorkflowHandler) DescribeDeployment(ctx context.Context, request *work
 			TaskQueueInfos:        taskQueues,
 		},
 	}, nil
+}
+
+func (wh *WorkflowHandler) GetCurrentDeployment(ctx context.Context, request *workflowservice.GetCurrentDeploymentRequest) (_ *workflowservice.GetCurrentDeploymentResponse, retError error) {
+	defer log.CapturePanic(wh.logger, &retError)
+
+	if request == nil {
+		return nil, errRequestNotSet
+	}
+
+	if len(request.Namespace) == 0 {
+		return nil, errNamespaceNotSet
+	}
+
+	if !wh.config.EnableDeployments(request.Namespace) {
+		return nil, errDeploymentsNotAllowed
+	}
+
+	namespaceEntry, err := wh.namespaceRegistry.GetNamespace(namespace.Name(request.GetNamespace()))
+	if err != nil {
+		return nil, err
+	}
+	namespaceID := namespaceEntry.ID()
+
+	// validating params
+	err = deployment.ValidateDeploymentWfParams(deployment.SeriesFieldName, request.SeriesName, wh.config.MaxIDLengthLimit())
+	if err != nil {
+		return nil, err
+	}
+
+	// Query the deployment series workflow to get the current deployment
+	workflowID := deployment.GenerateDeploymentSeriesWorkflowID(request.SeriesName)
+	req := &historyservice.QueryWorkflowRequest{
+		NamespaceId: namespaceID.String(),
+		Request: &workflowservice.QueryWorkflowRequest{
+			Namespace: request.Namespace,
+			Execution: &commonpb.WorkflowExecution{
+				WorkflowId: workflowID,
+			},
+			Query: &querypb.WorkflowQuery{QueryType: deployment.QueryCurrentDeployment},
+		},
+	}
+
+	res, err := wh.historyClient.QueryWorkflow(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+
+	var currentDeployment string
+	err = payloads.Decode(res.GetResponse().GetQueryResult(), &currentDeployment)
+	if err != nil {
+		return nil, err
+	}
+
+	describeDeploymentRequest := &workflowservice.DescribeDeploymentRequest{
+		Namespace: request.Namespace,
+		Deployment: &deploypb.Deployment{
+			SeriesName: request.SeriesName,
+			BuildId:    currentDeployment,
+		},
+	}
+	describeDeploymentResponse, err := wh.DescribeDeployment(ctx, describeDeploymentRequest)
+	if err != nil {
+		return nil, err
+	}
+
+	return &workflowservice.GetCurrentDeploymentResponse{
+		CurrentDeploymentInfo: describeDeploymentResponse.DeploymentInfo,
+	}, nil
+
+}
+
+func (wh *WorkflowHandler) GetDeploymentReachability(ctx context.Context, request *workflowservice.GetDeploymentReachabilityRequest) (_ *workflowservice.GetCurrentDeploymentResponse, retError error) {
+	panic("Not implemented *yet*")
 }
 
 // Returns the schedule description and current state of an existing schedule.

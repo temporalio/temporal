@@ -168,11 +168,11 @@ func (d *DeploymentWorkflowRunner) run() error {
 
 }
 
-func (d *DeploymentWorkflowRunner) invokeDeploymentNameActivity(ctx workflow.Context, deploymentName string) error {
+func (d *DeploymentWorkflowRunner) invokeDeploymentNameActivity(ctx workflow.Context, seriesName string) error {
 
 	activityCtx := workflow.WithActivityOptions(ctx, defaultActivityOptions)
 	activityArgs := &DeploymentNameWorkflowActivityInput{
-		DeploymentName: deploymentName,
+		SeriesName: seriesName,
 	}
 	return workflow.ExecuteActivity(activityCtx, d.a.StartDeploymentNameWorkflow, activityArgs).Get(ctx, nil)
 }

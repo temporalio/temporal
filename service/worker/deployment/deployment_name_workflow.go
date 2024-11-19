@@ -61,7 +61,7 @@ func DeploymentNameWorkflow(ctx workflow.Context, deploymentNameArgs *deployspb.
 func (d *DeploymentNameWorkflowRunner) run() error {
 	var pendingUpdates int
 
-	err := workflow.SetQueryHandler(d.ctx, "DefaultBuildID", func(input []byte) (string, error) {
+	err := workflow.SetQueryHandler(d.ctx, QueryCurrentDeployment, func(input []byte) (string, error) {
 		return d.DefaultBuildId, nil
 	})
 	if err != nil {

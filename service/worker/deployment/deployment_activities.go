@@ -44,7 +44,7 @@ type (
 	}
 
 	DeploymentNameWorkflowActivityInput struct {
-		DeploymentName string
+		SeriesName string
 	}
 )
 
@@ -58,7 +58,7 @@ func (a *DeploymentActivities) StartDeploymentNameWorkflow(ctx context.Context, 
 		DataConverter: sdk.PreferProtoDataConverter,
 	})
 
-	workflowID := generateDeploymentNameWorkflowID(input.DeploymentName)
+	workflowID := GenerateDeploymentSeriesWorkflowID(input.SeriesName)
 
 	workflowOptions := sdkclient.StartWorkflowOptions{
 		ID:        workflowID,
