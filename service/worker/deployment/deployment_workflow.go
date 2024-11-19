@@ -39,20 +39,8 @@ type (
 		a       *DeploymentActivities
 		logger  sdklog.Logger
 		metrics sdkclient.MetricsHandler
+		lock    workflow.Mutex
 	}
-)
-
-const (
-	// Updates
-	RegisterWorkerInDeployment = "register-task-queue-worker"
-
-	// Signals
-	UpdateDeploymentBuildIDSignalName = "update-deployment-build-id"
-	ForceCANSignalName                = "force-continue-as-new"
-
-	DeploymentWorkflowIDPrefix      = "temporal-sys-deployment"
-	DeploymentWorkflowIDDelimeter   = "|"
-	DeploymentWorkflowIDInitialSize = (2 * len(DeploymentWorkflowIDDelimeter)) + len(DeploymentWorkflowIDPrefix)
 )
 
 type AwaitSignals struct {
@@ -66,6 +54,7 @@ func DeploymentWorkflow(ctx workflow.Context, deploymentWorkflowArgs *deployspb.
 		a:                      nil,
 		logger:                 sdklog.With(workflow.GetLogger(ctx), "wf-namespace", deploymentWorkflowArgs.NamespaceName),
 		metrics:                workflow.GetMetricsHandler(ctx).WithTags(map[string]string{"namespace": deploymentWorkflowArgs.NamespaceName}),
+		lock:                   workflow.NewMutex(ctx),
 	}
 	return deploymentWorkflowRunner.run()
 }
@@ -114,9 +103,15 @@ func (d *DeploymentWorkflowRunner) run() error {
 		d.ctx,
 		RegisterWorkerInDeployment,
 		func(ctx workflow.Context, updateInput *deployspb.RegisterWorkerInDeploymentArgs) error {
+			err := d.lock.Lock(d.ctx)
+			if err != nil {
+				d.logger.Error("Could not acquire deploymnet workflow lock")
+				return err
+			}
 			pendingUpdates++
 			defer func() {
 				pendingUpdates--
+				d.lock.Unlock()
 			}()
 
 			// if no TaskQueueFamilies have been registered for the deployment
@@ -140,9 +135,8 @@ func (d *DeploymentWorkflowRunner) run() error {
 			}
 			d.DeploymentLocalState.TaskQueueFamilies[updateInput.TaskQueueName].TaskQueues[int32(updateInput.TaskQueueType)] = newTaskQueueWorkerInfo
 
-			// Call activity which starts "DeploymentName" workflow
-
-			return nil
+			// Call activity which starts a "DeploymentName" workflow
+			return d.invokeDeploymentNameActivity(ctx, d.DeploymentLocalState.WorkerDeployment.DeploymentName)
 		},
 		// TODO Shivam - have a validator which backsoff updates if we are scheduled to have a CAN
 	); err != nil {
@@ -175,4 +169,13 @@ func (d *DeploymentWorkflowRunner) run() error {
 	}
 	return workflow.NewContinueAsNewError(d.ctx, DeploymentWorkflow, workflowArgs)
 
+}
+
+func (d *DeploymentWorkflowRunner) invokeDeploymentNameActivity(ctx workflow.Context, deploymentName string) error {
+
+	activityCtx := workflow.WithActivityOptions(ctx, defaultActivityOptions)
+	activityArgs := &DeploymentNameWorkflowActivityInput{
+		DeploymentName: deploymentName,
+	}
+	return workflow.ExecuteActivity(activityCtx, d.a.StartDeploymentNameWorkflow, activityArgs).Get(ctx, nil)
 }
