@@ -349,7 +349,7 @@ func (n *Node) DeleteChild(path []Key) error {
 	if len(path) == 1 {
 		child, err := n.Child([]Key{childKey})
 		if err != nil {
-			return fmt.Errorf("failed to get child: %w", err)
+			return err
 		}
 
 		child.cache.deleted = true
