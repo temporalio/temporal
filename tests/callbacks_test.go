@@ -96,7 +96,6 @@ func (s *CallbacksSuite) runNexusCompletionHTTPServer(h *completionHandler, list
 }
 
 func (s *CallbacksSuite) TestWorkflowCallbacks_InvalidArgument() {
-	s.Equal(1, 2)
 	ctx := testcore.NewContext()
 	taskQueue := testcore.RandomizeStr(s.T().Name())
 	workflowType := "test"
