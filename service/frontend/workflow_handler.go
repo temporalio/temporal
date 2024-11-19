@@ -38,6 +38,7 @@ import (
 	"github.com/pborman/uuid"
 	batchpb "go.temporal.io/api/batch/v1"
 	commonpb "go.temporal.io/api/common/v1"
+	deploypb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	filterpb "go.temporal.io/api/filter/v1"
 	historypb "go.temporal.io/api/history/v1"
@@ -48,6 +49,7 @@ import (
 	updatepb "go.temporal.io/api/update/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	deployspb "go.temporal.io/server/api/deployment/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	schedspb "go.temporal.io/server/api/schedule/v1"
@@ -89,6 +91,7 @@ import (
 	"go.temporal.io/server/common/utf8validator"
 	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/service/worker/batcher"
+	"go.temporal.io/server/service/worker/deployment"
 	"go.temporal.io/server/service/worker/scheduler"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/health"
@@ -3115,22 +3118,75 @@ func (wh *WorkflowHandler) DescribeDeployment(ctx context.Context, request *work
 		return nil, errRequestNotSet
 	}
 
+	if len(request.Namespace) == 0 {
+		return nil, errNamespaceNotSet
+	}
+
 	if !wh.config.EnableDeployments(request.Namespace) {
 		return nil, errDeploymentsNotAllowed
 	}
 
-	// build the workflow ID
+	namespaceEntry, err := wh.namespaceRegistry.GetNamespace(namespace.Name(request.GetNamespace()))
+	if err != nil {
+		return nil, err
+	}
+	namespaceID := namespaceEntry.ID()
+
+	d := deployment.NewDeploymentWorkflowClient(namespaceEntry, request.Deployment, wh.historyClient)
+	deploymentWorkflowID := d.GenerateDeploymentWorkflowID()
+
+	req := &historyservice.QueryWorkflowRequest{
+		NamespaceId: namespaceID.String(),
+		Request: &workflowservice.QueryWorkflowRequest{
+			Namespace: request.Namespace,
+			Execution: &commonpb.WorkflowExecution{
+				WorkflowId: deploymentWorkflowID,
+			},
+			Query: &querypb.WorkflowQuery{QueryType: deployment.QueryNameDescribeDeployment},
+		},
+	}
+
+	res, err := wh.historyClient.QueryWorkflow(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+
+	var queryResponse deployspb.DescribeResponse
+	err = payloads.Decode(res.GetResponse().GetQueryResult(), &queryResponse)
+	if err != nil {
+		return nil, err
+	}
+
+	// build out task-queues for the response object
+	var taskQueues []*deploypb.DeploymentInfo_TaskQueueInfo
+	deploymentLocalState := queryResponse.DeploymentLocalState
+
+	for taskQueueName, taskQueueFamilyInfo := range deploymentLocalState.TaskQueueFamilies {
+		for taskQueueType, taskQueueInfo := range taskQueueFamilyInfo.TaskQueues {
+			element := &deploypb.DeploymentInfo_TaskQueueInfo{
+				Name:            taskQueueName,
+				Type:            enumspb.TaskQueueType(taskQueueType),
+				FirstPollerTime: taskQueueInfo.FirstPollerTime,
+			}
+			taskQueues = append(taskQueues, element)
+		}
+	}
+
+	// parse the response to get the desired output + think about what we want in the response based on the proto changes
 
 	/*
 		1. Develop the right workflowID to query based on worker deployment information
-			- user might give random information pertaining to a deployment - how do we wanna tackle?
-			- we should escape the given input string since we have done so when starting deployment wf
-		2. Query the workflow using the workflowID developed
-			- think about what happens if we can't query maybe because of wf termination/cancellation (query goes through!)
-		3. Parse the query response into the desired response object and give it back
+			- user might give random information pertaining to a deployment - how do we wanna tackle? (not being done in schedules/batchers but think if we wanna do )
 	*/
-	return nil, nil
-
+	return &workflowservice.DescribeDeploymentResponse{
+		DeploymentInfo: &deploypb.DeploymentInfo{
+			Deployment:            deploymentLocalState.WorkerDeployment,
+			Status:                deploymentLocalState.DeploymentStatus,
+			LastBecameCurrentTime: deploymentLocalState.LastBecameCurrentTime,
+			Metadata:              deploymentLocalState.Metadata,
+			TaskQueueInfos:        taskQueues,
+		},
+	}, nil
 }
 
 // Returns the schedule description and current state of an existing schedule.

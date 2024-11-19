@@ -327,13 +327,6 @@ func (h *Handler) DescribeTaskQueue(
 	return resp, nil
 }
 
-func (h *Handler) DescribeDeployment(
-	ctx context.Context,
-	request *matchingservice.DescribeDeploymentRequest,
-) (_ *matchingservice.DescribeDeploymentResponse, retError error) {
-	return nil, nil
-}
-
 // DescribeTaskQueuePartition returns information about the target task queue partition.
 func (h *Handler) DescribeTaskQueuePartition(
 	ctx context.Context,

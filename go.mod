@@ -153,3 +153,5 @@ require (
 )
 
 replace go.temporal.io/api => ../api-go
+
+replace go.temporal.io/sdk => ../sdk-go

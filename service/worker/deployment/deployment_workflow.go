@@ -87,10 +87,7 @@ func (d *DeploymentWorkflowRunner) run() error {
 	var pendingUpdates int
 
 	// Set up Query Handlers here:
-	err := workflow.SetQueryHandler(d.ctx, "deploymentTaskQueues", func(input []byte) (map[string]*deployspb.DeploymentLocalState_TaskQueueFamilyInfo, error) {
-		return d.DeploymentLocalState.TaskQueueFamilies, nil
-	})
-	if err != nil {
+	if err := workflow.SetQueryHandler(d.ctx, QueryNameDescribeDeployment, d.handleDescribeQuery); err != nil {
 		d.logger.Error("Failed while setting up query handler")
 		return err
 	}
@@ -136,7 +133,7 @@ func (d *DeploymentWorkflowRunner) run() error {
 			d.DeploymentLocalState.TaskQueueFamilies[updateInput.TaskQueueName].TaskQueues[int32(updateInput.TaskQueueType)] = newTaskQueueWorkerInfo
 
 			// Call activity which starts a "DeploymentName" workflow
-			return d.invokeDeploymentNameActivity(ctx, d.DeploymentLocalState.WorkerDeployment.DeploymentName)
+			return d.invokeDeploymentNameActivity(ctx, d.DeploymentLocalState.WorkerDeployment.SeriesName)
 		},
 		// TODO Shivam - have a validator which backsoff updates if we are scheduled to have a CAN
 	); err != nil {
@@ -144,7 +141,7 @@ func (d *DeploymentWorkflowRunner) run() error {
 	}
 
 	// Wait on any pending signals and updates.
-	err = workflow.Await(d.ctx, func() bool { return pendingUpdates == 0 && a.SignalsCompleted })
+	err := workflow.Await(d.ctx, func() bool { return pendingUpdates == 0 && a.SignalsCompleted })
 	if err != nil {
 		return err
 	}
@@ -178,4 +175,10 @@ func (d *DeploymentWorkflowRunner) invokeDeploymentNameActivity(ctx workflow.Con
 		DeploymentName: deploymentName,
 	}
 	return workflow.ExecuteActivity(activityCtx, d.a.StartDeploymentNameWorkflow, activityArgs).Get(ctx, nil)
+}
+
+func (d *DeploymentWorkflowRunner) handleDescribeQuery() (*deployspb.DescribeResponse, error) {
+	return &deployspb.DescribeResponse{
+		DeploymentLocalState: d.DeploymentLocalState,
+	}, nil
 }
