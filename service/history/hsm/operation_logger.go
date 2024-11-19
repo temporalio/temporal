@@ -23,327 +23,75 @@
 package hsm
 
 import (
-	"context"
-	"errors"
 	"fmt"
-	"sync"
-	"time"
+	"strings"
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
-	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/log/tag"
-	"google.golang.org/protobuf/proto"
 )
 
-const (
-	defaultMaxOperations = 10000
-	defaultPruneTimeout  = 5 * time.Minute
-	defaultPruneInterval = 1 * time.Hour
-	maxResultsLimit      = 10000
-)
+// TombstoneLog tracks deleted nodes for state-based replication
+type TombstoneLog map[string]*persistencespb.VersionedTransition
 
-// OpLogger handles persistence and retrieval of state machine operations
-type OpLogger interface {
-	// LogOperation records a state machine operation
-	LogOperation(ctx context.Context, op *persistencespb.StateMachineOperation) error
-
-	// GetOperations retrieves operations for a given path
-	GetOperations(ctx context.Context, path []string) ([]*persistencespb.StateMachineOperation, error)
-
-	// PruneOperations removes operations older than the given duration
-	PruneOperations(ctx context.Context, retention time.Duration) error
-
-	// Close stops the background pruning
-	Close() error
+// NewTombstoneLog creates a new tombstone log
+func NewTombstoneLog() TombstoneLog {
+	return make(TombstoneLog)
 }
 
-type OpLog struct {
-	sync.RWMutex
-	operations    []*persistencespb.StateMachineOperation
-	maxOperations int
-	retention     time.Duration
-	pruneInterval time.Duration
-	stopCh        chan struct{}
-	closed        bool
-	logger        log.Logger
-	wg            sync.WaitGroup
-}
-
-type Config struct {
-	MaxOperations int
-	Retention     time.Duration
-	PruneInterval time.Duration
-	Logger        log.Logger
-}
-
-func NewOpLog(config *Config) (*OpLog, error) {
-	if config == nil {
-		return nil, fmt.Errorf("config must be provided")
-	}
-
-	if config.MaxOperations <= 0 {
-		config.MaxOperations = defaultMaxOperations
-	}
-	if config.Retention <= 0 {
-		config.Retention = 7 * 24 * time.Hour // 1 week default
-	}
-	if config.PruneInterval <= 0 {
-		config.PruneInterval = defaultPruneInterval
-	}
-	if config.Logger == nil {
-		return nil, fmt.Errorf("logger must be provided")
-	}
-
-	l := &OpLog{
-		operations:    make([]*persistencespb.StateMachineOperation, 0),
-		maxOperations: config.MaxOperations,
-		retention:     config.Retention,
-		pruneInterval: config.PruneInterval,
-		stopCh:        make(chan struct{}),
-		logger:        config.Logger,
-	}
-
-	ready := make(chan struct{})
-	errCh := make(chan error, 1) // Buffer of 1 to avoid goroutine leak if initialization fails
-
-	go func() {
-		defer close(errCh)
-		close(ready)
-		l.pruneLoop()
-	}()
-
-	<-ready
-
-	config.Logger.Debug("Initializing operation log",
-		tag.Name("oplog"),
-		tag.Value("initialize"))
-
-	return l, nil
-}
-
-func (l *OpLog) LogOperation(ctx context.Context, op *persistencespb.StateMachineOperation) error {
-	select {
-	case <-ctx.Done():
-		return ctx.Err()
-	default:
-	}
-
-	l.Lock()
-	defer l.Unlock()
-
-	if l.closed {
-		return fmt.Errorf("operation log is closed")
-	}
-
-	l.logger.Debug("Logging operation",
-		tag.Name("oplog"),
-		tag.Value(op.OperationType.String()))
-
-	opCopy := proto.Clone(op).(*persistencespb.StateMachineOperation)
-
-	// If we're at capacity, remove oldest entries
-	if len(l.operations) >= l.maxOperations {
-		l.logger.Warn("Operation log at capacity, dropping oldest entry",
-			tag.Name("oplog"),
-			tag.Value("capacity_reached"))
-		l.operations = l.operations[1:]
-	}
-
-	l.operations = append(l.operations, opCopy)
-	return nil
-}
-
-// TODO: Consider memory allocation optimizations:
-// - Consider returning an iterator instead
-func (l *OpLog) GetOperations(ctx context.Context, path []string) ([]*persistencespb.StateMachineOperation, error) {
-	select {
-	case <-ctx.Done():
-		return nil, ctx.Err()
-	default:
-	}
-
-	l.RLock()
-	defer l.RUnlock()
-
-	if l.closed {
-		return nil, fmt.Errorf("operation log is closed")
-	}
-
-	l.logger.Debug("Fetching operations",
-		tag.Name("oplog"),
-		tag.Value(fmt.Sprintf("path: %v", path)))
-
-	// Pre-allocate with reasonable size
-	matches := make([]*persistencespb.StateMachineOperation, 0, min(len(l.operations), maxResultsLimit))
-
-	// Break up work into chunks and check context periodically
-	const chunkSize = 1000
-	for i := 0; i < len(l.operations) && len(matches) < maxResultsLimit; i += chunkSize {
-		select {
-		case <-ctx.Done():
-			return nil, ctx.Err()
-		default:
-		}
-
-		end := i + chunkSize
-		if end > len(l.operations) {
-			end = len(l.operations)
-		}
-
-		for _, op := range l.operations[i:end] {
-			if pathEquals(op.Path, path) {
-				matches = append(matches, proto.Clone(op).(*persistencespb.StateMachineOperation))
-				if len(matches) >= maxResultsLimit {
-					l.logger.Warn("GetOperations reached result limit",
-						tag.Name("oplog"),
-						tag.Value(fmt.Sprintf("limit: %d", maxResultsLimit)))
-					break
-				}
-			}
-		}
-	}
-
-	return matches, nil
-}
-
-func (l *OpLog) PruneOperations(ctx context.Context, retention time.Duration) error {
-	select {
-	case <-ctx.Done():
-		return ctx.Err()
-	default:
-	}
-
-	l.Lock()
-	defer l.Unlock()
-
-	if l.closed {
-		return fmt.Errorf("operation log is closed")
-	}
-
-	beforeCount := len(l.operations)
-
-	cutoff := time.Now().Add(-retention)
-	var retained []*persistencespb.StateMachineOperation
-
-	// Break up work into chunks and check context periodically
-	const chunkSize = 1000
-	for i := 0; i < len(l.operations); i += chunkSize {
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		default:
-		}
-
-		end := i + chunkSize
-		if end > len(l.operations) {
-			end = len(l.operations)
-		}
-
-		for _, op := range l.operations[i:end] {
-			if op.OperationTime.AsTime().After(cutoff) {
-				retained = append(retained, op)
-			}
-		}
-	}
-	afterCount := len(retained)
-	l.logger.Info("Pruned operations",
-		tag.Name("oplog"),
-		tag.Value(fmt.Sprintf("pruned %d operations", beforeCount-afterCount)))
-
-	l.operations = retained
-	return nil
-}
-
-func (l *OpLog) Close() error {
-	l.Lock()
-	defer l.Unlock()
-
-	if l.closed {
-		return nil
-	}
-
-	l.logger.Info("Closing operation log",
-		tag.Name("oplog"),
-		tag.Value("close"))
-
-	close(l.stopCh)
-
-	// Wait for any in-progress prune operation to complete
-	l.wg.Wait()
-
-	l.closed = true
-	return nil
-}
-
-func (l *OpLog) pruneLoop() {
-	ticker := time.NewTicker(l.pruneInterval)
-	defer ticker.Stop()
-
-	// Check if we're closed before starting loop
-	select {
-	case <-l.stopCh:
-		return
-	default:
-	}
-
-	for {
-		select {
-		case <-ticker.C:
-			l.wg.Add(1)
-			ctx, cancel := context.WithTimeout(context.Background(), defaultPruneTimeout)
-
-			l.RLock()
-			retention := l.retention
-			l.RUnlock()
-
-			if err := l.PruneOperations(ctx, retention); err != nil {
-				if errors.Is(err, context.DeadlineExceeded) {
-					l.logger.Error("Prune operation timed out",
-						tag.Name("oplog"),
-						tag.Error(err))
-				} else {
-					l.logger.Error("Failed to prune operations",
-						tag.Name("oplog"),
-						tag.Error(err))
-				}
-			}
-
-			cancel()
-			l.wg.Done()
-		case <-l.stopCh:
+// TrackDeletion records a node deletion
+// If this path is already under a deleted parent, it will be ignored
+// If this is a parent of existing deleted nodes, those will be removed
+func (l TombstoneLog) TrackDeletion(k []Key, vt *persistencespb.VersionedTransition) {
+	path := pathToString(k)
+	// If this path is under an existing deletion, ignore it
+	for existingPath := range l {
+		if strings.HasPrefix(path, existingPath+"/") {
+			// This node is already covered by a parent deletion
 			return
 		}
 	}
-}
 
-func (l *OpLog) GetRetention() time.Duration {
-	l.RLock()
-	defer l.RUnlock()
-	return l.retention
-}
-
-func (l *OpLog) SetRetention(d time.Duration) error {
-	if d <= 0 {
-		return fmt.Errorf("retention must be positive")
+	// Remove any existing paths under this one
+	for existingPath := range l {
+		if strings.HasPrefix(existingPath, path+"/") {
+			delete(l, existingPath)
+		}
 	}
 
-	l.Lock()
-	defer l.Unlock()
-	if l.closed {
-		return fmt.Errorf("operation log is closed")
+	l[path] = vt
+}
+
+// IsDeleted returns whether a node at the given path is deleted
+func (l TombstoneLog) IsDeleted(path string) bool {
+	for existingPath := range l {
+		if path == existingPath || strings.HasPrefix(path, existingPath+"/") {
+			return true
+		}
 	}
-	l.retention = d
+	return false
+}
+
+// GetDeletion returns the versioned transition for a deleted node
+// Returns nil if the node is not deleted
+func (l TombstoneLog) GetDeletion(path string) *persistencespb.VersionedTransition {
+	for existingPath, vt := range l {
+		if path == existingPath || strings.HasPrefix(path, existingPath+"/") {
+			return vt
+		}
+	}
 	return nil
 }
 
-func pathEquals(a, b []string) bool {
-	if len(a) != len(b) {
-		return false
+// Helper functions for path handling
+func pathToString(path []Key) string {
+	if len(path) == 0 {
+		return ""
 	}
-	for i := range a {
-		if a[i] != b[i] {
-			return false
+	var str string
+	for i, key := range path {
+		if i > 0 {
+			str += "/"
 		}
+		str += fmt.Sprintf("%s:%s", key.Type, key.ID)
 	}
-	return true
+	return str
 }

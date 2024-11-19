@@ -1184,7 +1184,7 @@ func (mr *MockMutableStateMockRecorder) ApplySignalExternalWorkflowExecutionInit
 }
 
 // ApplySnapshot mocks base method.
-func (m *MockMutableState) ApplySnapshot(ctx context.Context, snapshot *persistence.WorkflowMutableState) error {
+func (m *MockMutableState) ApplySnapshot(snapshot *persistence.WorkflowMutableState) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ApplySnapshot", snapshot)
 	ret0, _ := ret[0].(error)

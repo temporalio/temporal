@@ -535,12 +535,7 @@ func (s *syncWorkflowStateSuite) TestGetUpdatedSubStateMachine() {
 	err := reg.RegisterMachine(def1)
 	s.NoError(err)
 
-	root, err := hsm.NewRoot(reg,
-		def1.Type(),
-		hsmtest.NewData(hsmtest.State1),
-		make(map[string]*persistencespb.StateMachineMap),
-		&hsmtest.NodeBackend{},
-		s.logger)
+	root, err := hsm.NewRoot(reg, def1.Type(), hsmtest.NewData(hsmtest.State1), make(map[string]*persistencespb.StateMachineMap), &hsmtest.NodeBackend{})
 	s.NoError(err)
 	root.InternalRepr().LastUpdateVersionedTransition = &persistencespb.VersionedTransition{NamespaceFailoverVersion: 1, TransitionCount: 10}
 	child1, err := root.AddChild(hsm.Key{Type: def1.Type(), ID: "child1"}, hsmtest.NewData(hsmtest.State1))
@@ -550,7 +545,7 @@ func (s *syncWorkflowStateSuite) TestGetUpdatedSubStateMachine() {
 	s.Nil(err)
 	child2.InternalRepr().LastUpdateVersionedTransition = &persistencespb.VersionedTransition{NamespaceFailoverVersion: 1, TransitionCount: 10}
 
-	result, err := s.syncStateRetriever.getUpdatedSubStateMachine(root.Node, &persistencespb.VersionedTransition{NamespaceFailoverVersion: 1, TransitionCount: 9})
+	result, err := s.syncStateRetriever.getUpdatedSubStateMachine(root, &persistencespb.VersionedTransition{NamespaceFailoverVersion: 1, TransitionCount: 9})
 	s.NoError(err)
 	s.Equal(1, len(result))
 	s.Equal(len(child2.Path()), len(result[0].Path.Path))

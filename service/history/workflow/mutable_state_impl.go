@@ -351,7 +351,7 @@ func NewMutableState(
 	s.taskGenerator = taskGeneratorProvider.NewTaskGenerator(shard, s)
 	s.workflowTaskManager = newWorkflowTaskStateMachine(s, s.metricsHandler)
 
-	s.mustInitHSM(logger)
+	s.mustInitHSM()
 
 	return s
 }
@@ -476,7 +476,7 @@ func NewMutableStateFromDB(
 		}
 	}
 
-	mutableState.mustInitHSM(nil)
+	mutableState.mustInitHSM()
 
 	return mutableState, nil
 }
@@ -555,13 +555,13 @@ func NewMutableStateInChain(
 	return newMutableState, nil
 }
 
-func (ms *MutableStateImpl) mustInitHSM(logger log.Logger) {
+func (ms *MutableStateImpl) mustInitHSM() {
 	// Error only occurs if some initialization path forgets to register the workflow state machine.
-	stateMachineNode, err := hsm.NewRoot(ms.shard.StateMachineRegistry(), StateMachineType, ms, ms.executionInfo.SubStateMachinesByType, ms, logger)
+	stateMachineNode, err := hsm.NewRoot(ms.shard.StateMachineRegistry(), StateMachineType, ms, ms.executionInfo.SubStateMachinesByType, ms)
 	if err != nil {
 		panic(err)
 	}
-	ms.stateMachineNode = stateMachineNode.Node
+	ms.stateMachineNode = stateMachineNode
 }
 
 func (ms *MutableStateImpl) HSM() *hsm.Node {
@@ -6554,7 +6554,6 @@ func (ms *MutableStateImpl) ApplyMutation(
 }
 
 func (ms *MutableStateImpl) ApplySnapshot(
-	ctx context.Context,
 	snapshot *persistencespb.WorkflowMutableState,
 ) error {
 	prevExecutionInfoSize := ms.executionInfo.Size()
@@ -6570,7 +6569,7 @@ func (ms *MutableStateImpl) ApplySnapshot(
 
 	ms.applyUpdatesToUpdateInfos(snapshot.ExecutionInfo.UpdateInfos, true)
 
-	err = ms.syncSubStateMachinesByType(ctx, snapshot.ExecutionInfo.SubStateMachinesByType, ms.logger)
+	err = ms.syncSubStateMachinesByType(snapshot.ExecutionInfo.SubStateMachinesByType)
 	if err != nil {
 		return err
 	}
@@ -6880,9 +6879,7 @@ func (ms *MutableStateImpl) syncExecutionInfo(current *persistencespb.WorkflowEx
 	return nil
 }
 
-func (ms *MutableStateImpl) syncSubStateMachinesByType(ctx context.Context,
-	incoming map[string]*persistencespb.StateMachineMap,
-	logger log.Logger) error {
+func (ms *MutableStateImpl) syncSubStateMachinesByType(incoming map[string]*persistencespb.StateMachineMap) error {
 	currentHSM := ms.HSM()
 
 	// we don't care about the root here which is the entire mutable state
@@ -6892,7 +6889,6 @@ func (ms *MutableStateImpl) syncSubStateMachinesByType(ctx context.Context,
 		ms,
 		incoming,
 		ms,
-		logger,
 	)
 	if err != nil {
 		return err
@@ -6914,7 +6910,7 @@ func (ms *MutableStateImpl) syncSubStateMachinesByType(ctx context.Context,
 			return err
 		}
 
-		return currentNode.Sync(ctx, incomingNode)
+		return currentNode.Sync(incomingNode)
 	}); err != nil {
 		return err
 	}

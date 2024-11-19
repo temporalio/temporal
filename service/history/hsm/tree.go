@@ -27,18 +27,14 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
-	"sync"
-	"time"
 
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	tokenspb "go.temporal.io/server/api/token/v1"
-	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/service/history/consts"
 	"google.golang.org/protobuf/proto"
-	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 // ErrStateMachineNotFound is returned when looking up a non-existing state machine in a [Node] or a [Collection].
@@ -88,6 +84,8 @@ type cachedMachine struct {
 	dirty bool
 	// Outputs of all transitions in the current transaction.
 	outputs []TransitionOutputWithCount
+	// A flag to indicate the node was deleted.
+	deleted bool
 }
 
 // NodeBackend is a concrete implementation to support interacting with the underlying platform.
@@ -116,7 +114,6 @@ func EventIDFromToken(token []byte) (int64, error) {
 // Node data should not be manipulated directly and should only be done using [MachineTransition] or
 // [Collection.Transtion] to ensure the tree tracks dirty states and update transition counts.
 type Node struct {
-	sync.RWMutex
 	// Key of this node in parent's map. Empty if node is the root.
 	Key Key
 	// Parent node. Nil if current node is the root.
@@ -126,29 +123,17 @@ type Node struct {
 	persistence *persistencespb.StateMachineNode
 	definition  StateMachineDefinition
 	backend     NodeBackend
+	tombstones  TombstoneLog // Only used at root
 }
 
-type RootNode struct {
-	*Node
-	opLog *OpLog
-}
-
-type stateUpdate struct {
-	persistence *persistencespb.StateMachineNode
-	cache       *cachedMachine
-	dirty       bool
-	deleted     bool
-}
-
-// NewRoot creates a new root [RootNode].
+// NewRoot creates a new root [Node].
 // Children may be provided from persistence to rehydrate the tree.
 // Returns [ErrNotRegistered] if the key's type is not registered in the given registry or serialization errors.
 func NewRoot(registry *Registry,
 	t string,
 	data any,
 	children map[string]*persistencespb.StateMachineMap,
-	backend NodeBackend,
-	logger log.Logger) (*RootNode, error) {
+	backend NodeBackend) (*Node, error) {
 	def, ok := registry.Machine(t)
 	if !ok {
 		return nil, fmt.Errorf("%w: state machine for type: %v", ErrNotRegistered, t)
@@ -157,18 +142,7 @@ func NewRoot(registry *Registry,
 	if err != nil {
 		return nil, err
 	}
-
-	opLog, err := NewOpLog(&Config{
-		MaxOperations: defaultMaxOperations,
-		Retention:     7 * 24 * time.Hour, // TODO: Review defaults. Consider exposing as config
-		PruneInterval: defaultPruneInterval,
-		Logger:        logger,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("failed to create operation log: %w", err)
-	}
-
-	node := &Node{
+	return &Node{
 		definition: def,
 		registry:   registry,
 		persistence: &persistencespb.StateMachineNode{
@@ -177,19 +151,14 @@ func NewRoot(registry *Registry,
 			InitialVersionedTransition:    &persistencespb.VersionedTransition{},
 			LastUpdateVersionedTransition: &persistencespb.VersionedTransition{},
 			TransitionCount:               0,
-			Deleted:                       false,
 		},
 		cache: &cachedMachine{
 			dataLoaded: true,
 			data:       data,
 			children:   make(map[Key]*Node),
 		},
-		backend: backend,
-	}
-
-	return &RootNode{
-		Node:  node,
-		opLog: opLog,
+		backend:    backend,
+		tombstones: NewTombstoneLog(),
 	}, nil
 }
 
@@ -343,7 +312,6 @@ func (n *Node) AddChild(key Key, data any) (*Node, error) {
 			InitialVersionedTransition:    nextVersionedTransition,
 			LastUpdateVersionedTransition: nextVersionedTransition,
 			TransitionCount:               0,
-			Deleted:                       false,
 		},
 		cache: &cachedMachine{
 			dataLoaded: true,
@@ -368,46 +336,36 @@ func (n *Node) AddChild(key Key, data any) (*Node, error) {
 }
 
 // DeleteChild removes a child node and all its descendants
-func (n *Node) DeleteChild(ctx context.Context, path []Key) error {
+func (n *Node) DeleteChild(path []Key) error {
+	if n.cache.deleted {
+		return fmt.Errorf("cannot delete from deleted node: %v", n.Key)
+	}
+
 	if len(path) == 0 {
 		return fmt.Errorf("cannot delete empty path")
 	}
 
 	childKey := path[0]
-
 	if len(path) == 1 {
-		n.Lock()
-		defer n.Unlock()
-
 		child, err := n.Child([]Key{childKey})
 		if err != nil {
 			return fmt.Errorf("failed to get child: %w", err)
 		}
 
-		op := &persistencespb.StateMachineOperation{
-			Path:          pathToStrings(child.Path()),
-			OperationType: persistencespb.StateMachineOperation_OPERATION_TYPE_DELETE,
-			OperationTime: timestamppb.Now(),
-			VersionedTransition: &persistencespb.VersionedTransition{
-				NamespaceFailoverVersion: n.backend.GetCurrentVersion(),
-				TransitionCount:          n.backend.NextTransitionCount(),
-			},
-			Data:     child.persistence.Data,
-			Children: child.persistence.Children,
-		}
+		child.cache.deleted = true
 
-		// Mark node and descendants as deleted under parent lock
-		if err := child.markDeleted(op.VersionedTransition); err != nil {
-			return fmt.Errorf("failed to mark node deleted: %w", err)
+		// Track deletion in root's tombstones
+		root := n
+		for root.Parent != nil {
+			root = root.Parent
 		}
-
-		if err := child.Walk(func(descendant *Node) error {
-			return descendant.markDeleted(op.VersionedTransition)
-		}); err != nil {
-			return fmt.Errorf("failed to mark descendants deleted: %w", err)
+		vt := &persistencespb.VersionedTransition{
+			NamespaceFailoverVersion: n.backend.GetCurrentVersion(),
+			TransitionCount:          n.backend.NextTransitionCount(),
 		}
+		root.tombstones.TrackDeletion(child.Path(), vt)
 
-		// Remove from parent's children map (already under lock)
+		// Remove from parent's children map
 		machinesMap := n.persistence.Children[childKey.Type]
 		if machinesMap != nil {
 			delete(machinesMap.MachinesById, childKey.ID)
@@ -416,17 +374,8 @@ func (n *Node) DeleteChild(ctx context.Context, path []Key) error {
 			}
 		}
 
+		// Remove from cache
 		delete(n.cache.children, childKey)
-
-		// Clear caches with context
-		if err := child.clearCaches(ctx); err != nil {
-			return fmt.Errorf("failed to clear caches after deletion: %w", err)
-		}
-
-		if err := n.logOperation(ctx, op); err != nil {
-			return fmt.Errorf("failed to log deletion: %w", err)
-		}
-
 		return nil
 	}
 
@@ -435,7 +384,7 @@ func (n *Node) DeleteChild(ctx context.Context, path []Key) error {
 		return fmt.Errorf("failed to get child: %w", err)
 	}
 
-	return child.DeleteChild(ctx, path[1:])
+	return child.DeleteChild(path[1:])
 }
 
 // AddHistoryEvent adds a history event to be committed at the end of the current transaction.
@@ -525,12 +474,57 @@ func (n *Node) CompareState(incomingNode *Node) (int, error) {
 
 // Sync updates the state of the current node to that of the incoming node.
 // Meant to be used by the framework, **not** by components.
-func (n *Node) Sync(ctx context.Context, incomingNode *Node) error {
-	if err := n.checkVersions(incomingNode); err != nil {
-		return err
+func (n *Node) Sync(incomingNode *Node) error {
+	if n.cache.deleted {
+		return fmt.Errorf("cannot sync deleted node: %v", n.Key)
+	}
+
+	// Check for deletion first
+	incomingRoot := incomingNode
+	for incomingRoot.Parent != nil {
+		incomingRoot = incomingRoot.Parent
+	}
+
+	if vt := incomingRoot.tombstones.GetDeletion(pathToString(n.Path())); vt != nil {
+		// Node was deleted in incoming state
+		if n.Parent != nil {
+			// Remove from parent's children map
+			machinesMap := n.Parent.persistence.Children[n.Key.Type]
+			if machinesMap != nil {
+				delete(machinesMap.MachinesById, n.Key.ID)
+				if len(machinesMap.MachinesById) == 0 {
+					delete(n.Parent.persistence.Children, n.Key.Type)
+				}
+			}
+			// Remove from cache
+			delete(n.Parent.cache.children, n.Key)
+		}
+
+		n.cache.deleted = true
+
+		// Track deletion in our tombstones
+		root := n
+		for root.Parent != nil {
+			root = root.Parent
+		}
+		root.tombstones.TrackDeletion(n.Path(), vt)
+		return nil
 	}
 
 	incomingInternalRepr := incomingNode.InternalRepr()
+
+	currentInitialVersionedTransition := n.InternalRepr().InitialVersionedTransition
+	incomingInitialVersionedTransition := incomingNode.InternalRepr().InitialVersionedTransition
+	if currentInitialVersionedTransition.NamespaceFailoverVersion !=
+		incomingInitialVersionedTransition.NamespaceFailoverVersion {
+		return ErrInitialTransitionMismatch
+	}
+	if currentInitialVersionedTransition.TransitionCount != 0 &&
+		incomingInitialVersionedTransition.TransitionCount != 0 &&
+		currentInitialVersionedTransition.TransitionCount !=
+			incomingInitialVersionedTransition.TransitionCount {
+		return ErrInitialTransitionMismatch
+	}
 
 	n.persistence.Data = incomingInternalRepr.Data
 	// do not sync children, we are just syncing the current node
@@ -554,47 +548,6 @@ func (n *Node) Sync(ctx context.Context, incomingNode *Node) error {
 
 	// sync LastUpdateVersionedTransition last as MachineTransition can't correctly handle it.
 	n.persistence.LastUpdateVersionedTransition = incomingInternalRepr.LastUpdateVersionedTransition
-
-	if incomingInternalRepr.Deleted {
-		return n.SyncDeleted(ctx, incomingNode)
-	}
-
-	return nil
-}
-
-// SyncDeleted handles replication of deleted nodes and their operation history
-func (n *Node) SyncDeleted(ctx context.Context, incomingNode *Node) error {
-	if !incomingNode.persistence.Deleted {
-		return fmt.Errorf("incoming node is not marked as deleted")
-	}
-
-	if err := n.checkVersions(incomingNode); err != nil {
-		return fmt.Errorf("version check failed: %w", err)
-	}
-
-	incomingRoot := incomingNode.GetRoot()
-	ops, err := incomingRoot.opLog.GetOperations(ctx, pathToStrings(n.Path()))
-	if err != nil {
-		return fmt.Errorf("failed to get operations: %w", err)
-	}
-
-	for _, op := range ops {
-		if err := n.applyOperation(ctx, op); err != nil {
-			return fmt.Errorf("failed to apply operation: %w", err)
-		}
-	}
-
-	if err := n.clearCaches(ctx); err != nil {
-		return fmt.Errorf("failed to clear caches: %w", err)
-	}
-
-	return nil
-}
-
-func (r *RootNode) Close() error {
-	if r.opLog != nil {
-		return r.opLog.Close()
-	}
 	return nil
 }
 
@@ -602,6 +555,10 @@ func (r *RootNode) Close() error {
 // It updates the state machine's metadata and marks the entry as dirty in the node's cache.
 // If the transition fails, the changes are rolled back and no state is mutated.
 func MachineTransition[T any](n *Node, transitionFn func(T) (TransitionOutput, error)) (retErr error) {
+	if n.cache.deleted {
+		return fmt.Errorf("cannot transition deleted node: %v", n.Key)
+	}
+
 	data, err := MachineData[T](n)
 	if err != nil {
 		return err
@@ -657,14 +614,6 @@ func NewCollection[T any](node *Node, stateMachineType string) Collection[T] {
 		Type: stateMachineType,
 		node: node,
 	}
-}
-
-func (n *Node) GetRoot() *RootNode {
-	current := n
-	for current.Parent != nil {
-		current = current.Parent
-	}
-	return &RootNode{Node: current}
 }
 
 // Node gets an [Node] for a given state machine ID.
@@ -751,139 +700,4 @@ func GenerateEventLoadToken(event *historypb.HistoryEvent) ([]byte, error) {
 		EventBatchId: eventBatchID,
 	}
 	return proto.Marshal(ref)
-}
-
-// markDeleted marks a single node as deleted
-func (n *Node) markDeleted(vt *persistencespb.VersionedTransition) error {
-	if n.persistence.Deleted {
-		return fmt.Errorf("node already deleted: %v", n.Key)
-	}
-
-	update := stateUpdate{
-		persistence: &persistencespb.StateMachineNode{
-			Deleted:                       true,
-			LastUpdateVersionedTransition: vt,
-			TransitionCount:               n.persistence.TransitionCount + 1,
-			Children:                      n.persistence.Children,
-			Data:                          n.persistence.Data,
-			InitialVersionedTransition:    n.persistence.InitialVersionedTransition,
-		},
-		cache: &cachedMachine{
-			dataLoaded: n.cache.dataLoaded,
-			data:       n.cache.data,
-			children:   n.cache.children,
-			dirty:      true,
-		},
-		deleted: true,
-	}
-
-	return n.applyStateUpdate(update)
-}
-
-func (n *Node) applyStateUpdate(update stateUpdate) error {
-	n.Lock()
-	defer n.Unlock()
-
-	if update.persistence != nil {
-		n.persistence = update.persistence
-	}
-	if update.cache != nil {
-		n.cache = update.cache
-	}
-	if update.dirty {
-		n.cache.dirty = true
-	}
-	if update.deleted {
-		n.persistence.Deleted = true
-	}
-
-	return nil
-}
-
-// applyOperation applies a single operation during sync
-func (n *Node) applyOperation(ctx context.Context, op *persistencespb.StateMachineOperation) error {
-	switch op.OperationType {
-	case persistencespb.StateMachineOperation_OPERATION_TYPE_DELETE:
-		n.persistence.Deleted = true
-		n.persistence.LastUpdateVersionedTransition = op.VersionedTransition
-		n.persistence.TransitionCount++
-		n.cache.dirty = true
-
-		root := n.GetRoot()
-		return root.opLog.LogOperation(ctx, op)
-
-	case persistencespb.StateMachineOperation_OPERATION_TYPE_TRANSITION:
-		return n.Sync(ctx,
-			&Node{
-				persistence: &persistencespb.StateMachineNode{
-					Data:                          op.Data,
-					LastUpdateVersionedTransition: op.VersionedTransition,
-				},
-			})
-
-	default:
-		return fmt.Errorf("unknown operation type: %v", op.OperationType)
-	}
-}
-
-func (n *Node) checkVersions(incomingNode *Node) error {
-	// Check namespace failover version
-	if n.persistence.InitialVersionedTransition.NamespaceFailoverVersion !=
-		incomingNode.persistence.InitialVersionedTransition.NamespaceFailoverVersion {
-		return ErrInitialTransitionMismatch
-	}
-
-	// Check transition count if both are non-zero
-	if n.persistence.InitialVersionedTransition.TransitionCount != 0 &&
-		incomingNode.persistence.InitialVersionedTransition.TransitionCount != 0 &&
-		n.persistence.InitialVersionedTransition.TransitionCount !=
-			incomingNode.persistence.InitialVersionedTransition.TransitionCount {
-		return ErrInitialTransitionMismatch
-	}
-
-	return nil
-}
-
-// clearCaches recursively clears node caches and removes deleted node references
-func (n *Node) clearCaches(ctx context.Context) error {
-	select {
-	case <-ctx.Done():
-		return ctx.Err()
-	default:
-	}
-
-	// Create new cache with only non-deleted children
-	newChildren := make(map[Key]*Node)
-	for key, child := range n.cache.children {
-		if !child.persistence.Deleted {
-			newChildren[key] = child
-		}
-	}
-
-	for _, child := range newChildren {
-		if err := child.clearCaches(ctx); err != nil {
-			return fmt.Errorf("failed to clear child caches: %w", err)
-		}
-	}
-
-	n.cache = &cachedMachine{
-		dataLoaded: false,
-		children:   newChildren,
-		dirty:      true,
-	}
-
-	return nil
-}
-
-func (n *Node) logOperation(ctx context.Context, op *persistencespb.StateMachineOperation) error {
-	root := n.GetRoot()
-	return root.opLog.LogOperation(ctx, op)
-}
-
-func pathToStrings(path []Key) []string {
-	result := make([]string, len(path))
-	for i, key := range path {
-		result[i] = fmt.Sprintf("%s/%s", key.Type, key.ID)
-	}
-	return result
 }

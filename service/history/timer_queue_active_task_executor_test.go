@@ -1868,7 +1868,6 @@ func (s *timerQueueActiveTaskExecutorSuite) TestExecuteStateMachineTimerTask_Exe
 		ms,
 		make(map[string]*persistencespb.StateMachineMap),
 		ms,
-		s.mockShard.GetLogger(),
 	)
 	s.NoError(err)
 	ms.EXPECT().GetCurrentVersion().Return(int64(2)).AnyTimes()
@@ -1881,7 +1880,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestExecuteStateMachineTimerTask_Exe
 	).AnyTimes()
 	ms.EXPECT().HSM().Return(root).AnyTimes()
 
-	_, err = dummy.MachineCollection(root.Node).Add("dummy", dummy.NewDummy())
+	_, err = dummy.MachineCollection(root).Add("dummy", dummy.NewDummy())
 	s.NoError(err)
 
 	// Track some tasks.

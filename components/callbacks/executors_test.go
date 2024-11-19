@@ -466,12 +466,7 @@ func newRoot(t *testing.T) *hsm.Node {
 	require.NoError(t, callbacks.RegisterStateMachine(reg))
 	mutableState := newMutableState(t)
 
-	root, err := hsm.NewRoot(reg,
-		workflow.StateMachineType,
-		mutableState,
-		make(map[string]*persistencespb.StateMachineMap),
-		&hsmtest.NodeBackend{},
-		log.NewNoopLogger())
+	root, err := hsm.NewRoot(reg, workflow.StateMachineType, mutableState, make(map[string]*persistencespb.StateMachineMap), &hsmtest.NodeBackend{})
 	require.NoError(t, err)
-	return root.Node
+	return root
 }

@@ -333,7 +333,6 @@ func TestTaskGeneratorImpl_GenerateWorkflowCloseTasks(t *testing.T) {
 
 func TestTaskGenerator_GenerateDirtySubStateMachineTasks(t *testing.T) {
 	ctrl := gomock.NewController(t)
-	logger := log.NewTestLogger()
 	namespaceRegistry := namespace.NewMockRegistry(ctrl)
 
 	mutableState := NewMockMutableState(ctrl)
@@ -347,9 +346,9 @@ func TestTaskGenerator_GenerateDirtySubStateMachineTasks(t *testing.T) {
 	require.NoError(t, callbacks.RegisterTaskSerializers(reg))
 	require.NoError(t, nexusoperations.RegisterStateMachines(reg))
 	require.NoError(t, nexusoperations.RegisterTaskSerializers(reg))
-	node, err := hsm.NewRoot(reg, StateMachineType, nil, subStateMachinesByType, mutableState, logger)
+	node, err := hsm.NewRoot(reg, StateMachineType, nil, subStateMachinesByType, mutableState)
 	require.NoError(t, err)
-	coll := callbacks.MachineCollection(node.Node)
+	coll := callbacks.MachineCollection(node)
 
 	callbackToSchedule := callbacks.NewCallback(timestamppb.Now(), callbacks.NewWorkflowClosedTrigger(), &persistencespb.Callback{
 		Variant: &persistencespb.Callback_Nexus_{
@@ -384,7 +383,7 @@ func TestTaskGenerator_GenerateDirtySubStateMachineTasks(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	mutableState.EXPECT().HSM().DoAndReturn(func() *hsm.Node { return node.Node }).AnyTimes()
+	mutableState.EXPECT().HSM().DoAndReturn(func() *hsm.Node { return node }).AnyTimes()
 	mutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
 		TransitionHistory: []*persistencespb.VersionedTransition{
 			{NamespaceFailoverVersion: 3, TransitionCount: 3},
@@ -481,7 +480,7 @@ func TestTaskGenerator_GenerateDirtySubStateMachineTasks(t *testing.T) {
 	// Reset and test another timer task (nexusoperations.TimeoutTask)
 	node.ClearTransactionState()
 	genTasks = nil
-	opNode, err := nexusoperations.AddChild(node.Node, "ID", &historypb.HistoryEvent{
+	opNode, err := nexusoperations.AddChild(node, "ID", &historypb.HistoryEvent{
 		EventTime: timestamppb.Now(),
 		Attributes: &historypb.HistoryEvent_NexusOperationScheduledEventAttributes{
 			NexusOperationScheduledEventAttributes: &historypb.NexusOperationScheduledEventAttributes{

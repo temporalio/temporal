@@ -59,13 +59,6 @@ message StateMachineNode {
     // NOTE: This field will be made obsolete when transition history is enabled in favor of
     // last_update_versioned_transition.
     int64 transition_count = 100;
-
-    // Indicates if this node has been deleted
-    // When true:
-    // - Node and all descendants are considered deleted
-    // - Node cannot be modified further
-    // - Node remains in history for replication purposes
-    bool deleted = 5;
 }
 
 // Map of state machine ID to StateMachineNode.
@@ -166,41 +159,4 @@ message StateMachineTombstone {
 
 message StateMachinePath {
     repeated StateMachineKey path = 1;
-}
-
-// StateMachineOperation represents a history record of operations performed on nodes in the state machine tree
-message StateMachineOperation {
-    // OperationType defines the type of operation performed
-    enum OperationType {
-        // Unspecified operation type - should not be used
-        OPERATION_TYPE_UNSPECIFIED = 0;
-        // Node was deleted from the tree
-        OPERATION_TYPE_DELETE = 1;
-        // Node state was transitioned
-        OPERATION_TYPE_TRANSITION = 2;
-    }
-
-    // Path to the node in the tree, represented as string segments in the format "type/id"
-    repeated string path = 1;
-
-    // Type of operation performed
-    OperationType operation_type = 2;
-
-    // When the operation was performed
-    google.protobuf.Timestamp operation_time = 3;
-
-    // Version and transition information for the operation
-    VersionedTransition versioned_transition = 4;
-
-    // Serialized state data at time of operation
-    bytes data = 5;
-
-    // Child nodes at time of operation
-    map<string, StateMachineMap> children = 6;
-}
-
-// OperationLog stores the history of operations for state machine nodes
-message OperationLog {
-    // Ordered list of operations performed on nodes
-    repeated StateMachineOperation operations = 1;
 }

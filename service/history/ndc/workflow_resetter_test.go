@@ -612,12 +612,7 @@ func (s *workflowResetterSuite) TestReapplyContinueAsNewWorkflowEvents_WithOutCo
 	currentWorkflow := NewMockWorkflow(s.controller)
 	smReg := hsm.NewRegistry()
 	s.NoError(workflow.RegisterStateMachine(smReg))
-	root, err := hsm.NewRoot(smReg,
-		workflow.StateMachineType,
-		nil,
-		make(map[string]*persistencespb.StateMachineMap),
-		nil,
-		s.logger)
+	root, err := hsm.NewRoot(smReg, workflow.StateMachineType, nil, make(map[string]*persistencespb.StateMachineMap), nil)
 	s.NoError(err)
 	mutableState.EXPECT().HSM().Return(root).AnyTimes()
 
@@ -745,12 +740,7 @@ func (s *workflowResetterSuite) TestReapplyContinueAsNewWorkflowEvents_WithConti
 	currentWorkflow.EXPECT().GetMutableState().Return(mutableState)
 	smReg := hsm.NewRegistry()
 	s.NoError(workflow.RegisterStateMachine(smReg))
-	root, err := hsm.NewRoot(smReg,
-		workflow.StateMachineType,
-		nil,
-		make(map[string]*persistencespb.StateMachineMap),
-		nil,
-		s.logger)
+	root, err := hsm.NewRoot(smReg, workflow.StateMachineType, nil, make(map[string]*persistencespb.StateMachineMap), nil)
 	s.NoError(err)
 	mutableState.EXPECT().HSM().Return(root).AnyTimes()
 
@@ -820,12 +810,7 @@ func (s *workflowResetterSuite) TestReapplyWorkflowEvents() {
 	mutableState := workflow.NewMockMutableState(s.controller)
 	smReg := hsm.NewRegistry()
 	s.NoError(workflow.RegisterStateMachine(smReg))
-	root, err := hsm.NewRoot(smReg,
-		workflow.StateMachineType,
-		nil,
-		make(map[string]*persistencespb.StateMachineMap),
-		nil,
-		s.logger)
+	root, err := hsm.NewRoot(smReg, workflow.StateMachineType, nil, make(map[string]*persistencespb.StateMachineMap), nil)
 	s.NoError(err)
 	mutableState.EXPECT().HSM().Return(root).AnyTimes()
 
@@ -931,12 +916,7 @@ func (s *workflowResetterSuite) TestReapplyEvents() {
 
 	smReg := hsm.NewRegistry()
 	s.NoError(workflow.RegisterStateMachine(smReg))
-	root, err := hsm.NewRoot(smReg,
-		workflow.StateMachineType,
-		nil,
-		make(map[string]*persistencespb.StateMachineMap),
-		nil,
-		s.logger)
+	root, err := hsm.NewRoot(smReg, workflow.StateMachineType, nil, make(map[string]*persistencespb.StateMachineMap), nil)
 	s.NoError(err)
 	ms.EXPECT().HSM().Return(root).AnyTimes()
 
@@ -997,12 +977,7 @@ func (s *workflowResetterSuite) TestReapplyEvents_Excludes() {
 	smReg := hsm.NewRegistry()
 	s.NoError(smReg.RegisterEventDefinition(nexusoperations.StartedEventDefinition{}))
 	s.NoError(workflow.RegisterStateMachine(smReg))
-	root, err := hsm.NewRoot(smReg,
-		workflow.StateMachineType,
-		nil,
-		make(map[string]*persistencespb.StateMachineMap),
-		nil,
-		s.logger)
+	root, err := hsm.NewRoot(smReg, workflow.StateMachineType, nil, make(map[string]*persistencespb.StateMachineMap), nil)
 	s.NoError(err)
 	ms.EXPECT().HSM().Return(root).AnyTimes()
 
@@ -1180,12 +1155,7 @@ func (s *workflowResetterSuite) TestWorkflowRestartAfterExecutionTimeout() {
 	resetMutableState.EXPECT().GetPendingWorkflowTask().Return(workflowTaskSchedule).AnyTimes()
 	smReg := hsm.NewRegistry()
 	s.NoError(workflow.RegisterStateMachine(smReg))
-	root, err := hsm.NewRoot(smReg,
-		workflow.StateMachineType,
-		nil,
-		make(map[string]*persistencespb.StateMachineMap),
-		nil,
-		s.logger)
+	root, err := hsm.NewRoot(smReg, workflow.StateMachineType, nil, make(map[string]*persistencespb.StateMachineMap), nil)
 	s.NoError(err)
 	resetMutableState.EXPECT().HSM().Return(root).AnyTimes()
 

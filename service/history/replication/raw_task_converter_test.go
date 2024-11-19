@@ -991,12 +991,7 @@ func (s *rawTaskConverterSuite) TestConvertSyncHSMTask_WorkflowFound() {
 	err = reg.RegisterMachine(stateMachineDef)
 	s.NoError(err)
 
-	root, err := hsm.NewRoot(reg,
-		workflow.StateMachineType,
-		s.mutableState,
-		make(map[string]*persistencespb.StateMachineMap),
-		s.mutableState,
-		s.logger)
+	root, err := hsm.NewRoot(reg, workflow.StateMachineType, s.mutableState, make(map[string]*persistencespb.StateMachineMap), s.mutableState)
 	s.NoError(err)
 	_, err = root.AddChild(hsm.Key{Type: stateMachineDef.Type(), ID: "child_1"}, hsmtest.NewData(hsmtest.State1))
 	s.NoError(err)
@@ -1067,12 +1062,7 @@ func (s *rawTaskConverterSuite) TestConvertSyncHSMTask_BufferedEvents() {
 	err = reg.RegisterMachine(stateMachineDef)
 	s.NoError(err)
 
-	root, err := hsm.NewRoot(reg,
-		workflow.StateMachineType,
-		s.mutableState,
-		make(map[string]*persistencespb.StateMachineMap),
-		s.mutableState,
-		s.logger)
+	root, err := hsm.NewRoot(reg, workflow.StateMachineType, s.mutableState, make(map[string]*persistencespb.StateMachineMap), s.mutableState)
 	s.NoError(err)
 	_, err = root.AddChild(hsm.Key{Type: stateMachineDef.Type(), ID: "child_1"}, hsmtest.NewData(hsmtest.State1))
 	s.NoError(err)

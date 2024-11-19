@@ -1642,7 +1642,6 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestExecuteStateMachineTimerTask_Ex
 		ms,
 		make(map[string]*persistencespb.StateMachineMap),
 		ms,
-		s.mockShard.GetLogger(),
 	)
 	s.NoError(err)
 
@@ -1656,7 +1655,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestExecuteStateMachineTimerTask_Ex
 	).AnyTimes()
 	ms.EXPECT().HSM().Return(root).AnyTimes()
 
-	_, err = dummy.MachineCollection(root.Node).Add("dummy", dummy.NewDummy())
+	_, err = dummy.MachineCollection(root).Add("dummy", dummy.NewDummy())
 	s.NoError(err)
 
 	dummyRoot, err := root.Child([]hsm.Key{
@@ -1777,7 +1776,6 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestExecuteStateMachineTimerTask_Va
 		ms,
 		make(map[string]*persistencespb.StateMachineMap),
 		ms,
-		s.mockShard.GetLogger(),
 	)
 	s.NoError(err)
 
@@ -1791,7 +1789,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestExecuteStateMachineTimerTask_Va
 	).AnyTimes()
 	ms.EXPECT().HSM().Return(root).AnyTimes()
 
-	_, err = dummy.MachineCollection(root.Node).Add("dummy", dummy.NewDummy())
+	_, err = dummy.MachineCollection(root).Add("dummy", dummy.NewDummy())
 	s.NoError(err)
 
 	dummyRoot, err := root.Child([]hsm.Key{
@@ -1887,7 +1885,6 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestExecuteStateMachineTimerTask_St
 		ms,
 		make(map[string]*persistencespb.StateMachineMap),
 		ms,
-		s.mockShard.GetLogger(),
 	)
 	s.NoError(err)
 
@@ -1901,7 +1898,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestExecuteStateMachineTimerTask_St
 	).AnyTimes()
 	ms.EXPECT().HSM().Return(root).AnyTimes()
 
-	_, err = dummy.MachineCollection(root.Node).Add("dummy", dummy.NewDummy())
+	_, err = dummy.MachineCollection(root).Add("dummy", dummy.NewDummy())
 	s.NoError(err)
 
 	// Track some tasks.
