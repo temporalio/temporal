@@ -30,6 +30,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"google.golang.org/protobuf/types/known/fieldmaskpb"
 	"net/url"
 	"strings"
 	"sync/atomic"
@@ -5147,8 +5148,44 @@ func getBatchOperationState(workflowState enumspb.WorkflowExecutionStatus) enums
 func (wh *WorkflowHandler) UpdateWorkflowExecutionOptions(
 	ctx context.Context,
 	request *workflowservice.UpdateWorkflowExecutionOptionsRequest,
-) (*workflowservice.UpdateWorkflowExecutionOptionsResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method UpdateWorkflowExecutionOptions not implemented")
+) (_ *workflowservice.UpdateWorkflowExecutionOptionsResponse, retError error) {
+	defer log.CapturePanic(wh.logger, &retError)
+	wh.logger.Debug("Received UpdateWorkflowExecutionOptions")
+	if request == nil {
+		return nil, errRequestNotSet
+	}
+	if request.GetWorkflowExecution().GetWorkflowId() == "" {
+		return nil, errWorkflowIDNotSet
+	}
+	if request.GetUpdateMask() == nil {
+		return nil, serviceerror.NewInvalidArgument("UpdateMask must be non-nil")
+	}
+	opts := request.GetWorkflowExecutionOptions()
+	_, err := fieldmaskpb.New(opts, request.GetUpdateMask().GetPaths()...) // errors if any of the paths are not in WorkflowExecutionOptions
+	if err != nil {
+		return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("error parsing UpdateMask: %s", err.Error()))
+	}
+	if opts.GetVersioningBehaviorOverride().GetBehavior() == enumspb.VERSIONING_BEHAVIOR_PINNED &&
+		opts.GetVersioningBehaviorOverride().GetWorkerDeployment() == nil {
+		return nil, serviceerror.NewInvalidArgument("Deployment must be set if behavior override is PINNED")
+	}
+
+	namespaceId, err := wh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
+	if err != nil {
+		return nil, err
+	}
+
+	response, err := wh.historyClient.UpdateWorkflowExecutionOptions(ctx, &historyservice.UpdateWorkflowExecutionOptionsRequest{
+		NamespaceId:   namespaceId.String(),
+		UpdateRequest: request,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return &workflowservice.UpdateWorkflowExecutionOptionsResponse{
+		WorkflowExecutionOptions: response.WorkflowExecutionOptions,
+	}, nil
 }
 
 func (wh *WorkflowHandler) UpdateActivityOptionsById(
