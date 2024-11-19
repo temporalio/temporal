@@ -4244,11 +4244,6 @@ func (ms *MutableStateImpl) AddWorkflowExecutionOptionsUpdatedEvent(
 	if err := ms.checkMutability(tag.WorkflowActionWorkflowOptionsUpdated); err != nil {
 		return nil, err
 	}
-
-	// Deployment has changed due to update, need to:
-	//   - Reschedule pending WFT on new deployment
-	//   - Reschedule pending Activities on a new deployment
-
 	event := ms.hBuilder.AddWorkflowExecutionOptionsUpdatedEvent(options, mask)
 	if err := ms.ApplyWorkflowExecutionOptionsUpdatedEvent(event); err != nil {
 		return nil, err
@@ -4258,22 +4253,19 @@ func (ms *MutableStateImpl) AddWorkflowExecutionOptionsUpdatedEvent(
 
 func (ms *MutableStateImpl) ApplyWorkflowExecutionOptionsUpdatedEvent(event *historypb.HistoryEvent) error {
 	attributes := event.GetWorkflowExecutionOptionsUpdatedEventAttributes()
-
 	// Merge the requested fields mentioned in the field mask with the current fields
 	mergedOpts, err := fieldmask.MergeOptions(
-		attributes.GetUpdateMask(),
+		attributes.GetUpdateMask().GetPaths(),
 		attributes.GetOptions(),
 		GetOptionsFromMutableState(ms),
 	)
 	if err != nil {
 		return err
 	}
+	// todo carly: if deployment changed, do I need to do anything with pending activities / WFTs in unsafe mode?
 	// todo carly part 2: do replay test on new deployment if deployment changed
-
-	// todo carly: instead of merging the MS with the field-masked update and then applying everything, would it be better/worse to go through each field separately, and only set it if it exists in the field mask?
 	ms.GetExecutionInfo().VersioningInfo.BehaviorOverride = mergedOpts.GetVersioningBehaviorOverride().GetBehavior()
 	ms.GetExecutionInfo().VersioningInfo.DeploymentOverride = mergedOpts.GetVersioningBehaviorOverride().GetWorkerDeployment()
-
 	ms.writeEventToCache(event)
 	return nil
 }

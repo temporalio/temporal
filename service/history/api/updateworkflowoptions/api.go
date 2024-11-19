@@ -72,7 +72,11 @@ func Invoke(
 			_ = req.GetRequestId()
 
 			// Merge the requested options mentioned in the field mask with the current options in the mutable state
-			mergedOpts, updateError := fieldmask.MergeOptions(req.GetUpdateMask(), req.GetWorkflowExecutionOptions(), workflow.GetOptionsFromMutableState(mutableState))
+			mergedOpts, updateError := fieldmask.MergeOptions(
+				req.GetUpdateMask().GetPaths(),
+				req.GetWorkflowExecutionOptions(),
+				workflow.GetOptionsFromMutableState(mutableState),
+			)
 			if updateError != nil {
 				return nil, updateError
 			}
