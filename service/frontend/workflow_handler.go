@@ -3108,6 +3108,31 @@ func (wh *WorkflowHandler) validateStartWorkflowArgsForSchedule(
 	return wh.validateSearchAttributes(unaliasedStartWorkflowSas, namespaceName)
 }
 
+func (wh *WorkflowHandler) DescribeDeployment(ctx context.Context, request *workflowservice.DescribeDeploymentRequest) (_ *workflowservice.DescribeDeploymentResponse, retError error) {
+	defer log.CapturePanic(wh.logger, &retError)
+
+	if request == nil {
+		return nil, errRequestNotSet
+	}
+
+	if !wh.config.EnableDeployments(request.Namespace) {
+		return nil, errDeploymentsNotAllowed
+	}
+
+	// build the workflow ID
+
+	/*
+		1. Develop the right workflowID to query based on worker deployment information
+			- user might give random information pertaining to a deployment - how do we wanna tackle?
+			- we should escape the given input string since we have done so when starting deployment wf
+		2. Query the workflow using the workflowID developed
+			- think about what happens if we can't query maybe because of wf termination/cancellation (query goes through!)
+		3. Parse the query response into the desired response object and give it back
+	*/
+	return nil, nil
+
+}
+
 // Returns the schedule description and current state of an existing schedule.
 func (wh *WorkflowHandler) DescribeSchedule(ctx context.Context, request *workflowservice.DescribeScheduleRequest) (_ *workflowservice.DescribeScheduleResponse, retError error) {
 	defer log.CapturePanic(wh.logger, &retError)

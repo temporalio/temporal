@@ -31,6 +31,7 @@ import (
 	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
+	deploypb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
@@ -60,13 +61,13 @@ type DeploymentClient interface {
 // implements DeploymentClient
 type DeploymentWorkflowClient struct {
 	namespaceEntry *namespace.Namespace
-	deployment     *commonpb.WorkerDeployment
+	deployment     *deploypb.Deployment
 	historyClient  resource.HistoryClient
 }
 
 func NewDeploymentWorkflowClient(
 	namespaceEntry *namespace.Namespace,
-	deployment *commonpb.WorkerDeployment,
+	deployment *deploypb.Deployment,
 	historyClient resource.HistoryClient,
 ) *DeploymentWorkflowClient {
 	return &DeploymentWorkflowClient{
@@ -84,7 +85,7 @@ func (d *DeploymentWorkflowClient) RegisterTaskQueueWorker(
 	maxIDLengthLimit int,
 ) error {
 	// validate params which are used for building workflowID's
-	err := d.validateDeploymentWfParams("DeploymentName", d.deployment.DeploymentName, maxIDLengthLimit)
+	err := d.validateDeploymentWfParams("DeploymentName", d.deployment.SeriesName, maxIDLengthLimit)
 	if err != nil {
 		return err
 	}
@@ -164,8 +165,8 @@ func (d *DeploymentWorkflowClient) RegisterTaskQueueWorker(
 // workflowID which are used in our deployment workflows
 func (d *DeploymentWorkflowClient) generateDeploymentWorkflowID() string {
 	// escaping the reserved workflow delimiter (|) from the inputs, if present
-	escapedDeploymentName := d.escapeChar(d.deployment.DeploymentName)
-	escapedBuildId := d.escapeChar(d.deployment.BuildId)
+	escapedDeploymentName := escapeChar(d.deployment.SeriesName)
+	escapedBuildId := escapeChar(d.deployment.BuildId)
 
 	return DeploymentWorkflowIDPrefix + DeploymentWorkflowIDDelimeter + escapedDeploymentName + DeploymentWorkflowIDDelimeter + escapedBuildId
 }
@@ -211,7 +212,7 @@ func (d *DeploymentWorkflowClient) validateDeploymentWfParams(fieldName string, 
 	return common.ValidateUTF8String(fieldName, field)
 }
 
-func (d *DeploymentWorkflowClient) escapeChar(s string) string {
+func escapeChar(s string) string {
 	s = strings.Replace(s, `\`, `\\`, -1)
 	s = strings.Replace(s, DeploymentWorkflowIDDelimeter, `\`+DeploymentWorkflowIDDelimeter, -1)
 	return s

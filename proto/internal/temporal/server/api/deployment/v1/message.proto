@@ -28,10 +28,10 @@ option go_package = "go.temporal.io/server/api/deployment/v1;deployment";
 
 import "temporal/api/enums/v1/task_queue.proto";
 import "google/protobuf/timestamp.proto";
-import "temporal/api/common/v1/message.proto";
+import "temporal/api/deployment/v1/message.proto";
 
 message DeploymentLocalState {
-    temporal.api.common.v1.WorkerDeployment worker_deployment = 1;
+    temporal.api.deployment.v1.Deployment worker_deployment = 1;
     map<string, TaskQueueFamilyInfo> task_queue_families = 2;
     
     message TaskQueueFamilyInfo {

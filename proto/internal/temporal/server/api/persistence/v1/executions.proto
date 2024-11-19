@@ -47,6 +47,7 @@ import "temporal/server/api/persistence/v1/queues.proto";
 import "temporal/server/api/persistence/v1/hsm.proto";
 import "temporal/server/api/persistence/v1/update.proto";
 import "temporal/server/api/workflow/v1/message.proto";
+import "temporal/api/deployment/v1/message.proto";
 
 // shard column
 message ShardInfo {
@@ -266,12 +267,12 @@ message WorkflowExecutionInfo {
         temporal.api.enums.v1.VersioningBehavior behavior = 1;
         // The worker deployment to which this workflow is assigned currently.
         // Must be present if and only if `behavior` is set.
-        temporal.api.common.v1.WorkerDeployment deployment = 2;
+        temporal.api.deployment.v1.Deployment deployment = 2;
         // Manual override for execution's versioning behavior. Takes precedence over `behavior`.
         temporal.api.enums.v1.VersioningBehavior behavior_override = 3;
         // Used to manually pin the execution to a deployment. Must be set if and only if
         // `behavior_override` is PINNED. Takes precedence over `deployment`.
-        temporal.api.common.v1.WorkerDeployment deployment_override = 4;
+        temporal.api.deployment.v1.Deployment deployment_override = 4;
         // When present, indicates the workflow is being redirected to a different deployment.
         // A redirect can only exist during the lifetime of a pending workflow task.
         // If the pending workflow task completes (at the next WorkflowTaskCompleted event), the
@@ -283,7 +284,7 @@ message WorkflowExecutionInfo {
         message RedirectInfo {
             // The target deployment of the redirect. Null means a so-far-versioned workflow is
             // being redirected to unversioned workers.
-            temporal.api.common.v1.WorkerDeployment deployment = 1;
+            temporal.api.deployment.v1.Deployment deployment = 1;
             // If present, it means the redirect is initiated by a (safe) manual versioning
             // override. Such override is only applied to the workflow when and if the redirect
             // successfully completes.
@@ -510,7 +511,7 @@ message ActivityInfo {
 
     // The deployment this activity was dispatched to most recently. Present only if the activity
     // was dispatched to a versioned worker.
-    temporal.api.common.v1.WorkerDeployment last_started_deployment = 40;
+    temporal.api.deployment.v1.Deployment last_started_deployment = 40;
 }
 
 // timer_map column
