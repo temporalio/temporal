@@ -338,62 +338,48 @@ func (n *Node) AddChild(key Key, data any) (*Node, error) {
 	return node, nil
 }
 
-// DeleteChild removes a child node and all its descendants
-func (n *Node) DeleteChild(path []Key) error {
+// DeleteChild removes an immediate child node and all its descendants
+func (n *Node) DeleteChild(key Key) error {
 	if n.cache.deleted {
-		return fmt.Errorf("cannot delete from deleted node: %v", n.Key)
+		return fmt.Errorf("%w: cannot delete from deleted node: %v", ErrStateMachineInvalidState, n.Key)
 	}
 
-	if len(path) == 0 {
-		return fmt.Errorf("cannot delete empty path")
-	}
-
-	childKey := path[0]
-	if len(path) == 1 {
-		child, err := n.Child([]Key{childKey})
-		if err != nil {
-			return fmt.Errorf("failed to get child: %w", err)
-		}
-
-		// Mark entire subtree as deleted
-		if err := child.Walk(func(n *Node) error {
-			n.cache.deleted = true
-			return nil
-		}); err != nil {
-			return fmt.Errorf("failed to mark subtree as deleted: %w", err)
-		}
-
-		// Track deletion in root's tombstones
-		root := n
-		for root.Parent != nil {
-			root = root.Parent
-		}
-		vt := &persistencespb.VersionedTransition{
-			NamespaceFailoverVersion: n.backend.GetCurrentVersion(),
-			TransitionCount:          n.backend.NextTransitionCount(),
-		}
-		root.tombstones.TrackDeletion(child.Path(), vt)
-
-		// Remove from parent's children map
-		machinesMap := n.persistence.Children[childKey.Type]
-		if machinesMap != nil {
-			delete(machinesMap.MachinesById, childKey.ID)
-			if len(machinesMap.MachinesById) == 0 {
-				delete(n.persistence.Children, childKey.Type)
-			}
-		}
-
-		// Remove from cache
-		delete(n.cache.children, childKey)
-		return nil
-	}
-
-	child, err := n.Child([]Key{childKey})
+	child, err := n.Child([]Key{key})
 	if err != nil {
-		return fmt.Errorf("failed to get child: %w", err)
+		return err
 	}
 
-	return child.DeleteChild(path[1:])
+	// Mark entire subtree as deleted
+	if err := child.Walk(func(n *Node) error {
+		n.cache.deleted = true
+		return nil
+	}); err != nil {
+		return err
+	}
+
+	// Track deletion in root's tombstones
+	root := n
+	for root.Parent != nil {
+		root = root.Parent
+	}
+	vt := &persistencespb.VersionedTransition{
+		NamespaceFailoverVersion: n.backend.GetCurrentVersion(),
+		TransitionCount:          n.backend.NextTransitionCount(),
+	}
+	root.tombstones.TrackDeletion(child.Path(), vt)
+
+	// Remove from parent's children map
+	machinesMap := n.persistence.Children[key.Type]
+	if machinesMap != nil {
+		delete(machinesMap.MachinesById, key.ID)
+		if len(machinesMap.MachinesById) == 0 {
+			delete(n.persistence.Children, key.Type)
+		}
+	}
+
+	// Remove from cache
+	delete(n.cache.children, key)
+	return nil
 }
 
 // AddHistoryEvent adds a history event to be committed at the end of the current transaction.
@@ -514,7 +500,7 @@ func (n *Node) Sync(incomingNode *Node) error {
 			node.cache.deleted = true
 			return nil
 		}); err != nil {
-			return fmt.Errorf("failed to mark subtree as deleted: %w", err)
+			return err
 		}
 
 		// Track deletion in our tombstones
