@@ -5144,9 +5144,7 @@ func (s *UpdateWorkflowSuite) TestUpdateWithStart() {
 			tv := testvars.New(s.T())
 
 			// start workflow
-			initReq := startWorkflowReq(tv)
-			initReq.TaskQueue.Name = initReq.TaskQueue.Name + "-init" // avoid race condition with poller
-			initWF, err := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), initReq)
+			firstWF, err := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), startWorkflowReq(tv))
 			s.NoError(err)
 
 			_, err = s.TaskPoller.PollAndHandleWorkflowTask(tv, taskpoller.DrainWorkflowTask)
@@ -5180,7 +5178,7 @@ func (s *UpdateWorkflowSuite) TestUpdateWithStart() {
 			descResp, err := s.FrontendClient().DescribeWorkflowExecution(testcore.NewContext(),
 				&workflowservice.DescribeWorkflowExecutionRequest{
 					Namespace: s.Namespace(),
-					Execution: &commonpb.WorkflowExecution{WorkflowId: startReq.WorkflowId, RunId: initWF.RunId},
+					Execution: &commonpb.WorkflowExecution{WorkflowId: startReq.WorkflowId, RunId: firstWF.RunId},
 				})
 			s.NoError(err)
 			s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED, descResp.WorkflowExecutionInfo.Status)
