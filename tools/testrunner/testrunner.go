@@ -104,17 +104,21 @@ func (a attempt) failures() []string {
 	root := node{children: make(map[string]node)}
 
 	for _, suite := range a.suites.Suites {
+		if suite.Failures == 0 {
+			continue
+		}
 		for _, tc := range suite.Testcases {
-			if tc.Failure != nil {
-				n := root
-				for _, part := range strings.Split(tc.Name, "/") {
-					child, ok := n.children[part]
-					if !ok {
-						child = node{children: make(map[string]node)}
-						n.children[part] = child
-					}
-					n = child
+			if tc.Failure == nil {
+				continue
+			}
+			n := root
+			for _, part := range strings.Split(tc.Name, "/") {
+				child, ok := n.children[part]
+				if !ok {
+					child = node{children: make(map[string]node)}
+					n.children[part] = child
 				}
+				n = child
 			}
 		}
 	}
