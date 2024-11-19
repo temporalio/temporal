@@ -338,7 +338,7 @@ func TestProcessInvocationTask(t *testing.T) {
 			destinationDown:       true,
 			expectedMetricOutcome: "request-timeout",
 			onStartOperation: func(ctx context.Context, service, operation string, input *nexus.LazyValue, options nexus.StartOperationOptions) (nexus.HandlerStartOperationResult[any], error) {
-				time.Sleep(time.Millisecond * 100)
+				time.Sleep(time.Millisecond * 100) //nolint:forbidigo // Allow time.Sleep for timeout tests
 				return &nexus.HandlerStartOperationResultAsync{OperationID: "op-id"}, nil
 			},
 			checkOutcome: func(t *testing.T, op nexusoperations.Operation, events []*historypb.HistoryEvent) {
