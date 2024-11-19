@@ -75,7 +75,6 @@ import (
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/visibility"
 	"go.temporal.io/server/common/persistence/visibility/manager"
-	"go.temporal.io/server/common/persistence/visibility/store"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/retrypolicy"
@@ -4030,36 +4029,11 @@ func (wh *WorkflowHandler) StartBatchOperation(
 		Namespace: request.GetNamespace(),
 		Query:     batcher.OpenBatchOperationQuery,
 	})
-	openBatchOperationCount := 0
-	if err == nil {
-		openBatchOperationCount = int(countResp.GetCount())
-	} else {
-		if !errors.Is(err, store.OperationNotSupportedErr) {
-			return nil, err
-		}
-		// Some std visibility stores don't yet support CountWorkflowExecutions, even though some
-		// batch operations are still possible on those store (eg. by specyfing a list of Executions
-		// rather than a VisibilityQuery). Fallback to ListOpenWorkflowExecutions in these cases.
-		// TODO: Remove this once all std visibility stores support CountWorkflowExecutions.
-		nextPageToken := []byte{}
-		for nextPageToken != nil && openBatchOperationCount < maxConcurrentBatchOperation {
-			listResp, err := wh.ListOpenWorkflowExecutions(ctx, &workflowservice.ListOpenWorkflowExecutionsRequest{
-				Namespace: request.GetNamespace(),
-				Filters: &workflowservice.ListOpenWorkflowExecutionsRequest_TypeFilter{
-					TypeFilter: &filterpb.WorkflowTypeFilter{
-						Name: batcher.BatchWFTypeName,
-					},
-				},
-				MaximumPageSize: int32(maxConcurrentBatchOperation - openBatchOperationCount),
-				NextPageToken:   nextPageToken,
-			})
-			if err != nil {
-				return nil, err
-			}
-			openBatchOperationCount += len(listResp.Executions)
-			nextPageToken = listResp.NextPageToken
-		}
+	if err != nil {
+		return nil, err
 	}
+
+	openBatchOperationCount := int(countResp.GetCount())
 	if openBatchOperationCount >= maxConcurrentBatchOperation {
 		return nil, &serviceerror.ResourceExhausted{
 			Cause:   enumspb.RESOURCE_EXHAUSTED_CAUSE_CONCURRENT_LIMIT,
@@ -5158,7 +5132,44 @@ func (wh *WorkflowHandler) UpdateActivityOptionsById(
 		return nil, status.Errorf(codes.Unimplemented, "method UpdateActivityOptionsById not implemented")
 	}
 
-	wh.logger.Debug("Received UpdateActivityOptionsById")
+	if request == nil {
+		return nil, errRequestNotSet
+	}
+	if request.GetWorkflowId() == "" {
+		return nil, errWorkflowIDNotSet
+	}
+	if request.GetActivityId() == "" {
+		return nil, errActivityIDNotSet
+	}
+
+	namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
+	if err != nil {
+		return nil, err
+	}
+
+	response, err := wh.historyClient.UpdateActivityOptions(ctx, &historyservice.UpdateActivityOptionsRequest{
+		NamespaceId:   namespaceID.String(),
+		UpdateRequest: request,
+	})
+
+	if err != nil {
+		return nil, err
+	}
+
+	return &workflowservice.UpdateActivityOptionsByIdResponse{
+		ActivityOptions: response.ActivityOptions,
+	}, nil
+}
+
+func (wh *WorkflowHandler) PauseActivityById(
+	ctx context.Context,
+	request *workflowservice.PauseActivityByIdRequest,
+) (_ *workflowservice.PauseActivityByIdResponse, retError error) {
+	defer log.CapturePanic(wh.logger, &retError)
+
+	if !wh.config.ActivityAPIsEnabled(request.GetNamespace()) {
+		return nil, status.Errorf(codes.Unimplemented, "method PauseActivityById not implemented")
+	}
 
 	if request == nil {
 		return nil, errRequestNotSet
@@ -5170,21 +5181,91 @@ func (wh *WorkflowHandler) UpdateActivityOptionsById(
 		return nil, errActivityIDNotSet
 	}
 
-	namespaceId, err := wh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
+	namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
 	if err != nil {
 		return nil, err
 	}
 
-	response, err := wh.historyClient.UpdateActivityOptions(ctx, &historyservice.UpdateActivityOptionsRequest{
-		NamespaceId:   namespaceId.String(),
-		UpdateRequest: request,
+	_, err = wh.historyClient.PauseActivity(ctx, &historyservice.PauseActivityRequest{
+		NamespaceId:     namespaceID.String(),
+		FrontendRequest: request,
 	})
 
 	if err != nil {
 		return nil, err
 	}
 
-	return &workflowservice.UpdateActivityOptionsByIdResponse{
-		ActivityOptions: response.ActivityOptions,
-	}, nil
+	return &workflowservice.PauseActivityByIdResponse{}, nil
+}
+
+func (wh *WorkflowHandler) UnpauseActivityById(
+	ctx context.Context, request *workflowservice.UnpauseActivityByIdRequest,
+) (_ *workflowservice.UnpauseActivityByIdResponse, retError error) {
+	defer log.CapturePanic(wh.logger, &retError)
+
+	if !wh.config.ActivityAPIsEnabled(request.GetNamespace()) {
+		return nil, status.Errorf(codes.Unimplemented, "method UnpauseActivityById not implemented")
+	}
+
+	if request == nil {
+		return nil, errRequestNotSet
+	}
+	if request.GetWorkflowId() == "" {
+		return nil, errWorkflowIDNotSet
+	}
+	if request.GetActivityId() == "" {
+		return nil, errActivityIDNotSet
+	}
+
+	namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
+	if err != nil {
+		return nil, err
+	}
+
+	_, err = wh.historyClient.UnpauseActivity(ctx, &historyservice.UnpauseActivityRequest{
+		NamespaceId:     namespaceID.String(),
+		FrontendRequest: request,
+	})
+
+	if err != nil {
+		return nil, err
+	}
+
+	return &workflowservice.UnpauseActivityByIdResponse{}, nil
+}
+
+func (wh *WorkflowHandler) ResetActivityById(
+	ctx context.Context, request *workflowservice.ResetActivityByIdRequest,
+) (_ *workflowservice.ResetActivityByIdResponse, retError error) {
+	defer log.CapturePanic(wh.logger, &retError)
+
+	if !wh.config.ActivityAPIsEnabled(request.GetNamespace()) {
+		return nil, status.Errorf(codes.Unimplemented, "method ResetActivityById not implemented")
+	}
+
+	if request == nil {
+		return nil, errRequestNotSet
+	}
+	if request.GetWorkflowId() == "" {
+		return nil, errWorkflowIDNotSet
+	}
+	if request.GetActivityId() == "" {
+		return nil, errActivityIDNotSet
+	}
+
+	namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
+	if err != nil {
+		return nil, err
+	}
+
+	_, err = wh.historyClient.ResetActivity(ctx, &historyservice.ResetActivityRequest{
+		NamespaceId:     namespaceID.String(),
+		FrontendRequest: request,
+	})
+
+	if err != nil {
+		return nil, err
+	}
+
+	return &workflowservice.ResetActivityByIdResponse{}, nil
 }

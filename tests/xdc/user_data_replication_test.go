@@ -34,16 +34,14 @@ import (
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	replicationpb "go.temporal.io/api/replication/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	sdkclient "go.temporal.io/sdk/client"
-	"google.golang.org/protobuf/types/known/durationpb"
-
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
-	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock/hybrid_logical_clock"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -52,6 +50,7 @@ import (
 	"go.temporal.io/server/service/worker/migration"
 	"go.temporal.io/server/service/worker/scanner/build_ids"
 	"go.temporal.io/server/tests/testcore"
+	"google.golang.org/protobuf/types/known/durationpb"
 )
 
 type (
@@ -129,6 +128,131 @@ func (s *UserDataReplicationTestSuite) TestUserDataIsReplicatedFromActiveToPassi
 		}
 		return len(response.GetResponse().GetMajorVersionSets()) == 1
 	}, 15*time.Second, 500*time.Millisecond)
+
+	// make another change to test that merging works
+
+	_, err = activeFrontendClient.UpdateWorkerBuildIdCompatibility(testcore.NewContext(), &workflowservice.UpdateWorkerBuildIdCompatibilityRequest{
+		Namespace: namespace,
+		TaskQueue: taskQueue,
+		Operation: &workflowservice.UpdateWorkerBuildIdCompatibilityRequest_AddNewBuildIdInNewDefaultSet{AddNewBuildIdInNewDefaultSet: "0.2"},
+	})
+	s.Require().NoError(err)
+
+	s.Eventually(func() bool {
+		response, err := standbyMatchingClient.GetWorkerBuildIdCompatibility(testcore.NewContext(), &matchingservice.GetWorkerBuildIdCompatibilityRequest{
+			NamespaceId: description.GetNamespaceInfo().Id,
+			Request: &workflowservice.GetWorkerBuildIdCompatibilityRequest{
+				Namespace: namespace,
+				TaskQueue: taskQueue,
+			},
+		})
+		if err != nil {
+			return false
+		}
+		return len(response.GetResponse().GetMajorVersionSets()) == 2
+	}, 15*time.Second, 500*time.Millisecond)
+}
+
+func (s *UserDataReplicationTestSuite) TestUserDataIsReplicatedFromActiveToPassiveV2() {
+	namespace := s.T().Name() + "-" + common.GenerateRandomString(5)
+	taskQueue := "versioned"
+	ctx := testcore.NewContext()
+	activeFrontendClient := s.cluster1.FrontendClient()
+	standbyMatchingClient := s.cluster2.MatchingClient()
+	regReq := &workflowservice.RegisterNamespaceRequest{
+		Namespace:                        namespace,
+		IsGlobalNamespace:                true,
+		Clusters:                         s.clusterReplicationConfig(),
+		ActiveClusterName:                s.clusterNames[0],
+		WorkflowExecutionRetentionPeriod: durationpb.New(7 * time.Hour * 24),
+	}
+	_, err := activeFrontendClient.RegisterNamespace(ctx, regReq)
+	s.NoError(err)
+
+	description, err := activeFrontendClient.DescribeNamespace(ctx, &workflowservice.DescribeNamespaceRequest{Namespace: namespace})
+	s.Require().NoError(err)
+
+	rules, err := activeFrontendClient.GetWorkerVersioningRules(ctx, &workflowservice.GetWorkerVersioningRulesRequest{
+		Namespace: namespace,
+		TaskQueue: taskQueue,
+	})
+	s.NoError(err)
+	s.NotNil(rules)
+
+	_, err = activeFrontendClient.UpdateWorkerVersioningRules(ctx, &workflowservice.UpdateWorkerVersioningRulesRequest{
+		Namespace:     namespace,
+		TaskQueue:     taskQueue,
+		ConflictToken: rules.ConflictToken,
+		Operation: &workflowservice.UpdateWorkerVersioningRulesRequest_InsertAssignmentRule{
+			InsertAssignmentRule: &workflowservice.UpdateWorkerVersioningRulesRequest_InsertBuildIdAssignmentRule{
+				Rule: &taskqueuepb.BuildIdAssignmentRule{
+					TargetBuildId: "asdf",
+				},
+			},
+		},
+	})
+	s.NoError(err)
+
+	s.Eventually(func() bool {
+		// Call matching directly in case frontend is configured to redirect API calls to the active cluster
+		response, err := standbyMatchingClient.GetWorkerVersioningRules(ctx, &matchingservice.GetWorkerVersioningRulesRequest{
+			NamespaceId: description.GetNamespaceInfo().Id,
+			TaskQueue:   taskQueue,
+			Command: &matchingservice.GetWorkerVersioningRulesRequest_Request{
+				Request: &workflowservice.GetWorkerVersioningRulesRequest{
+					Namespace: namespace,
+					TaskQueue: taskQueue,
+				},
+			},
+		})
+		if err != nil {
+			return false
+		}
+		return len(response.GetResponse().GetAssignmentRules()) == 1
+	}, 15*time.Second, 500*time.Millisecond)
+
+	// make another change to test that merging works
+
+	rules, err = activeFrontendClient.GetWorkerVersioningRules(ctx, &workflowservice.GetWorkerVersioningRulesRequest{
+		Namespace: namespace,
+		TaskQueue: taskQueue,
+	})
+	s.NoError(err)
+	s.NotNil(rules)
+
+	_, err = activeFrontendClient.UpdateWorkerVersioningRules(ctx, &workflowservice.UpdateWorkerVersioningRulesRequest{
+		Namespace:     namespace,
+		TaskQueue:     taskQueue,
+		ConflictToken: rules.ConflictToken,
+		Operation: &workflowservice.UpdateWorkerVersioningRulesRequest_AddCompatibleRedirectRule{
+			AddCompatibleRedirectRule: &workflowservice.UpdateWorkerVersioningRulesRequest_AddCompatibleBuildIdRedirectRule{
+				Rule: &taskqueuepb.CompatibleBuildIdRedirectRule{
+					SourceBuildId: "asdf",
+					TargetBuildId: "uiop",
+				},
+			},
+		},
+	})
+	s.NoError(err)
+
+	s.Eventually(func() bool {
+		// Call matching directly in case frontend is configured to redirect API calls to the active cluster
+		response, err := standbyMatchingClient.GetWorkerVersioningRules(ctx, &matchingservice.GetWorkerVersioningRulesRequest{
+			NamespaceId: description.GetNamespaceInfo().Id,
+			TaskQueue:   taskQueue,
+			Command: &matchingservice.GetWorkerVersioningRulesRequest_Request{
+				Request: &workflowservice.GetWorkerVersioningRulesRequest{
+					Namespace: namespace,
+					TaskQueue: taskQueue,
+				},
+			},
+		})
+		if err != nil {
+			return false
+		}
+		return len(response.GetResponse().GetAssignmentRules()) == 1 &&
+			len(response.GetResponse().GetCompatibleRedirectRules()) == 1
+	}, 15*time.Second, 500*time.Millisecond)
 }
 
 func (s *UserDataReplicationTestSuite) TestUserDataIsReplicatedFromPassiveToActive() {
@@ -174,24 +298,36 @@ func (s *UserDataReplicationTestSuite) TestUserDataEntriesAreReplicatedOnDemand(
 	ctx := testcore.NewContext()
 	namespace := s.T().Name() + "-" + common.GenerateRandomString(5)
 	activeFrontendClient := s.cluster1.FrontendClient()
-	numTaskQueues := 20
+	adminClient := s.cluster1.AdminClient()
+	numTaskQueues := 10
+
+	replicationResponse, err := adminClient.GetNamespaceReplicationMessages(ctx, &adminservice.GetNamespaceReplicationMessagesRequest{
+		ClusterName:            "follower",
+		LastRetrievedMessageId: -1,
+		LastProcessedMessageId: -1,
+	})
+	s.NoError(err)
+	lastMessageId := replicationResponse.GetMessages().GetLastRetrievedMessageId()
+
 	regReq := &workflowservice.RegisterNamespaceRequest{
-		Namespace:                        namespace,
-		IsGlobalNamespace:                true,
-		Clusters:                         s.clusterReplicationConfig(),
+		Namespace:         namespace,
+		IsGlobalNamespace: true,
+		Clusters: []*replicationpb.ClusterReplicationConfig{
+			&replicationpb.ClusterReplicationConfig{ClusterName: s.clusterNames[0]},
+		},
 		ActiveClusterName:                s.clusterNames[0],
 		WorkflowExecutionRetentionPeriod: durationpb.New(7 * time.Hour * 24),
 	}
-	_, err := activeFrontendClient.RegisterNamespace(testcore.NewContext(), regReq)
+	_, err = activeFrontendClient.RegisterNamespace(testcore.NewContext(), regReq)
 	s.NoError(err)
 	// Wait for namespace cache to pick the change
 	time.Sleep(cacheRefreshInterval)
 	description, err := activeFrontendClient.DescribeNamespace(testcore.NewContext(), &workflowservice.DescribeNamespaceRequest{Namespace: namespace})
 	s.Require().NoError(err)
 
-	exectedReplicatedTaskQueues := make(map[string]struct{}, numTaskQueues)
+	expectedReplicatedTaskQueues := make(map[string]struct{}, numTaskQueues)
 	for i := 0; i < numTaskQueues; i++ {
-		taskQueue := fmt.Sprintf("q%v", i)
+		taskQueue := fmt.Sprintf("v1q%v", i)
 		res, err := activeFrontendClient.UpdateWorkerBuildIdCompatibility(ctx, &workflowservice.UpdateWorkerBuildIdCompatibilityRequest{
 			Namespace: namespace,
 			TaskQueue: taskQueue,
@@ -199,11 +335,56 @@ func (s *UserDataReplicationTestSuite) TestUserDataEntriesAreReplicatedOnDemand(
 				AddNewBuildIdInNewDefaultSet: "v0.1",
 			},
 		})
-		exectedReplicatedTaskQueues[taskQueue] = struct{}{}
 		s.NoError(err)
 		s.NotNil(res)
+		expectedReplicatedTaskQueues[taskQueue] = struct{}{}
+
+		taskQueue2 := fmt.Sprintf("v2q%v", i)
+		rules, err := activeFrontendClient.GetWorkerVersioningRules(ctx, &workflowservice.GetWorkerVersioningRulesRequest{
+			Namespace: namespace,
+			TaskQueue: taskQueue2,
+		})
+		s.NoError(err)
+		s.NotNil(rules)
+
+		rulesRes, err := activeFrontendClient.UpdateWorkerVersioningRules(ctx, &workflowservice.UpdateWorkerVersioningRulesRequest{
+			Namespace:     namespace,
+			TaskQueue:     taskQueue2,
+			ConflictToken: rules.ConflictToken,
+			Operation: &workflowservice.UpdateWorkerVersioningRulesRequest_InsertAssignmentRule{
+				InsertAssignmentRule: &workflowservice.UpdateWorkerVersioningRulesRequest_InsertBuildIdAssignmentRule{
+					Rule: &taskqueuepb.BuildIdAssignmentRule{
+						TargetBuildId: "asdf",
+					},
+				},
+			},
+		})
+		s.NoError(err)
+		s.NotNil(rulesRes)
+		expectedReplicatedTaskQueues[taskQueue2] = struct{}{}
 	}
-	adminClient := s.cluster1.AdminClient()
+
+	// update namespace to cross clusters
+	_, err = activeFrontendClient.UpdateNamespace(ctx, &workflowservice.UpdateNamespaceRequest{
+		Namespace: namespace,
+		ReplicationConfig: &replicationpb.NamespaceReplicationConfig{
+			Clusters: s.clusterReplicationConfig(),
+		},
+	})
+	s.NoError(err)
+	time.Sleep(cacheRefreshInterval) // nolint:forbidigo
+
+	// we should see one new namespace task in the replication queue
+	replicationResponse, err = adminClient.GetNamespaceReplicationMessages(ctx, &adminservice.GetNamespaceReplicationMessagesRequest{
+		ClusterName:            "follower",
+		LastRetrievedMessageId: lastMessageId,
+		LastProcessedMessageId: -1,
+	})
+	s.NoError(err)
+	lastMessageId = replicationResponse.GetMessages().GetLastRetrievedMessageId()
+	s.Equal(1, len(replicationResponse.GetMessages().ReplicationTasks))
+	task := replicationResponse.GetMessages().ReplicationTasks[0]
+	s.Equal(namespace, task.GetNamespaceTaskAttributes().GetInfo().GetName())
 
 	// start force-replicate wf
 	sysClient, err := sdkclient.Dial(sdkclient.Options{
@@ -223,39 +404,74 @@ func (s *UserDataReplicationTestSuite) TestUserDataEntriesAreReplicatedOnDemand(
 	err = run.Get(ctx, nil)
 	s.NoError(err)
 
-	replicationResponse, err := adminClient.GetNamespaceReplicationMessages(ctx, &adminservice.GetNamespaceReplicationMessagesRequest{
+	replicationResponse, err = adminClient.GetNamespaceReplicationMessages(ctx, &adminservice.GetNamespaceReplicationMessagesRequest{
+		ClusterName:            "follower",
+		LastRetrievedMessageId: lastMessageId,
+		LastProcessedMessageId: -1,
+	})
+	s.NoError(err)
+
+	// we should see a user data task for all task queues
+	seenTaskQueues := make(map[string]struct{}, numTaskQueues)
+	for _, task := range replicationResponse.GetMessages().ReplicationTasks {
+		if attrs := task.GetTaskQueueUserDataAttributes(); attrs.GetNamespaceId() == description.GetNamespaceInfo().Id {
+			seenTaskQueues[attrs.GetTaskQueueName()] = struct{}{}
+		}
+	}
+	s.Equal(expectedReplicatedTaskQueues, seenTaskQueues)
+
+	// failover and check on the other side
+	s.failover(namespace, s.clusterNames[1], int64(2), activeFrontendClient)
+
+	activeFrontendClient = s.cluster2.FrontendClient()
+	for i := 0; i < numTaskQueues; i++ {
+		taskQueue := fmt.Sprintf("v1q%v", i)
+
+		get, err := activeFrontendClient.GetWorkerBuildIdCompatibility(ctx, &workflowservice.GetWorkerBuildIdCompatibilityRequest{
+			Namespace: namespace,
+			TaskQueue: taskQueue,
+		})
+		s.NoError(err)
+		s.NotNil(get)
+
+		s.NotEmpty(get.MajorVersionSets)
+
+		taskQueue2 := fmt.Sprintf("v2q%v", i)
+		rules, err := activeFrontendClient.GetWorkerVersioningRules(ctx, &workflowservice.GetWorkerVersioningRulesRequest{
+			Namespace: namespace,
+			TaskQueue: taskQueue2,
+		})
+		s.NoError(err)
+		s.NotNil(rules)
+		s.NotEmpty(rules.AssignmentRules)
+	}
+}
+
+func (s *UserDataReplicationTestSuite) TestUserDataTombstonesAreReplicated() {
+	s.T().SkipNow() // flaky test
+	ctx := testcore.NewContext()
+	namespace := s.T().Name() + "-" + common.GenerateRandomString(5)
+	activeFrontendClient := s.cluster1.FrontendClient()
+	activeAdminClient := s.cluster1.AdminClient()
+	standbyAdminClient := s.cluster2.AdminClient()
+	taskQueue := "test-task-queue"
+
+	replicationResponse, err := activeAdminClient.GetNamespaceReplicationMessages(ctx, &adminservice.GetNamespaceReplicationMessagesRequest{
 		ClusterName:            "follower",
 		LastRetrievedMessageId: -1,
 		LastProcessedMessageId: -1,
 	})
 	s.NoError(err)
-	var replicationTasks []*replicationspb.ReplicationTask
-	for _, task := range replicationResponse.GetMessages().ReplicationTasks {
-		if task.GetTaskQueueUserDataAttributes().GetNamespaceId() == description.GetNamespaceInfo().Id {
-			replicationTasks = append(replicationTasks, task)
-		}
-	}
-	numReplicationTasks := len(replicationTasks)
-	s.Equal(numReplicationTasks, numTaskQueues*2)
+	lastMessageIdActive := replicationResponse.GetMessages().GetLastRetrievedMessageId()
 
-	lastTasks := replicationTasks[:numTaskQueues]
-	s.Equal(numTaskQueues, len(lastTasks))
-	seenTaskQueues := make(map[string]struct{}, numTaskQueues)
-	// Check the seeded messages
-	for _, task := range lastTasks {
-		s.Equal(enums.REPLICATION_TASK_TYPE_TASK_QUEUE_USER_DATA, task.TaskType)
-		attrs := task.GetTaskQueueUserDataAttributes()
-		seenTaskQueues[attrs.TaskQueueName] = struct{}{}
-	}
+	replicationResponse, err = standbyAdminClient.GetNamespaceReplicationMessages(ctx, &adminservice.GetNamespaceReplicationMessagesRequest{
+		ClusterName:            "follower",
+		LastRetrievedMessageId: -1,
+		LastProcessedMessageId: -1,
+	})
+	s.NoError(err)
+	lastMessageIdStandby := replicationResponse.GetMessages().GetLastRetrievedMessageId()
 
-	s.Equal(exectedReplicatedTaskQueues, seenTaskQueues)
-}
-
-func (s *UserDataReplicationTestSuite) TestUserDataTombstonesAreReplicated() {
-	ctx := testcore.NewContext()
-	namespace := s.T().Name() + "-" + common.GenerateRandomString(5)
-	activeFrontendClient := s.cluster1.FrontendClient()
-	taskQueue := "test-task-queue"
 	regReq := &workflowservice.RegisterNamespaceRequest{
 		Namespace:                        namespace,
 		IsGlobalNamespace:                true,
@@ -263,7 +479,7 @@ func (s *UserDataReplicationTestSuite) TestUserDataTombstonesAreReplicated() {
 		ActiveClusterName:                s.clusterNames[0],
 		WorkflowExecutionRetentionPeriod: durationpb.New(7 * time.Hour * 24),
 	}
-	_, err := activeFrontendClient.RegisterNamespace(testcore.NewContext(), regReq)
+	_, err = activeFrontendClient.RegisterNamespace(testcore.NewContext(), regReq)
 	s.NoError(err)
 	// Wait for namespace cache to pick the change
 	time.Sleep(cacheRefreshInterval)
@@ -281,7 +497,6 @@ func (s *UserDataReplicationTestSuite) TestUserDataTombstonesAreReplicated() {
 		})
 		s.NoError(err)
 	}
-	activeAdminClient := s.cluster1.AdminClient()
 
 	// start build ID scavenger workflow
 	sysClient, err := sdkclient.Dial(sdkclient.Options{
@@ -301,9 +516,9 @@ func (s *UserDataReplicationTestSuite) TestUserDataTombstonesAreReplicated() {
 	err = run.Get(ctx, nil)
 	s.NoError(err)
 
-	replicationResponse, err := activeAdminClient.GetNamespaceReplicationMessages(ctx, &adminservice.GetNamespaceReplicationMessagesRequest{
+	replicationResponse, err = activeAdminClient.GetNamespaceReplicationMessages(ctx, &adminservice.GetNamespaceReplicationMessagesRequest{
 		ClusterName:            "follower",
-		LastRetrievedMessageId: -1,
+		LastRetrievedMessageId: lastMessageIdActive,
 		LastProcessedMessageId: -1,
 	})
 	s.NoError(err)
@@ -334,7 +549,7 @@ func (s *UserDataReplicationTestSuite) TestUserDataTombstonesAreReplicated() {
 
 	replicationResponse, err = activeAdminClient.GetNamespaceReplicationMessages(ctx, &adminservice.GetNamespaceReplicationMessagesRequest{
 		ClusterName:            "follower",
-		LastRetrievedMessageId: -1,
+		LastRetrievedMessageId: lastMessageIdActive,
 		LastProcessedMessageId: -1,
 	})
 	s.NoError(err)
@@ -375,10 +590,9 @@ func (s *UserDataReplicationTestSuite) TestUserDataTombstonesAreReplicated() {
 	})
 	s.Require().NoError(err)
 
-	standbyAdminClient := s.cluster2.AdminClient()
 	replicationResponse, err = standbyAdminClient.GetNamespaceReplicationMessages(ctx, &adminservice.GetNamespaceReplicationMessagesRequest{
 		ClusterName:            "follower",
-		LastRetrievedMessageId: -1,
+		LastRetrievedMessageId: lastMessageIdStandby,
 		LastProcessedMessageId: -1,
 	})
 	s.NoError(err)

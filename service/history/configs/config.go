@@ -115,15 +115,17 @@ type Config struct {
 
 	TaskDLQEnabled                 dynamicconfig.BoolPropertyFn
 	TaskDLQUnexpectedErrorAttempts dynamicconfig.IntPropertyFn
+	TaskDLQInternalErrors          dynamicconfig.BoolPropertyFn
 	TaskDLQErrorPattern            dynamicconfig.StringPropertyFn
 
-	TaskSchedulerEnableRateLimiter           dynamicconfig.BoolPropertyFn
-	TaskSchedulerEnableRateLimiterShadowMode dynamicconfig.BoolPropertyFn
-	TaskSchedulerRateLimiterStartupDelay     dynamicconfig.DurationPropertyFn
-	TaskSchedulerGlobalMaxQPS                dynamicconfig.IntPropertyFn
-	TaskSchedulerMaxQPS                      dynamicconfig.IntPropertyFn
-	TaskSchedulerGlobalNamespaceMaxQPS       dynamicconfig.IntPropertyFnWithNamespaceFilter
-	TaskSchedulerNamespaceMaxQPS             dynamicconfig.IntPropertyFnWithNamespaceFilter
+	TaskSchedulerEnableRateLimiter            dynamicconfig.BoolPropertyFn
+	TaskSchedulerEnableRateLimiterShadowMode  dynamicconfig.BoolPropertyFn
+	TaskSchedulerRateLimiterStartupDelay      dynamicconfig.DurationPropertyFn
+	TaskSchedulerGlobalMaxQPS                 dynamicconfig.IntPropertyFn
+	TaskSchedulerMaxQPS                       dynamicconfig.IntPropertyFn
+	TaskSchedulerGlobalNamespaceMaxQPS        dynamicconfig.IntPropertyFnWithNamespaceFilter
+	TaskSchedulerNamespaceMaxQPS              dynamicconfig.IntPropertyFnWithNamespaceFilter
+	TaskSchedulerInactiveChannelDeletionDelay dynamicconfig.DurationPropertyFn
 
 	// TimerQueueProcessor settings
 	TimerTaskBatchSize                               dynamicconfig.IntPropertyFn
@@ -253,9 +255,10 @@ type Config struct {
 	DefaultWorkflowTaskTimeout dynamicconfig.DurationPropertyFnWithNamespaceFilter
 	// WorkflowTaskHeartbeatTimeout is to timeout behavior of: RespondWorkflowTaskComplete with ForceCreateNewWorkflowTask == true
 	// without any commands or messages. After this timeout workflow task will be scheduled to another worker(by clear stickyness).
-	WorkflowTaskHeartbeatTimeout dynamicconfig.DurationPropertyFnWithNamespaceFilter
-	WorkflowTaskCriticalAttempts dynamicconfig.IntPropertyFn
-	WorkflowTaskRetryMaxInterval dynamicconfig.DurationPropertyFn
+	WorkflowTaskHeartbeatTimeout                     dynamicconfig.DurationPropertyFnWithNamespaceFilter
+	WorkflowTaskCriticalAttempts                     dynamicconfig.IntPropertyFn
+	WorkflowTaskRetryMaxInterval                     dynamicconfig.DurationPropertyFn
+	DiscardSpeculativeWorkflowTaskMaximumEventsCount dynamicconfig.IntPropertyFn
 
 	// The following is used by the new RPC replication stack
 	ReplicationTaskApplyTimeout                          dynamicconfig.DurationPropertyFn
@@ -456,15 +459,17 @@ func NewConfig(
 
 		TaskDLQEnabled:                 dynamicconfig.HistoryTaskDLQEnabled.Get(dc),
 		TaskDLQUnexpectedErrorAttempts: dynamicconfig.HistoryTaskDLQUnexpectedErrorAttempts.Get(dc),
+		TaskDLQInternalErrors:          dynamicconfig.HistoryTaskDLQInternalErrors.Get(dc),
 		TaskDLQErrorPattern:            dynamicconfig.HistoryTaskDLQErrorPattern.Get(dc),
 
-		TaskSchedulerEnableRateLimiter:           dynamicconfig.TaskSchedulerEnableRateLimiter.Get(dc),
-		TaskSchedulerEnableRateLimiterShadowMode: dynamicconfig.TaskSchedulerEnableRateLimiterShadowMode.Get(dc),
-		TaskSchedulerRateLimiterStartupDelay:     dynamicconfig.TaskSchedulerRateLimiterStartupDelay.Get(dc),
-		TaskSchedulerGlobalMaxQPS:                dynamicconfig.TaskSchedulerGlobalMaxQPS.Get(dc),
-		TaskSchedulerMaxQPS:                      dynamicconfig.TaskSchedulerMaxQPS.Get(dc),
-		TaskSchedulerNamespaceMaxQPS:             dynamicconfig.TaskSchedulerNamespaceMaxQPS.Get(dc),
-		TaskSchedulerGlobalNamespaceMaxQPS:       dynamicconfig.TaskSchedulerGlobalNamespaceMaxQPS.Get(dc),
+		TaskSchedulerEnableRateLimiter:            dynamicconfig.TaskSchedulerEnableRateLimiter.Get(dc),
+		TaskSchedulerEnableRateLimiterShadowMode:  dynamicconfig.TaskSchedulerEnableRateLimiterShadowMode.Get(dc),
+		TaskSchedulerRateLimiterStartupDelay:      dynamicconfig.TaskSchedulerRateLimiterStartupDelay.Get(dc),
+		TaskSchedulerGlobalMaxQPS:                 dynamicconfig.TaskSchedulerGlobalMaxQPS.Get(dc),
+		TaskSchedulerMaxQPS:                       dynamicconfig.TaskSchedulerMaxQPS.Get(dc),
+		TaskSchedulerNamespaceMaxQPS:              dynamicconfig.TaskSchedulerNamespaceMaxQPS.Get(dc),
+		TaskSchedulerGlobalNamespaceMaxQPS:        dynamicconfig.TaskSchedulerGlobalNamespaceMaxQPS.Get(dc),
+		TaskSchedulerInactiveChannelDeletionDelay: dynamicconfig.TaskSchedulerInactiveChannelDeletionDelay.Get(dc),
 
 		TimerTaskBatchSize:                               dynamicconfig.TimerTaskBatchSize.Get(dc),
 		TimerProcessorSchedulerWorkerCount:               dynamicconfig.TimerProcessorSchedulerWorkerCount.Subscribe(dc),
@@ -582,11 +587,12 @@ func NewConfig(
 		ThrottledLogRPS:   dynamicconfig.HistoryThrottledLogRPS.Get(dc),
 		EnableStickyQuery: dynamicconfig.EnableStickyQuery.Get(dc),
 
-		DefaultActivityRetryPolicy:   dynamicconfig.DefaultActivityRetryPolicy.Get(dc),
-		DefaultWorkflowRetryPolicy:   dynamicconfig.DefaultWorkflowRetryPolicy.Get(dc),
-		WorkflowTaskHeartbeatTimeout: dynamicconfig.WorkflowTaskHeartbeatTimeout.Get(dc),
-		WorkflowTaskCriticalAttempts: dynamicconfig.WorkflowTaskCriticalAttempts.Get(dc),
-		WorkflowTaskRetryMaxInterval: dynamicconfig.WorkflowTaskRetryMaxInterval.Get(dc),
+		DefaultActivityRetryPolicy:                       dynamicconfig.DefaultActivityRetryPolicy.Get(dc),
+		DefaultWorkflowRetryPolicy:                       dynamicconfig.DefaultWorkflowRetryPolicy.Get(dc),
+		WorkflowTaskHeartbeatTimeout:                     dynamicconfig.WorkflowTaskHeartbeatTimeout.Get(dc),
+		WorkflowTaskCriticalAttempts:                     dynamicconfig.WorkflowTaskCriticalAttempts.Get(dc),
+		WorkflowTaskRetryMaxInterval:                     dynamicconfig.WorkflowTaskRetryMaxInterval.Get(dc),
+		DiscardSpeculativeWorkflowTaskMaximumEventsCount: dynamicconfig.DiscardSpeculativeWorkflowTaskMaximumEventsCount.Get(dc),
 
 		ReplicationTaskApplyTimeout:                  dynamicconfig.ReplicationTaskApplyTimeout.Get(dc),
 		ReplicationTaskFetcherParallelism:            dynamicconfig.ReplicationTaskFetcherParallelism.Get(dc),

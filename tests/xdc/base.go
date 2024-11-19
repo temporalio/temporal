@@ -38,9 +38,6 @@ import (
 	replicationpb "go.temporal.io/api/replication/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/converter"
-	"google.golang.org/protobuf/types/known/durationpb"
-	"gopkg.in/yaml.v3"
-
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common/cluster"
@@ -52,6 +49,8 @@ import (
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/environment"
 	"go.temporal.io/server/tests/testcore"
+	"google.golang.org/protobuf/types/known/durationpb"
+	"gopkg.in/yaml.v3"
 )
 
 type (
@@ -128,13 +127,11 @@ func (s *xdcBaseSuite) setupSuite(clusterNames []string, opts ...testcore.Option
 		clusterConfigs[i].EnableMetricsCapture = true
 	}
 
-	c, err := s.testClusterFactory.NewCluster(s.T(), clusterConfigs[0], log.With(s.logger, tag.ClusterName(s.clusterNames[0])))
+	s.cluster1, err = s.testClusterFactory.NewCluster(s.T(), clusterConfigs[0], log.With(s.logger, tag.ClusterName(s.clusterNames[0])))
 	s.Require().NoError(err)
-	s.cluster1 = c
 
-	c, err = s.testClusterFactory.NewCluster(s.T(), clusterConfigs[1], log.With(s.logger, tag.ClusterName(s.clusterNames[1])))
+	s.cluster2, err = s.testClusterFactory.NewCluster(s.T(), clusterConfigs[1], log.With(s.logger, tag.ClusterName(s.clusterNames[1])))
 	s.Require().NoError(err)
-	s.cluster2 = c
 
 	s.startTime = time.Now()
 
@@ -201,6 +198,11 @@ func (s *xdcBaseSuite) tearDownSuite() {
 	s.NoError(s.cluster2.TearDownCluster())
 }
 
+func (s *xdcBaseSuite) waitForClusterSynced() {
+	waitForClusterConnected(s.Assertions, s.logger, s.cluster1, s.clusterNames[0], s.clusterNames[1], s.startTime)
+	waitForClusterConnected(s.Assertions, s.logger, s.cluster2, s.clusterNames[1], s.clusterNames[0], s.startTime)
+}
+
 func (s *xdcBaseSuite) setupTest() {
 	// Have to define our overridden assertions in the test setup. If we did it earlier, s.T() will return nil
 	s.Assertions = require.New(s.T())
@@ -208,8 +210,7 @@ func (s *xdcBaseSuite) setupTest() {
 	s.HistoryRequire = historyrequire.New(s.T())
 
 	s.onceClusterConnect.Do(func() {
-		waitForClusterConnected(s.Assertions, s.logger, s.cluster1, s.clusterNames[0], s.clusterNames[1], s.startTime)
-		waitForClusterConnected(s.Assertions, s.logger, s.cluster2, s.clusterNames[1], s.clusterNames[0], s.startTime)
+		s.waitForClusterSynced()
 	})
 }
 

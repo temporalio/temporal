@@ -58,8 +58,9 @@ var (
 	rejectionOutcome = &updatepb.Outcome{Value: &updatepb.Outcome_Failure{Failure: rejectionFailure}}
 	failureOutcome   = &updatepb.Outcome{Value: &updatepb.Outcome_Failure{Failure: &failurepb.Failure{Message: "outcome failure"}}}
 	successOutcome   = &updatepb.Outcome{Value: &updatepb.Outcome_Success{Success: payloads.EncodeString("success")}}
-	immedateTimeout  = time.Duration(0)
-	immediateCtx, _  = context.WithTimeout(context.Background(), immedateTimeout)
+	abortedOutcome   = &updatepb.Outcome{Value: &updatepb.Outcome_Failure{Failure: update.AbortFailure}}
+	immediateTimeout = time.Duration(0)
+	immediateCtx, _  = context.WithTimeout(context.Background(), immediateTimeout)
 )
 
 func TestUpdateState(t *testing.T) {
@@ -189,13 +190,14 @@ func TestUpdateState(t *testing.T) {
 
 					err := admit(t, readonlyStore, upd) // NOTE the store!
 					require.ErrorIs(t, consts.ErrWorkflowCompleted, err)
+					effects.Apply(context.Background())
 
 					// ensure waiter received response
 					waiterRes := <-ch
 					require.EqualExportedValues(t, consts.ErrWorkflowCompleted, waiterRes)
 
 					// new waiter receives same response
-					_, err = upd.WaitLifecycleStage(context.Background(), UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_UNSPECIFIED, 100*time.Millisecond)
+					_, err = upd.WaitLifecycleStage(immediateCtx, UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_UNSPECIFIED, immediateTimeout)
 					require.ErrorIs(t, err, consts.ErrWorkflowCompleted)
 				},
 			}, {
@@ -224,6 +226,27 @@ func TestUpdateState(t *testing.T) {
 				apply: func() {
 					err := respondSuccess(t, store, upd)
 					require.ErrorContains(t, err, "received *update.Response message while in state Created")
+				},
+			}, {
+				title: "aborted because registry is cleared",
+				apply: func() {
+					abort(t, store, upd, update.AbortReasonRegistryCleared)
+					effects.Apply(context.Background())
+					assertAborted(t, upd, update.WorkflowUpdateAbortedErr)
+				},
+			}, {
+				title: "aborted because Workflow completed",
+				apply: func() {
+					abort(t, store, upd, update.AbortReasonWorkflowCompleted)
+					effects.Apply(context.Background())
+					assertAborted(t, upd, consts.ErrWorkflowCompleted)
+				},
+			}, {
+				title: "aborted because Workflow completing",
+				apply: func() {
+					abort(t, store, upd, update.AbortReasonWorkflowContinuing)
+					effects.Apply(context.Background())
+					assertAborted(t, upd, consts.ErrWorkflowClosing)
 				},
 			},
 			})
@@ -303,6 +326,27 @@ func TestUpdateState(t *testing.T) {
 				failOnEffect: true,
 				apply: func() {
 					require.NoError(t, admit(t, store, upd))
+				},
+			}, {
+				title: "aborted because registry is cleared",
+				apply: func() {
+					abort(t, store, upd, update.AbortReasonRegistryCleared)
+					effects.Apply(context.Background())
+					assertAborted(t, upd, update.WorkflowUpdateAbortedErr)
+				},
+			}, {
+				title: "aborted because Workflow completed",
+				apply: func() {
+					abort(t, store, upd, update.AbortReasonWorkflowCompleted)
+					effects.Apply(context.Background())
+					assertAborted(t, upd, consts.ErrWorkflowCompleted)
+				},
+			}, {
+				title: "aborted because Workflow completing",
+				apply: func() {
+					abort(t, store, upd, update.AbortReasonWorkflowContinuing)
+					effects.Apply(context.Background())
+					assertAborted(t, upd, consts.ErrWorkflowClosing)
 				},
 			},
 			})
@@ -418,8 +462,9 @@ func TestUpdateState(t *testing.T) {
 					// accept update
 					err := accept(t, readonlyStore, upd) // NOTE the store!
 					require.NoError(t, err)
+					effects.Apply(context.Background())
 
-					status, err := upd.WaitLifecycleStage(context.Background(), UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ACCEPTED, 100*time.Millisecond)
+					status, err := upd.WaitLifecycleStage(immediateCtx, UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ACCEPTED, immediateTimeout)
 					require.ErrorIs(t, err, consts.ErrWorkflowCompleted)
 					require.Nil(t, status)
 
@@ -428,7 +473,7 @@ func TestUpdateState(t *testing.T) {
 					require.EqualExportedValues(t, consts.ErrWorkflowCompleted, waiterRes)
 
 					// new waiter still sees same result
-					_, err = upd.WaitLifecycleStage(context.Background(), UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_UNSPECIFIED, 100*time.Millisecond)
+					_, err = upd.WaitLifecycleStage(immediateCtx, UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_UNSPECIFIED, immediateTimeout)
 					require.EqualExportedValues(t, consts.ErrWorkflowCompleted, err)
 				},
 			}, {
@@ -553,11 +598,82 @@ func TestUpdateState(t *testing.T) {
 					assertCompleted(t, upd, successOutcome)
 				},
 			}, {
+				// it is possible for the acceptance message and the WF completion command to
+				// be part of the same message batch, and thus they will be delivered without
+				// an intermediate call to apply pending effects
+				title: "transition to stateAborted via stateAccepted in one WFT",
+				apply: func() {
+					// start waiters
+					accptCh := make(chan any, 1)
+					go func() {
+						status, err := upd.WaitLifecycleStage(context.Background(), UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ACCEPTED, 100*time.Millisecond)
+						if err != nil {
+							accptCh <- err
+							return
+						}
+						accptCh <- status.Outcome
+					}()
+					complCh := make(chan any, 1)
+					go func() {
+						status, err := upd.WaitLifecycleStage(context.Background(), UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED, 100*time.Millisecond)
+						if err != nil {
+							complCh <- err
+							return
+						}
+						complCh <- status.Outcome
+					}()
+
+					err := accept(t, store, upd)
+					require.NoError(t, err)
+
+					// NOTE: no call to apply pending effects between these messages!
+
+					abort(t, store, upd, update.AbortReasonWorkflowCompleted)
+					require.False(t, completed, "completed call back should not be called when aborted")
+
+					assertNotAcceptedYet(t, upd)
+					assertNotCompletedYet(t, upd)
+
+					// apply pending effect
+					effects.Apply(context.Background())
+					require.False(t, completed, "completed call back should not be called when aborted")
+
+					// ensure both waiter received completed response
+					accptWaiterRes := <-accptCh
+					complWaiterRes := <-complCh
+					require.EqualExportedValues(t, abortedOutcome, accptWaiterRes)
+					require.EqualExportedValues(t, abortedOutcome, complWaiterRes)
+
+					// new waiter receives same response
+					assertAborted(t, upd, nil)
+				},
+			}, {
 				title:        "ignore another send request; unless explicitly requested",
 				failOnEffect: true,
 				apply: func() {
 					require.Nil(t, send(t, upd, skipAlreadySent), "update should not be sent")
 					require.NotNil(t, send(t, upd, includeAlreadySent), "update should be sent")
+				},
+			}, {
+				title: "aborted because registry is cleared",
+				apply: func() {
+					abort(t, store, upd, update.AbortReasonRegistryCleared)
+					effects.Apply(context.Background())
+					assertAborted(t, upd, update.WorkflowUpdateAbortedErr)
+				},
+			}, {
+				title: "aborted because Workflow completed",
+				apply: func() {
+					abort(t, store, upd, update.AbortReasonWorkflowCompleted)
+					effects.Apply(context.Background())
+					assertAborted(t, upd, consts.ErrWorkflowCompleted)
+				},
+			}, {
+				title: "aborted because Workflow completing",
+				apply: func() {
+					abort(t, store, upd, update.AbortReasonWorkflowContinuing)
+					effects.Apply(context.Background())
+					assertAborted(t, upd, consts.ErrWorkflowClosing)
 				},
 			},
 			})
@@ -705,8 +821,9 @@ func TestUpdateState(t *testing.T) {
 				apply: func() {
 					err := respondSuccess(t, readonlyStore, upd) // NOTE the store!
 					require.NoError(t, err)
+					effects.Apply(context.Background())
 
-					status, err := upd.WaitLifecycleStage(context.Background(), UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED, 100*time.Millisecond)
+					status, err := upd.WaitLifecycleStage(immediateCtx, UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED, immediateTimeout)
 					require.NoError(t, err)
 					require.NotNil(t, status)
 					require.Equal(t, "Workflow Update failed because the Workflow completed before the Update completed.", status.Outcome.GetFailure().Message)
@@ -739,6 +856,34 @@ func TestUpdateState(t *testing.T) {
 					require.Nil(t, send(t, upd, skipAlreadySent), "update should not be sent")
 					require.Nil(t, send(t, upd, includeAlreadySent), "update should not be sent")
 				},
+			}, {
+				title: "aborted because registry is cleared",
+				apply: func() {
+					abort(t, store, upd, update.AbortReasonRegistryCleared)
+					effects.Apply(context.Background())
+					// Because Update was already accepted, clear registry doesn't require retry.
+					assertAccepted(t, upd)
+
+					// And even completed stage returns accepted status (as most advanced status reached).
+					status, err := upd.WaitLifecycleStage(immediateCtx, UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED, immediateTimeout)
+					require.NoError(t, err)
+					require.Equal(t, UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ACCEPTED, status.Stage)
+					require.Nil(t, status.Outcome)
+				},
+			}, {
+				title: "aborted because Workflow completed",
+				apply: func() {
+					abort(t, store, upd, update.AbortReasonWorkflowCompleted)
+					effects.Apply(context.Background())
+					assertAborted(t, upd, nil)
+				},
+			}, {
+				title: "aborted because Workflow completing",
+				apply: func() {
+					abort(t, store, upd, update.AbortReasonWorkflowContinuing)
+					effects.Apply(context.Background())
+					assertAborted(t, upd, nil)
+				},
 			},
 			})
 	})
@@ -757,6 +902,27 @@ func TestUpdateState(t *testing.T) {
 			[]*stateTest{{
 				title: "send back status completed to waiters immediately for any stage",
 				apply: func() {
+					assertCompleted(t, upd, rejectionOutcome)
+				},
+			}, {
+				title: "aborted because registry is cleared",
+				apply: func() {
+					abort(t, store, upd, update.AbortReasonRegistryCleared)
+					effects.Apply(context.Background())
+					assertCompleted(t, upd, rejectionOutcome)
+				},
+			}, {
+				title: "aborted because Workflow completed",
+				apply: func() {
+					abort(t, store, upd, update.AbortReasonWorkflowCompleted)
+					effects.Apply(context.Background())
+					assertCompleted(t, upd, rejectionOutcome)
+				},
+			}, {
+				title: "aborted because Workflow completing",
+				apply: func() {
+					abort(t, store, upd, update.AbortReasonWorkflowContinuing)
+					effects.Apply(context.Background())
 					assertCompleted(t, upd, rejectionOutcome)
 				},
 			},
@@ -780,7 +946,7 @@ func TestUpdateState(t *testing.T) {
 						UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED,
 					} {
 						t.Logf("testing stage %v", UpdateWorkflowExecutionLifecycleStage.String(stage))
-						status, err := upd.WaitLifecycleStage(immediateCtx, stage, immedateTimeout)
+						status, err := upd.WaitLifecycleStage(immediateCtx, stage, immediateTimeout)
 						require.NoError(t, err)
 						require.Equal(t, UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED, status.Stage)
 						require.EqualExportedValues(t, successOutcome, status.Outcome)
@@ -798,6 +964,27 @@ func TestUpdateState(t *testing.T) {
 				apply: func() {
 					require.Nil(t, send(t, upd, skipAlreadySent), "update should not be sent")
 					require.Nil(t, send(t, upd, includeAlreadySent), "update should not be sent")
+				},
+			}, {
+				title: "aborted because registry is cleared",
+				apply: func() {
+					abort(t, store, upd, update.AbortReasonRegistryCleared)
+					effects.Apply(context.Background())
+					assertCompleted(t, upd, successOutcome)
+				},
+			}, {
+				title: "aborted because Workflow completed",
+				apply: func() {
+					abort(t, store, upd, update.AbortReasonWorkflowCompleted)
+					effects.Apply(context.Background())
+					assertCompleted(t, upd, successOutcome)
+				},
+			}, {
+				title: "aborted because Workflow completing",
+				apply: func() {
+					abort(t, store, upd, update.AbortReasonWorkflowContinuing)
+					effects.Apply(context.Background())
+					assertCompleted(t, upd, successOutcome)
 				},
 			},
 			})
@@ -862,18 +1049,19 @@ func mustAdmit(t *testing.T, store mockEventStore, upd *update.Update) {
 func assertAdmitted(t *testing.T, upd *update.Update) {
 	t.Helper()
 
-	status, err := upd.WaitLifecycleStage(context.Background(), UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_UNSPECIFIED, immedateTimeout)
+	status, err := upd.WaitLifecycleStage(immediateCtx, UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_UNSPECIFIED, immediateTimeout)
 	require.NoError(t, err)
 	require.Equal(t, UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ADMITTED, status.Stage)
 	require.Nil(t, status.Outcome, "outcome should not be available yet")
 
-	status, err = upd.WaitLifecycleStage(context.Background(), UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ADMITTED, immedateTimeout)
+	status, err = upd.WaitLifecycleStage(immediateCtx, UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ADMITTED, immediateTimeout)
 	require.NoError(t, err)
 	require.Equal(t, UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ADMITTED, status.Stage)
 	require.Nil(t, status.Outcome, "outcome should not be available yet")
 }
 
 func admit(t *testing.T, store mockEventStore, upd *update.Update) error {
+	t.Helper()
 	return upd.Admit(&updatepb.Request{
 		Meta:  &updatepb.Meta{UpdateId: upd.ID()},
 		Input: &updatepb.Input{Name: "not_empty"},
@@ -886,6 +1074,7 @@ func send(t *testing.T, upd *update.Update, includeAlreadySent bool) *protocolpb
 }
 
 func reject(t *testing.T, store mockEventStore, upd *update.Update) error {
+	t.Helper()
 	return upd.OnProtocolMessage(&protocolpb.Message{
 		Body: MarshalAny(t, &updatepb.Rejection{
 			RejectedRequestMessageId: "update1/request",
@@ -921,7 +1110,7 @@ func assertAccepted(t *testing.T, upd *update.Update) {
 		UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ACCEPTED,
 	} {
 		t.Logf("testing stage %v", UpdateWorkflowExecutionLifecycleStage.String(stage))
-		status, err := upd.WaitLifecycleStage(immediateCtx, stage, immedateTimeout)
+		status, err := upd.WaitLifecycleStage(immediateCtx, stage, immediateTimeout)
 		require.NoError(t, err)
 		require.Equal(t, UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ACCEPTED, status.Stage)
 		require.Nil(t, status.Outcome, "outcome should not be available yet")
@@ -938,7 +1127,7 @@ func assertNotAcceptedYet(t *testing.T, upd *update.Update) {
 	require.ErrorIs(t, err, context.DeadlineExceeded)
 
 	// on server timeout
-	status, err := upd.WaitLifecycleStage(context.Background(), UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ACCEPTED, immedateTimeout)
+	status, err := upd.WaitLifecycleStage(context.Background(), UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ACCEPTED, immediateTimeout)
 	require.NoError(t, err)
 	require.Equal(t, UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ADMITTED, status.Stage)
 	require.Nil(t, status.Outcome, "outcome should not be available yet")
@@ -946,6 +1135,7 @@ func assertNotAcceptedYet(t *testing.T, upd *update.Update) {
 }
 
 func respondSuccess(t *testing.T, store mockEventStore, upd *update.Update) error {
+	t.Helper()
 	return upd.OnProtocolMessage(&protocolpb.Message{
 		Body: MarshalAny(t, &updatepb.Response{
 			Meta:    &updatepb.Meta{UpdateId: upd.ID()},
@@ -954,6 +1144,7 @@ func respondSuccess(t *testing.T, store mockEventStore, upd *update.Update) erro
 }
 
 func respondFailure(t *testing.T, store mockEventStore, upd *update.Update) error {
+	t.Helper()
 	return upd.OnProtocolMessage(&protocolpb.Message{
 		Body: MarshalAny(t, &updatepb.Response{
 			Meta:    &updatepb.Meta{UpdateId: upd.ID()},
@@ -971,7 +1162,7 @@ func assertCompleted(t *testing.T, upd *update.Update, outcome *updatepb.Outcome
 		UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED,
 	} {
 		t.Logf("testing stage %v", UpdateWorkflowExecutionLifecycleStage.String(stage))
-		status, err := upd.WaitLifecycleStage(immediateCtx, stage, immedateTimeout)
+		status, err := upd.WaitLifecycleStage(immediateCtx, stage, immediateTimeout)
 		require.NoError(t, err)
 		require.Equal(t, UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED, status.Stage)
 		require.EqualExportedValues(t, outcome, status.Outcome)
@@ -988,8 +1179,36 @@ func assertNotCompletedYet(t *testing.T, upd *update.Update) {
 	require.ErrorIs(t, err, context.DeadlineExceeded)
 
 	// on server timeout
-	status, err := upd.WaitLifecycleStage(context.Background(), UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED, immedateTimeout)
+	status, err := upd.WaitLifecycleStage(context.Background(), UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED, immediateTimeout)
 	require.NoError(t, err)
 	require.NotEqual(t, UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED, status.Stage)
 	require.Nil(t, status.Outcome, "outcome should not be available yet")
+}
+
+func abort(t *testing.T, store mockEventStore, upd *update.Update, reason update.AbortReason) {
+	t.Helper()
+	upd.Abort(reason, store)
+}
+
+func assertAborted(t *testing.T, upd *update.Update, expectedErr error) {
+	t.Helper()
+
+	for _, stage := range []UpdateWorkflowExecutionLifecycleStage{
+		UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_UNSPECIFIED,
+		UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ADMITTED,
+		UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ACCEPTED,
+		UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED,
+	} {
+		t.Logf("testing stage %v", UpdateWorkflowExecutionLifecycleStage.String(stage))
+		status, err := upd.WaitLifecycleStage(immediateCtx, stage, immediateTimeout)
+		if expectedErr == nil {
+			// expectedErr == nil means update was aborted with failure instead of error.
+			require.NoError(t, err)
+			require.Equal(t, UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED, status.Stage)
+			require.EqualExportedValues(t, abortedOutcome, status.Outcome)
+		} else {
+			require.Error(t, err)
+			require.ErrorIs(t, err, expectedErr)
+		}
+	}
 }

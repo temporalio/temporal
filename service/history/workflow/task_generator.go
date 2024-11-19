@@ -751,10 +751,17 @@ func (r *TaskGeneratorImpl) GenerateMigrationTasks() ([]tasks.Task, int64, error
 		}}
 		if r.mutableState.IsTransitionHistoryEnabled() {
 			transitionHistory := executionInfo.TransitionHistory
+			if len(transitionHistory) == 0 {
+				// TODO: Handle the case where state-based replication is re-enabled.
+				return nil, 0, serviceerror.NewInternal("TaskGeneratorImpl encountered empty transition history")
+			}
 			return []tasks.Task{&tasks.SyncVersionedTransitionTask{
 				WorkflowKey:         workflowKey,
 				Priority:            enumsspb.TASK_PRIORITY_LOW,
 				VersionedTransition: transitionHistory[len(transitionHistory)-1],
+				FirstEventID:        executionInfo.LastFirstEventId,
+				FirstEventVersion:   lastItem.Version,
+				NextEventID:         lastItem.GetEventId() + 1,
 				TaskEquivalents:     syncWorkflowStateTask,
 			}}, 1, nil
 		}
@@ -788,15 +795,21 @@ func (r *TaskGeneratorImpl) GenerateMigrationTasks() ([]tasks.Task, int64, error
 
 	if r.mutableState.IsTransitionHistoryEnabled() {
 		transitionHistory := executionInfo.TransitionHistory
+		if len(transitionHistory) == 0 {
+			// TODO: Handle the case where state-based replication is re-enabled.
+			return nil, 0, serviceerror.NewInternal("TaskGeneratorImpl encountered empty transition history")
+		}
 		return []tasks.Task{&tasks.SyncVersionedTransitionTask{
 			WorkflowKey:         workflowKey,
 			Priority:            enumsspb.TASK_PRIORITY_LOW,
 			VersionedTransition: transitionHistory[len(transitionHistory)-1],
+			FirstEventID:        executionInfo.LastFirstEventId,
+			FirstEventVersion:   lastItem.GetVersion(),
+			NextEventID:         lastItem.GetEventId() + 1,
 			TaskEquivalents:     replicationTasks,
 		}}, 1, nil
 	}
 	return replicationTasks, executionInfo.StateTransitionCount, nil
-
 }
 
 func (r *TaskGeneratorImpl) getTimerSequence() TimerSequence {

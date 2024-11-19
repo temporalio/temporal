@@ -420,7 +420,7 @@ func TestMachineTransition(t *testing.T) {
 	err = hsm.MachineTransition(root, func(d *hsmtest.Data) (hsm.TransitionOutput, error) {
 		// Mutate state and make sure the cache is marked stale.
 		d.SetState(hsmtest.State2)
-		return hsm.TransitionOutput{}, fmt.Errorf("test") // nolint:goerr113
+		return hsm.TransitionOutput{}, fmt.Errorf("test")
 	})
 	require.ErrorContains(t, err, "test")
 	require.Equal(t, int64(0), root.InternalRepr().TransitionCount)

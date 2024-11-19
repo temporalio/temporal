@@ -261,7 +261,8 @@ func (f *factoryImpl) Close() {
 
 func IsPersistenceTransientError(err error) bool {
 	switch err.(type) {
-	case *serviceerror.Unavailable:
+	// we retry on DataLoss errors because persistence layer is sometimes unreliable when we immediately read-after-write
+	case *serviceerror.Unavailable, *serviceerror.DataLoss:
 		return true
 	}
 

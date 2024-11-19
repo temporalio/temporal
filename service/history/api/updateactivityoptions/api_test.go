@@ -260,7 +260,7 @@ type (
 	}
 )
 
-func TestStateBuilderSuite(t *testing.T) {
+func TestActivityOptionsSuite(t *testing.T) {
 	s := new(activityOptionsSuite)
 	suite.Run(t, s)
 }
@@ -321,7 +321,7 @@ func (s *activityOptionsSuite) Test_updateActivityOptionsWfNotRunning() {
 
 	s.mockMutableState.EXPECT().IsWorkflowExecutionRunning().Return(false)
 
-	_, err := updateActivityOptions(s.mockShard, s.validator, s.mockMutableState, request)
+	_, err := updateActivityOptions(s.validator, s.mockMutableState, request)
 	s.Error(err)
 	s.ErrorAs(err, &consts.ErrWorkflowCompleted)
 }
@@ -342,7 +342,7 @@ func (s *activityOptionsSuite) Test_updateActivityOptionsWfNoActivity() {
 
 	s.mockMutableState.EXPECT().IsWorkflowExecutionRunning().Return(true)
 	s.mockMutableState.EXPECT().GetActivityByActivityID(gomock.Any()).Return(nil, false)
-	_, err := updateActivityOptions(s.mockShard, s.validator, s.mockMutableState, request)
+	_, err := updateActivityOptions(s.validator, s.mockMutableState, request)
 	s.Error(err)
 	s.ErrorAs(err, &consts.ErrActivityNotFound)
 }
@@ -394,7 +394,8 @@ func (s *activityOptionsSuite) Test_updateActivityOptionsAcceptance() {
 
 	s.mockMutableState.EXPECT().IsWorkflowExecutionRunning().Return(true)
 	s.mockMutableState.EXPECT().GetActivityByActivityID(gomock.Any()).Return(fullActivityInfo, true)
-	s.mockMutableState.EXPECT().UpdateActivity(gomock.Any()).Return(nil)
+	s.mockMutableState.EXPECT().RegenerateActivityRetryTask(gomock.Any(), gomock.Any()).Return(nil)
+	s.mockMutableState.EXPECT().UpdateActivity(gomock.Any(), gomock.Any()).Return(nil)
 
 	request := &historyservice.UpdateActivityOptionsRequest{
 		UpdateRequest: &workflowservicepb.UpdateActivityOptionsByIdRequest{
@@ -403,7 +404,7 @@ func (s *activityOptionsSuite) Test_updateActivityOptionsAcceptance() {
 		},
 	}
 
-	response, err := updateActivityOptions(s.mockShard, s.validator, s.mockMutableState, request)
+	response, err := updateActivityOptions(s.validator, s.mockMutableState, request)
 
 	s.NoError(err)
 	s.NotNil(response)

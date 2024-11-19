@@ -274,6 +274,9 @@ message RecordActivityTaskStartedRequest {
     temporal.api.workflowservice.v1.PollActivityTaskQueueRequest poll_request = 6;
     temporal.server.api.clock.v1.VectorClock clock = 7;
     temporal.server.api.taskqueue.v1.BuildIdRedirectInfo build_id_redirect_info = 8;
+
+    // Stamp represents the internal “version” of the activity options and can/will be changed with Activity API.
+    int32 stamp = 9;
 }
 
 message RecordActivityTaskStartedResponse {
@@ -603,6 +606,15 @@ message SyncActivityRequest {
     string last_started_build_id = 16;
     // workflows redirect_counter value when this activity started last time
     int64 last_started_redirect_counter = 17;
+
+    // The first time the activity was scheduled.
+    google.protobuf.Timestamp first_scheduled_time = 18;
+    // The last time an activity attempt completion was recorded by the server.
+    google.protobuf.Timestamp last_attempt_complete_time = 19;
+    // Stamp represents the internal “version” of the activity options and can/will be changed with Activity API.
+    int32 stamp = 20;
+    // Indicates if the activity is paused.
+    bool paused = 21;
 }
 
 message SyncActivitiesRequest {
@@ -629,6 +641,17 @@ message ActivitySyncInfo {
     string last_started_build_id = 12;
     // workflows redirect_counter value when this activity started last time
     int64 last_started_redirect_counter = 13;
+
+
+    // The first time the activity was scheduled.
+    google.protobuf.Timestamp first_scheduled_time = 18;
+    // The last time an activity attempt completion was recorded by the server.
+    google.protobuf.Timestamp last_attempt_complete_time = 19;
+    // Stamp represents the internal “version” of the activity options and can/will be changed with Activity API.
+    int32 stamp = 20;
+    // Indicates if the activity is paused.
+    bool paused = 21;
+
 }
 
 message SyncActivityResponse {
@@ -1146,4 +1169,40 @@ message UpdateActivityOptionsRequest {
 message UpdateActivityOptionsResponse {
     // Activity options after an update
     temporal.api.activity.v1.ActivityOptions activity_options = 1;
+}
+
+message PauseActivityRequest {
+    option (routing).workflow_id = "frontend_request.workflow_id";
+
+    // Namespace ID of the workflow which scheduled this activity
+    string namespace_id = 1;
+
+    temporal.api.workflowservice.v1.PauseActivityByIdRequest frontend_request = 2;
+}
+
+message PauseActivityResponse {
+}
+
+message UnpauseActivityRequest {
+    option (routing).workflow_id = "frontend_request.workflow_id";
+
+    // Namespace ID of the workflow which scheduled this activity
+    string namespace_id = 1;
+
+    temporal.api.workflowservice.v1.UnpauseActivityByIdRequest frontend_request = 2;
+}
+
+message UnpauseActivityResponse {
+}
+
+message ResetActivityRequest {
+    option (routing).workflow_id = "frontend_request.workflow_id";
+
+    // Namespace ID of the workflow which scheduled this activity
+    string namespace_id = 1;
+
+    temporal.api.workflowservice.v1.ResetActivityByIdRequest frontend_request = 2;
+}
+
+message ResetActivityResponse {
 }

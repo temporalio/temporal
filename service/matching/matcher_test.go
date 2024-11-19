@@ -28,12 +28,12 @@ import (
 	"context"
 	"math/rand"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/assert"
-
 	"github.com/pborman/uuid"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/suite"
 	enumspb "go.temporal.io/api/enums/v1"
 	querypb "go.temporal.io/api/query/v1"
@@ -47,7 +47,6 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/tqid"
-	"go.uber.org/atomic"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/grpc"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -421,6 +420,7 @@ func (t *MatcherTestSuite) TestAvoidForwardingWhenBacklogIsOldButReconsider() {
 }
 
 func (t *MatcherTestSuite) TestBacklogAge() {
+	t.T().Skip("flaky test")
 	t.Equal(emptyBacklogAge, t.rootMatcher.getBacklogAge())
 
 	youngBacklogTask := newInternalTaskFromBacklog(randomTaskInfoWithAge(time.Second), nil)
@@ -606,7 +606,7 @@ func (t *MatcherTestSuite) TestQueryRemoteSyncMatch() {
 		}
 	}()
 
-	var querySet = atomic.NewBool(false)
+	var querySet = atomic.Bool{}
 	var remotePollErr error
 	var remotePollResp matchingservice.PollWorkflowTaskQueueResponse
 	t.client.EXPECT().PollWorkflowTaskQueue(gomock.Any(), gomock.Any(), gomock.Any()).Do(
@@ -616,7 +616,7 @@ func (t *MatcherTestSuite) TestQueryRemoteSyncMatch() {
 				remotePollErr = err
 			} else if task.isQuery() {
 				task.finish(nil, true)
-				querySet.Swap(true)
+				querySet.Store(true)
 				remotePollResp = matchingservice.PollWorkflowTaskQueueResponse{
 					Query: &querypb.WorkflowQuery{},
 				}

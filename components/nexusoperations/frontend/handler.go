@@ -270,6 +270,7 @@ func (h *completionHandler) forwardCompleteOperation(ctx context.Context, r *nex
 		return nexus.HandlerErrorf(nexus.HandlerErrorTypeInternal, "internal error")
 	}
 
+	// TODO: Upgrade Nexus SDK in order to reduce HTTP exposure
 	handlerErr := &nexus.HandlerError{
 		Type:    commonnexus.HandlerErrorTypeFromHTTPStatus(resp.StatusCode),
 		Failure: &failure,
@@ -339,7 +340,7 @@ func (c *requestContext) capturePanicAndRecordMetrics(ctxPtr *context.Context, e
 	if recovered != nil {
 		err, ok := recovered.(error)
 		if !ok {
-			err = fmt.Errorf("panic: %v", recovered) //nolint:goerr113
+			err = fmt.Errorf("panic: %v", recovered)
 		}
 
 		st := string(debug.Stack())

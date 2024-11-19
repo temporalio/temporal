@@ -306,11 +306,11 @@ func TestProcessInvocationTask(t *testing.T) {
 			onStartOperation: func(ctx context.Context, service, operation string, input *nexus.LazyValue, options nexus.StartOperationOptions) (nexus.HandlerStartOperationResult[any], error) {
 				return nil, nexus.HandlerErrorf(nexus.HandlerErrorTypeInternal, "internal server error")
 			},
-			expectedMetricOutcome: "request-error:500",
+			expectedMetricOutcome: "handler-error:INTERNAL",
 			checkOutcome: func(t *testing.T, op nexusoperations.Operation, events []*historypb.HistoryEvent) {
 				require.Equal(t, enumsspb.NEXUS_OPERATION_STATE_BACKING_OFF, op.State())
 				require.NotNil(t, op.LastAttemptFailure.GetApplicationFailureInfo())
-				require.Equal(t, "unexpected response status: \"500 Internal Server Error\": internal server error", op.LastAttemptFailure.Message)
+				require.Equal(t, "handler error (INTERNAL): internal server error", op.LastAttemptFailure.Message)
 				require.Equal(t, 0, len(events))
 			},
 		},
@@ -620,11 +620,11 @@ func TestProcessCancelationTask(t *testing.T) {
 			onCancelOperation: func(ctx context.Context, service, operation, operationID string, options nexus.CancelOperationOptions) error {
 				return nexus.HandlerErrorf(nexus.HandlerErrorTypeNotFound, "operation not found")
 			},
-			expectedMetricOutcome: "request-error:404",
+			expectedMetricOutcome: "handler-error:NOT_FOUND",
 			checkOutcome: func(t *testing.T, c nexusoperations.Cancelation) {
 				require.Equal(t, enumspb.NEXUS_OPERATION_CANCELLATION_STATE_FAILED, c.State())
 				require.NotNil(t, c.LastAttemptFailure.GetApplicationFailureInfo())
-				require.Equal(t, "unexpected response status: \"404 Not Found\": operation not found", c.LastAttemptFailure.Message)
+				require.Equal(t, "handler error (NOT_FOUND): operation not found", c.LastAttemptFailure.Message)
 			},
 		},
 		{
@@ -647,11 +647,11 @@ func TestProcessCancelationTask(t *testing.T) {
 			onCancelOperation: func(ctx context.Context, service, operation, operationID string, options nexus.CancelOperationOptions) error {
 				return nexus.HandlerErrorf(nexus.HandlerErrorTypeInternal, "internal server error")
 			},
-			expectedMetricOutcome: "request-error:500",
+			expectedMetricOutcome: "handler-error:INTERNAL",
 			checkOutcome: func(t *testing.T, c nexusoperations.Cancelation) {
 				require.Equal(t, enumspb.NEXUS_OPERATION_CANCELLATION_STATE_BACKING_OFF, c.State())
 				require.NotNil(t, c.LastAttemptFailure.GetApplicationFailureInfo())
-				require.Equal(t, "unexpected response status: \"500 Internal Server Error\": internal server error", c.LastAttemptFailure.Message)
+				require.Equal(t, "handler error (INTERNAL): internal server error", c.LastAttemptFailure.Message)
 			},
 		},
 		{
@@ -678,7 +678,7 @@ func TestProcessCancelationTask(t *testing.T) {
 			checkOutcome: func(t *testing.T, c nexusoperations.Cancelation) {
 				require.Equal(t, enumspb.NEXUS_OPERATION_CANCELLATION_STATE_FAILED, c.State())
 				require.NotNil(t, c.LastAttemptFailure.GetApplicationFailureInfo())
-				require.Equal(t, "endpoint not registered", c.LastAttemptFailure.Message)
+				require.Equal(t, "handler error (NOT_FOUND): endpoint not registered", c.LastAttemptFailure.Message)
 			},
 		},
 	}

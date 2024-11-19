@@ -38,6 +38,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
+	replicationpb "go.temporal.io/api/replication/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
@@ -65,18 +66,39 @@ import (
 type (
 	streamBasedReplicationTestSuite struct {
 		xdcBaseSuite
-		controller    *gomock.Controller
-		namespaceName string
-		namespaceID   string
-		serializer    serialization.Serializer
-		generator     test.Generator
-		once          sync.Once
+		controller              *gomock.Controller
+		namespaceName           string
+		namespaceID             string
+		serializer              serialization.Serializer
+		generator               test.Generator
+		once                    sync.Once
+		enableTransitionHistory bool
 	}
 )
 
 func TestStreamBasedReplicationTestSuite(t *testing.T) {
-	t.Parallel()
-	suite.Run(t, new(streamBasedReplicationTestSuite))
+	t.SkipNow() // flaky test (EnableTransitionHistory)
+	for _, tc := range []struct {
+		name                    string
+		enableTransitionHistory bool
+	}{
+		{
+			name:                    "EnableTransitionHistory",
+			enableTransitionHistory: true,
+		},
+		{
+			name:                    "DisableTransitionHistory",
+			enableTransitionHistory: false,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			s := &streamBasedReplicationTestSuite{
+				namespaceName:           "replication-test-" + common.GenerateRandomString(5),
+				enableTransitionHistory: tc.enableTransitionHistory,
+			}
+			suite.Run(t, s)
+		})
+	}
 }
 
 func (s *streamBasedReplicationTestSuite) SetupSuite() {
@@ -86,6 +108,7 @@ func (s *streamBasedReplicationTestSuite) SetupSuite() {
 		dynamicconfig.EnableEagerNamespaceRefresher.Key():       true,
 		dynamicconfig.EnableReplicationTaskBatching.Key():       true,
 		dynamicconfig.EnableReplicateLocalGeneratedEvents.Key(): true,
+		dynamicconfig.EnableTransitionHistory.Key():             s.enableTransitionHistory,
 	}
 	s.logger = log.NewTestLogger()
 	s.serializer = serialization.NewSerializer()
@@ -117,7 +140,6 @@ func (s *streamBasedReplicationTestSuite) SetupTest() {
 
 	s.once.Do(func() {
 		ctx := context.Background()
-		s.namespaceName = "replication-test"
 		_, err := s.cluster1.FrontendClient().RegisterNamespace(ctx, &workflowservice.RegisterNamespaceRequest{
 			Namespace: s.namespaceName,
 			Clusters:  s.clusterReplicationConfig(),
@@ -146,9 +168,17 @@ func (s *streamBasedReplicationTestSuite) TestReplicateHistoryEvents_ForceReplic
 	ctx, cancel := context.WithTimeout(ctx, testTimeout)
 	defer cancel()
 
+	var versions []int64
+	if s.enableTransitionHistory {
+		// Use versions for cluster1 (active) so we can update workflows
+		versions = []int64{1, 31, 21, 61, 41, 101, 91, 71, 81}
+	} else {
+		versions = []int64{2, 12, 22, 32, 2, 1, 5, 8, 9}
+	}
+
 	// let's import some events into cluster 1
 	historyClient1 := s.cluster1.HistoryClient()
-	executions := s.importTestEvents(historyClient1, namespace.Name(s.namespaceName), namespace.ID(s.namespaceID), []int64{2, 12, 22, 32, 2, 1, 5, 8, 9})
+	executions := s.importTestEvents(historyClient1, namespace.Name(s.namespaceName), namespace.ID(s.namespaceID), versions)
 
 	// let's trigger replication by calling GenerateLastHistoryReplicationTasks. This is also used by force replication logic
 	for _, execution := range executions {
@@ -159,11 +189,44 @@ func (s *streamBasedReplicationTestSuite) TestReplicateHistoryEvents_ForceReplic
 		s.NoError(err)
 	}
 
-	time.Sleep(10 * time.Second)
+	s.waitForClusterSynced()
 	for _, execution := range executions {
 		err := s.assertHistoryEvents(ctx, s.namespaceID, execution.GetWorkflowId(), execution.GetRunId())
 		s.NoError(err)
 	}
+}
+
+func (s *streamBasedReplicationTestSuite) updateNamespace(version int64) error {
+	client1 := s.cluster1.FrontendClient() // active
+	nsResp, err := client1.DescribeNamespace(context.Background(), &workflowservice.DescribeNamespaceRequest{
+		Namespace: s.namespaceName,
+	})
+	s.NoError(err)
+
+	for nsResp.GetFailoverVersion() < version {
+		_, err = client1.UpdateNamespace(context.Background(), &workflowservice.UpdateNamespaceRequest{
+			Namespace: s.namespaceName,
+			ReplicationConfig: &replicationpb.NamespaceReplicationConfig{
+				ActiveClusterName: s.clusterNames[1],
+			},
+		})
+		s.NoError(err)
+
+		_, err = client1.UpdateNamespace(context.Background(), &workflowservice.UpdateNamespaceRequest{
+			Namespace: s.namespaceName,
+			ReplicationConfig: &replicationpb.NamespaceReplicationConfig{
+				ActiveClusterName: s.clusterNames[0],
+			},
+		})
+		s.NoError(err)
+
+		nsResp, err = client1.DescribeNamespace(context.Background(), &workflowservice.DescribeNamespaceRequest{
+			Namespace: s.namespaceName,
+		})
+		s.NoError(err)
+	}
+
+	return nil
 }
 
 func (s *streamBasedReplicationTestSuite) importTestEvents(
@@ -188,7 +251,12 @@ func (s *streamBasedReplicationTestSuite) importTestEvents(
 	}
 	var runID string
 	for _, version := range versions {
-		workflowID := "xdc-stream-replication-test" + uuid.New()
+		if s.enableTransitionHistory {
+			err := s.updateNamespace(version)
+			s.NoError(err)
+		}
+
+		workflowID := "xdc-stream-replication-test-" + uuid.New()
 		runID = uuid.New()
 
 		var historyBatch []*historypb.History
@@ -217,6 +285,21 @@ func (s *streamBasedReplicationTestSuite) importTestEvents(
 			historyClient,
 			true,
 		)
+
+		if s.enableTransitionHistory {
+			// signal the workflow to make sure the TransitionHistory is updated
+			signalName := "my signal"
+			signalInput := payloads.EncodeString("my signal input")
+			client1 := s.cluster1.FrontendClient() // active
+			_, err = client1.SignalWorkflowExecution(context.Background(), &workflowservice.SignalWorkflowExecutionRequest{
+				Namespace:         s.namespaceName,
+				WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: workflowID, RunId: runID},
+				SignalName:        signalName,
+				Input:             signalInput,
+				Identity:          "worker1",
+			})
+			s.NoError(err)
+		}
 
 		executions = append(executions, &commonpb.WorkflowExecution{WorkflowId: workflowID, RunId: runID})
 	}

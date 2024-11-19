@@ -27,7 +27,6 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-
 	enumspb "go.temporal.io/api/enums/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 )

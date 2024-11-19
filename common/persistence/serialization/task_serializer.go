@@ -363,6 +363,7 @@ func (s *TaskSerializer) transferActivityTaskToProto(
 		Version:                 activityTask.Version,
 		TaskId:                  activityTask.TaskID,
 		VisibilityTime:          timestamppb.New(activityTask.VisibilityTimestamp),
+		Stamp:                   activityTask.Stamp,
 	}
 }
 
@@ -380,6 +381,7 @@ func (s *TaskSerializer) transferActivityTaskFromProto(
 		TaskQueue:           activityTask.TaskQueue,
 		ScheduledEventID:    activityTask.ScheduledEventId,
 		Version:             activityTask.Version,
+		Stamp:               activityTask.Stamp,
 	}
 }
 
@@ -1271,6 +1273,7 @@ func (s *TaskSerializer) replicationSyncVersionedTransitionTaskToProto(
 		VisibilityTime:      timestamppb.New(syncVersionedTransitionTask.VisibilityTimestamp),
 		VersionedTransition: syncVersionedTransitionTask.VersionedTransition,
 		FirstEventId:        syncVersionedTransitionTask.FirstEventID,
+		Version:             syncVersionedTransitionTask.FirstEventVersion,
 		NextEventId:         syncVersionedTransitionTask.NextEventID,
 		NewRunId:            syncVersionedTransitionTask.NewRunID,
 		TaskEquivalents:     taskInfoEquivalents,
@@ -1303,6 +1306,7 @@ func (s *TaskSerializer) replicationSyncVersionedTransitionTaskFromProto(
 		VisibilityTimestamp: visibilityTimestamp,
 		TaskID:              syncVersionedTransitionTask.TaskId,
 		FirstEventID:        syncVersionedTransitionTask.FirstEventId,
+		FirstEventVersion:   syncVersionedTransitionTask.Version,
 		NextEventID:         syncVersionedTransitionTask.NextEventId,
 		NewRunID:            syncVersionedTransitionTask.NewRunId,
 		VersionedTransition: syncVersionedTransitionTask.VersionedTransition,

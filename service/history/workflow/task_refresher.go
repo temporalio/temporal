@@ -389,12 +389,13 @@ func (r *TaskRefresherImpl) refreshTasksForActivity(
 		}
 
 		if CompareVersionedTransition(minVersionedTransition, EmptyVersionedTransition) == 0 { // Full refresh
-			// clear activity timer task mask for later activity timer task re-generation
-			activityInfo.TimerTaskStatus = TimerTaskStatusNone
 
 			// need to update activity timer task mask for which task is generated
 			if err := mutableState.UpdateActivity(
-				activityInfo,
+				activityInfo.ScheduledEventId, func(ai *persistencespb.ActivityInfo, _ MutableState) {
+					// clear activity timer task mask for later activity timer task re-generation
+					activityInfo.TimerTaskStatus = TimerTaskStatusNone
+				},
 			); err != nil {
 				return err
 			}
@@ -403,6 +404,10 @@ func (r *TaskRefresherImpl) refreshTasksForActivity(
 		refreshActivityTimerTask = true
 
 		if activityInfo.StartedEventId != common.EmptyEventID {
+			continue
+		}
+
+		if activityInfo.Paused {
 			continue
 		}
 

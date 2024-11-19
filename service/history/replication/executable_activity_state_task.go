@@ -103,6 +103,10 @@ func NewExecutableActivityStateTask(
 			LastStartedRedirectCounter: task.LastStartedRedirectCounter,
 			BaseExecutionInfo:          task.BaseExecutionInfo,
 			VersionHistory:             task.VersionHistory,
+			FirstScheduledTime:         task.FirstScheduledTime,
+			LastAttemptCompleteTime:    task.LastAttemptCompleteTime,
+			Stamp:                      task.Stamp,
+			Paused:                     task.Paused,
 		},
 
 		batchable: true,
@@ -120,6 +124,10 @@ func NewExecutableActivityStateTask(
 			VersionHistory:             task.VersionHistory,
 			LastStartedBuildId:         task.LastStartedBuildId,
 			LastStartedRedirectCounter: task.LastStartedRedirectCounter,
+			FirstScheduledTime:         task.FirstScheduledTime,
+			LastAttemptCompleteTime:    task.LastAttemptCompleteTime,
+			Stamp:                      task.Stamp,
+			Paused:                     task.Paused,
 		}),
 	}
 }

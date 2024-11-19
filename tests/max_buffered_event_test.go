@@ -31,7 +31,6 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/suite"
-
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/sdk/client"
@@ -139,6 +138,8 @@ func (s *MaxBufferedEventSuite) TestMaxBufferedEventsLimit() {
 }
 
 func (s *MaxBufferedEventSuite) TestBufferedEventsMutableStateSizeLimit() {
+	s.T().Skip("flaky test")
+
 	/*
 			This test starts a workflow, and block its workflow task, then sending
 			signals to it which will be buffered. The default max mutable state

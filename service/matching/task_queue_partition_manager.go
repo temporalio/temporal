@@ -89,26 +89,11 @@ func newTaskQueuePartitionManager(
 	ns *namespace.Namespace,
 	partition tqid.Partition,
 	tqConfig *taskQueueConfig,
+	logger log.Logger,
+	throttledLogger log.Logger,
+	metricsHandler metrics.Handler,
 	userDataManager userDataManager,
 ) (*taskQueuePartitionManagerImpl, error) {
-	nsName := ns.Name().String()
-	logger := log.With(e.logger,
-		tag.WorkflowTaskQueueName(partition.RpcName()),
-		tag.WorkflowTaskQueueType(partition.TaskType()),
-		tag.WorkflowNamespace(nsName))
-	throttledLogger := log.With(e.throttledLogger,
-		tag.WorkflowTaskQueueName(partition.RpcName()),
-		tag.WorkflowTaskQueueType(partition.TaskType()),
-		tag.WorkflowNamespace(nsName))
-	taggedMetricsHandler := metrics.GetPerTaskQueuePartitionIDScope(
-		e.metricsHandler,
-		nsName,
-		partition,
-		tqConfig.BreakdownMetricsByTaskQueue(),
-		tqConfig.BreakdownMetricsByPartition(),
-		metrics.OperationTag(metrics.MatchingTaskQueuePartitionManagerScope),
-	)
-
 	pm := &taskQueuePartitionManagerImpl{
 		engine:                      e,
 		partition:                   partition,
@@ -117,7 +102,7 @@ func newTaskQueuePartitionManager(
 		logger:                      logger,
 		throttledLogger:             throttledLogger,
 		matchingClient:              e.matchingRawClient,
-		metricsHandler:              taggedMetricsHandler,
+		metricsHandler:              metricsHandler,
 		versionedQueues:             make(map[string]physicalTaskQueueManager),
 		userDataManager:             userDataManager,
 		cachedPhysicalInfoByBuildId: nil,
@@ -356,7 +341,7 @@ func (pm *taskQueuePartitionManagerImpl) ProcessSpooledTask(
 			task.redirectInfo = nil
 		}
 		err = syncMatchQueue.DispatchSpooledTask(ctx, task, userDataChanged)
-		if err != errInterrupted { // nolint:goerr113
+		if err != errInterrupted {
 			return err
 		}
 	}

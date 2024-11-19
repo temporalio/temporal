@@ -28,8 +28,6 @@ import (
 	"context"
 	"fmt"
 
-	persistencespb "go.temporal.io/server/api/persistence/v1"
-
 	"github.com/pborman/uuid"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -37,6 +35,7 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/definition"
@@ -230,18 +229,6 @@ func (t *timerQueueActiveTaskExecutor) executeActivityTimeoutTask(
 	if mutableState == nil || !mutableState.IsWorkflowExecutionRunning() {
 		return nil
 	}
-	ai, ok := mutableState.GetActivityInfo(task.EventID)
-
-	if !ok {
-		// if activity is not found, the timer is invalid.
-		return nil
-	}
-
-	if task.Stamp != ai.Stamp {
-		// if this task is invalid - we want to generate new activity timeout task
-		// it will be done in closeTransactionPrepareTasks call
-		return weContext.UpdateWorkflowExecutionAsActive(ctx, t.shardContext)
-	}
 
 	timerSequence := t.getTimerSequence(mutableState)
 	referenceTime := t.shardContext.GetTimeSource().Now()
@@ -254,10 +241,12 @@ func (t *timerQueueActiveTaskExecutor) executeActivityTimeoutTask(
 	// for updating workflow execution. In that case, only one new heartbeat timeout task should be
 	// created.
 	isHeartBeatTask := task.TimeoutType == enumspb.TIMEOUT_TYPE_HEARTBEAT
-	activityInfo, heartbeatTimeoutVis, ok := mutableState.GetActivityInfoWithTimerHeartbeat(task.EventID)
+	ai, heartbeatTimeoutVis, ok := mutableState.GetActivityInfoWithTimerHeartbeat(task.EventID)
 	if isHeartBeatTask && ok && queues.IsTimeExpired(task.GetVisibilityTime(), heartbeatTimeoutVis) {
-		activityInfo.TimerTaskStatus = activityInfo.TimerTaskStatus &^ workflow.TimerTaskStatusCreatedHeartbeat
-		if err := mutableState.UpdateActivity(activityInfo); err != nil {
+		err := mutableState.UpdateActivity(ai.ScheduledEventId, func(activityInfo *persistencespb.ActivityInfo, _ workflow.MutableState) {
+			activityInfo.TimerTaskStatus = activityInfo.TimerTaskStatus &^ workflow.TimerTaskStatusCreatedHeartbeat
+		})
+		if err != nil {
 			return err
 		}
 		updateMutableState = true
@@ -316,6 +305,9 @@ func (t *timerQueueActiveTaskExecutor) processSingleActivityTimeoutTask(
 		return result, nil
 	}
 
+	// Note: we don't need to check activity Stamps.
+	// This is because for the same attempts calls are idempotent.
+
 	failureMsg := fmt.Sprintf("activity %v timeout", timerSequenceID.TimerType.String())
 	timeoutFailure := failure.NewTimeoutFailure(failureMsg, timerSequenceID.TimerType)
 	retryState, err := mutableState.RetryActivity(ai, timeoutFailure)
@@ -324,6 +316,8 @@ func (t *timerQueueActiveTaskExecutor) processSingleActivityTimeoutTask(
 	}
 
 	if retryState == enumspb.RETRY_STATE_IN_PROGRESS {
+		// TODO uncommment once RETRY_STATE_PAUSED is supported
+		// || retryState == enumspb.RETRY_STATE_PAUSED {
 		result.shouldUpdateMutableState = true
 		return result, nil
 	}
@@ -478,7 +472,7 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowBackoffTimerTask(
 	}
 
 	nsName := mutableState.GetNamespaceEntry().Name().String()
-	metrics.WorkflowBackoffCount.With(t.metricHandler).Record(
+	metrics.WorkflowBackoffCount.With(t.metricsHandler).Record(
 		1,
 		metrics.NamespaceTag(nsName),
 		metrics.StringTag("backoff_type", task.WorkflowBackoffType.String()))
@@ -522,11 +516,10 @@ func (t *timerQueueActiveTaskExecutor) executeActivityRetryTimerTask(
 		return consts.ErrActivityTaskNotFound
 	}
 
-	if task.Stamp != activityInfo.Stamp {
-		// this timer event is from an old stamp. In this case we ignore the event.
+	if task.Stamp != activityInfo.Stamp || activityInfo.Paused {
+		// if retry task event is from an old stamp of if activity is paused we should ignore the event.
 		release(nil) // release(nil) so mutable state is not unloaded from cache
-		// I really don't understand why we need this release(nil) call...
-		return nil
+		return consts.ErrActivityTaskNotFound
 	}
 
 	if task.Attempt < activityInfo.Attempt || activityInfo.StartedEventId != common.EmptyEventID {
@@ -574,6 +567,7 @@ func (t *timerQueueActiveTaskExecutor) executeActivityRetryTimerTask(
 		ScheduleToStartTimeout: durationpb.New(scheduleToStartTimeout),
 		Clock:                  vclock.NewVectorClock(t.shardContext.GetClusterMetadata().GetClusterID(), t.shardContext.GetShardID(), task.TaskID),
 		VersionDirective:       directive,
+		Stamp:                  task.Stamp,
 	})
 	if err != nil {
 		return err
@@ -591,7 +585,7 @@ func (t *timerQueueActiveTaskExecutor) executeActivityRetryTimerTask(
 		t.shardContext,
 		workflow.TransactionPolicyActive,
 		t.cache,
-		t.metricHandler,
+		t.metricsHandler,
 		t.logger,
 	)
 }
