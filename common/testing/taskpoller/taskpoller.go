@@ -33,6 +33,7 @@ import (
 
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
+	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/debug"
@@ -226,7 +227,7 @@ func (p *workflowTaskPoller) pollTask(
 	if err != nil {
 		return nil, err
 	}
-	if resp == nil || len(resp.TaskToken) == 0 {
+	if resp == nil {
 		return nil, NoTaskAvailable
 	}
 
