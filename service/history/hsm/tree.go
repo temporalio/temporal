@@ -338,7 +338,7 @@ func (n *Node) AddChild(key Key, data any) (*Node, error) {
 // DeleteChild removes a child node and all its descendants
 func (n *Node) DeleteChild(path []Key) error {
 	if n.cache.deleted {
-		return fmt.Errorf("cannot delete from deleted node: %v", n.Key)
+		return fmt.Errorf("%w: cannot delete from deleted node: %v", ErrStateMachineInvalidState, n.Key)
 	}
 
 	if len(path) == 0 {
