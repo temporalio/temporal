@@ -394,6 +394,7 @@ func (t *transferQueueActiveTaskExecutor) processCloseExecution(
 		case nil:
 			// noop
 		case *serviceerror.NotFound, *serviceerror.NamespaceNotFound:
+			t.logger.Error(err.Error())
 			// parent gone, noop
 		default:
 			return err
