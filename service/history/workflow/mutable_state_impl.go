@@ -4240,7 +4240,6 @@ func (ms *MutableStateImpl) AddWorkflowExecutionOptionsUpdatedEvent(
 	options *workflowpb.WorkflowExecutionOptions,
 	mask *fieldmaskpb.FieldMask,
 ) (*historypb.HistoryEvent, error) {
-	// todo carly
 	if err := ms.checkMutability(tag.WorkflowActionWorkflowOptionsUpdated); err != nil {
 		return nil, err
 	}
@@ -4266,7 +4265,6 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionOptionsUpdatedEvent(event *his
 	// todo carly part 2: do replay test on new deployment if deployment changed
 	ms.GetExecutionInfo().VersioningInfo.BehaviorOverride = mergedOpts.GetVersioningBehaviorOverride().GetBehavior()
 	ms.GetExecutionInfo().VersioningInfo.DeploymentOverride = mergedOpts.GetVersioningBehaviorOverride().GetWorkerDeployment()
-	ms.writeEventToCache(event)
 	return nil
 }
 
@@ -4354,7 +4352,6 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionSignaled(
 ) error {
 	// Increment signal count in mutable state for this workflow execution
 	ms.executionInfo.SignalCount++
-	// todo carly: why is there no ms.writeEventToCache(event) here?
 	return nil
 }
 
