@@ -485,7 +485,7 @@ func (n *Node) Sync(incomingNode *Node) error {
 		incomingRoot = incomingRoot.Parent
 	}
 
-	if vt := incomingRoot.tombstones.GetDeletion(pathToString(n.Path())); vt != nil {
+	if vt := incomingRoot.tombstones.GetDeletion(n.Path()); vt != nil {
 		// Node was deleted in incoming state
 		if n.Parent != nil {
 			// Remove from parent's children map

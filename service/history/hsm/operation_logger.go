@@ -61,7 +61,8 @@ func (l TombstoneLog) TrackDeletion(k []Key, vt *persistencespb.VersionedTransit
 }
 
 // IsDeleted returns whether a node at the given path is deleted
-func (l TombstoneLog) IsDeleted(path string) bool {
+func (l TombstoneLog) IsDeleted(k []Key) bool {
+	path := pathToString(k)
 	for existingPath := range l {
 		if path == existingPath || strings.HasPrefix(path, existingPath+"/") {
 			return true
@@ -72,7 +73,8 @@ func (l TombstoneLog) IsDeleted(path string) bool {
 
 // GetDeletion returns the versioned transition for a deleted node
 // Returns nil if the node is not deleted
-func (l TombstoneLog) GetDeletion(path string) *persistencespb.VersionedTransition {
+func (l TombstoneLog) GetDeletion(k []Key) *persistencespb.VersionedTransition {
+	path := pathToString(k)
 	for existingPath, vt := range l {
 		if path == existingPath || strings.HasPrefix(path, existingPath+"/") {
 			return vt
