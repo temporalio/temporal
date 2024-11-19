@@ -40,6 +40,7 @@ import (
 // ErrStateMachineNotFound is returned when looking up a non-existing state machine in a [Node] or a [Collection].
 var ErrStateMachineNotFound = errors.New("state machine not found")
 
+// ErrStateMachineInvalidState is returned a [Node] state transition is attempted to a state that is invalid.
 var ErrStateMachineInvalidState = errors.New("invalid state machine state")
 
 // ErrStateMachineAlreadyExists is returned when trying to add a state machine with an ID that already exists in a [Collection].
