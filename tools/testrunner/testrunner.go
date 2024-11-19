@@ -50,7 +50,6 @@ type attempt struct {
 func (a *attempt) run(ctx context.Context, args []string) error {
 	args = append([]string{"--junitfile", a.junitXmlPath}, args...)
 	log.Printf("starting test attempt %d with args: %v", a.number, args)
-	// This must run from the repo root.
 	cmd := exec.CommandContext(ctx, a.runner.gotestsumExecutable, args...)
 	cmd.Stderr = os.Stderr
 	cmd.Stdout = os.Stdout
