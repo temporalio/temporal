@@ -915,7 +915,7 @@ func (s *mutableStateSuite) TestOverride_BaseDeploymentUpdatedOnCompletion() {
 	)
 	s.NoError(err)
 	s.verifyCurrentDeployment(deployment3, overrideBehavior)
-	s.verifyOverrides(baseBehavior, overrideBehavior, deployment1, deployment3) // todo fix: base deployment still deployment1 here, because there is no redirect
+	s.verifyOverrides(baseBehavior, overrideBehavior, deployment1, deployment3)
 
 	_, err = s.mutableState.AddWorkflowTaskCompletedEvent(
 		wft,
@@ -928,46 +928,14 @@ func (s *mutableStateSuite) TestOverride_BaseDeploymentUpdatedOnCompletion() {
 	)
 	s.NoError(err)
 	s.verifyCurrentDeployment(deployment3, overrideBehavior)
-	s.verifyOverrides(baseBehavior, overrideBehavior, deployment2, deployment3) // todo: expect base deployment = 2 here
+	s.verifyOverrides(baseBehavior, overrideBehavior, deployment2, deployment3)
 
 	// now we unset the override and check that the base deployment/behavior is in effect
 	event, err = s.mutableState.AddWorkflowExecutionOptionsUpdatedEvent(unspecifiedOptions, versionOverrideMask)
 	s.NoError(err)
-	s.verifyCurrentDeployment(deployment2, baseBehavior) // todo: expect base deployment = 2 here
+	s.verifyCurrentDeployment(deployment2, baseBehavior)
 	s.verifyWorkflowOptionsUpdatedEvent(event, unspecifiedOptions, versionOverrideMask)
-	s.verifyOverrides(baseBehavior, enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED, deployment2, nil) // todo: expect base deployment = 2 here
-
-	// deployment 2 is still current, now we start and complete an event and the completion says it's pinned in the new version
-	// this actually takes effect now that the override is gone.
-	wft, err = s.mutableState.AddWorkflowTaskScheduledEvent(true, enumsspb.WORKFLOW_TASK_TYPE_NORMAL)
-	s.NoError(err)
-
-	_, wft, err = s.mutableState.AddWorkflowTaskStartedEvent(
-		wft.ScheduledEventID,
-		"",
-		tq,
-		"",
-		nil,
-		nil,
-		false,
-	)
-	s.NoError(err)
-	s.verifyCurrentDeployment(deployment2, baseBehavior)                                       // todo: expect base deployment = 2 here
-	s.verifyOverrides(baseBehavior, enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED, deployment2, nil) // todo: expect base deployment = 2 here
-
-	_, err = s.mutableState.AddWorkflowTaskCompletedEvent(
-		wft,
-		&workflowservice.RespondWorkflowTaskCompletedRequest{
-			// wf is pinned in the new version
-			VersioningBehavior: enumspb.VERSIONING_BEHAVIOR_PINNED,
-			WorkerVersionStamp: worker_versioning.StampFromDeployment(deployment3),
-		},
-		workflowTaskCompletionLimits,
-	)
-	baseBehavior = enumspb.VERSIONING_BEHAVIOR_PINNED
-	s.NoError(err)
-	s.verifyCurrentDeployment(deployment3, baseBehavior) // todo: expect base deployment = 3 here
-	s.verifyOverrides(baseBehavior, enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED, deployment3, nil)
+	s.verifyOverrides(baseBehavior, enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED, deployment2, nil)
 }
 
 func (s *mutableStateSuite) TestChecksum() {

@@ -401,6 +401,7 @@ func (b *EventFactory) CreateWorkflowExecutionOptionsUpdatedEvent(
 			UpdateMask: mask,
 		},
 	}
+	event.WorkerMayIgnore = true
 	return event
 }
 
