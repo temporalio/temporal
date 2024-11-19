@@ -1379,70 +1379,41 @@ func (s *UpdateWorkflowSuite) TestUpdateWorkflow_StickySpeculativeWorkflowTask_A
 				tv = tv.WithRunID("")
 			}
 
-			wtHandlerCalls := 0
-			wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
-				wtHandlerCalls++
-				switch wtHandlerCalls {
-				case 1:
-					// Completes first WT with empty command list.
-					return nil, nil
-				case 2:
-					// This WT contains partial history because sticky was enabled.
-					s.EqualHistory(`
-  4 WorkflowTaskCompleted
-  5 WorkflowTaskScheduled // Speculative WT.
-  6 WorkflowTaskStarted`, task.History)
-					return s.UpdateAcceptCompleteCommands(tv, "1"), nil
-				default:
-					s.Failf("wtHandler called too many times", "wtHandler shouldn't be called %d times", wtHandlerCalls)
-					return nil, nil
-				}
-			}
-
-			msgHandlerCalls := 0
-			msgHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*protocolpb.Message, error) {
-				msgHandlerCalls++
-				switch msgHandlerCalls {
-				case 1:
-					return nil, nil
-				case 2:
-					updRequestMsg := task.Messages[0]
-					updRequest := protoutils.UnmarshalAny[*updatepb.Request](s.T(), updRequestMsg.GetBody())
-
-					s.Equal("args-value-of-"+tv.UpdateID("1"), testcore.DecodeString(s.T(), updRequest.GetInput().GetArgs()))
-					s.Equal(tv.HandlerName(), updRequest.GetInput().GetName())
-					s.EqualValues(5, updRequestMsg.GetEventId())
-
-					return s.UpdateAcceptCompleteMessages(tv, updRequestMsg, "1"), nil
-				default:
-					s.Failf("msgHandler called too many times", "msgHandler shouldn't be called %d times", msgHandlerCalls)
-					return nil, nil
-				}
-			}
-
-			poller := &testcore.TaskPoller{
-				Client:                       s.FrontendClient(),
-				Namespace:                    s.Namespace(),
-				TaskQueue:                    tv.TaskQueue(),
-				StickyTaskQueue:              tv.StickyTaskQueue(),
-				StickyScheduleToStartTimeout: 3 * time.Second,
-				Identity:                     tv.WorkerIdentity(),
-				WorkflowTaskHandler:          wtHandler,
-				MessageHandler:               msgHandler,
-				Logger:                       s.Logger,
-				T:                            s.T(),
-			}
-
 			// Drain existing first WT from regular task queue, but respond with sticky queue enabled response, next WT will go to sticky queue.
-			_, err := poller.PollAndProcessWorkflowTask(testcore.WithRespondSticky)
+			_, err := s.TaskPoller.PollAndHandleWorkflowTask(tv,
+				func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+					return &workflowservice.RespondWorkflowTaskCompletedRequest{
+						StickyAttributes: tv.StickyExecutionAttributes(3 * time.Second),
+					}, nil
+				})
 			s.NoError(err)
 
 			go func() {
 				// Process update in workflow task (it is sticky).
-				res, err := poller.PollAndProcessWorkflowTask(testcore.WithPollSticky, testcore.WithoutRetries)
+				res, err := s.TaskPoller.
+					PollWorkflowTask(&workflowservice.PollWorkflowTaskQueueRequest{TaskQueue: tv.StickyTaskQueue()}).
+					HandleTask(tv,
+						func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+							// This WT contains partial history because sticky was enabled.
+							s.EqualHistory(`
+						  4 WorkflowTaskCompleted
+						  5 WorkflowTaskScheduled // Speculative WT.
+						  6 WorkflowTaskStarted`, task.History)
+
+							updRequestMsg := task.Messages[0]
+							updRequest := protoutils.UnmarshalAny[*updatepb.Request](s.T(), updRequestMsg.GetBody())
+							s.Equal("args-value-of-"+tv.UpdateID("1"), testcore.DecodeString(s.T(), updRequest.GetInput().GetArgs()))
+							s.Equal(tv.HandlerName(), updRequest.GetInput().GetName())
+							s.EqualValues(5, updRequestMsg.GetEventId())
+
+							return &workflowservice.RespondWorkflowTaskCompletedRequest{
+								Commands: s.UpdateAcceptCompleteCommands(tv, "1"),
+								Messages: s.UpdateAcceptCompleteMessages(tv, updRequestMsg, "1"),
+							}, nil
+						})
 				require.NoError(s.T(), err)
 				require.NotNil(s.T(), res)
-				require.EqualValues(s.T(), 0, res.NewTask.ResetHistoryEventId)
+				require.EqualValues(s.T(), 0, res.ResetHistoryEventId)
 			}()
 
 			// This is to make sure that sticky poller above reached server first.
@@ -1452,22 +1423,17 @@ func (s *UpdateWorkflowSuite) TestUpdateWorkflow_StickySpeculativeWorkflowTask_A
 
 			s.EqualValues("success-result-of-"+tv.UpdateID("1"), testcore.DecodeString(s.T(), updateResult.GetOutcome().GetSuccess()))
 
-			s.Equal(2, wtHandlerCalls)
-			s.Equal(2, msgHandlerCalls)
-
-			events := s.GetHistory(s.Namespace(), tv.WorkflowExecution())
-
 			s.EqualHistoryEvents(`
-  1 WorkflowExecutionStarted
-  2 WorkflowTaskScheduled
-  3 WorkflowTaskStarted
-  4 WorkflowTaskCompleted
-  5 WorkflowTaskScheduled
-  6 WorkflowTaskStarted
-  7 WorkflowTaskCompleted
-  8 WorkflowExecutionUpdateAccepted {"AcceptedRequestSequencingEventId": 5} // WTScheduled event which delivered update to the worker.
-  9 WorkflowExecutionUpdateCompleted {"AcceptedEventId": 8}
-`, events)
+			  1 WorkflowExecutionStarted
+			  2 WorkflowTaskScheduled
+			  3 WorkflowTaskStarted
+			  4 WorkflowTaskCompleted
+			  5 WorkflowTaskScheduled
+			  6 WorkflowTaskStarted
+			  7 WorkflowTaskCompleted
+			  8 WorkflowExecutionUpdateAccepted {"AcceptedRequestSequencingEventId": 5} // WTScheduled event which delivered update to the worker.
+			  9 WorkflowExecutionUpdateCompleted {"AcceptedEventId": 8}
+			`, s.GetHistory(s.Namespace(), tv.WorkflowExecution()))
 		})
 	}
 }
