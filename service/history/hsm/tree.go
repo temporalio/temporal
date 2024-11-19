@@ -479,7 +479,7 @@ func (n *Node) CompareState(incomingNode *Node) (int, error) {
 // Meant to be used by the framework, **not** by components.
 func (n *Node) Sync(incomingNode *Node) error {
 	if n.cache.deleted {
-		return fmt.Errorf("cannot sync deleted node: %v", n.Key)
+		return fmt.Errorf("%w: cannot sync deleted node: %v", ErrStateMachineInvalidState, n.Key)
 	}
 
 	// Check for deletion first
@@ -559,7 +559,7 @@ func (n *Node) Sync(incomingNode *Node) error {
 // If the transition fails, the changes are rolled back and no state is mutated.
 func MachineTransition[T any](n *Node, transitionFn func(T) (TransitionOutput, error)) (retErr error) {
 	if n.cache.deleted {
-		return fmt.Errorf("cannot transition deleted node: %v", n.Key)
+		return fmt.Errorf("%w: cannot transition deleted node: %v", ErrStateMachineInvalidState, n.Key)
 	}
 
 	data, err := MachineData[T](n)
