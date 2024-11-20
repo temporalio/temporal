@@ -85,10 +85,15 @@ type cachedMachine struct {
 	children map[Key]*Node
 	// A flag that indicates the cached machine is dirty.
 	dirty bool
-	// Outputs of all transitions in the current transaction.
-	outputs []TransitionOutputWithCount
 	// A flag to indicate the node was deleted.
 	deleted bool
+}
+
+type OperationLog struct {
+	// All transitions, including regular state changes and deletions
+	Transitions []TransitionOutputWithCount
+	// Track topmost deleted paths to filter outputs efficiently
+	DeletedPaths [][]Key
 }
 
 // NodeBackend is a concrete implementation to support interacting with the underlying platform.
@@ -115,7 +120,7 @@ func EventIDFromToken(token []byte) (int64, error) {
 //
 // It holds a persistent representation of itself and maintains an in-memory cache of deserialized data and child nodes.
 // Node data should not be manipulated directly and should only be done using [MachineTransition] or
-// [Collection.Transtion] to ensure the tree tracks dirty states and update transition counts.
+// [Collection.Transition] to ensure the tree tracks dirty states and update transition counts.
 type Node struct {
 	// Key of this node in parent's map. Empty if node is the root.
 	Key Key
@@ -126,6 +131,7 @@ type Node struct {
 	persistence *persistencespb.StateMachineNode
 	definition  StateMachineDefinition
 	backend     NodeBackend
+	opLog       *OperationLog
 }
 
 // NewRoot creates a new root [Node].
@@ -135,7 +141,8 @@ func NewRoot(registry *Registry,
 	t string,
 	data any,
 	children map[string]*persistencespb.StateMachineMap,
-	backend NodeBackend) (*Node, error) {
+	backend NodeBackend,
+) (*Node, error) {
 	def, ok := registry.Machine(t)
 	if !ok {
 		return nil, fmt.Errorf("%w: state machine for type: %v", ErrNotRegistered, t)
@@ -160,6 +167,7 @@ func NewRoot(registry *Registry,
 			children:   make(map[Key]*Node),
 		},
 		backend: backend,
+		opLog:   &OperationLog{},
 	}, nil
 }
 
@@ -179,6 +187,7 @@ func (n *Node) Dirty() bool {
 type TransitionOutputWithCount struct {
 	TransitionOutput
 	TransitionCount int64
+	NodePath        []Key
 }
 type PathAndOutputs struct {
 	Path    []Key
@@ -194,13 +203,42 @@ func (n *Node) Path() []Key {
 
 // Outputs returns all outputs produced by transitions on this tree.
 func (n *Node) Outputs() []PathAndOutputs {
+	root := n.getRoot()
+	if root.opLog == nil {
+		return nil
+	}
+
+	currentPath := n.Path()
 	var paos []PathAndOutputs
-	if len(n.cache.outputs) > 0 {
-		paos = append(paos, PathAndOutputs{Path: n.Path(), Outputs: n.cache.outputs})
+
+	isDeleted := func(path []Key) bool {
+		for _, deletedPath := range root.opLog.DeletedPaths {
+			if isPathPrefix(deletedPath, path) {
+				return true
+			}
+		}
+		return false
 	}
-	for _, child := range n.cache.children {
-		paos = append(paos, child.Outputs()...)
+
+	if !isDeleted(currentPath) {
+		var nodeTransitions []TransitionOutputWithCount
+		for _, t := range root.opLog.Transitions {
+			if reflect.DeepEqual(t.NodePath, currentPath) {
+				nodeTransitions = append(nodeTransitions, t)
+			}
+		}
+		if len(nodeTransitions) > 0 {
+			paos = append(paos, PathAndOutputs{
+				Path:    currentPath,
+				Outputs: nodeTransitions,
+			})
+		}
+
+		for _, child := range n.cache.children {
+			paos = append(paos, child.Outputs()...)
+		}
 	}
+
 	return paos
 }
 
@@ -208,8 +246,13 @@ func (n *Node) Outputs() []PathAndOutputs {
 // This should be called at the end of every transaction where the transitions are performed to avoid emitting duplicate
 // transition outputs.
 func (n *Node) ClearTransactionState() {
+	root := n.getRoot()
+	if root.opLog != nil {
+		root.opLog.Transitions = nil
+		root.opLog.DeletedPaths = nil
+	}
+
 	n.cache.dirty = false
-	n.cache.outputs = nil
 	for _, child := range n.cache.children {
 		child.ClearTransactionState()
 	}
@@ -356,12 +399,16 @@ func (n *Node) DeleteChild(key Key) error {
 	}
 
 	// Record deletion
-	n.cache.outputs = append(n.cache.outputs, TransitionOutputWithCount{
+	root := n.getRoot()
+	root.opLog.Transitions = append(root.opLog.Transitions, TransitionOutputWithCount{
 		TransitionOutput: TransitionOutput{
 			IsDelete: true,
 		},
 		TransitionCount: n.backend.NextTransitionCount(),
+		NodePath:        child.Path(),
 	})
+	// Track the deleted path
+	root.opLog.DeletedPaths = append(root.opLog.DeletedPaths, child.Path())
 
 	// Remove from persistence and cache
 	machinesMap := n.persistence.Children[key.Type]
@@ -545,11 +592,14 @@ func MachineTransition[T any](n *Node, transitionFn func(T) (TransitionOutput, e
 	}
 	n.persistence.Data = serialized
 	n.cache.dirty = true
-	outputWithCount := TransitionOutputWithCount{
+
+	root := n.getRoot()
+	root.opLog.Transitions = append(root.opLog.Transitions, TransitionOutputWithCount{
 		TransitionOutput: output,
 		TransitionCount:  n.persistence.TransitionCount,
-	}
-	n.cache.outputs = append(n.cache.outputs, outputWithCount)
+		NodePath:         n.Path(),
+	})
+
 	return nil
 }
 
@@ -652,6 +702,14 @@ func GenerateEventLoadToken(event *historypb.HistoryEvent) ([]byte, error) {
 		EventBatchId: eventBatchID,
 	}
 	return proto.Marshal(ref)
+}
+
+func (n *Node) getRoot() *Node {
+	root := n
+	for root.Parent != nil {
+		root = root.Parent
+	}
+	return root
 }
 
 func isPathPrefix(prefix, path []Key) bool {
