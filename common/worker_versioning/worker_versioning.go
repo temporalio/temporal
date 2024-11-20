@@ -129,6 +129,17 @@ func BuildIdIfUsingVersioning(stamp *commonpb.WorkerVersionStamp) string {
 	return ""
 }
 
+// DeploymentFromStamp returns the deployment if it is using versioning V3, otherwise nil.
+func DeploymentFromStamp(stamp *commonpb.WorkerVersionStamp) *deploymentpb.Deployment {
+	if stamp.GetUseVersioning() && stamp.GetDeploymentSeriesName() != "" && stamp.GetBuildId() != "" {
+		return &deploymentpb.Deployment{
+			SeriesName: stamp.GetDeploymentSeriesName(),
+			BuildId:    stamp.GetBuildId(),
+		}
+	}
+	return (*deploymentpb.Deployment)(nil)
+}
+
 // DeploymentFromCapabilities returns the deployment if it is using versioning V3, otherwise nil.
 func DeploymentFromCapabilities(capabilities *commonpb.WorkerVersionCapabilities) *deploymentpb.Deployment {
 	if capabilities.GetUseVersioning() && capabilities.GetDeploymentSeriesName() != "" && capabilities.GetBuildId() != "" {
@@ -187,4 +198,8 @@ func StampFromCapabilities(cap *commonpb.WorkerVersionCapabilities) *commonpb.Wo
 
 func StampFromBuildId(buildId string) *commonpb.WorkerVersionStamp {
 	return &commonpb.WorkerVersionStamp{UseVersioning: true, BuildId: buildId}
+}
+
+func StampFromDeployment(deployment *deploymentpb.Deployment) *commonpb.WorkerVersionStamp {
+	return &commonpb.WorkerVersionStamp{UseVersioning: true, BuildId: deployment.BuildId, DeploymentSeriesName: deployment.SeriesName}
 }

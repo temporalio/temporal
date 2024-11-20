@@ -5193,10 +5193,13 @@ func (wh *WorkflowHandler) UpdateWorkflowExecutionOptions(
 		return nil, errWorkflowIDNotSet
 	}
 	if request.GetUpdateMask() == nil {
-		return nil, serviceerror.NewInvalidArgument("UpdateMask must be non-nil")
+		return nil, serviceerror.NewInvalidArgument("UpdateMask is required")
 	}
 	opts := request.GetWorkflowExecutionOptions()
-	_, err := fieldmaskpb.New(opts, request.GetUpdateMask().GetPaths()...) // errors if any of the paths are not in WorkflowExecutionOptions
+	if opts == nil {
+		return nil, serviceerror.NewInvalidArgument("WorkflowExecutionOptions is required")
+	}
+	_, err := fieldmaskpb.New(opts, request.GetUpdateMask().GetPaths()...) // errors if paths are not valid for WorkflowExecutionOptions
 	if err != nil {
 		return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("error parsing UpdateMask: %s", err.Error()))
 	}

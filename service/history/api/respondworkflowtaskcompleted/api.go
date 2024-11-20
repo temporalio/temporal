@@ -1053,9 +1053,11 @@ func (handler *WorkflowTaskCompletedHandler) validateVersioningInfo(
 	request *workflowservice.RespondWorkflowTaskCompletedRequest,
 	ms workflow.MutableState,
 ) error {
-	// todo (carly): handle WorkerVersionStamp if needed
-	//taskDeployment := worker_versioning.DeploymentFromStamp(request.GetWorkerVersionStamp())
+	// todo (carly): remove WorkerVersionStamp if we delete it
 	taskDeployment := request.GetDeployment()
+	if taskDeployment == nil {
+		taskDeployment = worker_versioning.DeploymentFromStamp(request.GetWorkerVersionStamp())
+	}
 
 	wfDeployment := ms.GetCurrentDeployment()
 	if !taskDeployment.Equal(wfDeployment) {

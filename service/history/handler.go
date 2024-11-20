@@ -1222,28 +1222,28 @@ func (h *Handler) UpdateWorkflowExecutionOptions(ctx context.Context, request *h
 		return nil, errShuttingDown
 	}
 
-	//namespaceID := namespace.ID(request.GetNamespaceId())
-	//if namespaceID == "" {
-	//	return nil, h.convertError(errNamespaceNotSet)
-	//}
-	//
-	//workflowExecution := request.ResetRequest.WorkflowExecution
-	//workflowID := workflowExecution.GetWorkflowId()
-	//shardContext, err := h.controller.GetShardByNamespaceWorkflow(namespaceID, workflowID)
-	//if err != nil {
-	//	return nil, h.convertError(err)
-	//}
-	//engine, err := shardContext.GetEngine(ctx)
-	//if err != nil {
-	//	return nil, h.convertError(err)
-	//}
-	//
-	//resp, err2 := engine.ResetWorkflowExecution(ctx, request)
-	//if err2 != nil {
-	//	return nil, h.convertError(err2)
-	//}
+	namespaceID := namespace.ID(request.GetNamespaceId())
+	if namespaceID == "" {
+		return nil, h.convertError(errNamespaceNotSet)
+	}
 
-	return nil, nil
+	workflowExecution := request.UpdateRequest.WorkflowExecution
+	workflowID := workflowExecution.GetWorkflowId()
+	shardContext, err := h.controller.GetShardByNamespaceWorkflow(namespaceID, workflowID)
+	if err != nil {
+		return nil, h.convertError(err)
+	}
+	engine, err := shardContext.GetEngine(ctx)
+	if err != nil {
+		return nil, h.convertError(err)
+	}
+
+	resp, err2 := engine.UpdateWorkflowExecutionOptions(ctx, request)
+	if err2 != nil {
+		return nil, h.convertError(err2)
+	}
+
+	return resp, nil
 }
 
 // QueryWorkflow queries a workflow.

@@ -155,8 +155,14 @@ func Invoke(
 			},
 		}
 		if redirectInfo := versioningInfo.GetRedirectInfo(); redirectInfo != nil {
-			result.WorkflowExecutionInfo.VersioningInfo.Behavior = versioningInfo.Behavior
-			result.WorkflowExecutionInfo.VersioningInfo.Deployment = redirectInfo.Deployment
+			result.WorkflowExecutionInfo.VersioningInfo.DeploymentTransition =
+				&workflowpb.WorkflowExecutionInfo_VersioningInfo_DeploymentTransition{
+					Deployment: redirectInfo.Deployment,
+					// todo (carly): if the redirect has a versioning override or is unsetting an override, set this field
+					// currently redirectInfo only has "deployment" and "behavior override", not "deployment override"
+					// so I'm not 100% sure what to put here. Probably persistence.versioningInfo proto needs to change.
+					ApplyOverride: nil,
+				}
 		}
 	}
 

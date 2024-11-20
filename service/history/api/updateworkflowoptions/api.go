@@ -27,10 +27,11 @@ package updateworkflowoptions
 import (
 	"context"
 	"fmt"
-	"go.temporal.io/api/serviceerror"
 	"google.golang.org/protobuf/proto"
+	"slices"
 
 	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/api/serviceerror"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common/definition"
@@ -84,6 +85,8 @@ func Invoke(
 			if updateError != nil {
 				return nil, updateError
 			}
+
+			// Set options for gRPC response
 			ret.WorkflowExecutionOptions = mergedOpts
 
 			// If there is no mutable state change at all, return with no new history event and Noop=true
@@ -117,6 +120,7 @@ func Invoke(
 
 func GetOptionsFromMutableState(ms workflow.MutableState) *workflowpb.WorkflowExecutionOptions {
 	opts := &workflowpb.WorkflowExecutionOptions{}
+	// todo (carly) or todo (shahab): Have VersioningInfo store VersioningOverride instead of DeploymentOverride + BehaviorOverride separately
 	if versioningInfo := ms.GetExecutionInfo().GetVersioningInfo(); versioningInfo != nil {
 		if behaviorOverride := versioningInfo.GetBehaviorOverride(); behaviorOverride != enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED {
 			opts.VersioningOverride = &workflowpb.VersioningOverride{
@@ -133,8 +137,22 @@ func MergeOptions(paths []string, src, dst *workflowpb.WorkflowExecutionOptions)
 	// Apply masked fields
 	for _, p := range paths {
 		switch p {
-		case "versioning_behavior_override":
+		case "versioning_override":
 			dst.VersioningOverride = src.GetVersioningOverride()
+		case "versioning_override.deployment":
+			if slices.Contains(paths, "versioning_override.behavior") {
+				print("both")
+				dst.VersioningOverride = src.GetVersioningOverride()
+			} else {
+				return nil, serviceerror.NewInvalidArgument("versioning_override fields must be updated together")
+			}
+		case "versioning_override.behavior":
+			if slices.Contains(paths, "versioning_override.deployment") {
+				print("both")
+				dst.VersioningOverride = src.GetVersioningOverride()
+			} else {
+				return nil, serviceerror.NewInvalidArgument("versioning_override fields must be updated together")
+			}
 		default:
 			return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("error parsing UpdateMask: path %s not supported", p))
 		}
