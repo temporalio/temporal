@@ -7,7 +7,7 @@ retract (
 	v1.26.0 // Published accidentally.
 )
 
-replace go.temporal.io/api => ../api-go
+replace go.temporal.io/sdk => ../sdk-go
 
 require (
 	cloud.google.com/go/storage v1.41.0
@@ -29,7 +29,6 @@ require (
 	github.com/jackc/pgx/v5 v5.6.0
 	github.com/jmoiron/sqlx v1.3.4
 	github.com/lib/pq v1.10.9
-	github.com/mennanov/fieldmask-utils v1.1.2
 	github.com/mitchellh/mapstructure v1.5.0
 	github.com/nexus-rpc/sdk-go v0.0.10
 	github.com/olekukonko/tablewriter v0.0.5
@@ -58,7 +57,7 @@ require (
 	go.opentelemetry.io/otel/sdk v1.27.0
 	go.opentelemetry.io/otel/sdk/metric v1.27.0
 	go.opentelemetry.io/otel/trace v1.27.0
-	go.temporal.io/api v1.39.1-0.20241110233709-f3490ec44b20
+	go.temporal.io/api v1.39.1-0.20241120014457-e1e5008501b0
 	go.temporal.io/sdk v1.29.2-0.20241017230629-cc508c6fe7a9
 	go.temporal.io/version v0.3.0
 	go.uber.org/atomic v1.11.0

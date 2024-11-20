@@ -27,6 +27,7 @@ package deployment
 import (
 	"context"
 	"fmt"
+	deploymentpb "go.temporal.io/api/deployment/v1"
 	"strings"
 	"time"
 
@@ -88,13 +89,13 @@ type DeploymentClient interface {
 // implements DeploymentClient
 type DeploymentWorkflowClient struct {
 	namespaceEntry *namespace.Namespace
-	deployment     *commonpb.WorkerDeployment
+	deployment     *deploymentpb.Deployment
 	historyClient  resource.HistoryClient
 }
 
 func NewDeploymentWorkflowClient(
 	namespaceEntry *namespace.Namespace,
-	deployment *commonpb.WorkerDeployment,
+	deployment *deploymentpb.Deployment,
 	historyClient resource.HistoryClient,
 ) *DeploymentWorkflowClient {
 	return &DeploymentWorkflowClient{
@@ -112,7 +113,7 @@ func (d *DeploymentWorkflowClient) RegisterTaskQueueWorker(
 	maxIDLengthLimit int,
 ) error {
 	// validate params which are used for building workflowID's
-	err := d.validateDeploymentWfParams("DeploymentName", d.deployment.DeploymentName, maxIDLengthLimit)
+	err := d.validateDeploymentWfParams("DeploymentName", d.deployment.SeriesName, maxIDLengthLimit)
 	if err != nil {
 		return err
 	}
@@ -192,7 +193,7 @@ func (d *DeploymentWorkflowClient) RegisterTaskQueueWorker(
 // workflowID which are used in our deployment workflows
 func (d *DeploymentWorkflowClient) generateDeploymentWorkflowID() string {
 	// escaping the reserved workflow delimiter (|) from the inputs, if present
-	escapedDeploymentName := d.escapeChar(d.deployment.DeploymentName)
+	escapedDeploymentName := d.escapeChar(d.deployment.SeriesName)
 	escapedBuildId := d.escapeChar(d.deployment.BuildId)
 
 	return DeploymentWorkflowIDPrefix + DeploymentWorkflowIDDelimeter + escapedDeploymentName + DeploymentWorkflowIDDelimeter + escapedBuildId

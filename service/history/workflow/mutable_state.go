@@ -28,11 +28,13 @@ package workflow
 
 import (
 	"context"
-	"google.golang.org/protobuf/types/known/fieldmaskpb"
+	"google.golang.org/protobuf/types/known/durationpb"
+	"google.golang.org/protobuf/types/known/timestamppb"
 	"time"
 
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
+	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
 	historypb "go.temporal.io/api/history/v1"
@@ -55,8 +57,6 @@ import (
 	"go.temporal.io/server/service/history/historybuilder"
 	"go.temporal.io/server/service/history/hsm"
 	"go.temporal.io/server/service/history/tasks"
-	"google.golang.org/protobuf/types/known/durationpb"
-	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type TransactionPolicy int
@@ -164,7 +164,7 @@ type (
 			string,
 			string,
 			*commonpb.WorkerVersionStamp,
-			*commonpb.WorkerDeployment,
+			*deploymentpb.Deployment,
 			*taskqueuespb.BuildIdRedirectInfo,
 		) (*historypb.HistoryEvent, error)
 		AddActivityTaskTimedOutEvent(int64, int64, *failurepb.Failure, enumspb.RetryState) (*historypb.HistoryEvent, error)
@@ -223,7 +223,7 @@ type (
 		AddWorkflowExecutionStartedEvent(*commonpb.WorkflowExecution, *historyservice.StartWorkflowExecutionRequest) (*historypb.HistoryEvent, error)
 		AddWorkflowExecutionStartedEventWithOptions(*commonpb.WorkflowExecution, *historyservice.StartWorkflowExecutionRequest, *workflowpb.ResetPoints, string, string) (*historypb.HistoryEvent, error)
 		AddWorkflowExecutionTerminatedEvent(firstEventID int64, reason string, details *commonpb.Payloads, identity string, deleteAfterTerminate bool, links []*commonpb.Link) (*historypb.HistoryEvent, error)
-		AddWorkflowExecutionOptionsUpdatedEvent(options *workflowpb.WorkflowExecutionOptions, mask *fieldmaskpb.FieldMask) (*historypb.HistoryEvent, error)
+		AddWorkflowExecutionOptionsUpdatedEvent(versioningOverride *workflowpb.VersioningOverride) (*historypb.HistoryEvent, error)
 		AddWorkflowExecutionUpdateAcceptedEvent(protocolInstanceID string, acceptedRequestMessageId string, acceptedRequestSequencingEventId int64, acceptedRequest *updatepb.Request) (*historypb.HistoryEvent, error)
 		AddWorkflowExecutionUpdateCompletedEvent(acceptedEventID int64, updResp *updatepb.Response) (*historypb.HistoryEvent, error)
 		RejectWorkflowExecutionUpdate(protocolInstanceID string, updRejection *updatepb.Rejection) error
@@ -405,12 +405,12 @@ type (
 		NextTransitionCount() int64
 		// GetCurrentDeployment returns the current effective deployment in the following order:
 		// RedirectInfo.Deployment takes precedence over DeploymentOverride, over Deployment.
-		GetCurrentDeployment() *commonpb.WorkerDeployment
+		GetCurrentDeployment() *deploymentpb.Deployment
 		// GetVersioningBehavior returns the effective versioning behavior for the workflow.
 		GetVersioningBehavior() enumspb.VersioningBehavior
 		GetRedirectInfo() *persistencespb.WorkflowExecutionInfo_VersioningInfo_RedirectInfo
 		StartDeploymentRedirect(
-			deployment *commonpb.WorkerDeployment,
+			deployment *deploymentpb.Deployment,
 			behaviorOverride enumspb.VersioningBehavior,
 		) bool
 		CompleteDeploymentRedirect(behavior enumspb.VersioningBehavior) error

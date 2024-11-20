@@ -25,11 +25,11 @@
 package historybuilder
 
 import (
-	"google.golang.org/protobuf/types/known/fieldmaskpb"
 	"time"
 
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
+	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
 	historypb "go.temporal.io/api/history/v1"
@@ -156,19 +156,21 @@ func (b *EventFactory) CreateWorkflowTaskCompletedEvent(
 	workerVersionStamp *commonpb.WorkerVersionStamp,
 	sdkMetadata *sdkpb.WorkflowTaskCompletedMetadata,
 	meteringMetadata *commonpb.MeteringMetadata,
-	completedRedirect *historypb.CompletedDeploymentRedirectInfo,
+	deployment *deploymentpb.Deployment,
+	behavior enumspb.VersioningBehavior,
 ) *historypb.HistoryEvent {
 	event := b.createHistoryEvent(enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED, b.timeSource.Now())
 	event.Attributes = &historypb.HistoryEvent_WorkflowTaskCompletedEventAttributes{
 		WorkflowTaskCompletedEventAttributes: &historypb.WorkflowTaskCompletedEventAttributes{
-			ScheduledEventId:  scheduledEventID,
-			StartedEventId:    startedEventID,
-			Identity:          identity,
-			BinaryChecksum:    checksum,
-			WorkerVersion:     workerVersionStamp,
-			SdkMetadata:       sdkMetadata,
-			MeteringMetadata:  meteringMetadata,
-			CompletedRedirect: completedRedirect,
+			ScheduledEventId:   scheduledEventID,
+			StartedEventId:     startedEventID,
+			Identity:           identity,
+			BinaryChecksum:     checksum,
+			WorkerVersion:      workerVersionStamp,
+			SdkMetadata:        sdkMetadata,
+			MeteringMetadata:   meteringMetadata,
+			Deployment:         deployment,
+			VersioningBehavior: behavior,
 		},
 	}
 
@@ -391,14 +393,12 @@ func (b *EventFactory) CreateWorkflowExecutionTerminatedEvent(
 }
 
 func (b *EventFactory) CreateWorkflowExecutionOptionsUpdatedEvent(
-	options *workflowpb.WorkflowExecutionOptions,
-	mask *fieldmaskpb.FieldMask,
+	versioningOverride *workflowpb.VersioningOverride,
 ) *historypb.HistoryEvent {
 	event := b.createHistoryEvent(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED, b.timeSource.Now())
 	event.Attributes = &historypb.HistoryEvent_WorkflowExecutionOptionsUpdatedEventAttributes{
 		WorkflowExecutionOptionsUpdatedEventAttributes: &historypb.WorkflowExecutionOptionsUpdatedEventAttributes{
-			Options:    options,
-			UpdateMask: mask,
+			VersioningOverride: versioningOverride,
 		},
 	}
 	event.WorkerMayIgnore = true

@@ -27,17 +27,22 @@ package workflow
 import (
 	"context"
 	"fmt"
-	"google.golang.org/protobuf/types/known/fieldmaskpb"
-	"reflect"
-	"testing"
-	"time"
-
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-go/tally/v4"
+	"go.uber.org/mock/gomock"
+	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/durationpb"
+	"google.golang.org/protobuf/types/known/fieldmaskpb"
+	"google.golang.org/protobuf/types/known/timestamppb"
+	"reflect"
+	"testing"
+	"time"
+
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
+	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
 	historypb "go.temporal.io/api/history/v1"
@@ -76,10 +81,6 @@ import (
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/tests"
-	"go.uber.org/mock/gomock"
-	"google.golang.org/protobuf/proto"
-	"google.golang.org/protobuf/types/known/durationpb"
-	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type (
@@ -113,44 +114,44 @@ var (
 		MaxResetPoints:              10,
 		MaxSearchAttributeValueSize: 1024,
 	}
-	deployment1 = &commonpb.WorkerDeployment{
-		DeploymentName: "my_app",
-		BuildId:        "build_1",
+	deployment1 = &deploymentpb.Deployment{
+		SeriesName: "my_app",
+		BuildId:    "build_1",
 	}
-	deployment2 = &commonpb.WorkerDeployment{
-		DeploymentName: "my_app",
-		BuildId:        "build_2",
+	deployment2 = &deploymentpb.Deployment{
+		SeriesName: "my_app",
+		BuildId:    "build_2",
 	}
-	deployment3 = &commonpb.WorkerDeployment{
-		DeploymentName: "my_app",
-		BuildId:        "build_3",
+	deployment3 = &deploymentpb.Deployment{
+		SeriesName: "my_app",
+		BuildId:    "build_3",
 	}
 	versionOverrideMask = &fieldmaskpb.FieldMask{Paths: []string{"versioning_behavior_override"}}
 	pinnedOptions1      = &workflowpb.WorkflowExecutionOptions{
-		VersioningBehaviorOverride: &commonpb.VersioningBehaviorOverride{
-			Behavior:         enumspb.VERSIONING_BEHAVIOR_PINNED,
-			WorkerDeployment: deployment1,
+		VersioningOverride: &workflowpb.VersioningOverride{
+			Behavior:   enumspb.VERSIONING_BEHAVIOR_PINNED,
+			Deployment: deployment1,
 		},
 	}
 	pinnedOptions2 = &workflowpb.WorkflowExecutionOptions{
-		VersioningBehaviorOverride: &commonpb.VersioningBehaviorOverride{
-			Behavior:         enumspb.VERSIONING_BEHAVIOR_PINNED,
-			WorkerDeployment: deployment2,
+		VersioningOverride: &workflowpb.VersioningOverride{
+			Behavior:   enumspb.VERSIONING_BEHAVIOR_PINNED,
+			Deployment: deployment2,
 		},
 	}
 	pinnedOptions3 = &workflowpb.WorkflowExecutionOptions{
-		VersioningBehaviorOverride: &commonpb.VersioningBehaviorOverride{
-			Behavior:         enumspb.VERSIONING_BEHAVIOR_PINNED,
-			WorkerDeployment: deployment3,
+		VersioningOverride: &workflowpb.VersioningOverride{
+			Behavior:   enumspb.VERSIONING_BEHAVIOR_PINNED,
+			Deployment: deployment3,
 		},
 	}
 	unpinnedOptions = &workflowpb.WorkflowExecutionOptions{
-		VersioningBehaviorOverride: &commonpb.VersioningBehaviorOverride{
+		VersioningOverride: &workflowpb.VersioningOverride{
 			Behavior: enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE,
 		},
 	}
 	unspecifiedOptions = &workflowpb.WorkflowExecutionOptions{
-		VersioningBehaviorOverride: &commonpb.VersioningBehaviorOverride{
+		VersioningOverride: &workflowpb.VersioningOverride{
 			Behavior: enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED,
 		},
 	}
@@ -542,25 +543,25 @@ func (s *mutableStateSuite) TestCurrentDeployment() {
 	ms.executionInfo.VersioningInfo = versioningInfo
 	s.verifyCurrentDeployment(nil, enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED)
 
-	d1 := &commonpb.WorkerDeployment{
-		DeploymentName: "my_app",
-		BuildId:        "build_1",
+	d1 := &deploymentpb.Deployment{
+		SeriesName: "my_app",
+		BuildId:    "build_1",
 	}
 	versioningInfo.Deployment = d1
 	versioningInfo.Behavior = enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE
 	s.verifyCurrentDeployment(d1, enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE)
 
-	d2 := &commonpb.WorkerDeployment{
-		DeploymentName: "my_app",
-		BuildId:        "build_2",
+	d2 := &deploymentpb.Deployment{
+		SeriesName: "my_app",
+		BuildId:    "build_2",
 	}
 	versioningInfo.DeploymentOverride = d2
 	versioningInfo.Behavior = enumspb.VERSIONING_BEHAVIOR_PINNED
 	s.verifyCurrentDeployment(d2, enumspb.VERSIONING_BEHAVIOR_PINNED)
 
-	d3 := &commonpb.WorkerDeployment{
-		DeploymentName: "my_app",
-		BuildId:        "build_3",
+	d3 := &deploymentpb.Deployment{
+		SeriesName: "my_app",
+		BuildId:    "build_3",
 	}
 	versioningInfo.RedirectInfo = &persistencespb.WorkflowExecutionInfo_VersioningInfo_RedirectInfo{
 		Deployment: d3,
@@ -576,7 +577,7 @@ func (s *mutableStateSuite) TestCurrentDeployment() {
 }
 
 func (s *mutableStateSuite) verifyCurrentDeployment(
-	expectedDeployment *commonpb.WorkerDeployment,
+	expectedDeployment *deploymentpb.Deployment,
 	expectedBehavior enumspb.VersioningBehavior,
 ) {
 	fmt.Printf("actual deployment build id: %v\n", s.mutableState.GetCurrentDeployment().GetBuildId())
@@ -589,7 +590,7 @@ func (s *mutableStateSuite) verifyCurrentDeployment(
 // to the given behavior, testing expected output after Add, Start, and Complete Workflow Task.
 func (s *mutableStateSuite) createMutableStateWithVersioningBehavior(
 	behavior enumspb.VersioningBehavior,
-	deployment *commonpb.WorkerDeployment,
+	deployment *deploymentpb.Deployment,
 	tq *taskqueuepb.TaskQueue,
 ) {
 	version := int64(12)
@@ -759,17 +760,15 @@ func (s *mutableStateSuite) TestUnpinnedRedirectTimeout() {
 
 func (s *mutableStateSuite) verifyWorkflowOptionsUpdatedEvent(
 	event *historypb.HistoryEvent,
-	expectedOptions *workflowpb.WorkflowExecutionOptions,
-	expectedMask *fieldmaskpb.FieldMask,
+	expectedOverride *workflowpb.VersioningOverride,
 ) {
 	attr := event.GetWorkflowExecutionOptionsUpdatedEventAttributes()
-	s.Equal(expectedOptions, attr.GetOptions())
-	s.Equal(expectedMask, attr.GetUpdateMask())
+	s.Equal(expectedOverride, attr.GetVersioningOverride())
 }
 
 func (s *mutableStateSuite) verifyOverrides(
 	expectedBehavior, expectedBehaviorOverride enumspb.VersioningBehavior,
-	expectedDeployment, expectedDeploymentOverride *commonpb.WorkerDeployment,
+	expectedDeployment, expectedDeploymentOverride *deploymentpb.Deployment,
 ) {
 	versioningInfo := s.mutableState.GetExecutionInfo().GetVersioningInfo()
 	s.Equal(expectedBehavior, versioningInfo.Behavior)
@@ -785,17 +784,17 @@ func (s *mutableStateSuite) TestOverride_UnpinnedBase_SetPinnedAndUnsetWithEmpty
 	s.createMutableStateWithVersioningBehavior(baseBehavior, deployment1, tq)
 
 	// set pinned override
-	event, err := s.mutableState.AddWorkflowExecutionOptionsUpdatedEvent(pinnedOptions2, versionOverrideMask)
+	event, err := s.mutableState.AddWorkflowExecutionOptionsUpdatedEvent(pinnedOptions2.GetVersioningOverride())
 	s.NoError(err)
 	s.verifyCurrentDeployment(deployment2, overrideBehavior)
-	s.verifyWorkflowOptionsUpdatedEvent(event, pinnedOptions2, versionOverrideMask)
+	s.verifyWorkflowOptionsUpdatedEvent(event, pinnedOptions2.GetVersioningOverride())
 	s.verifyOverrides(baseBehavior, overrideBehavior, deployment1, deployment2)
 
 	// unset pinned override with empty
-	event, err = s.mutableState.AddWorkflowExecutionOptionsUpdatedEvent(emptyOptions, versionOverrideMask)
+	event, err = s.mutableState.AddWorkflowExecutionOptionsUpdatedEvent(emptyOptions.GetVersioningOverride())
 	s.NoError(err)
 	s.verifyCurrentDeployment(deployment1, baseBehavior)
-	s.verifyWorkflowOptionsUpdatedEvent(event, emptyOptions, versionOverrideMask)
+	s.verifyWorkflowOptionsUpdatedEvent(event, emptyOptions.GetVersioningOverride())
 	s.verifyOverrides(baseBehavior, enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED, deployment1, nil)
 }
 
@@ -806,17 +805,17 @@ func (s *mutableStateSuite) TestOverride_UnpinnedBase_SetPinnedAndUnsetWithUnspe
 	s.createMutableStateWithVersioningBehavior(baseBehavior, deployment1, tq)
 
 	// set pinned override
-	event, err := s.mutableState.AddWorkflowExecutionOptionsUpdatedEvent(pinnedOptions2, versionOverrideMask)
+	event, err := s.mutableState.AddWorkflowExecutionOptionsUpdatedEvent(pinnedOptions2.GetVersioningOverride())
 	s.NoError(err)
 	s.verifyCurrentDeployment(deployment2, overrideBehavior)
-	s.verifyWorkflowOptionsUpdatedEvent(event, pinnedOptions2, versionOverrideMask)
+	s.verifyWorkflowOptionsUpdatedEvent(event, pinnedOptions2.GetVersioningOverride())
 	s.verifyOverrides(baseBehavior, overrideBehavior, deployment1, deployment2)
 
 	// unset pinned override with unspecified
-	event, err = s.mutableState.AddWorkflowExecutionOptionsUpdatedEvent(unspecifiedOptions, versionOverrideMask)
+	event, err = s.mutableState.AddWorkflowExecutionOptionsUpdatedEvent(unspecifiedOptions.GetVersioningOverride())
 	s.NoError(err)
 	s.verifyCurrentDeployment(deployment1, baseBehavior)
-	s.verifyWorkflowOptionsUpdatedEvent(event, unspecifiedOptions, versionOverrideMask)
+	s.verifyWorkflowOptionsUpdatedEvent(event, unspecifiedOptions.GetVersioningOverride())
 	s.verifyOverrides(baseBehavior, enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED, deployment1, nil)
 }
 
@@ -827,17 +826,17 @@ func (s *mutableStateSuite) TestOverride_PinnedBase_SetUnpinnedAndUnsetWithEmpty
 	s.createMutableStateWithVersioningBehavior(baseBehavior, deployment1, tq)
 
 	// set unpinned override
-	event, err := s.mutableState.AddWorkflowExecutionOptionsUpdatedEvent(unpinnedOptions, versionOverrideMask)
+	event, err := s.mutableState.AddWorkflowExecutionOptionsUpdatedEvent(unpinnedOptions.GetVersioningOverride())
 	s.NoError(err)
 	s.verifyCurrentDeployment(deployment1, overrideBehavior)
-	s.verifyWorkflowOptionsUpdatedEvent(event, unpinnedOptions, versionOverrideMask)
+	s.verifyWorkflowOptionsUpdatedEvent(event, unpinnedOptions.GetVersioningOverride())
 	s.verifyOverrides(baseBehavior, overrideBehavior, deployment1, nil)
 
 	// unset pinned override with empty
-	event, err = s.mutableState.AddWorkflowExecutionOptionsUpdatedEvent(emptyOptions, versionOverrideMask)
+	event, err = s.mutableState.AddWorkflowExecutionOptionsUpdatedEvent(emptyOptions.GetVersioningOverride())
 	s.NoError(err)
 	s.verifyCurrentDeployment(deployment1, baseBehavior)
-	s.verifyWorkflowOptionsUpdatedEvent(event, emptyOptions, versionOverrideMask)
+	s.verifyWorkflowOptionsUpdatedEvent(event, emptyOptions.GetVersioningOverride())
 	s.verifyOverrides(baseBehavior, enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED, deployment1, nil)
 }
 
@@ -848,17 +847,17 @@ func (s *mutableStateSuite) TestOverride_PinnedBase_SetUnpinnedAndUnsetWithUnspe
 	s.createMutableStateWithVersioningBehavior(baseBehavior, deployment1, tq)
 
 	// set unpinned override
-	event, err := s.mutableState.AddWorkflowExecutionOptionsUpdatedEvent(unpinnedOptions, versionOverrideMask)
+	event, err := s.mutableState.AddWorkflowExecutionOptionsUpdatedEvent(unpinnedOptions.GetVersioningOverride())
 	s.NoError(err)
 	s.verifyCurrentDeployment(deployment1, overrideBehavior)
-	s.verifyWorkflowOptionsUpdatedEvent(event, unpinnedOptions, versionOverrideMask)
+	s.verifyWorkflowOptionsUpdatedEvent(event, unpinnedOptions.GetVersioningOverride())
 	s.verifyOverrides(baseBehavior, overrideBehavior, deployment1, nil)
 
 	// unset pinned override with unspecified
-	event, err = s.mutableState.AddWorkflowExecutionOptionsUpdatedEvent(unspecifiedOptions, versionOverrideMask)
+	event, err = s.mutableState.AddWorkflowExecutionOptionsUpdatedEvent(unspecifiedOptions.GetVersioningOverride())
 	s.NoError(err)
 	s.verifyCurrentDeployment(deployment1, baseBehavior)
-	s.verifyWorkflowOptionsUpdatedEvent(event, unspecifiedOptions, versionOverrideMask)
+	s.verifyWorkflowOptionsUpdatedEvent(event, unspecifiedOptions.GetVersioningOverride())
 	s.verifyOverrides(baseBehavior, enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED, deployment1, nil)
 }
 
@@ -868,10 +867,10 @@ func (s *mutableStateSuite) TestOverride_RedirectFails() {
 	overrideBehavior := enumspb.VERSIONING_BEHAVIOR_PINNED
 	s.createMutableStateWithVersioningBehavior(baseBehavior, deployment1, tq)
 
-	event, err := s.mutableState.AddWorkflowExecutionOptionsUpdatedEvent(pinnedOptions3, versionOverrideMask)
+	event, err := s.mutableState.AddWorkflowExecutionOptionsUpdatedEvent(pinnedOptions3.GetVersioningOverride())
 	s.NoError(err)
 	s.verifyCurrentDeployment(deployment3, overrideBehavior)
-	s.verifyWorkflowOptionsUpdatedEvent(event, pinnedOptions3, versionOverrideMask)
+	s.verifyWorkflowOptionsUpdatedEvent(event, pinnedOptions3.GetVersioningOverride())
 	s.verifyOverrides(baseBehavior, overrideBehavior, deployment1, deployment3)
 
 	// assert that redirect fails
@@ -888,10 +887,10 @@ func (s *mutableStateSuite) TestOverride_BaseDeploymentUpdatedOnCompletion() {
 	overrideBehavior := enumspb.VERSIONING_BEHAVIOR_PINNED
 	s.createMutableStateWithVersioningBehavior(baseBehavior, deployment1, tq)
 
-	event, err := s.mutableState.AddWorkflowExecutionOptionsUpdatedEvent(pinnedOptions3, versionOverrideMask)
+	event, err := s.mutableState.AddWorkflowExecutionOptionsUpdatedEvent(pinnedOptions3.GetVersioningOverride())
 	s.NoError(err)
 	s.verifyCurrentDeployment(deployment3, overrideBehavior)
-	s.verifyWorkflowOptionsUpdatedEvent(event, pinnedOptions3, versionOverrideMask)
+	s.verifyWorkflowOptionsUpdatedEvent(event, pinnedOptions3.GetVersioningOverride())
 	s.verifyOverrides(baseBehavior, overrideBehavior, deployment1, deployment3)
 
 	// assert that redirect fails - should be its own test
@@ -931,10 +930,10 @@ func (s *mutableStateSuite) TestOverride_BaseDeploymentUpdatedOnCompletion() {
 	s.verifyOverrides(baseBehavior, overrideBehavior, deployment2, deployment3)
 
 	// now we unset the override and check that the base deployment/behavior is in effect
-	event, err = s.mutableState.AddWorkflowExecutionOptionsUpdatedEvent(unspecifiedOptions, versionOverrideMask)
+	event, err = s.mutableState.AddWorkflowExecutionOptionsUpdatedEvent(unspecifiedOptions.GetVersioningOverride())
 	s.NoError(err)
 	s.verifyCurrentDeployment(deployment2, baseBehavior)
-	s.verifyWorkflowOptionsUpdatedEvent(event, unspecifiedOptions, versionOverrideMask)
+	s.verifyWorkflowOptionsUpdatedEvent(event, unspecifiedOptions.GetVersioningOverride())
 	s.verifyOverrides(baseBehavior, enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED, deployment2, nil)
 }
 

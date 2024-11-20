@@ -29,8 +29,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"go.temporal.io/server/common/rpc/fieldmask"
-	"google.golang.org/protobuf/types/known/fieldmaskpb"
+	deploymentpb "go.temporal.io/api/deployment/v1"
 	"math/rand"
 	"reflect"
 	"slices"
@@ -2984,7 +2983,7 @@ func (ms *MutableStateImpl) AddActivityTaskStartedEvent(
 	requestID string,
 	identity string,
 	versioningStamp *commonpb.WorkerVersionStamp,
-	deployment *commonpb.WorkerDeployment,
+	deployment *deploymentpb.Deployment,
 	redirectInfo *taskqueue.BuildIdRedirectInfo,
 ) (*historypb.HistoryEvent, error) {
 	opTag := tag.WorkflowActionActivityTaskStarted
@@ -4237,13 +4236,12 @@ func (ms *MutableStateImpl) RejectWorkflowExecutionUpdate(_ string, _ *updatepb.
 }
 
 func (ms *MutableStateImpl) AddWorkflowExecutionOptionsUpdatedEvent(
-	options *workflowpb.WorkflowExecutionOptions,
-	mask *fieldmaskpb.FieldMask,
+	versioningOverride *workflowpb.VersioningOverride,
 ) (*historypb.HistoryEvent, error) {
 	if err := ms.checkMutability(tag.WorkflowActionWorkflowOptionsUpdated); err != nil {
 		return nil, err
 	}
-	event := ms.hBuilder.AddWorkflowExecutionOptionsUpdatedEvent(options, mask)
+	event := ms.hBuilder.AddWorkflowExecutionOptionsUpdatedEvent(versioningOverride)
 	if err := ms.ApplyWorkflowExecutionOptionsUpdatedEvent(event); err != nil {
 		return nil, err
 	}
@@ -4251,34 +4249,14 @@ func (ms *MutableStateImpl) AddWorkflowExecutionOptionsUpdatedEvent(
 }
 
 func (ms *MutableStateImpl) ApplyWorkflowExecutionOptionsUpdatedEvent(event *historypb.HistoryEvent) error {
-	attributes := event.GetWorkflowExecutionOptionsUpdatedEventAttributes()
-	// Merge the requested fields mentioned in the field mask with the current fields
-	mergedOpts, err := fieldmask.MergeOptions(
-		attributes.GetUpdateMask().GetPaths(),
-		attributes.GetOptions(),
-		GetOptionsFromMutableState(ms),
-	)
-	if err != nil {
-		return err
-	}
+	override := event.GetWorkflowExecutionOptionsUpdatedEventAttributes().GetVersioningOverride()
 	// TODO (carly): if deployment changed, do I need to do anything with pending activities / WFTs in unsafe mode?
 	// TODO (carly) part 2: do replay test on new deployment if deployment changed
-	ms.GetExecutionInfo().VersioningInfo.BehaviorOverride = mergedOpts.GetVersioningBehaviorOverride().GetBehavior()
-	ms.GetExecutionInfo().VersioningInfo.DeploymentOverride = mergedOpts.GetVersioningBehaviorOverride().GetWorkerDeployment()
-	return nil
-}
-
-func GetOptionsFromMutableState(ms MutableState) *workflowpb.WorkflowExecutionOptions {
-	opts := &workflowpb.WorkflowExecutionOptions{}
-	if versioningInfo := ms.GetExecutionInfo().GetVersioningInfo(); versioningInfo != nil {
-		if behaviorOverride := versioningInfo.GetBehaviorOverride(); behaviorOverride != enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED {
-			opts.VersioningBehaviorOverride = &commonpb.VersioningBehaviorOverride{
-				Behavior:         behaviorOverride,
-				WorkerDeployment: versioningInfo.GetDeploymentOverride(),
-			}
-		}
+	if override != nil {
+		ms.GetExecutionInfo().VersioningInfo.BehaviorOverride = override.GetBehavior()
+		ms.GetExecutionInfo().VersioningInfo.DeploymentOverride = override.GetDeployment()
 	}
-	return opts
+	return nil
 }
 
 func (ms *MutableStateImpl) ApplyWorkflowExecutionTerminatedEvent(
@@ -6779,7 +6757,7 @@ func (ms *MutableStateImpl) disablingTransitionHistory() bool {
 
 // GetCurrentDeployment returns the current effective deployment in the following order:
 // RedirectingDeployment takes precedence over DeploymentOverride, over Deployment.
-func (ms *MutableStateImpl) GetCurrentDeployment() *commonpb.WorkerDeployment {
+func (ms *MutableStateImpl) GetCurrentDeployment() *deploymentpb.Deployment {
 	versioningInfo := ms.GetExecutionInfo().GetVersioningInfo()
 	if versioningInfo == nil {
 		return nil
@@ -6815,7 +6793,7 @@ func (ms *MutableStateImpl) GetVersioningBehavior() enumspb.VersioningBehavior {
 // rescheduling activities.
 // TODO (shahab): validate source deployment
 func (ms *MutableStateImpl) StartDeploymentRedirect(
-	deployment *commonpb.WorkerDeployment,
+	deployment *deploymentpb.Deployment,
 	behaviorOverride enumspb.VersioningBehavior,
 ) bool {
 	if deployment.Equal(ms.GetCurrentDeployment()) {

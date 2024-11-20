@@ -26,15 +26,19 @@ package updateworkflowoptions
 
 import (
 	"context"
+	"fmt"
+	"go.temporal.io/api/serviceerror"
+	"google.golang.org/protobuf/proto"
+
+	enumspb "go.temporal.io/api/enums/v1"
+	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/namespace"
-	"go.temporal.io/server/common/rpc/fieldmask"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/workflow"
-	"google.golang.org/protobuf/proto"
 )
 
 func Invoke(
@@ -72,10 +76,10 @@ func Invoke(
 			_ = req.GetRequestId()
 
 			// Merge the requested options mentioned in the field mask with the current options in the mutable state
-			mergedOpts, updateError := fieldmask.MergeOptions(
+			mergedOpts, updateError := MergeOptions(
 				req.GetUpdateMask().GetPaths(),
 				req.GetWorkflowExecutionOptions(),
-				workflow.GetOptionsFromMutableState(mutableState),
+				GetOptionsFromMutableState(mutableState),
 			)
 			if updateError != nil {
 				return nil, updateError
@@ -83,14 +87,14 @@ func Invoke(
 			ret.WorkflowExecutionOptions = mergedOpts
 
 			// If there is no mutable state change at all, return with no new history event and Noop=true
-			if proto.Equal(mergedOpts, workflow.GetOptionsFromMutableState(mutableState)) {
+			if proto.Equal(mergedOpts, GetOptionsFromMutableState(mutableState)) {
 				return &api.UpdateWorkflowAction{
 					Noop:               true,
 					CreateWorkflowTask: false,
 				}, nil
 			}
 
-			_, updateError = mutableState.AddWorkflowExecutionOptionsUpdatedEvent(req.GetWorkflowExecutionOptions(), req.GetUpdateMask())
+			_, updateError = mutableState.AddWorkflowExecutionOptionsUpdatedEvent(req.GetWorkflowExecutionOptions().GetVersioningOverride())
 			if updateError != nil {
 				return nil, updateError
 			}
@@ -109,4 +113,31 @@ func Invoke(
 		return nil, err
 	}
 	return ret, nil
+}
+
+func GetOptionsFromMutableState(ms workflow.MutableState) *workflowpb.WorkflowExecutionOptions {
+	opts := &workflowpb.WorkflowExecutionOptions{}
+	if versioningInfo := ms.GetExecutionInfo().GetVersioningInfo(); versioningInfo != nil {
+		if behaviorOverride := versioningInfo.GetBehaviorOverride(); behaviorOverride != enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED {
+			opts.VersioningOverride = &workflowpb.VersioningOverride{
+				Behavior:   behaviorOverride,
+				Deployment: versioningInfo.GetDeploymentOverride(),
+			}
+		}
+	}
+	return opts
+}
+
+// MergeOptions copies the given paths in `src` struct to `dst` struct
+func MergeOptions(paths []string, src, dst *workflowpb.WorkflowExecutionOptions) (*workflowpb.WorkflowExecutionOptions, error) {
+	// Apply masked fields
+	for _, p := range paths {
+		switch p {
+		case "versioning_behavior_override":
+			dst.VersioningOverride = src.GetVersioningOverride()
+		default:
+			return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("error parsing UpdateMask: path %s not supported", p))
+		}
+	}
+	return dst, nil
 }

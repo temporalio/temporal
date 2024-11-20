@@ -5145,6 +5145,41 @@ func getBatchOperationState(workflowState enumspb.WorkflowExecutionStatus) enums
 	return operationState
 }
 
+func (wh *WorkflowHandler) ListDeployments(
+	ctx context.Context,
+	request *workflowservice.ListDeploymentsRequest,
+) (_ *workflowservice.ListDeploymentsResponse, retError error) {
+	return nil, serviceerror.NewUnimplemented("not implemented")
+}
+
+func (wh *WorkflowHandler) DescribeDeployment(
+	ctx context.Context,
+	request *workflowservice.DescribeDeploymentRequest,
+) (_ *workflowservice.DescribeDeploymentResponse, retError error) {
+	return nil, serviceerror.NewUnimplemented("not implemented")
+}
+
+func (wh *WorkflowHandler) SetCurrentDeployment(
+	ctx context.Context,
+	request *workflowservice.SetCurrentDeploymentRequest,
+) (_ *workflowservice.SetCurrentDeploymentResponse, retError error) {
+	return nil, serviceerror.NewUnimplemented("not implemented")
+}
+
+func (wh *WorkflowHandler) GetCurrentDeployment(
+	ctx context.Context,
+	request *workflowservice.GetCurrentDeploymentRequest,
+) (_ *workflowservice.GetCurrentDeploymentResponse, retError error) {
+	return nil, serviceerror.NewUnimplemented("not implemented")
+}
+
+func (wh *WorkflowHandler) GetDeploymentReachability(
+	ctx context.Context,
+	request *workflowservice.GetDeploymentReachabilityRequest,
+) (_ *workflowservice.GetDeploymentReachabilityResponse, retError error) {
+	return nil, serviceerror.NewUnimplemented("not implemented")
+}
+
 func (wh *WorkflowHandler) UpdateWorkflowExecutionOptions(
 	ctx context.Context,
 	request *workflowservice.UpdateWorkflowExecutionOptionsRequest,
@@ -5165,8 +5200,8 @@ func (wh *WorkflowHandler) UpdateWorkflowExecutionOptions(
 	if err != nil {
 		return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("error parsing UpdateMask: %s", err.Error()))
 	}
-	if opts.GetVersioningBehaviorOverride().GetBehavior() == enumspb.VERSIONING_BEHAVIOR_PINNED &&
-		opts.GetVersioningBehaviorOverride().GetWorkerDeployment() == nil {
+	if opts.GetVersioningOverride().GetBehavior() == enumspb.VERSIONING_BEHAVIOR_PINNED &&
+		opts.GetVersioningOverride().GetDeployment() == nil {
 		return nil, serviceerror.NewInvalidArgument("Deployment must be set if behavior override is PINNED")
 	}
 

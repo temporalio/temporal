@@ -147,17 +147,16 @@ func Invoke(
 
 	if versioningInfo := executionInfo.GetVersioningInfo(); versioningInfo != nil {
 		result.WorkflowExecutionInfo.VersioningInfo = &workflowpb.WorkflowExecutionInfo_VersioningInfo{
-			Behavior:           versioningInfo.Behavior,
-			Deployment:         versioningInfo.Deployment,
-			BehaviorOverride:   versioningInfo.BehaviorOverride,
-			DeploymentOverride: versioningInfo.DeploymentOverride,
+			Behavior:   versioningInfo.Behavior,
+			Deployment: versioningInfo.Deployment,
+			VersioningOverride: &workflowpb.VersioningOverride{
+				Behavior:   versioningInfo.BehaviorOverride,
+				Deployment: versioningInfo.DeploymentOverride,
+			},
 		}
 		if redirectInfo := versioningInfo.GetRedirectInfo(); redirectInfo != nil {
-			result.WorkflowExecutionInfo.VersioningInfo.RedirectInfo =
-				&workflowpb.WorkflowExecutionInfo_VersioningInfo_RedirectInfo{
-					Deployment:       redirectInfo.Deployment,
-					BehaviorOverride: redirectInfo.BehaviorOverride,
-				}
+			result.WorkflowExecutionInfo.VersioningInfo.Behavior = versioningInfo.Behavior
+			result.WorkflowExecutionInfo.VersioningInfo.Deployment = redirectInfo.Deployment
 		}
 	}
 
@@ -185,8 +184,8 @@ func Invoke(
 
 	for _, ai := range mutableState.GetPendingActivityInfos() {
 		p := &workflowpb.PendingActivityInfo{
-			ActivityId:            ai.ActivityId,
-			LastStartedDeployment: ai.LastStartedDeployment,
+			ActivityId:     ai.ActivityId,
+			LastDeployment: ai.LastStartedDeployment,
 		}
 		if ai.GetUseWorkflowBuildIdInfo() != nil {
 			p.AssignedBuildId = &workflowpb.PendingActivityInfo_UseWorkflowBuildId{UseWorkflowBuildId: &emptypb.Empty{}}

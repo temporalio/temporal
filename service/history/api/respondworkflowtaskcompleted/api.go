@@ -54,7 +54,6 @@ import (
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/tasktoken"
-	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/internal/effect"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/api/recordworkflowtaskstarted"
@@ -1054,20 +1053,21 @@ func (handler *WorkflowTaskCompletedHandler) validateVersioningInfo(
 	request *workflowservice.RespondWorkflowTaskCompletedRequest,
 	ms workflow.MutableState,
 ) error {
-	taskDeployment := worker_versioning.DeploymentFromStamp(request.GetWorkerVersionStamp())
-	wfDeployment := ms.GetCurrentDeployment()
-	if !taskDeployment.Equal(wfDeployment) {
-		return serviceerror.NewNotFound(fmt.Sprintf(
-			"execution is not assigned to deployment %q, current deployment is %q",
-			worker_versioning.DeploymentToString(wfDeployment),
-			worker_versioning.DeploymentToString(taskDeployment),
-		))
-	}
-
-	behavior := request.GetVersioningBehavior()
-	if taskDeployment != nil && behavior == enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED {
-		return serviceerror.NewInvalidArgument("versioning behavior must be set for workflow tasks completed by versioned workers")
-	}
+	// todo (carly)
+	//taskDeployment := worker_versioning.DeploymentFromStamp(request.GetWorkerVersionStamp())
+	//wfDeployment := ms.GetCurrentDeployment()
+	//if !taskDeployment.Equal(wfDeployment) {
+	//	return serviceerror.NewNotFound(fmt.Sprintf(
+	//		"execution is not assigned to deployment %q, current deployment is %q",
+	//		worker_versioning.DeploymentToString(wfDeployment),
+	//		worker_versioning.DeploymentToString(taskDeployment),
+	//	))
+	//}
+	//
+	//behavior := request.GetVersioningBehavior()
+	//if taskDeployment != nil && behavior == enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED {
+	//	return serviceerror.NewInvalidArgument("versioning behavior must be set for workflow tasks completed by versioned workers")
+	//}
 	return nil
 }
 

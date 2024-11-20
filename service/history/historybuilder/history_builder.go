@@ -25,7 +25,7 @@
 package historybuilder
 
 import (
-	"google.golang.org/protobuf/types/known/fieldmaskpb"
+	deploymentpb "go.temporal.io/api/deployment/v1"
 	"time"
 
 	commandpb "go.temporal.io/api/command/v1"
@@ -238,7 +238,8 @@ func (b *HistoryBuilder) AddWorkflowTaskCompletedEvent(
 	workerVersionStamp *commonpb.WorkerVersionStamp,
 	sdkMetadata *sdkpb.WorkflowTaskCompletedMetadata,
 	meteringMetadata *commonpb.MeteringMetadata,
-	completedRedirect *historypb.CompletedDeploymentRedirectInfo,
+	deployment *deploymentpb.Deployment,
+	behavior enumspb.VersioningBehavior,
 ) *historypb.HistoryEvent {
 	event := b.EventFactory.CreateWorkflowTaskCompletedEvent(
 		scheduledEventID,
@@ -248,7 +249,8 @@ func (b *HistoryBuilder) AddWorkflowTaskCompletedEvent(
 		workerVersionStamp,
 		sdkMetadata,
 		meteringMetadata,
-		completedRedirect,
+		deployment,
+		behavior,
 	)
 	event, _ = b.EventStore.add(event)
 	return event
@@ -410,10 +412,9 @@ func (b *HistoryBuilder) AddWorkflowExecutionTerminatedEvent(
 }
 
 func (b *HistoryBuilder) AddWorkflowExecutionOptionsUpdatedEvent(
-	options *workflowpb.WorkflowExecutionOptions,
-	mask *fieldmaskpb.FieldMask,
+	versioningOverride *workflowpb.VersioningOverride,
 ) *historypb.HistoryEvent {
-	event := b.EventFactory.CreateWorkflowExecutionOptionsUpdatedEvent(options, mask)
+	event := b.EventFactory.CreateWorkflowExecutionOptionsUpdatedEvent(versioningOverride)
 	event, _ = b.EventStore.add(event)
 	return event
 }

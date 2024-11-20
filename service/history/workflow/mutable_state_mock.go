@@ -41,6 +41,7 @@ import (
 	nexus "github.com/nexus-rpc/sdk-go/nexus"
 	command "go.temporal.io/api/command/v1"
 	common "go.temporal.io/api/common/v1"
+	deployment "go.temporal.io/api/deployment/v1"
 	enums "go.temporal.io/api/enums/v1"
 	failure "go.temporal.io/api/failure/v1"
 	history "go.temporal.io/api/history/v1"
@@ -63,7 +64,6 @@ import (
 	tasks "go.temporal.io/server/service/history/tasks"
 	gomock "go.uber.org/mock/gomock"
 	durationpb "google.golang.org/protobuf/types/known/durationpb"
-	fieldmaskpb "google.golang.org/protobuf/types/known/fieldmaskpb"
 	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -168,7 +168,7 @@ func (mr *MockMutableStateMockRecorder) AddActivityTaskScheduledEvent(arg0, arg1
 }
 
 // AddActivityTaskStartedEvent mocks base method.
-func (m *MockMutableState) AddActivityTaskStartedEvent(arg0 *persistence.ActivityInfo, arg1 int64, arg2, arg3 string, arg4 *common.WorkerVersionStamp, arg5 *common.WorkerDeployment, arg6 *taskqueue0.BuildIdRedirectInfo) (*history.HistoryEvent, error) {
+func (m *MockMutableState) AddActivityTaskStartedEvent(arg0 *persistence.ActivityInfo, arg1 int64, arg2, arg3 string, arg4 *common.WorkerVersionStamp, arg5 *deployment.Deployment, arg6 *taskqueue0.BuildIdRedirectInfo) (*history.HistoryEvent, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "AddActivityTaskStartedEvent", arg0, arg1, arg2, arg3, arg4, arg5, arg6)
 	ret0, _ := ret[0].(*history.HistoryEvent)
@@ -647,18 +647,18 @@ func (mr *MockMutableStateMockRecorder) AddWorkflowExecutionCanceledEvent(arg0, 
 }
 
 // AddWorkflowExecutionOptionsUpdatedEvent mocks base method.
-func (m *MockMutableState) AddWorkflowExecutionOptionsUpdatedEvent(options *workflow.WorkflowExecutionOptions, mask *fieldmaskpb.FieldMask) (*history.HistoryEvent, error) {
+func (m *MockMutableState) AddWorkflowExecutionOptionsUpdatedEvent(versioningOverride *workflow.VersioningOverride) (*history.HistoryEvent, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "AddWorkflowExecutionOptionsUpdatedEvent", options, mask)
+	ret := m.ctrl.Call(m, "AddWorkflowExecutionOptionsUpdatedEvent", versioningOverride)
 	ret0, _ := ret[0].(*history.HistoryEvent)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // AddWorkflowExecutionOptionsUpdatedEvent indicates an expected call of AddWorkflowExecutionOptionsUpdatedEvent.
-func (mr *MockMutableStateMockRecorder) AddWorkflowExecutionOptionsUpdatedEvent(options, mask any) *gomock.Call {
+func (mr *MockMutableStateMockRecorder) AddWorkflowExecutionOptionsUpdatedEvent(versioningOverride any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddWorkflowExecutionOptionsUpdatedEvent", reflect.TypeOf((*MockMutableState)(nil).AddWorkflowExecutionOptionsUpdatedEvent), options, mask)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddWorkflowExecutionOptionsUpdatedEvent", reflect.TypeOf((*MockMutableState)(nil).AddWorkflowExecutionOptionsUpdatedEvent), versioningOverride)
 }
 
 // AddWorkflowExecutionSignaled mocks base method.
@@ -1954,10 +1954,10 @@ func (mr *MockMutableStateMockRecorder) GetCurrentBranchToken() *gomock.Call {
 }
 
 // GetCurrentDeployment mocks base method.
-func (m *MockMutableState) GetCurrentDeployment() *common.WorkerDeployment {
+func (m *MockMutableState) GetCurrentDeployment() *deployment.Deployment {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetCurrentDeployment")
-	ret0, _ := ret[0].(*common.WorkerDeployment)
+	ret0, _ := ret[0].(*deployment.Deployment)
 	return ret0
 }
 
@@ -3044,7 +3044,7 @@ func (mr *MockMutableStateMockRecorder) SetUpdateCondition(arg0, arg1 any) *gomo
 }
 
 // StartDeploymentRedirect mocks base method.
-func (m *MockMutableState) StartDeploymentRedirect(deployment *common.WorkerDeployment, behaviorOverride enums.VersioningBehavior) bool {
+func (m *MockMutableState) StartDeploymentRedirect(deployment *deployment.Deployment, behaviorOverride enums.VersioningBehavior) bool {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "StartDeploymentRedirect", deployment, behaviorOverride)
 	ret0, _ := ret[0].(bool)

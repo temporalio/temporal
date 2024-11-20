@@ -11,6 +11,7 @@ import (
 	batch "go.temporal.io/api/batch/v1"
 	command "go.temporal.io/api/command/v1"
 	common "go.temporal.io/api/common/v1"
+	deployment "go.temporal.io/api/deployment/v1"
 	enums "go.temporal.io/api/enums/v1"
 	failure "go.temporal.io/api/failure/v1"
 	filter "go.temporal.io/api/filter/v1"
@@ -47,9 +48,11 @@ func init() {
 	importMap["temporal/api/batch/v1/message.proto"] = batch.File_temporal_api_batch_v1_message_proto
 	importMap["temporal/api/command/v1/message.proto"] = command.File_temporal_api_command_v1_message_proto
 	importMap["temporal/api/common/v1/message.proto"] = common.File_temporal_api_common_v1_message_proto
+	importMap["temporal/api/deployment/v1/message.proto"] = deployment.File_temporal_api_deployment_v1_message_proto
 	importMap["temporal/api/enums/v1/batch_operation.proto"] = enums.File_temporal_api_enums_v1_batch_operation_proto
 	importMap["temporal/api/enums/v1/command_type.proto"] = enums.File_temporal_api_enums_v1_command_type_proto
 	importMap["temporal/api/enums/v1/common.proto"] = enums.File_temporal_api_enums_v1_common_proto
+	importMap["temporal/api/enums/v1/deployment.proto"] = enums.File_temporal_api_enums_v1_deployment_proto
 	importMap["temporal/api/enums/v1/event_type.proto"] = enums.File_temporal_api_enums_v1_event_type_proto
 	importMap["temporal/api/enums/v1/failed_cause.proto"] = enums.File_temporal_api_enums_v1_failed_cause_proto
 	importMap["temporal/api/enums/v1/namespace.proto"] = enums.File_temporal_api_enums_v1_namespace_proto
