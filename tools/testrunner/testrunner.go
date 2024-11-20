@@ -125,6 +125,9 @@ func (a attempt) failures() []string {
 
 	leafFailures := make([]string, 0)
 
+	// Walk the tree and find all leaf failures. The way Go test failures are reported in junit is that there's a
+	// test case per suite and per test in that suite. Filter out any nodes that have children to find the most
+	// specific failures to rerun.
 	for path, n := range root.walk() {
 		if len(n.children) > 0 {
 			continue
