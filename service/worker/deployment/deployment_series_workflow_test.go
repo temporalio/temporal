@@ -32,30 +32,30 @@ import (
 	"go.uber.org/mock/gomock"
 )
 
-type deploymentNameSuite struct {
+type deploymentSeriesSuite struct {
 	suite.Suite
 	testsuite.WorkflowTestSuite
 	controller *gomock.Controller
 	env        *testsuite.TestWorkflowEnvironment
 }
 
-func TestDeploymentNameSuite(t *testing.T) {
-	suite.Run(t, new(deploymentNameSuite))
+func TestDeploymentSeriesSuite(t *testing.T) {
+	suite.Run(t, new(deploymentSeriesSuite))
 }
 
-func (s *deploymentNameSuite) SetupTest() {
+func (s *deploymentSeriesSuite) SetupTest() {
 	s.controller = gomock.NewController(s.T())
 	s.env = s.WorkflowTestSuite.NewTestWorkflowEnvironment()
-	s.env.RegisterWorkflow(DeploymentNameWorkflow)
+	s.env.RegisterWorkflow(DeploymentSeriesWorkflow)
 }
 
-func (s *deploymentNameSuite) TearDownTest() {
+func (s *deploymentSeriesSuite) TearDownTest() {
 	s.controller.Finish()
 	s.env.AssertExpectations(s.T())
 }
 
 /*
-func (d *deploymentNameSuite) TestStartDeploymentNameWorkflow() {}
+func (d *deploymentSeriesSuite) TestStartDeploymentSeriesWorkflow() {}
 
 
 

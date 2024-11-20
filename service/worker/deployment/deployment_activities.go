@@ -43,15 +43,15 @@ type (
 		namespaceID   namespace.ID
 	}
 
-	DeploymentNameWorkflowActivityInput struct {
+	DeploymentSeriesWorkflowActivityInput struct {
 		SeriesName string
 	}
 )
 
-// StartDeploymentNameWorkflow activity starts a DeploymentName workflow
-func (a *DeploymentActivities) StartDeploymentNameWorkflow(ctx context.Context, input DeploymentNameWorkflowActivityInput) error {
+// StartDeploymentSeriesWorkflow activity starts a DeploymentSeries workflow
+func (a *DeploymentActivities) StartDeploymentSeriesWorkflow(ctx context.Context, input DeploymentSeriesWorkflowActivityInput) error {
 	logger := activity.GetLogger(ctx)
-	logger.Info("activity to start DeploymentName workflow started")
+	logger.Info("activity to start DeploymentSeries workflow started")
 
 	sdkClient := a.ClientFactory.NewClient(sdkclient.Options{
 		Namespace:     a.namespaceName.String(),
@@ -71,13 +71,13 @@ func (a *DeploymentActivities) StartDeploymentNameWorkflow(ctx context.Context, 
 	}
 
 	// Build workflow args
-	deploymentNameWorkflowArgs := &deployspb.DeploymentNameWorkflowArgs{
+	deploymentSeriesWorkflowArgs := &deployspb.DeploymentSeriesWorkflowArgs{
 		NamespaceName: a.namespaceName.String(),
 		NamespaceId:   a.namespaceID.String(),
 	}
 
 	// Calling the workflow with the args
-	_, err := sdkClient.ExecuteWorkflow(ctx, workflowOptions, DeploymentNameWorkflow, deploymentNameWorkflowArgs)
+	_, err := sdkClient.ExecuteWorkflow(ctx, workflowOptions, DeploymentSeriesWorkflow, deploymentSeriesWorkflowArgs)
 	if err != nil {
 		return err
 	}

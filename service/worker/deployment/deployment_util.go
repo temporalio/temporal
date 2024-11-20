@@ -72,7 +72,7 @@ const (
 	DeploymentWorkflowIDDelimeter    = "|"
 	DeploymentWorkflowIDInitialSize  = (2 * len(DeploymentWorkflowIDDelimeter)) + len(DeploymentWorkflowIDPrefix)
 	BuildIDMemoKey                   = "DefaultBuildID"
-	SeriesFieldName                  = "Series"
+	SeriesFieldName                  = "DeploymentSeries"
 	BuildIDFieldName                 = "BuildID"
 )
 

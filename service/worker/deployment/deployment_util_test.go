@@ -31,7 +31,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	commonpb "go.temporal.io/api/common/v1"
+	deploypb "go.temporal.io/api/deployment/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/api/historyservicemock/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -57,7 +57,7 @@ type (
 		ns                       *namespace.Namespace
 		mockNamespaceCache       *namespace.MockRegistry
 		mockHistoryClient        *historyservicemock.MockHistoryServiceClient
-		workerDeployment         *commonpb.WorkerDeployment
+		workerDeployment         *deploypb.Deployment
 		deploymentWorkflowClient *DeploymentWorkflowClient
 		sync.Mutex
 	}
@@ -77,9 +77,9 @@ func (d *deploymentWorkflowClientSuite) SetupTest() {
 	d.controller = gomock.NewController(d.T())
 	d.ns, d.mockNamespaceCache = createMockNamespaceCache(d.controller, testNamespace)
 	d.mockHistoryClient = historyservicemock.NewMockHistoryServiceClient(d.controller)
-	d.workerDeployment = &commonpb.WorkerDeployment{
-		DeploymentName: testDeployment,
-		BuildId:        testBuildID,
+	d.workerDeployment = &deploypb.Deployment{
+		SeriesName: testDeployment,
+		BuildId:    testBuildID,
 	}
 	d.deploymentWorkflowClient = NewDeploymentWorkflowClient(d.ns, d.workerDeployment, d.mockHistoryClient)
 
@@ -107,19 +107,19 @@ func (d *deploymentWorkflowClientSuite) TestValidateDeploymentWfParams() {
 	}{
 		{
 			Description:   "Empty Field",
-			FieldName:     "DeploymentName",
+			FieldName:     SeriesFieldName,
 			Input:         "",
-			ExpectedError: serviceerror.NewInvalidArgument("DeploymentName cannot be empty"),
+			ExpectedError: serviceerror.NewInvalidArgument("DeploymentSeries cannot be empty"),
 		},
 		{
 			Description:   "Large Field",
-			FieldName:     "DeploymentName",
+			FieldName:     SeriesFieldName,
 			Input:         strings.Repeat("s", 1000),
-			ExpectedError: serviceerror.NewInvalidArgument("size of DeploymentName larger than the maximum allowed"),
+			ExpectedError: serviceerror.NewInvalidArgument("size of DeploymentSeries larger than the maximum allowed"),
 		},
 		{
 			Description:   "Valid field",
-			FieldName:     "DeploymentName",
+			FieldName:     SeriesFieldName,
 			Input:         "A",
 			ExpectedError: nil,
 		},
@@ -128,7 +128,7 @@ func (d *deploymentWorkflowClientSuite) TestValidateDeploymentWfParams() {
 	for _, test := range testCases {
 		fieldName := test.FieldName
 		field := test.Input
-		err := d.deploymentWorkflowClient.validateDeploymentWfParams(fieldName, field, testMaxIDLengthLimit)
+		err := ValidateDeploymentWfParams(fieldName, field, testMaxIDLengthLimit)
 
 		if test.ExpectedError == nil {
 			d.NoError(err)
@@ -165,7 +165,7 @@ func (d *deploymentWorkflowClientSuite) TestEscapeChar() {
 	}
 
 	for _, test := range testCases {
-		escapedValue := d.deploymentWorkflowClient.escapeChar(test.value)
+		escapedValue := escapeChar(test.value)
 		d.Equal(test.escapedExpectedValue, escapedValue)
 	}
 }

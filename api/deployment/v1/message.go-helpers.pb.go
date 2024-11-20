@@ -103,35 +103,35 @@ func (this *DeploymentWorkflowArgs) Equal(that interface{}) bool {
 	return proto.Equal(this, that1)
 }
 
-// Marshal an object of type DeploymentNameWorkflowArgs to the protobuf v3 wire format
-func (val *DeploymentNameWorkflowArgs) Marshal() ([]byte, error) {
+// Marshal an object of type DeploymentSeriesWorkflowArgs to the protobuf v3 wire format
+func (val *DeploymentSeriesWorkflowArgs) Marshal() ([]byte, error) {
 	return proto.Marshal(val)
 }
 
-// Unmarshal an object of type DeploymentNameWorkflowArgs from the protobuf v3 wire format
-func (val *DeploymentNameWorkflowArgs) Unmarshal(buf []byte) error {
+// Unmarshal an object of type DeploymentSeriesWorkflowArgs from the protobuf v3 wire format
+func (val *DeploymentSeriesWorkflowArgs) Unmarshal(buf []byte) error {
 	return proto.Unmarshal(buf, val)
 }
 
 // Size returns the size of the object, in bytes, once serialized
-func (val *DeploymentNameWorkflowArgs) Size() int {
+func (val *DeploymentSeriesWorkflowArgs) Size() int {
 	return proto.Size(val)
 }
 
-// Equal returns whether two DeploymentNameWorkflowArgs values are equivalent by recursively
+// Equal returns whether two DeploymentSeriesWorkflowArgs values are equivalent by recursively
 // comparing the message's fields.
 // For more information see the documentation for
 // https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
-func (this *DeploymentNameWorkflowArgs) Equal(that interface{}) bool {
+func (this *DeploymentSeriesWorkflowArgs) Equal(that interface{}) bool {
 	if that == nil {
 		return this == nil
 	}
 
-	var that1 *DeploymentNameWorkflowArgs
+	var that1 *DeploymentSeriesWorkflowArgs
 	switch t := that.(type) {
-	case *DeploymentNameWorkflowArgs:
+	case *DeploymentSeriesWorkflowArgs:
 		that1 = t
-	case DeploymentNameWorkflowArgs:
+	case DeploymentSeriesWorkflowArgs:
 		that1 = &t
 	default:
 		return false

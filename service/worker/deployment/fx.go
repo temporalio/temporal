@@ -113,13 +113,13 @@ func (s *workerComponent) DedicatedWorkerOptions(ns *namespace.Namespace) *worke
 
 func (s *workerComponent) Register(registry sdkworker.Registry, ns *namespace.Namespace, details workercommon.RegistrationDetails) func() {
 	registry.RegisterWorkflowWithOptions(DeploymentWorkflow, workflow.RegisterOptions{Name: DeploymentWorkflowType})
-	registry.RegisterWorkflowWithOptions(DeploymentNameWorkflow, workflow.RegisterOptions{Name: DeploymentSeriesWorkflowType})
+	registry.RegisterWorkflowWithOptions(DeploymentSeriesWorkflow, workflow.RegisterOptions{Name: DeploymentSeriesWorkflowType})
 
 	// TODO Shivam: Might need a cleanup function upon activity registration
 	deploymentActivities := s.newDeploymentActivities(ns.Name(), ns.ID())
-	deploymentNameActivities := s.newDeploymentNameActivities(ns.Name(), ns.ID())
+	deploymentSeriesActivities := s.newDeploymentSeriesActivities(ns.Name(), ns.ID())
 	registry.RegisterActivity(deploymentActivities)
-	registry.RegisterActivity(deploymentNameActivities)
+	registry.RegisterActivity(deploymentSeriesActivities)
 	return nil
 }
 
@@ -133,8 +133,8 @@ func (s *workerComponent) newDeploymentActivities(name namespace.Name, id namesp
 }
 
 // TODO Shivam - place holder for now but will initialize activity rate limits (if any) amongst other things
-func (s *workerComponent) newDeploymentNameActivities(name namespace.Name, id namespace.ID) *DeploymentNameActivities {
-	return &DeploymentNameActivities{
+func (s *workerComponent) newDeploymentSeriesActivities(name namespace.Name, id namespace.ID) *DeploymentSeriesActivities {
+	return &DeploymentSeriesActivities{
 		activityDeps: s.activityDeps,
 		namespace:    name,
 		namespaceID:  id,

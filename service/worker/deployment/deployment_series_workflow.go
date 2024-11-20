@@ -32,11 +32,11 @@ import (
 )
 
 type (
-	// DeploymentWorkflowRunner holds the local state while running a deployment name workflow
-	DeploymentNameWorkflowRunner struct {
-		*deployspb.DeploymentNameWorkflowArgs
+	// DeploymentWorkflowRunner holds the local state while running a deployment-series workflow
+	DeploymentSeriesWorkflowRunner struct {
+		*deployspb.DeploymentSeriesWorkflowArgs
 		ctx     workflow.Context
-		a       *DeploymentNameActivities
+		a       *DeploymentSeriesActivities
 		logger  sdklog.Logger
 		metrics sdkclient.MetricsHandler
 	}
@@ -44,28 +44,28 @@ type (
 
 const (
 	// Updates
-	UpdateDeploymentNameDefaultBuildIDName = "update-deployment-name-default-buildID"
+	UpdateDeploymentSeriesDefaultBuildIDName = "update-deployment-name-default-buildID"
 )
 
-func DeploymentNameWorkflow(ctx workflow.Context, deploymentNameArgs *deployspb.DeploymentNameWorkflowArgs) error {
-	deploymentWorkflowNameRunner := &DeploymentNameWorkflowRunner{
-		DeploymentNameWorkflowArgs: deploymentNameArgs,
-		ctx:                        ctx,
-		a:                          nil,
-		logger:                     sdklog.With(workflow.GetLogger(ctx), "wf-namespace", deploymentNameArgs.NamespaceName),
-		metrics:                    workflow.GetMetricsHandler(ctx).WithTags(map[string]string{"namespace": deploymentNameArgs.NamespaceName}),
+func DeploymentSeriesWorkflow(ctx workflow.Context, deploymentSeriesArgs *deployspb.DeploymentSeriesWorkflowArgs) error {
+	deploymentWorkflowNameRunner := &DeploymentSeriesWorkflowRunner{
+		DeploymentSeriesWorkflowArgs: deploymentSeriesArgs,
+		ctx:                          ctx,
+		a:                            nil,
+		logger:                       sdklog.With(workflow.GetLogger(ctx), "wf-namespace", deploymentSeriesArgs.NamespaceName),
+		metrics:                      workflow.GetMetricsHandler(ctx).WithTags(map[string]string{"namespace": deploymentSeriesArgs.NamespaceName}),
 	}
 	return deploymentWorkflowNameRunner.run()
 }
 
-func (d *DeploymentNameWorkflowRunner) run() error {
+func (d *DeploymentSeriesWorkflowRunner) run() error {
 	var pendingUpdates int
 
 	err := workflow.SetQueryHandler(d.ctx, QueryCurrentDeployment, func(input []byte) (string, error) {
 		return d.DefaultBuildId, nil
 	})
 	if err != nil {
-		d.logger.Info("SetQueryHandler failed for DeploymentName workflow with error: " + err.Error())
+		d.logger.Info("SetQueryHandler failed for DeploymentSeries workflow with error: " + err.Error())
 		return err
 	}
 
@@ -83,5 +83,5 @@ func (d *DeploymentNameWorkflowRunner) run() error {
 	// Note, if update requests come in faster than they
 	// are handled, there will not be a moment where the workflow has
 	// nothing pending which means this will run forever.
-	return workflow.NewContinueAsNewError(d.ctx, DeploymentNameWorkflow, d.DeploymentNameWorkflowArgs)
+	return workflow.NewContinueAsNewError(d.ctx, DeploymentSeriesWorkflow, d.DeploymentSeriesWorkflowArgs)
 }

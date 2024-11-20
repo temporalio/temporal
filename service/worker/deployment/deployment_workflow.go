@@ -132,8 +132,8 @@ func (d *DeploymentWorkflowRunner) run() error {
 			}
 			d.DeploymentLocalState.TaskQueueFamilies[updateInput.TaskQueueName].TaskQueues[int32(updateInput.TaskQueueType)] = newTaskQueueWorkerInfo
 
-			// Call activity which starts a "DeploymentName" workflow
-			return d.invokeDeploymentNameActivity(ctx, d.DeploymentLocalState.WorkerDeployment.SeriesName)
+			// Call activity which starts a "DeploymentSeries" workflow
+			return d.invokeDeploymentSeriesActivity(ctx, d.DeploymentLocalState.WorkerDeployment.SeriesName)
 		},
 		// TODO Shivam - have a validator which backsoff updates if we are scheduled to have a CAN
 	); err != nil {
@@ -168,13 +168,13 @@ func (d *DeploymentWorkflowRunner) run() error {
 
 }
 
-func (d *DeploymentWorkflowRunner) invokeDeploymentNameActivity(ctx workflow.Context, seriesName string) error {
+func (d *DeploymentWorkflowRunner) invokeDeploymentSeriesActivity(ctx workflow.Context, seriesName string) error {
 
 	activityCtx := workflow.WithActivityOptions(ctx, defaultActivityOptions)
-	activityArgs := &DeploymentNameWorkflowActivityInput{
+	activityArgs := &DeploymentSeriesWorkflowActivityInput{
 		SeriesName: seriesName,
 	}
-	return workflow.ExecuteActivity(activityCtx, d.a.StartDeploymentNameWorkflow, activityArgs).Get(ctx, nil)
+	return workflow.ExecuteActivity(activityCtx, d.a.StartDeploymentSeriesWorkflow, activityArgs).Get(ctx, nil)
 }
 
 func (d *DeploymentWorkflowRunner) handleDescribeQuery() (*deployspb.DescribeResponse, error) {

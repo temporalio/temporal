@@ -55,7 +55,7 @@ message DeploymentWorkflowArgs {
     DeploymentLocalState deployment_local_state = 3;
 }
 
-message DeploymentNameWorkflowArgs {
+message DeploymentSeriesWorkflowArgs {
     string namespace_name = 1;
     string namespace_id = 2;
     string default_build_id = 3;

@@ -29,7 +29,7 @@ import (
 )
 
 type (
-	DeploymentNameActivities struct {
+	DeploymentSeriesActivities struct {
 		activityDeps
 		namespace   namespace.Name
 		namespaceID namespace.ID
