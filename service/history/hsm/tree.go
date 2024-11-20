@@ -338,7 +338,7 @@ func (n *Node) AddChild(key Key, data any) (*Node, error) {
 	return node, nil
 }
 
-// DeleteChild removes an immediate child node and all its descendants
+// DeleteChild deletes an immediate child node and all its descendants from the tree.
 func (n *Node) DeleteChild(key Key) error {
 	if n.cache.deleted {
 		return fmt.Errorf("%w: cannot delete from deleted node: %v", ErrStateMachineInvalidState, n.Key)
