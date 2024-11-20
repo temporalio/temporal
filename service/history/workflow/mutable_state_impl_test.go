@@ -580,9 +580,13 @@ func (s *mutableStateSuite) verifyCurrentDeployment(
 	expectedDeployment *deploymentpb.Deployment,
 	expectedBehavior enumspb.VersioningBehavior,
 ) {
-	fmt.Printf("actual deployment build id: %v\n", s.mutableState.GetCurrentDeployment().GetBuildId())
-
-	s.True(s.mutableState.GetCurrentDeployment().Equal(expectedDeployment))
+	if !s.mutableState.GetCurrentDeployment().Equal(expectedDeployment) {
+		s.Fail(fmt.Sprintf("expected: {%s}, actual: {%s}",
+			expectedDeployment.String(),
+			s.mutableState.GetCurrentDeployment().String(),
+		),
+		)
+	}
 	s.Equal(expectedBehavior, s.mutableState.GetVersioningBehavior())
 }
 
