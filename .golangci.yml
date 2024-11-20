@@ -42,8 +42,6 @@ linters-settings:
     forbid:
       - p: time.Sleep
         msg: "Please use require.Eventually or assert.Eventually instead unless you've no other option"
-      - p: ^time\.After$
-        msg: "time.After may leak resources. Use time.NewTimer instead."
   revive:
     severity: error
     confidence: 0.8
