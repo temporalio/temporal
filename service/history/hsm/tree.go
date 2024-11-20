@@ -27,7 +27,6 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
-	"sort"
 
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
@@ -464,46 +463,6 @@ func (n *Node) CompareState(incomingNode *Node) (int, error) {
 // Sync updates the state of the current node to that of the incoming node.
 // Meant to be used by the framework, **not** by components.
 func (n *Node) Sync(incomingNode *Node) error {
-	if n.cache.deleted {
-		return fmt.Errorf("%w: cannot sync deleted node: %v", ErrStateMachineInvalidState, n.Key)
-	}
-
-	// Sort outputs by path length so parent deletions take precedence
-	outputs := incomingNode.Outputs()
-	sort.Slice(outputs, func(i, j int) bool {
-		return len(outputs[i].Path) < len(outputs[j].Path)
-	})
-
-	myPath := n.Path()
-	for _, pao := range outputs {
-		if isPathPrefix(pao.Path, myPath) {
-			for _, output := range pao.Outputs {
-				if output.IsDelete {
-					if n.Parent != nil {
-						// Remove from parent's children map
-						machinesMap := n.Parent.persistence.Children[n.Key.Type]
-						if machinesMap != nil {
-							delete(machinesMap.MachinesById, n.Key.ID)
-							if len(machinesMap.MachinesById) == 0 {
-								delete(n.Parent.persistence.Children, n.Key.Type)
-							}
-						}
-						delete(n.Parent.cache.children, n.Key)
-					}
-
-					// Mark entire subtree as deleted
-					if err := n.Walk(func(node *Node) error {
-						node.cache.deleted = true
-						return nil
-					}); err != nil {
-						return err
-					}
-					return nil
-				}
-			}
-		}
-	}
-
 	incomingInternalRepr := incomingNode.InternalRepr()
 
 	currentInitialVersionedTransition := n.InternalRepr().InitialVersionedTransition
