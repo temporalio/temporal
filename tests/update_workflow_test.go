@@ -5174,7 +5174,7 @@ func (s *UpdateWorkflowSuite) TestUpdateWithStart() {
 			uwsCh := sendUpdateWithStart(testcore.NewContext(), startReq, updateReq)
 			uwsRes := <-uwsCh
 			s.Error(uwsRes.err)
-			s.Equal(uwsRes.err.Error(), "MultiOperation could not be executed.")
+			s.Contains(uwsRes.err.Error(), "MultiOperation could not be executed")
 			errs := uwsRes.err.(*serviceerror.MultiOperationExecution).OperationErrors()
 			s.Len(errs, 2)
 			s.Contains(errs[0].Error(), "Workflow execution is already running")

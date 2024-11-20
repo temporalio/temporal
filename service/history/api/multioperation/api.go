@@ -270,8 +270,8 @@ func startAndUpdateWorkflow(
 		// The workflow was meant to be *started* - but was actually *not* started since it's already running.
 		// The best way forward is to exit and retry from the top.
 		// By returning an Unavailable service error, the entire MultiOperation will be retried.
-		return nil, startOutcome, newMultiOpError(err,
-			serviceerror.NewUnavailable("Workflow could not be started as it is already running"))
+		return nil, startOutcome, newMultiOpError(
+			serviceerror.NewUnavailable("Workflow could not be started as it is already running"), multiOpAbortedErr)
 	case startworkflow.StartDeduped:
 		// Since the start request was deduped, the update was not applied to the *current* workflow execution.
 		// Returning here to allow the caller to apply the update to the current workflow execution.
@@ -300,8 +300,19 @@ func startAndUpdateWorkflow(
 	}, startOutcome, nil
 }
 
-func newMultiOpError(errs ...error) error {
-	return serviceerror.NewMultiOperationExecution("MultiOperation could not be executed.", errs)
+func newMultiOpError(startErr, updateErr error) error {
+	var message string
+	switch {
+	case startErr != nil && !errors.Is(startErr, multiOpAbortedErr):
+		message = fmt.Sprintf("Start failed: %v", startErr)
+	case updateErr != nil && !errors.Is(updateErr, multiOpAbortedErr):
+		message = fmt.Sprintf("Update failed: %v", updateErr)
+	default:
+		message = "Reason unknown"
+	}
+	return serviceerror.NewMultiOperationExecution(
+		fmt.Sprintf("MultiOperation could not be executed: %v", message),
+		[]error{startErr, updateErr})
 }
 
 func dedup(startReq *historyservice.StartWorkflowExecutionRequest, currentWorkflowLease api.WorkflowLease) bool {
