@@ -84,6 +84,8 @@ const (
 	UseLastAction = 8
 	// getFutureActionTimes accounts for UpdateTime and RemainingActions
 	AccurateFutureActionTimes = 9
+	// include WorkflowExecutionStatus in ScheduleActionResult
+	ActionResultIncludesStatus = 10
 )
 
 const (
@@ -826,14 +828,24 @@ func (s *scheduler) processWatcherResult(id string, f workflow.Future, long bool
 	}
 
 	// now we know it's not running, remove from running workflow list
-	match := func(ex *commonpb.WorkflowExecution) bool { return ex.WorkflowId == id }
-	if idx := slices.IndexFunc(s.Info.RunningWorkflows, match); idx >= 0 {
+	matchRunning := func(ex *commonpb.WorkflowExecution) bool { return ex.GetWorkflowId() == id }
+	if idx := slices.IndexFunc(s.Info.RunningWorkflows, matchRunning); idx >= 0 {
+		// We could also immediately update visibility, with updateMemoAndSearchAttributes,
+		// but the wakeup here will trigger a write after anyways (after processing the buffer).
 		s.Info.RunningWorkflows = slices.Delete(s.Info.RunningWorkflows, idx, idx+1)
 	} else {
 		// This could happen if the watcher activity gets interrupted and is retried after the
 		// heartbeat timeout, but in the meantime we have done a refresh through a local activity.
 		// This often happens when the worker is restarted.
 		s.logger.Warn("just-closed workflow not found in running list", "workflow", id, "long", long)
+	}
+
+	// update workflow execution status in RecentActions
+	if s.hasMinVersion(ActionResultIncludesStatus) {
+		matchRecent := func(a *schedpb.ScheduleActionResult) bool { return a.GetStartWorkflowResult().GetWorkflowId() == id }
+		if idx := slices.IndexFunc(s.Info.RecentActions, matchRecent); idx >= 0 {
+			s.Info.RecentActions[idx].StartWorkflowStatus = res.Status
+		}
 	}
 
 	// handle pause-on-failure
@@ -1361,14 +1373,20 @@ func (s *scheduler) startWorkflow(
 			s.metrics.Timer(metrics.ScheduleActionDelay.Name()).Record(res.RealStartTime.AsTime().Sub(desiredTime.AsTime()))
 		}
 
-		return &schedpb.ScheduleActionResult{
+		actionResult := &schedpb.ScheduleActionResult{
 			ScheduleTime: start.ActualTime,
 			ActualTime:   res.RealStartTime,
 			StartWorkflowResult: &commonpb.WorkflowExecution{
 				WorkflowId: workflowID,
 				RunId:      res.RunId,
 			},
-		}, nil
+		}
+
+		if s.hasMinVersion(ActionResultIncludesStatus) {
+			actionResult.StartWorkflowStatus = enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING
+		}
+
+		return actionResult, nil
 	}
 }
 

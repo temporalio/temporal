@@ -58,6 +58,7 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
+// TransactionPolicy indicates whether a mutable state transaction is happening for an active namespace or passive namespace.
 type TransactionPolicy int
 
 const (
@@ -144,6 +145,8 @@ type (
 		MaxSearchAttributeValueSize int
 	}
 
+	ActivityUpdater func(*persistencespb.ActivityInfo, MutableState)
+
 	MutableState interface {
 		callbacks.CanGetNexusCompletion
 		callbacks.CanGetHSMCompletionCallbackArg
@@ -192,18 +195,24 @@ type (
 		AddWorkflowPropertiesModifiedEvent(int64, *commandpb.ModifyWorkflowPropertiesCommandAttributes) (*historypb.HistoryEvent, error)
 		AddWorkflowExecutionCancelRequestedEvent(*historyservice.RequestCancelWorkflowExecutionRequest) (*historypb.HistoryEvent, error)
 		AddWorkflowExecutionCanceledEvent(int64, *commandpb.CancelWorkflowExecutionCommandAttributes) (*historypb.HistoryEvent, error)
-		AddWorkflowExecutionSignaled(signalName string, input *commonpb.Payloads, identity string, header *commonpb.Header, skipGenerateWorkflowTask bool) (*historypb.HistoryEvent, error)
+		AddWorkflowExecutionSignaled(
+			signalName string,
+			input *commonpb.Payloads,
+			identity string,
+			header *commonpb.Header,
+			links []*commonpb.Link,
+		) (*historypb.HistoryEvent, error)
 		AddWorkflowExecutionSignaledEvent(
 			signalName string,
 			input *commonpb.Payloads,
 			identity string,
 			header *commonpb.Header,
-			skipGenerateWorkflowTask bool,
 			externalWorkflowExecution *commonpb.WorkflowExecution,
+			links []*commonpb.Link,
 		) (*historypb.HistoryEvent, error)
 		AddWorkflowExecutionStartedEvent(*commonpb.WorkflowExecution, *historyservice.StartWorkflowExecutionRequest) (*historypb.HistoryEvent, error)
 		AddWorkflowExecutionStartedEventWithOptions(*commonpb.WorkflowExecution, *historyservice.StartWorkflowExecutionRequest, *workflowpb.ResetPoints, string, string) (*historypb.HistoryEvent, error)
-		AddWorkflowExecutionTerminatedEvent(firstEventID int64, reason string, details *commonpb.Payloads, identity string, deleteAfterTerminate bool) (*historypb.HistoryEvent, error)
+		AddWorkflowExecutionTerminatedEvent(firstEventID int64, reason string, details *commonpb.Payloads, identity string, deleteAfterTerminate bool, links []*commonpb.Link) (*historypb.HistoryEvent, error)
 
 		AddWorkflowExecutionUpdateAcceptedEvent(protocolInstanceID string, acceptedRequestMessageId string, acceptedRequestSequencingEventId int64, acceptedRequest *updatepb.Request) (*historypb.HistoryEvent, error)
 		AddWorkflowExecutionUpdateCompletedEvent(acceptedEventID int64, updResp *updatepb.Response) (*historypb.HistoryEvent, error)
@@ -214,8 +223,13 @@ type (
 		GetUpdateOutcome(ctx context.Context, updateID string) (*updatepb.Outcome, error)
 
 		CheckResettable() error
+		// UpdateResetRunID saves the runID that resulted when this execution was reset.
+		UpdateResetRunID(runID string)
+
 		CloneToProto() *persistencespb.WorkflowMutableState
 		RetryActivity(ai *persistencespb.ActivityInfo, failure *failurepb.Failure) (enumspb.RetryState, error)
+		RecordLastActivityCompleteTime(ai *persistencespb.ActivityInfo)
+		RegenerateActivityRetryTask(ai *persistencespb.ActivityInfo, newScheduledTime time.Time) error
 		GetTransientWorkflowTaskInfo(workflowTask *WorkflowTaskInfo, identity string) *historyspb.TransientWorkflowTaskInfo
 		DeleteSignalRequested(requestID string)
 		FlushBufferedEvents()
@@ -293,6 +307,8 @@ type (
 		IsWorkflowPendingOnWorkflowTaskBackoff() bool
 		UpdateDuplicatedResource(resourceDedupKey definition.DeduplicationID)
 		UpdateActivityInfo(*historyservice.ActivitySyncInfo, bool) error
+		ApplyMutation(mutation *persistencespb.WorkflowMutableStateMutation) error
+		ApplySnapshot(snapshot *persistencespb.WorkflowMutableState) error
 		ApplyActivityTaskCancelRequestedEvent(*historypb.HistoryEvent) error
 		ApplyActivityTaskCanceledEvent(*historypb.HistoryEvent) error
 		ApplyActivityTaskCompletedEvent(*historypb.HistoryEvent) error
@@ -344,8 +360,8 @@ type (
 			baseRunLowestCommonAncestorEventID int64,
 			baseRunLowestCommonAncestorEventVersion int64,
 		)
-		UpdateActivity(*persistencespb.ActivityInfo) error
-		UpdateActivityWithTimerHeartbeat(*persistencespb.ActivityInfo, time.Time) error
+		UpdateActivity(int64, ActivityUpdater) error
+		UpdateActivityTimerHeartbeat(int64, time.Time)
 		UpdateActivityProgress(ai *persistencespb.ActivityInfo, request *workflowservice.RecordActivityTaskHeartbeatRequest)
 		UpdateUserTimer(*persistencespb.TimerInfo) error
 		UpdateCurrentVersion(version int64, forceUpdate bool) error
@@ -367,8 +383,14 @@ type (
 		RemoveSpeculativeWorkflowTaskTimeoutTask()
 
 		IsDirty() bool
+		IsTransitionHistoryEnabled() bool
+		// StartTransaction sets up the mutable state for transacting.
 		StartTransaction(entry *namespace.Namespace) (bool, error)
+		// CloseTransactionAsMutation closes the mutable state transaction (different from DB transaction) and prepares the whole state mutation to be persisted and bumps the DBRecordVersion.
+		// You should ideally not make any changes to the mutable state after this call.
 		CloseTransactionAsMutation(transactionPolicy TransactionPolicy) (*persistence.WorkflowMutation, []*persistence.WorkflowEvents, error)
+		// CloseTransactionAsSnapshot closes the mutable state transaction (different from DB transaction) and prepares the current snapshot of the state to be persisted and bumps the DBRecordVersion.
+		// You should ideally not make any changes to the mutable state after this call.
 		CloseTransactionAsSnapshot(transactionPolicy TransactionPolicy) (*persistence.WorkflowSnapshot, []*persistence.WorkflowEvents, error)
 		GenerateMigrationTasks() ([]tasks.Task, int64, error)
 
@@ -384,5 +406,9 @@ type (
 		// NextTransitionCount returns the next state transition count from the state transition history.
 		// If state transition history is empty (e.g. when disabled or fresh mutable state), returns 0.
 		NextTransitionCount() int64
+
+		InitTransitionHistory()
+
+		ShouldResetActivityTimerTaskMask(current, incoming *persistencespb.ActivityInfo) bool
 	}
 )

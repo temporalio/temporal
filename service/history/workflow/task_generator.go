@@ -96,7 +96,7 @@ type (
 		// replication tasks
 		GenerateHistoryReplicationTasks(
 			eventBatches [][]*historypb.HistoryEvent,
-		) error
+		) ([]tasks.Task, error)
 		GenerateMigrationTasks() ([]tasks.Task, int64, error)
 
 		// Generate tasks for any updated state machines on mutable state.
@@ -560,6 +560,7 @@ func (r *TaskGeneratorImpl) GenerateActivityRetryTasks(activityInfo *persistence
 		VisibilityTimestamp: activityInfo.GetScheduledTime().AsTime(),
 		EventID:             activityInfo.GetScheduledEventId(),
 		Attempt:             activityInfo.GetAttempt(),
+		Stamp:               activityInfo.Stamp,
 	})
 	return nil
 }
@@ -696,13 +697,13 @@ func (r *TaskGeneratorImpl) GenerateUserTimerTasks() error {
 
 func (r *TaskGeneratorImpl) GenerateHistoryReplicationTasks(
 	eventBatches [][]*historypb.HistoryEvent,
-) error {
+) ([]tasks.Task, error) {
 	if len(eventBatches) == 0 {
-		return nil
+		return nil, nil
 	}
 	for _, events := range eventBatches {
 		if len(events) == 0 {
-			return serviceerror.NewInternal("TaskGeneratorImpl encountered empty event batch")
+			return nil, serviceerror.NewInternal("TaskGeneratorImpl encountered empty event batch")
 		}
 	}
 
@@ -713,18 +714,19 @@ func (r *TaskGeneratorImpl) GenerateHistoryReplicationTasks(
 	version := firstEvent.GetVersion()
 	for _, events := range eventBatches {
 		if events[0].GetVersion() != version || events[len(events)-1].GetVersion() != version {
-			return serviceerror.NewInternal("TaskGeneratorImpl encountered contradicting versions")
+			return nil, serviceerror.NewInternal("TaskGeneratorImpl encountered contradicting versions")
 		}
 	}
 
-	r.mutableState.AddTasks(&tasks.HistoryReplicationTask{
-		// TaskID, VisibilityTimestamp is set by shard
-		WorkflowKey:  r.mutableState.GetWorkflowKey(),
-		FirstEventID: firstEvent.GetEventId(),
-		NextEventID:  lastEvent.GetEventId() + 1,
-		Version:      version,
-	})
-	return nil
+	return []tasks.Task{
+		&tasks.HistoryReplicationTask{
+			// TaskID, VisibilityTimestamp is set by shard
+			WorkflowKey:  r.mutableState.GetWorkflowKey(),
+			FirstEventID: firstEvent.GetEventId(),
+			NextEventID:  lastEvent.GetEventId() + 1,
+			Version:      version,
+		},
+	}, nil
 }
 
 func (r *TaskGeneratorImpl) GenerateMigrationTasks() ([]tasks.Task, int64, error) {
@@ -737,19 +739,35 @@ func (r *TaskGeneratorImpl) GenerateMigrationTasks() ([]tasks.Task, int64, error
 	if err != nil {
 		return nil, 0, err
 	}
-
+	now := time.Now().UTC()
 	workflowKey := r.mutableState.GetWorkflowKey()
 
 	if r.mutableState.GetExecutionState().State == enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED {
-		return []tasks.Task{&tasks.SyncWorkflowStateTask{
+		syncWorkflowStateTask := []tasks.Task{&tasks.SyncWorkflowStateTask{
 			// TaskID, VisibilityTimestamp is set by shard
 			WorkflowKey: workflowKey,
 			Version:     lastItem.GetVersion(),
 			Priority:    enumsspb.TASK_PRIORITY_LOW,
-		}}, 1, nil
+		}}
+		if r.mutableState.IsTransitionHistoryEnabled() {
+			transitionHistory := executionInfo.TransitionHistory
+			if len(transitionHistory) == 0 {
+				// TODO: Handle the case where state-based replication is re-enabled.
+				return nil, 0, serviceerror.NewInternal("TaskGeneratorImpl encountered empty transition history")
+			}
+			return []tasks.Task{&tasks.SyncVersionedTransitionTask{
+				WorkflowKey:         workflowKey,
+				Priority:            enumsspb.TASK_PRIORITY_LOW,
+				VersionedTransition: transitionHistory[len(transitionHistory)-1],
+				FirstEventID:        executionInfo.LastFirstEventId,
+				FirstEventVersion:   lastItem.Version,
+				NextEventID:         lastItem.GetEventId() + 1,
+				TaskEquivalents:     syncWorkflowStateTask,
+			}}, 1, nil
+		}
+		return syncWorkflowStateTask, 1, nil
 	}
 
-	now := time.Now().UTC()
 	replicationTasks := make([]tasks.Task, 0, len(r.mutableState.GetPendingActivityInfos())+1)
 	replicationTasks = append(replicationTasks, &tasks.HistoryReplicationTask{
 		// TaskID, VisibilityTimestamp is set by shard
@@ -774,8 +792,24 @@ func (r *TaskGeneratorImpl) GenerateMigrationTasks() ([]tasks.Task, int64, error
 			// TaskID and VisibilityTimestamp are set by shard
 		})
 	}
-	return replicationTasks, executionInfo.StateTransitionCount, nil
 
+	if r.mutableState.IsTransitionHistoryEnabled() {
+		transitionHistory := executionInfo.TransitionHistory
+		if len(transitionHistory) == 0 {
+			// TODO: Handle the case where state-based replication is re-enabled.
+			return nil, 0, serviceerror.NewInternal("TaskGeneratorImpl encountered empty transition history")
+		}
+		return []tasks.Task{&tasks.SyncVersionedTransitionTask{
+			WorkflowKey:         workflowKey,
+			Priority:            enumsspb.TASK_PRIORITY_LOW,
+			VersionedTransition: transitionHistory[len(transitionHistory)-1],
+			FirstEventID:        executionInfo.LastFirstEventId,
+			FirstEventVersion:   lastItem.GetVersion(),
+			NextEventID:         lastItem.GetEventId() + 1,
+			TaskEquivalents:     replicationTasks,
+		}}, 1, nil
+	}
+	return replicationTasks, executionInfo.StateTransitionCount, nil
 }
 
 func (r *TaskGeneratorImpl) getTimerSequence() TimerSequence {
@@ -835,47 +869,51 @@ func generateSubStateMachineTask(
 			Id:   k.ID,
 		}
 	}
-	// Only set transition count if a task is non-concurrent.
-	var machineLastUpdateVersionedTransition *persistencespb.VersionedTransition
-	if task.Concurrent() {
-		transitionCount = 0
-	} else {
-		// An already outdated concurrent task.
-		// This happens during replication when multiple event batches are applied in a single transaction.
-		if node.InternalRepr().TransitionCount != transitionCount {
-			return nil
-		}
-		machineLastUpdateVersionedTransition = node.InternalRepr().GetLastUpdateVersionedTransition()
-	}
+	machineLastUpdateVersionedTransition := node.InternalRepr().GetLastUpdateVersionedTransition()
 
 	transitionHistory := mutableState.GetExecutionInfo().TransitionHistory
 	var currentVersionedTransition *persistencespb.VersionedTransition
 	if len(transitionHistory) > 0 {
 		currentVersionedTransition = transitionHistory[len(transitionHistory)-1]
 	}
+	ref := &persistencespb.StateMachineRef{
+		Path:                                 ppath,
+		MutableStateVersionedTransition:      currentVersionedTransition,
+		MachineInitialVersionedTransition:    node.InternalRepr().GetInitialVersionedTransition(),
+		MachineLastUpdateVersionedTransition: machineLastUpdateVersionedTransition,
+		MachineTransitionCount:               transitionCount,
+	}
+
+	// Task is invalid at generation time.
+	// This may happen during replication when multiple event batches are applied in a single transaction.
+	if err := task.Validate(ref, node); err != nil {
+		return nil
+	}
 
 	taskInfo := &persistencespb.StateMachineTaskInfo{
-		Ref: &persistencespb.StateMachineRef{
-			Path:                                 ppath,
-			MutableStateVersionedTransition:      currentVersionedTransition,
-			MachineInitialVersionedTransition:    node.InternalRepr().GetInitialVersionedTransition(),
-			MachineLastUpdateVersionedTransition: machineLastUpdateVersionedTransition,
-			MachineTransitionCount:               transitionCount,
-		},
+		Ref:  ref,
 		Type: task.Type(),
 		Data: data,
 	}
-	switch kind := task.Kind().(type) {
-	case hsm.TaskKindOutbound:
+	// NOTE: at the moment deadline is mutually exclusive with destination.
+	// This will change when we add the outbound timer queue.
+	if task.Deadline() != hsm.Immediate {
+		if task.Destination() != "" {
+			// TODO: support outbound timer tasks.
+			return fmt.Errorf("task cannot have both a deadline and destination due to missing outbound timer queue implementation")
+		}
+		TrackStateMachineTimer(mutableState, task.Deadline(), taskInfo)
+	} else if task.Destination() != "" {
 		mutableState.AddTasks(&tasks.StateMachineOutboundTask{
 			StateMachineTask: tasks.StateMachineTask{
 				WorkflowKey: mutableState.GetWorkflowKey(),
 				Info:        taskInfo,
 			},
-			Destination: kind.Destination,
+			Destination: task.Destination(),
 		})
-	case hsm.TaskKindTimer:
-		TrackStateMachineTimer(mutableState, kind.Deadline, taskInfo)
+	} else {
+		// TODO: support "transfer" tasks - immediate without destination.
+		return fmt.Errorf("task has no deadline or destination")
 	}
 
 	return nil

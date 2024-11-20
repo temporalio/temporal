@@ -185,6 +185,9 @@ func (s *redirectionInterceptorSuite) TestGlobalAPI() {
 		"DescribeBatchOperation":    {},
 		"ListBatchOperations":       {},
 		"UpdateActivityOptionsById": {},
+		"PauseActivityById":         {},
+		"UnpauseActivityById":       {},
+		"ResetActivityById":         {},
 	}, apis)
 }
 

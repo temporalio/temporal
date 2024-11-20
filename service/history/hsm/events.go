@@ -44,5 +44,5 @@ type EventDefinition interface {
 	// Command events should never be cherry picked as we rely on the workflow to reschedule them.
 	// Return [ErrNotCherryPickable], [ErrStateMachineNotFound], or [ErrInvalidTransition] to skip cherry picking. Any
 	// other error is considered fatal and will abort the cherry pick process.
-	CherryPick(root *Node, event *historypb.HistoryEvent) error
+	CherryPick(root *Node, event *historypb.HistoryEvent, resetReapplyExcludeTypes map[enumspb.ResetReapplyExcludeType]struct{}) error
 }

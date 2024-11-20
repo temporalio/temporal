@@ -38,8 +38,10 @@ import (
 	reflect "reflect"
 	time "time"
 
+	enums "go.temporal.io/api/enums/v1"
 	taskqueue "go.temporal.io/api/taskqueue/v1"
 	matchingservice "go.temporal.io/server/api/matchingservice/v1"
+	taskqueue0 "go.temporal.io/server/api/taskqueue/v1"
 	namespace "go.temporal.io/server/common/namespace"
 	tqid "go.temporal.io/server/common/tqid"
 	gomock "go.uber.org/mock/gomock"
@@ -141,6 +143,20 @@ func (m *MocktaskQueuePartitionManager) GetAllPollerInfo() []*taskqueue.PollerIn
 func (mr *MocktaskQueuePartitionManagerMockRecorder) GetAllPollerInfo() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetAllPollerInfo", reflect.TypeOf((*MocktaskQueuePartitionManager)(nil).GetAllPollerInfo))
+}
+
+// GetPhysicalTaskQueueInfoFromCache mocks base method.
+func (m *MocktaskQueuePartitionManager) GetPhysicalTaskQueueInfoFromCache() map[string]map[enums.TaskQueueType]*taskqueue0.PhysicalTaskQueueInfo {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetPhysicalTaskQueueInfoFromCache")
+	ret0, _ := ret[0].(map[string]map[enums.TaskQueueType]*taskqueue0.PhysicalTaskQueueInfo)
+	return ret0
+}
+
+// GetPhysicalTaskQueueInfoFromCache indicates an expected call of GetPhysicalTaskQueueInfoFromCache.
+func (mr *MocktaskQueuePartitionManagerMockRecorder) GetPhysicalTaskQueueInfoFromCache() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetPhysicalTaskQueueInfoFromCache", reflect.TypeOf((*MocktaskQueuePartitionManager)(nil).GetPhysicalTaskQueueInfoFromCache))
 }
 
 // GetUserDataManager mocks base method.
@@ -319,6 +335,32 @@ func (m *MocktaskQueuePartitionManager) String() string {
 func (mr *MocktaskQueuePartitionManagerMockRecorder) String() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "String", reflect.TypeOf((*MocktaskQueuePartitionManager)(nil).String))
+}
+
+// TimeSinceLastFanOut mocks base method.
+func (m *MocktaskQueuePartitionManager) TimeSinceLastFanOut() time.Duration {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "TimeSinceLastFanOut")
+	ret0, _ := ret[0].(time.Duration)
+	return ret0
+}
+
+// TimeSinceLastFanOut indicates an expected call of TimeSinceLastFanOut.
+func (mr *MocktaskQueuePartitionManagerMockRecorder) TimeSinceLastFanOut() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "TimeSinceLastFanOut", reflect.TypeOf((*MocktaskQueuePartitionManager)(nil).TimeSinceLastFanOut))
+}
+
+// UpdateTimeSinceLastFanOutAndCache mocks base method.
+func (m *MocktaskQueuePartitionManager) UpdateTimeSinceLastFanOutAndCache(physicalInfoByBuildId map[string]map[enums.TaskQueueType]*taskqueue0.PhysicalTaskQueueInfo) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "UpdateTimeSinceLastFanOutAndCache", physicalInfoByBuildId)
+}
+
+// UpdateTimeSinceLastFanOutAndCache indicates an expected call of UpdateTimeSinceLastFanOutAndCache.
+func (mr *MocktaskQueuePartitionManagerMockRecorder) UpdateTimeSinceLastFanOutAndCache(physicalInfoByBuildId any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateTimeSinceLastFanOutAndCache", reflect.TypeOf((*MocktaskQueuePartitionManager)(nil).UpdateTimeSinceLastFanOutAndCache), physicalInfoByBuildId)
 }
 
 // WaitUntilInitialized mocks base method.

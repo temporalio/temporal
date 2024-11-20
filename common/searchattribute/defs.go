@@ -81,6 +81,21 @@ const (
 	// define a custom ScheduleId search attribute, in which case the query using the ScheduleId would operate just like
 	// any other custom search attribute.
 	ScheduleID = "ScheduleId"
+
+	// TemporalPauseInfo is a search attribute that stores the information about paused entities in the workflow.
+	// Format of a single paused entity: "<key>:<value>".
+	//  * <key> is something that can be used to identify the filtering condition
+	//  * <value> is the value of the corresponding filtering condition.
+	// examples:
+	//   - for paused activities, manual pause, we may have 2 <key>:<value> pairs:
+	//     * "Activity:MyCoolActivityType"
+	//     * "Reason:ManualActivityPause"
+	//     * or
+	//     * "Policy:<some policy id>"
+	//   - for paused workflows, we may have the following <key>:<value> pairs:
+	//     * "Workflow:WorkflowID"
+	//     * "Reason:ManualWorkflowPause"
+	TemporalPauseInfo = "TemporalPauseInfo"
 )
 
 var (
@@ -115,6 +130,7 @@ var (
 		TemporalScheduledById:      enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 		TemporalSchedulePaused:     enumspb.INDEXED_VALUE_TYPE_BOOL,
 		TemporalNamespaceDivision:  enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+		TemporalPauseInfo:          enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST,
 	}
 
 	// reserved are internal field names that can't be used as search attribute names.

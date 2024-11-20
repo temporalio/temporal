@@ -37,6 +37,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
+	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/api/matchingservicemock/v1"
 	"go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/api/taskqueue/v1"
@@ -76,7 +77,8 @@ func (s *PartitionManagerTestSuite) SetupTest() {
 	partition := f.TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW).RootPartition()
 	tqConfig := newTaskQueueConfig(partition.TaskQueue(), me.config, ns.Name())
 	s.userDataMgr = &mockUserDataManager{}
-	pm, err := newTaskQueuePartitionManager(me, ns, partition, tqConfig, s.userDataMgr)
+	logger, _, metricsHandler := me.loggerAndMetricsForPartition(namespace.Name(namespaceName), partition, tqConfig)
+	pm, err := newTaskQueuePartitionManager(me, ns, partition, tqConfig, logger, logger, metricsHandler, s.userDataMgr)
 	s.Assert().NoError(err)
 	s.partitionMgr = pm
 	me.Start()
@@ -586,6 +588,10 @@ func (m *mockUserDataManager) UpdateUserData(_ context.Context, _ UserDataUpdate
 	}
 	m.data = &persistence.VersionedTaskQueueUserData{Data: data, Version: m.data.Version + 1}
 	return nil
+}
+
+func (m *mockUserDataManager) HandleGetUserDataRequest(ctx context.Context, req *matchingservice.GetTaskQueueUserDataRequest) (*matchingservice.GetTaskQueueUserDataResponse, error) {
+	panic("unused")
 }
 
 func (m *mockUserDataManager) updateVersioningData(data *persistence.VersioningData) {

@@ -81,7 +81,7 @@ func (s hsmInvocation) Invoke(ctx context.Context, ns *namespace.Namespace, e ta
 	// TODO(Tianyu): Will this ever be too big for an RPC call?
 	callbackArgSerialized, err := s.callbackArg.Marshal()
 	if err != nil {
-		return failed, fmt.Errorf("failed to serialize completion event: %v", err) //nolint:goerr113
+		return failed, fmt.Errorf("failed to serialize completion event: %v", err)
 	}
 
 	request := historyservice.InvokeStateMachineMethodRequest{
@@ -98,7 +98,7 @@ func (s hsmInvocation) Invoke(ctx context.Context, ns *namespace.Namespace, e ta
 
 	// Log down metrics about the call
 	namespaceTag := metrics.NamespaceTag(ns.Name().String())
-	destTag := metrics.DestinationTag(task.Destination)
+	destTag := metrics.DestinationTag(task.Destination())
 	statusCodeTag := metrics.OutcomeTag(fmt.Sprintf("status:%d", status.Code(err)))
 
 	e.MetricsHandler.Counter(RequestCounter.Name()).Record(1, namespaceTag, destTag, statusCodeTag)

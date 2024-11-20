@@ -36,6 +36,7 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	updatepb "go.temporal.io/api/update/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
+	"go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/metrics"
@@ -124,6 +125,31 @@ func NewImmutable(histories ...[]*historypb.HistoryEvent) *HistoryBuilder {
 			dbBufferBatch:          nil,
 			dbClearBuffer:          false,
 			memEventsBatches:       histories,
+			memLatestBatch:         nil,
+			memBufferBatch:         nil,
+			scheduledIDToStartedID: nil,
+
+			metricsHandler: nil,
+		},
+		EventFactory: EventFactory{},
+	}
+}
+
+func NewImmutableForUpdateNextEventID(lastVersionHistoryItem *history.VersionHistoryItem) *HistoryBuilder {
+	return &HistoryBuilder{
+		EventStore: EventStore{
+			state:           HistoryBuilderStateImmutable,
+			timeSource:      nil,
+			taskIDGenerator: nil,
+
+			version:     lastVersionHistoryItem.GetVersion(),
+			nextEventID: lastVersionHistoryItem.GetEventId() + 1,
+
+			workflowFinished: false,
+
+			dbBufferBatch:          nil,
+			dbClearBuffer:          false,
+			memEventsBatches:       nil,
 			memLatestBatch:         nil,
 			memBufferBatch:         nil,
 			scheduledIDToStartedID: nil,
@@ -372,8 +398,9 @@ func (b *HistoryBuilder) AddWorkflowExecutionTerminatedEvent(
 	reason string,
 	details *commonpb.Payloads,
 	identity string,
+	links []*commonpb.Link,
 ) *historypb.HistoryEvent {
-	event := b.EventFactory.CreateWorkflowExecutionTerminatedEvent(reason, details, identity)
+	event := b.EventFactory.CreateWorkflowExecutionTerminatedEvent(reason, details, identity, links)
 
 	event, _ = b.EventStore.add(event)
 	return event
@@ -641,16 +668,16 @@ func (b *HistoryBuilder) AddWorkflowExecutionSignaledEvent(
 	input *commonpb.Payloads,
 	identity string,
 	header *commonpb.Header,
-	skipGenerateWorkflowTask bool,
 	externalWorkflowExecution *commonpb.WorkflowExecution,
+	links []*commonpb.Link,
 ) *historypb.HistoryEvent {
 	event := b.EventFactory.CreateWorkflowExecutionSignaledEvent(
 		signalName,
 		input,
 		identity,
 		header,
-		skipGenerateWorkflowTask,
 		externalWorkflowExecution,
+		links,
 	)
 	event, _ = b.EventStore.add(event)
 	return event

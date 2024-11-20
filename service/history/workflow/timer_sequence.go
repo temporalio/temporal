@@ -153,15 +153,14 @@ func (t *timerSequenceImpl) CreateNextActivityTimer() (bool, error) {
 	if !ok {
 		return false, serviceerror.NewInternal(fmt.Sprintf("unable to load activity info %v", firstTimerTask.EventID))
 	}
-	// mark timer task mask as indication that timer task is generated
-	activityInfo.TimerTaskStatus |= timerTypeToTimerMask(firstTimerTask.TimerType)
 
-	var err error
-	if firstTimerTask.TimerType == enumspb.TIMEOUT_TYPE_HEARTBEAT {
-		err = t.mutableState.UpdateActivityWithTimerHeartbeat(activityInfo, firstTimerTask.Timestamp)
-	} else {
-		err = t.mutableState.UpdateActivity(activityInfo)
-	}
+	err := t.mutableState.UpdateActivity(activityInfo.ScheduledEventId, func(ai *persistencespb.ActivityInfo, ms MutableState) {
+		// mark timer task mask as indication that timer task is generated
+		ai.TimerTaskStatus |= timerTypeToTimerMask(firstTimerTask.TimerType)
+		if firstTimerTask.TimerType == enumspb.TIMEOUT_TYPE_HEARTBEAT {
+			t.mutableState.UpdateActivityTimerHeartbeat(ai.ScheduledEventId, firstTimerTask.Timestamp)
+		}
+	})
 
 	if err != nil {
 		return false, err
@@ -173,6 +172,7 @@ func (t *timerSequenceImpl) CreateNextActivityTimer() (bool, error) {
 		TimeoutType:         firstTimerTask.TimerType,
 		EventID:             firstTimerTask.EventID,
 		Attempt:             firstTimerTask.Attempt,
+		Stamp:               activityInfo.Stamp,
 	})
 	return true, nil
 }
@@ -202,7 +202,10 @@ func (t *timerSequenceImpl) LoadAndSortActivityTimers() []TimerSequenceID {
 	activityTimers := make(TimerSequenceIDs, 0, len(pendingActivities)*4)
 
 	for _, activityInfo := range pendingActivities {
-
+		// skip activities that are paused
+		if activityInfo.Paused {
+			continue
+		}
 		if sequenceID := t.getActivityScheduleToCloseTimeout(
 			activityInfo,
 		); sequenceID != nil {
@@ -291,7 +294,14 @@ func (t *timerSequenceImpl) getActivityScheduleToCloseTimeout(
 		return nil
 	}
 
-	timeoutTime := timestamp.TimeValue(activityInfo.ScheduledTime).Add(scheduleToCloseDuration)
+	var timeoutTime time.Time
+	// for backward compatibility. FirstScheduledTime can be null if mutable state was
+	// restored from the version before this field was introduce
+	if activityInfo.FirstScheduledTime != nil {
+		timeoutTime = timestamp.TimeValue(activityInfo.FirstScheduledTime).Add(scheduleToCloseDuration)
+	} else {
+		timeoutTime = timestamp.TimeValue(activityInfo.ScheduledTime).Add(scheduleToCloseDuration)
+	}
 
 	return &TimerSequenceID{
 		EventID:      activityInfo.ScheduledEventId,

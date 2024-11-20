@@ -26,7 +26,6 @@ package update_test
 
 import (
 	"context"
-	"fmt"
 	"sync"
 	"testing"
 	"time"
@@ -132,8 +131,10 @@ func TestNewRegistry(t *testing.T) {
 		upd := reg.Find(context.Background(), tv.UpdateID())
 		require.NotNil(t, upd)
 
-		_, err := upd.WaitLifecycleStage(context.Background(), 0, 100*time.Millisecond)
-		require.Equal(t, err, consts.ErrWorkflowCompleted)
+		status, err := upd.WaitLifecycleStage(context.Background(), 0, 100*time.Millisecond)
+		require.NoError(t, err)
+		require.NotNil(t, status)
+		require.Equal(t, "Workflow Update failed because the Workflow completed before the Update completed.", status.Outcome.GetFailure().Message)
 	})
 
 	t.Run("registry created from store with update in stateCompleted has no updates but increased completed count", func(t *testing.T) {
@@ -492,8 +493,7 @@ func TestRejectUnprocessed(t *testing.T) {
 	)
 
 	t.Run("empty registry has no updates to reject", func(t *testing.T) {
-		rejectedIDs, err := reg.RejectUnprocessed(context.Background(), evStore)
-		require.NoError(t, err)
+		rejectedIDs := reg.RejectUnprocessed(context.Background(), evStore)
 		require.Empty(t, rejectedIDs)
 	})
 
@@ -504,8 +504,7 @@ func TestRejectUnprocessed(t *testing.T) {
 		upd2, _, err = reg.FindOrCreate(context.Background(), tv.UpdateID("2"))
 		require.NoError(t, err)
 
-		rejectedIDs, err := reg.RejectUnprocessed(context.Background(), evStore)
-		require.NoError(t, err)
+		rejectedIDs := reg.RejectUnprocessed(context.Background(), evStore)
 		require.Empty(t, rejectedIDs)
 	})
 
@@ -513,8 +512,7 @@ func TestRejectUnprocessed(t *testing.T) {
 		mustAdmit(t, evStore, upd1)
 		mustAdmit(t, evStore, upd2)
 
-		rejectedIDs, err := reg.RejectUnprocessed(context.Background(), evStore)
-		require.NoError(t, err)
+		rejectedIDs := reg.RejectUnprocessed(context.Background(), evStore)
 		require.Empty(t, rejectedIDs)
 	})
 
@@ -522,13 +520,11 @@ func TestRejectUnprocessed(t *testing.T) {
 		t.Helper()
 		require.NotNil(t, send(t, upd1, includeAlreadySent), "update should be sent")
 
-		rejectedIDs, err := reg.RejectUnprocessed(context.Background(), evStore)
-		require.NoError(t, err)
+		rejectedIDs := reg.RejectUnprocessed(context.Background(), evStore)
 		require.Len(t, rejectedIDs, 1, "only update #1 in stateSent should be rejected")
 		require.Equal(t, rejectedIDs[0], upd1.ID(), "update #1 should be rejected")
 
-		rejectedIDs, err = reg.RejectUnprocessed(context.Background(), evStore)
-		require.NoError(t, err)
+		rejectedIDs = reg.RejectUnprocessed(context.Background(), evStore)
 		require.Empty(t, rejectedIDs, "rejected update #1 should not be rejected again")
 	})
 
@@ -537,8 +533,7 @@ func TestRejectUnprocessed(t *testing.T) {
 		require.NotNil(t, send(t, upd2, includeAlreadySent), "update should be sent")
 		mustAccept(t, evStore, upd2)
 
-		rejectedIDs, err := reg.RejectUnprocessed(context.Background(), evStore)
-		require.NoError(t, err)
+		rejectedIDs := reg.RejectUnprocessed(context.Background(), evStore)
 		require.Empty(t, rejectedIDs)
 	})
 
@@ -547,8 +542,7 @@ func TestRejectUnprocessed(t *testing.T) {
 		require.NoError(t, respondSuccess(t, evStore, upd2), "update should be completed")
 		assertCompleted(t, upd2, successOutcome)
 
-		rejectedIDs, err := reg.RejectUnprocessed(context.Background(), evStore)
-		require.NoError(t, err)
+		rejectedIDs := reg.RejectUnprocessed(context.Background(), evStore)
 		require.Empty(t, rejectedIDs)
 	})
 }
@@ -580,13 +574,19 @@ func TestAbort(t *testing.T) {
 	// abort both updates
 	reg.Abort(update.AbortReasonWorkflowCompleted)
 
-	for i := 1; i <= 2; i++ {
-		upd := reg.Find(context.Background(), tv.UpdateID(fmt.Sprintf("%d", i)))
-		require.NotNil(t, upd)
+	upd1 := reg.Find(context.Background(), tv.UpdateID("1"))
+	require.NotNil(t, upd1)
+	status1, err := upd1.WaitLifecycleStage(context.Background(), 0, 2*time.Second)
+	require.Equal(t, consts.ErrWorkflowCompleted, err)
+	require.Nil(t, status1)
 
-		_, err := upd.WaitLifecycleStage(context.Background(), 0, 2*time.Second)
-		require.Equal(t, consts.ErrWorkflowCompleted, err)
-	}
+	upd2 := reg.Find(context.Background(), tv.UpdateID("2"))
+	require.NotNil(t, upd2)
+	status2, err := upd2.WaitLifecycleStage(context.Background(), 0, 2*time.Second)
+	require.NoError(t, err)
+	require.NotNil(t, status2)
+	require.Equal(t, "Workflow Update failed because the Workflow completed before the Update completed.", status2.Outcome.GetFailure().Message)
+
 	require.Equal(t, 2, reg.Len(), "registry should still contain both updates")
 }
 

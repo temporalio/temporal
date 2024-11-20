@@ -51,6 +51,7 @@ import (
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	schedspb "go.temporal.io/server/api/schedule/v1"
+	"go.temporal.io/server/api/taskqueue/v1"
 	"go.temporal.io/server/client/frontend"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/archiver"
@@ -74,7 +75,6 @@ import (
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/visibility"
 	"go.temporal.io/server/common/persistence/visibility/manager"
-	"go.temporal.io/server/common/persistence/visibility/store"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/retrypolicy"
@@ -83,7 +83,6 @@ import (
 	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/tasktoken"
-	"go.temporal.io/server/common/timer"
 	"go.temporal.io/server/common/tqid"
 	"go.temporal.io/server/common/utf8validator"
 	"go.temporal.io/server/common/util"
@@ -477,6 +476,10 @@ func (wh *WorkflowHandler) prepareStartWorkflowRequest(
 	}
 
 	if err := wh.validateWorkflowCompletionCallbacks(namespaceName, request.GetCompletionCallbacks()); err != nil {
+		return nil, err
+	}
+
+	if err := wh.validateLinks(namespaceName, request.GetLinks()); err != nil {
 		return nil, err
 	}
 
@@ -1819,6 +1822,10 @@ func (wh *WorkflowHandler) RequestCancelWorkflowExecution(ctx context.Context, r
 		return nil, err
 	}
 
+	if err := wh.validateLinks(namespace.Name(request.GetNamespace()), request.GetLinks()); err != nil {
+		return nil, err
+	}
+
 	namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
 	if err != nil {
 		return nil, err
@@ -1858,6 +1865,10 @@ func (wh *WorkflowHandler) SignalWorkflowExecution(ctx context.Context, request 
 
 	if len(request.GetRequestId()) > wh.config.MaxIDLengthLimit() {
 		return nil, errRequestIDTooLong
+	}
+
+	if err := wh.validateLinks(namespace.Name(request.GetNamespace()), request.GetLinks()); err != nil {
+		return nil, err
 	}
 
 	namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
@@ -1978,6 +1989,10 @@ func (wh *WorkflowHandler) SignalWithStartWorkflowExecution(ctx context.Context,
 		request.SearchAttributes = sa
 	}
 
+	if err := wh.validateLinks(namespaceName, request.GetLinks()); err != nil {
+		return nil, err
+	}
+
 	namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespaceName)
 	if err != nil {
 		return nil, err
@@ -2048,6 +2063,10 @@ func (wh *WorkflowHandler) TerminateWorkflowExecution(ctx context.Context, reque
 	}
 
 	if err := validateExecution(request.WorkflowExecution); err != nil {
+		return nil, err
+	}
+
+	if err := wh.validateLinks(namespace.Name(request.GetNamespace()), request.GetLinks()); err != nil {
 		return nil, err
 	}
 
@@ -2608,6 +2627,27 @@ func (wh *WorkflowHandler) ResetStickyTaskQueue(ctx context.Context, request *wo
 func (wh *WorkflowHandler) ShutdownWorker(ctx context.Context, request *workflowservice.ShutdownWorkerRequest) (_ *workflowservice.ShutdownWorkerResponse, retError error) {
 	defer log.CapturePanic(wh.logger, &retError)
 
+	if request == nil {
+		return nil, errRequestNotSet
+	}
+
+	namespaceId, err := wh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
+	if err != nil {
+		return nil, err
+	}
+
+	// TODO: update poller info to indicate poller was shut down (pass identity/reason along)
+	_, err = wh.matchingClient.ForceUnloadTaskQueuePartition(ctx, &matchingservice.ForceUnloadTaskQueuePartitionRequest{
+		NamespaceId: namespaceId.String(),
+		TaskQueuePartition: &taskqueue.TaskQueuePartition{
+			TaskQueue:     request.GetStickyTaskQueue(),
+			TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW, // sticky task queues are always workflow queues
+		},
+	})
+	if err != nil {
+		return nil, err
+	}
+
 	return &workflowservice.ShutdownWorkerResponse{}, nil
 }
 
@@ -2739,7 +2779,12 @@ func (wh *WorkflowHandler) DescribeTaskQueue(ctx context.Context, request *workf
 		return nil, err
 	}
 
-	if err := tqid.NormalizeAndValidate(request.TaskQueue, "", wh.config.MaxIDLengthLimit()); err != nil {
+	if request.ApiMode == enumspb.DESCRIBE_TASK_QUEUE_MODE_UNSPECIFIED {
+		err = tqid.NormalizeAndValidatePartition(request.TaskQueue, "", wh.config.MaxIDLengthLimit())
+	} else {
+		err = tqid.NormalizeAndValidate(request.TaskQueue, "", wh.config.MaxIDLengthLimit())
+	}
+	if err != nil {
 		return nil, err
 	}
 
@@ -3984,36 +4029,11 @@ func (wh *WorkflowHandler) StartBatchOperation(
 		Namespace: request.GetNamespace(),
 		Query:     batcher.OpenBatchOperationQuery,
 	})
-	openBatchOperationCount := 0
-	if err == nil {
-		openBatchOperationCount = int(countResp.GetCount())
-	} else {
-		if !errors.Is(err, store.OperationNotSupportedErr) {
-			return nil, err
-		}
-		// Some std visibility stores don't yet support CountWorkflowExecutions, even though some
-		// batch operations are still possible on those store (eg. by specyfing a list of Executions
-		// rather than a VisibilityQuery). Fallback to ListOpenWorkflowExecutions in these cases.
-		// TODO: Remove this once all std visibility stores support CountWorkflowExecutions.
-		nextPageToken := []byte{}
-		for nextPageToken != nil && openBatchOperationCount < maxConcurrentBatchOperation {
-			listResp, err := wh.ListOpenWorkflowExecutions(ctx, &workflowservice.ListOpenWorkflowExecutionsRequest{
-				Namespace: request.GetNamespace(),
-				Filters: &workflowservice.ListOpenWorkflowExecutionsRequest_TypeFilter{
-					TypeFilter: &filterpb.WorkflowTypeFilter{
-						Name: batcher.BatchWFTypeName,
-					},
-				},
-				MaximumPageSize: int32(maxConcurrentBatchOperation - openBatchOperationCount),
-				NextPageToken:   nextPageToken,
-			})
-			if err != nil {
-				return nil, err
-			}
-			openBatchOperationCount += len(listResp.Executions)
-			nextPageToken = listResp.NextPageToken
-		}
+	if err != nil {
+		return nil, err
 	}
+
+	openBatchOperationCount := int(countResp.GetCount())
 	if openBatchOperationCount >= maxConcurrentBatchOperation {
 		return nil, &serviceerror.ResourceExhausted{
 			Cause:   enumspb.RESOURCE_EXHAUSTED_CAUSE_CONCURRENT_LIMIT,
@@ -4553,6 +4573,45 @@ func (wh *WorkflowHandler) validateWorkflowIdReusePolicy(
 	return nil
 }
 
+func (wh *WorkflowHandler) validateLinks(
+	ns namespace.Name,
+	links []*commonpb.Link,
+) error {
+	maxAllowedLinks := wh.config.MaxLinksPerRequest(ns.String())
+	if len(links) > maxAllowedLinks {
+		return serviceerror.NewInvalidArgument(fmt.Sprintf("cannot attach more than %d links per request, got %d", maxAllowedLinks, len(links)))
+	}
+
+	maxSize := wh.config.LinkMaxSize(ns.String())
+	for _, l := range links {
+		if l.Size() > maxSize {
+			return serviceerror.NewInvalidArgument(fmt.Sprintf("link exceeds allowed size of %d, got %d", maxSize, l.Size()))
+		}
+		switch t := l.Variant.(type) {
+		case *commonpb.Link_WorkflowEvent_:
+			if t.WorkflowEvent.GetNamespace() == "" {
+				return serviceerror.NewInvalidArgument("workflow event link must not have an empty namespace field")
+			}
+			if t.WorkflowEvent.GetWorkflowId() == "" {
+				return serviceerror.NewInvalidArgument("workflow event link must not have an empty workflow ID field")
+			}
+			if t.WorkflowEvent.GetRunId() == "" {
+				return serviceerror.NewInvalidArgument("workflow event link must not have an empty run ID field")
+			}
+			if t.WorkflowEvent.GetEventRef().GetEventType() == enumspb.EVENT_TYPE_UNSPECIFIED && t.WorkflowEvent.GetEventRef().GetEventId() != 0 {
+				return serviceerror.NewInvalidArgument("workflow event link ref cannot have an unspecified event type and a non-zero event ID")
+			}
+		case *commonpb.Link_BatchJob_:
+			if t.BatchJob.GetJobId() == "" {
+				return serviceerror.NewInvalidArgument("batch job link must not have an empty job ID")
+			}
+		default:
+			return serviceerror.NewInvalidArgument("unsupported link variant")
+		}
+	}
+	return nil
+}
+
 func (wh *WorkflowHandler) validateWorkflowCompletionCallbacks(
 	ns namespace.Name,
 	callbacks []*commonpb.Callback,
@@ -4880,16 +4939,16 @@ func validateRequestId(requestID *string, lenLimit int) error {
 func (wh *WorkflowHandler) validateStartWorkflowTimeouts(
 	request *workflowservice.StartWorkflowExecutionRequest,
 ) error {
-	if err := timer.ValidateAndCapTimer(request.GetWorkflowExecutionTimeout()); err != nil {
-		return errInvalidWorkflowExecutionTimeoutSeconds
+	if err := timestamp.ValidateProtoDuration(request.GetWorkflowExecutionTimeout()); err != nil {
+		return fmt.Errorf("%w cause: %v", errInvalidWorkflowExecutionTimeoutSeconds, err)
 	}
 
-	if err := timer.ValidateAndCapTimer(request.GetWorkflowRunTimeout()); err != nil {
-		return errInvalidWorkflowRunTimeoutSeconds
+	if err := timestamp.ValidateProtoDuration(request.GetWorkflowRunTimeout()); err != nil {
+		return fmt.Errorf("%w cause: %v", errInvalidWorkflowRunTimeoutSeconds, err)
 	}
 
-	if err := timer.ValidateAndCapTimer(request.GetWorkflowTaskTimeout()); err != nil {
-		return errInvalidWorkflowTaskTimeoutSeconds
+	if err := timestamp.ValidateProtoDuration(request.GetWorkflowTaskTimeout()); err != nil {
+		return fmt.Errorf("%w cause: %v", errInvalidWorkflowTaskTimeoutSeconds, err)
 	}
 
 	return nil
@@ -4898,16 +4957,16 @@ func (wh *WorkflowHandler) validateStartWorkflowTimeouts(
 func (wh *WorkflowHandler) validateSignalWithStartWorkflowTimeouts(
 	request *workflowservice.SignalWithStartWorkflowExecutionRequest,
 ) error {
-	if err := timer.ValidateAndCapTimer(request.WorkflowTaskTimeout); err != nil {
-		return errInvalidWorkflowExecutionTimeoutSeconds
+	if err := timestamp.ValidateProtoDuration(request.GetWorkflowExecutionTimeout()); err != nil {
+		return fmt.Errorf("%w cause: %v", errInvalidWorkflowExecutionTimeoutSeconds, err)
 	}
 
-	if err := timer.ValidateAndCapTimer(request.WorkflowRunTimeout); err != nil {
-		return errInvalidWorkflowRunTimeoutSeconds
+	if err := timestamp.ValidateProtoDuration(request.GetWorkflowRunTimeout()); err != nil {
+		return fmt.Errorf("%w cause: %v", errInvalidWorkflowRunTimeoutSeconds, err)
 	}
 
-	if err := timer.ValidateAndCapTimer(request.WorkflowTaskTimeout); err != nil {
-		return errInvalidWorkflowTaskTimeoutSeconds
+	if err := timestamp.ValidateProtoDuration(request.GetWorkflowTaskTimeout()); err != nil {
+		return fmt.Errorf("%w cause: %v", errInvalidWorkflowTaskTimeoutSeconds, err)
 	}
 
 	return nil
@@ -4921,8 +4980,8 @@ func (wh *WorkflowHandler) validateWorkflowStartDelay(
 		return errCronAndStartDelaySet
 	}
 
-	if err := timer.ValidateAndCapTimer(startDelay); err != nil {
-		return errInvalidWorkflowStartDelaySeconds
+	if err := timestamp.ValidateProtoDuration(startDelay); err != nil {
+		return fmt.Errorf("%w cause: %v", errInvalidWorkflowStartDelaySeconds, err)
 	}
 
 	return nil
@@ -5073,7 +5132,44 @@ func (wh *WorkflowHandler) UpdateActivityOptionsById(
 		return nil, status.Errorf(codes.Unimplemented, "method UpdateActivityOptionsById not implemented")
 	}
 
-	wh.logger.Debug("Received UpdateActivityOptionsById")
+	if request == nil {
+		return nil, errRequestNotSet
+	}
+	if request.GetWorkflowId() == "" {
+		return nil, errWorkflowIDNotSet
+	}
+	if request.GetActivityId() == "" {
+		return nil, errActivityIDNotSet
+	}
+
+	namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
+	if err != nil {
+		return nil, err
+	}
+
+	response, err := wh.historyClient.UpdateActivityOptions(ctx, &historyservice.UpdateActivityOptionsRequest{
+		NamespaceId:   namespaceID.String(),
+		UpdateRequest: request,
+	})
+
+	if err != nil {
+		return nil, err
+	}
+
+	return &workflowservice.UpdateActivityOptionsByIdResponse{
+		ActivityOptions: response.ActivityOptions,
+	}, nil
+}
+
+func (wh *WorkflowHandler) PauseActivityById(
+	ctx context.Context,
+	request *workflowservice.PauseActivityByIdRequest,
+) (_ *workflowservice.PauseActivityByIdResponse, retError error) {
+	defer log.CapturePanic(wh.logger, &retError)
+
+	if !wh.config.ActivityAPIsEnabled(request.GetNamespace()) {
+		return nil, status.Errorf(codes.Unimplemented, "method PauseActivityById not implemented")
+	}
 
 	if request == nil {
 		return nil, errRequestNotSet
@@ -5085,25 +5181,91 @@ func (wh *WorkflowHandler) UpdateActivityOptionsById(
 		return nil, errActivityIDNotSet
 	}
 
-	namespace_id, err := wh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
+	namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
 	if err != nil {
 		return nil, err
 	}
 
-	response, err := wh.historyClient.UpdateActivityOptions(ctx, &historyservice.UpdateActivityOptionsRequest{
-		NamespaceId:     namespace_id.String(),
-		WorkflowId:      request.WorkflowId,
-		RunId:           request.RunId,
-		ActivityId:      request.ActivityId,
-		ActivityOptions: request.ActivityOptions,
-		UpdateMask:      request.UpdateMask,
+	_, err = wh.historyClient.PauseActivity(ctx, &historyservice.PauseActivityRequest{
+		NamespaceId:     namespaceID.String(),
+		FrontendRequest: request,
 	})
 
 	if err != nil {
 		return nil, err
 	}
 
-	return &workflowservice.UpdateActivityOptionsByIdResponse{
-		ActivityOptions: response.ActivityOptions,
-	}, nil
+	return &workflowservice.PauseActivityByIdResponse{}, nil
+}
+
+func (wh *WorkflowHandler) UnpauseActivityById(
+	ctx context.Context, request *workflowservice.UnpauseActivityByIdRequest,
+) (_ *workflowservice.UnpauseActivityByIdResponse, retError error) {
+	defer log.CapturePanic(wh.logger, &retError)
+
+	if !wh.config.ActivityAPIsEnabled(request.GetNamespace()) {
+		return nil, status.Errorf(codes.Unimplemented, "method UnpauseActivityById not implemented")
+	}
+
+	if request == nil {
+		return nil, errRequestNotSet
+	}
+	if request.GetWorkflowId() == "" {
+		return nil, errWorkflowIDNotSet
+	}
+	if request.GetActivityId() == "" {
+		return nil, errActivityIDNotSet
+	}
+
+	namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
+	if err != nil {
+		return nil, err
+	}
+
+	_, err = wh.historyClient.UnpauseActivity(ctx, &historyservice.UnpauseActivityRequest{
+		NamespaceId:     namespaceID.String(),
+		FrontendRequest: request,
+	})
+
+	if err != nil {
+		return nil, err
+	}
+
+	return &workflowservice.UnpauseActivityByIdResponse{}, nil
+}
+
+func (wh *WorkflowHandler) ResetActivityById(
+	ctx context.Context, request *workflowservice.ResetActivityByIdRequest,
+) (_ *workflowservice.ResetActivityByIdResponse, retError error) {
+	defer log.CapturePanic(wh.logger, &retError)
+
+	if !wh.config.ActivityAPIsEnabled(request.GetNamespace()) {
+		return nil, status.Errorf(codes.Unimplemented, "method ResetActivityById not implemented")
+	}
+
+	if request == nil {
+		return nil, errRequestNotSet
+	}
+	if request.GetWorkflowId() == "" {
+		return nil, errWorkflowIDNotSet
+	}
+	if request.GetActivityId() == "" {
+		return nil, errActivityIDNotSet
+	}
+
+	namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
+	if err != nil {
+		return nil, err
+	}
+
+	_, err = wh.historyClient.ResetActivity(ctx, &historyservice.ResetActivityRequest{
+		NamespaceId:     namespaceID.String(),
+		FrontendRequest: request,
+	})
+
+	if err != nil {
+		return nil, err
+	}
+
+	return &workflowservice.ResetActivityByIdResponse{}, nil
 }

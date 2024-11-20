@@ -37,6 +37,7 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
+	"go.temporal.io/server/common/clock/hybrid_logical_clock"
 	"go.temporal.io/server/common/future"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
@@ -66,6 +67,8 @@ type (
 		// UpdateUserData updates user data for this task queue and replicates across clusters if necessary.
 		// Extra care should be taken to avoid mutating the existing data in the update function.
 		UpdateUserData(ctx context.Context, options UserDataUpdateOptions, updateFn UserDataUpdateFunc) error
+		// Handles the maybe-long-poll GetUserData RPC.
+		HandleGetUserDataRequest(ctx context.Context, req *matchingservice.GetTaskQueueUserDataRequest) (*matchingservice.GetTaskQueueUserDataResponse, error)
 	}
 
 	UserDataUpdateOptions struct {
@@ -73,6 +76,7 @@ type (
 		// Only perform the update if current version equals to supplied version.
 		// 0 is unset.
 		KnownVersion int64
+		Source       string // informative source for logging
 	}
 
 	// UserDataUpdateFunc accepts the current user data for a task queue and returns the updated user data, a boolean
@@ -222,7 +226,7 @@ func (m *userDataManagerImpl) userDataFetchSource() (*tqid.NormalPartition, erro
 		p = p.TaskQueue().Family().TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW).NormalPartition(p.PartitionId())
 		degree := m.config.ForwarderMaxChildrenPerNode()
 		parent, err := p.ParentPartition(degree)
-		if err == tqid.ErrNoParent { // nolint:goerr113
+		if err == tqid.ErrNoParent {
 			// we're the root activity task queue, ask the root workflow task queue
 			return p, nil
 		} else if err != nil {
@@ -250,7 +254,7 @@ func (m *userDataManagerImpl) fetchUserData(ctx context.Context) error {
 	// fetch from parent partition
 	fetchSource, err := m.userDataFetchSource()
 	if err != nil {
-		if err == errMissingNormalQueueName { // nolint:goerr113
+		if err == errMissingNormalQueueName {
 			// pretend we have no user data. this is a sticky queue so the only effect is that we can't
 			// kick off versioned pollers.
 			m.setUserDataState(userDataEnabled, nil)
@@ -276,6 +280,10 @@ func (m *userDataManagerImpl) fetchUserData(ctx context.Context) error {
 			WaitNewData:              hasFetchedUserData,
 		})
 		if err != nil {
+			// don't log on context canceled, produces too much log spam at shutdown
+			if !common.IsContextCanceledErr(err) {
+				m.logger.Error("error fetching user data from parent", tag.Error(err))
+			}
 			var unimplErr *serviceerror.Unimplemented
 			if errors.As(err, &unimplErr) {
 				// This might happen during a deployment. The older version couldn't have had any user data,
@@ -292,6 +300,9 @@ func (m *userDataManagerImpl) fetchUserData(ctx context.Context) error {
 		// nil inner fields.
 		if res.GetUserData() != nil {
 			m.setUserDataForNonOwningPartition(res.GetUserData())
+			m.logNewUserData("fetched user data from parent", res.GetUserData())
+		} else {
+			m.logger.Debug("fetched user data from parent, no change")
 		}
 		hasFetchedUserData = true
 		m.setUserDataState(userDataEnabled, nil)
@@ -339,6 +350,7 @@ func (m *userDataManagerImpl) loadUserDataFromDB(ctx context.Context) error {
 	m.lock.Lock()
 	defer m.lock.Unlock()
 	m.setUserDataLocked(response.UserData)
+	m.logNewUserData("loaded user data from db", response.UserData)
 
 	return nil
 }
@@ -349,7 +361,10 @@ func (m *userDataManagerImpl) UpdateUserData(ctx context.Context, options UserDa
 	if m.store == nil {
 		return errUserDataNoMutateNonRoot
 	}
-	newData, shouldReplicate, err := m.updateUserData(ctx, updateFn, options.KnownVersion, options.TaskQueueLimitPerBuildId)
+	if err := m.WaitUntilInitialized(ctx); err != nil {
+		return err
+	}
+	newData, shouldReplicate, err := m.updateUserData(ctx, updateFn, options)
 	if err != nil {
 		return err
 	}
@@ -392,8 +407,7 @@ func (m *userDataManagerImpl) UpdateUserData(ctx context.Context, options UserDa
 func (m *userDataManagerImpl) updateUserData(
 	ctx context.Context,
 	updateFn UserDataUpdateFunc,
-	knownVersion int64,
-	taskQueueLimitPerBuildId int,
+	options UserDataUpdateOptions,
 ) (*persistencespb.VersionedTaskQueueUserData, bool, error) {
 	m.lock.Lock()
 	defer m.lock.Unlock()
@@ -408,16 +422,17 @@ func (m *userDataManagerImpl) updateUserData(
 	if preUpdateData == nil {
 		preUpdateData = &persistencespb.TaskQueueUserData{}
 	}
-	if knownVersion > 0 && preUpdateVersion != knownVersion {
-		return nil, false, serviceerror.NewFailedPrecondition(fmt.Sprintf("user data version mismatch: requested: %d, current: %d", knownVersion, preUpdateVersion))
+	if options.KnownVersion > 0 && preUpdateVersion != options.KnownVersion {
+		return nil, false, serviceerror.NewFailedPrecondition(fmt.Sprintf("user data version mismatch: requested: %d, current: %d", options.KnownVersion, preUpdateVersion))
 	}
 	updatedUserData, shouldReplicate, err := updateFn(preUpdateData)
 	if err != nil {
+		m.logger.Error("user data update function failed", tag.Error(err), tag.NewStringTag("user-data-update-source", options.Source))
 		return nil, false, err
 	}
 
 	added, removed := GetBuildIdDeltas(preUpdateData.GetVersioningData(), updatedUserData.GetVersioningData())
-	if taskQueueLimitPerBuildId > 0 && len(added) > 0 {
+	if options.TaskQueueLimitPerBuildId > 0 && len(added) > 0 {
 		// We iterate here but in practice there should only be a single build Id added when the limit is enforced.
 		// We do not enforce the limit when applying replication events.
 		for _, buildId := range added {
@@ -428,8 +443,8 @@ func (m *userDataManagerImpl) updateUserData(
 			if err != nil {
 				return nil, false, err
 			}
-			if numTaskQueues >= taskQueueLimitPerBuildId {
-				return nil, false, serviceerror.NewFailedPrecondition(fmt.Sprintf("Exceeded max task queues allowed to be mapped to a single build ID: %d", taskQueueLimitPerBuildId))
+			if numTaskQueues >= options.TaskQueueLimitPerBuildId {
+				return nil, false, serviceerror.NewFailedPrecondition(fmt.Sprintf("Exceeded max task queues allowed to be mapped to a single build ID: %d", options.TaskQueueLimitPerBuildId))
 			}
 		}
 	}
@@ -441,12 +456,84 @@ func (m *userDataManagerImpl) updateUserData(
 		BuildIdsAdded:   added,
 		BuildIdsRemoved: removed,
 	})
-	var updatedVersionedData *persistencespb.VersionedTaskQueueUserData
-	if err == nil {
-		updatedVersionedData = &persistencespb.VersionedTaskQueueUserData{Version: preUpdateVersion + 1, Data: updatedUserData}
-		m.setUserDataLocked(updatedVersionedData)
+	if err != nil {
+		m.logger.Error("failed to push new user data to owning matching node for namespace", tag.Error(err))
+		return nil, false, err
 	}
+
+	updatedVersionedData := &persistencespb.VersionedTaskQueueUserData{Version: preUpdateVersion + 1, Data: updatedUserData}
+	m.logNewUserData("modified user data", updatedVersionedData, tag.NewStringTag("user-data-update-source", options.Source))
+	m.setUserDataLocked(updatedVersionedData)
+
 	return updatedVersionedData, shouldReplicate, err
+}
+
+func (m *userDataManagerImpl) HandleGetUserDataRequest(
+	ctx context.Context,
+	req *matchingservice.GetTaskQueueUserDataRequest,
+) (*matchingservice.GetTaskQueueUserDataResponse, error) {
+	version := req.GetLastKnownUserDataVersion()
+	if version < 0 {
+		return nil, serviceerror.NewInvalidArgument("last_known_user_data_version must not be negative")
+	}
+
+	if req.WaitNewData {
+		var cancel context.CancelFunc
+		ctx, cancel = newChildContext(ctx, m.config.GetUserDataLongPollTimeout(), m.config.GetUserDataReturnBudget)
+		defer cancel()
+	}
+
+	for {
+		resp := &matchingservice.GetTaskQueueUserDataResponse{}
+		userData, userDataChanged, err := m.GetUserData()
+		if errors.Is(err, errTaskQueueClosed) {
+			// If we're closing, return a success with no data, as if the request expired. We shouldn't
+			// close due to idleness (because of the MarkAlive above), so we're probably closing due to a
+			// change of ownership. The caller will retry and be redirected to the new owner.
+			m.logger.Debug("returning empty user data (closing)", tag.NewBoolTag("long-poll", req.WaitNewData))
+			return resp, nil
+		} else if err != nil {
+			return nil, err
+		}
+		if req.WaitNewData && userData.GetVersion() == version {
+			// long-poll: wait for data to change/appear
+			select {
+			case <-ctx.Done():
+				m.logger.Debug("returning empty user data (expired)",
+					tag.NewBoolTag("long-poll", req.WaitNewData),
+					tag.NewInt64("request-known-version", version),
+					tag.UserDataVersion(userData.GetVersion()),
+				)
+				return resp, nil
+			case <-userDataChanged:
+				m.logger.Debug("user data changed while blocked in long poll")
+				continue
+			}
+		}
+		if userData != nil {
+			if userData.Version > version {
+				resp.UserData = userData
+				m.logger.Info("returning user data",
+					tag.NewBoolTag("long-poll", req.WaitNewData),
+					tag.NewInt64("request-known-version", version),
+					tag.UserDataVersion(userData.Version),
+				)
+			} else if userData.Version < version {
+				// This is highly unlikely but may happen due to an edge case in during ownership transfer.
+				// We rely on client retries in this case to let the system eventually self-heal.
+				m.logger.Error("requested task queue user data for version greater than known version",
+					tag.NewInt64("request-known-version", version),
+					tag.UserDataVersion(userData.Version),
+				)
+				return nil, serviceerror.NewInvalidArgument(
+					"requested task queue user data for version greater than known version")
+			}
+		} else {
+			m.logger.Debug("returning empty user data (no data)", tag.NewBoolTag("long-poll", req.WaitNewData))
+		}
+		return resp, nil
+	}
+
 }
 
 func (m *userDataManagerImpl) setUserDataForNonOwningPartition(userData *persistencespb.VersionedTaskQueueUserData) {
@@ -458,4 +545,12 @@ func (m *userDataManagerImpl) setUserDataForNonOwningPartition(userData *persist
 func (m *userDataManagerImpl) callerInfoContext(ctx context.Context) context.Context {
 	ns, _ := m.namespaceRegistry.GetNamespaceName(namespace.ID(m.partition.NamespaceId()))
 	return headers.SetCallerInfo(ctx, headers.NewBackgroundCallerInfo(ns.String()))
+}
+
+func (m *userDataManagerImpl) logNewUserData(message string, data *persistencespb.VersionedTaskQueueUserData, tags ...tag.Tag) {
+	m.logger.Info(message,
+		append(tags,
+			tag.UserDataVersion(data.GetVersion()),
+			tag.Timestamp(hybrid_logical_clock.UTC(data.GetData().GetClock())),
+		)...)
 }

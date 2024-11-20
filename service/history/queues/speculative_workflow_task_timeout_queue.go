@@ -57,7 +57,6 @@ func NewSpeculativeWorkflowTaskTimeoutQueue(
 	timeSource clock.TimeSource,
 	metricsHandler metrics.Handler,
 	logger log.SnTaggedLogger,
-
 ) *SpeculativeWorkflowTaskTimeoutQueue {
 
 	timeoutQueue := newMemoryScheduledQueue(
@@ -105,7 +104,7 @@ func (q SpeculativeWorkflowTaskTimeoutQueue) NotifyNewTasks(ts []tasks.Task) {
 				q.namespaceRegistry,
 				q.clusterMetadata,
 				q.logger,
-				q.metricsHandler,
+				q.metricsHandler.WithTags(defaultExecutableMetricsTags...),
 			), wttt)
 			q.timeoutQueue.Add(executable)
 		}

@@ -192,7 +192,6 @@ func (c *clientImpl) OpenScroll(
 		Index(p.Index).
 		Query(p.Query).
 		SortBy(p.Sorter...).
-		TrackTotalHits(false).
 		KeepAlive(keepAliveInterval)
 	if p.PageSize != 0 {
 		scrollService.Size(p.PageSize)

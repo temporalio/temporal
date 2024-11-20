@@ -35,6 +35,7 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/definition"
@@ -92,7 +93,7 @@ func (t *timerQueueActiveTaskExecutor) Execute(
 	ctx context.Context,
 	executable queues.Executable,
 ) queues.ExecuteResponse {
-	taskTypeTagValue := queues.GetActiveTimerTaskTypeTagValue(executable)
+	taskTypeTagValue := queues.GetActiveTimerTaskTypeTagValue(executable.GetTask())
 
 	namespaceTag, replicationState := getNamespaceTagAndReplicationStateByID(
 		t.shardContext.GetNamespaceRegistry(),
@@ -240,10 +241,12 @@ func (t *timerQueueActiveTaskExecutor) executeActivityTimeoutTask(
 	// for updating workflow execution. In that case, only one new heartbeat timeout task should be
 	// created.
 	isHeartBeatTask := task.TimeoutType == enumspb.TIMEOUT_TYPE_HEARTBEAT
-	activityInfo, heartbeatTimeoutVis, ok := mutableState.GetActivityInfoWithTimerHeartbeat(task.EventID)
+	ai, heartbeatTimeoutVis, ok := mutableState.GetActivityInfoWithTimerHeartbeat(task.EventID)
 	if isHeartBeatTask && ok && queues.IsTimeExpired(task.GetVisibilityTime(), heartbeatTimeoutVis) {
-		activityInfo.TimerTaskStatus = activityInfo.TimerTaskStatus &^ workflow.TimerTaskStatusCreatedHeartbeat
-		if err := mutableState.UpdateActivity(activityInfo); err != nil {
+		err := mutableState.UpdateActivity(ai.ScheduledEventId, func(activityInfo *persistencespb.ActivityInfo, _ workflow.MutableState) {
+			activityInfo.TimerTaskStatus = activityInfo.TimerTaskStatus &^ workflow.TimerTaskStatusCreatedHeartbeat
+		})
+		if err != nil {
 			return err
 		}
 		updateMutableState = true
@@ -251,63 +254,100 @@ func (t *timerQueueActiveTaskExecutor) executeActivityTimeoutTask(
 
 Loop:
 	for _, timerSequenceID := range timerSequence.LoadAndSortActivityTimers() {
-		activityInfo, ok := mutableState.GetActivityInfo(timerSequenceID.EventID)
-		if !ok || timerSequenceID.Attempt < activityInfo.Attempt {
-			// handle 2 cases:
-			// 1. !ok
-			//  this case can happen since each activity can have 4 timers
-			//  and one of those 4 timers may have fired in this loop
-			// 2. timerSequenceID.attempt < activityInfo.Attempt
-			//  retry could update activity attempt, should not timeouts new attempt
-			continue Loop
-		}
-
 		if !queues.IsTimeExpired(referenceTime, timerSequenceID.Timestamp) {
 			// timer sequence IDs are sorted, once there is one timer
 			// sequence ID not expired, all after that wil not expired
 			break Loop
 		}
 
-		failureMsg := fmt.Sprintf("activity %v timeout", timerSequenceID.TimerType.String())
-		timeoutFailure := failure.NewTimeoutFailure(failureMsg, timerSequenceID.TimerType)
-		var retryState enumspb.RetryState
-		if retryState, err = mutableState.RetryActivity(activityInfo, timeoutFailure); err != nil {
-			return err
-		} else if retryState == enumspb.RETRY_STATE_IN_PROGRESS {
-			updateMutableState = true
+		activityInfo, ok := mutableState.GetActivityInfo(timerSequenceID.EventID)
+		if !ok {
+			//  this case can happen since each activity can have 4 timers
+			//  and one of those 4 timers may have fired in this loop
 			continue Loop
 		}
 
-		if retryState == enumspb.RETRY_STATE_TIMEOUT {
-			// If retryState is Timeout then it means that expirationTime is expired.
-			// ExpirationTime is expired when ScheduleToClose timeout is expired.
-			const timeoutType = enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE
-			var failureMsg = fmt.Sprintf("activity %v timeout", timeoutType.String())
-			timeoutFailure = failure.NewTimeoutFailure(failureMsg, timeoutType)
-		}
-		timeoutFailure.GetTimeoutFailureInfo().LastHeartbeatDetails = activityInfo.LastHeartbeatDetails
+		result, err := t.processSingleActivityTimeoutTask(mutableState, timerSequenceID, activityInfo)
 
-		t.emitTimeoutMetricScopeWithNamespaceTag(
-			namespace.ID(mutableState.GetExecutionInfo().NamespaceId),
-			metrics.TimerActiveTaskActivityTimeoutScope,
-			timerSequenceID.TimerType,
-		)
-		if _, err := mutableState.AddActivityTaskTimedOutEvent(
-			activityInfo.ScheduledEventId,
-			activityInfo.StartedEventId,
-			timeoutFailure,
-			retryState,
-		); err != nil {
+		if err != nil {
 			return err
 		}
-		updateMutableState = true
-		scheduleWorkflowTask = true
+
+		updateMutableState = updateMutableState || result.shouldUpdateMutableState
+		scheduleWorkflowTask = scheduleWorkflowTask || result.shouldScheduleWorkflowTask
+
 	}
 
 	if !updateMutableState {
 		return nil
 	}
 	return t.updateWorkflowExecution(ctx, weContext, mutableState, scheduleWorkflowTask)
+}
+
+type processingActivityTimeoutResult struct {
+	shouldUpdateMutableState   bool
+	shouldScheduleWorkflowTask bool
+}
+
+func (t *timerQueueActiveTaskExecutor) processSingleActivityTimeoutTask(
+	mutableState workflow.MutableState,
+	timerSequenceID workflow.TimerSequenceID,
+	ai *persistencespb.ActivityInfo,
+) (processingActivityTimeoutResult, error) {
+
+	result := processingActivityTimeoutResult{
+		shouldUpdateMutableState:   false,
+		shouldScheduleWorkflowTask: false,
+	}
+
+	if timerSequenceID.Attempt < ai.Attempt {
+		//  The RetryActivity call below could update activity attempt, in which case we do not want to apply a timeout for the previous attempt.
+		return result, nil
+	}
+
+	// Note: we don't need to check activity Stamps.
+	// This is because for the same attempts calls are idempotent.
+
+	failureMsg := fmt.Sprintf("activity %v timeout", timerSequenceID.TimerType.String())
+	timeoutFailure := failure.NewTimeoutFailure(failureMsg, timerSequenceID.TimerType)
+	retryState, err := mutableState.RetryActivity(ai, timeoutFailure)
+	if err != nil {
+		return result, nil
+	}
+
+	if retryState == enumspb.RETRY_STATE_IN_PROGRESS {
+		// TODO uncommment once RETRY_STATE_PAUSED is supported
+		// || retryState == enumspb.RETRY_STATE_PAUSED {
+		result.shouldUpdateMutableState = true
+		return result, nil
+	}
+
+	if retryState == enumspb.RETRY_STATE_TIMEOUT {
+		// If retryState is Timeout then it means that expirationTime is expired.
+		// ExpirationTime is expired when ScheduleToClose timeout is expired.
+		const timeoutType = enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE
+		var failureMsg = fmt.Sprintf("activity %v timeout", timeoutType.String())
+		timeoutFailure = failure.NewTimeoutFailure(failureMsg, timeoutType)
+	}
+	timeoutFailure.GetTimeoutFailureInfo().LastHeartbeatDetails = ai.LastHeartbeatDetails
+
+	t.emitTimeoutMetricScopeWithNamespaceTag(
+		namespace.ID(mutableState.GetExecutionInfo().NamespaceId),
+		metrics.TimerActiveTaskActivityTimeoutScope,
+		timerSequenceID.TimerType,
+	)
+	if _, err = mutableState.AddActivityTaskTimedOutEvent(
+		ai.ScheduledEventId,
+		ai.StartedEventId,
+		timeoutFailure,
+		retryState,
+	); err != nil {
+		return result, err
+	}
+
+	result.shouldUpdateMutableState = true
+	result.shouldScheduleWorkflowTask = true
+	return result, nil
 }
 
 func (t *timerQueueActiveTaskExecutor) executeWorkflowTaskTimeoutTask(
@@ -432,7 +472,7 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowBackoffTimerTask(
 	}
 
 	nsName := mutableState.GetNamespaceEntry().Name().String()
-	metrics.WorkflowBackoffCount.With(t.metricHandler).Record(
+	metrics.WorkflowBackoffCount.With(t.metricsHandler).Record(
 		1,
 		metrics.NamespaceTag(nsName),
 		metrics.StringTag("backoff_type", task.WorkflowBackoffType.String()))
@@ -470,18 +510,28 @@ func (t *timerQueueActiveTaskExecutor) executeActivityRetryTimerTask(
 
 	// generate activity task
 	activityInfo, ok := mutableState.GetActivityInfo(task.EventID)
-	if !ok || task.Attempt < activityInfo.Attempt || activityInfo.StartedEventId != common.EmptyEventID {
-		if ok {
-			t.logger.Info("Duplicate activity retry timer task",
-				tag.WorkflowID(mutableState.GetExecutionInfo().WorkflowId),
-				tag.WorkflowRunID(mutableState.GetExecutionState().GetRunId()),
-				tag.WorkflowNamespaceID(mutableState.GetExecutionInfo().NamespaceId),
-				tag.WorkflowScheduledEventID(activityInfo.ScheduledEventId),
-				tag.Attempt(activityInfo.Attempt),
-				tag.FailoverVersion(activityInfo.Version),
-				tag.TimerTaskStatus(activityInfo.TimerTaskStatus),
-				tag.ScheduleAttempt(task.Attempt))
-		}
+
+	if !ok {
+		release(nil) // release(nil) so mutable state is not unloaded from cache
+		return consts.ErrActivityTaskNotFound
+	}
+
+	if task.Stamp != activityInfo.Stamp || activityInfo.Paused {
+		// if retry task event is from an old stamp of if activity is paused we should ignore the event.
+		release(nil) // release(nil) so mutable state is not unloaded from cache
+		return consts.ErrActivityTaskNotFound
+	}
+
+	if task.Attempt < activityInfo.Attempt || activityInfo.StartedEventId != common.EmptyEventID {
+		t.logger.Info("Duplicate activity retry timer task",
+			tag.WorkflowID(mutableState.GetExecutionInfo().WorkflowId),
+			tag.WorkflowRunID(mutableState.GetExecutionState().GetRunId()),
+			tag.WorkflowNamespaceID(mutableState.GetExecutionInfo().NamespaceId),
+			tag.WorkflowScheduledEventID(activityInfo.ScheduledEventId),
+			tag.Attempt(activityInfo.Attempt),
+			tag.FailoverVersion(activityInfo.Version),
+			tag.TimerTaskStatus(activityInfo.TimerTaskStatus),
+			tag.ScheduleAttempt(task.Attempt))
 		release(nil) // release(nil) so mutable state is not unloaded from cache
 		return consts.ErrActivityTaskNotFound
 	}
@@ -517,6 +567,7 @@ func (t *timerQueueActiveTaskExecutor) executeActivityRetryTimerTask(
 		ScheduleToStartTimeout: durationpb.New(scheduleToStartTimeout),
 		Clock:                  vclock.NewVectorClock(t.shardContext.GetClusterMetadata().GetClusterID(), t.shardContext.GetShardID(), task.TaskID),
 		VersionDirective:       directive,
+		Stamp:                  task.Stamp,
 	})
 	if err != nil {
 		return err
@@ -534,7 +585,7 @@ func (t *timerQueueActiveTaskExecutor) executeActivityRetryTimerTask(
 		t.shardContext,
 		workflow.TransactionPolicyActive,
 		t.cache,
-		t.metricHandler,
+		t.metricsHandler,
 		t.logger,
 	)
 }
@@ -608,7 +659,12 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowRunTimeoutTask(
 	if initiator == enumspb.CONTINUE_AS_NEW_INITIATOR_UNSPECIFIED {
 		// We apply the update to execution using optimistic concurrency.  If it fails due to a conflict than reload
 		// the history and try the operation again.
-		return t.updateWorkflowExecution(ctx, weContext, mutableState, false)
+		updateErr := t.updateWorkflowExecution(ctx, weContext, mutableState, false)
+		if updateErr != nil {
+			return updateErr
+		}
+		weContext.UpdateRegistry(ctx, nil).Abort(update.AbortReasonWorkflowCompleted)
+		return nil
 	}
 
 	startEvent, err := mutableState.GetStartEvent(ctx)
@@ -678,7 +734,10 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowRunTimeoutTask(
 		return updateErr
 	}
 
-	weContext.UpdateRegistry(ctx, nil).Abort(update.AbortReasonWorkflowCompleted)
+	// A new run was created after the previous run timed out. Running Updates
+	// for this WF are aborted with a retryable error.
+	// Internal server retries will retry the API call, and the Update will be sent to the new run.
+	weContext.UpdateRegistry(ctx, nil).Abort(update.AbortReasonWorkflowContinuing)
 	return nil
 }
 

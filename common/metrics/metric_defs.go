@@ -367,6 +367,8 @@ const (
 	HistoryRecordActivityTaskStartedScope = "RecordActivityTaskStarted"
 	// HistorySignalWithStartWorkflowExecutionScope tracks SignalWithStartWorkflowExecution API calls received by service
 	HistorySignalWithStartWorkflowExecutionScope = "SignalWithStartWorkflowExecution"
+	// HistoryCompleteNexusOperationScope tracks CompleteNexusOperation API calls received by service
+	HistoryCompleteNexusOperationScope = "CompleteNexusOperation"
 	// HistorySyncShardStatusScope tracks HistorySyncShardStatus API calls received by service
 	HistorySyncShardStatusScope = "SyncShardStatus"
 	// HistoryShardControllerScope is the scope used by shard controller
@@ -1030,6 +1032,9 @@ var (
 	TaskDispatchLatencyPerTaskQueue                   = NewTimerDef("task_dispatch_latency")
 	ApproximateBacklogCount                           = NewGaugeDef("approximate_backlog_count")
 	ApproximateBacklogAgeSeconds                      = NewGaugeDef("approximate_backlog_age_seconds")
+	NonRetryableTasks                                 = NewCounterDef(
+		"non_retryable_tasks",
+		WithDescription("The number of non-retryable matching tasks which are dropped due to specific errors"))
 
 	// Versioning and Reachability
 	ReachabilityExitPointCounter = NewCounterDef("reachability_exit_point_count")

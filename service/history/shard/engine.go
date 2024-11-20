@@ -39,6 +39,7 @@ import (
 	workflowpb "go.temporal.io/server/api/workflow/v1"
 	"go.temporal.io/server/common/collection"
 	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/hsm"
@@ -76,7 +77,6 @@ type (
 		VerifyFirstWorkflowTaskScheduled(ctx context.Context, request *historyservice.VerifyFirstWorkflowTaskScheduledRequest) error
 		RecordChildExecutionCompleted(ctx context.Context, request *historyservice.RecordChildExecutionCompletedRequest) (*historyservice.RecordChildExecutionCompletedResponse, error)
 		VerifyChildExecutionCompletionRecorded(ctx context.Context, request *historyservice.VerifyChildExecutionCompletionRecordedRequest) (*historyservice.VerifyChildExecutionCompletionRecordedResponse, error)
-		// ReplicateHistoryEvents is for a WIP feature. Ultimately will replace the ReplicateEventsV2 API
 		ReplicateHistoryEvents(
 			ctx context.Context,
 			workflowKey definition.WorkflowKey,
@@ -88,6 +88,7 @@ type (
 		) error
 		ReplicateEventsV2(ctx context.Context, request *historyservice.ReplicateEventsV2Request) error
 		ReplicateWorkflowState(ctx context.Context, request *historyservice.ReplicateWorkflowStateRequest) error
+		ReplicateVersionedTransition(ctx context.Context, artifact *replicationspb.VersionedTransitionArtifact, sourceClusterName string) error
 		SyncShardStatus(ctx context.Context, request *historyservice.SyncShardStatusRequest) error
 		SyncActivity(ctx context.Context, request *historyservice.SyncActivityRequest) error
 		SyncActivities(ctx context.Context, request *historyservice.SyncActivitiesRequest) error
@@ -114,11 +115,15 @@ type (
 		AddTasks(ctx context.Context, request *historyservice.AddTasksRequest) (*historyservice.AddTasksResponse, error)
 		ListTasks(ctx context.Context, request *historyservice.ListTasksRequest) (*historyservice.ListTasksResponse, error)
 		SyncWorkflowState(ctx context.Context, request *historyservice.SyncWorkflowStateRequest) (*historyservice.SyncWorkflowStateResponse, error)
+		UpdateActivityOptions(ctx context.Context, request *historyservice.UpdateActivityOptionsRequest) (*historyservice.UpdateActivityOptionsResponse, error)
+		PauseActivity(ctx context.Context, request *historyservice.PauseActivityRequest) (*historyservice.PauseActivityResponse, error)
+		UnpauseActivity(ctx context.Context, request *historyservice.UnpauseActivityRequest) (*historyservice.UnpauseActivityResponse, error)
+		ResetActivity(ctx context.Context, request *historyservice.ResetActivityRequest) (*historyservice.ResetActivityResponse, error)
 
 		NotifyNewHistoryEvent(event *events.Notification)
 		NotifyNewTasks(tasks map[tasks.Category][]tasks.Task)
 		// TODO(bergundy): This Environment should be host level once shard level workflow cache is deprecated.
-		StateMachineEnvironment() hsm.Environment
+		StateMachineEnvironment(operationTag metrics.Tag) hsm.Environment
 
 		ReplicationStream
 		Start()

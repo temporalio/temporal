@@ -136,7 +136,8 @@ func NewTaskQueueFamily(namespaceId string, name string) (*TaskQueueFamily, erro
 	}, nil
 }
 
-// UnsafeTaskQueueFamily should be avoided as much as possible. Use NewTaskQueueFamily instead as it validates the tq name.
+// UnsafeTaskQueueFamily returns a TaskQueueFamily object without validating the task queue name.
+// This method should only be used in logs/metrics, not in the server logic (use NewTaskQueueFamily instead).
 func UnsafeTaskQueueFamily(namespaceId string, name string) *TaskQueueFamily {
 	return &TaskQueueFamily{namespaceId, name}
 }
@@ -367,7 +368,6 @@ func parseRpcName(rpcName string) (string, int, error) {
 		suffixOff := strings.LastIndex(rpcName, partitionDelimiter)
 		if suffixOff <= len(nonRootPartitionPrefix) {
 			return "", 0, serviceerror.NewInvalidArgument("invalid task queue partition name " + rpcName)
-			// nolint:goerr113
 		}
 		baseName = rpcName[len(nonRootPartitionPrefix):suffixOff]
 		suffix := rpcName[suffixOff+1:]

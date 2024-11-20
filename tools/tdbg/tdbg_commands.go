@@ -59,7 +59,7 @@ func getCommands(
 		},
 		{
 			Name:        "history-host",
-			Aliases:     []string{"h"},
+			Aliases:     []string{"hh"},
 			Usage:       "Run admin operation on history host",
 			Subcommands: newAdminHistoryHostCommands(clientFactory),
 		},
@@ -573,6 +573,40 @@ func newAdminTaskQueueCommands(clientFactory ClientFactory) []*cli.Command {
 			},
 			Action: func(c *cli.Context) error {
 				return AdminDescribeTaskQueuePartition(c, clientFactory)
+			},
+		},
+		{
+			Name:  "force-unload-task-queue-partition",
+			Usage: "Forcefully unload a task queue partition",
+			Flags: []cli.Flag{
+				&cli.StringFlag{
+					Name:  FlagNamespaceID,
+					Usage: "NamespaceId",
+					Value: "default",
+				},
+				&cli.StringFlag{
+					Name:     FlagTaskQueue,
+					Usage:    "Task Queue name",
+					Required: true,
+				},
+				&cli.StringFlag{
+					Name:  FlagTaskQueueType,
+					Value: "TASK_QUEUE_TYPE_WORKFLOW",
+					Usage: "Task Queue type: activity, workflow, nexus (experimental)",
+				},
+				&cli.Int64Flag{
+					Name:  FlagPartitionID,
+					Usage: "Partition ID",
+					Value: 0,
+				},
+				&cli.StringFlag{
+					Name:  FlagStickyName,
+					Usage: "Sticky Name for a task queue partition, if present",
+					Value: "",
+				},
+			},
+			Action: func(c *cli.Context) error {
+				return AdminForceUnloadTaskQueuePartition(c, clientFactory)
 			},
 		},
 	}

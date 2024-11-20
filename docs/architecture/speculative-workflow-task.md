@@ -6,157 +6,181 @@ There are three types of Workflow Task:
   2. Transient
   3. Speculative
 
-Every Workflow Task ships history to the worker. Last events must be `WorkflowTaskScheduled`
-and `WorkflowTaskStarted`. There might be some events in between if they come after Workflow Task
-was scheduled but not started (e.g., Workflow worker was down and didn't poll for Workflow Task).
+Every Workflow Task ships history events to the worker. It must always contain the two events
+`WorkflowTaskScheduled` and `WorkflowTaskStarted` (must be last!). There might be some events in-between
+them if they came in after the Workflow Task was scheduled but not yet started (e.g. when the Workflow
+worker was down and didn't poll for Workflow Task).
 
-**Normal Workflow Task** is created by server every time when server needs Workflow to make progress.
-If Workflow Task fails (worker responds with call to `RespondWorkflowTaskFailed` or an error occurred while
-processing `RespondWorkflowTaskCompleted`) or times out (worker is disconnected),
-server writes corresponding Workflow Task failed event in the history and increase attempt count
-in the mutable state. For the next attempt, Workflow Task events (`WorkflowTaskScheduled`
-and `WorkflowTaskStarted`) are not written into the history but attached to the response of
-`RecordWorkflowTaskStarted` API. These are transient Workflow Task events. Worker is not aware of any "transience"
-of these events. If Workflow Task keeps failing, attempt counter is getting increased in mutable state,
-but no new fail events are written into the history and new transient Workflow Task events are just recreated.
-Workflow Task, which has transient Workflow Task events, is called **transient Workflow Task**.
-When Workflow Task finally completes, `WorkflowTaskScheduled` and `WorkflowTaskStarted` events
-are getting written to history followed by `WorklfowTaskCompleted` event.
+A **normal Workflow Task** is created by the server when it needs a Workflow to make progress. If 
+the Workflow Task fails (i.e. worker responds with a call to `RespondWorkflowTaskFailed` or an error
+occurred while processing `RespondWorkflowTaskCompleted`) or times out (e.g. worker is disconnected),
+the server writes a corresponding Workflow Task failed event to the history and increases the
+attempt count in the mutable state.
 
-> #### TODO
-> Although `WorkflowTaskInfo` struct has `Type` field, `WORKFLOW_TASK_TYPE_TRANSIENT` value is currently
-> not used and `ms.IsTransientWorkflowTask()` method checks if attempts count > 1. 
-
-**Speculative WT** is similar to transient WT: it creates `WorkflowTaskScheduled`
-and `WorkflowTaskStarted` events only in response of `RecordWorkflowTaskStarted` API,
-but it does it from the very first attempt. Also after speculative Workflow Task is scheduled and mutable state is updated
-it is not written to the database. `WorkflowTaskInfo.Type` field is assigned to `WORKFLOW_TASK_TYPE_SPECULATIVE` value. 
-Essentially speculative Workflow Task can exist in memory only, and it never gets written to the database.
-Similar to CPU *speculative execution* (which gives a speculative Workflow Task its name) where branch execution 
-can be thrown away, a speculative Workflow Task can be dropped as it never existed.
-Overall logic, is to try to do the best and allow speculative Workflow Task to go through, but if anything
-goes wrong, quickly give up, convert speculative Workflow Task to normal and follow normal procedures.
-
-Zero database writes also means that transfer and regular timer tasks can't be used for
-speculative Workflow Tasks. Special [in-memory-queue](./in-memory-queue.md) is used for force speculative Workflow Task timeouts.
+For the next attempt, a **transient Workflow Task** is used: the *transient* Workflow Task events
+`WorkflowTaskScheduled` and `WorkflowTaskStarted` are *not* written to the history, but attached to
+the response from the `RecordWorkflowTaskStarted` API. The worker does not know the events are
+transient, though. If the Workflow Task keeps failing, the attempt counter is increased in the
+mutable state, and transient Workflow Task events are created again - but no new failure event is
+written into the history again. When the Workflow Task finally completes, the `WorkflowTaskScheduled`
+and `WorkflowTaskStarted` events are written to the history, followed by the `WorklfowTaskCompleted`
+event.
 
 > #### TODO
-> It is important to point out that `WorkflowTaskScheduled` and `WorkflowTaskStarted` events for transient
-> and speculative Workflow Task are added to `PollWorkflowTask` response only but not to `GetWorkflowExecutionHistory` response.
-> This has unpleasant consequence: when worker receives speculative Workflow Task on sticky task queue, but
-> Workflow is already evicted from cache, it sends a request to `GetWorkflowExecutionHistory`, which
-> returns history without speculative events, which leads to `premature end of stream` error on worker side.
-> It fails Workflow Task, clears stickiness, and everything works fine after that, but one extra failed Workflow Task appears
-> in the history. Fortunately, it doesn't happen often.
+> Although the `WorkflowTaskInfo` struct has a `Type` field, `WORKFLOW_TASK_TYPE_TRANSIENT` value is
+> currently not used. Instead, `ms.IsTransientWorkflowTask()` checks if the attempts count > 1.
+
+**Speculative Workflow Task** is similar to the transient one in that it attaches the
+`WorkflowTaskScheduled` and `WorkflowTaskStarted` events to the response from the
+`RecordWorkflowTaskStarted` API. But there are some differences:
+- it happens on the first attempt already
+- it is *never* written to the database
+- it is scheduled differently (see more details below)
+- its `WorkflowTaskInfo.Type` is `WORKFLOW_TASK_TYPE_SPECULATIVE`
+
+Similar to a CPU's *speculative execution* (which gives this Workflow Task its name) where a branch
+execution can be thrown away, a speculative Workflow Task can be discarded as if it never existed.
+The overall strategy is to optimistically assume the speculative Workflow Task will go through, but
+if anything goes wrong, give up quickly and convert the speculative Workflow Task to a normal one.
+
+Zero database writes also means that transfer and regular timer tasks can't be used here. Instead,
+a special [in-memory-queue](./in-memory-queue.md) is used for speculative Workflow Task timeouts.
+
+> #### TODO
+> It is important to point out that the `WorkflowTaskScheduled` and `WorkflowTaskStarted` events
+> for transient and speculative Workflow Task are only added to the `PollWorkflowTask` response - and
+> not to the `GetWorkflowExecutionHistory` response. This has an unfortunate consequence: when the 
+> worker receives a speculative Workflow Task on a sticky task queue, but the Workflow is already
+> evicted from its cache, it issues a `GetWorkflowExecutionHistory` request, which returns the 
+> history *without* speculative events. This leads to a `premature end of stream` error on the 
+> worker side. The worker fails the Workflow Task, clears stickiness, and everything works fine
+> after that - but a failed Workflow Task appears in the history. Fortunately, it doesn't happen often.
 
 ## Speculative Workflow Task & Workflow Update
-Speculative Workflow Task was introduced to support zero writes for Workflow Update, this is why it doesn't write 
-nor events, neither mutable state.
+Speculative Workflow Task was introduced to make it possible for Workflow Update to have zero writes
+for when it is rejected. This is why it doesn't persist any events or the mutable state.
 
 > #### TODO
-> Another application can be a replacement for query task that will unify two different
-> code paths (by introducing 3rd one and slowly deprecating existing two).
+> The task processig for Queries could be replaced by using speculative Workflow Tasks under the hood.
 
 ## Scheduling of Speculative Workflow Task
-Because currently speculative Workflow Task is used for Workflow Update only it is created in
-`UpdateWorkflowExecution` API handler only. And because a normal transfer task can't be created
-(speculative Workflow Task doesn't write to the database) it is directly added to matching service
-with a call to `AddWorkflowTask` API. It is crucial to notice that Workflow lock
-must be released before this call because in case of sync match, matching service will
-do a callback to history service to start Workflow Task. This call will also try to acquire Workflow lock.
+As of today, speculative Workflow Tasks are only used for Workflow Update, i.e. in the 
+`UpdateWorkflowExecution` API handler. Since a normal transfer task can't be created (because that
+would require a database write), it is added directly to the Matching service with a call to the
+`AddWorkflowTask` API. 
 
-But call to matching can fail (for various reasons), and then this error can't be properly handled
-outside of Workflow lock or returned to the user. Instead, an in-memory timer task
-is created for `SCHEDULED_TO_START` timeout for speculative Workflow Task even if it is on normal task queue
-(for normal Workflow Task `SCHEDULED_TO_START` timeout timer is created only for sticky task queue).
-If call to matching failed, `UpdateWorkflowExecution` API caller will observe short delay
-(`SpeculativeWorkflowTaskScheduleToStartTimeout` = 5s), but underneath timeout timer will fire,
-convert speculative Workflow Task to normal and create a transfer task which will eventually push it through.
+It is crucial to note that Workflow lock *must* be released before this call because in case of
+sync match, the Matching service will make a call to the history service to start the Workflow Task,
+which will attempt to get the Workflow lock and result in a deadlock.
+
+However, when the call to the matching service fails (e.g. due to networking issues), that error
+can't be properly handled outside of the Workflow lock, or returned to the user. In that case, the
+`UpdateWorkflowExecution` API caller will observe a short delay
+(`SpeculativeWorkflowTaskScheduleToStartTimeout` is 5s) until the timeout timer task fires, then
+the speculative Workflow Task is converted to a normal one and creates a transfer task which will
+eventually reach matching and the worker.
+
+The timeout timer task is is created for a `SCHEDULE_TO_START` timeout for every speculative
+Workflow Task - even if it is on a *normal* task queue. In comparision, for a normal Workflow Task, the
+`SCHEDULE_TO_START` timeout timer is only created for *sticky* task queues.
 
 ## Start of Speculative Workflow Task
-Speculative Workflow Task's `WorkflowTaskScheduled` and `WorkflowTaskStarted` events are shipped on 
-`TransientWorkflowTask` field of `RecordWorkflowTaskStartedResponse` and merged to the history
-before shipping to worker. This code path is not different from transient Workflow Task.
+Speculative Workflow Task's `WorkflowTaskScheduled` and `WorkflowTaskStarted` events are shipped
+inside the `TransientWorkflowTask` field of `RecordWorkflowTaskStartedResponse` and are merged to 
+the history before it is shipped to the worker. It is the same code path as for the transient
+Workflow Task.
 
 ## Completion of Speculative Workflow Task
-### StartTime in the Token
-Because a server can lose a speculative Workflow Task, it will not always be completed. Moreover, new
-speculative Workflow Task can be created after the first one is lost, and then worker will try to complete the first one.
-To prevent this `StartedTime` was added to Workflow Task token and if it doesn't match to start time in mutable state,
-Workflow Task can't be completed. All other checks aren't necessary anymore, but left there just in case.
 
-### Persist or Drop
-While completing speculative Workflow Task server makes a decision: write speculative events followed by
-`WorkflowTaskCompleted` event or drop speculative events and make speculative Workflow Task disappear.
-Server can drop events only if it knows that this Workflow Task didn't change the Workflow state. Currently,
-conditions are (check `skipWorkflowTaskCompletedEvent()` func):
+### `StartTime` in the Token
+Because the server can lose a speculative Workflow Task, it will not always be completed. Moreover,
+a new speculative Workflow Task can be created after the first one is lost, but the worker will
+try to complete the first one. To prevent this, `StartedTime` was added to the Workflow Task token
+and if it doesn't match the start time in mutable state, the Workflow Task can't be completed.
+
+### Persist or Discard
+While completing a speculative Workflow Task, the server makes a decision to either write the 
+speculative events followed by a `WorkflowTaskCompleted` event - or discard the speculative events and
+make the speculative Workflow Task disappear. The latter can only happen if the server knows that
+this Workflow Task didn't change the Workflow state. Currently, the conditions are
+(check `skipWorkflowTaskCompletedEvent()` func):
  - response doesn't have any commands,
  - response has only Update rejection messages.
 
-> #### TODO
-> There is one more condition that forces speculative Workflow Task to be persisted: if there are
-> events in the history prior to speculative Workflow Task, which were shipped by this speculative Workflow Task
-> to the worker, then it can't be dropped. This is because an old version of some SDKs didn't
-> support getting same events twice which would happen when the server drops one speculative Workflow Task,
-> and then creates another with the same events. Now old SDKs support it, and with some 
-> compatibility flag, this condition can be omitted.
+The speculative Workflow Task can also ship other events (e.g. `ActivityTaskScheduled` or `TimerStarted`)
+that were generated from previous Workflow Task commands (also known as command-events).
+Unfortunately, older SDKs don't support receiving same events more
+than once. If SDK supports this, it will set `DiscardSpeculativeWorkflowTaskWithEvents` flag to `true`
+and the server will discard speculative Workflow Task even if it had events. These events can be shipped
+multiply times if Updates keep being rejected. To prevent shipping a large set of events to the worker over
+and over again, the server persists speculative Workflow Task if a number of events exceed
+`DiscardSpeculativeWorkflowTaskMaximumEventsCount` threshold.
 
-When a server decides to drop a speculative Workflow Task, it needs to communicate this decision to SDK. 
-Because SDK needs to know where to roll back its history event pointer, i.e., after what event,
-all other events need to be dropped. SDK uses `ResetHistoryEventId` field on `RespondWorkflowTaskCompletedRespose`.
-Server set it to `LastCompletedWorkflowTaskStartedEventId` field value because
-SDK uses `WorkflowTaskStartedEventID` as history checkpoint.
+> #### NOTE
+> This is possible because of an important server invariant: the Workflow history can only end with:
+> - Workflow Task event (Scheduled, Started, Completed, Failed, Timeout),
+> 
+> or
+> - command-event, generated from previous Workflow Task command.
+> All these events don't change the Workflow state on the worker side. This invariant must not be 
+> broken by other features.
+
+When the server decides to discard a speculative Workflow Task, it needs to communicate this decision to 
+the worker - because the SDK needs to roll back to a previous history event and discard all events after
+that one. To do that, the server will set the `ResetHistoryEventId` field on the
+`RespondWorkflowTaskCompletedResponse` to the mutable state's `LastCompletedWorkflowTaskStartedEventId`
+(since the SDK uses `WorkflowTaskStartedEventID` as its history checkpoint).
 
 ### Heartbeat
-Workflow Task can heartbeat. If worker completes Workflow Task with `ForceCreateNewWorkflowTask` is set to `true`
-then server will create new Workflow Task even there are no new events.
-Because currently speculative Workflow Task is used for Workflow Update only, it is very unlikely
-that speculative Workflow Task can be completed as a heartbeat. Update validation logic
-is supposed to be quick and worker should respond with a rejection or acceptance message.
-But if it happens, server will persist all speculative Workflow Task events and create new Workflow Task as normal.
+Workflow Tasks can heartbeat: when the worker completes a Workflow Task with `ForceCreateNewWorkflowTask`
+set to `true`, the server will create a new Workflow Task even if there are no new events. Currently, 
+since speculative Workflow Tasks are only used for Workflow Update, it is very unlikely to occur here.
+The Update validation logic is supposed to be quick, and the worker is expected to respond with a
+rejection or acceptance message. If it does happen, the server will persist all speculative Workflow Task
+events and create a new Workflow Task as normal.
 
-> #### TODO
-> This is just a design decision, which can be changed later. Server can drop speculative Workflow Task
-> when it heartbeats and create new one as speculative too. No new events will be added to the
-> history which will save history events but also will decrease visibility of heartbeats.
+> #### NOTE
+> This is a design decision, which could be changed later: instead, the server could discard the
+> speculative Workflow Task when it heartbeats and create a new speculative Workflow Task. No
+> new events would be added to the history - but heartbeats would not be visible anymore.
 
 ## Conversion to Normal Workflow Task
-Speculative Workflow Task is never written to the database. If, while speculative Workflow Task is executed,
-something triggers mutable state write (i.e., new events come in), then speculative Workflow Task is converted
-to normal, and then written to the database. `Type` field value is changed to `WORKFLOW_TASK_TYPE_NORMAL`,
-in-memory timer is replaced with normal persisted timer, and corresponding speculative Workflow Task
-`WorkflowTaskScheduled` and `WorkflowTaskStarted` events are written to the history
+If during the exection of a speculative Workflow Task, a mutable state write is required
+(i.e., a new events comes in), then it is converted to a normal one, and written to the database.
+This means the `Type` field value is changed to `WORKFLOW_TASK_TYPE_NORMAL`, an in-memory timer is
+replaced with a persisted timer, and the corresponding speculative Workflow Task `WorkflowTaskScheduled`
+and `WorkflowTaskStarted` events are written to the history
 (`convertSpeculativeWorkflowTaskToNormal()` func). 
 
 ## Failure of Speculative Workflow Task
-Workflow Task failure indicates a bug in the Workflow code, SDK, or server.
-There are two major cases when a Workflow Task fails:
-1. Worker explicitly calls `RespondWorkflowTaskFailed` API,
-2. Worker calls `RespondWorkflowTaskCompleted` API, but there was error in request or while processing the request.
+A Workflow Task failure indicates a bug in the Workflow code, SDK, or server. The most common scenarios are:
+1. Worker calls `RespondWorkflowTaskFailed` API
+2. Worker calls `RespondWorkflowTaskCompleted` API, but there is an error in the request or
+   while processing the request.
 
-When speculative Workflow Task is failing `WorkflowTaskFailed` event is written to the history (followed by
-`WorkflowTaskScheduled` and `WorkflowTaskStarted` events) because Workflow Task failure needs to be visible
-to Workflow author.
-
-Speculative Workflow Task is retired the same way as normal Workflow Task, which means that it becomes a transitive Workflow Task:
-2nd failed attempt is not written to the history.
+When a speculative Workflow Task is failing, a `WorkflowTaskFailed` event is written to the history
+(followed by `WorkflowTaskScheduled` and `WorkflowTaskStarted` events) because a Workflow Task
+failure must be visible to the Workflow author. Then, it is retried the same way a normal
+Workflow Task is: it becomes a transitive Workflow Task.
 
 ## Speculative Workflow Task Timeout
-Speculative Workflow Task timeouts are enforced with special [in-memory timer queue](./in-memory-queue.md).
-Unlike for normal Workflow Task `SCHEDULE_TO_START` timeout timer is created if speculative Workflow Task
-is scheduled on both sticky and **normal** task queue. `START_TO_CLOSE` timer is created
- when a Workflow Task is started. There is only one timer exists for speculative Workflow Task at any given time.
-Pointer to that timer is stored inside mutable state because timer needs to be canceled
-when Workflow Task completes or fails: speculative Workflow Task timer can't be identified by `ScheduledEventID`
-because there might be another speculative Workflow Task with the same `ScheduledEventID`, and if not canceled
-can times out wrong Workflow Task. 
+Speculative Workflow Task timeouts are enforced with a special [in-memory timer queue](./in-memory-queue.md).
 
-The behaviour in timeout handler is similar to when a Workflow Task fails.
-First `WorkflowTaskScheduled` and `WorkflowTaskStarted` events are written to the history
-(because they were not written for speculative Workflow Task), then `WorkflowTaskTimeout` event.
-New Workflow Task is scheduled as normal, but because attempt count is increased,
-it automatically becomes a transient Workflow Task.
+A `SCHEDULE_TO_START` timeout timer is always created, regardless of whether a sticky or normal
+task queues is used. A normal Workflow Task will usually only do that for a sticky task queue.
+
+A `START_TO_CLOSE` timeout timer is created when a speculative Workflow Task is started. There is
+only one active timer at any given time. The timer needs to be canceled when the Workflow Task
+completes or fails, but it cannot be identified by its `ScheduledEventID` because there might be
+another speculative Workflow Task with the same `ScheduledEventID`, and it could time out the
+wrong Workflow Task. Therefore, a pointer to that timer is stored inside the mutable state.
+
+The behaviour in the timeout handler is similar to when a Workflow Task fails: first the
+`WorkflowTaskScheduled` and `WorkflowTaskStarted` events are written to the history (because they 
+were not written for speculative Workflow Task) and then the `WorkflowTaskTimeout` event. The new 
+Workflow Task is scheduled as normal, but because the attempt count is increased, it automatically
+becomes a transient Workflow Task.
 
 ## Replication of Speculative Workflow Task
-Speculative Workflow Task is not replicated. Worker can try to complete it in new cluster, and server
-will return `NotFound` error.
+Speculative Workflow Tasks are not replicated. The worker can try to complete it in new cluster,
+and the server will return a `NotFound` error.
