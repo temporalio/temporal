@@ -58,15 +58,16 @@ type (
 		RunID            string
 		LastWriteVersion int64
 	}
+	CreateLeaseForWorkflow func(shard.Context, workflow.MutableState) (WorkflowLease, error)
 )
 
-func NewWorkflowWithSignal(
+func NewWorkflow(
 	shard shard.Context,
 	namespaceEntry *namespace.Namespace,
 	workflowID string,
 	runID string,
 	startRequest *historyservice.StartWorkflowExecutionRequest,
-	signalWithStartRequest *workflowservice.SignalWithStartWorkflowExecutionRequest,
+	createLeaseForWorkflow CreateLeaseForWorkflow,
 ) (WorkflowLease, error) {
 	newMutableState, err := CreateMutableState(
 		shard,
@@ -115,20 +116,6 @@ func NewWorkflowWithSignal(
 		}
 	}
 
-	if signalWithStartRequest != nil {
-		if signalWithStartRequest.GetRequestId() != "" {
-			newMutableState.AddSignalRequested(signalWithStartRequest.GetRequestId())
-		}
-		if _, err := newMutableState.AddWorkflowExecutionSignaled(
-			signalWithStartRequest.GetSignalName(),
-			signalWithStartRequest.GetSignalInput(),
-			signalWithStartRequest.GetIdentity(),
-			signalWithStartRequest.GetHeader(),
-			signalWithStartRequest.GetLinks(),
-		); err != nil {
-			return nil, err
-		}
-	}
 	requestEagerExecution := startRequest.StartRequest.GetRequestEagerExecution()
 
 	var scheduledEventID int64
@@ -163,18 +150,29 @@ func NewWorkflowWithSignal(
 		}
 	}
 
-	newWorkflowContext := workflow.NewContext(
-		shard.GetConfig(),
-		definition.NewWorkflowKey(
-			namespaceEntry.ID().String(),
-			workflowID,
-			runID,
+	return createLeaseForWorkflow(shard, newMutableState)
+}
+
+// TODO
+func CreateMemoryWorkflowLease(
+	shardCtx shard.Context,
+	ms workflow.MutableState,
+) (WorkflowLease, error) {
+	return NewWorkflowLease(
+		workflow.NewContext(
+			shardCtx.GetConfig(),
+			definition.NewWorkflowKey(
+				ms.GetNamespaceEntry().ID().String(),
+				ms.GetExecutionInfo().WorkflowId,
+				ms.GetExecutionState().RunId,
+			),
+			shardCtx.GetLogger(),
+			shardCtx.GetThrottledLogger(),
+			shardCtx.GetMetricsHandler(),
 		),
-		shard.GetLogger(),
-		shard.GetThrottledLogger(),
-		shard.GetMetricsHandler(),
-	)
-	return NewWorkflowLease(newWorkflowContext, wcache.NoopReleaseFn, newMutableState), nil
+		wcache.NoopReleaseFn,
+		ms,
+	), nil
 }
 
 func CreateMutableState(

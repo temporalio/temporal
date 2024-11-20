@@ -664,7 +664,7 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowRunTimeoutTask(
 		if updateErr != nil {
 			return updateErr
 		}
-		weContext.UpdateRegistry(ctx, nil).Abort(update.AbortReasonWorkflowCompleted)
+		weContext.UpdateRegistry(ctx).Abort(update.AbortReasonWorkflowCompleted)
 		return nil
 	}
 
@@ -738,7 +738,7 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowRunTimeoutTask(
 	// A new run was created after the previous run timed out. Running Updates
 	// for this WF are aborted with a retryable error.
 	// Internal server retries will retry the API call, and the Update will be sent to the new run.
-	weContext.UpdateRegistry(ctx, nil).Abort(update.AbortReasonWorkflowContinuing)
+	weContext.UpdateRegistry(ctx).Abort(update.AbortReasonWorkflowContinuing)
 	return nil
 }
 
@@ -776,7 +776,7 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowExecutionTimeoutTask(
 		return updateErr
 	}
 
-	weContext.UpdateRegistry(ctx, nil).Abort(update.AbortReasonWorkflowCompleted)
+	weContext.UpdateRegistry(ctx).Abort(update.AbortReasonWorkflowCompleted)
 	return nil
 }
 

@@ -270,9 +270,9 @@ func (mr *MockContextMockRecorder) Unlock() *gomock.Call {
 }
 
 // UpdateRegistry mocks base method.
-func (m *MockContext) UpdateRegistry(ctx context.Context, ms MutableState) update.Registry {
+func (m *MockContext) UpdateRegistry(ctx context.Context) update.Registry {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "UpdateRegistry", ctx, ms)
+	ret := m.ctrl.Call(m, "UpdateRegistry", ctx)
 	ret0, _ := ret[0].(update.Registry)
 	return ret0
 }

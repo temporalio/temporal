@@ -80,7 +80,7 @@ func SignalWithStartWorkflow(
 
 func startAndSignalWorkflow(
 	ctx context.Context,
-	shard shard.Context,
+	shardCtx shard.Context,
 	namespaceEntry *namespace.Namespace,
 	currentWorkflowLease api.WorkflowLease,
 	startRequest *historyservice.StartWorkflowExecutionRequest,
@@ -89,20 +89,36 @@ func startAndSignalWorkflow(
 	workflowID := signalWithStartRequest.GetWorkflowId()
 	runID := uuid.New().String()
 	// TODO(bergundy): Support eager workflow task
-	newWorkflowLease, err := api.NewWorkflowWithSignal(
-		shard,
+	newWorkflowLease, err := api.NewWorkflow(
+		shardCtx,
 		namespaceEntry,
 		workflowID,
 		runID,
 		startRequest,
-		signalWithStartRequest,
+		func(shard shard.Context, ms workflow.MutableState) (api.WorkflowLease, error) {
+			if signalWithStartRequest.GetRequestId() != "" {
+				ms.AddSignalRequested(signalWithStartRequest.GetRequestId())
+			}
+
+			if _, err := ms.AddWorkflowExecutionSignaled(
+				signalWithStartRequest.GetSignalName(),
+				signalWithStartRequest.GetSignalInput(),
+				signalWithStartRequest.GetIdentity(),
+				signalWithStartRequest.GetHeader(),
+				signalWithStartRequest.GetLinks(),
+			); err != nil {
+				return nil, err
+			}
+
+			return api.CreateMemoryWorkflowLease(shard, ms)
+		},
 	)
 	if err != nil {
 		return "", false, err
 	}
 	if err = api.ValidateSignal(
 		ctx,
-		shard,
+		shardCtx,
 		newWorkflowLease.GetMutableState(),
 		signalWithStartRequest.GetSignalInput().Size(),
 		"SignalWithStartWorkflowExecution",
@@ -111,7 +127,7 @@ func startAndSignalWorkflow(
 	}
 
 	workflowMutationFn, err := createWorkflowMutationFunction(
-		shard,
+		shardCtx,
 		currentWorkflowLease,
 		namespaceEntry,
 		runID,
@@ -124,7 +140,7 @@ func startAndSignalWorkflow(
 	if workflowMutationFn != nil {
 		if err = startAndSignalWithCurrentWorkflow(
 			ctx,
-			shard,
+			shardCtx,
 			currentWorkflowLease,
 			workflowMutationFn,
 			newWorkflowLease,
@@ -139,7 +155,7 @@ func startAndSignalWorkflow(
 	}
 	return startAndSignalWithoutCurrentWorkflow(
 		ctx,
-		shard,
+		shardCtx,
 		vrid,
 		newWorkflowLease,
 		signalWithStartRequest.RequestId,

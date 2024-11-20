@@ -59,14 +59,6 @@ type (
 	ReleaseCacheFunc func(err error)
 
 	Cache interface {
-		Put(
-			shardContext shard.Context,
-			namespaceID namespace.ID,
-			execution *commonpb.WorkflowExecution,
-			workflowCtx workflow.Context,
-			handler metrics.Handler,
-		) error
-
 		GetOrCreateCurrentWorkflowExecution(
 			ctx context.Context,
 			shardContext shard.Context,
@@ -289,21 +281,6 @@ func (c *cacheImpl) GetOrCreateWorkflowExecution(
 	return weCtx, weReleaseFunc, err
 }
 
-func (c *cacheImpl) Put(
-	shardContext shard.Context,
-	namespaceID namespace.ID,
-	execution *commonpb.WorkflowExecution,
-	workflowCtx workflow.Context,
-	handler metrics.Handler,
-) error {
-	cacheKey := makeCacheKey(shardContext, namespaceID, execution)
-	item := &cacheItem{shardId: shardContext.GetShardID(), wfContext: workflowCtx, finalizer: shardContext.GetFinalizer()}
-	// need to make sure there isn't an existing context present (which could have been cleared)
-	c.Delete(cacheKey)
-	_, err := c.PutIfNotExist(cacheKey, item)
-	return err
-}
-
 func (c *cacheImpl) getOrCreateWorkflowExecutionInternal(
 	ctx context.Context,
 	shardContext shard.Context,
@@ -313,7 +290,10 @@ func (c *cacheImpl) getOrCreateWorkflowExecutionInternal(
 	forceClearContext bool,
 	lockPriority locks.Priority,
 ) (workflow.Context, ReleaseCacheFunc, error) {
-	cacheKey := makeCacheKey(shardContext, namespaceID, execution)
+	cacheKey := Key{
+		WorkflowKey: definition.NewWorkflowKey(namespaceID.String(), execution.GetWorkflowId(), execution.GetRunId()),
+		ShardUUID:   shardContext.GetOwner(),
+	}
 	item, cacheHit := c.Get(cacheKey).(*cacheItem)
 	var workflowCtx workflow.Context
 	if cacheHit {
@@ -328,11 +308,13 @@ func (c *cacheImpl) getOrCreateWorkflowExecutionInternal(
 			shardContext.GetMetricsHandler(),
 		)
 
-		var err error
-		err = c.Put(shardContext, namespaceID, execution, workflowCtx, handler)
+		value := &cacheItem{shardId: shardContext.GetShardID(), wfContext: workflowCtx, finalizer: shardContext.GetFinalizer()}
+		elem, err := c.PutIfNotExist(cacheKey, value)
 		if err != nil {
+			metrics.CacheFailures.With(handler).Record(1)
 			return nil, nil, err
 		}
+		workflowCtx = elem.(*cacheItem).wfContext
 	}
 
 	if err := c.lockWorkflowExecution(ctx, workflowCtx, cacheKey, lockPriority); err != nil {

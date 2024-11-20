@@ -5025,6 +5025,9 @@ func (s *UpdateWorkflowSuite) TestUpdateWithStart() {
 				_, err := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), startWorkflowReq(tv))
 				s.NoError(err)
 
+				_, err = s.TaskPoller.PollAndHandleWorkflowTask(tv, taskpoller.DrainWorkflowTask)
+				s.NoError(err)
+
 				// update-with-start
 				startReq := startWorkflowReq(tv)
 				startReq.WorkflowIdConflictPolicy = enumspb.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING
@@ -5058,8 +5061,11 @@ func (s *UpdateWorkflowSuite) TestUpdateWithStart() {
 				  2 WorkflowTaskScheduled
 				  3 WorkflowTaskStarted
 				  4 WorkflowTaskCompleted
-				  5 WorkflowExecutionUpdateAccepted
-				  6 WorkflowExecutionUpdateCompleted`, s.GetHistory(s.Namespace(), tv.WorkflowExecution()))
+				  5 WorkflowTaskScheduled
+				  6 WorkflowTaskStarted
+				  7 WorkflowTaskCompleted
+				  8 WorkflowExecutionUpdateAccepted
+				  9 WorkflowExecutionUpdateCompleted`, s.GetHistory(s.Namespace(), tv.WorkflowExecution()))
 			})
 
 			s.Run("and reject", func() {
@@ -5067,6 +5073,9 @@ func (s *UpdateWorkflowSuite) TestUpdateWithStart() {
 
 				// start workflow
 				_, err := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), startWorkflowReq(tv))
+				s.NoError(err)
+
+				_, err = s.TaskPoller.PollAndHandleWorkflowTask(tv, taskpoller.DrainWorkflowTask)
 				s.NoError(err)
 
 				// update-with-start
@@ -5174,7 +5183,7 @@ func (s *UpdateWorkflowSuite) TestUpdateWithStart() {
 			uwsCh := sendUpdateWithStart(testcore.NewContext(), startReq, updateReq)
 			uwsRes := <-uwsCh
 			s.Error(uwsRes.err)
-			s.Equal(uwsRes.err.Error(), "MultiOperation could not be executed.")
+			s.Contains(uwsRes.err.Error(), "MultiOperation could not be executed")
 			errs := uwsRes.err.(*serviceerror.MultiOperationExecution).OperationErrors()
 			s.Len(errs, 2)
 			s.Contains(errs[0].Error(), "Workflow execution is already running")

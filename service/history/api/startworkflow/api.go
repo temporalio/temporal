@@ -49,7 +49,7 @@ import (
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/workflow"
-	"go.temporal.io/server/service/history/workflow/cache"
+	wcache "go.temporal.io/server/service/history/workflow/cache"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -72,10 +72,6 @@ const (
 	StartDeduped
 )
 
-var (
-	BeforeCreateHookNoop = func(lease api.WorkflowLease) error { return nil }
-)
-
 // Starter starts a new workflow execution.
 type Starter struct {
 	shardContext               shard.Context
@@ -84,7 +80,7 @@ type Starter struct {
 	visibilityManager          manager.VisibilityManager
 	request                    *historyservice.StartWorkflowExecutionRequest
 	namespace                  *namespace.Namespace
-	beforeCreateHook           BeforeCreateHookFunc
+	createLeaseForWorkflow     api.CreateLeaseForWorkflow
 }
 
 // creationParams is a container for all information obtained from creating the uncommitted execution.
@@ -113,6 +109,7 @@ func NewStarter(
 	tokenSerializer common.TaskTokenSerializer,
 	visibilityManager manager.VisibilityManager,
 	request *historyservice.StartWorkflowExecutionRequest,
+	createLeaseForWorkflow api.CreateLeaseForWorkflow,
 ) (*Starter, error) {
 	namespaceEntry, err := api.GetActiveNamespace(shardContext, namespace.ID(request.GetNamespaceId()))
 	if err != nil {
@@ -126,6 +123,7 @@ func NewStarter(
 		visibilityManager:          visibilityManager,
 		request:                    request,
 		namespace:                  namespaceEntry,
+		createLeaseForWorkflow:     createLeaseForWorkflow,
 	}, nil
 }
 
@@ -191,35 +189,34 @@ func (s *Starter) requestEagerStart() bool {
 // requires terminating the running workflow first; it is then invoked again on the newly started workflow.
 func (s *Starter) Invoke(
 	ctx context.Context,
-	beforeCreateHook BeforeCreateHookFunc,
 ) (resp *historyservice.StartWorkflowExecutionResponse, startOutcome StartOutcome, retError error) {
 	request := s.request.StartRequest
 	if err := s.prepare(ctx); err != nil {
-		return nil, startOutcome, err
+		return nil, NoStart, err
 	}
 
-	creationParams, err := s.createNewMutableState(request.GetWorkflowId())
+	creationParams, err := s.prepareNewWorkflow(request.GetWorkflowId())
 	if err != nil {
-		return nil, startOutcome, err
+		return nil, NoStart, err
 	}
+	defer func() {
+		creationParams.workflowLease.GetReleaseFn()(retError)
+	}()
 
-	// grab current workflow context as a lock so that user latency can be computed
-	currentRelease, err := s.lockCurrentWorkflowExecution(ctx)
+	currentExecutionLock, err := s.lockCurrentWorkflowExecution(ctx)
 	if err != nil {
-		return nil, startOutcome, err
+		return nil, NoStart, err
 	}
-	defer func() { currentRelease(retError) }()
-
-	if err = beforeCreateHook(creationParams.workflowLease); err != nil {
-		return nil, startOutcome, err
-	}
+	defer func() {
+		currentExecutionLock(retError)
+	}()
 
 	err = s.createBrandNew(ctx, creationParams)
 	if err != nil {
 		var currentWorkflowConditionFailedError *persistence.CurrentWorkflowConditionFailedError
 		if errors.As(err, &currentWorkflowConditionFailedError) && len(currentWorkflowConditionFailedError.RunID) > 0 {
 			// The history and mutable state generated above will be deleted by a background process.
-			return s.handleConflict(ctx, creationParams, beforeCreateHook, currentWorkflowConditionFailedError)
+			return s.handleConflict(ctx, creationParams, currentWorkflowConditionFailedError)
 		}
 
 		return nil, startOutcome, err
@@ -233,33 +230,28 @@ func (s *Starter) Invoke(
 	return resp, StartNew, err
 }
 
-func (s *Starter) lockCurrentWorkflowExecution(
-	ctx context.Context,
-) (cache.ReleaseCacheFunc, error) {
-	currentRelease, err := s.workflowConsistencyChecker.GetWorkflowCache().GetOrCreateCurrentWorkflowExecution(
+// lockCurrentWorkflowExecution grabs current workflow execution lock so that user latency can be computed.
+func (s *Starter) lockCurrentWorkflowExecution(ctx context.Context) (wcache.ReleaseCacheFunc, error) {
+	return s.workflowConsistencyChecker.GetWorkflowCache().GetOrCreateCurrentWorkflowExecution(
 		ctx,
 		s.shardContext,
 		s.namespace.ID(),
 		s.request.StartRequest.WorkflowId,
 		locks.PriorityHigh,
 	)
-	if err != nil {
-		return nil, err
-	}
-	return currentRelease, nil
 }
 
-// createNewMutableState creates a new workflow context, and closes its mutable state transaction as snapshot.
+// prepareNewWorkflow creates a new workflow context, and closes its mutable state transaction as snapshot.
 // It returns the creationContext which can later be used to insert into the executions table.
-func (s *Starter) createNewMutableState(workflowID string) (*creationParams, error) {
+func (s *Starter) prepareNewWorkflow(workflowID string) (*creationParams, error) {
 	runID := uuid.NewString()
-	workflowLease, err := api.NewWorkflowWithSignal(
+	workflowLease, err := api.NewWorkflow(
 		s.shardContext,
 		s.namespace,
 		workflowID,
 		runID,
 		s.request,
-		nil,
+		s.createLeaseForWorkflow,
 	)
 	if err != nil {
 		return nil, err
@@ -270,9 +262,7 @@ func (s *Starter) createNewMutableState(workflowID string) (*creationParams, err
 	if s.requestEagerStart() && workflowTaskInfo == nil {
 		return nil, serviceerror.NewInternal("unexpected error: mutable state did not have a started workflow task")
 	}
-	workflowSnapshot, eventBatches, err := mutableState.CloseTransactionAsSnapshot(
-		workflow.TransactionPolicyActive,
-	)
+	workflowSnapshot, eventBatches, err := mutableState.CloseTransactionAsSnapshot(workflow.TransactionPolicyActive)
 	if err != nil {
 		return nil, err
 	}
@@ -290,7 +280,7 @@ func (s *Starter) createNewMutableState(workflowID string) (*creationParams, err
 	}, nil
 }
 
-// createBrandNew creates a new "brand new" execution in the executions table.
+// createBrandNew creates a "brand new" execution in the executions table.
 func (s *Starter) createBrandNew(ctx context.Context, creationParams *creationParams) error {
 	return creationParams.workflowLease.GetContext().CreateWorkflowExecution(
 		ctx,
@@ -310,7 +300,6 @@ func (s *Starter) createBrandNew(ctx context.Context, creationParams *creationPa
 func (s *Starter) handleConflict(
 	ctx context.Context,
 	creationParams *creationParams,
-	beforeCreateHook BeforeCreateHookFunc,
 	currentWorkflowConditionFailed *persistence.CurrentWorkflowConditionFailedError,
 ) (*historyservice.StartWorkflowExecutionResponse, StartOutcome, error) {
 	request := s.request.StartRequest
@@ -323,7 +312,7 @@ func (s *Starter) handleConflict(
 		return nil, NoStart, err
 	}
 
-	response, startOutcome, err := s.resolveDuplicateWorkflowID(ctx, creationParams, beforeCreateHook, currentWorkflowConditionFailed)
+	response, startOutcome, err := s.resolveDuplicateWorkflowID(ctx, currentWorkflowConditionFailed)
 	if err != nil {
 		return nil, NoStart, err
 	} else if response != nil {
@@ -380,8 +369,6 @@ func (s *Starter) verifyNamespaceActive(
 // Returns non-nil response if an action was required and completed successfully resulting in a newly created execution.
 func (s *Starter) resolveDuplicateWorkflowID(
 	ctx context.Context,
-	creationParams *creationParams,
-	beforeCreateHook BeforeCreateHookFunc,
 	currentWorkflowConditionFailed *persistence.CurrentWorkflowConditionFailedError,
 ) (*historyservice.StartWorkflowExecutionResponse, StartOutcome, error) {
 	workflowID := s.request.StartRequest.WorkflowId
@@ -398,11 +385,13 @@ func (s *Starter) resolveDuplicateWorkflowID(
 		currentWorkflowConditionFailed.RunID,
 	)
 
+	// TODO
+	newRunID := uuid.NewString()
 	currentExecutionUpdateAction, err := api.ResolveDuplicateWorkflowID(
 		s.shardContext,
 		workflowKey,
 		s.namespace,
-		creationParams.runID,
+		newRunID,
 		currentWorkflowConditionFailed.State,
 		currentWorkflowConditionFailed.Status,
 		currentWorkflowConditionFailed.RequestID,
@@ -424,10 +413,11 @@ func (s *Starter) resolveDuplicateWorkflowID(
 		return nil, NoStart, nil
 	}
 
+	var workflowLease api.WorkflowLease
 	var mutableStateInfo *mutableStateInfo
-	// update current execution and create new execution in one transaction
-	// we already validated that currentWorkflowConditionFailed.RunID is not empty,
-	// so the following update won't try to lock current execution again.
+	// Update current execution and create new execution in one transaction.
+	// We already validated that currentWorkflowConditionFailed.RunID is not empty,
+	// so the following update won't try to lock the current execution again.
 	err = api.GetAndUpdateWorkflowWithNew(
 		ctx,
 		nil,
@@ -437,20 +427,15 @@ func (s *Starter) resolveDuplicateWorkflowID(
 			currentWorkflowConditionFailed.RunID,
 		),
 		currentExecutionUpdateAction,
-		func() (workflow.Context, workflow.MutableState, error) {
-			workflowLease, err := api.NewWorkflowWithSignal(
+		func() (wfCtx workflow.Context, ms workflow.MutableState, retError error) {
+			workflowLease, err = api.NewWorkflow(
 				s.shardContext,
 				s.namespace,
 				workflowID,
-				creationParams.runID,
+				newRunID,
 				s.request,
-				nil)
+				s.createLeaseForWorkflow)
 			if err != nil {
-				return nil, nil, err
-			}
-
-			// apply hook again to new lease
-			if err = beforeCreateHook(workflowLease); err != nil {
 				return nil, nil, err
 			}
 
@@ -466,11 +451,15 @@ func (s *Starter) resolveDuplicateWorkflowID(
 		s.shardContext,
 		s.workflowConsistencyChecker,
 	)
+	if workflowLease != nil {
+		workflowLease.GetReleaseFn()(err)
+	}
+
 	switch err {
 	case nil:
 		if !s.requestEagerStart() {
 			return &historyservice.StartWorkflowExecutionResponse{
-				RunId:   creationParams.runID,
+				RunId:   newRunID,
 				Started: true,
 			}, StartNew, nil
 		}
@@ -478,7 +467,7 @@ func (s *Starter) resolveDuplicateWorkflowID(
 		if err != nil {
 			return nil, NoStart, err
 		}
-		resp, err := s.generateResponse(creationParams.runID, mutableStateInfo.workflowTask, events)
+		resp, err := s.generateResponse(newRunID, mutableStateInfo.workflowTask, events)
 		return resp, StartNew, err
 	case consts.ErrWorkflowCompleted:
 		// current workflow already closed
