@@ -34,44 +34,54 @@ import (
 type (
 	// DeploymentWorkflowRunner holds the local state while running a deployment name workflow
 	DeploymentNameWorkflowRunner struct {
+		*deployspb.DeploymentNameWorkflowArgs
 		ctx     workflow.Context
 		a       *DeploymentNameActivities
 		logger  sdklog.Logger
 		metrics sdkclient.MetricsHandler
-		// local state denoting the current "default" build-ID of a deploymentName (can be nil)
-		defaultBuildID string
 	}
 )
 
 const (
-	UpdateDeploymentNameBuildIDSignalName = "update-deployment-name-buildID"
-
-	DeploymentNameWorkflowIDPrefix = "temporal-sys-deployment-name:"
+	// Updates
+	UpdateDeploymentNameDefaultBuildIDName = "update-deployment-name-default-buildID"
 )
 
-// TODO Shivam - Define workflow for DeploymentName
 func DeploymentNameWorkflow(ctx workflow.Context, deploymentNameArgs *deployspb.DeploymentNameWorkflowArgs) error {
 	deploymentWorkflowNameRunner := &DeploymentNameWorkflowRunner{
-		ctx:            ctx,
-		a:              nil,
-		logger:         sdklog.With(workflow.GetLogger(ctx), "wf-namespace", deploymentNameArgs.NamespaceName),
-		metrics:        workflow.GetMetricsHandler(ctx).WithTags(map[string]string{"namespace": deploymentNameArgs.NamespaceName}),
-		defaultBuildID: "", // TODO Shivam - extract buildID from the workflowID
+		DeploymentNameWorkflowArgs: deploymentNameArgs,
+		ctx:                        ctx,
+		a:                          nil,
+		logger:                     sdklog.With(workflow.GetLogger(ctx), "wf-namespace", deploymentNameArgs.NamespaceName),
+		metrics:                    workflow.GetMetricsHandler(ctx).WithTags(map[string]string{"namespace": deploymentNameArgs.NamespaceName}),
 	}
 	return deploymentWorkflowNameRunner.run()
 }
 
 func (d *DeploymentNameWorkflowRunner) run() error {
-	/* TODO Shivam:
+	var pendingUpdates int
 
-	Implement this workflow to be an infinitely long running workflow
+	err := workflow.SetQueryHandler(d.ctx, "DefaultBuildID", func(input []byte) (string, error) {
+		return d.DefaultBuildId, nil
+	})
+	if err != nil {
+		d.logger.Info("SetQueryHandler failed for DeploymentName workflow with error: " + err.Error())
+		return err
+	}
 
-	Query handlers to return current default buildID of the deployment name
+	// TODO Shivam (later) -  Updatehandler for updating default-buildID of a deployment.
+	// This shall be responsible for:
+	//  - an update operation on a deployment which shall update all the task-queue's default buildID and the local state of the current deployment
 
-	Signal handler(s) to:
-	signal DeploymentWorkflow and update the buildID of all task-queues in the deployment name.
-	update default buildID of the deployment name.
+	// Wait until we can continue as new or are cancelled.
+	err = workflow.Await(d.ctx, func() bool { return workflow.GetInfo(d.ctx).GetContinueAsNewSuggested() && pendingUpdates == 0 })
+	if err != nil {
+		return err
+	}
 
-	*/
-	return nil
+	// Continue as new when there are no pending updates and history size is greater than requestsBeforeContinueAsNew.
+	// Note, if update requests come in faster than they
+	// are handled, there will not be a moment where the workflow has
+	// nothing pending which means this will run forever.
+	return workflow.NewContinueAsNewError(d.ctx, DeploymentNameWorkflow, d.DeploymentNameWorkflowArgs)
 }

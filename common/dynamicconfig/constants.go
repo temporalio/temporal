@@ -1203,6 +1203,11 @@ these log lines can be noisy, we want to be able to turn on and sample selective
 		time.Second,
 		`TaskQueueInfoByBuildIdTTL serves as a TTL for the cache holding DescribeTaskQueue partition results`,
 	)
+	MatchingEnableDeployments = NewNamespaceBoolSetting(
+		"matching.enableDeployment",
+		false,
+		`MatchingEnableDeployments enables deployment-related RPCs in matching`,
+	)
 	// for matching testing only:
 
 	TestMatchingDisableSyncMatch = NewGlobalBoolSetting(
