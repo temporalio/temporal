@@ -160,3 +160,4 @@ message StateMachineTombstone {
 message StateMachinePath {
     repeated StateMachineKey path = 1;
 }
+
