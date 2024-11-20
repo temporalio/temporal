@@ -630,7 +630,7 @@ func (s *mutableStateSuite) createMutableStateWithVersioningBehavior(
 		wft,
 		&workflowservice.RespondWorkflowTaskCompletedRequest{
 			VersioningBehavior: behavior,
-			WorkerVersionStamp: worker_versioning.StampFromDeployment(deployment),
+			Deployment:         deployment,
 		},
 		workflowTaskCompletionLimits,
 	)
@@ -680,7 +680,7 @@ func (s *mutableStateSuite) TestUnpinnedRedirected() {
 		&workflowservice.RespondWorkflowTaskCompletedRequest{
 			// wf is pinned in the new build
 			VersioningBehavior: enumspb.VERSIONING_BEHAVIOR_PINNED,
-			WorkerVersionStamp: worker_versioning.StampFromDeployment(deployment2),
+			Deployment:         deployment2,
 		},
 		workflowTaskCompletionLimits,
 	)
@@ -921,7 +921,7 @@ func (s *mutableStateSuite) TestOverride_BaseDeploymentUpdatedOnCompletion() {
 		&workflowservice.RespondWorkflowTaskCompletedRequest{
 			// sdk says wf is unpinned, but that does not take effect due to the override
 			VersioningBehavior: baseBehavior,
-			WorkerVersionStamp: worker_versioning.StampFromDeployment(deployment2),
+			Deployment:         deployment2,
 		},
 		workflowTaskCompletionLimits,
 	)

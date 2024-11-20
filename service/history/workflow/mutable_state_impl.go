@@ -4255,6 +4255,9 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionOptionsUpdatedEvent(event *his
 	if override != nil {
 		ms.GetExecutionInfo().VersioningInfo.BehaviorOverride = override.GetBehavior()
 		ms.GetExecutionInfo().VersioningInfo.DeploymentOverride = override.GetDeployment()
+	} else {
+		ms.GetExecutionInfo().VersioningInfo.BehaviorOverride = enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED
+		ms.GetExecutionInfo().VersioningInfo.DeploymentOverride = nil
 	}
 	return nil
 }
