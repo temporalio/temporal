@@ -387,7 +387,7 @@ func (n *Node) DeleteChild(key Key) error {
 
 	child, err := n.Child([]Key{key})
 	if err != nil {
-		return fmt.Errorf("failed to get child: %w", err)
+		return err
 	}
 
 	// Mark entire subtree as deleted
