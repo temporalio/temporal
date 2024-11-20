@@ -213,3 +213,40 @@ func (this *DescribeResponse) Equal(that interface{}) bool {
 
 	return proto.Equal(this, that1)
 }
+
+// Marshal an object of type DeploymentWorkflowMemo to the protobuf v3 wire format
+func (val *DeploymentWorkflowMemo) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type DeploymentWorkflowMemo from the protobuf v3 wire format
+func (val *DeploymentWorkflowMemo) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *DeploymentWorkflowMemo) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two DeploymentWorkflowMemo values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *DeploymentWorkflowMemo) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *DeploymentWorkflowMemo
+	switch t := that.(type) {
+	case *DeploymentWorkflowMemo:
+		that1 = t
+	case DeploymentWorkflowMemo:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}

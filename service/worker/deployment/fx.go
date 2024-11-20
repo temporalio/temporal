@@ -42,9 +42,9 @@ import (
 )
 
 const (
-	DeploymentWorkflowType      = "temporal-sys-deployment-workflow"
-	DeploymentNameWorkflowType  = "temporal-sys-deployment-name-workflow"
-	DeploymentNamespaceDivision = "TemporalDeployment"
+	DeploymentWorkflowType       = "temporal-sys-deployment-workflow"
+	DeploymentSeriesWorkflowType = "temporal-sys-deployment-series-workflow"
+	DeploymentNamespaceDivision  = "TemporalDeployment"
 )
 
 var (
@@ -58,10 +58,10 @@ var (
 		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING.String(),
 	)
 
-	DeploymentNameVisibilityBaseListQuery = fmt.Sprintf(
+	DeploymentSeriesVisibilityBaseListQuery = fmt.Sprintf(
 		"%s = '%s' AND %s = '%s' AND %s = '%s'",
 		searchattribute.WorkflowType,
-		DeploymentNameWorkflowType,
+		DeploymentSeriesWorkflowType,
 		searchattribute.TemporalNamespaceDivision,
 		DeploymentNamespaceDivision,
 		searchattribute.ExecutionStatus,
@@ -113,7 +113,7 @@ func (s *workerComponent) DedicatedWorkerOptions(ns *namespace.Namespace) *worke
 
 func (s *workerComponent) Register(registry sdkworker.Registry, ns *namespace.Namespace, details workercommon.RegistrationDetails) func() {
 	registry.RegisterWorkflowWithOptions(DeploymentWorkflow, workflow.RegisterOptions{Name: DeploymentWorkflowType})
-	registry.RegisterWorkflowWithOptions(DeploymentNameWorkflow, workflow.RegisterOptions{Name: DeploymentNameWorkflowType})
+	registry.RegisterWorkflowWithOptions(DeploymentNameWorkflow, workflow.RegisterOptions{Name: DeploymentSeriesWorkflowType})
 
 	// TODO Shivam: Might need a cleanup function upon activity registration
 	deploymentActivities := s.newDeploymentActivities(ns.Name(), ns.ID())

@@ -29,14 +29,14 @@ option go_package = "go.temporal.io/server/api/deployment/v1;deployment";
 import "temporal/api/enums/v1/task_queue.proto";
 import "google/protobuf/timestamp.proto";
 import "temporal/api/deployment/v1/message.proto";
-import "temporal/api/enums/v1/deployment.proto";
+import "temporal/api/common/v1/message.proto";
 
 message DeploymentLocalState {
     temporal.api.deployment.v1.Deployment worker_deployment = 1;
     map<string, TaskQueueFamilyInfo> task_queue_families = 2;
-    temporal.api.enums.v1.DeploymentStatus deployment_status = 3;
-    google.protobuf.Timestamp last_became_current_time = 4;
-    map<string, string> metadata = 5; 
+    bool is_current_deployment = 3;
+    google.protobuf.Timestamp create_time = 4;
+    map<string, temporal.api.common.v1.Payload> metadata = 5; 
     
     message TaskQueueFamilyInfo {
         // key: taskQueueType, val: TaskQueueInfo
@@ -69,4 +69,9 @@ message RegisterWorkerInDeploymentArgs{
 
 message DescribeResponse {
     DeploymentLocalState deployment_local_state = 1;
+}
+
+message DeploymentWorkflowMemo {
+    google.protobuf.Timestamp create_time = 1;
+    bool is_current_deployment = 2;
 }

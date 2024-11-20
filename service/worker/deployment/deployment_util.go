@@ -63,6 +63,9 @@ const (
 	QueryDescribeDeployment = "describe-deployment"
 	QueryCurrentDeployment  = "current-deployment"
 
+	// Memos
+	DeploymentMemoField = "DeploymentMemo"
+
 	// Prefixes, Delimeters and Keys
 	DeploymentWorkflowIDPrefix       = "temporal-sys-deployment"
 	DeploymentSeriesWorkflowIDPrefix = "temporal-sys-deployment-series"
@@ -141,6 +144,13 @@ func (d *DeploymentWorkflowClient) RegisterTaskQueueWorker(
 
 	sa := &commonpb.SearchAttributes{}
 	searchattribute.AddSearchAttribute(&sa, searchattribute.TemporalNamespaceDivision, payload.EncodeString(DeploymentNamespaceDivision))
+	searchattribute.AddSearchAttribute(&sa, searchattribute.DeploymentSeries, payload.EncodeString(d.deployment.SeriesName))
+
+	// initial memo fiels
+	memo, err := d.addInitialDeploymentMemo()
+	if err != nil {
+		return err
+	}
 
 	// Start workflow execution, if it hasn't already
 	startReq := &workflowservice.StartWorkflowExecutionRequest{
@@ -152,6 +162,7 @@ func (d *DeploymentWorkflowClient) RegisterTaskQueueWorker(
 		WorkflowIdReusePolicy:    enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
 		WorkflowIdConflictPolicy: enumspb.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING,
 		SearchAttributes:         sa,
+		Memo:                     memo,
 	}
 
 	updateReq := &workflowservice.UpdateWorkflowExecutionRequest{
@@ -194,6 +205,25 @@ func (d *DeploymentWorkflowClient) RegisterTaskQueueWorker(
 	}
 
 	return nil
+}
+
+func (d *DeploymentWorkflowClient) addInitialDeploymentMemo() (*commonpb.Memo, error) {
+	memo := &commonpb.Memo{}
+	memo.Fields = make(map[string]*commonpb.Payload)
+
+	deploymentWorkflowMemo := &deployspb.DeploymentWorkflowMemo{
+		CreateTime:          timestamppb.Now(),
+		IsCurrentDeployment: false,
+	}
+
+	memoPayload, err := sdk.PreferProtoDataConverter.ToPayload(deploymentWorkflowMemo)
+	if err != nil {
+		return nil, err
+	}
+
+	memo.Fields[DeploymentMemoField] = memoPayload
+	return memo, nil
+
 }
 
 // GenerateStartWorkflowPayload generates start workflow execution payload
@@ -248,7 +278,7 @@ func escapeChar(s string) string {
 func GenerateDeploymentSeriesWorkflowID(deploymentSeriesName string) string {
 	// escaping the reserved workflow delimiter (|) from the inputs, if present
 	escapedSeriesName := escapeChar(deploymentSeriesName)
-	return DeploymentNameWorkflowIDPrefix + DeploymentWorkflowIDDelimeter + escapedSeriesName
+	return DeploymentSeriesWorkflowIDPrefix + DeploymentWorkflowIDDelimeter + escapedSeriesName
 }
 
 // GenerateDeploymentWorkflowID is a helper that generates a system accepted

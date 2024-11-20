@@ -87,7 +87,7 @@ func (d *DeploymentWorkflowRunner) run() error {
 	var pendingUpdates int
 
 	// Set up Query Handlers here:
-	if err := workflow.SetQueryHandler(d.ctx, QueryNameDescribeDeployment, d.handleDescribeQuery); err != nil {
+	if err := workflow.SetQueryHandler(d.ctx, QueryDescribeDeployment, d.handleDescribeQuery); err != nil {
 		d.logger.Error("Failed while setting up query handler")
 		return err
 	}
@@ -182,3 +182,9 @@ func (d *DeploymentWorkflowRunner) handleDescribeQuery() (*deployspb.DescribeRes
 		DeploymentLocalState: d.DeploymentLocalState,
 	}, nil
 }
+
+/*
+// updateMemo should be called whenever the workflow updates it's local state: "is_current_deployment"
+func (d *DeploymentWorkflowRunner) updateMemo() {
+}
+*/
