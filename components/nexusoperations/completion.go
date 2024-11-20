@@ -123,7 +123,7 @@ func handleUnsuccessfulOperationError(
 	default:
 		// Both the Nexus Client and CompletionHandler reject invalid states, but just in case, we return this as a
 		// transition error.
-		return hsm.TransitionOutput{}, fmt.Errorf("unexpected operation state: %v", opFailedError.State) // nolint:goerr113
+		return hsm.TransitionOutput{}, fmt.Errorf("unexpected operation state: %v", opFailedError.State)
 	}
 }
 

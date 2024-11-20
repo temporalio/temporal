@@ -34,10 +34,6 @@ import (
 // ErrDuplicateRegistration is returned by a [Registry] when it detects duplicate registration.
 var ErrDuplicateRegistration = errors.New("duplicate registration")
 
-// ErrConcurrentTaskNotImplemented is returned by a [Registry] when trying to register a
-// concurrent task that did not implement the [ConcurrentTask] interface.
-var ErrConcurrentTaskNotImplemented = errors.New("concurrent task not implemented")
-
 // ErrNotRegistered is returned by a [Registry] when trying to get a type that is not registered.
 var ErrNotRegistered error = notRegisteredError{"not registered"}
 
@@ -130,16 +126,6 @@ func RegisterImmediateExecutor[T Task](r *Registry, executor ImmediateExecutor[T
 			existing,
 		)
 	}
-	// TODO(bergundy): Concurrent may be dependent on the task's state, this solution isn't failsafe.
-	if task.Concurrent() {
-		if _, ok := Task(task).(ConcurrentTask); !ok {
-			return fmt.Errorf(
-				"%w: %q does not implement ConcurrentTask interface",
-				ErrConcurrentTaskNotImplemented,
-				taskType,
-			)
-		}
-	}
 	r.immediateExecutors[taskType] = executor
 	return nil
 }
@@ -177,15 +163,6 @@ func RegisterTimerExecutor[T Task](r *Registry, executor TimerExecutor[T]) error
 			taskType,
 			existing,
 		)
-	}
-	if task.Concurrent() {
-		if _, ok := Task(task).(ConcurrentTask); !ok {
-			return fmt.Errorf(
-				"%w: concurrent task type %q does not implement ConcurrentTask interface",
-				ErrConcurrentTaskNotImplemented,
-				taskType,
-			)
-		}
 	}
 	r.timerExecutors[taskType] = executor
 	return nil

@@ -93,14 +93,14 @@ func (n nexusInvocation) Invoke(ctx context.Context, ns *namespace.Namespace, e 
 
 	caller := e.HTTPCallerProvider(queues.NamespaceIDAndDestination{
 		NamespaceID: ns.ID().String(),
-		Destination: task.Destination,
+		Destination: task.Destination(),
 	})
 	// Make the call and record metrics.
 	startTime := time.Now()
 	response, err := caller(request)
 
 	namespaceTag := metrics.NamespaceTag(ns.Name().String())
-	destTag := metrics.DestinationTag(task.Destination)
+	destTag := metrics.DestinationTag(task.Destination())
 	statusCodeTag := metrics.OutcomeTag(outcomeTag(ctx, response, err))
 	e.MetricsHandler.Counter(RequestCounter.Name()).Record(1, namespaceTag, destTag, statusCodeTag)
 	e.MetricsHandler.Timer(RequestLatencyHistogram.Name()).Record(time.Since(startTime), namespaceTag, destTag, statusCodeTag)
@@ -123,7 +123,7 @@ func (n nexusInvocation) Invoke(ctx context.Context, ns *namespace.Namespace, e 
 	}
 
 	retryable := isRetryableHTTPResponse(response)
-	err = fmt.Errorf("request failed with: %v", response.Status) // nolint:goerr113
+	err = fmt.Errorf("request failed with: %v", response.Status)
 	e.Logger.Error("Callback request failed", tag.Error(err), tag.NewStringTag("status", response.Status), tag.NewBoolTag("retryable", retryable))
 	if retryable {
 		return retry, err

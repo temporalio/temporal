@@ -1091,6 +1091,7 @@ func (s *rawTaskConverterSuite) TestConvertSyncVersionedTransitionTask_Backfill(
 		VisibilityTimestamp: time.Now().UTC(),
 		TaskID:              taskID,
 		FirstEventID:        firstEventID,
+		FirstEventVersion:   version,
 		NextEventID:         nextEventID,
 		NewRunID:            s.newRunID,
 		VersionedTransition: &persistencespb.VersionedTransition{
@@ -1470,6 +1471,7 @@ func (s *rawTaskConverterSuite) TestConvertSyncVersionedTransitionTask_Mutation(
 				},
 			},
 		},
+		VersionedTransitionHistory: transitionHistory,
 	}
 	s.syncStateRetriever.EXPECT().GetSyncWorkflowStateArtifactFromMutableState(
 		ctx,
@@ -1481,6 +1483,7 @@ func (s *rawTaskConverterSuite) TestConvertSyncVersionedTransitionTask_Mutation(
 		s.mutableState,
 		nil,
 		nil,
+		gomock.Any(),
 	).Return(syncResult, nil)
 	converter := newSyncVersionedTransitionTaskConverter(s.shardContext, s.workflowCache, nil, s.progressCache, s.executionManager, s.syncStateRetriever, s.logger)
 	result, err := convertSyncVersionedTransitionTask(ctx, task, targetClusterID, converter)
@@ -1497,6 +1500,9 @@ func (s *rawTaskConverterSuite) TestConvertSyncVersionedTransitionTask_Mutation(
 						},
 					},
 				},
+				NamespaceId: s.namespaceID,
+				WorkflowId:  s.workflowID,
+				RunId:       s.runID,
 			},
 		},
 		VersionedTransition: task.VersionedTransition,

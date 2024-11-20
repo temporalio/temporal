@@ -76,6 +76,7 @@ type (
 		// Only perform the update if current version equals to supplied version.
 		// 0 is unset.
 		KnownVersion int64
+		Source       string // informative source for logging
 	}
 
 	// UserDataUpdateFunc accepts the current user data for a task queue and returns the updated user data, a boolean
@@ -225,7 +226,7 @@ func (m *userDataManagerImpl) userDataFetchSource() (*tqid.NormalPartition, erro
 		p = p.TaskQueue().Family().TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW).NormalPartition(p.PartitionId())
 		degree := m.config.ForwarderMaxChildrenPerNode()
 		parent, err := p.ParentPartition(degree)
-		if err == tqid.ErrNoParent { // nolint:goerr113
+		if err == tqid.ErrNoParent {
 			// we're the root activity task queue, ask the root workflow task queue
 			return p, nil
 		} else if err != nil {
@@ -253,7 +254,7 @@ func (m *userDataManagerImpl) fetchUserData(ctx context.Context) error {
 	// fetch from parent partition
 	fetchSource, err := m.userDataFetchSource()
 	if err != nil {
-		if err == errMissingNormalQueueName { // nolint:goerr113
+		if err == errMissingNormalQueueName {
 			// pretend we have no user data. this is a sticky queue so the only effect is that we can't
 			// kick off versioned pollers.
 			m.setUserDataState(userDataEnabled, nil)
@@ -363,7 +364,7 @@ func (m *userDataManagerImpl) UpdateUserData(ctx context.Context, options UserDa
 	if err := m.WaitUntilInitialized(ctx); err != nil {
 		return err
 	}
-	newData, shouldReplicate, err := m.updateUserData(ctx, updateFn, options.KnownVersion, options.TaskQueueLimitPerBuildId)
+	newData, shouldReplicate, err := m.updateUserData(ctx, updateFn, options)
 	if err != nil {
 		return err
 	}
@@ -406,8 +407,7 @@ func (m *userDataManagerImpl) UpdateUserData(ctx context.Context, options UserDa
 func (m *userDataManagerImpl) updateUserData(
 	ctx context.Context,
 	updateFn UserDataUpdateFunc,
-	knownVersion int64,
-	taskQueueLimitPerBuildId int,
+	options UserDataUpdateOptions,
 ) (*persistencespb.VersionedTaskQueueUserData, bool, error) {
 	m.lock.Lock()
 	defer m.lock.Unlock()
@@ -422,17 +422,17 @@ func (m *userDataManagerImpl) updateUserData(
 	if preUpdateData == nil {
 		preUpdateData = &persistencespb.TaskQueueUserData{}
 	}
-	if knownVersion > 0 && preUpdateVersion != knownVersion {
-		return nil, false, serviceerror.NewFailedPrecondition(fmt.Sprintf("user data version mismatch: requested: %d, current: %d", knownVersion, preUpdateVersion))
+	if options.KnownVersion > 0 && preUpdateVersion != options.KnownVersion {
+		return nil, false, serviceerror.NewFailedPrecondition(fmt.Sprintf("user data version mismatch: requested: %d, current: %d", options.KnownVersion, preUpdateVersion))
 	}
 	updatedUserData, shouldReplicate, err := updateFn(preUpdateData)
 	if err != nil {
-		m.logger.Error("user data update function failed", tag.Error(err))
+		m.logger.Error("user data update function failed", tag.Error(err), tag.NewStringTag("user-data-update-source", options.Source))
 		return nil, false, err
 	}
 
 	added, removed := GetBuildIdDeltas(preUpdateData.GetVersioningData(), updatedUserData.GetVersioningData())
-	if taskQueueLimitPerBuildId > 0 && len(added) > 0 {
+	if options.TaskQueueLimitPerBuildId > 0 && len(added) > 0 {
 		// We iterate here but in practice there should only be a single build Id added when the limit is enforced.
 		// We do not enforce the limit when applying replication events.
 		for _, buildId := range added {
@@ -443,8 +443,8 @@ func (m *userDataManagerImpl) updateUserData(
 			if err != nil {
 				return nil, false, err
 			}
-			if numTaskQueues >= taskQueueLimitPerBuildId {
-				return nil, false, serviceerror.NewFailedPrecondition(fmt.Sprintf("Exceeded max task queues allowed to be mapped to a single build ID: %d", taskQueueLimitPerBuildId))
+			if numTaskQueues >= options.TaskQueueLimitPerBuildId {
+				return nil, false, serviceerror.NewFailedPrecondition(fmt.Sprintf("Exceeded max task queues allowed to be mapped to a single build ID: %d", options.TaskQueueLimitPerBuildId))
 			}
 		}
 	}
@@ -462,7 +462,7 @@ func (m *userDataManagerImpl) updateUserData(
 	}
 
 	updatedVersionedData := &persistencespb.VersionedTaskQueueUserData{Version: preUpdateVersion + 1, Data: updatedUserData}
-	m.logNewUserData("modified user data", updatedVersionedData)
+	m.logNewUserData("modified user data", updatedVersionedData, tag.NewStringTag("user-data-update-source", options.Source))
 	m.setUserDataLocked(updatedVersionedData)
 
 	return updatedVersionedData, shouldReplicate, err
@@ -547,9 +547,10 @@ func (m *userDataManagerImpl) callerInfoContext(ctx context.Context) context.Con
 	return headers.SetCallerInfo(ctx, headers.NewBackgroundCallerInfo(ns.String()))
 }
 
-func (m *userDataManagerImpl) logNewUserData(message string, data *persistencespb.VersionedTaskQueueUserData) {
+func (m *userDataManagerImpl) logNewUserData(message string, data *persistencespb.VersionedTaskQueueUserData, tags ...tag.Tag) {
 	m.logger.Info(message,
-		tag.UserDataVersion(data.GetVersion()),
-		tag.Timestamp(hybrid_logical_clock.UTC(data.GetData().GetClock())),
-	)
+		append(tags,
+			tag.UserDataVersion(data.GetVersion()),
+			tag.Timestamp(hybrid_logical_clock.UTC(data.GetData().GetClock())),
+		)...)
 }

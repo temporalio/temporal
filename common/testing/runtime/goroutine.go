@@ -121,7 +121,6 @@ func numGoRoutinesWithFn(fnName string) (int, error) {
 	stackRecords := make([]runtime.StackRecord, runtime.NumGoroutine()+20)
 	stackRecordsLen, ok := runtime.GoroutineProfile(stackRecords)
 	if !ok {
-		// nolint:goerr113 // Error is just for logging.
 		return 0, errors.New(fmt.Sprintf("Size %d is too small for stack records. Need %d", len(stackRecords), stackRecordsLen))
 	}
 
@@ -151,7 +150,6 @@ func functionName(fn any) (string, error) {
 		return fnName, nil
 	}
 
-	// nolint:goerr113 // Error is just for logging.
 	return "", errors.New(fmt.Sprintf("Invalid function %#v", fn))
 }
 

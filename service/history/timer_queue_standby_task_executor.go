@@ -36,6 +36,7 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -243,10 +244,12 @@ func (t *timerQueueStandbyTaskExecutor) executeActivityTimeoutTask(
 		// for updating workflow execution. In that case, only one new heartbeat timeout task should be
 		// created.
 		isHeartBeatTask := timerTask.TimeoutType == enumspb.TIMEOUT_TYPE_HEARTBEAT
-		activityInfo, heartbeatTimeoutVis, ok := mutableState.GetActivityInfoWithTimerHeartbeat(timerTask.EventID)
+		ai, heartbeatTimeoutVis, ok := mutableState.GetActivityInfoWithTimerHeartbeat(timerTask.EventID)
 		if isHeartBeatTask && ok && queues.IsTimeExpired(timerTask.GetVisibilityTime(), heartbeatTimeoutVis) {
-			activityInfo.TimerTaskStatus = activityInfo.TimerTaskStatus &^ workflow.TimerTaskStatusCreatedHeartbeat
-			if err := mutableState.UpdateActivity(activityInfo); err != nil {
+			err := mutableState.UpdateActivity(ai.ScheduledEventId, func(activityInfo *persistencespb.ActivityInfo, _ workflow.MutableState) {
+				activityInfo.TimerTaskStatus = activityInfo.TimerTaskStatus &^ workflow.TimerTaskStatusCreatedHeartbeat
+			})
+			if err != nil {
 				return nil, err
 			}
 			updateMutableState = true
@@ -317,11 +320,14 @@ func (t *timerQueueStandbyTaskExecutor) executeActivityRetryTimerTask(
 			return nil, err
 		}
 
-		if activityInfo.Attempt > task.Attempt {
-			return nil, nil
-		}
-
-		if activityInfo.StartedEventId != common.EmptyEventID {
+		// we ignore retry timer task if:
+		// * this retry task is from old Stamp.
+		// * attempts is not the same as recorded in activity info.
+		// * activity is already started.
+		if activityInfo.Attempt > task.Attempt ||
+			activityInfo.Stamp != task.Stamp ||
+			activityInfo.StartedEventId != common.EmptyEventID ||
+			activityInfo.Paused {
 			return nil, nil
 		}
 
@@ -520,15 +526,9 @@ func (t *timerQueueStandbyTaskExecutor) executeStateMachineTimerTask(
 			wfContext,
 			mutableState,
 			func(node *hsm.Node, task hsm.Task) error {
-				if task.Concurrent() {
-					//nolint:revive // concurrent tasks implements hsm.ConcurrentTask interface
-					concurrentTask := task.(hsm.ConcurrentTask)
-					if err := concurrentTask.Validate(node); err != nil {
-						return err
-					}
-				}
-				// If the timer fired and the task is still valid in the standby queue, wait for the active cluster to
-				// transition and invalidate the task.
+				// If this line of code is reached, the task's Validate() function returned no error, which indicates
+				// that it is still expected to run. Return ErrTaskRetry to wait the machine to transition on the active
+				// cluster.
 				return consts.ErrTaskRetry
 			},
 		)
@@ -747,6 +747,7 @@ func (t *timerQueueStandbyTaskExecutor) pushActivity(
 		ScheduleToStartTimeout: durationpb.New(activityScheduleToStartTimeout),
 		Clock:                  vclock.NewVectorClock(t.shardContext.GetClusterMetadata().GetClusterID(), t.shardContext.GetShardID(), activityTask.TaskID),
 		VersionDirective:       pushActivityInfo.versionDirective,
+		Stamp:                  activityTask.Stamp,
 	})
 
 	if err != nil {
@@ -765,7 +766,7 @@ func (t *timerQueueStandbyTaskExecutor) pushActivity(
 		t.shardContext,
 		workflow.TransactionPolicyPassive,
 		t.cache,
-		t.metricHandler,
+		t.metricsHandler,
 		t.logger,
 	)
 }

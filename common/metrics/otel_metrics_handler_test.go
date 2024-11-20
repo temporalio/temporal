@@ -119,7 +119,8 @@ func TestMeter(t *testing.T) {
 			Data: metricdata.Sum[int64]{
 				DataPoints: []metricdata.DataPoint[int64]{
 					{
-						Value: 8,
+						Value:     8,
+						Exemplars: []metricdata.Exemplar[int64]{},
 					},
 				},
 				Temporality: metricdata.CumulativeTemporality,
@@ -133,6 +134,7 @@ func TestMeter(t *testing.T) {
 					{
 						Attributes: attribute.NewSet(attribute.String("taskqueue", "__sticky__")),
 						Value:      11,
+						Exemplars:  []metricdata.Exemplar[int64]{},
 					},
 				},
 				Temporality: metricdata.CumulativeTemporality,
@@ -147,6 +149,7 @@ func TestMeter(t *testing.T) {
 
 						Attributes: attribute.NewSet(attribute.String("taskqueue", tagExcludedValue)),
 						Value:      14,
+						Exemplars:  []metricdata.Exemplar[int64]{},
 					},
 				},
 				Temporality: metricdata.CumulativeTemporality,
@@ -163,6 +166,7 @@ func TestMeter(t *testing.T) {
 						Min:          metricdata.NewExtrema[int64](int64(minLatency)),
 						Max:          metricdata.NewExtrema[int64](int64(maxLatency)),
 						Sum:          6503,
+						Exemplars:    []metricdata.Exemplar[int64]{},
 					},
 				},
 				Temporality: metricdata.CumulativeTemporality,
@@ -176,6 +180,7 @@ func TestMeter(t *testing.T) {
 					{
 						Attributes: attribute.NewSet(attribute.String("location", "Mare Imbrium")),
 						Value:      100,
+						Exemplars:  []metricdata.Exemplar[float64]{},
 					},
 				},
 			},
@@ -190,6 +195,7 @@ func TestMeter(t *testing.T) {
 						Min:          metricdata.NewExtrema[int64](int64(testBytes)),
 						Max:          metricdata.NewExtrema[int64](int64(testBytes)),
 						Sum:          int64(testBytes),
+						Exemplars:    []metricdata.Exemplar[int64]{},
 					},
 				},
 				Temporality: metricdata.CumulativeTemporality,

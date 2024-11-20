@@ -55,10 +55,11 @@ func NewExecutableSyncVersionedTransitionTask(
 	taskID int64,
 	taskCreationTime time.Time,
 	sourceClusterName string,
+	sourceShardKey ClusterShardKey,
 	replicationTask *replicationspb.ReplicationTask,
-) *ExecutableVerifyVersionedTransitionTask {
-	task := replicationTask.GetVerifyVersionedTransitionTaskAttributes()
-	return &ExecutableVerifyVersionedTransitionTask{
+) *ExecutableSyncVersionedTransitionTask {
+	task := replicationTask.GetSyncVersionedTransitionTaskAttributes()
+	return &ExecutableSyncVersionedTransitionTask{
 		ProcessToolBox: processToolBox,
 
 		WorkflowKey: definition.NewWorkflowKey(task.NamespaceId, task.WorkflowId, task.RunId),
@@ -69,6 +70,7 @@ func NewExecutableSyncVersionedTransitionTask(
 			taskCreationTime,
 			time.Now().UTC(),
 			sourceClusterName,
+			sourceShardKey,
 			replicationTask.Priority,
 			replicationTask,
 		),
@@ -137,7 +139,6 @@ func (e *ExecutableSyncVersionedTransitionTask) HandleErr(err error) error {
 
 		if doContinue, syncStateErr := e.SyncState(
 			ctx,
-			e.ExecutableTask.SourceClusterName(),
 			taskErr,
 			ResendAttempt,
 		); syncStateErr != nil || !doContinue {
@@ -165,7 +166,7 @@ func (e *ExecutableSyncVersionedTransitionTask) HandleErr(err error) error {
 		}
 		return e.Execute()
 	default:
-		e.Logger.Error("VerifyVersionedTransition replication task encountered error",
+		e.Logger.Error("Sync Versioned Transition replication task encountered error",
 			tag.WorkflowNamespaceID(e.NamespaceID),
 			tag.WorkflowID(e.WorkflowID),
 			tag.WorkflowRunID(e.RunID),

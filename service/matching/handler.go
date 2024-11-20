@@ -413,6 +413,14 @@ func (h *Handler) ForceUnloadTaskQueue(
 	return h.engine.ForceUnloadTaskQueue(ctx, request)
 }
 
+func (h *Handler) ForceUnloadTaskQueuePartition(
+	ctx context.Context,
+	request *matchingservice.ForceUnloadTaskQueuePartitionRequest,
+) (_ *matchingservice.ForceUnloadTaskQueuePartitionResponse, retError error) {
+	defer log.CapturePanic(h.logger, &retError)
+	return h.engine.ForceUnloadTaskQueuePartition(ctx, request)
+}
+
 func (h *Handler) ForceLoadTaskQueuePartition(
 	ctx context.Context,
 	request *matchingservice.ForceLoadTaskQueuePartitionRequest,

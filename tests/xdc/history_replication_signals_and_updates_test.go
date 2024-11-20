@@ -22,20 +22,17 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-//go:build !race
-
-// need to run xdc tests with race detector off because of ringpop bug causing data race issue
-
 package xdc
 
 import (
 	"context"
 	"errors"
-	"flag"
 	"fmt"
+	"sync"
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/suite"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
@@ -58,7 +55,7 @@ import (
 	"go.temporal.io/server/common/testing/protoutils"
 	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/service/history/replication"
-	"go.temporal.io/server/tests"
+	"go.temporal.io/server/tests/testcore"
 	"go.uber.org/fx"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
@@ -78,6 +75,7 @@ type (
 		// able to route tasks to test-specific (i.e. workflow-specific) buffers. The following two maps serve that
 		// purpose (each test registers itself in these maps as it starts). Workflow ID and namespace name are both
 		// unique per test (due to the use of TestVars).
+		testMapLock          sync.Mutex
 		testsByWorkflowId    map[string]*hrsuTest
 		testsByNamespaceName map[string]*hrsuTest
 	}
@@ -94,7 +92,7 @@ type (
 	}
 	hrsuTestCluster struct {
 		name        string
-		testCluster *tests.TestCluster
+		testCluster *testcore.TestCluster
 		client      sdkclient.Client
 		// Per-test, per-cluster buffer of history event replication tasks
 		inboundHistoryReplicationTasks chan *hrsuTestExecutableTask
@@ -125,7 +123,7 @@ const (
 )
 
 func TestHistoryReplicationSignalsAndUpdatesTestSuite(t *testing.T) {
-	flag.Parse()
+	t.Parallel()
 	suite.Run(t, new(hrsuTestSuite))
 }
 
@@ -136,7 +134,7 @@ func (s *hrsuTestSuite) SetupSuite() {
 	s.logger = log.NewTestLogger()
 	s.setupSuite(
 		[]string{"cluster1", "cluster2"},
-		tests.WithFxOptionsForService(primitives.WorkerService,
+		testcore.WithFxOptionsForService(primitives.WorkerService,
 			fx.Decorate(
 				func(executor namespace.ReplicationTaskExecutor) namespace.ReplicationTaskExecutor {
 					s.namespaceTaskExecutor = executor
@@ -147,7 +145,7 @@ func (s *hrsuTestSuite) SetupSuite() {
 				},
 			),
 		),
-		tests.WithFxOptionsForService(primitives.HistoryService,
+		testcore.WithFxOptionsForService(primitives.HistoryService,
 			fx.Decorate(
 				func(converter replication.ExecutableTaskConverter) replication.ExecutableTaskConverter {
 					return &hrsuTestExecutableTaskConverter{
@@ -180,8 +178,10 @@ func (s *hrsuTestSuite) startHrsuTest() (*hrsuTest, context.Context, context.Can
 		s:                         s,
 	}
 	// Register test with the suite, so that globally modified task executors can push tasks to test-specific buffers.
+	s.testMapLock.Lock()
 	s.testsByWorkflowId[tv.WorkflowID()] = &t
 	s.testsByNamespaceName[ns] = &t
+	s.testMapLock.Unlock()
 
 	t.cluster1 = t.newHrsuTestCluster(ns, s.clusterNames[0], s.cluster1)
 	t.cluster2 = t.newHrsuTestCluster(ns, s.clusterNames[1], s.cluster2)
@@ -189,9 +189,9 @@ func (s *hrsuTestSuite) startHrsuTest() (*hrsuTest, context.Context, context.Can
 	return &t, ctx, cancel
 }
 
-func (t *hrsuTest) newHrsuTestCluster(ns string, name string, cluster *tests.TestCluster) hrsuTestCluster {
+func (t *hrsuTest) newHrsuTestCluster(ns string, name string, cluster *testcore.TestCluster) hrsuTestCluster {
 	sdkClient, err := sdkclient.Dial(sdkclient.Options{
-		HostPort:  cluster.GetHost().FrontendGRPCAddress(),
+		HostPort:  cluster.Host().FrontendGRPCAddress(),
 		Namespace: ns,
 		Logger:    log.NewSdkLogger(t.s.logger),
 	})
@@ -256,17 +256,17 @@ func (s *hrsuTestSuite) TestConflictResolutionReappliesSignals() {
 	s.NoError(t.cluster2.client.SignalWorkflow(ctx, t.tv.WorkflowID(), t.tv.RunID(), "my-signal", "cluster2-signal"))
 
 	// cluster1 has accepted a signal
-	s.HistoryRequire.EqualHistoryEvents(`
-	1 1 WorkflowExecutionStarted
-	2 1 WorkflowTaskScheduled
-	3 1 WorkflowExecutionSignaled {"Input": {"Payloads": [{"Data": "\"cluster1-signal\""}]}}
+	s.EqualHistoryEvents(`
+	1 v1 WorkflowExecutionStarted
+	2 v1 WorkflowTaskScheduled
+	3 v1 WorkflowExecutionSignaled {"Input": {"Payloads": [{"Data": "\"cluster1-signal\""}]}}
 	`, t.cluster1.getHistory(ctx))
 
 	// cluster2 has also accepted a signal (with failover version 2 since it is endogenous to cluster 2)
-	s.HistoryRequire.EqualHistoryEvents(`
-	1 1 WorkflowExecutionStarted
-	2 1 WorkflowTaskScheduled
-	3 2 WorkflowExecutionSignaled {"Input": {"Payloads": [{"Data": "\"cluster2-signal\""}]}}
+	s.EqualHistoryEvents(`
+	1 v1 WorkflowExecutionStarted
+	2 v1 WorkflowTaskScheduled
+	3 v2 WorkflowExecutionSignaled {"Input": {"Payloads": [{"Data": "\"cluster2-signal\""}]}}
 	`, t.cluster2.getHistory(ctx))
 
 	// Execute pending history replication tasks. Each cluster sends its signal to the other, but these have the same
@@ -275,20 +275,20 @@ func (s *hrsuTestSuite) TestConflictResolutionReappliesSignals() {
 	// cluster2 sends its signal to cluster1. Since it has a higher failover version, it supersedes the endogenous
 	// signal in cluster1.
 	t.cluster1.executeHistoryReplicationTasksUntil(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED)
-	s.HistoryRequire.EqualHistoryEvents(`
-	1 1 WorkflowExecutionStarted
-	2 1 WorkflowTaskScheduled
-	3 2 WorkflowExecutionSignaled {"Input": {"Payloads": [{"Data": "\"cluster2-signal\""}]}}
+	s.EqualHistoryEvents(`
+	1 v1 WorkflowExecutionStarted
+	2 v1 WorkflowTaskScheduled
+	3 v2 WorkflowExecutionSignaled {"Input": {"Payloads": [{"Data": "\"cluster2-signal\""}]}}
 	`, t.cluster1.getHistory(ctx))
 
 	// cluster1 sends its signal to cluster2. Since it has a lower failover version, it is reapplied after the
 	// endogenous cluster 2 signal.
 	t.cluster2.executeHistoryReplicationTasksUntil(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED)
-	s.HistoryRequire.EqualHistoryEvents(`
-	1 1 WorkflowExecutionStarted
-	2 1 WorkflowTaskScheduled
-	3 2 WorkflowExecutionSignaled {"Input": {"Payloads": [{"Data": "\"cluster2-signal\""}]}}
-	4 2 WorkflowExecutionSignaled {"Input": {"Payloads": [{"Data": "\"cluster1-signal\""}]}}
+	s.EqualHistoryEvents(`
+	1 v1 WorkflowExecutionStarted
+	2 v1 WorkflowTaskScheduled
+	3 v2 WorkflowExecutionSignaled {"Input": {"Payloads": [{"Data": "\"cluster2-signal\""}]}}
+	4 v2 WorkflowExecutionSignaled {"Input": {"Payloads": [{"Data": "\"cluster1-signal\""}]}}
 	`, t.cluster2.getHistory(ctx))
 
 	// Cluster2 sends the reapplied signal to cluster1, bringing the cluster histories into agreement.
@@ -314,24 +314,24 @@ func (s *hrsuTestSuite) TestConflictResolutionReappliesUpdates() {
 	t.cluster2.executeHistoryReplicationTasksUntil(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ACCEPTED)
 
 	// cluster1 has received an update with failover version 2 which superseded its own update.
-	s.HistoryRequire.EqualHistoryEvents(fmt.Sprintf(`
-	1 1 WorkflowExecutionStarted
-	2 1 WorkflowTaskScheduled
-	3 2 WorkflowTaskStarted
-	4 2 WorkflowTaskCompleted
-	5 2 WorkflowExecutionUpdateAccepted {"ProtocolInstanceId": "%s", "AcceptedRequest": {"Input": {"Args": {"Payloads": [{"Data": "\"cluster2-update-input\""}]}}}}
+	s.EqualHistoryEvents(fmt.Sprintf(`
+	1 v1 WorkflowExecutionStarted
+	2 v1 WorkflowTaskScheduled
+	3 v2 WorkflowTaskStarted
+	4 v2 WorkflowTaskCompleted
+	5 v2 WorkflowExecutionUpdateAccepted {"ProtocolInstanceId": "%s", "AcceptedRequest": {"Input": {"Args": {"Payloads": [{"Data": "\"cluster2-update-input\""}]}}}}
 	`, cluster2UpdateId), t.cluster1.getHistory(ctx))
 
 	// cluster2 has reapplied the accepted update from cluster 1 on top of its own update, changing it from state
 	// Accepted to state Admitted, since it must be submitted to the validator on the new branch.
-	s.HistoryRequire.EqualHistoryEvents(fmt.Sprintf(`
-	1 1 WorkflowExecutionStarted
-	2 1 WorkflowTaskScheduled
-	3 2 WorkflowTaskStarted
-	4 2 WorkflowTaskCompleted
-	5 2 WorkflowExecutionUpdateAccepted {"ProtocolInstanceId": "%s", "AcceptedRequest": {"Input": {"Args": {"Payloads": [{"Data": "\"cluster2-update-input\""}]}}}}
-	6 2 WorkflowExecutionUpdateAdmitted {"Request": {"Meta": {"UpdateId": "%s"}, "Input": {"Args": {"Payloads": [{"Data": "\"cluster1-update-input\""}]}}}}
-	7 2 WorkflowTaskScheduled
+	s.EqualHistoryEvents(fmt.Sprintf(`
+	1 v1 WorkflowExecutionStarted
+	2 v1 WorkflowTaskScheduled
+	3 v2 WorkflowTaskStarted
+	4 v2 WorkflowTaskCompleted
+	5 v2 WorkflowExecutionUpdateAccepted {"ProtocolInstanceId": "%s", "AcceptedRequest": {"Input": {"Args": {"Payloads": [{"Data": "\"cluster2-update-input\""}]}}}}
+	6 v2 WorkflowExecutionUpdateAdmitted {"Request": {"Meta": {"UpdateId": "%s"}, "Input": {"Args": {"Payloads": [{"Data": "\"cluster1-update-input\""}]}}}}
+	7 v2 WorkflowTaskScheduled
 	`, cluster2UpdateId, cluster1UpdateId), t.cluster2.getHistory(ctx))
 
 	// Cluster2 sends the reapplied update to cluster1, bringing the cluster histories into agreement.
@@ -339,17 +339,17 @@ func (s *hrsuTestSuite) TestConflictResolutionReappliesUpdates() {
 	s.EqualValues(t.cluster1.getHistory(ctx), t.cluster2.getHistory(ctx))
 
 	s.NoError(t.cluster2.pollAndCompleteUpdate(cluster2UpdateId))
-	s.HistoryRequire.EqualHistoryEvents(fmt.Sprintf(`
-	1 1 WorkflowExecutionStarted
-	2 1 WorkflowTaskScheduled
-	3 2 WorkflowTaskStarted
-	4 2 WorkflowTaskCompleted
-	5 2 WorkflowExecutionUpdateAccepted {"ProtocolInstanceId": "%s", "AcceptedRequest": {"Input": {"Args": {"Payloads": [{"Data": "\"cluster2-update-input\""}]}}}}
-	6 2 WorkflowExecutionUpdateAdmitted {"Request": {"Meta": {"UpdateId": "%s"}, "Input": {"Args": {"Payloads": [{"Data": "\"cluster1-update-input\""}]}}}}
-	7 2 WorkflowTaskScheduled
-	8 2 WorkflowTaskStarted
-	9 2 WorkflowTaskCompleted
-   10 2 WorkflowExecutionUpdateCompleted {"Meta": {"UpdateId": "%s"}}
+	s.EqualHistoryEvents(fmt.Sprintf(`
+	1 v1 WorkflowExecutionStarted
+	2 v1 WorkflowTaskScheduled
+	3 v2 WorkflowTaskStarted
+	4 v2 WorkflowTaskCompleted
+	5 v2 WorkflowExecutionUpdateAccepted {"ProtocolInstanceId": "%s", "AcceptedRequest": {"Input": {"Args": {"Payloads": [{"Data": "\"cluster2-update-input\""}]}}}}
+	6 v2 WorkflowExecutionUpdateAdmitted {"Request": {"Meta": {"UpdateId": "%s"}, "Input": {"Args": {"Payloads": [{"Data": "\"cluster1-update-input\""}]}}}}
+	7 v2 WorkflowTaskScheduled
+	8 v2 WorkflowTaskStarted
+	9 v2 WorkflowTaskCompleted
+   10 v2 WorkflowExecutionUpdateCompleted {"Meta": {"UpdateId": "%s"}}
   `, cluster2UpdateId, cluster1UpdateId, cluster2UpdateId), t.cluster2.getHistory(ctx))
 }
 
@@ -375,12 +375,12 @@ func (s *hrsuTestSuite) TestConflictResolutionDoesNotReapplyAcceptedUpdateWithCo
 	// we must not reapply it. The result is that both clusters have the same history; the update accepted in cluster 1
 	// has been dropped.
 	for _, c := range []hrsuTestCluster{t.cluster1, t.cluster2} {
-		t.s.HistoryRequire.EqualHistoryEvents(`
-	1 1 WorkflowExecutionStarted
-	2 1 WorkflowTaskScheduled
-	3 2 WorkflowTaskStarted
-	4 2 WorkflowTaskCompleted
-	5 2 WorkflowExecutionUpdateAccepted {"ProtocolInstanceId": "update-id", "AcceptedRequest": {"Input": {"Args": {"Payloads": [{"Data": "\"cluster2-update-input\""}]}}}}
+		t.s.EqualHistoryEvents(`
+	1 v1 WorkflowExecutionStarted
+	2 v1 WorkflowTaskScheduled
+	3 v2 WorkflowTaskStarted
+	4 v2 WorkflowTaskCompleted
+	5 v2 WorkflowExecutionUpdateAccepted {"ProtocolInstanceId": "update-id", "AcceptedRequest": {"Input": {"Args": {"Payloads": [{"Data": "\"cluster2-update-input\""}]}}}}
 	`, c.getHistory(ctx))
 	}
 }
@@ -408,13 +408,13 @@ func (s *hrsuTestSuite) TestConflictResolutionDoesNotReapplyCompleteUpdateWithCo
 	// we must not reapply it. The result is that both clusters have the same history; the update accepted in cluster 1
 	// has been dropped.
 	for _, c := range []hrsuTestCluster{t.cluster1, t.cluster2} {
-		t.s.HistoryRequire.EqualHistoryEvents(`
-	1 1 WorkflowExecutionStarted
-	2 1 WorkflowTaskScheduled
-	3 2 WorkflowTaskStarted
-	4 2 WorkflowTaskCompleted
-	5 2 WorkflowExecutionUpdateAccepted {"ProtocolInstanceId": "update-id", "AcceptedRequest": {"Input": {"Args": {"Payloads": [{"Data": "\"cluster2-update-input\""}]}}}}
-	6 2 WorkflowExecutionUpdateCompleted {"Meta":{"UpdateId":"update-id"}}
+		t.s.EqualHistoryEvents(`
+	1 v1 WorkflowExecutionStarted
+	2 v1 WorkflowTaskScheduled
+	3 v2 WorkflowTaskStarted
+	4 v2 WorkflowTaskCompleted
+	5 v2 WorkflowExecutionUpdateAccepted {"ProtocolInstanceId": "update-id", "AcceptedRequest": {"Input": {"Args": {"Payloads": [{"Data": "\"cluster2-update-input\""}]}}}}
+	6 v2 WorkflowExecutionUpdateCompleted {"Meta":{"UpdateId":"update-id"}}
 		`, c.getHistory(ctx))
 	}
 }
@@ -433,12 +433,12 @@ func (s *hrsuTestSuite) TestConflictResolutionDoesNotReapplyAdmittedUpdateWithCo
 	t.enterSplitBrainStateAndAcceptUpdatesInBothClusters(ctx, "update-id", "update-id")
 	for i, c := range []hrsuTestCluster{t.cluster1, t.cluster2} {
 		clusterId := i + 1
-		t.s.HistoryRequire.EqualHistoryEvents(fmt.Sprintf(`
-	1 1 WorkflowExecutionStarted
-	2 1 WorkflowTaskScheduled
-	3 %[1]d WorkflowTaskStarted
-	4 %[1]d WorkflowTaskCompleted
-	5 %[1]d WorkflowExecutionUpdateAccepted {"ProtocolInstanceId": "update-id", "AcceptedRequest": {"Input": {"Args": {"Payloads": [{"Data": "\"cluster%[1]d-update-input\""}]}}}}
+		t.s.EqualHistoryEvents(fmt.Sprintf(`
+	1 v1 WorkflowExecutionStarted
+	2 v1 WorkflowTaskScheduled
+	3 v%[1]d WorkflowTaskStarted
+	4 v%[1]d WorkflowTaskCompleted
+	5 v%[1]d WorkflowExecutionUpdateAccepted {"ProtocolInstanceId": "update-id", "AcceptedRequest": {"Input": {"Args": {"Payloads": [{"Data": "\"cluster%[1]d-update-input\""}]}}}}
 	`, clusterId), c.getHistory(ctx))
 	}
 	// Perform a reset in each cluster; this converts the UpdateAccepted events to UpdateAdmitted events.
@@ -447,13 +447,13 @@ func (s *hrsuTestSuite) TestConflictResolutionDoesNotReapplyAdmittedUpdateWithCo
 	for i, c := range []hrsuTestCluster{t.cluster1, t.cluster2} {
 		clusterId := i + 1
 		resetRunIds = append(resetRunIds, c.resetWorkflow(ctx, int64(workflowTaskCompletedId)))
-		t.s.HistoryRequire.EqualHistoryEvents(fmt.Sprintf(`
-	1 1 WorkflowExecutionStarted
-	2 1 WorkflowTaskScheduled
-	3 %[1]d WorkflowTaskStarted
-	4 %[1]d WorkflowTaskFailed
-	5 %[1]d WorkflowExecutionUpdateAdmitted {"Request": {"Meta": {"UpdateId": "update-id"}, "Input": {"Args": {"Payloads": [{"Data": "\"cluster%[1]d-update-input\""}]}}}}
-	6 %[1]d WorkflowTaskScheduled
+		t.s.EqualHistoryEvents(fmt.Sprintf(`
+	1 v1 WorkflowExecutionStarted
+	2 v1 WorkflowTaskScheduled
+	3 v%[1]d WorkflowTaskStarted
+	4 v%[1]d WorkflowTaskFailed
+	5 v%[1]d WorkflowExecutionUpdateAdmitted {"Request": {"Meta": {"UpdateId": "update-id"}, "Input": {"Args": {"Payloads": [{"Data": "\"cluster%[1]d-update-input\""}]}}}}
+	6 v%[1]d WorkflowTaskScheduled
 	`, clusterId), c.getHistoryForRunId(ctx, resetRunIds[i]))
 	}
 	// Execute pending history replication tasks. Each cluster sends its update to the other, triggering conflict
@@ -470,13 +470,13 @@ func (s *hrsuTestSuite) TestConflictResolutionDoesNotReapplyAdmittedUpdateWithCo
 		// reapplied. But since it has the same update ID as the cluster 1 update, and since that update is not completed,
 		// we must not reapply it. The result is that both clusters have the same history; the update admitted in cluster 1
 		// has been dropped.
-		t.s.HistoryRequire.EqualHistoryEvents(`
-	1 1 WorkflowExecutionStarted
-	2 1 WorkflowTaskScheduled
-	3 2 WorkflowTaskStarted
-	4 2 WorkflowTaskFailed
-	5 2 WorkflowExecutionUpdateAdmitted {"Request": {"Meta": {"UpdateId": "update-id"}, "Input": {"Args": {"Payloads": [{"Data": "\"cluster2-update-input\""}]}}}}
-	6 2 WorkflowTaskScheduled
+		t.s.EqualHistoryEvents(`
+	1 v1 WorkflowExecutionStarted
+	2 v1 WorkflowTaskScheduled
+	3 v2 WorkflowTaskStarted
+	4 v2 WorkflowTaskFailed
+	5 v2 WorkflowExecutionUpdateAdmitted {"Request": {"Meta": {"UpdateId": "update-id"}, "Input": {"Args": {"Payloads": [{"Data": "\"cluster2-update-input\""}]}}}}
+	6 v2 WorkflowTaskScheduled
 	`, c.getHistoryForRunId(ctx, activeRunId))
 	}
 }
@@ -488,12 +488,12 @@ func (t *hrsuTest) startAndAcceptUpdateInCluster1ThenFailoverTo2AndCompleteUpdat
 	t.cluster2.executeHistoryReplicationTasksUntil(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ACCEPTED)
 
 	for _, c := range []hrsuTestCluster{t.cluster1, t.cluster2} {
-		t.s.HistoryRequire.EqualHistoryEvents(`
-		1 1 WorkflowExecutionStarted
-		2 1 WorkflowTaskScheduled
-		3 1 WorkflowTaskStarted
-		4 1 WorkflowTaskCompleted
-		5 1 WorkflowExecutionUpdateAccepted {"ProtocolInstanceId": "cluster1-update-id", "AcceptedRequest": {"Input": {"Args": {"Payloads": [{"Data": "\"cluster1-update-input\""}]}}}}
+		t.s.EqualHistoryEvents(`
+		1 v1 WorkflowExecutionStarted
+		2 v1 WorkflowTaskScheduled
+		3 v1 WorkflowTaskStarted
+		4 v1 WorkflowTaskCompleted
+		5 v1 WorkflowExecutionUpdateAccepted {"ProtocolInstanceId": "cluster1-update-id", "AcceptedRequest": {"Input": {"Args": {"Payloads": [{"Data": "\"cluster1-update-input\""}]}}}}
 		`, c.getHistory(ctx))
 	}
 
@@ -508,17 +508,17 @@ func (t *hrsuTest) startAndAcceptUpdateInCluster1ThenFailoverTo2AndCompleteUpdat
 	// Complete the update in  cluster 2 after the failover.
 	t.s.NoError(t.cluster2.pollAndCompleteUpdate("cluster1-update-id"))
 
-	t.s.HistoryRequire.EqualHistoryEvents(`
-	1 1 WorkflowExecutionStarted
-	2 1 WorkflowTaskScheduled
-	3 1 WorkflowTaskStarted
-	4 1 WorkflowTaskCompleted
-	5 1 WorkflowExecutionUpdateAccepted {"ProtocolInstanceId": "cluster1-update-id", "AcceptedRequest": {"Input": {"Args": {"Payloads": [{"Data": "\"cluster1-update-input\""}]}}}}
-	6 2 WorkflowExecutionSignaled
-	7 2 WorkflowTaskScheduled
-	8 2 WorkflowTaskStarted
-	9 2 WorkflowTaskCompleted
-   10 2 WorkflowExecutionUpdateCompleted {"Meta": {"UpdateId": "cluster1-update-id"}}
+	t.s.EqualHistoryEvents(`
+	1 v1 WorkflowExecutionStarted
+	2 v1 WorkflowTaskScheduled
+	3 v1 WorkflowTaskStarted
+	4 v1 WorkflowTaskCompleted
+	5 v1 WorkflowExecutionUpdateAccepted {"ProtocolInstanceId": "cluster1-update-id", "AcceptedRequest": {"Input": {"Args": {"Payloads": [{"Data": "\"cluster1-update-input\""}]}}}}
+	6 v2 WorkflowExecutionSignaled
+	7 v2 WorkflowTaskScheduled
+	8 v2 WorkflowTaskStarted
+	9 v2 WorkflowTaskCompleted
+   10 v2 WorkflowExecutionUpdateCompleted {"Meta": {"UpdateId": "cluster1-update-id"}}
 	`, t.cluster2.getHistory(ctx))
 }
 
@@ -528,21 +528,21 @@ func (t *hrsuTest) startAndAcceptUpdateInCluster2ThenFailoverTo1AndCompleteUpdat
 	t.cluster1.executeHistoryReplicationTasksUntil(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ACCEPTED)
 
 	for _, c := range []hrsuTestCluster{t.cluster1, t.cluster2} {
-		t.s.HistoryRequire.EqualHistoryEvents(`
-		1 1 WorkflowExecutionStarted
-		2 1 WorkflowTaskScheduled
-		3 1 WorkflowTaskStarted
-		4 1 WorkflowTaskCompleted
-		5 1 WorkflowExecutionUpdateAccepted {"ProtocolInstanceId": "cluster1-update-id", "AcceptedRequest": {"Input": {"Args": {"Payloads": [{"Data": "\"cluster1-update-input\""}]}}}}
-		6 2 WorkflowExecutionSignaled
-		7 2 WorkflowTaskScheduled
-		8 2 WorkflowTaskStarted
-		9 2 WorkflowTaskCompleted
-	   10 2 WorkflowExecutionUpdateCompleted {"Meta": {"UpdateId": "cluster1-update-id"}}
-	   11 2 WorkflowTaskScheduled
-	   12 2 WorkflowTaskStarted
-	   13 2 WorkflowTaskCompleted
-	   14 2 WorkflowExecutionUpdateAccepted {"ProtocolInstanceId": "cluster2-update-id", "AcceptedRequest": {"Input": {"Args": {"Payloads": [{"Data": "\"cluster2-update-input\""}]}}}}
+		t.s.EqualHistoryEvents(`
+		1 v1 WorkflowExecutionStarted
+		2 v1 WorkflowTaskScheduled
+		3 v1 WorkflowTaskStarted
+		4 v1 WorkflowTaskCompleted
+		5 v1 WorkflowExecutionUpdateAccepted {"ProtocolInstanceId": "cluster1-update-id", "AcceptedRequest": {"Input": {"Args": {"Payloads": [{"Data": "\"cluster1-update-input\""}]}}}}
+		6 v2 WorkflowExecutionSignaled
+		7 v2 WorkflowTaskScheduled
+		8 v2 WorkflowTaskStarted
+		9 v2 WorkflowTaskCompleted
+	   10 v2 WorkflowExecutionUpdateCompleted {"Meta": {"UpdateId": "cluster1-update-id"}}
+	   11 v2 WorkflowTaskScheduled
+	   12 v2 WorkflowTaskStarted
+	   13 v2 WorkflowTaskCompleted
+	   14 v2 WorkflowExecutionUpdateAccepted {"ProtocolInstanceId": "cluster2-update-id", "AcceptedRequest": {"Input": {"Args": {"Payloads": [{"Data": "\"cluster2-update-input\""}]}}}}
 	   `, c.getHistory(ctx))
 	}
 
@@ -552,26 +552,26 @@ func (t *hrsuTest) startAndAcceptUpdateInCluster2ThenFailoverTo1AndCompleteUpdat
 	t.s.NoError(t.cluster1.client.SignalWorkflow(ctx, t.tv.WorkflowID(), t.tv.RunID(), "my-signal", "cluster1-signal"))
 	t.s.NoError(t.cluster1.pollAndCompleteUpdate("cluster2-update-id"))
 
-	t.s.HistoryRequire.EqualHistoryEvents(`
-	1  1 WorkflowExecutionStarted
-	2  1 WorkflowTaskScheduled
-	3  1 WorkflowTaskStarted
-	4  1 WorkflowTaskCompleted
-	5  1 WorkflowExecutionUpdateAccepted {"ProtocolInstanceId": "cluster1-update-id", "AcceptedRequest": {"Input": {"Args": {"Payloads": [{"Data": "\"cluster1-update-input\""}]}}}}
-	6  2 WorkflowExecutionSignaled
-	7  2 WorkflowTaskScheduled
-	8  2 WorkflowTaskStarted
-	9  2 WorkflowTaskCompleted
-   10  2 WorkflowExecutionUpdateCompleted {"Meta": {"UpdateId": "cluster1-update-id"}}
-   11  2 WorkflowTaskScheduled
-   12  2 WorkflowTaskStarted
-   13  2 WorkflowTaskCompleted
-   14  2 WorkflowExecutionUpdateAccepted {"ProtocolInstanceId": "cluster2-update-id", "AcceptedRequest": {"Input": {"Args": {"Payloads": [{"Data": "\"cluster2-update-input\""}]}}}}
-   15 11 WorkflowExecutionSignaled
-   16 11 WorkflowTaskScheduled
-   17 11 WorkflowTaskStarted
-   18 11 WorkflowTaskCompleted
-   19 11 WorkflowExecutionUpdateCompleted {"Meta": {"UpdateId": "cluster2-update-id"}}
+	t.s.EqualHistoryEvents(`
+	1  v1 WorkflowExecutionStarted
+	2  v1 WorkflowTaskScheduled
+	3  v1 WorkflowTaskStarted
+	4  v1 WorkflowTaskCompleted
+	5  v1 WorkflowExecutionUpdateAccepted {"ProtocolInstanceId": "cluster1-update-id", "AcceptedRequest": {"Input": {"Args": {"Payloads": [{"Data": "\"cluster1-update-input\""}]}}}}
+	6  v2 WorkflowExecutionSignaled
+	7  v2 WorkflowTaskScheduled
+	8  v2 WorkflowTaskStarted
+	9  v2 WorkflowTaskCompleted
+   10  v2 WorkflowExecutionUpdateCompleted {"Meta": {"UpdateId": "cluster1-update-id"}}
+   11  v2 WorkflowTaskScheduled
+   12  v2 WorkflowTaskStarted
+   13  v2 WorkflowTaskCompleted
+   14  v2 WorkflowExecutionUpdateAccepted {"ProtocolInstanceId": "cluster2-update-id", "AcceptedRequest": {"Input": {"Args": {"Payloads": [{"Data": "\"cluster2-update-input\""}]}}}}
+   15 v11 WorkflowExecutionSignaled
+   16 v11 WorkflowTaskScheduled
+   17 v11 WorkflowTaskStarted
+   18 v11 WorkflowTaskCompleted
+   19 v11 WorkflowExecutionUpdateCompleted {"Meta": {"UpdateId": "cluster2-update-id"}}
    `, t.cluster1.getHistory(ctx))
 }
 
@@ -585,21 +585,21 @@ func (t *hrsuTest) enterSplitBrainStateAndAcceptUpdatesInBothClusters(ctx contex
 	t.cluster2.sendUpdateAndWaitUntilStage(ctx, cluster2UpdateId, "cluster2-update-input", sdkclient.WorkflowUpdateStageAccepted)
 
 	// cluster1 has accepted an update
-	t.s.HistoryRequire.EqualHistoryEvents(fmt.Sprintf(`
-	1 1 WorkflowExecutionStarted
-	2 1 WorkflowTaskScheduled
-	3 1 WorkflowTaskStarted
-	4 1 WorkflowTaskCompleted
-	5 1 WorkflowExecutionUpdateAccepted {"ProtocolInstanceId": "%s", "AcceptedRequest": {"Input": {"Args": {"Payloads": [{"Data": "\"cluster1-update-input\""}]}}}}
+	t.s.EqualHistoryEvents(fmt.Sprintf(`
+	1 v1 WorkflowExecutionStarted
+	2 v1 WorkflowTaskScheduled
+	3 v1 WorkflowTaskStarted
+	4 v1 WorkflowTaskCompleted
+	5 v1 WorkflowExecutionUpdateAccepted {"ProtocolInstanceId": "%s", "AcceptedRequest": {"Input": {"Args": {"Payloads": [{"Data": "\"cluster1-update-input\""}]}}}}
 	`, cluster1UpdateId), t.cluster1.getHistory(ctx))
 
 	// cluster2 has also accepted an update (events have failover version 2 since they are endogenous to cluster 2)
-	t.s.HistoryRequire.EqualHistoryEvents(fmt.Sprintf(`
-	1 1 WorkflowExecutionStarted
-	2 1 WorkflowTaskScheduled
-	3 2 WorkflowTaskStarted
-	4 2 WorkflowTaskCompleted
-	5 2 WorkflowExecutionUpdateAccepted {"ProtocolInstanceId": "%s", "AcceptedRequest": {"Input": {"Args": {"Payloads": [{"Data": "\"cluster2-update-input\""}]}}}}
+	t.s.EqualHistoryEvents(fmt.Sprintf(`
+	1 v1 WorkflowExecutionStarted
+	2 v1 WorkflowTaskScheduled
+	3 v2 WorkflowTaskStarted
+	4 v2 WorkflowTaskCompleted
+	5 v2 WorkflowExecutionUpdateAccepted {"ProtocolInstanceId": "%s", "AcceptedRequest": {"Input": {"Args": {"Payloads": [{"Data": "\"cluster2-update-input\""}]}}}}
 	`, cluster2UpdateId), t.cluster2.getHistory(ctx))
 }
 
@@ -613,23 +613,23 @@ func (t *hrsuTest) enterSplitBrainStateAndCompletedUpdatesInBothClusters(ctx con
 	t.cluster2.sendUpdateAndWaitUntilStage(ctx, cluster2UpdateId, "cluster2-update-input", sdkclient.WorkflowUpdateStageCompleted)
 
 	// cluster1 has completed an update
-	t.s.HistoryRequire.EqualHistoryEvents(fmt.Sprintf(`
-	1 1 WorkflowExecutionStarted
-	2 1 WorkflowTaskScheduled
-	3 1 WorkflowTaskStarted
-	4 1 WorkflowTaskCompleted
-	5 1 WorkflowExecutionUpdateAccepted {"ProtocolInstanceId": "%s", "AcceptedRequest": {"Input": {"Args": {"Payloads": [{"Data": "\"cluster1-update-input\""}]}}}}
-	6 1 WorkflowExecutionUpdateCompleted {"Meta":{"UpdateId":"%[1]s"}}
+	t.s.EqualHistoryEvents(fmt.Sprintf(`
+	1 v1 WorkflowExecutionStarted
+	2 v1 WorkflowTaskScheduled
+	3 v1 WorkflowTaskStarted
+	4 v1 WorkflowTaskCompleted
+	5 v1 WorkflowExecutionUpdateAccepted {"ProtocolInstanceId": "%s", "AcceptedRequest": {"Input": {"Args": {"Payloads": [{"Data": "\"cluster1-update-input\""}]}}}}
+	6 v1 WorkflowExecutionUpdateCompleted {"Meta":{"UpdateId":"%[1]s"}}
 	`, cluster1UpdateId), t.cluster1.getHistory(ctx))
 
 	// cluster2 has also completed an update (events have failover version 2 since they are endogenous to cluster 2)
-	t.s.HistoryRequire.EqualHistoryEvents(fmt.Sprintf(`
-	1 1 WorkflowExecutionStarted
-	2 1 WorkflowTaskScheduled
-	3 2 WorkflowTaskStarted
-	4 2 WorkflowTaskCompleted
-	5 2 WorkflowExecutionUpdateAccepted {"ProtocolInstanceId": "%s", "AcceptedRequest": {"Input": {"Args": {"Payloads": [{"Data": "\"cluster2-update-input\""}]}}}}
-	6 2 WorkflowExecutionUpdateCompleted {"Meta":{"UpdateId":"%[1]s"}}
+	t.s.EqualHistoryEvents(fmt.Sprintf(`
+	1 v1 WorkflowExecutionStarted
+	2 v1 WorkflowTaskScheduled
+	3 v2 WorkflowTaskStarted
+	4 v2 WorkflowTaskCompleted
+	5 v2 WorkflowExecutionUpdateAccepted {"ProtocolInstanceId": "%s", "AcceptedRequest": {"Input": {"Args": {"Payloads": [{"Data": "\"cluster2-update-input\""}]}}}}
+	6 v2 WorkflowExecutionUpdateCompleted {"Meta":{"UpdateId":"%[1]s"}}
 	`, cluster2UpdateId), t.cluster2.getHistory(ctx))
 }
 
@@ -638,12 +638,12 @@ func (t *hrsuTest) failover1To2(ctx context.Context) {
 	t.cluster1.setActive(ctx, "cluster2")
 	t.s.Equal([]string{"cluster2", "cluster1"}, t.getActiveClusters(ctx))
 
-	time.Sleep(tests.NamespaceCacheRefreshInterval)
+	time.Sleep(testcore.NamespaceCacheRefreshInterval) //nolint:forbidigo
 
 	t.executeNamespaceReplicationTasksUntil(ctx, enumsspb.NAMESPACE_OPERATION_UPDATE)
 	// Wait for active cluster to be changed in namespace registry entry.
 	// TODO (dan) It would be nice to find a better approach.
-	time.Sleep(tests.NamespaceCacheRefreshInterval)
+	time.Sleep(testcore.NamespaceCacheRefreshInterval) //nolint:forbidigo
 	t.s.Equal([]string{"cluster2", "cluster2"}, t.getActiveClusters(ctx))
 }
 
@@ -652,12 +652,12 @@ func (t *hrsuTest) failover2To1(ctx context.Context) {
 	t.cluster1.setActive(ctx, "cluster1")
 	t.s.Equal([]string{"cluster1", "cluster2"}, t.getActiveClusters(ctx))
 
-	time.Sleep(tests.NamespaceCacheRefreshInterval)
+	time.Sleep(testcore.NamespaceCacheRefreshInterval) //nolint:forbidigo
 
 	t.executeNamespaceReplicationTasksUntil(ctx, enumsspb.NAMESPACE_OPERATION_UPDATE)
 	// Wait for active cluster to be changed in namespace registry entry.
 	// TODO (dan) It would be nice to find a better approach.
-	time.Sleep(tests.NamespaceCacheRefreshInterval)
+	time.Sleep(testcore.NamespaceCacheRefreshInterval) //nolint:forbidigo
 	t.s.Equal([]string{"cluster1", "cluster1"}, t.getActiveClusters(ctx))
 }
 
@@ -673,7 +673,7 @@ func (t *hrsuTest) enterSplitBrainState(ctx context.Context) {
 
 	// Wait for active cluster to be changed in namespace registry entry.
 	// TODO (dan) It would be nice to find a better approach.
-	time.Sleep(tests.NamespaceCacheRefreshInterval)
+	time.Sleep(testcore.NamespaceCacheRefreshInterval) //nolint:forbidigo
 }
 
 // executeNamespaceReplicationTasksUntil executes buffered namespace event replication tasks until the specified event
@@ -718,11 +718,13 @@ func (s *hrsuTestSuite) executeHistoryReplicationTask(task *hrsuTestExecutableTa
 	return events
 }
 
-func (e *hrsuTestNamespaceReplicationTaskExecutor) Execute(ctx context.Context, task *replicationspb.NamespaceTaskAttributes) error {
+func (e *hrsuTestNamespaceReplicationTaskExecutor) Execute(_ context.Context, task *replicationspb.NamespaceTaskAttributes) error {
 	// TODO (dan) Use one channel per cluster, as we do for history replication tasks in this test suite. This is
 	// currently blocked by the fact that namespace tasks don't expose the current cluster name.
 	ns := task.Info.Name
+	e.s.testMapLock.Lock()
 	test := e.s.testsByNamespaceName[ns]
+	e.s.testMapLock.Unlock()
 	if test == nil {
 		// This can happen after a test has completed
 		return fmt.Errorf("failed to retrieve test for namespace %s", ns)
@@ -732,7 +734,7 @@ func (e *hrsuTestNamespaceReplicationTaskExecutor) Execute(ctx context.Context, 
 	return nil
 }
 
-// Convert the replication tasks using the base converter, and wrap them in our own executable tasks.
+// Convert the replication tasks using the testcore converter, and wrap them in our own executable tasks.
 func (t *hrsuTestExecutableTaskConverter) Convert(
 	taskClusterName string,
 	clientShardKey replication.ClusterShardKey,
@@ -755,7 +757,9 @@ func (t *hrsuTestExecutableTaskConverter) Convert(
 
 // Execute pushes the task to a buffer and waits for it to be executed.
 func (task *hrsuTestExecutableTask) Execute() error {
+	task.s.testMapLock.Lock()
 	test := task.s.testsByWorkflowId[task.workflowId()]
+	task.s.testMapLock.Unlock()
 	if test == nil {
 		return fmt.Errorf("failed to retrieve test for workflow %s", task.workflowId())
 	}
@@ -778,38 +782,57 @@ func (task *hrsuTestExecutableTask) workflowId() string {
 
 // Update test utilities
 func (c *hrsuTestCluster) sendUpdateAndWaitUntilStage(ctx context.Context, updateId string, arg string, stage sdkclient.WorkflowUpdateStage) {
-	updateResponse := make(chan error)
-	processWorkflowTaskResponse := make(chan error)
+	updateErrCh := make(chan error)
 	go func() {
 		_, err := c.client.UpdateWorkflow(ctx, sdkclient.UpdateWorkflowOptions{
 			UpdateID:     updateId,
 			WorkflowID:   c.t.tv.WorkflowID(),
 			RunID:        c.t.tv.RunID(),
-			UpdateName:   "the-test-doesn't-use-this",
-			Args:         []interface{}{arg},
+			UpdateName:   c.t.tv.Any().String(),
+			Args:         []any{arg},
 			WaitForStage: stage,
 		})
+		updateErrCh <- err
+	}()
+
+	// Wait admitted to make sure that Update reached server, and added to registry.
+	// This guarantees following poll to get an Update request message.
+	c.waitUpdateAdmitted(c.t.tv, updateId)
+
+	// Blocks until the update request causes a WFT to be dispatched; then sends the update acceptance message
+	// required for the update request to return.
+	if stage == sdkclient.WorkflowUpdateStageCompleted {
+		err := c.pollAndAcceptCompleteUpdate(updateId)
 		c.t.s.NoError(err)
-		updateResponse <- err
-	}()
-	go func() {
-		// Blocks until the update request causes a WFT to be dispatched; then sends the update acceptance message
-		// required for the update request to return.
-		if stage == sdkclient.WorkflowUpdateStageCompleted {
-			processWorkflowTaskResponse <- c.pollAndAcceptCompleteUpdate(updateId)
-		} else if stage == sdkclient.WorkflowUpdateStageAccepted {
-			processWorkflowTaskResponse <- c.pollAndAcceptUpdate()
-		} else {
-			c.t.s.FailNow("invalid stage")
-		}
-	}()
-	c.t.s.NoError(<-updateResponse)
-	c.t.s.NoError(<-processWorkflowTaskResponse)
+	} else if stage == sdkclient.WorkflowUpdateStageAccepted {
+		err := c.pollAndAcceptUpdate()
+		c.t.s.NoError(err)
+	} else {
+		c.t.s.FailNow("invalid stage", stage)
+	}
+
+	c.t.s.NoError(<-updateErrCh)
+}
+
+func (c *hrsuTestCluster) waitUpdateAdmitted(tv *testvars.TestVars, updateID string) {
+	c.t.s.EventuallyWithTf(func(collectT *assert.CollectT) {
+		pollResp, pollErr := c.testCluster.FrontendClient().PollWorkflowExecutionUpdate(testcore.NewContext(), &workflowservice.PollWorkflowExecutionUpdateRequest{
+			Namespace: tv.NamespaceName().String(),
+			UpdateRef: &updatepb.UpdateRef{
+				WorkflowExecution: tv.WorkflowExecution(),
+				UpdateId:          updateID,
+			},
+			WaitPolicy: &updatepb.WaitPolicy{LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_UNSPECIFIED},
+		})
+		assert.NoError(collectT, pollErr)
+		// This is technically "at least Admitted".
+		assert.GreaterOrEqual(collectT, pollResp.GetStage(), enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ADMITTED)
+	}, 5*time.Second, 10*time.Millisecond, "update %s did not reach Admitted stage", updateID)
 }
 
 func (c *hrsuTestCluster) pollAndAcceptUpdate() error {
-	poller := &tests.TaskPoller{
-		Client:              c.testCluster.GetFrontendClient(),
+	poller := &testcore.TaskPoller{
+		Client:              c.testCluster.FrontendClient(),
 		Namespace:           c.t.tv.NamespaceName().String(),
 		TaskQueue:           c.t.tv.TaskQueue(),
 		Identity:            c.t.tv.WorkerIdentity(),
@@ -823,8 +846,8 @@ func (c *hrsuTestCluster) pollAndAcceptUpdate() error {
 }
 
 func (c *hrsuTestCluster) pollAndCompleteUpdate(updateId string) error {
-	poller := &tests.TaskPoller{
-		Client:              c.testCluster.GetFrontendClient(),
+	poller := &testcore.TaskPoller{
+		Client:              c.testCluster.FrontendClient(),
 		Namespace:           c.t.tv.NamespaceName().String(),
 		TaskQueue:           c.t.tv.TaskQueue(),
 		Identity:            c.t.tv.WorkerIdentity(),
@@ -838,8 +861,8 @@ func (c *hrsuTestCluster) pollAndCompleteUpdate(updateId string) error {
 }
 
 func (c *hrsuTestCluster) pollAndAcceptCompleteUpdate(updateId string) error {
-	poller := &tests.TaskPoller{
-		Client:              c.testCluster.GetFrontendClient(),
+	poller := &testcore.TaskPoller{
+		Client:              c.testCluster.FrontendClient(),
 		Namespace:           c.t.tv.NamespaceName().String(),
 		TaskQueue:           c.t.tv.TaskQueue(),
 		Identity:            c.t.tv.WorkerIdentity(),
@@ -853,8 +876,8 @@ func (c *hrsuTestCluster) pollAndAcceptCompleteUpdate(updateId string) error {
 }
 
 func (c *hrsuTestCluster) pollAndErrorWhileProcessingWorkflowTask() error {
-	poller := &tests.TaskPoller{
-		Client:              c.testCluster.GetFrontendClient(),
+	poller := &testcore.TaskPoller{
+		Client:              c.testCluster.FrontendClient(),
 		Namespace:           c.t.tv.NamespaceName().String(),
 		TaskQueue:           c.t.tv.TaskQueue(),
 		Identity:            c.t.tv.WorkerIdentity(),
@@ -883,7 +906,7 @@ func (t *hrsuTest) acceptUpdateMessageHandler(resp *workflowservice.PollWorkflow
 		attrs := updateAdmittedEvent.GetWorkflowExecutionUpdateAdmittedEventAttributes()
 		updateId = attrs.Request.Meta.UpdateId
 	} else {
-		t.s.Equal(1, len(resp.Messages))
+		t.s.Len(resp.Messages, 1)
 		msg := resp.Messages[0]
 		updateId = msg.ProtocolInstanceId
 	}
@@ -900,7 +923,7 @@ func (t *hrsuTest) acceptUpdateMessageHandler(resp *workflowservice.PollWorkflow
 	}, nil
 }
 
-func (t *hrsuTest) acceptUpdateWFTHandler(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
+func (t *hrsuTest) acceptUpdateWFTHandler(_ *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
 	return []*commandpb.Command{{
 		CommandType: enumspb.COMMAND_TYPE_PROTOCOL_MESSAGE,
 		Attributes: &commandpb.Command_ProtocolMessageCommandAttributes{ProtocolMessageCommandAttributes: &commandpb.ProtocolMessageCommandAttributes{
@@ -971,7 +994,7 @@ func (c *hrsuTestCluster) otherCluster() *hrsuTestCluster {
 // gRPC utilities
 
 func (t *hrsuTest) registerMultiRegionNamespace(ctx context.Context) {
-	_, err := t.cluster1.testCluster.GetFrontendClient().RegisterNamespace(ctx, &workflowservice.RegisterNamespaceRequest{
+	_, err := t.cluster1.testCluster.FrontendClient().RegisterNamespace(ctx, &workflowservice.RegisterNamespaceRequest{
 		Namespace:                        t.tv.NamespaceName().String(),
 		Clusters:                         t.s.clusterReplicationConfig(),
 		ActiveClusterName:                t.s.clusterNames[0],
@@ -1002,9 +1025,9 @@ func (c *hrsuTestCluster) startWorkflow(ctx context.Context, workflowFn any) {
 	c.otherCluster().executeHistoryReplicationTasksUntil(enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED)
 
 	for _, cluster := range []*hrsuTestCluster{&c.t.cluster1, &c.t.cluster2} {
-		c.t.s.HistoryRequire.EqualHistoryEvents(`
-		1 1 WorkflowExecutionStarted
-		2 1 WorkflowTaskScheduled
+		c.t.s.EqualHistoryEvents(`
+		1 v1 WorkflowExecutionStarted
+		2 v1 WorkflowTaskScheduled
 		  `, cluster.getHistory(ctx))
 	}
 }
@@ -1021,7 +1044,7 @@ func (c *hrsuTestCluster) resetWorkflow(ctx context.Context, workflowTaskFinishE
 }
 
 func (c *hrsuTestCluster) setActive(ctx context.Context, clusterName string) {
-	_, err := c.testCluster.GetFrontendClient().UpdateNamespace(ctx, &workflowservice.UpdateNamespaceRequest{
+	_, err := c.testCluster.FrontendClient().UpdateNamespace(ctx, &workflowservice.UpdateNamespaceRequest{
 		Namespace: c.t.tv.NamespaceName().String(),
 		ReplicationConfig: &replicationpb.NamespaceReplicationConfig{
 			ActiveClusterName: clusterName,
@@ -1035,7 +1058,7 @@ func (c *hrsuTestCluster) getHistory(ctx context.Context) []*historypb.HistoryEv
 }
 
 func (c *hrsuTestCluster) getHistoryForRunId(ctx context.Context, runId string) []*historypb.HistoryEvent {
-	historyResponse, err := c.testCluster.GetFrontendClient().GetWorkflowExecutionHistory(ctx, &workflowservice.GetWorkflowExecutionHistoryRequest{
+	historyResponse, err := c.testCluster.FrontendClient().GetWorkflowExecutionHistory(ctx, &workflowservice.GetWorkflowExecutionHistoryRequest{
 		Namespace: c.t.tv.NamespaceName().String(),
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: c.t.tv.WorkflowID(),
@@ -1047,7 +1070,7 @@ func (c *hrsuTestCluster) getHistoryForRunId(ctx context.Context, runId string) 
 }
 
 func (c *hrsuTestCluster) getActiveCluster(ctx context.Context) string {
-	resp, err := c.testCluster.GetFrontendClient().DescribeNamespace(ctx, &workflowservice.DescribeNamespaceRequest{Namespace: c.t.tv.NamespaceName().String()})
+	resp, err := c.testCluster.FrontendClient().DescribeNamespace(ctx, &workflowservice.DescribeNamespaceRequest{Namespace: c.t.tv.NamespaceName().String()})
 	c.t.s.NoError(err)
 	return resp.ReplicationConfig.ActiveClusterName
 }

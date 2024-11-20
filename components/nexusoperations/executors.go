@@ -26,8 +26,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"net/http"
-	"slices"
 	"strings"
 	"text/template"
 	"time"
@@ -51,11 +49,6 @@ import (
 	"go.temporal.io/server/service/history/queues"
 	"go.uber.org/fx"
 )
-
-var retryable4xxErrorTypes = []int{
-	http.StatusRequestTimeout,
-	http.StatusTooManyRequests,
-}
 
 // ClientProvider provides a nexus client for a given endpoint.
 type ClientProvider func(ctx context.Context, namespaceID string, entry *persistencespb.NexusEndpointEntry, service string) (*nexus.Client, error)
@@ -117,7 +110,7 @@ func (e taskExecutor) executeInvocationTask(ctx context.Context, env hsm.Environ
 		return fmt.Errorf("failed to get namespace by ID: %w", err)
 	}
 
-	args, err := e.loadOperationArgs(ctx, ns, env, ref, task)
+	args, err := e.loadOperationArgs(ctx, ns, env, ref)
 	if err != nil {
 		return fmt.Errorf("failed to load operation args: %w", err)
 	}
@@ -136,24 +129,16 @@ func (e taskExecutor) executeInvocationTask(ctx context.Context, env hsm.Environ
 	// This happens when we accept the ScheduleNexusOperation command when the endpoint is not found in the registry as
 	// indicated by the EndpointNotFoundAlwaysNonRetryable dynamic config.
 	if args.endpointID == "" {
-		return e.saveResult(ctx, env, ref, nil, &nexus.UnexpectedResponseError{
-			Message: "endpoint not registered",
-			Response: &http.Response{
-				StatusCode: http.StatusNotFound,
-			},
-		})
+		handlerError := nexus.HandlerErrorf(nexus.HandlerErrorTypeNotFound, "endpoint not registered")
+		return e.saveResult(ctx, env, ref, nil, handlerError)
 	}
 
 	endpoint, err := e.lookupEndpoint(ctx, namespace.ID(ref.WorkflowKey.NamespaceID), args.endpointID, args.endpointName)
 	if err != nil {
 		if errors.As(err, new(*serviceerror.NotFound)) {
 			// The endpoint is not registered, immediately fail the invocation.
-			return e.saveResult(ctx, env, ref, nil, &nexus.UnexpectedResponseError{
-				Message: "endpoint not registered",
-				Response: &http.Response{
-					StatusCode: http.StatusNotFound,
-				},
-			})
+			handlerError := nexus.HandlerErrorf(nexus.HandlerErrorTypeNotFound, "endpoint not registered")
+			return e.saveResult(ctx, env, ref, nil, handlerError)
 		}
 		return err
 	}
@@ -187,11 +172,11 @@ func (e taskExecutor) executeInvocationTask(ctx context.Context, env hsm.Environ
 		return fmt.Errorf("failed to get a client: %w", err)
 	}
 
+	// Set MachineTransitionCount to 0 since older server versions, which had logic that considers references with
+	// non-zero MachineTransitionCount as "non-concurrent" references, and would fail validation of the reference if the
+	// Operation machine has transitioned.
+	// TODO(bergundy): Remove this before the 1.27 release.
 	smRef := common.CloneProto(ref.StateMachineRef)
-	// Unset the machine last update versioned transition so it is ignored in the completion staleness check.
-	// This is to account for either the operation transitioning to STARTED state after a successful call but also to
-	// account for the task timing out before we get a successful result and a transition to BACKING_OFF.
-	smRef.MachineLastUpdateVersionedTransition = nil
 	smRef.MachineTransitionCount = 0
 
 	token, err := e.CallbackTokenGenerator.Tokenize(&token.NexusOperationCompletion{
@@ -286,13 +271,9 @@ func (e taskExecutor) loadOperationArgs(
 	ns *namespace.Namespace,
 	env hsm.Environment,
 	ref hsm.Ref,
-	task InvocationTask,
 ) (args startArgs, err error) {
 	var eventToken []byte
 	err = env.Access(ctx, ref, hsm.AccessRead, func(node *hsm.Node) error {
-		if err := task.Validate(node); err != nil {
-			return err
-		}
 		operation, err := hsm.MachineData[Operation](node)
 		if err != nil {
 			return err
@@ -334,9 +315,6 @@ func (e taskExecutor) loadOperationArgs(
 
 func (e taskExecutor) saveResult(ctx context.Context, env hsm.Environment, ref hsm.Ref, result *nexus.ClientStartOperationResult[*commonpb.Payload], callErr error) error {
 	return env.Access(ctx, ref, hsm.AccessWrite, func(node *hsm.Node) error {
-		if err := node.CheckRunning(); err != nil {
-			return err
-		}
 		return hsm.MachineTransition(node, func(operation Operation) (hsm.TransitionOutput, error) {
 			if callErr != nil {
 				return e.handleStartOperationError(env, node, operation, callErr)
@@ -397,15 +375,16 @@ func (e taskExecutor) saveResult(ctx context.Context, env hsm.Environment, ref h
 }
 
 func (e taskExecutor) handleStartOperationError(env hsm.Environment, node *hsm.Node, operation Operation, callErr error) (hsm.TransitionOutput, error) {
-	var unexpectedResponseError *nexus.UnexpectedResponseError
+	var handlerError *nexus.HandlerError
 	var opFailedError *nexus.UnsuccessfulOperationError
 
 	if errors.As(callErr, &opFailedError) {
 		return handleUnsuccessfulOperationError(node, operation, opFailedError, CompletionSourceResponse)
-	} else if errors.As(callErr, &unexpectedResponseError) {
-		if !isRetryableHTTPResponse(unexpectedResponseError.Response) {
+	} else if errors.As(callErr, &handlerError) {
+		if !isRetryableHandlerError(handlerError.Type) {
 			// The StartOperation request got an unexpected response that is not retryable, fail the operation.
-			return handleNonRetryableStartOperationError(env, node, operation, unexpectedResponseError.Message)
+			// Although Failure is nullable, Nexus SDK is expected to always populate this field
+			return handleNonRetryableStartOperationError(env, node, operation, handlerError.Failure.Message)
 		}
 		// Fall through to the AttemptFailed transition.
 	} else if errors.Is(callErr, ErrResponseBodyTooLarge) {
@@ -458,9 +437,6 @@ func handleNonRetryableStartOperationError(env hsm.Environment, node *hsm.Node, 
 }
 
 func (e taskExecutor) executeBackoffTask(env hsm.Environment, node *hsm.Node, task BackoffTask) error {
-	if err := task.Validate(node); err != nil {
-		return err
-	}
 	return hsm.MachineTransition(node, func(op Operation) (hsm.TransitionOutput, error) {
 		return TransitionRescheduled.Apply(op, EventRescheduled{
 			Node: node,
@@ -469,9 +445,6 @@ func (e taskExecutor) executeBackoffTask(env hsm.Environment, node *hsm.Node, ta
 }
 
 func (e taskExecutor) executeTimeoutTask(env hsm.Environment, node *hsm.Node, task TimeoutTask) error {
-	if err := task.Validate(node); err != nil {
-		return err
-	}
 	return hsm.MachineTransition(node, func(op Operation) (hsm.TransitionOutput, error) {
 		eventID, err := hsm.EventIDFromToken(op.ScheduledEventToken)
 		if err != nil {
@@ -519,13 +492,10 @@ func (e taskExecutor) executeCancelationTask(ctx context.Context, env hsm.Enviro
 	endpoint, err := e.lookupEndpoint(ctx, namespace.ID(ref.WorkflowKey.NamespaceID), args.endpointID, args.endpointName)
 	if err != nil {
 		if errors.As(err, new(*serviceerror.NotFound)) {
+			handlerError := nexus.HandlerErrorf(nexus.HandlerErrorTypeNotFound, "endpoint not registered")
+
 			// The endpoint is not registered, immediately fail the invocation.
-			return e.saveCancelationResult(ctx, env, ref, &nexus.UnexpectedResponseError{
-				Message: "endpoint not registered",
-				Response: &http.Response{
-					StatusCode: http.StatusNotFound,
-				},
-			})
+			return e.saveCancelationResult(ctx, env, ref, handlerError)
 		}
 		return err
 	}
@@ -582,9 +552,6 @@ type cancelArgs struct {
 // given reference is pointing to.
 func (e taskExecutor) loadArgsForCancelation(ctx context.Context, env hsm.Environment, ref hsm.Ref) (args cancelArgs, err error) {
 	err = env.Access(ctx, ref, hsm.AccessRead, func(n *hsm.Node) error {
-		if err := n.CheckRunning(); err != nil {
-			return err
-		}
 		op, err := hsm.MachineData[Operation](n.Parent)
 		if err != nil {
 			return err
@@ -606,14 +573,11 @@ func (e taskExecutor) loadArgsForCancelation(ctx context.Context, env hsm.Enviro
 
 func (e taskExecutor) saveCancelationResult(ctx context.Context, env hsm.Environment, ref hsm.Ref, callErr error) error {
 	return env.Access(ctx, ref, hsm.AccessWrite, func(n *hsm.Node) error {
-		if err := n.CheckRunning(); err != nil {
-			return err
-		}
 		return hsm.MachineTransition(n, func(c Cancelation) (hsm.TransitionOutput, error) {
 			if callErr != nil {
-				var unexpectedResponseErr *nexus.UnexpectedResponseError
-				if errors.As(callErr, &unexpectedResponseErr) {
-					if !isRetryableHTTPResponse(unexpectedResponseErr.Response) {
+				var handlerErr *nexus.HandlerError
+				if errors.As(callErr, &handlerErr) {
+					if !isRetryableHandlerError(handlerErr.Type) {
 						return TransitionCancelationFailed.Apply(c, EventCancelationFailed{
 							Time: env.Now(),
 							Err:  callErr,
@@ -640,26 +604,11 @@ func (e taskExecutor) saveCancelationResult(ctx context.Context, env hsm.Environ
 }
 
 func (e taskExecutor) executeCancelationBackoffTask(env hsm.Environment, node *hsm.Node, task CancelationBackoffTask) error {
-	if err := node.CheckRunning(); err != nil {
-		return err
-	}
 	return hsm.MachineTransition(node, func(c Cancelation) (hsm.TransitionOutput, error) {
 		return TransitionCancelationRescheduled.Apply(c, EventCancelationRescheduled{
 			Node: node,
 		})
 	})
-}
-
-func (e taskExecutor) extractEndpointNameFromOperation(ctx context.Context, env hsm.Environment, ref hsm.Ref, getOpNode func(*hsm.Node) *hsm.Node) (endpoint string, err error) {
-	err = env.Access(ctx, ref, hsm.AccessRead, func(n *hsm.Node) error {
-		op, err := hsm.MachineData[Operation](getOpNode(n))
-		if err != nil {
-			return err
-		}
-		endpoint = op.Endpoint
-		return nil
-	})
-	return
 }
 
 // lookupEndpint gets an endpoint from the registry, preferring to look up by ID and falling back to name lookup.
@@ -694,7 +643,7 @@ func nexusOperationFailure(operation Operation, scheduledEventID int64, cause *f
 }
 
 func startCallOutcomeTag(callCtx context.Context, result *nexus.ClientStartOperationResult[*nexus.LazyValue], callErr error) string {
-	var unexpectedResponseError *nexus.UnexpectedResponseError
+	var handlerError *nexus.HandlerError
 	var opFailedError *nexus.UnsuccessfulOperationError
 
 	if callErr != nil {
@@ -703,8 +652,8 @@ func startCallOutcomeTag(callCtx context.Context, result *nexus.ClientStartOpera
 		}
 		if errors.As(callErr, &opFailedError) {
 			return "operation-unsuccessful:" + string(opFailedError.State)
-		} else if errors.As(callErr, &unexpectedResponseError) {
-			return fmt.Sprintf("request-error:%d", unexpectedResponseError.Response.StatusCode)
+		} else if errors.As(callErr, &handlerError) {
+			return "handler-error:" + string(handlerError.Type)
 		}
 		return "unknown-error"
 	}
@@ -715,31 +664,47 @@ func startCallOutcomeTag(callCtx context.Context, result *nexus.ClientStartOpera
 }
 
 func cancelCallOutcomeTag(callCtx context.Context, callErr error) string {
-	var unexpectedResponseError *nexus.UnexpectedResponseError
+	var handlerErr *nexus.HandlerError
 	if callErr != nil {
 		if callCtx.Err() != nil {
 			return "request-timeout"
 		}
-		if errors.As(callErr, &unexpectedResponseError) {
-			return fmt.Sprintf("request-error:%d", unexpectedResponseError.Response.StatusCode)
+		if errors.As(callErr, &handlerErr) {
+			return "handler-error:" + string(handlerErr.Type)
 		}
 		return "unknown-error"
 	}
 	return "successful"
 }
 
-func isRetryableHTTPResponse(response *http.Response) bool {
-	return response.StatusCode >= 500 || slices.Contains(retryable4xxErrorTypes, response.StatusCode)
+func isRetryableHandlerError(eType nexus.HandlerErrorType) bool {
+	switch eType {
+	case nexus.HandlerErrorTypeResourceExhausted,
+		nexus.HandlerErrorTypeInternal,
+		nexus.HandlerErrorTypeUnavailable,
+		nexus.HandlerErrorTypeUpstreamTimeout:
+		return true
+	case nexus.HandlerErrorTypeBadRequest,
+		nexus.HandlerErrorTypeUnauthenticated,
+		nexus.HandlerErrorTypeUnauthorized,
+		nexus.HandlerErrorTypeNotFound,
+		nexus.HandlerErrorTypeNotImplemented:
+		return false
+	default:
+		// Default to retryable in case other error types are added in the future.
+		// It's better to retry than unexpectedly fail.
+		return true
+	}
 }
 
 func isDestinationDown(err error) bool {
-	var unexpectedErr *nexus.UnexpectedResponseError
+	var handlerError *nexus.HandlerError
 	var opFailedErr *nexus.UnsuccessfulOperationError
 	if errors.As(err, &opFailedErr) {
 		return false
 	}
-	if errors.As(err, &unexpectedErr) {
-		return isRetryableHTTPResponse(unexpectedErr.Response)
+	if errors.As(err, &handlerError) {
+		return isRetryableHandlerError(handlerError.Type)
 	}
 	if errors.Is(err, ErrResponseBodyTooLarge) {
 		return false

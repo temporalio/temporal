@@ -137,6 +137,12 @@ func Invoke(
 	}
 	baseCurrentBranchToken := baseCurrentVersionHistory.GetBranchToken()
 	baseNextEventID := baseMutableState.GetNextEventID()
+	baseWorkflow := ndc.NewWorkflow(
+		shard.GetClusterMetadata(),
+		baseWorkflowLease.GetContext(),
+		baseWorkflowLease.GetMutableState(),
+		baseWorkflowLease.GetReleaseFn(),
+	)
 
 	if err := ndc.NewWorkflowResetter(
 		shard,
@@ -153,6 +159,7 @@ func Invoke(
 		baseNextEventID,
 		resetRunID,
 		request.GetRequestId(),
+		baseWorkflow,
 		ndc.NewWorkflow(
 			shard.GetClusterMetadata(),
 			currentWorkflowLease.GetContext(),
@@ -177,23 +184,23 @@ func Invoke(
 func GetResetReapplyExcludeTypes(
 	excludeTypes []enumspb.ResetReapplyExcludeType,
 	includeType enumspb.ResetReapplyType,
-) map[enumspb.ResetReapplyExcludeType]bool {
+) map[enumspb.ResetReapplyExcludeType]struct{} {
 	// A client who wishes to have reapplication of all supported event types should omit the deprecated
 	// reset_reapply_type field (since its default value is RESET_REAPPLY_TYPE_ALL_ELIGIBLE).
-	exclude := map[enumspb.ResetReapplyExcludeType]bool{}
+	exclude := map[enumspb.ResetReapplyExcludeType]struct{}{}
 	switch includeType {
 	case enumspb.RESET_REAPPLY_TYPE_SIGNAL:
 		// A client sending this value of the deprecated reset_reapply_type field will not have any events other than
 		// signal reapplied.
-		exclude[enumspb.RESET_REAPPLY_EXCLUDE_TYPE_UPDATE] = true
+		exclude[enumspb.RESET_REAPPLY_EXCLUDE_TYPE_UPDATE] = struct{}{}
 	case enumspb.RESET_REAPPLY_TYPE_NONE:
-		exclude[enumspb.RESET_REAPPLY_EXCLUDE_TYPE_SIGNAL] = true
-		exclude[enumspb.RESET_REAPPLY_EXCLUDE_TYPE_UPDATE] = true
+		exclude[enumspb.RESET_REAPPLY_EXCLUDE_TYPE_SIGNAL] = struct{}{}
+		exclude[enumspb.RESET_REAPPLY_EXCLUDE_TYPE_UPDATE] = struct{}{}
 	case enumspb.RESET_REAPPLY_TYPE_UNSPECIFIED, enumspb.RESET_REAPPLY_TYPE_ALL_ELIGIBLE:
 		// Do nothing.
 	}
 	for _, e := range excludeTypes {
-		exclude[e] = true
+		exclude[e] = struct{}{}
 	}
 	return exclude
 }

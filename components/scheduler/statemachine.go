@@ -133,7 +133,7 @@ func (s *Scheduler) SetState(state enumsspb.SchedulerState) {
 func (s *Scheduler) RegenerateTasks(*hsm.Node) ([]hsm.Task, error) {
 	switch s.HsmState { // nolint:exhaustive
 	case enumsspb.SCHEDULER_STATE_WAITING:
-		return []hsm.Task{SchedulerWaitTask{Deadline: s.NextInvocationTime.AsTime()}}, nil
+		return []hsm.Task{SchedulerWaitTask{deadline: s.NextInvocationTime.AsTime()}}, nil
 	case enumsspb.SCHEDULER_STATE_EXECUTING:
 		// This task is done locally and do not need a destination
 		return []hsm.Task{SchedulerActivateTask{}}, nil
@@ -161,7 +161,7 @@ func (stateMachineDefinition) Serialize(state any) ([]byte, error) {
 	if state, ok := state.(*Scheduler); ok {
 		return proto.Marshal(state.HsmSchedulerState)
 	}
-	return nil, fmt.Errorf("invalid scheduler state provided: %v", state) // nolint:goerr113
+	return nil, fmt.Errorf("invalid scheduler state provided: %v", state)
 }
 
 // CompareState is required for the temporary state sync solution to work.

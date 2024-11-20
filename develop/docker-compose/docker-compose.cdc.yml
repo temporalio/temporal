@@ -1,8 +1,6 @@
 # Adds CDC dependencies to main docker-compose files.
 # Include platform specific file also:
 # docker-compose -f docker-compose.yml -f docker-compose.linux.yml -f docker-compose.cdc.yml -f docker-compose.cdc.linux.yml up
-version: "3.5"
-
 services:
   temporal-ui-standby:
     image: temporalio/ui:2.21.3

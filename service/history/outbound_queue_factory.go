@@ -25,7 +25,6 @@ package history
 import (
 	"fmt"
 
-	"go.temporal.io/server/common/circuitbreaker"
 	"go.temporal.io/server/common/collection"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
@@ -34,6 +33,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/quotas"
 	ctasks "go.temporal.io/server/common/tasks"
+	"go.temporal.io/server/service/history/circuitbreakerpool"
 	"go.temporal.io/server/service/history/hsm"
 	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/shard"
@@ -51,6 +51,7 @@ type outboundQueueFactoryParams struct {
 	fx.In
 
 	QueueFactoryBaseParams
+	CircuitBreakerPool *circuitbreakerpool.OutboundQueueCircuitBreakerPool
 }
 
 type groupLimiter struct {
@@ -120,33 +121,6 @@ func NewOutboundQueueFactory(params outboundQueueFactoryParams) QueueFactory {
 		},
 	)
 
-	circuitBreakerPool := collection.NewOnceMap(
-		func(key tasks.TaskGroupNamespaceIDAndDestination) circuitbreaker.TwoStepCircuitBreaker {
-			// This is intentionally not failing the function in case of error. The circuit breaker is
-			// agnostic to Task implementation, and thus the settings function is not expected to return
-			// an error. Also, in this case, if the namespace registry fails to get the name, then the
-			// task itself will fail when it is processed and tries to get the namespace name.
-			nsName := getNamespaceNameOrDefault(
-				params.NamespaceRegistry,
-				key.NamespaceID,
-				"",
-				metricsHandler,
-			)
-			cb := circuitbreaker.NewTwoStepCircuitBreakerWithDynamicSettings(circuitbreaker.Settings{
-				Name: fmt.Sprintf(
-					"circuit_breaker:%s:%s:%s",
-					key.TaskGroup,
-					key.NamespaceID,
-					key.Destination,
-				),
-			})
-			initial, cancel := params.Config.OutboundQueueCircuitBreakerSettings(nsName, key.Destination, cb.UpdateSettings)
-			cb.UpdateSettings(initial)
-			_ = cancel // OnceMap never deletes anything. use this if we support deletion
-			return cb
-		},
-	)
-
 	grouper := queues.GrouperStateMachineNamespaceIDAndDestination{}
 	f := &outboundQueueFactory{
 		outboundQueueFactoryParams: params,
@@ -184,7 +158,7 @@ func NewOutboundQueueFactory(params outboundQueueFactoryParams) QueueFactory {
 							ctasks.RunnableTask{
 								Task: queues.NewCircuitBreakerExecutable(
 									e,
-									circuitBreakerPool.Get(key),
+									params.CircuitBreakerPool.Get(key),
 									taggedMetricsHandler,
 								),
 							},
@@ -347,7 +321,7 @@ func stateMachineTask(shardContext shard.Context, task tasks.Task) (hsm.Ref, hsm
 				fmt.Sprintf("deserializer not registered for task type %v", cbt.Info.Type),
 			)
 	}
-	smt, err := def.Deserialize(cbt.Info.Data, hsm.TaskKindOutbound{Destination: cbt.Destination})
+	smt, err := def.Deserialize(cbt.Info.Data, hsm.TaskAttributes{Destination: cbt.Destination})
 	if err != nil {
 		return hsm.Ref{},
 			nil,
@@ -361,6 +335,7 @@ func stateMachineTask(shardContext shard.Context, task tasks.Task) (hsm.Ref, hsm
 		WorkflowKey:     taskWorkflowKey(task),
 		StateMachineRef: cbt.Info.Ref,
 		TaskID:          task.GetTaskID(),
+		Validate:        smt.Validate,
 	}, smt, nil
 }
 

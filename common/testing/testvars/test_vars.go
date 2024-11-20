@@ -171,9 +171,9 @@ func (tv *TestVars) WorkflowExecution(key ...string) *commonpb.WorkflowExecution
 	}
 }
 
-func (tv *TestVars) UpdateRef() *updatepb.UpdateRef {
+func (tv *TestVars) UpdateRef(key ...string) *updatepb.UpdateRef {
 	return &updatepb.UpdateRef{
-		UpdateId:          tv.UpdateID(),
+		UpdateId:          tv.UpdateID(key...),
 		WorkflowExecution: tv.WorkflowExecution(),
 	}
 }
@@ -194,6 +194,13 @@ func (tv *TestVars) StickyTaskQueue(key ...string) *taskqueuepb.TaskQueue {
 		Name:       tv.getOrCreate("sticky_task_queue", key).(string),
 		Kind:       enumspb.TASK_QUEUE_KIND_STICKY,
 		NormalName: tv.getOrCreate("task_queue", key).(string),
+	}
+}
+
+func (tv *TestVars) StickyExecutionAttributes(timeout time.Duration, key ...string) *taskqueuepb.StickyExecutionAttributes {
+	return &taskqueuepb.StickyExecutionAttributes{
+		WorkerTaskQueue:        tv.StickyTaskQueue(key...),
+		ScheduleToStartTimeout: durationpb.New(timeout),
 	}
 }
 
@@ -282,8 +289,16 @@ func (tv *TestVars) QueryType(key ...string) string {
 	return tv.getOrCreate("query_type", key).(string)
 }
 
-func (tv *TestVars) WithQueryType(queryTypeID string, key ...string) *TestVars {
-	return tv.cloneSet("query_type", key, queryTypeID)
+func (tv *TestVars) WithQueryType(queryType string, key ...string) *TestVars {
+	return tv.cloneSet("query_type", key, queryType)
+}
+
+func (tv *TestVars) IndexName(key ...string) string {
+	return tv.getOrCreate("index_name", key).(string)
+}
+
+func (tv *TestVars) WithIndexName(indexName string, key ...string) *TestVars {
+	return tv.cloneSet("index_name", key, indexName)
 }
 
 // ----------- Generic methods ------------

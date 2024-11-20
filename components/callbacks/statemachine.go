@@ -93,22 +93,21 @@ func (c Callback) recordAttempt(ts time.Time) {
 func (c Callback) RegenerateTasks(*hsm.Node) ([]hsm.Task, error) {
 	switch c.CallbackInfo.State {
 	case enumsspb.CALLBACK_STATE_BACKING_OFF:
-		return []hsm.Task{BackoffTask{Deadline: c.NextAttemptScheduleTime.AsTime()}}, nil
+		return []hsm.Task{BackoffTask{deadline: c.NextAttemptScheduleTime.AsTime()}}, nil
 	case enumsspb.CALLBACK_STATE_SCHEDULED:
 		switch v := c.Callback.GetVariant().(type) {
 		case *persistencespb.Callback_Nexus_:
-			var baseURL string
 			u, err := url.Parse(c.Callback.GetNexus().Url)
 			if err != nil {
 				return nil, fmt.Errorf("failed to parse URL: %v: %w", &c, err)
 			}
-			baseURL = u.Scheme + "://" + u.Host
-			return []hsm.Task{InvocationTask{Destination: baseURL}}, nil
+			return []hsm.Task{InvocationTask{destination: u.Scheme + "://" + u.Host}}, nil
 		case *persistencespb.Callback_Hsm:
-			return []hsm.Task{InvocationTask{Destination: ""}}, nil
+			// Destination is empty on the internal queue.
+			return []hsm.Task{InvocationTask{"TODO(bergundy): make this empty"}}, nil
 
 		default:
-			return nil, fmt.Errorf("unsupported callback variant %v", v) // nolint:goerr113
+			return nil, fmt.Errorf("unsupported callback variant %v", v)
 		}
 	}
 	return nil, nil
@@ -160,7 +159,7 @@ func (stateMachineDefinition) Serialize(state any) ([]byte, error) {
 	if state, ok := state.(Callback); ok {
 		return proto.Marshal(state.CallbackInfo)
 	}
-	return nil, fmt.Errorf("invalid callback provided: %v", state) // nolint:goerr113
+	return nil, fmt.Errorf("invalid callback provided: %v", state)
 }
 
 // CompareState compares the progress of two Callback state machines to determine whether to sync machine state while

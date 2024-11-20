@@ -26,7 +26,6 @@ package ndc
 
 import (
 	"context"
-	"flag"
 	"os"
 	"sync/atomic"
 	"testing"
@@ -57,7 +56,7 @@ import (
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/environment"
 	"go.temporal.io/server/service/history/replication/eventhandler"
-	"go.temporal.io/server/tests"
+	"go.temporal.io/server/tests/testcore"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"gopkg.in/yaml.v3"
@@ -69,7 +68,7 @@ type (
 		protorequire.ProtoAssertions
 		suite.Suite
 
-		testClusterFactory          tests.TestClusterFactory
+		testClusterFactory          testcore.TestClusterFactory
 		standByReplicationTasksChan chan *replicationspb.ReplicationTask
 		mockAdminClient             map[string]adminservice.AdminServiceClient
 		namespace                   namespace.Name
@@ -79,7 +78,7 @@ type (
 		passiveClusterName          string
 
 		controller      *gomock.Controller
-		passtiveCluster *tests.TestCluster
+		passtiveCluster *testcore.TestCluster
 		generator       test.Generator
 		serializer      serialization.Serializer
 		logger          log.Logger
@@ -87,19 +86,19 @@ type (
 )
 
 func TestNDCReplicationTaskBatching(t *testing.T) {
-	flag.Parse()
+	// TODO: doesn't work yet: t.Parallel()
 	suite.Run(t, new(NDCReplicationTaskBatchingTestSuite))
 }
 
 func (s *NDCReplicationTaskBatchingTestSuite) SetupSuite() {
 	s.logger = log.NewTestLogger()
 	s.serializer = serialization.NewSerializer()
-	s.testClusterFactory = tests.NewTestClusterFactory()
+	s.testClusterFactory = testcore.NewTestClusterFactory()
 	s.passiveClusterName = "cluster-b"
 
 	fileName := "../testdata/ndc_clusters.yaml"
-	if tests.TestFlags.TestClusterConfigFile != "" {
-		fileName = tests.TestFlags.TestClusterConfigFile
+	if testcore.TestFlags.TestClusterConfigFile != "" {
+		fileName = testcore.TestFlags.TestClusterConfigFile
 	}
 	environment.SetupEnv()
 	s.standByTaskID = 0
@@ -108,11 +107,11 @@ func (s *NDCReplicationTaskBatchingTestSuite) SetupSuite() {
 	s.Require().NoError(err)
 	confContent = []byte(os.ExpandEnv(string(confContent)))
 
-	var clusterConfigs []*tests.TestClusterConfig
+	var clusterConfigs []*testcore.TestClusterConfig
 	s.Require().NoError(yaml.Unmarshal(confContent, &clusterConfigs))
 
 	passiveClusterConfig := clusterConfigs[1]
-	passiveClusterConfig.WorkerConfig = tests.WorkerConfig{DisableWorker: true}
+	passiveClusterConfig.WorkerConfig = testcore.WorkerConfig{DisableWorker: true}
 	passiveClusterConfig.DynamicConfigOverrides = map[dynamicconfig.Key]any{
 		dynamicconfig.EnableReplicationStream.Key():             true,
 		dynamicconfig.EnableEagerNamespaceRefresher.Key():       true,
@@ -176,7 +175,7 @@ func (s *NDCReplicationTaskBatchingTestSuite) TestHistoryReplicationTaskAndThenR
 				historyEvents.Events = append(historyEvents.Events, event.GetData().(*historypb.HistoryEvent))
 			}
 			historyBatch = append(historyBatch, historyEvents)
-			history, err := tests.EventBatchesToVersionHistory(nil, historyBatch)
+			history, err := testcore.EventBatchesToVersionHistory(nil, historyBatch)
 			s.NoError(err)
 			s.standByReplicationTasksChan <- s.createHistoryEventReplicationTaskFromHistoryEventBatch( // supply history replication task one by one
 				s.namespaceID.String(),
@@ -193,6 +192,7 @@ func (s *NDCReplicationTaskBatchingTestSuite) TestHistoryReplicationTaskAndThenR
 		}
 		executions[execution] = historyBatch
 	}
+	//nolint:forbidigo
 	time.Sleep(5 * time.Second) // 5 seconds is enough for the history replication task to be processed and applied to passive cluster
 
 	for execution, historyBatch := range executions {
@@ -210,7 +210,7 @@ func (s *NDCReplicationTaskBatchingTestSuite) assertHistoryEvents(
 	mockClientBean.
 		EXPECT().
 		GetRemoteAdminClient(s.passiveClusterName).
-		Return(s.passtiveCluster.GetAdminClient(), nil).
+		Return(s.passtiveCluster.AdminClient(), nil).
 		AnyTimes()
 
 	serializer := serialization.NewSerializer()
@@ -238,7 +238,7 @@ func (s *NDCReplicationTaskBatchingTestSuite) assertHistoryEvents(
 
 func (s *NDCReplicationTaskBatchingTestSuite) registerNamespace() {
 	s.namespace = namespace.Name("test-simple-workflow-ndc-" + common.GenerateRandomString(5))
-	passiveFrontend := s.passtiveCluster.GetFrontendClient() //
+	passiveFrontend := s.passtiveCluster.FrontendClient() //
 	replicationConfig := []*replicationpb.ClusterReplicationConfig{
 		{ClusterName: clusterName[0]},
 		{ClusterName: clusterName[1]},
@@ -252,7 +252,7 @@ func (s *NDCReplicationTaskBatchingTestSuite) registerNamespace() {
 	})
 	s.Require().NoError(err)
 	// Wait for namespace cache to pick the change
-	time.Sleep(2 * tests.NamespaceCacheRefreshInterval)
+	time.Sleep(2 * testcore.NamespaceCacheRefreshInterval) //nolint:forbidigo
 
 	descReq := &workflowservice.DescribeNamespaceRequest{
 		Namespace: s.namespace.String(),

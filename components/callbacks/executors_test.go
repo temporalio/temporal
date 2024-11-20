@@ -221,7 +221,7 @@ func TestProcessInvocationTaskNexus_Outcomes(t *testing.T) {
 						},
 					},
 				},
-				callbacks.InvocationTask{Destination: "http://localhost"},
+				callbacks.NewInvocationTask("http://localhost"),
 			)
 
 			if tc.destinationDown {
@@ -443,7 +443,7 @@ func TestProcessBackoffTask(t *testing.T) {
 }
 
 func newMutableState(t *testing.T) mutableState {
-	completionNexus, err := nexus.NewOperationCompletionSuccessful(nil, nexus.OperationCompletionSuccesfulOptions{})
+	completionNexus, err := nexus.NewOperationCompletionSuccessful(nil, nexus.OperationCompletionSuccessfulOptions{})
 	require.NoError(t, err)
 	hsmCallbackArg := &persistencespb.HSMCompletionCallbackArg{
 		NamespaceId: "mynsid",

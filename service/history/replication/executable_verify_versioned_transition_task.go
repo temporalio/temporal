@@ -30,6 +30,7 @@ import (
 	"go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
 	historyspb "go.temporal.io/server/api/history/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	common2 "go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
@@ -63,6 +64,7 @@ func NewExecutableVerifyVersionedTransitionTask(
 	taskID int64,
 	taskCreationTime time.Time,
 	sourceClusterName string,
+	sourceShardKey ClusterShardKey,
 	replicationTask *replicationspb.ReplicationTask,
 ) *ExecutableVerifyVersionedTransitionTask {
 	task := replicationTask.GetVerifyVersionedTransitionTaskAttributes()
@@ -77,6 +79,7 @@ func NewExecutableVerifyVersionedTransitionTask(
 			taskCreationTime,
 			time.Now().UTC(),
 			sourceClusterName,
+			sourceShardKey,
 			replicationTask.Priority,
 			replicationTask,
 		),
@@ -126,7 +129,8 @@ func (e *ExecutableVerifyVersionedTransitionTask) Execute() error {
 				e.NamespaceID,
 				e.WorkflowID,
 				e.RunID,
-				e.ReplicationTask().VersionedTransition,
+				nil,
+				nil,
 			)
 		default:
 			return err
@@ -134,11 +138,14 @@ func (e *ExecutableVerifyVersionedTransitionTask) Execute() error {
 	}
 
 	transitionHistory := ms.GetExecutionInfo().TransitionHistory
+	if len(transitionHistory) == 0 {
+		return nil
+	}
 	err = workflow.TransitionHistoryStalenessCheck(transitionHistory, e.ReplicationTask().VersionedTransition)
 
 	// case 1: VersionedTransition is up-to-date on current mutable state
 	if err == nil {
-		if ms.GetNextEventID() < e.taskAttr.NextEventId {
+		if ms.GetNextEventId() < e.taskAttr.NextEventId {
 			return serviceerror.NewDataLoss(fmt.Sprintf("Workflow event missed. NamespaceId: %v, workflowId: %v, runId: %v, expected last eventId: %v, versionedTransition: %v",
 				e.NamespaceID, e.WorkflowID, e.RunID, e.taskAttr.NextEventId-1, e.ReplicationTask().VersionedTransition))
 		}
@@ -152,7 +159,8 @@ func (e *ExecutableVerifyVersionedTransitionTask) Execute() error {
 			e.NamespaceID,
 			e.WorkflowID,
 			e.RunID,
-			e.ReplicationTask().VersionedTransition,
+			transitionHistory[len(transitionHistory)-1],
+			ms.GetExecutionInfo().VersionHistories,
 		)
 	}
 	// case 3: state transition is not on non-current branch, but no event to verify
@@ -207,7 +215,7 @@ func (e *ExecutableVerifyVersionedTransitionTask) verifyNewRunExist(ctx context.
 	}
 }
 
-func (e *ExecutableVerifyVersionedTransitionTask) getMutableState(ctx context.Context, runId string) (_ workflow.MutableState, retError error) {
+func (e *ExecutableVerifyVersionedTransitionTask) getMutableState(ctx context.Context, runId string) (_ *persistencespb.WorkflowMutableState, retError error) {
 	shardContext, err := e.ShardController.GetShardByNamespaceWorkflow(
 		namespace.ID(e.NamespaceID),
 		e.WorkflowID,
@@ -225,12 +233,16 @@ func (e *ExecutableVerifyVersionedTransitionTask) getMutableState(ctx context.Co
 		},
 		locks.PriorityLow,
 	)
+	if err != nil {
+		return nil, err
+	}
 	defer func() { release(retError) }()
+	ms, err := wfContext.LoadMutableState(ctx, shardContext)
 	if err != nil {
 		return nil, err
 	}
 
-	return wfContext.LoadMutableState(ctx, shardContext)
+	return ms.CloneToProto(), nil
 }
 
 func (e *ExecutableVerifyVersionedTransitionTask) HandleErr(err error) error {
@@ -248,10 +260,19 @@ func (e *ExecutableVerifyVersionedTransitionTask) HandleErr(err error) error {
 
 		if doContinue, syncStateErr := e.SyncState(
 			ctx,
-			e.ExecutableTask.SourceClusterName(),
 			taskErr,
 			ResendAttempt,
 		); syncStateErr != nil || !doContinue {
+			if syncStateErr != nil {
+				e.Logger.Error("VerifyVersionedTransition replication task encountered error during sync state",
+					tag.WorkflowNamespaceID(e.NamespaceID),
+					tag.WorkflowID(e.WorkflowID),
+					tag.WorkflowRunID(e.RunID),
+					tag.TaskID(e.ExecutableTask.TaskID()),
+					tag.Error(syncStateErr),
+				)
+			}
+			// return original task processing error
 			return err
 		}
 		return e.Execute()

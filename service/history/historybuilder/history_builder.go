@@ -398,8 +398,9 @@ func (b *HistoryBuilder) AddWorkflowExecutionTerminatedEvent(
 	reason string,
 	details *commonpb.Payloads,
 	identity string,
+	links []*commonpb.Link,
 ) *historypb.HistoryEvent {
-	event := b.EventFactory.CreateWorkflowExecutionTerminatedEvent(reason, details, identity)
+	event := b.EventFactory.CreateWorkflowExecutionTerminatedEvent(reason, details, identity, links)
 
 	event, _ = b.EventStore.add(event)
 	return event
@@ -667,16 +668,16 @@ func (b *HistoryBuilder) AddWorkflowExecutionSignaledEvent(
 	input *commonpb.Payloads,
 	identity string,
 	header *commonpb.Header,
-	skipGenerateWorkflowTask bool,
 	externalWorkflowExecution *commonpb.WorkflowExecution,
+	links []*commonpb.Link,
 ) *historypb.HistoryEvent {
 	event := b.EventFactory.CreateWorkflowExecutionSignaledEvent(
 		signalName,
 		input,
 		identity,
 		header,
-		skipGenerateWorkflowTask,
 		externalWorkflowExecution,
+		links,
 	)
 	event, _ = b.EventStore.add(event)
 	return event

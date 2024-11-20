@@ -46,6 +46,7 @@ import (
 	workflow "go.temporal.io/server/api/workflow/v1"
 	collection "go.temporal.io/server/common/collection"
 	definition "go.temporal.io/server/common/definition"
+	metrics "go.temporal.io/server/common/metrics"
 	namespace "go.temporal.io/server/common/namespace"
 	events "go.temporal.io/server/service/history/events"
 	hsm "go.temporal.io/server/service/history/hsm"
@@ -459,6 +460,21 @@ func (mr *MockEngineMockRecorder) NotifyNewTasks(tasks any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NotifyNewTasks", reflect.TypeOf((*MockEngine)(nil).NotifyNewTasks), tasks)
 }
 
+// PauseActivity mocks base method.
+func (m *MockEngine) PauseActivity(ctx context.Context, request *historyservice.PauseActivityRequest) (*historyservice.PauseActivityResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "PauseActivity", ctx, request)
+	ret0, _ := ret[0].(*historyservice.PauseActivityResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// PauseActivity indicates an expected call of PauseActivity.
+func (mr *MockEngineMockRecorder) PauseActivity(ctx, request any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PauseActivity", reflect.TypeOf((*MockEngine)(nil).PauseActivity), ctx, request)
+}
+
 // PollMutableState mocks base method.
 func (m *MockEngine) PollMutableState(ctx context.Context, request *historyservice.PollMutableStateRequest) (*historyservice.PollMutableStateResponse, error) {
 	m.ctrl.T.Helper()
@@ -707,6 +723,21 @@ func (mr *MockEngineMockRecorder) RequestCancelWorkflowExecution(ctx, request an
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RequestCancelWorkflowExecution", reflect.TypeOf((*MockEngine)(nil).RequestCancelWorkflowExecution), ctx, request)
 }
 
+// ResetActivity mocks base method.
+func (m *MockEngine) ResetActivity(ctx context.Context, request *historyservice.ResetActivityRequest) (*historyservice.ResetActivityResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ResetActivity", ctx, request)
+	ret0, _ := ret[0].(*historyservice.ResetActivityResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ResetActivity indicates an expected call of ResetActivity.
+func (mr *MockEngineMockRecorder) ResetActivity(ctx, request any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ResetActivity", reflect.TypeOf((*MockEngine)(nil).ResetActivity), ctx, request)
+}
+
 // ResetStickyTaskQueue mocks base method.
 func (m *MockEngine) ResetStickyTaskQueue(ctx context.Context, resetRequest *historyservice.ResetStickyTaskQueueRequest) (*historyservice.ResetStickyTaskQueueResponse, error) {
 	m.ctrl.T.Helper()
@@ -883,17 +914,17 @@ func (mr *MockEngineMockRecorder) StartWorkflowExecution(ctx, request any) *gomo
 }
 
 // StateMachineEnvironment mocks base method.
-func (m *MockEngine) StateMachineEnvironment() hsm.Environment {
+func (m *MockEngine) StateMachineEnvironment(operationTag metrics.Tag) hsm.Environment {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "StateMachineEnvironment")
+	ret := m.ctrl.Call(m, "StateMachineEnvironment", operationTag)
 	ret0, _ := ret[0].(hsm.Environment)
 	return ret0
 }
 
 // StateMachineEnvironment indicates an expected call of StateMachineEnvironment.
-func (mr *MockEngineMockRecorder) StateMachineEnvironment() *gomock.Call {
+func (mr *MockEngineMockRecorder) StateMachineEnvironment(operationTag any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "StateMachineEnvironment", reflect.TypeOf((*MockEngine)(nil).StateMachineEnvironment))
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "StateMachineEnvironment", reflect.TypeOf((*MockEngine)(nil).StateMachineEnvironment), operationTag)
 }
 
 // Stop mocks base method.
@@ -1009,6 +1040,21 @@ func (mr *MockEngineMockRecorder) TerminateWorkflowExecution(ctx, request any) *
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "TerminateWorkflowExecution", reflect.TypeOf((*MockEngine)(nil).TerminateWorkflowExecution), ctx, request)
 }
 
+// UnpauseActivity mocks base method.
+func (m *MockEngine) UnpauseActivity(ctx context.Context, request *historyservice.UnpauseActivityRequest) (*historyservice.UnpauseActivityResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UnpauseActivity", ctx, request)
+	ret0, _ := ret[0].(*historyservice.UnpauseActivityResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UnpauseActivity indicates an expected call of UnpauseActivity.
+func (mr *MockEngineMockRecorder) UnpauseActivity(ctx, request any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UnpauseActivity", reflect.TypeOf((*MockEngine)(nil).UnpauseActivity), ctx, request)
+}
+
 // UnsubscribeReplicationNotification mocks base method.
 func (m *MockEngine) UnsubscribeReplicationNotification(arg0 string) {
 	m.ctrl.T.Helper()
@@ -1019,6 +1065,21 @@ func (m *MockEngine) UnsubscribeReplicationNotification(arg0 string) {
 func (mr *MockEngineMockRecorder) UnsubscribeReplicationNotification(arg0 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UnsubscribeReplicationNotification", reflect.TypeOf((*MockEngine)(nil).UnsubscribeReplicationNotification), arg0)
+}
+
+// UpdateActivityOptions mocks base method.
+func (m *MockEngine) UpdateActivityOptions(ctx context.Context, request *historyservice.UpdateActivityOptionsRequest) (*historyservice.UpdateActivityOptionsResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdateActivityOptions", ctx, request)
+	ret0, _ := ret[0].(*historyservice.UpdateActivityOptionsResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UpdateActivityOptions indicates an expected call of UpdateActivityOptions.
+func (mr *MockEngineMockRecorder) UpdateActivityOptions(ctx, request any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateActivityOptions", reflect.TypeOf((*MockEngine)(nil).UpdateActivityOptions), ctx, request)
 }
 
 // UpdateWorkflowExecution mocks base method.

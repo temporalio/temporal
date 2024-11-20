@@ -38,6 +38,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
+	replicationpb "go.temporal.io/api/replication/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
@@ -56,7 +57,7 @@ import (
 	"go.temporal.io/server/common/primitives"
 	test "go.temporal.io/server/common/testing"
 	"go.temporal.io/server/service/history/replication/eventhandler"
-	"go.temporal.io/server/tests"
+	"go.temporal.io/server/tests/testcore"
 	"go.uber.org/fx"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/protobuf/types/known/durationpb"
@@ -65,17 +66,39 @@ import (
 type (
 	streamBasedReplicationTestSuite struct {
 		xdcBaseSuite
-		controller    *gomock.Controller
-		namespaceName string
-		namespaceID   string
-		serializer    serialization.Serializer
-		generator     test.Generator
-		once          sync.Once
+		controller              *gomock.Controller
+		namespaceName           string
+		namespaceID             string
+		serializer              serialization.Serializer
+		generator               test.Generator
+		once                    sync.Once
+		enableTransitionHistory bool
 	}
 )
 
 func TestStreamBasedReplicationTestSuite(t *testing.T) {
-	suite.Run(t, new(streamBasedReplicationTestSuite))
+	t.SkipNow() // flaky test (EnableTransitionHistory)
+	for _, tc := range []struct {
+		name                    string
+		enableTransitionHistory bool
+	}{
+		{
+			name:                    "EnableTransitionHistory",
+			enableTransitionHistory: true,
+		},
+		{
+			name:                    "DisableTransitionHistory",
+			enableTransitionHistory: false,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			s := &streamBasedReplicationTestSuite{
+				namespaceName:           "replication-test-" + common.GenerateRandomString(5),
+				enableTransitionHistory: tc.enableTransitionHistory,
+			}
+			suite.Run(t, s)
+		})
+	}
 }
 
 func (s *streamBasedReplicationTestSuite) SetupSuite() {
@@ -85,6 +108,7 @@ func (s *streamBasedReplicationTestSuite) SetupSuite() {
 		dynamicconfig.EnableEagerNamespaceRefresher.Key():       true,
 		dynamicconfig.EnableReplicationTaskBatching.Key():       true,
 		dynamicconfig.EnableReplicateLocalGeneratedEvents.Key(): true,
+		dynamicconfig.EnableTransitionHistory.Key():             s.enableTransitionHistory,
 	}
 	s.logger = log.NewTestLogger()
 	s.serializer = serialization.NewSerializer()
@@ -93,7 +117,7 @@ func (s *streamBasedReplicationTestSuite) SetupSuite() {
 			"active",
 			"standby",
 		},
-		tests.WithFxOptionsForService(primitives.AllServices,
+		testcore.WithFxOptionsForService(primitives.AllServices,
 			fx.Decorate(
 				func() config.DCRedirectionPolicy {
 					return config.DCRedirectionPolicy{Policy: "noop"}
@@ -116,8 +140,7 @@ func (s *streamBasedReplicationTestSuite) SetupTest() {
 
 	s.once.Do(func() {
 		ctx := context.Background()
-		s.namespaceName = "replication-test"
-		_, err := s.cluster1.GetFrontendClient().RegisterNamespace(ctx, &workflowservice.RegisterNamespaceRequest{
+		_, err := s.cluster1.FrontendClient().RegisterNamespace(ctx, &workflowservice.RegisterNamespaceRequest{
 			Namespace: s.namespaceName,
 			Clusters:  s.clusterReplicationConfig(),
 			// The first cluster is the active cluster.
@@ -131,7 +154,7 @@ func (s *streamBasedReplicationTestSuite) SetupTest() {
 		err = s.waitUntilNamespaceReplicated(ctx, s.namespaceName)
 		s.Require().NoError(err)
 
-		nsRes, _ := s.cluster1.GetFrontendClient().DescribeNamespace(ctx, &workflowservice.DescribeNamespaceRequest{
+		nsRes, _ := s.cluster1.FrontendClient().DescribeNamespace(ctx, &workflowservice.DescribeNamespaceRequest{
 			Namespace: s.namespaceName,
 		})
 
@@ -145,9 +168,17 @@ func (s *streamBasedReplicationTestSuite) TestReplicateHistoryEvents_ForceReplic
 	ctx, cancel := context.WithTimeout(ctx, testTimeout)
 	defer cancel()
 
+	var versions []int64
+	if s.enableTransitionHistory {
+		// Use versions for cluster1 (active) so we can update workflows
+		versions = []int64{1, 31, 21, 61, 41, 101, 91, 71, 81}
+	} else {
+		versions = []int64{2, 12, 22, 32, 2, 1, 5, 8, 9}
+	}
+
 	// let's import some events into cluster 1
-	historyClient1 := s.cluster1.GetHistoryClient()
-	executions := s.importTestEvents(historyClient1, namespace.Name(s.namespaceName), namespace.ID(s.namespaceID), []int64{2, 12, 22, 32, 2, 1, 5, 8, 9})
+	historyClient1 := s.cluster1.HistoryClient()
+	executions := s.importTestEvents(historyClient1, namespace.Name(s.namespaceName), namespace.ID(s.namespaceID), versions)
 
 	// let's trigger replication by calling GenerateLastHistoryReplicationTasks. This is also used by force replication logic
 	for _, execution := range executions {
@@ -158,11 +189,44 @@ func (s *streamBasedReplicationTestSuite) TestReplicateHistoryEvents_ForceReplic
 		s.NoError(err)
 	}
 
-	time.Sleep(10 * time.Second)
+	s.waitForClusterSynced()
 	for _, execution := range executions {
 		err := s.assertHistoryEvents(ctx, s.namespaceID, execution.GetWorkflowId(), execution.GetRunId())
 		s.NoError(err)
 	}
+}
+
+func (s *streamBasedReplicationTestSuite) updateNamespace(version int64) error {
+	client1 := s.cluster1.FrontendClient() // active
+	nsResp, err := client1.DescribeNamespace(context.Background(), &workflowservice.DescribeNamespaceRequest{
+		Namespace: s.namespaceName,
+	})
+	s.NoError(err)
+
+	for nsResp.GetFailoverVersion() < version {
+		_, err = client1.UpdateNamespace(context.Background(), &workflowservice.UpdateNamespaceRequest{
+			Namespace: s.namespaceName,
+			ReplicationConfig: &replicationpb.NamespaceReplicationConfig{
+				ActiveClusterName: s.clusterNames[1],
+			},
+		})
+		s.NoError(err)
+
+		_, err = client1.UpdateNamespace(context.Background(), &workflowservice.UpdateNamespaceRequest{
+			Namespace: s.namespaceName,
+			ReplicationConfig: &replicationpb.NamespaceReplicationConfig{
+				ActiveClusterName: s.clusterNames[0],
+			},
+		})
+		s.NoError(err)
+
+		nsResp, err = client1.DescribeNamespace(context.Background(), &workflowservice.DescribeNamespaceRequest{
+			Namespace: s.namespaceName,
+		})
+		s.NoError(err)
+	}
+
+	return nil
 }
 
 func (s *streamBasedReplicationTestSuite) importTestEvents(
@@ -187,7 +251,12 @@ func (s *streamBasedReplicationTestSuite) importTestEvents(
 	}
 	var runID string
 	for _, version := range versions {
-		workflowID := "xdc-stream-replication-test" + uuid.New()
+		if s.enableTransitionHistory {
+			err := s.updateNamespace(version)
+			s.NoError(err)
+		}
+
+		workflowID := "xdc-stream-replication-test-" + uuid.New()
 		runID = uuid.New()
 
 		var historyBatch []*historypb.History
@@ -206,7 +275,7 @@ func (s *streamBasedReplicationTestSuite) importTestEvents(
 			historyBatch = append(historyBatch, historyEvents)
 		}
 
-		versionHistory, err := tests.EventBatchesToVersionHistory(nil, historyBatch)
+		versionHistory, err := testcore.EventBatchesToVersionHistory(nil, historyBatch)
 		s.NoError(err)
 		s.importEvents(
 			workflowID,
@@ -216,6 +285,21 @@ func (s *streamBasedReplicationTestSuite) importTestEvents(
 			historyClient,
 			true,
 		)
+
+		if s.enableTransitionHistory {
+			// signal the workflow to make sure the TransitionHistory is updated
+			signalName := "my signal"
+			signalInput := payloads.EncodeString("my signal input")
+			client1 := s.cluster1.FrontendClient() // active
+			_, err = client1.SignalWorkflowExecution(context.Background(), &workflowservice.SignalWorkflowExecutionRequest{
+				Namespace:         s.namespaceName,
+				WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: workflowID, RunId: runID},
+				SignalName:        signalName,
+				Input:             signalInput,
+				Identity:          "worker1",
+			})
+			s.NoError(err)
+		}
 
 		executions = append(executions, &commonpb.WorkflowExecution{WorkflowId: workflowID, RunId: runID})
 	}
@@ -232,7 +316,7 @@ func (s *streamBasedReplicationTestSuite) waitUntilNamespaceReplicated(
 	for {
 		select {
 		case <-ticker.C:
-			_, err := s.cluster2.GetFrontendClient().DescribeNamespace(ctx, &workflowservice.DescribeNamespaceRequest{
+			_, err := s.cluster2.FrontendClient().DescribeNamespace(ctx, &workflowservice.DescribeNamespaceRequest{
 				Namespace: namespaceName,
 			})
 			if err != nil {
@@ -253,9 +337,9 @@ func (s *streamBasedReplicationTestSuite) assertHistoryEvents(
 	mockClientBean.
 		EXPECT().
 		GetRemoteAdminClient("cluster1").
-		Return(s.cluster1.GetAdminClient(), nil).
+		Return(s.cluster1.AdminClient(), nil).
 		AnyTimes()
-	mockClientBean.EXPECT().GetRemoteAdminClient("cluster2").Return(s.cluster2.GetAdminClient(), nil).AnyTimes()
+	mockClientBean.EXPECT().GetRemoteAdminClient("cluster2").Return(s.cluster2.AdminClient(), nil).AnyTimes()
 
 	serializer := serialization.NewSerializer()
 	cluster1Fetcher := eventhandler.NewHistoryPaginatedFetcher(
@@ -357,7 +441,7 @@ func (s *streamBasedReplicationTestSuite) importEvents(
 
 func (s *streamBasedReplicationTestSuite) TestForceReplicateResetWorkflow_BaseWorkflowNotFound() {
 	ns := "test-force-replicate-reset-" + common.GenerateRandomString(5)
-	client1 := s.cluster1.GetFrontendClient() // active
+	client1 := s.cluster1.FrontendClient() // active
 	regReq := &workflowservice.RegisterNamespaceRequest{
 		Namespace:                        ns,
 		IsGlobalNamespace:                true,
@@ -365,7 +449,7 @@ func (s *streamBasedReplicationTestSuite) TestForceReplicateResetWorkflow_BaseWo
 		ActiveClusterName:                s.clusterNames[0],
 		WorkflowExecutionRetentionPeriod: durationpb.New(1 * time.Hour * 24),
 	}
-	_, err := client1.RegisterNamespace(tests.NewContext(), regReq)
+	_, err := client1.RegisterNamespace(testcore.NewContext(), regReq)
 	s.NoError(err)
 	// Wait for namespace cache to pick the change
 	time.Sleep(cacheRefreshInterval)
@@ -373,7 +457,7 @@ func (s *streamBasedReplicationTestSuite) TestForceReplicateResetWorkflow_BaseWo
 	descReq := &workflowservice.DescribeNamespaceRequest{
 		Namespace: ns,
 	}
-	resp, err := client1.DescribeNamespace(tests.NewContext(), descReq)
+	resp, err := client1.DescribeNamespace(testcore.NewContext(), descReq)
 	s.NoError(err)
 	s.NotNil(resp)
 
@@ -395,7 +479,7 @@ func (s *streamBasedReplicationTestSuite) TestForceReplicateResetWorkflow_BaseWo
 		WorkflowTaskTimeout: durationpb.New(1 * time.Second),
 		Identity:            identity,
 	}
-	we, err := client1.StartWorkflowExecution(tests.NewContext(), startReq)
+	we, err := client1.StartWorkflowExecution(testcore.NewContext(), startReq)
 	s.NoError(err)
 	s.NotNil(we.GetRunId())
 
@@ -408,7 +492,7 @@ func (s *streamBasedReplicationTestSuite) TestForceReplicateResetWorkflow_BaseWo
 		}}, nil
 	}
 
-	poller := &tests.TaskPoller{
+	poller := &testcore.TaskPoller{
 		Client:              client1,
 		Namespace:           ns,
 		TaskQueue:           taskQueue,
@@ -422,7 +506,7 @@ func (s *streamBasedReplicationTestSuite) TestForceReplicateResetWorkflow_BaseWo
 	_, err = poller.PollAndProcessWorkflowTask()
 	s.NoError(err)
 
-	resetResp, err := client1.ResetWorkflowExecution(tests.NewContext(), &workflowservice.ResetWorkflowExecutionRequest{
+	resetResp, err := client1.ResetWorkflowExecution(testcore.NewContext(), &workflowservice.ResetWorkflowExecutionRequest{
 		Namespace: ns,
 		WorkflowExecution: &commonpb.WorkflowExecution{
 			WorkflowId: id,
@@ -437,7 +521,7 @@ func (s *streamBasedReplicationTestSuite) TestForceReplicateResetWorkflow_BaseWo
 	_, err = poller.PollAndProcessWorkflowTask()
 	s.NoError(err)
 
-	_, err = client1.DeleteWorkflowExecution(tests.NewContext(), &workflowservice.DeleteWorkflowExecutionRequest{
+	_, err = client1.DeleteWorkflowExecution(testcore.NewContext(), &workflowservice.DeleteWorkflowExecutionRequest{
 		Namespace: ns,
 		WorkflowExecution: &commonpb.WorkflowExecution{
 			WorkflowId: id,
@@ -446,8 +530,8 @@ func (s *streamBasedReplicationTestSuite) TestForceReplicateResetWorkflow_BaseWo
 	})
 	s.NoError(err)
 
-	client2 := s.cluster2.GetFrontendClient()
-	_, err = client2.DeleteWorkflowExecution(tests.NewContext(), &workflowservice.DeleteWorkflowExecutionRequest{
+	client2 := s.cluster2.FrontendClient()
+	_, err = client2.DeleteWorkflowExecution(testcore.NewContext(), &workflowservice.DeleteWorkflowExecutionRequest{
 		Namespace: ns,
 		WorkflowExecution: &commonpb.WorkflowExecution{
 			WorkflowId: id,
@@ -455,7 +539,7 @@ func (s *streamBasedReplicationTestSuite) TestForceReplicateResetWorkflow_BaseWo
 		},
 	})
 	s.NoError(err)
-	_, err = client2.DeleteWorkflowExecution(tests.NewContext(), &workflowservice.DeleteWorkflowExecutionRequest{
+	_, err = client2.DeleteWorkflowExecution(testcore.NewContext(), &workflowservice.DeleteWorkflowExecutionRequest{
 		Namespace: ns,
 		WorkflowExecution: &commonpb.WorkflowExecution{
 			WorkflowId: id,
@@ -466,7 +550,7 @@ func (s *streamBasedReplicationTestSuite) TestForceReplicateResetWorkflow_BaseWo
 
 	time.Sleep(time.Second)
 
-	_, err = client2.DescribeWorkflowExecution(tests.NewContext(), &workflowservice.DescribeWorkflowExecutionRequest{
+	_, err = client2.DescribeWorkflowExecution(testcore.NewContext(), &workflowservice.DescribeWorkflowExecutionRequest{
 		Namespace: ns,
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: id,
@@ -475,7 +559,7 @@ func (s *streamBasedReplicationTestSuite) TestForceReplicateResetWorkflow_BaseWo
 	})
 	s.Error(err)
 
-	_, err = s.cluster1.GetHistoryClient().GenerateLastHistoryReplicationTasks(tests.NewContext(), &historyservice.GenerateLastHistoryReplicationTasksRequest{
+	_, err = s.cluster1.HistoryClient().GenerateLastHistoryReplicationTasks(testcore.NewContext(), &historyservice.GenerateLastHistoryReplicationTasksRequest{
 		NamespaceId: resp.NamespaceInfo.GetId(),
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: id,
@@ -485,7 +569,7 @@ func (s *streamBasedReplicationTestSuite) TestForceReplicateResetWorkflow_BaseWo
 	s.NoError(err)
 
 	for i := 0; i < 5; i++ {
-		wfExec, err := client2.DescribeWorkflowExecution(tests.NewContext(), &workflowservice.DescribeWorkflowExecutionRequest{
+		wfExec, err := client2.DescribeWorkflowExecution(testcore.NewContext(), &workflowservice.DescribeWorkflowExecutionRequest{
 			Namespace: ns,
 			Execution: &commonpb.WorkflowExecution{
 				WorkflowId: id,
@@ -504,7 +588,7 @@ func (s *streamBasedReplicationTestSuite) TestForceReplicateResetWorkflow_BaseWo
 
 func (s *streamBasedReplicationTestSuite) TestResetWorkflow_SyncWorkflowState() {
 	ns := "test--reset-sync-workflow-sate" + common.GenerateRandomString(5)
-	client1 := s.cluster1.GetFrontendClient() // active
+	client1 := s.cluster1.FrontendClient() // active
 	regReq := &workflowservice.RegisterNamespaceRequest{
 		Namespace:                        ns,
 		IsGlobalNamespace:                true,
@@ -512,7 +596,7 @@ func (s *streamBasedReplicationTestSuite) TestResetWorkflow_SyncWorkflowState() 
 		ActiveClusterName:                s.clusterNames[0],
 		WorkflowExecutionRetentionPeriod: durationpb.New(1 * time.Hour * 24),
 	}
-	_, err := client1.RegisterNamespace(tests.NewContext(), regReq)
+	_, err := client1.RegisterNamespace(testcore.NewContext(), regReq)
 	s.NoError(err)
 	// Wait for namespace cache to pick the change
 	var resp *workflowservice.DescribeNamespaceResponse
@@ -521,7 +605,7 @@ func (s *streamBasedReplicationTestSuite) TestResetWorkflow_SyncWorkflowState() 
 			Namespace: ns,
 		}
 		var err error
-		resp, err = client1.DescribeNamespace(tests.NewContext(), descReq)
+		resp, err = client1.DescribeNamespace(testcore.NewContext(), descReq)
 		return err == nil
 	}, cacheRefreshInterval, time.Second)
 
@@ -543,7 +627,7 @@ func (s *streamBasedReplicationTestSuite) TestResetWorkflow_SyncWorkflowState() 
 		WorkflowTaskTimeout: durationpb.New(1 * time.Second),
 		Identity:            identity,
 	}
-	we, err := client1.StartWorkflowExecution(tests.NewContext(), startReq)
+	we, err := client1.StartWorkflowExecution(testcore.NewContext(), startReq)
 	s.NoError(err)
 	s.NotNil(we.GetRunId())
 
@@ -556,7 +640,7 @@ func (s *streamBasedReplicationTestSuite) TestResetWorkflow_SyncWorkflowState() 
 		}}, nil
 	}
 
-	poller := &tests.TaskPoller{
+	poller := &testcore.TaskPoller{
 		Client:              client1,
 		Namespace:           ns,
 		TaskQueue:           taskQueue,
@@ -570,7 +654,7 @@ func (s *streamBasedReplicationTestSuite) TestResetWorkflow_SyncWorkflowState() 
 	_, err = poller.PollAndProcessWorkflowTask()
 	s.NoError(err)
 
-	resetResp1, err := client1.ResetWorkflowExecution(tests.NewContext(), &workflowservice.ResetWorkflowExecutionRequest{
+	resetResp1, err := client1.ResetWorkflowExecution(testcore.NewContext(), &workflowservice.ResetWorkflowExecutionRequest{
 		Namespace: ns,
 		WorkflowExecution: &commonpb.WorkflowExecution{
 			WorkflowId: id,
@@ -585,7 +669,7 @@ func (s *streamBasedReplicationTestSuite) TestResetWorkflow_SyncWorkflowState() 
 	_, err = poller.PollAndProcessWorkflowTask()
 	s.NoError(err)
 
-	resetResp2, err := client1.ResetWorkflowExecution(tests.NewContext(), &workflowservice.ResetWorkflowExecutionRequest{
+	resetResp2, err := client1.ResetWorkflowExecution(testcore.NewContext(), &workflowservice.ResetWorkflowExecutionRequest{
 		Namespace: ns,
 		WorkflowExecution: &commonpb.WorkflowExecution{
 			WorkflowId: id,
@@ -601,8 +685,8 @@ func (s *streamBasedReplicationTestSuite) TestResetWorkflow_SyncWorkflowState() 
 	s.NoError(err)
 
 	s.Eventually(func() bool {
-		_, err = s.cluster2.GetAdminClient().DescribeMutableState(
-			tests.NewContext(),
+		_, err = s.cluster2.AdminClient().DescribeMutableState(
+			testcore.NewContext(),
 			&adminservice.DescribeMutableStateRequest{
 				Namespace: ns,
 				Execution: &commonpb.WorkflowExecution{
@@ -615,8 +699,8 @@ func (s *streamBasedReplicationTestSuite) TestResetWorkflow_SyncWorkflowState() 
 		time.Second*10,
 		time.Second)
 	s.Eventually(func() bool {
-		_, err = s.cluster2.GetAdminClient().DescribeMutableState(
-			tests.NewContext(),
+		_, err = s.cluster2.AdminClient().DescribeMutableState(
+			testcore.NewContext(),
 			&adminservice.DescribeMutableStateRequest{
 				Namespace: ns,
 				Execution: &commonpb.WorkflowExecution{
@@ -629,8 +713,8 @@ func (s *streamBasedReplicationTestSuite) TestResetWorkflow_SyncWorkflowState() 
 		time.Second*10,
 		time.Second)
 	s.Eventually(func() bool {
-		_, err = s.cluster2.GetAdminClient().DescribeMutableState(
-			tests.NewContext(),
+		_, err = s.cluster2.AdminClient().DescribeMutableState(
+			testcore.NewContext(),
 			&adminservice.DescribeMutableStateRequest{
 				Namespace: ns,
 				Execution: &commonpb.WorkflowExecution{
@@ -644,7 +728,7 @@ func (s *streamBasedReplicationTestSuite) TestResetWorkflow_SyncWorkflowState() 
 		time.Second)
 
 	// Delete reset workflows
-	_, err = s.cluster2.GetAdminClient().DeleteWorkflowExecution(tests.NewContext(), &adminservice.DeleteWorkflowExecutionRequest{
+	_, err = s.cluster2.AdminClient().DeleteWorkflowExecution(testcore.NewContext(), &adminservice.DeleteWorkflowExecutionRequest{
 		Namespace: ns,
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: id,
@@ -652,7 +736,7 @@ func (s *streamBasedReplicationTestSuite) TestResetWorkflow_SyncWorkflowState() 
 		},
 	})
 	s.NoError(err)
-	_, err = s.cluster2.GetAdminClient().DeleteWorkflowExecution(tests.NewContext(), &adminservice.DeleteWorkflowExecutionRequest{
+	_, err = s.cluster2.AdminClient().DeleteWorkflowExecution(testcore.NewContext(), &adminservice.DeleteWorkflowExecutionRequest{
 		Namespace: ns,
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: id,
@@ -660,7 +744,7 @@ func (s *streamBasedReplicationTestSuite) TestResetWorkflow_SyncWorkflowState() 
 		},
 	})
 	s.NoError(err)
-	_, err = s.cluster2.GetAdminClient().DeleteWorkflowExecution(tests.NewContext(), &adminservice.DeleteWorkflowExecutionRequest{
+	_, err = s.cluster2.AdminClient().DeleteWorkflowExecution(testcore.NewContext(), &adminservice.DeleteWorkflowExecutionRequest{
 		Namespace: ns,
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: id,
@@ -670,8 +754,8 @@ func (s *streamBasedReplicationTestSuite) TestResetWorkflow_SyncWorkflowState() 
 	s.NoError(err)
 
 	s.Eventually(func() bool {
-		_, err = s.cluster2.GetAdminClient().DescribeMutableState(
-			tests.NewContext(),
+		_, err = s.cluster2.AdminClient().DescribeMutableState(
+			testcore.NewContext(),
 			&adminservice.DescribeMutableStateRequest{
 				Namespace: ns,
 				Execution: &commonpb.WorkflowExecution{
@@ -685,8 +769,8 @@ func (s *streamBasedReplicationTestSuite) TestResetWorkflow_SyncWorkflowState() 
 		time.Second*10,
 		time.Second)
 	s.Eventually(func() bool {
-		_, err = s.cluster2.GetAdminClient().DescribeMutableState(
-			tests.NewContext(),
+		_, err = s.cluster2.AdminClient().DescribeMutableState(
+			testcore.NewContext(),
 			&adminservice.DescribeMutableStateRequest{
 				Namespace: ns,
 				Execution: &commonpb.WorkflowExecution{
@@ -700,8 +784,8 @@ func (s *streamBasedReplicationTestSuite) TestResetWorkflow_SyncWorkflowState() 
 		time.Second*10,
 		time.Second)
 	s.Eventually(func() bool {
-		_, err = s.cluster2.GetAdminClient().DescribeMutableState(
-			tests.NewContext(),
+		_, err = s.cluster2.AdminClient().DescribeMutableState(
+			testcore.NewContext(),
 			&adminservice.DescribeMutableStateRequest{
 				Namespace: ns,
 				Execution: &commonpb.WorkflowExecution{
@@ -715,7 +799,7 @@ func (s *streamBasedReplicationTestSuite) TestResetWorkflow_SyncWorkflowState() 
 		time.Second*10,
 		time.Second)
 
-	_, err = s.cluster1.GetHistoryClient().GenerateLastHistoryReplicationTasks(tests.NewContext(), &historyservice.GenerateLastHistoryReplicationTasksRequest{
+	_, err = s.cluster1.HistoryClient().GenerateLastHistoryReplicationTasks(testcore.NewContext(), &historyservice.GenerateLastHistoryReplicationTasksRequest{
 		NamespaceId: resp.NamespaceInfo.GetId(),
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: id,
@@ -724,8 +808,8 @@ func (s *streamBasedReplicationTestSuite) TestResetWorkflow_SyncWorkflowState() 
 	})
 	s.NoError(err)
 	s.Eventually(func() bool {
-		_, err = s.cluster2.GetAdminClient().DescribeMutableState(
-			tests.NewContext(),
+		_, err = s.cluster2.AdminClient().DescribeMutableState(
+			testcore.NewContext(),
 			&adminservice.DescribeMutableStateRequest{
 				Namespace: ns,
 				Execution: &commonpb.WorkflowExecution{
@@ -738,7 +822,7 @@ func (s *streamBasedReplicationTestSuite) TestResetWorkflow_SyncWorkflowState() 
 		time.Second*10,
 		time.Second)
 
-	_, err = s.cluster1.GetHistoryClient().GenerateLastHistoryReplicationTasks(tests.NewContext(), &historyservice.GenerateLastHistoryReplicationTasksRequest{
+	_, err = s.cluster1.HistoryClient().GenerateLastHistoryReplicationTasks(testcore.NewContext(), &historyservice.GenerateLastHistoryReplicationTasksRequest{
 		NamespaceId: resp.NamespaceInfo.GetId(),
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: id,
@@ -747,8 +831,8 @@ func (s *streamBasedReplicationTestSuite) TestResetWorkflow_SyncWorkflowState() 
 	})
 	s.NoError(err)
 	s.Eventually(func() bool {
-		_, err = s.cluster2.GetAdminClient().DescribeMutableState(
-			tests.NewContext(),
+		_, err = s.cluster2.AdminClient().DescribeMutableState(
+			testcore.NewContext(),
 			&adminservice.DescribeMutableStateRequest{
 				Namespace: ns,
 				Execution: &commonpb.WorkflowExecution{
@@ -761,7 +845,7 @@ func (s *streamBasedReplicationTestSuite) TestResetWorkflow_SyncWorkflowState() 
 		time.Second*10,
 		time.Second)
 
-	_, err = s.cluster1.GetHistoryClient().GenerateLastHistoryReplicationTasks(tests.NewContext(), &historyservice.GenerateLastHistoryReplicationTasksRequest{
+	_, err = s.cluster1.HistoryClient().GenerateLastHistoryReplicationTasks(testcore.NewContext(), &historyservice.GenerateLastHistoryReplicationTasksRequest{
 		NamespaceId: resp.NamespaceInfo.GetId(),
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: id,
@@ -770,8 +854,8 @@ func (s *streamBasedReplicationTestSuite) TestResetWorkflow_SyncWorkflowState() 
 	})
 	s.NoError(err)
 	s.Eventually(func() bool {
-		_, err = s.cluster2.GetAdminClient().DescribeMutableState(
-			tests.NewContext(),
+		_, err = s.cluster2.AdminClient().DescribeMutableState(
+			testcore.NewContext(),
 			&adminservice.DescribeMutableStateRequest{
 				Namespace: ns,
 				Execution: &commonpb.WorkflowExecution{

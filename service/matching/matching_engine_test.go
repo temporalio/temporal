@@ -86,6 +86,9 @@ import (
 	"google.golang.org/protobuf/types/known/wrapperspb"
 )
 
+// static error used in tests
+var randomTestError = errors.New("random error")
+
 type (
 	matchingEngineSuite struct {
 		suite.Suite
@@ -236,7 +239,8 @@ func newMatchingEngine(
 func (s *matchingEngineSuite) newPartitionManager(prtn tqid.Partition, config *Config) taskQueuePartitionManager {
 	tqConfig := newTaskQueueConfig(prtn.TaskQueue(), config, matchingTestNamespace)
 
-	pm, err := newTaskQueuePartitionManager(s.matchingEngine, s.ns, prtn, tqConfig, &mockUserDataManager{})
+	logger, _, metricsHandler := s.matchingEngine.loggerAndMetricsForPartition(matchingTestNamespace, prtn, tqConfig)
+	pm, err := newTaskQueuePartitionManager(s.matchingEngine, s.ns, prtn, tqConfig, logger, logger, metricsHandler, &mockUserDataManager{})
 	s.Require().NoError(err)
 	return pm
 }
@@ -468,9 +472,10 @@ func (s *matchingEngineSuite) TestFailAddTaskWithHistoryExhausted() {
 }
 
 func (s *matchingEngineSuite) TestFailAddTaskWithHistoryError() {
+	s.matchingEngine.config.MatchingDropNonRetryableTasks = dynamicconfig.GetBoolPropertyFn(true)
 	historyError := serviceerror.NewInternal("nothing to start")
 	tqName := "testFailAddTaskWithHistoryError"
-	s.testFailAddTaskWithHistoryError(tqName, true, historyError, historyError)
+	s.testFailAddTaskWithHistoryError(tqName, true, historyError, nil) // expectedError shall be nil since history drops the task
 }
 
 func (s *matchingEngineSuite) testFailAddTaskWithHistoryError(
@@ -685,6 +690,126 @@ func (s *matchingEngineSuite) TestPollWorkflowTaskQueues_NamespaceHandover() {
 	}, metrics.NoopMetricsHandler)
 	s.Nil(resp)
 	s.Equal(common.ErrNamespaceHandover.Error(), err.Error())
+}
+
+func (s *matchingEngineSuite) TestPollActivityTaskQueues_InternalError() {
+	s.matchingEngine.config.MatchingDropNonRetryableTasks = dynamicconfig.GetBoolPropertyFn(true)
+	namespaceId := uuid.New()
+	tl := "queue"
+	taskQueue := &taskqueuepb.TaskQueue{Name: "queue", Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
+
+	addRequest := matchingservice.AddActivityTaskRequest{
+		NamespaceId:            namespaceId,
+		Execution:              &commonpb.WorkflowExecution{WorkflowId: "workflowID", RunId: uuid.NewRandom().String()},
+		ScheduledEventId:       int64(5),
+		TaskQueue:              taskQueue,
+		ScheduleToStartTimeout: timestamp.DurationFromSeconds(0),
+	}
+
+	// add an activity task
+	_, _, err := s.matchingEngine.AddActivityTask(context.Background(), &addRequest)
+	s.NoError(err)
+	s.EqualValues(s.taskManager.getTaskCount(newUnversionedRootQueueKey(namespaceId, tl, enumspb.TASK_QUEUE_TYPE_ACTIVITY)), 1)
+
+	// task is dropped with no retry; RecordActivityTaskStarted should only be called once
+	s.mockHistoryClient.EXPECT().RecordActivityTaskStarted(gomock.Any(), gomock.Any(), gomock.Any()).
+		Return(nil, serviceerror.NewInternal("Internal error")).Times(1)
+	resp, err := s.matchingEngine.PollActivityTaskQueue(context.Background(), &matchingservice.PollActivityTaskQueueRequest{
+		NamespaceId: namespaceId,
+		PollRequest: &workflowservice.PollActivityTaskQueueRequest{
+			TaskQueue: taskQueue,
+			Identity:  "identity",
+		},
+	}, metrics.NoopMetricsHandler)
+	s.EqualValues(emptyPollActivityTaskQueueResponse, resp)
+	s.NoError(err)
+}
+
+func (s *matchingEngineSuite) TestPollActivityTaskQueues_DataLossError() {
+	s.matchingEngine.config.MatchingDropNonRetryableTasks = dynamicconfig.GetBoolPropertyFn(true)
+
+	namespaceId := uuid.New()
+	tl := "queue"
+	taskQueue := &taskqueuepb.TaskQueue{Name: "queue", Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
+
+	addRequest := matchingservice.AddActivityTaskRequest{
+		NamespaceId:            namespaceId,
+		Execution:              &commonpb.WorkflowExecution{WorkflowId: "workflowID", RunId: uuid.NewRandom().String()},
+		ScheduledEventId:       int64(5),
+		TaskQueue:              taskQueue,
+		ScheduleToStartTimeout: timestamp.DurationFromSeconds(0),
+	}
+
+	// add an activity task
+	_, _, err := s.matchingEngine.AddActivityTask(context.Background(), &addRequest)
+	s.NoError(err)
+	s.EqualValues(s.taskManager.getTaskCount(newUnversionedRootQueueKey(namespaceId, tl, enumspb.TASK_QUEUE_TYPE_ACTIVITY)), 1)
+
+	// task is dropped with no retry; RecordActivityTaskStarted should only be called once
+	s.mockHistoryClient.EXPECT().RecordActivityTaskStarted(gomock.Any(), gomock.Any(), gomock.Any()).
+		Return(nil, serviceerror.NewDataLoss("DataLoss Error")).Times(1)
+
+	resp, err := s.matchingEngine.PollActivityTaskQueue(context.Background(), &matchingservice.PollActivityTaskQueueRequest{
+		NamespaceId: namespaceId,
+		PollRequest: &workflowservice.PollActivityTaskQueueRequest{
+			TaskQueue: taskQueue,
+			Identity:  "identity",
+		},
+	}, metrics.NoopMetricsHandler)
+	s.EqualValues(emptyPollActivityTaskQueueResponse, resp)
+	s.NoError(err)
+}
+
+func (s *matchingEngineSuite) TestPollWorkflowTaskQueues_InternalError() {
+	s.matchingEngine.config.MatchingDropNonRetryableTasks = dynamicconfig.GetBoolPropertyFn(true)
+
+	tqName := "queue"
+	taskQueue := &taskqueuepb.TaskQueue{Name: tqName, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
+	wfExecution := &commonpb.WorkflowExecution{WorkflowId: "workflowID", RunId: uuid.NewRandom().String()}
+
+	// add a wf task
+	s.addWorkflowTask(wfExecution, taskQueue)
+	s.EqualValues(1, s.taskManager.getTaskCount(newUnversionedRootQueueKey(namespaceId, tqName, enumspb.TASK_QUEUE_TYPE_WORKFLOW)))
+
+	// task is dropped with no retry; RecordWorkflowTaskStarted should only be called once
+	s.mockHistoryClient.EXPECT().RecordWorkflowTaskStarted(gomock.Any(), gomock.Any(), gomock.Any()).
+		Return(nil, serviceerror.NewInternal("internal error")).Times(1)
+
+	resp, err := s.matchingEngine.PollWorkflowTaskQueue(context.Background(), &matchingservice.PollWorkflowTaskQueueRequest{
+		NamespaceId: namespaceId,
+		PollRequest: &workflowservice.PollWorkflowTaskQueueRequest{
+			TaskQueue: taskQueue,
+			Identity:  "identity",
+		},
+	}, metrics.NoopMetricsHandler)
+	s.EqualValues(emptyPollWorkflowTaskQueueResponse, resp)
+	s.NoError(err)
+}
+
+func (s *matchingEngineSuite) TestPollWorkflowTaskQueues_DataLossError() {
+	s.matchingEngine.config.MatchingDropNonRetryableTasks = dynamicconfig.GetBoolPropertyFn(true)
+
+	tqName := "queue"
+	taskQueue := &taskqueuepb.TaskQueue{Name: tqName, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
+	wfExecution := &commonpb.WorkflowExecution{WorkflowId: "workflowID", RunId: uuid.NewRandom().String()}
+
+	// add a wf task
+	s.addWorkflowTask(wfExecution, taskQueue)
+	s.EqualValues(1, s.taskManager.getTaskCount(newUnversionedRootQueueKey(namespaceId, tqName, enumspb.TASK_QUEUE_TYPE_WORKFLOW)))
+
+	// task is dropped with no retry; RecordWorkflowTaskStarted should only be called once
+	s.mockHistoryClient.EXPECT().RecordWorkflowTaskStarted(gomock.Any(), gomock.Any(), gomock.Any()).
+		Return(nil, serviceerror.NewDataLoss("DataLoss error")).Times(1)
+
+	resp, err := s.matchingEngine.PollWorkflowTaskQueue(context.Background(), &matchingservice.PollWorkflowTaskQueueRequest{
+		NamespaceId: namespaceId,
+		PollRequest: &workflowservice.PollWorkflowTaskQueueRequest{
+			TaskQueue: taskQueue,
+			Identity:  "identity",
+		},
+	}, metrics.NoopMetricsHandler)
+	s.EqualValues(emptyPollWorkflowTaskQueueResponse, resp)
+	s.NoError(err)
 }
 
 func (s *matchingEngineSuite) TestPollActivityTaskQueues_NamespaceHandover() {
@@ -1521,10 +1646,12 @@ func (s *matchingEngineSuite) TestForceUnloadTaskQueue() {
 	s.NoError(err)
 
 	// Force unload the sticky queue
-	unloadResp, err := s.matchingEngine.ForceUnloadTaskQueue(ctx, &matchingservice.ForceUnloadTaskQueueRequest{
-		NamespaceId:   namespaceId,
-		TaskQueue:     stickyQueue.Name,
-		TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+	unloadResp, err := s.matchingEngine.ForceUnloadTaskQueuePartition(ctx, &matchingservice.ForceUnloadTaskQueuePartitionRequest{
+		NamespaceId: namespaceId,
+		TaskQueuePartition: &taskqueuespb.TaskQueuePartition{
+			TaskQueue:     stickyQueue.Name,
+			TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+		},
 	})
 	s.NoError(err)
 	s.NotNil(unloadResp)
@@ -1872,7 +1999,7 @@ func (s *matchingEngineSuite) TestAddTaskAfterStartFailure() {
 	task, _, err := s.matchingEngine.pollTask(context.Background(), dbq.partition, &pollMetadata{})
 	s.NoError(err)
 
-	task.finish(errors.New("test error"))
+	task.finish(serviceerror.NewInternal("test error"), true)
 	s.EqualValues(1, s.taskManager.getTaskCount(dbq))
 	task2, _, err := s.matchingEngine.pollTask(context.Background(), dbq.partition, &pollMetadata{})
 	s.NoError(err)
@@ -1883,7 +2010,7 @@ func (s *matchingEngineSuite) TestAddTaskAfterStartFailure() {
 	s.Equal(task.event.Data.GetRunId(), task2.event.Data.GetRunId())
 	s.Equal(task.event.Data.GetScheduledEventId(), task2.event.Data.GetScheduledEventId())
 
-	task2.finish(nil)
+	task2.finish(nil, true)
 	s.EqualValues(0, s.taskManager.getTaskCount(dbq))
 }
 
@@ -2450,10 +2577,12 @@ func (s *matchingEngineSuite) TestGetTaskQueueUserData_LongPoll_Closes() {
 
 	go func() {
 		time.Sleep(200 * time.Millisecond)
-		_, _ = s.matchingEngine.ForceUnloadTaskQueue(context.Background(), &matchingservice.ForceUnloadTaskQueueRequest{
-			NamespaceId:   namespaceID.String(),
-			TaskQueue:     tq,
-			TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+		_, _ = s.matchingEngine.ForceUnloadTaskQueuePartition(context.Background(), &matchingservice.ForceUnloadTaskQueuePartitionRequest{
+			NamespaceId: namespaceID.String(),
+			TaskQueuePartition: &taskqueuespb.TaskQueuePartition{
+				TaskQueue:     tq,
+				TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+			},
 		})
 	}()
 
@@ -2540,7 +2669,7 @@ func (s *matchingEngineSuite) TestUnknownBuildId_Match() {
 		s.NoError(err)
 		s.Equal("wf", task.event.Data.WorkflowId)
 		s.Equal(int64(123), task.event.Data.ScheduledEventId)
-		task.finish(nil)
+		task.finish(nil, true)
 		wg.Done()
 	}()
 
@@ -2643,7 +2772,7 @@ func (s *matchingEngineSuite) TestDemotedMatch() {
 	s.Require().NoError(err)
 	s.Equal("wf", task.event.Data.WorkflowId)
 	s.Equal(int64(123), task.event.Data.ScheduledEventId)
-	task.finish(nil)
+	task.finish(nil, true)
 }
 
 func (s *matchingEngineSuite) TestUnloadOnMembershipChange() {

@@ -29,7 +29,7 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/pborman/uuid"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
@@ -92,9 +92,9 @@ func (s *nDCEventReapplicationSuite) TearDownTest() {
 }
 
 func (s *nDCEventReapplicationSuite) TestReapplyEvents_AppliedEvent_Signal() {
-	runID := uuid.New()
+	runID := uuid.NewString()
 	execution := &persistencespb.WorkflowExecutionInfo{
-		NamespaceId: uuid.New(),
+		NamespaceId: uuid.NewString(),
 	}
 	event := &historypb.HistoryEvent{
 		EventId:   1,
@@ -105,6 +105,17 @@ func (s *nDCEventReapplicationSuite) TestReapplyEvents_AppliedEvent_Signal() {
 			Input:      payloads.EncodeBytes([]byte{}),
 			Header:     &commonpb.Header{Fields: map[string]*commonpb.Payload{"myheader": {Data: []byte("myheader")}}},
 		}},
+		Links: []*commonpb.Link{
+			{
+				Variant: &commonpb.Link_WorkflowEvent_{
+					WorkflowEvent: &commonpb.Link_WorkflowEvent{
+						Namespace:  "whatever",
+						WorkflowId: "abc",
+						RunId:      uuid.NewString(),
+					},
+				},
+			},
+		},
 	}
 	attr := event.GetWorkflowExecutionSignaledEventAttributes()
 
@@ -119,7 +130,7 @@ func (s *nDCEventReapplicationSuite) TestReapplyEvents_AppliedEvent_Signal() {
 		attr.GetInput(),
 		attr.GetIdentity(),
 		attr.GetHeader(),
-		attr.GetSkipGenerateWorkflowTask(),
+		event.Links,
 	).Return(event, nil)
 	msCurrent.EXPECT().HSM().Return(s.hsmNode).AnyTimes()
 	msCurrent.EXPECT().IsWorkflowPendingOnWorkflowTaskBackoff().Return(true)
@@ -136,9 +147,9 @@ func (s *nDCEventReapplicationSuite) TestReapplyEvents_AppliedEvent_Signal() {
 }
 
 func (s *nDCEventReapplicationSuite) TestReapplyEvents_AppliedEvent_Update() {
-	runID := uuid.New()
+	runID := uuid.NewString()
 	execution := &persistencespb.WorkflowExecutionInfo{
-		NamespaceId: uuid.New(),
+		NamespaceId: uuid.NewString(),
 	}
 	for _, event := range []*historypb.HistoryEvent{
 		{
@@ -197,7 +208,7 @@ func (s *nDCEventReapplicationSuite) TestReapplyEvents_AppliedEvent_Update() {
 }
 
 func (s *nDCEventReapplicationSuite) TestReapplyEvents_Noop() {
-	runID := uuid.New()
+	runID := uuid.NewString()
 	event := &historypb.HistoryEvent{
 		EventId:   1,
 		EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED,
@@ -226,9 +237,9 @@ func (s *nDCEventReapplicationSuite) TestReapplyEvents_Noop() {
 }
 
 func (s *nDCEventReapplicationSuite) TestReapplyEvents_PartialAppliedEvent() {
-	runID := uuid.New()
+	runID := uuid.NewString()
 	execution := &persistencespb.WorkflowExecutionInfo{
-		NamespaceId: uuid.New(),
+		NamespaceId: uuid.NewString(),
 	}
 	event1 := &historypb.HistoryEvent{
 		EventId:   1,
@@ -263,7 +274,7 @@ func (s *nDCEventReapplicationSuite) TestReapplyEvents_PartialAppliedEvent() {
 		attr1.GetInput(),
 		attr1.GetIdentity(),
 		attr1.GetHeader(),
-		attr1.GetSkipGenerateWorkflowTask(),
+		event1.Links,
 	).Return(event1, nil)
 	msCurrent.EXPECT().IsWorkflowPendingOnWorkflowTaskBackoff().Return(true)
 	dedupResource1 := definition.NewEventReappliedID(runID, event1.GetEventId(), event1.GetVersion())
@@ -283,9 +294,9 @@ func (s *nDCEventReapplicationSuite) TestReapplyEvents_PartialAppliedEvent() {
 }
 
 func (s *nDCEventReapplicationSuite) TestReapplyEvents_Error() {
-	runID := uuid.New()
+	runID := uuid.NewString()
 	execution := &persistencespb.WorkflowExecutionInfo{
-		NamespaceId: uuid.New(),
+		NamespaceId: uuid.NewString(),
 	}
 	event := &historypb.HistoryEvent{
 		EventId:   1,
@@ -310,7 +321,7 @@ func (s *nDCEventReapplicationSuite) TestReapplyEvents_Error() {
 		attr.GetInput(),
 		attr.GetIdentity(),
 		attr.GetHeader(),
-		attr.GetSkipGenerateWorkflowTask(),
+		event.Links,
 	).Return(nil, fmt.Errorf("test"))
 	dedupResource := definition.NewEventReappliedID(runID, event.GetEventId(), event.GetVersion())
 	msCurrent.EXPECT().IsResourceDuplicated(dedupResource).Return(false)

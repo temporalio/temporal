@@ -141,7 +141,7 @@ func convertActivityStateReplicationTask(
 		shardContext,
 		definition.NewWorkflowKey(taskInfo.NamespaceID, taskInfo.WorkflowID, taskInfo.RunID),
 		workflowCache,
-		func(mutableState workflow.MutableState) (*replicationspb.ReplicationTask, error) {
+		func(mutableState workflow.MutableState, releaseFunc wcache.ReleaseCacheFunc) (*replicationspb.ReplicationTask, error) {
 			if !mutableState.IsWorkflowExecutionRunning() {
 				return nil, nil
 			}
@@ -193,6 +193,10 @@ func convertActivityStateReplicationTask(
 						LastStartedRedirectCounter: activityInfo.GetUseWorkflowBuildIdInfo().GetLastRedirectCounter(),
 						BaseExecutionInfo:          persistence.CopyBaseWorkflowInfo(mutableState.GetBaseWorkflowInfo()),
 						VersionHistory:             versionhistory.CopyVersionHistory(currentVersionHistory),
+						FirstScheduledTime:         activityInfo.FirstScheduledTime,
+						LastAttemptCompleteTime:    activityInfo.LastAttemptCompleteTime,
+						Stamp:                      activityInfo.Stamp,
+						Paused:                     activityInfo.Paused,
 					},
 				},
 				VisibilityTime: timestamppb.New(taskInfo.VisibilityTimestamp),
@@ -212,7 +216,7 @@ func convertWorkflowStateReplicationTask(
 		shardContext,
 		definition.NewWorkflowKey(taskInfo.NamespaceID, taskInfo.WorkflowID, taskInfo.RunID),
 		workflowCache,
-		func(mutableState workflow.MutableState) (*replicationspb.ReplicationTask, error) {
+		func(mutableState workflow.MutableState, releaseFunc wcache.ReleaseCacheFunc) (*replicationspb.ReplicationTask, error) {
 			state, _ := mutableState.GetWorkflowStateStatus()
 			if state != enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED {
 				return nil, nil
@@ -250,7 +254,7 @@ func convertSyncHSMReplicationTask(
 		shardContext,
 		definition.NewWorkflowKey(taskInfo.NamespaceID, taskInfo.WorkflowID, taskInfo.RunID),
 		workflowCache,
-		func(mutableState workflow.MutableState) (*replicationspb.ReplicationTask, error) {
+		func(mutableState workflow.MutableState, releaseFunc wcache.ReleaseCacheFunc) (*replicationspb.ReplicationTask, error) {
 			// HSM can be updated after workflow is completed
 			// so no check on workflow state here.
 
@@ -301,8 +305,8 @@ func convertSyncVersionedTransitionTask(
 		converter.shardContext,
 		definition.NewWorkflowKey(taskInfo.NamespaceID, taskInfo.WorkflowID, taskInfo.RunID),
 		converter.workflowCache,
-		func(mutableState workflow.MutableState) (*replicationspb.ReplicationTask, error) {
-			return converter.convert(ctx, taskInfo, targetClusterID, mutableState)
+		func(mutableState workflow.MutableState, releaseFunc wcache.ReleaseCacheFunc) (*replicationspb.ReplicationTask, error) {
+			return converter.convert(ctx, taskInfo, targetClusterID, mutableState, releaseFunc)
 		},
 	)
 }
@@ -375,7 +379,7 @@ func generateStateReplicationTask(
 	shardContext shard.Context,
 	workflowKey definition.WorkflowKey,
 	workflowCache wcache.Cache,
-	action func(workflow.MutableState) (*replicationspb.ReplicationTask, error),
+	action func(mutableState workflow.MutableState, releaseFunc wcache.ReleaseCacheFunc) (*replicationspb.ReplicationTask, error),
 ) (retReplicationTask *replicationspb.ReplicationTask, retError error) {
 	wfContext, release, err := workflowCache.GetOrCreateWorkflowExecution(
 		ctx,
@@ -395,7 +399,7 @@ func generateStateReplicationTask(
 	ms, err := wfContext.LoadMutableState(ctx, shardContext)
 	switch err.(type) {
 	case nil:
-		return action(ms)
+		return action(ms, release) // do not access mutable state after this point
 	case *serviceerror.NotFound, *serviceerror.NamespaceNotFound:
 		return nil, nil
 	default:
@@ -420,7 +424,6 @@ func getVersionHistoryAndEvents(
 		if xdcCacheValue, ok := eventBlobCache.Get(persistence.NewXDCCacheKey(
 			workflowKey,
 			firstEventID,
-			nextEventID,
 			eventVersion,
 		)); ok {
 			return xdcCacheValue.VersionHistoryItems, xdcCacheValue.EventBlobs, xdcCacheValue.BaseWorkflowInfo, nil
@@ -634,6 +637,7 @@ func (c *syncVersionedTransitionTaskConverter) convert(
 	taskInfo *tasks.SyncVersionedTransitionTask,
 	targetClusterID int32,
 	mutableState workflow.MutableState,
+	releaseFunc wcache.ReleaseCacheFunc,
 ) (*replicationspb.ReplicationTask, error) {
 	executionInfo := mutableState.GetExecutionInfo()
 
@@ -653,6 +657,7 @@ func (c *syncVersionedTransitionTaskConverter) convert(
 		if taskInfo.FirstEventID == common.EmptyEventID && taskInfo.NextEventID == common.EmptyEventID && len(taskInfo.NewRunID) == 0 {
 			return nil, nil
 		}
+		releaseFunc(nil) // release wf lock before retrieving history events
 		return c.generateBackfillHistoryTask(ctx, taskInfo, targetClusterID)
 	}
 
@@ -660,6 +665,11 @@ func (c *syncVersionedTransitionTaskConverter) convert(
 	if progress != nil {
 		targetHistoryItems = progress.eventVersionHistoryItems
 	}
+	currentHistory, err := versionhistory.GetCurrentVersionHistory(executionInfo.VersionHistories)
+	if err != nil {
+		return nil, err
+	}
+	currentHistoryCopy := versionhistory.CopyVersionHistory(currentHistory)
 
 	result, err := c.syncStateRetriever.GetSyncWorkflowStateArtifactFromMutableState(
 		ctx,
@@ -671,15 +681,14 @@ func (c *syncVersionedTransitionTaskConverter) convert(
 		mutableState,
 		progress.LastSyncedTransition(),
 		targetHistoryItems,
+		releaseFunc,
 	)
 	if err != nil {
 		return nil, err
 	}
-	currentHistory, err := versionhistory.GetCurrentVersionHistory(executionInfo.VersionHistories)
-	if err != nil {
-		return nil, err
-	}
-	err = c.replicationCache.Update(taskInfo.RunID, targetClusterID, executionInfo.TransitionHistory, currentHistory.Items)
+	// do not access mutable state after this point
+
+	err = c.replicationCache.Update(taskInfo.RunID, targetClusterID, result.VersionedTransitionHistory, currentHistoryCopy.Items)
 	if err != nil {
 		return nil, err
 	}
@@ -689,6 +698,9 @@ func (c *syncVersionedTransitionTaskConverter) convert(
 		Attributes: &replicationspb.ReplicationTask_SyncVersionedTransitionTaskAttributes{
 			SyncVersionedTransitionTaskAttributes: &replicationspb.SyncVersionedTransitionTaskAttributes{
 				VersionedTransitionArtifact: result.VersionedTransitionArtifact,
+				NamespaceId:                 taskInfo.NamespaceID,
+				WorkflowId:                  taskInfo.WorkflowID,
+				RunId:                       taskInfo.RunID,
 			},
 		},
 		VersionedTransition: taskInfo.VersionedTransition,
@@ -708,7 +720,7 @@ func (c *syncVersionedTransitionTaskConverter) generateVerifyVersionedTransition
 		mutableState.GetExecutionInfo().VersionHistories,
 		versionhistory.NewVersionHistoryItem(
 			taskInfo.FirstEventID,
-			taskInfo.VersionedTransition.NamespaceFailoverVersion,
+			taskInfo.FirstEventVersion,
 		),
 	)
 	if err != nil {
@@ -742,7 +754,7 @@ func (c *syncVersionedTransitionTaskConverter) generateBackfillHistoryTask(
 		c.shardContext,
 		c.shardID,
 		definition.NewWorkflowKey(taskInfo.NamespaceID, taskInfo.WorkflowID, taskInfo.RunID),
-		taskInfo.VersionedTransition.NamespaceFailoverVersion,
+		taskInfo.FirstEventVersion,
 		taskInfo.FirstEventID,
 		taskInfo.NextEventID,
 		taskInfo.NewRunID,
