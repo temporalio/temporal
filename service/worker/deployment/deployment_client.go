@@ -265,7 +265,7 @@ func (d *DeploymentClient) GetCurrentDeployment(ctx context.Context, namespaceEn
 	}
 
 	if len(persistenceResp.Executions) != 1 {
-		return nil, fmt.Errorf("There are more than one deployment series workflow executions")
+		return nil, fmt.Errorf("there are more than one deployment series workflow executions")
 	}
 
 	// Decode value from memo
@@ -276,9 +276,14 @@ func (d *DeploymentClient) GetCurrentDeployment(ctx context.Context, namespaceEn
 		return nil, err
 	}
 
+	// Series has no set current deployment
+	if buildID == "" {
+		return nil, nil
+	}
+
 	deploymentInfo, err := d.DescribeDeployment(ctx, namespaceEntry, seriesName, buildID, maxIDLengthLimit)
 	if err != nil {
-		return nil, err
+		return nil, nil
 	}
 
 	return deploymentInfo, nil
