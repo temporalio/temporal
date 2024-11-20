@@ -692,7 +692,7 @@ func HandlerProvider(
 	clientBean client.Bean,
 	historyClient resource.HistoryClient,
 	matchingClient resource.MatchingClient,
-	deploymentStoreClient *deployment.DeploymentStoreClient,
+	deploymentStoreClient deployment.DeploymentStoreClient,
 	archiverProvider provider.ArchiverProvider,
 	metricsHandler metrics.Handler,
 	payloadSerializer serialization.Serializer,

@@ -38,7 +38,6 @@ import (
 	"github.com/pborman/uuid"
 	batchpb "go.temporal.io/api/batch/v1"
 	commonpb "go.temporal.io/api/common/v1"
-	deploypb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	filterpb "go.temporal.io/api/filter/v1"
 	historypb "go.temporal.io/api/history/v1"
@@ -133,7 +132,7 @@ type (
 		clusterMetadata                 cluster.Metadata
 		historyClient                   historyservice.HistoryServiceClient
 		matchingClient                  matchingservice.MatchingServiceClient
-		deploymentStoreClient           *deployment.DeploymentStoreClient
+		deploymentStoreClient           deployment.DeploymentStoreClient
 		archiverProvider                provider.ArchiverProvider
 		payloadSerializer               serialization.Serializer
 		namespaceRegistry               namespace.Registry
@@ -162,7 +161,7 @@ func NewWorkflowHandler(
 	persistenceMetadataManager persistence.MetadataManager,
 	historyClient historyservice.HistoryServiceClient,
 	matchingClient matchingservice.MatchingServiceClient,
-	deploymentStoreClient *deployment.DeploymentStoreClient,
+	deploymentStoreClient deployment.DeploymentStoreClient,
 	archiverProvider provider.ArchiverProvider,
 	payloadSerializer serialization.Serializer,
 	namespaceRegistry namespace.Registry,
@@ -3129,69 +3128,18 @@ func (wh *WorkflowHandler) DescribeDeployment(ctx context.Context, request *work
 		return nil, errDeploymentsNotAllowed
 	}
 
-	namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
+	namespaceEntry, err := wh.namespaceRegistry.GetNamespace(namespace.Name(request.GetNamespace()))
 	if err != nil {
 		return nil, err
 	}
-
-	// validating params
-	maxIDLengthLimit := wh.config.MaxIDLengthLimit()
-	err = deployment.ValidateDeploymentWfParams(deployment.SeriesFieldName, request.Deployment.SeriesName, maxIDLengthLimit)
+	deploymentInfo, err := wh.deploymentStoreClient.DescribeDeployment(ctx, namespaceEntry, request.Deployment.SeriesName, request.Deployment.BuildId, wh.config.MaxIDLengthLimit())
 	if err != nil {
+		wh.logger.Error("Error during DescribeDeployment", tag.Error(err))
 		return nil, err
-	}
-	err = deployment.ValidateDeploymentWfParams(deployment.BuildIDFieldName, request.Deployment.BuildId, maxIDLengthLimit)
-	if err != nil {
-		return nil, err
-	}
-
-	deploymentWorkflowID := deployment.GenerateDeploymentWorkflowID(request.Deployment.SeriesName, request.Deployment.BuildId)
-
-	req := &historyservice.QueryWorkflowRequest{
-		NamespaceId: namespaceID.String(),
-		Request: &workflowservice.QueryWorkflowRequest{
-			Namespace: request.Namespace,
-			Execution: &commonpb.WorkflowExecution{
-				WorkflowId: deploymentWorkflowID,
-			},
-			Query: &querypb.WorkflowQuery{QueryType: deployment.QueryDescribeDeployment},
-		},
-	}
-
-	res, err := wh.historyClient.QueryWorkflow(ctx, req)
-	if err != nil {
-		return nil, err
-	}
-
-	var queryResponse deployspb.DescribeResponse
-	err = payloads.Decode(res.GetResponse().GetQueryResult(), &queryResponse)
-	if err != nil {
-		return nil, err
-	}
-
-	// build out task-queues for the response object
-	var taskQueues []*deploypb.DeploymentInfo_TaskQueueInfo
-	deploymentLocalState := queryResponse.DeploymentLocalState
-
-	for taskQueueName, taskQueueFamilyInfo := range deploymentLocalState.TaskQueueFamilies {
-		for _, taskQueueInfo := range taskQueueFamilyInfo.TaskQueues {
-			element := &deploypb.DeploymentInfo_TaskQueueInfo{
-				Name:            taskQueueName,
-				Type:            enumspb.TaskQueueType(taskQueueInfo.TaskQueueType),
-				FirstPollerTime: taskQueueInfo.FirstPollerTime,
-			}
-			taskQueues = append(taskQueues, element)
-		}
 	}
 
 	return &workflowservice.DescribeDeploymentResponse{
-		DeploymentInfo: &deploypb.DeploymentInfo{
-			Deployment:     deploymentLocalState.WorkerDeployment,
-			CreateTime:     deploymentLocalState.CreateTime,
-			TaskQueueInfos: taskQueues,
-			Metadata:       deploymentLocalState.Metadata,
-			IsCurrent:      deploymentLocalState.IsCurrent,
-		},
+		DeploymentInfo: deploymentInfo,
 	}, nil
 }
 
@@ -3210,55 +3158,19 @@ func (wh *WorkflowHandler) GetCurrentDeployment(ctx context.Context, request *wo
 		return nil, errDeploymentsNotAllowed
 	}
 
-	namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
+	namespaceEntry, err := wh.namespaceRegistry.GetNamespace(namespace.Name(request.GetNamespace()))
 	if err != nil {
 		return nil, err
 	}
 
-	// validating params
-	err = deployment.ValidateDeploymentWfParams(deployment.SeriesFieldName, request.SeriesName, wh.config.MaxIDLengthLimit())
+	describeDeploymentResponse, err := wh.deploymentStoreClient.GetCurrentDeployment(ctx, namespaceEntry, request.SeriesName, wh.config.MaxIDLengthLimit(), wh.config.VisibilityMaxPageSize(request.GetNamespace()))
 	if err != nil {
-		return nil, err
-	}
-
-	// Query the deployment series workflow to get the current deployment
-	workflowID := deployment.GenerateDeploymentSeriesWorkflowID(request.SeriesName)
-	req := &historyservice.QueryWorkflowRequest{
-		NamespaceId: namespaceID.String(),
-		Request: &workflowservice.QueryWorkflowRequest{
-			Namespace: request.Namespace,
-			Execution: &commonpb.WorkflowExecution{
-				WorkflowId: workflowID,
-			},
-			Query: &querypb.WorkflowQuery{QueryType: deployment.QueryCurrentDeployment},
-		},
-	}
-
-	res, err := wh.historyClient.QueryWorkflow(ctx, req)
-	if err != nil {
-		return nil, err
-	}
-
-	var currentDeployment string
-	err = payloads.Decode(res.GetResponse().GetQueryResult(), &currentDeployment)
-	if err != nil {
-		return nil, err
-	}
-
-	describeDeploymentRequest := &workflowservice.DescribeDeploymentRequest{
-		Namespace: request.Namespace,
-		Deployment: &deploypb.Deployment{
-			SeriesName: request.SeriesName,
-			BuildId:    currentDeployment,
-		},
-	}
-	describeDeploymentResponse, err := wh.DescribeDeployment(ctx, describeDeploymentRequest)
-	if err != nil {
+		wh.logger.Error("Error during GetCurrentDeployment", tag.Error(err))
 		return nil, err
 	}
 
 	return &workflowservice.GetCurrentDeploymentResponse{
-		CurrentDeploymentInfo: describeDeploymentResponse.DeploymentInfo,
+		CurrentDeploymentInfo: describeDeploymentResponse,
 	}, nil
 
 }
@@ -3281,13 +3193,12 @@ func (wh *WorkflowHandler) ListDeployments(
 		return nil, errDeploymentsNotAllowed
 	}
 
-	namespaceName := namespace.Name(request.GetNamespace())
-	namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespaceName)
+	namespaceEntry, err := wh.namespaceRegistry.GetNamespace(namespace.Name(request.GetNamespace()))
 	if err != nil {
 		return nil, err
 	}
 
-	if wh.config.DisableListVisibilityByFilter(namespaceName.String()) {
+	if wh.config.DisableListVisibilityByFilter(namespaceEntry.Name().String()) {
 		return nil, errListNotAllowed
 	}
 
@@ -3296,43 +3207,15 @@ func (wh *WorkflowHandler) ListDeployments(
 		request.PageSize = maxPageSize
 	}
 
-	query := ""
-	if strings.TrimSpace(request.SeriesName) != "" {
-		query = fmt.Sprintf("%s AND %s = %s", deployment.DeploymentVisibilityBaseListQuery, searchattribute.DeploymentSeries, request.SeriesName)
-	} else {
-		query = deployment.DeploymentVisibilityBaseListQuery
-	}
-
-	persistenceResp, err := wh.visibilityMgr.ListWorkflowExecutions(
-		ctx,
-		&manager.ListWorkflowExecutionsRequestV2{
-			NamespaceID:   namespaceID,
-			Namespace:     namespaceName,
-			PageSize:      int(request.GetPageSize()),
-			NextPageToken: request.NextPageToken,
-			Query:         query,
-		},
-	)
+	deployments, nextPageToken, err := wh.deploymentStoreClient.ListDeployments(ctx, namespaceEntry, request.SeriesName, request.NextPageToken, int(maxPageSize))
 	if err != nil {
+		wh.logger.Error("Error during ListDeployments", tag.Error(err))
 		return nil, err
-	}
-
-	deployments := make([]*deploypb.DeploymentListInfo, len(persistenceResp.Executions))
-	for _, ex := range persistenceResp.Executions {
-		deployment := ex.GetVersioningInfo().GetDeployment()
-		workflowMemo := wh.decodeDeploymentMemo(ex.GetMemo())
-		deploymentListInfo := &deploypb.DeploymentListInfo{
-			Deployment: deployment,
-			CreateTime: workflowMemo.CreateTime,
-			IsCurrent:  workflowMemo.IsCurrentDeployment,
-		}
-
-		deployments = append(deployments, deploymentListInfo)
 	}
 
 	return &workflowservice.ListDeploymentsResponse{
 		Deployments:   deployments,
-		NextPageToken: persistenceResp.NextPageToken,
+		NextPageToken: nextPageToken,
 	}, nil
 }
 

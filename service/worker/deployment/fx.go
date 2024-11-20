@@ -96,8 +96,8 @@ var Module = fx.Options(
 	fx.Provide(DeploymentStoreClientProvider),
 )
 
-func DeploymentStoreClientProvider(historyClient historyservice.HistoryServiceClient, visibilityManager manager.VisibilityManager) *DeploymentStoreClient {
-	return &DeploymentStoreClient{
+func DeploymentStoreClientProvider(historyClient historyservice.HistoryServiceClient, visibilityManager manager.VisibilityManager) *DeploymentClient {
+	return &DeploymentClient{
 		HistoryClient:     historyClient,
 		VisibilityManager: visibilityManager,
 	}

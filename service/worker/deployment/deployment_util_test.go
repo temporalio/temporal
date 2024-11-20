@@ -36,6 +36,7 @@ import (
 	"go.temporal.io/server/api/historyservicemock/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.uber.org/mock/gomock"
 )
 
@@ -54,11 +55,12 @@ type (
 		*require.Assertions
 		controller *gomock.Controller
 
-		ns                       *namespace.Namespace
-		mockNamespaceCache       *namespace.MockRegistry
-		mockHistoryClient        *historyservicemock.MockHistoryServiceClient
-		workerDeployment         *deploypb.Deployment
-		deploymentWorkflowClient *DeploymentStoreClient
+		ns                 *namespace.Namespace
+		mockNamespaceCache *namespace.MockRegistry
+		mockHistoryClient  *historyservicemock.MockHistoryServiceClient
+		VisibilityManager  *manager.MockVisibilityManager
+		workerDeployment   *deploypb.Deployment
+		deploymentClient   *DeploymentClient
 		sync.Mutex
 	}
 )
@@ -76,12 +78,16 @@ func (d *deploymentWorkflowClientSuite) SetupTest() {
 	d.controller = gomock.NewController(d.T())
 	d.controller = gomock.NewController(d.T())
 	d.ns, d.mockNamespaceCache = createMockNamespaceCache(d.controller, testNamespace)
+	d.VisibilityManager = manager.NewMockVisibilityManager(d.controller)
 	d.mockHistoryClient = historyservicemock.NewMockHistoryServiceClient(d.controller)
 	d.workerDeployment = &deploypb.Deployment{
 		SeriesName: testDeployment,
 		BuildId:    testBuildID,
 	}
-	d.deploymentWorkflowClient = NewDeploymentWorkflowClient(d.ns, d.workerDeployment, d.mockHistoryClient)
+	d.deploymentClient = &DeploymentClient{
+		HistoryClient:     d.mockHistoryClient,
+		VisibilityManager: d.VisibilityManager,
+	}
 
 }
 

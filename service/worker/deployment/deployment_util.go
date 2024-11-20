@@ -48,14 +48,14 @@ const (
 	QueryCurrentDeployment  = "current-deployment"
 
 	// Memos
-	DeploymentMemoField = "DeploymentMemo"
+	DeploymentMemoField              = "DeploymentMemo"
+	DeploymentSeriesBuildIDMemoField = "DeploymentSeriesBuildIDMemo"
 
 	// Prefixes, Delimeters and Keys
 	DeploymentWorkflowIDPrefix       = "temporal-sys-deployment"
 	DeploymentSeriesWorkflowIDPrefix = "temporal-sys-deployment-series"
 	DeploymentWorkflowIDDelimeter    = "|"
 	DeploymentWorkflowIDInitialSize  = (2 * len(DeploymentWorkflowIDDelimeter)) + len(DeploymentWorkflowIDPrefix)
-	BuildIDMemoKey                   = "DefaultBuildID"
 	SeriesFieldName                  = "DeploymentSeries"
 	BuildIDFieldName                 = "BuildID"
 )

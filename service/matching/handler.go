@@ -79,7 +79,7 @@ func NewHandler(
 	taskManager persistence.TaskManager,
 	historyClient resource.HistoryClient,
 	matchingRawClient resource.MatchingRawClient,
-	deploymentStoreClient *deployment.DeploymentStoreClient,
+	deploymentStoreClient deployment.DeploymentStoreClient,
 	hostInfoProvider membership.HostInfoProvider,
 	matchingServiceResolver membership.ServiceResolver,
 	metricsHandler metrics.Handler,

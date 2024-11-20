@@ -123,7 +123,7 @@ type (
 		taskManager                   persistence.TaskManager
 		historyClient                 resource.HistoryClient
 		matchingRawClient             resource.MatchingRawClient
-		deploymentStoreClient         *deployment.DeploymentStoreClient
+		deploymentStoreClient         deployment.DeploymentStoreClient
 		tokenSerializer               common.TaskTokenSerializer
 		historySerializer             serialization.Serializer
 		logger                        log.Logger
@@ -190,7 +190,7 @@ func NewEngine(
 	taskManager persistence.TaskManager,
 	historyClient resource.HistoryClient,
 	matchingRawClient resource.MatchingRawClient,
-	deploymentStoreClient *deployment.DeploymentStoreClient,
+	deploymentStoreClient deployment.DeploymentStoreClient,
 	config *Config,
 	logger log.Logger,
 	throttledLogger log.ThrottledLogger,

@@ -348,7 +348,9 @@ func (c *physicalTaskQueueManagerImpl) PollTask(
 				BuildId:    pollMetadata.workerVersionCapabilities.BuildId,
 			}
 
-			err := c.partitionMgr.engine.deploymentStoreClient.RegisterTaskQueueWorker(ctx, namespaceEntry, workerDeployment, c.queue.TaskQueueFamily().Name(), c.queue.TaskType(), nil, c.partitionMgr.engine.config.MaxIDLengthLimit())
+			err := c.partitionMgr.engine.deploymentStoreClient.RegisterTaskQueueWorker(
+				ctx, namespaceEntry, workerDeployment, c.queue.TaskQueueFamily().Name(), c.queue.TaskType(),
+				nil, c.partitionMgr.engine.config.MaxIDLengthLimit())
 			if err != nil {
 				return nil, err
 			}
