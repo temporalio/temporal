@@ -88,9 +88,17 @@ func Invoke(
 		updateReq,
 	)
 
-	// TODO
+	// For workflow id conflict policy terminate-existing, always attempt a start
+	// since that works when the workflow is already running *and* when it's not running.
 	if startReq.StartRequest.WorkflowIdConflictPolicy == enumspb.WORKFLOW_ID_CONFLICT_POLICY_TERMINATE_EXISTING {
-		return nil, serviceerror.NewInvalidArgument("workflow id conflict policy terminate-existing is not supported yet")
+		if resp, outcome, err := startAndUpdateWorkflow(
+			ctx, shardContext, workflowConsistencyChecker, starter, updater,
+		); err != nil {
+			return nil, err
+		} else if outcome != startworkflow.StartDeduped {
+			return resp, nil
+		}
+		// if the start was deduped, we fall through to the update
 	}
 
 	currentWorkflowLease, err := workflowConsistencyChecker.GetWorkflowLease(
@@ -132,9 +140,7 @@ func Invoke(
 			return nil, newMultiOpError(err, multiOpAbortedErr)
 
 		case enumspb.WORKFLOW_ID_CONFLICT_POLICY_TERMINATE_EXISTING:
-			currentWorkflowLease.GetReleaseFn()(nil) // nil since nothing was modified
-
-			return nil, serviceerror.NewInternal("unhandled workflow id conflict policy: terminate-existing")
+			return updateWorkflow(ctx, shardContext, currentWorkflowLease, updater)
 
 		case enumspb.WORKFLOW_ID_CONFLICT_POLICY_UNSPECIFIED:
 			// ... fail since this policy is invalid
@@ -216,11 +222,6 @@ func startAndUpdateWorkflow(
 
 	// hook is invoked before workflow is persisted
 	applyUpdateFunc := func(lease api.WorkflowLease) error {
-		// workflowCtx is the response from the cache write: either it's the context from the currently held lease
-		// OR the already-existing, previously cached context (this happens when the workflow is being terminated;
-		// it re-uses the same context).
-		var workflowCtx workflow.Context
-
 		// It is crucial to put the Update registry (inside the workflow context) into the cache, as it needs to
 		// exist on the Matching call back to History when delivering a workflow task to a worker.
 		//
@@ -234,7 +235,7 @@ func startAndUpdateWorkflow(
 		// - but receive a new instance that is inconsistent with this one
 		wfContext.(*workflow.ContextImpl).MutableState = ms
 		workflowKey := wfContext.GetWorkflowKey()
-		workflowCtx, updateErr = workflowConsistencyChecker.GetWorkflowCache().Put(
+		updateErr = workflowConsistencyChecker.GetWorkflowCache().Put(
 			shardContext,
 			ms.GetNamespaceEntry().ID(),
 			&commonpb.WorkflowExecution{WorkflowId: workflowKey.WorkflowID, RunId: workflowKey.RunID},
@@ -243,7 +244,7 @@ func startAndUpdateWorkflow(
 		)
 		if updateErr == nil {
 			// UpdateWorkflowAction return value is ignored since Start will always create WFT
-			updateReg := workflowCtx.UpdateRegistry(ctx, ms)
+			updateReg := wfContext.UpdateRegistry(ctx, ms)
 			_, updateErr = updater.ApplyRequest(ctx, updateReg, ms)
 		}
 		return updateErr
@@ -272,7 +273,9 @@ func startAndUpdateWorkflow(
 		return nil, startOutcome, newMultiOpError(err,
 			serviceerror.NewUnavailable("Workflow could not be started as it is already running"))
 	case startworkflow.StartDeduped:
-		panic("unreachable")
+		// Since the start request was deduped, the update was not applied to the *current* workflow execution.
+		// Returning here to allow the caller to apply the update to the current workflow execution.
+		return nil, startOutcome, nil
 	}
 
 	// wait for the update to complete
