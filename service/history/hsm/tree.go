@@ -27,6 +27,7 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
+	"sort"
 
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
@@ -126,7 +127,6 @@ type Node struct {
 	persistence *persistencespb.StateMachineNode
 	definition  StateMachineDefinition
 	backend     NodeBackend
-	tombstones  TombstoneLog // Only used at root
 }
 
 // NewRoot creates a new root [Node].
@@ -160,8 +160,7 @@ func NewRoot(registry *Registry,
 			data:       data,
 			children:   make(map[Key]*Node),
 		},
-		backend:    backend,
-		tombstones: NewTombstoneLog(),
+		backend: backend,
 	}, nil
 }
 
@@ -346,7 +345,7 @@ func (n *Node) DeleteChild(key Key) error {
 
 	child, err := n.Child([]Key{key})
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to get child: %w", err)
 	}
 
 	// Mark entire subtree as deleted
@@ -357,18 +356,15 @@ func (n *Node) DeleteChild(key Key) error {
 		return err
 	}
 
-	// Track deletion in root's tombstones
-	root := n
-	for root.Parent != nil {
-		root = root.Parent
-	}
-	vt := &persistencespb.VersionedTransition{
-		NamespaceFailoverVersion: n.backend.GetCurrentVersion(),
-		TransitionCount:          n.backend.NextTransitionCount(),
-	}
-	root.tombstones.TrackDeletion(child.Path(), vt)
+	// Record deletion
+	n.cache.outputs = append(n.cache.outputs, TransitionOutputWithCount{
+		TransitionOutput: TransitionOutput{
+			IsDelete: true,
+		},
+		TransitionCount: n.backend.NextTransitionCount(),
+	})
 
-	// Remove from parent's children map
+	// Remove from persistence and cache
 	machinesMap := n.persistence.Children[key.Type]
 	if machinesMap != nil {
 		delete(machinesMap.MachinesById, key.ID)
@@ -376,8 +372,6 @@ func (n *Node) DeleteChild(key Key) error {
 			delete(n.persistence.Children, key.Type)
 		}
 	}
-
-	// Remove from cache
 	delete(n.cache.children, key)
 	return nil
 }
@@ -474,42 +468,40 @@ func (n *Node) Sync(incomingNode *Node) error {
 		return fmt.Errorf("%w: cannot sync deleted node: %v", ErrStateMachineInvalidState, n.Key)
 	}
 
-	// Check for deletion first
-	incomingRoot := incomingNode
-	for incomingRoot.Parent != nil {
-		incomingRoot = incomingRoot.Parent
-	}
+	// Sort outputs by path length so parent deletions take precedence
+	outputs := incomingNode.Outputs()
+	sort.Slice(outputs, func(i, j int) bool {
+		return len(outputs[i].Path) < len(outputs[j].Path)
+	})
 
-	if vt := incomingRoot.tombstones.GetDeletion(n.Path()); vt != nil {
-		// Node was deleted in incoming state
-		if n.Parent != nil {
-			// Remove from parent's children map
-			machinesMap := n.Parent.persistence.Children[n.Key.Type]
-			if machinesMap != nil {
-				delete(machinesMap.MachinesById, n.Key.ID)
-				if len(machinesMap.MachinesById) == 0 {
-					delete(n.Parent.persistence.Children, n.Key.Type)
+	myPath := n.Path()
+	for _, pao := range outputs {
+		if isPathPrefix(pao.Path, myPath) {
+			for _, output := range pao.Outputs {
+				if output.IsDelete {
+					if n.Parent != nil {
+						// Remove from parent's children map
+						machinesMap := n.Parent.persistence.Children[n.Key.Type]
+						if machinesMap != nil {
+							delete(machinesMap.MachinesById, n.Key.ID)
+							if len(machinesMap.MachinesById) == 0 {
+								delete(n.Parent.persistence.Children, n.Key.Type)
+							}
+						}
+						delete(n.Parent.cache.children, n.Key)
+					}
+
+					// Mark entire subtree as deleted
+					if err := n.Walk(func(node *Node) error {
+						node.cache.deleted = true
+						return nil
+					}); err != nil {
+						return err
+					}
+					return nil
 				}
 			}
-			// Remove from cache
-			delete(n.Parent.cache.children, n.Key)
 		}
-
-		// Mark entire subtree as deleted
-		if err := n.Walk(func(node *Node) error {
-			node.cache.deleted = true
-			return nil
-		}); err != nil {
-			return err
-		}
-
-		// Track deletion in our tombstones
-		root := n
-		for root.Parent != nil {
-			root = root.Parent
-		}
-		root.tombstones.TrackDeletion(n.Path(), vt)
-		return nil
 	}
 
 	incomingInternalRepr := incomingNode.InternalRepr()
@@ -701,4 +693,16 @@ func GenerateEventLoadToken(event *historypb.HistoryEvent) ([]byte, error) {
 		EventBatchId: eventBatchID,
 	}
 	return proto.Marshal(ref)
+}
+
+func isPathPrefix(prefix, path []Key) bool {
+	if len(prefix) > len(path) {
+		return false
+	}
+	for i := range prefix {
+		if prefix[i] != path[i] {
+			return false
+		}
+	}
+	return true
 }
