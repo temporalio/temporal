@@ -35,6 +35,7 @@ type (
 		Now() time.Time
 		Since(t time.Time) time.Duration
 		AfterFunc(d time.Duration, f func()) Timer
+		After(d time.Duration) <-chan time.Time
 		NewTimer(d time.Duration) (<-chan time.Time, Timer)
 	}
 	// Timer is a timer returned by TimeSource.AfterFunc. Unlike the timers returned by [time.NewTimer] or time.Ticker,
@@ -71,6 +72,11 @@ func (ts RealTimeSource) Since(t time.Time) time.Duration {
 // AfterFunc is a pass-through to time.AfterFunc.
 func (ts RealTimeSource) AfterFunc(d time.Duration, f func()) Timer {
 	return time.AfterFunc(d, f)
+}
+
+// After is a pass-through to time.After.
+func (ts RealTimeSource) After(d time.Duration) <-chan time.Time {
+	return time.After(d)
 }
 
 // NewTimer is a pass-through to time.NewTimer.

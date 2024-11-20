@@ -68,6 +68,23 @@ func TestNewRealClock_AfterFunc(t *testing.T) {
 	assert.False(t, timer.Stop())
 }
 
+// TestNewRealClock_After tests that the After method returns a channel that receives the current time after the
+// specified duration.
+func TestNewRealClock_After(t *testing.T) {
+	t.Parallel()
+
+	source := clock.NewRealTimeSource()
+	ch := make(chan struct{})
+	go func() {
+		now := source.Now()
+		afterDelay := <-source.After(1 * time.Millisecond)
+		assert.Greater(t, afterDelay, now)
+		close(ch)
+	}()
+
+	<-ch
+}
+
 func TestNewRealClock_NewTimer(t *testing.T) {
 	t.Parallel()
 

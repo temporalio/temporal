@@ -199,6 +199,34 @@ func TestEventTimeSource_AfterFunc_NegativeDelay(t *testing.T) {
 	assert.False(t, timer.Stop(), "`Stop` should return false if the timer was already stopped")
 }
 
+// TestEventTimeSource_After tests that the After method returns a channel that receives the current time after the
+// specified duration.
+func TestEventTimeSource_After(t *testing.T) {
+	t.Parallel()
+	source := clock.NewEventTimeSource()
+
+	startTime := source.Now()
+	// Create a channel that will receive the current time after 1s.
+	ch := source.After(1 * time.Second)
+
+	select {
+	case <-ch:
+		t.Error("timer should not have fired yet")
+	default:
+	}
+
+	// Advance time beyond the deadline
+	source.Advance(2 * time.Second)
+
+	select {
+	case now := <-ch:
+		// The time sent on the channel should be `startTime` plus *at least* 1 second.
+		assert.Greater(t, now, startTime.Add(1*time.Second))
+	default:
+		t.Error("Since time has advanced beyond the deadline, the channel should have received a value")
+	}
+}
+
 func TestEventTimeSource_Update(t *testing.T) {
 	t.Parallel()
 

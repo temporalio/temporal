@@ -91,6 +91,11 @@ func (ts *EventTimeSource) AfterFunc(d time.Duration, f func()) Timer {
 	return timer
 }
 
+func (ts *EventTimeSource) After(d time.Duration) <-chan time.Time {
+	ch, _ := ts.NewTimer(d)
+	return ch
+}
+
 // NewTimer creates a Timer that will send the current time on a channel after at least
 // duration d. It returns the channel and the Timer.
 func (ts *EventTimeSource) NewTimer(d time.Duration) (<-chan time.Time, Timer) {
