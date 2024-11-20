@@ -4250,14 +4250,21 @@ func (ms *MutableStateImpl) AddWorkflowExecutionOptionsUpdatedEvent(
 
 func (ms *MutableStateImpl) ApplyWorkflowExecutionOptionsUpdatedEvent(event *historypb.HistoryEvent) error {
 	override := event.GetWorkflowExecutionOptionsUpdatedEventAttributes().GetVersioningOverride()
-	// TODO (carly): if deployment changed, do I need to do anything with pending activities / WFTs in unsafe mode?
-	// TODO (carly) part 2: do replay test on new deployment if deployment changed
+	previousCurrentDeployment := ms.GetCurrentDeployment()
 	if override != nil {
 		ms.GetExecutionInfo().VersioningInfo.BehaviorOverride = override.GetBehavior()
 		ms.GetExecutionInfo().VersioningInfo.DeploymentOverride = override.GetDeployment()
 	} else {
 		ms.GetExecutionInfo().VersioningInfo.BehaviorOverride = enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED
 		ms.GetExecutionInfo().VersioningInfo.DeploymentOverride = nil
+	}
+	// If behavior was changed, deployment will also have changed, so we only need to check deployment
+	if !proto.Equal(ms.GetCurrentDeployment(), previousCurrentDeployment) {
+		// TODO (carly) part 2: if safe mode, do replay test on new deployment if deployment changed, if fail, revert changes and abort
+		ms.ClearStickyTaskQueue()
+		// TODO (carly): handle started WTFs
+		// TODO (carly): reschedule pending WFTs
+		return ms.reschedulePendingActivities()
 	}
 	return nil
 }

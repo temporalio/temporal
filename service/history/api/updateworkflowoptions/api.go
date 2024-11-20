@@ -141,14 +141,12 @@ func MergeOptions(paths []string, src, dst *workflowpb.WorkflowExecutionOptions)
 			dst.VersioningOverride = src.GetVersioningOverride()
 		case "versioning_override.deployment":
 			if slices.Contains(paths, "versioning_override.behavior") {
-				print("both")
 				dst.VersioningOverride = src.GetVersioningOverride()
 			} else {
 				return nil, serviceerror.NewInvalidArgument("versioning_override fields must be updated together")
 			}
 		case "versioning_override.behavior":
 			if slices.Contains(paths, "versioning_override.deployment") {
-				print("both")
 				dst.VersioningOverride = src.GetVersioningOverride()
 			} else {
 				return nil, serviceerror.NewInvalidArgument("versioning_override fields must be updated together")
