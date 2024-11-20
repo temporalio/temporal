@@ -4260,10 +4260,22 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionOptionsUpdatedEvent(event *his
 	}
 	// If behavior was changed, deployment will also have changed, so we only need to check deployment
 	if !proto.Equal(ms.GetCurrentDeployment(), previousCurrentDeployment) {
+		// In the case of deployment change, I'm choosing to let started WFTs that are running on the old deployment finish running
+		// The argument for failing them is if the user wants to reschedule them on the new deployment, but that is an optimization
+		// that can come later, especially since it's possible the user would prefer to not fail them.
 		// TODO (carly) part 2: if safe mode, do replay test on new deployment if deployment changed, if fail, revert changes and abort
 		ms.ClearStickyTaskQueue()
-		// TODO (carly): handle started WTFs
-		// TODO (carly): reschedule pending WFTs
+		// TODO (carly): confirm this is the right way to reschedule pending WFT. Is there only one WFT?
+		if ms.HasPendingWorkflowTask() && !ms.HasStartedWorkflowTask() &&
+			// does not support them.
+			ms.GetPendingWorkflowTask().Type != enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE {
+			// sticky queue was just cleared, so the following call only generates
+			// a WorkflowTask, not a WorkflowTaskTimeoutTask.
+			err := ms.taskGenerator.GenerateScheduleWorkflowTaskTasks(ms.GetPendingWorkflowTask().ScheduledEventID)
+			if err != nil {
+				return err
+			}
+		}
 		return ms.reschedulePendingActivities()
 	}
 	return nil
