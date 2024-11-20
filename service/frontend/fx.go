@@ -66,6 +66,7 @@ import (
 	"go.temporal.io/server/service"
 	"go.temporal.io/server/service/frontend/configs"
 	"go.temporal.io/server/service/history/tasks"
+	"go.temporal.io/server/service/worker/deployment"
 	"go.temporal.io/server/service/worker/scheduler"
 	"go.uber.org/fx"
 	"google.golang.org/grpc"
@@ -86,6 +87,7 @@ var Module = fx.Options(
 	resource.Module,
 	scheduler.Module,
 	dynamicconfig.Module,
+	deployment.Module,
 	// Note that with this approach routes may be registered in arbitrary order.
 	// This is okay because our routes don't have overlapping matches.
 	// The only important detail is that the PathPrefix("/") route registered in the HTTPAPIServerProvider comes last.
@@ -690,6 +692,7 @@ func HandlerProvider(
 	clientBean client.Bean,
 	historyClient resource.HistoryClient,
 	matchingClient resource.MatchingClient,
+	deploymentStoreClient *deployment.DeploymentStoreClient,
 	archiverProvider provider.ArchiverProvider,
 	metricsHandler metrics.Handler,
 	payloadSerializer serialization.Serializer,
@@ -715,6 +718,7 @@ func HandlerProvider(
 		persistenceMetadataManager,
 		historyClient,
 		matchingClient,
+		deploymentStoreClient,
 		archiverProvider,
 		payloadSerializer,
 		namespaceRegistry,

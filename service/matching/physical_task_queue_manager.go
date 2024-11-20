@@ -49,7 +49,6 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
-	"go.temporal.io/server/service/worker/deployment"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 
@@ -348,9 +347,8 @@ func (c *physicalTaskQueueManagerImpl) PollTask(
 				SeriesName: pollMetadata.workerVersionCapabilities.DeploymentSeriesName,
 				BuildId:    pollMetadata.workerVersionCapabilities.BuildId,
 			}
-			d := deployment.NewDeploymentWorkflowClient(namespaceEntry, workerDeployment, c.partitionMgr.engine.historyClient)
-			err := d.RegisterTaskQueueWorker(ctx, c.queue.TaskQueueFamily().Name(), c.queue.TaskType(), nil, c.partitionMgr.engine.config.MaxIDLengthLimit())
 
+			err := c.partitionMgr.engine.deploymentStoreClient.RegisterTaskQueueWorker(ctx, namespaceEntry, workerDeployment, c.queue.TaskQueueFamily().Name(), c.queue.TaskType(), nil, c.partitionMgr.engine.config.MaxIDLengthLimit())
 			if err != nil {
 				return nil, err
 			}

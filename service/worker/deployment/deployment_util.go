@@ -25,30 +25,14 @@
 package deployment
 
 import (
-	"context"
 	"fmt"
 	"strings"
 	"time"
 
-	commonpb "go.temporal.io/api/common/v1"
-	deploypb "go.temporal.io/api/deployment/v1"
-	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
-	taskqueuepb "go.temporal.io/api/taskqueue/v1"
-	updatepb "go.temporal.io/api/update/v1"
-	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
-	deployspb "go.temporal.io/server/api/deployment/v1"
-	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common"
-	"go.temporal.io/server/common/namespace"
-	"go.temporal.io/server/common/payload"
-	"go.temporal.io/server/common/primitives"
-	"go.temporal.io/server/common/resource"
-	"go.temporal.io/server/common/sdk"
-	"go.temporal.io/server/common/searchattribute"
-	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 const (
@@ -86,169 +70,6 @@ var (
 		},
 	}
 )
-
-type DeploymentClient interface {
-	RegisterWorker(
-		ctx context.Context,
-		taskQueueName string,
-		taskQueueType enumspb.TaskQueueType,
-		pollTimestamp time.Time,
-	) error
-}
-
-// implements DeploymentClient
-type DeploymentWorkflowClient struct {
-	namespaceEntry *namespace.Namespace
-	deployment     *deploypb.Deployment
-	historyClient  resource.HistoryClient
-}
-
-func NewDeploymentWorkflowClient(
-	namespaceEntry *namespace.Namespace,
-	deployment *deploypb.Deployment,
-	historyClient resource.HistoryClient,
-) *DeploymentWorkflowClient {
-	return &DeploymentWorkflowClient{
-		namespaceEntry: namespaceEntry,
-		deployment:     deployment,
-		historyClient:  historyClient,
-	}
-}
-
-func (d *DeploymentWorkflowClient) RegisterTaskQueueWorker(
-	ctx context.Context,
-	taskQueueName string,
-	taskQueueType enumspb.TaskQueueType,
-	pollTimestamp *timestamppb.Timestamp,
-	maxIDLengthLimit int,
-) error {
-	// validate params which are used for building workflowID's
-	err := ValidateDeploymentWfParams(SeriesFieldName, d.deployment.SeriesName, maxIDLengthLimit)
-	if err != nil {
-		return err
-	}
-	err = ValidateDeploymentWfParams(BuildIDFieldName, d.deployment.BuildId, maxIDLengthLimit)
-	if err != nil {
-		return err
-	}
-
-	deploymentWorkflowID := GenerateDeploymentWorkflowID(d.deployment.SeriesName, d.deployment.BuildId)
-	workflowInputPayloads, err := d.generateStartWorkflowPayload()
-	if err != nil {
-		return err
-	}
-	updatePayload, err := d.generateRegisterWorkerInDeploymentArgs(taskQueueName, taskQueueType, pollTimestamp)
-	if err != nil {
-		return err
-	}
-
-	sa := &commonpb.SearchAttributes{}
-	searchattribute.AddSearchAttribute(&sa, searchattribute.TemporalNamespaceDivision, payload.EncodeString(DeploymentNamespaceDivision))
-	searchattribute.AddSearchAttribute(&sa, searchattribute.DeploymentSeries, payload.EncodeString(d.deployment.SeriesName))
-
-	// initial memo fiels
-	memo, err := d.addInitialDeploymentMemo()
-	if err != nil {
-		return err
-	}
-
-	// Start workflow execution, if it hasn't already
-	startReq := &workflowservice.StartWorkflowExecutionRequest{
-		Namespace:                d.namespaceEntry.Name().String(),
-		WorkflowId:               deploymentWorkflowID,
-		WorkflowType:             &commonpb.WorkflowType{Name: DeploymentWorkflowType},
-		TaskQueue:                &taskqueuepb.TaskQueue{Name: primitives.PerNSWorkerTaskQueue},
-		Input:                    workflowInputPayloads,
-		WorkflowIdReusePolicy:    enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
-		WorkflowIdConflictPolicy: enumspb.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING,
-		SearchAttributes:         sa,
-		Memo:                     memo,
-	}
-
-	updateReq := &workflowservice.UpdateWorkflowExecutionRequest{
-		Namespace: d.namespaceEntry.Name().String(),
-		WorkflowExecution: &commonpb.WorkflowExecution{
-			WorkflowId: deploymentWorkflowID,
-		},
-		Request: &updatepb.Request{
-			Input: &updatepb.Input{Name: RegisterWorkerInDeployment, Args: updatePayload},
-		},
-		WaitPolicy: &updatepb.WaitPolicy{LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED},
-	}
-
-	// This is an atomic operation; if one operation fails, both will.
-	_, err = d.historyClient.ExecuteMultiOperation(ctx, &historyservice.ExecuteMultiOperationRequest{
-		NamespaceId: d.namespaceEntry.ID().String(),
-		WorkflowId:  deploymentWorkflowID,
-		Operations: []*historyservice.ExecuteMultiOperationRequest_Operation{
-			{
-				Operation: &historyservice.ExecuteMultiOperationRequest_Operation_StartWorkflow{
-					StartWorkflow: &historyservice.StartWorkflowExecutionRequest{
-						NamespaceId:  d.namespaceEntry.ID().String(),
-						StartRequest: startReq,
-					},
-				},
-			},
-			{
-				Operation: &historyservice.ExecuteMultiOperationRequest_Operation_UpdateWorkflow{
-					UpdateWorkflow: &historyservice.UpdateWorkflowExecutionRequest{
-						NamespaceId: d.namespaceEntry.ID().String(),
-						Request:     updateReq,
-					},
-				},
-			},
-		},
-	})
-
-	if err != nil {
-		return err
-	}
-
-	return nil
-}
-
-func (d *DeploymentWorkflowClient) addInitialDeploymentMemo() (*commonpb.Memo, error) {
-	memo := &commonpb.Memo{}
-	memo.Fields = make(map[string]*commonpb.Payload)
-
-	deploymentWorkflowMemo := &deployspb.DeploymentWorkflowMemo{
-		CreateTime:          timestamppb.Now(),
-		IsCurrentDeployment: false,
-	}
-
-	memoPayload, err := sdk.PreferProtoDataConverter.ToPayload(deploymentWorkflowMemo)
-	if err != nil {
-		return nil, err
-	}
-
-	memo.Fields[DeploymentMemoField] = memoPayload
-	return memo, nil
-
-}
-
-// GenerateStartWorkflowPayload generates start workflow execution payload
-func (d *DeploymentWorkflowClient) generateStartWorkflowPayload() (*commonpb.Payloads, error) {
-	workflowArgs := &deployspb.DeploymentWorkflowArgs{
-		NamespaceName: d.namespaceEntry.Name().String(),
-		NamespaceId:   d.namespaceEntry.ID().String(),
-		DeploymentLocalState: &deployspb.DeploymentLocalState{
-			WorkerDeployment:  d.deployment,
-			TaskQueueFamilies: nil,
-		},
-	}
-	return sdk.PreferProtoDataConverter.ToPayloads(workflowArgs)
-}
-
-// GenerateUpdateDeploymentPayload generates update workflow payload
-func (d *DeploymentWorkflowClient) generateRegisterWorkerInDeploymentArgs(taskQueueName string, taskQueueType enumspb.TaskQueueType,
-	pollTimestamp *timestamppb.Timestamp) (*commonpb.Payloads, error) {
-	updateArgs := &deployspb.RegisterWorkerInDeploymentArgs{
-		TaskQueueName:   taskQueueName,
-		TaskQueueType:   taskQueueType,
-		FirstPollerTime: nil, // TODO Shivam - come back to this
-	}
-	return sdk.PreferProtoDataConverter.ToPayloads(updateArgs)
-}
 
 // ValidateDeploymentWfParams is a helper that verifies if the fields used for generating
 // deployment related workflowID's are valid

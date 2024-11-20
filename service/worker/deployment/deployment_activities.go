@@ -49,6 +49,7 @@ type (
 )
 
 // StartDeploymentSeriesWorkflow activity starts a DeploymentSeries workflow
+
 func (a *DeploymentActivities) StartDeploymentSeriesWorkflow(ctx context.Context, input DeploymentSeriesWorkflowActivityInput) error {
 	logger := activity.GetLogger(ctx)
 	logger.Info("activity to start DeploymentSeries workflow started")

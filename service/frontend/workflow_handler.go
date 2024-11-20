@@ -133,6 +133,7 @@ type (
 		clusterMetadata                 cluster.Metadata
 		historyClient                   historyservice.HistoryServiceClient
 		matchingClient                  matchingservice.MatchingServiceClient
+		deploymentStoreClient           *deployment.DeploymentStoreClient
 		archiverProvider                provider.ArchiverProvider
 		payloadSerializer               serialization.Serializer
 		namespaceRegistry               namespace.Registry
@@ -161,6 +162,7 @@ func NewWorkflowHandler(
 	persistenceMetadataManager persistence.MetadataManager,
 	historyClient historyservice.HistoryServiceClient,
 	matchingClient matchingservice.MatchingServiceClient,
+	deploymentStoreClient *deployment.DeploymentStoreClient,
 	archiverProvider provider.ArchiverProvider,
 	payloadSerializer serialization.Serializer,
 	namespaceRegistry namespace.Registry,
@@ -199,6 +201,7 @@ func NewWorkflowHandler(
 		clusterMetadata:                 clusterMetadata,
 		historyClient:                   historyClient,
 		matchingClient:                  matchingClient,
+		deploymentStoreClient:           deploymentStoreClient,
 		archiverProvider:                archiverProvider,
 		payloadSerializer:               payloadSerializer,
 		namespaceRegistry:               namespaceRegistry,
@@ -3187,7 +3190,7 @@ func (wh *WorkflowHandler) DescribeDeployment(ctx context.Context, request *work
 			CreateTime:     deploymentLocalState.CreateTime,
 			TaskQueueInfos: taskQueues,
 			Metadata:       deploymentLocalState.Metadata,
-			IsCurrent:      deploymentLocalState.IsCurrentDeployment,
+			IsCurrent:      deploymentLocalState.IsCurrent,
 		},
 	}, nil
 }

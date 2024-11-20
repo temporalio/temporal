@@ -30,10 +30,12 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	sdkworker "go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
+	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/searchattribute"
@@ -91,7 +93,15 @@ type (
 
 var Module = fx.Options(
 	fx.Provide(NewResult),
+	fx.Provide(DeploymentStoreClientProvider),
 )
+
+func DeploymentStoreClientProvider(historyClient historyservice.HistoryServiceClient, visibilityManager manager.VisibilityManager) *DeploymentStoreClient {
+	return &DeploymentStoreClient{
+		HistoryClient:     historyClient,
+		VisibilityManager: visibilityManager,
+	}
+}
 
 func NewResult(
 	dc *dynamicconfig.Collection,

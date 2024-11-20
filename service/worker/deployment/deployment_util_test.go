@@ -58,7 +58,7 @@ type (
 		mockNamespaceCache       *namespace.MockRegistry
 		mockHistoryClient        *historyservicemock.MockHistoryServiceClient
 		workerDeployment         *deploypb.Deployment
-		deploymentWorkflowClient *DeploymentWorkflowClient
+		deploymentWorkflowClient *DeploymentStoreClient
 		sync.Mutex
 	}
 )
