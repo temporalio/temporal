@@ -204,6 +204,7 @@ func ParsePhysicalTaskQueueKey(persistenceName string, namespaceId string, taskT
 	}, nil
 }
 
+//nolint:revive // cognitive complexity will be simpler once versioning 1-2 is cleaned up
 func parseSuffix(persistenceName string, suffix string) (partition int, versionSet string, buildId string, deploymentName string, err error) {
 	if buildIdOff := strings.LastIndex(suffix, deploymentNameDelimiter); buildIdOff == 0 {
 		return 0, "", "", "", fmt.Errorf("%w: %s", ErrInvalidPersistenceName, persistenceName)

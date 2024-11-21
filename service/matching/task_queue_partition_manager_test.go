@@ -329,7 +329,7 @@ func (s *PartitionManagerTestSuite) TestAddTaskWithAssignmentRulesAndVersionSets
 
 	s.validateAddTask("", false, versioningData, nil)
 	// make sure version set queue is not loaded
-	s.Assert().Nil(s.partitionMgr.versionedQueues[vs.SetIds[0]])
+	s.Assert().Nil(s.partitionMgr.versionedQueues[PhysicalTaskQueueVersion{versionSet: vs.SetIds[0]}])
 	s.validatePollTask("", false)
 }
 
@@ -344,13 +344,13 @@ func (s *PartitionManagerTestSuite) TestAddTaskWithAssignmentRulesAndVersionSets
 	taskBld := "task-bld"
 	s.validateAddTask("", false, versioningData, worker_versioning.MakeBuildIdDirective(taskBld))
 	// make sure version set queue is not loaded
-	s.Assert().Nil(s.partitionMgr.versionedQueues[vs.SetIds[0]])
+	s.Assert().Nil(s.partitionMgr.versionedQueues[PhysicalTaskQueueVersion{versionSet: vs.SetIds[0]}])
 	s.validatePollTask(taskBld, true)
 
 	// now use the version set build ID
 	s.validateAddTask("", false, versioningData, worker_versioning.MakeBuildIdDirective(vs.BuildIds[0].Id))
 	// make sure version set queue is loaded
-	s.Assert().NotNil(s.partitionMgr.versionedQueues[vs.SetIds[0]])
+	s.Assert().NotNil(s.partitionMgr.versionedQueues[PhysicalTaskQueueVersion{versionSet: vs.SetIds[0]}])
 	s.validatePollTask(vs.BuildIds[0].Id, true)
 }
 
@@ -363,7 +363,7 @@ func (s *PartitionManagerTestSuite) TestAddTaskWithAssignmentRulesAndVersionSets
 	}
 	s.validateAddTask(ruleBld, false, versioningData, worker_versioning.MakeUseAssignmentRulesDirective())
 	// make sure version set queue is not loaded
-	s.Assert().Nil(s.partitionMgr.versionedQueues[vs.SetIds[0]])
+	s.Assert().Nil(s.partitionMgr.versionedQueues[PhysicalTaskQueueVersion{versionSet: vs.SetIds[0]}])
 	s.validatePollTask(ruleBld, true)
 }
 

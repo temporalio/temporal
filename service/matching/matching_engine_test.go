@@ -2972,8 +2972,8 @@ func (s *matchingEngineSuite) TestUpdatePhysicalTaskQueueGauge_VersionSet() {
 	Vqtpm, err := tqm.(*taskQueuePartitionManagerImpl).getVersionedQueueNoWait(
 		versionSet,
 		"",
-		true,
 		nil,
+		true,
 	)
 	s.Require().NoError(err)
 
@@ -3014,8 +3014,8 @@ func (s *matchingEngineSuite) TestUpdatePhysicalTaskQueueGauge_BuildID() {
 	Vqtpm, err := tqm.(*taskQueuePartitionManagerImpl).getVersionedQueueNoWait(
 		"",
 		buildID,
-		true,
 		nil,
+		true,
 	)
 	s.Require().NoError(err)
 
@@ -3482,12 +3482,11 @@ type testTaskManager struct {
 
 type dbTaskQueueKey struct {
 	partitionKey tqid.PartitionKey
-	versionSet   string
-	buildId      string
+	version      PhysicalTaskQueueVersion
 }
 
 func getKey(dbq *PhysicalTaskQueueKey) dbTaskQueueKey {
-	return dbTaskQueueKey{dbq.partition.Key(), dbq.versionSet, dbq.buildId}
+	return dbTaskQueueKey{dbq.partition.Key(), *dbq.Version()}
 }
 
 func newTestTaskManager(logger log.Logger) *testTaskManager {
