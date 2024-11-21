@@ -403,17 +403,23 @@ type (
 		// NextTransitionCount returns the next state transition count from the state transition history.
 		// If state transition history is empty (e.g. when disabled or fresh mutable state), returns 0.
 		NextTransitionCount() int64
-		// GetCurrentDeployment returns the current effective deployment in the following order:
-		// RedirectInfo.Deployment takes precedence over DeploymentOverride, over Deployment.
-		GetCurrentDeployment() *deploymentpb.Deployment
-		// GetVersioningBehavior returns the effective versioning behavior for the workflow.
-		GetVersioningBehavior() enumspb.VersioningBehavior
-		GetRedirectInfo() *persistencespb.WorkflowExecutionInfo_VersioningInfo_RedirectInfo
-		StartDeploymentRedirect(
-			deployment *deploymentpb.Deployment,
-			behaviorOverride enumspb.VersioningBehavior,
-		) bool
-		CompleteDeploymentRedirect(behavior enumspb.VersioningBehavior) error
-		FailDeploymentRedirect() error
+		// GetEffectiveDeployment returns the effective deployment in the following order:
+		// DeploymentTransition.Deployment takes precedence over VersioningOverride.Deployment,
+		// over Deployment. VersioningOverride.Deployment is only considered if the override
+		// behavior is PINNED.
+		GetEffectiveDeployment() *deploymentpb.Deployment
+		// GetEffectiveVersioningBehavior returns the effective versioning behavior.
+		// VersioningOverride.Behavior, if set, takes precedence over Behavior.
+		GetEffectiveVersioningBehavior() enumspb.VersioningBehavior
+		GetOngoingDeploymentTransition() *persistencespb.WorkflowExecutionInfo_VersioningInfo_DeploymentTransition
+		// StartDeploymentTransition starts a transition to the given deployment. Returns true
+		// if the requested transition is started. Starting a new transition replaces possible
+		// existing ongoing transition without rescheduling activities. If the workflow is
+		// pinned, the transition won't start.
+		StartDeploymentTransition(deployment *deploymentpb.Deployment) bool
+		// CompleteDeploymentTransition completes the ongoing transition for this workflow if it exists.
+		// Completing a transition updates the workflow's deployment and possibly versioning behavior.
+		// All activities that are not started yet will be rescheduled to be dispatched the new deployment.
+		CompleteDeploymentTransition(workerSentBehavior enumspb.VersioningBehavior) error
 	}
 )

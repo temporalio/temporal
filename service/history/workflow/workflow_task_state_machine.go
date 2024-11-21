@@ -710,7 +710,7 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskCompletedEvent(
 
 	var completedDeployment *deploymentpb.Deployment
 	var completedBehavior enumspb.VersioningBehavior
-	if redirectInfo := m.ms.GetRedirectInfo(); redirectInfo != nil {
+	if redirectInfo := m.ms.GetOngoingDeploymentTransition(); redirectInfo != nil {
 		completedDeployment = redirectInfo.GetDeployment()
 		completedBehavior = request.GetVersioningBehavior()
 	}
@@ -864,9 +864,6 @@ func (m *workflowTaskStateMachine) failWorkflowTask(
 		incrementAttempt = false
 		m.ms.ClearStickyTaskQueue()
 	}
-
-	// TODO (shahab): should fail the deployment redirect here?
-	// m.ms.FailDeploymentRedirect()
 
 	failWorkflowTaskInfo := &WorkflowTaskInfo{
 		Version:               common.EmptyVersion,
@@ -1092,7 +1089,7 @@ func (m *workflowTaskStateMachine) afterAddWorkflowTaskCompletedEvent(
 	m.ms.executionInfo.LastCompletedWorkflowTaskStartedEventId = attrs.GetStartedEventId()
 	m.ms.executionInfo.MostRecentWorkerVersionStamp = attrs.GetWorkerVersion()
 
-	if err := m.ms.CompleteDeploymentRedirect(attrs.GetVersioningBehavior()); err != nil {
+	if err := m.ms.CompleteDeploymentTransition(attrs.GetVersioningBehavior()); err != nil {
 		return err
 	}
 

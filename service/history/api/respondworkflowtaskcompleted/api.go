@@ -1055,7 +1055,7 @@ func (handler *WorkflowTaskCompletedHandler) validateVersioningInfo(
 	ms workflow.MutableState,
 ) error {
 	taskDeployment := request.GetDeployment()
-	wfDeployment := ms.GetCurrentDeployment()
+	wfDeployment := ms.GetEffectiveDeployment()
 	if !taskDeployment.Equal(wfDeployment) {
 		return serviceerror.NewNotFound(fmt.Sprintf(
 			"execution is not assigned to deployment %q, current deployment is %q",

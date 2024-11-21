@@ -267,27 +267,21 @@ message WorkflowExecutionInfo {
         // The worker deployment to which this workflow is assigned currently.
         // Must be present if and only if `behavior` is set.
         temporal.api.deployment.v1.Deployment deployment = 2;
-        // Manual override for execution's versioning behavior. Takes precedence over `behavior`.
-        temporal.api.enums.v1.VersioningBehavior behavior_override = 3;
-        // Used to manually pin the execution to a deployment. Must be set if and only if
-        // `behavior_override` is PINNED. Takes precedence over `deployment`.
-        temporal.api.deployment.v1.Deployment deployment_override = 4;
-        // When present, indicates the workflow is being redirected to a different deployment.
-        // A redirect can only exist during the lifetime of a pending workflow task.
-        // If the pending workflow task completes (at the next WorkflowTaskCompleted event), the
-        // redirect is considered complete and the workflow's deployment is updated. If the pending
-        // workflow task fails or times out, then the redirect is canceled and workflow remains on
-        // the previous deployment.
-        RedirectInfo redirect_info = 5;
+        // Present if user has set an execution-specific versioning override. This override takes
+        // precedence over SDK-sent `behavior` (and `deployment` when override is PINNED).
+        temporal.api.workflow.v1.VersioningOverride versioning_override = 3;
+        // When present, indicates the workflow is transitioning to a different deployment.
+        // A deployment transition can only exist when there is a pending/started workflow task.
+        // Once the pending workflow task completes on the transition deployment, the transition
+        // completes and the workflow's deployment (or versioning override) is updated.
+        DeploymentTransition deployment_transition = 4;
 
-        message RedirectInfo {
-            // The target deployment of the redirect. Null means a so-far-versioned workflow is
-            // being redirected to unversioned workers.
+        message DeploymentTransition {
+            // The target deployment of the transition. Null means a so-far-versioned workflow is
+            // transitioning to unversioned workers.
             temporal.api.deployment.v1.Deployment deployment = 1;
-            // If present, it means the redirect is initiated by a (safe) manual versioning
-            // override. Such override is only applied to the workflow when and if the redirect
-            // successfully completes.
-            temporal.api.enums.v1.VersioningBehavior behavior_override = 2;
+
+            // Later: safe transition info
         }
     }
 }

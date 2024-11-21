@@ -115,9 +115,9 @@ func Invoke(
 
 			deployment := worker_versioning.DeploymentFromCapabilities(request.PollRequest.WorkerVersionCapabilities)
 			// TODO (shahab): support independent deployments
-			activityInitiatedRedirect := mutableState.StartDeploymentRedirect(deployment, enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED)
+			activityInitiatedRedirect := mutableState.StartDeploymentTransition(deployment)
 
-			if mutableState.GetRedirectInfo() != nil {
+			if mutableState.GetOngoingDeploymentTransition() != nil {
 				// Can't start activity during a redirect. We reject this request so Matching drops
 				// the task. The activity will be rescheduled when the redirect completes/fails.
 
