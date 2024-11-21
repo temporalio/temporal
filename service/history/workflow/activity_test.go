@@ -14,6 +14,7 @@
 //
 // THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
 // IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
 // FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
 // AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 // LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
@@ -229,35 +230,7 @@ func (s *activitySuite) TestGetPendingActivityInfoHasRetryPolicy() {
 	s.Equal(ai.LastAttemptCompleteTime, pi.LastAttemptCompleteTime)
 }
 
-func (s *activitySuite) TestResetActivityAcceptance() {
-	now := s.mockShard.GetTimeSource().Now().UTC().Round(time.Hour)
-	activityType := commonpb.ActivityType{
-		Name: "activityType",
-	}
-	ai := &persistencespb.ActivityInfo{
-		ScheduledEventId:        1,
-		ActivityType:            &activityType,
-		ActivityId:              "activityID",
-		CancelRequested:         false,
-		StartedEventId:          1,
-		Attempt:                 2,
-		ScheduledTime:           timestamppb.New(now),
-		LastAttemptCompleteTime: timestamppb.New(now.Add(-1 * time.Hour)),
-		HasRetryPolicy:          false,
-		Paused:                  true,
-		Stamp:                   0,
-	}
-
-	s.mutableState.AddPendingActivityInfo(ai)
-
-	err := ResetActivityById(s.mockShard, s.mutableState, ai.ActivityId, false, false)
-	s.NoError(err)
-	s.Equal(int32(1), ai.Attempt, "ActivityInfo.Attempt is not reset")
-	s.NotEqual(int64(0), ai.Stamp, "ActivityInfo.Stamp should change")
-	s.True(ai.Paused, "ActivityInfo.Paused was reset")
-}
-
-func (s *activitySuite) TestUnpauseActivityWithResumeAcceptance() {
+func (s *activitySuite) AddActivityInfo() *persistencespb.ActivityInfo {
 	activityId := "activity-id"
 	activityScheduledEvent := &historypb.HistoryEvent{
 		EventId:   1,
@@ -280,9 +253,30 @@ func (s *activitySuite) TestUnpauseActivityWithResumeAcceptance() {
 
 	ai, err := s.mutableState.ApplyActivityTaskScheduledEvent(0, activityScheduledEvent)
 	s.NoError(err)
+	return ai
+}
+
+func (s *activitySuite) TestResetPausedActivityAcceptance() {
+	ai := s.AddActivityInfo()
 
 	prevStamp := ai.Stamp
-	err = PauseActivityById(s.mutableState, activityId)
+	err := PauseActivityById(s.mutableState, ai.ActivityId)
+	s.NoError(err)
+	s.NotEqual(prevStamp, ai.Stamp, "ActivityInfo.Stamp should change")
+
+	prevStamp = ai.Stamp
+	err = ResetActivityById(s.mockShard, s.mutableState, ai.ActivityId, false, false)
+	s.NoError(err)
+	s.Equal(int32(1), ai.Attempt, "ActivityInfo.Attempt is not reset")
+	s.Equal(prevStamp, ai.Stamp, "ActivityInfo.Stamp should not change")
+	s.True(ai.Paused, "ActivityInfo.Paused shouldn't change by reset")
+}
+
+func (s *activitySuite) TestUnpauseActivityWithResumeAcceptance() {
+	ai := s.AddActivityInfo()
+
+	prevStamp := ai.Stamp
+	err := PauseActivityById(s.mutableState, ai.ActivityId)
 	s.NoError(err)
 
 	s.Equal(int32(1), ai.Attempt, "ActivityInfo.Attempt is shouldn't change")
@@ -298,43 +292,22 @@ func (s *activitySuite) TestUnpauseActivityWithResumeAcceptance() {
 }
 
 func (s *activitySuite) TestUnpauseActivityWithResetAcceptance() {
-	activityId := "activity-id"
-	activityScheduledEvent := &historypb.HistoryEvent{
-		EventId:   1,
-		EventType: enumspb.EVENT_TYPE_ACTIVITY_TASK_SCHEDULED,
-		Attributes: &historypb.HistoryEvent_ActivityTaskScheduledEventAttributes{
-			ActivityTaskScheduledEventAttributes: &historypb.ActivityTaskScheduledEventAttributes{
-				WorkflowTaskCompletedEventId: 4,
-				ActivityId:                   activityId,
-				ActivityType:                 &commonpb.ActivityType{Name: "activity-type"},
-				TaskQueue:                    &taskqueuepb.TaskQueue{Name: "task-queue", Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
-				Input:                        nil,
-				ScheduleToCloseTimeout:       durationpb.New(20 * time.Second),
-				ScheduleToStartTimeout:       durationpb.New(20 * time.Second),
-				StartToCloseTimeout:          durationpb.New(20 * time.Second),
-				HeartbeatTimeout:             durationpb.New(20 * time.Second),
-			}},
-	}
-
-	s.mockShard.MockEventsCache.EXPECT().PutEvent(gomock.Any(), gomock.Any()).AnyTimes()
-
-	ai, err := s.mutableState.ApplyActivityTaskScheduledEvent(0, activityScheduledEvent)
-	s.NoError(err)
+	ai := s.AddActivityInfo()
 
 	prevStamp := ai.Stamp
-	err = PauseActivityById(s.mutableState, activityId)
+	err := PauseActivityById(s.mutableState, ai.ActivityId)
 	s.NoError(err)
 
 	s.Equal(int32(1), ai.Attempt, "ActivityInfo.Attempt is shouldn't change")
 	s.NotEqual(prevStamp, ai.Stamp, "ActivityInfo.Stamp should change")
 	s.Equal(true, ai.Paused, "ActivityInfo.Paused was not unpaused")
-	prevStamp = ai.Stamp
 
+	prevStamp = ai.Stamp
 	_, err = UnpauseActivityWithReset(s.mockShard, s.mutableState, ai, false, true)
 	s.NoError(err)
 	s.Equal(int32(1), ai.Attempt, "ActivityInfo.Attempt is shouldn't change")
 	s.Equal(false, ai.Paused, "ActivityInfo.Paused was not unpaused")
-	s.NotEqual(int64(0), ai.Stamp, "ActivityInfo.Stamp should change")
+	s.NotEqual(prevStamp, ai.Stamp, "ActivityInfo.Stamp should change")
 	s.Nil(ai.LastHeartbeatUpdateTime)
 	s.Nil(ai.LastHeartbeatDetails)
 }
