@@ -403,18 +403,6 @@ func (mr *MockMutableStateMockRecorder) AddHistorySize(size any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddHistorySize", reflect.TypeOf((*MockMutableState)(nil).AddHistorySize), size)
 }
 
-// AddPendingActivityInfo mocks base method.
-func (m *MockMutableState) AddPendingActivityInfo(arg0 *persistence.ActivityInfo) {
-	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "AddPendingActivityInfo", arg0)
-}
-
-// AddPendingActivityInfo indicates an expected call of AddPendingActivityInfo.
-func (mr *MockMutableStateMockRecorder) AddPendingActivityInfo(arg0 any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddPendingActivityInfo", reflect.TypeOf((*MockMutableState)(nil).AddPendingActivityInfo), arg0)
-}
-
 // AddRecordMarkerEvent mocks base method.
 func (m *MockMutableState) AddRecordMarkerEvent(arg0 int64, arg1 *command.RecordMarkerCommandAttributes) (*history.HistoryEvent, error) {
 	m.ctrl.T.Helper()
