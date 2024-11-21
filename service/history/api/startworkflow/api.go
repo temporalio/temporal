@@ -215,22 +215,22 @@ func (s *Starter) Invoke(
 	}
 
 	err = s.createBrandNew(ctx, creationParams)
-	if err == nil {
-		resp, err = s.generateResponse(
-			creationParams.runID,
-			creationParams.workflowTaskInfo,
-			extractHistoryEvents(creationParams.workflowEventBatches),
-		)
-		return resp, StartNew, err
-	}
-	var currentWorkflowConditionFailedError *persistence.CurrentWorkflowConditionFailedError
-	if !errors.As(err, &currentWorkflowConditionFailedError) ||
-		len(currentWorkflowConditionFailedError.RunID) == 0 {
+	if err != nil {
+		var currentWorkflowConditionFailedError *persistence.CurrentWorkflowConditionFailedError
+		if errors.As(err, &currentWorkflowConditionFailedError) && len(currentWorkflowConditionFailedError.RunID) > 0 {
+			// The history and mutable state generated above will be deleted by a background process.
+			return s.handleConflict(ctx, creationParams, beforeCreateHook, currentWorkflowConditionFailedError)
+		}
+
 		return nil, startOutcome, err
 	}
 
-	// The history and mutable state we generated above will be deleted by a background process.
-	return s.handleConflict(ctx, creationParams, beforeCreateHook, currentWorkflowConditionFailedError)
+	resp, err = s.generateResponse(
+		creationParams.runID,
+		creationParams.workflowTaskInfo,
+		extractHistoryEvents(creationParams.workflowEventBatches),
+	)
+	return resp, StartNew, err
 }
 
 func (s *Starter) lockCurrentWorkflowExecution(
