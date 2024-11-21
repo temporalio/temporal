@@ -39,6 +39,11 @@ import (
 	"go.temporal.io/server/service/history/workflow"
 )
 
+// maxResetRedirectCount is the number of times we follow the reset run ID to forward the request to the new parent.
+// This redirection happens only when a workflow is reset and in most cases it's 1 or 2 hops.
+// maxResetRedirectCount prevents us from following long chain of resets (or some circular loop in redirects).
+const maxResetRedirectCount = 100
+
 func Invoke(
 	ctx context.Context,
 	request *historyservice.RecordChildExecutionCompletedRequest,
@@ -51,115 +56,12 @@ func Invoke(
 		return nil, err
 	}
 
-	parentInitiatedID := request.ParentInitiatedId
-	parentInitiatedVersion := request.ParentInitiatedVersion
+	redirectCount := 0
 	for {
-		resetRunID := ""
-		err = api.GetAndUpdateWorkflowWithConsistencyCheck(
-			ctx,
-			request.Clock,
-			func(mutableState workflow.MutableState) bool {
-				if !mutableState.IsWorkflowExecutionRunning() {
-					// current branch already closed, we won't perform any operation, pass the check
-					return true
-				}
-
-				onCurrentBranch, err := api.IsHistoryEventOnCurrentBranch(mutableState, parentInitiatedID, parentInitiatedVersion)
-				if err != nil {
-					// can't find initiated event, potential stale mutable, fail the predicate check
-					return false
-				}
-				if !onCurrentBranch {
-					// found on different branch, since we don't record completion on a different branch, pass the check
-					return true
-				}
-
-				_, childInitEventFound := mutableState.GetChildExecutionInfo(parentInitiatedID)
-				return childInitEventFound
-			},
-			definition.NewWorkflowKey(
-				request.NamespaceId,
-				request.GetParentExecution().WorkflowId,
-				request.GetParentExecution().RunId,
-			),
-			func(workflowLease api.WorkflowLease) (*api.UpdateWorkflowAction, error) {
-				mutableState := workflowLease.GetMutableState()
-				if !mutableState.IsWorkflowExecutionRunning() {
-					resetRunID = mutableState.GetExecutionInfo().ResetRunId
-					return nil, consts.ErrWorkflowCompleted
-				}
-
-				onCurrentBranch, err := api.IsHistoryEventOnCurrentBranch(mutableState, parentInitiatedID, parentInitiatedVersion)
-				if err != nil || !onCurrentBranch {
-					return nil, consts.ErrChildExecutionNotFound
-				}
-
-				// Check mutable state to make sure child execution is in pending child executions
-				ci, isRunning := mutableState.GetChildExecutionInfo(parentInitiatedID)
-				if !isRunning {
-					return nil, consts.ErrChildExecutionNotFound
-				}
-				if ci.StartedEventId == common.EmptyEventID {
-					// note we already checked if startedEventID is empty (in consistency predicate)
-					// and reloaded mutable state, so if startedEventID is still missing, we need to
-					// record a started event before recording completion event.
-					initiatedEvent, err := mutableState.GetChildExecutionInitiatedEvent(ctx, parentInitiatedID)
-					if err != nil {
-						return nil, consts.ErrChildExecutionNotFound
-					}
-					initiatedAttr := initiatedEvent.GetStartChildWorkflowExecutionInitiatedEventAttributes()
-					// note values used here should not matter because the child info will be deleted
-					// when the response is recorded, so it should be fine e.g. that ci.Clock is nil
-					_, err = mutableState.AddChildWorkflowExecutionStartedEvent(
-						request.GetChildExecution(),
-						initiatedAttr.WorkflowType,
-						initiatedEvent.EventId,
-						initiatedAttr.Header,
-						ci.Clock,
-					)
-					if err != nil {
-						return nil, err
-					}
-				}
-
-				childExecution := request.GetChildExecution()
-				if ci.GetStartedWorkflowId() != childExecution.GetWorkflowId() {
-					// this can only happen when we don't have the initiated version
-					return nil, consts.ErrChildExecutionNotFound
-				}
-
-				completionEvent := request.CompletionEvent
-				switch completionEvent.GetEventType() {
-				case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED:
-					attributes := completionEvent.GetWorkflowExecutionCompletedEventAttributes()
-					_, err = mutableState.AddChildWorkflowExecutionCompletedEvent(parentInitiatedID, childExecution, attributes)
-				case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_FAILED:
-					attributes := completionEvent.GetWorkflowExecutionFailedEventAttributes()
-					_, err = mutableState.AddChildWorkflowExecutionFailedEvent(parentInitiatedID, childExecution, attributes)
-				case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CANCELED:
-					attributes := completionEvent.GetWorkflowExecutionCanceledEventAttributes()
-					_, err = mutableState.AddChildWorkflowExecutionCanceledEvent(parentInitiatedID, childExecution, attributes)
-				case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TERMINATED:
-					attributes := completionEvent.GetWorkflowExecutionTerminatedEventAttributes()
-					_, err = mutableState.AddChildWorkflowExecutionTerminatedEvent(parentInitiatedID, childExecution, attributes)
-				case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TIMED_OUT:
-					attributes := completionEvent.GetWorkflowExecutionTimedOutEventAttributes()
-					_, err = mutableState.AddChildWorkflowExecutionTimedOutEvent(parentInitiatedID, childExecution, attributes)
-				}
-				if err != nil {
-					return nil, err
-				}
-				return &api.UpdateWorkflowAction{
-					Noop:               false,
-					CreateWorkflowTask: true,
-				}, nil
-			},
-			nil,
-			shard,
-			workflowConsistencyChecker,
-		)
+		resetRunID, err := recordchildworkflowcompleted(ctx, request, shard, workflowConsistencyChecker)
 		if errors.Is(err, consts.ErrWorkflowCompleted) {
-			if resetRunID != "" {
+			if resetRunID != "" && redirectCount < maxResetRedirectCount {
+				redirectCount++
 				request.ParentExecution.RunId = resetRunID
 				continue
 			}
@@ -169,4 +71,121 @@ func Invoke(
 		}
 		return &historyservice.RecordChildExecutionCompletedResponse{}, nil
 	}
+}
+
+// recordchildworkflowcompleted records the child completed event in the parent history if the parent is still running.
+// It returns consts.ErrWorkflowCompleted if the parent is already completed. Additionally a reset run ID is returned if the parent was completed due to a reset operation.
+func recordchildworkflowcompleted(
+	ctx context.Context,
+	request *historyservice.RecordChildExecutionCompletedRequest,
+	shard shard.Context,
+	workflowConsistencyChecker api.WorkflowConsistencyChecker,
+) (string, error) {
+	resetRunID := ""
+	parentInitiatedID := request.ParentInitiatedId
+	parentInitiatedVersion := request.ParentInitiatedVersion
+	err := api.GetAndUpdateWorkflowWithConsistencyCheck(
+		ctx,
+		request.Clock,
+		func(mutableState workflow.MutableState) bool {
+			if !mutableState.IsWorkflowExecutionRunning() {
+				// current branch already closed, we won't perform any operation, pass the check
+				return true
+			}
+
+			onCurrentBranch, err := api.IsHistoryEventOnCurrentBranch(mutableState, parentInitiatedID, parentInitiatedVersion)
+			if err != nil {
+				// can't find initiated event, potential stale mutable, fail the predicate check
+				return false
+			}
+			if !onCurrentBranch {
+				// found on different branch, since we don't record completion on a different branch, pass the check
+				return true
+			}
+
+			_, childInitEventFound := mutableState.GetChildExecutionInfo(parentInitiatedID)
+			return childInitEventFound
+		},
+		definition.NewWorkflowKey(
+			request.NamespaceId,
+			request.GetParentExecution().WorkflowId,
+			request.GetParentExecution().RunId,
+		),
+		func(workflowLease api.WorkflowLease) (*api.UpdateWorkflowAction, error) {
+			mutableState := workflowLease.GetMutableState()
+			if !mutableState.IsWorkflowExecutionRunning() {
+				resetRunID = mutableState.GetExecutionInfo().ResetRunId
+				return nil, consts.ErrWorkflowCompleted
+			}
+
+			onCurrentBranch, err := api.IsHistoryEventOnCurrentBranch(mutableState, parentInitiatedID, parentInitiatedVersion)
+			if err != nil || !onCurrentBranch {
+				return nil, consts.ErrChildExecutionNotFound
+			}
+
+			// Check mutable state to make sure child execution is in pending child executions
+			ci, isRunning := mutableState.GetChildExecutionInfo(parentInitiatedID)
+			if !isRunning {
+				return nil, consts.ErrChildExecutionNotFound
+			}
+			if ci.StartedEventId == common.EmptyEventID {
+				// note we already checked if startedEventID is empty (in consistency predicate)
+				// and reloaded mutable state, so if startedEventID is still missing, we need to
+				// record a started event before recording completion event.
+				initiatedEvent, err := mutableState.GetChildExecutionInitiatedEvent(ctx, parentInitiatedID)
+				if err != nil {
+					return nil, consts.ErrChildExecutionNotFound
+				}
+				initiatedAttr := initiatedEvent.GetStartChildWorkflowExecutionInitiatedEventAttributes()
+				// note values used here should not matter because the child info will be deleted
+				// when the response is recorded, so it should be fine e.g. that ci.Clock is nil
+				_, err = mutableState.AddChildWorkflowExecutionStartedEvent(
+					request.GetChildExecution(),
+					initiatedAttr.WorkflowType,
+					initiatedEvent.EventId,
+					initiatedAttr.Header,
+					ci.Clock,
+				)
+				if err != nil {
+					return nil, err
+				}
+			}
+
+			childExecution := request.GetChildExecution()
+			if ci.GetStartedWorkflowId() != childExecution.GetWorkflowId() {
+				// this can only happen when we don't have the initiated version
+				return nil, consts.ErrChildExecutionNotFound
+			}
+
+			completionEvent := request.CompletionEvent
+			switch completionEvent.GetEventType() {
+			case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED:
+				attributes := completionEvent.GetWorkflowExecutionCompletedEventAttributes()
+				_, err = mutableState.AddChildWorkflowExecutionCompletedEvent(parentInitiatedID, childExecution, attributes)
+			case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_FAILED:
+				attributes := completionEvent.GetWorkflowExecutionFailedEventAttributes()
+				_, err = mutableState.AddChildWorkflowExecutionFailedEvent(parentInitiatedID, childExecution, attributes)
+			case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CANCELED:
+				attributes := completionEvent.GetWorkflowExecutionCanceledEventAttributes()
+				_, err = mutableState.AddChildWorkflowExecutionCanceledEvent(parentInitiatedID, childExecution, attributes)
+			case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TERMINATED:
+				attributes := completionEvent.GetWorkflowExecutionTerminatedEventAttributes()
+				_, err = mutableState.AddChildWorkflowExecutionTerminatedEvent(parentInitiatedID, childExecution, attributes)
+			case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TIMED_OUT:
+				attributes := completionEvent.GetWorkflowExecutionTimedOutEventAttributes()
+				_, err = mutableState.AddChildWorkflowExecutionTimedOutEvent(parentInitiatedID, childExecution, attributes)
+			}
+			if err != nil {
+				return nil, err
+			}
+			return &api.UpdateWorkflowAction{
+				Noop:               false,
+				CreateWorkflowTask: true,
+			}, nil
+		},
+		nil,
+		shard,
+		workflowConsistencyChecker,
+	)
+	return resetRunID, err
 }
