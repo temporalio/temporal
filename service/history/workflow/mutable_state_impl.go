@@ -6749,7 +6749,7 @@ func (ms *MutableStateImpl) GetEffectiveDeployment() *deploymentpb.Deployment {
 	return versioningInfo.GetDeployment()
 }
 
-func (ms *MutableStateImpl) GetOngoingDeploymentTransition() *persistencespb.WorkflowExecutionInfo_VersioningInfo_DeploymentTransition {
+func (ms *MutableStateImpl) GetOngoingDeploymentTransition() *workflowpb.DeploymentTransition {
 	return ms.GetExecutionInfo().GetVersioningInfo().GetDeploymentTransition()
 }
 
@@ -6786,11 +6786,11 @@ func (ms *MutableStateImpl) StartDeploymentTransition(deployment *deploymentpb.D
 
 	versioningInfo := ms.GetExecutionInfo().GetVersioningInfo()
 	if versioningInfo == nil {
-		versioningInfo = &persistencespb.WorkflowExecutionInfo_VersioningInfo{}
+		versioningInfo = &workflowpb.WorkflowExecutionVersioningInfo{}
 		ms.GetExecutionInfo().VersioningInfo = versioningInfo
 	}
 
-	versioningInfo.DeploymentTransition = &persistencespb.WorkflowExecutionInfo_VersioningInfo_DeploymentTransition{
+	versioningInfo.DeploymentTransition = &workflowpb.DeploymentTransition{
 		Deployment: deployment,
 	}
 

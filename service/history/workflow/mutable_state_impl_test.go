@@ -507,7 +507,7 @@ func (s *mutableStateSuite) TestEffectiveDeployment() {
 	s.mutableState = ms
 	s.verifyEffectiveDeployment(nil, enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED)
 
-	versioningInfo := &persistencespb.WorkflowExecutionInfo_VersioningInfo{}
+	versioningInfo := &workflowpb.WorkflowExecutionVersioningInfo{}
 	ms.executionInfo.VersioningInfo = versioningInfo
 	s.verifyEffectiveDeployment(nil, enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED)
 
@@ -529,7 +529,7 @@ func (s *mutableStateSuite) TestEffectiveDeployment() {
 	}
 	s.verifyEffectiveDeployment(deployment1, enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE)
 
-	versioningInfo.DeploymentTransition = &persistencespb.WorkflowExecutionInfo_VersioningInfo_DeploymentTransition{
+	versioningInfo.DeploymentTransition = &workflowpb.DeploymentTransition{
 		Deployment: deployment3,
 	}
 	s.verifyEffectiveDeployment(deployment3, enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE)

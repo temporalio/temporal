@@ -411,7 +411,7 @@ type (
 		// GetEffectiveVersioningBehavior returns the effective versioning behavior.
 		// VersioningOverride.Behavior, if set, takes precedence over Behavior.
 		GetEffectiveVersioningBehavior() enumspb.VersioningBehavior
-		GetOngoingDeploymentTransition() *persistencespb.WorkflowExecutionInfo_VersioningInfo_DeploymentTransition
+		GetOngoingDeploymentTransition() *workflowpb.DeploymentTransition
 		// StartDeploymentTransition starts a transition to the given deployment. Returns true
 		// if the requested transition is started. Starting a new transition replaces possible
 		// existing ongoing transition without rescheduling activities. If the workflow is

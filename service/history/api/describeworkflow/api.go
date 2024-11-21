@@ -142,21 +142,8 @@ func Invoke(
 			AssignedBuildId:              executionInfo.AssignedBuildId,
 			InheritedBuildId:             executionInfo.InheritedBuildId,
 			FirstRunId:                   executionInfo.FirstExecutionRunId,
+			VersioningInfo:               executionInfo.VersioningInfo,
 		},
-	}
-
-	if versioningInfo := executionInfo.GetVersioningInfo(); versioningInfo != nil {
-		result.WorkflowExecutionInfo.VersioningInfo = &workflowpb.WorkflowExecutionInfo_VersioningInfo{
-			Behavior:           versioningInfo.Behavior,
-			Deployment:         versioningInfo.Deployment,
-			VersioningOverride: versioningInfo.GetVersioningOverride(),
-		}
-		if transition := versioningInfo.GetDeploymentTransition(); transition != nil {
-			result.WorkflowExecutionInfo.VersioningInfo.DeploymentTransition =
-				&workflowpb.WorkflowExecutionInfo_VersioningInfo_DeploymentTransition{
-					Deployment: transition.Deployment,
-				}
-		}
 	}
 
 	if executionInfo.ParentRunId != "" {

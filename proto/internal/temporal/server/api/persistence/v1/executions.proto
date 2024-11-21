@@ -256,34 +256,7 @@ message WorkflowExecutionInfo {
 
     repeated StateMachineTombstoneBatch sub_state_machine_tombstone_batches = 95;
 
-    // Holds all the information about versioning for this particular execution.
-    VersioningInfo versioning_info = 96;
-
-    message VersioningInfo {
-        // Determines how server should treat this execution when workers are upgraded.
-        // When present it means that this workflow is versioned. This is set after an execution
-        // completes its first workflow task on a versioned worker.
-        temporal.api.enums.v1.VersioningBehavior behavior = 1;
-        // The worker deployment to which this workflow is assigned currently.
-        // Must be present if and only if `behavior` is set.
-        temporal.api.deployment.v1.Deployment deployment = 2;
-        // Present if user has set an execution-specific versioning override. This override takes
-        // precedence over SDK-sent `behavior` (and `deployment` when override is PINNED).
-        temporal.api.workflow.v1.VersioningOverride versioning_override = 3;
-        // When present, indicates the workflow is transitioning to a different deployment.
-        // A deployment transition can only exist when there is a pending/started workflow task.
-        // Once the pending workflow task completes on the transition deployment, the transition
-        // completes and the workflow's deployment (or versioning override) is updated.
-        DeploymentTransition deployment_transition = 4;
-
-        message DeploymentTransition {
-            // The target deployment of the transition. Null means a so-far-versioned workflow is
-            // transitioning to unversioned workers.
-            temporal.api.deployment.v1.Deployment deployment = 1;
-
-            // Later: safe transition info
-        }
-    }
+    temporal.api.workflow.v1.WorkflowExecutionVersioningInfo versioning_info = 96;
 }
 
 message ExecutionStats {

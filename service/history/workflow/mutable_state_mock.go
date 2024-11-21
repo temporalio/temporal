@@ -2155,10 +2155,10 @@ func (mr *MockMutableStateMockRecorder) GetNexusCompletion(ctx any) *gomock.Call
 }
 
 // GetOngoingDeploymentTransition mocks base method.
-func (m *MockMutableState) GetOngoingDeploymentTransition() *persistence.WorkflowExecutionInfo_VersioningInfo_DeploymentTransition {
+func (m *MockMutableState) GetOngoingDeploymentTransition() *workflow.DeploymentTransition {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetOngoingDeploymentTransition")
-	ret0, _ := ret[0].(*persistence.WorkflowExecutionInfo_VersioningInfo_DeploymentTransition)
+	ret0, _ := ret[0].(*workflow.DeploymentTransition)
 	return ret0
 }
 
