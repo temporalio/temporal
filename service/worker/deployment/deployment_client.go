@@ -27,6 +27,8 @@ package deployment
 import (
 	"context"
 	"fmt"
+	"go.temporal.io/server/common/metrics"
+	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
 	deploypb "go.temporal.io/api/deployment/v1"
@@ -77,6 +79,13 @@ type DeploymentStoreClient interface {
 		seriesName string,
 		NextPageToken []byte,
 	) ([]*deploypb.DeploymentListInfo, []byte, error)
+
+	GetDeploymentReachability(
+		ctx context.Context,
+		namespaceEntry *namespace.Namespace,
+		seriesName string,
+		buildID string,
+	) (*workflowservice.GetDeploymentReachabilityResponse, error)
 }
 
 // implements DeploymentClient
@@ -85,6 +94,8 @@ type DeploymentClientImpl struct {
 	VisibilityManager     manager.VisibilityManager
 	MaxIDLengthLimit      dynamicconfig.IntPropertyFn
 	VisibilityMaxPageSize dynamicconfig.IntPropertyFnWithNamespaceFilter
+
+	reachabilityCache *ReachabilityCache
 }
 
 func (d *DeploymentClientImpl) RegisterTaskQueueWorker(
@@ -235,6 +246,48 @@ func (d *DeploymentClientImpl) DescribeDeployment(ctx context.Context, namespace
 		TaskQueueInfos: taskQueues,
 		Metadata:       deploymentLocalState.Metadata,
 		IsCurrent:      deploymentLocalState.IsCurrent,
+	}, nil
+}
+
+func (d *DeploymentClientImpl) GetDeploymentReachability(
+	ctx context.Context,
+	namespaceEntry *namespace.Namespace,
+	seriesName string,
+	buildID string,
+) (*workflowservice.GetDeploymentReachabilityResponse, error) {
+	deployInfo, err := d.DescribeDeployment(ctx, namespaceEntry, seriesName, buildID)
+	if err != nil {
+		return nil, err
+	}
+	currentDeployment, err := d.GetCurrentDeployment(ctx, namespaceEntry, seriesName)
+	if err != nil {
+		return nil, err
+	}
+
+	if d.reachabilityCache == nil {
+		cache := NewReachabilityCache(
+			metrics.NoopMetricsHandler,
+			d.VisibilityManager,
+			reachabilityCacheOpenWFsTTL,   // TODO (carly) use dc (ie. config.ReachabilityCacheOpenWFsTTL)
+			reachabilityCacheClosedWFsTTL, // TODO (carly) use dc (ie. config.ReachabilityCacheClosedWFsTTL)
+		)
+		d.reachabilityCache = &cache
+	}
+
+	reachability, lastUpdateTime, err := getDeploymentReachability(
+		ctx,
+		namespaceEntry,
+		seriesName,
+		buildID,
+		currentDeployment.GetDeployment().GetBuildId(),
+		time.Now(), // approx time that currentDeployment was confirmed valid
+		*d.reachabilityCache,
+	)
+
+	return &workflowservice.GetDeploymentReachabilityResponse{
+		DeploymentInfo: deployInfo,
+		Reachability:   reachability,
+		LastUpdateTime: timestamppb.New(lastUpdateTime),
 	}, nil
 }
 
