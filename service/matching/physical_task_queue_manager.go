@@ -33,7 +33,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	commonpb "go.temporal.io/api/common/v1"
+	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
@@ -49,7 +49,6 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
-	"go.temporal.io/server/service/worker/deployment"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 
@@ -341,13 +340,14 @@ func (c *physicalTaskQueueManagerImpl) PollTask(
 	if c.partitionMgr.engine.config.EnableDeployments(namespaceEntry.Name().String()) && pollMetadata.workerVersionCapabilities.UseVersioning {
 		if !c.isDeploymentWorkflowStarted.Load() {
 
-			workerDeployment := &commonpb.WorkerDeployment{
-				DeploymentName: pollMetadata.workerVersionCapabilities.DeploymentName,
-				BuildId:        pollMetadata.workerVersionCapabilities.BuildId,
+			workerDeployment := &deploymentpb.Deployment{
+				SeriesName: pollMetadata.workerVersionCapabilities.DeploymentSeriesName,
+				BuildId:    pollMetadata.workerVersionCapabilities.BuildId,
 			}
-			d := deployment.NewDeploymentWorkflowClient(namespaceEntry, workerDeployment, c.partitionMgr.engine.historyClient)
-			err := d.RegisterTaskQueueWorker(ctx, c.queue.TaskQueueFamily().Name(), c.queue.TaskType(), nil, c.partitionMgr.engine.config.MaxIDLengthLimit())
 
+			err := c.partitionMgr.engine.deploymentStoreClient.RegisterTaskQueueWorker(
+				ctx, namespaceEntry, workerDeployment, c.queue.TaskQueueFamily().Name(), c.queue.TaskType(),
+				nil)
 			if err != nil {
 				return nil, err
 			}

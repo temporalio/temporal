@@ -1054,7 +1054,7 @@ func (handler *WorkflowTaskCompletedHandler) validateVersioningInfo(
 	request *workflowservice.RespondWorkflowTaskCompletedRequest,
 	ms workflow.MutableState,
 ) error {
-	taskDeployment := worker_versioning.DeploymentFromStamp(request.GetWorkerVersionStamp())
+	taskDeployment := request.GetDeployment()
 	wfDeployment := ms.GetCurrentDeployment()
 	if !taskDeployment.Equal(wfDeployment) {
 		return serviceerror.NewNotFound(fmt.Sprintf(
