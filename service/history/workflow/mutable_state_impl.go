@@ -4252,6 +4252,8 @@ func (ms *MutableStateImpl) AddWorkflowExecutionOptionsUpdatedEvent(
 func (ms *MutableStateImpl) ApplyWorkflowExecutionOptionsUpdatedEvent(event *historypb.HistoryEvent) error {
 	override := event.GetWorkflowExecutionOptionsUpdatedEventAttributes().GetVersioningOverride()
 	previousCurrentDeployment := ms.GetCurrentDeployment()
+	previousEffectiveVersioningBehavior := ms.GetVersioningBehavior()
+	ms.GetExecutionInfo().GetVersioningInfo().GetBehavior()
 	if override != nil {
 		ms.GetExecutionInfo().VersioningInfo.BehaviorOverride = override.GetBehavior()
 		ms.GetExecutionInfo().VersioningInfo.DeploymentOverride = override.GetDeployment()
@@ -4259,11 +4261,14 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionOptionsUpdatedEvent(event *his
 		ms.GetExecutionInfo().VersioningInfo.BehaviorOverride = enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED
 		ms.GetExecutionInfo().VersioningInfo.DeploymentOverride = nil
 	}
-	// If behavior was changed, deployment will also have changed, so we only need to check deployment
-	if !proto.Equal(ms.GetCurrentDeployment(), previousCurrentDeployment) {
-		// In the case of deployment change, I'm choosing to let started WFTs that are running on the old deployment finish running
-		// The argument for failing them is if the user wants to reschedule them on the new deployment, but that is an optimization
-		// that can come later, especially since it's possible the user would prefer to not fail them.
+	if !proto.Equal(ms.GetCurrentDeployment(), previousCurrentDeployment) ||
+		// If behavior changes from pinned --> unpinned with the same effective deployment, we still need to reschedule
+		// pending tasks into the default/unpinned queue, so that if the current deployment changes before the tasks
+		// start, the unpinned queue will handle that correctly and the start task will succeed.
+		ms.GetVersioningBehavior() != previousEffectiveVersioningBehavior {
+		// In the case of deployment change, I'm choosing to let any started WFT that is running on the old deployment finish running.
+		// The argument for failing a started WFT is if the user wants to reschedule it on the new deployment, but that is an optimization
+		// that can come later, especially since it's possible the user would prefer to not fail it.
 		// TODO (carly) part 2: if safe mode, do replay test on new deployment if deployment changed, if fail, revert changes and abort
 		ms.ClearStickyTaskQueue()
 		// TODO (carly): confirm this is the right way to reschedule pending WFT. Is there only one WFT?
