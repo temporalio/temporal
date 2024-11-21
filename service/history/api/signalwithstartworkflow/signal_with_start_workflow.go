@@ -89,21 +89,43 @@ func startAndSignalWorkflow(
 	workflowID := signalWithStartRequest.GetWorkflowId()
 	runID := uuid.New().String()
 	// TODO(bergundy): Support eager workflow task
-	newWorkflowLease, err := api.NewWorkflowWithSignal(
+	newMutableState, err := api.NewWorkflow(
 		shard,
 		namespaceEntry,
 		workflowID,
 		runID,
 		startRequest,
-		signalWithStartRequest,
+		func(ms workflow.MutableState) error {
+			if signalWithStartRequest.GetRequestId() != "" {
+				ms.AddSignalRequested(signalWithStartRequest.GetRequestId())
+			}
+
+			if _, err := ms.AddWorkflowExecutionSignaled(
+				signalWithStartRequest.GetSignalName(),
+				signalWithStartRequest.GetSignalInput(),
+				signalWithStartRequest.GetIdentity(),
+				signalWithStartRequest.GetHeader(),
+				signalWithStartRequest.GetLinks(),
+			); err != nil {
+				return err
+			}
+
+			return nil
+		},
 	)
 	if err != nil {
 		return "", false, err
 	}
+
+	newWorkflowLease, err := api.NewEphemeralWorkflowLease(shard, newMutableState)
+	if err != nil {
+		return "", false, err
+	}
+
 	if err = api.ValidateSignal(
 		ctx,
 		shard,
-		newWorkflowLease.GetMutableState(),
+		newMutableState,
 		signalWithStartRequest.GetSignalInput().Size(),
 		"SignalWithStartWorkflowExecution",
 	); err != nil {
