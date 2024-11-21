@@ -250,3 +250,77 @@ func (this *DeploymentWorkflowMemo) Equal(that interface{}) bool {
 
 	return proto.Equal(this, that1)
 }
+
+// Marshal an object of type WorkflowVersioningInfo to the protobuf v3 wire format
+func (val *WorkflowVersioningInfo) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type WorkflowVersioningInfo from the protobuf v3 wire format
+func (val *WorkflowVersioningInfo) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *WorkflowVersioningInfo) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two WorkflowVersioningInfo values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *WorkflowVersioningInfo) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *WorkflowVersioningInfo
+	switch t := that.(type) {
+	case *WorkflowVersioningInfo:
+		that1 = t
+	case WorkflowVersioningInfo:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
+// Marshal an object of type TaskRedirectInfo to the protobuf v3 wire format
+func (val *TaskRedirectInfo) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type TaskRedirectInfo from the protobuf v3 wire format
+func (val *TaskRedirectInfo) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *TaskRedirectInfo) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two TaskRedirectInfo values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *TaskRedirectInfo) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *TaskRedirectInfo
+	switch t := that.(type) {
+	case *TaskRedirectInfo:
+		that1 = t
+	case TaskRedirectInfo:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
