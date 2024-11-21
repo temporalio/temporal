@@ -80,7 +80,7 @@ func SignalWithStartWorkflow(
 
 func startAndSignalWorkflow(
 	ctx context.Context,
-	shard shard.Context,
+	shardCtx shard.Context,
 	namespaceEntry *namespace.Namespace,
 	currentWorkflowLease api.WorkflowLease,
 	startRequest *historyservice.StartWorkflowExecutionRequest,
@@ -90,7 +90,7 @@ func startAndSignalWorkflow(
 	runID := uuid.New().String()
 	// TODO(bergundy): Support eager workflow task
 	newMutableState, err := api.NewWorkflow(
-		shard,
+		shardCtx,
 		namespaceEntry,
 		workflowID,
 		runID,
@@ -117,14 +117,14 @@ func startAndSignalWorkflow(
 		return "", false, err
 	}
 
-	newWorkflowLease, err := api.NewEphemeralWorkflowLease(shard, newMutableState)
+	newWorkflowLease, err := api.NewEphemeralWorkflowLease(shardCtx, newMutableState)
 	if err != nil {
 		return "", false, err
 	}
 
 	if err = api.ValidateSignal(
 		ctx,
-		shard,
+		shardCtx,
 		newMutableState,
 		signalWithStartRequest.GetSignalInput().Size(),
 		"SignalWithStartWorkflowExecution",
@@ -133,7 +133,7 @@ func startAndSignalWorkflow(
 	}
 
 	workflowMutationFn, err := createWorkflowMutationFunction(
-		shard,
+		shardCtx,
 		currentWorkflowLease,
 		namespaceEntry,
 		runID,
@@ -146,7 +146,7 @@ func startAndSignalWorkflow(
 	if workflowMutationFn != nil {
 		if err = startAndSignalWithCurrentWorkflow(
 			ctx,
-			shard,
+			shardCtx,
 			currentWorkflowLease,
 			workflowMutationFn,
 			newWorkflowLease,
@@ -161,7 +161,7 @@ func startAndSignalWorkflow(
 	}
 	return startAndSignalWithoutCurrentWorkflow(
 		ctx,
-		shard,
+		shardCtx,
 		vrid,
 		newWorkflowLease,
 		signalWithStartRequest.RequestId,

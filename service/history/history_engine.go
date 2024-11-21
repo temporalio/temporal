@@ -406,12 +406,13 @@ func (e *historyEngineImpl) StartWorkflowExecution(
 		e.tokenSerializer,
 		e.persistenceVisibilityMgr,
 		startRequest,
+		api.NewEphemeralWorkflowLease,
 	)
 	if err != nil {
 		return nil, err
 	}
 
-	resp, _, err := starter.Invoke(ctx, startworkflow.BeforeCreateHookNoop)
+	resp, _, err := starter.Invoke(ctx)
 	return resp, err
 }
 

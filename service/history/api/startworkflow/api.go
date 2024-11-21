@@ -72,10 +72,6 @@ const (
 	StartDeduped
 )
 
-var (
-	BeforeCreateHookNoop = func(lease api.WorkflowLease) error { return nil }
-)
-
 // Starter starts a new workflow execution.
 type Starter struct {
 	shardContext               shard.Context
@@ -84,6 +80,7 @@ type Starter struct {
 	visibilityManager          manager.VisibilityManager
 	request                    *historyservice.StartWorkflowExecutionRequest
 	namespace                  *namespace.Namespace
+	createLeaseForWorkflow     api.CreateLeaseForWorkflow
 }
 
 // creationParams is a container for all information obtained from creating the uncommitted execution.
@@ -112,6 +109,7 @@ func NewStarter(
 	tokenSerializer common.TaskTokenSerializer,
 	visibilityManager manager.VisibilityManager,
 	request *historyservice.StartWorkflowExecutionRequest,
+	createLeaseForWorkflow api.CreateLeaseForWorkflow,
 ) (*Starter, error) {
 	namespaceEntry, err := api.GetActiveNamespace(shardContext, namespace.ID(request.GetNamespaceId()))
 	if err != nil {
@@ -125,6 +123,7 @@ func NewStarter(
 		visibilityManager:          visibilityManager,
 		request:                    request,
 		namespace:                  namespaceEntry,
+		createLeaseForWorkflow:     createLeaseForWorkflow,
 	}, nil
 }
 
@@ -190,7 +189,6 @@ func (s *Starter) requestEagerStart() bool {
 // requires terminating the running workflow first; it is then invoked again on the newly started workflow.
 func (s *Starter) Invoke(
 	ctx context.Context,
-	beforeCreateHook BeforeCreateHookFunc,
 ) (resp *historyservice.StartWorkflowExecutionResponse, startOutcome StartOutcome, retError error) {
 	request := s.request.StartRequest
 	if err := s.prepare(ctx); err != nil {
@@ -213,16 +211,12 @@ func (s *Starter) Invoke(
 		currentExecutionLock(retError)
 	}()
 
-	if err = beforeCreateHook(creationParams.workflowLease); err != nil {
-		return nil, startOutcome, err
-	}
-
 	err = s.createBrandNew(ctx, creationParams)
 	if err != nil {
 		var currentWorkflowConditionFailedError *persistence.CurrentWorkflowConditionFailedError
 		if errors.As(err, &currentWorkflowConditionFailedError) && len(currentWorkflowConditionFailedError.RunID) > 0 {
 			// The history and mutable state generated above will be deleted by a background process.
-			return s.handleConflict(ctx, creationParams, beforeCreateHook, currentWorkflowConditionFailedError)
+			return s.handleConflict(ctx, creationParams, currentWorkflowConditionFailedError)
 		}
 
 		return nil, startOutcome, err
@@ -265,7 +259,7 @@ func (s *Starter) prepareNewWorkflow(workflowID string) (*creationParams, error)
 		return nil, err
 	}
 
-	workflowLease, err := api.NewEphemeralWorkflowLease(s.shardContext, mutableState)
+	workflowLease, err := s.createLeaseForWorkflow(s.shardContext, mutableState)
 	if err != nil {
 		return nil, err
 	}
@@ -312,7 +306,6 @@ func (s *Starter) createBrandNew(ctx context.Context, creationParams *creationPa
 func (s *Starter) handleConflict(
 	ctx context.Context,
 	creationParams *creationParams,
-	beforeCreateHook BeforeCreateHookFunc,
 	currentWorkflowConditionFailed *persistence.CurrentWorkflowConditionFailedError,
 ) (*historyservice.StartWorkflowExecutionResponse, StartOutcome, error) {
 	request := s.request.StartRequest
@@ -325,7 +318,7 @@ func (s *Starter) handleConflict(
 		return nil, NoStart, err
 	}
 
-	response, startOutcome, err := s.resolveDuplicateWorkflowID(ctx, beforeCreateHook, currentWorkflowConditionFailed)
+	response, startOutcome, err := s.resolveDuplicateWorkflowID(ctx, currentWorkflowConditionFailed)
 	if err != nil {
 		return nil, NoStart, err
 	} else if response != nil {
@@ -382,7 +375,6 @@ func (s *Starter) verifyNamespaceActive(
 // Returns non-nil response if an action was required and completed successfully resulting in a newly created execution.
 func (s *Starter) resolveDuplicateWorkflowID(
 	ctx context.Context,
-	beforeCreateHook BeforeCreateHookFunc,
 	currentWorkflowConditionFailed *persistence.CurrentWorkflowConditionFailedError,
 ) (*historyservice.StartWorkflowExecutionResponse, StartOutcome, error) {
 	workflowID := s.request.StartRequest.WorkflowId
@@ -452,13 +444,8 @@ func (s *Starter) resolveDuplicateWorkflowID(
 				return nil, nil, err
 			}
 
-			workflowLease, err = api.NewEphemeralWorkflowLease(s.shardContext, newMutableState)
+			workflowLease, err = s.createLeaseForWorkflow(s.shardContext, newMutableState)
 			if err != nil {
-				return nil, nil, err
-			}
-
-			// apply hook again to new lease
-			if err = beforeCreateHook(workflowLease); err != nil {
 				return nil, nil, err
 			}
 
