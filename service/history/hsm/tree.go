@@ -704,7 +704,7 @@ func GenerateEventLoadToken(event *historypb.HistoryEvent) ([]byte, error) {
 	return proto.Marshal(ref)
 }
 
-func (n *Node) getRoot() *Node {
+func (n *Node) root() *Node {
 	root := n
 	for root.Parent != nil {
 		root = root.Parent
