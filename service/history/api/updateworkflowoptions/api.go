@@ -29,7 +29,6 @@ import (
 	"fmt"
 	"google.golang.org/protobuf/types/known/fieldmaskpb"
 
-	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/server/api/historyservice/v1"
@@ -118,14 +117,8 @@ func Invoke(
 
 func getOptionsFromMutableState(ms workflow.MutableState) *workflowpb.WorkflowExecutionOptions {
 	opts := &workflowpb.WorkflowExecutionOptions{}
-	// todo (carly) or todo (shahab): Have VersioningInfo store VersioningOverride instead of DeploymentOverride + BehaviorOverride separately
 	if versioningInfo := ms.GetExecutionInfo().GetVersioningInfo(); versioningInfo != nil {
-		if behaviorOverride := versioningInfo.GetBehaviorOverride(); behaviorOverride != enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED {
-			opts.VersioningOverride = &workflowpb.VersioningOverride{
-				Behavior:   behaviorOverride,
-				Deployment: versioningInfo.GetDeploymentOverride(),
-			}
-		}
+		opts.VersioningOverride = versioningInfo.GetVersioningOverride()
 	}
 	return opts
 }

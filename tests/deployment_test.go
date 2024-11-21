@@ -22,43 +22,12 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package deployment
-
-import (
-	"testing"
-
-	"github.com/stretchr/testify/suite"
-	"go.temporal.io/sdk/testsuite"
-	"go.uber.org/mock/gomock"
-)
-
-type deploymentNameSuite struct {
-	suite.Suite
-	testsuite.WorkflowTestSuite
-	controller *gomock.Controller
-	env        *testsuite.TestWorkflowEnvironment
-}
-
-func TestDeploymentNameSuite(t *testing.T) {
-	suite.Run(t, new(deploymentNameSuite))
-}
-
-func (s *deploymentNameSuite) SetupTest() {
-	s.controller = gomock.NewController(s.T())
-	s.env = s.WorkflowTestSuite.NewTestWorkflowEnvironment()
-	s.env.RegisterWorkflow(DeploymentNameWorkflow)
-}
-
-func (s *deploymentNameSuite) TearDownTest() {
-	s.controller.Finish()
-	s.env.AssertExpectations(s.T())
-}
+package tests
 
 /*
-func (d *deploymentNameSuite) TestStartDeploymentNameWorkflow() {}
 
+tests to write:
 
-
-
-
+1. TestBasics to test basic deployment workflow start and use DescribeDeployment to query the deployment
+2. Tests to register worker in a deployment and using DescribeDeployment for verification
 */

@@ -36,7 +36,6 @@ import "temporal/api/workflow/v1/message.proto";
 import "temporal/api/history/v1/message.proto";
 import "temporal/api/deployment/v1/message.proto";
 
-
 import "temporal/server/api/clock/v1/message.proto";
 import "temporal/server/api/enums/v1/common.proto";
 import "temporal/server/api/enums/v1/nexus.proto";
@@ -257,40 +256,9 @@ message WorkflowExecutionInfo {
 
     repeated StateMachineTombstoneBatch sub_state_machine_tombstone_batches = 95;
 
-    // Holds all the information about versioning for this particular execution.
-    VersioningInfo versioning_info = 96;
-
-    message VersioningInfo {
-        // Determines how server should treat this execution when workers are upgraded.
-        // When present it means that this workflow is versioned. This is set after an execution
-        // completes its first workflow task on a versioned worker.
-        temporal.api.enums.v1.VersioningBehavior behavior = 1;
-        // The worker deployment to which this workflow is assigned currently.
-        // Must be present if and only if `behavior` is set.
-        temporal.api.deployment.v1.Deployment deployment = 2;
-        // Manual override for execution's versioning behavior. Takes precedence over `behavior`.
-        temporal.api.enums.v1.VersioningBehavior behavior_override = 3;
-        // Used to manually pin the execution to a deployment. Must be set if and only if
-        // `behavior_override` is PINNED. Takes precedence over `deployment`.
-        temporal.api.deployment.v1.Deployment deployment_override = 4;
-        // When present, indicates the workflow is being redirected to a different deployment.
-        // A redirect can only exist during the lifetime of a pending workflow task.
-        // If the pending workflow task completes (at the next WorkflowTaskCompleted event), the
-        // redirect is considered complete and the workflow's deployment is updated. If the pending
-        // workflow task fails or times out, then the redirect is canceled and workflow remains on
-        // the previous deployment.
-        RedirectInfo redirect_info = 5;
-
-        message RedirectInfo {
-            // The target deployment of the redirect. Null means a so-far-versioned workflow is
-            // being redirected to unversioned workers.
-            temporal.api.deployment.v1.Deployment deployment = 1;
-            // If present, it means the redirect is initiated by a (safe) manual versioning
-            // override. Such override is only applied to the workflow when and if the redirect
-            // successfully completes.
-            temporal.api.enums.v1.VersioningBehavior behavior_override = 2;
-        }
-    }
+    // When present, it means the workflow execution is versioned, or is transitioning from
+    // unversioned workers to versioned ones.
+    temporal.api.workflow.v1.WorkflowExecutionVersioningInfo versioning_info = 96;
 }
 
 message ExecutionStats {

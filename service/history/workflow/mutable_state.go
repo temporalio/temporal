@@ -404,17 +404,30 @@ type (
 		// NextTransitionCount returns the next state transition count from the state transition history.
 		// If state transition history is empty (e.g. when disabled or fresh mutable state), returns 0.
 		NextTransitionCount() int64
-		// GetCurrentDeployment returns the current effective deployment in the following order:
-		// RedirectInfo.Deployment takes precedence over DeploymentOverride, over Deployment.
-		GetCurrentDeployment() *deploymentpb.Deployment
-		// GetVersioningBehavior returns the effective versioning behavior for the workflow.
-		GetVersioningBehavior() enumspb.VersioningBehavior
-		GetRedirectInfo() *persistencespb.WorkflowExecutionInfo_VersioningInfo_RedirectInfo
-		StartDeploymentRedirect(
-			deployment *deploymentpb.Deployment,
-			behaviorOverride enumspb.VersioningBehavior,
-		) bool
-		CompleteDeploymentRedirect(behavior enumspb.VersioningBehavior) error
-		FailDeploymentRedirect() error
+		// GetEffectiveDeployment returns the effective deployment in the following order:
+		//  1. DeploymentTransition.Deployment: this is returned when the wf is transitioning to a new
+		//     deployment
+		//  2. VersioningOverride.Deployment: this is returned when user has set a PINNED override at wf
+		//     start time, or later via UpdateWorkflowExecutionOptions.
+		//  3. Deployment: this is returned when there is no transition and not override (most common case).
+		//     Deployment is set based on the worker-sent deployment in the latest WFT completion.
+		GetEffectiveDeployment() *deploymentpb.Deployment
+		// GetEffectiveVersioningBehavior returns the effective versioning behavior in the following
+		// order:
+		//  1. VersioningOverride.Behavior: this is returned when user has set a behavior override
+		//     at wf start time, or later via UpdateWorkflowExecutionOptions.
+		//  2. Behavior: this is returned when there is no override (most common case). Behavior is
+		//     set based on the worker-sent deployment in the latest WFT completion.
+		GetEffectiveVersioningBehavior() enumspb.VersioningBehavior
+		GetDeploymentTransition() *workflowpb.DeploymentTransition
+		// StartDeploymentTransition starts a transition to the given deployment. Returns true
+		// if the requested transition is started. Starting a new transition replaces possible
+		// existing ongoing transition without rescheduling activities. If the workflow is
+		// pinned, the transition won't start.
+		StartDeploymentTransition(deployment *deploymentpb.Deployment) bool
+		// CompleteDeploymentTransition completes the ongoing transition for this workflow if it exists.
+		// Completing a transition updates the workflow's deployment and possibly versioning behavior.
+		// All activities that are not started yet will be rescheduled to be dispatched the new deployment.
+		CompleteDeploymentTransition(workerSentBehavior enumspb.VersioningBehavior) error
 	}
 )

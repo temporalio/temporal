@@ -43,41 +43,42 @@ type (
 		namespaceID   namespace.ID
 	}
 
-	DeploymentNameWorkflowActivityInput struct {
-		DeploymentName string
+	DeploymentSeriesWorkflowActivityInput struct {
+		SeriesName string
 	}
 )
 
-// StartDeploymentNameWorkflow activity starts a DeploymentName workflow
-func (a *DeploymentActivities) StartDeploymentNameWorkflow(ctx context.Context, input DeploymentNameWorkflowActivityInput) error {
+// StartDeploymentSeriesWorkflow activity starts a DeploymentSeries workflow
+
+func (a *DeploymentActivities) StartDeploymentSeriesWorkflow(ctx context.Context, input DeploymentSeriesWorkflowActivityInput) error {
 	logger := activity.GetLogger(ctx)
-	logger.Info("activity to start DeploymentName workflow started")
+	logger.Info("activity to start DeploymentSeries workflow started")
 
 	sdkClient := a.ClientFactory.NewClient(sdkclient.Options{
 		Namespace:     a.namespaceName.String(),
 		DataConverter: sdk.PreferProtoDataConverter,
 	})
 
-	workflowID := generateDeploymentNameWorkflowID(input.DeploymentName)
+	workflowID := GenerateDeploymentSeriesWorkflowID(input.SeriesName)
 
 	workflowOptions := sdkclient.StartWorkflowOptions{
 		ID:        workflowID,
 		TaskQueue: primitives.PerNSWorkerTaskQueue,
 		Memo: map[string]interface{}{
-			BuildIDMemoKey: "",
+			DeploymentSeriesBuildIDMemoField: "",
 		},
 		WorkflowIDReusePolicy:    enums.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
 		WorkflowIDConflictPolicy: enums.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING,
 	}
 
 	// Build workflow args
-	deploymentNameWorkflowArgs := &deployspb.DeploymentNameWorkflowArgs{
+	deploymentSeriesWorkflowArgs := &deployspb.DeploymentSeriesWorkflowArgs{
 		NamespaceName: a.namespaceName.String(),
 		NamespaceId:   a.namespaceID.String(),
 	}
 
 	// Calling the workflow with the args
-	_, err := sdkClient.ExecuteWorkflow(ctx, workflowOptions, DeploymentNameWorkflow, deploymentNameWorkflowArgs)
+	_, err := sdkClient.ExecuteWorkflow(ctx, workflowOptions, DeploymentSeriesWorkflow, deploymentSeriesWorkflowArgs)
 	if err != nil {
 		return err
 	}
