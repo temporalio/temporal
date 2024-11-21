@@ -203,7 +203,7 @@ func (n *Node) Path() []Key {
 
 // Outputs returns all outputs produced by transitions on this tree.
 func (n *Node) Outputs() []PathAndOutputs {
-	root := n.getRoot()
+	root := n.root()
 	if root.opLog == nil {
 		return nil
 	}
@@ -246,7 +246,7 @@ func (n *Node) Outputs() []PathAndOutputs {
 // This should be called at the end of every transaction where the transitions are performed to avoid emitting duplicate
 // transition outputs.
 func (n *Node) ClearTransactionState() {
-	root := n.getRoot()
+	root := n.root()
 	if root.opLog != nil {
 		root.opLog.Transitions = nil
 		root.opLog.DeletedPaths = nil
@@ -399,7 +399,7 @@ func (n *Node) DeleteChild(key Key) error {
 	}
 
 	// Record deletion
-	root := n.getRoot()
+	root := n.root()
 	root.opLog.Transitions = append(root.opLog.Transitions, TransitionOutputWithCount{
 		TransitionOutput: TransitionOutput{
 			IsDelete: true,
@@ -593,7 +593,7 @@ func MachineTransition[T any](n *Node, transitionFn func(T) (TransitionOutput, e
 	n.persistence.Data = serialized
 	n.cache.dirty = true
 
-	root := n.getRoot()
+	root := n.root()
 	root.opLog.Transitions = append(root.opLog.Transitions, TransitionOutputWithCount{
 		TransitionOutput: output,
 		TransitionCount:  n.persistence.TransitionCount,
@@ -693,7 +693,7 @@ func GenerateEventLoadToken(event *historypb.HistoryEvent) ([]byte, error) {
 		// WFEStarted is always stored in the first batch of events.
 		eventBatchID = 1
 	} else {
-		// By default events aren't referenceable as they may end up buffered.
+		// By default, events aren't referenceable as they may end up buffered.
 		// This limitation may be relaxed later and the platform would need a way to fix references to buffered events.
 		return nil, serviceerror.NewInternal(fmt.Sprintf("cannot reference event: %v", event.EventType))
 	}
