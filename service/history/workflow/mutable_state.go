@@ -32,7 +32,7 @@ import (
 
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
-	deploypb "go.temporal.io/api/deployment/v1"
+	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
 	historypb "go.temporal.io/api/history/v1"
@@ -40,7 +40,7 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	updatepb "go.temporal.io/api/update/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
-	"go.temporal.io/api/workflowservice/v1"
+	workflowservice "go.temporal.io/api/workflowservice/v1"
 	clockspb "go.temporal.io/server/api/clock/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
@@ -164,7 +164,7 @@ type (
 			string,
 			string,
 			*commonpb.WorkerVersionStamp,
-			*deploypb.Deployment,
+			*deploymentpb.Deployment,
 			*taskqueuespb.BuildIdRedirectInfo,
 		) (*historypb.HistoryEvent, error)
 		AddActivityTaskTimedOutEvent(int64, int64, *failurepb.Failure, enumspb.RetryState) (*historypb.HistoryEvent, error)
@@ -405,12 +405,12 @@ type (
 		NextTransitionCount() int64
 		// GetCurrentDeployment returns the current effective deployment in the following order:
 		// RedirectInfo.Deployment takes precedence over DeploymentOverride, over Deployment.
-		GetCurrentDeployment() *deploypb.Deployment
+		GetCurrentDeployment() *deploymentpb.Deployment
 		// GetVersioningBehavior returns the effective versioning behavior for the workflow.
 		GetVersioningBehavior() enumspb.VersioningBehavior
 		GetRedirectInfo() *persistencespb.WorkflowExecutionInfo_VersioningInfo_RedirectInfo
 		StartDeploymentRedirect(
-			deployment *deploypb.Deployment,
+			deployment *deploymentpb.Deployment,
 			behaviorOverride enumspb.VersioningBehavior,
 		) bool
 		CompleteDeploymentRedirect(behavior enumspb.VersioningBehavior) error

@@ -34,7 +34,7 @@ import (
 	querypb "go.temporal.io/api/query/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	updatepb "go.temporal.io/api/update/v1"
-	"go.temporal.io/api/workflowservice/v1"
+	workflowservice "go.temporal.io/api/workflowservice/v1"
 	deployspb "go.temporal.io/server/api/deployment/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -80,14 +80,14 @@ type DeploymentStoreClient interface {
 }
 
 // implements DeploymentClient
-type DeploymentClient struct {
+type DeploymentClientImpl struct {
 	HistoryClient         historyservice.HistoryServiceClient
 	VisibilityManager     manager.VisibilityManager
 	MaxIDLengthLimit      dynamicconfig.IntPropertyFn
 	VisibilityMaxPageSize dynamicconfig.IntPropertyFnWithNamespaceFilter
 }
 
-func (d *DeploymentClient) RegisterTaskQueueWorker(
+func (d *DeploymentClientImpl) RegisterTaskQueueWorker(
 	ctx context.Context,
 	namespaceEntry *namespace.Namespace,
 	deployment *deploypb.Deployment,
@@ -179,7 +179,7 @@ func (d *DeploymentClient) RegisterTaskQueueWorker(
 	return nil
 }
 
-func (d *DeploymentClient) DescribeDeployment(ctx context.Context, namespaceEntry *namespace.Namespace, seriesName string, buildID string) (*deploypb.DeploymentInfo, error) {
+func (d *DeploymentClientImpl) DescribeDeployment(ctx context.Context, namespaceEntry *namespace.Namespace, seriesName string, buildID string) (*deploypb.DeploymentInfo, error) {
 	// validating params
 	err := ValidateDeploymentWfParams(SeriesFieldName, seriesName, d.MaxIDLengthLimit())
 	if err != nil {
@@ -238,7 +238,7 @@ func (d *DeploymentClient) DescribeDeployment(ctx context.Context, namespaceEntr
 	}, nil
 }
 
-func (d *DeploymentClient) GetCurrentDeployment(ctx context.Context, namespaceEntry *namespace.Namespace, seriesName string) (*deploypb.DeploymentInfo, error) {
+func (d *DeploymentClientImpl) GetCurrentDeployment(ctx context.Context, namespaceEntry *namespace.Namespace, seriesName string) (*deploypb.DeploymentInfo, error) {
 
 	// Validating params
 	err := ValidateDeploymentWfParams(SeriesFieldName, seriesName, d.MaxIDLengthLimit())
@@ -286,7 +286,7 @@ func (d *DeploymentClient) GetCurrentDeployment(ctx context.Context, namespaceEn
 	return deploymentInfo, nil
 }
 
-func (d *DeploymentClient) ListDeployments(ctx context.Context, namespaceEntry *namespace.Namespace, seriesName string, NextPageToken []byte) ([]*deploypb.DeploymentListInfo, []byte, error) {
+func (d *DeploymentClientImpl) ListDeployments(ctx context.Context, namespaceEntry *namespace.Namespace, seriesName string, NextPageToken []byte) ([]*deploypb.DeploymentListInfo, []byte, error) {
 
 	query := ""
 	if seriesName != "" {
@@ -326,7 +326,7 @@ func (d *DeploymentClient) ListDeployments(ctx context.Context, namespaceEntry *
 
 }
 
-func (d *DeploymentClient) decodeDeploymentMemo(memo *commonpb.Memo) *deployspb.DeploymentWorkflowMemo {
+func (d *DeploymentClientImpl) decodeDeploymentMemo(memo *commonpb.Memo) *deployspb.DeploymentWorkflowMemo {
 	var workflowMemo deployspb.DeploymentWorkflowMemo
 	err := sdk.PreferProtoDataConverter.FromPayload(memo.Fields[DeploymentMemoField], &workflowMemo)
 	if err != nil {
@@ -336,14 +336,14 @@ func (d *DeploymentClient) decodeDeploymentMemo(memo *commonpb.Memo) *deployspb.
 }
 
 // queryWithWorkflowID is a helper which generates a query with internally used workflowID's
-func (d *DeploymentClient) queryWithWorkflowID(seriesName string) string {
+func (d *DeploymentClientImpl) queryWithWorkflowID(seriesName string) string {
 	workflowID := GenerateDeploymentSeriesWorkflowID(seriesName)
 	query := fmt.Sprintf("%s AND %s = %s", DeploymentSeriesVisibilityBaseListQuery, searchattribute.WorkflowID, workflowID)
 	return query
 }
 
 // GenerateStartWorkflowPayload generates start workflow execution payload
-func (d *DeploymentClient) generateStartWorkflowPayload(namespaceEntry *namespace.Namespace, deployment *deploypb.Deployment) (*commonpb.Payloads, error) {
+func (d *DeploymentClientImpl) generateStartWorkflowPayload(namespaceEntry *namespace.Namespace, deployment *deploypb.Deployment) (*commonpb.Payloads, error) {
 	workflowArgs := &deployspb.DeploymentWorkflowArgs{
 		NamespaceName: namespaceEntry.Name().String(),
 		NamespaceId:   namespaceEntry.ID().String(),
@@ -356,7 +356,7 @@ func (d *DeploymentClient) generateStartWorkflowPayload(namespaceEntry *namespac
 }
 
 // GenerateUpdateDeploymentPayload generates update workflow payload
-func (d *DeploymentClient) generateRegisterWorkerInDeploymentArgs(taskQueueName string, taskQueueType enumspb.TaskQueueType,
+func (d *DeploymentClientImpl) generateRegisterWorkerInDeploymentArgs(taskQueueName string, taskQueueType enumspb.TaskQueueType,
 	pollTimestamp *timestamppb.Timestamp) (*commonpb.Payloads, error) {
 	updateArgs := &deployspb.RegisterWorkerInDeploymentArgs{
 		TaskQueueName:   taskQueueName,
@@ -366,7 +366,7 @@ func (d *DeploymentClient) generateRegisterWorkerInDeploymentArgs(taskQueueName 
 	return sdk.PreferProtoDataConverter.ToPayloads(updateArgs)
 }
 
-func (d *DeploymentClient) addInitialDeploymentMemo() (*commonpb.Memo, error) {
+func (d *DeploymentClientImpl) addInitialDeploymentMemo() (*commonpb.Memo, error) {
 	memo := &commonpb.Memo{}
 	memo.Fields = make(map[string]*commonpb.Payload)
 

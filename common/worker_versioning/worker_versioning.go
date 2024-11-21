@@ -27,17 +27,17 @@ package worker_versioning
 import (
 	"context"
 	"fmt"
+	"github.com/temporalio/sqlparser"
+	"google.golang.org/protobuf/types/known/emptypb"
 	"strings"
 
-	"github.com/temporalio/sqlparser"
 	commonpb "go.temporal.io/api/common/v1"
-	deploypb "go.temporal.io/api/deployment/v1"
+	deploymentpb "go.temporal.io/api/deployment/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/searchattribute"
-	"google.golang.org/protobuf/types/known/emptypb"
 )
 
 const (
@@ -129,29 +129,18 @@ func BuildIdIfUsingVersioning(stamp *commonpb.WorkerVersionStamp) string {
 	return ""
 }
 
-// DeploymentFromStamp returns the deployment if it is using versioning V3, otherwise nil.
-func DeploymentFromStamp(stamp *commonpb.WorkerVersionStamp) *deploypb.Deployment {
-	if stamp.GetUseVersioning() && stamp.GetDeploymentSeriesName() != "" && stamp.GetBuildId() != "" {
-		return &deploypb.Deployment{
-			SeriesName: stamp.GetDeploymentSeriesName(),
-			BuildId:    stamp.GetBuildId(),
-		}
-	}
-	return (*deploypb.Deployment)(nil)
-}
-
 // DeploymentFromCapabilities returns the deployment if it is using versioning V3, otherwise nil.
-func DeploymentFromCapabilities(capabilities *commonpb.WorkerVersionCapabilities) *deploypb.Deployment {
+func DeploymentFromCapabilities(capabilities *commonpb.WorkerVersionCapabilities) *deploymentpb.Deployment {
 	if capabilities.GetUseVersioning() && capabilities.GetDeploymentSeriesName() != "" && capabilities.GetBuildId() != "" {
-		return &deploypb.Deployment{
+		return &deploymentpb.Deployment{
 			SeriesName: capabilities.GetDeploymentSeriesName(),
 			BuildId:    capabilities.GetBuildId(),
 		}
 	}
-	return (*deploypb.Deployment)(nil)
+	return (*deploymentpb.Deployment)(nil)
 }
 
-func DeploymentToString(deployment *deploypb.Deployment) string {
+func DeploymentToString(deployment *deploymentpb.Deployment) string {
 	if deployment == nil {
 		return "UNVERSIONED"
 	}
@@ -200,6 +189,6 @@ func StampFromBuildId(buildId string) *commonpb.WorkerVersionStamp {
 	return &commonpb.WorkerVersionStamp{UseVersioning: true, BuildId: buildId}
 }
 
-func StampFromDeployment(deployment *deploypb.Deployment) *commonpb.WorkerVersionStamp {
-	return &commonpb.WorkerVersionStamp{UseVersioning: true, BuildId: deployment.BuildId, DeploymentSeriesName: deployment.SeriesName}
+func StampFromDeployment(deployment *deploymentpb.Deployment) *commonpb.WorkerVersionStamp {
+	return &commonpb.WorkerVersionStamp{UseVersioning: true, BuildId: deployment.BuildId}
 }

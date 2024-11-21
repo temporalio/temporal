@@ -714,6 +714,7 @@ func (s *historyBuilderSuite) TestWorkflowTaskCompleted() {
 		sdkMetadata,
 		meteringMeta,
 		nil,
+		enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED,
 	)
 	s.Equal(event, s.flush())
 	s.Equal(&historypb.HistoryEvent{

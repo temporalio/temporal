@@ -33,11 +33,11 @@ import (
 	"sync/atomic"
 	"time"
 
-	deploypb "go.temporal.io/api/deployment/v1"
+	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
-	"go.temporal.io/api/workflowservice/v1"
+	workflowservice "go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
@@ -343,7 +343,7 @@ func (c *physicalTaskQueueManagerImpl) PollTask(
 	if c.partitionMgr.engine.config.EnableDeployments(namespaceEntry.Name().String()) && pollMetadata.workerVersionCapabilities.UseVersioning {
 		if !c.isDeploymentWorkflowStarted.Load() {
 
-			workerDeployment := &deploypb.Deployment{
+			workerDeployment := &deploymentpb.Deployment{
 				SeriesName: pollMetadata.workerVersionCapabilities.DeploymentSeriesName,
 				BuildId:    pollMetadata.workerVersionCapabilities.BuildId,
 			}

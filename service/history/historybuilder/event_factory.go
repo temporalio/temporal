@@ -27,6 +27,8 @@ package historybuilder
 import (
 	"time"
 
+	deploymentpb "go.temporal.io/api/deployment/v1"
+
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -155,19 +157,21 @@ func (b *EventFactory) CreateWorkflowTaskCompletedEvent(
 	workerVersionStamp *commonpb.WorkerVersionStamp,
 	sdkMetadata *sdkpb.WorkflowTaskCompletedMetadata,
 	meteringMetadata *commonpb.MeteringMetadata,
-	completedRedirect *historypb.CompletedDeploymentRedirectInfo,
+	deployment *deploymentpb.Deployment,
+	behavior enumspb.VersioningBehavior,
 ) *historypb.HistoryEvent {
 	event := b.createHistoryEvent(enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED, b.timeSource.Now())
 	event.Attributes = &historypb.HistoryEvent_WorkflowTaskCompletedEventAttributes{
 		WorkflowTaskCompletedEventAttributes: &historypb.WorkflowTaskCompletedEventAttributes{
-			ScheduledEventId:  scheduledEventID,
-			StartedEventId:    startedEventID,
-			Identity:          identity,
-			BinaryChecksum:    checksum,
-			WorkerVersion:     workerVersionStamp,
-			SdkMetadata:       sdkMetadata,
-			MeteringMetadata:  meteringMetadata,
-			CompletedRedirect: completedRedirect,
+			ScheduledEventId:   scheduledEventID,
+			StartedEventId:     startedEventID,
+			Identity:           identity,
+			BinaryChecksum:     checksum,
+			WorkerVersion:      workerVersionStamp,
+			SdkMetadata:        sdkMetadata,
+			MeteringMetadata:   meteringMetadata,
+			Deployment:         deployment,
+			VersioningBehavior: behavior,
 		},
 	}
 
