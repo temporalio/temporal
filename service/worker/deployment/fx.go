@@ -30,10 +30,12 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	sdkworker "go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
+	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/searchattribute"
@@ -42,9 +44,9 @@ import (
 )
 
 const (
-	DeploymentWorkflowType      = "temporal-sys-deployment-workflow"
-	DeploymentNameWorkflowType  = "temporal-sys-deployment-name-workflow"
-	DeploymentNamespaceDivision = "TemporalDeployment"
+	DeploymentWorkflowType       = "temporal-sys-deployment-workflow"
+	DeploymentSeriesWorkflowType = "temporal-sys-deployment-series-workflow"
+	DeploymentNamespaceDivision  = "TemporalDeployment"
 )
 
 var (
@@ -58,10 +60,10 @@ var (
 		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING.String(),
 	)
 
-	DeploymentNameVisibilityBaseListQuery = fmt.Sprintf(
+	DeploymentSeriesVisibilityBaseListQuery = fmt.Sprintf(
 		"%s = '%s' AND %s = '%s' AND %s = '%s'",
 		searchattribute.WorkflowType,
-		DeploymentNameWorkflowType,
+		DeploymentSeriesWorkflowType,
 		searchattribute.TemporalNamespaceDivision,
 		DeploymentNamespaceDivision,
 		searchattribute.ExecutionStatus,
@@ -91,7 +93,17 @@ type (
 
 var Module = fx.Options(
 	fx.Provide(NewResult),
+	fx.Provide(DeploymentStoreClientProvider),
 )
+
+func DeploymentStoreClientProvider(historyClient historyservice.HistoryServiceClient, visibilityManager manager.VisibilityManager, dc *dynamicconfig.Collection) *DeploymentClientImpl {
+	return &DeploymentClientImpl{
+		HistoryClient:         historyClient,
+		VisibilityManager:     visibilityManager,
+		MaxIDLengthLimit:      dynamicconfig.MaxIDLengthLimit.Get(dc),
+		VisibilityMaxPageSize: dynamicconfig.FrontendVisibilityMaxPageSize.Get(dc),
+	}
+}
 
 func NewResult(
 	dc *dynamicconfig.Collection,
@@ -113,13 +125,13 @@ func (s *workerComponent) DedicatedWorkerOptions(ns *namespace.Namespace) *worke
 
 func (s *workerComponent) Register(registry sdkworker.Registry, ns *namespace.Namespace, details workercommon.RegistrationDetails) func() {
 	registry.RegisterWorkflowWithOptions(DeploymentWorkflow, workflow.RegisterOptions{Name: DeploymentWorkflowType})
-	registry.RegisterWorkflowWithOptions(DeploymentNameWorkflow, workflow.RegisterOptions{Name: DeploymentNameWorkflowType})
+	registry.RegisterWorkflowWithOptions(DeploymentSeriesWorkflow, workflow.RegisterOptions{Name: DeploymentSeriesWorkflowType})
 
 	// TODO Shivam: Might need a cleanup function upon activity registration
 	deploymentActivities := s.newDeploymentActivities(ns.Name(), ns.ID())
-	deploymentNameActivities := s.newDeploymentNameActivities(ns.Name(), ns.ID())
+	deploymentSeriesActivities := s.newDeploymentSeriesActivities(ns.Name(), ns.ID())
 	registry.RegisterActivity(deploymentActivities)
-	registry.RegisterActivity(deploymentNameActivities)
+	registry.RegisterActivity(deploymentSeriesActivities)
 	return nil
 }
 
@@ -133,8 +145,8 @@ func (s *workerComponent) newDeploymentActivities(name namespace.Name, id namesp
 }
 
 // TODO Shivam - place holder for now but will initialize activity rate limits (if any) amongst other things
-func (s *workerComponent) newDeploymentNameActivities(name namespace.Name, id namespace.ID) *DeploymentNameActivities {
-	return &DeploymentNameActivities{
+func (s *workerComponent) newDeploymentSeriesActivities(name namespace.Name, id namespace.ID) *DeploymentSeriesActivities {
+	return &DeploymentSeriesActivities{
 		activityDeps: s.activityDeps,
 		namespace:    name,
 		namespaceID:  id,
