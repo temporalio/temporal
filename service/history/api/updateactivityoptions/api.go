@@ -159,7 +159,7 @@ func updateActivityOptions(
 
 		// invalidate timers
 		activityInfo.TimerTaskStatus = workflow.TimerTaskStatusNone
-		return err
+		return nil
 	}); err != nil {
 		return nil, err
 	}
