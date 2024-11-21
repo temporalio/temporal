@@ -25,8 +25,9 @@
 package updateworkflowoptions
 
 import (
-	"google.golang.org/protobuf/types/known/fieldmaskpb"
 	"testing"
+
+	"google.golang.org/protobuf/types/known/fieldmaskpb"
 
 	"github.com/stretchr/testify/assert"
 	"google.golang.org/protobuf/proto"

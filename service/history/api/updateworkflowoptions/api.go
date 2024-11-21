@@ -27,6 +27,7 @@ package updateworkflowoptions
 import (
 	"context"
 	"fmt"
+
 	"google.golang.org/protobuf/types/known/fieldmaskpb"
 
 	"go.temporal.io/api/serviceerror"
@@ -80,7 +81,7 @@ func Invoke(
 				req.GetUpdateMask(),
 			)
 			if updateError != nil {
-				return nil, updateError
+				return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("error parsing update_options: %v", updateError))
 			}
 
 			// Set options for gRPC response
@@ -130,7 +131,7 @@ func applyWorkflowExecutionOptions(
 ) (*workflowpb.WorkflowExecutionOptions, error) {
 	_, err := fieldmaskpb.New(mergeInto, updateMask.GetPaths()...)
 	if err != nil { // errors if any paths are not valid for the struct we are merging into
-		return nil, fmt.Errorf("error parsing UpdateMask: %s", err.Error())
+		return nil, err
 	}
 	updateFields := util.ParseFieldMask(updateMask)
 	if _, ok := updateFields["versioningOverride"]; ok {
