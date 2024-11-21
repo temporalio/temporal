@@ -3331,6 +3331,88 @@ func tombstoneExists(
 	return false
 }
 
+func (s *mutableStateSuite) TestCloseTransactionTrackTombstones_CapIfLargerThanLimit() {
+	dbState := s.buildWorkflowMutableState()
+
+	mutableState, err := NewMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, s.namespaceEntry, dbState, 123)
+	s.NoError(err)
+	mutableState.executionInfo.SubStateMachineTombstoneBatches = []*persistencespb.StateMachineTombstoneBatch{
+		{
+			VersionedTransition: &persistencespb.VersionedTransition{
+				NamespaceFailoverVersion: s.namespaceEntry.FailoverVersion(),
+				TransitionCount:          1,
+			},
+		},
+	}
+
+	transitionHistory := mutableState.GetExecutionInfo().TransitionHistory
+	currentVersionedTransition := transitionHistory[len(transitionHistory)-1]
+	newVersionedTranstion := common.CloneProto(currentVersionedTransition)
+	newVersionedTranstion.TransitionCount += 1
+	signalMap := mutableState.GetPendingSignalExternalInfos()
+	for i := 0; i < s.mockConfig.MutableStateTombstoneCountLimit(); i++ {
+		signalMap[int64(76+i)] = &persistencespb.SignalInfo{
+
+			Version:               s.namespaceEntry.FailoverVersion(),
+			InitiatedEventId:      int64(76 + i),
+			InitiatedEventBatchId: 17,
+			RequestId:             uuid.New(),
+		}
+	}
+
+	_, err = mutableState.StartTransaction(s.namespaceEntry)
+	s.NoError(err)
+	var initiatedEventId int64
+	for initiatedEventId = range signalMap {
+		_, err := mutableState.AddSignalExternalWorkflowExecutionFailedEvent(
+			initiatedEventId,
+			s.namespaceEntry.Name(),
+			s.namespaceEntry.ID(),
+			uuid.New(),
+			uuid.New(),
+			"",
+			enumspb.SIGNAL_EXTERNAL_WORKFLOW_EXECUTION_FAILED_CAUSE_EXTERNAL_WORKFLOW_EXECUTION_NOT_FOUND,
+		)
+		s.NoError(err)
+	}
+
+	_, _, err = mutableState.CloseTransactionAsMutation(TransactionPolicyActive)
+	s.NoError(err)
+
+	tombstoneBatches := mutableState.GetExecutionInfo().SubStateMachineTombstoneBatches
+	s.Len(tombstoneBatches, 0)
+}
+
+func (s *mutableStateSuite) TestCloseTransactionTrackTombstones_OnlyTrackFirstEmpty() {
+	dbState := s.buildWorkflowMutableState()
+
+	mutableState, err := NewMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, s.namespaceEntry, dbState, 123)
+	s.NoError(err)
+	mutableState.executionInfo.SubStateMachineTombstoneBatches = []*persistencespb.StateMachineTombstoneBatch{
+		{
+			VersionedTransition: &persistencespb.VersionedTransition{
+				NamespaceFailoverVersion: s.namespaceEntry.FailoverVersion(),
+				TransitionCount:          1,
+			},
+		},
+	}
+
+	transitionHistory := mutableState.GetExecutionInfo().TransitionHistory
+	currentVersionedTransition := transitionHistory[len(transitionHistory)-1]
+	newVersionedTranstion := common.CloneProto(currentVersionedTransition)
+	newVersionedTranstion.TransitionCount += 1
+
+	_, err = mutableState.StartTransaction(s.namespaceEntry)
+	s.NoError(err)
+
+	_, _, err = mutableState.CloseTransactionAsMutation(TransactionPolicyActive)
+	s.NoError(err)
+
+	tombstoneBatches := mutableState.GetExecutionInfo().SubStateMachineTombstoneBatches
+	s.Len(tombstoneBatches, 1)
+	s.Equal(int64(1), tombstoneBatches[0].VersionedTransition.TransitionCount)
+}
+
 func (s *mutableStateSuite) TestExecutionInfoClone() {
 	newInstance := reflect.New(reflect.TypeOf(s.mutableState.executionInfo).Elem()).Interface()
 	clone, ok := newInstance.(*persistencespb.WorkflowExecutionInfo)

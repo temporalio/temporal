@@ -5586,6 +5586,7 @@ func (ms *MutableStateImpl) closeTransactionHandleUnknownVersionedTransition() {
 	// We are in unknown versioned transition state, clear the transition history.
 	ms.executionInfo.TransitionHistory = nil
 	ms.executionInfo.SubStateMachineTombstoneBatches = nil
+	ms.totalTombstones = 0
 
 	for _, activityInfo := range ms.updateActivityInfos {
 		activityInfo.LastUpdateVersionedTransition = nil
@@ -5693,7 +5694,10 @@ func (ms *MutableStateImpl) closeTransactionTrackTombstones(
 		VersionedTransition:    ms.executionInfo.TransitionHistory[len(ms.executionInfo.TransitionHistory)-1],
 		StateMachineTombstones: tombstones,
 	}
-	ms.executionInfo.SubStateMachineTombstoneBatches = append(ms.executionInfo.SubStateMachineTombstoneBatches, tombstoneBatch)
+	// As an optimization, we only track the first empty tombstone batch. So we can know the start point of the tombstone batch
+	if len(tombstones) > 0 || len(ms.executionInfo.SubStateMachineTombstoneBatches) == 0 {
+		ms.executionInfo.SubStateMachineTombstoneBatches = append(ms.executionInfo.SubStateMachineTombstoneBatches, tombstoneBatch)
+	}
 
 	ms.totalTombstones += len(tombstones)
 	ms.capTombstoneCount()
