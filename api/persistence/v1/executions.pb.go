@@ -322,12 +322,14 @@ type WorkflowExecutionInfo struct {
 	// (-- api-linter: core::0142::time-field-type=disabled
 	//
 	//	aip.dev/not-precedent: This is a vector clock, not a timestamp --)
-	TaskGenerationShardClockTimestamp             int64                                `protobuf:"varint,91,opt,name=task_generation_shard_clock_timestamp,json=taskGenerationShardClockTimestamp,proto3" json:"task_generation_shard_clock_timestamp,omitempty"`
-	WorkflowTaskLastUpdateVersionedTransition     *VersionedTransition                 `protobuf:"bytes,92,opt,name=workflow_task_last_update_versioned_transition,json=workflowTaskLastUpdateVersionedTransition,proto3" json:"workflow_task_last_update_versioned_transition,omitempty"`
-	VisibilityLastUpdateVersionedTransition       *VersionedTransition                 `protobuf:"bytes,93,opt,name=visibility_last_update_versioned_transition,json=visibilityLastUpdateVersionedTransition,proto3" json:"visibility_last_update_versioned_transition,omitempty"`
-	SignalRequestIdsLastUpdateVersionedTransition *VersionedTransition                 `protobuf:"bytes,94,opt,name=signal_request_ids_last_update_versioned_transition,json=signalRequestIdsLastUpdateVersionedTransition,proto3" json:"signal_request_ids_last_update_versioned_transition,omitempty"`
-	SubStateMachineTombstoneBatches               []*StateMachineTombstoneBatch        `protobuf:"bytes,95,rep,name=sub_state_machine_tombstone_batches,json=subStateMachineTombstoneBatches,proto3" json:"sub_state_machine_tombstone_batches,omitempty"`
-	VersioningInfo                                *v11.WorkflowExecutionVersioningInfo `protobuf:"bytes,96,opt,name=versioning_info,json=versioningInfo,proto3" json:"versioning_info,omitempty"`
+	TaskGenerationShardClockTimestamp             int64                         `protobuf:"varint,91,opt,name=task_generation_shard_clock_timestamp,json=taskGenerationShardClockTimestamp,proto3" json:"task_generation_shard_clock_timestamp,omitempty"`
+	WorkflowTaskLastUpdateVersionedTransition     *VersionedTransition          `protobuf:"bytes,92,opt,name=workflow_task_last_update_versioned_transition,json=workflowTaskLastUpdateVersionedTransition,proto3" json:"workflow_task_last_update_versioned_transition,omitempty"`
+	VisibilityLastUpdateVersionedTransition       *VersionedTransition          `protobuf:"bytes,93,opt,name=visibility_last_update_versioned_transition,json=visibilityLastUpdateVersionedTransition,proto3" json:"visibility_last_update_versioned_transition,omitempty"`
+	SignalRequestIdsLastUpdateVersionedTransition *VersionedTransition          `protobuf:"bytes,94,opt,name=signal_request_ids_last_update_versioned_transition,json=signalRequestIdsLastUpdateVersionedTransition,proto3" json:"signal_request_ids_last_update_versioned_transition,omitempty"`
+	SubStateMachineTombstoneBatches               []*StateMachineTombstoneBatch `protobuf:"bytes,95,rep,name=sub_state_machine_tombstone_batches,json=subStateMachineTombstoneBatches,proto3" json:"sub_state_machine_tombstone_batches,omitempty"`
+	// When present, it means the workflow execution is versioned, or is transitioning from
+	// unversioned workers to versioned ones.
+	VersioningInfo *v11.WorkflowExecutionVersioningInfo `protobuf:"bytes,96,opt,name=versioning_info,json=versioningInfo,proto3" json:"versioning_info,omitempty"`
 }
 
 func (x *WorkflowExecutionInfo) Reset() {

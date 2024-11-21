@@ -256,6 +256,8 @@ message WorkflowExecutionInfo {
 
     repeated StateMachineTombstoneBatch sub_state_machine_tombstone_batches = 95;
 
+    // When present, it means the workflow execution is versioned, or is transitioning from
+    // unversioned workers to versioned ones.
     temporal.api.workflow.v1.WorkflowExecutionVersioningInfo versioning_info = 96;
 }
 
