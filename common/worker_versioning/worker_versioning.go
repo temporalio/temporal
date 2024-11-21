@@ -27,11 +27,11 @@ package worker_versioning
 import (
 	"context"
 	"fmt"
-	deploymentpb "go.temporal.io/api/deployment/v1"
 	"strings"
 
 	"github.com/temporalio/sqlparser"
 	commonpb "go.temporal.io/api/common/v1"
+	deploymentpb "go.temporal.io/api/deployment/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	"go.temporal.io/server/common/namespace"
