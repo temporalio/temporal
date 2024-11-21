@@ -4862,9 +4862,6 @@ func (s *UpdateWorkflowSuite) TestUpdateWorkflow_ContinueAsNew_UpdateIsNotCarrie
 }
 
 func (s *UpdateWorkflowSuite) TestUpdateWithStart() {
-	// reset reuse minimal interval to allow workflow termination
-	s.OverrideDynamicConfig(dynamicconfig.WorkflowIdReuseMinimalInterval, 0)
-
 	type multiopsResponseErr struct {
 		response *workflowservice.ExecuteMultiOperationResponse
 		err      error
@@ -5224,6 +5221,25 @@ func (s *UpdateWorkflowSuite) TestUpdateWithStart() {
 				})
 			}
 		})
+	})
+
+	s.Run("return update rate limit error", func() {
+		// lower maximum total number of updates for testing purposes
+		maxTotalUpdates := 0
+		cleanup := s.OverrideDynamicConfig(dynamicconfig.WorkflowExecutionMaxTotalUpdates, maxTotalUpdates)
+		defer cleanup()
+
+		tv := testvars.New(s.T())
+
+		startReq := startWorkflowReq(tv)
+		updateReq := s.updateWorkflowRequest(tv,
+			&updatepb.WaitPolicy{LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED}, "1")
+		err := (<-sendUpdateWithStart(testcore.NewContext(), startReq, updateReq)).err
+		s.Error(err)
+		errs := err.(*serviceerror.MultiOperationExecution).OperationErrors()
+		s.Len(errs, 2)
+		s.Equal("Operation was aborted.", errs[0].Error())
+		s.Contains(errs[1].Error(), "limit on number of total updates has been reached")
 	})
 }
 
