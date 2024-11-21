@@ -25,8 +25,9 @@
 package historybuilder
 
 import (
-	deploymentpb "go.temporal.io/api/deployment/v1"
 	"time"
+
+	deploymentpb "go.temporal.io/api/deployment/v1"
 
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"

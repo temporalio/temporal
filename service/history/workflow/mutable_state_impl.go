@@ -29,12 +29,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/nexus-rpc/sdk-go/nexus"
-	"github.com/pborman/uuid"
 	"math/rand"
 	"reflect"
 	"slices"
 	"time"
+
+	"github.com/nexus-rpc/sdk-go/nexus"
+	"github.com/pborman/uuid"
 
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"

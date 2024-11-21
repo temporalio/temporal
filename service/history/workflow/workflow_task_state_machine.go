@@ -28,9 +28,10 @@ package workflow
 
 import (
 	"fmt"
-	deploymentpb "go.temporal.io/api/deployment/v1"
 	"math"
 	"time"
+
+	deploymentpb "go.temporal.io/api/deployment/v1"
 
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
