@@ -214,10 +214,6 @@ func (n *Node) Path() []Key {
 // Outputs returns all outputs produced by transitions on this tree.
 func (n *Node) Outputs() []PathAndOutputs {
 	root := n.root()
-	if root.opLog == nil {
-		return nil
-	}
-
 	currentPath := n.Path()
 
 	if root.opLog.IsDeleted(currentPath) {
