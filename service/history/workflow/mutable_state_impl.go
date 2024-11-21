@@ -3017,7 +3017,7 @@ func (ms *MutableStateImpl) AddActivityTaskStartedEvent(
 		return nil, err
 	}
 
-	if err := ms.UpdateActivity(ai.ScheduledEventId, func(activityInfo *persistencespb.ActivityInfo, _ MutableState) {
+	if err := ms.UpdateActivity(ai.ScheduledEventId, func(activityInfo *persistencespb.ActivityInfo, _ MutableState) error {
 		// we might need to retry, so do not append started event just yet,
 		// instead update mutable state and will record started event when activity task is closed
 		activityInfo.Version = ms.GetCurrentVersion()
@@ -3025,7 +3025,7 @@ func (ms *MutableStateImpl) AddActivityTaskStartedEvent(
 		activityInfo.RequestId = requestID
 		activityInfo.StartedTime = timestamppb.New(ms.timeSource.Now())
 		activityInfo.StartedIdentity = identity
-
+		return nil
 	}); err != nil {
 		return nil, err
 	}
@@ -4901,8 +4901,9 @@ func (ms *MutableStateImpl) RetryActivity(
 }
 
 func (ms *MutableStateImpl) RecordLastActivityCompleteTime(ai *persistencespb.ActivityInfo) {
-	_ = ms.UpdateActivity(ai.ScheduledEventId, func(info *persistencespb.ActivityInfo, _ MutableState) {
+	_ = ms.UpdateActivity(ai.ScheduledEventId, func(info *persistencespb.ActivityInfo, _ MutableState) error {
 		ai.LastAttemptCompleteTime = timestamppb.New(ms.shard.GetTimeSource().Now().UTC())
+		return nil
 	})
 }
 
@@ -4926,7 +4927,7 @@ func (ms *MutableStateImpl) updateActivityInfoForRetries(
 	nextAttempt int32,
 	activityFailure *failurepb.Failure,
 ) {
-	_ = ms.UpdateActivity(ai.ScheduledEventId, func(activityInfo *persistencespb.ActivityInfo, mutableState MutableState) {
+	_ = ms.UpdateActivity(ai.ScheduledEventId, func(activityInfo *persistencespb.ActivityInfo, mutableState MutableState) error {
 		mutableStateImpl, ok := mutableState.(*MutableStateImpl)
 		if ok {
 			ai = UpdateActivityInfoForRetries(
@@ -4937,6 +4938,7 @@ func (ms *MutableStateImpl) updateActivityInfoForRetries(
 				timestamppb.New(nextScheduledTime),
 			)
 		}
+		return nil
 	})
 }
 
@@ -4963,7 +4965,9 @@ func (ms *MutableStateImpl) UpdateActivity(scheduledEventId int64, updater Activ
 		prevPause = prev.Paused
 	}
 
-	updater(ai, ms)
+	if err := updater(ai, ms); err != nil {
+		return err
+	}
 
 	if prevPause != ai.Paused {
 		err := ms.updatePauseInfoSearchAttribute()

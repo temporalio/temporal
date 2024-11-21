@@ -93,16 +93,6 @@ func UpdateActivityInfoForRetries(
 	return ai
 }
 
-func ActivityState(ai *persistence.ActivityInfo) enumspb.PendingActivityState {
-	if ai.CancelRequested {
-		return enumspb.PENDING_ACTIVITY_STATE_CANCEL_REQUESTED
-	}
-	if ai.StartedEventId != common.EmptyEventID {
-		return enumspb.PENDING_ACTIVITY_STATE_STARTED
-	}
-	return enumspb.PENDING_ACTIVITY_STATE_SCHEDULED
-}
-
 func GetPendingActivityInfo(
 	ctx context.Context, // only used as a passthrough to GetActivityType
 	shardContext shard.Context,
@@ -122,7 +112,7 @@ func GetPendingActivityInfo(
 		}
 	}
 
-	p.State = ActivityState(ai)
+	p.State = GetActivityState(ai)
 
 	p.LastAttemptCompleteTime = ai.LastAttemptCompleteTime
 	if !ai.HasRetryPolicy {
@@ -210,12 +200,13 @@ func PauseActivityById(mutableState MutableState, activityId string) error {
 		return nil
 	}
 
-	return mutableState.UpdateActivity(ai.ScheduledEventId, func(activityInfo *persistence.ActivityInfo, _ MutableState) {
+	return mutableState.UpdateActivity(ai.ScheduledEventId, func(activityInfo *persistence.ActivityInfo, _ MutableState) error {
 		// note - we are not increasing the stamp of the activity if it is running.
 		// this is because if activity is actually running we should let it finish
 		if GetActivityState(activityInfo) == enumspb.PENDING_ACTIVITY_STATE_SCHEDULED {
 			activityInfo.Stamp++
 		}
 		activityInfo.Paused = true
+		return nil
 	})
 }

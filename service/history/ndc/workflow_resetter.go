@@ -551,10 +551,11 @@ func (r *workflowResetterImpl) failInflightActivity(
 		switch ai.StartedEventId {
 		case common.EmptyEventID:
 			// activity not started, noop
-			if err := mutableState.UpdateActivity(ai.ScheduledEventId, func(activityInfo *persistencespb.ActivityInfo, _ workflow.MutableState) {
+			if err := mutableState.UpdateActivity(ai.ScheduledEventId, func(activityInfo *persistencespb.ActivityInfo, _ workflow.MutableState) error {
 				// override the scheduled activity time to now
 				activityInfo.ScheduledTime = timestamppb.New(now)
 				activityInfo.FirstScheduledTime = timestamppb.New(now)
+				return nil
 			}); err != nil {
 				return err
 			}
