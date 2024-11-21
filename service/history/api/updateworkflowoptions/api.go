@@ -46,10 +46,10 @@ import (
 func Invoke(
 	ctx context.Context,
 	request *historyservice.UpdateWorkflowExecutionOptionsRequest,
-	shard shard.Context,
+	shardCtx shard.Context,
 	workflowConsistencyChecker api.WorkflowConsistencyChecker,
 ) (*historyservice.UpdateWorkflowExecutionOptionsResponse, error) {
-	ns, err := api.GetActiveNamespace(shard, namespace.ID(request.GetNamespaceId()))
+	ns, err := api.GetActiveNamespace(shardCtx, namespace.ID(request.GetNamespaceId()))
 	if err != nil {
 		return nil, err
 	}
@@ -110,7 +110,7 @@ func Invoke(
 			}, nil
 		},
 		nil,
-		shard,
+		shardCtx,
 		workflowConsistencyChecker,
 	)
 	if err != nil {
