@@ -96,6 +96,15 @@ type OperationLog struct {
 	DeletedPaths [][]Key
 }
 
+func (o *OperationLog) IsDeleted(path []Key) bool {
+	for _, deletedPath := range o.DeletedPaths {
+		if isPathPrefix(deletedPath, path) {
+			return true
+		}
+	}
+	return false
+}
+
 // NodeBackend is a concrete implementation to support interacting with the underlying platform.
 // It currently has only a single implementation - workflow mutable state.
 type NodeBackend interface {
@@ -211,16 +220,7 @@ func (n *Node) Outputs() []PathAndOutputs {
 	currentPath := n.Path()
 	var paos []PathAndOutputs
 
-	isDeleted := func(path []Key) bool {
-		for _, deletedPath := range root.opLog.DeletedPaths {
-			if isPathPrefix(deletedPath, path) {
-				return true
-			}
-		}
-		return false
-	}
-
-	if !isDeleted(currentPath) {
+	if !root.opLog.IsDeleted(currentPath) {
 		var nodeTransitions []TransitionOutputWithCount
 		for _, t := range root.opLog.Transitions {
 			if reflect.DeepEqual(t.NodePath, currentPath) {
