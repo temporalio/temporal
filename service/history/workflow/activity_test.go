@@ -125,7 +125,7 @@ func (s *activitySuite) TestGetActivityState() {
 	}
 
 	for _, tc := range testCases {
-		state := ActivityState(tc.ai)
+		state := GetActivityState(tc.ai)
 		s.Equal(tc.state, state)
 	}
 }

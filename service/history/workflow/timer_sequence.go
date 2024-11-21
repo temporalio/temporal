@@ -154,12 +154,13 @@ func (t *timerSequenceImpl) CreateNextActivityTimer() (bool, error) {
 		return false, serviceerror.NewInternal(fmt.Sprintf("unable to load activity info %v", firstTimerTask.EventID))
 	}
 
-	err := t.mutableState.UpdateActivity(activityInfo.ScheduledEventId, func(ai *persistencespb.ActivityInfo, ms MutableState) {
+	err := t.mutableState.UpdateActivity(activityInfo.ScheduledEventId, func(ai *persistencespb.ActivityInfo, ms MutableState) error {
 		// mark timer task mask as indication that timer task is generated
 		ai.TimerTaskStatus |= timerTypeToTimerMask(firstTimerTask.TimerType)
 		if firstTimerTask.TimerType == enumspb.TIMEOUT_TYPE_HEARTBEAT {
 			t.mutableState.UpdateActivityTimerHeartbeat(ai.ScheduledEventId, firstTimerTask.Timestamp)
 		}
+		return nil
 	})
 
 	if err != nil {

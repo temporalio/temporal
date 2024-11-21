@@ -145,7 +145,7 @@ type (
 		MaxSearchAttributeValueSize int
 	}
 
-	ActivityUpdater func(*persistencespb.ActivityInfo, MutableState)
+	ActivityUpdater func(*persistencespb.ActivityInfo, MutableState) error
 
 	MutableState interface {
 		callbacks.CanGetNexusCompletion
