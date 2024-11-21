@@ -146,7 +146,8 @@ type Node struct {
 // NewRoot creates a new root [Node].
 // Children may be provided from persistence to rehydrate the tree.
 // Returns [ErrNotRegistered] if the key's type is not registered in the given registry or serialization errors.
-func NewRoot(registry *Registry,
+func NewRoot(
+	registry *Registry,
 	t string,
 	data any,
 	children map[string]*persistencespb.StateMachineMap,
