@@ -26,7 +26,7 @@ import (
 	update "go.temporal.io/api/update/v1"
 	version "go.temporal.io/api/version/v1"
 	workflow "go.temporal.io/api/workflow/v1"
-	workflowservice "go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/api/workflowservice/v1"
 	anypb "google.golang.org/protobuf/types/known/anypb"
 	durationpb "google.golang.org/protobuf/types/known/durationpb"
 	emptypb "google.golang.org/protobuf/types/known/emptypb"
