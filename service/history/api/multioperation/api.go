@@ -116,7 +116,7 @@ func Invoke(
 
 			// Add the Update.
 			// NOTE: UpdateWorkflowAction return value is ignored since ther Starter will always create a WFT.
-			updateReg := workflowLease.GetContext().UpdateRegistry(ctx, nil)
+			updateReg := workflowLease.GetContext().UpdateRegistry(ctx)
 			if _, err := updater.ApplyRequest(ctx, updateReg, ms); err != nil {
 				// Wrapping the error so Update and Start errors can be distinguished later.
 				return nil, updateError{err}
@@ -214,7 +214,7 @@ func updateWorkflow(
 		currentWorkflowLease,
 		func(lease api.WorkflowLease) (*api.UpdateWorkflowAction, error) {
 			ms := lease.GetMutableState()
-			updateReg := lease.GetContext().UpdateRegistry(ctx, ms)
+			updateReg := lease.GetContext().UpdateRegistry(ctx)
 			return updater.ApplyRequest(ctx, updateReg, ms)
 		},
 		nil,
