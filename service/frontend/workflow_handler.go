@@ -5186,7 +5186,7 @@ func (wh *WorkflowHandler) UpdateWorkflowExecutionOptions(
 	request *workflowservice.UpdateWorkflowExecutionOptionsRequest,
 ) (_ *workflowservice.UpdateWorkflowExecutionOptionsResponse, retError error) {
 	defer log.CapturePanic(wh.logger, &retError)
-	wh.logger.Debug("Received UpdateWorkflowExecutionOptions")
+	wh.logger.Debug("Received UpdateWorkflowExecutionOptions for ", tag.WorkflowID(request.GetWorkflowExecution().GetWorkflowId()))
 	if request == nil {
 		return nil, errRequestNotSet
 	}

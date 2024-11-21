@@ -25,6 +25,7 @@
 package updateworkflowoptions
 
 import (
+	"google.golang.org/protobuf/types/known/fieldmaskpb"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -57,32 +58,32 @@ var (
 )
 
 func TestMergeOptions_VersionOverrideMask(t *testing.T) {
-	paths := []string{"versioning_override"}
+	updateMask := &fieldmaskpb.FieldMask{Paths: []string{"versioning_override"}}
 	opts := &workflowpb.WorkflowExecutionOptions{}
 
 	// Merge unpinned into empty options
-	opts, err := MergeOptions(paths, unpinnedOverrideOptions, opts)
+	opts, err := applyWorkflowExecutionOptions(opts, unpinnedOverrideOptions, updateMask)
 	if err != nil {
 		t.Error(err)
 	}
 	assert.True(t, proto.Equal(unpinnedOverrideOptions, opts))
 
 	// Merge pinned_A into unpinned options
-	opts, err = MergeOptions(paths, pinnedOverrideOptionsA, opts)
+	opts, err = applyWorkflowExecutionOptions(opts, pinnedOverrideOptionsA, updateMask)
 	if err != nil {
 		t.Error(err)
 	}
 	assert.True(t, proto.Equal(pinnedOverrideOptionsA, opts))
 
 	// Merge pinned_B into pinned_A options
-	opts, err = MergeOptions(paths, pinnedOverrideOptionsB, opts)
+	opts, err = applyWorkflowExecutionOptions(opts, pinnedOverrideOptionsB, updateMask)
 	if err != nil {
 		t.Error(err)
 	}
 	assert.True(t, proto.Equal(pinnedOverrideOptionsB, opts))
 
 	// Unset versioning override
-	opts, err = MergeOptions(paths, emptyOptions, opts)
+	opts, err = applyWorkflowExecutionOptions(opts, emptyOptions, updateMask)
 	if err != nil {
 		t.Error(err)
 	}
@@ -90,30 +91,33 @@ func TestMergeOptions_VersionOverrideMask(t *testing.T) {
 }
 
 func TestMergeOptions_PartialUpdateMask(t *testing.T) {
-	bothPaths := []string{"versioning_override.behavior", "versioning_override.deployment"}
-	behaviorOnlyPaths := []string{"versioning_override.behavior"}
-	deploymentOnlyPaths := []string{"versioning_override.deployment"}
-	_, err := MergeOptions(behaviorOnlyPaths, unpinnedOverrideOptions, &workflowpb.WorkflowExecutionOptions{})
+	bothUpdateMask := &fieldmaskpb.FieldMask{Paths: []string{"versioning_override.behavior", "versioning_override.deployment"}}
+	behaviorOnlyUpdateMask := &fieldmaskpb.FieldMask{Paths: []string{"versioning_override.behavior"}}
+	deploymentOnlyUpdateMask := &fieldmaskpb.FieldMask{Paths: []string{"versioning_override.deployment"}}
+	_, err := applyWorkflowExecutionOptions(&workflowpb.WorkflowExecutionOptions{}, unpinnedOverrideOptions, behaviorOnlyUpdateMask)
 	assert.Error(t, err)
-	_, err = MergeOptions(deploymentOnlyPaths, unpinnedOverrideOptions, &workflowpb.WorkflowExecutionOptions{})
+	_, err = applyWorkflowExecutionOptions(&workflowpb.WorkflowExecutionOptions{}, unpinnedOverrideOptions, deploymentOnlyUpdateMask)
 	assert.Error(t, err)
-	opts, err := MergeOptions(bothPaths, unpinnedOverrideOptions, &workflowpb.WorkflowExecutionOptions{})
+	opts, err := applyWorkflowExecutionOptions(&workflowpb.WorkflowExecutionOptions{}, unpinnedOverrideOptions, bothUpdateMask)
 	assert.NoError(t, err)
 	assert.True(t, proto.Equal(unpinnedOverrideOptions, opts))
 }
 
 func TestMergeOptions_EmptyPathsMask(t *testing.T) {
-	opts, err := MergeOptions([]string{}, unpinnedOverrideOptions, &workflowpb.WorkflowExecutionOptions{})
+	emptyUpdateMask := &fieldmaskpb.FieldMask{Paths: []string{}}
+	opts, err := applyWorkflowExecutionOptions(&workflowpb.WorkflowExecutionOptions{}, unpinnedOverrideOptions, emptyUpdateMask)
 	assert.NoError(t, err)
 	assert.True(t, proto.Equal(emptyOptions, opts))
 }
 
 func TestMergeOptions_AsteriskMask(t *testing.T) {
-	_, err := MergeOptions([]string{"*"}, unpinnedOverrideOptions, &workflowpb.WorkflowExecutionOptions{})
+	asteriskUpdateMask := &fieldmaskpb.FieldMask{Paths: []string{"*"}}
+	_, err := applyWorkflowExecutionOptions(&workflowpb.WorkflowExecutionOptions{}, unpinnedOverrideOptions, asteriskUpdateMask)
 	assert.Error(t, err)
 }
 
 func TestMergeOptions_FooMask(t *testing.T) {
-	_, err := MergeOptions([]string{"foo"}, unpinnedOverrideOptions, &workflowpb.WorkflowExecutionOptions{})
+	fooUpdateMask := &fieldmaskpb.FieldMask{Paths: []string{"foo"}}
+	_, err := applyWorkflowExecutionOptions(&workflowpb.WorkflowExecutionOptions{}, unpinnedOverrideOptions, fooUpdateMask)
 	assert.Error(t, err)
 }

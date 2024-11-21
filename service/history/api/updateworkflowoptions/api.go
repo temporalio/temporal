@@ -27,9 +27,7 @@ package updateworkflowoptions
 import (
 	"context"
 	"fmt"
-	"slices"
-
-	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/fieldmaskpb"
 
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
@@ -37,10 +35,12 @@ import (
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/workflow"
+	"google.golang.org/protobuf/proto"
 )
 
 func Invoke(
@@ -74,14 +74,11 @@ func Invoke(
 				return nil, consts.ErrWorkflowCompleted
 			}
 
-			// TODO (carly): dedupe by requestID
-			_ = req.GetRequestId()
-
 			// Merge the requested options mentioned in the field mask with the current options in the mutable state
-			mergedOpts, updateError := MergeOptions(
-				req.GetUpdateMask().GetPaths(),
+			mergedOpts, updateError := applyWorkflowExecutionOptions(
+				getOptionsFromMutableState(mutableState),
 				req.GetWorkflowExecutionOptions(),
-				GetOptionsFromMutableState(mutableState),
+				req.GetUpdateMask(),
 			)
 			if updateError != nil {
 				return nil, updateError
@@ -91,7 +88,7 @@ func Invoke(
 			ret.WorkflowExecutionOptions = mergedOpts
 
 			// If there is no mutable state change at all, return with no new history event and Noop=true
-			if proto.Equal(mergedOpts, GetOptionsFromMutableState(mutableState)) {
+			if proto.Equal(mergedOpts, getOptionsFromMutableState(mutableState)) {
 				return &api.UpdateWorkflowAction{
 					Noop:               true,
 					CreateWorkflowTask: false,
@@ -119,7 +116,7 @@ func Invoke(
 	return ret, nil
 }
 
-func GetOptionsFromMutableState(ms workflow.MutableState) *workflowpb.WorkflowExecutionOptions {
+func getOptionsFromMutableState(ms workflow.MutableState) *workflowpb.WorkflowExecutionOptions {
 	opts := &workflowpb.WorkflowExecutionOptions{}
 	// todo (carly) or todo (shahab): Have VersioningInfo store VersioningOverride instead of DeploymentOverride + BehaviorOverride separately
 	if versioningInfo := ms.GetExecutionInfo().GetVersioningInfo(); versioningInfo != nil {
@@ -133,28 +130,34 @@ func GetOptionsFromMutableState(ms workflow.MutableState) *workflowpb.WorkflowEx
 	return opts
 }
 
-// MergeOptions copies the given paths in `src` struct to `dst` struct
-func MergeOptions(paths []string, src, dst *workflowpb.WorkflowExecutionOptions) (*workflowpb.WorkflowExecutionOptions, error) {
-	// Apply masked fields
-	for _, p := range paths {
-		switch p {
-		case "versioning_override":
-			dst.VersioningOverride = src.GetVersioningOverride()
-		case "versioning_override.deployment":
-			if slices.Contains(paths, "versioning_override.behavior") {
-				dst.VersioningOverride = src.GetVersioningOverride()
-			} else {
-				return nil, serviceerror.NewInvalidArgument("versioning_override fields must be updated together")
-			}
-		case "versioning_override.behavior":
-			if slices.Contains(paths, "versioning_override.deployment") {
-				dst.VersioningOverride = src.GetVersioningOverride()
-			} else {
-				return nil, serviceerror.NewInvalidArgument("versioning_override fields must be updated together")
-			}
-		default:
-			return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("error parsing UpdateMask: path %s not supported", p))
+// applyWorkflowExecutionOptions copies the given paths in `src` struct to `dst` struct
+func applyWorkflowExecutionOptions(
+	mergeInto, mergeFrom *workflowpb.WorkflowExecutionOptions,
+	updateMask *fieldmaskpb.FieldMask,
+) (*workflowpb.WorkflowExecutionOptions, error) {
+	_, err := fieldmaskpb.New(mergeInto, updateMask.GetPaths()...)
+	if err != nil { // errors if any paths are not valid for the struct we are merging into
+		return nil, fmt.Errorf("error parsing UpdateMask: %s", err.Error())
+	}
+	updateFields := util.ParseFieldMask(updateMask)
+	if _, ok := updateFields["versioningOverride"]; ok {
+		mergeInto.VersioningOverride = mergeFrom.GetVersioningOverride()
+	}
+
+	if _, ok := updateFields["versioningOverride.deployment"]; ok {
+		if _, ok := updateFields["versioningOverride.behavior"]; ok {
+			mergeInto.VersioningOverride = mergeFrom.GetVersioningOverride()
+		} else {
+			return nil, serviceerror.NewInvalidArgument("versioning_override fields must be updated together")
 		}
 	}
-	return dst, nil
+
+	if _, ok := updateFields["versioningOverride.behavior"]; ok {
+		if _, ok := updateFields["versioningOverride.deployment"]; ok {
+			mergeInto.VersioningOverride = mergeFrom.GetVersioningOverride()
+		} else {
+			return nil, serviceerror.NewInvalidArgument("versioning_override fields must be updated together")
+		}
+	}
+	return mergeInto, nil
 }
