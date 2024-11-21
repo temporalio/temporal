@@ -31,6 +31,8 @@ import (
 	"math"
 	"time"
 
+	deploymentpb "go.temporal.io/api/deployment/v1"
+
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
@@ -706,13 +708,11 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskCompletedEvent(
 		workflowTask.StartedEventID = startedEvent.GetEventId()
 	}
 
-	var completedRedirect *historypb.CompletedDeploymentRedirectInfo
+	var completedDeployment *deploymentpb.Deployment
+	var completedBehavior enumspb.VersioningBehavior
 	if redirectInfo := m.ms.GetRedirectInfo(); redirectInfo != nil {
-		completedRedirect = &historypb.CompletedDeploymentRedirectInfo{
-			Deployment:                 redirectInfo.GetDeployment(),
-			VersioningBehavior:         request.GetVersioningBehavior(),
-			VersioningBehaviorOverride: redirectInfo.GetBehaviorOverride(),
-		}
+		completedDeployment = redirectInfo.GetDeployment()
+		completedBehavior = request.GetVersioningBehavior()
 	}
 
 	// Now write the completed event
@@ -724,7 +724,8 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskCompletedEvent(
 		request.WorkerVersionStamp,
 		request.SdkMetadata,
 		request.MeteringMetadata,
-		completedRedirect,
+		completedDeployment,
+		completedBehavior,
 	)
 
 	err := m.afterAddWorkflowTaskCompletedEvent(event, limits)
@@ -1091,7 +1092,7 @@ func (m *workflowTaskStateMachine) afterAddWorkflowTaskCompletedEvent(
 	m.ms.executionInfo.LastCompletedWorkflowTaskStartedEventId = attrs.GetStartedEventId()
 	m.ms.executionInfo.MostRecentWorkerVersionStamp = attrs.GetWorkerVersion()
 
-	if err := m.ms.CompleteDeploymentRedirect(attrs.GetCompletedRedirect().GetVersioningBehavior()); err != nil {
+	if err := m.ms.CompleteDeploymentRedirect(attrs.GetVersioningBehavior()); err != nil {
 		return err
 	}
 

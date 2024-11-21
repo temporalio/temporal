@@ -136,7 +136,7 @@ func (d *DeploymentWorkflowRunner) run() error {
 			d.DeploymentLocalState.TaskQueueFamilies[updateInput.TaskQueueName].TaskQueues[int32(updateInput.TaskQueueType)] = newTaskQueueWorkerInfo
 
 			// Call activity which starts a "DeploymentName" workflow
-			return d.invokeDeploymentNameActivity(ctx, d.DeploymentLocalState.WorkerDeployment.DeploymentName)
+			return d.invokeDeploymentNameActivity(ctx, d.DeploymentLocalState.WorkerDeployment.SeriesName)
 		},
 		// TODO Shivam - have a validator which backsoff updates if we are scheduled to have a CAN
 	); err != nil {

@@ -41,6 +41,7 @@ import (
 	nexus "github.com/nexus-rpc/sdk-go/nexus"
 	command "go.temporal.io/api/command/v1"
 	common "go.temporal.io/api/common/v1"
+	deployment "go.temporal.io/api/deployment/v1"
 	enums "go.temporal.io/api/enums/v1"
 	failure "go.temporal.io/api/failure/v1"
 	history "go.temporal.io/api/history/v1"
@@ -167,7 +168,7 @@ func (mr *MockMutableStateMockRecorder) AddActivityTaskScheduledEvent(arg0, arg1
 }
 
 // AddActivityTaskStartedEvent mocks base method.
-func (m *MockMutableState) AddActivityTaskStartedEvent(arg0 *persistence.ActivityInfo, arg1 int64, arg2, arg3 string, arg4 *common.WorkerVersionStamp, arg5 *common.WorkerDeployment, arg6 *taskqueue0.BuildIdRedirectInfo) (*history.HistoryEvent, error) {
+func (m *MockMutableState) AddActivityTaskStartedEvent(arg0 *persistence.ActivityInfo, arg1 int64, arg2, arg3 string, arg4 *common.WorkerVersionStamp, arg5 *deployment.Deployment, arg6 *taskqueue0.BuildIdRedirectInfo) (*history.HistoryEvent, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "AddActivityTaskStartedEvent", arg0, arg1, arg2, arg3, arg4, arg5, arg6)
 	ret0, _ := ret[0].(*history.HistoryEvent)
@@ -1924,10 +1925,10 @@ func (mr *MockMutableStateMockRecorder) GetCurrentBranchToken() *gomock.Call {
 }
 
 // GetCurrentDeployment mocks base method.
-func (m *MockMutableState) GetCurrentDeployment() *common.WorkerDeployment {
+func (m *MockMutableState) GetCurrentDeployment() *deployment.Deployment {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetCurrentDeployment")
-	ret0, _ := ret[0].(*common.WorkerDeployment)
+	ret0, _ := ret[0].(*deployment.Deployment)
 	return ret0
 }
 
@@ -3014,7 +3015,7 @@ func (mr *MockMutableStateMockRecorder) SetUpdateCondition(arg0, arg1 any) *gomo
 }
 
 // StartDeploymentRedirect mocks base method.
-func (m *MockMutableState) StartDeploymentRedirect(deployment *common.WorkerDeployment, behaviorOverride enums.VersioningBehavior) bool {
+func (m *MockMutableState) StartDeploymentRedirect(deployment *deployment.Deployment, behaviorOverride enums.VersioningBehavior) bool {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "StartDeploymentRedirect", deployment, behaviorOverride)
 	ret0, _ := ret[0].(bool)
