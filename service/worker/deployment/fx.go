@@ -30,7 +30,6 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	sdkworker "go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
-	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
@@ -96,7 +95,7 @@ var Module = fx.Options(
 	fx.Provide(DeploymentStoreClientProvider),
 )
 
-func DeploymentStoreClientProvider(historyClient historyservice.HistoryServiceClient, visibilityManager manager.VisibilityManager, dc *dynamicconfig.Collection) *DeploymentClientImpl {
+func DeploymentStoreClientProvider(historyClient resource.HistoryClient, visibilityManager manager.VisibilityManager, dc *dynamicconfig.Collection) DeploymentStoreClient {
 	return &DeploymentClientImpl{
 		HistoryClient:         historyClient,
 		VisibilityManager:     visibilityManager,
@@ -129,9 +128,9 @@ func (s *workerComponent) Register(registry sdkworker.Registry, ns *namespace.Na
 
 	// TODO Shivam: Might need a cleanup function upon activity registration
 	deploymentActivities := s.newDeploymentActivities(ns.Name(), ns.ID())
-	deploymentSeriesActivities := s.newDeploymentSeriesActivities(ns.Name(), ns.ID())
+	// deploymentSeriesActivities := s.newDeploymentSeriesActivities(ns.Name(), ns.ID())
 	registry.RegisterActivity(deploymentActivities)
-	registry.RegisterActivity(deploymentSeriesActivities)
+	// registry.RegisterActivity(deploymentSeriesActivities)
 	return nil
 }
 
@@ -144,11 +143,11 @@ func (s *workerComponent) newDeploymentActivities(name namespace.Name, id namesp
 	}
 }
 
-// TODO Shivam - place holder for now but will initialize activity rate limits (if any) amongst other things
-func (s *workerComponent) newDeploymentSeriesActivities(name namespace.Name, id namespace.ID) *DeploymentSeriesActivities {
-	return &DeploymentSeriesActivities{
-		activityDeps: s.activityDeps,
-		namespace:    name,
-		namespaceID:  id,
-	}
-}
+// // TODO Shivam - place holder for now but will initialize activity rate limits (if any) amongst other things
+// func (s *workerComponent) newDeploymentSeriesActivities(name namespace.Name, id namespace.ID) *DeploymentSeriesActivities {
+// 	return &DeploymentSeriesActivities{
+// 		activityDeps: s.activityDeps,
+// 		namespace:    name,
+// 		namespaceID:  id,
+// 	}
+// }
