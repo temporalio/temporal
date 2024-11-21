@@ -3132,7 +3132,7 @@ func (wh *WorkflowHandler) DescribeDeployment(ctx context.Context, request *work
 	if err != nil {
 		return nil, err
 	}
-	deploymentInfo, err := wh.deploymentStoreClient.DescribeDeployment(ctx, namespaceEntry, request.Deployment.SeriesName, request.Deployment.BuildId, wh.config.MaxIDLengthLimit())
+	deploymentInfo, err := wh.deploymentStoreClient.DescribeDeployment(ctx, namespaceEntry, request.Deployment.SeriesName, request.Deployment.BuildId)
 	if err != nil {
 		wh.logger.Error("Error during DescribeDeployment", tag.Error(err))
 		return nil, err
@@ -3163,7 +3163,7 @@ func (wh *WorkflowHandler) GetCurrentDeployment(ctx context.Context, request *wo
 		return nil, err
 	}
 
-	describeDeploymentResponse, err := wh.deploymentStoreClient.GetCurrentDeployment(ctx, namespaceEntry, request.SeriesName, wh.config.MaxIDLengthLimit(), wh.config.VisibilityMaxPageSize(request.GetNamespace()))
+	describeDeploymentResponse, err := wh.deploymentStoreClient.GetCurrentDeployment(ctx, namespaceEntry, request.SeriesName)
 	if err != nil {
 		wh.logger.Error("Error during GetCurrentDeployment", tag.Error(err))
 		return nil, err
@@ -3207,7 +3207,7 @@ func (wh *WorkflowHandler) ListDeployments(
 		request.PageSize = maxPageSize
 	}
 
-	deployments, nextPageToken, err := wh.deploymentStoreClient.ListDeployments(ctx, namespaceEntry, request.SeriesName, request.NextPageToken, int(maxPageSize))
+	deployments, nextPageToken, err := wh.deploymentStoreClient.ListDeployments(ctx, namespaceEntry, request.SeriesName, request.NextPageToken)
 	if err != nil {
 		wh.logger.Error("Error during ListDeployments", tag.Error(err))
 		return nil, err

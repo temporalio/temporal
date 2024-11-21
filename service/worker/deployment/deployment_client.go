@@ -37,6 +37,7 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	deployspb "go.temporal.io/server/api/deployment/v1"
 	"go.temporal.io/server/api/historyservice/v1"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/payloads"
@@ -55,7 +56,6 @@ type DeploymentStoreClient interface {
 		taskQueueName string,
 		taskQueueType enumspb.TaskQueueType,
 		pollTimestamp *timestamppb.Timestamp,
-		maxIDLengthLimit int,
 	) error
 
 	DescribeDeployment(
@@ -63,15 +63,12 @@ type DeploymentStoreClient interface {
 		namespaceEntry *namespace.Namespace,
 		seriesName string,
 		buildID string,
-		maxIDLengthLimit int,
 	) (*deploypb.DeploymentInfo, error)
 
 	GetCurrentDeployment(
 		ctx context.Context,
 		namespaceEntry *namespace.Namespace,
 		seriesName string,
-		maxIDLengthLimit int,
-		maxPageSize int,
 	) (*deploypb.DeploymentInfo, error)
 
 	ListDeployments(
@@ -79,14 +76,15 @@ type DeploymentStoreClient interface {
 		namespaceEntry *namespace.Namespace,
 		seriesName string,
 		NextPageToken []byte,
-		maxPageSize int,
 	) ([]*deploypb.DeploymentListInfo, []byte, error)
 }
 
 // implements DeploymentClient
 type DeploymentClient struct {
-	HistoryClient     historyservice.HistoryServiceClient
-	VisibilityManager manager.VisibilityManager
+	HistoryClient         historyservice.HistoryServiceClient
+	VisibilityManager     manager.VisibilityManager
+	MaxIDLengthLimit      dynamicconfig.IntPropertyFn
+	VisibilityMaxPageSize dynamicconfig.IntPropertyFnWithNamespaceFilter
 }
 
 func (d *DeploymentClient) RegisterTaskQueueWorker(
@@ -96,14 +94,13 @@ func (d *DeploymentClient) RegisterTaskQueueWorker(
 	taskQueueName string,
 	taskQueueType enumspb.TaskQueueType,
 	pollTimestamp *timestamppb.Timestamp,
-	maxIDLengthLimit int,
 ) error {
 	// validate params which are used for building workflowID's
-	err := ValidateDeploymentWfParams(SeriesFieldName, deployment.SeriesName, maxIDLengthLimit)
+	err := ValidateDeploymentWfParams(SeriesFieldName, deployment.SeriesName, d.MaxIDLengthLimit())
 	if err != nil {
 		return err
 	}
-	err = ValidateDeploymentWfParams(BuildIDFieldName, deployment.BuildId, maxIDLengthLimit)
+	err = ValidateDeploymentWfParams(BuildIDFieldName, deployment.BuildId, d.MaxIDLengthLimit())
 	if err != nil {
 		return err
 	}
@@ -182,13 +179,13 @@ func (d *DeploymentClient) RegisterTaskQueueWorker(
 	return nil
 }
 
-func (d *DeploymentClient) DescribeDeployment(ctx context.Context, namespaceEntry *namespace.Namespace, seriesName string, buildID string, maxIDLengthLimit int) (*deploypb.DeploymentInfo, error) {
+func (d *DeploymentClient) DescribeDeployment(ctx context.Context, namespaceEntry *namespace.Namespace, seriesName string, buildID string) (*deploypb.DeploymentInfo, error) {
 	// validating params
-	err := ValidateDeploymentWfParams(SeriesFieldName, seriesName, maxIDLengthLimit)
+	err := ValidateDeploymentWfParams(SeriesFieldName, seriesName, d.MaxIDLengthLimit())
 	if err != nil {
 		return nil, err
 	}
-	err = ValidateDeploymentWfParams(BuildIDFieldName, buildID, maxIDLengthLimit)
+	err = ValidateDeploymentWfParams(BuildIDFieldName, buildID, d.MaxIDLengthLimit())
 	if err != nil {
 		return nil, err
 	}
@@ -241,10 +238,10 @@ func (d *DeploymentClient) DescribeDeployment(ctx context.Context, namespaceEntr
 	}, nil
 }
 
-func (d *DeploymentClient) GetCurrentDeployment(ctx context.Context, namespaceEntry *namespace.Namespace, seriesName string, maxIDLengthLimit int, maxPageSize int) (*deploypb.DeploymentInfo, error) {
+func (d *DeploymentClient) GetCurrentDeployment(ctx context.Context, namespaceEntry *namespace.Namespace, seriesName string) (*deploypb.DeploymentInfo, error) {
 
 	// Validating params
-	err := ValidateDeploymentWfParams(SeriesFieldName, seriesName, maxIDLengthLimit)
+	err := ValidateDeploymentWfParams(SeriesFieldName, seriesName, d.MaxIDLengthLimit())
 	if err != nil {
 		return nil, err
 	}
@@ -256,7 +253,7 @@ func (d *DeploymentClient) GetCurrentDeployment(ctx context.Context, namespaceEn
 		&manager.ListWorkflowExecutionsRequestV2{
 			NamespaceID: namespaceEntry.ID(),
 			Namespace:   namespaceEntry.Name(),
-			PageSize:    maxPageSize,
+			PageSize:    d.VisibilityMaxPageSize(namespaceEntry.Name().String()),
 			Query:       query,
 		},
 	)
@@ -281,7 +278,7 @@ func (d *DeploymentClient) GetCurrentDeployment(ctx context.Context, namespaceEn
 		return nil, nil
 	}
 
-	deploymentInfo, err := d.DescribeDeployment(ctx, namespaceEntry, seriesName, buildID, maxIDLengthLimit)
+	deploymentInfo, err := d.DescribeDeployment(ctx, namespaceEntry, seriesName, buildID)
 	if err != nil {
 		return nil, nil
 	}
@@ -289,7 +286,7 @@ func (d *DeploymentClient) GetCurrentDeployment(ctx context.Context, namespaceEn
 	return deploymentInfo, nil
 }
 
-func (d *DeploymentClient) ListDeployments(ctx context.Context, namespaceEntry *namespace.Namespace, seriesName string, NextPageToken []byte, maxPageSize int) ([]*deploypb.DeploymentListInfo, []byte, error) {
+func (d *DeploymentClient) ListDeployments(ctx context.Context, namespaceEntry *namespace.Namespace, seriesName string, NextPageToken []byte) ([]*deploypb.DeploymentListInfo, []byte, error) {
 
 	query := ""
 	if seriesName != "" {
@@ -303,7 +300,7 @@ func (d *DeploymentClient) ListDeployments(ctx context.Context, namespaceEntry *
 		&manager.ListWorkflowExecutionsRequestV2{
 			NamespaceID:   namespaceEntry.ID(),
 			Namespace:     namespaceEntry.Name(),
-			PageSize:      maxPageSize,
+			PageSize:      d.VisibilityMaxPageSize(namespaceEntry.Name().String()),
 			NextPageToken: NextPageToken,
 			Query:         query,
 		},

@@ -350,7 +350,7 @@ func (c *physicalTaskQueueManagerImpl) PollTask(
 
 			err := c.partitionMgr.engine.deploymentStoreClient.RegisterTaskQueueWorker(
 				ctx, namespaceEntry, workerDeployment, c.queue.TaskQueueFamily().Name(), c.queue.TaskType(),
-				nil, c.partitionMgr.engine.config.MaxIDLengthLimit())
+				nil)
 			if err != nil {
 				return nil, err
 			}
