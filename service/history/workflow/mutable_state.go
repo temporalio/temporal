@@ -361,9 +361,10 @@ type (
 			baseRunLowestCommonAncestorEventVersion int64,
 		)
 		UpdateActivity(int64, ActivityUpdater) error
-		UpdateActivityTimerHeartbeat(int64, time.Time)
+		UpdateActivityTaskStatusWithTimerHeartbeat(scheduleEventId int64, timerTaskStatus *int32, heartbeatTimeoutVisibility *time.Time) error
 		UpdateActivityProgress(ai *persistencespb.ActivityInfo, request *workflowservice.RecordActivityTaskHeartbeatRequest)
 		UpdateUserTimer(*persistencespb.TimerInfo) error
+		UpdateUserTimerTaskStatus(timerId string, status int64) error
 		UpdateCurrentVersion(version int64, forceUpdate bool) error
 		UpdateWorkflowStateStatus(state enumsspb.WorkflowExecutionState, status enumspb.WorkflowExecutionStatus) error
 		UpdateBuildIdAssignment(buildId string) error

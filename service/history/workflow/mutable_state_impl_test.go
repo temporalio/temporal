@@ -3818,7 +3818,13 @@ func (s *mutableStateSuite) TestApplySnapshot() {
 
 	// set updateXXX so LastUpdateVersionedTransition will be updated
 	targetMS.updateActivityInfos = targetMS.pendingActivityInfoIDs
+	for key := range targetMS.updateActivityInfos {
+		targetMS.activityInfosUserDataUpdated[key] = struct{}{}
+	}
 	targetMS.updateTimerInfos = targetMS.pendingTimerInfoIDs
+	for key := range targetMS.updateTimerInfos {
+		targetMS.timerInfosUserDataUpdated[key] = struct{}{}
+	}
 	targetMS.updateChildExecutionInfos = targetMS.pendingChildExecutionInfoIDs
 	targetMS.updateRequestCancelInfos = targetMS.pendingRequestCancelInfoIDs
 	targetMS.updateSignalInfos = targetMS.pendingSignalInfoIDs
@@ -3884,7 +3890,13 @@ func (s *mutableStateSuite) TestApplyMutation() {
 
 	// set updateXXX so LastUpdateVersionedTransition will be updated
 	targetMS.updateActivityInfos = targetMS.pendingActivityInfoIDs
+	for key := range targetMS.updateActivityInfos {
+		targetMS.activityInfosUserDataUpdated[key] = struct{}{}
+	}
 	targetMS.updateTimerInfos = targetMS.pendingTimerInfoIDs
+	for key := range targetMS.updateTimerInfos {
+		targetMS.timerInfosUserDataUpdated[key] = struct{}{}
+	}
 	targetMS.updateChildExecutionInfos = targetMS.pendingChildExecutionInfoIDs
 	targetMS.updateRequestCancelInfos = targetMS.pendingRequestCancelInfoIDs
 	targetMS.updateSignalInfos = targetMS.pendingSignalInfoIDs
@@ -4018,4 +4030,35 @@ func (s *mutableStateSuite) TestRefreshTask_SameCluster_SameAttempt() {
 		incomingActivityInfo,
 	)
 	s.False(shouldReset)
+}
+
+func (s *mutableStateSuite) TestUpdateActivityTaskStatusWithTimerHeartbeat() {
+	dbState := s.buildWorkflowMutableState()
+	scheduleEventId := int64(781)
+	dbState.ActivityInfos[scheduleEventId] = &persistencespb.ActivityInfo{
+		Version:                5,
+		ScheduledEventId:       int64(90),
+		ScheduledTime:          timestamppb.New(time.Now().UTC()),
+		StartedEventId:         common.EmptyEventID,
+		StartedTime:            timestamppb.New(time.Now().UTC()),
+		ActivityId:             "activityID_5",
+		TimerTaskStatus:        0,
+		ScheduleToStartTimeout: timestamp.DurationFromSeconds(100),
+		ScheduleToCloseTimeout: timestamp.DurationFromSeconds(200),
+		StartToCloseTimeout:    timestamp.DurationFromSeconds(300),
+		HeartbeatTimeout:       timestamp.DurationFromSeconds(50),
+	}
+	mutableState, err := NewMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, s.namespaceEntry, dbState, 123)
+	s.NoError(err)
+	originalTime := time.Now().UTC().Add(time.Second * 60)
+	mutableState.pendingActivityTimerHeartbeats[scheduleEventId] = originalTime
+	status := int32(1)
+	err = mutableState.UpdateActivityTaskStatusWithTimerHeartbeat(scheduleEventId, &status, nil)
+	s.NoError(err)
+	s.Equal(status, dbState.ActivityInfos[scheduleEventId].TimerTaskStatus)
+	s.Equal(originalTime, mutableState.pendingActivityTimerHeartbeats[scheduleEventId])
+	time1 := time.Now().UTC().Add(time.Second * 80)
+	err = mutableState.UpdateActivityTaskStatusWithTimerHeartbeat(scheduleEventId, nil, &time1)
+	s.Equal(status, dbState.ActivityInfos[scheduleEventId].TimerTaskStatus)
+	s.Equal(time1, mutableState.pendingActivityTimerHeartbeats[scheduleEventId])
 }
