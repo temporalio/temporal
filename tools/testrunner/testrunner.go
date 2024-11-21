@@ -242,6 +242,12 @@ func (r *runner) combineAttempts() junit.Testsuites {
 			continue
 		}
 
+		// Just a sanity check for this tool since it's new and we want to make sure we actually rerun what we
+		// expect.
+		if attempt.suites.Tests != r.attempts[i-1].suites.Failures {
+			log.Fatalf("expected a rerun of all failures from the previous attempt, got (%d/%d)", attempt.suites.Tests, r.attempts[i-1].suites.Failures)
+		}
+
 		for _, suite := range attempt.suites.Suites {
 			cpy := suite
 			cpy.Name += fmt.Sprintf(" (retry %d)", i)
