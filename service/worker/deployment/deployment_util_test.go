@@ -31,6 +31,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	deploymentpb "go.temporal.io/api/deployment/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/api/historyservicemock/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -77,8 +78,8 @@ func (d *deploymentWorkflowClientSuite) SetupTest() {
 	d.ns, d.mockNamespaceCache = createMockNamespaceCache(d.controller, testNamespace)
 	d.mockHistoryClient = historyservicemock.NewMockHistoryServiceClient(d.controller)
 	d.workerDeployment = &deploymentpb.Deployment{
-		DeploymentName: testDeployment,
-		BuildId:        testBuildID,
+		SeriesName: testDeployment,
+		BuildId:    testBuildID,
 	}
 	d.deploymentWorkflowClient = NewDeploymentWorkflowClient(d.ns, d.workerDeployment, d.mockHistoryClient)
 
