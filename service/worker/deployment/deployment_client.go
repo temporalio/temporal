@@ -29,6 +29,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/pborman/uuid"
 	commonpb "go.temporal.io/api/common/v1"
 	deploypb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -87,7 +88,7 @@ type DeploymentStoreClient interface {
 	) (*workflowservice.GetDeploymentReachabilityResponse, error)
 }
 
-// implements DeploymentClient
+// implements DeploymentStoreClient
 type DeploymentClientImpl struct {
 	HistoryClient         historyservice.HistoryServiceClient
 	VisibilityManager     manager.VisibilityManager
@@ -136,6 +137,7 @@ func (d *DeploymentClientImpl) RegisterTaskQueueWorker(
 
 	// Start workflow execution, if it hasn't already
 	startReq := &workflowservice.StartWorkflowExecutionRequest{
+		RequestId:                uuid.New(),
 		Namespace:                namespaceEntry.Name().String(),
 		WorkflowId:               deploymentWorkflowID,
 		WorkflowType:             &commonpb.WorkflowType{Name: DeploymentWorkflowType},
@@ -154,6 +156,7 @@ func (d *DeploymentClientImpl) RegisterTaskQueueWorker(
 		},
 		Request: &updatepb.Request{
 			Input: &updatepb.Input{Name: RegisterWorkerInDeployment, Args: updatePayload},
+			Meta:  &updatepb.Meta{UpdateId: uuid.New(), Identity: "deploymentClient"},
 		},
 		WaitPolicy: &updatepb.WaitPolicy{LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED},
 	}
