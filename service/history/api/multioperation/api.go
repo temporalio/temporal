@@ -222,6 +222,11 @@ func startAndUpdateWorkflow(
 
 	// hook is invoked before workflow is persisted
 	applyUpdateFunc := func(lease api.WorkflowLease) error {
+		// workflowCtx is the response from the cache write: either it's the context from the currently held lease
+		// OR the already-existing, previously cached context (this happens when the workflow is being terminated;
+		// it re-uses the same context).
+		var workflowCtx workflow.Context
+
 		// It is crucial to put the Update registry (inside the workflow context) into the cache, as it needs to
 		// exist on the Matching call back to History when delivering a workflow task to a worker.
 		//
@@ -235,7 +240,7 @@ func startAndUpdateWorkflow(
 		// - but receive a new instance that is inconsistent with this one
 		wfContext.(*workflow.ContextImpl).MutableState = ms
 		workflowKey := wfContext.GetWorkflowKey()
-		updateErr = workflowConsistencyChecker.GetWorkflowCache().Put(
+		workflowCtx, updateErr = workflowConsistencyChecker.GetWorkflowCache().Put(
 			shardContext,
 			ms.GetNamespaceEntry().ID(),
 			&commonpb.WorkflowExecution{WorkflowId: workflowKey.WorkflowID, RunId: workflowKey.RunID},
@@ -244,7 +249,7 @@ func startAndUpdateWorkflow(
 		)
 		if updateErr == nil {
 			// UpdateWorkflowAction return value is ignored since Start will always create WFT
-			updateReg := wfContext.UpdateRegistry(ctx, ms)
+			updateReg := workflowCtx.UpdateRegistry(ctx, ms)
 			_, updateErr = updater.ApplyRequest(ctx, updateReg, ms)
 		}
 		return updateErr

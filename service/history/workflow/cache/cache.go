@@ -65,7 +65,7 @@ type (
 			execution *commonpb.WorkflowExecution,
 			workflowCtx workflow.Context,
 			handler metrics.Handler,
-		) error
+		) (workflow.Context, error)
 
 		GetOrCreateCurrentWorkflowExecution(
 			ctx context.Context,
@@ -295,13 +295,16 @@ func (c *cacheImpl) Put(
 	execution *commonpb.WorkflowExecution,
 	workflowCtx workflow.Context,
 	handler metrics.Handler,
-) error {
+) (workflow.Context, error) {
 	cacheKey := makeCacheKey(shardContext, namespaceID, execution)
 	item := &cacheItem{shardId: shardContext.GetShardID(), wfContext: workflowCtx, finalizer: shardContext.GetFinalizer()}
-	// need to make sure there isn't an existing context present (which could have been cleared)
-	c.Delete(cacheKey)
-	_, err := c.PutIfNotExist(cacheKey, item)
-	return err
+	existing, err := c.PutIfNotExist(cacheKey, item)
+	if err != nil {
+		metrics.CacheFailures.With(handler).Record(1)
+		return nil, err
+	}
+	//nolint:revive
+	return existing.(*cacheItem).wfContext, nil
 }
 
 func (c *cacheImpl) getOrCreateWorkflowExecutionInternal(
@@ -329,7 +332,7 @@ func (c *cacheImpl) getOrCreateWorkflowExecutionInternal(
 		)
 
 		var err error
-		err = c.Put(shardContext, namespaceID, execution, workflowCtx, handler)
+		workflowCtx, err = c.Put(shardContext, namespaceID, execution, workflowCtx, handler)
 		if err != nil {
 			return nil, nil, err
 		}
