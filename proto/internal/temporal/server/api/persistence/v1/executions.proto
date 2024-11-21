@@ -36,7 +36,6 @@ import "temporal/api/workflow/v1/message.proto";
 import "temporal/api/history/v1/message.proto";
 import "temporal/api/deployment/v1/message.proto";
 
-
 import "temporal/server/api/clock/v1/message.proto";
 import "temporal/server/api/enums/v1/common.proto";
 import "temporal/server/api/enums/v1/nexus.proto";

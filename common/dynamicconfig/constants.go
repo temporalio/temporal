@@ -845,6 +845,11 @@ of Timeout and if no activity is seen even after that the connection is closed.`
 		true,
 		`FrontendEnableSchedules enables schedule-related RPCs in the frontend`,
 	)
+	FrontendEnableDeployments = NewNamespaceBoolSetting(
+		"frontend.enableDeployments",
+		false,
+		`FrontendEnableDeployments enables deployment-related RPCs in the frontend`,
+	)
 	EnableNexus = NewGlobalBoolSetting(
 		"system.enableNexus",
 		false,
