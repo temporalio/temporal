@@ -292,6 +292,11 @@ func Main() {
 		if len(failures) == 0 {
 			log.Fatalf("tests failed but no failures have been detected, not rerunning tests")
 		}
+		// Don't rerun if there's more than 10 failures in a single suite.
+		if len(failures) > 10 && retry < r.retries {
+			log.Printf("will not rerun tests, number of failures exceeds configured threshold (%d/%d)", len(failures), 10)
+			break
+		}
 		args = stripRunFromArgs(args)
 		for i, failure := range failures {
 			failures[i] = goTestNameToRunFlagRegexp(failure)
