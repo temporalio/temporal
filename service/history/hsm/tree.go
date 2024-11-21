@@ -218,24 +218,29 @@ func (n *Node) Outputs() []PathAndOutputs {
 	}
 
 	currentPath := n.Path()
+
+	if root.opLog.IsDeleted(currentPath) {
+		return nil
+	}
+
+	// Group transitions by their path
+	pathToTransitions := make(map[string][]TransitionOutputWithCount)
+	for _, t := range root.opLog.Transitions {
+		// Only include transitions under current node's path
+		if isPathPrefix(currentPath, t.NodePath) {
+			pathKey := fmt.Sprint(t.NodePath)
+			pathToTransitions[pathKey] = append(pathToTransitions[pathKey], t)
+		}
+	}
+
+	// Convert to PathAndOutputs
 	var paos []PathAndOutputs
-
-	if !root.opLog.IsDeleted(currentPath) {
-		var nodeTransitions []TransitionOutputWithCount
-		for _, t := range root.opLog.Transitions {
-			if reflect.DeepEqual(t.NodePath, currentPath) {
-				nodeTransitions = append(nodeTransitions, t)
-			}
-		}
-		if len(nodeTransitions) > 0 {
+	for _, transitions := range pathToTransitions {
+		if len(transitions) > 0 {
 			paos = append(paos, PathAndOutputs{
-				Path:    currentPath,
-				Outputs: nodeTransitions,
+				Path:    transitions[0].NodePath, // all transitions in group have same path
+				Outputs: transitions,
 			})
-		}
-
-		for _, child := range n.cache.children {
-			paos = append(paos, child.Outputs()...)
 		}
 	}
 
