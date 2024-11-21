@@ -49,7 +49,6 @@ import (
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	sdkclient "go.temporal.io/sdk/client"
-	"go.temporal.io/sdk/internal" // todo (carly): use of the internal package is not allowed, but the only way to set DeploymentOptions is through it..
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
@@ -2086,10 +2085,8 @@ func (s *AdvancedVisibilitySuite) Test_BuildIdIndexedOnCompletion_VersionedWorke
 
 	// Start first worker
 	w1 := worker.New(s.sdkClient, taskQueue, worker.Options{
-		DeploymentOptions: internal.WorkerDeploymentOptions{
-			BuildID:                 buildIdv1,
-			UseBuildIDForVersioning: true,
-		},
+		BuildID:                      buildIdv1,
+		UseBuildIDForVersioning:      true,
 		StickyScheduleToStartTimeout: time.Second,
 	})
 	w1.RegisterWorkflowWithOptions(wf, workflow.RegisterOptions{Name: workflowType})
@@ -2131,10 +2128,8 @@ func (s *AdvancedVisibilitySuite) Test_BuildIdIndexedOnCompletion_VersionedWorke
 
 	// Start v1.1 worker
 	w11 := worker.New(s.sdkClient, taskQueue, worker.Options{
-		DeploymentOptions: internal.WorkerDeploymentOptions{
-			BuildID:                 buildIdv11,
-			UseBuildIDForVersioning: true,
-		},
+		BuildID:                 buildIdv11,
+		UseBuildIDForVersioning: true,
 	})
 	w11.RegisterWorkflowWithOptions(wf, workflow.RegisterOptions{Name: workflowType})
 	s.Require().NoError(w11.Start())
@@ -2232,10 +2227,8 @@ func (s *AdvancedVisibilitySuite) Test_BuildIdIndexedOnReset() {
 
 	// Start a worker
 	w := worker.New(s.sdkClient, taskQueue, worker.Options{
-		DeploymentOptions: internal.WorkerDeploymentOptions{
-			BuildID:                 buildIdv1,
-			UseBuildIDForVersioning: true,
-		},
+		BuildID:                      buildIdv1,
+		UseBuildIDForVersioning:      true,
 		StickyScheduleToStartTimeout: time.Second,
 	})
 	w.RegisterWorkflowWithOptions(wf, workflow.RegisterOptions{Name: workflowType})
@@ -2309,10 +2302,8 @@ func (s *AdvancedVisibilitySuite) Test_BuildIdIndexedOnRetry() {
 
 	// Start a worker
 	w := worker.New(s.sdkClient, taskQueue, worker.Options{
-		DeploymentOptions: internal.WorkerDeploymentOptions{
-			BuildID:                 buildIdv1,
-			UseBuildIDForVersioning: true,
-		},
+		BuildID:                      buildIdv1,
+		UseBuildIDForVersioning:      true,
 		StickyScheduleToStartTimeout: time.Second,
 	})
 	w.RegisterWorkflowWithOptions(wf, workflow.RegisterOptions{Name: workflowType})
