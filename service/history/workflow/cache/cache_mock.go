@@ -101,11 +101,12 @@ func (mr *MockCacheMockRecorder) GetOrCreateWorkflowExecution(ctx, shardContext,
 }
 
 // Put mocks base method.
-func (m *MockCache) Put(shardContext shard.Context, namespaceID namespace.ID, execution *common.WorkflowExecution, workflowCtx workflow.Context, handler metrics.Handler) error {
+func (m *MockCache) Put(shardContext shard.Context, namespaceID namespace.ID, execution *common.WorkflowExecution, workflowCtx workflow.Context, handler metrics.Handler) (workflow.Context, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Put", shardContext, namespaceID, execution, workflowCtx, handler)
-	ret0, _ := ret[0].(error)
-	return ret0
+	ret0, _ := ret[0].(workflow.Context)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // Put indicates an expected call of Put.

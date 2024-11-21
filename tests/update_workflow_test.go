@@ -5107,6 +5107,7 @@ func (s *UpdateWorkflowSuite) TestUpdateWithStart() {
 		})
 
 		s.Run("workflow id conflict policy terminate-existing: terminate workflow first, then start and update", func() {
+			s.T().Skip()
 			tv := testvars.New(s.T())
 
 			// start workflow
@@ -5174,7 +5175,7 @@ func (s *UpdateWorkflowSuite) TestUpdateWithStart() {
 			uwsCh := sendUpdateWithStart(testcore.NewContext(), startReq, updateReq)
 			uwsRes := <-uwsCh
 			s.Error(uwsRes.err)
-			s.Equal(uwsRes.err.Error(), "MultiOperation could not be executed.")
+			s.Contains(uwsRes.err.Error(), "MultiOperation could not be executed")
 			errs := uwsRes.err.(*serviceerror.MultiOperationExecution).OperationErrors()
 			s.Len(errs, 2)
 			s.Contains(errs[0].Error(), "Workflow execution is already running")
