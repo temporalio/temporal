@@ -31,7 +31,6 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/api/historyservicemock/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -57,7 +56,7 @@ type (
 		ns                       *namespace.Namespace
 		mockNamespaceCache       *namespace.MockRegistry
 		mockHistoryClient        *historyservicemock.MockHistoryServiceClient
-		workerDeployment         *commonpb.WorkerDeployment
+		workerDeployment         *deploymentpb.Deployment
 		deploymentWorkflowClient *DeploymentWorkflowClient
 		sync.Mutex
 	}
@@ -77,7 +76,7 @@ func (d *deploymentWorkflowClientSuite) SetupTest() {
 	d.controller = gomock.NewController(d.T())
 	d.ns, d.mockNamespaceCache = createMockNamespaceCache(d.controller, testNamespace)
 	d.mockHistoryClient = historyservicemock.NewMockHistoryServiceClient(d.controller)
-	d.workerDeployment = &commonpb.WorkerDeployment{
+	d.workerDeployment = &deploymentpb.Deployment{
 		DeploymentName: testDeployment,
 		BuildId:        testBuildID,
 	}

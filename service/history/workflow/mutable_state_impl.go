@@ -29,15 +29,16 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/nexus-rpc/sdk-go/nexus"
+	"github.com/pborman/uuid"
 	"math/rand"
 	"reflect"
 	"slices"
 	"time"
 
-	"github.com/nexus-rpc/sdk-go/nexus"
-	"github.com/pborman/uuid"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
+	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
 	historypb "go.temporal.io/api/history/v1"
@@ -2982,7 +2983,7 @@ func (ms *MutableStateImpl) AddActivityTaskStartedEvent(
 	requestID string,
 	identity string,
 	versioningStamp *commonpb.WorkerVersionStamp,
-	deployment *commonpb.WorkerDeployment,
+	deployment *deploymentpb.Deployment,
 	redirectInfo *taskqueue.BuildIdRedirectInfo,
 ) (*historypb.HistoryEvent, error) {
 	opTag := tag.WorkflowActionActivityTaskStarted
@@ -6732,7 +6733,7 @@ func (ms *MutableStateImpl) disablingTransitionHistory() bool {
 
 // GetCurrentDeployment returns the current effective deployment in the following order:
 // RedirectingDeployment takes precedence over DeploymentOverride, over Deployment.
-func (ms *MutableStateImpl) GetCurrentDeployment() *commonpb.WorkerDeployment {
+func (ms *MutableStateImpl) GetCurrentDeployment() *deploymentpb.Deployment {
 	versioningInfo := ms.GetExecutionInfo().GetVersioningInfo()
 	if versioningInfo == nil {
 		return nil
@@ -6768,7 +6769,7 @@ func (ms *MutableStateImpl) GetVersioningBehavior() enumspb.VersioningBehavior {
 // rescheduling activities.
 // TODO (shahab): validate source deployment
 func (ms *MutableStateImpl) StartDeploymentRedirect(
-	deployment *commonpb.WorkerDeployment,
+	deployment *deploymentpb.Deployment,
 	behaviorOverride enumspb.VersioningBehavior,
 ) bool {
 	if deployment.Equal(ms.GetCurrentDeployment()) {

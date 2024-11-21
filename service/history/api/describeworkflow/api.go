@@ -147,16 +147,21 @@ func Invoke(
 
 	if versioningInfo := executionInfo.GetVersioningInfo(); versioningInfo != nil {
 		result.WorkflowExecutionInfo.VersioningInfo = &workflowpb.WorkflowExecutionInfo_VersioningInfo{
-			Behavior:           versioningInfo.Behavior,
-			Deployment:         versioningInfo.Deployment,
-			BehaviorOverride:   versioningInfo.BehaviorOverride,
-			DeploymentOverride: versioningInfo.DeploymentOverride,
+			Behavior:   versioningInfo.Behavior,
+			Deployment: versioningInfo.Deployment,
+			VersioningOverride: &workflowpb.VersioningOverride{
+				Behavior:   versioningInfo.BehaviorOverride,
+				Deployment: versioningInfo.DeploymentOverride,
+			},
 		}
 		if redirectInfo := versioningInfo.GetRedirectInfo(); redirectInfo != nil {
-			result.WorkflowExecutionInfo.VersioningInfo.RedirectInfo =
-				&workflowpb.WorkflowExecutionInfo_VersioningInfo_RedirectInfo{
-					Deployment:       redirectInfo.Deployment,
-					BehaviorOverride: redirectInfo.BehaviorOverride,
+			result.WorkflowExecutionInfo.VersioningInfo.DeploymentTransition =
+				&workflowpb.WorkflowExecutionInfo_VersioningInfo_DeploymentTransition{
+					Deployment: redirectInfo.Deployment,
+					// todo (carly): if the redirect has a versioning override or is unsetting an override, set this field
+					// currently redirectInfo only has "deployment" and "behavior override", not "deployment override"
+					// so I'm not 100% sure what to put here. Probably persistence.versioningInfo proto needs to change.
+					ApplyOverride: nil,
 				}
 		}
 	}
@@ -185,8 +190,8 @@ func Invoke(
 
 	for _, ai := range mutableState.GetPendingActivityInfos() {
 		p := &workflowpb.PendingActivityInfo{
-			ActivityId:            ai.ActivityId,
-			LastStartedDeployment: ai.LastStartedDeployment,
+			ActivityId:     ai.ActivityId,
+			LastDeployment: ai.LastStartedDeployment,
 		}
 		if ai.GetUseWorkflowBuildIdInfo() != nil {
 			p.AssignedBuildId = &workflowpb.PendingActivityInfo_UseWorkflowBuildId{UseWorkflowBuildId: &emptypb.Empty{}}

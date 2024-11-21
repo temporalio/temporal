@@ -112,15 +112,15 @@ var (
 		MaxResetPoints:              10,
 		MaxSearchAttributeValueSize: 1024,
 	}
-	deployment1 = &commonpb.WorkerDeployment{
+	deployment1 = &deploymentpb.Deployment{
 		DeploymentName: "my_app",
 		BuildId:        "build_1",
 	}
-	deployment2 = &commonpb.WorkerDeployment{
+	deployment2 = &deploymentpb.Deployment{
 		DeploymentName: "my_app",
 		BuildId:        "build_2",
 	}
-	deployment3 = &commonpb.WorkerDeployment{
+	deployment3 = &deploymentpb.Deployment{
 		DeploymentName: "my_app",
 		BuildId:        "build_3",
 	}
@@ -510,7 +510,7 @@ func (s *mutableStateSuite) TestCurrentDeployment() {
 	ms.executionInfo.VersioningInfo = versioningInfo
 	s.verifyCurrentDeployment(nil, enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED)
 
-	d1 := &commonpb.WorkerDeployment{
+	d1 := &deploymentpb.Deployment{
 		DeploymentName: "my_app",
 		BuildId:        "build_1",
 	}
@@ -518,7 +518,7 @@ func (s *mutableStateSuite) TestCurrentDeployment() {
 	versioningInfo.Behavior = enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE
 	s.verifyCurrentDeployment(d1, enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE)
 
-	d2 := &commonpb.WorkerDeployment{
+	d2 := &deploymentpb.Deployment{
 		DeploymentName: "my_app",
 		BuildId:        "build_2",
 	}
@@ -526,7 +526,7 @@ func (s *mutableStateSuite) TestCurrentDeployment() {
 	versioningInfo.Behavior = enumspb.VERSIONING_BEHAVIOR_PINNED
 	s.verifyCurrentDeployment(d2, enumspb.VERSIONING_BEHAVIOR_PINNED)
 
-	d3 := &commonpb.WorkerDeployment{
+	d3 := &deploymentpb.Deployment{
 		DeploymentName: "my_app",
 		BuildId:        "build_3",
 	}
@@ -544,7 +544,7 @@ func (s *mutableStateSuite) TestCurrentDeployment() {
 }
 
 func (s *mutableStateSuite) verifyCurrentDeployment(
-	expectedDeployment *commonpb.WorkerDeployment,
+	expectedDeployment *deploymentpb.Deployment,
 	expectedBehavior enumspb.VersioningBehavior,
 ) {
 	s.True(s.mutableState.GetCurrentDeployment().Equal(expectedDeployment))
@@ -555,7 +555,7 @@ func (s *mutableStateSuite) verifyCurrentDeployment(
 // to the given behavior, testing expected output after Add, Start, and Complete Workflow Task.
 func (s *mutableStateSuite) createMutableStateWithVersioningBehavior(
 	behavior enumspb.VersioningBehavior,
-	deployment *commonpb.WorkerDeployment,
+	deployment *deploymentpb.Deployment,
 	tq *taskqueuepb.TaskQueue,
 ) {
 	version := int64(12)

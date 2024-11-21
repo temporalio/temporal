@@ -5144,6 +5144,41 @@ func getBatchOperationState(workflowState enumspb.WorkflowExecutionStatus) enums
 	return operationState
 }
 
+func (wh *WorkflowHandler) ListDeployments(
+	ctx context.Context,
+	request *workflowservice.ListDeploymentsRequest,
+) (_ *workflowservice.ListDeploymentsResponse, retError error) {
+	return nil, serviceerror.NewUnimplemented("not implemented")
+}
+
+func (wh *WorkflowHandler) DescribeDeployment(
+	ctx context.Context,
+	request *workflowservice.DescribeDeploymentRequest,
+) (_ *workflowservice.DescribeDeploymentResponse, retError error) {
+	return nil, serviceerror.NewUnimplemented("not implemented")
+}
+
+func (wh *WorkflowHandler) SetCurrentDeployment(
+	ctx context.Context,
+	request *workflowservice.SetCurrentDeploymentRequest,
+) (_ *workflowservice.SetCurrentDeploymentResponse, retError error) {
+	return nil, serviceerror.NewUnimplemented("not implemented")
+}
+
+func (wh *WorkflowHandler) GetCurrentDeployment(
+	ctx context.Context,
+	request *workflowservice.GetCurrentDeploymentRequest,
+) (_ *workflowservice.GetCurrentDeploymentResponse, retError error) {
+	return nil, serviceerror.NewUnimplemented("not implemented")
+}
+
+func (wh *WorkflowHandler) GetDeploymentReachability(
+	ctx context.Context,
+	request *workflowservice.GetDeploymentReachabilityRequest,
+) (_ *workflowservice.GetDeploymentReachabilityResponse, retError error) {
+	return nil, serviceerror.NewUnimplemented("not implemented")
+}
+
 func (wh *WorkflowHandler) UpdateWorkflowExecutionOptions(
 	ctx context.Context,
 	request *workflowservice.UpdateWorkflowExecutionOptionsRequest,
