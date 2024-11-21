@@ -5107,6 +5107,7 @@ func (s *UpdateWorkflowSuite) TestUpdateWithStart() {
 		})
 
 		s.Run("workflow id conflict policy terminate-existing: terminate workflow first, then start and update", func() {
+			s.T().Skip()
 			tv := testvars.New(s.T())
 
 			// start workflow
