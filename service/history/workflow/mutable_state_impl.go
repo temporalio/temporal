@@ -2912,12 +2912,12 @@ func (ms *MutableStateImpl) ApplyActivityTaskScheduledEvent(
 		}
 	}
 
-	ms.AddPendingActivityInfo(ai)
+	ms.addPendingActivityInfo(ai)
 	ms.writeEventToCache(event)
 	return ai, nil
 }
 
-func (ms *MutableStateImpl) AddPendingActivityInfo(ai *persistencespb.ActivityInfo) {
+func (ms *MutableStateImpl) addPendingActivityInfo(ai *persistencespb.ActivityInfo) {
 	ms.pendingActivityInfoIDs[ai.ScheduledEventId] = ai
 	ms.pendingActivityIDToEventID[ai.ActivityId] = ai.ScheduledEventId
 	ms.updateActivityInfos[ai.ScheduledEventId] = ai

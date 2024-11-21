@@ -31,11 +31,12 @@ import (
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	historypb "go.temporal.io/api/history/v1"
+	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/namespace"
-	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/hsm"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tests"
@@ -91,9 +92,8 @@ func (s *activitySuite) SetupTest() {
 	s.NoError(err)
 	s.mockShard.SetStateMachineRegistry(reg)
 
-	mockEventsCache := events.NewMockCache(s.controller)
 	s.mutableState = NewMutableState(
-		s.mockShard, mockEventsCache, s.mockShard.GetLogger(), tests.GlobalNamespaceEntry, tests.WorkflowID, tests.RunID, time.Now().UTC(),
+		s.mockShard, s.mockShard.MockEventsCache, s.mockShard.GetLogger(), tests.GlobalNamespaceEntry, tests.WorkflowID, tests.RunID, time.Now().UTC(),
 	)
 }
 
@@ -258,55 +258,79 @@ func (s *activitySuite) TestResetActivityAcceptance() {
 }
 
 func (s *activitySuite) TestUnpauseActivityWithResumeAcceptance() {
-	now := s.mockShard.GetTimeSource().Now().UTC().Round(time.Hour)
-	activityType := commonpb.ActivityType{
-		Name: "activityType",
-	}
-	ai := &persistencespb.ActivityInfo{
-		ScheduledEventId:        1,
-		ActivityType:            &activityType,
-		ActivityId:              "activityID",
-		CancelRequested:         false,
-		StartedEventId:          1,
-		Attempt:                 2,
-		ScheduledTime:           timestamppb.New(now),
-		LastAttemptCompleteTime: timestamppb.New(now.Add(-1 * time.Hour)),
-		HasRetryPolicy:          false,
-		Paused:                  true,
-		Stamp:                   0,
+	activityId := "activity-id"
+	activityScheduledEvent := &historypb.HistoryEvent{
+		EventId:   1,
+		EventType: enumspb.EVENT_TYPE_ACTIVITY_TASK_SCHEDULED,
+		Attributes: &historypb.HistoryEvent_ActivityTaskScheduledEventAttributes{
+			ActivityTaskScheduledEventAttributes: &historypb.ActivityTaskScheduledEventAttributes{
+				WorkflowTaskCompletedEventId: 4,
+				ActivityId:                   activityId,
+				ActivityType:                 &commonpb.ActivityType{Name: "activity-type"},
+				TaskQueue:                    &taskqueuepb.TaskQueue{Name: "task-queue", Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+				Input:                        nil,
+				ScheduleToCloseTimeout:       durationpb.New(20 * time.Second),
+				ScheduleToStartTimeout:       durationpb.New(20 * time.Second),
+				StartToCloseTimeout:          durationpb.New(20 * time.Second),
+				HeartbeatTimeout:             durationpb.New(20 * time.Second),
+			}},
 	}
 
-	s.mutableState.AddPendingActivityInfo(ai)
+	s.mockShard.MockEventsCache.EXPECT().PutEvent(gomock.Any(), gomock.Any()).AnyTimes()
 
-	_, err := UnpauseActivityWithResume(s.mockShard, s.mutableState, ai, false)
+	ai, err := s.mutableState.ApplyActivityTaskScheduledEvent(0, activityScheduledEvent)
 	s.NoError(err)
-	s.Equal(int32(2), ai.Attempt, "ActivityInfo.Attempt is shouldn't change")
-	s.NotEqual(int64(0), ai.Stamp, "ActivityInfo.Stamp should change")
+
+	prevStamp := ai.Stamp
+	err = PauseActivityById(s.mutableState, activityId)
+	s.NoError(err)
+
+	s.Equal(int32(1), ai.Attempt, "ActivityInfo.Attempt is shouldn't change")
+	s.NotEqual(prevStamp, ai.Stamp, "ActivityInfo.Stamp should change")
+	s.Equal(true, ai.Paused, "ActivityInfo.Paused was not unpaused")
+	prevStamp = ai.Stamp
+	_, err = UnpauseActivityWithResume(s.mockShard, s.mutableState, ai, false)
+	s.NoError(err)
+
+	s.Equal(int32(1), ai.Attempt, "ActivityInfo.Attempt is shouldn't change")
+	s.NotEqual(prevStamp, ai.Stamp, "ActivityInfo.Stamp should change")
 	s.Equal(false, ai.Paused, "ActivityInfo.Paused was not unpaused")
 }
 
 func (s *activitySuite) TestUnpauseActivityWithResetAcceptance() {
-	now := s.mockShard.GetTimeSource().Now().UTC().Round(time.Hour)
-	activityType := commonpb.ActivityType{
-		Name: "activityType",
-	}
-	ai := &persistencespb.ActivityInfo{
-		ScheduledEventId:        1,
-		ActivityType:            &activityType,
-		ActivityId:              "activityID",
-		CancelRequested:         false,
-		StartedEventId:          1,
-		Attempt:                 2,
-		ScheduledTime:           timestamppb.New(now),
-		LastAttemptCompleteTime: timestamppb.New(now.Add(-1 * time.Hour)),
-		HasRetryPolicy:          false,
-		Paused:                  true,
-		Stamp:                   0,
+	activityId := "activity-id"
+	activityScheduledEvent := &historypb.HistoryEvent{
+		EventId:   1,
+		EventType: enumspb.EVENT_TYPE_ACTIVITY_TASK_SCHEDULED,
+		Attributes: &historypb.HistoryEvent_ActivityTaskScheduledEventAttributes{
+			ActivityTaskScheduledEventAttributes: &historypb.ActivityTaskScheduledEventAttributes{
+				WorkflowTaskCompletedEventId: 4,
+				ActivityId:                   activityId,
+				ActivityType:                 &commonpb.ActivityType{Name: "activity-type"},
+				TaskQueue:                    &taskqueuepb.TaskQueue{Name: "task-queue", Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+				Input:                        nil,
+				ScheduleToCloseTimeout:       durationpb.New(20 * time.Second),
+				ScheduleToStartTimeout:       durationpb.New(20 * time.Second),
+				StartToCloseTimeout:          durationpb.New(20 * time.Second),
+				HeartbeatTimeout:             durationpb.New(20 * time.Second),
+			}},
 	}
 
-	s.mutableState.AddPendingActivityInfo(ai)
+	s.mockShard.MockEventsCache.EXPECT().PutEvent(gomock.Any(), gomock.Any()).AnyTimes()
 
-	_, err := UnpauseActivityWithReset(s.mockShard, s.mutableState, ai, false, true)
+	ai, err := s.mutableState.ApplyActivityTaskScheduledEvent(0, activityScheduledEvent)
+	s.NoError(err)
+
+	prevStamp := ai.Stamp
+	err = PauseActivityById(s.mutableState, activityId)
+	s.NoError(err)
+
+	s.Equal(int32(1), ai.Attempt, "ActivityInfo.Attempt is shouldn't change")
+	s.NotEqual(prevStamp, ai.Stamp, "ActivityInfo.Stamp should change")
+	s.Equal(true, ai.Paused, "ActivityInfo.Paused was not unpaused")
+	prevStamp = ai.Stamp
+
+	_, err = UnpauseActivityWithReset(s.mockShard, s.mutableState, ai, false, true)
 	s.NoError(err)
 	s.Equal(int32(1), ai.Attempt, "ActivityInfo.Attempt is shouldn't change")
 	s.Equal(false, ai.Paused, "ActivityInfo.Paused was not unpaused")

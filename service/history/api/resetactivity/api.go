@@ -53,12 +53,9 @@ func Invoke(
 			mutableState := workflowLease.GetMutableState()
 			activityId := request.GetActivityId()
 
-			var err error
-
-			err = workflow.ResetActivityById(
+			if err := workflow.ResetActivityById(
 				shardContext, mutableState, activityId, request.NoWait, request.ResetHeartbeat,
-			)
-			if err != nil {
+			); err != nil {
 				return nil, err
 			}
 			return &api.UpdateWorkflowAction{

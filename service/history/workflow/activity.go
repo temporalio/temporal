@@ -227,20 +227,26 @@ func ResetActivityById(
 		return consts.ErrActivityNotFound
 	}
 
-	if err := mutableState.UpdateActivity(ai.ScheduledEventId, func(activityInfo *persistencepb.ActivityInfo, ms MutableState) {
+	if err := mutableState.UpdateActivity(ai.ScheduledEventId, func(activityInfo *persistencepb.ActivityInfo, ms MutableState) error {
 		// reset the number of attempts
 		ai.Attempt = 1
 
-		// change stamp and regenerate the retry task if needed
 		if needRegenerateRetryTask(ai, scheduleNewRun) {
+			// we need to change the Stamp every time if we need to regenerate retry task
+			// * to make sure the stale retry is not processed
+			// * to prevent the current running activity from finishing if scheduleNewRun is provided
 			ai.Stamp++
-			_ = ms.RegenerateActivityRetryTask(ai, shardContext.GetTimeSource().Now())
+			if err := ms.RegenerateActivityRetryTask(ai, shardContext.GetTimeSource().Now()); err != nil {
+				return err
+			}
 		}
 
 		if resetHeartbeats {
 			activityInfo.LastHeartbeatDetails = nil
 			activityInfo.LastHeartbeatUpdateTime = nil
 		}
+
+		return nil
 	}); err != nil {
 		return err
 	}
@@ -255,7 +261,7 @@ func UnpauseActivityWithResume(
 	scheduleNewRun bool,
 ) (*historyservice.UnpauseActivityResponse, error) {
 
-	if err := mutableState.UpdateActivity(ai.ScheduledEventId, func(activityInfo *persistencepb.ActivityInfo, ms MutableState) {
+	if err := mutableState.UpdateActivity(ai.ScheduledEventId, func(activityInfo *persistencepb.ActivityInfo, ms MutableState) error {
 		activityInfo.Stamp++
 		activityInfo.Paused = false
 
@@ -265,8 +271,11 @@ func UnpauseActivityWithResume(
 			if scheduleNewRun {
 				scheduleTime = shardContext.GetTimeSource().Now().UTC()
 			}
-			_ = ms.RegenerateActivityRetryTask(activityInfo, scheduleTime)
+			if err := ms.RegenerateActivityRetryTask(activityInfo, scheduleTime); err != nil {
+				return err
+			}
 		}
+		return nil
 	}); err != nil {
 		return nil, err
 	}
@@ -281,7 +290,7 @@ func UnpauseActivityWithReset(
 	scheduleNewRun bool,
 	resetHeartbeats bool,
 ) (*historyservice.UnpauseActivityResponse, error) {
-	if err := mutableState.UpdateActivity(ai.ScheduledEventId, func(activityInfo *persistencepb.ActivityInfo, ms MutableState) {
+	if err := mutableState.UpdateActivity(ai.ScheduledEventId, func(activityInfo *persistencepb.ActivityInfo, ms MutableState) error {
 		activityInfo.Paused = false
 		activityInfo.Stamp++
 
@@ -293,15 +302,16 @@ func UnpauseActivityWithReset(
 			if scheduleNewRun {
 				scheduleTime = shardContext.GetTimeSource().Now().UTC()
 			}
-			_ = ms.RegenerateActivityRetryTask(activityInfo, scheduleTime)
-
+			if err := ms.RegenerateActivityRetryTask(activityInfo, scheduleTime); err != nil {
+				return err
+			}
 		}
 
 		if resetHeartbeats {
 			activityInfo.LastHeartbeatDetails = nil
 			activityInfo.LastHeartbeatUpdateTime = nil
 		}
-
+		return nil
 	}); err != nil {
 		return nil, err
 	}
@@ -314,17 +324,6 @@ func needRegenerateRetryTask(ai *persistencepb.ActivityInfo, scheduleNewRun bool
 	if ai.Paused {
 		return false
 	}
-
-	// we need to update the Stamp:
-	// * if scheduleNewRun flag is provided and activity is in retry
-	//		- we need to prevent the retry from executing
-	// * if scheduleNewRun flag is provided and activity is running
-	//		- we need to prevent the previous run from succeeding
-	// * if scheduleNewRun flag is not provided  and activity is in retry
-	//		- retry may not happen  since the number of attempts changes
-	//   	- because of that we need to generate new retry task
-	//  	- because of that we need to increase the Stamp to block previous retry attempt (if the number of attempts doesn't change)
-	// the only case when we don't need to increase the Stamp is when activity is running and there is no scheduleNewRun flag.
 
 	if scheduleNewRun && GetActivityState(ai) == enumspb.PENDING_ACTIVITY_STATE_SCHEDULED {
 		// activity is waiting to start, scheduleNewRun flag is provided
