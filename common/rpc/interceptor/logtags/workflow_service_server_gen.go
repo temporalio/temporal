@@ -48,6 +48,8 @@ func (wt *WorkflowTags) extractFromWorkflowServiceServerRequest(req any) []tag.T
 		return nil
 	case *workflowservice.DescribeBatchOperationRequest:
 		return nil
+	case *workflowservice.DescribeDeploymentRequest:
+		return nil
 	case *workflowservice.DescribeNamespaceRequest:
 		return nil
 	case *workflowservice.DescribeScheduleRequest:
@@ -62,6 +64,10 @@ func (wt *WorkflowTags) extractFromWorkflowServiceServerRequest(req any) []tag.T
 	case *workflowservice.ExecuteMultiOperationRequest:
 		return nil
 	case *workflowservice.GetClusterInfoRequest:
+		return nil
+	case *workflowservice.GetCurrentDeploymentRequest:
+		return nil
+	case *workflowservice.GetDeploymentReachabilityRequest:
 		return nil
 	case *workflowservice.GetSearchAttributesRequest:
 		return nil
@@ -88,6 +94,8 @@ func (wt *WorkflowTags) extractFromWorkflowServiceServerRequest(req any) []tag.T
 	case *workflowservice.ListBatchOperationsRequest:
 		return nil
 	case *workflowservice.ListClosedWorkflowExecutionsRequest:
+		return nil
+	case *workflowservice.ListDeploymentsRequest:
 		return nil
 	case *workflowservice.ListNamespacesRequest:
 		return nil
@@ -175,6 +183,8 @@ func (wt *WorkflowTags) extractFromWorkflowServiceServerRequest(req any) []tag.T
 	case *workflowservice.RespondWorkflowTaskFailedRequest:
 		return wt.fromTaskToken(r.GetTaskToken())
 	case *workflowservice.ScanWorkflowExecutionsRequest:
+		return nil
+	case *workflowservice.SetCurrentDeploymentRequest:
 		return nil
 	case *workflowservice.ShutdownWorkerRequest:
 		return nil

@@ -31,6 +31,7 @@ import (
 
 	"github.com/temporalio/sqlparser"
 	commonpb "go.temporal.io/api/common/v1"
+	deploymentpb "go.temporal.io/api/deployment/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	"go.temporal.io/server/common/namespace"
@@ -128,33 +129,22 @@ func BuildIdIfUsingVersioning(stamp *commonpb.WorkerVersionStamp) string {
 	return ""
 }
 
-// DeploymentFromStamp returns the deployment if it is using versioning V3, otherwise nil.
-func DeploymentFromStamp(stamp *commonpb.WorkerVersionStamp) *commonpb.WorkerDeployment {
-	if stamp.GetUseVersioning() && stamp.GetDeploymentName() != "" && stamp.GetBuildId() != "" {
-		return &commonpb.WorkerDeployment{
-			DeploymentName: stamp.GetDeploymentName(),
-			BuildId:        stamp.GetBuildId(),
-		}
-	}
-	return (*commonpb.WorkerDeployment)(nil)
-}
-
 // DeploymentFromCapabilities returns the deployment if it is using versioning V3, otherwise nil.
-func DeploymentFromCapabilities(capabilities *commonpb.WorkerVersionCapabilities) *commonpb.WorkerDeployment {
-	if capabilities.GetUseVersioning() && capabilities.GetDeploymentName() != "" && capabilities.GetBuildId() != "" {
-		return &commonpb.WorkerDeployment{
-			DeploymentName: capabilities.GetDeploymentName(),
-			BuildId:        capabilities.GetBuildId(),
+func DeploymentFromCapabilities(capabilities *commonpb.WorkerVersionCapabilities) *deploymentpb.Deployment {
+	if capabilities.GetUseVersioning() && capabilities.GetDeploymentSeriesName() != "" && capabilities.GetBuildId() != "" {
+		return &deploymentpb.Deployment{
+			SeriesName: capabilities.GetDeploymentSeriesName(),
+			BuildId:    capabilities.GetBuildId(),
 		}
 	}
-	return (*commonpb.WorkerDeployment)(nil)
+	return (*deploymentpb.Deployment)(nil)
 }
 
-func DeploymentToString(deployment *commonpb.WorkerDeployment) string {
+func DeploymentToString(deployment *deploymentpb.Deployment) string {
 	if deployment == nil {
 		return "UNVERSIONED"
 	}
-	return deployment.DeploymentName + ":" + deployment.GetBuildId()
+	return deployment.SeriesName + ":" + deployment.GetBuildId()
 }
 
 // MakeDirectiveForWorkflowTask returns a versioning directive based on the following parameters:
@@ -199,6 +189,6 @@ func StampFromBuildId(buildId string) *commonpb.WorkerVersionStamp {
 	return &commonpb.WorkerVersionStamp{UseVersioning: true, BuildId: buildId}
 }
 
-func StampFromDeployment(deployment *commonpb.WorkerDeployment) *commonpb.WorkerVersionStamp {
-	return &commonpb.WorkerVersionStamp{UseVersioning: true, BuildId: deployment.BuildId, DeploymentName: deployment.DeploymentName}
+func StampFromDeployment(deployment *deploymentpb.Deployment) *commonpb.WorkerVersionStamp {
+	return &commonpb.WorkerVersionStamp{UseVersioning: true, BuildId: deployment.BuildId}
 }

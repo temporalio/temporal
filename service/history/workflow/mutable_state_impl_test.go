@@ -37,6 +37,7 @@ import (
 	"github.com/uber-go/tally/v4"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
+	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
 	historypb "go.temporal.io/api/history/v1"
@@ -112,17 +113,17 @@ var (
 		MaxResetPoints:              10,
 		MaxSearchAttributeValueSize: 1024,
 	}
-	deployment1 = &commonpb.WorkerDeployment{
-		DeploymentName: "my_app",
-		BuildId:        "build_1",
+	deployment1 = &deploymentpb.Deployment{
+		SeriesName: "my_app",
+		BuildId:    "build_1",
 	}
-	deployment2 = &commonpb.WorkerDeployment{
-		DeploymentName: "my_app",
-		BuildId:        "build_2",
+	deployment2 = &deploymentpb.Deployment{
+		SeriesName: "my_app",
+		BuildId:    "build_2",
 	}
-	deployment3 = &commonpb.WorkerDeployment{
-		DeploymentName: "my_app",
-		BuildId:        "build_3",
+	deployment3 = &deploymentpb.Deployment{
+		SeriesName: "my_app",
+		BuildId:    "build_3",
 	}
 )
 
@@ -510,25 +511,25 @@ func (s *mutableStateSuite) TestCurrentDeployment() {
 	ms.executionInfo.VersioningInfo = versioningInfo
 	s.verifyCurrentDeployment(nil, enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED)
 
-	d1 := &commonpb.WorkerDeployment{
-		DeploymentName: "my_app",
-		BuildId:        "build_1",
+	d1 := &deploymentpb.Deployment{
+		SeriesName: "my_app",
+		BuildId:    "build_1",
 	}
 	versioningInfo.Deployment = d1
 	versioningInfo.Behavior = enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE
 	s.verifyCurrentDeployment(d1, enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE)
 
-	d2 := &commonpb.WorkerDeployment{
-		DeploymentName: "my_app",
-		BuildId:        "build_2",
+	d2 := &deploymentpb.Deployment{
+		SeriesName: "my_app",
+		BuildId:    "build_2",
 	}
 	versioningInfo.DeploymentOverride = d2
 	versioningInfo.Behavior = enumspb.VERSIONING_BEHAVIOR_PINNED
 	s.verifyCurrentDeployment(d2, enumspb.VERSIONING_BEHAVIOR_PINNED)
 
-	d3 := &commonpb.WorkerDeployment{
-		DeploymentName: "my_app",
-		BuildId:        "build_3",
+	d3 := &deploymentpb.Deployment{
+		SeriesName: "my_app",
+		BuildId:    "build_3",
 	}
 	versioningInfo.RedirectInfo = &persistencespb.WorkflowExecutionInfo_VersioningInfo_RedirectInfo{
 		Deployment: d3,
@@ -544,7 +545,7 @@ func (s *mutableStateSuite) TestCurrentDeployment() {
 }
 
 func (s *mutableStateSuite) verifyCurrentDeployment(
-	expectedDeployment *commonpb.WorkerDeployment,
+	expectedDeployment *deploymentpb.Deployment,
 	expectedBehavior enumspb.VersioningBehavior,
 ) {
 	s.True(s.mutableState.GetCurrentDeployment().Equal(expectedDeployment))
@@ -555,7 +556,7 @@ func (s *mutableStateSuite) verifyCurrentDeployment(
 // to the given behavior, testing expected output after Add, Start, and Complete Workflow Task.
 func (s *mutableStateSuite) createMutableStateWithVersioningBehavior(
 	behavior enumspb.VersioningBehavior,
-	deployment *commonpb.WorkerDeployment,
+	deployment *deploymentpb.Deployment,
 	tq *taskqueuepb.TaskQueue,
 ) {
 	version := int64(12)
