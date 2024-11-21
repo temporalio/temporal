@@ -25,12 +25,13 @@
 package deployment
 
 import (
-	"github.com/stretchr/testify/require"
-	"github.com/stretchr/testify/suite"
-	"go.uber.org/mock/gomock"
 	"strings"
 	"sync"
 	"testing"
+
+	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
+	"go.uber.org/mock/gomock"
 
 	deploymentpb "go.temporal.io/api/deployment/v1"
 	"go.temporal.io/api/serviceerror"

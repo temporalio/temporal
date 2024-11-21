@@ -27,8 +27,9 @@ package updateworkflowoptions
 import (
 	"context"
 	"fmt"
-	"google.golang.org/protobuf/proto"
 	"slices"
+
+	"google.golang.org/protobuf/proto"
 
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"

@@ -25,9 +25,10 @@
 package updateworkflowoptions
 
 import (
+	"testing"
+
 	"github.com/stretchr/testify/assert"
 	"google.golang.org/protobuf/proto"
-	"testing"
 
 	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"

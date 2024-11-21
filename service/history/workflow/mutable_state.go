@@ -28,9 +28,10 @@ package workflow
 
 import (
 	"context"
+	"time"
+
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
-	"time"
 
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"

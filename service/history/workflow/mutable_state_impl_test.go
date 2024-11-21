@@ -27,6 +27,10 @@ package workflow
 import (
 	"context"
 	"fmt"
+	"reflect"
+	"testing"
+	"time"
+
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -36,9 +40,6 @@ import (
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/fieldmaskpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
-	"reflect"
-	"testing"
-	"time"
 
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"

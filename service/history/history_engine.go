@@ -26,9 +26,10 @@ package history
 
 import (
 	"context"
-	"go.opentelemetry.io/otel/trace"
 	"sync/atomic"
 	"time"
+
+	"go.opentelemetry.io/otel/trace"
 
 	commonpb "go.temporal.io/api/common/v1"
 	historypb "go.temporal.io/api/history/v1"

@@ -30,11 +30,12 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
-	"google.golang.org/protobuf/types/known/fieldmaskpb"
 	"net/url"
 	"strings"
 	"sync/atomic"
 	"time"
+
+	"google.golang.org/protobuf/types/known/fieldmaskpb"
 
 	"github.com/pborman/uuid"
 	batchpb "go.temporal.io/api/batch/v1"
