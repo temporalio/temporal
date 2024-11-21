@@ -1924,6 +1924,20 @@ func (mr *MockMutableStateMockRecorder) GetCurrentVersion() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetCurrentVersion", reflect.TypeOf((*MockMutableState)(nil).GetCurrentVersion))
 }
 
+// GetDeploymentTransition mocks base method.
+func (m *MockMutableState) GetDeploymentTransition() *workflow.DeploymentTransition {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetDeploymentTransition")
+	ret0, _ := ret[0].(*workflow.DeploymentTransition)
+	return ret0
+}
+
+// GetDeploymentTransition indicates an expected call of GetDeploymentTransition.
+func (mr *MockMutableStateMockRecorder) GetDeploymentTransition() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetDeploymentTransition", reflect.TypeOf((*MockMutableState)(nil).GetDeploymentTransition))
+}
+
 // GetEffectiveDeployment mocks base method.
 func (m *MockMutableState) GetEffectiveDeployment() *deployment.Deployment {
 	m.ctrl.T.Helper()
@@ -2152,20 +2166,6 @@ func (m *MockMutableState) GetNexusCompletion(ctx context.Context) (nexus.Operat
 func (mr *MockMutableStateMockRecorder) GetNexusCompletion(ctx any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetNexusCompletion", reflect.TypeOf((*MockMutableState)(nil).GetNexusCompletion), ctx)
-}
-
-// GetOngoingDeploymentTransition mocks base method.
-func (m *MockMutableState) GetOngoingDeploymentTransition() *workflow.DeploymentTransition {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetOngoingDeploymentTransition")
-	ret0, _ := ret[0].(*workflow.DeploymentTransition)
-	return ret0
-}
-
-// GetOngoingDeploymentTransition indicates an expected call of GetOngoingDeploymentTransition.
-func (mr *MockMutableStateMockRecorder) GetOngoingDeploymentTransition() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetOngoingDeploymentTransition", reflect.TypeOf((*MockMutableState)(nil).GetOngoingDeploymentTransition))
 }
 
 // GetPendingActivityInfos mocks base method.

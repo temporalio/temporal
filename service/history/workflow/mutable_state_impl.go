@@ -6733,9 +6733,12 @@ func (ms *MutableStateImpl) disablingTransitionHistory() bool {
 }
 
 // GetEffectiveDeployment returns the effective deployment in the following order:
-// DeploymentTransition.Deployment takes precedence over VersioningOverride.Deployment,
-// over Deployment. VersioningOverride.Deployment is only considered if the override
-// behavior is PINNED.
+//  1. DeploymentTransition.Deployment: this is returned when the wf is transitioning to a new
+//     deployment
+//  2. VersioningOverride.Deployment: this is returned when user has set a PINNED override at wf
+//     start time, or later via UpdateWorkflowExecutionOptions.
+//  3. Deployment: this is returned when there is no transition and not override (most common case).
+//     Deployment is set based on the worker-sent deployment in the latest WFT completion.
 func (ms *MutableStateImpl) GetEffectiveDeployment() *deploymentpb.Deployment {
 	versioningInfo := ms.GetExecutionInfo().GetVersioningInfo()
 	if versioningInfo == nil {
@@ -6749,12 +6752,16 @@ func (ms *MutableStateImpl) GetEffectiveDeployment() *deploymentpb.Deployment {
 	return versioningInfo.GetDeployment()
 }
 
-func (ms *MutableStateImpl) GetOngoingDeploymentTransition() *workflowpb.DeploymentTransition {
+func (ms *MutableStateImpl) GetDeploymentTransition() *workflowpb.DeploymentTransition {
 	return ms.GetExecutionInfo().GetVersioningInfo().GetDeploymentTransition()
 }
 
-// GetEffectiveVersioningBehavior returns the effective versioning behavior.
-// VersioningOverride.Behavior, if set, takes precedence over Behavior.
+// GetEffectiveVersioningBehavior returns the effective versioning behavior in the following
+// order:
+//  1. VersioningOverride.Behavior: this is returned when user has set a behavior override
+//     at wf start time, or later via UpdateWorkflowExecutionOptions.
+//  2. Behavior: this is returned when there is no override (most common case). Behavior is
+//     set based on the worker-sent deployment in the latest WFT completion.
 func (ms *MutableStateImpl) GetEffectiveVersioningBehavior() enumspb.VersioningBehavior {
 	versioningInfo := ms.GetExecutionInfo().GetVersioningInfo()
 	if versioningInfo == nil {

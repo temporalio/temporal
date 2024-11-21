@@ -117,7 +117,7 @@ func Invoke(
 			// TODO (shahab): support independent deployments
 			activityInitiatedRedirect := mutableState.StartDeploymentTransition(deployment)
 
-			if mutableState.GetOngoingDeploymentTransition() != nil {
+			if mutableState.GetDeploymentTransition() != nil {
 				// Can't start activity during a redirect. We reject this request so Matching drops
 				// the task. The activity will be rescheduled when the redirect completes/fails.
 

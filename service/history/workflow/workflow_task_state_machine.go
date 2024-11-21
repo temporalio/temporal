@@ -710,7 +710,7 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskCompletedEvent(
 
 	var completedDeployment *deploymentpb.Deployment
 	var completedBehavior enumspb.VersioningBehavior
-	if redirectInfo := m.ms.GetOngoingDeploymentTransition(); redirectInfo != nil {
+	if redirectInfo := m.ms.GetDeploymentTransition(); redirectInfo != nil {
 		completedDeployment = redirectInfo.GetDeployment()
 		completedBehavior = request.GetVersioningBehavior()
 	}

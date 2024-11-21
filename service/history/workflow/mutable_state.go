@@ -404,14 +404,21 @@ type (
 		// If state transition history is empty (e.g. when disabled or fresh mutable state), returns 0.
 		NextTransitionCount() int64
 		// GetEffectiveDeployment returns the effective deployment in the following order:
-		// DeploymentTransition.Deployment takes precedence over VersioningOverride.Deployment,
-		// over Deployment. VersioningOverride.Deployment is only considered if the override
-		// behavior is PINNED.
+		//  1. DeploymentTransition.Deployment: this is returned when the wf is transitioning to a new
+		//     deployment
+		//  2. VersioningOverride.Deployment: this is returned when user has set a PINNED override at wf
+		//     start time, or later via UpdateWorkflowExecutionOptions.
+		//  3. Deployment: this is returned when there is no transition and not override (most common case).
+		//     Deployment is set based on the worker-sent deployment in the latest WFT completion.
 		GetEffectiveDeployment() *deploymentpb.Deployment
-		// GetEffectiveVersioningBehavior returns the effective versioning behavior.
-		// VersioningOverride.Behavior, if set, takes precedence over Behavior.
+		// GetEffectiveVersioningBehavior returns the effective versioning behavior in the following
+		// order:
+		//  1. VersioningOverride.Behavior: this is returned when user has set a behavior override
+		//     at wf start time, or later via UpdateWorkflowExecutionOptions.
+		//  2. Behavior: this is returned when there is no override (most common case). Behavior is
+		//     set based on the worker-sent deployment in the latest WFT completion.
 		GetEffectiveVersioningBehavior() enumspb.VersioningBehavior
-		GetOngoingDeploymentTransition() *workflowpb.DeploymentTransition
+		GetDeploymentTransition() *workflowpb.DeploymentTransition
 		// StartDeploymentTransition starts a transition to the given deployment. Returns true
 		// if the requested transition is started. Starting a new transition replaces possible
 		// existing ongoing transition without rescheduling activities. If the workflow is
