@@ -121,8 +121,7 @@ message AddWorkflowTaskRequest {
     // for TaskVersionDirective, which is unversioned.)
     temporal.server.api.taskqueue.v1.TaskVersionDirective version_directive = 10;
     temporal.server.api.taskqueue.v1.TaskForwardInfo forward_info = 11;
-    // Presence of this field means the workflow is versioned. Not set for tasks added to sticky
-    // queues.
+    // Presence of this field means the workflow is versioned.
     temporal.server.api.deployment.v1.WorkflowVersioningInfo workflow_versioning_info = 12;
 }
 
@@ -146,8 +145,7 @@ message AddActivityTaskRequest {
     // for TaskVersionDirective, which is unversioned.)
     temporal.server.api.taskqueue.v1.TaskVersionDirective version_directive = 10;
     temporal.server.api.taskqueue.v1.TaskForwardInfo forward_info = 11;
-    // Presence of this field means the workflow is versioned. Not set for tasks added to sticky
-    // queues.
+    // Presence of this field means the workflow is versioned.
     temporal.server.api.deployment.v1.WorkflowVersioningInfo workflow_versioning_info = 12;
 }
 
@@ -165,8 +163,7 @@ message QueryWorkflowRequest {
     // for TaskVersionDirective, which is unversioned.)
     temporal.server.api.taskqueue.v1.TaskVersionDirective version_directive = 5;
     temporal.server.api.taskqueue.v1.TaskForwardInfo forward_info = 6;
-    // Presence of this field means the workflow is versioned. Not set for tasks added to sticky
-    // queues.
+    // Presence of this field means the workflow is versioned.
     temporal.server.api.deployment.v1.WorkflowVersioningInfo workflow_versioning_info = 7;
 }
 
