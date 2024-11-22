@@ -57,7 +57,7 @@ func Invoke(
 
 	redirectCount := 0
 	for {
-		resetRunID, err := recordchildworkflowcompleted(ctx, request, shardContext, workflowConsistencyChecker)
+		resetRunID, err := recordChildWorkflowCompleted(ctx, request, shardContext, workflowConsistencyChecker)
 		if errors.Is(err, consts.ErrWorkflowCompleted) {
 			if resetRunID != "" && redirectCount < maxResetRedirectCount {
 				redirectCount++
@@ -72,9 +72,9 @@ func Invoke(
 	}
 }
 
-// recordchildworkflowcompleted records the child completed event in the parent history if the parent is still running.
+// recordChildWorkflowCompleted records the child completed event in the parent history if the parent is still running.
 // It returns consts.ErrWorkflowCompleted if the parent is already completed. Additionally a reset run ID is returned if the parent was completed due to a reset operation.
-func recordchildworkflowcompleted(
+func recordChildWorkflowCompleted(
 	ctx context.Context,
 	request *historyservice.RecordChildExecutionCompletedRequest,
 	shardContext shard.Context,
