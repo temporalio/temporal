@@ -26,7 +26,6 @@ package deployment
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/pborman/uuid"
 	commonpb "go.temporal.io/api/common/v1"
@@ -261,10 +260,10 @@ func (d *DeploymentClientImpl) GetCurrentDeployment(ctx context.Context, namespa
 	})
 
 	if err != nil {
-		return nil, fmt.Errorf("error while DescribeWorkflowExecution for workflow: %s", workflowID)
+		return nil, err
 	}
 	if resp == nil {
-		return nil, fmt.Errorf("empty workflow execution for Deployment Series workflow with workflow ID: %s", workflowID)
+		return nil, err
 	}
 
 	// Decode value from memo

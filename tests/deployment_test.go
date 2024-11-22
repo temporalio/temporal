@@ -26,6 +26,7 @@ package tests
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
@@ -33,11 +34,12 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
-	"go.temporal.io/api/deployment/v1"
+	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/service/worker/deployment"
 	"go.temporal.io/server/tests/testcore"
 )
 
@@ -93,14 +95,34 @@ func (d *DeploymentSuite) SetupTest() {
 func (d *DeploymentSuite) TearDownTest() {
 }
 
+// startDeploymentWorkflows calls PollWorkflowTaskQueue to start deployment related workflows
+func (d *DeploymentSuite) startDeploymentWorkflows(ctx context.Context, taskQueue *taskqueuepb.TaskQueue,
+	deployment *deploymentpb.Deployment, errChan chan error) {
+	_, err := d.FrontendClient().PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
+		Namespace: d.Namespace(),
+		TaskQueue: taskQueue,
+		Identity:  "random",
+		WorkerVersionCapabilities: &commonpb.WorkerVersionCapabilities{
+			UseVersioning:        true,
+			BuildId:              deployment.BuildId,
+			DeploymentSeriesName: deployment.SeriesName,
+		},
+	})
+	select {
+	case <-ctx.Done():
+		return
+	case errChan <- err:
+	}
+}
+
 func (d *DeploymentSuite) TestDescribeDeployment_RegisterTaskQueue() {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
 	defer cancel()
 
-	seriesName := "test"
-	buildID := "bgt"
+	seriesName := testcore.RandomizeStr("my-series")
+	buildID := testcore.RandomizeStr("bgt")
 	taskQueue := &taskqueuepb.TaskQueue{Name: "deployment-test", Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
-	workerDeployment := &deployment.Deployment{
+	workerDeployment := &deploymentpb.Deployment{
 		SeriesName: seriesName,
 		BuildId:    buildID,
 	}
@@ -111,21 +133,7 @@ func (d *DeploymentSuite) TestDescribeDeployment_RegisterTaskQueue() {
 
 	// Starting a deployment workflow
 	go func() {
-		_, err := d.FrontendClient().PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
-			Namespace: d.Namespace(),
-			TaskQueue: taskQueue,
-			Identity:  "random",
-			WorkerVersionCapabilities: &commonpb.WorkerVersionCapabilities{
-				UseVersioning:        true,
-				BuildId:              buildID,
-				DeploymentSeriesName: seriesName,
-			},
-		})
-		select {
-		case <-ctx.Done():
-			return
-		case errChan <- err:
-		}
+		d.startDeploymentWorkflows(ctx, taskQueue, workerDeployment, errChan)
 	}()
 
 	// Querying the Deployment
@@ -143,14 +151,16 @@ func (d *DeploymentSuite) TestDescribeDeployment_RegisterTaskQueue() {
 		a.Equal(seriesName, resp.DeploymentInfo.Deployment.SeriesName)
 		a.Equal(buildID, resp.DeploymentInfo.Deployment.BuildId)
 
+		a.Equal(numberOfDeployments, len(resp.DeploymentInfo.TaskQueueInfos))
 		if len(resp.DeploymentInfo.TaskQueueInfos) < numberOfDeployments {
 			return
 		}
-		a.Equal(numberOfDeployments, len(resp.DeploymentInfo.TaskQueueInfos))
 		a.Equal(taskQueue.Name, resp.DeploymentInfo.TaskQueueInfos[0].Name)
 		a.Equal(false, resp.DeploymentInfo.IsCurrent)
+		// todo (Shivam) - please add a check for current time
 	}, time.Second*5, time.Millisecond*200)
 
+	// todo (Shivam) - cancel if pollers are still awake
 	<-ctx.Done()
 	select {
 	case err := <-errChan:
@@ -163,45 +173,56 @@ func (d *DeploymentSuite) TestGetCurrentDeployment_NoCurrentDeployment() {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
 	defer cancel()
 
-	seriesName := "test"
-	buildID := "bgt"
+	seriesName := testcore.RandomizeStr("my-series")
+	buildID := testcore.RandomizeStr("bgt")
 	taskQueue := &taskqueuepb.TaskQueue{Name: "deployment-test", Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
+	workerDeployment := &deploymentpb.Deployment{
+		SeriesName: seriesName,
+		BuildId:    buildID,
+	}
 
-	// Starting a deployment workflow
 	errChan := make(chan error)
 	defer close(errChan)
 
+	workflowID := deployment.GenerateDeploymentSeriesWorkflowID(seriesName)
+	query := fmt.Sprintf("WorkflowId = '%s'", workflowID)
+	notFoundErr := fmt.Sprintf("workflow not found for ID: %s", workflowID)
+
+	// GetCurrentDeployment on a non-existing series returns an error
+	resp, err := d.FrontendClient().GetCurrentDeployment(ctx, &workflowservice.GetCurrentDeploymentRequest{
+		Namespace:  d.Namespace(),
+		SeriesName: seriesName,
+	})
+	d.Error(err)
+	d.Equal(err.Error(), notFoundErr)
+	d.Nil(resp)
+
+	// Starting a deployment workflow
 	go func() {
-		_, err := d.FrontendClient().PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
-			Namespace: d.Namespace(),
-			TaskQueue: taskQueue,
-			Identity:  "random",
-			WorkerVersionCapabilities: &commonpb.WorkerVersionCapabilities{
-				UseVersioning:        true,
-				BuildId:              buildID,
-				DeploymentSeriesName: seriesName,
-			},
-		})
-		select {
-		case <-ctx.Done():
-			return
-		case errChan <- err:
-		}
+		d.startDeploymentWorkflows(ctx, taskQueue, workerDeployment, errChan)
 	}()
 
-	// Querying the Deployment
+	// Verify the existence of a deployment series
 	d.EventuallyWithT(func(t *assert.CollectT) {
 		a := assert.New(t)
 
-		resp, err := d.FrontendClient().GetCurrentDeployment(ctx, &workflowservice.GetCurrentDeploymentRequest{
-			Namespace:  d.Namespace(),
-			SeriesName: seriesName,
+		resp, err := d.FrontendClient().CountWorkflowExecutions(ctx, &workflowservice.CountWorkflowExecutionsRequest{
+			Namespace: d.Namespace(),
+			Query:     query,
 		})
 		a.NoError(err)
-		a.Nil(resp.GetCurrentDeploymentInfo())
-
+		a.Equal(int64(1), resp.GetCount())
 	}, time.Second*5, time.Millisecond*200)
 
+	// Fetch series workflow's current deployment - will be nil since we haven't set it
+	resp, err = d.FrontendClient().GetCurrentDeployment(ctx, &workflowservice.GetCurrentDeploymentRequest{
+		Namespace:  d.Namespace(),
+		SeriesName: seriesName,
+	})
+	d.NoError(err)
+	d.Nil(resp.GetCurrentDeploymentInfo())
+
+	// todo (Shivam) - cancel if pollers are still awake
 	<-ctx.Done()
 	select {
 	case err := <-errChan:
@@ -210,34 +231,27 @@ func (d *DeploymentSuite) TestGetCurrentDeployment_NoCurrentDeployment() {
 	}
 }
 
+// verifyListDeployments makes a ListDeployment request and verifies that all the expected deployments eventually appear in the list.
+// Empty `seriesFilter` will list all deployments.
 func (d *DeploymentSuite) listDeployments(seriesName string, buildID string, withSeries bool) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
 	defer cancel()
 
 	// todo (shivam) - fails when seriesName has backslashes
 	taskQueue := &taskqueuepb.TaskQueue{Name: "deployment-test", Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
+	workerDeployment := &deploymentpb.Deployment{
+		SeriesName: seriesName,
+		BuildId:    buildID,
+	}
 	numberOfDeployments := 1
 
 	// Starting a deployment workflow
 	errChan := make(chan error)
 	defer close(errChan)
 
+	// Starting a deployment workflow
 	go func() {
-		_, err := d.FrontendClient().PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
-			Namespace: d.Namespace(),
-			TaskQueue: taskQueue,
-			Identity:  "random",
-			WorkerVersionCapabilities: &commonpb.WorkerVersionCapabilities{
-				UseVersioning:        true,
-				BuildId:              buildID,
-				DeploymentSeriesName: seriesName,
-			},
-		})
-		select {
-		case <-ctx.Done():
-			return
-		case errChan <- err:
-		}
+		d.startDeploymentWorkflows(ctx, taskQueue, workerDeployment, errChan)
 	}()
 
 	request := &workflowservice.ListDeploymentsRequest{
@@ -277,15 +291,15 @@ func (d *DeploymentSuite) listDeployments(seriesName string, buildID string, wit
 	default:
 	}
 }
-func (d *DeploymentSuite) TestListDeployments_WithSeriesName() {
-	seriesName := "abc"
-	buildID := "xyz"
+func (d *DeploymentSuite) TestListDeployments_WithSeriesNameFilter() {
+	seriesName := testcore.RandomizeStr("my-series")
+	buildID := testcore.RandomizeStr("bgt")
 	d.listDeployments(seriesName, buildID, true)
 }
 
-func (d *DeploymentSuite) TestListDeployments_WithoutSeriesName() {
-	seriesName := "d"
-	buildID := "e"
+func (d *DeploymentSuite) TestListDeployments_WithoutSeriesNameFilter() {
+	seriesName := testcore.RandomizeStr("my-series")
+	buildID := testcore.RandomizeStr("bgt")
 	d.listDeployments(seriesName, buildID, true)
 }
 
