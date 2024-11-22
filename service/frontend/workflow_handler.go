@@ -3165,7 +3165,7 @@ func (wh *WorkflowHandler) GetCurrentDeployment(ctx context.Context, request *wo
 
 	describeDeploymentResponse, err := wh.deploymentStoreClient.GetCurrentDeployment(ctx, namespaceEntry, request.SeriesName)
 	if err != nil {
-		wh.logger.Error("Error during GetCurrentDeployment", tag.Error(err))
+		wh.logger.Error("Error during GetEffectiveDeployment", tag.Error(err))
 		return nil, err
 	}
 
