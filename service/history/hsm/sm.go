@@ -47,8 +47,7 @@ type StateMachine[S comparable] interface {
 
 // TransitionOutput is output produced for a single transition.
 type TransitionOutput struct {
-	Tasks    []Task
-	IsDelete bool
+	Tasks []Task
 }
 
 // Transition represents a state machine transition for a machine of type SM with state S and event E.

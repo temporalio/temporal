@@ -27,6 +27,7 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
+	"slices"
 
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
@@ -91,7 +92,7 @@ type cachedMachine struct {
 
 type OperationLog struct {
 	// All transitions, including regular state changes and deletions
-	Transitions []TransitionOutputWithCount
+	TransitionsByPath map[string][]TransitionOutputWithCount
 	// Track topmost deleted paths to filter outputs efficiently
 	DeletedPaths [][]Key
 }
@@ -177,7 +178,9 @@ func NewRoot(
 			children:   make(map[Key]*Node),
 		},
 		backend: backend,
-		opLog:   &OperationLog{},
+		opLog: &OperationLog{
+			TransitionsByPath: make(map[string][]TransitionOutputWithCount),
+		},
 	}, nil
 }
 
@@ -197,7 +200,6 @@ func (n *Node) Dirty() bool {
 type TransitionOutputWithCount struct {
 	TransitionOutput
 	TransitionCount int64
-	NodePath        []Key
 }
 type PathAndOutputs struct {
 	Path    []Key
@@ -220,25 +222,17 @@ func (n *Node) Outputs() []PathAndOutputs {
 		return nil
 	}
 
-	// Group transitions by their path
-	pathToTransitions := make(map[string][]TransitionOutputWithCount)
-	for _, t := range root.opLog.Transitions {
-		// Only include transitions under current node's path
-		if isPathPrefix(currentPath, t.NodePath) {
-			pathKey := fmt.Sprint(t.NodePath)
-			pathToTransitions[pathKey] = append(pathToTransitions[pathKey], t)
-		}
+	var paos []PathAndOutputs
+	pathKey := fmt.Sprint(currentPath)
+	if transitions := root.opLog.TransitionsByPath[pathKey]; len(transitions) > 0 {
+		paos = append(paos, PathAndOutputs{
+			Path:    currentPath,
+			Outputs: transitions,
+		})
 	}
 
-	// Convert to PathAndOutputs
-	var paos []PathAndOutputs
-	for _, transitions := range pathToTransitions {
-		if len(transitions) > 0 {
-			paos = append(paos, PathAndOutputs{
-				Path:    transitions[0].NodePath, // all transitions in group have same path
-				Outputs: transitions,
-			})
-		}
+	for _, child := range n.cache.children {
+		paos = append(paos, child.Outputs()...)
 	}
 
 	return paos
@@ -250,8 +244,8 @@ func (n *Node) Outputs() []PathAndOutputs {
 func (n *Node) ClearTransactionState() {
 	root := n.root()
 	if root.opLog != nil {
-		root.opLog.Transitions = nil
 		root.opLog.DeletedPaths = nil
+		root.opLog.TransitionsByPath = make(map[string][]TransitionOutputWithCount)
 	}
 
 	n.cache.dirty = false
@@ -402,14 +396,6 @@ func (n *Node) DeleteChild(key Key) error {
 
 	// Record deletion
 	root := n.root()
-	root.opLog.Transitions = append(root.opLog.Transitions, TransitionOutputWithCount{
-		TransitionOutput: TransitionOutput{
-			IsDelete: true,
-		},
-		TransitionCount: n.backend.NextTransitionCount(),
-		NodePath:        child.Path(),
-	})
-	// Track the deleted path
 	root.opLog.DeletedPaths = append(root.opLog.DeletedPaths, child.Path())
 
 	// Remove from persistence and cache
@@ -596,10 +582,10 @@ func MachineTransition[T any](n *Node, transitionFn func(T) (TransitionOutput, e
 	n.cache.dirty = true
 
 	root := n.root()
-	root.opLog.Transitions = append(root.opLog.Transitions, TransitionOutputWithCount{
+	pathKey := fmt.Sprint(n.Path())
+	root.opLog.TransitionsByPath[pathKey] = append(root.opLog.TransitionsByPath[pathKey], TransitionOutputWithCount{
 		TransitionOutput: output,
 		TransitionCount:  n.persistence.TransitionCount,
-		NodePath:         n.Path(),
 	})
 
 	return nil
@@ -718,10 +704,6 @@ func isPathPrefix(prefix, path []Key) bool {
 	if len(prefix) > len(path) {
 		return false
 	}
-	for i := range prefix {
-		if prefix[i] != path[i] {
-			return false
-		}
-	}
-	return true
+
+	return slices.Equal(prefix, path[:len(prefix)])
 }
