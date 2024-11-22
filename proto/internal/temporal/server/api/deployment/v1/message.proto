@@ -27,6 +27,7 @@ package temporal.server.api.deployment.v1;
 option go_package = "go.temporal.io/server/api/deployment/v1;deployment";
 
 import "temporal/api/enums/v1/task_queue.proto";
+import "temporal/api/enums/v1/workflow.proto";
 import "google/protobuf/timestamp.proto";
 import "temporal/api/deployment/v1/message.proto";
 import "temporal/api/common/v1/message.proto";
@@ -36,8 +37,8 @@ message DeploymentLocalState {
     map<string, TaskQueueFamilyInfo> task_queue_families = 2;
     bool is_current = 3;
     google.protobuf.Timestamp create_time = 4;
-    map<string, temporal.api.common.v1.Payload> metadata = 5; 
-    
+    map<string, temporal.api.common.v1.Payload> metadata = 5;
+
     message TaskQueueFamilyInfo {
         // key: taskQueueType, val: TaskQueueInfo
         map<int32,TaskQueueInfo> task_queues = 1;
@@ -74,4 +75,20 @@ message DescribeResponse {
 message DeploymentWorkflowMemo {
     google.protobuf.Timestamp create_time = 1;
     bool is_current_deployment = 2;
+}
+
+// Used in internal APIs to pass versioning info about a versioned workflow execution.
+message WorkflowVersioningInfo {
+    temporal.api.enums.v1.VersioningBehavior behavior = 1;
+    temporal.api.deployment.v1.Deployment deployment = 2;
+}
+
+// Information about task redirect done by Matching.
+message TaskRedirectInfo {
+    // Deployment sent in WorkflowVersioningInfo when the task was scheduled.
+    temporal.api.deployment.v1.Deployment schedule_time_workflow_deployment = 1;
+    // Whether the workflow deployment that Matching received when the task was scheduled contains
+    // the task's task queue. Used by History to determine if the task redirect should affect the
+    // workflow.
+    temporal.api.deployment.v1.Deployment schedule_time_workflow_deployment_contains_task_queue = 2;
 }
