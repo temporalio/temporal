@@ -4253,21 +4253,53 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionOptionsUpdatedEvent(event *his
 	override := event.GetWorkflowExecutionOptionsUpdatedEventAttributes().GetVersioningOverride()
 	previousCurrentDeployment := ms.GetEffectiveDeployment()
 	previousEffectiveVersioningBehavior := ms.GetEffectiveVersioningBehavior()
-	ms.GetExecutionInfo().GetVersioningInfo().GetBehavior()
+	if ms.GetExecutionInfo().GetVersioningInfo() == nil {
+		ms.GetExecutionInfo().VersioningInfo = &workflowpb.WorkflowExecutionVersioningInfo{}
+	}
 	ms.GetExecutionInfo().VersioningInfo.VersioningOverride = override
+
+	// If effective deployment or behavior change, we need to reschedule any pending tasks, because History will reject
+	// the task's start request if the task is being started by a poller that is not from the workflow's effective
+	// deployment according to History. Therefore, it is important for matching to match tasks with the correct pollers.
+	// Even if the effective deployment does not change, we still need to reschedule tasks into the appropriate
+	// default/unpinned queue or the pinned queue, because the two queues will be handled differently if the task queue's
+	// Current Deployment changes between now and when the task is started.
+	//
+	// We choose to let any started WFT that is running on the old deployment finish running, instead of forcing it to fail.
 	if !proto.Equal(ms.GetEffectiveDeployment(), previousCurrentDeployment) ||
-		// If behavior changes from pinned --> unpinned with the same effective deployment, we still need to reschedule
-		// pending tasks into the default/unpinned queue, so that if the current deployment changes before the tasks
-		// start, the unpinned queue will handle that correctly and the start task will succeed.
 		ms.GetEffectiveVersioningBehavior() != previousEffectiveVersioningBehavior {
-		// In the case of deployment change, I'm choosing to let any started WFT that is running on the old deployment finish running.
-		// The argument for failing a started WFT is if the user wants to reschedule it on the new deployment, but that is an optimization
-		// that can come later, especially since it's possible the user would prefer to not fail it.
+		// If there is an ongoing transition, we remove it so that tasks from this workflow (including the pending WFT
+		// that initiated the transition) can run on our override deployment as soon as possible.
+		//
+		// We only have to think about the case where the workflow is unpinned, since if the workflow is pinned, no
+		// transition will start.
+		//
+		// If we did NOT remove the transition, we would have to keep the pending WFT scheduled per the transition's
+		// reschedule, so that when the task is started it can run on the transition's target deployment, complete,
+		// and thereby complete the transition. If there is anything wrong with the transition's target deployment,
+		// the transition could hang due to the task being stuck, or the transition could fail if the WFT fails.
+		// Instead of waiting for that, we remove the transition and all is well.
+		//
+		// Once the override is set, any attempts to start a transition will be rejected.
+		//
+		// It is possible for there to be an ongoing transition and an override that both result in the same effective
+		// behavior and effective deployment. In that case, we would not hit the code path to remove the transition or
+		// reschedule the WFT. For this to happen, the existing behavior and the override would both have to be unpinned.
+		// If we don't remove the transition or reschedule pending tasks, the outstanding WFT on the transition's
+		// target queue will be started on the transition's target deployment, it will likely succeed, since the override
+		// also points to that deployment, so the transition will complete successfully.
+		// If we removed the transition, the pending WFT would try to start on the transition's target deployment, but
+		// the effective deployment in history would not match, so the task would be rejected and rescheduled.
+		// So we should keep the transition to avoid an extra reschedule cycle.
+		ms.executionInfo.GetVersioningInfo().DeploymentTransition = nil
 		// TODO (carly) part 2: if safe mode, do replay test on new deployment if deployment changed, if fail, revert changes and abort
 		ms.ClearStickyTaskQueue()
 		// TODO (carly): confirm this is the right way to reschedule pending WFT. Is there only one WFT?
 		if ms.HasPendingWorkflowTask() && !ms.HasStartedWorkflowTask() &&
-			// does not support them.
+			// Speculative WFT is directly (without transfer task) added to matching when scheduled.
+			// It is protected by timeout on both normal and sticky task queues.
+			// If there is no poller for previous deployment, it will time out,
+			// and will be rescheduled as normal WFT.
 			ms.GetPendingWorkflowTask().Type != enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE {
 			// sticky queue was just cleared, so the following call only generates
 			// a WorkflowTask, not a WorkflowTaskTimeoutTask.
@@ -4276,9 +4308,8 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionOptionsUpdatedEvent(event *his
 				return err
 			}
 		}
-		return ms.reschedulePendingActivities()
 	}
-	return nil
+	return ms.reschedulePendingActivities()
 }
 
 func (ms *MutableStateImpl) ApplyWorkflowExecutionTerminatedEvent(

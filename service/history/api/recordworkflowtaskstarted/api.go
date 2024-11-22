@@ -132,7 +132,7 @@ func Invoke(
 			// Assuming a workflow is running on a sticky task queue by a workerA.
 			// After workerA is dead for more than 10s, matching will return StickyWorkerUnavailable error when history
 			// tries to push a new workflow task. When history sees that error, it will fall back to push the task to
-			// its original normal task queue without clear its stickiness to avoid an extra persistence write.
+			// its original normal task queue without clearing its stickiness to avoid an extra persistence write.
 			// We will clear the stickiness here when that task is delivered to another worker polling from normal queue.
 			// The stickiness info is used by frontend to decide if it should send down partial history or full history.
 			// Sending down partial history will cost the worker an extra fetch to server for the full history.
@@ -149,6 +149,18 @@ func Invoke(
 				// req.PollRequest.TaskQueue.GetName() may include partition, but we only check when sticky is enabled,
 				// and sticky queue never has partition, so it does not matter.
 				mutableState.ClearStickyTaskQueue()
+			}
+
+			// TODO (carly): Confirm that this handles obsolete task starts correctly
+			// Versioning reschedules tasks when there are changes to effective deployment or behavior, which
+			// can result in obsolete dispatch requests when the task that was originally scheduled tries to
+			// start after it has already been rescheduled.
+			// Even if the current task queue is not sticky, we want to reject these start requests.
+			pollerVersionCaps := req.GetPollRequest().GetWorkerVersionCapabilities()
+			if mutableState.GetEffectiveDeployment() != nil &&
+				(mutableState.GetEffectiveDeployment().GetSeriesName() != pollerVersionCaps.GetDeploymentSeriesName() ||
+					mutableState.GetEffectiveDeployment().GetBuildId() != pollerVersionCaps.GetBuildId()) {
+				return nil, serviceerrors.NewObsoleteDispatchBuildId("obsolete deployment queue")
 			}
 
 			deployment := worker_versioning.DeploymentFromCapabilities(req.PollRequest.WorkerVersionCapabilities)
