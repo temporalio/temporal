@@ -167,6 +167,6 @@ func Test_Recordchildworkflowcompleted_WithInfiniteForwards(t *testing.T) {
 	consistencyChecker.EXPECT().GetWorkflowLeaseWithConsistencyCheck(anyArg, anyArg, anyArg, oldParentWFKey, anyArg).Return(oldParentWFLease, nil).Times(maxResetRedirectCount + 1)
 
 	resp, err := Invoke(ctx, request, shardContext, consistencyChecker)
-	require.ErrorIs(t, err, consts.ErrWorkflowCompleted)
+	require.ErrorIs(t, err, consts.ErrResetRedirectLimitReached)
 	require.Nil(t, resp)
 }
