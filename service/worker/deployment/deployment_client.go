@@ -272,7 +272,8 @@ func (d *DeploymentClientImpl) GetDeploymentReachability(
 
 	reachability, lastUpdateTime, err := getDeploymentReachability(
 		ctx,
-		namespaceEntry,
+		namespaceEntry.ID().String(),
+		namespaceEntry.Name().String(),
 		seriesName,
 		buildID,
 		currDeploymentBuildId,

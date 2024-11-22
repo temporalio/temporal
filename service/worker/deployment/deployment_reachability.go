@@ -47,8 +47,7 @@ const (
 
 func getDeploymentReachability(
 	ctx context.Context,
-	namespaceEntry *namespace.Namespace,
-	seriesName, buildID, currentBuildID string,
+	nsId, nsName, seriesName, buildID, currentBuildID string,
 	currentBuildIDValidTime time.Time,
 	cache reachabilityCache,
 ) (enumspb.DeploymentReachability, time.Time, error) {
@@ -58,11 +57,7 @@ func getDeploymentReachability(
 	}
 
 	// 2a. Reachable by open pinned workflows
-	countRequest := visibility_manager.CountWorkflowExecutionsRequest{
-		NamespaceID: namespaceEntry.ID(),
-		Namespace:   namespaceEntry.Name(),
-		Query:       makeDeploymentQuery(seriesName, buildID, true),
-	}
+	countRequest := makeCountRequest(nsId, nsName, seriesName, buildID, true)
 	exists, lastUpdateTime, err := cache.Get(ctx, countRequest, true)
 	if err != nil {
 		return enumspb.DEPLOYMENT_REACHABILITY_UNSPECIFIED, time.Time{}, err
@@ -72,11 +67,7 @@ func getDeploymentReachability(
 	}
 
 	// 3. Reachable by closed pinned workflows
-	countRequest = visibility_manager.CountWorkflowExecutionsRequest{
-		NamespaceID: namespaceEntry.ID(),
-		Namespace:   namespaceEntry.Name(),
-		Query:       makeDeploymentQuery(seriesName, buildID, false),
-	}
+	countRequest = makeCountRequest(nsId, nsName, seriesName, buildID, false)
 	exists, lastUpdateTime, err = cache.Get(ctx, countRequest, false)
 	if err != nil {
 		return enumspb.DEPLOYMENT_REACHABILITY_UNSPECIFIED, time.Time{}, err
@@ -89,21 +80,31 @@ func getDeploymentReachability(
 	return enumspb.DEPLOYMENT_REACHABILITY_UNREACHABLE, time.Now(), nil
 }
 
+func makeCountRequest(
+	namespaceId, namespaceName, seriesName, buildId string, open bool,
+) visibility_manager.CountWorkflowExecutionsRequest {
+	return visibility_manager.CountWorkflowExecutionsRequest{
+		NamespaceID: namespace.ID(namespaceId),
+		Namespace:   namespace.Name(namespaceName),
+		Query:       makeDeploymentQuery(seriesName, buildId, open),
+	}
+}
+
 func makeDeploymentQuery(seriesName, buildID string, open bool) string {
 	var statusFilter string
-	deploymentFilter := sqlparser.String(sqlparser.NewStrVal([]byte(
+	deploymentFilter := "= " + sqlparser.String(sqlparser.NewStrVal([]byte(
 		worker_versioning.ReachabilityBuildIdSearchAttribute(enumspb.VERSIONING_BEHAVIOR_PINNED, &deploymentpb.Deployment{
 			SeriesName: seriesName,
 			BuildId:    buildID,
 		}),
-	))) + " IN"
+	)))
 	if open {
-		statusFilter = `= "Running"`
+		statusFilter = "= 'Running'"
 	} else {
-		statusFilter = `!= "Running"`
+		statusFilter = "!= 'Running'"
 	}
 	// todo (carly): handle null / unversioned
-	return fmt.Sprintf("%s %s AND %s %s", deploymentFilter, searchattribute.BuildIds, searchattribute.ExecutionStatus, statusFilter)
+	return fmt.Sprintf("%s %s AND %s %s", searchattribute.BuildIds, deploymentFilter, searchattribute.ExecutionStatus, statusFilter)
 }
 
 /*
