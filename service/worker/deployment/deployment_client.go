@@ -264,7 +264,7 @@ func (d *DeploymentClientImpl) GetDeploymentReachability(
 	}
 	var currDeploymentBuildId string
 	if currentDeploymentInfo != nil && currentDeploymentInfo.GetDeployment() != nil {
-		currDeploymentBuildId = currentDeployment.GetDeployment().GetBuildId()
+		currDeploymentBuildId = currentDeploymentInfo.GetDeployment().GetBuildId()
 	}
 
 	reachability, lastUpdateTime, err := getDeploymentReachability(
