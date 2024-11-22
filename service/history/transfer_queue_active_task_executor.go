@@ -216,13 +216,14 @@ func (t *transferQueueActiveTaskExecutor) processActivityTask(
 
 	timeout := timestamp.DurationValue(ai.ScheduleToStartTimeout)
 	directive := MakeDirectiveForActivityTask(mutableState, ai)
+	wfVersioningInfo := workflow.GetWorkflowVersioningInfoMatchingTask(mutableState)
 
 	// NOTE: do not access anything related mutable state after this lock release
 	// release the context lock since we no longer need mutable state and
 	// the rest of logic is making RPC call, which takes time.
 	release(nil)
 
-	return t.pushActivity(ctx, task, timeout, directive, workflow.TransactionPolicyActive)
+	return t.pushActivity(ctx, task, timeout, directive, wfVersioningInfo, workflow.TransactionPolicyActive)
 }
 
 func (t *transferQueueActiveTaskExecutor) processWorkflowTask(
@@ -265,6 +266,8 @@ func (t *transferQueueActiveTaskExecutor) processWorkflowTask(
 
 	directive := MakeDirectiveForWorkflowTask(mutableState)
 
+	wfVersioningInfo := workflow.GetWorkflowVersioningInfoMatchingTask(mutableState)
+
 	// NOTE: Do not access mutableState after this lock is released.
 	// It is important to release the workflow lock here, because pushWorkflowTask will call matching,
 	// which will call history back (with RecordWorkflowTaskStarted), and it will try to get workflow lock again.
@@ -276,6 +279,7 @@ func (t *transferQueueActiveTaskExecutor) processWorkflowTask(
 		taskQueue,
 		scheduleToStartTimeout.AsDuration(),
 		directive,
+		wfVersioningInfo,
 		workflow.TransactionPolicyActive,
 	)
 
@@ -298,6 +302,7 @@ func (t *transferQueueActiveTaskExecutor) processWorkflowTask(
 			taskQueue,
 			scheduleToStartTimeout.AsDuration(),
 			directive,
+			nil,
 			workflow.TransactionPolicyActive,
 		)
 	}

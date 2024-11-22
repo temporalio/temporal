@@ -153,6 +153,7 @@ func (fwdr *Forwarder) ForwardTask(ctx context.Context, task *internalTask) erro
 				Clock:                  task.event.Data.GetClock(),
 				ScheduleToStartTimeout: expirationDuration,
 				ForwardInfo:            fwdr.getForwardInfo(task),
+				WorkflowVersioningInfo: task.event.Data.GetWorkflowVersioningInfo(),
 			},
 		)
 	case enumspb.TASK_QUEUE_TYPE_ACTIVITY:
@@ -168,6 +169,7 @@ func (fwdr *Forwarder) ForwardTask(ctx context.Context, task *internalTask) erro
 				Clock:                  task.event.Data.GetClock(),
 				ScheduleToStartTimeout: expirationDuration,
 				ForwardInfo:            fwdr.getForwardInfo(task),
+				WorkflowVersioningInfo: task.event.Data.GetWorkflowVersioningInfo(),
 			},
 		)
 	default:
@@ -212,9 +214,10 @@ func (fwdr *Forwarder) ForwardQueryTask(
 			Name: target.RpcName(),
 			Kind: fwdr.partition.Kind(),
 		},
-		QueryRequest:     task.query.request.QueryRequest,
-		VersionDirective: task.query.request.VersionDirective,
-		ForwardInfo:      fwdr.getForwardInfo(task),
+		QueryRequest:           task.query.request.QueryRequest,
+		VersionDirective:       task.query.request.VersionDirective,
+		ForwardInfo:            fwdr.getForwardInfo(task),
+		WorkflowVersioningInfo: task.query.request.GetWorkflowVersioningInfo(),
 	})
 
 	return resp, fwdr.handleErr(err)

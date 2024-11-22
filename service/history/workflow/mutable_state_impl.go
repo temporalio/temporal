@@ -6733,23 +6733,16 @@ func (ms *MutableStateImpl) disablingTransitionHistory() bool {
 }
 
 // GetEffectiveDeployment returns the effective deployment in the following order:
-//  1. DeploymentTransition.Deployment: this is returned when the wf is transitioning to a new
-//     deployment
-//  2. VersioningOverride.Deployment: this is returned when user has set a PINNED override at wf
-//     start time, or later via UpdateWorkflowExecutionOptions.
-//  3. Deployment: this is returned when there is no transition and not override (most common case).
-//     Deployment is set based on the worker-sent deployment in the latest WFT completion.
+//  1. DeploymentTransition.Deployment: this is returned when the wf is transitioning to a
+//     new deployment
+//  2. VersioningOverride.Deployment: this is returned when user has set a PINNED override
+//     at wf start time, or later via UpdateWorkflowExecutionOptions.
+//  3. Deployment: this is returned when there is no transition and no override (the most
+//     common case). Deployment is set based on the worker-sent deployment in the latest WFT
+//     completion. Exception: if Deployment is set but the workflow's effective behavior is
+//     UNSPECIFIED, it means the workflow is unversioned, so effective deployment will be nil.
 func (ms *MutableStateImpl) GetEffectiveDeployment() *deploymentpb.Deployment {
-	versioningInfo := ms.GetExecutionInfo().GetVersioningInfo()
-	if versioningInfo == nil {
-		return nil
-	} else if transition := versioningInfo.GetDeploymentTransition(); transition != nil {
-		return transition.GetDeployment()
-	} else if override := versioningInfo.GetVersioningOverride(); override != nil &&
-		override.GetBehavior() == enumspb.VERSIONING_BEHAVIOR_PINNED {
-		return override.GetDeployment()
-	}
-	return versioningInfo.GetDeployment()
+	return GetEffectiveDeployment(ms.GetExecutionInfo().GetVersioningInfo())
 }
 
 func (ms *MutableStateImpl) GetDeploymentTransition() *workflowpb.DeploymentTransition {
@@ -6763,13 +6756,7 @@ func (ms *MutableStateImpl) GetDeploymentTransition() *workflowpb.DeploymentTran
 //  2. Behavior: this is returned when there is no override (most common case). Behavior is
 //     set based on the worker-sent deployment in the latest WFT completion.
 func (ms *MutableStateImpl) GetEffectiveVersioningBehavior() enumspb.VersioningBehavior {
-	versioningInfo := ms.GetExecutionInfo().GetVersioningInfo()
-	if versioningInfo == nil {
-		return enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED
-	} else if override := versioningInfo.GetVersioningOverride(); override != nil {
-		return override.GetBehavior()
-	}
-	return versioningInfo.GetBehavior()
+	return GetEffectiveVersioningBehavior(ms.GetExecutionInfo().GetVersioningInfo())
 }
 
 // StartDeploymentTransition starts a transition to the given deployment. Returns true
