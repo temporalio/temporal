@@ -30,6 +30,7 @@ import (
 
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
+	"go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/namespace"
@@ -127,28 +128,11 @@ func recordChildWorkflowCompleted(
 			if !isRunning {
 				return nil, consts.ErrChildExecutionNotFound
 			}
-			if ci.StartedEventId == common.EmptyEventID {
-				// note we already checked if startedEventID is empty (in consistency predicate)
-				// and reloaded mutable state, so if startedEventID is still missing, we need to
-				// record a started event before recording completion event.
-				initiatedEvent, err := mutableState.GetChildExecutionInitiatedEvent(ctx, parentInitiatedID)
-				if err != nil {
-					return nil, consts.ErrChildExecutionNotFound
-				}
-				initiatedAttr := initiatedEvent.GetStartChildWorkflowExecutionInitiatedEventAttributes()
-				// note values used here should not matter because the child info will be deleted
-				// when the response is recorded, so it should be fine e.g. that ci.Clock is nil
-				_, err = mutableState.AddChildWorkflowExecutionStartedEvent(
-					request.GetChildExecution(),
-					initiatedAttr.WorkflowType,
-					initiatedEvent.EventId,
-					initiatedAttr.Header,
-					ci.Clock,
-				)
-				if err != nil {
-					return nil, err
-				}
-			}
+
+			// note we already checked if startedEventID is empty (in consistency predicate)
+			// and reloaded mutable state, so if startedEventID is still missing, we need to
+			// record a started event before recording completion event.
+			recordStartedEventIfMissing(ctx, mutableState, request, ci)
 
 			childExecution := request.GetChildExecution()
 			if ci.GetStartedWorkflowId() != childExecution.GetWorkflowId() {
@@ -187,4 +171,33 @@ func recordChildWorkflowCompleted(
 		workflowConsistencyChecker,
 	)
 	return resetRunID, err
+}
+
+func recordStartedEventIfMissing(
+	ctx context.Context,
+	mutableState workflow.MutableState,
+	request *historyservice.RecordChildExecutionCompletedRequest,
+	ci *persistence.ChildExecutionInfo,
+) error {
+	parentInitiatedID := request.ParentInitiatedId
+	if ci.StartedEventId == common.EmptyEventID {
+		initiatedEvent, err := mutableState.GetChildExecutionInitiatedEvent(ctx, parentInitiatedID)
+		if err != nil {
+			return consts.ErrChildExecutionNotFound
+		}
+		initiatedAttr := initiatedEvent.GetStartChildWorkflowExecutionInitiatedEventAttributes()
+		// note values used here should not matter because the child info will be deleted
+		// when the response is recorded, so it should be fine e.g. that ci.Clock is nil
+		_, err = mutableState.AddChildWorkflowExecutionStartedEvent(
+			request.GetChildExecution(),
+			initiatedAttr.WorkflowType,
+			initiatedEvent.EventId,
+			initiatedAttr.Header,
+			ci.Clock,
+		)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }
