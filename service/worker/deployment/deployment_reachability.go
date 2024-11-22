@@ -64,7 +64,7 @@ func getDeploymentReachability(
 	namespaceEntry *namespace.Namespace,
 	seriesName, buildID, currentBuildID string,
 	currentBuildIDValidTime time.Time,
-	cache ReachabilityCache,
+	cache reachabilityCache,
 ) (enumspb.DeploymentReachability, time.Time, error) {
 	// 1a. Reachable by new unpinned workflows
 	if buildID == currentBuildID { // add if buildID is ramping, once we have ramp
@@ -77,12 +77,12 @@ func getDeploymentReachability(
 		Namespace:   namespaceEntry.Name(),
 		Query:       makeDeploymentQuery(seriesName, buildID, true),
 	}
-	exists, _, err := cache.Get(ctx, countRequest, true) // TODO (carly): make cache.Get return time of validity
+	exists, lastUpdateTime, err := cache.Get(ctx, countRequest, true)
 	if err != nil {
 		return enumspb.DEPLOYMENT_REACHABILITY_UNSPECIFIED, time.Time{}, err
 	}
 	if exists {
-		return enumspb.DEPLOYMENT_REACHABILITY_REACHABLE, time.Time{}, nil
+		return enumspb.DEPLOYMENT_REACHABILITY_REACHABLE, lastUpdateTime, nil
 	}
 
 	// 3. Reachable by closed pinned workflows
@@ -91,12 +91,12 @@ func getDeploymentReachability(
 		Namespace:   namespaceEntry.Name(),
 		Query:       makeDeploymentQuery(seriesName, buildID, false),
 	}
-	exists, _, err = cache.Get(ctx, countRequest, false) // TODO (carly): make cache.Get return time of validity
+	exists, lastUpdateTime, err = cache.Get(ctx, countRequest, false)
 	if err != nil {
 		return enumspb.DEPLOYMENT_REACHABILITY_UNSPECIFIED, time.Time{}, err
 	}
 	if exists {
-		return enumspb.DEPLOYMENT_REACHABILITY_CLOSED_WORKFLOWS_ONLY, time.Time{}, nil
+		return enumspb.DEPLOYMENT_REACHABILITY_CLOSED_WORKFLOWS_ONLY, lastUpdateTime, nil
 	}
 
 	// 4. Unreachable
@@ -123,20 +123,25 @@ func makeDeploymentQuery(seriesName, buildID string, open bool) string {
 In-memory Reachability Cache of Visibility Queries and Results
 */
 
-type ReachabilityCache struct {
+type reachabilityCache struct {
 	openWFCache    cache.Cache
 	closedWFCache  cache.Cache // these are separate due to allow for different TTL
 	metricsHandler metrics.Handler
 	visibilityMgr  visibility_manager.VisibilityManager
 }
 
-func NewReachabilityCache(
+type reachabilityCacheValue struct {
+	exists         bool
+	lastUpdateTime time.Time
+}
+
+func newReachabilityCache(
 	handler metrics.Handler,
 	visibilityMgr visibility_manager.VisibilityManager,
 	reachabilityCacheOpenWFExecutionTTL,
 	reachabilityCacheClosedWFExecutionTTL time.Duration,
-) ReachabilityCache {
-	return ReachabilityCache{
+) reachabilityCache {
+	return reachabilityCache{
 		openWFCache:    cache.New(reachabilityCacheMaxSize, &cache.Options{TTL: reachabilityCacheOpenWFExecutionTTL}),
 		closedWFCache:  cache.New(reachabilityCacheMaxSize, &cache.Options{TTL: reachabilityCacheClosedWFExecutionTTL}),
 		metricsHandler: handler,
@@ -144,8 +149,12 @@ func NewReachabilityCache(
 	}
 }
 
-// Get retrieves the Workflow Count existence value based on the query-string key.
-func (c *ReachabilityCache) Get(ctx context.Context, countRequest visibility_manager.CountWorkflowExecutionsRequest, open bool) (exists, hit bool, err error) {
+// Get retrieves the Workflow Count existence value and update time based on the query-string key.
+func (c *reachabilityCache) Get(
+	ctx context.Context,
+	countRequest visibility_manager.CountWorkflowExecutionsRequest,
+	open bool,
+) (exists bool, lastUpdateTime time.Time, err error) {
 	// try cache
 	var result interface{}
 	if open {
@@ -154,28 +163,29 @@ func (c *ReachabilityCache) Get(ctx context.Context, countRequest visibility_man
 		result = c.closedWFCache.Get(countRequest)
 	}
 	if result != nil {
-		// there's no reason that the cache would ever contain a non-bool, but just in case, treat non-bool as a miss
-		exists, ok := result.(bool)
+		// there's no reason that the cache would ever contain a non-reachabilityCacheValue, but just in case, treat non-bool as a miss
+		val, ok := result.(reachabilityCacheValue)
 		if ok {
-			return exists, true, nil
+			return val.exists, val.lastUpdateTime, nil
 		}
 	}
 
 	// cache was cold, ask visibility and put result in cache
 	countResponse, err := c.visibilityMgr.CountWorkflowExecutions(ctx, &countRequest)
 	if err != nil {
-		return false, false, err
+		return false, time.Time{}, err
 	}
 	exists = countResponse.Count > 0
-	c.Put(countRequest, exists, open)
-	return exists, false, nil
+	lastUpdateTime = time.Now()
+	c.Put(countRequest, reachabilityCacheValue{exists, lastUpdateTime}, open)
+	return exists, lastUpdateTime, nil
 }
 
 // Put adds an element to the cache.
-func (c *ReachabilityCache) Put(countRequest visibility_manager.CountWorkflowExecutionsRequest, exists, open bool) {
+func (c *reachabilityCache) Put(key visibility_manager.CountWorkflowExecutionsRequest, val reachabilityCacheValue, open bool) {
 	if open {
-		c.openWFCache.Put(countRequest, exists)
+		c.openWFCache.Put(key, val)
 	} else {
-		c.closedWFCache.Put(countRequest, exists)
+		c.closedWFCache.Put(key, val)
 	}
 }

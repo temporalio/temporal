@@ -95,7 +95,7 @@ type DeploymentClientImpl struct {
 	MaxIDLengthLimit      dynamicconfig.IntPropertyFn
 	VisibilityMaxPageSize dynamicconfig.IntPropertyFnWithNamespaceFilter
 
-	reachabilityCache *ReachabilityCache
+	reachabilityCache *reachabilityCache
 }
 
 func (d *DeploymentClientImpl) RegisterTaskQueueWorker(
@@ -265,7 +265,7 @@ func (d *DeploymentClientImpl) GetDeploymentReachability(
 	}
 
 	if d.reachabilityCache == nil {
-		cache := NewReachabilityCache(
+		cache := newReachabilityCache(
 			metrics.NoopMetricsHandler,
 			d.VisibilityManager,
 			reachabilityCacheOpenWFsTTL,   // TODO (carly) use dc (ie. config.ReachabilityCacheOpenWFsTTL)
