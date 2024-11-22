@@ -258,9 +258,13 @@ func (d *DeploymentClientImpl) GetDeploymentReachability(
 	if err != nil {
 		return nil, err
 	}
-	currentDeployment, err := d.GetCurrentDeployment(ctx, namespaceEntry, seriesName)
+	currentDeploymentInfo, err := d.GetCurrentDeployment(ctx, namespaceEntry, seriesName)
 	if err != nil {
 		return nil, err
+	}
+	var currDeploymentBuildId string
+	if currentDeploymentInfo != nil && currentDeploymentInfo.GetDeployment() != nil {
+		currDeploymentBuildId = currentDeployment.GetDeployment().GetBuildId()
 	}
 
 	reachability, lastUpdateTime, err := getDeploymentReachability(
@@ -268,7 +272,7 @@ func (d *DeploymentClientImpl) GetDeploymentReachability(
 		namespaceEntry,
 		seriesName,
 		buildID,
-		currentDeployment.GetDeployment().GetBuildId(),
+		currDeploymentBuildId,
 		time.Now(), // approx time that currentDeployment was confirmed valid
 		d.reachabilityCache,
 	)
