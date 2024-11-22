@@ -4275,7 +4275,7 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionOptionsUpdatedEvent(event *his
 		// transition will start.
 		//
 		// If we did NOT remove the transition, we would have to keep the pending WFT scheduled per the transition's
-		// reschedule, so that when the task is started it can run on the transition's target deployment, complete,
+		// deployment, so that when the task is started it can run on the transition's target deployment, complete,
 		// and thereby complete the transition. If there is anything wrong with the transition's target deployment,
 		// the transition could hang due to the task being stuck, or the transition could fail if the WFT fails.
 		// Instead of waiting for that, we remove the transition and all is well.
