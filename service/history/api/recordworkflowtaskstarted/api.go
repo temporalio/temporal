@@ -151,18 +151,6 @@ func Invoke(
 				mutableState.ClearStickyTaskQueue()
 			}
 
-			// TODO (carly): Confirm that this handles obsolete task starts correctly
-			// Versioning reschedules tasks when there are changes to effective deployment or behavior, which
-			// can result in obsolete dispatch requests when the task that was originally scheduled tries to
-			// start after it has already been rescheduled.
-			// Even if the current task queue is not sticky, we want to reject these start requests.
-			pollerVersionCaps := req.GetPollRequest().GetWorkerVersionCapabilities()
-			if mutableState.GetEffectiveDeployment() != nil &&
-				(mutableState.GetEffectiveDeployment().GetSeriesName() != pollerVersionCaps.GetDeploymentSeriesName() ||
-					mutableState.GetEffectiveDeployment().GetBuildId() != pollerVersionCaps.GetBuildId()) {
-				return nil, serviceerrors.NewObsoleteDispatchBuildId("obsolete deployment queue")
-			}
-
 			deployment := worker_versioning.DeploymentFromCapabilities(req.PollRequest.WorkerVersionCapabilities)
 			wfDeployment := mutableState.GetEffectiveDeployment()
 			if !deployment.Equal(wfDeployment) {
