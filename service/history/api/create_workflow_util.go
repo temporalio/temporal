@@ -58,6 +58,7 @@ type (
 		RunID            string
 		LastWriteVersion int64
 	}
+	CreateLeaseForWorkflow func(shard.Context, workflow.MutableState) (WorkflowLease, error)
 )
 
 func NewWorkflowWithSignal(
@@ -67,7 +68,7 @@ func NewWorkflowWithSignal(
 	runID string,
 	startRequest *historyservice.StartWorkflowExecutionRequest,
 	signalWithStartRequest *workflowservice.SignalWithStartWorkflowExecutionRequest,
-) (WorkflowLease, error) {
+) (workflow.MutableState, error) {
 	newMutableState, err := CreateMutableState(
 		shard,
 		namespaceEntry,
@@ -163,18 +164,28 @@ func NewWorkflowWithSignal(
 		}
 	}
 
-	newWorkflowContext := workflow.NewContext(
-		shard.GetConfig(),
-		definition.NewWorkflowKey(
-			namespaceEntry.ID().String(),
-			workflowID,
-			runID,
+	return newMutableState, nil
+}
+
+func NewWorkflowLeaseAndContext(
+	shardCtx shard.Context,
+	ms workflow.MutableState,
+) (WorkflowLease, error) {
+	return NewWorkflowLease(
+		workflow.NewContext(
+			shardCtx.GetConfig(),
+			definition.NewWorkflowKey(
+				ms.GetNamespaceEntry().ID().String(),
+				ms.GetExecutionInfo().WorkflowId,
+				ms.GetExecutionState().RunId,
+			),
+			shardCtx.GetLogger(),
+			shardCtx.GetThrottledLogger(),
+			shardCtx.GetMetricsHandler(),
 		),
-		shard.GetLogger(),
-		shard.GetThrottledLogger(),
-		shard.GetMetricsHandler(),
-	)
-	return NewWorkflowLease(newWorkflowContext, wcache.NoopReleaseFn, newMutableState), nil
+		wcache.NoopReleaseFn,
+		ms,
+	), nil
 }
 
 func CreateMutableState(

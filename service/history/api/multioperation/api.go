@@ -49,6 +49,10 @@ var (
 	multiOpAbortedErr = serviceerror.NewMultiOperationAborted("Operation was aborted.")
 )
 
+type (
+	updateError struct{ error }
+)
+
 func Invoke(
 	ctx context.Context,
 	req *historyservice.ExecuteMultiOperationRequest,
@@ -62,21 +66,6 @@ func Invoke(
 		return nil, serviceerror.NewInternal("expected exactly 2 operations")
 	}
 
-	startReq := req.Operations[0].GetStartWorkflow()
-	if startReq == nil {
-		return nil, serviceerror.NewInternal("expected first operation to be Start Workflow")
-	}
-	starter, err := startworkflow.NewStarter(
-		shardContext,
-		workflowConsistencyChecker,
-		tokenSerializer,
-		visibilityManager,
-		startReq,
-	)
-	if err != nil {
-		return nil, newMultiOpError(err, multiOpAbortedErr)
-	}
-
 	updateReq := req.Operations[1].GetUpdateWorkflow()
 	if updateReq == nil {
 		return nil, serviceerror.NewInternal("expected second operation to be Update Workflow")
@@ -87,6 +76,58 @@ func Invoke(
 		matchingClient,
 		updateReq,
 	)
+
+	startReq := req.Operations[0].GetStartWorkflow()
+	if startReq == nil {
+		return nil, serviceerror.NewInternal("expected first operation to be Start Workflow")
+	}
+	starter, err := startworkflow.NewStarter(
+		shardContext,
+		workflowConsistencyChecker,
+		tokenSerializer,
+		visibilityManager,
+		startReq,
+		func(
+			shardContext shard.Context,
+			ms workflow.MutableState,
+		) (api.WorkflowLease, error) {
+			// Create a new *locked* workflow context. This is important since without the lock, task processing
+			// would try to modify the mutable state concurrently. Once the Starter completes, it will release the lock.
+			//
+			// The cache write needs to happen *before* the persistence write because a failed cache write means an
+			// early error response that aborts the entire MultiOperation request. And it allows for a simple retry, too -
+			// whereas if the cache write happened and failed *after* a successful persistence write,
+			// it would leave behind a started workflow that will never receive the update.
+			workflowContext, releaseFunc, err := workflowConsistencyChecker.GetWorkflowCache().GetOrCreateWorkflowExecution(
+				ctx,
+				shardContext,
+				ms.GetNamespaceEntry().ID(),
+				&commonpb.WorkflowExecution{WorkflowId: ms.GetExecutionInfo().WorkflowId, RunId: ms.GetExecutionState().RunId},
+				locks.PriorityHigh,
+			)
+			if err != nil {
+				return nil, err
+			}
+			workflowLease := api.NewWorkflowLease(workflowContext, releaseFunc, ms)
+
+			// If MutableState isn't set here, the next request for it will load it from the database
+			// - but receive a new instance that won't have the in-memory Update registry.
+			workflowLease.GetContext().(*workflow.ContextImpl).MutableState = ms
+
+			// Add the Update.
+			// NOTE: UpdateWorkflowAction return value is ignored since ther Starter will always create a WFT.
+			updateReg := workflowLease.GetContext().UpdateRegistry(ctx, nil)
+			if _, err := updater.ApplyRequest(ctx, updateReg, ms); err != nil {
+				// Wrapping the error so Update and Start errors can be distinguished later.
+				return nil, updateError{err}
+			}
+
+			return workflowLease, nil
+		},
+	)
+	if err != nil {
+		return nil, newMultiOpError(err, multiOpAbortedErr)
+	}
 
 	// For workflow id conflict policy terminate-existing, always attempt a start
 	// since that works when the workflow is already running *and* when it's not running.
@@ -218,49 +259,11 @@ func startAndUpdateWorkflow(
 	starter *startworkflow.Starter,
 	updater *updateworkflow.Updater,
 ) (*historyservice.ExecuteMultiOperationResponse, startworkflow.StartOutcome, error) {
-	var updateErr error
-
-	// hook is invoked before workflow is persisted
-	applyUpdateFunc := func(lease api.WorkflowLease) error {
-		// workflowCtx is the response from the cache write: either it's the context from the currently held lease
-		// OR the already-existing, previously cached context (this happens when the workflow is being terminated;
-		// it re-uses the same context).
-		var workflowCtx workflow.Context
-
-		// It is crucial to put the Update registry (inside the workflow context) into the cache, as it needs to
-		// exist on the Matching call back to History when delivering a workflow task to a worker.
-		//
-		// The cache write needs to happen *before* the persistence write because a failed cache write means an
-		// early error response that aborts the entire MultiOperation request. And it allows for a simple retry, too -
-		// whereas if the cache write happened and failed *after* a successful persistence write,
-		// it would leave behind a started workflow that will never receive the update.
-		ms := lease.GetMutableState()
-		wfContext := lease.GetContext()
-		// if MutableState isn't set, the next request for it will load it from the database
-		// - but receive a new instance that is inconsistent with this one
-		wfContext.(*workflow.ContextImpl).MutableState = ms
-		workflowKey := wfContext.GetWorkflowKey()
-		workflowCtx, updateErr = workflowConsistencyChecker.GetWorkflowCache().Put(
-			shardContext,
-			ms.GetNamespaceEntry().ID(),
-			&commonpb.WorkflowExecution{WorkflowId: workflowKey.WorkflowID, RunId: workflowKey.RunID},
-			wfContext,
-			shardContext.GetMetricsHandler(),
-		)
-		if updateErr == nil {
-			// UpdateWorkflowAction return value is ignored since Start will always create WFT
-			updateReg := workflowCtx.UpdateRegistry(ctx, ms)
-			_, updateErr = updater.ApplyRequest(ctx, updateReg, ms)
-		}
-		return updateErr
-	}
-
-	// start workflow, using the hook to apply the update operation
-	startResp, startOutcome, err := starter.Invoke(ctx, applyUpdateFunc)
+	startResp, startOutcome, err := starter.Invoke(ctx)
 	if err != nil {
 		// an update error occurred
-		if updateErr != nil {
-			return nil, startOutcome, newMultiOpError(multiOpAbortedErr, updateErr)
+		if errors.As(err, &updateError{}) {
+			return nil, startOutcome, newMultiOpError(multiOpAbortedErr, err)
 		}
 
 		// a start error occurred
