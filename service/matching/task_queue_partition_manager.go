@@ -792,7 +792,10 @@ func (pm *taskQueuePartitionManagerImpl) getPhysicalQueuesForAdd(
 		wfDeployment := workflowVersioningInfo.GetDeployment()
 
 		if pm.partition.Kind() == enumspb.TASK_QUEUE_KIND_STICKY {
-			return nil, nil, nil, serviceerror.NewInvalidArgument("workflow_versioning_info is not expected to be set for sticky queues")
+			// TODO (shahab): reject sticky task if this deployment is not the current deployment
+			// TODO (shahab): we can verify the passed deployment matches the last poller's
+			// deployment
+			return pm.defaultQueue, pm.defaultQueue, userDataChanged, nil
 		}
 
 		switch wfBehavior {

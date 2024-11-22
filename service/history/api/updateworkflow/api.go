@@ -34,6 +34,7 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	updatepb "go.temporal.io/api/update/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	deploymentpb "go.temporal.io/server/api/deployment/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
@@ -65,9 +66,10 @@ type Updater struct {
 	req                        *historyservice.UpdateWorkflowExecutionRequest
 	namespaceID                namespace.ID
 
-	wfKey     definition.WorkflowKey
-	upd       *update.Update
-	directive *taskqueuespb.TaskVersionDirective
+	wfKey                  definition.WorkflowKey
+	upd                    *update.Update
+	directive              *taskqueuespb.TaskVersionDirective
+	workflowVersioningInfo *deploymentpb.WorkflowVersioningInfo
 
 	// Variables referencing mutable state data.
 	// WARNING: any references to mutable state data *have to* be copied
@@ -216,6 +218,7 @@ func (u *Updater) ApplyRequest(
 		ms.GetMostRecentWorkerVersionStamp(),
 		ms.HasCompletedAnyWorkflowTask(),
 	)
+	u.workflowVersioningInfo = workflow.GetWorkflowVersioningInfoMatchingTask(ms)
 
 	return &api.UpdateWorkflowAction{
 		Noop:               true,
@@ -231,7 +234,7 @@ func (u *Updater) OnSuccess(
 		// Speculative WFT was created and needs to be added directly to matching w/o transfer task.
 		// TODO (alex): This code is copied from transferQueueActiveTaskExecutor.processWorkflowTask.
 		//   Helper function needs to be extracted to avoid code duplication.
-		err := u.addWorkflowTaskToMatching(ctx, u.wfKey, u.taskQueue, u.scheduledEventID, u.scheduleToStartTimeout, u.directive)
+		err := u.addWorkflowTaskToMatching(ctx)
 
 		if _, isStickyWorkerUnavailable := err.(*serviceerrors.StickyWorkerUnavailable); isStickyWorkerUnavailable {
 			// If sticky worker is unavailable, switch to original normal task queue.
@@ -239,7 +242,7 @@ func (u *Updater) OnSuccess(
 				Name: u.normalTaskQueueName,
 				Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
 			}
-			err = u.addWorkflowTaskToMatching(ctx, u.wfKey, u.taskQueue, u.scheduledEventID, u.scheduleToStartTimeout, u.directive)
+			err = u.addWorkflowTaskToMatching(ctx)
 		}
 
 		if err != nil {
@@ -277,14 +280,7 @@ func (u *Updater) OnSuccess(
 }
 
 // TODO (alex-update): Consider moving this func to a better place.
-func (u *Updater) addWorkflowTaskToMatching(
-	ctx context.Context,
-	wfKey definition.WorkflowKey,
-	tq *taskqueuepb.TaskQueue,
-	scheduledEventID int64,
-	wtScheduleToStartTimeout time.Duration,
-	directive *taskqueuespb.TaskVersionDirective,
-) error {
+func (u *Updater) addWorkflowTaskToMatching(ctx context.Context) error {
 	clock, err := u.shardCtx.NewVectorClock()
 	if err != nil {
 		return err
@@ -293,14 +289,15 @@ func (u *Updater) addWorkflowTaskToMatching(
 	_, err = u.matchingClient.AddWorkflowTask(ctx, &matchingservice.AddWorkflowTaskRequest{
 		NamespaceId: u.namespaceID.String(),
 		Execution: &commonpb.WorkflowExecution{
-			WorkflowId: wfKey.WorkflowID,
-			RunId:      wfKey.RunID,
+			WorkflowId: u.wfKey.WorkflowID,
+			RunId:      u.wfKey.RunID,
 		},
-		TaskQueue:              tq,
-		ScheduledEventId:       scheduledEventID,
-		ScheduleToStartTimeout: durationpb.New(wtScheduleToStartTimeout),
+		TaskQueue:              u.taskQueue,
+		ScheduledEventId:       u.scheduledEventID,
+		ScheduleToStartTimeout: durationpb.New(u.scheduleToStartTimeout),
 		Clock:                  clock,
-		VersionDirective:       directive,
+		VersionDirective:       u.directive,
+		WorkflowVersioningInfo: u.workflowVersioningInfo,
 	})
 	if err != nil {
 		return err

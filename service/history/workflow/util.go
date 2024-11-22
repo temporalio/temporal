@@ -26,10 +26,12 @@ package workflow
 
 import (
 	commonpb "go.temporal.io/api/common/v1"
+	deploymentspb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 	workflowpb "go.temporal.io/api/workflow/v1"
+	deploymentpb "go.temporal.io/server/api/deployment/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/primitives/timestamp"
@@ -194,4 +196,55 @@ type MutableStateWithEffects struct {
 func (mse MutableStateWithEffects) CanAddEvent() bool {
 	// Event can be added to the history if workflow is still running.
 	return mse.MutableState.IsWorkflowExecutionRunning()
+}
+
+func GetWorkflowVersioningInfoMatchingTask(ms MutableState) *deploymentpb.WorkflowVersioningInfo {
+	effectiveBehavior := ms.GetEffectiveVersioningBehavior()
+	if effectiveBehavior == enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED {
+		// unversioned
+		return nil
+	}
+
+	return &deploymentpb.WorkflowVersioningInfo{
+		Behavior:   effectiveBehavior,
+		Deployment: ms.GetEffectiveDeployment(),
+	}
+}
+
+// GetEffectiveDeployment returns the effective deployment in the following order:
+//  1. DeploymentTransition.Deployment: this is returned when the wf is transitioning to a
+//     new deployment
+//  2. VersioningOverride.Deployment: this is returned when user has set a PINNED override
+//     at wf start time, or later via UpdateWorkflowExecutionOptions.
+//  3. Deployment: this is returned when there is no transition and no override (the most
+//     common case). Deployment is set based on the worker-sent deployment in the latest WFT
+//     completion. Exception: if Deployment is set but the workflow's effective behavior is
+//     UNSPECIFIED, it means the workflow is unversioned, so effective deployment will be nil.
+func GetEffectiveDeployment(versioningInfo *workflowpb.WorkflowExecutionVersioningInfo) *deploymentspb.Deployment {
+	if versioningInfo == nil {
+		return nil
+	} else if transition := versioningInfo.GetDeploymentTransition(); transition != nil {
+		return transition.GetDeployment()
+	} else if override := versioningInfo.GetVersioningOverride(); override != nil &&
+		override.GetBehavior() == enumspb.VERSIONING_BEHAVIOR_PINNED {
+		return override.GetDeployment()
+	} else if GetEffectiveVersioningBehavior(versioningInfo) != enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED {
+		return versioningInfo.GetDeployment()
+	}
+	return nil
+}
+
+// GetEffectiveVersioningBehavior returns the effective versioning behavior in the following
+// order:
+//  1. VersioningOverride.Behavior: this is returned when user has set a behavior override
+//     at wf start time, or later via UpdateWorkflowExecutionOptions.
+//  2. Behavior: this is returned when there is no override (most common case). Behavior is
+//     set based on the worker-sent deployment in the latest WFT completion.
+func GetEffectiveVersioningBehavior(versioningInfo *workflowpb.WorkflowExecutionVersioningInfo) enumspb.VersioningBehavior {
+	if versioningInfo == nil {
+		return enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED
+	} else if override := versioningInfo.GetVersioningOverride(); override != nil {
+		return override.GetBehavior()
+	}
+	return versioningInfo.GetBehavior()
 }

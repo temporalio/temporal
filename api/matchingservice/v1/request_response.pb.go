@@ -585,8 +585,7 @@ type AddWorkflowTaskRequest struct {
 	// for TaskVersionDirective, which is unversioned.)
 	VersionDirective *v18.TaskVersionDirective `protobuf:"bytes,10,opt,name=version_directive,json=versionDirective,proto3" json:"version_directive,omitempty"`
 	ForwardInfo      *v18.TaskForwardInfo      `protobuf:"bytes,11,opt,name=forward_info,json=forwardInfo,proto3" json:"forward_info,omitempty"`
-	// Presence of this field means the workflow is versioned. Not set for tasks added to sticky
-	// queues.
+	// Presence of this field means the workflow is versioned.
 	WorkflowVersioningInfo *v19.WorkflowVersioningInfo `protobuf:"bytes,12,opt,name=workflow_versioning_info,json=workflowVersioningInfo,proto3" json:"workflow_versioning_info,omitempty"`
 }
 
@@ -752,8 +751,7 @@ type AddActivityTaskRequest struct {
 	// for TaskVersionDirective, which is unversioned.)
 	VersionDirective *v18.TaskVersionDirective `protobuf:"bytes,10,opt,name=version_directive,json=versionDirective,proto3" json:"version_directive,omitempty"`
 	ForwardInfo      *v18.TaskForwardInfo      `protobuf:"bytes,11,opt,name=forward_info,json=forwardInfo,proto3" json:"forward_info,omitempty"`
-	// Presence of this field means the workflow is versioned. Not set for tasks added to sticky
-	// queues.
+	// Presence of this field means the workflow is versioned.
 	WorkflowVersioningInfo *v19.WorkflowVersioningInfo `protobuf:"bytes,12,opt,name=workflow_versioning_info,json=workflowVersioningInfo,proto3" json:"workflow_versioning_info,omitempty"`
 }
 
@@ -913,8 +911,7 @@ type QueryWorkflowRequest struct {
 	// for TaskVersionDirective, which is unversioned.)
 	VersionDirective *v18.TaskVersionDirective `protobuf:"bytes,5,opt,name=version_directive,json=versionDirective,proto3" json:"version_directive,omitempty"`
 	ForwardInfo      *v18.TaskForwardInfo      `protobuf:"bytes,6,opt,name=forward_info,json=forwardInfo,proto3" json:"forward_info,omitempty"`
-	// Presence of this field means the workflow is versioned. Not set for tasks added to sticky
-	// queues.
+	// Presence of this field means the workflow is versioned.
 	WorkflowVersioningInfo *v19.WorkflowVersioningInfo `protobuf:"bytes,7,opt,name=workflow_versioning_info,json=workflowVersioningInfo,proto3" json:"workflow_versioning_info,omitempty"`
 }
 

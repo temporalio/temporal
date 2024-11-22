@@ -32,6 +32,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
+	deploymentpb "go.temporal.io/server/api/deployment/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	"go.temporal.io/server/common"
@@ -118,6 +119,7 @@ func (t *transferQueueTaskExecutorBase) pushActivity(
 	task *tasks.ActivityTask,
 	activityScheduleToStartTimeout time.Duration,
 	directive *taskqueuespb.TaskVersionDirective,
+	workflowVersioningInfo *deploymentpb.WorkflowVersioningInfo,
 	transactionPolicy workflow.TransactionPolicy,
 ) error {
 	resp, err := t.matchingRawClient.AddActivityTask(ctx, &matchingservice.AddActivityTaskRequest{
@@ -134,6 +136,7 @@ func (t *transferQueueTaskExecutorBase) pushActivity(
 		ScheduleToStartTimeout: durationpb.New(activityScheduleToStartTimeout),
 		Clock:                  vclock.NewVectorClock(t.shardContext.GetClusterMetadata().GetClusterID(), t.shardContext.GetShardID(), task.TaskID),
 		VersionDirective:       directive,
+		WorkflowVersioningInfo: workflowVersioningInfo,
 	})
 	if _, isNotFound := err.(*serviceerror.NotFound); isNotFound {
 		// NotFound error is not expected for AddTasks calls
@@ -168,6 +171,7 @@ func (t *transferQueueTaskExecutorBase) pushWorkflowTask(
 	taskqueue *taskqueuepb.TaskQueue,
 	workflowTaskScheduleToStartTimeout time.Duration,
 	directive *taskqueuespb.TaskVersionDirective,
+	workflowVersioningInfo *deploymentpb.WorkflowVersioningInfo,
 	transactionPolicy workflow.TransactionPolicy,
 ) error {
 	var sst *durationpb.Duration
@@ -185,6 +189,7 @@ func (t *transferQueueTaskExecutorBase) pushWorkflowTask(
 		ScheduleToStartTimeout: sst,
 		Clock:                  vclock.NewVectorClock(t.shardContext.GetClusterMetadata().GetClusterID(), t.shardContext.GetShardID(), task.TaskID),
 		VersionDirective:       directive,
+		WorkflowVersioningInfo: workflowVersioningInfo,
 	})
 	if _, isNotFound := err.(*serviceerror.NotFound); isNotFound {
 		// NotFound error is not expected for AddTasks calls
