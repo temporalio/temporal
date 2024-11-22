@@ -33,13 +33,13 @@ import (
 	"go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/history/v1"
-	"go.temporal.io/server/api/clock/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/service/history/api"
+	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/ndc"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tests"
@@ -47,6 +47,7 @@ import (
 	"go.uber.org/mock/gomock"
 )
 
+// tests that the child execution completed request is forwarded to the new parent in case of resets.
 func Test_Recordchildworkflowcompleted_WithForwards(t *testing.T) {
 	ctx := context.Background()
 	ctrl := gomock.NewController(t)
@@ -60,22 +61,20 @@ func Test_Recordchildworkflowcompleted_WithForwards(t *testing.T) {
 	oldParentWFKey := definition.NewWorkflowKey(testNamespaceID.String(), paretntWFID, oldParentRunID)
 	newParentWFKey := definition.NewWorkflowKey(testNamespaceID.String(), paretntWFID, newParentRunID)
 	oldParentExecutionInfo := &persistence.WorkflowExecutionInfo{
-		ResetRunId: newParentRunID,
+		ResetRunId: newParentRunID, // link the old parent to the new parent.
 	}
 
+	// The request will be sent to the old parent.
 	request := &historyservice.RecordChildExecutionCompletedRequest{
 		NamespaceId: testNamespaceID.String(),
 		ParentExecution: &common.WorkflowExecution{
 			RunId:      oldParentRunID,
 			WorkflowId: paretntWFID,
 		},
-		ParentInitiatedId: 0,
-		ChildExecution:    &common.WorkflowExecution{WorkflowId: childWFID},
+		ChildExecution: &common.WorkflowExecution{WorkflowId: childWFID},
 		CompletionEvent: &history.HistoryEvent{
 			EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED,
 		},
-		Clock:                  &clock.VectorClock{},
-		ParentInitiatedVersion: 0,
 	}
 	mockRegistery := namespace.NewMockRegistry(ctrl)
 	mockRegistery.EXPECT().GetNamespaceByID(testNamespaceID).Return(&namespace.Namespace{}, nil)
@@ -105,10 +104,10 @@ func Test_Recordchildworkflowcompleted_WithForwards(t *testing.T) {
 	mockWFContext.EXPECT().UpdateWorkflowExecutionAsActive(anyArg, anyArg).Return(nil)
 
 	oldParentWFLease := ndc.NewMockWorkflow(ctrl)
-	oldParentWFLease.EXPECT().GetMutableState().Return(oldParentMutableState).AnyTimes()
+	oldParentWFLease.EXPECT().GetMutableState().Return(oldParentMutableState) // old parent's mutable state is accesses just once.
 	oldParentWFLease.EXPECT().GetReleaseFn().Return(func(_ error) {})
 	newParentWFLease := ndc.NewMockWorkflow(ctrl)
-	newParentWFLease.EXPECT().GetMutableState().Return(newParentMutableState).AnyTimes()
+	newParentWFLease.EXPECT().GetMutableState().Return(newParentMutableState).AnyTimes() // new parent's mutable state would be accessed many times.
 	newParentWFLease.EXPECT().GetReleaseFn().Return(func(_ error) {})
 	newParentWFLease.EXPECT().GetContext().Return(mockWFContext)
 
@@ -119,4 +118,55 @@ func Test_Recordchildworkflowcompleted_WithForwards(t *testing.T) {
 	resp, err := Invoke(ctx, request, shard, consistencyChecker)
 	require.NoError(t, err)
 	require.NotNil(t, resp)
+	require.Equal(t, newParentRunID, request.ParentExecution.RunId) // the request should be modified to point to the new parent.
+}
+
+// tests that we break out of the loop after max redirect attempts.
+func Test_Recordchildworkflowcompleted_WithInfiniteForwards(t *testing.T) {
+	ctx := context.Background()
+	ctrl := gomock.NewController(t)
+	anyArg := gomock.Any()
+
+	testNamespaceID := tests.NamespaceID
+	childWFID := uuid.NewString()
+	paretntWFID := uuid.NewString()
+	oldParentRunID := uuid.NewString()
+	oldParentWFKey := definition.NewWorkflowKey(testNamespaceID.String(), paretntWFID, oldParentRunID)
+	oldParentExecutionInfo := &persistence.WorkflowExecutionInfo{
+		ResetRunId: oldParentRunID, // link to self causing an infinite loop.
+	}
+
+	request := &historyservice.RecordChildExecutionCompletedRequest{
+		NamespaceId: testNamespaceID.String(),
+		ParentExecution: &common.WorkflowExecution{
+			RunId:      oldParentRunID,
+			WorkflowId: paretntWFID,
+		},
+		ChildExecution: &common.WorkflowExecution{WorkflowId: childWFID},
+		CompletionEvent: &history.HistoryEvent{
+			EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED,
+		},
+	}
+	mockRegistery := namespace.NewMockRegistry(ctrl)
+	mockRegistery.EXPECT().GetNamespaceByID(testNamespaceID).Return(&namespace.Namespace{}, nil)
+	mockClusterMetadata := cluster.NewMockMetadata(ctrl)
+	mockClusterMetadata.EXPECT().GetCurrentClusterName().Return("")
+	shard := shard.NewMockContext(ctrl)
+	shard.EXPECT().GetNamespaceRegistry().Return(mockRegistery)
+	shard.EXPECT().GetClusterMetadata().Return(mockClusterMetadata)
+
+	oldParentMutableState := workflow.NewMockMutableState(ctrl)
+	oldParentMutableState.EXPECT().IsWorkflowExecutionRunning().Return(false).Times(maxResetRedirectCount + 1)
+	oldParentMutableState.EXPECT().GetExecutionInfo().Return(oldParentExecutionInfo).Times(maxResetRedirectCount + 1)
+
+	oldParentWFLease := ndc.NewMockWorkflow(ctrl)
+	oldParentWFLease.EXPECT().GetMutableState().Return(oldParentMutableState).Times(maxResetRedirectCount + 1)
+	oldParentWFLease.EXPECT().GetReleaseFn().Return(func(_ error) {}).Times(maxResetRedirectCount + 1)
+
+	consistencyChecker := api.NewMockWorkflowConsistencyChecker(ctrl)
+	consistencyChecker.EXPECT().GetWorkflowLeaseWithConsistencyCheck(anyArg, anyArg, anyArg, oldParentWFKey, anyArg).Return(oldParentWFLease, nil).Times(maxResetRedirectCount + 1)
+
+	resp, err := Invoke(ctx, request, shard, consistencyChecker)
+	require.ErrorIs(t, err, consts.ErrWorkflowCompleted)
+	require.Nil(t, resp)
 }
