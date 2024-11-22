@@ -113,14 +113,14 @@ func makeDeploymentQuery(seriesName, buildID string, open bool) string {
 			SeriesName: seriesName,
 			BuildId:    buildID,
 		}),
-	)))
+	))) + " IN"
 	if open {
 		statusFilter = `= "Running"`
 	} else {
 		statusFilter = `!= "Running"`
 	}
 	// todo (carly): handle null / unversioned
-	return fmt.Sprintf("%s = %s AND %s %s", searchattribute.BuildIds, deploymentFilter, searchattribute.ExecutionStatus, statusFilter)
+	return fmt.Sprintf("%s %s AND %s %s", deploymentFilter, searchattribute.BuildIds, searchattribute.ExecutionStatus, statusFilter)
 }
 
 /*

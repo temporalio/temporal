@@ -151,7 +151,7 @@ func DeploymentToString(deployment *deploymentpb.Deployment) string {
 	if deployment == nil {
 		return "UNVERSIONED"
 	}
-	return deployment.SeriesName + ":" + deployment.GetBuildId()
+	return deployment.GetSeriesName() + ":" + deployment.GetBuildId()
 }
 
 // MakeDirectiveForWorkflowTask returns a versioning directive based on the following parameters:

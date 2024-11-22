@@ -102,6 +102,12 @@ func DeploymentStoreClientProvider(historyClient historyservice.HistoryServiceCl
 		VisibilityManager:     visibilityManager,
 		MaxIDLengthLimit:      dynamicconfig.MaxIDLengthLimit.Get(dc),
 		VisibilityMaxPageSize: dynamicconfig.FrontendVisibilityMaxPageSize.Get(dc),
+		reachabilityCache: newReachabilityCache(
+			metrics.NoopMetricsHandler,
+			visibilityManager,
+			reachabilityCacheOpenWFsTTL,   // TODO (carly) use dc (ie. config.ReachabilityCacheOpenWFsTTL)
+			reachabilityCacheClosedWFsTTL, // TODO (carly) use dc (ie. config.ReachabilityCacheClosedWFsTTL)
+		),
 	}
 }
 

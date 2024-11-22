@@ -27,7 +27,6 @@ package deployment
 import (
 	"context"
 	"fmt"
-	"go.temporal.io/server/common/metrics"
 	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
@@ -95,7 +94,7 @@ type DeploymentClientImpl struct {
 	MaxIDLengthLimit      dynamicconfig.IntPropertyFn
 	VisibilityMaxPageSize dynamicconfig.IntPropertyFnWithNamespaceFilter
 
-	reachabilityCache *reachabilityCache
+	reachabilityCache reachabilityCache
 }
 
 func (d *DeploymentClientImpl) RegisterTaskQueueWorker(
@@ -264,16 +263,6 @@ func (d *DeploymentClientImpl) GetDeploymentReachability(
 		return nil, err
 	}
 
-	if d.reachabilityCache == nil {
-		cache := newReachabilityCache(
-			metrics.NoopMetricsHandler,
-			d.VisibilityManager,
-			reachabilityCacheOpenWFsTTL,   // TODO (carly) use dc (ie. config.ReachabilityCacheOpenWFsTTL)
-			reachabilityCacheClosedWFsTTL, // TODO (carly) use dc (ie. config.ReachabilityCacheClosedWFsTTL)
-		)
-		d.reachabilityCache = &cache
-	}
-
 	reachability, lastUpdateTime, err := getDeploymentReachability(
 		ctx,
 		namespaceEntry,
@@ -281,7 +270,7 @@ func (d *DeploymentClientImpl) GetDeploymentReachability(
 		buildID,
 		currentDeployment.GetDeployment().GetBuildId(),
 		time.Now(), // approx time that currentDeployment was confirmed valid
-		*d.reachabilityCache,
+		d.reachabilityCache,
 	)
 
 	return &workflowservice.GetDeploymentReachabilityResponse{
