@@ -613,7 +613,7 @@ func (s *WorkflowTaskCompletedHandlerSuite) createSentUpdate(tv *testvars.TestVa
 	s.NoError(err)
 
 	// 2. Create update.
-	upd, alreadyExisted, err := wfContext.UpdateRegistry(ctx, nil).FindOrCreate(ctx, tv.UpdateID(updateID))
+	upd, alreadyExisted, err := wfContext.UpdateRegistry(ctx).FindOrCreate(ctx, tv.UpdateID(updateID))
 	s.False(alreadyExisted)
 	s.NoError(err)
 
