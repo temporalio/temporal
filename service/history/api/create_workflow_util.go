@@ -58,7 +58,7 @@ type (
 		RunID            string
 		LastWriteVersion int64
 	}
-	CreateLeaseForWorkflow func(shard.Context, workflow.MutableState) (WorkflowLease, error)
+	CreateLeaseFunc func(shard.Context, workflow.MutableState) (WorkflowLease, error)
 )
 
 func NewWorkflowWithSignal(
@@ -167,6 +167,7 @@ func NewWorkflowWithSignal(
 	return newMutableState, nil
 }
 
+// NOTE: must implement CreateLeaseFunc.
 func NewWorkflowLeaseAndContext(
 	shardCtx shard.Context,
 	ms workflow.MutableState,
