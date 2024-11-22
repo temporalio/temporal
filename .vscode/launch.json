@@ -76,13 +76,6 @@
 				"start",
 			]
 		},
-        {
-            "name": "Debug Running Server",
-            "type": "go",
-            "request": "attach",
-            "mode": "local",
-            "cwd": "${workspaceFolder}",
-        },
 	],
 	"inputs": [
 		{
