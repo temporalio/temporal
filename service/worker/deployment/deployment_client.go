@@ -120,7 +120,7 @@ func (d *DeploymentClientImpl) RegisterTaskQueueWorker(
 	searchattribute.AddSearchAttribute(&sa, searchattribute.TemporalNamespaceDivision, payload.EncodeString(DeploymentNamespaceDivision))
 
 	// initial memo fiels
-	memo, err := d.addInitialDeploymentMemo()
+	memo, err := d.buildInitialDeploymentMemo(deployment)
 	if err != nil {
 		return err
 	}
@@ -289,7 +289,6 @@ func (d *DeploymentClientImpl) GetCurrentDeployment(ctx context.Context, namespa
 }
 
 func (d *DeploymentClientImpl) ListDeployments(ctx context.Context, namespaceEntry *namespace.Namespace, seriesName string, NextPageToken []byte) ([]*deploypb.DeploymentListInfo, []byte, error) {
-
 	query := ""
 	if seriesName != "" {
 		query = BuildQueryWithSeriesFilter(seriesName)
@@ -311,22 +310,12 @@ func (d *DeploymentClientImpl) ListDeployments(ctx context.Context, namespaceEnt
 		return nil, nil, err
 	}
 
-	if len(persistenceResp.Executions) == 0 {
-		fmt.Println("WE ARE soooo wrong")
-	}
-
 	deployments := make([]*deploypb.DeploymentListInfo, 0)
 	for _, ex := range persistenceResp.Executions {
-
-		seriesName, buildID := ParseDeploymentWorkflowID(ex.Execution.WorkflowId)
-		deployment := &deploypb.Deployment{
-			SeriesName: seriesName,
-			BuildId:    buildID,
-		}
 		workflowMemo := DecodeDeploymentMemo(ex.GetMemo())
 
 		deploymentListInfo := &deploypb.DeploymentListInfo{
-			Deployment: deployment,
+			Deployment: workflowMemo.Deployment,
 			CreateTime: workflowMemo.CreateTime,
 			IsCurrent:  workflowMemo.IsCurrentDeployment,
 		}
@@ -361,11 +350,12 @@ func (d *DeploymentClientImpl) generateRegisterWorkerInDeploymentArgs(taskQueueN
 	return sdk.PreferProtoDataConverter.ToPayloads(updateArgs)
 }
 
-func (d *DeploymentClientImpl) addInitialDeploymentMemo() (*commonpb.Memo, error) {
+func (d *DeploymentClientImpl) buildInitialDeploymentMemo(deployment *deploypb.Deployment) (*commonpb.Memo, error) {
 	memo := &commonpb.Memo{}
 	memo.Fields = make(map[string]*commonpb.Payload)
 
 	deploymentWorkflowMemo := &deployspb.DeploymentWorkflowMemo{
+		Deployment:          deployment,
 		CreateTime:          timestamppb.Now(),
 		IsCurrentDeployment: false,
 	}

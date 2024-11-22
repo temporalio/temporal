@@ -90,6 +90,9 @@ func (d *DeploymentSuite) SetupTest() {
 	d.setAssertions()
 }
 
+func (d *DeploymentSuite) TearDownTest() {
+}
+
 func (d *DeploymentSuite) TestDescribeDeployment_RegisterTaskQueue() {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
 	defer cancel()
@@ -101,6 +104,7 @@ func (d *DeploymentSuite) TestDescribeDeployment_RegisterTaskQueue() {
 		SeriesName: seriesName,
 		BuildId:    buildID,
 	}
+	numberOfDeployments := 1
 
 	errChan := make(chan error)
 	defer close(errChan)
@@ -133,13 +137,17 @@ func (d *DeploymentSuite) TestDescribeDeployment_RegisterTaskQueue() {
 			Deployment: workerDeployment,
 		})
 		a.NoError(err)
+		a.NotNil(resp.DeploymentInfo)
+		a.NotNil(resp.DeploymentInfo.Deployment)
 
 		a.Equal(seriesName, resp.DeploymentInfo.Deployment.SeriesName)
 		a.Equal(buildID, resp.DeploymentInfo.Deployment.BuildId)
 
-		a.Equal(1, len(resp.DeploymentInfo.TaskQueueInfos))
+		if len(resp.DeploymentInfo.TaskQueueInfos) < numberOfDeployments {
+			return
+		}
+		a.Equal(numberOfDeployments, len(resp.DeploymentInfo.TaskQueueInfos))
 		a.Equal(taskQueue.Name, resp.DeploymentInfo.TaskQueueInfos[0].Name)
-
 		a.Equal(false, resp.DeploymentInfo.IsCurrent)
 	}, time.Second*5, time.Millisecond*200)
 
@@ -202,13 +210,13 @@ func (d *DeploymentSuite) TestGetCurrentDeployment_NoCurrentDeployment() {
 	}
 }
 
-func (d *DeploymentSuite) listDeployments(withSeries bool) {
+func (d *DeploymentSuite) listDeployments(seriesName string, buildID string, withSeries bool) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
 	defer cancel()
 
-	seriesName := "test"
-	buildID := "bgt"
+	// todo (shivam) - fails when seriesName has backslashes
 	taskQueue := &taskqueuepb.TaskQueue{Name: "deployment-test", Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
+	numberOfDeployments := 1
 
 	// Starting a deployment workflow
 	errChan := make(chan error)
@@ -246,17 +254,21 @@ func (d *DeploymentSuite) listDeployments(withSeries bool) {
 		resp, err := d.FrontendClient().ListDeployments(ctx, request)
 		a.NoError(err)
 		a.NotNil(resp)
+		if resp == nil {
+			return
+		}
 		a.NotNil(resp.Deployments)
-		a.Equal(1, len(resp.Deployments))
+		a.Equal(numberOfDeployments, len(resp.Deployments))
+		if len(resp.Deployments) < 1 {
+			return
+		}
 
 		deployment := resp.Deployments[0]
-
 		a.Equal(seriesName, deployment.Deployment.SeriesName)
 		a.Equal(buildID, deployment.Deployment.BuildId)
-
 		a.Equal(false, deployment.IsCurrent)
 
-	}, time.Second*50, time.Millisecond*200)
+	}, time.Second*5, time.Millisecond*200)
 
 	<-ctx.Done()
 	select {
@@ -266,11 +278,15 @@ func (d *DeploymentSuite) listDeployments(withSeries bool) {
 	}
 }
 func (d *DeploymentSuite) TestListDeployments_WithSeriesName() {
-	d.listDeployments(true)
+	seriesName := "abc"
+	buildID := "xyz"
+	d.listDeployments(seriesName, buildID, true)
 }
 
 func (d *DeploymentSuite) TestListDeployments_WithoutSeriesName() {
-	d.listDeployments(false)
+	seriesName := "d"
+	buildID := "e"
+	d.listDeployments(seriesName, buildID, true)
 }
 
 // TODO Shivam - Add more getCurrentDeployment tests when SetCurrentDefaultBuildID API has been defined

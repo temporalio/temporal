@@ -29,6 +29,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/temporalio/sqlparser"
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/sdk/temporal"
@@ -95,8 +96,7 @@ func ValidateDeploymentWfParams(fieldName string, field string, maxIDLengthLimit
 // EscapeChar is a helper which escapes the DeploymentWorkflowIDDelimeter character
 // in the input string
 func escapeChar(s string) string {
-	s = strings.Replace(s, `\`, `\\`, -1)
-	s = strings.Replace(s, DeploymentWorkflowIDDelimeter, `\`+DeploymentWorkflowIDDelimeter, -1)
+	s = strings.Replace(s, DeploymentWorkflowIDDelimeter, DeploymentWorkflowIDDelimeter+DeploymentWorkflowIDDelimeter, -1)
 	return s
 }
 
@@ -109,7 +109,6 @@ func GenerateDeploymentSeriesWorkflowID(deploymentSeriesName string) string {
 // GenerateDeploymentWorkflowID is a helper that generates a system accepted
 // workflowID which are used in our deployment workflows
 func GenerateDeploymentWorkflowID(seriesName string, buildID string) string {
-	// escaping the reserved workflow delimiter (|) from the inputs, if present
 	escapedSeriesName := escapeChar(seriesName)
 	escapedBuildId := escapeChar(buildID)
 
@@ -117,7 +116,6 @@ func GenerateDeploymentWorkflowID(seriesName string, buildID string) string {
 }
 
 func GenerateDeploymentWorkflowIDForPatternMatching(seriesName string) string {
-	// escaping the reserved workflow delimiter (|) from the inputs, if present
 	escapedSeriesName := escapeChar(seriesName)
 
 	return DeploymentWorkflowIDPrefix + DeploymentWorkflowIDDelimeter + escapedSeriesName + DeploymentWorkflowIDDelimeter
@@ -126,8 +124,10 @@ func GenerateDeploymentWorkflowIDForPatternMatching(seriesName string) string {
 // BuildQueryWithSeriesFilter is a helper which builds a query for pattern matching based on the
 // provided seriesName
 func BuildQueryWithSeriesFilter(seriesName string) string {
-	wildCardedWorkflowID := GenerateDeploymentWorkflowIDForPatternMatching(seriesName)
-	query := fmt.Sprintf("%s AND %s STARTS_WITH '%s'", DeploymentVisibilityBaseListQuery, searchattribute.WorkflowID, wildCardedWorkflowID)
+	workflowID := GenerateDeploymentWorkflowIDForPatternMatching(seriesName)
+	escapedSeriesEntry := sqlparser.String(sqlparser.NewStrVal([]byte(workflowID)))
+
+	query := fmt.Sprintf("%s AND %s STARTS_WITH %s", DeploymentVisibilityBaseListQuery, searchattribute.WorkflowID, escapedSeriesEntry)
 	return query
 }
 
