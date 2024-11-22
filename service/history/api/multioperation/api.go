@@ -114,10 +114,9 @@ func Invoke(
 			// - but receive a new instance that won't have the in-memory Update registry.
 			workflowLease.GetContext().(*workflow.ContextImpl).MutableState = ms
 
-			updateReg := workflowLease.GetContext().UpdateRegistry(ctx, nil)
-
 			// Add the Update.
 			// NOTE: UpdateWorkflowAction return value is ignored since ther Starter will always create a WFT.
+			updateReg := workflowLease.GetContext().UpdateRegistry(ctx, nil)
 			if _, err := updater.ApplyRequest(ctx, updateReg, ms); err != nil {
 				// Wrapping the error so Update and Start errors can be distinguished later.
 				return nil, updateError{err}
