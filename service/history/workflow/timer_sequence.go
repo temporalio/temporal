@@ -157,7 +157,7 @@ func (t *timerSequenceImpl) CreateNextActivityTimer() (bool, error) {
 	activityInfo.TimerTaskStatus |= timerTypeToTimerMask(firstTimerTask.TimerType)
 	var err error
 	if firstTimerTask.TimerType == enumspb.TIMEOUT_TYPE_HEARTBEAT {
-		err = t.mutableState.UpdateActivityTaskStatusWithTimerHeartbeat(activityInfo.ScheduledEventId, nil, &firstTimerTask.Timestamp)
+		err = t.mutableState.UpdateActivityTaskStatusWithTimerHeartbeat(activityInfo.ScheduledEventId, &activityInfo.TimerTaskStatus, &firstTimerTask.Timestamp)
 	} else {
 		err = t.mutableState.UpdateActivityTaskStatusWithTimerHeartbeat(activityInfo.ScheduledEventId, &activityInfo.TimerTaskStatus, nil)
 	}

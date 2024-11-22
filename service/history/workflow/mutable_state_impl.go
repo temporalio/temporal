@@ -1669,7 +1669,7 @@ func (ms *MutableStateImpl) UpdateActivityInfo(
 	return err
 }
 
-// UpdateActivityTimerHeartbeat updates an activity
+// UpdateActivityTaskStatusWithTimerHeartbeat updates an activity's timer task status or/and timer heartbeat
 func (ms *MutableStateImpl) UpdateActivityTaskStatusWithTimerHeartbeat(scheduleEventID int64, timerTaskStatus *int32, heartbeatTimeoutVisibility *time.Time) error {
 	if timerTaskStatus != nil {
 		ai, ok := ms.pendingActivityInfoIDs[scheduleEventID]
