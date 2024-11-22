@@ -139,19 +139,17 @@ func applyWorkflowExecutionOptions(
 	}
 
 	if _, ok := updateFields["versioningOverride.deployment"]; ok {
-		if _, ok := updateFields["versioningOverride.behavior"]; ok {
-			mergeInto.VersioningOverride = mergeFrom.GetVersioningOverride()
-		} else {
+		if _, ok := updateFields["versioningOverride.behavior"]; !ok {
 			return nil, serviceerror.NewInvalidArgument("versioning_override fields must be updated together")
 		}
+		mergeInto.VersioningOverride = mergeFrom.GetVersioningOverride()
 	}
 
 	if _, ok := updateFields["versioningOverride.behavior"]; ok {
-		if _, ok := updateFields["versioningOverride.deployment"]; ok {
-			mergeInto.VersioningOverride = mergeFrom.GetVersioningOverride()
-		} else {
+		if _, ok := updateFields["versioningOverride.deployment"]; !ok {
 			return nil, serviceerror.NewInvalidArgument("versioning_override fields must be updated together")
 		}
+		mergeInto.VersioningOverride = mergeFrom.GetVersioningOverride()
 	}
 	return mergeInto, nil
 }
