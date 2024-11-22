@@ -80,7 +80,7 @@ type Starter struct {
 	visibilityManager          manager.VisibilityManager
 	request                    *historyservice.StartWorkflowExecutionRequest
 	namespace                  *namespace.Namespace
-	createLeaseFunc            api.CreateLeaseFunc
+	createLeaseFn              api.CreateLeaseFunc
 }
 
 // creationParams is a container for all information obtained from creating the uncommitted execution.
@@ -109,7 +109,7 @@ func NewStarter(
 	tokenSerializer common.TaskTokenSerializer,
 	visibilityManager manager.VisibilityManager,
 	request *historyservice.StartWorkflowExecutionRequest,
-	createLeaseFunc api.CreateLeaseFunc,
+	createLeaseFn api.CreateLeaseFunc,
 ) (*Starter, error) {
 	namespaceEntry, err := api.GetActiveNamespace(shardContext, namespace.ID(request.GetNamespaceId()))
 	if err != nil {
@@ -123,7 +123,7 @@ func NewStarter(
 		visibilityManager:          visibilityManager,
 		request:                    request,
 		namespace:                  namespaceEntry,
-		createLeaseFunc:            createLeaseFunc,
+		createLeaseFn:              createLeaseFn,
 	}, nil
 }
 
@@ -262,7 +262,7 @@ func (s *Starter) prepareNewWorkflow(workflowID string) (*creationParams, error)
 		return nil, err
 	}
 
-	workflowLease, err := s.createLeaseFunc(s.shardContext, mutableState)
+	workflowLease, err := s.createLeaseFn(s.shardContext, mutableState)
 	if err != nil {
 		return nil, err
 	}
@@ -453,7 +453,7 @@ func (s *Starter) resolveDuplicateWorkflowID(
 				return nil, nil, err
 			}
 
-			workflowLease, err = s.createLeaseFunc(s.shardContext, newMutableState)
+			workflowLease, err = s.createLeaseFn(s.shardContext, newMutableState)
 			if err != nil {
 				return nil, nil, err
 			}
