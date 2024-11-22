@@ -4059,6 +4059,7 @@ func (s *mutableStateSuite) TestUpdateActivityTaskStatusWithTimerHeartbeat() {
 	s.Equal(originalTime, mutableState.pendingActivityTimerHeartbeats[scheduleEventId])
 	time1 := time.Now().UTC().Add(time.Second * 80)
 	err = mutableState.UpdateActivityTaskStatusWithTimerHeartbeat(scheduleEventId, nil, &time1)
+	s.NoError(err)
 	s.Equal(status, dbState.ActivityInfos[scheduleEventId].TimerTaskStatus)
 	s.Equal(time1, mutableState.pendingActivityTimerHeartbeats[scheduleEventId])
 }
