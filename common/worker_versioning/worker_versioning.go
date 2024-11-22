@@ -32,6 +32,7 @@ import (
 	"github.com/temporalio/sqlparser"
 	commonpb "go.temporal.io/api/common/v1"
 	deploymentpb "go.temporal.io/api/deployment/v1"
+	enumspb "go.temporal.io/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	"go.temporal.io/server/common/namespace"
@@ -41,13 +42,19 @@ import (
 )
 
 const (
-	buildIdSearchAttributePrefixAssigned    = "assigned"
-	buildIdSearchAttributePrefixVersioned   = "versioned"
-	buildIdSearchAttributePrefixUnversioned = "unversioned"
-	BuildIdSearchAttributeDelimiter         = ":"
+	buildIdSearchAttributePrefixReachability = "reachability"
+	buildIdSearchAttributePrefixAssigned     = "assigned"
+	buildIdSearchAttributePrefixVersioned    = "versioned"
+	buildIdSearchAttributePrefixUnversioned  = "unversioned"
+	BuildIdSearchAttributeDelimiter          = ":"
 	// UnversionedSearchAttribute is the sentinel value used to mark all unversioned workflows
 	UnversionedSearchAttribute = buildIdSearchAttributePrefixUnversioned
 )
+
+// ReachabilityBuildIdSearchAttribute returns the search attribute value for the currently assigned build ID
+func ReachabilityBuildIdSearchAttribute(behavior enumspb.VersioningBehavior, deployment *deploymentpb.Deployment) string {
+	return fmt.Sprintf("%s:%s:%s", buildIdSearchAttributePrefixReachability, behavior.String(), DeploymentToString(deployment))
+}
 
 // AssignedBuildIdSearchAttribute returns the search attribute value for the currently assigned build ID
 func AssignedBuildIdSearchAttribute(buildId string) string {

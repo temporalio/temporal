@@ -229,6 +229,10 @@ func (m *workflowTaskStateMachine) ApplyWorkflowTaskStartedEvent(
 		BuildIdRedirectCounter: redirectCounter,
 	}
 
+	// todo (carly): possibly update the reachability search attribute here?
+	if err := m.ms.updateBuildIdsSearchAttribute(nil, enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED, nil, 0); err != nil {
+		return nil, err
+	}
 	if buildId := worker_versioning.BuildIdIfUsingVersioning(versioningStamp); buildId != "" {
 		if redirectCounter == 0 {
 			// this is the initial build ID, it should normally be persisted after scheduling the wf task,
@@ -1102,7 +1106,7 @@ func (m *workflowTaskStateMachine) afterAddWorkflowTaskCompletedEvent(
 	)
 	// For versioned workflows the search attributes should be already up-to-date based on the task started events.
 	// This is still useful for unversioned workers.
-	if err := m.ms.updateBuildIdsSearchAttribute(attrs.GetWorkerVersion(), limits.MaxSearchAttributeValueSize); err != nil {
+	if err := m.ms.updateBuildIdsSearchAttribute(attrs.GetWorkerVersion(), attrs.GetVersioningBehavior(), attrs.GetDeployment(), limits.MaxSearchAttributeValueSize); err != nil {
 		return err
 	}
 	if addedResetPoint && len(attrs.GetBinaryChecksum()) > 0 {

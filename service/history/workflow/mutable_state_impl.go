@@ -2349,7 +2349,7 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionStartedEvent(
 	} else if event.SourceVersionStamp.GetUseVersioning() && event.SourceVersionStamp.GetBuildId() != "" {
 		// TODO: [cleanup-old-wv]
 		limit := ms.config.SearchAttributesSizeOfValueLimit(string(ms.namespaceEntry.Name()))
-		if _, err := ms.addBuildIdToSearchAttributesWithNoVisibilityTask(event.SourceVersionStamp, limit); err != nil {
+		if _, err := ms.addBuildIdToSearchAttributesWithNoVisibilityTask(event.SourceVersionStamp, enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED, nil, limit); err != nil {
 			return err
 		}
 	}
@@ -2636,11 +2636,15 @@ func (ms *MutableStateImpl) UpdateBuildIdAssignment(buildId string) error {
 	// because build ID is changed, we clear sticky queue so to make sure the next wf task does not go to old version.
 	ms.ClearStickyTaskQueue()
 	limit := ms.config.SearchAttributesSizeOfValueLimit(ms.namespaceEntry.Name().String())
-	return ms.updateBuildIdsSearchAttribute(&commonpb.WorkerVersionStamp{UseVersioning: true, BuildId: buildId}, limit)
+	return ms.updateBuildIdsSearchAttribute(&commonpb.WorkerVersionStamp{UseVersioning: true, BuildId: buildId}, enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED, nil, limit)
 }
 
-func (ms *MutableStateImpl) updateBuildIdsSearchAttribute(stamp *commonpb.WorkerVersionStamp, maxSearchAttributeValueSize int) error {
-	changed, err := ms.addBuildIdToSearchAttributesWithNoVisibilityTask(stamp, maxSearchAttributeValueSize)
+func (ms *MutableStateImpl) updateBuildIdsSearchAttribute(
+	stamp *commonpb.WorkerVersionStamp,
+	behavior enumspb.VersioningBehavior,
+	deployment *deploymentpb.Deployment,
+	maxSearchAttributeValueSize int) error {
+	changed, err := ms.addBuildIdToSearchAttributesWithNoVisibilityTask(stamp, behavior, deployment, maxSearchAttributeValueSize)
 	if err != nil {
 		return err
 	}
@@ -2678,10 +2682,14 @@ func (ms *MutableStateImpl) loadBuildIds() ([]string, error) {
 func (ms *MutableStateImpl) addBuildIdToLoadedSearchAttribute(
 	existingValues []string,
 	stamp *commonpb.WorkerVersionStamp,
+	behavior enumspb.VersioningBehavior,
+	deployment *deploymentpb.Deployment,
 ) []string {
 	var newValues []string
-	if !stamp.GetUseVersioning() {
+	if !stamp.GetUseVersioning() && deployment == nil && behavior == enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED {
 		newValues = append(newValues, worker_versioning.UnversionedSearchAttribute)
+	} else if deployment != nil && behavior != enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED {
+		newValues = append(newValues, worker_versioning.ReachabilityBuildIdSearchAttribute(behavior, deployment))
 	} else if ms.GetAssignedBuildId() != "" {
 		newValues = append(newValues, worker_versioning.AssignedBuildIdSearchAttribute(ms.GetAssignedBuildId()))
 	}
@@ -2731,12 +2739,17 @@ func (ms *MutableStateImpl) saveBuildIds(buildIds []string, maxSearchAttributeVa
 	return nil
 }
 
-func (ms *MutableStateImpl) addBuildIdToSearchAttributesWithNoVisibilityTask(stamp *commonpb.WorkerVersionStamp, maxSearchAttributeValueSize int) (bool, error) {
+func (ms *MutableStateImpl) addBuildIdToSearchAttributesWithNoVisibilityTask(
+	stamp *commonpb.WorkerVersionStamp,
+	behavior enumspb.VersioningBehavior,
+	deployment *deploymentpb.Deployment,
+	maxSearchAttributeValueSize int,
+) (bool, error) {
 	existingBuildIds, err := ms.loadBuildIds()
 	if err != nil {
 		return false, err
 	}
-	modifiedBuildIds := ms.addBuildIdToLoadedSearchAttribute(existingBuildIds, stamp)
+	modifiedBuildIds := ms.addBuildIdToLoadedSearchAttribute(existingBuildIds, stamp, behavior, deployment)
 	if slices.Equal(existingBuildIds, modifiedBuildIds) {
 		return false, nil
 	}

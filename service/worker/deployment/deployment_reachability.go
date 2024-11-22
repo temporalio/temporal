@@ -27,12 +27,15 @@ package deployment
 import (
 	"context"
 	"fmt"
+	"github.com/temporalio/sqlparser"
+	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	visibility_manager "go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/worker_versioning"
 	"time"
 )
 
@@ -104,19 +107,20 @@ func getDeploymentReachability(
 }
 
 func makeDeploymentQuery(seriesName, buildID string, open bool) string {
-	var deploymentFilter string
 	var statusFilter string
-	var includeNull bool
+	deploymentFilter := sqlparser.String(sqlparser.NewStrVal([]byte(
+		worker_versioning.ReachabilityBuildIdSearchAttribute(enumspb.VERSIONING_BEHAVIOR_PINNED, &deploymentpb.Deployment{
+			SeriesName: seriesName,
+			BuildId:    buildID,
+		}),
+	)))
 	if open {
-		statusFilter = fmt.Sprintf(` AND %s = "Running"`, searchattribute.ExecutionStatus)
-
+		statusFilter = `= "Running"`
 	} else {
-		statusFilter = fmt.Sprintf(` AND %s != "Running"`, searchattribute.ExecutionStatus)
+		statusFilter = `!= "Running"`
 	}
-	if includeNull { // TODO (carly): decide on null deployment behavior, we set includeNull=true in v2 when we were looking for the unversioned build id
-		deploymentFilter = fmt.Sprintf("(%s IS NULL OR %s)", "searchattribute.Deployment", deploymentFilter)
-	}
-	return fmt.Sprintf("%s %s", deploymentFilter, statusFilter)
+	// todo (carly): handle null / unversioned
+	return fmt.Sprintf("%s = %s AND %s %s", searchattribute.BuildIds, deploymentFilter, searchattribute.ExecutionStatus, statusFilter)
 }
 
 /*

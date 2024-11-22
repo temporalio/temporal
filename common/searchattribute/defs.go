@@ -82,9 +82,7 @@ const (
 	ScheduleID = "ScheduleId"
 
 	// Used for Worker Versioning
-	BuildIds             = "BuildIds"
-	DeploymentSeriesName = "DeploymentSeriesName"
-	VersioningBehavior   = "VersioningBehavior"
+	BuildIds = "BuildIds"
 )
 
 var (
