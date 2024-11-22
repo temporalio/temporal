@@ -81,7 +81,6 @@ type Starter struct {
 	request                    *historyservice.StartWorkflowExecutionRequest
 	namespace                  *namespace.Namespace
 	createLeaseForWorkflow     api.CreateLeaseForWorkflow
-	newRunID                   string
 }
 
 // creationParams is a container for all information obtained from creating the uncommitted execution.
@@ -125,7 +124,6 @@ func NewStarter(
 		request:                    request,
 		namespace:                  namespaceEntry,
 		createLeaseForWorkflow:     createLeaseForWorkflow,
-		newRunID:                   uuid.NewString(),
 	}, nil
 }
 
@@ -201,17 +199,19 @@ func (s *Starter) Invoke(
 	if err != nil {
 		return nil, NoStart, err
 	}
+	defer func() {
+		creationParams.workflowLease.GetReleaseFn()(retError)
+	}()
 
-	unlockCurrentExecution, err := s.lockCurrentWorkflowExecution(ctx)
+	currentExecutionLock, err := s.lockCurrentWorkflowExecution(ctx)
 	if err != nil {
 		return nil, NoStart, err
 	}
 	defer func() {
-		unlockCurrentExecution(retError)
+		currentExecutionLock(retError)
 	}()
 
 	err = s.createBrandNew(ctx, creationParams)
-	creationParams.workflowLease.GetReleaseFn()(err) // unlock now in case of Terminate-Existing, since the same workflow context is locked
 	if err != nil {
 		var currentWorkflowConditionFailedError *persistence.CurrentWorkflowConditionFailedError
 		if errors.As(err, &currentWorkflowConditionFailedError) && len(currentWorkflowConditionFailedError.RunID) > 0 {
@@ -249,11 +249,12 @@ func (s *Starter) lockCurrentWorkflowExecution(
 // prepareNewWorkflow creates a new workflow context, and closes its mutable state transaction as snapshot.
 // It returns the creationContext which can later be used to insert into the executions table.
 func (s *Starter) prepareNewWorkflow(workflowID string) (*creationParams, error) {
+	runID := uuid.NewString()
 	mutableState, err := api.NewWorkflowWithSignal(
 		s.shardContext,
 		s.namespace,
 		workflowID,
-		s.newRunID,
+		runID,
 		s.request,
 		nil,
 	)
@@ -282,7 +283,7 @@ func (s *Starter) prepareNewWorkflow(workflowID string) (*creationParams, error)
 
 	return &creationParams{
 		workflowID:           workflowID,
-		runID:                s.newRunID,
+		runID:                runID,
 		workflowLease:        workflowLease,
 		workflowTaskInfo:     workflowTaskInfo,
 		workflowSnapshot:     workflowSnapshot,
@@ -395,11 +396,15 @@ func (s *Starter) resolveDuplicateWorkflowID(
 		currentWorkflowConditionFailed.RunID,
 	)
 
+	// Using a new RunID here to simplify locking. MultiOperation, that re-uses the Starter, is creating
+	// locked workflow contexts, and using a fresh RunID prevents a deadlock.
+	newRunID := uuid.NewString()
+
 	currentExecutionUpdateAction, err := api.ResolveDuplicateWorkflowID(
 		s.shardContext,
 		workflowKey,
 		s.namespace,
-		s.newRunID,
+		newRunID,
 		currentWorkflowConditionFailed.State,
 		currentWorkflowConditionFailed.Status,
 		currentWorkflowConditionFailed.RequestID,
@@ -440,7 +445,7 @@ func (s *Starter) resolveDuplicateWorkflowID(
 				s.shardContext,
 				s.namespace,
 				workflowID,
-				s.newRunID,
+				newRunID,
 				s.request,
 				nil)
 			if err != nil {
@@ -472,7 +477,7 @@ func (s *Starter) resolveDuplicateWorkflowID(
 	case nil:
 		if !s.requestEagerStart() {
 			return &historyservice.StartWorkflowExecutionResponse{
-				RunId:   s.newRunID,
+				RunId:   newRunID,
 				Started: true,
 			}, StartNew, nil
 		}
@@ -480,7 +485,7 @@ func (s *Starter) resolveDuplicateWorkflowID(
 		if err != nil {
 			return nil, NoStart, err
 		}
-		resp, err := s.generateResponse(s.newRunID, mutableStateInfo.workflowTask, events)
+		resp, err := s.generateResponse(newRunID, mutableStateInfo.workflowTask, events)
 		return resp, StartNew, err
 	case consts.ErrWorkflowCompleted:
 		// current workflow already closed
