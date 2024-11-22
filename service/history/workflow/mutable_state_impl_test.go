@@ -511,7 +511,7 @@ func (s *mutableStateSuite) TestEffectiveDeployment() {
 	ms.executionInfo.VersioningInfo = versioningInfo
 	s.verifyEffectiveDeployment(nil, enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED)
 
-	//------- Without override, without transition
+	// ------- Without override, without transition
 
 	// deployment is set but behavior is not -> unversioned
 	versioningInfo.Deployment = deployment1
@@ -526,7 +526,7 @@ func (s *mutableStateSuite) TestEffectiveDeployment() {
 	versioningInfo.Behavior = enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE
 	s.verifyEffectiveDeployment(deployment1, enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE)
 
-	//------- With override, without transition
+	// ------- With override, without transition
 
 	// deployment and behavior are not set, but override behavior is AUTO_UPGRADE -> AUTO_UPGRADE
 	versioningInfo.Deployment = nil
@@ -582,7 +582,8 @@ func (s *mutableStateSuite) TestEffectiveDeployment() {
 	}
 	s.verifyEffectiveDeployment(deployment2, enumspb.VERSIONING_BEHAVIOR_PINNED)
 
-	//------- With transition
+	// ------- With transition
+
 	versioningInfo.Deployment = deployment1
 	versioningInfo.Behavior = enumspb.VERSIONING_BEHAVIOR_PINNED
 	versioningInfo.VersioningOverride = &workflowpb.VersioningOverride{
