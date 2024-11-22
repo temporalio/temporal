@@ -77,7 +77,7 @@ message DeploymentWorkflowMemo {
     bool is_current_deployment = 2;
 }
 
-// Used in internal APIs to pass versioning info about a versioned workflow.
+// Used in internal APIs to pass versioning info about a versioned workflow execution.
 message WorkflowVersioningInfo {
     temporal.api.enums.v1.VersioningBehavior behavior = 1;
     temporal.api.deployment.v1.Deployment deployment = 2;
@@ -87,7 +87,8 @@ message WorkflowVersioningInfo {
 message TaskRedirectInfo {
     // Deployment sent in WorkflowVersioningInfo when the task was scheduled.
     temporal.api.deployment.v1.Deployment schedule_time_workflow_deployment = 1;
-    // Whether the source deployment contains the task's task queue. Used by history to determine
-    // if the task redirect should affect the workflow.
+    // Whether the workflow deployment that Matching received when the task was scheduled contains
+    // the task's task queue. Used by History to determine if the task redirect should affect the
+    // workflow.
     temporal.api.deployment.v1.Deployment schedule_time_workflow_deployment_contains_task_queue = 2;
 }

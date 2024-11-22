@@ -417,7 +417,7 @@ func (x *DeploymentWorkflowMemo) GetIsCurrentDeployment() bool {
 	return false
 }
 
-// Used in internal APIs to pass versioning info about a versioned workflow.
+// Used in internal APIs to pass versioning info about a versioned workflow execution.
 type WorkflowVersioningInfo struct {
 	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache
@@ -481,8 +481,9 @@ type TaskRedirectInfo struct {
 
 	// Deployment sent in WorkflowVersioningInfo when the task was scheduled.
 	ScheduleTimeWorkflowDeployment *v1.Deployment `protobuf:"bytes,1,opt,name=schedule_time_workflow_deployment,json=scheduleTimeWorkflowDeployment,proto3" json:"schedule_time_workflow_deployment,omitempty"`
-	// Whether the source deployment contains the task's task queue. Used by history to determine
-	// if the task redirect should affect the workflow.
+	// Whether the workflow deployment that Matching received when the task was scheduled contains
+	// the task's task queue. Used by History to determine if the task redirect should affect the
+	// workflow.
 	ScheduleTimeWorkflowDeploymentContainsTaskQueue *v1.Deployment `protobuf:"bytes,2,opt,name=schedule_time_workflow_deployment_contains_task_queue,json=scheduleTimeWorkflowDeploymentContainsTaskQueue,proto3" json:"schedule_time_workflow_deployment_contains_task_queue,omitempty"`
 }
 

@@ -30,7 +30,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"go.temporal.io/api/common/v1"
+	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/server/common/tqid"
 )
@@ -78,31 +78,31 @@ func TestParsePhysicalTaskQueueKey(t *testing.T) {
 	a.Nil(key.Version().Deployment())
 	a.Equal("/_sys/my-basic-tq-name/"+encodedBuildID+"#23", key.PersistenceName())
 
-	deploymentName := "?deployment-ABC|ad/sf:98"
-	encodedDeploymentName := base64.URLEncoding.EncodeToString([]byte(deploymentName))
-	deployment := &common.WorkerDeployment{
-		DeploymentName: deploymentName,
-		BuildId:        buildID,
+	seriesName := "?deployment-ABC|ad/sf:98"
+	encodedSeriesName := base64.URLEncoding.EncodeToString([]byte(seriesName))
+	deployment := &deploymentpb.Deployment{
+		SeriesName: seriesName,
+		BuildId:    buildID,
 	}
-	key, err = ParsePhysicalTaskQueueKey("/_sys/my-basic-tq-name/"+encodedDeploymentName+"|"+encodedBuildID+"#23", ns, tt)
+	key, err = ParsePhysicalTaskQueueKey("/_sys/my-basic-tq-name/"+encodedSeriesName+"|"+encodedBuildID+"#23", ns, tt)
 	a.NoError(err)
 	a.Equal("my-basic-tq-name", key.TaskQueueFamily().Name())
 	a.Equal(f.TaskQueue(tt).NormalPartition(23).Key(), key.Partition().Key())
 	a.Equal("", key.Version().VersionSet())
 	a.Equal("", key.Version().BuildId())
 	a.True(deployment.Equal(key.Version().Deployment()))
-	a.Equal("/_sys/my-basic-tq-name/"+encodedDeploymentName+"|"+encodedBuildID+"#23", key.PersistenceName())
+	a.Equal("/_sys/my-basic-tq-name/"+encodedSeriesName+"|"+encodedBuildID+"#23", key.PersistenceName())
 }
 
 func TestValidPersistenceNames(t *testing.T) {
 	versionSet := "asdf89SD-lks_="
 	buildID := "build-ABC/adsf:98"
-	deploymentName := "?deployment-ABC|ad/sf:98"
+	seriesName := "?deployment-ABC|ad/sf:98"
 	encodedBuildID := base64.URLEncoding.EncodeToString([]byte(buildID))
-	encodedDeploymentName := base64.URLEncoding.EncodeToString([]byte(deploymentName))
-	deployment := &common.WorkerDeployment{
-		DeploymentName: deploymentName,
-		BuildId:        buildID,
+	encodedSeriesName := base64.URLEncoding.EncodeToString([]byte(seriesName))
+	deployment := &deploymentpb.Deployment{
+		SeriesName: seriesName,
+		BuildId:    buildID,
 	}
 
 	testCases := []struct {
@@ -111,7 +111,7 @@ func TestValidPersistenceNames(t *testing.T) {
 		partition  int
 		versionSet string
 		buildId    string
-		deployment *common.WorkerDeployment
+		deployment *deploymentpb.Deployment
 	}{
 		{"0", "0", 0, "", "", nil},
 		{"list0", "list0", 0, "", "", nil},
@@ -126,8 +126,8 @@ func TestValidPersistenceNames(t *testing.T) {
 		{"/_sys//list0//" + versionSet + ":41", "/list0/", 41, versionSet, "", nil},
 		{"/_sys/list0/" + encodedBuildID + "#1", "list0", 1, "", buildID, nil},
 		{"/_sys//list0//" + encodedBuildID + "#41", "/list0/", 41, "", buildID, nil},
-		{"/_sys/list0/" + encodedDeploymentName + "|" + encodedBuildID + "#1", "list0", 1, "", "", deployment},
-		{"/_sys//list0//" + encodedDeploymentName + "|" + encodedBuildID + "#41", "/list0/", 41, "", "", deployment},
+		{"/_sys/list0/" + encodedSeriesName + "|" + encodedBuildID + "#1", "list0", 1, "", "", deployment},
+		{"/_sys//list0//" + encodedSeriesName + "|" + encodedBuildID + "#41", "/list0/", 41, "", "", deployment},
 	}
 
 	for _, tc := range testCases {
@@ -203,9 +203,9 @@ func TestDeploymentQueueKey(t *testing.T) {
 	f, err := tqid.NewTaskQueueFamily("", "tq")
 	assert.NoError(t, err)
 	p := f.TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW).NormalPartition(2)
-	d := &common.WorkerDeployment{
-		DeploymentName: "my_app",
-		BuildId:        "abc",
+	d := &deploymentpb.Deployment{
+		SeriesName: "my_app",
+		BuildId:    "abc",
 	}
 	key := DeploymentQueueKey(p, d)
 	a.Equal(p, key.Partition())

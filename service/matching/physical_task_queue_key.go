@@ -31,7 +31,7 @@ import (
 	"strconv"
 	"strings"
 
-	"go.temporal.io/api/common/v1"
+	"go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/server/common/tqid"
 )
@@ -59,10 +59,10 @@ type (
 
 	PhysicalTaskQueueVersion struct {
 		versionSet string // version set id
-		// buildId and versionSet are mutually exclusive. buildId must be set if deploymentName is.
+		// buildId and versionSet are mutually exclusive. buildId must be set if deploymentSeriesName is.
 		buildId string
 		// When present, it means this is a V3 pinned queue.
-		deploymentName string
+		deploymentSeriesName string
 	}
 )
 
@@ -114,12 +114,12 @@ func BuildIdQueueKey(p tqid.Partition, buildId string) *PhysicalTaskQueueKey {
 }
 
 // DeploymentQueueKey returns a PhysicalTaskQueueKey of a task queue partition for a deployment.
-func DeploymentQueueKey(p tqid.Partition, deployment *common.WorkerDeployment) *PhysicalTaskQueueKey {
+func DeploymentQueueKey(p tqid.Partition, deployment *deployment.Deployment) *PhysicalTaskQueueKey {
 	return &PhysicalTaskQueueKey{
 		partition: p,
 		version: PhysicalTaskQueueVersion{
-			buildId:        deployment.GetBuildId(),
-			deploymentName: deployment.GetDeploymentName(),
+			buildId:              deployment.GetBuildId(),
+			deploymentSeriesName: deployment.GetSeriesName(),
 		},
 	}
 }
@@ -148,9 +148,9 @@ func (q *PhysicalTaskQueueKey) PersistenceName() string {
 			return nonRootPartitionPrefix + baseName + partitionDelimiter + q.version.versionSet + versionSetDelimiter + strconv.Itoa(p.PartitionId())
 		}
 
-		if len(q.version.deploymentName) > 0 {
+		if len(q.version.deploymentSeriesName) > 0 {
 			encodedBuildId := base64.URLEncoding.EncodeToString([]byte(q.version.buildId))
-			encodedDeploymentName := base64.URLEncoding.EncodeToString([]byte(q.version.deploymentName))
+			encodedDeploymentName := base64.URLEncoding.EncodeToString([]byte(q.version.deploymentSeriesName))
 			return nonRootPartitionPrefix + baseName + partitionDelimiter + encodedDeploymentName + deploymentNameDelimiter + encodedBuildId + buildIdDelimiter + strconv.Itoa(p.PartitionId())
 		} else if len(q.version.buildId) > 0 {
 			encodedBuildId := base64.URLEncoding.EncodeToString([]byte(q.version.buildId))
@@ -197,9 +197,9 @@ func ParsePhysicalTaskQueueKey(persistenceName string, namespaceId string, taskT
 	return &PhysicalTaskQueueKey{
 		partition: f.TaskQueue(taskType).NormalPartition(partitionId),
 		version: PhysicalTaskQueueVersion{
-			versionSet:     versionSet,
-			buildId:        buildId,
-			deploymentName: deploymentName,
+			versionSet:           versionSet,
+			buildId:              buildId,
+			deploymentSeriesName: deploymentName,
 		},
 	}, nil
 }
@@ -263,11 +263,11 @@ func (v *PhysicalTaskQueueVersion) IsVersioned() bool {
 	return v.versionSet != "" || v.buildId != ""
 }
 
-func (v *PhysicalTaskQueueVersion) Deployment() *common.WorkerDeployment {
-	if len(v.deploymentName) > 0 {
-		return &common.WorkerDeployment{
-			DeploymentName: v.deploymentName,
-			BuildId:        v.buildId,
+func (v *PhysicalTaskQueueVersion) Deployment() *deployment.Deployment {
+	if len(v.deploymentSeriesName) > 0 {
+		return &deployment.Deployment{
+			SeriesName: v.deploymentSeriesName,
+			BuildId:    v.buildId,
 		}
 	}
 	return nil
@@ -275,7 +275,7 @@ func (v *PhysicalTaskQueueVersion) Deployment() *common.WorkerDeployment {
 
 // BuildId returns empty if this is not a Versioning v2 queue.
 func (v *PhysicalTaskQueueVersion) BuildId() string {
-	if len(v.deploymentName) > 0 {
+	if len(v.deploymentSeriesName) > 0 {
 		return ""
 	}
 	return v.buildId
@@ -289,8 +289,8 @@ func (v *PhysicalTaskQueueVersion) VersionSet() string {
 func (v *PhysicalTaskQueueVersion) MetricsTagValue() string {
 	if v.versionSet != "" {
 		return v.versionSet
-	} else if v.deploymentName == "" {
+	} else if v.deploymentSeriesName == "" {
 		return v.buildId
 	}
-	return v.deploymentName + "/" + v.buildId
+	return v.deploymentSeriesName + "/" + v.buildId
 }

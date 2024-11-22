@@ -196,12 +196,12 @@ func StampFromDeployment(deployment *deploymentpb.Deployment) *commonpb.WorkerVe
 
 // ValidateDeployment returns error if the deployment is nil or it has empty build ID or deployment
 // name.
-func ValidateDeployment(deployment *commonpb.WorkerDeployment) error {
+func ValidateDeployment(deployment *deploymentpb.Deployment) error {
 	if deployment == nil {
 		return serviceerror.NewInvalidArgument("deployment cannot be nil")
 	}
-	if deployment.GetDeploymentName() == "" {
-		return serviceerror.NewInvalidArgument("deployment name cannot be empty")
+	if deployment.GetSeriesName() == "" {
+		return serviceerror.NewInvalidArgument("deployment series name cannot be empty")
 	}
 	if deployment.GetBuildId() == "" {
 		return serviceerror.NewInvalidArgument("deployment build ID cannot be empty")

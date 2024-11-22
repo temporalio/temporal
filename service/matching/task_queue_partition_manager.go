@@ -31,6 +31,7 @@ import (
 	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
+	"go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
@@ -653,7 +654,7 @@ func (pm *taskQueuePartitionManagerImpl) getVersionedQueue(
 	ctx context.Context,
 	versionSet string,
 	buildId string,
-	deployment *commonpb.WorkerDeployment,
+	deployment *deployment.Deployment,
 	create bool,
 ) (physicalTaskQueueManager, error) {
 	if pm.partition.Kind() == enumspb.TASK_QUEUE_KIND_STICKY {
@@ -679,7 +680,7 @@ func (pm *taskQueuePartitionManagerImpl) getVersionedQueue(
 func (pm *taskQueuePartitionManagerImpl) getVersionedQueueNoWait(
 	versionSet string,
 	buildId string,
-	deployment *commonpb.WorkerDeployment,
+	deployment *deployment.Deployment,
 	create bool,
 ) (physicalTaskQueueManager, error) {
 	key := PhysicalTaskQueueVersion{
@@ -687,7 +688,7 @@ func (pm *taskQueuePartitionManagerImpl) getVersionedQueueNoWait(
 		buildId:    buildId,
 	}
 	if deployment != nil {
-		key.deploymentName = deployment.GetDeploymentName()
+		key.deploymentSeriesName = deployment.GetSeriesName()
 		key.buildId = deployment.GetBuildId()
 	}
 
