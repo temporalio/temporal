@@ -47,18 +47,18 @@ const maxResetRedirectCount = 100
 func Invoke(
 	ctx context.Context,
 	request *historyservice.RecordChildExecutionCompletedRequest,
-	shard shard.Context,
+	shardContext shard.Context,
 	workflowConsistencyChecker api.WorkflowConsistencyChecker,
 ) (resp *historyservice.RecordChildExecutionCompletedResponse, retError error) {
 	ctx = context.Background()
-	_, err := api.GetActiveNamespace(shard, namespace.ID(request.GetNamespaceId()))
+	_, err := api.GetActiveNamespace(shardContext, namespace.ID(request.GetNamespaceId()))
 	if err != nil {
 		return nil, err
 	}
 
 	redirectCount := 0
 	for {
-		resetRunID, err := recordchildworkflowcompleted(ctx, request, shard, workflowConsistencyChecker)
+		resetRunID, err := recordchildworkflowcompleted(ctx, request, shardContext, workflowConsistencyChecker)
 		if errors.Is(err, consts.ErrWorkflowCompleted) {
 			if resetRunID != "" && redirectCount < maxResetRedirectCount {
 				redirectCount++
@@ -78,7 +78,7 @@ func Invoke(
 func recordchildworkflowcompleted(
 	ctx context.Context,
 	request *historyservice.RecordChildExecutionCompletedRequest,
-	shard shard.Context,
+	shardContext shard.Context,
 	workflowConsistencyChecker api.WorkflowConsistencyChecker,
 ) (string, error) {
 	resetRunID := ""
@@ -184,7 +184,7 @@ func recordchildworkflowcompleted(
 			}, nil
 		},
 		nil,
-		shard,
+		shardContext,
 		workflowConsistencyChecker,
 	)
 	return resetRunID, err
