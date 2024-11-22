@@ -4278,9 +4278,8 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionOptionsUpdatedEvent(event *his
 		// deployment, so that when the task is started it can run on the transition's target deployment, complete,
 		// and thereby complete the transition. If there is anything wrong with the transition's target deployment,
 		// the transition could hang due to the task being stuck, or the transition could fail if the WFT fails.
-		// Instead of waiting for that, we remove the transition and all is well.
-		//
-		// Once the override is set, any attempts to start a transition will be rejected.
+		// Basically, WF might be stuck in a transition loop, and user wants to pin it to the previous build to move
+		// it out of the loop. If we don't remove the transition, it will still be stuck.
 		//
 		// It is possible for there to be an ongoing transition and an override that both result in the same effective
 		// behavior and effective deployment. In that case, we would not hit the code path to remove the transition or
@@ -4290,7 +4289,6 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionOptionsUpdatedEvent(event *his
 		ms.executionInfo.GetVersioningInfo().DeploymentTransition = nil
 		// TODO (carly) part 2: if safe mode, do replay test on new deployment if deployment changed, if fail, revert changes and abort
 		ms.ClearStickyTaskQueue()
-		// TODO (carly): confirm this is the right way to reschedule pending WFT. Is there only one WFT?
 		if ms.HasPendingWorkflowTask() && !ms.HasStartedWorkflowTask() &&
 			// Speculative WFT is directly (without transfer task) added to matching when scheduled.
 			// It is protected by timeout on both normal and sticky task queues.
