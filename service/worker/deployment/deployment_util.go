@@ -29,10 +29,14 @@ import (
 	"strings"
 	"time"
 
+	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
+	deployspb "go.temporal.io/server/api/deployment/v1"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/sdk"
+	"go.temporal.io/server/common/searchattribute"
 )
 
 const (
@@ -110,4 +114,35 @@ func GenerateDeploymentWorkflowID(seriesName string, buildID string) string {
 	escapedBuildId := escapeChar(buildID)
 
 	return DeploymentWorkflowIDPrefix + DeploymentWorkflowIDDelimeter + escapedSeriesName + DeploymentWorkflowIDDelimeter + escapedBuildId
+}
+
+func GenerateDeploymentWorkflowIDForPatternMatching(seriesName string) string {
+	// escaping the reserved workflow delimiter (|) from the inputs, if present
+	escapedSeriesName := escapeChar(seriesName)
+
+	return DeploymentWorkflowIDPrefix + DeploymentWorkflowIDDelimeter + escapedSeriesName + DeploymentWorkflowIDDelimeter
+}
+
+// BuildQueryWithSeriesFilter is a helper which builds a query for pattern matching based on the
+// provided seriesName
+func BuildQueryWithSeriesFilter(seriesName string) string {
+	wildCardedWorkflowID := GenerateDeploymentWorkflowIDForPatternMatching(seriesName)
+	query := fmt.Sprintf("%s AND %s STARTS_WITH '%s'", DeploymentVisibilityBaseListQuery, searchattribute.WorkflowID, wildCardedWorkflowID)
+	return query
+}
+
+// ParseDeploymentWorkflowID is a helper which parses out the deployment workflow ID to
+// extract the seriesName and buildID
+func ParseDeploymentWorkflowID(workflowID string) (string, string) {
+	parts := strings.Split(workflowID, DeploymentWorkflowIDDelimeter)
+	return parts[1], parts[2]
+}
+
+func DecodeDeploymentMemo(memo *commonpb.Memo) *deployspb.DeploymentWorkflowMemo {
+	var workflowMemo deployspb.DeploymentWorkflowMemo
+	err := sdk.PreferProtoDataConverter.FromPayload(memo.Fields[DeploymentMemoField], &workflowMemo)
+	if err != nil {
+		return nil
+	}
+	return &workflowMemo
 }

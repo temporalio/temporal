@@ -58,16 +58,6 @@ var (
 		searchattribute.ExecutionStatus,
 		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING.String(),
 	)
-
-	DeploymentSeriesVisibilityBaseListQuery = fmt.Sprintf(
-		"%s = '%s' AND %s = '%s' AND %s = '%s'",
-		searchattribute.WorkflowType,
-		DeploymentSeriesWorkflowType,
-		searchattribute.TemporalNamespaceDivision,
-		DeploymentNamespaceDivision,
-		searchattribute.ExecutionStatus,
-		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING.String(),
-	)
 )
 
 type (

@@ -118,6 +118,8 @@ func (d *DeploymentClientImpl) RegisterTaskQueueWorker(
 
 	sa := &commonpb.SearchAttributes{}
 	searchattribute.AddSearchAttribute(&sa, searchattribute.TemporalNamespaceDivision, payload.EncodeString(DeploymentNamespaceDivision))
+	searchattribute.AddSearchAttribute(&sa, searchattribute.TemporalNamespaceDivision, payload.EncodeString(DeploymentNamespaceDivision))
+	searchattribute.AddSearchAttribute(&sa, searchattribute.TemporalNamespaceDivision, payload.EncodeString(DeploymentNamespaceDivision))
 
 	// initial memo fiels
 	memo, err := d.addInitialDeploymentMemo()
@@ -249,28 +251,27 @@ func (d *DeploymentClientImpl) GetCurrentDeployment(ctx context.Context, namespa
 		return nil, err
 	}
 
-	// Fetch the workflow execution to decode it's memo
-	query := d.queryWithWorkflowID(seriesName)
-	persistenceResp, err := d.VisibilityManager.ListWorkflowExecutions(
-		ctx,
-		&manager.ListWorkflowExecutionsRequestV2{
-			NamespaceID: namespaceEntry.ID(),
-			Namespace:   namespaceEntry.Name(),
-			PageSize:    d.VisibilityMaxPageSize(namespaceEntry.Name().String()),
-			Query:       query,
+	workflowID := GenerateDeploymentSeriesWorkflowID(seriesName)
+	resp, err := d.HistoryClient.DescribeWorkflowExecution(ctx, &historyservice.DescribeWorkflowExecutionRequest{
+		NamespaceId: namespaceEntry.ID().String(),
+		Request: &workflowservice.DescribeWorkflowExecutionRequest{
+			Namespace: namespaceEntry.Name().String(),
+			Execution: &commonpb.WorkflowExecution{
+				WorkflowId: workflowID,
+			},
 		},
-	)
-	if err != nil {
-		return nil, err
-	}
+	})
 
-	if len(persistenceResp.Executions) != 1 {
-		return nil, fmt.Errorf("there are more than one deployment series workflow executions")
+	if err != nil {
+		return nil, fmt.Errorf("error while DescribeWorkflowExecution for workflow: %s", workflowID)
+	}
+	if resp == nil {
+		return nil, fmt.Errorf("empty workflow execution for Deployment Series workflow with workflow ID: %s", workflowID)
 	}
 
 	// Decode value from memo
 	var buildID string
-	val := persistenceResp.Executions[0].Memo.Fields[DeploymentSeriesBuildIDMemoField]
+	val := resp.WorkflowExecutionInfo.Memo.Fields[DeploymentSeriesBuildIDMemoField]
 	err = sdk.PreferProtoDataConverter.FromPayload(val, &buildID)
 	if err != nil {
 		return nil, err
@@ -293,7 +294,7 @@ func (d *DeploymentClientImpl) ListDeployments(ctx context.Context, namespaceEnt
 
 	query := ""
 	if seriesName != "" {
-		query = d.queryWithWorkflowID(seriesName)
+		query = BuildQueryWithSeriesFilter(seriesName)
 	} else {
 		query = DeploymentVisibilityBaseListQuery
 	}
@@ -312,37 +313,30 @@ func (d *DeploymentClientImpl) ListDeployments(ctx context.Context, namespaceEnt
 		return nil, nil, err
 	}
 
-	deployments := make([]*deploypb.DeploymentListInfo, len(persistenceResp.Executions))
+	if len(persistenceResp.Executions) == 0 {
+		fmt.Println("WE ARE soooo wrong")
+	}
+
+	deployments := make([]*deploypb.DeploymentListInfo, 0)
 	for _, ex := range persistenceResp.Executions {
-		deployment := ex.GetVersioningInfo().GetDeployment()
-		workflowMemo := d.decodeDeploymentMemo(ex.GetMemo())
+
+		seriesName, buildID := ParseDeploymentWorkflowID(ex.Execution.WorkflowId)
+		deployment := &deploypb.Deployment{
+			SeriesName: seriesName,
+			BuildId:    buildID,
+		}
+		workflowMemo := DecodeDeploymentMemo(ex.GetMemo())
+
 		deploymentListInfo := &deploypb.DeploymentListInfo{
 			Deployment: deployment,
 			CreateTime: workflowMemo.CreateTime,
 			IsCurrent:  workflowMemo.IsCurrentDeployment,
 		}
-
 		deployments = append(deployments, deploymentListInfo)
 	}
 
 	return deployments, NextPageToken, nil
 
-}
-
-func (d *DeploymentClientImpl) decodeDeploymentMemo(memo *commonpb.Memo) *deployspb.DeploymentWorkflowMemo {
-	var workflowMemo deployspb.DeploymentWorkflowMemo
-	err := sdk.PreferProtoDataConverter.FromPayload(memo.Fields[DeploymentMemoField], &workflowMemo)
-	if err != nil {
-		return nil
-	}
-	return &workflowMemo
-}
-
-// queryWithWorkflowID is a helper which generates a query with internally used workflowID's
-func (d *DeploymentClientImpl) queryWithWorkflowID(seriesName string) string {
-	workflowID := GenerateDeploymentSeriesWorkflowID(seriesName)
-	query := fmt.Sprintf("%s AND %s = %s", DeploymentSeriesVisibilityBaseListQuery, searchattribute.WorkflowID, workflowID)
-	return query
 }
 
 // GenerateStartWorkflowPayload generates start workflow execution payload
