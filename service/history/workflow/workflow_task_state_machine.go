@@ -548,17 +548,20 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskStartedEvent(
 		versioningStamp,
 		redirectCounter,
 	)
+	if err != nil {
+		return nil, nil, err
+	}
 
 	m.emitWorkflowTaskAttemptStats(workflowTask.Attempt)
 
 	// TODO merge active & passive task generation
-	if err := m.ms.taskGenerator.GenerateStartWorkflowTaskTasks(
+	if err = m.ms.taskGenerator.GenerateStartWorkflowTaskTasks(
 		scheduledEventID,
 	); err != nil {
 		return nil, nil, err
 	}
 
-	return startedEvent, workflowTask, err
+	return startedEvent, workflowTask, nil
 }
 
 // processBuildIdRedirectInfo validated possible build ID redirect based on the versioningStamp and redirectInfo.
