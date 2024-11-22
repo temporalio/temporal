@@ -408,10 +408,10 @@ type (
 		//     new deployment
 		//  2. VersioningOverride.Deployment: this is returned when user has set a PINNED override
 		//     at wf start time, or later via UpdateWorkflowExecutionOptions.
-		//  3. Deployment: this is returned when there is no transition and not override (the most
+		//  3. Deployment: this is returned when there is no transition and no override (the most
 		//     common case). Deployment is set based on the worker-sent deployment in the latest WFT
-		//     completion. Exception: if Deployment is set but workflows effective behavior is
-		//     UNSPECIFIED, it means the workflow is unversioned so Deployment will be ignored.
+		//     completion. Exception: if Deployment is set but the workflow's effective behavior is
+		//     UNSPECIFIED, it means the workflow is unversioned, so effective deployment will be nil.
 		GetEffectiveDeployment() *deploymentpb.Deployment
 		// GetEffectiveVersioningBehavior returns the effective versioning behavior in the following
 		// order:
