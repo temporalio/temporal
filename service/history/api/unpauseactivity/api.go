@@ -55,7 +55,7 @@ func Invoke(
 		func(workflowLease api.WorkflowLease) (*api.UpdateWorkflowAction, error) {
 			mutableState := workflowLease.GetMutableState()
 			var err error
-			response, err = unpauseActivity(shardContext, mutableState, request)
+			response, err = processUnpauseActivityRequest(shardContext, mutableState, request)
 			if err != nil {
 				return nil, err
 			}
@@ -76,7 +76,7 @@ func Invoke(
 	return response, err
 }
 
-func unpauseActivity(
+func processUnpauseActivityRequest(
 	shardContext shard.Context,
 	mutableState workflow.MutableState,
 	request *historyservice.UnpauseActivityRequest,

@@ -14,7 +14,6 @@
 //
 // THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
 // IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
 // FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
 // AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 // LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
@@ -286,6 +285,29 @@ func (s *activitySuite) TestUnpauseActivityWithResumeAcceptance() {
 	_, err = UnpauseActivityWithResume(s.mockShard, s.mutableState, ai, false)
 	s.NoError(err)
 
+	s.Equal(int32(1), ai.Attempt, "ActivityInfo.Attempt is shouldn't change")
+	s.NotEqual(prevStamp, ai.Stamp, "ActivityInfo.Stamp should change")
+	s.Equal(false, ai.Paused, "ActivityInfo.Paused was not unpaused")
+}
+
+func (s *activitySuite) TestUnpauseActivityWithNewRun() {
+	ai := s.AddActivityInfo()
+
+	prevStamp := ai.Stamp
+	err := PauseActivityById(s.mutableState, ai.ActivityId)
+	s.NoError(err)
+
+	s.Equal(int32(1), ai.Attempt, "ActivityInfo.Attempt is shouldn't change")
+	s.NotEqual(prevStamp, ai.Stamp, "ActivityInfo.Stamp should change")
+	s.Equal(true, ai.Paused, "ActivityInfo.Paused was not unpaused")
+	prevStamp = ai.Stamp
+	fakeScheduledTime := time.Now().UTC().Add(5 * time.Minute)
+	ai.ScheduledTime = timestamppb.New(fakeScheduledTime)
+	_, err = UnpauseActivityWithResume(s.mockShard, s.mutableState, ai, true)
+	s.NoError(err)
+
+	// scheduled time should be reset to
+	s.NotEqual(fakeScheduledTime, ai.ScheduledTime.AsTime())
 	s.Equal(int32(1), ai.Attempt, "ActivityInfo.Attempt is shouldn't change")
 	s.NotEqual(prevStamp, ai.Stamp, "ActivityInfo.Stamp should change")
 	s.Equal(false, ai.Paused, "ActivityInfo.Paused was not unpaused")
