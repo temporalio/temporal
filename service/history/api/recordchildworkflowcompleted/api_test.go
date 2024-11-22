@@ -80,9 +80,9 @@ func Test_Recordchildworkflowcompleted_WithForwards(t *testing.T) {
 	mockRegistery.EXPECT().GetNamespaceByID(testNamespaceID).Return(&namespace.Namespace{}, nil)
 	mockClusterMetadata := cluster.NewMockMetadata(ctrl)
 	mockClusterMetadata.EXPECT().GetCurrentClusterName().Return("")
-	shard := shard.NewMockContext(ctrl)
-	shard.EXPECT().GetNamespaceRegistry().Return(mockRegistery)
-	shard.EXPECT().GetClusterMetadata().Return(mockClusterMetadata)
+	shardContext := shard.NewMockContext(ctrl)
+	shardContext.EXPECT().GetNamespaceRegistry().Return(mockRegistery)
+	shardContext.EXPECT().GetClusterMetadata().Return(mockClusterMetadata)
 
 	oldParentMutableState := workflow.NewMockMutableState(ctrl)
 	oldParentMutableState.EXPECT().IsWorkflowExecutionRunning().Return(false)
@@ -115,7 +115,7 @@ func Test_Recordchildworkflowcompleted_WithForwards(t *testing.T) {
 	consistencyChecker.EXPECT().GetWorkflowLeaseWithConsistencyCheck(anyArg, anyArg, anyArg, oldParentWFKey, anyArg).Return(oldParentWFLease, nil)
 	consistencyChecker.EXPECT().GetWorkflowLeaseWithConsistencyCheck(anyArg, anyArg, anyArg, newParentWFKey, anyArg).Return(newParentWFLease, nil)
 
-	resp, err := Invoke(ctx, request, shard, consistencyChecker)
+	resp, err := Invoke(ctx, request, shardContext, consistencyChecker)
 	require.NoError(t, err)
 	require.NotNil(t, resp)
 	require.Equal(t, newParentRunID, request.ParentExecution.RunId) // the request should be modified to point to the new parent.
@@ -151,9 +151,9 @@ func Test_Recordchildworkflowcompleted_WithInfiniteForwards(t *testing.T) {
 	mockRegistery.EXPECT().GetNamespaceByID(testNamespaceID).Return(&namespace.Namespace{}, nil)
 	mockClusterMetadata := cluster.NewMockMetadata(ctrl)
 	mockClusterMetadata.EXPECT().GetCurrentClusterName().Return("")
-	shard := shard.NewMockContext(ctrl)
-	shard.EXPECT().GetNamespaceRegistry().Return(mockRegistery)
-	shard.EXPECT().GetClusterMetadata().Return(mockClusterMetadata)
+	shardContext := shard.NewMockContext(ctrl)
+	shardContext.EXPECT().GetNamespaceRegistry().Return(mockRegistery)
+	shardContext.EXPECT().GetClusterMetadata().Return(mockClusterMetadata)
 
 	oldParentMutableState := workflow.NewMockMutableState(ctrl)
 	oldParentMutableState.EXPECT().IsWorkflowExecutionRunning().Return(false).Times(maxResetRedirectCount + 1)
@@ -166,7 +166,7 @@ func Test_Recordchildworkflowcompleted_WithInfiniteForwards(t *testing.T) {
 	consistencyChecker := api.NewMockWorkflowConsistencyChecker(ctrl)
 	consistencyChecker.EXPECT().GetWorkflowLeaseWithConsistencyCheck(anyArg, anyArg, anyArg, oldParentWFKey, anyArg).Return(oldParentWFLease, nil).Times(maxResetRedirectCount + 1)
 
-	resp, err := Invoke(ctx, request, shard, consistencyChecker)
+	resp, err := Invoke(ctx, request, shardContext, consistencyChecker)
 	require.ErrorIs(t, err, consts.ErrWorkflowCompleted)
 	require.Nil(t, resp)
 }
