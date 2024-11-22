@@ -45,23 +45,6 @@ const (
 	reachabilityCacheMaxSize      = 10000
 )
 
-/*
-const (
-	// Reachability level is not specified.
-	DEPLOYMENT_REACHABILITY_UNSPECIFIED DeploymentReachability = 0
-	// The deployment is reachable by new and/or open workflows. The deployment cannot be
-	// decommissioned safely.
-	DEPLOYMENT_REACHABILITY_REACHABLE DeploymentReachability = 1
-	// The deployment is not reachable by new or open workflows, but might be still needed by
-	// Queries sent to closed workflows. The deployment can be decommissioned safely if user does
-	// not query closed workflows.
-	DEPLOYMENT_REACHABILITY_CLOSED_WORKFLOWS_ONLY DeploymentReachability = 2
-	// The deployment is not reachable by any workflow because all the workflows who needed this
-	// deployment went out of retention period. The deployment can be decommissioned safely.
-	DEPLOYMENT_REACHABILITY_UNREACHABLE DeploymentReachability = 3
-)
-*/
-
 func getDeploymentReachability(
 	ctx context.Context,
 	namespaceEntry *namespace.Namespace,
