@@ -45,6 +45,10 @@ import (
 // maxResetRedirectCount prevents us from following long chain of resets (or some circular loop in redirects).
 const maxResetRedirectCount = 100
 
+// This API records the child completion event in the parent's history. It does the following.
+// - Rejects the request if the parent was closed for any reason other than reset.
+// - If the parent was closed due to reset, it forwards the request to the new parent following the resetRunID link.
+// - It ensures that the child sending the completion request was initialized by this parent before accepting the request.
 func Invoke(
 	ctx context.Context,
 	request *historyservice.RecordChildExecutionCompletedRequest,
@@ -56,10 +60,14 @@ func Invoke(
 		return nil, err
 	}
 
+	// If the parent is reset, we need to follow a possible chain of resets to deliver the completion event to the correct parent.
 	redirectCount := 0
 	for {
 		resetRunID, err := recordChildWorkflowCompleted(ctx, request, shardContext, workflowConsistencyChecker)
 		if errors.Is(err, consts.ErrWorkflowCompleted) {
+			// if the parent was reset, forward the request to the new run pointed by resetRunID
+			// Note: An alternative solution is to load the current run here ane compare the originalRunIDs of the current run and the closed parent.
+			// If they match, then deliver it to the current run. We should consider this optimization if we notice that reset chain is longer than 1-2 hops.
 			if resetRunID != "" && redirectCount < maxResetRedirectCount {
 				redirectCount++
 				request.ParentExecution.RunId = resetRunID
@@ -132,7 +140,9 @@ func recordChildWorkflowCompleted(
 			// note we already checked if startedEventID is empty (in consistency predicate)
 			// and reloaded mutable state, so if startedEventID is still missing, we need to
 			// record a started event before recording completion event.
-			recordStartedEventIfMissing(ctx, mutableState, request, ci)
+			if err := recordStartedEventIfMissing(ctx, mutableState, request, ci); err != nil {
+				return nil, err
+			}
 
 			childExecution := request.GetChildExecution()
 			if ci.GetStartedWorkflowId() != childExecution.GetWorkflowId() {
