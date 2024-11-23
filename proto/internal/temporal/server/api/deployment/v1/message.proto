@@ -36,8 +36,8 @@ message DeploymentLocalState {
     map<string, TaskQueueFamilyInfo> task_queue_families = 2;
     bool is_current = 3;
     google.protobuf.Timestamp create_time = 4;
-    map<string, temporal.api.common.v1.Payload> metadata = 5; 
-    
+    map<string, temporal.api.common.v1.Payload> metadata = 5;
+
     message TaskQueueFamilyInfo {
         // key: taskQueueType, val: TaskQueueInfo
         map<int32,TaskQueueInfo> task_queues = 1;

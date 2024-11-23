@@ -680,6 +680,7 @@ type AddWorkflowTaskResponse struct {
 	unknownFields protoimpl.UnknownFields
 
 	// When present, it means that the task is spooled to a versioned queue of this build ID
+	// Deprecated. [cleanup-old-wv]
 	AssignedBuildId string `protobuf:"bytes,1,opt,name=assigned_build_id,json=assignedBuildId,proto3" json:"assigned_build_id,omitempty"`
 }
 
@@ -836,6 +837,7 @@ type AddActivityTaskResponse struct {
 	unknownFields protoimpl.UnknownFields
 
 	// When present, it means that the task is spooled to a versioned queue of this build ID
+	// Deprecated. [cleanup-old-wv]
 	AssignedBuildId string `protobuf:"bytes,1,opt,name=assigned_build_id,json=assignedBuildId,proto3" json:"assigned_build_id,omitempty"`
 }
 
