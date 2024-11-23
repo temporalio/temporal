@@ -72,6 +72,7 @@ message DescribeResponse {
 }
 
 message DeploymentWorkflowMemo {
-    google.protobuf.Timestamp create_time = 1;
-    bool is_current_deployment = 2;
+    temporal.api.deployment.v1.Deployment deployment = 1;
+    google.protobuf.Timestamp create_time = 2;
+    bool is_current_deployment = 3;
 }

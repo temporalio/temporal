@@ -78,7 +78,7 @@ func (a *DeploymentActivities) StartDeploymentSeriesWorkflow(ctx context.Context
 	}
 
 	// Calling the workflow with the args
-	_, err := sdkClient.ExecuteWorkflow(ctx, workflowOptions, DeploymentSeriesWorkflow, deploymentSeriesWorkflowArgs)
+	_, err := sdkClient.ExecuteWorkflow(ctx, workflowOptions, DeploymentSeriesWorkflowType, deploymentSeriesWorkflowArgs)
 	if err != nil {
 		return err
 	}
