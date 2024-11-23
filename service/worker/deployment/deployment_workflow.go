@@ -25,8 +25,6 @@
 package deployment
 
 import (
-	"fmt"
-
 	sdkclient "go.temporal.io/sdk/client"
 	sdklog "go.temporal.io/sdk/log"
 	"go.temporal.io/sdk/workflow"
@@ -50,7 +48,6 @@ type AwaitSignals struct {
 }
 
 func DeploymentWorkflow(ctx workflow.Context, deploymentWorkflowArgs *deployspb.DeploymentWorkflowArgs) error {
-	fmt.Println("I am going to start deployment")
 	deploymentWorkflowRunner := &DeploymentWorkflowRunner{
 		DeploymentWorkflowArgs: deploymentWorkflowArgs,
 		ctx:                    ctx,
