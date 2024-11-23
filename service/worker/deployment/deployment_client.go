@@ -280,6 +280,10 @@ func (d *DeploymentClientImpl) GetDeploymentReachability(
 		d.reachabilityCache,
 	)
 
+	if err != nil {
+		return nil, err
+	}
+
 	return &workflowservice.GetDeploymentReachabilityResponse{
 		DeploymentInfo: deployInfo,
 		Reachability:   reachability,
