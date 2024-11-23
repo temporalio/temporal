@@ -1670,20 +1670,19 @@ func (ms *MutableStateImpl) UpdateActivityInfo(
 }
 
 // UpdateActivityTaskStatusWithTimerHeartbeat updates an activity's timer task status or/and timer heartbeat
-func (ms *MutableStateImpl) UpdateActivityTaskStatusWithTimerHeartbeat(scheduleEventID int64, timerTaskStatus *int32, heartbeatTimeoutVisibility *time.Time) error {
-	if timerTaskStatus != nil {
-		ai, ok := ms.pendingActivityInfoIDs[scheduleEventID]
-		if !ok {
-			ms.logError(
-				fmt.Sprintf("unable to find activity event ID: %v in mutable state", scheduleEventID),
-				tag.ErrorTypeInvalidMutableStateAction,
-			)
-			return ErrMissingActivityInfo
-		}
-
-		ai.TimerTaskStatus = *timerTaskStatus
-		ms.updateActivityInfos[ai.ScheduledEventId] = ai
+func (ms *MutableStateImpl) UpdateActivityTaskStatusWithTimerHeartbeat(scheduleEventID int64, timerTaskStatus int32, heartbeatTimeoutVisibility *time.Time) error {
+	ai, ok := ms.pendingActivityInfoIDs[scheduleEventID]
+	if !ok {
+		ms.logError(
+			fmt.Sprintf("unable to find activity event ID: %v in mutable state", scheduleEventID),
+			tag.ErrorTypeInvalidMutableStateAction,
+		)
+		return ErrMissingActivityInfo
 	}
+
+	ai.TimerTaskStatus = timerTaskStatus
+	ms.updateActivityInfos[ai.ScheduledEventId] = ai
+
 	if heartbeatTimeoutVisibility != nil {
 		ms.pendingActivityTimerHeartbeats[scheduleEventID] = *heartbeatTimeoutVisibility
 	}

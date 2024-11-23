@@ -392,7 +392,7 @@ func (r *TaskRefresherImpl) refreshTasksForActivity(
 			activityInfo.TimerTaskStatus = TimerTaskStatusNone // clear activity timer task mask for later activity timer task re-generation
 			if err := mutableState.UpdateActivityTaskStatusWithTimerHeartbeat(
 				activityInfo.ScheduledEventId,
-				&activityInfo.TimerTaskStatus,
+				activityInfo.TimerTaskStatus,
 				nil,
 			); err != nil {
 				return err

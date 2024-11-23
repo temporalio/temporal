@@ -3108,7 +3108,7 @@ func (mr *MockMutableStateMockRecorder) UpdateActivityProgress(ai, request any) 
 }
 
 // UpdateActivityTaskStatusWithTimerHeartbeat mocks base method.
-func (m *MockMutableState) UpdateActivityTaskStatusWithTimerHeartbeat(scheduleEventId int64, timerTaskStatus *int32, heartbeatTimeoutVisibility *time.Time) error {
+func (m *MockMutableState) UpdateActivityTaskStatusWithTimerHeartbeat(scheduleEventId int64, timerTaskStatus int32, heartbeatTimeoutVisibility *time.Time) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "UpdateActivityTaskStatusWithTimerHeartbeat", scheduleEventId, timerTaskStatus, heartbeatTimeoutVisibility)
 	ret0, _ := ret[0].(error)
