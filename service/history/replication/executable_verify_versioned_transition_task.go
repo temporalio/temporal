@@ -181,10 +181,14 @@ func (e *ExecutableVerifyVersionedTransitionTask) Execute() error {
 		return err
 	}
 	// case 4: event on non-current branch are up-to-date
-	if lcaItem.EventId >= lastItem.EventId {
+	if versionhistory.IsEqualVersionHistoryItem(lcaItem, lastItem) {
 		return e.verifyNewRunExist(ctx)
 	}
+	// case 5: event on non-current branch are not up-to-date, we need to backfill events
 	startEventVersion, err := versionhistory.GetVersionHistoryEventVersion(targetHistory, lcaItem.EventId+1)
+	if err != nil {
+		return err
+	}
 	return e.BackFillEvents(
 		ctx,
 		e.ExecutableTask.SourceClusterName(),

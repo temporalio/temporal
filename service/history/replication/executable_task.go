@@ -574,7 +574,7 @@ func (e *ExecutableTaskImpl) BackFillEvents(
 		workflowKey.WorkflowID,
 		workflowKey.RunID,
 		startEventId,
-		startEventVersion, // continue as new run's first event batch should have the same version as the last event of the old run
+		startEventVersion,
 		endEventId,
 		endEventVersion,
 	)
