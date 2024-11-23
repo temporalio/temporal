@@ -94,7 +94,7 @@ type DeploymentStoreClient interface {
 		seriesName string,
 		buildID string,
 		identity string,
-		updateMetadata deploymentpb.UpdateDeploymentMetadata,
+		updateMetadata *deploymentpb.UpdateDeploymentMetadata,
 	) (*deploymentpb.DeploymentInfo, *deploymentpb.DeploymentInfo, error)
 }
 
@@ -384,9 +384,50 @@ func (d *DeploymentClientImpl) SetCurrentDeployment(
 	seriesName string,
 	buildID string,
 	identity string,
-	updateMetadata deploymentpb.UpdateDeploymentMetadata,
+	updateMetadata *deploymentpb.UpdateDeploymentMetadata,
 ) (*deploymentpb.DeploymentInfo, *deploymentpb.DeploymentInfo, error) {
+	err := ValidateDeploymentWfParams(SeriesFieldName, seriesName, d.MaxIDLengthLimit())
+	if err != nil {
+		return nil, nil, err
+	}
+	err = ValidateDeploymentWfParams(BuildIDFieldName, buildID, d.MaxIDLengthLimit())
+	if err != nil {
+		return nil, nil, err
+	}
 
+	deploymentWorkflowID := GenerateDeploymentWorkflowID(seriesName, buildID)
+
+	updateArgs := &deploymentspb.SetCurrentDeploymentArgs{
+		Identity:       identity,
+		UpdateMetadata: updateMetadata,
+	}
+	updatePayload, err := sdk.PreferProtoDataConverter.ToPayloads(updateArgs)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	historyUpdateReq := &historyservice.UpdateWorkflowExecutionRequest{
+		NamespaceId: namespaceEntry.ID().String(),
+		Request: &workflowservice.UpdateWorkflowExecutionRequest{
+			Namespace: namespaceEntry.Name().String(),
+			WorkflowExecution: &commonpb.WorkflowExecution{
+				WorkflowId: deploymentWorkflowID,
+			},
+			Request: &updatepb.Request{
+				Input: &updatepb.Input{Name: SetCurrentDeployment, Args: updatePayload},
+			},
+			WaitPolicy: &updatepb.WaitPolicy{LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED},
+		},
+	}
+
+	res, err := d.HistoryClient.UpdateWorkflowExecution(ctx, historyUpdateReq)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	// FIXME: wait?
+	_ = res
+	return nil, nil, nil
 }
 
 // GenerateStartWorkflowPayload generates start workflow execution payload

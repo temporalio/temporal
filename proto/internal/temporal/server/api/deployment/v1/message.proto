@@ -80,6 +80,12 @@ message RegisterWorkerInDeploymentArgs {
     int32 max_task_queues = 4;
 }
 
+// used as deployment workflow update input:
+message SetCurrentDeploymentArgs {
+    string identity = 1;
+    temporal.api.deployment.v1.UpdateDeploymentMetadata update_metadata = 2;
+}
+
 // used as deployment workflow query response:
 message QueryDescribeDeploymentResponse {
     DeploymentLocalState deployment_local_state = 1;

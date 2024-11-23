@@ -77,14 +77,10 @@ func DeploymentWorkflow(ctx workflow.Context, deploymentWorkflowArgs *deployment
 
 func (d *DeploymentWorkflowRunner) listenToSignals(ctx workflow.Context) {
 	// Fetch signal channels
-	updateBuildIDSignalChannel := workflow.GetSignalChannel(ctx, UpdateDeploymentBuildIDSignalName)
 	forceCANSignalChannel := workflow.GetSignalChannel(ctx, ForceCANSignalName)
 	forceCAN := false
 
 	selector := workflow.NewSelector(ctx)
-	selector.AddReceive(updateBuildIDSignalChannel, func(c workflow.ReceiveChannel, more bool) {
-		// Process Signal
-	})
 	selector.AddReceive(forceCANSignalChannel, func(c workflow.ReceiveChannel, more bool) {
 		// Process Signal
 		forceCAN = true

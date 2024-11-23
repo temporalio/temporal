@@ -40,10 +40,10 @@ import (
 const (
 	// Updates
 	RegisterWorkerInDeployment = "register-task-queue-worker"
+	SetCurrentDeployment       = "set-current-deployment"
 
 	// Signals
-	UpdateDeploymentBuildIDSignalName = "update-deployment-build-id"
-	ForceCANSignalName                = "force-continue-as-new"
+	ForceCANSignalName = "force-continue-as-new"
 
 	// Queries
 	QueryDescribeDeployment = "describe-deployment"
