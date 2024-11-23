@@ -60,14 +60,22 @@ func escapeBuildIdSearchAttributeDelimiter(s string) string {
 // ReachabilityBuildIdSearchAttribute returns the search attribute value for the currently assigned build ID in the form
 // 'reachability:<behavior>:<deployment_series_name>:<deployment_build_id>'
 func ReachabilityBuildIdSearchAttribute(behavior enumspb.VersioningBehavior, deployment *deploymentpb.Deployment) string {
+	var escapedDeployment string
+	if deployment == nil {
+		escapedDeployment = "UNVERSIONED"
+	} else {
+		escapedDeployment = fmt.Sprintf("%s%s%s",
+			escapeBuildIdSearchAttributeDelimiter(deployment.GetSeriesName()),
+			BuildIdSearchAttributeDelimiter,
+			escapeBuildIdSearchAttributeDelimiter(deployment.GetBuildId()),
+		)
+	}
 	return sqlparser.String(sqlparser.NewStrVal([]byte(fmt.Sprintf("%s%s%s%s%s%s%s",
 		buildIdSearchAttributePrefixReachability,
 		BuildIdSearchAttributeDelimiter,
 		escapeBuildIdSearchAttributeDelimiter(behavior.String()),
 		BuildIdSearchAttributeDelimiter,
-		escapeBuildIdSearchAttributeDelimiter(deployment.GetSeriesName()),
-		BuildIdSearchAttributeDelimiter,
-		escapeBuildIdSearchAttributeDelimiter(deployment.GetBuildId()),
+		escapedDeployment,
 	))))
 }
 
