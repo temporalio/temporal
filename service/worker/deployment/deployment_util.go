@@ -57,6 +57,7 @@ const (
 	DeploymentWorkflowIDPrefix       = "temporal-sys-deployment"
 	DeploymentSeriesWorkflowIDPrefix = "temporal-sys-deployment-series"
 	DeploymentWorkflowIDDelimeter    = ":"
+	DeploymentWorkflowIDEscape       = "|"
 	DeploymentWorkflowIDInitialSize  = (2 * len(DeploymentWorkflowIDDelimeter)) + len(DeploymentWorkflowIDPrefix)
 	SeriesFieldName                  = "DeploymentSeries"
 	BuildIDFieldName                 = "BuildID"
@@ -82,7 +83,8 @@ func ValidateDeploymentWfParams(fieldName string, field string, maxIDLengthLimit
 // EscapeChar is a helper which escapes the DeploymentWorkflowIDDelimeter character
 // in the input string
 func escapeChar(s string) string {
-	s = strings.Replace(s, DeploymentWorkflowIDDelimeter, `|`+DeploymentWorkflowIDDelimeter, -1)
+	s = strings.Replace(s, DeploymentWorkflowIDEscape, DeploymentWorkflowIDEscape+DeploymentWorkflowIDEscape, -1)
+	s = strings.Replace(s, DeploymentWorkflowIDDelimeter, DeploymentWorkflowIDEscape+DeploymentWorkflowIDDelimeter, -1)
 	return s
 }
 
