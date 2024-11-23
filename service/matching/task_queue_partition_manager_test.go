@@ -78,7 +78,8 @@ func (s *PartitionManagerTestSuite) SetupTest() {
 	partition := f.TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW).RootPartition()
 	tqConfig := newTaskQueueConfig(partition.TaskQueue(), me.config, ns.Name())
 	s.userDataMgr = &mockUserDataManager{}
-	pm, err := newTaskQueuePartitionManager(me, ns, partition, tqConfig, s.userDataMgr)
+	logger, _, metricsHandler := me.loggerAndMetricsForPartition(namespace.Name(namespaceName), partition, tqConfig)
+	pm, err := newTaskQueuePartitionManager(me, ns, partition, tqConfig, logger, logger, metricsHandler, s.userDataMgr)
 	s.Assert().NoError(err)
 	s.partitionMgr = pm
 	me.Start()

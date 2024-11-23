@@ -132,7 +132,7 @@ func Invoke(
 			// Assuming a workflow is running on a sticky task queue by a workerA.
 			// After workerA is dead for more than 10s, matching will return StickyWorkerUnavailable error when history
 			// tries to push a new workflow task. When history sees that error, it will fall back to push the task to
-			// its original normal task queue without clear its stickiness to avoid an extra persistence write.
+			// its original normal task queue without clearing its stickiness to avoid an extra persistence write.
 			// We will clear the stickiness here when that task is delivered to another worker polling from normal queue.
 			// The stickiness info is used by frontend to decide if it should send down partial history or full history.
 			// Sending down partial history will cost the worker an extra fetch to server for the full history.
@@ -142,7 +142,7 @@ func Invoke(
 				// For versioned workflows we additionally check for the poller queue to not be a sticky queue itself.
 				// Although it's ideal to check this for unversioned workflows as well, we can't rely on older clients
 				// setting the poller TQ kind.
-				if (mutableState.GetAssignedBuildId() != "" || mutableState.GetCurrentDeployment() != nil) &&
+				if (mutableState.GetAssignedBuildId() != "" || mutableState.GetEffectiveDeployment() != nil) &&
 					req.PollRequest.TaskQueue.Kind == enumspb.TASK_QUEUE_KIND_STICKY {
 					return nil, serviceerrors.NewObsoleteDispatchBuildId("wrong sticky queue")
 				}
@@ -152,10 +152,10 @@ func Invoke(
 			}
 
 			deployment := worker_versioning.DeploymentFromCapabilities(req.PollRequest.WorkerVersionCapabilities)
-			wfDeployment := mutableState.GetCurrentDeployment()
+			wfDeployment := mutableState.GetEffectiveDeployment()
 			if !deployment.Equal(wfDeployment) {
 				// Try starting a redirect. If it doesn't happen, it means this task is obsolete.
-				if !mutableState.StartDeploymentRedirect(deployment, enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED) {
+				if !mutableState.StartDeploymentTransition(deployment) {
 					return nil, serviceerrors.NewObsoleteDispatchBuildId("poller's deployment does not match workflow's current deployment")
 				}
 			}

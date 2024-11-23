@@ -4236,6 +4236,80 @@ func (ms *MutableStateImpl) RejectWorkflowExecutionUpdate(_ string, _ *updatepb.
 	return nil
 }
 
+func (ms *MutableStateImpl) AddWorkflowExecutionOptionsUpdatedEvent(
+	versioningOverride *workflowpb.VersioningOverride,
+) (*historypb.HistoryEvent, error) {
+	if err := ms.checkMutability(tag.WorkflowActionWorkflowOptionsUpdated); err != nil {
+		return nil, err
+	}
+	event := ms.hBuilder.AddWorkflowExecutionOptionsUpdatedEvent(versioningOverride)
+	if err := ms.ApplyWorkflowExecutionOptionsUpdatedEvent(event); err != nil {
+		return nil, err
+	}
+	return event, nil
+}
+
+func (ms *MutableStateImpl) ApplyWorkflowExecutionOptionsUpdatedEvent(event *historypb.HistoryEvent) error {
+	override := event.GetWorkflowExecutionOptionsUpdatedEventAttributes().GetVersioningOverride()
+	previousCurrentDeployment := ms.GetEffectiveDeployment()
+	previousEffectiveVersioningBehavior := ms.GetEffectiveVersioningBehavior()
+	if ms.GetExecutionInfo().GetVersioningInfo() == nil {
+		ms.GetExecutionInfo().VersioningInfo = &workflowpb.WorkflowExecutionVersioningInfo{}
+	}
+	ms.GetExecutionInfo().VersioningInfo.VersioningOverride = override
+
+	// If effective deployment or behavior change, we need to reschedule any pending tasks, because History will reject
+	// the task's start request if the task is being started by a poller that is not from the workflow's effective
+	// deployment according to History. Therefore, it is important for matching to match tasks with the correct pollers.
+	// Even if the effective deployment does not change, we still need to reschedule tasks into the appropriate
+	// default/unpinned queue or the pinned queue, because the two queues will be handled differently if the task queue's
+	// Current Deployment changes between now and when the task is started.
+	//
+	// We choose to let any started WFT that is running on the old deployment finish running, instead of forcing it to fail.
+	if !proto.Equal(ms.GetEffectiveDeployment(), previousCurrentDeployment) ||
+		ms.GetEffectiveVersioningBehavior() != previousEffectiveVersioningBehavior {
+		// If there is an ongoing transition, we remove it so that tasks from this workflow (including the pending WFT
+		// that initiated the transition) can run on our override deployment as soon as possible.
+		//
+		// We only have to think about the case where the workflow is unpinned, since if the workflow is pinned, no
+		// transition will start.
+		//
+		// If we did NOT remove the transition, we would have to keep the pending WFT scheduled per the transition's
+		// deployment, so that when the task is started it can run on the transition's target deployment, complete,
+		// and thereby complete the transition. If there is anything wrong with the transition's target deployment,
+		// the transition could hang due to the task being stuck, or the transition could fail if the WFT fails.
+		// Basically, WF might be stuck in a transition loop, and user wants to pin it to the previous build to move
+		// it out of the loop. If we don't remove the transition, it will still be stuck.
+		//
+		// It is possible for there to be an ongoing transition and an override that both result in the same effective
+		// behavior and effective deployment. In that case, we would not hit the code path to remove the transition or
+		// reschedule the WFT. For this to happen, the existing behavior and the override would both have to be unpinned.
+		// If we don't remove the transition or reschedule pending tasks, the outstanding WFT on the transition's
+		// target queue will be started on the transition's target deployment. Most likely this matches user's intention
+		// because they add the unpinned override, they want to workflow to do the transition. Even if we removed the
+		// transition, the rescheduled task will be redirected by Matching to the old transition's deployment again,
+		// and it will start the same transition in the workflow. So removing the transition would not make a difference
+		// and would in fact add some extra work for the server.
+		ms.executionInfo.GetVersioningInfo().DeploymentTransition = nil
+		// TODO (carly) part 2: if safe mode, do replay test on new deployment if deployment changed, if fail, revert changes and abort
+		ms.ClearStickyTaskQueue()
+		if ms.HasPendingWorkflowTask() && !ms.HasStartedWorkflowTask() &&
+			// Speculative WFT is directly (without transfer task) added to matching when scheduled.
+			// It is protected by timeout on both normal and sticky task queues.
+			// If there is no poller for previous deployment, it will time out,
+			// and will be rescheduled as normal WFT.
+			ms.GetPendingWorkflowTask().Type != enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE {
+			// sticky queue was just cleared, so the following call only generates
+			// a WorkflowTask, not a WorkflowTaskTimeoutTask.
+			err := ms.taskGenerator.GenerateScheduleWorkflowTaskTasks(ms.GetPendingWorkflowTask().ScheduledEventID)
+			if err != nil {
+				return err
+			}
+		}
+	}
+	return ms.reschedulePendingActivities()
+}
+
 func (ms *MutableStateImpl) ApplyWorkflowExecutionTerminatedEvent(
 	firstEventID int64,
 	event *historypb.HistoryEvent,
@@ -6732,56 +6806,64 @@ func (ms *MutableStateImpl) disablingTransitionHistory() bool {
 	return ms.versionedTransitionInDB != nil && len(ms.executionInfo.TransitionHistory) == 0
 }
 
-// GetCurrentDeployment returns the current effective deployment in the following order:
-// RedirectingDeployment takes precedence over DeploymentOverride, over Deployment.
-func (ms *MutableStateImpl) GetCurrentDeployment() *deploymentpb.Deployment {
+// GetEffectiveDeployment returns the effective deployment in the following order:
+//  1. DeploymentTransition.Deployment: this is returned when the wf is transitioning to a
+//     new deployment
+//  2. VersioningOverride.Deployment: this is returned when user has set a PINNED override
+//     at wf start time, or later via UpdateWorkflowExecutionOptions.
+//  3. Deployment: this is returned when there is no transition and no override (the most
+//     common case). Deployment is set based on the worker-sent deployment in the latest WFT
+//     completion. Exception: if Deployment is set but the workflow's effective behavior is
+//     UNSPECIFIED, it means the workflow is unversioned, so effective deployment will be nil.
+func (ms *MutableStateImpl) GetEffectiveDeployment() *deploymentpb.Deployment {
 	versioningInfo := ms.GetExecutionInfo().GetVersioningInfo()
 	if versioningInfo == nil {
 		return nil
-	} else if redirectInfo := versioningInfo.GetRedirectInfo(); redirectInfo != nil {
-		return redirectInfo.GetDeployment()
-	} else if override := versioningInfo.GetDeploymentOverride(); override != nil {
-		return override
+	} else if transition := versioningInfo.GetDeploymentTransition(); transition != nil {
+		return transition.GetDeployment()
+	} else if override := versioningInfo.GetVersioningOverride(); override != nil &&
+		override.GetBehavior() == enumspb.VERSIONING_BEHAVIOR_PINNED {
+		return override.GetDeployment()
+	} else if ms.GetEffectiveVersioningBehavior() != enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED {
+		return versioningInfo.GetDeployment()
 	}
-	return versioningInfo.GetDeployment()
+	return nil
 }
 
-func (ms *MutableStateImpl) GetRedirectInfo() *persistencespb.WorkflowExecutionInfo_VersioningInfo_RedirectInfo {
-	return ms.GetExecutionInfo().GetVersioningInfo().GetRedirectInfo()
+func (ms *MutableStateImpl) GetDeploymentTransition() *workflowpb.DeploymentTransition {
+	return ms.GetExecutionInfo().GetVersioningInfo().GetDeploymentTransition()
 }
 
-// GetVersioningBehavior returns the effective versioning behavior for the workflow.
-func (ms *MutableStateImpl) GetVersioningBehavior() enumspb.VersioningBehavior {
+// GetEffectiveVersioningBehavior returns the effective versioning behavior in the following
+// order:
+//  1. VersioningOverride.Behavior: this is returned when user has set a behavior override
+//     at wf start time, or later via UpdateWorkflowExecutionOptions.
+//  2. Behavior: this is returned when there is no override (most common case). Behavior is
+//     set based on the worker-sent deployment in the latest WFT completion.
+func (ms *MutableStateImpl) GetEffectiveVersioningBehavior() enumspb.VersioningBehavior {
 	versioningInfo := ms.GetExecutionInfo().GetVersioningInfo()
 	if versioningInfo == nil {
 		return enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED
-	} else if redirectInfo := versioningInfo.GetRedirectInfo(); redirectInfo != nil &&
-		redirectInfo.GetBehaviorOverride() != enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED {
-		return redirectInfo.GetBehaviorOverride()
-	} else if versioningInfo.GetBehaviorOverride() != enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED {
-		return versioningInfo.GetBehaviorOverride()
+	} else if override := versioningInfo.GetVersioningOverride(); override != nil {
+		return override.GetBehavior()
 	}
 	return versioningInfo.GetBehavior()
 }
 
-// StartDeploymentRedirect starts a redirect to the given deployment. If the workflow is pinned,
-// the redirect will be rejected unless it's initiated by an override. Returns true if the requested
-// redirect is started. Starting a new redirect replaces possible existing redirect without
-// rescheduling activities.
+// StartDeploymentTransition starts a transition to the given deployment. Returns true
+// if the requested transition is started. Starting a new transition replaces possible
+// existing ongoing transition without rescheduling activities. If the workflow is
+// pinned, the transition won't start.
 // TODO (shahab): validate source deployment
-func (ms *MutableStateImpl) StartDeploymentRedirect(
-	deployment *deploymentpb.Deployment,
-	behaviorOverride enumspb.VersioningBehavior,
-) bool {
-	if deployment.Equal(ms.GetCurrentDeployment()) {
-		// Not a deployment change.
+func (ms *MutableStateImpl) StartDeploymentTransition(deployment *deploymentpb.Deployment) bool {
+	if deployment.Equal(ms.GetEffectiveDeployment()) {
+		// Not an effective deployment change.
 		return false
 	}
 
-	wfBehavior := ms.GetVersioningBehavior()
-	if wfBehavior == enumspb.VERSIONING_BEHAVIOR_PINNED &&
-		behaviorOverride == enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED {
-		// WF is pinned and the redirect is not from a manual override, so we reject it.
+	wfBehavior := ms.GetEffectiveVersioningBehavior()
+	if wfBehavior == enumspb.VERSIONING_BEHAVIOR_PINNED {
+		// WF is pinned so we reject the transition.
 		// It's possible that a backlogged task in matching from an earlier time that this wf was
 		// unpinned is being dispatched now and wants to redirect the wf. Such task should be dropped.
 		return false
@@ -6789,13 +6871,12 @@ func (ms *MutableStateImpl) StartDeploymentRedirect(
 
 	versioningInfo := ms.GetExecutionInfo().GetVersioningInfo()
 	if versioningInfo == nil {
-		versioningInfo = &persistencespb.WorkflowExecutionInfo_VersioningInfo{}
+		versioningInfo = &workflowpb.WorkflowExecutionVersioningInfo{}
 		ms.GetExecutionInfo().VersioningInfo = versioningInfo
 	}
 
-	versioningInfo.RedirectInfo = &persistencespb.WorkflowExecutionInfo_VersioningInfo_RedirectInfo{
-		Deployment:       deployment,
-		BehaviorOverride: behaviorOverride,
+	versioningInfo.DeploymentTransition = &workflowpb.DeploymentTransition{
+		Deployment: deployment,
 	}
 
 	// TODO (shahab): fail the existing wf task if it is started already
@@ -6807,40 +6888,20 @@ func (ms *MutableStateImpl) StartDeploymentRedirect(
 	return true
 }
 
-// CompleteDeploymentRedirect completes the ongoing redirect for this workflow if it exists.
-// Completing a redirect updates the workflow's deployment and possibly versioning behavior.
+// CompleteDeploymentTransition completes the ongoing transition for this workflow if it exists.
+// Completing a transition updates the workflow's deployment and possibly versioning behavior.
 // All activities that are not started yet will be rescheduled to be dispatched the new deployment.
-func (ms *MutableStateImpl) CompleteDeploymentRedirect(
-	behavior enumspb.VersioningBehavior,
+func (ms *MutableStateImpl) CompleteDeploymentTransition(
+	workerSentBehavior enumspb.VersioningBehavior,
 ) error {
 	versioningInfo := ms.GetExecutionInfo().GetVersioningInfo()
-	redirectInfo := versioningInfo.GetRedirectInfo()
-	if redirectInfo == nil {
+	transition := versioningInfo.GetDeploymentTransition()
+	if transition == nil {
 		return nil
 	}
-	versioningInfo.RedirectInfo = nil
-	versioningInfo.Deployment = redirectInfo.GetDeployment()
-	versioningInfo.Behavior = behavior
-	if override := redirectInfo.GetBehaviorOverride(); override != enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED {
-		versioningInfo.BehaviorOverride = override
-		if override == enumspb.VERSIONING_BEHAVIOR_PINNED {
-			versioningInfo.DeploymentOverride = redirectInfo.GetDeployment()
-		}
-	}
-	return ms.reschedulePendingActivities()
-}
-
-// FailDeploymentRedirect fails the ongoing redirect for this workflow if it exists.
-// A failed redirect does not change the workflow's deployment and behavior overrides. All
-// activities that are not started yet will be rescheduled to be dispatched the current deployment.
-func (ms *MutableStateImpl) FailDeploymentRedirect() error {
-	versioningInfo := ms.GetExecutionInfo().GetVersioningInfo()
-	if versioningInfo.GetRedirectInfo() == nil {
-		return nil
-	}
-	versioningInfo.RedirectInfo = nil
-	// Even though the wfs deployment is not changed rescheduling activities is still needed because
-	// activity tasks that were attempted during redirect are dropped by Matching.
+	versioningInfo.DeploymentTransition = nil
+	versioningInfo.Deployment = transition.GetDeployment()
+	versioningInfo.Behavior = workerSentBehavior
 	return ms.reschedulePendingActivities()
 }
 
