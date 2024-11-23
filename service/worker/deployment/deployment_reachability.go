@@ -32,7 +32,7 @@ import (
 	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
-	visibility_manager "go.temporal.io/server/common/persistence/visibility/manager"
+	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/worker_versioning"
 	"time"
@@ -54,7 +54,7 @@ func getDeploymentReachability(
 	ctx context.Context,
 	nsId, nsName, seriesName, buildID, currentBuildID string,
 	currentBuildIDValidTime time.Time,
-	cache reachabilityCache,
+	rc reachabilityCache,
 ) (enumspb.DeploymentReachability, time.Time, error) {
 	// 1a. Reachable by new unpinned workflows
 	if buildID == currentBuildID { // add if buildID is ramping, once we have ramp
@@ -63,7 +63,7 @@ func getDeploymentReachability(
 
 	// 2a. Reachable by open pinned workflows
 	countRequest := makeCountRequest(nsId, nsName, seriesName, buildID, true)
-	exists, lastUpdateTime, err := cache.Get(ctx, countRequest, true)
+	exists, lastUpdateTime, err := rc.Get(ctx, countRequest, true)
 	if err != nil {
 		return enumspb.DEPLOYMENT_REACHABILITY_UNSPECIFIED, time.Time{}, err
 	}
@@ -73,7 +73,7 @@ func getDeploymentReachability(
 
 	// 3. Reachable by closed pinned workflows
 	countRequest = makeCountRequest(nsId, nsName, seriesName, buildID, false)
-	exists, lastUpdateTime, err = cache.Get(ctx, countRequest, false)
+	exists, lastUpdateTime, err = rc.Get(ctx, countRequest, false)
 	if err != nil {
 		return enumspb.DEPLOYMENT_REACHABILITY_UNSPECIFIED, time.Time{}, err
 	}
@@ -87,8 +87,8 @@ func getDeploymentReachability(
 
 func makeCountRequest(
 	namespaceId, namespaceName, seriesName, buildId string, open bool,
-) visibility_manager.CountWorkflowExecutionsRequest {
-	return visibility_manager.CountWorkflowExecutionsRequest{
+) manager.CountWorkflowExecutionsRequest {
+	return manager.CountWorkflowExecutionsRequest{
 		NamespaceID: namespace.ID(namespaceId),
 		Namespace:   namespace.Name(namespaceName),
 		Query:       makeDeploymentQuery(seriesName, buildId, open),
@@ -106,7 +106,7 @@ func makeDeploymentQuery(seriesName, buildID string, open bool) string {
 	} else {
 		statusFilter = "!= 'Running'"
 	}
-	// todo (carly): handle null / unversioned
+	// todo (carly) part 2: handle null search attribute / unversioned deployment
 	return fmt.Sprintf("%s %s AND %s %s", searchattribute.BuildIds, deploymentFilter, searchattribute.ExecutionStatus, statusFilter)
 }
 
@@ -118,7 +118,7 @@ type reachabilityCache struct {
 	openWFCache    cache.Cache
 	closedWFCache  cache.Cache // these are separate due to allow for different TTL
 	metricsHandler metrics.Handler
-	visibilityMgr  visibility_manager.VisibilityManager
+	visibilityMgr  manager.VisibilityManager
 }
 
 type reachabilityCacheValue struct {
@@ -128,7 +128,7 @@ type reachabilityCacheValue struct {
 
 func newReachabilityCache(
 	handler metrics.Handler,
-	visibilityMgr visibility_manager.VisibilityManager,
+	visibilityMgr manager.VisibilityManager,
 	reachabilityCacheOpenWFExecutionTTL,
 	reachabilityCacheClosedWFExecutionTTL time.Duration,
 ) reachabilityCache {
@@ -143,7 +143,7 @@ func newReachabilityCache(
 // Get retrieves the Workflow Count existence value and update time based on the query-string key.
 func (c *reachabilityCache) Get(
 	ctx context.Context,
-	countRequest visibility_manager.CountWorkflowExecutionsRequest,
+	countRequest manager.CountWorkflowExecutionsRequest,
 	open bool,
 ) (exists bool, lastUpdateTime time.Time, err error) {
 	// try cache
@@ -173,7 +173,7 @@ func (c *reachabilityCache) Get(
 }
 
 // Put adds an element to the cache.
-func (c *reachabilityCache) Put(key visibility_manager.CountWorkflowExecutionsRequest, val reachabilityCacheValue, open bool) {
+func (c *reachabilityCache) Put(key manager.CountWorkflowExecutionsRequest, val reachabilityCacheValue, open bool) {
 	if open {
 		c.openWFCache.Put(key, val)
 	} else {
