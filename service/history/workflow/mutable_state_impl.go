@@ -2349,7 +2349,7 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionStartedEvent(
 	} else if event.SourceVersionStamp.GetUseVersioning() && event.SourceVersionStamp.GetBuildId() != "" {
 		// TODO: [cleanup-old-wv]
 		limit := ms.config.SearchAttributesSizeOfValueLimit(string(ms.namespaceEntry.Name()))
-		if _, err := ms.addBuildIdToSearchAttributesWithNoVisibilityTask(event.SourceVersionStamp, enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED, nil, limit); err != nil {
+		if _, err := ms.addBuildIdToSearchAttributesWithNoVisibilityTask(event.SourceVersionStamp, limit); err != nil {
 			return err
 		}
 	}
@@ -2636,15 +2636,19 @@ func (ms *MutableStateImpl) UpdateBuildIdAssignment(buildId string) error {
 	// because build ID is changed, we clear sticky queue so to make sure the next wf task does not go to old version.
 	ms.ClearStickyTaskQueue()
 	limit := ms.config.SearchAttributesSizeOfValueLimit(ms.namespaceEntry.Name().String())
-	return ms.updateBuildIdsSearchAttribute(&commonpb.WorkerVersionStamp{UseVersioning: true, BuildId: buildId}, enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED, nil, limit)
+	return ms.updateBuildIdsSearchAttribute(&commonpb.WorkerVersionStamp{UseVersioning: true, BuildId: buildId}, limit)
 }
 
+// For v3 versioned workflows (ms.GetEffectiveVersioningBehavior() != UNSPECIFIED), this will append a tag formed as
+// reachability:<effective_behavior>:<deployment_series_name>:<deployment_build_id> to the BuildIds search attribute,
+// if it does not already exist there. The deployment will be execution_info.deployment, or the override deployment if
+// a pinned override is set.
+// For all other workflows (ms.GetEffectiveVersioningBehavior() == UNSPECIFIED), this will append a tag based on the
+// workflow's versioning status.
 func (ms *MutableStateImpl) updateBuildIdsSearchAttribute(
 	stamp *commonpb.WorkerVersionStamp,
-	behavior enumspb.VersioningBehavior,
-	deployment *deploymentpb.Deployment,
 	maxSearchAttributeValueSize int) error {
-	changed, err := ms.addBuildIdToSearchAttributesWithNoVisibilityTask(stamp, behavior, deployment, maxSearchAttributeValueSize)
+	changed, err := ms.addBuildIdToSearchAttributesWithNoVisibilityTask(stamp, maxSearchAttributeValueSize)
 	if err != nil {
 		return err
 	}
@@ -2675,37 +2679,54 @@ func (ms *MutableStateImpl) loadBuildIds() ([]string, error) {
 	return searchAttributeValues, nil
 }
 
+// getReachabilityDeployment ignores DeploymentTransition.Deployment. If there is a pinned override,
+// it returns the override deployment. If there is an unpinned override or no override, it returns
+// execution_info.deployment, which is the last deployment that this workflow completed a task on.
+func (ms *MutableStateImpl) getReachabilityDeployment() *deploymentpb.Deployment {
+	versioningInfo := ms.GetExecutionInfo().GetVersioningInfo()
+	if override := versioningInfo.GetVersioningOverride(); override != nil {
+		if override.GetDeployment() != nil {
+			return override.GetDeployment()
+		}
+	}
+	return versioningInfo.GetDeployment()
+}
+
 // Takes a list of loaded build IDs from a search attribute and adds a new build ID to it. Also makes sure that the
 // resulting SA list begins with either "unversioned" or "assigned:<bld>" based on workflow's Build ID assignment status.
 // Returns a potentially modified list.
 // [cleanup-old-wv] old versioning does not add "assigned:<bld>" value to the SA.
+// [cleanup-versioning-2] versioning-2 adds "assigned:<bld>" which is no longer used in versioning-3
 func (ms *MutableStateImpl) addBuildIdToLoadedSearchAttribute(
 	existingValues []string,
 	stamp *commonpb.WorkerVersionStamp,
-	behavior enumspb.VersioningBehavior,
-	deployment *deploymentpb.Deployment,
 ) []string {
 	var newValues []string
-	if !stamp.GetUseVersioning() && deployment == nil && behavior == enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED {
+	if !stamp.GetUseVersioning() && ms.GetEffectiveVersioningBehavior() == enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED { // unversioned workflows may still have non-nil deployment, so we don't check deployment
 		newValues = append(newValues, worker_versioning.UnversionedSearchAttribute)
-	} else if deployment != nil && behavior != enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED {
-		newValues = append(newValues, worker_versioning.ReachabilityBuildIdSearchAttribute(behavior, deployment))
+	} else if ms.GetEffectiveVersioningBehavior() != enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED {
+		newValues = append(newValues, worker_versioning.ReachabilityBuildIdSearchAttribute(
+			ms.GetEffectiveVersioningBehavior(),
+			ms.getReachabilityDeployment(),
+		))
 	} else if ms.GetAssignedBuildId() != "" {
 		newValues = append(newValues, worker_versioning.AssignedBuildIdSearchAttribute(ms.GetAssignedBuildId()))
 	}
 
-	buildId := worker_versioning.VersionStampToBuildIdSearchAttribute(stamp)
-	found := slices.Contains(newValues, buildId)
-	for _, existingValue := range existingValues {
-		if existingValue == buildId {
-			found = true
+	if ms.GetEffectiveVersioningBehavior() == enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED {
+		buildId := worker_versioning.VersionStampToBuildIdSearchAttribute(stamp)
+		found := slices.Contains(newValues, buildId)
+		for _, existingValue := range existingValues {
+			if existingValue == buildId {
+				found = true
+			}
+			if !worker_versioning.IsUnversionedOrAssignedBuildIdSearchAttribute(existingValue) {
+				newValues = append(newValues, existingValue)
+			}
 		}
-		if !worker_versioning.IsUnversionedOrAssignedBuildIdSearchAttribute(existingValue) {
-			newValues = append(newValues, existingValue)
+		if !found {
+			newValues = append(newValues, buildId)
 		}
-	}
-	if !found {
-		newValues = append(newValues, buildId)
 	}
 	return newValues
 }
@@ -2741,15 +2762,13 @@ func (ms *MutableStateImpl) saveBuildIds(buildIds []string, maxSearchAttributeVa
 
 func (ms *MutableStateImpl) addBuildIdToSearchAttributesWithNoVisibilityTask(
 	stamp *commonpb.WorkerVersionStamp,
-	behavior enumspb.VersioningBehavior,
-	deployment *deploymentpb.Deployment,
 	maxSearchAttributeValueSize int,
 ) (bool, error) {
 	existingBuildIds, err := ms.loadBuildIds()
 	if err != nil {
 		return false, err
 	}
-	modifiedBuildIds := ms.addBuildIdToLoadedSearchAttribute(existingBuildIds, stamp, behavior, deployment)
+	modifiedBuildIds := ms.addBuildIdToLoadedSearchAttribute(existingBuildIds, stamp)
 	if slices.Equal(existingBuildIds, modifiedBuildIds) {
 		return false, nil
 	}
