@@ -102,7 +102,7 @@ func (d *DeploymentWorkflowRunner) run() error {
 		func(ctx workflow.Context, updateInput *deployspb.RegisterWorkerInDeploymentArgs) error {
 			err := d.lock.Lock(d.ctx)
 			if err != nil {
-				d.logger.Error("Could not acquire deploymnet workflow lock")
+				d.logger.Error("Could not acquire deployment workflow lock")
 				return err
 			}
 			pendingUpdates++
@@ -115,7 +115,10 @@ func (d *DeploymentWorkflowRunner) run() error {
 			if d.DeploymentLocalState.TaskQueueFamilies == nil {
 				d.DeploymentLocalState.TaskQueueFamilies = make(map[string]*deployspb.DeploymentLocalState_TaskQueueFamilyInfo)
 			}
-			// if no TaskQueues have been registered for the TaskQueueName
+
+			if _, ok := d.DeploymentLocalState.TaskQueueFamilies[updateInput.TaskQueueName]; !ok {
+				d.DeploymentLocalState.TaskQueueFamilies[updateInput.TaskQueueName] = &deployspb.DeploymentLocalState_TaskQueueFamilyInfo{}
+			}
 			if d.DeploymentLocalState.TaskQueueFamilies[updateInput.TaskQueueName].TaskQueues == nil {
 				d.DeploymentLocalState.TaskQueueFamilies[updateInput.TaskQueueName].TaskQueues = make(map[int32]*deployspb.DeploymentLocalState_TaskQueueFamilyInfo_TaskQueueInfo)
 			}
