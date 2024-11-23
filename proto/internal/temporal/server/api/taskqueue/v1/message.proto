@@ -48,6 +48,9 @@ message TaskVersionDirective {
         // containing this build ID. [cleanup-old-wv]
         string assigned_build_id = 2;
     }
+
+    temporal.api.enums.v1.VersioningBehavior behavior = 3;
+    temporal.api.deployment.v1.Deployment deployment = 4;
 }
 
 message InternalTaskQueueStatus {
