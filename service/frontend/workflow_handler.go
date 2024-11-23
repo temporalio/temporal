@@ -3123,6 +3123,7 @@ func (wh *WorkflowHandler) validateStartWorkflowArgsForSchedule(
 	return wh.validateSearchAttributes(unaliasedStartWorkflowSas, namespaceName)
 }
 
+// TODO: move these to the proper order
 func (wh *WorkflowHandler) DescribeDeployment(ctx context.Context, request *workflowservice.DescribeDeploymentRequest) (_ *workflowservice.DescribeDeploymentResponse, retError error) {
 	defer log.CapturePanic(wh.logger, &retError)
 
@@ -3142,7 +3143,7 @@ func (wh *WorkflowHandler) DescribeDeployment(ctx context.Context, request *work
 	if err != nil {
 		return nil, err
 	}
-	deploymentInfo, err := wh.deploymentStoreClient.DescribeDeployment(ctx, namespaceEntry, request.Deployment.SeriesName, request.Deployment.BuildId)
+	deploymentInfo, err := wh.deploymentStoreClient.DescribeDeployment(ctx, namespaceEntry, request.Deployment.GetSeriesName(), request.Deployment.GetBuildId())
 	if err != nil {
 		wh.logger.Error("Error during DescribeDeployment", tag.Error(err))
 		return nil, err
@@ -3182,7 +3183,6 @@ func (wh *WorkflowHandler) GetCurrentDeployment(ctx context.Context, request *wo
 	return &workflowservice.GetCurrentDeploymentResponse{
 		CurrentDeploymentInfo: describeDeploymentResponse,
 	}, nil
-
 }
 
 func (wh *WorkflowHandler) ListDeployments(
@@ -3274,8 +3274,42 @@ func (wh *WorkflowHandler) GetDeploymentReachability(
 	return resp, nil
 }
 
-func (wh *WorkflowHandler) SetCurrentDeployment(context.Context, *workflowservice.SetCurrentDeploymentRequest) (*workflowservice.SetCurrentDeploymentResponse, error) {
-	panic("Not implemented *yet*")
+func (wh *WorkflowHandler) SetCurrentDeployment(ctx context.Context, req *workflowservice.SetCurrentDeploymentRequest) (*workflowservice.SetCurrentDeploymentResponse, error) {
+	defer log.CapturePanic(wh.logger, &retError)
+
+	if request == nil {
+		return nil, errRequestNotSet
+	}
+
+	if len(request.Namespace) == 0 {
+		return nil, errNamespaceNotSet
+	}
+
+	if !wh.config.EnableDeployments(request.Namespace) {
+		return nil, errDeploymentsNotAllowed
+	}
+
+	namespaceEntry, err := wh.namespaceRegistry.GetNamespace(namespace.Name(request.GetNamespace()))
+	if err != nil {
+		return nil, err
+	}
+
+	current, previous, err := wh.deploymentStoreClient.SetCurrentDeployment(
+		ctx,
+		namespaceEntry,
+		req.Deployment.GetSeriesName(),
+		req.Deployment.GetBuildId(),
+		req.Identity,
+		req.UpdateMetadata,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	return &workflowservice.SetCurrentDeploymentResponse{
+		CurrentDeploymentInfo:  current,
+		PreviousDeploymentInfo: previous,
+	}, nil
 }
 
 // Returns the schedule description and current state of an existing schedule.

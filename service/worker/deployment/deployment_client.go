@@ -78,7 +78,7 @@ type DeploymentStoreClient interface {
 		ctx context.Context,
 		namespaceEntry *namespace.Namespace,
 		seriesName string,
-		NextPageToken []byte,
+		nextPageToken []byte,
 	) ([]*deploymentpb.DeploymentListInfo, []byte, error)
 
 	GetDeploymentReachability(
@@ -87,6 +87,15 @@ type DeploymentStoreClient interface {
 		seriesName string,
 		buildID string,
 	) (*workflowservice.GetDeploymentReachabilityResponse, error)
+
+	SetCurrentDeployment(
+		ctx context.Context,
+		namespaceEntry *namespace.Namespace,
+		seriesName string,
+		buildID string,
+		identity string,
+		updateMetadata deploymentpb.UpdateDeploymentMetadata,
+	) (*deploymentpb.DeploymentInfo, *deploymentpb.DeploymentInfo, error)
 }
 
 // implements DeploymentStoreClient
@@ -366,6 +375,17 @@ func (d *DeploymentClientImpl) ListDeployments(ctx context.Context, namespaceEnt
 	}
 
 	return deployments, NextPageToken, nil
+
+}
+
+func (d *DeploymentClientImpl) SetCurrentDeployment(
+	ctx context.Context,
+	namespaceEntry *namespace.Namespace,
+	seriesName string,
+	buildID string,
+	identity string,
+	updateMetadata deploymentpb.UpdateDeploymentMetadata,
+) (*deploymentpb.DeploymentInfo, *deploymentpb.DeploymentInfo, error) {
 
 }
 
