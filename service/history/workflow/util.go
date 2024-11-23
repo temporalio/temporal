@@ -31,7 +31,6 @@ import (
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 	workflowpb "go.temporal.io/api/workflow/v1"
-	deploymentpb "go.temporal.io/server/api/deployment/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/primitives/timestamp"
@@ -196,19 +195,6 @@ type MutableStateWithEffects struct {
 func (mse MutableStateWithEffects) CanAddEvent() bool {
 	// Event can be added to the history if workflow is still running.
 	return mse.MutableState.IsWorkflowExecutionRunning()
-}
-
-func GetWorkflowVersioningInfoMatchingTask(ms MutableState) *deploymentpb.WorkflowVersioningInfo {
-	effectiveBehavior := ms.GetEffectiveVersioningBehavior()
-	if effectiveBehavior == enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED {
-		// unversioned
-		return nil
-	}
-
-	return &deploymentpb.WorkflowVersioningInfo{
-		Behavior:   effectiveBehavior,
-		Deployment: ms.GetEffectiveDeployment(),
-	}
 }
 
 // GetEffectiveDeployment returns the effective deployment in the following order:

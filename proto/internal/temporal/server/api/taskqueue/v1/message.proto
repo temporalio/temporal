@@ -28,8 +28,10 @@ option go_package = "go.temporal.io/server/api/taskqueue/v1;taskqueue";
 
 import "google/protobuf/empty.proto";
 
-import "temporal/api/taskqueue/v1/message.proto";
+import "temporal/api/deployment/v1/message.proto";
 import "temporal/api/enums/v1/task_queue.proto";
+import "temporal/api/enums/v1/workflow.proto";
+import "temporal/api/taskqueue/v1/message.proto";
 import "temporal/server/api/enums/v1/task.proto";
 
 // TaskVersionDirective controls how matching should direct a task.
@@ -48,6 +50,11 @@ message TaskVersionDirective {
         // containing this build ID. [cleanup-old-wv]
         string assigned_build_id = 2;
     }
+
+    // Workflow's effective behavior when the task is scheduled.
+    temporal.api.enums.v1.VersioningBehavior behavior = 3;
+    // Workflow's effective deployment when the task is scheduled.
+    temporal.api.deployment.v1.Deployment deployment = 4;
 }
 
 message InternalTaskQueueStatus {

@@ -26,8 +26,8 @@ package deployment
 
 import (
 	"context"
-	"fmt"
 
+	"github.com/pborman/uuid"
 	commonpb "go.temporal.io/api/common/v1"
 	deploypb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -79,7 +79,7 @@ type DeploymentStoreClient interface {
 	) ([]*deploypb.DeploymentListInfo, []byte, error)
 }
 
-// implements DeploymentClient
+// implements DeploymentStoreClient
 type DeploymentClientImpl struct {
 	HistoryClient         historyservice.HistoryServiceClient
 	VisibilityManager     manager.VisibilityManager
@@ -119,13 +119,14 @@ func (d *DeploymentClientImpl) RegisterTaskQueueWorker(
 	searchattribute.AddSearchAttribute(&sa, searchattribute.TemporalNamespaceDivision, payload.EncodeString(DeploymentNamespaceDivision))
 
 	// initial memo fiels
-	memo, err := d.addInitialDeploymentMemo()
+	memo, err := d.buildInitialDeploymentMemo(deployment)
 	if err != nil {
 		return err
 	}
 
 	// Start workflow execution, if it hasn't already
 	startReq := &workflowservice.StartWorkflowExecutionRequest{
+		RequestId:                uuid.New(),
 		Namespace:                namespaceEntry.Name().String(),
 		WorkflowId:               deploymentWorkflowID,
 		WorkflowType:             &commonpb.WorkflowType{Name: DeploymentWorkflowType},
@@ -144,6 +145,7 @@ func (d *DeploymentClientImpl) RegisterTaskQueueWorker(
 		},
 		Request: &updatepb.Request{
 			Input: &updatepb.Input{Name: RegisterWorkerInDeployment, Args: updatePayload},
+			Meta:  &updatepb.Meta{UpdateId: uuid.New(), Identity: "deploymentClient"},
 		},
 		WaitPolicy: &updatepb.WaitPolicy{LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED},
 	}
@@ -246,28 +248,27 @@ func (d *DeploymentClientImpl) GetCurrentDeployment(ctx context.Context, namespa
 		return nil, err
 	}
 
-	// Fetch the workflow execution to decode it's memo
-	query := d.queryWithWorkflowID(seriesName)
-	persistenceResp, err := d.VisibilityManager.ListWorkflowExecutions(
-		ctx,
-		&manager.ListWorkflowExecutionsRequestV2{
-			NamespaceID: namespaceEntry.ID(),
-			Namespace:   namespaceEntry.Name(),
-			PageSize:    d.VisibilityMaxPageSize(namespaceEntry.Name().String()),
-			Query:       query,
+	workflowID := GenerateDeploymentSeriesWorkflowID(seriesName)
+	resp, err := d.HistoryClient.DescribeWorkflowExecution(ctx, &historyservice.DescribeWorkflowExecutionRequest{
+		NamespaceId: namespaceEntry.ID().String(),
+		Request: &workflowservice.DescribeWorkflowExecutionRequest{
+			Namespace: namespaceEntry.Name().String(),
+			Execution: &commonpb.WorkflowExecution{
+				WorkflowId: workflowID,
+			},
 		},
-	)
+	})
+
 	if err != nil {
 		return nil, err
 	}
-
-	if len(persistenceResp.Executions) != 1 {
-		return nil, fmt.Errorf("there are more than one deployment series workflow executions")
+	if resp == nil {
+		return nil, err
 	}
 
 	// Decode value from memo
 	var buildID string
-	val := persistenceResp.Executions[0].Memo.Fields[DeploymentSeriesBuildIDMemoField]
+	val := resp.WorkflowExecutionInfo.Memo.Fields[DeploymentSeriesBuildIDMemoField]
 	err = sdk.PreferProtoDataConverter.FromPayload(val, &buildID)
 	if err != nil {
 		return nil, err
@@ -287,10 +288,9 @@ func (d *DeploymentClientImpl) GetCurrentDeployment(ctx context.Context, namespa
 }
 
 func (d *DeploymentClientImpl) ListDeployments(ctx context.Context, namespaceEntry *namespace.Namespace, seriesName string, NextPageToken []byte) ([]*deploypb.DeploymentListInfo, []byte, error) {
-
 	query := ""
 	if seriesName != "" {
-		query = d.queryWithWorkflowID(seriesName)
+		query = BuildQueryWithSeriesFilter(seriesName)
 	} else {
 		query = DeploymentVisibilityBaseListQuery
 	}
@@ -309,37 +309,20 @@ func (d *DeploymentClientImpl) ListDeployments(ctx context.Context, namespaceEnt
 		return nil, nil, err
 	}
 
-	deployments := make([]*deploypb.DeploymentListInfo, len(persistenceResp.Executions))
+	deployments := make([]*deploypb.DeploymentListInfo, 0)
 	for _, ex := range persistenceResp.Executions {
-		deployment := ex.GetVersioningInfo().GetDeployment()
-		workflowMemo := d.decodeDeploymentMemo(ex.GetMemo())
+		workflowMemo := DecodeDeploymentMemo(ex.GetMemo())
+
 		deploymentListInfo := &deploypb.DeploymentListInfo{
-			Deployment: deployment,
+			Deployment: workflowMemo.Deployment,
 			CreateTime: workflowMemo.CreateTime,
 			IsCurrent:  workflowMemo.IsCurrentDeployment,
 		}
-
 		deployments = append(deployments, deploymentListInfo)
 	}
 
 	return deployments, NextPageToken, nil
 
-}
-
-func (d *DeploymentClientImpl) decodeDeploymentMemo(memo *commonpb.Memo) *deployspb.DeploymentWorkflowMemo {
-	var workflowMemo deployspb.DeploymentWorkflowMemo
-	err := sdk.PreferProtoDataConverter.FromPayload(memo.Fields[DeploymentMemoField], &workflowMemo)
-	if err != nil {
-		return nil
-	}
-	return &workflowMemo
-}
-
-// queryWithWorkflowID is a helper which generates a query with internally used workflowID's
-func (d *DeploymentClientImpl) queryWithWorkflowID(seriesName string) string {
-	workflowID := GenerateDeploymentSeriesWorkflowID(seriesName)
-	query := fmt.Sprintf("%s AND %s = %s", DeploymentSeriesVisibilityBaseListQuery, searchattribute.WorkflowID, workflowID)
-	return query
 }
 
 // GenerateStartWorkflowPayload generates start workflow execution payload
@@ -366,11 +349,12 @@ func (d *DeploymentClientImpl) generateRegisterWorkerInDeploymentArgs(taskQueueN
 	return sdk.PreferProtoDataConverter.ToPayloads(updateArgs)
 }
 
-func (d *DeploymentClientImpl) addInitialDeploymentMemo() (*commonpb.Memo, error) {
+func (d *DeploymentClientImpl) buildInitialDeploymentMemo(deployment *deploypb.Deployment) (*commonpb.Memo, error) {
 	memo := &commonpb.Memo{}
 	memo.Fields = make(map[string]*commonpb.Payload)
 
 	deploymentWorkflowMemo := &deployspb.DeploymentWorkflowMemo{
+		Deployment:          deployment,
 		CreateTime:          timestamppb.Now(),
 		IsCurrentDeployment: false,
 	}
