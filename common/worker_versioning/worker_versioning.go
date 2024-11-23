@@ -70,7 +70,7 @@ func ReachabilityBuildIdSearchAttribute(behavior enumspb.VersioningBehavior, dep
 			escapeBuildIdSearchAttributeDelimiter(deployment.GetBuildId()),
 		)
 	}
-	return sqlparser.String(sqlparser.NewStrVal([]byte(fmt.Sprintf("%s%s%s%s%s%s%s",
+	return sqlparser.String(sqlparser.NewStrVal([]byte(fmt.Sprintf("%s%s%s%s%s",
 		buildIdSearchAttributePrefixReachability,
 		BuildIdSearchAttributeDelimiter,
 		escapeBuildIdSearchAttributeDelimiter(behavior.String()),
