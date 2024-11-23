@@ -44,6 +44,12 @@ const (
 	reachabilityCacheMaxSize      = 10000
 )
 
+// We update the reachability search attribute on workflow task completion and when there is
+// an UpdateWorkflowExecutionOptions request that changes the workflow's effective behavior
+// or deployment. We do not update the reachability search attribute if the search attribute
+// has not changed. We also do not update the reachability search attribute if a workflow has
+// started transitioning to a new deployment, because only on task completion do we know whether
+// the transition has succeeded or failed.
 func getDeploymentReachability(
 	ctx context.Context,
 	nsId, nsName, seriesName, buildID, currentBuildID string,
