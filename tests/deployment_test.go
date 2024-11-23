@@ -119,8 +119,11 @@ func (d *DeploymentSuite) TestDescribeDeployment_RegisterTaskQueue() {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
 	defer cancel()
 
-	seriesName := testcore.RandomizeStr("my-series")
-	buildID := testcore.RandomizeStr("bgt")
+	// presence of internally used delimiters (:) or escape
+	// characters shouldn't break functionality
+	seriesName := testcore.RandomizeStr("my-series|:|:")
+	buildID := testcore.RandomizeStr("bgt:|")
+
 	taskQueue := &taskqueuepb.TaskQueue{Name: "deployment-test", Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 	workerDeployment := &deploymentpb.Deployment{
 		SeriesName: seriesName,

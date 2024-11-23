@@ -59,7 +59,7 @@ const (
 	// Prefixes, Delimeters and Keys
 	DeploymentWorkflowIDPrefix       = "temporal-sys-deployment"
 	DeploymentSeriesWorkflowIDPrefix = "temporal-sys-deployment-series"
-	DeploymentWorkflowIDDelimeter    = "|"
+	DeploymentWorkflowIDDelimeter    = ":"
 	DeploymentWorkflowIDInitialSize  = (2 * len(DeploymentWorkflowIDDelimeter)) + len(DeploymentWorkflowIDPrefix)
 	SeriesFieldName                  = "DeploymentSeries"
 	BuildIDFieldName                 = "BuildID"
@@ -96,7 +96,7 @@ func ValidateDeploymentWfParams(fieldName string, field string, maxIDLengthLimit
 // EscapeChar is a helper which escapes the DeploymentWorkflowIDDelimeter character
 // in the input string
 func escapeChar(s string) string {
-	s = strings.Replace(s, DeploymentWorkflowIDDelimeter, DeploymentWorkflowIDDelimeter+DeploymentWorkflowIDDelimeter, -1)
+	s = strings.Replace(s, DeploymentWorkflowIDDelimeter, `|`+DeploymentWorkflowIDDelimeter, -1)
 	return s
 }
 
@@ -129,13 +129,6 @@ func BuildQueryWithSeriesFilter(seriesName string) string {
 
 	query := fmt.Sprintf("%s AND %s STARTS_WITH %s", DeploymentVisibilityBaseListQuery, searchattribute.WorkflowID, escapedSeriesEntry)
 	return query
-}
-
-// ParseDeploymentWorkflowID is a helper which parses out the deployment workflow ID to
-// extract the seriesName and buildID
-func ParseDeploymentWorkflowID(workflowID string) (string, string) {
-	parts := strings.Split(workflowID, DeploymentWorkflowIDDelimeter)
-	return parts[1], parts[2]
 }
 
 func DecodeDeploymentMemo(memo *commonpb.Memo) *deployspb.DeploymentWorkflowMemo {
