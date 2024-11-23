@@ -28,13 +28,13 @@ import (
 	sdkclient "go.temporal.io/sdk/client"
 	sdklog "go.temporal.io/sdk/log"
 	"go.temporal.io/sdk/workflow"
-	deployspb "go.temporal.io/server/api/deployment/v1"
+	deploymentspb "go.temporal.io/server/api/deployment/v1"
 )
 
 type (
 	// DeploymentWorkflowRunner holds the local state while running a deployment-series workflow
 	DeploymentSeriesWorkflowRunner struct {
-		*deployspb.DeploymentSeriesWorkflowArgs
+		*deploymentspb.DeploymentSeriesWorkflowArgs
 		ctx     workflow.Context
 		a       *DeploymentSeriesActivities
 		logger  sdklog.Logger
@@ -47,7 +47,7 @@ const (
 	UpdateDeploymentSeriesDefaultBuildIDName = "update-deployment-name-default-buildID"
 )
 
-func DeploymentSeriesWorkflow(ctx workflow.Context, deploymentSeriesArgs *deployspb.DeploymentSeriesWorkflowArgs) error {
+func DeploymentSeriesWorkflow(ctx workflow.Context, deploymentSeriesArgs *deploymentspb.DeploymentSeriesWorkflowArgs) error {
 	deploymentWorkflowNameRunner := &DeploymentSeriesWorkflowRunner{
 		DeploymentSeriesWorkflowArgs: deploymentSeriesArgs,
 		ctx:                          ctx,

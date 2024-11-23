@@ -27,14 +27,11 @@ package deployment
 import (
 	"fmt"
 	"strings"
-	"time"
 
 	"github.com/temporalio/sqlparser"
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
-	"go.temporal.io/sdk/temporal"
-	"go.temporal.io/sdk/workflow"
-	deployspb "go.temporal.io/server/api/deployment/v1"
+	deploymentspb "go.temporal.io/server/api/deployment/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/searchattribute"
@@ -63,17 +60,6 @@ const (
 	DeploymentWorkflowIDInitialSize  = (2 * len(DeploymentWorkflowIDDelimeter)) + len(DeploymentWorkflowIDPrefix)
 	SeriesFieldName                  = "DeploymentSeries"
 	BuildIDFieldName                 = "BuildID"
-)
-
-var (
-	defaultActivityOptions = workflow.ActivityOptions{
-		ScheduleToCloseTimeout: 1 * time.Hour,
-		StartToCloseTimeout:    1 * time.Minute,
-		RetryPolicy: &temporal.RetryPolicy{
-			InitialInterval: 1 * time.Second,
-			MaximumInterval: 60 * time.Second,
-		},
-	}
 )
 
 // ValidateDeploymentWfParams is a helper that verifies if the fields used for generating
@@ -131,8 +117,8 @@ func BuildQueryWithSeriesFilter(seriesName string) string {
 	return query
 }
 
-func DecodeDeploymentMemo(memo *commonpb.Memo) *deployspb.DeploymentWorkflowMemo {
-	var workflowMemo deployspb.DeploymentWorkflowMemo
+func DecodeDeploymentMemo(memo *commonpb.Memo) *deploymentspb.DeploymentWorkflowMemo {
+	var workflowMemo deploymentspb.DeploymentWorkflowMemo
 	err := sdk.PreferProtoDataConverter.FromPayload(memo.Fields[DeploymentMemoField], &workflowMemo)
 	if err != nil {
 		return nil
