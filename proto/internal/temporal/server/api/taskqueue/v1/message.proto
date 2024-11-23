@@ -28,8 +28,10 @@ option go_package = "go.temporal.io/server/api/taskqueue/v1;taskqueue";
 
 import "google/protobuf/empty.proto";
 
-import "temporal/api/taskqueue/v1/message.proto";
+import "temporal/api/deployment/v1/message.proto";
 import "temporal/api/enums/v1/task_queue.proto";
+import "temporal/api/enums/v1/workflow.proto";
+import "temporal/api/taskqueue/v1/message.proto";
 import "temporal/server/api/enums/v1/task.proto";
 
 // TaskVersionDirective controls how matching should direct a task.
@@ -48,6 +50,11 @@ message TaskVersionDirective {
         // containing this build ID. [cleanup-old-wv]
         string assigned_build_id = 2;
     }
+
+    // Workflow's effective behavior when the task is scheduled.
+    temporal.api.enums.v1.VersioningBehavior behavior = 3;
+    // Workflow's effective deployment when the task is scheduled.
+    temporal.api.deployment.v1.Deployment deployment = 4;
 }
 
 message InternalTaskQueueStatus {
@@ -80,7 +87,8 @@ message TaskQueuePartition {
     }
 }
 
-// Information about redirect intention sent by Matching to History in Record*TaskStarted calls
+// Information about redirect intention sent by Matching to History in Record*TaskStarted calls.
+// Deprecated.
 message BuildIdRedirectInfo {
     // build ID asked by History in the directive or the one calculated based on the assignment rules.
     // this is the source of the redirect rule chain applied. (the target of the redirect rule chain is
@@ -88,19 +96,22 @@ message BuildIdRedirectInfo {
     string assigned_build_id = 1;
 }
 
-// Information about task forwarding from one partition to its parent. Versioning decisions for activity/workflow
-// tasks are made at the source partition and sent to the parent partition in this message so that parent partition
-// does not have to make versioning decision again. For Query/Nexus tasks, this works differently as the child's
-// versioning decision is ignored and the parent partition makes a fresh decision.
+// Information about task forwarding from one partition to its parent.
 message TaskForwardInfo {
     // RPC name of the partition forwarded the task.
     // In case of multiple hops, this is the source partition of the last hop.
     string source_partition = 1;
     temporal.server.api.enums.v1.TaskSource task_source = 2;
-    // Redirect info is not present for Query and Nexus tasks.
+    // Redirect info is not present for Query and Nexus tasks. Versioning decisions for activity/workflow
+    // tasks are made at the source partition and sent to the parent partition in this message so that parent partition
+    // does not have to make versioning decision again. For Query/Nexus tasks, this works differently as the child's
+    // versioning decision is ignored and the parent partition makes a fresh decision.
+    // Deprecated. [cleanup-old-wv]
     BuildIdRedirectInfo redirect_info = 3;
     // Build ID that should be used to dispatch the task to. Ignored in Query and Nexus tasks.
+    // Deprecated. [cleanup-old-wv]
     string dispatch_build_id = 4;
     // Only used for old versioning. [cleanup-old-wv]
+    // Deprecated. [cleanup-old-wv]
     string dispatch_version_set = 5;
 }

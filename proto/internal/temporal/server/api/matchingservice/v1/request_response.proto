@@ -124,6 +124,7 @@ message AddWorkflowTaskRequest {
 
 message AddWorkflowTaskResponse {
     // When present, it means that the task is spooled to a versioned queue of this build ID
+    // Deprecated. [cleanup-old-wv]
     string assigned_build_id = 1;
 }
 
@@ -145,6 +146,7 @@ message AddActivityTaskRequest {
 
 message AddActivityTaskResponse {
     // When present, it means that the task is spooled to a versioned queue of this build ID
+    // Deprecated. [cleanup-old-wv]
     string assigned_build_id = 1;
 }
 
