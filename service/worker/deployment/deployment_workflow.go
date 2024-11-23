@@ -102,15 +102,17 @@ func (d *DeploymentWorkflowRunner) run() error {
 		return err
 	}
 
-	// Listen to signals in a different go-routine to make business logic clearer
-	workflow.Go(d.ctx, d.listenToSignals)
-
 	// Setting an update handler for updating deployment task-queues
 	if err := workflow.SetUpdateHandler(
 		d.ctx,
 		RegisterWorkerInDeployment,
 		func(ctx workflow.Context, updateInput *deploymentspb.RegisterWorkerInDeploymentArgs) error {
-			err := d.lock.Lock(d.ctx)
+			err := workflow.Await(ctx, func() bool { return d.DeploymentLocalState.StartedSeriesWorkflow })
+			if err != nil {
+				return err
+			}
+
+			err = d.lock.Lock(ctx)
 			if err != nil {
 				d.logger.Error("Could not acquire deployment workflow lock")
 				return err
@@ -144,20 +146,11 @@ func (d *DeploymentWorkflowRunner) run() error {
 			}
 			d.DeploymentLocalState.TaskQueueFamilies[updateInput.TaskQueueName].TaskQueues[int32(updateInput.TaskQueueType)] = data
 
-			// Call activities which start a "DeploymentSeries" workflow and register the task queue in user data.
-			activityCtx := workflow.WithActivityOptions(ctx, defaultActivityOptions)
-
-			err = workflow.ExecuteActivity(activityCtx, d.a.StartDeploymentSeriesWorkflow, &deploymentspb.StartDeploymentSeriesRequest{
-				SeriesName: d.DeploymentLocalState.WorkerDeployment.SeriesName,
-			}).Get(ctx, nil)
-			if err != nil {
-				return err
-			}
-
 			// denormalize LastBecameCurrentTime into per-tq data
 			syncData := common.CloneProto(data)
 			syncData.LastBecameCurrentTime = d.DeploymentLocalState.LastBecameCurrentTime
 
+			activityCtx := workflow.WithActivityOptions(ctx, defaultActivityOptions)
 			err = workflow.ExecuteActivity(activityCtx, d.a.SyncUserData, &deploymentspb.SyncUserDataRequest{
 				Deployment:    d.DeploymentLocalState.WorkerDeployment,
 				TaskQueueName: updateInput.TaskQueueName,
@@ -170,6 +163,21 @@ func (d *DeploymentWorkflowRunner) run() error {
 	); err != nil {
 		return err
 	}
+
+	// First ensure series workflow is running
+	if !d.DeploymentLocalState.StartedSeriesWorkflow {
+		activityCtx := workflow.WithActivityOptions(d.ctx, defaultActivityOptions)
+		err := workflow.ExecuteActivity(activityCtx, d.a.StartDeploymentSeriesWorkflow, &deploymentspb.StartDeploymentSeriesRequest{
+			SeriesName: d.DeploymentLocalState.WorkerDeployment.SeriesName,
+		}).Get(d.ctx, nil)
+		if err != nil {
+			return err
+		}
+		d.DeploymentLocalState.StartedSeriesWorkflow = true
+	}
+
+	// Listen to signals in a different go-routine to make business logic clearer
+	workflow.Go(d.ctx, d.listenToSignals)
 
 	// Wait on any pending signals and updates.
 	err := workflow.Await(d.ctx, func() bool { return pendingUpdates == 0 && d.signalsCompleted })
