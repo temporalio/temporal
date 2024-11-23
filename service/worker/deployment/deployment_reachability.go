@@ -59,6 +59,7 @@ func getDeploymentReachability(
 ) (enumspb.DeploymentReachability, time.Time, error) {
 	// 1a. Reachable by new unpinned workflows
 	if isCurrent {
+		// TODO (carly): still return reachable if the deployment just became not current, but workflows started on it are not yet in reachability
 		return enumspb.DEPLOYMENT_REACHABILITY_REACHABLE, time.Now(), nil
 	}
 

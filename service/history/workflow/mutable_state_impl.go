@@ -2684,7 +2684,7 @@ func (ms *MutableStateImpl) loadBuildIds() ([]string, error) {
 func (ms *MutableStateImpl) getReachabilityDeployment() *deploymentpb.Deployment {
 	versioningInfo := ms.GetExecutionInfo().GetVersioningInfo()
 	if override := versioningInfo.GetVersioningOverride(); override != nil {
-		if override.GetDeployment() != nil {
+		if override.GetBehavior() == enumspb.VERSIONING_BEHAVIOR_PINNED {
 			return override.GetDeployment()
 		}
 	}
@@ -4289,12 +4289,6 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionOptionsUpdatedEvent(event *his
 	if !proto.Equal(ms.GetEffectiveDeployment(), previousEffectiveDeployment) ||
 		ms.GetEffectiveVersioningBehavior() != previousEffectiveVersioningBehavior {
 		// TODO (carly) part 2: if safe mode, do replay test on new deployment if deployment changed, if fail, revert changes and abort
-		// For v3 versioned workflows (ms.GetEffectiveVersioningBehavior() != UNSPECIFIED), this will update the reachability
-		// search attribute based on the execution_info.deployment and/or override deployment if one exists.
-		if err := ms.updateBuildIdsSearchAttribute(nil, math.MaxInt32); err != nil {
-			return err
-		}
-
 		// If there is an ongoing transition, we remove it so that tasks from this workflow (including the pending WFT
 		// that initiated the transition) can run on our override deployment as soon as possible.
 		//
@@ -4339,6 +4333,11 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionOptionsUpdatedEvent(event *his
 			if err != nil {
 				return err
 			}
+		}
+		// For v3 versioned workflows (ms.GetEffectiveVersioningBehavior() != UNSPECIFIED), this will update the reachability
+		// search attribute based on the execution_info.deployment and/or override deployment if one exists.
+		if err := ms.updateBuildIdsSearchAttribute(nil, math.MaxInt32); err != nil {
+			return err
 		}
 	}
 	return ms.reschedulePendingActivities()

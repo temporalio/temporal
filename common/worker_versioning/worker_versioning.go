@@ -51,6 +51,7 @@ const (
 	UnversionedSearchAttribute = buildIdSearchAttributePrefixUnversioned
 )
 
+// TODO (carly): fix delimiter
 // escapeBuildIdSearchAttributeDelimiter is a helper which escapes the BuildIdSearchAttributeDelimiter character in the input string
 func escapeBuildIdSearchAttributeDelimiter(s string) string {
 	s = strings.Replace(s, BuildIdSearchAttributeDelimiter, `|`+BuildIdSearchAttributeDelimiter, -1)

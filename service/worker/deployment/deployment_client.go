@@ -248,6 +248,7 @@ func (d *DeploymentClientImpl) DescribeDeployment(ctx context.Context, namespace
 	}, nil
 }
 
+// TODO (carly): pass deployment instead of seriesName + buildId in all these APIs -- separate PR
 func (d *DeploymentClientImpl) GetDeploymentReachability(
 	ctx context.Context,
 	namespaceEntry *namespace.Namespace,
