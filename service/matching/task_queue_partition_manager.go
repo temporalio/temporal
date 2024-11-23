@@ -31,12 +31,11 @@ import (
 	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
-	"go.temporal.io/api/deployment/v1"
+	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
-	deployspb "go.temporal.io/server/api/deployment/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
@@ -158,9 +157,9 @@ func (pm *taskQueuePartitionManagerImpl) AddTask(
 	params addTaskParams,
 ) (buildId string, syncMatched bool, err error) {
 	var spoolQueue, syncMatchQueue physicalTaskQueueManager
-
+	directive := params.taskInfo.GetVersionDirective()
 	// spoolQueue will be nil iff task is forwarded.
-	spoolQueue, syncMatchQueue, _, err = pm.getPhysicalQueuesForAdd(ctx, params.directive, params.forwardInfo, params.taskInfo.GetRunId(), params.taskInfo.GetWorkflowVersioningInfo())
+	spoolQueue, syncMatchQueue, _, err = pm.getPhysicalQueuesForAdd(ctx, directive, params.forwardInfo, params.taskInfo.GetRunId())
 	if err != nil {
 		return "", false, err
 	}
@@ -207,7 +206,7 @@ func (pm *taskQueuePartitionManagerImpl) AddTask(
 	}
 
 	var assignedBuildId string
-	if params.directive.GetUseAssignmentRules() != nil {
+	if directive.GetUseAssignmentRules() != nil {
 		// return build ID only if a new one is assigned.
 		assignedBuildId = spoolQueue.QueueKey().Version().BuildId()
 	}
@@ -336,7 +335,6 @@ func (pm *taskQueuePartitionManagerImpl) ProcessSpooledTask(
 	assignedBuildId string,
 ) error {
 	taskInfo := task.event.GetData()
-	wfVersioningInfo := taskInfo.GetWorkflowVersioningInfo()
 	// This task came from taskReader so task.event is always set here.
 	// TODO: in WV2 we should not look at a spooled task directive anymore [cleanup-old-wv]
 	directive := taskInfo.GetVersionDirective()
@@ -351,7 +349,6 @@ func (pm *taskQueuePartitionManagerImpl) ProcessSpooledTask(
 			directive,
 			nil,
 			taskInfo.GetRunId(),
-			wfVersioningInfo,
 		)
 		if err != nil {
 			return err
@@ -387,7 +384,6 @@ func (pm *taskQueuePartitionManagerImpl) DispatchQueryTask(
 		// did not have up-to-date User Data when selected a dispatch build ID.
 		nil,
 		request.GetQueryRequest().GetExecution().GetRunId(),
-		request.GetWorkflowVersioningInfo(),
 	)
 	if err != nil {
 		return nil, err
@@ -416,7 +412,6 @@ func (pm *taskQueuePartitionManagerImpl) DispatchNexusTask(
 		// did not have up-to-date User Data when selected a dispatch build ID.
 		nil,
 		"",
-		nil,
 	)
 	if err != nil {
 		return nil, err
@@ -654,7 +649,7 @@ func (pm *taskQueuePartitionManagerImpl) getVersionedQueue(
 	ctx context.Context,
 	versionSet string,
 	buildId string,
-	deployment *deployment.Deployment,
+	deployment *deploymentpb.Deployment,
 	create bool,
 ) (physicalTaskQueueManager, error) {
 	if pm.partition.Kind() == enumspb.TASK_QUEUE_KIND_STICKY {
@@ -680,7 +675,7 @@ func (pm *taskQueuePartitionManagerImpl) getVersionedQueue(
 func (pm *taskQueuePartitionManagerImpl) getVersionedQueueNoWait(
 	versionSet string,
 	buildId string,
-	deployment *deployment.Deployment,
+	deployment *deploymentpb.Deployment,
 	create bool,
 ) (physicalTaskQueueManager, error) {
 	key := PhysicalTaskQueueVersion{
@@ -784,27 +779,23 @@ func (pm *taskQueuePartitionManagerImpl) getPhysicalQueuesForAdd(
 	directive *taskqueuespb.TaskVersionDirective,
 	forwardInfo *taskqueuespb.TaskForwardInfo,
 	runId string,
-	workflowVersioningInfo *deployspb.WorkflowVersioningInfo,
 ) (spoolQueue physicalTaskQueueManager, syncMatchQueue physicalTaskQueueManager, userDataChanged <-chan struct{}, err error) {
-	if workflowVersioningInfo != nil {
-		// Non-nil workflowVersioningInfo means the workflow is versioned.
-		wfBehavior := workflowVersioningInfo.GetBehavior()
-		wfDeployment := workflowVersioningInfo.GetDeployment()
+	if deployment := directive.GetDeployment(); deployment != nil {
+		wfBehavior := directive.GetBehavior()
 
 		if pm.partition.Kind() == enumspb.TASK_QUEUE_KIND_STICKY {
 			// TODO (shahab): reject sticky task if this deployment is not the current deployment
-			// TODO (shahab): we can verify the passed deployment matches the last poller's
-			// deployment
+			// TODO (shahab): we can verify the passed deployment matches the last poller's deployment
 			return pm.defaultQueue, pm.defaultQueue, userDataChanged, nil
 		}
 
 		switch wfBehavior {
 		case enumspb.VERSIONING_BEHAVIOR_PINNED:
-			err = worker_versioning.ValidateDeployment(wfDeployment)
+			err = worker_versioning.ValidateDeployment(deployment)
 			if err != nil {
 				return nil, nil, nil, err
 			}
-			spoolQueue, err = pm.getVersionedQueue(ctx, "", "", wfDeployment, true)
+			spoolQueue, err = pm.getVersionedQueue(ctx, "", "", deployment, true)
 			if err != nil {
 				return nil, nil, nil, err
 			}

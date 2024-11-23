@@ -487,7 +487,6 @@ func (s *PartitionManagerTestSuite) validateAddTask(expectedBuildId string, expe
 			WorkflowId:       "wf",
 			VersionDirective: directive,
 		},
-		directive: directive,
 	})
 	s.Assert().NoError(err)
 	s.Assert().Equal(expectedSyncMatch, syncMatch)

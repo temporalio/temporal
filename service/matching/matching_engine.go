@@ -492,20 +492,18 @@ func (e *matchingEngineImpl) AddWorkflowTask(
 		expirationTime = timestamppb.New(now.Add(expirationDuration))
 	}
 	taskInfo := &persistencespb.TaskInfo{
-		NamespaceId:            addRequest.NamespaceId,
-		RunId:                  addRequest.Execution.GetRunId(),
-		WorkflowId:             addRequest.Execution.GetWorkflowId(),
-		ScheduledEventId:       addRequest.GetScheduledEventId(),
-		Clock:                  addRequest.GetClock(),
-		ExpiryTime:             expirationTime,
-		CreateTime:             timestamppb.New(now),
-		VersionDirective:       addRequest.VersionDirective,
-		WorkflowVersioningInfo: addRequest.GetWorkflowVersioningInfo(),
+		NamespaceId:      addRequest.NamespaceId,
+		RunId:            addRequest.Execution.GetRunId(),
+		WorkflowId:       addRequest.Execution.GetWorkflowId(),
+		ScheduledEventId: addRequest.GetScheduledEventId(),
+		Clock:            addRequest.GetClock(),
+		ExpiryTime:       expirationTime,
+		CreateTime:       timestamppb.New(now),
+		VersionDirective: addRequest.VersionDirective,
 	}
 
 	return pm.AddTask(ctx, addTaskParams{
 		taskInfo:    taskInfo,
-		directive:   addRequest.VersionDirective,
 		forwardInfo: addRequest.ForwardInfo,
 	})
 }
@@ -531,20 +529,18 @@ func (e *matchingEngineImpl) AddActivityTask(
 		expirationTime = timestamppb.New(now.Add(expirationDuration))
 	}
 	taskInfo := &persistencespb.TaskInfo{
-		NamespaceId:            addRequest.NamespaceId,
-		RunId:                  addRequest.Execution.GetRunId(),
-		WorkflowId:             addRequest.Execution.GetWorkflowId(),
-		ScheduledEventId:       addRequest.GetScheduledEventId(),
-		Clock:                  addRequest.GetClock(),
-		CreateTime:             timestamppb.New(now),
-		ExpiryTime:             expirationTime,
-		VersionDirective:       addRequest.VersionDirective,
-		WorkflowVersioningInfo: addRequest.GetWorkflowVersioningInfo(),
+		NamespaceId:      addRequest.NamespaceId,
+		RunId:            addRequest.Execution.GetRunId(),
+		WorkflowId:       addRequest.Execution.GetWorkflowId(),
+		ScheduledEventId: addRequest.GetScheduledEventId(),
+		Clock:            addRequest.GetClock(),
+		CreateTime:       timestamppb.New(now),
+		ExpiryTime:       expirationTime,
+		VersionDirective: addRequest.VersionDirective,
 	}
 
 	return pm.AddTask(ctx, addTaskParams{
 		taskInfo:    taskInfo,
-		directive:   addRequest.VersionDirective,
 		forwardInfo: addRequest.ForwardInfo,
 	})
 }

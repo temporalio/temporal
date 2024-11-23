@@ -76,7 +76,6 @@ type (
 
 	addTaskParams struct {
 		taskInfo    *persistencespb.TaskInfo
-		directive   *taskqueuespb.TaskVersionDirective
 		forwardInfo *taskqueuespb.TaskForwardInfo
 	}
 	// physicalTaskQueueManagerImpl manages a single DB-level (aka physical) task queue in memory
