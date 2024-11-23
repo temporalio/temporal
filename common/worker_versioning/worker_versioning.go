@@ -51,9 +51,24 @@ const (
 	UnversionedSearchAttribute = buildIdSearchAttributePrefixUnversioned
 )
 
-// ReachabilityBuildIdSearchAttribute returns the search attribute value for the currently assigned build ID
+// escapeBuildIdSearchAttributeDelimiter is a helper which escapes the BuildIdSearchAttributeDelimiter character in the input string
+func escapeBuildIdSearchAttributeDelimiter(s string) string {
+	s = strings.Replace(s, BuildIdSearchAttributeDelimiter, `|`+BuildIdSearchAttributeDelimiter, -1)
+	return s
+}
+
+// ReachabilityBuildIdSearchAttribute returns the search attribute value for the currently assigned build ID in the form
+// 'reachability:<behavior>:<deployment_series_name>:<deployment_build_id>'
 func ReachabilityBuildIdSearchAttribute(behavior enumspb.VersioningBehavior, deployment *deploymentpb.Deployment) string {
-	return fmt.Sprintf("%s:%s:%s", buildIdSearchAttributePrefixReachability, behavior.String(), DeploymentToString(deployment))
+	return sqlparser.String(sqlparser.NewStrVal([]byte(fmt.Sprintf("%s%s%s%s%s%s%s",
+		buildIdSearchAttributePrefixReachability,
+		BuildIdSearchAttributeDelimiter,
+		escapeBuildIdSearchAttributeDelimiter(behavior.String()),
+		BuildIdSearchAttributeDelimiter,
+		escapeBuildIdSearchAttributeDelimiter(deployment.GetSeriesName()),
+		BuildIdSearchAttributeDelimiter,
+		escapeBuildIdSearchAttributeDelimiter(deployment.GetBuildId()),
+	))))
 }
 
 // AssignedBuildIdSearchAttribute returns the search attribute value for the currently assigned build ID

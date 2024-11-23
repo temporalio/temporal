@@ -27,7 +27,6 @@ package deployment
 import (
 	"context"
 	"fmt"
-	"github.com/temporalio/sqlparser"
 	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/server/common/cache"
@@ -92,12 +91,10 @@ func makeCountRequest(
 
 func makeDeploymentQuery(seriesName, buildID string, open bool) string {
 	var statusFilter string
-	deploymentFilter := "= " + sqlparser.String(sqlparser.NewStrVal([]byte(
-		worker_versioning.ReachabilityBuildIdSearchAttribute(enumspb.VERSIONING_BEHAVIOR_PINNED, &deploymentpb.Deployment{
-			SeriesName: seriesName,
-			BuildId:    buildID,
-		}),
-	)))
+	deploymentFilter := "= " + worker_versioning.ReachabilityBuildIdSearchAttribute(enumspb.VERSIONING_BEHAVIOR_PINNED, &deploymentpb.Deployment{
+		SeriesName: seriesName,
+		BuildId:    buildID,
+	})
 	if open {
 		statusFilter = "= 'Running'"
 	} else {
