@@ -31,7 +31,6 @@ import "temporal/api/enums/v1/task_queue.proto";
 
 import "temporal/server/api/clock/v1/message.proto";
 import "temporal/server/api/taskqueue/v1/message.proto";
-import "temporal/server/api/deployment/v1/message.proto";
 
 // task column
 message AllocatedTaskInfo {
@@ -49,9 +48,7 @@ message TaskInfo {
     temporal.server.api.clock.v1.VectorClock clock = 7;
     // How this task should be directed. (Missing means the default for
     // TaskVersionDirective, which is unversioned.)
-    // Deprecated. No need to store this for new versioning [cleanup-old-wv]
     temporal.server.api.taskqueue.v1.TaskVersionDirective version_directive = 8;
-    temporal.server.api.deployment.v1.WorkflowVersioningInfo workflow_versioning_info = 9;
 }
 
 // task_queue column

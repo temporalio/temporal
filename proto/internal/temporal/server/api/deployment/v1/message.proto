@@ -27,7 +27,6 @@ package temporal.server.api.deployment.v1;
 option go_package = "go.temporal.io/server/api/deployment/v1;deployment";
 
 import "temporal/api/enums/v1/task_queue.proto";
-import "temporal/api/enums/v1/workflow.proto";
 import "google/protobuf/timestamp.proto";
 import "temporal/api/deployment/v1/message.proto";
 import "temporal/api/common/v1/message.proto";
