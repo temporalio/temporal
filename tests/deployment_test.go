@@ -336,4 +336,8 @@ func (d *DeploymentSuite) TestListDeployments_WithoutSeriesNameFilter() {
 	d.addDeploymentsAndVerifyListDeployments(seriesName, buildID, false)
 }
 
+// TODO Shivam - refactor the above test cases TestListDeployments_WithSeriesNameFilter + TestListDeployments_WithoutSeriesNameFilter
+// Refactoring should be done in a way where we are validating the exact deployment (based on how many we create) - right now,
+// the tests do validate the read API logic but are not the most assertive
+
 // TODO Shivam - Add more getCurrentDeployment tests when SetCurrentDefaultBuildID API has been defined
