@@ -30,7 +30,6 @@ import (
 	"time"
 
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
-	"go.temporal.io/server/api/deployment/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	"go.temporal.io/server/common/log"
@@ -118,7 +117,6 @@ type (
 		taskQueue                          string
 		activityTaskScheduleToStartTimeout time.Duration
 		versionDirective                   *taskqueuespb.TaskVersionDirective
-		workflowVersioningInfo             *deployment.WorkflowVersioningInfo
 	}
 
 	workflowTaskPostActionInfo struct {
@@ -169,7 +167,6 @@ func newActivityTaskPostActionInfo(
 		historyResendInfo:                  resendInfo,
 		activityTaskScheduleToStartTimeout: activityInfo.ScheduleToStartTimeout.AsDuration(),
 		versionDirective:                   directive,
-		workflowVersioningInfo:             workflow.GetWorkflowVersioningInfoMatchingTask(mutableState),
 	}, nil
 }
 
@@ -191,7 +188,6 @@ func newActivityRetryTimePostActionInfo(
 		taskQueue:                          taskQueue,
 		activityTaskScheduleToStartTimeout: activityScheduleToStartTimeout,
 		versionDirective:                   directive,
-		workflowVersioningInfo:             workflow.GetWorkflowVersioningInfoMatchingTask(mutableState),
 	}, nil
 }
 

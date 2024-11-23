@@ -517,7 +517,6 @@ func (t *timerQueueActiveTaskExecutor) executeActivityRetryTimerTask(
 		ScheduleToStartTimeout: durationpb.New(scheduleToStartTimeout),
 		Clock:                  vclock.NewVectorClock(t.shardContext.GetClusterMetadata().GetClusterID(), t.shardContext.GetShardID(), task.TaskID),
 		VersionDirective:       directive,
-		WorkflowVersioningInfo: workflow.GetWorkflowVersioningInfoMatchingTask(mutableState),
 	})
 	if err != nil {
 		return err

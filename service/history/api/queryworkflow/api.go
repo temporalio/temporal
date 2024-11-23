@@ -32,7 +32,6 @@ import (
 	querypb "go.temporal.io/api/query/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
-	deploymentpb "go.temporal.io/server/api/deployment/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/common"
@@ -293,6 +292,8 @@ func queryDirectlyThroughMatching(
 		msResp.GetAssignedBuildId(),
 		msResp.GetMostRecentWorkerVersionStamp(),
 		msResp.GetPreviousStartedEventId() != common.EmptyEventID,
+		workflow.GetEffectiveVersioningBehavior(msResp.GetVersioningInfo()),
+		workflow.GetEffectiveDeployment(msResp.GetVersioningInfo()),
 	)
 
 	if msResp.GetIsStickyTaskQueueEnabled() &&
@@ -346,11 +347,10 @@ func queryDirectlyThroughMatching(
 	}
 
 	nonStickyMatchingRequest := &matchingservice.QueryWorkflowRequest{
-		NamespaceId:            namespaceID,
-		QueryRequest:           queryRequest,
-		TaskQueue:              msResp.TaskQueue,
-		VersionDirective:       directive,
-		WorkflowVersioningInfo: GetWorkflowVersioningInfoMatchingTask(msResp),
+		NamespaceId:      namespaceID,
+		QueryRequest:     queryRequest,
+		TaskQueue:        msResp.TaskQueue,
+		VersionDirective: directive,
 	}
 
 	nonStickyStartTime := time.Now().UTC()
@@ -365,17 +365,4 @@ func queryDirectlyThroughMatching(
 			QueryResult:   matchingResp.GetQueryResult(),
 			QueryRejected: matchingResp.GetQueryRejected(),
 		}}, err
-}
-
-func GetWorkflowVersioningInfoMatchingTask(msResp *historyservice.GetMutableStateResponse) *deploymentpb.WorkflowVersioningInfo {
-	effectiveBehavior := workflow.GetEffectiveVersioningBehavior(msResp.GetVersioningInfo())
-	if effectiveBehavior == enumspb.VERSIONING_BEHAVIOR_PINNED {
-		// unversioned
-		return nil
-	}
-
-	return &deploymentpb.WorkflowVersioningInfo{
-		Behavior:   effectiveBehavior,
-		Deployment: workflow.GetEffectiveDeployment(msResp.GetVersioningInfo()),
-	}
 }

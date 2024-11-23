@@ -34,7 +34,6 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	updatepb "go.temporal.io/api/update/v1"
 	"go.temporal.io/api/workflowservice/v1"
-	deploymentpb "go.temporal.io/server/api/deployment/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
@@ -66,10 +65,9 @@ type Updater struct {
 	req                        *historyservice.UpdateWorkflowExecutionRequest
 	namespaceID                namespace.ID
 
-	wfKey                  definition.WorkflowKey
-	upd                    *update.Update
-	directive              *taskqueuespb.TaskVersionDirective
-	workflowVersioningInfo *deploymentpb.WorkflowVersioningInfo
+	wfKey     definition.WorkflowKey
+	upd       *update.Update
+	directive *taskqueuespb.TaskVersionDirective
 
 	// Variables referencing mutable state data.
 	// WARNING: any references to mutable state data *have to* be copied
@@ -217,8 +215,9 @@ func (u *Updater) ApplyRequest(
 		ms.GetAssignedBuildId(),
 		ms.GetMostRecentWorkerVersionStamp(),
 		ms.HasCompletedAnyWorkflowTask(),
+		ms.GetEffectiveVersioningBehavior(),
+		ms.GetEffectiveDeployment(),
 	)
-	u.workflowVersioningInfo = workflow.GetWorkflowVersioningInfoMatchingTask(ms)
 
 	return &api.UpdateWorkflowAction{
 		Noop:               true,
@@ -297,7 +296,6 @@ func (u *Updater) addWorkflowTaskToMatching(ctx context.Context) error {
 		ScheduleToStartTimeout: durationpb.New(u.scheduleToStartTimeout),
 		Clock:                  clock,
 		VersionDirective:       u.directive,
-		WorkflowVersioningInfo: u.workflowVersioningInfo,
 	})
 	if err != nil {
 		return err
