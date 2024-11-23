@@ -2645,9 +2645,7 @@ func (ms *MutableStateImpl) UpdateBuildIdAssignment(buildId string) error {
 // a pinned override is set.
 // For all other workflows (ms.GetEffectiveVersioningBehavior() == UNSPECIFIED), this will append a tag based on the
 // workflow's versioning status.
-func (ms *MutableStateImpl) updateBuildIdsSearchAttribute(
-	stamp *commonpb.WorkerVersionStamp,
-	maxSearchAttributeValueSize int) error {
+func (ms *MutableStateImpl) updateBuildIdsSearchAttribute(stamp *commonpb.WorkerVersionStamp, maxSearchAttributeValueSize int) error {
 	changed, err := ms.addBuildIdToSearchAttributesWithNoVisibilityTask(stamp, maxSearchAttributeValueSize)
 	if err != nil {
 		return err
@@ -2760,10 +2758,7 @@ func (ms *MutableStateImpl) saveBuildIds(buildIds []string, maxSearchAttributeVa
 	return nil
 }
 
-func (ms *MutableStateImpl) addBuildIdToSearchAttributesWithNoVisibilityTask(
-	stamp *commonpb.WorkerVersionStamp,
-	maxSearchAttributeValueSize int,
-) (bool, error) {
+func (ms *MutableStateImpl) addBuildIdToSearchAttributesWithNoVisibilityTask(stamp *commonpb.WorkerVersionStamp, maxSearchAttributeValueSize int) (bool, error) {
 	existingBuildIds, err := ms.loadBuildIds()
 	if err != nil {
 		return false, err
