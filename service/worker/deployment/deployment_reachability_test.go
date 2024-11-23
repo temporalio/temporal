@@ -26,13 +26,14 @@ package deployment
 
 import (
 	"context"
+	"testing"
+	"time"
+
 	"github.com/stretchr/testify/assert"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.uber.org/mock/gomock"
-	"testing"
-	"time"
 )
 
 const (

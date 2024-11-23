@@ -27,6 +27,8 @@ package deployment
 import (
 	"context"
 	"fmt"
+	"time"
+
 	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/server/common/cache"
@@ -35,7 +37,6 @@ import (
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/worker_versioning"
-	"time"
 )
 
 const (
