@@ -35,6 +35,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"google.golang.org/protobuf/types/known/fieldmaskpb"
+
 	"github.com/pborman/uuid"
 	batchpb "go.temporal.io/api/batch/v1"
 	commonpb "go.temporal.io/api/common/v1"
@@ -5276,8 +5278,47 @@ func getBatchOperationState(workflowState enumspb.WorkflowExecutionStatus) enums
 func (wh *WorkflowHandler) UpdateWorkflowExecutionOptions(
 	ctx context.Context,
 	request *workflowservice.UpdateWorkflowExecutionOptionsRequest,
-) (*workflowservice.UpdateWorkflowExecutionOptionsResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method UpdateWorkflowExecutionOptions not implemented")
+) (_ *workflowservice.UpdateWorkflowExecutionOptionsResponse, retError error) {
+	defer log.CapturePanic(wh.logger, &retError)
+	wh.logger.Debug("Received UpdateWorkflowExecutionOptions for ", tag.WorkflowID(request.GetWorkflowExecution().GetWorkflowId()))
+	if request == nil {
+		return nil, errRequestNotSet
+	}
+	if request.GetWorkflowExecution().GetWorkflowId() == "" {
+		return nil, errWorkflowIDNotSet
+	}
+	if request.GetUpdateMask() == nil {
+		return nil, serviceerror.NewInvalidArgument("UpdateMask is required")
+	}
+	opts := request.GetWorkflowExecutionOptions()
+	if opts == nil {
+		return nil, serviceerror.NewInvalidArgument("WorkflowExecutionOptions is required")
+	}
+	_, err := fieldmaskpb.New(opts, request.GetUpdateMask().GetPaths()...) // errors if paths are not valid for WorkflowExecutionOptions
+	if err != nil {
+		return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("error parsing UpdateMask: %s", err.Error()))
+	}
+	if opts.GetVersioningOverride().GetBehavior() == enumspb.VERSIONING_BEHAVIOR_PINNED &&
+		opts.GetVersioningOverride().GetDeployment() == nil {
+		return nil, serviceerror.NewInvalidArgument("Deployment must be set if behavior override is PINNED")
+	}
+
+	namespaceId, err := wh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
+	if err != nil {
+		return nil, err
+	}
+
+	response, err := wh.historyClient.UpdateWorkflowExecutionOptions(ctx, &historyservice.UpdateWorkflowExecutionOptionsRequest{
+		NamespaceId:   namespaceId.String(),
+		UpdateRequest: request,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return &workflowservice.UpdateWorkflowExecutionOptionsResponse{
+		WorkflowExecutionOptions: response.WorkflowExecutionOptions,
+	}, nil
 }
 
 func (wh *WorkflowHandler) UpdateActivityOptionsById(

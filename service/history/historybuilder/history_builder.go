@@ -411,6 +411,14 @@ func (b *HistoryBuilder) AddWorkflowExecutionTerminatedEvent(
 	return event
 }
 
+func (b *HistoryBuilder) AddWorkflowExecutionOptionsUpdatedEvent(
+	versioningOverride *workflowpb.VersioningOverride,
+) *historypb.HistoryEvent {
+	event := b.EventFactory.CreateWorkflowExecutionOptionsUpdatedEvent(versioningOverride)
+	event, _ = b.EventStore.add(event)
+	return event
+}
+
 func (b *HistoryBuilder) AddWorkflowExecutionUpdateAcceptedEvent(
 	protocolInstanceID string,
 	acceptedRequestMessageId string,
