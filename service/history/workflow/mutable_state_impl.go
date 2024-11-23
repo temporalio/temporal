@@ -4285,7 +4285,11 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionOptionsUpdatedEvent(event *his
 		// behavior and effective deployment. In that case, we would not hit the code path to remove the transition or
 		// reschedule the WFT. For this to happen, the existing behavior and the override would both have to be unpinned.
 		// If we don't remove the transition or reschedule pending tasks, the outstanding WFT on the transition's
-		// target queue will be started on the transition's target deployment. Most likely this matches user's intention because they add the unpinned override, they want to workflow to do the transition. Even if we removed the transition, the rescheduled task will be redirected by Matching to the old transition's deployment again and it will start the same transition in the workflow. So removing the transition does not make a difference and just adds some extra work for the server.
+		// target queue will be started on the transition's target deployment. Most likely this matches user's intention
+		// because they add the unpinned override, they want to workflow to do the transition. Even if we removed the
+		// transition, the rescheduled task will be redirected by Matching to the old transition's deployment again,
+		// and it will start the same transition in the workflow. So removing the transition would not make a difference
+		// and would in fact add some extra work for the server.
 		ms.executionInfo.GetVersioningInfo().DeploymentTransition = nil
 		// TODO (carly) part 2: if safe mode, do replay test on new deployment if deployment changed, if fail, revert changes and abort
 		ms.ClearStickyTaskQueue()
