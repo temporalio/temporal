@@ -29,6 +29,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 	"math/rand"
 	"reflect"
 	"slices"
@@ -4278,23 +4279,22 @@ func (ms *MutableStateImpl) AddWorkflowExecutionOptionsUpdatedEvent(
 
 func (ms *MutableStateImpl) ApplyWorkflowExecutionOptionsUpdatedEvent(event *historypb.HistoryEvent) error {
 	override := event.GetWorkflowExecutionOptionsUpdatedEventAttributes().GetVersioningOverride()
-	previousCurrentDeployment := ms.GetEffectiveDeployment()
+	previousEffectiveDeployment := ms.GetEffectiveDeployment()
 	previousEffectiveVersioningBehavior := ms.GetEffectiveVersioningBehavior()
 	if ms.GetExecutionInfo().GetVersioningInfo() == nil {
 		ms.GetExecutionInfo().VersioningInfo = &workflowpb.WorkflowExecutionVersioningInfo{}
 	}
 	ms.GetExecutionInfo().VersioningInfo.VersioningOverride = override
 
-	// If effective deployment or behavior change, we need to reschedule any pending tasks, because History will reject
-	// the task's start request if the task is being started by a poller that is not from the workflow's effective
-	// deployment according to History. Therefore, it is important for matching to match tasks with the correct pollers.
-	// Even if the effective deployment does not change, we still need to reschedule tasks into the appropriate
-	// default/unpinned queue or the pinned queue, because the two queues will be handled differently if the task queue's
-	// Current Deployment changes between now and when the task is started.
-	//
-	// We choose to let any started WFT that is running on the old deployment finish running, instead of forcing it to fail.
-	if !proto.Equal(ms.GetEffectiveDeployment(), previousCurrentDeployment) ||
+	if !proto.Equal(ms.GetEffectiveDeployment(), previousEffectiveDeployment) ||
 		ms.GetEffectiveVersioningBehavior() != previousEffectiveVersioningBehavior {
+		// TODO (carly) part 2: if safe mode, do replay test on new deployment if deployment changed, if fail, revert changes and abort
+		// For v3 versioned workflows (ms.GetEffectiveVersioningBehavior() != UNSPECIFIED), this will update the reachability
+		// search attribute based on the execution_info.deployment and/or override deployment if one exists.
+		if err := ms.updateBuildIdsSearchAttribute(nil, math.MaxInt32); err != nil {
+			return err
+		}
+
 		// If there is an ongoing transition, we remove it so that tasks from this workflow (including the pending WFT
 		// that initiated the transition) can run on our override deployment as soon as possible.
 		//
@@ -4318,7 +4318,15 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionOptionsUpdatedEvent(event *his
 		// and it will start the same transition in the workflow. So removing the transition would not make a difference
 		// and would in fact add some extra work for the server.
 		ms.executionInfo.GetVersioningInfo().DeploymentTransition = nil
-		// TODO (carly) part 2: if safe mode, do replay test on new deployment if deployment changed, if fail, revert changes and abort
+
+		// If effective deployment or behavior change, we need to reschedule any pending tasks, because History will reject
+		// the task's start request if the task is being started by a poller that is not from the workflow's effective
+		// deployment according to History. Therefore, it is important for matching to match tasks with the correct pollers.
+		// Even if the effective deployment does not change, we still need to reschedule tasks into the appropriate
+		// default/unpinned queue or the pinned queue, because the two queues will be handled differently if the task queue's
+		// Current Deployment changes between now and when the task is started.
+		//
+		// We choose to let any started WFT that is running on the old deployment finish running, instead of forcing it to fail.
 		ms.ClearStickyTaskQueue()
 		if ms.HasPendingWorkflowTask() && !ms.HasStartedWorkflowTask() &&
 			// Speculative WFT is directly (without transfer task) added to matching when scheduled.
@@ -4326,8 +4334,7 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionOptionsUpdatedEvent(event *his
 			// If there is no poller for previous deployment, it will time out,
 			// and will be rescheduled as normal WFT.
 			ms.GetPendingWorkflowTask().Type != enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE {
-			// sticky queue was just cleared, so the following call only generates
-			// a WorkflowTask, not a WorkflowTaskTimeoutTask.
+			// Sticky queue was just cleared, so the following call only generates a WorkflowTask, not a WorkflowTaskTimeoutTask.
 			err := ms.taskGenerator.GenerateScheduleWorkflowTaskTasks(ms.GetPendingWorkflowTask().ScheduledEventID)
 			if err != nil {
 				return err
