@@ -25,6 +25,7 @@
 package deployment
 
 import (
+	"errors"
 	"time"
 
 	sdkclient "go.temporal.io/sdk/client"
@@ -56,6 +57,8 @@ var (
 			MaximumInterval: 60 * time.Second,
 		},
 	}
+
+	errAlreadyExists = errors.New("Task queue already exists in deployment")
 )
 
 func DeploymentWorkflow(ctx workflow.Context, deploymentWorkflowArgs *deploymentspb.DeploymentWorkflowArgs) error {
@@ -103,7 +106,7 @@ func (d *DeploymentWorkflowRunner) run() error {
 	}
 
 	// Setting an update handler for updating deployment task-queues
-	if err := workflow.SetUpdateHandler(
+	if err := workflow.SetUpdateHandlerWithOptions(
 		d.ctx,
 		RegisterWorkerInDeployment,
 		func(ctx workflow.Context, updateInput *deploymentspb.RegisterWorkerInDeploymentArgs) error {
@@ -112,6 +115,7 @@ func (d *DeploymentWorkflowRunner) run() error {
 				return err
 			}
 
+			// use lock to enforce only one update at a time
 			err = d.lock.Lock(ctx)
 			if err != nil {
 				d.logger.Error("Could not acquire deployment workflow lock")
@@ -123,29 +127,10 @@ func (d *DeploymentWorkflowRunner) run() error {
 				d.lock.Unlock()
 			}()
 
-			// check if already present
-			if _, ok := d.DeploymentLocalState.TaskQueueFamilies[updateInput.TaskQueueName].GetTaskQueues()[int32(updateInput.TaskQueueType)]; ok {
-				return nil
-			}
-
-			// if no TaskQueueFamilies have been registered for the deployment
-			if d.DeploymentLocalState.TaskQueueFamilies == nil {
-				d.DeploymentLocalState.TaskQueueFamilies = make(map[string]*deploymentspb.DeploymentLocalState_TaskQueueFamilyData)
-			}
-			if d.DeploymentLocalState.TaskQueueFamilies[updateInput.TaskQueueName] == nil {
-				d.DeploymentLocalState.TaskQueueFamilies[updateInput.TaskQueueName] = &deploymentspb.DeploymentLocalState_TaskQueueFamilyData{}
-			}
-			// if no TaskQueues have been registered for the TaskQueueName
-			if d.DeploymentLocalState.TaskQueueFamilies[updateInput.TaskQueueName].TaskQueues == nil {
-				d.DeploymentLocalState.TaskQueueFamilies[updateInput.TaskQueueName].TaskQueues = make(map[int32]*deploymentspb.TaskQueueData)
-			}
-
-			// Add the task queue to the local state
+			// initial data
 			data := &deploymentspb.TaskQueueData{
 				FirstPollerTime: updateInput.FirstPollerTime,
 			}
-			d.DeploymentLocalState.TaskQueueFamilies[updateInput.TaskQueueName].TaskQueues[int32(updateInput.TaskQueueType)] = data
-
 			// denormalize LastBecameCurrentTime into per-tq data
 			syncData := common.CloneProto(data)
 			syncData.LastBecameCurrentTime = d.DeploymentLocalState.LastBecameCurrentTime
@@ -157,9 +142,31 @@ func (d *DeploymentWorkflowRunner) run() error {
 				TaskQueueType: updateInput.TaskQueueType,
 				Data:          syncData,
 			}).Get(ctx, nil)
+
+			if err == nil {
+				// Add the task queue to the local state
+				if d.DeploymentLocalState.TaskQueueFamilies == nil {
+					d.DeploymentLocalState.TaskQueueFamilies = make(map[string]*deploymentspb.DeploymentLocalState_TaskQueueFamilyData)
+				}
+				if d.DeploymentLocalState.TaskQueueFamilies[updateInput.TaskQueueName] == nil {
+					d.DeploymentLocalState.TaskQueueFamilies[updateInput.TaskQueueName] = &deploymentspb.DeploymentLocalState_TaskQueueFamilyData{}
+				}
+				if d.DeploymentLocalState.TaskQueueFamilies[updateInput.TaskQueueName].TaskQueues == nil {
+					d.DeploymentLocalState.TaskQueueFamilies[updateInput.TaskQueueName].TaskQueues = make(map[int32]*deploymentspb.TaskQueueData)
+				}
+				d.DeploymentLocalState.TaskQueueFamilies[updateInput.TaskQueueName].TaskQueues[int32(updateInput.TaskQueueType)] = data
+			}
+
 			return err
 		},
-		// TODO Shivam - have a validator which backsoff updates if we are scheduled to have a CAN
+		workflow.UpdateHandlerOptions{
+			Validator: func(updateInput *deploymentspb.RegisterWorkerInDeploymentArgs) error {
+				if _, ok := d.DeploymentLocalState.TaskQueueFamilies[updateInput.TaskQueueName].GetTaskQueues()[int32(updateInput.TaskQueueType)]; ok {
+					return errAlreadyExists
+				}
+				return nil
+			},
+		},
 	); err != nil {
 		return err
 	}
