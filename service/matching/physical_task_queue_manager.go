@@ -542,7 +542,7 @@ func (c *physicalTaskQueueManagerImpl) ensureRegisteredInDeployment(
 
 	// lock so that only one poll does the update and the rest wait for it
 	c.deploymentLock.Lock()
-	defer c.deploymentLock.Lock()
+	defer c.deploymentLock.Unlock()
 
 	if c.deploymentRegistered {
 		// already done
