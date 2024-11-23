@@ -29,10 +29,15 @@ import (
 	"strings"
 	"time"
 
+	"github.com/temporalio/sqlparser"
+	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
+	deployspb "go.temporal.io/server/api/deployment/v1"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/sdk"
+	"go.temporal.io/server/common/searchattribute"
 )
 
 const (
@@ -54,7 +59,7 @@ const (
 	// Prefixes, Delimeters and Keys
 	DeploymentWorkflowIDPrefix       = "temporal-sys-deployment"
 	DeploymentSeriesWorkflowIDPrefix = "temporal-sys-deployment-series"
-	DeploymentWorkflowIDDelimeter    = "|"
+	DeploymentWorkflowIDDelimeter    = ":"
 	DeploymentWorkflowIDInitialSize  = (2 * len(DeploymentWorkflowIDDelimeter)) + len(DeploymentWorkflowIDPrefix)
 	SeriesFieldName                  = "DeploymentSeries"
 	BuildIDFieldName                 = "BuildID"
@@ -91,8 +96,7 @@ func ValidateDeploymentWfParams(fieldName string, field string, maxIDLengthLimit
 // EscapeChar is a helper which escapes the DeploymentWorkflowIDDelimeter character
 // in the input string
 func escapeChar(s string) string {
-	s = strings.Replace(s, `\`, `\\`, -1)
-	s = strings.Replace(s, DeploymentWorkflowIDDelimeter, `\`+DeploymentWorkflowIDDelimeter, -1)
+	s = strings.Replace(s, DeploymentWorkflowIDDelimeter, `|`+DeploymentWorkflowIDDelimeter, -1)
 	return s
 }
 
@@ -105,9 +109,33 @@ func GenerateDeploymentSeriesWorkflowID(deploymentSeriesName string) string {
 // GenerateDeploymentWorkflowID is a helper that generates a system accepted
 // workflowID which are used in our deployment workflows
 func GenerateDeploymentWorkflowID(seriesName string, buildID string) string {
-	// escaping the reserved workflow delimiter (|) from the inputs, if present
 	escapedSeriesName := escapeChar(seriesName)
 	escapedBuildId := escapeChar(buildID)
 
 	return DeploymentWorkflowIDPrefix + DeploymentWorkflowIDDelimeter + escapedSeriesName + DeploymentWorkflowIDDelimeter + escapedBuildId
+}
+
+func GenerateDeploymentWorkflowIDForPatternMatching(seriesName string) string {
+	escapedSeriesName := escapeChar(seriesName)
+
+	return DeploymentWorkflowIDPrefix + DeploymentWorkflowIDDelimeter + escapedSeriesName + DeploymentWorkflowIDDelimeter
+}
+
+// BuildQueryWithSeriesFilter is a helper which builds a query for pattern matching based on the
+// provided seriesName
+func BuildQueryWithSeriesFilter(seriesName string) string {
+	workflowID := GenerateDeploymentWorkflowIDForPatternMatching(seriesName)
+	escapedSeriesEntry := sqlparser.String(sqlparser.NewStrVal([]byte(workflowID)))
+
+	query := fmt.Sprintf("%s AND %s STARTS_WITH %s", DeploymentVisibilityBaseListQuery, searchattribute.WorkflowID, escapedSeriesEntry)
+	return query
+}
+
+func DecodeDeploymentMemo(memo *commonpb.Memo) *deployspb.DeploymentWorkflowMemo {
+	var workflowMemo deployspb.DeploymentWorkflowMemo
+	err := sdk.PreferProtoDataConverter.FromPayload(memo.Fields[DeploymentMemoField], &workflowMemo)
+	if err != nil {
+		return nil
+	}
+	return &workflowMemo
 }

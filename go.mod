@@ -7,8 +7,6 @@ retract (
 	v1.26.0 // Published accidentally.
 )
 
-//replace go.temporal.io/api => github.com/temporalio/api-go v1.39.1-0.20241120204558-7018129677c5
-
 require (
 	cloud.google.com/go/storage v1.41.0
 	github.com/aws/aws-sdk-go v1.53.15

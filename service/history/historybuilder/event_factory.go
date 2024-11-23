@@ -27,10 +27,9 @@ package historybuilder
 import (
 	"time"
 
-	deploymentpb "go.temporal.io/api/deployment/v1"
-
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
+	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
 	historypb "go.temporal.io/api/history/v1"
@@ -390,6 +389,19 @@ func (b *EventFactory) CreateWorkflowExecutionTerminatedEvent(
 		},
 	}
 	event.Links = links
+	return event
+}
+
+func (b *EventFactory) CreateWorkflowExecutionOptionsUpdatedEvent(
+	versioningOverride *workflowpb.VersioningOverride,
+) *historypb.HistoryEvent {
+	event := b.createHistoryEvent(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED, b.timeSource.Now())
+	event.Attributes = &historypb.HistoryEvent_WorkflowExecutionOptionsUpdatedEventAttributes{
+		WorkflowExecutionOptionsUpdatedEventAttributes: &historypb.WorkflowExecutionOptionsUpdatedEventAttributes{
+			VersioningOverride: versioningOverride,
+		},
+	}
+	event.WorkerMayIgnore = true
 	return event
 }
 

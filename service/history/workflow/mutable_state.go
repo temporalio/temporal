@@ -30,6 +30,9 @@ import (
 	"context"
 	"time"
 
+	"google.golang.org/protobuf/types/known/durationpb"
+	"google.golang.org/protobuf/types/known/timestamppb"
+
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	deploymentpb "go.temporal.io/api/deployment/v1"
@@ -55,8 +58,6 @@ import (
 	"go.temporal.io/server/service/history/historybuilder"
 	"go.temporal.io/server/service/history/hsm"
 	"go.temporal.io/server/service/history/tasks"
-	"google.golang.org/protobuf/types/known/durationpb"
-	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type TransactionPolicy int
@@ -223,7 +224,7 @@ type (
 		AddWorkflowExecutionStartedEvent(*commonpb.WorkflowExecution, *historyservice.StartWorkflowExecutionRequest) (*historypb.HistoryEvent, error)
 		AddWorkflowExecutionStartedEventWithOptions(*commonpb.WorkflowExecution, *historyservice.StartWorkflowExecutionRequest, *workflowpb.ResetPoints, string, string) (*historypb.HistoryEvent, error)
 		AddWorkflowExecutionTerminatedEvent(firstEventID int64, reason string, details *commonpb.Payloads, identity string, deleteAfterTerminate bool, links []*commonpb.Link) (*historypb.HistoryEvent, error)
-
+		AddWorkflowExecutionOptionsUpdatedEvent(versioningOverride *workflowpb.VersioningOverride) (*historypb.HistoryEvent, error)
 		AddWorkflowExecutionUpdateAcceptedEvent(protocolInstanceID string, acceptedRequestMessageId string, acceptedRequestSequencingEventId int64, acceptedRequest *updatepb.Request) (*historypb.HistoryEvent, error)
 		AddWorkflowExecutionUpdateCompletedEvent(acceptedEventID int64, updResp *updatepb.Response) (*historypb.HistoryEvent, error)
 		RejectWorkflowExecutionUpdate(protocolInstanceID string, updRejection *updatepb.Rejection) error
@@ -231,7 +232,6 @@ type (
 		ApplyWorkflowExecutionUpdateAdmittedEvent(event *historypb.HistoryEvent, batchId int64) error
 		VisitUpdates(visitor func(updID string, updInfo *persistencespb.UpdateInfo))
 		GetUpdateOutcome(ctx context.Context, updateID string) (*updatepb.Outcome, error)
-
 		CheckResettable() error
 		CloneToProto() *persistencespb.WorkflowMutableState
 		RetryActivity(ai *persistencespb.ActivityInfo, failure *failurepb.Failure) (enumspb.RetryState, error)
@@ -352,6 +352,7 @@ type (
 		ApplyWorkflowExecutionSignaled(*historypb.HistoryEvent) error
 		ApplyWorkflowExecutionStartedEvent(*clockspb.VectorClock, *commonpb.WorkflowExecution, string, *historypb.HistoryEvent) error
 		ApplyWorkflowExecutionTerminatedEvent(int64, *historypb.HistoryEvent) error
+		ApplyWorkflowExecutionOptionsUpdatedEvent(event *historypb.HistoryEvent) error
 		ApplyWorkflowExecutionTimedoutEvent(int64, *historypb.HistoryEvent) error
 		ApplyWorkflowExecutionUpdateAcceptedEvent(*historypb.HistoryEvent) error
 		ApplyWorkflowExecutionUpdateCompletedEvent(event *historypb.HistoryEvent, batchID int64) error
@@ -404,12 +405,14 @@ type (
 		// If state transition history is empty (e.g. when disabled or fresh mutable state), returns 0.
 		NextTransitionCount() int64
 		// GetEffectiveDeployment returns the effective deployment in the following order:
-		//  1. DeploymentTransition.Deployment: this is returned when the wf is transitioning to a new
-		//     deployment
-		//  2. VersioningOverride.Deployment: this is returned when user has set a PINNED override at wf
-		//     start time, or later via UpdateWorkflowExecutionOptions.
-		//  3. Deployment: this is returned when there is no transition and not override (most common case).
-		//     Deployment is set based on the worker-sent deployment in the latest WFT completion.
+		//  1. DeploymentTransition.Deployment: this is returned when the wf is transitioning to a
+		//     new deployment
+		//  2. VersioningOverride.Deployment: this is returned when user has set a PINNED override
+		//     at wf start time, or later via UpdateWorkflowExecutionOptions.
+		//  3. Deployment: this is returned when there is no transition and no override (the most
+		//     common case). Deployment is set based on the worker-sent deployment in the latest WFT
+		//     completion. Exception: if Deployment is set but the workflow's effective behavior is
+		//     UNSPECIFIED, it means the workflow is unversioned, so effective deployment will be nil.
 		GetEffectiveDeployment() *deploymentpb.Deployment
 		// GetEffectiveVersioningBehavior returns the effective versioning behavior in the following
 		// order:
