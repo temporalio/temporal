@@ -60,15 +60,12 @@ func TestReachable_CurrentDeployment(t *testing.T) {
 	ctx := context.Background()
 	seriesName := "test-deployment"
 	buildId := "A"
-	currentBuildId := "A"
 	vm := manager.NewMockVisibilityManager(gomock.NewController(t)) // won't receive any calls
-
 	testCache := newReachabilityCache(metrics.NoopMetricsHandler, vm, testReachabilityCacheOpenWFsTTL, testReachabilityCacheClosedWFsTTL)
-	currentBuildIdValidTime := time.Now()
 
-	reach, reachValidTime, err := getDeploymentReachability(ctx, "", "", seriesName, buildId, currentBuildId, currentBuildIdValidTime, testCache)
+	reach, reachValidTime, err := getDeploymentReachability(ctx, "", "", seriesName, buildId, true, testCache)
 	assert.Nil(t, err)
-	assert.Equal(t, currentBuildIdValidTime, reachValidTime)
+	assert.Greater(t, time.Now(), reachValidTime)
 	assert.Equal(t, enumspb.DEPLOYMENT_REACHABILITY_REACHABLE, reach)
 }
 
@@ -79,31 +76,28 @@ func TestReachable_OpenWorkflow(t *testing.T) {
 	nsName := "test-namespace"
 	seriesName := "test-deployment"
 	buildId := "A"
-	currentBuildId := "B"
 	vm := manager.NewMockVisibilityManager(gomock.NewController(t))
 	openCountRequest := makeCountRequest(nsId, nsName, seriesName, buildId, true)
 	closedCountRequest := makeCountRequest(nsId, nsName, seriesName, buildId, false)
 	vm.EXPECT().CountWorkflowExecutions(gomock.Any(), &openCountRequest).MaxTimes(2).Return(mkCountResponse(1))
 	vm.EXPECT().CountWorkflowExecutions(gomock.Any(), &closedCountRequest).MaxTimes(2).Return(mkCountResponse(0))
-
 	testCache := newReachabilityCache(metrics.NoopMetricsHandler, vm, testReachabilityCacheOpenWFsTTL, testReachabilityCacheClosedWFsTTL)
-	currentBuildIdValidTime := time.Now()
 
 	// put a value in cold cache
-	reach, reachValidTime, err := getDeploymentReachability(ctx, nsId, nsName, seriesName, buildId, currentBuildId, currentBuildIdValidTime, testCache)
+	reach, reachValidTime, err := getDeploymentReachability(ctx, nsId, nsName, seriesName, buildId, false, testCache)
 	assert.Nil(t, err)
-	assert.Greater(t, reachValidTime, currentBuildIdValidTime)
+	assert.Greater(t, time.Now(), reachValidTime)
 	assert.Equal(t, enumspb.DEPLOYMENT_REACHABILITY_REACHABLE, reach)
 
 	// get the cached value and time
-	reach, reachValidTimeCached, err := getDeploymentReachability(ctx, nsId, nsName, seriesName, buildId, currentBuildId, currentBuildIdValidTime, testCache)
+	reach, reachValidTimeCached, err := getDeploymentReachability(ctx, nsId, nsName, seriesName, buildId, false, testCache)
 	assert.Nil(t, err)
 	assert.Equal(t, reachValidTime, reachValidTimeCached)
 	assert.Equal(t, enumspb.DEPLOYMENT_REACHABILITY_REACHABLE, reach)
 
 	// check that the cache is cold again after TTL (as shown by newer valid time)
 	time.Sleep(testReachabilityCacheOpenWFsTTL)
-	reach, reachValidTimeCacheCold, err := getDeploymentReachability(ctx, nsId, nsName, seriesName, buildId, currentBuildId, currentBuildIdValidTime, testCache)
+	reach, reachValidTimeCacheCold, err := getDeploymentReachability(ctx, nsId, nsName, seriesName, buildId, false, testCache)
 	assert.Nil(t, err)
 	assert.Greater(t, reachValidTimeCacheCold, reachValidTime)
 	assert.Equal(t, enumspb.DEPLOYMENT_REACHABILITY_REACHABLE, reach)
@@ -116,31 +110,28 @@ func TestReachable_ClosedWorkflow(t *testing.T) {
 	nsName := "test-namespace"
 	seriesName := "test-deployment"
 	buildId := "A"
-	currentBuildId := "B"
 	vm := manager.NewMockVisibilityManager(gomock.NewController(t))
 	openCountRequest := makeCountRequest(nsId, nsName, seriesName, buildId, true)
 	closedCountRequest := makeCountRequest(nsId, nsName, seriesName, buildId, false)
 	vm.EXPECT().CountWorkflowExecutions(gomock.Any(), &openCountRequest).MaxTimes(2).Return(mkCountResponse(0))
 	vm.EXPECT().CountWorkflowExecutions(gomock.Any(), &closedCountRequest).MaxTimes(2).Return(mkCountResponse(1))
-
 	testCache := newReachabilityCache(metrics.NoopMetricsHandler, vm, testReachabilityCacheOpenWFsTTL, testReachabilityCacheClosedWFsTTL)
-	currentBuildIdValidTime := time.Now()
 
 	// put a value in cold cache
-	reach, reachValidTime, err := getDeploymentReachability(ctx, nsId, nsName, seriesName, buildId, currentBuildId, currentBuildIdValidTime, testCache)
+	reach, reachValidTime, err := getDeploymentReachability(ctx, nsId, nsName, seriesName, buildId, false, testCache)
 	assert.Nil(t, err)
-	assert.Greater(t, reachValidTime, currentBuildIdValidTime)
+	assert.Greater(t, time.Now(), reachValidTime)
 	assert.Equal(t, enumspb.DEPLOYMENT_REACHABILITY_CLOSED_WORKFLOWS_ONLY, reach)
 
 	// get the cached value and time
-	reach, reachValidTimeCacheHot, err := getDeploymentReachability(ctx, nsId, nsName, seriesName, buildId, currentBuildId, currentBuildIdValidTime, testCache)
+	reach, reachValidTimeCacheHot, err := getDeploymentReachability(ctx, nsId, nsName, seriesName, buildId, false, testCache)
 	assert.Nil(t, err)
 	assert.Equal(t, reachValidTime, reachValidTimeCacheHot)
 	assert.Equal(t, enumspb.DEPLOYMENT_REACHABILITY_CLOSED_WORKFLOWS_ONLY, reach)
 
 	// check that the cache is cold again after TTL (as shown by newer valid time)
 	time.Sleep(testReachabilityCacheClosedWFsTTL)
-	reach, reachValidTimeCacheCold, err := getDeploymentReachability(ctx, nsId, nsName, seriesName, buildId, currentBuildId, currentBuildIdValidTime, testCache)
+	reach, reachValidTimeCacheCold, err := getDeploymentReachability(ctx, nsId, nsName, seriesName, buildId, false, testCache)
 	assert.Nil(t, err)
 	assert.Greater(t, reachValidTimeCacheCold, reachValidTime)
 	assert.Equal(t, enumspb.DEPLOYMENT_REACHABILITY_CLOSED_WORKFLOWS_ONLY, reach)

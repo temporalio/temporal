@@ -26,8 +26,6 @@ package deployment
 
 import (
 	"context"
-	"time"
-
 	"github.com/pborman/uuid"
 	commonpb "go.temporal.io/api/common/v1"
 	deploypb "go.temporal.io/api/deployment/v1"
@@ -260,23 +258,13 @@ func (d *DeploymentClientImpl) GetDeploymentReachability(
 	if err != nil {
 		return nil, err
 	}
-	currentDeploymentInfo, err := d.GetCurrentDeployment(ctx, namespaceEntry, seriesName)
-	if err != nil {
-		return nil, err
-	}
-	var currDeploymentBuildId string
-	if currentDeploymentInfo != nil && currentDeploymentInfo.GetDeployment() != nil {
-		currDeploymentBuildId = currentDeploymentInfo.GetDeployment().GetBuildId()
-	}
-
 	reachability, lastUpdateTime, err := getDeploymentReachability(
 		ctx,
 		namespaceEntry.ID().String(),
 		namespaceEntry.Name().String(),
 		seriesName,
 		buildID,
-		currDeploymentBuildId,
-		time.Now(), // approx time that currentDeployment was confirmed valid
+		deployInfo.GetIsCurrent(),
 		d.reachabilityCache,
 	)
 

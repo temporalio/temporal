@@ -53,17 +53,17 @@ const (
 // the transition has succeeded or failed.
 func getDeploymentReachability(
 	ctx context.Context,
-	nsId, nsName, seriesName, buildID, currentBuildID string,
-	currentBuildIDValidTime time.Time,
+	nsId, nsName, seriesName, buildId string,
+	isCurrent bool,
 	rc reachabilityCache,
 ) (enumspb.DeploymentReachability, time.Time, error) {
 	// 1a. Reachable by new unpinned workflows
-	if buildID == currentBuildID { // add if buildID is ramping, once we have ramp
-		return enumspb.DEPLOYMENT_REACHABILITY_REACHABLE, currentBuildIDValidTime, nil
+	if isCurrent {
+		return enumspb.DEPLOYMENT_REACHABILITY_REACHABLE, time.Now(), nil
 	}
 
 	// 2a. Reachable by open pinned workflows
-	countRequest := makeCountRequest(nsId, nsName, seriesName, buildID, true)
+	countRequest := makeCountRequest(nsId, nsName, seriesName, buildId, true)
 	exists, lastUpdateTime, err := rc.Get(ctx, countRequest, true)
 	if err != nil {
 		return enumspb.DEPLOYMENT_REACHABILITY_UNSPECIFIED, time.Time{}, err
@@ -73,7 +73,7 @@ func getDeploymentReachability(
 	}
 
 	// 3. Reachable by closed pinned workflows
-	countRequest = makeCountRequest(nsId, nsName, seriesName, buildID, false)
+	countRequest = makeCountRequest(nsId, nsName, seriesName, buildId, false)
 	exists, lastUpdateTime, err = rc.Get(ctx, countRequest, false)
 	if err != nil {
 		return enumspb.DEPLOYMENT_REACHABILITY_UNSPECIFIED, time.Time{}, err
