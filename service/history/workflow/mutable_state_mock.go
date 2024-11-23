@@ -646,6 +646,21 @@ func (mr *MockMutableStateMockRecorder) AddWorkflowExecutionCanceledEvent(arg0, 
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddWorkflowExecutionCanceledEvent", reflect.TypeOf((*MockMutableState)(nil).AddWorkflowExecutionCanceledEvent), arg0, arg1)
 }
 
+// AddWorkflowExecutionOptionsUpdatedEvent mocks base method.
+func (m *MockMutableState) AddWorkflowExecutionOptionsUpdatedEvent(versioningOverride *workflow.VersioningOverride) (*history.HistoryEvent, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "AddWorkflowExecutionOptionsUpdatedEvent", versioningOverride)
+	ret0, _ := ret[0].(*history.HistoryEvent)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// AddWorkflowExecutionOptionsUpdatedEvent indicates an expected call of AddWorkflowExecutionOptionsUpdatedEvent.
+func (mr *MockMutableStateMockRecorder) AddWorkflowExecutionOptionsUpdatedEvent(versioningOverride any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddWorkflowExecutionOptionsUpdatedEvent", reflect.TypeOf((*MockMutableState)(nil).AddWorkflowExecutionOptionsUpdatedEvent), versioningOverride)
+}
+
 // AddWorkflowExecutionSignaled mocks base method.
 func (m *MockMutableState) AddWorkflowExecutionSignaled(signalName string, input *common.Payloads, identity string, header *common.Header, skipGenerateWorkflowTask bool, links []*common.Link) (*history.HistoryEvent, error) {
 	m.ctrl.T.Helper()
@@ -1337,6 +1352,20 @@ func (m *MockMutableState) ApplyWorkflowExecutionFailedEvent(arg0 int64, arg1 *h
 func (mr *MockMutableStateMockRecorder) ApplyWorkflowExecutionFailedEvent(arg0, arg1 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ApplyWorkflowExecutionFailedEvent", reflect.TypeOf((*MockMutableState)(nil).ApplyWorkflowExecutionFailedEvent), arg0, arg1)
+}
+
+// ApplyWorkflowExecutionOptionsUpdatedEvent mocks base method.
+func (m *MockMutableState) ApplyWorkflowExecutionOptionsUpdatedEvent(event *history.HistoryEvent) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ApplyWorkflowExecutionOptionsUpdatedEvent", event)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// ApplyWorkflowExecutionOptionsUpdatedEvent indicates an expected call of ApplyWorkflowExecutionOptionsUpdatedEvent.
+func (mr *MockMutableStateMockRecorder) ApplyWorkflowExecutionOptionsUpdatedEvent(event any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ApplyWorkflowExecutionOptionsUpdatedEvent", reflect.TypeOf((*MockMutableState)(nil).ApplyWorkflowExecutionOptionsUpdatedEvent), event)
 }
 
 // ApplyWorkflowExecutionSignaled mocks base method.

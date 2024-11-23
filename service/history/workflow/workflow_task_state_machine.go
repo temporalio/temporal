@@ -31,16 +31,15 @@ import (
 	"math"
 	"time"
 
-	deploymentpb "go.temporal.io/api/deployment/v1"
-
 	commonpb "go.temporal.io/api/common/v1"
+	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	updatepb "go.temporal.io/api/update/v1"
-	"go.temporal.io/api/workflowservice/v1"
+	workflowservice "go.temporal.io/api/workflowservice/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
@@ -1088,7 +1087,6 @@ func (m *workflowTaskStateMachine) afterAddWorkflowTaskCompletedEvent(
 	attrs := event.GetWorkflowTaskCompletedEventAttributes()
 	m.ms.executionInfo.LastCompletedWorkflowTaskStartedEventId = attrs.GetStartedEventId()
 	m.ms.executionInfo.MostRecentWorkerVersionStamp = attrs.GetWorkerVersion()
-
 	if err := m.ms.CompleteDeploymentTransition(attrs.GetVersioningBehavior()); err != nil {
 		return err
 	}
