@@ -3247,6 +3247,10 @@ func (wh *WorkflowHandler) GetDeploymentReachability(
 		return nil, errDeploymentsNotAllowed
 	}
 
+	if request.GetDeployment() == nil {
+		return nil, serviceerror.NewInvalidArgument("deployment is required")
+	}
+
 	namespaceEntry, err := wh.namespaceRegistry.GetNamespace(namespace.Name(request.GetNamespace()))
 	if err != nil {
 		return nil, err
