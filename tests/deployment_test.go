@@ -234,9 +234,11 @@ func (d *DeploymentSuite) TestGetCurrentDeployment_NoCurrentDeployment() {
 	}
 }
 
-// verifyListDeployments makes a ListDeployment request and verifies that all the expected deployments eventually appear in the list.
-// Empty `seriesFilter` will list all deployments.
-func (d *DeploymentSuite) listDeployments(seriesName string, buildID string, withSeries bool) {
+// addDeploymentsAndVerifyListDeployments does the following:
+// - starts deployment workflow(s)
+// - makes a ListDeployment request (with and without seriesFilter)
+// - verifies that all the expected deployments eventually appear in the list.
+func (d *DeploymentSuite) addDeploymentsAndVerifyListDeployments(seriesName string, buildID string, withSeriesFilter bool) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
 	defer cancel()
 
@@ -246,7 +248,6 @@ func (d *DeploymentSuite) listDeployments(seriesName string, buildID string, wit
 		SeriesName: seriesName,
 		BuildId:    buildID,
 	}
-	numberOfDeployments := 1
 
 	// Starting a deployment workflow
 	errChan := make(chan error)
@@ -260,11 +261,26 @@ func (d *DeploymentSuite) listDeployments(seriesName string, buildID string, wit
 	request := &workflowservice.ListDeploymentsRequest{
 		Namespace: d.Namespace(),
 	}
-	if withSeries {
+
+	if withSeriesFilter {
 		request.SeriesName = seriesName
+		d.validateListDeploymentsResponse_WithSeriesFilter(ctx, request, workerDeployment)
+	} else {
+		d.validateListDeploymentsResponse_WithoutSeriesFilter(ctx, request)
 	}
 
-	// Querying the Deployment
+	<-ctx.Done()
+	select {
+	case err := <-errChan:
+		d.Fail("Expected error channel to be empty but got error %w", err)
+	default:
+	}
+}
+
+func (d *DeploymentSuite) validateListDeploymentsResponse_WithSeriesFilter(ctx context.Context,
+	request *workflowservice.ListDeploymentsRequest, expectedDeployment *deploymentpb.Deployment) {
+	expectedNumberOfDeployments := 1
+
 	d.EventuallyWithT(func(t *assert.CollectT) {
 		a := assert.New(t)
 
@@ -275,35 +291,49 @@ func (d *DeploymentSuite) listDeployments(seriesName string, buildID string, wit
 			return
 		}
 		a.NotNil(resp.Deployments)
-		a.Equal(numberOfDeployments, len(resp.Deployments))
+		a.Equal(expectedNumberOfDeployments, len(resp.Deployments))
+
+		// check to stop eventuallyWithT from panicking since
+		// it collects all possible errors
 		if len(resp.Deployments) < 1 {
 			return
 		}
 
 		deployment := resp.Deployments[0]
-		a.Equal(seriesName, deployment.Deployment.SeriesName)
-		a.Equal(buildID, deployment.Deployment.BuildId)
+		a.Equal(expectedDeployment.SeriesName, deployment.Deployment.SeriesName)
+		a.Equal(expectedDeployment.BuildId, deployment.Deployment.BuildId)
 		a.Equal(false, deployment.IsCurrent)
 
 	}, time.Second*5, time.Millisecond*200)
-
-	<-ctx.Done()
-	select {
-	case err := <-errChan:
-		d.Fail("Expected error channel to be empty but got error %w", err)
-	default:
-	}
 }
+
+func (d *DeploymentSuite) validateListDeploymentsResponse_WithoutSeriesFilter(ctx context.Context,
+	request *workflowservice.ListDeploymentsRequest) {
+
+	d.EventuallyWithT(func(t *assert.CollectT) {
+		a := assert.New(t)
+
+		resp, err := d.FrontendClient().ListDeployments(ctx, request)
+		a.NoError(err)
+		a.NotNil(resp)
+		if resp == nil {
+			return
+		}
+		a.NotNil(resp.Deployments)
+		a.GreaterOrEqual(len(resp.Deployments), 1) // atleast one deployment will be present in the test cluster
+	}, time.Second*5, time.Millisecond*200)
+}
+
 func (d *DeploymentSuite) TestListDeployments_WithSeriesNameFilter() {
 	seriesName := testcore.RandomizeStr("my-series")
 	buildID := testcore.RandomizeStr("bgt")
-	d.listDeployments(seriesName, buildID, true)
+	d.addDeploymentsAndVerifyListDeployments(seriesName, buildID, true)
 }
 
 func (d *DeploymentSuite) TestListDeployments_WithoutSeriesNameFilter() {
 	seriesName := testcore.RandomizeStr("my-series")
 	buildID := testcore.RandomizeStr("bgt")
-	d.listDeployments(seriesName, buildID, true)
+	d.addDeploymentsAndVerifyListDeployments(seriesName, buildID, false)
 }
 
 // TODO Shivam - Add more getCurrentDeployment tests when SetCurrentDefaultBuildID API has been defined
