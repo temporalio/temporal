@@ -48,7 +48,6 @@ message TaskInfo {
     temporal.server.api.clock.v1.VectorClock clock = 7;
     // How this task should be directed. (Missing means the default for
     // TaskVersionDirective, which is unversioned.)
-    // Deprecated. No need to store this for new versioning [cleanup-old-wv]
     temporal.server.api.taskqueue.v1.TaskVersionDirective version_directive = 8;
 }
 

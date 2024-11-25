@@ -168,7 +168,7 @@ func DeploymentFromCapabilities(capabilities *commonpb.WorkerVersionCapabilities
 			BuildId:    capabilities.GetBuildId(),
 		}
 	}
-	return (*deploymentpb.Deployment)(nil)
+	return nil
 }
 
 func DeploymentToString(deployment *deploymentpb.Deployment) string {

@@ -26,15 +26,17 @@ package deployment
 
 import (
 	"context"
+	"time"
+
 	"github.com/pborman/uuid"
 	commonpb "go.temporal.io/api/common/v1"
-	deploypb "go.temporal.io/api/deployment/v1"
+	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	querypb "go.temporal.io/api/query/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	updatepb "go.temporal.io/api/update/v1"
 	"go.temporal.io/api/workflowservice/v1"
-	deployspb "go.temporal.io/server/api/deployment/v1"
+	deploymentspb "go.temporal.io/server/api/deployment/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/namespace"
@@ -51,10 +53,10 @@ type DeploymentStoreClient interface {
 	RegisterTaskQueueWorker(
 		ctx context.Context,
 		namespaceEntry *namespace.Namespace,
-		deployment *deploypb.Deployment,
+		deployment *deploymentpb.Deployment,
 		taskQueueName string,
 		taskQueueType enumspb.TaskQueueType,
-		pollTimestamp *timestamppb.Timestamp,
+		firstPoll time.Time,
 	) error
 
 	DescribeDeployment(
@@ -62,20 +64,20 @@ type DeploymentStoreClient interface {
 		namespaceEntry *namespace.Namespace,
 		seriesName string,
 		buildID string,
-	) (*deploypb.DeploymentInfo, error)
+	) (*deploymentpb.DeploymentInfo, error)
 
 	GetCurrentDeployment(
 		ctx context.Context,
 		namespaceEntry *namespace.Namespace,
 		seriesName string,
-	) (*deploypb.DeploymentInfo, error)
+	) (*deploymentpb.DeploymentInfo, error)
 
 	ListDeployments(
 		ctx context.Context,
 		namespaceEntry *namespace.Namespace,
 		seriesName string,
 		NextPageToken []byte,
-	) ([]*deploypb.DeploymentListInfo, []byte, error)
+	) ([]*deploymentpb.DeploymentListInfo, []byte, error)
 
 	GetDeploymentReachability(
 		ctx context.Context,
@@ -95,13 +97,15 @@ type DeploymentClientImpl struct {
 	reachabilityCache reachabilityCache
 }
 
+var _ DeploymentStoreClient = (*DeploymentClientImpl)(nil)
+
 func (d *DeploymentClientImpl) RegisterTaskQueueWorker(
 	ctx context.Context,
 	namespaceEntry *namespace.Namespace,
-	deployment *deploypb.Deployment,
+	deployment *deploymentpb.Deployment,
 	taskQueueName string,
 	taskQueueType enumspb.TaskQueueType,
-	pollTimestamp *timestamppb.Timestamp,
+	firstPoll time.Time,
 ) error {
 	// validate params which are used for building workflowID's
 	err := ValidateDeploymentWfParams(SeriesFieldName, deployment.SeriesName, d.MaxIDLengthLimit())
@@ -118,7 +122,7 @@ func (d *DeploymentClientImpl) RegisterTaskQueueWorker(
 	if err != nil {
 		return err
 	}
-	updatePayload, err := d.generateRegisterWorkerInDeploymentArgs(taskQueueName, taskQueueType, pollTimestamp)
+	updatePayload, err := d.generateRegisterWorkerInDeploymentArgs(taskQueueName, taskQueueType, firstPoll)
 	if err != nil {
 		return err
 	}
@@ -181,15 +185,10 @@ func (d *DeploymentClientImpl) RegisterTaskQueueWorker(
 			},
 		},
 	})
-
-	if err != nil {
-		return err
-	}
-
-	return nil
+	return err
 }
 
-func (d *DeploymentClientImpl) DescribeDeployment(ctx context.Context, namespaceEntry *namespace.Namespace, seriesName string, buildID string) (*deploypb.DeploymentInfo, error) {
+func (d *DeploymentClientImpl) DescribeDeployment(ctx context.Context, namespaceEntry *namespace.Namespace, seriesName string, buildID string) (*deploymentpb.DeploymentInfo, error) {
 	// validating params
 	err := ValidateDeploymentWfParams(SeriesFieldName, seriesName, d.MaxIDLengthLimit())
 	if err != nil {
@@ -218,28 +217,28 @@ func (d *DeploymentClientImpl) DescribeDeployment(ctx context.Context, namespace
 		return nil, err
 	}
 
-	var queryResponse deployspb.DescribeResponse
+	var queryResponse deploymentspb.QueryDescribeDeploymentResponse
 	err = payloads.Decode(res.GetResponse().GetQueryResult(), &queryResponse)
 	if err != nil {
 		return nil, err
 	}
 
 	// build out task-queues for the response object
-	var taskQueues []*deploypb.DeploymentInfo_TaskQueueInfo
+	var taskQueues []*deploymentpb.DeploymentInfo_TaskQueueInfo
 	deploymentLocalState := queryResponse.DeploymentLocalState
 
 	for taskQueueName, taskQueueFamilyInfo := range deploymentLocalState.TaskQueueFamilies {
-		for _, taskQueueInfo := range taskQueueFamilyInfo.TaskQueues {
-			element := &deploypb.DeploymentInfo_TaskQueueInfo{
+		for taskQueueType, taskQueueInfo := range taskQueueFamilyInfo.TaskQueues {
+			element := &deploymentpb.DeploymentInfo_TaskQueueInfo{
 				Name:            taskQueueName,
-				Type:            enumspb.TaskQueueType(taskQueueInfo.TaskQueueType),
+				Type:            enumspb.TaskQueueType(taskQueueType),
 				FirstPollerTime: taskQueueInfo.FirstPollerTime,
 			}
 			taskQueues = append(taskQueues, element)
 		}
 	}
 
-	return &deploypb.DeploymentInfo{
+	return &deploymentpb.DeploymentInfo{
 		Deployment:     deploymentLocalState.WorkerDeployment,
 		CreateTime:     deploymentLocalState.CreateTime,
 		TaskQueueInfos: taskQueues,
@@ -280,8 +279,7 @@ func (d *DeploymentClientImpl) GetDeploymentReachability(
 	}, nil
 }
 
-func (d *DeploymentClientImpl) GetCurrentDeployment(ctx context.Context, namespaceEntry *namespace.Namespace, seriesName string) (*deploypb.DeploymentInfo, error) {
-
+func (d *DeploymentClientImpl) GetCurrentDeployment(ctx context.Context, namespaceEntry *namespace.Namespace, seriesName string) (*deploymentpb.DeploymentInfo, error) {
 	// Validating params
 	err := ValidateDeploymentWfParams(SeriesFieldName, seriesName, d.MaxIDLengthLimit())
 	if err != nil {
@@ -327,7 +325,7 @@ func (d *DeploymentClientImpl) GetCurrentDeployment(ctx context.Context, namespa
 	return deploymentInfo, nil
 }
 
-func (d *DeploymentClientImpl) ListDeployments(ctx context.Context, namespaceEntry *namespace.Namespace, seriesName string, NextPageToken []byte) ([]*deploypb.DeploymentListInfo, []byte, error) {
+func (d *DeploymentClientImpl) ListDeployments(ctx context.Context, namespaceEntry *namespace.Namespace, seriesName string, NextPageToken []byte) ([]*deploymentpb.DeploymentListInfo, []byte, error) {
 	query := ""
 	if seriesName != "" {
 		query = BuildQueryWithSeriesFilter(seriesName)
@@ -349,11 +347,11 @@ func (d *DeploymentClientImpl) ListDeployments(ctx context.Context, namespaceEnt
 		return nil, nil, err
 	}
 
-	deployments := make([]*deploypb.DeploymentListInfo, 0)
+	deployments := make([]*deploymentpb.DeploymentListInfo, 0)
 	for _, ex := range persistenceResp.Executions {
 		workflowMemo := DecodeDeploymentMemo(ex.GetMemo())
 
-		deploymentListInfo := &deploypb.DeploymentListInfo{
+		deploymentListInfo := &deploymentpb.DeploymentListInfo{
 			Deployment: workflowMemo.Deployment,
 			CreateTime: workflowMemo.CreateTime,
 			IsCurrent:  workflowMemo.IsCurrentDeployment,
@@ -366,34 +364,37 @@ func (d *DeploymentClientImpl) ListDeployments(ctx context.Context, namespaceEnt
 }
 
 // GenerateStartWorkflowPayload generates start workflow execution payload
-func (d *DeploymentClientImpl) generateStartWorkflowPayload(namespaceEntry *namespace.Namespace, deployment *deploypb.Deployment) (*commonpb.Payloads, error) {
-	workflowArgs := &deployspb.DeploymentWorkflowArgs{
+func (d *DeploymentClientImpl) generateStartWorkflowPayload(namespaceEntry *namespace.Namespace, deployment *deploymentpb.Deployment) (*commonpb.Payloads, error) {
+	workflowArgs := &deploymentspb.DeploymentWorkflowArgs{
 		NamespaceName: namespaceEntry.Name().String(),
 		NamespaceId:   namespaceEntry.ID().String(),
-		DeploymentLocalState: &deployspb.DeploymentLocalState{
-			WorkerDeployment:  deployment,
-			TaskQueueFamilies: nil,
+		DeploymentLocalState: &deploymentspb.DeploymentLocalState{
+			WorkerDeployment: deployment,
+			CreateTime:       timestamppb.Now(),
 		},
 	}
 	return sdk.PreferProtoDataConverter.ToPayloads(workflowArgs)
 }
 
 // GenerateUpdateDeploymentPayload generates update workflow payload
-func (d *DeploymentClientImpl) generateRegisterWorkerInDeploymentArgs(taskQueueName string, taskQueueType enumspb.TaskQueueType,
-	pollTimestamp *timestamppb.Timestamp) (*commonpb.Payloads, error) {
-	updateArgs := &deployspb.RegisterWorkerInDeploymentArgs{
+func (d *DeploymentClientImpl) generateRegisterWorkerInDeploymentArgs(
+	taskQueueName string,
+	taskQueueType enumspb.TaskQueueType,
+	firstPoll time.Time,
+) (*commonpb.Payloads, error) {
+	updateArgs := &deploymentspb.RegisterWorkerInDeploymentArgs{
 		TaskQueueName:   taskQueueName,
 		TaskQueueType:   taskQueueType,
-		FirstPollerTime: nil, // TODO Shivam - come back to this
+		FirstPollerTime: timestamppb.New(firstPoll),
 	}
 	return sdk.PreferProtoDataConverter.ToPayloads(updateArgs)
 }
 
-func (d *DeploymentClientImpl) buildInitialDeploymentMemo(deployment *deploypb.Deployment) (*commonpb.Memo, error) {
+func (d *DeploymentClientImpl) buildInitialDeploymentMemo(deployment *deploymentpb.Deployment) (*commonpb.Memo, error) {
 	memo := &commonpb.Memo{}
 	memo.Fields = make(map[string]*commonpb.Payload)
 
-	deploymentWorkflowMemo := &deployspb.DeploymentWorkflowMemo{
+	deploymentWorkflowMemo := &deploymentspb.DeploymentWorkflowMemo{
 		Deployment:          deployment,
 		CreateTime:          timestamppb.Now(),
 		IsCurrentDeployment: false,
