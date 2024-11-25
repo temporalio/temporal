@@ -41,6 +41,7 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/service/worker/deployment"
 	"go.temporal.io/server/tests/testcore"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 /*
@@ -236,6 +237,7 @@ func (d *DeploymentSuite) TestGetCurrentDeployment_NoCurrentDeployment() {
 
 // verifyDeploymentListInfo checks the equality between two DeploymentListInfo objects
 func (d *DeploymentSuite) verifyDeploymentListInfo(expectedDeploymentListInfo *deploymentpb.DeploymentListInfo, receivedDeploymentListInfo *deploymentpb.DeploymentListInfo) bool {
+	maxDurationBetweenTimeStamps := 1 * time.Millisecond
 	if expectedDeploymentListInfo.Deployment.SeriesName != receivedDeploymentListInfo.Deployment.SeriesName {
 		return false
 	}
@@ -243,6 +245,9 @@ func (d *DeploymentSuite) verifyDeploymentListInfo(expectedDeploymentListInfo *d
 		return false
 	}
 	if expectedDeploymentListInfo.IsCurrent != receivedDeploymentListInfo.IsCurrent {
+		return false
+	}
+	if expectedDeploymentListInfo.CreateTime.AsTime().Sub(receivedDeploymentListInfo.CreateTime.AsTime()) > maxDurationBetweenTimeStamps {
 		return false
 	}
 	return true
@@ -329,13 +334,14 @@ func (d *DeploymentSuite) buildDeploymentInfo(numberOfDeployments int) []*deploy
 	for i := 0; i < numberOfDeployments; i++ {
 		seriesName := testcore.RandomizeStr("my-series")
 		buildID := testcore.RandomizeStr("bgt")
-		deployment := &deploymentpb.Deployment{
+		indDeployment := &deploymentpb.Deployment{
 			SeriesName: seriesName,
 			BuildId:    buildID,
 		}
 		deploymentListInfo := &deploymentpb.DeploymentListInfo{
-			Deployment: deployment,
+			Deployment: indDeployment,
 			IsCurrent:  false,
+			CreateTime: timestamppb.Now(),
 		}
 		deploymentInfo = append(deploymentInfo, deploymentListInfo)
 	}
