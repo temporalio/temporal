@@ -47,7 +47,6 @@ const (
 	StateTransitionCount  = "StateTransitionCount"
 	TemporalChangeVersion = "TemporalChangeVersion"
 	BinaryChecksums       = "BinaryChecksums"
-	BuildIds              = "BuildIds"
 	BatcherNamespace      = "BatcherNamespace"
 	BatcherUser           = "BatcherUser"
 	HistorySizeBytes      = "HistorySizeBytes"
@@ -81,6 +80,9 @@ const (
 	// define a custom ScheduleId search attribute, in which case the query using the ScheduleId would operate just like
 	// any other custom search attribute.
 	ScheduleID = "ScheduleId"
+
+	// Used for Worker Versioning
+	BuildIds = "BuildIds"
 )
 
 var (

@@ -3231,8 +3231,39 @@ func (wh *WorkflowHandler) decodeDeploymentMemo(memo *commonpb.Memo) *deployspb.
 	return &workflowMemo
 }
 
-func (wh *WorkflowHandler) GetDeploymentReachability(context.Context, *workflowservice.GetDeploymentReachabilityRequest) (*workflowservice.GetDeploymentReachabilityResponse, error) {
-	panic("Not implemented *yet*")
+func (wh *WorkflowHandler) GetDeploymentReachability(
+	ctx context.Context,
+	request *workflowservice.GetDeploymentReachabilityRequest,
+) (_ *workflowservice.GetDeploymentReachabilityResponse, retError error) {
+	defer log.CapturePanic(wh.logger, &retError)
+
+	if request == nil {
+		return nil, errRequestNotSet
+	}
+
+	if len(request.Namespace) == 0 {
+		return nil, errNamespaceNotSet
+	}
+
+	if !wh.config.EnableDeployments(request.Namespace) {
+		return nil, errDeploymentsNotAllowed
+	}
+
+	if request.GetDeployment() == nil {
+		return nil, serviceerror.NewInvalidArgument("deployment is required")
+	}
+
+	namespaceEntry, err := wh.namespaceRegistry.GetNamespace(namespace.Name(request.GetNamespace()))
+	if err != nil {
+		return nil, err
+	}
+	resp, err := wh.deploymentStoreClient.GetDeploymentReachability(ctx, namespaceEntry, request.Deployment.SeriesName, request.Deployment.BuildId)
+	if err != nil {
+		wh.logger.Error("Error during GetDeploymentReachability", tag.Error(err))
+		return nil, err
+	}
+
+	return resp, nil
 }
 
 func (wh *WorkflowHandler) SetCurrentDeployment(context.Context, *workflowservice.SetCurrentDeploymentRequest) (*workflowservice.SetCurrentDeploymentResponse, error) {
