@@ -201,6 +201,14 @@ func Invoke(
 				}
 			}
 
+			// If the wft is speculative MS changes are not persisted, so the possibly started
+			// transition by the StartDeploymentTransition call above won't be persisted. This is OK
+			// because once the speculative task completes the transition will be applied
+			// automatically based on wft completion info. If the speculative task fails or times
+			// out, future wft will be redirected by matching again and the transition will
+			// eventually happen. If an activity starts while the speculative is also started on the
+			// new deployment, the activity will cause the transition to be created and persisted in
+			// the MS.
 			if workflowTask.Type == enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE {
 				updateAction.Noop = true
 			}
