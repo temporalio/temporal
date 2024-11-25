@@ -548,7 +548,7 @@ func (c *physicalTaskQueueManagerImpl) ensureRegisteredInDeployment(
 
 	if c.deploymentRegistered {
 		// deployment already registered
-		return deployment.ErrTaskQueueExistsInDeployment
+		return nil
 	}
 
 	if c.deploymentRegistrationNotPossible {
