@@ -43,6 +43,7 @@ import (
 )
 
 const (
+	BuildIdSearchAttributePrefixPinned      = "pinned"
 	buildIdSearchAttributePrefixAssigned    = "assigned"
 	buildIdSearchAttributePrefixVersioned   = "versioned"
 	buildIdSearchAttributePrefixUnversioned = "unversioned"
@@ -50,6 +51,30 @@ const (
 	// UnversionedSearchAttribute is the sentinel value used to mark all unversioned workflows
 	UnversionedSearchAttribute = buildIdSearchAttributePrefixUnversioned
 )
+
+// TODO (carly): fix delimiter
+// escapeBuildIdSearchAttributeDelimiter is a helper which escapes the BuildIdSearchAttributeDelimiter character in the input string
+func escapeBuildIdSearchAttributeDelimiter(s string) string {
+	s = strings.Replace(s, BuildIdSearchAttributeDelimiter, `|`+BuildIdSearchAttributeDelimiter, -1)
+	return s
+}
+
+// PinnedBuildIdSearchAttribute returns the search attribute value for the currently assigned pinned build ID in the form
+// 'pinned:<deployment_series_name>:<deployment_build_id>'. Each workflow execution will have at most one member of the
+// BuildIds KeywordList in this format. If the workflow becomes unpinned or unversioned, this entry will be removed from
+// that list.
+func PinnedBuildIdSearchAttribute(deployment *deploymentpb.Deployment) string {
+	escapedDeployment := fmt.Sprintf("%s%s%s",
+		escapeBuildIdSearchAttributeDelimiter(deployment.GetSeriesName()),
+		BuildIdSearchAttributeDelimiter,
+		escapeBuildIdSearchAttributeDelimiter(deployment.GetBuildId()),
+	)
+	return sqlparser.String(sqlparser.NewStrVal([]byte(fmt.Sprintf("%s%s%s",
+		BuildIdSearchAttributePrefixPinned,
+		BuildIdSearchAttributeDelimiter,
+		escapedDeployment,
+	))))
+}
 
 // AssignedBuildIdSearchAttribute returns the search attribute value for the currently assigned build ID
 func AssignedBuildIdSearchAttribute(buildId string) string {
@@ -149,7 +174,7 @@ func DeploymentToString(deployment *deploymentpb.Deployment) string {
 	if deployment == nil {
 		return "UNVERSIONED"
 	}
-	return deployment.SeriesName + ":" + deployment.GetBuildId()
+	return deployment.GetSeriesName() + ":" + deployment.GetBuildId()
 }
 
 // MakeDirectiveForWorkflowTask returns a versioning directive based on the following parameters:
