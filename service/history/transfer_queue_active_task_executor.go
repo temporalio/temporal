@@ -1040,7 +1040,7 @@ func (t *transferQueueActiveTaskExecutor) recordChildExecutionStarted(
 	return t.updateWorkflowExecution(ctx, context, true,
 		func(mutableState workflow.MutableState) error {
 			if !mutableState.IsWorkflowExecutionRunning() {
-				return serviceerror.NewNotFound("Workflow execution already completed.")
+				return consts.ErrWorkflowCompleted
 			}
 
 			ci, ok := mutableState.GetChildExecutionInfo(task.InitiatedEventID)
@@ -1073,7 +1073,7 @@ func (t *transferQueueActiveTaskExecutor) recordStartChildExecutionFailed(
 	return t.updateWorkflowExecution(ctx, context, true,
 		func(mutableState workflow.MutableState) error {
 			if !mutableState.IsWorkflowExecutionRunning() {
-				return serviceerror.NewNotFound("Workflow execution already completed.")
+				return consts.ErrWorkflowCompleted
 			}
 
 			ci, ok := mutableState.GetChildExecutionInfo(task.InitiatedEventID)
@@ -1121,7 +1121,7 @@ func (t *transferQueueActiveTaskExecutor) requestCancelExternalExecutionComplete
 	return t.updateWorkflowExecution(ctx, context, true,
 		func(mutableState workflow.MutableState) error {
 			if !mutableState.IsWorkflowExecutionRunning() {
-				return serviceerror.NewNotFound("Workflow execution already completed.")
+				return consts.ErrWorkflowCompleted
 			}
 
 			_, ok := mutableState.GetRequestCancelInfo(task.InitiatedEventID)
@@ -1153,7 +1153,7 @@ func (t *transferQueueActiveTaskExecutor) signalExternalExecutionCompleted(
 	return t.updateWorkflowExecution(ctx, context, true,
 		func(mutableState workflow.MutableState) error {
 			if !mutableState.IsWorkflowExecutionRunning() {
-				return serviceerror.NewNotFound("Workflow execution already completed.")
+				return consts.ErrWorkflowCompleted
 			}
 
 			_, ok := mutableState.GetSignalInfo(task.InitiatedEventID)
@@ -1186,7 +1186,7 @@ func (t *transferQueueActiveTaskExecutor) requestCancelExternalExecutionFailed(
 	return t.updateWorkflowExecution(ctx, context, true,
 		func(mutableState workflow.MutableState) error {
 			if !mutableState.IsWorkflowExecutionRunning() {
-				return serviceerror.NewNotFound("Workflow execution already completed.")
+				return consts.ErrWorkflowCompleted
 			}
 
 			_, ok := mutableState.GetRequestCancelInfo(task.InitiatedEventID)

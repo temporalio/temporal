@@ -89,7 +89,7 @@ func startAndSignalWorkflow(
 	workflowID := signalWithStartRequest.GetWorkflowId()
 	runID := uuid.New().String()
 	// TODO(bergundy): Support eager workflow task
-	newWorkflowLease, err := api.NewWorkflowWithSignal(
+	newMutableState, err := api.NewWorkflowWithSignal(
 		shard,
 		namespaceEntry,
 		workflowID,
@@ -100,10 +100,16 @@ func startAndSignalWorkflow(
 	if err != nil {
 		return "", false, err
 	}
+
+	newWorkflowLease, err := api.NewWorkflowLeaseAndContext(shard, newMutableState)
+	if err != nil {
+		return "", false, err
+	}
+
 	if err = api.ValidateSignal(
 		ctx,
 		shard,
-		newWorkflowLease.GetMutableState(),
+		newMutableState,
 		signalWithStartRequest.GetSignalInput().Size(),
 		"SignalWithStartWorkflowExecution",
 	); err != nil {
