@@ -32,7 +32,6 @@ import (
 	"github.com/temporalio/sqlparser"
 	commonpb "go.temporal.io/api/common/v1"
 	deploymentpb "go.temporal.io/api/deployment/v1"
-	enumspb "go.temporal.io/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	"go.temporal.io/server/common/namespace"
@@ -42,11 +41,11 @@ import (
 )
 
 const (
-	buildIdSearchAttributePrefixReachability = "reachability"
-	buildIdSearchAttributePrefixAssigned     = "assigned"
-	buildIdSearchAttributePrefixVersioned    = "versioned"
-	buildIdSearchAttributePrefixUnversioned  = "unversioned"
-	BuildIdSearchAttributeDelimiter          = ":"
+	BuildIdSearchAttributePrefixPinned      = "pinned"
+	buildIdSearchAttributePrefixAssigned    = "assigned"
+	buildIdSearchAttributePrefixVersioned   = "versioned"
+	buildIdSearchAttributePrefixUnversioned = "unversioned"
+	BuildIdSearchAttributeDelimiter         = ":"
 	// UnversionedSearchAttribute is the sentinel value used to mark all unversioned workflows
 	UnversionedSearchAttribute = buildIdSearchAttributePrefixUnversioned
 )
@@ -58,23 +57,18 @@ func escapeBuildIdSearchAttributeDelimiter(s string) string {
 	return s
 }
 
-// ReachabilityBuildIdSearchAttribute returns the search attribute value for the currently assigned build ID in the form
-// 'reachability:<behavior>:<deployment_series_name>:<deployment_build_id>'
-func ReachabilityBuildIdSearchAttribute(behavior enumspb.VersioningBehavior, deployment *deploymentpb.Deployment) string {
-	var escapedDeployment string
-	if deployment == nil {
-		escapedDeployment = "UNVERSIONED"
-	} else {
-		escapedDeployment = fmt.Sprintf("%s%s%s",
-			escapeBuildIdSearchAttributeDelimiter(deployment.GetSeriesName()),
-			BuildIdSearchAttributeDelimiter,
-			escapeBuildIdSearchAttributeDelimiter(deployment.GetBuildId()),
-		)
-	}
-	return sqlparser.String(sqlparser.NewStrVal([]byte(fmt.Sprintf("%s%s%s%s%s",
-		buildIdSearchAttributePrefixReachability,
+// PinnedBuildIdSearchAttribute returns the search attribute value for the currently assigned pinned build ID in the form
+// 'pinned:<deployment_series_name>:<deployment_build_id>'. Each workflow execution will have at most one member of the
+// BuildIds KeywordList in this format. If the workflow becomes unpinned or unversioned, this entry will be removed from
+// that list.
+func PinnedBuildIdSearchAttribute(deployment *deploymentpb.Deployment) string {
+	escapedDeployment := fmt.Sprintf("%s%s%s",
+		escapeBuildIdSearchAttributeDelimiter(deployment.GetSeriesName()),
 		BuildIdSearchAttributeDelimiter,
-		escapeBuildIdSearchAttributeDelimiter(behavior.String()),
+		escapeBuildIdSearchAttributeDelimiter(deployment.GetBuildId()),
+	)
+	return sqlparser.String(sqlparser.NewStrVal([]byte(fmt.Sprintf("%s%s%s",
+		BuildIdSearchAttributePrefixPinned,
 		BuildIdSearchAttributeDelimiter,
 		escapedDeployment,
 	))))
