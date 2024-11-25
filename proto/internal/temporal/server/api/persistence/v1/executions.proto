@@ -258,6 +258,9 @@ message WorkflowExecutionInfo {
 
     // When present, it means the workflow execution is versioned, or is transitioning from
     // unversioned workers to versioned ones.
+    // Note: Deployment objects inside versioning info are immutable, never change their fields.
+    // (-- api-linter: core::0203::immutable=disabled
+    //     aip.dev/not-precedent: field_behavior annotation is not yet used in this repo --)
     temporal.api.workflow.v1.WorkflowExecutionVersioningInfo versioning_info = 96;
 }
 
