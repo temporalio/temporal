@@ -257,7 +257,7 @@ func (d *DeploymentSuite) verifyDeploymentListInfo(expectedDeploymentListInfo *d
 // - makes a list deployments call with/without seriesFilter
 // - validates the response with expectedDeployments
 func (d *DeploymentSuite) verifyDeployments(ctx context.Context, request *workflowservice.ListDeploymentsRequest,
-	expectedDeployments []*deploymentpb.DeploymentListInfo, seriesFilter string) {
+	expectedDeployments []*deploymentpb.DeploymentListInfo) {
 
 	// list deployment call
 	d.EventuallyWithT(func(t *assert.CollectT) {
@@ -278,10 +278,6 @@ func (d *DeploymentSuite) verifyDeployments(ctx context.Context, request *workfl
 		}
 
 		for _, expectedDeploymentListInfo := range expectedDeployments {
-			if seriesFilter != "" && expectedDeploymentListInfo.Deployment.SeriesName != seriesFilter {
-				// don't need to validate those DeploymentListInfo with seriesName != seriesFilter
-				continue
-			}
 
 			deploymentListInfoValidated := false
 			for _, receivedDeploymentListInfo := range resp.Deployments {
@@ -312,14 +308,25 @@ func (d *DeploymentSuite) startlistAndValidateDeployments(deploymentInfo []*depl
 		}()
 	}
 
+	var expectedDeployments []*deploymentpb.DeploymentListInfo
 	request := &workflowservice.ListDeploymentsRequest{
 		Namespace: d.Namespace(),
 	}
 	if seriesFilter != "" {
-		request.SeriesName = seriesFilter // filter deployments by seriesName
+		request.SeriesName = seriesFilter
+
+		// pass only those deployments for verification which have seriesName == seriesFilter
+		for _, dInfo := range deploymentInfo {
+			if dInfo.Deployment.SeriesName == seriesFilter {
+				expectedDeployments = append(expectedDeployments, dInfo)
+			}
+		}
+	} else {
+		// pass all deployments for verification which have been started
+		expectedDeployments = deploymentInfo
 	}
 
-	d.verifyDeployments(ctx, request, deploymentInfo, seriesFilter)
+	d.verifyDeployments(ctx, request, expectedDeployments)
 
 	<-ctx.Done()
 	select {
