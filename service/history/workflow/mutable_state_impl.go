@@ -33,6 +33,7 @@ import (
 	"math/rand"
 	"reflect"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/nexus-rpc/sdk-go/nexus"
@@ -2703,11 +2704,8 @@ func (ms *MutableStateImpl) addBuildIdToLoadedSearchAttribute(
 	var newValues []string
 	if !stamp.GetUseVersioning() && ms.GetEffectiveVersioningBehavior() == enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED { // unversioned workflows may still have non-nil deployment, so we don't check deployment
 		newValues = append(newValues, worker_versioning.UnversionedSearchAttribute)
-	} else if ms.GetEffectiveVersioningBehavior() != enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED {
-		newValues = append(newValues, worker_versioning.ReachabilityBuildIdSearchAttribute(
-			ms.GetEffectiveVersioningBehavior(),
-			ms.getReachabilityDeployment(),
-		))
+	} else if ms.GetEffectiveVersioningBehavior() == enumspb.VERSIONING_BEHAVIOR_PINNED {
+		newValues = append(newValues, worker_versioning.PinnedBuildIdSearchAttribute(ms.getReachabilityDeployment()))
 	} else if ms.GetAssignedBuildId() != "" {
 		newValues = append(newValues, worker_versioning.AssignedBuildIdSearchAttribute(ms.GetAssignedBuildId()))
 	}
@@ -2726,6 +2724,13 @@ func (ms *MutableStateImpl) addBuildIdToLoadedSearchAttribute(
 		if !found {
 			newValues = append(newValues, buildId)
 		}
+	}
+
+	// Remove pinned build id search attribute if it exists and we are not pinned
+	if ms.GetEffectiveVersioningBehavior() != enumspb.VERSIONING_BEHAVIOR_PINNED {
+		newValues = slices.DeleteFunc(newValues, func(s string) bool {
+			return strings.Contains(s, worker_versioning.BuildIdSearchAttributePrefixPinned)
+		})
 	}
 	return newValues
 }
