@@ -88,10 +88,11 @@ var Module = fx.Options(
 
 func DeploymentStoreClientProvider(historyClient resource.HistoryClient, visibilityManager manager.VisibilityManager, dc *dynamicconfig.Collection) DeploymentStoreClient {
 	return &DeploymentClientImpl{
-		HistoryClient:         historyClient,
-		VisibilityManager:     visibilityManager,
-		MaxIDLengthLimit:      dynamicconfig.MaxIDLengthLimit.Get(dc),
-		VisibilityMaxPageSize: dynamicconfig.FrontendVisibilityMaxPageSize.Get(dc),
+		HistoryClient:             historyClient,
+		VisibilityManager:         visibilityManager,
+		MaxIDLengthLimit:          dynamicconfig.MaxIDLengthLimit.Get(dc),
+		VisibilityMaxPageSize:     dynamicconfig.FrontendVisibilityMaxPageSize.Get(dc),
+		MaxTaskQueuesInDeployment: dynamicconfig.MatchingMaxTaskQueuesInDeployment.Get(dc),
 	}
 }
 
@@ -139,12 +140,3 @@ func (s *workerComponent) newDeploymentActivities(name namespace.Name, id namesp
 		matchingClient: s.activityDeps.MatchingClient,
 	}
 }
-
-// // TODO Shivam - place holder for now but will initialize activity rate limits (if any) amongst other things
-// func (s *workerComponent) newDeploymentSeriesActivities(name namespace.Name, id namespace.ID) *DeploymentSeriesActivities {
-// 	return &DeploymentSeriesActivities{
-// 		activityDeps: s.activityDeps,
-// 		namespace:    name,
-// 		namespaceID:  id,
-// 	}
-// }

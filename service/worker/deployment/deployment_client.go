@@ -82,10 +82,11 @@ type DeploymentStoreClient interface {
 
 // implements DeploymentStoreClient
 type DeploymentClientImpl struct {
-	HistoryClient         historyservice.HistoryServiceClient
-	VisibilityManager     manager.VisibilityManager
-	MaxIDLengthLimit      dynamicconfig.IntPropertyFn
-	VisibilityMaxPageSize dynamicconfig.IntPropertyFnWithNamespaceFilter
+	HistoryClient             historyservice.HistoryServiceClient
+	VisibilityManager         manager.VisibilityManager
+	MaxIDLengthLimit          dynamicconfig.IntPropertyFn
+	VisibilityMaxPageSize     dynamicconfig.IntPropertyFnWithNamespaceFilter
+	MaxTaskQueuesInDeployment dynamicconfig.IntPropertyFnWithNamespaceFilter
 }
 
 var _ DeploymentStoreClient = (*DeploymentClientImpl)(nil)
@@ -331,6 +332,7 @@ func (d *DeploymentClientImpl) generateStartWorkflowPayload(namespaceEntry *name
 		DeploymentLocalState: &deploymentspb.DeploymentLocalState{
 			WorkerDeployment: deployment,
 			CreateTime:       timestamppb.Now(),
+			MaxTaskQueues:    int32(d.MaxTaskQueuesInDeployment(namespaceEntry.Name().String())),
 		},
 	}
 	return sdk.PreferProtoDataConverter.ToPayloads(workflowArgs)

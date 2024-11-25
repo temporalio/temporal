@@ -25,6 +25,7 @@
 package deployment
 
 import (
+	"fmt"
 	"time"
 
 	sdkclient "go.temporal.io/sdk/client"
@@ -136,6 +137,12 @@ func (d *DeploymentWorkflowRunner) run() error {
 			// if no TaskQueues have been registered for the TaskQueueName
 			if d.DeploymentLocalState.TaskQueueFamilies[updateInput.TaskQueueName].TaskQueues == nil {
 				d.DeploymentLocalState.TaskQueueFamilies[updateInput.TaskQueueName].TaskQueues = make(map[int32]*deploymentspb.TaskQueueData)
+			}
+
+			// check if we can add more task-queues in the deployment
+			if len(d.DeploymentLocalState.TaskQueueFamilies)+1 == int(d.DeploymentLocalState.MaxTaskQueues) {
+				return fmt.Errorf("cannot register task queue as number of task queues in the deployment %s has reached the limit %d",
+					d.DeploymentLocalState.WorkerDeployment.BuildId, d.DeploymentLocalState.MaxTaskQueues)
 			}
 
 			// Add the task queue to the local state
