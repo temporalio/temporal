@@ -148,32 +148,34 @@ func (d *deploymentWorkflowClientSuite) TestValidateDeploymentWfParams() {
 	}
 }
 
-// TODO (Shivam/David) - fix this whenever EscapeChar gets working
-func (d *deploymentWorkflowClientSuite) TestEscapeChar() {
+func (d *deploymentWorkflowClientSuite) TestGenerateDeploymentWorkflowID() {
 	testCases := []struct {
-		value                string
-		escapedExpectedValue string
+		series, buildID string
+		expected        string
 	}{
 		{
-			value:                "test" + DeploymentWorkflowIDDelimeter + "value",
-			escapedExpectedValue: "test\\|value",
+			series:   "test",
+			buildID:  "build",
+			expected: "temporal-sys-deployment:test:build",
 		},
 		{
-			value:                "test/a/a" + DeploymentWorkflowIDDelimeter + "value",
-			escapedExpectedValue: "test/a/a\\|value",
+			series:   "|es|",
+			buildID:  "bu:ld",
+			expected: "temporal-sys-deployment:||es||:bu|:ld",
 		},
 		{
-			value:                "test/a/a\b" + DeploymentWorkflowIDDelimeter + "value",
-			escapedExpectedValue: "test/a/a\b\\|value",
+			series:   "test:|",
+			buildID:  "|build",
+			expected: "temporal-sys-deployment:test|:||:||build",
 		},
 		{
-			value:                "\b" + DeploymentWorkflowIDDelimeter + "\test",
-			escapedExpectedValue: "\b\\|\test",
+			series:   "test|",
+			buildID:  ":|build",
+			expected: "temporal-sys-deployment:test||:|:||build",
 		},
 	}
 
 	for _, test := range testCases {
-		escapedValue := escapeChar(test.value)
-		d.Equal(test.escapedExpectedValue, escapedValue)
+		d.Equal(test.expected, GenerateDeploymentWorkflowID(test.series, test.buildID))
 	}
 }
