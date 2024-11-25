@@ -37,7 +37,9 @@ import (
 	historypb "go.temporal.io/api/history/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	updatepb "go.temporal.io/api/update/v1"
+	"go.temporal.io/api/workflowservice/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
+	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/collection"
@@ -83,6 +85,11 @@ type (
 
 		workflowResetter *workflowResetterImpl
 	}
+)
+
+var (
+	testIdentity      = "test identity"
+	testRequestReason = "test request reason"
 )
 
 func TestWorkflowResetterSuite(t *testing.T) {
@@ -872,13 +879,23 @@ func (s *workflowResetterSuite) TestReapplyEvents() {
 	}
 	// This event is not reapplied
 	event6 := &historypb.HistoryEvent{
-		EventId:   105,
+		EventId:   106,
 		EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_COMPLETED,
 		Attributes: &historypb.HistoryEvent_WorkflowExecutionUpdateCompletedEventAttributes{
 			WorkflowExecutionUpdateCompletedEventAttributes: &historypb.WorkflowExecutionUpdateCompletedEventAttributes{},
 		},
 	}
-	events := []*historypb.HistoryEvent{event1, event2, event3, event4, event5, event6}
+	event7 := &historypb.HistoryEvent{
+		EventId:   107,
+		EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CANCEL_REQUESTED,
+		Attributes: &historypb.HistoryEvent_WorkflowExecutionCancelRequestedEventAttributes{
+			WorkflowExecutionCancelRequestedEventAttributes: &historypb.WorkflowExecutionCancelRequestedEventAttributes{
+				Cause:    testRequestReason,
+				Identity: testIdentity,
+			},
+		},
+	}
+	events := []*historypb.HistoryEvent{event1, event2, event3, event4, event5, event6, event7}
 
 	ms := workflow.NewMockMutableState(s.controller)
 
@@ -905,6 +922,19 @@ func (s *workflowResetterSuite) TestReapplyEvents() {
 				attr.GetAcceptedRequest(),
 				enumspb.UPDATE_ADMITTED_EVENT_ORIGIN_REAPPLY,
 			).Return(&historypb.HistoryEvent{}, nil)
+		case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CANCEL_REQUESTED:
+			attr := event.GetWorkflowExecutionCancelRequestedEventAttributes()
+			ms.EXPECT().AddWorkflowExecutionCancelRequestedEvent(
+				&historyservice.RequestCancelWorkflowExecutionRequest{
+					CancelRequest: &workflowservice.RequestCancelWorkflowExecutionRequest{
+						Reason:   attr.GetCause(),
+						Identity: attr.GetIdentity(),
+						Links:    event.Links,
+					},
+					ExternalInitiatedEventId:  attr.GetExternalInitiatedEventId(),
+					ExternalWorkflowExecution: attr.GetExternalWorkflowExecution(),
+				},
+			).Return(&historypb.HistoryEvent{}, nil)
 		}
 	}
 
@@ -917,6 +947,7 @@ func (s *workflowResetterSuite) TestReapplyEvents() {
 	_, err = reapplyEvents(context.Background(), ms, nil, smReg, events, nil, "")
 	s.NoError(err)
 }
+
 func (s *workflowResetterSuite) TestReapplyEvents_Excludes() {
 	event1 := &historypb.HistoryEvent{
 		EventId:   101,
@@ -959,7 +990,17 @@ func (s *workflowResetterSuite) TestReapplyEvents_Excludes() {
 		EventId:   106,
 		EventType: enumspb.EVENT_TYPE_NEXUS_OPERATION_CANCELED,
 	}
-	events := []*historypb.HistoryEvent{event1, event2, event3, event4, event5, event6}
+	event7 := &historypb.HistoryEvent{
+		EventId:   107,
+		EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CANCEL_REQUESTED,
+		Attributes: &historypb.HistoryEvent_WorkflowExecutionCancelRequestedEventAttributes{
+			WorkflowExecutionCancelRequestedEventAttributes: &historypb.WorkflowExecutionCancelRequestedEventAttributes{
+				Cause:    testRequestReason,
+				Identity: testIdentity,
+			},
+		},
+	}
+	events := []*historypb.HistoryEvent{event1, event2, event3, event4, event5, event6, event7}
 
 	ms := workflow.NewMockMutableState(s.controller)
 	// Assert that none of these following methods are invoked.
@@ -976,9 +1017,10 @@ func (s *workflowResetterSuite) TestReapplyEvents_Excludes() {
 	ms.EXPECT().HSM().Return(root).AnyTimes()
 
 	excludes := map[enumspb.ResetReapplyExcludeType]struct{}{
-		enumspb.RESET_REAPPLY_EXCLUDE_TYPE_SIGNAL: {},
-		enumspb.RESET_REAPPLY_EXCLUDE_TYPE_UPDATE: {},
-		enumspb.RESET_REAPPLY_EXCLUDE_TYPE_NEXUS:  {},
+		enumspb.RESET_REAPPLY_EXCLUDE_TYPE_SIGNAL:         {},
+		enumspb.RESET_REAPPLY_EXCLUDE_TYPE_UPDATE:         {},
+		enumspb.RESET_REAPPLY_EXCLUDE_TYPE_NEXUS:          {},
+		enumspb.RESET_REAPPLY_EXCLUDE_TYPE_CANCEL_REQUEST: {},
 	}
 	reappliedEvents, err := reapplyEvents(context.Background(), ms, nil, smReg, events, excludes, "")
 	s.Empty(reappliedEvents)
@@ -991,9 +1033,10 @@ func (s *workflowResetterSuite) TestReapplyContinueAsNewWorkflowEvents_ExcludeAl
 	baseNextEventID := int64(456)
 	baseBranchToken := []byte("some random base branch token")
 	optionExcludeAllReapplyEvents := map[enumspb.ResetReapplyExcludeType]struct{}{
-		enumspb.RESET_REAPPLY_EXCLUDE_TYPE_SIGNAL: {},
-		enumspb.RESET_REAPPLY_EXCLUDE_TYPE_UPDATE: {},
-		enumspb.RESET_REAPPLY_EXCLUDE_TYPE_NEXUS:  {},
+		enumspb.RESET_REAPPLY_EXCLUDE_TYPE_SIGNAL:         {},
+		enumspb.RESET_REAPPLY_EXCLUDE_TYPE_UPDATE:         {},
+		enumspb.RESET_REAPPLY_EXCLUDE_TYPE_NEXUS:          {},
+		enumspb.RESET_REAPPLY_EXCLUDE_TYPE_CANCEL_REQUEST: {},
 	}
 
 	mutableState := workflow.NewMockMutableState(s.controller)

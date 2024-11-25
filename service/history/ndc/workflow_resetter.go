@@ -36,6 +36,8 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cluster"
@@ -804,6 +806,7 @@ func reapplyEvents(
 	}
 	_, excludeSignal := resetReapplyExcludeTypes[enumspb.RESET_REAPPLY_EXCLUDE_TYPE_SIGNAL]
 	_, excludeUpdate := resetReapplyExcludeTypes[enumspb.RESET_REAPPLY_EXCLUDE_TYPE_UPDATE]
+	_, excludeCancelRequest := resetReapplyExcludeTypes[enumspb.RESET_REAPPLY_EXCLUDE_TYPE_CANCEL_REQUEST]
 	var reappliedEvents []*historypb.HistoryEvent
 	for _, event := range events {
 		switch event.GetEventType() {
@@ -862,6 +865,26 @@ func reapplyEvents(
 			if _, err := mutableState.AddWorkflowExecutionUpdateAdmittedEvent(
 				request,
 				enumspb.UPDATE_ADMITTED_EVENT_ORIGIN_REAPPLY,
+			); err != nil {
+				return reappliedEvents, err
+			}
+			reappliedEvents = append(reappliedEvents, event)
+		case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CANCEL_REQUESTED:
+			if excludeCancelRequest || isDuplicate(event) {
+				continue
+			}
+			attr := event.GetWorkflowExecutionCancelRequestedEventAttributes()
+			request := &historyservice.RequestCancelWorkflowExecutionRequest{
+				CancelRequest: &workflowservice.RequestCancelWorkflowExecutionRequest{
+					Reason:   attr.GetCause(),
+					Identity: attr.GetIdentity(),
+					Links:    event.Links,
+				},
+				ExternalInitiatedEventId:  attr.GetExternalInitiatedEventId(),
+				ExternalWorkflowExecution: attr.GetExternalWorkflowExecution(),
+			}
+			if _, err := mutableState.AddWorkflowExecutionCancelRequestedEvent(
+				request,
 			); err != nil {
 				return reappliedEvents, err
 			}
