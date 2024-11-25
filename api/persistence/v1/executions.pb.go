@@ -329,6 +329,10 @@ type WorkflowExecutionInfo struct {
 	SubStateMachineTombstoneBatches               []*StateMachineTombstoneBatch `protobuf:"bytes,95,rep,name=sub_state_machine_tombstone_batches,json=subStateMachineTombstoneBatches,proto3" json:"sub_state_machine_tombstone_batches,omitempty"`
 	// When present, it means the workflow execution is versioned, or is transitioning from
 	// unversioned workers to versioned ones.
+	// Note: Deployment objects inside versioning info are immutable, never change their fields.
+	// (-- api-linter: core::0203::immutable=disabled
+	//
+	//	aip.dev/not-precedent: field_behavior annotation is not yet used in this repo --)
 	VersioningInfo *v11.WorkflowExecutionVersioningInfo `protobuf:"bytes,96,opt,name=versioning_info,json=versioningInfo,proto3" json:"versioning_info,omitempty"`
 }
 
