@@ -234,40 +234,87 @@ func (d *DeploymentSuite) TestGetCurrentDeployment_NoCurrentDeployment() {
 	}
 }
 
-// addDeploymentsAndVerifyListDeployments does the following:
+// verifyDeploymentListInfo checks the equality between two DeploymentListInfo objects
+func (d *DeploymentSuite) verifyDeploymentListInfo(expectedDeploymentListInfo *deploymentpb.DeploymentListInfo, receivedDeploymentListInfo *deploymentpb.DeploymentListInfo) bool {
+	if expectedDeploymentListInfo.Deployment.SeriesName != receivedDeploymentListInfo.Deployment.SeriesName {
+		return false
+	}
+	if expectedDeploymentListInfo.Deployment.BuildId != receivedDeploymentListInfo.Deployment.BuildId {
+		return false
+	}
+	if expectedDeploymentListInfo.IsCurrent != receivedDeploymentListInfo.IsCurrent {
+		return false
+	}
+	return true
+}
+
+// verifyDeployments does the following:
+// - makes a list deployments call with/without seriesFilter
+// - validates the response with expectedDeployments
+func (d *DeploymentSuite) verifyDeployments(ctx context.Context, request *workflowservice.ListDeploymentsRequest,
+	expectedDeployments []*deploymentpb.DeploymentListInfo, seriesFilter string) {
+
+	// list deployment call
+	d.EventuallyWithT(func(t *assert.CollectT) {
+		a := assert.New(t)
+
+		resp, err := d.FrontendClient().ListDeployments(ctx, request)
+		a.NoError(err)
+		a.NotNil(resp)
+		if resp == nil {
+			return
+		}
+		a.NotNil(resp.Deployments)
+
+		// check to stop eventuallyWithT from panicking since
+		// it collects all possible errors
+		if len(resp.Deployments) < 1 {
+			return
+		}
+
+		for _, expectedDeploymentListInfo := range expectedDeployments {
+			if seriesFilter != "" && expectedDeploymentListInfo.Deployment.SeriesName != seriesFilter {
+				// don't need to validate those DeploymentListInfo with seriesName != seriesFilter
+				continue
+			}
+
+			deploymentListInfoValidated := false
+			for _, receivedDeploymentListInfo := range resp.Deployments {
+
+				deploymentListInfoValidated = deploymentListInfoValidated ||
+					d.verifyDeploymentListInfo(expectedDeploymentListInfo, receivedDeploymentListInfo)
+			}
+			a.True(deploymentListInfoValidated)
+		}
+	}, time.Second*5, time.Millisecond*200)
+}
+
+// startlistAndValidateDeployments does the following:
 // - starts deployment workflow(s)
-// - makes a ListDeployment request (with and without seriesFilter)
-// - verifies that all the expected deployments eventually appear in the list.
-func (d *DeploymentSuite) addDeploymentsAndVerifyListDeployments(seriesName string, buildID string, withSeriesFilter bool) {
+// - calls verifyDeployments which lists + validates Deployments
+func (d *DeploymentSuite) startlistAndValidateDeployments(deploymentInfo []*deploymentpb.DeploymentListInfo, seriesFilter string) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
 	defer cancel()
 
-	// todo (shivam) - fails when seriesName has backslashes
 	taskQueue := &taskqueuepb.TaskQueue{Name: "deployment-test", Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
-	workerDeployment := &deploymentpb.Deployment{
-		SeriesName: seriesName,
-		BuildId:    buildID,
-	}
-
-	// Starting a deployment workflow
 	errChan := make(chan error)
 	defer close(errChan)
 
-	// Starting a deployment workflow
-	go func() {
-		d.startDeploymentWorkflows(ctx, taskQueue, workerDeployment, errChan)
-	}()
+	// Start deployment workflow(s)
+	for _, listInfo := range deploymentInfo {
+		go func() {
+			d.startDeploymentWorkflows(ctx, taskQueue, listInfo.Deployment, errChan)
+		}()
+	}
 
 	request := &workflowservice.ListDeploymentsRequest{
 		Namespace: d.Namespace(),
 	}
-
-	if withSeriesFilter {
-		request.SeriesName = seriesName
-		d.validateListDeploymentsResponse_WithSeriesFilter(ctx, request, workerDeployment)
-	} else {
-		d.validateListDeploymentsResponse_WithoutSeriesFilter(ctx, request)
+	if seriesFilter != "" {
+		request.SeriesName = seriesFilter // filter deployments by seriesName
 	}
+
+	d.verifyDeployments(ctx, request, deploymentInfo, seriesFilter)
 
 	<-ctx.Done()
 	select {
@@ -277,67 +324,37 @@ func (d *DeploymentSuite) addDeploymentsAndVerifyListDeployments(seriesName stri
 	}
 }
 
-func (d *DeploymentSuite) validateListDeploymentsResponse_WithSeriesFilter(ctx context.Context,
-	request *workflowservice.ListDeploymentsRequest, expectedDeployment *deploymentpb.Deployment) {
-	expectedNumberOfDeployments := 1
-
-	d.EventuallyWithT(func(t *assert.CollectT) {
-		a := assert.New(t)
-
-		resp, err := d.FrontendClient().ListDeployments(ctx, request)
-		a.NoError(err)
-		a.NotNil(resp)
-		if resp == nil {
-			return
+func (d *DeploymentSuite) buildDeploymentInfo(numberOfDeployments int) []*deploymentpb.DeploymentListInfo {
+	deploymentInfo := make([]*deploymentpb.DeploymentListInfo, 0)
+	for i := 0; i < numberOfDeployments; i++ {
+		seriesName := testcore.RandomizeStr("my-series")
+		buildID := testcore.RandomizeStr("bgt")
+		deployment := &deploymentpb.Deployment{
+			SeriesName: seriesName,
+			BuildId:    buildID,
 		}
-		a.NotNil(resp.Deployments)
-		a.Equal(expectedNumberOfDeployments, len(resp.Deployments))
-
-		// check to stop eventuallyWithT from panicking since
-		// it collects all possible errors
-		if len(resp.Deployments) < 1 {
-			return
+		deploymentListInfo := &deploymentpb.DeploymentListInfo{
+			Deployment: deployment,
+			IsCurrent:  false,
 		}
+		deploymentInfo = append(deploymentInfo, deploymentListInfo)
+	}
 
-		deployment := resp.Deployments[0]
-		a.Equal(expectedDeployment.SeriesName, deployment.Deployment.SeriesName)
-		a.Equal(expectedDeployment.BuildId, deployment.Deployment.BuildId)
-		a.Equal(false, deployment.IsCurrent)
-
-	}, time.Second*5, time.Millisecond*200)
+	return deploymentInfo
 }
 
-func (d *DeploymentSuite) validateListDeploymentsResponse_WithoutSeriesFilter(ctx context.Context,
-	request *workflowservice.ListDeploymentsRequest) {
-
-	d.EventuallyWithT(func(t *assert.CollectT) {
-		a := assert.New(t)
-
-		resp, err := d.FrontendClient().ListDeployments(ctx, request)
-		a.NoError(err)
-		a.NotNil(resp)
-		if resp == nil {
-			return
-		}
-		a.NotNil(resp.Deployments)
-		a.GreaterOrEqual(len(resp.Deployments), 1) // atleast one deployment will be present in the test cluster
-	}, time.Second*5, time.Millisecond*200)
+func (d *DeploymentSuite) TestListDeployments_VerifySingleDeployment() {
+	deploymentInfo := d.buildDeploymentInfo(1)
+	d.startlistAndValidateDeployments(deploymentInfo, "")
 }
 
-func (d *DeploymentSuite) TestListDeployments_WithSeriesNameFilter() {
-	seriesName := testcore.RandomizeStr("my-series")
-	buildID := testcore.RandomizeStr("bgt")
-	d.addDeploymentsAndVerifyListDeployments(seriesName, buildID, true)
+func (d *DeploymentSuite) TestListDeployments_MultipleDeployments() {
+	deploymentInfo := d.buildDeploymentInfo(5)
+	d.startlistAndValidateDeployments(deploymentInfo, "")
 }
 
-func (d *DeploymentSuite) TestListDeployments_WithoutSeriesNameFilter() {
-	seriesName := testcore.RandomizeStr("my-series")
-	buildID := testcore.RandomizeStr("bgt")
-	d.addDeploymentsAndVerifyListDeployments(seriesName, buildID, false)
+func (d *DeploymentSuite) TestListDeployments_MultipleDeployments_WithSeriesFilter() {
+	deploymentInfo := d.buildDeploymentInfo(2)
+	seriesFilter := deploymentInfo[0].Deployment.SeriesName
+	d.startlistAndValidateDeployments(deploymentInfo, seriesFilter)
 }
-
-// TODO Shivam - refactor the above test cases TestListDeployments_WithSeriesNameFilter + TestListDeployments_WithoutSeriesNameFilter
-// Refactoring should be done in a way where we are validating the exact deployment (based on how many we create) - right now,
-// the tests do validate the read API logic but are not the most assertive
-
-// TODO Shivam - Add more getCurrentDeployment tests when SetCurrentDefaultBuildID API has been defined
