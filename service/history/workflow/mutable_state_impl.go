@@ -29,6 +29,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 	"math/rand"
 	"reflect"
 	"slices"
@@ -2639,6 +2640,12 @@ func (ms *MutableStateImpl) UpdateBuildIdAssignment(buildId string) error {
 	return ms.updateBuildIdsSearchAttribute(&commonpb.WorkerVersionStamp{UseVersioning: true, BuildId: buildId}, limit)
 }
 
+// For v3 versioned workflows (ms.GetEffectiveVersioningBehavior() != UNSPECIFIED), this will append a tag formed as
+// reachability:<effective_behavior>:<deployment_series_name>:<deployment_build_id> to the BuildIds search attribute,
+// if it does not already exist there. The deployment will be execution_info.deployment, or the override deployment if
+// a pinned override is set.
+// For all other workflows (ms.GetEffectiveVersioningBehavior() == UNSPECIFIED), this will append a tag based on the
+// workflow's versioning status.
 func (ms *MutableStateImpl) updateBuildIdsSearchAttribute(stamp *commonpb.WorkerVersionStamp, maxSearchAttributeValueSize int) error {
 	changed, err := ms.addBuildIdToSearchAttributesWithNoVisibilityTask(stamp, maxSearchAttributeValueSize)
 	if err != nil {
@@ -2671,33 +2678,54 @@ func (ms *MutableStateImpl) loadBuildIds() ([]string, error) {
 	return searchAttributeValues, nil
 }
 
+// getReachabilityDeployment ignores DeploymentTransition.Deployment. If there is a pinned override,
+// it returns the override deployment. If there is an unpinned override or no override, it returns
+// execution_info.deployment, which is the last deployment that this workflow completed a task on.
+func (ms *MutableStateImpl) getReachabilityDeployment() *deploymentpb.Deployment {
+	versioningInfo := ms.GetExecutionInfo().GetVersioningInfo()
+	if override := versioningInfo.GetVersioningOverride(); override != nil {
+		if override.GetBehavior() == enumspb.VERSIONING_BEHAVIOR_PINNED {
+			return override.GetDeployment()
+		}
+	}
+	return versioningInfo.GetDeployment()
+}
+
 // Takes a list of loaded build IDs from a search attribute and adds a new build ID to it. Also makes sure that the
 // resulting SA list begins with either "unversioned" or "assigned:<bld>" based on workflow's Build ID assignment status.
 // Returns a potentially modified list.
 // [cleanup-old-wv] old versioning does not add "assigned:<bld>" value to the SA.
+// [cleanup-versioning-2] versioning-2 adds "assigned:<bld>" which is no longer used in versioning-3
 func (ms *MutableStateImpl) addBuildIdToLoadedSearchAttribute(
 	existingValues []string,
 	stamp *commonpb.WorkerVersionStamp,
 ) []string {
 	var newValues []string
-	if !stamp.GetUseVersioning() {
+	if !stamp.GetUseVersioning() && ms.GetEffectiveVersioningBehavior() == enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED { // unversioned workflows may still have non-nil deployment, so we don't check deployment
 		newValues = append(newValues, worker_versioning.UnversionedSearchAttribute)
+	} else if ms.GetEffectiveVersioningBehavior() != enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED {
+		newValues = append(newValues, worker_versioning.ReachabilityBuildIdSearchAttribute(
+			ms.GetEffectiveVersioningBehavior(),
+			ms.getReachabilityDeployment(),
+		))
 	} else if ms.GetAssignedBuildId() != "" {
 		newValues = append(newValues, worker_versioning.AssignedBuildIdSearchAttribute(ms.GetAssignedBuildId()))
 	}
 
-	buildId := worker_versioning.VersionStampToBuildIdSearchAttribute(stamp)
-	found := slices.Contains(newValues, buildId)
-	for _, existingValue := range existingValues {
-		if existingValue == buildId {
-			found = true
+	if ms.GetEffectiveVersioningBehavior() == enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED {
+		buildId := worker_versioning.VersionStampToBuildIdSearchAttribute(stamp)
+		found := slices.Contains(newValues, buildId)
+		for _, existingValue := range existingValues {
+			if existingValue == buildId {
+				found = true
+			}
+			if !worker_versioning.IsUnversionedOrAssignedBuildIdSearchAttribute(existingValue) {
+				newValues = append(newValues, existingValue)
+			}
 		}
-		if !worker_versioning.IsUnversionedOrAssignedBuildIdSearchAttribute(existingValue) {
-			newValues = append(newValues, existingValue)
+		if !found {
+			newValues = append(newValues, buildId)
 		}
-	}
-	if !found {
-		newValues = append(newValues, buildId)
 	}
 	return newValues
 }
@@ -4251,23 +4279,16 @@ func (ms *MutableStateImpl) AddWorkflowExecutionOptionsUpdatedEvent(
 
 func (ms *MutableStateImpl) ApplyWorkflowExecutionOptionsUpdatedEvent(event *historypb.HistoryEvent) error {
 	override := event.GetWorkflowExecutionOptionsUpdatedEventAttributes().GetVersioningOverride()
-	previousCurrentDeployment := ms.GetEffectiveDeployment()
+	previousEffectiveDeployment := ms.GetEffectiveDeployment()
 	previousEffectiveVersioningBehavior := ms.GetEffectiveVersioningBehavior()
 	if ms.GetExecutionInfo().GetVersioningInfo() == nil {
 		ms.GetExecutionInfo().VersioningInfo = &workflowpb.WorkflowExecutionVersioningInfo{}
 	}
 	ms.GetExecutionInfo().VersioningInfo.VersioningOverride = override
 
-	// If effective deployment or behavior change, we need to reschedule any pending tasks, because History will reject
-	// the task's start request if the task is being started by a poller that is not from the workflow's effective
-	// deployment according to History. Therefore, it is important for matching to match tasks with the correct pollers.
-	// Even if the effective deployment does not change, we still need to reschedule tasks into the appropriate
-	// default/unpinned queue or the pinned queue, because the two queues will be handled differently if the task queue's
-	// Current Deployment changes between now and when the task is started.
-	//
-	// We choose to let any started WFT that is running on the old deployment finish running, instead of forcing it to fail.
-	if !proto.Equal(ms.GetEffectiveDeployment(), previousCurrentDeployment) ||
+	if !proto.Equal(ms.GetEffectiveDeployment(), previousEffectiveDeployment) ||
 		ms.GetEffectiveVersioningBehavior() != previousEffectiveVersioningBehavior {
+		// TODO (carly) part 2: if safe mode, do replay test on new deployment if deployment changed, if fail, revert changes and abort
 		// If there is an ongoing transition, we remove it so that tasks from this workflow (including the pending WFT
 		// that initiated the transition) can run on our override deployment as soon as possible.
 		//
@@ -4291,7 +4312,15 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionOptionsUpdatedEvent(event *his
 		// and it will start the same transition in the workflow. So removing the transition would not make a difference
 		// and would in fact add some extra work for the server.
 		ms.executionInfo.GetVersioningInfo().DeploymentTransition = nil
-		// TODO (carly) part 2: if safe mode, do replay test on new deployment if deployment changed, if fail, revert changes and abort
+
+		// If effective deployment or behavior change, we need to reschedule any pending tasks, because History will reject
+		// the task's start request if the task is being started by a poller that is not from the workflow's effective
+		// deployment according to History. Therefore, it is important for matching to match tasks with the correct pollers.
+		// Even if the effective deployment does not change, we still need to reschedule tasks into the appropriate
+		// default/unpinned queue or the pinned queue, because the two queues will be handled differently if the task queue's
+		// Current Deployment changes between now and when the task is started.
+		//
+		// We choose to let any started WFT that is running on the old deployment finish running, instead of forcing it to fail.
 		ms.ClearStickyTaskQueue()
 		if ms.HasPendingWorkflowTask() && !ms.HasStartedWorkflowTask() &&
 			// Speculative WFT is directly (without transfer task) added to matching when scheduled.
@@ -4299,12 +4328,16 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionOptionsUpdatedEvent(event *his
 			// If there is no poller for previous deployment, it will time out,
 			// and will be rescheduled as normal WFT.
 			ms.GetPendingWorkflowTask().Type != enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE {
-			// sticky queue was just cleared, so the following call only generates
-			// a WorkflowTask, not a WorkflowTaskTimeoutTask.
+			// Sticky queue was just cleared, so the following call only generates a WorkflowTask, not a WorkflowTaskTimeoutTask.
 			err := ms.taskGenerator.GenerateScheduleWorkflowTaskTasks(ms.GetPendingWorkflowTask().ScheduledEventID)
 			if err != nil {
 				return err
 			}
+		}
+		// For v3 versioned workflows (ms.GetEffectiveVersioningBehavior() != UNSPECIFIED), this will update the reachability
+		// search attribute based on the execution_info.deployment and/or override deployment if one exists.
+		if err := ms.updateBuildIdsSearchAttribute(nil, math.MaxInt32); err != nil {
+			return err
 		}
 	}
 	return ms.reschedulePendingActivities()

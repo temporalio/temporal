@@ -32,6 +32,7 @@ import (
 	"github.com/temporalio/sqlparser"
 	commonpb "go.temporal.io/api/common/v1"
 	deploymentpb "go.temporal.io/api/deployment/v1"
+	enumspb "go.temporal.io/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	"go.temporal.io/server/common/namespace"
@@ -41,13 +42,43 @@ import (
 )
 
 const (
-	buildIdSearchAttributePrefixAssigned    = "assigned"
-	buildIdSearchAttributePrefixVersioned   = "versioned"
-	buildIdSearchAttributePrefixUnversioned = "unversioned"
-	BuildIdSearchAttributeDelimiter         = ":"
+	buildIdSearchAttributePrefixReachability = "reachability"
+	buildIdSearchAttributePrefixAssigned     = "assigned"
+	buildIdSearchAttributePrefixVersioned    = "versioned"
+	buildIdSearchAttributePrefixUnversioned  = "unversioned"
+	BuildIdSearchAttributeDelimiter          = ":"
 	// UnversionedSearchAttribute is the sentinel value used to mark all unversioned workflows
 	UnversionedSearchAttribute = buildIdSearchAttributePrefixUnversioned
 )
+
+// TODO (carly): fix delimiter
+// escapeBuildIdSearchAttributeDelimiter is a helper which escapes the BuildIdSearchAttributeDelimiter character in the input string
+func escapeBuildIdSearchAttributeDelimiter(s string) string {
+	s = strings.Replace(s, BuildIdSearchAttributeDelimiter, `|`+BuildIdSearchAttributeDelimiter, -1)
+	return s
+}
+
+// ReachabilityBuildIdSearchAttribute returns the search attribute value for the currently assigned build ID in the form
+// 'reachability:<behavior>:<deployment_series_name>:<deployment_build_id>'
+func ReachabilityBuildIdSearchAttribute(behavior enumspb.VersioningBehavior, deployment *deploymentpb.Deployment) string {
+	var escapedDeployment string
+	if deployment == nil {
+		escapedDeployment = "UNVERSIONED"
+	} else {
+		escapedDeployment = fmt.Sprintf("%s%s%s",
+			escapeBuildIdSearchAttributeDelimiter(deployment.GetSeriesName()),
+			BuildIdSearchAttributeDelimiter,
+			escapeBuildIdSearchAttributeDelimiter(deployment.GetBuildId()),
+		)
+	}
+	return sqlparser.String(sqlparser.NewStrVal([]byte(fmt.Sprintf("%s%s%s%s%s",
+		buildIdSearchAttributePrefixReachability,
+		BuildIdSearchAttributeDelimiter,
+		escapeBuildIdSearchAttributeDelimiter(behavior.String()),
+		BuildIdSearchAttributeDelimiter,
+		escapedDeployment,
+	))))
+}
 
 // AssignedBuildIdSearchAttribute returns the search attribute value for the currently assigned build ID
 func AssignedBuildIdSearchAttribute(buildId string) string {
@@ -144,7 +175,7 @@ func DeploymentToString(deployment *deploymentpb.Deployment) string {
 	if deployment == nil {
 		return "UNVERSIONED"
 	}
-	return deployment.SeriesName + ":" + deployment.GetBuildId()
+	return deployment.GetSeriesName() + ":" + deployment.GetBuildId()
 }
 
 // MakeDirectiveForWorkflowTask returns a versioning directive based on the following parameters:

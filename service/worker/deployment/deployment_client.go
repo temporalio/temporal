@@ -78,6 +78,13 @@ type DeploymentStoreClient interface {
 		seriesName string,
 		NextPageToken []byte,
 	) ([]*deploymentpb.DeploymentListInfo, []byte, error)
+
+	GetDeploymentReachability(
+		ctx context.Context,
+		namespaceEntry *namespace.Namespace,
+		seriesName string,
+		buildID string,
+	) (*workflowservice.GetDeploymentReachabilityResponse, error)
 }
 
 // implements DeploymentStoreClient
@@ -86,6 +93,8 @@ type DeploymentClientImpl struct {
 	VisibilityManager     manager.VisibilityManager
 	MaxIDLengthLimit      dynamicconfig.IntPropertyFn
 	VisibilityMaxPageSize dynamicconfig.IntPropertyFnWithNamespaceFilter
+
+	reachabilityCache reachabilityCache
 }
 
 var _ DeploymentStoreClient = (*DeploymentClientImpl)(nil)
@@ -238,8 +247,39 @@ func (d *DeploymentClientImpl) DescribeDeployment(ctx context.Context, namespace
 	}, nil
 }
 
-func (d *DeploymentClientImpl) GetCurrentDeployment(ctx context.Context, namespaceEntry *namespace.Namespace, seriesName string) (*deploymentpb.DeploymentInfo, error) {
+// TODO (carly): pass deployment instead of seriesName + buildId in all these APIs -- separate PR
+func (d *DeploymentClientImpl) GetDeploymentReachability(
+	ctx context.Context,
+	namespaceEntry *namespace.Namespace,
+	seriesName string,
+	buildID string,
+) (*workflowservice.GetDeploymentReachabilityResponse, error) {
+	deployInfo, err := d.DescribeDeployment(ctx, namespaceEntry, seriesName, buildID)
+	if err != nil {
+		return nil, err
+	}
+	reachability, lastUpdateTime, err := getDeploymentReachability(
+		ctx,
+		namespaceEntry.ID().String(),
+		namespaceEntry.Name().String(),
+		seriesName,
+		buildID,
+		deployInfo.GetIsCurrent(),
+		d.reachabilityCache,
+	)
 
+	if err != nil {
+		return nil, err
+	}
+
+	return &workflowservice.GetDeploymentReachabilityResponse{
+		DeploymentInfo: deployInfo,
+		Reachability:   reachability,
+		LastUpdateTime: timestamppb.New(lastUpdateTime),
+	}, nil
+}
+
+func (d *DeploymentClientImpl) GetCurrentDeployment(ctx context.Context, namespaceEntry *namespace.Namespace, seriesName string) (*deploymentpb.DeploymentInfo, error) {
 	// Validating params
 	err := ValidateDeploymentWfParams(SeriesFieldName, seriesName, d.MaxIDLengthLimit())
 	if err != nil {

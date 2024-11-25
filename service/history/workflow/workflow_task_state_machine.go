@@ -1098,8 +1098,11 @@ func (m *workflowTaskStateMachine) afterAddWorkflowTaskCompletedEvent(
 		event.GetEventId(),
 		limits.MaxResetPoints,
 	)
-	// For versioned workflows the search attributes should be already up-to-date based on the task started events.
-	// This is still useful for unversioned workers.
+	// For v3 versioned workflows (ms.GetEffectiveVersioningBehavior() != UNSPECIFIED), this will update the reachability
+	// search attribute based on the execution_info.deployment and/or override deployment if one exists. We must update the
+	// search attribute here because the reachability deployment may have just been changed by CompleteDeploymentTransition.
+	// This is also useful for unversioned workers.
+	// For v1 and v2 versioned workflows the search attributes should be already up-to-date based on the task started events.
 	if err := m.ms.updateBuildIdsSearchAttribute(attrs.GetWorkerVersion(), limits.MaxSearchAttributeValueSize); err != nil {
 		return err
 	}
