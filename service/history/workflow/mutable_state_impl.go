@@ -129,6 +129,8 @@ var (
 	ErrMissingChildWorkflowInitiatedEvent = serviceerror.NewInternal("unable to get child workflow initiated event")
 	// ErrMissingSignalInitiatedEvent indicates missing workflow signal initiated event
 	ErrMissingSignalInitiatedEvent = serviceerror.NewInternal("unable to get signal initiated event")
+	// ErrPinnedWorkflowCannotTransition indicates attempt to start a transition on a pinned workflow
+	ErrPinnedWorkflowCannotTransition = serviceerror.NewInternal("unable to start transition on pinned workflows")
 
 	timeZeroUTC = time.Unix(0, 0).UTC()
 )
@@ -6871,27 +6873,19 @@ func (ms *MutableStateImpl) GetEffectiveVersioningBehavior() enumspb.VersioningB
 	return GetEffectiveVersioningBehavior(ms.GetExecutionInfo().GetVersioningInfo())
 }
 
-// StartDeploymentTransition starts a transition to the given deployment. Returns true
-// if the requested transition is started. Starting a new transition replaces possible
-// existing ongoing transition without rescheduling activities. If the workflow is
-// pinned, the transition won't start.
-// If reschedulePendingWorkflowTask is true and there is a pending workflow task it'll
-// be rescheduled after transition start.
-func (ms *MutableStateImpl) StartDeploymentTransition(
-	deployment *deploymentpb.Deployment,
-	reschedulePendingWorkflowTask bool,
-) (bool, error) {
-	if deployment.Equal(ms.GetEffectiveDeployment()) {
-		// Not an effective deployment change.
-		return false, nil
-	}
-
+// StartDeploymentTransition starts a transition to the given deployment which must be
+// different from workflows effective deployment. Will fail if the workflow is pinned.
+// Starting a new transition replaces current transition, if present, without rescheduling
+// activities.
+// If there is a pending workflow task that is not started yet, it'll be rescheduled after
+// transition start.
+func (ms *MutableStateImpl) StartDeploymentTransition(deployment *deploymentpb.Deployment) error {
 	wfBehavior := ms.GetEffectiveVersioningBehavior()
 	if wfBehavior == enumspb.VERSIONING_BEHAVIOR_PINNED {
 		// WF is pinned so we reject the transition.
 		// It's possible that a backlogged task in matching from an earlier time that this wf was
 		// unpinned is being dispatched now and wants to redirect the wf. Such task should be dropped.
-		return false, nil
+		return ErrPinnedWorkflowCannotTransition
 	}
 
 	versioningInfo := ms.GetExecutionInfo().GetVersioningInfo()
@@ -6903,9 +6897,6 @@ func (ms *MutableStateImpl) StartDeploymentTransition(
 	versioningInfo.DeploymentTransition = &workflowpb.DeploymentTransition{
 		Deployment: deployment,
 	}
-
-	// TODO (shahab): fail the existing wf task if it is started already
-	// TODO (shahab): reschedule or fail the existing wf task if it is not yet started
 
 	// Because deployment is changed, we clear sticky queue to make sure the next wf task does not
 	// go to the old deployment.
@@ -6926,10 +6917,10 @@ func (ms *MutableStateImpl) StartDeploymentTransition(
 		// a WorkflowTask, not a WorkflowTaskTimeoutTask.
 		err := ms.taskGenerator.GenerateScheduleWorkflowTaskTasks(ms.GetPendingWorkflowTask().ScheduledEventID)
 		if err != nil {
-			return false, err
+			return err
 		}
 	}
-	return true, nil
+	return nil
 }
 
 // CompleteDeploymentTransition completes the ongoing transition for this workflow if it exists.

@@ -26,6 +26,7 @@ package recordactivitytaskstarted
 
 import (
 	"context"
+	"errors"
 
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
@@ -39,6 +40,7 @@ import (
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/shard"
+	"go.temporal.io/server/service/history/workflow"
 )
 
 func Invoke(
@@ -54,7 +56,7 @@ func Invoke(
 	namespace := namespaceEntry.Name()
 
 	response := &historyservice.RecordActivityTaskStartedResponse{}
-	var duringTransition bool
+	var startedTransition bool
 	err = api.GetAndUpdateWorkflowWithNew(
 		ctx,
 		request.Clock,
@@ -113,7 +115,9 @@ func Invoke(
 				return nil, serviceerrors.NewTaskAlreadyStarted("Activity")
 			}
 
-			// TODO (shahab): support independent activities
+			// TODO (shahab): support independent activities. Independent activities do not need all
+			// the deployment validations and do not start workflow transition.
+
 			if mutableState.GetDeploymentTransition() != nil {
 				// Can't start activity during a redirect. We reject this request so Matching drops
 				// the task. The activity will be rescheduled when the redirect completes/fails.
@@ -133,22 +137,35 @@ func Invoke(
 				return nil, serviceerrors.NewObsoleteMatchingTask("wrong directive deployment")
 			}
 
-			// See if a transition can start.
-			activityInitiatedRedirect := mutableState.StartDeploymentTransition(dispatchDeployment)
-
 			if mutableState.GetDeploymentTransition() != nil {
 				// Can't start activity during a redirect. We reject this request so Matching drops
 				// the task. The activity will be rescheduled when the redirect completes/fails.
+				return nil, serviceerrors.NewActivityStartDuringTransition()
+			}
 
-				// Not returning error so the mutable state is updated. Just setting this flag to
-				// return error at a higher level.
-				duringTransition = true
-				return &api.UpdateWorkflowAction{
-					Noop: false,
-					// If the redirect was initiated by this activity we must create a workflow task
-					// to ensure the workflow won't be stuck.
-					CreateWorkflowTask: activityInitiatedRedirect,
-				}, nil
+			if !dispatchDeployment.Equal(wfDeployment) {
+				// Task is redirected, see if a transition can start.
+				if err := mutableState.StartDeploymentTransition(dispatchDeployment); err != nil {
+					if errors.Is(err, workflow.ErrPinnedWorkflowCannotTransition) {
+						// This must be a task from a time that the workflow was unpinned, but it's
+						// now pinned so can't transition. Matching can drop the task safely.
+						return nil, serviceerrors.NewObsoleteMatchingTask("workflow is not eligible for transition")
+					}
+					return nil, err
+				} else {
+					// This activity started a transition, make sure the MS changes are written but
+					// reject the activity task.
+					// Not returning error so the mutable state is updated. Just setting this flag to
+					// return error at a higher level.
+					startedTransition = true
+					return &api.UpdateWorkflowAction{
+						Noop: false,
+						// StartDeploymentTransition rescheduled pending wft, but this creates new
+						// one if there is no pending wft.
+						CreateWorkflowTask: true,
+					}, nil
+				}
+
 			}
 
 			versioningStamp := worker_versioning.StampFromCapabilities(request.PollRequest.WorkerVersionCapabilities)
@@ -193,10 +210,9 @@ func Invoke(
 		return nil, err
 	}
 
-	if duringTransition {
-		// Rejecting the activity start if the workflow is transitioning between deployments.
-		// Matching can drop the task, new activity task will be scheduled after transition
-		// completion.
+	if startedTransition {
+		// Rejecting the activity start because the workflow is now in transition. Matching can drop
+		// the task, new activity task will be scheduled after transition completion.
 		return nil, serviceerrors.NewActivityStartDuringTransition()
 	}
 	return response, err

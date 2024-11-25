@@ -3030,10 +3030,10 @@ func (mr *MockMutableStateMockRecorder) SetUpdateCondition(arg0, arg1 any) *gomo
 }
 
 // StartDeploymentTransition mocks base method.
-func (m *MockMutableState) StartDeploymentTransition(deployment *deployment.Deployment) bool {
+func (m *MockMutableState) StartDeploymentTransition(deployment *deployment.Deployment) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "StartDeploymentTransition", deployment)
-	ret0, _ := ret[0].(bool)
+	ret0, _ := ret[0].(error)
 	return ret0
 }
 

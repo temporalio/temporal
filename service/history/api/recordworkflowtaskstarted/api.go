@@ -26,6 +26,7 @@ package recordworkflowtaskstarted
 
 import (
 	"context"
+	"errors"
 
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -172,16 +173,6 @@ func Invoke(
 				return nil, serviceerrors.NewObsoleteMatchingTask("wrong directive deployment")
 			}
 
-			if !dispatchDeployment.Equal(wfDeployment) {
-				// Try starting a transition. If it doesn't happen, it means this task is obsolete
-				// and Matching can drop it.
-				// This might happen if the workflow was previously unpinned and now pinned to the
-				// same deployment, but the previous task is redirected.
-				if !mutableState.StartDeploymentTransition(directiveDeployment) {
-					return nil, serviceerrors.NewObsoleteMatchingTask("workflow not eligible for transition")
-				}
-			}
-
 			_, workflowTask, err = mutableState.AddWorkflowTaskStartedEvent(
 				scheduledEventID,
 				requestID,
@@ -194,6 +185,20 @@ func Invoke(
 			if err != nil {
 				// Unable to add WorkflowTaskStarted event to history
 				return nil, err
+			}
+
+			if !dispatchDeployment.Equal(wfDeployment) {
+				// Dispatching to a different deployment. Try starting a transition. Starting the
+				// transition AFTER applying the start event because we don't want this pending
+				// wft to be rescheduled by StartDeploymentTransition.
+				if err := mutableState.StartDeploymentTransition(dispatchDeployment); err != nil {
+					if errors.Is(err, workflow.ErrPinnedWorkflowCannotTransition) {
+						// This must be a task from a time that the workflow was unpinned, but it's
+						// now pinned so can't transition. Matching can drop the task safely.
+						return nil, serviceerrors.NewObsoleteMatchingTask("workflow is not eligible for transition")
+					}
+					return nil, err
+				}
 			}
 
 			if workflowTask.Type == enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE {
