@@ -88,10 +88,16 @@ var Module = fx.Options(
 
 func DeploymentStoreClientProvider(historyClient resource.HistoryClient, visibilityManager manager.VisibilityManager, dc *dynamicconfig.Collection) DeploymentStoreClient {
 	return &DeploymentClientImpl{
-		HistoryClient:             historyClient,
-		VisibilityManager:         visibilityManager,
-		MaxIDLengthLimit:          dynamicconfig.MaxIDLengthLimit.Get(dc),
-		VisibilityMaxPageSize:     dynamicconfig.FrontendVisibilityMaxPageSize.Get(dc),
+		HistoryClient:         historyClient,
+		VisibilityManager:     visibilityManager,
+		MaxIDLengthLimit:      dynamicconfig.MaxIDLengthLimit.Get(dc),
+		VisibilityMaxPageSize: dynamicconfig.FrontendVisibilityMaxPageSize.Get(dc),
+		reachabilityCache: newReachabilityCache(
+			metrics.NoopMetricsHandler,
+			visibilityManager,
+			reachabilityCacheOpenWFsTTL,   // TODO (carly) use dc (ie. config.ReachabilityCacheOpenWFsTTL)
+			reachabilityCacheClosedWFsTTL, // TODO (carly) use dc (ie. config.ReachabilityCacheClosedWFsTTL)
+		),
 		MaxTaskQueuesInDeployment: dynamicconfig.MatchingMaxTaskQueuesInDeployment.Get(dc),
 	}
 }

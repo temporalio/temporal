@@ -48,7 +48,8 @@ message DeploymentLocalState {
 
     google.protobuf.Timestamp last_became_current_time = 6;
 
-    int32 max_task_queues = 7;
+    bool started_series_workflow = 7;
+    int32 max_task_queues = 8;
 
 
     message TaskQueueFamilyData {
