@@ -148,6 +148,7 @@ func (d *deploymentWorkflowClientSuite) TestValidateDeploymentWfParams() {
 	}
 }
 
+// TODO (Shivam/David) - fix this whenever EscapeChar gets working
 func (d *deploymentWorkflowClientSuite) TestEscapeChar() {
 	testCases := []struct {
 		value                string
