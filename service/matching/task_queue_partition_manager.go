@@ -779,7 +779,7 @@ func (pm *taskQueuePartitionManagerImpl) getPhysicalQueuesForAdd(
 	directive *taskqueuespb.TaskVersionDirective,
 	forwardInfo *taskqueuespb.TaskForwardInfo,
 	runId string,
-) (spoolQueue physicalTaskQueueManager, syncMatchQueue physicalTaskQueueManager, userDataChanged <-chan struct{}, err error) {
+) (pinnedQueue physicalTaskQueueManager, syncMatchQueue physicalTaskQueueManager, userDataChanged <-chan struct{}, err error) {
 	if deployment := directive.GetDeployment(); deployment != nil {
 		wfBehavior := directive.GetBehavior()
 
@@ -795,12 +795,18 @@ func (pm *taskQueuePartitionManagerImpl) getPhysicalQueuesForAdd(
 			if err != nil {
 				return nil, nil, nil, err
 			}
-			spoolQueue, err = pm.getVersionedQueue(ctx, "", "", deployment, true)
+			pinnedQueue, err = pm.getVersionedQueue(ctx, "", "", deployment, true)
 			if err != nil {
 				return nil, nil, nil, err
 			}
-			// spool queue and sync match queue is the same for pinned workflows.
-			return spoolQueue, spoolQueue, nil, nil
+			if forwardInfo == nil {
+				// Task is not forwarded, so it can be spooled if sync match fails.
+				// Spool queue and sync match queue is the same for pinned workflows.
+				return pinnedQueue, pinnedQueue, nil, nil
+			} else {
+				// Forwarded from child partition - only do sync match.
+				return nil, pinnedQueue, nil, nil
+			}
 		case enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE:
 			return nil, nil, nil, serviceerror.NewUnimplemented("AUTO_UPGRADE mode is not implemented yet")
 		case enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED:
@@ -890,7 +896,7 @@ func (pm *taskQueuePartitionManagerImpl) getPhysicalQueuesForAdd(
 	}
 
 	if versionSet != "" {
-		spoolQueue = pm.defaultQueue
+		pinnedQueue = pm.defaultQueue
 		syncMatchQueue, err = pm.getVersionedQueue(ctx, versionSet, "", nil, true)
 		if err != nil {
 			return nil, nil, nil, err
@@ -901,13 +907,13 @@ func (pm *taskQueuePartitionManagerImpl) getPhysicalQueuesForAdd(
 			return nil, nil, nil, err
 		}
 		// redirect rules are not applied when spooling a task. They'll be applied when dispatching the spool task.
-		spoolQueue, err = pm.getPhysicalQueue(ctx, buildId)
+		pinnedQueue, err = pm.getPhysicalQueue(ctx, buildId)
 		if err != nil {
 			return nil, nil, nil, err
 		}
 	}
 
-	return spoolQueue, syncMatchQueue, userDataChanged, err
+	return pinnedQueue, syncMatchQueue, userDataChanged, err
 }
 
 func (pm *taskQueuePartitionManagerImpl) getVersionSetForAdd(directive *taskqueuespb.TaskVersionDirective, data *persistencespb.VersioningData) (string, error) {
