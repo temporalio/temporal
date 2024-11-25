@@ -32,6 +32,7 @@ import (
 	"github.com/temporalio/sqlparser"
 	commonpb "go.temporal.io/api/common/v1"
 	deploymentpb "go.temporal.io/api/deployment/v1"
+	enumspb "go.temporal.io/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	"go.temporal.io/server/common/namespace"
@@ -177,7 +178,19 @@ func DeploymentToString(deployment *deploymentpb.Deployment) string {
 // - assignedBuildId: the build ID to which the WF is currently assigned (i.e. mutable state's AssginedBuildId)
 // - stamp: the latest versioning stamp of the execution (only needed for old versioning)
 // - hasCompletedWorkflowTask: if the wf has completed any WFT
-func MakeDirectiveForWorkflowTask(inheritedBuildId string, assignedBuildId string, stamp *commonpb.WorkerVersionStamp, hasCompletedWorkflowTask bool) *taskqueuespb.TaskVersionDirective {
+// - behavior: workflow's effective behavior
+// - deployment: workflow's effective deployment
+func MakeDirectiveForWorkflowTask(
+	inheritedBuildId string,
+	assignedBuildId string,
+	stamp *commonpb.WorkerVersionStamp,
+	hasCompletedWorkflowTask bool,
+	behavior enumspb.VersioningBehavior,
+	deployment *deploymentpb.Deployment,
+) *taskqueuespb.TaskVersionDirective {
+	if behavior != enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED {
+		return &taskqueuespb.TaskVersionDirective{Behavior: behavior, Deployment: deployment}
+	}
 	if id := BuildIdIfUsingVersioning(stamp); id != "" && assignedBuildId == "" {
 		// TODO: old versioning only [cleanup-old-wv]
 		return MakeBuildIdDirective(id)
@@ -212,8 +225,4 @@ func StampFromCapabilities(cap *commonpb.WorkerVersionCapabilities) *commonpb.Wo
 
 func StampFromBuildId(buildId string) *commonpb.WorkerVersionStamp {
 	return &commonpb.WorkerVersionStamp{UseVersioning: true, BuildId: buildId}
-}
-
-func StampFromDeployment(deployment *deploymentpb.Deployment) *commonpb.WorkerVersionStamp {
-	return &commonpb.WorkerVersionStamp{UseVersioning: true, BuildId: deployment.BuildId}
 }
