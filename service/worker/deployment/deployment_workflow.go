@@ -26,7 +26,6 @@ package deployment
 
 import (
 	"errors"
-	"fmt"
 	"time"
 
 	sdkclient "go.temporal.io/sdk/client"
@@ -60,7 +59,8 @@ var (
 		},
 	}
 
-	errAlreadyExists = errors.New("Task queue already exists in deployment")
+	errAlreadyExists             = errors.New("task queue already exists in deployment")
+	ErrMaxTaskQueuesInDeployment = errors.New("maximum number of task queues registed in deployment")
 )
 
 func DeploymentWorkflow(ctx workflow.Context, deploymentWorkflowArgs *deploymentspb.DeploymentWorkflowArgs) error {
@@ -178,8 +178,7 @@ func (d *DeploymentWorkflowRunner) handleRegisterWorker(ctx workflow.Context, ar
 
 	// check if we can add more task-queues in the deployment
 	if len(d.DeploymentLocalState.TaskQueueFamilies)+1 == int(d.DeploymentLocalState.MaxTaskQueues) {
-		return fmt.Errorf("cannot register task queue as number of task queues in the deployment %s has reached the limit %d",
-			d.DeploymentLocalState.WorkerDeployment.BuildId, d.DeploymentLocalState.MaxTaskQueues)
+		return ErrMaxTaskQueuesInDeployment
 	}
 
 	// wait until series workflow started
