@@ -485,6 +485,11 @@ message ActivityInfo {
     // It monotonically increments when the activity options are changed.
     // It is used to check if activity related tasks are still relevant to  their corresponding state machine.
     int32 stamp = 41;
+
+    // Paused state. When activity is paused it will not advance until unpaused.
+    // Iw will not be scheduled, timer tasks will not be processed, etc.
+    // Note: it still can be cancelled/completed.
+    bool  paused = 42;
 }
 
 // timer_map column

@@ -32,6 +32,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/server/api/historyservice/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/util"
@@ -66,7 +67,7 @@ func Invoke(
 		func(workflowLease api.WorkflowLease) (*api.UpdateWorkflowAction, error) {
 			mutableState := workflowLease.GetMutableState()
 			var err error
-			response, err = updateActivityOptions(shardContext, validator, mutableState, request)
+			response, err = updateActivityOptions(validator, mutableState, request)
 			if err != nil {
 				return nil, err
 			}
@@ -88,7 +89,6 @@ func Invoke(
 }
 
 func updateActivityOptions(
-	shardContext shard.Context,
 	validator *api.CommandAttrValidator,
 	mutableState workflow.MutableState,
 	request *historyservice.UpdateActivityOptionsRequest,
@@ -142,23 +142,25 @@ func updateActivityOptions(
 		return nil, err
 	}
 
-	// update activity info with new options
-	ai.TaskQueue = adjustedOptions.TaskQueue.Name
-	ai.ScheduleToCloseTimeout = adjustedOptions.ScheduleToCloseTimeout
-	ai.ScheduleToStartTimeout = adjustedOptions.ScheduleToStartTimeout
-	ai.StartToCloseTimeout = adjustedOptions.StartToCloseTimeout
-	ai.HeartbeatTimeout = adjustedOptions.HeartbeatTimeout
-	ai.RetryMaximumInterval = adjustedOptions.RetryPolicy.MaximumInterval
-	ai.RetryBackoffCoefficient = adjustedOptions.RetryPolicy.BackoffCoefficient
-	ai.RetryMaximumInterval = adjustedOptions.RetryPolicy.MaximumInterval
-	ai.RetryMaximumAttempts = adjustedOptions.RetryPolicy.MaximumAttempts
+	if err = mutableState.UpdateActivity(ai.ScheduledEventId, func(activityInfo *persistencespb.ActivityInfo, _ workflow.MutableState) error {
+		// update activity info with new options
+		activityInfo.TaskQueue = adjustedOptions.TaskQueue.Name
+		activityInfo.ScheduleToCloseTimeout = adjustedOptions.ScheduleToCloseTimeout
+		activityInfo.ScheduleToStartTimeout = adjustedOptions.ScheduleToStartTimeout
+		activityInfo.StartToCloseTimeout = adjustedOptions.StartToCloseTimeout
+		activityInfo.HeartbeatTimeout = adjustedOptions.HeartbeatTimeout
+		activityInfo.RetryMaximumInterval = adjustedOptions.RetryPolicy.MaximumInterval
+		activityInfo.RetryBackoffCoefficient = adjustedOptions.RetryPolicy.BackoffCoefficient
+		activityInfo.RetryMaximumInterval = adjustedOptions.RetryPolicy.MaximumInterval
+		activityInfo.RetryMaximumAttempts = adjustedOptions.RetryPolicy.MaximumAttempts
 
-	// move forward activity version
-	ai.Stamp++
+		// move forward activity version
+		activityInfo.Stamp++
 
-	// invalidate timers
-	ai.TimerTaskStatus = workflow.TimerTaskStatusNone
-	if err := mutableState.UpdateActivity(ai); err != nil {
+		// invalidate timers
+		activityInfo.TimerTaskStatus = workflow.TimerTaskStatusNone
+		return nil
+	}); err != nil {
 		return nil, err
 	}
 
@@ -173,7 +175,8 @@ func updateActivityOptions(
 		// 		eventually matching service will call history service (recordActivityTaskStarted)
 		// 		history service will return error based on stamp. Task will be dropped
 
-		err = mutableState.RegenerateActivityRetryTask(ai)
+		nextScheduledTime := workflow.GetNextScheduledTime(ai)
+		err = mutableState.RegenerateActivityRetryTask(ai, nextScheduledTime)
 		if err != nil {
 			return nil, err
 		}

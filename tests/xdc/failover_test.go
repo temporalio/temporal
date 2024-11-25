@@ -1275,20 +1275,6 @@ func (s *FunctionalClustersTestSuite) TestSignalFailover() {
 	s.NoError(err)
 	s.False(eventSignaled)
 
-	// Send a signal without a task in cluster 1
-	_, err = client1.SignalWorkflowExecution(testcore.NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
-		Namespace: namespace,
-		WorkflowExecution: &commonpb.WorkflowExecution{
-			WorkflowId: id,
-			RunId:      we.GetRunId(),
-		},
-		SignalName:               "signal without task",
-		Input:                    payloads.EncodeString("my signal input without task"),
-		Identity:                 identity,
-		SkipGenerateWorkflowTask: true,
-	})
-	s.NoError(err)
-
 	// Send a signal in cluster 1
 	signalName := "my signal"
 	signalInput := payloads.EncodeString("my signal input")
@@ -1326,10 +1312,9 @@ func (s *FunctionalClustersTestSuite) TestSignalFailover() {
   3 v1 WorkflowTaskStarted
   4 v1 WorkflowTaskCompleted
   5 v1 WorkflowExecutionSignaled
-  6 v1 WorkflowExecutionSignaled
-  7 v1 WorkflowTaskScheduled
-  8 v1 WorkflowTaskStarted
-  9 v1 WorkflowTaskCompleted`,
+  6 v1 WorkflowTaskScheduled
+  7 v1 WorkflowTaskStarted
+  8 v1 WorkflowTaskCompleted`,
 		func() *historypb.History {
 			historyResponse, err := client2.GetWorkflowExecutionHistory(testcore.NewContext(), getHistoryReq)
 			if err != nil {
@@ -1338,20 +1323,6 @@ func (s *FunctionalClustersTestSuite) TestSignalFailover() {
 			return historyResponse.History
 		}, 15*time.Second, 1*time.Second,
 	)
-
-	// Send another signal without a task in cluster 2
-	_, err = client2.SignalWorkflowExecution(testcore.NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
-		Namespace: namespace,
-		WorkflowExecution: &commonpb.WorkflowExecution{
-			WorkflowId: id,
-			RunId:      we.GetRunId(),
-		},
-		SignalName:               "signal without task",
-		Input:                    payloads.EncodeString("my signal input without task"),
-		Identity:                 identity,
-		SkipGenerateWorkflowTask: true,
-	})
-	s.NoError(err)
 
 	// Send another signal in cluster 2
 	signalName2 := "my signal 2"
@@ -1381,15 +1352,13 @@ func (s *FunctionalClustersTestSuite) TestSignalFailover() {
   3 v1 WorkflowTaskStarted
   4 v1 WorkflowTaskCompleted
   5 v1 WorkflowExecutionSignaled
-  6 v1 WorkflowExecutionSignaled
-  7 v1 WorkflowTaskScheduled
-  8 v1 WorkflowTaskStarted
-  9 v1 WorkflowTaskCompleted
- 10 v2 WorkflowExecutionSignaled
- 11 v2 WorkflowExecutionSignaled
- 12 v2 WorkflowTaskScheduled
- 13 v2 WorkflowTaskStarted
- 14 v2 WorkflowTaskCompleted`,
+  6 v1 WorkflowTaskScheduled
+  7 v1 WorkflowTaskStarted
+  8 v1 WorkflowTaskCompleted
+  9 v2 WorkflowExecutionSignaled
+ 10 v2 WorkflowTaskScheduled
+ 11 v2 WorkflowTaskStarted
+ 12 v2 WorkflowTaskCompleted`,
 		func() *historypb.History {
 			historyResponse, err := client2.GetWorkflowExecutionHistory(testcore.NewContext(), getHistoryReq)
 			if err != nil {

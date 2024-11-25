@@ -493,13 +493,7 @@ func (s *workflowResetterSuite) TestFailInflightActivity() {
 		activity1.LastWorkerVersionStamp,
 	).Return(&historypb.HistoryEvent{}, nil)
 
-	mutableState.EXPECT().UpdateActivity(&persistencespb.ActivityInfo{
-		Version:            activity2.Version,
-		ScheduledEventId:   activity2.ScheduledEventId,
-		ScheduledTime:      timestamppb.New(now),
-		FirstScheduledTime: timestamppb.New(now),
-		StartedEventId:     activity2.StartedEventId,
-	}).Return(nil)
+	mutableState.EXPECT().UpdateActivity(gomock.Any(), gomock.Any()).Return(nil)
 
 	err := s.workflowResetter.failInflightActivity(now, mutableState, terminateReason)
 	s.NoError(err)
@@ -897,7 +891,6 @@ func (s *workflowResetterSuite) TestReapplyEvents() {
 				attr.GetInput(),
 				attr.GetIdentity(),
 				attr.GetHeader(),
-				attr.GetSkipGenerateWorkflowTask(),
 				event.Links,
 			).Return(&historypb.HistoryEvent{}, nil)
 		case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ADMITTED:
@@ -971,7 +964,7 @@ func (s *workflowResetterSuite) TestReapplyEvents_Excludes() {
 	ms := workflow.NewMockMutableState(s.controller)
 	// Assert that none of these following methods are invoked.
 	arg := gomock.Any()
-	ms.EXPECT().AddWorkflowExecutionSignaled(arg, arg, arg, arg, arg, arg).Times(0)
+	ms.EXPECT().AddWorkflowExecutionSignaled(arg, arg, arg, arg, arg).Times(0)
 	ms.EXPECT().AddWorkflowExecutionUpdateAdmittedEvent(arg, arg).Times(0)
 	ms.EXPECT().AddHistoryEvent(arg, arg).Times(0)
 

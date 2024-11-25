@@ -39,6 +39,7 @@ import (
 	workflowpb "go.temporal.io/server/api/workflow/v1"
 	"go.temporal.io/server/common/collection"
 	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/hsm"
@@ -122,7 +123,7 @@ type (
 		NotifyNewHistoryEvent(event *events.Notification)
 		NotifyNewTasks(tasks map[tasks.Category][]tasks.Task)
 		// TODO(bergundy): This Environment should be host level once shard level workflow cache is deprecated.
-		StateMachineEnvironment() hsm.Environment
+		StateMachineEnvironment(operationTag metrics.Tag) hsm.Environment
 
 		ReplicationStream
 		Start()

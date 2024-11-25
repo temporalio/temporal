@@ -36,6 +36,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/collection"
@@ -248,7 +249,7 @@ func (r *workflowResetterImpl) ResetWorkflow(
 		return err
 	}
 
-	currentWorkflow.GetContext().UpdateRegistry(ctx, nil).Abort(update.AbortReasonWorkflowCompleted)
+	currentWorkflow.GetContext().UpdateRegistry(ctx).Abort(update.AbortReasonWorkflowCompleted)
 
 	return nil
 }
@@ -550,10 +551,12 @@ func (r *workflowResetterImpl) failInflightActivity(
 		switch ai.StartedEventId {
 		case common.EmptyEventID:
 			// activity not started, noop
-			// override the scheduled activity time to now
-			ai.ScheduledTime = timestamppb.New(now)
-			ai.FirstScheduledTime = timestamppb.New(now)
-			if err := mutableState.UpdateActivity(ai); err != nil {
+			if err := mutableState.UpdateActivity(ai.ScheduledEventId, func(activityInfo *persistencespb.ActivityInfo, _ workflow.MutableState) error {
+				// override the scheduled activity time to now
+				activityInfo.ScheduledTime = timestamppb.New(now)
+				activityInfo.FirstScheduledTime = timestamppb.New(now)
+				return nil
+			}); err != nil {
 				return err
 			}
 
@@ -815,7 +818,6 @@ func reapplyEvents(
 				attr.GetInput(),
 				attr.GetIdentity(),
 				attr.GetHeader(),
-				attr.GetSkipGenerateWorkflowTask(),
 				event.Links,
 			); err != nil {
 				return reappliedEvents, err

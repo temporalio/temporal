@@ -1091,6 +1091,7 @@ func (s *rawTaskConverterSuite) TestConvertSyncVersionedTransitionTask_Backfill(
 		VisibilityTimestamp: time.Now().UTC(),
 		TaskID:              taskID,
 		FirstEventID:        firstEventID,
+		FirstEventVersion:   version,
 		NextEventID:         nextEventID,
 		NewRunID:            s.newRunID,
 		VersionedTransition: &persistencespb.VersionedTransition{

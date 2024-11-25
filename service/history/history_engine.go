@@ -152,7 +152,7 @@ type (
 		tracer                     trace.Tracer
 		taskCategoryRegistry       tasks.TaskCategoryRegistry
 		commandHandlerRegistry     *workflow.CommandHandlerRegistry
-		stateMachineEnvironment    *stateMachineEnvironment
+		workflowCache              wcache.Cache
 		replicationProgressCache   replication.ProgressCache
 		syncStateRetriever         replication.SyncStateRetriever
 		outboundQueueCBPool        *circuitbreakerpool.OutboundQueueCircuitBreakerPool
@@ -227,15 +227,10 @@ func NewEngineWithShardContext(
 		tracer:                     tracerProvider.Tracer(consts.LibraryName),
 		taskCategoryRegistry:       taskCategoryRegistry,
 		commandHandlerRegistry:     commandHandlerRegistry,
-		stateMachineEnvironment: &stateMachineEnvironment{
-			shardContext:   shard,
-			cache:          workflowCache,
-			metricsHandler: shard.GetMetricsHandler(),
-			logger:         logger,
-		},
-		replicationProgressCache: replicationProgressCache,
-		syncStateRetriever:       syncStateRetriever,
-		outboundQueueCBPool:      outboundQueueCBPool,
+		workflowCache:              workflowCache,
+		replicationProgressCache:   replicationProgressCache,
+		syncStateRetriever:         syncStateRetriever,
+		outboundQueueCBPool:        outboundQueueCBPool,
 	}
 
 	historyEngImpl.queueProcessors = make(map[tasks.Category]queues.Queue)
@@ -404,18 +399,21 @@ func (e *historyEngineImpl) registerNamespaceStateChangeCallback() {
 func (e *historyEngineImpl) StartWorkflowExecution(
 	ctx context.Context,
 	startRequest *historyservice.StartWorkflowExecutionRequest,
-) (resp *historyservice.StartWorkflowExecutionResponse, retError error) {
+) (*historyservice.StartWorkflowExecutionResponse, error) {
 	starter, err := startworkflow.NewStarter(
 		e.shardContext,
 		e.workflowConsistencyChecker,
 		e.tokenSerializer,
 		e.persistenceVisibilityMgr,
 		startRequest,
+		api.NewWorkflowLeaseAndContext,
 	)
 	if err != nil {
 		return nil, err
 	}
-	return starter.Invoke(ctx, startworkflow.BeforeCreateHookNoop)
+
+	resp, _, err := starter.Invoke(ctx)
+	return resp, err
 }
 
 func (e *historyEngineImpl) ExecuteMultiOperation(
@@ -1046,8 +1044,15 @@ func (e *historyEngineImpl) ListTasks(
 }
 
 // StateMachineEnvironment implements shard.Engine.
-func (e *historyEngineImpl) StateMachineEnvironment() hsm.Environment {
-	return e.stateMachineEnvironment
+func (e *historyEngineImpl) StateMachineEnvironment(
+	operationTag metrics.Tag,
+) hsm.Environment {
+	return &stateMachineEnvironment{
+		shardContext:   e.shardContext,
+		cache:          e.workflowCache,
+		metricsHandler: e.metricsHandler.WithTags(operationTag),
+		logger:         e.logger,
+	}
 }
 
 func (e *historyEngineImpl) SyncWorkflowState(ctx context.Context, request *historyservice.SyncWorkflowStateRequest) (_ *historyservice.SyncWorkflowStateResponse, retErr error) {

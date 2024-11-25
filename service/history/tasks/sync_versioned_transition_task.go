@@ -41,6 +41,7 @@ type (
 		Priority            enumsspb.TaskPriority
 
 		VersionedTransition *persistencespb.VersionedTransition
+		FirstEventVersion   int64
 		FirstEventID        int64
 		NextEventID         int64
 		NewRunID            string
@@ -78,6 +79,6 @@ func (a *SyncVersionedTransitionTask) GetType() enumsspb.TaskType {
 }
 
 func (a *SyncVersionedTransitionTask) String() string {
-	return fmt.Sprintf("SyncVersionedTransitionTask{WorkflowKey: %v, TaskID: %v, Priority: %v, VersionedTransition: %v, FirstEventID: %v, NextEventID: %v, NewRunID: %v}",
-		a.WorkflowKey, a.TaskID, a.Priority, a.VersionedTransition, a.FirstEventID, a.NextEventID, a.NewRunID)
+	return fmt.Sprintf("SyncVersionedTransitionTask{WorkflowKey: %v, TaskID: %v, Priority: %v, VersionedTransition: %v, FirstEventID: %v, FirstEventVersion: %v, NextEventID: %v, NewRunID: %v}",
+		a.WorkflowKey, a.TaskID, a.Priority, a.VersionedTransition, a.FirstEventID, a.FirstEventVersion, a.NextEventID, a.NewRunID)
 }
