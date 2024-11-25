@@ -206,6 +206,8 @@ func (mse MutableStateWithEffects) CanAddEvent() bool {
 //     common case). Deployment is set based on the worker-sent deployment in the latest WFT
 //     completion. Exception: if Deployment is set but the workflow's effective behavior is
 //     UNSPECIFIED, it means the workflow is unversioned, so effective deployment will be nil.
+//
+// Note: Deployment objects are immutable, never change their fields.
 func GetEffectiveDeployment(versioningInfo *workflowpb.WorkflowExecutionVersioningInfo) *deploymentspb.Deployment {
 	if versioningInfo == nil {
 		return nil
