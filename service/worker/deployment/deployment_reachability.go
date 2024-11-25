@@ -99,7 +99,7 @@ func makeCountRequest(
 
 func makeDeploymentQuery(seriesName, buildID string, open bool) string {
 	var statusFilter string
-	deploymentFilter := "= " + worker_versioning.ReachabilityBuildIdSearchAttribute(enumspb.VERSIONING_BEHAVIOR_PINNED, &deploymentpb.Deployment{
+	deploymentFilter := "= " + worker_versioning.PinnedBuildIdSearchAttribute(&deploymentpb.Deployment{
 		SeriesName: seriesName,
 		BuildId:    buildID,
 	})
