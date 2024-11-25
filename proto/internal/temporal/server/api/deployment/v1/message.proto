@@ -31,48 +31,73 @@ import "google/protobuf/timestamp.proto";
 import "temporal/api/deployment/v1/message.proto";
 import "temporal/api/common/v1/message.proto";
 
+// Data for each deployment+task queue pair. This is stored in each deployment (for each task
+// queue), and synced to task queue user data (for each deployment).
+message TaskQueueData {
+    google.protobuf.Timestamp first_poller_time = 1;
+    google.protobuf.Timestamp last_became_current_time = 2;
+}
+
 message DeploymentLocalState {
     temporal.api.deployment.v1.Deployment worker_deployment = 1;
-    map<string, TaskQueueFamilyInfo> task_queue_families = 2;
+    map<string, TaskQueueFamilyData> task_queue_families = 2;
+
     bool is_current = 3;
+    google.protobuf.Timestamp last_became_current_time = 6;
+
     google.protobuf.Timestamp create_time = 4;
     map<string, temporal.api.common.v1.Payload> metadata = 5;
 
-    message TaskQueueFamilyInfo {
-        // key: taskQueueType, val: TaskQueueInfo
-        map<int32,TaskQueueInfo> task_queues = 1;
-        
-        message TaskQueueInfo {
-            temporal.api.enums.v1.TaskQueueType task_queue_type = 1;
-            google.protobuf.Timestamp first_poller_time = 2;
-        }
+    message TaskQueueFamilyData {
+        // Key: enums.TaskQueueType, Value: TaskQueueData
+        // All fields in TaskQueueData are valid except last_became_current_time, the source of
+        // truth for that is the value at the root of DeploymentLocalState.
+        map<int32, TaskQueueData> task_queues = 1;
     }
 }
 
+// used as deployment workflow input:
 message DeploymentWorkflowArgs {
     string namespace_name = 1;
     string namespace_id = 2;
     DeploymentLocalState deployment_local_state = 3;
 }
 
+// used as deployment series workflow input:
 message DeploymentSeriesWorkflowArgs {
     string namespace_name = 1;
     string namespace_id = 2;
     string default_build_id = 3;
 }
 
-message RegisterWorkerInDeploymentArgs{
+// used as deployment workflow update input:
+message RegisterWorkerInDeploymentArgs {
     string task_queue_name = 1;
     temporal.api.enums.v1.TaskQueueType task_queue_type = 2;
     google.protobuf.Timestamp first_poller_time = 3;
 }
 
-message DescribeResponse {
+// used as deployment workflow query response:
+message QueryDescribeDeploymentResponse {
     DeploymentLocalState deployment_local_state = 1;
 }
 
+// used as deployment workflow memo:
 message DeploymentWorkflowMemo {
     temporal.api.deployment.v1.Deployment deployment = 1;
     google.protobuf.Timestamp create_time = 2;
     bool is_current_deployment = 3;
+}
+
+// used as deployment workflow activity input:
+message StartDeploymentSeriesRequest {
+    string series_name = 1;
+}
+
+// used as deployment workflow activity input:
+message SyncUserDataRequest {
+    temporal.api.deployment.v1.Deployment deployment = 1;
+    string task_queue_name = 2;
+    temporal.api.enums.v1.TaskQueueType task_queue_type = 3;
+    TaskQueueData data = 4;
 }
