@@ -32,14 +32,14 @@ import (
 	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
-	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	updatepb "go.temporal.io/api/update/v1"
-	workflowservice "go.temporal.io/api/workflowservice/v1"
+	workflowpb "go.temporal.io/api/workflow/v1"
+	"go.temporal.io/api/workflowservice/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
@@ -707,13 +707,6 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskCompletedEvent(
 		workflowTask.StartedEventID = startedEvent.GetEventId()
 	}
 
-	var completedDeployment *deploymentpb.Deployment
-	var completedBehavior enumspb.VersioningBehavior
-	if redirectInfo := m.ms.GetDeploymentTransition(); redirectInfo != nil {
-		completedDeployment = redirectInfo.GetDeployment()
-		completedBehavior = request.GetVersioningBehavior()
-	}
-
 	// Now write the completed event
 	event := m.ms.hBuilder.AddWorkflowTaskCompletedEvent(
 		workflowTask.ScheduledEventID,
@@ -723,8 +716,8 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskCompletedEvent(
 		request.WorkerVersionStamp,
 		request.SdkMetadata,
 		request.MeteringMetadata,
-		completedDeployment,
-		completedBehavior,
+		request.Deployment,
+		request.VersioningBehavior,
 	)
 
 	err := m.afterAddWorkflowTaskCompletedEvent(event, limits)
@@ -1087,11 +1080,64 @@ func (m *workflowTaskStateMachine) afterAddWorkflowTaskCompletedEvent(
 	attrs := event.GetWorkflowTaskCompletedEventAttributes()
 	m.ms.executionInfo.LastCompletedWorkflowTaskStartedEventId = attrs.GetStartedEventId()
 	m.ms.executionInfo.MostRecentWorkerVersionStamp = attrs.GetWorkerVersion()
-	if err := m.ms.CompleteDeploymentTransition(attrs.GetVersioningBehavior()); err != nil {
-		return err
+
+	taskDeployment := attrs.GetDeployment()
+	taskBehavior := attrs.GetVersioningBehavior()
+	versioningInfo := m.ms.GetExecutionInfo().GetVersioningInfo()
+
+	var completedTransition bool
+	if versioningInfo.DeploymentTransition != nil {
+		// It's possible that the completed WFT is not yet from the current transition because when
+		// the transition started, the current wft was already started. In this case, we allow the
+		// started wft to run and when completed, we create another wft immediately.
+		if versioningInfo.DeploymentTransition.GetDeployment().Equal(taskDeployment) {
+			versioningInfo.DeploymentTransition = nil
+			completedTransition = true
+		}
 	}
 
-	// TODO: create reset point based on attr.CompletedRedirect instead of the build ID.
+	if m.ms.GetDeploymentTransition() != nil {
+		// There is still a transition going on. We need to schedule a new WFT so it goes to the
+		// transition deployment this time.
+		if _, err := m.ms.AddWorkflowTaskScheduledEvent(
+			false,
+			enumsspb.WORKFLOW_TASK_TYPE_NORMAL,
+		); err != nil {
+			return err
+		}
+	} else {
+		// Deployment and behavior before applying the data came from the completed wft.
+		wfDeploymentBefore := m.ms.GetEffectiveDeployment()
+		wfBehaviorBefore := m.ms.GetEffectiveVersioningBehavior()
+
+		// Change deployment and behavior based on the completed wft.
+		if wfBehaviorBefore != taskBehavior || !wfDeploymentBefore.Equal(taskDeployment) {
+			if versioningInfo == nil {
+				versioningInfo = &workflowpb.WorkflowExecutionVersioningInfo{}
+				m.ms.GetExecutionInfo().VersioningInfo = versioningInfo
+			}
+			versioningInfo.Behavior = taskBehavior
+			versioningInfo.Deployment = taskDeployment
+		}
+
+		// Deployment and behavior after applying the data came from the completed wft.
+		wfDeploymentAfter := m.ms.GetEffectiveDeployment()
+		wfBehaviorAfter := m.ms.GetEffectiveVersioningBehavior()
+		if completedTransition ||
+			// It is possible that this WFT is changing workflow's deployment even if there was no
+			// ongoing transition in the MS. That is possible when the wft is speculative. We still
+			// want to reschedule the activities so they are queued with the up-to-date directive.
+			!wfDeploymentBefore.Equal(wfDeploymentAfter) ||
+			// If effective behavior changes we also want to reschedule the pending activities, so
+			// they go to the right matching queues.
+			wfBehaviorBefore != wfBehaviorAfter {
+			if err := m.ms.reschedulePendingActivities(); err != nil {
+				return err
+			}
+		}
+	}
+
+	// TODO: create reset point based on attrs.Deployment instead of the build ID.
 	addedResetPoint := m.ms.addResetPointFromCompletion(
 		attrs.GetBinaryChecksum(),
 		attrs.GetWorkerVersion().GetBuildId(),

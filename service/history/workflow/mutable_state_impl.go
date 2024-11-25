@@ -6923,23 +6923,6 @@ func (ms *MutableStateImpl) StartDeploymentTransition(deployment *deploymentpb.D
 	return nil
 }
 
-// CompleteDeploymentTransition completes the ongoing transition for this workflow if it exists.
-// Completing a transition updates the workflow's deployment and possibly versioning behavior.
-// All activities that are not started yet will be rescheduled to be dispatched the new deployment.
-func (ms *MutableStateImpl) CompleteDeploymentTransition(
-	workerSentBehavior enumspb.VersioningBehavior,
-) error {
-	versioningInfo := ms.GetExecutionInfo().GetVersioningInfo()
-	transition := versioningInfo.GetDeploymentTransition()
-	if transition == nil {
-		return nil
-	}
-	versioningInfo.DeploymentTransition = nil
-	versioningInfo.Deployment = transition.GetDeployment()
-	versioningInfo.Behavior = workerSentBehavior
-	return ms.reschedulePendingActivities()
-}
-
 // reschedulePendingActivities reschedules all the activities that are not started, so they are
 // scheduled against the right queue in matching.
 func (ms *MutableStateImpl) reschedulePendingActivities() error {

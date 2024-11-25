@@ -54,7 +54,6 @@ import (
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/tasktoken"
-	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/internal/effect"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/api/recordworkflowtaskstarted"
@@ -215,10 +214,11 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 		return nil, serviceerror.NewNotFound("Workflow task not found.")
 	}
 
-	if err = handler.validateVersioningInfo(request, ms); err != nil {
+	behavior := request.GetVersioningBehavior()
+	if behavior != enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED && request.GetDeployment() == nil {
 		// Mutable state wasn't changed yet and doesn't have to be cleared.
 		releaseLeaseWithError = false
-		return nil, err
+		return nil, serviceerror.NewInvalidArgument("deployment must be set when versioning behavior specified")
 	}
 
 	assignedBuildId := ms.GetAssignedBuildId()
@@ -1046,27 +1046,6 @@ func (handler *WorkflowTaskCompletedHandler) clearStickyTaskQueue(ctx context.Co
 	err = wfContext.UpdateWorkflowExecutionAsActive(ctx, handler.shardContext)
 	if err != nil {
 		return err
-	}
-	return nil
-}
-
-func (handler *WorkflowTaskCompletedHandler) validateVersioningInfo(
-	request *workflowservice.RespondWorkflowTaskCompletedRequest,
-	ms workflow.MutableState,
-) error {
-	taskDeployment := request.GetDeployment()
-	wfDeployment := ms.GetEffectiveDeployment()
-	if !taskDeployment.Equal(wfDeployment) {
-		return serviceerror.NewNotFound(fmt.Sprintf(
-			"execution is not assigned to deployment %q, current deployment is %q",
-			worker_versioning.DeploymentToString(wfDeployment),
-			worker_versioning.DeploymentToString(taskDeployment),
-		))
-	}
-
-	behavior := request.GetVersioningBehavior()
-	if taskDeployment != nil && behavior == enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED {
-		return serviceerror.NewInvalidArgument("versioning behavior must be set for workflow tasks completed by versioned workers")
 	}
 	return nil
 }

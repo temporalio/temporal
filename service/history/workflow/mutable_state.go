@@ -430,9 +430,5 @@ type (
 		// If there is a pending workflow task that is not started yet, it'll be rescheduled after
 		// transition start.
 		StartDeploymentTransition(deployment *deploymentpb.Deployment) error
-		// CompleteDeploymentTransition completes the ongoing transition for this workflow if it exists.
-		// Completing a transition updates the workflow's deployment and possibly versioning behavior.
-		// All activities that are not started yet will be rescheduled to be dispatched the new deployment.
-		CompleteDeploymentTransition(workerSentBehavior enumspb.VersioningBehavior) error
 	}
 )

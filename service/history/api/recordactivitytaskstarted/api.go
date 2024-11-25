@@ -152,19 +152,18 @@ func Invoke(
 						return nil, serviceerrors.NewObsoleteMatchingTask("workflow is not eligible for transition")
 					}
 					return nil, err
-				} else {
-					// This activity started a transition, make sure the MS changes are written but
-					// reject the activity task.
-					// Not returning error so the mutable state is updated. Just setting this flag to
-					// return error at a higher level.
-					startedTransition = true
-					return &api.UpdateWorkflowAction{
-						Noop: false,
-						// StartDeploymentTransition rescheduled pending wft, but this creates new
-						// one if there is no pending wft.
-						CreateWorkflowTask: true,
-					}, nil
 				}
+				// This activity started a transition, make sure the MS changes are written but
+				// reject the activity task.
+				// Not returning error so the mutable state is updated. Just setting this flag to
+				// return error at a higher level.
+				startedTransition = true
+				return &api.UpdateWorkflowAction{
+					Noop: false,
+					// StartDeploymentTransition rescheduled pending wft, but this creates new
+					// one if there is no pending wft.
+					CreateWorkflowTask: true,
+				}, nil
 
 			}
 
