@@ -59,8 +59,8 @@ var (
 		},
 	}
 
-	errAlreadyExists             = errors.New("task queue already exists in deployment")
-	ErrMaxTaskQueuesInDeployment = errors.New("maximum number of task queues registed in deployment")
+	ErrTaskQueueExistsInDeployment = errors.New("task queue already exists in deployment")
+	ErrMaxTaskQueuesInDeployment   = errors.New("maximum number of task queues have been registered in deployment")
 )
 
 func DeploymentWorkflow(ctx workflow.Context, deploymentWorkflowArgs *deploymentspb.DeploymentWorkflowArgs) error {
@@ -156,7 +156,10 @@ func (d *DeploymentWorkflowRunner) run() error {
 
 func (d *DeploymentWorkflowRunner) validateRegisterWorker(args *deploymentspb.RegisterWorkerInDeploymentArgs) error {
 	if _, ok := d.DeploymentLocalState.TaskQueueFamilies[args.TaskQueueName].GetTaskQueues()[int32(args.TaskQueueType)]; ok {
-		return errAlreadyExists
+		return ErrTaskQueueExistsInDeployment
+	}
+	if len(d.DeploymentLocalState.TaskQueueFamilies)+1 == int(args.MaxTaskQueues) {
+		return ErrMaxTaskQueuesInDeployment
 	}
 	return nil
 }
@@ -175,11 +178,6 @@ func (d *DeploymentWorkflowRunner) handleRegisterWorker(ctx workflow.Context, ar
 		d.pendingUpdates--
 		d.lock.Unlock()
 	}()
-
-	// check if we can add more task-queues in the deployment
-	if len(d.DeploymentLocalState.TaskQueueFamilies)+1 == int(d.DeploymentLocalState.MaxTaskQueues) {
-		return ErrMaxTaskQueuesInDeployment
-	}
 
 	// wait until series workflow started
 	err = workflow.Await(ctx, func() bool { return d.DeploymentLocalState.StartedSeriesWorkflow })

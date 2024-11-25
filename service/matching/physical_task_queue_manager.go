@@ -546,9 +546,14 @@ func (c *physicalTaskQueueManagerImpl) ensureRegisteredInDeployment(
 	c.deploymentLock.Lock()
 	defer c.deploymentLock.Unlock()
 
-	if c.deploymentRegistered || c.deploymentRegistrationNotPossible {
-		// deployment already registered or not possible due to registration limits
-		return nil
+	if c.deploymentRegistered {
+		// deployment already registered
+		return deployment.ErrTaskQueueExistsInDeployment
+	}
+
+	if c.deploymentRegistrationNotPossible {
+		// deployment not possible due to registration limits
+		return deployment.ErrMaxTaskQueuesInDeployment
 	}
 
 	userData, _, err := c.partitionMgr.GetUserDataManager().GetUserData()

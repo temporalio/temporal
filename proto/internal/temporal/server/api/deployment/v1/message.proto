@@ -43,14 +43,12 @@ message DeploymentLocalState {
     map<string, TaskQueueFamilyData> task_queue_families = 2;
 
     bool is_current = 3;
+    google.protobuf.Timestamp last_became_current_time = 6;
+
     google.protobuf.Timestamp create_time = 4;
     map<string, temporal.api.common.v1.Payload> metadata = 5;
 
-    google.protobuf.Timestamp last_became_current_time = 6;
-
     bool started_series_workflow = 7;
-    int32 max_task_queues = 8;
-
 
     message TaskQueueFamilyData {
         // Key: enums.TaskQueueType, Value: TaskQueueData
@@ -79,6 +77,7 @@ message RegisterWorkerInDeploymentArgs {
     string task_queue_name = 1;
     temporal.api.enums.v1.TaskQueueType task_queue_type = 2;
     google.protobuf.Timestamp first_poller_time = 3;
+    int32 max_task_queues = 4;
 }
 
 // used as deployment workflow query response:
