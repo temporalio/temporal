@@ -23,7 +23,7 @@ func findDeployment(deployments []*persistencespb.DeploymentData_Deployment, dep
 	return -1
 }
 
-func findCurrentDeployment(deployments []*persistencespb.DeploymentData_Deployment) int {
+func findCurrentDeployment(deployments []*persistencespb.DeploymentData_Deployment) *deploymentpb.Deployment {
 	maxCurrentIndex := -1
 	var maxCurrentTime time.Time
 	for i, d := range deployments {
@@ -33,5 +33,8 @@ func findCurrentDeployment(deployments []*persistencespb.DeploymentData_Deployme
 			}
 		}
 	}
-	return maxCurrentIndex
+	if maxCurrentIndex == -1 {
+		return nil
+	}
+	return deployments[maxCurrentIndex].GetDeployment()
 }

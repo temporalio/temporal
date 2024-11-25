@@ -253,3 +253,5 @@ func (task *internalTask) finish(err error, wasValid bool) {
 		task.event.completionFunc(task.event.AllocatedTaskInfo, err)
 	}
 }
+
+//func (task *internalTask) finish(err error, wasValid bool) {

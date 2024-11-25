@@ -426,7 +426,9 @@ type (
 		// if the requested transition is started. Starting a new transition replaces possible
 		// existing ongoing transition without rescheduling activities. If the workflow is
 		// pinned, the transition won't start.
-		StartDeploymentTransition(deployment *deploymentpb.Deployment) bool
+		// If reschedulePendingWorkflowTask is true and there is a pending workflow task it'll
+		// be rescheduled after transition start.
+		StartDeploymentTransition(deployment *deploymentpb.Deployment, reschedulePendingWorkflowTask bool) bool
 		// CompleteDeploymentTransition completes the ongoing transition for this workflow if it exists.
 		// Completing a transition updates the workflow's deployment and possibly versioning behavior.
 		// All activities that are not started yet will be rescheduled to be dispatched the new deployment.

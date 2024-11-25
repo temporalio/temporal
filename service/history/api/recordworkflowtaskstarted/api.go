@@ -137,13 +137,14 @@ func Invoke(
 			// The stickiness info is used by frontend to decide if it should send down partial history or full history.
 			// Sending down partial history will cost the worker an extra fetch to server for the full history.
 			currentTaskQueue := mutableState.CurrentTaskQueue()
+			pollerTaskQueue := req.PollRequest.TaskQueue
 			if currentTaskQueue.Kind == enumspb.TASK_QUEUE_KIND_STICKY &&
-				currentTaskQueue.GetName() != req.PollRequest.TaskQueue.GetName() {
+				currentTaskQueue.GetName() != pollerTaskQueue.GetName() {
 				// For versioned workflows we additionally check for the poller queue to not be a sticky queue itself.
 				// Although it's ideal to check this for unversioned workflows as well, we can't rely on older clients
 				// setting the poller TQ kind.
 				if (mutableState.GetAssignedBuildId() != "" || mutableState.GetEffectiveDeployment() != nil) &&
-					req.PollRequest.TaskQueue.Kind == enumspb.TASK_QUEUE_KIND_STICKY {
+					pollerTaskQueue.Kind == enumspb.TASK_QUEUE_KIND_STICKY {
 					return nil, serviceerrors.NewObsoleteDispatchBuildId("wrong sticky queue")
 				}
 				// req.PollRequest.TaskQueue.GetName() may include partition, but we only check when sticky is enabled,
@@ -151,19 +152,40 @@ func Invoke(
 				mutableState.ClearStickyTaskQueue()
 			}
 
-			deployment := worker_versioning.DeploymentFromCapabilities(req.PollRequest.WorkerVersionCapabilities)
+			if currentTaskQueue.Kind != pollerTaskQueue.Kind &&
+				// Older SDKs might not specify poller task queue kind
+				pollerTaskQueue.Kind != enumspb.TASK_QUEUE_KIND_UNSPECIFIED {
+				// Matching can drop the task, newer one should be scheduled already.
+				return nil, serviceerrors.NewObsoleteMatchingTask("wrong task queue type")
+			}
+
+			dispatchDeployment := worker_versioning.DeploymentFromCapabilities(req.PollRequest.WorkerVersionCapabilities)
+			directiveDeployment := req.GetDirectiveDeployment()
+			if directiveDeployment == nil {
+				// Matching does not send the directive deployment when it's the same as poller's.
+				directiveDeployment = dispatchDeployment
+			}
 			wfDeployment := mutableState.GetEffectiveDeployment()
-			if !deployment.Equal(wfDeployment) {
-				// Try starting a redirect. If it doesn't happen, it means this task is obsolete.
-				if !mutableState.StartDeploymentTransition(deployment) {
-					return nil, serviceerrors.NewObsoleteDispatchBuildId("poller's deployment does not match workflow's current deployment")
+			if !directiveDeployment.Equal(wfDeployment) {
+				// This must be a task scheduled before the workflow transitions to the current
+				// deployment. Matching can drop it.
+				return nil, serviceerrors.NewObsoleteMatchingTask("wrong directive deployment")
+			}
+
+			if !dispatchDeployment.Equal(wfDeployment) {
+				// Try starting a transition. If it doesn't happen, it means this task is obsolete
+				// and Matching can drop it.
+				// This might happen if the workflow was previously unpinned and now pinned to the
+				// same deployment, but the previous task is redirected.
+				if !mutableState.StartDeploymentTransition(directiveDeployment) {
+					return nil, serviceerrors.NewObsoleteMatchingTask("workflow not eligible for transition")
 				}
 			}
 
 			_, workflowTask, err = mutableState.AddWorkflowTaskStartedEvent(
 				scheduledEventID,
 				requestID,
-				req.PollRequest.TaskQueue,
+				pollerTaskQueue,
 				req.PollRequest.Identity,
 				worker_versioning.StampFromCapabilities(req.PollRequest.WorkerVersionCapabilities),
 				req.GetBuildIdRedirectInfo(),

@@ -674,6 +674,21 @@ pollLoop:
 					tag.BuildId(requestClone.WorkerVersionCapabilities.GetBuildId()),
 				)
 				task.finish(nil, false)
+			case *serviceerrors.ObsoleteMatchingTask:
+				// History should've scheduled another task on the right task queue and deployment.
+				// Dropping this one.
+				e.logger.Info("dropping obsolete workflow task",
+					tag.WorkflowTaskQueueName(taskQueueName),
+					tag.WorkflowNamespaceID(task.event.Data.GetNamespaceId()),
+					tag.WorkflowID(task.event.Data.GetWorkflowId()),
+					tag.WorkflowRunID(task.event.Data.GetRunId()),
+					tag.TaskID(task.event.GetTaskId()),
+					tag.TaskVisibilityTimestamp(timestamp.TimeValue(task.event.Data.GetCreateTime())),
+					tag.VersioningBehavior(task.event.Data.VersionDirective.GetBehavior()),
+					tag.Deployment(worker_versioning.DeploymentFromCapabilities(requestClone.WorkerVersionCapabilities)),
+					tag.Error(err),
+				)
+				task.finish(nil, false)
 			default:
 				task.finish(err, false)
 				if err.Error() == common.ErrNamespaceHandover.Error() {
@@ -837,6 +852,34 @@ pollLoop:
 					tag.TaskID(task.event.GetTaskId()),
 					tag.TaskVisibilityTimestamp(timestamp.TimeValue(task.event.Data.GetCreateTime())),
 					tag.BuildId(requestClone.WorkerVersionCapabilities.GetBuildId()),
+				)
+				task.finish(nil, false)
+			case *serviceerrors.ObsoleteMatchingTask:
+				// History should've scheduled another task on the right task queue and deployment.
+				// Dropping this one.
+				e.logger.Info("dropping obsolete activity task",
+					tag.WorkflowTaskQueueName(taskQueueName),
+					tag.WorkflowNamespaceID(task.event.Data.GetNamespaceId()),
+					tag.WorkflowID(task.event.Data.GetWorkflowId()),
+					tag.WorkflowRunID(task.event.Data.GetRunId()),
+					tag.TaskID(task.event.GetTaskId()),
+					tag.TaskVisibilityTimestamp(timestamp.TimeValue(task.event.Data.GetCreateTime())),
+					tag.VersioningBehavior(task.event.Data.VersionDirective.GetBehavior()),
+					tag.Deployment(worker_versioning.DeploymentFromCapabilities(requestClone.WorkerVersionCapabilities)),
+					tag.Error(err),
+				)
+				task.finish(nil, false)
+			case *serviceerrors.ActivityStartDuringTransition:
+				// History will schedule another task once transition ends. Dropping this one.
+				e.logger.Info("dropping activity task during transition",
+					tag.WorkflowTaskQueueName(taskQueueName),
+					tag.WorkflowNamespaceID(task.event.Data.GetNamespaceId()),
+					tag.WorkflowID(task.event.Data.GetWorkflowId()),
+					tag.WorkflowRunID(task.event.Data.GetRunId()),
+					tag.TaskID(task.event.GetTaskId()),
+					tag.TaskVisibilityTimestamp(timestamp.TimeValue(task.event.Data.GetCreateTime())),
+					tag.VersioningBehavior(task.event.Data.VersionDirective.GetBehavior()),
+					tag.Deployment(worker_versioning.DeploymentFromCapabilities(requestClone.WorkerVersionCapabilities)),
 				)
 				task.finish(nil, false)
 			default:
@@ -1576,19 +1619,20 @@ func (e *matchingEngineImpl) SyncDeploymentUserData(
 		if data.PerType[int32(req.TaskQueueType)] == nil {
 			data.PerType[int32(req.TaskQueueType)] = &persistencespb.TaskQueueTypeUserData{}
 		}
-		if data.PerType[int32(req.TaskQueueType)].Deployment == nil {
-			data.PerType[int32(req.TaskQueueType)].Deployment = &persistencespb.DeploymentData{}
+		if data.PerType[int32(req.TaskQueueType)].DeploymentData == nil {
+			data.PerType[int32(req.TaskQueueType)].DeploymentData = &persistencespb.DeploymentData{}
 		}
 
 		// set/append the new data
-		deployments := data.PerType[int32(req.TaskQueueType)].Deployment
-		if idx := findDeployment(deployments.Deployment, req.Deployment); idx >= 0 {
-			deployments.Deployment[idx].Data = req.Data
+		deploymentData := data.PerType[int32(req.TaskQueueType)].DeploymentData
+		if idx := findDeployment(deploymentData.Deployments, req.Deployment); idx >= 0 {
+			deploymentData.Deployments[idx].Data = req.Data
 		} else {
-			deployments.Deployment = append(deployments.Deployment, &persistencespb.DeploymentData_Deployment{
-				Deployment: req.Deployment,
-				Data:       req.Data,
-			})
+			deploymentData.Deployments = append(
+				deploymentData.Deployments, &persistencespb.DeploymentData_Deployment{
+					Deployment: req.Deployment,
+					Data:       req.Data,
+				})
 		}
 
 		data.Clock = now
@@ -2337,7 +2381,7 @@ func (e *matchingEngineImpl) recordWorkflowTaskStarted(
 	ctx, cancel := newRecordTaskStartedContext(ctx, task)
 	defer cancel()
 
-	return e.historyClient.RecordWorkflowTaskStarted(ctx, &historyservice.RecordWorkflowTaskStartedRequest{
+	recordStartedRequest := &historyservice.RecordWorkflowTaskStartedRequest{
 		NamespaceId:         task.event.Data.GetNamespaceId(),
 		WorkflowExecution:   task.workflowExecution(),
 		ScheduledEventId:    task.event.Data.GetScheduledEventId(),
@@ -2345,7 +2389,17 @@ func (e *matchingEngineImpl) recordWorkflowTaskStarted(
 		RequestId:           uuid.New(),
 		PollRequest:         pollReq,
 		BuildIdRedirectInfo: task.redirectInfo,
-	})
+	}
+
+	directiveDeployment := task.event.Data.VersionDirective.GetDeployment()
+	dispatchDeployment := worker_versioning.DeploymentFromCapabilities(pollReq.GetWorkerVersionCapabilities())
+	if !directiveDeployment.Equal(dispatchDeployment) {
+		// Redirect has happened, set the directive deployment in the request so History can
+		// validate the task is not stale.
+		recordStartedRequest.DirectiveDeployment = directiveDeployment
+	}
+
+	return e.historyClient.RecordWorkflowTaskStarted(ctx, recordStartedRequest)
 }
 
 func (e *matchingEngineImpl) recordActivityTaskStarted(
@@ -2356,7 +2410,7 @@ func (e *matchingEngineImpl) recordActivityTaskStarted(
 	ctx, cancel := newRecordTaskStartedContext(ctx, task)
 	defer cancel()
 
-	return e.historyClient.RecordActivityTaskStarted(ctx, &historyservice.RecordActivityTaskStartedRequest{
+	recordStartedRequest := &historyservice.RecordActivityTaskStartedRequest{
 		NamespaceId:         task.event.Data.GetNamespaceId(),
 		WorkflowExecution:   task.workflowExecution(),
 		ScheduledEventId:    task.event.Data.GetScheduledEventId(),
@@ -2364,7 +2418,17 @@ func (e *matchingEngineImpl) recordActivityTaskStarted(
 		RequestId:           uuid.New(),
 		PollRequest:         pollReq,
 		BuildIdRedirectInfo: task.redirectInfo,
-	})
+	}
+
+	directiveDeployment := task.event.Data.VersionDirective.GetDeployment()
+	dispatchDeployment := worker_versioning.DeploymentFromCapabilities(pollReq.GetWorkerVersionCapabilities())
+	if !directiveDeployment.Equal(dispatchDeployment) {
+		// Redirect has happened, set the directive deployment in the request so History can
+		// validate the task is not stale.
+		recordStartedRequest.DirectiveDeployment = directiveDeployment
+	}
+
+	return e.historyClient.RecordActivityTaskStarted(ctx, recordStartedRequest)
 }
 
 // newRecordTaskStartedContext creates a context for recording

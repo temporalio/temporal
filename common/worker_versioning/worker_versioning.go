@@ -142,6 +142,9 @@ func DeploymentFromCapabilities(capabilities *commonpb.WorkerVersionCapabilities
 	return nil
 }
 
+// DeploymentToString is intended to be used for logs and metrics only. Theoretically, it can map
+// different deployments to the string.
+// DO NOT USE IN SERVER LOGIC.
 func DeploymentToString(deployment *deploymentpb.Deployment) string {
 	if deployment == nil {
 		return "UNVERSIONED"

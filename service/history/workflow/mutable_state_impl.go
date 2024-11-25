@@ -6837,11 +6837,15 @@ func (ms *MutableStateImpl) GetEffectiveVersioningBehavior() enumspb.VersioningB
 // if the requested transition is started. Starting a new transition replaces possible
 // existing ongoing transition without rescheduling activities. If the workflow is
 // pinned, the transition won't start.
-// TODO (shahab): validate source deployment
-func (ms *MutableStateImpl) StartDeploymentTransition(deployment *deploymentpb.Deployment) bool {
+// If reschedulePendingWorkflowTask is true and there is a pending workflow task it'll
+// be rescheduled after transition start.
+func (ms *MutableStateImpl) StartDeploymentTransition(
+	deployment *deploymentpb.Deployment,
+	reschedulePendingWorkflowTask bool,
+) (bool, error) {
 	if deployment.Equal(ms.GetEffectiveDeployment()) {
 		// Not an effective deployment change.
-		return false
+		return false, nil
 	}
 
 	wfBehavior := ms.GetEffectiveVersioningBehavior()
@@ -6849,7 +6853,7 @@ func (ms *MutableStateImpl) StartDeploymentTransition(deployment *deploymentpb.D
 		// WF is pinned so we reject the transition.
 		// It's possible that a backlogged task in matching from an earlier time that this wf was
 		// unpinned is being dispatched now and wants to redirect the wf. Such task should be dropped.
-		return false
+		return false, nil
 	}
 
 	versioningInfo := ms.GetExecutionInfo().GetVersioningInfo()
@@ -6868,7 +6872,26 @@ func (ms *MutableStateImpl) StartDeploymentTransition(deployment *deploymentpb.D
 	// Because deployment is changed, we clear sticky queue to make sure the next wf task does not
 	// go to the old deployment.
 	ms.ClearStickyTaskQueue()
-	return true
+
+	// If there is a pending (unstarted) WFT, we need to reschedule it, so it goes to Matching with
+	// the right directive deployment. The current scheduled WFT will be rejected when attempted to
+	// start because its directive deployment no longer matches workflows effective deployment.
+	// If the WFT is started but not finished, we let it run its course, once it's completed, failed
+	// or timed out a new one will be scheduled.
+	if ms.HasPendingWorkflowTask() && !ms.HasStartedWorkflowTask() &&
+		// Speculative WFT is directly (without transfer task) added to matching when scheduled.
+		// It is protected by timeout on both normal and sticky task queues.
+		// If there is no poller for previous deployment, it will time out,
+		// and will be rescheduled as normal WFT.
+		ms.GetPendingWorkflowTask().Type != enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE {
+		// sticky queue was just cleared, so the following call only generates
+		// a WorkflowTask, not a WorkflowTaskTimeoutTask.
+		err := ms.taskGenerator.GenerateScheduleWorkflowTaskTasks(ms.GetPendingWorkflowTask().ScheduledEventID)
+		if err != nil {
+			return false, err
+		}
+	}
+	return true, nil
 }
 
 // CompleteDeploymentTransition completes the ongoing transition for this workflow if it exists.

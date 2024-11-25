@@ -54,7 +54,7 @@ func Invoke(
 	namespace := namespaceEntry.Name()
 
 	response := &historyservice.RecordActivityTaskStartedResponse{}
-	var dropTask bool
+	var duringTransition bool
 	err = api.GetAndUpdateWorkflowWithNew(
 		ctx,
 		request.Clock,
@@ -113,9 +113,28 @@ func Invoke(
 				return nil, serviceerrors.NewTaskAlreadyStarted("Activity")
 			}
 
-			deployment := worker_versioning.DeploymentFromCapabilities(request.PollRequest.WorkerVersionCapabilities)
-			// TODO (shahab): support independent deployments
-			activityInitiatedRedirect := mutableState.StartDeploymentTransition(deployment)
+			// TODO (shahab): support independent activities
+			if mutableState.GetDeploymentTransition() != nil {
+				// Can't start activity during a redirect. We reject this request so Matching drops
+				// the task. The activity will be rescheduled when the redirect completes/fails.
+				return nil, serviceerrors.NewActivityStartDuringTransition()
+			}
+
+			dispatchDeployment := worker_versioning.DeploymentFromCapabilities(request.PollRequest.WorkerVersionCapabilities)
+			directiveDeployment := request.GetDirectiveDeployment()
+			if directiveDeployment == nil {
+				// Matching does not send the directive deployment when it's the same as poller's.
+				directiveDeployment = dispatchDeployment
+			}
+			wfDeployment := mutableState.GetEffectiveDeployment()
+			if !directiveDeployment.Equal(wfDeployment) {
+				// This must be a task scheduled before the workflow transitions to the current
+				// deployment. Matching can drop it.
+				return nil, serviceerrors.NewObsoleteMatchingTask("wrong directive deployment")
+			}
+
+			// See if a transition can start.
+			activityInitiatedRedirect := mutableState.StartDeploymentTransition(dispatchDeployment)
 
 			if mutableState.GetDeploymentTransition() != nil {
 				// Can't start activity during a redirect. We reject this request so Matching drops
@@ -123,7 +142,7 @@ func Invoke(
 
 				// Not returning error so the mutable state is updated. Just setting this flag to
 				// return error at a higher level.
-				dropTask = true
+				duringTransition = true
 				return &api.UpdateWorkflowAction{
 					Noop: false,
 					// If the redirect was initiated by this activity we must create a workflow task
@@ -135,7 +154,7 @@ func Invoke(
 			versioningStamp := worker_versioning.StampFromCapabilities(request.PollRequest.WorkerVersionCapabilities)
 			if _, err := mutableState.AddActivityTaskStartedEvent(
 				ai, scheduledEventID, requestID, request.PollRequest.GetIdentity(),
-				versioningStamp, deployment, request.GetBuildIdRedirectInfo(),
+				versioningStamp, dispatchDeployment, request.GetBuildIdRedirectInfo(),
 			); err != nil {
 				return nil, err
 			}
@@ -174,9 +193,11 @@ func Invoke(
 		return nil, err
 	}
 
-	if dropTask {
-		// TODO (shahab): Log that the activity is dropped. Maybe on Matching side.
-		return nil, serviceerrors.NewObsoleteDispatchBuildId("cannot start activity during a redirect. Activity will be rescheduled when redirect completes")
+	if duringTransition {
+		// Rejecting the activity start if the workflow is transitioning between deployments.
+		// Matching can drop the task, new activity task will be scheduled after transition
+		// completion.
+		return nil, serviceerrors.NewActivityStartDuringTransition()
 	}
 	return response, err
 }
