@@ -895,6 +895,16 @@ func (s *workflowResetterSuite) TestReapplyEvents() {
 			},
 		},
 	}
+	event8 := &historypb.HistoryEvent{
+		EventId:   108,
+		EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CANCEL_REQUESTED,
+		Attributes: &historypb.HistoryEvent_WorkflowExecutionCancelRequestedEventAttributes{
+			WorkflowExecutionCancelRequestedEventAttributes: &historypb.WorkflowExecutionCancelRequestedEventAttributes{
+				Cause:    "duplicated cancel cause",
+				Identity: "duplicated cancel identity",
+			},
+		},
+	}
 	events := []*historypb.HistoryEvent{event1, event2, event3, event4, event5, event6, event7}
 
 	ms := workflow.NewMockMutableState(s.controller)
@@ -924,6 +934,7 @@ func (s *workflowResetterSuite) TestReapplyEvents() {
 			).Return(&historypb.HistoryEvent{}, nil)
 		case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CANCEL_REQUESTED:
 			attr := event.GetWorkflowExecutionCancelRequestedEventAttributes()
+			ms.EXPECT().IsCancelRequested().Return(false)
 			ms.EXPECT().AddWorkflowExecutionCancelRequestedEvent(
 				&historyservice.RequestCancelWorkflowExecutionRequest{
 					CancelRequest: &workflowservice.RequestCancelWorkflowExecutionRequest{
@@ -937,6 +948,9 @@ func (s *workflowResetterSuite) TestReapplyEvents() {
 			).Return(&historypb.HistoryEvent{}, nil)
 		}
 	}
+
+	events = append(events, event8)
+	ms.EXPECT().IsCancelRequested().Return(true)
 
 	smReg := hsm.NewRegistry()
 	s.NoError(workflow.RegisterStateMachine(smReg))

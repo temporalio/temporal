@@ -873,6 +873,10 @@ func reapplyEvents(
 			if excludeCancelRequest || isDuplicate(event) {
 				continue
 			}
+			if mutableState.IsCancelRequested() {
+				// This is a no-op because the cancel request is already recorded.
+				continue
+			}
 			attr := event.GetWorkflowExecutionCancelRequestedEventAttributes()
 			request := &historyservice.RequestCancelWorkflowExecutionRequest{
 				CancelRequest: &workflowservice.RequestCancelWorkflowExecutionRequest{
