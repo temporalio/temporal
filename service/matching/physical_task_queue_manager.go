@@ -33,7 +33,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
@@ -49,6 +48,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/worker_versioning"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 
@@ -100,9 +100,11 @@ type (
 		taskValidator              taskValidator
 		tasksAddedInIntervals      *taskTracker
 		tasksDispatchedInIntervals *taskTracker
-		// isDeploymentWorkflowStarted keeps track if we have already registered the task queue worker
+		// deploymentWorkflowStarted keeps track if we have already registered the task queue worker
 		// in the deployment.
-		isDeploymentWorkflowStarted atomic.Bool
+		deploymentLock       sync.Mutex
+		deploymentRegistered bool
+		firstPoll            time.Time
 	}
 )
 
@@ -340,23 +342,8 @@ func (c *physicalTaskQueueManagerImpl) PollTask(
 		return nil, err
 	}
 
-	if c.partitionMgr.engine.config.EnableDeployments(namespaceEntry.Name().String()) && pollMetadata.workerVersionCapabilities.UseVersioning {
-		if !c.isDeploymentWorkflowStarted.Load() {
-
-			workerDeployment := &deploymentpb.Deployment{
-				SeriesName: pollMetadata.workerVersionCapabilities.DeploymentSeriesName,
-				BuildId:    pollMetadata.workerVersionCapabilities.BuildId,
-			}
-
-			err := c.partitionMgr.engine.deploymentStoreClient.RegisterTaskQueueWorker(
-				ctx, namespaceEntry, workerDeployment, c.queue.TaskQueueFamily().Name(), c.queue.TaskType(),
-				nil)
-			if err != nil {
-				return nil, err
-			}
-
-			c.isDeploymentWorkflowStarted.Store(true)
-		}
+	if err = c.ensureRegisteredInDeployment(ctx, namespaceEntry, pollMetadata); err != nil {
+		return nil, err
 	}
 
 	// the desired global rate limit for the task queue comes from the
@@ -538,6 +525,76 @@ func (c *physicalTaskQueueManagerImpl) TrySyncMatch(ctx context.Context, task *i
 	defer cancel()
 
 	return c.matcher.Offer(childCtx, task)
+}
+
+func (c *physicalTaskQueueManagerImpl) ensureRegisteredInDeployment(
+	ctx context.Context,
+	namespaceEntry *namespace.Namespace,
+	pollMetadata *pollMetadata,
+) error {
+	deployment := worker_versioning.DeploymentFromCapabilities(pollMetadata.workerVersionCapabilities)
+	if deployment == nil {
+		return nil
+	}
+	if !c.partitionMgr.engine.config.EnableDeployments(namespaceEntry.Name().String()) {
+		return errDeploymentsNotAllowed
+	}
+
+	// lock so that only one poll does the update and the rest wait for it
+	c.deploymentLock.Lock()
+	defer c.deploymentLock.Unlock()
+
+	if c.deploymentRegistered {
+		// already done
+		return nil
+	}
+
+	userData, _, err := c.partitionMgr.GetUserDataManager().GetUserData()
+	if err != nil {
+		return err
+	}
+
+	deployments := userData.GetData().GetPerType()[int32(c.queue.TaskType())].GetDeployment().GetDeployment()
+	if findDeployment(deployments, deployment) >= 0 {
+		// already registered in user data, we can assume the workflow is running.
+		// TODO: consider replication scenarios where user data is replicated before
+		// the deployment workflow.
+		return nil
+	}
+
+	// we need to update the deployment workflow to tell it about this task queue
+	// TODO: add some backoff here if we got an error last time
+
+	if c.firstPoll.IsZero() {
+		c.firstPoll = c.partitionMgr.engine.timeSource.Now()
+	}
+	err = c.partitionMgr.engine.deploymentStoreClient.RegisterTaskQueueWorker(
+		ctx, namespaceEntry, deployment, c.queue.TaskQueueFamily().Name(), c.queue.TaskType(), c.firstPoll)
+	if err != nil {
+		return err
+	}
+
+	// the deployment workflow will register itself in this task queue's user data.
+	// wait for it to propagate here.
+	for {
+		userData, userDataChanged, err := c.partitionMgr.GetUserDataManager().GetUserData()
+		if err != nil {
+			return err
+		}
+		deployments := userData.GetData().GetPerType()[int32(c.queue.TaskType())].GetDeployment().GetDeployment()
+		if findDeployment(deployments, deployment) >= 0 {
+			break
+		}
+		select {
+		case <-userDataChanged:
+		case <-ctx.Done():
+			c.logger.Error("timed out waiting for deployment to appear in user data")
+			return ctx.Err()
+		}
+	}
+
+	c.deploymentRegistered = true
+	return nil
 }
 
 // newChildContext creates a child context with desired timeout.

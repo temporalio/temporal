@@ -1540,6 +1540,68 @@ func (e *matchingEngineImpl) GetTaskQueueUserData(
 	return pm.GetUserDataManager().HandleGetUserDataRequest(ctx, req)
 }
 
+func (e *matchingEngineImpl) SyncDeploymentUserData(
+	ctx context.Context,
+	req *matchingservice.SyncDeploymentUserDataRequest,
+) (*matchingservice.SyncDeploymentUserDataResponse, error) {
+	taskQueueFamily, err := tqid.NewTaskQueueFamily(req.NamespaceId, req.GetTaskQueue())
+	if err != nil {
+		return nil, err
+	}
+	if req.Deployment == nil {
+		return nil, errMissingDeployment
+	}
+
+	tqMgr, _, err := e.getTaskQueuePartitionManager(ctx, taskQueueFamily.TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW).RootPartition(), true, loadCauseOtherWrite)
+	if err != nil {
+		return nil, err
+	}
+
+	updateOptions := UserDataUpdateOptions{Source: "SyncDeploymentUserData"}
+
+	err = tqMgr.GetUserDataManager().UpdateUserData(ctx, updateOptions, func(data *persistencespb.TaskQueueUserData) (*persistencespb.TaskQueueUserData, bool, error) {
+		clk := data.GetClock()
+		if clk == nil {
+			clk = hlc.Zero(e.clusterMeta.GetClusterID())
+		}
+		now := hlc.Next(clk, e.timeSource)
+		// clone the whole thing so we can just mutate
+		data = common.CloneProto(data)
+
+		// fill in enough structure so we can set/append the new deployment data
+		if data == nil {
+			data = &persistencespb.TaskQueueUserData{}
+		}
+		if data.PerType == nil {
+			data.PerType = make(map[int32]*persistencespb.TaskQueueTypeUserData)
+		}
+		if data.PerType[int32(req.TaskQueueType)] == nil {
+			data.PerType[int32(req.TaskQueueType)] = &persistencespb.TaskQueueTypeUserData{}
+		}
+		if data.PerType[int32(req.TaskQueueType)].Deployment == nil {
+			data.PerType[int32(req.TaskQueueType)].Deployment = &persistencespb.DeploymentData{}
+		}
+
+		// set/append the new data
+		deployments := data.PerType[int32(req.TaskQueueType)].Deployment
+		if idx := findDeployment(deployments.Deployment, req.Deployment); idx >= 0 {
+			deployments.Deployment[idx].Data = req.Data
+		} else {
+			deployments.Deployment = append(deployments.Deployment, &persistencespb.DeploymentData_Deployment{
+				Deployment: req.Deployment,
+				Data:       req.Data,
+			})
+		}
+
+		data.Clock = now
+		return data, true, nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &matchingservice.SyncDeploymentUserDataResponse{}, nil
+}
+
 func (e *matchingEngineImpl) ApplyTaskQueueUserDataReplicationEvent(
 	ctx context.Context,
 	req *matchingservice.ApplyTaskQueueUserDataReplicationEventRequest,
@@ -1583,13 +1645,15 @@ func (e *matchingEngineImpl) ApplyTaskQueueUserDataReplicationEvent(
 		// merge v1 sets
 		mergedData := MergeVersioningData(currentVersioningData, newVersioningData)
 
-		// take last writer for V2 rules
+		// take last writer for V2 rules and V3 data
 		if req.GetUserData().GetClock() == nil || current.GetClock() != nil && hlc.Greater(current.GetClock(), req.GetUserData().GetClock()) {
 			mergedData.AssignmentRules = currentVersioningData.GetAssignmentRules()
 			mergedData.RedirectRules = currentVersioningData.GetRedirectRules()
+			mergedUserData.PerType = current.GetPerType()
 		} else {
 			mergedData.AssignmentRules = newVersioningData.GetAssignmentRules()
 			mergedData.RedirectRules = newVersioningData.GetRedirectRules()
+			mergedUserData.PerType = req.GetUserData().GetPerType()
 		}
 
 		for _, buildId := range buildIdsToRevive {

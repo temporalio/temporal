@@ -30,7 +30,6 @@ import (
 
 type (
 	DeploymentSeriesActivities struct {
-		activityDeps
 		namespace   namespace.Name
 		namespaceID namespace.ID
 	}
