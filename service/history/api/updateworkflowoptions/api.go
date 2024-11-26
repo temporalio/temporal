@@ -27,6 +27,7 @@ package updateworkflowoptions
 import (
 	"context"
 	"fmt"
+
 	"google.golang.org/protobuf/types/known/fieldmaskpb"
 
 	"go.temporal.io/api/serviceerror"

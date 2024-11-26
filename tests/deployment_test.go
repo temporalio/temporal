@@ -27,11 +27,12 @@ package tests
 import (
 	"context"
 	"fmt"
+	"testing"
+	"time"
+
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/fieldmaskpb"
-	"testing"
-	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"

@@ -248,7 +248,6 @@ func createMutableState(t *testing.T, nsEntry *namespace.Namespace, cfg *configs
 		tests.WorkflowID,
 		tests.RunID,
 		startTime,
-		nil, // TODO (carly): do we want to use this to test with non-nil override?
 	)
 	ms.GetExecutionInfo().NamespaceId = nsEntry.ID().String()
 	// must start with a non-empty version history so that we have something to compare against when writing
