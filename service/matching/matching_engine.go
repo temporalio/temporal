@@ -1625,11 +1625,11 @@ func (e *matchingEngineImpl) SyncDeploymentUserData(
 
 		// set/append the new data
 		deploymentData := data.PerType[int32(req.TaskQueueType)].DeploymentData
-		if idx := findDeployment(deploymentData.Deployments, req.Deployment); idx >= 0 {
+		if idx := findDeployment(deploymentData, req.Deployment); idx >= 0 {
 			deploymentData.Deployments[idx].Data = req.Data
 		} else {
 			deploymentData.Deployments = append(
-				deploymentData.Deployments, &persistencespb.DeploymentData_Deployment{
+				deploymentData.Deployments, &persistencespb.DeploymentData_DeploymentDataItem{
 					Deployment: req.Deployment,
 					Data:       req.Data,
 				})
@@ -2393,12 +2393,12 @@ func (e *matchingEngineImpl) recordWorkflowTaskStarted(
 		BuildIdRedirectInfo: task.redirectInfo,
 	}
 
-	directiveDeployment := task.event.Data.VersionDirective.GetDeployment()
+	scheduledDeployment := task.event.Data.VersionDirective.GetDeployment()
 	dispatchDeployment := worker_versioning.DeploymentFromCapabilities(pollReq.GetWorkerVersionCapabilities())
-	if !directiveDeployment.Equal(dispatchDeployment) {
+	if !scheduledDeployment.Equal(dispatchDeployment) {
 		// Redirect has happened, set the directive deployment in the request so History can
 		// validate the task is not stale.
-		recordStartedRequest.DirectiveDeployment = directiveDeployment
+		recordStartedRequest.ScheduledDeployment = scheduledDeployment
 	}
 
 	return e.historyClient.RecordWorkflowTaskStarted(ctx, recordStartedRequest)
@@ -2422,12 +2422,12 @@ func (e *matchingEngineImpl) recordActivityTaskStarted(
 		BuildIdRedirectInfo: task.redirectInfo,
 	}
 
-	directiveDeployment := task.event.Data.VersionDirective.GetDeployment()
+	scheduledDeployment := task.event.Data.VersionDirective.GetDeployment()
 	dispatchDeployment := worker_versioning.DeploymentFromCapabilities(pollReq.GetWorkerVersionCapabilities())
-	if !directiveDeployment.Equal(dispatchDeployment) {
+	if !scheduledDeployment.Equal(dispatchDeployment) {
 		// Redirect has happened, set the directive deployment in the request so History can
 		// validate the task is not stale.
-		recordStartedRequest.DirectiveDeployment = directiveDeployment
+		recordStartedRequest.ScheduledDeployment = scheduledDeployment
 	}
 
 	return e.historyClient.RecordActivityTaskStarted(ctx, recordStartedRequest)

@@ -623,13 +623,13 @@ func (pm *taskQueuePartitionManagerImpl) unloadPhysicalQueue(unloadedDbq physica
 	}
 
 	pm.versionedQueuesLock.Lock()
-	foundDbq, ok := pm.versionedQueues[*version]
+	foundDbq, ok := pm.versionedQueues[version]
 	if !ok || foundDbq != unloadedDbq {
 		pm.versionedQueuesLock.Unlock()
 		unloadedDbq.Stop(unloadCause)
 		return
 	}
-	delete(pm.versionedQueues, *version)
+	delete(pm.versionedQueues, version)
 	pm.versionedQueuesLock.Unlock()
 	unloadedDbq.Stop(unloadCause)
 }
@@ -813,7 +813,7 @@ func (pm *taskQueuePartitionManagerImpl) getPhysicalQueuesForAdd(
 				return nil, nil, nil, err
 			}
 
-			currentDeployment := findCurrentDeployment(perTypeUserData.GetDeploymentData().GetDeployments())
+			currentDeployment := findCurrentDeployment(perTypeUserData.GetDeploymentData())
 
 			if pm.partition.Kind() == enumspb.TASK_QUEUE_KIND_STICKY {
 				if !deployment.Equal(currentDeployment) {

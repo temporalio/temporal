@@ -14,8 +14,8 @@ var (
 	errBadDeploymentUpdate   = serviceerror.NewInvalidArgument("bad deployment update type")
 )
 
-func findDeployment(deployments []*persistencespb.DeploymentData_Deployment, deployment *deploymentpb.Deployment) int {
-	for i, d := range deployments {
+func findDeployment(deployments *persistencespb.DeploymentData, deployment *deploymentpb.Deployment) int {
+	for i, d := range deployments.GetDeployments() {
 		if d.Deployment.SeriesName == deployment.SeriesName && d.Deployment.BuildId == deployment.BuildId {
 			return i
 		}
@@ -23,18 +23,15 @@ func findDeployment(deployments []*persistencespb.DeploymentData_Deployment, dep
 	return -1
 }
 
-func findCurrentDeployment(deployments []*persistencespb.DeploymentData_Deployment) *deploymentpb.Deployment {
-	maxCurrentIndex := -1
+func findCurrentDeployment(deployments *persistencespb.DeploymentData) *deploymentpb.Deployment {
+	var currentDeployment *deploymentpb.Deployment
 	var maxCurrentTime time.Time
-	for i, d := range deployments {
+	for _, d := range deployments.GetDeployments() {
 		if d.Data.LastBecameCurrentTime != nil {
 			if t := d.Data.LastBecameCurrentTime.AsTime(); t.After(maxCurrentTime) {
-				maxCurrentIndex, maxCurrentTime = i, t
+				currentDeployment, maxCurrentTime = d.GetDeployment(), t
 			}
 		}
 	}
-	if maxCurrentIndex == -1 {
-		return nil
-	}
-	return deployments[maxCurrentIndex].GetDeployment()
+	return currentDeployment
 }

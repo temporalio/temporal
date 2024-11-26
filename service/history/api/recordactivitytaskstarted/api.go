@@ -124,15 +124,16 @@ func Invoke(
 				return nil, serviceerrors.NewActivityStartDuringTransition()
 			}
 
-			dispatchDeployment := worker_versioning.DeploymentFromCapabilities(request.PollRequest.WorkerVersionCapabilities)
-			directiveDeployment := request.GetDirectiveDeployment()
-			if directiveDeployment == nil {
-				// Matching does not send the directive deployment when it's the same as poller's.
-				directiveDeployment = dispatchDeployment
-			}
 			wfDeployment := mutableState.GetEffectiveDeployment()
-			if !directiveDeployment.Equal(wfDeployment) {
-				// This must be a task scheduled before the workflow transitions to the current
+			pollerDeployment := worker_versioning.DeploymentFromCapabilities(request.PollRequest.WorkerVersionCapabilities)
+			// Effective deployment of the workflow when History scheduled the WFT.
+			scheduledDeployment := request.GetScheduledDeployment()
+			if scheduledDeployment == nil {
+				// Matching does not send the directive deployment when it's the same as poller's.
+				scheduledDeployment = pollerDeployment
+			}
+			if !scheduledDeployment.Equal(wfDeployment) {
+				// This must be an AT scheduled before the workflow transitions to the current
 				// deployment. Matching can drop it.
 				return nil, serviceerrors.NewObsoleteMatchingTask("wrong directive deployment")
 			}
@@ -143,13 +144,13 @@ func Invoke(
 				return nil, serviceerrors.NewActivityStartDuringTransition()
 			}
 
-			if !dispatchDeployment.Equal(wfDeployment) {
+			if !pollerDeployment.Equal(wfDeployment) {
 				// Task is redirected, see if a transition can start.
-				if err := mutableState.StartDeploymentTransition(dispatchDeployment); err != nil {
+				if err := mutableState.StartDeploymentTransition(pollerDeployment); err != nil {
 					if errors.Is(err, workflow.ErrPinnedWorkflowCannotTransition) {
 						// This must be a task from a time that the workflow was unpinned, but it's
 						// now pinned so can't transition. Matching can drop the task safely.
-						return nil, serviceerrors.NewObsoleteMatchingTask("workflow is not eligible for transition")
+						return nil, serviceerrors.NewObsoleteMatchingTask(err.Error())
 					}
 					return nil, err
 				}
@@ -170,7 +171,7 @@ func Invoke(
 			versioningStamp := worker_versioning.StampFromCapabilities(request.PollRequest.WorkerVersionCapabilities)
 			if _, err := mutableState.AddActivityTaskStartedEvent(
 				ai, scheduledEventID, requestID, request.PollRequest.GetIdentity(),
-				versioningStamp, dispatchDeployment, request.GetBuildIdRedirectInfo(),
+				versioningStamp, pollerDeployment, request.GetBuildIdRedirectInfo(),
 			); err != nil {
 				return nil, err
 			}

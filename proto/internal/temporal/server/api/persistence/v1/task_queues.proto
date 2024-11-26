@@ -109,10 +109,11 @@ message VersioningData {
 
 message DeploymentData {
     // Set of deployments that this task queue belongs to.
-    // Current deployment is defined implicitly as the deployment with the most recent last_became_current_time.
-    repeated Deployment deployments = 1;
+    // Current deployment is defined implicitly as the deployment with the most recent
+    // TaskQueueData.last_became_current_time.
+    repeated DeploymentDataItem deployments = 1;
 
-    message Deployment {
+    message DeploymentDataItem {
         temporal.api.deployment.v1.Deployment deployment = 1;
         temporal.server.api.deployment.v1.TaskQueueData data = 2;
     }
