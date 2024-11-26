@@ -1081,8 +1081,8 @@ func (m *workflowTaskStateMachine) afterAddWorkflowTaskCompletedEvent(
 	m.ms.executionInfo.LastCompletedWorkflowTaskStartedEventId = attrs.GetStartedEventId()
 	m.ms.executionInfo.MostRecentWorkerVersionStamp = attrs.GetWorkerVersion()
 
-	taskDeployment := attrs.GetDeployment()
-	taskBehavior := attrs.GetVersioningBehavior()
+	wftDeployment := attrs.GetDeployment()
+	wftBehavior := attrs.GetVersioningBehavior()
 	versioningInfo := m.ms.GetExecutionInfo().GetVersioningInfo()
 
 	var completedTransition bool
@@ -1090,7 +1090,7 @@ func (m *workflowTaskStateMachine) afterAddWorkflowTaskCompletedEvent(
 		// It's possible that the completed WFT is not yet from the current transition because when
 		// the transition started, the current wft was already started. In this case, we allow the
 		// started wft to run and when completed, we create another wft immediately.
-		if versioningInfo.DeploymentTransition.GetDeployment().Equal(taskDeployment) {
+		if versioningInfo.DeploymentTransition.GetDeployment().Equal(wftDeployment) {
 			versioningInfo.DeploymentTransition = nil
 			completedTransition = true
 		}
@@ -1111,13 +1111,13 @@ func (m *workflowTaskStateMachine) afterAddWorkflowTaskCompletedEvent(
 		wfBehaviorBefore := m.ms.GetEffectiveVersioningBehavior()
 
 		// Change deployment and behavior based on the completed wft.
-		if wfBehaviorBefore != taskBehavior || !wfDeploymentBefore.Equal(taskDeployment) {
+		if wfBehaviorBefore != wftBehavior || !wfDeploymentBefore.Equal(wftDeployment) {
 			if versioningInfo == nil {
 				versioningInfo = &workflowpb.WorkflowExecutionVersioningInfo{}
 				m.ms.GetExecutionInfo().VersioningInfo = versioningInfo
 			}
-			versioningInfo.Behavior = taskBehavior
-			versioningInfo.Deployment = taskDeployment
+			versioningInfo.Behavior = wftBehavior
+			versioningInfo.Deployment = wftDeployment
 		}
 
 		// Deployment and behavior after applying the data came from the completed wft.
