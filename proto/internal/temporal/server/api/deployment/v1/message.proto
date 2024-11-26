@@ -77,6 +77,7 @@ message RegisterWorkerInDeploymentArgs {
     string task_queue_name = 1;
     temporal.api.enums.v1.TaskQueueType task_queue_type = 2;
     google.protobuf.Timestamp first_poller_time = 3;
+    int32 max_task_queues = 4;
 }
 
 // used as deployment workflow query response:

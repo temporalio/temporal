@@ -49,6 +49,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/worker_versioning"
+	"go.temporal.io/server/service/worker/deployment"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 
@@ -101,9 +102,10 @@ type (
 		tasksDispatchedInIntervals *taskTracker
 		// deploymentWorkflowStarted keeps track if we have already registered the task queue worker
 		// in the deployment.
-		deploymentLock       sync.Mutex
-		deploymentRegistered bool
-		firstPoll            time.Time
+		deploymentLock                    sync.Mutex
+		deploymentRegistered              bool
+		deploymentRegistrationNotPossible bool
+		firstPoll                         time.Time
 	}
 )
 
@@ -528,8 +530,8 @@ func (c *physicalTaskQueueManagerImpl) ensureRegisteredInDeployment(
 	namespaceEntry *namespace.Namespace,
 	pollMetadata *pollMetadata,
 ) error {
-	deployment := worker_versioning.DeploymentFromCapabilities(pollMetadata.workerVersionCapabilities)
-	if deployment == nil {
+	workerDeployment := worker_versioning.DeploymentFromCapabilities(pollMetadata.workerVersionCapabilities)
+	if workerDeployment == nil {
 		return nil
 	}
 	if !c.partitionMgr.engine.config.EnableDeployments(namespaceEntry.Name().String()) {
@@ -541,8 +543,13 @@ func (c *physicalTaskQueueManagerImpl) ensureRegisteredInDeployment(
 	defer c.deploymentLock.Unlock()
 
 	if c.deploymentRegistered {
-		// already done
+		// deployment already registered
 		return nil
+	}
+
+	if c.deploymentRegistrationNotPossible {
+		// deployment not possible due to registration limits
+		return deployment.ErrMaxTaskQueuesInDeployment
 	}
 
 	userData, _, err := c.partitionMgr.GetUserDataManager().GetUserData()
@@ -551,7 +558,7 @@ func (c *physicalTaskQueueManagerImpl) ensureRegisteredInDeployment(
 	}
 
 	deployments := userData.GetData().GetPerType()[int32(c.queue.TaskType())].GetDeployment().GetDeployment()
-	if findDeployment(deployments, deployment) >= 0 {
+	if findDeployment(deployments, workerDeployment) >= 0 {
 		// already registered in user data, we can assume the workflow is running.
 		// TODO: consider replication scenarios where user data is replicated before
 		// the deployment workflow.
@@ -565,8 +572,11 @@ func (c *physicalTaskQueueManagerImpl) ensureRegisteredInDeployment(
 		c.firstPoll = c.partitionMgr.engine.timeSource.Now()
 	}
 	err = c.partitionMgr.engine.deploymentStoreClient.RegisterTaskQueueWorker(
-		ctx, namespaceEntry, deployment, c.queue.TaskQueueFamily().Name(), c.queue.TaskType(), c.firstPoll)
+		ctx, namespaceEntry, workerDeployment, c.queue.TaskQueueFamily().Name(), c.queue.TaskType(), c.firstPoll)
 	if err != nil {
+		if errors.Is(err, deployment.ErrMaxTaskQueuesInDeployment) {
+			c.deploymentRegistrationNotPossible = true
+		}
 		return err
 	}
 
@@ -578,7 +588,7 @@ func (c *physicalTaskQueueManagerImpl) ensureRegisteredInDeployment(
 			return err
 		}
 		deployments := userData.GetData().GetPerType()[int32(c.queue.TaskType())].GetDeployment().GetDeployment()
-		if findDeployment(deployments, deployment) >= 0 {
+		if findDeployment(deployments, workerDeployment) >= 0 {
 			break
 		}
 		select {

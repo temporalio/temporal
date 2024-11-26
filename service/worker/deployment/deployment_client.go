@@ -89,11 +89,12 @@ type DeploymentStoreClient interface {
 
 // implements DeploymentStoreClient
 type DeploymentClientImpl struct {
-	HistoryClient         historyservice.HistoryServiceClient
-	VisibilityManager     manager.VisibilityManager
-	MaxIDLengthLimit      dynamicconfig.IntPropertyFn
-	VisibilityMaxPageSize dynamicconfig.IntPropertyFnWithNamespaceFilter
-	reachabilityCache     reachabilityCache
+	HistoryClient             historyservice.HistoryServiceClient
+	VisibilityManager         manager.VisibilityManager
+	MaxIDLengthLimit          dynamicconfig.IntPropertyFn
+	VisibilityMaxPageSize     dynamicconfig.IntPropertyFnWithNamespaceFilter
+	MaxTaskQueuesInDeployment dynamicconfig.IntPropertyFnWithNamespaceFilter
+	reachabilityCache         reachabilityCache
 }
 
 var _ DeploymentStoreClient = (*DeploymentClientImpl)(nil)
@@ -121,7 +122,7 @@ func (d *DeploymentClientImpl) RegisterTaskQueueWorker(
 	if err != nil {
 		return err
 	}
-	updatePayload, err := d.generateRegisterWorkerInDeploymentArgs(taskQueueName, taskQueueType, firstPoll)
+	updatePayload, err := d.generateRegisterWorkerInDeploymentArgs(namespaceEntry, taskQueueName, taskQueueType, firstPoll)
 	if err != nil {
 		return err
 	}
@@ -377,6 +378,7 @@ func (d *DeploymentClientImpl) generateStartWorkflowPayload(namespaceEntry *name
 
 // GenerateUpdateDeploymentPayload generates update workflow payload
 func (d *DeploymentClientImpl) generateRegisterWorkerInDeploymentArgs(
+	namespaceEntry *namespace.Namespace,
 	taskQueueName string,
 	taskQueueType enumspb.TaskQueueType,
 	firstPoll time.Time,
@@ -385,6 +387,7 @@ func (d *DeploymentClientImpl) generateRegisterWorkerInDeploymentArgs(
 		TaskQueueName:   taskQueueName,
 		TaskQueueType:   taskQueueType,
 		FirstPollerTime: timestamppb.New(firstPoll),
+		MaxTaskQueues:   int32(d.MaxTaskQueuesInDeployment(namespaceEntry.Name().String())),
 	}
 	return sdk.PreferProtoDataConverter.ToPayloads(updateArgs)
 }
