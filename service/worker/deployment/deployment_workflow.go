@@ -40,7 +40,6 @@ type (
 	// DeploymentWorkflowRunner holds the local state for a deployment workflow
 	DeploymentWorkflowRunner struct {
 		*deploymentspb.DeploymentWorkflowArgs
-		ctx              workflow.Context
 		a                *DeploymentActivities
 		logger           sdklog.Logger
 		metrics          sdkclient.MetricsHandler
@@ -66,13 +65,12 @@ var (
 func DeploymentWorkflow(ctx workflow.Context, deploymentWorkflowArgs *deploymentspb.DeploymentWorkflowArgs) error {
 	deploymentWorkflowRunner := &DeploymentWorkflowRunner{
 		DeploymentWorkflowArgs: deploymentWorkflowArgs,
-		ctx:                    ctx,
 		a:                      nil,
 		logger:                 sdklog.With(workflow.GetLogger(ctx), "wf-namespace", deploymentWorkflowArgs.NamespaceName),
 		metrics:                workflow.GetMetricsHandler(ctx).WithTags(map[string]string{"namespace": deploymentWorkflowArgs.NamespaceName}),
 		lock:                   workflow.NewMutex(ctx),
 	}
-	return deploymentWorkflowRunner.run()
+	return deploymentWorkflowRunner.run(ctx)
 }
 
 func (d *DeploymentWorkflowRunner) listenToSignals(ctx workflow.Context) {
@@ -94,15 +92,15 @@ func (d *DeploymentWorkflowRunner) listenToSignals(ctx workflow.Context) {
 	d.signalsCompleted = true
 }
 
-func (d *DeploymentWorkflowRunner) run() error {
+func (d *DeploymentWorkflowRunner) run(ctx workflow.Context) error {
 	// Set up Query Handlers here:
-	if err := workflow.SetQueryHandler(d.ctx, QueryDescribeDeployment, d.handleDescribeQuery); err != nil {
+	if err := workflow.SetQueryHandler(ctx, QueryDescribeDeployment, d.handleDescribeQuery); err != nil {
 		d.logger.Error("Failed while setting up query handler")
 		return err
 	}
 
 	if err := workflow.SetUpdateHandlerWithOptions(
-		d.ctx,
+		ctx,
 		RegisterWorkerInDeployment,
 		d.handleRegisterWorker,
 		workflow.UpdateHandlerOptions{
@@ -113,7 +111,7 @@ func (d *DeploymentWorkflowRunner) run() error {
 	}
 
 	if err := workflow.SetUpdateHandlerWithOptions(
-		d.ctx,
+		ctx,
 		SetCurrentDeployment,
 		d.handleSetCurrent,
 		workflow.UpdateHandlerOptions{
@@ -125,10 +123,10 @@ func (d *DeploymentWorkflowRunner) run() error {
 
 	// First ensure series workflow is running
 	if !d.DeploymentLocalState.StartedSeriesWorkflow {
-		activityCtx := workflow.WithActivityOptions(d.ctx, defaultActivityOptions)
+		activityCtx := workflow.WithActivityOptions(ctx, defaultActivityOptions)
 		err := workflow.ExecuteActivity(activityCtx, d.a.StartDeploymentSeriesWorkflow, &deploymentspb.StartDeploymentSeriesRequest{
 			SeriesName: d.DeploymentLocalState.WorkerDeployment.SeriesName,
-		}).Get(d.ctx, nil)
+		}).Get(ctx, nil)
 		if err != nil {
 			return err
 		}
@@ -136,10 +134,10 @@ func (d *DeploymentWorkflowRunner) run() error {
 	}
 
 	// Listen to signals in a different goroutine to make business logic clearer
-	workflow.Go(d.ctx, d.listenToSignals)
+	workflow.Go(ctx, d.listenToSignals)
 
 	// Wait on any pending signals and updates.
-	err := workflow.Await(d.ctx, func() bool { return d.pendingUpdates == 0 && d.signalsCompleted })
+	err := workflow.Await(ctx, func() bool { return d.pendingUpdates == 0 && d.signalsCompleted })
 	if err != nil {
 		return err
 	}
@@ -157,7 +155,7 @@ func (d *DeploymentWorkflowRunner) run() error {
 	*/
 
 	d.logger.Debug("Deployment doing continue-as-new")
-	return workflow.NewContinueAsNewError(d.ctx, DeploymentWorkflow, d.DeploymentWorkflowArgs)
+	return workflow.NewContinueAsNewError(ctx, DeploymentWorkflow, d.DeploymentWorkflowArgs)
 }
 
 func (d *DeploymentWorkflowRunner) validateRegisterWorker(args *deploymentspb.RegisterWorkerInDeploymentArgs) error {
@@ -171,8 +169,6 @@ func (d *DeploymentWorkflowRunner) validateRegisterWorker(args *deploymentspb.Re
 }
 
 func (d *DeploymentWorkflowRunner) handleRegisterWorker(ctx workflow.Context, args *deploymentspb.RegisterWorkerInDeploymentArgs) error {
-	// Note: use ctx in here (provided by update) instead of d.ctx
-
 	// use lock to enforce only one update at a time
 	err := d.lock.Lock(ctx)
 	if err != nil {
@@ -232,8 +228,6 @@ func (d *DeploymentWorkflowRunner) validateSetCurrent(args *deploymentspb.SetCur
 }
 
 func (d *DeploymentWorkflowRunner) handleSetCurrent(ctx workflow.Context, args *deploymentspb.SetCurrentDeploymentArgs) error {
-	// Note: use ctx in here (provided by update) instead of d.ctx
-
 	// use lock to enforce only one update at a time
 	err := d.lock.Lock(ctx)
 	if err != nil {
