@@ -527,14 +527,14 @@ func (d *DeploymentSuite) checkDescribeWorkflowAfterOverride(
 
 func (d *DeploymentSuite) checkDeploymentReachability(
 	ctx context.Context,
-	deployment *deploymentpb.Deployment,
+	deploy *deploymentpb.Deployment,
 	expectedReachability enumspb.DeploymentReachability,
 ) {
 	d.EventuallyWithT(func(t *assert.CollectT) {
 		a := assert.New(t)
 		resp, err := d.FrontendClient().GetDeploymentReachability(ctx, &workflowservice.GetDeploymentReachabilityRequest{
 			Namespace:  d.Namespace(),
-			Deployment: deployment,
+			Deployment: deploy,
 		})
 		a.NoError(err)
 		a.Equal(expectedReachability, resp.GetReachability())
@@ -542,7 +542,7 @@ func (d *DeploymentSuite) checkDeploymentReachability(
 }
 
 func (d *DeploymentSuite) createDeploymentAndWaitForExist(
-	deployment *deploymentpb.Deployment,
+	deploy *deploymentpb.Deployment,
 	tq *taskqueuepb.TaskQueue,
 ) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
@@ -551,7 +551,7 @@ func (d *DeploymentSuite) createDeploymentAndWaitForExist(
 	defer close(errChan)
 	// Start a deployment workflow
 	go func() {
-		d.startDeploymentWorkflows(ctx, tq, deployment, errChan)
+		d.startDeploymentWorkflows(ctx, tq, deploy, errChan)
 	}()
 
 	// Wait for the deployment to exist
