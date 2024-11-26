@@ -26,7 +26,9 @@ package tests
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"go.temporal.io/api/serviceerror"
 	"testing"
 	"time"
 
@@ -482,6 +484,26 @@ func (d *DeploymentSuite) TestGetDeploymentReachability_OverrideUnversioned() {
 	// TODO (carly): once SetCurrentDeployment is ready, check that a current deployment is reachable even with no workflows
 	// TODO (carly): test starting a workflow execution on a current deployment, then getting reachability with no override
 	// TODO (carly): check cache times (do I need to do this in functional when I have cache time tests in unit?)
+}
+
+func (d *DeploymentSuite) TestGetDeploymentReachability_NotFound() {
+	ctx := context.Background()
+
+	// presence of internally used delimiters (:) or escape
+	// characters shouldn't break functionality
+	seriesName := testcore.RandomizeStr("my-series|:|:")
+	buildID := testcore.RandomizeStr("bgt:|")
+	resp, err := d.FrontendClient().GetDeploymentReachability(ctx, &workflowservice.GetDeploymentReachabilityRequest{
+		Namespace: d.Namespace(),
+		Deployment: &deploymentpb.Deployment{
+			SeriesName: seriesName,
+			BuildId:    buildID,
+		},
+	})
+	var notFound *serviceerror.NotFound
+	d.NotNil(err)
+	d.True(errors.As(err, &notFound))
+	d.Nil(resp)
 }
 
 func (d *DeploymentSuite) checkDescribeWorkflowAfterOverride(

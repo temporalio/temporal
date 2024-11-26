@@ -26,7 +26,7 @@ package deployment
 
 import (
 	"context"
-	"strings"
+	"errors"
 	"time"
 
 	"go.temporal.io/api/serviceerror"
@@ -217,7 +217,8 @@ func (d *DeploymentClientImpl) DescribeDeployment(ctx context.Context, namespace
 
 	res, err := d.HistoryClient.QueryWorkflow(ctx, req)
 	if err != nil {
-		if strings.Contains(err.Error(), "workflow not found") { // is there a way to check if err is a serviceerror.NotFound?
+		var notFound *serviceerror.NotFound
+		if errors.As(err, &notFound) {
 			return nil, serviceerror.NewNotFound("Deployment not found")
 		}
 		return nil, err
