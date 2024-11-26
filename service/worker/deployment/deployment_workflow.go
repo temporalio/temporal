@@ -101,13 +101,23 @@ func (d *DeploymentWorkflowRunner) run() error {
 		return err
 	}
 
-	// Setting an update handler for updating deployment task-queues
 	if err := workflow.SetUpdateHandlerWithOptions(
 		d.ctx,
 		RegisterWorkerInDeployment,
 		d.handleRegisterWorker,
 		workflow.UpdateHandlerOptions{
 			Validator: d.validateRegisterWorker,
+		},
+	); err != nil {
+		return err
+	}
+
+	if err := workflow.SetUpdateHandlerWithOptions(
+		d.ctx,
+		SetCurrentDeployment,
+		d.handleSetCurrent,
+		workflow.UpdateHandlerOptions{
+			Validator: d.validateSetCurrent,
 		},
 	); err != nil {
 		return err
@@ -213,6 +223,44 @@ func (d *DeploymentWorkflowRunner) handleRegisterWorker(ctx workflow.Context, ar
 		d.DeploymentLocalState.TaskQueueFamilies[args.TaskQueueName].TaskQueues = make(map[int32]*deploymentspb.TaskQueueData)
 	}
 	d.DeploymentLocalState.TaskQueueFamilies[args.TaskQueueName].TaskQueues[int32(args.TaskQueueType)] = data
+
+	return nil
+}
+
+func (d *DeploymentWorkflowRunner) validateSetCurrent(args *deploymentspb.SetCurrentDeploymentArgs) error {
+	return nil
+}
+
+func (d *DeploymentWorkflowRunner) handleSetCurrent(ctx workflow.Context, args *deploymentspb.SetCurrentDeploymentArgs) error {
+	// Note: use ctx in here (provided by update) instead of d.ctx
+
+	// use lock to enforce only one update at a time
+	err := d.lock.Lock(ctx)
+	if err != nil {
+		d.logger.Error("Could not acquire deployment workflow lock")
+		return err
+	}
+	d.pendingUpdates++
+	defer func() {
+		d.pendingUpdates--
+		d.lock.Unlock()
+	}()
+
+	// wait until series workflow started
+	err = workflow.Await(ctx, func() bool { return d.DeploymentLocalState.StartedSeriesWorkflow })
+	if err != nil {
+		d.logger.Error("Update canceled before series workflow started")
+		return err
+	}
+
+	// FIXME
+	// Should lock the series while making the change
+	// Should update the current deployment in the series entity wf and well as updating the status of the target deployment.
+	// Also update the status of the previous current deployment to NO_STATUS
+	// update the timestamps
+	// Update all TQs current deployment
+	// Update metadata
+	// See if a request_id is needed for idempotency
 
 	return nil
 }
