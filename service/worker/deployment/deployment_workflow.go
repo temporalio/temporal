@@ -28,6 +28,7 @@ import (
 	"errors"
 	"time"
 
+	"go.temporal.io/api/serviceerror"
 	sdkclient "go.temporal.io/sdk/client"
 	sdklog "go.temporal.io/sdk/log"
 	"go.temporal.io/sdk/temporal"
@@ -227,12 +228,12 @@ func (d *DeploymentWorkflowRunner) validateSetCurrent(args *deploymentspb.SetCur
 	return nil
 }
 
-func (d *DeploymentWorkflowRunner) handleSetCurrent(ctx workflow.Context, args *deploymentspb.SetCurrentDeploymentArgs) error {
+func (d *DeploymentWorkflowRunner) handleSetCurrent(ctx workflow.Context, args *deploymentspb.SetCurrentDeploymentArgs) (*deploymentspb.SetCurrentDeploymentResponse, error) {
 	// use lock to enforce only one update at a time
 	err := d.lock.Lock(ctx)
 	if err != nil {
 		d.logger.Error("Could not acquire deployment workflow lock")
-		return err
+		return nil, serviceerror.NewDeadlineExceeded("Could not acquire deployment workflow lock")
 	}
 	d.pendingUpdates++
 	defer func() {
@@ -244,7 +245,7 @@ func (d *DeploymentWorkflowRunner) handleSetCurrent(ctx workflow.Context, args *
 	err = workflow.Await(ctx, func() bool { return d.DeploymentLocalState.StartedSeriesWorkflow })
 	if err != nil {
 		d.logger.Error("Update canceled before series workflow started")
-		return err
+		return nil, serviceerror.NewDeadlineExceeded("Update canceled before series workflow started")
 	}
 
 	// FIXME
@@ -256,7 +257,7 @@ func (d *DeploymentWorkflowRunner) handleSetCurrent(ctx workflow.Context, args *
 	// Update metadata
 	// See if a request_id is needed for idempotency
 
-	return nil
+	return nil, nil
 }
 
 func (d *DeploymentWorkflowRunner) handleDescribeQuery() (*deploymentspb.QueryDescribeDeploymentResponse, error) {

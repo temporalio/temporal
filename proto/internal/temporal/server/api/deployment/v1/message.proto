@@ -86,6 +86,12 @@ message SetCurrentDeploymentArgs {
     temporal.api.deployment.v1.UpdateDeploymentMetadata update_metadata = 2;
 }
 
+// used as deployment workflow update response:
+message SetCurrentDeploymentResponse {
+    temporal.api.deployment.v1.DeploymentInfo current_deployment_info = 1;
+    temporal.api.deployment.v1.DeploymentInfo previous_deployment_info = 2;
+}
+
 // used as deployment workflow query response:
 message QueryDescribeDeploymentResponse {
     DeploymentLocalState deployment_local_state = 1;

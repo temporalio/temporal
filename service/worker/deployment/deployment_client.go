@@ -91,8 +91,7 @@ type DeploymentStoreClient interface {
 	SetCurrentDeployment(
 		ctx context.Context,
 		namespaceEntry *namespace.Namespace,
-		seriesName string,
-		buildID string,
+		deployment *deploymentpb.Deployment,
 		identity string,
 		updateMetadata *deploymentpb.UpdateDeploymentMetadata,
 	) (*deploymentpb.DeploymentInfo, *deploymentpb.DeploymentInfo, error)
@@ -118,83 +117,13 @@ func (d *DeploymentClientImpl) RegisterTaskQueueWorker(
 	taskQueueType enumspb.TaskQueueType,
 	firstPoll time.Time,
 ) error {
-	// validate params which are used for building workflowID's
-	err := ValidateDeploymentWfParams(SeriesFieldName, deployment.SeriesName, d.MaxIDLengthLimit())
-	if err != nil {
-		return err
-	}
-	err = ValidateDeploymentWfParams(BuildIDFieldName, deployment.BuildId, d.MaxIDLengthLimit())
-	if err != nil {
-		return err
-	}
-
-	deploymentWorkflowID := GenerateDeploymentWorkflowID(deployment.SeriesName, deployment.BuildId)
-	workflowInputPayloads, err := d.generateStartWorkflowPayload(namespaceEntry, deployment)
-	if err != nil {
-		return err
-	}
 	updatePayload, err := d.generateRegisterWorkerInDeploymentArgs(namespaceEntry, taskQueueName, taskQueueType, firstPoll)
 	if err != nil {
 		return err
 	}
-
-	sa := &commonpb.SearchAttributes{}
-	searchattribute.AddSearchAttribute(&sa, searchattribute.TemporalNamespaceDivision, payload.EncodeString(DeploymentNamespaceDivision))
-
-	// initial memo fiels
-	memo, err := d.buildInitialDeploymentMemo(deployment)
-	if err != nil {
-		return err
-	}
-
-	// Start workflow execution, if it hasn't already
-	startReq := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:                uuid.New(),
-		Namespace:                namespaceEntry.Name().String(),
-		WorkflowId:               deploymentWorkflowID,
-		WorkflowType:             &commonpb.WorkflowType{Name: DeploymentWorkflowType},
-		TaskQueue:                &taskqueuepb.TaskQueue{Name: primitives.PerNSWorkerTaskQueue},
-		Input:                    workflowInputPayloads,
-		WorkflowIdReusePolicy:    enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
-		WorkflowIdConflictPolicy: enumspb.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING,
-		SearchAttributes:         sa,
-		Memo:                     memo,
-	}
-
-	updateReq := &workflowservice.UpdateWorkflowExecutionRequest{
-		Namespace: namespaceEntry.Name().String(),
-		WorkflowExecution: &commonpb.WorkflowExecution{
-			WorkflowId: deploymentWorkflowID,
-		},
-		Request: &updatepb.Request{
-			Input: &updatepb.Input{Name: RegisterWorkerInDeployment, Args: updatePayload},
-			Meta:  &updatepb.Meta{UpdateId: uuid.New(), Identity: "deploymentClient"},
-		},
-		WaitPolicy: &updatepb.WaitPolicy{LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED},
-	}
-
-	// This is an atomic operation; if one operation fails, both will.
-	_, err = d.HistoryClient.ExecuteMultiOperation(ctx, &historyservice.ExecuteMultiOperationRequest{
-		NamespaceId: namespaceEntry.ID().String(),
-		WorkflowId:  deploymentWorkflowID,
-		Operations: []*historyservice.ExecuteMultiOperationRequest_Operation{
-			{
-				Operation: &historyservice.ExecuteMultiOperationRequest_Operation_StartWorkflow{
-					StartWorkflow: &historyservice.StartWorkflowExecutionRequest{
-						NamespaceId:  namespaceEntry.ID().String(),
-						StartRequest: startReq,
-					},
-				},
-			},
-			{
-				Operation: &historyservice.ExecuteMultiOperationRequest_Operation_UpdateWorkflow{
-					UpdateWorkflow: &historyservice.UpdateWorkflowExecutionRequest{
-						NamespaceId: namespaceEntry.ID().String(),
-						Request:     updateReq,
-					},
-				},
-			},
-		},
+	_, err = d.updateWithStartDeployment(ctx, namespaceEntry, deployment, &updatepb.Request{
+		Input: &updatepb.Input{Name: RegisterWorkerInDeployment, Args: updatePayload},
+		Meta:  &updatepb.Meta{UpdateId: uuid.New(), Identity: "deploymentClient"},
 	})
 	return err
 }
@@ -381,53 +310,125 @@ func (d *DeploymentClientImpl) ListDeployments(ctx context.Context, namespaceEnt
 func (d *DeploymentClientImpl) SetCurrentDeployment(
 	ctx context.Context,
 	namespaceEntry *namespace.Namespace,
-	seriesName string,
-	buildID string,
+	deployment *deploymentpb.Deployment,
 	identity string,
 	updateMetadata *deploymentpb.UpdateDeploymentMetadata,
 ) (*deploymentpb.DeploymentInfo, *deploymentpb.DeploymentInfo, error) {
-	err := ValidateDeploymentWfParams(SeriesFieldName, seriesName, d.MaxIDLengthLimit())
-	if err != nil {
-		return nil, nil, err
-	}
-	err = ValidateDeploymentWfParams(BuildIDFieldName, buildID, d.MaxIDLengthLimit())
-	if err != nil {
-		return nil, nil, err
-	}
-
-	deploymentWorkflowID := GenerateDeploymentWorkflowID(seriesName, buildID)
-
-	updateArgs := &deploymentspb.SetCurrentDeploymentArgs{
+	updatePayload, err := sdk.PreferProtoDataConverter.ToPayloads(&deploymentspb.SetCurrentDeploymentArgs{
 		Identity:       identity,
 		UpdateMetadata: updateMetadata,
-	}
-	updatePayload, err := sdk.PreferProtoDataConverter.ToPayloads(updateArgs)
+	})
+	outcome, err := d.updateWithStartDeployment(ctx, namespaceEntry, deployment, &updatepb.Request{
+		Input: &updatepb.Input{Name: SetCurrentDeployment, Args: updatePayload},
+		Meta:  &updatepb.Meta{UpdateId: uuid.New(), Identity: identity},
+	})
 	if err != nil {
 		return nil, nil, err
 	}
+	if failure := outcome.GetFailure(); failure != nil {
+		// FIXME: use the correct error type
+		return nil, nil, serviceerror.NewInternal(failure.Message)
+	}
+	success := outcome.GetSuccess()
+	if success == nil {
+		return nil, nil, serviceerror.NewInternal("outcome missing success and failure")
+	}
 
-	historyUpdateReq := &historyservice.UpdateWorkflowExecutionRequest{
-		NamespaceId: namespaceEntry.ID().String(),
-		Request: &workflowservice.UpdateWorkflowExecutionRequest{
-			Namespace: namespaceEntry.Name().String(),
-			WorkflowExecution: &commonpb.WorkflowExecution{
-				WorkflowId: deploymentWorkflowID,
-			},
-			Request: &updatepb.Request{
-				Input: &updatepb.Input{Name: SetCurrentDeployment, Args: updatePayload},
-			},
-			WaitPolicy: &updatepb.WaitPolicy{LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED},
+	var res deploymentspb.SetCurrentDeploymentResponse
+	if err := payloads.Decode(success, &res); err != nil {
+		return nil, nil, err
+	}
+	return res.CurrentDeploymentInfo, res.PreviousDeploymentInfo, nil
+}
+
+func (d *DeploymentClientImpl) updateWithStartDeployment(
+	ctx context.Context,
+	namespaceEntry *namespace.Namespace,
+	deployment *deploymentpb.Deployment,
+	updateRequest *updatepb.Request,
+) (*updatepb.Outcome, error) {
+	// validate params which are used for building workflowID's
+	err := ValidateDeploymentWfParams(SeriesFieldName, deployment.SeriesName, d.MaxIDLengthLimit())
+	if err != nil {
+		return nil, err
+	}
+	err = ValidateDeploymentWfParams(BuildIDFieldName, deployment.BuildId, d.MaxIDLengthLimit())
+	if err != nil {
+		return nil, err
+	}
+
+	deploymentWorkflowID := GenerateDeploymentWorkflowID(deployment.SeriesName, deployment.BuildId)
+	workflowInputPayloads, err := d.generateStartWorkflowPayload(namespaceEntry, deployment)
+	if err != nil {
+		return nil, err
+	}
+
+	sa := &commonpb.SearchAttributes{}
+	searchattribute.AddSearchAttribute(&sa, searchattribute.TemporalNamespaceDivision, payload.EncodeString(DeploymentNamespaceDivision))
+
+	// initial memo fiels
+	memo, err := d.buildInitialDeploymentMemo(deployment)
+	if err != nil {
+		return nil, err
+	}
+
+	// Start workflow execution, if it hasn't already
+	startReq := &workflowservice.StartWorkflowExecutionRequest{
+		RequestId:                uuid.New(),
+		Namespace:                namespaceEntry.Name().String(),
+		WorkflowId:               deploymentWorkflowID,
+		WorkflowType:             &commonpb.WorkflowType{Name: DeploymentWorkflowType},
+		TaskQueue:                &taskqueuepb.TaskQueue{Name: primitives.PerNSWorkerTaskQueue},
+		Input:                    workflowInputPayloads,
+		WorkflowIdReusePolicy:    enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
+		WorkflowIdConflictPolicy: enumspb.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING,
+		SearchAttributes:         sa,
+		Memo:                     memo,
+	}
+
+	updateReq := &workflowservice.UpdateWorkflowExecutionRequest{
+		Namespace: namespaceEntry.Name().String(),
+		WorkflowExecution: &commonpb.WorkflowExecution{
+			WorkflowId: deploymentWorkflowID,
 		},
+		Request:    updateRequest,
+		WaitPolicy: &updatepb.WaitPolicy{LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED},
 	}
 
-	res, err := d.HistoryClient.UpdateWorkflowExecution(ctx, historyUpdateReq)
+	// This is an atomic operation; if one operation fails, both will.
+	// FIXME: retry this whole thing until error or update is durable. see
+	// https://github.com/temporalio/sdk-go/blob/08d52ce3d7/internal/internal_workflow_client.go#L1800
+	res, err := d.HistoryClient.ExecuteMultiOperation(ctx, &historyservice.ExecuteMultiOperationRequest{
+		NamespaceId: namespaceEntry.ID().String(),
+		WorkflowId:  deploymentWorkflowID,
+		Operations: []*historyservice.ExecuteMultiOperationRequest_Operation{
+			{
+				Operation: &historyservice.ExecuteMultiOperationRequest_Operation_StartWorkflow{
+					StartWorkflow: &historyservice.StartWorkflowExecutionRequest{
+						NamespaceId:  namespaceEntry.ID().String(),
+						StartRequest: startReq,
+					},
+				},
+			},
+			{
+				Operation: &historyservice.ExecuteMultiOperationRequest_Operation_UpdateWorkflow{
+					UpdateWorkflow: &historyservice.UpdateWorkflowExecutionRequest{
+						NamespaceId: namespaceEntry.ID().String(),
+						Request:     updateReq,
+					},
+				},
+			},
+		},
+	})
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 
-	// FIXME: wait?
-	_ = res
-	return nil, nil, nil
+	// FIXME: handle the various places we can get errors
+	updateRes := res.Responses[1].GetUpdateWorkflow().GetResponse()
+	outcome := updateRes.GetOutcome()
+	return outcome, nil
+
 }
 
 // GenerateStartWorkflowPayload generates start workflow execution payload
