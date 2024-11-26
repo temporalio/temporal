@@ -76,8 +76,10 @@ func NewWorkflowWithSignal(
 		startRequest.StartRequest.WorkflowRunTimeout,
 		workflowID,
 		runID,
-		signalWithStartRequest.GetVersioningOverride(),
 	)
+	newMutableState.GetExecutionInfo().VersioningInfo = &workflowpb.WorkflowExecutionVersioningInfo{
+		VersioningOverride: startRequest.GetVersioningOverride(),
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -187,7 +189,6 @@ func CreateMutableState(
 	runTimeout *durationpb.Duration,
 	workflowID string,
 	runID string,
-	versioningOverride *workflowpb.VersioningOverride,
 ) (workflow.MutableState, error) {
 	newMutableState := workflow.NewMutableState(
 		shard,
@@ -197,7 +198,6 @@ func CreateMutableState(
 		workflowID,
 		runID,
 		shard.GetTimeSource().Now(),
-		&workflowpb.WorkflowExecutionVersioningInfo{VersioningOverride: versioningOverride},
 	)
 	if err := newMutableState.SetHistoryTree(executionTimeout, runTimeout, runID); err != nil {
 		return nil, err

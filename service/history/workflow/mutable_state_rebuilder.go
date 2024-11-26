@@ -748,7 +748,6 @@ func (b *MutableStateRebuilderImpl) applyNewRunHistory(
 			newExecution.WorkflowId,
 			newExecution.RunId,
 			timestamp.TimeValue(newRunHistory[0].GetEventTime()),
-			b.mutableState.GetExecutionInfo().GetVersioningInfo(), // TODO (carly): Should versioning info be inherited like this?
 		)
 	}
 

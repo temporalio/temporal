@@ -255,7 +255,6 @@ func NewMutableState(
 	workflowID string,
 	runID string,
 	startTime time.Time,
-	versioningInfo *workflowpb.WorkflowExecutionVersioningInfo,
 ) *MutableStateImpl {
 	s := &MutableStateImpl{
 		updateActivityInfos:            make(map[int64]*persistencespb.ActivityInfo),
@@ -330,7 +329,6 @@ func NewMutableState(
 		VersionHistories:       versionhistory.NewVersionHistories(&historyspb.VersionHistory{}),
 		ExecutionStats:         &persistencespb.ExecutionStats{HistorySize: 0},
 		SubStateMachinesByType: make(map[string]*persistencespb.StateMachineMap),
-		VersioningInfo:         versioningInfo,
 	}
 	if s.config.EnableNexus() {
 		s.executionInfo.TaskGenerationShardClockTimestamp = shard.CurrentVectorClock().GetClock()
@@ -381,7 +379,6 @@ func NewMutableStateFromDB(
 		dbRecord.ExecutionInfo.WorkflowId,
 		dbRecord.ExecutionState.RunId,
 		startTime,
-		dbRecord.ExecutionInfo.VersioningInfo,
 	)
 
 	if dbRecord.ActivityInfos != nil {
@@ -538,7 +535,6 @@ func NewMutableStateInChain(
 		workflowID,
 		runID,
 		startTime,
-		currentMutableState.GetExecutionInfo().GetVersioningInfo(), // TODO (Carly): make sure this is right
 	)
 
 	// carry over necessary fields from current mutable state

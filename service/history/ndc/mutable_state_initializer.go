@@ -158,7 +158,6 @@ func (r *MutableStateInitializerImpl) InitializeFromDB(
 					workflowKey.WorkflowID,
 					workflowKey.RunID,
 					time.Now().UTC(),
-					nil,
 				),
 				releaseFn,
 			), MutableStateInitializationSpec{
