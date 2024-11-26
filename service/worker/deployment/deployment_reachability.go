@@ -59,7 +59,7 @@ func getDeploymentReachability(
 ) (enumspb.DeploymentReachability, time.Time, error) {
 	// 1a. Reachable by new unpinned workflows
 	if isCurrent {
-		// TODO (carly): still return reachable if the deployment just became not current, but workflows started on it are not yet in reachability
+		// TODO (carly) part 2: still return reachable if the deployment just became not current, but workflows started on it are not yet in reachability
 		return enumspb.DEPLOYMENT_REACHABILITY_REACHABLE, time.Now(), nil
 	}
 
@@ -99,10 +99,10 @@ func makeCountRequest(
 
 func makeDeploymentQuery(seriesName, buildID string, open bool) string {
 	var statusFilter string
-	deploymentFilter := "= " + worker_versioning.PinnedBuildIdSearchAttribute(&deploymentpb.Deployment{
+	deploymentFilter := fmt.Sprintf("= '%s'", worker_versioning.PinnedBuildIdSearchAttribute(&deploymentpb.Deployment{
 		SeriesName: seriesName,
 		BuildId:    buildID,
-	})
+	}))
 	if open {
 		statusFilter = "= 'Running'"
 	} else {

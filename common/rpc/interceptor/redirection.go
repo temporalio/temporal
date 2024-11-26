@@ -128,6 +128,12 @@ var (
 		"DescribeBatchOperation":    func() any { return &workflowservice.DescribeBatchOperationResponse{} },
 		"ListBatchOperations":       func() any { return &workflowservice.ListBatchOperationsResponse{} },
 		"UpdateActivityOptionsById": func() any { return &workflowservice.UpdateActivityOptionsByIdResponse{} },
+
+		"DescribeDeployment":        func() any { return &workflowservice.DescribeDeploymentResponse{} },
+		"ListDeployments":           func() any { return &workflowservice.ListDeploymentsResponse{} },
+		"GetDeploymentReachability": func() any { return &workflowservice.GetDeploymentReachabilityResponse{} },
+		"GetCurrentDeployment":      func() any { return &workflowservice.GetCurrentDeploymentResponse{} },
+		"SetCurrentDeployment":      func() any { return &workflowservice.SetCurrentDeploymentResponse{} },
 	}
 )
 

@@ -32,6 +32,8 @@ import (
 	"github.com/temporalio/sqlparser"
 	commonpb "go.temporal.io/api/common/v1"
 	deploymentpb "go.temporal.io/api/deployment/v1"
+	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/api/serviceerror"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	"go.temporal.io/server/common/namespace"
@@ -50,7 +52,6 @@ const (
 	UnversionedSearchAttribute = buildIdSearchAttributePrefixUnversioned
 )
 
-// TODO (carly): fix delimiter
 // escapeBuildIdSearchAttributeDelimiter is a helper which escapes the BuildIdSearchAttributeDelimiter character in the input string
 func escapeBuildIdSearchAttributeDelimiter(s string) string {
 	s = strings.Replace(s, BuildIdSearchAttributeDelimiter, `|`+BuildIdSearchAttributeDelimiter, -1)
@@ -62,16 +63,13 @@ func escapeBuildIdSearchAttributeDelimiter(s string) string {
 // BuildIds KeywordList in this format. If the workflow becomes unpinned or unversioned, this entry will be removed from
 // that list.
 func PinnedBuildIdSearchAttribute(deployment *deploymentpb.Deployment) string {
-	escapedDeployment := fmt.Sprintf("%s%s%s",
+	return fmt.Sprintf("%s%s%s%s%s",
+		BuildIdSearchAttributePrefixPinned,
+		BuildIdSearchAttributeDelimiter,
 		escapeBuildIdSearchAttributeDelimiter(deployment.GetSeriesName()),
 		BuildIdSearchAttributeDelimiter,
 		escapeBuildIdSearchAttributeDelimiter(deployment.GetBuildId()),
 	)
-	return sqlparser.String(sqlparser.NewStrVal([]byte(fmt.Sprintf("%s%s%s",
-		BuildIdSearchAttributePrefixPinned,
-		BuildIdSearchAttributeDelimiter,
-		escapedDeployment,
-	))))
 }
 
 // AssignedBuildIdSearchAttribute returns the search attribute value for the currently assigned build ID
@@ -177,7 +175,19 @@ func DeploymentToString(deployment *deploymentpb.Deployment) string {
 // - assignedBuildId: the build ID to which the WF is currently assigned (i.e. mutable state's AssginedBuildId)
 // - stamp: the latest versioning stamp of the execution (only needed for old versioning)
 // - hasCompletedWorkflowTask: if the wf has completed any WFT
-func MakeDirectiveForWorkflowTask(inheritedBuildId string, assignedBuildId string, stamp *commonpb.WorkerVersionStamp, hasCompletedWorkflowTask bool) *taskqueuespb.TaskVersionDirective {
+// - behavior: workflow's effective behavior
+// - deployment: workflow's effective deployment
+func MakeDirectiveForWorkflowTask(
+	inheritedBuildId string,
+	assignedBuildId string,
+	stamp *commonpb.WorkerVersionStamp,
+	hasCompletedWorkflowTask bool,
+	behavior enumspb.VersioningBehavior,
+	deployment *deploymentpb.Deployment,
+) *taskqueuespb.TaskVersionDirective {
+	if behavior != enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED {
+		return &taskqueuespb.TaskVersionDirective{Behavior: behavior, Deployment: deployment}
+	}
 	if id := BuildIdIfUsingVersioning(stamp); id != "" && assignedBuildId == "" {
 		// TODO: old versioning only [cleanup-old-wv]
 		return MakeBuildIdDirective(id)
@@ -214,6 +224,17 @@ func StampFromBuildId(buildId string) *commonpb.WorkerVersionStamp {
 	return &commonpb.WorkerVersionStamp{UseVersioning: true, BuildId: buildId}
 }
 
-func StampFromDeployment(deployment *deploymentpb.Deployment) *commonpb.WorkerVersionStamp {
-	return &commonpb.WorkerVersionStamp{UseVersioning: true, BuildId: deployment.BuildId}
+// ValidateDeployment returns error if the deployment is nil or it has empty build ID or deployment
+// name.
+func ValidateDeployment(deployment *deploymentpb.Deployment) error {
+	if deployment == nil {
+		return serviceerror.NewInvalidArgument("deployment cannot be nil")
+	}
+	if deployment.GetSeriesName() == "" {
+		return serviceerror.NewInvalidArgument("deployment series name cannot be empty")
+	}
+	if deployment.GetBuildId() == "" {
+		return serviceerror.NewInvalidArgument("deployment build ID cannot be empty")
+	}
+	return nil
 }
