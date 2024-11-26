@@ -84,7 +84,7 @@ func Invoke(
 		),
 		func(workflowLease api.WorkflowLease) (*api.UpdateWorkflowAction, error) {
 			mutableState := workflowLease.GetMutableState()
-			updateRegistry := workflowLease.GetContext().UpdateRegistry(ctx, nil)
+			updateRegistry := workflowLease.GetContext().UpdateRegistry(ctx)
 			if !mutableState.IsWorkflowExecutionRunning() {
 				return nil, consts.ErrWorkflowCompleted
 			}

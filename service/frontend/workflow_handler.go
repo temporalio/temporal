@@ -539,6 +539,12 @@ func (wh *WorkflowHandler) ExecuteMultiOperation(
 
 	historyResp, err := wh.historyClient.ExecuteMultiOperation(ctx, historyReq)
 	if err != nil {
+		var multiErr *serviceerror.MultiOperationExecution
+		if errors.As(err, &multiErr) {
+			// Trim error message for end-users.
+			// The per-operation errors are embedded inside the error and unpacked by the SDK.
+			multiErr.Message = "MultiOperation could not be executed."
+		}
 		return nil, err
 	}
 
@@ -3676,8 +3682,10 @@ func (wh *WorkflowHandler) UpdateWorkflowExecution(
 		NamespaceId: nsID.String(),
 		Request:     request,
 	})
-
-	return histResp.GetResponse(), err
+	if err != nil {
+		return nil, err
+	}
+	return histResp.GetResponse(), nil
 }
 
 func (wh *WorkflowHandler) prepareUpdateWorkflowRequest(

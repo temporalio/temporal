@@ -117,7 +117,7 @@ func (t *timerSequenceImpl) CreateNextUserTimer() (bool, error) {
 	// mark timer task mask as indication that timer task is generated
 	// here TaskID is misleading attr, should be called timer created flag or something
 	timerInfo.TaskStatus = TimerTaskStatusCreated
-	if err := t.mutableState.UpdateUserTimer(timerInfo); err != nil {
+	if err := t.mutableState.UpdateUserTimerTaskStatus(timerInfo.TimerId, TimerTaskStatusCreated); err != nil {
 		return false, err
 	}
 	t.mutableState.AddTasks(&tasks.UserTimerTask{
@@ -153,14 +153,14 @@ func (t *timerSequenceImpl) CreateNextActivityTimer() (bool, error) {
 	if !ok {
 		return false, serviceerror.NewInternal(fmt.Sprintf("unable to load activity info %v", firstTimerTask.EventID))
 	}
-
-	err := t.mutableState.UpdateActivity(activityInfo.ScheduledEventId, func(ai *persistencespb.ActivityInfo, ms MutableState) {
-		// mark timer task mask as indication that timer task is generated
-		ai.TimerTaskStatus |= timerTypeToTimerMask(firstTimerTask.TimerType)
-		if firstTimerTask.TimerType == enumspb.TIMEOUT_TYPE_HEARTBEAT {
-			t.mutableState.UpdateActivityTimerHeartbeat(ai.ScheduledEventId, firstTimerTask.Timestamp)
-		}
-	})
+	// mark timer task mask as indication that timer task is generated
+	activityInfo.TimerTaskStatus |= timerTypeToTimerMask(firstTimerTask.TimerType)
+	var err error
+	var timerTaskStamp *time.Time
+	if firstTimerTask.TimerType == enumspb.TIMEOUT_TYPE_HEARTBEAT {
+		timerTaskStamp = &firstTimerTask.Timestamp
+	}
+	err = t.mutableState.UpdateActivityTaskStatusWithTimerHeartbeat(activityInfo.ScheduledEventId, activityInfo.TimerTaskStatus, timerTaskStamp)
 
 	if err != nil {
 		return false, err
