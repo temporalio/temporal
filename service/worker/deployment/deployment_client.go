@@ -26,9 +26,10 @@ package deployment
 
 import (
 	"context"
-	"go.temporal.io/api/serviceerror"
 	"strings"
 	"time"
+
+	"go.temporal.io/api/serviceerror"
 
 	"github.com/pborman/uuid"
 	commonpb "go.temporal.io/api/common/v1"
