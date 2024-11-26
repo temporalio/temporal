@@ -908,3 +908,141 @@ func (d *DeploymentSuite) TestUpdateWorkflowExecutionOptions_SetPinnedSetUnpinne
 	versioningInfo = descResp.GetWorkflowExecutionInfo().GetVersioningInfo()
 	d.True(proto.Equal(unpinnedOpts.GetVersioningOverride(), versioningInfo.GetVersioningOverride()))
 }
+
+func (d *DeploymentSuite) TestStartWorkflowExecution_WithPinnedOverride() {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
+	defer cancel()
+	override := &workflowpb.VersioningOverride{
+		Behavior: enumspb.VERSIONING_BEHAVIOR_PINNED,
+		Deployment: &deploymentpb.Deployment{
+			SeriesName: "seriesName",
+			BuildId:    "A",
+		},
+	}
+
+	resp, err := d.FrontendClient().StartWorkflowExecution(ctx, &workflowservice.StartWorkflowExecutionRequest{
+		Namespace:          d.Namespace(),
+		WorkflowId:         "test-workflow-id",
+		WorkflowType:       &commonpb.WorkflowType{Name: "test-wf-type"},
+		TaskQueue:          &taskqueuepb.TaskQueue{Name: "test-tq", Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+		Identity:           "test-id",
+		RequestId:          "test-request-id",
+		VersioningOverride: override,
+	})
+
+	d.NoError(err)
+	d.True(resp.GetStarted())
+
+	descResp, err := d.FrontendClient().DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
+		Namespace: d.Namespace(),
+		Execution: &commonpb.WorkflowExecution{
+			WorkflowId: "test-workflow-id",
+			RunId:      resp.GetRunId(),
+		},
+	})
+	d.NoError(err)
+	d.True(proto.Equal(override, descResp.GetWorkflowExecutionInfo().GetVersioningInfo().GetVersioningOverride()))
+}
+
+func (d *DeploymentSuite) TestStartWorkflowExecution_WithUnpinnedOverride() {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
+	defer cancel()
+	override := &workflowpb.VersioningOverride{
+		Behavior:   enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE,
+		Deployment: nil,
+	}
+
+	resp, err := d.FrontendClient().StartWorkflowExecution(ctx, &workflowservice.StartWorkflowExecutionRequest{
+		Namespace:          d.Namespace(),
+		WorkflowId:         "test-workflow-id",
+		WorkflowType:       &commonpb.WorkflowType{Name: "test-wf-type"},
+		TaskQueue:          &taskqueuepb.TaskQueue{Name: "test-tq", Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+		Identity:           "test-id",
+		RequestId:          "test-request-id",
+		VersioningOverride: override,
+	})
+
+	d.NoError(err)
+	d.True(resp.GetStarted())
+
+	descResp, err := d.FrontendClient().DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
+		Namespace: d.Namespace(),
+		Execution: &commonpb.WorkflowExecution{
+			WorkflowId: "test-workflow-id",
+			RunId:      resp.GetRunId(),
+		},
+	})
+	d.NoError(err)
+	d.True(proto.Equal(override, descResp.GetWorkflowExecutionInfo().GetVersioningInfo().GetVersioningOverride()))
+}
+
+func (d *DeploymentSuite) TestSignalWithStartWorkflowExecution_WithPinnedOverride() {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
+	defer cancel()
+	override := &workflowpb.VersioningOverride{
+		Behavior: enumspb.VERSIONING_BEHAVIOR_PINNED,
+		Deployment: &deploymentpb.Deployment{
+			SeriesName: "seriesName",
+			BuildId:    "A",
+		},
+	}
+
+	resp, err := d.FrontendClient().SignalWithStartWorkflowExecution(ctx, &workflowservice.SignalWithStartWorkflowExecutionRequest{
+		Namespace:          d.Namespace(),
+		WorkflowId:         "test-workflow-id",
+		WorkflowType:       &commonpb.WorkflowType{Name: "test-wf-type"},
+		TaskQueue:          &taskqueuepb.TaskQueue{Name: "test-tq", Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+		Identity:           "test-id",
+		RequestId:          "test-request-id",
+		SignalName:         "test-signal",
+		SignalInput:        nil,
+		VersioningOverride: override,
+	})
+
+	d.NoError(err)
+	d.True(resp.GetStarted())
+
+	descResp, err := d.FrontendClient().DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
+		Namespace: d.Namespace(),
+		Execution: &commonpb.WorkflowExecution{
+			WorkflowId: "test-workflow-id",
+			RunId:      resp.GetRunId(),
+		},
+	})
+	d.NoError(err)
+	d.True(proto.Equal(override, descResp.GetWorkflowExecutionInfo().GetVersioningInfo().GetVersioningOverride()))
+}
+
+func (d *DeploymentSuite) TestSignalWithStartWorkflowExecution_WithUnpinnedOverride() {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
+	defer cancel()
+	override := &workflowpb.VersioningOverride{
+		Behavior:   enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE,
+		Deployment: nil,
+	}
+
+	resp, err := d.FrontendClient().SignalWithStartWorkflowExecution(ctx, &workflowservice.SignalWithStartWorkflowExecutionRequest{
+		Namespace:          d.Namespace(),
+		WorkflowId:         "test-workflow-id",
+		WorkflowType:       &commonpb.WorkflowType{Name: "test-wf-type"},
+		TaskQueue:          &taskqueuepb.TaskQueue{Name: "test-tq", Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+		Identity:           "test-id",
+		RequestId:          "test-request-id",
+		SignalName:         "test-signal",
+		SignalInput:        nil,
+		VersioningOverride: override,
+	})
+
+	d.NoError(err)
+	d.True(resp.GetStarted())
+
+	descResp, err := d.FrontendClient().DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
+		Namespace: d.Namespace(),
+		Execution: &commonpb.WorkflowExecution{
+			WorkflowId: "test-workflow-id",
+			RunId:      resp.GetRunId(),
+		},
+	})
+	d.NoError(err)
+	d.True(proto.Equal(override, descResp.GetWorkflowExecutionInfo().GetVersioningInfo().GetVersioningOverride()))
+}

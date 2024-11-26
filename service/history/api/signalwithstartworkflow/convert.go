@@ -59,6 +59,7 @@ func ConvertToStartRequest(
 		WorkflowStartDelay:       request.GetWorkflowStartDelay(),
 		UserMetadata:             request.UserMetadata,
 		Links:                    request.GetLinks(),
+		VersioningOverride:       request.GetVersioningOverride(),
 	}
 
 	return common.CreateHistoryStartWorkflowRequest(namespaceID.String(), req, nil, nil, now)
