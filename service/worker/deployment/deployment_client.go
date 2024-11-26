@@ -461,9 +461,6 @@ func (d *DeploymentClientImpl) generateRegisterWorkerInDeploymentArgs(
 }
 
 func (d *DeploymentClientImpl) buildInitialDeploymentMemo(deployment *deploymentpb.Deployment) (*commonpb.Memo, error) {
-	memo := &commonpb.Memo{}
-	memo.Fields = make(map[string]*commonpb.Payload)
-
 	deploymentWorkflowMemo := &deploymentspb.DeploymentWorkflowMemo{
 		Deployment:          deployment,
 		CreateTime:          timestamppb.Now(),
@@ -475,7 +472,9 @@ func (d *DeploymentClientImpl) buildInitialDeploymentMemo(deployment *deployment
 		return nil, err
 	}
 
-	memo.Fields[DeploymentMemoField] = memoPayload
-	return memo, nil
-
+	return &commonpb.Memo{
+		Fields: map[string]*commonpb.Payload{
+			DeploymentMemoField: memoPayload,
+		},
+	}, nil
 }

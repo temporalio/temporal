@@ -48,7 +48,6 @@ import (
 	updatepb "go.temporal.io/api/update/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
-	deployspb "go.temporal.io/server/api/deployment/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	schedspb "go.temporal.io/server/api/schedule/v1"
@@ -3227,16 +3226,6 @@ func (wh *WorkflowHandler) ListDeployments(
 		Deployments:   deployments,
 		NextPageToken: nextPageToken,
 	}, nil
-}
-
-func (wh *WorkflowHandler) decodeDeploymentMemo(memo *commonpb.Memo) *deployspb.DeploymentWorkflowMemo {
-	var workflowMemo deployspb.DeploymentWorkflowMemo
-	err := sdk.PreferProtoDataConverter.FromPayload(memo.Fields[deployment.DeploymentMemoField], &workflowMemo)
-	if err != nil {
-		wh.logger.Error("Error while decoding deployment memo info from payload", tag.Error(err))
-		return nil
-	}
-	return &workflowMemo
 }
 
 func (wh *WorkflowHandler) GetDeploymentReachability(

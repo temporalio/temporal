@@ -36,6 +36,7 @@ import (
 	"go.temporal.io/sdk/workflow"
 	deploymentspb "go.temporal.io/server/api/deployment/v1"
 	"go.temporal.io/server/common"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type (
@@ -258,7 +259,10 @@ func (d *DeploymentWorkflowRunner) handleSetCurrent(ctx workflow.Context, args *
 
 	// FIXME: Also update the status of the previous current deployment to NO_STATUS
 
-	// FIXME: Update the timestamps
+	// Update local state
+	d.DeploymentLocalState.IsCurrent = true
+	d.DeploymentLocalState.LastBecameCurrentTime = timestamppb.New(workflow.Now(ctx))
+	d.updateMemo()
 
 	// Update all TQs in current deployment
 	syncReq := &deploymentspb.SyncUserDataRequest{
@@ -276,6 +280,7 @@ func (d *DeploymentWorkflowRunner) handleSetCurrent(ctx workflow.Context, args *
 	activityCtx := workflow.WithActivityOptions(ctx, defaultActivityOptions)
 	err = workflow.ExecuteActivity(activityCtx, d.a.SyncUserData, syncReq).Get(ctx, nil)
 	if err != nil {
+		// FIXME: if this fails, should we roll back anything?
 		return nil, err
 	}
 
@@ -302,8 +307,13 @@ func (d *DeploymentWorkflowRunner) handleDescribeQuery() (*deploymentspb.QueryDe
 	}, nil
 }
 
-/*
 // updateMemo should be called whenever the workflow updates it's local state: "is_current_deployment"
-func (d *DeploymentWorkflowRunner) updateMemo() {
+func (d *DeploymentWorkflowRunner) updateMemo(ctx workflow.Context) {
+	workflow.UpsertMemo(ctx, map[string]any{
+		DeploymentMemoField: &deploymentspb.DeploymentWorkflowMemo{
+			Deployment:          d.DeploymentLocalState.WorkerDeployment,
+			CreateTime:          d.DeploymentLocalState.CreateTime,
+			IsCurrentDeployment: d.DeploymentLocalState.IsCurrent,
+		},
+	})
 }
-*/
