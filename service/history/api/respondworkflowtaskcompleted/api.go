@@ -333,7 +333,7 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 		newMutableState             workflow.MutableState
 		responseMutations           []workflowTaskResponseMutation
 	)
-	updateRegistry := weContext.UpdateRegistry(ctx, nil)
+	updateRegistry := weContext.UpdateRegistry(ctx)
 	// hasBufferedEventsOrMessages indicates if there are any buffered events
 	// or admitted updates which should generate a new workflow task.
 

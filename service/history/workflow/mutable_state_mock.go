@@ -3107,16 +3107,18 @@ func (mr *MockMutableStateMockRecorder) UpdateActivityProgress(ai, request any) 
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateActivityProgress", reflect.TypeOf((*MockMutableState)(nil).UpdateActivityProgress), ai, request)
 }
 
-// UpdateActivityTimerHeartbeat mocks base method.
-func (m *MockMutableState) UpdateActivityTimerHeartbeat(arg0 int64, arg1 time.Time) {
+// UpdateActivityTaskStatusWithTimerHeartbeat mocks base method.
+func (m *MockMutableState) UpdateActivityTaskStatusWithTimerHeartbeat(scheduleEventId int64, timerTaskStatus int32, heartbeatTimeoutVisibility *time.Time) error {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "UpdateActivityTimerHeartbeat", arg0, arg1)
+	ret := m.ctrl.Call(m, "UpdateActivityTaskStatusWithTimerHeartbeat", scheduleEventId, timerTaskStatus, heartbeatTimeoutVisibility)
+	ret0, _ := ret[0].(error)
+	return ret0
 }
 
-// UpdateActivityTimerHeartbeat indicates an expected call of UpdateActivityTimerHeartbeat.
-func (mr *MockMutableStateMockRecorder) UpdateActivityTimerHeartbeat(arg0, arg1 any) *gomock.Call {
+// UpdateActivityTaskStatusWithTimerHeartbeat indicates an expected call of UpdateActivityTaskStatusWithTimerHeartbeat.
+func (mr *MockMutableStateMockRecorder) UpdateActivityTaskStatusWithTimerHeartbeat(scheduleEventId, timerTaskStatus, heartbeatTimeoutVisibility any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateActivityTimerHeartbeat", reflect.TypeOf((*MockMutableState)(nil).UpdateActivityTimerHeartbeat), arg0, arg1)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateActivityTaskStatusWithTimerHeartbeat", reflect.TypeOf((*MockMutableState)(nil).UpdateActivityTaskStatusWithTimerHeartbeat), scheduleEventId, timerTaskStatus, heartbeatTimeoutVisibility)
 }
 
 // UpdateBuildIdAssignment mocks base method.
@@ -3183,6 +3185,20 @@ func (m *MockMutableState) UpdateUserTimer(arg0 *persistence.TimerInfo) error {
 func (mr *MockMutableStateMockRecorder) UpdateUserTimer(arg0 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateUserTimer", reflect.TypeOf((*MockMutableState)(nil).UpdateUserTimer), arg0)
+}
+
+// UpdateUserTimerTaskStatus mocks base method.
+func (m *MockMutableState) UpdateUserTimerTaskStatus(timerId string, status int64) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdateUserTimerTaskStatus", timerId, status)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// UpdateUserTimerTaskStatus indicates an expected call of UpdateUserTimerTaskStatus.
+func (mr *MockMutableStateMockRecorder) UpdateUserTimerTaskStatus(timerId, status any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateUserTimerTaskStatus", reflect.TypeOf((*MockMutableState)(nil).UpdateUserTimerTaskStatus), timerId, status)
 }
 
 // UpdateWorkflowStateStatus mocks base method.

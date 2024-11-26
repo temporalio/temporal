@@ -156,6 +156,9 @@ var (
 		enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED: {},
 		enumspb.WORKFLOW_EXECUTION_STATUS_TIMED_OUT:  {},
 	}
+
+	// ErrResetRedirectLimitReached indicates a possible long chain (or a loop) of resets that cannot be handled.
+	ErrResetRedirectLimitReached = serviceerror.NewInternal("The chain of resets is too long to iterate.")
 )
 
 // StaleStateError is an indicator that after loading the state for a task it was detected as stale. It's possible that

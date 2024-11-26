@@ -193,7 +193,7 @@ func (s *SyncStateRetrieverImpl) getSyncStateResult(
 		}
 		tombstoneBatch := mutableState.GetExecutionInfo().SubStateMachineTombstoneBatches
 		if len(tombstoneBatch) == 0 {
-			return true
+			return false
 		}
 		if workflow.CompareVersionedTransition(tombstoneBatch[0].VersionedTransition, targetCurrentVersionedTransition) <= 0 {
 			return true
