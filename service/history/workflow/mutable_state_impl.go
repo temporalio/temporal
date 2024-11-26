@@ -2224,7 +2224,6 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionStartedEvent(
 	ms.executionInfo.WorkflowExecutionTimeout = event.GetWorkflowExecutionTimeout()
 	ms.executionInfo.DefaultWorkflowTaskTimeout = event.GetWorkflowTaskTimeout()
 	ms.executionInfo.VersioningInfo = &workflowpb.WorkflowExecutionVersioningInfo{VersioningOverride: event.GetVersioningOverride()}
-	ms.logger.Info(fmt.Sprintf("override: %v", ms.executionInfo.GetVersioningInfo().GetVersioningOverride()))
 
 	coll := callbacks.MachineCollection(ms.HSM())
 	for idx, cb := range event.GetCompletionCallbacks() {
