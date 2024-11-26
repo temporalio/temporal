@@ -95,8 +95,8 @@ func DeploymentStoreClientProvider(historyClient resource.HistoryClient, visibil
 		reachabilityCache: newReachabilityCache(
 			metrics.NoopMetricsHandler,
 			visibilityManager,
-			reachabilityCacheOpenWFsTTL,   // TODO (carly) use dc (ie. config.ReachabilityCacheOpenWFsTTL)
-			reachabilityCacheClosedWFsTTL, // TODO (carly) use dc (ie. config.ReachabilityCacheClosedWFsTTL)
+			dynamicconfig.ReachabilityCacheOpenWFsTTL.Get(dc)(),
+			dynamicconfig.ReachabilityCacheClosedWFsTTL.Get(dc)(),
 		),
 	}
 }

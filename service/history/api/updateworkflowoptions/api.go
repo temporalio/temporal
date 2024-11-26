@@ -27,7 +27,6 @@ package updateworkflowoptions
 import (
 	"context"
 	"fmt"
-
 	"google.golang.org/protobuf/types/known/fieldmaskpb"
 
 	"go.temporal.io/api/serviceerror"
@@ -64,10 +63,8 @@ func Invoke(
 			req.GetWorkflowExecution().GetWorkflowId(),
 			req.GetWorkflowExecution().GetRunId(),
 		),
-		func(workflowLease api.WorkflowLease) (_ *api.UpdateWorkflowAction, updateError error) {
+		func(workflowLease api.WorkflowLease) (*api.UpdateWorkflowAction, error) {
 			mutableState := workflowLease.GetMutableState()
-			defer func() { workflowLease.GetReleaseFn()(updateError) }()
-
 			if !mutableState.IsWorkflowExecutionRunning() {
 				// in-memory mutable state is still clean, let updateError=nil in the defer func()
 				// to prevent clearing and reloading mutable state while releasing the lock
@@ -75,13 +72,13 @@ func Invoke(
 			}
 
 			// Merge the requested options mentioned in the field mask with the current options in the mutable state
-			mergedOpts, updateError := applyWorkflowExecutionOptions(
+			mergedOpts, err := applyWorkflowExecutionOptions(
 				getOptionsFromMutableState(mutableState),
 				req.GetWorkflowExecutionOptions(),
 				req.GetUpdateMask(),
 			)
-			if updateError != nil {
-				return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("error parsing update_options: %v", updateError))
+			if err != nil {
+				return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("error applying update_options: %v", err))
 			}
 
 			// Set options for gRPC response
@@ -95,9 +92,9 @@ func Invoke(
 				}, nil
 			}
 
-			_, updateError = mutableState.AddWorkflowExecutionOptionsUpdatedEvent(req.GetWorkflowExecutionOptions().GetVersioningOverride())
-			if updateError != nil {
-				return nil, updateError
+			_, err = mutableState.AddWorkflowExecutionOptionsUpdatedEvent(mergedOpts.GetVersioningOverride())
+			if err != nil {
+				return nil, err
 			}
 
 			// TODO (carly) part 2: handle safe deployment change --> CreateWorkflowTask=true
