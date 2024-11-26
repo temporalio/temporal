@@ -372,7 +372,7 @@ func (wh *WorkflowHandler) DeprecateNamespace(ctx context.Context, request *work
 	return resp, err
 }
 
-// StartWorkflowExecution starts a new long running workflow instance.  It will create the instance with
+// StartWorkflowExecution starts a new workflow instance (a "workflow execution").  It will create the instance with
 // 'WorkflowExecutionStarted' event in history and also schedule the first WorkflowTask for the worker to make the
 // first workflow task for this instance.  It will return 'WorkflowExecutionAlreadyStartedError', if an instance already
 // exists with same workflowId.
@@ -5331,7 +5331,7 @@ func (wh *WorkflowHandler) UpdateWorkflowExecutionOptions(
 	}
 	if opts.GetVersioningOverride().GetBehavior() == enumspb.VERSIONING_BEHAVIOR_PINNED &&
 		opts.GetVersioningOverride().GetDeployment() == nil {
-		return nil, serviceerror.NewInvalidArgument("Deployment must be set if behavior override is PINNED")
+		return nil, serviceerror.NewInvalidArgument("Deployment override must be set if behavior override is PINNED")
 	}
 
 	namespaceId, err := wh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))

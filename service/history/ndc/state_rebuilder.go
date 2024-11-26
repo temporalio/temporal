@@ -212,6 +212,7 @@ func (r *StateRebuilderImpl) initializeBuilders(
 		workflowIdentifier.GetWorkflowID(),
 		workflowIdentifier.GetRunID(),
 		now,
+		nil,
 	)
 	stateBuilder := workflow.NewMutableStateRebuilder(
 		r.shard,

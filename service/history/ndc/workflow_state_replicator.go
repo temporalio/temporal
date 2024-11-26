@@ -657,6 +657,7 @@ func (r *WorkflowStateReplicatorImpl) getNewRunMutableState(
 			workflowID,
 			newRunID,
 			timestamp.TimeValue(newRunHistory[0].GetEventTime()),
+			originalMutableState.GetExecutionInfo().GetVersioningInfo(),
 		)
 	}
 

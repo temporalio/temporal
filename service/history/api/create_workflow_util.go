@@ -26,6 +26,8 @@ package api
 
 import (
 	"context"
+	enumspb "go.temporal.io/api/enums/v1"
+	workflowpb "go.temporal.io/api/workflow/v1"
 
 	commonpb "go.temporal.io/api/common/v1"
 	historypb "go.temporal.io/api/history/v1"
@@ -74,6 +76,7 @@ func NewWorkflowWithSignal(
 		startRequest.StartRequest.WorkflowRunTimeout,
 		workflowID,
 		runID,
+		signalWithStartRequest.GetVersioningOverride(),
 	)
 	if err != nil {
 		return nil, err
@@ -184,6 +187,7 @@ func CreateMutableState(
 	runTimeout *durationpb.Duration,
 	workflowID string,
 	runID string,
+	versioningOverride *workflowpb.VersioningOverride,
 ) (workflow.MutableState, error) {
 	newMutableState := workflow.NewMutableState(
 		shard,
@@ -193,6 +197,7 @@ func CreateMutableState(
 		workflowID,
 		runID,
 		shard.GetTimeSource().Now(),
+		&workflowpb.WorkflowExecutionVersioningInfo{VersioningOverride: versioningOverride},
 	)
 	if err := newMutableState.SetHistoryTree(executionTimeout, runTimeout, runID); err != nil {
 		return nil, err
@@ -322,6 +327,10 @@ func ValidateStartWorkflowExecutionRequest(
 	}
 	if len(request.WorkflowType.GetName()) > maxIDLengthLimit {
 		return serviceerror.NewInvalidArgument("WorkflowType exceeds length limit.")
+	}
+	if request.GetVersioningOverride().GetBehavior() == enumspb.VERSIONING_BEHAVIOR_PINNED &&
+		request.GetVersioningOverride().GetDeployment() == nil {
+		return serviceerror.NewInvalidArgument("Deployment override must be set if behavior override is PINNED")
 	}
 	if err := retrypolicy.Validate(request.RetryPolicy); err != nil {
 		return err

@@ -543,6 +543,7 @@ func (r *HistoryReplicatorImpl) applyStartEvents(
 		task.getWorkflowID(),
 		task.getRunID(),
 		timestamp.TimeValue(task.getFirstEvent().GetEventTime()),
+		nil, // TODO (carly): figure out what to pass here
 	)
 	mutableState, newMutableState, err := r.mutableStateMapper.ApplyEvents(ctx, wfContext, mutableState, task)
 	if err != nil {
