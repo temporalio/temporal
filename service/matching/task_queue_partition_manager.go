@@ -491,6 +491,7 @@ func (pm *taskQueuePartitionManagerImpl) Describe(
 	// In the future, active will mean that the physical queue for that version has had a task added recently or a recent poller.
 	if includeAllActive {
 		for k := range pm.versionedQueues {
+			// TODO: add deployment info to DescribeTaskQueue
 			if b := k.BuildId(); b != "" {
 				buildIds[b] = true
 			}
@@ -622,13 +623,13 @@ func (pm *taskQueuePartitionManagerImpl) unloadPhysicalQueue(unloadedDbq physica
 	}
 
 	pm.versionedQueuesLock.Lock()
-	foundDbq, ok := pm.versionedQueues[*version]
+	foundDbq, ok := pm.versionedQueues[version]
 	if !ok || foundDbq != unloadedDbq {
 		pm.versionedQueuesLock.Unlock()
 		unloadedDbq.Stop(unloadCause)
 		return
 	}
-	delete(pm.versionedQueues, *version)
+	delete(pm.versionedQueues, version)
 	pm.versionedQueuesLock.Unlock()
 	unloadedDbq.Stop(unloadCause)
 }

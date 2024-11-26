@@ -2970,7 +2970,7 @@ func (s *matchingEngineSuite) TestUpdatePhysicalTaskQueueGauge_VersionSet() {
 	// the size of the map to 1 and it's counter to 1.
 	s.PhysicalQueueMetricValidator(capture, 1, 1)
 
-	Vqtpm, err := tqm.(*taskQueuePartitionManagerImpl).getVersionedQueueNoWait(
+	vqtpm, err := tqm.(*taskQueuePartitionManagerImpl).getVersionedQueueNoWait(
 		versionSet,
 		"",
 		nil,
@@ -2981,7 +2981,7 @@ func (s *matchingEngineSuite) TestUpdatePhysicalTaskQueueGauge_VersionSet() {
 	// Creating a VersionedQueue results in increasing the size of the map to 2, due to 2 entries now,
 	// with it's counter to 1.
 	s.PhysicalQueueMetricValidator(capture, 2, 1)
-	s.matchingEngine.updatePhysicalTaskQueueGauge(Vqtpm.(*physicalTaskQueueManagerImpl), 1)
+	s.matchingEngine.updatePhysicalTaskQueueGauge(vqtpm.(*physicalTaskQueueManagerImpl), 1)
 	s.PhysicalQueueMetricValidator(capture, 3, 2)
 
 	// Validating if versioned has been set right for the specific parameters
@@ -3487,7 +3487,7 @@ type dbTaskQueueKey struct {
 }
 
 func getKey(dbq *PhysicalTaskQueueKey) dbTaskQueueKey {
-	return dbTaskQueueKey{dbq.partition.Key(), *dbq.Version()}
+	return dbTaskQueueKey{dbq.partition.Key(), dbq.Version()}
 }
 
 func newTestTaskManager(logger log.Logger) *testTaskManager {

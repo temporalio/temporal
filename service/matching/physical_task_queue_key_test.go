@@ -98,8 +98,9 @@ func TestValidPersistenceNames(t *testing.T) {
 	versionSet := "asdf89SD-lks_="
 	buildID := "build-ABC/adsf:98"
 	seriesName := "?deployment-ABC|ad/sf:98"
-	encodedBuildID := base64.URLEncoding.EncodeToString([]byte(buildID))
-	encodedSeriesName := base64.URLEncoding.EncodeToString([]byte(seriesName))
+	v2EncodedBuildID := base64.URLEncoding.EncodeToString([]byte(buildID))
+	encodedBuildID := base64.RawURLEncoding.EncodeToString([]byte(buildID))
+	encodedSeriesName := base64.RawURLEncoding.EncodeToString([]byte(seriesName))
 	deployment := &deploymentpb.Deployment{
 		SeriesName: seriesName,
 		BuildId:    buildID,
@@ -124,8 +125,8 @@ func TestValidPersistenceNames(t *testing.T) {
 		{"/_sys//list0//41", "/list0/", 41, "", "", nil},
 		{"/_sys/list0/" + versionSet + ":1", "list0", 1, versionSet, "", nil},
 		{"/_sys//list0//" + versionSet + ":41", "/list0/", 41, versionSet, "", nil},
-		{"/_sys/list0/" + encodedBuildID + "#1", "list0", 1, "", buildID, nil},
-		{"/_sys//list0//" + encodedBuildID + "#41", "/list0/", 41, "", buildID, nil},
+		{"/_sys/list0/" + v2EncodedBuildID + "#1", "list0", 1, "", buildID, nil},
+		{"/_sys//list0//" + v2EncodedBuildID + "#41", "/list0/", 41, "", buildID, nil},
 		{"/_sys/list0/" + encodedSeriesName + "|" + encodedBuildID + "#1", "list0", 1, "", "", deployment},
 		{"/_sys//list0//" + encodedSeriesName + "|" + encodedBuildID + "#41", "/list0/", 41, "", "", deployment},
 	}

@@ -149,8 +149,8 @@ func (q *PhysicalTaskQueueKey) PersistenceName() string {
 		}
 
 		if len(q.version.deploymentSeriesName) > 0 {
-			encodedBuildId := base64.URLEncoding.EncodeToString([]byte(q.version.buildId))
-			encodedDeploymentName := base64.URLEncoding.EncodeToString([]byte(q.version.deploymentSeriesName))
+			encodedBuildId := base64.RawURLEncoding.EncodeToString([]byte(q.version.buildId))
+			encodedDeploymentName := base64.RawURLEncoding.EncodeToString([]byte(q.version.deploymentSeriesName))
 			return nonRootPartitionPrefix + baseName + partitionDelimiter + encodedDeploymentName + deploymentNameDelimiter + encodedBuildId + buildIdDelimiter + strconv.Itoa(p.PartitionId())
 		} else if len(q.version.buildId) > 0 {
 			encodedBuildId := base64.URLEncoding.EncodeToString([]byte(q.version.buildId))
@@ -209,7 +209,7 @@ func parseSuffix(persistenceName string, suffix string) (partition int, versionS
 	if buildIdOff := strings.LastIndex(suffix, deploymentNameDelimiter); buildIdOff == 0 {
 		return 0, "", "", "", fmt.Errorf("%w: %s", ErrInvalidPersistenceName, persistenceName)
 	} else if buildIdOff > 0 {
-		deploymentNameBytes, err := base64.URLEncoding.DecodeString(suffix[:buildIdOff])
+		deploymentNameBytes, err := base64.RawURLEncoding.DecodeString(suffix[:buildIdOff])
 		if err != nil {
 			return 0, "", "", "", fmt.Errorf("%w: %s", ErrInvalidPersistenceName, persistenceName)
 		}
@@ -219,7 +219,7 @@ func parseSuffix(persistenceName string, suffix string) (partition int, versionS
 		if partitionOff := strings.LastIndex(suffix, buildIdDelimiter); partitionOff == 0 {
 			return 0, "", "", "", fmt.Errorf("%w: %s", ErrInvalidPersistenceName, persistenceName)
 		} else if partitionOff > 0 {
-			buildIdBytes, err := base64.URLEncoding.DecodeString(suffix[:partitionOff])
+			buildIdBytes, err := base64.RawURLEncoding.DecodeString(suffix[:partitionOff])
 			if err != nil {
 				return 0, "", "", "", fmt.Errorf("%w: %s", ErrInvalidPersistenceName, persistenceName)
 			}
@@ -255,15 +255,15 @@ func (q *PhysicalTaskQueueKey) IsVersioned() bool {
 
 // Version returns a pointer to the physical queue version key. Caller must not manipulate the
 // returned value.
-func (q *PhysicalTaskQueueKey) Version() *PhysicalTaskQueueVersion {
-	return &q.version
+func (q *PhysicalTaskQueueKey) Version() PhysicalTaskQueueVersion {
+	return q.version
 }
 
-func (v *PhysicalTaskQueueVersion) IsVersioned() bool {
+func (v PhysicalTaskQueueVersion) IsVersioned() bool {
 	return v.versionSet != "" || v.buildId != ""
 }
 
-func (v *PhysicalTaskQueueVersion) Deployment() *deployment.Deployment {
+func (v PhysicalTaskQueueVersion) Deployment() *deployment.Deployment {
 	if len(v.deploymentSeriesName) > 0 {
 		return &deployment.Deployment{
 			SeriesName: v.deploymentSeriesName,
@@ -274,19 +274,19 @@ func (v *PhysicalTaskQueueVersion) Deployment() *deployment.Deployment {
 }
 
 // BuildId returns empty if this is not a Versioning v2 queue.
-func (v *PhysicalTaskQueueVersion) BuildId() string {
+func (v PhysicalTaskQueueVersion) BuildId() string {
 	if len(v.deploymentSeriesName) > 0 {
 		return ""
 	}
 	return v.buildId
 }
 
-func (v *PhysicalTaskQueueVersion) VersionSet() string {
+func (v PhysicalTaskQueueVersion) VersionSet() string {
 	return v.versionSet
 }
 
 // MetricsTagValue returns the build ID tag value for this version.
-func (v *PhysicalTaskQueueVersion) MetricsTagValue() string {
+func (v PhysicalTaskQueueVersion) MetricsTagValue() string {
 	if v.versionSet != "" {
 		return v.versionSet
 	} else if v.deploymentSeriesName == "" {
