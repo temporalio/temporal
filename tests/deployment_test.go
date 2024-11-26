@@ -30,7 +30,6 @@ import (
 	"testing"
 	"time"
 
-	workflowpb "go.temporal.io/api/workflow/v1"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/fieldmaskpb"
 
@@ -42,6 +41,7 @@ import (
 	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
+	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	sdkclient "go.temporal.io/sdk/client"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -98,7 +98,6 @@ func (d *DeploymentSuite) SetupSuite() {
 	}
 	d.SetDynamicConfigOverrides(dynamicConfigOverrides)
 	d.FunctionalTestBase.SetupSuite("testdata/es_cluster.yaml")
-
 }
 
 func (d *DeploymentSuite) TearDownSuite() {
@@ -119,6 +118,9 @@ func (d *DeploymentSuite) SetupTest() {
 }
 
 func (d *DeploymentSuite) TearDownTest() {
+	if d.sdkClient != nil {
+		d.sdkClient.Close()
+	}
 }
 
 // startDeploymentWorkflows calls PollWorkflowTaskQueue to start deployment related workflows
@@ -405,8 +407,7 @@ func (d *DeploymentSuite) TestListDeployments_MultipleDeployments_WithSeriesFilt
 // TODO Shivam - Add more getCurrentDeployment tests when SetCurrentDefaultBuildID API has been defined
 
 func (d *DeploymentSuite) TestGetDeploymentReachability_OverrideUnversioned() {
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
-	defer cancel()
+	ctx := context.Background()
 
 	// presence of internally used delimiters (:) or escape
 	// characters shouldn't break functionality
@@ -445,13 +446,7 @@ func (d *DeploymentSuite) TestGetDeploymentReachability_OverrideUnversioned() {
 	}
 
 	// non-current deployment is unreachable
-	ctx = context.Background()
-	resp, err := d.FrontendClient().GetDeploymentReachability(ctx, &workflowservice.GetDeploymentReachabilityRequest{
-		Namespace:  d.Namespace(),
-		Deployment: workerDeployment,
-	})
-	d.NoError(err)
-	d.Assert().Equal(enumspb.DEPLOYMENT_REACHABILITY_UNREACHABLE, resp.GetReachability())
+	d.checkDeploymentReachability(ctx, workerDeployment, enumspb.DEPLOYMENT_REACHABILITY_UNREACHABLE)
 
 	// start an unversioned workflow, set pinned deployment override --> deployment should be reachable
 	unversionedTQ := "unversioned-test-tq"
@@ -479,21 +474,9 @@ func (d *DeploymentSuite) TestGetDeploymentReachability_OverrideUnversioned() {
 	d.True(proto.Equal(updateResp.GetWorkflowExecutionOptions(), updateOpts))
 
 	// describe workflow and check that the versioning info has the override
-	descResp, err := d.FrontendClient().DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
-		Namespace: d.Namespace(),
-		Execution: unversionedWFExec,
-	})
-	d.NoError(err)
-	versioningInfo := descResp.GetWorkflowExecutionInfo().GetVersioningInfo()
-	d.True(proto.Equal(updateOpts.GetVersioningOverride(), versioningInfo.GetVersioningOverride()))
-
-	d.Eventually(func() bool {
-		resp, err = d.FrontendClient().GetDeploymentReachability(ctx, &workflowservice.GetDeploymentReachabilityRequest{
-			Namespace:  d.Namespace(),
-			Deployment: workerDeployment,
-		})
-		return resp.GetReachability() == enumspb.DEPLOYMENT_REACHABILITY_REACHABLE
-	}, 5*time.Second, 50*time.Millisecond)
+	d.checkDescribeWorkflowAfterOverride(ctx, unversionedWFExec, updateOpts.GetVersioningOverride())
+	// check that the deployment is now reachable, since an open workflow is using it via override
+	d.checkDeploymentReachability(ctx, workerDeployment, enumspb.DEPLOYMENT_REACHABILITY_REACHABLE)
 
 	// TODO (carly): once sdk allows starting a deployment worker, start worker, complete workflow, and check for CLOSED_ONLY
 	// TODO (carly): once SetCurrentDeployment is ready, check that a current deployment is reachable even with no workflows
@@ -501,9 +484,76 @@ func (d *DeploymentSuite) TestGetDeploymentReachability_OverrideUnversioned() {
 	// TODO (carly): check cache times (do I need to do this in functional when I have cache time tests in unit?)
 }
 
-func (d *DeploymentSuite) TestUpdateWorkflowExecutionOptions_SetUnpinnedThenUnset() {
+func (d *DeploymentSuite) checkDescribeWorkflowAfterOverride(
+	ctx context.Context,
+	wf *commonpb.WorkflowExecution,
+	expectedOverride *workflowpb.VersioningOverride,
+) {
+	d.EventuallyWithT(func(t *assert.CollectT) {
+		a := assert.New(t)
+		resp, err := d.FrontendClient().DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
+			Namespace: d.Namespace(),
+			Execution: wf,
+		})
+		a.NoError(err)
+		a.NotNil(resp)
+		a.NotNil(resp.GetWorkflowExecutionInfo())
+		a.NotNil(resp.GetWorkflowExecutionInfo().GetVersioningInfo())
+		a.True(proto.Equal(expectedOverride, resp.GetWorkflowExecutionInfo().GetVersioningInfo().GetVersioningOverride()))
+	}, 5*time.Second, 50*time.Millisecond)
+}
+
+func (d *DeploymentSuite) checkDeploymentReachability(
+	ctx context.Context,
+	deployment *deploymentpb.Deployment,
+	expectedReachability enumspb.DeploymentReachability,
+) {
+	d.EventuallyWithT(func(t *assert.CollectT) {
+		a := assert.New(t)
+		resp, err := d.FrontendClient().GetDeploymentReachability(ctx, &workflowservice.GetDeploymentReachabilityRequest{
+			Namespace:  d.Namespace(),
+			Deployment: deployment,
+		})
+		a.NoError(err)
+		a.Equal(expectedReachability, resp.GetReachability())
+	}, 5*time.Second, 50*time.Millisecond)
+}
+
+func (d *DeploymentSuite) createDeploymentAndWaitForExist(
+	deployment *deploymentpb.Deployment,
+	tq *taskqueuepb.TaskQueue,
+) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
 	defer cancel()
+	errChan := make(chan error)
+	defer close(errChan)
+	// Start a deployment workflow
+	go func() {
+		d.startDeploymentWorkflows(ctx, tq, deployment, errChan)
+	}()
+
+	// Wait for the deployment to exist
+	d.EventuallyWithT(func(t *assert.CollectT) {
+		a := assert.New(t)
+
+		resp, err := d.FrontendClient().DescribeDeployment(ctx, &workflowservice.DescribeDeploymentRequest{
+			Namespace:  d.Namespace(),
+			Deployment: deployment,
+		})
+		a.NoError(err)
+		a.NotNil(resp.DeploymentInfo)
+		a.NotNil(resp.DeploymentInfo.Deployment)
+	}, time.Second*5, time.Millisecond*200)
+	<-ctx.Done()
+	select {
+	case err := <-errChan:
+		d.Fail("Expected error channel to be empty but got error %w", err)
+	default:
+	}
+}
+
+func (d *DeploymentSuite) TestUpdateWorkflowExecutionOptions_SetUnpinnedThenUnset() {
+	ctx := context.Background()
 
 	// start an unversioned workflow
 	unversionedTQ := "unversioned-test-tq"
@@ -529,13 +579,7 @@ func (d *DeploymentSuite) TestUpdateWorkflowExecutionOptions_SetUnpinnedThenUnse
 	})
 	d.NoError(err)
 	d.True(proto.Equal(updateResp.GetWorkflowExecutionOptions(), unpinnedOpts))
-	descResp, err := d.FrontendClient().DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
-		Namespace: d.Namespace(),
-		Execution: unversionedWFExec,
-	})
-	d.NoError(err)
-	versioningInfo := descResp.GetWorkflowExecutionInfo().GetVersioningInfo()
-	d.True(proto.Equal(unpinnedOpts.GetVersioningOverride(), versioningInfo.GetVersioningOverride()))
+	d.checkDescribeWorkflowAfterOverride(ctx, unversionedWFExec, unpinnedOpts.GetVersioningOverride())
 
 	// 2. Unset using empty update opts with mutation mask --> describe workflow shows no more override
 	updateResp, err = d.FrontendClient().UpdateWorkflowExecutionOptions(ctx, &workflowservice.UpdateWorkflowExecutionOptionsRequest{
@@ -546,17 +590,11 @@ func (d *DeploymentSuite) TestUpdateWorkflowExecutionOptions_SetUnpinnedThenUnse
 	})
 	d.NoError(err)
 	d.True(proto.Equal(updateResp.GetWorkflowExecutionOptions(), &workflowpb.WorkflowExecutionOptions{}))
-	descResp, err = d.FrontendClient().DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
-		Namespace: d.Namespace(),
-		Execution: unversionedWFExec,
-	})
-	d.NoError(err)
-	d.Nil(descResp.GetWorkflowExecutionInfo().GetVersioningInfo().GetVersioningOverride())
+	d.checkDescribeWorkflowAfterOverride(ctx, unversionedWFExec, nil)
 }
 
 func (d *DeploymentSuite) TestUpdateWorkflowExecutionOptions_SetPinnedThenUnset() {
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
-	defer cancel()
+	ctx := context.Background()
 
 	// presence of internally used delimiters (:) or escape
 	// characters shouldn't break functionality
@@ -582,7 +620,10 @@ func (d *DeploymentSuite) TestUpdateWorkflowExecutionOptions_SetPinnedThenUnset(
 		},
 	}
 
-	// 1. Set pinned override on our new unversioned workflow --> describe workflow shows the override
+	// create deployment so that GetDeploymentReachability doesn't error
+	d.createDeploymentAndWaitForExist(workerDeployment, &taskqueuepb.TaskQueue{Name: unversionedTQ, Kind: enumspb.TASK_QUEUE_KIND_NORMAL})
+
+	// 1. Set pinned override on our new unversioned workflow --> describe workflow shows the override + deployment is reachable
 	updateResp, err := d.FrontendClient().UpdateWorkflowExecutionOptions(ctx, &workflowservice.UpdateWorkflowExecutionOptionsRequest{
 		Namespace:                d.Namespace(),
 		WorkflowExecution:        unversionedWFExec,
@@ -591,34 +632,22 @@ func (d *DeploymentSuite) TestUpdateWorkflowExecutionOptions_SetPinnedThenUnset(
 	})
 	d.NoError(err)
 	d.True(proto.Equal(updateResp.GetWorkflowExecutionOptions(), pinnedOpts))
-	descResp, err := d.FrontendClient().DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
-		Namespace: d.Namespace(),
-		Execution: unversionedWFExec,
-	})
-	d.NoError(err)
-	versioningInfo := descResp.GetWorkflowExecutionInfo().GetVersioningInfo()
-	d.True(proto.Equal(pinnedOpts.GetVersioningOverride(), versioningInfo.GetVersioningOverride()))
+	d.checkDescribeWorkflowAfterOverride(ctx, unversionedWFExec, pinnedOpts.GetVersioningOverride())
+	d.checkDeploymentReachability(ctx, workerDeployment, enumspb.DEPLOYMENT_REACHABILITY_REACHABLE)
 
-	// 2. Unset with empty update opts with mutation mask --> describe workflow shows no more override
+	// 2. Unset with empty update opts with mutation mask --> describe workflow shows no more override + deployment is unreachable
 	updateResp, err = d.FrontendClient().UpdateWorkflowExecutionOptions(ctx, &workflowservice.UpdateWorkflowExecutionOptionsRequest{
 		Namespace:                d.Namespace(),
 		WorkflowExecution:        unversionedWFExec,
 		WorkflowExecutionOptions: &workflowpb.WorkflowExecutionOptions{},
 		UpdateMask:               &fieldmaskpb.FieldMask{Paths: []string{"versioning_override"}},
 	})
-	d.NoError(err)
-	d.True(proto.Equal(updateResp.GetWorkflowExecutionOptions(), &workflowpb.WorkflowExecutionOptions{}))
-	descResp, err = d.FrontendClient().DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
-		Namespace: d.Namespace(),
-		Execution: unversionedWFExec,
-	})
-	d.NoError(err)
-	d.Nil(descResp.GetWorkflowExecutionInfo().GetVersioningInfo().GetVersioningOverride())
+	d.checkDescribeWorkflowAfterOverride(ctx, unversionedWFExec, nil)
+	d.checkDeploymentReachability(ctx, workerDeployment, enumspb.DEPLOYMENT_REACHABILITY_UNREACHABLE)
 }
 
 func (d *DeploymentSuite) TestUpdateWorkflowExecutionOptions_EmptyFields() {
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
-	defer cancel()
+	ctx := context.Background()
 
 	// presence of internally used delimiters (:) or escape
 	// characters shouldn't break functionality
@@ -653,18 +682,11 @@ func (d *DeploymentSuite) TestUpdateWorkflowExecutionOptions_EmptyFields() {
 	})
 	d.NoError(err)
 	d.True(proto.Equal(updateResp.GetWorkflowExecutionOptions(), &workflowpb.WorkflowExecutionOptions{}))
-	descResp, err := d.FrontendClient().DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
-		Namespace: d.Namespace(),
-		Execution: unversionedWFExec,
-	})
-	d.NoError(err)
-	versioningInfo := descResp.GetWorkflowExecutionInfo().GetVersioningInfo()
-	d.Nil(versioningInfo.GetVersioningOverride())
+	d.checkDescribeWorkflowAfterOverride(ctx, unversionedWFExec, nil)
 }
 
 func (d *DeploymentSuite) TestUpdateWorkflowExecutionOptions_SetPinnedSetPinned() {
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
-	defer cancel()
+	ctx := context.Background()
 
 	// start an unversioned workflow
 	unversionedTQ := "unversioned-test-tq"
@@ -674,26 +696,32 @@ func (d *DeploymentSuite) TestUpdateWorkflowExecutionOptions_SetPinnedSetPinned(
 		WorkflowId: run.GetID(),
 		RunId:      run.GetRunID(),
 	}
+	deploymentA := &deploymentpb.Deployment{
+		SeriesName: "seriesName",
+		BuildId:    "A",
+	}
+	deploymentB := &deploymentpb.Deployment{
+		SeriesName: "seriesName",
+		BuildId:    "B",
+	}
 	pinnedOptsA := &workflowpb.WorkflowExecutionOptions{
 		VersioningOverride: &workflowpb.VersioningOverride{
-			Behavior: enumspb.VERSIONING_BEHAVIOR_PINNED,
-			Deployment: &deploymentpb.Deployment{
-				SeriesName: "seriesName",
-				BuildId:    "A",
-			},
+			Behavior:   enumspb.VERSIONING_BEHAVIOR_PINNED,
+			Deployment: deploymentA,
 		},
 	}
 	pinnedOptsB := &workflowpb.WorkflowExecutionOptions{
 		VersioningOverride: &workflowpb.VersioningOverride{
-			Behavior: enumspb.VERSIONING_BEHAVIOR_PINNED,
-			Deployment: &deploymentpb.Deployment{
-				SeriesName: "seriesName",
-				BuildId:    "B",
-			},
+			Behavior:   enumspb.VERSIONING_BEHAVIOR_PINNED,
+			Deployment: deploymentB,
 		},
 	}
 
-	// 1. Set pinned override A --> describe workflow shows the override
+	// create deployment so that GetDeploymentReachability doesn't error
+	d.createDeploymentAndWaitForExist(deploymentA, &taskqueuepb.TaskQueue{Name: unversionedTQ, Kind: enumspb.TASK_QUEUE_KIND_NORMAL})
+	d.createDeploymentAndWaitForExist(deploymentB, &taskqueuepb.TaskQueue{Name: unversionedTQ, Kind: enumspb.TASK_QUEUE_KIND_NORMAL})
+
+	// 1. Set pinned override A --> describe workflow shows the override + deployment A is reachable
 	updateResp, err := d.FrontendClient().UpdateWorkflowExecutionOptions(ctx, &workflowservice.UpdateWorkflowExecutionOptionsRequest{
 		Namespace:                d.Namespace(),
 		WorkflowExecution:        unversionedWFExec,
@@ -702,15 +730,11 @@ func (d *DeploymentSuite) TestUpdateWorkflowExecutionOptions_SetPinnedSetPinned(
 	})
 	d.NoError(err)
 	d.True(proto.Equal(updateResp.GetWorkflowExecutionOptions(), pinnedOptsA))
-	descResp, err := d.FrontendClient().DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
-		Namespace: d.Namespace(),
-		Execution: unversionedWFExec,
-	})
-	d.NoError(err)
-	versioningInfo := descResp.GetWorkflowExecutionInfo().GetVersioningInfo()
-	d.True(proto.Equal(pinnedOptsA.GetVersioningOverride(), versioningInfo.GetVersioningOverride()))
+	d.checkDescribeWorkflowAfterOverride(ctx, unversionedWFExec, pinnedOptsA.GetVersioningOverride())
+	d.checkDeploymentReachability(ctx, deploymentA, enumspb.DEPLOYMENT_REACHABILITY_REACHABLE)
+	d.checkDeploymentReachability(ctx, deploymentB, enumspb.DEPLOYMENT_REACHABILITY_UNREACHABLE)
 
-	// 3. Set pinned override B --> describe workflow shows the override
+	// 3. Set pinned override B --> describe workflow shows the override + deployment B is reachable, A unreachable
 	updateResp, err = d.FrontendClient().UpdateWorkflowExecutionOptions(ctx, &workflowservice.UpdateWorkflowExecutionOptionsRequest{
 		Namespace:                d.Namespace(),
 		WorkflowExecution:        unversionedWFExec,
@@ -719,18 +743,13 @@ func (d *DeploymentSuite) TestUpdateWorkflowExecutionOptions_SetPinnedSetPinned(
 	})
 	d.NoError(err)
 	d.True(proto.Equal(updateResp.GetWorkflowExecutionOptions(), pinnedOptsB))
-	descResp, err = d.FrontendClient().DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
-		Namespace: d.Namespace(),
-		Execution: unversionedWFExec,
-	})
-	d.NoError(err)
-	versioningInfo = descResp.GetWorkflowExecutionInfo().GetVersioningInfo()
-	d.True(proto.Equal(pinnedOptsB.GetVersioningOverride(), versioningInfo.GetVersioningOverride()))
+	d.checkDescribeWorkflowAfterOverride(ctx, unversionedWFExec, pinnedOptsB.GetVersioningOverride())
+	d.checkDeploymentReachability(ctx, deploymentA, enumspb.DEPLOYMENT_REACHABILITY_UNREACHABLE)
+	d.checkDeploymentReachability(ctx, deploymentB, enumspb.DEPLOYMENT_REACHABILITY_REACHABLE)
 }
 
 func (d *DeploymentSuite) TestUpdateWorkflowExecutionOptions_SetUnpinnedSetUnpinned() {
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
-	defer cancel()
+	ctx := context.Background()
 
 	// start an unversioned workflow
 	unversionedTQ := "unversioned-test-tq"
@@ -756,13 +775,7 @@ func (d *DeploymentSuite) TestUpdateWorkflowExecutionOptions_SetUnpinnedSetUnpin
 	})
 	d.NoError(err)
 	d.True(proto.Equal(updateResp.GetWorkflowExecutionOptions(), unpinnedOpts))
-	descResp, err := d.FrontendClient().DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
-		Namespace: d.Namespace(),
-		Execution: unversionedWFExec,
-	})
-	d.NoError(err)
-	versioningInfo := descResp.GetWorkflowExecutionInfo().GetVersioningInfo()
-	d.True(proto.Equal(unpinnedOpts.GetVersioningOverride(), versioningInfo.GetVersioningOverride()))
+	d.checkDescribeWorkflowAfterOverride(ctx, unversionedWFExec, unpinnedOpts.GetVersioningOverride())
 
 	// 1. Set unpinned override --> describe workflow shows the override
 	updateResp, err = d.FrontendClient().UpdateWorkflowExecutionOptions(ctx, &workflowservice.UpdateWorkflowExecutionOptionsRequest{
@@ -773,18 +786,11 @@ func (d *DeploymentSuite) TestUpdateWorkflowExecutionOptions_SetUnpinnedSetUnpin
 	})
 	d.NoError(err)
 	d.True(proto.Equal(updateResp.GetWorkflowExecutionOptions(), unpinnedOpts))
-	descResp, err = d.FrontendClient().DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
-		Namespace: d.Namespace(),
-		Execution: unversionedWFExec,
-	})
-	d.NoError(err)
-	versioningInfo = descResp.GetWorkflowExecutionInfo().GetVersioningInfo()
-	d.True(proto.Equal(unpinnedOpts.GetVersioningOverride(), versioningInfo.GetVersioningOverride()))
+	d.checkDescribeWorkflowAfterOverride(ctx, unversionedWFExec, unpinnedOpts.GetVersioningOverride())
 }
 
 func (d *DeploymentSuite) TestUpdateWorkflowExecutionOptions_SetUnpinnedSetPinned() {
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
-	defer cancel()
+	ctx := context.Background()
 
 	// start an unversioned workflow
 	unversionedTQ := "unversioned-test-tq"
@@ -800,8 +806,21 @@ func (d *DeploymentSuite) TestUpdateWorkflowExecutionOptions_SetUnpinnedSetPinne
 			Deployment: nil,
 		},
 	}
+	deploymentA := &deploymentpb.Deployment{
+		SeriesName: "seriesName",
+		BuildId:    "A",
+	}
+	pinnedOptsA := &workflowpb.WorkflowExecutionOptions{
+		VersioningOverride: &workflowpb.VersioningOverride{
+			Behavior:   enumspb.VERSIONING_BEHAVIOR_PINNED,
+			Deployment: deploymentA,
+		},
+	}
 
-	// 1. Set unpinned override --> describe workflow shows the override
+	// create deployment so that GetDeploymentReachability doesn't error
+	d.createDeploymentAndWaitForExist(deploymentA, &taskqueuepb.TaskQueue{Name: unversionedTQ, Kind: enumspb.TASK_QUEUE_KIND_NORMAL})
+
+	// 1. Set unpinned override --> describe workflow shows the override + deploymentA is unreachable
 	updateResp, err := d.FrontendClient().UpdateWorkflowExecutionOptions(ctx, &workflowservice.UpdateWorkflowExecutionOptionsRequest{
 		Namespace:                d.Namespace(),
 		WorkflowExecution:        unversionedWFExec,
@@ -810,25 +829,10 @@ func (d *DeploymentSuite) TestUpdateWorkflowExecutionOptions_SetUnpinnedSetPinne
 	})
 	d.NoError(err)
 	d.True(proto.Equal(updateResp.GetWorkflowExecutionOptions(), unpinnedOpts))
-	descResp, err := d.FrontendClient().DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
-		Namespace: d.Namespace(),
-		Execution: unversionedWFExec,
-	})
-	d.NoError(err)
-	versioningInfo := descResp.GetWorkflowExecutionInfo().GetVersioningInfo()
-	d.True(proto.Equal(unpinnedOpts.GetVersioningOverride(), versioningInfo.GetVersioningOverride()))
+	d.checkDescribeWorkflowAfterOverride(ctx, unversionedWFExec, unpinnedOpts.GetVersioningOverride())
+	d.checkDeploymentReachability(ctx, deploymentA, enumspb.DEPLOYMENT_REACHABILITY_UNREACHABLE)
 
-	pinnedOptsA := &workflowpb.WorkflowExecutionOptions{
-		VersioningOverride: &workflowpb.VersioningOverride{
-			Behavior: enumspb.VERSIONING_BEHAVIOR_PINNED,
-			Deployment: &deploymentpb.Deployment{
-				SeriesName: "seriesName",
-				BuildId:    "A",
-			},
-		},
-	}
-
-	// 1. Set pinned override A --> describe workflow shows the override
+	// 1. Set pinned override A --> describe workflow shows the override + deploymentA is reachable
 	updateResp, err = d.FrontendClient().UpdateWorkflowExecutionOptions(ctx, &workflowservice.UpdateWorkflowExecutionOptionsRequest{
 		Namespace:                d.Namespace(),
 		WorkflowExecution:        unversionedWFExec,
@@ -837,18 +841,12 @@ func (d *DeploymentSuite) TestUpdateWorkflowExecutionOptions_SetUnpinnedSetPinne
 	})
 	d.NoError(err)
 	d.True(proto.Equal(updateResp.GetWorkflowExecutionOptions(), pinnedOptsA))
-	descResp, err = d.FrontendClient().DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
-		Namespace: d.Namespace(),
-		Execution: unversionedWFExec,
-	})
-	d.NoError(err)
-	versioningInfo = descResp.GetWorkflowExecutionInfo().GetVersioningInfo()
-	d.True(proto.Equal(pinnedOptsA.GetVersioningOverride(), versioningInfo.GetVersioningOverride()))
+	d.checkDescribeWorkflowAfterOverride(ctx, unversionedWFExec, pinnedOptsA.GetVersioningOverride())
+	d.checkDeploymentReachability(ctx, deploymentA, enumspb.DEPLOYMENT_REACHABILITY_REACHABLE)
 }
 
 func (d *DeploymentSuite) TestUpdateWorkflowExecutionOptions_SetPinnedSetUnpinned() {
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
-	defer cancel()
+	ctx := context.Background()
 
 	// start an unversioned workflow
 	unversionedTQ := "unversioned-test-tq"
@@ -864,17 +862,21 @@ func (d *DeploymentSuite) TestUpdateWorkflowExecutionOptions_SetPinnedSetUnpinne
 			Deployment: nil,
 		},
 	}
+	deploymentA := &deploymentpb.Deployment{
+		SeriesName: "seriesName",
+		BuildId:    "A",
+	}
 	pinnedOptsA := &workflowpb.WorkflowExecutionOptions{
 		VersioningOverride: &workflowpb.VersioningOverride{
-			Behavior: enumspb.VERSIONING_BEHAVIOR_PINNED,
-			Deployment: &deploymentpb.Deployment{
-				SeriesName: "seriesName",
-				BuildId:    "A",
-			},
+			Behavior:   enumspb.VERSIONING_BEHAVIOR_PINNED,
+			Deployment: deploymentA,
 		},
 	}
 
-	// 1. Set pinned override A --> describe workflow shows the override
+	// create deployment so that GetDeploymentReachability doesn't error
+	d.createDeploymentAndWaitForExist(deploymentA, &taskqueuepb.TaskQueue{Name: unversionedTQ, Kind: enumspb.TASK_QUEUE_KIND_NORMAL})
+
+	// 1. Set pinned override A --> describe workflow shows the override + deploymentA is reachable
 	updateResp, err := d.FrontendClient().UpdateWorkflowExecutionOptions(ctx, &workflowservice.UpdateWorkflowExecutionOptionsRequest{
 		Namespace:                d.Namespace(),
 		WorkflowExecution:        unversionedWFExec,
@@ -883,15 +885,10 @@ func (d *DeploymentSuite) TestUpdateWorkflowExecutionOptions_SetPinnedSetUnpinne
 	})
 	d.NoError(err)
 	d.True(proto.Equal(updateResp.GetWorkflowExecutionOptions(), pinnedOptsA))
-	descResp, err := d.FrontendClient().DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
-		Namespace: d.Namespace(),
-		Execution: unversionedWFExec,
-	})
-	d.NoError(err)
-	versioningInfo := descResp.GetWorkflowExecutionInfo().GetVersioningInfo()
-	d.True(proto.Equal(pinnedOptsA.GetVersioningOverride(), versioningInfo.GetVersioningOverride()))
+	d.checkDescribeWorkflowAfterOverride(ctx, unversionedWFExec, pinnedOptsA.GetVersioningOverride())
+	d.checkDeploymentReachability(ctx, deploymentA, enumspb.DEPLOYMENT_REACHABILITY_REACHABLE)
 
-	// 1. Set unpinned override --> describe workflow shows the override
+	// 1. Set unpinned override --> describe workflow shows the override + deploymentA is unreachable
 	updateResp, err = d.FrontendClient().UpdateWorkflowExecutionOptions(ctx, &workflowservice.UpdateWorkflowExecutionOptionsRequest{
 		Namespace:                d.Namespace(),
 		WorkflowExecution:        unversionedWFExec,
@@ -900,53 +897,46 @@ func (d *DeploymentSuite) TestUpdateWorkflowExecutionOptions_SetPinnedSetUnpinne
 	})
 	d.NoError(err)
 	d.True(proto.Equal(updateResp.GetWorkflowExecutionOptions(), unpinnedOpts))
-	descResp, err = d.FrontendClient().DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
-		Namespace: d.Namespace(),
-		Execution: unversionedWFExec,
-	})
-	d.NoError(err)
-	versioningInfo = descResp.GetWorkflowExecutionInfo().GetVersioningInfo()
-	d.True(proto.Equal(unpinnedOpts.GetVersioningOverride(), versioningInfo.GetVersioningOverride()))
+	d.checkDescribeWorkflowAfterOverride(ctx, unversionedWFExec, unpinnedOpts.GetVersioningOverride())
+	d.checkDeploymentReachability(ctx, deploymentA, enumspb.DEPLOYMENT_REACHABILITY_UNREACHABLE)
 }
 
 func (d *DeploymentSuite) TestStartWorkflowExecution_WithPinnedOverride() {
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
-	defer cancel()
-	override := &workflowpb.VersioningOverride{
-		Behavior: enumspb.VERSIONING_BEHAVIOR_PINNED,
-		Deployment: &deploymentpb.Deployment{
-			SeriesName: "seriesName",
-			BuildId:    "A",
-		},
+	ctx := context.Background()
+	deploymentA := &deploymentpb.Deployment{
+		SeriesName: "seriesName",
+		BuildId:    "A",
 	}
+	override := &workflowpb.VersioningOverride{
+		Behavior:   enumspb.VERSIONING_BEHAVIOR_PINNED,
+		Deployment: deploymentA,
+	}
+
+	// create deployment so that GetDeploymentReachability doesn't error
+	d.createDeploymentAndWaitForExist(deploymentA, &taskqueuepb.TaskQueue{Name: "test-tq", Kind: enumspb.TASK_QUEUE_KIND_NORMAL})
 
 	resp, err := d.FrontendClient().StartWorkflowExecution(ctx, &workflowservice.StartWorkflowExecutionRequest{
 		Namespace:          d.Namespace(),
-		WorkflowId:         "test-workflow-id",
+		WorkflowId:         "test-workflow-id1",
 		WorkflowType:       &commonpb.WorkflowType{Name: "test-wf-type"},
 		TaskQueue:          &taskqueuepb.TaskQueue{Name: "test-tq", Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
-		Identity:           "test-id",
-		RequestId:          "test-request-id",
+		Identity:           "test-id1",
+		RequestId:          "test-request-id1",
 		VersioningOverride: override,
 	})
 
 	d.NoError(err)
 	d.True(resp.GetStarted())
-
-	descResp, err := d.FrontendClient().DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
-		Namespace: d.Namespace(),
-		Execution: &commonpb.WorkflowExecution{
-			WorkflowId: "test-workflow-id",
-			RunId:      resp.GetRunId(),
-		},
-	})
-	d.NoError(err)
-	d.True(proto.Equal(override, descResp.GetWorkflowExecutionInfo().GetVersioningInfo().GetVersioningOverride()))
+	wf := &commonpb.WorkflowExecution{
+		WorkflowId: "test-workflow-id1",
+		RunId:      resp.GetRunId(),
+	}
+	d.checkDescribeWorkflowAfterOverride(ctx, wf, override)
+	d.checkDeploymentReachability(ctx, deploymentA, enumspb.DEPLOYMENT_REACHABILITY_REACHABLE)
 }
 
 func (d *DeploymentSuite) TestStartWorkflowExecution_WithUnpinnedOverride() {
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
-	defer cancel()
+	ctx := context.Background()
 	override := &workflowpb.VersioningOverride{
 		Behavior:   enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE,
 		Deployment: nil,
@@ -954,47 +944,46 @@ func (d *DeploymentSuite) TestStartWorkflowExecution_WithUnpinnedOverride() {
 
 	resp, err := d.FrontendClient().StartWorkflowExecution(ctx, &workflowservice.StartWorkflowExecutionRequest{
 		Namespace:          d.Namespace(),
-		WorkflowId:         "test-workflow-id",
+		WorkflowId:         "test-workflow-id2",
 		WorkflowType:       &commonpb.WorkflowType{Name: "test-wf-type"},
 		TaskQueue:          &taskqueuepb.TaskQueue{Name: "test-tq", Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
-		Identity:           "test-id",
-		RequestId:          "test-request-id",
+		Identity:           "test-id2",
+		RequestId:          "test-request-id2",
 		VersioningOverride: override,
 	})
 
 	d.NoError(err)
 	d.True(resp.GetStarted())
 
-	descResp, err := d.FrontendClient().DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
-		Namespace: d.Namespace(),
-		Execution: &commonpb.WorkflowExecution{
-			WorkflowId: "test-workflow-id",
-			RunId:      resp.GetRunId(),
-		},
-	})
-	d.NoError(err)
-	d.True(proto.Equal(override, descResp.GetWorkflowExecutionInfo().GetVersioningInfo().GetVersioningOverride()))
+	wf := &commonpb.WorkflowExecution{
+		WorkflowId: "test-workflow-id2",
+		RunId:      resp.GetRunId(),
+	}
+	d.checkDescribeWorkflowAfterOverride(ctx, wf, override)
 }
 
 func (d *DeploymentSuite) TestSignalWithStartWorkflowExecution_WithPinnedOverride() {
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
-	defer cancel()
-	override := &workflowpb.VersioningOverride{
-		Behavior: enumspb.VERSIONING_BEHAVIOR_PINNED,
-		Deployment: &deploymentpb.Deployment{
-			SeriesName: "seriesName",
-			BuildId:    "A",
-		},
+	ctx := context.Background()
+	deploymentA := &deploymentpb.Deployment{
+		SeriesName: "seriesName",
+		BuildId:    "A",
 	}
+	override := &workflowpb.VersioningOverride{
+		Behavior:   enumspb.VERSIONING_BEHAVIOR_PINNED,
+		Deployment: deploymentA,
+	}
+
+	// create deployment so that GetDeploymentReachability doesn't error
+	d.createDeploymentAndWaitForExist(deploymentA, &taskqueuepb.TaskQueue{Name: "test-tq", Kind: enumspb.TASK_QUEUE_KIND_NORMAL})
 
 	resp, err := d.FrontendClient().SignalWithStartWorkflowExecution(ctx, &workflowservice.SignalWithStartWorkflowExecutionRequest{
 		Namespace:          d.Namespace(),
-		WorkflowId:         "test-workflow-id",
+		WorkflowId:         "test-workflow-id3",
 		WorkflowType:       &commonpb.WorkflowType{Name: "test-wf-type"},
 		TaskQueue:          &taskqueuepb.TaskQueue{Name: "test-tq", Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
-		Identity:           "test-id",
-		RequestId:          "test-request-id",
-		SignalName:         "test-signal",
+		Identity:           "test-id3",
+		RequestId:          "test-request-id3",
+		SignalName:         "test-signal3",
 		SignalInput:        nil,
 		VersioningOverride: override,
 	})
@@ -1002,20 +991,16 @@ func (d *DeploymentSuite) TestSignalWithStartWorkflowExecution_WithPinnedOverrid
 	d.NoError(err)
 	d.True(resp.GetStarted())
 
-	descResp, err := d.FrontendClient().DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
-		Namespace: d.Namespace(),
-		Execution: &commonpb.WorkflowExecution{
-			WorkflowId: "test-workflow-id",
-			RunId:      resp.GetRunId(),
-		},
-	})
-	d.NoError(err)
-	d.True(proto.Equal(override, descResp.GetWorkflowExecutionInfo().GetVersioningInfo().GetVersioningOverride()))
+	wf := &commonpb.WorkflowExecution{
+		WorkflowId: "test-workflow-id3",
+		RunId:      resp.GetRunId(),
+	}
+	d.checkDescribeWorkflowAfterOverride(ctx, wf, override)
+	d.checkDeploymentReachability(ctx, deploymentA, enumspb.DEPLOYMENT_REACHABILITY_REACHABLE)
 }
 
 func (d *DeploymentSuite) TestSignalWithStartWorkflowExecution_WithUnpinnedOverride() {
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
-	defer cancel()
+	ctx := context.Background()
 	override := &workflowpb.VersioningOverride{
 		Behavior:   enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE,
 		Deployment: nil,
@@ -1023,12 +1008,12 @@ func (d *DeploymentSuite) TestSignalWithStartWorkflowExecution_WithUnpinnedOverr
 
 	resp, err := d.FrontendClient().SignalWithStartWorkflowExecution(ctx, &workflowservice.SignalWithStartWorkflowExecutionRequest{
 		Namespace:          d.Namespace(),
-		WorkflowId:         "test-workflow-id",
+		WorkflowId:         "test-workflow-id4",
 		WorkflowType:       &commonpb.WorkflowType{Name: "test-wf-type"},
 		TaskQueue:          &taskqueuepb.TaskQueue{Name: "test-tq", Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
-		Identity:           "test-id",
-		RequestId:          "test-request-id",
-		SignalName:         "test-signal",
+		Identity:           "test-id4",
+		RequestId:          "test-request-id4",
+		SignalName:         "test-signal4",
 		SignalInput:        nil,
 		VersioningOverride: override,
 	})
@@ -1036,13 +1021,9 @@ func (d *DeploymentSuite) TestSignalWithStartWorkflowExecution_WithUnpinnedOverr
 	d.NoError(err)
 	d.True(resp.GetStarted())
 
-	descResp, err := d.FrontendClient().DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
-		Namespace: d.Namespace(),
-		Execution: &commonpb.WorkflowExecution{
-			WorkflowId: "test-workflow-id",
-			RunId:      resp.GetRunId(),
-		},
-	})
-	d.NoError(err)
-	d.True(proto.Equal(override, descResp.GetWorkflowExecutionInfo().GetVersioningInfo().GetVersioningOverride()))
+	wf := &commonpb.WorkflowExecution{
+		WorkflowId: "test-workflow-id4",
+		RunId:      resp.GetRunId(),
+	}
+	d.checkDescribeWorkflowAfterOverride(ctx, wf, override)
 }

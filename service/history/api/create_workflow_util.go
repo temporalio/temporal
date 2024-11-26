@@ -27,10 +27,8 @@ package api
 import (
 	"context"
 
-	enumspb "go.temporal.io/api/enums/v1"
-	workflowpb "go.temporal.io/api/workflow/v1"
-
 	commonpb "go.temporal.io/api/common/v1"
+	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
@@ -78,9 +76,6 @@ func NewWorkflowWithSignal(
 		workflowID,
 		runID,
 	)
-	newMutableState.GetExecutionInfo().VersioningInfo = &workflowpb.WorkflowExecutionVersioningInfo{
-		VersioningOverride: startRequest.GetVersioningOverride(),
-	}
 	if err != nil {
 		return nil, err
 	}

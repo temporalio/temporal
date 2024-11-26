@@ -2223,6 +2223,8 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionStartedEvent(
 	ms.executionInfo.WorkflowRunTimeout = event.GetWorkflowRunTimeout()
 	ms.executionInfo.WorkflowExecutionTimeout = event.GetWorkflowExecutionTimeout()
 	ms.executionInfo.DefaultWorkflowTaskTimeout = event.GetWorkflowTaskTimeout()
+	ms.executionInfo.VersioningInfo = &workflowpb.WorkflowExecutionVersioningInfo{VersioningOverride: event.GetVersioningOverride()}
+	ms.logger.Info(fmt.Sprintf("override: %v", ms.executionInfo.GetVersioningInfo().GetVersioningOverride()))
 
 	coll := callbacks.MachineCollection(ms.HSM())
 	for idx, cb := range event.GetCompletionCallbacks() {
@@ -2348,7 +2350,8 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionStartedEvent(
 		if err := ms.UpdateBuildIdAssignment(inheritedBuildId); err != nil {
 			return err
 		}
-	} else if event.SourceVersionStamp.GetUseVersioning() && event.SourceVersionStamp.GetBuildId() != "" {
+	} else if event.SourceVersionStamp.GetUseVersioning() && event.SourceVersionStamp.GetBuildId() != "" ||
+		ms.GetEffectiveVersioningBehavior() == enumspb.VERSIONING_BEHAVIOR_PINNED {
 		// TODO: [cleanup-old-wv]
 		limit := ms.config.SearchAttributesSizeOfValueLimit(string(ms.namespaceEntry.Name()))
 		if _, err := ms.addBuildIdToSearchAttributesWithNoVisibilityTask(event.SourceVersionStamp, limit); err != nil {
