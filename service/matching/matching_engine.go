@@ -504,7 +504,6 @@ func (e *matchingEngineImpl) AddWorkflowTask(
 
 	return pm.AddTask(ctx, addTaskParams{
 		taskInfo:    taskInfo,
-		directive:   addRequest.VersionDirective,
 		forwardInfo: addRequest.ForwardInfo,
 	})
 }
@@ -542,7 +541,6 @@ func (e *matchingEngineImpl) AddActivityTask(
 
 	return pm.AddTask(ctx, addTaskParams{
 		taskInfo:    taskInfo,
-		directive:   addRequest.VersionDirective,
 		forwardInfo: addRequest.ForwardInfo,
 	})
 }
@@ -2128,9 +2126,11 @@ func (e *matchingEngineImpl) unloadTaskQueuePartitionByKey(
 func (e *matchingEngineImpl) updatePhysicalTaskQueueGauge(pqm *physicalTaskQueueManagerImpl, delta int) {
 	// calculating versioned to be one of: “unversioned” or "buildId” or “versionSet”
 	versioned := "unversioned"
-	if buildID := pqm.queue.BuildId(); buildID != "" {
+	if dep := pqm.queue.Version().Deployment(); dep != nil {
+		versioned = "deployment"
+	} else if buildID := pqm.queue.Version().BuildId(); buildID != "" {
 		versioned = "buildId"
-	} else if versionSet := pqm.queue.VersionSet(); versionSet != "" {
+	} else if versionSet := pqm.queue.Version().VersionSet(); versionSet != "" {
 		versioned = "versionSet"
 	}
 

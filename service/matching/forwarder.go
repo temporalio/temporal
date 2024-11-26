@@ -190,8 +190,8 @@ func (fwdr *Forwarder) getForwardInfo(task *internalTask) *taskqueuespb.TaskForw
 	forwardInfo := &taskqueuespb.TaskForwardInfo{
 		TaskSource:         task.source,
 		SourcePartition:    fwdr.partition.RpcName(),
-		DispatchBuildId:    fwdr.queue.BuildId(),
-		DispatchVersionSet: fwdr.queue.VersionSet(),
+		DispatchBuildId:    fwdr.queue.Version().BuildId(),
+		DispatchVersionSet: fwdr.queue.Version().VersionSet(),
 		RedirectInfo:       task.redirectInfo,
 	}
 	return forwardInfo

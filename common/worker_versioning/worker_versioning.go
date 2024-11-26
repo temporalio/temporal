@@ -33,6 +33,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/api/serviceerror"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	"go.temporal.io/server/common/namespace"
@@ -221,4 +222,19 @@ func StampFromCapabilities(cap *commonpb.WorkerVersionCapabilities) *commonpb.Wo
 
 func StampFromBuildId(buildId string) *commonpb.WorkerVersionStamp {
 	return &commonpb.WorkerVersionStamp{UseVersioning: true, BuildId: buildId}
+}
+
+// ValidateDeployment returns error if the deployment is nil or it has empty build ID or deployment
+// name.
+func ValidateDeployment(deployment *deploymentpb.Deployment) error {
+	if deployment == nil {
+		return serviceerror.NewInvalidArgument("deployment cannot be nil")
+	}
+	if deployment.GetSeriesName() == "" {
+		return serviceerror.NewInvalidArgument("deployment series name cannot be empty")
+	}
+	if deployment.GetBuildId() == "" {
+		return serviceerror.NewInvalidArgument("deployment build ID cannot be empty")
+	}
+	return nil
 }
