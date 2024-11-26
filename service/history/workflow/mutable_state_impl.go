@@ -6854,19 +6854,10 @@ func (ms *MutableStateImpl) disablingTransitionHistory() bool {
 //     common case). Deployment is set based on the worker-sent deployment in the latest WFT
 //     completion. Exception: if Deployment is set but the workflow's effective behavior is
 //     UNSPECIFIED, it means the workflow is unversioned, so effective deployment will be nil.
+//
+// Note: Deployment objects are immutable, never change their fields.
 func (ms *MutableStateImpl) GetEffectiveDeployment() *deploymentpb.Deployment {
-	versioningInfo := ms.GetExecutionInfo().GetVersioningInfo()
-	if versioningInfo == nil {
-		return nil
-	} else if transition := versioningInfo.GetDeploymentTransition(); transition != nil {
-		return transition.GetDeployment()
-	} else if override := versioningInfo.GetVersioningOverride(); override != nil &&
-		override.GetBehavior() == enumspb.VERSIONING_BEHAVIOR_PINNED {
-		return override.GetDeployment()
-	} else if ms.GetEffectiveVersioningBehavior() != enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED {
-		return versioningInfo.GetDeployment()
-	}
-	return nil
+	return GetEffectiveDeployment(ms.GetExecutionInfo().GetVersioningInfo())
 }
 
 func (ms *MutableStateImpl) GetDeploymentTransition() *workflowpb.DeploymentTransition {
@@ -6880,13 +6871,7 @@ func (ms *MutableStateImpl) GetDeploymentTransition() *workflowpb.DeploymentTran
 //  2. Behavior: this is returned when there is no override (most common case). Behavior is
 //     set based on the worker-sent deployment in the latest WFT completion.
 func (ms *MutableStateImpl) GetEffectiveVersioningBehavior() enumspb.VersioningBehavior {
-	versioningInfo := ms.GetExecutionInfo().GetVersioningInfo()
-	if versioningInfo == nil {
-		return enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED
-	} else if override := versioningInfo.GetVersioningOverride(); override != nil {
-		return override.GetBehavior()
-	}
-	return versioningInfo.GetBehavior()
+	return GetEffectiveVersioningBehavior(ms.GetExecutionInfo().GetVersioningInfo())
 }
 
 // StartDeploymentTransition starts a transition to the given deployment. Returns true

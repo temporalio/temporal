@@ -48,6 +48,8 @@ message DeploymentLocalState {
     google.protobuf.Timestamp create_time = 4;
     map<string, temporal.api.common.v1.Payload> metadata = 5;
 
+    bool started_series_workflow = 7;
+
     message TaskQueueFamilyData {
         // Key: enums.TaskQueueType, Value: TaskQueueData
         // All fields in TaskQueueData are valid except last_became_current_time, the source of
