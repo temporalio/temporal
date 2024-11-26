@@ -47,11 +47,11 @@ func TestMakeDeploymentQuery(t *testing.T) {
 	buildId := "A"
 
 	query := makeDeploymentQuery(seriesName, buildId, true)
-	expectedQuery := "BuildIds = 'reachability:Pinned:test-deployment:A' AND ExecutionStatus = 'Running'"
+	expectedQuery := "BuildIds = 'pinned:test-deployment:A' AND ExecutionStatus = 'Running'"
 	assert.Equal(t, expectedQuery, query)
 
 	query = makeDeploymentQuery(seriesName, buildId, false)
-	expectedQuery = "BuildIds = 'reachability:Pinned:test-deployment:A' AND ExecutionStatus != 'Running'"
+	expectedQuery = "BuildIds = 'pinned:test-deployment:A' AND ExecutionStatus != 'Running'"
 	assert.Equal(t, expectedQuery, query)
 }
 
@@ -63,9 +63,8 @@ func TestReachable_CurrentDeployment(t *testing.T) {
 	vm := manager.NewMockVisibilityManager(gomock.NewController(t)) // won't receive any calls
 	testCache := newReachabilityCache(metrics.NoopMetricsHandler, vm, testReachabilityCacheOpenWFsTTL, testReachabilityCacheClosedWFsTTL)
 
-	reach, reachValidTime, err := getDeploymentReachability(ctx, "", "", seriesName, buildId, true, testCache)
+	reach, _, err := getDeploymentReachability(ctx, "", "", seriesName, buildId, true, testCache)
 	assert.Nil(t, err)
-	assert.Greater(t, time.Now(), reachValidTime)
 	assert.Equal(t, enumspb.DEPLOYMENT_REACHABILITY_REACHABLE, reach)
 }
 

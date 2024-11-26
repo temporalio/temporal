@@ -93,8 +93,7 @@ type DeploymentClientImpl struct {
 	VisibilityManager     manager.VisibilityManager
 	MaxIDLengthLimit      dynamicconfig.IntPropertyFn
 	VisibilityMaxPageSize dynamicconfig.IntPropertyFnWithNamespaceFilter
-
-	reachabilityCache reachabilityCache
+	reachabilityCache     reachabilityCache
 }
 
 var _ DeploymentStoreClient = (*DeploymentClientImpl)(nil)
