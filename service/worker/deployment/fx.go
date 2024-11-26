@@ -95,9 +95,10 @@ func DeploymentStoreClientProvider(historyClient resource.HistoryClient, visibil
 		reachabilityCache: newReachabilityCache(
 			metrics.NoopMetricsHandler,
 			visibilityManager,
-			reachabilityCacheOpenWFsTTL,   // TODO (carly) use dc (ie. config.ReachabilityCacheOpenWFsTTL)
-			reachabilityCacheClosedWFsTTL, // TODO (carly) use dc (ie. config.ReachabilityCacheClosedWFsTTL)
+			dynamicconfig.ReachabilityCacheOpenWFsTTL.Get(dc)(),
+			dynamicconfig.ReachabilityCacheClosedWFsTTL.Get(dc)(),
 		),
+		MaxTaskQueuesInDeployment: dynamicconfig.MatchingMaxTaskQueuesInDeployment.Get(dc),
 	}
 }
 
@@ -145,12 +146,3 @@ func (s *workerComponent) newDeploymentActivities(name namespace.Name, id namesp
 		matchingClient: s.activityDeps.MatchingClient,
 	}
 }
-
-// // TODO Shivam - place holder for now but will initialize activity rate limits (if any) amongst other things
-// func (s *workerComponent) newDeploymentSeriesActivities(name namespace.Name, id namespace.ID) *DeploymentSeriesActivities {
-// 	return &DeploymentSeriesActivities{
-// 		activityDeps: s.activityDeps,
-// 		namespace:    name,
-// 		namespaceID:  id,
-// 	}
-// }

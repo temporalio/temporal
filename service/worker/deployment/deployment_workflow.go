@@ -59,7 +59,8 @@ var (
 		},
 	}
 
-	errAlreadyExists = errors.New("Task queue already exists in deployment")
+	errTaskQueueExistsInDeployment = errors.New("task queue already exists in deployment")
+	ErrMaxTaskQueuesInDeployment   = errors.New("maximum number of task queues have been registered in deployment")
 )
 
 func DeploymentWorkflow(ctx workflow.Context, deploymentWorkflowArgs *deploymentspb.DeploymentWorkflowArgs) error {
@@ -155,7 +156,10 @@ func (d *DeploymentWorkflowRunner) run() error {
 
 func (d *DeploymentWorkflowRunner) validateRegisterWorker(args *deploymentspb.RegisterWorkerInDeploymentArgs) error {
 	if _, ok := d.DeploymentLocalState.TaskQueueFamilies[args.TaskQueueName].GetTaskQueues()[int32(args.TaskQueueType)]; ok {
-		return errAlreadyExists
+		return errTaskQueueExistsInDeployment
+	}
+	if len(d.DeploymentLocalState.TaskQueueFamilies) >= int(args.MaxTaskQueues) {
+		return ErrMaxTaskQueuesInDeployment
 	}
 	return nil
 }

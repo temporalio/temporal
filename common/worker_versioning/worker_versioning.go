@@ -52,7 +52,6 @@ const (
 	UnversionedSearchAttribute = buildIdSearchAttributePrefixUnversioned
 )
 
-// TODO (carly): fix delimiter
 // escapeBuildIdSearchAttributeDelimiter is a helper which escapes the BuildIdSearchAttributeDelimiter character in the input string
 func escapeBuildIdSearchAttributeDelimiter(s string) string {
 	s = strings.Replace(s, BuildIdSearchAttributeDelimiter, `|`+BuildIdSearchAttributeDelimiter, -1)
@@ -64,16 +63,13 @@ func escapeBuildIdSearchAttributeDelimiter(s string) string {
 // BuildIds KeywordList in this format. If the workflow becomes unpinned or unversioned, this entry will be removed from
 // that list.
 func PinnedBuildIdSearchAttribute(deployment *deploymentpb.Deployment) string {
-	escapedDeployment := fmt.Sprintf("%s%s%s",
+	return fmt.Sprintf("%s%s%s%s%s",
+		BuildIdSearchAttributePrefixPinned,
+		BuildIdSearchAttributeDelimiter,
 		escapeBuildIdSearchAttributeDelimiter(deployment.GetSeriesName()),
 		BuildIdSearchAttributeDelimiter,
 		escapeBuildIdSearchAttributeDelimiter(deployment.GetBuildId()),
 	)
-	return sqlparser.String(sqlparser.NewStrVal([]byte(fmt.Sprintf("%s%s%s",
-		BuildIdSearchAttributePrefixPinned,
-		BuildIdSearchAttributeDelimiter,
-		escapedDeployment,
-	))))
 }
 
 // AssignedBuildIdSearchAttribute returns the search attribute value for the currently assigned build ID

@@ -484,7 +484,9 @@ Deleted Redirect Rules will be kept in the DB (with DeleteTimestamp). After this
 		"matching.wv.ReachabilityBuildIdVisibilityGracePeriod",
 		3*time.Minute,
 		`ReachabilityBuildIdVisibilityGracePeriod is the time period for which deleted versioning rules are still considered active
-to account for the delay in updating the build id field in visibility.`,
+to account for the delay in updating the build id field in visibility. Not yet supported for GetDeploymentReachability. We recommend waiting 
+at least 2 minutes between changing the current deployment and calling GetDeployment, so that newly started workflow executions using the 
+recently-current deployment can arrive in visibility.`,
 	)
 	ReachabilityTaskQueueScanLimit = NewGlobalIntSetting(
 		"limit.reachabilityTaskQueueScan",
@@ -1212,6 +1214,11 @@ these log lines can be noisy, we want to be able to turn on and sample selective
 		"matching.enableDeployment",
 		false,
 		`MatchingEnableDeployments enables deployment-related RPCs in matching`,
+	)
+	MatchingMaxTaskQueuesInDeployment = NewNamespaceIntSetting(
+		"matching.maxTaskQueuesInDeployment",
+		1000,
+		`MatchingMaxTaskQueuesInDeployment represents the maximum number of task-queues that can be registed in a single deployment`,
 	)
 	// for matching testing only:
 

@@ -491,6 +491,7 @@ func (pm *taskQueuePartitionManagerImpl) Describe(
 	// In the future, active will mean that the physical queue for that version has had a task added recently or a recent poller.
 	if includeAllActive {
 		for k := range pm.versionedQueues {
+			// TODO: add deployment info to DescribeTaskQueue
 			if b := k.BuildId(); b != "" {
 				buildIds[b] = true
 			}
@@ -913,6 +914,7 @@ func (pm *taskQueuePartitionManagerImpl) getPhysicalQueuesForAdd(
 		}
 		if buildId != redirectBuildId {
 			// redirect rule added for buildId, kick task back to normal queue
+			// TODO (shahab): support V3 in here
 			return nil, nil, nil, serviceerrors.NewStickyWorkerUnavailable()
 		}
 		// sticky queues only use default queue
