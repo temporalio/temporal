@@ -188,30 +188,30 @@ func Invoke(
 				return nil, err
 			}
 
-			if !pollerDeployment.Equal(wfDeployment) {
-				// Dispatching to a different deployment. Try starting a transition. Starting the
-				// transition AFTER applying the start event because we don't want this pending
-				// wft to be rescheduled by StartDeploymentTransition.
-				if err := mutableState.StartDeploymentTransition(pollerDeployment); err != nil {
-					if errors.Is(err, workflow.ErrPinnedWorkflowCannotTransition) {
-						// This must be a task from a time that the workflow was unpinned, but it's
-						// now pinned so can't transition. Matching can drop the task safely.
-						return nil, serviceerrors.NewObsoleteMatchingTask("workflow is not eligible for transition")
-					}
-					return nil, err
-				}
-			}
-
-			// If the wft is speculative MS changes are not persisted, so the possibly started
-			// transition by the StartDeploymentTransition call above won't be persisted. This is OK
-			// because once the speculative task completes the transition will be applied
-			// automatically based on wft completion info. If the speculative task fails or times
-			// out, future wft will be redirected by matching again and the transition will
-			// eventually happen. If an activity starts while the speculative is also started on the
-			// new deployment, the activity will cause the transition to be created and persisted in
-			// the MS.
 			if workflowTask.Type == enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE {
 				updateAction.Noop = true
+			} else {
+				// If the wft is speculative MS changes are not persisted, so the possibly started
+				// transition by the StartDeploymentTransition call above won't be persisted. This is OK
+				// because once the speculative task completes the transition will be applied
+				// automatically based on wft completion info. If the speculative task fails or times
+				// out, future wft will be redirected by matching again and the transition will
+				// eventually happen. If an activity starts while the speculative is also started on the
+				// new deployment, the activity will cause the transition to be created and persisted in
+				// the MS.
+				if !pollerDeployment.Equal(wfDeployment) {
+					// Dispatching to a different deployment. Try starting a transition. Starting the
+					// transition AFTER applying the start event because we don't want this pending
+					// wft to be rescheduled by StartDeploymentTransition.
+					if err := mutableState.StartDeploymentTransition(pollerDeployment); err != nil {
+						if errors.Is(err, workflow.ErrPinnedWorkflowCannotTransition) {
+							// This must be a task from a time that the workflow was unpinned, but it's
+							// now pinned so can't transition. Matching can drop the task safely.
+							return nil, serviceerrors.NewObsoleteMatchingTask(err.Error())
+						}
+						return nil, err
+					}
+				}
 			}
 
 			workflowScheduleToStartLatency := workflowTask.StartedTime.Sub(workflowTask.ScheduledTime)

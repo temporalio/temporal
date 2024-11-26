@@ -27,11 +27,13 @@ package tests
 import (
 	"context"
 	"fmt"
+	"testing"
+	"time"
+
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/fieldmaskpb"
-	"testing"
-	"time"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -47,7 +49,6 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/service/worker/deployment"
 	"go.temporal.io/server/tests/testcore"
-	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 /*
