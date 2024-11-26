@@ -1215,6 +1215,11 @@ these log lines can be noisy, we want to be able to turn on and sample selective
 		false,
 		`MatchingEnableDeployments enables deployment-related RPCs in matching`,
 	)
+	MatchingMaxTaskQueuesInDeployment = NewNamespaceIntSetting(
+		"matching.maxTaskQueuesInDeployment",
+		1000,
+		`MatchingMaxTaskQueuesInDeployment represents the maximum number of task-queues that can be registed in a single deployment`,
+	)
 	// for matching testing only:
 
 	TestMatchingDisableSyncMatch = NewGlobalBoolSetting(
