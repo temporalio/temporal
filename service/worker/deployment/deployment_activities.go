@@ -25,6 +25,7 @@
 package deployment
 
 import (
+	"cmp"
 	"context"
 
 	enumspb "go.temporal.io/api/enums/v1"
@@ -77,17 +78,28 @@ func (a *DeploymentActivities) StartDeploymentSeriesWorkflow(ctx context.Context
 
 func (a *DeploymentActivities) SyncUserData(ctx context.Context, input *deploymentspb.SyncUserDataRequest) error {
 	logger := activity.GetLogger(ctx)
-	logger.Info("syncing task queue userdata for deployment", "taskQueue", input.TaskQueueName, "type", input.TaskQueueType)
 
-	_, err := a.matchingClient.SyncDeploymentUserData(ctx, &matchingservice.SyncDeploymentUserDataRequest{
-		NamespaceId:   a.namespaceID.String(),
-		TaskQueue:     input.TaskQueueName,
-		TaskQueueType: input.TaskQueueType,
-		Deployment:    input.Deployment,
-		Data:          input.Data,
-	})
-	if err != nil {
-		logger.Error("syncing task queue userdata", "taskQueue", input.TaskQueueName, "type", input.TaskQueueType, "error", err)
+	errs := make(chan error)
+	for _, sync := range input.Sync {
+		go func() {
+			logger.Info("syncing task queue userdata for deployment", "taskQueue", sync.Name, "type", sync.Type)
+			_, err := a.matchingClient.SyncDeploymentUserData(ctx, &matchingservice.SyncDeploymentUserDataRequest{
+				NamespaceId:   a.namespaceID.String(),
+				TaskQueue:     sync.Name,
+				TaskQueueType: sync.Type,
+				Deployment:    input.Deployment,
+				Data:          sync.Data,
+			})
+			if err != nil {
+				logger.Error("syncing task queue userdata", "taskQueue", sync.Name, "type", sync.Type, "error", err)
+			}
+			errs <- err
+		}()
+	}
+
+	var err error
+	for range input.Sync {
+		err = cmp.Or(err, <-errs)
 	}
 
 	// TODO: it might be nice if we check propagation status and not return from here until

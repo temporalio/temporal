@@ -28,6 +28,7 @@ import (
 	"errors"
 	"time"
 
+	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	sdkclient "go.temporal.io/sdk/client"
 	sdklog "go.temporal.io/sdk/log"
@@ -193,17 +194,18 @@ func (d *DeploymentWorkflowRunner) handleRegisterWorker(ctx workflow.Context, ar
 	data := &deploymentspb.TaskQueueData{
 		FirstPollerTime: args.FirstPollerTime,
 	}
-	// denormalize LastBecameCurrentTime into per-tq data
-	syncData := common.CloneProto(data)
-	syncData.LastBecameCurrentTime = d.DeploymentLocalState.LastBecameCurrentTime
 
 	// sync to user data
 	activityCtx := workflow.WithActivityOptions(ctx, defaultActivityOptions)
 	err = workflow.ExecuteActivity(activityCtx, d.a.SyncUserData, &deploymentspb.SyncUserDataRequest{
-		Deployment:    d.DeploymentLocalState.WorkerDeployment,
-		TaskQueueName: args.TaskQueueName,
-		TaskQueueType: args.TaskQueueType,
-		Data:          syncData,
+		Deployment: d.DeploymentLocalState.WorkerDeployment,
+		Sync: []*deploymentspb.SyncUserDataRequest_SyncUserData{
+			&deploymentspb.SyncUserDataRequest_SyncUserData{
+				Name: args.TaskQueueName,
+				Type: args.TaskQueueType,
+				Data: d.withCurrentTime(data),
+			},
+		},
 	}).Get(ctx, nil)
 	if err != nil {
 		return err
@@ -248,16 +250,50 @@ func (d *DeploymentWorkflowRunner) handleSetCurrent(ctx workflow.Context, args *
 		return nil, serviceerror.NewDeadlineExceeded("Update canceled before series workflow started")
 	}
 
-	// FIXME
-	// Should lock the series while making the change
-	// Should update the current deployment in the series entity wf and well as updating the status of the target deployment.
-	// Also update the status of the previous current deployment to NO_STATUS
-	// update the timestamps
-	// Update all TQs current deployment
+	// TODO: See if a request_id is needed for idempotency
+
+	// FIXME: Should lock the series while making the change
+
+	// FIXME: Should update the current deployment in the series entity wf and well as updating the status of the target deployment.
+
+	// FIXME: Also update the status of the previous current deployment to NO_STATUS
+
+	// FIXME: Update the timestamps
+
+	// Update all TQs in current deployment
+	syncReq := &deploymentspb.SyncUserDataRequest{
+		Deployment: d.DeploymentLocalState.WorkerDeployment,
+	}
+	for tqName, byType := range d.DeploymentLocalState.TaskQueueFamilies {
+		for tqType, data := range byType.TaskQueues {
+			syncReq.Sync = append(syncReq.Sync, &deploymentspb.SyncUserDataRequest_SyncUserData{
+				Name: tqName,
+				Type: enumspb.TaskQueueType(tqType),
+				Data: d.withCurrentTime(data),
+			})
+		}
+	}
+	activityCtx := workflow.WithActivityOptions(ctx, defaultActivityOptions)
+	err = workflow.ExecuteActivity(activityCtx, d.a.SyncUserData, syncReq).Get(ctx, nil)
+	if err != nil {
+		return nil, err
+	}
+
 	// Update metadata
-	// See if a request_id is needed for idempotency
+	for key, payload := range args.UpdateMetadata.GetUpsertEntries() {
+		d.DeploymentLocalState.Metadata[key] = payload
+	}
+	for _, key := range args.UpdateMetadata.GetRemoveEntries() {
+		delete(d.DeploymentLocalState.Metadata, key)
+	}
 
 	return nil, nil
+}
+
+func (d *DeploymentWorkflowRunner) withCurrentTime(data *deploymentspb.TaskQueueData) *deploymentspb.TaskQueueData {
+	data = common.CloneProto(data)
+	data.LastBecameCurrentTime = d.DeploymentLocalState.LastBecameCurrentTime
+	return data
 }
 
 func (d *DeploymentWorkflowRunner) handleDescribeQuery() (*deploymentspb.QueryDescribeDeploymentResponse, error) {
