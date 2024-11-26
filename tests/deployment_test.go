@@ -463,7 +463,60 @@ func (d *DeploymentSuite) TestListDeployments_WithoutSeriesNameFilter() {
 
 // TODO Shivam - Add more getCurrentDeployment tests when SetCurrentDefaultBuildID API has been defined
 
-func (d *DeploymentSuite) TestUpdateWorkflowExecutionOptions() {
+func (d *DeploymentSuite) TestUpdateWorkflowExecutionOptions_SetUnpinnedThenUnset() {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
+	defer cancel()
+
+	// start an unversioned workflow
+	unversionedTQ := "unversioned-test-tq"
+	run, err := d.sdkClient.ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{TaskQueue: unversionedTQ}, "wf")
+	d.NoError(err)
+	unversionedWFExec := &commonpb.WorkflowExecution{
+		WorkflowId: run.GetID(),
+		RunId:      run.GetRunID(),
+	}
+	unpinnedOpts := &workflowpb.WorkflowExecutionOptions{
+		VersioningOverride: &workflowpb.VersioningOverride{
+			Behavior:   enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE,
+			Deployment: nil,
+		},
+	}
+
+	// 1. Set unpinned override --> describe workflow shows the override
+	updateResp, err := d.FrontendClient().UpdateWorkflowExecutionOptions(ctx, &workflowservice.UpdateWorkflowExecutionOptionsRequest{
+		Namespace:                d.Namespace(),
+		WorkflowExecution:        unversionedWFExec,
+		WorkflowExecutionOptions: unpinnedOpts,
+		UpdateMask:               &fieldmaskpb.FieldMask{Paths: []string{"versioning_override"}},
+	})
+	d.NoError(err)
+	d.True(proto.Equal(updateResp.GetWorkflowExecutionOptions(), unpinnedOpts))
+	descResp, err := d.FrontendClient().DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
+		Namespace: d.Namespace(),
+		Execution: unversionedWFExec,
+	})
+	d.NoError(err)
+	versioningInfo := descResp.GetWorkflowExecutionInfo().GetVersioningInfo()
+	d.True(proto.Equal(unpinnedOpts.GetVersioningOverride(), versioningInfo.GetVersioningOverride()))
+
+	// 2. Unset using empty update opts with mutation mask --> describe workflow shows no more override
+	updateResp, err = d.FrontendClient().UpdateWorkflowExecutionOptions(ctx, &workflowservice.UpdateWorkflowExecutionOptionsRequest{
+		Namespace:                d.Namespace(),
+		WorkflowExecution:        unversionedWFExec,
+		WorkflowExecutionOptions: &workflowpb.WorkflowExecutionOptions{},
+		UpdateMask:               &fieldmaskpb.FieldMask{Paths: []string{"versioning_override"}},
+	})
+	d.NoError(err)
+	d.True(proto.Equal(updateResp.GetWorkflowExecutionOptions(), &workflowpb.WorkflowExecutionOptions{}))
+	descResp, err = d.FrontendClient().DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
+		Namespace: d.Namespace(),
+		Execution: unversionedWFExec,
+	})
+	d.NoError(err)
+	d.Nil(descResp.GetWorkflowExecutionInfo().GetVersioningInfo().GetVersioningOverride())
+}
+
+func (d *DeploymentSuite) TestUpdateWorkflowExecutionOptions_SetPinnedThenUnset() {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
 	defer cancel()
 
@@ -490,10 +543,66 @@ func (d *DeploymentSuite) TestUpdateWorkflowExecutionOptions() {
 			Deployment: workerDeployment,
 		},
 	}
-	unpinnedOpts := &workflowpb.WorkflowExecutionOptions{
+
+	// 1. Set pinned override on our new unversioned workflow --> describe workflow shows the override
+	updateResp, err := d.FrontendClient().UpdateWorkflowExecutionOptions(ctx, &workflowservice.UpdateWorkflowExecutionOptionsRequest{
+		Namespace:                d.Namespace(),
+		WorkflowExecution:        unversionedWFExec,
+		WorkflowExecutionOptions: pinnedOpts,
+		UpdateMask:               &fieldmaskpb.FieldMask{Paths: []string{"versioning_override"}},
+	})
+	d.NoError(err)
+	d.True(proto.Equal(updateResp.GetWorkflowExecutionOptions(), pinnedOpts))
+	descResp, err := d.FrontendClient().DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
+		Namespace: d.Namespace(),
+		Execution: unversionedWFExec,
+	})
+	d.NoError(err)
+	versioningInfo := descResp.GetWorkflowExecutionInfo().GetVersioningInfo()
+	d.True(proto.Equal(pinnedOpts.GetVersioningOverride(), versioningInfo.GetVersioningOverride()))
+
+	// 2. Unset with empty update opts with mutation mask --> describe workflow shows no more override
+	updateResp, err = d.FrontendClient().UpdateWorkflowExecutionOptions(ctx, &workflowservice.UpdateWorkflowExecutionOptionsRequest{
+		Namespace:                d.Namespace(),
+		WorkflowExecution:        unversionedWFExec,
+		WorkflowExecutionOptions: &workflowpb.WorkflowExecutionOptions{},
+		UpdateMask:               &fieldmaskpb.FieldMask{Paths: []string{"versioning_override"}},
+	})
+	d.NoError(err)
+	d.True(proto.Equal(updateResp.GetWorkflowExecutionOptions(), &workflowpb.WorkflowExecutionOptions{}))
+	descResp, err = d.FrontendClient().DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
+		Namespace: d.Namespace(),
+		Execution: unversionedWFExec,
+	})
+	d.NoError(err)
+	d.Nil(descResp.GetWorkflowExecutionInfo().GetVersioningInfo().GetVersioningOverride())
+}
+
+func (d *DeploymentSuite) TestUpdateWorkflowExecutionOptions_EmptyFields() {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
+	defer cancel()
+
+	// presence of internally used delimiters (:) or escape
+	// characters shouldn't break functionality
+	seriesName := testcore.RandomizeStr("my-series|:|:")
+	buildID := testcore.RandomizeStr("bgt:|")
+	workerDeployment := &deploymentpb.Deployment{
+		SeriesName: seriesName,
+		BuildId:    buildID,
+	}
+
+	// start an unversioned workflow
+	unversionedTQ := "unversioned-test-tq"
+	run, err := d.sdkClient.ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{TaskQueue: unversionedTQ}, "wf")
+	d.NoError(err)
+	unversionedWFExec := &commonpb.WorkflowExecution{
+		WorkflowId: run.GetID(),
+		RunId:      run.GetRunID(),
+	}
+	pinnedOpts := &workflowpb.WorkflowExecutionOptions{
 		VersioningOverride: &workflowpb.VersioningOverride{
-			Behavior:   enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE,
-			Deployment: nil,
+			Behavior:   enumspb.VERSIONING_BEHAVIOR_PINNED,
+			Deployment: workerDeployment,
 		},
 	}
 
@@ -513,25 +622,111 @@ func (d *DeploymentSuite) TestUpdateWorkflowExecutionOptions() {
 	d.NoError(err)
 	versioningInfo := descResp.GetWorkflowExecutionInfo().GetVersioningInfo()
 	d.Nil(versioningInfo.GetVersioningOverride())
+}
 
-	// 2. Set pinned override on our new unversioned workflow --> describe workflow shows the override
-	updateResp, err = d.FrontendClient().UpdateWorkflowExecutionOptions(ctx, &workflowservice.UpdateWorkflowExecutionOptionsRequest{
+func (d *DeploymentSuite) TestUpdateWorkflowExecutionOptions_SetPinnedSetPinned() {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
+	defer cancel()
+
+	// start an unversioned workflow
+	unversionedTQ := "unversioned-test-tq"
+	run, err := d.sdkClient.ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{TaskQueue: unversionedTQ}, "wf")
+	d.NoError(err)
+	unversionedWFExec := &commonpb.WorkflowExecution{
+		WorkflowId: run.GetID(),
+		RunId:      run.GetRunID(),
+	}
+	pinnedOptsA := &workflowpb.WorkflowExecutionOptions{
+		VersioningOverride: &workflowpb.VersioningOverride{
+			Behavior: enumspb.VERSIONING_BEHAVIOR_PINNED,
+			Deployment: &deploymentpb.Deployment{
+				SeriesName: "seriesName",
+				BuildId:    "A",
+			},
+		},
+	}
+	pinnedOptsB := &workflowpb.WorkflowExecutionOptions{
+		VersioningOverride: &workflowpb.VersioningOverride{
+			Behavior: enumspb.VERSIONING_BEHAVIOR_PINNED,
+			Deployment: &deploymentpb.Deployment{
+				SeriesName: "seriesName",
+				BuildId:    "B",
+			},
+		},
+	}
+
+	// 1. Set pinned override A --> describe workflow shows the override
+	updateResp, err := d.FrontendClient().UpdateWorkflowExecutionOptions(ctx, &workflowservice.UpdateWorkflowExecutionOptionsRequest{
 		Namespace:                d.Namespace(),
 		WorkflowExecution:        unversionedWFExec,
-		WorkflowExecutionOptions: pinnedOpts,
+		WorkflowExecutionOptions: pinnedOptsA,
 		UpdateMask:               &fieldmaskpb.FieldMask{Paths: []string{"versioning_override"}},
 	})
 	d.NoError(err)
-	d.True(proto.Equal(updateResp.GetWorkflowExecutionOptions(), pinnedOpts))
+	d.True(proto.Equal(updateResp.GetWorkflowExecutionOptions(), pinnedOptsA))
+	descResp, err := d.FrontendClient().DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
+		Namespace: d.Namespace(),
+		Execution: unversionedWFExec,
+	})
+	d.NoError(err)
+	versioningInfo := descResp.GetWorkflowExecutionInfo().GetVersioningInfo()
+	d.True(proto.Equal(pinnedOptsA.GetVersioningOverride(), versioningInfo.GetVersioningOverride()))
+
+	// 3. Set pinned override B --> describe workflow shows the override
+	updateResp, err = d.FrontendClient().UpdateWorkflowExecutionOptions(ctx, &workflowservice.UpdateWorkflowExecutionOptionsRequest{
+		Namespace:                d.Namespace(),
+		WorkflowExecution:        unversionedWFExec,
+		WorkflowExecutionOptions: pinnedOptsB,
+		UpdateMask:               &fieldmaskpb.FieldMask{Paths: []string{"versioning_override"}},
+	})
+	d.NoError(err)
+	d.True(proto.Equal(updateResp.GetWorkflowExecutionOptions(), pinnedOptsB))
 	descResp, err = d.FrontendClient().DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
 		Namespace: d.Namespace(),
 		Execution: unversionedWFExec,
 	})
 	d.NoError(err)
 	versioningInfo = descResp.GetWorkflowExecutionInfo().GetVersioningInfo()
-	d.True(proto.Equal(pinnedOpts.GetVersioningOverride(), versioningInfo.GetVersioningOverride()))
+	d.True(proto.Equal(pinnedOptsB.GetVersioningOverride(), versioningInfo.GetVersioningOverride()))
+}
 
-	// 3. Set unpinned override --> describe workflow shows the override
+func (d *DeploymentSuite) TestUpdateWorkflowExecutionOptions_SetUnpinnedSetUnpinned() {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
+	defer cancel()
+
+	// start an unversioned workflow
+	unversionedTQ := "unversioned-test-tq"
+	run, err := d.sdkClient.ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{TaskQueue: unversionedTQ}, "wf")
+	d.NoError(err)
+	unversionedWFExec := &commonpb.WorkflowExecution{
+		WorkflowId: run.GetID(),
+		RunId:      run.GetRunID(),
+	}
+	unpinnedOpts := &workflowpb.WorkflowExecutionOptions{
+		VersioningOverride: &workflowpb.VersioningOverride{
+			Behavior:   enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE,
+			Deployment: nil,
+		},
+	}
+
+	// 1. Set unpinned override --> describe workflow shows the override
+	updateResp, err := d.FrontendClient().UpdateWorkflowExecutionOptions(ctx, &workflowservice.UpdateWorkflowExecutionOptionsRequest{
+		Namespace:                d.Namespace(),
+		WorkflowExecution:        unversionedWFExec,
+		WorkflowExecutionOptions: unpinnedOpts,
+		UpdateMask:               &fieldmaskpb.FieldMask{Paths: []string{"versioning_override"}},
+	})
+	d.NoError(err)
+	d.True(proto.Equal(updateResp.GetWorkflowExecutionOptions(), unpinnedOpts))
+	descResp, err := d.FrontendClient().DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
+		Namespace: d.Namespace(),
+		Execution: unversionedWFExec,
+	})
+	d.NoError(err)
+	versioningInfo := descResp.GetWorkflowExecutionInfo().GetVersioningInfo()
+	d.True(proto.Equal(unpinnedOpts.GetVersioningOverride(), versioningInfo.GetVersioningOverride()))
+
+	// 1. Set unpinned override --> describe workflow shows the override
 	updateResp, err = d.FrontendClient().UpdateWorkflowExecutionOptions(ctx, &workflowservice.UpdateWorkflowExecutionOptionsRequest{
 		Namespace:                d.Namespace(),
 		WorkflowExecution:        unversionedWFExec,
@@ -547,21 +742,131 @@ func (d *DeploymentSuite) TestUpdateWorkflowExecutionOptions() {
 	d.NoError(err)
 	versioningInfo = descResp.GetWorkflowExecutionInfo().GetVersioningInfo()
 	d.True(proto.Equal(unpinnedOpts.GetVersioningOverride(), versioningInfo.GetVersioningOverride()))
+}
 
-	// 4. Empty update opts with mutation mask --> describe workflow shows no more override
-	updateResp, err = d.FrontendClient().UpdateWorkflowExecutionOptions(ctx, &workflowservice.UpdateWorkflowExecutionOptionsRequest{
+func (d *DeploymentSuite) TestUpdateWorkflowExecutionOptions_SetUnpinnedSetPinned() {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
+	defer cancel()
+
+	// start an unversioned workflow
+	unversionedTQ := "unversioned-test-tq"
+	run, err := d.sdkClient.ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{TaskQueue: unversionedTQ}, "wf")
+	d.NoError(err)
+	unversionedWFExec := &commonpb.WorkflowExecution{
+		WorkflowId: run.GetID(),
+		RunId:      run.GetRunID(),
+	}
+	unpinnedOpts := &workflowpb.WorkflowExecutionOptions{
+		VersioningOverride: &workflowpb.VersioningOverride{
+			Behavior:   enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE,
+			Deployment: nil,
+		},
+	}
+
+	// 1. Set unpinned override --> describe workflow shows the override
+	updateResp, err := d.FrontendClient().UpdateWorkflowExecutionOptions(ctx, &workflowservice.UpdateWorkflowExecutionOptionsRequest{
 		Namespace:                d.Namespace(),
 		WorkflowExecution:        unversionedWFExec,
-		WorkflowExecutionOptions: &workflowpb.WorkflowExecutionOptions{},
+		WorkflowExecutionOptions: unpinnedOpts,
 		UpdateMask:               &fieldmaskpb.FieldMask{Paths: []string{"versioning_override"}},
 	})
 	d.NoError(err)
-	d.True(proto.Equal(updateResp.GetWorkflowExecutionOptions(), &workflowpb.WorkflowExecutionOptions{}))
+	d.True(proto.Equal(updateResp.GetWorkflowExecutionOptions(), unpinnedOpts))
+	descResp, err := d.FrontendClient().DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
+		Namespace: d.Namespace(),
+		Execution: unversionedWFExec,
+	})
+	d.NoError(err)
+	versioningInfo := descResp.GetWorkflowExecutionInfo().GetVersioningInfo()
+	d.True(proto.Equal(unpinnedOpts.GetVersioningOverride(), versioningInfo.GetVersioningOverride()))
+
+	pinnedOptsA := &workflowpb.WorkflowExecutionOptions{
+		VersioningOverride: &workflowpb.VersioningOverride{
+			Behavior: enumspb.VERSIONING_BEHAVIOR_PINNED,
+			Deployment: &deploymentpb.Deployment{
+				SeriesName: "seriesName",
+				BuildId:    "A",
+			},
+		},
+	}
+
+	// 1. Set pinned override A --> describe workflow shows the override
+	updateResp, err = d.FrontendClient().UpdateWorkflowExecutionOptions(ctx, &workflowservice.UpdateWorkflowExecutionOptionsRequest{
+		Namespace:                d.Namespace(),
+		WorkflowExecution:        unversionedWFExec,
+		WorkflowExecutionOptions: pinnedOptsA,
+		UpdateMask:               &fieldmaskpb.FieldMask{Paths: []string{"versioning_override"}},
+	})
+	d.NoError(err)
+	d.True(proto.Equal(updateResp.GetWorkflowExecutionOptions(), pinnedOptsA))
 	descResp, err = d.FrontendClient().DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
 		Namespace: d.Namespace(),
 		Execution: unversionedWFExec,
 	})
 	d.NoError(err)
-	d.Nil(descResp.GetWorkflowExecutionInfo().GetVersioningInfo().GetVersioningOverride())
+	versioningInfo = descResp.GetWorkflowExecutionInfo().GetVersioningInfo()
+	d.True(proto.Equal(pinnedOptsA.GetVersioningOverride(), versioningInfo.GetVersioningOverride()))
+}
 
+func (d *DeploymentSuite) TestUpdateWorkflowExecutionOptions_SetPinnedSetUnpinned() {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
+	defer cancel()
+
+	// start an unversioned workflow
+	unversionedTQ := "unversioned-test-tq"
+	run, err := d.sdkClient.ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{TaskQueue: unversionedTQ}, "wf")
+	d.NoError(err)
+	unversionedWFExec := &commonpb.WorkflowExecution{
+		WorkflowId: run.GetID(),
+		RunId:      run.GetRunID(),
+	}
+	unpinnedOpts := &workflowpb.WorkflowExecutionOptions{
+		VersioningOverride: &workflowpb.VersioningOverride{
+			Behavior:   enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE,
+			Deployment: nil,
+		},
+	}
+	pinnedOptsA := &workflowpb.WorkflowExecutionOptions{
+		VersioningOverride: &workflowpb.VersioningOverride{
+			Behavior: enumspb.VERSIONING_BEHAVIOR_PINNED,
+			Deployment: &deploymentpb.Deployment{
+				SeriesName: "seriesName",
+				BuildId:    "A",
+			},
+		},
+	}
+
+	// 1. Set pinned override A --> describe workflow shows the override
+	updateResp, err := d.FrontendClient().UpdateWorkflowExecutionOptions(ctx, &workflowservice.UpdateWorkflowExecutionOptionsRequest{
+		Namespace:                d.Namespace(),
+		WorkflowExecution:        unversionedWFExec,
+		WorkflowExecutionOptions: pinnedOptsA,
+		UpdateMask:               &fieldmaskpb.FieldMask{Paths: []string{"versioning_override"}},
+	})
+	d.NoError(err)
+	d.True(proto.Equal(updateResp.GetWorkflowExecutionOptions(), pinnedOptsA))
+	descResp, err := d.FrontendClient().DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
+		Namespace: d.Namespace(),
+		Execution: unversionedWFExec,
+	})
+	d.NoError(err)
+	versioningInfo := descResp.GetWorkflowExecutionInfo().GetVersioningInfo()
+	d.True(proto.Equal(pinnedOptsA.GetVersioningOverride(), versioningInfo.GetVersioningOverride()))
+
+	// 1. Set unpinned override --> describe workflow shows the override
+	updateResp, err = d.FrontendClient().UpdateWorkflowExecutionOptions(ctx, &workflowservice.UpdateWorkflowExecutionOptionsRequest{
+		Namespace:                d.Namespace(),
+		WorkflowExecution:        unversionedWFExec,
+		WorkflowExecutionOptions: unpinnedOpts,
+		UpdateMask:               &fieldmaskpb.FieldMask{Paths: []string{"versioning_override"}},
+	})
+	d.NoError(err)
+	d.True(proto.Equal(updateResp.GetWorkflowExecutionOptions(), unpinnedOpts))
+	descResp, err = d.FrontendClient().DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
+		Namespace: d.Namespace(),
+		Execution: unversionedWFExec,
+	})
+	d.NoError(err)
+	versioningInfo = descResp.GetWorkflowExecutionInfo().GetVersioningInfo()
+	d.True(proto.Equal(unpinnedOpts.GetVersioningOverride(), versioningInfo.GetVersioningOverride()))
 }
