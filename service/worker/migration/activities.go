@@ -27,12 +27,13 @@ package migration
 import (
 	"context"
 	"fmt"
-	serverClient "go.temporal.io/server/client"
-	"go.temporal.io/server/common/log"
 	"math"
 	"slices"
 	"sort"
 	"time"
+
+	serverClient "go.temporal.io/server/client"
+	"go.temporal.io/server/common/log"
 
 	"github.com/pkg/errors"
 	commonpb "go.temporal.io/api/common/v1"
