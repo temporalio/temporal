@@ -158,7 +158,7 @@ func (d *DeploymentWorkflowRunner) validateRegisterWorker(args *deploymentspb.Re
 	if _, ok := d.DeploymentLocalState.TaskQueueFamilies[args.TaskQueueName].GetTaskQueues()[int32(args.TaskQueueType)]; ok {
 		return errTaskQueueExistsInDeployment
 	}
-	if len(d.DeploymentLocalState.TaskQueueFamilies)+1 == int(args.MaxTaskQueues) {
+	if len(d.DeploymentLocalState.TaskQueueFamilies) >= int(args.MaxTaskQueues) {
 		return ErrMaxTaskQueuesInDeployment
 	}
 	return nil
