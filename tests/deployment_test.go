@@ -560,7 +560,7 @@ func (d *DeploymentSuite) createDeploymentAndWaitForExist(
 
 		resp, err := d.FrontendClient().DescribeDeployment(ctx, &workflowservice.DescribeDeploymentRequest{
 			Namespace:  d.Namespace(),
-			Deployment: deployment,
+			Deployment: deploy,
 		})
 		a.NoError(err)
 		a.NotNil(resp.DeploymentInfo)
