@@ -35,18 +35,16 @@ import (
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/server/api/historyservice/v1"
+	"go.temporal.io/server/client"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/resource"
-	"go.temporal.io/server/common/xdc"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/ndc"
 	"go.temporal.io/server/service/history/queues"
-	"go.temporal.io/server/service/history/replication/eventhandler"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/workflow"
@@ -62,9 +60,8 @@ type (
 	transferQueueStandbyTaskExecutor struct {
 		*transferQueueTaskExecutorBase
 
-		clusterName        string
-		nDCHistoryResender xdc.NDCHistoryResender // Deprecated, will delete once eventhandler.ResendHandler feature is fully launched
-		resendHandler      eventhandler.ResendHandler
+		clusterName string
+		clientBean  client.Bean
 	}
 
 	verificationErr struct {
@@ -76,14 +73,13 @@ type (
 func newTransferQueueStandbyTaskExecutor(
 	shard shard.Context,
 	workflowCache wcache.Cache,
-	nDCHistoryResender xdc.NDCHistoryResender,
-	resendHandler eventhandler.ResendHandler,
 	logger log.Logger,
 	metricProvider metrics.Handler,
 	clusterName string,
 	historyRawClient resource.HistoryRawClient,
 	matchingRawClient resource.MatchingRawClient,
 	visibilityManager manager.VisibilityManager,
+	clientBean client.Bean,
 ) queues.Executor {
 	return &transferQueueStandbyTaskExecutor{
 		transferQueueTaskExecutorBase: newTransferQueueTaskExecutorBase(
@@ -95,9 +91,8 @@ func newTransferQueueStandbyTaskExecutor(
 			matchingRawClient,
 			visibilityManager,
 		),
-		clusterName:        clusterName,
-		nDCHistoryResender: nDCHistoryResender,
-		resendHandler:      resendHandler,
+		clusterName: clusterName,
+		clientBean:  clientBean,
 	}
 }
 
@@ -175,9 +170,7 @@ func (t *transferQueueStandbyTaskExecutor) processActivityTask(
 		getStandbyPostActionFn(
 			transferTask,
 			t.getCurrentTime,
-			t.config.StandbyTaskMissingEventsResendDelay(transferTask.GetType()),
 			t.config.StandbyTaskMissingEventsDiscardDelay(transferTask.GetType()),
-			t.fetchHistoryFromRemote,
 			t.pushActivity,
 		),
 	)
@@ -228,9 +221,7 @@ func (t *transferQueueStandbyTaskExecutor) processWorkflowTask(
 		getStandbyPostActionFn(
 			transferTask,
 			t.getCurrentTime,
-			t.config.StandbyTaskMissingEventsResendDelay(transferTask.GetType()),
 			t.config.StandbyTaskMissingEventsDiscardDelay(transferTask.GetType()),
-			t.fetchHistoryFromRemote,
 			t.pushWorkflowTask,
 		),
 	)
@@ -316,10 +307,8 @@ func (t *transferQueueStandbyTaskExecutor) processCloseExecution(
 		getStandbyPostActionFn(
 			transferTask,
 			t.getCurrentTime,
-			t.config.StandbyTaskMissingEventsResendDelay(transferTask.GetType()),
 			t.config.StandbyTaskMissingEventsDiscardDelay(transferTask.GetType()),
-			standbyTaskPostActionNoOp,
-			standbyTransferTaskPostActionTaskDiscarded,
+			t.checkWorkflowStillExistOnSourceBeforeDiscard,
 		),
 	)
 }
@@ -340,7 +329,7 @@ func (t *transferQueueStandbyTaskExecutor) processCancelExecution(
 			return nil, err
 		}
 
-		return getHistoryResendInfo(mutableState)
+		return &struct{}{}, nil
 	}
 
 	return t.processTransfer(
@@ -351,10 +340,8 @@ func (t *transferQueueStandbyTaskExecutor) processCancelExecution(
 		getStandbyPostActionFn(
 			transferTask,
 			t.getCurrentTime,
-			t.config.StandbyTaskMissingEventsResendDelay(transferTask.GetType()),
 			t.config.StandbyTaskMissingEventsDiscardDelay(transferTask.GetType()),
-			t.fetchHistoryFromRemote,
-			standbyTransferTaskPostActionTaskDiscarded,
+			t.checkWorkflowStillExistOnSourceBeforeDiscard,
 		),
 	)
 }
@@ -375,7 +362,7 @@ func (t *transferQueueStandbyTaskExecutor) processSignalExecution(
 			return nil, err
 		}
 
-		return getHistoryResendInfo(mutableState)
+		return &struct{}{}, nil
 	}
 
 	return t.processTransfer(
@@ -386,10 +373,8 @@ func (t *transferQueueStandbyTaskExecutor) processSignalExecution(
 		getStandbyPostActionFn(
 			transferTask,
 			t.getCurrentTime,
-			t.config.StandbyTaskMissingEventsResendDelay(transferTask.GetType()),
 			t.config.StandbyTaskMissingEventsDiscardDelay(transferTask.GetType()),
-			t.fetchHistoryFromRemote,
-			standbyTransferTaskPostActionTaskDiscarded,
+			t.checkWorkflowStillExistOnSourceBeforeDiscard,
 		),
 	)
 }
@@ -424,11 +409,7 @@ func (t *transferQueueStandbyTaskExecutor) processStartChildExecution(
 		}
 
 		if !childStarted {
-			historyResendInfo, err := getHistoryResendInfo(mutableState)
-			if err != nil {
-				return nil, err
-			}
-			return historyResendInfo, nil
+			return &struct{}{}, nil
 		}
 
 		_, err = t.historyRawClient.VerifyFirstWorkflowTaskScheduled(ctx, &historyservice.VerifyFirstWorkflowTaskScheduledRequest{
@@ -468,10 +449,8 @@ func (t *transferQueueStandbyTaskExecutor) processStartChildExecution(
 		getStandbyPostActionFn(
 			transferTask,
 			t.getCurrentTime,
-			t.config.StandbyTaskMissingEventsResendDelay(transferTask.GetType()),
 			t.config.StandbyTaskMissingEventsDiscardDelay(transferTask.GetType()),
-			t.startChildExecutionResendPostAction,
-			standbyTransferTaskPostActionTaskDiscarded,
+			t.checkWorkflowStillExistOnSourceBeforeDiscard,
 		),
 	)
 }
@@ -570,113 +549,6 @@ func (t *transferQueueStandbyTaskExecutor) pushWorkflowTask(
 	)
 }
 
-func (t *transferQueueStandbyTaskExecutor) startChildExecutionResendPostAction(
-	ctx context.Context,
-	taskInfo tasks.Task,
-	postActionInfo interface{},
-	log log.Logger,
-) error {
-	if postActionInfo == nil {
-		return nil
-	}
-
-	if historyResendInfo, ok := postActionInfo.(*historyResendInfo); ok {
-		return t.fetchHistoryFromRemote(ctx, taskInfo, historyResendInfo, log)
-	}
-
-	return standbyTaskPostActionNoOp(ctx, taskInfo, postActionInfo, log)
-}
-
-func (t *transferQueueStandbyTaskExecutor) fetchHistoryFromRemote(
-	ctx context.Context,
-	taskInfo tasks.Task,
-	postActionInfo interface{},
-	logger log.Logger,
-) error {
-	var resendInfo *historyResendInfo
-	switch postActionInfo := postActionInfo.(type) {
-	case nil:
-		return nil
-	case *historyResendInfo:
-		resendInfo = postActionInfo
-	case *activityTaskPostActionInfo:
-		resendInfo = postActionInfo.historyResendInfo
-	case *workflowTaskPostActionInfo:
-		resendInfo = postActionInfo.historyResendInfo
-	default:
-		logger.Fatal("unknown post action info for fetching remote history", tag.Value(postActionInfo))
-	}
-
-	remoteClusterName, err := getRemoteClusterName(
-		t.currentClusterName,
-		t.registry,
-		taskInfo.GetNamespaceID(),
-	)
-	if err != nil {
-		return err
-	}
-
-	scope := t.metricHandler.WithTags(metrics.OperationTag(metrics.HistoryRereplicationByTransferTaskScope))
-	metrics.ClientRequests.With(scope).Record(1)
-	startTime := time.Now().UTC()
-	defer func() { metrics.ClientLatency.With(scope).Record(time.Since(startTime)) }()
-
-	if resendInfo.lastEventID == common.EmptyEventID || resendInfo.lastEventVersion == common.EmptyVersion {
-		t.logger.Error("Error re-replicating history from remote: transferQueueStandbyProcessor encountered empty historyResendInfo.",
-			tag.ShardID(t.shardContext.GetShardID()),
-			tag.WorkflowNamespaceID(taskInfo.GetNamespaceID()),
-			tag.WorkflowID(taskInfo.GetWorkflowID()),
-			tag.WorkflowRunID(taskInfo.GetRunID()),
-			tag.SourceCluster(remoteClusterName))
-
-		return consts.ErrTaskRetry
-	}
-
-	// NOTE: history resend may take long time and its timeout is currently
-	// controlled by a separate dynamicconfig config: StandbyTaskReReplicationContextTimeout
-	if t.config.EnableReplicateLocalGeneratedEvent() {
-		err = t.resendHandler.ResendHistoryEvents(
-			ctx,
-			remoteClusterName,
-			namespace.ID(taskInfo.GetNamespaceID()),
-			taskInfo.GetWorkflowID(),
-			taskInfo.GetRunID(),
-			resendInfo.lastEventID,
-			resendInfo.lastEventVersion,
-			common.EmptyEventID,
-			common.EmptyVersion,
-		)
-	} else {
-		err = t.nDCHistoryResender.SendSingleWorkflowHistory(
-			ctx,
-			remoteClusterName,
-			namespace.ID(taskInfo.GetNamespaceID()),
-			taskInfo.GetWorkflowID(),
-			taskInfo.GetRunID(),
-			resendInfo.lastEventID,
-			resendInfo.lastEventVersion,
-			0,
-			0,
-		)
-	}
-	if err != nil {
-		if _, isNotFound := err.(*serviceerror.NamespaceNotFound); isNotFound {
-			// Don't log NamespaceNotFound error because it is valid case, and return error to stop retrying.
-			return err
-		}
-		t.logger.Error("Error re-replicating history from remote.",
-			tag.ShardID(t.shardContext.GetShardID()),
-			tag.WorkflowNamespaceID(taskInfo.GetNamespaceID()),
-			tag.WorkflowID(taskInfo.GetWorkflowID()),
-			tag.WorkflowRunID(taskInfo.GetRunID()),
-			tag.SourceCluster(remoteClusterName),
-			tag.Error(err))
-	}
-
-	// Return retryable error, so task processing will retry.
-	return consts.ErrTaskRetry
-}
-
 func (t *transferQueueStandbyTaskExecutor) getCurrentTime() time.Time {
 	return t.shardContext.GetCurrentTime(t.clusterName)
 }
@@ -687,4 +559,19 @@ func (e *verificationErr) Error() string {
 
 func (e *verificationErr) Unwrap() error {
 	return e.err
+}
+
+func (t *transferQueueStandbyTaskExecutor) checkWorkflowStillExistOnSourceBeforeDiscard(
+	ctx context.Context,
+	taskInfo tasks.Task,
+	postActionInfo interface{},
+	logger log.Logger,
+) error {
+	if postActionInfo == nil {
+		return nil
+	}
+	if !isWorkflowExistOnSource(ctx, taskInfo, logger, t.clusterName, t.clientBean, t.shardContext.GetNamespaceRegistry()) {
+		return standbyTransferTaskPostActionTaskDiscarded(ctx, taskInfo, nil, logger)
+	}
+	return standbyTransferTaskPostActionTaskDiscarded(ctx, taskInfo, postActionInfo, logger)
 }

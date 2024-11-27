@@ -25,22 +25,14 @@
 package history
 
 import (
-	"context"
-
-	historypb "go.temporal.io/api/history/v1"
-	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/client"
-	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
-	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/sdk"
-	"go.temporal.io/server/common/xdc"
 	"go.temporal.io/server/service/history/queues"
-	"go.temporal.io/server/service/history/replication/eventhandler"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
@@ -144,73 +136,17 @@ func (f *transferQueueFactory) CreateQueue(
 		f.MatchingRawClient,
 		f.VisibilityManager,
 	)
-	eventImporter := eventhandler.NewEventImporter(
-		f.RemoteHistoryFetcher,
-		func(ctx context.Context, namespaceID namespace.ID, workflowID string) (shard.Engine, error) {
-			return shardContext.GetEngine(ctx)
-		},
-		f.Serializer,
-		logger,
-	)
-	resendHandler := eventhandler.NewResendHandler(
-		f.NamespaceRegistry,
-		f.ClientBean,
-		f.Serializer,
-		f.ClusterMetadata,
-		func(ctx context.Context, namespaceID namespace.ID, workflowID string) (shard.Engine, error) {
-			return shardContext.GetEngine(ctx)
-		},
-		f.RemoteHistoryFetcher,
-		eventImporter,
-		logger,
-		f.Config,
-	)
 
 	standbyExecutor := newTransferQueueStandbyTaskExecutor(
 		shardContext,
 		workflowCache,
-		xdc.NewNDCHistoryResender(
-			f.NamespaceRegistry,
-			f.ClientBean,
-			func(
-				ctx context.Context,
-				sourceClusterName string,
-				namespaceId namespace.ID,
-				workflowId string,
-				runId string,
-				events [][]*historypb.HistoryEvent,
-				versionHistory []*historyspb.VersionHistoryItem,
-			) error {
-				engine, err := shardContext.GetEngine(ctx)
-				if err != nil {
-					return err
-				}
-				return engine.ReplicateHistoryEvents(
-					ctx,
-					definition.WorkflowKey{
-						NamespaceID: namespaceId.String(),
-						WorkflowID:  workflowId,
-						RunID:       runId,
-					},
-					nil,
-					versionHistory,
-					events,
-					nil,
-					"",
-				)
-			},
-			shardContext.GetPayloadSerializer(),
-			f.Config.StandbyTaskReReplicationContextTimeout,
-			logger,
-			f.Config,
-		),
-		resendHandler,
 		logger,
 		f.MetricsHandler,
 		currentClusterName,
 		f.HistoryRawClient,
 		f.MatchingRawClient,
 		f.VisibilityManager,
+		f.ClientBean,
 	)
 
 	executor := queues.NewActiveStandbyExecutor(
