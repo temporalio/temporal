@@ -2537,6 +2537,18 @@ func (wh *WorkflowHandler) GetSearchAttributes(ctx context.Context, _ *workflows
 	return resp, nil
 }
 
+func (wh *WorkflowHandler) PauseActivityById(ctx context.Context, _ *workflowservice.PauseActivityByIdRequest) (*workflowservice.PauseActivityByIdResponse, error) {
+	return nil, serviceerror.NewUnimplemented("pause activity by id not implemented")
+}
+
+func (wh *WorkflowHandler) ResetActivityById(ctx context.Context, _ *workflowservice.ResetActivityByIdRequest) (*workflowservice.ResetActivityByIdResponse, error) {
+	return nil, serviceerror.NewUnimplemented("reset activity by id not implemented")
+}
+
+func (wh *WorkflowHandler) UnpauseActivityById(ctx context.Context, _ *workflowservice.UnpauseActivityByIdRequest) (*workflowservice.UnpauseActivityByIdResponse, error) {
+	return nil, serviceerror.NewUnimplemented("unpause activity by id not implemented")
+}
+
 // RespondQueryTaskCompleted is called by application worker to complete a QueryTask (which is a WorkflowTask for query)
 // as a result of 'PollWorkflowTaskQueue' API call. Completing a QueryTask will unblock the client call to 'QueryWorkflow'
 // API and return the query result to client as a response to 'QueryWorkflow' API call.
@@ -4234,6 +4246,7 @@ func (wh *WorkflowHandler) StartBatchOperation(
 	var operationType string
 	var signalParams batcher.SignalParams
 	var resetParams batcher.ResetParams
+	var updateOptionsParams batcher.UpdateOptionsParams
 	switch op := request.Operation.(type) {
 	case *workflowservice.StartBatchOperationRequest_TerminationOperation:
 		identity = op.TerminationOperation.GetIdentity()
@@ -4270,23 +4283,29 @@ func (wh *WorkflowHandler) StartBatchOperation(
 			resetParams.ResetType = resetType
 			resetParams.ResetReapplyType = op.ResetOperation.GetResetReapplyType()
 		}
+	case *workflowservice.StartBatchOperationRequest_UpdateWorkflowOptionsOperation:
+		identity = op.UpdateWorkflowOptionsOperation.GetIdentity()
+		operationType = batcher.BatchTypeUpdateOptions
+		updateOptionsParams.WorkflowExecutionOptions = op.UpdateWorkflowOptionsOperation.GetWorkflowExecutionOptions()
+		updateOptionsParams.UpdateMask = op.UpdateWorkflowOptionsOperation.GetUpdateMask()
 
 	default:
 		return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("The operation type %T is not supported", op))
 	}
 
 	input := &batcher.BatchParams{
-		Namespace:       request.GetNamespace(),
-		Query:           request.GetVisibilityQuery(),
-		Executions:      request.GetExecutions(),
-		Reason:          request.GetReason(),
-		BatchType:       operationType,
-		RPS:             float64(request.GetMaxOperationsPerSecond()),
-		TerminateParams: batcher.TerminateParams{},
-		CancelParams:    batcher.CancelParams{},
-		SignalParams:    signalParams,
-		DeleteParams:    batcher.DeleteParams{},
-		ResetParams:     resetParams,
+		Namespace:           request.GetNamespace(),
+		Query:               request.GetVisibilityQuery(),
+		Executions:          request.GetExecutions(),
+		Reason:              request.GetReason(),
+		BatchType:           operationType,
+		RPS:                 float64(request.GetMaxOperationsPerSecond()),
+		TerminateParams:     batcher.TerminateParams{},
+		CancelParams:        batcher.CancelParams{},
+		SignalParams:        signalParams,
+		DeleteParams:        batcher.DeleteParams{},
+		ResetParams:         resetParams,
+		UpdateOptionsParams: updateOptionsParams,
 	}
 	inputPayload, err := sdk.PreferProtoDataConverter.ToPayloads(input)
 	if err != nil {
@@ -4449,6 +4468,8 @@ func (wh *WorkflowHandler) DescribeBatchOperation(
 		operationType = enumspb.BATCH_OPERATION_TYPE_DELETE
 	case batcher.BatchTypeReset:
 		operationType = enumspb.BATCH_OPERATION_TYPE_RESET
+	case batcher.BatchTypeUpdateOptions:
+		operationType = enumspb.BATCH_OPERATION_TYPE_UPDATE_EXECUTION_OPTIONS
 	default:
 		operationType = enumspb.BATCH_OPERATION_TYPE_UNSPECIFIED
 		wh.throttledLogger.Warn("Unknown batch operation type", tag.NewStringTag("batch-operation-type", operationTypeString))

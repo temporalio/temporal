@@ -316,14 +316,14 @@ func signalWorkflow(
 		request.GetSignalInput(),
 		request.GetIdentity(),
 		request.GetHeader(),
-		request.GetSkipGenerateWorkflowTask(),
+		false,
 		request.GetLinks(),
 	); err != nil {
 		return err
 	}
 
 	// Create a transfer task to schedule a workflow task
-	if !mutableState.HasPendingWorkflowTask() && !request.GetSkipGenerateWorkflowTask() {
+	if !mutableState.HasPendingWorkflowTask() {
 
 		executionInfo := mutableState.GetExecutionInfo()
 		executionState := mutableState.GetExecutionState()

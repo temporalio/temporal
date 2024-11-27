@@ -123,7 +123,7 @@ func NewWorkflowWithSignal(
 			signalWithStartRequest.GetSignalInput(),
 			signalWithStartRequest.GetIdentity(),
 			signalWithStartRequest.GetHeader(),
-			signalWithStartRequest.GetSkipGenerateWorkflowTask(),
+			false,
 			signalWithStartRequest.GetLinks(),
 		); err != nil {
 			return nil, err
