@@ -336,6 +336,9 @@ func ValidateStartWorkflowExecutionRequest(
 	if len(request.WorkflowType.GetName()) > maxIDLengthLimit {
 		return serviceerror.NewInvalidArgument("WorkflowType exceeds length limit.")
 	}
+	if request.GetVersioningOverride() != nil && request.GetVersioningOverride().GetBehavior() == enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED {
+		return serviceerror.NewInvalidArgument("Missing versioning override behavior")
+	}
 	if request.GetVersioningOverride().GetBehavior() == enumspb.VERSIONING_BEHAVIOR_PINNED &&
 		request.GetVersioningOverride().GetDeployment() == nil {
 		return serviceerror.NewInvalidArgument("Deployment override must be set if behavior override is PINNED")

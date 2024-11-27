@@ -35,8 +35,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"google.golang.org/protobuf/types/known/fieldmaskpb"
-
 	"github.com/pborman/uuid"
 	batchpb "go.temporal.io/api/batch/v1"
 	commonpb "go.temporal.io/api/common/v1"
@@ -99,6 +97,7 @@ import (
 	"google.golang.org/protobuf/encoding/protowire"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/durationpb"
+	"google.golang.org/protobuf/types/known/fieldmaskpb"
 )
 
 var _ Handler = (*WorkflowHandler)(nil)
