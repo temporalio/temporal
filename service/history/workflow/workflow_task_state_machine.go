@@ -1096,7 +1096,7 @@ func (m *workflowTaskStateMachine) afterAddWorkflowTaskCompletedEvent(
 		}
 	}
 
-	if m.ms.GetDeploymentTransition() != nil {
+	if versioningInfo.GetDeploymentTransition() != nil {
 		// There is still a transition going on. We need to schedule a new WFT so it goes to the
 		// transition deployment this time.
 		if _, err := m.ms.AddWorkflowTaskScheduledEvent(
