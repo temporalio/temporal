@@ -154,6 +154,7 @@ func (r *ActivityStateReplicatorImpl) SyncActivityState(
 			FirstScheduledTime:         request.FirstScheduledTime,
 			LastAttemptCompleteTime:    request.LastAttemptCompleteTime,
 			Stamp:                      request.Stamp,
+			Paused:                     request.Paused,
 		},
 	)
 	if err != nil {

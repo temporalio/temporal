@@ -79,18 +79,7 @@ func (s *WorkflowUpdateBaseSuite) sendUpdateInternal(
 
 	updateResultCh := make(chan updateResponseErr)
 	go func() {
-		updateResp, updateErr := s.FrontendClient().UpdateWorkflowExecution(ctx, &workflowservice.UpdateWorkflowExecutionRequest{
-			Namespace:         s.Namespace(),
-			WorkflowExecution: tv.WorkflowExecution(),
-			WaitPolicy:        waitPolicy,
-			Request: &updatepb.Request{
-				Meta: &updatepb.Meta{UpdateId: tv.UpdateID(updateID)},
-				Input: &updatepb.Input{
-					Name: tv.HandlerName(),
-					Args: payloads.EncodeString("args-value-of-" + tv.UpdateID(updateID)),
-				},
-			},
-		})
+		updateResp, updateErr := s.FrontendClient().UpdateWorkflowExecution(ctx, s.updateWorkflowRequest(tv, waitPolicy, updateID))
 		// It is important to do assert here (before writing to channel which doesn't have readers yet)
 		// to fail fast without trying to process update in wtHandler.
 		if requireNoError {
@@ -100,6 +89,25 @@ func (s *WorkflowUpdateBaseSuite) sendUpdateInternal(
 	}()
 	s.waitUpdateAdmitted(tv, updateID)
 	return updateResultCh
+}
+
+func (s *WorkflowUpdateBaseSuite) updateWorkflowRequest(
+	tv *testvars.TestVars,
+	waitPolicy *updatepb.WaitPolicy,
+	updateID string,
+) *workflowservice.UpdateWorkflowExecutionRequest {
+	return &workflowservice.UpdateWorkflowExecutionRequest{
+		Namespace:         s.Namespace(),
+		WorkflowExecution: tv.WorkflowExecution(),
+		WaitPolicy:        waitPolicy,
+		Request: &updatepb.Request{
+			Meta: &updatepb.Meta{UpdateId: tv.UpdateID(updateID)},
+			Input: &updatepb.Input{
+				Name: tv.HandlerName(),
+				Args: payloads.EncodeString("args-value-of-" + tv.UpdateID(updateID)),
+			},
+		},
+	}
 }
 
 func (s *WorkflowUpdateBaseSuite) waitUpdateAdmitted(tv *testvars.TestVars, updateID string) {
@@ -118,16 +126,18 @@ func (s *WorkflowUpdateBaseSuite) waitUpdateAdmitted(tv *testvars.TestVars, upda
 
 func (s *WorkflowUpdateBaseSuite) startWorkflow(tv *testvars.TestVars) *testvars.TestVars {
 	s.T().Helper()
-	request := &workflowservice.StartWorkflowExecutionRequest{
+	startResp, err := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), s.startWorkflowRequest(tv))
+	s.NoError(err)
+
+	return tv.WithRunID(startResp.GetRunId())
+}
+
+func (s *WorkflowUpdateBaseSuite) startWorkflowRequest(tv *testvars.TestVars) *workflowservice.StartWorkflowExecutionRequest {
+	return &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:    tv.Any().String(),
 		Namespace:    s.Namespace(),
 		WorkflowId:   tv.WorkflowID(),
 		WorkflowType: tv.WorkflowType(),
 		TaskQueue:    tv.TaskQueue(),
 	}
-
-	startResp, err := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
-	s.NoError(err)
-
-	return tv.WithRunID(startResp.GetRunId())
 }

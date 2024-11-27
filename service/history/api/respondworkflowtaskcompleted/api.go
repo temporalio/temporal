@@ -333,7 +333,7 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 		newMutableState             workflow.MutableState
 		responseMutations           []workflowTaskResponseMutation
 	)
-	updateRegistry := weContext.UpdateRegistry(ctx, nil)
+	updateRegistry := weContext.UpdateRegistry(ctx)
 	// hasBufferedEventsOrMessages indicates if there are any buffered events
 	// or admitted updates which should generate a new workflow task.
 
@@ -414,6 +414,14 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 			request.GetIdentity(),
 		)
 
+		// If the Workflow completed itself, but there are still accepted
+		// (but not completed) Updates, they need to be aborted.
+		// Reason is always "WorkflowCompleted" because accepted Updates
+		// are not moving to continuing runs (if any).
+		if !ms.IsWorkflowExecutionRunning() {
+			updateRegistry.AbortAccepted(update.AbortReasonWorkflowCompleted, &effects)
+		}
+
 		// set the vars used by following logic
 		// further refactor should also clean up the vars used below
 		wtFailedCause = workflowTaskHandler.workflowTaskFailedCause
@@ -472,16 +480,11 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 		}
 	}
 
-	bufferedEventShouldCreateNewTask := hasBufferedEventsOrMessages && ms.HasAnyBufferedEvent(eventShouldGenerateNewTaskFilter)
-	if hasBufferedEventsOrMessages && !bufferedEventShouldCreateNewTask {
-		// Make sure tasks that should not create a new event don't get stuck in ms forever
-		ms.FlushBufferedEvents()
-	}
 	newWorkflowTaskType := enumsspb.WORKFLOW_TASK_TYPE_UNSPECIFIED
 	if ms.IsWorkflowExecutionRunning() {
 		if request.GetForceCreateNewWorkflowTask() || // Heartbeat WT is always of Normal type.
 			wtFailedShouldCreateNewTask ||
-			bufferedEventShouldCreateNewTask ||
+			hasBufferedEventsOrMessages ||
 			activityNotStartedCancelled {
 
 			newWorkflowTaskType = enumsspb.WORKFLOW_TASK_TYPE_NORMAL
@@ -634,11 +637,13 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 	effects.Apply(ctx)
 
 	if !ms.IsWorkflowExecutionRunning() {
-		// NOTE: It is important to call this *after* applying effects to be sure there are no pending effects.
+		// NOTE: It is important to call this *after* applying effects to be sure there are no
+		// Updates in ProvisionallyCompleted state.
 
-		// Because all unprocessed Updates were already rejected, the registry only has:
-		//   (1) Updates that were received while this WFT was running,
-		//   (2) Updates that were accepted but not yet completed.
+		// Because:
+		//  (1) all unprocessed Updates were already rejected
+		//  (2) all accepted Updates were aborted
+		// the registry only has: Updates received while this WFT was running (new Updates).
 		hasNewRun := newMutableState != nil
 		if hasNewRun {
 			// If a new run was created (e.g. ContinueAsNew, Retry, Cron), then Updates that were
@@ -1038,14 +1043,4 @@ func (handler *WorkflowTaskCompletedHandler) clearStickyTaskQueue(ctx context.Co
 		return err
 	}
 	return nil
-}
-
-// Filter function to be passed to mutable_state.HasAnyBufferedEvent
-// Returns true if the event should generate a new workflow task
-// Currently only signal events with SkipGenerateWorkflowTask=true flag set do not generate tasks
-func eventShouldGenerateNewTaskFilter(event *historypb.HistoryEvent) bool {
-	if event.GetEventType() != enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED {
-		return true
-	}
-	return !event.GetWorkflowExecutionSignaledEventAttributes().GetSkipGenerateWorkflowTask()
 }

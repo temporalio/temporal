@@ -30,12 +30,14 @@ import (
 	// should not be used for anything more important (password hashes etc.). Marking it as #nosec because of how it's
 	// being used.
 	"crypto/md5" // #nosec
+	"embed"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
 	"io/fs"
 	"os"
+	"path"
 	"path/filepath"
 	"regexp"
 	"sort"
@@ -198,7 +200,7 @@ func (task *UpdateTask) buildChangeSet(currVer string) ([]changeSet, error) {
 	var dir string
 	if len(config.SchemaName) > 0 {
 		fsys = dbschemas.Assets()
-		dir = filepath.Join(config.SchemaName, "versioned")
+		dir = path.Join(config.SchemaName, "versioned")
 	} else {
 		fsys = os.DirFS(config.SchemaDir)
 		dir = "."
@@ -214,7 +216,12 @@ func (task *UpdateTask) buildChangeSet(currVer string) ([]changeSet, error) {
 	var result []changeSet
 
 	for _, vd := range verDirs {
-		dirPath := filepath.Join(dir, vd)
+		var dirPath string
+		if _, ok := fsys.(embed.FS); ok {
+			dirPath = path.Join(dir, vd)
+		} else {
+			dirPath = filepath.Join(dir, vd)
+		}
 
 		m, e := readManifest(fsys, dirPath)
 		if e != nil {
@@ -252,15 +259,20 @@ func (task *UpdateTask) parseSQLStmts(fsys fs.FS, dir string, manifest *manifest
 	result := make([]string, 0, 4)
 
 	for _, file := range manifest.SchemaUpdateCqlFiles {
-		path := filepath.Join(dir, file)
-		task.logger.Info("Processing schema file: " + path)
-		schemaBuf, err := fs.ReadFile(fsys, path)
+		var schemaPath string
+		if _, ok := fsys.(embed.FS); ok {
+			schemaPath = path.Join(dir, file)
+		} else {
+			schemaPath = filepath.Join(dir, file)
+		}
+		task.logger.Info("Processing schema file: " + schemaPath)
+		schemaBuf, err := fs.ReadFile(fsys, schemaPath)
 		if err != nil {
-			return nil, fmt.Errorf("error reading file %s: %w", path, err)
+			return nil, fmt.Errorf("error reading file %s: %w", schemaPath, err)
 		}
 		stmts, err := persistence.LoadAndSplitQueryFromReaders([]io.Reader{bytes.NewBuffer(schemaBuf)})
 		if err != nil {
-			return nil, fmt.Errorf("error parsing file %v, err=%v", path, err)
+			return nil, fmt.Errorf("error parsing file %v, err=%v", schemaPath, err)
 		}
 		result = append(result, stmts...)
 	}
@@ -290,7 +302,13 @@ func validateCQLStmts(stmts []string) error {
 
 // readManifest reads the json manifest at dirPath into a manifest struct.
 func readManifest(fsys fs.FS, dirPath string) (*manifest, error) {
-	jsonBlob, err := fs.ReadFile(fsys, filepath.Join(dirPath, manifestFileName))
+	var manifestPath string
+	if _, ok := fsys.(embed.FS); ok {
+		manifestPath = path.Join(dirPath, manifestFileName)
+	} else {
+		manifestPath = filepath.Join(dirPath, manifestFileName)
+	}
+	jsonBlob, err := fs.ReadFile(fsys, manifestPath)
 	if err != nil {
 		return nil, err
 	}

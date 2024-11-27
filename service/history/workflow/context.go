@@ -152,7 +152,7 @@ type (
 			transactionPolicy TransactionPolicy,
 		) error
 		// TODO (alex-update): move this from workflow context.
-		UpdateRegistry(ctx context.Context, ms MutableState) update.Registry
+		UpdateRegistry(ctx context.Context) update.Registry
 	}
 )
 
@@ -954,26 +954,17 @@ func (c *ContextImpl) RefreshTasks(
 	return c.UpdateWorkflowExecutionAsPassive(ctx, shardContext)
 }
 
-// TODO: remove `fallbackMutableState` parameter again (added since it's not possible to initialize a new Context with a specific MutableState)
-func (c *ContextImpl) UpdateRegistry(ctx context.Context, fallbackMutableState MutableState) update.Registry {
-	ms := c.MutableState
-	if ms == nil {
-		if fallbackMutableState == nil {
-			panic("both c.MutableState and fallbackMutableState are nil")
-		}
-		ms = fallbackMutableState
-	}
-
-	if c.updateRegistry != nil && c.updateRegistry.FailoverVersion() != ms.GetCurrentVersion() {
+func (c *ContextImpl) UpdateRegistry(ctx context.Context) update.Registry {
+	if c.updateRegistry != nil && c.updateRegistry.FailoverVersion() != c.MutableState.GetCurrentVersion() {
 		c.updateRegistry.Clear()
 		c.updateRegistry = nil
 	}
 
 	if c.updateRegistry == nil {
-		nsIDStr := ms.GetNamespaceEntry().ID().String()
+		nsIDStr := c.MutableState.GetNamespaceEntry().ID().String()
 
 		c.updateRegistry = update.NewRegistry(
-			ms,
+			c.MutableState,
 			update.WithLogger(c.logger),
 			update.WithMetrics(c.metricsHandler),
 			update.WithTracerProvider(trace.SpanFromContext(ctx).TracerProvider()),
@@ -1118,7 +1109,7 @@ func (c *ContextImpl) forceTerminateWorkflow(
 	// Abort updates before clearing context.
 	// MS is not persisted yet, but this code is executed only when something
 	// really bad happened with workflow, and it won't make any progress anyway.
-	c.UpdateRegistry(ctx, nil).Abort(update.AbortReasonWorkflowCompleted)
+	c.UpdateRegistry(ctx).Abort(update.AbortReasonWorkflowCompleted)
 
 	// Discard pending changes in MutableState so we can apply terminate state transition
 	c.Clear()

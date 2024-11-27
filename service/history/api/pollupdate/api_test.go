@@ -117,7 +117,7 @@ func TestPollOutcome(t *testing.T) {
 
 	wfCtx := workflow.NewMockContext(mockController)
 	wfCtx.EXPECT().GetWorkflowKey().Return(definition.WorkflowKey{NamespaceID: namespaceId, WorkflowID: workflowId, RunID: runId}).AnyTimes()
-	wfCtx.EXPECT().UpdateRegistry(gomock.Any(), gomock.Any()).Return(reg).AnyTimes()
+	wfCtx.EXPECT().UpdateRegistry(gomock.Any()).Return(reg).AnyTimes()
 
 	apiCtx := mockWorkflowLeaseCtx{
 		GetReleaseFnFn: func() wcache.ReleaseCacheFunc { return func(error) {} },

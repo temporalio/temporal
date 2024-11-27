@@ -399,18 +399,21 @@ func (e *historyEngineImpl) registerNamespaceStateChangeCallback() {
 func (e *historyEngineImpl) StartWorkflowExecution(
 	ctx context.Context,
 	startRequest *historyservice.StartWorkflowExecutionRequest,
-) (resp *historyservice.StartWorkflowExecutionResponse, retError error) {
+) (*historyservice.StartWorkflowExecutionResponse, error) {
 	starter, err := startworkflow.NewStarter(
 		e.shardContext,
 		e.workflowConsistencyChecker,
 		e.tokenSerializer,
 		e.persistenceVisibilityMgr,
 		startRequest,
+		api.NewWorkflowLeaseAndContext,
 	)
 	if err != nil {
 		return nil, err
 	}
-	return starter.Invoke(ctx, startworkflow.BeforeCreateHookNoop)
+
+	resp, _, err := starter.Invoke(ctx)
+	return resp, err
 }
 
 func (e *historyEngineImpl) ExecuteMultiOperation(

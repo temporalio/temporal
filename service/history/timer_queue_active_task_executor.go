@@ -241,10 +241,10 @@ func (t *timerQueueActiveTaskExecutor) executeActivityTimeoutTask(
 	// for updating workflow execution. In that case, only one new heartbeat timeout task should be
 	// created.
 	isHeartBeatTask := task.TimeoutType == enumspb.TIMEOUT_TYPE_HEARTBEAT
-	activityInfo, heartbeatTimeoutVis, ok := mutableState.GetActivityInfoWithTimerHeartbeat(task.EventID)
+	ai, heartbeatTimeoutVis, ok := mutableState.GetActivityInfoWithTimerHeartbeat(task.EventID)
 	if isHeartBeatTask && ok && queues.IsTimeExpired(task.GetVisibilityTime(), heartbeatTimeoutVis) {
-		activityInfo.TimerTaskStatus = activityInfo.TimerTaskStatus &^ workflow.TimerTaskStatusCreatedHeartbeat
-		if err := mutableState.UpdateActivity(activityInfo); err != nil {
+		if err := mutableState.UpdateActivityTaskStatusWithTimerHeartbeat(
+			ai.ScheduledEventId, ai.TimerTaskStatus&^workflow.TimerTaskStatusCreatedHeartbeat, nil); err != nil {
 			return err
 		}
 		updateMutableState = true
@@ -314,6 +314,8 @@ func (t *timerQueueActiveTaskExecutor) processSingleActivityTimeoutTask(
 	}
 
 	if retryState == enumspb.RETRY_STATE_IN_PROGRESS {
+		// TODO uncommment once RETRY_STATE_PAUSED is supported
+		// || retryState == enumspb.RETRY_STATE_PAUSED {
 		result.shouldUpdateMutableState = true
 		return result, nil
 	}
@@ -512,11 +514,10 @@ func (t *timerQueueActiveTaskExecutor) executeActivityRetryTimerTask(
 		return consts.ErrActivityTaskNotFound
 	}
 
-	if task.Stamp != activityInfo.Stamp {
-		// this retry task event is from an old stamp. In this case we should ignore the event.
+	if task.Stamp != activityInfo.Stamp || activityInfo.Paused {
+		// if retry task event is from an old stamp of if activity is paused we should ignore the event.
 		release(nil) // release(nil) so mutable state is not unloaded from cache
-		// I really don't understand why we need this release(nil) call...
-		return nil
+		return consts.ErrActivityTaskNotFound
 	}
 
 	if task.Attempt < activityInfo.Attempt || activityInfo.StartedEventId != common.EmptyEventID {
@@ -660,7 +661,7 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowRunTimeoutTask(
 		if updateErr != nil {
 			return updateErr
 		}
-		weContext.UpdateRegistry(ctx, nil).Abort(update.AbortReasonWorkflowCompleted)
+		weContext.UpdateRegistry(ctx).Abort(update.AbortReasonWorkflowCompleted)
 		return nil
 	}
 
@@ -734,7 +735,7 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowRunTimeoutTask(
 	// A new run was created after the previous run timed out. Running Updates
 	// for this WF are aborted with a retryable error.
 	// Internal server retries will retry the API call, and the Update will be sent to the new run.
-	weContext.UpdateRegistry(ctx, nil).Abort(update.AbortReasonWorkflowContinuing)
+	weContext.UpdateRegistry(ctx).Abort(update.AbortReasonWorkflowContinuing)
 	return nil
 }
 
@@ -772,7 +773,7 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowExecutionTimeoutTask(
 		return updateErr
 	}
 
-	weContext.UpdateRegistry(ctx, nil).Abort(update.AbortReasonWorkflowCompleted)
+	weContext.UpdateRegistry(ctx).Abort(update.AbortReasonWorkflowCompleted)
 	return nil
 }
 

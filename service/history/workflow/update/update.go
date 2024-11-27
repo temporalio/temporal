@@ -257,32 +257,57 @@ func (u *Update) WaitLifecycleStage(
 
 // abort set Update futures with error or failure (which is passed to all waiters)
 // and set state to stateAborted. It is a terminal state. Update can't be changed after it is aborted.
-func (u *Update) abort(reason AbortReason) {
-	const terminalStates = stateSet(stateCompleted | stateAborted)
+// abort uses effects and intermediate stateProvisionallyAborted to delay actual aborting until effects are applied.
+func (u *Update) abort(
+	reason AbortReason,
+	effects effect.Controller,
+) {
+	const terminalStates = stateSet(stateCompleted | stateProvisionallyAborted | stateAborted)
 	if u.state.Matches(terminalStates) {
 		return
 	}
 
 	u.instrumentation.countAborted()
+	prevState := u.setState(stateProvisionallyAborted)
 
-	abortFailure, abortErr := reason.FailureError(u.state)
-	var abortOutcome *updatepb.Outcome
-	if abortFailure != nil {
-		abortOutcome = &updatepb.Outcome{Value: &updatepb.Outcome_Failure{Failure: abortFailure}}
-	}
+	effects.OnAfterCommit(func(context.Context) {
+		if !u.state.Matches(stateSet(stateProvisionallyAborted | stateProvisionallyCompletedAfterAccepted)) {
+			return
+		}
+		abortFailure, abortErr := reason.FailureError(prevState)
+		var abortOutcome *updatepb.Outcome
+		if abortFailure != nil {
+			abortOutcome = &updatepb.Outcome{Value: &updatepb.Outcome_Failure{Failure: abortFailure}}
+		}
 
-	const preAcceptedStates = stateSet(stateCreated | stateProvisionallyAdmitted | stateAdmitted | stateSent | stateProvisionallyAccepted)
-	if u.state.Matches(preAcceptedStates | stateSet(stateProvisionallyCompletedAfterAccepted)) {
-		u.accepted.(*future.FutureImpl[*failurepb.Failure]).Set(abortFailure, abortErr)
+		beforeCommitState := u.setState(stateAborted)
 		u.outcome.(*future.FutureImpl[*updatepb.Outcome]).Set(abortOutcome, abortErr)
-	}
+		if beforeCommitState == stateProvisionallyCompletedAfterAccepted {
+			// If the Update is accepted *and* aborted in the same WFT (because WF was completed in the same WFT),
+			// then its state is ProvisionallyCompletedAfterAccepted here, set by onAcceptance.OnAfterCommit.
+			//
+			// To prevent a race condition in WaitLifecycleStage, the accepted future
+			// has not been set by OnAcceptance earlier, as it must be set *after* the outcome future.
+			// Now is the time to set it.
+			//
+			// Note that the Accepted state is skipped, and it transitions straight to Aborted.
+			u.accepted.(*future.FutureImpl[*failurepb.Failure]).Set(nil, nil)
+			return
+		}
 
-	const preCompletedStates = stateSet(stateAccepted | stateProvisionallyCompleted)
-	if u.state.Matches(preCompletedStates) {
-		u.outcome.(*future.FutureImpl[*updatepb.Outcome]).Set(abortOutcome, abortErr)
-	}
-
-	u.setState(stateAborted)
+		// If Update was aborted without being accepted,
+		// then accepted future must be also set with failure/error.
+		const preAcceptedStates = stateSet(stateCreated | stateProvisionallyAdmitted | stateAdmitted | stateSent | stateProvisionallyAccepted)
+		if prevState.Matches(preAcceptedStates) {
+			u.accepted.(*future.FutureImpl[*failurepb.Failure]).Set(abortFailure, abortErr)
+		}
+	})
+	effects.OnAfterRollback(func(context.Context) {
+		if u.state != stateProvisionallyAborted {
+			return
+		}
+		u.setState(prevState)
+	})
 }
 
 // Admit works if the Update is in any state, but if the state is anything
@@ -303,7 +328,7 @@ func (u *Update) Admit(
 	if !eventStore.CanAddEvent() {
 		// There shouldn't be any waiters before Update is admitted (this func returns).
 		// Call abort to seal the Update.
-		u.abort(AbortReasonWorkflowCompleted)
+		u.abort(AbortReasonWorkflowCompleted, eventStore)
 		// This error must be not nil.
 		_, abortErr := AbortReasonWorkflowCompleted.FailureError(stateCreated)
 		return abortErr
@@ -377,7 +402,7 @@ func (u *Update) OnProtocolMessage(
 	_, isRejection := body.(*updatepb.Rejection)
 	shouldAbort := !(eventStore.CanAddEvent() || isRejection)
 	if shouldAbort {
-		u.abort(AbortReasonWorkflowCompleted)
+		u.abort(AbortReasonWorkflowCompleted, eventStore)
 		return nil
 	}
 
@@ -500,7 +525,7 @@ func (u *Update) onAcceptanceMsg(
 
 	prevState := u.setState(stateProvisionallyAccepted)
 	eventStore.OnAfterCommit(func(context.Context) {
-		if !u.state.Matches(stateSet(stateProvisionallyAccepted | stateProvisionallyCompleted)) {
+		if !u.state.Matches(stateSet(stateProvisionallyAccepted | stateProvisionallyCompleted | stateProvisionallyAborted)) {
 			return
 		}
 		u.request = nil
@@ -513,8 +538,22 @@ func (u *Update) onAcceptanceMsg(
 		// cannot be set here right now, as it must be set *after* the outcome future.
 		//
 		// So instead, the state is set to ProvisionallyCompletedAfterAccepted here,
-		// and onResponseMsg's OnAfterCommit callback will set the futures in the correct order.
+		// and onResponseMsg.OnAfterCommit callback will set the futures in the correct order.
 		if u.state == stateProvisionallyCompleted {
+			u.state = stateProvisionallyCompletedAfterAccepted
+			return
+		}
+		// If the Update is accepted *and* WF is completed in the same WFT, then its state has transitioned
+		// from ProvisionallyAccepted to ProvisionallyAborted in abort function by the
+		// time we get here.
+		//
+		// Now, to prevent a race condition in WaitLifecycleStage, the accepted future
+		// cannot be set here right now, as it must be set *after* the outcome future.
+		//
+		// Same ProvisionallyCompletedAfterAccepted is reused here (although it is
+		// technically ProvisionallyAbortedAfterAccepted), and abort.OnAfterCommit callback
+		// will set the futures in the correct order.
+		if u.state == stateProvisionallyAborted {
 			u.state = stateProvisionallyCompletedAfterAccepted
 			return
 		}
@@ -605,7 +644,8 @@ func (u *Update) onResponseMsg(
 		beforeCommitState := u.setState(stateCompleted)
 		u.outcome.(*future.FutureImpl[*updatepb.Outcome]).Set(res.GetOutcome(), nil)
 		if beforeCommitState == stateProvisionallyCompletedAfterAccepted {
-			// If the Update is accepted *and* completed in the same WFT, then its state is ProvisionallyCompletedAfterAccepted here, set by onAcceptance's OnAfterCommit.
+			// If the Update is accepted *and* completed in the same WFT,
+			// then its state is ProvisionallyCompletedAfterAccepted here, set by onAcceptance.OnAfterCommit.
 			//
 			// To prevent a race condition in WaitLifecycleStage, the accepted future
 			// has not been set by OnAcceptance earlier, as it must be set *after* the outcome future.
