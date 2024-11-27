@@ -76,8 +76,7 @@ var (
 			WithMaximumInterval(5 * time.Second).
 			WithMaximumAttempts(80).
 			WithExpirationInterval(5 * time.Minute)
-	ErrResendAttemptExceeded   = serviceerror.NewInternal("resend history attempts exceeded")
-	ErrBackFillAttemptExceeded = serviceerror.NewInternal("back fill history attempts exceeded")
+	ErrResendAttemptExceeded = serviceerror.NewInternal("resend history attempts exceeded")
 )
 
 type (
@@ -125,7 +124,6 @@ type (
 			endEventId int64, // inclusive
 			endEventVersion int64,
 			newRunId string,
-			remainingAttempt int,
 		) error
 	}
 	ExecutableTaskImpl struct {
@@ -471,18 +469,7 @@ func (e *ExecutableTaskImpl) BackFillEvents(
 	endEventId int64, // inclusive
 	endEventVersion int64,
 	newRunId string, // only verify task should pass this value
-	remainingAttempt int,
 ) error {
-	remainingAttempt--
-	if remainingAttempt < 0 {
-		e.Logger.Error("back fill history attempts exceeded",
-			tag.WorkflowNamespaceID(workflowKey.NamespaceID),
-			tag.WorkflowID(workflowKey.WorkflowID),
-			tag.WorkflowRunID(workflowKey.RunID),
-			tag.Error(ErrBackFillAttemptExceeded),
-		)
-		return ErrResendAttemptExceeded
-	}
 	if len(newRunId) != 0 && e.replicationTask.GetTaskType() != enumsspb.REPLICATION_TASK_TYPE_VERIFY_VERSIONED_TRANSITION_TASK {
 		return serviceerror.NewInternal("newRunId should be empty for non verify task")
 	}

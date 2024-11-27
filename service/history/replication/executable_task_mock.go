@@ -108,17 +108,17 @@ func (mr *MockExecutableTaskMockRecorder) Attempt() *gomock.Call {
 }
 
 // BackFillEvents mocks base method.
-func (m *MockExecutableTask) BackFillEvents(ctx context.Context, remoteCluster string, workflowKey definition.WorkflowKey, startEventId, startEventVersion, endEventId, endEventVersion int64, newRunId string, remainingAttempt int) error {
+func (m *MockExecutableTask) BackFillEvents(ctx context.Context, remoteCluster string, workflowKey definition.WorkflowKey, startEventId, startEventVersion, endEventId, endEventVersion int64, newRunId string) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "BackFillEvents", ctx, remoteCluster, workflowKey, startEventId, startEventVersion, endEventId, endEventVersion, newRunId, remainingAttempt)
+	ret := m.ctrl.Call(m, "BackFillEvents", ctx, remoteCluster, workflowKey, startEventId, startEventVersion, endEventId, endEventVersion, newRunId)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // BackFillEvents indicates an expected call of BackFillEvents.
-func (mr *MockExecutableTaskMockRecorder) BackFillEvents(ctx, remoteCluster, workflowKey, startEventId, startEventVersion, endEventId, endEventVersion, newRunId, remainingAttempt any) *gomock.Call {
+func (mr *MockExecutableTaskMockRecorder) BackFillEvents(ctx, remoteCluster, workflowKey, startEventId, startEventVersion, endEventId, endEventVersion, newRunId any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "BackFillEvents", reflect.TypeOf((*MockExecutableTask)(nil).BackFillEvents), ctx, remoteCluster, workflowKey, startEventId, startEventVersion, endEventId, endEventVersion, newRunId, remainingAttempt)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "BackFillEvents", reflect.TypeOf((*MockExecutableTask)(nil).BackFillEvents), ctx, remoteCluster, workflowKey, startEventId, startEventVersion, endEventId, endEventVersion, newRunId)
 }
 
 // Cancel mocks base method.

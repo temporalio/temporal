@@ -199,7 +199,6 @@ func (e *ExecutableSyncVersionedTransitionTask) HandleErr(err error) error {
 			endEvent,
 			endEventVersion,
 			"",
-			ResendAttempt,
 		); resendErr != nil {
 			return err
 		}

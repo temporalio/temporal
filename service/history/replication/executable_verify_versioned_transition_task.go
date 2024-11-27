@@ -198,7 +198,6 @@ func (e *ExecutableVerifyVersionedTransitionTask) Execute() error {
 		lastItem.EventId,
 		lastItem.Version,
 		e.taskAttr.NewRunId,
-		ResendAttempt,
 	)
 }
 

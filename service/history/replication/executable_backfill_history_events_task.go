@@ -215,9 +215,8 @@ func (e *ExecutableBackfillHistoryEventsTask) HandleErr(err error) error {
 			endEvent,
 			endEventVersion,
 			"",
-			ResendAttempt,
 		); resendErr != nil {
-			return err
+			return resendErr
 		}
 		return e.Execute()
 	default:

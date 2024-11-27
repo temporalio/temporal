@@ -638,7 +638,6 @@ func (s *executableTaskSuite) TestBackFillEvents_Success() {
 	endEventVersion := int64(12)
 	newRunId := uuid.NewString()
 	remoteCluster := "remote cluster"
-	remainAttempt := 10
 	eventBatchOriginal1 := []*historypb.HistoryEvent{
 		{EventId: 20, Version: 10},
 	}
@@ -755,7 +754,6 @@ func (s *executableTaskSuite) TestBackFillEvents_Success() {
 		endEventId,
 		endEventVersion,
 		newRunId,
-		remainAttempt,
 	)
 	s.NoError(err)
 }

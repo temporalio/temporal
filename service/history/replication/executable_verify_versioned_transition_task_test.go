@@ -382,6 +382,12 @@ func (s *executableVerifyVersionedTransitionTaskSuite) TestExecute_NonCurrentBra
 				RunId:       s.runID,
 				NextEventId: taskNextEvent,
 				NewRunId:    s.newRunID,
+				EventVersionHistory: []*historyspb.VersionHistoryItem{
+					{
+						EventId: 9,
+						Version: 1,
+					},
+				},
 			},
 		},
 		VersionedTransition: &persistencepb.VersionedTransition{
@@ -409,7 +415,20 @@ func (s *executableVerifyVersionedTransitionTaskSuite) TestExecute_NonCurrentBra
 							BranchToken: []byte{1, 2, 3},
 							Items: []*historyspb.VersionHistoryItem{
 								{
-									EventId: 11,
+									EventId: 5,
+									Version: 1,
+								},
+								{
+									EventId: 10,
+									Version: 3,
+								},
+							},
+						},
+						{
+							BranchToken: []byte{1, 2, 3, 4},
+							Items: []*historyspb.VersionHistoryItem{
+								{
+									EventId: 10,
 									Version: 1,
 								},
 							},
@@ -508,16 +527,19 @@ func (s *executableVerifyVersionedTransitionTaskSuite) TestExecute_NonCurrentBra
 		replicationTask,
 	)
 	task.ExecutableTask = s.executableTask
+	s.executableTask.EXPECT().BackFillEvents(
+		gomock.Any(),
+		s.sourceClusterName,
+		s.task.WorkflowKey,
+		int64(9),
+		int64(1),
+		int64(9),
+		int64(1),
+		s.newRunID,
+	).Return(nil)
 
 	err := task.Execute()
-	s.IsType(&serviceerrors.RetryReplication{}, err)
-	re, ok := err.(*serviceerrors.RetryReplication)
-	s.True(ok)
-
-	s.Equal(int64(8), re.StartEventId)
-	s.Equal(int64(1), re.StartEventVersion)
-	s.Equal(taskNextEvent, re.EndEventId)
-	s.Equal(int64(1), re.EndEventVersion)
+	s.NoError(err)
 }
 
 func (s *executableVerifyVersionedTransitionTaskSuite) TestExecute_Skip_TerminalState() {
