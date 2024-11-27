@@ -469,7 +469,7 @@ func (e *ExecutableTaskImpl) BackFillEvents(
 	startEventVersion int64,
 	endEventId int64, // inclusive
 	endEventVersion int64,
-	newRunId string,
+	newRunId string, // only verify task should pass this value
 	remainingAttempt int,
 ) error {
 	remainingAttempt--
@@ -478,9 +478,12 @@ func (e *ExecutableTaskImpl) BackFillEvents(
 			tag.WorkflowNamespaceID(workflowKey.NamespaceID),
 			tag.WorkflowID(workflowKey.WorkflowID),
 			tag.WorkflowRunID(workflowKey.RunID),
-			tag.Error(ErrResendAttemptExceeded),
+			tag.Error(ErrBackFillAttemptExceeded),
 		)
 		return ErrResendAttemptExceeded
+	}
+	if len(newRunId) != 0 && e.replicationTask.GetTaskType() != enumsspb.REPLICATION_TASK_TYPE_VERIFY_VERSIONED_TRANSITION_TASK {
+		return serviceerror.NewInternal("newRunId should be empty for non verify task")
 	}
 
 	var namespaceName string
@@ -534,7 +537,9 @@ func (e *ExecutableTaskImpl) BackFillEvents(
 			1,
 			endEventVersion,
 		)
-		iterator.HasNext()
+		if !iterator.HasNext() {
+			return serviceerror.NewInternal(fmt.Sprintf("failed to get new run history when backfill"))
+		}
 		batch, err := iterator.Next()
 		if err != nil {
 			return serviceerror.NewInternal(fmt.Sprintf("failed to get new run history when backfill: %v", err))
@@ -554,7 +559,7 @@ func (e *ExecutableTaskImpl) BackFillEvents(
 			VersionHistoryItems: versionHistory,
 			Events:              eventsBatch,
 		}
-		if isLastEvent {
+		if isLastEvent && len(newRunId) > 0 && len(newRunEvents) > 0 {
 			backFillRequest.NewEvents = newRunEvents
 			backFillRequest.NewRunID = newRunId
 		}
