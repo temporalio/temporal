@@ -2407,7 +2407,6 @@ func (ms *MutableStateImpl) AddWorkflowTaskScheduledEvent(
 	if err := ms.checkMutability(opTag); err != nil {
 		return nil, err
 	}
-	ms.logInfo("AddScheduled")
 	return ms.workflowTaskManager.AddWorkflowTaskScheduledEvent(bypassTaskGeneration, workflowTaskType)
 }
 
@@ -2454,7 +2453,6 @@ func (ms *MutableStateImpl) AddWorkflowTaskStartedEvent(
 	if err := ms.checkMutability(opTag); err != nil {
 		return nil, nil, err
 	}
-	ms.logInfo("AddStarted")
 	return ms.workflowTaskManager.AddWorkflowTaskStartedEvent(scheduledEventID, requestID, taskQueue, identity, versioningStamp, redirectInfo, skipVersioningCheck)
 }
 
@@ -2712,11 +2710,9 @@ func (ms *MutableStateImpl) addBuildIdToLoadedSearchAttribute(
 ) []string {
 	var newValues []string
 	effectiveBehavior := ms.GetEffectiveVersioningBehavior()
-	ms.logInfo(fmt.Sprintf("effectiveBehavior: %s", effectiveBehavior.String()))
 	if !stamp.GetUseVersioning() && effectiveBehavior == enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED { // unversioned workflows may still have non-nil deployment, so we don't check deployment
 		newValues = append(newValues, worker_versioning.UnversionedSearchAttribute)
 	} else if effectiveBehavior == enumspb.VERSIONING_BEHAVIOR_PINNED {
-		ms.logInfo("appended pinned SA")
 		newValues = append(newValues, worker_versioning.PinnedBuildIdSearchAttribute(ms.getPinnedDeployment()))
 	} else if ms.GetAssignedBuildId() != "" {
 		newValues = append(newValues, worker_versioning.AssignedBuildIdSearchAttribute(ms.GetAssignedBuildId()))
@@ -2740,12 +2736,10 @@ func (ms *MutableStateImpl) addBuildIdToLoadedSearchAttribute(
 
 	// Remove pinned build id search attribute if it exists and we are not pinned
 	if effectiveBehavior != enumspb.VERSIONING_BEHAVIOR_PINNED {
-		ms.logInfo("removing pinned")
 		newValues = slices.DeleteFunc(newValues, func(s string) bool {
 			return strings.Contains(s, worker_versioning.BuildIdSearchAttributePrefixPinned)
 		})
 	}
-	ms.logInfo(fmt.Sprintf("newValues: %+v", newValues))
 	return newValues
 }
 
@@ -2786,9 +2780,7 @@ func (ms *MutableStateImpl) addBuildIdToSearchAttributesWithNoVisibilityTask(sta
 	if err != nil {
 		return false, err
 	}
-	ms.logInfo(fmt.Sprintf("build ids loaded: %+v", existingBuildIds))
 	modifiedBuildIds := ms.addBuildIdToLoadedSearchAttribute(existingBuildIds, stamp)
-	ms.logInfo(fmt.Sprintf("build ids modified: %+v", modifiedBuildIds))
 	if slices.Equal(existingBuildIds, modifiedBuildIds) {
 		return false, nil
 	}
@@ -2820,7 +2812,6 @@ func (ms *MutableStateImpl) AddWorkflowTaskCompletedEvent(
 	if err := ms.checkMutability(opTag); err != nil {
 		return nil, err
 	}
-	ms.logInfo("AddCompleted")
 	return ms.workflowTaskManager.AddWorkflowTaskCompletedEvent(workflowTask, request, limits)
 }
 
