@@ -1086,7 +1086,7 @@ func (m *workflowTaskStateMachine) afterAddWorkflowTaskCompletedEvent(
 	versioningInfo := m.ms.GetExecutionInfo().GetVersioningInfo()
 
 	var completedTransition bool
-	if versioningInfo.DeploymentTransition != nil {
+	if versioningInfo.GetDeploymentTransition() != nil {
 		// It's possible that the completed WFT is not yet from the current transition because when
 		// the transition started, the current wft was already started. In this case, we allow the
 		// started wft to run and when completed, we create another wft immediately.
@@ -1123,6 +1123,11 @@ func (m *workflowTaskStateMachine) afterAddWorkflowTaskCompletedEvent(
 		// Deployment and behavior after applying the data came from the completed wft.
 		wfDeploymentAfter := m.ms.GetEffectiveDeployment()
 		wfBehaviorAfter := m.ms.GetEffectiveVersioningBehavior()
+		// We reschedule activities if a transition was completed because during the transition
+		// ATs might have been dropped. Note that it is possible that transition completes and still
+		// `wfDeploymentBefore == wfDeploymentAfter`. Example: wf was on deployment1, started
+		// transition to deployment2, before completing the transition it changed the transition to
+		// deployment1 (maybe user rolled back current deployment), now the transition completes.
 		if completedTransition ||
 			// It is possible that this WFT is changing workflow's deployment even if there was no
 			// ongoing transition in the MS. That is possible when the wft is speculative. We still
