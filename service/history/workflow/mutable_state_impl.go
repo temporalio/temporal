@@ -4287,7 +4287,6 @@ func (ms *MutableStateImpl) AddWorkflowExecutionOptionsUpdatedEvent(
 		return nil, err
 	}
 	event := ms.hBuilder.AddWorkflowExecutionOptionsUpdatedEvent(versioningOverride)
-	ms.logInfo("UpdateOptions")
 	if err := ms.ApplyWorkflowExecutionOptionsUpdatedEvent(event); err != nil {
 		return nil, err
 	}
