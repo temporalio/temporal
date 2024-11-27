@@ -88,6 +88,7 @@ func (b *EventFactory) CreateWorkflowExecutionStartedEvent(
 		CompletionCallbacks:             req.CompletionCallbacks,
 		RootWorkflowExecution:           request.RootExecutionInfo.GetExecution(),
 		InheritedBuildId:                request.InheritedBuildId,
+		VersioningOverride:              request.VersioningOverride,
 	}
 
 	parentInfo := request.ParentExecutionInfo
