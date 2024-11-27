@@ -49,7 +49,7 @@ import (
 	sdkclient "go.temporal.io/sdk/client"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log/tag"
-	"go.temporal.io/server/service/worker/deployment"
+	deploymentwf "go.temporal.io/server/service/worker/deployment"
 	"go.temporal.io/server/tests/testcore"
 )
 
@@ -217,7 +217,7 @@ func (d *DeploymentSuite) TestGetCurrentDeployment_NoCurrentDeployment() {
 	errChan := make(chan error)
 	defer close(errChan)
 
-	workflowID := deployment.GenerateDeploymentSeriesWorkflowID(seriesName)
+	workflowID := deploymentwf.GenerateDeploymentSeriesWorkflowID(seriesName)
 	query := fmt.Sprintf("WorkflowId = '%s'", workflowID)
 	notFoundErr := fmt.Sprintf("workflow not found for ID: %s", workflowID)
 
@@ -641,6 +641,7 @@ func (d *DeploymentSuite) TestUpdateWorkflowExecutionOptions_SetPinnedThenUnset(
 			Deployment: workerDeployment,
 		},
 	}
+	noOpts := &workflowpb.WorkflowExecutionOptions{}
 
 	// create deployment so that GetDeploymentReachability doesn't error
 	d.createDeploymentAndWaitForExist(workerDeployment, &taskqueuepb.TaskQueue{Name: unversionedTQ, Kind: enumspb.TASK_QUEUE_KIND_NORMAL})
@@ -664,6 +665,8 @@ func (d *DeploymentSuite) TestUpdateWorkflowExecutionOptions_SetPinnedThenUnset(
 		WorkflowExecutionOptions: &workflowpb.WorkflowExecutionOptions{},
 		UpdateMask:               &fieldmaskpb.FieldMask{Paths: []string{"versioning_override"}},
 	})
+	d.NoError(err)
+	d.True(proto.Equal(updateResp.GetWorkflowExecutionOptions(), noOpts))
 	d.checkDescribeWorkflowAfterOverride(ctx, unversionedWFExec, nil)
 	d.checkDeploymentReachability(ctx, workerDeployment, enumspb.DEPLOYMENT_REACHABILITY_UNREACHABLE)
 }

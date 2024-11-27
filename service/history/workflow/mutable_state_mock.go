@@ -41,6 +41,7 @@ import (
 	nexus "github.com/nexus-rpc/sdk-go/nexus"
 	command "go.temporal.io/api/command/v1"
 	common "go.temporal.io/api/common/v1"
+	deployment "go.temporal.io/api/deployment/v1"
 	enums "go.temporal.io/api/enums/v1"
 	failure "go.temporal.io/api/failure/v1"
 	history "go.temporal.io/api/history/v1"
@@ -167,18 +168,18 @@ func (mr *MockMutableStateMockRecorder) AddActivityTaskScheduledEvent(arg0, arg1
 }
 
 // AddActivityTaskStartedEvent mocks base method.
-func (m *MockMutableState) AddActivityTaskStartedEvent(arg0 *persistence.ActivityInfo, arg1 int64, arg2, arg3 string, arg4 *common.WorkerVersionStamp, arg5 *taskqueue0.BuildIdRedirectInfo) (*history.HistoryEvent, error) {
+func (m *MockMutableState) AddActivityTaskStartedEvent(arg0 *persistence.ActivityInfo, arg1 int64, arg2, arg3 string, arg4 *common.WorkerVersionStamp, arg5 *deployment.Deployment, arg6 *taskqueue0.BuildIdRedirectInfo) (*history.HistoryEvent, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "AddActivityTaskStartedEvent", arg0, arg1, arg2, arg3, arg4, arg5)
+	ret := m.ctrl.Call(m, "AddActivityTaskStartedEvent", arg0, arg1, arg2, arg3, arg4, arg5, arg6)
 	ret0, _ := ret[0].(*history.HistoryEvent)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // AddActivityTaskStartedEvent indicates an expected call of AddActivityTaskStartedEvent.
-func (mr *MockMutableStateMockRecorder) AddActivityTaskStartedEvent(arg0, arg1, arg2, arg3, arg4, arg5 any) *gomock.Call {
+func (mr *MockMutableStateMockRecorder) AddActivityTaskStartedEvent(arg0, arg1, arg2, arg3, arg4, arg5, arg6 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddActivityTaskStartedEvent", reflect.TypeOf((*MockMutableState)(nil).AddActivityTaskStartedEvent), arg0, arg1, arg2, arg3, arg4, arg5)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddActivityTaskStartedEvent", reflect.TypeOf((*MockMutableState)(nil).AddActivityTaskStartedEvent), arg0, arg1, arg2, arg3, arg4, arg5, arg6)
 }
 
 // AddActivityTaskTimedOutEvent mocks base method.
@@ -643,6 +644,21 @@ func (m *MockMutableState) AddWorkflowExecutionCanceledEvent(arg0 int64, arg1 *c
 func (mr *MockMutableStateMockRecorder) AddWorkflowExecutionCanceledEvent(arg0, arg1 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddWorkflowExecutionCanceledEvent", reflect.TypeOf((*MockMutableState)(nil).AddWorkflowExecutionCanceledEvent), arg0, arg1)
+}
+
+// AddWorkflowExecutionOptionsUpdatedEvent mocks base method.
+func (m *MockMutableState) AddWorkflowExecutionOptionsUpdatedEvent(versioningOverride *workflow.VersioningOverride) (*history.HistoryEvent, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "AddWorkflowExecutionOptionsUpdatedEvent", versioningOverride)
+	ret0, _ := ret[0].(*history.HistoryEvent)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// AddWorkflowExecutionOptionsUpdatedEvent indicates an expected call of AddWorkflowExecutionOptionsUpdatedEvent.
+func (mr *MockMutableStateMockRecorder) AddWorkflowExecutionOptionsUpdatedEvent(versioningOverride any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddWorkflowExecutionOptionsUpdatedEvent", reflect.TypeOf((*MockMutableState)(nil).AddWorkflowExecutionOptionsUpdatedEvent), versioningOverride)
 }
 
 // AddWorkflowExecutionSignaled mocks base method.
@@ -1366,6 +1382,20 @@ func (mr *MockMutableStateMockRecorder) ApplyWorkflowExecutionFailedEvent(arg0, 
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ApplyWorkflowExecutionFailedEvent", reflect.TypeOf((*MockMutableState)(nil).ApplyWorkflowExecutionFailedEvent), arg0, arg1)
 }
 
+// ApplyWorkflowExecutionOptionsUpdatedEvent mocks base method.
+func (m *MockMutableState) ApplyWorkflowExecutionOptionsUpdatedEvent(event *history.HistoryEvent) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ApplyWorkflowExecutionOptionsUpdatedEvent", event)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// ApplyWorkflowExecutionOptionsUpdatedEvent indicates an expected call of ApplyWorkflowExecutionOptionsUpdatedEvent.
+func (mr *MockMutableStateMockRecorder) ApplyWorkflowExecutionOptionsUpdatedEvent(event any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ApplyWorkflowExecutionOptionsUpdatedEvent", reflect.TypeOf((*MockMutableState)(nil).ApplyWorkflowExecutionOptionsUpdatedEvent), event)
+}
+
 // ApplyWorkflowExecutionSignaled mocks base method.
 func (m *MockMutableState) ApplyWorkflowExecutionSignaled(arg0 *history.HistoryEvent) error {
 	m.ctrl.T.Helper()
@@ -1935,6 +1965,48 @@ func (m *MockMutableState) GetCurrentVersion() int64 {
 func (mr *MockMutableStateMockRecorder) GetCurrentVersion() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetCurrentVersion", reflect.TypeOf((*MockMutableState)(nil).GetCurrentVersion))
+}
+
+// GetDeploymentTransition mocks base method.
+func (m *MockMutableState) GetDeploymentTransition() *workflow.DeploymentTransition {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetDeploymentTransition")
+	ret0, _ := ret[0].(*workflow.DeploymentTransition)
+	return ret0
+}
+
+// GetDeploymentTransition indicates an expected call of GetDeploymentTransition.
+func (mr *MockMutableStateMockRecorder) GetDeploymentTransition() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetDeploymentTransition", reflect.TypeOf((*MockMutableState)(nil).GetDeploymentTransition))
+}
+
+// GetEffectiveDeployment mocks base method.
+func (m *MockMutableState) GetEffectiveDeployment() *deployment.Deployment {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetEffectiveDeployment")
+	ret0, _ := ret[0].(*deployment.Deployment)
+	return ret0
+}
+
+// GetEffectiveDeployment indicates an expected call of GetEffectiveDeployment.
+func (mr *MockMutableStateMockRecorder) GetEffectiveDeployment() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetEffectiveDeployment", reflect.TypeOf((*MockMutableState)(nil).GetEffectiveDeployment))
+}
+
+// GetEffectiveVersioningBehavior mocks base method.
+func (m *MockMutableState) GetEffectiveVersioningBehavior() enums.VersioningBehavior {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetEffectiveVersioningBehavior")
+	ret0, _ := ret[0].(enums.VersioningBehavior)
+	return ret0
+}
+
+// GetEffectiveVersioningBehavior indicates an expected call of GetEffectiveVersioningBehavior.
+func (mr *MockMutableStateMockRecorder) GetEffectiveVersioningBehavior() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetEffectiveVersioningBehavior", reflect.TypeOf((*MockMutableState)(nil).GetEffectiveVersioningBehavior))
 }
 
 // GetExecutionInfo mocks base method.
@@ -3035,6 +3107,20 @@ func (m *MockMutableState) ShouldResetActivityTimerTaskMask(current, incoming *p
 func (mr *MockMutableStateMockRecorder) ShouldResetActivityTimerTaskMask(current, incoming any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ShouldResetActivityTimerTaskMask", reflect.TypeOf((*MockMutableState)(nil).ShouldResetActivityTimerTaskMask), current, incoming)
+}
+
+// StartDeploymentTransition mocks base method.
+func (m *MockMutableState) StartDeploymentTransition(deployment *deployment.Deployment) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "StartDeploymentTransition", deployment)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// StartDeploymentTransition indicates an expected call of StartDeploymentTransition.
+func (mr *MockMutableStateMockRecorder) StartDeploymentTransition(deployment any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "StartDeploymentTransition", reflect.TypeOf((*MockMutableState)(nil).StartDeploymentTransition), deployment)
 }
 
 // StartTransaction mocks base method.
