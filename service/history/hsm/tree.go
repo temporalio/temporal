@@ -240,9 +240,8 @@ func (n *Node) Path() []Key {
 	return append(n.Parent.Path(), n.Key)
 }
 
-// Outputs returns all operations that are relevant to this node and its subtree.
-// For non-deleted nodes, this includes their transitions and any deletions in
-// their subtree. For deleted nodes, this includes their deletion operation and
+// Outputs returns all operations that are relevant to this node and its subtree. For non-deleted nodes, this includes
+// their transitions and any deletions in their subtree. For deleted nodes, this includes their deletion operation and
 // any deletions of their descendants, but no transitions.
 func (n *Node) Outputs() OperationLog {
 	root := n.root()
