@@ -4219,6 +4219,7 @@ func (wh *WorkflowHandler) StartBatchOperation(
 	var operationType string
 	var signalParams batcher.SignalParams
 	var resetParams batcher.ResetParams
+	var updateOptionsParams batcher.UpdateOptionsParams
 	switch op := request.Operation.(type) {
 	case *workflowservice.StartBatchOperationRequest_TerminationOperation:
 		identity = op.TerminationOperation.GetIdentity()
@@ -4255,23 +4256,29 @@ func (wh *WorkflowHandler) StartBatchOperation(
 			resetParams.ResetType = resetType
 			resetParams.ResetReapplyType = op.ResetOperation.GetResetReapplyType()
 		}
+	case *workflowservice.StartBatchOperationRequest_UpdateWorkflowOptionsOperation:
+		identity = op.UpdateWorkflowOptionsOperation.GetIdentity()
+		operationType = batcher.BatchTypeUpdateOptions
+		updateOptionsParams.WorkflowExecutionOptions = op.UpdateWorkflowOptionsOperation.GetWorkflowExecutionOptions()
+		updateOptionsParams.UpdateMask = op.UpdateWorkflowOptionsOperation.GetUpdateMask()
 
 	default:
 		return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("The operation type %T is not supported", op))
 	}
 
 	input := &batcher.BatchParams{
-		Namespace:       request.GetNamespace(),
-		Query:           request.GetVisibilityQuery(),
-		Executions:      request.GetExecutions(),
-		Reason:          request.GetReason(),
-		BatchType:       operationType,
-		RPS:             float64(request.GetMaxOperationsPerSecond()),
-		TerminateParams: batcher.TerminateParams{},
-		CancelParams:    batcher.CancelParams{},
-		SignalParams:    signalParams,
-		DeleteParams:    batcher.DeleteParams{},
-		ResetParams:     resetParams,
+		Namespace:           request.GetNamespace(),
+		Query:               request.GetVisibilityQuery(),
+		Executions:          request.GetExecutions(),
+		Reason:              request.GetReason(),
+		BatchType:           operationType,
+		RPS:                 float64(request.GetMaxOperationsPerSecond()),
+		TerminateParams:     batcher.TerminateParams{},
+		CancelParams:        batcher.CancelParams{},
+		SignalParams:        signalParams,
+		DeleteParams:        batcher.DeleteParams{},
+		ResetParams:         resetParams,
+		UpdateOptionsParams: updateOptionsParams,
 	}
 	inputPayload, err := sdk.PreferProtoDataConverter.ToPayloads(input)
 	if err != nil {
@@ -4434,6 +4441,8 @@ func (wh *WorkflowHandler) DescribeBatchOperation(
 		operationType = enumspb.BATCH_OPERATION_TYPE_DELETE
 	case batcher.BatchTypeReset:
 		operationType = enumspb.BATCH_OPERATION_TYPE_RESET
+	case batcher.BatchTypeUpdateOptions:
+		operationType = enumspb.BATCH_OPERATION_TYPE_UPDATE_EXECUTION_OPTIONS
 	default:
 		operationType = enumspb.BATCH_OPERATION_TYPE_UNSPECIFIED
 		wh.throttledLogger.Warn("Unknown batch operation type", tag.NewStringTag("batch-operation-type", operationTypeString))

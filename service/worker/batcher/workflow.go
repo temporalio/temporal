@@ -30,9 +30,11 @@ import (
 
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
 	"go.temporal.io/server/common/searchattribute"
+	"google.golang.org/protobuf/types/known/fieldmaskpb"
 )
 
 const (
@@ -59,6 +61,8 @@ const (
 	BatchTypeDelete = "delete"
 	// BatchTypeReset is batch type for resetting workflows
 	BatchTypeReset = "reset"
+	// BatchTypeUpdateOptions is batch type for updating the options of workflows
+	BatchTypeUpdateOptions = "update_options"
 )
 
 var (
@@ -101,6 +105,12 @@ type (
 		ResetReapplyType enumspb.ResetReapplyType
 	}
 
+	// UpdateOptionsParams is the parameters for updating workflow execution options
+	UpdateOptionsParams struct {
+		WorkflowExecutionOptions *workflowpb.WorkflowExecutionOptions
+		UpdateMask               *fieldmaskpb.FieldMask
+	}
+
 	// BatchParams is the parameters for batch operation workflow
 	BatchParams struct {
 		// Target namespace to execute batch operation
@@ -125,6 +135,8 @@ type (
 		DeleteParams DeleteParams
 		// ResetParams is params only for BatchTypeReset
 		ResetParams ResetParams
+		// UpdateOptionsParams is params only for BatchTypeUpdateOptions
+		UpdateOptionsParams UpdateOptionsParams
 		// RPS sets the requests-per-second limit for the batch.
 		// The default (and max) is defined by `worker.BatcherRPS` in the dynamic config.
 		RPS float64
@@ -233,6 +245,24 @@ func validateParams(params BatchParams) error {
 	case BatchTypeSignal:
 		if params.SignalParams.SignalName == "" {
 			return fmt.Errorf("must provide signal name")
+		}
+		return nil
+	case BatchTypeUpdateOptions:
+		if params.UpdateOptionsParams.WorkflowExecutionOptions == nil {
+			return fmt.Errorf("must provide UpdateOptions")
+		}
+		if params.UpdateOptionsParams.UpdateMask == nil {
+			return fmt.Errorf("must provide UpdateMask")
+		}
+		if override := params.UpdateOptionsParams.WorkflowExecutionOptions.VersioningOverride; override != nil {
+			if override.GetBehavior() == enumspb.VERSIONING_BEHAVIOR_PINNED &&
+				override.GetDeployment() == nil {
+				return fmt.Errorf("must provide Deployment if Behavior is 'PINNED'")
+			}
+			if override.GetBehavior() != enumspb.VERSIONING_BEHAVIOR_PINNED &&
+				override.GetDeployment() != nil {
+				return fmt.Errorf("only provide Deployment if Behavior is 'PINNED'")
+			}
 		}
 		return nil
 	case BatchTypeCancel, BatchTypeTerminate, BatchTypeDelete, BatchTypeReset:
