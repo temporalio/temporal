@@ -62,14 +62,19 @@ message DeploymentLocalState {
 message DeploymentWorkflowArgs {
     string namespace_name = 1;
     string namespace_id = 2;
-    DeploymentLocalState deployment_local_state = 3;
+    DeploymentLocalState state = 3;
 }
 
 // used as deployment series workflow input:
 message DeploymentSeriesWorkflowArgs {
     string namespace_name = 1;
     string namespace_id = 2;
-    string default_build_id = 3;
+    string series_name = 3;
+    SeriesLocalState state = 4;
+}
+
+message SeriesLocalState {
+    string current_build_id = 1;
 }
 
 // used as deployment workflow update input:
@@ -80,16 +85,24 @@ message RegisterWorkerInDeploymentArgs {
     int32 max_task_queues = 4;
 }
 
-// used as deployment workflow update input:
-message SetCurrentDeploymentArgs {
-    string identity = 1;
+// used as deployment series workflow update input (sent from series workflow):
+message SyncDeploymentStateArgs {
+    SetCurrent set_current = 1;
+    // currently, update_metadata will only be set if set_current.last_became_current_time is
+    // present. this could change in the future.
     temporal.api.deployment.v1.UpdateDeploymentMetadata update_metadata = 2;
+
+    message SetCurrent {
+        // If last_became_current_time is present, then set the deployment's
+        // last_became_current_time to it and set is_current true. If it's missing,
+        // set is_current false.
+        google.protobuf.Timestamp last_became_current_time = 1;
+    }
 }
 
-// used as deployment workflow update response:
-message SetCurrentDeploymentResponse {
-    temporal.api.deployment.v1.DeploymentInfo current_deployment_info = 1;
-    temporal.api.deployment.v1.DeploymentInfo previous_deployment_info = 2;
+// used as deployment series workflow update response (sent from series workflow):
+message SyncDeploymentStateResponse {
+    DeploymentLocalState deployment_local_state = 1;
 }
 
 // used as deployment workflow query response:
@@ -119,4 +132,18 @@ message SyncUserDataRequest {
         temporal.api.enums.v1.TaskQueueType type = 2;
         TaskQueueData data = 3;
     }
+}
+
+// used as deployment series workflow update input:
+message SetCurrentDeploymentArgs {
+    string identity = 1;
+    string build_id = 2;
+    temporal.api.deployment.v1.UpdateDeploymentMetadata update_metadata = 3;
+    string request_id = 4;
+}
+
+// used as deployment series update response:
+message SetCurrentDeploymentResponse {
+    temporal.api.deployment.v1.DeploymentInfo current_deployment_info = 1;
+    temporal.api.deployment.v1.DeploymentInfo previous_deployment_info = 2;
 }

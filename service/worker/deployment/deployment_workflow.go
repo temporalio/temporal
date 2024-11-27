@@ -36,7 +36,6 @@ import (
 	"go.temporal.io/sdk/workflow"
 	deploymentspb "go.temporal.io/server/api/deployment/v1"
 	"go.temporal.io/server/common"
-	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type (
@@ -62,6 +61,7 @@ var (
 	}
 
 	errTaskQueueExistsInDeployment = errors.New("task queue already exists in deployment")
+	errDeployStateUnchanged        = errors.New("deployment state would not change")
 	ErrMaxTaskQueuesInDeployment   = errors.New("maximum number of task queues have been registered in deployment")
 )
 
@@ -115,25 +115,25 @@ func (d *DeploymentWorkflowRunner) run(ctx workflow.Context) error {
 
 	if err := workflow.SetUpdateHandlerWithOptions(
 		ctx,
-		SetCurrentDeployment,
-		d.handleSetCurrent,
+		SyncDeploymentState,
+		d.handleSyncState,
 		workflow.UpdateHandlerOptions{
-			Validator: d.validateSetCurrent,
+			Validator: d.validateSyncState,
 		},
 	); err != nil {
 		return err
 	}
 
 	// First ensure series workflow is running
-	if !d.DeploymentLocalState.StartedSeriesWorkflow {
+	if !d.State.StartedSeriesWorkflow {
 		activityCtx := workflow.WithActivityOptions(ctx, defaultActivityOptions)
 		err := workflow.ExecuteActivity(activityCtx, d.a.StartDeploymentSeriesWorkflow, &deploymentspb.StartDeploymentSeriesRequest{
-			SeriesName: d.DeploymentLocalState.WorkerDeployment.SeriesName,
+			SeriesName: d.State.WorkerDeployment.SeriesName,
 		}).Get(ctx, nil)
 		if err != nil {
 			return err
 		}
-		d.DeploymentLocalState.StartedSeriesWorkflow = true
+		d.State.StartedSeriesWorkflow = true
 	}
 
 	// Listen to signals in a different goroutine to make business logic clearer
@@ -162,10 +162,10 @@ func (d *DeploymentWorkflowRunner) run(ctx workflow.Context) error {
 }
 
 func (d *DeploymentWorkflowRunner) validateRegisterWorker(args *deploymentspb.RegisterWorkerInDeploymentArgs) error {
-	if _, ok := d.DeploymentLocalState.TaskQueueFamilies[args.TaskQueueName].GetTaskQueues()[int32(args.TaskQueueType)]; ok {
+	if _, ok := d.State.TaskQueueFamilies[args.TaskQueueName].GetTaskQueues()[int32(args.TaskQueueType)]; ok {
 		return errTaskQueueExistsInDeployment
 	}
-	if len(d.DeploymentLocalState.TaskQueueFamilies) >= int(args.MaxTaskQueues) {
+	if len(d.State.TaskQueueFamilies) >= int(args.MaxTaskQueues) {
 		return ErrMaxTaskQueuesInDeployment
 	}
 	return nil
@@ -175,7 +175,7 @@ func (d *DeploymentWorkflowRunner) handleRegisterWorker(ctx workflow.Context, ar
 	// use lock to enforce only one update at a time
 	err := d.lock.Lock(ctx)
 	if err != nil {
-		d.logger.Error("Could not acquire deployment workflow lock")
+		d.logger.Error("Could not acquire workflow lock")
 		return err
 	}
 	d.pendingUpdates++
@@ -185,7 +185,7 @@ func (d *DeploymentWorkflowRunner) handleRegisterWorker(ctx workflow.Context, ar
 	}()
 
 	// wait until series workflow started
-	err = workflow.Await(ctx, func() bool { return d.DeploymentLocalState.StartedSeriesWorkflow })
+	err = workflow.Await(ctx, func() bool { return d.State.StartedSeriesWorkflow })
 	if err != nil {
 		d.logger.Error("Update canceled before series workflow started")
 		return err
@@ -199,12 +199,12 @@ func (d *DeploymentWorkflowRunner) handleRegisterWorker(ctx workflow.Context, ar
 	// sync to user data
 	activityCtx := workflow.WithActivityOptions(ctx, defaultActivityOptions)
 	err = workflow.ExecuteActivity(activityCtx, d.a.SyncUserData, &deploymentspb.SyncUserDataRequest{
-		Deployment: d.DeploymentLocalState.WorkerDeployment,
+		Deployment: d.State.WorkerDeployment,
 		Sync: []*deploymentspb.SyncUserDataRequest_SyncUserData{
 			&deploymentspb.SyncUserDataRequest_SyncUserData{
 				Name: args.TaskQueueName,
 				Type: args.TaskQueueType,
-				Data: d.withCurrentTime(data),
+				Data: d.dataWithTime(data),
 			},
 		},
 	}).Get(ctx, nil)
@@ -213,30 +213,46 @@ func (d *DeploymentWorkflowRunner) handleRegisterWorker(ctx workflow.Context, ar
 	}
 
 	// if successful, add the task queue to the local state
-	if d.DeploymentLocalState.TaskQueueFamilies == nil {
-		d.DeploymentLocalState.TaskQueueFamilies = make(map[string]*deploymentspb.DeploymentLocalState_TaskQueueFamilyData)
+	if d.State.TaskQueueFamilies == nil {
+		d.State.TaskQueueFamilies = make(map[string]*deploymentspb.DeploymentLocalState_TaskQueueFamilyData)
 	}
-	if d.DeploymentLocalState.TaskQueueFamilies[args.TaskQueueName] == nil {
-		d.DeploymentLocalState.TaskQueueFamilies[args.TaskQueueName] = &deploymentspb.DeploymentLocalState_TaskQueueFamilyData{}
+	if d.State.TaskQueueFamilies[args.TaskQueueName] == nil {
+		d.State.TaskQueueFamilies[args.TaskQueueName] = &deploymentspb.DeploymentLocalState_TaskQueueFamilyData{}
 	}
-	if d.DeploymentLocalState.TaskQueueFamilies[args.TaskQueueName].TaskQueues == nil {
-		d.DeploymentLocalState.TaskQueueFamilies[args.TaskQueueName].TaskQueues = make(map[int32]*deploymentspb.TaskQueueData)
+	if d.State.TaskQueueFamilies[args.TaskQueueName].TaskQueues == nil {
+		d.State.TaskQueueFamilies[args.TaskQueueName].TaskQueues = make(map[int32]*deploymentspb.TaskQueueData)
 	}
-	d.DeploymentLocalState.TaskQueueFamilies[args.TaskQueueName].TaskQueues[int32(args.TaskQueueType)] = data
+	d.State.TaskQueueFamilies[args.TaskQueueName].TaskQueues[int32(args.TaskQueueType)] = data
 
 	return nil
 }
 
-func (d *DeploymentWorkflowRunner) validateSetCurrent(args *deploymentspb.SetCurrentDeploymentArgs) error {
-	return nil
+func (d *DeploymentWorkflowRunner) validateSyncState(args *deploymentspb.SyncDeploymentStateArgs) error {
+	if set := args.SetCurrent; set != nil {
+		if set.LastBecameCurrentTime == nil {
+			if d.State.IsCurrent {
+				return nil
+			}
+		} else {
+			if !d.State.IsCurrent ||
+				!d.State.LastBecameCurrentTime.AsTime().Equal(set.LastBecameCurrentTime.AsTime()) {
+				return nil
+			}
+		}
+	}
+	if args.UpdateMetadata != nil {
+		// can't compare payloads, just assume it changes something
+		return nil
+	}
+	return errDeployStateUnchanged
 }
 
-func (d *DeploymentWorkflowRunner) handleSetCurrent(ctx workflow.Context, args *deploymentspb.SetCurrentDeploymentArgs) (*deploymentspb.SetCurrentDeploymentResponse, error) {
+func (d *DeploymentWorkflowRunner) handleSyncState(ctx workflow.Context, args *deploymentspb.SyncDeploymentStateArgs) (*deploymentspb.SyncDeploymentStateResponse, error) {
 	// use lock to enforce only one update at a time
 	err := d.lock.Lock(ctx)
 	if err != nil {
-		d.logger.Error("Could not acquire deployment workflow lock")
-		return nil, serviceerror.NewDeadlineExceeded("Could not acquire deployment workflow lock")
+		d.logger.Error("Could not acquire workflow lock")
+		return nil, serviceerror.NewDeadlineExceeded("Could not acquire workflow lock")
 	}
 	d.pendingUpdates++
 	defer func() {
@@ -245,65 +261,65 @@ func (d *DeploymentWorkflowRunner) handleSetCurrent(ctx workflow.Context, args *
 	}()
 
 	// wait until series workflow started
-	err = workflow.Await(ctx, func() bool { return d.DeploymentLocalState.StartedSeriesWorkflow })
+	err = workflow.Await(ctx, func() bool { return d.State.StartedSeriesWorkflow })
 	if err != nil {
 		d.logger.Error("Update canceled before series workflow started")
 		return nil, serviceerror.NewDeadlineExceeded("Update canceled before series workflow started")
 	}
 
-	// TODO: See if a request_id is needed for idempotency
+	// apply changes to "current"
+	if set := args.SetCurrent; set != nil {
+		if set.LastBecameCurrentTime == nil {
+			d.State.IsCurrent = false
+		} else {
+			d.State.IsCurrent = true
+			d.State.LastBecameCurrentTime = set.LastBecameCurrentTime
+		}
+		d.updateMemo(ctx)
 
-	// FIXME: Should lock the series while making the change
-
-	// FIXME: Should update the current deployment in the series entity wf and well as updating the status of the target deployment.
-
-	// FIXME: Also update the status of the previous current deployment to NO_STATUS
-
-	// Update local state
-	d.DeploymentLocalState.IsCurrent = true
-	d.DeploymentLocalState.LastBecameCurrentTime = timestamppb.New(workflow.Now(ctx))
-	d.updateMemo()
-
-	// Update all TQs in current deployment
-	syncReq := &deploymentspb.SyncUserDataRequest{
-		Deployment: d.DeploymentLocalState.WorkerDeployment,
-	}
-	for tqName, byType := range d.DeploymentLocalState.TaskQueueFamilies {
-		for tqType, data := range byType.TaskQueues {
-			syncReq.Sync = append(syncReq.Sync, &deploymentspb.SyncUserDataRequest_SyncUserData{
-				Name: tqName,
-				Type: enumspb.TaskQueueType(tqType),
-				Data: d.withCurrentTime(data),
-			})
+		// sync to task queues
+		syncReq := &deploymentspb.SyncUserDataRequest{
+			Deployment: d.State.WorkerDeployment,
+		}
+		for tqName, byType := range d.State.TaskQueueFamilies {
+			for tqType, data := range byType.TaskQueues {
+				syncReq.Sync = append(syncReq.Sync, &deploymentspb.SyncUserDataRequest_SyncUserData{
+					Name: tqName,
+					Type: enumspb.TaskQueueType(tqType),
+					Data: d.dataWithTime(data),
+				})
+			}
+		}
+		activityCtx := workflow.WithActivityOptions(ctx, defaultActivityOptions)
+		err = workflow.ExecuteActivity(activityCtx, d.a.SyncUserData, syncReq).Get(ctx, nil)
+		if err != nil {
+			// FIXME: if this fails, should we roll back anything?
+			return nil, err
 		}
 	}
-	activityCtx := workflow.WithActivityOptions(ctx, defaultActivityOptions)
-	err = workflow.ExecuteActivity(activityCtx, d.a.SyncUserData, syncReq).Get(ctx, nil)
-	if err != nil {
-		// FIXME: if this fails, should we roll back anything?
-		return nil, err
-	}
 
-	// Update metadata
+	// apply changes to metadata
 	for key, payload := range args.UpdateMetadata.GetUpsertEntries() {
-		d.DeploymentLocalState.Metadata[key] = payload
+		d.State.Metadata[key] = payload
 	}
 	for _, key := range args.UpdateMetadata.GetRemoveEntries() {
-		delete(d.DeploymentLocalState.Metadata, key)
+		delete(d.State.Metadata, key)
 	}
 
-	return nil, nil
+	return &deploymentspb.SyncDeploymentStateResponse{
+		DeploymentLocalState: d.State,
+	}, nil
 }
 
-func (d *DeploymentWorkflowRunner) withCurrentTime(data *deploymentspb.TaskQueueData) *deploymentspb.TaskQueueData {
+func (d *DeploymentWorkflowRunner) dataWithTime(data *deploymentspb.TaskQueueData) *deploymentspb.TaskQueueData {
 	data = common.CloneProto(data)
-	data.LastBecameCurrentTime = d.DeploymentLocalState.LastBecameCurrentTime
+	data.LastBecameCurrentTime = d.State.LastBecameCurrentTime
 	return data
 }
 
 func (d *DeploymentWorkflowRunner) handleDescribeQuery() (*deploymentspb.QueryDescribeDeploymentResponse, error) {
 	return &deploymentspb.QueryDescribeDeploymentResponse{
-		DeploymentLocalState: d.DeploymentLocalState,
+		DeploymentLocalState: d.State,
 	}, nil
 }
 
@@ -311,9 +327,9 @@ func (d *DeploymentWorkflowRunner) handleDescribeQuery() (*deploymentspb.QueryDe
 func (d *DeploymentWorkflowRunner) updateMemo(ctx workflow.Context) {
 	workflow.UpsertMemo(ctx, map[string]any{
 		DeploymentMemoField: &deploymentspb.DeploymentWorkflowMemo{
-			Deployment:          d.DeploymentLocalState.WorkerDeployment,
-			CreateTime:          d.DeploymentLocalState.CreateTime,
-			IsCurrentDeployment: d.DeploymentLocalState.IsCurrent,
+			Deployment:          d.State.WorkerDeployment,
+			CreateTime:          d.State.CreateTime,
+			IsCurrentDeployment: d.State.IsCurrent,
 		},
 	})
 }

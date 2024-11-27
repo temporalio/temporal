@@ -436,7 +436,7 @@ func (d *DeploymentClientImpl) generateStartWorkflowPayload(namespaceEntry *name
 	workflowArgs := &deploymentspb.DeploymentWorkflowArgs{
 		NamespaceName: namespaceEntry.Name().String(),
 		NamespaceId:   namespaceEntry.ID().String(),
-		DeploymentLocalState: &deploymentspb.DeploymentLocalState{
+		State: &deploymentspb.DeploymentLocalState{
 			WorkerDeployment: deployment,
 			CreateTime:       timestamppb.Now(),
 		},

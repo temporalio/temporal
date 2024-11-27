@@ -25,6 +25,7 @@
 package deployment
 
 import (
+	"go.temporal.io/api/serviceerror"
 	sdkclient "go.temporal.io/sdk/client"
 	sdklog "go.temporal.io/sdk/log"
 	"go.temporal.io/sdk/workflow"
@@ -35,46 +36,49 @@ type (
 	// DeploymentWorkflowRunner holds the local state while running a deployment-series workflow
 	DeploymentSeriesWorkflowRunner struct {
 		*deploymentspb.DeploymentSeriesWorkflowArgs
-		ctx     workflow.Context
-		a       *DeploymentSeriesActivities
-		logger  sdklog.Logger
-		metrics sdkclient.MetricsHandler
+		a              *DeploymentSeriesActivities
+		logger         sdklog.Logger
+		metrics        sdkclient.MetricsHandler
+		lock           workflow.Mutex
+		pendingUpdates int
 	}
-)
-
-const (
-	// Updates
-	UpdateDeploymentSeriesDefaultBuildIDName = "update-deployment-name-default-buildID"
 )
 
 func DeploymentSeriesWorkflow(ctx workflow.Context, deploymentSeriesArgs *deploymentspb.DeploymentSeriesWorkflowArgs) error {
 	deploymentWorkflowNameRunner := &DeploymentSeriesWorkflowRunner{
 		DeploymentSeriesWorkflowArgs: deploymentSeriesArgs,
-		ctx:                          ctx,
 		a:                            nil,
 		logger:                       sdklog.With(workflow.GetLogger(ctx), "wf-namespace", deploymentSeriesArgs.NamespaceName),
 		metrics:                      workflow.GetMetricsHandler(ctx).WithTags(map[string]string{"namespace": deploymentSeriesArgs.NamespaceName}),
+		lock:                         workflow.NewMutex(ctx),
 	}
-	return deploymentWorkflowNameRunner.run()
+	return deploymentWorkflowNameRunner.run(ctx)
 }
 
-func (d *DeploymentSeriesWorkflowRunner) run() error {
+func (d *DeploymentSeriesWorkflowRunner) run(ctx workflow.Context) error {
 	var pendingUpdates int
 
-	err := workflow.SetQueryHandler(d.ctx, QueryCurrentDeployment, func(input []byte) (string, error) {
-		return d.DefaultBuildId, nil
+	err := workflow.SetQueryHandler(ctx, QueryCurrentDeployment, func() (string, error) {
+		return d.State.CurrentBuildId, nil
 	})
 	if err != nil {
 		d.logger.Info("SetQueryHandler failed for DeploymentSeries workflow with error: " + err.Error())
 		return err
 	}
 
-	// TODO Shivam (later) -  Updatehandler for updating default-buildID of a deployment.
-	// This shall be responsible for:
-	//  - an update operation on a deployment which shall update all the task-queue's default buildID and the local state of the current deployment
+	if err := workflow.SetUpdateHandlerWithOptions(
+		ctx,
+		SetCurrentDeployment,
+		d.handleSetCurrent,
+		workflow.UpdateHandlerOptions{
+			Validator: d.validateSetCurrent,
+		},
+	); err != nil {
+		return err
+	}
 
 	// Wait until we can continue as new or are cancelled.
-	err = workflow.Await(d.ctx, func() bool { return workflow.GetInfo(d.ctx).GetContinueAsNewSuggested() && pendingUpdates == 0 })
+	err = workflow.Await(ctx, func() bool { return workflow.GetInfo(ctx).GetContinueAsNewSuggested() && pendingUpdates == 0 })
 	if err != nil {
 		return err
 	}
@@ -83,5 +87,37 @@ func (d *DeploymentSeriesWorkflowRunner) run() error {
 	// Note, if update requests come in faster than they
 	// are handled, there will not be a moment where the workflow has
 	// nothing pending which means this will run forever.
-	return workflow.NewContinueAsNewError(d.ctx, DeploymentSeriesWorkflow, d.DeploymentSeriesWorkflowArgs)
+	return workflow.NewContinueAsNewError(ctx, DeploymentSeriesWorkflow, d.DeploymentSeriesWorkflowArgs)
+}
+
+func (d *DeploymentSeriesWorkflowRunner) validateSetCurrent(args *deploymentspb.SetCurrentDeploymentArgs) error {
+	return nil
+}
+
+func (d *DeploymentSeriesWorkflowRunner) handleSetCurrent(ctx workflow.Context, args *deploymentspb.SetCurrentDeploymentArgs) (*deploymentspb.SetCurrentDeploymentResponse, error) {
+	// use lock to enforce only one update at a time
+	err := d.lock.Lock(ctx)
+	if err != nil {
+		d.logger.Error("Could not acquire workflow lock")
+		return nil, serviceerror.NewDeadlineExceeded("Could not acquire workflow lock")
+	}
+	d.pendingUpdates++
+	defer func() {
+		d.pendingUpdates--
+		d.lock.Unlock()
+	}()
+
+	// TODO: See if a request_id is needed for idempotency
+
+	// FIXME: Should lock the series while making the change
+
+	// FIXME: Should update the current deployment in the series entity wf and well as updating the status of the target deployment.
+
+	// FIXME: Also update the status of the previous current deployment to NO_STATUS
+
+	// Update local state
+	d.State.CurrentBuildId = args.BuildId
+	// FIXME: d.updateMemo()
+
+	return nil, nil
 }

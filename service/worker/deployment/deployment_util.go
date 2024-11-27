@@ -39,19 +39,20 @@ import (
 
 const (
 	// Updates
-	RegisterWorkerInDeployment = "register-task-queue-worker"
-	SetCurrentDeployment       = "set-current-deployment"
+	RegisterWorkerInDeployment = "register-task-queue-worker" // for deployment wf
+	SyncDeploymentState        = "sync-deployment-state"      // for deployment wfs
+	SetCurrentDeployment       = "set-current-deployment"     // for series wfs
 
 	// Signals
-	ForceCANSignalName = "force-continue-as-new"
+	ForceCANSignalName = "force-continue-as-new" // for deployment _and_ series wfs
 
 	// Queries
-	QueryDescribeDeployment = "describe-deployment"
-	QueryCurrentDeployment  = "current-deployment"
+	QueryDescribeDeployment = "describe-deployment" // for deployment wf
+	QueryCurrentDeployment  = "current-deployment"  // for series wf
 
 	// Memos
-	DeploymentMemoField              = "DeploymentMemo"
-	DeploymentSeriesBuildIDMemoField = "DeploymentSeriesBuildIDMemo"
+	DeploymentMemoField              = "DeploymentMemo"              // for deployment wf
+	DeploymentSeriesBuildIDMemoField = "DeploymentSeriesBuildIDMemo" // for deployment series wf
 
 	// Prefixes, Delimeters and Keys
 	DeploymentWorkflowIDPrefix       = "temporal-sys-deployment"
