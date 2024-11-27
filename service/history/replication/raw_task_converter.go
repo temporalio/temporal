@@ -193,6 +193,10 @@ func convertActivityStateReplicationTask(
 						LastStartedRedirectCounter: activityInfo.GetUseWorkflowBuildIdInfo().GetLastRedirectCounter(),
 						BaseExecutionInfo:          persistence.CopyBaseWorkflowInfo(mutableState.GetBaseWorkflowInfo()),
 						VersionHistory:             versionhistory.CopyVersionHistory(currentVersionHistory),
+						FirstScheduledTime:         activityInfo.FirstScheduledTime,
+						LastAttemptCompleteTime:    activityInfo.LastAttemptCompleteTime,
+						Stamp:                      activityInfo.Stamp,
+						Paused:                     activityInfo.Paused,
 					},
 				},
 				VisibilityTime: timestamppb.New(taskInfo.VisibilityTimestamp),
@@ -694,6 +698,9 @@ func (c *syncVersionedTransitionTaskConverter) convert(
 		Attributes: &replicationspb.ReplicationTask_SyncVersionedTransitionTaskAttributes{
 			SyncVersionedTransitionTaskAttributes: &replicationspb.SyncVersionedTransitionTaskAttributes{
 				VersionedTransitionArtifact: result.VersionedTransitionArtifact,
+				NamespaceId:                 taskInfo.NamespaceID,
+				WorkflowId:                  taskInfo.WorkflowID,
+				RunId:                       taskInfo.RunID,
 			},
 		},
 		VersionedTransition: taskInfo.VersionedTransition,
@@ -709,13 +716,18 @@ func (c *syncVersionedTransitionTaskConverter) generateVerifyVersionedTransition
 	taskInfo *tasks.SyncVersionedTransitionTask,
 	mutableState workflow.MutableState,
 ) (*replicationspb.ReplicationTask, error) {
-	versionHistoryIndex, err := versionhistory.FindFirstVersionHistoryIndexByVersionHistoryItem(
-		mutableState.GetExecutionInfo().VersionHistories,
-		versionhistory.NewVersionHistoryItem(
-			taskInfo.FirstEventID,
-			taskInfo.VersionedTransition.NamespaceFailoverVersion,
-		),
-	)
+	currentHistory, err := versionhistory.GetCurrentVersionHistory(mutableState.GetExecutionInfo().VersionHistories)
+	if err != nil {
+		return nil, err
+	}
+	lastEventVersion, err := versionhistory.GetVersionHistoryEventVersion(currentHistory, taskInfo.NextEventID-1)
+	if err != nil {
+		return nil, err
+	}
+	capItems, err := versionhistory.CopyVersionHistoryUntilLCAVersionHistoryItem(currentHistory, &historyspb.VersionHistoryItem{
+		EventId: taskInfo.NextEventID - 1,
+		Version: lastEventVersion,
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -728,7 +740,7 @@ func (c *syncVersionedTransitionTaskConverter) generateVerifyVersionedTransition
 				WorkflowId:          taskInfo.WorkflowID,
 				RunId:               taskInfo.RunID,
 				NewRunId:            taskInfo.NewRunID,
-				EventVersionHistory: mutableState.GetExecutionInfo().VersionHistories.Histories[versionHistoryIndex].Items,
+				EventVersionHistory: capItems.Items,
 				NextEventId:         taskInfo.NextEventID,
 			},
 		},
@@ -747,7 +759,7 @@ func (c *syncVersionedTransitionTaskConverter) generateBackfillHistoryTask(
 		c.shardContext,
 		c.shardID,
 		definition.NewWorkflowKey(taskInfo.NamespaceID, taskInfo.WorkflowID, taskInfo.RunID),
-		taskInfo.VersionedTransition.NamespaceFailoverVersion,
+		taskInfo.FirstEventVersion,
 		taskInfo.FirstEventID,
 		taskInfo.NextEventID,
 		taskInfo.NewRunID,

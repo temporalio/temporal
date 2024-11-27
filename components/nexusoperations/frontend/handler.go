@@ -41,6 +41,7 @@ import (
 	"github.com/nexus-rpc/sdk-go/nexus"
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/sdk/temporalnexus"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common/authorization"
 	"go.temporal.io/server/common/cluster"
@@ -59,6 +60,7 @@ import (
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 var apiName = configs.CompleteNexusOperation
@@ -176,9 +178,36 @@ func (h *completionHandler) CompleteOperation(ctx context.Context, r *nexus.Comp
 		)
 		return nexus.HandlerErrorf(nexus.HandlerErrorTypeBadRequest, "invalid callback token")
 	}
+	var links []*commonpb.Link
+	for _, nexusLink := range r.StartLinks {
+		switch nexusLink.Type {
+		case string((&commonpb.Link_WorkflowEvent{}).ProtoReflect().Descriptor().FullName()):
+			link, err := temporalnexus.ConvertNexusLinkToLinkWorkflowEvent(nexusLink)
+			if err != nil {
+				// TODO(rodrigozhou): links are non-essential for the execution of the workflow,
+				// so ignoring the error for now; we will revisit how to handle these errors later.
+				h.Logger.Warn(
+					fmt.Sprintf("failed to parse link to %q: %s", nexusLink.Type, nexusLink.URL),
+					tag.Error(err),
+				)
+				continue
+			}
+			links = append(links, &commonpb.Link{
+				Variant: &commonpb.Link_WorkflowEvent_{
+					WorkflowEvent: link,
+				},
+			})
+		default:
+			// If the link data type is unsupported, just ignore it for now.
+			h.Logger.Warn(fmt.Sprintf("invalid link data type: %q", nexusLink.Type))
+		}
+	}
 	hr := &historyservice.CompleteNexusOperationRequest{
-		Completion: completion,
-		State:      string(r.State),
+		Completion:  completion,
+		State:       string(r.State),
+		OperationId: r.OperationID,
+		StartTime:   timestamppb.New(r.StartTime),
+		Links:       links,
 	}
 	switch r.State { // nolint:exhaustive
 	case nexus.OperationStateFailed, nexus.OperationStateCanceled:
@@ -270,6 +299,7 @@ func (h *completionHandler) forwardCompleteOperation(ctx context.Context, r *nex
 		return nexus.HandlerErrorf(nexus.HandlerErrorTypeInternal, "internal error")
 	}
 
+	// TODO: Upgrade Nexus SDK in order to reduce HTTP exposure
 	handlerErr := &nexus.HandlerError{
 		Type:    commonnexus.HandlerErrorTypeFromHTTPStatus(resp.StatusCode),
 		Failure: &failure,
@@ -339,7 +369,7 @@ func (c *requestContext) capturePanicAndRecordMetrics(ctxPtr *context.Context, e
 	if recovered != nil {
 		err, ok := recovered.(error)
 		if !ok {
-			err = fmt.Errorf("panic: %v", recovered) //nolint:goerr113
+			err = fmt.Errorf("panic: %v", recovered)
 		}
 
 		st := string(debug.Stack())
@@ -420,10 +450,9 @@ func (c *requestContext) interceptRequest(ctx context.Context, request *nexus.Co
 	if !c.namespace.ActiveInCluster(c.ClusterMetadata.GetCurrentClusterName()) {
 		if c.shouldForwardRequest(ctx, request.HTTPRequest.Header) {
 			c.forwarded = true
-			var forwardStartTime time.Time
-			c.metricsHandlerForInterceptors, forwardStartTime = c.RedirectionInterceptor.BeforeCall(methodNameForMetrics)
+			handler, forwardStartTime := c.RedirectionInterceptor.BeforeCall(methodNameForMetrics)
 			c.cleanupFunctions = append(c.cleanupFunctions, func(retErr error) {
-				c.RedirectionInterceptor.AfterCall(c.metricsHandlerForInterceptors, forwardStartTime, c.namespace.ActiveClusterName(), retErr)
+				c.RedirectionInterceptor.AfterCall(handler, forwardStartTime, c.namespace.ActiveClusterName(), retErr)
 			})
 			// Handler methods should have special logic to forward requests if this method returns a serviceerror.NamespaceNotActive error.
 			return serviceerror.NewNamespaceNotActive(c.namespace.Name().String(), c.ClusterMetadata.GetCurrentClusterName(), c.namespace.ActiveClusterName())

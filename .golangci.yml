@@ -2,16 +2,36 @@
 linters:
   disable-all: true
   enable:
-    - goerr113
     - errcheck
     - goimports
     # - paralleltest # missing the call to method parallel, but testify does not seem to work well with parallel test: https://github.com/stretchr/testify/issues/187
     - revive # revive supersedes golint, which is now archived
     - staticcheck
-    - vet
+    - govet
     - forbidigo
     - exhaustive
     - godox
+issues:
+  exclude-dirs:
+    - ^api
+    - ^proto
+    - ^.git
+  exclude-rules:
+    - path-except: _test\.go|tests/.+\.go
+      text: "time.Sleep"
+      linters:
+        - forbidigo
+    - path: _test\.go|tests/.+\.go
+      text: "(cyclomatic|cognitive)"  # false positives when using subtests
+      linters:
+        - revive
+    - path: _test\.go|tests/.+\.go
+      text: "dot-imports"  # helpful in tests
+      linters:
+        - revive
+    - path: ^tools\/.+\.go
+      linters:
+        - revive
 linters-settings:
   godox:
     keywords:
@@ -104,28 +124,3 @@ linters-settings:
           - "fmt.*"
           - "bytes.Buffer.*"
           - "strings.Builder.*"
-issues:
-  exclude-dirs:
-    - ^api
-    - ^proto
-    - ^.git
-  exclude-rules:
-    - path-except: _test\.go|tests/.+\.go
-      text: "time.Sleep"
-      linters:
-        - forbidigo
-    - path: _test\.go|tests/.+\.go
-      text: "(cyclomatic|cognitive)"  # false positives when using subtests
-      linters:
-        - revive
-    - path: _test\.go|tests/.+\.go
-      text: "dot-imports"  # helpful in tests
-      linters:
-        - revive
-    - path: _test\.go|tests/.+\.go
-      linters:
-        - goerr113  # like err = errors.New("test error")
-    - path: ^tools\/.+\.go
-      linters:
-        - goerr113
-        - revive

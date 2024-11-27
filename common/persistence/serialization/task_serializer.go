@@ -363,6 +363,7 @@ func (s *TaskSerializer) transferActivityTaskToProto(
 		Version:                 activityTask.Version,
 		TaskId:                  activityTask.TaskID,
 		VisibilityTime:          timestamppb.New(activityTask.VisibilityTimestamp),
+		Stamp:                   activityTask.Stamp,
 	}
 }
 
@@ -380,6 +381,7 @@ func (s *TaskSerializer) transferActivityTaskFromProto(
 		TaskQueue:           activityTask.TaskQueue,
 		ScheduledEventID:    activityTask.ScheduledEventId,
 		Version:             activityTask.Version,
+		Stamp:               activityTask.Stamp,
 	}
 }
 
@@ -732,6 +734,7 @@ func (s *TaskSerializer) timerActivityTaskToProto(
 		EventId:             activityTimer.EventID,
 		TaskId:              activityTimer.TaskID,
 		VisibilityTime:      timestamppb.New(activityTimer.VisibilityTimestamp),
+		Stamp:               activityTimer.Stamp,
 	}
 }
 
@@ -749,6 +752,7 @@ func (s *TaskSerializer) timerActivityTaskFromProto(
 		EventID:             activityTimer.EventId,
 		Attempt:             activityTimer.ScheduleAttempt,
 		TimeoutType:         activityTimer.TimeoutType,
+		Stamp:               activityTimer.Stamp,
 	}
 }
 
@@ -767,6 +771,7 @@ func (s *TaskSerializer) timerActivityRetryTaskToProto(
 		EventId:             activityRetryTimer.EventID,
 		TaskId:              activityRetryTimer.TaskID,
 		VisibilityTime:      timestamppb.New(activityRetryTimer.VisibilityTimestamp),
+		Stamp:               activityRetryTimer.Stamp,
 	}
 }
 
@@ -784,6 +789,7 @@ func (s *TaskSerializer) timerActivityRetryTaskFromProto(
 		EventID:             activityRetryTimer.EventId,
 		Version:             activityRetryTimer.Version,
 		Attempt:             activityRetryTimer.ScheduleAttempt,
+		Stamp:               activityRetryTimer.Stamp,
 	}
 }
 
@@ -1267,6 +1273,7 @@ func (s *TaskSerializer) replicationSyncVersionedTransitionTaskToProto(
 		VisibilityTime:      timestamppb.New(syncVersionedTransitionTask.VisibilityTimestamp),
 		VersionedTransition: syncVersionedTransitionTask.VersionedTransition,
 		FirstEventId:        syncVersionedTransitionTask.FirstEventID,
+		Version:             syncVersionedTransitionTask.FirstEventVersion,
 		NextEventId:         syncVersionedTransitionTask.NextEventID,
 		NewRunId:            syncVersionedTransitionTask.NewRunID,
 		TaskEquivalents:     taskInfoEquivalents,
@@ -1299,6 +1306,7 @@ func (s *TaskSerializer) replicationSyncVersionedTransitionTaskFromProto(
 		VisibilityTimestamp: visibilityTimestamp,
 		TaskID:              syncVersionedTransitionTask.TaskId,
 		FirstEventID:        syncVersionedTransitionTask.FirstEventId,
+		FirstEventVersion:   syncVersionedTransitionTask.Version,
 		NextEventID:         syncVersionedTransitionTask.NextEventId,
 		NewRunID:            syncVersionedTransitionTask.NewRunId,
 		VersionedTransition: syncVersionedTransitionTask.VersionedTransition,

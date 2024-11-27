@@ -227,7 +227,7 @@ func (m *userDataManagerImpl) userDataFetchSource() (*tqid.NormalPartition, erro
 		p = p.TaskQueue().Family().TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW).NormalPartition(p.PartitionId())
 		degree := m.config.ForwarderMaxChildrenPerNode()
 		parent, err := p.ParentPartition(degree)
-		if err == tqid.ErrNoParent { // nolint:goerr113
+		if err == tqid.ErrNoParent {
 			// we're the root activity task queue, ask the root workflow task queue
 			return p, nil
 		} else if err != nil {
@@ -255,7 +255,7 @@ func (m *userDataManagerImpl) fetchUserData(ctx context.Context) error {
 	// fetch from parent partition
 	fetchSource, err := m.userDataFetchSource()
 	if err != nil {
-		if err == errMissingNormalQueueName { // nolint:goerr113
+		if err == errMissingNormalQueueName {
 			// pretend we have no user data. this is a sticky queue so the only effect is that we can't
 			// kick off versioned pollers.
 			m.setUserDataState(userDataEnabled, nil)

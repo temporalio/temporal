@@ -107,9 +107,15 @@ var (
 		"/temporal.api.workflowservice.v1.WorkflowService/DeleteSchedule":                 2,
 		"/temporal.api.workflowservice.v1.WorkflowService/StopBatchOperation":             2,
 		"/temporal.api.workflowservice.v1.WorkflowService/UpdateActivityOptionsById":      2,
+		"/temporal.api.workflowservice.v1.WorkflowService/PauseActivityById":              2,
+		"/temporal.api.workflowservice.v1.WorkflowService/UnpauseActivityById":            2,
+		"/temporal.api.workflowservice.v1.WorkflowService/ResetActivityById":              2,
+		"/temporal.api.workflowservice.v1.WorkflowService/UpdateWorkflowExecutionOptions": 2,
+		"/temporal.api.workflowservice.v1.WorkflowService/SetCurrentDeployment":           2,
 
 		// P3: Status Querying APIs
 		"/temporal.api.workflowservice.v1.WorkflowService/DescribeWorkflowExecution":     3,
+		"/temporal.api.workflowservice.v1.WorkflowService/DescribeTaskQueue":             3,
 		"/temporal.api.workflowservice.v1.WorkflowService/GetWorkerBuildIdCompatibility": 3,
 		"/temporal.api.workflowservice.v1.WorkflowService/GetWorkerVersioningRules":      3,
 		"/temporal.api.workflowservice.v1.WorkflowService/ListTaskQueuePartitions":       3,
@@ -117,6 +123,8 @@ var (
 		"/temporal.api.workflowservice.v1.WorkflowService/DescribeSchedule":              3,
 		"/temporal.api.workflowservice.v1.WorkflowService/ListScheduleMatchingTimes":     3,
 		"/temporal.api.workflowservice.v1.WorkflowService/DescribeBatchOperation":        3,
+		"/temporal.api.workflowservice.v1.WorkflowService/DescribeDeployment":            3,
+		"/temporal.api.workflowservice.v1.WorkflowService/GetCurrentDeployment":          3,
 
 		// P4: Progress APIs
 		"/temporal.api.workflowservice.v1.WorkflowService/RecordActivityTaskHeartbeat":      4,
@@ -159,10 +167,12 @@ var (
 		"/temporal.api.workflowservice.v1.WorkflowService/ListArchivedWorkflowExecutions": 1,
 
 		// APIs that rely on visibility
-		"/temporal.api.workflowservice.v1.WorkflowService/GetWorkerTaskReachability": 1,
-		"/temporal.api.workflowservice.v1.WorkflowService/ListSchedules":             1,
-		"/temporal.api.workflowservice.v1.WorkflowService/ListBatchOperations":       1,
-		"/temporal.api.workflowservice.v1.WorkflowService/DescribeTaskQueue":         1,
+		"/temporal.api.workflowservice.v1.WorkflowService/GetWorkerTaskReachability":         1,
+		"/temporal.api.workflowservice.v1.WorkflowService/ListSchedules":                     1,
+		"/temporal.api.workflowservice.v1.WorkflowService/ListBatchOperations":               1,
+		"/temporal.api.workflowservice.v1.WorkflowService/DescribeTaskQueueWithReachability": 1, // note this isn't a real method name
+		"/temporal.api.workflowservice.v1.WorkflowService/ListDeployments":                   1,
+		"/temporal.api.workflowservice.v1.WorkflowService/GetDeploymentReachability":         1,
 	}
 
 	VisibilityAPIPrioritiesOrdered = []int{0, 1}
@@ -205,7 +215,7 @@ func NewNamespaceRateBurst(
 		namespaceName: namespaceName,
 		rateFn:        rateFn,
 		burstFn: func(namespace string) int {
-			return int(rateFn(namespace) * math.Max(1, burstRatioFn(namespace)))
+			return max(1, int(math.Ceil(rateFn(namespace)*burstRatioFn(namespace))))
 		},
 	}
 }

@@ -681,7 +681,6 @@ func (b *HistoryBuilder) AddWorkflowExecutionSignaledEvent(
 	input *commonpb.Payloads,
 	identity string,
 	header *commonpb.Header,
-	skipGenerateWorkflowTask bool,
 	externalWorkflowExecution *commonpb.WorkflowExecution,
 	links []*commonpb.Link,
 ) *historypb.HistoryEvent {
@@ -690,7 +689,6 @@ func (b *HistoryBuilder) AddWorkflowExecutionSignaledEvent(
 		input,
 		identity,
 		header,
-		skipGenerateWorkflowTask,
 		externalWorkflowExecution,
 		links,
 	)

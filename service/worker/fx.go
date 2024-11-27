@@ -26,6 +26,7 @@ package worker
 
 import (
 	"context"
+	"os"
 
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/client"
@@ -87,6 +88,7 @@ var Module = fx.Options(
 			})
 		},
 	),
+	fx.Provide(HostInfoProvider),
 	fx.Provide(VisibilityManagerProvider),
 	fx.Provide(ThrottledLoggerRpsFnProvider),
 	fx.Provide(ConfigProvider),
@@ -131,6 +133,11 @@ func PersistenceRateLimitingParamsProvider(
 		persistenceLazyLoadedServiceResolver,
 		logger,
 	)
+}
+
+func HostInfoProvider() (membership.HostInfo, error) {
+	hn, err := os.Hostname()
+	return membership.NewHostInfoFromAddress(hn), err
 }
 
 func ServiceResolverProvider(

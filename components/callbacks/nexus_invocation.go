@@ -123,7 +123,7 @@ func (n nexusInvocation) Invoke(ctx context.Context, ns *namespace.Namespace, e 
 	}
 
 	retryable := isRetryableHTTPResponse(response)
-	err = fmt.Errorf("request failed with: %v", response.Status) // nolint:goerr113
+	err = fmt.Errorf("request failed with: %v", response.Status)
 	e.Logger.Error("Callback request failed", tag.Error(err), tag.NewStringTag("status", response.Status), tag.NewBoolTag("retryable", retryable))
 	if retryable {
 		return retry, err

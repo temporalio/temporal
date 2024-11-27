@@ -363,7 +363,7 @@ func (pm *taskQueuePartitionManagerImpl) ProcessSpooledTask(
 			task.redirectInfo = nil
 		}
 		err = syncMatchQueue.DispatchSpooledTask(ctx, task, userDataChanged)
-		if err != errInterrupted { // nolint:goerr113
+		if err != errInterrupted {
 			return err
 		}
 	}

@@ -38,7 +38,6 @@ import (
 
 	"github.com/dgryski/go-farm"
 	"github.com/stretchr/testify/suite"
-
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -1050,8 +1049,6 @@ func (s *VersioningIntegSuite) firstWorkflowTaskAssignmentSyncMatch() {
 }
 
 func (s *VersioningIntegSuite) TestIndependentActivityTaskAssignment_Spooled_VersionedWorkflow() {
-	s.T().Skip("flaky test")
-
 	s.RunTestWithMatchingBehavior(func() { s.independentActivityTaskAssignmentSpooled(true) })
 }
 
@@ -1242,8 +1239,6 @@ func (s *VersioningIntegSuite) independentActivityTaskAssignmentSpooled(versione
 }
 
 func (s *VersioningIntegSuite) TestIndependentActivityTaskAssignment_SyncMatch_VersionedWorkflow() {
-	s.T().Skip("flaky test")
-
 	s.RunTestWithMatchingBehavior(func() { s.independentActivityTaskAssignmentSyncMatch(true) })
 }
 
@@ -1298,7 +1293,7 @@ func (s *VersioningIntegSuite) independentActivityTaskAssignmentSyncMatch(versio
 	failedTask := make(chan struct{})
 	act1 := func() (string, error) {
 		close(failedTask)
-		return "", errors.New("failing activity task intentionally") //nolint:goerr113
+		return "", errors.New("failing activity task intentionally")
 	}
 
 	w1 := worker.New(s.sdkClient, actTq, worker.Options{
@@ -1424,8 +1419,6 @@ func (s *VersioningIntegSuite) independentActivityTaskAssignmentSyncMatch(versio
 }
 
 func (s *VersioningIntegSuite) TestWorkflowTaskRedirectInRetryFirstTask() {
-	s.T().Skip("flaky test")
-
 	s.RunTestWithMatchingBehavior(func() { s.testWorkflowTaskRedirectInRetry(true) })
 }
 
@@ -1735,8 +1728,6 @@ func (s *VersioningIntegSuite) TestDispatchUpgradeStopOld() {
 }
 
 func (s *VersioningIntegSuite) TestDispatchUpgradeWait() {
-	s.T().Skip("flaky test")
-
 	s.RunTestWithMatchingBehavior(func() { s.dispatchUpgrade(true, false) })
 }
 
@@ -1838,20 +1829,14 @@ const (
 )
 
 func (s *VersioningIntegSuite) TestDispatchActivityOld() {
-	s.T().Skip("flaky test")
-
 	s.RunTestWithMatchingBehavior(func() { s.dispatchActivity(dontFailActivity, false, false) })
 }
 
 func (s *VersioningIntegSuite) TestDispatchActivityFailOld() {
-	s.T().Skip("flaky test")
-
 	s.RunTestWithMatchingBehavior(func() { s.dispatchActivity(failActivity, false, false) })
 }
 
 func (s *VersioningIntegSuite) TestDispatchActivityTimeoutOld() {
-	s.T().Skip("flaky test")
-
 	s.RunTestWithMatchingBehavior(func() { s.dispatchActivity(timeoutActivity, false, false) })
 }
 
@@ -1898,7 +1883,7 @@ func (s *VersioningIntegSuite) dispatchActivity(failMode activityFailMode, newVe
 		if state.Add(1) == 1 {
 			switch failMode {
 			case failActivity:
-				return "", errors.New("try again") //nolint:goerr113
+				return "", errors.New("try again")
 			case timeoutActivity:
 				time.Sleep(5 * time.Second) //nolint:forbidigo
 				return "ignored", nil
@@ -2242,7 +2227,7 @@ func (s *VersioningIntegSuite) TestRedirectWithConcurrentActivities() {
 			lastRedirectTarget.CompareAndSwap(version+" observed", version+" redirect cleaned")
 		}
 		if rand.Float64() < activityErrorRate {
-			return "", errors.New("intentionally failing activity") //nolint:goerr113
+			return "", errors.New("intentionally failing activity")
 		}
 		if triggerRedirectAtActivityRun.Load() == runId {
 			// When enough activities are run using the current version, add redirect rule to the next version.
@@ -2605,14 +2590,10 @@ func (s *VersioningIntegSuite) TestDispatchActivityCrossTQFails() {
 }
 
 func (s *VersioningIntegSuite) TestDispatchChildWorkflowOld() {
-	s.T().Skip("flaky test")
-
 	s.RunTestWithMatchingBehavior(func() { s.dispatchChildWorkflow(false, false) })
 }
 
 func (s *VersioningIntegSuite) TestDispatchChildWorkflow() {
-	s.T().Skip("flaky test")
-
 	s.RunTestWithMatchingBehavior(func() { s.dispatchChildWorkflow(true, false) })
 }
 
@@ -3087,8 +3068,6 @@ func (s *VersioningIntegSuite) dispatchQuery(newVersioning bool) {
 }
 
 func (s *VersioningIntegSuite) TestDispatchContinueAsNewOld() {
-	s.T().Skip("flaky test")
-
 	s.RunTestWithMatchingBehavior(func() { s.dispatchContinueAsNew(false, false) })
 }
 
@@ -3251,8 +3230,6 @@ func (s *VersioningIntegSuite) dispatchContinueAsNew(newVersioning bool, crossTq
 }
 
 func (s *VersioningIntegSuite) TestDispatchContinueAsNewUpgradeOld() {
-	s.T().Skip("flaky test")
-
 	s.RunTestWithMatchingBehavior(func() { s.dispatchContinueAsNewUpgrade(false) })
 }
 
@@ -3512,8 +3489,6 @@ func (s *VersioningIntegSuite) dispatchRetryOld() {
 }
 
 func (s *VersioningIntegSuite) TestDispatchRetry() {
-	s.T().Skip("flaky test")
-
 	s.RunTestWithMatchingBehavior(s.dispatchRetry)
 }
 
@@ -3605,14 +3580,10 @@ func (s *VersioningIntegSuite) dispatchRetry() {
 }
 
 func (s *VersioningIntegSuite) TestDispatchCronOld() {
-	s.T().Skip("flaky test")
-
 	s.RunTestWithMatchingBehavior(func() { s.dispatchCron(false) })
 }
 
 func (s *VersioningIntegSuite) TestDispatchCron() {
-	s.T().Skip("flaky test")
-
 	s.RunTestWithMatchingBehavior(func() { s.dispatchCron(true) })
 }
 

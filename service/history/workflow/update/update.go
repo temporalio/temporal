@@ -181,21 +181,18 @@ func (u *Update) WaitLifecycleStage(
 			return statusCompleted(outcome), nil
 		}
 
-		// If err is not nil (checked above), and is not coming from context,
-		// then it means that the error is from the future itself.
-		if ctx.Err() == nil && stCtx.Err() == nil {
-			// Update uses registryClearedErr when Registry is cleared. This error has special handling here:
-			//   abort waiting for COMPLETED stage and check if Update has reached ACCEPTED stage.
-			// All other errors are returned to the caller.
-			if !errors.Is(err, registryClearedErr) {
-				return nil, err
-			}
-		}
-
-		if ctx.Err() != nil {
-			// Handle root context deadline expiry as normal error which is returned to the caller.
+		// If err is coming from user context (user deadline exceeded), then return it to the caller.
+		if errors.Is(err, ctx.Err()) {
 			metrics.WorkflowExecutionUpdateClientTimeout.With(u.instrumentation.metrics).Record(1)
 			return nil, ctx.Err()
+		}
+
+		// Update uses registryClearedErr when Registry is cleared. This error has special handling here:
+		//   stop waiting for COMPLETED stage and check if Update has reached ACCEPTED stage.
+		// If err is not registryClearedErr and is not coming from stCtx,
+		// then it means that the error is from the future itself and needs to be returned to the caller.
+		if !errors.Is(err, registryClearedErr) && !errors.Is(err, stCtx.Err()) {
+			return nil, err
 		}
 
 		// Only get here if there is an error, and this error is stCtx.Err() (softTimeout has expired) or registryClearedErr.
@@ -226,24 +223,24 @@ func (u *Update) WaitLifecycleStage(
 			return statusAccepted(), nil
 		}
 
-		// If err is not nil (checked above), and is not coming from context,
-		// then it means that the error is from the future itself.
-		if ctx.Err() == nil && stCtx.Err() == nil {
-			// Update uses registryClearedErr when Registry is cleared. This error has special handling here:
-			//   abort waiting for ACCEPTED stage and return Unavailable (retryable) error to the caller.
-			// This error will be retried (by history service handler, or history service client in frontend,
-			// or SDK, or user client). This will recreate Update in the Registry.
-			// All other errors are returned to the caller.
-			if !errors.Is(err, registryClearedErr) {
-				return nil, err
-			}
+		// If err is coming from user context (user deadline exceeded), then return it to the caller.
+		if errors.Is(err, ctx.Err()) {
+			metrics.WorkflowExecutionUpdateClientTimeout.With(u.instrumentation.metrics).Record(1)
+			return nil, ctx.Err()
+		}
+
+		// Update uses registryClearedErr when Registry is cleared. This error has special handling here:
+		//   stop waiting for ACCEPTED stage and return Unavailable (retryable) error to the caller.
+		// This error will be retried (by history service handler, or history service client in frontend,
+		// or SDK, or user client). This will recreate Update in the Registry.
+		if errors.Is(err, registryClearedErr) {
 			return nil, WorkflowUpdateAbortedErr
 		}
 
-		if ctx.Err() != nil {
-			// Handle root context deadline expiry as normal error which is returned to the caller.
-			metrics.WorkflowExecutionUpdateClientTimeout.With(u.instrumentation.metrics).Record(1)
-			return nil, ctx.Err()
+		// If err is not coming from stCtx,
+		// then it means that the error is from the future itself and needs to be returned to the caller.
+		if !errors.Is(err, stCtx.Err()) {
+			return nil, err
 		}
 	}
 
@@ -258,29 +255,59 @@ func (u *Update) WaitLifecycleStage(
 	return statusAdmitted(), nil
 }
 
-// abort fails Update futures with reason.Error() error (which will notify all waiters with error)
+// abort set Update futures with error or failure (which is passed to all waiters)
 // and set state to stateAborted. It is a terminal state. Update can't be changed after it is aborted.
-func (u *Update) abort(reason AbortReason) {
+// abort uses effects and intermediate stateProvisionallyAborted to delay actual aborting until effects are applied.
+func (u *Update) abort(
+	reason AbortReason,
+	effects effect.Controller,
+) {
+	const terminalStates = stateSet(stateCompleted | stateProvisionallyAborted | stateAborted)
+	if u.state.Matches(terminalStates) {
+		return
+	}
+
 	u.instrumentation.countAborted()
+	prevState := u.setState(stateProvisionallyAborted)
 
-	const preAcceptedStates = stateSet(stateCreated | stateProvisionallyAdmitted | stateAdmitted | stateSent | stateProvisionallyAccepted)
-	if u.state.Matches(preAcceptedStates | stateSet(stateProvisionallyCompletedAfterAccepted)) {
-		u.accepted.(*future.FutureImpl[*failurepb.Failure]).Set(nil, reason.Error())
-		u.outcome.(*future.FutureImpl[*updatepb.Outcome]).Set(nil, reason.Error())
-	}
-
-	const preCompletedStates = stateSet(stateAccepted | stateProvisionallyCompleted)
-	if u.state.Matches(preCompletedStates) {
-		abortErr := reason.Error()
-		if reason == AbortReasonWorkflowContinuing {
-			// Accepted Update can't be applied to the new run, and must be aborted
-			// same way as if Workflow is completed.
-			abortErr = AbortReasonWorkflowCompleted.Error()
+	effects.OnAfterCommit(func(context.Context) {
+		if !u.state.Matches(stateSet(stateProvisionallyAborted | stateProvisionallyCompletedAfterAccepted)) {
+			return
 		}
-		u.outcome.(*future.FutureImpl[*updatepb.Outcome]).Set(nil, abortErr)
-	}
+		abortFailure, abortErr := reason.FailureError(prevState)
+		var abortOutcome *updatepb.Outcome
+		if abortFailure != nil {
+			abortOutcome = &updatepb.Outcome{Value: &updatepb.Outcome_Failure{Failure: abortFailure}}
+		}
 
-	u.setState(stateAborted)
+		beforeCommitState := u.setState(stateAborted)
+		u.outcome.(*future.FutureImpl[*updatepb.Outcome]).Set(abortOutcome, abortErr)
+		if beforeCommitState == stateProvisionallyCompletedAfterAccepted {
+			// If the Update is accepted *and* aborted in the same WFT (because WF was completed in the same WFT),
+			// then its state is ProvisionallyCompletedAfterAccepted here, set by onAcceptance.OnAfterCommit.
+			//
+			// To prevent a race condition in WaitLifecycleStage, the accepted future
+			// has not been set by OnAcceptance earlier, as it must be set *after* the outcome future.
+			// Now is the time to set it.
+			//
+			// Note that the Accepted state is skipped, and it transitions straight to Aborted.
+			u.accepted.(*future.FutureImpl[*failurepb.Failure]).Set(nil, nil)
+			return
+		}
+
+		// If Update was aborted without being accepted,
+		// then accepted future must be also set with failure/error.
+		const preAcceptedStates = stateSet(stateCreated | stateProvisionallyAdmitted | stateAdmitted | stateSent | stateProvisionallyAccepted)
+		if prevState.Matches(preAcceptedStates) {
+			u.accepted.(*future.FutureImpl[*failurepb.Failure]).Set(abortFailure, abortErr)
+		}
+	})
+	effects.OnAfterRollback(func(context.Context) {
+		if u.state != stateProvisionallyAborted {
+			return
+		}
+		u.setState(prevState)
+	})
 }
 
 // Admit works if the Update is in any state, but if the state is anything
@@ -301,8 +328,10 @@ func (u *Update) Admit(
 	if !eventStore.CanAddEvent() {
 		// There shouldn't be any waiters before Update is admitted (this func returns).
 		// Call abort to seal the Update.
-		u.abort(AbortReasonWorkflowCompleted)
-		return AbortReasonWorkflowCompleted.Error()
+		u.abort(AbortReasonWorkflowCompleted, eventStore)
+		// This error must be not nil.
+		_, abortErr := AbortReasonWorkflowCompleted.FailureError(stateCreated)
+		return abortErr
 	}
 
 	u.instrumentation.countRequestMsg()
@@ -373,7 +402,7 @@ func (u *Update) OnProtocolMessage(
 	_, isRejection := body.(*updatepb.Rejection)
 	shouldAbort := !(eventStore.CanAddEvent() || isRejection)
 	if shouldAbort {
-		u.abort(AbortReasonWorkflowCompleted)
+		u.abort(AbortReasonWorkflowCompleted, eventStore)
 		return nil
 	}
 
@@ -496,7 +525,7 @@ func (u *Update) onAcceptanceMsg(
 
 	prevState := u.setState(stateProvisionallyAccepted)
 	eventStore.OnAfterCommit(func(context.Context) {
-		if !u.state.Matches(stateSet(stateProvisionallyAccepted | stateProvisionallyCompleted)) {
+		if !u.state.Matches(stateSet(stateProvisionallyAccepted | stateProvisionallyCompleted | stateProvisionallyAborted)) {
 			return
 		}
 		u.request = nil
@@ -509,8 +538,22 @@ func (u *Update) onAcceptanceMsg(
 		// cannot be set here right now, as it must be set *after* the outcome future.
 		//
 		// So instead, the state is set to ProvisionallyCompletedAfterAccepted here,
-		// and onResponseMsg's OnAfterCommit callback will set the futures in the correct order.
+		// and onResponseMsg.OnAfterCommit callback will set the futures in the correct order.
 		if u.state == stateProvisionallyCompleted {
+			u.state = stateProvisionallyCompletedAfterAccepted
+			return
+		}
+		// If the Update is accepted *and* WF is completed in the same WFT, then its state has transitioned
+		// from ProvisionallyAccepted to ProvisionallyAborted in abort function by the
+		// time we get here.
+		//
+		// Now, to prevent a race condition in WaitLifecycleStage, the accepted future
+		// cannot be set here right now, as it must be set *after* the outcome future.
+		//
+		// Same ProvisionallyCompletedAfterAccepted is reused here (although it is
+		// technically ProvisionallyAbortedAfterAccepted), and abort.OnAfterCommit callback
+		// will set the futures in the correct order.
+		if u.state == stateProvisionallyAborted {
 			u.state = stateProvisionallyCompletedAfterAccepted
 			return
 		}
@@ -601,7 +644,8 @@ func (u *Update) onResponseMsg(
 		beforeCommitState := u.setState(stateCompleted)
 		u.outcome.(*future.FutureImpl[*updatepb.Outcome]).Set(res.GetOutcome(), nil)
 		if beforeCommitState == stateProvisionallyCompletedAfterAccepted {
-			// If the Update is accepted *and* completed in the same WFT, then its state is ProvisionallyCompletedAfterAccepted here, set by onAcceptance's OnAfterCommit.
+			// If the Update is accepted *and* completed in the same WFT,
+			// then its state is ProvisionallyCompletedAfterAccepted here, set by onAcceptance.OnAfterCommit.
 			//
 			// To prevent a race condition in WaitLifecycleStage, the accepted future
 			// has not been set by OnAcceptance earlier, as it must be set *after* the outcome future.

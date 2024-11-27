@@ -45,8 +45,8 @@ type (
 		GetIndexName() string
 
 		// Validate search attributes based on the store constraints. It returns a new map containing
-		// only search attributes with valid values. If there are invalid values, an error of type
-		// VisibilityStoreInvalidValuesError wraps all invalid values errors.
+		// only search attributes with valid values. If there are invalid values, it returns error of type
+		// serviceerror.InvalidArgument.
 		ValidateCustomSearchAttributes(searchAttributes map[string]any) (map[string]any, error)
 
 		// Write APIs.

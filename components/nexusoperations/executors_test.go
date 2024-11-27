@@ -105,11 +105,13 @@ func TestProcessInvocationTask(t *testing.T) {
 		endpointNotFound           bool
 		eventHasNoEndpointID       bool
 		operationIsCanceled        bool
+		header                     nexus.Header
 		checkStartOperationOptions func(t *testing.T, options nexus.StartOperationOptions)
 		onStartOperation           func(ctx context.Context, service, operation string, input *nexus.LazyValue, options nexus.StartOperationOptions) (nexus.HandlerStartOperationResult[any], error)
 		expectedMetricOutcome      string
 		checkOutcome               func(t *testing.T, op nexusoperations.Operation, events []*historypb.HistoryEvent)
 		requestTimeout             time.Duration
+		schedToCloseTimeout        time.Duration
 		destinationDown            bool
 	}{
 		{
@@ -167,9 +169,11 @@ func TestProcessInvocationTask(t *testing.T) {
 			},
 		},
 		{
-			name:            "sync start",
-			requestTimeout:  time.Hour,
-			destinationDown: false,
+			name:                "sync start",
+			requestTimeout:      time.Hour,
+			schedToCloseTimeout: time.Hour,
+			header:              nexus.Header{nexus.HeaderOperationTimeout: time.Microsecond.String()}, // to test this value is ignored when ScheduleToCloseTimeout is set
+			destinationDown:     false,
 			onStartOperation: func(ctx context.Context, service, operation string, input *nexus.LazyValue, options nexus.StartOperationOptions) (nexus.HandlerStartOperationResult[any], error) {
 				// Also use this test case to check the input and options provided.
 				if service != "service" {
@@ -302,17 +306,18 @@ func TestProcessInvocationTask(t *testing.T) {
 			onStartOperation: func(ctx context.Context, service, operation string, input *nexus.LazyValue, options nexus.StartOperationOptions) (nexus.HandlerStartOperationResult[any], error) {
 				return nil, nexus.HandlerErrorf(nexus.HandlerErrorTypeInternal, "internal server error")
 			},
-			expectedMetricOutcome: "request-error:500",
+			expectedMetricOutcome: "handler-error:INTERNAL",
 			checkOutcome: func(t *testing.T, op nexusoperations.Operation, events []*historypb.HistoryEvent) {
 				require.Equal(t, enumsspb.NEXUS_OPERATION_STATE_BACKING_OFF, op.State())
 				require.NotNil(t, op.LastAttemptFailure.GetApplicationFailureInfo())
-				require.Equal(t, "unexpected response status: \"500 Internal Server Error\": internal server error", op.LastAttemptFailure.Message)
+				require.Equal(t, "handler error (INTERNAL): internal server error", op.LastAttemptFailure.Message)
 				require.Equal(t, 0, len(events))
 			},
 		},
 		{
-			name:                  "invocation timeout",
-			requestTimeout:        time.Microsecond,
+			name:                  "invocation timeout by request timeout",
+			requestTimeout:        2 * time.Millisecond,
+			schedToCloseTimeout:   time.Hour,
 			destinationDown:       true,
 			expectedMetricOutcome: "request-timeout",
 			onStartOperation: func(ctx context.Context, service, operation string, input *nexus.LazyValue, options nexus.StartOperationOptions) (nexus.HandlerStartOperationResult[any], error) {
@@ -324,6 +329,37 @@ func TestProcessInvocationTask(t *testing.T) {
 				require.NotNil(t, op.LastAttemptFailure.GetApplicationFailureInfo())
 				require.Regexp(t, "Post \"http://localhost:\\d+/service/operation\\?callback=http%3A%2F%2Flocalhost%2Fcallback\": context deadline exceeded", op.LastAttemptFailure.Message)
 				require.Equal(t, 0, len(events))
+			},
+		},
+		{
+			name:                  "invocation timeout by ScheduleToCloseTimeout",
+			requestTimeout:        time.Hour,
+			schedToCloseTimeout:   2 * time.Millisecond,
+			destinationDown:       true,
+			expectedMetricOutcome: "request-timeout",
+			onStartOperation: func(ctx context.Context, service, operation string, input *nexus.LazyValue, options nexus.StartOperationOptions) (nexus.HandlerStartOperationResult[any], error) {
+				time.Sleep(time.Millisecond * 100) //nolint:forbidigo // Allow time.Sleep for timeout tests
+				return &nexus.HandlerStartOperationResultAsync{OperationID: "op-id"}, nil
+			},
+			checkOutcome: func(t *testing.T, op nexusoperations.Operation, events []*historypb.HistoryEvent) {
+				require.Equal(t, enumsspb.NEXUS_OPERATION_STATE_BACKING_OFF, op.State())
+				require.NotNil(t, op.LastAttemptFailure.GetApplicationFailureInfo())
+				require.Regexp(t, "Post \"http://localhost:\\d+/service/operation\\?callback=http%3A%2F%2Flocalhost%2Fcallback\": context deadline exceeded", op.LastAttemptFailure.Message)
+				require.Equal(t, 0, len(events))
+			},
+		},
+		{
+			name:                  "ScheduleToCloseTimeout less than MinOperationTimeout",
+			requestTimeout:        time.Hour,
+			schedToCloseTimeout:   time.Microsecond,
+			destinationDown:       false,
+			expectedMetricOutcome: "operation-timeout",
+			onStartOperation:      nil, // This should not be called if the operation has timed out.
+			checkOutcome: func(t *testing.T, op nexusoperations.Operation, events []*historypb.HistoryEvent) {
+				require.Equal(t, enumsspb.NEXUS_OPERATION_STATE_FAILED, op.State())
+				require.NotNil(t, op.LastAttemptFailure.GetApplicationFailureInfo())
+				require.Regexp(t, "remaining operation timeout is less than required minimum", op.LastAttemptFailure.Message)
+				require.Equal(t, 1, len(events))
 			},
 		},
 		{
@@ -390,9 +426,12 @@ func TestProcessInvocationTask(t *testing.T) {
 			nexustest.NewNexusServer(t, listenAddr, h)
 
 			reg := newRegistry(t)
-			event := mustNewScheduledEvent(time.Now(), time.Hour)
+			event := mustNewScheduledEvent(time.Now(), tc.schedToCloseTimeout)
 			if tc.eventHasNoEndpointID {
 				event.GetNexusOperationScheduledEventAttributes().EndpointId = ""
+			}
+			if tc.header != nil {
+				event.GetNexusOperationScheduledEventAttributes().NexusHeader = tc.header
 			}
 			backend := &hsmtest.NodeBackend{Events: []*historypb.HistoryEvent{event}}
 			node := newOperationNode(t, backend, backend.Events[0])
@@ -446,6 +485,7 @@ func TestProcessInvocationTask(t *testing.T) {
 				Config: &nexusoperations.Config{
 					Enabled:             dynamicconfig.GetBoolPropertyFn(true),
 					RequestTimeout:      dynamicconfig.GetDurationPropertyFnFilteredByDestination(tc.requestTimeout),
+					MinOperationTimeout: dynamicconfig.GetDurationPropertyFnFilteredByNamespace(time.Millisecond),
 					PayloadSizeLimit:    dynamicconfig.GetIntPropertyFnFilteredByNamespace(2 * 1024 * 1024),
 					CallbackURLTemplate: dynamicconfig.GetStringPropertyFn("http://localhost/callback"),
 					RetryPolicy: func() backoff.RetryPolicy {
@@ -569,6 +609,7 @@ func TestProcessCancelationTask(t *testing.T) {
 		expectedMetricOutcome string
 		checkOutcome          func(t *testing.T, op nexusoperations.Cancelation)
 		requestTimeout        time.Duration
+		schedToCloseTimeout   time.Duration
 		destinationDown       bool
 	}{
 		{
@@ -578,11 +619,11 @@ func TestProcessCancelationTask(t *testing.T) {
 			onCancelOperation: func(ctx context.Context, service, operation, operationID string, options nexus.CancelOperationOptions) error {
 				return nexus.HandlerErrorf(nexus.HandlerErrorTypeNotFound, "operation not found")
 			},
-			expectedMetricOutcome: "request-error:404",
+			expectedMetricOutcome: "handler-error:NOT_FOUND",
 			checkOutcome: func(t *testing.T, c nexusoperations.Cancelation) {
 				require.Equal(t, enumspb.NEXUS_OPERATION_CANCELLATION_STATE_FAILED, c.State())
 				require.NotNil(t, c.LastAttemptFailure.GetApplicationFailureInfo())
-				require.Equal(t, "unexpected response status: \"404 Not Found\": operation not found", c.LastAttemptFailure.Message)
+				require.Equal(t, "handler error (NOT_FOUND): operation not found", c.LastAttemptFailure.Message)
 			},
 		},
 		{
@@ -605,19 +646,19 @@ func TestProcessCancelationTask(t *testing.T) {
 			onCancelOperation: func(ctx context.Context, service, operation, operationID string, options nexus.CancelOperationOptions) error {
 				return nexus.HandlerErrorf(nexus.HandlerErrorTypeInternal, "internal server error")
 			},
-			expectedMetricOutcome: "request-error:500",
+			expectedMetricOutcome: "handler-error:INTERNAL",
 			checkOutcome: func(t *testing.T, c nexusoperations.Cancelation) {
 				require.Equal(t, enumspb.NEXUS_OPERATION_CANCELLATION_STATE_BACKING_OFF, c.State())
 				require.NotNil(t, c.LastAttemptFailure.GetApplicationFailureInfo())
-				require.Equal(t, "unexpected response status: \"500 Internal Server Error\": internal server error", c.LastAttemptFailure.Message)
+				require.Equal(t, "handler error (INTERNAL): internal server error", c.LastAttemptFailure.Message)
 			},
 		},
 		{
 			name:            "invocation timeout",
-			requestTimeout:  time.Microsecond,
+			requestTimeout:  2 * time.Millisecond,
 			destinationDown: true,
 			onCancelOperation: func(ctx context.Context, service, operation, operationID string, options nexus.CancelOperationOptions) error {
-				time.Sleep(time.Millisecond * 100)
+				time.Sleep(time.Millisecond * 100) //nolint:forbidigo // Allow time.Sleep for timeout tests
 				return nil
 			},
 			expectedMetricOutcome: "request-timeout",
@@ -625,6 +666,19 @@ func TestProcessCancelationTask(t *testing.T) {
 				require.Equal(t, enumspb.NEXUS_OPERATION_CANCELLATION_STATE_BACKING_OFF, c.State())
 				require.NotNil(t, c.LastAttemptFailure.GetApplicationFailureInfo())
 				require.Regexp(t, "Post \"http://localhost:\\d+/service/operation/op-id/cancel\": context deadline exceeded", c.LastAttemptFailure.Message)
+			},
+		},
+		{
+			name:                  "operation timeout",
+			requestTimeout:        time.Hour,
+			schedToCloseTimeout:   time.Microsecond,
+			destinationDown:       false,
+			onCancelOperation:     nil, // This should not be called if the operation has timed out.
+			expectedMetricOutcome: "operation-timeout",
+			checkOutcome: func(t *testing.T, c nexusoperations.Cancelation) {
+				require.Equal(t, enumspb.NEXUS_OPERATION_CANCELLATION_STATE_FAILED, c.State())
+				require.NotNil(t, c.LastAttemptFailure.GetApplicationFailureInfo())
+				require.Regexp(t, nexusoperations.ErrOperationTimeoutBelowMin.Error(), c.LastAttemptFailure.Message)
 			},
 		},
 		{
@@ -636,7 +690,7 @@ func TestProcessCancelationTask(t *testing.T) {
 			checkOutcome: func(t *testing.T, c nexusoperations.Cancelation) {
 				require.Equal(t, enumspb.NEXUS_OPERATION_CANCELLATION_STATE_FAILED, c.State())
 				require.NotNil(t, c.LastAttemptFailure.GetApplicationFailureInfo())
-				require.Equal(t, "endpoint not registered", c.LastAttemptFailure.Message)
+				require.Equal(t, "handler error (NOT_FOUND): endpoint not registered", c.LastAttemptFailure.Message)
 			},
 		},
 	}
@@ -652,7 +706,7 @@ func TestProcessCancelationTask(t *testing.T) {
 
 			reg := newRegistry(t)
 			backend := &hsmtest.NodeBackend{}
-			node := newOperationNode(t, backend, mustNewScheduledEvent(time.Now(), time.Hour))
+			node := newOperationNode(t, backend, mustNewScheduledEvent(time.Now(), tc.schedToCloseTimeout))
 			op, err := hsm.MachineData[nexusoperations.Operation](node)
 			require.NoError(t, err)
 			_, err = nexusoperations.TransitionStarted.Apply(op, nexusoperations.EventStarted{
@@ -710,8 +764,9 @@ func TestProcessCancelationTask(t *testing.T) {
 
 			require.NoError(t, nexusoperations.RegisterExecutor(reg, nexusoperations.TaskExecutorOptions{
 				Config: &nexusoperations.Config{
-					Enabled:        dynamicconfig.GetBoolPropertyFn(true),
-					RequestTimeout: dynamicconfig.GetDurationPropertyFnFilteredByDestination(tc.requestTimeout),
+					Enabled:             dynamicconfig.GetBoolPropertyFn(true),
+					RequestTimeout:      dynamicconfig.GetDurationPropertyFnFilteredByDestination(tc.requestTimeout),
+					MinOperationTimeout: dynamicconfig.GetDurationPropertyFnFilteredByNamespace(time.Millisecond),
 					RetryPolicy: func() backoff.RetryPolicy {
 						return backoff.NewExponentialRetryPolicy(time.Second)
 					},

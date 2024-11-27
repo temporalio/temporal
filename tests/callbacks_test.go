@@ -335,3 +335,126 @@ func (s *CallbacksSuite) TestWorkflowNexusCallbacks_CarriedOver() {
 		})
 	}
 }
+
+func (s *CallbacksSuite) TestNexusResetWorkflowWithCallback() {
+	s.OverrideDynamicConfig(dynamicconfig.EnableNexus, true)
+	s.OverrideDynamicConfig(
+		callbacks.AllowedAddresses,
+		[]any{map[string]any{"Pattern": "*", "AllowInsecure": true}},
+	)
+
+	ctx := testcore.NewContext()
+	sdkClient, err := client.Dial(client.Options{
+		HostPort:  s.FrontendGRPCAddress(),
+		Namespace: s.Namespace(),
+	})
+	s.NoError(err)
+	pp := temporalite.NewPortProvider()
+
+	taskQueue := testcore.RandomizeStr(s.T().Name())
+
+	ch := &completionHandler{
+		requestCh:         make(chan *nexus.CompletionRequest, 1),
+		requestCompleteCh: make(chan error, 1),
+	}
+	callbackAddress := fmt.Sprintf("localhost:%d", pp.MustGetFreePort())
+	s.NoError(pp.Close())
+	shutdownServer := s.runNexusCompletionHTTPServer(ch, callbackAddress)
+	s.T().Cleanup(func() {
+		require.NoError(s.T(), shutdownServer())
+	})
+
+	w := worker.New(sdkClient, taskQueue, worker.Options{})
+
+	// A workflow that completes once it has been reset.
+	longRunningWorkflow := func(ctx workflow.Context) error {
+		return workflow.Await(ctx, func() bool {
+			info := workflow.GetInfo(ctx)
+
+			return info.OriginalRunID != info.WorkflowExecution.RunID
+		})
+	}
+
+	w.RegisterWorkflowWithOptions(longRunningWorkflow, workflow.RegisterOptions{
+		Name: "longRunningWorkflow",
+	})
+	s.NoError(w.Start())
+	defer w.Stop()
+
+	request := &workflowservice.StartWorkflowExecutionRequest{
+		RequestId:          uuid.New(),
+		Namespace:          s.Namespace(),
+		WorkflowId:         testcore.RandomizeStr(s.T().Name()),
+		WorkflowType:       &commonpb.WorkflowType{Name: "longRunningWorkflow"},
+		TaskQueue:          &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+		Input:              nil,
+		WorkflowRunTimeout: durationpb.New(20 * time.Second),
+		Identity:           s.T().Name(),
+		CompletionCallbacks: []*commonpb.Callback{
+			{
+				Variant: &commonpb.Callback_Nexus_{
+					Nexus: &commonpb.Callback_Nexus{
+						Url: "http://" + callbackAddress,
+					},
+				},
+			},
+		},
+	}
+
+	startResponse, err := s.FrontendClient().StartWorkflowExecution(ctx, request)
+	s.NoError(err)
+
+	// Get history, iterate to ensure workflow task completed event exists. then reset
+	workflowExecution := &commonpb.WorkflowExecution{
+		WorkflowId: request.WorkflowId,
+		RunId:      startResponse.RunId,
+	}
+	s.WaitForHistoryEvents(`
+			1 WorkflowExecutionStarted
+  			2 WorkflowTaskScheduled
+  			3 WorkflowTaskStarted
+  			4 WorkflowTaskCompleted`,
+		s.GetHistoryFunc(s.Namespace(), workflowExecution),
+		5*time.Second,
+		10*time.Millisecond)
+
+	resetWfResponse, err := sdkClient.ResetWorkflowExecution(ctx, &workflowservice.ResetWorkflowExecutionRequest{
+		Namespace: s.Namespace(),
+
+		WorkflowExecution:         workflowExecution,
+		Reason:                    "TestNexusResetWorkflowWithCallback",
+		WorkflowTaskFinishEventId: 3,
+		RequestId:                 "test_id",
+	})
+	s.NoError(err)
+
+	// Get the description of the run that was reset and ensure that its callback is still in STANDBY state.
+	description, err := sdkClient.DescribeWorkflowExecution(ctx, request.WorkflowId, startResponse.RunId)
+	s.NoError(err)
+	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED, description.WorkflowExecutionInfo.Status)
+
+	// Should not be invoked during a reset
+	s.Equal(1, len(description.Callbacks))
+	callbackInfo := description.Callbacks[0]
+	s.ProtoEqual(request.CompletionCallbacks[0], callbackInfo.Callback)
+	s.Equal(enumspb.CALLBACK_STATE_STANDBY, callbackInfo.State)
+	s.Equal(int32(0), callbackInfo.Attempt)
+
+	resetWorkflowRun := sdkClient.GetWorkflow(ctx, request.WorkflowId, resetWfResponse.RunId)
+	err = resetWorkflowRun.Get(ctx, nil)
+	s.NoError(err)
+
+	completion := <-ch.requestCh
+	s.Equal(nexus.OperationStateSucceeded, completion.State)
+	ch.requestCompleteCh <- err
+
+	// Get the description of the run post-reset and ensure that its callback is in SUCCEEDED state.
+	description, err = sdkClient.DescribeWorkflowExecution(ctx, resetWorkflowRun.GetID(), "")
+	s.NoError(err)
+	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, description.WorkflowExecutionInfo.Status)
+
+	s.Equal(1, len(description.Callbacks))
+	callbackInfo = description.Callbacks[0]
+	s.ProtoEqual(request.CompletionCallbacks[0], callbackInfo.Callback)
+	s.Equal(enumspb.CALLBACK_STATE_SUCCEEDED, callbackInfo.State)
+}

@@ -97,6 +97,7 @@ func NewStreamReceiver(
 		tag.SourceCluster(processToolBox.ClusterMetadata.ClusterNameForFailoverVersion(true, int64(serverShardKey.ClusterID))),
 		tag.SourceShardID(serverShardKey.ShardID),
 		tag.ShardID(clientShardKey.ShardID), // client is the local cluster (target cluster, passive cluster)
+		tag.Operation("replication-stream-receiver"),
 	)
 	highPriorityTaskTracker := NewExecutableTaskTracker(logger, processToolBox.MetricsHandler)
 	lowPriorityTaskTracker := NewExecutableTaskTracker(logger, processToolBox.MetricsHandler)
@@ -197,11 +198,6 @@ func (r *StreamReceiverImpl) sendEventLoop() error {
 			timer.Reset(r.Config.ReplicationStreamSyncStatusDuration())
 			watermark, err := r.ackMessage(r.stream)
 			if err != nil {
-				if IsStreamError(err) {
-					r.logger.Error("ReplicationStreamError StreamReceiver exit send loop", tag.Error(err))
-				} else {
-					r.logger.Error("ReplicationServiceError StreamReceiver exit send loop", tag.Error(err))
-				}
 				return err
 			}
 			if watermark != inclusiveLowWatermark {
@@ -226,11 +222,6 @@ func (r *StreamReceiverImpl) recvEventLoop() error {
 	err := r.processMessages(r.stream)
 	if err == nil {
 		return nil
-	}
-	if IsStreamError(err) {
-		r.logger.Error("ReplicationStreamError StreamReceiver exit recv loop", tag.Error(err))
-	} else {
-		r.logger.Error("ReplicationServiceError StreamReceiver exit recv loop", tag.Error(err))
 	}
 	return err
 }
@@ -372,7 +363,6 @@ func (r *StreamReceiverImpl) processMessages(
 			taskScheduler.Submit(task)
 		}
 	}
-	r.logger.Error("StreamReceiver encountered channel close")
 	return nil
 }
 

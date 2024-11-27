@@ -1021,6 +1021,7 @@ func (t *transferQueueActiveTaskExecutor) processResetWorkflow(
 		task,
 		reason,
 		resetPoint,
+		baseContext,
 		baseMutableState,
 		currentContext,
 		currentMutableState,
@@ -1039,7 +1040,7 @@ func (t *transferQueueActiveTaskExecutor) recordChildExecutionStarted(
 	return t.updateWorkflowExecution(ctx, context, true,
 		func(mutableState workflow.MutableState) error {
 			if !mutableState.IsWorkflowExecutionRunning() {
-				return serviceerror.NewNotFound("Workflow execution already completed.")
+				return consts.ErrWorkflowCompleted
 			}
 
 			ci, ok := mutableState.GetChildExecutionInfo(task.InitiatedEventID)
@@ -1072,7 +1073,7 @@ func (t *transferQueueActiveTaskExecutor) recordStartChildExecutionFailed(
 	return t.updateWorkflowExecution(ctx, context, true,
 		func(mutableState workflow.MutableState) error {
 			if !mutableState.IsWorkflowExecutionRunning() {
-				return serviceerror.NewNotFound("Workflow execution already completed.")
+				return consts.ErrWorkflowCompleted
 			}
 
 			ci, ok := mutableState.GetChildExecutionInfo(task.InitiatedEventID)
@@ -1120,7 +1121,7 @@ func (t *transferQueueActiveTaskExecutor) requestCancelExternalExecutionComplete
 	return t.updateWorkflowExecution(ctx, context, true,
 		func(mutableState workflow.MutableState) error {
 			if !mutableState.IsWorkflowExecutionRunning() {
-				return serviceerror.NewNotFound("Workflow execution already completed.")
+				return consts.ErrWorkflowCompleted
 			}
 
 			_, ok := mutableState.GetRequestCancelInfo(task.InitiatedEventID)
@@ -1152,7 +1153,7 @@ func (t *transferQueueActiveTaskExecutor) signalExternalExecutionCompleted(
 	return t.updateWorkflowExecution(ctx, context, true,
 		func(mutableState workflow.MutableState) error {
 			if !mutableState.IsWorkflowExecutionRunning() {
-				return serviceerror.NewNotFound("Workflow execution already completed.")
+				return consts.ErrWorkflowCompleted
 			}
 
 			_, ok := mutableState.GetSignalInfo(task.InitiatedEventID)
@@ -1185,7 +1186,7 @@ func (t *transferQueueActiveTaskExecutor) requestCancelExternalExecutionFailed(
 	return t.updateWorkflowExecution(ctx, context, true,
 		func(mutableState workflow.MutableState) error {
 			if !mutableState.IsWorkflowExecutionRunning() {
-				return serviceerror.NewNotFound("Workflow execution already completed.")
+				return consts.ErrWorkflowCompleted
 			}
 
 			_, ok := mutableState.GetRequestCancelInfo(task.InitiatedEventID)
@@ -1396,6 +1397,7 @@ func (t *transferQueueActiveTaskExecutor) resetWorkflow(
 	task *tasks.ResetWorkflowTask,
 	reason string,
 	resetPoint *workflowpb.ResetPointInfo,
+	baseContext workflow.Context,
 	baseMutableState workflow.MutableState,
 	currentContext workflow.Context,
 	currentMutableState workflow.MutableState,
@@ -1425,6 +1427,12 @@ func (t *transferQueueActiveTaskExecutor) resetWorkflow(
 	baseCurrentBranchToken := baseCurrentVersionHistory.GetBranchToken()
 	baseNextEventID := baseMutableState.GetNextEventID()
 
+	baseWorkflow := ndc.NewWorkflow(
+		t.shardContext.GetClusterMetadata(),
+		baseContext,
+		baseMutableState,
+		wcache.NoopReleaseFn, // this is fine since caller will defer on release
+	)
 	err = t.workflowResetter.ResetWorkflow(
 		resetWorkflowCtx,
 		namespaceID,
@@ -1436,6 +1444,7 @@ func (t *transferQueueActiveTaskExecutor) resetWorkflow(
 		baseNextEventID,
 		resetRunID,
 		uuid.New(),
+		baseWorkflow,
 		ndc.NewWorkflow(
 			t.shardContext.GetClusterMetadata(),
 			currentContext,

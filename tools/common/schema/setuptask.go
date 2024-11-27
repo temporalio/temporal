@@ -30,6 +30,7 @@ import (
 	"io"
 	"io/fs"
 	"os"
+	"path"
 	"path/filepath"
 
 	"github.com/blang/semver/v4"
@@ -82,7 +83,7 @@ func (task *SetupTask) Run() error {
 		var schemaFilePath string
 		if len(config.SchemaName) > 0 {
 			fsys := dbschemas.Assets()
-			schemaFilePath = filepath.Join(config.SchemaName, "schema"+schemaFileEnding(config.SchemaName))
+			schemaFilePath = path.Join(config.SchemaName, "schema"+schemaFileEnding(config.SchemaName))
 			schemaBuf, err = fs.ReadFile(fsys, schemaFilePath)
 		} else {
 			schemaFilePath, err = filepath.Abs(config.SchemaFilePath)

@@ -98,6 +98,7 @@ func NewStreamSender(
 		tag.TargetCluster(clientClusterName), // client is the target cluster (passive cluster)
 		tag.TargetShardID(clientShardKey.ShardID),
 		tag.ShardID(serverShardKey.ShardID), // server is the source cluster (active cluster)
+		tag.Operation("replication-stream-sender"),
 	)
 	return &StreamSenderImpl{
 		server:                  server,
@@ -185,27 +186,18 @@ func (s *StreamSenderImpl) recvEventLoop() (retErr error) {
 
 	defer log.CapturePanic(s.logger, &panicErr)
 
-	var inclusiveLowWatermark int64
-
 	for !s.shutdownChan.IsShutdown() {
 		if s.isTieredStackEnabled != s.config.EnableReplicationTaskTieredProcessing() {
-			s.logger.Warn("ReplicationStreamError StreamSender detected tiered stack change, restart the stream")
-			return NewStreamError("StreamError tiered stack change, reconnect stream", serviceerror.NewInternal("tiered stack change"))
+			return NewStreamError("StreamSender detected tiered stack change, restart the stream", nil)
 		}
 		req, err := s.server.Recv()
 		if err != nil {
-			s.logger.Error("ReplicationStreamError StreamSender failed to receive", tag.Error(err))
-			return NewStreamError("StreamError recv error", err)
+			return NewStreamError("StreamSender failed to receive", err)
 		}
 		switch attr := req.GetAttributes().(type) {
 		case *historyservice.StreamWorkflowReplicationMessagesRequest_SyncReplicationState:
-			if attr.SyncReplicationState.GetInclusiveLowWatermark() != inclusiveLowWatermark {
-				inclusiveLowWatermark = attr.SyncReplicationState.GetInclusiveLowWatermark()
-				s.logger.Debug(fmt.Sprintf("StreamSender received new inclusiveLowWatermark: %v", inclusiveLowWatermark))
-			}
 			if err := s.recvSyncReplicationState(attr.SyncReplicationState); err != nil {
-				s.logger.Error("ReplicationServiceError StreamSender unable to handle SyncReplicationState", tag.Error(err))
-				return err
+				return fmt.Errorf("ReplicationServiceError StreamSender unable to handle SyncReplicationState: %w", err)
 			}
 			metrics.ReplicationTasksRecv.With(s.metrics).Record(
 				int64(1),
@@ -214,11 +206,7 @@ func (s *StreamSenderImpl) recvEventLoop() (retErr error) {
 				metrics.OperationTag(metrics.SyncWatermarkScope),
 			)
 		default:
-			err := serviceerror.NewInternal(fmt.Sprintf(
-				"StreamReplicationMessages encountered unknown type: %T %v", attr, attr,
-			))
-			s.logger.Error("ReplicationServiceError StreamSender unable to handle request", tag.Error(err))
-			return err
+			return fmt.Errorf("ReplicationServiceError StreamSender unable to handle request: %w, taskAttr: %v", err, attr)
 		}
 	}
 	return nil
@@ -240,17 +228,14 @@ func (s *StreamSenderImpl) sendEventLoop(priority enumsspb.TaskPriority) (retErr
 
 	catchupEndExclusiveWatermark, err := s.sendCatchUp(priority)
 	if err != nil {
-		s.logger.Error("ReplicationServiceError StreamSender unable to catch up replication tasks", tag.Error(err))
-		return err
+		return fmt.Errorf("ReplicationServiceError StreamSender unable to catch up replication tasks: %w", err)
 	}
-	s.logger.Debug(fmt.Sprintf("StreamSender sendCatchUp finished with catchupEndExclusiveWatermark %v", catchupEndExclusiveWatermark))
 	if err := s.sendLive(
 		priority,
 		newTaskNotificationChan,
 		catchupEndExclusiveWatermark,
 	); err != nil {
-		s.logger.Error("ReplicationServiceError StreamSender unable to stream replication tasks", tag.Error(err))
-		return err
+		return fmt.Errorf("ReplicationServiceError StreamSender unable to stream replication tasks: %w", err)
 	}
 	return nil
 }
@@ -462,13 +447,11 @@ func (s *StreamSenderImpl) sendTasks(
 	beginInclusiveWatermark int64,
 	endExclusiveWatermark int64,
 ) error {
-	s.logger.Debug(fmt.Sprintf("StreamSender sendTasks [%v, %v)", beginInclusiveWatermark, endExclusiveWatermark))
 	if beginInclusiveWatermark > endExclusiveWatermark {
 		err := serviceerror.NewInternal(fmt.Sprintf("StreamWorkflowReplication encountered invalid task range [%v, %v)",
 			beginInclusiveWatermark,
 			endExclusiveWatermark,
 		))
-		s.logger.Error("ReplicationServiceError StreamSender unable to send tasks", tag.Error(err))
 		return err
 	}
 	if beginInclusiveWatermark == endExclusiveWatermark {
@@ -503,8 +486,7 @@ Loop:
 
 		item, err := iter.Next()
 		if err != nil {
-			s.logger.Error("ReplicationServiceError StreamSender unable to get next replication task", tag.Error(err))
-			return err
+			return fmt.Errorf("ReplicationServiceError StreamSender unable to get next replication task: %w", err)
 		}
 
 		if !s.shouldProcessTask(item) {
@@ -573,7 +555,7 @@ Loop:
 			WithExpirationInterval(3 * time.Minute)
 
 		if err := backoff.ThrottleRetry(operation, retryPolicy, IsRetryableError); err != nil {
-			return err
+			return fmt.Errorf("failed to send task: %v, cause: %w", item, err)
 		}
 	}
 	return s.sendToStream(&historyservice.StreamWorkflowReplicationMessagesResponse{
@@ -593,8 +575,7 @@ func (s *StreamSenderImpl) sendToStream(payload *historyservice.StreamWorkflowRe
 	defer s.sendLock.Unlock()
 	err := s.server.Send(payload)
 	if err != nil {
-		s.logger.Error("ReplicationStreamError Stream Sender unable to send", tag.Error(err))
-		return NewStreamError("ReplicationStreamError send failed", err)
+		return NewStreamError("Stream Sender unable to send", err)
 	}
 	return nil
 }

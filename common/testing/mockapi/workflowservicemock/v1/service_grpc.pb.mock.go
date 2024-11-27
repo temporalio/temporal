@@ -725,6 +725,26 @@ func (mr *MockWorkflowServiceClientMockRecorder) PatchSchedule(arg0, arg1 any, a
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PatchSchedule", reflect.TypeOf((*MockWorkflowServiceClient)(nil).PatchSchedule), varargs...)
 }
 
+// PauseActivityById mocks base method.
+func (m *MockWorkflowServiceClient) PauseActivityById(arg0 context.Context, arg1 *workflowservice.PauseActivityByIdRequest, arg2 ...grpc.CallOption) (*workflowservice.PauseActivityByIdResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []any{arg0, arg1}
+	for _, a := range arg2 {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "PauseActivityById", varargs...)
+	ret0, _ := ret[0].(*workflowservice.PauseActivityByIdResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// PauseActivityById indicates an expected call of PauseActivityById.
+func (mr *MockWorkflowServiceClientMockRecorder) PauseActivityById(arg0, arg1 any, arg2 ...any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]any{arg0, arg1}, arg2...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PauseActivityById", reflect.TypeOf((*MockWorkflowServiceClient)(nil).PauseActivityById), varargs...)
+}
+
 // PollActivityTaskQueue mocks base method.
 func (m *MockWorkflowServiceClient) PollActivityTaskQueue(arg0 context.Context, arg1 *workflowservice.PollActivityTaskQueueRequest, arg2 ...grpc.CallOption) (*workflowservice.PollActivityTaskQueueResponse, error) {
 	m.ctrl.T.Helper()
@@ -903,6 +923,26 @@ func (mr *MockWorkflowServiceClientMockRecorder) RequestCancelWorkflowExecution(
 	mr.mock.ctrl.T.Helper()
 	varargs := append([]any{arg0, arg1}, arg2...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RequestCancelWorkflowExecution", reflect.TypeOf((*MockWorkflowServiceClient)(nil).RequestCancelWorkflowExecution), varargs...)
+}
+
+// ResetActivityById mocks base method.
+func (m *MockWorkflowServiceClient) ResetActivityById(arg0 context.Context, arg1 *workflowservice.ResetActivityByIdRequest, arg2 ...grpc.CallOption) (*workflowservice.ResetActivityByIdResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []any{arg0, arg1}
+	for _, a := range arg2 {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "ResetActivityById", varargs...)
+	ret0, _ := ret[0].(*workflowservice.ResetActivityByIdResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ResetActivityById indicates an expected call of ResetActivityById.
+func (mr *MockWorkflowServiceClientMockRecorder) ResetActivityById(arg0, arg1 any, arg2 ...any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]any{arg0, arg1}, arg2...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ResetActivityById", reflect.TypeOf((*MockWorkflowServiceClient)(nil).ResetActivityById), varargs...)
 }
 
 // ResetStickyTaskQueue mocks base method.
@@ -1343,6 +1383,26 @@ func (mr *MockWorkflowServiceClientMockRecorder) TerminateWorkflowExecution(arg0
 	mr.mock.ctrl.T.Helper()
 	varargs := append([]any{arg0, arg1}, arg2...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "TerminateWorkflowExecution", reflect.TypeOf((*MockWorkflowServiceClient)(nil).TerminateWorkflowExecution), varargs...)
+}
+
+// UnpauseActivityById mocks base method.
+func (m *MockWorkflowServiceClient) UnpauseActivityById(arg0 context.Context, arg1 *workflowservice.UnpauseActivityByIdRequest, arg2 ...grpc.CallOption) (*workflowservice.UnpauseActivityByIdResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []any{arg0, arg1}
+	for _, a := range arg2 {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "UnpauseActivityById", varargs...)
+	ret0, _ := ret[0].(*workflowservice.UnpauseActivityByIdResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UnpauseActivityById indicates an expected call of UnpauseActivityById.
+func (mr *MockWorkflowServiceClientMockRecorder) UnpauseActivityById(arg0, arg1 any, arg2 ...any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]any{arg0, arg1}, arg2...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UnpauseActivityById", reflect.TypeOf((*MockWorkflowServiceClient)(nil).UnpauseActivityById), varargs...)
 }
 
 // UpdateActivityOptionsById mocks base method.

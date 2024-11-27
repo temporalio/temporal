@@ -92,9 +92,10 @@ func newHostScheduler(params ArchivalQueueFactoryParams) queues.Scheduler {
 	return queues.NewScheduler(
 		params.ClusterMetadata.GetCurrentClusterName(),
 		queues.SchedulerOptions{
-			WorkerCount:             params.Config.ArchivalProcessorSchedulerWorkerCount,
-			ActiveNamespaceWeights:  dynamicconfig.GetMapPropertyFnFilteredByNamespace(ArchivalTaskPriorities),
-			StandbyNamespaceWeights: dynamicconfig.GetMapPropertyFnFilteredByNamespace(ArchivalTaskPriorities),
+			WorkerCount:                    params.Config.ArchivalProcessorSchedulerWorkerCount,
+			ActiveNamespaceWeights:         dynamicconfig.GetMapPropertyFnFilteredByNamespace(ArchivalTaskPriorities),
+			StandbyNamespaceWeights:        dynamicconfig.GetMapPropertyFnFilteredByNamespace(ArchivalTaskPriorities),
+			InactiveNamespaceDeletionDelay: params.Config.TaskSchedulerInactiveChannelDeletionDelay,
 		},
 		params.NamespaceRegistry,
 		params.Logger,
@@ -184,6 +185,7 @@ func (f *archivalQueueFactory) newScheduledQueue(shard shard.Context, executor q
 		f.DLQWriter,
 		f.Config.TaskDLQEnabled,
 		f.Config.TaskDLQUnexpectedErrorAttempts,
+		f.Config.TaskDLQInternalErrors,
 		f.Config.TaskDLQErrorPattern,
 	)
 	return queues.NewScheduledQueue(

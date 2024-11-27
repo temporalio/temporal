@@ -31,14 +31,13 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	"go.uber.org/mock/gomock"
-
 	deploymentpb "go.temporal.io/api/deployment/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/api/historyservicemock/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/visibility/manager"
+	"go.uber.org/mock/gomock"
 )
 
 // testMaxIDLengthLimit is the current default value used by dynamic config for

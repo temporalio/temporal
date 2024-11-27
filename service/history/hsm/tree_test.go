@@ -420,7 +420,7 @@ func TestMachineTransition(t *testing.T) {
 	err = hsm.MachineTransition(root, func(d *hsmtest.Data) (hsm.TransitionOutput, error) {
 		// Mutate state and make sure the cache is marked stale.
 		d.SetState(hsmtest.State2)
-		return hsm.TransitionOutput{}, fmt.Errorf("test") // nolint:goerr113
+		return hsm.TransitionOutput{}, fmt.Errorf("test")
 	})
 	require.ErrorContains(t, err, "test")
 	require.Equal(t, int64(0), root.InternalRepr().TransitionCount)
@@ -479,4 +479,249 @@ func TestCollection(t *testing.T) {
 	d, err := coll.Data("a")
 	require.NoError(t, err)
 	require.Equal(t, hsmtest.NewData(hsmtest.State2), d)
+}
+
+func TestNode_DeleteChild(t *testing.T) {
+	root, err := hsm.NewRoot(reg, def1.Type(), hsmtest.NewData(hsmtest.State1), make(map[string]*persistencespb.StateMachineMap), &backend{})
+	require.NoError(t, err)
+
+	l1, err := root.AddChild(hsm.Key{Type: def1.Type(), ID: "l1"}, hsmtest.NewData(hsmtest.State1))
+	require.NoError(t, err)
+	l2, err := l1.AddChild(hsm.Key{Type: def1.Type(), ID: "l2"}, hsmtest.NewData(hsmtest.State1))
+	require.NoError(t, err)
+	_, err = l1.AddChild(hsm.Key{Type: def1.Type(), ID: "l2_sibling"}, hsmtest.NewData(hsmtest.State1))
+	require.NoError(t, err)
+
+	err = hsm.MachineTransition(l2, func(d *hsmtest.Data) (hsm.TransitionOutput, error) {
+		d.SetState(hsmtest.State2)
+		return hsm.TransitionOutput{}, nil
+	})
+	require.NoError(t, err)
+
+	err = l1.DeleteChild(hsm.Key{Type: def1.Type(), ID: "l2"})
+	require.NoError(t, err)
+
+	err = hsm.MachineTransition(l2, func(d *hsmtest.Data) (hsm.TransitionOutput, error) {
+		return hsm.TransitionOutput{}, nil
+	})
+	require.ErrorIs(t, err, hsm.ErrStateMachineInvalidState)
+
+	l2Outputs := l2.Outputs()
+	require.Empty(t, l2Outputs)
+
+	// Cannot delete non-existent or already deleted nodes
+	err = l1.DeleteChild(hsm.Key{Type: def1.Type(), ID: "nonexistent"})
+	require.ErrorIs(t, err, hsm.ErrStateMachineNotFound)
+
+	err = l1.DeleteChild(hsm.Key{Type: def1.Type(), ID: "l2"})
+	require.ErrorIs(t, err, hsm.ErrStateMachineNotFound)
+}
+
+func TestOperationLog_IsDeleted(t *testing.T) {
+	root, err := hsm.NewRoot(reg, def1.Type(), hsmtest.NewData(hsmtest.State1), make(map[string]*persistencespb.StateMachineMap), &backend{})
+	require.NoError(t, err)
+
+	l1, err := root.AddChild(hsm.Key{Type: def1.Type(), ID: "l1"}, hsmtest.NewData(hsmtest.State1))
+	require.NoError(t, err)
+	l2, err := l1.AddChild(hsm.Key{Type: def1.Type(), ID: "l2"}, hsmtest.NewData(hsmtest.State1))
+	require.NoError(t, err)
+	l2_sibling, err := l1.AddChild(hsm.Key{Type: def1.Type(), ID: "l2_sibling"}, hsmtest.NewData(hsmtest.State1))
+	require.NoError(t, err)
+
+	err = hsm.MachineTransition(l2, func(d *hsmtest.Data) (hsm.TransitionOutput, error) {
+		d.SetState(hsmtest.State2)
+		return hsm.TransitionOutput{}, nil
+	})
+	require.NoError(t, err)
+
+	err = hsm.MachineTransition(l2_sibling, func(d *hsmtest.Data) (hsm.TransitionOutput, error) {
+		d.SetState(hsmtest.State2)
+		return hsm.TransitionOutput{}, nil
+	})
+	require.NoError(t, err)
+
+	err = l1.DeleteChild(hsm.Key{Type: def1.Type(), ID: "l2"})
+	require.NoError(t, err)
+
+	l2Outputs := l2.Outputs()
+	require.Empty(t, l2Outputs)
+
+	// Non-deleted sibling should still have outputs
+	siblingOutputs := l2_sibling.Outputs()
+	require.Len(t, siblingOutputs, 1)
+	require.Equal(t, l2_sibling.Path(), siblingOutputs[0].Path)
+}
+
+func TestNode_OutputsWithDeletion(t *testing.T) {
+	root, err := hsm.NewRoot(reg, def1.Type(), hsmtest.NewData(hsmtest.State1), make(map[string]*persistencespb.StateMachineMap), &backend{})
+	require.NoError(t, err)
+
+	l1, err := root.AddChild(hsm.Key{Type: def1.Type(), ID: "l1"}, hsmtest.NewData(hsmtest.State1))
+	require.NoError(t, err)
+	l2, err := l1.AddChild(hsm.Key{Type: def1.Type(), ID: "l2"}, hsmtest.NewData(hsmtest.State1))
+	require.NoError(t, err)
+
+	err = hsm.MachineTransition(root, func(d *hsmtest.Data) (hsm.TransitionOutput, error) {
+		d.SetState(hsmtest.State2)
+		return hsm.TransitionOutput{}, nil
+	})
+	require.NoError(t, err)
+
+	err = hsm.MachineTransition(l2, func(d *hsmtest.Data) (hsm.TransitionOutput, error) {
+		d.SetState(hsmtest.State2)
+		return hsm.TransitionOutput{}, nil
+	})
+	require.NoError(t, err)
+
+	rootOutputs := root.Outputs()
+	require.Len(t, rootOutputs, 2) // root and l2 transitions
+
+	// Delete l1 (and by extension l2)
+	err = root.DeleteChild(hsm.Key{Type: def1.Type(), ID: "l1"})
+	require.NoError(t, err)
+
+	rootOutputs = root.Outputs()
+	require.Len(t, rootOutputs, 1)
+	require.Equal(t, []hsm.Key{}, rootOutputs[0].Path)
+
+	// Deleted nodes have no outputs
+	l1Outputs := l1.Outputs()
+	require.Empty(t, l1Outputs)
+
+	l2Outputs := l2.Outputs()
+	require.Empty(t, l2Outputs)
+}
+
+func TestNode_ClearTransactionState(t *testing.T) {
+	root, err := hsm.NewRoot(reg, def1.Type(), hsmtest.NewData(hsmtest.State1), make(map[string]*persistencespb.StateMachineMap), &backend{})
+	require.NoError(t, err)
+
+	l1, err := root.AddChild(hsm.Key{Type: def1.Type(), ID: "l1"}, hsmtest.NewData(hsmtest.State1))
+	require.NoError(t, err)
+
+	err = hsm.MachineTransition(root, func(d *hsmtest.Data) (hsm.TransitionOutput, error) {
+		d.SetState(hsmtest.State2)
+		return hsm.TransitionOutput{}, nil
+	})
+	require.NoError(t, err)
+
+	err = root.DeleteChild(hsm.Key{Type: def1.Type(), ID: "l1"})
+	require.NoError(t, err)
+
+	outputs := root.Outputs()
+	require.NotEmpty(t, outputs)
+
+	root.ClearTransactionState()
+
+	outputs = root.Outputs()
+	require.Empty(t, outputs)
+	require.False(t, root.Dirty())
+
+	err = hsm.MachineTransition(l1, func(d *hsmtest.Data) (hsm.TransitionOutput, error) {
+		return hsm.TransitionOutput{}, nil
+	})
+	require.ErrorIs(t, err, hsm.ErrStateMachineInvalidState)
+}
+
+func TestNode_DeleteDeepHierarchy(t *testing.T) {
+	root, err := hsm.NewRoot(reg, def1.Type(), hsmtest.NewData(hsmtest.State1), make(map[string]*persistencespb.StateMachineMap), &backend{})
+	require.NoError(t, err)
+
+	// Build hierarchy
+	current := root
+	var nodes []*hsm.Node
+	for i := 0; i < 5; i++ {
+		node, err := current.AddChild(hsm.Key{Type: def1.Type(), ID: fmt.Sprintf("node%d", i)}, hsmtest.NewData(hsmtest.State1))
+		require.NoError(t, err)
+		nodes = append(nodes, node)
+		current = node
+	}
+
+	for _, node := range nodes {
+		err = hsm.MachineTransition(node, func(d *hsmtest.Data) (hsm.TransitionOutput, error) {
+			d.SetState(hsmtest.State2)
+			return hsm.TransitionOutput{}, nil
+		})
+		require.NoError(t, err)
+	}
+
+	// Delete from middle
+	err = nodes[1].DeleteChild(hsm.Key{Type: def1.Type(), ID: "node2"})
+	require.NoError(t, err)
+
+	// Verify outputs at each level
+	for i, node := range nodes {
+		outputs := node.Outputs()
+		if i <= 1 { // Above deletion
+			require.NotEmpty(t, outputs)
+		} else { // At or below deletion
+			require.Empty(t, outputs)
+		}
+	}
+}
+
+func TestNode_MixedOperationsBeforeDeletion(t *testing.T) {
+	root, err := hsm.NewRoot(reg, def1.Type(), hsmtest.NewData(hsmtest.State1), make(map[string]*persistencespb.StateMachineMap), &backend{})
+	require.NoError(t, err)
+
+	l1, err := root.AddChild(hsm.Key{Type: def1.Type(), ID: "l1"}, hsmtest.NewData(hsmtest.State1))
+	require.NoError(t, err)
+
+	for i := 0; i < 3; i++ {
+		err = hsm.MachineTransition(l1, func(d *hsmtest.Data) (hsm.TransitionOutput, error) {
+			d.SetState(hsmtest.State2)
+			return hsm.TransitionOutput{}, nil
+		})
+		require.NoError(t, err)
+	}
+
+	outputs := l1.Outputs()
+	require.Len(t, outputs, 1)
+	require.Len(t, outputs[0].Outputs, 3)
+
+	err = root.DeleteChild(hsm.Key{Type: def1.Type(), ID: "l1"})
+	require.NoError(t, err)
+
+	outputs = l1.Outputs()
+	require.Empty(t, outputs)
+}
+
+func TestNode_MultipleDeletedPaths(t *testing.T) {
+	root, err := hsm.NewRoot(reg, def1.Type(), hsmtest.NewData(hsmtest.State1), make(map[string]*persistencespb.StateMachineMap), &backend{})
+	require.NoError(t, err)
+
+	branch1, err := root.AddChild(hsm.Key{Type: def1.Type(), ID: "branch1"}, hsmtest.NewData(hsmtest.State1))
+	require.NoError(t, err)
+	branch2, err := root.AddChild(hsm.Key{Type: def1.Type(), ID: "branch2"}, hsmtest.NewData(hsmtest.State1))
+	require.NoError(t, err)
+
+	b1child, err := branch1.AddChild(hsm.Key{Type: def1.Type(), ID: "b1child"}, hsmtest.NewData(hsmtest.State1))
+	require.NoError(t, err)
+	b2child, err := branch2.AddChild(hsm.Key{Type: def1.Type(), ID: "b2child"}, hsmtest.NewData(hsmtest.State1))
+	require.NoError(t, err)
+
+	err = hsm.MachineTransition(branch1, func(d *hsmtest.Data) (hsm.TransitionOutput, error) {
+		d.SetState(hsmtest.State2)
+		return hsm.TransitionOutput{}, nil
+	})
+	require.NoError(t, err)
+
+	err = hsm.MachineTransition(branch2, func(d *hsmtest.Data) (hsm.TransitionOutput, error) {
+		d.SetState(hsmtest.State2)
+		return hsm.TransitionOutput{}, nil
+	})
+	require.NoError(t, err)
+
+	err = branch1.DeleteChild(hsm.Key{Type: def1.Type(), ID: "b1child"})
+	require.NoError(t, err)
+	err = branch2.DeleteChild(hsm.Key{Type: def1.Type(), ID: "b2child"})
+	require.NoError(t, err)
+
+	require.Empty(t, b1child.Outputs())
+	require.Empty(t, b2child.Outputs())
+
+	branch1Outputs := branch1.Outputs()
+	require.NotEmpty(t, branch1Outputs)
+	branch2Outputs := branch2.Outputs()
+	require.NotEmpty(t, branch2Outputs)
 }
