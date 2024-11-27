@@ -39,6 +39,13 @@ var RequestTimeout = dynamicconfig.NewDestinationDurationSetting(
 	`RequestTimeout is the timeout for making a single nexus start or cancel request.`,
 )
 
+var MinOperationTimeout = dynamicconfig.NewNamespaceDurationSetting(
+	"componenet.nexusoperations.limit.operation.timeout.min",
+	0,
+	`MinOperationTimeout is the minimum time remaining for an operation to complete for the server to make
+RPCs. If the remaining operation timeout is less than this value, a non-retryable timeout error will be returned.`,
+)
+
 var MaxConcurrentOperations = dynamicconfig.NewNamespaceIntSetting(
 	"component.nexusoperations.limit.operation.concurrency",
 	// Temporary limit due to a persistence limitation, this will be increased when we change persistence to accept
@@ -136,6 +143,7 @@ var RetryPolicyMaximumInterval = dynamicconfig.NewGlobalDurationSetting(
 type Config struct {
 	Enabled                            dynamicconfig.BoolPropertyFn
 	RequestTimeout                     dynamicconfig.DurationPropertyFnWithDestinationFilter
+	MinOperationTimeout                dynamicconfig.DurationPropertyFnWithNamespaceFilter
 	MaxConcurrentOperations            dynamicconfig.IntPropertyFnWithNamespaceFilter
 	MaxServiceNameLength               dynamicconfig.IntPropertyFnWithNamespaceFilter
 	MaxOperationNameLength             dynamicconfig.IntPropertyFnWithNamespaceFilter
@@ -152,6 +160,7 @@ func ConfigProvider(dc *dynamicconfig.Collection) *Config {
 	return &Config{
 		Enabled:                            dynamicconfig.EnableNexus.Get(dc),
 		RequestTimeout:                     RequestTimeout.Get(dc),
+		MinOperationTimeout:                MinOperationTimeout.Get(dc),
 		MaxConcurrentOperations:            MaxConcurrentOperations.Get(dc),
 		MaxServiceNameLength:               MaxServiceNameLength.Get(dc),
 		MaxOperationNameLength:             MaxOperationNameLength.Get(dc),

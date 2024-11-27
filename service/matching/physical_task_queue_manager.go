@@ -425,8 +425,8 @@ func (c *physicalTaskQueueManagerImpl) DispatchNexusTask(
 ) (*matchingservice.DispatchNexusTaskResponse, error) {
 	deadline, _ := ctx.Deadline() // If not set by user, our client will set a default.
 	var opDeadline time.Time
-	if headers := nexus.Header(request.GetRequest().GetHeader()); headers != nil {
-		if opTimeoutHeader := headers.Get(nexus.HeaderOperationTimeout); opTimeoutHeader != "" {
+	if header := nexus.Header(request.GetRequest().GetHeader()); header != nil {
+		if opTimeoutHeader := header.Get(nexus.HeaderOperationTimeout); opTimeoutHeader != "" {
 			opTimeout, err := time.ParseDuration(opTimeoutHeader)
 			if err != nil {
 				// Operation-Timeout header is not required so don't fail request on parsing errors.
