@@ -48,9 +48,10 @@ type (
 	}
 	// nexusTaskInfo contains the info for a nexus task
 	nexusTaskInfo struct {
-		taskID   string
-		deadline time.Time
-		request  *matchingservice.DispatchNexusTaskRequest
+		taskID            string
+		deadline          time.Time
+		operationDeadline time.Time
+		request           *matchingservice.DispatchNexusTaskRequest
 	}
 	// startedTaskInfo contains info for any task received from
 	// another matching host. This type of task is already marked as started
@@ -141,13 +142,15 @@ func newInternalQueryTask(
 func newInternalNexusTask(
 	taskID string,
 	deadline time.Time,
+	operationDeadline time.Time,
 	request *matchingservice.DispatchNexusTaskRequest,
 ) *internalTask {
 	return &internalTask{
 		nexus: &nexusTaskInfo{
-			taskID:   taskID,
-			deadline: deadline,
-			request:  request,
+			taskID:            taskID,
+			deadline:          deadline,
+			operationDeadline: operationDeadline,
+			request:           request,
 		},
 		forwardInfo: request.GetForwardInfo(),
 		responseC:   make(chan error, 1),
