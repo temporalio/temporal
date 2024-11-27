@@ -391,7 +391,7 @@ func (ti *TelemetryInterceptor) logErrors(
 		return
 	}
 
-	if !logAllErrors && isUserCaused(statusCode) {
+	if !logAllErrors && isRecordingNeeded(statusCode) {
 		return
 	}
 
@@ -408,7 +408,7 @@ func (ti *TelemetryInterceptor) logErrors(
 	ti.logger.Error("service failures", append(logTags, tag.Error(err))...)
 }
 
-func isUserCaused(statusCode codes.Code) bool {
+func isRecordingNeeded(statusCode codes.Code) bool {
 	switch statusCode {
 	case codes.InvalidArgument,
 		codes.AlreadyExists,
@@ -465,7 +465,7 @@ func recordMetrics(metricsHandler metrics.Handler, err error, statusCode codes.C
 		return
 	}
 
-	if !isUserCaused(statusCode) {
+	if !isRecordingNeeded(statusCode) {
 		metrics.ServiceFailures.With(metricsHandler).Record(1)
 	}
 }
