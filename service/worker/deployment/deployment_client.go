@@ -26,7 +26,10 @@ package deployment
 
 import (
 	"context"
+	"errors"
 	"time"
+
+	"go.temporal.io/api/serviceerror"
 
 	"github.com/pborman/uuid"
 	commonpb "go.temporal.io/api/common/v1"
@@ -214,6 +217,10 @@ func (d *DeploymentClientImpl) DescribeDeployment(ctx context.Context, namespace
 
 	res, err := d.HistoryClient.QueryWorkflow(ctx, req)
 	if err != nil {
+		var notFound *serviceerror.NotFound
+		if errors.As(err, &notFound) {
+			return nil, serviceerror.NewNotFound("Deployment not found")
+		}
 		return nil, err
 	}
 

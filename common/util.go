@@ -549,6 +549,7 @@ func CreateHistoryStartWorkflowRequest(
 		ContinuedFailure:         startRequest.ContinuedFailure,
 		LastCompletionResult:     startRequest.LastCompletionResult,
 		RootExecutionInfo:        rootExecutionInfo,
+		VersioningOverride:       startRequest.GetVersioningOverride(),
 	}
 	startRequest.ContinuedFailure = nil
 	startRequest.LastCompletionResult = nil
