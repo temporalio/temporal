@@ -24,13 +24,14 @@ package tests
 
 import (
 	"context"
+	"errors"
 
 	"github.com/google/uuid"
-	enumspb "go.temporal.io/api/enums/v1"
-	taskqueuepb "go.temporal.io/api/taskqueue/v1"
-
 	commonpb "go.temporal.io/api/common/v1"
+	enumspb "go.temporal.io/api/enums/v1"
 	nexuspb "go.temporal.io/api/nexus/v1"
+	"go.temporal.io/api/serviceerror"
+	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/converter"
 	"go.temporal.io/server/tests/testcore"
@@ -88,8 +89,9 @@ func (s *NexusTestBaseSuite) versionedNexusTaskPoller(ctx context.Context, taskQ
 			TaskToken: res.TaskToken,
 			Error:     handlerError,
 		})
-		// There's no clean way to propagate this error back to the test that's worthwhile. Panic is good enough.
-		if err != nil && ctx.Err() == nil {
+		// Ignore if context is already cancelled or if the task is not found.
+		if err != nil && ctx.Err() == nil && !errors.As(err, new(*serviceerror.NotFound)) {
+			// There's no clean way to propagate this error back to the test that's worthwhile. Panic is good enough.
 			panic(err)
 		}
 	} else if response != nil {
@@ -99,8 +101,9 @@ func (s *NexusTestBaseSuite) versionedNexusTaskPoller(ctx context.Context, taskQ
 			TaskToken: res.TaskToken,
 			Response:  response,
 		})
-		// There's no clean way to propagate this error back to the test that's worthwhile. Panic is good enough.
-		if err != nil && ctx.Err() == nil {
+		// Ignore if context is already cancelled or if the task is not found.
+		if err != nil && ctx.Err() == nil && !errors.As(err, new(*serviceerror.NotFound)) {
+			// There's no clean way to propagate this error back to the test that's worthwhile. Panic is good enough.
 			panic(err)
 		}
 	}

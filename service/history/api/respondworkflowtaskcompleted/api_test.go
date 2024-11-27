@@ -28,11 +28,13 @@ import (
 	"context"
 	"errors"
 	"maps"
+	"strconv"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	commandpb "go.temporal.io/api/command/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	protocolpb "go.temporal.io/api/protocol/v1"
@@ -159,7 +161,6 @@ func (s *WorkflowTaskCompletedHandlerSuite) TestUpdateWorkflow() {
 
 	createWrittenHistoryCh := func(expectedUpdateWorkflowExecutionCalls int) <-chan []*historypb.HistoryEvent {
 		writtenHistoryCh := make(chan []*historypb.HistoryEvent, expectedUpdateWorkflowExecutionCalls)
-		var historyEvents []*historypb.HistoryEvent
 		s.mockExecutionMgr.EXPECT().UpdateWorkflowExecution(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, request *persistence.UpdateWorkflowExecutionRequest) (*persistence.UpdateWorkflowExecutionResponse, error) {
 			var wfEvents []*persistence.WorkflowEvents
 			if len(request.UpdateWorkflowEvents) > 0 {
@@ -168,6 +169,7 @@ func (s *WorkflowTaskCompletedHandlerSuite) TestUpdateWorkflow() {
 				wfEvents = request.NewWorkflowEvents
 			}
 
+			var historyEvents []*historypb.HistoryEvent
 			for _, uwe := range wfEvents {
 				for _, event := range uwe.Events {
 					historyEvents = append(historyEvents, event)
@@ -187,10 +189,13 @@ func (s *WorkflowTaskCompletedHandlerSuite) TestUpdateWorkflow() {
 		wfContext := s.createStartedWorkflow(tv)
 		writtenHistoryCh := createWrittenHistoryCh(1)
 
+		_, err := wfContext.LoadMutableState(context.Background(), s.workflowTaskCompletedHandler.shardContext)
+		s.NoError(err)
+
 		updRequestMsg, upd, serializedTaskToken := s.createSentUpdate(tv, "1", wfContext)
 		s.NotNil(upd)
 
-		_, err := s.workflowTaskCompletedHandler.Invoke(context.Background(), &historyservice.RespondWorkflowTaskCompletedRequest{
+		_, err = s.workflowTaskCompletedHandler.Invoke(context.Background(), &historyservice.RespondWorkflowTaskCompletedRequest{
 			NamespaceId: tv.NamespaceID().String(),
 			CompleteRequest: &workflowservice.RespondWorkflowTaskCompletedRequest{
 				TaskToken: serializedTaskToken,
@@ -338,6 +343,129 @@ func (s *WorkflowTaskCompletedHandlerSuite) TestUpdateWorkflow() {
   7 WorkflowTaskScheduled
   8 WorkflowTaskStarted`, <-writtenHistoryCh)
 	})
+
+	s.Run("Discard speculative WFT with events", func() {
+		tv := testvars.New(s.T())
+		tv = tv.WithRunID(tv.Any().RunID())
+		s.mockNamespaceCache.EXPECT().GetNamespaceByID(tv.NamespaceID()).Return(tv.Namespace(), nil).AnyTimes()
+		wfContext := s.createStartedWorkflow(tv)
+		// Expect only 2 calls to UpdateWorkflowExecution: for timer started and timer fired events but not Update or WFT events.
+		writtenHistoryCh := createWrittenHistoryCh(2)
+		ms, err := wfContext.LoadMutableState(context.Background(), s.workflowTaskCompletedHandler.shardContext)
+		s.NoError(err)
+
+		_, _, err = ms.AddTimerStartedEvent(
+			1,
+			&commandpb.StartTimerCommandAttributes{
+				TimerId:            tv.TimerID(),
+				StartToFireTimeout: tv.InfiniteTimeout(),
+			},
+		)
+		s.NoError(err)
+		err = wfContext.UpdateWorkflowExecutionAsActive(context.Background(), s.workflowTaskCompletedHandler.shardContext)
+		s.NoError(err)
+
+		s.EqualHistoryEvents(`
+  2 TimerStarted
+`, <-writtenHistoryCh)
+
+		updRequestMsg, upd, serializedTaskToken := s.createSentUpdate(tv, "1", wfContext)
+		s.NotNil(upd)
+
+		_, err = s.workflowTaskCompletedHandler.Invoke(context.Background(), &historyservice.RespondWorkflowTaskCompletedRequest{
+			NamespaceId: tv.NamespaceID().String(),
+			CompleteRequest: &workflowservice.RespondWorkflowTaskCompletedRequest{
+				TaskToken: serializedTaskToken,
+				Messages:  s.UpdateRejectMessages(tv, updRequestMsg, "1"),
+				Identity:  tv.Any().String(),
+				Capabilities: &workflowservice.RespondWorkflowTaskCompletedRequest_Capabilities{
+					DiscardSpeculativeWorkflowTaskWithEvents: true,
+				},
+			},
+		})
+		s.NoError(err)
+
+		updStatus, err := upd.WaitLifecycleStage(context.Background(), enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_UNSPECIFIED, time.Duration(0))
+		s.NoError(err)
+		s.Equal(enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED.String(), updStatus.Stage.String())
+		s.Equal("rejection-of-"+tv.UpdateID("1"), updStatus.Outcome.GetFailure().GetMessage())
+
+		ms, err = wfContext.LoadMutableState(context.Background(), s.workflowTaskCompletedHandler.shardContext)
+		s.NoError(err)
+		_, err = ms.AddTimerFiredEvent(tv.TimerID())
+		s.NoError(err)
+		err = wfContext.UpdateWorkflowExecutionAsActive(context.Background(), s.workflowTaskCompletedHandler.shardContext)
+		s.NoError(err)
+
+		s.EqualHistoryEvents(`
+  3 TimerFired // No WFT events in between 2 and 3.
+`, <-writtenHistoryCh)
+	})
+
+	s.Run("Do not discard speculative WFT with more than 10 events", func() {
+		tv := testvars.New(s.T())
+		tv = tv.WithRunID(tv.Any().RunID())
+		s.mockNamespaceCache.EXPECT().GetNamespaceByID(tv.NamespaceID()).Return(tv.Namespace(), nil).AnyTimes()
+		wfContext := s.createStartedWorkflow(tv)
+		// Expect 2 calls to UpdateWorkflowExecution: for timer started and WFT events.
+		writtenHistoryCh := createWrittenHistoryCh(2)
+		ms, err := wfContext.LoadMutableState(context.Background(), s.workflowTaskCompletedHandler.shardContext)
+		s.NoError(err)
+
+		for i := 0; i < 11; i++ {
+			_, _, err = ms.AddTimerStartedEvent(
+				1,
+				&commandpb.StartTimerCommandAttributes{
+					TimerId:            tv.TimerID(strconv.Itoa(i)),
+					StartToFireTimeout: tv.InfiniteTimeout(),
+				},
+			)
+			s.NoError(err)
+		}
+		err = wfContext.UpdateWorkflowExecutionAsActive(context.Background(), s.workflowTaskCompletedHandler.shardContext)
+		s.NoError(err)
+
+		s.EqualHistoryEvents(`
+  2 TimerStarted
+  3 TimerStarted
+  4 TimerStarted
+  5 TimerStarted
+  6 TimerStarted
+  7 TimerStarted
+  8 TimerStarted
+  9 TimerStarted
+ 10 TimerStarted
+ 11 TimerStarted
+ 12 TimerStarted
+`, <-writtenHistoryCh)
+
+		updRequestMsg, upd, serializedTaskToken := s.createSentUpdate(tv, "1", wfContext)
+		s.NotNil(upd)
+
+		_, err = s.workflowTaskCompletedHandler.Invoke(context.Background(), &historyservice.RespondWorkflowTaskCompletedRequest{
+			NamespaceId: tv.NamespaceID().String(),
+			CompleteRequest: &workflowservice.RespondWorkflowTaskCompletedRequest{
+				TaskToken: serializedTaskToken,
+				Messages:  s.UpdateRejectMessages(tv, updRequestMsg, "1"),
+				Identity:  tv.Any().String(),
+				Capabilities: &workflowservice.RespondWorkflowTaskCompletedRequest_Capabilities{
+					DiscardSpeculativeWorkflowTaskWithEvents: true,
+				},
+			},
+		})
+		s.NoError(err)
+
+		updStatus, err := upd.WaitLifecycleStage(context.Background(), enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_UNSPECIFIED, time.Duration(0))
+		s.NoError(err)
+		s.Equal(enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED.String(), updStatus.Stage.String())
+		s.Equal("rejection-of-"+tv.UpdateID("1"), updStatus.Outcome.GetFailure().GetMessage())
+
+		s.EqualHistoryEvents(`
+ 13 WorkflowTaskScheduled // WFT events were created even if it was a rejection (because number of events > 10). 
+ 14 WorkflowTaskStarted
+ 15 WorkflowTaskCompleted
+`, <-writtenHistoryCh)
+	})
 }
 
 func (s *WorkflowTaskCompletedHandlerSuite) TestHandleBufferedQueries() {
@@ -420,7 +548,7 @@ func (s *WorkflowTaskCompletedHandlerSuite) createStartedWorkflow(tv *testvars.T
 		WorkflowExecutionTimeout: durationpb.New(tv.InfiniteTimeout().AsDuration()),
 		WorkflowRunTimeout:       durationpb.New(tv.InfiniteTimeout().AsDuration()),
 		WorkflowTaskTimeout:      durationpb.New(tv.InfiniteTimeout().AsDuration()),
-		Identity:                 tv.Any().String(),
+		Identity:                 tv.ClientIdentity(),
 	}
 
 	_, _ = ms.AddWorkflowExecutionStartedEvent(
@@ -485,7 +613,7 @@ func (s *WorkflowTaskCompletedHandlerSuite) createSentUpdate(tv *testvars.TestVa
 	s.NoError(err)
 
 	// 2. Create update.
-	upd, alreadyExisted, err := wfContext.UpdateRegistry(ctx, nil).FindOrCreate(ctx, tv.UpdateID(updateID))
+	upd, alreadyExisted, err := wfContext.UpdateRegistry(ctx).FindOrCreate(ctx, tv.UpdateID(updateID))
 	s.False(alreadyExisted)
 	s.NoError(err)
 

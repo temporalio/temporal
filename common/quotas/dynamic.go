@@ -25,7 +25,8 @@
 package quotas
 
 import (
-	"go.uber.org/atomic"
+	"math"
+	"sync/atomic"
 )
 
 type (
@@ -57,8 +58,8 @@ type (
 
 	// MutableRateBurstImpl stores the dynamic rate & burst for rate limiter
 	MutableRateBurstImpl struct {
-		rate  *atomic.Float64
-		burst *atomic.Int64
+		rate  atomic.Uint64
+		burst atomic.Int64
 	}
 
 	MutableRateBurst interface {
@@ -129,14 +130,15 @@ func NewMutableRateBurst(
 	rate float64,
 	burst int,
 ) *MutableRateBurstImpl {
-	return &MutableRateBurstImpl{
-		rate:  atomic.NewFloat64(rate),
-		burst: atomic.NewInt64(int64(burst)),
-	}
+	d := &MutableRateBurstImpl{}
+	d.SetRPS(rate)
+	d.SetBurst(burst)
+
+	return d
 }
 
 func (d *MutableRateBurstImpl) SetRPS(rate float64) {
-	d.rate.Store(rate)
+	d.rate.Store(math.Float64bits(rate))
 }
 
 func (d *MutableRateBurstImpl) SetBurst(burst int) {
@@ -144,7 +146,7 @@ func (d *MutableRateBurstImpl) SetBurst(burst int) {
 }
 
 func (d *MutableRateBurstImpl) Rate() float64 {
-	return d.rate.Load()
+	return math.Float64frombits(d.rate.Load())
 }
 
 func (d *MutableRateBurstImpl) Burst() int {

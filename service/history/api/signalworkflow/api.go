@@ -90,7 +90,7 @@ func Invoke(
 			executionInfo := mutableState.GetExecutionInfo()
 
 			// Do not create workflow task when the workflow has first workflow task backoff and execution is not started yet
-			createWorkflowTask := !mutableState.IsWorkflowPendingOnWorkflowTaskBackoff() && !request.GetSkipGenerateWorkflowTask()
+			createWorkflowTask := !mutableState.IsWorkflowPendingOnWorkflowTaskBackoff()
 
 			if childWorkflowOnly {
 				parentWorkflowID := executionInfo.ParentWorkflowId
@@ -110,7 +110,6 @@ func Invoke(
 				request.GetInput(),
 				request.GetIdentity(),
 				request.GetHeader(),
-				request.GetSkipGenerateWorkflowTask(),
 				externalWorkflowExecution,
 				request.GetLinks(),
 			)

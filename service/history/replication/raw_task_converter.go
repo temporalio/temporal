@@ -193,6 +193,10 @@ func convertActivityStateReplicationTask(
 						LastStartedRedirectCounter: activityInfo.GetUseWorkflowBuildIdInfo().GetLastRedirectCounter(),
 						BaseExecutionInfo:          persistence.CopyBaseWorkflowInfo(mutableState.GetBaseWorkflowInfo()),
 						VersionHistory:             versionhistory.CopyVersionHistory(currentVersionHistory),
+						FirstScheduledTime:         activityInfo.FirstScheduledTime,
+						LastAttemptCompleteTime:    activityInfo.LastAttemptCompleteTime,
+						Stamp:                      activityInfo.Stamp,
+						Paused:                     activityInfo.Paused,
 					},
 				},
 				VisibilityTime: timestamppb.New(taskInfo.VisibilityTimestamp),
@@ -694,6 +698,9 @@ func (c *syncVersionedTransitionTaskConverter) convert(
 		Attributes: &replicationspb.ReplicationTask_SyncVersionedTransitionTaskAttributes{
 			SyncVersionedTransitionTaskAttributes: &replicationspb.SyncVersionedTransitionTaskAttributes{
 				VersionedTransitionArtifact: result.VersionedTransitionArtifact,
+				NamespaceId:                 taskInfo.NamespaceID,
+				WorkflowId:                  taskInfo.WorkflowID,
+				RunId:                       taskInfo.RunID,
 			},
 		},
 		VersionedTransition: taskInfo.VersionedTransition,
@@ -713,7 +720,7 @@ func (c *syncVersionedTransitionTaskConverter) generateVerifyVersionedTransition
 		mutableState.GetExecutionInfo().VersionHistories,
 		versionhistory.NewVersionHistoryItem(
 			taskInfo.FirstEventID,
-			taskInfo.VersionedTransition.NamespaceFailoverVersion,
+			taskInfo.FirstEventVersion,
 		),
 	)
 	if err != nil {
@@ -747,7 +754,7 @@ func (c *syncVersionedTransitionTaskConverter) generateBackfillHistoryTask(
 		c.shardContext,
 		c.shardID,
 		definition.NewWorkflowKey(taskInfo.NamespaceID, taskInfo.WorkflowID, taskInfo.RunID),
-		taskInfo.VersionedTransition.NamespaceFailoverVersion,
+		taskInfo.FirstEventVersion,
 		taskInfo.FirstEventID,
 		taskInfo.NextEventID,
 		taskInfo.NewRunID,

@@ -49,6 +49,7 @@ import (
 	"go.temporal.io/server/common/namespace/nsregistry"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/internal/effect"
+	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tests"
@@ -109,7 +110,7 @@ func TestCommandProtocolMessage(t *testing.T) {
 			out.ms,
 			out.updates,
 			&effects,
-			newCommandAttrValidator(
+			api.NewCommandAttrValidator(
 				nsReg,
 				config,
 				nil, // searchAttributesValidator

@@ -49,6 +49,9 @@ message TaskInfo {
     // How this task should be directed. (Missing means the default for
     // TaskVersionDirective, which is unversioned.)
     temporal.server.api.taskqueue.v1.TaskVersionDirective version_directive = 8;
+
+    // Stamp field allows to differentiate between different instances of the same task
+    int32 stamp = 9;
 }
 
 // task_queue column

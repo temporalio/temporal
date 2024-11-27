@@ -92,10 +92,6 @@ const (
 
 type (
 	TemporalImpl struct {
-		// TODO: this is only used to refresh pernsworkermanager, we can get rid of this after
-		// it uses dynamic config subscriptions.
-		workerServices []*worker.Service
-
 		fxApps []*fx.App
 
 		// This is used to wait for namespace registries to have noticed a change in some xdc tests.
@@ -385,10 +381,6 @@ func (c *TemporalImpl) WorkerServiceAddresses() []string {
 	return c.makeGRPCAddresses(c.workerConfig.NumWorkers, workerPort)
 }
 
-func (c *TemporalImpl) WorkerServices() []*worker.Service {
-	return c.workerServices
-}
-
 func (c *TemporalImpl) AdminClient() adminservice.AdminServiceClient {
 	return c.adminClient
 }
@@ -636,7 +628,6 @@ func (c *TemporalImpl) startWorker() {
 
 	for _, host := range c.hostsByService[serviceName].All {
 		logger := log.With(c.logger, tag.Host(host))
-		var workerService *worker.Service
 		app := fx.New(
 			fx.Supply(
 				c.copyPersistenceConfig(),
@@ -670,7 +661,6 @@ func (c *TemporalImpl) startWorker() {
 			fx.Supply(c.spanExporters),
 			temporal.ServiceTracingModule,
 			worker.Module,
-			fx.Populate(&workerService),
 			temporal.FxLogAdapter,
 			c.getFxOptionsForService(primitives.WorkerService),
 		)
@@ -680,7 +670,6 @@ func (c *TemporalImpl) startWorker() {
 		}
 
 		c.fxApps = append(c.fxApps, app)
-		c.workerServices = append(c.workerServices, workerService)
 		if err := app.Start(context.Background()); err != nil {
 			logger.Fatal("unable to start worker service", tag.Error(err))
 		}

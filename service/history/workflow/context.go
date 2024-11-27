@@ -152,7 +152,7 @@ type (
 			transactionPolicy TransactionPolicy,
 		) error
 		// TODO (alex-update): move this from workflow context.
-		UpdateRegistry(ctx context.Context, ms MutableState) update.Registry
+		UpdateRegistry(ctx context.Context) update.Registry
 	}
 )
 
@@ -741,18 +741,57 @@ func (c *ContextImpl) mergeUpdateWithNewReplicationTasks(
 	// so that they can be applied transactionally in the standby cluster.
 	// TODO: this logic should be more generic so that the first replication task
 	// in the new run doesn't have to be HistoryReplicationTask
-	newRunTask := newWorkflowSnapshot.Tasks[tasks.CategoryReplication][0].(*tasks.HistoryReplicationTask)
+	var newRunBranchToken []byte
+	var newRunID string
+	newRunTask := newWorkflowSnapshot.Tasks[tasks.CategoryReplication][0]
 	delete(newWorkflowSnapshot.Tasks, tasks.CategoryReplication)
 
-	newRunBranchToken := newRunTask.BranchToken
-	newRunID := newRunTask.RunID
+	switch task := newRunTask.(type) {
+	case *tasks.HistoryReplicationTask:
+		// Handle HistoryReplicationTask specifically
+		newRunBranchToken = task.BranchToken
+		newRunID = task.RunID
+	case *tasks.SyncVersionedTransitionTask:
+		// Handle SyncVersionedTransitionTask specifically
+		newRunID = task.RunID
+	default:
+		// Handle unexpected types or log an error if this case is not expected
+		return serviceerror.NewInternal(fmt.Sprintf("unexpected replication task type for new run task %T", newRunTask))
+	}
 	taskUpdated := false
+
+	updateTask := func(task interface{}) bool {
+		switch t := task.(type) {
+		case *tasks.HistoryReplicationTask:
+			t.NewRunBranchToken = newRunBranchToken
+			t.NewRunID = newRunID
+			return true
+		case *tasks.SyncVersionedTransitionTask:
+			t.NewRunID = newRunID
+			taskEquivalents := t.TaskEquivalents
+			taskEquivalentsUpdated := false
+			for idx := len(taskEquivalents) - 1; idx >= 0; idx-- {
+				// For state based, we should update a sync versioned transition task and update a history task inside task equivalent.
+				if historyTask, ok := taskEquivalents[idx].(*tasks.HistoryReplicationTask); ok {
+					historyTask.NewRunBranchToken = newRunBranchToken
+					historyTask.NewRunID = newRunID
+					taskEquivalentsUpdated = true
+					break
+				}
+			}
+			if !taskEquivalentsUpdated {
+				c.logger.Error("SyncVersionedTransitionTask has no HistoryReplicationTask equivalent to update")
+			}
+			return taskEquivalentsUpdated
+		default:
+		}
+		return false
+	}
+
 	for idx := numCurrentReplicationTasks - 1; idx >= 0; idx-- {
 		replicationTask := currentWorkflowMutation.Tasks[tasks.CategoryReplication][idx]
-		if task, ok := replicationTask.(*tasks.HistoryReplicationTask); ok {
+		if updateTask(replicationTask) {
 			taskUpdated = true
-			task.NewRunBranchToken = newRunBranchToken
-			task.NewRunID = newRunID
 			break
 		}
 	}
@@ -915,26 +954,17 @@ func (c *ContextImpl) RefreshTasks(
 	return c.UpdateWorkflowExecutionAsPassive(ctx, shardContext)
 }
 
-// TODO: remove `fallbackMutableState` parameter again (added since it's not possible to initialize a new Context with a specific MutableState)
-func (c *ContextImpl) UpdateRegistry(ctx context.Context, fallbackMutableState MutableState) update.Registry {
-	ms := c.MutableState
-	if ms == nil {
-		if fallbackMutableState == nil {
-			panic("both c.MutableState and fallbackMutableState are nil")
-		}
-		ms = fallbackMutableState
-	}
-
-	if c.updateRegistry != nil && c.updateRegistry.FailoverVersion() != ms.GetCurrentVersion() {
+func (c *ContextImpl) UpdateRegistry(ctx context.Context) update.Registry {
+	if c.updateRegistry != nil && c.updateRegistry.FailoverVersion() != c.MutableState.GetCurrentVersion() {
 		c.updateRegistry.Clear()
 		c.updateRegistry = nil
 	}
 
 	if c.updateRegistry == nil {
-		nsIDStr := ms.GetNamespaceEntry().ID().String()
+		nsIDStr := c.MutableState.GetNamespaceEntry().ID().String()
 
 		c.updateRegistry = update.NewRegistry(
-			ms,
+			c.MutableState,
 			update.WithLogger(c.logger),
 			update.WithMetrics(c.metricsHandler),
 			update.WithTracerProvider(trace.SpanFromContext(ctx).TracerProvider()),
@@ -1079,7 +1109,7 @@ func (c *ContextImpl) forceTerminateWorkflow(
 	// Abort updates before clearing context.
 	// MS is not persisted yet, but this code is executed only when something
 	// really bad happened with workflow, and it won't make any progress anyway.
-	c.UpdateRegistry(ctx, nil).Abort(update.AbortReasonWorkflowCompleted)
+	c.UpdateRegistry(ctx).Abort(update.AbortReasonWorkflowCompleted)
 
 	// Discard pending changes in MutableState so we can apply terminate state transition
 	c.Clear()

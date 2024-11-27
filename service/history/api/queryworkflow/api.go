@@ -97,7 +97,11 @@ func Invoke(
 	if err != nil {
 		return nil, err
 	}
-	defer func() { workflowLease.GetReleaseFn()(retError) }()
+	defer func() {
+		// Do not clear mutable state when query failed. Clear mutable state will fail other buffered pending queries.
+		// Note: QueryWorkflow should not alter mutable state, so it is safe to ignore error and not clear ms.
+		workflowLease.GetReleaseFn()(nil)
+	}()
 
 	req := request.GetRequest()
 	_, mutableStateStatus := workflowLease.GetMutableState().GetWorkflowStateStatus()

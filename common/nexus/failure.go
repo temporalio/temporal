@@ -181,7 +181,7 @@ func ConvertGRPCError(err error, exposeDetails bool) error {
 		if !exposeDetails {
 			errMessage = "request timeout"
 		}
-		return nexus.HandlerErrorf(nexus.HandlerErrorTypeDownstreamTimeout, errMessage)
+		return nexus.HandlerErrorf(nexus.HandlerErrorTypeUpstreamTimeout, errMessage) //nolint:govet
 	case codes.OK:
 		return nil
 	}
@@ -219,8 +219,8 @@ func HandlerErrorTypeFromHTTPStatus(statusCode int) nexus.HandlerErrorType {
 		return nexus.HandlerErrorTypeNotImplemented
 	case http.StatusServiceUnavailable:
 		return nexus.HandlerErrorTypeUnavailable
-	case nexus.StatusDownstreamTimeout:
-		return nexus.HandlerErrorTypeDownstreamTimeout
+	case nexus.StatusUpstreamTimeout:
+		return nexus.HandlerErrorTypeUpstreamTimeout
 	default:
 		return nexus.HandlerErrorTypeInternal
 	}

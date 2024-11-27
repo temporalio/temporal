@@ -33,6 +33,7 @@ import (
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/service/history/api"
+	"go.temporal.io/server/service/history/circuitbreakerpool"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/replication"
@@ -66,6 +67,7 @@ type (
 		TaskCategoryRegistry            tasks.TaskCategoryRegistry
 		ReplicationDLQWriter            replication.DLQWriter
 		CommandHandlerRegistry          *workflow.CommandHandlerRegistry
+		OutboundQueueCBPool             *circuitbreakerpool.OutboundQueueCircuitBreakerPool
 	}
 
 	historyEngineFactory struct {
@@ -105,5 +107,6 @@ func (f *historyEngineFactory) CreateEngine(
 		f.TaskCategoryRegistry,
 		f.ReplicationDLQWriter,
 		f.CommandHandlerRegistry,
+		f.OutboundQueueCBPool,
 	)
 }

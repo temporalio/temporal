@@ -32,6 +32,7 @@ import (
 	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
+	"go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/api/adminservice/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
@@ -332,15 +333,24 @@ func (e *ExecutableTaskImpl) Resend(
 		return false, ErrResendAttemptExceeded
 	}
 
+	var namespaceName string
+	item := e.namespace.Load()
+	if item != nil {
+		namespaceName = item.(namespace.Name).String()
+	}
 	metrics.ClientRequests.With(e.MetricsHandler).Record(
 		1,
 		metrics.OperationTag(e.metricsTag+"Resend"),
+		metrics.NamespaceTag(namespaceName),
+		metrics.ServiceRoleTag(metrics.HistoryRoleTagValue),
 	)
 	startTime := time.Now().UTC()
 	defer func() {
 		metrics.ClientLatency.With(e.MetricsHandler).Record(
 			time.Since(startTime),
 			metrics.OperationTag(e.metricsTag+"Resend"),
+			metrics.NamespaceTag(namespaceName),
+			metrics.ServiceRoleTag(metrics.HistoryRoleTagValue),
 		)
 	}()
 	var resendErr error
@@ -584,6 +594,9 @@ func (e *ExecutableTaskImpl) GetNamespaceInfo(
 	}
 
 	e.namespace.Store(namespaceEntry.Name())
+	if namespaceEntry.State() == enums.NAMESPACE_STATE_DELETED {
+		return namespaceEntry.Name().String(), false, nil
+	}
 	shouldProcessTask := false
 FilterLoop:
 	for _, targetCluster := range namespaceEntry.ClusterNames() {
@@ -620,7 +633,7 @@ func (e *ExecutableTaskImpl) MarkPoisonPill() error {
 		tag.SourceShardID(e.sourceShardKey.ShardID),
 		tag.WorkflowNamespaceID(e.replicationTask.RawTaskInfo.NamespaceId),
 		tag.WorkflowID(e.replicationTask.RawTaskInfo.WorkflowId),
-		tag.WorkflowRunID(e.replicationTask.RawTaskInfo.NamespaceId),
+		tag.WorkflowRunID(e.replicationTask.RawTaskInfo.RunId),
 		tag.TaskID(e.taskID),
 		tag.SourceCluster(e.SourceClusterName()),
 		tag.ReplicationTask(taskInfo),

@@ -495,6 +495,20 @@ func (c *metricClient) PatchSchedule(
 	return c.client.PatchSchedule(ctx, request, opts...)
 }
 
+func (c *metricClient) PauseActivityById(
+	ctx context.Context,
+	request *workflowservice.PauseActivityByIdRequest,
+	opts ...grpc.CallOption,
+) (_ *workflowservice.PauseActivityByIdResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, "FrontendClientPauseActivityById")
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.PauseActivityById(ctx, request, opts...)
+}
+
 func (c *metricClient) PollActivityTaskQueue(
 	ctx context.Context,
 	request *workflowservice.PollActivityTaskQueueRequest,
@@ -619,6 +633,20 @@ func (c *metricClient) RequestCancelWorkflowExecution(
 	}()
 
 	return c.client.RequestCancelWorkflowExecution(ctx, request, opts...)
+}
+
+func (c *metricClient) ResetActivityById(
+	ctx context.Context,
+	request *workflowservice.ResetActivityByIdRequest,
+	opts ...grpc.CallOption,
+) (_ *workflowservice.ResetActivityByIdResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, "FrontendClientResetActivityById")
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.ResetActivityById(ctx, request, opts...)
 }
 
 func (c *metricClient) ResetStickyTaskQueue(
@@ -927,6 +955,20 @@ func (c *metricClient) TerminateWorkflowExecution(
 	}()
 
 	return c.client.TerminateWorkflowExecution(ctx, request, opts...)
+}
+
+func (c *metricClient) UnpauseActivityById(
+	ctx context.Context,
+	request *workflowservice.UnpauseActivityByIdRequest,
+	opts ...grpc.CallOption,
+) (_ *workflowservice.UnpauseActivityByIdResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, "FrontendClientUnpauseActivityById")
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.UnpauseActivityById(ctx, request, opts...)
 }
 
 func (c *metricClient) UpdateActivityOptionsById(
