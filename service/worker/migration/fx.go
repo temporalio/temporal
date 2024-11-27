@@ -30,16 +30,16 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	sdkworker "go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
-	"go.temporal.io/server/common/headers"
-	"go.temporal.io/server/common/primitives"
 	"go.uber.org/fx"
 
 	serverClient "go.temporal.io/server/client"
 	"go.temporal.io/server/common/config"
+	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/resource"
 	workercommon "go.temporal.io/server/service/worker/common"
 )
