@@ -144,7 +144,8 @@ func Invoke(
 				// For versioned workflows we additionally check for the poller queue to not be a sticky queue itself.
 				// Although it's ideal to check this for unversioned workflows as well, we can't rely on older clients
 				// setting the poller TQ kind.
-				if (mutableState.GetAssignedBuildId() != "" || mutableState.GetEffectiveDeployment() != nil) &&
+				if (mutableState.GetAssignedBuildId() != "" ||
+					mutableState.GetEffectiveVersioningBehavior() != enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED) &&
 					pollerTaskQueue.Kind == enumspb.TASK_QUEUE_KIND_STICKY {
 					return nil, serviceerrors.NewObsoleteDispatchBuildId("wrong sticky queue")
 				}
@@ -153,10 +154,16 @@ func Invoke(
 				mutableState.ClearStickyTaskQueue()
 			}
 
-			if currentTaskQueue.Kind != pollerTaskQueue.Kind &&
-				// Older SDKs might not specify poller task queue kind
-				pollerTaskQueue.Kind != enumspb.TASK_QUEUE_KIND_UNSPECIFIED {
+			if currentTaskQueue.Kind == enumspb.TASK_QUEUE_KIND_NORMAL &&
+				pollerTaskQueue.Kind == enumspb.TASK_QUEUE_KIND_STICKY {
+				// A poll from a sticky queue while the workflow's task queue is not yet sticky
+				// should be rejected. This means the task was a stale task on the matching queue.
 				// Matching can drop the task, newer one should be scheduled already.
+				// Note that the other way around is not true: a poll from a normal task is valid
+				// even if the workflow's queue is sticky. It could be that the transfer task had to
+				// be scheduled in the normal task because matching returned a `StickyWorkerUnavailable`
+				// error. In that case, the mutable state is not updated at task transfer time until
+				// the workflow task starts on the normal queue, and we clear MS's sticky queue.
 				return nil, serviceerrors.NewObsoleteMatchingTask("wrong task queue type")
 			}
 
