@@ -213,7 +213,6 @@ func (e taskExecutor) executeInvocationTask(ctx context.Context, env hsm.Environ
 	if callTimeout < e.Config.MinOperationTimeout(ns.Name().String()) {
 		callErr = ErrOperationTimeoutBelowMin
 	} else {
-		// Make the call and record metrics.
 		rawResult, callErr = client.StartOperation(callCtx, args.operation, args.payload, nexus.StartOperationOptions{
 			Header:      header,
 			CallbackURL: callbackURL,
@@ -551,7 +550,6 @@ func (e taskExecutor) executeCancelationTask(ctx context.Context, env hsm.Enviro
 	if callTimeout < e.Config.MinOperationTimeout(ns.Name().String()) {
 		callErr = ErrOperationTimeoutBelowMin
 	} else {
-		// Make the call and record metrics.
 		callErr = handle.Cancel(callCtx, nexus.CancelOperationOptions{})
 	}
 
