@@ -416,13 +416,13 @@ func isUserCaused(statusCode codes.Code) bool {
 		codes.OutOfRange,
 		codes.PermissionDenied,
 		codes.Unauthenticated,
-		codes.NotFound:
+		codes.NotFound,
+		codes.ResourceExhausted:
 		return true
 	case codes.OK,
 		codes.Canceled,
 		codes.Unknown,
 		codes.DeadlineExceeded,
-		codes.ResourceExhausted,
 		codes.Aborted,
 		codes.Unimplemented,
 		codes.Internal,
