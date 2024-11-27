@@ -38,7 +38,6 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
-	replicationpb "go.temporal.io/api/replication/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
@@ -196,39 +195,6 @@ func (s *streamBasedReplicationTestSuite) TestReplicateHistoryEvents_ForceReplic
 	}
 }
 
-func (s *streamBasedReplicationTestSuite) updateNamespace(version int64) error {
-	client1 := s.cluster1.FrontendClient() // active
-	nsResp, err := client1.DescribeNamespace(context.Background(), &workflowservice.DescribeNamespaceRequest{
-		Namespace: s.namespaceName,
-	})
-	s.NoError(err)
-
-	for nsResp.GetFailoverVersion() < version {
-		_, err = client1.UpdateNamespace(context.Background(), &workflowservice.UpdateNamespaceRequest{
-			Namespace: s.namespaceName,
-			ReplicationConfig: &replicationpb.NamespaceReplicationConfig{
-				ActiveClusterName: s.clusterNames[1],
-			},
-		})
-		s.NoError(err)
-
-		_, err = client1.UpdateNamespace(context.Background(), &workflowservice.UpdateNamespaceRequest{
-			Namespace: s.namespaceName,
-			ReplicationConfig: &replicationpb.NamespaceReplicationConfig{
-				ActiveClusterName: s.clusterNames[0],
-			},
-		})
-		s.NoError(err)
-
-		nsResp, err = client1.DescribeNamespace(context.Background(), &workflowservice.DescribeNamespaceRequest{
-			Namespace: s.namespaceName,
-		})
-		s.NoError(err)
-	}
-
-	return nil
-}
-
 func (s *streamBasedReplicationTestSuite) importTestEvents(
 	historyClient historyservice.HistoryServiceClient,
 	namespaceName namespace.Name,
@@ -251,11 +217,6 @@ func (s *streamBasedReplicationTestSuite) importTestEvents(
 	}
 	var runID string
 	for _, version := range versions {
-		if s.enableTransitionHistory {
-			err := s.updateNamespace(version)
-			s.NoError(err)
-		}
-
 		workflowID := "xdc-stream-replication-test-" + uuid.New()
 		runID = uuid.New()
 
