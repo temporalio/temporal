@@ -31,6 +31,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -944,7 +945,7 @@ func (d *DeploymentSuite) TestStartWorkflowExecution_WithPinnedOverride() {
 		WorkflowType:       &commonpb.WorkflowType{Name: "test-wf-type"},
 		TaskQueue:          &taskqueuepb.TaskQueue{Name: "test-tq", Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		Identity:           "test-id1",
-		RequestId:          "test-request-id1",
+		RequestId:          uuid.New(),
 		VersioningOverride: override,
 	})
 
@@ -971,7 +972,7 @@ func (d *DeploymentSuite) TestStartWorkflowExecution_WithUnpinnedOverride() {
 		WorkflowType:       &commonpb.WorkflowType{Name: "test-wf-type"},
 		TaskQueue:          &taskqueuepb.TaskQueue{Name: "test-tq", Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		Identity:           "test-id2",
-		RequestId:          "test-request-id2",
+		RequestId:          uuid.New(),
 		VersioningOverride: override,
 	})
 
@@ -1005,7 +1006,7 @@ func (d *DeploymentSuite) TestSignalWithStartWorkflowExecution_WithPinnedOverrid
 		WorkflowType:       &commonpb.WorkflowType{Name: "test-wf-type"},
 		TaskQueue:          &taskqueuepb.TaskQueue{Name: "test-tq", Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		Identity:           "test-id3",
-		RequestId:          "test-request-id3",
+		RequestId:          uuid.New(),
 		SignalName:         "test-signal3",
 		SignalInput:        nil,
 		VersioningOverride: override,
@@ -1035,7 +1036,7 @@ func (d *DeploymentSuite) TestSignalWithStartWorkflowExecution_WithUnpinnedOverr
 		WorkflowType:       &commonpb.WorkflowType{Name: "test-wf-type"},
 		TaskQueue:          &taskqueuepb.TaskQueue{Name: "test-tq", Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		Identity:           "test-id4",
-		RequestId:          "test-request-id4",
+		RequestId:          uuid.New(),
 		SignalName:         "test-signal4",
 		SignalInput:        nil,
 		VersioningOverride: override,
