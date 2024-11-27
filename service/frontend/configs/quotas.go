@@ -111,7 +111,7 @@ var (
 		"/temporal.api.workflowservice.v1.WorkflowService/UnpauseActivityById":            2,
 		"/temporal.api.workflowservice.v1.WorkflowService/ResetActivityById":              2,
 		"/temporal.api.workflowservice.v1.WorkflowService/UpdateWorkflowExecutionOptions": 2,
-		"/temporal.api.workflowservice.v1.WorkflowService/SetCurrentDeployment":           3,
+		"/temporal.api.workflowservice.v1.WorkflowService/SetCurrentDeployment":           2,
 
 		// P3: Status Querying APIs
 		"/temporal.api.workflowservice.v1.WorkflowService/DescribeWorkflowExecution":     3,

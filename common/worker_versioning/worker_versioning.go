@@ -48,13 +48,16 @@ const (
 	buildIdSearchAttributePrefixVersioned   = "versioned"
 	buildIdSearchAttributePrefixUnversioned = "unversioned"
 	BuildIdSearchAttributeDelimiter         = ":"
+	BuildIdSearchAttributeEscape            = "|"
 	// UnversionedSearchAttribute is the sentinel value used to mark all unversioned workflows
 	UnversionedSearchAttribute = buildIdSearchAttributePrefixUnversioned
 )
 
-// escapeBuildIdSearchAttributeDelimiter is a helper which escapes the BuildIdSearchAttributeDelimiter character in the input string
-func escapeBuildIdSearchAttributeDelimiter(s string) string {
-	s = strings.Replace(s, BuildIdSearchAttributeDelimiter, `|`+BuildIdSearchAttributeDelimiter, -1)
+// EscapeChar is a helper which escapes the BuildIdSearchAttributeDelimiter character
+// in the input string
+func escapeChar(s string) string {
+	s = strings.Replace(s, BuildIdSearchAttributeEscape, BuildIdSearchAttributeEscape+BuildIdSearchAttributeEscape, -1)
+	s = strings.Replace(s, BuildIdSearchAttributeDelimiter, BuildIdSearchAttributeEscape+BuildIdSearchAttributeDelimiter, -1)
 	return s
 }
 
@@ -66,9 +69,9 @@ func PinnedBuildIdSearchAttribute(deployment *deploymentpb.Deployment) string {
 	return fmt.Sprintf("%s%s%s%s%s",
 		BuildIdSearchAttributePrefixPinned,
 		BuildIdSearchAttributeDelimiter,
-		escapeBuildIdSearchAttributeDelimiter(deployment.GetSeriesName()),
+		escapeChar(deployment.GetSeriesName()),
 		BuildIdSearchAttributeDelimiter,
-		escapeBuildIdSearchAttributeDelimiter(deployment.GetBuildId()),
+		escapeChar(deployment.GetBuildId()),
 	)
 }
 
