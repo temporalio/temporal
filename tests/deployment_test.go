@@ -436,8 +436,8 @@ func (d *DeploymentSuite) TestGetDeploymentReachability_OverrideUnversioned() {
 			Deployment: workerDeployment,
 		})
 		a.NoError(err)
-		a.NotNil(resp.DeploymentInfo)
-		a.NotNil(resp.DeploymentInfo.Deployment)
+		a.NotNil(resp.GetDeploymentInfo())
+		a.NotNil(resp.GetDeploymentInfo().GetDeployment())
 	}, time.Second*5, time.Millisecond*200)
 	<-ctx.Done()
 	select {
@@ -562,8 +562,8 @@ func (d *DeploymentSuite) createDeploymentAndWaitForExist(
 			Deployment: deploy,
 		})
 		a.NoError(err)
-		a.NotNil(resp.DeploymentInfo)
-		a.NotNil(resp.DeploymentInfo.Deployment)
+		a.NotNil(resp.GetDeploymentInfo())
+		a.NotNil(resp.GetDeploymentInfo().GetDeployment())
 	}, time.Second*5, time.Millisecond*200)
 	<-ctx.Done()
 	select {

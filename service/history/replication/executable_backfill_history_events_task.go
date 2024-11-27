@@ -28,12 +28,14 @@ import (
 
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
+	historyspb "go.temporal.io/server/api/history/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/persistence/versionhistory"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	ctasks "go.temporal.io/server/common/tasks"
 	"go.temporal.io/server/service/history/shard"
@@ -191,14 +193,30 @@ func (e *ExecutableBackfillHistoryEventsTask) HandleErr(err error) error {
 		}
 		ctx, cancel := newTaskContext(namespaceName, e.Config.ReplicationTaskApplyTimeout())
 		defer cancel()
-
-		if doContinue, resendErr := e.Resend(
+		history := &historyspb.VersionHistory{
+			Items: e.taskAttr.EventVersionHistory,
+		}
+		startEvent := taskErr.StartEventId + 1
+		endEvent := taskErr.EndEventId - 1
+		startEventVersion, err := versionhistory.GetVersionHistoryEventVersion(history, startEvent)
+		if err != nil {
+			return err
+		}
+		endEventVersion, err := versionhistory.GetVersionHistoryEventVersion(history, endEvent)
+		if err != nil {
+			return err
+		}
+		if resendErr := e.BackFillEvents(
 			ctx,
 			e.ExecutableTask.SourceClusterName(),
-			taskErr,
-			ResendAttempt,
-		); resendErr != nil || !doContinue {
-			return err
+			definition.NewWorkflowKey(e.NamespaceID, e.WorkflowID, e.RunID),
+			startEvent,
+			startEventVersion,
+			endEvent,
+			endEventVersion,
+			"",
+		); resendErr != nil {
+			return resendErr
 		}
 		return e.Execute()
 	default:
