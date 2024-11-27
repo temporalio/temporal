@@ -32,7 +32,6 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
-	"go.temporal.io/server/api/enums/v1"
 	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/service/history/hsm"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -149,7 +148,9 @@ func fabricateStartedEventIfMissing(
 			return err
 		}
 
-		node.AddHistoryEvent(enumspb.EVENT_TYPE_NEXUS_OPERATION_STARTED, func(e *historypb.HistoryEvent) {
+		operation.OperationId = operationID
+
+		event := node.AddHistoryEvent(enumspb.EVENT_TYPE_NEXUS_OPERATION_STARTED, func(e *historypb.HistoryEvent) {
 			e.Attributes = &historypb.HistoryEvent_NexusOperationStartedEventAttributes{
 				NexusOperationStartedEventAttributes: &historypb.NexusOperationStartedEventAttributes{
 					ScheduledEventId: eventID,
@@ -158,10 +159,18 @@ func fabricateStartedEventIfMissing(
 				},
 			}
 			e.Links = links
+			if startTime != nil {
+				e.EventTime = startTime
+			}
 		})
 
-		operation.OperationId = operationID
-		operation.SetState(enums.NEXUS_OPERATION_STATE_STARTED)
+		_, err = TransitionStarted.Apply(operation, EventStarted{
+			Time:       event.EventTime.AsTime(),
+			Node:       node,
+			Attributes: event.GetNexusOperationStartedEventAttributes(),
+		})
+
+		return err
 	}
 
 	return nil

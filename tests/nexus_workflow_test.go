@@ -774,7 +774,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletionBeforeStart() 
 	}
 
 	startLink := &commonpb.Link_WorkflowEvent{
-		Namespace:  s.GetNamespaceID(s.Namespace()),
+		Namespace:  s.Namespace(),
 		WorkflowId: completionWFID,
 		Reference: &commonpb.Link_WorkflowEvent_EventRef{
 			EventRef: &commonpb.Link_WorkflowEvent_EventReference{
