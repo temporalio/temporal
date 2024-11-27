@@ -588,7 +588,7 @@ func (ms *MutableStateImpl) GetNexusCompletion(ctx context.Context) (nexus.Opera
 	// Create the link information about the workflow to be attached to fabricated started event if completion is
 	// received before start response.
 	startLink := temporalnexus.ConvertLinkWorkflowEventToNexusLink(&commonpb.Link_WorkflowEvent{
-		Namespace:  ms.namespaceEntry.ID().String(),
+		Namespace:  ms.namespaceEntry.Name().String(),
 		WorkflowId: ms.executionInfo.WorkflowId,
 		RunId:      ms.executionState.RunId,
 		Reference: &commonpb.Link_WorkflowEvent_EventRef{

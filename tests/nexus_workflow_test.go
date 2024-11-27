@@ -734,7 +734,8 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletion() {
 }
 
 func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletionBeforeStart() {
-	ctx := testcore.NewContext()
+	ctx, cancel := context.WithCancel(testcore.NewContext())
+	defer cancel()
 	taskQueue := testcore.RandomizeStr(s.T().Name())
 	endpointName := testcore.RandomizedNexusEndpoint(s.T().Name())
 
@@ -785,21 +786,21 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletionBeforeStart() 
 	finishStartReqCh := make(chan struct{})
 	startFinishedCh := make(chan struct{})
 	// Special Nexus task poller to handle waiting until start request is finished.
-	go func() {
+	go func(t *testing.T, ns string, feClient testcore.FrontendClient) {
 		defer close(startFinishedCh)
 
-		res, err := s.GetTestCluster().FrontendClient().PollNexusTaskQueue(ctx, &workflowservice.PollNexusTaskQueueRequest{
-			Namespace: s.Namespace(),
+		res, err := feClient.PollNexusTaskQueue(ctx, &workflowservice.PollNexusTaskQueueRequest{
+			Namespace: ns,
 			Identity:  uuid.NewString(),
 			TaskQueue: &taskqueuepb.TaskQueue{
 				Name: taskQueue,
 				Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
 			},
 		})
-		s.NoError(err)
+		require.NoError(t, err)
 
 		start := res.Request.Variant.(*nexuspb.Request_StartOperation).StartOperation
-		s.Equal(op.Name(), start.Operation)
+		require.Equal(t, op.Name(), start.Operation)
 
 		start.CallbackHeader[nexus.HeaderOperationID] = completionWFID
 		completionWFStartReq.CompletionCallbacks = []*commonpb.Callback{
@@ -813,15 +814,15 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletionBeforeStart() 
 			},
 		}
 
-		completionRun, err := s.FrontendClient().StartWorkflowExecution(ctx, completionWFStartReq)
-		s.NoError(err)
+		completionRun, err := feClient.StartWorkflowExecution(ctx, completionWFStartReq)
+		require.NoError(t, err)
 		startLink.RunId = completionRun.RunId
 
 		// Delay finishing start request until after completion is received.
 		<-finishStartReqCh
 
-		_, err = s.GetTestCluster().FrontendClient().RespondNexusTaskCompleted(ctx, &workflowservice.RespondNexusTaskCompletedRequest{
-			Namespace: s.Namespace(),
+		_, err = feClient.RespondNexusTaskCompleted(ctx, &workflowservice.RespondNexusTaskCompletedRequest{
+			Namespace: ns,
 			Identity:  uuid.NewString(),
 			TaskToken: res.TaskToken,
 			Response: &nexuspb.Response{
@@ -836,8 +837,8 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletionBeforeStart() 
 				},
 			},
 		})
-		s.NoErrorf(err, "Duplicate start response should be ignored.")
-	}()
+		require.NoErrorf(t, err, "Duplicate start response should be ignored.")
+	}(s.T(), s.Namespace(), s.FrontendClient())
 
 	pollResp, err := s.FrontendClient().PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
 		Namespace: s.Namespace(),

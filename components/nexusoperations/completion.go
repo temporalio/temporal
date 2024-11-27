@@ -138,17 +138,13 @@ func fabricateStartedEventIfMissing(
 	startTime *timestamppb.Timestamp,
 	links []*commonpb.Link,
 ) error {
-	data, err := hsm.MachineData[Operation](node)
+	operation, err := hsm.MachineData[Operation](node)
 	if err != nil {
 		return err
 	}
 
-	if TransitionStarted.Possible(data) {
-		if operationID == "" {
-			return serviceerror.NewNotFound("operation not found")
-		}
-
-		eventID, err := hsm.EventIDFromToken(data.ScheduledEventToken)
+	if TransitionStarted.Possible(operation) {
+		eventID, err := hsm.EventIDFromToken(operation.ScheduledEventToken)
 		if err != nil {
 			return err
 		}
@@ -162,13 +158,10 @@ func fabricateStartedEventIfMissing(
 				},
 			}
 			e.Links = links
-			if startTime != nil {
-				e.EventTime = startTime
-			}
 		})
 
-		data.OperationId = operationID
-		data.SetState(enums.NEXUS_OPERATION_STATE_STARTED)
+		operation.OperationId = operationID
+		operation.SetState(enums.NEXUS_OPERATION_STATE_STARTED)
 	}
 
 	return nil

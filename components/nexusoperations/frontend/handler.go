@@ -186,7 +186,7 @@ func (h *completionHandler) CompleteOperation(ctx context.Context, r *nexus.Comp
 			if err != nil {
 				// TODO(rodrigozhou): links are non-essential for the execution of the workflow,
 				// so ignoring the error for now; we will revisit how to handle these errors later.
-				h.Logger.Error(
+				h.Logger.Warn(
 					fmt.Sprintf("failed to parse link to %q: %s", nexusLink.Type, nexusLink.URL),
 					tag.Error(err),
 				)
@@ -199,7 +199,7 @@ func (h *completionHandler) CompleteOperation(ctx context.Context, r *nexus.Comp
 			})
 		default:
 			// If the link data type is unsupported, just ignore it for now.
-			h.Logger.Error(fmt.Sprintf("invalid link data type: %q", nexusLink.Type))
+			h.Logger.Warn(fmt.Sprintf("invalid link data type: %q", nexusLink.Type))
 		}
 	}
 	hr := &historyservice.CompleteNexusOperationRequest{
