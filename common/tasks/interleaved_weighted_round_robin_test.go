@@ -26,6 +26,7 @@ package tasks
 
 import (
 	"math/rand"
+	"slices"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -33,6 +34,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/log"
 	"go.uber.org/mock/gomock"
 )
@@ -49,6 +51,7 @@ type (
 		channelWeightUpdateCh chan struct{}
 
 		scheduler *InterleavedWeightedRoundRobinScheduler[*testTask, int]
+		ts        *clock.EventTimeSource
 	}
 
 	testTask struct {
@@ -83,16 +86,21 @@ func (s *interleavedWeightedRoundRobinSchedulerSuite) SetupTest() {
 	}
 	s.channelWeightUpdateCh = make(chan struct{}, 1)
 	logger := log.NewTestLogger()
+	s.ts = clock.NewEventTimeSource()
 
 	s.scheduler = NewInterleavedWeightedRoundRobinScheduler(
 		InterleavedWeightedRoundRobinSchedulerOptions[*testTask, int]{
 			TaskChannelKeyFn:      func(task *testTask) int { return task.channelKey },
 			ChannelWeightFn:       func(key int) int { return s.channelKeyToWeight[key] },
 			ChannelWeightUpdateCh: s.channelWeightUpdateCh,
+			InactiveChannelDeletionDelay: func() time.Duration {
+				return time.Hour
+			},
 		},
 		Scheduler[*testTask](s.mockFIFOScheduler),
 		logger,
 	)
+	s.scheduler.ts = s.ts
 }
 
 func (s *interleavedWeightedRoundRobinSchedulerSuite) TearDownTest() {
@@ -393,6 +401,199 @@ func (s *interleavedWeightedRoundRobinSchedulerSuite) TestUpdateWeight() {
 
 	// set the number of pending task back
 	atomic.AddInt64(&s.scheduler.numInflightTask, -1)
+}
+
+func (s *interleavedWeightedRoundRobinSchedulerSuite) TestDeleteInactiveChannels() {
+	s.mockFIFOScheduler.EXPECT().Start()
+	s.scheduler.Start()
+	s.mockFIFOScheduler.EXPECT().Stop()
+
+	var taskWG sync.WaitGroup
+	s.mockFIFOScheduler.EXPECT().Submit(gomock.Any()).Do(func(task Task) {
+		taskWG.Done()
+	}).AnyTimes()
+
+	// need to manually set the number of pending task to 1
+	// so schedule by task priority logic will execute
+	atomic.AddInt64(&s.scheduler.numInflightTask, 1)
+
+	mockTask0 := newTestTask(s.controller, 0)
+	mockTask1 := newTestTask(s.controller, 1)
+	mockTask2 := newTestTask(s.controller, 2)
+	mockTask3 := newTestTask(s.controller, 3)
+
+	taskWG.Add(4)
+	s.scheduler.Submit(mockTask0)
+	s.scheduler.Submit(mockTask1)
+	s.scheduler.Submit(mockTask2)
+	s.scheduler.Submit(mockTask3)
+	taskWG.Wait()
+
+	var channelWeights []int
+	for _, channel := range s.scheduler.channels() {
+		channelWeights = append(channelWeights, channel.Weight())
+	}
+	s.Equal([]int{5, 5, 5, 3, 5, 3, 2, 5, 3, 2, 1}, channelWeights)
+
+	s.ts.Advance(30 * time.Minute)
+
+	// Sleeping for a small duration for the current event loop to finish.
+	// doDispatchTasksWithWeight reads the current time before entering the loop. We have to wait for that loop to finish.
+	// Otherwise, the tasks added below will have old lastActiveTime. We don't have any other way to know if the loop has finished.
+	time.Sleep(100 * time.Millisecond) //nolint:forbidigo
+
+	// Only add tasks to first two channels.
+	taskWG.Add(2)
+	s.scheduler.Submit(mockTask0)
+	s.scheduler.Submit(mockTask1)
+	taskWG.Wait()
+
+	// Advance time past 1 hour. This will make other two channels inactive for more than 1 hour.
+	s.ts.Advance(31 * time.Minute)
+
+	s.Eventually(func() bool {
+		channelWeights = []int{}
+		for _, channel := range s.scheduler.channels() {
+			channelWeights = append(channelWeights, channel.Weight())
+		}
+		if !slices.Equal([]int{5, 5, 5, 3, 5, 3, 5, 3}, channelWeights) {
+			return false
+		}
+		return true
+	}, 30*time.Second, 100*time.Millisecond)
+
+	// set the number of pending task back
+	atomic.AddInt64(&s.scheduler.numInflightTask, -1)
+}
+
+func (s *interleavedWeightedRoundRobinSchedulerSuite) TestInactiveChannelDeletionDelayNotProvided() {
+	s.scheduler = NewInterleavedWeightedRoundRobinScheduler(
+		InterleavedWeightedRoundRobinSchedulerOptions[*testTask, int]{
+			TaskChannelKeyFn:      func(task *testTask) int { return task.channelKey },
+			ChannelWeightFn:       func(key int) int { return s.channelKeyToWeight[key] },
+			ChannelWeightUpdateCh: s.channelWeightUpdateCh,
+			// Not setting InactiveChannelDeletionDelay
+		},
+		Scheduler[*testTask](s.mockFIFOScheduler),
+		log.NewTestLogger(),
+	)
+	s.scheduler.ts = s.ts
+	s.mockFIFOScheduler.EXPECT().Start()
+	s.scheduler.Start()
+	s.mockFIFOScheduler.EXPECT().Stop()
+
+	var taskWG sync.WaitGroup
+	s.mockFIFOScheduler.EXPECT().Submit(gomock.Any()).Do(func(task Task) {
+		taskWG.Done()
+	}).AnyTimes()
+
+	// need to manually set the number of pending task to 1
+	// so schedule by task priority logic will execute
+	atomic.AddInt64(&s.scheduler.numInflightTask, 1)
+
+	mockTask0 := newTestTask(s.controller, 0)
+	mockTask1 := newTestTask(s.controller, 1)
+	mockTask2 := newTestTask(s.controller, 2)
+	mockTask3 := newTestTask(s.controller, 3)
+
+	taskWG.Add(4)
+	s.scheduler.Submit(mockTask0)
+	s.scheduler.Submit(mockTask1)
+	s.scheduler.Submit(mockTask2)
+	s.scheduler.Submit(mockTask3)
+	taskWG.Wait()
+
+	var channelWeights []int
+	for _, channel := range s.scheduler.channels() {
+		channelWeights = append(channelWeights, channel.Weight())
+	}
+	s.Equal([]int{5, 5, 5, 3, 5, 3, 2, 5, 3, 2, 1}, channelWeights)
+
+	s.ts.Advance(30 * time.Minute)
+
+	// Sleeping for a small duration for the current event loop to finish.
+	// We read ts.Now() before the loop begins and reuse it in the loop.
+	time.Sleep(100 * time.Millisecond) //nolint:forbidigo
+
+	// Only add tasks to first two channels.
+	taskWG.Add(2)
+	s.scheduler.Submit(mockTask0)
+	s.scheduler.Submit(mockTask1)
+	taskWG.Wait()
+
+	// Advance time past 1 hour. This will make other two channels inactive for more than 1 hour.
+	// But this time, those channels should not be deleted as we haven't provided InactiveChannelDeletionDelay
+	s.ts.Advance(31 * time.Minute)
+
+	time.Sleep(100 * time.Millisecond) //nolint:forbidigo
+	channelWeights = []int{}
+	for _, channel := range s.scheduler.channels() {
+		channelWeights = append(channelWeights, channel.Weight())
+	}
+
+	// Check that all channels exist.
+	s.Equal([]int{5, 5, 5, 3, 5, 3, 2, 5, 3, 2, 1}, channelWeights)
+
+	// set the number of pending task back
+	atomic.AddInt64(&s.scheduler.numInflightTask, -1)
+}
+
+// Test to verify that there is no race condition when a chancel reference is returned by
+// getOrCreateTaskChannel to submit a task and cleanup loop deletes this channel before that happens.
+func (s *interleavedWeightedRoundRobinSchedulerSuite) TestInactiveChannelDeletionRace() {
+	s.scheduler = NewInterleavedWeightedRoundRobinScheduler(
+		InterleavedWeightedRoundRobinSchedulerOptions[*testTask, int]{
+			TaskChannelKeyFn:      func(task *testTask) int { return task.channelKey },
+			ChannelWeightFn:       func(key int) int { return s.channelKeyToWeight[key] },
+			ChannelWeightUpdateCh: s.channelWeightUpdateCh,
+			InactiveChannelDeletionDelay: func() time.Duration {
+				return 0 // Setting cleanup delay to 0 to continuously delete channels.
+			},
+		},
+		Scheduler[*testTask](s.mockFIFOScheduler),
+		log.NewTestLogger(),
+	)
+	s.mockFIFOScheduler.EXPECT().Start()
+	s.scheduler.Start()
+	s.mockFIFOScheduler.EXPECT().Stop()
+
+	var taskWG sync.WaitGroup
+	s.mockFIFOScheduler.EXPECT().Submit(gomock.Any()).Do(func(task Task) {
+		taskWG.Done()
+	}).AnyTimes()
+
+	// need to manually set the number of pending task to 1
+	// so schedule by task priority logic will execute
+	atomic.AddInt64(&s.scheduler.numInflightTask, 1)
+	defer func() {
+		atomic.AddInt64(&s.scheduler.numInflightTask, -1)
+	}()
+
+	mockTask0 := newTestTask(s.controller, 0)
+	mockTask1 := newTestTask(s.controller, 1)
+	mockTask2 := newTestTask(s.controller, 2)
+	mockTask3 := newTestTask(s.controller, 3)
+
+	for i := 0; i < 1000; i++ {
+		taskWG.Add(1)
+		s.scheduler.Submit(mockTask0)
+		taskWG.Wait()
+
+		taskWG.Add(1)
+		s.scheduler.Submit(mockTask1)
+		taskWG.Wait()
+
+		taskWG.Add(1)
+		s.scheduler.Submit(mockTask2)
+		taskWG.Wait()
+
+		taskWG.Add(1)
+		s.scheduler.Submit(mockTask3)
+		taskWG.Wait()
+	}
+
+	time.Sleep(100 * time.Millisecond) //nolint:forbidigo
+	s.Empty(s.scheduler.channels())
 }
 
 func newTestTask(

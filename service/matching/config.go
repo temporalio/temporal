@@ -53,6 +53,7 @@ type (
 		AlignMembershipChange                dynamicconfig.DurationPropertyFn
 		ShutdownDrainDuration                dynamicconfig.DurationPropertyFn
 		HistoryMaxPageSize                   dynamicconfig.IntPropertyFnWithNamespaceFilter
+		MatchingDropNonRetryableTasks        dynamicconfig.BoolPropertyFn
 		EnableDeployments                    dynamicconfig.BoolPropertyFnWithNamespaceFilter
 		MaxTaskQueuesInDeployment            dynamicconfig.IntPropertyFnWithNamespaceFilter
 		MaxIDLengthLimit                     dynamicconfig.IntPropertyFn
@@ -255,6 +256,7 @@ func NewConfig(
 		QueryWorkflowTaskTimeoutLogRate:          dynamicconfig.MatchingQueryWorkflowTaskTimeoutLogRate.Get(dc),
 		MembershipUnloadDelay:                    dynamicconfig.MatchingMembershipUnloadDelay.Get(dc),
 		TaskQueueInfoByBuildIdTTL:                dynamicconfig.TaskQueueInfoByBuildIdTTL.Get(dc),
+		MatchingDropNonRetryableTasks:            dynamicconfig.MatchingDropNonRetryableTasks.Get(dc),
 		MaxIDLengthLimit:                         dynamicconfig.MaxIDLengthLimit.Get(dc),
 
 		AdminNamespaceToPartitionDispatchRate:          dynamicconfig.AdminMatchingNamespaceToPartitionDispatchRate.Get(dc),

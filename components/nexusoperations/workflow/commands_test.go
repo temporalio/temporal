@@ -59,7 +59,7 @@ func (v commandValidator) IsValidPayloadSize(size int) bool {
 
 type testContext struct {
 	execInfo        *persistencespb.WorkflowExecutionInfo
-	ms              workflow.MutableState
+	ms              *workflow.MockMutableState
 	scheduleHandler workflow.CommandHandler
 	cancelHandler   workflow.CommandHandler
 	history         *historypb.History
@@ -492,6 +492,8 @@ func TestHandleCancelCommand(t *testing.T) {
 
 	t.Run("operation already completed", func(t *testing.T) {
 		tcx := newTestContext(t, defaultConfig)
+		tcx.ms.EXPECT().HasAnyBufferedEvent(gomock.Any()).Return(false)
+
 		err := tcx.scheduleHandler(context.Background(), tcx.ms, commandValidator{maxPayloadSize: 1}, 1, &commandpb.Command{
 			Attributes: &commandpb.Command_ScheduleNexusOperationCommandAttributes{
 				ScheduleNexusOperationCommandAttributes: &commandpb.ScheduleNexusOperationCommandAttributes{
@@ -527,6 +529,46 @@ func TestHandleCancelCommand(t *testing.T) {
 		require.False(t, failWFTErr.TerminateWorkflow)
 		require.Equal(t, enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_REQUEST_CANCEL_NEXUS_OPERATION_ATTRIBUTES, failWFTErr.Cause)
 		require.Equal(t, 1, len(tcx.history.Events)) // Only scheduled event should be recorded.
+	})
+
+	t.Run("operation already completed - completion buffered", func(t *testing.T) {
+		tcx := newTestContext(t, defaultConfig)
+		tcx.ms.EXPECT().HasAnyBufferedEvent(gomock.Any()).Return(true)
+
+		err := tcx.scheduleHandler(context.Background(), tcx.ms, commandValidator{maxPayloadSize: 1}, 1, &commandpb.Command{
+			Attributes: &commandpb.Command_ScheduleNexusOperationCommandAttributes{
+				ScheduleNexusOperationCommandAttributes: &commandpb.ScheduleNexusOperationCommandAttributes{
+					Endpoint:  "endpoint",
+					Service:   "service",
+					Operation: "op",
+				},
+			},
+		})
+		require.NoError(t, err)
+		require.Equal(t, 1, len(tcx.history.Events))
+		event := tcx.history.Events[0]
+
+		coll := nexusoperations.MachineCollection(tcx.ms.HSM())
+		node, err := coll.Node(strconv.FormatInt(event.EventId, 10))
+		require.NoError(t, err)
+		op, err := coll.Data(strconv.FormatInt(event.EventId, 10))
+		require.NoError(t, err)
+		_, err = nexusoperations.TransitionSucceeded.Apply(op, nexusoperations.EventSucceeded{
+			Node: node,
+		})
+		require.NoError(t, err)
+
+		err = tcx.cancelHandler(context.Background(), tcx.ms, commandValidator{maxPayloadSize: 1}, 1, &commandpb.Command{
+			Attributes: &commandpb.Command_RequestCancelNexusOperationCommandAttributes{
+				RequestCancelNexusOperationCommandAttributes: &commandpb.RequestCancelNexusOperationCommandAttributes{
+					ScheduledEventId: event.EventId,
+				},
+			},
+		})
+		require.NoError(t, err)
+		require.Equal(t, 2, len(tcx.history.Events)) // Only scheduled event should be recorded.
+		crAttrs := tcx.history.Events[1].GetNexusOperationCancelRequestedEventAttributes()
+		require.Equal(t, event.EventId, crAttrs.ScheduledEventId)
 	})
 
 	t.Run("sets event attributes with UserMetadata and spawns cancelation child machine", func(t *testing.T) {

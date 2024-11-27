@@ -39,6 +39,7 @@ import (
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/quotas/calculator"
+	"go.temporal.io/server/service/history/circuitbreakerpool"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/replication/eventhandler"
@@ -96,6 +97,7 @@ type (
 )
 
 var QueueModule = fx.Options(
+	circuitbreakerpool.Module,
 	fx.Provide(
 		QueueSchedulerRateLimiterProvider,
 		func(tqm persistence.HistoryTaskQueueManager) queues.QueueWriter {

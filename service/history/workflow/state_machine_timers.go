@@ -55,17 +55,28 @@ func AddNextStateMachineTimerTask(ms MutableState) {
 
 // TrackStateMachineTimer tracks a timer task in the mutable state's StateMachineTimers slice sorted and grouped by
 // deadline.
+// Only a single task for a given type can be tracked for a given machine. If a task of the same type is already
+// tracked, it will be overridden.
 func TrackStateMachineTimer(ms MutableState, deadline time.Time, taskInfo *persistencespb.StateMachineTaskInfo) {
 	execInfo := ms.GetExecutionInfo()
 	group := &persistencespb.StateMachineTimerGroup{
 		Deadline: timestamppb.New(deadline),
 		Infos:    []*persistencespb.StateMachineTaskInfo{taskInfo},
 	}
-	idx, found := slices.BinarySearchFunc(execInfo.StateMachineTimers, group, func(a, b *persistencespb.StateMachineTimerGroup) int {
+	idx, groupFound := slices.BinarySearchFunc(execInfo.StateMachineTimers, group, func(a, b *persistencespb.StateMachineTimerGroup) int {
 		return a.Deadline.AsTime().Compare(b.Deadline.AsTime())
 	})
-	if found {
-		execInfo.StateMachineTimers[idx].Infos = append(execInfo.StateMachineTimers[idx].Infos, taskInfo)
+	if groupFound {
+		groupIdx := slices.IndexFunc(execInfo.StateMachineTimers[idx].Infos, func(info *persistencespb.StateMachineTaskInfo) bool {
+			return info.GetType() == taskInfo.GetType() && slices.EqualFunc(info.GetRef().GetPath(), taskInfo.GetRef().GetPath(), func(a, b *persistencespb.StateMachineKey) bool {
+				return a.GetType() == b.GetType() && a.GetId() == b.GetId()
+			})
+		})
+		if groupIdx == -1 {
+			execInfo.StateMachineTimers[idx].Infos = append(execInfo.StateMachineTimers[idx].Infos, taskInfo)
+		} else {
+			execInfo.StateMachineTimers[idx].Infos[groupIdx] = taskInfo
+		}
 	} else {
 		execInfo.StateMachineTimers = slices.Insert(execInfo.StateMachineTimers, idx, group)
 	}

@@ -65,18 +65,38 @@ import (
 type (
 	streamBasedReplicationTestSuite struct {
 		xdcBaseSuite
-		controller    *gomock.Controller
-		namespaceName string
-		namespaceID   string
-		serializer    serialization.Serializer
-		generator     test.Generator
-		once          sync.Once
+		controller              *gomock.Controller
+		namespaceName           string
+		namespaceID             string
+		serializer              serialization.Serializer
+		generator               test.Generator
+		once                    sync.Once
+		enableTransitionHistory bool
 	}
 )
 
 func TestStreamBasedReplicationTestSuite(t *testing.T) {
-	t.Parallel()
-	suite.Run(t, new(streamBasedReplicationTestSuite))
+	for _, tc := range []struct {
+		name                    string
+		enableTransitionHistory bool
+	}{
+		{
+			name:                    "DisableTransitionHistory",
+			enableTransitionHistory: false,
+		},
+		{
+			name:                    "EnableTransitionHistory",
+			enableTransitionHistory: true,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			s := &streamBasedReplicationTestSuite{
+				namespaceName:           "replication-test-" + common.GenerateRandomString(5),
+				enableTransitionHistory: tc.enableTransitionHistory,
+			}
+			suite.Run(t, s)
+		})
+	}
 }
 
 func (s *streamBasedReplicationTestSuite) SetupSuite() {
@@ -86,6 +106,7 @@ func (s *streamBasedReplicationTestSuite) SetupSuite() {
 		dynamicconfig.EnableEagerNamespaceRefresher.Key():       true,
 		dynamicconfig.EnableReplicationTaskBatching.Key():       true,
 		dynamicconfig.EnableReplicateLocalGeneratedEvents.Key(): true,
+		dynamicconfig.EnableTransitionHistory.Key():             s.enableTransitionHistory,
 	}
 	s.logger = log.NewTestLogger()
 	s.serializer = serialization.NewSerializer()
@@ -117,7 +138,6 @@ func (s *streamBasedReplicationTestSuite) SetupTest() {
 
 	s.once.Do(func() {
 		ctx := context.Background()
-		s.namespaceName = "replication-test"
 		_, err := s.cluster1.FrontendClient().RegisterNamespace(ctx, &workflowservice.RegisterNamespaceRequest{
 			Namespace: s.namespaceName,
 			Clusters:  s.clusterReplicationConfig(),
@@ -146,9 +166,18 @@ func (s *streamBasedReplicationTestSuite) TestReplicateHistoryEvents_ForceReplic
 	ctx, cancel := context.WithTimeout(ctx, testTimeout)
 	defer cancel()
 
+	var versions []int64
+	if s.enableTransitionHistory {
+		// Use versions for cluster1 (active) so we can update workflows
+		// Use same versions to prevent workflow tasks from being failed due to WORKFLOW_TASK_FAILED_CAUSE_FAILOVER_CLOSE_COMMAND
+		versions = []int64{1, 1, 1, 1, 1, 1, 1, 1, 1}
+	} else {
+		versions = []int64{2, 12, 22, 32, 2, 1, 5, 8, 9}
+	}
+
 	// let's import some events into cluster 1
 	historyClient1 := s.cluster1.HistoryClient()
-	executions := s.importTestEvents(historyClient1, namespace.Name(s.namespaceName), namespace.ID(s.namespaceID), []int64{2, 12, 22, 32, 2, 1, 5, 8, 9})
+	executions := s.importTestEvents(historyClient1, namespace.Name(s.namespaceName), namespace.ID(s.namespaceID), versions)
 
 	// let's trigger replication by calling GenerateLastHistoryReplicationTasks. This is also used by force replication logic
 	for _, execution := range executions {
@@ -159,7 +188,7 @@ func (s *streamBasedReplicationTestSuite) TestReplicateHistoryEvents_ForceReplic
 		s.NoError(err)
 	}
 
-	time.Sleep(10 * time.Second)
+	s.waitForClusterSynced()
 	for _, execution := range executions {
 		err := s.assertHistoryEvents(ctx, s.namespaceID, execution.GetWorkflowId(), execution.GetRunId())
 		s.NoError(err)
@@ -188,7 +217,7 @@ func (s *streamBasedReplicationTestSuite) importTestEvents(
 	}
 	var runID string
 	for _, version := range versions {
-		workflowID := "xdc-stream-replication-test" + uuid.New()
+		workflowID := "xdc-stream-replication-test-" + uuid.New()
 		runID = uuid.New()
 
 		var historyBatch []*historypb.History
@@ -217,6 +246,21 @@ func (s *streamBasedReplicationTestSuite) importTestEvents(
 			historyClient,
 			true,
 		)
+
+		if s.enableTransitionHistory {
+			// signal the workflow to make sure the TransitionHistory is updated
+			signalName := "my signal"
+			signalInput := payloads.EncodeString("my signal input")
+			client1 := s.cluster1.FrontendClient() // active
+			_, err = client1.SignalWorkflowExecution(context.Background(), &workflowservice.SignalWorkflowExecutionRequest{
+				Namespace:         s.namespaceName,
+				WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: workflowID, RunId: runID},
+				SignalName:        signalName,
+				Input:             signalInput,
+				Identity:          "worker1",
+			})
+			s.NoError(err)
+		}
 
 		executions = append(executions, &commonpb.WorkflowExecution{WorkflowId: workflowID, RunId: runID})
 	}

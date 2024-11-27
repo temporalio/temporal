@@ -220,7 +220,7 @@ a custom [Executable
 implementation](https://github.com/temporalio/temporal/blob/7c8025aff96af7d72a91af615f1d625817842894/service/history/queues/executable.go#L801).
 
 The circuit breaker tracks `DestinationDownError`s returned by executors (for Nexus and Callbacks this happens on
-non-retryable HTTP errors and timeouts) and trips when the number of consecutive failures is more than 5.
+retryable HTTP errors and timeouts) and trips when the number of consecutive failures is more than 5.
 When the circuit breaker is tripped it transitions to the "open" state, from which it transitions to half-open, starting
 to let some requests through to probe if the destination is up again. After a while the circuit breaker transitions back
 into open or closed states, depending on the success of requests during the time spent in the half-open state.

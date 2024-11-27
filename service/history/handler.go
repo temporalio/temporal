@@ -2371,7 +2371,7 @@ func (h *Handler) CompleteNexusOperation(ctx context.Context, request *historyse
 	}
 	err = nexusoperations.CompletionHandler(
 		ctx,
-		engine.StateMachineEnvironment(),
+		engine.StateMachineEnvironment(metrics.OperationTag(metrics.HistoryCompleteNexusOperationScope)),
 		ref,
 		request.Completion.RequestId,
 		request.GetSuccess(),
@@ -2439,7 +2439,13 @@ func (h *Handler) InvokeStateMachineMethod(ctx context.Context, request *history
 		StateMachineRef: request.Ref,
 	}
 
-	bytes, err := registry.ExecuteRemoteMethod(ctx, engine.StateMachineEnvironment(), ref, request.MethodName, request.Input)
+	bytes, err := registry.ExecuteRemoteMethod(
+		ctx,
+		engine.StateMachineEnvironment(metrics.OperationTag(request.MethodName)),
+		ref,
+		request.MethodName,
+		request.Input,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -2474,6 +2480,114 @@ func (h *Handler) SyncWorkflowState(ctx context.Context, request *historyservice
 	return response, nil
 }
 
-func (h *Handler) UpdateActivityOptions(context.Context, *historyservice.UpdateActivityOptionsRequest) (*historyservice.UpdateActivityOptionsResponse, error) {
-	return nil, serviceerror.NewUnimplemented("UpdateActivityOptions is not supported yet")
+func (h *Handler) UpdateActivityOptions(
+	ctx context.Context, request *historyservice.UpdateActivityOptionsRequest,
+) (response *historyservice.UpdateActivityOptionsResponse, retError error) {
+	defer metrics.CapturePanic(h.logger, h.metricsHandler, &retError)
+	h.startWG.Wait()
+
+	namespaceID := namespace.ID(request.GetNamespaceId())
+	workflowID := request.GetUpdateRequest().WorkflowId
+	if request.GetNamespaceId() == "" {
+		return nil, h.convertError(errNamespaceNotSet)
+	}
+
+	shardContext, err := h.controller.GetShardByNamespaceWorkflow(namespaceID, workflowID)
+	if err != nil {
+		return nil, h.convertError(err)
+	}
+	engine, err := shardContext.GetEngine(ctx)
+	if err != nil {
+		return nil, h.convertError(err)
+	}
+
+	response, err = engine.UpdateActivityOptions(ctx, request)
+	if err != nil {
+		return nil, h.convertError(err)
+	}
+	return response, nil
+}
+
+func (h *Handler) PauseActivity(
+	ctx context.Context, request *historyservice.PauseActivityRequest,
+) (response *historyservice.PauseActivityResponse, retError error) {
+	defer metrics.CapturePanic(h.logger, h.metricsHandler, &retError)
+	h.startWG.Wait()
+
+	namespaceID := namespace.ID(request.GetNamespaceId())
+	workflowID := request.GetFrontendRequest().WorkflowId
+	if request.GetNamespaceId() == "" {
+		return nil, h.convertError(errNamespaceNotSet)
+	}
+
+	shardContext, err := h.controller.GetShardByNamespaceWorkflow(namespaceID, workflowID)
+	if err != nil {
+		return nil, h.convertError(err)
+	}
+	engine, err := shardContext.GetEngine(ctx)
+	if err != nil {
+		return nil, h.convertError(err)
+	}
+
+	response, err = engine.PauseActivity(ctx, request)
+	if err != nil {
+		return nil, h.convertError(err)
+	}
+	return response, nil
+}
+
+func (h *Handler) UnpauseActivity(
+	ctx context.Context, request *historyservice.UnpauseActivityRequest,
+) (response *historyservice.UnpauseActivityResponse, retError error) {
+	defer metrics.CapturePanic(h.logger, h.metricsHandler, &retError)
+	h.startWG.Wait()
+
+	namespaceID := namespace.ID(request.GetNamespaceId())
+	workflowID := request.GetFrontendRequest().WorkflowId
+	if request.GetNamespaceId() == "" {
+		return nil, h.convertError(errNamespaceNotSet)
+	}
+
+	shardContext, err := h.controller.GetShardByNamespaceWorkflow(namespaceID, workflowID)
+	if err != nil {
+		return nil, h.convertError(err)
+	}
+	engine, err := shardContext.GetEngine(ctx)
+	if err != nil {
+		return nil, h.convertError(err)
+	}
+
+	response, err = engine.UnpauseActivity(ctx, request)
+	if err != nil {
+		return nil, h.convertError(err)
+	}
+	return response, nil
+}
+
+func (h *Handler) ResetActivity(
+	ctx context.Context, request *historyservice.ResetActivityRequest,
+) (response *historyservice.ResetActivityResponse, retError error) {
+	defer metrics.CapturePanic(h.logger, h.metricsHandler, &retError)
+	h.startWG.Wait()
+
+	namespaceID := namespace.ID(request.GetNamespaceId())
+	workflowID := request.GetFrontendRequest().WorkflowId
+	if request.GetNamespaceId() == "" {
+		return nil, h.convertError(errNamespaceNotSet)
+	}
+
+	shardContext, err := h.controller.GetShardByNamespaceWorkflow(namespaceID, workflowID)
+	if err != nil {
+		return nil, h.convertError(err)
+	}
+	engine, err := shardContext.GetEngine(ctx)
+	if err != nil {
+		return nil, h.convertError(err)
+	}
+
+	response, err = engine.ResetActivity(ctx, request)
+	if err != nil {
+		return nil, h.convertError(err)
+	}
+	return response, nil
 }

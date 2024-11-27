@@ -537,6 +537,7 @@ func (e *matchingEngineImpl) AddActivityTask(
 		CreateTime:       timestamppb.New(now),
 		ExpiryTime:       expirationTime,
 		VersionDirective: addRequest.VersionDirective,
+		Stamp:            addRequest.Stamp,
 	}
 
 	return pm.AddTask(ctx, addTaskParams{
@@ -644,9 +645,14 @@ pollLoop:
 		if err != nil {
 			switch err.(type) {
 			case *serviceerror.Internal, *serviceerror.DataLoss:
-				e.nonRetryableErrorsDropTask(task, taskQueueName, err)
-				// drop the task as otherwise task would be stuck in a retry-loop
-				task.finish(nil, false)
+				if e.config.MatchingDropNonRetryableTasks() {
+					e.nonRetryableErrorsDropTask(task, taskQueueName, err)
+					// drop the task as otherwise task would be stuck in a retry-loop
+					task.finish(nil, false)
+				} else {
+					// default case
+					task.finish(err, false)
+				}
 			case *serviceerror.NotFound: // mutable state not found, workflow not running or workflow task not found
 				e.logger.Info("Workflow task not found",
 					tag.WorkflowTaskQueueName(taskQueueName),
@@ -824,9 +830,14 @@ pollLoop:
 		if err != nil {
 			switch err.(type) {
 			case *serviceerror.Internal, *serviceerror.DataLoss:
-				e.nonRetryableErrorsDropTask(task, taskQueueName, err)
-				// drop the task as otherwise task would be stuck in a retry-loop
-				task.finish(nil, false)
+				if e.config.MatchingDropNonRetryableTasks() {
+					e.nonRetryableErrorsDropTask(task, taskQueueName, err)
+					// drop the task as otherwise task would be stuck in a retry-loop
+					task.finish(nil, false)
+				} else {
+					// default case
+					task.finish(err, false)
+				}
 			case *serviceerror.NotFound: // mutable state not found, workflow not running or activity info not found
 				e.logger.Info("Activity task not found",
 					tag.WorkflowNamespaceID(task.event.Data.GetNamespaceId()),
@@ -2420,6 +2431,7 @@ func (e *matchingEngineImpl) recordActivityTaskStarted(
 		RequestId:           uuid.New(),
 		PollRequest:         pollReq,
 		BuildIdRedirectInfo: task.redirectInfo,
+		Stamp:               task.event.Data.GetStamp(),
 	}
 
 	scheduledDeployment := task.event.Data.VersionDirective.GetDeployment()

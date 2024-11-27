@@ -46,7 +46,6 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/converter"
-
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
@@ -163,10 +162,10 @@ func (s *NexusRequestForwardingSuite) TestStartOperationForwardedFromStandbyToAc
 				}
 			},
 			assertion: func(t *testing.T, result *nexus.ClientStartOperationResult[string], retErr error, activeSnap map[string][]*metricstest.CapturedRecording, passiveSnap map[string][]*metricstest.CapturedRecording) {
-				var unexpectedError *nexus.UnexpectedResponseError
-				require.ErrorAs(t, retErr, &unexpectedError)
-				require.Equal(t, http.StatusInternalServerError, unexpectedError.Response.StatusCode)
-				require.Equal(t, "deliberate internal failure", unexpectedError.Failure.Message)
+				var handlerErr *nexus.HandlerError
+				require.ErrorAs(t, retErr, &handlerErr)
+				require.Equal(t, nexus.HandlerErrorTypeInternal, handlerErr.Type)
+				require.Equal(t, "deliberate internal failure", handlerErr.Failure.Message)
 				requireExpectedMetricsCaptured(t, activeSnap, ns, "StartNexusOperation", "handler_error")
 				requireExpectedMetricsCaptured(t, passiveSnap, ns, "StartNexusOperation", "forwarded_request_error")
 			},
@@ -183,10 +182,10 @@ func (s *NexusRequestForwardingSuite) TestStartOperationForwardedFromStandbyToAc
 				}
 			},
 			assertion: func(t *testing.T, result *nexus.ClientStartOperationResult[string], retErr error, activeSnap map[string][]*metricstest.CapturedRecording, passiveSnap map[string][]*metricstest.CapturedRecording) {
-				var unexpectedError *nexus.UnexpectedResponseError
-				require.ErrorAs(t, retErr, &unexpectedError)
-				require.Equal(t, http.StatusServiceUnavailable, unexpectedError.Response.StatusCode)
-				require.Equal(t, "cluster inactive", unexpectedError.Failure.Message)
+				var handlerErr *nexus.HandlerError
+				require.ErrorAs(t, retErr, &handlerErr)
+				require.Equal(t, nexus.HandlerErrorTypeUnavailable, handlerErr.Type)
+				require.Equal(t, "cluster inactive", handlerErr.Failure.Message)
 				requireExpectedMetricsCaptured(t, passiveSnap, ns, "StartNexusOperation", "namespace_inactive_forwarding_disabled")
 			},
 		},
@@ -264,10 +263,10 @@ func (s *NexusRequestForwardingSuite) TestCancelOperationForwardedFromStandbyToA
 				}
 			},
 			assertion: func(t *testing.T, retErr error, activeSnap map[string][]*metricstest.CapturedRecording, passiveSnap map[string][]*metricstest.CapturedRecording) {
-				var unexpectedError *nexus.UnexpectedResponseError
-				require.ErrorAs(t, retErr, &unexpectedError)
-				require.Equal(t, http.StatusInternalServerError, unexpectedError.Response.StatusCode)
-				require.Equal(t, "deliberate internal failure", unexpectedError.Failure.Message)
+				var handlerErr *nexus.HandlerError
+				require.ErrorAs(t, retErr, &handlerErr)
+				require.Equal(t, nexus.HandlerErrorTypeInternal, handlerErr.Type)
+				require.Equal(t, "deliberate internal failure", handlerErr.Failure.Message)
 				requireExpectedMetricsCaptured(t, activeSnap, ns, "CancelNexusOperation", "handler_error")
 				requireExpectedMetricsCaptured(t, passiveSnap, ns, "CancelNexusOperation", "forwarded_request_error")
 			},
@@ -284,10 +283,10 @@ func (s *NexusRequestForwardingSuite) TestCancelOperationForwardedFromStandbyToA
 				}
 			},
 			assertion: func(t *testing.T, retErr error, activeSnap map[string][]*metricstest.CapturedRecording, passiveSnap map[string][]*metricstest.CapturedRecording) {
-				var unexpectedError *nexus.UnexpectedResponseError
-				require.ErrorAs(t, retErr, &unexpectedError)
-				require.Equal(t, http.StatusServiceUnavailable, unexpectedError.Response.StatusCode)
-				require.Equal(t, "cluster inactive", unexpectedError.Failure.Message)
+				var handlerErr *nexus.HandlerError
+				require.ErrorAs(t, retErr, &handlerErr)
+				require.Equal(t, nexus.HandlerErrorTypeUnavailable, handlerErr.Type)
+				require.Equal(t, "cluster inactive", handlerErr.Failure.Message)
 				requireExpectedMetricsCaptured(t, passiveSnap, ns, "CancelNexusOperation", "namespace_inactive_forwarding_disabled")
 			},
 		},
@@ -447,7 +446,7 @@ func (s *NexusRequestForwardingSuite) TestCompleteOperationForwardedFromStandbyT
 	}, 5*time.Second, 500*time.Millisecond)
 
 	// Send a valid - successful completion request to standby cluster.
-	completion, err := nexus.NewOperationCompletionSuccessful(s.mustToPayload("result"), nexus.OperationCompletionSuccesfulOptions{
+	completion, err := nexus.NewOperationCompletionSuccessful(s.mustToPayload("result"), nexus.OperationCompletionSuccessfulOptions{
 		Serializer: cnexus.PayloadSerializer,
 	})
 	s.NoError(err)

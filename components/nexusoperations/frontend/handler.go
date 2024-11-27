@@ -270,6 +270,7 @@ func (h *completionHandler) forwardCompleteOperation(ctx context.Context, r *nex
 		return nexus.HandlerErrorf(nexus.HandlerErrorTypeInternal, "internal error")
 	}
 
+	// TODO: Upgrade Nexus SDK in order to reduce HTTP exposure
 	handlerErr := &nexus.HandlerError{
 		Type:    commonnexus.HandlerErrorTypeFromHTTPStatus(resp.StatusCode),
 		Failure: &failure,
@@ -339,7 +340,7 @@ func (c *requestContext) capturePanicAndRecordMetrics(ctxPtr *context.Context, e
 	if recovered != nil {
 		err, ok := recovered.(error)
 		if !ok {
-			err = fmt.Errorf("panic: %v", recovered) //nolint:goerr113
+			err = fmt.Errorf("panic: %v", recovered)
 		}
 
 		st := string(debug.Stack())
@@ -420,10 +421,9 @@ func (c *requestContext) interceptRequest(ctx context.Context, request *nexus.Co
 	if !c.namespace.ActiveInCluster(c.ClusterMetadata.GetCurrentClusterName()) {
 		if c.shouldForwardRequest(ctx, request.HTTPRequest.Header) {
 			c.forwarded = true
-			var forwardStartTime time.Time
-			c.metricsHandlerForInterceptors, forwardStartTime = c.RedirectionInterceptor.BeforeCall(methodNameForMetrics)
+			handler, forwardStartTime := c.RedirectionInterceptor.BeforeCall(methodNameForMetrics)
 			c.cleanupFunctions = append(c.cleanupFunctions, func(retErr error) {
-				c.RedirectionInterceptor.AfterCall(c.metricsHandlerForInterceptors, forwardStartTime, c.namespace.ActiveClusterName(), retErr)
+				c.RedirectionInterceptor.AfterCall(handler, forwardStartTime, c.namespace.ActiveClusterName(), retErr)
 			})
 			// Handler methods should have special logic to forward requests if this method returns a serviceerror.NamespaceNotActive error.
 			return serviceerror.NewNamespaceNotActive(c.namespace.Name().String(), c.ClusterMetadata.GetCurrentClusterName(), c.namespace.ActiveClusterName())

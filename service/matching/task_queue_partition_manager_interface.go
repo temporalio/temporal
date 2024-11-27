@@ -31,10 +31,9 @@ import (
 	"time"
 
 	enumspb "go.temporal.io/api/enums/v1"
-	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
-
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
+	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/tqid"
 )

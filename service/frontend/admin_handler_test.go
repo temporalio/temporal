@@ -71,6 +71,7 @@ import (
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/resourcetest"
 	"go.temporal.io/server/common/searchattribute"
+	serviceerror2 "go.temporal.io/server/common/serviceerror"
 	test "go.temporal.io/server/common/testing"
 	"go.temporal.io/server/common/testing/historyrequire"
 	"go.temporal.io/server/common/testing/mocksdk"
@@ -1056,7 +1057,7 @@ func (s *adminHandlerSuite) TestStreamWorkflowReplicationMessages_ClientToServer
 
 		defer waitGroupEnd.Done()
 		<-channel
-		return nil, serviceerror.NewUnavailable("random error")
+		return nil, serviceerror.NewInternal("random error")
 	})
 	_ = s.handler.StreamWorkflowReplicationMessages(clientCluster)
 	close(channel)
@@ -1097,12 +1098,14 @@ func (s *adminHandlerSuite) TestStreamWorkflowReplicationMessages_ServerToClient
 		<-channel
 		return nil, serviceerror.NewUnavailable("random error")
 	})
+
+	s.mockHistoryClient.EXPECT().GetShard(gomock.Any(), &historyservice.GetShardRequest{ShardId: serverClusterShardID.ShardID}).Return(&historyservice.GetShardResponse{}, nil)
 	serverCluster.EXPECT().Recv().DoAndReturn(func() (*historyservice.StreamWorkflowReplicationMessagesResponse, error) {
 		waitGroupStart.Done()
 		waitGroupStart.Wait()
 
 		defer waitGroupEnd.Done()
-		return nil, serviceerror.NewUnavailable("random error")
+		return nil, serviceerror2.NewShardOwnershipLost("host1", "host2")
 	})
 	_ = s.handler.StreamWorkflowReplicationMessages(clientCluster)
 	close(channel)

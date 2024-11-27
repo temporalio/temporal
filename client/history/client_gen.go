@@ -578,6 +578,26 @@ func (c *clientImpl) MergeDLQMessages(
 	return response, nil
 }
 
+func (c *clientImpl) PauseActivity(
+	ctx context.Context,
+	request *historyservice.PauseActivityRequest,
+	opts ...grpc.CallOption,
+) (*historyservice.PauseActivityResponse, error) {
+	shardID := c.shardIDFromWorkflowID(request.GetNamespaceId(), request.GetFrontendRequest().GetWorkflowId())
+	var response *historyservice.PauseActivityResponse
+	op := func(ctx context.Context, client historyservice.HistoryServiceClient) error {
+		var err error
+		ctx, cancel := c.createContext(ctx)
+		defer cancel()
+		response, err = client.PauseActivity(ctx, request, opts...)
+		return err
+	}
+	if err := c.executeWithRedirect(ctx, shardID, op); err != nil {
+		return nil, err
+	}
+	return response, nil
+}
+
 func (c *clientImpl) PollMutableState(
 	ctx context.Context,
 	request *historyservice.PollMutableStateRequest,
@@ -903,6 +923,26 @@ func (c *clientImpl) RequestCancelWorkflowExecution(
 	return response, nil
 }
 
+func (c *clientImpl) ResetActivity(
+	ctx context.Context,
+	request *historyservice.ResetActivityRequest,
+	opts ...grpc.CallOption,
+) (*historyservice.ResetActivityResponse, error) {
+	shardID := c.shardIDFromWorkflowID(request.GetNamespaceId(), request.GetFrontendRequest().GetWorkflowId())
+	var response *historyservice.ResetActivityResponse
+	op := func(ctx context.Context, client historyservice.HistoryServiceClient) error {
+		var err error
+		ctx, cancel := c.createContext(ctx)
+		defer cancel()
+		response, err = client.ResetActivity(ctx, request, opts...)
+		return err
+	}
+	if err := c.executeWithRedirect(ctx, shardID, op); err != nil {
+		return nil, err
+	}
+	return response, nil
+}
+
 func (c *clientImpl) ResetStickyTaskQueue(
 	ctx context.Context,
 	request *historyservice.ResetStickyTaskQueueRequest,
@@ -1220,6 +1260,26 @@ func (c *clientImpl) TerminateWorkflowExecution(
 		ctx, cancel := c.createContext(ctx)
 		defer cancel()
 		response, err = client.TerminateWorkflowExecution(ctx, request, opts...)
+		return err
+	}
+	if err := c.executeWithRedirect(ctx, shardID, op); err != nil {
+		return nil, err
+	}
+	return response, nil
+}
+
+func (c *clientImpl) UnpauseActivity(
+	ctx context.Context,
+	request *historyservice.UnpauseActivityRequest,
+	opts ...grpc.CallOption,
+) (*historyservice.UnpauseActivityResponse, error) {
+	shardID := c.shardIDFromWorkflowID(request.GetNamespaceId(), request.GetFrontendRequest().GetWorkflowId())
+	var response *historyservice.UnpauseActivityResponse
+	op := func(ctx context.Context, client historyservice.HistoryServiceClient) error {
+		var err error
+		ctx, cancel := c.createContext(ctx)
+		defer cancel()
+		response, err = client.UnpauseActivity(ctx, request, opts...)
 		return err
 	}
 	if err := c.executeWithRedirect(ctx, shardID, op); err != nil {

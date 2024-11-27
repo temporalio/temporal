@@ -206,7 +206,7 @@ func (operationMachineDefinition) Serialize(state any) ([]byte, error) {
 	if state, ok := state.(Operation); ok {
 		return proto.Marshal(state.NexusOperationInfo)
 	}
-	return nil, fmt.Errorf("invalid operation provided: %v", state) // nolint:goerr113
+	return nil, fmt.Errorf("invalid operation provided: %v", state)
 }
 
 // CompareState compares the progress of two Operation state machines to determine whether to sync machine state while
@@ -519,7 +519,7 @@ func (cancelationMachineDefinition) Serialize(state any) ([]byte, error) {
 	if state, ok := state.(Cancelation); ok {
 		return proto.Marshal(state.NexusOperationCancellationInfo)
 	}
-	return nil, fmt.Errorf("invalid cancelation provided: %v", state) // nolint:goerr113
+	return nil, fmt.Errorf("invalid cancelation provided: %v", state)
 }
 
 func (cancelationMachineDefinition) Type() string {

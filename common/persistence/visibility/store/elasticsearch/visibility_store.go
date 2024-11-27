@@ -925,7 +925,7 @@ func (s *VisibilityStore) GenerateESDoc(
 	// If it's only invalid values error, then silently continue without them.
 	searchAttributes, err = s.ValidateCustomSearchAttributes(searchAttributes)
 	if err != nil {
-		if _, ok := err.(*store.VisibilityStoreInvalidValuesError); !ok {
+		if _, ok := err.(*serviceerror.InvalidArgument); !ok {
 			return nil, err
 		}
 	}
@@ -1453,7 +1453,7 @@ func parsePageTokenValue(
 func validateDatetime(value time.Time) error {
 	if value.Before(minTime) || value.After(maxTime) {
 		return serviceerror.NewInvalidArgument(
-			fmt.Sprintf("Date not supported in Elasticsearch: %v", value),
+			fmt.Sprintf("invalid search attribute date: %v, supported range: [%v, %v]", value, minTime, maxTime),
 		)
 	}
 	return nil
@@ -1463,7 +1463,7 @@ func validateString(value string) error {
 	if len(value) > maxStringLength {
 		return serviceerror.NewInvalidArgument(
 			fmt.Sprintf(
-				"strings with more than %d bytes are not supported in Elasticsearch (got string of len %d)",
+				"strings with more than %d bytes are not supported (got string of len %d)",
 				maxStringLength,
 				len(value),
 			),

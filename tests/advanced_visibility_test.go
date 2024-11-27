@@ -2287,7 +2287,7 @@ func (s *AdvancedVisibilitySuite) Test_BuildIdIndexedOnRetry() {
 	buildIdv1 := s.T().Name() + "-v1"
 
 	wf := func(ctx workflow.Context) error {
-		return fmt.Errorf("fail") //nolint:goerr113
+		return fmt.Errorf("fail")
 	}
 
 	// Declare v1

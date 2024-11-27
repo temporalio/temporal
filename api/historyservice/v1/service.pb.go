@@ -54,7 +54,7 @@ var file_temporal_server_api_historyservice_v1_service_proto_rawDesc = []byte{
 	0x6d, 0x70, 0x6f, 0x72, 0x61, 0x6c, 0x2f, 0x73, 0x65, 0x72, 0x76, 0x65, 0x72, 0x2f, 0x61, 0x70,
 	0x69, 0x2f, 0x68, 0x69, 0x73, 0x74, 0x6f, 0x72, 0x79, 0x73, 0x65, 0x72, 0x76, 0x69, 0x63, 0x65,
 	0x2f, 0x76, 0x31, 0x2f, 0x72, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x5f, 0x72, 0x65, 0x73, 0x70,
-	0x6f, 0x6e, 0x73, 0x65, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x32, 0x8a, 0x5a, 0x0a, 0x0e, 0x48,
+	0x6f, 0x6e, 0x73, 0x65, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x32, 0xbd, 0x5d, 0x0a, 0x0e, 0x48,
 	0x69, 0x73, 0x74, 0x6f, 0x72, 0x79, 0x53, 0x65, 0x72, 0x76, 0x69, 0x63, 0x65, 0x12, 0xa7, 0x01,
 	0x0a, 0x16, 0x53, 0x74, 0x61, 0x72, 0x74, 0x57, 0x6f, 0x72, 0x6b, 0x66, 0x6c, 0x6f, 0x77, 0x45,
 	0x78, 0x65, 0x63, 0x75, 0x74, 0x69, 0x6f, 0x6e, 0x12, 0x44, 0x2e, 0x74, 0x65, 0x6d, 0x70, 0x6f,
@@ -775,11 +775,38 @@ var file_temporal_server_api_historyservice_v1_service_proto_rawDesc = []byte{
 	0x72, 0x2e, 0x61, 0x70, 0x69, 0x2e, 0x68, 0x69, 0x73, 0x74, 0x6f, 0x72, 0x79, 0x73, 0x65, 0x72,
 	0x76, 0x69, 0x63, 0x65, 0x2e, 0x76, 0x31, 0x2e, 0x55, 0x70, 0x64, 0x61, 0x74, 0x65, 0x41, 0x63,
 	0x74, 0x69, 0x76, 0x69, 0x74, 0x79, 0x4f, 0x70, 0x74, 0x69, 0x6f, 0x6e, 0x73, 0x52, 0x65, 0x73,
-	0x70, 0x6f, 0x6e, 0x73, 0x65, 0x22, 0x00, 0x42, 0x3c, 0x5a, 0x3a, 0x67, 0x6f, 0x2e, 0x74, 0x65,
-	0x6d, 0x70, 0x6f, 0x72, 0x61, 0x6c, 0x2e, 0x69, 0x6f, 0x2f, 0x73, 0x65, 0x72, 0x76, 0x65, 0x72,
-	0x2f, 0x61, 0x70, 0x69, 0x2f, 0x68, 0x69, 0x73, 0x74, 0x6f, 0x72, 0x79, 0x73, 0x65, 0x72, 0x76,
-	0x69, 0x63, 0x65, 0x2f, 0x76, 0x31, 0x3b, 0x68, 0x69, 0x73, 0x74, 0x6f, 0x72, 0x79, 0x73, 0x65,
-	0x72, 0x76, 0x69, 0x63, 0x65, 0x62, 0x06, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x33,
+	0x70, 0x6f, 0x6e, 0x73, 0x65, 0x22, 0x00, 0x12, 0x8c, 0x01, 0x0a, 0x0d, 0x50, 0x61, 0x75, 0x73,
+	0x65, 0x41, 0x63, 0x74, 0x69, 0x76, 0x69, 0x74, 0x79, 0x12, 0x3b, 0x2e, 0x74, 0x65, 0x6d, 0x70,
+	0x6f, 0x72, 0x61, 0x6c, 0x2e, 0x73, 0x65, 0x72, 0x76, 0x65, 0x72, 0x2e, 0x61, 0x70, 0x69, 0x2e,
+	0x68, 0x69, 0x73, 0x74, 0x6f, 0x72, 0x79, 0x73, 0x65, 0x72, 0x76, 0x69, 0x63, 0x65, 0x2e, 0x76,
+	0x31, 0x2e, 0x50, 0x61, 0x75, 0x73, 0x65, 0x41, 0x63, 0x74, 0x69, 0x76, 0x69, 0x74, 0x79, 0x52,
+	0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x3c, 0x2e, 0x74, 0x65, 0x6d, 0x70, 0x6f, 0x72, 0x61,
+	0x6c, 0x2e, 0x73, 0x65, 0x72, 0x76, 0x65, 0x72, 0x2e, 0x61, 0x70, 0x69, 0x2e, 0x68, 0x69, 0x73,
+	0x74, 0x6f, 0x72, 0x79, 0x73, 0x65, 0x72, 0x76, 0x69, 0x63, 0x65, 0x2e, 0x76, 0x31, 0x2e, 0x50,
+	0x61, 0x75, 0x73, 0x65, 0x41, 0x63, 0x74, 0x69, 0x76, 0x69, 0x74, 0x79, 0x52, 0x65, 0x73, 0x70,
+	0x6f, 0x6e, 0x73, 0x65, 0x22, 0x00, 0x12, 0x92, 0x01, 0x0a, 0x0f, 0x55, 0x6e, 0x70, 0x61, 0x75,
+	0x73, 0x65, 0x41, 0x63, 0x74, 0x69, 0x76, 0x69, 0x74, 0x79, 0x12, 0x3d, 0x2e, 0x74, 0x65, 0x6d,
+	0x70, 0x6f, 0x72, 0x61, 0x6c, 0x2e, 0x73, 0x65, 0x72, 0x76, 0x65, 0x72, 0x2e, 0x61, 0x70, 0x69,
+	0x2e, 0x68, 0x69, 0x73, 0x74, 0x6f, 0x72, 0x79, 0x73, 0x65, 0x72, 0x76, 0x69, 0x63, 0x65, 0x2e,
+	0x76, 0x31, 0x2e, 0x55, 0x6e, 0x70, 0x61, 0x75, 0x73, 0x65, 0x41, 0x63, 0x74, 0x69, 0x76, 0x69,
+	0x74, 0x79, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x3e, 0x2e, 0x74, 0x65, 0x6d, 0x70,
+	0x6f, 0x72, 0x61, 0x6c, 0x2e, 0x73, 0x65, 0x72, 0x76, 0x65, 0x72, 0x2e, 0x61, 0x70, 0x69, 0x2e,
+	0x68, 0x69, 0x73, 0x74, 0x6f, 0x72, 0x79, 0x73, 0x65, 0x72, 0x76, 0x69, 0x63, 0x65, 0x2e, 0x76,
+	0x31, 0x2e, 0x55, 0x6e, 0x70, 0x61, 0x75, 0x73, 0x65, 0x41, 0x63, 0x74, 0x69, 0x76, 0x69, 0x74,
+	0x79, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x22, 0x00, 0x12, 0x8c, 0x01, 0x0a, 0x0d,
+	0x52, 0x65, 0x73, 0x65, 0x74, 0x41, 0x63, 0x74, 0x69, 0x76, 0x69, 0x74, 0x79, 0x12, 0x3b, 0x2e,
+	0x74, 0x65, 0x6d, 0x70, 0x6f, 0x72, 0x61, 0x6c, 0x2e, 0x73, 0x65, 0x72, 0x76, 0x65, 0x72, 0x2e,
+	0x61, 0x70, 0x69, 0x2e, 0x68, 0x69, 0x73, 0x74, 0x6f, 0x72, 0x79, 0x73, 0x65, 0x72, 0x76, 0x69,
+	0x63, 0x65, 0x2e, 0x76, 0x31, 0x2e, 0x52, 0x65, 0x73, 0x65, 0x74, 0x41, 0x63, 0x74, 0x69, 0x76,
+	0x69, 0x74, 0x79, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x3c, 0x2e, 0x74, 0x65, 0x6d,
+	0x70, 0x6f, 0x72, 0x61, 0x6c, 0x2e, 0x73, 0x65, 0x72, 0x76, 0x65, 0x72, 0x2e, 0x61, 0x70, 0x69,
+	0x2e, 0x68, 0x69, 0x73, 0x74, 0x6f, 0x72, 0x79, 0x73, 0x65, 0x72, 0x76, 0x69, 0x63, 0x65, 0x2e,
+	0x76, 0x31, 0x2e, 0x52, 0x65, 0x73, 0x65, 0x74, 0x41, 0x63, 0x74, 0x69, 0x76, 0x69, 0x74, 0x79,
+	0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x22, 0x00, 0x42, 0x3c, 0x5a, 0x3a, 0x67, 0x6f,
+	0x2e, 0x74, 0x65, 0x6d, 0x70, 0x6f, 0x72, 0x61, 0x6c, 0x2e, 0x69, 0x6f, 0x2f, 0x73, 0x65, 0x72,
+	0x76, 0x65, 0x72, 0x2f, 0x61, 0x70, 0x69, 0x2f, 0x68, 0x69, 0x73, 0x74, 0x6f, 0x72, 0x79, 0x73,
+	0x65, 0x72, 0x76, 0x69, 0x63, 0x65, 0x2f, 0x76, 0x31, 0x3b, 0x68, 0x69, 0x73, 0x74, 0x6f, 0x72,
+	0x79, 0x73, 0x65, 0x72, 0x76, 0x69, 0x63, 0x65, 0x62, 0x06, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x33,
 }
 
 var file_temporal_server_api_historyservice_v1_service_proto_goTypes = []interface{}{
@@ -851,74 +878,80 @@ var file_temporal_server_api_historyservice_v1_service_proto_goTypes = []interfa
 	(*DeepHealthCheckRequest)(nil),                         // 65: temporal.server.api.historyservice.v1.DeepHealthCheckRequest
 	(*SyncWorkflowStateRequest)(nil),                       // 66: temporal.server.api.historyservice.v1.SyncWorkflowStateRequest
 	(*UpdateActivityOptionsRequest)(nil),                   // 67: temporal.server.api.historyservice.v1.UpdateActivityOptionsRequest
-	(*StartWorkflowExecutionResponse)(nil),                 // 68: temporal.server.api.historyservice.v1.StartWorkflowExecutionResponse
-	(*GetMutableStateResponse)(nil),                        // 69: temporal.server.api.historyservice.v1.GetMutableStateResponse
-	(*PollMutableStateResponse)(nil),                       // 70: temporal.server.api.historyservice.v1.PollMutableStateResponse
-	(*ResetStickyTaskQueueResponse)(nil),                   // 71: temporal.server.api.historyservice.v1.ResetStickyTaskQueueResponse
-	(*RecordWorkflowTaskStartedResponse)(nil),              // 72: temporal.server.api.historyservice.v1.RecordWorkflowTaskStartedResponse
-	(*RecordActivityTaskStartedResponse)(nil),              // 73: temporal.server.api.historyservice.v1.RecordActivityTaskStartedResponse
-	(*RespondWorkflowTaskCompletedResponse)(nil),           // 74: temporal.server.api.historyservice.v1.RespondWorkflowTaskCompletedResponse
-	(*RespondWorkflowTaskFailedResponse)(nil),              // 75: temporal.server.api.historyservice.v1.RespondWorkflowTaskFailedResponse
-	(*IsWorkflowTaskValidResponse)(nil),                    // 76: temporal.server.api.historyservice.v1.IsWorkflowTaskValidResponse
-	(*RecordActivityTaskHeartbeatResponse)(nil),            // 77: temporal.server.api.historyservice.v1.RecordActivityTaskHeartbeatResponse
-	(*RespondActivityTaskCompletedResponse)(nil),           // 78: temporal.server.api.historyservice.v1.RespondActivityTaskCompletedResponse
-	(*RespondActivityTaskFailedResponse)(nil),              // 79: temporal.server.api.historyservice.v1.RespondActivityTaskFailedResponse
-	(*RespondActivityTaskCanceledResponse)(nil),            // 80: temporal.server.api.historyservice.v1.RespondActivityTaskCanceledResponse
-	(*IsActivityTaskValidResponse)(nil),                    // 81: temporal.server.api.historyservice.v1.IsActivityTaskValidResponse
-	(*SignalWorkflowExecutionResponse)(nil),                // 82: temporal.server.api.historyservice.v1.SignalWorkflowExecutionResponse
-	(*SignalWithStartWorkflowExecutionResponse)(nil),       // 83: temporal.server.api.historyservice.v1.SignalWithStartWorkflowExecutionResponse
-	(*ExecuteMultiOperationResponse)(nil),                  // 84: temporal.server.api.historyservice.v1.ExecuteMultiOperationResponse
-	(*RemoveSignalMutableStateResponse)(nil),               // 85: temporal.server.api.historyservice.v1.RemoveSignalMutableStateResponse
-	(*TerminateWorkflowExecutionResponse)(nil),             // 86: temporal.server.api.historyservice.v1.TerminateWorkflowExecutionResponse
-	(*DeleteWorkflowExecutionResponse)(nil),                // 87: temporal.server.api.historyservice.v1.DeleteWorkflowExecutionResponse
-	(*ResetWorkflowExecutionResponse)(nil),                 // 88: temporal.server.api.historyservice.v1.ResetWorkflowExecutionResponse
-	(*UpdateWorkflowExecutionOptionsResponse)(nil),         // 89: temporal.server.api.historyservice.v1.UpdateWorkflowExecutionOptionsResponse
-	(*RequestCancelWorkflowExecutionResponse)(nil),         // 90: temporal.server.api.historyservice.v1.RequestCancelWorkflowExecutionResponse
-	(*ScheduleWorkflowTaskResponse)(nil),                   // 91: temporal.server.api.historyservice.v1.ScheduleWorkflowTaskResponse
-	(*VerifyFirstWorkflowTaskScheduledResponse)(nil),       // 92: temporal.server.api.historyservice.v1.VerifyFirstWorkflowTaskScheduledResponse
-	(*RecordChildExecutionCompletedResponse)(nil),          // 93: temporal.server.api.historyservice.v1.RecordChildExecutionCompletedResponse
-	(*VerifyChildExecutionCompletionRecordedResponse)(nil), // 94: temporal.server.api.historyservice.v1.VerifyChildExecutionCompletionRecordedResponse
-	(*DescribeWorkflowExecutionResponse)(nil),              // 95: temporal.server.api.historyservice.v1.DescribeWorkflowExecutionResponse
-	(*ReplicateEventsV2Response)(nil),                      // 96: temporal.server.api.historyservice.v1.ReplicateEventsV2Response
-	(*ReplicateWorkflowStateResponse)(nil),                 // 97: temporal.server.api.historyservice.v1.ReplicateWorkflowStateResponse
-	(*SyncShardStatusResponse)(nil),                        // 98: temporal.server.api.historyservice.v1.SyncShardStatusResponse
-	(*SyncActivityResponse)(nil),                           // 99: temporal.server.api.historyservice.v1.SyncActivityResponse
-	(*DescribeMutableStateResponse)(nil),                   // 100: temporal.server.api.historyservice.v1.DescribeMutableStateResponse
-	(*DescribeHistoryHostResponse)(nil),                    // 101: temporal.server.api.historyservice.v1.DescribeHistoryHostResponse
-	(*CloseShardResponse)(nil),                             // 102: temporal.server.api.historyservice.v1.CloseShardResponse
-	(*GetShardResponse)(nil),                               // 103: temporal.server.api.historyservice.v1.GetShardResponse
-	(*RemoveTaskResponse)(nil),                             // 104: temporal.server.api.historyservice.v1.RemoveTaskResponse
-	(*GetReplicationMessagesResponse)(nil),                 // 105: temporal.server.api.historyservice.v1.GetReplicationMessagesResponse
-	(*GetDLQReplicationMessagesResponse)(nil),              // 106: temporal.server.api.historyservice.v1.GetDLQReplicationMessagesResponse
-	(*QueryWorkflowResponse)(nil),                          // 107: temporal.server.api.historyservice.v1.QueryWorkflowResponse
-	(*ReapplyEventsResponse)(nil),                          // 108: temporal.server.api.historyservice.v1.ReapplyEventsResponse
-	(*GetDLQMessagesResponse)(nil),                         // 109: temporal.server.api.historyservice.v1.GetDLQMessagesResponse
-	(*PurgeDLQMessagesResponse)(nil),                       // 110: temporal.server.api.historyservice.v1.PurgeDLQMessagesResponse
-	(*MergeDLQMessagesResponse)(nil),                       // 111: temporal.server.api.historyservice.v1.MergeDLQMessagesResponse
-	(*RefreshWorkflowTasksResponse)(nil),                   // 112: temporal.server.api.historyservice.v1.RefreshWorkflowTasksResponse
-	(*GenerateLastHistoryReplicationTasksResponse)(nil),    // 113: temporal.server.api.historyservice.v1.GenerateLastHistoryReplicationTasksResponse
-	(*GetReplicationStatusResponse)(nil),                   // 114: temporal.server.api.historyservice.v1.GetReplicationStatusResponse
-	(*RebuildMutableStateResponse)(nil),                    // 115: temporal.server.api.historyservice.v1.RebuildMutableStateResponse
-	(*ImportWorkflowExecutionResponse)(nil),                // 116: temporal.server.api.historyservice.v1.ImportWorkflowExecutionResponse
-	(*DeleteWorkflowVisibilityRecordResponse)(nil),         // 117: temporal.server.api.historyservice.v1.DeleteWorkflowVisibilityRecordResponse
-	(*UpdateWorkflowExecutionResponse)(nil),                // 118: temporal.server.api.historyservice.v1.UpdateWorkflowExecutionResponse
-	(*PollWorkflowExecutionUpdateResponse)(nil),            // 119: temporal.server.api.historyservice.v1.PollWorkflowExecutionUpdateResponse
-	(*StreamWorkflowReplicationMessagesResponse)(nil),      // 120: temporal.server.api.historyservice.v1.StreamWorkflowReplicationMessagesResponse
-	(*GetWorkflowExecutionHistoryResponse)(nil),            // 121: temporal.server.api.historyservice.v1.GetWorkflowExecutionHistoryResponse
-	(*GetWorkflowExecutionHistoryReverseResponse)(nil),     // 122: temporal.server.api.historyservice.v1.GetWorkflowExecutionHistoryReverseResponse
-	(*GetWorkflowExecutionRawHistoryV2Response)(nil),       // 123: temporal.server.api.historyservice.v1.GetWorkflowExecutionRawHistoryV2Response
-	(*GetWorkflowExecutionRawHistoryResponse)(nil),         // 124: temporal.server.api.historyservice.v1.GetWorkflowExecutionRawHistoryResponse
-	(*ForceDeleteWorkflowExecutionResponse)(nil),           // 125: temporal.server.api.historyservice.v1.ForceDeleteWorkflowExecutionResponse
-	(*GetDLQTasksResponse)(nil),                            // 126: temporal.server.api.historyservice.v1.GetDLQTasksResponse
-	(*DeleteDLQTasksResponse)(nil),                         // 127: temporal.server.api.historyservice.v1.DeleteDLQTasksResponse
-	(*ListQueuesResponse)(nil),                             // 128: temporal.server.api.historyservice.v1.ListQueuesResponse
-	(*AddTasksResponse)(nil),                               // 129: temporal.server.api.historyservice.v1.AddTasksResponse
-	(*ListTasksResponse)(nil),                              // 130: temporal.server.api.historyservice.v1.ListTasksResponse
-	(*CompleteNexusOperationResponse)(nil),                 // 131: temporal.server.api.historyservice.v1.CompleteNexusOperationResponse
-	(*InvokeStateMachineMethodResponse)(nil),               // 132: temporal.server.api.historyservice.v1.InvokeStateMachineMethodResponse
-	(*DeepHealthCheckResponse)(nil),                        // 133: temporal.server.api.historyservice.v1.DeepHealthCheckResponse
-	(*SyncWorkflowStateResponse)(nil),                      // 134: temporal.server.api.historyservice.v1.SyncWorkflowStateResponse
-	(*UpdateActivityOptionsResponse)(nil),                  // 135: temporal.server.api.historyservice.v1.UpdateActivityOptionsResponse
+	(*PauseActivityRequest)(nil),                           // 68: temporal.server.api.historyservice.v1.PauseActivityRequest
+	(*UnpauseActivityRequest)(nil),                         // 69: temporal.server.api.historyservice.v1.UnpauseActivityRequest
+	(*ResetActivityRequest)(nil),                           // 70: temporal.server.api.historyservice.v1.ResetActivityRequest
+	(*StartWorkflowExecutionResponse)(nil),                 // 71: temporal.server.api.historyservice.v1.StartWorkflowExecutionResponse
+	(*GetMutableStateResponse)(nil),                        // 72: temporal.server.api.historyservice.v1.GetMutableStateResponse
+	(*PollMutableStateResponse)(nil),                       // 73: temporal.server.api.historyservice.v1.PollMutableStateResponse
+	(*ResetStickyTaskQueueResponse)(nil),                   // 74: temporal.server.api.historyservice.v1.ResetStickyTaskQueueResponse
+	(*RecordWorkflowTaskStartedResponse)(nil),              // 75: temporal.server.api.historyservice.v1.RecordWorkflowTaskStartedResponse
+	(*RecordActivityTaskStartedResponse)(nil),              // 76: temporal.server.api.historyservice.v1.RecordActivityTaskStartedResponse
+	(*RespondWorkflowTaskCompletedResponse)(nil),           // 77: temporal.server.api.historyservice.v1.RespondWorkflowTaskCompletedResponse
+	(*RespondWorkflowTaskFailedResponse)(nil),              // 78: temporal.server.api.historyservice.v1.RespondWorkflowTaskFailedResponse
+	(*IsWorkflowTaskValidResponse)(nil),                    // 79: temporal.server.api.historyservice.v1.IsWorkflowTaskValidResponse
+	(*RecordActivityTaskHeartbeatResponse)(nil),            // 80: temporal.server.api.historyservice.v1.RecordActivityTaskHeartbeatResponse
+	(*RespondActivityTaskCompletedResponse)(nil),           // 81: temporal.server.api.historyservice.v1.RespondActivityTaskCompletedResponse
+	(*RespondActivityTaskFailedResponse)(nil),              // 82: temporal.server.api.historyservice.v1.RespondActivityTaskFailedResponse
+	(*RespondActivityTaskCanceledResponse)(nil),            // 83: temporal.server.api.historyservice.v1.RespondActivityTaskCanceledResponse
+	(*IsActivityTaskValidResponse)(nil),                    // 84: temporal.server.api.historyservice.v1.IsActivityTaskValidResponse
+	(*SignalWorkflowExecutionResponse)(nil),                // 85: temporal.server.api.historyservice.v1.SignalWorkflowExecutionResponse
+	(*SignalWithStartWorkflowExecutionResponse)(nil),       // 86: temporal.server.api.historyservice.v1.SignalWithStartWorkflowExecutionResponse
+	(*ExecuteMultiOperationResponse)(nil),                  // 87: temporal.server.api.historyservice.v1.ExecuteMultiOperationResponse
+	(*RemoveSignalMutableStateResponse)(nil),               // 88: temporal.server.api.historyservice.v1.RemoveSignalMutableStateResponse
+	(*TerminateWorkflowExecutionResponse)(nil),             // 89: temporal.server.api.historyservice.v1.TerminateWorkflowExecutionResponse
+	(*DeleteWorkflowExecutionResponse)(nil),                // 90: temporal.server.api.historyservice.v1.DeleteWorkflowExecutionResponse
+	(*ResetWorkflowExecutionResponse)(nil),                 // 91: temporal.server.api.historyservice.v1.ResetWorkflowExecutionResponse
+	(*UpdateWorkflowExecutionOptionsResponse)(nil),         // 92: temporal.server.api.historyservice.v1.UpdateWorkflowExecutionOptionsResponse
+	(*RequestCancelWorkflowExecutionResponse)(nil),         // 93: temporal.server.api.historyservice.v1.RequestCancelWorkflowExecutionResponse
+	(*ScheduleWorkflowTaskResponse)(nil),                   // 94: temporal.server.api.historyservice.v1.ScheduleWorkflowTaskResponse
+	(*VerifyFirstWorkflowTaskScheduledResponse)(nil),       // 95: temporal.server.api.historyservice.v1.VerifyFirstWorkflowTaskScheduledResponse
+	(*RecordChildExecutionCompletedResponse)(nil),          // 96: temporal.server.api.historyservice.v1.RecordChildExecutionCompletedResponse
+	(*VerifyChildExecutionCompletionRecordedResponse)(nil), // 97: temporal.server.api.historyservice.v1.VerifyChildExecutionCompletionRecordedResponse
+	(*DescribeWorkflowExecutionResponse)(nil),              // 98: temporal.server.api.historyservice.v1.DescribeWorkflowExecutionResponse
+	(*ReplicateEventsV2Response)(nil),                      // 99: temporal.server.api.historyservice.v1.ReplicateEventsV2Response
+	(*ReplicateWorkflowStateResponse)(nil),                 // 100: temporal.server.api.historyservice.v1.ReplicateWorkflowStateResponse
+	(*SyncShardStatusResponse)(nil),                        // 101: temporal.server.api.historyservice.v1.SyncShardStatusResponse
+	(*SyncActivityResponse)(nil),                           // 102: temporal.server.api.historyservice.v1.SyncActivityResponse
+	(*DescribeMutableStateResponse)(nil),                   // 103: temporal.server.api.historyservice.v1.DescribeMutableStateResponse
+	(*DescribeHistoryHostResponse)(nil),                    // 104: temporal.server.api.historyservice.v1.DescribeHistoryHostResponse
+	(*CloseShardResponse)(nil),                             // 105: temporal.server.api.historyservice.v1.CloseShardResponse
+	(*GetShardResponse)(nil),                               // 106: temporal.server.api.historyservice.v1.GetShardResponse
+	(*RemoveTaskResponse)(nil),                             // 107: temporal.server.api.historyservice.v1.RemoveTaskResponse
+	(*GetReplicationMessagesResponse)(nil),                 // 108: temporal.server.api.historyservice.v1.GetReplicationMessagesResponse
+	(*GetDLQReplicationMessagesResponse)(nil),              // 109: temporal.server.api.historyservice.v1.GetDLQReplicationMessagesResponse
+	(*QueryWorkflowResponse)(nil),                          // 110: temporal.server.api.historyservice.v1.QueryWorkflowResponse
+	(*ReapplyEventsResponse)(nil),                          // 111: temporal.server.api.historyservice.v1.ReapplyEventsResponse
+	(*GetDLQMessagesResponse)(nil),                         // 112: temporal.server.api.historyservice.v1.GetDLQMessagesResponse
+	(*PurgeDLQMessagesResponse)(nil),                       // 113: temporal.server.api.historyservice.v1.PurgeDLQMessagesResponse
+	(*MergeDLQMessagesResponse)(nil),                       // 114: temporal.server.api.historyservice.v1.MergeDLQMessagesResponse
+	(*RefreshWorkflowTasksResponse)(nil),                   // 115: temporal.server.api.historyservice.v1.RefreshWorkflowTasksResponse
+	(*GenerateLastHistoryReplicationTasksResponse)(nil),    // 116: temporal.server.api.historyservice.v1.GenerateLastHistoryReplicationTasksResponse
+	(*GetReplicationStatusResponse)(nil),                   // 117: temporal.server.api.historyservice.v1.GetReplicationStatusResponse
+	(*RebuildMutableStateResponse)(nil),                    // 118: temporal.server.api.historyservice.v1.RebuildMutableStateResponse
+	(*ImportWorkflowExecutionResponse)(nil),                // 119: temporal.server.api.historyservice.v1.ImportWorkflowExecutionResponse
+	(*DeleteWorkflowVisibilityRecordResponse)(nil),         // 120: temporal.server.api.historyservice.v1.DeleteWorkflowVisibilityRecordResponse
+	(*UpdateWorkflowExecutionResponse)(nil),                // 121: temporal.server.api.historyservice.v1.UpdateWorkflowExecutionResponse
+	(*PollWorkflowExecutionUpdateResponse)(nil),            // 122: temporal.server.api.historyservice.v1.PollWorkflowExecutionUpdateResponse
+	(*StreamWorkflowReplicationMessagesResponse)(nil),      // 123: temporal.server.api.historyservice.v1.StreamWorkflowReplicationMessagesResponse
+	(*GetWorkflowExecutionHistoryResponse)(nil),            // 124: temporal.server.api.historyservice.v1.GetWorkflowExecutionHistoryResponse
+	(*GetWorkflowExecutionHistoryReverseResponse)(nil),     // 125: temporal.server.api.historyservice.v1.GetWorkflowExecutionHistoryReverseResponse
+	(*GetWorkflowExecutionRawHistoryV2Response)(nil),       // 126: temporal.server.api.historyservice.v1.GetWorkflowExecutionRawHistoryV2Response
+	(*GetWorkflowExecutionRawHistoryResponse)(nil),         // 127: temporal.server.api.historyservice.v1.GetWorkflowExecutionRawHistoryResponse
+	(*ForceDeleteWorkflowExecutionResponse)(nil),           // 128: temporal.server.api.historyservice.v1.ForceDeleteWorkflowExecutionResponse
+	(*GetDLQTasksResponse)(nil),                            // 129: temporal.server.api.historyservice.v1.GetDLQTasksResponse
+	(*DeleteDLQTasksResponse)(nil),                         // 130: temporal.server.api.historyservice.v1.DeleteDLQTasksResponse
+	(*ListQueuesResponse)(nil),                             // 131: temporal.server.api.historyservice.v1.ListQueuesResponse
+	(*AddTasksResponse)(nil),                               // 132: temporal.server.api.historyservice.v1.AddTasksResponse
+	(*ListTasksResponse)(nil),                              // 133: temporal.server.api.historyservice.v1.ListTasksResponse
+	(*CompleteNexusOperationResponse)(nil),                 // 134: temporal.server.api.historyservice.v1.CompleteNexusOperationResponse
+	(*InvokeStateMachineMethodResponse)(nil),               // 135: temporal.server.api.historyservice.v1.InvokeStateMachineMethodResponse
+	(*DeepHealthCheckResponse)(nil),                        // 136: temporal.server.api.historyservice.v1.DeepHealthCheckResponse
+	(*SyncWorkflowStateResponse)(nil),                      // 137: temporal.server.api.historyservice.v1.SyncWorkflowStateResponse
+	(*UpdateActivityOptionsResponse)(nil),                  // 138: temporal.server.api.historyservice.v1.UpdateActivityOptionsResponse
+	(*PauseActivityResponse)(nil),                          // 139: temporal.server.api.historyservice.v1.PauseActivityResponse
+	(*UnpauseActivityResponse)(nil),                        // 140: temporal.server.api.historyservice.v1.UnpauseActivityResponse
+	(*ResetActivityResponse)(nil),                          // 141: temporal.server.api.historyservice.v1.ResetActivityResponse
 }
 var file_temporal_server_api_historyservice_v1_service_proto_depIdxs = []int32{
 	0,   // 0: temporal.server.api.historyservice.v1.HistoryService.StartWorkflowExecution:input_type -> temporal.server.api.historyservice.v1.StartWorkflowExecutionRequest
@@ -989,76 +1022,82 @@ var file_temporal_server_api_historyservice_v1_service_proto_depIdxs = []int32{
 	65,  // 65: temporal.server.api.historyservice.v1.HistoryService.DeepHealthCheck:input_type -> temporal.server.api.historyservice.v1.DeepHealthCheckRequest
 	66,  // 66: temporal.server.api.historyservice.v1.HistoryService.SyncWorkflowState:input_type -> temporal.server.api.historyservice.v1.SyncWorkflowStateRequest
 	67,  // 67: temporal.server.api.historyservice.v1.HistoryService.UpdateActivityOptions:input_type -> temporal.server.api.historyservice.v1.UpdateActivityOptionsRequest
-	68,  // 68: temporal.server.api.historyservice.v1.HistoryService.StartWorkflowExecution:output_type -> temporal.server.api.historyservice.v1.StartWorkflowExecutionResponse
-	69,  // 69: temporal.server.api.historyservice.v1.HistoryService.GetMutableState:output_type -> temporal.server.api.historyservice.v1.GetMutableStateResponse
-	70,  // 70: temporal.server.api.historyservice.v1.HistoryService.PollMutableState:output_type -> temporal.server.api.historyservice.v1.PollMutableStateResponse
-	71,  // 71: temporal.server.api.historyservice.v1.HistoryService.ResetStickyTaskQueue:output_type -> temporal.server.api.historyservice.v1.ResetStickyTaskQueueResponse
-	72,  // 72: temporal.server.api.historyservice.v1.HistoryService.RecordWorkflowTaskStarted:output_type -> temporal.server.api.historyservice.v1.RecordWorkflowTaskStartedResponse
-	73,  // 73: temporal.server.api.historyservice.v1.HistoryService.RecordActivityTaskStarted:output_type -> temporal.server.api.historyservice.v1.RecordActivityTaskStartedResponse
-	74,  // 74: temporal.server.api.historyservice.v1.HistoryService.RespondWorkflowTaskCompleted:output_type -> temporal.server.api.historyservice.v1.RespondWorkflowTaskCompletedResponse
-	75,  // 75: temporal.server.api.historyservice.v1.HistoryService.RespondWorkflowTaskFailed:output_type -> temporal.server.api.historyservice.v1.RespondWorkflowTaskFailedResponse
-	76,  // 76: temporal.server.api.historyservice.v1.HistoryService.IsWorkflowTaskValid:output_type -> temporal.server.api.historyservice.v1.IsWorkflowTaskValidResponse
-	77,  // 77: temporal.server.api.historyservice.v1.HistoryService.RecordActivityTaskHeartbeat:output_type -> temporal.server.api.historyservice.v1.RecordActivityTaskHeartbeatResponse
-	78,  // 78: temporal.server.api.historyservice.v1.HistoryService.RespondActivityTaskCompleted:output_type -> temporal.server.api.historyservice.v1.RespondActivityTaskCompletedResponse
-	79,  // 79: temporal.server.api.historyservice.v1.HistoryService.RespondActivityTaskFailed:output_type -> temporal.server.api.historyservice.v1.RespondActivityTaskFailedResponse
-	80,  // 80: temporal.server.api.historyservice.v1.HistoryService.RespondActivityTaskCanceled:output_type -> temporal.server.api.historyservice.v1.RespondActivityTaskCanceledResponse
-	81,  // 81: temporal.server.api.historyservice.v1.HistoryService.IsActivityTaskValid:output_type -> temporal.server.api.historyservice.v1.IsActivityTaskValidResponse
-	82,  // 82: temporal.server.api.historyservice.v1.HistoryService.SignalWorkflowExecution:output_type -> temporal.server.api.historyservice.v1.SignalWorkflowExecutionResponse
-	83,  // 83: temporal.server.api.historyservice.v1.HistoryService.SignalWithStartWorkflowExecution:output_type -> temporal.server.api.historyservice.v1.SignalWithStartWorkflowExecutionResponse
-	84,  // 84: temporal.server.api.historyservice.v1.HistoryService.ExecuteMultiOperation:output_type -> temporal.server.api.historyservice.v1.ExecuteMultiOperationResponse
-	85,  // 85: temporal.server.api.historyservice.v1.HistoryService.RemoveSignalMutableState:output_type -> temporal.server.api.historyservice.v1.RemoveSignalMutableStateResponse
-	86,  // 86: temporal.server.api.historyservice.v1.HistoryService.TerminateWorkflowExecution:output_type -> temporal.server.api.historyservice.v1.TerminateWorkflowExecutionResponse
-	87,  // 87: temporal.server.api.historyservice.v1.HistoryService.DeleteWorkflowExecution:output_type -> temporal.server.api.historyservice.v1.DeleteWorkflowExecutionResponse
-	88,  // 88: temporal.server.api.historyservice.v1.HistoryService.ResetWorkflowExecution:output_type -> temporal.server.api.historyservice.v1.ResetWorkflowExecutionResponse
-	89,  // 89: temporal.server.api.historyservice.v1.HistoryService.UpdateWorkflowExecutionOptions:output_type -> temporal.server.api.historyservice.v1.UpdateWorkflowExecutionOptionsResponse
-	90,  // 90: temporal.server.api.historyservice.v1.HistoryService.RequestCancelWorkflowExecution:output_type -> temporal.server.api.historyservice.v1.RequestCancelWorkflowExecutionResponse
-	91,  // 91: temporal.server.api.historyservice.v1.HistoryService.ScheduleWorkflowTask:output_type -> temporal.server.api.historyservice.v1.ScheduleWorkflowTaskResponse
-	92,  // 92: temporal.server.api.historyservice.v1.HistoryService.VerifyFirstWorkflowTaskScheduled:output_type -> temporal.server.api.historyservice.v1.VerifyFirstWorkflowTaskScheduledResponse
-	93,  // 93: temporal.server.api.historyservice.v1.HistoryService.RecordChildExecutionCompleted:output_type -> temporal.server.api.historyservice.v1.RecordChildExecutionCompletedResponse
-	94,  // 94: temporal.server.api.historyservice.v1.HistoryService.VerifyChildExecutionCompletionRecorded:output_type -> temporal.server.api.historyservice.v1.VerifyChildExecutionCompletionRecordedResponse
-	95,  // 95: temporal.server.api.historyservice.v1.HistoryService.DescribeWorkflowExecution:output_type -> temporal.server.api.historyservice.v1.DescribeWorkflowExecutionResponse
-	96,  // 96: temporal.server.api.historyservice.v1.HistoryService.ReplicateEventsV2:output_type -> temporal.server.api.historyservice.v1.ReplicateEventsV2Response
-	97,  // 97: temporal.server.api.historyservice.v1.HistoryService.ReplicateWorkflowState:output_type -> temporal.server.api.historyservice.v1.ReplicateWorkflowStateResponse
-	98,  // 98: temporal.server.api.historyservice.v1.HistoryService.SyncShardStatus:output_type -> temporal.server.api.historyservice.v1.SyncShardStatusResponse
-	99,  // 99: temporal.server.api.historyservice.v1.HistoryService.SyncActivity:output_type -> temporal.server.api.historyservice.v1.SyncActivityResponse
-	100, // 100: temporal.server.api.historyservice.v1.HistoryService.DescribeMutableState:output_type -> temporal.server.api.historyservice.v1.DescribeMutableStateResponse
-	101, // 101: temporal.server.api.historyservice.v1.HistoryService.DescribeHistoryHost:output_type -> temporal.server.api.historyservice.v1.DescribeHistoryHostResponse
-	102, // 102: temporal.server.api.historyservice.v1.HistoryService.CloseShard:output_type -> temporal.server.api.historyservice.v1.CloseShardResponse
-	103, // 103: temporal.server.api.historyservice.v1.HistoryService.GetShard:output_type -> temporal.server.api.historyservice.v1.GetShardResponse
-	104, // 104: temporal.server.api.historyservice.v1.HistoryService.RemoveTask:output_type -> temporal.server.api.historyservice.v1.RemoveTaskResponse
-	105, // 105: temporal.server.api.historyservice.v1.HistoryService.GetReplicationMessages:output_type -> temporal.server.api.historyservice.v1.GetReplicationMessagesResponse
-	106, // 106: temporal.server.api.historyservice.v1.HistoryService.GetDLQReplicationMessages:output_type -> temporal.server.api.historyservice.v1.GetDLQReplicationMessagesResponse
-	107, // 107: temporal.server.api.historyservice.v1.HistoryService.QueryWorkflow:output_type -> temporal.server.api.historyservice.v1.QueryWorkflowResponse
-	108, // 108: temporal.server.api.historyservice.v1.HistoryService.ReapplyEvents:output_type -> temporal.server.api.historyservice.v1.ReapplyEventsResponse
-	109, // 109: temporal.server.api.historyservice.v1.HistoryService.GetDLQMessages:output_type -> temporal.server.api.historyservice.v1.GetDLQMessagesResponse
-	110, // 110: temporal.server.api.historyservice.v1.HistoryService.PurgeDLQMessages:output_type -> temporal.server.api.historyservice.v1.PurgeDLQMessagesResponse
-	111, // 111: temporal.server.api.historyservice.v1.HistoryService.MergeDLQMessages:output_type -> temporal.server.api.historyservice.v1.MergeDLQMessagesResponse
-	112, // 112: temporal.server.api.historyservice.v1.HistoryService.RefreshWorkflowTasks:output_type -> temporal.server.api.historyservice.v1.RefreshWorkflowTasksResponse
-	113, // 113: temporal.server.api.historyservice.v1.HistoryService.GenerateLastHistoryReplicationTasks:output_type -> temporal.server.api.historyservice.v1.GenerateLastHistoryReplicationTasksResponse
-	114, // 114: temporal.server.api.historyservice.v1.HistoryService.GetReplicationStatus:output_type -> temporal.server.api.historyservice.v1.GetReplicationStatusResponse
-	115, // 115: temporal.server.api.historyservice.v1.HistoryService.RebuildMutableState:output_type -> temporal.server.api.historyservice.v1.RebuildMutableStateResponse
-	116, // 116: temporal.server.api.historyservice.v1.HistoryService.ImportWorkflowExecution:output_type -> temporal.server.api.historyservice.v1.ImportWorkflowExecutionResponse
-	117, // 117: temporal.server.api.historyservice.v1.HistoryService.DeleteWorkflowVisibilityRecord:output_type -> temporal.server.api.historyservice.v1.DeleteWorkflowVisibilityRecordResponse
-	118, // 118: temporal.server.api.historyservice.v1.HistoryService.UpdateWorkflowExecution:output_type -> temporal.server.api.historyservice.v1.UpdateWorkflowExecutionResponse
-	119, // 119: temporal.server.api.historyservice.v1.HistoryService.PollWorkflowExecutionUpdate:output_type -> temporal.server.api.historyservice.v1.PollWorkflowExecutionUpdateResponse
-	120, // 120: temporal.server.api.historyservice.v1.HistoryService.StreamWorkflowReplicationMessages:output_type -> temporal.server.api.historyservice.v1.StreamWorkflowReplicationMessagesResponse
-	121, // 121: temporal.server.api.historyservice.v1.HistoryService.GetWorkflowExecutionHistory:output_type -> temporal.server.api.historyservice.v1.GetWorkflowExecutionHistoryResponse
-	122, // 122: temporal.server.api.historyservice.v1.HistoryService.GetWorkflowExecutionHistoryReverse:output_type -> temporal.server.api.historyservice.v1.GetWorkflowExecutionHistoryReverseResponse
-	123, // 123: temporal.server.api.historyservice.v1.HistoryService.GetWorkflowExecutionRawHistoryV2:output_type -> temporal.server.api.historyservice.v1.GetWorkflowExecutionRawHistoryV2Response
-	124, // 124: temporal.server.api.historyservice.v1.HistoryService.GetWorkflowExecutionRawHistory:output_type -> temporal.server.api.historyservice.v1.GetWorkflowExecutionRawHistoryResponse
-	125, // 125: temporal.server.api.historyservice.v1.HistoryService.ForceDeleteWorkflowExecution:output_type -> temporal.server.api.historyservice.v1.ForceDeleteWorkflowExecutionResponse
-	126, // 126: temporal.server.api.historyservice.v1.HistoryService.GetDLQTasks:output_type -> temporal.server.api.historyservice.v1.GetDLQTasksResponse
-	127, // 127: temporal.server.api.historyservice.v1.HistoryService.DeleteDLQTasks:output_type -> temporal.server.api.historyservice.v1.DeleteDLQTasksResponse
-	128, // 128: temporal.server.api.historyservice.v1.HistoryService.ListQueues:output_type -> temporal.server.api.historyservice.v1.ListQueuesResponse
-	129, // 129: temporal.server.api.historyservice.v1.HistoryService.AddTasks:output_type -> temporal.server.api.historyservice.v1.AddTasksResponse
-	130, // 130: temporal.server.api.historyservice.v1.HistoryService.ListTasks:output_type -> temporal.server.api.historyservice.v1.ListTasksResponse
-	131, // 131: temporal.server.api.historyservice.v1.HistoryService.CompleteNexusOperation:output_type -> temporal.server.api.historyservice.v1.CompleteNexusOperationResponse
-	132, // 132: temporal.server.api.historyservice.v1.HistoryService.InvokeStateMachineMethod:output_type -> temporal.server.api.historyservice.v1.InvokeStateMachineMethodResponse
-	133, // 133: temporal.server.api.historyservice.v1.HistoryService.DeepHealthCheck:output_type -> temporal.server.api.historyservice.v1.DeepHealthCheckResponse
-	134, // 134: temporal.server.api.historyservice.v1.HistoryService.SyncWorkflowState:output_type -> temporal.server.api.historyservice.v1.SyncWorkflowStateResponse
-	135, // 135: temporal.server.api.historyservice.v1.HistoryService.UpdateActivityOptions:output_type -> temporal.server.api.historyservice.v1.UpdateActivityOptionsResponse
-	68,  // [68:136] is the sub-list for method output_type
-	0,   // [0:68] is the sub-list for method input_type
+	68,  // 68: temporal.server.api.historyservice.v1.HistoryService.PauseActivity:input_type -> temporal.server.api.historyservice.v1.PauseActivityRequest
+	69,  // 69: temporal.server.api.historyservice.v1.HistoryService.UnpauseActivity:input_type -> temporal.server.api.historyservice.v1.UnpauseActivityRequest
+	70,  // 70: temporal.server.api.historyservice.v1.HistoryService.ResetActivity:input_type -> temporal.server.api.historyservice.v1.ResetActivityRequest
+	71,  // 71: temporal.server.api.historyservice.v1.HistoryService.StartWorkflowExecution:output_type -> temporal.server.api.historyservice.v1.StartWorkflowExecutionResponse
+	72,  // 72: temporal.server.api.historyservice.v1.HistoryService.GetMutableState:output_type -> temporal.server.api.historyservice.v1.GetMutableStateResponse
+	73,  // 73: temporal.server.api.historyservice.v1.HistoryService.PollMutableState:output_type -> temporal.server.api.historyservice.v1.PollMutableStateResponse
+	74,  // 74: temporal.server.api.historyservice.v1.HistoryService.ResetStickyTaskQueue:output_type -> temporal.server.api.historyservice.v1.ResetStickyTaskQueueResponse
+	75,  // 75: temporal.server.api.historyservice.v1.HistoryService.RecordWorkflowTaskStarted:output_type -> temporal.server.api.historyservice.v1.RecordWorkflowTaskStartedResponse
+	76,  // 76: temporal.server.api.historyservice.v1.HistoryService.RecordActivityTaskStarted:output_type -> temporal.server.api.historyservice.v1.RecordActivityTaskStartedResponse
+	77,  // 77: temporal.server.api.historyservice.v1.HistoryService.RespondWorkflowTaskCompleted:output_type -> temporal.server.api.historyservice.v1.RespondWorkflowTaskCompletedResponse
+	78,  // 78: temporal.server.api.historyservice.v1.HistoryService.RespondWorkflowTaskFailed:output_type -> temporal.server.api.historyservice.v1.RespondWorkflowTaskFailedResponse
+	79,  // 79: temporal.server.api.historyservice.v1.HistoryService.IsWorkflowTaskValid:output_type -> temporal.server.api.historyservice.v1.IsWorkflowTaskValidResponse
+	80,  // 80: temporal.server.api.historyservice.v1.HistoryService.RecordActivityTaskHeartbeat:output_type -> temporal.server.api.historyservice.v1.RecordActivityTaskHeartbeatResponse
+	81,  // 81: temporal.server.api.historyservice.v1.HistoryService.RespondActivityTaskCompleted:output_type -> temporal.server.api.historyservice.v1.RespondActivityTaskCompletedResponse
+	82,  // 82: temporal.server.api.historyservice.v1.HistoryService.RespondActivityTaskFailed:output_type -> temporal.server.api.historyservice.v1.RespondActivityTaskFailedResponse
+	83,  // 83: temporal.server.api.historyservice.v1.HistoryService.RespondActivityTaskCanceled:output_type -> temporal.server.api.historyservice.v1.RespondActivityTaskCanceledResponse
+	84,  // 84: temporal.server.api.historyservice.v1.HistoryService.IsActivityTaskValid:output_type -> temporal.server.api.historyservice.v1.IsActivityTaskValidResponse
+	85,  // 85: temporal.server.api.historyservice.v1.HistoryService.SignalWorkflowExecution:output_type -> temporal.server.api.historyservice.v1.SignalWorkflowExecutionResponse
+	86,  // 86: temporal.server.api.historyservice.v1.HistoryService.SignalWithStartWorkflowExecution:output_type -> temporal.server.api.historyservice.v1.SignalWithStartWorkflowExecutionResponse
+	87,  // 87: temporal.server.api.historyservice.v1.HistoryService.ExecuteMultiOperation:output_type -> temporal.server.api.historyservice.v1.ExecuteMultiOperationResponse
+	88,  // 88: temporal.server.api.historyservice.v1.HistoryService.RemoveSignalMutableState:output_type -> temporal.server.api.historyservice.v1.RemoveSignalMutableStateResponse
+	89,  // 89: temporal.server.api.historyservice.v1.HistoryService.TerminateWorkflowExecution:output_type -> temporal.server.api.historyservice.v1.TerminateWorkflowExecutionResponse
+	90,  // 90: temporal.server.api.historyservice.v1.HistoryService.DeleteWorkflowExecution:output_type -> temporal.server.api.historyservice.v1.DeleteWorkflowExecutionResponse
+	91,  // 91: temporal.server.api.historyservice.v1.HistoryService.ResetWorkflowExecution:output_type -> temporal.server.api.historyservice.v1.ResetWorkflowExecutionResponse
+	92,  // 92: temporal.server.api.historyservice.v1.HistoryService.UpdateWorkflowExecutionOptions:output_type -> temporal.server.api.historyservice.v1.UpdateWorkflowExecutionOptionsResponse
+	93,  // 93: temporal.server.api.historyservice.v1.HistoryService.RequestCancelWorkflowExecution:output_type -> temporal.server.api.historyservice.v1.RequestCancelWorkflowExecutionResponse
+	94,  // 94: temporal.server.api.historyservice.v1.HistoryService.ScheduleWorkflowTask:output_type -> temporal.server.api.historyservice.v1.ScheduleWorkflowTaskResponse
+	95,  // 95: temporal.server.api.historyservice.v1.HistoryService.VerifyFirstWorkflowTaskScheduled:output_type -> temporal.server.api.historyservice.v1.VerifyFirstWorkflowTaskScheduledResponse
+	96,  // 96: temporal.server.api.historyservice.v1.HistoryService.RecordChildExecutionCompleted:output_type -> temporal.server.api.historyservice.v1.RecordChildExecutionCompletedResponse
+	97,  // 97: temporal.server.api.historyservice.v1.HistoryService.VerifyChildExecutionCompletionRecorded:output_type -> temporal.server.api.historyservice.v1.VerifyChildExecutionCompletionRecordedResponse
+	98,  // 98: temporal.server.api.historyservice.v1.HistoryService.DescribeWorkflowExecution:output_type -> temporal.server.api.historyservice.v1.DescribeWorkflowExecutionResponse
+	99,  // 99: temporal.server.api.historyservice.v1.HistoryService.ReplicateEventsV2:output_type -> temporal.server.api.historyservice.v1.ReplicateEventsV2Response
+	100, // 100: temporal.server.api.historyservice.v1.HistoryService.ReplicateWorkflowState:output_type -> temporal.server.api.historyservice.v1.ReplicateWorkflowStateResponse
+	101, // 101: temporal.server.api.historyservice.v1.HistoryService.SyncShardStatus:output_type -> temporal.server.api.historyservice.v1.SyncShardStatusResponse
+	102, // 102: temporal.server.api.historyservice.v1.HistoryService.SyncActivity:output_type -> temporal.server.api.historyservice.v1.SyncActivityResponse
+	103, // 103: temporal.server.api.historyservice.v1.HistoryService.DescribeMutableState:output_type -> temporal.server.api.historyservice.v1.DescribeMutableStateResponse
+	104, // 104: temporal.server.api.historyservice.v1.HistoryService.DescribeHistoryHost:output_type -> temporal.server.api.historyservice.v1.DescribeHistoryHostResponse
+	105, // 105: temporal.server.api.historyservice.v1.HistoryService.CloseShard:output_type -> temporal.server.api.historyservice.v1.CloseShardResponse
+	106, // 106: temporal.server.api.historyservice.v1.HistoryService.GetShard:output_type -> temporal.server.api.historyservice.v1.GetShardResponse
+	107, // 107: temporal.server.api.historyservice.v1.HistoryService.RemoveTask:output_type -> temporal.server.api.historyservice.v1.RemoveTaskResponse
+	108, // 108: temporal.server.api.historyservice.v1.HistoryService.GetReplicationMessages:output_type -> temporal.server.api.historyservice.v1.GetReplicationMessagesResponse
+	109, // 109: temporal.server.api.historyservice.v1.HistoryService.GetDLQReplicationMessages:output_type -> temporal.server.api.historyservice.v1.GetDLQReplicationMessagesResponse
+	110, // 110: temporal.server.api.historyservice.v1.HistoryService.QueryWorkflow:output_type -> temporal.server.api.historyservice.v1.QueryWorkflowResponse
+	111, // 111: temporal.server.api.historyservice.v1.HistoryService.ReapplyEvents:output_type -> temporal.server.api.historyservice.v1.ReapplyEventsResponse
+	112, // 112: temporal.server.api.historyservice.v1.HistoryService.GetDLQMessages:output_type -> temporal.server.api.historyservice.v1.GetDLQMessagesResponse
+	113, // 113: temporal.server.api.historyservice.v1.HistoryService.PurgeDLQMessages:output_type -> temporal.server.api.historyservice.v1.PurgeDLQMessagesResponse
+	114, // 114: temporal.server.api.historyservice.v1.HistoryService.MergeDLQMessages:output_type -> temporal.server.api.historyservice.v1.MergeDLQMessagesResponse
+	115, // 115: temporal.server.api.historyservice.v1.HistoryService.RefreshWorkflowTasks:output_type -> temporal.server.api.historyservice.v1.RefreshWorkflowTasksResponse
+	116, // 116: temporal.server.api.historyservice.v1.HistoryService.GenerateLastHistoryReplicationTasks:output_type -> temporal.server.api.historyservice.v1.GenerateLastHistoryReplicationTasksResponse
+	117, // 117: temporal.server.api.historyservice.v1.HistoryService.GetReplicationStatus:output_type -> temporal.server.api.historyservice.v1.GetReplicationStatusResponse
+	118, // 118: temporal.server.api.historyservice.v1.HistoryService.RebuildMutableState:output_type -> temporal.server.api.historyservice.v1.RebuildMutableStateResponse
+	119, // 119: temporal.server.api.historyservice.v1.HistoryService.ImportWorkflowExecution:output_type -> temporal.server.api.historyservice.v1.ImportWorkflowExecutionResponse
+	120, // 120: temporal.server.api.historyservice.v1.HistoryService.DeleteWorkflowVisibilityRecord:output_type -> temporal.server.api.historyservice.v1.DeleteWorkflowVisibilityRecordResponse
+	121, // 121: temporal.server.api.historyservice.v1.HistoryService.UpdateWorkflowExecution:output_type -> temporal.server.api.historyservice.v1.UpdateWorkflowExecutionResponse
+	122, // 122: temporal.server.api.historyservice.v1.HistoryService.PollWorkflowExecutionUpdate:output_type -> temporal.server.api.historyservice.v1.PollWorkflowExecutionUpdateResponse
+	123, // 123: temporal.server.api.historyservice.v1.HistoryService.StreamWorkflowReplicationMessages:output_type -> temporal.server.api.historyservice.v1.StreamWorkflowReplicationMessagesResponse
+	124, // 124: temporal.server.api.historyservice.v1.HistoryService.GetWorkflowExecutionHistory:output_type -> temporal.server.api.historyservice.v1.GetWorkflowExecutionHistoryResponse
+	125, // 125: temporal.server.api.historyservice.v1.HistoryService.GetWorkflowExecutionHistoryReverse:output_type -> temporal.server.api.historyservice.v1.GetWorkflowExecutionHistoryReverseResponse
+	126, // 126: temporal.server.api.historyservice.v1.HistoryService.GetWorkflowExecutionRawHistoryV2:output_type -> temporal.server.api.historyservice.v1.GetWorkflowExecutionRawHistoryV2Response
+	127, // 127: temporal.server.api.historyservice.v1.HistoryService.GetWorkflowExecutionRawHistory:output_type -> temporal.server.api.historyservice.v1.GetWorkflowExecutionRawHistoryResponse
+	128, // 128: temporal.server.api.historyservice.v1.HistoryService.ForceDeleteWorkflowExecution:output_type -> temporal.server.api.historyservice.v1.ForceDeleteWorkflowExecutionResponse
+	129, // 129: temporal.server.api.historyservice.v1.HistoryService.GetDLQTasks:output_type -> temporal.server.api.historyservice.v1.GetDLQTasksResponse
+	130, // 130: temporal.server.api.historyservice.v1.HistoryService.DeleteDLQTasks:output_type -> temporal.server.api.historyservice.v1.DeleteDLQTasksResponse
+	131, // 131: temporal.server.api.historyservice.v1.HistoryService.ListQueues:output_type -> temporal.server.api.historyservice.v1.ListQueuesResponse
+	132, // 132: temporal.server.api.historyservice.v1.HistoryService.AddTasks:output_type -> temporal.server.api.historyservice.v1.AddTasksResponse
+	133, // 133: temporal.server.api.historyservice.v1.HistoryService.ListTasks:output_type -> temporal.server.api.historyservice.v1.ListTasksResponse
+	134, // 134: temporal.server.api.historyservice.v1.HistoryService.CompleteNexusOperation:output_type -> temporal.server.api.historyservice.v1.CompleteNexusOperationResponse
+	135, // 135: temporal.server.api.historyservice.v1.HistoryService.InvokeStateMachineMethod:output_type -> temporal.server.api.historyservice.v1.InvokeStateMachineMethodResponse
+	136, // 136: temporal.server.api.historyservice.v1.HistoryService.DeepHealthCheck:output_type -> temporal.server.api.historyservice.v1.DeepHealthCheckResponse
+	137, // 137: temporal.server.api.historyservice.v1.HistoryService.SyncWorkflowState:output_type -> temporal.server.api.historyservice.v1.SyncWorkflowStateResponse
+	138, // 138: temporal.server.api.historyservice.v1.HistoryService.UpdateActivityOptions:output_type -> temporal.server.api.historyservice.v1.UpdateActivityOptionsResponse
+	139, // 139: temporal.server.api.historyservice.v1.HistoryService.PauseActivity:output_type -> temporal.server.api.historyservice.v1.PauseActivityResponse
+	140, // 140: temporal.server.api.historyservice.v1.HistoryService.UnpauseActivity:output_type -> temporal.server.api.historyservice.v1.UnpauseActivityResponse
+	141, // 141: temporal.server.api.historyservice.v1.HistoryService.ResetActivity:output_type -> temporal.server.api.historyservice.v1.ResetActivityResponse
+	71,  // [71:142] is the sub-list for method output_type
+	0,   // [0:71] is the sub-list for method input_type
 	0,   // [0:0] is the sub-list for extension type_name
 	0,   // [0:0] is the sub-list for extension extendee
 	0,   // [0:0] is the sub-list for field type_name

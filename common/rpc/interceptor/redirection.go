@@ -128,6 +128,9 @@ var (
 		"DescribeBatchOperation":    func() any { return &workflowservice.DescribeBatchOperationResponse{} },
 		"ListBatchOperations":       func() any { return &workflowservice.ListBatchOperationsResponse{} },
 		"UpdateActivityOptionsById": func() any { return &workflowservice.UpdateActivityOptionsByIdResponse{} },
+		"PauseActivityById":         func() any { return &workflowservice.PauseActivityByIdResponse{} },
+		"UnpauseActivityById":       func() any { return &workflowservice.UnpauseActivityByIdResponse{} },
+		"ResetActivityById":         func() any { return &workflowservice.ResetActivityByIdResponse{} },
 
 		"DescribeDeployment":        func() any { return &workflowservice.DescribeDeploymentResponse{} },
 		"ListDeployments":           func() any { return &workflowservice.ListDeploymentsResponse{} },
