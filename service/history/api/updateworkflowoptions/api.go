@@ -28,9 +28,7 @@ import (
 	"context"
 	"fmt"
 
-	"google.golang.org/protobuf/proto"
-	"google.golang.org/protobuf/types/known/fieldmaskpb"
-
+	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/server/api/historyservice/v1"
@@ -41,6 +39,8 @@ import (
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/workflow"
+	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/fieldmaskpb"
 )
 
 func Invoke(
@@ -55,6 +55,15 @@ func Invoke(
 	}
 	req := request.GetUpdateRequest()
 	ret := &historyservice.UpdateWorkflowExecutionOptionsResponse{}
+
+	opts := req.GetWorkflowExecutionOptions()
+	if opts.GetVersioningOverride() != nil && opts.GetVersioningOverride().GetBehavior() == enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED {
+		return nil, serviceerror.NewInvalidArgument("Missing versioning override behavior")
+	}
+	if opts.GetVersioningOverride().GetBehavior() == enumspb.VERSIONING_BEHAVIOR_PINNED &&
+		opts.GetVersioningOverride().GetDeployment() == nil {
+		return nil, serviceerror.NewInvalidArgument("Deployment override must be set if behavior override is PINNED")
+	}
 
 	err = api.GetAndUpdateWorkflowWithNew(
 		ctx,
@@ -75,7 +84,7 @@ func Invoke(
 			// Merge the requested options mentioned in the field mask with the current options in the mutable state
 			mergedOpts, err := applyWorkflowExecutionOptions(
 				getOptionsFromMutableState(mutableState),
-				req.GetWorkflowExecutionOptions(),
+				opts,
 				req.GetUpdateMask(),
 			)
 			if err != nil {

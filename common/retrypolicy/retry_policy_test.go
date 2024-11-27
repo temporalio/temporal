@@ -158,7 +158,7 @@ func TestValidateRetryPolicy(t *testing.T) {
 				InitialInterval: durationpb.New(-22 * time.Second),
 			},
 			wantErr:       true,
-			wantErrString: "InitialInterval cannot be negative on retry policy.",
+			wantErrString: "invalid InitialInterval set on retry policy: negative duration",
 		},
 		{
 			name: "coefficient < 1",
@@ -175,7 +175,7 @@ func TestValidateRetryPolicy(t *testing.T) {
 				MaximumInterval:    durationpb.New(-2 * time.Second),
 			},
 			wantErr:       true,
-			wantErrString: "MaximumInterval cannot be negative on retry policy.",
+			wantErrString: "invalid MaximumInterval set on retry policy: negative duration",
 		},
 		{
 			name: "maximum interval in less than initial interval",

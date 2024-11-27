@@ -31,7 +31,6 @@ import (
 
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/suite"
-
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -118,7 +117,7 @@ func (s *StickyTqTestSuite) TestStickyTimeout_NonTransientWorkflowTask() {
 				}
 			*/
 			failureCount--
-			return nil, errors.New("non deterministic error") //nolint:goerr113
+			return nil, errors.New("non deterministic error")
 		}
 
 		return []*commandpb.Command{{
@@ -299,7 +298,7 @@ func (s *StickyTqTestSuite) TestStickyTaskqueueResetThenTimeout() {
 
 		if failureCount > 0 {
 			failureCount--
-			return nil, errors.New("non deterministic error") //nolint:goerr113
+			return nil, errors.New("non deterministic error")
 		}
 
 		return []*commandpb.Command{{

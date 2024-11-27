@@ -27,6 +27,7 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
+	"slices"
 
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
@@ -39,6 +40,9 @@ import (
 
 // ErrStateMachineNotFound is returned when looking up a non-existing state machine in a [Node] or a [Collection].
 var ErrStateMachineNotFound = errors.New("state machine not found")
+
+// ErrStateMachineInvalidState is returned when modifying a [Node] in an invalid state (e.g. deleted).
+var ErrStateMachineInvalidState = errors.New("invalid state machine state")
 
 // ErrStateMachineAlreadyExists is returned when trying to add a state machine with an ID that already exists in a [Collection].
 var ErrStateMachineAlreadyExists = errors.New("state machine already exists")
@@ -82,8 +86,24 @@ type cachedMachine struct {
 	children map[Key]*Node
 	// A flag that indicates the cached machine is dirty.
 	dirty bool
-	// Outputs of all transitions in the current transaction.
-	outputs []TransitionOutputWithCount
+	// A flag to indicate the node was deleted.
+	deleted bool
+}
+
+type OperationLog struct {
+	// All transitions, including regular state changes and deletions
+	TransitionsByPath map[string][]TransitionOutputWithCount
+	// Track topmost deleted paths to filter outputs efficiently
+	DeletedPaths [][]Key
+}
+
+func (o *OperationLog) IsDeleted(path []Key) bool {
+	for _, deletedPath := range o.DeletedPaths {
+		if isPathPrefix(deletedPath, path) {
+			return true
+		}
+	}
+	return false
 }
 
 // NodeBackend is a concrete implementation to support interacting with the underlying platform.
@@ -110,7 +130,7 @@ func EventIDFromToken(token []byte) (int64, error) {
 //
 // It holds a persistent representation of itself and maintains an in-memory cache of deserialized data and child nodes.
 // Node data should not be manipulated directly and should only be done using [MachineTransition] or
-// [Collection.Transtion] to ensure the tree tracks dirty states and update transition counts.
+// [Collection.Transition] to ensure the tree tracks dirty states and update transition counts.
 type Node struct {
 	// Key of this node in parent's map. Empty if node is the root.
 	Key Key
@@ -121,12 +141,19 @@ type Node struct {
 	persistence *persistencespb.StateMachineNode
 	definition  StateMachineDefinition
 	backend     NodeBackend
+	opLog       *OperationLog
 }
 
 // NewRoot creates a new root [Node].
 // Children may be provided from persistence to rehydrate the tree.
 // Returns [ErrNotRegistered] if the key's type is not registered in the given registry or serialization errors.
-func NewRoot(registry *Registry, t string, data any, children map[string]*persistencespb.StateMachineMap, backend NodeBackend) (*Node, error) {
+func NewRoot(
+	registry *Registry,
+	t string,
+	data any,
+	children map[string]*persistencespb.StateMachineMap,
+	backend NodeBackend,
+) (*Node, error) {
 	def, ok := registry.Machine(t)
 	if !ok {
 		return nil, fmt.Errorf("%w: state machine for type: %v", ErrNotRegistered, t)
@@ -151,6 +178,9 @@ func NewRoot(registry *Registry, t string, data any, children map[string]*persis
 			children:   make(map[Key]*Node),
 		},
 		backend: backend,
+		opLog: &OperationLog{
+			TransitionsByPath: make(map[string][]TransitionOutputWithCount),
+		},
 	}, nil
 }
 
@@ -185,13 +215,26 @@ func (n *Node) Path() []Key {
 
 // Outputs returns all outputs produced by transitions on this tree.
 func (n *Node) Outputs() []PathAndOutputs {
-	var paos []PathAndOutputs
-	if len(n.cache.outputs) > 0 {
-		paos = append(paos, PathAndOutputs{Path: n.Path(), Outputs: n.cache.outputs})
+	root := n.root()
+	currentPath := n.Path()
+
+	if root.opLog.IsDeleted(currentPath) {
+		return nil
 	}
+
+	var paos []PathAndOutputs
+	pathKey := fmt.Sprint(currentPath)
+	if transitions := root.opLog.TransitionsByPath[pathKey]; len(transitions) > 0 {
+		paos = append(paos, PathAndOutputs{
+			Path:    currentPath,
+			Outputs: transitions,
+		})
+	}
+
 	for _, child := range n.cache.children {
 		paos = append(paos, child.Outputs()...)
 	}
+
 	return paos
 }
 
@@ -199,8 +242,13 @@ func (n *Node) Outputs() []PathAndOutputs {
 // This should be called at the end of every transaction where the transitions are performed to avoid emitting duplicate
 // transition outputs.
 func (n *Node) ClearTransactionState() {
+	root := n.root()
+	if root.opLog != nil {
+		root.opLog.DeletedPaths = nil
+		root.opLog.TransitionsByPath = make(map[string][]TransitionOutputWithCount)
+	}
+
 	n.cache.dirty = false
-	n.cache.outputs = nil
 	for _, child := range n.cache.children {
 		child.ClearTransactionState()
 	}
@@ -325,6 +373,41 @@ func (n *Node) AddChild(key Key, data any) (*Node, error) {
 	}
 	children.MachinesById[key.ID] = node.persistence
 	return node, nil
+}
+
+// DeleteChild deletes an immediate child node and all its descendants from the tree.
+func (n *Node) DeleteChild(key Key) error {
+	if n.cache.deleted {
+		return fmt.Errorf("%w: cannot delete from deleted node: %v", ErrStateMachineInvalidState, n.Key)
+	}
+
+	child, err := n.Child([]Key{key})
+	if err != nil {
+		return err
+	}
+
+	// Mark entire subtree as deleted
+	if err := child.Walk(func(n *Node) error {
+		n.cache.deleted = true
+		return nil
+	}); err != nil {
+		return err
+	}
+
+	// Record deletion
+	root := n.root()
+	root.opLog.DeletedPaths = append(root.opLog.DeletedPaths, child.Path())
+
+	// Remove from persistence and cache
+	machinesMap := n.persistence.Children[key.Type]
+	if machinesMap != nil {
+		delete(machinesMap.MachinesById, key.ID)
+		if len(machinesMap.MachinesById) == 0 {
+			delete(n.persistence.Children, key.Type)
+		}
+	}
+	delete(n.cache.children, key)
+	return nil
 }
 
 // AddHistoryEvent adds a history event to be committed at the end of the current transaction.
@@ -459,6 +542,10 @@ func (n *Node) Sync(incomingNode *Node) error {
 // It updates the state machine's metadata and marks the entry as dirty in the node's cache.
 // If the transition fails, the changes are rolled back and no state is mutated.
 func MachineTransition[T any](n *Node, transitionFn func(T) (TransitionOutput, error)) (retErr error) {
+	if n.cache.deleted {
+		return fmt.Errorf("%w: cannot transition deleted node: %v", ErrStateMachineInvalidState, n.Key)
+	}
+
 	data, err := MachineData[T](n)
 	if err != nil {
 		return err
@@ -493,11 +580,14 @@ func MachineTransition[T any](n *Node, transitionFn func(T) (TransitionOutput, e
 	}
 	n.persistence.Data = serialized
 	n.cache.dirty = true
-	outputWithCount := TransitionOutputWithCount{
+
+	root := n.root()
+	pathKey := fmt.Sprint(n.Path())
+	root.opLog.TransitionsByPath[pathKey] = append(root.opLog.TransitionsByPath[pathKey], TransitionOutputWithCount{
 		TransitionOutput: output,
 		TransitionCount:  n.persistence.TransitionCount,
-	}
-	n.cache.outputs = append(n.cache.outputs, outputWithCount)
+	})
+
 	return nil
 }
 
@@ -591,7 +681,7 @@ func GenerateEventLoadToken(event *historypb.HistoryEvent) ([]byte, error) {
 		// WFEStarted is always stored in the first batch of events.
 		eventBatchID = 1
 	} else {
-		// By default events aren't referenceable as they may end up buffered.
+		// By default, events aren't referenceable as they may end up buffered.
 		// This limitation may be relaxed later and the platform would need a way to fix references to buffered events.
 		return nil, serviceerror.NewInternal(fmt.Sprintf("cannot reference event: %v", event.EventType))
 	}
@@ -600,4 +690,20 @@ func GenerateEventLoadToken(event *historypb.HistoryEvent) ([]byte, error) {
 		EventBatchId: eventBatchID,
 	}
 	return proto.Marshal(ref)
+}
+
+func (n *Node) root() *Node {
+	root := n
+	for root.Parent != nil {
+		root = root.Parent
+	}
+	return root
+}
+
+func isPathPrefix(prefix, path []Key) bool {
+	if len(prefix) > len(path) {
+		return false
+	}
+
+	return slices.Equal(prefix, path[:len(prefix)])
 }

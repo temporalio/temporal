@@ -30,9 +30,6 @@ import (
 	"context"
 	"time"
 
-	"google.golang.org/protobuf/types/known/durationpb"
-	"google.golang.org/protobuf/types/known/timestamppb"
-
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	deploymentpb "go.temporal.io/api/deployment/v1"
@@ -58,8 +55,11 @@ import (
 	"go.temporal.io/server/service/history/historybuilder"
 	"go.temporal.io/server/service/history/hsm"
 	"go.temporal.io/server/service/history/tasks"
+	"google.golang.org/protobuf/types/known/durationpb"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
+// TransactionPolicy indicates whether a mutable state transaction is happening for an active namespace or passive namespace.
 type TransactionPolicy int
 
 const (
@@ -148,6 +148,8 @@ type (
 		MaxSearchAttributeValueSize int
 	}
 
+	ActivityUpdater func(*persistencespb.ActivityInfo, MutableState) error
+
 	MutableState interface {
 		callbacks.CanGetNexusCompletion
 		callbacks.CanGetHSMCompletionCallbackArg
@@ -209,7 +211,6 @@ type (
 			input *commonpb.Payloads,
 			identity string,
 			header *commonpb.Header,
-			skipGenerateWorkflowTask bool,
 			links []*commonpb.Link,
 		) (*historypb.HistoryEvent, error)
 		AddWorkflowExecutionSignaledEvent(
@@ -217,7 +218,6 @@ type (
 			input *commonpb.Payloads,
 			identity string,
 			header *commonpb.Header,
-			skipGenerateWorkflowTask bool,
 			externalWorkflowExecution *commonpb.WorkflowExecution,
 			links []*commonpb.Link,
 		) (*historypb.HistoryEvent, error)
@@ -233,8 +233,13 @@ type (
 		VisitUpdates(visitor func(updID string, updInfo *persistencespb.UpdateInfo))
 		GetUpdateOutcome(ctx context.Context, updateID string) (*updatepb.Outcome, error)
 		CheckResettable() error
+		// UpdateResetRunID saves the runID that resulted when this execution was reset.
+		UpdateResetRunID(runID string)
+
 		CloneToProto() *persistencespb.WorkflowMutableState
 		RetryActivity(ai *persistencespb.ActivityInfo, failure *failurepb.Failure) (enumspb.RetryState, error)
+		RecordLastActivityCompleteTime(ai *persistencespb.ActivityInfo)
+		RegenerateActivityRetryTask(ai *persistencespb.ActivityInfo, newScheduledTime time.Time) error
 		GetTransientWorkflowTaskInfo(workflowTask *WorkflowTaskInfo, identity string) *historyspb.TransientWorkflowTaskInfo
 		DeleteSignalRequested(requestID string)
 		FlushBufferedEvents()
@@ -312,6 +317,8 @@ type (
 		IsWorkflowPendingOnWorkflowTaskBackoff() bool
 		UpdateDuplicatedResource(resourceDedupKey definition.DeduplicationID)
 		UpdateActivityInfo(*historyservice.ActivitySyncInfo, bool) error
+		ApplyMutation(mutation *persistencespb.WorkflowMutableStateMutation) error
+		ApplySnapshot(snapshot *persistencespb.WorkflowMutableState) error
 		ApplyActivityTaskCancelRequestedEvent(*historypb.HistoryEvent) error
 		ApplyActivityTaskCanceledEvent(*historypb.HistoryEvent) error
 		ApplyActivityTaskCompletedEvent(*historypb.HistoryEvent) error
@@ -364,10 +371,11 @@ type (
 			baseRunLowestCommonAncestorEventID int64,
 			baseRunLowestCommonAncestorEventVersion int64,
 		)
-		UpdateActivity(*persistencespb.ActivityInfo) error
-		UpdateActivityWithTimerHeartbeat(*persistencespb.ActivityInfo, time.Time) error
+		UpdateActivity(int64, ActivityUpdater) error
+		UpdateActivityTaskStatusWithTimerHeartbeat(scheduleEventId int64, timerTaskStatus int32, heartbeatTimeoutVisibility *time.Time) error
 		UpdateActivityProgress(ai *persistencespb.ActivityInfo, request *workflowservice.RecordActivityTaskHeartbeatRequest)
 		UpdateUserTimer(*persistencespb.TimerInfo) error
+		UpdateUserTimerTaskStatus(timerId string, status int64) error
 		UpdateCurrentVersion(version int64, forceUpdate bool) error
 		UpdateWorkflowStateStatus(state enumsspb.WorkflowExecutionState, status enumspb.WorkflowExecutionStatus) error
 		UpdateBuildIdAssignment(buildId string) error
@@ -387,8 +395,14 @@ type (
 		RemoveSpeculativeWorkflowTaskTimeoutTask()
 
 		IsDirty() bool
+		IsTransitionHistoryEnabled() bool
+		// StartTransaction sets up the mutable state for transacting.
 		StartTransaction(entry *namespace.Namespace) (bool, error)
+		// CloseTransactionAsMutation closes the mutable state transaction (different from DB transaction) and prepares the whole state mutation to be persisted and bumps the DBRecordVersion.
+		// You should ideally not make any changes to the mutable state after this call.
 		CloseTransactionAsMutation(transactionPolicy TransactionPolicy) (*persistence.WorkflowMutation, []*persistence.WorkflowEvents, error)
+		// CloseTransactionAsSnapshot closes the mutable state transaction (different from DB transaction) and prepares the current snapshot of the state to be persisted and bumps the DBRecordVersion.
+		// You should ideally not make any changes to the mutable state after this call.
 		CloseTransactionAsSnapshot(transactionPolicy TransactionPolicy) (*persistence.WorkflowSnapshot, []*persistence.WorkflowEvents, error)
 		GenerateMigrationTasks() ([]tasks.Task, int64, error)
 
@@ -404,6 +418,10 @@ type (
 		// NextTransitionCount returns the next state transition count from the state transition history.
 		// If state transition history is empty (e.g. when disabled or fresh mutable state), returns 0.
 		NextTransitionCount() int64
+
+		InitTransitionHistory()
+
+		ShouldResetActivityTimerTaskMask(current, incoming *persistencespb.ActivityInfo) bool
 		// GetEffectiveDeployment returns the effective deployment in the following order:
 		//  1. DeploymentTransition.Deployment: this is returned when the wf is transitioning to a
 		//     new deployment

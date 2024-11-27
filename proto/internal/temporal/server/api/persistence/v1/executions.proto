@@ -169,7 +169,9 @@ message WorkflowExecutionInfo {
     // Used to check if visibility close task is processed before deleting the workflow execution.
     int64 close_visibility_task_id = 65;
     google.protobuf.Timestamp close_time = 66;
-    bool close_visibility_task_completed = 67;
+    // Relocatable attributes are memo and search attributes. If they were removed, then they are not
+    // present in the mutable state, and they should be in visibility store.
+    bool relocatable_attributes_removed = 67;
     temporal.server.api.workflow.v1.BaseExecutionInfo base_execution_info = 76;
     // If using build-id based versioning: version stamp of the last worker to complete a
     // workflow tasks for this workflow.
@@ -256,12 +258,18 @@ message WorkflowExecutionInfo {
 
     repeated StateMachineTombstoneBatch sub_state_machine_tombstone_batches = 95;
 
+    // The workflow has been reset.
+    bool workflow_was_reset = 96;
+
+    // Reset Run ID points to the new nun when this execution is reset. If the execution is reset multiple times, it points to the latest run.
+    string reset_run_id = 97;
+
     // When present, it means the workflow execution is versioned, or is transitioning from
     // unversioned workers to versioned ones.
     // Note: Deployment objects inside versioning info are immutable, never change their fields.
     // (-- api-linter: core::0203::immutable=disabled
     //     aip.dev/not-precedent: field_behavior annotation is not yet used in this repo --)
-    temporal.api.workflow.v1.WorkflowExecutionVersioningInfo versioning_info = 96;
+    temporal.api.workflow.v1.WorkflowExecutionVersioningInfo versioning_info = 98;
 }
 
 message ExecutionStats {
@@ -305,6 +313,10 @@ message TransferTaskInfo {
     oneof task_details {
         CloseExecutionTaskDetails close_execution_task_details = 16;
     }
+    // Stamp represents the version of the activity internal state, for which the timer task was created.
+    // It monotonically increments when the activity options are changed.
+    // It is used to check if activity related tasks are still relevant to  their corresponding state machine.
+    int32 stamp = 17;
 }
 
 // replication column
@@ -329,7 +341,7 @@ message ReplicationTaskInfo {
     temporal.server.api.enums.v1.TaskPriority priority = 18;
     VersionedTransition versioned_transition = 19;
     // A list of event-based replication tasks that, together, are equivalent
-    // to this state-based task. 
+    // to this state-based task.
     // TODO: Remove this field when state-based replication is stable and
     // doesn't need to be disabled.
     repeated ReplicationTaskInfo task_equivalents = 20;
@@ -375,6 +387,11 @@ message TimerTaskInfo {
     // If specified, the task is a for a workflow chain instead of a specific workflow run.
     // A workflow chain is identified by the run_id of the first workflow in the chain.
     string first_run_id = 15;
+
+    // Stamp represents the version of the activity internal state, for which the timer task was created.
+    // It monotonically increments when the activity options are changed.
+    // It is used to check if activity related tasks are still relevant to  their corresponding state machine.
+    int32 stamp = 16;
 }
 
 message ArchivalTaskInfo {
@@ -477,12 +494,25 @@ message ActivityInfo {
         int64 last_redirect_counter = 2;
     }
 
-    // fist time activity was schedulled.
+    // The first time the activity was scheduled.
     google.protobuf.Timestamp first_scheduled_time = 39;
+    // The last time an activity attempt completion was recorded by the server.
+    google.protobuf.Timestamp last_attempt_complete_time = 40;
+
+
+    // Stamp represents the “version” of the activity internal state (options) and can/will be changed with Activity API.
+    // It monotonically increments when the activity options are changed.
+    // It is used to check if activity related tasks are still relevant to  their corresponding state machine.
+    int32 stamp = 41;
+
+    // Paused state. When activity is paused it will not advance until unpaused.
+    // Iw will not be scheduled, timer tasks will not be processed, etc.
+    // Note: it still can be cancelled/completed.
+    bool  paused = 42;
 
     // The deployment this activity was dispatched to most recently. Present only if the activity
     // was dispatched to a versioned worker.
-    temporal.api.deployment.v1.Deployment last_started_deployment = 40;
+    temporal.api.deployment.v1.Deployment last_started_deployment = 43;
 }
 
 // timer_map column
@@ -619,7 +649,7 @@ message CallbackInfo {
 
 // NexusOperationInfo contains the state of a nexus operation.
 message NexusOperationInfo {
-    // Endpoint name. 
+    // Endpoint name.
     // Resolved the endpoint registry for this workflow's namespace.
     string endpoint = 1;
 

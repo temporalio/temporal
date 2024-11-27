@@ -35,7 +35,6 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/suite"
-
 	"go.temporal.io/api/serviceerror"
 	sdkclient "go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/worker"

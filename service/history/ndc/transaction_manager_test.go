@@ -181,7 +181,7 @@ func (s *transactionMgrSuite) TestBackfillWorkflow_CurrentWorkflow_Active_Open()
 	weContext.EXPECT().UpdateWorkflowExecutionWithNew(
 		gomock.Any(), s.mockShard, persistence.UpdateWorkflowModeUpdateCurrent, nil, nil, workflow.TransactionPolicyActive, (*workflow.TransactionPolicy)(nil),
 	).Return(nil)
-	weContext.EXPECT().UpdateRegistry(ctx, nil).Return(updateRegistry)
+	weContext.EXPECT().UpdateRegistry(ctx).Return(updateRegistry)
 	err := s.transactionMgr.BackfillWorkflow(ctx, targetWorkflow, workflowEvents)
 	s.NoError(err)
 	s.True(releaseCalled)
@@ -244,6 +244,7 @@ func (s *transactionMgrSuite) TestBackfillWorkflow_CurrentWorkflow_Active_Closed
 		nextEventID,
 		gomock.Any(),
 		gomock.Any(),
+		targetWorkflow,
 		targetWorkflow,
 		EventsReapplicationResetWorkflowReason,
 		workflowEvents.Events,
@@ -323,6 +324,7 @@ func (s *transactionMgrSuite) TestBackfillWorkflow_CurrentWorkflow_Closed_ResetF
 		nextEventID,
 		gomock.Any(),
 		gomock.Any(),
+		targetWorkflow,
 		targetWorkflow,
 		EventsReapplicationResetWorkflowReason,
 		workflowEvents.Events,

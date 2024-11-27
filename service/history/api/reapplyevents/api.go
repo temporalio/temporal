@@ -138,6 +138,12 @@ func Invoke(
 				}
 				baseCurrentBranchToken := baseCurrentVersionHistory.GetBranchToken()
 				baseNextEventID := mutableState.GetNextEventID()
+				baseWorkflow := ndc.NewWorkflow(
+					shard.GetClusterMetadata(),
+					context,
+					mutableState,
+					wcache.NoopReleaseFn,
+				)
 
 				err = workflowResetter.ResetWorkflow(
 					ctx,
@@ -150,12 +156,8 @@ func Invoke(
 					baseNextEventID,
 					resetRunID.String(),
 					uuid.New().String(),
-					ndc.NewWorkflow(
-						shard.GetClusterMetadata(),
-						context,
-						mutableState,
-						wcache.NoopReleaseFn,
-					),
+					baseWorkflow,
+					baseWorkflow,
 					ndc.EventsReapplicationResetWorkflowReason,
 					toReapplyEvents,
 					nil,
@@ -178,7 +180,7 @@ func Invoke(
 			reappliedEvents, err := eventsReapplier.ReapplyEvents(
 				ctx,
 				mutableState,
-				context.UpdateRegistry(ctx, nil),
+				context.UpdateRegistry(ctx),
 				toReapplyEvents,
 				runID,
 			)

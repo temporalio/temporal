@@ -420,7 +420,7 @@ func (s *VisibilityStore) prepareSearchAttributesForDb(
 	// If it's only invalid values error, then silently continue without them.
 	searchAttributes, err = s.ValidateCustomSearchAttributes(searchAttributes)
 	if err != nil {
-		if _, ok := err.(*store.VisibilityStoreInvalidValuesError); !ok {
+		if _, ok := err.(*serviceerror.InvalidArgument); !ok {
 			return nil, err
 		}
 	}

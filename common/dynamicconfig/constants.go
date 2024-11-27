@@ -572,7 +572,12 @@ is currently processing a task.
 	)
 
 	// keys for frontend
-
+	FrontendHTTPAllowedHosts = NewGlobalTypedSetting(
+		"frontend.httpAllowedHosts",
+		[]string(nil),
+		`HTTP API Requests with a "Host" header matching the allowed hosts will be processed, otherwise rejected.
+Wildcards (*) are expanded to allow any substring. By default any Host header is allowed.`,
+	)
 	FrontendPersistenceMaxQPS = NewGlobalIntSetting(
 		"frontend.persistenceMaxQPS",
 		2000,
@@ -1210,6 +1215,11 @@ these log lines can be noisy, we want to be able to turn on and sample selective
 		time.Second,
 		`TaskQueueInfoByBuildIdTTL serves as a TTL for the cache holding DescribeTaskQueue partition results`,
 	)
+	MatchingDropNonRetryableTasks = NewGlobalBoolSetting(
+		"matching.dropNonRetryableTasks",
+		false,
+		`MatchingDropNonRetryableTasks states if we should drop matching tasks with Internal/Dataloss errors`,
+	)
 	MatchingEnableDeployments = NewNamespaceBoolSetting(
 		"matching.enableDeployment",
 		false,
@@ -1540,6 +1550,11 @@ If value less or equal to 0, will fall back to TaskSchedulerNamespaceMaxQPS`,
 		`TaskSchedulerNamespaceMaxQPS is the max qps task schedulers on a host can schedule tasks for a certain namespace
 If value less or equal to 0, will fall back to HistoryPersistenceNamespaceMaxQPS`,
 	)
+	TaskSchedulerInactiveChannelDeletionDelay = NewGlobalDurationSetting(
+		"history.taskSchedulerInactiveChannelDeletionDelay",
+		time.Hour,
+		`TaskSchedulerInactiveChannelDeletionDelay the time delay before a namespace's' channel is removed from the scheduler`,
+	)
 
 	TimerTaskBatchSize = NewGlobalIntSetting(
 		"history.timerTaskBatchSize",
@@ -1859,10 +1874,23 @@ the outbound standby task failed to be processed due to missing events.`,
 close task has been processed. Must use Elasticsearch as visibility store, otherwise workflow
 data (eg: search attributes) will be lost after workflow is closed.`,
 	)
+	VisibilityProcessorRelocateAttributesMinBlobSize = NewNamespaceIntSetting(
+		"history.visibilityProcessorRelocateAttributesMinBlobSize",
+		0,
+		`VisibilityProcessorRelocateAttributesMinBlobSize is the minimum size in bytes of memo or search
+attributes.`,
+	)
 	VisibilityQueueMaxReaderCount = NewGlobalIntSetting(
 		"history.visibilityQueueMaxReaderCount",
 		2,
 		`VisibilityQueueMaxReaderCount is the max number of readers in one multi-cursor visibility queue`,
+	)
+
+	DisableFetchRelocatableAttributesFromVisibility = NewNamespaceBoolSetting(
+		"history.disableFetchRelocatableAttributesFromVisibility",
+		false,
+		`DisableFetchRelocatableAttributesFromVisibility disables fetching memo and search attributes from
+visibility if they were removed from the mutable state`,
 	)
 
 	ArchivalTaskBatchSize = NewGlobalIntSetting(
@@ -2061,6 +2089,11 @@ the number of children greater than or equal to this threshold`,
 		time.Minute*10,
 		`WorkflowTaskRetryMaxInterval is the maximum interval added to a workflow task's startToClose timeout for slowing down retry`,
 	)
+	DiscardSpeculativeWorkflowTaskMaximumEventsCount = NewGlobalIntSetting(
+		"history.discardSpeculativeWorkflowTaskMaximumEventsCount",
+		10,
+		`If speculative workflow task shipped more than DiscardSpeculativeWorkflowTaskMaximumEventsCount events, it can't be discarded`,
+	)
 	DefaultWorkflowTaskTimeout = NewNamespaceDurationSetting(
 		"history.defaultWorkflowTaskTimeout",
 		primitives.DefaultWorkflowTaskTimeout,
@@ -2198,6 +2231,12 @@ Do not turn this on if you aren't using Cassandra as the history task DLQ is not
 		"history.TaskDLQUnexpectedErrorAttempts",
 		70, // 70 attempts takes about an hour
 		`HistoryTaskDLQUnexpectedErrorAttempts is the number of task execution attempts before sending the task to DLQ.`,
+	)
+	HistoryTaskDLQInternalErrors = NewGlobalBoolSetting(
+		"history.TaskDLQInternalErrors",
+		false,
+		`HistoryTaskDLQInternalErrors causes history task processing to send tasks failing with serviceerror.Internal to
+the dlq (or will drop them if not enabled)`,
 	)
 	HistoryTaskDLQErrorPattern = NewGlobalStringSetting(
 		"history.TaskDLQErrorPattern",
@@ -2448,11 +2487,6 @@ Should be at least WorkerESProcessorFlushInterval+<time to process request>.`,
 		true,
 		`HistoryScannerVerifyRetention indicates the history scanner verify data retention.
 If the service configures with archival feature enabled, update worker.historyScannerVerifyRetention to be double of the data retention.`,
-	)
-	EnableBatcherGlobal = NewGlobalBoolSetting(
-		"worker.enableBatcher",
-		true,
-		`EnableBatcher decides whether to start old (system namespace) batcher in our worker`,
 	)
 	EnableBatcherNamespace = NewNamespaceBoolSetting(
 		"worker.enableNamespaceBatcher",

@@ -95,7 +95,7 @@ func TestReachable_OpenWorkflow(t *testing.T) {
 	assert.Equal(t, enumspb.DEPLOYMENT_REACHABILITY_REACHABLE, reach)
 
 	// check that the cache is cold again after TTL (as shown by newer valid time)
-	time.Sleep(testReachabilityCacheOpenWFsTTL)
+	time.Sleep(testReachabilityCacheOpenWFsTTL) //nolint:forbidigo
 	reach, reachValidTimeCacheCold, err := getDeploymentReachability(ctx, nsId, nsName, seriesName, buildId, false, testCache)
 	assert.Nil(t, err)
 	assert.Greater(t, reachValidTimeCacheCold, reachValidTime)
@@ -129,7 +129,7 @@ func TestReachable_ClosedWorkflow(t *testing.T) {
 	assert.Equal(t, enumspb.DEPLOYMENT_REACHABILITY_CLOSED_WORKFLOWS_ONLY, reach)
 
 	// check that the cache is cold again after TTL (as shown by newer valid time)
-	time.Sleep(testReachabilityCacheClosedWFsTTL)
+	time.Sleep(testReachabilityCacheClosedWFsTTL) //nolint:forbidigo
 	reach, reachValidTimeCacheCold, err := getDeploymentReachability(ctx, nsId, nsName, seriesName, buildId, false, testCache)
 	assert.Nil(t, err)
 	assert.Greater(t, reachValidTimeCacheCold, reachValidTime)

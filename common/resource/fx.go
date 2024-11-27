@@ -389,7 +389,7 @@ func RPCFactoryProvider(
 	logger log.Logger,
 	tlsConfigProvider encryption.TLSConfigProvider,
 	resolver *membership.GRPCResolver,
-	traceInterceptor telemetry.ClientTraceInterceptor,
+	tracingStatsHandler telemetry.ClientStatsHandler,
 	monitor membership.Monitor,
 ) (common.RPCFactory, error) {
 	svcCfg := cfg.Services[string(svcName)]
@@ -397,6 +397,12 @@ func RPCFactoryProvider(
 	if err != nil {
 		return nil, err
 	}
+
+	var options []grpc.DialOption
+	if tracingStatsHandler != nil {
+		options = append(options, grpc.WithStatsHandler(tracingStatsHandler))
+	}
+
 	return rpc.NewFactory(
 		&svcCfg.RPC,
 		svcName,
@@ -406,9 +412,7 @@ func RPCFactoryProvider(
 		frontendHTTPURL,
 		frontendHTTPPort,
 		frontendTLSConfig,
-		[]grpc.UnaryClientInterceptor{
-			grpc.UnaryClientInterceptor(traceInterceptor),
-		},
+		options,
 		monitor,
 	), nil
 }

@@ -67,6 +67,7 @@ type (
 		getBaseWorkflowInfo() *workflowspb.BaseExecutionInfo
 		getVersionHistory() *historyspb.VersionHistory
 		isWorkflowReset() bool
+		stateBased() bool
 
 		skipDuplicatedEvents(skipIndex int) error
 		splitTask() (replicationTask, replicationTask, error)
@@ -85,6 +86,7 @@ type (
 		newEvents           []*historypb.HistoryEvent
 		newRunID            string
 		versionedTransition *persistencespb.VersionedTransition
+		isStateBased        bool
 		logger              log.Logger
 	}
 )
@@ -139,6 +141,7 @@ func newReplicationTaskFromRequest(
 		newEvents,
 		request.NewRunId,
 		nil,
+		false,
 	)
 }
 
@@ -152,6 +155,7 @@ func newReplicationTaskFromBatch(
 	newEvents []*historypb.HistoryEvent,
 	newRunID string,
 	versionedTransition *persistencespb.VersionedTransition,
+	isStateBased bool,
 ) (*replicationTaskImpl, error) {
 
 	if len(eventsSlice) == 0 {
@@ -181,6 +185,7 @@ func newReplicationTaskFromBatch(
 		newEvents,
 		newRunID,
 		versionedTransition,
+		isStateBased,
 	)
 }
 
@@ -194,6 +199,7 @@ func newReplicationTask(
 	newEvents []*historypb.HistoryEvent,
 	newRunID string,
 	versionedTransition *persistencespb.VersionedTransition,
+	isStateBased bool,
 ) (*replicationTaskImpl, error) {
 
 	versionHistory := &historyspb.VersionHistory{
@@ -253,6 +259,7 @@ func newReplicationTask(
 		newEvents:           newEvents,
 		newRunID:            newRunID,
 		versionedTransition: versionedTransition,
+		isStateBased:        isStateBased,
 
 		logger: logger,
 	}, nil
@@ -332,6 +339,10 @@ func (t *replicationTaskImpl) isWorkflowReset() bool {
 	return false
 }
 
+func (t *replicationTaskImpl) stateBased() bool {
+	return t.isStateBased
+}
+
 func (t *replicationTaskImpl) skipDuplicatedEvents(index int) error {
 	if index == 0 {
 		return nil
@@ -409,6 +420,14 @@ func (t *replicationTaskImpl) splitTask() (_ replicationTask, _ replicationTask,
 		newRunID:         "",
 		logger:           logger,
 	}
+	if t.stateBased() {
+		newRunTask.versionedTransition = &persistencespb.VersionedTransition{
+			NamespaceFailoverVersion: t.newEvents[0].GetVersion(),
+			TransitionCount:          1,
+		}
+		newRunTask.isStateBased = true
+	}
+
 	t.newEvents = nil
 	t.newRunID = ""
 

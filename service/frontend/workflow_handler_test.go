@@ -66,7 +66,6 @@ import (
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/visibility/manager"
-	"go.temporal.io/server/common/persistence/visibility/store"
 	"go.temporal.io/server/common/persistence/visibility/store/elasticsearch"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/primitives/timestamp"
@@ -446,8 +445,9 @@ func (s *WorkflowHandlerSuite) TestStartWorkflowExecution_Failed_InvalidExecutio
 		RequestId: uuid.NewString(),
 	}
 	_, err := wh.StartWorkflowExecution(context.Background(), startWorkflowExecutionRequest)
-	s.Error(err)
-	s.Equal(errInvalidWorkflowExecutionTimeoutSeconds, err)
+	var invalidArg *serviceerror.InvalidArgument
+	s.ErrorAs(err, &invalidArg)
+	s.ErrorContains(err, errInvalidWorkflowExecutionTimeoutSeconds.Error())
 }
 
 func (s *WorkflowHandlerSuite) TestStartWorkflowExecution_Failed_InvalidRunTimeout() {
@@ -475,8 +475,9 @@ func (s *WorkflowHandlerSuite) TestStartWorkflowExecution_Failed_InvalidRunTimeo
 		RequestId: uuid.NewString(),
 	}
 	_, err := wh.StartWorkflowExecution(context.Background(), startWorkflowExecutionRequest)
-	s.Error(err)
-	s.Equal(errInvalidWorkflowRunTimeoutSeconds, err)
+	var invalidArg *serviceerror.InvalidArgument
+	s.ErrorAs(err, &invalidArg)
+	s.ErrorContains(err, errInvalidWorkflowRunTimeoutSeconds.Error())
 }
 
 func (s *WorkflowHandlerSuite) TestStartWorkflowExecution_EnsureNonNilRetryPolicyInitialized() {
@@ -556,8 +557,9 @@ func (s *WorkflowHandlerSuite) TestStartWorkflowExecution_Failed_InvalidTaskTime
 		RequestId: uuid.NewString(),
 	}
 	_, err := wh.StartWorkflowExecution(context.Background(), startWorkflowExecutionRequest)
-	s.Error(err)
-	s.Equal(errInvalidWorkflowTaskTimeoutSeconds, err)
+	var invalidArg *serviceerror.InvalidArgument
+	s.ErrorAs(err, &invalidArg)
+	s.ErrorContains(err, errInvalidWorkflowTaskTimeoutSeconds.Error())
 }
 
 func (s *WorkflowHandlerSuite) TestStartWorkflowExecution_Failed_CronAndStartDelaySet() {
@@ -619,8 +621,9 @@ func (s *WorkflowHandlerSuite) TestStartWorkflowExecution_Failed_InvalidStartDel
 	}
 
 	_, err := wh.StartWorkflowExecution(context.Background(), startWorkflowExecutionRequest)
-
-	s.ErrorIs(err, errInvalidWorkflowStartDelaySeconds)
+	var invalidArg *serviceerror.InvalidArgument
+	s.ErrorAs(err, &invalidArg)
+	s.ErrorContains(err, errInvalidWorkflowStartDelaySeconds.Error())
 }
 
 func (s *WorkflowHandlerSuite) TestStartWorkflowExecution_InvalidWorkflowIdReusePolicy_TerminateIfRunning() {
@@ -2371,34 +2374,8 @@ func (s *WorkflowHandlerSuite) TestStartBatchOperation_WorkflowExecutions_TooMan
 	config := s.newConfig()
 	wh := s.getWorkflowHandler(config)
 	s.mockNamespaceCache.EXPECT().GetNamespaceID(gomock.Any()).Return(namespaceID, nil).AnyTimes()
-	// Simulate std visibility, which does not support CountWorkflowExecutions
-	// TODO: remove this once every visibility implementation supports CountWorkflowExecutions
-	s.mockVisibilityMgr.EXPECT().CountWorkflowExecutions(gomock.Any(), gomock.Any()).Return(nil, store.OperationNotSupportedErr)
-	s.mockVisibilityMgr.EXPECT().ListWorkflowExecutions(
-		gomock.Any(),
-		gomock.Any(),
-	).DoAndReturn(
-		func(
-			_ context.Context,
-			request *manager.ListWorkflowExecutionsRequestV2,
-		) (*manager.ListWorkflowExecutionsResponse, error) {
-			s.Equal(testNamespace, request.Namespace)
-			s.True(strings.Contains(request.Query, searchattribute.WorkflowType))
-			s.Equal(int(config.MaxConcurrentBatchOperation(testNamespace.String())), request.PageSize)
-			s.Equal([]byte{}, request.NextPageToken)
-			return &manager.ListWorkflowExecutionsResponse{
-				Executions: []*workflowpb.WorkflowExecutionInfo{
-					{
-						Execution: &commonpb.WorkflowExecution{
-							WorkflowId: testWorkflowID,
-							RunId:      testRunID,
-						},
-					},
-				},
-				NextPageToken: nil,
-			}, nil
-		},
-	)
+	// StartBatchOperation API uses CountWorkflowExecutions to know how many existing in-flight batch operations.
+	s.mockVisibilityMgr.EXPECT().CountWorkflowExecutions(gomock.Any(), gomock.Any()).Return(&manager.CountWorkflowExecutionsResponse{Count: 1}, nil)
 
 	request := &workflowservice.StartBatchOperationRequest{
 		Namespace: testNamespace.String(),

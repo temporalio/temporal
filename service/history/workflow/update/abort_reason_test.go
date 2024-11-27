@@ -22,45 +22,27 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package timer
+package update
 
 import (
-	"errors"
-	"time"
+	"testing"
 
-	"go.temporal.io/server/common/primitives/timestamp"
-	"google.golang.org/protobuf/types/known/durationpb"
+	"github.com/stretchr/testify/require"
 )
 
-const (
-	// MaxAllowedTimer is the maximum allowed timer duration in the system
-	// exported for integration tests
-	MaxAllowedTimer = 100 * 365 * 24 * time.Hour
-)
-
-var (
-	errNegativeDuration = errors.New("negative timer duration")
-	// Pre-extracted for ease of use later
-	maxSeconds = MaxAllowedTimer.Nanoseconds() / 1e9
-	maxNanos   = int32(MaxAllowedTimer.Nanoseconds() - maxSeconds*1e9)
-)
-
-// TODO: remove this logic, rely on scheduled task dropping logic in mutableState for long duration timers
-func ValidateAndCapTimer(delay *durationpb.Duration) error {
-	duration := timestamp.DurationValue(delay)
-	if duration < 0 {
-		return errNegativeDuration
+func TestAbortReasonUpdateStateMatrix(t *testing.T) {
+	for r := AbortReasonRegistryCleared; r < lastAbortReason; r++ {
+		for st := stateCreated; st < lastState; st <<= 1 {
+			fe, ok := reasonStateMatrix[reasonState{r: r, st: st}]
+			// If new abort reason or state is added, this test will fail.
+			// Do not modify the test but make sure to update the reasonStateMatrix.
+			require.True(t, ok, "Missing combination: %v, %v. If new abort reason or state is added make sure to update the reasonStateMatrix", r, st)
+			if fe.f != nil {
+				require.Nil(t, fe.err)
+			}
+			if fe.err != nil {
+				require.Nil(t, fe.f)
+			}
+		}
 	}
-
-	// unix nano (max int64) is 2262-04-11T23:47:16.854775807Z
-	// allowing 100 years timer is safe until 2162
-	//
-	// NOTE: we choose to cap the timer instead of returning error so that
-	// existing workflows implementation using higher than allowed timer
-	// can continue to run.
-	if duration > MaxAllowedTimer {
-		delay.Nanos = maxNanos
-		delay.Seconds = maxSeconds
-	}
-	return nil
 }

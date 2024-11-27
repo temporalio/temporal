@@ -108,7 +108,7 @@ func (u *Updater) Invoke(
 		wfKey,
 		func(lease api.WorkflowLease) (*api.UpdateWorkflowAction, error) {
 			ms := lease.GetMutableState()
-			updateReg := lease.GetContext().UpdateRegistry(ctx, ms)
+			updateReg := lease.GetContext().UpdateRegistry(ctx)
 			return u.ApplyRequest(ctx, updateReg, ms)
 		},
 		nil,

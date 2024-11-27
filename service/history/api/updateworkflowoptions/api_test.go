@@ -27,14 +27,12 @@ package updateworkflowoptions
 import (
 	"testing"
 
-	"google.golang.org/protobuf/types/known/fieldmaskpb"
-
 	"github.com/stretchr/testify/assert"
-	"google.golang.org/protobuf/proto"
-
 	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
+	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/fieldmaskpb"
 )
 
 var (

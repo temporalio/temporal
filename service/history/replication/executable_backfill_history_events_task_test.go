@@ -47,7 +47,6 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
-	"go.temporal.io/server/common/xdc"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tests"
@@ -64,7 +63,6 @@ type (
 		clientBean              *client.MockBean
 		shardController         *shard.MockController
 		namespaceCache          *namespace.MockRegistry
-		ndcHistoryResender      *xdc.MockNDCHistoryResender
 		metricsHandler          metrics.Handler
 		logger                  log.Logger
 		executableTask          *MockExecutableTask
@@ -84,6 +82,9 @@ type (
 		eventsBlobs   []*commonpb.DataBlob
 		newRunEvents  []*historypb.HistoryEvent
 		newRunID      string
+		firstEventID  int64
+		nextEventID   int64
+		version       int64
 	}
 )
 
@@ -106,25 +107,24 @@ func (s *executableBackfillHistoryEventsTaskSuite) SetupTest() {
 	s.clientBean = client.NewMockBean(s.controller)
 	s.shardController = shard.NewMockController(s.controller)
 	s.namespaceCache = namespace.NewMockRegistry(s.controller)
-	s.ndcHistoryResender = xdc.NewMockNDCHistoryResender(s.controller)
 	s.metricsHandler = metrics.NoopMetricsHandler
 	s.logger = log.NewNoopLogger()
 	s.executableTask = NewMockExecutableTask(s.controller)
 	s.eventSerializer = serialization.NewSerializer()
 	s.eagerNamespaceRefresher = NewMockEagerNamespaceRefresher(s.controller)
 
-	firstEventID := rand.Int63()
-	nextEventID := firstEventID + 1
-	version := rand.Int63()
+	s.firstEventID = int64(10)
+	s.nextEventID = int64(21)
+	s.version = rand.Int63()
 	eventsBlob, _ := s.eventSerializer.SerializeEvents([]*historypb.HistoryEvent{{
-		EventId: firstEventID,
-		Version: version,
+		EventId: s.firstEventID,
+		Version: s.version,
 	}}, enumspb.ENCODING_TYPE_PROTO3)
 	s.events, _ = s.eventSerializer.DeserializeEvents(eventsBlob)
 	s.eventsBatches = [][]*historypb.HistoryEvent{s.events}
 	newEventsBlob, _ := s.eventSerializer.SerializeEvents([]*historypb.HistoryEvent{{
 		EventId: 1,
-		Version: version,
+		Version: s.version,
 	}}, enumspb.ENCODING_TYPE_PROTO3)
 	s.newRunEvents, _ = s.eventSerializer.DeserializeEvents(newEventsBlob)
 	s.newRunID = uuid.NewString()
@@ -141,8 +141,8 @@ func (s *executableBackfillHistoryEventsTaskSuite) SetupTest() {
 				WorkflowId:  uuid.NewString(),
 				RunId:       uuid.NewString(),
 				EventVersionHistory: []*history.VersionHistoryItem{{
-					EventId: nextEventID - 1,
-					Version: version,
+					EventId: s.nextEventID - 1,
+					Version: s.version,
 				}},
 				EventBatches: s.eventsBlobs,
 				NewRunInfo: &replicationspb.NewRunInfo{
@@ -171,7 +171,6 @@ func (s *executableBackfillHistoryEventsTaskSuite) SetupTest() {
 			ClientBean:              s.clientBean,
 			ShardController:         s.shardController,
 			NamespaceCache:          s.namespaceCache,
-			NDCHistoryResender:      s.ndcHistoryResender,
 			MetricsHandler:          s.metricsHandler,
 			Logger:                  s.logger,
 			EventSerializer:         s.eventSerializer,
@@ -273,12 +272,20 @@ func (s *executableBackfillHistoryEventsTaskSuite) TestHandleErr_Resend_Success(
 		s.task.NamespaceID,
 		s.task.WorkflowID,
 		s.task.RunID,
-		rand.Int63(),
-		rand.Int63(),
-		rand.Int63(),
-		rand.Int63(),
+		s.firstEventID,
+		s.version,
+		s.nextEventID-1,
+		s.version,
 	)
-	s.executableTask.EXPECT().Resend(gomock.Any(), s.sourceClusterName, err, ResendAttempt).Return(true, nil)
+	s.executableTask.EXPECT().BackFillEvents(
+		gomock.Any(),
+		s.sourceClusterName,
+		definition.NewWorkflowKey(s.task.NamespaceID, s.task.WorkflowID, s.task.RunID),
+		s.firstEventID+1,
+		s.version,
+		s.nextEventID-2,
+		s.version,
+		"").Return(nil)
 	engine.EXPECT().BackfillHistoryEvents(gomock.Any(), gomock.Any()).Return(nil)
 	s.NoError(s.task.HandleErr(err))
 }
@@ -292,12 +299,22 @@ func (s *executableBackfillHistoryEventsTaskSuite) TestHandleErr_Resend_Error() 
 		s.task.NamespaceID,
 		s.task.WorkflowID,
 		s.task.RunID,
-		rand.Int63(),
-		rand.Int63(),
-		rand.Int63(),
-		rand.Int63(),
+		s.firstEventID,
+		s.version,
+		s.nextEventID-1,
+		s.version,
 	)
-	s.executableTask.EXPECT().Resend(gomock.Any(), s.sourceClusterName, err, ResendAttempt).Return(false, errors.New("OwO"))
+	backFillErr := errors.New("OwO")
+	s.executableTask.EXPECT().BackFillEvents(
+		gomock.Any(),
+		s.sourceClusterName,
+		definition.NewWorkflowKey(s.task.NamespaceID, s.task.WorkflowID, s.task.RunID),
+		s.firstEventID+1,
+		s.version,
+		s.nextEventID-2,
+		s.version,
+		"").Return(backFillErr)
+	actualErr := s.task.HandleErr(err)
 
-	s.Equal(err, s.task.HandleErr(err))
+	s.Equal(backFillErr, actualErr)
 }

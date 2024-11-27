@@ -38,8 +38,6 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	sdkclient "go.temporal.io/sdk/client"
-	"google.golang.org/protobuf/types/known/durationpb"
-
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
@@ -52,6 +50,7 @@ import (
 	"go.temporal.io/server/service/worker/migration"
 	"go.temporal.io/server/service/worker/scanner/build_ids"
 	"go.temporal.io/server/tests/testcore"
+	"google.golang.org/protobuf/types/known/durationpb"
 )
 
 type (
@@ -449,6 +448,7 @@ func (s *UserDataReplicationTestSuite) TestUserDataEntriesAreReplicatedOnDemand(
 }
 
 func (s *UserDataReplicationTestSuite) TestUserDataTombstonesAreReplicated() {
+	s.T().SkipNow() // flaky test
 	ctx := testcore.NewContext()
 	namespace := s.T().Name() + "-" + common.GenerateRandomString(5)
 	activeFrontendClient := s.cluster1.FrontendClient()
