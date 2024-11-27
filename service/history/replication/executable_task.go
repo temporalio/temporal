@@ -460,6 +460,7 @@ func (e *ExecutableTaskImpl) Resend(
 	}
 }
 
+//nolint:revive // cognitive complexity 29 (> max enabled 25)
 func (e *ExecutableTaskImpl) BackFillEvents(
 	ctx context.Context,
 	remoteCluster string,
