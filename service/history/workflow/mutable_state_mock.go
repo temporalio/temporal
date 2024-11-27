@@ -1650,20 +1650,6 @@ func (mr *MockMutableStateMockRecorder) CloseTransactionAsSnapshot(transactionPo
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CloseTransactionAsSnapshot", reflect.TypeOf((*MockMutableState)(nil).CloseTransactionAsSnapshot), transactionPolicy)
 }
 
-// CompleteDeploymentTransition mocks base method.
-func (m *MockMutableState) CompleteDeploymentTransition(workerSentBehavior enums.VersioningBehavior) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "CompleteDeploymentTransition", workerSentBehavior)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// CompleteDeploymentTransition indicates an expected call of CompleteDeploymentTransition.
-func (mr *MockMutableStateMockRecorder) CompleteDeploymentTransition(workerSentBehavior any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CompleteDeploymentTransition", reflect.TypeOf((*MockMutableState)(nil).CompleteDeploymentTransition), workerSentBehavior)
-}
-
 // ContinueAsNewMinBackoff mocks base method.
 func (m *MockMutableState) ContinueAsNewMinBackoff(backoffDuration *durationpb.Duration) *durationpb.Duration {
 	m.ctrl.T.Helper()
@@ -3030,10 +3016,10 @@ func (mr *MockMutableStateMockRecorder) SetUpdateCondition(arg0, arg1 any) *gomo
 }
 
 // StartDeploymentTransition mocks base method.
-func (m *MockMutableState) StartDeploymentTransition(deployment *deployment.Deployment) bool {
+func (m *MockMutableState) StartDeploymentTransition(deployment *deployment.Deployment) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "StartDeploymentTransition", deployment)
-	ret0, _ := ret[0].(bool)
+	ret0, _ := ret[0].(error)
 	return ret0
 }
 

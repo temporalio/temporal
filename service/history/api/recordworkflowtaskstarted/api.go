@@ -26,6 +26,7 @@ package recordworkflowtaskstarted
 
 import (
 	"context"
+	"errors"
 
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -137,13 +138,14 @@ func Invoke(
 			// The stickiness info is used by frontend to decide if it should send down partial history or full history.
 			// Sending down partial history will cost the worker an extra fetch to server for the full history.
 			currentTaskQueue := mutableState.CurrentTaskQueue()
+			pollerTaskQueue := req.PollRequest.TaskQueue
 			if currentTaskQueue.Kind == enumspb.TASK_QUEUE_KIND_STICKY &&
-				currentTaskQueue.GetName() != req.PollRequest.TaskQueue.GetName() {
+				currentTaskQueue.GetName() != pollerTaskQueue.GetName() {
 				// For versioned workflows we additionally check for the poller queue to not be a sticky queue itself.
 				// Although it's ideal to check this for unversioned workflows as well, we can't rely on older clients
 				// setting the poller TQ kind.
 				if (mutableState.GetAssignedBuildId() != "" || mutableState.GetEffectiveDeployment() != nil) &&
-					req.PollRequest.TaskQueue.Kind == enumspb.TASK_QUEUE_KIND_STICKY {
+					pollerTaskQueue.Kind == enumspb.TASK_QUEUE_KIND_STICKY {
 					return nil, serviceerrors.NewObsoleteDispatchBuildId("wrong sticky queue")
 				}
 				// req.PollRequest.TaskQueue.GetName() may include partition, but we only check when sticky is enabled,
@@ -151,19 +153,31 @@ func Invoke(
 				mutableState.ClearStickyTaskQueue()
 			}
 
-			deployment := worker_versioning.DeploymentFromCapabilities(req.PollRequest.WorkerVersionCapabilities)
+			if currentTaskQueue.Kind != pollerTaskQueue.Kind &&
+				// Older SDKs might not specify poller task queue kind
+				pollerTaskQueue.Kind != enumspb.TASK_QUEUE_KIND_UNSPECIFIED {
+				// Matching can drop the task, newer one should be scheduled already.
+				return nil, serviceerrors.NewObsoleteMatchingTask("wrong task queue type")
+			}
+
 			wfDeployment := mutableState.GetEffectiveDeployment()
-			if !deployment.Equal(wfDeployment) {
-				// Try starting a redirect. If it doesn't happen, it means this task is obsolete.
-				if !mutableState.StartDeploymentTransition(deployment) {
-					return nil, serviceerrors.NewObsoleteDispatchBuildId("poller's deployment does not match workflow's current deployment")
-				}
+			pollerDeployment := worker_versioning.DeploymentFromCapabilities(req.PollRequest.WorkerVersionCapabilities)
+			// Effective deployment of the workflow when History scheduled the WFT.
+			scheduledDeployment := req.GetScheduledDeployment()
+			if scheduledDeployment == nil {
+				// Matching does not send the directive deployment when it's the same as poller's.
+				scheduledDeployment = pollerDeployment
+			}
+			if !scheduledDeployment.Equal(wfDeployment) {
+				// This must be an AT scheduled before the workflow transitions to the current
+				// deployment. Matching can drop it.
+				return nil, serviceerrors.NewObsoleteMatchingTask("wrong directive deployment")
 			}
 
 			_, workflowTask, err = mutableState.AddWorkflowTaskStartedEvent(
 				scheduledEventID,
 				requestID,
-				req.PollRequest.TaskQueue,
+				pollerTaskQueue,
 				req.PollRequest.Identity,
 				worker_versioning.StampFromCapabilities(req.PollRequest.WorkerVersionCapabilities),
 				req.GetBuildIdRedirectInfo(),
@@ -176,6 +190,28 @@ func Invoke(
 
 			if workflowTask.Type == enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE {
 				updateAction.Noop = true
+			} else {
+				// If the wft is speculative MS changes are not persisted, so the possibly started
+				// transition by the StartDeploymentTransition call above won't be persisted. This is OK
+				// because once the speculative task completes the transition will be applied
+				// automatically based on wft completion info. If the speculative task fails or times
+				// out, future wft will be redirected by matching again and the transition will
+				// eventually happen. If an activity starts while the speculative is also started on the
+				// new deployment, the activity will cause the transition to be created and persisted in
+				// the MS.
+				if !pollerDeployment.Equal(wfDeployment) {
+					// Dispatching to a different deployment. Try starting a transition. Starting the
+					// transition AFTER applying the start event because we don't want this pending
+					// wft to be rescheduled by StartDeploymentTransition.
+					if err := mutableState.StartDeploymentTransition(pollerDeployment); err != nil {
+						if errors.Is(err, workflow.ErrPinnedWorkflowCannotTransition) {
+							// This must be a task from a time that the workflow was unpinned, but it's
+							// now pinned so can't transition. Matching can drop the task safely.
+							return nil, serviceerrors.NewObsoleteMatchingTask(err.Error())
+						}
+						return nil, err
+					}
+				}
 			}
 
 			workflowScheduleToStartLatency := workflowTask.StartedTime.Sub(workflowTask.ScheduledTime)

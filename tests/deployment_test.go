@@ -28,12 +28,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"go.temporal.io/api/serviceerror"
 	"testing"
 	"time"
 
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/fieldmaskpb"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -42,6 +42,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
@@ -50,7 +51,6 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/service/worker/deployment"
 	"go.temporal.io/server/tests/testcore"
-	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 /*

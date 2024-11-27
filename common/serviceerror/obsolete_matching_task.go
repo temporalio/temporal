@@ -29,44 +29,45 @@ import (
 )
 
 type (
-	// ObsoleteDispatchBuildId happens when matching wants to dispatch task to an obsolete build ID. This is expected to
-	// happen when a workflow has concurrent tasks (and in some other edge cases) and redirect rules apply to the WF.
-	// In that case, tasks already scheduled but not started will become invalid and History reschedules them in the
-	// new build ID. Matching will still try dispatching the old tasks but it will face this error.
-	// Matching can safely drop tasks which face this error.
-	// Deprecated. [cleanup-old-wv]
-	ObsoleteDispatchBuildId struct {
+	// ObsoleteMatchingTask happens when History determines a task that Matching wants to dispatch
+	// is no longer valid. Some examples:
+	// - WFT belongs to a sticky queue but the workflow is not on that sticky queue anymore.
+	// - WFT belongs to the normal queue but no the workflow is on a sticky queue.
+	// - WF or activity task wants to start but their schedule time directive deployment no longer
+	//   matched the workflows effective deployment.
+	// When Matching receives this error it can safely drop the task because History has already
+	// scheduled new Matching tasks on the right task queue and deployment.
+	ObsoleteMatchingTask struct {
 		Message string
 		st      *status.Status
 	}
 )
 
-// Deprecated. [cleanup-old-wv]
-func NewObsoleteDispatchBuildId(msg string) error {
-	return &ObsoleteDispatchBuildId{
+func NewObsoleteMatchingTask(msg string) error {
+	return &ObsoleteMatchingTask{
 		Message: msg,
 	}
 }
 
 // Error returns string message.
-func (e *ObsoleteDispatchBuildId) Error() string {
+func (e *ObsoleteMatchingTask) Error() string {
 	return e.Message
 }
 
-func (e *ObsoleteDispatchBuildId) Status() *status.Status {
+func (e *ObsoleteMatchingTask) Status() *status.Status {
 	if e.st != nil {
 		return e.st
 	}
 
 	st := status.New(codes.FailedPrecondition, e.Message)
 	st, _ = st.WithDetails(
-		&errordetails.ObsoleteDispatchBuildIdFailure{},
+		&errordetails.ObsoleteMatchingTaskFailure{},
 	)
 	return st
 }
 
-func newObsoleteDispatchBuildId(st *status.Status) error {
-	return &ObsoleteDispatchBuildId{
+func newObsoleteMatchingTask(st *status.Status) error {
+	return &ObsoleteMatchingTask{
 		Message: st.Message(),
 		st:      st,
 	}
