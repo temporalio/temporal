@@ -80,10 +80,12 @@ var (
 	respondWorkflowTaskCompleted = "RespondWorkflowTaskCompleted"
 	pollActivityTaskQueue        = "PollActivityTaskQueue"
 	startWorkflowExecution       = "StartWorkflowExecution"
+	executeMultiOperation        = "ExecuteMultiOperation"
 	queryWorkflow                = "QueryWorkflow"
 
 	grpcActions = map[string]struct{}{
 		startWorkflowExecution:             {},
+		executeMultiOperation:              {},
 		respondWorkflowTaskCompleted:       {},
 		pollActivityTaskQueue:              {},
 		queryWorkflow:                      {},
@@ -258,6 +260,18 @@ func (ti *TelemetryInterceptor) emitActionMetric(
 		}
 		if resp.Started {
 			metrics.ActionCounter.With(metricsHandler).Record(1, metrics.ActionType("grpc_"+methodName))
+		}
+	case executeMultiOperation:
+		resp, ok := result.(*workflowservice.ExecuteMultiOperationResponse)
+		if !ok {
+			return
+		}
+		if len(resp.Responses) > 0 {
+			if startResp := resp.GetResponses()[0].GetStartWorkflow(); startResp != nil {
+				if startResp.Started {
+					metrics.ActionCounter.With(metricsHandler).Record(1, metrics.ActionType("grpc_"+methodName))
+				}
+			}
 		}
 	case respondWorkflowTaskCompleted:
 		// handle commands
