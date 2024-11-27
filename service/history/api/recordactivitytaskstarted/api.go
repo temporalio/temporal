@@ -75,14 +75,9 @@ func Invoke(
 				return nil, err
 			}
 
-			// This activity started a transition, make sure the MS changes are written but
-			// reject the activity task.
-			// Not returning error so the mutable state is updated. Just setting this flag to
-			// return error at a higher level.
-			startedTransition = true
 			return &api.UpdateWorkflowAction{
 				Noop: false,
-				// Create new wft if a trasition started with this activity.
+				// Create new wft if a transition started with this activity.
 				// StartDeploymentTransition rescheduled pending wft, but this creates new
 				// one if there is no pending wft.
 				CreateWorkflowTask: startedTransition,

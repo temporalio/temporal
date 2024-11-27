@@ -5315,6 +5315,9 @@ func (wh *WorkflowHandler) UpdateWorkflowExecutionOptions(
 	if err != nil {
 		return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("error parsing UpdateMask: %s", err.Error()))
 	}
+	if opts.GetVersioningOverride() != nil && opts.GetVersioningOverride().GetBehavior() == enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED {
+		return nil, serviceerror.NewInvalidArgument("Missing versioning override behavior")
+	}
 	if opts.GetVersioningOverride().GetBehavior() == enumspb.VERSIONING_BEHAVIOR_PINNED &&
 		opts.GetVersioningOverride().GetDeployment() == nil {
 		return nil, serviceerror.NewInvalidArgument("Deployment override must be set if behavior override is PINNED")

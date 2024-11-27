@@ -29,7 +29,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"math"
 	"math/rand"
 	"reflect"
 	"slices"
@@ -2678,11 +2677,11 @@ func (ms *MutableStateImpl) UpdateBuildIdAssignment(buildId string) error {
 	return ms.updateBuildIdsSearchAttribute(&commonpb.WorkerVersionStamp{UseVersioning: true, BuildId: buildId}, limit)
 }
 
-// For v3 versioned workflows (ms.GetEffectiveVersioningBehavior() != UNSPECIFIED), this will append a tag formed as
-// reachability:<effective_behavior>:<deployment_series_name>:<deployment_build_id> to the BuildIds search attribute,
+// For pinned workflows (ms.GetEffectiveVersioningBehavior() == PINNED), this will append a tag formed as
+// pinned:<deployment_series_name>:<deployment_build_id> to the BuildIds search attribute,
 // if it does not already exist there. The deployment will be execution_info.deployment, or the override deployment if
 // a pinned override is set.
-// For all other workflows (ms.GetEffectiveVersioningBehavior() == UNSPECIFIED), this will append a tag based on the
+// For all other workflows (ms.GetEffectiveVersioningBehavior() != PINNED), this will append a tag based on the
 // workflow's versioning status.
 func (ms *MutableStateImpl) updateBuildIdsSearchAttribute(stamp *commonpb.WorkerVersionStamp, maxSearchAttributeValueSize int) error {
 	changed, err := ms.addBuildIdToSearchAttributesWithNoVisibilityTask(stamp, maxSearchAttributeValueSize)
@@ -2708,6 +2707,9 @@ func (ms *MutableStateImpl) loadBuildIds() ([]string, error) {
 	decoded, err := searchattribute.DecodeValue(saPayload, enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST, true)
 	if err != nil {
 		return nil, err
+	}
+	if decoded == nil {
+		return []string{}, nil
 	}
 	searchAttributeValues, ok := decoded.([]string)
 	if !ok {
@@ -2764,7 +2766,7 @@ func (ms *MutableStateImpl) addBuildIdToLoadedSearchAttribute(
 	// Remove pinned build id search attribute if it exists and we are not pinned
 	if effectiveBehavior != enumspb.VERSIONING_BEHAVIOR_PINNED {
 		newValues = slices.DeleteFunc(newValues, func(s string) bool {
-			return strings.Contains(s, worker_versioning.BuildIdSearchAttributePrefixPinned)
+			return strings.HasPrefix(s, worker_versioning.BuildIdSearchAttributePrefixPinned)
 		})
 	}
 	return newValues
@@ -4388,7 +4390,8 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionOptionsUpdatedEvent(event *his
 		}
 		// For v3 versioned workflows (ms.GetEffectiveVersioningBehavior() != UNSPECIFIED), this will update the reachability
 		// search attribute based on the execution_info.deployment and/or override deployment if one exists.
-		if err := ms.updateBuildIdsSearchAttribute(nil, math.MaxInt32); err != nil {
+		limit := ms.config.SearchAttributesSizeOfValueLimit(ms.namespaceEntry.Name().String())
+		if err := ms.updateBuildIdsSearchAttribute(nil, limit); err != nil {
 			return err
 		}
 	}

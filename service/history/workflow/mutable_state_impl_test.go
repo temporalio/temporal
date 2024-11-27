@@ -152,12 +152,7 @@ var (
 			Behavior: enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE,
 		},
 	}
-	unspecifiedOptions = &workflowpb.WorkflowExecutionOptions{
-		VersioningOverride: &workflowpb.VersioningOverride{
-			Behavior: enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED,
-		},
-	}
-	emptyOptions = &workflowpb.WorkflowExecutionOptions{} // should be handled the same as unspecifiedOptions
+	emptyOptions = &workflowpb.WorkflowExecutionOptions{}
 )
 
 func TestMutableStateSuite(t *testing.T) {
@@ -196,7 +191,6 @@ func (s *mutableStateSuite) SetupTest() {
 
 	s.controller = gomock.NewController(s.T())
 	s.mockEventsCache = events.NewMockCache(s.controller)
-	s.mockEventsCache.EXPECT().PutEvent(gomock.Any(), gomock.Any()).Return().AnyTimes()
 
 	s.mockConfig = tests.NewDynamicConfig()
 	s.mockConfig.ReplicationMultipleBatches = dynamicconfig.GetBoolPropertyFn(s.replicationMultipleBatches)
@@ -843,10 +837,10 @@ func (s *mutableStateSuite) verifyOverrides(
 	expectedDeployment, expectedDeploymentOverride *deploymentpb.Deployment,
 ) {
 	versioningInfo := s.mutableState.GetExecutionInfo().GetVersioningInfo()
-	s.Equal(expectedBehavior, versioningInfo.Behavior)
-	s.Equal(expectedBehaviorOverride, versioningInfo.VersioningOverride.Behavior)
-	s.Equal(expectedDeployment, versioningInfo.Deployment)
-	s.Equal(expectedDeploymentOverride, versioningInfo.VersioningOverride.Deployment)
+	s.Equal(expectedBehavior, versioningInfo.GetBehavior())
+	s.Equal(expectedBehaviorOverride, versioningInfo.GetVersioningOverride().GetBehavior())
+	s.Equal(expectedDeployment, versioningInfo.GetDeployment())
+	s.Equal(expectedDeploymentOverride, versioningInfo.GetVersioningOverride().GetDeployment())
 }
 
 func (s *mutableStateSuite) TestOverride_UnpinnedBase_SetPinnedAndUnsetWithEmptyOptions() {
@@ -870,27 +864,6 @@ func (s *mutableStateSuite) TestOverride_UnpinnedBase_SetPinnedAndUnsetWithEmpty
 	s.verifyOverrides(baseBehavior, enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED, deployment1, nil)
 }
 
-func (s *mutableStateSuite) TestOverride_UnpinnedBase_SetPinnedAndUnsetWithUnspecifiedOptions() {
-	tq := &taskqueuepb.TaskQueue{Name: "tq"}
-	baseBehavior := enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE
-	overrideBehavior := enumspb.VERSIONING_BEHAVIOR_PINNED
-	s.createMutableStateWithVersioningBehavior(baseBehavior, deployment1, tq)
-
-	// set pinned override
-	event, err := s.mutableState.AddWorkflowExecutionOptionsUpdatedEvent(pinnedOptions2.GetVersioningOverride())
-	s.NoError(err)
-	s.verifyEffectiveDeployment(deployment2, overrideBehavior)
-	s.verifyWorkflowOptionsUpdatedEvent(event, pinnedOptions2.GetVersioningOverride())
-	s.verifyOverrides(baseBehavior, overrideBehavior, deployment1, deployment2)
-
-	// unset pinned override with unspecified
-	event, err = s.mutableState.AddWorkflowExecutionOptionsUpdatedEvent(unspecifiedOptions.GetVersioningOverride())
-	s.NoError(err)
-	s.verifyEffectiveDeployment(deployment1, baseBehavior)
-	s.verifyWorkflowOptionsUpdatedEvent(event, unspecifiedOptions.GetVersioningOverride())
-	s.verifyOverrides(baseBehavior, enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED, deployment1, nil)
-}
-
 func (s *mutableStateSuite) TestOverride_PinnedBase_SetUnpinnedAndUnsetWithEmptyOptions() {
 	tq := &taskqueuepb.TaskQueue{Name: "tq"}
 	baseBehavior := enumspb.VERSIONING_BEHAVIOR_PINNED
@@ -909,27 +882,6 @@ func (s *mutableStateSuite) TestOverride_PinnedBase_SetUnpinnedAndUnsetWithEmpty
 	s.NoError(err)
 	s.verifyEffectiveDeployment(deployment1, baseBehavior)
 	s.verifyWorkflowOptionsUpdatedEvent(event, emptyOptions.GetVersioningOverride())
-	s.verifyOverrides(baseBehavior, enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED, deployment1, nil)
-}
-
-func (s *mutableStateSuite) TestOverride_PinnedBase_SetUnpinnedAndUnsetWithUnspecifiedOptions() {
-	tq := &taskqueuepb.TaskQueue{Name: "tq"}
-	baseBehavior := enumspb.VERSIONING_BEHAVIOR_PINNED
-	overrideBehavior := enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE
-	s.createMutableStateWithVersioningBehavior(baseBehavior, deployment1, tq)
-
-	// set unpinned override
-	event, err := s.mutableState.AddWorkflowExecutionOptionsUpdatedEvent(unpinnedOptions.GetVersioningOverride())
-	s.NoError(err)
-	s.verifyEffectiveDeployment(deployment1, overrideBehavior)
-	s.verifyWorkflowOptionsUpdatedEvent(event, unpinnedOptions.GetVersioningOverride())
-	s.verifyOverrides(baseBehavior, overrideBehavior, deployment1, nil)
-
-	// unset pinned override with unspecified
-	event, err = s.mutableState.AddWorkflowExecutionOptionsUpdatedEvent(unspecifiedOptions.GetVersioningOverride())
-	s.NoError(err)
-	s.verifyEffectiveDeployment(deployment1, baseBehavior)
-	s.verifyWorkflowOptionsUpdatedEvent(event, unspecifiedOptions.GetVersioningOverride())
 	s.verifyOverrides(baseBehavior, enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED, deployment1, nil)
 }
 
@@ -1002,10 +954,10 @@ func (s *mutableStateSuite) TestOverride_BaseDeploymentUpdatedOnCompletion() {
 	s.verifyOverrides(baseBehavior, overrideBehavior, deployment2, deployment3)
 
 	// now we unset the override and check that the base deployment/behavior is in effect
-	event, err = s.mutableState.AddWorkflowExecutionOptionsUpdatedEvent(unspecifiedOptions.GetVersioningOverride())
+	event, err = s.mutableState.AddWorkflowExecutionOptionsUpdatedEvent(emptyOptions.GetVersioningOverride())
 	s.NoError(err)
 	s.verifyEffectiveDeployment(deployment2, baseBehavior)
-	s.verifyWorkflowOptionsUpdatedEvent(event, unspecifiedOptions.GetVersioningOverride())
+	s.verifyWorkflowOptionsUpdatedEvent(event, emptyOptions.GetVersioningOverride())
 	s.verifyOverrides(baseBehavior, enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED, deployment2, nil)
 }
 

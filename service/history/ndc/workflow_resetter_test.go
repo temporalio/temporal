@@ -991,9 +991,10 @@ func (s *workflowResetterSuite) TestReapplyContinueAsNewWorkflowEvents_ExcludeAl
 	baseNextEventID := int64(456)
 	baseBranchToken := []byte("some random base branch token")
 	optionExcludeAllReapplyEvents := map[enumspb.ResetReapplyExcludeType]struct{}{
-		enumspb.RESET_REAPPLY_EXCLUDE_TYPE_SIGNAL: {},
-		enumspb.RESET_REAPPLY_EXCLUDE_TYPE_UPDATE: {},
-		enumspb.RESET_REAPPLY_EXCLUDE_TYPE_NEXUS:  {},
+		enumspb.RESET_REAPPLY_EXCLUDE_TYPE_SIGNAL:         {},
+		enumspb.RESET_REAPPLY_EXCLUDE_TYPE_UPDATE:         {},
+		enumspb.RESET_REAPPLY_EXCLUDE_TYPE_NEXUS:          {},
+		enumspb.RESET_REAPPLY_EXCLUDE_TYPE_CANCEL_REQUEST: {},
 	}
 
 	mutableState := workflow.NewMockMutableState(s.controller)
