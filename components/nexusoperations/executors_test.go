@@ -354,10 +354,7 @@ func TestProcessInvocationTask(t *testing.T) {
 			schedToCloseTimeout:   time.Microsecond,
 			destinationDown:       false,
 			expectedMetricOutcome: "operation-timeout",
-			onStartOperation: func(ctx context.Context, service, operation string, input *nexus.LazyValue, options nexus.StartOperationOptions) (nexus.HandlerStartOperationResult[any], error) {
-				time.Sleep(time.Millisecond * 100) //nolint:forbidigo // Allow time.Sleep for timeout tests
-				return &nexus.HandlerStartOperationResultAsync{OperationID: "op-id"}, nil
-			},
+			onStartOperation:      nil, // This should not be called if the operation has timed out.
 			checkOutcome: func(t *testing.T, op nexusoperations.Operation, events []*historypb.HistoryEvent) {
 				require.Equal(t, enumsspb.NEXUS_OPERATION_STATE_FAILED, op.State())
 				require.NotNil(t, op.LastAttemptFailure.GetApplicationFailureInfo())
@@ -661,7 +658,7 @@ func TestProcessCancelationTask(t *testing.T) {
 			requestTimeout:  2 * time.Millisecond,
 			destinationDown: true,
 			onCancelOperation: func(ctx context.Context, service, operation, operationID string, options nexus.CancelOperationOptions) error {
-				time.Sleep(time.Millisecond * 100)
+				time.Sleep(time.Millisecond * 100) //nolint:forbidigo // Allow time.Sleep for timeout tests
 				return nil
 			},
 			expectedMetricOutcome: "request-timeout",
@@ -672,14 +669,11 @@ func TestProcessCancelationTask(t *testing.T) {
 			},
 		},
 		{
-			name:                "operation timeout",
-			requestTimeout:      time.Hour,
-			schedToCloseTimeout: time.Microsecond,
-			destinationDown:     false,
-			onCancelOperation: func(ctx context.Context, service, operation, operationID string, options nexus.CancelOperationOptions) error {
-				time.Sleep(time.Millisecond * 100)
-				return nil
-			},
+			name:                  "operation timeout",
+			requestTimeout:        time.Hour,
+			schedToCloseTimeout:   time.Microsecond,
+			destinationDown:       false,
+			onCancelOperation:     nil, // This should not be called if the operation has timed out.
 			expectedMetricOutcome: "operation-timeout",
 			checkOutcome: func(t *testing.T, c nexusoperations.Cancelation) {
 				require.Equal(t, enumspb.NEXUS_OPERATION_CANCELLATION_STATE_FAILED, c.State())
