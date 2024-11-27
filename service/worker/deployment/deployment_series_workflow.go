@@ -47,10 +47,11 @@ type (
 func DeploymentSeriesWorkflow(ctx workflow.Context, deploymentSeriesArgs *deploymentspb.DeploymentSeriesWorkflowArgs) error {
 	deploymentWorkflowNameRunner := &DeploymentSeriesWorkflowRunner{
 		DeploymentSeriesWorkflowArgs: deploymentSeriesArgs,
-		a:                            nil,
-		logger:                       sdklog.With(workflow.GetLogger(ctx), "wf-namespace", deploymentSeriesArgs.NamespaceName),
-		metrics:                      workflow.GetMetricsHandler(ctx).WithTags(map[string]string{"namespace": deploymentSeriesArgs.NamespaceName}),
-		lock:                         workflow.NewMutex(ctx),
+
+		a:       nil,
+		logger:  sdklog.With(workflow.GetLogger(ctx), "wf-namespace", deploymentSeriesArgs.NamespaceName),
+		metrics: workflow.GetMetricsHandler(ctx).WithTags(map[string]string{"namespace": deploymentSeriesArgs.NamespaceName}),
+		lock:    workflow.NewMutex(ctx),
 	}
 	return deploymentWorkflowNameRunner.run(ctx)
 }
