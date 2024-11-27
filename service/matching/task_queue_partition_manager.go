@@ -784,14 +784,13 @@ func (pm *taskQueuePartitionManagerImpl) getPhysicalQueuesForAdd(
 	if deployment := directive.GetDeployment(); deployment != nil {
 		wfBehavior := directive.GetBehavior()
 
-		if pm.partition.Kind() == enumspb.TASK_QUEUE_KIND_STICKY {
-			// TODO (shahab): reject sticky task if this deployment is not the current deployment
-			// TODO (shahab): we can verify the passed deployment matches the last poller's deployment
-			return pm.defaultQueue, pm.defaultQueue, userDataChanged, nil
-		}
-
 		switch wfBehavior {
 		case enumspb.VERSIONING_BEHAVIOR_PINNED:
+			if pm.partition.Kind() == enumspb.TASK_QUEUE_KIND_STICKY {
+				// TODO (shahab): we can verify the passed deployment matches the last poller's deployment
+				return pm.defaultQueue, pm.defaultQueue, userDataChanged, nil
+			}
+
 			err = worker_versioning.ValidateDeployment(deployment)
 			if err != nil {
 				return nil, nil, nil, err
@@ -809,7 +808,33 @@ func (pm *taskQueuePartitionManagerImpl) getPhysicalQueuesForAdd(
 				return nil, pinnedQueue, nil, nil
 			}
 		case enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE:
-			return nil, nil, nil, serviceerror.NewUnimplemented("AUTO_UPGRADE mode is not implemented yet")
+			perTypeUserData, perTypeUserDataChanged, err := pm.getPerTypeUserData()
+			if err != nil {
+				return nil, nil, nil, err
+			}
+
+			currentDeployment := findCurrentDeployment(perTypeUserData.GetDeploymentData())
+
+			if pm.partition.Kind() == enumspb.TASK_QUEUE_KIND_STICKY {
+				if !deployment.Equal(currentDeployment) {
+					// Current deployment has changed, so the workflow should move to a normal queue to
+					// get redirected to the new deployment.
+					return nil, nil, nil, serviceerrors.NewStickyWorkerUnavailable()
+				}
+
+				// TODO (shahab): we can verify the passed deployment matches the last poller's deployment
+				return pm.defaultQueue, pm.defaultQueue, perTypeUserDataChanged, nil
+			}
+
+			currentDeploymentQueue, err := pm.getVersionedQueue(ctx, "", "", currentDeployment, true)
+			if forwardInfo == nil {
+				// Task is not forwarded, so it can be spooled if sync match fails.
+				// Unpinned tasks are spooled in default queue
+				return pm.defaultQueue, currentDeploymentQueue, perTypeUserDataChanged, err
+			} else {
+				// Forwarded from child partition - only do sync match.
+				return nil, currentDeploymentQueue, perTypeUserDataChanged, err
+			}
 		case enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED:
 			return nil, nil, nil, serviceerror.NewInvalidArgument("versioning behavior must be set")
 		}
@@ -955,4 +980,15 @@ func (pm *taskQueuePartitionManagerImpl) recordUnknownBuildPoll(buildId string) 
 func (pm *taskQueuePartitionManagerImpl) recordUnknownBuildTask(buildId string) {
 	pm.logger.Warn("unknown build ID in task", tag.BuildId(buildId))
 	pm.metricsHandler.Counter(metrics.UnknownBuildTasksCounter.Name()).Record(1)
+}
+
+func (pm *taskQueuePartitionManagerImpl) getPerTypeUserData() (*persistencespb.TaskQueueTypeUserData, <-chan struct{}, error) {
+	userData, userDataChanged, err := pm.userDataManager.GetUserData()
+	if err != nil {
+		return nil, nil, err
+	}
+	if perType, ok := userData.GetData().GetPerType()[int32(pm.Partition().TaskType())]; ok {
+		return perType, userDataChanged, nil
+	}
+	return nil, userDataChanged, nil
 }

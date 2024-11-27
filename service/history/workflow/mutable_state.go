@@ -423,14 +423,12 @@ type (
 		//     set based on the worker-sent deployment in the latest WFT completion.
 		GetEffectiveVersioningBehavior() enumspb.VersioningBehavior
 		GetDeploymentTransition() *workflowpb.DeploymentTransition
-		// StartDeploymentTransition starts a transition to the given deployment. Returns true
-		// if the requested transition is started. Starting a new transition replaces possible
-		// existing ongoing transition without rescheduling activities. If the workflow is
-		// pinned, the transition won't start.
-		StartDeploymentTransition(deployment *deploymentpb.Deployment) bool
-		// CompleteDeploymentTransition completes the ongoing transition for this workflow if it exists.
-		// Completing a transition updates the workflow's deployment and possibly versioning behavior.
-		// All activities that are not started yet will be rescheduled to be dispatched the new deployment.
-		CompleteDeploymentTransition(workerSentBehavior enumspb.VersioningBehavior) error
+		// StartDeploymentTransition starts a transition to the given deployment which must be
+		// different from workflows effective deployment. Will fail if the workflow is pinned.
+		// Starting a new transition replaces current transition, if present, without rescheduling
+		// activities.
+		// If there is a pending workflow task that is not started yet, it'll be rescheduled after
+		// transition start.
+		StartDeploymentTransition(deployment *deploymentpb.Deployment) error
 	}
 )

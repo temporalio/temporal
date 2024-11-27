@@ -29,44 +29,41 @@ import (
 )
 
 type (
-	// ObsoleteDispatchBuildId happens when matching wants to dispatch task to an obsolete build ID. This is expected to
-	// happen when a workflow has concurrent tasks (and in some other edge cases) and redirect rules apply to the WF.
-	// In that case, tasks already scheduled but not started will become invalid and History reschedules them in the
-	// new build ID. Matching will still try dispatching the old tasks but it will face this error.
-	// Matching can safely drop tasks which face this error.
-	// Deprecated. [cleanup-old-wv]
-	ObsoleteDispatchBuildId struct {
+	// ActivityStartDuringTransition when an activity start is rejected by History because the
+	// workflow is in a transitioning between worker deployments.
+	// When Matching sees this error it can safely drop the activity task because History will
+	// reschedule the activity task after the transition is complete.
+	ActivityStartDuringTransition struct {
 		Message string
 		st      *status.Status
 	}
 )
 
-// Deprecated. [cleanup-old-wv]
-func NewObsoleteDispatchBuildId(msg string) error {
-	return &ObsoleteDispatchBuildId{
-		Message: msg,
+func NewActivityStartDuringTransition() error {
+	return &ActivityStartDuringTransition{
+		Message: "activity start attempted during deployment transition",
 	}
 }
 
 // Error returns string message.
-func (e *ObsoleteDispatchBuildId) Error() string {
+func (e *ActivityStartDuringTransition) Error() string {
 	return e.Message
 }
 
-func (e *ObsoleteDispatchBuildId) Status() *status.Status {
+func (e *ActivityStartDuringTransition) Status() *status.Status {
 	if e.st != nil {
 		return e.st
 	}
 
 	st := status.New(codes.FailedPrecondition, e.Message)
 	st, _ = st.WithDetails(
-		&errordetails.ObsoleteDispatchBuildIdFailure{},
+		&errordetails.ActivityStartDuringTransitionFailure{},
 	)
 	return st
 }
 
-func newObsoleteDispatchBuildId(st *status.Status) error {
-	return &ObsoleteDispatchBuildId{
+func newActivityStartDuringTransition(st *status.Status) error {
+	return &ActivityStartDuringTransition{
 		Message: st.Message(),
 		st:      st,
 	}

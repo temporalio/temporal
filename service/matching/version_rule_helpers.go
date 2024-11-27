@@ -609,9 +609,9 @@ func getSourcesForTarget(buildId string, redirectRules []*persistencespb.Redirec
 	return sources
 }
 
-// FindAssignmentBuildId finds a build ID for the given runId based on the given rules.
+// FindAssignmentBuildId finds a build ID for the given workflowId based on the given rules.
 // Non-empty runId is deterministically mapped to a ramp threshold, while empty runId is mapped randomly each time.
-func FindAssignmentBuildId(rules []*persistencespb.AssignmentRule, runId string) string {
+func FindAssignmentBuildId(rules []*persistencespb.AssignmentRule, workflowId string) string {
 	rampThreshold := -1.
 	for _, r := range rules {
 		if r.GetDeleteTimestamp() != nil {
@@ -619,7 +619,7 @@ func FindAssignmentBuildId(rules []*persistencespb.AssignmentRule, runId string)
 		}
 		if !isFullyRamped(r.GetRule()) {
 			if rampThreshold == -1. {
-				rampThreshold = calcRampThreshold(runId)
+				rampThreshold = calcRampThreshold(workflowId)
 			}
 			if float64(r.GetRule().GetPercentageRamp().GetRampPercentage()) <= rampThreshold {
 				continue

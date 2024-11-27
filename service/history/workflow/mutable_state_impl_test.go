@@ -679,8 +679,8 @@ func (s *mutableStateSuite) createMutableStateWithVersioningBehavior(
 	s.NoError(err)
 	s.verifyEffectiveDeployment(nil, enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED)
 
-	redirectStarted := s.mutableState.StartDeploymentTransition(deployment)
-	s.True(redirectStarted)
+	err = s.mutableState.StartDeploymentTransition(deployment)
+	s.NoError(err)
 	s.verifyEffectiveDeployment(deployment, enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED)
 
 	_, wft, err = s.mutableState.AddWorkflowTaskStartedEvent(
@@ -728,8 +728,8 @@ func (s *mutableStateSuite) TestUnpinnedTransition() {
 	s.NoError(err)
 	s.verifyEffectiveDeployment(deployment1, behavior)
 
-	redirectStarted := s.mutableState.StartDeploymentTransition(deployment2)
-	s.True(redirectStarted)
+	err = s.mutableState.StartDeploymentTransition(deployment2)
+	s.NoError(err)
 	s.verifyEffectiveDeployment(deployment2, behavior)
 
 	_, wft, err = s.mutableState.AddWorkflowTaskStartedEvent(
@@ -766,8 +766,8 @@ func (s *mutableStateSuite) TestUnpinnedTransitionFailed() {
 	s.NoError(err)
 	s.verifyEffectiveDeployment(deployment1, behavior)
 
-	transitionStarted := s.mutableState.StartDeploymentTransition(deployment2)
-	s.True(transitionStarted)
+	err = s.mutableState.StartDeploymentTransition(deployment2)
+	s.NoError(err)
 	s.verifyEffectiveDeployment(deployment2, behavior)
 
 	_, wft, err = s.mutableState.AddWorkflowTaskStartedEvent(
@@ -807,8 +807,8 @@ func (s *mutableStateSuite) TestUnpinnedTransitionTimeout() {
 	s.NoError(err)
 	s.verifyEffectiveDeployment(deployment1, behavior)
 
-	transitionStarted := s.mutableState.StartDeploymentTransition(deployment2)
-	s.True(transitionStarted)
+	err = s.mutableState.StartDeploymentTransition(deployment2)
+	s.NoError(err)
 	s.verifyEffectiveDeployment(deployment2, behavior)
 
 	_, wft, err = s.mutableState.AddWorkflowTaskStartedEvent(
@@ -826,7 +826,7 @@ func (s *mutableStateSuite) TestUnpinnedTransitionTimeout() {
 	_, err = s.mutableState.AddWorkflowTaskTimedOutEvent(wft)
 	s.NoError(err)
 	// WFT timeout does not fail transition
-	s.verifyEffectiveDeployment(deployment1, behavior)
+	s.verifyEffectiveDeployment(deployment2, behavior)
 }
 
 func (s *mutableStateSuite) verifyWorkflowOptionsUpdatedEvent(
@@ -945,8 +945,8 @@ func (s *mutableStateSuite) TestOverride_RedirectFails() {
 	s.verifyOverrides(baseBehavior, overrideBehavior, deployment1, deployment3)
 
 	// assert that transition fails
-	redirectStarted := s.mutableState.StartDeploymentTransition(deployment2)
-	s.False(redirectStarted)
+	err = s.mutableState.StartDeploymentTransition(deployment2)
+	s.ErrorIs(err, ErrPinnedWorkflowCannotTransition)
 	s.verifyEffectiveDeployment(deployment3, overrideBehavior)
 	s.verifyOverrides(baseBehavior, overrideBehavior, deployment1, deployment3)
 }
@@ -965,8 +965,8 @@ func (s *mutableStateSuite) TestOverride_BaseDeploymentUpdatedOnCompletion() {
 	s.verifyOverrides(baseBehavior, overrideBehavior, deployment1, deployment3)
 
 	// assert that redirect fails - should be its own test
-	redirectStarted := s.mutableState.StartDeploymentTransition(deployment2)
-	s.False(redirectStarted)
+	err = s.mutableState.StartDeploymentTransition(deployment2)
+	s.ErrorIs(err, ErrPinnedWorkflowCannotTransition)
 	s.verifyEffectiveDeployment(deployment3, overrideBehavior)
 	s.verifyOverrides(baseBehavior, overrideBehavior, deployment1, deployment3) // base deployment still deployment1 here -- good
 
