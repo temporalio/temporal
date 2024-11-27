@@ -35,6 +35,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
+	"go.temporal.io/api/enums/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
@@ -799,6 +800,34 @@ func (s *executableTaskSuite) TestGetNamespaceInfo_Skip() {
 			ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
 				ActiveClusterName: cluster.TestAlternativeClusterName,
 				Clusters: []string{
+					cluster.TestAlternativeClusterName,
+				},
+			},
+		},
+	})
+	s.namespaceCache.EXPECT().GetNamespaceByID(namespace.ID(namespaceID)).Return(namespaceEntry, nil).AnyTimes()
+
+	name, toProcess, err := s.task.GetNamespaceInfo(context.Background(), namespaceID)
+	s.NoError(err)
+	s.Equal(namespaceName, name)
+	s.False(toProcess)
+}
+
+func (s *executableTaskSuite) TestGetNamespaceInfo_Deleted() {
+	namespaceID := uuid.NewString()
+	namespaceName := uuid.NewString()
+	namespaceEntry := namespace.FromPersistentState(&persistence.GetNamespaceResponse{
+		Namespace: &persistencespb.NamespaceDetail{
+			Info: &persistencespb.NamespaceInfo{
+				Id:    namespaceID,
+				Name:  namespaceName,
+				State: enums.NAMESPACE_STATE_DELETED,
+			},
+			Config: &persistencespb.NamespaceConfig{},
+			ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
+				ActiveClusterName: cluster.TestAlternativeClusterName,
+				Clusters: []string{
+					cluster.TestCurrentClusterName,
 					cluster.TestAlternativeClusterName,
 				},
 			},

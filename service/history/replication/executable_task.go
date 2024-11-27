@@ -32,6 +32,7 @@ import (
 	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
+	"go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/api/adminservice/v1"
@@ -774,6 +775,9 @@ func (e *ExecutableTaskImpl) GetNamespaceInfo(
 	}
 
 	e.namespace.Store(namespaceEntry.Name())
+	if namespaceEntry.State() == enums.NAMESPACE_STATE_DELETED {
+		return namespaceEntry.Name().String(), false, nil
+	}
 	shouldProcessTask := false
 FilterLoop:
 	for _, targetCluster := range namespaceEntry.ClusterNames() {
