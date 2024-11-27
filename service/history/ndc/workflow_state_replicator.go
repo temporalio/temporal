@@ -300,6 +300,7 @@ func (r *WorkflowStateReplicatorImpl) ReplicateVersionedTransition(
 
 			if localLastWriteVersion > sourceLastWriteVersion {
 				// local is newer, try backfill events
+				releaseFn(nil)
 				return r.backFillEvents(ctx, namespaceID, wid, rid, executionInfo.VersionHistories, versionedTransition.EventBatches, versionedTransition.NewRunInfo, sourceClusterName, sourceTransitionHistory[len(sourceTransitionHistory)-1])
 			}
 			if localLastWriteVersion < sourceLastWriteVersion ||
@@ -321,6 +322,7 @@ func (r *WorkflowStateReplicatorImpl) ReplicateVersionedTransition(
 			}
 			return r.applyMutation(ctx, namespaceID, wid, rid, wfCtx, ms, releaseFn, versionedTransition, sourceClusterName)
 		case errors.Is(err, consts.ErrStaleReference):
+			releaseFn(nil)
 			return r.backFillEvents(ctx, namespaceID, wid, rid, executionInfo.VersionHistories, versionedTransition.EventBatches, versionedTransition.NewRunInfo, sourceClusterName, sourceTransitionHistory[len(sourceTransitionHistory)-1])
 		default:
 			return err
