@@ -25,6 +25,7 @@
 package matching
 
 import (
+	"sync"
 	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
@@ -59,6 +60,12 @@ type (
 		activityTaskInfo *matchingservice.PollActivityTaskQueueResponse
 		nexusTaskInfo    *matchingservice.PollNexusTaskQueueResponse
 	}
+	// lockedRecycleToken contains the recycle token func and a lock
+	lockedRecycleToken struct {
+		recycleToken func()
+		lock         sync.Mutex
+	}
+
 	// internalTask represents an activity, workflow, query or started (received from another host).
 	// this struct is more like a union and only one of [ query, event, forwarded ] is
 	// non-nil for any given task
@@ -77,10 +84,23 @@ type (
 		forwardInfo *taskqueuespb.TaskForwardInfo
 		// redirectInfo is only set when redirect rule is applied on the task. for forwarded tasks, this is populated
 		// based on forwardInfo.
-		redirectInfo *taskqueuespb.BuildIdRedirectInfo
-		recycleToken func()
+		redirectInfo     *taskqueuespb.BuildIdRedirectInfo
+		recycleTokenLock sync.Mutex
+		recycleToken     func()
 	}
 )
+
+func (t *internalTask) setRecycleToken(recycleToken func()) {
+	t.recycleTokenLock.Lock()
+	defer t.recycleTokenLock.Unlock()
+	t.recycleToken = recycleToken
+}
+
+func (t *internalTask) callRecycleToken() {
+	t.recycleTokenLock.Lock()
+	defer t.recycleTokenLock.Unlock()
+	t.callRecycleToken()
+}
 
 func newInternalTaskForSyncMatch(
 	info *persistencespb.TaskInfo,
@@ -242,7 +262,7 @@ func (task *internalTask) pollNexusTaskQueueResponse() *matchingservice.PollNexu
 // that is waiting on the token, if one exists.
 func (task *internalTask) finish(err error, wasValid bool) {
 	if !wasValid && task.recycleToken != nil {
-		task.recycleToken()
+		task.callRecycleToken()
 	}
 
 	switch {
