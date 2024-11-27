@@ -47,6 +47,47 @@ enum SchedulerState {
     SCHEDULER_STATE_EXECUTING = 2;
 }
 
+enum Scheduler2State {
+    // Default value, unspecified state.
+    SCHEDULER2_STATE_UNSPECIFIED = 0;
+    // Scheduler's top-level state machine has been initialized and is running
+    SCHEDULER2_STATE_RUNNING = 1;
+}
+
+// State for the V2 Scheduler's Generator substate machine.
+enum SchedulerGeneratorState {
+    // Default value, unspecified state.
+    SCHEDULER_GENERATOR_STATE_UNSPECIFIED = 0;
+    // Generator is waiting to be activated after the specified amount of time.
+    SCHEDULER_GENERATOR_STATE_WAITING = 1;
+    // Generator is buffering actions.
+    SCHEDULER_GENERATOR_STATE_BUFFERING = 2;
+}
+
+// State for the V2 Scheduler's Executor substate machine.
+enum SchedulerExecutorState {
+    // Default value, unspecified state.
+    SCHEDULER_EXECUTOR_STATE_UNSPECIFIED = 0;
+    // Executor is awaiting actions to be buffered and eligible for execution.
+    SCHEDULER_EXECUTOR_STATE_WAITING = 1;
+    // Executor is starting actions.
+    SCHEDULER_EXECUTOR_STATE_EXECUTING = 2;
+    // Executor is backing off from executing actions.
+    SCHEDULER_EXECUTOR_STATE_BACKING_OFF = 3;
+}
+
+// State for the V2 Scheduler's Backfiller substate machine.
+enum SchedulerBackfillerState {
+    // Default value, unspecified state.
+    SCHEDULER_BACKFILLER_STATE_UNSPECIFIED = 0;
+    // Backfiller is awaiting backfill to be requested.
+    SCHEDULER_BACKFILLER_STATE_WAITING = 1;
+    // Backfiller is actively starting actions.
+    SCHEDULER_BACKFILLER_STATE_EXECUTING = 2;
+    // Backfiller is backing off from starting actions.
+    SCHEDULER_BACKFILLER_STATE_BACKING_OFF = 3;
+}
+
 // State of a callback.
 enum CallbackState {
     // Default value, unspecified state.

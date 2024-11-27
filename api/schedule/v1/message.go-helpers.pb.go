@@ -472,3 +472,151 @@ func (this *NextTimeCache) Equal(that interface{}) bool {
 
 	return proto.Equal(this, that1)
 }
+
+// Marshal an object of type HsmSchedulerV2State to the protobuf v3 wire format
+func (val *HsmSchedulerV2State) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type HsmSchedulerV2State from the protobuf v3 wire format
+func (val *HsmSchedulerV2State) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *HsmSchedulerV2State) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two HsmSchedulerV2State values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *HsmSchedulerV2State) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *HsmSchedulerV2State
+	switch t := that.(type) {
+	case *HsmSchedulerV2State:
+		that1 = t
+	case HsmSchedulerV2State:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
+// Marshal an object of type GeneratorInternalState to the protobuf v3 wire format
+func (val *GeneratorInternalState) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type GeneratorInternalState from the protobuf v3 wire format
+func (val *GeneratorInternalState) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *GeneratorInternalState) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two GeneratorInternalState values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *GeneratorInternalState) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *GeneratorInternalState
+	switch t := that.(type) {
+	case *GeneratorInternalState:
+		that1 = t
+	case GeneratorInternalState:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
+// Marshal an object of type ExecutorInternalState to the protobuf v3 wire format
+func (val *ExecutorInternalState) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type ExecutorInternalState from the protobuf v3 wire format
+func (val *ExecutorInternalState) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *ExecutorInternalState) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two ExecutorInternalState values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *ExecutorInternalState) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *ExecutorInternalState
+	switch t := that.(type) {
+	case *ExecutorInternalState:
+		that1 = t
+	case ExecutorInternalState:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
+// Marshal an object of type BackfillerInternalState to the protobuf v3 wire format
+func (val *BackfillerInternalState) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type BackfillerInternalState from the protobuf v3 wire format
+func (val *BackfillerInternalState) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *BackfillerInternalState) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two BackfillerInternalState values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *BackfillerInternalState) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *BackfillerInternalState
+	switch t := that.(type) {
+	case *BackfillerInternalState:
+		that1 = t
+	case BackfillerInternalState:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}

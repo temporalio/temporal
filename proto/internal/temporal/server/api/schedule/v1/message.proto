@@ -47,6 +47,9 @@ message BufferedStart {
     temporal.api.enums.v1.ScheduleOverlapPolicy overlap_policy = 3;
     // Trigger-immediately or backfill
     bool manual = 4;
+    // An ID generated when the action is buffered for deduplication during
+    // execution. Only used by the V2 Scheduler (otherwise left empty).
+    string request_id = 6;
 }
 
 message InternalState {
@@ -146,3 +149,59 @@ message NextTimeCache {
     bool completed = 5;
 }
 
+
+// V2 Scheduler state
+message HsmSchedulerV2State {
+    temporal.server.api.enums.v1.Scheduler2State state = 1;
+
+    // scheduler request parameters and metadata. 
+    temporal.api.schedule.v1.Schedule schedule = 2;
+    temporal.api.schedule.v1.ScheduleInfo info = 3;
+    temporal.api.schedule.v1.SchedulePatch initial_patch = 4;
+
+    // state common to all generators is stored in the toplevel machine
+    string namespace = 5;
+    string namespace_id = 6;
+    string schedule_id = 7;
+
+    // Implemented as a sequence number. Useful for substate machines to
+    // invalidate transactions based on update requests
+    int64 conflict_token = 8;
+}
+
+// V2 Scheduler Generator state
+message GeneratorInternalState {
+    temporal.server.api.enums.v1.SchedulerGeneratorState state = 1;
+
+    // waiting state waits for the next_invocation_time before transitioning to buffering
+    google.protobuf.Timestamp next_invocation_time = 2;
+
+    // high water mark
+    google.protobuf.Timestamp last_processed_time = 3;
+
+    // Implemented as a sequence number. Useful for invalidating a stale
+    // Generator persisted state write.
+    int64 conflict_token = 4;
+}
+
+// V2 Scheduler Executor state
+message ExecutorInternalState {
+    temporal.server.api.enums.v1.SchedulerExecutorState state = 1;
+
+    // Wakes immediately after actions are buffered, or when the deadline from
+    // the BACKING_OFF state has expired.
+    google.protobuf.Timestamp next_invocation_time = 2;
+
+    // buffered starts that will be executed by the Executor
+    repeated BufferedStart buffered_starts = 3;
+}
+
+// V2 Scheduler Backfiller state
+message BackfillerInternalState {
+    temporal.server.api.enums.v1.SchedulerBackfillerState state = 1;
+
+    // Wakes from wait state on the "backfill requested" event. When backing off,
+    // the next_invocation_time is used to set the timer deadline that will move
+    // out of the "backing off" state.
+    google.protobuf.Timestamp next_invocation_time = 2;
+}
