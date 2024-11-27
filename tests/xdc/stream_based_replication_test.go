@@ -77,18 +77,17 @@ type (
 )
 
 func TestStreamBasedReplicationTestSuite(t *testing.T) {
-	t.SkipNow() // flaky test (EnableTransitionHistory)
 	for _, tc := range []struct {
 		name                    string
 		enableTransitionHistory bool
 	}{
 		{
-			name:                    "EnableTransitionHistory",
-			enableTransitionHistory: true,
-		},
-		{
 			name:                    "DisableTransitionHistory",
 			enableTransitionHistory: false,
+		},
+		{
+			name:                    "EnableTransitionHistory",
+			enableTransitionHistory: true,
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -171,7 +170,8 @@ func (s *streamBasedReplicationTestSuite) TestReplicateHistoryEvents_ForceReplic
 	var versions []int64
 	if s.enableTransitionHistory {
 		// Use versions for cluster1 (active) so we can update workflows
-		versions = []int64{1, 31, 21, 61, 41, 101, 91, 71, 81}
+		// Use same versions to prevent workflow tasks from being failed due to WORKFLOW_TASK_FAILED_CAUSE_FAILOVER_CLOSE_COMMAND
+		versions = []int64{1, 1, 1, 1, 1, 1, 1, 1, 1}
 	} else {
 		versions = []int64{2, 12, 22, 32, 2, 1, 5, 8, 9}
 	}
