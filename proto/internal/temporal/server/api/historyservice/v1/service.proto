@@ -165,6 +165,13 @@ service HistoryService {
     rpc ResetWorkflowExecution (ResetWorkflowExecutionRequest) returns (ResetWorkflowExecutionResponse) {
     }
 
+    // UpdateWorkflowExecutionOptions modifies the options of an existing workflow execution.
+    // Currently the option that can be updated is setting and unsetting a versioning behavior override.
+    // (-- api-linter: core::0134::method-signature=disabled
+    // (-- api-linter: core::0134::response-message-name=disabled
+    rpc UpdateWorkflowExecutionOptions (UpdateWorkflowExecutionOptionsRequest) returns (UpdateWorkflowExecutionOptionsResponse) {
+    }
+
     // RequestCancelWorkflowExecution is called by application worker when it wants to request cancellation of a workflow instance.
     // It will result in a new 'WorkflowExecutionCancelRequested' event being written to the workflow history and a new WorkflowTask
     // created for the workflow instance so new commands could be made. It fails with 'EntityNotExistsError' if the workflow is not valid

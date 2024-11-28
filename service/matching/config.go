@@ -54,6 +54,9 @@ type (
 		ShutdownDrainDuration                dynamicconfig.DurationPropertyFn
 		HistoryMaxPageSize                   dynamicconfig.IntPropertyFnWithNamespaceFilter
 		MatchingDropNonRetryableTasks        dynamicconfig.BoolPropertyFn
+		EnableDeployments                    dynamicconfig.BoolPropertyFnWithNamespaceFilter
+		MaxTaskQueuesInDeployment            dynamicconfig.IntPropertyFnWithNamespaceFilter
+		MaxIDLengthLimit                     dynamicconfig.IntPropertyFn
 
 		// task queue configuration
 
@@ -211,6 +214,8 @@ func NewConfig(
 		TestDisableSyncMatch:                     dynamicconfig.TestMatchingDisableSyncMatch.Get(dc),
 		LoadUserData:                             dynamicconfig.MatchingLoadUserData.Get(dc),
 		HistoryMaxPageSize:                       dynamicconfig.MatchingHistoryMaxPageSize.Get(dc),
+		EnableDeployments:                        dynamicconfig.MatchingEnableDeployments.Get(dc),
+		MaxTaskQueuesInDeployment:                dynamicconfig.MatchingMaxTaskQueuesInDeployment.Get(dc),
 		RPS:                                      dynamicconfig.MatchingRPS.Get(dc),
 		OperatorRPSRatio:                         dynamicconfig.OperatorRPSRatio.Get(dc),
 		RangeSize:                                100000,
@@ -252,6 +257,7 @@ func NewConfig(
 		MembershipUnloadDelay:                    dynamicconfig.MatchingMembershipUnloadDelay.Get(dc),
 		TaskQueueInfoByBuildIdTTL:                dynamicconfig.TaskQueueInfoByBuildIdTTL.Get(dc),
 		MatchingDropNonRetryableTasks:            dynamicconfig.MatchingDropNonRetryableTasks.Get(dc),
+		MaxIDLengthLimit:                         dynamicconfig.MaxIDLengthLimit.Get(dc),
 
 		AdminNamespaceToPartitionDispatchRate:          dynamicconfig.AdminMatchingNamespaceToPartitionDispatchRate.Get(dc),
 		AdminNamespaceTaskqueueToPartitionDispatchRate: dynamicconfig.AdminMatchingNamespaceTaskqueueToPartitionDispatchRate.Get(dc),

@@ -32,12 +32,14 @@ import (
 	"math/rand"
 	"reflect"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/nexus-rpc/sdk-go/nexus"
 	"github.com/pborman/uuid"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
+	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
 	historypb "go.temporal.io/api/history/v1"
@@ -46,6 +48,7 @@ import (
 	updatepb "go.temporal.io/api/update/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/sdk/temporalnexus"
 	clockspb "go.temporal.io/server/api/clock/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
@@ -125,6 +128,8 @@ var (
 	ErrMissingChildWorkflowInitiatedEvent = serviceerror.NewInternal("unable to get child workflow initiated event")
 	// ErrMissingSignalInitiatedEvent indicates missing workflow signal initiated event
 	ErrMissingSignalInitiatedEvent = serviceerror.NewInternal("unable to get signal initiated event")
+	// ErrPinnedWorkflowCannotTransition indicates attempt to start a transition on a pinned workflow
+	ErrPinnedWorkflowCannotTransition = serviceerror.NewInternal("unable to start transition on pinned workflows")
 
 	timeZeroUTC = time.Unix(0, 0).UTC()
 )
@@ -584,6 +589,18 @@ func (ms *MutableStateImpl) GetNexusCompletion(ctx context.Context) (nexus.Opera
 	if err != nil {
 		return nil, err
 	}
+	// Create the link information about the workflow to be attached to fabricated started event if completion is
+	// received before start response.
+	startLink := temporalnexus.ConvertLinkWorkflowEventToNexusLink(&commonpb.Link_WorkflowEvent{
+		Namespace:  ms.namespaceEntry.Name().String(),
+		WorkflowId: ms.executionInfo.WorkflowId,
+		RunId:      ms.executionState.RunId,
+		Reference: &commonpb.Link_WorkflowEvent_EventRef{
+			EventRef: &commonpb.Link_WorkflowEvent_EventReference{
+				EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
+			},
+		},
+	})
 	switch ce.GetEventType() {
 	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED:
 		payloads := ce.GetWorkflowExecutionCompletedEventAttributes().GetResult().GetPayloads()
@@ -596,6 +613,8 @@ func (ms *MutableStateImpl) GetNexusCompletion(ctx context.Context) (nexus.Opera
 		}
 		completion, err := nexus.NewOperationCompletionSuccessful(p, nexus.OperationCompletionSuccessfulOptions{
 			Serializer: commonnexus.PayloadSerializer,
+			StartTime:  ms.executionState.GetStartTime().AsTime(),
+			StartLinks: []nexus.Link{startLink},
 		})
 		if err != nil {
 			return nil, serviceerror.NewInternal(fmt.Sprintf("failed to construct Nexus completion: %v", err))
@@ -604,23 +623,31 @@ func (ms *MutableStateImpl) GetNexusCompletion(ctx context.Context) (nexus.Opera
 	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_FAILED:
 		f := commonnexus.APIFailureToNexusFailure(ce.GetWorkflowExecutionFailedEventAttributes().GetFailure())
 		return &nexus.OperationCompletionUnsuccessful{
-			State:   nexus.OperationStateFailed,
-			Failure: f,
+			State:      nexus.OperationStateFailed,
+			StartTime:  ms.executionState.GetStartTime().AsTime(),
+			StartLinks: []nexus.Link{startLink},
+			Failure:    f,
 		}, nil
 	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CANCELED:
 		return &nexus.OperationCompletionUnsuccessful{
-			State:   nexus.OperationStateCanceled,
-			Failure: &nexus.Failure{Message: "operation canceled"},
+			State:      nexus.OperationStateCanceled,
+			StartTime:  ms.executionState.GetStartTime().AsTime(),
+			StartLinks: []nexus.Link{startLink},
+			Failure:    &nexus.Failure{Message: "operation canceled"},
 		}, nil
 	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TERMINATED:
 		return &nexus.OperationCompletionUnsuccessful{
-			State:   nexus.OperationStateFailed,
-			Failure: &nexus.Failure{Message: "operation terminated"},
+			State:      nexus.OperationStateFailed,
+			StartTime:  ms.executionState.GetStartTime().AsTime(),
+			StartLinks: []nexus.Link{startLink},
+			Failure:    &nexus.Failure{Message: "operation terminated"},
 		}, nil
 	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TIMED_OUT:
 		return &nexus.OperationCompletionUnsuccessful{
-			State:   nexus.OperationStateFailed,
-			Failure: &nexus.Failure{Message: "operation exceeded internal timeout"},
+			State:      nexus.OperationStateFailed,
+			StartTime:  ms.executionState.GetStartTime().AsTime(),
+			StartLinks: []nexus.Link{startLink},
+			Failure:    &nexus.Failure{Message: "operation exceeded internal timeout"},
 		}, nil
 	}
 	return nil, serviceerror.NewInternal(fmt.Sprintf("invalid workflow execution status: %v", ce.GetEventType()))
@@ -2370,12 +2397,16 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionStartedEvent(
 		ms.executionInfo.SearchAttributes = event.SearchAttributes.GetIndexedFields()
 	}
 
+	if event.GetVersioningOverride() != nil {
+		ms.executionInfo.VersioningInfo = &workflowpb.WorkflowExecutionVersioningInfo{VersioningOverride: event.GetVersioningOverride()}
+	}
 	if inheritedBuildId := event.InheritedBuildId; inheritedBuildId != "" {
 		ms.executionInfo.InheritedBuildId = inheritedBuildId
 		if err := ms.UpdateBuildIdAssignment(inheritedBuildId); err != nil {
 			return err
 		}
-	} else if event.SourceVersionStamp.GetUseVersioning() && event.SourceVersionStamp.GetBuildId() != "" {
+	} else if event.SourceVersionStamp.GetUseVersioning() && event.SourceVersionStamp.GetBuildId() != "" ||
+		ms.GetEffectiveVersioningBehavior() == enumspb.VERSIONING_BEHAVIOR_PINNED {
 		// TODO: [cleanup-old-wv]
 		limit := ms.config.SearchAttributesSizeOfValueLimit(string(ms.namespaceEntry.Name()))
 		if _, err := ms.addBuildIdToSearchAttributesWithNoVisibilityTask(event.SourceVersionStamp, limit); err != nil {
@@ -2668,6 +2699,12 @@ func (ms *MutableStateImpl) UpdateBuildIdAssignment(buildId string) error {
 	return ms.updateBuildIdsSearchAttribute(&commonpb.WorkerVersionStamp{UseVersioning: true, BuildId: buildId}, limit)
 }
 
+// For pinned workflows (ms.GetEffectiveVersioningBehavior() == PINNED), this will append a tag formed as
+// pinned:<deployment_series_name>:<deployment_build_id> to the BuildIds search attribute,
+// if it does not already exist there. The deployment will be execution_info.deployment, or the override deployment if
+// a pinned override is set.
+// For all other workflows (ms.GetEffectiveVersioningBehavior() != PINNED), this will append a tag based on the
+// workflow's versioning status.
 func (ms *MutableStateImpl) updateBuildIdsSearchAttribute(stamp *commonpb.WorkerVersionStamp, maxSearchAttributeValueSize int) error {
 	changed, err := ms.addBuildIdToSearchAttributesWithNoVisibilityTask(stamp, maxSearchAttributeValueSize)
 	if err != nil {
@@ -2693,6 +2730,9 @@ func (ms *MutableStateImpl) loadBuildIds() ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
+	if decoded == nil {
+		return []string{}, nil
+	}
 	searchAttributeValues, ok := decoded.([]string)
 	if !ok {
 		return nil, serviceerror.NewInternal("invalid search attribute value stored for BuildIds")
@@ -2700,33 +2740,56 @@ func (ms *MutableStateImpl) loadBuildIds() ([]string, error) {
 	return searchAttributeValues, nil
 }
 
+// getPinnedDeployment returns nil if the workflow is not pinned. If there is a pinned override,
+// it returns the override deployment. If there is no override, it returns execution_info.deployment,
+// which is the last deployment that this workflow completed a task on.
+func (ms *MutableStateImpl) getPinnedDeployment() *deploymentpb.Deployment {
+	if ms.GetEffectiveVersioningBehavior() != enumspb.VERSIONING_BEHAVIOR_PINNED {
+		return nil
+	}
+	return ms.GetEffectiveDeployment()
+}
+
 // Takes a list of loaded build IDs from a search attribute and adds a new build ID to it. Also makes sure that the
 // resulting SA list begins with either "unversioned" or "assigned:<bld>" based on workflow's Build ID assignment status.
 // Returns a potentially modified list.
 // [cleanup-old-wv] old versioning does not add "assigned:<bld>" value to the SA.
+// [cleanup-versioning-2] versioning-2 adds "assigned:<bld>" which is no longer used in versioning-3
 func (ms *MutableStateImpl) addBuildIdToLoadedSearchAttribute(
 	existingValues []string,
 	stamp *commonpb.WorkerVersionStamp,
 ) []string {
 	var newValues []string
-	if !stamp.GetUseVersioning() {
+	effectiveBehavior := ms.GetEffectiveVersioningBehavior()
+	if !stamp.GetUseVersioning() && effectiveBehavior == enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED { // unversioned workflows may still have non-nil deployment, so we don't check deployment
 		newValues = append(newValues, worker_versioning.UnversionedSearchAttribute)
+	} else if effectiveBehavior == enumspb.VERSIONING_BEHAVIOR_PINNED {
+		newValues = append(newValues, worker_versioning.PinnedBuildIdSearchAttribute(ms.getPinnedDeployment()))
 	} else if ms.GetAssignedBuildId() != "" {
 		newValues = append(newValues, worker_versioning.AssignedBuildIdSearchAttribute(ms.GetAssignedBuildId()))
 	}
 
-	buildId := worker_versioning.VersionStampToBuildIdSearchAttribute(stamp)
-	found := slices.Contains(newValues, buildId)
-	for _, existingValue := range existingValues {
-		if existingValue == buildId {
-			found = true
+	if effectiveBehavior == enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED {
+		buildId := worker_versioning.VersionStampToBuildIdSearchAttribute(stamp)
+		found := slices.Contains(newValues, buildId)
+		for _, existingValue := range existingValues {
+			if existingValue == buildId {
+				found = true
+			}
+			if !worker_versioning.IsUnversionedOrAssignedBuildIdSearchAttribute(existingValue) {
+				newValues = append(newValues, existingValue)
+			}
 		}
-		if !worker_versioning.IsUnversionedOrAssignedBuildIdSearchAttribute(existingValue) {
-			newValues = append(newValues, existingValue)
+		if !found {
+			newValues = append(newValues, buildId)
 		}
 	}
-	if !found {
-		newValues = append(newValues, buildId)
+
+	// Remove pinned build id search attribute if it exists and we are not pinned
+	if effectiveBehavior != enumspb.VERSIONING_BEHAVIOR_PINNED {
+		newValues = slices.DeleteFunc(newValues, func(s string) bool {
+			return strings.HasPrefix(s, worker_versioning.BuildIdSearchAttributePrefixPinned)
+		})
 	}
 	return newValues
 }
@@ -2738,7 +2801,10 @@ func (ms *MutableStateImpl) saveBuildIds(buildIds []string, maxSearchAttributeVa
 		ms.executionInfo.SearchAttributes = searchAttributes
 	}
 
-	hasUnversionedOrAssigned := worker_versioning.IsUnversionedOrAssignedBuildIdSearchAttribute(buildIds[0])
+	hasUnversionedOrAssigned := false
+	if len(buildIds) > 0 { // len is 0 if we are removing the pinned search attribute and the workflow was never unversioned or assigned
+		hasUnversionedOrAssigned = worker_versioning.IsUnversionedOrAssignedBuildIdSearchAttribute(buildIds[0])
+	}
 	for {
 		saPayload, err := searchattribute.EncodeValue(buildIds, enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST)
 		if err != nil {
@@ -3017,6 +3083,7 @@ func (ms *MutableStateImpl) AddActivityTaskStartedEvent(
 	requestID string,
 	identity string,
 	versioningStamp *commonpb.WorkerVersionStamp,
+	deployment *deploymentpb.Deployment,
 	redirectInfo *taskqueue.BuildIdRedirectInfo,
 ) (*historypb.HistoryEvent, error) {
 	opTag := tag.WorkflowActionActivityTaskStarted
@@ -3040,6 +3107,8 @@ func (ms *MutableStateImpl) AddActivityTaskStartedEvent(
 			}
 		}
 	}
+
+	ai.LastStartedDeployment = deployment
 
 	if !ai.HasRetryPolicy {
 		event := ms.hBuilder.AddActivityTaskStartedEvent(
@@ -4269,6 +4338,86 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionUpdateCompletedEvent(
 func (ms *MutableStateImpl) RejectWorkflowExecutionUpdate(_ string, _ *updatepb.Rejection) error {
 	// TODO (alex-update): This method is noop because we don't currently write rejections to the history.
 	return nil
+}
+
+func (ms *MutableStateImpl) AddWorkflowExecutionOptionsUpdatedEvent(
+	versioningOverride *workflowpb.VersioningOverride,
+) (*historypb.HistoryEvent, error) {
+	if err := ms.checkMutability(tag.WorkflowActionWorkflowOptionsUpdated); err != nil {
+		return nil, err
+	}
+	event := ms.hBuilder.AddWorkflowExecutionOptionsUpdatedEvent(versioningOverride)
+	if err := ms.ApplyWorkflowExecutionOptionsUpdatedEvent(event); err != nil {
+		return nil, err
+	}
+	return event, nil
+}
+
+func (ms *MutableStateImpl) ApplyWorkflowExecutionOptionsUpdatedEvent(event *historypb.HistoryEvent) error {
+	override := event.GetWorkflowExecutionOptionsUpdatedEventAttributes().GetVersioningOverride()
+	previousEffectiveDeployment := ms.GetEffectiveDeployment()
+	previousEffectiveVersioningBehavior := ms.GetEffectiveVersioningBehavior()
+	if ms.GetExecutionInfo().GetVersioningInfo() == nil {
+		ms.GetExecutionInfo().VersioningInfo = &workflowpb.WorkflowExecutionVersioningInfo{}
+	}
+	ms.GetExecutionInfo().VersioningInfo.VersioningOverride = override
+
+	if !proto.Equal(ms.GetEffectiveDeployment(), previousEffectiveDeployment) ||
+		ms.GetEffectiveVersioningBehavior() != previousEffectiveVersioningBehavior {
+		// TODO (carly) part 2: if safe mode, do replay test on new deployment if deployment changed, if fail, revert changes and abort
+		// If there is an ongoing transition, we remove it so that tasks from this workflow (including the pending WFT
+		// that initiated the transition) can run on our override deployment as soon as possible.
+		//
+		// We only have to think about the case where the workflow is unpinned, since if the workflow is pinned, no
+		// transition will start.
+		//
+		// If we did NOT remove the transition, we would have to keep the pending WFT scheduled per the transition's
+		// deployment, so that when the task is started it can run on the transition's target deployment, complete,
+		// and thereby complete the transition. If there is anything wrong with the transition's target deployment,
+		// the transition could hang due to the task being stuck, or the transition could fail if the WFT fails.
+		// Basically, WF might be stuck in a transition loop, and user wants to pin it to the previous build to move
+		// it out of the loop. If we don't remove the transition, it will still be stuck.
+		//
+		// It is possible for there to be an ongoing transition and an override that both result in the same effective
+		// behavior and effective deployment. In that case, we would not hit the code path to remove the transition or
+		// reschedule the WFT. For this to happen, the existing behavior and the override would both have to be unpinned.
+		// If we don't remove the transition or reschedule pending tasks, the outstanding WFT on the transition's
+		// target queue will be started on the transition's target deployment. Most likely this matches user's intention
+		// because they add the unpinned override, they want to workflow to do the transition. Even if we removed the
+		// transition, the rescheduled task will be redirected by Matching to the old transition's deployment again,
+		// and it will start the same transition in the workflow. So removing the transition would not make a difference
+		// and would in fact add some extra work for the server.
+		ms.executionInfo.GetVersioningInfo().DeploymentTransition = nil
+
+		// If effective deployment or behavior change, we need to reschedule any pending tasks, because History will reject
+		// the task's start request if the task is being started by a poller that is not from the workflow's effective
+		// deployment according to History. Therefore, it is important for matching to match tasks with the correct pollers.
+		// Even if the effective deployment does not change, we still need to reschedule tasks into the appropriate
+		// default/unpinned queue or the pinned queue, because the two queues will be handled differently if the task queue's
+		// Current Deployment changes between now and when the task is started.
+		//
+		// We choose to let any started WFT that is running on the old deployment finish running, instead of forcing it to fail.
+		ms.ClearStickyTaskQueue()
+		if ms.HasPendingWorkflowTask() && !ms.HasStartedWorkflowTask() &&
+			// Speculative WFT is directly (without transfer task) added to matching when scheduled.
+			// It is protected by timeout on both normal and sticky task queues.
+			// If there is no poller for previous deployment, it will time out,
+			// and will be rescheduled as normal WFT.
+			ms.GetPendingWorkflowTask().Type != enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE {
+			// Sticky queue was just cleared, so the following call only generates a WorkflowTask, not a WorkflowTaskTimeoutTask.
+			err := ms.taskGenerator.GenerateScheduleWorkflowTaskTasks(ms.GetPendingWorkflowTask().ScheduledEventID)
+			if err != nil {
+				return err
+			}
+		}
+		// For v3 versioned workflows (ms.GetEffectiveVersioningBehavior() != UNSPECIFIED), this will update the reachability
+		// search attribute based on the execution_info.deployment and/or override deployment if one exists.
+		limit := ms.config.SearchAttributesSizeOfValueLimit(ms.namespaceEntry.Name().String())
+		if err := ms.updateBuildIdsSearchAttribute(nil, limit); err != nil {
+			return err
+		}
+	}
+	return ms.reschedulePendingActivities()
 }
 
 func (ms *MutableStateImpl) ApplyWorkflowExecutionTerminatedEvent(
@@ -7077,4 +7226,102 @@ func (ms *MutableStateImpl) initVersionedTransitionInDB() {
 	if len(ms.executionInfo.TransitionHistory) != 0 {
 		ms.versionedTransitionInDB = ms.executionInfo.TransitionHistory[len(ms.executionInfo.TransitionHistory)-1]
 	}
+}
+
+// GetEffectiveDeployment returns the effective deployment in the following order:
+//  1. DeploymentTransition.Deployment: this is returned when the wf is transitioning to a
+//     new deployment
+//  2. VersioningOverride.Deployment: this is returned when user has set a PINNED override
+//     at wf start time, or later via UpdateWorkflowExecutionOptions.
+//  3. Deployment: this is returned when there is no transition and no override (the most
+//     common case). Deployment is set based on the worker-sent deployment in the latest WFT
+//     completion. Exception: if Deployment is set but the workflow's effective behavior is
+//     UNSPECIFIED, it means the workflow is unversioned, so effective deployment will be nil.
+//
+// Note: Deployment objects are immutable, never change their fields.
+func (ms *MutableStateImpl) GetEffectiveDeployment() *deploymentpb.Deployment {
+	return GetEffectiveDeployment(ms.GetExecutionInfo().GetVersioningInfo())
+}
+
+func (ms *MutableStateImpl) GetDeploymentTransition() *workflowpb.DeploymentTransition {
+	return ms.GetExecutionInfo().GetVersioningInfo().GetDeploymentTransition()
+}
+
+// GetEffectiveVersioningBehavior returns the effective versioning behavior in the following
+// order:
+//  1. VersioningOverride.Behavior: this is returned when user has set a behavior override
+//     at wf start time, or later via UpdateWorkflowExecutionOptions.
+//  2. Behavior: this is returned when there is no override (most common case). Behavior is
+//     set based on the worker-sent deployment in the latest WFT completion.
+func (ms *MutableStateImpl) GetEffectiveVersioningBehavior() enumspb.VersioningBehavior {
+	return GetEffectiveVersioningBehavior(ms.GetExecutionInfo().GetVersioningInfo())
+}
+
+// StartDeploymentTransition starts a transition to the given deployment which must be
+// different from workflows effective deployment. Will fail if the workflow is pinned.
+// Starting a new transition replaces current transition, if present, without rescheduling
+// activities.
+// If there is a pending workflow task that is not started yet, it'll be rescheduled after
+// transition start.
+func (ms *MutableStateImpl) StartDeploymentTransition(deployment *deploymentpb.Deployment) error {
+	wfBehavior := ms.GetEffectiveVersioningBehavior()
+	if wfBehavior == enumspb.VERSIONING_BEHAVIOR_PINNED {
+		// WF is pinned so we reject the transition.
+		// It's possible that a backlogged task in matching from an earlier time that this wf was
+		// unpinned is being dispatched now and wants to redirect the wf. Such task should be dropped.
+		return ErrPinnedWorkflowCannotTransition
+	}
+
+	versioningInfo := ms.GetExecutionInfo().GetVersioningInfo()
+	if versioningInfo == nil {
+		versioningInfo = &workflowpb.WorkflowExecutionVersioningInfo{}
+		ms.GetExecutionInfo().VersioningInfo = versioningInfo
+	}
+
+	versioningInfo.DeploymentTransition = &workflowpb.DeploymentTransition{
+		Deployment: deployment,
+	}
+
+	// Because deployment is changed, we clear sticky queue to make sure the next wf task does not
+	// go to the old deployment.
+	ms.ClearStickyTaskQueue()
+
+	// If there is a pending (unstarted) WFT, we need to reschedule it, so it goes to Matching with
+	// the right directive deployment. The current scheduled WFT will be rejected when attempted to
+	// start because its directive deployment no longer matches workflows effective deployment.
+	// If the WFT is started but not finished, we let it run its course, once it's completed, failed
+	// or timed out a new one will be scheduled.
+	if ms.HasPendingWorkflowTask() && !ms.HasStartedWorkflowTask() &&
+		// Speculative WFT is directly (without transfer task) added to matching when scheduled.
+		// It is protected by timeout on both normal and sticky task queues.
+		// If there is no poller for previous deployment, it will time out,
+		// and will be rescheduled as normal WFT.
+		ms.GetPendingWorkflowTask().Type != enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE {
+		// sticky queue was just cleared, so the following call only generates
+		// a WorkflowTask, not a WorkflowTaskTimeoutTask.
+		err := ms.taskGenerator.GenerateScheduleWorkflowTaskTasks(ms.GetPendingWorkflowTask().ScheduledEventID)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// reschedulePendingActivities reschedules all the activities that are not started, so they are
+// scheduled against the right queue in matching.
+func (ms *MutableStateImpl) reschedulePendingActivities() error {
+	for _, ai := range ms.GetPendingActivityInfos() {
+		if ai.StartedEventId != common.EmptyEventID {
+			// TODO: skip task generation also when activity is in backoff period
+			// activity already started
+			continue
+		}
+		// we only need to resend the activities to matching, no need to update timer tasks.
+		err := ms.taskGenerator.GenerateActivityTasks(ai.ScheduledEventId)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
 }

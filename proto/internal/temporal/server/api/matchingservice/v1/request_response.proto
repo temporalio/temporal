@@ -29,6 +29,7 @@ import "google/protobuf/duration.proto";
 import "google/protobuf/timestamp.proto";
 
 import "temporal/api/common/v1/message.proto";
+import "temporal/api/deployment/v1/message.proto";
 import "temporal/api/enums/v1/task_queue.proto";
 import "temporal/api/history/v1/message.proto";
 import "temporal/api/taskqueue/v1/message.proto";
@@ -36,6 +37,7 @@ import "temporal/api/query/v1/message.proto";
 import "temporal/api/protocol/v1/message.proto";
 
 import "temporal/server/api/clock/v1/message.proto";
+import "temporal/server/api/deployment/v1/message.proto";
 import "temporal/server/api/history/v1/message.proto";
 import "temporal/server/api/persistence/v1/nexus.proto";
 import "temporal/server/api/persistence/v1/task_queues.proto";
@@ -124,6 +126,7 @@ message AddWorkflowTaskRequest {
 
 message AddWorkflowTaskResponse {
     // When present, it means that the task is spooled to a versioned queue of this build ID
+    // Deprecated. [cleanup-old-wv]
     string assigned_build_id = 1;
 }
 
@@ -147,6 +150,7 @@ message AddActivityTaskRequest {
 
 message AddActivityTaskResponse {
     // When present, it means that the task is spooled to a versioned queue of this build ID
+    // Deprecated. [cleanup-old-wv]
     string assigned_build_id = 1;
 }
 
@@ -287,6 +291,7 @@ message GetWorkerBuildIdCompatibilityRequest {
     string namespace_id = 1;
     temporal.api.workflowservice.v1.GetWorkerBuildIdCompatibilityRequest request = 2;
 }
+
 message GetWorkerBuildIdCompatibilityResponse {
     temporal.api.workflowservice.v1.GetWorkerBuildIdCompatibilityResponse response = 1;
 }
@@ -307,11 +312,28 @@ message GetTaskQueueUserDataRequest {
     // available (or timeout).
     bool wait_new_data = 4;
 }
+
 message GetTaskQueueUserDataResponse {
     reserved 1;
     // Versioned user data, set if the task queue has user data and the request's last_known_user_data_version is less
     // than the version cached in the root partition.
     temporal.server.api.persistence.v1.VersionedTaskQueueUserData user_data = 2;
+}
+
+message SyncDeploymentUserDataRequest {
+    string namespace_id = 1;
+    string task_queue = 2;
+    // Note: this is the task queue type being modified, but this field should not be used for
+    // routing, the user data is owned by the WORKFLOW task queue.
+    temporal.api.enums.v1.TaskQueueType task_queue_type = 3;
+
+    // This is the deployment being modified.
+    temporal.api.deployment.v1.Deployment deployment = 4;
+    // Data for this deployment.
+    temporal.server.api.deployment.v1.TaskQueueData data = 5;
+}
+
+message SyncDeploymentUserDataResponse {
 }
 
 message ApplyTaskQueueUserDataReplicationEventRequest {

@@ -25,8 +25,10 @@ syntax = "proto3";
 package temporal.server.api.persistence.v1;
 option go_package = "go.temporal.io/server/api/persistence/v1;persistence";
 
-import "temporal/server/api/clock/v1/message.proto";
+import "temporal/api/deployment/v1/message.proto";
 import "temporal/api/taskqueue/v1/message.proto";
+import "temporal/server/api/clock/v1/message.proto";
+import "temporal/server/api/deployment/v1/message.proto";
 
 // BuildId is an identifier with a timestamped status used to identify workers for task queue versioning purposes.
 message BuildId {
@@ -105,19 +107,38 @@ message VersioningData {
     repeated RedirectRule redirect_rules = 3;
 }
 
-// Container for all persistent user provided data for a task queue.
-// Task queue as a named concept here is close to how users interpret them, rather than relating to some specific type
-// (workflow vs activity, etc) and thus, as a consequence, any data that applies to a specific type (say, activity rate
-// limiting) should be defined as such within this structure.
+message DeploymentData {
+    // Set of deployments that this task queue belongs to.
+    // Current deployment is defined implicitly as the deployment with the most recent
+    // TaskQueueData.last_became_current_time.
+    repeated DeploymentDataItem deployments = 1;
+
+    message DeploymentDataItem {
+        temporal.api.deployment.v1.Deployment deployment = 1;
+        temporal.server.api.deployment.v1.TaskQueueData data = 2;
+    }
+}
+
+// Container for all persistent user data that varies per task queue type within a family.
+message TaskQueueTypeUserData {
+    DeploymentData deployment_data = 1;
+}
+
+// Container for all persistent user provided data for a task queue family.
+// "Task queue" as a named concept here is a task queue family, i.e. the set of task queues
+// that share a name, at most one of each type (workflow, activity, etc.).
 // This data must all fit in a single DB column and is kept cached in-memory, take extra care to ensure data added here
 // has reasonable size limits imposed on it.
 message TaskQueueUserData {
-    // The last recorded cluster-local Hybrid Logical Clock timestamp for _this_ task queue.
+    // The last recorded cluster-local Hybrid Logical Clock timestamp for _this_ task queue family.
     // Updated whenever user data is directly updated due to a user action but not when applying replication events.
     // The clock is referenced when new timestamps are generated to ensure it produces monotonically increasing
     // timestamps.
     temporal.server.api.clock.v1.HybridLogicalClock clock = 1;
     VersioningData versioning_data = 2;
+
+    // Map from task queue type (workflow, activity, nexus) to per-type data.
+    map<int32, TaskQueueTypeUserData> per_type = 3;
 
     // For future use: description, rate limits, manual partition control, etc...
 }

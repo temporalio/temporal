@@ -214,6 +214,13 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 		return nil, serviceerror.NewNotFound("Workflow task not found.")
 	}
 
+	behavior := request.GetVersioningBehavior()
+	if behavior != enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED && request.GetDeployment() == nil {
+		// Mutable state wasn't changed yet and doesn't have to be cleared.
+		releaseLeaseWithError = false
+		return nil, serviceerror.NewInvalidArgument("deployment must be set when versioning behavior specified")
+	}
+
 	assignedBuildId := ms.GetAssignedBuildId()
 	wftCompletedBuildId := request.GetWorkerVersionStamp().GetBuildId()
 	if assignedBuildId != "" && !ms.IsStickyTaskQueueSet() {
@@ -319,6 +326,7 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 			1,
 			metrics.OperationTag(metrics.HistoryRespondWorkflowTaskCompletedScope))
 		if assignedBuildId == "" || assignedBuildId == wftCompletedBuildId {
+			// TODO: clean up. this is not applicable to V3
 			// For versioned workflows, only set sticky queue if the WFT is completed by the WF's current build ID.
 			// It is possible that the WF has been redirected to another build ID since this WFT started, in that case
 			// we should not set sticky queue of the old build ID and keep the normal queue to let Matching send the

@@ -68,6 +68,10 @@ func FromStatus(st *status.Status) error {
 		switch errDetails.(type) {
 		case *errordetails.ObsoleteDispatchBuildIdFailure:
 			return newObsoleteDispatchBuildId(st)
+		case *errordetails.ObsoleteMatchingTaskFailure:
+			return newObsoleteMatchingTask(st)
+		case *errordetails.ActivityStartDuringTransitionFailure:
+			return newActivityStartDuringTransition(st)
 		}
 	}
 

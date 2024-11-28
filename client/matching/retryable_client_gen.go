@@ -425,6 +425,21 @@ func (c *retryableClient) RespondQueryTaskCompleted(
 	return resp, err
 }
 
+func (c *retryableClient) SyncDeploymentUserData(
+	ctx context.Context,
+	request *matchingservice.SyncDeploymentUserDataRequest,
+	opts ...grpc.CallOption,
+) (*matchingservice.SyncDeploymentUserDataResponse, error) {
+	var resp *matchingservice.SyncDeploymentUserDataResponse
+	op := func(ctx context.Context) error {
+		var err error
+		resp, err = c.client.SyncDeploymentUserData(ctx, request, opts...)
+		return err
+	}
+	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
+	return resp, err
+}
+
 func (c *retryableClient) UpdateNexusEndpoint(
 	ctx context.Context,
 	request *matchingservice.UpdateNexusEndpointRequest,

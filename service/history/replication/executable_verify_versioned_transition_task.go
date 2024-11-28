@@ -163,39 +163,41 @@ func (e *ExecutableVerifyVersionedTransitionTask) Execute() error {
 			ms.GetExecutionInfo().VersionHistories,
 		)
 	}
-	// case 3: state transition is not on non-current branch, but no event to verify
+	// case 3: state transition is on non-current branch, but no event to verify
 	if e.taskAttr.NextEventId == common2.EmptyEventID {
 		return e.verifyNewRunExist(ctx)
 	}
 
-	_, err = versionhistory.FindFirstVersionHistoryIndexByVersionHistoryItem(ms.GetExecutionInfo().VersionHistories, &historyspb.VersionHistoryItem{
-		EventId: e.taskAttr.NextEventId - 1,
-		Version: e.ReplicationTask().VersionedTransition.NamespaceFailoverVersion,
-	})
-	// case 4: event on non-current branch are up-to-date
-	if err == nil {
-		return e.verifyNewRunExist(ctx)
+	targetHistory := &historyspb.VersionHistory{
+		Items: e.taskAttr.EventVersionHistory,
 	}
 
-	// case 5: event on non-current branch are not up-to-date, need to backfill events to non-current branch
-	item, _, err := versionhistory.FindLCAVersionHistoryItemAndIndex(ms.GetExecutionInfo().VersionHistories, &historyspb.VersionHistory{
-		Items: e.taskAttr.EventVersionHistory,
-	})
+	lcaItem, _, err := versionhistory.FindLCAVersionHistoryItemAndIndex(ms.GetExecutionInfo().VersionHistories, targetHistory)
 	if err != nil {
 		return err
 	}
-	// TODO: Current resend logic made an assumption that current task has the last batch of events,
-	// so the resend start/end events are exclusive/exclusive. We need to re-visit this logic when working on
-	// sync state task and consolidate the event resend logic
-	return serviceerrors.NewRetryReplication(
-		"retry replication",
-		e.NamespaceID,
-		e.WorkflowID,
-		e.RunID,
-		item.EventId,
-		item.Version,
-		e.taskAttr.NextEventId,
-		e.ReplicationTask().VersionedTransition.NamespaceFailoverVersion,
+	lastItem, err := versionhistory.GetLastVersionHistoryItem(targetHistory)
+	if err != nil {
+		return err
+	}
+	// case 4: event on non-current branch are up-to-date
+	if versionhistory.IsEqualVersionHistoryItem(lcaItem, lastItem) {
+		return e.verifyNewRunExist(ctx)
+	}
+	// case 5: event on non-current branch are not up-to-date, we need to backfill events
+	startEventVersion, err := versionhistory.GetVersionHistoryEventVersion(targetHistory, lcaItem.EventId+1)
+	if err != nil {
+		return err
+	}
+	return e.BackFillEvents(
+		ctx,
+		e.ExecutableTask.SourceClusterName(),
+		e.WorkflowKey,
+		lcaItem.EventId+1,
+		startEventVersion,
+		lastItem.EventId,
+		lastItem.Version,
+		e.taskAttr.NewRunId,
 	)
 }
 
@@ -273,26 +275,6 @@ func (e *ExecutableVerifyVersionedTransitionTask) HandleErr(err error) error {
 				)
 			}
 			// return original task processing error
-			return err
-		}
-		return e.Execute()
-	case *serviceerrors.RetryReplication:
-		namespaceName, _, nsError := e.GetNamespaceInfo(headers.SetCallerInfo(
-			context.Background(),
-			headers.SystemPreemptableCallerInfo,
-		), e.NamespaceID)
-		if nsError != nil {
-			return err
-		}
-		ctx, cancel := newTaskContext(namespaceName, e.Config.ReplicationTaskApplyTimeout())
-		defer cancel()
-
-		if doContinue, resendErr := e.Resend(
-			ctx,
-			e.ExecutableTask.SourceClusterName(),
-			taskErr,
-			ResendAttempt,
-		); resendErr != nil || !doContinue {
 			return err
 		}
 		return e.Execute()

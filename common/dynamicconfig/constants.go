@@ -484,7 +484,9 @@ Deleted Redirect Rules will be kept in the DB (with DeleteTimestamp). After this
 		"matching.wv.ReachabilityBuildIdVisibilityGracePeriod",
 		3*time.Minute,
 		`ReachabilityBuildIdVisibilityGracePeriod is the time period for which deleted versioning rules are still considered active
-to account for the delay in updating the build id field in visibility.`,
+to account for the delay in updating the build id field in visibility. Not yet supported for GetDeploymentReachability. We recommend waiting 
+at least 2 minutes between changing the current deployment and calling GetDeployment, so that newly started workflow executions using the 
+recently-current deployment can arrive in visibility.`,
 	)
 	ReachabilityTaskQueueScanLimit = NewGlobalIntSetting(
 		"limit.reachabilityTaskQueueScan",
@@ -850,6 +852,11 @@ of Timeout and if no activity is seen even after that the connection is closed.`
 		true,
 		`FrontendEnableSchedules enables schedule-related RPCs in the frontend`,
 	)
+	FrontendEnableDeployments = NewNamespaceBoolSetting(
+		"frontend.enableDeployments",
+		false,
+		`FrontendEnableDeployments enables deployment-related RPCs in the frontend`,
+	)
 	EnableNexus = NewGlobalBoolSetting(
 		"system.enableNexus",
 		false,
@@ -1212,6 +1219,16 @@ these log lines can be noisy, we want to be able to turn on and sample selective
 		"matching.dropNonRetryableTasks",
 		false,
 		`MatchingDropNonRetryableTasks states if we should drop matching tasks with Internal/Dataloss errors`,
+	)
+	MatchingEnableDeployments = NewNamespaceBoolSetting(
+		"matching.enableDeployment",
+		false,
+		`MatchingEnableDeployments enables deployment-related RPCs in matching`,
+	)
+	MatchingMaxTaskQueuesInDeployment = NewNamespaceIntSetting(
+		"matching.maxTaskQueuesInDeployment",
+		1000,
+		`MatchingMaxTaskQueuesInDeployment represents the maximum number of task-queues that can be registed in a single deployment`,
 	)
 	// for matching testing only:
 
@@ -2542,6 +2559,11 @@ If the service configures with archival feature enabled, update worker.historySc
 		1*time.Second,
 		`How long to sleep within a local activity before pushing to workflow level sleep (don't make this
 close to or more than the workflow task timeout)`,
+	)
+	WorkerEnableDeployment = NewNamespaceBoolSetting(
+		"worker.enableDeployment",
+		false,
+		`WorkerEnableDeploymentGroup controls whether to start the worker for deployment and deployment-name workflows`,
 	)
 	WorkerDeleteNamespaceActivityLimits = NewGlobalTypedSetting(
 		"worker.deleteNamespaceActivityLimitsConfig",

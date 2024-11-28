@@ -1097,6 +1097,21 @@ func (mr *MockEngineMockRecorder) UpdateWorkflowExecution(ctx, request any) *gom
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateWorkflowExecution", reflect.TypeOf((*MockEngine)(nil).UpdateWorkflowExecution), ctx, request)
 }
 
+// UpdateWorkflowExecutionOptions mocks base method.
+func (m *MockEngine) UpdateWorkflowExecutionOptions(ctx context.Context, request *historyservice.UpdateWorkflowExecutionOptionsRequest) (*historyservice.UpdateWorkflowExecutionOptionsResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdateWorkflowExecutionOptions", ctx, request)
+	ret0, _ := ret[0].(*historyservice.UpdateWorkflowExecutionOptionsResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UpdateWorkflowExecutionOptions indicates an expected call of UpdateWorkflowExecutionOptions.
+func (mr *MockEngineMockRecorder) UpdateWorkflowExecutionOptions(ctx, request any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateWorkflowExecutionOptions", reflect.TypeOf((*MockEngine)(nil).UpdateWorkflowExecutionOptions), ctx, request)
+}
+
 // VerifyChildExecutionCompletionRecorded mocks base method.
 func (m *MockEngine) VerifyChildExecutionCompletionRecorded(ctx context.Context, request *historyservice.VerifyChildExecutionCompletionRecordedRequest) (*historyservice.VerifyChildExecutionCompletionRecordedResponse, error) {
 	m.ctrl.T.Helper()
