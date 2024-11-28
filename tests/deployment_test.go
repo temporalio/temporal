@@ -28,6 +28,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	batchpb "go.temporal.io/api/batch/v1"
 	"testing"
 	"time"
 
@@ -867,6 +868,113 @@ func (s *DeploymentSuite) TestUpdateWorkflowExecutionOptions_SetPinnedSetUnpinne
 	s.True(proto.Equal(updateResp.GetWorkflowExecutionOptions(), unpinnedOpts))
 	s.checkDescribeWorkflowAfterOverride(ctx, unversionedWFExec, unpinnedOpts.GetVersioningOverride())
 	s.checkDeploymentReachability(ctx, deploymentA, enumspb.DEPLOYMENT_REACHABILITY_UNREACHABLE)
+}
+
+func (s *DeploymentSuite) TestBatchUpdateWorkflowExecutionOptions_SetPinnedThenUnset() {
+	ctx := context.Background()
+
+	// presence of internally used delimiters (:) or escape
+	// characters shouldn't break functionality
+	seriesName := testcore.RandomizeStr("my-series|:|:")
+	buildID := testcore.RandomizeStr("bgt:|")
+	workerDeployment := &deploymentpb.Deployment{
+		SeriesName: seriesName,
+		BuildId:    buildID,
+	}
+	pinnedOpts := &workflowpb.WorkflowExecutionOptions{
+		VersioningOverride: &workflowpb.VersioningOverride{
+			Behavior:   enumspb.VERSIONING_BEHAVIOR_PINNED,
+			Deployment: workerDeployment,
+		},
+	}
+	unversionedTQ := "unversioned-test-tq"
+
+	// create deployment so that GetDeploymentReachability doesn't error
+	s.createDeploymentAndWaitForExist(workerDeployment, &taskqueuepb.TaskQueue{Name: unversionedTQ, Kind: enumspb.TASK_QUEUE_KIND_NORMAL})
+
+	// start some unversioned workflows
+	workflowType := "batch-test-type"
+	workflows := make([]*commonpb.WorkflowExecution, 0)
+	for i := 0; i < 5; i++ {
+		run, err := s.sdkClient.ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{TaskQueue: unversionedTQ}, workflowType)
+		s.NoError(err)
+		workflows = append(workflows, &commonpb.WorkflowExecution{
+			WorkflowId: run.GetID(),
+			RunId:      run.GetRunID(),
+		})
+	}
+
+	// start batch update-options operation
+	batchJobId := uuid.New()
+	_, err := s.FrontendClient().StartBatchOperation(ctx, &workflowservice.StartBatchOperationRequest{
+		Namespace:  s.Namespace(),
+		JobId:      batchJobId,
+		Reason:     "test",
+		Executions: workflows,
+		Operation: &workflowservice.StartBatchOperationRequest_UpdateWorkflowOptionsOperation{
+			UpdateWorkflowOptionsOperation: &batchpb.BatchOperationUpdateWorkflowExecutionOptions{
+				Identity:                 uuid.New(),
+				WorkflowExecutionOptions: pinnedOpts,
+				UpdateMask:               &fieldmaskpb.FieldMask{Paths: []string{"versioning_override"}},
+			},
+		},
+	})
+	s.NoError(err)
+
+	// wait til batch completes
+	s.waitForBatchCompletion(ctx, batchJobId)
+
+	// check all the workflows
+	for _, wf := range workflows {
+		s.checkDescribeWorkflowAfterOverride(ctx, wf, pinnedOpts.GetVersioningOverride())
+	}
+
+	// deployment should now be reachable
+	s.checkDeploymentReachability(ctx, workerDeployment, enumspb.DEPLOYMENT_REACHABILITY_REACHABLE)
+
+	// unset with empty update opts with mutation mask
+	batchJobId = uuid.New()
+	_, err = s.FrontendClient().StartBatchOperation(ctx, &workflowservice.StartBatchOperationRequest{
+		Namespace:  s.Namespace(),
+		JobId:      batchJobId,
+		Reason:     "test",
+		Executions: workflows,
+		Operation: &workflowservice.StartBatchOperationRequest_UpdateWorkflowOptionsOperation{
+			UpdateWorkflowOptionsOperation: &batchpb.BatchOperationUpdateWorkflowExecutionOptions{
+				Identity:                 uuid.New(),
+				WorkflowExecutionOptions: &workflowpb.WorkflowExecutionOptions{},
+				UpdateMask:               &fieldmaskpb.FieldMask{Paths: []string{"versioning_override"}},
+			},
+		},
+	})
+	s.NoError(err)
+
+	// wait til batch completes
+	s.waitForBatchCompletion(ctx, batchJobId)
+
+	// check all the workflows
+	for _, wf := range workflows {
+		s.checkDescribeWorkflowAfterOverride(ctx, wf, nil)
+	}
+
+	// deployment should now be reachable
+	s.checkDeploymentReachability(ctx, workerDeployment, enumspb.DEPLOYMENT_REACHABILITY_UNREACHABLE)
+}
+
+func (s *DeploymentSuite) waitForBatchCompletion(ctx context.Context, jobId string) {
+	for {
+		descResp, err := s.FrontendClient().DescribeBatchOperation(ctx, &workflowservice.DescribeBatchOperationRequest{
+			Namespace: s.Namespace(),
+			JobId:     jobId,
+		})
+		s.NoError(err)
+		if descResp.GetState() == enumspb.BATCH_OPERATION_STATE_FAILED {
+			s.Fail("batch operation failed")
+			return
+		} else if descResp.GetState() == enumspb.BATCH_OPERATION_STATE_COMPLETED {
+			return
+		}
+	}
 }
 
 func (s *DeploymentSuite) TestStartWorkflowExecution_WithPinnedOverride() {
