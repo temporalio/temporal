@@ -28,7 +28,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	batchpb "go.temporal.io/api/batch/v1"
 	"testing"
 	"time"
 
@@ -36,6 +35,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+
+	batchpb "go.temporal.io/api/batch/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -129,6 +130,7 @@ func (s *DeploymentSuite) TearDownTest() {
 // pollFromDeployment calls PollWorkflowTaskQueue to start deployment related workflows
 func (s *DeploymentSuite) pollFromDeployment(ctx context.Context, taskQueue *taskqueuepb.TaskQueue,
 	deployment *deploymentpb.Deployment) {
+	a := s.Assertions
 	_, err := s.FrontendClient().PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
 		Namespace: s.Namespace(),
 		TaskQueue: taskQueue,
@@ -141,7 +143,7 @@ func (s *DeploymentSuite) pollFromDeployment(ctx context.Context, taskQueue *tas
 	})
 	if !errors.Is(err, context.Canceled) {
 		// ctx canceled error is expected in most test cases
-		s.Error(err)
+		a.Error(err)
 	}
 }
 
