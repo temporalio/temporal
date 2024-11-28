@@ -27,9 +27,9 @@ package api
 import (
 	"context"
 	"fmt"
+	"go.temporal.io/server/common/worker_versioning"
 
 	commonpb "go.temporal.io/api/common/v1"
-	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
@@ -336,12 +336,8 @@ func ValidateStartWorkflowExecutionRequest(
 	if len(request.WorkflowType.GetName()) > maxIDLengthLimit {
 		return serviceerror.NewInvalidArgument("WorkflowType exceeds length limit.")
 	}
-	if request.GetVersioningOverride() != nil && request.GetVersioningOverride().GetBehavior() == enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED {
-		return serviceerror.NewInvalidArgument("Missing versioning override behavior")
-	}
-	if request.GetVersioningOverride().GetBehavior() == enumspb.VERSIONING_BEHAVIOR_PINNED &&
-		request.GetVersioningOverride().GetDeployment() == nil {
-		return serviceerror.NewInvalidArgument("Deployment override must be set if behavior override is PINNED")
+	if err := worker_versioning.ValidateVersioningOverride(request.GetVersioningOverride()); err != nil {
+		return err
 	}
 	if err := retrypolicy.Validate(request.RetryPolicy); err != nil {
 		return err

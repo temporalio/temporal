@@ -26,6 +26,7 @@ package batcher
 
 import (
 	"fmt"
+	"go.temporal.io/server/common/worker_versioning"
 	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
@@ -254,17 +255,7 @@ func validateParams(params BatchParams) error {
 		if params.UpdateOptionsParams.UpdateMask == nil {
 			return fmt.Errorf("must provide UpdateMask")
 		}
-		if override := params.UpdateOptionsParams.WorkflowExecutionOptions.VersioningOverride; override != nil {
-			if override.GetBehavior() == enumspb.VERSIONING_BEHAVIOR_PINNED &&
-				override.GetDeployment() == nil {
-				return fmt.Errorf("must provide Deployment if Behavior is 'PINNED'")
-			}
-			if override.GetBehavior() != enumspb.VERSIONING_BEHAVIOR_PINNED &&
-				override.GetDeployment() != nil {
-				return fmt.Errorf("only provide Deployment if Behavior is 'PINNED'")
-			}
-		}
-		return nil
+		return worker_versioning.ValidateVersioningOverride(params.UpdateOptionsParams.WorkflowExecutionOptions.VersioningOverride)
 	case BatchTypeCancel, BatchTypeTerminate, BatchTypeDelete, BatchTypeReset:
 		return nil
 	default:

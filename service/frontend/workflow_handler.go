@@ -30,6 +30,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"go.temporal.io/server/common/worker_versioning"
 	"net/url"
 	"strings"
 	"sync/atomic"
@@ -5323,14 +5324,9 @@ func (wh *WorkflowHandler) UpdateWorkflowExecutionOptions(
 	if err != nil {
 		return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("error parsing UpdateMask: %s", err.Error()))
 	}
-	if opts.GetVersioningOverride() != nil && opts.GetVersioningOverride().GetBehavior() == enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED {
-		return nil, serviceerror.NewInvalidArgument("Missing versioning override behavior")
+	if err := worker_versioning.ValidateVersioningOverride(opts.GetVersioningOverride()); err != nil {
+		return nil, err
 	}
-	if opts.GetVersioningOverride().GetBehavior() == enumspb.VERSIONING_BEHAVIOR_PINNED &&
-		opts.GetVersioningOverride().GetDeployment() == nil {
-		return nil, serviceerror.NewInvalidArgument("Deployment override must be set if behavior override is PINNED")
-	}
-
 	namespaceId, err := wh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
 	if err != nil {
 		return nil, err

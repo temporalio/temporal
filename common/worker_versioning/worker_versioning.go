@@ -27,6 +27,7 @@ package worker_versioning
 import (
 	"context"
 	"fmt"
+	workflowpb "go.temporal.io/api/workflow/v1"
 	"strings"
 
 	"github.com/temporalio/sqlparser"
@@ -241,6 +242,29 @@ func ValidateDeployment(deployment *deploymentpb.Deployment) error {
 	}
 	if deployment.GetBuildId() == "" {
 		return serviceerror.NewInvalidArgument("deployment build ID cannot be empty")
+	}
+	return nil
+}
+
+func ValidateVersioningOverride(override *workflowpb.VersioningOverride) error {
+	if override == nil {
+		return nil
+	}
+	switch override.GetBehavior() {
+	case enumspb.VERSIONING_BEHAVIOR_PINNED:
+		if override.GetDeployment() != nil {
+			return ValidateDeployment(override.GetDeployment())
+		} else {
+			return serviceerror.NewInvalidArgument("must provide deployment if behavior is 'PINNED'")
+		}
+	case enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE:
+		if override.GetDeployment() != nil {
+			return serviceerror.NewInvalidArgument("only provide deployment if behavior is 'PINNED'")
+		}
+	case enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED:
+		return serviceerror.NewInvalidArgument("override behavior is required")
+	default:
+		return serviceerror.NewInvalidArgument("override behavior not recognized")
 	}
 	return nil
 }
