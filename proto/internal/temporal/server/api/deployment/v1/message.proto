@@ -75,6 +75,7 @@ message DeploymentSeriesWorkflowArgs {
 
 message SeriesLocalState {
     string current_build_id = 1;
+    google.protobuf.Timestamp current_changed_time = 2;
 }
 
 // used as deployment workflow update input:
@@ -144,6 +145,15 @@ message SetCurrentDeploymentArgs {
 
 // used as deployment series update response:
 message SetCurrentDeploymentResponse {
-    temporal.api.deployment.v1.DeploymentInfo current_deployment_info = 1;
-    temporal.api.deployment.v1.DeploymentInfo previous_deployment_info = 2;
+    DeploymentLocalState current_deployment_state = 1;
+    DeploymentLocalState previous_deployment_state = 2;
+}
+
+message SyncDeploymentStateActivityArgs {
+    string build_id = 1;
+    SyncDeploymentStateArgs args = 2;
+}
+
+message SyncDeploymentStateActivityResult {
+    DeploymentLocalState state = 1;
 }

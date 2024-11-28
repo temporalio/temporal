@@ -25,12 +25,21 @@
 package deployment
 
 import (
+	"context"
+
+	deploymentspb "go.temporal.io/server/api/deployment/v1"
 	"go.temporal.io/server/common/namespace"
 )
 
 type (
 	DeploymentSeriesActivities struct {
-		namespace   namespace.Name
-		namespaceID namespace.ID
+		namespaceName    namespace.Name
+		namespaceID      namespace.ID
+		deploymentClient DeploymentStoreClient
 	}
 )
+
+func (a *DeploymentSeriesActivities) SyncDeployment(ctx context.Context, args *deploymentspb.SyncDeploymentStateActivityArgs) (*deploymentspb.SyncDeploymentStateActivityResult, error) {
+	// FIXME
+	return nil, nil
+}

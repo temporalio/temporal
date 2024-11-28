@@ -69,10 +69,11 @@ type (
 
 	activityDeps struct {
 		fx.In
-		MetricsHandler metrics.Handler
-		Logger         log.Logger
-		ClientFactory  sdk.ClientFactory
-		MatchingClient resource.MatchingClient
+		MetricsHandler   metrics.Handler
+		Logger           log.Logger
+		ClientFactory    sdk.ClientFactory
+		MatchingClient   resource.MatchingClient
+		DeploymentClient DeploymentStoreClient
 	}
 
 	fxResult struct {
@@ -124,25 +125,25 @@ func (s *workerComponent) Register(registry sdkworker.Registry, ns *namespace.Na
 	registry.RegisterWorkflowWithOptions(DeploymentWorkflow, workflow.RegisterOptions{Name: DeploymentWorkflowType})
 	registry.RegisterWorkflowWithOptions(DeploymentSeriesWorkflow, workflow.RegisterOptions{Name: DeploymentSeriesWorkflowType})
 
-	// TODO Shivam: Might need a cleanup function upon activity registration
-	deploymentActivities := s.newDeploymentActivities(ns.Name(), ns.ID())
-	// deploymentSeriesActivities := s.newDeploymentSeriesActivities(ns.Name(), ns.ID())
-	registry.RegisterActivity(deploymentActivities)
-	// registry.RegisterActivity(deploymentSeriesActivities)
-	return nil
-}
-
-// TODO Shivam - place holder for now but will initialize activity rate limits (if any) amongst other things
-func (s *workerComponent) newDeploymentActivities(name namespace.Name, id namespace.ID) *DeploymentActivities {
 	sdkClient := s.activityDeps.ClientFactory.NewClient(sdkclient.Options{
-		Namespace:     name.String(),
+		Namespace:     ns.Name().String(),
 		DataConverter: sdk.PreferProtoDataConverter,
 	})
 
-	return &DeploymentActivities{
-		namespaceName:  name,
-		namespaceID:    id,
+	deploymentActivities := &DeploymentActivities{
+		namespaceName:  ns.Name(),
+		namespaceID:    ns.ID(),
 		sdkClient:      sdkClient,
 		matchingClient: s.activityDeps.MatchingClient,
 	}
+	registry.RegisterActivity(deploymentActivities)
+
+	deploymentSeriesActivities := &DeploymentSeriesActivities{
+		namespaceName:    ns.Name(),
+		namespaceID:      ns.ID(),
+		deploymentClient: s.activityDeps.DeploymentClient,
+	}
+	registry.RegisterActivity(deploymentSeriesActivities)
+
+	return nil
 }

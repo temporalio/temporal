@@ -25,11 +25,13 @@
 package deployment
 
 import (
+	deploymentpb "go.temporal.io/api/deployment/v1"
 	"go.temporal.io/api/serviceerror"
 	sdkclient "go.temporal.io/sdk/client"
 	sdklog "go.temporal.io/sdk/log"
 	"go.temporal.io/sdk/workflow"
 	deploymentspb "go.temporal.io/server/api/deployment/v1"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type (
@@ -108,17 +110,46 @@ func (d *DeploymentSeriesWorkflowRunner) handleSetCurrent(ctx workflow.Context, 
 		d.lock.Unlock()
 	}()
 
-	// TODO: See if a request_id is needed for idempotency
+	var curState, prevState *deploymentspb.DeploymentLocalState
+	prevCurrent := d.State.CurrentBuildId
 
-	// FIXME: Should lock the series while making the change
-
-	// FIXME: Should update the current deployment in the series entity wf and well as updating the status of the target deployment.
-
-	// FIXME: Also update the status of the previous current deployment to NO_STATUS
-
-	// Update local state
+	// update local state
 	d.State.CurrentBuildId = args.BuildId
-	// FIXME: d.updateMemo()
+	d.State.CurrentChangedTime = timestamppb.New(workflow.Now(ctx))
 
-	return nil, nil
+	// tell new current that it's current
+	if curState, err = d.syncDeployment(ctx, d.State.CurrentBuildId, args.UpdateMetadata); err != nil {
+		return nil, err
+	}
+
+	if prevCurrent != "" {
+		// tell previous current that it's no longer current
+		if prevState, err = d.syncDeployment(ctx, prevCurrent, nil); err != nil {
+			return nil, err
+		}
+	}
+
+	return &deploymentspb.SetCurrentDeploymentResponse{
+		CurrentDeploymentState:  curState,
+		PreviousDeploymentState: prevState,
+	}, nil
+}
+
+func (d *DeploymentSeriesWorkflowRunner) syncDeployment(ctx workflow.Context, buildId string, updateMetadata *deploymentpb.UpdateDeploymentMetadata) (*deploymentspb.DeploymentLocalState, error) {
+	activityCtx := workflow.WithActivityOptions(ctx, defaultActivityOptions)
+
+	setCur := &deploymentspb.SyncDeploymentStateArgs_SetCurrent{}
+	if d.State.CurrentBuildId == buildId {
+		setCur.LastBecameCurrentTime = d.State.CurrentChangedTime
+	}
+
+	var res deploymentspb.SyncDeploymentStateActivityResult
+	err := workflow.ExecuteActivity(activityCtx, d.a.SyncDeployment, &deploymentspb.SyncDeploymentStateActivityArgs{
+		BuildId: buildId,
+		Args: &deploymentspb.SyncDeploymentStateArgs{
+			SetCurrent:     setCur,
+			UpdateMetadata: updateMetadata,
+		},
+	}).Get(ctx, &res)
+	return res.State, err
 }

@@ -167,28 +167,7 @@ func (d *DeploymentClientImpl) DescribeDeployment(ctx context.Context, namespace
 		return nil, err
 	}
 
-	// build out task-queues for the response object
-	var taskQueues []*deploymentpb.DeploymentInfo_TaskQueueInfo
-	deploymentLocalState := queryResponse.DeploymentLocalState
-
-	for taskQueueName, taskQueueFamilyInfo := range deploymentLocalState.TaskQueueFamilies {
-		for taskQueueType, taskQueueInfo := range taskQueueFamilyInfo.TaskQueues {
-			element := &deploymentpb.DeploymentInfo_TaskQueueInfo{
-				Name:            taskQueueName,
-				Type:            enumspb.TaskQueueType(taskQueueType),
-				FirstPollerTime: taskQueueInfo.FirstPollerTime,
-			}
-			taskQueues = append(taskQueues, element)
-		}
-	}
-
-	return &deploymentpb.DeploymentInfo{
-		Deployment:     deploymentLocalState.WorkerDeployment,
-		CreateTime:     deploymentLocalState.CreateTime,
-		TaskQueueInfos: taskQueues,
-		Metadata:       deploymentLocalState.Metadata,
-		IsCurrent:      deploymentLocalState.IsCurrent,
-	}, nil
+	return stateToInfo(queryResponse.DeploymentLocalState), nil
 }
 
 // TODO (carly): pass deployment instead of seriesName + buildId in all these APIs -- separate PR
@@ -326,6 +305,7 @@ func (d *DeploymentClientImpl) SetCurrentDeployment(
 		return nil, nil, err
 	}
 	if failure := outcome.GetFailure(); failure != nil {
+		// FIXME: handle "no change" and convert to success
 		// FIXME: use the correct error type
 		return nil, nil, serviceerror.NewInternal(failure.Message)
 	}
@@ -338,7 +318,7 @@ func (d *DeploymentClientImpl) SetCurrentDeployment(
 	if err := payloads.Decode(success, &res); err != nil {
 		return nil, nil, err
 	}
-	return res.CurrentDeploymentInfo, res.PreviousDeploymentInfo, nil
+	return stateToInfo(res.CurrentDeploymentState), stateToInfo(res.PreviousDeploymentState), nil
 }
 
 func (d *DeploymentClientImpl) updateWithStartDeployment(
@@ -428,7 +408,6 @@ func (d *DeploymentClientImpl) updateWithStartDeployment(
 	updateRes := res.Responses[1].GetUpdateWorkflow().GetResponse()
 	outcome := updateRes.GetOutcome()
 	return outcome, nil
-
 }
 
 // GenerateStartWorkflowPayload generates start workflow execution payload
@@ -477,4 +456,30 @@ func (d *DeploymentClientImpl) buildInitialDeploymentMemo(deployment *deployment
 			DeploymentMemoField: memoPayload,
 		},
 	}, nil
+}
+
+func stateToInfo(state *deploymentspb.DeploymentLocalState) *deploymentpb.DeploymentInfo {
+	if state == nil {
+		return nil
+	}
+
+	taskQueues := make([]*deploymentpb.DeploymentInfo_TaskQueueInfo, 0, len(state.TaskQueueFamilies)*2)
+	for taskQueueName, taskQueueFamilyInfo := range state.TaskQueueFamilies {
+		for taskQueueType, taskQueueInfo := range taskQueueFamilyInfo.TaskQueues {
+			element := &deploymentpb.DeploymentInfo_TaskQueueInfo{
+				Name:            taskQueueName,
+				Type:            enumspb.TaskQueueType(taskQueueType),
+				FirstPollerTime: taskQueueInfo.FirstPollerTime,
+			}
+			taskQueues = append(taskQueues, element)
+		}
+	}
+
+	return &deploymentpb.DeploymentInfo{
+		Deployment:     state.WorkerDeployment,
+		CreateTime:     state.CreateTime,
+		TaskQueueInfos: taskQueues,
+		Metadata:       state.Metadata,
+		IsCurrent:      state.IsCurrent,
+	}
 }

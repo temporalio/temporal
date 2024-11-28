@@ -546,3 +546,77 @@ func (this *SetCurrentDeploymentResponse) Equal(that interface{}) bool {
 
 	return proto.Equal(this, that1)
 }
+
+// Marshal an object of type SyncDeploymentStateActivityArgs to the protobuf v3 wire format
+func (val *SyncDeploymentStateActivityArgs) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type SyncDeploymentStateActivityArgs from the protobuf v3 wire format
+func (val *SyncDeploymentStateActivityArgs) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *SyncDeploymentStateActivityArgs) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two SyncDeploymentStateActivityArgs values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *SyncDeploymentStateActivityArgs) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *SyncDeploymentStateActivityArgs
+	switch t := that.(type) {
+	case *SyncDeploymentStateActivityArgs:
+		that1 = t
+	case SyncDeploymentStateActivityArgs:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
+// Marshal an object of type SyncDeploymentStateActivityResult to the protobuf v3 wire format
+func (val *SyncDeploymentStateActivityResult) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type SyncDeploymentStateActivityResult from the protobuf v3 wire format
+func (val *SyncDeploymentStateActivityResult) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *SyncDeploymentStateActivityResult) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two SyncDeploymentStateActivityResult values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *SyncDeploymentStateActivityResult) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *SyncDeploymentStateActivityResult
+	switch t := that.(type) {
+	case *SyncDeploymentStateActivityResult:
+		that1 = t
+	case SyncDeploymentStateActivityResult:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
