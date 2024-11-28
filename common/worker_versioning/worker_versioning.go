@@ -27,7 +27,6 @@ package worker_versioning
 import (
 	"context"
 	"fmt"
-	workflowpb "go.temporal.io/api/workflow/v1"
 	"strings"
 
 	"github.com/temporalio/sqlparser"
@@ -35,6 +34,7 @@ import (
 	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
+	workflowpb "go.temporal.io/api/workflow/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	"go.temporal.io/server/common/namespace"

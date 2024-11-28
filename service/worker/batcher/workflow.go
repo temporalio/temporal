@@ -26,7 +26,6 @@ package batcher
 
 import (
 	"fmt"
-	"go.temporal.io/server/common/worker_versioning"
 	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
@@ -35,6 +34,7 @@ import (
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
 	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/worker_versioning"
 	"google.golang.org/protobuf/types/known/fieldmaskpb"
 )
 
