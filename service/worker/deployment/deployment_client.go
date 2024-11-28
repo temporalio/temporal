@@ -29,7 +29,6 @@ import (
 	"errors"
 	"time"
 
-	"github.com/pborman/uuid"
 	commonpb "go.temporal.io/api/common/v1"
 	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -40,6 +39,7 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	deploymentspb "go.temporal.io/server/api/deployment/v1"
 	"go.temporal.io/server/api/historyservice/v1"
+	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/payload"
@@ -130,6 +130,8 @@ type DeploymentClientImpl struct {
 }
 
 var _ DeploymentStoreClient = (*DeploymentClientImpl)(nil)
+
+var errRetry = errors.New("retry update")
 
 func (d *DeploymentClientImpl) RegisterTaskQueueWorker(
 	ctx context.Context,
@@ -334,7 +336,7 @@ func (d *DeploymentClientImpl) SetCurrentDeployment(
 		deployment.SeriesName,
 		&updatepb.Request{
 			Input: &updatepb.Input{Name: SetCurrentDeployment, Args: updatePayload},
-			Meta:  &updatepb.Meta{UpdateId: uuid.New(), Identity: identity},
+			Meta:  &updatepb.Meta{UpdateId: requestID, Identity: identity},
 		},
 		identity,
 		requestID,
@@ -572,9 +574,7 @@ func (d *DeploymentClientImpl) updateWithStart(
 	}
 
 	// This is an atomic operation; if one operation fails, both will.
-	// FIXME: retry this whole thing until error or update is durable. see
-	// https://github.com/temporalio/sdk-go/blob/08d52ce3d7/internal/internal_workflow_client.go#L1800
-	res, err := d.historyClient.ExecuteMultiOperation(ctx, &historyservice.ExecuteMultiOperationRequest{
+	multiOpReq := &historyservice.ExecuteMultiOperationRequest{
 		NamespaceId: namespaceEntry.ID().String(),
 		WorkflowId:  workflowID,
 		Operations: []*historyservice.ExecuteMultiOperationRequest_Operation{
@@ -595,15 +595,44 @@ func (d *DeploymentClientImpl) updateWithStart(
 				},
 			},
 		},
-	})
-	if err != nil {
-		return nil, err
 	}
 
-	// FIXME: handle the various places we can get errors
-	updateRes := res.Responses[1].GetUpdateWorkflow().GetResponse()
-	outcome := updateRes.GetOutcome()
-	return outcome, nil
+	policy := backoff.NewExponentialRetryPolicy(time.Second)
+	isRetryable := func(err error) bool { return errors.Is(err, errRetry) }
+	var outcome *updatepb.Outcome
+
+	err := backoff.ThrottleRetryContext(ctx, func(ctx context.Context) error {
+		res, err := d.historyClient.ExecuteMultiOperation(ctx, multiOpReq)
+		if err != nil {
+			return err
+		}
+
+		// we should get exactly one of each of these
+		var startRes *historyservice.StartWorkflowExecutionResponse
+		var updateRes *workflowservice.UpdateWorkflowExecutionResponse
+		for _, response := range res.Responses {
+			if sr := response.GetStartWorkflow(); sr != nil {
+				startRes = sr
+			} else if ur := response.GetUpdateWorkflow().GetResponse(); ur != nil {
+				updateRes = ur
+			}
+		}
+		if startRes == nil {
+			return serviceerror.NewInternal("failed to start deployment workflow")
+		} else if updateRes == nil {
+			return serviceerror.NewInternal("failed to update deployment workflow")
+		}
+
+		if updateRes.Stage != enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED {
+			// update not completed, try again
+			return errRetry
+		}
+
+		outcome = updateRes.GetOutcome()
+		return nil
+	}, policy, isRetryable)
+
+	return outcome, err
 }
 
 // GenerateUpdateDeploymentPayload generates update workflow payload
