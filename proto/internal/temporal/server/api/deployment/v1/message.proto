@@ -1,0 +1,106 @@
+// The MIT License
+//
+// Copyright (c) 2024 Temporal Technologies, Inc.
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+// THE SOFTWARE.
+
+syntax = "proto3";
+
+package temporal.server.api.deployment.v1;
+
+option go_package = "go.temporal.io/server/api/deployment/v1;deployment";
+
+import "temporal/api/enums/v1/task_queue.proto";
+import "google/protobuf/timestamp.proto";
+import "temporal/api/deployment/v1/message.proto";
+import "temporal/api/common/v1/message.proto";
+
+// Data for each deployment+task queue pair. This is stored in each deployment (for each task
+// queue), and synced to task queue user data (for each deployment).
+message TaskQueueData {
+    google.protobuf.Timestamp first_poller_time = 1;
+    google.protobuf.Timestamp last_became_current_time = 2;
+}
+
+message DeploymentLocalState {
+    temporal.api.deployment.v1.Deployment worker_deployment = 1;
+    map<string, TaskQueueFamilyData> task_queue_families = 2;
+
+    bool is_current = 3;
+    google.protobuf.Timestamp last_became_current_time = 6;
+
+    google.protobuf.Timestamp create_time = 4;
+    map<string, temporal.api.common.v1.Payload> metadata = 5;
+
+    bool started_series_workflow = 7;
+
+    message TaskQueueFamilyData {
+        // Key: enums.TaskQueueType, Value: TaskQueueData
+        // All fields in TaskQueueData are valid except last_became_current_time, the source of
+        // truth for that is the value at the root of DeploymentLocalState.
+        map<int32, TaskQueueData> task_queues = 1;
+    }
+}
+
+// used as deployment workflow input:
+message DeploymentWorkflowArgs {
+    string namespace_name = 1;
+    string namespace_id = 2;
+    DeploymentLocalState deployment_local_state = 3;
+}
+
+// used as deployment series workflow input:
+message DeploymentSeriesWorkflowArgs {
+    string namespace_name = 1;
+    string namespace_id = 2;
+    string default_build_id = 3;
+}
+
+// used as deployment workflow update input:
+message RegisterWorkerInDeploymentArgs {
+    string task_queue_name = 1;
+    temporal.api.enums.v1.TaskQueueType task_queue_type = 2;
+    google.protobuf.Timestamp first_poller_time = 3;
+    int32 max_task_queues = 4;
+}
+
+// used as deployment workflow query response:
+message QueryDescribeDeploymentResponse {
+    DeploymentLocalState deployment_local_state = 1;
+}
+
+// used as deployment workflow memo:
+message DeploymentWorkflowMemo {
+    temporal.api.deployment.v1.Deployment deployment = 1;
+    google.protobuf.Timestamp create_time = 2;
+    bool is_current_deployment = 3;
+}
+
+// used as deployment workflow activity input:
+message StartDeploymentSeriesRequest {
+    string series_name = 1;
+}
+
+// used as deployment workflow activity input:
+message SyncUserDataRequest {
+    temporal.api.deployment.v1.Deployment deployment = 1;
+    string task_queue_name = 2;
+    temporal.api.enums.v1.TaskQueueType task_queue_type = 3;
+    TaskQueueData data = 4;
+}

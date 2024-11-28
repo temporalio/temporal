@@ -67,6 +67,7 @@ var (
 		"/temporal.server.api.matchingservice.v1.MatchingService/UpdateWorkerVersioningRules":            1,
 		"/temporal.server.api.matchingservice.v1.MatchingService/GetWorkerVersioningRules":               1,
 		"/temporal.server.api.matchingservice.v1.MatchingService/DescribeTaskQueuePartition":             1,
+		"/temporal.server.api.matchingservice.v1.MatchingService/SyncDeploymentUserData":                 1,
 	}
 
 	APIPrioritiesOrdered = []int{0, 1}

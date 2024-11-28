@@ -38,6 +38,7 @@ import (
 	"github.com/uber-go/tally/v4"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
+	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
 	historypb "go.temporal.io/api/history/v1"
@@ -79,6 +80,7 @@ import (
 	"go.uber.org/mock/gomock"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/durationpb"
+	"google.golang.org/protobuf/types/known/fieldmaskpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -108,7 +110,48 @@ var (
 		},
 		Data: []byte("random data"),
 	}
-	testPayloads = &commonpb.Payloads{Payloads: []*commonpb.Payload{testPayload}}
+	testPayloads                 = &commonpb.Payloads{Payloads: []*commonpb.Payload{testPayload}}
+	workflowTaskCompletionLimits = WorkflowTaskCompletionLimits{
+		MaxResetPoints:              10,
+		MaxSearchAttributeValueSize: 1024,
+	}
+	deployment1 = &deploymentpb.Deployment{
+		SeriesName: "my_app",
+		BuildId:    "build_1",
+	}
+	deployment2 = &deploymentpb.Deployment{
+		SeriesName: "my_app",
+		BuildId:    "build_2",
+	}
+	deployment3 = &deploymentpb.Deployment{
+		SeriesName: "my_app",
+		BuildId:    "build_3",
+	}
+	versionOverrideMask = &fieldmaskpb.FieldMask{Paths: []string{"versioning_behavior_override"}}
+	pinnedOptions1      = &workflowpb.WorkflowExecutionOptions{
+		VersioningOverride: &workflowpb.VersioningOverride{
+			Behavior:   enumspb.VERSIONING_BEHAVIOR_PINNED,
+			Deployment: deployment1,
+		},
+	}
+	pinnedOptions2 = &workflowpb.WorkflowExecutionOptions{
+		VersioningOverride: &workflowpb.VersioningOverride{
+			Behavior:   enumspb.VERSIONING_BEHAVIOR_PINNED,
+			Deployment: deployment2,
+		},
+	}
+	pinnedOptions3 = &workflowpb.WorkflowExecutionOptions{
+		VersioningOverride: &workflowpb.VersioningOverride{
+			Behavior:   enumspb.VERSIONING_BEHAVIOR_PINNED,
+			Deployment: deployment3,
+		},
+	}
+	unpinnedOptions = &workflowpb.WorkflowExecutionOptions{
+		VersioningOverride: &workflowpb.VersioningOverride{
+			Behavior: enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE,
+		},
+	}
+	emptyOptions = &workflowpb.WorkflowExecutionOptions{}
 )
 
 func TestMutableStateSuite(t *testing.T) {
@@ -294,7 +337,7 @@ func (s *mutableStateSuite) TestRedirectInfoValidation_Valid() {
 		"",
 		tq,
 		"",
-		worker_versioning.StampForBuildId("b2"),
+		worker_versioning.StampFromBuildId("b2"),
 		&taskqueue.BuildIdRedirectInfo{AssignedBuildId: "b1"},
 		false,
 	)
@@ -317,7 +360,7 @@ func (s *mutableStateSuite) TestRedirectInfoValidation_Invalid() {
 		"",
 		tq,
 		"",
-		worker_versioning.StampForBuildId("b2"),
+		worker_versioning.StampFromBuildId("b2"),
 		&taskqueue.BuildIdRedirectInfo{AssignedBuildId: "b0"},
 		false,
 	)
@@ -338,7 +381,7 @@ func (s *mutableStateSuite) TestRedirectInfoValidation_EmptyRedirectInfo() {
 		"",
 		tq,
 		"",
-		worker_versioning.StampForBuildId("b2"),
+		worker_versioning.StampFromBuildId("b2"),
 		nil,
 		false,
 	)
@@ -460,7 +503,7 @@ func (s *mutableStateSuite) createVersionedMutableStateWithCompletedWFT(tq *task
 		"",
 		tq,
 		"",
-		worker_versioning.StampForBuildId("b1"),
+		worker_versioning.StampFromBuildId("b1"),
 		nil,
 		false,
 	)
@@ -473,12 +516,448 @@ func (s *mutableStateSuite) createVersionedMutableStateWithCompletedWFT(tq *task
 	_, err = s.mutableState.AddWorkflowTaskCompletedEvent(
 		wft,
 		&workflowservice.RespondWorkflowTaskCompletedRequest{},
-		WorkflowTaskCompletionLimits{
-			MaxResetPoints:              10,
-			MaxSearchAttributeValueSize: 1024,
-		},
+		workflowTaskCompletionLimits,
 	)
 	s.NoError(err)
+}
+
+func (s *mutableStateSuite) TestEffectiveDeployment() {
+	ms := TestGlobalMutableState(
+		s.mockShard,
+		s.mockEventsCache,
+		s.logger,
+		int64(12),
+		"some random workflow ID",
+		uuid.New(),
+	)
+	s.Nil(ms.executionInfo.VersioningInfo)
+	s.mutableState = ms
+	s.verifyEffectiveDeployment(nil, enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED)
+
+	versioningInfo := &workflowpb.WorkflowExecutionVersioningInfo{}
+	ms.executionInfo.VersioningInfo = versioningInfo
+	s.verifyEffectiveDeployment(nil, enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED)
+
+	// ------- Without override, without transition
+
+	// deployment is set but behavior is not -> unversioned
+	versioningInfo.Deployment = deployment1
+	versioningInfo.Behavior = enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED
+	s.verifyEffectiveDeployment(nil, enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED)
+
+	versioningInfo.Deployment = deployment1
+	versioningInfo.Behavior = enumspb.VERSIONING_BEHAVIOR_PINNED
+	s.verifyEffectiveDeployment(deployment1, enumspb.VERSIONING_BEHAVIOR_PINNED)
+
+	versioningInfo.Deployment = deployment1
+	versioningInfo.Behavior = enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE
+	s.verifyEffectiveDeployment(deployment1, enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE)
+
+	// ------- With override, without transition
+
+	// deployment and behavior are not set, but override behavior is AUTO_UPGRADE -> AUTO_UPGRADE
+	versioningInfo.Deployment = nil
+	versioningInfo.Behavior = enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED
+	versioningInfo.VersioningOverride = &workflowpb.VersioningOverride{
+		Behavior: enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE,
+	}
+	s.verifyEffectiveDeployment(nil, enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE)
+
+	// deployment is set, behavior is not, but override behavior is AUTO_UPGRADE -> AUTO_UPGRADE
+	versioningInfo.Deployment = deployment1
+	versioningInfo.Behavior = enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED
+	versioningInfo.VersioningOverride = &workflowpb.VersioningOverride{
+		Behavior: enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE,
+	}
+	s.verifyEffectiveDeployment(deployment1, enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE)
+
+	// worker says PINNED, but override behavior is AUTO_UPGRADE -> AUTO_UPGRADE
+	versioningInfo.Deployment = deployment1
+	versioningInfo.Behavior = enumspb.VERSIONING_BEHAVIOR_PINNED
+	versioningInfo.VersioningOverride = &workflowpb.VersioningOverride{
+		Behavior: enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE,
+		// Technically, API should not allow deployment to be set for AUTO_UPGRADE override, but we
+		// test it this way to make sure it is ignored.
+		Deployment: deployment2,
+	}
+	s.verifyEffectiveDeployment(deployment1, enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE)
+
+	// deployment and behavior are not set, but override behavior is PINNED -> PINNED
+	versioningInfo.Deployment = nil
+	versioningInfo.Behavior = enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED
+	versioningInfo.VersioningOverride = &workflowpb.VersioningOverride{
+		Behavior:   enumspb.VERSIONING_BEHAVIOR_PINNED,
+		Deployment: deployment2,
+	}
+	s.verifyEffectiveDeployment(deployment2, enumspb.VERSIONING_BEHAVIOR_PINNED)
+
+	// deployment is set, behavior is not, but override behavior is PINNED --> PINNED
+	versioningInfo.Deployment = deployment1
+	versioningInfo.Behavior = enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED
+	versioningInfo.VersioningOverride = &workflowpb.VersioningOverride{
+		Behavior:   enumspb.VERSIONING_BEHAVIOR_PINNED,
+		Deployment: deployment2,
+	}
+	s.verifyEffectiveDeployment(deployment2, enumspb.VERSIONING_BEHAVIOR_PINNED)
+
+	// worker says AUTO_UPGRADE, but override behavior is PINNED --> PINNED
+	versioningInfo.Deployment = deployment1
+	versioningInfo.Behavior = enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE
+	versioningInfo.VersioningOverride = &workflowpb.VersioningOverride{
+		Behavior:   enumspb.VERSIONING_BEHAVIOR_PINNED,
+		Deployment: deployment2,
+	}
+	s.verifyEffectiveDeployment(deployment2, enumspb.VERSIONING_BEHAVIOR_PINNED)
+
+	// ------- With transition
+
+	versioningInfo.Deployment = deployment1
+	versioningInfo.Behavior = enumspb.VERSIONING_BEHAVIOR_PINNED
+	versioningInfo.VersioningOverride = &workflowpb.VersioningOverride{
+		Behavior:   enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE,
+		Deployment: deployment2,
+	}
+	versioningInfo.DeploymentTransition = &workflowpb.DeploymentTransition{
+		Deployment: deployment3,
+	}
+	s.verifyEffectiveDeployment(deployment3, enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE)
+
+	// Transitioning to unversioned
+	versioningInfo.Deployment = deployment1
+	versioningInfo.Behavior = enumspb.VERSIONING_BEHAVIOR_PINNED
+	versioningInfo.VersioningOverride = &workflowpb.VersioningOverride{
+		Behavior:   enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE,
+		Deployment: deployment2,
+	}
+	versioningInfo.DeploymentTransition = &workflowpb.DeploymentTransition{
+		Deployment: nil,
+	}
+	s.verifyEffectiveDeployment(nil, enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE)
+}
+
+func (s *mutableStateSuite) verifyEffectiveDeployment(
+	expectedDeployment *deploymentpb.Deployment,
+	expectedBehavior enumspb.VersioningBehavior,
+) {
+	if !s.mutableState.GetEffectiveDeployment().Equal(expectedDeployment) {
+		s.Fail(fmt.Sprintf("expected: {%s}, actual: {%s}",
+			expectedDeployment.String(),
+			s.mutableState.GetEffectiveDeployment().String(),
+		),
+		)
+	}
+	s.Equal(expectedBehavior, s.mutableState.GetEffectiveVersioningBehavior())
+}
+
+// Creates a mutable state with first WFT completed on the given deployment and behavior set
+// to the given behavior, testing expected output after Add, Start, and Complete Workflow Task.
+func (s *mutableStateSuite) createMutableStateWithVersioningBehavior(
+	behavior enumspb.VersioningBehavior,
+	deployment *deploymentpb.Deployment,
+	tq *taskqueuepb.TaskQueue,
+) {
+	version := int64(12)
+	workflowID := "some random workflow ID"
+	runID := uuid.New()
+
+	s.mutableState = TestGlobalMutableState(
+		s.mockShard,
+		s.mockEventsCache,
+		s.logger,
+		version,
+		workflowID,
+		runID,
+	)
+
+	wft, err := s.mutableState.AddWorkflowTaskScheduledEvent(true, enumsspb.WORKFLOW_TASK_TYPE_NORMAL)
+	s.NoError(err)
+	s.verifyEffectiveDeployment(nil, enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED)
+
+	err = s.mutableState.StartDeploymentTransition(deployment)
+	s.NoError(err)
+	s.verifyEffectiveDeployment(deployment, enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED)
+
+	_, wft, err = s.mutableState.AddWorkflowTaskStartedEvent(
+		wft.ScheduledEventID,
+		"",
+		tq,
+		"",
+		nil,
+		nil,
+		false,
+	)
+	s.NoError(err)
+	s.verifyEffectiveDeployment(deployment, enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED)
+
+	_, err = s.mutableState.AddWorkflowTaskCompletedEvent(
+		wft,
+		&workflowservice.RespondWorkflowTaskCompletedRequest{
+			VersioningBehavior: behavior,
+			Deployment:         deployment,
+		},
+		workflowTaskCompletionLimits,
+	)
+	s.verifyEffectiveDeployment(deployment, behavior)
+	s.NoError(err)
+}
+
+func (s *mutableStateSuite) TestPinnedFirstWorkflowTask() {
+	tq := &taskqueuepb.TaskQueue{Name: "tq"}
+	s.createMutableStateWithVersioningBehavior(enumspb.VERSIONING_BEHAVIOR_PINNED, deployment1, tq)
+	s.verifyEffectiveDeployment(deployment1, enumspb.VERSIONING_BEHAVIOR_PINNED)
+}
+
+func (s *mutableStateSuite) TestUnpinnedFirstWorkflowTask() {
+	tq := &taskqueuepb.TaskQueue{Name: "tq"}
+	s.createMutableStateWithVersioningBehavior(enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE, deployment1, tq)
+	s.verifyEffectiveDeployment(deployment1, enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE)
+}
+
+func (s *mutableStateSuite) TestUnpinnedTransition() {
+	tq := &taskqueuepb.TaskQueue{Name: "tq"}
+	behavior := enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE
+	s.createMutableStateWithVersioningBehavior(behavior, deployment1, tq)
+
+	wft, err := s.mutableState.AddWorkflowTaskScheduledEvent(true, enumsspb.WORKFLOW_TASK_TYPE_NORMAL)
+	s.NoError(err)
+	s.verifyEffectiveDeployment(deployment1, behavior)
+
+	err = s.mutableState.StartDeploymentTransition(deployment2)
+	s.NoError(err)
+	s.verifyEffectiveDeployment(deployment2, behavior)
+
+	_, wft, err = s.mutableState.AddWorkflowTaskStartedEvent(
+		wft.ScheduledEventID,
+		"",
+		tq,
+		"",
+		nil,
+		nil,
+		false,
+	)
+	s.NoError(err)
+	s.verifyEffectiveDeployment(deployment2, behavior)
+
+	_, err = s.mutableState.AddWorkflowTaskCompletedEvent(
+		wft,
+		&workflowservice.RespondWorkflowTaskCompletedRequest{
+			// wf is pinned in the new build
+			VersioningBehavior: enumspb.VERSIONING_BEHAVIOR_PINNED,
+			Deployment:         deployment2,
+		},
+		workflowTaskCompletionLimits,
+	)
+	s.verifyEffectiveDeployment(deployment2, enumspb.VERSIONING_BEHAVIOR_PINNED)
+	s.NoError(err)
+}
+
+func (s *mutableStateSuite) TestUnpinnedTransitionFailed() {
+	tq := &taskqueuepb.TaskQueue{Name: "tq"}
+	behavior := enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE
+	s.createMutableStateWithVersioningBehavior(behavior, deployment1, tq)
+
+	wft, err := s.mutableState.AddWorkflowTaskScheduledEvent(true, enumsspb.WORKFLOW_TASK_TYPE_NORMAL)
+	s.NoError(err)
+	s.verifyEffectiveDeployment(deployment1, behavior)
+
+	err = s.mutableState.StartDeploymentTransition(deployment2)
+	s.NoError(err)
+	s.verifyEffectiveDeployment(deployment2, behavior)
+
+	_, wft, err = s.mutableState.AddWorkflowTaskStartedEvent(
+		wft.ScheduledEventID,
+		"",
+		tq,
+		"",
+		nil,
+		nil,
+		false,
+	)
+	s.NoError(err)
+	s.verifyEffectiveDeployment(deployment2, behavior)
+
+	_, err = s.mutableState.AddWorkflowTaskFailedEvent(
+		wft,
+		enumspb.WORKFLOW_TASK_FAILED_CAUSE_WORKFLOW_WORKER_UNHANDLED_FAILURE,
+		failure.NewServerFailure("some random workflow task failure details", false),
+		"some random workflow task failure identity",
+		nil,
+		"",
+		"",
+		"",
+		0,
+	)
+	s.NoError(err)
+	// WFT failure does not fail transition
+	s.verifyEffectiveDeployment(deployment2, behavior)
+}
+
+func (s *mutableStateSuite) TestUnpinnedTransitionTimeout() {
+	tq := &taskqueuepb.TaskQueue{Name: "tq"}
+	behavior := enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE
+	s.createMutableStateWithVersioningBehavior(behavior, deployment1, tq)
+
+	wft, err := s.mutableState.AddWorkflowTaskScheduledEvent(true, enumsspb.WORKFLOW_TASK_TYPE_NORMAL)
+	s.NoError(err)
+	s.verifyEffectiveDeployment(deployment1, behavior)
+
+	err = s.mutableState.StartDeploymentTransition(deployment2)
+	s.NoError(err)
+	s.verifyEffectiveDeployment(deployment2, behavior)
+
+	_, wft, err = s.mutableState.AddWorkflowTaskStartedEvent(
+		wft.ScheduledEventID,
+		"",
+		tq,
+		"",
+		nil,
+		nil,
+		false,
+	)
+	s.NoError(err)
+	s.verifyEffectiveDeployment(deployment2, behavior)
+
+	_, err = s.mutableState.AddWorkflowTaskTimedOutEvent(wft)
+	s.NoError(err)
+	// WFT timeout does not fail transition
+	s.verifyEffectiveDeployment(deployment2, behavior)
+}
+
+func (s *mutableStateSuite) verifyWorkflowOptionsUpdatedEvent(
+	event *historypb.HistoryEvent,
+	expectedOverride *workflowpb.VersioningOverride,
+) {
+	attr := event.GetWorkflowExecutionOptionsUpdatedEventAttributes()
+	s.Equal(expectedOverride, attr.GetVersioningOverride())
+}
+
+func (s *mutableStateSuite) verifyOverrides(
+	expectedBehavior, expectedBehaviorOverride enumspb.VersioningBehavior,
+	expectedDeployment, expectedDeploymentOverride *deploymentpb.Deployment,
+) {
+	versioningInfo := s.mutableState.GetExecutionInfo().GetVersioningInfo()
+	s.Equal(expectedBehavior, versioningInfo.GetBehavior())
+	s.Equal(expectedBehaviorOverride, versioningInfo.GetVersioningOverride().GetBehavior())
+	s.Equal(expectedDeployment, versioningInfo.GetDeployment())
+	s.Equal(expectedDeploymentOverride, versioningInfo.GetVersioningOverride().GetDeployment())
+}
+
+func (s *mutableStateSuite) TestOverride_UnpinnedBase_SetPinnedAndUnsetWithEmptyOptions() {
+	tq := &taskqueuepb.TaskQueue{Name: "tq"}
+	baseBehavior := enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE
+	overrideBehavior := enumspb.VERSIONING_BEHAVIOR_PINNED
+	s.createMutableStateWithVersioningBehavior(baseBehavior, deployment1, tq)
+
+	// set pinned override
+	event, err := s.mutableState.AddWorkflowExecutionOptionsUpdatedEvent(pinnedOptions2.GetVersioningOverride())
+	s.NoError(err)
+	s.verifyEffectiveDeployment(deployment2, overrideBehavior)
+	s.verifyWorkflowOptionsUpdatedEvent(event, pinnedOptions2.GetVersioningOverride())
+	s.verifyOverrides(baseBehavior, overrideBehavior, deployment1, deployment2)
+
+	// unset pinned override with empty
+	event, err = s.mutableState.AddWorkflowExecutionOptionsUpdatedEvent(emptyOptions.GetVersioningOverride())
+	s.NoError(err)
+	s.verifyEffectiveDeployment(deployment1, baseBehavior)
+	s.verifyWorkflowOptionsUpdatedEvent(event, emptyOptions.GetVersioningOverride())
+	s.verifyOverrides(baseBehavior, enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED, deployment1, nil)
+}
+
+func (s *mutableStateSuite) TestOverride_PinnedBase_SetUnpinnedAndUnsetWithEmptyOptions() {
+	tq := &taskqueuepb.TaskQueue{Name: "tq"}
+	baseBehavior := enumspb.VERSIONING_BEHAVIOR_PINNED
+	overrideBehavior := enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE
+	s.createMutableStateWithVersioningBehavior(baseBehavior, deployment1, tq)
+
+	// set unpinned override
+	event, err := s.mutableState.AddWorkflowExecutionOptionsUpdatedEvent(unpinnedOptions.GetVersioningOverride())
+	s.NoError(err)
+	s.verifyEffectiveDeployment(deployment1, overrideBehavior)
+	s.verifyWorkflowOptionsUpdatedEvent(event, unpinnedOptions.GetVersioningOverride())
+	s.verifyOverrides(baseBehavior, overrideBehavior, deployment1, nil)
+
+	// unset pinned override with empty
+	event, err = s.mutableState.AddWorkflowExecutionOptionsUpdatedEvent(emptyOptions.GetVersioningOverride())
+	s.NoError(err)
+	s.verifyEffectiveDeployment(deployment1, baseBehavior)
+	s.verifyWorkflowOptionsUpdatedEvent(event, emptyOptions.GetVersioningOverride())
+	s.verifyOverrides(baseBehavior, enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED, deployment1, nil)
+}
+
+func (s *mutableStateSuite) TestOverride_RedirectFails() {
+	tq := &taskqueuepb.TaskQueue{Name: "tq"}
+	baseBehavior := enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE
+	overrideBehavior := enumspb.VERSIONING_BEHAVIOR_PINNED
+	s.createMutableStateWithVersioningBehavior(baseBehavior, deployment1, tq)
+
+	event, err := s.mutableState.AddWorkflowExecutionOptionsUpdatedEvent(pinnedOptions3.GetVersioningOverride())
+	s.NoError(err)
+	s.verifyEffectiveDeployment(deployment3, overrideBehavior)
+	s.verifyWorkflowOptionsUpdatedEvent(event, pinnedOptions3.GetVersioningOverride())
+	s.verifyOverrides(baseBehavior, overrideBehavior, deployment1, deployment3)
+
+	// assert that transition fails
+	err = s.mutableState.StartDeploymentTransition(deployment2)
+	s.ErrorIs(err, ErrPinnedWorkflowCannotTransition)
+	s.verifyEffectiveDeployment(deployment3, overrideBehavior)
+	s.verifyOverrides(baseBehavior, overrideBehavior, deployment1, deployment3)
+}
+
+func (s *mutableStateSuite) TestOverride_BaseDeploymentUpdatedOnCompletion() {
+	s.T().Skip("TODO (Shahab)")
+	tq := &taskqueuepb.TaskQueue{Name: "tq"}
+	baseBehavior := enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE
+	overrideBehavior := enumspb.VERSIONING_BEHAVIOR_PINNED
+	s.createMutableStateWithVersioningBehavior(baseBehavior, deployment1, tq)
+
+	event, err := s.mutableState.AddWorkflowExecutionOptionsUpdatedEvent(pinnedOptions3.GetVersioningOverride())
+	s.NoError(err)
+	s.verifyEffectiveDeployment(deployment3, overrideBehavior)
+	s.verifyWorkflowOptionsUpdatedEvent(event, pinnedOptions3.GetVersioningOverride())
+	s.verifyOverrides(baseBehavior, overrideBehavior, deployment1, deployment3)
+
+	// assert that redirect fails - should be its own test
+	err = s.mutableState.StartDeploymentTransition(deployment2)
+	s.ErrorIs(err, ErrPinnedWorkflowCannotTransition)
+	s.verifyEffectiveDeployment(deployment3, overrideBehavior)
+	s.verifyOverrides(baseBehavior, overrideBehavior, deployment1, deployment3) // base deployment still deployment1 here -- good
+
+	wft, err := s.mutableState.AddWorkflowTaskScheduledEvent(true, enumsspb.WORKFLOW_TASK_TYPE_NORMAL)
+	s.NoError(err)
+	s.verifyEffectiveDeployment(deployment3, overrideBehavior)
+
+	_, wft, err = s.mutableState.AddWorkflowTaskStartedEvent(
+		wft.ScheduledEventID,
+		"",
+		tq,
+		"",
+		nil,
+		nil,
+		false,
+	)
+	s.NoError(err)
+	s.verifyEffectiveDeployment(deployment3, overrideBehavior)
+	s.verifyOverrides(baseBehavior, overrideBehavior, deployment1, deployment3)
+
+	_, err = s.mutableState.AddWorkflowTaskCompletedEvent(
+		wft,
+		&workflowservice.RespondWorkflowTaskCompletedRequest{
+			// sdk says wf is unpinned, but that does not take effect due to the override
+			VersioningBehavior: baseBehavior,
+			Deployment:         deployment2,
+		},
+		workflowTaskCompletionLimits,
+	)
+	s.NoError(err)
+	s.verifyEffectiveDeployment(deployment3, overrideBehavior)
+	s.verifyOverrides(baseBehavior, overrideBehavior, deployment2, deployment3)
+
+	// now we unset the override and check that the base deployment/behavior is in effect
+	event, err = s.mutableState.AddWorkflowExecutionOptionsUpdatedEvent(emptyOptions.GetVersioningOverride())
+	s.NoError(err)
+	s.verifyEffectiveDeployment(deployment2, baseBehavior)
+	s.verifyWorkflowOptionsUpdatedEvent(event, emptyOptions.GetVersioningOverride())
+	s.verifyOverrides(baseBehavior, enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED, deployment2, nil)
 }
 
 func (s *mutableStateSuite) TestChecksum() {
@@ -1327,10 +1806,7 @@ func (s *mutableStateSuite) TestAddContinueAsNewEvent_Default() {
 	workflowTaskCompletedEvent, err := s.mutableState.AddWorkflowTaskCompletedEvent(
 		workflowTaskInfo,
 		&workflowservice.RespondWorkflowTaskCompletedRequest{},
-		WorkflowTaskCompletionLimits{
-			MaxResetPoints:              10,
-			MaxSearchAttributeValueSize: 1024,
-		},
+		workflowTaskCompletionLimits,
 	)
 	s.NoError(err)
 
@@ -1575,6 +2051,7 @@ func (s *mutableStateSuite) TestRetryActivity_TruncateRetryableFailure() {
 		"worker-identity",
 		nil,
 		nil,
+		nil,
 	)
 	s.NoError(err)
 
@@ -1791,10 +2268,7 @@ func (s *mutableStateSuite) TestCloseTransactionUpdateTransition() {
 		_, err := ms.AddWorkflowTaskCompletedEvent(
 			workflowTaskInfo,
 			&workflowservice.RespondWorkflowTaskCompletedRequest{},
-			WorkflowTaskCompletionLimits{
-				MaxResetPoints:              10,
-				MaxSearchAttributeValueSize: 1024,
-			},
+			workflowTaskCompletionLimits,
 		)
 		s.NoError(err)
 	}
@@ -1977,10 +2451,7 @@ func (s *mutableStateSuite) TestCloseTransactionTrackLastUpdateVersionedTransiti
 		completedEvent, err := ms.AddWorkflowTaskCompletedEvent(
 			workflowTaskInfo,
 			&workflowservice.RespondWorkflowTaskCompletedRequest{},
-			WorkflowTaskCompletionLimits{
-				MaxResetPoints:              10,
-				MaxSearchAttributeValueSize: 1024,
-			},
+			workflowTaskCompletionLimits,
 		)
 		s.NoError(err)
 		return completedEvent
@@ -3528,6 +3999,7 @@ func (s *mutableStateSuite) verifyActivityInfos(expectedMap, actualMap map[int64
 		s.Equal(expected.UseCompatibleVersion, actual.UseCompatibleVersion, "UseCompatibleVersion mismatch")
 		s.True(proto.Equal(expected.ActivityType, actual.ActivityType), "ActivityType mismatch")
 		s.True(proto.Equal(expected.LastWorkerVersionStamp, actual.LastWorkerVersionStamp), "LastWorkerVersionStamp mismatch")
+		s.True(proto.Equal(expected.LastStartedDeployment, actual.LastStartedDeployment), "LastStartedDeployment mismatch")
 		s.True(proto.Equal(expected.LastUpdateVersionedTransition, actual.LastUpdateVersionedTransition), "LastUpdateVersionedTransition mismatch")
 
 		// special handled fields
@@ -3551,6 +4023,7 @@ func (s *mutableStateSuite) verifyExecutionInfo(current, target, origin *persist
 	s.Equal(origin.WorkflowTaskHistorySizeBytes, current.WorkflowTaskHistorySizeBytes, "WorkflowTaskHistorySizeBytes mismatch")
 	s.Equal(origin.WorkflowTaskBuildId, current.WorkflowTaskBuildId, "WorkflowTaskBuildId mismatch")
 	s.Equal(origin.WorkflowTaskBuildIdRedirectCounter, current.WorkflowTaskBuildIdRedirectCounter, "WorkflowTaskBuildIdRedirectCounter mismatch")
+	s.True(proto.Equal(origin.VersioningInfo, current.VersioningInfo), "VersioningInfo mismatch")
 	s.True(proto.Equal(origin.VersionHistories, current.VersionHistories), "VersionHistories mismatch")
 	s.True(proto.Equal(origin.ExecutionStats, current.ExecutionStats), "ExecutionStats mismatch")
 	s.Equal(origin.LastFirstEventTxnId, current.LastFirstEventTxnId, "LastFirstEventTxnId mismatch")

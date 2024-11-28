@@ -47,7 +47,6 @@ const (
 	StateTransitionCount  = "StateTransitionCount"
 	TemporalChangeVersion = "TemporalChangeVersion"
 	BinaryChecksums       = "BinaryChecksums"
-	BuildIds              = "BuildIds"
 	BatcherNamespace      = "BatcherNamespace"
 	BatcherUser           = "BatcherUser"
 	HistorySizeBytes      = "HistorySizeBytes"
@@ -96,6 +95,9 @@ const (
 	//     * "Workflow:WorkflowID"
 	//     * "Reason:ManualWorkflowPause"
 	TemporalPauseInfo = "TemporalPauseInfo"
+
+	// Used for Worker Versioning
+	BuildIds = "BuildIds"
 )
 
 var (

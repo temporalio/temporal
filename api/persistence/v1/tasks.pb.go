@@ -117,7 +117,6 @@ type TaskInfo struct {
 	Clock            *v1.VectorClock        `protobuf:"bytes,7,opt,name=clock,proto3" json:"clock,omitempty"`
 	// How this task should be directed. (Missing means the default for
 	// TaskVersionDirective, which is unversioned.)
-	// Deprecated. No need to store this for new versioning [cleanup-old-wv]
 	VersionDirective *v11.TaskVersionDirective `protobuf:"bytes,8,opt,name=version_directive,json=versionDirective,proto3" json:"version_directive,omitempty"`
 	// Stamp field allows to differentiate between different instances of the same task
 	Stamp int32 `protobuf:"varint,9,opt,name=stamp,proto3" json:"stamp,omitempty"`

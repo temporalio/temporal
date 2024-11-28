@@ -334,7 +334,7 @@ func TestProcessInvocationTask(t *testing.T) {
 		{
 			name:                  "invocation timeout by ScheduleToCloseTimeout",
 			requestTimeout:        time.Hour,
-			schedToCloseTimeout:   2 * time.Millisecond,
+			schedToCloseTimeout:   10 * time.Millisecond,
 			destinationDown:       true,
 			expectedMetricOutcome: "request-timeout",
 			onStartOperation: func(ctx context.Context, service, operation string, input *nexus.LazyValue, options nexus.StartOperationOptions) (nexus.HandlerStartOperationResult[any], error) {
@@ -655,7 +655,7 @@ func TestProcessCancelationTask(t *testing.T) {
 		},
 		{
 			name:            "invocation timeout",
-			requestTimeout:  2 * time.Millisecond,
+			requestTimeout:  10 * time.Millisecond,
 			destinationDown: true,
 			onCancelOperation: func(ctx context.Context, service, operation, operationID string, options nexus.CancelOperationOptions) error {
 				time.Sleep(time.Millisecond * 100) //nolint:forbidigo // Allow time.Sleep for timeout tests

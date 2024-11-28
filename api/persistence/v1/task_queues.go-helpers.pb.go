@@ -214,6 +214,80 @@ func (this *VersioningData) Equal(that interface{}) bool {
 	return proto.Equal(this, that1)
 }
 
+// Marshal an object of type DeploymentData to the protobuf v3 wire format
+func (val *DeploymentData) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type DeploymentData from the protobuf v3 wire format
+func (val *DeploymentData) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *DeploymentData) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two DeploymentData values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *DeploymentData) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *DeploymentData
+	switch t := that.(type) {
+	case *DeploymentData:
+		that1 = t
+	case DeploymentData:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
+// Marshal an object of type TaskQueueTypeUserData to the protobuf v3 wire format
+func (val *TaskQueueTypeUserData) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type TaskQueueTypeUserData from the protobuf v3 wire format
+func (val *TaskQueueTypeUserData) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *TaskQueueTypeUserData) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two TaskQueueTypeUserData values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *TaskQueueTypeUserData) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *TaskQueueTypeUserData
+	switch t := that.(type) {
+	case *TaskQueueTypeUserData:
+		that1 = t
+	case TaskQueueTypeUserData:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
 // Marshal an object of type TaskQueueUserData to the protobuf v3 wire format
 func (val *TaskQueueUserData) Marshal() ([]byte, error) {
 	return proto.Marshal(val)

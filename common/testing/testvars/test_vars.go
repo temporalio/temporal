@@ -152,6 +152,16 @@ func (tv *TestVars) WorkflowID(key ...string) string {
 	return tv.getOrCreate("workflow_id", key).(string)
 }
 
+func (tv *TestVars) BuildId(key ...string) string {
+	//revive:disable-next-line:unchecked-type-assertion
+	return tv.getOrCreate("build_id", key).(string)
+}
+
+func (tv *TestVars) DeploymentSeries(key ...string) string {
+	//revive:disable-next-line:unchecked-type-assertion
+	return tv.getOrCreate("deployment_series", key).(string)
+}
+
 func (tv *TestVars) WithWorkflowID(workflowID string, key ...string) *TestVars {
 	return tv.cloneSet("workflow_id", key, workflowID)
 }

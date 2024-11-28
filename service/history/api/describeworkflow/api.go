@@ -153,6 +153,7 @@ func Invoke(
 			AssignedBuildId:              executionInfo.AssignedBuildId,
 			InheritedBuildId:             executionInfo.InheritedBuildId,
 			FirstRunId:                   executionInfo.FirstExecutionRunId,
+			VersioningInfo:               executionInfo.VersioningInfo,
 		},
 	}
 
