@@ -43,6 +43,7 @@ import (
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/tqid"
+	"go.temporal.io/server/service/worker/deployment"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protoreflect"
 )
@@ -78,6 +79,7 @@ func NewHandler(
 	taskManager persistence.TaskManager,
 	historyClient resource.HistoryClient,
 	matchingRawClient resource.MatchingRawClient,
+	deploymentStoreClient deployment.DeploymentStoreClient,
 	hostInfoProvider membership.HostInfoProvider,
 	matchingServiceResolver membership.ServiceResolver,
 	metricsHandler metrics.Handler,
@@ -96,6 +98,7 @@ func NewHandler(
 			taskManager,
 			historyClient,
 			matchingRawClient, // Use non retry client inside matching
+			deploymentStoreClient,
 			config,
 			logger,
 			throttledLogger,
@@ -387,6 +390,14 @@ func (h *Handler) GetTaskQueueUserData(
 ) (_ *matchingservice.GetTaskQueueUserDataResponse, retError error) {
 	defer log.CapturePanic(h.logger, &retError)
 	return h.engine.GetTaskQueueUserData(ctx, request)
+}
+
+func (h *Handler) SyncDeploymentUserData(
+	ctx context.Context,
+	request *matchingservice.SyncDeploymentUserDataRequest,
+) (_ *matchingservice.SyncDeploymentUserDataResponse, retError error) {
+	defer log.CapturePanic(h.logger, &retError)
+	return h.engine.SyncDeploymentUserData(ctx, request)
 }
 
 func (h *Handler) ApplyTaskQueueUserDataReplicationEvent(

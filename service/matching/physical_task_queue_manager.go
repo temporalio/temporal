@@ -49,6 +49,8 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/worker_versioning"
+	"go.temporal.io/server/service/worker/deployment"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 
@@ -76,7 +78,6 @@ type (
 
 	addTaskParams struct {
 		taskInfo    *persistencespb.TaskInfo
-		directive   *taskqueuespb.TaskVersionDirective
 		forwardInfo *taskqueuespb.TaskForwardInfo
 	}
 	// physicalTaskQueueManagerImpl manages a single DB-level (aka physical) task queue in memory
@@ -100,6 +101,12 @@ type (
 		taskValidator              taskValidator
 		tasksAddedInIntervals      *taskTracker
 		tasksDispatchedInIntervals *taskTracker
+		// deploymentWorkflowStarted keeps track if we have already registered the task queue worker
+		// in the deployment.
+		deploymentLock                    sync.Mutex
+		deploymentRegistered              bool
+		deploymentRegistrationNotPossible bool
+		firstPoll                         time.Time
 	}
 )
 
@@ -216,10 +223,7 @@ func newPhysicalTaskQueueManager(
 ) (*physicalTaskQueueManagerImpl, error) {
 	e := partitionMgr.engine
 	config := partitionMgr.config
-	buildIdTagValue := queue.VersionSet()
-	if buildIdTagValue == "" {
-		buildIdTagValue = queue.BuildId()
-	}
+	buildIdTagValue := queue.Version().MetricsTagValue()
 	logger := log.With(partitionMgr.logger, tag.WorkerBuildId(buildIdTagValue))
 	throttledLogger := log.With(partitionMgr.throttledLogger, tag.WorkerBuildId(buildIdTagValue))
 	taggedMetricsHandler := partitionMgr.metricsHandler.WithTags(
@@ -331,8 +335,13 @@ func (c *physicalTaskQueueManagerImpl) PollTask(
 	c.currentPolls.Add(1)
 	defer c.currentPolls.Add(-1)
 
-	namespaceEntry, err := c.namespaceRegistry.GetNamespaceByID(namespace.ID(c.queue.NamespaceId()))
+	namespaceId := namespace.ID(c.queue.NamespaceId())
+	namespaceEntry, err := c.namespaceRegistry.GetNamespaceByID(namespaceId)
 	if err != nil {
+		return nil, err
+	}
+
+	if err = c.ensureRegisteredInDeployment(ctx, namespaceEntry, pollMetadata); err != nil {
 		return nil, err
 	}
 
@@ -401,7 +410,7 @@ func (c *physicalTaskQueueManagerImpl) ProcessSpooledTask(
 		// Don't try to set read level here because it may have been advanced already.
 		return nil
 	}
-	return c.partitionMgr.ProcessSpooledTask(ctx, task, c.queue.BuildId())
+	return c.partitionMgr.ProcessSpooledTask(ctx, task, c.queue.Version().BuildId())
 }
 
 // DispatchQueryTask will dispatch query to local or remote poller. If forwarded then result or error is returned,
@@ -527,6 +536,84 @@ func (c *physicalTaskQueueManagerImpl) TrySyncMatch(ctx context.Context, task *i
 	defer cancel()
 
 	return c.matcher.Offer(childCtx, task)
+}
+
+func (c *physicalTaskQueueManagerImpl) ensureRegisteredInDeployment(
+	ctx context.Context,
+	namespaceEntry *namespace.Namespace,
+	pollMetadata *pollMetadata,
+) error {
+	workerDeployment := worker_versioning.DeploymentFromCapabilities(pollMetadata.workerVersionCapabilities)
+	if workerDeployment == nil {
+		return nil
+	}
+	if !c.partitionMgr.engine.config.EnableDeployments(namespaceEntry.Name().String()) {
+		return errDeploymentsNotAllowed
+	}
+
+	// lock so that only one poll does the update and the rest wait for it
+	c.deploymentLock.Lock()
+	defer c.deploymentLock.Unlock()
+
+	if c.deploymentRegistered {
+		// deployment already registered
+		return nil
+	}
+
+	if c.deploymentRegistrationNotPossible {
+		// deployment not possible due to registration limits
+		return deployment.ErrMaxTaskQueuesInDeployment
+	}
+
+	userData, _, err := c.partitionMgr.GetUserDataManager().GetUserData()
+	if err != nil {
+		return err
+	}
+
+	deploymentData := userData.GetData().GetPerType()[int32(c.queue.TaskType())].GetDeploymentData()
+	if findDeployment(deploymentData, workerDeployment) >= 0 {
+		// already registered in user data, we can assume the workflow is running.
+		// TODO: consider replication scenarios where user data is replicated before
+		// the deployment workflow.
+		return nil
+	}
+
+	// we need to update the deployment workflow to tell it about this task queue
+	// TODO: add some backoff here if we got an error last time
+
+	if c.firstPoll.IsZero() {
+		c.firstPoll = c.partitionMgr.engine.timeSource.Now()
+	}
+	err = c.partitionMgr.engine.deploymentStoreClient.RegisterTaskQueueWorker(
+		ctx, namespaceEntry, workerDeployment, c.queue.TaskQueueFamily().Name(), c.queue.TaskType(), c.firstPoll)
+	if err != nil {
+		if errors.Is(err, deployment.ErrMaxTaskQueuesInDeployment) {
+			c.deploymentRegistrationNotPossible = true
+		}
+		return err
+	}
+
+	// the deployment workflow will register itself in this task queue's user data.
+	// wait for it to propagate here.
+	for {
+		userData, userDataChanged, err := c.partitionMgr.GetUserDataManager().GetUserData()
+		if err != nil {
+			return err
+		}
+		deploymentData := userData.GetData().GetPerType()[int32(c.queue.TaskType())].GetDeploymentData()
+		if findDeployment(deploymentData, workerDeployment) >= 0 {
+			break
+		}
+		select {
+		case <-userDataChanged:
+		case <-ctx.Done():
+			c.logger.Error("timed out waiting for deployment to appear in user data")
+			return ctx.Err()
+		}
+	}
+
+	c.deploymentRegistered = true
+	return nil
 }
 
 // newChildContext creates a child context with desired timeout.

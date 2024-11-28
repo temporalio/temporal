@@ -296,6 +296,8 @@ func queryDirectlyThroughMatching(
 		msResp.GetAssignedBuildId(),
 		msResp.GetMostRecentWorkerVersionStamp(),
 		msResp.GetPreviousStartedEventId() != common.EmptyEventID,
+		workflow.GetEffectiveVersioningBehavior(msResp.GetVersioningInfo()),
+		workflow.GetEffectiveDeployment(msResp.GetVersioningInfo()),
 	)
 
 	if msResp.GetIsStickyTaskQueueEnabled() &&
