@@ -130,7 +130,6 @@ func isWorkflowExistOnSource(
 	})
 	if err != nil {
 		if common.IsNotFoundError(err) {
-			// Don't log NamespaceNotFound error because it is valid case, and return error to stop retrying.
 			return false
 		}
 		logger.Error("Error describe mutable state from remote.",
