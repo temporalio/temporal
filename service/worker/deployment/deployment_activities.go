@@ -40,8 +40,7 @@ import (
 
 type (
 	DeploymentActivities struct {
-		namespaceName  namespace.Name
-		namespaceID    namespace.ID
+		namespace      *namespace.Namespace
 		sdkClient      sdkclient.Client
 		matchingClient resource.MatchingClient
 	}
@@ -50,6 +49,8 @@ type (
 // StartDeploymentSeriesWorkflow activity starts a DeploymentSeries workflow
 
 func (a *DeploymentActivities) StartDeploymentSeriesWorkflow(ctx context.Context, input *deploymentspb.StartDeploymentSeriesRequest) error {
+	// FIXME: consolidate this into deployment client too
+
 	logger := activity.GetLogger(ctx)
 	logger.Info("starting deployment series workflow", "seriesName", input.SeriesName)
 
@@ -67,8 +68,8 @@ func (a *DeploymentActivities) StartDeploymentSeriesWorkflow(ctx context.Context
 
 	// Calling the workflow with the args
 	_, err := a.sdkClient.ExecuteWorkflow(ctx, workflowOptions, DeploymentSeriesWorkflowType, &deploymentspb.DeploymentSeriesWorkflowArgs{
-		NamespaceName: a.namespaceName.String(),
-		NamespaceId:   a.namespaceID.String(),
+		NamespaceName: a.namespace.Name().String(),
+		NamespaceId:   a.namespace.ID().String(),
 	})
 	if err != nil {
 		logger.Error("starting deployment series workflow failed", "seriesName", input.SeriesName, "error", err)
@@ -84,7 +85,7 @@ func (a *DeploymentActivities) SyncUserData(ctx context.Context, input *deployme
 		go func() {
 			logger.Info("syncing task queue userdata for deployment", "taskQueue", sync.Name, "type", sync.Type)
 			_, err := a.matchingClient.SyncDeploymentUserData(ctx, &matchingservice.SyncDeploymentUserDataRequest{
-				NamespaceId:   a.namespaceID.String(),
+				NamespaceId:   a.namespace.ID().String(),
 				TaskQueue:     sync.Name,
 				TaskQueueType: sync.Type,
 				Deployment:    input.Deployment,

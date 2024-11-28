@@ -131,16 +131,14 @@ func (s *workerComponent) Register(registry sdkworker.Registry, ns *namespace.Na
 	})
 
 	deploymentActivities := &DeploymentActivities{
-		namespaceName:  ns.Name(),
-		namespaceID:    ns.ID(),
+		namespace:      ns,
 		sdkClient:      sdkClient,
 		matchingClient: s.activityDeps.MatchingClient,
 	}
 	registry.RegisterActivity(deploymentActivities)
 
 	deploymentSeriesActivities := &DeploymentSeriesActivities{
-		namespaceName:    ns.Name(),
-		namespaceID:      ns.ID(),
+		namespace:        ns,
 		deploymentClient: s.activityDeps.DeploymentClient,
 	}
 	registry.RegisterActivity(deploymentSeriesActivities)

@@ -33,13 +33,22 @@ import (
 
 type (
 	DeploymentSeriesActivities struct {
-		namespaceName    namespace.Name
-		namespaceID      namespace.ID
+		namespace        *namespace.Namespace
 		deploymentClient DeploymentStoreClient
 	}
 )
 
 func (a *DeploymentSeriesActivities) SyncDeployment(ctx context.Context, args *deploymentspb.SyncDeploymentStateActivityArgs) (*deploymentspb.SyncDeploymentStateActivityResult, error) {
-	// FIXME
-	return nil, nil
+	res, err := a.deploymentClient.SyncDeploymentWorkflowFromSeries(
+		ctx,
+		a.namespace,
+		args.Deployment,
+		args.Args,
+	)
+	if err != nil {
+		return nil, err
+	}
+	return &deploymentspb.SyncDeploymentStateActivityResult{
+		State: res.DeploymentLocalState,
+	}, nil
 }

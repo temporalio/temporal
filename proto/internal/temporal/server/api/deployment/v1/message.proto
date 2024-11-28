@@ -149,11 +149,13 @@ message SetCurrentDeploymentResponse {
     DeploymentLocalState previous_deployment_state = 2;
 }
 
+// used as deployment series activity input:
 message SyncDeploymentStateActivityArgs {
-    string build_id = 1;
+    temporal.api.deployment.v1.Deployment deployment = 1;
     SyncDeploymentStateArgs args = 2;
 }
 
+// used as deployment series activity result:
 message SyncDeploymentStateActivityResult {
     DeploymentLocalState state = 1;
 }

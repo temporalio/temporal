@@ -46,19 +46,23 @@ type (
 	}
 )
 
-func DeploymentSeriesWorkflow(ctx workflow.Context, deploymentSeriesArgs *deploymentspb.DeploymentSeriesWorkflowArgs) error {
+func DeploymentSeriesWorkflow(ctx workflow.Context, args *deploymentspb.DeploymentSeriesWorkflowArgs) error {
 	deploymentWorkflowNameRunner := &DeploymentSeriesWorkflowRunner{
-		DeploymentSeriesWorkflowArgs: deploymentSeriesArgs,
+		DeploymentSeriesWorkflowArgs: args,
 
 		a:       nil,
-		logger:  sdklog.With(workflow.GetLogger(ctx), "wf-namespace", deploymentSeriesArgs.NamespaceName),
-		metrics: workflow.GetMetricsHandler(ctx).WithTags(map[string]string{"namespace": deploymentSeriesArgs.NamespaceName}),
+		logger:  sdklog.With(workflow.GetLogger(ctx), "wf-namespace", args.NamespaceName),
+		metrics: workflow.GetMetricsHandler(ctx).WithTags(map[string]string{"namespace": args.NamespaceName}),
 		lock:    workflow.NewMutex(ctx),
 	}
 	return deploymentWorkflowNameRunner.run(ctx)
 }
 
 func (d *DeploymentSeriesWorkflowRunner) run(ctx workflow.Context) error {
+	if d.State == nil {
+		d.State = &deploymentspb.SeriesLocalState{}
+	}
+
 	var pendingUpdates int
 
 	err := workflow.SetQueryHandler(ctx, QueryCurrentDeployment, func() (string, error) {
@@ -145,7 +149,10 @@ func (d *DeploymentSeriesWorkflowRunner) syncDeployment(ctx workflow.Context, bu
 
 	var res deploymentspb.SyncDeploymentStateActivityResult
 	err := workflow.ExecuteActivity(activityCtx, d.a.SyncDeployment, &deploymentspb.SyncDeploymentStateActivityArgs{
-		BuildId: buildId,
+		Deployment: &deploymentpb.Deployment{
+			SeriesName: d.SeriesName,
+			BuildId:    buildId,
+		},
 		Args: &deploymentspb.SyncDeploymentStateArgs{
 			SetCurrent:     setCur,
 			UpdateMetadata: updateMetadata,
