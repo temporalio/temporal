@@ -3283,13 +3283,16 @@ func (wh *WorkflowHandler) SetCurrentDeployment(ctx context.Context, req *workfl
 		return nil, err
 	}
 
+	// TODO: should we get this from the request?
+	requestID := uuid.New()
+
 	current, previous, err := wh.deploymentStoreClient.SetCurrentDeployment(
 		ctx,
 		namespaceEntry,
-		req.Deployment.GetSeriesName(),
-		req.Deployment.GetBuildId(),
-		req.Identity,
+		req.Deployment,
 		req.UpdateMetadata,
+		req.Identity,
+		requestID,
 	)
 	if err != nil {
 		return nil, err

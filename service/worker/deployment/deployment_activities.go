@@ -28,53 +28,26 @@ import (
 	"cmp"
 	"context"
 
-	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/sdk/activity"
-	sdkclient "go.temporal.io/sdk/client"
 	deploymentspb "go.temporal.io/server/api/deployment/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/common/namespace"
-	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/resource"
 )
 
 type (
 	DeploymentActivities struct {
-		namespace      *namespace.Namespace
-		sdkClient      sdkclient.Client
-		matchingClient resource.MatchingClient
+		namespace        *namespace.Namespace
+		deploymentClient DeploymentStoreClient
+		matchingClient   resource.MatchingClient
 	}
 )
 
-// StartDeploymentSeriesWorkflow activity starts a DeploymentSeries workflow
-
 func (a *DeploymentActivities) StartDeploymentSeriesWorkflow(ctx context.Context, input *deploymentspb.StartDeploymentSeriesRequest) error {
-	// FIXME: consolidate this into deployment client too
-
 	logger := activity.GetLogger(ctx)
 	logger.Info("starting deployment series workflow", "seriesName", input.SeriesName)
-
-	workflowID := GenerateDeploymentSeriesWorkflowID(input.SeriesName)
-
-	workflowOptions := sdkclient.StartWorkflowOptions{
-		ID:        workflowID,
-		TaskQueue: primitives.PerNSWorkerTaskQueue,
-		Memo: map[string]interface{}{
-			DeploymentSeriesBuildIDMemoField: "",
-		},
-		WorkflowIDReusePolicy:    enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
-		WorkflowIDConflictPolicy: enumspb.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING,
-	}
-
-	// Calling the workflow with the args
-	_, err := a.sdkClient.ExecuteWorkflow(ctx, workflowOptions, DeploymentSeriesWorkflowType, &deploymentspb.DeploymentSeriesWorkflowArgs{
-		NamespaceName: a.namespace.Name().String(),
-		NamespaceId:   a.namespace.ID().String(),
-	})
-	if err != nil {
-		logger.Error("starting deployment series workflow failed", "seriesName", input.SeriesName, "error", err)
-	}
-	return err
+	identity := "deployment workflow " + activity.GetInfo(ctx).WorkflowExecution.ID
+	return a.deploymentClient.StartDeploymentSeries(ctx, a.namespace, input.SeriesName, identity, input.RequestId)
 }
 
 func (a *DeploymentActivities) SyncUserData(ctx context.Context, input *deploymentspb.SyncUserDataRequest) error {

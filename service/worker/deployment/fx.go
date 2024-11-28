@@ -28,7 +28,6 @@ import (
 	"fmt"
 
 	enumspb "go.temporal.io/api/enums/v1"
-	sdkclient "go.temporal.io/sdk/client"
 	sdkworker "go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -89,17 +88,17 @@ var Module = fx.Options(
 
 func DeploymentStoreClientProvider(historyClient resource.HistoryClient, visibilityManager manager.VisibilityManager, dc *dynamicconfig.Collection) DeploymentStoreClient {
 	return &DeploymentClientImpl{
-		HistoryClient:         historyClient,
-		VisibilityManager:     visibilityManager,
-		MaxIDLengthLimit:      dynamicconfig.MaxIDLengthLimit.Get(dc),
-		VisibilityMaxPageSize: dynamicconfig.FrontendVisibilityMaxPageSize.Get(dc),
+		historyClient:         historyClient,
+		visibilityManager:     visibilityManager,
+		maxIDLengthLimit:      dynamicconfig.MaxIDLengthLimit.Get(dc),
+		visibilityMaxPageSize: dynamicconfig.FrontendVisibilityMaxPageSize.Get(dc),
 		reachabilityCache: newReachabilityCache(
 			metrics.NoopMetricsHandler,
 			visibilityManager,
 			dynamicconfig.ReachabilityCacheOpenWFsTTL.Get(dc)(),
 			dynamicconfig.ReachabilityCacheClosedWFsTTL.Get(dc)(),
 		),
-		MaxTaskQueuesInDeployment: dynamicconfig.MatchingMaxTaskQueuesInDeployment.Get(dc),
+		maxTaskQueuesInDeployment: dynamicconfig.MatchingMaxTaskQueuesInDeployment.Get(dc),
 	}
 }
 
@@ -125,15 +124,10 @@ func (s *workerComponent) Register(registry sdkworker.Registry, ns *namespace.Na
 	registry.RegisterWorkflowWithOptions(DeploymentWorkflow, workflow.RegisterOptions{Name: DeploymentWorkflowType})
 	registry.RegisterWorkflowWithOptions(DeploymentSeriesWorkflow, workflow.RegisterOptions{Name: DeploymentSeriesWorkflowType})
 
-	sdkClient := s.activityDeps.ClientFactory.NewClient(sdkclient.Options{
-		Namespace:     ns.Name().String(),
-		DataConverter: sdk.PreferProtoDataConverter,
-	})
-
 	deploymentActivities := &DeploymentActivities{
-		namespace:      ns,
-		sdkClient:      sdkClient,
-		matchingClient: s.activityDeps.MatchingClient,
+		namespace:        ns,
+		deploymentClient: s.activityDeps.DeploymentClient,
+		matchingClient:   s.activityDeps.MatchingClient,
 	}
 	registry.RegisterActivity(deploymentActivities)
 

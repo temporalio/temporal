@@ -51,8 +51,8 @@ const (
 	QueryCurrentDeployment  = "current-deployment"  // for series wf
 
 	// Memos
-	DeploymentMemoField              = "DeploymentMemo"              // for deployment wf
-	DeploymentSeriesBuildIDMemoField = "DeploymentSeriesBuildIDMemo" // for deployment series wf
+	DeploymentMemoField       = "DeploymentMemo"       // for deployment wf
+	DeploymentSeriesMemoField = "DeploymentSeriesMemo" // for deployment series wf
 
 	// Prefixes, Delimeters and Keys
 	DeploymentWorkflowIDPrefix       = "temporal-sys-deployment"

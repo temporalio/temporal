@@ -28,6 +28,7 @@ import (
 	"errors"
 	"time"
 
+	"github.com/pborman/uuid"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	sdkclient "go.temporal.io/sdk/client"
@@ -130,6 +131,7 @@ func (d *DeploymentWorkflowRunner) run(ctx workflow.Context) error {
 		activityCtx := workflow.WithActivityOptions(ctx, defaultActivityOptions)
 		err := workflow.ExecuteActivity(activityCtx, d.a.StartDeploymentSeriesWorkflow, &deploymentspb.StartDeploymentSeriesRequest{
 			SeriesName: d.State.WorkerDeployment.SeriesName,
+			RequestId:  d.newUUID(ctx),
 		}).Get(ctx, nil)
 		if err != nil {
 			return err
@@ -333,4 +335,12 @@ func (d *DeploymentWorkflowRunner) updateMemo(ctx workflow.Context) {
 			IsCurrentDeployment: d.State.IsCurrent,
 		},
 	})
+}
+
+func (d *DeploymentWorkflowRunner) newUUID(ctx workflow.Context) string {
+	var val string
+	_ = workflow.SideEffect(ctx, func(ctx workflow.Context) any {
+		return uuid.New()
+	}).Get(&val)
+	return val
 }
