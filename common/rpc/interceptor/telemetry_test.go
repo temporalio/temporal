@@ -327,7 +327,7 @@ func TestHandleError(t *testing.T) {
 		{
 			name:                      "resource-exhausted",
 			err:                       serviceerror.NewResourceExhausted(enumspb.RESOURCE_EXHAUSTED_CAUSE_UNSPECIFIED, "resource exhausted"),
-			expectLogging:             true,
+			expectLogging:             false,
 			ServiceFailuresCount:      0,
 			ResourceExhaustedCount:    1,
 			ServiceErrorWithTypeCount: 1,
