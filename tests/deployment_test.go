@@ -971,7 +971,9 @@ func (s *DeploymentSuite) checkListAndWaitForBatchCompletion(ctx context.Context
 		})
 		a.NoError(err)
 		a.Greater(len(listResp.GetOperationInfo()), 0)
-		a.Equal(jobId, listResp.GetOperationInfo()[0].GetJobId())
+		if len(listResp.GetOperationInfo()) > 0 {
+			a.Equal(jobId, listResp.GetOperationInfo()[0].GetJobId())
+		}
 	}, 5*time.Second, 50*time.Millisecond)
 
 	for {
