@@ -2,8 +2,6 @@
 //
 // Copyright (c) 2024 Temporal Technologies Inc.  All rights reserved.
 //
-// Copyright (c) 2024 Uber Technologies, Inc.
-//
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
 // in the Software without restriction, including without limitation the rights
@@ -22,39 +20,15 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package matching
+package nexus
 
 import (
+	"strconv"
 	"time"
-
-	deploymentpb "go.temporal.io/api/deployment/v1"
-	"go.temporal.io/api/serviceerror"
-	persistencespb "go.temporal.io/server/api/persistence/v1"
 )
 
-var (
-	errDeploymentsNotAllowed = serviceerror.NewPermissionDenied("deployments are disabled on this namespace", "")
-	errMissingDeployment     = serviceerror.NewInvalidArgument("missing deployment")
-)
-
-func findDeployment(deployments *persistencespb.DeploymentData, deployment *deploymentpb.Deployment) int {
-	for i, d := range deployments.GetDeployments() {
-		if d.Deployment.SeriesName == deployment.SeriesName && d.Deployment.BuildId == deployment.BuildId {
-			return i
-		}
-	}
-	return -1
-}
-
-func findCurrentDeployment(deployments *persistencespb.DeploymentData) *deploymentpb.Deployment {
-	var currentDeployment *deploymentpb.Deployment
-	var maxCurrentTime time.Time
-	for _, d := range deployments.GetDeployments() {
-		if d.Data.LastBecameCurrentTime != nil {
-			if t := d.Data.LastBecameCurrentTime.AsTime(); t.After(maxCurrentTime) {
-				currentDeployment, maxCurrentTime = d.GetDeployment(), t
-			}
-		}
-	}
-	return currentDeployment
+// FormatDuration converts a duration into a string representation in millisecond resolution.
+// TODO: replace this with the version exported from the Nexus SDK
+func FormatDuration(d time.Duration) string {
+	return strconv.FormatInt(d.Milliseconds(), 10) + "ms"
 }

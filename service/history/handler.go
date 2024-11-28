@@ -2374,6 +2374,9 @@ func (h *Handler) CompleteNexusOperation(ctx context.Context, request *historyse
 		engine.StateMachineEnvironment(metrics.OperationTag(metrics.HistoryCompleteNexusOperationScope)),
 		ref,
 		request.Completion.RequestId,
+		request.OperationId,
+		request.StartTime,
+		request.Links,
 		request.GetSuccess(),
 		opErr,
 	)

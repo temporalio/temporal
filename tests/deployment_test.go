@@ -175,18 +175,18 @@ func (s *DeploymentSuite) TestDescribeDeployment_RegisterTaskQueue() {
 			Deployment: workerDeployment,
 		})
 		a.NoError(err)
-		a.NotNil(resp.DeploymentInfo)
-		a.NotNil(resp.DeploymentInfo.Deployment)
+		a.NotNil(resp.GetDeploymentInfo())
+		a.NotNil(resp.GetDeploymentInfo().GetDeployment())
 
-		a.Equal(seriesName, resp.DeploymentInfo.Deployment.SeriesName)
-		a.Equal(buildID, resp.DeploymentInfo.Deployment.BuildId)
+		a.Equal(seriesName, resp.GetDeploymentInfo().GetDeployment().GetSeriesName())
+		a.Equal(buildID, resp.GetDeploymentInfo().GetDeployment().GetBuildId())
 
-		a.Equal(numberOfDeployments, len(resp.DeploymentInfo.TaskQueueInfos))
-		if len(resp.DeploymentInfo.TaskQueueInfos) < numberOfDeployments {
+		a.Equal(numberOfDeployments, len(resp.GetDeploymentInfo().GetTaskQueueInfos()))
+		if len(resp.GetDeploymentInfo().GetTaskQueueInfos()) < numberOfDeployments {
 			return
 		}
-		a.Equal(taskQueue.Name, resp.DeploymentInfo.TaskQueueInfos[0].Name)
-		a.Equal(false, resp.DeploymentInfo.IsCurrent)
+		a.Equal(taskQueue.Name, resp.GetDeploymentInfo().GetTaskQueueInfos()[0].Name)
+		a.Equal(false, resp.GetDeploymentInfo().GetIsCurrent())
 		// todo (Shivam) - please add a check for current time
 	}, time.Second*5, time.Millisecond*200)
 }
@@ -277,18 +277,18 @@ func (s *DeploymentSuite) verifyDeployments(ctx context.Context, request *workfl
 		if resp == nil {
 			return
 		}
-		a.NotNil(resp.Deployments)
+		a.NotNil(resp.GetDeployments())
 
 		// check to stop eventuallyWithT from panicking since
 		// it collects all possible errors
-		if len(resp.Deployments) < 1 {
+		if len(resp.GetDeployments()) < 1 {
 			return
 		}
 
 		for _, expectedDeploymentListInfo := range expectedDeployments {
 
 			deploymentListInfoValidated := false
-			for _, receivedDeploymentListInfo := range resp.Deployments {
+			for _, receivedDeploymentListInfo := range resp.GetDeployments() {
 
 				deploymentListInfoValidated = deploymentListInfoValidated ||
 					s.verifyDeploymentListInfo(expectedDeploymentListInfo, receivedDeploymentListInfo)
@@ -648,7 +648,7 @@ func (s *DeploymentSuite) TestUpdateWorkflowExecutionOptions_EmptyFields() {
 
 func (s *DeploymentSuite) TestUpdateWorkflowExecutionOptions_SetPinnedSetPinned() {
 	ctx := context.Background()
-	tv := testvars.New(s.T())
+	tv := testvars.New(s)
 	tq := tv.TaskQueue()
 	series := tv.DeploymentSeries()
 
@@ -713,7 +713,7 @@ func (s *DeploymentSuite) TestUpdateWorkflowExecutionOptions_SetPinnedSetPinned(
 
 func (s *DeploymentSuite) TestUpdateWorkflowExecutionOptions_SetUnpinnedSetUnpinned() {
 	ctx := context.Background()
-	tv := testvars.New(s.T())
+	tv := testvars.New(s)
 	tq := tv.TaskQueue()
 
 	// start an unversioned workflow
@@ -755,7 +755,7 @@ func (s *DeploymentSuite) TestUpdateWorkflowExecutionOptions_SetUnpinnedSetUnpin
 
 func (s *DeploymentSuite) TestUpdateWorkflowExecutionOptions_SetUnpinnedSetPinned() {
 	ctx := context.Background()
-	tv := testvars.New(s.T())
+	tv := testvars.New(s)
 	tq := tv.TaskQueue()
 	series := tv.DeploymentSeries()
 
@@ -814,7 +814,7 @@ func (s *DeploymentSuite) TestUpdateWorkflowExecutionOptions_SetUnpinnedSetPinne
 
 func (s *DeploymentSuite) TestUpdateWorkflowExecutionOptions_SetPinnedSetUnpinned() {
 	ctx := context.Background()
-	tv := testvars.New(s.T())
+	tv := testvars.New(s)
 	tq := tv.TaskQueue()
 	series := tv.DeploymentSeries()
 
@@ -1102,4 +1102,11 @@ func (s *DeploymentSuite) TestSignalWithStartWorkflowExecution_WithUnpinnedOverr
 		RunId:      resp.GetRunId(),
 	}
 	s.checkDescribeWorkflowAfterOverride(ctx, wf, override)
+}
+
+// Name is used by testvars. We use a shorten test name in variables so that physical task queue IDs
+// do not grow larger that DB column limit (currently as low as 272 chars).
+func (s *DeploymentSuite) Name() string {
+	fullName := s.T().Name()
+	return fullName[len(fullName)-20:]
 }
