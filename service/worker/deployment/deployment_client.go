@@ -143,7 +143,12 @@ func (d *DeploymentClientImpl) RegisterTaskQueueWorker(
 	identity string,
 	requestID string,
 ) error {
-	updatePayload, err := d.generateRegisterWorkerInDeploymentArgs(namespaceEntry, taskQueueName, taskQueueType, firstPoll)
+	updatePayload, err := sdk.PreferProtoDataConverter.ToPayloads(&deploymentspb.RegisterWorkerInDeploymentArgs{
+		TaskQueueName:   taskQueueName,
+		TaskQueueType:   taskQueueType,
+		FirstPollerTime: timestamppb.New(firstPoll),
+		MaxTaskQueues:   int32(d.maxTaskQueuesInDeployment(namespaceEntry.Name().String())),
+	})
 	if err != nil {
 		return err
 	}
@@ -633,22 +638,6 @@ func (d *DeploymentClientImpl) updateWithStart(
 	}, policy, isRetryable)
 
 	return outcome, err
-}
-
-// GenerateUpdateDeploymentPayload generates update workflow payload
-func (d *DeploymentClientImpl) generateRegisterWorkerInDeploymentArgs(
-	namespaceEntry *namespace.Namespace,
-	taskQueueName string,
-	taskQueueType enumspb.TaskQueueType,
-	firstPoll time.Time,
-) (*commonpb.Payloads, error) {
-	updateArgs := &deploymentspb.RegisterWorkerInDeploymentArgs{
-		TaskQueueName:   taskQueueName,
-		TaskQueueType:   taskQueueType,
-		FirstPollerTime: timestamppb.New(firstPoll),
-		MaxTaskQueues:   int32(d.maxTaskQueuesInDeployment(namespaceEntry.Name().String())),
-	}
-	return sdk.PreferProtoDataConverter.ToPayloads(updateArgs)
 }
 
 func (d *DeploymentClientImpl) buildInitialDeploymentMemo(deployment *deploymentpb.Deployment) (*commonpb.Memo, error) {
