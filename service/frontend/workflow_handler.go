@@ -3263,7 +3263,7 @@ func (wh *WorkflowHandler) GetDeploymentReachability(
 	return resp, nil
 }
 
-func (wh *WorkflowHandler) SetCurrentDeployment(ctx context.Context, req *workflowservice.SetCurrentDeploymentRequest) (*workflowservice.SetCurrentDeploymentResponse, error) {
+func (wh *WorkflowHandler) SetCurrentDeployment(ctx context.Context, request *workflowservice.SetCurrentDeploymentRequest) (_ *workflowservice.SetCurrentDeploymentResponse, retError error) {
 	defer log.CapturePanic(wh.logger, &retError)
 
 	if request == nil {
@@ -3289,9 +3289,9 @@ func (wh *WorkflowHandler) SetCurrentDeployment(ctx context.Context, req *workfl
 	current, previous, err := wh.deploymentStoreClient.SetCurrentDeployment(
 		ctx,
 		namespaceEntry,
-		req.Deployment,
-		req.UpdateMetadata,
-		req.Identity,
+		request.Deployment,
+		request.UpdateMetadata,
+		request.Identity,
 		requestID,
 	)
 	if err != nil {
