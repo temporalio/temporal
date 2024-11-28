@@ -28,13 +28,13 @@ import (
 	"context"
 	"fmt"
 
-	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/util"
+	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/shard"
@@ -57,12 +57,8 @@ func Invoke(
 	ret := &historyservice.UpdateWorkflowExecutionOptionsResponse{}
 
 	opts := req.GetWorkflowExecutionOptions()
-	if opts.GetVersioningOverride() != nil && opts.GetVersioningOverride().GetBehavior() == enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED {
-		return nil, serviceerror.NewInvalidArgument("Missing versioning override behavior")
-	}
-	if opts.GetVersioningOverride().GetBehavior() == enumspb.VERSIONING_BEHAVIOR_PINNED &&
-		opts.GetVersioningOverride().GetDeployment() == nil {
-		return nil, serviceerror.NewInvalidArgument("Deployment override must be set if behavior override is PINNED")
+	if err := worker_versioning.ValidateVersioningOverride(opts.GetVersioningOverride()); err != nil {
+		return nil, err
 	}
 
 	err = api.GetAndUpdateWorkflowWithNew(
