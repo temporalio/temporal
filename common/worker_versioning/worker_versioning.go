@@ -264,7 +264,7 @@ func ValidateVersioningOverride(override *workflowpb.VersioningOverride) error {
 	case enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED:
 		return serviceerror.NewInvalidArgument("override behavior is required")
 	default:
-		return serviceerror.NewInvalidArgument("override behavior not recognized")
+		return serviceerror.NewInvalidArgument(fmt.Sprintf("override behavior %s not recognized", override.GetBehavior()))
 	}
 	return nil
 }
