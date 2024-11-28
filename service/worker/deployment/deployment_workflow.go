@@ -25,7 +25,7 @@
 package deployment
 
 import (
-	"errors"
+	"fmt"
 	"time"
 
 	"github.com/pborman/uuid"
@@ -60,10 +60,6 @@ var (
 			MaximumInterval: 60 * time.Second,
 		},
 	}
-
-	errTaskQueueExistsInDeployment = errors.New("task queue already exists in deployment")
-	errDeployStateUnchanged        = errors.New("deployment state would not change")
-	ErrMaxTaskQueuesInDeployment   = errors.New("maximum number of task queues have been registered in deployment")
 )
 
 func DeploymentWorkflow(ctx workflow.Context, deploymentWorkflowArgs *deploymentspb.DeploymentWorkflowArgs) error {
@@ -166,10 +162,13 @@ func (d *DeploymentWorkflowRunner) run(ctx workflow.Context) error {
 
 func (d *DeploymentWorkflowRunner) validateRegisterWorker(args *deploymentspb.RegisterWorkerInDeploymentArgs) error {
 	if _, ok := d.State.TaskQueueFamilies[args.TaskQueueName].GetTaskQueues()[int32(args.TaskQueueType)]; ok {
-		return errTaskQueueExistsInDeployment
+		return temporal.NewApplicationError("task queue already exists in deployment", errNoChangeType)
 	}
 	if len(d.State.TaskQueueFamilies) >= int(args.MaxTaskQueues) {
-		return ErrMaxTaskQueuesInDeployment
+		return temporal.NewApplicationError(
+			fmt.Sprintf("maximum number of task queues (%d) have been registered in deployment", args.MaxTaskQueues),
+			errMaxTaskQueuesInDeploymentType,
+		)
 	}
 	return nil
 }
@@ -247,7 +246,9 @@ func (d *DeploymentWorkflowRunner) validateSyncState(args *deploymentspb.SyncDep
 		// can't compare payloads, just assume it changes something
 		return nil
 	}
-	return errDeployStateUnchanged
+	// return current state along with "no change"
+	res := &deploymentspb.SyncDeploymentStateResponse{DeploymentLocalState: d.State}
+	return temporal.NewApplicationError("no change", errNoChangeType, res)
 }
 
 func (d *DeploymentWorkflowRunner) handleSyncState(ctx workflow.Context, args *deploymentspb.SyncDeploymentStateArgs) (*deploymentspb.SyncDeploymentStateResponse, error) {
@@ -296,7 +297,7 @@ func (d *DeploymentWorkflowRunner) handleSyncState(ctx workflow.Context, args *d
 		activityCtx := workflow.WithActivityOptions(ctx, defaultActivityOptions)
 		err = workflow.ExecuteActivity(activityCtx, d.a.SyncUserData, syncReq).Get(ctx, nil)
 		if err != nil {
-			// FIXME: if this fails, should we roll back anything?
+			// TODO: if this fails, should we roll back anything?
 			return nil, err
 		}
 	}

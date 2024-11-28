@@ -62,6 +62,10 @@ const (
 	DeploymentWorkflowIDInitialSize  = (2 * len(DeploymentWorkflowIDDelimeter)) + len(DeploymentWorkflowIDPrefix)
 	SeriesFieldName                  = "DeploymentSeries"
 	BuildIDFieldName                 = "BuildID"
+
+	// Application error names for rejected updates
+	errNoChangeType                  = "errNoChange"
+	errMaxTaskQueuesInDeploymentType = "errMaxTaskQueuesInDeployment"
 )
 
 // ValidateDeploymentWfParams is a helper that verifies if the fields used for generating

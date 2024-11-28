@@ -27,6 +27,7 @@ package deployment
 import (
 	"context"
 	"errors"
+	"fmt"
 	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
@@ -119,6 +120,10 @@ type DeploymentStoreClient interface {
 	) (*deploymentspb.SyncDeploymentStateResponse, error)
 }
 
+type ErrMaxTaskQueuesInDeployment struct{ error }
+
+type ErrRegister struct{ error }
+
 // implements DeploymentStoreClient
 type DeploymentClientImpl struct {
 	historyClient             historyservice.HistoryServiceClient
@@ -152,11 +157,23 @@ func (d *DeploymentClientImpl) RegisterTaskQueueWorker(
 	if err != nil {
 		return err
 	}
-	_, err = d.updateWithStartDeployment(ctx, namespaceEntry, deployment, &updatepb.Request{
+
+	outcome, err := d.updateWithStartDeployment(ctx, namespaceEntry, deployment, &updatepb.Request{
 		Input: &updatepb.Input{Name: RegisterWorkerInDeployment, Args: updatePayload},
 		Meta:  &updatepb.Meta{UpdateId: requestID, Identity: identity},
 	}, identity, requestID)
-	return err
+	if err != nil {
+		return err
+	}
+
+	if failure := outcome.GetFailure(); failure.GetApplicationFailureInfo().GetType() == errMaxTaskQueuesInDeploymentType {
+		// translate to client-side error type
+		return ErrMaxTaskQueuesInDeployment{error: errors.New(failure.Message)}
+	} else if failure != nil {
+		return ErrRegister{error: errors.New(failure.Message)}
+	}
+
+	return nil
 }
 
 func (d *DeploymentClientImpl) DescribeDeployment(ctx context.Context, namespaceEntry *namespace.Namespace, seriesName string, buildID string) (*deploymentpb.DeploymentInfo, error) {
@@ -349,11 +366,15 @@ func (d *DeploymentClientImpl) SetCurrentDeployment(
 	if err != nil {
 		return nil, nil, err
 	}
-	if failure := outcome.GetFailure(); failure != nil {
-		// FIXME: handle "no change" and convert to success
-		// FIXME: use the correct error type
+
+	if failure := outcome.GetFailure(); failure.GetApplicationFailureInfo().GetType() == errNoChangeType {
+		return nil, nil, serviceerror.NewAlreadyExist(fmt.Sprintf("Build ID %q is already current for %q",
+			deployment.BuildId, deployment.SeriesName))
+	} else if failure != nil {
+		// TODO: is there an easy way to recover the original type here?
 		return nil, nil, serviceerror.NewInternal(failure.Message)
 	}
+
 	success := outcome.GetSuccess()
 	if success == nil {
 		return nil, nil, serviceerror.NewInternal("outcome missing success and failure")
@@ -434,18 +455,26 @@ func (d *DeploymentClientImpl) SyncDeploymentWorkflowFromSeries(
 	if err != nil {
 		return nil, err
 	}
-	if failure := outcome.GetFailure(); failure != nil {
-		// FIXME: handle "no change" and convert to success
-		// FIXME: use the correct error type
+
+	if failure := outcome.GetFailure(); failure.GetApplicationFailureInfo().GetType() == errNoChangeType {
+		// pretend this is a success
+		outcome = &updatepb.Outcome{
+			Value: &updatepb.Outcome_Success{
+				Success: failure.GetApplicationFailureInfo().GetDetails(),
+			},
+		}
+	} else if failure != nil {
+		// TODO: is there an easy way to recover the original type here?
 		return nil, serviceerror.NewInternal(failure.Message)
 	}
+
 	success := outcome.GetSuccess()
 	if success == nil {
 		return nil, serviceerror.NewInternal("outcome missing success and failure")
 	}
 
 	var res deploymentspb.SyncDeploymentStateResponse
-	if err := payloads.Decode(success, &res); err != nil {
+	if err := sdk.PreferProtoDataConverter.FromPayloads(success, &res); err != nil {
 		return nil, err
 	}
 	return &res, nil
@@ -483,7 +512,6 @@ func (d *DeploymentClientImpl) updateWithStartDeployment(
 		return nil, err
 	}
 
-	// initial memo fiels
 	memo, err := d.buildInitialDeploymentMemo(deployment)
 	if err != nil {
 		return nil, err
