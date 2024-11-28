@@ -924,7 +924,7 @@ func (s *DeploymentSuite) TestBatchUpdateWorkflowExecutionOptions_SetPinnedThenU
 	s.NoError(err)
 
 	// wait til batch completes
-	s.waitForBatchCompletion(ctx, batchJobId)
+	s.checkListAndWaitForBatchCompletion(ctx, batchJobId)
 
 	// check all the workflows
 	for _, wf := range workflows {
@@ -952,7 +952,7 @@ func (s *DeploymentSuite) TestBatchUpdateWorkflowExecutionOptions_SetPinnedThenU
 	s.NoError(err)
 
 	// wait til batch completes
-	s.waitForBatchCompletion(ctx, batchJobId)
+	s.checkListAndWaitForBatchCompletion(ctx, batchJobId)
 
 	// check all the workflows
 	for _, wf := range workflows {
@@ -963,7 +963,17 @@ func (s *DeploymentSuite) TestBatchUpdateWorkflowExecutionOptions_SetPinnedThenU
 	s.checkDeploymentReachability(ctx, workerDeployment, enumspb.DEPLOYMENT_REACHABILITY_UNREACHABLE)
 }
 
-func (s *DeploymentSuite) waitForBatchCompletion(ctx context.Context, jobId string) {
+func (s *DeploymentSuite) checkListAndWaitForBatchCompletion(ctx context.Context, jobId string) {
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		a := assert.New(t)
+		listResp, err := s.FrontendClient().ListBatchOperations(ctx, &workflowservice.ListBatchOperationsRequest{
+			Namespace: s.Namespace(),
+		})
+		a.NoError(err)
+		a.Greater(len(listResp.GetOperationInfo()), 0)
+		a.Equal(jobId, listResp.GetOperationInfo()[0].GetJobId())
+	}, 5*time.Second, 50*time.Millisecond)
+
 	for {
 		descResp, err := s.FrontendClient().DescribeBatchOperation(ctx, &workflowservice.DescribeBatchOperationRequest{
 			Namespace: s.Namespace(),
