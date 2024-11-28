@@ -61,7 +61,7 @@ const (
 	BatchTypeDelete = "delete"
 	// BatchTypeReset is batch type for resetting workflows
 	BatchTypeReset = "reset"
-	// BatchTypeUpdateOptions is batch type for updating the options of workflows
+	// BatchTypeUpdateOptions is batch type for updating the options of workflow executions
 	BatchTypeUpdateOptions = "update_options"
 )
 
