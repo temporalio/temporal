@@ -486,6 +486,22 @@ func (s *DeploymentSuite) checkDeploymentReachability(
 	}, 5*time.Second, 50*time.Millisecond)
 }
 
+// SDK will have a GetWorkflowExecutionOptions method that sends an empty mask and a default
+// WorkflowExecutionOptions and expects to read the workflow execution's existing options with no write
+func (s *DeploymentSuite) checkSDKGetWorkflowExecutionOptions(ctx context.Context,
+	wf *commonpb.WorkflowExecution,
+	expectedOpts *workflowpb.WorkflowExecutionOptions,
+) {
+	getResp, err := s.FrontendClient().UpdateWorkflowExecutionOptions(ctx, &workflowservice.UpdateWorkflowExecutionOptionsRequest{
+		Namespace:                s.Namespace(),
+		WorkflowExecution:        wf,
+		WorkflowExecutionOptions: &workflowpb.WorkflowExecutionOptions{},
+		UpdateMask:               &fieldmaskpb.FieldMask{Paths: []string{}},
+	})
+	s.NoError(err)
+	s.True(proto.Equal(getResp.GetWorkflowExecutionOptions(), expectedOpts))
+}
+
 func (s *DeploymentSuite) createDeploymentAndWaitForExist(
 	deployment *deploymentpb.Deployment,
 	tq *taskqueuepb.TaskQueue,
@@ -539,6 +555,7 @@ func (s *DeploymentSuite) TestUpdateWorkflowExecutionOptions_SetUnpinnedThenUnse
 	s.NoError(err)
 	s.True(proto.Equal(updateResp.GetWorkflowExecutionOptions(), unpinnedOpts))
 	s.checkDescribeWorkflowAfterOverride(ctx, unversionedWFExec, unpinnedOpts.GetVersioningOverride())
+	s.checkSDKGetWorkflowExecutionOptions(ctx, unversionedWFExec, unpinnedOpts)
 
 	// 2. Unset using empty update opts with mutation mask --> describe workflow shows no more override
 	updateResp, err = s.FrontendClient().UpdateWorkflowExecutionOptions(ctx, &workflowservice.UpdateWorkflowExecutionOptionsRequest{
@@ -594,6 +611,7 @@ func (s *DeploymentSuite) TestUpdateWorkflowExecutionOptions_SetPinnedThenUnset(
 	s.True(proto.Equal(updateResp.GetWorkflowExecutionOptions(), pinnedOpts))
 	s.checkDescribeWorkflowAfterOverride(ctx, unversionedWFExec, pinnedOpts.GetVersioningOverride())
 	s.checkDeploymentReachability(ctx, workerDeployment, enumspb.DEPLOYMENT_REACHABILITY_REACHABLE)
+	s.checkSDKGetWorkflowExecutionOptions(ctx, unversionedWFExec, pinnedOpts)
 
 	// 2. Unset with empty update opts with mutation mask --> describe workflow shows no more override + deployment is unreachable
 	updateResp, err = s.FrontendClient().UpdateWorkflowExecutionOptions(ctx, &workflowservice.UpdateWorkflowExecutionOptionsRequest{
@@ -645,6 +663,7 @@ func (s *DeploymentSuite) TestUpdateWorkflowExecutionOptions_EmptyFields() {
 	s.NoError(err)
 	s.True(proto.Equal(updateResp.GetWorkflowExecutionOptions(), &workflowpb.WorkflowExecutionOptions{}))
 	s.checkDescribeWorkflowAfterOverride(ctx, unversionedWFExec, nil)
+	s.checkSDKGetWorkflowExecutionOptions(ctx, unversionedWFExec, &workflowpb.WorkflowExecutionOptions{})
 }
 
 func (s *DeploymentSuite) TestUpdateWorkflowExecutionOptions_SetPinnedSetPinned() {
