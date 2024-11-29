@@ -163,9 +163,7 @@ func (s *DeploymentSuite) TestDescribeDeployment_RegisterTaskQueue() {
 	numberOfDeployments := 1
 
 	// Starting a deployment workflow
-	go func() {
-		s.pollFromDeployment(ctx, taskQueue, workerDeployment)
-	}()
+	go s.pollFromDeployment(ctx, taskQueue, workerDeployment)
 
 	// Querying the Deployment
 	s.EventuallyWithT(func(t *assert.CollectT) {
@@ -308,9 +306,7 @@ func (s *DeploymentSuite) startDeploymentsAndValidateList(deploymentInfo []*depl
 
 	// Start deployment workflow(s)
 	for _, listInfo := range deploymentInfo {
-		go func() {
-			s.pollFromDeployment(ctx, taskQueue, listInfo.Deployment)
-		}()
+		go s.pollFromDeployment(ctx, taskQueue, listInfo.Deployment)
 	}
 
 	var expectedDeployments []*deploymentpb.DeploymentListInfo
@@ -491,9 +487,7 @@ func (s *DeploymentSuite) createDeploymentAndWaitForExist(
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 	defer cancel()
 	// Start a deployment workflow
-	go func() {
-		s.pollFromDeployment(ctx, tq, deployment)
-	}()
+	go s.pollFromDeployment(ctx, tq, deployment)
 
 	// Wait for the deployment to exist
 	s.EventuallyWithT(func(t *assert.CollectT) {
