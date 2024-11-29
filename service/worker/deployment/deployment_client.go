@@ -761,8 +761,7 @@ func (d *DeploymentClientImpl) record(operation string, retErr *error, args ...a
 				tag.NewAnyTag("args", args),
 			)
 		} else {
-			// FIXME: change to debug
-			d.logger.Info("deployment client success",
+			d.logger.Debug("deployment client success",
 				tag.Operation(operation),
 				tag.NewDurationTag("elapsed", elapsed),
 				tag.NewAnyTag("args", args),
