@@ -173,6 +173,8 @@ func (d *DeploymentClientImpl) RegisterTaskQueueWorker(
 	if failure := outcome.GetFailure(); failure.GetApplicationFailureInfo().GetType() == errMaxTaskQueuesInDeploymentType {
 		// translate to client-side error type
 		return ErrMaxTaskQueuesInDeployment{error: errors.New(failure.Message)}
+	} else if failure.GetApplicationFailureInfo().GetType() == errNoChangeType {
+		return nil
 	} else if failure != nil {
 		return ErrRegister{error: errors.New(failure.Message)}
 	}

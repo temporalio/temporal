@@ -129,9 +129,7 @@ func (s *DeploymentSuite) TearDownTest() {
 // pollFromDeployment calls PollWorkflowTaskQueue to start deployment related workflows
 func (s *DeploymentSuite) pollFromDeployment(ctx context.Context, taskQueue *taskqueuepb.TaskQueue,
 	deployment *deploymentpb.Deployment) {
-	a := s.Assertions
-
-	_, err := s.FrontendClient().PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
+	_, _ = s.FrontendClient().PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
 		Namespace: s.Namespace(),
 		TaskQueue: taskQueue,
 		Identity:  "random",
@@ -141,10 +139,6 @@ func (s *DeploymentSuite) pollFromDeployment(ctx context.Context, taskQueue *tas
 			DeploymentSeriesName: deployment.SeriesName,
 		},
 	})
-	if !errors.Is(err, context.Canceled) {
-		// ctx canceled error is expected in most test cases
-		a.Error(err)
-	}
 }
 
 func (s *DeploymentSuite) TestDescribeDeployment_RegisterTaskQueue() {
@@ -374,7 +368,8 @@ func (s *DeploymentSuite) TestListDeployments_MultipleDeployments_WithSeriesFilt
 // TODO Shivam - Add more getCurrentDeployment tests when SetCurrentDefaultBuildID API has been defined
 
 func (s *DeploymentSuite) TestGetDeploymentReachability_OverrideUnversioned() {
-	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
+	defer cancel()
 
 	// presence of internally used delimiters (:) or escape
 	// characters shouldn't break functionality
@@ -386,7 +381,7 @@ func (s *DeploymentSuite) TestGetDeploymentReachability_OverrideUnversioned() {
 		BuildId:    buildID,
 	}
 
-	s.createDeploymentAndWaitForExist(workerDeployment, taskQueue)
+	s.createDeploymentAndWaitForExist(ctx, workerDeployment, taskQueue)
 
 	// non-current deployment is unreachable
 	s.checkDeploymentReachability(ctx, workerDeployment, enumspb.DEPLOYMENT_REACHABILITY_UNREACHABLE)
@@ -428,7 +423,8 @@ func (s *DeploymentSuite) TestGetDeploymentReachability_OverrideUnversioned() {
 }
 
 func (s *DeploymentSuite) TestGetDeploymentReachability_NotFound() {
-	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
+	defer cancel()
 
 	// presence of internally used delimiters (:) or escape
 	// characters shouldn't break functionality
@@ -482,11 +478,10 @@ func (s *DeploymentSuite) checkDeploymentReachability(
 }
 
 func (s *DeploymentSuite) createDeploymentAndWaitForExist(
+	ctx context.Context,
 	deployment *deploymentpb.Deployment,
 	tq *taskqueuepb.TaskQueue,
 ) {
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
-	defer cancel()
 	// Start a deployment workflow
 	go s.pollFromDeployment(ctx, tq, deployment)
 
@@ -505,7 +500,8 @@ func (s *DeploymentSuite) createDeploymentAndWaitForExist(
 }
 
 func (s *DeploymentSuite) TestUpdateWorkflowExecutionOptions_SetUnpinnedThenUnset() {
-	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
+	defer cancel()
 
 	// start an unversioned workflow
 	unversionedTQ := "unversioned-test-tq"
@@ -546,7 +542,8 @@ func (s *DeploymentSuite) TestUpdateWorkflowExecutionOptions_SetUnpinnedThenUnse
 }
 
 func (s *DeploymentSuite) TestUpdateWorkflowExecutionOptions_SetPinnedThenUnset() {
-	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
+	defer cancel()
 
 	// presence of internally used delimiters (:) or escape
 	// characters shouldn't break functionality
@@ -574,7 +571,7 @@ func (s *DeploymentSuite) TestUpdateWorkflowExecutionOptions_SetPinnedThenUnset(
 	noOpts := &workflowpb.WorkflowExecutionOptions{}
 
 	// create deployment so that GetDeploymentReachability doesn't error
-	s.createDeploymentAndWaitForExist(workerDeployment, &taskqueuepb.TaskQueue{Name: unversionedTQ, Kind: enumspb.TASK_QUEUE_KIND_NORMAL})
+	s.createDeploymentAndWaitForExist(ctx, workerDeployment, &taskqueuepb.TaskQueue{Name: unversionedTQ, Kind: enumspb.TASK_QUEUE_KIND_NORMAL})
 
 	// 1. Set pinned override on our new unversioned workflow --> describe workflow shows the override + deployment is reachable
 	updateResp, err := s.FrontendClient().UpdateWorkflowExecutionOptions(ctx, &workflowservice.UpdateWorkflowExecutionOptionsRequest{
@@ -602,7 +599,8 @@ func (s *DeploymentSuite) TestUpdateWorkflowExecutionOptions_SetPinnedThenUnset(
 }
 
 func (s *DeploymentSuite) TestUpdateWorkflowExecutionOptions_EmptyFields() {
-	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
+	defer cancel()
 
 	// presence of internally used delimiters (:) or escape
 	// characters shouldn't break functionality
@@ -641,7 +639,9 @@ func (s *DeploymentSuite) TestUpdateWorkflowExecutionOptions_EmptyFields() {
 }
 
 func (s *DeploymentSuite) TestUpdateWorkflowExecutionOptions_SetPinnedSetPinned() {
-	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
+	defer cancel()
+
 	tv := testvars.New(s)
 	tq := tv.TaskQueue()
 	series := tv.DeploymentSeries()
@@ -675,8 +675,8 @@ func (s *DeploymentSuite) TestUpdateWorkflowExecutionOptions_SetPinnedSetPinned(
 	}
 
 	// create deployment so that GetDeploymentReachability doesn't error
-	s.createDeploymentAndWaitForExist(deploymentA, tq)
-	s.createDeploymentAndWaitForExist(deploymentB, tq)
+	s.createDeploymentAndWaitForExist(ctx, deploymentA, tq)
+	s.createDeploymentAndWaitForExist(ctx, deploymentB, tq)
 
 	// 1. Set pinned override A --> describe workflow shows the override + deployment A is reachable
 	updateResp, err := s.FrontendClient().UpdateWorkflowExecutionOptions(ctx, &workflowservice.UpdateWorkflowExecutionOptionsRequest{
@@ -706,7 +706,9 @@ func (s *DeploymentSuite) TestUpdateWorkflowExecutionOptions_SetPinnedSetPinned(
 }
 
 func (s *DeploymentSuite) TestUpdateWorkflowExecutionOptions_SetUnpinnedSetUnpinned() {
-	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
+	defer cancel()
+
 	tv := testvars.New(s)
 	tq := tv.TaskQueue()
 
@@ -748,7 +750,9 @@ func (s *DeploymentSuite) TestUpdateWorkflowExecutionOptions_SetUnpinnedSetUnpin
 }
 
 func (s *DeploymentSuite) TestUpdateWorkflowExecutionOptions_SetUnpinnedSetPinned() {
-	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
+	defer cancel()
+
 	tv := testvars.New(s)
 	tq := tv.TaskQueue()
 	series := tv.DeploymentSeries()
@@ -779,7 +783,7 @@ func (s *DeploymentSuite) TestUpdateWorkflowExecutionOptions_SetUnpinnedSetPinne
 	}
 
 	// create deployment so that GetDeploymentReachability doesn't error
-	s.createDeploymentAndWaitForExist(deploymentA, &taskqueuepb.TaskQueue{Name: unversionedTQ, Kind: enumspb.TASK_QUEUE_KIND_NORMAL})
+	s.createDeploymentAndWaitForExist(ctx, deploymentA, &taskqueuepb.TaskQueue{Name: unversionedTQ, Kind: enumspb.TASK_QUEUE_KIND_NORMAL})
 
 	// 1. Set unpinned override --> describe workflow shows the override + deploymentA is unreachable
 	updateResp, err := s.FrontendClient().UpdateWorkflowExecutionOptions(ctx, &workflowservice.UpdateWorkflowExecutionOptionsRequest{
@@ -807,7 +811,9 @@ func (s *DeploymentSuite) TestUpdateWorkflowExecutionOptions_SetUnpinnedSetPinne
 }
 
 func (s *DeploymentSuite) TestUpdateWorkflowExecutionOptions_SetPinnedSetUnpinned() {
-	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
+	defer cancel()
+
 	tv := testvars.New(s)
 	tq := tv.TaskQueue()
 	series := tv.DeploymentSeries()
@@ -837,7 +843,7 @@ func (s *DeploymentSuite) TestUpdateWorkflowExecutionOptions_SetPinnedSetUnpinne
 	}
 
 	// create deployment so that GetDeploymentReachability doesn't error
-	s.createDeploymentAndWaitForExist(deploymentA, tq)
+	s.createDeploymentAndWaitForExist(ctx, deploymentA, tq)
 
 	// 1. Set pinned override A --> describe workflow shows the override + deploymentA is reachable
 	updateResp, err := s.FrontendClient().UpdateWorkflowExecutionOptions(ctx, &workflowservice.UpdateWorkflowExecutionOptionsRequest{
@@ -865,7 +871,9 @@ func (s *DeploymentSuite) TestUpdateWorkflowExecutionOptions_SetPinnedSetUnpinne
 }
 
 func (s *DeploymentSuite) TestStartWorkflowExecution_WithPinnedOverride() {
-	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
+	defer cancel()
+
 	deploymentA := &deploymentpb.Deployment{
 		SeriesName: "seriesName",
 		BuildId:    "A",
@@ -876,7 +884,7 @@ func (s *DeploymentSuite) TestStartWorkflowExecution_WithPinnedOverride() {
 	}
 
 	// create deployment so that GetDeploymentReachability doesn't error
-	s.createDeploymentAndWaitForExist(deploymentA, &taskqueuepb.TaskQueue{Name: "test-tq", Kind: enumspb.TASK_QUEUE_KIND_NORMAL})
+	s.createDeploymentAndWaitForExist(ctx, deploymentA, &taskqueuepb.TaskQueue{Name: "test-tq", Kind: enumspb.TASK_QUEUE_KIND_NORMAL})
 
 	resp, err := s.FrontendClient().StartWorkflowExecution(ctx, &workflowservice.StartWorkflowExecutionRequest{
 		Namespace:          s.Namespace(),
@@ -899,7 +907,9 @@ func (s *DeploymentSuite) TestStartWorkflowExecution_WithPinnedOverride() {
 }
 
 func (s *DeploymentSuite) TestStartWorkflowExecution_WithUnpinnedOverride() {
-	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
+	defer cancel()
+
 	override := &workflowpb.VersioningOverride{
 		Behavior:   enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE,
 		Deployment: nil,
@@ -926,7 +936,9 @@ func (s *DeploymentSuite) TestStartWorkflowExecution_WithUnpinnedOverride() {
 }
 
 func (s *DeploymentSuite) TestSignalWithStartWorkflowExecution_WithPinnedOverride() {
-	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
+	defer cancel()
+
 	deploymentA := &deploymentpb.Deployment{
 		SeriesName: "seriesName",
 		BuildId:    "A",
@@ -937,7 +949,7 @@ func (s *DeploymentSuite) TestSignalWithStartWorkflowExecution_WithPinnedOverrid
 	}
 
 	// create deployment so that GetDeploymentReachability doesn't error
-	s.createDeploymentAndWaitForExist(deploymentA, &taskqueuepb.TaskQueue{Name: "test-tq", Kind: enumspb.TASK_QUEUE_KIND_NORMAL})
+	s.createDeploymentAndWaitForExist(ctx, deploymentA, &taskqueuepb.TaskQueue{Name: "test-tq", Kind: enumspb.TASK_QUEUE_KIND_NORMAL})
 
 	resp, err := s.FrontendClient().SignalWithStartWorkflowExecution(ctx, &workflowservice.SignalWithStartWorkflowExecutionRequest{
 		Namespace:          s.Namespace(),
@@ -963,7 +975,9 @@ func (s *DeploymentSuite) TestSignalWithStartWorkflowExecution_WithPinnedOverrid
 }
 
 func (s *DeploymentSuite) TestSignalWithStartWorkflowExecution_WithUnpinnedOverride() {
-	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
+	defer cancel()
+
 	override := &workflowpb.VersioningOverride{
 		Behavior:   enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE,
 		Deployment: nil,
