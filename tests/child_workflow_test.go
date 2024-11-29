@@ -25,15 +25,18 @@
 package tests
 
 import (
+	"context"
 	"fmt"
 	"sort"
 	"testing"
 	"time"
 
 	"github.com/pborman/uuid"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/suite"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
+	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
 	filterpb "go.temporal.io/api/filter/v1"
@@ -45,6 +48,7 @@ import (
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/tests/testcore"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -59,6 +63,39 @@ func TestChildWorkflowSuite(t *testing.T) {
 }
 
 func (s *ChildWorkflowSuite) TestChildWorkflowExecution() {
+	s.testChildWorkflowExecution(nil)
+}
+
+func (s *ChildWorkflowSuite) TestChildWorkflowExecution_WithVersioningOverride() {
+	deploymentA := &deploymentpb.Deployment{
+		SeriesName: "seriesName",
+		BuildId:    "A",
+	}
+	override := &workflowpb.VersioningOverride{
+		Behavior:   enumspb.VERSIONING_BEHAVIOR_PINNED,
+		Deployment: deploymentA,
+	}
+	s.testChildWorkflowExecution(override)
+}
+
+func (s *ChildWorkflowSuite) checkDescribeWorkflowAfterOverride(
+	wf *commonpb.WorkflowExecution,
+	expectedOverride *workflowpb.VersioningOverride,
+) {
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		a := assert.New(t)
+		resp, err := s.FrontendClient().DescribeWorkflowExecution(context.Background(), &workflowservice.DescribeWorkflowExecutionRequest{
+			Namespace: s.Namespace(),
+			Execution: wf,
+		})
+		a.NoError(err)
+		a.NotNil(resp)
+		a.NotNil(resp.GetWorkflowExecutionInfo())
+		a.True(proto.Equal(expectedOverride, resp.GetWorkflowExecutionInfo().GetVersioningInfo().GetVersioningOverride()))
+	}, 5*time.Second, 50*time.Millisecond)
+}
+
+func (s *ChildWorkflowSuite) testChildWorkflowExecution(override *workflowpb.VersioningOverride) {
 	parentID := "functional-child-workflow-test-parent"
 	childID := "functional-child-workflow-test-child"
 	grandchildID := "functional-child-workflow-test-grandchild"
@@ -96,6 +133,7 @@ func (s *ChildWorkflowSuite) TestChildWorkflowExecution() {
 		WorkflowRunTimeout:  durationpb.New(100 * time.Second),
 		WorkflowTaskTimeout: durationpb.New(1 * time.Second),
 		Identity:            identity,
+		VersioningOverride:  override,
 	}
 
 	we, err0 := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
@@ -332,6 +370,9 @@ func (s *ChildWorkflowSuite) TestChildWorkflowExecution() {
 	)
 	s.Equal(time.Duration(0), childStartedEventAttrs.GetWorkflowExecutionTimeout().AsDuration())
 	s.Equal(200*time.Second, childStartedEventAttrs.GetWorkflowRunTimeout().AsDuration())
+	// check versioning override was inherited
+	s.ProtoEqual(override, childStartedEventAttrs.GetVersioningOverride())
+	s.checkDescribeWorkflowAfterOverride(&commonpb.WorkflowExecution{WorkflowId: childID, RunId: childRunID}, override)
 
 	// Process GrandchildExecution Started event and Process Grandchild Execution and complete it
 	_, err = pollerChild.PollAndProcessWorkflowTask()
@@ -354,6 +395,8 @@ func (s *ChildWorkflowSuite) TestChildWorkflowExecution() {
 	s.NotNil(grandchildStartedEventAttrs.GetRootWorkflowExecution())
 	s.Equal(parentID, grandchildStartedEventAttrs.RootWorkflowExecution.GetWorkflowId())
 	s.Equal(we.GetRunId(), grandchildStartedEventAttrs.RootWorkflowExecution.GetRunId())
+	// check versioning override was inherited
+	s.ProtoEqual(override, grandchildStartedEventAttrs.GetVersioningOverride())
 
 	// Process GrandchildExecution completed event and complete child execution
 	_, err = pollerChild.PollAndProcessWorkflowTask()

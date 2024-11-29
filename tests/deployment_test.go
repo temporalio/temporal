@@ -1021,7 +1021,8 @@ func (s *DeploymentSuite) waitForChan(ctx context.Context, ch chan struct{}) {
 	}
 }
 
-func (s *DeploymentSuite) TestUpdateWorkflowExecutionOptions_ChildWorkflow() {
+func (s *DeploymentSuite) TestUpdateWorkflowExecutionOptions_ChildWorkflowWithSDK() {
+	s.T().Skip("needs new sdk with deployment pollers to work")
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	deploymentA := &deploymentpb.Deployment{
@@ -1051,29 +1052,29 @@ func (s *DeploymentSuite) TestUpdateWorkflowExecutionOptions_ChildWorkflow() {
 		parentStarted <- struct{}{}
 		// after the test receives "parentStarted", we set the pinned override, and this workflow will
 		// make no more progress by itself, since we have no sdk workers that can handle this
-		//// wait for signal
-		//workflow.GetSignalChannel(ctx, "wait").Receive(ctx, nil)
-		//
-		//// check that parent's override is set
-		//parentWE := workflow.GetInfo(ctx).WorkflowExecution
-		//s.checkDescribeWorkflowAfterOverride(
-		//	context.Background(),
-		//	&commonpb.WorkflowExecution{WorkflowId: parentWE.ID, RunId: parentWE.RunID},
-		//	override)
-		//
-		//// run child workflow
-		//fut := workflow.ExecuteChildWorkflow(workflow.WithChildOptions(ctx, workflow.ChildWorkflowOptions{
-		//	TaskQueue: tqName,
-		//}), "child")
-		//
-		//// check that child's override is set
-		//var childWE workflow.Execution
-		//s.NoError(fut.GetChildWorkflowExecution().Get(ctx, &childWE))
-		//s.checkDescribeWorkflowAfterOverride(
-		//	context.Background(),
-		//	&commonpb.WorkflowExecution{WorkflowId: childWE.ID, RunId: childWE.RunID},
-		//	override)
-		//childOverrideValidated <- struct{}{}
+		// wait for signal
+		workflow.GetSignalChannel(ctx, "wait").Receive(ctx, nil)
+
+		// check that parent's override is set
+		parentWE := workflow.GetInfo(ctx).WorkflowExecution
+		s.checkDescribeWorkflowAfterOverride(
+			context.Background(),
+			&commonpb.WorkflowExecution{WorkflowId: parentWE.ID, RunId: parentWE.RunID},
+			override)
+
+		// run child workflow
+		fut := workflow.ExecuteChildWorkflow(workflow.WithChildOptions(ctx, workflow.ChildWorkflowOptions{
+			TaskQueue: tqName,
+		}), "child")
+
+		// check that child's override is set
+		var childWE workflow.Execution
+		s.NoError(fut.GetChildWorkflowExecution().Get(ctx, &childWE))
+		s.checkDescribeWorkflowAfterOverride(
+			context.Background(),
+			&commonpb.WorkflowExecution{WorkflowId: childWE.ID, RunId: childWE.RunID},
+			override)
+		childOverrideValidated <- struct{}{}
 		return nil
 	}
 
