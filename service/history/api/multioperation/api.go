@@ -131,15 +131,26 @@ func Invoke(
 
 	// For workflow id conflict policy terminate-existing, always attempt a start
 	// since that works when the workflow is already running *and* when it's not running.
-	if startReq.StartRequest.WorkflowIdConflictPolicy == enumspb.WORKFLOW_ID_CONFLICT_POLICY_TERMINATE_EXISTING {
-		if resp, outcome, err := startAndUpdateWorkflow(
-			ctx, shardContext, workflowConsistencyChecker, starter, updater,
-		); err != nil {
+	conflictPolicy := startReq.StartRequest.WorkflowIdConflictPolicy
+	if conflictPolicy == enumspb.WORKFLOW_ID_CONFLICT_POLICY_TERMINATE_EXISTING {
+		resp, startOutcome, err := startAndUpdateWorkflow(ctx, starter, updater)
+		if err != nil {
 			return nil, err
-		} else if outcome != startworkflow.StartDeduped {
-			return resp, nil
 		}
-		// if the start was deduped, we fall through to the update
+
+		switch startOutcome {
+		case startworkflow.NoStart:
+			// An error would have been returned above in this case.
+			panic("unreachable")
+		case startworkflow.StartReused:
+			// Not possible as the conflict policy was not Use-Existing.
+			panic("unreachable")
+		case startworkflow.StartNew:
+			// The old workflow was terminated, the new workflow was started and has received the update.
+			return resp, nil
+		case startworkflow.StartDeduped:
+			// The start request was deduped, fall through and only send the update.
+		}
 	}
 
 	currentWorkflowLease, err := workflowConsistencyChecker.GetWorkflowLease(
@@ -157,7 +168,7 @@ func Invoke(
 
 	// workflow was already started, ...
 	if currentWorkflowLease != nil {
-		switch startReq.StartRequest.WorkflowIdConflictPolicy {
+		switch conflictPolicy {
 		case enumspb.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING:
 			// ... skip the start and only send the update
 			// NOTE: currentWorkflowLease will be released by the function
@@ -191,13 +202,19 @@ func Invoke(
 	}
 
 	// workflow hasn't been started yet: start and then apply update
-	resp, _, err := startAndUpdateWorkflow(
-		ctx,
-		shardContext,
-		workflowConsistencyChecker,
-		starter,
-		updater,
-	)
+	resp, outcome, err := startAndUpdateWorkflow(ctx, starter, updater)
+	if err == nil && outcome != startworkflow.StartNew {
+		// The workflow was meant to be started - but was actually *not* started.
+		// The problem is that the update has not been applied.
+		//
+		// This can happen when there's a race: another workflow start occurred right after the check for a
+		// running workflow above - but before the new workflow could be created (and locked).
+		// TODO: Consider a refactoring of the startworkflow.Starter to make this case impossible.
+		//
+		// The best way forward is to exit and retry from the top.
+		// By returning an Unavailable service error, the entire MultiOperation will be retried.
+		return nil, newMultiOpError(serviceerror.NewUnavailable("Workflow could not be started as it is already running"), multiOpAbortedErr)
+	}
 	return resp, err
 }
 
@@ -254,8 +271,6 @@ func updateWorkflow(
 
 func startAndUpdateWorkflow(
 	ctx context.Context,
-	shardContext shard.Context,
-	workflowConsistencyChecker api.WorkflowConsistencyChecker,
 	starter *startworkflow.Starter,
 	updater *updateworkflow.Updater,
 ) (*historyservice.ExecuteMultiOperationResponse, startworkflow.StartOutcome, error) {
@@ -272,17 +287,13 @@ func startAndUpdateWorkflow(
 
 	switch startOutcome {
 	case startworkflow.NoStart:
+		// An error would have been returned above in this case.
 		panic("unreachable")
 	case startworkflow.StartNew:
-	case startworkflow.StartReused:
-		// The workflow was meant to be *started* - but was actually *not* started since it's already running.
-		// The best way forward is to exit and retry from the top.
-		// By returning an Unavailable service error, the entire MultiOperation will be retried.
-		return nil, startOutcome, newMultiOpError(
-			serviceerror.NewUnavailable("Workflow could not be started as it is already running"), multiOpAbortedErr)
-	case startworkflow.StartDeduped:
-		// Since the start request was deduped, the update was not applied to the *current* workflow execution.
-		// Returning here to allow the caller to apply the update to the current workflow execution.
+		// The workflow was started, as expected.
+	case startworkflow.StartDeduped, startworkflow.StartReused:
+		// The workflow was not started.
+		// Aborting since the update has not been applied.
 		return nil, startOutcome, nil
 	}
 
