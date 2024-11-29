@@ -205,7 +205,7 @@ func (s *DeploymentSuite) TestGetCurrentDeployment_NoCurrentDeployment() {
 	}
 
 	workflowID := deploymentwf.GenerateDeploymentSeriesWorkflowID(seriesName)
-	query := fmt.Sprintf("WorkflowId = '%s'", workflowID)
+	query := fmt.Sprintf("WorkflowId = '%s' AND TemporalNamespaceDivision IS NOT NULL", workflowID)
 	notFoundErr := fmt.Sprintf("workflow not found for ID: %s", workflowID)
 
 	// GetCurrentDeployment on a non-existing series returns an error
