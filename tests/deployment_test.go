@@ -1005,6 +1005,7 @@ func (s *DeploymentSuite) TestSetCurrent_BeforeRegister() {
 		BuildId:    tv.BuildId("2"),
 	}
 
+	// set to 1
 	res, err := s.FrontendClient().SetCurrentDeployment(ctx, &workflowservice.SetCurrentDeploymentRequest{
 		Namespace:  s.Namespace(),
 		Deployment: dep1,
@@ -1015,6 +1016,40 @@ func (s *DeploymentSuite) TestSetCurrent_BeforeRegister() {
 	s.NotNil(res.CurrentDeploymentInfo)
 	s.Equal(dep1.BuildId, res.CurrentDeploymentInfo.Deployment.BuildId)
 
+	// describe 1 should say it's current (no delay)
+	desc, err := s.FrontendClient().DescribeDeployment(ctx, &workflowservice.DescribeDeploymentRequest{
+		Namespace:  s.Namespace(),
+		Deployment: dep1,
+	})
+	s.NoError(err)
+	s.True(desc.DeploymentInfo.IsCurrent)
+
+	// get current should return 1 (no delay)
+	cur, err := s.FrontendClient().GetCurrentDeployment(ctx, &workflowservice.GetCurrentDeploymentRequest{
+		Namespace:  s.Namespace(),
+		SeriesName: tv.DeploymentSeries(),
+	})
+	s.NoError(err)
+	s.Equal(dep1.BuildId, cur.CurrentDeploymentInfo.Deployment.BuildId)
+
+	// list should say it's current (with some delay)
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		list, err := s.FrontendClient().ListDeployments(ctx, &workflowservice.ListDeploymentsRequest{
+			Namespace: s.Namespace(),
+		})
+		require.NoError(t, err)
+		found, isCurrent1 := 0, false
+		for _, d := range list.GetDeployments() {
+			if d.Deployment.BuildId == dep1.BuildId {
+				found++
+				isCurrent1 = d.IsCurrent
+			}
+		}
+		require.Equal(t, 1, found)
+		require.True(t, isCurrent1)
+	}, time.Second*5, time.Millisecond*200)
+
+	// now set to 2
 	res, err = s.FrontendClient().SetCurrentDeployment(ctx, &workflowservice.SetCurrentDeploymentRequest{
 		Namespace:  s.Namespace(),
 		Deployment: dep2,
@@ -1025,6 +1060,51 @@ func (s *DeploymentSuite) TestSetCurrent_BeforeRegister() {
 	s.Equal(dep1.BuildId, res.PreviousDeploymentInfo.Deployment.BuildId)
 	s.NotNil(res.CurrentDeploymentInfo)
 	s.Equal(dep2.BuildId, res.CurrentDeploymentInfo.Deployment.BuildId)
+
+	// describe 1 should say it's not current (no delay)
+	desc, err = s.FrontendClient().DescribeDeployment(ctx, &workflowservice.DescribeDeploymentRequest{
+		Namespace:  s.Namespace(),
+		Deployment: dep1,
+	})
+	s.NoError(err)
+	s.False(desc.DeploymentInfo.IsCurrent)
+
+	// describe 2 should say it's not current (no delay)
+	desc, err = s.FrontendClient().DescribeDeployment(ctx, &workflowservice.DescribeDeploymentRequest{
+		Namespace:  s.Namespace(),
+		Deployment: dep2,
+	})
+	s.NoError(err)
+	s.True(desc.DeploymentInfo.IsCurrent)
+
+	// get current should return 2 (no delay)
+	cur, err = s.FrontendClient().GetCurrentDeployment(ctx, &workflowservice.GetCurrentDeploymentRequest{
+		Namespace:  s.Namespace(),
+		SeriesName: tv.DeploymentSeries(),
+	})
+	s.NoError(err)
+	s.Equal(dep2.BuildId, cur.CurrentDeploymentInfo.Deployment.BuildId)
+
+	// list should say 2 is current and 1 is not current (with some delay)
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		list, err := s.FrontendClient().ListDeployments(ctx, &workflowservice.ListDeploymentsRequest{
+			Namespace: s.Namespace(),
+		})
+		require.NoError(t, err)
+		found, isCurrent1, isCurrent2 := 0, false, false
+		for _, d := range list.GetDeployments() {
+			if d.Deployment.BuildId == dep1.BuildId {
+				found++
+				isCurrent1 = d.IsCurrent
+			} else if d.Deployment.BuildId == dep2.BuildId {
+				found++
+				isCurrent2 = d.IsCurrent
+			}
+		}
+		require.Equal(t, 2, found)
+		require.False(t, isCurrent1)
+		require.True(t, isCurrent2)
+	}, time.Second*5, time.Millisecond*200)
 }
 
 // Name is used by testvars. We use a shorten test name in variables so that physical task queue IDs
