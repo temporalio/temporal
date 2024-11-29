@@ -86,6 +86,7 @@ func TestVersioningFunctionalSuite(t *testing.T) {
 
 func (s *VersioningIntegSuite) SetupSuite() {
 	dynamicConfigOverrides := map[dynamicconfig.Key]any{
+		dynamicconfig.FrontendEnableDeployments.Key():                  true,
 		dynamicconfig.FrontendEnableWorkerVersioningDataAPIs.Key():     true,
 		dynamicconfig.FrontendEnableWorkerVersioningWorkflowAPIs.Key(): true,
 		dynamicconfig.FrontendEnableWorkerVersioningRuleAPIs.Key():     true,

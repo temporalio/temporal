@@ -87,8 +87,6 @@ func (s *DeploymentSuite) SetupSuite() {
 		dynamicconfig.FrontendEnableWorkerVersioningWorkflowAPIs.Key(): true,
 		dynamicconfig.FrontendEnableWorkerVersioningRuleAPIs.Key():     true,
 		dynamicconfig.FrontendEnableExecuteMultiOperation.Key():        true,
-		dynamicconfig.MatchingEnableDeployments.Key():                  true,
-		dynamicconfig.WorkerEnableDeployment.Key():                     true,
 
 		// Reachability
 		dynamicconfig.ReachabilityCacheOpenWFsTTL.Key():   testReachabilityCacheOpenWFsTTL,
@@ -1122,5 +1120,5 @@ func (s *DeploymentSuite) TestSignalWithStartWorkflowExecution_WithUnpinnedOverr
 // do not grow larger that DB column limit (currently as low as 272 chars).
 func (s *DeploymentSuite) Name() string {
 	fullName := s.T().Name()
-	return fullName[len(fullName)-20:]
+	return fullName[len(fullName)-30:]
 }

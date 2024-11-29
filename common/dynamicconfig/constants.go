@@ -1220,11 +1220,6 @@ these log lines can be noisy, we want to be able to turn on and sample selective
 		false,
 		`MatchingDropNonRetryableTasks states if we should drop matching tasks with Internal/Dataloss errors`,
 	)
-	MatchingEnableDeployments = NewNamespaceBoolSetting(
-		"matching.enableDeployment",
-		false,
-		`MatchingEnableDeployments enables deployment-related RPCs in matching`,
-	)
 	MatchingMaxTaskQueuesInDeployment = NewNamespaceIntSetting(
 		"matching.maxTaskQueuesInDeployment",
 		1000,
@@ -2559,11 +2554,6 @@ If the service configures with archival feature enabled, update worker.historySc
 		1*time.Second,
 		`How long to sleep within a local activity before pushing to workflow level sleep (don't make this
 close to or more than the workflow task timeout)`,
-	)
-	WorkerEnableDeployment = NewNamespaceBoolSetting(
-		"worker.enableDeployment",
-		false,
-		`WorkerEnableDeploymentGroup controls whether to start the worker for deployment and deployment-name workflows`,
 	)
 	WorkerDeleteNamespaceActivityLimits = NewGlobalTypedSetting(
 		"worker.deleteNamespaceActivityLimitsConfig",

@@ -243,8 +243,7 @@ message RecordWorkflowTaskStartedRequest {
     temporal.api.workflowservice.v1.PollWorkflowTaskQueueRequest poll_request = 6;
     temporal.server.api.clock.v1.VectorClock clock = 7;
     temporal.server.api.taskqueue.v1.BuildIdRedirectInfo build_id_redirect_info = 8;
-    // Presence of this value means matching has redirected the task to a deployment other than
-    // the deployment that History passed when scheduling the task.
+    // The deployment passed by History when the task was scheduled.
     temporal.api.deployment.v1.Deployment scheduled_deployment = 9;
 
 }
@@ -286,13 +285,12 @@ message RecordActivityTaskStartedRequest {
 
     // Stamp represents the internal “version” of the activity options and can/will be changed with Activity API.
     int32 stamp = 9;
-    // Presence of this value means matching has redirected the task to a deployment other than
-    // the deployment that History passed when scheduling the task.
+    // The deployment passed by History when the task was scheduled.
     temporal.api.deployment.v1.Deployment scheduled_deployment = 10;
-    // Whether the directive deployment contains the activity's task queue. Used by History to
+    // Whether the scheduled deployment contains the activity's task queue. Used by History to
     // determine if the activity redirect should affect the workflow.
-    // Only set if `directive_deployment` is set (i.e. the task is redirected).
-    bool directive_deployment_contains_task_queue = 11;
+    // Only set if `scheduled_deployment` is set (i.e. the task is redirected).
+    bool scheduled_deployment_contains_task_queue = 11;
 }
 
 message RecordActivityTaskStartedResponse {

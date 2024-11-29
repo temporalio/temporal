@@ -184,7 +184,7 @@ func (s *FunctionalTestBase) SetupSuite(defaultClusterConfigFile string, options
 	s.operatorClient = s.testCluster.OperatorClient()
 	s.httpAPIAddress = cluster.Host().FrontendHTTPAddress()
 
-	s.namespace = RandomizeStr("functional-test-namespace")
+	s.namespace = "functional-test-namespace"
 	s.Require().NoError(s.registerNamespaceWithDefaults(s.namespace))
 
 	s.foreignNamespace = RandomizeStr("functional-foreign-test-namespace")
