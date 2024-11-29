@@ -126,7 +126,7 @@ func (d *DeploymentWorkflowRunner) run(ctx workflow.Context) error {
 	if !d.State.StartedSeriesWorkflow {
 		activityCtx := workflow.WithActivityOptions(ctx, defaultActivityOptions)
 		err := workflow.ExecuteActivity(activityCtx, d.a.StartDeploymentSeriesWorkflow, &deploymentspb.StartDeploymentSeriesRequest{
-			SeriesName: d.State.WorkerDeployment.SeriesName,
+			SeriesName: d.State.Deployment.SeriesName,
 			RequestId:  d.newUUID(ctx),
 		}).Get(ctx, nil)
 		if err != nil {
@@ -201,7 +201,7 @@ func (d *DeploymentWorkflowRunner) handleRegisterWorker(ctx workflow.Context, ar
 	// sync to user data
 	activityCtx := workflow.WithActivityOptions(ctx, defaultActivityOptions)
 	err = workflow.ExecuteActivity(activityCtx, d.a.SyncUserData, &deploymentspb.SyncUserDataRequest{
-		Deployment: d.State.WorkerDeployment,
+		Deployment: d.State.Deployment,
 		Sync: []*deploymentspb.SyncUserDataRequest_SyncUserData{
 			&deploymentspb.SyncUserDataRequest_SyncUserData{
 				Name: args.TaskQueueName,
@@ -283,7 +283,7 @@ func (d *DeploymentWorkflowRunner) handleSyncState(ctx workflow.Context, args *d
 
 		// sync to task queues
 		syncReq := &deploymentspb.SyncUserDataRequest{
-			Deployment: d.State.WorkerDeployment,
+			Deployment: d.State.Deployment,
 		}
 		for tqName, byType := range d.State.TaskQueueFamilies {
 			for tqType, data := range byType.TaskQueues {
@@ -331,7 +331,7 @@ func (d *DeploymentWorkflowRunner) handleDescribeQuery() (*deploymentspb.QueryDe
 func (d *DeploymentWorkflowRunner) updateMemo(ctx workflow.Context) {
 	workflow.UpsertMemo(ctx, map[string]any{
 		DeploymentMemoField: &deploymentspb.DeploymentWorkflowMemo{
-			Deployment:          d.State.WorkerDeployment,
+			Deployment:          d.State.Deployment,
 			CreateTime:          d.State.CreateTime,
 			IsCurrentDeployment: d.State.IsCurrent,
 		},

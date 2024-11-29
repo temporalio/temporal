@@ -44,7 +44,6 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/payload"
-	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/sdk"
@@ -210,7 +209,7 @@ func (d *DeploymentClientImpl) DescribeDeployment(ctx context.Context, namespace
 	}
 
 	var queryResponse deploymentspb.QueryDescribeDeploymentResponse
-	err = payloads.Decode(res.GetResponse().GetQueryResult(), &queryResponse)
+	err = sdk.PreferProtoDataConverter.FromPayloads(res.GetResponse().GetQueryResult(), &queryResponse)
 	if err != nil {
 		return nil, err
 	}
@@ -352,6 +351,9 @@ func (d *DeploymentClientImpl) SetCurrentDeployment(
 		UpdateMetadata: updateMetadata,
 		RequestId:      requestID,
 	})
+	if err != nil {
+		return nil, nil, err
+	}
 	outcome, err := d.updateWithStartDeploymentSeries(
 		ctx,
 		namespaceEntry,
@@ -381,7 +383,7 @@ func (d *DeploymentClientImpl) SetCurrentDeployment(
 	}
 
 	var res deploymentspb.SetCurrentDeploymentResponse
-	if err := payloads.Decode(success, &res); err != nil {
+	if err := sdk.PreferProtoDataConverter.FromPayloads(success, &res); err != nil {
 		return nil, nil, err
 	}
 	return stateToInfo(res.CurrentDeploymentState), stateToInfo(res.PreviousDeploymentState), nil
@@ -441,6 +443,9 @@ func (d *DeploymentClientImpl) SyncDeploymentWorkflowFromSeries(
 	requestID string,
 ) (*deploymentspb.SyncDeploymentStateResponse, error) {
 	updatePayload, err := sdk.PreferProtoDataConverter.ToPayloads(args)
+	if err != nil {
+		return nil, err
+	}
 	outcome, err := d.updateWithStartDeployment(
 		ctx,
 		namespaceEntry,
@@ -504,8 +509,8 @@ func (d *DeploymentClientImpl) updateWithStartDeployment(
 		NamespaceName: namespaceEntry.Name().String(),
 		NamespaceId:   namespaceEntry.ID().String(),
 		State: &deploymentspb.DeploymentLocalState{
-			WorkerDeployment: deployment,
-			CreateTime:       timestamppb.Now(),
+			Deployment: deployment,
+			CreateTime: timestamppb.Now(),
 		},
 	})
 	if err != nil {
@@ -635,6 +640,8 @@ func (d *DeploymentClientImpl) updateWithStart(
 	var outcome *updatepb.Outcome
 
 	err := backoff.ThrottleRetryContext(ctx, func(ctx context.Context) error {
+		// historyClient retries internally on retryable rpc errors, we just have to retry on
+		// successful but un-completed responses.
 		res, err := d.historyClient.ExecuteMultiOperation(ctx, multiOpReq)
 		if err != nil {
 			return err
@@ -724,7 +731,7 @@ func stateToInfo(state *deploymentspb.DeploymentLocalState) *deploymentpb.Deploy
 	}
 
 	return &deploymentpb.DeploymentInfo{
-		Deployment:     state.WorkerDeployment,
+		Deployment:     state.Deployment,
 		CreateTime:     state.CreateTime,
 		TaskQueueInfos: taskQueues,
 		Metadata:       state.Metadata,

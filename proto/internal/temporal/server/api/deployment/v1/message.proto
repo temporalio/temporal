@@ -39,7 +39,7 @@ message TaskQueueData {
 }
 
 message DeploymentLocalState {
-    temporal.api.deployment.v1.Deployment worker_deployment = 1;
+    temporal.api.deployment.v1.Deployment deployment = 1;
     map<string, TaskQueueFamilyData> task_queue_families = 2;
 
     bool is_current = 3;
