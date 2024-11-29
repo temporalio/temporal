@@ -46,6 +46,7 @@ import (
 	sdkclient "go.temporal.io/sdk/client"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/testing/testvars"
 	deploymentwf "go.temporal.io/server/service/worker/deployment"
 	"go.temporal.io/server/tests/testcore"
@@ -129,9 +130,7 @@ func (s *DeploymentSuite) TearDownTest() {
 // pollFromDeployment calls PollWorkflowTaskQueue to start deployment related workflows
 func (s *DeploymentSuite) pollFromDeployment(ctx context.Context, taskQueue *taskqueuepb.TaskQueue,
 	deployment *deploymentpb.Deployment) {
-	a := s.Assertions
-
-	_, err := s.FrontendClient().PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
+	_, _ = s.FrontendClient().PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
 		Namespace: s.Namespace(),
 		TaskQueue: taskQueue,
 		Identity:  "random",
@@ -141,10 +140,6 @@ func (s *DeploymentSuite) pollFromDeployment(ctx context.Context, taskQueue *tas
 			DeploymentSeriesName: deployment.SeriesName,
 		},
 	})
-	if !errors.Is(err, context.Canceled) {
-		// ctx canceled error is expected in most test cases
-		a.Error(err)
-	}
 }
 
 func (s *DeploymentSuite) TestDescribeDeployment_RegisterTaskQueue() {
@@ -164,9 +159,7 @@ func (s *DeploymentSuite) TestDescribeDeployment_RegisterTaskQueue() {
 	numberOfDeployments := 1
 
 	// Starting a deployment workflow
-	go func() {
-		s.pollFromDeployment(ctx, taskQueue, workerDeployment)
-	}()
+	go s.pollFromDeployment(ctx, taskQueue, workerDeployment)
 
 	// Querying the Deployment
 	s.EventuallyWithT(func(t *assert.CollectT) {
@@ -206,7 +199,7 @@ func (s *DeploymentSuite) TestGetCurrentDeployment_NoCurrentDeployment() {
 	}
 
 	workflowID := deploymentwf.GenerateDeploymentSeriesWorkflowID(seriesName)
-	query := fmt.Sprintf("WorkflowId = '%s'", workflowID)
+	query := fmt.Sprintf("WorkflowId = '%s' AND TemporalNamespaceDivision IS NOT NULL", workflowID)
 	notFoundErr := fmt.Sprintf("workflow not found for ID: %s", workflowID)
 
 	// GetCurrentDeployment on a non-existing series returns an error
@@ -219,9 +212,7 @@ func (s *DeploymentSuite) TestGetCurrentDeployment_NoCurrentDeployment() {
 	s.Nil(resp)
 
 	// Starting a deployment workflow
-	go func() {
-		s.pollFromDeployment(ctx, taskQueue, workerDeployment)
-	}()
+	go s.pollFromDeployment(ctx, taskQueue, workerDeployment)
 
 	// Verify the existence of a deployment series
 	s.EventuallyWithT(func(t *assert.CollectT) {
@@ -311,9 +302,7 @@ func (s *DeploymentSuite) startDeploymentsAndValidateList(deploymentInfo []*depl
 
 	// Start deployment workflow(s)
 	for _, listInfo := range deploymentInfo {
-		go func() {
-			s.pollFromDeployment(ctx, taskQueue, listInfo.Deployment)
-		}()
+		go s.pollFromDeployment(ctx, taskQueue, listInfo.Deployment)
 	}
 
 	var expectedDeployments []*deploymentpb.DeploymentListInfo
@@ -380,7 +369,8 @@ func (s *DeploymentSuite) TestListDeployments_MultipleDeployments_WithSeriesFilt
 // TODO Shivam - Add more getCurrentDeployment tests when SetCurrentDefaultBuildID API has been defined
 
 func (s *DeploymentSuite) TestGetDeploymentReachability_OverrideUnversioned() {
-	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
+	defer cancel()
 
 	// presence of internally used delimiters (:) or escape
 	// characters shouldn't break functionality
@@ -392,7 +382,7 @@ func (s *DeploymentSuite) TestGetDeploymentReachability_OverrideUnversioned() {
 		BuildId:    buildID,
 	}
 
-	s.createDeploymentAndWaitForExist(workerDeployment, taskQueue)
+	s.createDeploymentAndWaitForExist(ctx, workerDeployment, taskQueue)
 
 	// non-current deployment is unreachable
 	s.checkDeploymentReachability(ctx, workerDeployment, enumspb.DEPLOYMENT_REACHABILITY_UNREACHABLE)
@@ -434,7 +424,8 @@ func (s *DeploymentSuite) TestGetDeploymentReachability_OverrideUnversioned() {
 }
 
 func (s *DeploymentSuite) TestGetDeploymentReachability_NotFound() {
-	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
+	defer cancel()
 
 	// presence of internally used delimiters (:) or escape
 	// characters shouldn't break functionality
@@ -488,15 +479,12 @@ func (s *DeploymentSuite) checkDeploymentReachability(
 }
 
 func (s *DeploymentSuite) createDeploymentAndWaitForExist(
+	ctx context.Context,
 	deployment *deploymentpb.Deployment,
 	tq *taskqueuepb.TaskQueue,
 ) {
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
-	defer cancel()
 	// Start a deployment workflow
-	go func() {
-		s.pollFromDeployment(ctx, tq, deployment)
-	}()
+	go s.pollFromDeployment(ctx, tq, deployment)
 
 	// Wait for the deployment to exist
 	s.EventuallyWithT(func(t *assert.CollectT) {
@@ -513,11 +501,12 @@ func (s *DeploymentSuite) createDeploymentAndWaitForExist(
 }
 
 func (s *DeploymentSuite) TestUpdateWorkflowExecutionOptions_SetUnpinnedThenUnset() {
-	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
+	defer cancel()
 
+	tv := testvars.New(s)
 	// start an unversioned workflow
-	unversionedTQ := "unversioned-test-tq"
-	run, err := s.sdkClient.ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{TaskQueue: unversionedTQ}, "wf")
+	run, err := s.sdkClient.ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{TaskQueue: tv.TaskQueue().Name}, "wf")
 	s.NoError(err)
 	unversionedWFExec := &commonpb.WorkflowExecution{
 		WorkflowId: run.GetID(),
@@ -554,7 +543,8 @@ func (s *DeploymentSuite) TestUpdateWorkflowExecutionOptions_SetUnpinnedThenUnse
 }
 
 func (s *DeploymentSuite) TestUpdateWorkflowExecutionOptions_SetPinnedThenUnset() {
-	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
+	defer cancel()
 
 	// presence of internally used delimiters (:) or escape
 	// characters shouldn't break functionality
@@ -582,7 +572,7 @@ func (s *DeploymentSuite) TestUpdateWorkflowExecutionOptions_SetPinnedThenUnset(
 	noOpts := &workflowpb.WorkflowExecutionOptions{}
 
 	// create deployment so that GetDeploymentReachability doesn't error
-	s.createDeploymentAndWaitForExist(workerDeployment, &taskqueuepb.TaskQueue{Name: unversionedTQ, Kind: enumspb.TASK_QUEUE_KIND_NORMAL})
+	s.createDeploymentAndWaitForExist(ctx, workerDeployment, &taskqueuepb.TaskQueue{Name: unversionedTQ, Kind: enumspb.TASK_QUEUE_KIND_NORMAL})
 
 	// 1. Set pinned override on our new unversioned workflow --> describe workflow shows the override + deployment is reachable
 	updateResp, err := s.FrontendClient().UpdateWorkflowExecutionOptions(ctx, &workflowservice.UpdateWorkflowExecutionOptionsRequest{
@@ -610,7 +600,8 @@ func (s *DeploymentSuite) TestUpdateWorkflowExecutionOptions_SetPinnedThenUnset(
 }
 
 func (s *DeploymentSuite) TestUpdateWorkflowExecutionOptions_EmptyFields() {
-	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
+	defer cancel()
 
 	// presence of internally used delimiters (:) or escape
 	// characters shouldn't break functionality
@@ -649,7 +640,9 @@ func (s *DeploymentSuite) TestUpdateWorkflowExecutionOptions_EmptyFields() {
 }
 
 func (s *DeploymentSuite) TestUpdateWorkflowExecutionOptions_SetPinnedSetPinned() {
-	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
+	defer cancel()
+
 	tv := testvars.New(s)
 	tq := tv.TaskQueue()
 	series := tv.DeploymentSeries()
@@ -683,8 +676,8 @@ func (s *DeploymentSuite) TestUpdateWorkflowExecutionOptions_SetPinnedSetPinned(
 	}
 
 	// create deployment so that GetDeploymentReachability doesn't error
-	s.createDeploymentAndWaitForExist(deploymentA, tq)
-	s.createDeploymentAndWaitForExist(deploymentB, tq)
+	s.createDeploymentAndWaitForExist(ctx, deploymentA, tq)
+	s.createDeploymentAndWaitForExist(ctx, deploymentB, tq)
 
 	// 1. Set pinned override A --> describe workflow shows the override + deployment A is reachable
 	updateResp, err := s.FrontendClient().UpdateWorkflowExecutionOptions(ctx, &workflowservice.UpdateWorkflowExecutionOptionsRequest{
@@ -714,7 +707,9 @@ func (s *DeploymentSuite) TestUpdateWorkflowExecutionOptions_SetPinnedSetPinned(
 }
 
 func (s *DeploymentSuite) TestUpdateWorkflowExecutionOptions_SetUnpinnedSetUnpinned() {
-	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
+	defer cancel()
+
 	tv := testvars.New(s)
 	tq := tv.TaskQueue()
 
@@ -756,7 +751,9 @@ func (s *DeploymentSuite) TestUpdateWorkflowExecutionOptions_SetUnpinnedSetUnpin
 }
 
 func (s *DeploymentSuite) TestUpdateWorkflowExecutionOptions_SetUnpinnedSetPinned() {
-	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
+	defer cancel()
+
 	tv := testvars.New(s)
 	tq := tv.TaskQueue()
 	series := tv.DeploymentSeries()
@@ -787,7 +784,7 @@ func (s *DeploymentSuite) TestUpdateWorkflowExecutionOptions_SetUnpinnedSetPinne
 	}
 
 	// create deployment so that GetDeploymentReachability doesn't error
-	s.createDeploymentAndWaitForExist(deploymentA, &taskqueuepb.TaskQueue{Name: unversionedTQ, Kind: enumspb.TASK_QUEUE_KIND_NORMAL})
+	s.createDeploymentAndWaitForExist(ctx, deploymentA, &taskqueuepb.TaskQueue{Name: unversionedTQ, Kind: enumspb.TASK_QUEUE_KIND_NORMAL})
 
 	// 1. Set unpinned override --> describe workflow shows the override + deploymentA is unreachable
 	updateResp, err := s.FrontendClient().UpdateWorkflowExecutionOptions(ctx, &workflowservice.UpdateWorkflowExecutionOptionsRequest{
@@ -815,7 +812,9 @@ func (s *DeploymentSuite) TestUpdateWorkflowExecutionOptions_SetUnpinnedSetPinne
 }
 
 func (s *DeploymentSuite) TestUpdateWorkflowExecutionOptions_SetPinnedSetUnpinned() {
-	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
+	defer cancel()
+
 	tv := testvars.New(s)
 	tq := tv.TaskQueue()
 	series := tv.DeploymentSeries()
@@ -845,7 +844,7 @@ func (s *DeploymentSuite) TestUpdateWorkflowExecutionOptions_SetPinnedSetUnpinne
 	}
 
 	// create deployment so that GetDeploymentReachability doesn't error
-	s.createDeploymentAndWaitForExist(deploymentA, tq)
+	s.createDeploymentAndWaitForExist(ctx, deploymentA, tq)
 
 	// 1. Set pinned override A --> describe workflow shows the override + deploymentA is reachable
 	updateResp, err := s.FrontendClient().UpdateWorkflowExecutionOptions(ctx, &workflowservice.UpdateWorkflowExecutionOptionsRequest{
@@ -873,7 +872,11 @@ func (s *DeploymentSuite) TestUpdateWorkflowExecutionOptions_SetPinnedSetUnpinne
 }
 
 func (s *DeploymentSuite) TestBatchUpdateWorkflowExecutionOptions_SetPinnedThenUnset() {
-	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
+	defer cancel()
+
+	tv := testvars.New(s)
+	tq := tv.TaskQueue()
 
 	// presence of internally used delimiters (:) or escape
 	// characters shouldn't break functionality
@@ -889,16 +892,15 @@ func (s *DeploymentSuite) TestBatchUpdateWorkflowExecutionOptions_SetPinnedThenU
 			Deployment: workerDeployment,
 		},
 	}
-	unversionedTQ := "unversioned-test-tq"
 
 	// create deployment so that GetDeploymentReachability doesn't error
-	s.createDeploymentAndWaitForExist(workerDeployment, &taskqueuepb.TaskQueue{Name: unversionedTQ, Kind: enumspb.TASK_QUEUE_KIND_NORMAL})
+	s.createDeploymentAndWaitForExist(ctx, workerDeployment, tq)
 
 	// start some unversioned workflows
 	workflowType := "batch-test-type"
 	workflows := make([]*commonpb.WorkflowExecution, 0)
 	for i := 0; i < 5; i++ {
-		run, err := s.sdkClient.ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{TaskQueue: unversionedTQ}, workflowType)
+		run, err := s.sdkClient.ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{TaskQueue: tq.GetName()}, workflowType)
 		s.NoError(err)
 		workflows = append(workflows, &commonpb.WorkflowExecution{
 			WorkflowId: run.GetID(),
@@ -992,7 +994,9 @@ func (s *DeploymentSuite) checkListAndWaitForBatchCompletion(ctx context.Context
 }
 
 func (s *DeploymentSuite) TestStartWorkflowExecution_WithPinnedOverride() {
-	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
+	defer cancel()
+
 	deploymentA := &deploymentpb.Deployment{
 		SeriesName: "seriesName",
 		BuildId:    "A",
@@ -1003,7 +1007,7 @@ func (s *DeploymentSuite) TestStartWorkflowExecution_WithPinnedOverride() {
 	}
 
 	// create deployment so that GetDeploymentReachability doesn't error
-	s.createDeploymentAndWaitForExist(deploymentA, &taskqueuepb.TaskQueue{Name: "test-tq", Kind: enumspb.TASK_QUEUE_KIND_NORMAL})
+	s.createDeploymentAndWaitForExist(ctx, deploymentA, &taskqueuepb.TaskQueue{Name: "test-tq", Kind: enumspb.TASK_QUEUE_KIND_NORMAL})
 
 	resp, err := s.FrontendClient().StartWorkflowExecution(ctx, &workflowservice.StartWorkflowExecutionRequest{
 		Namespace:          s.Namespace(),
@@ -1026,7 +1030,9 @@ func (s *DeploymentSuite) TestStartWorkflowExecution_WithPinnedOverride() {
 }
 
 func (s *DeploymentSuite) TestStartWorkflowExecution_WithUnpinnedOverride() {
-	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
+	defer cancel()
+
 	override := &workflowpb.VersioningOverride{
 		Behavior:   enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE,
 		Deployment: nil,
@@ -1053,7 +1059,9 @@ func (s *DeploymentSuite) TestStartWorkflowExecution_WithUnpinnedOverride() {
 }
 
 func (s *DeploymentSuite) TestSignalWithStartWorkflowExecution_WithPinnedOverride() {
-	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
+	defer cancel()
+
 	deploymentA := &deploymentpb.Deployment{
 		SeriesName: "seriesName",
 		BuildId:    "A",
@@ -1064,7 +1072,7 @@ func (s *DeploymentSuite) TestSignalWithStartWorkflowExecution_WithPinnedOverrid
 	}
 
 	// create deployment so that GetDeploymentReachability doesn't error
-	s.createDeploymentAndWaitForExist(deploymentA, &taskqueuepb.TaskQueue{Name: "test-tq", Kind: enumspb.TASK_QUEUE_KIND_NORMAL})
+	s.createDeploymentAndWaitForExist(ctx, deploymentA, &taskqueuepb.TaskQueue{Name: "test-tq", Kind: enumspb.TASK_QUEUE_KIND_NORMAL})
 
 	resp, err := s.FrontendClient().SignalWithStartWorkflowExecution(ctx, &workflowservice.SignalWithStartWorkflowExecutionRequest{
 		Namespace:          s.Namespace(),
@@ -1090,7 +1098,9 @@ func (s *DeploymentSuite) TestSignalWithStartWorkflowExecution_WithPinnedOverrid
 }
 
 func (s *DeploymentSuite) TestSignalWithStartWorkflowExecution_WithUnpinnedOverride() {
-	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
+	defer cancel()
+
 	override := &workflowpb.VersioningOverride{
 		Behavior:   enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE,
 		Deployment: nil,
@@ -1116,6 +1126,190 @@ func (s *DeploymentSuite) TestSignalWithStartWorkflowExecution_WithUnpinnedOverr
 		RunId:      resp.GetRunId(),
 	}
 	s.checkDescribeWorkflowAfterOverride(ctx, wf, override)
+}
+
+func (s *DeploymentSuite) TestSetCurrent_BeforeAndAfterRegister() {
+	tv := testvars.New(s)
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*20)
+	defer cancel()
+
+	dep1 := &deploymentpb.Deployment{
+		SeriesName: tv.DeploymentSeries(),
+		BuildId:    tv.BuildId("1"),
+	}
+	dep2 := &deploymentpb.Deployment{
+		SeriesName: tv.DeploymentSeries(),
+		BuildId:    tv.BuildId("2"),
+	}
+
+	// set to 1
+	res, err := s.FrontendClient().SetCurrentDeployment(ctx, &workflowservice.SetCurrentDeploymentRequest{
+		Namespace:  s.Namespace(),
+		Deployment: dep1,
+		Identity:   "test",
+	})
+	s.NoError(err)
+	s.Nil(res.PreviousDeploymentInfo)
+	s.NotNil(res.CurrentDeploymentInfo)
+	s.Equal(dep1.BuildId, res.CurrentDeploymentInfo.Deployment.BuildId)
+
+	// describe 1 should say it's current (no delay)
+	desc, err := s.FrontendClient().DescribeDeployment(ctx, &workflowservice.DescribeDeploymentRequest{
+		Namespace:  s.Namespace(),
+		Deployment: dep1,
+	})
+	s.NoError(err)
+	s.True(desc.DeploymentInfo.IsCurrent)
+
+	// get current should return 1 (no delay)
+	cur, err := s.FrontendClient().GetCurrentDeployment(ctx, &workflowservice.GetCurrentDeploymentRequest{
+		Namespace:  s.Namespace(),
+		SeriesName: tv.DeploymentSeries(),
+	})
+	s.NoError(err)
+	s.Equal(dep1.BuildId, cur.CurrentDeploymentInfo.Deployment.BuildId)
+
+	// list should say it's current (with some delay)
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		a := assert.New(t)
+		list, err := s.FrontendClient().ListDeployments(ctx, &workflowservice.ListDeploymentsRequest{
+			Namespace: s.Namespace(),
+		})
+		a.NoError(err)
+		found, isCurrent1 := 0, false
+		for _, d := range list.GetDeployments() {
+			if d.Deployment.BuildId == dep1.BuildId {
+				found++
+				isCurrent1 = d.IsCurrent
+			}
+		}
+		a.Equal(1, found)
+		a.True(isCurrent1)
+	}, time.Second*5, time.Millisecond*200)
+
+	// now set to 2
+	res, err = s.FrontendClient().SetCurrentDeployment(ctx, &workflowservice.SetCurrentDeploymentRequest{
+		Namespace:  s.Namespace(),
+		Deployment: dep2,
+		Identity:   "test",
+	})
+	s.NoError(err)
+	s.NotNil(res.PreviousDeploymentInfo)
+	s.Equal(dep1.BuildId, res.PreviousDeploymentInfo.Deployment.BuildId)
+	s.NotNil(res.CurrentDeploymentInfo)
+	s.Equal(dep2.BuildId, res.CurrentDeploymentInfo.Deployment.BuildId)
+
+	// describe 1 should say it's not current (no delay)
+	desc, err = s.FrontendClient().DescribeDeployment(ctx, &workflowservice.DescribeDeploymentRequest{
+		Namespace:  s.Namespace(),
+		Deployment: dep1,
+	})
+	s.NoError(err)
+	s.False(desc.DeploymentInfo.IsCurrent)
+
+	// describe 2 should say it's not current (no delay)
+	desc, err = s.FrontendClient().DescribeDeployment(ctx, &workflowservice.DescribeDeploymentRequest{
+		Namespace:  s.Namespace(),
+		Deployment: dep2,
+	})
+	s.NoError(err)
+	s.True(desc.DeploymentInfo.IsCurrent)
+
+	// get current should return 2 (no delay)
+	cur, err = s.FrontendClient().GetCurrentDeployment(ctx, &workflowservice.GetCurrentDeploymentRequest{
+		Namespace:  s.Namespace(),
+		SeriesName: tv.DeploymentSeries(),
+	})
+	s.NoError(err)
+	s.Equal(dep2.BuildId, cur.CurrentDeploymentInfo.Deployment.BuildId)
+
+	// list should say 2 is current and 1 is not current (with some delay)
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		a := assert.New(t)
+		list, err := s.FrontendClient().ListDeployments(ctx, &workflowservice.ListDeploymentsRequest{
+			Namespace: s.Namespace(),
+		})
+		a.NoError(err)
+		found, isCurrent1, isCurrent2 := 0, false, false
+		for _, d := range list.GetDeployments() {
+			if d.Deployment.BuildId == dep1.BuildId {
+				found++
+				isCurrent1 = d.IsCurrent
+			} else if d.Deployment.BuildId == dep2.BuildId {
+				found++
+				isCurrent2 = d.IsCurrent
+			}
+		}
+		a.Equal(2, found)
+		a.False(isCurrent1)
+		a.True(isCurrent2)
+	}, time.Second*5, time.Millisecond*200)
+}
+
+func (s *DeploymentSuite) TestSetCurrent_UpdateMetadata() {
+	tv := testvars.New(s)
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
+	defer cancel()
+
+	dep1 := &deploymentpb.Deployment{
+		SeriesName: tv.DeploymentSeries(),
+		BuildId:    tv.BuildId("1"),
+	}
+	dep2 := &deploymentpb.Deployment{
+		SeriesName: tv.DeploymentSeries(),
+		BuildId:    tv.BuildId("2"),
+	}
+
+	// set to 1 with some metadata
+	_, err := s.FrontendClient().SetCurrentDeployment(ctx, &workflowservice.SetCurrentDeploymentRequest{
+		Namespace:  s.Namespace(),
+		Deployment: dep1,
+		Identity:   "test",
+		UpdateMetadata: &deploymentpb.UpdateDeploymentMetadata{
+			UpsertEntries: map[string]*commonpb.Payload{
+				"key1": payload.EncodeString("val1"),
+				"key2": payload.EncodeString("val2"),
+				"key3": payload.EncodeString("val3"),
+			},
+		},
+	})
+	s.NoError(err)
+
+	// set to 2
+	_, err = s.FrontendClient().SetCurrentDeployment(ctx, &workflowservice.SetCurrentDeploymentRequest{
+		Namespace:  s.Namespace(),
+		Deployment: dep2,
+		Identity:   "test",
+	})
+	s.NoError(err)
+
+	// set back to 1 with different metadata
+	_, err = s.FrontendClient().SetCurrentDeployment(ctx, &workflowservice.SetCurrentDeploymentRequest{
+		Namespace:  s.Namespace(),
+		Deployment: dep1,
+		Identity:   "test",
+		UpdateMetadata: &deploymentpb.UpdateDeploymentMetadata{
+			UpsertEntries: map[string]*commonpb.Payload{
+				"key1": payload.EncodeString("new1"),
+				"key4": payload.EncodeString("val4"),
+			},
+			RemoveEntries: []string{"key2"},
+		},
+	})
+	s.NoError(err)
+
+	cur, err := s.FrontendClient().GetCurrentDeployment(ctx, &workflowservice.GetCurrentDeploymentRequest{
+		Namespace:  s.Namespace(),
+		SeriesName: tv.DeploymentSeries(),
+	})
+	s.NoError(err)
+	s.Equal(dep1.BuildId, cur.CurrentDeploymentInfo.Deployment.BuildId)
+	s.Equal(`"new1"`, payload.ToString(cur.CurrentDeploymentInfo.Metadata["key1"]))
+	s.Nil(cur.CurrentDeploymentInfo.Metadata["key2"])
+	s.Equal(`"val3"`, payload.ToString(cur.CurrentDeploymentInfo.Metadata["key3"]))
+	s.Equal(`"val4"`, payload.ToString(cur.CurrentDeploymentInfo.Metadata["key4"]))
 }
 
 // Name is used by testvars. We use a shorten test name in variables so that physical task queue IDs

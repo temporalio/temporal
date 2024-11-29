@@ -25,69 +25,55 @@
 package deployment
 
 import (
+	"cmp"
 	"context"
 
-	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/sdk/activity"
-	sdkclient "go.temporal.io/sdk/client"
 	deploymentspb "go.temporal.io/server/api/deployment/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/common/namespace"
-	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/resource"
 )
 
 type (
 	DeploymentActivities struct {
-		namespaceName  namespace.Name
-		namespaceID    namespace.ID
-		sdkClient      sdkclient.Client
-		matchingClient resource.MatchingClient
+		namespace        *namespace.Namespace
+		deploymentClient DeploymentStoreClient
+		matchingClient   resource.MatchingClient
 	}
 )
-
-// StartDeploymentSeriesWorkflow activity starts a DeploymentSeries workflow
 
 func (a *DeploymentActivities) StartDeploymentSeriesWorkflow(ctx context.Context, input *deploymentspb.StartDeploymentSeriesRequest) error {
 	logger := activity.GetLogger(ctx)
 	logger.Info("starting deployment series workflow", "seriesName", input.SeriesName)
-
-	workflowID := GenerateDeploymentSeriesWorkflowID(input.SeriesName)
-
-	workflowOptions := sdkclient.StartWorkflowOptions{
-		ID:        workflowID,
-		TaskQueue: primitives.PerNSWorkerTaskQueue,
-		Memo: map[string]interface{}{
-			DeploymentSeriesBuildIDMemoField: "",
-		},
-		WorkflowIDReusePolicy:    enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
-		WorkflowIDConflictPolicy: enumspb.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING,
-	}
-
-	// Calling the workflow with the args
-	_, err := a.sdkClient.ExecuteWorkflow(ctx, workflowOptions, DeploymentSeriesWorkflowType, &deploymentspb.DeploymentSeriesWorkflowArgs{
-		NamespaceName: a.namespaceName.String(),
-		NamespaceId:   a.namespaceID.String(),
-	})
-	if err != nil {
-		logger.Error("starting deployment series workflow failed", "seriesName", input.SeriesName, "error", err)
-	}
-	return err
+	identity := "deployment workflow " + activity.GetInfo(ctx).WorkflowExecution.ID
+	return a.deploymentClient.StartDeploymentSeries(ctx, a.namespace, input.SeriesName, identity, input.RequestId)
 }
 
 func (a *DeploymentActivities) SyncUserData(ctx context.Context, input *deploymentspb.SyncUserDataRequest) error {
 	logger := activity.GetLogger(ctx)
-	logger.Info("syncing task queue userdata for deployment", "taskQueue", input.TaskQueueName, "type", input.TaskQueueType)
 
-	_, err := a.matchingClient.SyncDeploymentUserData(ctx, &matchingservice.SyncDeploymentUserDataRequest{
-		NamespaceId:   a.namespaceID.String(),
-		TaskQueue:     input.TaskQueueName,
-		TaskQueueType: input.TaskQueueType,
-		Deployment:    input.Deployment,
-		Data:          input.Data,
-	})
-	if err != nil {
-		logger.Error("syncing task queue userdata", "taskQueue", input.TaskQueueName, "type", input.TaskQueueType, "error", err)
+	errs := make(chan error)
+	for _, sync := range input.Sync {
+		go func() {
+			logger.Info("syncing task queue userdata for deployment", "taskQueue", sync.Name, "type", sync.Type)
+			_, err := a.matchingClient.SyncDeploymentUserData(ctx, &matchingservice.SyncDeploymentUserDataRequest{
+				NamespaceId:   a.namespace.ID().String(),
+				TaskQueue:     sync.Name,
+				TaskQueueType: sync.Type,
+				Deployment:    input.Deployment,
+				Data:          sync.Data,
+			})
+			if err != nil {
+				logger.Error("syncing task queue userdata", "taskQueue", sync.Name, "type", sync.Type, "error", err)
+			}
+			errs <- err
+		}()
+	}
+
+	var err error
+	for range input.Sync {
+		err = cmp.Or(err, <-errs)
 	}
 
 	// TODO: it might be nice if we check propagation status and not return from here until
