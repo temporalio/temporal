@@ -600,7 +600,7 @@ func (d *DeploymentClientImpl) updateWithStartDeploymentSeries(
 	return d.updateWithStart(
 		ctx,
 		namespaceEntry,
-		DeploymentWorkflowType,
+		DeploymentSeriesWorkflowType,
 		workflowID,
 		memo,
 		input,

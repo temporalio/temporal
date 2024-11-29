@@ -990,6 +990,43 @@ func (s *DeploymentSuite) TestSignalWithStartWorkflowExecution_WithUnpinnedOverr
 	s.checkDescribeWorkflowAfterOverride(ctx, wf, override)
 }
 
+func (s *DeploymentSuite) TestSetCurrent_BeforeRegister() {
+	tv := testvars.New(s)
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
+	defer cancel()
+
+	dep1 := &deploymentpb.Deployment{
+		SeriesName: tv.DeploymentSeries(),
+		BuildId:    tv.BuildId("1"),
+	}
+	dep2 := &deploymentpb.Deployment{
+		SeriesName: tv.DeploymentSeries(),
+		BuildId:    tv.BuildId("2"),
+	}
+
+	res, err := s.FrontendClient().SetCurrentDeployment(ctx, &workflowservice.SetCurrentDeploymentRequest{
+		Namespace:  s.Namespace(),
+		Deployment: dep1,
+		Identity:   "test",
+	})
+	s.NoError(err)
+	s.Nil(res.PreviousDeploymentInfo)
+	s.NotNil(res.CurrentDeploymentInfo)
+	s.Equal(dep1.BuildId, res.CurrentDeploymentInfo.Deployment.BuildId)
+
+	res, err = s.FrontendClient().SetCurrentDeployment(ctx, &workflowservice.SetCurrentDeploymentRequest{
+		Namespace:  s.Namespace(),
+		Deployment: dep2,
+		Identity:   "test",
+	})
+	s.NoError(err)
+	s.NotNil(res.PreviousDeploymentInfo)
+	s.Equal(dep1.BuildId, res.PreviousDeploymentInfo.Deployment.BuildId)
+	s.NotNil(res.CurrentDeploymentInfo)
+	s.Equal(dep2.BuildId, res.CurrentDeploymentInfo.Deployment.BuildId)
+}
+
 // Name is used by testvars. We use a shorten test name in variables so that physical task queue IDs
 // do not grow larger that DB column limit (currently as low as 272 chars).
 func (s *DeploymentSuite) Name() string {
