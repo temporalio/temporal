@@ -42,6 +42,8 @@ import (
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/persistence/visibility/manager"
@@ -125,6 +127,7 @@ type ErrRegister struct{ error }
 
 // implements DeploymentStoreClient
 type DeploymentClientImpl struct {
+	logger                    log.Logger
 	historyClient             historyservice.HistoryServiceClient
 	visibilityManager         manager.VisibilityManager
 	maxIDLengthLimit          dynamicconfig.IntPropertyFn
@@ -146,7 +149,9 @@ func (d *DeploymentClientImpl) RegisterTaskQueueWorker(
 	firstPoll time.Time,
 	identity string,
 	requestID string,
-) error {
+) (retErr error) {
+	defer d.record("RegisterTaskQueueWorker", &retErr, taskQueueName, taskQueueType, identity)()
+
 	updatePayload, err := sdk.PreferProtoDataConverter.ToPayloads(&deploymentspb.RegisterWorkerInDeploymentArgs{
 		TaskQueueName:   taskQueueName,
 		TaskQueueType:   taskQueueType,
@@ -175,7 +180,14 @@ func (d *DeploymentClientImpl) RegisterTaskQueueWorker(
 	return nil
 }
 
-func (d *DeploymentClientImpl) DescribeDeployment(ctx context.Context, namespaceEntry *namespace.Namespace, seriesName string, buildID string) (*deploymentpb.DeploymentInfo, error) {
+func (d *DeploymentClientImpl) DescribeDeployment(
+	ctx context.Context,
+	namespaceEntry *namespace.Namespace,
+	seriesName string,
+	buildID string,
+) (_ *deploymentpb.DeploymentInfo, retErr error) {
+	defer d.record("DescribeDeployment", &retErr, seriesName, buildID)()
+
 	// validating params
 	err := ValidateDeploymentWfParams(SeriesFieldName, seriesName, d.maxIDLengthLimit())
 	if err != nil {
@@ -223,7 +235,9 @@ func (d *DeploymentClientImpl) GetDeploymentReachability(
 	namespaceEntry *namespace.Namespace,
 	seriesName string,
 	buildID string,
-) (*workflowservice.GetDeploymentReachabilityResponse, error) {
+) (_ *workflowservice.GetDeploymentReachabilityResponse, retErr error) {
+	defer d.record("GetDeploymentReachability", &retErr, seriesName, buildID)()
+
 	deployInfo, err := d.DescribeDeployment(ctx, namespaceEntry, seriesName, buildID)
 	if err != nil {
 		return nil, err
@@ -249,7 +263,13 @@ func (d *DeploymentClientImpl) GetDeploymentReachability(
 	}, nil
 }
 
-func (d *DeploymentClientImpl) GetCurrentDeployment(ctx context.Context, namespaceEntry *namespace.Namespace, seriesName string) (*deploymentpb.DeploymentInfo, error) {
+func (d *DeploymentClientImpl) GetCurrentDeployment(
+	ctx context.Context,
+	namespaceEntry *namespace.Namespace,
+	seriesName string,
+) (_ *deploymentpb.DeploymentInfo, retErr error) {
+	defer d.record("GetCurrentDeployment", &retErr, seriesName)()
+
 	// Validating params
 	err := ValidateDeploymentWfParams(SeriesFieldName, seriesName, d.maxIDLengthLimit())
 	if err != nil {
@@ -299,7 +319,14 @@ func (d *DeploymentClientImpl) GetCurrentDeployment(ctx context.Context, namespa
 	return deploymentInfo, nil
 }
 
-func (d *DeploymentClientImpl) ListDeployments(ctx context.Context, namespaceEntry *namespace.Namespace, seriesName string, NextPageToken []byte) ([]*deploymentpb.DeploymentListInfo, []byte, error) {
+func (d *DeploymentClientImpl) ListDeployments(
+	ctx context.Context,
+	namespaceEntry *namespace.Namespace,
+	seriesName string,
+	NextPageToken []byte,
+) (_ []*deploymentpb.DeploymentListInfo, _ []byte, retErr error) {
+	defer d.record("ListDeployments", &retErr, seriesName)()
+
 	query := ""
 	if seriesName != "" {
 		query = BuildQueryWithSeriesFilter(seriesName)
@@ -344,7 +371,9 @@ func (d *DeploymentClientImpl) SetCurrentDeployment(
 	updateMetadata *deploymentpb.UpdateDeploymentMetadata,
 	identity string,
 	requestID string,
-) (*deploymentpb.DeploymentInfo, *deploymentpb.DeploymentInfo, error) {
+) (_ *deploymentpb.DeploymentInfo, _ *deploymentpb.DeploymentInfo, retErr error) {
+	defer d.record("SetCurrentDeployment", &retErr, namespaceEntry.Name(), deployment, identity)()
+
 	updatePayload, err := sdk.PreferProtoDataConverter.ToPayloads(&deploymentspb.SetCurrentDeploymentArgs{
 		Identity:       identity,
 		BuildId:        deployment.BuildId,
@@ -395,7 +424,9 @@ func (d *DeploymentClientImpl) StartDeploymentSeries(
 	seriesName string,
 	identity string,
 	requestID string,
-) error {
+) (retErr error) {
+	defer d.record("StartDeploymentSeries", &retErr, namespaceEntry.Name(), seriesName, identity)()
+
 	workflowID := GenerateDeploymentSeriesWorkflowID(seriesName)
 
 	input, err := sdk.PreferProtoDataConverter.ToPayloads(&deploymentspb.DeploymentSeriesWorkflowArgs{
@@ -441,7 +472,9 @@ func (d *DeploymentClientImpl) SyncDeploymentWorkflowFromSeries(
 	args *deploymentspb.SyncDeploymentStateArgs,
 	identity string,
 	requestID string,
-) (*deploymentspb.SyncDeploymentStateResponse, error) {
+) (_ *deploymentspb.SyncDeploymentStateResponse, retErr error) {
+	defer d.record("SyncDeploymentWorkflowFromSeries", &retErr, namespaceEntry.Name(), deployment, args, identity)()
+
 	updatePayload, err := sdk.PreferProtoDataConverter.ToPayloads(args)
 	if err != nil {
 		return nil, err
@@ -711,6 +744,31 @@ func (d *DeploymentClientImpl) buildSearchAttributes() *commonpb.SearchAttribute
 	sa := &commonpb.SearchAttributes{}
 	searchattribute.AddSearchAttribute(&sa, searchattribute.TemporalNamespaceDivision, payload.EncodeString(DeploymentNamespaceDivision))
 	return sa
+}
+
+func (d *DeploymentClientImpl) record(operation string, retErr *error, args ...any) func() {
+	start := time.Now()
+	return func() {
+		elapsed := time.Since(start)
+
+		// TODO: add metrics recording here
+
+		if *retErr != nil {
+			d.logger.Error("deployment client error",
+				tag.Error(*retErr),
+				tag.Operation(operation),
+				tag.NewDurationTag("elapsed", elapsed),
+				tag.NewAnyTag("args", args),
+			)
+		} else {
+			// FIXME: change to debug
+			d.logger.Info("deployment client success",
+				tag.Operation(operation),
+				tag.NewDurationTag("elapsed", elapsed),
+				tag.NewAnyTag("args", args),
+			)
+		}
+	}
 }
 
 func stateToInfo(state *deploymentspb.DeploymentLocalState) *deploymentpb.DeploymentInfo {

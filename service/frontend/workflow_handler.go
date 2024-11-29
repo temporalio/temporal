@@ -3144,7 +3144,6 @@ func (wh *WorkflowHandler) DescribeDeployment(ctx context.Context, request *work
 	}
 	deploymentInfo, err := wh.deploymentStoreClient.DescribeDeployment(ctx, namespaceEntry, request.Deployment.GetSeriesName(), request.Deployment.GetBuildId())
 	if err != nil {
-		wh.logger.Error("Error during DescribeDeployment", tag.Error(err))
 		return nil, err
 	}
 
@@ -3175,7 +3174,6 @@ func (wh *WorkflowHandler) GetCurrentDeployment(ctx context.Context, request *wo
 
 	describeDeploymentResponse, err := wh.deploymentStoreClient.GetCurrentDeployment(ctx, namespaceEntry, request.SeriesName)
 	if err != nil {
-		wh.logger.Error("Error during GetEffectiveDeployment", tag.Error(err))
 		return nil, err
 	}
 
@@ -3218,7 +3216,6 @@ func (wh *WorkflowHandler) ListDeployments(
 
 	deployments, nextPageToken, err := wh.deploymentStoreClient.ListDeployments(ctx, namespaceEntry, request.SeriesName, request.NextPageToken)
 	if err != nil {
-		wh.logger.Error("Error during ListDeployments", tag.Error(err))
 		return nil, err
 	}
 
@@ -3256,7 +3253,6 @@ func (wh *WorkflowHandler) GetDeploymentReachability(
 	}
 	resp, err := wh.deploymentStoreClient.GetDeploymentReachability(ctx, namespaceEntry, request.Deployment.SeriesName, request.Deployment.BuildId)
 	if err != nil {
-		wh.logger.Error("Error during GetDeploymentReachability", tag.Error(err))
 		return nil, err
 	}
 

@@ -218,9 +218,7 @@ func (s *DeploymentSuite) TestGetCurrentDeployment_NoCurrentDeployment() {
 	s.Nil(resp)
 
 	// Starting a deployment workflow
-	go func() {
-		s.pollFromDeployment(ctx, taskQueue, workerDeployment)
-	}()
+	go s.pollFromDeployment(ctx, taskQueue, workerDeployment)
 
 	// Verify the existence of a deployment series
 	s.EventuallyWithT(func(t *assert.CollectT) {
