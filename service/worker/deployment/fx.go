@@ -25,10 +25,6 @@
 package deployment
 
 import (
-	"fmt"
-
-	enumspb "go.temporal.io/api/enums/v1"
-	sdkclient "go.temporal.io/sdk/client"
 	sdkworker "go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -38,27 +34,8 @@ import (
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/sdk"
-	"go.temporal.io/server/common/searchattribute"
 	workercommon "go.temporal.io/server/service/worker/common"
 	"go.uber.org/fx"
-)
-
-const (
-	DeploymentWorkflowType       = "temporal-sys-deployment-workflow"
-	DeploymentSeriesWorkflowType = "temporal-sys-deployment-series-workflow"
-	DeploymentNamespaceDivision  = "TemporalDeployment"
-)
-
-var (
-	DeploymentVisibilityBaseListQuery = fmt.Sprintf(
-		"%s = '%s' AND %s = '%s' AND %s = '%s'",
-		searchattribute.WorkflowType,
-		DeploymentWorkflowType,
-		searchattribute.TemporalNamespaceDivision,
-		DeploymentNamespaceDivision,
-		searchattribute.ExecutionStatus,
-		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING.String(),
-	)
 )
 
 type (
@@ -69,10 +46,11 @@ type (
 
 	activityDeps struct {
 		fx.In
-		MetricsHandler metrics.Handler
-		Logger         log.Logger
-		ClientFactory  sdk.ClientFactory
-		MatchingClient resource.MatchingClient
+		MetricsHandler   metrics.Handler
+		Logger           log.Logger
+		ClientFactory    sdk.ClientFactory
+		MatchingClient   resource.MatchingClient
+		DeploymentClient DeploymentStoreClient
 	}
 
 	fxResult struct {
@@ -86,19 +64,25 @@ var Module = fx.Options(
 	fx.Provide(DeploymentStoreClientProvider),
 )
 
-func DeploymentStoreClientProvider(historyClient resource.HistoryClient, visibilityManager manager.VisibilityManager, dc *dynamicconfig.Collection) DeploymentStoreClient {
+func DeploymentStoreClientProvider(
+	logger log.Logger,
+	historyClient resource.HistoryClient,
+	visibilityManager manager.VisibilityManager,
+	dc *dynamicconfig.Collection,
+) DeploymentStoreClient {
 	return &DeploymentClientImpl{
-		HistoryClient:         historyClient,
-		VisibilityManager:     visibilityManager,
-		MaxIDLengthLimit:      dynamicconfig.MaxIDLengthLimit.Get(dc),
-		VisibilityMaxPageSize: dynamicconfig.FrontendVisibilityMaxPageSize.Get(dc),
+		logger:                logger,
+		historyClient:         historyClient,
+		visibilityManager:     visibilityManager,
+		maxIDLengthLimit:      dynamicconfig.MaxIDLengthLimit.Get(dc),
+		visibilityMaxPageSize: dynamicconfig.FrontendVisibilityMaxPageSize.Get(dc),
 		reachabilityCache: newReachabilityCache(
 			metrics.NoopMetricsHandler,
 			visibilityManager,
 			dynamicconfig.ReachabilityCacheOpenWFsTTL.Get(dc)(),
 			dynamicconfig.ReachabilityCacheClosedWFsTTL.Get(dc)(),
 		),
-		MaxTaskQueuesInDeployment: dynamicconfig.MatchingMaxTaskQueuesInDeployment.Get(dc),
+		maxTaskQueuesInDeployment: dynamicconfig.MatchingMaxTaskQueuesInDeployment.Get(dc),
 	}
 }
 
@@ -124,25 +108,18 @@ func (s *workerComponent) Register(registry sdkworker.Registry, ns *namespace.Na
 	registry.RegisterWorkflowWithOptions(DeploymentWorkflow, workflow.RegisterOptions{Name: DeploymentWorkflowType})
 	registry.RegisterWorkflowWithOptions(DeploymentSeriesWorkflow, workflow.RegisterOptions{Name: DeploymentSeriesWorkflowType})
 
-	// TODO Shivam: Might need a cleanup function upon activity registration
-	deploymentActivities := s.newDeploymentActivities(ns.Name(), ns.ID())
-	// deploymentSeriesActivities := s.newDeploymentSeriesActivities(ns.Name(), ns.ID())
-	registry.RegisterActivity(deploymentActivities)
-	// registry.RegisterActivity(deploymentSeriesActivities)
-	return nil
-}
-
-// TODO Shivam - place holder for now but will initialize activity rate limits (if any) amongst other things
-func (s *workerComponent) newDeploymentActivities(name namespace.Name, id namespace.ID) *DeploymentActivities {
-	sdkClient := s.activityDeps.ClientFactory.NewClient(sdkclient.Options{
-		Namespace:     name.String(),
-		DataConverter: sdk.PreferProtoDataConverter,
-	})
-
-	return &DeploymentActivities{
-		namespaceName:  name,
-		namespaceID:    id,
-		sdkClient:      sdkClient,
-		matchingClient: s.activityDeps.MatchingClient,
+	deploymentActivities := &DeploymentActivities{
+		namespace:        ns,
+		deploymentClient: s.activityDeps.DeploymentClient,
+		matchingClient:   s.activityDeps.MatchingClient,
 	}
+	registry.RegisterActivity(deploymentActivities)
+
+	deploymentSeriesActivities := &DeploymentSeriesActivities{
+		namespace:        ns,
+		deploymentClient: s.activityDeps.DeploymentClient,
+	}
+	registry.RegisterActivity(deploymentSeriesActivities)
+
+	return nil
 }

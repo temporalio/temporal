@@ -48,7 +48,6 @@ import (
 	updatepb "go.temporal.io/api/update/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
-	deployspb "go.temporal.io/server/api/deployment/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	schedspb "go.temporal.io/server/api/schedule/v1"
@@ -3124,6 +3123,7 @@ func (wh *WorkflowHandler) validateStartWorkflowArgsForSchedule(
 	return wh.validateSearchAttributes(unaliasedStartWorkflowSas, namespaceName)
 }
 
+// TODO: move these to the proper order
 func (wh *WorkflowHandler) DescribeDeployment(ctx context.Context, request *workflowservice.DescribeDeploymentRequest) (_ *workflowservice.DescribeDeploymentResponse, retError error) {
 	defer log.CapturePanic(wh.logger, &retError)
 
@@ -3143,9 +3143,8 @@ func (wh *WorkflowHandler) DescribeDeployment(ctx context.Context, request *work
 	if err != nil {
 		return nil, err
 	}
-	deploymentInfo, err := wh.deploymentStoreClient.DescribeDeployment(ctx, namespaceEntry, request.Deployment.SeriesName, request.Deployment.BuildId)
+	deploymentInfo, err := wh.deploymentStoreClient.DescribeDeployment(ctx, namespaceEntry, request.Deployment.GetSeriesName(), request.Deployment.GetBuildId())
 	if err != nil {
-		wh.logger.Error("Error during DescribeDeployment", tag.Error(err))
 		return nil, err
 	}
 
@@ -3176,14 +3175,12 @@ func (wh *WorkflowHandler) GetCurrentDeployment(ctx context.Context, request *wo
 
 	describeDeploymentResponse, err := wh.deploymentStoreClient.GetCurrentDeployment(ctx, namespaceEntry, request.SeriesName)
 	if err != nil {
-		wh.logger.Error("Error during GetEffectiveDeployment", tag.Error(err))
 		return nil, err
 	}
 
 	return &workflowservice.GetCurrentDeploymentResponse{
 		CurrentDeploymentInfo: describeDeploymentResponse,
 	}, nil
-
 }
 
 func (wh *WorkflowHandler) ListDeployments(
@@ -3220,7 +3217,6 @@ func (wh *WorkflowHandler) ListDeployments(
 
 	deployments, nextPageToken, err := wh.deploymentStoreClient.ListDeployments(ctx, namespaceEntry, request.SeriesName, request.NextPageToken)
 	if err != nil {
-		wh.logger.Error("Error during ListDeployments", tag.Error(err))
 		return nil, err
 	}
 
@@ -3228,16 +3224,6 @@ func (wh *WorkflowHandler) ListDeployments(
 		Deployments:   deployments,
 		NextPageToken: nextPageToken,
 	}, nil
-}
-
-func (wh *WorkflowHandler) decodeDeploymentMemo(memo *commonpb.Memo) *deployspb.DeploymentWorkflowMemo {
-	var workflowMemo deployspb.DeploymentWorkflowMemo
-	err := sdk.PreferProtoDataConverter.FromPayload(memo.Fields[deployment.DeploymentMemoField], &workflowMemo)
-	if err != nil {
-		wh.logger.Error("Error while decoding deployment memo info from payload", tag.Error(err))
-		return nil
-	}
-	return &workflowMemo
 }
 
 func (wh *WorkflowHandler) GetDeploymentReachability(
@@ -3268,15 +3254,51 @@ func (wh *WorkflowHandler) GetDeploymentReachability(
 	}
 	resp, err := wh.deploymentStoreClient.GetDeploymentReachability(ctx, namespaceEntry, request.Deployment.SeriesName, request.Deployment.BuildId)
 	if err != nil {
-		wh.logger.Error("Error during GetDeploymentReachability", tag.Error(err))
 		return nil, err
 	}
 
 	return resp, nil
 }
 
-func (wh *WorkflowHandler) SetCurrentDeployment(context.Context, *workflowservice.SetCurrentDeploymentRequest) (*workflowservice.SetCurrentDeploymentResponse, error) {
-	panic("Not implemented *yet*")
+func (wh *WorkflowHandler) SetCurrentDeployment(ctx context.Context, request *workflowservice.SetCurrentDeploymentRequest) (_ *workflowservice.SetCurrentDeploymentResponse, retError error) {
+	defer log.CapturePanic(wh.logger, &retError)
+
+	if request == nil {
+		return nil, errRequestNotSet
+	}
+
+	if len(request.Namespace) == 0 {
+		return nil, errNamespaceNotSet
+	}
+
+	if !wh.config.EnableDeployments(request.Namespace) {
+		return nil, errDeploymentsNotAllowed
+	}
+
+	namespaceEntry, err := wh.namespaceRegistry.GetNamespace(namespace.Name(request.GetNamespace()))
+	if err != nil {
+		return nil, err
+	}
+
+	// TODO: should we get this from the request?
+	requestID := uuid.New()
+
+	current, previous, err := wh.deploymentStoreClient.SetCurrentDeployment(
+		ctx,
+		namespaceEntry,
+		request.Deployment,
+		request.UpdateMetadata,
+		request.Identity,
+		requestID,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	return &workflowservice.SetCurrentDeploymentResponse{
+		CurrentDeploymentInfo:  current,
+		PreviousDeploymentInfo: previous,
+	}, nil
 }
 
 // Returns the schedule description and current state of an existing schedule.

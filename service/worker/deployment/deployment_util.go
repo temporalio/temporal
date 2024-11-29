@@ -30,6 +30,7 @@ import (
 
 	"github.com/temporalio/sqlparser"
 	commonpb "go.temporal.io/api/common/v1"
+	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	deploymentspb "go.temporal.io/server/api/deployment/v1"
 	"go.temporal.io/server/common"
@@ -38,20 +39,28 @@ import (
 )
 
 const (
+	// Workflow types
+	DeploymentWorkflowType       = "temporal-sys-deployment-workflow"
+	DeploymentSeriesWorkflowType = "temporal-sys-deployment-series-workflow"
+
+	// Namespace division
+	DeploymentNamespaceDivision = "TemporalDeployment"
+
 	// Updates
-	RegisterWorkerInDeployment = "register-task-queue-worker"
+	RegisterWorkerInDeployment = "register-task-queue-worker" // for deployment wf
+	SyncDeploymentState        = "sync-deployment-state"      // for deployment wfs
+	SetCurrentDeployment       = "set-current-deployment"     // for series wfs
 
 	// Signals
-	UpdateDeploymentBuildIDSignalName = "update-deployment-build-id"
-	ForceCANSignalName                = "force-continue-as-new"
+	ForceCANSignalName = "force-continue-as-new" // for deployment _and_ series wfs
 
 	// Queries
-	QueryDescribeDeployment = "describe-deployment"
-	QueryCurrentDeployment  = "current-deployment"
+	QueryDescribeDeployment = "describe-deployment" // for deployment wf
+	QueryCurrentDeployment  = "current-deployment"  // for series wf
 
 	// Memos
-	DeploymentMemoField              = "DeploymentMemo"
-	DeploymentSeriesBuildIDMemoField = "DeploymentSeriesBuildIDMemo"
+	DeploymentMemoField       = "DeploymentMemo"       // for deployment wf
+	DeploymentSeriesMemoField = "DeploymentSeriesMemo" // for deployment series wf
 
 	// Prefixes, Delimeters and Keys
 	DeploymentWorkflowIDPrefix       = "temporal-sys-deployment"
@@ -61,6 +70,22 @@ const (
 	DeploymentWorkflowIDInitialSize  = (2 * len(DeploymentWorkflowIDDelimeter)) + len(DeploymentWorkflowIDPrefix)
 	SeriesFieldName                  = "DeploymentSeries"
 	BuildIDFieldName                 = "BuildID"
+
+	// Application error names for rejected updates
+	errNoChangeType                  = "errNoChange"
+	errMaxTaskQueuesInDeploymentType = "errMaxTaskQueuesInDeployment"
+)
+
+var (
+	DeploymentVisibilityBaseListQuery = fmt.Sprintf(
+		"%s = '%s' AND %s = '%s' AND %s = '%s'",
+		searchattribute.WorkflowType,
+		DeploymentWorkflowType,
+		searchattribute.TemporalNamespaceDivision,
+		DeploymentNamespaceDivision,
+		searchattribute.ExecutionStatus,
+		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING.String(),
+	)
 )
 
 // ValidateDeploymentWfParams is a helper that verifies if the fields used for generating

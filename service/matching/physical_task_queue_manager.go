@@ -34,6 +34,7 @@ import (
 	"time"
 
 	"github.com/nexus-rpc/sdk-go/nexus"
+	"github.com/pborman/uuid"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
@@ -104,10 +105,10 @@ type (
 		tasksDispatchedInIntervals *taskTracker
 		// deploymentWorkflowStarted keeps track if we have already registered the task queue worker
 		// in the deployment.
-		deploymentLock                    sync.Mutex
-		deploymentRegistered              bool
-		deploymentRegistrationNotPossible bool
-		firstPoll                         time.Time
+		deploymentLock          sync.Mutex
+		deploymentRegistered    bool
+		deploymentRegisterError error // last "too many ..." error we got when registering
+		firstPoll               time.Time
 	}
 )
 
@@ -600,9 +601,9 @@ func (c *physicalTaskQueueManagerImpl) ensureRegisteredInDeployment(
 		return nil
 	}
 
-	if c.deploymentRegistrationNotPossible {
+	if c.deploymentRegisterError != nil {
 		// deployment not possible due to registration limits
-		return deployment.ErrMaxTaskQueuesInDeployment
+		return c.deploymentRegisterError
 	}
 
 	userData, _, err := c.partitionMgr.GetUserDataManager().GetUserData()
@@ -625,10 +626,12 @@ func (c *physicalTaskQueueManagerImpl) ensureRegisteredInDeployment(
 		c.firstPoll = c.partitionMgr.engine.timeSource.Now()
 	}
 	err = c.partitionMgr.engine.deploymentStoreClient.RegisterTaskQueueWorker(
-		ctx, namespaceEntry, workerDeployment, c.queue.TaskQueueFamily().Name(), c.queue.TaskType(), c.firstPoll)
+		ctx, namespaceEntry, workerDeployment, c.queue.TaskQueueFamily().Name(), c.queue.TaskType(), c.firstPoll,
+		"matching service", uuid.New())
 	if err != nil {
-		if errors.Is(err, deployment.ErrMaxTaskQueuesInDeployment) {
-			c.deploymentRegistrationNotPossible = true
+		var errTooMany deployment.ErrMaxTaskQueuesInDeployment
+		if errors.As(err, &errTooMany) {
+			c.deploymentRegisterError = errTooMany
 		}
 		return err
 	}
