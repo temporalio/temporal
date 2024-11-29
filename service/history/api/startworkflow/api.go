@@ -686,3 +686,18 @@ func (s *Starter) generateResponse(
 		},
 	}, nil
 }
+
+func (s StartOutcome) String() string {
+	switch s {
+	case NoStart:
+		return "NoStart"
+	case StartNew:
+		return "StartNew"
+	case StartReused:
+		return "StartReused"
+	case StartDeduped:
+		return "StartDeduped"
+	default:
+		return "Unknown"
+	}
+}
