@@ -321,6 +321,21 @@ func startTaskProcessor(
 						})
 						return err
 					})
+			case BatchTypeUpdateOptions:
+				err = processTask(ctx, limiter, task,
+					func(workflowID, runID string) error {
+						var err error
+						_, err = frontendClient.UpdateWorkflowExecutionOptions(ctx, &workflowservice.UpdateWorkflowExecutionOptionsRequest{
+							Namespace: batchParams.Namespace,
+							WorkflowExecution: &commonpb.WorkflowExecution{
+								WorkflowId: workflowID,
+								RunId:      runID,
+							},
+							WorkflowExecutionOptions: batchParams.UpdateOptionsParams.WorkflowExecutionOptions,
+							UpdateMask:               batchParams.UpdateOptionsParams.UpdateMask,
+						})
+						return err
+					})
 			}
 			if err != nil {
 				metrics.BatcherProcessorFailures.With(metricsHandler).Record(1)
