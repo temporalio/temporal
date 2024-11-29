@@ -25,9 +25,6 @@
 package deployment
 
 import (
-	"fmt"
-
-	enumspb "go.temporal.io/api/enums/v1"
 	sdkworker "go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -37,27 +34,8 @@ import (
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/sdk"
-	"go.temporal.io/server/common/searchattribute"
 	workercommon "go.temporal.io/server/service/worker/common"
 	"go.uber.org/fx"
-)
-
-const (
-	DeploymentWorkflowType       = "temporal-sys-deployment-workflow"
-	DeploymentSeriesWorkflowType = "temporal-sys-deployment-series-workflow"
-	DeploymentNamespaceDivision  = "TemporalDeployment"
-)
-
-var (
-	DeploymentVisibilityBaseListQuery = fmt.Sprintf(
-		"%s = '%s' AND %s = '%s' AND %s = '%s'",
-		searchattribute.WorkflowType,
-		DeploymentWorkflowType,
-		searchattribute.TemporalNamespaceDivision,
-		DeploymentNamespaceDivision,
-		searchattribute.ExecutionStatus,
-		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING.String(),
-	)
 )
 
 type (
