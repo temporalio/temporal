@@ -55,6 +55,8 @@ import (
 )
 
 var (
+	tqTypeWf         = enumspb.TASK_QUEUE_TYPE_WORKFLOW
+	tqTypeAct        = enumspb.TASK_QUEUE_TYPE_ACTIVITY
 	unspecified      = enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED
 	pinned           = enumspb.VERSIONING_BEHAVIOR_PINNED
 	unpinned         = enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE
@@ -109,12 +111,13 @@ func (s *Versioning3Suite) TestPinnedTask_NoProperPoller() {
 		func() {
 			tv := testvars.New(s)
 
-			s.startWorkflow(tv, pinnedOverride(tv.Deployment()))
-
+			other := tv.WithBuildId("other")
 			go func() {
-				s.idlePollWorkflow(tv.WithBuildId("other"), true, minPollTime, "other deployment should not receive pinned task")
+				s.idlePollWorkflow(other, true, minPollTime, "other deployment should not receive pinned task")
 			}()
+			s.waitForDeploymentDataPropagation(other, tqTypeWf)
 
+			s.startWorkflow(tv, pinnedOverride(tv.Deployment()))
 			s.idlePollWorkflow(tv, false, minPollTime, "unversioned worker should not receive pinned task")
 		})
 }
@@ -123,8 +126,12 @@ func (s *Versioning3Suite) TestUnpinnedTask_NonCurrentDeployment() {
 	s.RunTestWithMatchingBehavior(
 		func() {
 			tv := testvars.New(s)
+			go func() {
+				s.idlePollWorkflow(tv, true, minPollTime, "non-current versioned poller should not receive unpinned task")
+			}()
+			s.waitForDeploymentDataPropagation(tv, tqTypeWf)
+
 			s.startWorkflow(tv, nil)
-			s.idlePollWorkflow(tv, true, minPollTime, "non-current versioned poller should not receive unpinned task")
 		})
 }
 
@@ -133,9 +140,9 @@ func (s *Versioning3Suite) TestUnpinnedTask_OldDeployment() {
 		func() {
 			tv := testvars.New(s)
 			// previous current deployment
-			s.updateTaskQueueDeploymentData(tv.WithBuildId("older"), time.Minute)
+			s.updateTaskQueueDeploymentData(tv.WithBuildId("older"), time.Minute, tqTypeWf)
 			// current deployment
-			s.updateTaskQueueDeploymentData(tv, 0)
+			s.updateTaskQueueDeploymentData(tv, 0, tqTypeWf)
 
 			s.startWorkflow(tv, nil)
 
@@ -167,43 +174,54 @@ func (s *Versioning3Suite) TestUnpinnedWorkflow_NoSticky() {
 
 func (s *Versioning3Suite) testUnpinnedWorkflow(sticky bool) {
 	tv := testvars.New(s)
+	d := tv.Deployment()
 
 	if sticky {
 		s.warmUpSticky(tv)
 	}
 
-	// current deployment
-	s.updateTaskQueueDeploymentData(tv, 0)
-
-	we := s.startWorkflow(tv, nil)
-
-	_, err := s.pollWftAndHandle(tv, false,
+	wftCompleted := make(chan interface{})
+	s.pollWftAndHandle(tv, false, wftCompleted,
 		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
 			s.NotNil(task)
-			s.verifyWorkflowVersioning(we, unspecified, nil, nil)
+			s.verifyWorkflowVersioning(tv, unspecified, nil, nil, transitionTo(d))
 			return respondWftWithActivity(tv, sticky, unpinned, "5"), nil
 		})
-	s.NoError(err)
-	s.verifyWorkflowVersioning(we, unpinned, tv.Deployment(), nil)
-	if sticky {
-		s.verifyWorkflowStickyQueue(we, tv.StickyTaskQueue())
-	}
+	s.waitForDeploymentDataPropagation(tv, tqTypeWf)
 
-	_, err = s.pollActivityAndHandle(tv,
+	actCompleted := make(chan interface{})
+	s.pollActivityAndHandle(tv, actCompleted,
 		func(task *workflowservice.PollActivityTaskQueueResponse) (*workflowservice.RespondActivityTaskCompletedRequest, error) {
 			s.NotNil(task)
 			return respondActivity(), nil
 		})
-	s.NoError(err)
-	s.verifyWorkflowVersioning(we, unpinned, tv.Deployment(), nil)
+	s.waitForDeploymentDataPropagation(tv, tqTypeAct)
 
-	_, err = s.pollWftAndHandle(tv, sticky,
+	s.updateTaskQueueDeploymentData(tv, 0, tqTypeWf, tqTypeAct)
+
+	we := s.startWorkflow(tv, nil)
+
+	<-wftCompleted
+	s.verifyWorkflowVersioning(tv, unpinned, tv.Deployment(), nil, nil)
+	if sticky {
+		s.verifyWorkflowStickyQueue(we, tv.StickyTaskQueue())
+	}
+
+	<-actCompleted
+	s.verifyWorkflowVersioning(tv, unpinned, tv.Deployment(), nil, nil)
+
+	s.pollWftAndHandle(tv, sticky, nil,
 		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
 			s.NotNil(task)
 			return respondCompleteWorkflow(tv, unpinned), nil
 		})
-	s.NoError(err)
-	s.verifyWorkflowVersioning(we, unpinned, tv.Deployment(), nil)
+	s.verifyWorkflowVersioning(tv, unpinned, tv.Deployment(), nil, nil)
+}
+
+func transitionTo(d *deploymentpb.Deployment) *workflow.DeploymentTransition {
+	return &workflow.DeploymentTransition{
+		Deployment: d,
+	}
 }
 
 func (s *Versioning3Suite) TestWorkflowWithPinnedOverride_Sticky() {
@@ -229,47 +247,52 @@ func (s *Versioning3Suite) testWorkflowWithPinnedOverride(sticky bool) {
 		s.warmUpSticky(tv)
 	}
 
-	override := pinnedOverride(tv.Deployment())
-	we := s.startWorkflow(tv, override)
-
-	_, err := s.pollWftAndHandle(tv, false,
+	wftCompleted := make(chan interface{})
+	s.pollWftAndHandle(tv, false, wftCompleted,
 		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
 			s.NotNil(task)
 			return respondWftWithActivity(tv, sticky, unpinned, "5"), nil
 		})
-	s.NoError(err)
-	s.verifyWorkflowVersioning(we, unpinned, tv.Deployment(), override)
-	if sticky {
-		s.verifyWorkflowStickyQueue(we, tv.StickyTaskQueue())
-	}
+	s.waitForDeploymentDataPropagation(tv, tqTypeWf)
 
-	_, err = s.pollActivityAndHandle(tv,
+	actCompleted := make(chan interface{})
+	s.pollActivityAndHandle(tv, actCompleted,
 		func(task *workflowservice.PollActivityTaskQueueResponse) (*workflowservice.RespondActivityTaskCompletedRequest, error) {
 			s.NotNil(task)
 			return respondActivity(), nil
 		})
-	s.NoError(err)
-	s.verifyWorkflowVersioning(we, unpinned, tv.Deployment(), override)
+	s.waitForDeploymentDataPropagation(tv, tqTypeAct)
 
-	_, err = s.pollWftAndHandle(tv, sticky,
+	override := pinnedOverride(tv.Deployment())
+	we := s.startWorkflow(tv, override)
+
+	<-wftCompleted
+	s.verifyWorkflowVersioning(tv, unpinned, tv.Deployment(), override, nil)
+	if sticky {
+		s.verifyWorkflowStickyQueue(we, tv.StickyTaskQueue())
+	}
+
+	<-actCompleted
+	s.verifyWorkflowVersioning(tv, unpinned, tv.Deployment(), override, nil)
+
+	s.pollWftAndHandle(tv, sticky, nil,
 		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
 			s.NotNil(task)
 			return respondCompleteWorkflow(tv, unpinned), nil
 		})
-	s.NoError(err)
-	s.verifyWorkflowVersioning(we, unpinned, tv.Deployment(), override)
+	s.verifyWorkflowVersioning(tv, unpinned, tv.Deployment(), override, nil)
 }
 
 func (s *Versioning3Suite) updateTaskQueueDeploymentData(
 	tv *testvars.TestVars,
 	timeSinceCurrent time.Duration,
+	tqTypes ...enumspb.TaskQueueType,
 ) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
 	defer cancel()
 
 	lastBecameCurrent := time.Now().Add(-timeSinceCurrent)
-	types := []enumspb.TaskQueueType{enumspb.TASK_QUEUE_TYPE_WORKFLOW, enumspb.TASK_QUEUE_TYPE_ACTIVITY}
-	for _, t := range types {
+	for _, t := range tqTypes {
 		_, err := s.GetTestCluster().MatchingClient().SyncDeploymentUserData(
 			ctx, &matchingservice.SyncDeploymentUserDataRequest{
 				NamespaceId:   s.GetNamespaceID(s.Namespace()),
@@ -284,69 +307,22 @@ func (s *Versioning3Suite) updateTaskQueueDeploymentData(
 		)
 		s.NoError(err)
 	}
-	s.waitForDeploymentDataPropagation(ctx, tv)
-}
-
-func (s *Versioning3Suite) waitForDeploymentDataPropagation(
-	ctx context.Context,
-	tv *testvars.TestVars,
-) {
-	v := s.GetTestCluster().Host().DcClient().GetValue(dynamicconfig.MatchingNumTaskqueueReadPartitions.Key())
-	s.NotEmpty(v, "versioning tests require setting explicit number of partitions")
-	count, ok := v[0].Value.(int)
-	s.True(ok, "partition count is not an int")
-	partitionCount := count
-
-	type partAndType struct {
-		part int
-		tp   enumspb.TaskQueueType
-	}
-	remaining := make(map[partAndType]struct{})
-	for i := 0; i < partitionCount; i++ {
-		remaining[partAndType{i, enumspb.TASK_QUEUE_TYPE_ACTIVITY}] = struct{}{}
-		remaining[partAndType{i, enumspb.TASK_QUEUE_TYPE_WORKFLOW}] = struct{}{}
-	}
-	nsId := s.GetNamespaceID(s.Namespace())
-	f, err := tqid.NewTaskQueueFamily(nsId, tv.TaskQueue().GetName())
-	deployment := tv.Deployment()
-	s.Eventually(func() bool {
-		for pt := range remaining {
-			s.NoError(err)
-			partition := f.TaskQueue(pt.tp).NormalPartition(pt.part)
-			// Use lower-level GetTaskQueueUserData instead of GetWorkerBuildIdCompatibility
-			// here so that we can target activity queues.
-			res, err := s.GetTestCluster().MatchingClient().GetTaskQueueUserData(
-				ctx,
-				&matchingservice.GetTaskQueueUserDataRequest{
-					NamespaceId:   nsId,
-					TaskQueue:     partition.RpcName(),
-					TaskQueueType: partition.TaskType(),
-				})
-			s.NoError(err)
-			perTypes := res.GetUserData().GetData().GetPerType()
-			if perTypes != nil {
-				deps := perTypes[int32(pt.tp)].GetDeploymentData().GetDeployments()
-				for _, d := range deps {
-					if d.GetDeployment().Equal(deployment) {
-						delete(remaining, pt)
-					}
-				}
-			}
-		}
-		return len(remaining) == 0
-	}, 10*time.Second, 100*time.Millisecond)
+	s.waitForDeploymentDataPropagation(tv, tqTypes...)
 }
 
 func (s *Versioning3Suite) verifyWorkflowVersioning(
-	we *commonpb.WorkflowExecution,
+	tv *testvars.TestVars,
 	behavior enumspb.VersioningBehavior,
 	deployment *deploymentpb.Deployment,
 	override *workflow.VersioningOverride,
+	transition *workflow.DeploymentTransition,
 ) {
 	dwf, err := s.FrontendClient().DescribeWorkflowExecution(
 		context.Background(), &workflowservice.DescribeWorkflowExecutionRequest{
 			Namespace: s.Namespace(),
-			Execution: we,
+			Execution: &commonpb.WorkflowExecution{
+				WorkflowId: tv.WorkflowID(),
+			},
 		},
 	)
 	s.NoError(err)
@@ -365,6 +341,13 @@ func (s *Versioning3Suite) verifyWorkflowVersioning(
 		s.Fail(fmt.Sprintf("deployment override mismatch. expected: {%s}, actual: {%s}",
 			override.GetDeployment(),
 			actualOverrideDeployment,
+		))
+	}
+
+	if !versioningInfo.GetDeploymentTransition().Equal(transition) {
+		s.Fail(fmt.Sprintf("deployment override mismatch. expected: {%s}, actual: {%s}",
+			transition,
+			versioningInfo.GetDeploymentTransition(),
 		))
 	}
 }
@@ -469,53 +452,79 @@ func (s *Versioning3Suite) startWorkflow(
 // do not grow larger that DB column limit (currently as low as 272 chars).
 func (s *Versioning3Suite) Name() string {
 	fullName := s.T().Name()
-	if len(fullName) <= 300 {
+	if len(fullName) <= 30 {
 		return fullName
 	}
 	return fmt.Sprintf("%s-%08x",
-		fullName[len(fullName)-25:],
+		fullName[len(fullName)-21:],
 		farm.Fingerprint32([]byte(fullName)),
 	)
 }
 
+// pollWftAndHandle can be used in sync and async mode. For async mode pass the async channel. It
+// will be closed when the task is handled.
 func (s *Versioning3Suite) pollWftAndHandle(
 	tv *testvars.TestVars,
 	sticky bool,
+	async chan<- interface{},
 	handler func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error),
-) (*workflowservice.RespondWorkflowTaskCompletedResponse, error) {
+) {
 	poller := taskpoller.New(s.T(), s.FrontendClient(), s.Namespace())
 	d := tv.Deployment()
 	tq := tv.TaskQueue()
 	if sticky {
 		tq = tv.StickyTaskQueue()
 	}
-	return poller.PollWorkflowTask(
-		&workflowservice.PollWorkflowTaskQueueRequest{
-			WorkerVersionCapabilities: &commonpb.WorkerVersionCapabilities{
-				BuildId:              d.BuildId,
-				DeploymentSeriesName: d.SeriesName,
-				UseVersioning:        true,
+	f := func() {
+		_, err := poller.PollWorkflowTask(
+			&workflowservice.PollWorkflowTaskQueueRequest{
+				WorkerVersionCapabilities: &commonpb.WorkerVersionCapabilities{
+					BuildId:              d.BuildId,
+					DeploymentSeriesName: d.SeriesName,
+					UseVersioning:        true,
+				},
+				TaskQueue: tq,
 			},
-			TaskQueue: tq,
-		},
-	).HandleTask(tv, handler)
+		).HandleTask(tv, handler)
+		s.NoError(err)
+	}
+	if async == nil {
+		f()
+	} else {
+		go func() {
+			f()
+			close(async)
+		}()
+	}
 }
 
 func (s *Versioning3Suite) pollActivityAndHandle(
 	tv *testvars.TestVars,
+	async chan<- interface{},
 	handler func(task *workflowservice.PollActivityTaskQueueResponse) (*workflowservice.RespondActivityTaskCompletedRequest, error),
-) (*workflowservice.RespondActivityTaskCompletedResponse, error) {
+) {
 	poller := taskpoller.New(s.T(), s.FrontendClient(), s.Namespace())
 	d := tv.Deployment()
-	return poller.PollActivityTask(
-		&workflowservice.PollActivityTaskQueueRequest{
-			WorkerVersionCapabilities: &commonpb.WorkerVersionCapabilities{
-				BuildId:              d.BuildId,
-				DeploymentSeriesName: d.SeriesName,
-				UseVersioning:        true,
+	f := func() {
+		_, err := poller.PollActivityTask(
+			&workflowservice.PollActivityTaskQueueRequest{
+				WorkerVersionCapabilities: &commonpb.WorkerVersionCapabilities{
+					BuildId:              d.BuildId,
+					DeploymentSeriesName: d.SeriesName,
+					UseVersioning:        true,
+				},
 			},
-		},
-	).HandleTask(tv, handler, taskpoller.WithTimeout(time.Minute))
+		).HandleTask(tv, handler, taskpoller.WithTimeout(time.Minute))
+		s.NoError(err)
+	}
+	if async == nil {
+		f()
+	} else {
+		go func() {
+			f()
+			close(async)
+		}()
+	}
 }
 
 func (s *Versioning3Suite) idlePollWorkflow(
@@ -602,4 +611,58 @@ func (s *Versioning3Suite) warmUpSticky(
 		},
 		taskpoller.WithTimeout(minPollTime),
 	)
+}
+
+func (s *Versioning3Suite) waitForDeploymentDataPropagation(
+	tv *testvars.TestVars,
+	tqTypes ...enumspb.TaskQueueType,
+) {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
+	defer cancel()
+
+	v := s.GetTestCluster().Host().DcClient().GetValue(dynamicconfig.MatchingNumTaskqueueReadPartitions.Key())
+	s.NotEmpty(v, "versioning tests require setting explicit number of partitions")
+	count, ok := v[0].Value.(int)
+	s.True(ok, "partition count is not an int")
+	partitionCount := count
+
+	type partAndType struct {
+		part int
+		tp   enumspb.TaskQueueType
+	}
+	remaining := make(map[partAndType]struct{})
+	for i := 0; i < partitionCount; i++ {
+		for _, tqt := range tqTypes {
+			remaining[partAndType{i, tqt}] = struct{}{}
+		}
+	}
+	nsId := s.GetNamespaceID(s.Namespace())
+	f, err := tqid.NewTaskQueueFamily(nsId, tv.TaskQueue().GetName())
+	deployment := tv.Deployment()
+	s.Eventually(func() bool {
+		for pt := range remaining {
+			s.NoError(err)
+			partition := f.TaskQueue(pt.tp).NormalPartition(pt.part)
+			// Use lower-level GetTaskQueueUserData instead of GetWorkerBuildIdCompatibility
+			// here so that we can target activity queues.
+			res, err := s.GetTestCluster().MatchingClient().GetTaskQueueUserData(
+				ctx,
+				&matchingservice.GetTaskQueueUserDataRequest{
+					NamespaceId:   nsId,
+					TaskQueue:     partition.RpcName(),
+					TaskQueueType: partition.TaskType(),
+				})
+			s.NoError(err)
+			perTypes := res.GetUserData().GetData().GetPerType()
+			if perTypes != nil {
+				deps := perTypes[int32(pt.tp)].GetDeploymentData().GetDeployments()
+				for _, d := range deps {
+					if d.GetDeployment().Equal(deployment) {
+						delete(remaining, pt)
+					}
+				}
+			}
+		}
+		return len(remaining) == 0
+	}, 10*time.Second, 100*time.Millisecond)
 }

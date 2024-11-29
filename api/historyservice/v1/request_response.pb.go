@@ -1132,8 +1132,7 @@ type RecordWorkflowTaskStartedRequest struct {
 	PollRequest         *v1.PollWorkflowTaskQueueRequest `protobuf:"bytes,6,opt,name=poll_request,json=pollRequest,proto3" json:"poll_request,omitempty"`
 	Clock               *v16.VectorClock                 `protobuf:"bytes,7,opt,name=clock,proto3" json:"clock,omitempty"`
 	BuildIdRedirectInfo *v111.BuildIdRedirectInfo        `protobuf:"bytes,8,opt,name=build_id_redirect_info,json=buildIdRedirectInfo,proto3" json:"build_id_redirect_info,omitempty"`
-	// Presence of this value means matching has redirected the task to a deployment other than
-	// the deployment that History passed when scheduling the task.
+	// The deployment passed by History when the task was scheduled.
 	ScheduledDeployment *v112.Deployment `protobuf:"bytes,9,opt,name=scheduled_deployment,json=scheduledDeployment,proto3" json:"scheduled_deployment,omitempty"`
 }
 
@@ -1423,13 +1422,12 @@ type RecordActivityTaskStartedRequest struct {
 	BuildIdRedirectInfo *v111.BuildIdRedirectInfo        `protobuf:"bytes,8,opt,name=build_id_redirect_info,json=buildIdRedirectInfo,proto3" json:"build_id_redirect_info,omitempty"`
 	// Stamp represents the internal “version” of the activity options and can/will be changed with Activity API.
 	Stamp int32 `protobuf:"varint,9,opt,name=stamp,proto3" json:"stamp,omitempty"`
-	// Presence of this value means matching has redirected the task to a deployment other than
-	// the deployment that History passed when scheduling the task.
+	// The deployment passed by History when the task was scheduled.
 	ScheduledDeployment *v112.Deployment `protobuf:"bytes,10,opt,name=scheduled_deployment,json=scheduledDeployment,proto3" json:"scheduled_deployment,omitempty"`
-	// Whether the directive deployment contains the activity's task queue. Used by History to
+	// Whether the scheduled deployment contains the activity's task queue. Used by History to
 	// determine if the activity redirect should affect the workflow.
-	// Only set if `directive_deployment` is set (i.e. the task is redirected).
-	DirectiveDeploymentContainsTaskQueue bool `protobuf:"varint,11,opt,name=directive_deployment_contains_task_queue,json=directiveDeploymentContainsTaskQueue,proto3" json:"directive_deployment_contains_task_queue,omitempty"`
+	// Only set if `scheduled_deployment` is set (i.e. the task is redirected).
+	ScheduledDeploymentContainsTaskQueue bool `protobuf:"varint,11,opt,name=scheduled_deployment_contains_task_queue,json=scheduledDeploymentContainsTaskQueue,proto3" json:"scheduled_deployment_contains_task_queue,omitempty"`
 }
 
 func (x *RecordActivityTaskStartedRequest) Reset() {
@@ -1527,9 +1525,9 @@ func (x *RecordActivityTaskStartedRequest) GetScheduledDeployment() *v112.Deploy
 	return nil
 }
 
-func (x *RecordActivityTaskStartedRequest) GetDirectiveDeploymentContainsTaskQueue() bool {
+func (x *RecordActivityTaskStartedRequest) GetScheduledDeploymentContainsTaskQueue() bool {
 	if x != nil {
-		return x.DirectiveDeploymentContainsTaskQueue
+		return x.ScheduledDeploymentContainsTaskQueue
 	}
 	return false
 }
@@ -10206,10 +10204,10 @@ var file_temporal_server_api_historyservice_v1_request_response_proto_rawDesc = 
 	0x2e, 0x61, 0x70, 0x69, 0x2e, 0x64, 0x65, 0x70, 0x6c, 0x6f, 0x79, 0x6d, 0x65, 0x6e, 0x74, 0x2e,
 	0x76, 0x31, 0x2e, 0x44, 0x65, 0x70, 0x6c, 0x6f, 0x79, 0x6d, 0x65, 0x6e, 0x74, 0x52, 0x13, 0x73, 0x63,
 	0x68, 0x65, 0x64, 0x75, 0x6c, 0x65, 0x64, 0x44, 0x65, 0x70, 0x6c, 0x6f, 0x79, 0x6d, 0x65, 0x6e, 0x74,
-	0x42, 0x02, 0x68, 0x00, 0x12, 0x5a, 0x0a, 0x28, 0x64, 0x69, 0x72, 0x65, 0x63, 0x74, 0x69, 0x76, 0x65,
+	0x42, 0x02, 0x68, 0x00, 0x12, 0x5a, 0x0a, 0x28, 0x73, 0x63, 0x68, 0x65, 0x64, 0x75, 0x6c, 0x65, 0x64,
 	0x5f, 0x64, 0x65, 0x70, 0x6c, 0x6f, 0x79, 0x6d, 0x65, 0x6e, 0x74, 0x5f, 0x63, 0x6f, 0x6e, 0x74,
 	0x61, 0x69, 0x6e, 0x73, 0x5f, 0x74, 0x61, 0x73, 0x6b, 0x5f, 0x71, 0x75, 0x65, 0x75, 0x65, 0x18, 0x0b,
-	0x20, 0x01, 0x28, 0x08, 0x52, 0x24, 0x64, 0x69, 0x72, 0x65, 0x63, 0x74, 0x69, 0x76, 0x65, 0x44, 0x65,
+	0x20, 0x01, 0x28, 0x08, 0x52, 0x24, 0x73, 0x63, 0x68, 0x65, 0x64, 0x75, 0x6c, 0x65, 0x64, 0x44, 0x65,
 	0x70, 0x6c, 0x6f, 0x79, 0x6d, 0x65, 0x6e, 0x74, 0x43, 0x6f, 0x6e, 0x74, 0x61, 0x69, 0x6e, 0x73, 0x54,
 	0x61, 0x73, 0x6b, 0x51, 0x75, 0x65, 0x75, 0x65, 0x42, 0x02, 0x68, 0x00, 0x3a, 0x24, 0x92, 0xc4,
 	0x03, 0x20, 0x2a, 0x1e, 0x77, 0x6f, 0x72, 0x6b, 0x66, 0x6c, 0x6f, 0x77, 0x5f, 0x65, 0x78, 0x65, 0x63,

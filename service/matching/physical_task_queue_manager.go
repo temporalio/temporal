@@ -635,22 +635,22 @@ func (c *physicalTaskQueueManagerImpl) ensureRegisteredInDeployment(
 
 	// the deployment workflow will register itself in this task queue's user data.
 	// wait for it to propagate here.
-	//for {
-	//	userData, userDataChanged, err := c.partitionMgr.GetUserDataManager().GetUserData()
-	//	if err != nil {
-	//		return err
-	//	}
-	//	deploymentData := userData.GetData().GetPerType()[int32(c.queue.TaskType())].GetDeploymentData()
-	//	if findDeployment(deploymentData, workerDeployment) >= 0 {
-	//		break
-	//	}
-	//	select {
-	//	case <-userDataChanged:
-	//	case <-ctx.Done():
-	//		c.logger.Error("timed out waiting for deployment to appear in user data")
-	//		return ctx.Err()
-	//	}
-	//}
+	for {
+		userData, userDataChanged, err := c.partitionMgr.GetUserDataManager().GetUserData()
+		if err != nil {
+			return err
+		}
+		deploymentData := userData.GetData().GetPerType()[int32(c.queue.TaskType())].GetDeploymentData()
+		if findDeployment(deploymentData, workerDeployment) >= 0 {
+			break
+		}
+		select {
+		case <-userDataChanged:
+		case <-ctx.Done():
+			c.logger.Error("timed out waiting for deployment to appear in user data")
+			return ctx.Err()
+		}
+	}
 
 	c.deploymentRegistered = true
 	return nil

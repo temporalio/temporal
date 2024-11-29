@@ -47,6 +47,7 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/testing/testvars"
+	"go.temporal.io/server/common/tqid"
 	deploymentwf "go.temporal.io/server/service/worker/deployment"
 	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/protobuf/proto"
@@ -189,6 +190,60 @@ func (s *DeploymentSuite) TestDescribeDeployment_RegisterTaskQueue() {
 		a.Equal(false, resp.GetDeploymentInfo().GetIsCurrent())
 		// todo (Shivam) - please add a check for current time
 	}, time.Second*5, time.Millisecond*200)
+}
+
+func (s *DeploymentSuite) TestDescribeDeployment_RegisterTaskQueue_ConcurrentPollers() {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
+	defer cancel()
+
+	// presence of internally used delimiters (:) or escape
+	// characters shouldn't break functionality
+	seriesName := testcore.RandomizeStr("my-series|:|:")
+	buildID := testcore.RandomizeStr("bgt:|")
+
+	taskQueue := &taskqueuepb.TaskQueue{Name: "deployment-test", Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
+	workerDeployment := &deploymentpb.Deployment{
+		SeriesName: seriesName,
+		BuildId:    buildID,
+	}
+	numberOfDeployments := 1
+
+	root, err := tqid.PartitionFromProto(taskQueue, s.Namespace(), enumspb.TASK_QUEUE_TYPE_WORKFLOW)
+	s.NoError(err)
+	// Making concurrent polls to 4 partitions, 3 polls to each
+	for p := 0; p < 4; p++ {
+		for i := 0; i < 3; i++ {
+			tq := &taskqueuepb.TaskQueue{Name: root.TaskQueue().NormalPartition(p).RpcName(), Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
+			go func() {
+				s.pollFromDeployment(ctx, tq, workerDeployment)
+			}()
+		}
+	}
+
+	// Querying the Deployment
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		a := assert.New(t)
+
+		resp, err := s.FrontendClient().DescribeDeployment(ctx, &workflowservice.DescribeDeploymentRequest{
+			Namespace:  s.Namespace(),
+			Deployment: workerDeployment,
+		})
+		if !a.NoError(err) {
+			return
+		}
+		a.NotNil(resp.GetDeploymentInfo())
+		a.NotNil(resp.GetDeploymentInfo().GetDeployment())
+
+		a.Equal(seriesName, resp.GetDeploymentInfo().GetDeployment().GetSeriesName())
+		a.Equal(buildID, resp.GetDeploymentInfo().GetDeployment().GetBuildId())
+
+		if !a.Equal(numberOfDeployments, len(resp.GetDeploymentInfo().GetTaskQueueInfos())) {
+			return
+		}
+		a.Equal(taskQueue.Name, resp.GetDeploymentInfo().GetTaskQueueInfos()[0].Name)
+		a.Equal(false, resp.GetDeploymentInfo().GetIsCurrent())
+		// todo (Shivam) - please add a check for current time
+	}, time.Second*5, time.Millisecond*1000)
 }
 
 func (s *DeploymentSuite) TestGetCurrentDeployment_NoCurrentDeployment() {
