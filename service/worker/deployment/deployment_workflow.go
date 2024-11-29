@@ -29,6 +29,7 @@ import (
 	"time"
 
 	"github.com/pborman/uuid"
+	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	sdkclient "go.temporal.io/sdk/client"
@@ -307,6 +308,9 @@ func (d *DeploymentWorkflowRunner) handleSyncState(ctx workflow.Context, args *d
 	}
 
 	// apply changes to metadata
+	if d.State.Metadata == nil && args.UpdateMetadata != nil {
+		d.State.Metadata = make(map[string]*commonpb.Payload)
+	}
 	for key, payload := range args.UpdateMetadata.GetUpsertEntries() {
 		d.State.Metadata[key] = payload
 	}

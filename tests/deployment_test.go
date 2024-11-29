@@ -45,6 +45,7 @@ import (
 	sdkclient "go.temporal.io/sdk/client"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/testing/testvars"
 	deploymentwf "go.temporal.io/server/service/worker/deployment"
 	"go.temporal.io/server/tests/testcore"
@@ -1105,6 +1106,69 @@ func (s *DeploymentSuite) TestSetCurrent_BeforeRegister() {
 		require.False(t, isCurrent1)
 		require.True(t, isCurrent2)
 	}, time.Second*5, time.Millisecond*200)
+}
+
+func (s *DeploymentSuite) TestSetCurrent_UpdateMetadata() {
+	tv := testvars.New(s)
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
+	defer cancel()
+
+	dep1 := &deploymentpb.Deployment{
+		SeriesName: tv.DeploymentSeries(),
+		BuildId:    tv.BuildId("1"),
+	}
+	dep2 := &deploymentpb.Deployment{
+		SeriesName: tv.DeploymentSeries(),
+		BuildId:    tv.BuildId("2"),
+	}
+
+	// set to 1 with some metadata
+	_, err := s.FrontendClient().SetCurrentDeployment(ctx, &workflowservice.SetCurrentDeploymentRequest{
+		Namespace:  s.Namespace(),
+		Deployment: dep1,
+		Identity:   "test",
+		UpdateMetadata: &deploymentpb.UpdateDeploymentMetadata{
+			UpsertEntries: map[string]*commonpb.Payload{
+				"key1": payload.EncodeString("val1"),
+				"key2": payload.EncodeString("val2"),
+				"key3": payload.EncodeString("val3"),
+			},
+		},
+	})
+	s.NoError(err)
+
+	// set to 2
+	_, err = s.FrontendClient().SetCurrentDeployment(ctx, &workflowservice.SetCurrentDeploymentRequest{
+		Namespace:  s.Namespace(),
+		Deployment: dep2,
+		Identity:   "test",
+	})
+
+	// set back to 1 with different metadata
+	_, err = s.FrontendClient().SetCurrentDeployment(ctx, &workflowservice.SetCurrentDeploymentRequest{
+		Namespace:  s.Namespace(),
+		Deployment: dep1,
+		Identity:   "test",
+		UpdateMetadata: &deploymentpb.UpdateDeploymentMetadata{
+			UpsertEntries: map[string]*commonpb.Payload{
+				"key1": payload.EncodeString("new1"),
+				"key4": payload.EncodeString("val4"),
+			},
+			RemoveEntries: []string{"key2"},
+		},
+	})
+
+	cur, err := s.FrontendClient().GetCurrentDeployment(ctx, &workflowservice.GetCurrentDeploymentRequest{
+		Namespace:  s.Namespace(),
+		SeriesName: tv.DeploymentSeries(),
+	})
+	s.NoError(err)
+	s.Equal(dep1.BuildId, cur.CurrentDeploymentInfo.Deployment.BuildId)
+	s.Equal(`"new1"`, payload.ToString(cur.CurrentDeploymentInfo.Metadata["key1"]))
+	s.Nil(cur.CurrentDeploymentInfo.Metadata["key2"])
+	s.Equal(`"val3"`, payload.ToString(cur.CurrentDeploymentInfo.Metadata["key3"]))
+	s.Equal(`"val4"`, payload.ToString(cur.CurrentDeploymentInfo.Metadata["key4"]))
 }
 
 // Name is used by testvars. We use a shorten test name in variables so that physical task queue IDs
