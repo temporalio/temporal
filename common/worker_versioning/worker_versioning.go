@@ -34,6 +34,7 @@ import (
 	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
+	workflowpb "go.temporal.io/api/workflow/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	"go.temporal.io/server/common/namespace"
@@ -241,6 +242,29 @@ func ValidateDeployment(deployment *deploymentpb.Deployment) error {
 	}
 	if deployment.GetBuildId() == "" {
 		return serviceerror.NewInvalidArgument("deployment build ID cannot be empty")
+	}
+	return nil
+}
+
+func ValidateVersioningOverride(override *workflowpb.VersioningOverride) error {
+	if override == nil {
+		return nil
+	}
+	switch override.GetBehavior() {
+	case enumspb.VERSIONING_BEHAVIOR_PINNED:
+		if override.GetDeployment() != nil {
+			return ValidateDeployment(override.GetDeployment())
+		} else {
+			return serviceerror.NewInvalidArgument("must provide deployment if behavior is 'PINNED'")
+		}
+	case enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE:
+		if override.GetDeployment() != nil {
+			return serviceerror.NewInvalidArgument("only provide deployment if behavior is 'PINNED'")
+		}
+	case enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED:
+		return serviceerror.NewInvalidArgument("override behavior is required")
+	default:
+		return serviceerror.NewInvalidArgument(fmt.Sprintf("override behavior %s not recognized", override.GetBehavior()))
 	}
 	return nil
 }

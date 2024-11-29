@@ -854,6 +854,7 @@ func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
 		rootExecutionInfo,
 		inheritedBuildId,
 		initiatedEvent.GetUserMetadata(),
+		mutableState.GetExecutionInfo().GetVersioningInfo().GetVersioningOverride(),
 	)
 	if err != nil {
 		t.logger.Debug("Failed to start child workflow execution", tag.Error(err))
@@ -1344,6 +1345,7 @@ func (t *transferQueueActiveTaskExecutor) startWorkflow(
 	rootExecutionInfo *workflowspb.RootExecutionInfo,
 	inheritedBuildId string,
 	userMetadata *sdkpb.UserMetadata,
+	inheritedOverride *workflowpb.VersioningOverride,
 ) (string, *clockspb.VectorClock, error) {
 	request := common.CreateHistoryStartWorkflowRequest(
 		task.TargetNamespaceID,
@@ -1366,6 +1368,7 @@ func (t *transferQueueActiveTaskExecutor) startWorkflow(
 			Memo:                  attributes.Memo,
 			SearchAttributes:      attributes.SearchAttributes,
 			UserMetadata:          userMetadata,
+			VersioningOverride:    inheritedOverride,
 		},
 		&workflowspb.ParentExecutionInfo{
 			NamespaceId: task.NamespaceID,
