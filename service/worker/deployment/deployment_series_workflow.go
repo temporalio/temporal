@@ -128,7 +128,9 @@ func (d *DeploymentSeriesWorkflowRunner) handleSetCurrent(ctx workflow.Context, 
 	d.State.CurrentChangedTime = timestamppb.New(workflow.Now(ctx))
 
 	// update memo
-	d.updateMemo(ctx)
+	if err = d.updateMemo(ctx); err != nil {
+		return nil, err
+	}
 
 	// tell new current that it's current
 	if curState, err = d.syncDeployment(ctx, d.State.CurrentBuildId, args.UpdateMetadata); err != nil {
@@ -179,8 +181,8 @@ func (d *DeploymentSeriesWorkflowRunner) newUUID(ctx workflow.Context) string {
 	return val
 }
 
-func (d *DeploymentSeriesWorkflowRunner) updateMemo(ctx workflow.Context) {
-	workflow.UpsertMemo(ctx, map[string]any{
+func (d *DeploymentSeriesWorkflowRunner) updateMemo(ctx workflow.Context) error {
+	return workflow.UpsertMemo(ctx, map[string]any{
 		DeploymentSeriesMemoField: &deploymentspb.DeploymentSeriesWorkflowMemo{
 			SeriesName:         d.SeriesName,
 			CurrentBuildId:     d.State.CurrentBuildId,

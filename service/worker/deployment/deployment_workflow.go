@@ -284,7 +284,9 @@ func (d *DeploymentWorkflowRunner) handleSyncState(ctx workflow.Context, args *d
 			d.State.IsCurrent = true
 			d.State.LastBecameCurrentTime = set.LastBecameCurrentTime
 		}
-		d.updateMemo(ctx)
+		if err = d.updateMemo(ctx); err != nil {
+			return nil, err
+		}
 
 		// sync to task queues
 		syncReq := &deploymentspb.SyncUserDataRequest{
@@ -336,8 +338,8 @@ func (d *DeploymentWorkflowRunner) handleDescribeQuery() (*deploymentspb.QueryDe
 }
 
 // updateMemo should be called whenever the workflow updates its local state
-func (d *DeploymentWorkflowRunner) updateMemo(ctx workflow.Context) {
-	workflow.UpsertMemo(ctx, map[string]any{
+func (d *DeploymentWorkflowRunner) updateMemo(ctx workflow.Context) error {
+	return workflow.UpsertMemo(ctx, map[string]any{
 		DeploymentMemoField: &deploymentspb.DeploymentWorkflowMemo{
 			Deployment:          d.State.Deployment,
 			CreateTime:          d.State.CreateTime,

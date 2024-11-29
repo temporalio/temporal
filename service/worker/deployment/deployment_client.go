@@ -150,6 +150,7 @@ func (d *DeploymentClientImpl) RegisterTaskQueueWorker(
 	identity string,
 	requestID string,
 ) (retErr error) {
+	//revive:disable-next-line:defer
 	defer d.record("RegisterTaskQueueWorker", &retErr, taskQueueName, taskQueueType, identity)()
 
 	updatePayload, err := sdk.PreferProtoDataConverter.ToPayloads(&deploymentspb.RegisterWorkerInDeploymentArgs{
@@ -188,6 +189,7 @@ func (d *DeploymentClientImpl) DescribeDeployment(
 	seriesName string,
 	buildID string,
 ) (_ *deploymentpb.DeploymentInfo, retErr error) {
+	//revive:disable-next-line:defer
 	defer d.record("DescribeDeployment", &retErr, seriesName, buildID)()
 
 	// validating params
@@ -238,6 +240,7 @@ func (d *DeploymentClientImpl) GetDeploymentReachability(
 	seriesName string,
 	buildID string,
 ) (_ *workflowservice.GetDeploymentReachabilityResponse, retErr error) {
+	//revive:disable-next-line:defer
 	defer d.record("GetDeploymentReachability", &retErr, seriesName, buildID)()
 
 	deployInfo, err := d.DescribeDeployment(ctx, namespaceEntry, seriesName, buildID)
@@ -270,6 +273,7 @@ func (d *DeploymentClientImpl) GetCurrentDeployment(
 	namespaceEntry *namespace.Namespace,
 	seriesName string,
 ) (_ *deploymentpb.DeploymentInfo, retErr error) {
+	//revive:disable-next-line:defer
 	defer d.record("GetCurrentDeployment", &retErr, seriesName)()
 
 	// Validating params
@@ -327,6 +331,7 @@ func (d *DeploymentClientImpl) ListDeployments(
 	seriesName string,
 	NextPageToken []byte,
 ) (_ []*deploymentpb.DeploymentListInfo, _ []byte, retErr error) {
+	//revive:disable-next-line:defer
 	defer d.record("ListDeployments", &retErr, seriesName)()
 
 	query := ""
@@ -374,6 +379,7 @@ func (d *DeploymentClientImpl) SetCurrentDeployment(
 	identity string,
 	requestID string,
 ) (_ *deploymentpb.DeploymentInfo, _ *deploymentpb.DeploymentInfo, retErr error) {
+	//revive:disable-next-line:defer
 	defer d.record("SetCurrentDeployment", &retErr, namespaceEntry.Name(), deployment, identity)()
 
 	updatePayload, err := sdk.PreferProtoDataConverter.ToPayloads(&deploymentspb.SetCurrentDeploymentArgs{
@@ -427,6 +433,7 @@ func (d *DeploymentClientImpl) StartDeploymentSeries(
 	identity string,
 	requestID string,
 ) (retErr error) {
+	//revive:disable-next-line:defer
 	defer d.record("StartDeploymentSeries", &retErr, namespaceEntry.Name(), seriesName, identity)()
 
 	workflowID := GenerateDeploymentSeriesWorkflowID(seriesName)
@@ -475,6 +482,7 @@ func (d *DeploymentClientImpl) SyncDeploymentWorkflowFromSeries(
 	identity string,
 	requestID string,
 ) (_ *deploymentspb.SyncDeploymentStateResponse, retErr error) {
+	//revive:disable-next-line:defer
 	defer d.record("SyncDeploymentWorkflowFromSeries", &retErr, namespaceEntry.Name(), deployment, args, identity)()
 
 	updatePayload, err := sdk.PreferProtoDataConverter.ToPayloads(args)
@@ -711,7 +719,7 @@ func (d *DeploymentClientImpl) updateWithStart(
 }
 
 func (d *DeploymentClientImpl) buildInitialDeploymentMemo(deployment *deploymentpb.Deployment) (*commonpb.Memo, error) {
-	payload, err := sdk.PreferProtoDataConverter.ToPayload(&deploymentspb.DeploymentWorkflowMemo{
+	pl, err := sdk.PreferProtoDataConverter.ToPayload(&deploymentspb.DeploymentWorkflowMemo{
 		Deployment:          deployment,
 		CreateTime:          timestamppb.Now(),
 		IsCurrentDeployment: false,
@@ -722,13 +730,13 @@ func (d *DeploymentClientImpl) buildInitialDeploymentMemo(deployment *deployment
 
 	return &commonpb.Memo{
 		Fields: map[string]*commonpb.Payload{
-			DeploymentMemoField: payload,
+			DeploymentMemoField: pl,
 		},
 	}, nil
 }
 
 func (d *DeploymentClientImpl) buildInitialDeploymentSeriesMemo(seriesName string) (*commonpb.Memo, error) {
-	payload, err := sdk.PreferProtoDataConverter.ToPayload(&deploymentspb.DeploymentSeriesWorkflowMemo{
+	pl, err := sdk.PreferProtoDataConverter.ToPayload(&deploymentspb.DeploymentSeriesWorkflowMemo{
 		SeriesName: seriesName,
 	})
 	if err != nil {
@@ -737,7 +745,7 @@ func (d *DeploymentClientImpl) buildInitialDeploymentSeriesMemo(seriesName strin
 
 	return &commonpb.Memo{
 		Fields: map[string]*commonpb.Payload{
-			DeploymentSeriesMemoField: payload,
+			DeploymentSeriesMemoField: pl,
 		},
 	}, nil
 }

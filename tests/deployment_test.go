@@ -504,9 +504,9 @@ func (s *DeploymentSuite) TestUpdateWorkflowExecutionOptions_SetUnpinnedThenUnse
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 	defer cancel()
 
+	tv := testvars.New(s)
 	// start an unversioned workflow
-	unversionedTQ := "unversioned-test-tq"
-	run, err := s.sdkClient.ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{TaskQueue: unversionedTQ}, "wf")
+	run, err := s.sdkClient.ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{TaskQueue: tv.TaskQueue().Name}, "wf")
 	s.NoError(err)
 	unversionedWFExec := &commonpb.WorkflowExecution{
 		WorkflowId: run.GetID(),
@@ -872,7 +872,11 @@ func (s *DeploymentSuite) TestUpdateWorkflowExecutionOptions_SetPinnedSetUnpinne
 }
 
 func (s *DeploymentSuite) TestBatchUpdateWorkflowExecutionOptions_SetPinnedThenUnset() {
-	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
+	defer cancel()
+
+	tv := testvars.New(s)
+	tq := tv.TaskQueue()
 
 	// presence of internally used delimiters (:) or escape
 	// characters shouldn't break functionality
@@ -888,16 +892,15 @@ func (s *DeploymentSuite) TestBatchUpdateWorkflowExecutionOptions_SetPinnedThenU
 			Deployment: workerDeployment,
 		},
 	}
-	unversionedTQ := "unversioned-test-tq"
 
 	// create deployment so that GetDeploymentReachability doesn't error
-	s.createDeploymentAndWaitForExist(ctx, workerDeployment, &taskqueuepb.TaskQueue{Name: unversionedTQ, Kind: enumspb.TASK_QUEUE_KIND_NORMAL})
+	s.createDeploymentAndWaitForExist(ctx, workerDeployment, tq)
 
 	// start some unversioned workflows
 	workflowType := "batch-test-type"
 	workflows := make([]*commonpb.WorkflowExecution, 0)
 	for i := 0; i < 5; i++ {
-		run, err := s.sdkClient.ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{TaskQueue: unversionedTQ}, workflowType)
+		run, err := s.sdkClient.ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{TaskQueue: tq.GetName()}, workflowType)
 		s.NoError(err)
 		workflows = append(workflows, &commonpb.WorkflowExecution{
 			WorkflowId: run.GetID(),
@@ -1125,10 +1128,10 @@ func (s *DeploymentSuite) TestSignalWithStartWorkflowExecution_WithUnpinnedOverr
 	s.checkDescribeWorkflowAfterOverride(ctx, wf, override)
 }
 
-func (s *DeploymentSuite) TestSetCurrent_BeforeRegister() {
+func (s *DeploymentSuite) TestSetCurrent_BeforeAndAfterRegister() {
 	tv := testvars.New(s)
 
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*20)
 	defer cancel()
 
 	dep1 := &deploymentpb.Deployment{
@@ -1278,6 +1281,7 @@ func (s *DeploymentSuite) TestSetCurrent_UpdateMetadata() {
 		Deployment: dep2,
 		Identity:   "test",
 	})
+	s.NoError(err)
 
 	// set back to 1 with different metadata
 	_, err = s.FrontendClient().SetCurrentDeployment(ctx, &workflowservice.SetCurrentDeploymentRequest{
@@ -1292,6 +1296,7 @@ func (s *DeploymentSuite) TestSetCurrent_UpdateMetadata() {
 			RemoveEntries: []string{"key2"},
 		},
 	})
+	s.NoError(err)
 
 	cur, err := s.FrontendClient().GetCurrentDeployment(ctx, &workflowservice.GetCurrentDeploymentRequest{
 		Namespace:  s.Namespace(),
