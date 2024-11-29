@@ -1172,10 +1172,11 @@ func (s *DeploymentSuite) TestSetCurrent_BeforeAndAfterRegister() {
 
 	// list should say it's current (with some delay)
 	s.EventuallyWithT(func(t *assert.CollectT) {
+		a := assert.New(t)
 		list, err := s.FrontendClient().ListDeployments(ctx, &workflowservice.ListDeploymentsRequest{
 			Namespace: s.Namespace(),
 		})
-		require.NoError(t, err)
+		a.NoError(err)
 		found, isCurrent1 := 0, false
 		for _, d := range list.GetDeployments() {
 			if d.Deployment.BuildId == dep1.BuildId {
@@ -1183,8 +1184,8 @@ func (s *DeploymentSuite) TestSetCurrent_BeforeAndAfterRegister() {
 				isCurrent1 = d.IsCurrent
 			}
 		}
-		require.Equal(t, 1, found)
-		require.True(t, isCurrent1)
+		a.Equal(1, found)
+		a.True(isCurrent1)
 	}, time.Second*5, time.Millisecond*200)
 
 	// now set to 2
@@ -1225,10 +1226,11 @@ func (s *DeploymentSuite) TestSetCurrent_BeforeAndAfterRegister() {
 
 	// list should say 2 is current and 1 is not current (with some delay)
 	s.EventuallyWithT(func(t *assert.CollectT) {
+		a := assert.New(t)
 		list, err := s.FrontendClient().ListDeployments(ctx, &workflowservice.ListDeploymentsRequest{
 			Namespace: s.Namespace(),
 		})
-		require.NoError(t, err)
+		a.NoError(err)
 		found, isCurrent1, isCurrent2 := 0, false, false
 		for _, d := range list.GetDeployments() {
 			if d.Deployment.BuildId == dep1.BuildId {
@@ -1239,9 +1241,9 @@ func (s *DeploymentSuite) TestSetCurrent_BeforeAndAfterRegister() {
 				isCurrent2 = d.IsCurrent
 			}
 		}
-		require.Equal(t, 2, found)
-		require.False(t, isCurrent1)
-		require.True(t, isCurrent2)
+		a.Equal(2, found)
+		a.False(isCurrent1)
+		a.True(isCurrent2)
 	}, time.Second*5, time.Millisecond*200)
 }
 
