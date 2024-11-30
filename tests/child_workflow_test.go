@@ -27,6 +27,7 @@ package tests
 import (
 	"context"
 	"fmt"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/testing/taskpoller"
 	"go.temporal.io/server/common/testing/testvars"
 	"sort"
@@ -59,30 +60,30 @@ type ChildWorkflowSuite struct {
 	testcore.FunctionalSuite
 }
 
-//func (s *ChildWorkflowSuite) SetupSuite() {
-//	dynamicConfigOverrides := map[dynamicconfig.Key]any{
-//		dynamicconfig.FrontendEnableDeployments.Key():                  true,
-//		dynamicconfig.WorkerEnableDeployment.Key():                     true,
-//		dynamicconfig.FrontendEnableWorkerVersioningWorkflowAPIs.Key(): true,
-//		dynamicconfig.MatchingForwarderMaxChildrenPerNode.Key():        partitionTreeDegree,
-//
-//		// Make sure we don't hit the rate limiter in tests
-//		dynamicconfig.FrontendGlobalNamespaceNamespaceReplicationInducingAPIsRPS.Key():                1000,
-//		dynamicconfig.FrontendMaxNamespaceNamespaceReplicationInducingAPIsBurstRatioPerInstance.Key(): 1,
-//		dynamicconfig.FrontendNamespaceReplicationInducingAPIsRPS.Key():                               1000,
-//
-//		// this is overridden for tests using RunTestWithMatchingBehavior
-//		dynamicconfig.MatchingNumTaskqueueReadPartitions.Key():  4,
-//		dynamicconfig.MatchingNumTaskqueueWritePartitions.Key(): 4,
-//	}
-//	s.SetDynamicConfigOverrides(dynamicConfigOverrides)
-//	s.FunctionalTestBase.SetupSuite("testdata/es_cluster.yaml")
-//}
-//
-//func (s *ChildWorkflowSuite) TearDownSuite() {
-//	s.FunctionalTestBase.TearDownSuite()
-//}
-//
+func (s *ChildWorkflowSuite) SetupSuite() {
+	dynamicConfigOverrides := map[dynamicconfig.Key]any{
+		dynamicconfig.FrontendEnableDeployments.Key():                  true,
+		dynamicconfig.WorkerEnableDeployment.Key():                     true,
+		dynamicconfig.FrontendEnableWorkerVersioningWorkflowAPIs.Key(): true,
+		dynamicconfig.MatchingForwarderMaxChildrenPerNode.Key():        partitionTreeDegree,
+
+		// Make sure we don't hit the rate limiter in tests
+		dynamicconfig.FrontendGlobalNamespaceNamespaceReplicationInducingAPIsRPS.Key():                1000,
+		dynamicconfig.FrontendMaxNamespaceNamespaceReplicationInducingAPIsBurstRatioPerInstance.Key(): 1,
+		dynamicconfig.FrontendNamespaceReplicationInducingAPIsRPS.Key():                               1000,
+
+		// this is overridden for tests using RunTestWithMatchingBehavior
+		dynamicconfig.MatchingNumTaskqueueReadPartitions.Key():  4,
+		dynamicconfig.MatchingNumTaskqueueWritePartitions.Key(): 4,
+	}
+	s.SetDynamicConfigOverrides(dynamicConfigOverrides)
+	s.FunctionalTestBase.SetupSuite("testdata/es_cluster.yaml")
+}
+
+func (s *ChildWorkflowSuite) TearDownSuite() {
+	s.FunctionalTestBase.TearDownSuite()
+}
+
 //func (s *ChildWorkflowSuite) SetupTest() {
 //	s.FunctionalTestBase.SetupTest()
 //}
