@@ -25,7 +25,6 @@
 package testcore
 
 import (
-	"encoding/base64"
 	"fmt"
 	"regexp"
 
@@ -52,7 +51,7 @@ func GetFreeClusterNumber() int  { return <-freeClusterNumbers }
 func PutFreeClusterNumber(i int) { freeClusterNumbers <- i }
 
 func RandomizeStr(id string) string {
-	return fmt.Sprintf("%s-%.6s", id, base64.RawURLEncoding.EncodeToString(uuid.NewRandom()))
+	return fmt.Sprintf("%v-%v", id, uuid.New())
 }
 
 func DecodeString(t require.TestingT, pls *commonpb.Payloads) string {
