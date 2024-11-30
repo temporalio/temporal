@@ -66,7 +66,7 @@ const (
 )
 
 const (
-	NoStart StartOutcome = iota
+	StartErr StartOutcome = iota
 	StartNew
 	StartReused
 	StartDeduped
@@ -192,12 +192,12 @@ func (s *Starter) Invoke(
 ) (resp *historyservice.StartWorkflowExecutionResponse, startOutcome StartOutcome, retError error) {
 	request := s.request.StartRequest
 	if err := s.prepare(ctx); err != nil {
-		return nil, NoStart, err
+		return nil, StartErr, err
 	}
 
 	creationParams, err := s.prepareNewWorkflow(request.GetWorkflowId())
 	if err != nil {
-		return nil, NoStart, err
+		return nil, StartErr, err
 	}
 	defer func() {
 		creationParams.workflowLease.GetReleaseFn()(retError)
@@ -205,7 +205,7 @@ func (s *Starter) Invoke(
 
 	currentExecutionLock, err := s.lockCurrentWorkflowExecution(ctx)
 	if err != nil {
-		return nil, NoStart, err
+		return nil, StartErr, err
 	}
 	defer func() {
 		currentExecutionLock(retError)
@@ -219,7 +219,7 @@ func (s *Starter) Invoke(
 			return s.handleConflict(ctx, creationParams, currentWorkflowConditionFailedError)
 		}
 
-		return nil, NoStart, err
+		return nil, StartErr, err
 	}
 
 	resp, err = s.generateResponse(
@@ -320,18 +320,18 @@ func (s *Starter) handleConflict(
 	}
 
 	if err := s.verifyNamespaceActive(creationParams, currentWorkflowConditionFailed); err != nil {
-		return nil, NoStart, err
+		return nil, StartErr, err
 	}
 
 	response, startOutcome, err := s.resolveDuplicateWorkflowID(ctx, currentWorkflowConditionFailed)
 	if err != nil {
-		return nil, NoStart, err
+		return nil, StartErr, err
 	} else if response != nil {
 		return response, startOutcome, nil
 	}
 
 	if err := s.createAsCurrent(ctx, creationParams, currentWorkflowConditionFailed); err != nil {
-		return nil, NoStart, err
+		return nil, StartErr, err
 	}
 
 	resp, err := s.generateResponse(
@@ -422,9 +422,9 @@ func (s *Starter) resolveDuplicateWorkflowID(
 		}
 		return resp, StartReused, nil
 	case err != nil:
-		return nil, NoStart, err
+		return nil, StartErr, err
 	case currentExecutionUpdateAction == nil:
-		return nil, NoStart, nil
+		return nil, StartErr, nil
 	}
 
 	var workflowLease api.WorkflowLease
@@ -484,16 +484,16 @@ func (s *Starter) resolveDuplicateWorkflowID(
 		}
 		events, err := s.getWorkflowHistory(ctx, mutableStateInfo)
 		if err != nil {
-			return nil, NoStart, err
+			return nil, StartErr, err
 		}
 		resp, err := s.generateResponse(newRunID, mutableStateInfo.workflowTask, events)
 		return resp, StartNew, err
 	case consts.ErrWorkflowCompleted:
 		// current workflow already closed
 		// fallthough to the logic for only creating the new workflow below
-		return nil, NoStart, nil
+		return nil, StartErr, nil
 	default:
-		return nil, NoStart, err
+		return nil, StartErr, err
 	}
 }
 
@@ -685,4 +685,19 @@ func (s *Starter) generateResponse(
 			StartedTime:                timestamppb.New(workflowTaskInfo.StartedTime),
 		},
 	}, nil
+}
+
+func (s StartOutcome) String() string {
+	switch s {
+	case StartErr:
+		return "StartErr"
+	case StartNew:
+		return "StartNew"
+	case StartReused:
+		return "StartReused"
+	case StartDeduped:
+		return "StartDeduped"
+	default:
+		return "Unknown"
+	}
 }

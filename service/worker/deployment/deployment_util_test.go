@@ -85,8 +85,8 @@ func (d *deploymentWorkflowClientSuite) SetupTest() {
 		BuildId:    testBuildID,
 	}
 	d.deploymentClient = &DeploymentClientImpl{
-		HistoryClient:     d.mockHistoryClient,
-		VisibilityManager: d.VisibilityManager,
+		historyClient:     d.mockHistoryClient,
+		visibilityManager: d.VisibilityManager,
 	}
 
 }
