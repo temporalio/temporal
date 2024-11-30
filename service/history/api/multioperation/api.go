@@ -50,7 +50,8 @@ var (
 )
 
 type (
-	updateError struct{ error }
+	updateError  struct{ error }
+	noStartError struct{ startworkflow.StartOutcome }
 )
 
 func Invoke(
@@ -133,23 +134,15 @@ func Invoke(
 	// since that works when the workflow is already running *and* when it's not running.
 	conflictPolicy := startReq.StartRequest.WorkflowIdConflictPolicy
 	if conflictPolicy == enumspb.WORKFLOW_ID_CONFLICT_POLICY_TERMINATE_EXISTING {
-		resp, startOutcome, err := startAndUpdateWorkflow(ctx, starter, updater)
-		if err != nil {
+		resp, err := startAndUpdateWorkflow(ctx, starter, updater)
+		var noStartErr *noStartError
+		switch {
+		case errors.As(err, &noStartErr):
+			// The start request was deduped. Continue below and only send the update.
+		case err != nil:
 			return nil, err
-		}
-
-		switch startOutcome {
-		case startworkflow.NoStart:
-			// An error would have been returned above in this case.
-			panic("unreachable")
-		case startworkflow.StartReused:
-			// Not possible as the conflict policy was not Use-Existing.
-			panic("unreachable")
-		case startworkflow.StartNew:
-			// The old workflow was terminated, the new workflow was started and has received the update.
+		default:
 			return resp, nil
-		case startworkflow.StartDeduped:
-			// The start request was deduped, fall through and only send the update.
 		}
 	}
 
@@ -202,8 +195,9 @@ func Invoke(
 	}
 
 	// workflow hasn't been started yet: start and then apply update
-	resp, outcome, err := startAndUpdateWorkflow(ctx, starter, updater)
-	if err == nil && outcome != startworkflow.StartNew {
+	resp, err := startAndUpdateWorkflow(ctx, starter, updater)
+	var noStartErr *noStartError
+	if errors.As(err, &noStartErr) {
 		// The workflow was meant to be started - but was actually *not* started.
 		// The problem is that the update has not been applied.
 		//
@@ -213,8 +207,7 @@ func Invoke(
 		//
 		// The best way forward is to exit and retry from the top.
 		// By returning an Unavailable service error, the entire MultiOperation will be retried.
-		return nil, newMultiOpError(serviceerror.NewUnavailable(
-			fmt.Sprintf("Workflow could not be started as it is already running: %v", outcome)), multiOpAbortedErr)
+		return nil, newMultiOpError(serviceerror.NewUnavailable(err.Error()), multiOpAbortedErr)
 	}
 	return resp, err
 }
@@ -270,38 +263,34 @@ func updateWorkflow(
 	}, nil
 }
 
+// NOTE: Returns a `startDedupedOrReusedErr` if the start was unexpectedly reused/deduped.
 func startAndUpdateWorkflow(
 	ctx context.Context,
 	starter *startworkflow.Starter,
 	updater *updateworkflow.Updater,
-) (*historyservice.ExecuteMultiOperationResponse, startworkflow.StartOutcome, error) {
+) (*historyservice.ExecuteMultiOperationResponse, error) {
 	startResp, startOutcome, err := starter.Invoke(ctx)
-	if err != nil {
-		// an update error occurred
-		if errors.As(err, &updateError{}) {
-			return nil, startOutcome, newMultiOpError(multiOpAbortedErr, err)
-		}
-
-		// a start error occurred
-		return nil, startOutcome, newMultiOpError(err, multiOpAbortedErr)
-	}
 
 	switch startOutcome {
-	case startworkflow.NoStart:
-		// An error would have been returned above in this case.
-		panic("unreachable")
+	case startworkflow.StartErr:
+		// An update error occurred.
+		if errors.As(err, &updateError{}) {
+			return nil, newMultiOpError(multiOpAbortedErr, err)
+		}
+		// A start error occurred.
+		return nil, newMultiOpError(err, multiOpAbortedErr)
 	case startworkflow.StartNew:
 		// The workflow was started, as expected.
 	case startworkflow.StartDeduped, startworkflow.StartReused:
 		// The workflow was not started.
 		// Aborting since the update has not been applied.
-		return nil, startOutcome, nil
+		return nil, &noStartError{startOutcome}
 	}
 
 	// wait for the update to complete
 	updateResp, err := updater.OnSuccess(ctx)
 	if err != nil {
-		return nil, startOutcome, newMultiOpError(nil, err) // `nil` for start since it succeeded
+		return nil, newMultiOpError(nil, err) // `nil` for start since it succeeded
 	}
 
 	return &historyservice.ExecuteMultiOperationResponse{
@@ -317,7 +306,7 @@ func startAndUpdateWorkflow(
 				},
 			},
 		},
-	}, startOutcome, nil
+	}, nil
 }
 
 func newMultiOpError(startErr, updateErr error) error {
@@ -337,4 +326,8 @@ func newMultiOpError(startErr, updateErr error) error {
 
 func dedup(startReq *historyservice.StartWorkflowExecutionRequest, currentWorkflowLease api.WorkflowLease) bool {
 	return startReq.StartRequest.RequestId == currentWorkflowLease.GetMutableState().GetExecutionState().GetCreateRequestId()
+}
+
+func (e *noStartError) Error() string {
+	return fmt.Sprintf("Workflow was not started: %v", e.StartOutcome)
 }
