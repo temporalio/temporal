@@ -105,17 +105,17 @@ func (s *ChildWorkflowSuite) testChildWorkflowExecution(override *workflowpb.Ver
 		overrideDeployment = override.GetDeployment()
 		overrideBehavior = override.GetBehavior()
 	}
-	parentID := "functional-child-workflow-test-parent"
-	childID := "functional-child-workflow-test-child"
-	grandchildID := "functional-child-workflow-test-grandchild"
-	wtParent := "functional-child-workflow-test-parent-type"
-	wtChild := "functional-child-workflow-test-child-type"
-	wtGrandchild := "functional-child-workflow-test-grandchild-type"
-	tlParent := "functional-child-workflow-test-parent-taskqueue"
-	tlChild := "functional-child-workflow-test-child-taskqueue"
-	tlGrandchild := "functional-child-workflow-test-grandchild-taskqueue"
-	identity := "worker1"
-	saName := "CustomKeywordField"
+	parentID := tv.String("functional-child-workflow-test-parent")
+	childID := tv.String("functional-child-workflow-test-child")
+	grandchildID := tv.String("functional-child-workflow-test-grandchild")
+	wtParent := tv.String("functional-child-workflow-test-parent-type")
+	wtChild := tv.String("functional-child-workflow-test-child-type")
+	wtGrandchild := tv.String("functional-child-workflow-test-grandchild-type")
+	tlParent := tv.String("functional-child-workflow-test-parent-taskqueue")
+	tlChild := tv.String("functional-child-workflow-test-child-taskqueue")
+	tlGrandchild := tv.String("functional-child-workflow-test-grandchild-taskqueue")
+	identity := tv.String("worker1")
+	saName := tv.String("CustomKeywordField")
 	// Uncomment this line to test with mapper.
 	// saName = "AliasForCustomKeywordField"
 
