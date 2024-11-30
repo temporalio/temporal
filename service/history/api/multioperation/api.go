@@ -263,7 +263,7 @@ func updateWorkflow(
 	}, nil
 }
 
-// NOTE: Returns a `startDedupedOrReusedErr` if the start was unexpectedly reused/deduped.
+// NOTE: Returns a `noStartError` if the start was unexpectedly reused/deduped.
 func startAndUpdateWorkflow(
 	ctx context.Context,
 	starter *startworkflow.Starter,
