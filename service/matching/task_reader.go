@@ -39,6 +39,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/primitives/timestamp"
+	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/internal/goro"
 )
@@ -155,10 +156,12 @@ dispatchLoop:
 					continue dispatchLoop
 				}
 
+				var stickyUnavailable *serviceerrors.StickyWorkerUnavailable
 				// if task is still valid (truly valid or unable to verify if task is valid)
 				metrics.BufferThrottlePerTaskQueueCounter.With(tr.taggedMetricsHandler()).Record(1)
-				if !errors.Is(err, context.DeadlineExceeded) && !errors.Is(err, context.Canceled) {
-					// Don't log here if encounters missing user data error when dispatch a versioned task.
+				if !errors.Is(err, context.DeadlineExceeded) && !errors.Is(err, context.Canceled) &&
+					// StickyWorkerUnavailable is expected for versioned sticky queues
+					!errors.As(err, &stickyUnavailable) {
 					tr.throttledLogger().Error("taskReader: unexpected error dispatching task", tag.Error(err))
 				}
 				util.InterruptibleSleep(ctx, taskReaderOfferThrottleWait)

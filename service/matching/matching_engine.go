@@ -2406,14 +2406,7 @@ func (e *matchingEngineImpl) recordWorkflowTaskStarted(
 		RequestId:           uuid.New(),
 		PollRequest:         pollReq,
 		BuildIdRedirectInfo: task.redirectInfo,
-	}
-
-	scheduledDeployment := task.event.Data.VersionDirective.GetDeployment()
-	dispatchDeployment := worker_versioning.DeploymentFromCapabilities(pollReq.GetWorkerVersionCapabilities())
-	if !scheduledDeployment.Equal(dispatchDeployment) {
-		// Redirect has happened, set the directive deployment in the request so History can
-		// validate the task is not stale.
-		recordStartedRequest.ScheduledDeployment = scheduledDeployment
+		ScheduledDeployment: task.event.Data.VersionDirective.GetDeployment(),
 	}
 
 	return e.historyClient.RecordWorkflowTaskStarted(ctx, recordStartedRequest)
@@ -2436,14 +2429,7 @@ func (e *matchingEngineImpl) recordActivityTaskStarted(
 		PollRequest:         pollReq,
 		BuildIdRedirectInfo: task.redirectInfo,
 		Stamp:               task.event.Data.GetStamp(),
-	}
-
-	scheduledDeployment := task.event.Data.VersionDirective.GetDeployment()
-	dispatchDeployment := worker_versioning.DeploymentFromCapabilities(pollReq.GetWorkerVersionCapabilities())
-	if !scheduledDeployment.Equal(dispatchDeployment) {
-		// Redirect has happened, set the directive deployment in the request so History can
-		// validate the task is not stale.
-		recordStartedRequest.ScheduledDeployment = scheduledDeployment
+		ScheduledDeployment: task.event.Data.VersionDirective.GetDeployment(),
 	}
 
 	return e.historyClient.RecordActivityTaskStarted(ctx, recordStartedRequest)

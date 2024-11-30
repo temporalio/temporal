@@ -781,62 +781,61 @@ func (pm *taskQueuePartitionManagerImpl) getPhysicalQueuesForAdd(
 	forwardInfo *taskqueuespb.TaskForwardInfo,
 	runId string,
 ) (pinnedQueue physicalTaskQueueManager, syncMatchQueue physicalTaskQueueManager, userDataChanged <-chan struct{}, err error) {
-	if deployment := directive.GetDeployment(); deployment != nil {
-		wfBehavior := directive.GetBehavior()
+	wfBehavior := directive.GetBehavior()
+	deployment := directive.GetDeployment()
 
-		switch wfBehavior {
-		case enumspb.VERSIONING_BEHAVIOR_PINNED:
-			if pm.partition.Kind() == enumspb.TASK_QUEUE_KIND_STICKY {
-				// TODO (shahab): we can verify the passed deployment matches the last poller's deployment
-				return pm.defaultQueue, pm.defaultQueue, userDataChanged, nil
-			}
+	if wfBehavior == enumspb.VERSIONING_BEHAVIOR_PINNED {
+		if pm.partition.Kind() == enumspb.TASK_QUEUE_KIND_STICKY {
+			// TODO (shahab): we can verify the passed deployment matches the last poller's deployment
+			return pm.defaultQueue, pm.defaultQueue, userDataChanged, nil
+		}
 
-			err = worker_versioning.ValidateDeployment(deployment)
-			if err != nil {
-				return nil, nil, nil, err
-			}
-			pinnedQueue, err = pm.getVersionedQueue(ctx, "", "", deployment, true)
-			if err != nil {
-				return nil, nil, nil, err
-			}
-			if forwardInfo == nil {
-				// Task is not forwarded, so it can be spooled if sync match fails.
-				// Spool queue and sync match queue is the same for pinned workflows.
-				return pinnedQueue, pinnedQueue, nil, nil
-			} else {
-				// Forwarded from child partition - only do sync match.
-				return nil, pinnedQueue, nil, nil
-			}
-		case enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE:
-			perTypeUserData, perTypeUserDataChanged, err := pm.getPerTypeUserData()
-			if err != nil {
-				return nil, nil, nil, err
-			}
+		err = worker_versioning.ValidateDeployment(deployment)
+		if err != nil {
+			return nil, nil, nil, err
+		}
+		pinnedQueue, err = pm.getVersionedQueue(ctx, "", "", deployment, true)
+		if err != nil {
+			return nil, nil, nil, err
+		}
+		if forwardInfo == nil {
+			// Task is not forwarded, so it can be spooled if sync match fails.
+			// Spool queue and sync match queue is the same for pinned workflows.
+			return pinnedQueue, pinnedQueue, nil, nil
+		} else {
+			// Forwarded from child partition - only do sync match.
+			return nil, pinnedQueue, nil, nil
+		}
+	}
 
-			currentDeployment := findCurrentDeployment(perTypeUserData.GetDeploymentData())
+	perTypeUserData, perTypeUserDataChanged, err := pm.getPerTypeUserData()
+	if err != nil {
+		return nil, nil, nil, err
+	}
 
-			if pm.partition.Kind() == enumspb.TASK_QUEUE_KIND_STICKY {
-				if !deployment.Equal(currentDeployment) {
-					// Current deployment has changed, so the workflow should move to a normal queue to
-					// get redirected to the new deployment.
-					return nil, nil, nil, serviceerrors.NewStickyWorkerUnavailable()
-				}
-
-				// TODO (shahab): we can verify the passed deployment matches the last poller's deployment
-				return pm.defaultQueue, pm.defaultQueue, perTypeUserDataChanged, nil
+	currentDeployment := findCurrentDeployment(perTypeUserData.GetDeploymentData())
+	if currentDeployment != nil &&
+		// Make sure the wf is not v1-2 versioned
+		directive.GetAssignedBuildId() == "" {
+		if pm.partition.Kind() == enumspb.TASK_QUEUE_KIND_STICKY {
+			if !deployment.Equal(currentDeployment) {
+				// Current deployment has changed, so the workflow should move to a normal queue to
+				// get redirected to the new deployment.
+				return nil, nil, nil, serviceerrors.NewStickyWorkerUnavailable()
 			}
 
-			currentDeploymentQueue, err := pm.getVersionedQueue(ctx, "", "", currentDeployment, true)
-			if forwardInfo == nil {
-				// Task is not forwarded, so it can be spooled if sync match fails.
-				// Unpinned tasks are spooled in default queue
-				return pm.defaultQueue, currentDeploymentQueue, perTypeUserDataChanged, err
-			} else {
-				// Forwarded from child partition - only do sync match.
-				return nil, currentDeploymentQueue, perTypeUserDataChanged, err
-			}
-		case enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED:
-			return nil, nil, nil, serviceerror.NewInvalidArgument("versioning behavior must be set")
+			// TODO (shahab): we can verify the passed deployment matches the last poller's deployment
+			return pm.defaultQueue, pm.defaultQueue, perTypeUserDataChanged, nil
+		}
+
+		currentDeploymentQueue, err := pm.getVersionedQueue(ctx, "", "", currentDeployment, true)
+		if forwardInfo == nil {
+			// Task is not forwarded, so it can be spooled if sync match fails.
+			// Unpinned tasks are spooled in default queue
+			return pm.defaultQueue, currentDeploymentQueue, perTypeUserDataChanged, err
+		} else {
+			// Forwarded from child partition - only do sync match.
+			return nil, currentDeploymentQueue, perTypeUserDataChanged, err
 		}
 	}
 
@@ -987,8 +986,6 @@ func (pm *taskQueuePartitionManagerImpl) getPerTypeUserData() (*persistencespb.T
 	if err != nil {
 		return nil, nil, err
 	}
-	if perType, ok := userData.GetData().GetPerType()[int32(pm.Partition().TaskType())]; ok {
-		return perType, userDataChanged, nil
-	}
-	return nil, userDataChanged, nil
+	perType := userData.GetData().GetPerType()[int32(pm.Partition().TaskType())]
+	return perType, userDataChanged, nil
 }

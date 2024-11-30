@@ -228,7 +228,7 @@ func (p *workflowTaskPoller) pollTask(
 	if err != nil {
 		return nil, err
 	}
-	if resp == nil {
+	if resp == nil || resp.TaskToken == nil {
 		return nil, NoWorkflowTaskAvailable
 	}
 
