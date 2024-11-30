@@ -270,6 +270,9 @@ message WorkflowExecutionInfo {
     // (-- api-linter: core::0203::immutable=disabled
     //     aip.dev/not-precedent: field_behavior annotation is not yet used in this repo --)
     temporal.api.workflow.v1.WorkflowExecutionVersioningInfo versioning_info = 98;
+
+    // This flag indicates that this execution is a running because a previous run was reset.
+    bool is_reset_run = 99;
 }
 
 message ExecutionStats {
