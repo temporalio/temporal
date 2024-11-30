@@ -218,10 +218,14 @@ func MakeBuildIdDirective(buildId string) *taskqueuespb.TaskVersionDirective {
 }
 
 func StampFromCapabilities(cap *commonpb.WorkerVersionCapabilities) *commonpb.WorkerVersionStamp {
+	if cap.GetUseVersioning() && cap.GetDeploymentSeriesName() != "" {
+		// Versioning 3, do not return stamp.
+		return nil
+	}
 	// TODO: remove `cap.BuildId != ""` condition after old versioning cleanup. this condition is used to differentiate
 	// between old and new versioning in Record*TaskStart calls. [cleanup-old-wv]
 	// we don't want to add stamp for task started events in old versioning
-	if cap != nil && cap.BuildId != "" {
+	if cap.GetBuildId() != "" {
 		return &commonpb.WorkerVersionStamp{UseVersioning: cap.UseVersioning, BuildId: cap.BuildId}
 	}
 	return nil

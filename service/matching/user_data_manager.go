@@ -310,6 +310,7 @@ func (m *userDataManagerImpl) fetchUserData(ctx context.Context) error {
 		return nil
 	}
 
+	fastResponseCounter := 0
 	minWaitTime := m.config.GetUserDataMinWaitTime
 
 	for ctx.Err() == nil {
@@ -322,11 +323,20 @@ func (m *userDataManagerImpl) fetchUserData(ctx context.Context) error {
 		// spinning. So enforce a minimum wait time that increases as long as we keep getting
 		// very fast replies.
 		if elapsed < m.config.GetUserDataMinWaitTime {
-			util.InterruptibleSleep(ctx, minWaitTime-elapsed)
-			// Don't let this get near our call timeout, otherwise we can't tell the difference
-			// between a fast reply and a timeout.
-			minWaitTime = min(minWaitTime*2, m.config.GetUserDataLongPollTimeout()/2)
+			if fastResponseCounter >= 3 {
+				// 3 or more consecutive fast responses, let's throttle!
+				util.InterruptibleSleep(ctx, minWaitTime-elapsed)
+				// Don't let this get near our call timeout, otherwise we can't tell the difference
+				// between a fast reply and a timeout.
+				minWaitTime = min(minWaitTime*2, m.config.GetUserDataLongPollTimeout()/2)
+			} else {
+				// Not yet 3 consecutive fast responses. A few rapid refreshes for versioned queues
+				// is expected when the first poller arrives. We do not want to slow down the queue
+				// for that.
+				fastResponseCounter++
+			}
 		} else {
+			fastResponseCounter = 0
 			minWaitTime = m.config.GetUserDataMinWaitTime
 		}
 	}

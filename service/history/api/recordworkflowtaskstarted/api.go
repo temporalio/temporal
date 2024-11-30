@@ -171,10 +171,6 @@ func Invoke(
 			pollerDeployment := worker_versioning.DeploymentFromCapabilities(req.PollRequest.WorkerVersionCapabilities)
 			// Effective deployment of the workflow when History scheduled the WFT.
 			scheduledDeployment := req.GetScheduledDeployment()
-			if scheduledDeployment == nil {
-				// Matching does not send the directive deployment when it's the same as poller's.
-				scheduledDeployment = pollerDeployment
-			}
 			if !scheduledDeployment.Equal(wfDeployment) {
 				// This must be an AT scheduled before the workflow transitions to the current
 				// deployment. Matching can drop it.

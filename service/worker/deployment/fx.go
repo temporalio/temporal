@@ -93,7 +93,7 @@ func NewResult(
 	return fxResult{
 		Component: &workerComponent{
 			activityDeps: params,
-			enabledForNs: dynamicconfig.WorkerEnableDeployment.Get(dc),
+			enabledForNs: dynamicconfig.EnableDeployments.Get(dc),
 		},
 	}
 }
