@@ -39,7 +39,6 @@ import (
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
-	"go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
@@ -321,15 +320,6 @@ func (c *physicalTaskQueueManagerImpl) WaitUntilInitialized(ctx context.Context)
 
 func (c *physicalTaskQueueManagerImpl) SpoolTask(taskInfo *persistencespb.TaskInfo) error {
 	c.liveness.markAlive()
-	if c.queue.version.Deployment() != nil {
-		fmt.Printf(
-			"\n %s shahab> spooled task %s %s %s\n\n",
-			time.Now(),
-			c.queue.partition.RpcName(),
-			c.queue.partition.TaskType().String(),
-			c.queue.version.Deployment(),
-		)
-	}
 	return c.backlogMgr.SpoolTask(taskInfo)
 }
 
@@ -341,15 +331,6 @@ func (c *physicalTaskQueueManagerImpl) PollTask(
 	ctx context.Context,
 	pollMetadata *pollMetadata,
 ) (*internalTask, error) {
-	if c.queue.version.Deployment() != nil {
-		fmt.Printf(
-			"\n %s shahab> polling task %s %s %s\n\n",
-			time.Now(),
-			c.queue.partition.RpcName(),
-			c.queue.partition.TaskType().String(),
-			c.queue.version.Deployment(),
-		)
-	}
 	c.liveness.markAlive()
 
 	c.currentPolls.Add(1)
@@ -401,17 +382,6 @@ func (c *physicalTaskQueueManagerImpl) PollTask(
 			(!task.isStarted() || !task.started.hasEmptyResponse()) { // Need to filter out the empty "started" ones
 			c.tasksDispatchedInIntervals.incrementTaskCount()
 		}
-
-		if c.queue.version.Deployment() != nil {
-			fmt.Printf(
-				"\n %s shahab> polled task %s %s %s\n\n",
-				time.Now(),
-				c.queue.partition.RpcName(),
-				c.queue.partition.TaskType().String(),
-				c.queue.version.Deployment(),
-			)
-		}
-
 		return task, nil
 	}
 }
@@ -566,17 +536,7 @@ func (c *physicalTaskQueueManagerImpl) TrySyncMatch(ctx context.Context, task *i
 	childCtx, cancel := newChildContext(ctx, c.config.SyncMatchWaitDuration(), time.Second)
 	defer cancel()
 
-	a, b := c.matcher.Offer(childCtx, task)
-	if task.source == enums.TASK_SOURCE_HISTORY && a && c.queue.version.Deployment() != nil {
-		fmt.Printf(
-			"\n %s shahab> sync-matched task %s %s %s\n\n",
-			time.Now(),
-			c.queue.partition.RpcName(),
-			c.queue.partition.TaskType().String(),
-			c.queue.version.Deployment(),
-		)
-	}
-	return a, b
+	return c.matcher.Offer(childCtx, task)
 }
 
 func (c *physicalTaskQueueManagerImpl) ensureRegisteredInDeployment(

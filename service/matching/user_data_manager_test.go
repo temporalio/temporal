@@ -153,11 +153,24 @@ func TestUserData_FetchesOnInit(t *testing.T) {
 			TaskQueue:                defaultRootTqID,
 			TaskQueueType:            enumspb.TASK_QUEUE_TYPE_WORKFLOW,
 			LastKnownUserDataVersion: 0,
-			WaitNewData:              false, // first fetch is not long poll
+			WaitNewData:              false, // first is not long poll
 		}).
 		Return(&matchingservice.GetTaskQueueUserDataResponse{
 			UserData: data1,
 		}, nil)
+
+	tqCfg.matchingClientMock.EXPECT().GetTaskQueueUserData(
+		gomock.Any(),
+		&matchingservice.GetTaskQueueUserDataRequest{
+			NamespaceId:              defaultNamespaceId,
+			TaskQueue:                defaultRootTqID,
+			TaskQueueType:            enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+			LastKnownUserDataVersion: 1,
+			WaitNewData:              true, // second is long poll
+		}).
+		Return(&matchingservice.GetTaskQueueUserDataResponse{
+			UserData: data1,
+		}, nil).MaxTimes(3)
 
 	m := createUserDataManager(t, controller, tqCfg)
 	m.config.GetUserDataMinWaitTime = 10 * time.Second // only one fetch
@@ -283,6 +296,19 @@ func TestUserData_RetriesFetchOnUnavailable(t *testing.T) {
 			}, nil
 		})
 
+	tqCfg.matchingClientMock.EXPECT().GetTaskQueueUserData(
+		gomock.Any(),
+		&matchingservice.GetTaskQueueUserDataRequest{
+			NamespaceId:              defaultNamespaceId,
+			TaskQueue:                defaultRootTqID,
+			TaskQueueType:            enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+			LastKnownUserDataVersion: 1,
+			WaitNewData:              true, // after first successful poll, there would be long polls
+		}).
+		Return(&matchingservice.GetTaskQueueUserDataResponse{
+			UserData: data1,
+		}, nil).MaxTimes(3)
+
 	m := createUserDataManager(t, controller, tqCfg)
 	m.config.GetUserDataMinWaitTime = 10 * time.Second // wait on success
 	m.config.GetUserDataRetryPolicy = backoff.NewExponentialRetryPolicy(50 * time.Millisecond).
@@ -354,6 +380,19 @@ func TestUserData_RetriesFetchOnUnImplemented(t *testing.T) {
 			}, nil
 		})
 
+	tqCfg.matchingClientMock.EXPECT().GetTaskQueueUserData(
+		gomock.Any(),
+		&matchingservice.GetTaskQueueUserDataRequest{
+			NamespaceId:              defaultNamespaceId,
+			TaskQueue:                defaultRootTqID,
+			TaskQueueType:            enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+			LastKnownUserDataVersion: 1,
+			WaitNewData:              true, // after first successful poll, there would be long polls
+		}).
+		Return(&matchingservice.GetTaskQueueUserDataResponse{
+			UserData: data1,
+		}, nil).MaxTimes(3)
+
 	m := createUserDataManager(t, controller, tqCfg)
 	m.config.GetUserDataMinWaitTime = 10 * time.Second // wait on success
 	m.config.GetUserDataRetryPolicy = backoff.NewExponentialRetryPolicy(50 * time.Millisecond).
@@ -410,6 +449,19 @@ func TestUserData_FetchesUpTree(t *testing.T) {
 			UserData: data1,
 		}, nil)
 
+	tqCfg.matchingClientMock.EXPECT().GetTaskQueueUserData(
+		gomock.Any(),
+		&matchingservice.GetTaskQueueUserDataRequest{
+			NamespaceId:              defaultNamespaceId,
+			TaskQueue:                taskQueue.NormalPartition(10).RpcName(),
+			TaskQueueType:            enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+			LastKnownUserDataVersion: 1,
+			WaitNewData:              true, // after first successful poll, there would be long polls
+		}).
+		Return(&matchingservice.GetTaskQueueUserDataResponse{
+			UserData: data1,
+		}, nil).MaxTimes(3)
+
 	m := createUserDataManager(t, controller, tqCfg)
 	m.config.GetUserDataMinWaitTime = 10 * time.Second // wait on success
 	m.Start()
@@ -447,6 +499,19 @@ func TestUserData_FetchesActivityToWorkflow(t *testing.T) {
 		Return(&matchingservice.GetTaskQueueUserDataResponse{
 			UserData: data1,
 		}, nil)
+
+	tqCfg.matchingClientMock.EXPECT().GetTaskQueueUserData(
+		gomock.Any(),
+		&matchingservice.GetTaskQueueUserDataRequest{
+			NamespaceId:              defaultNamespaceId,
+			TaskQueue:                defaultRootTqID,
+			TaskQueueType:            enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+			LastKnownUserDataVersion: 1,
+			WaitNewData:              true, // after first successful poll, there would be long polls
+		}).
+		Return(&matchingservice.GetTaskQueueUserDataResponse{
+			UserData: data1,
+		}, nil).MaxTimes(3)
 
 	m := createUserDataManager(t, controller, tqCfg)
 	m.config.GetUserDataMinWaitTime = 10 * time.Second // wait on success
@@ -489,6 +554,19 @@ func TestUserData_FetchesStickyToNormal(t *testing.T) {
 		Return(&matchingservice.GetTaskQueueUserDataResponse{
 			UserData: data1,
 		}, nil)
+
+	tqCfg.matchingClientMock.EXPECT().GetTaskQueueUserData(
+		gomock.Any(),
+		&matchingservice.GetTaskQueueUserDataRequest{
+			NamespaceId:              defaultNamespaceId,
+			TaskQueue:                normalName,
+			TaskQueueType:            enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+			LastKnownUserDataVersion: 1,
+			WaitNewData:              true, // after first successful poll, there would be long polls
+		}).
+		Return(&matchingservice.GetTaskQueueUserDataResponse{
+			UserData: data1,
+		}, nil).MaxTimes(3)
 
 	m := createUserDataManager(t, controller, tqCfg)
 	m.config.GetUserDataMinWaitTime = 10 * time.Second // wait on success
