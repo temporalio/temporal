@@ -415,7 +415,7 @@ func (s *Versioning3Suite) testTransitionFromActivity(sticky bool) {
 	s.updateTaskQueueDeploymentData(tvB, 0, tqTypeWf, tqTypeAct)
 
 	// Pollers of dA are there, but should not get any task
-	s.idlePollActivity(tvA, true, time.Second*10, "activities should not go to the old deployment")
+	go s.idlePollActivity(tvA, true, time.Second*10, "activities should not go to the old deployment")
 
 	go func() {
 		for i := 2; i <= 4; i++ {
