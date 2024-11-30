@@ -98,26 +98,32 @@ func (s *ChildWorkflowSuite) checkDescribeWorkflowAfterOverride(
 }
 
 func (s *ChildWorkflowSuite) testChildWorkflowExecution(override *workflowpb.VersioningOverride) {
-	tv := testvars.New(s.T())
 	var overrideDeployment *deploymentpb.Deployment
 	var overrideBehavior enumspb.VersioningBehavior
 	if override != nil {
 		overrideDeployment = override.GetDeployment()
 		overrideBehavior = override.GetBehavior()
 	}
-	parentID := tv.String("functional-child-workflow-test-parent")
-	childID := tv.String("functional-child-workflow-test-child")
-	grandchildID := tv.String("functional-child-workflow-test-grandchild")
-	wtParent := tv.String("functional-child-workflow-test-parent-type")
-	wtChild := tv.String("functional-child-workflow-test-child-type")
-	wtGrandchild := tv.String("functional-child-workflow-test-grandchild-type")
-	tlParent := tv.String("functional-child-workflow-test-parent-taskqueue")
-	tlChild := tv.String("functional-child-workflow-test-child-taskqueue")
-	tlGrandchild := tv.String("functional-child-workflow-test-grandchild-taskqueue")
-	identity := tv.String("worker1")
-	saName := tv.String("CustomKeywordField")
+	parentTV := testvars.New(s.T())
+	childTV := testvars.New(s.T())
+	grandchildTV := testvars.New(s.T())
+
+	parentID := parentTV.String("functional-child-workflow-test-parent")
+	childID := childTV.String("functional-child-workflow-test-child")
+	grandchildID := grandchildTV.String("functional-child-workflow-test-grandchild")
+	wtParent := parentTV.String("functional-child-workflow-test-parent-type")
+	wtChild := childTV.String("functional-child-workflow-test-child-type")
+	wtGrandchild := grandchildTV.String("functional-child-workflow-test-grandchild-type")
+	tlParent := parentTV.String("functional-child-workflow-test-parent-taskqueue")
+	tlChild := childTV.String("functional-child-workflow-test-child-taskqueue")
+	tlGrandchild := grandchildTV.String("functional-child-workflow-test-grandchild-taskqueue")
+	identity := "worker1"
+	saName := "CustomKeywordField"
 	// Uncomment this line to test with mapper.
 	// saName = "AliasForCustomKeywordField"
+	parentTV = parentTV.WithTaskQueue(tlParent)
+	childTV = childTV.WithTaskQueue(tlChild)
+	grandchildTV = grandchildTV.WithTaskQueue(tlGrandchild)
 
 	parentWorkflowType := &commonpb.WorkflowType{Name: wtParent}
 	childWorkflowType := &commonpb.WorkflowType{Name: wtChild}
@@ -354,7 +360,7 @@ func (s *ChildWorkflowSuite) testChildWorkflowExecution(override *workflowpb.Ver
 	pollerGrandchild := taskpoller.New(s.T(), s.FrontendClient(), s.Namespace()) // taskQueueGrandchild
 
 	// Make first workflow task to start child execution
-	_, err := pollerParent.PollAndHandleWorkflowTask(tv, wtHandlerParent)
+	_, err := pollerParent.PollAndHandleWorkflowTask(parentTV, wtHandlerParent)
 	s.Logger.Info("PollAndHandleWorkflowTask", tag.Error(err))
 	s.NoError(err)
 	s.True(childExecutionStarted)
@@ -365,12 +371,12 @@ func (s *ChildWorkflowSuite) testChildWorkflowExecution(override *workflowpb.Ver
 	s.Nil(parentStartedEventAttrs.GetRootWorkflowExecution())
 
 	// Process ChildExecution Started event and Process Child Execution and complete it
-	_, err = pollerParent.PollAndHandleWorkflowTask(tv, wtHandlerParent)
+	_, err = pollerParent.PollAndHandleWorkflowTask(parentTV, wtHandlerParent)
 	s.Logger.Info("PollAndHandleWorkflowTask", tag.Error(err))
 	s.NoError(err)
 
 	// Process Child workflow to start grandchild execution
-	_, err = pollerChild.PollAndHandleWorkflowTask(tv, wtHandlerChild)
+	_, err = pollerChild.PollAndHandleWorkflowTask(childTV, wtHandlerChild)
 	s.Logger.Info("PollAndHandleWorkflowTask", tag.Error(err))
 	s.NoError(err)
 	s.NotNil(childStartedEventFromParent)
@@ -409,12 +415,12 @@ func (s *ChildWorkflowSuite) testChildWorkflowExecution(override *workflowpb.Ver
 	s.checkDescribeWorkflowAfterOverride(&commonpb.WorkflowExecution{WorkflowId: childID, RunId: childRunID}, override)
 
 	// Process GrandchildExecution Started event and Process Grandchild Execution and complete it
-	_, err = pollerChild.PollAndHandleWorkflowTask(tv, wtHandlerChild)
+	_, err = pollerChild.PollAndHandleWorkflowTask(childTV, wtHandlerChild)
 	s.Logger.Info("PollAndHandleWorkflowTask", tag.Error(err))
 	s.NoError(err)
 
 	// Process Grandchild workflow
-	_, err = pollerGrandchild.PollAndHandleWorkflowTask(tv, wtHandlerGrandchild)
+	_, err = pollerGrandchild.PollAndHandleWorkflowTask(grandchildTV, wtHandlerGrandchild)
 	s.Logger.Info("PollAndHandleWorkflowTask", tag.Error(err))
 	s.NoError(err)
 	s.True(grandchildComplete)
@@ -433,13 +439,13 @@ func (s *ChildWorkflowSuite) testChildWorkflowExecution(override *workflowpb.Ver
 	s.ProtoEqual(override, grandchildStartedEventAttrs.GetVersioningOverride())
 
 	// Process GrandchildExecution completed event and complete child execution
-	_, err = pollerChild.PollAndHandleWorkflowTask(tv, wtHandlerChild)
+	_, err = pollerChild.PollAndHandleWorkflowTask(childTV, wtHandlerChild)
 	s.Logger.Info("PollAndHandleWorkflowTask", tag.Error(err))
 	s.NoError(err)
 	s.True(childComplete)
 
 	// Process ChildExecution completed event and complete parent execution
-	_, err = pollerParent.PollAndHandleWorkflowTask(tv, wtHandlerParent)
+	_, err = pollerParent.PollAndHandleWorkflowTask(parentTV, wtHandlerParent)
 	s.Logger.Info("PollAndHandleWorkflowTask", tag.Error(err))
 	s.NoError(err)
 	s.NotNil(childCompletedEventFromParent)
