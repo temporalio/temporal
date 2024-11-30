@@ -50,7 +50,9 @@ var (
 )
 
 type (
-	updateError  struct{ error }
+	// updateError is a wrapper to distinguish an update error from a start error.
+	updateError struct{ error }
+	// noStartError is a sentinel error that indicates no workflow start occurred.
 	noStartError struct{ startworkflow.StartOutcome }
 )
 
