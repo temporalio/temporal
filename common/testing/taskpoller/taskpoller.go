@@ -233,6 +233,7 @@ func (p *workflowTaskPoller) pollTask(
 	}
 
 	var events []*historypb.HistoryEvent
+	fmt.Printf("\n\n\nCARLY DEBUG resp: %+v\n\n\n", resp)
 	history := resp.History
 	if history == nil {
 		return nil, errors.New("history is nil")

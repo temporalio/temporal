@@ -64,7 +64,7 @@ func TestChildWorkflowSuite(t *testing.T) {
 	suite.Run(t, new(ChildWorkflowSuite))
 }
 
-func (s *ChildWorkflowSuite) TestChildWorkflowExecution() {
+func (s *ChildWorkflowSuite) TestChildWorkflowExecution_NoOverride() {
 	s.testChildWorkflowExecution(nil)
 }
 
