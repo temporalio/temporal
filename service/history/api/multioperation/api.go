@@ -270,18 +270,15 @@ func startAndUpdateWorkflow(
 	updater *updateworkflow.Updater,
 ) (*historyservice.ExecuteMultiOperationResponse, error) {
 	startResp, startOutcome, err := starter.Invoke(ctx)
-
-	switch startOutcome {
-	case startworkflow.StartErr:
+	if err != nil {
 		// An update error occurred.
 		if errors.As(err, &updateError{}) {
 			return nil, newMultiOpError(multiOpAbortedErr, err)
 		}
 		// A start error occurred.
 		return nil, newMultiOpError(err, multiOpAbortedErr)
-	case startworkflow.StartNew:
-		// The workflow was started, as expected.
-	case startworkflow.StartDeduped, startworkflow.StartReused:
+	}
+	if startOutcome != startworkflow.StartNew {
 		// The workflow was not started.
 		// Aborting since the update has not been applied.
 		return nil, &noStartError{startOutcome}
