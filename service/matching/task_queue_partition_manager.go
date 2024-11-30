@@ -986,8 +986,6 @@ func (pm *taskQueuePartitionManagerImpl) getPerTypeUserData() (*persistencespb.T
 	if err != nil {
 		return nil, nil, err
 	}
-	if perType, ok := userData.GetData().GetPerType()[int32(pm.Partition().TaskType())]; ok {
-		return perType, userDataChanged, nil
-	}
-	return nil, userDataChanged, nil
+	perType := userData.GetData().GetPerType()[int32(pm.Partition().TaskType())]
+	return perType, userDataChanged, nil
 }
