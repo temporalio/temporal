@@ -82,7 +82,7 @@ func TestVersioning3FunctionalSuite(t *testing.T) {
 
 func (s *Versioning3Suite) SetupSuite() {
 	dynamicConfigOverrides := map[dynamicconfig.Key]any{
-		dynamicconfig.FrontendEnableDeployments.Key():                  true,
+		dynamicconfig.EnableDeployments.Key():                          true,
 		dynamicconfig.FrontendEnableWorkerVersioningWorkflowAPIs.Key(): true,
 		dynamicconfig.MatchingForwarderMaxChildrenPerNode.Key():        partitionTreeDegree,
 

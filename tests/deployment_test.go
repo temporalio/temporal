@@ -84,7 +84,7 @@ func TestDeploymentSuite(t *testing.T) {
 func (s *DeploymentSuite) SetupSuite() {
 	s.setAssertions()
 	dynamicConfigOverrides := map[dynamicconfig.Key]any{
-		dynamicconfig.FrontendEnableDeployments.Key():                  true,
+		dynamicconfig.EnableDeployments.Key():                          true,
 		dynamicconfig.FrontendEnableWorkerVersioningDataAPIs.Key():     true,
 		dynamicconfig.FrontendEnableWorkerVersioningWorkflowAPIs.Key(): true,
 		dynamicconfig.FrontendEnableWorkerVersioningRuleAPIs.Key():     true,
