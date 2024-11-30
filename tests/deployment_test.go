@@ -1041,7 +1041,7 @@ func (s *DeploymentSuite) TestUpdateWorkflowExecutionOptions_ChildWorkflowWithSD
 	tqName := "test-tq-child-override"
 
 	// create deployment so that GetDeploymentReachability doesn't error
-	s.createDeploymentAndWaitForExist(deploymentA, &taskqueuepb.TaskQueue{Name: tqName, Kind: enumspb.TASK_QUEUE_KIND_NORMAL})
+	s.createDeploymentAndWaitForExist(context.Background(), deploymentA, &taskqueuepb.TaskQueue{Name: tqName, Kind: enumspb.TASK_QUEUE_KIND_NORMAL})
 
 	// define parent and child worfklows
 	parentStarted := make(chan struct{}, 1)

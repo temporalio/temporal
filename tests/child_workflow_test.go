@@ -59,6 +59,34 @@ type ChildWorkflowSuite struct {
 	testcore.FunctionalSuite
 }
 
+//func (s *ChildWorkflowSuite) SetupSuite() {
+//	dynamicConfigOverrides := map[dynamicconfig.Key]any{
+//		dynamicconfig.FrontendEnableDeployments.Key():                  true,
+//		dynamicconfig.WorkerEnableDeployment.Key():                     true,
+//		dynamicconfig.FrontendEnableWorkerVersioningWorkflowAPIs.Key(): true,
+//		dynamicconfig.MatchingForwarderMaxChildrenPerNode.Key():        partitionTreeDegree,
+//
+//		// Make sure we don't hit the rate limiter in tests
+//		dynamicconfig.FrontendGlobalNamespaceNamespaceReplicationInducingAPIsRPS.Key():                1000,
+//		dynamicconfig.FrontendMaxNamespaceNamespaceReplicationInducingAPIsBurstRatioPerInstance.Key(): 1,
+//		dynamicconfig.FrontendNamespaceReplicationInducingAPIsRPS.Key():                               1000,
+//
+//		// this is overridden for tests using RunTestWithMatchingBehavior
+//		dynamicconfig.MatchingNumTaskqueueReadPartitions.Key():  4,
+//		dynamicconfig.MatchingNumTaskqueueWritePartitions.Key(): 4,
+//	}
+//	s.SetDynamicConfigOverrides(dynamicConfigOverrides)
+//	s.FunctionalTestBase.SetupSuite("testdata/es_cluster.yaml")
+//}
+//
+//func (s *ChildWorkflowSuite) TearDownSuite() {
+//	s.FunctionalTestBase.TearDownSuite()
+//}
+//
+//func (s *ChildWorkflowSuite) SetupTest() {
+//	s.FunctionalTestBase.SetupTest()
+//}
+
 func TestChildWorkflowSuite(t *testing.T) {
 	t.Parallel()
 	suite.Run(t, new(ChildWorkflowSuite))
@@ -100,9 +128,15 @@ func (s *ChildWorkflowSuite) checkDescribeWorkflowAfterOverride(
 func (s *ChildWorkflowSuite) testChildWorkflowExecution(override *workflowpb.VersioningOverride) {
 	var overrideDeployment *deploymentpb.Deployment
 	var overrideBehavior enumspb.VersioningBehavior
+	var versionCap *commonpb.WorkerVersionCapabilities
 	if override != nil {
 		overrideDeployment = override.GetDeployment()
 		overrideBehavior = override.GetBehavior()
+		versionCap = &commonpb.WorkerVersionCapabilities{
+			BuildId:              overrideDeployment.GetBuildId(),
+			UseVersioning:        true,
+			DeploymentSeriesName: overrideDeployment.GetSeriesName(),
+		}
 	}
 	parentTV := testvars.New(s.T())
 	childTV := testvars.New(s.T())
@@ -128,6 +162,12 @@ func (s *ChildWorkflowSuite) testChildWorkflowExecution(override *workflowpb.Ver
 	parentWorkflowType := &commonpb.WorkflowType{Name: wtParent}
 	childWorkflowType := &commonpb.WorkflowType{Name: wtChild}
 	grandchildWorkflowType := &commonpb.WorkflowType{Name: wtGrandchild}
+
+	if overrideDeployment != nil {
+		parentTV = parentTV.WithBuildId(overrideDeployment.GetBuildId())
+		childTV = childTV.WithBuildId(overrideDeployment.GetBuildId())
+		grandchildTV = grandchildTV.WithBuildId(overrideDeployment.GetBuildId())
+	}
 
 	taskQueueParent := &taskqueuepb.TaskQueue{Name: tlParent, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 	taskQueueChild := &taskqueuepb.TaskQueue{Name: tlChild, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
@@ -360,7 +400,9 @@ func (s *ChildWorkflowSuite) testChildWorkflowExecution(override *workflowpb.Ver
 	pollerGrandchild := taskpoller.New(s.T(), s.FrontendClient(), s.Namespace()) // taskQueueGrandchild
 
 	// Make first workflow task to start child execution
-	_, err := pollerParent.PollAndHandleWorkflowTask(parentTV, wtHandlerParent)
+	_, err := pollerParent.PollWorkflowTask(
+		&workflowservice.PollWorkflowTaskQueueRequest{WorkerVersionCapabilities: versionCap},
+	).HandleTask(parentTV, wtHandlerParent)
 	s.Logger.Info("PollAndHandleWorkflowTask", tag.Error(err))
 	s.NoError(err)
 	s.True(childExecutionStarted)

@@ -25,6 +25,7 @@
 package testvars
 
 import (
+	deploymentpb "go.temporal.io/api/deployment/v1"
 	"strings"
 	"sync"
 	"time"
@@ -197,6 +198,18 @@ func (tv *TestVars) TaskQueue(key ...string) *taskqueuepb.TaskQueue {
 
 func (tv *TestVars) WithTaskQueue(taskQueue string, key ...string) *TestVars {
 	return tv.cloneSet("task_queue", key, taskQueue)
+}
+
+func (tv *TestVars) WithBuildId(buildId string, key ...string) *TestVars {
+	return tv.cloneSet("build_id", key, buildId)
+}
+
+func (tv *TestVars) Deployment(key ...string) *deploymentpb.Deployment {
+	//revive:disable-next-line:unchecked-type-assertion
+	return &deploymentpb.Deployment{
+		SeriesName: tv.DeploymentSeries(key...),
+		BuildId:    tv.BuildId(key...),
+	}
 }
 
 func (tv *TestVars) StickyTaskQueue(key ...string) *taskqueuepb.TaskQueue {
