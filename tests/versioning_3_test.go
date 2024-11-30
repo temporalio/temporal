@@ -26,6 +26,7 @@ package tests
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sync/atomic"
 	"testing"
@@ -92,8 +93,8 @@ func (s *Versioning3Suite) SetupSuite() {
 		dynamicconfig.FrontendNamespaceReplicationInducingAPIsRPS.Key():                               1000,
 
 		// this is overridden for tests using RunTestWithMatchingBehavior
-		dynamicconfig.MatchingNumTaskqueueReadPartitions.Key():  4,
-		dynamicconfig.MatchingNumTaskqueueWritePartitions.Key(): 4,
+		dynamicconfig.MatchingNumTaskqueueReadPartitions.Key():  1,
+		dynamicconfig.MatchingNumTaskqueueWritePartitions.Key(): 1,
 	}
 	s.SetDynamicConfigOverrides(dynamicConfigOverrides)
 	s.FunctionalTestBase.SetupSuite("testdata/es_cluster.yaml")
@@ -348,7 +349,7 @@ func (s *Versioning3Suite) testTransitionFromActivity(sticky bool) {
 	//    dispatched.
 	// 4. The 4th activity also does not start on any of the builds although there are pending
 	//    pollers on both.
-	// 5. The transition generates a WFT and it is started in dB.
+	// 5. The transition generates a WFT, and it is started in dB.
 	// 6. The 1st act is completed here while the transition is going on.
 	// 7. The 2nd act fails and makes another attempt. But it is not dispatched.
 	// 8. WFT completes and the transition completes.
@@ -377,27 +378,70 @@ func (s *Versioning3Suite) testTransitionFromActivity(sticky bool) {
 		s.verifyWorkflowStickyQueue(we, tvA.StickyTaskQueue())
 	}
 
-	// Set B as the current deployment
-	s.updateTaskQueueDeploymentData(tvB, 0, tqTypeWf, tqTypeAct)
-
-	// The poller should be present to the activity task is redirected, but it should not receive a
-	// task until transition completes in the next wft.
 	transitionCompleted := atomic.Bool{}
-	actCompleted := make(chan interface{})
-	s.pollActivityAndHandle(tvB, actCompleted,
+	transitionStarted := make(chan interface{})
+	act1Started := make(chan interface{})
+	act1Completed := make(chan interface{})
+	act2Started := make(chan interface{})
+	act2Failed := make(chan interface{})
+	act2To4Completed := make(chan interface{})
+
+	// 1. Start 1st and 2nd activities
+	s.pollActivityAndHandle(tvA, act1Completed,
 		func(task *workflowservice.PollActivityTaskQueueResponse) (*workflowservice.RespondActivityTaskCompletedRequest, error) {
-			// Activity should not start until the transition is completed
-			s.True(transitionCompleted.Load())
 			s.NotNil(task)
+			close(act1Started)
+			// block until the transition WFT starts
+			<-transitionStarted
+			// 6. the 1st act completes during transition
 			return respondActivity(), nil
 		})
+
+	<-act1Started
+	s.pollActivityAndHandle(tvA, act2Failed,
+		func(task *workflowservice.PollActivityTaskQueueResponse) (*workflowservice.RespondActivityTaskCompletedRequest, error) {
+			s.NotNil(task)
+			close(act2Started)
+			// block until the transition WFT starts
+			<-transitionStarted
+			// 7. 2nd activity fails. Respond with error so it is retried.
+			return nil, errors.New("intentional activity failure")
+		})
+
+	<-act2Started
 	s.verifyWorkflowVersioning(tvA, unpinned, dA, nil, nil)
 
-	// The transition should create a new WFT to be sent to dB. Poller responds with empty wft complete.
+	// 2. Set dB as the current deployment
+	s.updateTaskQueueDeploymentData(tvB, 0, tqTypeWf, tqTypeAct)
+
+	// Pollers of dA are there, but should not get any task
+	s.idlePollActivity(tvA, true, time.Second*10, "activities should not go to the old deployment")
+
+	go func() {
+		for i := 2; i <= 4; i++ {
+			// 3-4. The new dB poller should trigger the third activity to be redirected, but the activity should
+			// not start until transition completes in the next wft.
+			// Repeating the handler so it processes all the three activities
+			s.pollActivityAndHandle(tvB, nil,
+				func(task *workflowservice.PollActivityTaskQueueResponse) (*workflowservice.RespondActivityTaskCompletedRequest, error) {
+					// Activity should not start until the transition is completed
+					s.True(transitionCompleted.Load())
+					s.NotNil(task)
+					return respondActivity(), nil
+				})
+		}
+		close(act2To4Completed)
+	}()
+
+	// 5. The transition should create a new WFT to be sent to dB.
 	s.pollWftAndHandle(tvB, false, nil,
 		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
 			s.NotNil(task)
 			s.verifyWorkflowVersioning(tvA, unpinned, dA, nil, transitionTo(dB))
+			close(transitionStarted)
+			// 8. Complete the transition after act1 completes and act2's first attempt fails.
+			<-act1Completed
+			<-act2Failed
 			transitionCompleted.Store(true)
 			return respondEmptyWft(tvB, sticky, unpinned), nil
 		})
@@ -406,6 +450,8 @@ func (s *Versioning3Suite) testTransitionFromActivity(sticky bool) {
 		s.verifyWorkflowStickyQueue(we, tvB.StickyTaskQueue())
 	}
 
+	// 9. Now all activities should complete.
+	<-act2To4Completed
 	s.pollWftAndHandle(tvB, false, nil,
 		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
 			s.NotNil(task)
@@ -482,7 +528,7 @@ func (s *Versioning3Suite) verifyWorkflowVersioning(
 	}
 
 	if !versioningInfo.GetDeploymentTransition().Equal(transition) {
-		s.Fail(fmt.Sprintf("deployment override mismatch. expected: {%s}, actual: {%s}",
+		s.Fail(fmt.Sprintf("deployment transition mismatch. expected: {%s}, actual: {%s}",
 			transition,
 			versioningInfo.GetDeploymentTransition(),
 		))
@@ -521,7 +567,11 @@ func respondWftWithActivities(
 					ScheduleToStartTimeout: durationpb.New(10 * time.Second),
 					StartToCloseTimeout:    durationpb.New(1 * time.Second),
 					HeartbeatTimeout:       durationpb.New(1 * time.Second),
-					RequestEagerExecution:  false,
+					RetryPolicy: &commonpb.RetryPolicy{
+						BackoffCoefficient: 1,
+						InitialInterval:    durationpb.New(1 * time.Second),
+					},
+					RequestEagerExecution: false,
 				},
 			},
 		})
