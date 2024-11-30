@@ -62,8 +62,7 @@ type ChildWorkflowSuite struct {
 
 func (s *ChildWorkflowSuite) SetupSuite() {
 	dynamicConfigOverrides := map[dynamicconfig.Key]any{
-		dynamicconfig.FrontendEnableDeployments.Key():                  true,
-		dynamicconfig.WorkerEnableDeployment.Key():                     true,
+		dynamicconfig.EnableDeployments.Key():                          true,
 		dynamicconfig.FrontendEnableWorkerVersioningWorkflowAPIs.Key(): true,
 		dynamicconfig.MatchingForwarderMaxChildrenPerNode.Key():        partitionTreeDegree,
 
@@ -83,10 +82,6 @@ func (s *ChildWorkflowSuite) SetupSuite() {
 func (s *ChildWorkflowSuite) TearDownSuite() {
 	s.FunctionalTestBase.TearDownSuite()
 }
-
-//func (s *ChildWorkflowSuite) SetupTest() {
-//	s.FunctionalTestBase.SetupTest()
-//}
 
 func TestChildWorkflowSuite(t *testing.T) {
 	t.Parallel()
@@ -414,12 +409,16 @@ func (s *ChildWorkflowSuite) testChildWorkflowExecution(override *workflowpb.Ver
 	s.Nil(parentStartedEventAttrs.GetRootWorkflowExecution())
 
 	// Process ChildExecution Started event and Process Child Execution and complete it
-	_, err = pollerParent.PollAndHandleWorkflowTask(parentTV, wtHandlerParent)
+	_, err = pollerParent.PollWorkflowTask(
+		&workflowservice.PollWorkflowTaskQueueRequest{WorkerVersionCapabilities: versionCap},
+	).HandleTask(parentTV, wtHandlerParent)
 	s.Logger.Info("PollAndHandleWorkflowTask", tag.Error(err))
 	s.NoError(err)
 
 	// Process Child workflow to start grandchild execution
-	_, err = pollerChild.PollAndHandleWorkflowTask(childTV, wtHandlerChild)
+	_, err = pollerChild.PollWorkflowTask(
+		&workflowservice.PollWorkflowTaskQueueRequest{WorkerVersionCapabilities: versionCap},
+	).HandleTask(childTV, wtHandlerChild)
 	s.Logger.Info("PollAndHandleWorkflowTask", tag.Error(err))
 	s.NoError(err)
 	s.NotNil(childStartedEventFromParent)
@@ -458,12 +457,16 @@ func (s *ChildWorkflowSuite) testChildWorkflowExecution(override *workflowpb.Ver
 	s.checkDescribeWorkflowAfterOverride(&commonpb.WorkflowExecution{WorkflowId: childID, RunId: childRunID}, override)
 
 	// Process GrandchildExecution Started event and Process Grandchild Execution and complete it
-	_, err = pollerChild.PollAndHandleWorkflowTask(childTV, wtHandlerChild)
+	_, err = pollerChild.PollWorkflowTask(
+		&workflowservice.PollWorkflowTaskQueueRequest{WorkerVersionCapabilities: versionCap},
+	).HandleTask(childTV, wtHandlerChild)
 	s.Logger.Info("PollAndHandleWorkflowTask", tag.Error(err))
 	s.NoError(err)
 
 	// Process Grandchild workflow
-	_, err = pollerGrandchild.PollAndHandleWorkflowTask(grandchildTV, wtHandlerGrandchild)
+	_, err = pollerGrandchild.PollWorkflowTask(
+		&workflowservice.PollWorkflowTaskQueueRequest{WorkerVersionCapabilities: versionCap},
+	).HandleTask(grandchildTV, wtHandlerGrandchild)
 	s.Logger.Info("PollAndHandleWorkflowTask", tag.Error(err))
 	s.NoError(err)
 	s.True(grandchildComplete)
@@ -482,13 +485,17 @@ func (s *ChildWorkflowSuite) testChildWorkflowExecution(override *workflowpb.Ver
 	s.ProtoEqual(override, grandchildStartedEventAttrs.GetVersioningOverride())
 
 	// Process GrandchildExecution completed event and complete child execution
-	_, err = pollerChild.PollAndHandleWorkflowTask(childTV, wtHandlerChild)
+	_, err = pollerChild.PollWorkflowTask(
+		&workflowservice.PollWorkflowTaskQueueRequest{WorkerVersionCapabilities: versionCap},
+	).HandleTask(childTV, wtHandlerChild)
 	s.Logger.Info("PollAndHandleWorkflowTask", tag.Error(err))
 	s.NoError(err)
 	s.True(childComplete)
 
 	// Process ChildExecution completed event and complete parent execution
-	_, err = pollerParent.PollAndHandleWorkflowTask(parentTV, wtHandlerParent)
+	_, err = pollerParent.PollWorkflowTask(
+		&workflowservice.PollWorkflowTaskQueueRequest{WorkerVersionCapabilities: versionCap},
+	).HandleTask(parentTV, wtHandlerParent)
 	s.Logger.Info("PollAndHandleWorkflowTask", tag.Error(err))
 	s.NoError(err)
 	s.NotNil(childCompletedEventFromParent)
