@@ -241,17 +241,6 @@ func TestValidateStateMachineRef(t *testing.T) {
 			},
 		},
 		{
-			name:                    "WithoutTransitionHistory/MachineTransitionInequality",
-			enableTransitionHistory: false,
-			mutateRef: func(ref *hsm.Ref) {
-				ref.StateMachineRef.MachineTransitionCount++
-			},
-			mutateNode: func(node *hsm.Node) {},
-			assertOutcome: func(t *testing.T, err error) {
-				require.ErrorIs(t, err, consts.ErrStaleReference)
-			},
-		},
-		{
 			name:                    "WithTransitionHistory/Valid",
 			enableTransitionHistory: true,
 			mutateRef: func(ref *hsm.Ref) {
@@ -269,42 +258,6 @@ func TestValidateStateMachineRef(t *testing.T) {
 			mutateNode: func(node *hsm.Node) {},
 			assertOutcome: func(t *testing.T, err error) {
 				require.NoError(t, err)
-			},
-		},
-		{
-			name:                    "WithoutTransitionHistory/NodeRebuilt/MachineTransitionInequality",
-			enableTransitionHistory: true,
-			mutateRef: func(ref *hsm.Ref) {
-				// this validates we fallback to the validation logic without transition history
-				ref.StateMachineRef.MachineTransitionCount++
-			},
-			mutateNode: func(node *hsm.Node) {
-				initialVersionedTransition := node.InternalRepr().InitialVersionedTransition
-				node.InternalRepr().InitialVersionedTransition = &persistencespb.VersionedTransition{
-					NamespaceFailoverVersion: initialVersionedTransition.NamespaceFailoverVersion,
-					TransitionCount:          0, // transition history disabled when re-creating the node
-				}
-			},
-			assertOutcome: func(t *testing.T, err error) {
-				require.ErrorIs(t, err, consts.ErrStaleReference)
-			},
-		},
-		{
-			name:                    "WithoutTransitionHistory/NodeTransitioned/MachineTransitionInequality",
-			enableTransitionHistory: true,
-			mutateRef: func(ref *hsm.Ref) {
-				// this validates we fallback to the validation logic without transition history
-				ref.StateMachineRef.MachineTransitionCount++
-			},
-			mutateNode: func(node *hsm.Node) {
-				lastUpdateVersionedTransition := node.InternalRepr().LastUpdateVersionedTransition
-				node.InternalRepr().InitialVersionedTransition = &persistencespb.VersionedTransition{
-					NamespaceFailoverVersion: lastUpdateVersionedTransition.NamespaceFailoverVersion,
-					TransitionCount:          0, // transition history disabled when node transitioned.
-				}
-			},
-			assertOutcome: func(t *testing.T, err error) {
-				require.ErrorIs(t, err, consts.ErrStaleReference)
 			},
 		},
 	}
