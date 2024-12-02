@@ -290,7 +290,7 @@ func (s *Versioning3Suite) TestTransitionFromWft_NoSticky() {
 }
 
 func (s *Versioning3Suite) testTransitionFromWft(sticky bool) {
-	// Wf runs one TWF and one AC on dA, then the second WFT is redirected to dB and
+	// Wf runs one TWF and one AT on dA, then the second WFT is redirected to dB and
 	// transitions the wf with it.
 
 	tvA := testvars.New(s).WithBuildId("A")
@@ -333,6 +333,45 @@ func (s *Versioning3Suite) testTransitionFromWft(sticky bool) {
 			return respondCompleteWorkflow(tvB, vbUnpinned), nil
 		})
 	s.verifyWorkflowVersioning(tvB, vbUnpinned, dB, nil, nil)
+}
+
+func (s *Versioning3Suite) TestEagerActivity() {
+	// The first WFT asks for an activity to starts and get it eagerly in the WFT completion
+	// response. The activity is processed without issues and wf completes.
+
+	s.OverrideDynamicConfig(dynamicconfig.EnableActivityEagerExecution, true)
+	tv := testvars.New(s)
+	d := tv.Deployment()
+
+	s.updateTaskQueueDeploymentData(tv, 0, tqTypeWf, tqTypeAct)
+	s.startWorkflow(tv, nil)
+
+	poller, resp := s.pollWftAndHandle(tv, false, nil,
+		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+			s.NotNil(task)
+			s.verifyWorkflowVersioning(tv, vbUnspecified, nil, nil, transitionTo(d))
+			resp := respondWftWithActivities(tv, tv, true, vbUnpinned, "5")
+			resp.Commands[0].GetScheduleActivityTaskCommandAttributes().RequestEagerExecution = true
+			return resp, nil
+		})
+	s.verifyWorkflowVersioning(tv, vbUnpinned, d, nil, nil)
+
+	s.NotEmpty(resp.GetActivityTasks())
+
+	_, err := poller.HandleActivityTask(tv, resp.GetActivityTasks()[0],
+		func(task *workflowservice.PollActivityTaskQueueResponse) (*workflowservice.RespondActivityTaskCompletedRequest, error) {
+			s.NotNil(task)
+			return respondActivity(), nil
+		})
+	s.NoError(err)
+	s.verifyWorkflowVersioning(tv, vbUnpinned, d, nil, nil)
+
+	s.pollWftAndHandle(tv, false, nil,
+		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+			s.NotNil(task)
+			return respondCompleteWorkflow(tv, vbUnpinned), nil
+		})
+	s.verifyWorkflowVersioning(tv, vbUnpinned, d, nil, nil)
 }
 
 func (s *Versioning3Suite) TestTransitionFromActivity_Sticky() {
@@ -486,6 +525,12 @@ func (s *Versioning3Suite) TestIndependentActivity_Unpinned() {
 }
 
 func (s *Versioning3Suite) testIndependentActivity(behavior enumspb.VersioningBehavior) {
+	// This test starts a wf on wf-series. The workflow runs an activity that is sent to act-tq with
+	// workers on a different deployment series, act-series. We make sure that the activity is
+	// dispatched and processed properly without affecting versioning of the workflow. Note that it
+	// is not required for independent activities to use a different TQ name but in here we test the
+	// more common case where the TQ name is different.
+
 	tvWf := testvars.New(s).WithDeploymentSeries("wf-series")
 	tvAct := testvars.New(s).WithDeploymentSeries("act-series").WithTaskQueue("act-tq")
 	dWf := tvWf.Deployment()
@@ -735,15 +780,15 @@ func (s *Versioning3Suite) pollWftAndHandle(
 	sticky bool,
 	async chan<- interface{},
 	handler func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error),
-) {
+) (*taskpoller.TaskPoller, *workflowservice.RespondWorkflowTaskCompletedResponse) {
 	poller := taskpoller.New(s.T(), s.FrontendClient(), s.Namespace())
 	d := tv.Deployment()
 	tq := tv.TaskQueue()
 	if sticky {
 		tq = tv.StickyTaskQueue()
 	}
-	f := func() {
-		_, err := poller.PollWorkflowTask(
+	f := func() *workflowservice.RespondWorkflowTaskCompletedResponse {
+		resp, err := poller.PollWorkflowTask(
 			&workflowservice.PollWorkflowTaskQueueRequest{
 				WorkerVersionCapabilities: &commonpb.WorkerVersionCapabilities{
 					BuildId:              d.BuildId,
@@ -754,15 +799,17 @@ func (s *Versioning3Suite) pollWftAndHandle(
 			},
 		).HandleTask(tv, handler)
 		s.NoError(err)
+		return resp
 	}
 	if async == nil {
-		f()
+		return poller, f()
 	} else {
 		go func() {
 			f()
 			close(async)
 		}()
 	}
+	return nil, nil
 }
 
 func (s *Versioning3Suite) pollActivityAndHandle(

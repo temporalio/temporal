@@ -141,6 +141,20 @@ func (s *DeploymentSuite) pollFromDeployment(ctx context.Context, taskQueue *tas
 	})
 }
 
+func (s *DeploymentSuite) pollActivityFromDeployment(ctx context.Context, taskQueue *taskqueuepb.TaskQueue,
+	deployment *deploymentpb.Deployment) {
+	_, _ = s.FrontendClient().PollActivityTaskQueue(ctx, &workflowservice.PollActivityTaskQueueRequest{
+		Namespace: s.Namespace(),
+		TaskQueue: taskQueue,
+		Identity:  "random",
+		WorkerVersionCapabilities: &commonpb.WorkerVersionCapabilities{
+			UseVersioning:        true,
+			BuildId:              deployment.BuildId,
+			DeploymentSeriesName: deployment.SeriesName,
+		},
+	})
+}
+
 func (s *DeploymentSuite) TestDescribeDeployment_RegisterTaskQueue() {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 	defer cancel()
@@ -207,7 +221,8 @@ func (s *DeploymentSuite) TestDescribeDeployment_RegisterTaskQueue_ConcurrentPol
 	for p := 0; p < 4; p++ {
 		for i := 0; i < 3; i++ {
 			tq := &taskqueuepb.TaskQueue{Name: root.TaskQueue().NormalPartition(p).RpcName(), Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
-			s.pollFromDeployment(ctx, tq, workerDeployment)
+			go s.pollFromDeployment(ctx, tq, workerDeployment)
+			go s.pollActivityFromDeployment(ctx, tq, workerDeployment)
 		}
 	}
 
