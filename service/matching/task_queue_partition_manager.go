@@ -812,7 +812,7 @@ func (pm *taskQueuePartitionManagerImpl) getPhysicalQueuesForAdd(
 		return nil, nil, nil, err
 	}
 
-	currentDeployment := findCurrentDeployment(perTypeUserData.GetDeploymentData())
+	currentDeployment := worker_versioning.FindCurrentDeployment(perTypeUserData.GetDeploymentData())
 	if currentDeployment != nil &&
 		// Make sure the wf is not v1-2 versioned
 		directive.GetAssignedBuildId() == "" {

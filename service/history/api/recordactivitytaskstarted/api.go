@@ -194,12 +194,11 @@ func recordActivityTaskStarted(
 
 	if !pollerDeployment.Equal(wfDeployment) {
 		// Task is redirected, see if this activity should start a transition on the workflow. The
-		// workflow transition happens only if the workflow TQ also is present in the poller
-		// deployment. Otherwise, it means the activity is independently versioned, we allow it to
-		// start without affecting the workflow.
-		wfTaskQueueIsPresent, err := deploymentContainTaskQueue(ctx,
+		// workflow transition happens only if the workflow TQ's current deployment is the same as
+		// the poller deployment. Otherwise, it means the activity is independently versioned, we
+		// allow it to start without affecting the workflow.
+		wfTqCurrentDeployment, err := getTaskQueueCurrentDeployment(ctx,
 			request.NamespaceId,
-			pollerDeployment,
 			mutableState.GetExecutionInfo().GetTaskQueue(),
 			enumspb.TASK_QUEUE_TYPE_WORKFLOW,
 			matchingClient)
@@ -207,7 +206,7 @@ func recordActivityTaskStarted(
 			// Let matching retry
 			return nil, false, err
 		}
-		if wfTaskQueueIsPresent {
+		if pollerDeployment.Equal(wfTqCurrentDeployment) {
 			if err := mutableState.StartDeploymentTransition(pollerDeployment); err != nil {
 				if errors.Is(err, workflow.ErrPinnedWorkflowCannotTransition) {
 					// This must be a task from a time that the workflow was unpinned, but it's
@@ -252,15 +251,15 @@ func recordActivityTaskStarted(
 	return response, false, nil
 }
 
+// TODO: move this method to a better place
 // TODO: cache this result (especially if the answer is true)
-func deploymentContainTaskQueue(
+func getTaskQueueCurrentDeployment(
 	ctx context.Context,
 	namespaceID string,
-	deployment *deploymentpb.Deployment,
 	taskQueueName string,
 	taskQueueType enumspb.TaskQueueType,
 	matchingClient matchingservice.MatchingServiceClient,
-) (bool, error) {
+) (*deploymentpb.Deployment, error) {
 	resp, err := matchingClient.GetTaskQueueUserData(ctx,
 		&matchingservice.GetTaskQueueUserDataRequest{
 			NamespaceId:   namespaceID,
@@ -268,17 +267,12 @@ func deploymentContainTaskQueue(
 			TaskQueueType: taskQueueType,
 		})
 	if err != nil {
-		return false, err
+		return nil, err
 	}
 	tqData, ok := resp.GetUserData().GetData().GetPerType()[int32(taskQueueType)]
 	if !ok {
-		// The TQ is unversioned, return true if the passed deployment is also unversioned (nil)
-		return deployment == nil, err
+		// The TQ is unversioned
+		return nil, nil
 	}
-	for _, d := range tqData.GetDeploymentData().GetDeployments() {
-		if d.GetDeployment().Equal(deployment) {
-			return true, nil
-		}
-	}
-	return false, nil
+	return worker_versioning.FindCurrentDeployment(tqData.GetDeploymentData()), nil
 }
