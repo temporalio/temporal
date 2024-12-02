@@ -84,7 +84,7 @@ func TestDeploymentSuite(t *testing.T) {
 func (s *DeploymentSuite) SetupSuite() {
 	s.setAssertions()
 	dynamicConfigOverrides := map[dynamicconfig.Key]any{
-		dynamicconfig.FrontendEnableDeployments.Key():                  true,
+		dynamicconfig.EnableDeployments.Key():                          true,
 		dynamicconfig.FrontendEnableWorkerVersioningDataAPIs.Key():     true,
 		dynamicconfig.FrontendEnableWorkerVersioningWorkflowAPIs.Key(): true,
 		dynamicconfig.FrontendEnableWorkerVersioningRuleAPIs.Key():     true,
@@ -207,9 +207,7 @@ func (s *DeploymentSuite) TestDescribeDeployment_RegisterTaskQueue_ConcurrentPol
 	for p := 0; p < 4; p++ {
 		for i := 0; i < 3; i++ {
 			tq := &taskqueuepb.TaskQueue{Name: root.TaskQueue().NormalPartition(p).RpcName(), Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
-			go func() {
-				s.pollFromDeployment(ctx, tq, workerDeployment)
-			}()
+			s.pollFromDeployment(ctx, tq, workerDeployment)
 		}
 	}
 

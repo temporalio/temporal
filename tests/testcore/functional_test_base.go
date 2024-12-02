@@ -184,14 +184,14 @@ func (s *FunctionalTestBase) SetupSuite(defaultClusterConfigFile string, options
 	s.operatorClient = s.testCluster.OperatorClient()
 	s.httpAPIAddress = cluster.Host().FrontendHTTPAddress()
 
-	s.namespace = "functional-test-namespace"
+	s.namespace = RandomizeStr("namespace")
 	s.Require().NoError(s.registerNamespaceWithDefaults(s.namespace))
 
-	s.foreignNamespace = RandomizeStr("functional-foreign-test-namespace")
+	s.foreignNamespace = RandomizeStr("foreign-namespace")
 	s.Require().NoError(s.registerNamespaceWithDefaults(s.foreignNamespace))
 
 	if clusterConfig.EnableArchival {
-		s.archivalNamespace = RandomizeStr("functional-archival-enabled-namespace")
+		s.archivalNamespace = RandomizeStr("archival-enabled-namespace")
 		s.Require().NoError(s.registerArchivalNamespace(s.archivalNamespace))
 	}
 }

@@ -309,7 +309,7 @@ func NewConfig(
 
 		EnableSchedules: dynamicconfig.FrontendEnableSchedules.Get(dc),
 
-		EnableDeployments: dynamicconfig.FrontendEnableDeployments.Get(dc),
+		EnableDeployments: dynamicconfig.EnableDeployments.Get(dc),
 
 		EnableBatcher:                   dynamicconfig.FrontendEnableBatcher.Get(dc),
 		MaxConcurrentBatchOperation:     dynamicconfig.FrontendMaxConcurrentBatchOperationPerNamespace.Get(dc),
