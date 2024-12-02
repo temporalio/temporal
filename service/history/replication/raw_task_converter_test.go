@@ -1447,6 +1447,7 @@ func (s *rawTaskConverterSuite) TestConvertSyncVersionedTransitionTask_Mutation(
 		VersionHistories:  versionHistories,
 		TransitionHistory: transitionHistory,
 	}).Times(2)
+	s.mutableState.EXPECT().HasBufferedEvents().Return(false).Times(1)
 
 	s.progressCache.EXPECT().Get(
 		s.runID,
@@ -1509,4 +1510,57 @@ func (s *rawTaskConverterSuite) TestConvertSyncVersionedTransitionTask_Mutation(
 		VisibilityTime:      timestamppb.New(task.VisibilityTimestamp),
 	}, result)
 	s.True(s.lockReleased)
+}
+
+func (s *rawTaskConverterSuite) TestConvertSyncVersionedTransitionTask_HasBufferedEvent_Nil() {
+	ctx := context.Background()
+	targetClusterID := int32(3)
+	firstEventID := int64(999)
+	nextEventID := int64(1911)
+	version := int64(1)
+	taskID := int64(1444)
+	task := &tasks.SyncVersionedTransitionTask{
+		WorkflowKey: definition.NewWorkflowKey(
+			s.namespaceID,
+			s.workflowID,
+			s.runID,
+		),
+		VisibilityTimestamp: time.Now().UTC(),
+		TaskID:              taskID,
+		FirstEventID:        firstEventID,
+		NextEventID:         nextEventID,
+		VersionedTransition: &persistencespb.VersionedTransition{
+			NamespaceFailoverVersion: version,
+			TransitionCount:          3,
+		},
+	}
+	transitionHistory := []*persistencespb.VersionedTransition{
+		{NamespaceFailoverVersion: 1, TransitionCount: 3},
+		{NamespaceFailoverVersion: 3, TransitionCount: 6},
+	}
+
+	s.workflowCache.EXPECT().GetOrCreateWorkflowExecution(
+		gomock.Any(),
+		s.shardContext,
+		namespace.ID(s.namespaceID),
+		&commonpb.WorkflowExecution{
+			WorkflowId: s.workflowID,
+			RunId:      s.runID,
+		},
+		locks.PriorityLow,
+	).Return(s.workflowContext, s.releaseFn, nil)
+	s.workflowContext.EXPECT().LoadMutableState(gomock.Any(), s.shardContext).Return(s.mutableState, nil).Times(1)
+	s.mutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
+		TransitionHistory: transitionHistory,
+	}).Times(2)
+	s.mutableState.EXPECT().HasBufferedEvents().Return(true).Times(1)
+	s.progressCache.EXPECT().Get(
+		s.runID,
+		targetClusterID,
+	).Return(nil)
+
+	converter := newSyncVersionedTransitionTaskConverter(s.shardContext, s.workflowCache, nil, s.progressCache, s.executionManager, s.syncStateRetriever, s.logger)
+	result, err := convertSyncVersionedTransitionTask(ctx, task, targetClusterID, converter)
+	s.NoError(err)
+	s.Nil(result)
 }

@@ -92,6 +92,10 @@ type (
 	lastUpdatedStateTransitionGetter interface {
 		GetLastUpdateVersionedTransition() *persistencepb.VersionedTransition
 	}
+
+	UnFlushedBufferedEventsError struct {
+		Msg string
+	}
 )
 
 func NewSyncStateRetriever(
@@ -108,6 +112,10 @@ func NewSyncStateRetriever(
 		eventBlobCache:             eventBlobCache,
 		logger:                     logger,
 	}
+}
+
+func (e *UnFlushedBufferedEventsError) Error() string {
+	return e.Msg
 }
 
 func (s *SyncStateRetrieverImpl) GetSyncWorkflowStateArtifact(
@@ -144,6 +152,11 @@ func (s *SyncStateRetrieverImpl) GetSyncWorkflowStateArtifact(
 			releaseFunc(retError)
 		}
 	}()
+	if mutableState.HasBufferedEvents() {
+		return nil, &UnFlushedBufferedEventsError{
+			Msg: "workflow has buffered events",
+		}
+	}
 
 	if len(mutableState.GetExecutionInfo().TransitionHistory) == 0 {
 		// workflow essentially in an unknown state

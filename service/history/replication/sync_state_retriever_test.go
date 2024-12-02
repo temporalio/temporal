@@ -152,6 +152,28 @@ func (s *syncWorkflowStateSuite) TestSyncWorkflowState_TransitionHistoryDisabled
 	s.ErrorIs(err, consts.ErrTransitionHistoryDisabled)
 }
 
+func (s *syncWorkflowStateSuite) TestSyncWorkflowState_UnFlushedBufferedEvents() {
+	mu := workflow.NewMockMutableState(s.controller)
+	s.workflowConsistencyChecker.EXPECT().GetWorkflowLeaseWithConsistencyCheck(gomock.Any(), nil, gomock.Any(), definition.WorkflowKey{
+		NamespaceID: s.namespaceID,
+		WorkflowID:  s.execution.WorkflowId,
+		RunID:       s.execution.RunId,
+	}, locks.PriorityLow).Return(
+		api.NewWorkflowLease(nil, func(err error) {}, mu), nil)
+
+	mu.EXPECT().HasBufferedEvents().Return(true)
+	result, err := s.syncStateRetriever.GetSyncWorkflowStateArtifact(
+		context.Background(),
+		s.namespaceID,
+		s.execution,
+		nil,
+		nil,
+	)
+	s.Nil(result)
+	s.Error(err)
+	s.IsType(&UnFlushedBufferedEventsError{}, err)
+}
+
 func (s *syncWorkflowStateSuite) TestSyncWorkflowState_ReturnMutation() {
 	mu := workflow.NewMockMutableState(s.controller)
 	s.workflowConsistencyChecker.EXPECT().GetWorkflowLeaseWithConsistencyCheck(gomock.Any(), nil, gomock.Any(), definition.WorkflowKey{
