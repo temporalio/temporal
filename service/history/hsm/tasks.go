@@ -78,7 +78,7 @@ type TaskSerializer interface {
 // generated.
 func ValidateNotTransitioned(ref *persistencespb.StateMachineRef, node *Node) error {
 	if ref.MachineTransitionCount != node.InternalRepr().TransitionCount {
-		return fmt.Errorf("%w: state machine transitions != ref transitions", consts.ErrStaleReference)
+		return fmt.Errorf("%w: state machine transitions (%d) != ref transitions (%d)", consts.ErrStaleReference, node.InternalRepr().TransitionCount, ref.MachineTransitionCount)
 	}
 	return nil
 }
