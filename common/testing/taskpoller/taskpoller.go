@@ -89,8 +89,8 @@ func New(
 	t *testing.T,
 	client workflowservice.WorkflowServiceClient,
 	namespace string,
-) TaskPoller {
-	return TaskPoller{
+) *TaskPoller {
+	return &TaskPoller{
 		t:         t,
 		client:    client,
 		namespace: namespace,
@@ -314,7 +314,9 @@ func (p *workflowTaskPoller) respondTaskCompleted(
 	if reply.Identity == "" {
 		reply.Identity = opts.tv.WorkerIdentity()
 	}
-	reply.ReturnNewWorkflowTask = true
+	if reply.ForceCreateNewWorkflowTask {
+		reply.ReturnNewWorkflowTask = true
+	}
 
 	return p.client.RespondWorkflowTaskCompleted(ctx, reply)
 }
