@@ -168,9 +168,8 @@ func (d *RPCFactory) GetGRPCListener() net.Listener {
 
 func (d *RPCFactory) createGRPCListener() net.Listener {
 	hostAddress := net.JoinHostPort(getListenIP(d.config, d.logger).String(), convert.IntToString(d.config.GRPCPort))
-	var err error
-	grpcListener, err := net.Listen("tcp", hostAddress)
 
+	grpcListener, err := net.Listen("tcp", hostAddress)
 	if err != nil || grpcListener == nil || grpcListener.Addr() == nil {
 		d.logger.Fatal("Failed to start gRPC listener", tag.Error(err), tag.Service(d.serviceName), tag.Address(hostAddress))
 	}
