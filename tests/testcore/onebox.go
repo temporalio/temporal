@@ -385,7 +385,7 @@ func (c *TemporalImpl) startFrontend() {
 			),
 			fx.Provide(c.frontendConfigProvider),
 			fx.Provide(func() listenHostPort { return listenHostPort(host) }),
-			fx.Provide(func() httpPort { return portFromAddress(c.FrontendHTTPAddress()) }),
+			fx.Provide(func() httpPort { return mustPortFromAddress(c.FrontendHTTPAddress()) }),
 			fx.Provide(func() config.DCRedirectionPolicy { return config.DCRedirectionPolicy{} }),
 			fx.Provide(func() log.Logger { return logger }),
 			fx.Provide(func() log.ThrottledLogger { return logger }),
@@ -462,7 +462,7 @@ func (c *TemporalImpl) startHistory() {
 			),
 			fx.Provide(c.GetMetricsHandler),
 			fx.Provide(func() listenHostPort { return listenHostPort(host) }),
-			fx.Provide(func() httpPort { return portFromAddress(c.FrontendHTTPAddress()) }),
+			fx.Provide(func() httpPort { return mustPortFromAddress(c.FrontendHTTPAddress()) }),
 			fx.Provide(func() config.DCRedirectionPolicy { return config.DCRedirectionPolicy{} }),
 			fx.Provide(func() log.Logger { return logger }),
 			fx.Provide(func() log.ThrottledLogger { return logger }),
@@ -519,7 +519,7 @@ func (c *TemporalImpl) startMatching() {
 			),
 			fx.Provide(c.GetMetricsHandler),
 			fx.Provide(func() listenHostPort { return listenHostPort(host) }),
-			fx.Provide(func() httpPort { return portFromAddress(c.FrontendHTTPAddress()) }),
+			fx.Provide(func() httpPort { return mustPortFromAddress(c.FrontendHTTPAddress()) }),
 			fx.Provide(func() log.Logger { return logger }),
 			fx.Provide(func() log.ThrottledLogger { return logger }),
 			fx.Provide(c.newRPCFactory),
@@ -580,7 +580,7 @@ func (c *TemporalImpl) startWorker() {
 			),
 			fx.Provide(c.GetMetricsHandler),
 			fx.Provide(func() listenHostPort { return listenHostPort(host) }),
-			fx.Provide(func() httpPort { return portFromAddress(c.FrontendHTTPAddress()) }),
+			fx.Provide(func() httpPort { return mustPortFromAddress(c.FrontendHTTPAddress()) }),
 			fx.Provide(func() config.DCRedirectionPolicy { return config.DCRedirectionPolicy{} }),
 			fx.Provide(func() log.Logger { return logger }),
 			fx.Provide(func() log.ThrottledLogger { return logger }),
@@ -670,7 +670,7 @@ func (c *TemporalImpl) frontendConfigProvider() *config.Config {
 		Services: map[string]config.Service{
 			string(primitives.FrontendService): {
 				RPC: config.RPC{
-					HTTPPort: int(portFromAddress(c.FrontendHTTPAddress())),
+					HTTPPort: int(mustPortFromAddress(c.FrontendHTTPAddress())),
 					HTTPAdditionalForwardedHeaders: []string{
 						"this-header-forwarded",
 						"this-header-prefix-forwarded-*",
@@ -894,7 +894,7 @@ func (c *TemporalImpl) overrideDynamicConfig(t *testing.T, name dynamicconfig.Ke
 	return cleanup
 }
 
-func portFromAddress(addr string) httpPort {
+func mustPortFromAddress(addr string) httpPort {
 	_, port, err := net.SplitHostPort(addr)
 	if err != nil {
 		panic(fmt.Errorf("Invalid address: %w", err))

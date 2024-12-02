@@ -211,14 +211,14 @@ func NewClusterWithPersistenceTestBaseFactory(t *testing.T, options *TestCluster
 	// allocate ports
 	pp := temporalite.NewPortProvider()
 	hostsByProtocolByService := map[transferProtocol]map[primitives.ServiceName]static.Hosts{
-		grpcProtocol: map[primitives.ServiceName]static.Hosts{
-			primitives.FrontendService: static.Hosts{All: makeAddresses(pp, options.FrontendConfig.NumFrontendHosts)},
-			primitives.MatchingService: static.Hosts{All: makeAddresses(pp, options.MatchingConfig.NumMatchingHosts)},
-			primitives.HistoryService:  static.Hosts{All: makeAddresses(pp, options.HistoryConfig.NumHistoryHosts)},
-			primitives.WorkerService:   static.Hosts{All: makeAddresses(pp, options.WorkerConfig.NumWorkers)},
+		grpcProtocol: {
+			primitives.FrontendService: {All: makeAddresses(pp, options.FrontendConfig.NumFrontendHosts)},
+			primitives.MatchingService: {All: makeAddresses(pp, options.MatchingConfig.NumMatchingHosts)},
+			primitives.HistoryService:  {All: makeAddresses(pp, options.HistoryConfig.NumHistoryHosts)},
+			primitives.WorkerService:   {All: makeAddresses(pp, options.WorkerConfig.NumWorkers)},
 		},
-		httpProtocol: map[primitives.ServiceName]static.Hosts{
-			primitives.FrontendService: static.Hosts{All: makeAddresses(pp, options.FrontendConfig.NumFrontendHosts)},
+		httpProtocol: {
+			primitives.FrontendService: {All: makeAddresses(pp, options.FrontendConfig.NumFrontendHosts)},
 		},
 	}
 	if err := pp.Close(); err != nil {
