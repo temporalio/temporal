@@ -26,6 +26,7 @@ package tests
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sync/atomic"
 	"testing"
@@ -148,94 +149,6 @@ func (s *Versioning3Suite) TestUnpinnedTask_OldDeployment() {
 	)
 }
 
-type Versioning3Suite struct {
-	// override suite.Suite.Assertions with require.Assertions; this means that s.NotNil(nil) will stop the test,
-	// not merely log an error
-	testcore.FunctionalTestBase
-}
-
-func TestVersioning3FunctionalSuite(t *testing.T) {
-	t.Parallel()
-	suite.Run(t, new(Versioning3Suite))
-}
-
-func (s *Versioning3Suite) SetupSuite() {
-	dynamicConfigOverrides := map[dynamicconfig.Key]any{
-		dynamicconfig.FrontendEnableDeployments.Key():                  true,
-		dynamicconfig.FrontendEnableWorkerVersioningWorkflowAPIs.Key(): true,
-		dynamicconfig.MatchingForwarderMaxChildrenPerNode.Key():        partitionTreeDegree,
-
-		// Make sure we don't hit the rate limiter in tests
-		dynamicconfig.FrontendGlobalNamespaceNamespaceReplicationInducingAPIsRPS.Key():                1000,
-		dynamicconfig.FrontendMaxNamespaceNamespaceReplicationInducingAPIsBurstRatioPerInstance.Key(): 1,
-		dynamicconfig.FrontendNamespaceReplicationInducingAPIsRPS.Key():                               1000,
-
-		// this is overridden for tests using RunTestWithMatchingBehavior
-		dynamicconfig.MatchingNumTaskqueueReadPartitions.Key():  1,
-		dynamicconfig.MatchingNumTaskqueueWritePartitions.Key(): 1,
-	}
-	s.SetDynamicConfigOverrides(dynamicConfigOverrides)
-	s.FunctionalTestBase.SetupSuite("testdata/es_cluster.yaml")
-}
-
-func (s *Versioning3Suite) TearDownSuite() {
-	s.FunctionalTestBase.TearDownSuite()
-}
-
-func (s *Versioning3Suite) SetupTest() {
-	s.FunctionalTestBase.SetupTest()
-}
-
-func (s *Versioning3Suite) TestPinnedTask_NoProperPoller() {
-	s.RunTestWithMatchingBehavior(
-		func() {
-			tv := testvars.New(s)
-
-			other := tv.WithBuildId("other")
-			go func() {
-				s.idlePollWorkflow(other, true, minPollTime, "other deployment should not receive pinned task")
-			}()
-			s.waitForDeploymentDataPropagation(other, tqTypeWf)
-
-			s.startWorkflow(tv, pinnedOverride(tv.Deployment()))
-			s.idlePollWorkflow(tv, false, minPollTime, "unversioned worker should not receive pinned task")
-		})
-}
-
-func (s *Versioning3Suite) TestUnpinnedTask_NonCurrentDeployment() {
-	s.RunTestWithMatchingBehavior(
-		func() {
-			tv := testvars.New(s)
-			go func() {
-				s.idlePollWorkflow(tv, true, minPollTime, "non-current versioned poller should not receive unpinned task")
-			}()
-			s.waitForDeploymentDataPropagation(tv, tqTypeWf)
-
-			s.startWorkflow(tv, nil)
-		})
-}
-
-func (s *Versioning3Suite) TestUnpinnedTask_OldDeployment() {
-	s.RunTestWithMatchingBehavior(
-		func() {
-			tv := testvars.New(s)
-			// previous current deployment
-			s.updateTaskQueueDeploymentData(tv.WithBuildId("older"), time.Minute, tqTypeWf)
-			// current deployment
-			s.updateTaskQueueDeploymentData(tv, 0, tqTypeWf)
-
-			s.startWorkflow(tv, nil)
-
-			s.idlePollWorkflow(
-				tv.WithBuildId("older"),
-				true,
-				minPollTime,
-				"old deployment should not receive unpinned task",
-			)
-		},
-	)
-}
-
 func (s *Versioning3Suite) TestWorkflowWithPinnedOverride_Sticky() {
 	s.RunTestWithMatchingBehavior(
 		func() {
@@ -259,354 +172,342 @@ func (s *Versioning3Suite) testWorkflowWithPinnedOverride(sticky bool) {
 		s.warmUpSticky(tv)
 	}
 
-	func(s *Versioning3Suite) TestWorkflowWithPinnedOverride_Sticky()
-	{
-		s.RunTestWithMatchingBehavior(
-			func() {
-				s.testWorkflowWithPinnedOverride(true)
-			},
-		)
+	wftCompleted := make(chan interface{})
+	s.pollWftAndHandle(tv, false, wftCompleted,
+		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+			s.NotNil(task)
+			return respondWftWithActivities(tv, tv, sticky, vbUnpinned, "5"), nil
+		})
+	s.waitForDeploymentDataPropagation(tv, tqTypeWf)
+
+	actCompleted := make(chan interface{})
+	s.pollActivityAndHandle(tv, actCompleted,
+		func(task *workflowservice.PollActivityTaskQueueResponse) (*workflowservice.RespondActivityTaskCompletedRequest, error) {
+			s.NotNil(task)
+			return respondActivity(), nil
+		})
+	s.waitForDeploymentDataPropagation(tv, tqTypeAct)
+
+	override := makePinnedOverride(tv.Deployment())
+	we := s.startWorkflow(tv, override)
+
+	<-wftCompleted
+	s.verifyWorkflowVersioning(tv, vbUnpinned, tv.Deployment(), override, nil)
+	if sticky {
+		s.verifyWorkflowStickyQueue(we, tv.StickyTaskQueue())
 	}
 
-	func(s *Versioning3Suite) TestWorkflowWithPinnedOverride_NoSticky()
-	{
-		s.RunTestWithMatchingBehavior(
-			func() {
-				s.testWorkflowWithPinnedOverride(false)
-			},
-		)
+	<-actCompleted
+	s.verifyWorkflowVersioning(tv, vbUnpinned, tv.Deployment(), override, nil)
+
+	s.pollWftAndHandle(tv, sticky, nil,
+		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+			s.NotNil(task)
+			return respondCompleteWorkflow(tv, vbUnpinned), nil
+		})
+	s.verifyWorkflowVersioning(tv, vbUnpinned, tv.Deployment(), override, nil)
+}
+
+func (s *Versioning3Suite) TestUnpinnedWorkflow_Sticky() {
+	s.RunTestWithMatchingBehavior(
+		func() {
+			s.testUnpinnedWorkflow(true)
+		},
+	)
+}
+
+func (s *Versioning3Suite) TestUnpinnedWorkflow_NoSticky() {
+	s.RunTestWithMatchingBehavior(
+		func() {
+			s.testUnpinnedWorkflow(false)
+		},
+	)
+}
+
+func (s *Versioning3Suite) testUnpinnedWorkflow(sticky bool) {
+	tv := testvars.New(s)
+	d := tv.Deployment()
+
+	if sticky {
+		s.warmUpSticky(tv)
 	}
 
-	func(s *Versioning3Suite) testWorkflowWithPinnedOverride(sticky
-	bool) {
-		tv := testvars.New(s)
+	wftCompleted := make(chan interface{})
+	s.pollWftAndHandle(tv, false, wftCompleted,
+		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+			s.NotNil(task)
+			s.verifyWorkflowVersioning(tv, vbUnspecified, nil, nil, transitionTo(d))
+			return respondWftWithActivities(tv, tv, sticky, vbUnpinned, "5"), nil
+		})
+	s.waitForDeploymentDataPropagation(tv, tqTypeWf)
 
-		if sticky {
-			s.warmUpSticky(tv)
+	actCompleted := make(chan interface{})
+	s.pollActivityAndHandle(tv, actCompleted,
+		func(task *workflowservice.PollActivityTaskQueueResponse) (*workflowservice.RespondActivityTaskCompletedRequest, error) {
+			s.NotNil(task)
+			return respondActivity(), nil
+		})
+	s.waitForDeploymentDataPropagation(tv, tqTypeAct)
+
+	s.updateTaskQueueDeploymentData(tv, 0, tqTypeWf, tqTypeAct)
+
+	we := s.startWorkflow(tv, nil)
+
+	<-wftCompleted
+	s.verifyWorkflowVersioning(tv, vbUnpinned, tv.Deployment(), nil, nil)
+	if sticky {
+		s.verifyWorkflowStickyQueue(we, tv.StickyTaskQueue())
+	}
+
+	<-actCompleted
+	s.verifyWorkflowVersioning(tv, vbUnpinned, tv.Deployment(), nil, nil)
+
+	s.pollWftAndHandle(tv, sticky, nil,
+		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+			s.NotNil(task)
+			return respondCompleteWorkflow(tv, vbUnpinned), nil
+		})
+	s.verifyWorkflowVersioning(tv, vbUnpinned, tv.Deployment(), nil, nil)
+}
+
+func (s *Versioning3Suite) TestTransitionFromWft_Sticky() {
+	s.testTransitionFromWft(true)
+}
+
+func (s *Versioning3Suite) TestTransitionFromWft_NoSticky() {
+	s.testTransitionFromWft(false)
+}
+
+func (s *Versioning3Suite) testTransitionFromWft(sticky bool) {
+	// Wf runs one TWF and one AC on dA, then the second WFT is redirected to dB and
+	// transitions the wf with it.
+
+	tvA := testvars.New(s).WithBuildId("A")
+	tvB := tvA.WithBuildId("B")
+	dA := tvA.Deployment()
+	dB := tvB.Deployment()
+
+	if sticky {
+		s.warmUpSticky(tvA)
+	}
+
+	s.updateTaskQueueDeploymentData(tvA, 0, tqTypeWf, tqTypeAct)
+	we := s.startWorkflow(tvA, nil)
+
+	s.pollWftAndHandle(tvA, false, nil,
+		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+			s.NotNil(task)
+			s.verifyWorkflowVersioning(tvA, vbUnspecified, nil, nil, transitionTo(dA))
+			return respondWftWithActivities(tvA, tvA, sticky, vbUnpinned, "5"), nil
+		})
+	s.verifyWorkflowVersioning(tvA, vbUnpinned, dA, nil, nil)
+	if sticky {
+		s.verifyWorkflowStickyQueue(we, tvA.StickyTaskQueue())
+	}
+
+	s.pollActivityAndHandle(tvA, nil,
+		func(task *workflowservice.PollActivityTaskQueueResponse) (*workflowservice.RespondActivityTaskCompletedRequest, error) {
+			s.NotNil(task)
+			return respondActivity(), nil
+		})
+	s.verifyWorkflowVersioning(tvA, vbUnpinned, dA, nil, nil)
+
+	// Set B as the current deployment
+	s.updateTaskQueueDeploymentData(tvB, 0, tqTypeWf, tqTypeAct)
+
+	s.pollWftAndHandle(tvB, false, nil,
+		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+			s.NotNil(task)
+			s.verifyWorkflowVersioning(tvA, vbUnpinned, dA, nil, transitionTo(dB))
+			return respondCompleteWorkflow(tvB, vbUnpinned), nil
+		})
+	s.verifyWorkflowVersioning(tvB, vbUnpinned, dB, nil, nil)
+}
+
+func (s *Versioning3Suite) TestTransitionFromActivity_Sticky() {
+	s.testTransitionFromActivity(true)
+}
+
+func (s *Versioning3Suite) TestTransitionFromActivity_NoSticky() {
+	s.testTransitionFromActivity(false)
+}
+
+func (s *Versioning3Suite) testTransitionFromActivity(sticky bool) {
+	// Wf runs one TWF on dA and schedules four activities, then:
+	// 1. The first and second activities starts on dA
+	// 2. Current deployment becomes dB
+	// 3. The third activity is redirected to dB and starts a transition in the wf, without being
+	//    dispatched.
+	// 4. The 4th activity also does not start on any of the builds although there are pending
+	//    pollers on both.
+	// 5. The transition generates a WFT, and it is started in dB.
+	// 6. The 1st act is completed here while the transition is going on.
+	// 7. The 2nd act fails and makes another attempt. But it is not dispatched.
+	// 8. WFT completes and the transition completes.
+	// 9. All the 3 remaining activities are now dispatched and completed.
+
+	tvA := testvars.New(s).WithBuildId("A")
+	tvB := tvA.WithBuildId("B")
+	dA := tvA.Deployment()
+	dB := tvB.Deployment()
+
+	if sticky {
+		s.warmUpSticky(tvA)
+	}
+
+	s.updateTaskQueueDeploymentData(tvA, 0, tqTypeWf, tqTypeAct)
+	we := s.startWorkflow(tvA, nil)
+
+	s.pollWftAndHandle(tvA, false, nil,
+		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+			s.NotNil(task)
+			s.verifyWorkflowVersioning(tvA, vbUnspecified, nil, nil, transitionTo(dA))
+			return respondWftWithActivities(tvA, tvA, sticky, vbUnpinned, "5", "6", "7", "8"), nil
+		})
+	s.verifyWorkflowVersioning(tvA, vbUnpinned, dA, nil, nil)
+	if sticky {
+		s.verifyWorkflowStickyQueue(we, tvA.StickyTaskQueue())
+	}
+
+	transitionCompleted := atomic.Bool{}
+	transitionStarted := make(chan interface{})
+	act1Started := make(chan interface{})
+	act1Completed := make(chan interface{})
+	act2Started := make(chan interface{})
+	act2Failed := make(chan interface{})
+	act2To4Completed := make(chan interface{})
+
+	// 1. Start 1st and 2nd activities
+	s.pollActivityAndHandle(tvA, act1Completed,
+		func(task *workflowservice.PollActivityTaskQueueResponse) (*workflowservice.RespondActivityTaskCompletedRequest, error) {
+			s.NotNil(task)
+			s.Logger.Info(fmt.Sprintf("Activity 1 started ID: %s", task.ActivityId))
+			close(act1Started)
+			// block until the transition WFT starts
+			<-transitionStarted
+			// 6. the 1st act completes during transition
+			s.Logger.Info(fmt.Sprintf("Activity 1 completed ID: %s", task.ActivityId))
+			return respondActivity(), nil
+		})
+
+	<-act1Started
+	s.pollActivityAndHandle(tvA, act2Failed,
+		func(task *workflowservice.PollActivityTaskQueueResponse) (*workflowservice.RespondActivityTaskCompletedRequest, error) {
+			s.NotNil(task)
+			s.Logger.Info(fmt.Sprintf("Activity 2 started ID: %s", task.ActivityId))
+			close(act2Started)
+			// block until the transition WFT starts
+			<-transitionStarted
+			// 7. 2nd activity fails. Respond with error so it is retried.
+			s.Logger.Info(fmt.Sprintf("Activity 2 failed ID: %s", task.ActivityId))
+			return nil, errors.New("intentional activity failure")
+		})
+
+	<-act2Started
+	s.verifyWorkflowVersioning(tvA, vbUnpinned, dA, nil, nil)
+
+	// 2. Set dB as the current deployment
+	s.updateTaskQueueDeploymentData(tvB, 0, tqTypeWf, tqTypeAct)
+	// Although updateTaskQueueDeploymentData waits for deployment data to reach the TQs, backlogged
+	// tasks might still be waiting behind the old deployment's poll channel. Partition manage should
+	// immediately react to the deployment data changes, but there still is a race possible and the
+	// only way to safeguard against it is to wait a little while before proceeding.
+	time.Sleep(time.Millisecond * 100) //nolint:forbidigo
+
+	// Pollers of dA are there, but should not get any task
+	go s.idlePollActivity(tvA, true, ver3MinPollTime, "activities should not go to the old deployment")
+
+	go func() {
+		for i := 2; i <= 4; i++ {
+			// 3-4. The new dB poller should trigger the third activity to be redirected, but the activity should
+			// not start until transition completes in the next wft.
+			// Repeating the handler so it processes all the three activities
+			s.pollActivityAndHandle(tvB, nil,
+				func(task *workflowservice.PollActivityTaskQueueResponse) (*workflowservice.RespondActivityTaskCompletedRequest, error) {
+					// Activity should not start until the transition is completed
+					s.True(transitionCompleted.Load())
+					s.NotNil(task)
+					s.Logger.Info(fmt.Sprintf("Remaining activity completed ID: %s", task.ActivityId))
+					return respondActivity(), nil
+				})
 		}
+		close(act2To4Completed)
+	}()
 
-		wftCompleted := make(chan interface{})
-		s.pollWftAndHandle(
-			tv, false, wftCompleted,
-			func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
-				s.NotNil(task)
-				return respondWftWithActivities(tv, sticky, vbUnpinned, "5"), nil
-			}
-		)
-		s.waitForDeploymentDataPropagation(tv, tqTypeWf)
-
-		actCompleted := make(chan interface{})
-		s.pollActivityAndHandle(
-			tv, actCompleted,
-			func(task *workflowservice.PollActivityTaskQueueResponse) (*workflowservice.RespondActivityTaskCompletedRequest, error) {
-				s.NotNil(task)
-				return respondActivity(), nil
-			}
-		)
-		s.waitForDeploymentDataPropagation(tv, tqTypeAct)
-
-		override := makePinnedOverride(tv.Deployment())
-		we := s.startWorkflow(tv, override)
-
-		<-wftCompleted
-		s.verifyWorkflowVersioning(tv, vbUnpinned, tv.Deployment(), override, nil)
-		if sticky {
-			s.verifyWorkflowStickyQueue(we, tv.StickyTaskQueue())
-		}
-
-		<-actCompleted
-		s.verifyWorkflowVersioning(tv, vbUnpinned, tv.Deployment(), override, nil)
-
-		s.pollWftAndHandle(
-			tv, sticky, nil,
-			func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
-				s.NotNil(task)
-				return respondCompleteWorkflow(tv, vbUnpinned), nil
-			}
-		)
-		s.verifyWorkflowVersioning(tv, vbUnpinned, tv.Deployment(), override, nil)
+	// 5. The transition should create a new WFT to be sent to dB.
+	s.pollWftAndHandle(tvB, false, nil,
+		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+			s.NotNil(task)
+			s.verifyWorkflowVersioning(tvA, vbUnpinned, dA, nil, transitionTo(dB))
+			close(transitionStarted)
+			s.Logger.Info("Transition wft started")
+			// 8. Complete the transition after act1 completes and act2's first attempt fails.
+			<-act1Completed
+			<-act2Failed
+			transitionCompleted.Store(true)
+			s.Logger.Info("Transition wft completed")
+			return respondEmptyWft(tvB, sticky, vbUnpinned), nil
+		})
+	s.verifyWorkflowVersioning(tvB, vbUnpinned, dB, nil, nil)
+	if sticky {
+		s.verifyWorkflowStickyQueue(we, tvB.StickyTaskQueue())
 	}
 
-	func(s *Versioning3Suite) TestUnpinnedWorkflow_Sticky()
-	{
-		s.RunTestWithMatchingBehavior(
-			func() {
-				s.testUnpinnedWorkflow(true)
-			},
-		)
-	}
+	// 9. Now all activities should complete.
+	<-act2To4Completed
+	s.pollWftAndHandle(tvB, sticky, nil,
+		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+			s.NotNil(task)
+			s.Logger.Info("Final wft completed")
+			return respondCompleteWorkflow(tvB, vbUnpinned), nil
+		})
+	s.verifyWorkflowVersioning(tvB, vbUnpinned, dB, nil, nil)
+}
 
-	func(s *Versioning3Suite) TestUnpinnedWorkflow_NoSticky()
-	{
-		s.RunTestWithMatchingBehavior(
-			func() {
-				s.testUnpinnedWorkflow(false)
-			},
-		)
-	}
+func (s *Versioning3Suite) TestIndependentActivity_Pinned() {
+	// TODO (shahab): need to handle pinned activities properly so the wf does not get stuck.
+	s.T().Skip()
+	s.testIndependentActivity(vbPinned)
+}
 
-	func(s *Versioning3Suite) testUnpinnedWorkflow(sticky
-	bool) {
-		tv := testvars.New(s)
-		d := tv.Deployment()
+func (s *Versioning3Suite) TestIndependentActivity_Unpinned() {
+	s.testIndependentActivity(vbUnpinned)
+}
 
-		if sticky {
-			s.warmUpSticky(tv)
-		}
+func (s *Versioning3Suite) testIndependentActivity(behavior enumspb.VersioningBehavior) {
+	tvWf := testvars.New(s).WithDeploymentSeries("wf-series")
+	tvAct := testvars.New(s).WithDeploymentSeries("act-series").WithTaskQueue("act-tq")
+	dWf := tvWf.Deployment()
 
-		wftCompleted := make(chan interface{})
-		s.pollWftAndHandle(
-			tv, false, wftCompleted,
-			func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
-				s.NotNil(task)
-				s.verifyWorkflowVersioning(tv, vbUnspecified, nil, nil, transitionTo(d))
-				return respondWftWithActivities(tv, sticky, vbUnpinned, "5"), nil
-			}
-		)
-		s.waitForDeploymentDataPropagation(tv, tqTypeWf)
+	// Set current deployment for each TQ
+	s.updateTaskQueueDeploymentData(tvWf, 0, tqTypeWf)
+	s.updateTaskQueueDeploymentData(tvAct, 0, tqTypeAct)
 
-		actCompleted := make(chan interface{})
-		s.pollActivityAndHandle(
-			tv, actCompleted,
-			func(task *workflowservice.PollActivityTaskQueueResponse) (*workflowservice.RespondActivityTaskCompletedRequest, error) {
-				s.NotNil(task)
-				return respondActivity(), nil
-			}
-		)
-		s.waitForDeploymentDataPropagation(tv, tqTypeAct)
+	s.startWorkflow(tvWf, nil)
 
-		s.updateTaskQueueDeploymentData(tv, 0, tqTypeWf, tqTypeAct)
+	s.pollWftAndHandle(tvWf, false, nil,
+		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+			s.NotNil(task)
+			s.verifyWorkflowVersioning(tvWf, vbUnspecified, nil, nil, transitionTo(dWf))
+			s.Logger.Info("First wf task completed")
+			return respondWftWithActivities(tvWf, tvAct, false, behavior, "5"), nil
+		})
+	s.verifyWorkflowVersioning(tvWf, behavior, dWf, nil, nil)
 
-		we := s.startWorkflow(tv, nil)
+	s.pollActivityAndHandle(tvAct, nil,
+		func(task *workflowservice.PollActivityTaskQueueResponse) (*workflowservice.RespondActivityTaskCompletedRequest, error) {
+			s.NotNil(task)
+			s.Logger.Info("Activity completed")
+			return respondActivity(), nil
+		})
+	s.verifyWorkflowVersioning(tvWf, behavior, dWf, nil, nil)
 
-		<-wftCompleted
-		s.verifyWorkflowVersioning(tv, vbUnpinned, tv.Deployment(), nil, nil)
-		if sticky {
-			s.verifyWorkflowStickyQueue(we, tv.StickyTaskQueue())
-		}
-
-		<-actCompleted
-		s.verifyWorkflowVersioning(tv, vbUnpinned, tv.Deployment(), nil, nil)
-
-		s.pollWftAndHandle(
-			tv, sticky, nil,
-			func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
-				s.NotNil(task)
-				return respondCompleteWorkflow(tv, vbUnpinned), nil
-			}
-		)
-		s.verifyWorkflowVersioning(tv, vbUnpinned, tv.Deployment(), nil, nil)
-	}
-
-	func(s *Versioning3Suite) TestTransitionFromWft_Sticky()
-	{
-		s.testTransitionFromWft(true)
-	}
-
-	func(s *Versioning3Suite) TestTransitionFromWft_NoSticky()
-	{
-		s.testTransitionFromWft(false)
-	}
-
-	func(s *Versioning3Suite) testTransitionFromWft(sticky
-	bool) {
-		// Wf runs one TWF and one AC on dA, then the second WFT is redirected to dB and
-		// transitions the wf with it.
-
-		tvA := testvars.New(s).WithBuildId("A")
-		tvB := tvA.WithBuildId("B")
-		dA := tvA.Deployment()
-		dB := tvB.Deployment()
-
-		if sticky {
-			s.warmUpSticky(tvA)
-		}
-
-		s.updateTaskQueueDeploymentData(tvA, 0, tqTypeWf, tqTypeAct)
-		we := s.startWorkflow(tvA, nil)
-
-		s.pollWftAndHandle(
-			tvA, false, nil,
-			func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
-				s.NotNil(task)
-				s.verifyWorkflowVersioning(tvA, vbUnspecified, nil, nil, transitionTo(dA))
-				return respondWftWithActivities(tvA, sticky, vbUnpinned, "5"), nil
-			}
-		)
-		s.verifyWorkflowVersioning(tvA, vbUnpinned, dA, nil, nil)
-		if sticky {
-			s.verifyWorkflowStickyQueue(we, tvA.StickyTaskQueue())
-		}
-
-		s.pollActivityAndHandle(
-			tvA, nil,
-			func(task *workflowservice.PollActivityTaskQueueResponse) (*workflowservice.RespondActivityTaskCompletedRequest, error) {
-				s.NotNil(task)
-				return respondActivity(), nil
-			}
-		)
-		s.verifyWorkflowVersioning(tvA, vbUnpinned, dA, nil, nil)
-
-		// Set B as the current deployment
-		s.updateTaskQueueDeploymentData(tvB, 0, tqTypeWf, tqTypeAct)
-
-		s.pollWftAndHandle(
-			tvB, false, nil,
-			func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
-				s.NotNil(task)
-				s.verifyWorkflowVersioning(tvA, vbUnpinned, dA, nil, transitionTo(dB))
-				return respondCompleteWorkflow(tvB, vbUnpinned), nil
-			}
-		)
-		s.verifyWorkflowVersioning(tvB, vbUnpinned, dB, nil, nil)
-	}
-
-	func(s *Versioning3Suite) TestTransitionFromActivity_Sticky()
-	{
-		s.testTransitionFromActivity(true)
-	}
-
-	func(s *Versioning3Suite) TestTransitionFromActivity_NoSticky()
-	{
-		s.testTransitionFromActivity(false)
-	}
-
-	func(s *Versioning3Suite) testTransitionFromActivity(sticky
-	bool) {
-		// Wf runs one TWF on dA and schedules four activities, then:
-		// 1. The first and second activities starts on dA
-		// 2. Current deployment becomes dB
-		// 3. The third activity is redirected to dB and starts a transition in the wf, without being
-		//    dispatched.
-		// 4. The 4th activity also does not start on any of the builds although there are pending
-		//    pollers on both.
-		// 5. The transition generates a WFT, and it is started in dB.
-		// 6. The 1st act is completed here while the transition is going on.
-		// 7. The 2nd act fails and makes another attempt. But it is not dispatched.
-		// 8. WFT completes and the transition completes.
-		// 9. All the 3 remaining activities are now dispatched and completed.
-
-		tvA := testvars.New(s).WithBuildId("A")
-		tvB := tvA.WithBuildId("B")
-		dA := tvA.Deployment()
-		dB := tvB.Deployment()
-
-		if sticky {
-			s.warmUpSticky(tvA)
-		}
-
-		s.updateTaskQueueDeploymentData(tvA, 0, tqTypeWf, tqTypeAct)
-		we := s.startWorkflow(tvA, nil)
-
-		s.pollWftAndHandle(
-			tvA, false, nil,
-			func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
-				s.NotNil(task)
-				s.verifyWorkflowVersioning(tvA, unspecified, nil, nil, transitionTo(dA))
-				return respondWftWithActivities(tvA, sticky, unpinned, "5", "6", "7", "8"), nil
-			}
-		)
-		s.verifyWorkflowVersioning(tvA, unpinned, dA, nil, nil)
-		if sticky {
-			s.verifyWorkflowStickyQueue(we, tvA.StickyTaskQueue())
-		}
-
-		transitionCompleted := atomic.Bool{}
-		transitionStarted := make(chan interface{})
-		act1Started := make(chan interface{})
-		act1Completed := make(chan interface{})
-		act2Started := make(chan interface{})
-		act2Failed := make(chan interface{})
-		act2To4Completed := make(chan interface{})
-
-		// 1. Start 1st and 2nd activities
-		s.pollActivityAndHandle(
-			tvA, act1Completed,
-			func(task *workflowservice.PollActivityTaskQueueResponse) (*workflowservice.RespondActivityTaskCompletedRequest, error) {
-				s.NotNil(task)
-				close(act1Started)
-				// block until the transition WFT starts
-				<-transitionStarted
-				// 6. the 1st act completes during transition
-				return respondActivity(), nil
-			}
-		)
-
-		<-act1Started
-		s.pollActivityAndHandle(
-			tvA, act2Failed,
-			func(task *workflowservice.PollActivityTaskQueueResponse) (*workflowservice.RespondActivityTaskCompletedRequest, error) {
-				s.NotNil(task)
-				close(act2Started)
-				// block until the transition WFT starts
-				<-transitionStarted
-				// 7. 2nd activity fails. Respond with error so it is retried.
-				return nil, errors.New("intentional activity failure")
-			}
-		)
-
-		<-act2Started
-		s.verifyWorkflowVersioning(tvA, unpinned, dA, nil, nil)
-
-		// 2. Set dB as the current deployment
-		s.updateTaskQueueDeploymentData(tvB, 0, tqTypeWf, tqTypeAct)
-
-		// Pollers of dA are there, but should not get any task
-		go s.idlePollActivity(
-			tvA,
-			true,
-			time.Second*10,
-			"activities should not go to the old deployment"
-		)
-
-		go func() {
-			for i := 2; i <= 4; i++ {
-				// 3-4. The new dB poller should trigger the third activity to be redirected, but the activity should
-				// not start until transition completes in the next wft.
-				// Repeating the handler so it processes all the three activities
-				s.pollActivityAndHandle(
-					tvB, nil,
-					func(task *workflowservice.PollActivityTaskQueueResponse) (*workflowservice.RespondActivityTaskCompletedRequest, error) {
-						// Activity should not start until the transition is completed
-						s.True(transitionCompleted.Load())
-						s.NotNil(task)
-						return respondActivity(), nil
-					}
-				)
-			}
-			close(act2To4Completed)
-		}()
-
-		// 5. The transition should create a new WFT to be sent to dB.
-		s.pollWftAndHandle(
-			tvB, false, nil,
-			func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
-				s.NotNil(task)
-				s.verifyWorkflowVersioning(tvA, unpinned, dA, nil, transitionTo(dB))
-				close(transitionStarted)
-				// 8. Complete the transition after act1 completes and act2's first attempt fails.
-				<-act1Completed
-				<-act2Failed
-				transitionCompleted.Store(true)
-				return respondEmptyWft(tvB, sticky, unpinned), nil
-			}
-		)
-		s.verifyWorkflowVersioning(tvB, unpinned, dB, nil, nil)
-		if sticky {
-			s.verifyWorkflowStickyQueue(we, tvB.StickyTaskQueue())
-		}
-
-		// 9. Now all activities should complete.
-		<-act2To4Completed
-		s.pollWftAndHandle(
-			tvB, false, nil,
-			func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
-				s.NotNil(task)
-				return respondCompleteWorkflow(tvB, unpinned), nil
-			}
-		)
-		s.verifyWorkflowVersioning(tvB, unpinned, dB, nil, nil)
-	}
+	s.pollWftAndHandle(tvWf, false, nil,
+		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+			s.NotNil(task)
+			return respondCompleteWorkflow(tvWf, behavior), nil
+		})
+	s.verifyWorkflowVersioning(tvWf, behavior, dWf, nil, nil)
 }
 
 func transitionTo(d *deploymentpb.Deployment) *workflow.DeploymentTransition {
@@ -677,7 +578,7 @@ func (s *Versioning3Suite) verifyWorkflowVersioning(
 	}
 
 	if !versioningInfo.GetDeploymentTransition().Equal(transition) {
-		s.Fail(fmt.Sprintf("deployment override mismatch. expected: {%s}, actual: {%s}",
+		s.Fail(fmt.Sprintf("deployment transition mismatch. expected: {%s}, actual: {%s}",
 			transition,
 			versioningInfo.GetDeploymentTransition(),
 		))
@@ -689,7 +590,8 @@ func respondActivity() *workflowservice.RespondActivityTaskCompletedRequest {
 }
 
 func respondWftWithActivities(
-	tv *testvars.TestVars,
+	tvWf *testvars.TestVars,
+	tvAct *testvars.TestVars,
 	sticky bool,
 	behavior enumspb.VersioningBehavior,
 	activityIds ...string,
@@ -697,7 +599,7 @@ func respondWftWithActivities(
 	var stickyAttr *taskqueuepb.StickyExecutionAttributes
 	if sticky {
 		stickyAttr = &taskqueuepb.StickyExecutionAttributes{
-			WorkerTaskQueue:        tv.StickyTaskQueue(),
+			WorkerTaskQueue:        tvWf.StickyTaskQueue(),
 			ScheduleToStartTimeout: durationpb.New(5 * time.Second),
 		}
 	}
@@ -709,7 +611,7 @@ func respondWftWithActivities(
 				ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
 					ActivityId:   a,
 					ActivityType: &commonpb.ActivityType{Name: "act"},
-					TaskQueue:    tv.TaskQueue(),
+					TaskQueue:    tvAct.TaskQueue(),
 					Input:        payloads.EncodeString("input"),
 					// TODO (shahab): tests with forced task forward take multiple seconds. Need to know why?
 					ScheduleToCloseTimeout: durationpb.New(10 * time.Second),
@@ -724,9 +626,8 @@ func respondWftWithActivities(
 	return &workflowservice.RespondWorkflowTaskCompletedRequest{
 		Commands:                   commands,
 		StickyAttributes:           stickyAttr,
-		ReturnNewWorkflowTask:      false,
 		ForceCreateNewWorkflowTask: false,
-		Deployment:                 tv.Deployment(),
+		Deployment:                 tvWf.Deployment(),
 		VersioningBehavior:         behavior,
 	}
 }
@@ -736,20 +637,7 @@ func respondEmptyWft(
 	sticky bool,
 	behavior enumspb.VersioningBehavior,
 ) *workflowservice.RespondWorkflowTaskCompletedRequest {
-	var stickyAttr *taskqueuepb.StickyExecutionAttributes
-	if sticky {
-		stickyAttr = &taskqueuepb.StickyExecutionAttributes{
-			WorkerTaskQueue:        tv.StickyTaskQueue(),
-			ScheduleToStartTimeout: durationpb.New(5 * time.Second),
-		}
-	}
-	return &workflowservice.RespondWorkflowTaskCompletedRequest{
-		StickyAttributes:           stickyAttr,
-		ReturnNewWorkflowTask:      false,
-		ForceCreateNewWorkflowTask: false,
-		Deployment:                 tv.Deployment(),
-		VersioningBehavior:         behavior,
-	}
+	return respondWftWithActivities(tv, tv, sticky, behavior)
 }
 
 func respondCompleteWorkflow(
@@ -767,7 +655,6 @@ func respondCompleteWorkflow(
 				},
 			},
 		},
-		ReturnNewWorkflowTask:      false,
 		ForceCreateNewWorkflowTask: false,
 		Deployment:                 tv.Deployment(),
 		VersioningBehavior:         behavior,
@@ -818,6 +705,7 @@ func (s *Versioning3Suite) Name() string {
 
 // pollWftAndHandle can be used in sync and async mode. For async mode pass the async channel. It
 // will be closed when the task is handled.
+// Returns the poller and poll response only in sync mode (can be used to process new wft in the response)
 func (s *Versioning3Suite) pollWftAndHandle(
 	tv *testvars.TestVars,
 	sticky bool,
@@ -927,7 +815,10 @@ func (s *Versioning3Suite) idlePollActivity(
 	).HandleTask(
 		tv,
 		func(task *workflowservice.PollActivityTaskQueueResponse) (*workflowservice.RespondActivityTaskCompletedRequest, error) {
-			s.Fail(unexpectedTaskMessage)
+			if task != nil {
+				s.Logger.Error(fmt.Sprintf("Unexpected activity task received, ID: %s", task.ActivityId))
+				s.Fail(unexpectedTaskMessage)
+			}
 			return nil, nil
 		},
 		taskpoller.WithTimeout(timeout),

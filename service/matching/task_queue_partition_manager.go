@@ -336,7 +336,6 @@ func (pm *taskQueuePartitionManagerImpl) ProcessSpooledTask(
 ) error {
 	taskInfo := task.event.GetData()
 	// This task came from taskReader so task.event is always set here.
-	// TODO: in WV2 we should not look at a spooled task directive anymore [cleanup-old-wv]
 	directive := taskInfo.GetVersionDirective()
 	if assignedBuildId != "" {
 		// construct directive based on the build ID of the spool queue

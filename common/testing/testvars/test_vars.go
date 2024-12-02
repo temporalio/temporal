@@ -167,6 +167,10 @@ func (tv *TestVars) DeploymentSeries(key ...string) string {
 	return tv.getOrCreate("deployment_series", key).(string)
 }
 
+func (tv *TestVars) WithDeploymentSeries(series string, key ...string) *TestVars {
+	return tv.cloneSet("deployment_series", key, series)
+}
+
 func (tv *TestVars) Deployment(key ...string) *deployment.Deployment {
 	//revive:disable-next-line:unchecked-type-assertion
 	return &deployment.Deployment{
