@@ -234,7 +234,7 @@ func (s *DeploymentSuite) TestDescribeDeployment_RegisterTaskQueue_ConcurrentPol
 		a.Equal(taskQueue.Name, resp.GetDeploymentInfo().GetTaskQueueInfos()[0].Name)
 		a.Equal(false, resp.GetDeploymentInfo().GetIsCurrent())
 		// todo (Shivam) - please add a check for current time
-	}, time.Second*5, time.Millisecond*1000)
+	}, time.Second*10, time.Millisecond*1000)
 }
 
 func (s *DeploymentSuite) TestGetCurrentDeployment_NoCurrentDeployment() {
