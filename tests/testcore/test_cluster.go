@@ -126,7 +126,7 @@ type (
 var (
 	// Each new new cluster uses random ports. But there is a chance that in-between allocating the new random ports
 	// and using them, another cluster start tries to grab the same random port. This mutex prevents that.
-	newClusterMutex sync.Mutex
+	portsMutex sync.Mutex
 )
 
 const (
@@ -151,8 +151,6 @@ func (a *ArchiverBase) VisibilityURI() string {
 }
 
 func (f *defaultTestClusterFactory) NewCluster(t *testing.T, options *TestClusterConfig, logger log.Logger) (*TestCluster, error) {
-	newClusterMutex.Lock()
-	defer newClusterMutex.Unlock()
 	return newClusterWithPersistenceTestBaseFactory(t, options, logger, f.tbFactory)
 }
 
@@ -229,9 +227,6 @@ func newClusterWithPersistenceTestBaseFactory(t *testing.T, options *TestCluster
 		httpProtocol: {
 			primitives.FrontendService: {All: makeAddresses(pp, options.FrontendConfig.NumFrontendHosts)},
 		},
-	}
-	if err := pp.Close(); err != nil {
-		logger.Fatal("unable to close port provider listeners", tag.Error(err))
 	}
 
 	if len(options.ClusterMetadata.ClusterInformation) > 0 {
@@ -379,8 +374,16 @@ func newClusterWithPersistenceTestBaseFactory(t *testing.T, options *TestCluster
 		logger.Fatal("Failed to start pprof", tag.Error(err))
 	}
 
+	// We need to release the pre-allocated random ports before we start the cluster to make them available again.
+	// But to prevent another cluster from grabbing the ports before the start completed, we use this lock.
+	portsMutex.Lock()
+	defer portsMutex.Unlock()
+	if err = pp.Close(); err != nil {
+		return nil, fmt.Errorf("unable to close port provider listeners: %w", err)
+	}
+
 	cluster := newTemporal(t, temporalParams)
-	if err := cluster.Start(); err != nil {
+	if err = cluster.Start(); err != nil {
 		return nil, err
 	}
 
