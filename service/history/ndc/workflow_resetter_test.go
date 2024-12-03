@@ -925,7 +925,7 @@ func (s *workflowResetterSuite) TestReapplyEvents() {
 
 	for _, tc := range testcases {
 		for _, event := range events {
-			switch event.GetEventType() {
+			switch event.GetEventType() { // nolint:exhaustive
 			case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED:
 				attr := event.GetWorkflowExecutionSignaledEventAttributes()
 				ms.EXPECT().AddWorkflowExecutionSignaled(
