@@ -32,6 +32,7 @@ import (
 	"fmt"
 	"os"
 	"path"
+	"sync"
 	"testing"
 	"time"
 
@@ -122,6 +123,12 @@ type (
 	}
 )
 
+var (
+	// Each new new cluster uses random ports. But there is a chance that in-between allocating the new random ports
+	// and using them, another cluster start tries to grab the same random port. This mutex prevents that.
+	newClusterMutex sync.Mutex
+)
+
 const (
 	httpProtocol transferProtocol = "http"
 	grpcProtocol transferProtocol = "grpc"
@@ -144,7 +151,9 @@ func (a *ArchiverBase) VisibilityURI() string {
 }
 
 func (f *defaultTestClusterFactory) NewCluster(t *testing.T, options *TestClusterConfig, logger log.Logger) (*TestCluster, error) {
-	return NewClusterWithPersistenceTestBaseFactory(t, options, logger, f.tbFactory)
+	newClusterMutex.Lock()
+	defer newClusterMutex.Unlock()
+	return newClusterWithPersistenceTestBaseFactory(t, options, logger, f.tbFactory)
 }
 
 func NewTestClusterFactory() TestClusterFactory {
@@ -197,7 +206,7 @@ func (f *defaultPersistenceTestBaseFactory) NewTestBase(options *persistencetest
 	return persistencetests.NewTestBase(options)
 }
 
-func NewClusterWithPersistenceTestBaseFactory(t *testing.T, options *TestClusterConfig, logger log.Logger, tbFactory PersistenceTestBaseFactory) (*TestCluster, error) {
+func newClusterWithPersistenceTestBaseFactory(t *testing.T, options *TestClusterConfig, logger log.Logger, tbFactory PersistenceTestBaseFactory) (*TestCluster, error) {
 	// determine number of hosts per service
 	const minNodes = 1
 	options.FrontendConfig.NumFrontendHosts = max(minNodes, options.FrontendConfig.NumFrontendHosts)
