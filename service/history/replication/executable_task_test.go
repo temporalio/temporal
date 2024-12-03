@@ -660,9 +660,7 @@ func (s *executableTaskSuite) TestSyncState_SourceMutableStateHasUnFlushedBuffer
 			VersionHistories:    syncStateErr.VersionHistories,
 			TargetClusterId:     int32(s.clusterMetadata.GetAllClusterInfo()[s.clusterMetadata.GetCurrentClusterName()].InitialFailoverVersion),
 		},
-	).Return(nil, &UnFlushedBufferedEventsError{
-		Msg: "some random error",
-	}).Times(1)
+	).Return(nil, serviceerror.NewWorkflowNotReady("workflow not ready")).Times(1)
 
 	doContinue, err := s.task.SyncState(context.Background(), syncStateErr, ResendAttempt)
 	s.Nil(err)

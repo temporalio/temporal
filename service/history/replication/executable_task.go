@@ -646,9 +646,10 @@ func (e *ExecutableTaskImpl) SyncState(
 			tag.WorkflowRunID(syncStateErr.RunId),
 			tag.ReplicationTask(e.replicationTask),
 		)
-		var unFlushedBufferedEventsErr *UnFlushedBufferedEventsError
-		if errors.As(err, &unFlushedBufferedEventsErr) {
-			logger.Info("Dropped replication task as source mutable state has buffered events.")
+
+		var workflowNotReady *serviceerror.WorkflowNotReady
+		if errors.As(err, &workflowNotReady) {
+			logger.Info("Dropped replication task as source mutable state has buffered events.", tag.Error(err))
 			return false, nil
 		}
 		var failedPreconditionErr *serviceerror.FailedPrecondition

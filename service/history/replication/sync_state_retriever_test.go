@@ -139,6 +139,7 @@ func (s *syncWorkflowStateSuite) TestSyncWorkflowState_TransitionHistoryDisabled
 	executionInfo := &persistencespb.WorkflowExecutionInfo{
 		TransitionHistory: nil, // transition history is disabled
 	}
+	mu.EXPECT().HasBufferedEvents().Return(false)
 	mu.EXPECT().GetExecutionInfo().Return(executionInfo).AnyTimes()
 	result, err := s.syncStateRetriever.GetSyncWorkflowStateArtifact(
 		context.Background(),
@@ -171,7 +172,7 @@ func (s *syncWorkflowStateSuite) TestSyncWorkflowState_UnFlushedBufferedEvents()
 	)
 	s.Nil(result)
 	s.Error(err)
-	s.IsType(&UnFlushedBufferedEventsError{}, err)
+	s.IsType(&serviceerror.WorkflowNotReady{}, err)
 }
 
 func (s *syncWorkflowStateSuite) TestSyncWorkflowState_ReturnMutation() {
@@ -206,6 +207,7 @@ func (s *syncWorkflowStateSuite) TestSyncWorkflowState_ReturnMutation() {
 		},
 		VersionHistories: versionHistories,
 	}
+	mu.EXPECT().HasBufferedEvents().Return(false)
 	mu.EXPECT().GetExecutionInfo().Return(executionInfo).AnyTimes()
 	mu.EXPECT().CloneToProto().Return(&persistencespb.WorkflowMutableState{
 		ExecutionInfo: executionInfo,
@@ -295,6 +297,7 @@ func (s *syncWorkflowStateSuite) TestSyncWorkflowState_ReturnSnapshot() {
 				VersionHistories:                versionHistories,
 			}
 			mu.EXPECT().GetExecutionInfo().Return(executionInfo).AnyTimes()
+			mu.EXPECT().HasBufferedEvents().Return(false)
 			mu.EXPECT().CloneToProto().Return(&persistencespb.WorkflowMutableState{
 				ExecutionInfo: executionInfo,
 			})
@@ -348,6 +351,7 @@ func (s *syncWorkflowStateSuite) TestSyncWorkflowState_NoVersionTransitionProvid
 		},
 		VersionHistories: versionHistories,
 	}
+	mu.EXPECT().HasBufferedEvents().Return(false)
 	mu.EXPECT().GetExecutionInfo().Return(executionInfo).AnyTimes()
 	mu.EXPECT().CloneToProto().Return(&persistencespb.WorkflowMutableState{
 		ExecutionInfo: executionInfo,
