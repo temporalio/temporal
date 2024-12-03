@@ -250,7 +250,6 @@ func (s *Versioning3Suite) testUnpinnedWorkflow(sticky bool) {
 			s.NotNil(task)
 			return respondActivity(), nil
 		})
-	//s.waitForDeploymentDataPropagation(tv, tqTypeAct)
 
 	s.setCurrentDeployment(d)
 	s.waitForDeploymentDataPropagation(tv, tqTypeWf, tqTypeAct)
