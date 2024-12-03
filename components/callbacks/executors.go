@@ -76,6 +76,8 @@ type taskExecutor struct {
 // invocationResult is a marker for the callbackInvokable.Invoke result to indicate to the executor how to handle the
 // invocation outcome.
 type invocationResult interface {
+	// A marker for all possible implementations.
+	mustImplementInvocationResult()
 	error() error
 }
 
@@ -99,7 +101,7 @@ func (r invocationResultFail) error() error {
 	return r.err
 }
 
-// invocationResultFail marks an invocation as failed with the intent to retry.
+// invocationResultRetry marks an invocation as failed with the intent to retry.
 type invocationResultRetry struct {
 	err error
 }

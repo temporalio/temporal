@@ -111,18 +111,7 @@ func (InvocationTask) Validate(ref *persistencespb.StateMachineRef, node *hsm.No
 	if err := node.CheckRunning(); err != nil {
 		return err
 	}
-	op, err := hsm.MachineData[Operation](node)
-	if err != nil {
-		return err
-	}
-	if op.State() != enumsspb.NEXUS_OPERATION_STATE_SCHEDULED {
-		return fmt.Errorf(
-			"%w: operation is not in Scheduled state, current state: %v",
-			consts.ErrStaleReference,
-			op.State(),
-		)
-	}
-	return nil
+	return hsm.ValidateState[enumsspb.NexusOperationState, Operation](node, enumsspb.NEXUS_OPERATION_STATE_SCHEDULED)
 }
 
 type InvocationTaskSerializer struct{}
@@ -157,18 +146,7 @@ func (t BackoffTask) Validate(_ *persistencespb.StateMachineRef, node *hsm.Node)
 	if err := node.CheckRunning(); err != nil {
 		return err
 	}
-	op, err := hsm.MachineData[Operation](node)
-	if err != nil {
-		return err
-	}
-	if op.State() != enumsspb.NEXUS_OPERATION_STATE_BACKING_OFF {
-		return fmt.Errorf(
-			"%w: operation is not in BackingOff state, current state: %v",
-			consts.ErrStaleReference,
-			op.State(),
-		)
-	}
-	return nil
+	return hsm.ValidateState[enumsspb.NexusOperationState, Operation](node, enumsspb.NEXUS_OPERATION_STATE_BACKING_OFF)
 }
 
 type BackoffTaskSerializer struct{}
@@ -200,19 +178,10 @@ func (t CancelationTask) Destination() string {
 }
 
 func (CancelationTask) Validate(ref *persistencespb.StateMachineRef, node *hsm.Node) error {
-	c, err := hsm.MachineData[Cancelation](node)
-	if err != nil {
+	if err := node.CheckRunning(); err != nil {
 		return err
 	}
-	if c.State() != enumspb.NEXUS_OPERATION_CANCELLATION_STATE_SCHEDULED {
-		return fmt.Errorf(
-			"%w: %w: expected a machine in SCHEDULED state, got %v",
-			consts.ErrStaleReference,
-			hsm.ErrInvalidTransition,
-			c.State(),
-		)
-	}
-	return node.CheckRunning()
+	return hsm.ValidateState[enumspb.NexusOperationCancellationState, Cancelation](node, enumspb.NEXUS_OPERATION_CANCELLATION_STATE_SCHEDULED)
 }
 
 type CancelationTaskSerializer struct{}
@@ -244,19 +213,10 @@ func (CancelationBackoffTask) Destination() string {
 }
 
 func (CancelationBackoffTask) Validate(ref *persistencespb.StateMachineRef, node *hsm.Node) error {
-	c, err := hsm.MachineData[Cancelation](node)
-	if err != nil {
+	if err := node.CheckRunning(); err != nil {
 		return err
 	}
-	if c.State() != enumspb.NEXUS_OPERATION_CANCELLATION_STATE_BACKING_OFF {
-		return fmt.Errorf(
-			"%w: %w: expected a machine in BACKING_OFF state, got %v",
-			consts.ErrStaleReference,
-			hsm.ErrInvalidTransition,
-			c.State(),
-		)
-	}
-	return node.CheckRunning()
+	return hsm.ValidateState[enumspb.NexusOperationCancellationState, Cancelation](node, enumspb.NEXUS_OPERATION_CANCELLATION_STATE_BACKING_OFF)
 }
 
 type CancelationBackoffTaskSerializer struct{}
