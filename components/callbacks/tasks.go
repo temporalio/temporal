@@ -25,6 +25,7 @@ package callbacks
 import (
 	"time"
 
+	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/service/history/hsm"
 )
@@ -59,7 +60,7 @@ func (t InvocationTask) Deadline() time.Time {
 }
 
 func (InvocationTask) Validate(ref *persistencespb.StateMachineRef, node *hsm.Node) error {
-	return hsm.ValidateNotTransitioned(ref, node)
+	return hsm.ValidateState[enumsspb.CallbackState, Callback](node, enumsspb.CALLBACK_STATE_SCHEDULED)
 }
 
 type InvocationTaskSerializer struct{}
@@ -91,7 +92,7 @@ func (BackoffTask) Destination() string {
 }
 
 func (BackoffTask) Validate(ref *persistencespb.StateMachineRef, node *hsm.Node) error {
-	return hsm.ValidateNotTransitioned(ref, node)
+	return hsm.ValidateState[enumsspb.CallbackState, Callback](node, enumsspb.CALLBACK_STATE_BACKING_OFF)
 }
 
 type BackoffTaskSerializer struct{}
