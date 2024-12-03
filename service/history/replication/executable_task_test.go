@@ -624,6 +624,49 @@ func (s *executableTaskSuite) TestResend_TransitionHistoryDisabled() {
 	s.False(doContinue)
 }
 
+func (s *executableTaskSuite) TestSyncState_SourceMutableStateHasUnFlushedBufferEvents() {
+	syncStateErr := &serviceerrors.SyncState{
+		NamespaceId: uuid.NewString(),
+		WorkflowId:  uuid.NewString(),
+		RunId:       uuid.NewString(),
+		VersionedTransition: &persistencespb.VersionedTransition{
+			NamespaceFailoverVersion: rand.Int63(),
+			TransitionCount:          rand.Int63(),
+		},
+		VersionHistories: &historyspb.VersionHistories{
+			Histories: []*historyspb.VersionHistory{
+				{
+					BranchToken: []byte("token#1"),
+					Items: []*historyspb.VersionHistoryItem{
+						{EventId: 102, Version: 1234},
+					},
+				},
+			},
+		},
+	}
+
+	mockRemoteAdminClient := adminservicemock.NewMockAdminServiceClient(s.controller)
+	s.clientBean.EXPECT().GetRemoteAdminClient(s.sourceCluster).Return(mockRemoteAdminClient, nil).AnyTimes()
+
+	mockRemoteAdminClient.EXPECT().SyncWorkflowState(
+		gomock.Any(),
+		&adminservice.SyncWorkflowStateRequest{
+			NamespaceId: syncStateErr.NamespaceId,
+			Execution: &commonpb.WorkflowExecution{
+				WorkflowId: syncStateErr.WorkflowId,
+				RunId:      syncStateErr.RunId,
+			},
+			VersionedTransition: syncStateErr.VersionedTransition,
+			VersionHistories:    syncStateErr.VersionHistories,
+			TargetClusterId:     int32(s.clusterMetadata.GetAllClusterInfo()[s.clusterMetadata.GetCurrentClusterName()].InitialFailoverVersion),
+		},
+	).Return(nil, serviceerror.NewWorkflowNotReady("workflow not ready")).Times(1)
+
+	doContinue, err := s.task.SyncState(context.Background(), syncStateErr, ResendAttempt)
+	s.Nil(err)
+	s.False(doContinue)
+}
+
 func (s *executableTaskSuite) TestBackFillEvents_Success() {
 	workflowKey := definition.NewWorkflowKey(
 		s.namespaceId,
