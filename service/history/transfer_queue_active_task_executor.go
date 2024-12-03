@@ -103,6 +103,7 @@ func newTransferQueueActiveTaskExecutor(
 			shard,
 			workflowCache,
 			logger,
+			false,
 		),
 		parentClosePolicyClient: parentclosepolicy.NewClient(
 			shard.GetMetricsHandler(),

@@ -83,14 +83,15 @@ type (
 	}
 
 	workflowResetterImpl struct {
-		shardContext      shard.Context
-		namespaceRegistry namespace.Registry
-		clusterMetadata   cluster.Metadata
-		executionMgr      persistence.ExecutionManager
-		workflowCache     wcache.Cache
-		stateRebuilder    StateRebuilder
-		transaction       workflow.Transaction
-		logger            log.Logger
+		shardContext                  shard.Context
+		namespaceRegistry             namespace.Registry
+		clusterMetadata               cluster.Metadata
+		executionMgr                  persistence.ExecutionManager
+		workflowCache                 wcache.Cache
+		stateRebuilder                StateRebuilder
+		transaction                   workflow.Transaction
+		logger                        log.Logger
+		allowResetWithPendingChildren bool
 	}
 )
 
@@ -100,16 +101,18 @@ func NewWorkflowResetter(
 	shardContext shard.Context,
 	workflowCache wcache.Cache,
 	logger log.Logger,
+	allowResetWithPendingChildren bool,
 ) *workflowResetterImpl {
 	return &workflowResetterImpl{
-		shardContext:      shardContext,
-		namespaceRegistry: shardContext.GetNamespaceRegistry(),
-		clusterMetadata:   shardContext.GetClusterMetadata(),
-		executionMgr:      shardContext.GetExecutionManager(),
-		workflowCache:     workflowCache,
-		stateRebuilder:    NewStateRebuilder(shardContext, logger),
-		transaction:       workflow.NewTransaction(shardContext),
-		logger:            logger,
+		shardContext:                  shardContext,
+		namespaceRegistry:             shardContext.GetNamespaceRegistry(),
+		clusterMetadata:               shardContext.GetClusterMetadata(),
+		executionMgr:                  shardContext.GetExecutionManager(),
+		workflowCache:                 workflowCache,
+		stateRebuilder:                NewStateRebuilder(shardContext, logger),
+		transaction:                   workflow.NewTransaction(shardContext),
+		logger:                        logger,
+		allowResetWithPendingChildren: allowResetWithPendingChildren,
 	}
 }
 
@@ -306,7 +309,7 @@ func (r *workflowResetterImpl) prepareResetWorkflow(
 		return nil, err
 	}
 
-	if len(resetMutableState.GetPendingChildExecutionInfos()) > 0 {
+	if !r.allowResetWithPendingChildren && len(resetMutableState.GetPendingChildExecutionInfos()) > 0 {
 		return nil, serviceerror.NewInvalidArgument("WorkflowResetter encountered pending child workflows.")
 	}
 

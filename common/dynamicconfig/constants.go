@@ -484,8 +484,8 @@ Deleted Redirect Rules will be kept in the DB (with DeleteTimestamp). After this
 		"matching.wv.ReachabilityBuildIdVisibilityGracePeriod",
 		3*time.Minute,
 		`ReachabilityBuildIdVisibilityGracePeriod is the time period for which deleted versioning rules are still considered active
-to account for the delay in updating the build id field in visibility. Not yet supported for GetDeploymentReachability. We recommend waiting 
-at least 2 minutes between changing the current deployment and calling GetDeployment, so that newly started workflow executions using the 
+to account for the delay in updating the build id field in visibility. Not yet supported for GetDeploymentReachability. We recommend waiting
+at least 2 minutes between changing the current deployment and calling GetDeployment, so that newly started workflow executions using the
 recently-current deployment can arrive in visibility.`,
 	)
 	ReachabilityTaskQueueScanLimit = NewGlobalIntSetting(
@@ -1121,25 +1121,25 @@ Note: this should be greater than matching.longPollExpirationInterval and matchi
 	MetricsBreakdownByTaskQueue = NewTaskQueueBoolSetting(
 		"metrics.breakdownByTaskQueue",
 		true,
-		`MetricsBreakdownByTaskQueue determines if the 'taskqueue' tag in Matching and History metrics should 
-contain the actual TQ name or a generic __omitted__ value. Disable this option if the cardinality is too high for your 
+		`MetricsBreakdownByTaskQueue determines if the 'taskqueue' tag in Matching and History metrics should
+contain the actual TQ name or a generic __omitted__ value. Disable this option if the cardinality is too high for your
 observability stack. Disabling this option will disable all the per-Task Queue gauges such as backlog lag, count, and age.`,
 	)
 	MetricsBreakdownByPartition = NewTaskQueueBoolSetting(
 		"metrics.breakdownByPartition",
 		true,
-		`MetricsBreakdownByPartition determines if the 'partition' tag in Matching metrics should 
-contain the actual normal partition ID or a generic __normal__ value. Regardless of this config, the tag value for sticky 
-queues will be "__sticky__". Disable this option if the partition cardinality is too high for your 
+		`MetricsBreakdownByPartition determines if the 'partition' tag in Matching metrics should
+contain the actual normal partition ID or a generic __normal__ value. Regardless of this config, the tag value for sticky
+queues will be "__sticky__". Disable this option if the partition cardinality is too high for your
 observability stack. Disabling this option will disable all the per-Task Queue gauges such as backlog lag, count, and age.`,
 	)
 	MetricsBreakdownByBuildID = NewTaskQueueBoolSetting(
 		"metrics.breakdownByBuildID",
 		true,
-		`MetricsBreakdownByBuildID determines if the 'worker-build-id' tag in Matching metrics should 
-contain the actual Build ID or a generic "__versioned__" value. Regardless of this config, the tag value for unversioned 
-queues will be "__unversioned__". Disable this option if the Build ID cardinality is too high for your 
-observability stack. Disabling this option will disable all the per-Task Queue gauges such as backlog lag, count, and age 
+		`MetricsBreakdownByBuildID determines if the 'worker-build-id' tag in Matching metrics should
+contain the actual Build ID or a generic "__versioned__" value. Regardless of this config, the tag value for unversioned
+queues will be "__unversioned__". Disable this option if the Build ID cardinality is too high for your
+observability stack. Disabling this option will disable all the per-Task Queue gauges such as backlog lag, count, and age
 for VERSIONED queues.`,
 	)
 	MatchingForwarderMaxOutstandingPolls = NewTaskQueueIntSetting(
@@ -2044,6 +2044,11 @@ the user has not specified an explicit RetryPolicy`,
 		retrypolicy.DefaultDefaultRetrySettings,
 		`DefaultWorkflowRetryPolicy represents the out-of-box retry policy for unset fields
 where the user has set an explicit RetryPolicy, but not specified all the fields`,
+	)
+	AllowResetWithPendingChildren = NewNamespaceBoolSetting(
+		"history.allowResetWithPendingChildren",
+		false,
+		`Allows resetting of workflows with pending children when set to true`,
 	)
 	HistoryMaxAutoResetPoints = NewNamespaceIntSetting(
 		"history.historyMaxAutoResetPoints",

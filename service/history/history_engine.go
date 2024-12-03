@@ -291,6 +291,7 @@ func NewEngineWithShardContext(
 		shard,
 		workflowCache,
 		logger,
+		false,
 	)
 
 	historyEngImpl.searchAttributesValidator = searchattribute.NewValidator(
@@ -836,7 +837,7 @@ func (e *historyEngineImpl) ResetWorkflowExecution(
 	ctx context.Context,
 	req *historyservice.ResetWorkflowExecutionRequest,
 ) (*historyservice.ResetWorkflowExecutionResponse, error) {
-	return resetworkflow.Invoke(ctx, req, e.shardContext, e.workflowConsistencyChecker)
+	return resetworkflow.Invoke(ctx, req, e.shardContext, e.workflowConsistencyChecker, e.config)
 }
 
 // UpdateWorkflowExecutionOptions updates the options of a specific workflow execution.

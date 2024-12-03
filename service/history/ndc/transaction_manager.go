@@ -187,6 +187,7 @@ func NewTransactionManager(
 			shardContext,
 			workflowCache,
 			logger,
+			false,
 		),
 		eventsReapplier: eventsReapplier,
 		logger:          logger,
