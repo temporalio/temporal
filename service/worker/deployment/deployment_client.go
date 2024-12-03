@@ -687,6 +687,10 @@ func (d *DeploymentClientImpl) updateWithStart(
 		// successful but un-completed responses.
 		res, err := d.historyClient.ExecuteMultiOperation(ctx, multiOpReq)
 		if err != nil {
+			var multiErr *serviceerror.MultiOperationExecution
+			if errors.As(err, &multiErr) {
+				return errRetry
+			}
 			return err
 		}
 
