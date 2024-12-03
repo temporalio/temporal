@@ -40,7 +40,6 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	deploymentspb "go.temporal.io/server/api/deployment/v1"
 	"go.temporal.io/server/api/historyservice/v1"
-	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
@@ -681,18 +680,7 @@ func (d *DeploymentClientImpl) updateWithStart(
 
 	policy := backoff.NewExponentialRetryPolicy(100 * time.Millisecond)
 	isRetryable := func(err error) bool {
-		if errors.Is(err, errRetry) {
-			return true
-		}
-		var multiErr *serviceerror.MultiOperationExecution
-		if errors.As(err, &multiErr) {
-			for _, e := range multiErr.OperationErrors() {
-				if common.IsServiceClientTransientError(e) {
-					return true
-				}
-			}
-		}
-		return false
+		return errors.Is(err, errRetry)
 	}
 	var outcome *updatepb.Outcome
 
