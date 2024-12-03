@@ -80,7 +80,7 @@ type Starter struct {
 	visibilityManager          manager.VisibilityManager
 	request                    *historyservice.StartWorkflowExecutionRequest
 	namespace                  *namespace.Namespace
-	createOrUpdateLeaseFn      api.CreateLeaseFunc
+	createOrUpdateLeaseFn      api.CreateOrUpdateLeaseFunc
 }
 
 // creationParams is a container for all information obtained from creating the uncommitted execution.
@@ -109,7 +109,7 @@ func NewStarter(
 	tokenSerializer common.TaskTokenSerializer,
 	visibilityManager manager.VisibilityManager,
 	request *historyservice.StartWorkflowExecutionRequest,
-	createLeaseFn api.CreateLeaseFunc,
+	createLeaseFn api.CreateOrUpdateLeaseFunc,
 ) (*Starter, error) {
 	namespaceEntry, err := api.GetActiveNamespace(shardContext, namespace.ID(request.GetNamespaceId()))
 	if err != nil {
