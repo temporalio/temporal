@@ -80,7 +80,7 @@ type Starter struct {
 	visibilityManager          manager.VisibilityManager
 	request                    *historyservice.StartWorkflowExecutionRequest
 	namespace                  *namespace.Namespace
-	createLeaseFn              api.CreateLeaseFunc
+	createOrUpdateLeaseFn      api.CreateLeaseFunc
 }
 
 // creationParams is a container for all information obtained from creating the uncommitted execution.
@@ -123,7 +123,7 @@ func NewStarter(
 		visibilityManager:          visibilityManager,
 		request:                    request,
 		namespace:                  namespaceEntry,
-		createLeaseFn:              createLeaseFn,
+		createOrUpdateLeaseFn:      createLeaseFn,
 	}, nil
 }
 
@@ -262,7 +262,7 @@ func (s *Starter) prepareNewWorkflow(workflowID string) (*creationParams, error)
 		return nil, err
 	}
 
-	workflowLease, err := s.createLeaseFn(s.shardContext, mutableState)
+	workflowLease, err := s.createOrUpdateLeaseFn(nil, s.shardContext, mutableState)
 	if err != nil {
 		return nil, err
 	}
@@ -333,7 +333,6 @@ func (s *Starter) handleConflict(
 	if err := s.createAsCurrent(ctx, creationParams, currentWorkflowConditionFailed); err != nil {
 		return nil, StartErr, err
 	}
-
 	resp, err := s.generateResponse(
 		creationParams.runID,
 		creationParams.workflowTaskInfo,
@@ -348,6 +347,11 @@ func (s *Starter) createAsCurrent(
 	creationParams *creationParams,
 	currentWorkflowConditionFailed *persistence.CurrentWorkflowConditionFailedError,
 ) error {
+	// TODO(stephanos): remove this hack
+	// This is here for Update-with-Start to reapply the Update after it was aborted previously.
+	if _, err := s.createOrUpdateLeaseFn(creationParams.workflowLease, s.shardContext, nil); err != nil {
+		return err
+	}
 	return creationParams.workflowLease.GetContext().CreateWorkflowExecution(
 		ctx,
 		s.shardContext,
@@ -424,7 +428,7 @@ func (s *Starter) resolveDuplicateWorkflowID(
 	case err != nil:
 		return nil, StartErr, err
 	case currentExecutionUpdateAction == nil:
-		return nil, StartErr, nil
+		return nil, StartNew, nil
 	}
 
 	var workflowLease api.WorkflowLease
@@ -453,7 +457,7 @@ func (s *Starter) resolveDuplicateWorkflowID(
 				return nil, nil, err
 			}
 
-			workflowLease, err = s.createLeaseFn(s.shardContext, newMutableState)
+			workflowLease, err = s.createOrUpdateLeaseFn(nil, s.shardContext, newMutableState)
 			if err != nil {
 				return nil, nil, err
 			}
@@ -491,7 +495,7 @@ func (s *Starter) resolveDuplicateWorkflowID(
 	case consts.ErrWorkflowCompleted:
 		// current workflow already closed
 		// fallthough to the logic for only creating the new workflow below
-		return nil, StartErr, nil
+		return nil, StartNew, nil
 	default:
 		return nil, StartErr, err
 	}

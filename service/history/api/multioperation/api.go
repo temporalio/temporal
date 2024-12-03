@@ -91,41 +91,50 @@ func Invoke(
 		visibilityManager,
 		startReq,
 		func(
+			existingLease api.WorkflowLease,
 			shardContext shard.Context,
 			ms workflow.MutableState,
 		) (api.WorkflowLease, error) {
-			// Create a new *locked* workflow context. This is important since without the lock, task processing
-			// would try to modify the mutable state concurrently. Once the Starter completes, it will release the lock.
-			//
-			// The cache write needs to happen *before* the persistence write because a failed cache write means an
-			// early error response that aborts the entire MultiOperation request. And it allows for a simple retry, too -
-			// whereas if the cache write happened and failed *after* a successful persistence write,
-			// it would leave behind a started workflow that will never receive the update.
-			workflowContext, releaseFunc, err := workflowConsistencyChecker.GetWorkflowCache().GetOrCreateWorkflowExecution(
-				ctx,
-				shardContext,
-				ms.GetNamespaceEntry().ID(),
-				&commonpb.WorkflowExecution{WorkflowId: ms.GetExecutionInfo().WorkflowId, RunId: ms.GetExecutionState().RunId},
-				locks.PriorityHigh,
-			)
-			if err != nil {
-				return nil, err
+			var res api.WorkflowLease
+
+			if existingLease == nil {
+				// Create a new *locked* workflow context. This is important since without the lock, task processing
+				// would try to modify the mutable state concurrently. Once the Starter completes, it will release the lock.
+				//
+				// The cache write needs to happen *before* the persistence write because a failed cache write means an
+				// early error response that aborts the entire MultiOperation request. And it allows for a simple retry, too -
+				// whereas if the cache write happened and failed *after* a successful persistence write,
+				// it would leave behind a started workflow that will never receive the update.
+				workflowContext, releaseFunc, err := workflowConsistencyChecker.GetWorkflowCache().GetOrCreateWorkflowExecution(
+					ctx,
+					shardContext,
+					ms.GetNamespaceEntry().ID(),
+					&commonpb.WorkflowExecution{WorkflowId: ms.GetExecutionInfo().WorkflowId, RunId: ms.GetExecutionState().RunId},
+					locks.PriorityHigh,
+				)
+				if err != nil {
+					return nil, err
+				}
+				res = api.NewWorkflowLease(workflowContext, releaseFunc, ms)
+			} else {
+				// TODO(stephanos): remove this hack
+				// If the lease already exists, but the update needs to be re-applied since it was aborted due to a conflict.
+				res = existingLease
+				ms = existingLease.GetMutableState()
 			}
-			workflowLease := api.NewWorkflowLease(workflowContext, releaseFunc, ms)
 
 			// If MutableState isn't set here, the next request for it will load it from the database
 			// - but receive a new instance that won't have the in-memory Update registry.
-			workflowLease.GetContext().(*workflow.ContextImpl).MutableState = ms
+			res.GetContext().(*workflow.ContextImpl).MutableState = ms
 
 			// Add the Update.
 			// NOTE: UpdateWorkflowAction return value is ignored since ther Starter will always create a WFT.
-			updateReg := workflowLease.GetContext().UpdateRegistry(ctx)
+			updateReg := res.GetContext().UpdateRegistry(ctx)
 			if _, err := updater.ApplyRequest(ctx, updateReg, ms); err != nil {
 				// Wrapping the error so Update and Start errors can be distinguished later.
 				return nil, updateError{err}
 			}
-
-			return workflowLease, nil
+			return res, nil
 		},
 	)
 	if err != nil {
@@ -162,7 +171,7 @@ func Invoke(
 	}
 
 	// workflow was already started, ...
-	if currentWorkflowLease != nil {
+	if currentWorkflowLease != nil && currentWorkflowLease.GetMutableState().IsWorkflowExecutionRunning() {
 		switch conflictPolicy {
 		case enumspb.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING:
 			// ... skip the start and only send the update
