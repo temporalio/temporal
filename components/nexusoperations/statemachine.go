@@ -460,18 +460,19 @@ var TransitionTimedOut = hsm.NewTransition(
 	},
 )
 
-// Cancel marks the Operation machine as canceled by spawning a child Cancelation machine and transitioning the child to
-// the SCHEDULED state.
+// Cancel marks the Operation machine as canceled by spawning a child Cancelation machine. If the
+// Operation ID is set, then transition the Cancelation machine to the SCHEDULED state. Otherwise,
+// the Cancelation machine will wait the Operation machine transition to the STARTED state.
 func (o Operation) Cancel(node *hsm.Node, t time.Time) (hsm.TransitionOutput, error) {
 	child, err := node.AddChild(CancelationMachineKey, Cancelation{
 		NexusOperationCancellationInfo: &persistencespb.NexusOperationCancellationInfo{},
 	})
 	if err != nil {
-		// This function should be called as part of command/event handling and it should not called more than once.
+		// This function should be called as part of command/event handling and it should not be called
+		// more than once.
 		return hsm.TransitionOutput{}, err
 	}
 	// Operation wasn't started yet, we don't know how to cancel it ATM.
-	// TODO(bergundy): Support cancel-before-started.
 	if o.OperationId == "" {
 		// Don't schedule the cancelation yet. We may schedule it again once the operation is started.
 		return hsm.TransitionOutput{}, nil
