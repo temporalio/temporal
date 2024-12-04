@@ -72,6 +72,8 @@ type (
 
 		startTime          time.Time
 		onceClusterConnect sync.Once
+
+		enableTransitionHistory bool
 	}
 )
 
@@ -98,6 +100,7 @@ func (s *xdcBaseSuite) setupSuite(clusterNames []string, opts ...testcore.Option
 		s.dynamicConfigOverrides = make(map[dynamicconfig.Key]interface{})
 	}
 	s.dynamicConfigOverrides[dynamicconfig.ClusterMetadataRefreshInterval.Key()] = time.Second * 5
+	s.dynamicConfigOverrides[dynamicconfig.EnableTransitionHistory.Key()] = s.enableTransitionHistory
 
 	fileName := "../testdata/xdc_clusters.yaml"
 	if testcore.TestFlags.TestClusterConfigFile != "" {

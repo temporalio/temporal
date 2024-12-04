@@ -6913,7 +6913,7 @@ func (ms *MutableStateImpl) applyUpdatesToStateMachineNodes(
 		for _, p := range nodeMutation.Path.Path {
 			incomingPath = append(incomingPath, hsm.Key{Type: p.Type, ID: p.Id})
 		}
-		currentNode, err := root.Child(incomingPath)
+		node, err := root.Child(incomingPath)
 		if err != nil {
 			if !errors.Is(err, hsm.ErrStateMachineNotFound) {
 				return err
@@ -6927,13 +6927,20 @@ func (ms *MutableStateImpl) applyUpdatesToStateMachineNodes(
 				// we don't have enough information to recreate all parents
 				return err
 			}
-			newNode, err := parentNode.AddChild(incomingPath[len(incomingPath)-1], nodeMutation.Data)
+
+			key := incomingPath[len(incomingPath)-1]
+			deserilzed, err := parentNode.DeserializeData(key, nodeMutation.Data)
 			if err != nil {
 				return err
 			}
-			internalNode = newNode.InternalRepr()
+			node, err = parentNode.AddChild(incomingPath[len(incomingPath)-1], deserilzed)
+			if err != nil {
+				return err
+			}
+
+			internalNode = node.InternalRepr()
 		} else {
-			internalNode = currentNode.InternalRepr()
+			internalNode = node.InternalRepr()
 			if CompareVersionedTransition(nodeMutation.LastUpdateVersionedTransition, internalNode.LastUpdateVersionedTransition) == 0 {
 				continue
 			}
@@ -6942,6 +6949,7 @@ func (ms *MutableStateImpl) applyUpdatesToStateMachineNodes(
 		internalNode.InitialVersionedTransition = nodeMutation.InitialVersionedTransition
 		internalNode.LastUpdateVersionedTransition = nodeMutation.LastUpdateVersionedTransition
 		internalNode.TransitionCount++
+		node.InvalidCache()
 	}
 	return nil
 }
