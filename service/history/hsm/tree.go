@@ -733,14 +733,14 @@ func (n *Node) root() *Node {
 func (ol OperationLog) Compact() OperationLog {
 	var deletedPaths [][]Key
 	result := make(OperationLog, 0, len(ol))
-	hasDeleteOperation := make(map[string]bool)
+	hasDeleteOperation := make(map[string]struct{})
 
 	// First get deletion paths and record existing deletions
 	for _, op := range ol {
 		if del, ok := op.(DeleteOperation); ok {
 			deletedPaths = append(deletedPaths, del.Path())
 			pathKey := fmt.Sprintf("%v", del.Path())
-			hasDeleteOperation[pathKey] = true
+			hasDeleteOperation[pathKey] = struct{}{}
 			result = append(result, op)
 		}
 	}
@@ -753,9 +753,9 @@ func (ol OperationLog) Compact() OperationLog {
 				if isPathPrefix(delPath, trans.Path()) {
 					// Only add deletion if we haven't seen it
 					pathKey := fmt.Sprintf("%v", trans.Path())
-					if !hasDeleteOperation[pathKey] {
+					if _, seen := hasDeleteOperation[pathKey]; !seen {
 						result = append(result, DeleteOperation{path: trans.Path()})
-						hasDeleteOperation[pathKey] = true
+						hasDeleteOperation[pathKey] = struct{}{}
 					}
 					isDeleted = true
 					break
