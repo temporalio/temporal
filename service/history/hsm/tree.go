@@ -106,7 +106,7 @@ type DeleteOperation struct {
 	path []Key
 }
 
-func (d DeleteOperation) Path() []Key           { return d.NodePath }
+func (d DeleteOperation) Path() []Key           { return d.path }
 func (DeleteOperation) mustImplementOperation() {}
 
 // TransitionOperation represents a state transition that occurred at a specific
@@ -131,7 +131,7 @@ type OperationLog []Operation
 func (ol OperationLog) IsDeleted(path []Key) bool {
 	for _, op := range ol {
 		if del, ok := op.(DeleteOperation); ok {
-			if isPathPrefix(del.NodePath, path) {
+			if isPathPrefix(del.path, path) {
 				return true
 			}
 		}
@@ -423,7 +423,7 @@ func (n *Node) DeleteChild(key Key) error {
 
 	root := n.root()
 	root.opLog = append(root.opLog, DeleteOperation{
-		NodePath: child.Path(),
+		path: child.Path(),
 	})
 
 	// Remove from persistence and cache
@@ -757,7 +757,7 @@ func (ol OperationLog) Compact() OperationLog {
 					// Only add deletion if we haven't seen it
 					pathKey := fmt.Sprintf("%v", trans.Path())
 					if !hasDeleteOperation[pathKey] {
-						result = append(result, DeleteOperation{NodePath: trans.Path()})
+						result = append(result, DeleteOperation{path: trans.Path()})
 						hasDeleteOperation[pathKey] = true
 					}
 					isDeleted = true
