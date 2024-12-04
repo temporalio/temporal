@@ -1196,20 +1196,20 @@ func (s *operatorHandlerSuite) Test_DeleteNamespace() {
 	}
 
 	// Delete by name: Nexus endpoint associated.
-	resp, err := handler.DeleteNamespace(ctx, &operatorservice.DeleteNamespaceRequest{
+	_, err := handler.DeleteNamespace(ctx, &operatorservice.DeleteNamespaceRequest{
 		Namespace: "namespace-with-nexus-endpoint",
 	})
 	s.ErrorContains(err, "cannot delete a namespace that is a target of a Nexus endpoint (test-endpoint)")
 
 	// Delete by ID: Nexus endpoint associated.
-	resp, err = handler.DeleteNamespace(ctx, &operatorservice.DeleteNamespaceRequest{
+	_, err = handler.DeleteNamespace(ctx, &operatorservice.DeleteNamespaceRequest{
 		NamespaceId: "fake",
 	})
 	s.ErrorContains(err, "cannot delete a namespace that is a target of a Nexus endpoint (test-endpoint)")
 
 	// Start workflow failed.
 	mockSdkClient.EXPECT().ExecuteWorkflow(gomock.Any(), gomock.Any(), "temporal-sys-delete-namespace-workflow", gomock.Any()).Return(nil, errors.New("start failed"))
-	resp, err = handler.DeleteNamespace(ctx, &operatorservice.DeleteNamespaceRequest{
+	resp, err := handler.DeleteNamespace(ctx, &operatorservice.DeleteNamespaceRequest{
 		Namespace: "test-namespace",
 	})
 	s.Error(err)
