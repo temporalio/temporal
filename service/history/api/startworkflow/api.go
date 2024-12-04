@@ -27,6 +27,7 @@ package startworkflow
 import (
 	"context"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/google/uuid"
@@ -249,7 +250,11 @@ func (s *Starter) lockCurrentWorkflowExecution(
 // prepareNewWorkflow creates a new workflow context, and closes its mutable state transaction as snapshot.
 // It returns the creationContext which can later be used to insert into the executions table.
 func (s *Starter) prepareNewWorkflow(workflowID string) (*creationParams, error) {
-	runID := uuid.NewString()
+	runUUID, err := uuid.NewV7()
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate run id: %w", err)
+	}
+	runID := runUUID.String()
 	mutableState, err := api.NewWorkflowWithSignal(
 		s.shardContext,
 		s.namespace,
