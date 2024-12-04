@@ -113,12 +113,12 @@ func (DeleteOperation) mustImplementOperation() {}
 // node in the tree.
 type TransitionOperation struct {
 	// NodePath is the full path to the node where the transition occurred
-	NodePath []Key
+	path []Key
 	// Output contains the transition output and associated metadata
 	Output TransitionOutputWithCount
 }
 
-func (t TransitionOperation) Path() []Key { return t.NodePath }
+func (t TransitionOperation) Path() []Key { return t.path }
 
 func (TransitionOperation) mustImplementOperation() {}
 
@@ -611,7 +611,7 @@ func MachineTransition[T any](n *Node, transitionFn func(T) (TransitionOutput, e
 
 	root := n.root()
 	root.opLog = append(root.opLog, TransitionOperation{
-		NodePath: n.Path(),
+		path: n.Path(),
 		Output: TransitionOutputWithCount{
 			TransitionOutput: output,
 			TransitionCount:  n.persistence.TransitionCount,
