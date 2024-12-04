@@ -1179,7 +1179,7 @@ func (s *operatorHandlerSuite) Test_DeleteNamespace() {
 	}, nil).AnyTimes()
 	// Map "fake" namespace ID to the "namespace-with-nexus-endpoint" name.
 	s.mockResource.NamespaceCache.EXPECT().GetNamespaceName(namespace.ID("fake")).
-		Return(namespace.Name("namespace-with-nexus-endpoint"), nil).AnyTimes()
+		Return(namespace.Name("test-namespace"), nil).AnyTimes()
 	// Map "c13c01a7-3887-4eda-ba4b-9a07a6359e7e" namespace ID to the "test-namespace-deleted-ka2te" name.
 	s.mockResource.NamespaceCache.EXPECT().GetNamespaceName(namespace.ID("c13c01a7-3887-4eda-ba4b-9a07a6359e7e")).
 		Return(namespace.Name("test-namespace-deleted-ka2te"), nil).AnyTimes()
@@ -1193,11 +1193,12 @@ func (s *operatorHandlerSuite) Test_DeleteNamespace() {
 		DeleteNamespacePagesPerExecution:                    dynamicconfig.GetIntPropertyFn(78),
 		DeleteNamespaceConcurrentDeleteExecutionsActivities: dynamicconfig.GetIntPropertyFn(3),
 		DeleteNamespaceNamespaceDeleteDelay:                 dynamicconfig.GetDurationPropertyFn(22 * time.Hour),
+		AllowDeleteNamespaceIfNexusEndpointTarget:           dynamicconfig.GetBoolPropertyFn(false),
 	}
 
 	// Delete by name: Nexus endpoint associated.
 	_, err := handler.DeleteNamespace(ctx, &operatorservice.DeleteNamespaceRequest{
-		Namespace: "namespace-with-nexus-endpoint",
+		Namespace: "test-namespace",
 	})
 	s.ErrorContains(err, "cannot delete a namespace that is a target of a Nexus endpoint (test-endpoint)")
 
@@ -1206,6 +1207,9 @@ func (s *operatorHandlerSuite) Test_DeleteNamespace() {
 		NamespaceId: "fake",
 	})
 	s.ErrorContains(err, "cannot delete a namespace that is a target of a Nexus endpoint (test-endpoint)")
+
+	// Allow delete from now on.
+	handler.config.AllowDeleteNamespaceIfNexusEndpointTarget = dynamicconfig.GetBoolPropertyFn(true)
 
 	// Start workflow failed.
 	mockSdkClient.EXPECT().ExecuteWorkflow(gomock.Any(), gomock.Any(), "temporal-sys-delete-namespace-workflow", gomock.Any()).Return(nil, errors.New("start failed"))
