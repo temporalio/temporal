@@ -66,12 +66,12 @@ func Invoke(
 	matchingClient matchingservice.MatchingServiceClient,
 ) (*historyservice.ExecuteMultiOperationResponse, error) {
 	if len(req.Operations) != 2 {
-		return nil, serviceerror.NewInternal("expected exactly 2 operations")
+		return nil, serviceerror.NewInvalidArgument("expected exactly 2 operations")
 	}
 
 	updateReq := req.Operations[1].GetUpdateWorkflow()
 	if updateReq == nil {
-		return nil, serviceerror.NewInternal("expected second operation to be Update Workflow")
+		return nil, serviceerror.NewInvalidArgument("expected second operation to be Update Workflow")
 	}
 	updater := updateworkflow.NewUpdater(
 		shardContext,
@@ -82,7 +82,7 @@ func Invoke(
 
 	startReq := req.Operations[0].GetStartWorkflow()
 	if startReq == nil {
-		return nil, serviceerror.NewInternal("expected first operation to be Start Workflow")
+		return nil, serviceerror.NewInvalidArgument("expected first operation to be Start Workflow")
 	}
 	starter, err := startworkflow.NewStarter(
 		shardContext,
@@ -201,7 +201,7 @@ func Invoke(
 		case enumspb.WORKFLOW_ID_CONFLICT_POLICY_UNSPECIFIED:
 			// ... fail since this policy is invalid
 			currentWorkflowLease.GetReleaseFn()(nil) // nil since nothing was modified
-			return nil, serviceerror.NewInternal("unhandled workflow id conflict policy: unspecified")
+			return nil, serviceerror.NewInvalidArgument("unhandled workflow id conflict policy: unspecified")
 		}
 	}
 
