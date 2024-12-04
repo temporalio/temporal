@@ -66,7 +66,7 @@ func NewExecutableSyncVersionedTransitionTask(
 		ExecutableTask: NewExecutableTask(
 			processToolBox,
 			taskID,
-			metrics.VerifyVersionedTransitionTaskScope,
+			metrics.SyncVersionedTransitionTaskScope,
 			taskCreationTime,
 			time.Now().UTC(),
 			sourceClusterName,
@@ -102,7 +102,7 @@ func (e *ExecutableSyncVersionedTransitionTask) Execute() error {
 		)
 		metrics.ReplicationTasksSkipped.With(e.MetricsHandler).Record(
 			1,
-			metrics.OperationTag(metrics.VerifyVersionedTransitionTaskScope),
+			metrics.OperationTag(metrics.SyncVersionedTransitionTaskScope),
 			metrics.NamespaceTag(namespaceName),
 		)
 		return nil
