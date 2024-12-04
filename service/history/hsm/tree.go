@@ -731,42 +731,16 @@ func (n *Node) root() *Node {
 // The returned log maintains deletion tombstones, but excludes transitions that occurred on deleted nodes or their
 // descendants.
 func (ol OperationLog) Compact() OperationLog {
-	var deletedPaths [][]Key
-	result := make(OperationLog, 0, len(ol))
-	hasDeleteOperation := make(map[string]struct{})
-
-	// First get deletion paths and record existing deletions
-	for _, op := range ol {
-		if del, ok := op.(DeleteOperation); ok {
-			deletedPaths = append(deletedPaths, del.Path())
-			pathKey := fmt.Sprintf("%v", del.Path())
-			hasDeleteOperation[pathKey] = struct{}{}
-			result = append(result, op)
-		}
+	if len(ol) == 0 {
+		return ol
 	}
 
-	// For each transition: if not under deleted path, keep it
+	root := newOpNode(Key{})
 	for _, op := range ol {
-		if trans, ok := op.(TransitionOperation); ok {
-			isDeleted := false
-			for _, delPath := range deletedPaths {
-				if isPathPrefix(delPath, trans.Path()) {
-					// Only add deletion if we haven't seen it
-					pathKey := fmt.Sprintf("%v", trans.Path())
-					if _, seen := hasDeleteOperation[pathKey]; !seen {
-						result = append(result, DeleteOperation{path: trans.Path()})
-						hasDeleteOperation[pathKey] = struct{}{}
-					}
-					isDeleted = true
-					break
-				}
-			}
-			if !isDeleted {
-				result = append(result, op)
-			}
-		}
+		root.insert(op.Path(), op)
 	}
-	return result
+
+	return root.collect()
 }
 
 func isPathPrefix(prefix, path []Key) bool {
@@ -775,4 +749,63 @@ func isPathPrefix(prefix, path []Key) bool {
 	}
 
 	return slices.Equal(prefix, path[:len(prefix)])
+}
+
+// opNode represents a node in the operation tree. Each node maintains its operations and tracks whether it has been
+// deleted.
+type opNode struct {
+	key        Key
+	children   map[Key]*opNode
+	operations []Operation
+	isDeleted  bool
+}
+
+// newOpNode creates a new operation tree node with the given key.
+func newOpNode(key Key) *opNode {
+	return &opNode{
+		key:        key,
+		children:   make(map[Key]*opNode),
+		operations: make([]Operation, 0),
+	}
+}
+
+// insert adds an operation at the specified path in the tree.
+func (n *opNode) insert(path []Key, op Operation) {
+	if len(path) == 0 {
+		if deleteOp, ok := op.(DeleteOperation); ok {
+			n.isDeleted = true
+			for k, child := range n.children {
+				child.insert(nil, DeleteOperation{path: append(slices.Clone(deleteOp.path), k)})
+			}
+		}
+		n.operations = append(n.operations, op)
+		return
+	}
+
+	key := path[0]
+	child, exists := n.children[key]
+	if !exists {
+		child = newOpNode(key)
+		n.children[key] = child
+	}
+	child.insert(path[1:], op)
+}
+
+// collect returns an OperationLog containing all valid operations in the tree.
+func (n *opNode) collect() OperationLog {
+	var result OperationLog
+	if n.isDeleted {
+		for _, op := range n.operations {
+			if _, ok := op.(DeleteOperation); ok {
+				result = append(result, op)
+			}
+		}
+	} else {
+		result = append(result, n.operations...)
+	}
+
+	for _, child := range n.children {
+		result = append(result, child.collect()...)
+	}
+	return result
 }
