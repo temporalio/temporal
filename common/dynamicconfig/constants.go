@@ -869,7 +869,7 @@ server hosts for it to take effect.`,
 	AllowDeleteNamespaceIfNexusEndpointTarget = NewGlobalBoolSetting(
 		"frontend.allowDeleteNamespaceIfNexusEndpointTarget",
 		false,
-		`If set to true (default) namespaces that are Nexus endpoint targets will be prevented from being deleted.`,
+		`If set to true (default is false), namespaces that are Nexus endpoint targets will be prevented from being deleted.`,
 	)
 
 	RefreshNexusEndpointsLongPollTimeout = NewGlobalDurationSetting(
