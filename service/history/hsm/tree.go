@@ -103,7 +103,7 @@ type Operation interface {
 // is deleted, DeleteOperations are created for it and all its descendants.
 type DeleteOperation struct {
 	// NodePath is the full path to the deleted node
-	NodePath []Key
+	path []Key
 }
 
 func (d DeleteOperation) Path() []Key           { return d.NodePath }
