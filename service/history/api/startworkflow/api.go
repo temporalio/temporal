@@ -408,7 +408,11 @@ func (s *Starter) resolveDuplicateWorkflowID(
 	// Using a new RunID here to simplify locking: MultiOperation, that re-uses the Starter, is creating
 	// a locked workflow context for each new workflow. Using a fresh RunID prevents a deadlock with the
 	// previously created workflow context.
-	newRunID := uuid.NewString()
+	newRunUUID, err := uuid.NewV7()
+	if err != nil {
+		return nil, StartErr, fmt.Errorf("failed to generate run id: %w", err)
+	}
+	newRunID := newRunUUID.String()
 
 	currentExecutionUpdateAction, err := api.ResolveDuplicateWorkflowID(
 		s.shardContext,
