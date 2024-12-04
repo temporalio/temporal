@@ -184,9 +184,6 @@ func (s *Versioning3Suite) testWorkflowWithPinnedOverride(sticky bool) {
 			s.NotNil(task)
 			return respondWftWithActivities(tv, tv, sticky, vbUnpinned, "5"), nil
 		})
-	// TODO (shahab): remove the waits once the following error is handled properly.
-	// "MultiOperation could not be executed: Start failed: Workflow was not started: StartReused"
-	s.waitForDeploymentDataPropagation(tv, tqTypeWf)
 
 	actCompleted := make(chan interface{})
 	s.pollActivityAndHandle(tv, actCompleted,
@@ -194,7 +191,6 @@ func (s *Versioning3Suite) testWorkflowWithPinnedOverride(sticky bool) {
 			s.NotNil(task)
 			return respondActivity(), nil
 		})
-	s.waitForDeploymentDataPropagation(tv, tqTypeAct)
 
 	override := makePinnedOverride(tv.Deployment())
 	we := s.startWorkflow(tv, override)
@@ -247,8 +243,7 @@ func (s *Versioning3Suite) testUnpinnedWorkflow(sticky bool) {
 			s.verifyWorkflowVersioning(tv, vbUnspecified, nil, nil, transitionTo(d))
 			return respondWftWithActivities(tv, tv, sticky, vbUnpinned, "5"), nil
 		})
-	// TODO (shahab): remove the waits once the following error is handled properly.
-	// "MultiOperation could not be executed: Start failed: Workflow was not started: StartReused"
+	// TODO (shahab): remove the next line once the test is not flaky in NoTaskForwardNoPollForwardAllowSync mode
 	s.waitForDeploymentDataPropagation(tv, tqTypeWf)
 
 	actCompleted := make(chan interface{})
@@ -257,7 +252,6 @@ func (s *Versioning3Suite) testUnpinnedWorkflow(sticky bool) {
 			s.NotNil(task)
 			return respondActivity(), nil
 		})
-	s.waitForDeploymentDataPropagation(tv, tqTypeAct)
 
 	s.setCurrentDeployment(d)
 	s.waitForDeploymentDataPropagation(tv, tqTypeWf, tqTypeAct)

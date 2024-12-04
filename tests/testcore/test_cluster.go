@@ -32,6 +32,7 @@ import (
 	"fmt"
 	"os"
 	"path"
+	"sync"
 	"testing"
 	"time"
 
@@ -50,6 +51,7 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/membership/static"
 	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
@@ -62,6 +64,7 @@ import (
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/rpc/encryption"
 	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/internal/temporalite"
 	"go.temporal.io/server/temporal"
 	"go.temporal.io/server/tests/testutils"
 	"go.uber.org/fx"
@@ -69,11 +72,12 @@ import (
 )
 
 type (
+	transferProtocol string
+
 	// TestCluster is a testcore struct for functional tests
 	TestCluster struct {
 		testBase     *persistencetests.TestBase
 		archiverBase *ArchiverBase
-		clusterNo    int
 		host         *TemporalImpl
 	}
 
@@ -109,15 +113,26 @@ type (
 		DeprecatedFrontendAddress string `yaml:"frontendAddress"`
 		DeprecatedClusterNo       int    `yaml:"clusterno"`
 	}
+
+	TestClusterFactory interface {
+		NewCluster(t *testing.T, options *TestClusterConfig, logger log.Logger) (*TestCluster, error)
+	}
+
+	defaultTestClusterFactory struct {
+		tbFactory PersistenceTestBaseFactory
+	}
 )
 
-type TestClusterFactory interface {
-	NewCluster(t *testing.T, options *TestClusterConfig, logger log.Logger) (*TestCluster, error)
-}
+var (
+	// Each new new cluster uses random ports. But there is a chance that in-between allocating the new random ports
+	// and using them, another cluster start tries to grab the same random port. This mutex prevents that.
+	portsMutex sync.Mutex
+)
 
-type defaultTestClusterFactory struct {
-	tbFactory PersistenceTestBaseFactory
-}
+const (
+	httpProtocol transferProtocol = "http"
+	grpcProtocol transferProtocol = "grpc"
+)
 
 func (a *ArchiverBase) Metadata() archiver.ArchivalMetadata {
 	return a.metadata
@@ -136,7 +151,7 @@ func (a *ArchiverBase) VisibilityURI() string {
 }
 
 func (f *defaultTestClusterFactory) NewCluster(t *testing.T, options *TestClusterConfig, logger log.Logger) (*TestCluster, error) {
-	return NewClusterWithPersistenceTestBaseFactory(t, options, logger, f.tbFactory)
+	return newClusterWithPersistenceTestBaseFactory(t, options, logger, f.tbFactory)
 }
 
 func NewTestClusterFactory() TestClusterFactory {
@@ -189,16 +204,36 @@ func (f *defaultPersistenceTestBaseFactory) NewTestBase(options *persistencetest
 	return persistencetests.NewTestBase(options)
 }
 
-func NewClusterWithPersistenceTestBaseFactory(t *testing.T, options *TestClusterConfig, logger log.Logger, tbFactory PersistenceTestBaseFactory) (*TestCluster, error) {
-	clusterNo := GetFreeClusterNumber()
+func newClusterWithPersistenceTestBaseFactory(t *testing.T, options *TestClusterConfig, logger log.Logger, tbFactory PersistenceTestBaseFactory) (*TestCluster, error) {
+	// determine number of hosts per service
+	const minNodes = 1
+	options.FrontendConfig.NumFrontendHosts = max(minNodes, options.FrontendConfig.NumFrontendHosts)
+	options.HistoryConfig.NumHistoryHosts = max(minNodes, options.HistoryConfig.NumHistoryHosts)
+	options.MatchingConfig.NumMatchingHosts = max(minNodes, options.MatchingConfig.NumMatchingHosts)
+	options.WorkerConfig.NumWorkers = max(minNodes, options.WorkerConfig.NumWorkers)
+	if options.WorkerConfig.DisableWorker {
+		options.WorkerConfig.NumWorkers = 0
+	}
+
+	// allocate ports
+	pp := temporalite.NewPortProvider()
+	hostsByProtocolByService := map[transferProtocol]map[primitives.ServiceName]static.Hosts{
+		grpcProtocol: {
+			primitives.FrontendService: {All: makeAddresses(pp, options.FrontendConfig.NumFrontendHosts)},
+			primitives.MatchingService: {All: makeAddresses(pp, options.MatchingConfig.NumMatchingHosts)},
+			primitives.HistoryService:  {All: makeAddresses(pp, options.HistoryConfig.NumHistoryHosts)},
+			primitives.WorkerService:   {All: makeAddresses(pp, options.WorkerConfig.NumWorkers)},
+		},
+		httpProtocol: {
+			primitives.FrontendService: {All: makeAddresses(pp, options.FrontendConfig.NumFrontendHosts)},
+		},
+	}
 
 	if len(options.ClusterMetadata.ClusterInformation) > 0 {
 		// set self-address for current cluster
-		// TODO: remove duplication between this and makeGRPCAddresses. we don't have a TemporalImpl
-		// yet so we can't just call that.
 		ci := options.ClusterMetadata.ClusterInformation[options.ClusterMetadata.CurrentClusterName]
-		ci.RPCAddress = fmt.Sprintf("127.0.%d.%d:%d", clusterNo, 1, frontendPort)
-		ci.HTTPAddress = fmt.Sprintf("127.0.%d.%d:%d", clusterNo, 1, frontendHTTPPort)
+		ci.RPCAddress = hostsByProtocolByService[grpcProtocol][primitives.FrontendService].All[0]
+		ci.HTTPAddress = hostsByProtocolByService[httpProtocol][primitives.FrontendService].All[0]
 		options.ClusterMetadata.ClusterInformation[options.ClusterMetadata.CurrentClusterName] = ci
 	}
 
@@ -313,7 +348,6 @@ func NewClusterWithPersistenceTestBaseFactory(t *testing.T, options *TestCluster
 		VisibilityStoreFactory:           testBase.VisibilityStoreFactory,
 		TaskMgr:                          testBase.TaskMgr,
 		Logger:                           logger,
-		ClusterNo:                        clusterNo,
 		ESConfig:                         options.ESConfig,
 		ESClient:                         esClient,
 		ArchiverMetadata:                 archiverBase.metadata,
@@ -328,6 +362,7 @@ func NewClusterWithPersistenceTestBaseFactory(t *testing.T, options *TestCluster
 		TLSConfigProvider:                tlsConfigProvider,
 		ServiceFxOptions:                 options.ServiceFxOptions,
 		TaskCategoryRegistry:             taskCategoryRegistry,
+		HostsByProtocolByService:         hostsByProtocolByService,
 	}
 
 	if options.EnableMetricsCapture {
@@ -339,12 +374,20 @@ func NewClusterWithPersistenceTestBaseFactory(t *testing.T, options *TestCluster
 		logger.Fatal("Failed to start pprof", tag.Error(err))
 	}
 
+	// We need to release the pre-allocated random ports before we start the cluster to make them available again.
+	// But to prevent another cluster from grabbing the ports before the start completed, we use this lock.
+	portsMutex.Lock()
+	defer portsMutex.Unlock()
+	if err = pp.Close(); err != nil {
+		return nil, fmt.Errorf("unable to close port provider listeners: %w", err)
+	}
+
 	cluster := newTemporal(t, temporalParams)
-	if err := cluster.Start(); err != nil {
+	if err = cluster.Start(); err != nil {
 		return nil, err
 	}
 
-	return &TestCluster{testBase: testBase, archiverBase: archiverBase, clusterNo: clusterNo, host: cluster}, nil
+	return &TestCluster{testBase: testBase, archiverBase: archiverBase, host: cluster}, nil
 }
 
 func setupIndex(esConfig *esclient.Config, logger log.Logger) error {
@@ -513,8 +556,6 @@ func newArchiverBase(enabled bool, logger log.Logger) *ArchiverBase {
 
 // TearDownCluster tears down the test cluster
 func (tc *TestCluster) TearDownCluster() error {
-	defer PutFreeClusterNumber(tc.clusterNo)
-
 	errs := tc.host.Stop()
 	tc.testBase.TearDownWorkflowStore()
 	if !UsingSQLAdvancedVisibility() && tc.host.esConfig != nil {
@@ -623,4 +664,12 @@ func createFixedTLSConfigProvider() (*encryption.FixedTLSConfigProvider, error) 
 		FrontendServerConfig:  serverTLSConfig,
 		FrontendClientConfig:  clientTLSConfig,
 	}, nil
+}
+
+func makeAddresses(pp *temporalite.PortProvider, count int) []string {
+	hosts := make([]string, count)
+	for i := range hosts {
+		hosts[i] = fmt.Sprintf("127.0.0.1:%d", pp.MustGetFreePort())
+	}
+	return hosts
 }

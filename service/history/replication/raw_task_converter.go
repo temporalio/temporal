@@ -661,6 +661,12 @@ func (c *syncVersionedTransitionTaskConverter) convert(
 		return c.generateBackfillHistoryTask(ctx, taskInfo, targetClusterID)
 	}
 
+	if mutableState.HasBufferedEvents() {
+		// we can't sync state when there's buffered events
+		// as current state could depend on those buffered events
+		return nil, nil
+	}
+
 	var targetHistoryItems [][]*historyspb.VersionHistoryItem
 	if progress != nil {
 		targetHistoryItems = progress.eventVersionHistoryItems

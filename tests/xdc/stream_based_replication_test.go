@@ -222,7 +222,6 @@ func (s *streamBasedReplicationTestSuite) importTestEvents(
 
 		var historyBatch []*historypb.History
 		s.generator = test.InitializeHistoryEventGenerator(namespaceName, namespaceId, version)
-	ImportLoop:
 		for s.generator.HasNextVertex() {
 			events := s.generator.GetNextVertices()
 
@@ -231,7 +230,7 @@ func (s *streamBasedReplicationTestSuite) importTestEvents(
 				historyEvents.Events = append(historyEvents.Events, event.GetData().(*historypb.HistoryEvent))
 			}
 			if isCloseEvent(historyEvents.Events[len(historyEvents.Events)-1]) {
-				break ImportLoop
+				historyEvents.Events = historyEvents.Events[:len(historyEvents.Events)-1]
 			}
 			historyBatch = append(historyBatch, historyEvents)
 		}

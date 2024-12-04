@@ -5184,7 +5184,8 @@ func (s *UpdateWorkflowSuite) TestUpdateWithStart() {
 			s.Equal("MultiOperation could not be executed.", uwsRes.err.Error())
 			errs := uwsRes.err.(*serviceerror.MultiOperationExecution).OperationErrors()
 			s.Len(errs, 2)
-			s.Contains(errs[0].Error(), "Workflow execution is already running")
+			var alreadyStartedErr *serviceerror.WorkflowExecutionAlreadyStarted
+			s.ErrorAs(errs[0], &alreadyStartedErr)
 			s.Equal("Operation was aborted.", errs[1].Error())
 		})
 
@@ -5230,6 +5231,92 @@ func (s *UpdateWorkflowSuite) TestUpdateWithStart() {
 					s.Equal(uwsRes1.response.Responses[1].GetUpdateWorkflow().Outcome.String(), pollRes.Outcome.String())
 				})
 			}
+		})
+	})
+
+	s.Run("workflow is closed", func() {
+
+		s.Run("workflow id reuse policy allow-duplicate", func() {
+			tv := testvars.New(s.T())
+
+			// start and terminate workflow
+			_, err := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), startWorkflowReq(tv))
+			s.NoError(err)
+
+			_, err = s.TaskPoller.PollAndHandleWorkflowTask(tv, taskpoller.DrainWorkflowTask)
+			s.NoError(err)
+
+			_, err = s.FrontendClient().TerminateWorkflowExecution(testcore.NewContext(),
+				&workflowservice.TerminateWorkflowExecutionRequest{
+					Namespace:         s.Namespace(),
+					WorkflowExecution: tv.WorkflowExecution(),
+					Reason:            tv.Any().String(),
+				})
+			s.NoError(err)
+
+			// update-with-start
+			startReq := startWorkflowReq(tv)
+			startReq.WorkflowIdReusePolicy = enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE
+			updateReq := s.updateWorkflowRequest(tv,
+				&updatepb.WaitPolicy{LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED}, "1")
+			uwsCh := sendUpdateWithStart(testcore.NewContext(), startReq, updateReq)
+
+			_, err = s.TaskPoller.PollAndHandleWorkflowTask(tv,
+				func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+					return &workflowservice.RespondWorkflowTaskCompletedRequest{
+						Messages: s.UpdateAcceptCompleteMessages(tv, task.Messages[0], "1"),
+					}, nil
+				})
+			s.NoError(err)
+
+			uwsRes := <-uwsCh
+			s.NoError(uwsRes.err)
+			startResp := uwsRes.response.Responses[0].GetStartWorkflow()
+			updateRep := uwsRes.response.Responses[1].GetUpdateWorkflow()
+			s.True(startResp.Started)
+			s.EqualValues("success-result-of-"+tv.UpdateID("1"), testcore.DecodeString(s.T(), updateRep.GetOutcome().GetSuccess()))
+
+			// poll update to ensure same outcome is returned
+			pollRes, err := s.pollUpdate(tv, "1",
+				&updatepb.WaitPolicy{LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED})
+			s.Nil(err)
+			s.Equal(updateRep.Outcome.String(), pollRes.Outcome.String())
+		})
+
+		s.Run("workflow id reuse policy reject-duplicate", func() {
+			tv := testvars.New(s.T())
+
+			// start and terminate workflow
+			_, err := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), startWorkflowReq(tv))
+			s.NoError(err)
+
+			_, err = s.TaskPoller.PollAndHandleWorkflowTask(tv, taskpoller.DrainWorkflowTask)
+			s.NoError(err)
+
+			_, err = s.FrontendClient().TerminateWorkflowExecution(testcore.NewContext(),
+				&workflowservice.TerminateWorkflowExecutionRequest{
+					Namespace:         s.Namespace(),
+					WorkflowExecution: tv.WorkflowExecution(),
+					Reason:            tv.Any().String(),
+				})
+			s.NoError(err)
+
+			// update-with-start
+			startReq := startWorkflowReq(tv)
+			startReq.WorkflowIdReusePolicy = enumspb.WORKFLOW_ID_REUSE_POLICY_REJECT_DUPLICATE
+			updateReq := s.updateWorkflowRequest(tv,
+				&updatepb.WaitPolicy{LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED}, "1")
+			uwsCh := sendUpdateWithStart(testcore.NewContext(), startReq, updateReq)
+
+			uwsRes := <-uwsCh
+			s.Error(uwsRes.err)
+			s.Equal("MultiOperation could not be executed.", uwsRes.err.Error())
+			errs := uwsRes.err.(*serviceerror.MultiOperationExecution).OperationErrors()
+			s.Len(errs, 2)
+			s.Contains(errs[0].Error(), "Workflow execution already finished")
+			var alreadyStartedErr *serviceerror.WorkflowExecutionAlreadyStarted
+			s.ErrorAs(errs[0], &alreadyStartedErr)
+			s.Equal("Operation was aborted.", errs[1].Error())
 		})
 	})
 

@@ -679,7 +679,9 @@ func (d *DeploymentClientImpl) updateWithStart(
 	}
 
 	policy := backoff.NewExponentialRetryPolicy(100 * time.Millisecond)
-	isRetryable := func(err error) bool { return errors.Is(err, errRetry) }
+	isRetryable := func(err error) bool {
+		return errors.Is(err, errRetry)
+	}
 	var outcome *updatepb.Outcome
 
 	err := backoff.ThrottleRetryContext(ctx, func(ctx context.Context) error {

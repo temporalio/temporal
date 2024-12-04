@@ -67,22 +67,18 @@ func outcomeTag(callCtx context.Context, response *http.Response, callErr error)
 }
 
 func (n nexusInvocation) WrapError(result invocationResult, err error) error {
-	// If the request permanently failed there is no need to raise the error
-	if result == failed {
-		return nil
+	if failure, ok := result.(invocationResultRetry); ok {
+		return queues.NewDestinationDownError(failure.err.Error(), err)
 	}
-	if err != nil {
-		return queues.NewDestinationDownError(err.Error(), err)
-	}
-	return nil
+	return err
 }
 
-func (n nexusInvocation) Invoke(ctx context.Context, ns *namespace.Namespace, e taskExecutor, task InvocationTask) (invocationResult, error) {
+func (n nexusInvocation) Invoke(ctx context.Context, ns *namespace.Namespace, e taskExecutor, task InvocationTask) invocationResult {
 	request, err := nexus.NewCompletionHTTPRequest(ctx, n.nexus.Url, n.completion)
 	if err != nil {
-		return failed, queues.NewUnprocessableTaskError(
+		return invocationResultFail{queues.NewUnprocessableTaskError(
 			fmt.Sprintf("failed to construct Nexus request: %v", err),
-		)
+		)}
 	}
 	if request.Header == nil {
 		request.Header = make(http.Header)
@@ -116,17 +112,17 @@ func (n nexusInvocation) Invoke(ctx context.Context, ns *namespace.Namespace, e 
 
 	if err != nil {
 		e.Logger.Error("Callback request failed with error", tag.Error(err))
-		return retry, err
+		return invocationResultRetry{err}
 	}
 	if response.StatusCode >= 200 && response.StatusCode < 300 {
-		return ok, nil
+		return invocationResultOK{}
 	}
 
 	retryable := isRetryableHTTPResponse(response)
 	err = fmt.Errorf("request failed with: %v", response.Status)
 	e.Logger.Error("Callback request failed", tag.Error(err), tag.NewStringTag("status", response.Status), tag.NewBoolTag("retryable", retryable))
 	if retryable {
-		return retry, err
+		return invocationResultRetry{err}
 	}
-	return failed, err
+	return invocationResultFail{err}
 }
