@@ -348,7 +348,7 @@ func IsServiceHandlerRetryableError(err error) bool {
 		return true
 	case *serviceerror.MultiOperationExecution:
 		for _, opErr := range err.OperationErrors() {
-			if IsServiceHandlerRetryableError(opErr) {
+			if opErr != nil && IsServiceHandlerRetryableError(opErr) {
 				return true
 			}
 		}
