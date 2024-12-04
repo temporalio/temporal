@@ -243,10 +243,8 @@ func (t *timerQueueActiveTaskExecutor) executeActivityTimeoutTask(
 	isHeartBeatTask := task.TimeoutType == enumspb.TIMEOUT_TYPE_HEARTBEAT
 	ai, heartbeatTimeoutVis, ok := mutableState.GetActivityInfoWithTimerHeartbeat(task.EventID)
 	if isHeartBeatTask && ok && queues.IsTimeExpired(task.GetVisibilityTime(), heartbeatTimeoutVis) {
-		err := mutableState.UpdateActivity(ai.ScheduledEventId, func(activityInfo *persistencespb.ActivityInfo, _ workflow.MutableState) {
-			activityInfo.TimerTaskStatus = activityInfo.TimerTaskStatus &^ workflow.TimerTaskStatusCreatedHeartbeat
-		})
-		if err != nil {
+		if err := mutableState.UpdateActivityTaskStatusWithTimerHeartbeat(
+			ai.ScheduledEventId, ai.TimerTaskStatus&^workflow.TimerTaskStatusCreatedHeartbeat, nil); err != nil {
 			return err
 		}
 		updateMutableState = true
@@ -663,7 +661,7 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowRunTimeoutTask(
 		if updateErr != nil {
 			return updateErr
 		}
-		weContext.UpdateRegistry(ctx, nil).Abort(update.AbortReasonWorkflowCompleted)
+		weContext.UpdateRegistry(ctx).Abort(update.AbortReasonWorkflowCompleted)
 		return nil
 	}
 
@@ -737,7 +735,7 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowRunTimeoutTask(
 	// A new run was created after the previous run timed out. Running Updates
 	// for this WF are aborted with a retryable error.
 	// Internal server retries will retry the API call, and the Update will be sent to the new run.
-	weContext.UpdateRegistry(ctx, nil).Abort(update.AbortReasonWorkflowContinuing)
+	weContext.UpdateRegistry(ctx).Abort(update.AbortReasonWorkflowContinuing)
 	return nil
 }
 
@@ -775,7 +773,7 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowExecutionTimeoutTask(
 		return updateErr
 	}
 
-	weContext.UpdateRegistry(ctx, nil).Abort(update.AbortReasonWorkflowCompleted)
+	weContext.UpdateRegistry(ctx).Abort(update.AbortReasonWorkflowCompleted)
 	return nil
 }
 

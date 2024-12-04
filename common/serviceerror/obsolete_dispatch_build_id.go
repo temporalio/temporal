@@ -34,12 +34,14 @@ type (
 	// In that case, tasks already scheduled but not started will become invalid and History reschedules them in the
 	// new build ID. Matching will still try dispatching the old tasks but it will face this error.
 	// Matching can safely drop tasks which face this error.
+	// Deprecated. [cleanup-old-wv]
 	ObsoleteDispatchBuildId struct {
 		Message string
 		st      *status.Status
 	}
 )
 
+// Deprecated. [cleanup-old-wv]
 func NewObsoleteDispatchBuildId(msg string) error {
 	return &ObsoleteDispatchBuildId{
 		Message: msg,

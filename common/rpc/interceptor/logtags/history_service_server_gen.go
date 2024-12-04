@@ -299,6 +299,11 @@ func (wt *WorkflowTags) extractFromHistoryServiceServerRequest(req any) []tag.Ta
 			tag.WorkflowID(r.GetRequest().GetWorkflowExecution().GetWorkflowId()),
 			tag.WorkflowRunID(r.GetRequest().GetWorkflowExecution().GetRunId()),
 		}
+	case *historyservice.UpdateWorkflowExecutionOptionsRequest:
+		return []tag.Tag{
+			tag.WorkflowID(r.GetUpdateRequest().GetWorkflowExecution().GetWorkflowId()),
+			tag.WorkflowRunID(r.GetUpdateRequest().GetWorkflowExecution().GetRunId()),
+		}
 	case *historyservice.VerifyChildExecutionCompletionRecordedRequest:
 		return []tag.Tag{
 			tag.WorkflowID(r.GetParentExecution().GetWorkflowId()),

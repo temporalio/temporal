@@ -1328,6 +1328,26 @@ func (c *clientImpl) UpdateWorkflowExecution(
 	return response, nil
 }
 
+func (c *clientImpl) UpdateWorkflowExecutionOptions(
+	ctx context.Context,
+	request *historyservice.UpdateWorkflowExecutionOptionsRequest,
+	opts ...grpc.CallOption,
+) (*historyservice.UpdateWorkflowExecutionOptionsResponse, error) {
+	shardID := c.shardIDFromWorkflowID(request.GetNamespaceId(), request.GetUpdateRequest().GetWorkflowExecution().GetWorkflowId())
+	var response *historyservice.UpdateWorkflowExecutionOptionsResponse
+	op := func(ctx context.Context, client historyservice.HistoryServiceClient) error {
+		var err error
+		ctx, cancel := c.createContext(ctx)
+		defer cancel()
+		response, err = client.UpdateWorkflowExecutionOptions(ctx, request, opts...)
+		return err
+	}
+	if err := c.executeWithRedirect(ctx, shardID, op); err != nil {
+		return nil, err
+	}
+	return response, nil
+}
+
 func (c *clientImpl) VerifyChildExecutionCompletionRecorded(
 	ctx context.Context,
 	request *historyservice.VerifyChildExecutionCompletionRecordedRequest,

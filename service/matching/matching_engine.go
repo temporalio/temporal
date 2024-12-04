@@ -61,6 +61,7 @@ import (
 	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/visibility/manager"
@@ -71,6 +72,7 @@ import (
 	"go.temporal.io/server/common/tqid"
 	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/common/worker_versioning"
+	"go.temporal.io/server/service/worker/deployment"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -122,6 +124,7 @@ type (
 		taskManager                   persistence.TaskManager
 		historyClient                 resource.HistoryClient
 		matchingRawClient             resource.MatchingRawClient
+		deploymentStoreClient         deployment.DeploymentStoreClient
 		tokenSerializer               common.TaskTokenSerializer
 		historySerializer             serialization.Serializer
 		logger                        log.Logger
@@ -188,6 +191,7 @@ func NewEngine(
 	taskManager persistence.TaskManager,
 	historyClient resource.HistoryClient,
 	matchingRawClient resource.MatchingRawClient,
+	deploymentStoreClient deployment.DeploymentStoreClient,
 	config *Config,
 	logger log.Logger,
 	throttledLogger log.ThrottledLogger,
@@ -206,6 +210,7 @@ func NewEngine(
 		taskManager:                   taskManager,
 		historyClient:                 historyClient,
 		matchingRawClient:             matchingRawClient,
+		deploymentStoreClient:         deploymentStoreClient,
 		tokenSerializer:               common.NewProtoTaskTokenSerializer(),
 		historySerializer:             serialization.NewSerializer(),
 		logger:                        log.With(logger, tag.ComponentMatchingEngine),
@@ -500,7 +505,6 @@ func (e *matchingEngineImpl) AddWorkflowTask(
 
 	return pm.AddTask(ctx, addTaskParams{
 		taskInfo:    taskInfo,
-		directive:   addRequest.VersionDirective,
 		forwardInfo: addRequest.ForwardInfo,
 	})
 }
@@ -539,7 +543,6 @@ func (e *matchingEngineImpl) AddActivityTask(
 
 	return pm.AddTask(ctx, addTaskParams{
 		taskInfo:    taskInfo,
-		directive:   addRequest.VersionDirective,
 		forwardInfo: addRequest.ForwardInfo,
 	})
 }
@@ -676,6 +679,21 @@ pollLoop:
 					tag.TaskID(task.event.GetTaskId()),
 					tag.TaskVisibilityTimestamp(timestamp.TimeValue(task.event.Data.GetCreateTime())),
 					tag.BuildId(requestClone.WorkerVersionCapabilities.GetBuildId()),
+				)
+				task.finish(nil, false)
+			case *serviceerrors.ObsoleteMatchingTask:
+				// History should've scheduled another task on the right task queue and deployment.
+				// Dropping this one.
+				e.logger.Info("dropping obsolete workflow task",
+					tag.WorkflowTaskQueueName(taskQueueName),
+					tag.WorkflowNamespaceID(task.event.Data.GetNamespaceId()),
+					tag.WorkflowID(task.event.Data.GetWorkflowId()),
+					tag.WorkflowRunID(task.event.Data.GetRunId()),
+					tag.TaskID(task.event.GetTaskId()),
+					tag.TaskVisibilityTimestamp(timestamp.TimeValue(task.event.Data.GetCreateTime())),
+					tag.VersioningBehavior(task.event.Data.VersionDirective.GetBehavior()),
+					tag.Deployment(worker_versioning.DeploymentFromCapabilities(requestClone.WorkerVersionCapabilities)),
+					tag.Error(err),
 				)
 				task.finish(nil, false)
 			default:
@@ -846,6 +864,34 @@ pollLoop:
 					tag.TaskID(task.event.GetTaskId()),
 					tag.TaskVisibilityTimestamp(timestamp.TimeValue(task.event.Data.GetCreateTime())),
 					tag.BuildId(requestClone.WorkerVersionCapabilities.GetBuildId()),
+				)
+				task.finish(nil, false)
+			case *serviceerrors.ObsoleteMatchingTask:
+				// History should've scheduled another task on the right task queue and deployment.
+				// Dropping this one.
+				e.logger.Info("dropping obsolete activity task",
+					tag.WorkflowTaskQueueName(taskQueueName),
+					tag.WorkflowNamespaceID(task.event.Data.GetNamespaceId()),
+					tag.WorkflowID(task.event.Data.GetWorkflowId()),
+					tag.WorkflowRunID(task.event.Data.GetRunId()),
+					tag.TaskID(task.event.GetTaskId()),
+					tag.TaskVisibilityTimestamp(timestamp.TimeValue(task.event.Data.GetCreateTime())),
+					tag.VersioningBehavior(task.event.Data.VersionDirective.GetBehavior()),
+					tag.Deployment(worker_versioning.DeploymentFromCapabilities(requestClone.WorkerVersionCapabilities)),
+					tag.Error(err),
+				)
+				task.finish(nil, false)
+			case *serviceerrors.ActivityStartDuringTransition:
+				// History will schedule another task once transition ends. Dropping this one.
+				e.logger.Info("dropping activity task during transition",
+					tag.WorkflowTaskQueueName(taskQueueName),
+					tag.WorkflowNamespaceID(task.event.Data.GetNamespaceId()),
+					tag.WorkflowID(task.event.Data.GetWorkflowId()),
+					tag.WorkflowRunID(task.event.Data.GetRunId()),
+					tag.TaskID(task.event.GetTaskId()),
+					tag.TaskVisibilityTimestamp(timestamp.TimeValue(task.event.Data.GetCreateTime())),
+					tag.VersioningBehavior(task.event.Data.VersionDirective.GetBehavior()),
+					tag.Deployment(worker_versioning.DeploymentFromCapabilities(requestClone.WorkerVersionCapabilities)),
 				)
 				task.finish(nil, false)
 			default:
@@ -1547,6 +1593,69 @@ func (e *matchingEngineImpl) GetTaskQueueUserData(
 	return pm.GetUserDataManager().HandleGetUserDataRequest(ctx, req)
 }
 
+func (e *matchingEngineImpl) SyncDeploymentUserData(
+	ctx context.Context,
+	req *matchingservice.SyncDeploymentUserDataRequest,
+) (*matchingservice.SyncDeploymentUserDataResponse, error) {
+	taskQueueFamily, err := tqid.NewTaskQueueFamily(req.NamespaceId, req.GetTaskQueue())
+	if err != nil {
+		return nil, err
+	}
+	if req.Deployment == nil {
+		return nil, errMissingDeployment
+	}
+
+	tqMgr, _, err := e.getTaskQueuePartitionManager(ctx, taskQueueFamily.TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW).RootPartition(), true, loadCauseOtherWrite)
+	if err != nil {
+		return nil, err
+	}
+
+	updateOptions := UserDataUpdateOptions{Source: "SyncDeploymentUserData"}
+
+	err = tqMgr.GetUserDataManager().UpdateUserData(ctx, updateOptions, func(data *persistencespb.TaskQueueUserData) (*persistencespb.TaskQueueUserData, bool, error) {
+		clk := data.GetClock()
+		if clk == nil {
+			clk = hlc.Zero(e.clusterMeta.GetClusterID())
+		}
+		now := hlc.Next(clk, e.timeSource)
+		// clone the whole thing so we can just mutate
+		data = common.CloneProto(data)
+
+		// fill in enough structure so we can set/append the new deployment data
+		if data == nil {
+			data = &persistencespb.TaskQueueUserData{}
+		}
+		if data.PerType == nil {
+			data.PerType = make(map[int32]*persistencespb.TaskQueueTypeUserData)
+		}
+		if data.PerType[int32(req.TaskQueueType)] == nil {
+			data.PerType[int32(req.TaskQueueType)] = &persistencespb.TaskQueueTypeUserData{}
+		}
+		if data.PerType[int32(req.TaskQueueType)].DeploymentData == nil {
+			data.PerType[int32(req.TaskQueueType)].DeploymentData = &persistencespb.DeploymentData{}
+		}
+
+		// set/append the new data
+		deploymentData := data.PerType[int32(req.TaskQueueType)].DeploymentData
+		if idx := findDeployment(deploymentData, req.Deployment); idx >= 0 {
+			deploymentData.Deployments[idx].Data = req.Data
+		} else {
+			deploymentData.Deployments = append(
+				deploymentData.Deployments, &persistencespb.DeploymentData_DeploymentDataItem{
+					Deployment: req.Deployment,
+					Data:       req.Data,
+				})
+		}
+
+		data.Clock = now
+		return data, true, nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &matchingservice.SyncDeploymentUserDataResponse{}, nil
+}
+
 func (e *matchingEngineImpl) ApplyTaskQueueUserDataReplicationEvent(
 	ctx context.Context,
 	req *matchingservice.ApplyTaskQueueUserDataReplicationEventRequest,
@@ -1590,13 +1699,15 @@ func (e *matchingEngineImpl) ApplyTaskQueueUserDataReplicationEvent(
 		// merge v1 sets
 		mergedData := MergeVersioningData(currentVersioningData, newVersioningData)
 
-		// take last writer for V2 rules
+		// take last writer for V2 rules and V3 data
 		if req.GetUserData().GetClock() == nil || current.GetClock() != nil && hlc.Greater(current.GetClock(), req.GetUserData().GetClock()) {
 			mergedData.AssignmentRules = currentVersioningData.GetAssignmentRules()
 			mergedData.RedirectRules = currentVersioningData.GetRedirectRules()
+			mergedUserData.PerType = current.GetPerType()
 		} else {
 			mergedData.AssignmentRules = newVersioningData.GetAssignmentRules()
 			mergedData.RedirectRules = newVersioningData.GetRedirectRules()
+			mergedUserData.PerType = req.GetUserData().GetPerType()
 		}
 
 		for _, buildId := range buildIdsToRevive {
@@ -1821,6 +1932,9 @@ pollLoop:
 
 		nexusReq := task.nexus.request.GetRequest()
 		nexusReq.Header[nexus.HeaderRequestTimeout] = time.Until(task.nexus.deadline).String()
+		if !task.nexus.operationDeadline.IsZero() {
+			nexusReq.Header[nexus.HeaderOperationTimeout] = commonnexus.FormatDuration(time.Until(task.nexus.operationDeadline))
+		}
 
 		return &matchingservice.PollNexusTaskQueueResponse{
 			Response: &workflowservice.PollNexusTaskQueueResponse{
@@ -2071,9 +2185,11 @@ func (e *matchingEngineImpl) unloadTaskQueuePartitionByKey(
 func (e *matchingEngineImpl) updatePhysicalTaskQueueGauge(pqm *physicalTaskQueueManagerImpl, delta int) {
 	// calculating versioned to be one of: “unversioned” or "buildId” or “versionSet”
 	versioned := "unversioned"
-	if buildID := pqm.queue.BuildId(); buildID != "" {
+	if dep := pqm.queue.Version().Deployment(); dep != nil {
+		versioned = "deployment"
+	} else if buildID := pqm.queue.Version().BuildId(); buildID != "" {
 		versioned = "buildId"
-	} else if versionSet := pqm.queue.VersionSet(); versionSet != "" {
+	} else if versionSet := pqm.queue.Version().VersionSet(); versionSet != "" {
 		versioned = "versionSet"
 	}
 
@@ -2282,7 +2398,7 @@ func (e *matchingEngineImpl) recordWorkflowTaskStarted(
 	ctx, cancel := newRecordTaskStartedContext(ctx, task)
 	defer cancel()
 
-	return e.historyClient.RecordWorkflowTaskStarted(ctx, &historyservice.RecordWorkflowTaskStartedRequest{
+	recordStartedRequest := &historyservice.RecordWorkflowTaskStartedRequest{
 		NamespaceId:         task.event.Data.GetNamespaceId(),
 		WorkflowExecution:   task.workflowExecution(),
 		ScheduledEventId:    task.event.Data.GetScheduledEventId(),
@@ -2290,7 +2406,10 @@ func (e *matchingEngineImpl) recordWorkflowTaskStarted(
 		RequestId:           uuid.New(),
 		PollRequest:         pollReq,
 		BuildIdRedirectInfo: task.redirectInfo,
-	})
+		ScheduledDeployment: task.event.Data.VersionDirective.GetDeployment(),
+	}
+
+	return e.historyClient.RecordWorkflowTaskStarted(ctx, recordStartedRequest)
 }
 
 func (e *matchingEngineImpl) recordActivityTaskStarted(
@@ -2301,7 +2420,7 @@ func (e *matchingEngineImpl) recordActivityTaskStarted(
 	ctx, cancel := newRecordTaskStartedContext(ctx, task)
 	defer cancel()
 
-	return e.historyClient.RecordActivityTaskStarted(ctx, &historyservice.RecordActivityTaskStartedRequest{
+	recordStartedRequest := &historyservice.RecordActivityTaskStartedRequest{
 		NamespaceId:         task.event.Data.GetNamespaceId(),
 		WorkflowExecution:   task.workflowExecution(),
 		ScheduledEventId:    task.event.Data.GetScheduledEventId(),
@@ -2310,7 +2429,10 @@ func (e *matchingEngineImpl) recordActivityTaskStarted(
 		PollRequest:         pollReq,
 		BuildIdRedirectInfo: task.redirectInfo,
 		Stamp:               task.event.Data.GetStamp(),
-	})
+		ScheduledDeployment: task.event.Data.VersionDirective.GetDeployment(),
+	}
+
+	return e.historyClient.RecordActivityTaskStarted(ctx, recordStartedRequest)
 }
 
 // newRecordTaskStartedContext creates a context for recording

@@ -42,6 +42,7 @@ import (
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/retrypolicy"
 	"go.temporal.io/server/common/rpc/interceptor"
+	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/workflow"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
@@ -53,6 +54,7 @@ type (
 		RunID            string
 		LastWriteVersion int64
 	}
+	CreateOrUpdateLeaseFunc func(WorkflowLease, shard.Context, workflow.MutableState) (WorkflowLease, error)
 )
 
 func NewWorkflowWithSignal(
@@ -62,7 +64,7 @@ func NewWorkflowWithSignal(
 	runID string,
 	startRequest *historyservice.StartWorkflowExecutionRequest,
 	signalWithStartRequest *workflowservice.SignalWithStartWorkflowExecutionRequest,
-) (WorkflowLease, error) {
+) (workflow.MutableState, error) {
 	newMutableState, err := CreateMutableState(
 		shard,
 		namespaceEntry,
@@ -132,18 +134,34 @@ func NewWorkflowWithSignal(
 		}
 	}
 
-	newWorkflowContext := workflow.NewContext(
-		shard.GetConfig(),
-		definition.NewWorkflowKey(
-			namespaceEntry.ID().String(),
-			workflowID,
-			runID,
+	return newMutableState, nil
+}
+
+// NOTE: must implement CreateOrUpdateLeaseFunc.
+func NewWorkflowLeaseAndContext(
+	existingLease WorkflowLease,
+	shardCtx shard.Context,
+	ms workflow.MutableState,
+) (WorkflowLease, error) {
+	// TODO(stephanos): remove this hack
+	if existingLease != nil {
+		return existingLease, nil
+	}
+	return NewWorkflowLease(
+		workflow.NewContext(
+			shardCtx.GetConfig(),
+			definition.NewWorkflowKey(
+				ms.GetNamespaceEntry().ID().String(),
+				ms.GetExecutionInfo().WorkflowId,
+				ms.GetExecutionState().RunId,
+			),
+			shardCtx.GetLogger(),
+			shardCtx.GetThrottledLogger(),
+			shardCtx.GetMetricsHandler(),
 		),
-		shard.GetLogger(),
-		shard.GetThrottledLogger(),
-		shard.GetMetricsHandler(),
-	)
-	return NewWorkflowLease(newWorkflowContext, wcache.NoopReleaseFn, newMutableState), nil
+		wcache.NoopReleaseFn,
+		ms,
+	), nil
 }
 
 func CreateMutableState(
@@ -291,6 +309,9 @@ func ValidateStartWorkflowExecutionRequest(
 	}
 	if len(request.WorkflowType.GetName()) > maxIDLengthLimit {
 		return serviceerror.NewInvalidArgument("WorkflowType exceeds length limit.")
+	}
+	if err := worker_versioning.ValidateVersioningOverride(request.GetVersioningOverride()); err != nil {
+		return err
 	}
 	if err := retrypolicy.Validate(request.RetryPolicy); err != nil {
 		return err

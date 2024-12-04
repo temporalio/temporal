@@ -661,6 +661,12 @@ func (c *syncVersionedTransitionTaskConverter) convert(
 		return c.generateBackfillHistoryTask(ctx, taskInfo, targetClusterID)
 	}
 
+	if mutableState.HasBufferedEvents() {
+		// we can't sync state when there's buffered events
+		// as current state could depend on those buffered events
+		return nil, nil
+	}
+
 	var targetHistoryItems [][]*historyspb.VersionHistoryItem
 	if progress != nil {
 		targetHistoryItems = progress.eventVersionHistoryItems
@@ -716,13 +722,18 @@ func (c *syncVersionedTransitionTaskConverter) generateVerifyVersionedTransition
 	taskInfo *tasks.SyncVersionedTransitionTask,
 	mutableState workflow.MutableState,
 ) (*replicationspb.ReplicationTask, error) {
-	versionHistoryIndex, err := versionhistory.FindFirstVersionHistoryIndexByVersionHistoryItem(
-		mutableState.GetExecutionInfo().VersionHistories,
-		versionhistory.NewVersionHistoryItem(
-			taskInfo.FirstEventID,
-			taskInfo.FirstEventVersion,
-		),
-	)
+	currentHistory, err := versionhistory.GetCurrentVersionHistory(mutableState.GetExecutionInfo().VersionHistories)
+	if err != nil {
+		return nil, err
+	}
+	lastEventVersion, err := versionhistory.GetVersionHistoryEventVersion(currentHistory, taskInfo.NextEventID-1)
+	if err != nil {
+		return nil, err
+	}
+	capItems, err := versionhistory.CopyVersionHistoryUntilLCAVersionHistoryItem(currentHistory, &historyspb.VersionHistoryItem{
+		EventId: taskInfo.NextEventID - 1,
+		Version: lastEventVersion,
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -735,7 +746,7 @@ func (c *syncVersionedTransitionTaskConverter) generateVerifyVersionedTransition
 				WorkflowId:          taskInfo.WorkflowID,
 				RunId:               taskInfo.RunID,
 				NewRunId:            taskInfo.NewRunID,
-				EventVersionHistory: mutableState.GetExecutionInfo().VersionHistories.Histories[versionHistoryIndex].Items,
+				EventVersionHistory: capItems.Items,
 				NextEventId:         taskInfo.NextEventID,
 			},
 		},

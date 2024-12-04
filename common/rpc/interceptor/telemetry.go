@@ -80,10 +80,12 @@ var (
 	respondWorkflowTaskCompleted = "RespondWorkflowTaskCompleted"
 	pollActivityTaskQueue        = "PollActivityTaskQueue"
 	startWorkflowExecution       = "StartWorkflowExecution"
+	executeMultiOperation        = "ExecuteMultiOperation"
 	queryWorkflow                = "QueryWorkflow"
 
 	grpcActions = map[string]struct{}{
 		startWorkflowExecution:             {},
+		executeMultiOperation:              {},
 		respondWorkflowTaskCompleted:       {},
 		pollActivityTaskQueue:              {},
 		queryWorkflow:                      {},
@@ -259,6 +261,18 @@ func (ti *TelemetryInterceptor) emitActionMetric(
 		if resp.Started {
 			metrics.ActionCounter.With(metricsHandler).Record(1, metrics.ActionType("grpc_"+methodName))
 		}
+	case executeMultiOperation:
+		resp, ok := result.(*workflowservice.ExecuteMultiOperationResponse)
+		if !ok {
+			return
+		}
+		if len(resp.Responses) > 0 {
+			if startResp := resp.GetResponses()[0].GetStartWorkflow(); startResp != nil {
+				if startResp.Started {
+					metrics.ActionCounter.With(metricsHandler).Record(1, metrics.ActionType("grpc_"+methodName))
+				}
+			}
+		}
 	case respondWorkflowTaskCompleted:
 		// handle commands
 		completedRequest, ok := req.(*workflowservice.RespondWorkflowTaskCompletedRequest)
@@ -391,7 +405,7 @@ func (ti *TelemetryInterceptor) logErrors(
 		return
 	}
 
-	if !logAllErrors && isUserCaused(statusCode) {
+	if !logAllErrors && isRecordingNeeded(statusCode) {
 		return
 	}
 
@@ -408,7 +422,7 @@ func (ti *TelemetryInterceptor) logErrors(
 	ti.logger.Error("service failures", append(logTags, tag.Error(err))...)
 }
 
-func isUserCaused(statusCode codes.Code) bool {
+func isRecordingNeeded(statusCode codes.Code) bool {
 	switch statusCode {
 	case codes.InvalidArgument,
 		codes.AlreadyExists,
@@ -416,13 +430,13 @@ func isUserCaused(statusCode codes.Code) bool {
 		codes.OutOfRange,
 		codes.PermissionDenied,
 		codes.Unauthenticated,
-		codes.NotFound:
+		codes.NotFound,
+		codes.ResourceExhausted:
 		return true
 	case codes.OK,
 		codes.Canceled,
 		codes.Unknown,
 		codes.DeadlineExceeded,
-		codes.ResourceExhausted,
 		codes.Aborted,
 		codes.Unimplemented,
 		codes.Internal,
@@ -465,7 +479,7 @@ func recordMetrics(metricsHandler metrics.Handler, err error, statusCode codes.C
 		return
 	}
 
-	if !isUserCaused(statusCode) {
+	if !isRecordingNeeded(statusCode) {
 		metrics.ServiceFailures.With(metricsHandler).Record(1)
 	}
 }

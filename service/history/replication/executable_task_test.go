@@ -35,6 +35,8 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
+	"go.temporal.io/api/enums/v1"
+	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/api/adminservicemock/v1"
@@ -45,13 +47,17 @@ import (
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common/cluster"
+	"go.temporal.io/server/common/collection"
+	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/persistence/serialization"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	ctasks "go.temporal.io/server/common/tasks"
+	"go.temporal.io/server/common/testing/protomock"
 	"go.temporal.io/server/common/xdc"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/consts"
@@ -86,6 +92,8 @@ type (
 		runId                   string
 		taskId                  int64
 		mockExecutionManager    *persistence.MockExecutionManager
+		serializer              serialization.Serializer
+		toolBox                 ProcessToolBox
 
 		task *ExecutableTaskImpl
 	}
@@ -117,6 +125,7 @@ func (s *executableTaskSuite) SetupTest() {
 	s.metricsHandler = metrics.NoopMetricsHandler
 	s.logger = log.NewNoopLogger()
 	s.config = tests.NewDynamicConfig()
+	s.serializer = serialization.NewSerializer()
 
 	s.clusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 	s.clusterMetadata.EXPECT().GetAllClusterInfo().Return(cluster.TestAllClusterInfo).AnyTimes()
@@ -132,20 +141,23 @@ func (s *executableTaskSuite) SetupTest() {
 	s.workflowId = uuid.NewString()
 	s.runId = uuid.NewString()
 	s.taskId = rand.Int63()
+	s.toolBox = ProcessToolBox{
+		Config:                  s.config,
+		ClusterMetadata:         s.clusterMetadata,
+		ClientBean:              s.clientBean,
+		ShardController:         s.shardController,
+		NamespaceCache:          s.namespaceCache,
+		NDCHistoryResender:      s.ndcHistoryResender,
+		MetricsHandler:          s.metricsHandler,
+		Logger:                  s.logger,
+		EagerNamespaceRefresher: s.eagerNamespaceRefresher,
+		DLQWriter:               NewExecutionManagerDLQWriter(s.mockExecutionManager),
+		EventSerializer:         s.serializer,
+		RemoteHistoryFetcher:    s.remoteHistoryFetcher,
+	}
 
 	s.task = NewExecutableTask(
-		ProcessToolBox{
-			Config:                  s.config,
-			ClusterMetadata:         s.clusterMetadata,
-			ClientBean:              s.clientBean,
-			ShardController:         s.shardController,
-			NamespaceCache:          s.namespaceCache,
-			NDCHistoryResender:      s.ndcHistoryResender,
-			MetricsHandler:          s.metricsHandler,
-			Logger:                  s.logger,
-			EagerNamespaceRefresher: s.eagerNamespaceRefresher,
-			DLQWriter:               NewExecutionManagerDLQWriter(s.mockExecutionManager),
-		},
+		s.toolBox,
 		s.taskId,
 		"metrics-tag",
 		creationTime,
@@ -612,6 +624,183 @@ func (s *executableTaskSuite) TestResend_TransitionHistoryDisabled() {
 	s.False(doContinue)
 }
 
+func (s *executableTaskSuite) TestSyncState_SourceMutableStateHasUnFlushedBufferEvents() {
+	syncStateErr := &serviceerrors.SyncState{
+		NamespaceId: uuid.NewString(),
+		WorkflowId:  uuid.NewString(),
+		RunId:       uuid.NewString(),
+		VersionedTransition: &persistencespb.VersionedTransition{
+			NamespaceFailoverVersion: rand.Int63(),
+			TransitionCount:          rand.Int63(),
+		},
+		VersionHistories: &historyspb.VersionHistories{
+			Histories: []*historyspb.VersionHistory{
+				{
+					BranchToken: []byte("token#1"),
+					Items: []*historyspb.VersionHistoryItem{
+						{EventId: 102, Version: 1234},
+					},
+				},
+			},
+		},
+	}
+
+	mockRemoteAdminClient := adminservicemock.NewMockAdminServiceClient(s.controller)
+	s.clientBean.EXPECT().GetRemoteAdminClient(s.sourceCluster).Return(mockRemoteAdminClient, nil).AnyTimes()
+
+	mockRemoteAdminClient.EXPECT().SyncWorkflowState(
+		gomock.Any(),
+		&adminservice.SyncWorkflowStateRequest{
+			NamespaceId: syncStateErr.NamespaceId,
+			Execution: &commonpb.WorkflowExecution{
+				WorkflowId: syncStateErr.WorkflowId,
+				RunId:      syncStateErr.RunId,
+			},
+			VersionedTransition: syncStateErr.VersionedTransition,
+			VersionHistories:    syncStateErr.VersionHistories,
+			TargetClusterId:     int32(s.clusterMetadata.GetAllClusterInfo()[s.clusterMetadata.GetCurrentClusterName()].InitialFailoverVersion),
+		},
+	).Return(nil, serviceerror.NewWorkflowNotReady("workflow not ready")).Times(1)
+
+	doContinue, err := s.task.SyncState(context.Background(), syncStateErr, ResendAttempt)
+	s.Nil(err)
+	s.False(doContinue)
+}
+
+func (s *executableTaskSuite) TestBackFillEvents_Success() {
+	workflowKey := definition.NewWorkflowKey(
+		s.namespaceId,
+		s.workflowId,
+		s.runId,
+	)
+
+	startEventId := int64(20)
+	startEventVersion := int64(10)
+	endEventId := int64(21)
+	endEventVersion := int64(12)
+	newRunId := uuid.NewString()
+	remoteCluster := "remote cluster"
+	eventBatchOriginal1 := []*historypb.HistoryEvent{
+		{EventId: 20, Version: 10},
+	}
+	eventBatchOriginal2 := []*historypb.HistoryEvent{
+		{EventId: 21, Version: 12},
+	}
+	blogOriginal1, err := s.serializer.SerializeEvents(eventBatchOriginal1, enums.ENCODING_TYPE_PROTO3)
+	s.NoError(err)
+
+	blogOriginal2, err := s.serializer.SerializeEvents(eventBatchOriginal2, enums.ENCODING_TYPE_PROTO3)
+	s.NoError(err)
+	versionHistory := &historyspb.VersionHistory{
+		Items: []*historyspb.VersionHistoryItem{
+			{EventId: 20, Version: 10},
+			{EventId: 28, Version: 12},
+		},
+	}
+	fetcher := collection.NewPagingIterator(func(paginationToken []byte) ([]*eventhandler.HistoryBatch, []byte, error) {
+		return []*eventhandler.HistoryBatch{
+			{RawEventBatch: blogOriginal1, VersionHistory: versionHistory},
+			{RawEventBatch: blogOriginal2, VersionHistory: versionHistory},
+		}, nil, nil
+	})
+	eventBatchNewRun := []*historypb.HistoryEvent{
+		{EventId: 1, Version: 12},
+		{EventId: 2, Version: 12},
+	}
+	blobNewRun, err := s.serializer.SerializeEvents(eventBatchNewRun, enums.ENCODING_TYPE_PROTO3)
+	s.NoError(err)
+	fetcherNewRun := collection.NewPagingIterator(func(paginationToken []byte) ([]*eventhandler.HistoryBatch, []byte, error) {
+		return []*eventhandler.HistoryBatch{
+			{RawEventBatch: blobNewRun, VersionHistory: &historyspb.VersionHistory{
+				Items: []*historyspb.VersionHistoryItem{
+					{EventId: 4, Version: 12},
+				},
+			}},
+		}, nil, nil
+	})
+	s.remoteHistoryFetcher.EXPECT().GetSingleWorkflowHistoryPaginatedIteratorInclusive(
+		gomock.Any(),
+		remoteCluster,
+		namespace.ID(workflowKey.NamespaceID),
+		workflowKey.WorkflowID,
+		newRunId,
+		int64(1),
+		endEventVersion,
+		int64(1),
+		endEventVersion,
+	).Return(fetcherNewRun)
+	s.remoteHistoryFetcher.EXPECT().GetSingleWorkflowHistoryPaginatedIteratorInclusive(
+		gomock.Any(),
+		remoteCluster,
+		namespace.ID(workflowKey.NamespaceID),
+		workflowKey.WorkflowID,
+		workflowKey.RunID,
+		startEventId,
+		startEventVersion,
+		endEventId,
+		endEventVersion,
+	).Return(fetcher)
+	shardContext := shard.NewMockContext(s.controller)
+	engine := shard.NewMockEngine(s.controller)
+	s.shardController.EXPECT().GetShardByNamespaceWorkflow(
+		namespace.ID(workflowKey.NamespaceID),
+		workflowKey.WorkflowID,
+	).Return(shardContext, nil).AnyTimes()
+	shardContext.EXPECT().GetEngine(gomock.Any()).Return(engine, nil).AnyTimes()
+	engine.EXPECT().BackfillHistoryEvents(
+		gomock.Any(), protomock.Eq(&shard.BackfillHistoryEventsRequest{
+			WorkflowKey:         workflowKey,
+			SourceClusterName:   s.sourceCluster,
+			VersionedHistory:    s.task.replicationTask.VersionedTransition,
+			VersionHistoryItems: versionHistory.Items,
+			Events:              [][]*historypb.HistoryEvent{eventBatchOriginal1},
+		})).Return(nil)
+	engine.EXPECT().BackfillHistoryEvents(
+		gomock.Any(), protomock.Eq(&shard.BackfillHistoryEventsRequest{
+			WorkflowKey:         workflowKey,
+			SourceClusterName:   s.sourceCluster,
+			VersionedHistory:    s.task.replicationTask.VersionedTransition,
+			VersionHistoryItems: versionHistory.Items,
+			Events:              [][]*historypb.HistoryEvent{eventBatchOriginal2},
+			NewRunID:            newRunId,
+			NewEvents:           eventBatchNewRun,
+		})).Return(nil)
+	task := NewExecutableTask(
+		s.toolBox,
+		s.taskId,
+		"metrics-tag",
+		time.Now(),
+		time.Now(),
+		s.sourceCluster,
+		s.sourceShardKey,
+		enumsspb.TASK_PRIORITY_UNSPECIFIED,
+		&replicationspb.ReplicationTask{
+			TaskType: enumsspb.REPLICATION_TASK_TYPE_VERIFY_VERSIONED_TRANSITION_TASK,
+			RawTaskInfo: &persistencespb.ReplicationTaskInfo{
+				NamespaceId: s.namespaceId,
+				WorkflowId:  s.workflowId,
+				RunId:       s.runId,
+				TaskId:      s.taskId,
+				TaskEquivalents: []*persistencespb.ReplicationTaskInfo{
+					{NamespaceId: s.namespaceId, WorkflowId: s.workflowId, RunId: s.runId},
+					{NamespaceId: s.namespaceId, WorkflowId: s.workflowId, RunId: s.runId},
+				},
+			},
+		},
+	)
+	err = task.BackFillEvents(
+		context.Background(),
+		remoteCluster,
+		workflowKey,
+		startEventId,
+		startEventVersion,
+		endEventId,
+		endEventVersion,
+		newRunId,
+	)
+	s.NoError(err)
+}
+
 func (s *executableTaskSuite) TestGetNamespaceInfo_Process() {
 	namespaceID := uuid.NewString()
 	namespaceName := uuid.NewString()
@@ -652,6 +841,34 @@ func (s *executableTaskSuite) TestGetNamespaceInfo_Skip() {
 			ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
 				ActiveClusterName: cluster.TestAlternativeClusterName,
 				Clusters: []string{
+					cluster.TestAlternativeClusterName,
+				},
+			},
+		},
+	})
+	s.namespaceCache.EXPECT().GetNamespaceByID(namespace.ID(namespaceID)).Return(namespaceEntry, nil).AnyTimes()
+
+	name, toProcess, err := s.task.GetNamespaceInfo(context.Background(), namespaceID)
+	s.NoError(err)
+	s.Equal(namespaceName, name)
+	s.False(toProcess)
+}
+
+func (s *executableTaskSuite) TestGetNamespaceInfo_Deleted() {
+	namespaceID := uuid.NewString()
+	namespaceName := uuid.NewString()
+	namespaceEntry := namespace.FromPersistentState(&persistence.GetNamespaceResponse{
+		Namespace: &persistencespb.NamespaceDetail{
+			Info: &persistencespb.NamespaceInfo{
+				Id:    namespaceID,
+				Name:  namespaceName,
+				State: enums.NAMESPACE_STATE_DELETED,
+			},
+			Config: &persistencespb.NamespaceConfig{},
+			ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
+				ActiveClusterName: cluster.TestAlternativeClusterName,
+				Clusters: []string{
+					cluster.TestCurrentClusterName,
 					cluster.TestAlternativeClusterName,
 				},
 			},

@@ -117,6 +117,7 @@ var _ userDataManager = (*userDataManagerImpl)(nil)
 var (
 	errUserDataNoMutateNonRoot = serviceerror.NewInvalidArgument("can only mutate user data on root workflow task queue")
 	errTaskQueueClosed         = serviceerror.NewUnavailable("task queue closed")
+	errUserDataUnmodified      = errors.New("sentinel error for unchanged user data")
 )
 
 func newUserDataManager(
@@ -309,6 +310,7 @@ func (m *userDataManagerImpl) fetchUserData(ctx context.Context) error {
 		return nil
 	}
 
+	fastResponseCounter := 0
 	minWaitTime := m.config.GetUserDataMinWaitTime
 
 	for ctx.Err() == nil {
@@ -321,11 +323,20 @@ func (m *userDataManagerImpl) fetchUserData(ctx context.Context) error {
 		// spinning. So enforce a minimum wait time that increases as long as we keep getting
 		// very fast replies.
 		if elapsed < m.config.GetUserDataMinWaitTime {
-			util.InterruptibleSleep(ctx, minWaitTime-elapsed)
-			// Don't let this get near our call timeout, otherwise we can't tell the difference
-			// between a fast reply and a timeout.
-			minWaitTime = min(minWaitTime*2, m.config.GetUserDataLongPollTimeout()/2)
+			if fastResponseCounter >= 3 {
+				// 3 or more consecutive fast responses, let's throttle!
+				util.InterruptibleSleep(ctx, minWaitTime-elapsed)
+				// Don't let this get near our call timeout, otherwise we can't tell the difference
+				// between a fast reply and a timeout.
+				minWaitTime = min(minWaitTime*2, m.config.GetUserDataLongPollTimeout()/2)
+			} else {
+				// Not yet 3 consecutive fast responses. A few rapid refreshes for versioned queues
+				// is expected when the first poller arrives. We do not want to slow down the queue
+				// for that.
+				fastResponseCounter++
+			}
 		} else {
+			fastResponseCounter = 0
 			minWaitTime = m.config.GetUserDataMinWaitTime
 		}
 	}
@@ -365,10 +376,11 @@ func (m *userDataManagerImpl) UpdateUserData(ctx context.Context, options UserDa
 		return err
 	}
 	newData, shouldReplicate, err := m.updateUserData(ctx, updateFn, options)
-	if err != nil {
+	if err == errUserDataUnmodified {
+		return nil
+	} else if err != nil {
 		return err
-	}
-	if !shouldReplicate {
+	} else if !shouldReplicate {
 		return nil
 	}
 
@@ -426,6 +438,9 @@ func (m *userDataManagerImpl) updateUserData(
 		return nil, false, serviceerror.NewFailedPrecondition(fmt.Sprintf("user data version mismatch: requested: %d, current: %d", options.KnownVersion, preUpdateVersion))
 	}
 	updatedUserData, shouldReplicate, err := updateFn(preUpdateData)
+	if err == errUserDataUnmodified {
+		return nil, false, err
+	}
 	if err != nil {
 		m.logger.Error("user data update function failed", tag.Error(err), tag.NewStringTag("user-data-update-source", options.Source))
 		return nil, false, err

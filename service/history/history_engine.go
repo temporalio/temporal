@@ -97,6 +97,7 @@ import (
 	"go.temporal.io/server/service/history/api/unpauseactivity"
 	"go.temporal.io/server/service/history/api/updateactivityoptions"
 	"go.temporal.io/server/service/history/api/updateworkflow"
+	"go.temporal.io/server/service/history/api/updateworkflowoptions"
 	"go.temporal.io/server/service/history/api/verifychildworkflowcompletionrecorded"
 	"go.temporal.io/server/service/history/api/verifyfirstworkflowtaskscheduled"
 	"go.temporal.io/server/service/history/circuitbreakerpool"
@@ -406,12 +407,13 @@ func (e *historyEngineImpl) StartWorkflowExecution(
 		e.tokenSerializer,
 		e.persistenceVisibilityMgr,
 		startRequest,
+		api.NewWorkflowLeaseAndContext,
 	)
 	if err != nil {
 		return nil, err
 	}
 
-	resp, _, err := starter.Invoke(ctx, startworkflow.BeforeCreateHookNoop)
+	resp, _, err := starter.Invoke(ctx)
 	return resp, err
 }
 
@@ -523,7 +525,7 @@ func (e *historyEngineImpl) RecordActivityTaskStarted(
 	ctx context.Context,
 	request *historyservice.RecordActivityTaskStartedRequest,
 ) (*historyservice.RecordActivityTaskStartedResponse, error) {
-	return recordactivitytaskstarted.Invoke(ctx, request, e.shardContext, e.workflowConsistencyChecker)
+	return recordactivitytaskstarted.Invoke(ctx, request, e.shardContext, e.workflowConsistencyChecker, e.matchingClient)
 }
 
 // ScheduleWorkflowTask schedules a workflow task if no outstanding workflow task found
@@ -835,6 +837,15 @@ func (e *historyEngineImpl) ResetWorkflowExecution(
 	req *historyservice.ResetWorkflowExecutionRequest,
 ) (*historyservice.ResetWorkflowExecutionResponse, error) {
 	return resetworkflow.Invoke(ctx, req, e.shardContext, e.workflowConsistencyChecker)
+}
+
+// UpdateWorkflowExecutionOptions updates the options of a specific workflow execution.
+// Can be used to set and unset versioning behavior override.
+func (e *historyEngineImpl) UpdateWorkflowExecutionOptions(
+	ctx context.Context,
+	req *historyservice.UpdateWorkflowExecutionOptionsRequest,
+) (*historyservice.UpdateWorkflowExecutionOptionsResponse, error) {
+	return updateworkflowoptions.Invoke(ctx, req, e.shardContext, e.workflowConsistencyChecker)
 }
 
 func (e *historyEngineImpl) NotifyNewHistoryEvent(

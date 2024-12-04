@@ -30,6 +30,7 @@ import "google/protobuf/duration.proto";
 import "google/protobuf/timestamp.proto";
 
 import "temporal/api/activity/v1/message.proto";
+import "temporal/api/deployment/v1/message.proto";
 import "temporal/api/common/v1/message.proto";
 import "temporal/api/history/v1/message.proto";
 import "temporal/api/taskqueue/v1/message.proto";
@@ -104,6 +105,9 @@ message StartWorkflowExecutionRequest {
     temporal.server.api.workflow.v1.RootExecutionInfo root_execution_info = 11;
     // inherited build ID from parent/previous execution
     string inherited_build_id = 12;
+    // If set, takes precedence over the Versioning Behavior sent by the SDK on Workflow Task completion.
+    // To unset the override after the workflow is running, use UpdateWorkflowExecutionOptions.
+    temporal.api.workflow.v1.VersioningOverride versioning_override = 13;
 }
 
 message StartWorkflowExecutionResponse {
@@ -155,6 +159,7 @@ message GetMutableStateResponse {
     string assigned_build_id = 22;
     string inherited_build_id = 23;
     repeated temporal.server.api.persistence.v1.VersionedTransition transition_history = 24;
+    temporal.api.workflow.v1.WorkflowExecutionVersioningInfo versioning_info = 25;
 }
 
 message PollMutableStateRequest {
@@ -238,6 +243,9 @@ message RecordWorkflowTaskStartedRequest {
     temporal.api.workflowservice.v1.PollWorkflowTaskQueueRequest poll_request = 6;
     temporal.server.api.clock.v1.VectorClock clock = 7;
     temporal.server.api.taskqueue.v1.BuildIdRedirectInfo build_id_redirect_info = 8;
+    // The deployment passed by History when the task was scheduled.
+    temporal.api.deployment.v1.Deployment scheduled_deployment = 9;
+
 }
 
 message RecordWorkflowTaskStartedResponse {
@@ -277,6 +285,12 @@ message RecordActivityTaskStartedRequest {
 
     // Stamp represents the internal “version” of the activity options and can/will be changed with Activity API.
     int32 stamp = 9;
+    // The deployment passed by History when the task was scheduled.
+    temporal.api.deployment.v1.Deployment scheduled_deployment = 10;
+    // Whether the scheduled deployment contains the activity's task queue. Used by History to
+    // determine if the activity redirect should affect the workflow.
+    // Only set if `scheduled_deployment` is set (i.e. the task is redirected).
+    bool scheduled_deployment_contains_task_queue = 11;
 }
 
 message RecordActivityTaskStartedResponse {
@@ -1094,6 +1108,12 @@ message CompleteNexusOperationRequest {
         // Operation failure, only set if state != successful.
         temporal.api.nexus.v1.Failure failure = 4;
     }
+    // Operation ID - used when the completion is received before the started response.
+    string operation_id = 5;
+    // Time the operation was started. Used when completion is received before the started response.
+    google.protobuf.Timestamp start_time = 6;
+    // Links to be attached to a fabricated start event if completion is received before started response.
+    repeated temporal.api.common.v1.Link links = 7;
 }
 
 message CompleteNexusOperationResponse {
@@ -1205,4 +1225,18 @@ message ResetActivityRequest {
 }
 
 message ResetActivityResponse {
+}
+
+// (-- api-linter: core::0134::request-mask-required=disabled
+// (-- api-linter: core::0134::request-resource-required=disabled
+message UpdateWorkflowExecutionOptionsRequest {
+    option (routing).workflow_id = "update_request.workflow_execution.workflow_id";
+
+    string namespace_id = 1;
+    temporal.api.workflowservice.v1.UpdateWorkflowExecutionOptionsRequest update_request = 2;
+}
+
+message UpdateWorkflowExecutionOptionsResponse {
+    // Workflow Execution options after update.
+    temporal.api.workflow.v1.WorkflowExecutionOptions workflow_execution_options = 1;
 }

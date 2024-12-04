@@ -144,6 +144,12 @@ var (
 		"PauseActivityById":                  {Scope: ScopeNamespace, Access: AccessWrite},
 		"UnpauseActivityById":                {Scope: ScopeNamespace, Access: AccessWrite},
 		"ResetActivityById":                  {Scope: ScopeNamespace, Access: AccessWrite},
+		"UpdateWorkflowExecutionOptions":     {Scope: ScopeNamespace, Access: AccessWrite},
+		"DescribeDeployment":                 {Scope: ScopeNamespace, Access: AccessReadOnly},
+		"ListDeployments":                    {Scope: ScopeNamespace, Access: AccessReadOnly},
+		"GetDeploymentReachability":          {Scope: ScopeNamespace, Access: AccessReadOnly},
+		"GetCurrentDeployment":               {Scope: ScopeNamespace, Access: AccessReadOnly},
+		"SetCurrentDeployment":               {Scope: ScopeNamespace, Access: AccessWrite},
 	}
 	operatorServiceMetadata = map[string]MethodMetadata{
 		"AddSearchAttributes":      {Scope: ScopeNamespace, Access: AccessAdmin},

@@ -47,7 +47,7 @@ type (
 		updateutils.UpdateUtils
 		FunctionalTestBase
 
-		TaskPoller taskpoller.TaskPoller
+		TaskPoller *taskpoller.TaskPoller
 	}
 )
 

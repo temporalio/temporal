@@ -144,6 +144,9 @@ func (s *SyncStateRetrieverImpl) GetSyncWorkflowStateArtifact(
 			releaseFunc(retError)
 		}
 	}()
+	if mutableState.HasBufferedEvents() {
+		return nil, serviceerror.NewWorkflowNotReady("workflow has buffered events")
+	}
 
 	if len(mutableState.GetExecutionInfo().TransitionHistory) == 0 {
 		// workflow essentially in an unknown state
@@ -193,7 +196,7 @@ func (s *SyncStateRetrieverImpl) getSyncStateResult(
 		}
 		tombstoneBatch := mutableState.GetExecutionInfo().SubStateMachineTombstoneBatches
 		if len(tombstoneBatch) == 0 {
-			return true
+			return false
 		}
 		if workflow.CompareVersionedTransition(tombstoneBatch[0].VersionedTransition, targetCurrentVersionedTransition) <= 0 {
 			return true

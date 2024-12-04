@@ -36,6 +36,8 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cluster"
@@ -249,7 +251,7 @@ func (r *workflowResetterImpl) ResetWorkflow(
 		return err
 	}
 
-	currentWorkflow.GetContext().UpdateRegistry(ctx, nil).Abort(update.AbortReasonWorkflowCompleted)
+	currentWorkflow.GetContext().UpdateRegistry(ctx).Abort(update.AbortReasonWorkflowCompleted)
 
 	return nil
 }
@@ -551,10 +553,11 @@ func (r *workflowResetterImpl) failInflightActivity(
 		switch ai.StartedEventId {
 		case common.EmptyEventID:
 			// activity not started, noop
-			if err := mutableState.UpdateActivity(ai.ScheduledEventId, func(activityInfo *persistencespb.ActivityInfo, _ workflow.MutableState) {
+			if err := mutableState.UpdateActivity(ai.ScheduledEventId, func(activityInfo *persistencespb.ActivityInfo, _ workflow.MutableState) error {
 				// override the scheduled activity time to now
 				activityInfo.ScheduledTime = timestamppb.New(now)
 				activityInfo.FirstScheduledTime = timestamppb.New(now)
+				return nil
 			}); err != nil {
 				return err
 			}
@@ -781,7 +784,7 @@ func (r *workflowResetterImpl) reapplyEvents(
 	// When reapplying events during WorkflowReset, we do not check for conflicting update IDs (they are not possible,
 	// since the workflow was in a consistent state before reset), and we do not perform deduplication (because we never
 	// did, before the refactoring that unified two code paths; see comment below.)
-	return reapplyEvents(ctx, mutableState, nil, r.shardContext.StateMachineRegistry(), events, resetReapplyExcludeTypes, "")
+	return reapplyEvents(ctx, mutableState, nil, r.shardContext.StateMachineRegistry(), events, resetReapplyExcludeTypes, "", true)
 }
 
 func reapplyEvents(
@@ -792,6 +795,7 @@ func reapplyEvents(
 	events []*historypb.HistoryEvent,
 	resetReapplyExcludeTypes map[enumspb.ResetReapplyExcludeType]struct{},
 	runIdForDeduplication string,
+	isReset bool,
 ) ([]*historypb.HistoryEvent, error) {
 	// TODO (dan): This implementation is the result of unifying two previous implementations, one of which did
 	// deduplication. Can we always/never do this deduplication, or must it be decided by the caller?
@@ -862,6 +866,30 @@ func reapplyEvents(
 			if _, err := mutableState.AddWorkflowExecutionUpdateAdmittedEvent(
 				request,
 				enumspb.UPDATE_ADMITTED_EVENT_ORIGIN_REAPPLY,
+			); err != nil {
+				return reappliedEvents, err
+			}
+			reappliedEvents = append(reappliedEvents, event)
+		case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CANCEL_REQUESTED:
+			if isReset || isDuplicate(event) {
+				continue
+			}
+			if mutableState.IsCancelRequested() {
+				// This is a no-op because the cancel request is already recorded.
+				continue
+			}
+			attr := event.GetWorkflowExecutionCancelRequestedEventAttributes()
+			request := &historyservice.RequestCancelWorkflowExecutionRequest{
+				CancelRequest: &workflowservice.RequestCancelWorkflowExecutionRequest{
+					Reason:   attr.GetCause(),
+					Identity: attr.GetIdentity(),
+					Links:    event.Links,
+				},
+				ExternalInitiatedEventId:  attr.GetExternalInitiatedEventId(),
+				ExternalWorkflowExecution: attr.GetExternalWorkflowExecution(),
+			}
+			if _, err := mutableState.AddWorkflowExecutionCancelRequestedEvent(
+				request,
 			); err != nil {
 				return reappliedEvents, err
 			}
