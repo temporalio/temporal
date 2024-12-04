@@ -269,10 +269,7 @@ func (n *Node) Outputs() OperationLog {
 // This should be called at the end of every transaction where the transitions are performed to avoid emitting duplicate
 // transition outputs.
 func (n *Node) ClearTransactionState() {
-	root := n.root()
-	if root.opLog != nil {
-		root.opLog = make(OperationLog, 0)
-	}
+	n.root().opLog = nil
 
 	n.cache.dirty = false
 	for _, child := range n.cache.children {
