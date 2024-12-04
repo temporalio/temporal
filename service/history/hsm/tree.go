@@ -245,7 +245,6 @@ func (n *Node) Path() []Key {
 // any deletions of their descendants, but no transitions.
 func (n *Node) Outputs() OperationLog {
 	root := n.root()
-	currentPath := n.Path()
 
 	compacted := root.opLog.Compact()
 
@@ -254,6 +253,7 @@ func (n *Node) Outputs() OperationLog {
 	}
 
 	// Filter to this subtree
+	currentPath := n.Path()
 	var relevantOps OperationLog
 	for _, op := range compacted {
 		opPath := op.Path()
