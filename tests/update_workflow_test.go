@@ -3252,6 +3252,7 @@ func (s *UpdateWorkflowSuite) TestUpdateWorkflow_SpeculativeWorkflowTask_Heartbe
 			s.EqualValues(5, updRequestMsg.GetEventId())
 
 			return &workflowservice.RespondWorkflowTaskCompletedRequest{
+				ReturnNewWorkflowTask:      true,
 				ForceCreateNewWorkflowTask: true,
 			}, nil
 		})
