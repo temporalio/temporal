@@ -192,7 +192,7 @@ func Invoke(
 		case enumspb.WORKFLOW_ID_CONFLICT_POLICY_UNSPECIFIED:
 			// ... fail since this policy is invalid
 			currentWorkflowLease.GetReleaseFn()(nil) // nil since nothing was modified
-			return nil, serviceerror.NewUnimplemented("unhandled workflow id conflict policy: unspecified")
+			return nil, serviceerror.NewInvalidArgument("unhandled workflow id conflict policy: unspecified")
 		}
 	}
 
