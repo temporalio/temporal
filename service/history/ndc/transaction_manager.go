@@ -187,7 +187,6 @@ func NewTransactionManager(
 			shardContext,
 			workflowCache,
 			logger,
-			false,
 		),
 		eventsReapplier: eventsReapplier,
 		logger:          logger,
@@ -351,6 +350,7 @@ func (r *transactionMgrImpl) backfillWorkflowEventsReapply(
 			EventsReapplicationResetWorkflowReason,
 			totalEvents,
 			nil,
+			false, // allowResetWithPendingChildren
 		)
 		switch err.(type) {
 		case *serviceerror.InvalidArgument:

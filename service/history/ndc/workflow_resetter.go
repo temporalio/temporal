@@ -79,19 +79,19 @@ type (
 			resetReason string,
 			additionalReapplyEvents []*historypb.HistoryEvent,
 			resetReapplyExcludeTypes map[enumspb.ResetReapplyExcludeType]struct{},
+			allowResetWithPendingChildren bool,
 		) error
 	}
 
 	workflowResetterImpl struct {
-		shardContext                  shard.Context
-		namespaceRegistry             namespace.Registry
-		clusterMetadata               cluster.Metadata
-		executionMgr                  persistence.ExecutionManager
-		workflowCache                 wcache.Cache
-		stateRebuilder                StateRebuilder
-		transaction                   workflow.Transaction
-		logger                        log.Logger
-		allowResetWithPendingChildren bool
+		shardContext      shard.Context
+		namespaceRegistry namespace.Registry
+		clusterMetadata   cluster.Metadata
+		executionMgr      persistence.ExecutionManager
+		workflowCache     wcache.Cache
+		stateRebuilder    StateRebuilder
+		transaction       workflow.Transaction
+		logger            log.Logger
 	}
 )
 
@@ -101,18 +101,16 @@ func NewWorkflowResetter(
 	shardContext shard.Context,
 	workflowCache wcache.Cache,
 	logger log.Logger,
-	allowResetWithPendingChildren bool,
 ) *workflowResetterImpl {
 	return &workflowResetterImpl{
-		shardContext:                  shardContext,
-		namespaceRegistry:             shardContext.GetNamespaceRegistry(),
-		clusterMetadata:               shardContext.GetClusterMetadata(),
-		executionMgr:                  shardContext.GetExecutionManager(),
-		workflowCache:                 workflowCache,
-		stateRebuilder:                NewStateRebuilder(shardContext, logger),
-		transaction:                   workflow.NewTransaction(shardContext),
-		logger:                        logger,
-		allowResetWithPendingChildren: allowResetWithPendingChildren,
+		shardContext:      shardContext,
+		namespaceRegistry: shardContext.GetNamespaceRegistry(),
+		clusterMetadata:   shardContext.GetClusterMetadata(),
+		executionMgr:      shardContext.GetExecutionManager(),
+		workflowCache:     workflowCache,
+		stateRebuilder:    NewStateRebuilder(shardContext, logger),
+		transaction:       workflow.NewTransaction(shardContext),
+		logger:            logger,
 	}
 }
 
@@ -136,6 +134,7 @@ func (r *workflowResetterImpl) ResetWorkflow(
 	resetReason string,
 	additionalReapplyEvents []*historypb.HistoryEvent,
 	resetReapplyExcludeTypes map[enumspb.ResetReapplyExcludeType]struct{},
+	allowResetWithPendingChildren bool,
 ) (retError error) {
 
 	namespaceEntry, err := r.namespaceRegistry.GetNamespaceByID(namespaceID)
@@ -225,6 +224,7 @@ func (r *workflowResetterImpl) ResetWorkflow(
 		resetRequestID,
 		resetWorkflowVersion,
 		resetReason,
+		allowResetWithPendingChildren,
 	)
 	if err != nil {
 		return err
@@ -271,6 +271,7 @@ func (r *workflowResetterImpl) prepareResetWorkflow(
 	resetRequestID string,
 	resetWorkflowVersion int64,
 	resetReason string,
+	allowResetWithPendingChildren bool,
 ) (Workflow, error) {
 
 	resetWorkflow, err := r.replayResetWorkflow(
@@ -309,7 +310,7 @@ func (r *workflowResetterImpl) prepareResetWorkflow(
 		return nil, err
 	}
 
-	if !r.allowResetWithPendingChildren && len(resetMutableState.GetPendingChildExecutionInfos()) > 0 {
+	if !allowResetWithPendingChildren && len(resetMutableState.GetPendingChildExecutionInfos()) > 0 {
 		return nil, serviceerror.NewInvalidArgument("WorkflowResetter encountered pending child workflows.")
 	}
 

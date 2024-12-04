@@ -145,6 +145,7 @@ func Invoke(
 					wcache.NoopReleaseFn,
 				)
 
+				allowResetWithPendingChildren := shard.GetConfig().AllowResetWithPendingChildren(namespaceEntry.Name().String())
 				err = workflowResetter.ResetWorkflow(
 					ctx,
 					namespaceID,
@@ -161,6 +162,7 @@ func Invoke(
 					ndc.EventsReapplicationResetWorkflowReason,
 					toReapplyEvents,
 					nil,
+					allowResetWithPendingChildren,
 				)
 				switch err.(type) {
 				case *serviceerror.InvalidArgument:

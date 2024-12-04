@@ -1250,6 +1250,7 @@ func (s *workflowResetterSuite) TestWorkflowRestartAfterExecutionTimeout() {
 		resetRequestID,
 		resetWorkflowVersion,
 		resetReason,
+		false, //allowResetWithPendingChildren
 	)
 	s.NoError(err)
 	s.Equal(resetMutableState, resetWorkflow.GetMutableState())

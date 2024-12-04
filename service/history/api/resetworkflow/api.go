@@ -38,7 +38,6 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/service/history/api"
-	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/ndc"
 	"go.temporal.io/server/service/history/shard"
 )
@@ -48,7 +47,6 @@ func Invoke(
 	resetRequest *historyservice.ResetWorkflowExecutionRequest,
 	shard shard.Context,
 	workflowConsistencyChecker api.WorkflowConsistencyChecker,
-	config *configs.Config,
 ) (_ *historyservice.ResetWorkflowExecutionResponse, retError error) {
 	namespaceID := namespace.ID(resetRequest.GetNamespaceId())
 	err := api.ValidateNamespaceUUID(namespaceID)
@@ -150,13 +148,11 @@ func Invoke(
 	if err != nil {
 		return nil, err
 	}
-	nsName := namespaceEntry.Name().String()
-	allowResetWithPendingChildren := config.AllowResetWithPendingChildren(nsName)
+	allowResetWithPendingChildren := shard.GetConfig().AllowResetWithPendingChildren(namespaceEntry.Name().String())
 	if err := ndc.NewWorkflowResetter(
 		shard,
 		workflowConsistencyChecker.GetWorkflowCache(),
 		shard.GetLogger(),
-		allowResetWithPendingChildren,
 	).ResetWorkflow(
 		ctx,
 		namespaceID,
@@ -178,6 +174,7 @@ func Invoke(
 		request.GetReason(),
 		nil,
 		GetResetReapplyExcludeTypes(request.GetResetReapplyExcludeTypes(), request.GetResetReapplyType()),
+		allowResetWithPendingChildren,
 	); err != nil {
 		return nil, err
 	}
