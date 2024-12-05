@@ -60,6 +60,13 @@ func Get[T any](th TestHooks, key string) (T, bool) {
 	return zero, false
 }
 
+// Call calls a func() hook if present.
+func Call(th TestHooks, key string) {
+	if hook, ok := Get[func()](th, key); ok {
+		hook()
+	}
+}
+
 // Set sets a test hook to a value and returns a cleanup function to unset it.
 // Calls to Set and the cleanup functions should form a stack.
 func Set[T any](th TestHooks, key string, val T) func() {

@@ -205,9 +205,7 @@ func Invoke(
 		}
 	}
 
-	if hook, ok := testhooks.Get[func()](testHooks, testhooks.UpdateWithStartInBetweenLockAndStart); ok {
-		hook()
-	}
+	testhooks.Call(testHooks, testhooks.UpdateWithStartInBetweenLockAndStart)
 
 	// workflow hasn't been started yet: start and then apply update
 	resp, err := startAndUpdateWorkflow(ctx, starter, updater)

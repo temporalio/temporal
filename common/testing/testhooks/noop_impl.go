@@ -42,3 +42,7 @@ func Get[T any](_ TestHooks, key string) (T, bool) {
 	var zero T
 	return zero, false
 }
+
+// Call calls a func() hook if present.
+func Call(_ TestHooks, key string) {
+}
