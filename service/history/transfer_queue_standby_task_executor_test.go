@@ -60,6 +60,7 @@ import (
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/testing/mockapi/workflowservicemock/v1"
 	"go.temporal.io/server/common/testing/protomock"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/events"
@@ -85,6 +86,7 @@ type (
 		mockNamespaceCache  *namespace.MockRegistry
 		mockClusterMetadata *cluster.MockMetadata
 		mockAdminClient     *adminservicemock.MockAdminServiceClient
+		mockFrontendClient  *workflowservicemock.MockWorkflowServiceClient
 		mockHistoryClient   *historyservicemock.MockHistoryServiceClient
 		mockMatchingClient  *matchingservicemock.MockMatchingServiceClient
 
@@ -189,6 +191,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) SetupTest() {
 	s.clientBean = client.NewMockBean(s.controller)
 	s.workflowCache = wcache.NewHostLevelCache(s.mockShard.GetConfig(), s.mockShard.GetLogger(), metrics.NoopMetricsHandler)
 	s.logger = s.mockShard.GetLogger()
+	s.mockFrontendClient = s.mockShard.Resource.FrontendClient
 
 	s.mockArchivalMetadata.SetHistoryEnabledByDefault()
 	s.mockArchivalMetadata.SetVisibilityEnabledByDefault()
@@ -594,6 +597,13 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessCloseExecution() {
 		ParentInitiatedVersion: parentInitiatedVersion,
 		Clock:                  parentClock,
 	})
+
+	s.mockNamespaceCache.EXPECT().GetNamespaceByID(namespace.ID(parentNamespaceID)).Return(tests.GlobalParentNamespaceEntry, nil).AnyTimes()
+	s.clientBean.EXPECT().GetRemoteFrontendClient(tests.GlobalChildNamespaceEntry.ActiveClusterName()).Return(nil, s.mockFrontendClient, nil).AnyTimes()
+	s.mockFrontendClient.EXPECT().DescribeWorkflowExecution(gomock.Any(), protomock.Eq(&workflowservice.DescribeWorkflowExecutionRequest{
+		Namespace: parentNamespaceID,
+		Execution: parentExecution,
+	})).Return(nil, serviceerror.NewInternal("some error")).AnyTimes()
 
 	persistenceMutableState := s.createPersistenceMutableState(mutableState, event.GetEventId(), event.GetVersion())
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)

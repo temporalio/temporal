@@ -31,11 +31,12 @@ import (
 
 	commonpb "go.temporal.io/api/common/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
-	"go.temporal.io/server/api/adminservice/v1"
+	"go.temporal.io/api/workflowservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/namespace"
@@ -102,14 +103,13 @@ func standbyTimerTaskPostActionTaskDiscarded(
 
 func isWorkflowExistOnSource(
 	ctx context.Context,
-	taskInfo tasks.Task,
+	workflowKey definition.WorkflowKey,
 	logger log.Logger,
 	currentCluster string,
 	clientBean client.Bean,
 	registry namespace.Registry,
 ) bool {
-	workflowKey := taskWorkflowKey(taskInfo)
-	remoteClusterName, err := getRemoteClusterName(
+	remoteClusterName, err := getSourceClusterName(
 		currentCluster,
 		registry,
 		workflowKey.GetNamespaceID(),
@@ -117,11 +117,11 @@ func isWorkflowExistOnSource(
 	if err != nil {
 		return true
 	}
-	remoteAdminClient, err := clientBean.GetRemoteAdminClient(remoteClusterName)
+	_, remoteAdminClient, err := clientBean.GetRemoteFrontendClient(remoteClusterName)
 	if err != nil {
 		return true
 	}
-	_, err = remoteAdminClient.DescribeMutableState(ctx, &adminservice.DescribeMutableStateRequest{
+	_, err = remoteAdminClient.DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
 		Namespace: workflowKey.GetNamespaceID(),
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: workflowKey.GetWorkflowID(),
@@ -151,6 +151,10 @@ type (
 		taskQueue                          string
 		activityTaskScheduleToStartTimeout time.Duration
 		versionDirective                   *taskqueuespb.TaskVersionDirective
+	}
+
+	verifyCompletionRecordedPostActionInfo struct {
+		parentWorkflowKey *definition.WorkflowKey
 	}
 
 	workflowTaskPostActionInfo struct {
@@ -230,7 +234,7 @@ func getStandbyPostActionFn(
 	return discardTaskStandbyPostActionFn
 }
 
-func getRemoteClusterName(
+func getSourceClusterName(
 	currentCluster string,
 	registry namespace.Registry,
 	namespaceID string,

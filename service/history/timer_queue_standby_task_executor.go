@@ -665,7 +665,7 @@ func (t *timerQueueStandbyTaskExecutor) checkWorkflowStillExistOnSourceBeforeDis
 	if postActionInfo == nil {
 		return nil
 	}
-	if !isWorkflowExistOnSource(ctx, taskInfo, logger, t.clusterName, t.clientBean, t.shardContext.GetNamespaceRegistry()) {
+	if !isWorkflowExistOnSource(ctx, taskWorkflowKey(taskInfo), logger, t.clusterName, t.clientBean, t.shardContext.GetNamespaceRegistry()) {
 		return standbyTimerTaskPostActionTaskDiscarded(ctx, taskInfo, nil, logger)
 	}
 	return standbyTimerTaskPostActionTaskDiscarded(ctx, taskInfo, postActionInfo, logger)

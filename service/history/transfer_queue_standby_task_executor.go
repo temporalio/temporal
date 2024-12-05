@@ -37,6 +37,7 @@ import (
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
@@ -283,7 +284,13 @@ func (t *transferQueueStandbyTaskExecutor) processCloseExecution(
 			case *serviceerror.NotFound, *serviceerror.WorkflowNotReady:
 				// Case 2: Target workflow is not in the desired state.
 				// Returning a non-nil pointer as postActionInfo here to indicate that verification is not done yet.
-				return &struct{}{}, nil
+				return &verifyCompletionRecordedPostActionInfo{
+					parentWorkflowKey: &definition.WorkflowKey{
+						NamespaceID: executionInfo.ParentNamespaceId,
+						WorkflowID:  executionInfo.ParentWorkflowId,
+						RunID:       executionInfo.ParentRunId,
+					},
+				}, nil
 			default:
 				// Case 3: Verification itself failed.
 				// NOTE: Returning an error as postActionInfo here so that post action can decide whether to retry or not.
@@ -308,7 +315,7 @@ func (t *transferQueueStandbyTaskExecutor) processCloseExecution(
 			transferTask,
 			t.getCurrentTime,
 			t.config.StandbyTaskMissingEventsDiscardDelay(transferTask.GetType()),
-			t.checkWorkflowStillExistOnSourceBeforeDiscard,
+			t.checkParentWorkflowStillExistOnSourceBeforeDiscard,
 		),
 	)
 }
@@ -570,7 +577,27 @@ func (t *transferQueueStandbyTaskExecutor) checkWorkflowStillExistOnSourceBefore
 	if postActionInfo == nil {
 		return nil
 	}
-	if !isWorkflowExistOnSource(ctx, taskInfo, logger, t.clusterName, t.clientBean, t.shardContext.GetNamespaceRegistry()) {
+	if !isWorkflowExistOnSource(ctx, taskWorkflowKey(taskInfo), logger, t.clusterName, t.clientBean, t.shardContext.GetNamespaceRegistry()) {
+		return standbyTransferTaskPostActionTaskDiscarded(ctx, taskInfo, nil, logger)
+	}
+	return standbyTransferTaskPostActionTaskDiscarded(ctx, taskInfo, postActionInfo, logger)
+}
+
+func (t *transferQueueStandbyTaskExecutor) checkParentWorkflowStillExistOnSourceBeforeDiscard(
+	ctx context.Context,
+	taskInfo tasks.Task,
+	postActionInfo interface{},
+	logger log.Logger,
+) error {
+	if postActionInfo == nil {
+		return nil
+	}
+	pushActivityInfo, ok := postActionInfo.(*verifyCompletionRecordedPostActionInfo)
+	if !ok || pushActivityInfo.parentWorkflowKey == nil {
+		return standbyTransferTaskPostActionTaskDiscarded(ctx, taskInfo, postActionInfo, logger)
+	}
+
+	if !isWorkflowExistOnSource(ctx, *pushActivityInfo.parentWorkflowKey, logger, t.clusterName, t.clientBean, t.shardContext.GetNamespaceRegistry()) {
 		return standbyTransferTaskPostActionTaskDiscarded(ctx, taskInfo, nil, logger)
 	}
 	return standbyTransferTaskPostActionTaskDiscarded(ctx, taskInfo, postActionInfo, logger)
