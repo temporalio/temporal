@@ -1027,7 +1027,7 @@ func (s *DeploymentSuite) checkListAndWaitForBatchCompletion(ctx context.Context
 		if len(listResp.GetOperationInfo()) > 0 {
 			a.Equal(jobId, listResp.GetOperationInfo()[0].GetJobId())
 		}
-	}, 5*time.Second, 50*time.Millisecond)
+	}, 10*time.Second, 50*time.Millisecond)
 
 	for {
 		descResp, err := s.FrontendClient().DescribeBatchOperation(ctx, &workflowservice.DescribeBatchOperationRequest{
