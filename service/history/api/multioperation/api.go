@@ -38,6 +38,7 @@ import (
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/persistence/visibility/manager"
+	"go.temporal.io/server/internal/testhook"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/api/startworkflow"
 	"go.temporal.io/server/service/history/api/updateworkflow"
@@ -46,7 +47,8 @@ import (
 )
 
 var (
-	multiOpAbortedErr = serviceerror.NewMultiOperationAborted("Operation was aborted.")
+	HookInBetweenLockAndStart = testhook.NewHook[any]()
+	multiOpAbortedErr         = serviceerror.NewMultiOperationAborted("Operation was aborted.")
 )
 
 type (
@@ -204,6 +206,8 @@ func Invoke(
 			return nil, serviceerror.NewInvalidArgument("unhandled workflow id conflict policy: unspecified")
 		}
 	}
+
+	HookInBetweenLockAndStart.Invoke(req.WorkflowId)
 
 	// workflow hasn't been started yet: start and then apply update
 	resp, err := startAndUpdateWorkflow(ctx, starter, updater)

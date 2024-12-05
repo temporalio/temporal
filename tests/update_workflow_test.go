@@ -52,6 +52,7 @@ import (
 	"go.temporal.io/server/common/testing/protoutils"
 	"go.temporal.io/server/common/testing/taskpoller"
 	"go.temporal.io/server/common/testing/testvars"
+	"go.temporal.io/server/service/history/api/multioperation"
 	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
@@ -5316,6 +5317,48 @@ func (s *UpdateWorkflowSuite) TestUpdateWithStart() {
 			var alreadyStartedErr *serviceerror.WorkflowExecutionAlreadyStarted
 			s.ErrorAs(errs[0], &alreadyStartedErr)
 			s.Equal("Operation was aborted.", errs[1].Error())
+		})
+	})
+
+	s.Run("workflow start conflict", func() {
+
+		s.Run("workflow id conflict policy fail: use-existing", func() {
+			tv := testvars.New(s.T())
+
+			startReq := startWorkflowReq(tv)
+			startReq.WorkflowIdConflictPolicy = enumspb.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING
+			updateReq := s.updateWorkflowRequest(tv,
+				&updatepb.WaitPolicy{LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED}, "1")
+
+			// simulate a race condition
+			defer multioperation.HookInBetweenLockAndStart.Reset()
+			multioperation.HookInBetweenLockAndStart.Set(func(args ...any) any {
+				if args[0] == tv.WorkflowID() {
+					_, err := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), startReq)
+					s.NoError(err)
+				}
+				return nil
+			})
+
+			uwsCh := sendUpdateWithStart(testcore.NewContext(), startReq, updateReq)
+
+			_, err := s.TaskPoller.PollAndHandleWorkflowTask(tv,
+				func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+					fmt.Println("PROCESS TASK #1")
+					return &workflowservice.RespondWorkflowTaskCompletedRequest{}, nil
+				})
+			s.NoError(err)
+
+			_, err = s.TaskPoller.PollAndHandleWorkflowTask(tv,
+				func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+					fmt.Println("PROCESS TASK #2")
+					return &workflowservice.RespondWorkflowTaskCompletedRequest{
+						Messages: s.UpdateAcceptCompleteMessages(tv, task.Messages[0], "1"),
+					}, nil
+				})
+			s.NoError(err)
+
+			<-uwsCh
 		})
 	})
 
