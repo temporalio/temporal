@@ -82,15 +82,6 @@ func TestActivityApiUpdateClientTestSuite(t *testing.T) {
 	suite.Run(t, s)
 }
 
-func (s *ActivityApiUpdateClientTestSuite) waitForChan(ctx context.Context, ch chan struct{}) {
-	s.T().Helper()
-	select {
-	case <-ch:
-	case <-ctx.Done():
-		s.FailNow("context timeout")
-	}
-}
-
 type (
 	ActivityFunctions func() (string, error)
 	WorkflowFunction  func(context2 workflow.Context) (string, error)
@@ -125,7 +116,7 @@ func (s *ActivityApiUpdateClientTestSuite) TestActivityUpdateApi_ChangeRetryInte
 			return "", activityErr
 		}
 
-		s.waitForChan(ctx, activityUpdated)
+		s.WaitForChannel(ctx, activityUpdated)
 		activityCompleted.Add(1)
 		return "done!", nil
 	}
