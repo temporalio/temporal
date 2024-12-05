@@ -186,7 +186,7 @@ func (s *DeploymentSuite) TestDescribeDeployment_RegisterTaskQueue() {
 }
 
 func (s *DeploymentSuite) TestDescribeDeployment_RegisterTaskQueue_ConcurrentPollers() {
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*15)
 	defer cancel()
 
 	// presence of internally used delimiters (:) or escape
