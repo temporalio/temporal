@@ -11,13 +11,11 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
-	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/components/scheduler2/common"
 	"go.temporal.io/server/components/scheduler2/core"
 	"go.temporal.io/server/components/scheduler2/executor"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/hsm"
-	"go.temporal.io/server/service/worker/scheduler"
 	scheduler1 "go.temporal.io/server/service/worker/scheduler"
 	"go.uber.org/fx"
 	"google.golang.org/protobuf/encoding/protojson"
@@ -41,36 +39,26 @@ type (
 
 func RegisterExecutor(registry *hsm.Registry, options TaskExecutorOptions) error {
 	e := taskExecutor{options}
-	if err := hsm.RegisterTimerExecutor(registry, e.executeSleepTask); err != nil {
-		return err
-	}
 	if err := hsm.RegisterImmediateExecutor(registry, e.executeBufferTask); err != nil {
 		return err
 	}
 	return nil
 }
 
-func (e taskExecutor) executeSleepTask(env hsm.Environment, node *hsm.Node, task SleepTask) error {
-	return hsm.MachineTransition(node, func(g Generator) (hsm.TransitionOutput, error) {
-		return TransitionBuffer.Apply(g, EventBuffer{
-			Node: node,
-		})
-	})
-}
-
-func (e taskExecutor) executeBufferTask(ctx context.Context, env hsm.Environment, ref hsm.Ref, task BufferTask) error {
+func (e taskExecutor) runBufferLoop(ctx context.Context, env hsm.Environment, ref hsm.Ref) (wakeupTime time.Time, err error) {
+	wakeupTime = time.Now()
 	scheduler, err := common.LoadSchedulerFromParent(ctx, env, ref)
 	if err != nil {
-		return err
+		return
 	}
 	tweakables := e.Config.Tweakables(scheduler.Namespace)
 
 	generator, err := e.loadGenerator(ctx, env, ref)
 	if err != nil {
-		return err
+		return
 	}
 
-	// if we have no last processed time, this is a new schedule
+	// If we have no last processed time, this is a new schedule.
 	if generator.LastProcessedTime == nil {
 		generator.LastProcessedTime = timestamppb.Now()
 		// TODO - update schedule info with create time
@@ -78,8 +66,8 @@ func (e taskExecutor) executeBufferTask(ctx context.Context, env hsm.Environment
 		e.logSchedule("Starting schedule", scheduler)
 	}
 
-	// process time range between last high water mark and system time
-	t1 := timestamp.TimeValue(generator.LastProcessedTime)
+	// Process time range between last high water mark and system time.
+	t1 := generator.LastProcessedTime.AsTime()
 	t2 := time.Now()
 	if t2.Before(t1) {
 		e.Logger.Warn("Time went backwards",
@@ -90,36 +78,37 @@ func (e taskExecutor) executeBufferTask(ctx context.Context, env hsm.Environment
 
 	res, err := e.processTimeRange(scheduler, tweakables, t1, t2, nil)
 	if err != nil {
-		// An error here should be impossible and go to the DLQ
+		// An error here should be impossible, send to the DLQ.
 		e.Logger.Error("Error processing time range", tag.Error(err))
 
-		return fmt.Errorf(
+		err = fmt.Errorf(
 			"%w: %w",
 			err,
 			serviceerror.NewInternal("Scheduler's Generator failed to process a time range"),
 		)
+		return
 	}
 	generator.LastProcessedTime = timestamppb.New(res.LastActionTime)
 	generator.NextInvocationTime = timestamppb.New(res.NextWakeupTime)
+	wakeupTime = res.NextWakeupTime
 
-	return env.Access(ctx, ref, hsm.AccessWrite, func(generatorNode *hsm.Node) error {
-		// Check for scheduler version conflict. We don't need to bump it, as the
-		// Generator's buffered actions are idempotent when pushed to the Executor, and the
-		// Generator's own state is also versioned. This helps Generator quickly react to
-		// schedule updates/pauses.
+	err = env.Access(ctx, ref, hsm.AccessWrite, func(generatorNode *hsm.Node) error {
+		// Check if an update was applied to the scheduler while actions were being
+		// buffered.
 		refreshedScheduler, err := hsm.MachineData[core.Scheduler](generatorNode.Parent)
 		if err != nil {
 			return err
 		}
 		if refreshedScheduler.ConflictToken != scheduler.ConflictToken {
-			// schedule was updated while processing, retry
+			// Schedule was updated while processing, drop this task as the update will have
+			// generated another.
 			return fmt.Errorf(
 				"%w: Scheduler state was updated while buffering actions",
-				consts.ErrStaleState,
+				consts.ErrStaleReference,
 			)
 		}
 
-		// transition the executor substate machine to execute the new buffered actions
+		// Transition the executor sub state machine to execute the new buffered actions.
 		executorNode, err := generatorNode.Parent.Child([]hsm.Key{executor.MachineKey})
 		if err != nil {
 			return fmt.Errorf(
@@ -131,7 +120,7 @@ func (e taskExecutor) executeBufferTask(ctx context.Context, env hsm.Environment
 		err = hsm.MachineTransition(executorNode, func(e executor.Executor) (hsm.TransitionOutput, error) {
 			return executor.TransitionExecute.Apply(e, executor.EventExecute{
 				Node:            executorNode,
-				BufferedActions: []*schedpb.BufferedStart{},
+				BufferedActions: res.BufferedStarts,
 			})
 		})
 		if err != nil {
@@ -141,29 +130,33 @@ func (e taskExecutor) executeBufferTask(ctx context.Context, env hsm.Environment
 			)
 		}
 
-		// transition the generator back to waiting with new wait times. if we fail
-		// conflict here (after transitioning Executor), that's fine; buffered actions
-		// are idempotent through their generated request IDs
+		// Write Generator internal state, flushing the high water mark to persistence.
+		// if we fail conflict here (after transitioning Executor), that's fine; buffered
+		// actions are idempotent through their generated request IDs.
 		return hsm.MachineTransition(generatorNode, func(g Generator) (hsm.TransitionOutput, error) {
-			if g.ConflictToken != generator.ConflictToken {
-				return hsm.TransitionOutput{}, fmt.Errorf(
-					"%w: conflicting Generator state while buffering actions",
-					consts.ErrStaleState,
-				)
-			}
-
-			g.GeneratorInternalState = generator.GeneratorInternalState
-			g.ConflictToken++
-			return TransitionSleep.Apply(g, EventSleep{
-				Node:     generatorNode,
-				Deadline: generator.NextInvocationTime.AsTime(),
-			})
+			g.GeneratorInternal = generator.GeneratorInternal
+			return hsm.TransitionOutput{}, nil
 		})
 	})
+	return
+}
+
+func (e taskExecutor) executeBufferTask(ctx context.Context, env hsm.Environment, ref hsm.Ref, task BufferTask) error {
+	// The buffer task runs indefinitely (unless runBufferLoop fails).
+	for {
+		wakeupTime, err := e.runBufferLoop(ctx, env, ref)
+		if err != nil {
+			return err
+		}
+
+		e.Logger.Debug("Sleeping after buffering",
+			tag.NewTimeTag("wakeupTime", wakeupTime))
+		time.Sleep(wakeupTime.Sub(time.Now()))
+	}
 }
 
 func (e taskExecutor) logSchedule(msg string, scheduler core.Scheduler) {
-	// log spec as json since it's more readable than the Go representation
+	// Log spec as json since it's more readable than the Go representation.
 	specJson, _ := protojson.Marshal(scheduler.Schedule.Spec)
 	policiesJson, _ := protojson.Marshal(scheduler.Schedule.Policies)
 	e.Logger.Info(msg,
@@ -177,8 +170,8 @@ type processedTimeRangeResult struct {
 	BufferedStarts []*schedpb.BufferedStart
 }
 
-// Processes the given time range, generating buffered actions according to the
-// schedule spec.
+// processTimeRange generates buffered actions according to the schedule spec for
+// the given time range.
 func (e taskExecutor) processTimeRange(
 	scheduler core.Scheduler,
 	tweakables common.Tweakables,
@@ -193,13 +186,11 @@ func (e taskExecutor) processTimeRange(
 		tag.NewAnyTag("overlap-policy", overlapPolicy),
 		tag.NewBoolTag("manual", false))
 
-	catchupWindow := e.catchupWindow(scheduler, tweakables)
-
 	// Peek at paused/remaining actions state and don't bother if we're not going to
 	// take an action now. (Don't count as missed catchup window either.)
 	// Skip over entire time range if paused or no actions can be taken.
-	if !scheduler.CanTakeScheduledAction(false) {
-		// use end as last action time so that we don't reprocess time spent paused
+	if !scheduler.UseScheduledAction(false) {
+		// Use end as last action time so that we don't reprocess time spent paused.
 		next, err := e.getNextTime(scheduler, end)
 		if err != nil {
 			return nil, err
@@ -212,19 +203,21 @@ func (e taskExecutor) processTimeRange(
 		}, nil
 	}
 
+	catchupWindow := catchupWindow(scheduler, tweakables)
 	lastAction := start
 	var next scheduler1.GetNextTimeResult
 	var bufferedStarts []*schedpb.BufferedStart
 	for next, err := e.getNextTime(scheduler, start); err == nil && !(next.Next.IsZero() || next.Next.After(end)); next, err = e.getNextTime(scheduler, next.Next) {
 		if scheduler.Info.UpdateTime.AsTime().After(next.Next) {
-			// We're reprocessing since the most recent event after an update. Discard actions before
-			// the update time (which was just set to "now"). This doesn't have to be guarded with
-			// hasMinVersion because this condition couldn't happen in previous versions.
+			// If we've received an update that took effect after the LastProcessedTime high
+			// water mark, discard actions that were scheduled to kick off before the update.
 			continue
 		}
 
 		if end.Sub(next.Next) > catchupWindow {
-			e.Logger.Warn("Schedule missed catchup window", tag.NewTimeTag("now", end), tag.NewTimeTag("time", next.Next))
+			e.Logger.Warn("Schedule missed catchup window",
+				tag.NewTimeTag("now", end),
+				tag.NewTimeTag("time", next.Next))
 			e.MetricsHandler.Counter(metrics.ScheduleMissedCatchupWindow.Name()).Record(1)
 
 			// TODO - update Info.MissedCatchupWindow
@@ -236,7 +229,7 @@ func (e taskExecutor) processTimeRange(
 		bufferedStarts = append(bufferedStarts, &schedpb.BufferedStart{
 			NominalTime:   timestamppb.New(next.Nominal),
 			ActualTime:    timestamppb.New(next.Next),
-			OverlapPolicy: scheduler.OverlapPolicy(),
+			OverlapPolicy: overlapPolicy,
 			Manual:        false,
 			RequestId:     common.GenerateRequestID(scheduler, "", next.Nominal, next.Next),
 		})
@@ -256,7 +249,7 @@ func (e taskExecutor) processTimeRange(
 	}, nil
 }
 
-func (e taskExecutor) catchupWindow(s core.Scheduler, tweakables common.Tweakables) time.Duration {
+func catchupWindow(s core.Scheduler, tweakables common.Tweakables) time.Duration {
 	cw := s.Schedule.Policies.CatchupWindow
 	if cw == nil {
 		return tweakables.DefaultCatchupWindow
@@ -265,8 +258,8 @@ func (e taskExecutor) catchupWindow(s core.Scheduler, tweakables common.Tweakabl
 	return max(cw.AsDuration(), tweakables.MinCatchupWindow)
 }
 
-// Returns the next time result, or an error if the schedule cannot be compiled.
-func (e taskExecutor) getNextTime(s core.Scheduler, after time.Time) (scheduler.GetNextTimeResult, error) {
+// getNextTime returns the next time result, or an error if the schedule cannot be compiled.
+func (e taskExecutor) getNextTime(s core.Scheduler, after time.Time) (scheduler1.GetNextTimeResult, error) {
 	spec, err := s.CompiledSpec(e.SpecBuilder)
 	if err != nil {
 		e.Logger.Error("Invalid schedule", tag.Error(err))
@@ -276,12 +269,12 @@ func (e taskExecutor) getNextTime(s core.Scheduler, after time.Time) (scheduler.
 	return spec.GetNextTime(s.JitterSeed(), after), nil
 }
 
-// Loads the generator's persisted state, returning a cloned copy.
+// loadGenerator loads the Generator's persisted state, returning a cloned copy.
 func (e taskExecutor) loadGenerator(ctx context.Context, env hsm.Environment, ref hsm.Ref) (generator Generator, err error) {
 	err = env.Access(ctx, ref, hsm.AccessRead, func(node *hsm.Node) error {
 		prevGenerator, err := hsm.MachineData[Generator](node)
 		generator = Generator{
-			GeneratorInternalState: servercommon.CloneProto(prevGenerator.GeneratorInternalState),
+			GeneratorInternal: servercommon.CloneProto(prevGenerator.GeneratorInternal),
 		}
 		return err
 	})

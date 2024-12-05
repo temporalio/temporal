@@ -10,11 +10,11 @@ import (
 )
 
 type (
-	// The Generator substate machine is responsible for buffering actions according
+	// The Generator sub state machine is responsible for buffering actions according
 	// to the schedule's specification. Manually requested actions (from an immediate
-	// request or backfill) are separately handled in the Backfiller substate machine.
+	// request or backfill) are separately handled in the Backfiller sub state machine.
 	Generator struct {
-		*schedspb.GeneratorInternalState
+		*schedspb.GeneratorInternal
 	}
 
 	// The machine definition provides serialization/deserialization and type information.
@@ -22,7 +22,7 @@ type (
 )
 
 const (
-	// Unique identifier for the Generator substate machine.
+	// Unique identifier for the Generator sub state machine.
 	MachineType = "scheduler.Generator"
 )
 
@@ -30,17 +30,17 @@ var (
 	_ hsm.StateMachine[enumsspb.SchedulerGeneratorState] = Generator{}
 	_ hsm.StateMachineDefinition                         = &machineDefinition{}
 
-	// Each substate machine is a singleton of the top-level Scheduler, accessed with
+	// Each sub state machine is a singleton of the top-level Scheduler, accessed with
 	// a fixed key
 	MachineKey = hsm.Key{Type: MachineType, ID: ""}
 )
 
 func (g Generator) State() enumsspb.SchedulerGeneratorState {
-	return g.GeneratorInternalState.State
+	return g.GeneratorInternal.State
 }
 
 func (g Generator) SetState(state enumsspb.SchedulerGeneratorState) {
-	g.GeneratorInternalState.State = state
+	g.GeneratorInternal.State = state
 }
 
 func (g Generator) RegenerateTasks(node *hsm.Node) ([]hsm.Task, error) {
@@ -53,38 +53,30 @@ func (machineDefinition) Type() string {
 
 func (machineDefinition) Serialize(state any) ([]byte, error) {
 	if state, ok := state.(Generator); ok {
-		return proto.Marshal(state.GeneratorInternalState)
+		return proto.Marshal(state.GeneratorInternal)
 	}
 	return nil, fmt.Errorf("invalid generator state provided: %v", state)
 }
 
 func (machineDefinition) Deserialize(body []byte) (any, error) {
-	state := &schedspb.GeneratorInternalState{}
+	state := &schedspb.GeneratorInternal{}
 	return Generator{
-		GeneratorInternalState: state,
+		GeneratorInternal: state,
 	}, proto.Unmarshal(body, state)
 }
 
-// Returns:
-//
-// 0 when states are equal
-// 1 when a is newer than b
-// -1 when b is newer than a
 func (machineDefinition) CompareState(a any, b any) (int, error) {
-	s1, ok := a.(Generator)
-	if !ok {
-		return 0, fmt.Errorf("%w: expected state1 to be a Generator instance, got %v", hsm.ErrIncompatibleType, s1)
-	}
-	s2, ok := a.(Generator)
-	if !ok {
-		return 0, fmt.Errorf("%w: expected state1 to be a Generator instance, got %v", hsm.ErrIncompatibleType, s2)
-	}
-
-	if s1.State() > s2.State() {
-		return 1, nil
-	} else if s1.State() < s2.State() {
-		return -1, nil
-	}
-
-	return 0, nil
+	panic("TODO: CompareState not yet implemented for Generator")
 }
+
+var TransitionBuffer = hsm.NewTransition(
+	[]enumsspb.SchedulerGeneratorState{
+		enumsspb.SCHEDULER_GENERATOR_STATE_UNSPECIFIED,
+		enumsspb.SCHEDULER_GENERATOR_STATE_BUFFERING, // Allow re-entering the buffering state, to wake up immediately
+	},
+	enumsspb.SCHEDULER_GENERATOR_STATE_BUFFERING,
+	func(g Generator, _ EventBuffer) (hsm.TransitionOutput, error) {
+		g.NextInvocationTime = nil
+		return g.output()
+	},
+)
