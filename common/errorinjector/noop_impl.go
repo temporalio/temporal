@@ -5,18 +5,14 @@ package errorinjector
 import "go.uber.org/fx"
 
 var Module = fx.Options(
-	fx.Provide(func() ErrorInjector { return nil }),
+	fx.Provide(func() (ei ErrorInjector) { return }),
 )
 
 type (
-	ErrorInjector interface {
-	}
+	ErrorInjector struct{}
 )
 
 func Get[T any](ei ErrorInjector, key string) (T, bool) {
 	var zero T
 	return zero, false
-}
-
-func Set[T any](ei ErrorInjector, key string, val T) {
 }
