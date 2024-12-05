@@ -106,8 +106,7 @@ func Scheduler2StateFromString(s string) (Scheduler2State, error) {
 var (
 	SchedulerGeneratorState_shorthandValue = map[string]int32{
 		"Unspecified": 0,
-		"Waiting":     1,
-		"Buffering":   2,
+		"Buffering":   1,
 	}
 )
 
@@ -127,7 +126,6 @@ var (
 		"Unspecified": 0,
 		"Waiting":     1,
 		"Executing":   2,
-		"BackingOff":  3,
 	}
 )
 
@@ -147,7 +145,6 @@ var (
 		"Unspecified": 0,
 		"Waiting":     1,
 		"Executing":   2,
-		"BackingOff":  3,
 	}
 )
 
