@@ -317,28 +317,6 @@ func (n *Node) InvalidateCache() {
 	n.cache.dataLoaded = false
 }
 
-// DeserializeData deserialzies data by given key.
-func (n *Node) DeserializeData(key Key, data []byte) (any, error) {
-	machines, ok := n.persistence.Children[key.Type]
-	if ok {
-		if _, ok = machines.MachinesById[key.ID]; ok {
-			if ok {
-				return nil, fmt.Errorf("%w: %v", ErrStateMachineAlreadyExists, key)
-			}
-		}
-	}
-	def, ok := n.registry.Machine(key.Type)
-	if !ok {
-		return nil, fmt.Errorf("%w: state machine for type: %v", ErrNotRegistered, key.Type)
-	}
-	deserialized, err := def.Deserialize(data)
-	if err != nil {
-		return nil, err
-	}
-
-	return deserialized, nil
-}
-
 // AddChild adds an immediate child to a node, serializing the given data.
 // Returns [ErrStateMachineAlreadyExists] if a child with the given key already exists, [ErrNotRegistered] if the key's
 // type is not found in the node's state machine registry and serialization errors.
