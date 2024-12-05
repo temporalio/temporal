@@ -46,6 +46,7 @@ import (
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/deadlock"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/errorinjector"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/membership"
@@ -129,6 +130,7 @@ var Module = fx.Options(
 	deadlock.Module,
 	config.Module,
 	utf8validator.Module,
+	errorinjector.Module,
 	fx.Invoke(func(*utf8validator.Validator) {}), // force this to be constructed even if not referenced elsewhere
 )
 
@@ -227,6 +229,7 @@ func ClientFactoryProvider(
 	membershipMonitor membership.Monitor,
 	metricsHandler metrics.Handler,
 	dynamicCollection *dynamicconfig.Collection,
+	errorInjector errorinjector.ErrorInjector,
 	persistenceConfig *config.Persistence,
 	logger log.SnTaggedLogger,
 	throttledLogger log.ThrottledLogger,
@@ -236,6 +239,7 @@ func ClientFactoryProvider(
 		membershipMonitor,
 		metricsHandler,
 		dynamicCollection,
+		errorInjector,
 		persistenceConfig.NumHistoryShards,
 		logger,
 		throttledLogger,

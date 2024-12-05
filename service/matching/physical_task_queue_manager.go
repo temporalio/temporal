@@ -46,6 +46,7 @@ import (
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/debug"
+	"go.temporal.io/server/common/errorinjector"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
@@ -529,7 +530,7 @@ func (c *physicalTaskQueueManagerImpl) TrySyncMatch(ctx context.Context, task *i
 		// request sent by history service
 		c.liveness.markAlive()
 		c.tasksAddedInIntervals.incrementTaskCount()
-		if c.config.TestDisableSyncMatch() {
+		if disable, _ := errorinjector.Get[bool](c.partitionMgr.engine.errorInjector, errorinjector.MatchingDisableSyncMatch); disable {
 			return false, nil
 		}
 	}

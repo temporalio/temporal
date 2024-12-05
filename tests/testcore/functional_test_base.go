@@ -48,6 +48,7 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/errorinjector"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/payloads"
@@ -478,6 +479,10 @@ func (s *FunctionalTestBase) OverrideDynamicConfig(setting dynamicconfig.Generic
 	return s.testCluster.host.overrideDynamicConfig(s.T(), setting.Key(), value)
 }
 
+func (s *FunctionalTestBase) InjectError(key string, value any) (cleanup func()) {
+	return s.testCluster.host.injectError(s.T(), key, value)
+}
+
 func (s *FunctionalTestBase) GetNamespaceID(namespace string) string {
 	namespaceResp, err := s.FrontendClient().DescribeNamespace(NewContext(), &workflowservice.DescribeNamespaceRequest{
 		Namespace: namespace,
@@ -510,20 +515,20 @@ func (s *FunctionalTestBase) RunTestWithMatchingBehavior(subtest func()) {
 					name, func() {
 						if forceTaskForward {
 							s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 13)
-							s.OverrideDynamicConfig(dynamicconfig.TestMatchingLBForceWritePartition, 11)
+							s.InjectError(errorinjector.MatchingLBForceWritePartition, 11)
 						} else {
 							s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 1)
 						}
 						if forcePollForward {
 							s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 13)
-							s.OverrideDynamicConfig(dynamicconfig.TestMatchingLBForceReadPartition, 5)
+							s.InjectError(errorinjector.MatchingLBForceReadPartition, 5)
 						} else {
 							s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 1)
 						}
 						if forceAsync {
-							s.OverrideDynamicConfig(dynamicconfig.TestMatchingDisableSyncMatch, true)
+							s.InjectError(errorinjector.MatchingDisableSyncMatch, true)
 						} else {
-							s.OverrideDynamicConfig(dynamicconfig.TestMatchingDisableSyncMatch, false)
+							s.InjectError(errorinjector.MatchingDisableSyncMatch, false)
 						}
 
 						subtest()

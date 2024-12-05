@@ -39,6 +39,7 @@ import (
 	"go.temporal.io/server/client/matching"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/errorinjector"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/metrics"
@@ -65,6 +66,7 @@ type (
 			monitor membership.Monitor,
 			metricsHandler metrics.Handler,
 			dc *dynamicconfig.Collection,
+			errorInjector errorinjector.ErrorInjector,
 			numberOfHistoryShards int32,
 			logger log.Logger,
 			throttledLogger log.Logger,
@@ -79,6 +81,7 @@ type (
 		monitor               membership.Monitor
 		metricsHandler        metrics.Handler
 		dynConfig             *dynamicconfig.Collection
+		errorInjector         errorinjector.ErrorInjector
 		numberOfHistoryShards int32
 		logger                log.Logger
 		throttledLogger       log.Logger
@@ -103,6 +106,7 @@ func (p *factoryProviderImpl) NewFactory(
 	monitor membership.Monitor,
 	metricsHandler metrics.Handler,
 	dc *dynamicconfig.Collection,
+	errorInjector errorinjector.ErrorInjector,
 	numberOfHistoryShards int32,
 	logger log.Logger,
 	throttledLogger log.Logger,
@@ -112,6 +116,7 @@ func (p *factoryProviderImpl) NewFactory(
 		monitor:               monitor,
 		metricsHandler:        metricsHandler,
 		dynConfig:             dc,
+		errorInjector:         errorInjector,
 		numberOfHistoryShards: numberOfHistoryShards,
 		logger:                logger,
 		throttledLogger:       throttledLogger,
@@ -159,7 +164,7 @@ func (cf *rpcClientFactory) NewMatchingClientWithTimeout(
 		common.NewClientCache(keyResolver, clientProvider),
 		cf.metricsHandler,
 		cf.logger,
-		matching.NewLoadBalancer(namespaceIDToName, cf.dynConfig),
+		matching.NewLoadBalancer(namespaceIDToName, cf.dynConfig, cf.errorInjector),
 	)
 
 	if cf.metricsHandler != nil {

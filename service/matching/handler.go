@@ -35,6 +35,7 @@ import (
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cluster"
+	"go.temporal.io/server/common/errorinjector"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/metrics"
@@ -88,6 +89,7 @@ func NewHandler(
 	namespaceReplicationQueue persistence.NamespaceReplicationQueue,
 	visibilityManager manager.VisibilityManager,
 	nexusEndpointManager persistence.NexusEndpointManager,
+	errorInjector errorinjector.ErrorInjector,
 ) *Handler {
 	handler := &Handler{
 		config:          config,
@@ -110,6 +112,7 @@ func NewHandler(
 			namespaceReplicationQueue,
 			visibilityManager,
 			nexusEndpointManager,
+			errorInjector,
 		),
 		namespaceRegistry: namespaceRegistry,
 	}

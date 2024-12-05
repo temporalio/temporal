@@ -9,7 +9,7 @@ import (
 )
 
 var Module = fx.Options(
-	fx.Provide(func() ErrorInjector { return newTestErrorInjector() }),
+	fx.Provide(NewTestErrorInjector),
 )
 
 type (
@@ -17,6 +17,7 @@ type (
 		// private accessors; access must go through package-level Get/Set
 		get(string) (any, bool)
 		set(string, any)
+		del(string)
 	}
 
 	errorInjectorImpl struct {
@@ -33,11 +34,12 @@ func Get[T any](ei ErrorInjector, key string) (T, bool) {
 	return zero, false
 }
 
-func Set[T any](ei ErrorInjector, key string, val T) {
+func Set[T any](ei ErrorInjector, key string, val T) func() {
 	ei.set(key, val)
+	return func() { ei.del(key) }
 }
 
-func newTestErrorInjector() *errorInjectorImpl {
+func NewTestErrorInjector() ErrorInjector {
 	return &errorInjectorImpl{}
 }
 
@@ -48,4 +50,8 @@ func (ei *errorInjectorImpl) get(key string) (any, bool) {
 
 func (ei *errorInjectorImpl) set(key string, val any) {
 	ei.m.Store(key, val)
+}
+
+func (ei *errorInjectorImpl) del(key string) {
+	ei.m.Delete(key)
 }

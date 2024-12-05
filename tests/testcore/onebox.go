@@ -52,6 +52,7 @@ import (
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/errorinjector"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/membership"
@@ -99,6 +100,7 @@ type (
 		matchingClient matchingservice.MatchingServiceClient
 
 		dcClient                         *dynamicconfig.MemoryClient
+		errorInjector                    errorinjector.ErrorInjector
 		logger                           log.Logger
 		clusterMetadataConfig            *cluster.Config
 		persistenceConfig                config.Persistence
@@ -258,9 +260,11 @@ func newTemporal(t *testing.T, params *TemporalParams) *TemporalImpl {
 		tlsConfigProvider:                params.TLSConfigProvider,
 		captureMetricsHandler:            params.CaptureMetricsHandler,
 		dcClient:                         dynamicconfig.NewMemoryClient(),
-		serviceFxOptions:                 params.ServiceFxOptions,
-		taskCategoryRegistry:             params.TaskCategoryRegistry,
-		hostsByProtocolByService:         params.HostsByProtocolByService,
+		// If this doesn't build, make sure you're building with tags 'errorinjector':
+		errorInjector:            errorinjector.NewTestErrorInjector(),
+		serviceFxOptions:         params.ServiceFxOptions,
+		taskCategoryRegistry:     params.TaskCategoryRegistry,
+		hostsByProtocolByService: params.HostsByProtocolByService,
 	}
 
 	for k, v := range staticOverrides {
@@ -410,6 +414,7 @@ func (c *TemporalImpl) startFrontend() {
 			fx.Provide(func() persistenceClient.AbstractDataStoreFactory { return c.abstractDataStoreFactory }),
 			fx.Provide(func() visibility.VisibilityStoreFactory { return c.visibilityStoreFactory }),
 			fx.Provide(func() dynamicconfig.Client { return c.dcClient }),
+			fx.Decorate(func() errorinjector.ErrorInjector { return c.errorInjector }),
 			fx.Provide(resource.DefaultSnTaggedLoggerProvider),
 			fx.Provide(func() *esclient.Config { return c.esConfig }),
 			fx.Provide(func() esclient.Client { return c.esClient }),
@@ -481,6 +486,7 @@ func (c *TemporalImpl) startHistory() {
 			fx.Provide(func() persistenceClient.AbstractDataStoreFactory { return c.abstractDataStoreFactory }),
 			fx.Provide(func() visibility.VisibilityStoreFactory { return c.visibilityStoreFactory }),
 			fx.Provide(func() dynamicconfig.Client { return c.dcClient }),
+			fx.Decorate(func() errorinjector.ErrorInjector { return c.errorInjector }),
 			fx.Provide(resource.DefaultSnTaggedLoggerProvider),
 			fx.Provide(func() *esclient.Config { return c.esConfig }),
 			fx.Provide(func() esclient.Client { return c.esClient }),
@@ -534,6 +540,7 @@ func (c *TemporalImpl) startMatching() {
 			fx.Provide(func() persistenceClient.AbstractDataStoreFactory { return c.abstractDataStoreFactory }),
 			fx.Provide(func() visibility.VisibilityStoreFactory { return c.visibilityStoreFactory }),
 			fx.Provide(func() dynamicconfig.Client { return c.dcClient }),
+			fx.Decorate(func() errorinjector.ErrorInjector { return c.errorInjector }),
 			fx.Provide(func() *esclient.Config { return c.esConfig }),
 			fx.Provide(func() esclient.Client { return c.esClient }),
 			fx.Provide(c.GetTLSConfigProvider),
@@ -597,6 +604,7 @@ func (c *TemporalImpl) startWorker() {
 			fx.Provide(func() persistenceClient.AbstractDataStoreFactory { return c.abstractDataStoreFactory }),
 			fx.Provide(func() visibility.VisibilityStoreFactory { return c.visibilityStoreFactory }),
 			fx.Provide(func() dynamicconfig.Client { return c.dcClient }),
+			fx.Decorate(func() errorinjector.ErrorInjector { return c.errorInjector }),
 			fx.Provide(resource.DefaultSnTaggedLoggerProvider),
 			fx.Provide(func() esclient.Client { return c.esClient }),
 			fx.Provide(func() *esclient.Config { return c.esConfig }),
@@ -772,6 +780,7 @@ func (p *clientFactoryProvider) NewFactory(
 	monitor membership.Monitor,
 	metricsHandler metrics.Handler,
 	dc *dynamicconfig.Collection,
+	errorInjector errorinjector.ErrorInjector,
 	numberOfHistoryShards int32,
 	logger log.Logger,
 	throttledLogger log.Logger,
@@ -781,6 +790,7 @@ func (p *clientFactoryProvider) NewFactory(
 		monitor,
 		metricsHandler,
 		dc,
+		errorInjector,
 		numberOfHistoryShards,
 		logger,
 		throttledLogger,
@@ -890,6 +900,12 @@ func sdkClientFactoryProvider(
 
 func (c *TemporalImpl) overrideDynamicConfig(t *testing.T, name dynamicconfig.Key, value any) func() {
 	cleanup := c.dcClient.OverrideValue(name, value)
+	t.Cleanup(cleanup)
+	return cleanup
+}
+
+func (c *TemporalImpl) injectError(t *testing.T, key string, value any) func() {
+	cleanup := errorinjector.Set(c.errorInjector, key, value)
 	t.Cleanup(cleanup)
 	return cleanup
 }
