@@ -20,7 +20,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-//go:build !testhooks
+//go:build !test_dep
 
 package testhooks
 
@@ -31,9 +31,13 @@ var Module = fx.Options(
 )
 
 type (
+	// TestHooks (in production mode) is an empty struct just so the build works.
+	// See TestHooks in test_impl.go.
 	TestHooks struct{}
 )
 
+// Get gets the value of a test hook. In production mode it always returns the zero value and
+// false, which hopefully the compiler will inline and remove the hook as dead code.
 func Get[T any](_ TestHooks, key string) (T, bool) {
 	var zero T
 	return zero, false

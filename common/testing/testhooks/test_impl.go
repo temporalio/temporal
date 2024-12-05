@@ -20,7 +20,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-//go:build testhooks
+//go:build test_dep
 
 package testhooks
 
@@ -35,6 +35,8 @@ var Module = fx.Options(
 )
 
 type (
+	// TestHooks holds a registry of active test hooks. It should be obtained through fx and
+	// used with Get and Set.
 	TestHooks interface {
 		// private accessors; access must go through package-level Get/Set
 		get(string) (any, bool)
@@ -42,11 +44,13 @@ type (
 		del(string)
 	}
 
+	// testHooksImpl is an implementation of TestHooks.
 	testHooksImpl struct {
 		m sync.Map
 	}
 )
 
+// Get gets the value of a test hook from the registry.
 func Get[T any](th TestHooks, key string) (T, bool) {
 	if val, ok := th.get(key); ok {
 		// this is only used in test so we want to panic on type mismatch:
@@ -56,18 +60,22 @@ func Get[T any](th TestHooks, key string) (T, bool) {
 	return zero, false
 }
 
+// Set sets a test hook to a value and returns a cleanup function to unset it.
+// Calls to Set and the cleanup functions should form a stack.
 func Set[T any](th TestHooks, key string, val T) func() {
 	th.set(key, val)
 	return func() { th.del(key) }
 }
 
+// NewTestHooksImpl returns a new instance of a test hook registry. This is provided and used
+// in the main "resource" module as a default, but in functional tests, it's overridden by an
+// explicitly constructed instance.
 func NewTestHooksImpl() TestHooks {
 	return &testHooksImpl{}
 }
 
 func (th *testHooksImpl) get(key string) (any, bool) {
-	val, ok := th.m.Load(key)
-	return val, ok
+	return th.m.Load(key)
 }
 
 func (th *testHooksImpl) set(key string, val any) {
