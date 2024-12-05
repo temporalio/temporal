@@ -6929,11 +6929,10 @@ func (ms *MutableStateImpl) applyUpdatesToStateMachineNodes(
 			}
 
 			key := incomingPath[len(incomingPath)-1]
-			node, err = parentNode.AddChildWithData(key, nil, nodeMutation.Data, nodeMutation.InitialVersionedTransition, nodeMutation.LastUpdateVersionedTransition, 1)
+			_, err = parentNode.AddChildWithData(key, nil, nodeMutation.Data, nodeMutation.InitialVersionedTransition, nodeMutation.LastUpdateVersionedTransition, 1)
 			if err != nil {
 				return err
 			}
-			node.InvalidateCache()
 		} else {
 			internalNode = node.InternalRepr()
 			if CompareVersionedTransition(nodeMutation.LastUpdateVersionedTransition, internalNode.LastUpdateVersionedTransition) == 0 {
