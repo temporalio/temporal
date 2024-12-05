@@ -12,21 +12,22 @@ import (
 )
 
 type (
-	// The top-level scheduler state machine is compromised of 3 substate machines:
+	// Scheduler is a top-level state machine compromised of 3 sub state machines:
 	// - Generator: buffers actions according to the schedule specification
 	// - Executor: executes buffered actions
 	// - Backfiller: buffers actions according to requested backfills
 	//
-	// 	A running scheduler will always have exactly one of each of the above substate
+	// A running Scheduler will always have exactly one of each of the above sub state
 	// machines mounted as nodes within the HSM tree. The top-level	machine itself
 	// remains in a singular running state for its lifetime (all work is done within the
-	// substate machines). The Scheduler state machine is only responsible for creating
-	// the singleton substate machines.
+	// sub state machines). The Scheduler state machine is only responsible for creating
+	// the singleton sub state machines.
 	Scheduler struct {
-		*schedspb.HsmSchedulerV2State
+		*schedspb.SchedulerInternal
 
-		// Locally-cached state
-		compiledSpec *scheduler.CompiledSpec
+		// Locally-cached state, invalidated whenever cacheConflictToken != ConflictToken.
+		cacheConflictToken int64
+		compiledSpec       *scheduler.CompiledSpec
 	}
 
 	// The machine definitions provide serialization/deserialization and type information.
@@ -43,8 +44,8 @@ var (
 	_ hsm.StateMachineDefinition                 = &machineDefinition{}
 )
 
-// Registers state machine definitions with the HSM registry. Should be called
-// during dependency injection.
+// RegisterStateMachine registers state machine definitions with the HSM
+// registry. Should be called during dependency injection.
 func RegisterStateMachines(r *hsm.Registry) error {
 	if err := r.RegisterMachine(machineDefinition{}); err != nil {
 		return err
@@ -59,11 +60,11 @@ func MachineCollection(tree *hsm.Node) hsm.Collection[Scheduler] {
 }
 
 func (s Scheduler) State() enumsspb.Scheduler2State {
-	return s.HsmSchedulerV2State.State
+	return s.SchedulerInternal.State
 }
 
 func (s Scheduler) SetState(state enumsspb.Scheduler2State) {
-	s.HsmSchedulerV2State.State = state
+	s.SchedulerInternal.State = state
 }
 
 func (s Scheduler) RegenerateTasks(node *hsm.Node) ([]hsm.Task, error) {
@@ -76,63 +77,49 @@ func (machineDefinition) Type() string {
 
 func (machineDefinition) Serialize(state any) ([]byte, error) {
 	if state, ok := state.(Scheduler); ok {
-		return proto.Marshal(state.HsmSchedulerV2State)
+		return proto.Marshal(state.SchedulerInternal)
 	}
 	return nil, fmt.Errorf("invalid scheduler state provided: %v", state)
 }
 
 func (machineDefinition) Deserialize(body []byte) (any, error) {
-	state := &schedspb.HsmSchedulerV2State{}
+	state := &schedspb.SchedulerInternal{}
 	return Scheduler{
-		HsmSchedulerV2State: state,
-		compiledSpec:        nil,
+		SchedulerInternal: state,
+		compiledSpec:      nil,
 	}, proto.Unmarshal(body, state)
 }
 
-// Returns:
-//
-// 0 when states are equal
-// 1 when a is newer than b
-// -1 when b is newer than a
 func (machineDefinition) CompareState(a any, b any) (int, error) {
-	s1, ok := a.(Scheduler)
-	if !ok {
-		return 0, fmt.Errorf("%w: expected state1 to be a Scheduler instance, got %v", hsm.ErrIncompatibleType, s1)
-	}
-	s2, ok := a.(Scheduler)
-	if !ok {
-		return 0, fmt.Errorf("%w: expected state1 to be a Scheduler instance, got %v", hsm.ErrIncompatibleType, s2)
-	}
-
-	if s1.State() > s2.State() {
-		return 1, nil
-	} else if s1.State() < s2.State() {
-		return -1, nil
-	}
-
-	return 0, nil
+	panic("TODO: CompareState not yet implemented for Scheduler")
 }
 
-// Returns true when the Scheduler should allow scheduled actions to be taken.
+// UseScheduledAction returns true when the Scheduler should allow scheduled
+// actions to be taken.
 //
-// When decrement is true, the schedule's state's `RemainingActions` counter
-// is decremented and the conflict token is bumped.
-func (s Scheduler) CanTakeScheduledAction(decrement bool) bool {
-	// If paused, don't do anything
+// When decrement is true, the schedule's state's `RemainingActions` counter is
+// decremented when an action can be taken. When decrement is false, no state
+// is mutated.
+func (s Scheduler) UseScheduledAction(decrement bool) bool {
+	// If paused, don't do anything.
 	if s.Schedule.State.Paused {
 		return false
 	}
 
-	// If unlimited actions, allow
+	// If unlimited actions, allow.
 	if !s.Schedule.State.LimitedActions {
 		return true
 	}
 
-	// Otherwise check and decrement limit
+	// Otherwise check and decrement limit.
 	if s.Schedule.State.RemainingActions > 0 {
 		if decrement {
 			s.Schedule.State.RemainingActions--
-			s.ConflictToken++
+
+			// The conflict token is updated because a client might be in the process of
+			// preparing an update request that increments their schedule's RemainingActions
+			// field.
+			s.UpdateConflictToken()
 		}
 		return true
 	}
@@ -142,7 +129,9 @@ func (s Scheduler) CanTakeScheduledAction(decrement bool) bool {
 }
 
 func (s Scheduler) CompiledSpec(specBuilder *scheduler.SpecBuilder) (*scheduler.CompiledSpec, error) {
-	// cache compiled spec
+	s.validateCachedState()
+
+	// Cache compiled spec.
 	if s.compiledSpec == nil {
 		cspec, err := specBuilder.NewCompiledSpec(s.Schedule.Spec)
 		if err != nil {
@@ -168,4 +157,24 @@ func (s Scheduler) OverlapPolicy() enumspb.ScheduleOverlapPolicy {
 		policy = enumspb.SCHEDULE_OVERLAP_POLICY_SKIP
 	}
 	return policy
+}
+
+// validateCachedState clears cached fields whenever the Scheduler's
+// ConflictToken doesn't match its cacheConflictToken field. Validation is only
+// as effective as the Scheduler's backing persisted state is up-to-date.
+func (s Scheduler) validateCachedState() {
+	if s.cacheConflictToken != s.ConflictToken {
+		// Bust stale cached fields.
+		s.compiledSpec = nil
+
+		// We're now up-to-date.
+		s.cacheConflictToken = s.ConflictToken
+	}
+}
+
+// UpdateConflictToken bumps the Scheduler's conflict token. This has a side
+// effect of invalidating the local cache. Use whenever applying a mutation that
+// should invalidate other in-flight updates.
+func (s Scheduler) UpdateConflictToken() {
+	s.ConflictToken++
 }
