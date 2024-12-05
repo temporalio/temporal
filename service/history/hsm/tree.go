@@ -774,9 +774,16 @@ func (n *opNode) insert(path []Key, op Operation) {
 	if len(path) == 0 {
 		if deleteOp, ok := op.(DeleteOperation); ok {
 			n.isDeleted = true
-			for k, child := range n.children {
-				child.insert(nil, DeleteOperation{path: append(slices.Clone(deleteOp.path), k)})
+			n.operations = []Operation{deleteOp}
+
+			// Generate and add delete operations for all descendants
+			basePath := deleteOp.path
+			for childKey, child := range n.children {
+				childPath := append(basePath, childKey)
+				childDeleteOp := DeleteOperation{path: childPath}
+				child.insert(nil, childDeleteOp)
 			}
+			return
 		}
 		n.operations = append(n.operations, op)
 		return
@@ -794,16 +801,7 @@ func (n *opNode) insert(path []Key, op Operation) {
 // collect returns an OperationLog containing all valid operations in the tree.
 func (n *opNode) collect() OperationLog {
 	var result OperationLog
-	if n.isDeleted {
-		for _, op := range n.operations {
-			if _, ok := op.(DeleteOperation); ok {
-				result = append(result, op)
-			}
-		}
-	} else {
-		result = append(result, n.operations...)
-	}
-
+	result = append(result, n.operations...)
 	for _, child := range n.children {
 		result = append(result, child.collect()...)
 	}
