@@ -855,14 +855,16 @@ func (pm *taskQueuePartitionManagerImpl) getPhysicalQueuesForAdd(
 		return nil, syncMatchQueue, nil, err
 	}
 
-	if directive.GetBuildId() == nil {
-		// This means the tasks is a middle task belonging to an unversioned execution. Keep using unversioned.
-		return pm.defaultQueue, pm.defaultQueue, nil, nil
-	}
-
 	userData, userDataChanged, err := pm.userDataManager.GetUserData()
 	if err != nil {
 		return nil, nil, nil, err
+	}
+
+	if directive.GetBuildId() == nil {
+		// This means the tasks is a middle task belonging to an unversioned execution. Keep using unversioned.
+		// But also return userDataChanged so if current deployment is set, the task redirects to
+		// that deployment.
+		return pm.defaultQueue, pm.defaultQueue, userDataChanged, nil
 	}
 
 	data := userData.GetData().GetVersioningData()

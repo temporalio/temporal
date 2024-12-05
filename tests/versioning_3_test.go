@@ -243,8 +243,6 @@ func (s *Versioning3Suite) testUnpinnedWorkflow(sticky bool) {
 			s.verifyWorkflowVersioning(tv, vbUnspecified, nil, nil, transitionTo(d))
 			return respondWftWithActivities(tv, tv, sticky, vbUnpinned, "5"), nil
 		})
-	// TODO (shahab): remove the next line once the test is not flaky in NoTaskForwardNoPollForwardAllowSync mode
-	s.waitForDeploymentDataPropagation(tv, tqTypeWf)
 
 	actCompleted := make(chan interface{})
 	s.pollActivityAndHandle(tv, actCompleted,
@@ -259,20 +257,20 @@ func (s *Versioning3Suite) testUnpinnedWorkflow(sticky bool) {
 	we := s.startWorkflow(tv, nil)
 
 	<-wftCompleted
-	s.verifyWorkflowVersioning(tv, vbUnpinned, tv.Deployment(), nil, nil)
+	s.verifyWorkflowVersioning(tv, vbUnpinned, d, nil, nil)
 	if sticky {
 		s.verifyWorkflowStickyQueue(we, tv.StickyTaskQueue())
 	}
 
 	<-actCompleted
-	s.verifyWorkflowVersioning(tv, vbUnpinned, tv.Deployment(), nil, nil)
+	s.verifyWorkflowVersioning(tv, vbUnpinned, d, nil, nil)
 
 	s.pollWftAndHandle(tv, sticky, nil,
 		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
 			s.NotNil(task)
 			return respondCompleteWorkflow(tv, vbUnpinned), nil
 		})
-	s.verifyWorkflowVersioning(tv, vbUnpinned, tv.Deployment(), nil, nil)
+	s.verifyWorkflowVersioning(tv, vbUnpinned, d, nil, nil)
 }
 
 func (s *Versioning3Suite) TestTransitionFromWft_Sticky() {
