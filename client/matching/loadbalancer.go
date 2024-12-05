@@ -129,7 +129,11 @@ func (lb *defaultLoadBalancer) PickReadPartition(
 		partitionCount = lb.nReadPartitions(string(namespaceName), taskQueue.Name(), taskQueue.TaskType())
 	}
 
-	return tqlb.pickReadPartition(partitionCount, lb.errorInjector)
+	if n, ok := errorinjector.Get[int](lb.errorInjector, errorinjector.MatchingLBForceWritePartition); ok {
+		return tqlb.forceReadPartition(partitionCount, n)
+	} else {
+		return tqlb.pickReadPartition(partitionCount)
+	}
 }
 
 func (lb *defaultLoadBalancer) getTaskQueueLoadBalancer(tq *tqid.TaskQueue) *tqLoadBalancer {
@@ -156,18 +160,26 @@ func newTaskQueueLoadBalancer(tq *tqid.TaskQueue) *tqLoadBalancer {
 	}
 }
 
-func (b *tqLoadBalancer) pickReadPartition(partitionCount int, ei errorinjector.ErrorInjector) *pollToken {
+func (b *tqLoadBalancer) pickReadPartition(partitionCount int) *pollToken {
 	b.lock.Lock()
 	defer b.lock.Unlock()
 
-	var partitionID int
-	if n, ok := errorinjector.Get[int](ei, errorinjector.MatchingLBForceWritePartition); ok {
-		b.ensurePartitionCountLocked(max(partitionCount, n+1)) // allow n to be >= partitionCount
-		partitionID = n
-	} else {
-		b.ensurePartitionCountLocked(partitionCount)
-		partitionID = b.pickReadPartitionWithFewestPolls(partitionCount)
+	b.ensurePartitionCountLocked(partitionCount)
+	partitionID := b.pickReadPartitionWithFewestPolls(partitionCount)
+
+	b.pollerCounts[partitionID]++
+
+	return &pollToken{
+		TQPartition: b.taskQueue.NormalPartition(partitionID),
+		balancer:    b,
 	}
+}
+
+func (b *tqLoadBalancer) forceReadPartition(partitionCount, partitionID int) *pollToken {
+	b.lock.Lock()
+	defer b.lock.Unlock()
+
+	b.ensurePartitionCountLocked(max(partitionCount, partitionID+1))
 
 	b.pollerCounts[partitionID]++
 
