@@ -17,7 +17,7 @@ type (
 		// TODO - incomplete tweakables list
 	}
 
-	// V2 Scheduler dynamic config, shared among all substate machines.
+	// V2 Scheduler dynamic config, shared among all sub state machines.
 	Config struct {
 		Tweakables       dynamicconfig.TypedPropertyFnWithNamespaceFilter[Tweakables]
 		ExecutionTimeout dynamicconfig.DurationPropertyFnWithNamespaceFilter
