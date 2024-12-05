@@ -136,7 +136,6 @@ func (s *ActivityApiUpdateClientTestSuite) TestActivityUpdateApi_ChangeRetryInte
 	s.Worker().RegisterActivity(activityFunction)
 
 	wfId := testcore.RandomizeStr("wfid-" + s.T().Name())
-	//wfId := "functional-test-activity-update-api"
 	workflowOptions := sdkclient.StartWorkflowOptions{
 		ID:        wfId,
 		TaskQueue: s.TaskQueue(),
