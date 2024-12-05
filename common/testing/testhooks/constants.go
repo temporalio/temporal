@@ -1,4 +1,4 @@
-package errorinjector
+package testhooks
 
 const (
 	MatchingDisableSyncMatch      = "matching.disableSyncMatch"

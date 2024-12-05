@@ -29,8 +29,8 @@ import (
 	"sync"
 
 	"go.temporal.io/server/common/dynamicconfig"
-	"go.temporal.io/server/common/errorinjector"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/common/tqid"
 )
 
@@ -61,7 +61,7 @@ type (
 		namespaceIDToName func(id namespace.ID) (namespace.Name, error)
 		nReadPartitions   dynamicconfig.IntPropertyFnWithTaskQueueFilter
 		nWritePartitions  dynamicconfig.IntPropertyFnWithTaskQueueFilter
-		errorInjector     errorinjector.ErrorInjector
+		testHooks         testhooks.TestHooks
 
 		lock         sync.RWMutex
 		taskQueueLBs map[tqid.TaskQueue]*tqLoadBalancer
@@ -85,13 +85,13 @@ type (
 func NewLoadBalancer(
 	namespaceIDToName func(id namespace.ID) (namespace.Name, error),
 	dc *dynamicconfig.Collection,
-	errorInjector errorinjector.ErrorInjector,
+	testHooks testhooks.TestHooks,
 ) LoadBalancer {
 	lb := &defaultLoadBalancer{
 		namespaceIDToName: namespaceIDToName,
 		nReadPartitions:   dynamicconfig.MatchingNumTaskqueueReadPartitions.Get(dc),
 		nWritePartitions:  dynamicconfig.MatchingNumTaskqueueWritePartitions.Get(dc),
-		errorInjector:     errorInjector,
+		testHooks:         testHooks,
 		taskQueueLBs:      make(map[tqid.TaskQueue]*tqLoadBalancer),
 	}
 	return lb
@@ -100,7 +100,7 @@ func NewLoadBalancer(
 func (lb *defaultLoadBalancer) PickWritePartition(
 	taskQueue *tqid.TaskQueue,
 ) *tqid.NormalPartition {
-	if n, ok := errorinjector.Get[int](lb.errorInjector, errorinjector.MatchingLBForceWritePartition); ok {
+	if n, ok := testhooks.Get[int](lb.testHooks, testhooks.MatchingLBForceWritePartition); ok {
 		return taskQueue.NormalPartition(n)
 	}
 
@@ -129,11 +129,11 @@ func (lb *defaultLoadBalancer) PickReadPartition(
 		partitionCount = lb.nReadPartitions(string(namespaceName), taskQueue.Name(), taskQueue.TaskType())
 	}
 
-	if n, ok := errorinjector.Get[int](lb.errorInjector, errorinjector.MatchingLBForceWritePartition); ok {
+	if n, ok := testhooks.Get[int](lb.testHooks, testhooks.MatchingLBForceWritePartition); ok {
 		return tqlb.forceReadPartition(partitionCount, n)
-	} else {
-		return tqlb.pickReadPartition(partitionCount)
 	}
+
+	return tqlb.pickReadPartition(partitionCount)
 }
 
 func (lb *defaultLoadBalancer) getTaskQueueLoadBalancer(tq *tqid.TaskQueue) *tqLoadBalancer {

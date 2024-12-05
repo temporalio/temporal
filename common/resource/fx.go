@@ -46,7 +46,6 @@ import (
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/deadlock"
 	"go.temporal.io/server/common/dynamicconfig"
-	"go.temporal.io/server/common/errorinjector"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/membership"
@@ -64,6 +63,7 @@ import (
 	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/telemetry"
+	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/common/utf8validator"
 	"go.uber.org/fx"
 	"google.golang.org/grpc"
@@ -130,7 +130,7 @@ var Module = fx.Options(
 	deadlock.Module,
 	config.Module,
 	utf8validator.Module,
-	errorinjector.Module,
+	testhooks.Module,
 	fx.Invoke(func(*utf8validator.Validator) {}), // force this to be constructed even if not referenced elsewhere
 )
 
@@ -229,7 +229,7 @@ func ClientFactoryProvider(
 	membershipMonitor membership.Monitor,
 	metricsHandler metrics.Handler,
 	dynamicCollection *dynamicconfig.Collection,
-	errorInjector errorinjector.ErrorInjector,
+	testHooks testhooks.TestHooks,
 	persistenceConfig *config.Persistence,
 	logger log.SnTaggedLogger,
 	throttledLogger log.ThrottledLogger,
@@ -239,7 +239,7 @@ func ClientFactoryProvider(
 		membershipMonitor,
 		metricsHandler,
 		dynamicCollection,
-		errorInjector,
+		testHooks,
 		persistenceConfig.NumHistoryShards,
 		logger,
 		throttledLogger,

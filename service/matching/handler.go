@@ -35,7 +35,6 @@ import (
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cluster"
-	"go.temporal.io/server/common/errorinjector"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/metrics"
@@ -43,6 +42,7 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/resource"
+	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/common/tqid"
 	"go.temporal.io/server/service/worker/deployment"
 	"google.golang.org/protobuf/proto"
@@ -89,7 +89,7 @@ func NewHandler(
 	namespaceReplicationQueue persistence.NamespaceReplicationQueue,
 	visibilityManager manager.VisibilityManager,
 	nexusEndpointManager persistence.NexusEndpointManager,
-	errorInjector errorinjector.ErrorInjector,
+	testHooks testhooks.TestHooks,
 ) *Handler {
 	handler := &Handler{
 		config:          config,
@@ -112,7 +112,7 @@ func NewHandler(
 			namespaceReplicationQueue,
 			visibilityManager,
 			nexusEndpointManager,
-			errorInjector,
+			testHooks,
 		),
 		namespaceRegistry: namespaceRegistry,
 	}

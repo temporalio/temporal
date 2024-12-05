@@ -43,10 +43,10 @@ import (
 	matchingservice "go.temporal.io/server/api/matchingservice/v1"
 	common "go.temporal.io/server/common"
 	dynamicconfig "go.temporal.io/server/common/dynamicconfig"
-	errorinjector "go.temporal.io/server/common/errorinjector"
 	log "go.temporal.io/server/common/log"
 	membership "go.temporal.io/server/common/membership"
 	metrics "go.temporal.io/server/common/metrics"
+	testhooks "go.temporal.io/server/common/testing/testhooks"
 	gomock "go.uber.org/mock/gomock"
 	grpc "google.golang.org/grpc"
 )
@@ -188,15 +188,15 @@ func (m *MockFactoryProvider) EXPECT() *MockFactoryProviderMockRecorder {
 }
 
 // NewFactory mocks base method.
-func (m *MockFactoryProvider) NewFactory(rpcFactory common.RPCFactory, monitor membership.Monitor, metricsHandler metrics.Handler, dc *dynamicconfig.Collection, errorInjector errorinjector.ErrorInjector, numberOfHistoryShards int32, logger, throttledLogger log.Logger) Factory {
+func (m *MockFactoryProvider) NewFactory(rpcFactory common.RPCFactory, monitor membership.Monitor, metricsHandler metrics.Handler, dc *dynamicconfig.Collection, testHooks testhooks.TestHooks, numberOfHistoryShards int32, logger, throttledLogger log.Logger) Factory {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "NewFactory", rpcFactory, monitor, metricsHandler, dc, errorInjector, numberOfHistoryShards, logger, throttledLogger)
+	ret := m.ctrl.Call(m, "NewFactory", rpcFactory, monitor, metricsHandler, dc, testHooks, numberOfHistoryShards, logger, throttledLogger)
 	ret0, _ := ret[0].(Factory)
 	return ret0
 }
 
 // NewFactory indicates an expected call of NewFactory.
-func (mr *MockFactoryProviderMockRecorder) NewFactory(rpcFactory, monitor, metricsHandler, dc, errorInjector, numberOfHistoryShards, logger, throttledLogger any) *gomock.Call {
+func (mr *MockFactoryProviderMockRecorder) NewFactory(rpcFactory, monitor, metricsHandler, dc, testHooks, numberOfHistoryShards, logger, throttledLogger any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NewFactory", reflect.TypeOf((*MockFactoryProvider)(nil).NewFactory), rpcFactory, monitor, metricsHandler, dc, errorInjector, numberOfHistoryShards, logger, throttledLogger)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NewFactory", reflect.TypeOf((*MockFactoryProvider)(nil).NewFactory), rpcFactory, monitor, metricsHandler, dc, testHooks, numberOfHistoryShards, logger, throttledLogger)
 }

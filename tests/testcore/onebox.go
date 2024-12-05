@@ -52,7 +52,6 @@ import (
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"
-	"go.temporal.io/server/common/errorinjector"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/membership"
@@ -71,6 +70,7 @@ import (
 	"go.temporal.io/server/common/rpc/encryption"
 	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/service/frontend"
 	"go.temporal.io/server/service/history"
 	"go.temporal.io/server/service/history/replication"
@@ -100,7 +100,7 @@ type (
 		matchingClient matchingservice.MatchingServiceClient
 
 		dcClient                         *dynamicconfig.MemoryClient
-		errorInjector                    errorinjector.ErrorInjector
+		testHooks                        testhooks.TestHooks
 		logger                           log.Logger
 		clusterMetadataConfig            *cluster.Config
 		persistenceConfig                config.Persistence
@@ -260,8 +260,8 @@ func newTemporal(t *testing.T, params *TemporalParams) *TemporalImpl {
 		tlsConfigProvider:                params.TLSConfigProvider,
 		captureMetricsHandler:            params.CaptureMetricsHandler,
 		dcClient:                         dynamicconfig.NewMemoryClient(),
-		// If this doesn't build, make sure you're building with tags 'errorinjector':
-		errorInjector:            errorinjector.NewTestErrorInjector(),
+		// If this doesn't build, make sure you're building with tags 'testhooks':
+		testHooks:                testhooks.NewTestHooksImpl(),
 		serviceFxOptions:         params.ServiceFxOptions,
 		taskCategoryRegistry:     params.TaskCategoryRegistry,
 		hostsByProtocolByService: params.HostsByProtocolByService,
@@ -414,7 +414,7 @@ func (c *TemporalImpl) startFrontend() {
 			fx.Provide(func() persistenceClient.AbstractDataStoreFactory { return c.abstractDataStoreFactory }),
 			fx.Provide(func() visibility.VisibilityStoreFactory { return c.visibilityStoreFactory }),
 			fx.Provide(func() dynamicconfig.Client { return c.dcClient }),
-			fx.Decorate(func() errorinjector.ErrorInjector { return c.errorInjector }),
+			fx.Decorate(func() testhooks.TestHooks { return c.testHooks }),
 			fx.Provide(resource.DefaultSnTaggedLoggerProvider),
 			fx.Provide(func() *esclient.Config { return c.esConfig }),
 			fx.Provide(func() esclient.Client { return c.esClient }),
@@ -486,7 +486,7 @@ func (c *TemporalImpl) startHistory() {
 			fx.Provide(func() persistenceClient.AbstractDataStoreFactory { return c.abstractDataStoreFactory }),
 			fx.Provide(func() visibility.VisibilityStoreFactory { return c.visibilityStoreFactory }),
 			fx.Provide(func() dynamicconfig.Client { return c.dcClient }),
-			fx.Decorate(func() errorinjector.ErrorInjector { return c.errorInjector }),
+			fx.Decorate(func() testhooks.TestHooks { return c.testHooks }),
 			fx.Provide(resource.DefaultSnTaggedLoggerProvider),
 			fx.Provide(func() *esclient.Config { return c.esConfig }),
 			fx.Provide(func() esclient.Client { return c.esClient }),
@@ -540,7 +540,7 @@ func (c *TemporalImpl) startMatching() {
 			fx.Provide(func() persistenceClient.AbstractDataStoreFactory { return c.abstractDataStoreFactory }),
 			fx.Provide(func() visibility.VisibilityStoreFactory { return c.visibilityStoreFactory }),
 			fx.Provide(func() dynamicconfig.Client { return c.dcClient }),
-			fx.Decorate(func() errorinjector.ErrorInjector { return c.errorInjector }),
+			fx.Decorate(func() testhooks.TestHooks { return c.testHooks }),
 			fx.Provide(func() *esclient.Config { return c.esConfig }),
 			fx.Provide(func() esclient.Client { return c.esClient }),
 			fx.Provide(c.GetTLSConfigProvider),
@@ -604,7 +604,7 @@ func (c *TemporalImpl) startWorker() {
 			fx.Provide(func() persistenceClient.AbstractDataStoreFactory { return c.abstractDataStoreFactory }),
 			fx.Provide(func() visibility.VisibilityStoreFactory { return c.visibilityStoreFactory }),
 			fx.Provide(func() dynamicconfig.Client { return c.dcClient }),
-			fx.Decorate(func() errorinjector.ErrorInjector { return c.errorInjector }),
+			fx.Decorate(func() testhooks.TestHooks { return c.testHooks }),
 			fx.Provide(resource.DefaultSnTaggedLoggerProvider),
 			fx.Provide(func() esclient.Client { return c.esClient }),
 			fx.Provide(func() *esclient.Config { return c.esConfig }),
@@ -780,7 +780,7 @@ func (p *clientFactoryProvider) NewFactory(
 	monitor membership.Monitor,
 	metricsHandler metrics.Handler,
 	dc *dynamicconfig.Collection,
-	errorInjector errorinjector.ErrorInjector,
+	testHooks testhooks.TestHooks,
 	numberOfHistoryShards int32,
 	logger log.Logger,
 	throttledLogger log.Logger,
@@ -790,7 +790,7 @@ func (p *clientFactoryProvider) NewFactory(
 		monitor,
 		metricsHandler,
 		dc,
-		errorInjector,
+		testHooks,
 		numberOfHistoryShards,
 		logger,
 		throttledLogger,
@@ -905,7 +905,7 @@ func (c *TemporalImpl) overrideDynamicConfig(t *testing.T, name dynamicconfig.Ke
 }
 
 func (c *TemporalImpl) injectError(t *testing.T, key string, value any) func() {
-	cleanup := errorinjector.Set(c.errorInjector, key, value)
+	cleanup := testhooks.Set(c.testHooks, key, value)
 	t.Cleanup(cleanup)
 	return cleanup
 }
