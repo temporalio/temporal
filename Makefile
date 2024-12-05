@@ -41,7 +41,7 @@ VISIBILITY_DB ?= temporal_visibility
 # Always use "protolegacy" tag to allow disabling utf-8 validation on proto messages
 # during proto library transition.
 ALL_BUILD_TAGS := protolegacy,$(BUILD_TAG)
-ALL_TEST_TAGS := $(ALL_BUILD_TAGS),$(TEST_TAG)
+ALL_TEST_TAGS := $(ALL_BUILD_TAGS),errorinjector,$(TEST_TAG)
 BUILD_TAG_FLAG := -tags $(ALL_BUILD_TAGS)
 TEST_TAG_FLAG := -tags $(ALL_TEST_TAGS)
 
