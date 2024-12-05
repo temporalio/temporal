@@ -6886,7 +6886,6 @@ func (ms *MutableStateImpl) applyUpdatesToSubStateMachines(
 		if current != nil {
 			incoming.Clock = current.Clock
 		}
-		incoming.CreateRequestId = uuid.New()
 	}, nil)
 	if err != nil {
 		return err
