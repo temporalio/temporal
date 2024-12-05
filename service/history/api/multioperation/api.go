@@ -38,6 +38,7 @@ import (
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/persistence/visibility/manager"
+	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/api/startworkflow"
 	"go.temporal.io/server/service/history/api/updateworkflow"
@@ -45,9 +46,7 @@ import (
 	"go.temporal.io/server/service/history/workflow"
 )
 
-var (
-	multiOpAbortedErr = serviceerror.NewMultiOperationAborted("Operation was aborted.")
-)
+var multiOpAbortedErr = serviceerror.NewMultiOperationAborted("Operation was aborted.")
 
 type (
 	// updateError is a wrapper to distinguish an update error from a start error.
@@ -64,6 +63,7 @@ func Invoke(
 	tokenSerializer common.TaskTokenSerializer,
 	visibilityManager manager.VisibilityManager,
 	matchingClient matchingservice.MatchingServiceClient,
+	testHooks testhooks.TestHooks,
 ) (*historyservice.ExecuteMultiOperationResponse, error) {
 	if len(req.Operations) != 2 {
 		return nil, serviceerror.NewInvalidArgument("expected exactly 2 operations")
@@ -203,6 +203,10 @@ func Invoke(
 			currentWorkflowLease.GetReleaseFn()(nil) // nil since nothing was modified
 			return nil, serviceerror.NewInvalidArgument("unhandled workflow id conflict policy: unspecified")
 		}
+	}
+
+	if hook, ok := testhooks.Get[func()](testHooks, testhooks.UpdateWithStartInBetweenLockAndStart); ok {
+		hook()
 	}
 
 	// workflow hasn't been started yet: start and then apply update

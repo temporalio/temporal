@@ -26,4 +26,6 @@ const (
 	MatchingDisableSyncMatch      = "matching.disableSyncMatch"
 	MatchingLBForceReadPartition  = "matching.lbForceReadPartition"
 	MatchingLBForceWritePartition = "matching.lbForceWritePartition"
+
+	UpdateWithStartInBetweenLockAndStart = "history.updateWithStartInBetweenLockAndStart"
 )
