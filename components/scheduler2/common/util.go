@@ -34,7 +34,7 @@ func ValidateTask[
 	return nil
 }
 
-// Intended to be called with a substate machine's node. Returns a cloned copy
+// Intended to be called with a sub state machine's node. Returns a cloned copy
 // of the top-level Scheduler from its persisted state.
 func LoadSchedulerFromParent(
 	ctx context.Context,
@@ -46,7 +46,7 @@ func LoadSchedulerFromParent(
 			return err
 		}
 		scheduler = core.Scheduler{
-			HsmSchedulerV2State: servercommon.CloneProto(prevScheduler.HsmSchedulerV2State),
+			SchedulerInternal: servercommon.CloneProto(prevScheduler.SchedulerInternal),
 		}
 		return nil
 	})
