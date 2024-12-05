@@ -260,7 +260,7 @@ func newTemporal(t *testing.T, params *TemporalParams) *TemporalImpl {
 		tlsConfigProvider:                params.TLSConfigProvider,
 		captureMetricsHandler:            params.CaptureMetricsHandler,
 		dcClient:                         dynamicconfig.NewMemoryClient(),
-		// If this doesn't build, make sure you're building with tags 'testhooks':
+		// If this doesn't build, make sure you're building with tags 'test_dep':
 		testHooks:                testhooks.NewTestHooksImpl(),
 		serviceFxOptions:         params.ServiceFxOptions,
 		taskCategoryRegistry:     params.TaskCategoryRegistry,
@@ -904,7 +904,7 @@ func (c *TemporalImpl) overrideDynamicConfig(t *testing.T, name dynamicconfig.Ke
 	return cleanup
 }
 
-func (c *TemporalImpl) injectError(t *testing.T, key string, value any) func() {
+func (c *TemporalImpl) injectHook(t *testing.T, key string, value any) func() {
 	cleanup := testhooks.Set(c.testHooks, key, value)
 	t.Cleanup(cleanup)
 	return cleanup

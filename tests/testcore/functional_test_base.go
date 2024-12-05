@@ -479,8 +479,8 @@ func (s *FunctionalTestBase) OverrideDynamicConfig(setting dynamicconfig.Generic
 	return s.testCluster.host.overrideDynamicConfig(s.T(), setting.Key(), value)
 }
 
-func (s *FunctionalTestBase) InjectError(key string, value any) (cleanup func()) {
-	return s.testCluster.host.injectError(s.T(), key, value)
+func (s *FunctionalTestBase) InjectHook(key string, value any) (cleanup func()) {
+	return s.testCluster.host.injectHook(s.T(), key, value)
 }
 
 func (s *FunctionalTestBase) GetNamespaceID(namespace string) string {
@@ -515,20 +515,20 @@ func (s *FunctionalTestBase) RunTestWithMatchingBehavior(subtest func()) {
 					name, func() {
 						if forceTaskForward {
 							s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 13)
-							s.InjectError(testhooks.MatchingLBForceWritePartition, 11)
+							s.InjectHook(testhooks.MatchingLBForceWritePartition, 11)
 						} else {
 							s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 1)
 						}
 						if forcePollForward {
 							s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 13)
-							s.InjectError(testhooks.MatchingLBForceReadPartition, 5)
+							s.InjectHook(testhooks.MatchingLBForceReadPartition, 5)
 						} else {
 							s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 1)
 						}
 						if forceAsync {
-							s.InjectError(testhooks.MatchingDisableSyncMatch, true)
+							s.InjectHook(testhooks.MatchingDisableSyncMatch, true)
 						} else {
-							s.InjectError(testhooks.MatchingDisableSyncMatch, false)
+							s.InjectHook(testhooks.MatchingDisableSyncMatch, false)
 						}
 
 						subtest()

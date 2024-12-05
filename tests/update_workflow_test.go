@@ -5331,7 +5331,7 @@ func (s *UpdateWorkflowSuite) TestUpdateWithStart() {
 				&updatepb.WaitPolicy{LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED}, "1")
 
 			// simulate a race condition
-			s.InjectError(testhooks.UpdateWithStartInBetweenLockAndStart, func() {
+			s.InjectHook(testhooks.UpdateWithStartInBetweenLockAndStart, func() {
 				_, err := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), startReq)
 				s.NoError(err)
 			})
