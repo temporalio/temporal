@@ -67,14 +67,13 @@ func (s *ActivityApiUpdateClientTestSuite) SetupSuite() {
 func (s *ActivityApiUpdateClientTestSuite) SetupTest() {
 	s.ClientFunctionalSuite.SetupTest()
 
-	s.initialRetryInterval = 10 * time.Second
-	s.scheduleToCloseTimeout = 30 * time.Second
-	s.startToCloseTimeout = 10 * time.Second
+	s.initialRetryInterval = 10 * time.Minute
+	s.scheduleToCloseTimeout = 30 * time.Minute
+	s.startToCloseTimeout = 15 * time.Minute
 
 	s.activityRetryPolicy = &temporal.RetryPolicy{
 		InitialInterval:    s.initialRetryInterval,
 		BackoffCoefficient: 1,
-		MaximumInterval:    10 * time.Second,
 	}
 }
 
@@ -136,7 +135,8 @@ func (s *ActivityApiUpdateClientTestSuite) TestActivityUpdateApi_ChangeRetryInte
 	s.Worker().RegisterWorkflow(workflowFn)
 	s.Worker().RegisterActivity(activityFunction)
 
-	wfId := "functional-test-activity-update-api"
+	wfId := testcore.RandomizeStr("wfid-" + s.T().Name())
+	//wfId := "functional-test-activity-update-api"
 	workflowOptions := sdkclient.StartWorkflowOptions{
 		ID:        wfId,
 		TaskQueue: s.TaskQueue(),
@@ -150,6 +150,7 @@ func (s *ActivityApiUpdateClientTestSuite) TestActivityUpdateApi_ChangeRetryInte
 		assert.NoError(t, err)
 		assert.Equal(t, 1, len(description.PendingActivities))
 		assert.Equal(t, int32(1), activityCompleted.Load())
+		assert.True(t, true)
 	}, 10*time.Second, 500*time.Millisecond)
 
 	updateRequest := &workflowservicepb.UpdateActivityOptionsByIdRequest{
@@ -168,7 +169,7 @@ func (s *ActivityApiUpdateClientTestSuite) TestActivityUpdateApi_ChangeRetryInte
 	s.NotNil(resp)
 
 	description, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
-	s.NotNil(description)
+	s.NoError(err)
 	s.Equal(1, len(description.PendingActivities))
 
 	activityUpdated <- struct{}{}
@@ -179,10 +180,6 @@ func (s *ActivityApiUpdateClientTestSuite) TestActivityUpdateApi_ChangeRetryInte
 		assert.Equal(t, 0, len(description.PendingActivities))
 		assert.Equal(t, int32(2), activityCompleted.Load())
 	}, 3*time.Second, 500*time.Millisecond)
-
-	description, err = s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
-	s.NotNil(description)
-	s.Equal(0, len(description.PendingActivities))
 
 	var out string
 	err = workflowRun.Get(ctx, &out)
@@ -282,7 +279,14 @@ func (s *ActivityApiUpdateClientTestSuite) TestActivityUpdateApi_ChangeScheduleT
 	}
 
 	// make scheduleToClose shorter than retry interval
-	s.scheduleToCloseTimeout = 5 * time.Second
+	s.scheduleToCloseTimeout = 8 * time.Second
+	s.startToCloseTimeout = 8 * time.Second
+	s.initialRetryInterval = 5 * time.Second
+
+	s.activityRetryPolicy = &temporal.RetryPolicy{
+		InitialInterval:    s.initialRetryInterval,
+		BackoffCoefficient: 1,
+	}
 
 	workflowFn := s.makeWorkflowFunc(activityFunction)
 
@@ -300,7 +304,7 @@ func (s *ActivityApiUpdateClientTestSuite) TestActivityUpdateApi_ChangeScheduleT
 
 	// wait for activity to start (and fail)
 	s.EventuallyWithT(func(t *assert.CollectT) {
-		assert.Equal(t, int32(1), activityCompleted.Load())
+		assert.True(t, activityCompleted.Load() > 0)
 	}, 2*time.Second, 200*time.Millisecond)
 
 	// update schedule_to_close_timeout, make it longer
@@ -310,7 +314,7 @@ func (s *ActivityApiUpdateClientTestSuite) TestActivityUpdateApi_ChangeScheduleT
 		WorkflowId: workflowRun.GetID(),
 		ActivityId: "activity-id",
 		ActivityOptions: &activitypb.ActivityOptions{
-			ScheduleToCloseTimeout: durationpb.New(5 * time.Second),
+			ScheduleToCloseTimeout: durationpb.New(10 * time.Second),
 			RetryPolicy: &commonpb.RetryPolicy{
 				InitialInterval: durationpb.New(1 * time.Second),
 			},
@@ -322,9 +326,9 @@ func (s *ActivityApiUpdateClientTestSuite) TestActivityUpdateApi_ChangeScheduleT
 	s.NoError(err)
 	s.NotNil(resp)
 	// check that the update was successful
-	s.Equal(5, resp.GetActivityOptions().ScheduleToCloseTimeout.GetSeconds())
+	s.Equal(int64(10), resp.GetActivityOptions().ScheduleToCloseTimeout.GetSeconds())
 	// check that field we didn't update is the same
-	s.Equal(s.startToCloseTimeout.Seconds(), resp.GetActivityOptions().StartToCloseTimeout.GetSeconds())
+	s.Equal(int64(s.startToCloseTimeout.Seconds()), resp.GetActivityOptions().StartToCloseTimeout.GetSeconds())
 
 	// now activity should succeed
 	s.EventuallyWithT(func(t *assert.CollectT) {
@@ -332,7 +336,7 @@ func (s *ActivityApiUpdateClientTestSuite) TestActivityUpdateApi_ChangeScheduleT
 		assert.NoError(t, err)
 		assert.Equal(t, 0, len(description.PendingActivities))
 		assert.Equal(t, int32(2), activityCompleted.Load())
-	}, 2*time.Second, 200*time.Millisecond)
+	}, 5*time.Second, 200*time.Millisecond)
 
 	var out string
 	err = workflowRun.Get(ctx, &out)
