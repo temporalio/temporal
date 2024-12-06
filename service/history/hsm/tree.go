@@ -812,46 +812,30 @@ func (n *opNode) collect(oplog OperationLog) OperationLog {
 
 	for _, op := range oplog {
 		path := op.Path()
-
-		// Handle root node case
-		if len(path) == 0 {
-			if n.isDeleted {
-				if deleteOp, ok := op.(DeleteOperation); ok {
-					result = append(result, deleteOp)
-				}
-			} else {
-				result = append(result, op)
-			}
-			continue
-		}
-
 		current := n
 
-		// Check ancestors
-		var isParentDeleted bool
-		for i := 0; i < len(path)-1; i++ {
-			child, exists := current.children[path[i]]
+		var isAncestorDeleted bool
+
+		// Traverse the path to the target node, checking deletion status
+		for i, key := range path {
+			child, exists := current.children[key]
 			if !exists {
 				panic("path must exist in tree")
 			}
+
 			if child.isDeleted {
-				isParentDeleted = true
+				isAncestorDeleted = true
+				if i == len(path)-1 {
+					if deleteOp, ok := op.(DeleteOperation); ok {
+						result = append(result, deleteOp)
+					}
+				}
 				break
 			}
 			current = child
 		}
 
-		if isParentDeleted {
-			continue
-		}
-
-		// Check "target" node
-		finalNode := current.children[path[len(path)-1]]
-		if finalNode.isDeleted {
-			// Keep only if this is the delete operation for the "target" node
-			if deleteOp, ok := op.(DeleteOperation); ok {
-				result = append(result, deleteOp)
-			}
+		if isAncestorDeleted {
 			continue
 		}
 
