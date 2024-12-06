@@ -6523,12 +6523,6 @@ func (ms *MutableStateImpl) closeTransactionHandleWorkflowResetTask(
 		return nil
 	}
 
-	// only schedule reset task if current doesn't have childWFs.
-	// TODO: This will be removed once our reset allows childWFs
-	if len(ms.GetPendingChildExecutionInfos()) != 0 {
-		return nil
-	}
-
 	namespaceEntry, err := ms.shard.GetNamespaceRegistry().GetNamespaceByID(namespace.ID(ms.executionInfo.NamespaceId))
 	if err != nil {
 		return err
