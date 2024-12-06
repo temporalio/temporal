@@ -25,6 +25,7 @@ package hsm_test
 import (
 	"context"
 	"fmt"
+	"reflect"
 	"slices"
 	"sort"
 	"testing"
@@ -81,7 +82,9 @@ func TestNode_MaintainsCachedData(t *testing.T) {
 	require.NoError(t, err)
 
 	require.False(t, root.Dirty())
-	require.Equal(t, 0, len(root.Outputs()))
+	opLog, err := root.Outputs()
+	require.NoError(t, err)
+	require.Equal(t, 0, len(opLog))
 
 	err = hsm.MachineTransition(root, func(d *hsmtest.Data) (hsm.TransitionOutput, error) {
 		d.SetState(hsmtest.State2)
@@ -92,11 +95,12 @@ func TestNode_MaintainsCachedData(t *testing.T) {
 	// Our data variable is a pointer to the cache.
 	require.Equal(t, hsmtest.State2, v1.State())
 
-	require.NoError(t, err)
 	require.True(t, root.Dirty())
-	require.Equal(t, 1, len(root.Outputs()))
+	opLog, err = root.Outputs()
+	require.NoError(t, err)
+	require.Equal(t, 1, len(opLog))
 
-	transOp, ok := root.Outputs()[0].(hsm.TransitionOperation)
+	transOp, ok := opLog[0].(hsm.TransitionOperation)
 	require.True(t, ok)
 	require.Equal(t, []hsm.Key{}, transOp.Path())
 }
@@ -148,9 +152,10 @@ func TestNode_MaintainsChildCache(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, root.Dirty()) // Should now be dirty again.
 
-	operations := root.Outputs()
-	require.Equal(t, 1, len(operations))
-	transOp, ok := operations[0].(hsm.TransitionOperation)
+	opLog, err := root.Outputs()
+	require.NoError(t, err)
+	require.Equal(t, 1, len(opLog))
+	transOp, ok := opLog[0].(hsm.TransitionOperation)
 	require.True(t, ok)
 	require.Equal(t, int64(1), transOp.Output.TransitionCount)
 	require.Equal(t, []hsm.Key{key}, transOp.Path())
@@ -392,9 +397,10 @@ func TestNode_Sync(t *testing.T) {
 			protorequire.ProtoEqual(t, incomingNode.InternalRepr().LastUpdateVersionedTransition, currentNode.InternalRepr().LastUpdateVersionedTransition)
 			require.Equal(t, currentNodeTransitionCount+1, currentNode.InternalRepr().TransitionCount)
 
-			paos := currentNode.Outputs()
-			require.Len(t, paos, 1)
-			transOp, ok := paos[0].(hsm.TransitionOperation)
+			opLog, err := currentNode.Outputs()
+			require.NoError(t, err)
+			require.Len(t, opLog, 1)
+			transOp, ok := opLog[0].(hsm.TransitionOperation)
 			require.True(t, ok)
 			require.Equal(t, currentNode.Path(), transOp.Path())
 			require.Len(t, transOp.Output.Tasks, 2)
@@ -514,10 +520,14 @@ func TestNode_DeleteChild(t *testing.T) {
 	})
 	require.ErrorIs(t, err, hsm.ErrStateMachineInvalidState)
 
-	l2Outputs := l2.Outputs()
-	require.Len(t, l2Outputs, 1) // Should see its delete operation
-	_, ok := l2Outputs[0].(hsm.DeleteOperation)
-	require.True(t, ok) // Should only see the delete operation, no transitions
+	_, err = l2.Outputs()
+	require.Error(t, err)
+
+	opLog, err := root.Outputs()
+	require.NoError(t, err)
+	require.Len(t, opLog, 1) // After compaction, only the delete operation remains
+	_, ok := opLog[0].(hsm.DeleteOperation)
+	require.True(t, ok)
 
 	// Cannot delete non-existent or already deleted nodes
 	err = l1.DeleteChild(hsm.Key{Type: def1.Type(), ID: "nonexistent"})
@@ -527,7 +537,7 @@ func TestNode_DeleteChild(t *testing.T) {
 	require.ErrorIs(t, err, hsm.ErrStateMachineNotFound)
 }
 
-func TestOperationLog_IsDeleted(t *testing.T) {
+func TestNode_PreservesUnrelatedOperations(t *testing.T) {
 	root, err := hsm.NewRoot(reg, def1.Type(), hsmtest.NewData(hsmtest.State1), make(map[string]*persistencespb.StateMachineMap), &backend{})
 	require.NoError(t, err)
 
@@ -553,18 +563,30 @@ func TestOperationLog_IsDeleted(t *testing.T) {
 	err = l1.DeleteChild(hsm.Key{Type: def1.Type(), ID: "l2"})
 	require.NoError(t, err)
 
-	// Deleted node should see only its delete operation
-	l2Outputs := l2.Outputs()
-	require.Len(t, l2Outputs, 1)
-	_, ok := l2Outputs[0].(hsm.DeleteOperation)
-	require.True(t, ok)
+	opLog, err := root.Outputs()
+	require.NoError(t, err)
 
-	// Non-deleted sibling should still have only its transition
-	siblingOutputs := l2_sibling.Outputs()
-	require.Len(t, siblingOutputs, 1)
-	transOp, ok := siblingOutputs[0].(hsm.TransitionOperation)
-	require.True(t, ok)
-	require.Equal(t, l2_sibling.Path(), transOp.Path())
+	var foundDelete bool
+	for _, op := range opLog {
+		if delOp, ok := op.(hsm.DeleteOperation); ok {
+			if reflect.DeepEqual(delOp.Path(), l2.Path()) {
+				foundDelete = true
+				break
+			}
+		}
+	}
+	require.True(t, foundDelete, "should find l2's delete operation")
+
+	var foundTransition bool
+	for _, op := range opLog {
+		if transOp, ok := op.(hsm.TransitionOperation); ok {
+			if reflect.DeepEqual(transOp.Path(), l2_sibling.Path()) {
+				foundTransition = true
+				break
+			}
+		}
+	}
+	require.True(t, foundTransition, "should find l2_sibling's transition")
 }
 
 func TestNode_OutputsWithDeletion(t *testing.T) {
@@ -588,18 +610,15 @@ func TestNode_OutputsWithDeletion(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	rootOutputs := root.Outputs()
-	require.Len(t, rootOutputs, 2) // root and l2 transitions
-
-	// Delete l1 (and by extension l2)
 	err = root.DeleteChild(hsm.Key{Type: def1.Type(), ID: "l1"})
 	require.NoError(t, err)
 
-	rootOutputs = root.Outputs()
-	require.Len(t, rootOutputs, 3) // root's transition, l1's deletion, and l2's deletion
+	outputs, err := root.Outputs()
+	require.NoError(t, err)
+	require.Len(t, outputs, 2) // root's transition and l1's deletion (l2's operations excluded due to l1 deletion)
 
-	var foundTransition, foundL1Deletion, foundL2Deletion bool
-	for _, op := range rootOutputs {
+	var foundTransition, foundL1Deletion bool
+	for _, op := range outputs {
 		switch o := op.(type) {
 		case hsm.TransitionOperation:
 			if slices.Equal(o.Path(), []hsm.Key{}) { // root's path
@@ -609,37 +628,10 @@ func TestNode_OutputsWithDeletion(t *testing.T) {
 			if slices.Equal(o.Path(), l1.Path()) {
 				foundL1Deletion = true
 			}
-			if slices.Equal(o.Path(), l2.Path()) {
-				foundL2Deletion = true
-			}
 		}
 	}
 	require.True(t, foundTransition, "should have root's transition")
 	require.True(t, foundL1Deletion, "should have l1's deletion")
-	require.True(t, foundL2Deletion, "should have l2's deletion")
-
-	// Deleted nodes have no transitions but see their deletion
-	l1Outputs := l1.Outputs()
-	require.Len(t, l1Outputs, 2) // l1's deletion and l2's deletion
-
-	for _, op := range l1Outputs {
-		if del, ok := op.(hsm.DeleteOperation); ok {
-			if slices.Equal(del.Path(), l1.Path()) {
-				foundL1Deletion = true
-			}
-			if slices.Equal(del.Path(), l2.Path()) {
-				foundL2Deletion = true
-			}
-		}
-	}
-	require.True(t, foundL1Deletion)
-	require.True(t, foundL2Deletion)
-
-	// Leaf deleted node only sees its own deletion
-	l2Outputs := l2.Outputs()
-	require.Len(t, l2Outputs, 1)
-	_, ok := l2Outputs[0].(hsm.DeleteOperation)
-	require.True(t, ok)
 }
 
 func TestNode_ClearTransactionState(t *testing.T) {
@@ -658,13 +650,15 @@ func TestNode_ClearTransactionState(t *testing.T) {
 	err = root.DeleteChild(hsm.Key{Type: def1.Type(), ID: "l1"})
 	require.NoError(t, err)
 
-	outputs := root.Outputs()
-	require.NotEmpty(t, outputs)
+	opLog, err := root.Outputs()
+	require.NoError(t, err)
+	require.NotEmpty(t, opLog)
 
 	root.ClearTransactionState()
 
-	outputs = root.Outputs()
-	require.Empty(t, outputs)
+	opLog, err = root.Outputs()
+	require.NoError(t, err)
+	require.Empty(t, opLog)
 	require.False(t, root.Dirty())
 
 	err = hsm.MachineTransition(l1, func(d *hsmtest.Data) (hsm.TransitionOutput, error) {
@@ -699,30 +693,27 @@ func TestNode_DeleteDeepHierarchy(t *testing.T) {
 	err = nodes[1].DeleteChild(hsm.Key{Type: def1.Type(), ID: "node2"})
 	require.NoError(t, err)
 
-	// Verify outputs at each level
-	for i, node := range nodes {
-		outputs := node.Outputs()
-		if i <= 1 { // Above deletion
-			require.NotEmpty(t, outputs)
-			// Should see deletions of all descendants
-			deletionCount := 0
-			for _, op := range outputs {
-				if _, ok := op.(hsm.DeleteOperation); ok {
-					deletionCount++
-				}
-			}
-			require.Equal(t, len(nodes)-2, deletionCount)
-		} else { // At or below deletion
-			require.NotEmpty(t, outputs) // Should see deletion ops
-			// Should only see deletions, no transitions
-			for _, op := range outputs {
-				_, ok := op.(hsm.DeleteOperation)
-				require.True(t, ok)
-			}
-			// Should see own deletion and all descendant deletions
-			require.Equal(t, len(nodes)-i, len(outputs))
+	opLog, err := root.Outputs()
+	require.NoError(t, err)
+	require.NotEmpty(t, opLog)
+
+	// Count transitions and deletions
+	var transitionCount, deletionCount int
+	var deletedPaths [][]hsm.Key
+	for _, op := range opLog {
+		switch o := op.(type) {
+		case hsm.TransitionOperation:
+			transitionCount++
+			pathLen := len(o.Path())
+			require.True(t, pathLen <= 3, "should not see transitions for deleted nodes")
+		case hsm.DeleteOperation:
+			deletionCount++
+			deletedPaths = append(deletedPaths, o.Path())
 		}
 	}
+
+	require.Equal(t, 2, transitionCount, "should see transitions for nodes above deletion")
+	require.Equal(t, 1, deletionCount, "should see one deletion operation")
 }
 
 func TestNode_MixedOperationsBeforeDeletion(t *testing.T) {
@@ -740,30 +731,38 @@ func TestNode_MixedOperationsBeforeDeletion(t *testing.T) {
 		require.NoError(t, err)
 	}
 
-	// Count transition operations for l1
-	outputs := l1.Outputs()
+	// Count transition operations for l1 from root's outputs
+	opLog, err := root.Outputs()
+	require.NoError(t, err)
 	transitionCount := 0
-	for _, op := range outputs {
+	for _, op := range opLog {
 		if transOp, ok := op.(hsm.TransitionOperation); ok {
 			if slices.Equal(transOp.Path(), l1.Path()) {
 				transitionCount++
 			}
 		}
 	}
-	require.Equal(t, 3, transitionCount)
+	require.Equal(t, 3, transitionCount, "should see all transitions before deletion")
 
 	err = root.DeleteChild(hsm.Key{Type: def1.Type(), ID: "l1"})
 	require.NoError(t, err)
 
-	// After deletion, no transitions should remain for l1
-	outputs = l1.Outputs()
-	require.NotEmpty(t, outputs) // Should still have the delete operation
-	for _, op := range outputs {
-		if _, ok := op.(hsm.TransitionOperation); ok {
-			// Should not find any transition operations for deleted node
-			require.NotEqual(t, l1.Path(), op.Path())
+	opLog, err = root.Outputs()
+	require.NoError(t, err)
+	require.NotEmpty(t, opLog)
+
+	var foundDelete bool
+	for _, op := range opLog {
+		if delOp, ok := op.(hsm.DeleteOperation); ok {
+			if slices.Equal(delOp.Path(), l1.Path()) {
+				foundDelete = true
+			}
+		}
+		if transOp, ok := op.(hsm.TransitionOperation); ok {
+			require.NotEqual(t, l1.Path(), transOp.Path(), "should not see transitions for deleted node")
 		}
 	}
+	require.True(t, foundDelete, "should find deletion operation")
 }
 
 func TestNode_MultipleDeletedPaths(t *testing.T) {
@@ -797,15 +796,214 @@ func TestNode_MultipleDeletedPaths(t *testing.T) {
 	err = branch2.DeleteChild(hsm.Key{Type: def1.Type(), ID: "b2child"})
 	require.NoError(t, err)
 
-	b1outputs := b1child.Outputs()
-	require.Len(t, b1outputs, 1)
-	del, ok := b1outputs[0].(hsm.DeleteOperation)
-	require.True(t, ok)
-	require.Equal(t, b1child.Path(), del.Path())
+	outputs, err := root.Outputs()
+	require.NoError(t, err)
 
-	b2outputs := b2child.Outputs()
-	require.Len(t, b2outputs, 1)
-	del, ok = b2outputs[0].(hsm.DeleteOperation)
+	// Verify both deletion operations exist
+	var foundB1ChildDel, foundB2ChildDel bool
+	for _, op := range outputs {
+		if del, ok := op.(hsm.DeleteOperation); ok {
+			if slices.Equal(del.Path(), b1child.Path()) {
+				foundB1ChildDel = true
+			}
+			if slices.Equal(del.Path(), b2child.Path()) {
+				foundB2ChildDel = true
+			}
+		}
+	}
+	require.True(t, foundB1ChildDel, "should find b1child deletion")
+	require.True(t, foundB2ChildDel, "should find b2child deletion")
+}
+
+func TestNode_PathPrefixEdgeCases(t *testing.T) {
+	root, err := hsm.NewRoot(reg, def1.Type(), hsmtest.NewData(hsmtest.State1), make(map[string]*persistencespb.StateMachineMap), &backend{})
+	require.NoError(t, err)
+
+	// Test similar paths at different levels:
+	// root
+	// ├── node1
+	// │   └── child1
+	// │       └── node1  (same name as parent)
+	// ├── node10
+	// └── node11
+
+	node1, err := root.AddChild(hsm.Key{Type: def1.Type(), ID: "node1"}, hsmtest.NewData(hsmtest.State1))
+	require.NoError(t, err)
+	node10, err := root.AddChild(hsm.Key{Type: def1.Type(), ID: "node10"}, hsmtest.NewData(hsmtest.State1))
+	require.NoError(t, err)
+	node11, err := root.AddChild(hsm.Key{Type: def1.Type(), ID: "node11"}, hsmtest.NewData(hsmtest.State1))
+	require.NoError(t, err)
+
+	// Add a path that reuses "node1" at a deeper level
+	child1, err := node1.AddChild(hsm.Key{Type: def1.Type(), ID: "child1"}, hsmtest.NewData(hsmtest.State1))
+	require.NoError(t, err)
+	deepNode1, err := child1.AddChild(hsm.Key{Type: def1.Type(), ID: "node1"}, hsmtest.NewData(hsmtest.State1))
+	require.NoError(t, err)
+
+	// Add transitions to all nodes
+	for _, node := range []*hsm.Node{node1, node10, node11, child1, deepNode1} {
+		err = hsm.MachineTransition(node, func(d *hsmtest.Data) (hsm.TransitionOutput, error) {
+			d.SetState(hsmtest.State2)
+			return hsm.TransitionOutput{}, nil
+		})
+		require.NoError(t, err)
+	}
+
+	err = root.DeleteChild(hsm.Key{Type: def1.Type(), ID: "node1"})
+	require.NoError(t, err)
+
+	// Verify operations
+	opLog, err := root.Outputs()
+	require.NoError(t, err)
+
+	var transitions, deletes [][]hsm.Key
+	for _, op := range opLog {
+		switch o := op.(type) {
+		case hsm.TransitionOperation:
+			transitions = append(transitions, o.Path())
+		case hsm.DeleteOperation:
+			deletes = append(deletes, o.Path())
+		}
+	}
+
+	// Should see:
+	// - Delete operation for node1 and its subtree
+	// - Transitions for node10 and node11
+	// - No transitions from node1's subtree
+	require.Len(t, deletes, 1, "should have one delete operation")
+	require.Equal(t, node1.Path(), deletes[0], "delete should be for top-level node1")
+
+	// Only node10 and node11 transitions should remain
+	require.Len(t, transitions, 2, "should have only node10 and node11 transitions")
+	for _, transition := range transitions {
+		require.True(t, slices.Equal(transition, node10.Path()) || slices.Equal(transition, node11.Path()),
+			"remaining transitions should only be for node10 or node11")
+	}
+
+	// Verify root operations are preserved
+	err = hsm.MachineTransition(root, func(d *hsmtest.Data) (hsm.TransitionOutput, error) {
+		d.SetState(hsmtest.State2)
+		return hsm.TransitionOutput{}, nil
+	})
+	require.NoError(t, err)
+
+	opLog, err = root.Outputs()
+	require.NoError(t, err)
+
+	// Find root's transition
+	foundRootTransition := false
+	for _, op := range opLog {
+		if transOp, ok := op.(hsm.TransitionOperation); ok {
+			if len(transOp.Path()) == 0 {
+				foundRootTransition = true
+				break
+			}
+		}
+	}
+	require.True(t, foundRootTransition, "root's transition should be preserved")
+}
+
+func TestNode_ComplexHierarchicalDeletions(t *testing.T) {
+	root, err := hsm.NewRoot(reg, def1.Type(), hsmtest.NewData(hsmtest.State1), make(map[string]*persistencespb.StateMachineMap), &backend{})
+	require.NoError(t, err)
+
+	// Create a three-level hierarchy with siblings
+	parent, err := root.AddChild(hsm.Key{Type: def1.Type(), ID: "parent"}, hsmtest.NewData(hsmtest.State1))
+	require.NoError(t, err)
+
+	child1, err := parent.AddChild(hsm.Key{Type: def1.Type(), ID: "child1"}, hsmtest.NewData(hsmtest.State1))
+	require.NoError(t, err)
+	child2, err := parent.AddChild(hsm.Key{Type: def1.Type(), ID: "child2"}, hsmtest.NewData(hsmtest.State1))
+	require.NoError(t, err)
+
+	grandchild1, err := child1.AddChild(hsm.Key{Type: def1.Type(), ID: "grandchild1"}, hsmtest.NewData(hsmtest.State1))
+	require.NoError(t, err)
+	grandchild2, err := child2.AddChild(hsm.Key{Type: def1.Type(), ID: "grandchild2"}, hsmtest.NewData(hsmtest.State1))
+	require.NoError(t, err)
+
+	// Add operations to all nodes
+	for _, node := range []*hsm.Node{parent, child1, child2, grandchild1, grandchild2} {
+		err = hsm.MachineTransition(node, func(d *hsmtest.Data) (hsm.TransitionOutput, error) {
+			d.SetState(hsmtest.State2)
+			return hsm.TransitionOutput{}, nil
+		})
+		require.NoError(t, err)
+	}
+
+	// Delete parent while children have pending operations
+	err = root.DeleteChild(hsm.Key{Type: def1.Type(), ID: "parent"})
+	require.NoError(t, err)
+
+	// Verify only parent's delete operation remains, all child operations are removed
+	opLog, err := root.Outputs()
+	require.NoError(t, err)
+
+	require.Len(t, opLog, 1, "should only see parent's delete operation")
+	deleteOp, ok := opLog[0].(hsm.DeleteOperation)
 	require.True(t, ok)
-	require.Equal(t, b2child.Path(), del.Path())
+	require.Equal(t, parent.Path(), deleteOp.Path())
+}
+
+func TestNode_CompactionOrderPreservation(t *testing.T) {
+	root, err := hsm.NewRoot(reg, def1.Type(), hsmtest.NewData(hsmtest.State1), make(map[string]*persistencespb.StateMachineMap), &backend{})
+	require.NoError(t, err)
+
+	node1, err := root.AddChild(hsm.Key{Type: def1.Type(), ID: "node1"}, hsmtest.NewData(hsmtest.State1))
+	require.NoError(t, err)
+	node2, err := root.AddChild(hsm.Key{Type: def1.Type(), ID: "node2"}, hsmtest.NewData(hsmtest.State1))
+	require.NoError(t, err)
+
+	// Record sequence of operations:
+	// 1. Transition on node1
+	// 2. Transition on node2
+	// 3. Delete node1 (should remove node1's transition)
+	// 4. Another transition on node2
+
+	err = hsm.MachineTransition(node1, func(d *hsmtest.Data) (hsm.TransitionOutput, error) {
+		return hsm.TransitionOutput{}, nil
+	})
+	require.NoError(t, err)
+
+	err = hsm.MachineTransition(node2, func(d *hsmtest.Data) (hsm.TransitionOutput, error) {
+		return hsm.TransitionOutput{}, nil
+	})
+	require.NoError(t, err)
+
+	err = root.DeleteChild(hsm.Key{Type: def1.Type(), ID: "node1"})
+	require.NoError(t, err)
+
+	err = hsm.MachineTransition(node2, func(d *hsmtest.Data) (hsm.TransitionOutput, error) {
+		return hsm.TransitionOutput{}, nil
+	})
+	require.NoError(t, err)
+
+	// After compaction:
+	// - node1's transition should be gone
+	// - delete operation should remain
+	// - node2's transitions should remain in original order
+	opLog, err := root.Outputs()
+	require.NoError(t, err)
+
+	var ops []string
+	for _, op := range opLog {
+		switch o := op.(type) {
+		case hsm.TransitionOperation:
+			if slices.Equal(o.Path(), node2.Path()) {
+				ops = append(ops, "node2_transition")
+			} else if slices.Equal(o.Path(), node1.Path()) {
+				ops = append(ops, "node1_transition")
+			}
+		case hsm.DeleteOperation:
+			if slices.Equal(o.Path(), node1.Path()) {
+				ops = append(ops, "node1_delete")
+			}
+		}
+	}
+
+	expected := []string{
+		"node2_transition",
+		"node1_delete",
+		"node2_transition",
+	}
+	require.Equal(t, expected, ops, "operations should maintain chronological order after compaction")
 }

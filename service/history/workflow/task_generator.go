@@ -296,26 +296,34 @@ func (r *TaskGeneratorImpl) GenerateDirtySubStateMachineTasks(
 	stateMachineRegistry *hsm.Registry,
 ) error {
 	tree := r.mutableState.HSM()
-	for _, pao := range tree.Outputs() {
-		node, err := tree.Child(pao.Path)
+	opLog, err := tree.Outputs()
+	if err != nil {
+		return err
+	}
+	for _, op := range opLog {
+		transitionOp, ok := op.(hsm.TransitionOperation)
+		if !ok {
+			continue
+		}
+
+		node, err := tree.Child(transitionOp.Path())
 		if err != nil {
 			return err
 		}
-		for _, output := range pao.Outputs {
-			for _, task := range output.Tasks {
-				// since this method is called after transition history is updated for the current transition,
-				// we can safely call generateSubStateMachineTask which sets MutableStateVersionedTransition
-				// to the last versioned transition in StateMachineRef
-				if err := generateSubStateMachineTask(
-					r.mutableState,
-					stateMachineRegistry,
-					node,
-					pao.Path,
-					output.TransitionCount,
-					task,
-				); err != nil {
-					return err
-				}
+
+		for _, task := range transitionOp.Output.Tasks {
+			// since this method is called after transition history is updated for the current transition,
+			// we can safely call generateSubStateMachineTask which sets MutableStateVersionedTransition
+			// to the last versioned transition in StateMachineRef
+			if err := generateSubStateMachineTask(
+				r.mutableState,
+				stateMachineRegistry,
+				node,
+				transitionOp.Path(),
+				transitionOp.Output.TransitionCount,
+				task,
+			); err != nil {
+				return err
 			}
 		}
 	}
