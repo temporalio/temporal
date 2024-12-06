@@ -151,7 +151,7 @@ func updateActivityOptions(
 		activityInfo.HeartbeatTimeout = adjustedOptions.HeartbeatTimeout
 		activityInfo.RetryMaximumInterval = adjustedOptions.RetryPolicy.MaximumInterval
 		activityInfo.RetryBackoffCoefficient = adjustedOptions.RetryPolicy.BackoffCoefficient
-		activityInfo.RetryMaximumInterval = adjustedOptions.RetryPolicy.MaximumInterval
+		activityInfo.RetryInitialInterval = adjustedOptions.RetryPolicy.InitialInterval
 		activityInfo.RetryMaximumAttempts = adjustedOptions.RetryPolicy.MaximumAttempts
 
 		// move forward activity version

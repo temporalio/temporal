@@ -88,6 +88,7 @@ type (
 		clusterMetadataManager persistence.ClusterMetadataManager
 		clusterMetadata        clustermetadata.Metadata
 		clientFactory          svc.Factory
+		namespaceRegistry      namespace.Registry
 		nexusEndpointClient    *NexusEndpointClient
 	}
 
@@ -104,6 +105,7 @@ type (
 		clusterMetadataManager persistence.ClusterMetadataManager
 		clusterMetadata        clustermetadata.Metadata
 		clientFactory          svc.Factory
+		namespaceRegistry      namespace.Registry
 		nexusEndpointClient    *NexusEndpointClient
 	}
 )
@@ -133,6 +135,7 @@ func NewOperatorHandlerImpl(
 		clusterMetadataManager: args.clusterMetadataManager,
 		clusterMetadata:        args.clusterMetadata,
 		clientFactory:          args.clientFactory,
+		namespaceRegistry:      args.namespaceRegistry,
 		nexusEndpointClient:    args.nexusEndpointClient,
 	}
 
@@ -609,6 +612,40 @@ func (h *OperatorHandlerImpl) DeleteNamespace(
 
 	if request.GetNamespace() == primitives.SystemLocalNamespace || request.GetNamespaceId() == primitives.SystemNamespaceID {
 		return nil, errUnableDeleteSystemNamespace
+	}
+
+	if !h.config.AllowDeleteNamespaceIfNexusEndpointTarget() {
+		// Get the namespace name in case the request is to delete by ID so we can verify that this namespace is not
+		// associated with a Nexus endpoint.
+		requestNSName := request.GetNamespace()
+		if request.GetNamespaceId() != "" {
+			nsName, err := h.namespaceRegistry.GetNamespaceName(namespace.ID(request.GetNamespaceId()))
+			if err != nil {
+				return nil, err
+			}
+			requestNSName = nsName.String()
+		}
+
+		// Prevent deletion of a namespace that is targeted by a Nexus endpoint.
+		var nextPageToken []byte
+		for {
+			resp, err := h.nexusEndpointClient.List(ctx, &operatorservice.ListNexusEndpointsRequest{
+				// Don't specify PageSize and fallback to default.
+				NextPageToken: nextPageToken,
+			})
+			if err != nil {
+				return nil, err
+			}
+			for _, entry := range resp.GetEndpoints() {
+				if nsName := entry.GetSpec().GetTarget().GetWorker().GetNamespace(); nsName == requestNSName {
+					return nil, serviceerror.NewFailedPrecondition(fmt.Sprintf("cannot delete a namespace that is a target of a Nexus endpoint (%s)", entry.GetSpec().GetName()))
+				}
+			}
+			nextPageToken = resp.NextPageToken
+			if len(nextPageToken) == 0 {
+				break
+			}
+		}
 	}
 
 	namespaceDeleteDelay := h.config.DeleteNamespaceNamespaceDeleteDelay()
