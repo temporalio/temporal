@@ -1433,6 +1433,11 @@ func (t *transferQueueActiveTaskExecutor) resetWorkflow(
 	baseCurrentBranchToken := baseCurrentVersionHistory.GetBranchToken()
 	baseNextEventID := baseMutableState.GetNextEventID()
 
+	namespaceName, err := t.shardContext.GetNamespaceRegistry().GetNamespaceName(namespaceID)
+	if err != nil {
+		return err
+	}
+	allowResetWithPendingChildren := t.shardContext.GetConfig().AllowResetWithPendingChildren(namespaceName.String())
 	baseWorkflow := ndc.NewWorkflow(
 		t.shardContext.GetClusterMetadata(),
 		baseContext,
@@ -1460,6 +1465,7 @@ func (t *transferQueueActiveTaskExecutor) resetWorkflow(
 		reason,
 		nil,
 		nil,
+		allowResetWithPendingChildren,
 	)
 
 	switch err.(type) {
