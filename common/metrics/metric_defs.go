@@ -920,6 +920,7 @@ var (
 	WorkflowFailedCount                   = NewCounterDef("workflow_failed")
 	WorkflowTimeoutCount                  = NewCounterDef("workflow_timeout")
 	WorkflowTerminateCount                = NewCounterDef("workflow_terminate")
+	WorkflowForceTerminateCount           = NewCounterDef("workflow_force_terminate")
 	WorkflowContinuedAsNewCount           = NewCounterDef("workflow_continued_as_new")
 	ReplicationStreamPanic                = NewCounterDef("replication_stream_panic")
 	ReplicationStreamError                = NewCounterDef("replication_stream_error")

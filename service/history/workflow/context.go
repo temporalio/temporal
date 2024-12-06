@@ -990,7 +990,7 @@ func (c *ContextImpl) enforceHistorySizeCheck(
 ) (bool, error) {
 	// Hard terminate workflow if still running and breached history size limit
 	if c.maxHistorySizeExceeded(shardContext) {
-		if err := c.forceTerminateWorkflow(ctx, shardContext, common.FailureReasonHistorySizeExceedsLimit); err != nil {
+		if err := c.forceTerminateWorkflow(ctx, shardContext, common.TerminationReasonHistorySizeExceedsLimit); err != nil {
 			return false, err
 		}
 		// Return true to caller to indicate workflow state is overwritten to force terminate execution on update
@@ -1028,7 +1028,7 @@ func (c *ContextImpl) enforceHistoryCountCheck(
 ) (bool, error) {
 	// Hard terminate workflow if still running and breached history count limit
 	if c.maxHistoryCountExceeded(shardContext) {
-		if err := c.forceTerminateWorkflow(ctx, shardContext, common.FailureReasonHistoryCountExceedsLimit); err != nil {
+		if err := c.forceTerminateWorkflow(ctx, shardContext, common.TerminationReasonHistoryCountExceedsLimit); err != nil {
 			return false, err
 		}
 		// Return true to caller to indicate workflow state is overwritten to force terminate execution on update
@@ -1064,7 +1064,7 @@ func (c *ContextImpl) maxHistoryCountExceeded(shardContext shard.Context) bool {
 // TODO: ideally this check should be after closing mutable state tx, but that would require a large refactor
 func (c *ContextImpl) enforceMutableStateSizeCheck(ctx context.Context, shardContext shard.Context) (bool, error) {
 	if c.maxMutableStateSizeExceeded() {
-		if err := c.forceTerminateWorkflow(ctx, shardContext, common.FailureReasonMutableStateSizeExceedsLimit); err != nil {
+		if err := c.forceTerminateWorkflow(ctx, shardContext, common.TerminationReasonMutableStateSizeExceedsLimit); err != nil {
 			return false, err
 		}
 		// Return true to caller to indicate workflow state is overwritten to force terminate execution on update
@@ -1100,7 +1100,7 @@ func (c *ContextImpl) maxMutableStateSizeExceeded() bool {
 func (c *ContextImpl) forceTerminateWorkflow(
 	ctx context.Context,
 	shardContext shard.Context,
-	failureReason string,
+	failureReason common.WorkflowTerminationReason,
 ) error {
 	if !c.MutableState.IsWorkflowExecutionRunning() {
 		return nil
@@ -1120,14 +1120,17 @@ func (c *ContextImpl) forceTerminateWorkflow(
 		return err
 	}
 
-	return TerminateWorkflow(
+	err = TerminateWorkflow(
 		mutableState,
-		failureReason,
+		failureReason.String(),
 		nil,
 		consts.IdentityHistoryService,
 		false,
 		nil, // No links necessary.
 	)
+	if err != nil {
+		return err
+	}
 }
 
 // CacheSize estimates the in-memory size of the object for cache limits. For proto objects, it uses proto.Size()

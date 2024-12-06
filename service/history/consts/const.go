@@ -102,11 +102,11 @@ var (
 	// ErrEmptyHistoryRawEventBatch indicate that one single batch of history raw events is of size 0
 	ErrEmptyHistoryRawEventBatch = serviceerror.NewInvalidArgument("encountered empty history batch")
 	// ErrHistorySizeExceedsLimit is error indicating workflow execution has exceeded system defined history size limit
-	ErrHistorySizeExceedsLimit = serviceerror.NewInvalidArgument(common.FailureReasonHistorySizeExceedsLimit)
+	ErrHistorySizeExceedsLimit = serviceerror.NewInvalidArgument(common.TerminationReasonHistorySizeExceedsLimit.String())
 	// ErrHistoryCountExceedsLimit is error indicating workflow execution has exceeded system defined history count limit
-	ErrHistoryCountExceedsLimit = serviceerror.NewInvalidArgument(common.FailureReasonHistoryCountExceedsLimit)
+	ErrHistoryCountExceedsLimit = serviceerror.NewInvalidArgument(common.TerminationReasonHistoryCountExceedsLimit.String())
 	// ErrMutableStateSizeExceedsLimit is error indicating workflow execution has exceeded system defined mutable state size limit
-	ErrMutableStateSizeExceedsLimit = serviceerror.NewInvalidArgument(common.FailureReasonMutableStateSizeExceedsLimit)
+	ErrMutableStateSizeExceedsLimit = serviceerror.NewInvalidArgument(common.TerminationReasonMutableStateSizeExceedsLimit.String())
 	// ErrUnknownCluster is error indicating unknown cluster
 	ErrUnknownCluster = serviceerror.NewInvalidArgument("unknown cluster")
 	// ErrBufferedQueryCleared is error indicating mutable state is cleared while buffered query is pending
