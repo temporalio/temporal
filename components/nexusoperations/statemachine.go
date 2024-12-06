@@ -93,7 +93,7 @@ func AddChild(node *hsm.Node, id string, event *historypb.HistoryEvent, eventTok
 		if err != nil {
 			return output, err
 		}
-		creationTasks, err := op.creationTasks(node)
+		creationTasks, err := op.creationTasks()
 		if err != nil {
 			return output, err
 		}
@@ -160,11 +160,7 @@ func (o Operation) transitionTasks() ([]hsm.Task, error) {
 }
 
 // creationTasks returns tasks that are emitted when the machine is created.
-func (o Operation) creationTasks(node *hsm.Node) ([]hsm.Task, error) {
-	if canceled, err := o.cancelRequested(node); canceled || err != nil {
-		return nil, err
-	}
-
+func (o Operation) creationTasks() ([]hsm.Task, error) {
 	if o.ScheduleToCloseTimeout.AsDuration() != 0 {
 		return []hsm.Task{TimeoutTask{deadline: o.ScheduledTime.AsTime().Add(o.ScheduleToCloseTimeout.AsDuration())}}, nil
 	}
@@ -176,7 +172,7 @@ func (o Operation) RegenerateTasks(node *hsm.Node) ([]hsm.Task, error) {
 	if err != nil {
 		return nil, err
 	}
-	creationTasks, err := o.creationTasks(node)
+	creationTasks, err := o.creationTasks()
 	if err != nil {
 		return nil, err
 	}
