@@ -894,6 +894,22 @@ func reapplyEvents(
 				return reappliedEvents, err
 			}
 			reappliedEvents = append(reappliedEvents, event)
+		case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TERMINATED:
+			if isReset || isDuplicate(event) {
+				continue
+			}
+			attr := event.GetWorkflowExecutionTerminatedEventAttributes()
+			if err := workflow.TerminateWorkflow(
+				mutableState,
+				attr.GetReason(),
+				attr.GetDetails(),
+				attr.GetIdentity(),
+				false,
+				event.Links,
+			); err != nil {
+				return reappliedEvents, err
+			}
+			reappliedEvents = append(reappliedEvents, event)
 		default:
 			root := mutableState.HSM()
 			def, ok := stateMachineRegistry.EventDefinition(event.GetEventType())
