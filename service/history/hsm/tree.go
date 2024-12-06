@@ -96,7 +96,7 @@ type cachedMachine struct {
 	deleted bool
 }
 
-// String returns a human-readable representation of a path
+// formatPath returns a human-readable representation of a path.
 func formatPath(path []Key) string {
 	if len(path) == 0 {
 		return "<root>"
@@ -112,14 +112,14 @@ func formatPath(path []Key) string {
 // Each operation is associated with a path in the tree and provides information
 // about what occurred at that location.
 type Operation interface {
-	// Path returns the full path to the node where this operation occurred
+	// Path returns the full path to the node where this operation occurred.
 	Path() []Key
 	mustImplementOperation()
 }
 
 // DeleteOperation represents the deletion of a node in the tree.
 type DeleteOperation struct {
-	// NodePath is the full path to the deleted node
+	// path is the full path to the deleted node.
 	path []Key
 }
 
@@ -127,7 +127,7 @@ func (d DeleteOperation) Path() []Key { return d.path }
 
 func (DeleteOperation) mustImplementOperation() {}
 
-// String returns a human-readable representation of a DeleteOperation
+// String returns a human-readable representation of a DeleteOperation.
 func (d DeleteOperation) String() string {
 	return fmt.Sprintf("Delete(%s)", formatPath(d.path))
 }
@@ -135,9 +135,9 @@ func (d DeleteOperation) String() string {
 // TransitionOperation represents a state transition that occurred at a specific
 // node in the tree.
 type TransitionOperation struct {
-	// NodePath is the full path to the node where the transition occurred
+	// path is the full path to the node where the transition occurred.
 	path []Key
-	// Output contains the transition output and associated metadata
+	// Output contains the transition output and associated metadata.
 	Output TransitionOutputWithCount
 }
 
@@ -145,7 +145,7 @@ func (t TransitionOperation) Path() []Key { return t.path }
 
 func (TransitionOperation) mustImplementOperation() {}
 
-// String returns a human-readable representation of a TransitionOperation
+// String returns a human-readable representation of a TransitionOperation.
 func (t TransitionOperation) String() string {
 	return fmt.Sprintf("Transition(%s)[count=%d]", formatPath(t.path), t.Output.TransitionCount)
 }
@@ -154,7 +154,7 @@ func (t TransitionOperation) String() string {
 // chronologically.
 type OperationLog []Operation
 
-// String returns a human-readable representation of an OperationLog
+// String returns a human-readable representation of an OperationLog.
 func (ol OperationLog) String() string {
 	var ops []string
 	for _, op := range ol {
@@ -780,7 +780,7 @@ func (ol OperationLog) compact() OperationLog {
 	return root.collect(ol)
 }
 
-// getOrCreateNode traverses/creates path and returns the final node
+// getOrCreateNode traverses/creates path and returns the final node.
 func (n *opNode) getOrCreateNode(path []Key) *opNode {
 	current := n
 	for _, key := range path {
@@ -802,7 +802,7 @@ func isPathPrefix(prefix, path []Key) bool {
 	return slices.Equal(prefix, path[:len(prefix)])
 }
 
-// opNode represents a node in the operation tree, tracking deletion status
+// opNode represents a node in the operation tree, tracking deletion status.
 type opNode struct {
 	key       Key
 	children  map[Key]*opNode
