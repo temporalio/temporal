@@ -27,10 +27,8 @@ package startworkflow
 import (
 	"context"
 	"errors"
-	"fmt"
 	"time"
 
-	"github.com/google/uuid"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
@@ -45,6 +43,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/visibility/manager"
+	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/tasktoken"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/consts"
@@ -250,11 +249,7 @@ func (s *Starter) lockCurrentWorkflowExecution(
 // prepareNewWorkflow creates a new workflow context, and closes its mutable state transaction as snapshot.
 // It returns the creationContext which can later be used to insert into the executions table.
 func (s *Starter) prepareNewWorkflow(workflowID string) (*creationParams, error) {
-	runUUID, err := uuid.NewV7()
-	if err != nil {
-		return nil, fmt.Errorf("failed to generate run id: %w", err)
-	}
-	runID := runUUID.String()
+	runID := primitives.NewUUID().String()
 	mutableState, err := api.NewWorkflowWithSignal(
 		s.shardContext,
 		s.namespace,
@@ -408,11 +403,7 @@ func (s *Starter) resolveDuplicateWorkflowID(
 	// Using a new RunID here to simplify locking: MultiOperation, that re-uses the Starter, is creating
 	// a locked workflow context for each new workflow. Using a fresh RunID prevents a deadlock with the
 	// previously created workflow context.
-	newRunUUID, err := uuid.NewV7()
-	if err != nil {
-		return nil, StartErr, fmt.Errorf("failed to generate run id: %w", err)
-	}
-	newRunID := newRunUUID.String()
+	newRunID := primitives.NewUUID().String()
 
 	currentExecutionUpdateAction, err := api.ResolveDuplicateWorkflowID(
 		s.shardContext,
