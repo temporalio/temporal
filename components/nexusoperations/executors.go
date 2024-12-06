@@ -117,17 +117,6 @@ func (e taskExecutor) executeInvocationTask(ctx context.Context, env hsm.Environ
 		return fmt.Errorf("failed to load operation args: %w", err)
 	}
 
-	if args.cancelRequested {
-		// TODO(bergundy): Properly support cancel before started. We need to transmit this intent to cancel to the
-		// handler because we don't know for sure that the operation hasn't been started.
-		return e.saveResult(ctx, env, ref, nil, &nexus.UnsuccessfulOperationError{
-			State: nexus.OperationStateCanceled,
-			Failure: nexus.Failure{
-				Message: "operation canceled before it was started",
-			},
-		})
-	}
-
 	// This happens when we accept the ScheduleNexusOperation command when the endpoint is not found in the registry as
 	// indicated by the EndpointNotFoundAlwaysNonRetryable dynamic config.
 	if args.endpointID == "" {
@@ -281,7 +270,6 @@ type startArgs struct {
 	payload                  *commonpb.Payload
 	nexusLink                nexus.Link
 	namespaceFailoverVersion int64
-	cancelRequested          bool
 }
 
 func (e taskExecutor) loadOperationArgs(
@@ -293,11 +281,6 @@ func (e taskExecutor) loadOperationArgs(
 	var eventToken []byte
 	err = env.Access(ctx, ref, hsm.AccessRead, func(node *hsm.Node) error {
 		operation, err := hsm.MachineData[Operation](node)
-		if err != nil {
-			return err
-		}
-
-		args.cancelRequested, err = operation.cancelRequested(node)
 		if err != nil {
 			return err
 		}

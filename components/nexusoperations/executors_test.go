@@ -104,7 +104,7 @@ func TestProcessInvocationTask(t *testing.T) {
 		name                       string
 		endpointNotFound           bool
 		eventHasNoEndpointID       bool
-		operationIsCanceled        bool
+		cancelBeforeStart          bool
 		header                     nexus.Header
 		checkStartOperationOptions func(t *testing.T, options nexus.StartOperationOptions)
 		onStartOperation           func(ctx context.Context, service, operation string, input *nexus.LazyValue, options nexus.StartOperationOptions) (nexus.HandlerStartOperationResult[any], error)
@@ -389,19 +389,26 @@ func TestProcessInvocationTask(t *testing.T) {
 			},
 		},
 		{
-			name:                "operation already canceled",
-			operationIsCanceled: true,
-			requestTimeout:      time.Hour,
-			destinationDown:     false,
-			onStartOperation:    nil, // This should not be called if the operation is already canceled.
+			name:              "cancel before start",
+			cancelBeforeStart: true,
+			requestTimeout:    time.Hour,
+			destinationDown:   false,
+			onStartOperation: func(
+				ctx context.Context,
+				service, operation string,
+				input *nexus.LazyValue,
+				options nexus.StartOperationOptions,
+			) (nexus.HandlerStartOperationResult[any], error) {
+				return &nexus.HandlerStartOperationResultAsync{
+					OperationID: "op-id",
+					Links:       []nexus.Link{handlerNexusLink},
+				}, nil
+			},
+			expectedMetricOutcome: "pending",
 			checkOutcome: func(t *testing.T, op nexusoperations.Operation, events []*historypb.HistoryEvent) {
-				require.Equal(t, enumsspb.NEXUS_OPERATION_STATE_CANCELED, op.State())
+				require.Equal(t, enumsspb.NEXUS_OPERATION_STATE_STARTED, op.State())
 				require.Nil(t, op.LastAttemptFailure)
 				require.Equal(t, 1, len(events))
-				require.NotNil(t, events[0].GetNexusOperationCanceledEventAttributes().Failure.Cause.GetCanceledFailureInfo())
-				require.Equal(t,
-					"operation canceled before it was started",
-					events[0].GetNexusOperationCanceledEventAttributes().Failure.Cause.Message)
 			},
 		},
 	}
@@ -436,11 +443,15 @@ func TestProcessInvocationTask(t *testing.T) {
 			backend := &hsmtest.NodeBackend{Events: []*historypb.HistoryEvent{event}}
 			node := newOperationNode(t, backend, backend.Events[0])
 			env := fakeEnv{node}
-			if tc.operationIsCanceled {
+			if tc.cancelBeforeStart {
 				op, err := hsm.MachineData[nexusoperations.Operation](node)
 				require.NoError(t, err)
 				_, err = op.Cancel(node, time.Now())
 				require.NoError(t, err)
+				c, err := op.Cancelation(node)
+				require.NoError(t, err)
+				require.NotNil(t, c)
+				require.Equal(t, enumspb.NEXUS_OPERATION_CANCELLATION_STATE_UNSPECIFIED, c.State())
 			}
 			namespaceRegistry := namespace.NewMockRegistry(ctrl)
 			namespaceRegistry.EXPECT().GetNamespaceByID(namespace.ID("ns-id")).Return(
@@ -524,6 +535,12 @@ func TestProcessInvocationTask(t *testing.T) {
 			op, err := hsm.MachineData[nexusoperations.Operation](node)
 			require.NoError(t, err)
 			tc.checkOutcome(t, op, backend.Events[1:]) // Ignore the original scheduled event.
+			if tc.cancelBeforeStart {
+				c, err := op.Cancelation(node)
+				require.NoError(t, err)
+				require.NotNil(t, c)
+				require.Equal(t, enumspb.NEXUS_OPERATION_CANCELLATION_STATE_SCHEDULED, c.State())
+			}
 		})
 	}
 }
