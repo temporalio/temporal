@@ -270,6 +270,10 @@ message WorkflowExecutionInfo {
     // (-- api-linter: core::0203::immutable=disabled
     //     aip.dev/not-precedent: field_behavior annotation is not yet used in this repo --)
     temporal.api.workflow.v1.WorkflowExecutionVersioningInfo versioning_info = 98;
+
+	// This is the run id when the WorkflowExecutionStarted event was written.
+	// A workflow reset changes the execution run_id, but preserves this field so that we have a reference to the original workflow execution that was reset.
+	string original_execution_run_id = 99;
 }
 
 message ExecutionStats {
