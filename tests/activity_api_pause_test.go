@@ -39,6 +39,7 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/testing/testvars"
+	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/tests/testcore"
 )
 
@@ -149,7 +150,7 @@ func (s *ActivityApiPauseClientTestSuite) TestActivityPauseApi_WhileRunning() {
 	s.True(description.PendingActivities[0].Paused)
 
 	// wait long enough for activity to retry if pause is not working
-	time.Sleep(2 * time.Second)
+	util.InterruptibleSleep(ctx, 2*time.Second)
 
 	// make sure activity is not completed, and was not retried
 	description, err = s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
@@ -240,7 +241,7 @@ func (s *ActivityApiPauseClientTestSuite) TestActivityPauseApi_WhileWaiting() {
 	s.NotNil(resp)
 
 	// wait long enough for activity to retry if pause is not working
-	time.Sleep(2 * time.Second)
+	util.InterruptibleSleep(ctx, 2*time.Second)
 
 	// make sure activity is not completed, and was not retried
 	description, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
