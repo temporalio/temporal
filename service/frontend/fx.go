@@ -660,6 +660,7 @@ func OperatorHandlerProvider(
 	clusterMetadataManager persistence.ClusterMetadataManager,
 	clusterMetadata cluster.Metadata,
 	clientFactory client.Factory,
+	namespaceRegistry namespace.Registry,
 	nexusEndpointClient *NexusEndpointClient,
 ) *OperatorHandlerImpl {
 	args := NewOperatorHandlerImplArgs{
@@ -675,6 +676,7 @@ func OperatorHandlerProvider(
 		clusterMetadataManager,
 		clusterMetadata,
 		clientFactory,
+		namespaceRegistry,
 		nexusEndpointClient,
 	}
 	return NewOperatorHandlerImpl(args)

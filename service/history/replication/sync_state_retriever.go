@@ -144,6 +144,9 @@ func (s *SyncStateRetrieverImpl) GetSyncWorkflowStateArtifact(
 			releaseFunc(retError)
 		}
 	}()
+	if mutableState.HasBufferedEvents() {
+		return nil, serviceerror.NewWorkflowNotReady("workflow has buffered events")
+	}
 
 	if len(mutableState.GetExecutionInfo().TransitionHistory) == 0 {
 		// workflow essentially in an unknown state

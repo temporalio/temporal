@@ -29,9 +29,11 @@ import (
 	"errors"
 	"fmt"
 
+	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/api/historyservice/v1"
+	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/metrics"
@@ -50,6 +52,7 @@ func Invoke(
 	request *historyservice.RecordActivityTaskStartedRequest,
 	shardContext shard.Context,
 	workflowConsistencyChecker api.WorkflowConsistencyChecker,
+	matchingClient matchingservice.MatchingServiceClient,
 ) (resp *historyservice.RecordActivityTaskStartedResponse, retError error) {
 
 	var err error
@@ -70,7 +73,7 @@ func Invoke(
 				return nil, consts.ErrWorkflowCompleted
 			}
 
-			response, startedTransition, err = recordActivityTaskStarted(ctx, shardContext, mutableState, request)
+			response, startedTransition, err = recordActivityTaskStarted(ctx, shardContext, mutableState, request, matchingClient)
 			if err != nil {
 				return nil, err
 			}
@@ -105,6 +108,7 @@ func recordActivityTaskStarted(
 	shardContext shard.Context,
 	mutableState workflow.MutableState,
 	request *historyservice.RecordActivityTaskStartedRequest,
+	matchingClient matchingservice.MatchingServiceClient,
 ) (*historyservice.RecordActivityTaskStartedResponse, bool, error) {
 	namespaceEntry, err := api.GetActiveNamespace(shardContext, namespace.ID(request.GetNamespaceId()))
 	if err != nil {
@@ -189,18 +193,32 @@ func recordActivityTaskStarted(
 	}
 
 	if !pollerDeployment.Equal(wfDeployment) {
-		// Task is redirected, see if a transition can start.
-		if err := mutableState.StartDeploymentTransition(pollerDeployment); err != nil {
-			if errors.Is(err, workflow.ErrPinnedWorkflowCannotTransition) {
-				// This must be a task from a time that the workflow was unpinned, but it's
-				// now pinned so can't transition. Matching can drop the task safely.
-				return nil, false, serviceerrors.NewObsoleteMatchingTask(err.Error())
-			}
+		// Task is redirected, see if this activity should start a transition on the workflow. The
+		// workflow transition happens only if the workflow TQ's current deployment is the same as
+		// the poller deployment. Otherwise, it means the activity is independently versioned, we
+		// allow it to start without affecting the workflow.
+		wfTqCurrentDeployment, err := getTaskQueueCurrentDeployment(ctx,
+			request.NamespaceId,
+			mutableState.GetExecutionInfo().GetTaskQueue(),
+			enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+			matchingClient)
+		if err != nil {
+			// Let matching retry
 			return nil, false, err
 		}
-		// This activity started a transition, make sure the MS changes are written but
-		// reject the activity task.
-		return nil, true, nil
+		if pollerDeployment.Equal(wfTqCurrentDeployment) {
+			if err := mutableState.StartDeploymentTransition(pollerDeployment); err != nil {
+				if errors.Is(err, workflow.ErrPinnedWorkflowCannotTransition) {
+					// This must be a task from a time that the workflow was unpinned, but it's
+					// now pinned so can't transition. Matching can drop the task safely.
+					return nil, false, serviceerrors.NewObsoleteMatchingTask(err.Error())
+				}
+				return nil, false, err
+			}
+			// This activity started a transition, make sure the MS changes are written but
+			// reject the activity task.
+			return nil, true, nil
+		}
 	}
 
 	versioningStamp := worker_versioning.StampFromCapabilities(request.PollRequest.WorkerVersionCapabilities)
@@ -231,4 +249,30 @@ func recordActivityTaskStarted(
 	response.WorkflowNamespace = namespaceName
 
 	return response, false, nil
+}
+
+// TODO: move this method to a better place
+// TODO: cache this result (especially if the answer is true)
+func getTaskQueueCurrentDeployment(
+	ctx context.Context,
+	namespaceID string,
+	taskQueueName string,
+	taskQueueType enumspb.TaskQueueType,
+	matchingClient matchingservice.MatchingServiceClient,
+) (*deploymentpb.Deployment, error) {
+	resp, err := matchingClient.GetTaskQueueUserData(ctx,
+		&matchingservice.GetTaskQueueUserDataRequest{
+			NamespaceId:   namespaceID,
+			TaskQueue:     taskQueueName,
+			TaskQueueType: taskQueueType,
+		})
+	if err != nil {
+		return nil, err
+	}
+	tqData, ok := resp.GetUserData().GetData().GetPerType()[int32(taskQueueType)]
+	if !ok {
+		// The TQ is unversioned
+		return nil, nil
+	}
+	return worker_versioning.FindCurrentDeployment(tqData.GetDeploymentData()), nil
 }

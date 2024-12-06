@@ -101,7 +101,7 @@ func startAndSignalWorkflow(
 		return "", false, err
 	}
 
-	newWorkflowLease, err := api.NewWorkflowLeaseAndContext(shard, newMutableState)
+	newWorkflowLease, err := api.NewWorkflowLeaseAndContext(nil, shard, newMutableState)
 	if err != nil {
 		return "", false, err
 	}

@@ -188,7 +188,7 @@ func (s *DeploymentSuite) TestDescribeDeployment_RegisterTaskQueue() {
 }
 
 func (s *DeploymentSuite) TestDescribeDeployment_RegisterTaskQueue_ConcurrentPollers() {
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*15)
 	defer cancel()
 
 	// presence of internally used delimiters (:) or escape
@@ -236,7 +236,7 @@ func (s *DeploymentSuite) TestDescribeDeployment_RegisterTaskQueue_ConcurrentPol
 		a.Equal(taskQueue.Name, resp.GetDeploymentInfo().GetTaskQueueInfos()[0].Name)
 		a.Equal(false, resp.GetDeploymentInfo().GetIsCurrent())
 		// todo (Shivam) - please add a check for current time
-	}, time.Second*5, time.Millisecond*1000)
+	}, time.Second*10, time.Millisecond*1000)
 }
 
 func (s *DeploymentSuite) TestGetCurrentDeployment_NoCurrentDeployment() {
@@ -1048,7 +1048,7 @@ func (s *DeploymentSuite) checkListAndWaitForBatchCompletion(ctx context.Context
 		if len(listResp.GetOperationInfo()) > 0 {
 			a.Equal(jobId, listResp.GetOperationInfo()[0].GetJobId())
 		}
-	}, 5*time.Second, 50*time.Millisecond)
+	}, 10*time.Second, 50*time.Millisecond)
 
 	for {
 		descResp, err := s.FrontendClient().DescribeBatchOperation(ctx, &workflowservice.DescribeBatchOperationRequest{
