@@ -788,7 +788,7 @@ func (r *workflowResetterImpl) reapplyEvents(
 	// When reapplying events during WorkflowReset, we do not check for conflicting update IDs (they are not possible,
 	// since the workflow was in a consistent state before reset), and we do not perform deduplication (because we never
 	// did, before the refactoring that unified two code paths; see comment below.)
-	return reapplyEvents(ctx, mutableState, nil, r.shardContext.StateMachineRegistry(), events, resetReapplyExcludeTypes, "")
+	return reapplyEvents(ctx, mutableState, nil, r.shardContext.StateMachineRegistry(), events, resetReapplyExcludeTypes, "", true)
 }
 
 func reapplyEvents(
@@ -799,6 +799,7 @@ func reapplyEvents(
 	events []*historypb.HistoryEvent,
 	resetReapplyExcludeTypes map[enumspb.ResetReapplyExcludeType]struct{},
 	runIdForDeduplication string,
+	isReset bool,
 ) ([]*historypb.HistoryEvent, error) {
 	// TODO (dan): This implementation is the result of unifying two previous implementations, one of which did
 	// deduplication. Can we always/never do this deduplication, or must it be decided by the caller?
@@ -811,7 +812,6 @@ func reapplyEvents(
 	}
 	_, excludeSignal := resetReapplyExcludeTypes[enumspb.RESET_REAPPLY_EXCLUDE_TYPE_SIGNAL]
 	_, excludeUpdate := resetReapplyExcludeTypes[enumspb.RESET_REAPPLY_EXCLUDE_TYPE_UPDATE]
-	_, excludeCancelRequest := resetReapplyExcludeTypes[enumspb.RESET_REAPPLY_EXCLUDE_TYPE_CANCEL_REQUEST]
 	var reappliedEvents []*historypb.HistoryEvent
 	for _, event := range events {
 		switch event.GetEventType() {
@@ -875,7 +875,7 @@ func reapplyEvents(
 			}
 			reappliedEvents = append(reappliedEvents, event)
 		case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CANCEL_REQUESTED:
-			if excludeCancelRequest || isDuplicate(event) {
+			if isReset || isDuplicate(event) {
 				continue
 			}
 			if mutableState.IsCancelRequested() {

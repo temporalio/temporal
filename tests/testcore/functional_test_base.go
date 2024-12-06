@@ -533,3 +533,12 @@ func (s *FunctionalTestBase) RunTestWithMatchingBehavior(subtest func()) {
 		}
 	}
 }
+
+func (s *FunctionalTestBase) WaitForChannel(ctx context.Context, ch chan struct{}) {
+	s.T().Helper()
+	select {
+	case <-ch:
+	case <-ctx.Done():
+		s.FailNow("context timeout while waiting for channel")
+	}
+}
