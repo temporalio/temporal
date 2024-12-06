@@ -117,8 +117,7 @@ type Operation interface {
 	mustImplementOperation()
 }
 
-// DeleteOperation represents the deletion of a node in the tree. When a node
-// is deleted, DeleteOperations are created for it and all its descendants.
+// DeleteOperation represents the deletion of a node in the tree.
 type DeleteOperation struct {
 	// NodePath is the full path to the deleted node
 	path []Key
