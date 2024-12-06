@@ -171,19 +171,6 @@ func (ol OperationLog) String() string {
 	return fmt.Sprintf("[%s]", strings.Join(ops, ", "))
 }
 
-// IsDeleted returns true if the given path or any of its ancestors has been deleted. This is used to determine if
-// operations are valid for a given path.
-func (ol OperationLog) IsDeleted(path []Key) bool {
-	for _, op := range ol {
-		if del, ok := op.(DeleteOperation); ok {
-			if isPathPrefix(del.path, path) {
-				return true
-			}
-		}
-	}
-	return false
-}
-
 // NodeBackend is a concrete implementation to support interacting with the underlying platform.
 // It currently has only a single implementation - workflow mutable state.
 type NodeBackend interface {
