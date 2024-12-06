@@ -692,7 +692,6 @@ func TestNode_DeleteDeepHierarchy(t *testing.T) {
 
 	// Count transitions and deletions
 	var transitionCount, deletionCount int
-	var deletedPaths [][]hsm.Key
 	for _, op := range opLog {
 		switch o := op.(type) {
 		case hsm.TransitionOperation:
@@ -701,7 +700,6 @@ func TestNode_DeleteDeepHierarchy(t *testing.T) {
 			require.True(t, pathLen <= 3, "should not see transitions for deleted nodes")
 		case hsm.DeleteOperation:
 			deletionCount++
-			deletedPaths = append(deletedPaths, o.Path())
 		}
 	}
 
