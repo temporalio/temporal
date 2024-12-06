@@ -42,6 +42,7 @@ type (
 		TargetWorkflowID    string
 		InitiatedEventID    int64
 		Version             int64
+		IsResetRun          bool // TODO (Chetan): Change this to reset policy when we have those definitions.
 	}
 )
 
