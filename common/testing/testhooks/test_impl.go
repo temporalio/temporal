@@ -39,9 +39,9 @@ type (
 	// used with Get and Set.
 	TestHooks interface {
 		// private accessors; access must go through package-level Get/Set
-		get(string) (any, bool)
-		set(string, any)
-		del(string)
+		get(Key) (any, bool)
+		set(Key, any)
+		del(Key)
 	}
 
 	// testHooksImpl is an implementation of TestHooks.
@@ -51,7 +51,7 @@ type (
 )
 
 // Get gets the value of a test hook from the registry.
-func Get[T any](th TestHooks, key string) (T, bool) {
+func Get[T any](th TestHooks, key Key) (T, bool) {
 	if val, ok := th.get(key); ok {
 		// this is only used in test so we want to panic on type mismatch:
 		return val.(T), ok // nolint:revive
@@ -61,7 +61,7 @@ func Get[T any](th TestHooks, key string) (T, bool) {
 }
 
 // Call calls a func() hook if present.
-func Call(th TestHooks, key string) {
+func Call(th TestHooks, key Key) {
 	if hook, ok := Get[func()](th, key); ok {
 		hook()
 	}
@@ -69,7 +69,7 @@ func Call(th TestHooks, key string) {
 
 // Set sets a test hook to a value and returns a cleanup function to unset it.
 // Calls to Set and the cleanup functions should form a stack.
-func Set[T any](th TestHooks, key string, val T) func() {
+func Set[T any](th TestHooks, key Key, val T) func() {
 	th.set(key, val)
 	return func() { th.del(key) }
 }
@@ -81,14 +81,14 @@ func NewTestHooksImpl() TestHooks {
 	return &testHooksImpl{}
 }
 
-func (th *testHooksImpl) get(key string) (any, bool) {
+func (th *testHooksImpl) get(key Key) (any, bool) {
 	return th.m.Load(key)
 }
 
-func (th *testHooksImpl) set(key string, val any) {
+func (th *testHooksImpl) set(key Key, val any) {
 	th.m.Store(key, val)
 }
 
-func (th *testHooksImpl) del(key string) {
+func (th *testHooksImpl) del(key Key) {
 	th.m.Delete(key)
 }

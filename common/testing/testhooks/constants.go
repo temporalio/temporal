@@ -22,10 +22,11 @@
 
 package testhooks
 
-const (
-	MatchingDisableSyncMatch      = "matching.disableSyncMatch"
-	MatchingLBForceReadPartition  = "matching.lbForceReadPartition"
-	MatchingLBForceWritePartition = "matching.lbForceWritePartition"
+type Key int
 
-	UpdateWithStartInBetweenLockAndStart = "history.updateWithStartInBetweenLockAndStart"
+const (
+	MatchingDisableSyncMatch Key = iota
+	MatchingLBForceReadPartition
+	MatchingLBForceWritePartition
+	UpdateWithStartInBetweenLockAndStart
 )

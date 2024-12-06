@@ -38,11 +38,11 @@ type (
 
 // Get gets the value of a test hook. In production mode it always returns the zero value and
 // false, which hopefully the compiler will inline and remove the hook as dead code.
-func Get[T any](_ TestHooks, key string) (T, bool) {
+func Get[T any](_ TestHooks, key Key) (T, bool) {
 	var zero T
 	return zero, false
 }
 
 // Call calls a func() hook if present.
-func Call(_ TestHooks, key string) {
+func Call(_ TestHooks, key Key) {
 }

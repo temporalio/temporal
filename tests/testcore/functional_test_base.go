@@ -479,7 +479,7 @@ func (s *FunctionalTestBase) OverrideDynamicConfig(setting dynamicconfig.Generic
 	return s.testCluster.host.overrideDynamicConfig(s.T(), setting.Key(), value)
 }
 
-func (s *FunctionalTestBase) InjectHook(key string, value any) (cleanup func()) {
+func (s *FunctionalTestBase) InjectHook(key testhooks.Key, value any) (cleanup func()) {
 	return s.testCluster.host.injectHook(s.T(), key, value)
 }
 
