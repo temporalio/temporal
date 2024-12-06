@@ -431,8 +431,8 @@ func (n *Node) AddChild(key Key, data any) (*Node, error) {
 	return node, nil
 }
 
-// DeleteChild marks a child node and all its descendants as deleted, removing them from the cache. After deletion,
-// nodes will only see operations relevant to their subtree via prefix matching of paths.
+// DeleteChild marks a child node and all its descendants as deleted, removing them from the cache. No transitions will
+// be allowed after deleting a child.
 func (n *Node) DeleteChild(key Key) error {
 	if n.cache.deleted {
 		return fmt.Errorf("%w: cannot delete from deleted node: %v", ErrStateMachineInvalidState, n.Key)
