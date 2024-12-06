@@ -25,7 +25,6 @@ package hsm_test
 import (
 	"context"
 	"fmt"
-	"reflect"
 	"slices"
 	"sort"
 	"testing"
@@ -566,26 +565,20 @@ func TestNode_PreservesUnrelatedOperations(t *testing.T) {
 	opLog, err := root.Outputs()
 	require.NoError(t, err)
 
-	var foundDelete bool
-	for _, op := range opLog {
+	foundDelete := slices.ContainsFunc(opLog, func(op hsm.Operation) bool {
 		if delOp, ok := op.(hsm.DeleteOperation); ok {
-			if reflect.DeepEqual(delOp.Path(), l2.Path()) {
-				foundDelete = true
-				break
-			}
+			return slices.Equal(delOp.Path(), l2.Path())
 		}
-	}
+		return false
+	})
 	require.True(t, foundDelete, "should find l2's delete operation")
 
-	var foundTransition bool
-	for _, op := range opLog {
+	foundTransition := slices.ContainsFunc(opLog, func(op hsm.Operation) bool {
 		if transOp, ok := op.(hsm.TransitionOperation); ok {
-			if reflect.DeepEqual(transOp.Path(), l2_sibling.Path()) {
-				foundTransition = true
-				break
-			}
+			return slices.Equal(transOp.Path(), l2_sibling.Path())
 		}
-	}
+		return false
+	})
 	require.True(t, foundTransition, "should find l2_sibling's transition")
 }
 
