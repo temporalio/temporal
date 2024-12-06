@@ -3947,7 +3947,7 @@ func (s *mutableStateSuite) verifyChildExecutionInfos(expectedMap, actualMap, or
 		s.Equal(expected.StartedEventId, actual.StartedEventId, "StartedEventId mismatch")
 		s.Equal(expected.StartedWorkflowId, actual.StartedWorkflowId, "StartedWorkflowId mismatch")
 		s.Equal(expected.StartedRunId, actual.StartedRunId, "StartedRunId mismatch")
-		s.NotEqual(expected.CreateRequestId, actual.CreateRequestId, "CreateRequestId mismatch")
+		s.Equal(expected.CreateRequestId, actual.CreateRequestId, "CreateRequestId mismatch")
 		s.Equal(expected.Namespace, actual.Namespace, "Namespace mismatch")
 		s.Equal(expected.WorkflowTypeName, actual.WorkflowTypeName, "WorkflowTypeName mismatch")
 		s.Equal(expected.ParentClosePolicy, actual.ParentClosePolicy, "ParentClosePolicy mismatch")
