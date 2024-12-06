@@ -556,6 +556,7 @@ func VisibilityManagerProvider(
 		serviceConfig.VisibilityPersistenceMaxReadQPS,
 		serviceConfig.VisibilityPersistenceMaxWriteQPS,
 		serviceConfig.OperatorRPSRatio,
+		serviceConfig.VisibilityPersistenceSlowQueryThreshold,
 		serviceConfig.EnableReadFromSecondaryVisibility,
 		serviceConfig.VisibilityEnableShadowReadMode,
 		dynamicconfig.GetStringPropertyFn(visibility.SecondaryVisibilityWritingModeOff), // frontend visibility never write

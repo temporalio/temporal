@@ -105,12 +105,13 @@ type (
 		PerNamespaceWorkerOptions            dynamicconfig.TypedSubscribableWithNamespaceFilter[sdkworker.Options]
 		PerNamespaceWorkerStartRate          dynamicconfig.FloatPropertyFn
 
-		VisibilityPersistenceMaxReadQPS   dynamicconfig.IntPropertyFn
-		VisibilityPersistenceMaxWriteQPS  dynamicconfig.IntPropertyFn
-		EnableReadFromSecondaryVisibility dynamicconfig.BoolPropertyFnWithNamespaceFilter
-		VisibilityEnableShadowReadMode    dynamicconfig.BoolPropertyFn
-		VisibilityDisableOrderByClause    dynamicconfig.BoolPropertyFnWithNamespaceFilter
-		VisibilityEnableManualPagination  dynamicconfig.BoolPropertyFnWithNamespaceFilter
+		VisibilityPersistenceMaxReadQPS         dynamicconfig.IntPropertyFn
+		VisibilityPersistenceMaxWriteQPS        dynamicconfig.IntPropertyFn
+		VisibilityPersistenceSlowQueryThreshold dynamicconfig.DurationPropertyFn
+		EnableReadFromSecondaryVisibility       dynamicconfig.BoolPropertyFnWithNamespaceFilter
+		VisibilityEnableShadowReadMode          dynamicconfig.BoolPropertyFn
+		VisibilityDisableOrderByClause          dynamicconfig.BoolPropertyFnWithNamespaceFilter
+		VisibilityEnableManualPagination        dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	}
 )
 
