@@ -1054,7 +1054,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_ParentW
 	)
 	s.Nil(err)
 
-	mutableState.GetExecutionInfo().WorkflowWasReset = true
+	mutableState.GetExecutionInfo().ResetRunId = uuid.New() // indicate that the execution was reset.
 	wt := addWorkflowTaskScheduledEvent(mutableState)
 	event := addWorkflowTaskStartedEvent(mutableState, wt.ScheduledEventID, taskQueueName, uuid.New())
 	wt.StartedEventID = event.GetEventId()
