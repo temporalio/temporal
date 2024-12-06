@@ -28,8 +28,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"go.temporal.io/sdk/worker"
-	"go.temporal.io/sdk/workflow"
 	"testing"
 	"time"
 
@@ -46,6 +44,8 @@ import (
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	sdkclient "go.temporal.io/sdk/client"
+	"go.temporal.io/sdk/worker"
+	"go.temporal.io/sdk/workflow"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/payload"
