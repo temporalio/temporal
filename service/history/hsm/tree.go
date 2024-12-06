@@ -321,6 +321,14 @@ func (n *Node) InvalidateCache() {
 // Returns [ErrStateMachineAlreadyExists] if a child with the given key already exists, [ErrNotRegistered] if the key's
 // type is not found in the node's state machine registry and serialization errors.
 func (n *Node) AddChild(key Key, data any) (*Node, error) {
+	machines, ok := n.persistence.Children[key.Type]
+	if ok {
+		if _, ok = machines.MachinesById[key.ID]; ok {
+			if ok {
+				return nil, fmt.Errorf("%w: %v", ErrStateMachineAlreadyExists, key)
+			}
+		}
+	}
 	def, ok := n.registry.Machine(key.Type)
 	if !ok {
 		return nil, fmt.Errorf("%w: state machine for type: %v", ErrNotRegistered, key.Type)
@@ -337,42 +345,6 @@ func (n *Node) AddChild(key Key, data any) (*Node, error) {
 		// so we can safely using next transition count here is safe.
 		TransitionCount: n.backend.NextTransitionCount(),
 	}
-	return n.AddChildWithData(key, data, serialized, nextVersionedTransition, nextVersionedTransition, 0)
-}
-
-// AddChildWithData adds an immediate child to a node with provided data and versioned transitions.
-// Returns [ErrStateMachineAlreadyExists] if a child with the given key already exists, [ErrNotRegistered] if the key's
-// type is not found in the node's state machine registry and serialization errors.
-func (n *Node) AddChildWithData(
-	key Key,
-	data any,
-	serialized []byte,
-	initialVersionedTransition *persistencespb.VersionedTransition,
-	lastUpdateVersionedTransition *persistencespb.VersionedTransition,
-	transitionCount int64,
-) (*Node, error) {
-	machines, ok := n.persistence.Children[key.Type]
-	if ok {
-		if _, ok = machines.MachinesById[key.ID]; ok {
-			if ok {
-				return nil, fmt.Errorf("%w: %v", ErrStateMachineAlreadyExists, key)
-			}
-		}
-	}
-	def, ok := n.registry.Machine(key.Type)
-	if !ok {
-		return nil, fmt.Errorf("%w: state machine for type: %v", ErrNotRegistered, key.Type)
-	}
-
-	cache := &cachedMachine{
-		dirty:    true,
-		children: make(map[Key]*Node),
-	}
-	if data != nil {
-		cache.dataLoaded = true
-		cache.data = data
-	}
-
 	node := &Node{
 		Key:        key,
 		Parent:     n,
@@ -381,11 +353,16 @@ func (n *Node) AddChildWithData(
 		persistence: &persistencespb.StateMachineNode{
 			Children:                      make(map[string]*persistencespb.StateMachineMap),
 			Data:                          serialized,
-			InitialVersionedTransition:    initialVersionedTransition,
-			LastUpdateVersionedTransition: lastUpdateVersionedTransition,
-			TransitionCount:               transitionCount,
+			InitialVersionedTransition:    nextVersionedTransition,
+			LastUpdateVersionedTransition: nextVersionedTransition,
+			TransitionCount:               0,
 		},
-		cache:   cache,
+		cache: &cachedMachine{
+			dataLoaded: true,
+			data:       data,
+			dirty:      true,
+			children:   make(map[Key]*Node),
+		},
 		backend: n.backend,
 	}
 	n.cache.children[key] = node

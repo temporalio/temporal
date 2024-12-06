@@ -6929,10 +6929,33 @@ func (ms *MutableStateImpl) applyUpdatesToStateMachineNodes(
 			}
 
 			key := incomingPath[len(incomingPath)-1]
-			_, err = parentNode.AddChildWithData(key, nil, nodeMutation.Data, nodeMutation.InitialVersionedTransition, nodeMutation.LastUpdateVersionedTransition, 1)
-			if err != nil {
-				return err
+			parentInternalNode := parentNode.InternalRepr()
+			machines, ok := parentInternalNode.Children[key.Type]
+			if ok {
+				if _, ok = machines.MachinesById[key.ID]; ok {
+					if ok {
+						return fmt.Errorf("%w: %v", hsm.ErrStateMachineAlreadyExists, key)
+					}
+				}
 			}
+
+			internalNode := &persistencespb.StateMachineNode{
+				Children:                      make(map[string]*persistencespb.StateMachineMap),
+				Data:                          nodeMutation.Data,
+				InitialVersionedTransition:    nodeMutation.InitialVersionedTransition,
+				LastUpdateVersionedTransition: nodeMutation.LastUpdateVersionedTransition,
+				TransitionCount:               1,
+			}
+			children, ok := parentInternalNode.Children[key.Type]
+			if !ok {
+				children = &persistencespb.StateMachineMap{MachinesById: make(map[string]*persistencespb.StateMachineNode)}
+				// Children may be nil if the map was empty and the proto message we serialized and deserialized.
+				if parentInternalNode.Children == nil {
+					parentInternalNode.Children = make(map[string]*persistencespb.StateMachineMap, 1)
+				}
+				parentInternalNode.Children[key.Type] = children
+			}
+			children.MachinesById[key.ID] = internalNode
 		} else {
 			internalNode = node.InternalRepr()
 			if CompareVersionedTransition(nodeMutation.LastUpdateVersionedTransition, internalNode.LastUpdateVersionedTransition) == 0 {
