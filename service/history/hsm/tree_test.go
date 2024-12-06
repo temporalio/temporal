@@ -511,7 +511,7 @@ func TestNode_DeleteChild(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	err = l1.DeleteChild(hsm.Key{Type: def1.Type(), ID: "l2"})
+	err = l1.DeleteChild(l2.Key)
 	require.NoError(t, err)
 
 	err = hsm.MachineTransition(l2, func(d *hsmtest.Data) (hsm.TransitionOutput, error) {
@@ -532,7 +532,7 @@ func TestNode_DeleteChild(t *testing.T) {
 	err = l1.DeleteChild(hsm.Key{Type: def1.Type(), ID: "nonexistent"})
 	require.ErrorIs(t, err, hsm.ErrStateMachineNotFound)
 
-	err = l1.DeleteChild(hsm.Key{Type: def1.Type(), ID: "l2"})
+	err = l1.DeleteChild(l2.Key)
 	require.ErrorIs(t, err, hsm.ErrStateMachineNotFound)
 }
 
@@ -559,7 +559,7 @@ func TestNode_PreservesUnrelatedOperations(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	err = l1.DeleteChild(hsm.Key{Type: def1.Type(), ID: "l2"})
+	err = l1.DeleteChild(l2.Key)
 	require.NoError(t, err)
 
 	opLog, err := root.Outputs()
@@ -603,7 +603,7 @@ func TestNode_OutputsWithDeletion(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	err = root.DeleteChild(hsm.Key{Type: def1.Type(), ID: "l1"})
+	err = root.DeleteChild(l1.Key)
 	require.NoError(t, err)
 
 	outputs, err := root.Outputs()
@@ -640,7 +640,7 @@ func TestNode_ClearTransactionState(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	err = root.DeleteChild(hsm.Key{Type: def1.Type(), ID: "l1"})
+	err = root.DeleteChild(l1.Key)
 	require.NoError(t, err)
 
 	opLog, err := root.Outputs()
@@ -735,7 +735,7 @@ func TestNode_MixedOperationsBeforeDeletion(t *testing.T) {
 	}
 	require.Equal(t, 3, transitionCount, "should see all transitions before deletion")
 
-	err = root.DeleteChild(hsm.Key{Type: def1.Type(), ID: "l1"})
+	err = root.DeleteChild(l1.Key)
 	require.NoError(t, err)
 
 	opLog, err = root.Outputs()
@@ -782,9 +782,9 @@ func TestNode_MultipleDeletedPaths(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	err = branch1.DeleteChild(hsm.Key{Type: def1.Type(), ID: "b1child"})
+	err = branch1.DeleteChild(b1child.Key)
 	require.NoError(t, err)
-	err = branch2.DeleteChild(hsm.Key{Type: def1.Type(), ID: "b2child"})
+	err = branch2.DeleteChild(b2child.Key)
 	require.NoError(t, err)
 
 	outputs, err := root.Outputs()
@@ -840,7 +840,7 @@ func TestNode_PathPrefixEdgeCases(t *testing.T) {
 		require.NoError(t, err)
 	}
 
-	err = root.DeleteChild(hsm.Key{Type: def1.Type(), ID: "node1"})
+	err = root.DeleteChild(node1.Key)
 	require.NoError(t, err)
 
 	// Verify operations
@@ -922,7 +922,7 @@ func TestNode_ComplexHierarchicalDeletions(t *testing.T) {
 	}
 
 	// Delete parent while children have pending operations
-	err = root.DeleteChild(hsm.Key{Type: def1.Type(), ID: "parent"})
+	err = root.DeleteChild(parent.Key)
 	require.NoError(t, err)
 
 	// Verify only parent's delete operation remains, all child operations are removed
@@ -960,7 +960,7 @@ func TestNode_CompactionOrderPreservation(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	err = root.DeleteChild(hsm.Key{Type: def1.Type(), ID: "node1"})
+	err = root.DeleteChild(node1.Key)
 	require.NoError(t, err)
 
 	err = hsm.MachineTransition(node2, func(d *hsmtest.Data) (hsm.TransitionOutput, error) {
