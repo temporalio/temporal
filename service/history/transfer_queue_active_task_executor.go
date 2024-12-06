@@ -400,16 +400,19 @@ func (t *transferQueueActiveTaskExecutor) processCloseExecution(
 		}
 	}
 
-	err = t.processParentClosePolicy(
-		ctx,
-		namespaceName.String(),
-		&workflowExecution,
-		children,
-	)
-
-	if err != nil {
-		// This is some retryable error, not NotFound or NamespaceNotFound.
-		return err
+	// process parentClosePolicy except when the execution was reset. In case of reset, we need to keep the children around so that we can reconnect to them.
+	// We know an execution was reset when ResetRunId was populated in it.
+	// TODO (Chetan): update this condition as new reset policies are added. For now we keep all children since "Reconnect" is the only policy available.
+	if executionInfo.GetResetRunId() == "" {
+		if err := t.processParentClosePolicy(
+			ctx,
+			namespaceName.String(),
+			&workflowExecution,
+			children,
+		); err != nil {
+			// This is some retryable error, not NotFound or NamespaceNotFound.
+			return err
+		}
 	}
 
 	if task.DeleteAfterClose {
