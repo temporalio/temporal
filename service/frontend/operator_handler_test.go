@@ -44,6 +44,7 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin/mysql"
 	"go.temporal.io/server/common/persistence/visibility"
@@ -70,8 +71,9 @@ type (
 		suite.Suite
 		*require.Assertions
 
-		controller   *gomock.Controller
-		mockResource *resourcetest.Test
+		controller                      *gomock.Controller
+		mockResource                    *resourcetest.Test
+		nexusEndpointPersistenceManager *persistence.MockNexusEndpointManager
 
 		handler *OperatorHandlerImpl
 	}
@@ -88,12 +90,13 @@ func (s *operatorHandlerSuite) SetupTest() {
 	s.controller = gomock.NewController(s.T())
 	s.mockResource = resourcetest.NewTest(s.controller, primitives.FrontendService)
 	s.mockResource.ClusterMetadata.EXPECT().GetCurrentClusterName().Return(uuid.New()).AnyTimes()
+	s.nexusEndpointPersistenceManager = persistence.NewMockNexusEndpointManager(s.controller)
 
 	endpointClient := newNexusEndpointClient(
 		newNexusEndpointClientConfig(dynamicconfig.NewNoopCollection()),
 		s.mockResource.NamespaceCache,
 		s.mockResource.MatchingClient,
-		persistence.NewMockNexusEndpointManager(s.controller),
+		s.nexusEndpointPersistenceManager,
 		s.mockResource.Logger,
 	)
 
@@ -110,6 +113,7 @@ func (s *operatorHandlerSuite) SetupTest() {
 		s.mockResource.GetClusterMetadataManager(),
 		s.mockResource.GetClusterMetadata(),
 		s.mockResource.GetClientFactory(),
+		s.mockResource.NamespaceCache,
 		endpointClient,
 	}
 	s.handler = NewOperatorHandlerImpl(args)
@@ -1154,6 +1158,32 @@ func (s *operatorHandlerSuite) Test_DeleteNamespace() {
 		})
 	}
 
+	// The "fake" namespace ID is associated with a Nexus endoint.
+	s.nexusEndpointPersistenceManager.EXPECT().ListNexusEndpoints(gomock.Any(), gomock.Any()).Return(&persistence.ListNexusEndpointsResponse{
+		Entries: []*persistencespb.NexusEndpointEntry{
+			{
+				Endpoint: &persistencespb.NexusEndpoint{
+					Spec: &persistencespb.NexusEndpointSpec{
+						Name: "test-endpoint",
+						Target: &persistencespb.NexusEndpointTarget{
+							Variant: &persistencespb.NexusEndpointTarget_Worker_{
+								Worker: &persistencespb.NexusEndpointTarget_Worker{
+									NamespaceId: "fake",
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}, nil).AnyTimes()
+	// Map "fake" namespace ID to the "namespace-with-nexus-endpoint" name.
+	s.mockResource.NamespaceCache.EXPECT().GetNamespaceName(namespace.ID("fake")).
+		Return(namespace.Name("test-namespace"), nil).AnyTimes()
+	// Map "c13c01a7-3887-4eda-ba4b-9a07a6359e7e" namespace ID to the "test-namespace-deleted-ka2te" name.
+	s.mockResource.NamespaceCache.EXPECT().GetNamespaceName(namespace.ID("c13c01a7-3887-4eda-ba4b-9a07a6359e7e")).
+		Return(namespace.Name("test-namespace-deleted-ka2te"), nil).AnyTimes()
+
 	mockSdkClient := mocksdk.NewMockClient(s.controller)
 	s.mockResource.SDKClientFactory.EXPECT().GetSystemClient().Return(mockSdkClient).AnyTimes()
 
@@ -1163,7 +1193,23 @@ func (s *operatorHandlerSuite) Test_DeleteNamespace() {
 		DeleteNamespacePagesPerExecution:                    dynamicconfig.GetIntPropertyFn(78),
 		DeleteNamespaceConcurrentDeleteExecutionsActivities: dynamicconfig.GetIntPropertyFn(3),
 		DeleteNamespaceNamespaceDeleteDelay:                 dynamicconfig.GetDurationPropertyFn(22 * time.Hour),
+		AllowDeleteNamespaceIfNexusEndpointTarget:           dynamicconfig.GetBoolPropertyFn(false),
 	}
+
+	// Delete by name: Nexus endpoint associated.
+	_, err := handler.DeleteNamespace(ctx, &operatorservice.DeleteNamespaceRequest{
+		Namespace: "test-namespace",
+	})
+	s.ErrorContains(err, "cannot delete a namespace that is a target of a Nexus endpoint (test-endpoint)")
+
+	// Delete by ID: Nexus endpoint associated.
+	_, err = handler.DeleteNamespace(ctx, &operatorservice.DeleteNamespaceRequest{
+		NamespaceId: "fake",
+	})
+	s.ErrorContains(err, "cannot delete a namespace that is a target of a Nexus endpoint (test-endpoint)")
+
+	// Allow delete from now on.
+	handler.config.AllowDeleteNamespaceIfNexusEndpointTarget = dynamicconfig.GetBoolPropertyFn(true)
 
 	// Start workflow failed.
 	mockSdkClient.EXPECT().ExecuteWorkflow(gomock.Any(), gomock.Any(), "temporal-sys-delete-namespace-workflow", gomock.Any()).Return(nil, errors.New("start failed"))

@@ -865,6 +865,13 @@ and deployment interaction in matching and history.`,
 		`EnableNexus toggles all Nexus functionality on the server. Note that toggling this requires restarting
 server hosts for it to take effect.`,
 	)
+
+	AllowDeleteNamespaceIfNexusEndpointTarget = NewGlobalBoolSetting(
+		"frontend.allowDeleteNamespaceIfNexusEndpointTarget",
+		false,
+		`If set to true (default is false), namespaces that are Nexus endpoint targets will be prevented from being deleted.`,
+	)
+
 	RefreshNexusEndpointsLongPollTimeout = NewGlobalDurationSetting(
 		"system.refreshNexusEndpointsLongPollTimeout",
 		5*time.Minute,
