@@ -44,6 +44,8 @@ import (
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	sdkclient "go.temporal.io/sdk/client"
+	"go.temporal.io/sdk/worker"
+	"go.temporal.io/sdk/workflow"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/payload"
@@ -529,6 +531,22 @@ func (s *DeploymentSuite) checkDeploymentReachability(
 	}, 5*time.Second, 50*time.Millisecond)
 }
 
+// SDK will have a GetWorkflowExecutionOptions method that sends an empty mask and a default
+// WorkflowExecutionOptions and expects to read the workflow execution's existing options with no write
+func (s *DeploymentSuite) checkSDKGetWorkflowExecutionOptions(ctx context.Context,
+	wf *commonpb.WorkflowExecution,
+	expectedOpts *workflowpb.WorkflowExecutionOptions,
+) {
+	getResp, err := s.FrontendClient().UpdateWorkflowExecutionOptions(ctx, &workflowservice.UpdateWorkflowExecutionOptionsRequest{
+		Namespace:                s.Namespace(),
+		WorkflowExecution:        wf,
+		WorkflowExecutionOptions: &workflowpb.WorkflowExecutionOptions{},
+		UpdateMask:               &fieldmaskpb.FieldMask{Paths: []string{}},
+	})
+	s.NoError(err)
+	s.True(proto.Equal(getResp.GetWorkflowExecutionOptions(), expectedOpts))
+}
+
 func (s *DeploymentSuite) createDeploymentAndWaitForExist(
 	ctx context.Context,
 	deployment *deploymentpb.Deployment,
@@ -580,6 +598,7 @@ func (s *DeploymentSuite) TestUpdateWorkflowExecutionOptions_SetUnpinnedThenUnse
 	s.NoError(err)
 	s.True(proto.Equal(updateResp.GetWorkflowExecutionOptions(), unpinnedOpts))
 	s.checkDescribeWorkflowAfterOverride(ctx, unversionedWFExec, unpinnedOpts.GetVersioningOverride())
+	s.checkSDKGetWorkflowExecutionOptions(ctx, unversionedWFExec, unpinnedOpts)
 
 	// 2. Unset using empty update opts with mutation mask --> describe workflow shows no more override
 	updateResp, err = s.FrontendClient().UpdateWorkflowExecutionOptions(ctx, &workflowservice.UpdateWorkflowExecutionOptionsRequest{
@@ -636,6 +655,7 @@ func (s *DeploymentSuite) TestUpdateWorkflowExecutionOptions_SetPinnedThenUnset(
 	s.True(proto.Equal(updateResp.GetWorkflowExecutionOptions(), pinnedOpts))
 	s.checkDescribeWorkflowAfterOverride(ctx, unversionedWFExec, pinnedOpts.GetVersioningOverride())
 	s.checkDeploymentReachability(ctx, workerDeployment, enumspb.DEPLOYMENT_REACHABILITY_REACHABLE)
+	s.checkSDKGetWorkflowExecutionOptions(ctx, unversionedWFExec, pinnedOpts)
 
 	// 2. Unset with empty update opts with mutation mask --> describe workflow shows no more override + deployment is unreachable
 	updateResp, err = s.FrontendClient().UpdateWorkflowExecutionOptions(ctx, &workflowservice.UpdateWorkflowExecutionOptionsRequest{
@@ -688,6 +708,7 @@ func (s *DeploymentSuite) TestUpdateWorkflowExecutionOptions_EmptyFields() {
 	s.NoError(err)
 	s.True(proto.Equal(updateResp.GetWorkflowExecutionOptions(), &workflowpb.WorkflowExecutionOptions{}))
 	s.checkDescribeWorkflowAfterOverride(ctx, unversionedWFExec, nil)
+	s.checkSDKGetWorkflowExecutionOptions(ctx, unversionedWFExec, &workflowpb.WorkflowExecutionOptions{})
 }
 
 func (s *DeploymentSuite) TestUpdateWorkflowExecutionOptions_SetPinnedSetPinned() {
@@ -1042,6 +1063,103 @@ func (s *DeploymentSuite) checkListAndWaitForBatchCompletion(ctx context.Context
 			return
 		}
 	}
+}
+
+func (s *DeploymentSuite) waitForChan(ctx context.Context, ch chan struct{}) {
+	s.T().Helper()
+	select {
+	case <-ch:
+	case <-ctx.Done():
+		s.FailNow("context timeout")
+	}
+}
+
+func (s *DeploymentSuite) TestUpdateWorkflowExecutionOptions_ChildWorkflowWithSDK() {
+	s.T().Skip("needs new sdk with deployment pollers to work")
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	deploymentA := &deploymentpb.Deployment{
+		SeriesName: "seriesName",
+		BuildId:    "A",
+	}
+	override := &workflowpb.VersioningOverride{
+		Behavior:   enumspb.VERSIONING_BEHAVIOR_PINNED,
+		Deployment: deploymentA,
+	}
+	pinnedOptsA := &workflowpb.WorkflowExecutionOptions{
+		VersioningOverride: override,
+	}
+	tqName := "test-tq-child-override"
+
+	// create deployment so that GetDeploymentReachability doesn't error
+	s.createDeploymentAndWaitForExist(context.Background(), deploymentA, &taskqueuepb.TaskQueue{Name: tqName, Kind: enumspb.TASK_QUEUE_KIND_NORMAL})
+
+	// define parent and child worfklows
+	parentStarted := make(chan struct{}, 1)
+	childOverrideValidated := make(chan struct{}, 1)
+	child := func(cctx workflow.Context) (string, error) {
+		// no worker will take this, since we can't make a pinned worker with the old sdk
+		return "hello", nil
+	}
+	parent := func(ctx workflow.Context) error {
+		parentStarted <- struct{}{}
+		// after the test receives "parentStarted", we set the pinned override, and this workflow will
+		// make no more progress by itself, since we have no sdk workers that can handle this
+		// wait for signal
+		workflow.GetSignalChannel(ctx, "wait").Receive(ctx, nil)
+
+		// check that parent's override is set
+		parentWE := workflow.GetInfo(ctx).WorkflowExecution
+		s.checkDescribeWorkflowAfterOverride(
+			context.Background(),
+			&commonpb.WorkflowExecution{WorkflowId: parentWE.ID, RunId: parentWE.RunID},
+			override)
+
+		// run child workflow
+		fut := workflow.ExecuteChildWorkflow(workflow.WithChildOptions(ctx, workflow.ChildWorkflowOptions{
+			TaskQueue: tqName,
+		}), "child")
+
+		// check that child's override is set
+		var childWE workflow.Execution
+		s.NoError(fut.GetChildWorkflowExecution().Get(ctx, &childWE))
+		s.checkDescribeWorkflowAfterOverride(
+			context.Background(),
+			&commonpb.WorkflowExecution{WorkflowId: childWE.ID, RunId: childWE.RunID},
+			override)
+		childOverrideValidated <- struct{}{}
+		return nil
+	}
+
+	unversionedWorker := worker.New(s.sdkClient, tqName, worker.Options{MaxConcurrentWorkflowTaskPollers: numPollers})
+	unversionedWorker.RegisterWorkflowWithOptions(parent, workflow.RegisterOptions{Name: "parent"})
+	unversionedWorker.RegisterWorkflowWithOptions(child, workflow.RegisterOptions{Name: "child"})
+	s.NoError(unversionedWorker.Start())
+	defer unversionedWorker.Stop()
+
+	run, err := s.sdkClient.ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{TaskQueue: tqName}, "parent")
+	s.NoError(err)
+	// wait for parent to start
+	s.waitForChan(ctx, parentStarted)
+	close(parentStarted) // force panic if replayed
+
+	// set override on parent
+	updateResp, err := s.FrontendClient().UpdateWorkflowExecutionOptions(ctx, &workflowservice.UpdateWorkflowExecutionOptionsRequest{
+		Namespace:                s.Namespace(),
+		WorkflowExecution:        &commonpb.WorkflowExecution{WorkflowId: run.GetID(), RunId: run.GetRunID()},
+		WorkflowExecutionOptions: pinnedOptsA,
+		UpdateMask:               &fieldmaskpb.FieldMask{Paths: []string{"versioning_override"}},
+	})
+	s.NoError(err)
+	s.True(proto.Equal(updateResp.GetWorkflowExecutionOptions(), pinnedOptsA))
+
+	// unblock the parent workflow so it will start its child
+	s.NoError(s.sdkClient.SignalWorkflow(ctx, run.GetID(), run.GetRunID(), "wait", nil))
+
+	// wait for child override to be validated (parent workflow might not complete, because no worker is polling
+	// that matches the child)
+	s.waitForChan(ctx, childOverrideValidated)
+	close(childOverrideValidated) // force panic if replayed
 }
 
 func (s *DeploymentSuite) TestStartWorkflowExecution_WithPinnedOverride() {
