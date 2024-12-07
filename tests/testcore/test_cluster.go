@@ -38,6 +38,7 @@ import (
 
 	"github.com/pborman/uuid"
 	"go.temporal.io/api/operatorservice/v1"
+	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
@@ -581,12 +582,12 @@ func (tc *TestCluster) ArchivalBase() *ArchiverBase {
 }
 
 // FrontendClient returns a frontend client from the test cluster
-func (tc *TestCluster) FrontendClient() FrontendClient {
+func (tc *TestCluster) FrontendClient() workflowservice.WorkflowServiceClient {
 	return tc.host.FrontendClient()
 }
 
 // AdminClient returns an admin client from the test cluster
-func (tc *TestCluster) AdminClient() AdminClient {
+func (tc *TestCluster) AdminClient() adminservice.AdminServiceClient {
 	return tc.host.AdminClient()
 }
 

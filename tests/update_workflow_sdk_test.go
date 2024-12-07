@@ -52,8 +52,7 @@ type UpdateWorkflowSdkSuite struct {
 
 func TestUpdateWorkflowSdkSuite(t *testing.T) {
 	t.Parallel()
-	s := new(UpdateWorkflowSdkSuite)
-	suite.Run(t, s)
+	suite.Run(t, new(UpdateWorkflowSdkSuite))
 }
 
 func (s *UpdateWorkflowSdkSuite) TestUpdateWorkflow_TerminateWorkflowAfterUpdateAdmitted() {

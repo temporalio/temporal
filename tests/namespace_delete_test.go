@@ -79,6 +79,9 @@ func TestNamespaceSuite(t *testing.T) {
 }
 
 func (s *namespaceTestSuite) SetupSuite() {
+	// This suite doesn't embed FunctionalTestBase so we have to call CheckTestShard manually.
+	testcore.CheckTestShard(s.T(), false)
+
 	s.logger = log.NewTestLogger()
 	s.testClusterFactory = testcore.NewTestClusterFactory()
 

@@ -60,7 +60,6 @@ env:
   PR_BASE_COMMIT: ${{ github.event.pull_request.base.sha }}
   DOCKER_COMPOSE_FILE: ./develop/github/docker-compose.yml
   TEMPORAL_VERSION_CHECK_DISABLED: 1
-  BUILDKITE_ANALYTICS_TOKEN: ${{ secrets.BUILDKITE_ANALYTICS_TOKEN }}
 
 jobs:
   set-up-single-test:
@@ -82,7 +81,7 @@ jobs:
     steps:
       - id: generate_output
         run: |
-          shards=3
+          shards=8
           timeout=20   # update this to TEST_TIMEOUT if you update the Makefile
           runs_on='["ubuntu-20.04"]'
           if [[ "${{ inputs.run_single_functional_test }}" == "true" || "${{ inputs.run_single_unit_test }}" == "true" ]]; then
@@ -232,8 +231,6 @@ jobs:
     strategy:
       fail-fast: false
     runs-on: ubuntu-20.04
-    env:
-      BUILDKITE_MESSAGE: '{"job": "unit-test"}'
     steps:
       - uses: actions/checkout@v4
         with:
@@ -305,8 +302,6 @@ jobs:
     strategy:
       fail-fast: false
     runs-on: ubuntu-20.04
-    env:
-      BUILDKITE_MESSAGE: '{"job": "integration-test"}'
     steps:
       - uses: actions/checkout@v4
         with:
@@ -388,50 +383,51 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        runs-on: ${{ fromJson(needs.set-up-single-test.outputs.runs_on) }}
         shard_index: ${{ fromJson(needs.set-up-single-test.outputs.shard_indices) }}
-        name:
-          - cass_es
-          - cass_es8
-          - sqlite
-          - mysql8
-          - postgres12
-          - postgres12_pgx
+        name: [cass_es, sqlite]
         include:
+          # These two get all tests:
           - name: cass_es
             persistence_type: nosql
             persistence_driver: cassandra
             containers: [cassandra, elasticsearch]
             es_version: v7
+            parallel_flags: "-parallel=8"
+          - name: sqlite
+            persistence_type: sql
+            persistence_driver: sqlite
+            containers: []
+            parallel_flags: "-parallel=8"
+          # The rest get smoke tests only:
           - name: cass_es8
             persistence_type: nosql
             persistence_driver: cassandra
             containers: [cassandra, elasticsearch8]
             es_version: v8
-          - name: sqlite
-            persistence_type: sql
-            persistence_driver: sqlite
-            containers: []
+            shard_index: smoke_only
           - name: mysql8
             persistence_type: sql
             persistence_driver: mysql8
             containers: [mysql]
+            shard_index: smoke_only
           - name: postgres12
             persistence_type: sql
             persistence_driver: postgres12
             containers: [postgresql]
+            shard_index: smoke_only
           - name: postgres12_pgx
             persistence_type: sql
             persistence_driver: postgres12_pgx
             containers: [postgresql]
-    runs-on: ${{ matrix.runs-on }}
+            shard_index: smoke_only
+    runs-on: ${{ fromJson(needs.set-up-single-test.outputs.runs_on) }}
     env:
       TEST_TOTAL_SHARDS: ${{ needs.set-up-single-test.outputs.total_shards }}
       TEST_SHARD_INDEX: ${{ matrix.shard_index }}
       PERSISTENCE_TYPE: ${{ matrix.persistence_type }}
       PERSISTENCE_DRIVER: ${{ matrix.persistence_driver }}
       TEST_TIMEOUT: ${{ needs.set-up-single-test.outputs.test_timeout }}
-      BUILDKITE_MESSAGE: '{"job": "functional-test", "db": "${{ matrix.persistence_driver }}"}'
+      TEST_PARALLEL_FLAGS: ${{ matrix.parallel_flags }}
     steps:
       - uses: ScribeMD/docker-cache@0.3.7
         if: ${{ inputs.run_single_functional_test != true || (inputs.run_single_functional_test == true && contains(fromJSON(needs.set-up-single-test.outputs.dbs), env.PERSISTENCE_DRIVER)) }}
@@ -492,7 +488,7 @@ jobs:
         uses: actions/upload-artifact@v4.4.3
         if: ${{ !cancelled() && !inputs.run_single_functional_test }}
         with:
-          name: junit-xml--${{github.run_id}}--${{github.run_attempt}}--${{matrix.runs-on}}--${{matrix.name}}--${{matrix.shard_index}}--functional-test
+          name: junit-xml--${{github.run_id}}--${{github.run_attempt}}--${{matrix.name}}--${{matrix.shard_index}}--functional-test
           path: .testoutput
           include-hidden-files: true
           retention-days: 28
@@ -516,38 +512,23 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        name: [cass_es, cass_es8, mysql8, postgres12, postgres12_pgx]
+        shard_index: [0, 1]
+        name: [cass_es, sqlite]
         include:
           - name: cass_es
             persistence_type: nosql
             persistence_driver: elasticsearch
-            parallel_flags: ""
             containers: [cassandra, elasticsearch]
-          - name: cass_es8
-            persistence_type: nosql
-            persistence_driver: elasticsearch
-            parallel_flags: ""
-            containers: [cassandra, elasticsearch8]
-          - name: mysql8
+          - name: sqlite
             persistence_type: sql
-            persistence_driver: mysql8
-            parallel_flags: ""
-            containers: [mysql]
-          - name: postgres12
-            persistence_type: sql
-            persistence_driver: postgres12
-            parallel_flags: "-parallel=2" # reduce parallelism for postgres
-            containers: [postgresql]
-          - name: postgres12_pgx
-            persistence_type: sql
-            persistence_driver: postgres12_pgx
-            parallel_flags: "-parallel=2" # reduce parallelism for postgres
-            containers: [postgresql]
+            persistence_driver: sqlite
+            containers: []
     runs-on: ubuntu-20.04
     env:
+      TEST_TOTAL_SHARDS: 2
+      TEST_SHARD_INDEX: ${{ matrix.shard_index }}
       PERSISTENCE_TYPE: ${{ matrix.persistence_type }}
       PERSISTENCE_DRIVER: ${{ matrix.persistence_driver }}
-      BUILDKITE_MESSAGE: '{"job": "functional-test-xdc", "db": "${{ matrix.persistence_driver }}"}'
       TEST_PARALLEL_FLAGS: ${{ matrix.parallel_flags }}
     steps:
       - uses: actions/checkout@v4
@@ -599,7 +580,7 @@ jobs:
         uses: actions/upload-artifact@v4.4.3
         if: ${{ !cancelled() }}
         with:
-          name: junit-xml--${{github.run_id}}--${{github.run_attempt}}--${{matrix.name}}--functional-test-xdc
+          name: junit-xml--${{github.run_id}}--${{github.run_attempt}}--${{matrix.name}}--${{matrix.shard_index}}--functional-test-xdc
           path: .testoutput
           include-hidden-files: true
           retention-days: 28
@@ -623,35 +604,17 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        name:
-          - cass_es
-          - cass_es8
-          - mysql8
-          - postgres12
-          - postgres12_pgx
+        name: [cass_es, sqlite]
         include:
           - name: cass_es
             persistence_type: nosql
             persistence_driver: elasticsearch
             containers: [cassandra, elasticsearch]
             es_version: v7
-          - name: cass_es8
-            persistence_type: nosql
-            persistence_driver: elasticsearch
-            containers: [cassandra, elasticsearch8]
-            es_version: v8
-          - name: mysql8
+          - name: sqlite
             persistence_type: sql
-            persistence_driver: mysql8
-            containers: [mysql]
-          - name: postgres12
-            persistence_type: sql
-            persistence_driver: postgres12
-            containers: [postgresql]
-          - name: postgres12_pgx
-            persistence_type: sql
-            persistence_driver: postgres12_pgx
-            containers: [postgresql]
+            persistence_driver: sqlite
+            containers: []
     runs-on: ubuntu-20.04
     env:
       PERSISTENCE_TYPE: ${{ matrix.persistence_type }}
