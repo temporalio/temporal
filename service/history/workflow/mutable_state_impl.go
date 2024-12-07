@@ -5244,7 +5244,7 @@ func (ms *MutableStateImpl) truncateRetryableActivityFailure(
 	// nonRetryable is set to false here as only retryable failures are recorded in mutable state.
 	// also when this method is called, the check for isRetryable is already done, so the value
 	// is only for visibility/debugging purpose.
-	serverFailure := failure.NewServerFailure(common.FailureReasonFailureExceedsLimit, false)
+	serverFailure := failure.NewServerFailure(common.TerminationReasonFailureExceedsLimit.String(), false)
 	serverFailure.Cause = failure.Truncate(activityFailure, sizeLimitError)
 	return serverFailure
 }
