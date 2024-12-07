@@ -140,7 +140,6 @@ func (s *ActivityApiUpdateClientTestSuite) TestActivityUpdateApi_ChangeRetryInte
 		assert.NoError(t, err)
 		assert.Equal(t, 1, len(description.PendingActivities))
 		assert.Equal(t, int32(1), activityCompleted.Load())
-		assert.True(t, true)
 	}, 10*time.Second, 500*time.Millisecond)
 
 	updateRequest := &workflowservicepb.UpdateActivityOptionsByIdRequest{
