@@ -38,6 +38,8 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/activity"
 	"go.temporal.io/sdk/temporal"
+	"google.golang.org/protobuf/types/known/timestamppb"
+
 	"go.temporal.io/server/api/adminservice/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
@@ -53,7 +55,6 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/searchattribute"
-	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type (
@@ -444,8 +445,9 @@ func (a *activities) GenerateReplicationTasks(ctx context.Context, request *gene
 	for i := startIndex; i < len(request.Executions); i++ {
 		we := request.Executions[i]
 		if err := a.generateWorkflowReplicationTask(ctx, rateLimiter, definition.NewWorkflowKey(request.NamespaceID, we.WorkflowId, we.RunId)); err != nil {
-			if !isNotFoundServiceError(err) {
-				a.logger.Error("force-replication failed to generate replication task", tag.WorkflowNamespaceID(request.NamespaceID), tag.WorkflowID(we.WorkflowId), tag.WorkflowRunID(we.RunId), tag.Error(err))
+			if isNotFoundServiceError(err) {
+				a.logger.Warn("force-replication failed to generate replication task", tag.WorkflowNamespaceID(request.NamespaceID), tag.WorkflowID(we.WorkflowId), tag.WorkflowRunID(we.RunId), tag.Error(err))
+			} else {
 				return err
 			}
 		}
