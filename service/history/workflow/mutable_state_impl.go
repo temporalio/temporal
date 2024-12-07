@@ -6906,7 +6906,7 @@ func (ms *MutableStateImpl) applyUpdatesToStateMachineNodes(
 		for _, p := range nodeMutation.Path.Path {
 			incomingPath = append(incomingPath, hsm.Key{Type: p.Type, ID: p.Id})
 		}
-		currentNode, err := root.Child(incomingPath)
+		node, err := root.Child(incomingPath)
 		if err != nil {
 			if !errors.Is(err, hsm.ErrStateMachineNotFound) {
 				return err
@@ -6920,21 +6920,46 @@ func (ms *MutableStateImpl) applyUpdatesToStateMachineNodes(
 				// we don't have enough information to recreate all parents
 				return err
 			}
-			newNode, err := parentNode.AddChild(incomingPath[len(incomingPath)-1], nodeMutation.Data)
-			if err != nil {
-				return err
+
+			key := incomingPath[len(incomingPath)-1]
+			parentInternalNode := parentNode.InternalRepr()
+			machines, ok := parentInternalNode.Children[key.Type]
+			if ok {
+				if _, ok = machines.MachinesById[key.ID]; ok {
+					if ok {
+						return fmt.Errorf("%w: %v", hsm.ErrStateMachineAlreadyExists, key)
+					}
+				}
 			}
-			internalNode = newNode.InternalRepr()
+
+			internalNode := &persistencespb.StateMachineNode{
+				Children:                      make(map[string]*persistencespb.StateMachineMap),
+				Data:                          nodeMutation.Data,
+				InitialVersionedTransition:    nodeMutation.InitialVersionedTransition,
+				LastUpdateVersionedTransition: nodeMutation.LastUpdateVersionedTransition,
+				TransitionCount:               1,
+			}
+			children, ok := parentInternalNode.Children[key.Type]
+			if !ok {
+				children = &persistencespb.StateMachineMap{MachinesById: make(map[string]*persistencespb.StateMachineNode)}
+				// Children may be nil if the map was empty and the proto message we serialized and deserialized.
+				if parentInternalNode.Children == nil {
+					parentInternalNode.Children = make(map[string]*persistencespb.StateMachineMap, 1)
+				}
+				parentInternalNode.Children[key.Type] = children
+			}
+			children.MachinesById[key.ID] = internalNode
 		} else {
-			internalNode = currentNode.InternalRepr()
+			internalNode = node.InternalRepr()
 			if CompareVersionedTransition(nodeMutation.LastUpdateVersionedTransition, internalNode.LastUpdateVersionedTransition) == 0 {
 				continue
 			}
+			internalNode.Data = nodeMutation.Data
+			internalNode.InitialVersionedTransition = nodeMutation.InitialVersionedTransition
+			internalNode.LastUpdateVersionedTransition = nodeMutation.LastUpdateVersionedTransition
+			internalNode.TransitionCount++
+			node.InvalidateCache()
 		}
-		internalNode.Data = nodeMutation.Data
-		internalNode.InitialVersionedTransition = nodeMutation.InitialVersionedTransition
-		internalNode.LastUpdateVersionedTransition = nodeMutation.LastUpdateVersionedTransition
-		internalNode.TransitionCount++
 	}
 	return nil
 }
