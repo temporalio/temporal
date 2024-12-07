@@ -39,8 +39,6 @@ message StateMachineNode {
     // This field will always be set even when transition history is disabled.
     // NOTE: If transition history is disabled, the transition_count field will be 0 and 
     // cannot be used to uniquely identify a node.
-    // NOTE: Node deletion is not yet implemented at the time of writing so we can still uniquely identify a node just
-    // with the initial namespace failover version.
     VersionedTransition initial_versioned_transition = 3;
 
     // Versioned transition when the node was last updated.

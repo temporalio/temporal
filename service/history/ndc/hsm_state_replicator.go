@@ -152,15 +152,30 @@ func (r *HSMStateReplicatorImpl) syncHSMNode(
 	mutableState workflow.MutableState,
 	request *shard.SyncHSMRequest,
 ) (bool, error) {
-
 	shouldSync, err := r.compareVersionHistory(mutableState, request.EventVersionHistory)
 	if err != nil || !shouldSync {
 		return shouldSync, err
 	}
 
-	currentHSM := mutableState.HSM()
+	synced, err := r.syncIncomingNodes(mutableState, request)
+	if err != nil {
+		return false, err
+	}
 
-	// we don't care about the root here which is the entire mutable state
+	deleted, err := r.syncDeletions(mutableState, request)
+	if err != nil {
+		return false, err
+	}
+
+	return synced || deleted, nil
+}
+
+func (r *HSMStateReplicatorImpl) syncIncomingNodes(
+	mutableState workflow.MutableState,
+	request *shard.SyncHSMRequest,
+) (bool, error) {
+
+	currentHSM := mutableState.HSM()
 	incomingHSM, err := hsm.NewRoot(
 		r.shardContext.StateMachineRegistry(),
 		workflow.StateMachineType,
@@ -174,7 +189,6 @@ func (r *HSMStateReplicatorImpl) syncHSMNode(
 
 	synced := false
 	if err := incomingHSM.Walk(func(incomingNode *hsm.Node) error {
-
 		if incomingNode.Parent == nil {
 			// skip root which is the entire mutable state
 			return nil
@@ -183,27 +197,106 @@ func (r *HSMStateReplicatorImpl) syncHSMNode(
 		incomingNodePath := incomingNode.Path()
 		currentNode, err := currentHSM.Child(incomingNodePath)
 		if err != nil {
-			// 1. Already done history resend if needed before,
-			// and node creation today always associated with an event
-			// 2. Node deletion is not supported right now.
-			// Based on 1 and 2, node should always be found here.
+			// In the old code:
+			//   Node creation is always associated with an event.
+			// Given that events should have been replicated first, we shouldn't miss nodes here.
+			// If we do, it's unexpected, so return the error.
 			return err
 		}
 
-		if shouldSyncNode, err := r.shouldSyncNode(currentNode, incomingNode); err != nil || !shouldSyncNode {
+		shouldSyncNode, err := r.shouldSyncNode(currentNode, incomingNode)
+		if err != nil {
 			if err != nil && errors.Is(err, hsm.ErrInitialTransitionMismatch) {
+				// skip syncing this node if initial transitions mismatch
 				return nil
 			}
 			return err
 		}
 
-		synced = true
-		return currentNode.Sync(incomingNode)
+		if shouldSyncNode {
+			synced = true
+			if syncErr := currentNode.Sync(incomingNode); syncErr != nil {
+				return syncErr
+			}
+		}
+
+		return nil
 	}); err != nil {
 		return false, err
 	}
 
 	return synced, nil
+}
+
+func (r *HSMStateReplicatorImpl) syncDeletions(
+	mutableState workflow.MutableState,
+	request *shard.SyncHSMRequest,
+) (bool, error) {
+	currentHSM := mutableState.HSM()
+	incomingHSM, err := hsm.NewRoot(
+		r.shardContext.StateMachineRegistry(),
+		workflow.StateMachineType,
+		mutableState,
+		request.StateMachineNode.Children,
+		mutableState,
+	)
+	if err != nil {
+		return false, err
+	}
+
+	deleted := false
+	err = currentHSM.Walk(func(currentNode *hsm.Node) error {
+		if currentNode.Parent == nil {
+			// skip root
+			return nil
+		}
+
+		_, findErr := incomingHSM.Child(currentNode.Path())
+		if findErr != nil {
+			// incomingNode not found => candidate for deletion
+			canDelete, deleteErr := r.shouldDeleteNode(currentNode, request)
+			if deleteErr != nil {
+				return deleteErr
+			}
+			if canDelete {
+				if delErr := currentNode.Parent.DeleteChild(currentNode.Key); delErr != nil {
+					return delErr
+				}
+				deleted = true
+			}
+		}
+		return nil
+	})
+
+	if err != nil {
+		return false, err
+	}
+	return deleted, nil
+}
+
+// shouldDeleteNode checks if it's safe and correct to delete a node from the currentHSM that doesn't exist in
+// incomingHSM.
+// It uses version comparisons similar to how we handle updates, ensuring that we're on the same branch and the incoming
+// version is newer.
+func (r *HSMStateReplicatorImpl) shouldDeleteNode(
+	currentNode *hsm.Node,
+	request *shard.SyncHSMRequest,
+) (bool, error) {
+	targetInitialVersion := currentNode.InternalRepr().InitialVersionedTransition.NamespaceFailoverVersion
+	targetVersion := currentNode.InternalRepr().LastUpdateVersionedTransition.NamespaceFailoverVersion
+
+	sourceInitialVersion := request.StateMachineNode.InitialVersionedTransition.NamespaceFailoverVersion
+	sourceVersion := request.StateMachineNode.LastUpdateVersionedTransition.NamespaceFailoverVersion
+
+	// Must be same initial version and source strictly newer
+	if targetInitialVersion != sourceInitialVersion {
+		return false, nil
+	}
+	if sourceVersion <= targetVersion {
+		return false, nil
+	}
+
+	return true, nil
 }
 
 func (r *HSMStateReplicatorImpl) shouldSyncNode(

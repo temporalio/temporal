@@ -24,12 +24,14 @@ package ndc
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	enumspb "go.temporal.io/api/enums/v1"
+	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
@@ -75,6 +77,27 @@ type (
 		nDCHSMStateReplicator *HSMStateReplicatorImpl
 	}
 )
+
+type testBackend struct {
+	nextTransitionCount int64
+	currentVersion      int64
+}
+
+func (b *testBackend) AddHistoryEvent(t enumspb.EventType, setAttributes func(*historypb.HistoryEvent)) *historypb.HistoryEvent {
+	return nil // Not needed for deletion tests
+}
+
+func (b *testBackend) LoadHistoryEvent(ctx context.Context, token []byte) (*historypb.HistoryEvent, error) {
+	return nil, nil // Not needed for deletion tests
+}
+
+func (b *testBackend) GetCurrentVersion() int64 {
+	return b.currentVersion
+}
+
+func (b *testBackend) NextTransitionCount() int64 {
+	return b.nextTransitionCount
+}
 
 func TestHSMStateReplicatorSuite(t *testing.T) {
 	s := new(hsmStateReplicatorSuite)
@@ -698,6 +721,273 @@ func (s *hsmStateReplicatorSuite) TestSyncHSM_IncomingStateNewer_WorkflowClosed(
 				},
 			},
 		},
+	})
+	s.NoError(err)
+}
+
+func (s *hsmStateReplicatorSuite) TestSyncHSM_DeleteNode_Success() {
+	persistedState := s.buildWorkflowMutableState()
+
+	targetFailoverVersion := s.namespaceEntry.FailoverVersion()
+	sourceFailoverVersion := targetFailoverVersion + 500
+
+	// Set up target cluster state
+	targetNode := persistedState.ExecutionInfo.SubStateMachinesByType[s.stateMachineDef.Type()].MachinesById["child1"]
+	targetNode.InitialVersionedTransition = &persistencespb.VersionedTransition{
+		NamespaceFailoverVersion: targetFailoverVersion,
+		TransitionCount:          10,
+	}
+	targetNode.LastUpdateVersionedTransition = &persistencespb.VersionedTransition{
+		NamespaceFailoverVersion: targetFailoverVersion,
+		TransitionCount:          10,
+	}
+	targetNode.Data = []byte(hsmtest.State2)
+
+	// Set up mocks
+	var replicationLogs []string
+	logReplication := func(msg string) {
+		replicationLogs = append(replicationLogs, msg)
+		s.T().Logf("REPLICATION: %s", msg)
+	}
+
+	s.mockMutableState.EXPECT().GetWorkflowStateStatus().DoAndReturn(func() (enumsspb.WorkflowExecutionState, enumspb.WorkflowExecutionStatus) {
+		logReplication("GetWorkflowStateStatus called")
+		return enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING
+	}).AnyTimes()
+
+	s.mockMutableState.EXPECT().GetExecutionInfo().DoAndReturn(func() *persistencespb.WorkflowExecutionInfo {
+		logReplication("GetExecutionInfo called")
+		return persistedState.ExecutionInfo
+	}).AnyTimes()
+
+	s.mockMutableState.EXPECT().GetWorkflowKey().DoAndReturn(func() definition.WorkflowKey {
+		logReplication("GetWorkflowKey called")
+		return s.workflowKey
+	}).AnyTimes()
+
+	s.mockMutableState.EXPECT().HSM().DoAndReturn(func() *hsm.Node {
+		logReplication("HSM called")
+		targetRoot, err := hsm.NewRoot(
+			s.mockShard.StateMachineRegistry(),
+			workflow.StateMachineType,
+			persistedState.ExecutionInfo,
+			persistedState.ExecutionInfo.SubStateMachinesByType,
+			s.mockMutableState,
+		)
+		s.NoError(err)
+		return targetRoot
+	}).AnyTimes()
+
+	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(ctx context.Context, request *persistence.GetWorkflowExecutionRequest) (*persistence.GetWorkflowExecutionResponse, error) {
+			logReplication("GetWorkflowExecution called")
+			return &persistence.GetWorkflowExecutionResponse{
+				State:           persistedState,
+				DBRecordVersion: 777,
+			}, nil
+		}).Times(1)
+
+	s.mockExecutionMgr.EXPECT().UpdateWorkflowExecution(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(ctx context.Context, request *persistence.UpdateWorkflowExecutionRequest) (*persistence.UpdateWorkflowExecutionResponse, error) {
+			info := request.UpdateWorkflowMutation.ExecutionInfo
+			// Check that the entire entry for this machine type is removed
+			_, ok := info.SubStateMachinesByType[s.stateMachineDef.Type()]
+			s.False(ok, "Entire state machine type entry should be removed since no machines remain")
+
+			return &persistence.UpdateWorkflowExecutionResponse{
+				UpdateMutableStateStats: persistence.MutableStateStatistics{
+					HistoryStatistics: &persistence.HistoryStatistics{},
+				},
+			}, nil
+		},
+	).Times(1)
+
+	fmt.Printf("TEST: Target state=%+v\n", persistedState.ExecutionInfo.SubStateMachinesByType)
+
+	// Create source state representing deletion
+	sourceNode := &persistencespb.StateMachineNode{
+		InitialVersionedTransition: &persistencespb.VersionedTransition{
+			NamespaceFailoverVersion: targetFailoverVersion, // Same initial version
+			TransitionCount:          10,
+		},
+		LastUpdateVersionedTransition: &persistencespb.VersionedTransition{
+			NamespaceFailoverVersion: sourceFailoverVersion, // Higher version
+			TransitionCount:          50,
+		},
+		Children: map[string]*persistencespb.StateMachineMap{}, // Empty children indicating deletion
+	}
+
+	fmt.Printf("TEST: Source state=%+v\n", sourceNode)
+
+	logReplication("=== Version Info ===")
+	logReplication(fmt.Sprintf("Source initial version: %+v", sourceNode.InitialVersionedTransition))
+	logReplication(fmt.Sprintf("Source last update: %+v", sourceNode.LastUpdateVersionedTransition))
+	logReplication(fmt.Sprintf("Target initial version: %+v", targetNode.InitialVersionedTransition))
+	logReplication(fmt.Sprintf("Target last update: %+v", targetNode.LastUpdateVersionedTransition))
+
+	err := s.nDCHSMStateReplicator.SyncHSMState(context.Background(), &shard.SyncHSMRequest{
+		WorkflowKey:         s.workflowKey,
+		EventVersionHistory: persistedState.ExecutionInfo.VersionHistories.Histories[0],
+		StateMachineNode:    sourceNode,
+	})
+	s.NoError(err)
+
+	s.T().Logf("Replication flow:")
+	for _, log := range replicationLogs {
+		s.T().Logf("  %s", log)
+	}
+}
+
+func (s *hsmStateReplicatorSuite) TestSyncHSM_DeleteNode_TargetNewer() {
+	persistedState := s.buildWorkflowMutableState()
+	// Make target node have newer version
+	targetNode := persistedState.ExecutionInfo.SubStateMachinesByType[s.stateMachineDef.Type()].MachinesById["child1"]
+	targetNode.LastUpdateVersionedTransition.NamespaceFailoverVersion += 200
+
+	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(&persistence.GetWorkflowExecutionResponse{
+		State:           persistedState,
+		DBRecordVersion: 777,
+	}, nil).Times(1)
+
+	// No update expected since target is newer
+	// UpdateWorkflowExecution should not be called
+
+	backend := &testBackend{
+		nextTransitionCount: 100,
+		currentVersion:      s.namespaceEntry.FailoverVersion(),
+	}
+
+	incomingRoot, err := hsm.NewRoot(
+		s.mockShard.StateMachineRegistry(),
+		workflow.StateMachineType,
+		hsmtest.NewData(hsmtest.State1),
+		map[string]*persistencespb.StateMachineMap{},
+		backend,
+	)
+	s.NoError(err)
+
+	child1, err := incomingRoot.AddChild(hsm.Key{Type: s.stateMachineDef.Type(), ID: "child1"}, hsmtest.NewData(hsmtest.State2))
+	s.NoError(err)
+
+	// Set version info before delete
+	child1.InternalRepr().InitialVersionedTransition = &persistencespb.VersionedTransition{
+		NamespaceFailoverVersion: s.namespaceEntry.FailoverVersion(),
+		TransitionCount:          10,
+	}
+	child1.InternalRepr().LastUpdateVersionedTransition = &persistencespb.VersionedTransition{
+		NamespaceFailoverVersion: s.namespaceEntry.FailoverVersion() + 100,
+		TransitionCount:          50,
+	}
+
+	err = incomingRoot.DeleteChild(child1.Key)
+	s.NoError(err)
+
+	err = s.nDCHSMStateReplicator.SyncHSMState(context.Background(), &shard.SyncHSMRequest{
+		WorkflowKey:         s.workflowKey,
+		EventVersionHistory: persistedState.ExecutionInfo.VersionHistories.Histories[0],
+		StateMachineNode:    incomingRoot.InternalRepr(),
+	})
+	s.NoError(err)
+}
+
+func (s *hsmStateReplicatorSuite) TestSyncHSM_DeleteNode_InitialTransitionMismatch() {
+	persistedState := s.buildWorkflowMutableState()
+	// Make target node have different initial version
+	targetNode := persistedState.ExecutionInfo.SubStateMachinesByType[s.stateMachineDef.Type()].MachinesById["child1"]
+	targetNode.InitialVersionedTransition.NamespaceFailoverVersion += 100
+
+	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(&persistence.GetWorkflowExecutionResponse{
+		State:           persistedState,
+		DBRecordVersion: 777,
+	}, nil).Times(1)
+
+	// No update expected since initial versions mismatch
+	// UpdateWorkflowExecution should not be called
+
+	backend := &testBackend{
+		nextTransitionCount: 100,
+		currentVersion:      s.namespaceEntry.FailoverVersion(),
+	}
+
+	incomingRoot, err := hsm.NewRoot(
+		s.mockShard.StateMachineRegistry(),
+		workflow.StateMachineType,
+		hsmtest.NewData(hsmtest.State1),
+		map[string]*persistencespb.StateMachineMap{},
+		backend,
+	)
+	s.NoError(err)
+
+	child1, err := incomingRoot.AddChild(hsm.Key{Type: s.stateMachineDef.Type(), ID: "child1"}, hsmtest.NewData(hsmtest.State2))
+	s.NoError(err)
+
+	// Set version info before delete, with mismatched initial version
+	child1.InternalRepr().InitialVersionedTransition = &persistencespb.VersionedTransition{
+		NamespaceFailoverVersion: s.namespaceEntry.FailoverVersion(), // Different from target's version
+		TransitionCount:          10,
+	}
+	child1.InternalRepr().LastUpdateVersionedTransition = &persistencespb.VersionedTransition{
+		NamespaceFailoverVersion: s.namespaceEntry.FailoverVersion() + 100,
+		TransitionCount:          50,
+	}
+
+	err = incomingRoot.DeleteChild(child1.Key)
+	s.NoError(err)
+
+	err = s.nDCHSMStateReplicator.SyncHSMState(context.Background(), &shard.SyncHSMRequest{
+		WorkflowKey:         s.workflowKey,
+		EventVersionHistory: persistedState.ExecutionInfo.VersionHistories.Histories[0],
+		StateMachineNode:    incomingRoot.InternalRepr(),
+	})
+	s.NoError(err)
+}
+
+func (s *hsmStateReplicatorSuite) TestSyncHSM_DeleteNode_ConcurrentDeletion() {
+	persistedState := s.buildWorkflowMutableState()
+	// Remove the node from persisted state to simulate it was already deleted
+	delete(persistedState.ExecutionInfo.SubStateMachinesByType[s.stateMachineDef.Type()].MachinesById, "child1")
+
+	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(&persistence.GetWorkflowExecutionResponse{
+		State:           persistedState,
+		DBRecordVersion: 777,
+	}, nil).Times(1)
+
+	// No update expected since node is already deleted
+	// UpdateWorkflowExecution should not be called
+
+	incomingRoot, err := hsm.NewRoot(
+		s.mockShard.StateMachineRegistry(),
+		workflow.StateMachineType,
+		hsmtest.NewData(hsmtest.State1),
+		map[string]*persistencespb.StateMachineMap{},
+		&testBackend{
+			nextTransitionCount: 100,
+			currentVersion:      s.namespaceEntry.FailoverVersion(),
+		},
+	)
+	s.NoError(err)
+
+	child1, err := incomingRoot.AddChild(hsm.Key{Type: s.stateMachineDef.Type(), ID: "child1"},
+		hsmtest.NewData(hsmtest.State2))
+	s.NoError(err)
+
+	// Set version info before delete
+	child1.InternalRepr().InitialVersionedTransition = &persistencespb.VersionedTransition{
+		NamespaceFailoverVersion: s.namespaceEntry.FailoverVersion(),
+		TransitionCount:          10,
+	}
+	child1.InternalRepr().LastUpdateVersionedTransition = &persistencespb.VersionedTransition{
+		NamespaceFailoverVersion: s.namespaceEntry.FailoverVersion() + 100,
+		TransitionCount:          50,
+	}
+
+	err = incomingRoot.DeleteChild(child1.Key)
+	s.NoError(err)
+
+	err = s.nDCHSMStateReplicator.SyncHSMState(context.Background(), &shard.SyncHSMRequest{
+		WorkflowKey:         s.workflowKey,
+		EventVersionHistory: persistedState.ExecutionInfo.VersionHistories.Histories[0],
+		StateMachineNode:    incomingRoot.InternalRepr(),
 	})
 	s.NoError(err)
 }
