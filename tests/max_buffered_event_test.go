@@ -137,7 +137,6 @@ func (s *MaxBufferedEventSuite) TestMaxBufferedEventsLimit() {
 	}
 	s.Equal(enumspb.WORKFLOW_TASK_FAILED_CAUSE_FORCE_CLOSE_COMMAND, failedCause)
 	s.Equal(1, failedCount)
-
 }
 
 func (s *MaxBufferedEventSuite) TestBufferedEventsMutableStateSizeLimit() {
