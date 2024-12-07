@@ -314,9 +314,6 @@ func (p *workflowTaskPoller) respondTaskCompleted(
 	if reply.Identity == "" {
 		reply.Identity = opts.tv.WorkerIdentity()
 	}
-	if reply.ForceCreateNewWorkflowTask {
-		reply.ReturnNewWorkflowTask = true
-	}
 
 	return p.client.RespondWorkflowTaskCompleted(ctx, reply)
 }

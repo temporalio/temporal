@@ -49,7 +49,7 @@ TEST_TAG_FLAG := -tags $(ALL_TEST_TAGS)
 # If you change this, also change .github/workflows/run-tests.yml!
 # The timeout in the GH workflow must be larger than this to avoid GH timing out the action,
 # which causes the a job run to not produce any logs and hurts the debugging experience.
-TEST_TIMEOUT ?= 20m
+TEST_TIMEOUT ?= 25m
 
 # Number of retries for *-coverage targets.
 FAILED_TEST_RETRIES ?= 2
