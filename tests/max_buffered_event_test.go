@@ -128,20 +128,23 @@ func (s *MaxBufferedEventSuite) TestMaxBufferedEventsLimit() {
 	historyEvents := s.GetHistory(s.Namespace(), &commonpb.WorkflowExecution{WorkflowId: wf1.GetID()})
 	// Not using historyrequire here because history is not deterministic.
 	var failedCause enumspb.WorkflowTaskFailedCause
+	var failedCount int
 	for _, evt := range historyEvents {
 		if evt.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_TASK_FAILED {
 			failedCause = evt.GetWorkflowTaskFailedEventAttributes().Cause
-			break
+			failedCount++
 		}
 	}
 	s.Equal(enumspb.WORKFLOW_TASK_FAILED_CAUSE_FORCE_CLOSE_COMMAND, failedCause)
+	s.Equal(1, failedCount)
+
 }
 
 func (s *MaxBufferedEventSuite) TestBufferedEventsMutableStateSizeLimit() {
 	/*
 			This test starts a workflow, and block its workflow task, then sending
 			signals to it which will be buffered. The default max mutable state
-		    size is 16MB and each signal will have a 1MB payload, so when the 17th
+		    size is 2MB and each signal will have a 500KB payload, so when the 4th
 			signal is received, the workflow will be force terminated.
 	*/
 	closeStartChanOnce := sync.Once{}
@@ -195,15 +198,15 @@ func (s *MaxBufferedEventSuite) TestBufferedEventsMutableStateSizeLimit() {
 	// block until workflow task started
 	<-waitStartChan
 
-	// now send 15 signals with 1MB payload each, all of them will be buffered
-	buf := make([]byte, 1048577)
+	// now send 3 signals with 500KB payload each, all of them will be buffered
+	buf := make([]byte, 500*1024)
 	largePayload := payloads.EncodeBytes(buf)
-	for i := 0; i < 16; i++ {
+	for i := 0; i < 3; i++ {
 		err := s.SdkClient().SignalWorkflow(testCtx, wid, "", "test-signal", largePayload)
 		s.NoError(err)
 	}
 
-	// send 16th signal, this will fail the started workflow task and force terminate the workflow
+	// send 4th signal, this will fail the started workflow task and force terminate the workflow
 	err := s.SdkClient().SignalWorkflow(testCtx, wid, "", "test-signal", largePayload)
 	s.NoError(err)
 
@@ -213,16 +216,18 @@ func (s *MaxBufferedEventSuite) TestBufferedEventsMutableStateSizeLimit() {
 	var sigCount int
 	err = wf1.Get(testCtx, &sigCount)
 	s.NoError(err)
-	s.Equal(17, sigCount)
+	s.Equal(4, sigCount)
 
 	historyEvents := s.GetHistory(s.Namespace(), &commonpb.WorkflowExecution{WorkflowId: wf1.GetID()})
 	// Not using historyrequire here because history is not deterministic.
 	var failedCause enumspb.WorkflowTaskFailedCause
+	var failedCount int
 	for _, evt := range historyEvents {
 		if evt.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_TASK_FAILED {
 			failedCause = evt.GetWorkflowTaskFailedEventAttributes().Cause
-			break
+			failedCount++
 		}
 	}
 	s.Equal(enumspb.WORKFLOW_TASK_FAILED_CAUSE_FORCE_CLOSE_COMMAND, failedCause)
+	s.Equal(1, failedCount)
 }
