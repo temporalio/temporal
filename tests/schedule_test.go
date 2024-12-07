@@ -52,7 +52,6 @@ import (
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/testing/historyrequire"
 	"go.temporal.io/server/common/testing/protorequire"
-	schedulerhsm "go.temporal.io/server/components/scheduler"
 	"go.temporal.io/server/service/worker/scheduler"
 	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/protobuf/proto"
@@ -625,153 +624,10 @@ func (s *ScheduleFunctionalSuite) TestInput() {
 	s.Eventually(func() bool { return atomic.LoadInt32(&runs) == 1 }, 8*time.Second, 200*time.Millisecond)
 }
 
-func (s *ScheduleFunctionalSuite) TestExperimentalHsmInput() {
-	sid := "sched-test-experimental-hsm"
-	wid := "sched-test-experimental-hsm-wf"
-	wt := "sched-test-experimental-hsm-wt"
-
-	s.OverrideDynamicConfig(schedulerhsm.UseExperimentalHsmScheduler, true)
-
-	type myData struct {
-		Stuff  string
-		Things []int
-	}
-
-	input1 := &myData{
-		Stuff:  "here's some data",
-		Things: []int{7, 8, 9},
-	}
-	input2 := map[int]float64{11: 1.4375}
-	inputPayloads, err := s.dataConverter.ToPayloads(input1, input2)
-	s.NoError(err)
-
-	schedule := &schedulepb.Schedule{
-		Spec: &schedulepb.ScheduleSpec{
-			Interval: []*schedulepb.IntervalSpec{
-				{Interval: durationpb.New(3 * time.Second)},
-			},
-		},
-		Action: &schedulepb.ScheduleAction{
-			Action: &schedulepb.ScheduleAction_StartWorkflow{
-				StartWorkflow: &workflowpb.NewWorkflowExecutionInfo{
-					WorkflowId:   wid,
-					WorkflowType: &commonpb.WorkflowType{Name: wt},
-					TaskQueue:    &taskqueuepb.TaskQueue{Name: s.taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
-					Input:        inputPayloads,
-				},
-			},
-		},
-	}
-	req := &workflowservice.CreateScheduleRequest{
-		Namespace:  s.Namespace(),
-		ScheduleId: sid,
-		Schedule:   schedule,
-		Identity:   "test",
-		RequestId:  uuid.New(),
-	}
-
-	var runs int32
-	workflowFn := func(ctx workflow.Context, arg1 *myData, arg2 map[int]float64) error {
-		workflow.SideEffect(ctx, func(ctx workflow.Context) any {
-			s.Equal(*input1, *arg1)
-			s.Equal(input2, arg2)
-			atomic.AddInt32(&runs, 1)
-			return 0
-		})
-		return nil
-	}
-	s.worker.RegisterWorkflowWithOptions(workflowFn, workflow.RegisterOptions{Name: wt})
-
-	_, err = s.FrontendClient().CreateSchedule(testcore.NewContext(), req)
-	s.NoError(err)
-	s.cleanup(sid)
-
-	s.Eventually(func() bool { return atomic.LoadInt32(&runs) == 1 }, 8*time.Second, 200*time.Millisecond)
-
-	events := s.GetHistory(s.Namespace(), &commonpb.WorkflowExecution{WorkflowId: scheduler.WorkflowIDPrefix + sid})
-	expectedHistory := `1 WorkflowExecutionStarted`
-	s.EqualHistoryEvents(expectedHistory, events)
-}
-
 func (s *ScheduleFunctionalSuite) TestLastCompletionAndError() {
 	sid := "sched-test-last"
 	wid := "sched-test-last-wf"
 	wt := "sched-test-last-wt"
-
-	schedule := &schedulepb.Schedule{
-		Spec: &schedulepb.ScheduleSpec{
-			Interval: []*schedulepb.IntervalSpec{
-				{Interval: durationpb.New(3 * time.Second)},
-			},
-		},
-		Action: &schedulepb.ScheduleAction{
-			Action: &schedulepb.ScheduleAction_StartWorkflow{
-				StartWorkflow: &workflowpb.NewWorkflowExecutionInfo{
-					WorkflowId:   wid,
-					WorkflowType: &commonpb.WorkflowType{Name: wt},
-					TaskQueue:    &taskqueuepb.TaskQueue{Name: s.taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
-				},
-			},
-		},
-	}
-	req := &workflowservice.CreateScheduleRequest{
-		Namespace:  s.Namespace(),
-		ScheduleId: sid,
-		Schedule:   schedule,
-		Identity:   "test",
-		RequestId:  uuid.New(),
-	}
-
-	runs := make(map[string]struct{})
-	var testComplete int32
-
-	workflowFn := func(ctx workflow.Context) (string, error) {
-		var num int
-		_ = workflow.SideEffect(ctx, func(ctx workflow.Context) any {
-			runs[workflow.GetInfo(ctx).WorkflowExecution.ID] = struct{}{}
-			return len(runs)
-		}).Get(&num)
-
-		var lcr string
-		if workflow.HasLastCompletionResult(ctx) {
-			s.NoError(workflow.GetLastCompletionResult(ctx, &lcr))
-		}
-
-		lastErr := workflow.GetLastError(ctx)
-
-		switch num {
-		case 1:
-			s.Equal("", lcr)
-			s.NoError(lastErr)
-			return "this one succeeds", nil
-		case 2:
-			s.NoError(lastErr)
-			s.Equal("this one succeeds", lcr)
-			return "", errors.New("this one fails")
-		case 3:
-			s.Equal("this one succeeds", lcr)
-			s.ErrorContains(lastErr, "this one fails")
-			atomic.StoreInt32(&testComplete, 1)
-			return "done", nil
-		default:
-			panic("shouldn't be running anymore")
-		}
-	}
-	s.worker.RegisterWorkflowWithOptions(workflowFn, workflow.RegisterOptions{Name: wt})
-
-	_, err := s.FrontendClient().CreateSchedule(testcore.NewContext(), req)
-	s.NoError(err)
-	s.cleanup(sid)
-
-	s.Eventually(func() bool { return atomic.LoadInt32(&testComplete) == 1 }, 20*time.Second, 200*time.Millisecond)
-}
-
-func (s *ScheduleFunctionalSuite) TestExperimentalHsmLastCompletionAndError() {
-	sid := "sched-test-last"
-	wid := "sched-test-last-wf"
-	wt := "sched-test-last-wt"
-
-	s.OverrideDynamicConfig(schedulerhsm.UseExperimentalHsmScheduler, true)
 
 	schedule := &schedulepb.Schedule{
 		Spec: &schedulepb.ScheduleSpec{
