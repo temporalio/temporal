@@ -200,6 +200,25 @@ func (s *WorkflowResetSuite) TestWithMoreClosedRuns() {
 	}
 }
 
+func (s *WorkflowResetSuite) TestOriginalExecutionRunId() {
+	workflowID := "test-reset" + uuid.NewString()
+	ctx := testcore.NewContext()
+	runs := s.setupRuns(ctx, workflowID, 1, true)
+	baseRunID := runs[0]
+	// Reset the current run repeatedly. Verify that each time the new run points to the original baseRunID
+	for i := 0; i < 5; i++ {
+		currentRunID := s.performReset(ctx, workflowID, baseRunID)
+		baseMutableState, err := s.AdminClient().DescribeMutableState(ctx, &adminservice.DescribeMutableStateRequest{
+			Namespace: s.Namespace(),
+			Execution: &commonpb.WorkflowExecution{WorkflowId: workflowID, RunId: currentRunID},
+		})
+		s.NoError(err)
+		s.Equal(baseRunID, baseMutableState.GetDatabaseMutableState().ExecutionInfo.OriginalExecutionRunId)
+	}
+}
+
+// Helper methods
+
 // getFirstWFTaskCompleteEventID finds the first event corresponding to workflow task completion. This can be used as a good reset point for tests in this suite.
 func (s *WorkflowResetSuite) getFirstWFTaskCompleteEventID(ctx context.Context, workflowID string, runID string) int64 {
 	hist := s.SdkClient().GetWorkflowHistory(ctx, workflowID, runID, false, enumspb.HISTORY_EVENT_FILTER_TYPE_ALL_EVENT)
