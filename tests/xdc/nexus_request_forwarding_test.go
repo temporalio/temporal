@@ -65,7 +65,25 @@ type NexusRequestForwardingSuite struct {
 
 func TestNexusRequestForwardingTestSuite(t *testing.T) {
 	t.Parallel()
-	suite.Run(t, new(NexusRequestForwardingSuite))
+	for _, tc := range []struct {
+		name                    string
+		enableTransitionHistory bool
+	}{
+		{
+			name:                    "DisableTransitionHistory",
+			enableTransitionHistory: false,
+		},
+		{
+			name:                    "EnableTransitionHistory",
+			enableTransitionHistory: true,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			s := &NexusRequestForwardingSuite{}
+			s.enableTransitionHistory = tc.enableTransitionHistory
+			suite.Run(t, s)
+		})
+	}
 }
 
 func (s *NexusRequestForwardingSuite) SetupSuite() {

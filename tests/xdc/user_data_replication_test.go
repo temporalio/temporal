@@ -61,7 +61,25 @@ type (
 
 func TestUserDataReplicationTestSuite(t *testing.T) {
 	t.Parallel()
-	suite.Run(t, new(UserDataReplicationTestSuite))
+	for _, tc := range []struct {
+		name                    string
+		enableTransitionHistory bool
+	}{
+		{
+			name:                    "EnableTransitionHistory",
+			enableTransitionHistory: true,
+		},
+		{
+			name:                    "DisableTransitionHistory",
+			enableTransitionHistory: false,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			s := &UserDataReplicationTestSuite{}
+			s.enableTransitionHistory = tc.enableTransitionHistory
+			suite.Run(t, s)
+		})
+	}
 }
 
 func (s *UserDataReplicationTestSuite) SetupSuite() {
