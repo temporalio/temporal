@@ -200,7 +200,6 @@ func (r *ConflictResolverImpl) rebuild(
 	rebuildMutableState.AddHistorySize(historySize)
 	// set the update condition from original mutable state
 	rebuildMutableState.SetUpdateCondition(r.mutableState.GetUpdateCondition())
-	executionInfo.BaseExecutionInfo = nil
 
 	r.context.Clear()
 	return rebuildMutableState, nil
