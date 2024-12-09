@@ -99,12 +99,12 @@ func (s *ActivityApiResetClientTestSuite) TestActivityResetApi_Acceptance() {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	activityReseted := false
+	var activityReseted atomic.Bool
 	activityCompleteSignal := make(chan struct{})
 	var activityCompleted atomic.Int32
 
 	activityFunction := func() (string, error) {
-		if !activityReseted {
+		if activityReseted.Load() == false {
 			activityErr := errors.New("bad-luck-please-retry")
 			activityCompleted.Add(1)
 			return "", activityErr
@@ -147,7 +147,7 @@ func (s *ActivityApiResetClientTestSuite) TestActivityResetApi_Acceptance() {
 	s.NoError(err)
 	s.NotNil(resp)
 
-	activityReseted = true
+	activityReseted.Store(true)
 
 	// wait for activity to be running
 	s.EventuallyWithT(func(t *assert.CollectT) {
@@ -174,12 +174,12 @@ func (s *ActivityApiResetClientTestSuite) TestActivityResetApi_WithNoWait() {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	activityReseted := false
 	activityCompleteSignal1 := make(chan struct{})
 	activityCompleteSignal2 := make(chan struct{})
+	var activityReseted atomic.Bool
 
 	activityFunction := func() (string, error) {
-		if !activityReseted {
+		if activityReseted.Load() == false {
 			activityErr := errors.New("bad-luck-please-retry")
 			s.WaitForChannel(ctx, activityCompleteSignal1)
 			return "", activityErr
@@ -211,7 +211,7 @@ func (s *ActivityApiResetClientTestSuite) TestActivityResetApi_WithNoWait() {
 		assert.Equal(t, enumspb.PENDING_ACTIVITY_STATE_STARTED, description.PendingActivities[0].State)
 	}, 5*time.Second, 200*time.Millisecond)
 
-	activityReseted = true
+	activityReseted.Store(true)
 	resetRequest := &workflowservicepb.ResetActivityByIdRequest{
 		Namespace:  s.Namespace(),
 		WorkflowId: workflowRun.GetID(),
