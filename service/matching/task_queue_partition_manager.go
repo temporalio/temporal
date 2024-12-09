@@ -783,6 +783,12 @@ func (pm *taskQueuePartitionManagerImpl) getPhysicalQueuesForAdd(
 	wfBehavior := directive.GetBehavior()
 	deployment := directive.GetDeployment()
 
+	perTypeUserData, perTypeUserDataChanged, err := pm.getPerTypeUserData()
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	deploymentData := perTypeUserData.GetDeploymentData()
+
 	if wfBehavior == enumspb.VERSIONING_BEHAVIOR_PINNED {
 		if pm.partition.Kind() == enumspb.TASK_QUEUE_KIND_STICKY {
 			// TODO (shahab): we can verify the passed deployment matches the last poller's deployment
@@ -793,26 +799,27 @@ func (pm *taskQueuePartitionManagerImpl) getPhysicalQueuesForAdd(
 		if err != nil {
 			return nil, nil, nil, err
 		}
-		pinnedQueue, err = pm.getVersionedQueue(ctx, "", "", deployment, true)
-		if err != nil {
-			return nil, nil, nil, err
-		}
-		if forwardInfo == nil {
-			// Task is not forwarded, so it can be spooled if sync match fails.
-			// Spool queue and sync match queue is the same for pinned workflows.
-			return pinnedQueue, pinnedQueue, nil, nil
-		} else {
-			// Forwarded from child partition - only do sync match.
-			return nil, pinnedQueue, nil, nil
+
+		// We ignore the pinned directive if this is an activity task but the activity task queue is
+		// not present in the workflow's pinned deployment. Such activities are considered
+		// independent activities and are treated as unpinned, sent to their TQ's current deployment.
+		if pm.partition.TaskType() != enumspb.TASK_QUEUE_TYPE_ACTIVITY || findDeployment(deploymentData, deployment) != -1 {
+			pinnedQueue, err = pm.getVersionedQueue(ctx, "", "", deployment, true)
+			if err != nil {
+				return nil, nil, nil, err
+			}
+			if forwardInfo == nil {
+				// Task is not forwarded, so it can be spooled if sync match fails.
+				// Spool queue and sync match queue is the same for pinned workflows.
+				return pinnedQueue, pinnedQueue, nil, nil
+			} else {
+				// Forwarded from child partition - only do sync match.
+				return nil, pinnedQueue, nil, nil
+			}
 		}
 	}
 
-	perTypeUserData, perTypeUserDataChanged, err := pm.getPerTypeUserData()
-	if err != nil {
-		return nil, nil, nil, err
-	}
-
-	currentDeployment := worker_versioning.FindCurrentDeployment(perTypeUserData.GetDeploymentData())
+	currentDeployment := worker_versioning.FindCurrentDeployment(deploymentData)
 	if currentDeployment != nil &&
 		// Make sure the wf is not v1-2 versioned
 		directive.GetAssignedBuildId() == "" {
