@@ -614,41 +614,71 @@ func (ms *MutableStateImpl) GetNexusCompletion(ctx context.Context) (nexus.Opera
 		completion, err := nexus.NewOperationCompletionSuccessful(p, nexus.OperationCompletionSuccessfulOptions{
 			Serializer: commonnexus.PayloadSerializer,
 			StartTime:  ms.executionState.GetStartTime().AsTime(),
-			StartLinks: []nexus.Link{startLink},
+			Links:      []nexus.Link{startLink},
 		})
 		if err != nil {
 			return nil, serviceerror.NewInternal(fmt.Sprintf("failed to construct Nexus completion: %v", err))
 		}
 		return completion, nil
 	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_FAILED:
-		f := commonnexus.APIFailureToNexusFailure(ce.GetWorkflowExecutionFailedEventAttributes().GetFailure())
-		return &nexus.OperationCompletionUnsuccessful{
-			State:      nexus.OperationStateFailed,
-			StartTime:  ms.executionState.GetStartTime().AsTime(),
-			StartLinks: []nexus.Link{startLink},
-			Failure:    f,
-		}, nil
+		f, err := commonnexus.APIFailureToNexusFailure(ce.GetWorkflowExecutionFailedEventAttributes().GetFailure())
+		if err != nil {
+			return nil, err
+		}
+		return nexus.NewOperationCompletionUnsuccessful(nexus.NewFailedOperationError(&nexus.FailureError{Failure: f}), nexus.OperationCompletionUnsuccessfulOptions{
+			StartTime: ms.executionState.GetStartTime().AsTime(),
+			Links:     []nexus.Link{startLink},
+		})
 	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CANCELED:
-		return &nexus.OperationCompletionUnsuccessful{
-			State:      nexus.OperationStateCanceled,
-			StartTime:  ms.executionState.GetStartTime().AsTime(),
-			StartLinks: []nexus.Link{startLink},
-			Failure:    &nexus.Failure{Message: "operation canceled"},
-		}, nil
+		failure := &failurepb.Failure{
+			Message: "operation canceled",
+			FailureInfo: &failurepb.Failure_CanceledFailureInfo{
+				CanceledFailureInfo: &failurepb.CanceledFailureInfo{
+					Details: ce.GetWorkflowExecutionCanceledEventAttributes().GetDetails(),
+				},
+			},
+		}
+		f, err := commonnexus.APIFailureToNexusFailure(failure)
+		if err != nil {
+			return nil, err
+		}
+		return nexus.NewOperationCompletionUnsuccessful(nexus.NewCanceledOperationError(&nexus.FailureError{Failure: f}), nexus.OperationCompletionUnsuccessfulOptions{
+			StartTime: ms.executionState.GetStartTime().AsTime(),
+			Links:     []nexus.Link{startLink},
+		})
 	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TERMINATED:
-		return &nexus.OperationCompletionUnsuccessful{
-			State:      nexus.OperationStateFailed,
-			StartTime:  ms.executionState.GetStartTime().AsTime(),
-			StartLinks: []nexus.Link{startLink},
-			Failure:    &nexus.Failure{Message: "operation terminated"},
-		}, nil
+		failure := &failurepb.Failure{
+			Message: "operation terminated",
+			FailureInfo: &failurepb.Failure_TerminatedFailureInfo{
+				TerminatedFailureInfo: &failurepb.TerminatedFailureInfo{},
+			},
+		}
+		f, err := commonnexus.APIFailureToNexusFailure(failure)
+		if err != nil {
+			return nil, err
+		}
+		return nexus.NewOperationCompletionUnsuccessful(nexus.NewFailedOperationError(&nexus.FailureError{Failure: f}), nexus.OperationCompletionUnsuccessfulOptions{
+			StartTime: ms.executionState.GetStartTime().AsTime(),
+			Links:     []nexus.Link{startLink},
+		})
 	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TIMED_OUT:
-		return &nexus.OperationCompletionUnsuccessful{
-			State:      nexus.OperationStateFailed,
-			StartTime:  ms.executionState.GetStartTime().AsTime(),
-			StartLinks: []nexus.Link{startLink},
-			Failure:    &nexus.Failure{Message: "operation exceeded internal timeout"},
-		}, nil
+		failure := &failurepb.Failure{
+			Message: "operation exceeded internal timeout",
+			FailureInfo: &failurepb.Failure_TimeoutFailureInfo{
+				TimeoutFailureInfo: &failurepb.TimeoutFailureInfo{
+					// Not filling in timeout type and other information, it's not particularly interesting to a Nexus
+					// caller.
+				},
+			},
+		}
+		f, err := commonnexus.APIFailureToNexusFailure(failure)
+		if err != nil {
+			return nil, err
+		}
+		return nexus.NewOperationCompletionUnsuccessful(nexus.NewFailedOperationError(&nexus.FailureError{Failure: f}), nexus.OperationCompletionUnsuccessfulOptions{
+			StartTime: ms.executionState.GetStartTime().AsTime(),
+			Links:     []nexus.Link{startLink},
+		})
 	}
 	return nil, serviceerror.NewInternal(fmt.Sprintf("invalid workflow execution status: %v", ce.GetEventType()))
 }

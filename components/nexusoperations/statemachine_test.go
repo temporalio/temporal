@@ -23,7 +23,6 @@
 package nexusoperations_test
 
 import (
-	"fmt"
 	"testing"
 	"time"
 
@@ -165,7 +164,7 @@ func TestRegenerateTasks(t *testing.T) {
 				require.NoError(t, hsm.MachineTransition(node, func(op nexusoperations.Operation) (hsm.TransitionOutput, error) {
 					return nexusoperations.TransitionAttemptFailed.Apply(op, nexusoperations.EventAttemptFailed{
 						Time:        time.Now(),
-						Err:         fmt.Errorf("test"),
+						Failure:     &failurepb.Failure{Message: "test"},
 						Node:        node,
 						RetryPolicy: backoff.NewExponentialRetryPolicy(time.Second),
 					})
@@ -188,7 +187,7 @@ func TestRetry(t *testing.T) {
 	require.NoError(t, hsm.MachineTransition(node, func(op nexusoperations.Operation) (hsm.TransitionOutput, error) {
 		return nexusoperations.TransitionAttemptFailed.Apply(op, nexusoperations.EventAttemptFailed{
 			Time:        time.Now(),
-			Err:         fmt.Errorf("test"),
+			Failure:     &failurepb.Failure{Message: "test"},
 			Node:        node,
 			RetryPolicy: backoff.NewExponentialRetryPolicy(time.Second),
 		})
@@ -354,7 +353,7 @@ func TestCompleteExternally(t *testing.T) {
 					return nexusoperations.TransitionAttemptFailed.Apply(op, nexusoperations.EventAttemptFailed{
 						Node:        node,
 						Time:        time.Now(),
-						Err:         fmt.Errorf("test"),
+						Failure:     &failurepb.Failure{Message: "test"},
 						RetryPolicy: backoff.NewExponentialRetryPolicy(time.Second),
 					})
 				}))
@@ -503,7 +502,7 @@ func TestCancelationValidTransitions(t *testing.T) {
 	// AttemptFailed
 	out, err := nexusoperations.TransitionCancelationAttemptFailed.Apply(cancelation, nexusoperations.EventCancelationAttemptFailed{
 		Time:        currentTime,
-		Err:         fmt.Errorf("test"),
+		Failure:     &failurepb.Failure{Message: "test"},
 		Node:        node,
 		RetryPolicy: backoff.NewExponentialRetryPolicy(time.Second),
 	})
@@ -513,7 +512,6 @@ func TestCancelationValidTransitions(t *testing.T) {
 	require.Equal(t, enumspb.NEXUS_OPERATION_CANCELLATION_STATE_BACKING_OFF, cancelation.State())
 	require.Equal(t, int32(1), cancelation.Attempt)
 	require.Equal(t, "test", cancelation.LastAttemptFailure.Message)
-	require.False(t, cancelation.LastAttemptFailure.GetApplicationFailureInfo().NonRetryable)
 	require.Equal(t, currentTime, cancelation.LastAttemptCompleteTime.AsTime())
 	dt := currentTime.Add(time.Second).Sub(cancelation.NextAttemptScheduleTime.AsTime())
 	require.True(t, dt < time.Millisecond*200)
@@ -570,9 +568,9 @@ func TestCancelationValidTransitions(t *testing.T) {
 
 	// Failed
 	out, err = nexusoperations.TransitionCancelationFailed.Apply(cancelation, nexusoperations.EventCancelationFailed{
-		Time: currentTime,
-		Err:  fmt.Errorf("failed"),
-		Node: node,
+		Time:    currentTime,
+		Failure: &failurepb.Failure{Message: "failed"},
+		Node:    node,
 	})
 	require.NoError(t, err)
 
@@ -580,7 +578,6 @@ func TestCancelationValidTransitions(t *testing.T) {
 	require.Equal(t, enumspb.NEXUS_OPERATION_CANCELLATION_STATE_FAILED, cancelation.State())
 	require.Equal(t, int32(2), cancelation.Attempt)
 	require.Equal(t, "failed", cancelation.LastAttemptFailure.Message)
-	require.True(t, cancelation.LastAttemptFailure.GetApplicationFailureInfo().NonRetryable)
 	require.Equal(t, currentTime, cancelation.LastAttemptCompleteTime.AsTime())
 	require.Nil(t, cancelation.NextAttemptScheduleTime)
 
