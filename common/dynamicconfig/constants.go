@@ -1234,23 +1234,6 @@ these log lines can be noisy, we want to be able to turn on and sample selective
 		1000,
 		`MatchingMaxTaskQueuesInDeployment represents the maximum number of task-queues that can be registed in a single deployment`,
 	)
-	// for matching testing only:
-
-	TestMatchingDisableSyncMatch = NewGlobalBoolSetting(
-		"test.matching.disableSyncMatch",
-		false,
-		`TestMatchingDisableSyncMatch forces tasks to go through the db once`,
-	)
-	TestMatchingLBForceReadPartition = NewGlobalIntSetting(
-		"test.matching.lbForceReadPartition",
-		-1,
-		`TestMatchingLBForceReadPartition forces polls to go to a specific partition`,
-	)
-	TestMatchingLBForceWritePartition = NewGlobalIntSetting(
-		"test.matching.lbForceWritePartition",
-		-1,
-		`TestMatchingLBForceWritePartition forces adds to go to a specific partition`,
-	)
 
 	// keys for history
 

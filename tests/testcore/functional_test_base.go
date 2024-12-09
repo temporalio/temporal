@@ -55,6 +55,7 @@ import (
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/rpc"
+	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/environment"
 	"go.uber.org/fx"
 	"google.golang.org/protobuf/types/known/durationpb"
@@ -478,6 +479,10 @@ func (s *FunctionalTestBase) OverrideDynamicConfig(setting dynamicconfig.Generic
 	return s.testCluster.host.overrideDynamicConfig(s.T(), setting.Key(), value)
 }
 
+func (s *FunctionalTestBase) InjectHook(key testhooks.Key, value any) (cleanup func()) {
+	return s.testCluster.host.injectHook(s.T(), key, value)
+}
+
 func (s *FunctionalTestBase) GetNamespaceID(namespace string) string {
 	namespaceResp, err := s.FrontendClient().DescribeNamespace(NewContext(), &workflowservice.DescribeNamespaceRequest{
 		Namespace: namespace,
@@ -510,20 +515,20 @@ func (s *FunctionalTestBase) RunTestWithMatchingBehavior(subtest func()) {
 					name, func() {
 						if forceTaskForward {
 							s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 13)
-							s.OverrideDynamicConfig(dynamicconfig.TestMatchingLBForceWritePartition, 11)
+							s.InjectHook(testhooks.MatchingLBForceWritePartition, 11)
 						} else {
 							s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 1)
 						}
 						if forcePollForward {
 							s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 13)
-							s.OverrideDynamicConfig(dynamicconfig.TestMatchingLBForceReadPartition, 5)
+							s.InjectHook(testhooks.MatchingLBForceReadPartition, 5)
 						} else {
 							s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 1)
 						}
 						if forceAsync {
-							s.OverrideDynamicConfig(dynamicconfig.TestMatchingDisableSyncMatch, true)
+							s.InjectHook(testhooks.MatchingDisableSyncMatch, true)
 						} else {
-							s.OverrideDynamicConfig(dynamicconfig.TestMatchingDisableSyncMatch, false)
+							s.InjectHook(testhooks.MatchingDisableSyncMatch, false)
 						}
 
 						subtest()
