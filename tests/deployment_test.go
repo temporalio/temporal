@@ -233,7 +233,7 @@ func (s *DeploymentSuite) TestDescribeDeployment_RegisterTaskQueue_ConcurrentPol
 
 		a.True(d.Equal(resp.GetDeploymentInfo().GetDeployment()))
 
-		if len(resp.GetDeploymentInfo().GetTaskQueueInfos()) < 1 {
+		if !a.Equal(1, len(resp.GetDeploymentInfo().GetTaskQueueInfos())) {
 			return
 		}
 		a.Equal(tv.TaskQueue().GetName(), resp.GetDeploymentInfo().GetTaskQueueInfos()[0].Name)
