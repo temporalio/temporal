@@ -805,7 +805,8 @@ func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
 	}
 
 	var targetNamespaceName namespace.Name
-	if namespaceEntry, err := t.registry.GetNamespaceByID(namespace.ID(task.TargetNamespaceID)); err != nil {
+	var targetNamespaceEntry *namespace.Namespace
+	if targetNamespaceEntry, err = t.registry.GetNamespaceByID(namespace.ID(task.TargetNamespaceID)); err != nil {
 		if _, isNotFound := err.(*serviceerror.NamespaceNotFound); !isNotFound {
 			return err
 		}
@@ -820,7 +821,7 @@ func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
 		)
 		return err
 	} else {
-		targetNamespaceName = namespaceEntry.Name()
+		targetNamespaceName = targetNamespaceEntry.Name()
 	}
 
 	var sourceVersionStamp *commonpb.WorkerVersionStamp
@@ -836,6 +837,44 @@ func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
 			// - using versioning
 			sourceVersionStamp = worker_versioning.StampIfUsingVersioning(mutableState.GetMostRecentWorkerVersionStamp())
 		}
+	}
+
+	// Note: childStarted flag above is computed from the parent's history. When this is TRUE it's guaranteed that the child was succesfully started.
+	// But if it's FALSE then the child *may or maynot* be started (ex: we failed to record ChildExecutionStarted event previously.)
+	// This is not an issue in the general flow since starting a child is an idempotent operation (guarded by childInfo.CreateRequestId)
+	// But in the case of resets, we overwrite childInfo.CreateRequestId with a newly generated ID. Hence we need special handling when we are
+	// in the reset run before we can attempt to start the child.
+	if mutableState.IsResetRun() {
+		childRunID, err := t.checkAndReconnectChild(ctx, mutableState, targetNamespaceEntry, attributes.WorkflowId)
+		if err != nil {
+			return err
+		}
+		if childRunID != "" {
+			childExecution := &commonpb.WorkflowExecution{
+				WorkflowId: childInfo.StartedWorkflowId,
+				RunId:      childInfo.StartedRunId,
+			}
+			childClock := childInfo.Clock
+			// Child execution is successfully started, record ChildExecutionStartedEvent in parent execution
+			err = t.recordChildExecutionStarted(ctx, task, weContext, attributes, childRunID, childClock)
+			if err != nil {
+				return err
+			}
+			// NOTE: do not access anything related mutable state after this lock release
+			// release the context lock since we no longer need mutable state and
+			// the rest of logic is making RPC call, which takes time.
+			release(nil)
+
+			parentClock, err := t.shardContext.NewVectorClock()
+			if err != nil {
+				return err
+			}
+			return t.createFirstWorkflowTask(ctx, task.TargetNamespaceID, childExecution, parentClock, childClock)
+		}
+	} else {
+		t.logger.Error("Failing to start the childStart")
+		// time.Sleep(5 * time.Second)
+		return fmt.Errorf("TEST ERROR")
 	}
 
 	executionInfo := mutableState.GetExecutionInfo()
@@ -888,6 +927,9 @@ func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
 	t.logger.Debug("Child Execution started successfully",
 		tag.WorkflowID(attributes.WorkflowId), tag.WorkflowRunID(childRunID))
 
+	// t.logger.Error(fmt.Sprintf("Failing to record the childStart. Child RunID: [%s]", childRunID))
+	// return fmt.Errorf("TEST ERROR")
+
 	// Child execution is successfully started, record ChildExecutionStartedEvent in parent execution
 	err = t.recordChildExecutionStarted(ctx, task, weContext, attributes, childRunID, childClock)
 	if err != nil {
@@ -908,6 +950,76 @@ func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
 	}, parentClock, childClock)
 }
 
+// /////////////////////////////////////////////////////////////////////////////////////////////
+func (t *transferQueueActiveTaskExecutor) checkAndReconnectChild(
+	ctx context.Context,
+	// task *tasks.ResetWorkflowTask,
+	mutableState workflow.MutableState,
+	childNamespace *namespace.Namespace,
+	childWorkflowID string,
+) (childID string, retError error) {
+	childDescribeReq := &historyservice.DescribeWorkflowExecutionRequest{
+		NamespaceId: childNamespace.ID().String(),
+		Request: &workflowservice.DescribeWorkflowExecutionRequest{
+			Namespace: childNamespace.Name().String(),
+			Execution: &commonpb.WorkflowExecution{
+				WorkflowId: childWorkflowID,
+			},
+		},
+	}
+	response, err := t.historyRawClient.DescribeWorkflowExecution(ctx, childDescribeReq)
+	if err != nil {
+		// It's not an error if the child is not found. Return empty childID so that the child is created.
+		if common.IsNotFoundError(err) {
+			return "", nil
+		}
+		return "", err
+	}
+
+	// Verify if the WorkflowIDs match first.
+	if response.WorkflowExecutionInfo.ParentExecution.WorkflowId != mutableState.GetExecutionInfo().WorkflowId {
+		return "", nil
+	}
+	if response.WorkflowExecutionInfo.ParentExecution == nil {
+		// The child doesn't have a parent. Maybe it was started by some client.
+		return "", nil
+	}
+
+	childsParentRunID := response.WorkflowExecutionInfo.ParentExecution.RunId
+	// Check if the child's parent was the base run for the current run.
+	if childsParentRunID == mutableState.GetExecutionInfo().OriginalExecutionRunId {
+		return response.WorkflowExecutionInfo.Execution.RunId, nil
+	}
+
+	// load the child's parent mutable state.
+	wfKey := mutableState.GetWorkflowKey()
+	wfKey.RunID = childsParentRunID
+	wfContext, release, err := getWorkflowExecutionContext(
+		ctx,
+		t.shardContext,
+		t.cache,
+		wfKey,
+		locks.PriorityLow,
+	)
+	if err != nil {
+		return "", err
+	}
+	defer func() { release(retError) }()
+
+	childsParentMutableState, err := wfContext.LoadMutableState(ctx, t.shardContext)
+	if err != nil {
+		return "", err
+	}
+
+	// now check if the child's parent's original run id and the current run's original run ID are the same.
+	if childsParentMutableState.GetExecutionInfo().OriginalExecutionRunId == mutableState.GetExecutionInfo().OriginalExecutionRunId {
+		return response.WorkflowExecutionInfo.Execution.RunId, nil
+	}
+
+	return "", nil
+}
+
+// /////////////////////////////////////////////////////////////////////////////////////////////
 func (t *transferQueueActiveTaskExecutor) processResetWorkflow(
 	ctx context.Context,
 	task *tasks.ResetWorkflowTask,
