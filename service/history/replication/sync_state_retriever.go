@@ -198,6 +198,11 @@ func (s *SyncStateRetrieverImpl) getSyncStateResult(
 		if len(tombstoneBatch) == 0 {
 			return false
 		}
+		if mutableState.GetExecutionInfo().PreviousTransitionHistoryBreakPoint != nil &&
+			// the target transition falls into the previous break point, need to send snapshot
+			workflow.CompareVersionedTransition(mutableState.GetExecutionInfo().PreviousTransitionHistoryBreakPoint, targetCurrentVersionedTransition) >= 0 {
+			return false
+		}
 		if workflow.CompareVersionedTransition(tombstoneBatch[0].VersionedTransition, targetCurrentVersionedTransition) <= 0 {
 			return true
 		}

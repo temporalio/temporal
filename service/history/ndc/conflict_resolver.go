@@ -182,6 +182,8 @@ func (r *ConflictResolverImpl) rebuild(
 	// after rebuilt verification
 	rebuildVersionHistories := rebuildMutableState.GetExecutionInfo().GetVersionHistories()
 	rebuildVersionHistory, err := versionhistory.GetCurrentVersionHistory(rebuildVersionHistories)
+	rebuildMutableState.GetExecutionInfo().PreviousTransitionHistory = r.mutableState.GetExecutionInfo().PreviousTransitionHistory
+	rebuildMutableState.GetExecutionInfo().PreviousTransitionHistoryBreakPoint = r.mutableState.GetExecutionInfo().PreviousTransitionHistoryBreakPoint
 	if err != nil {
 		return nil, err
 	}
@@ -198,6 +200,7 @@ func (r *ConflictResolverImpl) rebuild(
 	rebuildMutableState.AddHistorySize(historySize)
 	// set the update condition from original mutable state
 	rebuildMutableState.SetUpdateCondition(r.mutableState.GetUpdateCondition())
+	executionInfo.BaseExecutionInfo = nil
 
 	r.context.Clear()
 	return rebuildMutableState, nil
