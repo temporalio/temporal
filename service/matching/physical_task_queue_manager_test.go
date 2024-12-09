@@ -60,9 +60,10 @@ const (
 )
 
 type tqmTestOpts struct {
-	config             *Config
-	dbq                *PhysicalTaskQueueKey
-	matchingClientMock *matchingservicemock.MockMatchingServiceClient
+	config              *Config
+	dbq                 *PhysicalTaskQueueKey
+	matchingClientMock  *matchingservicemock.MockMatchingServiceClient
+	expectUserDataError bool
 }
 
 func defaultTqmTestOpts(controller *gomock.Controller) *tqmTestOpts {
@@ -264,12 +265,13 @@ func mustCreateTestTaskQueueManagerWithConfig(
 	opts ...taskQueueManagerOpt,
 ) *physicalTaskQueueManagerImpl {
 	t.Helper()
-	tqm, err := createTestTaskQueueManagerWithConfig(controller, testOpts, opts...)
+	tqm, err := createTestTaskQueueManagerWithConfig(t, controller, testOpts, opts...)
 	require.NoError(t, err)
 	return tqm
 }
 
 func createTestTaskQueueManagerWithConfig(
+	t *testing.T,
 	controller *gomock.Controller,
 	testOpts *tqmTestOpts,
 	opts ...taskQueueManagerOpt,
@@ -280,7 +282,8 @@ func createTestTaskQueueManagerWithConfig(
 	me.metricsHandler = metricstest.NewCaptureHandler()
 	partition := testOpts.dbq.Partition()
 	tqConfig := newTaskQueueConfig(partition.TaskQueue(), me.config, nsName)
-	userDataManager := newUserDataManager(me.taskManager, me.matchingRawClient, partition, tqConfig, me.logger, me.namespaceRegistry)
+	onFatalErr := func(unloadCause) { t.Fatal("user data manager called onFatalErr") }
+	userDataManager := newUserDataManager(me.taskManager, me.matchingRawClient, onFatalErr, partition, tqConfig, me.logger, me.namespaceRegistry)
 	pm := createTestTaskQueuePartitionManager(ns, partition, tqConfig, me, userDataManager)
 	tlMgr, err := newPhysicalTaskQueueManager(pm, testOpts.dbq, opts...)
 	pm.defaultQueue = tlMgr

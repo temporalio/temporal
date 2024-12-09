@@ -405,8 +405,10 @@ func (e *matchingEngineImpl) getTaskQueuePartitionManager(
 	tqConfig := newTaskQueueConfig(partition.TaskQueue(), e.config, nsName)
 	tqConfig.loadCause = loadCause
 	logger, throttledLogger, metricsHandler := e.loggerAndMetricsForPartition(nsName, partition, tqConfig)
-	userDataManager := newUserDataManager(e.taskManager, e.matchingRawClient, partition, tqConfig, logger, e.namespaceRegistry)
-	newPM, err := newTaskQueuePartitionManager(e, namespaceEntry, partition, tqConfig, logger, throttledLogger, metricsHandler, userDataManager)
+	var newPM *taskQueuePartitionManagerImpl
+	onFatalErr := func(cause unloadCause) { newPM.unloadFromEngine(cause) }
+	userDataManager := newUserDataManager(e.taskManager, e.matchingRawClient, onFatalErr, partition, tqConfig, logger, e.namespaceRegistry)
+	newPM, err = newTaskQueuePartitionManager(e, namespaceEntry, partition, tqConfig, logger, throttledLogger, metricsHandler, userDataManager)
 	if err != nil {
 		return nil, false, err
 	}
