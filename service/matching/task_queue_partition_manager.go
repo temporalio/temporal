@@ -881,7 +881,8 @@ func (pm *taskQueuePartitionManagerImpl) getPhysicalQueuesForAdd(
 	}
 
 	if directive.GetBuildId() == nil {
-		// This means the tasks is a middle task belonging to an unversioned execution. Keep using unversioned.
+		// The task belongs to an unversioned execution. Keep using unversioned. But also return
+		// userDataChanged so if current deployment is set, the task redirects to that deployment.
 		return pm.defaultQueue, pm.defaultQueue, perTypeUserDataChanged, nil
 	}
 
