@@ -182,6 +182,8 @@ func (r *ConflictResolverImpl) rebuild(
 	// after rebuilt verification
 	rebuildVersionHistories := rebuildMutableState.GetExecutionInfo().GetVersionHistories()
 	rebuildVersionHistory, err := versionhistory.GetCurrentVersionHistory(rebuildVersionHistories)
+	rebuildMutableState.GetExecutionInfo().PreviousTransitionHistory = r.mutableState.GetExecutionInfo().PreviousTransitionHistory
+	rebuildMutableState.GetExecutionInfo().PreviousTransitionHistoryBreakPoint = r.mutableState.GetExecutionInfo().PreviousTransitionHistoryBreakPoint
 	if err != nil {
 		return nil, err
 	}
