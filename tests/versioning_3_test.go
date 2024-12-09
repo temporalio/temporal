@@ -192,10 +192,6 @@ func (s *Versioning3Suite) testWorkflowWithPinnedOverride(sticky bool) {
 			s.NotNil(task)
 			return respondActivity(), nil
 		})
-	// If we don't wait for the activity TQ to be registered to the deployment, the activity will be
-	// considered independent and the test will be stuck because there is no unversioned poller and
-	// current deployment is sent (so the tasks in the default queue are not dispatched).
-	s.waitForDeploymentDataPropagation(tv, tqTypeWf, tqTypeAct)
 
 	override := makePinnedOverride(tv.Deployment())
 	we := s.startWorkflow(tv, override)
