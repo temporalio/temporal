@@ -905,7 +905,18 @@ func (s *workflowResetterSuite) TestReapplyEvents() {
 			},
 		},
 	}
-	events := []*historypb.HistoryEvent{event1, event2, event3, event4, event5, event6, event7, event8}
+	event9 := &historypb.HistoryEvent{
+		EventId:   109,
+		EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TERMINATED,
+		Attributes: &historypb.HistoryEvent_WorkflowExecutionTerminatedEventAttributes{
+			WorkflowExecutionTerminatedEventAttributes: &historypb.WorkflowExecutionTerminatedEventAttributes{
+				Reason:   testRequestReason,
+				Details:  payloads.EncodeString("test details"),
+				Identity: testIdentity,
+			},
+		},
+	}
+	events := []*historypb.HistoryEvent{event1, event2, event3, event4, event5, event6, event7, event8, event9}
 
 	testcases := []struct {
 		name    string
@@ -961,6 +972,20 @@ func (s *workflowResetterSuite) TestReapplyEvents() {
 							ExternalInitiatedEventId:  attr.GetExternalInitiatedEventId(),
 							ExternalWorkflowExecution: attr.GetExternalWorkflowExecution(),
 						},
+					).Return(&historypb.HistoryEvent{}, nil)
+				}
+			case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TERMINATED:
+				if !tc.isReset {
+					ms.EXPECT().GetNextEventID().Return(event.GetEventId() + 1)
+					ms.EXPECT().GetStartedWorkflowTask().Return(nil)
+					attr := event.GetWorkflowExecutionTerminatedEventAttributes()
+					ms.EXPECT().AddWorkflowExecutionTerminatedEvent(
+						event.GetEventId()+1,
+						attr.GetReason(),
+						attr.GetDetails(),
+						attr.GetIdentity(),
+						false,
+						event.Links,
 					).Return(&historypb.HistoryEvent{}, nil)
 				}
 			}
@@ -1059,7 +1084,18 @@ func (s *workflowResetterSuite) TestReapplyEvents_Excludes() {
 			},
 		},
 	}
-	events = append(events, event7)
+	event8 := &historypb.HistoryEvent{
+		EventId:   108,
+		EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TERMINATED,
+		Attributes: &historypb.HistoryEvent_WorkflowExecutionTerminatedEventAttributes{
+			WorkflowExecutionTerminatedEventAttributes: &historypb.WorkflowExecutionTerminatedEventAttributes{
+				Reason:   testRequestReason,
+				Details:  payloads.EncodeString("test details"),
+				Identity: testIdentity,
+			},
+		},
+	}
+	events = append(events, event7, event8)
 	reappliedEvents, err = reapplyEvents(context.Background(), ms, nil, smReg, events, excludes, "", true)
 	s.Empty(reappliedEvents)
 	s.NoError(err)
@@ -1274,6 +1310,7 @@ func (s *workflowResetterSuite) TestWorkflowRestartAfterExecutionTimeout() {
 		resetRequestID,
 		resetWorkflowVersion,
 		resetReason,
+		false, // allowResetWithPendingChildren
 	)
 	s.NoError(err)
 	s.Equal(resetMutableState, resetWorkflow.GetMutableState())

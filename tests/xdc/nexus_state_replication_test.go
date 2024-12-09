@@ -255,9 +255,16 @@ func (s *NexusStateReplicationSuite) TestNexusOperationEventsReplicated() {
 }
 
 func (s *NexusStateReplicationSuite) TestNexusOperationCancelationReplicated() {
+	var callbackToken string
+	var publicCallbackUrl string
 	h := nexustest.Handler{
 		OnStartOperation: func(ctx context.Context, service, operation string, input *nexus.LazyValue, options nexus.StartOperationOptions) (nexus.HandlerStartOperationResult[any], error) {
-			return nil, errors.New("injected error for failing nexus start operation")
+			callbackToken = options.CallbackHeader.Get(commonnexus.CallbackTokenHeader)
+			publicCallbackUrl = options.CallbackURL
+			return &nexus.HandlerStartOperationResultAsync{OperationID: "test"}, nil
+		},
+		OnCancelOperation: func(ctx context.Context, service, operation, operationID string, options nexus.CancelOperationOptions) error {
+			return nil
 		},
 	}
 	listenAddr := nexustest.AllocListenAddress(s.T())
@@ -331,8 +338,8 @@ func (s *NexusStateReplicationSuite) TestNexusOperationCancelationReplicated() {
 	// Ensure the scheduled event is replicated.
 	scheduledEventID := s.waitEvent(ctx, sdkClient2, run, enumspb.EVENT_TYPE_NEXUS_OPERATION_SCHEDULED)
 
-	// Wake the workflow back up so it can request to cancel the operation.
-	s.NoError(sdkClient1.SignalWorkflow(ctx, run.GetID(), run.GetRunID(), "wake-up", nil))
+	// Verify the operation started and it is replicated in the passive cluster
+	s.waitEvent(ctx, sdkClient2, run, enumspb.EVENT_TYPE_NEXUS_OPERATION_STARTED)
 
 	pollRes = s.pollWorkflowTask(ctx, s.cluster1.FrontendClient(), ns)
 	_, err = s.cluster1.FrontendClient().RespondWorkflowTaskCompleted(ctx, &workflowservice.RespondWorkflowTaskCompletedRequest{
@@ -349,6 +356,18 @@ func (s *NexusStateReplicationSuite) TestNexusOperationCancelationReplicated() {
 		},
 	})
 	s.NoError(err)
+
+	s.Eventually(func() bool {
+		describeRes, err := sdkClient1.DescribeWorkflowExecution(ctx, run.GetID(), run.GetRunID())
+		s.NoError(err)
+		s.Equal(1, len(describeRes.PendingNexusOperations))
+		op := describeRes.PendingNexusOperations[0]
+		fmt.Println(op.CancellationInfo)
+		s.NotNil(op.CancellationInfo)
+		return op.CancellationInfo.State == enumspb.NEXUS_OPERATION_CANCELLATION_STATE_SUCCEEDED
+	}, time.Second*20, time.Millisecond*100)
+
+	s.cancelNexusOperation(ctx, publicCallbackUrl, callbackToken)
 
 	// Verify the canceled event is replicated and the passive cluster catches up.
 	s.waitEvent(ctx, sdkClient2, run, enumspb.EVENT_TYPE_NEXUS_OPERATION_CANCELED)
@@ -516,6 +535,25 @@ func (s *NexusStateReplicationSuite) completeNexusOperation(ctx context.Context,
 		Serializer: commonnexus.PayloadSerializer,
 	})
 	s.NoError(err)
+	req, err := nexus.NewCompletionHTTPRequest(ctx, callbackUrl, completion)
+	s.NoError(err)
+	if callbackToken != "" {
+		req.Header.Add(commonnexus.CallbackTokenHeader, callbackToken)
+	}
+
+	res, err := http.DefaultClient.Do(req)
+	s.NoError(err)
+	defer res.Body.Close()
+	_, err = io.ReadAll(res.Body)
+	s.NoError(err)
+	s.Equal(http.StatusOK, res.StatusCode)
+}
+
+func (s *NexusStateReplicationSuite) cancelNexusOperation(ctx context.Context, callbackUrl, callbackToken string) {
+	completion := &nexus.OperationCompletionUnsuccessful{
+		State:   nexus.OperationStateCanceled,
+		Failure: &nexus.Failure{Message: "operation canceled"},
+	}
 	req, err := nexus.NewCompletionHTTPRequest(ctx, callbackUrl, completion)
 	s.NoError(err)
 	if callbackToken != "" {
