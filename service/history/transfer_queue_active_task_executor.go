@@ -871,10 +871,6 @@ func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
 			}
 			return t.createFirstWorkflowTask(ctx, task.TargetNamespaceID, childExecution, parentClock, childClock)
 		}
-	} else {
-		t.logger.Error("Failing to start the childStart")
-		// time.Sleep(5 * time.Second)
-		return fmt.Errorf("TEST ERROR")
 	}
 
 	executionInfo := mutableState.GetExecutionInfo()
@@ -927,9 +923,6 @@ func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
 	t.logger.Debug("Child Execution started successfully",
 		tag.WorkflowID(attributes.WorkflowId), tag.WorkflowRunID(childRunID))
 
-	// t.logger.Error(fmt.Sprintf("Failing to record the childStart. Child RunID: [%s]", childRunID))
-	// return fmt.Errorf("TEST ERROR")
-
 	// Child execution is successfully started, record ChildExecutionStartedEvent in parent execution
 	err = t.recordChildExecutionStarted(ctx, task, weContext, attributes, childRunID, childClock)
 	if err != nil {
@@ -950,7 +943,6 @@ func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
 	}, parentClock, childClock)
 }
 
-// /////////////////////////////////////////////////////////////////////////////////////////////
 func (t *transferQueueActiveTaskExecutor) checkAndReconnectChild(
 	ctx context.Context,
 	// task *tasks.ResetWorkflowTask,
@@ -1019,7 +1011,6 @@ func (t *transferQueueActiveTaskExecutor) checkAndReconnectChild(
 	return "", nil
 }
 
-// /////////////////////////////////////////////////////////////////////////////////////////////
 func (t *transferQueueActiveTaskExecutor) processResetWorkflow(
 	ctx context.Context,
 	task *tasks.ResetWorkflowTask,
