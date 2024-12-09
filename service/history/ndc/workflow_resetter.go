@@ -232,6 +232,7 @@ func (r *workflowResetterImpl) ResetWorkflow(
 	defer func() { resetWorkflow.GetReleaseFn()(retError) }()
 
 	resetMS := resetWorkflow.GetMutableState()
+	resetMS.GetExecutionInfo().IsResetRun = true // mark the new run as result of reset.
 	if err := reapplyEventsFn(ctx, resetMS); err != nil {
 		return err
 	}

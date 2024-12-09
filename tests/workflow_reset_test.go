@@ -70,6 +70,8 @@ func (s *WorkflowResetSuite) TestNoBaseCurrentRunning() {
 	})
 	s.NoError(err)
 	newRunID := resp.RunId
+	// ensure that new run is marked with is_reset_run flag.
+	s.assertIsResetRun(ctx, workflowID, newRunID)
 
 	// Current run is the assumed base run. The new run should be linked to this one.
 	currentMutableState, err := s.AdminClient().DescribeMutableState(ctx, &adminservice.DescribeMutableStateRequest{
@@ -98,6 +100,8 @@ func (s *WorkflowResetSuite) TestNoBaseCurrentClosed() {
 	})
 	s.NoError(err)
 	newRunID := resp.RunId
+	// ensure that new run is marked with is_reset_run flag.
+	s.assertIsResetRun(ctx, workflowID, newRunID)
 
 	// Current run is the assumed base run. The new run should be linked to this one.
 	currentMutableState, err := s.AdminClient().DescribeMutableState(ctx, &adminservice.DescribeMutableStateRequest{
@@ -246,6 +250,16 @@ func (s *WorkflowResetSuite) assertResetWorkflowLink(ctx context.Context, workfl
 	})
 	s.NoError(err)
 	s.Equal(expectedLinkRunID, baseMutableState.GetDatabaseMutableState().ExecutionInfo.ResetRunId)
+}
+
+// assertIsResetRun asserts that the mutable state for the given run is marked with is_reset_run flag.
+func (s *WorkflowResetSuite) assertIsResetRun(ctx context.Context, workflowID string, runID string) {
+	ms, err := s.AdminClient().DescribeMutableState(ctx, &adminservice.DescribeMutableStateRequest{
+		Namespace: s.Namespace(),
+		Execution: &commonpb.WorkflowExecution{WorkflowId: workflowID, RunId: runID},
+	})
+	s.NoError(err)
+	s.True(ms.GetDatabaseMutableState().GetExecutionInfo().GetIsResetRun())
 }
 
 // helper method to setup the test run in the required configuration. It creates a total of n runs. If isCurrentRunning is true then the last run is kept open.
