@@ -23,6 +23,7 @@
 package nexus
 
 import (
+	"encoding/json"
 	"errors"
 	"net/http"
 
@@ -31,14 +32,18 @@ import (
 	failurepb "go.temporal.io/api/failure/v1"
 	nexuspb "go.temporal.io/api/nexus/v1"
 	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/server/common"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/encoding/protojson"
 )
+
+var failureTypeString = string((&failurepb.Failure{}).ProtoReflect().Descriptor().FullName())
 
 // ProtoFailureToNexusFailure converts a proto Nexus Failure to a Nexus SDK Failure.
 // Always returns a non-nil value.
-func ProtoFailureToNexusFailure(failure *nexuspb.Failure) *nexus.Failure {
-	return &nexus.Failure{
+func ProtoFailureToNexusFailure(failure *nexuspb.Failure) nexus.Failure {
+	return nexus.Failure{
 		Message:  failure.GetMessage(),
 		Metadata: failure.GetMetadata(),
 		Details:  failure.GetDetails(),
@@ -47,10 +52,7 @@ func ProtoFailureToNexusFailure(failure *nexuspb.Failure) *nexus.Failure {
 
 // NexusFailureToProtoFailure converts a Nexus SDK Failure to a proto Nexus Failure.
 // Always returns a non-nil value.
-func NexusFailureToProtoFailure(failure *nexus.Failure) *nexuspb.Failure {
-	if failure == nil {
-		return &nexuspb.Failure{Message: "unknown error"}
-	}
+func NexusFailureToProtoFailure(failure nexus.Failure) *nexuspb.Failure {
 	return &nexuspb.Failure{
 		Message:  failure.Message,
 		Metadata: failure.Metadata,
@@ -61,48 +63,109 @@ func NexusFailureToProtoFailure(failure *nexus.Failure) *nexuspb.Failure {
 // APIFailureToNexusFailure converts an API proto Failure to a Nexus SDK Failure taking only the failure message to
 // avoid leaking too many details to 3rd party callers.
 // Always returns a non-nil value.
-func APIFailureToNexusFailure(failure *failurepb.Failure) *nexus.Failure {
-	return &nexus.Failure{
+func APIFailureToNexusFailure(failure *failurepb.Failure) (nexus.Failure, error) {
+	// Unset message so it's not serialized in the details.
+	failureCopy := common.CloneProto(failure)
+	failureCopy.Message = ""
+	data, err := protojson.Marshal(failureCopy)
+	if err != nil {
+		return nexus.Failure{}, err
+	}
+	return nexus.Failure{
 		Message: failure.GetMessage(),
+		Metadata: map[string]string{
+			"type": failureTypeString,
+		},
+		Details: data,
+	}, nil
+}
+
+// TODO: is retryable really needed here?
+func NexusFailureToAPIFailure(failure nexus.Failure, retryable bool) (*failurepb.Failure, error) {
+	apiFailure := &failurepb.Failure{}
+
+	if failure.Metadata != nil && failure.Metadata["type"] == failureTypeString {
+		if err := protojson.Unmarshal(failure.Details, apiFailure); err != nil {
+			return nil, err
+		}
+	} else {
+		apiFailure.FailureInfo = &failurepb.Failure_ApplicationFailureInfo{
+			ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{
+				// Make up a type here, it's not part of the Nexus Failure spec.
+				Type:         "NexusFailure",
+				Details:      nexusFailureMetadataToPayloads(failure),
+				NonRetryable: !retryable,
+			},
+		}
+	}
+	// Ensure this always gets written.
+	apiFailure.Message = failure.Message
+	return apiFailure, nil
+}
+
+func IsRetryableHandlerError(eType nexus.HandlerErrorType) bool {
+	switch eType {
+	case nexus.HandlerErrorTypeResourceExhausted,
+		nexus.HandlerErrorTypeInternal,
+		nexus.HandlerErrorTypeUnavailable,
+		nexus.HandlerErrorTypeUpstreamTimeout:
+		return true
+	case nexus.HandlerErrorTypeBadRequest,
+		nexus.HandlerErrorTypeUnauthenticated,
+		nexus.HandlerErrorTypeUnauthorized,
+		nexus.HandlerErrorTypeNotFound,
+		nexus.HandlerErrorTypeNotImplemented:
+		return false
+	default:
+		// Default to retryable in case other error types are added in the future.
+		// It's better to retry than unexpectedly fail.
+		return true
 	}
 }
 
-func UnsuccessfulOperationErrorToTemporalFailure(err *nexus.UnsuccessfulOperationError) *failurepb.Failure {
-	failure := &failurepb.Failure{
-		Message: err.Failure.Message,
-	}
-	if err.State == nexus.OperationStateCanceled {
-		failure.FailureInfo = &failurepb.Failure_CanceledFailureInfo{
-			CanceledFailureInfo: &failurepb.CanceledFailureInfo{
-				Details: nexusFailureMetadataToPayloads(err.Failure),
-			},
-		}
-	} else {
-		failure.FailureInfo = &failurepb.Failure_ApplicationFailureInfo{
-			ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{
-				// Make up a type here, it's not part of the Nexus Failure spec.
-				Type:         "NexusOperationFailure",
-				Details:      nexusFailureMetadataToPayloads(err.Failure),
-				NonRetryable: true,
-			},
+func UnsuccessfulOperationErrorToTemporalFailure(opErr *nexus.UnsuccessfulOperationError) *failurepb.Failure {
+	var nexusFailure nexus.Failure
+	failureErr, ok := opErr.Cause.(FailureError)
+	if ok {
+		nexusFailure = failureErr.Failure
+	} else if opErr.Cause != nil {
+		nexusFailure = nexus.Failure{
+			Message: opErr.Cause.Error(),
 		}
 	}
-	return failure
+	// Canceled must be translated into a CanceledFailure to match the SDK expectation.
+	// TODO: What if it's already a CanceledFailure, that should be possible?
+	if opErr.State == nexus.OperationStateCanceled {
+		return &failurepb.Failure{
+			Message: nexusFailure.Message,
+			FailureInfo: &failurepb.Failure_CanceledFailureInfo{
+				CanceledFailureInfo: &failurepb.CanceledFailureInfo{
+					Details: nexusFailureMetadataToPayloads(nexusFailure),
+				},
+			},
+		}
+	}
+
+	temporalFailure, err := NexusFailureToAPIFailure(nexusFailure, false)
+	_ = err // TODO
+	return temporalFailure
 }
 
 func nexusFailureMetadataToPayloads(failure nexus.Failure) *commonpb.Payloads {
 	if len(failure.Metadata) == 0 && len(failure.Details) == 0 {
 		return nil
 	}
-	metadata := make(map[string][]byte, len(failure.Metadata))
-	for k, v := range failure.Metadata {
-		metadata[k] = []byte(v)
-	}
+	// Delete before serializing.
+	failure.Message = ""
+	data, err := json.Marshal(failure)
+	_ = err // TODO
 	return &commonpb.Payloads{
 		Payloads: []*commonpb.Payload{
 			{
-				Metadata: metadata,
-				Data:     failure.Details,
+				Metadata: map[string][]byte{
+					"encoding": []byte("json/plain"),
+				},
+				Data: data,
 			},
 		},
 	}

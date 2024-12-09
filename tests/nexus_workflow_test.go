@@ -24,6 +24,7 @@ package tests
 
 import (
 	"context"
+	"errors"
 	"io"
 	"net/http"
 	"slices"
@@ -1028,12 +1029,8 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncFailure() {
 	s.Greater(startedEventIdx, 0)
 
 	// Send a valid - failed completion request.
-	completion := &nexus.OperationCompletionUnsuccessful{
-		State: nexus.OperationStateFailed,
-		Failure: &nexus.Failure{
-			Message: "test operation failed",
-		},
-	}
+	completion, err := nexus.NewOperationCompletionUnsuccessful(nexus.NewFailedOperationError(errors.New("test operation failed")), nexus.OperationCompletionUnsuccessfulOptions{})
+	s.NoError(err)
 	res, snap := s.sendNexusCompletionRequest(ctx, s.T(), publicCallbackUrl, completion, callbackToken)
 	s.Equal(http.StatusOK, res.StatusCode)
 	s.Equal(1, len(snap["nexus_completion_requests"]))

@@ -421,8 +421,10 @@ func (h *nexusHandler) StartOperation(
 			oc.nexusContext.setFailureSource(failureSourceWorker)
 
 			err := &nexus.UnsuccessfulOperationError{
-				State:   nexus.OperationState(t.OperationError.GetOperationState()),
-				Failure: *commonnexus.ProtoFailureToNexusFailure(t.OperationError.GetFailure()),
+				State: nexus.OperationState(t.OperationError.GetOperationState()),
+				Cause: commonnexus.FailureError{
+					Failure: commonnexus.ProtoFailureToNexusFailure(t.OperationError.GetFailure()),
+				},
 			}
 			return nil, err
 		}
@@ -555,7 +557,7 @@ func (h *nexusHandler) forwardCancelOperation(
 	return nil
 }
 
-func (h *nexusHandler) nexusClientForActiveCluster(oc *operationContext, service string) (*nexus.Client, error) {
+func (h *nexusHandler) nexusClientForActiveCluster(oc *operationContext, service string) (*nexus.HTTPClient, error) {
 	httpClient, err := h.forwardingClients.Get(oc.namespace.ActiveClusterName())
 	if err != nil {
 		oc.logger.Error("failed to forward Nexus request. error creating HTTP client", tag.Error(err), tag.SourceCluster(oc.namespace.ActiveClusterName()), tag.TargetCluster(oc.namespace.ActiveClusterName()))
@@ -588,17 +590,20 @@ func (h *nexusHandler) nexusClientForActiveCluster(oc *operationContext, service
 		return nil, nexus.HandlerErrorf(nexus.HandlerErrorTypeInternal, "request forwarding failed")
 	}
 
-	return nexus.NewClient(nexus.ClientOptions{
-		HTTPCaller: wrappedHttpDo,
-		BaseURL:    baseURL,
-		Service:    service,
+	return nexus.NewHTTPClient(nexus.HTTPClientOptions{
+		HTTPCaller:       wrappedHttpDo,
+		BaseURL:          baseURL,
+		Service:          service,
+		FailureConverter: commonnexus.FailureConverter,
 	})
 }
 
 func (h *nexusHandler) convertOutcomeToNexusHandlerError(resp *matchingservice.DispatchNexusTaskResponse_HandlerError) *nexus.HandlerError {
 	handlerError := &nexus.HandlerError{
 		Type:    nexus.HandlerErrorType(resp.HandlerError.GetErrorType()),
-		Failure: commonnexus.ProtoFailureToNexusFailure(resp.HandlerError.GetFailure()),
+		Cause: commonnexus.FailureError{
+			Failure: commonnexus.ProtoFailureToNexusFailure(resp.HandlerError.GetFailure()),
+		},
 	}
 
 	switch handlerError.Type {

@@ -212,10 +212,9 @@ func TestProcessInvocationTask(t *testing.T) {
 			requestTimeout:  time.Hour,
 			destinationDown: false,
 			onStartOperation: func(ctx context.Context, service, operation string, input *nexus.LazyValue, options nexus.StartOperationOptions) (nexus.HandlerStartOperationResult[any], error) {
-				return nil, &nexus.UnsuccessfulOperationError{
+				return nil, nexus.NewFailedOperationError(commonnexus.FailureError{
 					Failure: nexus.Failure{Message: "operation failed from handler", Metadata: map[string]string{"encoding": "json/plain"}, Details: json.RawMessage("\"details\"")},
-					State:   nexus.OperationStateFailed,
-				}
+				})
 			},
 			expectedMetricOutcome: "operation-unsuccessful:failed",
 			checkOutcome: func(t *testing.T, op nexusoperations.Operation, events []*historypb.HistoryEvent) {
@@ -239,7 +238,7 @@ func TestProcessInvocationTask(t *testing.T) {
 							Message: "operation failed from handler",
 							FailureInfo: &failurepb.Failure_ApplicationFailureInfo{
 								ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{
-									Type: "NexusOperationFailure",
+									Type: "NexusFailure",
 									Details: &commonpb.Payloads{
 										Payloads: []*commonpb.Payload{
 											mustToPayload(t, "details"),
@@ -259,10 +258,11 @@ func TestProcessInvocationTask(t *testing.T) {
 			requestTimeout:  time.Hour,
 			destinationDown: false,
 			onStartOperation: func(ctx context.Context, service, operation string, input *nexus.LazyValue, options nexus.StartOperationOptions) (nexus.HandlerStartOperationResult[any], error) {
-				return nil, &nexus.UnsuccessfulOperationError{
-					Failure: nexus.Failure{Message: "operation canceled from handler", Metadata: map[string]string{"encoding": "json/plain"}, Details: json.RawMessage("\"details\"")},
-					State:   nexus.OperationStateCanceled,
-				}
+				return nil, nexus.NewCanceledOperationError(
+					commonnexus.FailureError{
+						Failure: nexus.Failure{Message: "operation canceled from handler", Metadata: map[string]string{"encoding": "json/plain"}, Details: json.RawMessage("\"details\"")},
+					},
+				)
 			},
 			expectedMetricOutcome: "operation-unsuccessful:canceled",
 			checkOutcome: func(t *testing.T, op nexusoperations.Operation, events []*historypb.HistoryEvent) {
@@ -508,11 +508,12 @@ func TestProcessInvocationTask(t *testing.T) {
 				MetricsHandler:         metricsHandler,
 				Logger:                 log.NewNoopLogger(),
 				EndpointRegistry:       endpointReg,
-				ClientProvider: func(ctx context.Context, namespaceID string, entry *persistence.NexusEndpointEntry, service string) (*nexus.Client, error) {
-					return nexus.NewClient(nexus.ClientOptions{
-						BaseURL:    "http://" + listenAddr,
-						Service:    service,
-						Serializer: commonnexus.PayloadSerializer,
+				ClientProvider: func(ctx context.Context, namespaceID string, entry *persistence.NexusEndpointEntry, service string) (*nexus.HTTPClient, error) {
+					return nexus.NewHTTPClient(nexus.HTTPClientOptions{
+						BaseURL:          "http://" + listenAddr,
+						Service:          service,
+						Serializer:       commonnexus.PayloadSerializer,
+						FailureConverter: commonnexus.FailureConverter,
 					})
 				},
 			}))
@@ -792,11 +793,12 @@ func TestProcessCancelationTask(t *testing.T) {
 				MetricsHandler:    metricsHandler,
 				Logger:            log.NewNoopLogger(),
 				EndpointRegistry:  endpointReg,
-				ClientProvider: func(ctx context.Context, namespaceID string, entry *persistence.NexusEndpointEntry, service string) (*nexus.Client, error) {
-					return nexus.NewClient(nexus.ClientOptions{
-						BaseURL:    "http://" + listenAddr,
-						Service:    service,
-						Serializer: commonnexus.PayloadSerializer,
+				ClientProvider: func(ctx context.Context, namespaceID string, entry *persistence.NexusEndpointEntry, service string) (*nexus.HTTPClient, error) {
+					return nexus.NewHTTPClient(nexus.HTTPClientOptions{
+						BaseURL:          "http://" + listenAddr,
+						Service:          service,
+						Serializer:       commonnexus.PayloadSerializer,
+						FailureConverter: commonnexus.FailureConverter,
 					})
 				},
 			}))
@@ -867,7 +869,7 @@ func TestProcessCancelationTask_OperationCompleted(t *testing.T) {
 				return endpointEntry, nil
 			},
 		},
-		ClientProvider: func(ctx context.Context, namespaceID string, entry *persistence.NexusEndpointEntry, service string) (*nexus.Client, error) {
+		ClientProvider: func(ctx context.Context, namespaceID string, entry *persistence.NexusEndpointEntry, service string) (*nexus.HTTPClient, error) {
 			return nil, serviceerror.NewInternal("shouldn't get here")
 		},
 	}))

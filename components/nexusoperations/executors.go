@@ -53,7 +53,7 @@ import (
 var ErrOperationTimeoutBelowMin = errors.New("remaining operation timeout is less than required minimum")
 
 // ClientProvider provides a nexus client for a given endpoint.
-type ClientProvider func(ctx context.Context, namespaceID string, entry *persistencespb.NexusEndpointEntry, service string) (*nexus.Client, error)
+type ClientProvider func(ctx context.Context, namespaceID string, entry *persistencespb.NexusEndpointEntry, service string) (*nexus.HTTPClient, error)
 
 type TaskExecutorOptions struct {
 	fx.In
@@ -378,25 +378,26 @@ func (e taskExecutor) saveResult(ctx context.Context, env hsm.Environment, ref h
 }
 
 func (e taskExecutor) handleStartOperationError(env hsm.Environment, node *hsm.Node, operation Operation, callErr error) (hsm.TransitionOutput, error) {
-	var handlerError *nexus.HandlerError
-	var opFailedError *nexus.UnsuccessfulOperationError
+	var handlerErr *nexus.HandlerError
+	var opFailedErr *nexus.UnsuccessfulOperationError
 
-	if errors.As(callErr, &opFailedError) {
-		return handleUnsuccessfulOperationError(node, operation, opFailedError, CompletionSourceResponse)
-	} else if errors.As(callErr, &handlerError) {
-		if !isRetryableHandlerError(handlerError.Type) {
+	if errors.As(callErr, &opFailedErr) {
+		return handleUnsuccessfulOperationError(node, operation, opFailedErr, CompletionSourceResponse)
+	} else if errors.As(callErr, &handlerErr) {
+		if !isRetryableHandlerError(handlerErr.Type) {
 			// The StartOperation request got an unexpected response that is not retryable, fail the operation.
 			// Although Failure is nullable, Nexus SDK is expected to always populate this field
-			return handleNonRetryableStartOperationError(env, node, operation, handlerError.Failure.Message)
+			// TODO: don't lose error details.
+			return handleNonRetryableStartOperationError(env, node, operation, handlerErr)
 		}
 		// Fall through to the AttemptFailed transition.
 	} else if errors.Is(callErr, ErrResponseBodyTooLarge) {
 		// Following practices from workflow task completion payload size limit enforcement, we do not retry this
 		// operation if the response body is too large.
-		return handleNonRetryableStartOperationError(env, node, operation, callErr.Error())
+		return handleNonRetryableStartOperationError(env, node, operation, callErr)
 	} else if errors.Is(callErr, ErrOperationTimeoutBelowMin) {
 		// Operation timeout is not retryable
-		return handleNonRetryableStartOperationError(env, node, operation, callErr.Error())
+		return handleNonRetryableStartOperationError(env, node, operation, callErr)
 	}
 	return TransitionAttemptFailed.Apply(operation, EventAttemptFailed{
 		Time:        env.Now(),
@@ -406,23 +407,45 @@ func (e taskExecutor) handleStartOperationError(env hsm.Environment, node *hsm.N
 	})
 }
 
-func handleNonRetryableStartOperationError(env hsm.Environment, node *hsm.Node, operation Operation, message string) (hsm.TransitionOutput, error) {
+func handleNonRetryableStartOperationError(env hsm.Environment, node *hsm.Node, operation Operation, callErr error) (hsm.TransitionOutput, error) {
 	eventID, err := hsm.EventIDFromToken(operation.ScheduledEventToken)
 	if err != nil {
 		return hsm.TransitionOutput{}, err
+	}
+	var failure *failurepb.Failure
+	var handlerErr *nexus.HandlerError
+	if errors.As(callErr, &handlerErr) {
+		var failureError commonnexus.FailureError
+		var failureCause *failurepb.Failure
+
+		if errors.As(handlerErr.Cause, &failureError) {
+			failureCause, err = commonnexus.NexusFailureToAPIFailure(failureError.Failure, false)
+			_ = err // TODO
+		}
+		failure = &failurepb.Failure{
+			Message: handlerErr.Error(),
+			FailureInfo: &failurepb.Failure_NexusHandlerFailureInfo{
+				NexusHandlerFailureInfo: &failurepb.NexusHandlerFailureInfo{
+					Type: string(handlerErr.Type),
+				},
+			},
+			Cause: failureCause,
+		}
+	} else {
+		failure = &failurepb.Failure{
+			Message: callErr.Error(),
+			FailureInfo: &failurepb.Failure_ApplicationFailureInfo{
+				ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{
+					NonRetryable: true,
+				},
+			},
+		}
 	}
 	attrs := &historypb.NexusOperationFailedEventAttributes{
 		Failure: nexusOperationFailure(
 			operation,
 			eventID,
-			&failurepb.Failure{
-				Message: message,
-				FailureInfo: &failurepb.Failure_ApplicationFailureInfo{
-					ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{
-						NonRetryable: true,
-					},
-				},
-			},
+			failure,
 		),
 		ScheduledEventId: eventID,
 		RequestId:        operation.RequestId,

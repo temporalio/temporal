@@ -2365,10 +2365,13 @@ func (h *Handler) CompleteNexusOperation(ctx context.Context, request *historyse
 	var opErr *nexus.UnsuccessfulOperationError
 	if request.State != string(nexus.OperationStateSucceeded) {
 		opErr = &nexus.UnsuccessfulOperationError{
-			State:   nexus.OperationState(request.GetState()),
-			Failure: *commonnexus.ProtoFailureToNexusFailure(request.GetFailure()),
+			State: nexus.OperationState(request.GetState()),
+			Cause: commonnexus.FailureError{
+				Failure: commonnexus.ProtoFailureToNexusFailure(request.GetFailure()),
+			},
 		}
 	}
+	fmt.Println("AAAAAAAAAAAAAAAAAA", "failure", request.GetFailure())
 	err = nexusoperations.CompletionHandler(
 		ctx,
 		engine.StateMachineEnvironment(metrics.OperationTag(metrics.HistoryCompleteNexusOperationScope)),
