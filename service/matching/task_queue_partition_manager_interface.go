@@ -57,7 +57,11 @@ type (
 		PollTask(ctx context.Context, pollMetadata *pollMetadata) (*internalTask, bool, error)
 		// ProcessSpooledTask dispatches a task to a poller. When there are no pollers to pick
 		// up the task, this method will return error. Task will not be persisted to db
-		ProcessSpooledTask(ctx context.Context, task *internalTask, assignedBuildId string) error
+		ProcessSpooledTask(
+			ctx context.Context,
+			task *internalTask,
+			backlogQueue *PhysicalTaskQueueKey,
+		) error
 		// DispatchQueryTask will dispatch query to local or remote poller. If forwarded then result or error is returned,
 		// if dispatched to local poller then nil and nil is returned.
 		DispatchQueryTask(ctx context.Context, taskId string, request *matchingservice.QueryWorkflowRequest) (*matchingservice.QueryWorkflowResponse, error)
