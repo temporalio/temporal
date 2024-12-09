@@ -211,7 +211,7 @@ func (h *completionHandler) CompleteOperation(ctx context.Context, r *nexus.Comp
 	}
 	switch r.State { // nolint:exhaustive
 	case nexus.OperationStateFailed, nexus.OperationStateCanceled:
-		failureErr, ok := r.Error.(commonnexus.FailureError)
+		failureErr, ok := r.Error.(*nexus.FailureError)
 		if !ok {
 			logger.Error("result error is not a FailureError", tag.Error(err))
 			return nexus.HandlerErrorf(nexus.HandlerErrorTypeInternal, "internal server error")
@@ -306,8 +306,8 @@ func (h *completionHandler) forwardCompleteOperation(ctx context.Context, r *nex
 
 	// TODO: Upgrade Nexus SDK in order to reduce HTTP exposure
 	handlerErr := &nexus.HandlerError{
-		Type:    commonnexus.HandlerErrorTypeFromHTTPStatus(resp.StatusCode),
-		Cause: commonnexus.FailureError{Failure: failure},
+		Type:  commonnexus.HandlerErrorTypeFromHTTPStatus(resp.StatusCode),
+		Cause: &nexus.FailureError{Failure: failure},
 	}
 
 	if handlerErr.Type == nexus.HandlerErrorTypeInternal && resp.StatusCode != http.StatusInternalServerError {

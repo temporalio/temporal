@@ -212,7 +212,7 @@ func TestProcessInvocationTask(t *testing.T) {
 			requestTimeout:  time.Hour,
 			destinationDown: false,
 			onStartOperation: func(ctx context.Context, service, operation string, input *nexus.LazyValue, options nexus.StartOperationOptions) (nexus.HandlerStartOperationResult[any], error) {
-				return nil, nexus.NewFailedOperationError(commonnexus.FailureError{
+				return nil, nexus.NewFailedOperationError(&nexus.FailureError{
 					Failure: nexus.Failure{Message: "operation failed from handler", Metadata: map[string]string{"encoding": "json/plain"}, Details: json.RawMessage("\"details\"")},
 				})
 			},
@@ -259,7 +259,7 @@ func TestProcessInvocationTask(t *testing.T) {
 			destinationDown: false,
 			onStartOperation: func(ctx context.Context, service, operation string, input *nexus.LazyValue, options nexus.StartOperationOptions) (nexus.HandlerStartOperationResult[any], error) {
 				return nil, nexus.NewCanceledOperationError(
-					commonnexus.FailureError{
+					&nexus.FailureError{
 						Failure: nexus.Failure{Message: "operation canceled from handler", Metadata: map[string]string{"encoding": "json/plain"}, Details: json.RawMessage("\"details\"")},
 					},
 				)
@@ -510,10 +510,9 @@ func TestProcessInvocationTask(t *testing.T) {
 				EndpointRegistry:       endpointReg,
 				ClientProvider: func(ctx context.Context, namespaceID string, entry *persistence.NexusEndpointEntry, service string) (*nexus.HTTPClient, error) {
 					return nexus.NewHTTPClient(nexus.HTTPClientOptions{
-						BaseURL:          "http://" + listenAddr,
-						Service:          service,
-						Serializer:       commonnexus.PayloadSerializer,
-						FailureConverter: commonnexus.FailureConverter,
+						BaseURL:    "http://" + listenAddr,
+						Service:    service,
+						Serializer: commonnexus.PayloadSerializer,
 					})
 				},
 			}))
@@ -795,10 +794,9 @@ func TestProcessCancelationTask(t *testing.T) {
 				EndpointRegistry:  endpointReg,
 				ClientProvider: func(ctx context.Context, namespaceID string, entry *persistence.NexusEndpointEntry, service string) (*nexus.HTTPClient, error) {
 					return nexus.NewHTTPClient(nexus.HTTPClientOptions{
-						BaseURL:          "http://" + listenAddr,
-						Service:          service,
-						Serializer:       commonnexus.PayloadSerializer,
-						FailureConverter: commonnexus.FailureConverter,
+						BaseURL:    "http://" + listenAddr,
+						Service:    service,
+						Serializer: commonnexus.PayloadSerializer,
 					})
 				},
 			}))

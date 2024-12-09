@@ -189,7 +189,7 @@ func (s *NexusApiTestSuite) TestNexusStartOperation_Outcomes() {
 				require.ErrorAs(t, err, &operationError)
 				require.Equal(t, nexus.OperationStateFailed, operationError.State)
 				require.Equal(t, "deliberate test failure", operationError.Cause.Error())
-				var failureErr cnexus.FailureError
+				var failureErr *nexus.FailureError
 				require.ErrorAs(t, operationError.Cause, &failureErr)
 				require.Equal(t, map[string]string{"k": "v"}, failureErr.Failure.Metadata)
 				var details string
@@ -242,10 +242,9 @@ func (s *NexusApiTestSuite) TestNexusStartOperation_Outcomes() {
 
 		httpCaller, headerCapture := newHeaderCaptureCaller()
 		client, err := nexus.NewHTTPClient(nexus.HTTPClientOptions{
-			BaseURL:          dispatchURL,
-			Service:          "test-service",
-			HTTPCaller:       httpCaller,
-			FailureConverter: cnexus.FailureConverter,
+			BaseURL:    dispatchURL,
+			Service:    "test-service",
+			HTTPCaller: httpCaller,
 		})
 		require.NoError(t, err)
 		capture := s.GetTestCluster().Host().CaptureMetricsHandler().StartCapture()

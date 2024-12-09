@@ -142,11 +142,10 @@ func ClientProviderFactory(
 			}
 		}
 		return nexus.NewHTTPClient(nexus.HTTPClientOptions{
-			BaseURL:          url,
-			Service:          service,
-			HTTPCaller:       httpCaller,
-			Serializer:       commonnexus.PayloadSerializer,
-			FailureConverter: commonnexus.FailureConverter,
+			BaseURL:    url,
+			Service:    service,
+			HTTPCaller: httpCaller,
+			Serializer: commonnexus.PayloadSerializer,
 		})
 	}, nil
 }

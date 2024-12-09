@@ -58,9 +58,8 @@ func RegisterHTTPHandler(options HandlerOptions, logger log.Logger, router *mux.
 			headers.NewDefaultVersionChecker(),
 			options.MetricsHandler.Counter(metrics.NexusCompletionRequestPreProcessErrors.Name()),
 		},
-		Logger:           log.NewSlogLogger(logger),
-		Serializer:       commonnexus.PayloadSerializer,
-		FailureConverter: commonnexus.FailureConverter,
+		Logger:     log.NewSlogLogger(logger),
+		Serializer: commonnexus.PayloadSerializer,
 	})
 	router.Path("/" + commonnexus.RouteCompletionCallback.Representation()).HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Limit the request body to max allowed Payload size.

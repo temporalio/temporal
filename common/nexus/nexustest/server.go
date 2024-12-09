@@ -32,7 +32,6 @@ import (
 
 	"github.com/nexus-rpc/sdk-go/nexus"
 	"github.com/stretchr/testify/require"
-	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/internal/temporalite"
 )
 
@@ -45,8 +44,7 @@ func AllocListenAddress(t *testing.T) string {
 
 func NewNexusServer(t *testing.T, listenAddr string, handler nexus.Handler) {
 	hh := nexus.NewHTTPHandler(nexus.HandlerOptions{
-		Handler:          handler,
-		FailureConverter: commonnexus.FailureConverter,
+		Handler: handler,
 	})
 	srv := &http.Server{Addr: listenAddr, Handler: hh}
 	listener, err := net.Listen("tcp", listenAddr)

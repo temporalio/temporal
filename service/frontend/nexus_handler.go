@@ -422,7 +422,7 @@ func (h *nexusHandler) StartOperation(
 
 			err := &nexus.UnsuccessfulOperationError{
 				State: nexus.OperationState(t.OperationError.GetOperationState()),
-				Cause: commonnexus.FailureError{
+				Cause: &nexus.FailureError{
 					Failure: commonnexus.ProtoFailureToNexusFailure(t.OperationError.GetFailure()),
 				},
 			}
@@ -591,17 +591,16 @@ func (h *nexusHandler) nexusClientForActiveCluster(oc *operationContext, service
 	}
 
 	return nexus.NewHTTPClient(nexus.HTTPClientOptions{
-		HTTPCaller:       wrappedHttpDo,
-		BaseURL:          baseURL,
-		Service:          service,
-		FailureConverter: commonnexus.FailureConverter,
+		HTTPCaller: wrappedHttpDo,
+		BaseURL:    baseURL,
+		Service:    service,
 	})
 }
 
 func (h *nexusHandler) convertOutcomeToNexusHandlerError(resp *matchingservice.DispatchNexusTaskResponse_HandlerError) *nexus.HandlerError {
 	handlerError := &nexus.HandlerError{
-		Type:    nexus.HandlerErrorType(resp.HandlerError.GetErrorType()),
-		Cause: commonnexus.FailureError{
+		Type: nexus.HandlerErrorType(resp.HandlerError.GetErrorType()),
+		Cause: &nexus.FailureError{
 			Failure: commonnexus.ProtoFailureToNexusFailure(resp.HandlerError.GetFailure()),
 		},
 	}

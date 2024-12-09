@@ -621,12 +621,13 @@ func (ms *MutableStateImpl) GetNexusCompletion(ctx context.Context) (nexus.Opera
 		}
 		return completion, nil
 	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_FAILED:
-		// TODO
-		f, _ := commonnexus.APIFailureToNexusFailure(ce.GetWorkflowExecutionFailedEventAttributes().GetFailure())
-		return nexus.NewOperationCompletionUnsuccessful(nexus.NewFailedOperationError(commonnexus.FailureError{Failure: f}), nexus.OperationCompletionUnsuccessfulOptions{
+		f, err := commonnexus.APIFailureToNexusFailure(ce.GetWorkflowExecutionFailedEventAttributes().GetFailure())
+		if err != nil {
+			return nil, err
+		}
+		return nexus.NewOperationCompletionUnsuccessful(nexus.NewFailedOperationError(&nexus.FailureError{Failure: f}), nexus.OperationCompletionUnsuccessfulOptions{
 			StartTime: ms.executionState.GetStartTime().AsTime(),
 			Links:     []nexus.Link{startLink},
-			FailureConverter: commonnexus.FailureConverter,
 		})
 	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CANCELED:
 		failure := &failurepb.Failure{
@@ -637,13 +638,14 @@ func (ms *MutableStateImpl) GetNexusCompletion(ctx context.Context) (nexus.Opera
 				},
 			},
 		}
-		// TODO
-		f, _ := commonnexus.APIFailureToNexusFailure(failure)
-		return nexus.NewOperationCompletionUnsuccessful(nexus.NewCanceledOperationError(commonnexus.FailureError{Failure: f}), nexus.OperationCompletionUnsuccessfulOptions{
-			StartTime:  ms.executionState.GetStartTime().AsTime(),
-			Links: []nexus.Link{startLink},
-			FailureConverter: commonnexus.FailureConverter,
-	})
+		f, err := commonnexus.APIFailureToNexusFailure(failure)
+		if err != nil {
+			return nil, err
+		}
+		return nexus.NewOperationCompletionUnsuccessful(nexus.NewCanceledOperationError(&nexus.FailureError{Failure: f}), nexus.OperationCompletionUnsuccessfulOptions{
+			StartTime: ms.executionState.GetStartTime().AsTime(),
+			Links:     []nexus.Link{startLink},
+		})
 	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TERMINATED:
 		// TODO: app error?
 		return nexus.NewOperationCompletionUnsuccessful(nexus.NewFailedOperationError(errors.New("operation terminated")), nexus.OperationCompletionUnsuccessfulOptions{

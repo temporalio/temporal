@@ -550,10 +550,11 @@ func (s *NexusStateReplicationSuite) completeNexusOperation(ctx context.Context,
 }
 
 func (s *NexusStateReplicationSuite) cancelNexusOperation(ctx context.Context, callbackUrl, callbackToken string) {
-	completion := &nexus.OperationCompletionUnsuccessful{
-		State:   nexus.OperationStateCanceled,
-		Failure: &nexus.Failure{Message: "operation canceled"},
-	}
+	completion, err := nexus.NewOperationCompletionUnsuccessful(
+		nexus.NewCanceledOperationError(errors.New("operation canceled")),
+		nexus.OperationCompletionUnsuccessfulOptions{},
+	)
+	s.NoError(err)
 	req, err := nexus.NewCompletionHTTPRequest(ctx, callbackUrl, completion)
 	s.NoError(err)
 	if callbackToken != "" {

@@ -125,7 +125,7 @@ func IsRetryableHandlerError(eType nexus.HandlerErrorType) bool {
 
 func UnsuccessfulOperationErrorToTemporalFailure(opErr *nexus.UnsuccessfulOperationError) *failurepb.Failure {
 	var nexusFailure nexus.Failure
-	failureErr, ok := opErr.Cause.(FailureError)
+	failureErr, ok := opErr.Cause.(*nexus.FailureError)
 	if ok {
 		nexusFailure = failureErr.Failure
 	} else if opErr.Cause != nil {

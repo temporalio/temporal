@@ -415,7 +415,7 @@ func handleNonRetryableStartOperationError(env hsm.Environment, node *hsm.Node, 
 	var failure *failurepb.Failure
 	var handlerErr *nexus.HandlerError
 	if errors.As(callErr, &handlerErr) {
-		var failureError commonnexus.FailureError
+		var failureError *nexus.FailureError
 		var failureCause *failurepb.Failure
 
 		if errors.As(handlerErr.Cause, &failureError) {
