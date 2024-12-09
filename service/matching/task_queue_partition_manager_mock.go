@@ -286,17 +286,17 @@ func (mr *MocktaskQueuePartitionManagerMockRecorder) PollTask(ctx, pollMetadata 
 }
 
 // ProcessSpooledTask mocks base method.
-func (m *MocktaskQueuePartitionManager) ProcessSpooledTask(ctx context.Context, task *internalTask, assignedBuildId string) error {
+func (m *MocktaskQueuePartitionManager) ProcessSpooledTask(ctx context.Context, task *internalTask, backlogQueue *PhysicalTaskQueueKey) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ProcessSpooledTask", ctx, task, assignedBuildId)
+	ret := m.ctrl.Call(m, "ProcessSpooledTask", ctx, task, backlogQueue)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // ProcessSpooledTask indicates an expected call of ProcessSpooledTask.
-func (mr *MocktaskQueuePartitionManagerMockRecorder) ProcessSpooledTask(ctx, task, assignedBuildId any) *gomock.Call {
+func (mr *MocktaskQueuePartitionManagerMockRecorder) ProcessSpooledTask(ctx, task, backlogQueue any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ProcessSpooledTask", reflect.TypeOf((*MocktaskQueuePartitionManager)(nil).ProcessSpooledTask), ctx, task, assignedBuildId)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ProcessSpooledTask", reflect.TypeOf((*MocktaskQueuePartitionManager)(nil).ProcessSpooledTask), ctx, task, backlogQueue)
 }
 
 // Start mocks base method.

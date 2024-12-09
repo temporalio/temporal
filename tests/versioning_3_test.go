@@ -34,6 +34,7 @@ import (
 
 	"github.com/dgryski/go-farm"
 	"github.com/pborman/uuid"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/suite"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
@@ -209,6 +210,58 @@ func (s *Versioning3Suite) testWorkflowWithPinnedOverride(sticky bool) {
 	s.verifyWorkflowVersioning(tv, vbUnpinned, tv.Deployment(), override, nil)
 
 	s.pollWftAndHandle(tv, sticky, nil,
+		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+			s.NotNil(task)
+			return respondCompleteWorkflow(tv, vbUnpinned), nil
+		})
+	s.verifyWorkflowVersioning(tv, vbUnpinned, tv.Deployment(), override, nil)
+}
+
+func (s *Versioning3Suite) TestPinnedWorkflowWithLateActivityPoller() {
+	s.RunTestWithMatchingBehavior(
+		func() {
+			s.testPinnedWorkflowWithLateActivityPoller()
+		},
+	)
+}
+
+func (s *Versioning3Suite) testPinnedWorkflowWithLateActivityPoller() {
+	// Here, we test that designating activities as independent is revisited if the missing activity
+	// pollers arrive to server while the so-far-independent activity is backlogged.
+	// Summary: a wf starts with a pinned override. The first wft schedules an activity before
+	// any activity poller on the pinned deployment is seen by the server. The activity is sent
+	// to the default queue. Then, the activity poller on the pinned deployment arrives, the task
+	// should be now sent to that poller although no current deployment is set on the TQs.
+
+	tv := testvars.New(s)
+
+	wftCompleted := make(chan interface{})
+	s.pollWftAndHandle(tv, false, wftCompleted,
+		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+			s.NotNil(task)
+			return respondWftWithActivities(tv, tv, false, vbUnpinned, "5"), nil
+		})
+	s.waitForDeploymentDataPropagation(tv, tqTypeWf)
+
+	override := makePinnedOverride(tv.Deployment())
+	s.startWorkflow(tv, override)
+
+	<-wftCompleted
+	s.verifyWorkflowVersioning(tv, vbUnpinned, tv.Deployment(), override, nil)
+	// Wait long enough to make sure the activity is backlogged.
+	s.validateBacklogCount(tv, tqTypeAct, 1)
+
+	// When the first activity poller arrives from this deployment, it registers the TQ in the
+	// deployment and that will trigger reevaluation of backlog queue.
+	s.pollActivityAndHandle(tv, nil,
+		func(task *workflowservice.PollActivityTaskQueueResponse) (*workflowservice.RespondActivityTaskCompletedRequest, error) {
+			s.NotNil(task)
+			return respondActivity(), nil
+		})
+	s.verifyWorkflowVersioning(tv, vbUnpinned, tv.Deployment(), override, nil)
+	s.validateBacklogCount(tv, tqTypeAct, 0)
+
+	s.pollWftAndHandle(tv, false, nil,
 		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
 			s.NotNil(task)
 			return respondCompleteWorkflow(tv, vbUnpinned), nil
@@ -931,6 +984,39 @@ func (s *Versioning3Suite) waitForDeploymentDataPropagation(
 		}
 		return len(remaining) == 0
 	}, 10*time.Second, 100*time.Millisecond)
+}
+
+func (s *Versioning3Suite) validateBacklogCount(
+	tv *testvars.TestVars,
+	tqType enumspb.TaskQueueType,
+	expectedCount int64,
+) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	var resp *workflowservice.DescribeTaskQueueResponse
+	var err error
+
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		resp, err = s.FrontendClient().DescribeTaskQueue(ctx, &workflowservice.DescribeTaskQueueRequest{
+			Namespace:              s.Namespace(),
+			TaskQueue:              tv.TaskQueue(),
+			ApiMode:                enumspb.DESCRIBE_TASK_QUEUE_MODE_ENHANCED,
+			Versions:               nil, // default version, in this case unversioned queue
+			TaskQueueTypes:         []enumspb.TaskQueueType{tqType},
+			ReportPollers:          false,
+			ReportTaskReachability: false,
+			ReportStats:            true,
+		})
+		s.NoError(err)
+		s.NotNil(resp)
+		s.Equal(1, len(resp.GetVersionsInfo()), "should be 1 because only default/unversioned queue")
+		versionInfo := resp.GetVersionsInfo()[""]
+		typeInfo, ok := versionInfo.GetTypesInfo()[int32(tqType)]
+		s.True(ok)
+		a := assert.New(t)
+		a.Equal(expectedCount, typeInfo.Stats.GetApproximateBacklogCount())
+	}, 6*time.Second, 100*time.Millisecond)
 }
 
 func makePinnedOverride(d *deploymentpb.Deployment) *workflow.VersioningOverride {
