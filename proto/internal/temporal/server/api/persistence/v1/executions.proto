@@ -270,9 +270,11 @@ message WorkflowExecutionInfo {
     // (-- api-linter: core::0203::immutable=disabled
     //     aip.dev/not-precedent: field_behavior annotation is not yet used in this repo --)
     temporal.api.workflow.v1.WorkflowExecutionVersioningInfo versioning_info = 98;
-    // This filed is to record the transition history when the transition history is cleaned up due to disabling transition history
+
+    // These two fields are to record the transition history when the transition history is cleaned up due to disabling transition history
+    // Should be deprecated once the transition history is fully launched
     repeated VersionedTransition previous_transition_history = 99;
-    VersionedTransition previous_transition_history_break_point = 100;
+    VersionedTransition last_transition_history_break_point = 100;
 }
 
 message ExecutionStats {
