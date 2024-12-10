@@ -138,6 +138,7 @@ func GetPendingActivityInfo(
 		}
 	}
 	p.Attempt = max(p.Attempt, 1)
+	p.Paused = ai.Paused
 
 	if ai.LastHeartbeatUpdateTime != nil && !ai.LastHeartbeatUpdateTime.AsTime().IsZero() {
 		p.LastHeartbeatTime = ai.LastHeartbeatUpdateTime
