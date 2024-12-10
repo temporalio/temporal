@@ -143,9 +143,10 @@ func (m *visibilityManagerMetrics) ListWorkflowExecutions(
 	response, err := m.delegate.ListWorkflowExecutions(ctx, request)
 	elapsed := time.Since(startTime)
 	if elapsed > m.slowQueryThreshold() {
-		m.logger.Info("List query exceeded threshold",
+		m.logger.Warn("List query exceeded threshold",
 			tag.NewDurationTag("duration", elapsed),
 			tag.NewStringTag("visibility-query", request.Query),
+			tag.NewStringTag("namepsace", request.Namespace.String()),
 		)
 	}
 	metrics.VisibilityPersistenceLatency.With(handler).Record(elapsed)
@@ -160,9 +161,10 @@ func (m *visibilityManagerMetrics) ScanWorkflowExecutions(
 	response, err := m.delegate.ScanWorkflowExecutions(ctx, request)
 	elapsed := time.Since(startTime)
 	if elapsed > m.slowQueryThreshold() {
-		m.logger.Info("Count query exceeded threshold",
+		m.logger.Warn("Count query exceeded threshold",
 			tag.NewDurationTag("duration", elapsed),
 			tag.NewStringTag("visibility-query", request.Query),
+			tag.NewStringTag("namepsace", request.Namespace.String()),
 		)
 	}
 	metrics.VisibilityPersistenceLatency.With(handler).Record(elapsed)
