@@ -94,24 +94,24 @@ func (s *ActivityApiResetClientTestSuite) makeWorkflowFunc(activityFunction Acti
 	}
 }
 
-func (s *ActivityApiResetClientTestSuite) TestActivityResetApi_Acceptance() {
+func (s *ActivityApiResetClientTestSuite) TestActivityResetApi_AfterRetry() {
 	// activity reset is called after multiple attempts,
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	var activityReseted atomic.Bool
-	activityCompleteSignal := make(chan struct{})
-	var activityCompleted atomic.Int32
+	var activityWasReset atomic.Bool
+	activityCompleteCh := make(chan struct{})
+	var activityCompleteCount atomic.Int32
 
 	activityFunction := func() (string, error) {
-		if activityReseted.Load() == false {
+		activityCompleteCount.Add(1)
+
+		if activityWasReset.Load() == false {
 			activityErr := errors.New("bad-luck-please-retry")
-			activityCompleted.Add(1)
 			return "", activityErr
 		}
 
-		activityCompleted.Add(1)
-		s.WaitForChannel(ctx, activityCompleteSignal)
+		s.WaitForChannel(ctx, activityCompleteCh)
 		return "done!", nil
 	}
 
@@ -134,7 +134,7 @@ func (s *ActivityApiResetClientTestSuite) TestActivityResetApi_Acceptance() {
 		description, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
 		assert.NoError(t, err)
 		assert.Equal(t, 1, len(description.PendingActivities))
-		assert.True(t, activityCompleted.Load() > 1)
+		assert.True(t, activityCompleteCount.Load() > 1)
 	}, 5*time.Second, 200*time.Millisecond)
 
 	resetRequest := &workflowservicepb.ResetActivityByIdRequest{
@@ -147,7 +147,7 @@ func (s *ActivityApiResetClientTestSuite) TestActivityResetApi_Acceptance() {
 	s.NoError(err)
 	s.NotNil(resp)
 
-	activityReseted.Store(true)
+	activityWasReset.Store(true)
 
 	// wait for activity to be running
 	s.EventuallyWithT(func(t *assert.CollectT) {
@@ -160,32 +160,31 @@ func (s *ActivityApiResetClientTestSuite) TestActivityResetApi_Acceptance() {
 	}, 5*time.Second, 100*time.Millisecond)
 
 	// let activity finish
-	activityCompleteSignal <- struct{}{}
+	activityCompleteCh <- struct{}{}
 
 	// wait for workflow to complete
 	var out string
 	err = workflowRun.Get(ctx, &out)
-
 	s.NoError(err)
 }
 
-func (s *ActivityApiResetClientTestSuite) TestActivityResetApi_WithNoWait() {
+func (s *ActivityApiResetClientTestSuite) TestActivityResetApi_WithRunningAndNoWait() {
 	// activity reset is called while activity is running, with NoWait=true to start new activity immediately
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	activityCompleteSignal1 := make(chan struct{})
-	activityCompleteSignal2 := make(chan struct{})
-	var activityReseted atomic.Bool
+	activityCompleteCh1 := make(chan struct{})
+	activityCompleteCh2 := make(chan struct{})
+	var activityWasReset atomic.Bool
 
 	activityFunction := func() (string, error) {
-		if activityReseted.Load() == false {
+		if activityWasReset.Load() == false {
 			activityErr := errors.New("bad-luck-please-retry")
-			s.WaitForChannel(ctx, activityCompleteSignal1)
+			s.WaitForChannel(ctx, activityCompleteCh1)
 			return "", activityErr
 		}
 
-		s.WaitForChannel(ctx, activityCompleteSignal2)
+		s.WaitForChannel(ctx, activityCompleteCh2)
 		return "done!", nil
 	}
 
@@ -211,7 +210,7 @@ func (s *ActivityApiResetClientTestSuite) TestActivityResetApi_WithNoWait() {
 		assert.Equal(t, enumspb.PENDING_ACTIVITY_STATE_STARTED, description.PendingActivities[0].State)
 	}, 5*time.Second, 200*time.Millisecond)
 
-	activityReseted.Store(true)
+	activityWasReset.Store(true)
 	resetRequest := &workflowservicepb.ResetActivityByIdRequest{
 		Namespace:  s.Namespace(),
 		WorkflowId: workflowRun.GetID(),
@@ -223,7 +222,7 @@ func (s *ActivityApiResetClientTestSuite) TestActivityResetApi_WithNoWait() {
 	s.NotNil(resp)
 
 	// let previous activity complete
-	activityCompleteSignal1 <- struct{}{}
+	activityCompleteCh1 <- struct{}{}
 	// wait a bit to make sure previous activity is completed
 	util.InterruptibleSleep(ctx, 1*time.Second)
 
@@ -238,12 +237,11 @@ func (s *ActivityApiResetClientTestSuite) TestActivityResetApi_WithNoWait() {
 	}, 5*time.Second, 100*time.Millisecond)
 
 	// let activity finish
-	activityCompleteSignal2 <- struct{}{}
+	activityCompleteCh2 <- struct{}{}
 
 	// wait for workflow to complete
 	var out string
 	err = workflowRun.Get(ctx, &out)
-
 	s.NoError(err)
 }
 
@@ -258,18 +256,18 @@ func (s *ActivityApiResetClientTestSuite) TestActivityResetApi_InRetry() {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	var activityCompleted atomic.Int32
-	activityCompleteSignal := make(chan struct{})
+	var activityCompleteCount atomic.Int32
+	activityCompleteCh := make(chan struct{})
 
 	activityFunction := func() (string, error) {
-		if activityCompleted.Load() == 0 {
-			activityCompleted.Add(1)
+		activityCompleteCount.Add(1)
+
+		if activityCompleteCount.Load() == 1 {
 			activityErr := errors.New("bad-luck-please-retry")
 			return "", activityErr
 		}
 
-		activityCompleted.Add(1)
-		s.WaitForChannel(ctx, activityCompleteSignal)
+		s.WaitForChannel(ctx, activityCompleteCh)
 		return "done!", nil
 	}
 
@@ -293,7 +291,7 @@ func (s *ActivityApiResetClientTestSuite) TestActivityResetApi_InRetry() {
 		assert.NoError(t, err)
 		assert.Equal(t, 1, len(description.PendingActivities))
 		assert.Equal(t, enumspb.PENDING_ACTIVITY_STATE_SCHEDULED, description.PendingActivities[0].State)
-		assert.Equal(t, int32(1), activityCompleted.Load())
+		assert.Equal(t, int32(1), activityCompleteCount.Load())
 	}, 5*time.Second, 200*time.Millisecond)
 
 	resetRequest := &workflowservicepb.ResetActivityByIdRequest{
@@ -312,17 +310,16 @@ func (s *ActivityApiResetClientTestSuite) TestActivityResetApi_InRetry() {
 		assert.NoError(t, err)
 		assert.Equal(t, 1, len(description.PendingActivities))
 		assert.Equal(t, enumspb.PENDING_ACTIVITY_STATE_STARTED, description.PendingActivities[0].State)
-		assert.Equal(t, int32(2), activityCompleted.Load())
+		assert.Equal(t, int32(2), activityCompleteCount.Load())
 		// also verify that the number of attempts was reset
 		assert.Equal(t, int32(1), description.PendingActivities[0].Attempt)
 	}, 2*time.Second, 200*time.Millisecond)
 
 	// let previous activity complete
-	activityCompleteSignal <- struct{}{}
+	activityCompleteCh <- struct{}{}
 
 	// wait for workflow to complete
 	var out string
 	err = workflowRun.Get(ctx, &out)
-
 	s.NoError(err)
 }
