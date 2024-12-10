@@ -2277,6 +2277,7 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionStartedEvent(
 	ms.executionInfo.WorkflowRunTimeout = event.GetWorkflowRunTimeout()
 	ms.executionInfo.WorkflowExecutionTimeout = event.GetWorkflowExecutionTimeout()
 	ms.executionInfo.DefaultWorkflowTaskTimeout = event.GetWorkflowTaskTimeout()
+	ms.executionInfo.OriginalExecutionRunId = event.GetOriginalExecutionRunId()
 
 	coll := callbacks.MachineCollection(ms.HSM())
 	for idx, cb := range event.GetCompletionCallbacks() {
