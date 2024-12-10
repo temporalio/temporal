@@ -96,17 +96,16 @@ func (s *ActivityApiPauseClientTestSuite) TestActivityPauseApi_WhileRunning() {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	activityPaused := make(chan struct{})
-	var activityCompleted atomic.Int32
+	activityPausedCn := make(chan struct{})
+	var completedActivityCount atomic.Int32
 
 	activityFunction := func() (string, error) {
-		if activityCompleted.Load() == 0 {
+		completedActivityCount.Add(1)
+		if completedActivityCount.Load() == 1 {
 			activityErr := errors.New("bad-luck-please-retry")
-			activityCompleted.Add(1)
-			s.WaitForChannel(ctx, activityPaused)
+			s.WaitForChannel(ctx, activityPausedCn)
 			return "", activityErr
 		}
-		activityCompleted.Add(1)
 		return "done!", nil
 	}
 
@@ -128,7 +127,7 @@ func (s *ActivityApiPauseClientTestSuite) TestActivityPauseApi_WhileRunning() {
 		description, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
 		assert.NoError(t, err)
 		assert.Equal(t, 1, len(description.PendingActivities))
-		assert.Equal(t, int32(1), activityCompleted.Load())
+		assert.Equal(t, int32(1), completedActivityCount.Load())
 	}, 10*time.Second, 500*time.Millisecond)
 
 	// pause activity
@@ -142,7 +141,7 @@ func (s *ActivityApiPauseClientTestSuite) TestActivityPauseApi_WhileRunning() {
 	s.NotNil(resp)
 
 	// unblock the activity
-	activityPaused <- struct{}{}
+	activityPausedCn <- struct{}{}
 
 	description, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
 	s.NoError(err)
@@ -175,7 +174,7 @@ func (s *ActivityApiPauseClientTestSuite) TestActivityPauseApi_WhileRunning() {
 	s.NotNil(unpauseResp)
 
 	s.EventuallyWithT(func(t *assert.CollectT) {
-		assert.Equal(t, int32(2), activityCompleted.Load())
+		assert.Equal(t, int32(2), completedActivityCount.Load())
 	}, 5*time.Second, 100*time.Millisecond)
 
 	var out string
@@ -197,15 +196,14 @@ func (s *ActivityApiPauseClientTestSuite) TestActivityPauseApi_WhileWaiting() {
 		BackoffCoefficient: 1,
 	}
 
-	var activityCompleted atomic.Int32
+	var completedActivityCount atomic.Int32
 
 	activityFunction := func() (string, error) {
-		if activityCompleted.Load() == 0 {
+		completedActivityCount.Add(1)
+		if completedActivityCount.Load() == 1 {
 			activityErr := errors.New("bad-luck-please-retry")
-			activityCompleted.Add(1)
 			return "", activityErr
 		}
-		activityCompleted.Add(1)
 		return "done!", nil
 	}
 
@@ -227,7 +225,7 @@ func (s *ActivityApiPauseClientTestSuite) TestActivityPauseApi_WhileWaiting() {
 		description, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
 		assert.NoError(t, err)
 		assert.Equal(t, 1, len(description.PendingActivities))
-		assert.Equal(t, int32(1), activityCompleted.Load())
+		assert.Equal(t, int32(1), completedActivityCount.Load())
 	}, 5*time.Second, 500*time.Millisecond)
 
 	// pause activity
@@ -267,7 +265,7 @@ func (s *ActivityApiPauseClientTestSuite) TestActivityPauseApi_WhileWaiting() {
 
 	// wait for activity to complete
 	s.EventuallyWithT(func(t *assert.CollectT) {
-		assert.Equal(t, int32(2), activityCompleted.Load())
+		assert.Equal(t, int32(2), completedActivityCount.Load())
 	}, 5*time.Second, 100*time.Millisecond)
 
 	var out string
@@ -290,15 +288,14 @@ func (s *ActivityApiPauseClientTestSuite) TestActivityPauseApi_WhileRetryNoWait(
 		BackoffCoefficient: 1,
 	}
 
-	var activityCompleted atomic.Int32
+	var activityCompletedCount atomic.Int32
 
 	activityFunction := func() (string, error) {
-		if activityCompleted.Load() == 0 {
+		activityCompletedCount.Add(1)
+		if activityCompletedCount.Load() == 1 {
 			activityErr := errors.New("bad-luck-please-retry")
-			activityCompleted.Add(1)
 			return "", activityErr
 		}
-		activityCompleted.Add(1)
 		return "done!", nil
 	}
 
@@ -320,7 +317,7 @@ func (s *ActivityApiPauseClientTestSuite) TestActivityPauseApi_WhileRetryNoWait(
 		description, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
 		assert.NoError(t, err)
 		assert.Equal(t, 1, len(description.PendingActivities))
-		assert.Equal(t, int32(1), activityCompleted.Load())
+		assert.Equal(t, int32(1), activityCompletedCount.Load())
 	}, 5*time.Second, 100*time.Millisecond)
 
 	// pause activity
@@ -350,7 +347,7 @@ func (s *ActivityApiPauseClientTestSuite) TestActivityPauseApi_WhileRetryNoWait(
 
 	// wait for activity to complete. It should happen immediately since noWait is set
 	s.EventuallyWithT(func(t *assert.CollectT) {
-		assert.Equal(t, int32(2), activityCompleted.Load())
+		assert.Equal(t, int32(2), activityCompletedCount.Load())
 	}, 5*time.Second, 100*time.Millisecond)
 
 	var out string
@@ -370,18 +367,18 @@ func (s *ActivityApiPauseClientTestSuite) TestActivityPauseApi_WithReset() {
 		BackoffCoefficient: 1,
 	}
 
-	var activityCompleted atomic.Int32
-	activityReseted := false
-	activityCompleteSignal := make(chan struct{})
+	var completedActivityCount atomic.Int32
+	activityWasReset := false
+	activityCompleteCn := make(chan struct{})
 
 	activityFunction := func() (string, error) {
-		if !activityReseted {
+		completedActivityCount.Add(1)
+
+		if !activityWasReset {
 			activityErr := errors.New("bad-luck-please-retry")
-			activityCompleted.Add(1)
 			return "", activityErr
 		}
-		activityCompleted.Add(1)
-		s.WaitForChannel(ctx, activityCompleteSignal)
+		s.WaitForChannel(ctx, activityCompleteCn)
 		return "done!", nil
 	}
 
@@ -403,7 +400,7 @@ func (s *ActivityApiPauseClientTestSuite) TestActivityPauseApi_WithReset() {
 		description, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
 		assert.NoError(t, err)
 		assert.Equal(t, 1, len(description.PendingActivities))
-		assert.Equal(t, int32(2), activityCompleted.Load())
+		assert.Equal(t, int32(2), completedActivityCount.Load())
 	}, 5*time.Second, 100*time.Millisecond)
 
 	// pause activity
@@ -426,7 +423,7 @@ func (s *ActivityApiPauseClientTestSuite) TestActivityPauseApi_WithReset() {
 		assert.True(t, description.PendingActivities[0].Attempt > 1)
 	}, 5*time.Second, 100*time.Millisecond)
 
-	activityReseted = true
+	activityWasReset = true
 
 	// unpause the activity with reset, and set noWait flag
 	unpauseRequest := &workflowservicepb.UnpauseActivityByIdRequest{
@@ -454,7 +451,7 @@ func (s *ActivityApiPauseClientTestSuite) TestActivityPauseApi_WithReset() {
 	}, 5*time.Second, 100*time.Millisecond)
 
 	// let activity finish
-	activityCompleteSignal <- struct{}{}
+	activityCompleteCn <- struct{}{}
 
 	// wait for workflow to finish
 	var out string
