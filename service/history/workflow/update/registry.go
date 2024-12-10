@@ -372,10 +372,8 @@ func (r *registry) remover(id string) updateOpt {
 
 			// A rejected update is *not* counted as a completed update
 			// as that would negatively impact the registry's rate limit.
-			if upd := r.updates[id]; upd != nil {
-				if updateWasAccepted := upd.acceptedEventID != common.EmptyEventID; updateWasAccepted {
-					r.completedCount++
-				}
+			if upd := r.updates[id]; upd != nil && upd.acceptedEventID != common.EmptyEventID {
+				r.completedCount++
 			}
 
 			// The update was either discarded or persisted; no need to keep it here anymore.
