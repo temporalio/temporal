@@ -60,6 +60,7 @@ func NexusFailureToProtoFailure(failure nexus.Failure) *nexuspb.Failure {
 	}
 }
 
+// TODO: fix outdated docstring
 // APIFailureToNexusFailure converts an API proto Failure to a Nexus SDK Failure taking only the failure message to
 // avoid leaking too many details to 3rd party callers.
 // Always returns a non-nil value.
@@ -89,11 +90,15 @@ func NexusFailureToAPIFailure(failure nexus.Failure, retryable bool) (*failurepb
 			return nil, err
 		}
 	} else {
+		payloads, err := nexusFailureMetadataToPayloads(failure)
+		if err != nil {
+			return nil, err
+		}
 		apiFailure.FailureInfo = &failurepb.Failure_ApplicationFailureInfo{
 			ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{
 				// Make up a type here, it's not part of the Nexus Failure spec.
 				Type:         "NexusFailure",
-				Details:      nexusFailureMetadataToPayloads(failure),
+				Details:      payloads,
 				NonRetryable: !retryable,
 			},
 		}
@@ -123,7 +128,7 @@ func IsRetryableHandlerError(eType nexus.HandlerErrorType) bool {
 	}
 }
 
-func UnsuccessfulOperationErrorToTemporalFailure(opErr *nexus.UnsuccessfulOperationError) *failurepb.Failure {
+func UnsuccessfulOperationErrorToTemporalFailure(opErr *nexus.UnsuccessfulOperationError) (*failurepb.Failure, error) {
 	var nexusFailure nexus.Failure
 	failureErr, ok := opErr.Cause.(*nexus.FailureError)
 	if ok {
@@ -136,29 +141,33 @@ func UnsuccessfulOperationErrorToTemporalFailure(opErr *nexus.UnsuccessfulOperat
 	// Canceled must be translated into a CanceledFailure to match the SDK expectation.
 	// TODO: What if it's already a CanceledFailure, that should be possible?
 	if opErr.State == nexus.OperationStateCanceled {
+		payloads, err := nexusFailureMetadataToPayloads(nexusFailure)
+		if err != nil {
+			return nil, err
+		}
 		return &failurepb.Failure{
 			Message: nexusFailure.Message,
 			FailureInfo: &failurepb.Failure_CanceledFailureInfo{
 				CanceledFailureInfo: &failurepb.CanceledFailureInfo{
-					Details: nexusFailureMetadataToPayloads(nexusFailure),
+					Details: payloads,
 				},
 			},
-		}
+		}, nil
 	}
 
-	temporalFailure, err := NexusFailureToAPIFailure(nexusFailure, false)
-	_ = err // TODO
-	return temporalFailure
+	return NexusFailureToAPIFailure(nexusFailure, false)
 }
 
-func nexusFailureMetadataToPayloads(failure nexus.Failure) *commonpb.Payloads {
+func nexusFailureMetadataToPayloads(failure nexus.Failure) (*commonpb.Payloads, error) {
 	if len(failure.Metadata) == 0 && len(failure.Details) == 0 {
-		return nil
+		return nil, nil
 	}
 	// Delete before serializing.
 	failure.Message = ""
 	data, err := json.Marshal(failure)
-	_ = err // TODO
+	if err != nil {
+		return nil, err
+	}
 	return &commonpb.Payloads{
 		Payloads: []*commonpb.Payload{
 			{
@@ -168,7 +177,7 @@ func nexusFailureMetadataToPayloads(failure nexus.Failure) *commonpb.Payloads {
 				Data: data,
 			},
 		},
-	}
+	}, err
 }
 
 // ConvertGRPCError converts either a serviceerror or a gRPC status error into a Nexus HandlerError if possible.
