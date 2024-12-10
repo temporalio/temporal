@@ -776,6 +776,12 @@ func (ms *MutableStateImpl) UpdateResetRunID(runID string) {
 	ms.executionInfo.ResetRunId = runID
 }
 
+// IsResetRun returns true if this run is the result of a reset operation.
+// A run is a reset run if OriginalExecutionRunID points to another run.
+func (ms *MutableStateImpl) IsResetRun() bool {
+	return ms.GetExecutionInfo().GetOriginalExecutionRunId() != ms.GetExecutionState().GetRunId()
+}
+
 func (ms *MutableStateImpl) GetBaseWorkflowInfo() *workflowspb.BaseExecutionInfo {
 	return ms.executionInfo.BaseExecutionInfo
 }

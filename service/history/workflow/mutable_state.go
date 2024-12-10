@@ -235,6 +235,8 @@ type (
 		CheckResettable() error
 		// UpdateResetRunID saves the runID that resulted when this execution was reset.
 		UpdateResetRunID(runID string)
+		// IsResetRun returns true if this run is result of a reset operation.
+		IsResetRun() bool
 
 		CloneToProto() *persistencespb.WorkflowMutableState
 		RetryActivity(ai *persistencespb.ActivityInfo, failure *failurepb.Failure) (enumspb.RetryState, error)
