@@ -357,7 +357,7 @@ func TestFindOrCreate(t *testing.T) {
 			require.Equal(t, 0, reg.Len())
 
 			_, existed, err := reg.FindOrCreate(context.Background(), tv.UpdateID("2"))
-			require.NoError(t, err, "update #2 should be created after the limit increase")
+			require.NoError(t, err)
 			require.False(t, existed)
 			require.Equal(t, 1, reg.Len())
 		})
@@ -389,7 +389,7 @@ func TestFindOrCreate(t *testing.T) {
 			limit = 2
 
 			_, existed, err := reg.FindOrCreate(context.Background(), tv.UpdateID("2"))
-			require.NoError(t, err, "update #2 should be created after the limit increase")
+			require.NoError(t, err)
 			require.False(t, existed)
 			require.Equal(t, 2, reg.Len())
 		})
