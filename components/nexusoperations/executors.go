@@ -384,10 +384,9 @@ func (e taskExecutor) handleStartOperationError(env hsm.Environment, node *hsm.N
 	if errors.As(callErr, &opFailedErr) {
 		return handleUnsuccessfulOperationError(node, operation, opFailedErr, CompletionSourceResponse)
 	} else if errors.As(callErr, &handlerErr) {
-		if !isRetryableHandlerError(handlerErr.Type) {
+		if !commonnexus.IsRetryableHandlerError(handlerErr.Type) {
 			// The StartOperation request got an unexpected response that is not retryable, fail the operation.
 			// Although Failure is nullable, Nexus SDK is expected to always populate this field
-			// TODO: don't lose error details.
 			return handleNonRetryableStartOperationError(env, node, operation, handlerErr)
 		}
 		// Fall through to the AttemptFailed transition.
@@ -399,9 +398,13 @@ func (e taskExecutor) handleStartOperationError(env hsm.Environment, node *hsm.N
 		// Operation timeout is not retryable
 		return handleNonRetryableStartOperationError(env, node, operation, callErr)
 	}
+	failure, err := callErrToFailure(callErr, true)
+	if err != nil {
+		return hsm.TransitionOutput{}, err
+	}
 	return TransitionAttemptFailed.Apply(operation, EventAttemptFailed{
 		Time:        env.Now(),
-		Err:         callErr,
+		Failure:     failure,
 		Node:        node,
 		RetryPolicy: e.Config.RetryPolicy(),
 	})
@@ -412,34 +415,9 @@ func handleNonRetryableStartOperationError(env hsm.Environment, node *hsm.Node, 
 	if err != nil {
 		return hsm.TransitionOutput{}, err
 	}
-	var failure *failurepb.Failure
-	var handlerErr *nexus.HandlerError
-	if errors.As(callErr, &handlerErr) {
-		var failureError *nexus.FailureError
-		var failureCause *failurepb.Failure
-
-		if errors.As(handlerErr.Cause, &failureError) {
-			failureCause, err = commonnexus.NexusFailureToAPIFailure(failureError.Failure, false)
-			_ = err // TODO
-		}
-		failure = &failurepb.Failure{
-			Message: handlerErr.Error(),
-			FailureInfo: &failurepb.Failure_NexusHandlerFailureInfo{
-				NexusHandlerFailureInfo: &failurepb.NexusHandlerFailureInfo{
-					Type: string(handlerErr.Type),
-				},
-			},
-			Cause: failureCause,
-		}
-	} else {
-		failure = &failurepb.Failure{
-			Message: callErr.Error(),
-			FailureInfo: &failurepb.Failure_ApplicationFailureInfo{
-				ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{
-					NonRetryable: true,
-				},
-			},
-		}
+	failure, err := callErrToFailure(callErr, true)
+	if err != nil {
+		return hsm.TransitionOutput{}, err
 	}
 	attrs := &historypb.NexusOperationFailedEventAttributes{
 		Failure: nexusOperationFailure(
@@ -614,26 +592,22 @@ func (e taskExecutor) saveCancelationResult(ctx context.Context, env hsm.Environ
 	return env.Access(ctx, ref, hsm.AccessWrite, func(n *hsm.Node) error {
 		return hsm.MachineTransition(n, func(c Cancelation) (hsm.TransitionOutput, error) {
 			if callErr != nil {
-				if errors.Is(callErr, ErrOperationTimeoutBelowMin) {
-					return TransitionCancelationFailed.Apply(c, EventCancelationFailed{
-						Time: env.Now(),
-						Err:  callErr,
-						Node: n,
-					})
-				}
 				var handlerErr *nexus.HandlerError
-				if errors.As(callErr, &handlerErr) {
-					if !isRetryableHandlerError(handlerErr.Type) {
-						return TransitionCancelationFailed.Apply(c, EventCancelationFailed{
-							Time: env.Now(),
-							Err:  callErr,
-							Node: n,
-						})
-					}
+				isRetryable := !errors.Is(callErr, ErrOperationTimeoutBelowMin) && (!errors.As(callErr, &handlerErr) || commonnexus.IsRetryableHandlerError(handlerErr.Type))
+				failure, err := callErrToFailure(callErr, isRetryable)
+				if err != nil {
+					return hsm.TransitionOutput{}, err
+				}
+				if !isRetryable {
+					return TransitionCancelationFailed.Apply(c, EventCancelationFailed{
+						Time:    env.Now(),
+						Failure: failure,
+						Node:    n,
+					})
 				}
 				return TransitionCancelationAttemptFailed.Apply(c, EventCancelationAttemptFailed{
 					Time:        env.Now(),
-					Err:         callErr,
+					Failure:     failure,
 					Node:        n,
 					RetryPolicy: e.Config.RetryPolicy(),
 				})
@@ -729,26 +703,6 @@ func cancelCallOutcomeTag(callCtx context.Context, callErr error) string {
 	return "successful"
 }
 
-func isRetryableHandlerError(eType nexus.HandlerErrorType) bool {
-	switch eType {
-	case nexus.HandlerErrorTypeResourceExhausted,
-		nexus.HandlerErrorTypeInternal,
-		nexus.HandlerErrorTypeUnavailable,
-		nexus.HandlerErrorTypeUpstreamTimeout:
-		return true
-	case nexus.HandlerErrorTypeBadRequest,
-		nexus.HandlerErrorTypeUnauthenticated,
-		nexus.HandlerErrorTypeUnauthorized,
-		nexus.HandlerErrorTypeNotFound,
-		nexus.HandlerErrorTypeNotImplemented:
-		return false
-	default:
-		// Default to retryable in case other error types are added in the future.
-		// It's better to retry than unexpectedly fail.
-		return true
-	}
-}
-
 func isDestinationDown(err error) bool {
 	var handlerError *nexus.HandlerError
 	var opFailedErr *nexus.UnsuccessfulOperationError
@@ -756,7 +710,7 @@ func isDestinationDown(err error) bool {
 		return false
 	}
 	if errors.As(err, &handlerError) {
-		return isRetryableHandlerError(handlerError.Type)
+		return commonnexus.IsRetryableHandlerError(handlerError.Type)
 	}
 	if errors.Is(err, ErrResponseBodyTooLarge) {
 		return false
@@ -765,4 +719,37 @@ func isDestinationDown(err error) bool {
 		return false
 	}
 	return true
+}
+
+func callErrToFailure(callErr error, retryable bool) (*failurepb.Failure, error) {
+	var handlerErr *nexus.HandlerError
+	if errors.As(callErr, &handlerErr) {
+		failure := &failurepb.Failure{
+			Message: handlerErr.Error(),
+			FailureInfo: &failurepb.Failure_NexusHandlerFailureInfo{
+				NexusHandlerFailureInfo: &failurepb.NexusHandlerFailureInfo{
+					Type: string(handlerErr.Type),
+				},
+			},
+		}
+		var failureError *nexus.FailureError
+		if errors.As(handlerErr.Cause, &failureError) {
+			var err error
+			failure.Cause, err = commonnexus.NexusFailureToAPIFailure(failureError.Failure, retryable)
+			if err != nil {
+				return nil, err
+			}
+		}
+		return failure, nil
+	}
+
+	return &failurepb.Failure{
+		Message: callErr.Error(),
+		FailureInfo: &failurepb.Failure_ApplicationFailureInfo{
+			ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{
+				Type:         "UnexpectedError",
+				NonRetryable: !retryable,
+			},
+		},
+	}, nil
 }

@@ -41,7 +41,6 @@ import (
 var failureTypeString = string((&failurepb.Failure{}).ProtoReflect().Descriptor().FullName())
 
 // ProtoFailureToNexusFailure converts a proto Nexus Failure to a Nexus SDK Failure.
-// Always returns a non-nil value.
 func ProtoFailureToNexusFailure(failure *nexuspb.Failure) nexus.Failure {
 	return nexus.Failure{
 		Message:  failure.GetMessage(),
@@ -60,9 +59,8 @@ func NexusFailureToProtoFailure(failure nexus.Failure) *nexuspb.Failure {
 	}
 }
 
-// TODO: fix outdated docstring
-// APIFailureToNexusFailure converts an API proto Failure to a Nexus SDK Failure taking only the failure message to
-// avoid leaking too many details to 3rd party callers.
+// APIFailureToNexusFailure converts an API proto Failure to a Nexus SDK Failure setting the metadata "type" field to
+// the proto fullname of the temporal API Failure message.
 // Always returns a non-nil value.
 func APIFailureToNexusFailure(failure *failurepb.Failure) (nexus.Failure, error) {
 	// Unset message so it's not serialized in the details.
@@ -81,7 +79,9 @@ func APIFailureToNexusFailure(failure *failurepb.Failure) (nexus.Failure, error)
 	}, nil
 }
 
-// TODO: is retryable really needed here?
+// NexusFailureToAPIFailure converts a Nexus Failure to an API proto Failure.
+// If the failure metadata "type" field is set to the fullname of the temporal API Failure message, the failure is
+// reconstructed using protojson.Unmarshal on the failure details field.
 func NexusFailureToAPIFailure(failure nexus.Failure, retryable bool) (*failurepb.Failure, error) {
 	apiFailure := &failurepb.Failure{}
 

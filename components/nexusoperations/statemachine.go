@@ -282,7 +282,7 @@ var TransitionRescheduled = hsm.NewTransition(
 // EventAttemptFailed is triggered when an invocation attempt is failed with a retryable error.
 type EventAttemptFailed struct {
 	Time        time.Time
-	Err         error
+	Failure     *failurepb.Failure
 	Node        *hsm.Node
 	RetryPolicy backoff.RetryPolicy
 }
@@ -293,17 +293,11 @@ var TransitionAttemptFailed = hsm.NewTransition(
 	func(op Operation, event EventAttemptFailed) (hsm.TransitionOutput, error) {
 		op.recordAttempt(event.Time)
 		// Use 0 for elapsed time as we don't limit the retry by time (for now).
-		nextDelay := event.RetryPolicy.ComputeNextDelay(0, int(op.Attempt), event.Err)
+		// The last argument (error) is ignored.
+		nextDelay := event.RetryPolicy.ComputeNextDelay(0, int(op.Attempt), nil)
 		nextAttemptScheduleTime := event.Time.Add(nextDelay)
 		op.NextAttemptScheduleTime = timestamppb.New(nextAttemptScheduleTime)
-		op.LastAttemptFailure = &failurepb.Failure{
-			Message: event.Err.Error(),
-			FailureInfo: &failurepb.Failure_ApplicationFailureInfo{
-				ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{
-					NonRetryable: false,
-				},
-			},
-		}
+		op.LastAttemptFailure = event.Failure
 		return op.output()
 	},
 )
@@ -652,7 +646,7 @@ var TransitionCancelationRescheduled = hsm.NewTransition(
 // EventCancelationAttemptFailed is triggered when a cancelation attempt is failed with a retryable error.
 type EventCancelationAttemptFailed struct {
 	Time        time.Time
-	Err         error
+	Failure     *failurepb.Failure
 	Node        *hsm.Node
 	RetryPolicy backoff.RetryPolicy
 }
@@ -663,26 +657,19 @@ var TransitionCancelationAttemptFailed = hsm.NewTransition(
 	func(c Cancelation, event EventCancelationAttemptFailed) (hsm.TransitionOutput, error) {
 		c.recordAttempt(event.Time)
 		// Use 0 for elapsed time as we don't limit the retry by time (for now).
-		nextDelay := event.RetryPolicy.ComputeNextDelay(0, int(c.Attempt), event.Err)
+		nextDelay := event.RetryPolicy.ComputeNextDelay(0, int(c.Attempt), nil)
 		nextAttemptScheduleTime := event.Time.Add(nextDelay)
 		c.NextAttemptScheduleTime = timestamppb.New(nextAttemptScheduleTime)
-		c.LastAttemptFailure = &failurepb.Failure{
-			Message: event.Err.Error(),
-			FailureInfo: &failurepb.Failure_ApplicationFailureInfo{
-				ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{
-					NonRetryable: false,
-				},
-			},
-		}
+		c.LastAttemptFailure = event.Failure
 		return c.output(event.Node)
 	},
 )
 
 // EventCancelationFailed is triggered when a cancelation attempt is failed with a non retryable error.
 type EventCancelationFailed struct {
-	Time time.Time
-	Err  error
-	Node *hsm.Node
+	Time    time.Time
+	Failure *failurepb.Failure
+	Node    *hsm.Node
 }
 
 var TransitionCancelationFailed = hsm.NewTransition(
@@ -695,14 +682,7 @@ var TransitionCancelationFailed = hsm.NewTransition(
 	enumspb.NEXUS_OPERATION_CANCELLATION_STATE_FAILED,
 	func(c Cancelation, event EventCancelationFailed) (hsm.TransitionOutput, error) {
 		c.recordAttempt(event.Time)
-		c.LastAttemptFailure = &failurepb.Failure{
-			Message: event.Err.Error(),
-			FailureInfo: &failurepb.Failure_ApplicationFailureInfo{
-				ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{
-					NonRetryable: true,
-				},
-			},
-		}
+		c.LastAttemptFailure = event.Failure
 		return c.output(event.Node)
 	},
 )
