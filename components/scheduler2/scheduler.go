@@ -1,14 +1,18 @@
-package core
+package scheduler2
 
 import (
 	"fmt"
+	"time"
 
+	"go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/api/schedule/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	schedspb "go.temporal.io/server/api/schedule/v1"
 	"go.temporal.io/server/service/history/hsm"
 	"go.temporal.io/server/service/worker/scheduler"
 	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type (
@@ -31,7 +35,7 @@ type (
 	}
 
 	// The machine definitions provide serialization/deserialization and type information.
-	machineDefinition struct{}
+	schedulerMachineDefinition struct{}
 )
 
 const (
@@ -41,13 +45,54 @@ const (
 
 var (
 	_ hsm.StateMachine[enumsspb.Scheduler2State] = Scheduler{}
-	_ hsm.StateMachineDefinition                 = &machineDefinition{}
+	_ hsm.StateMachineDefinition                 = &schedulerMachineDefinition{}
 )
+
+// NewScheduler returns an initialized Scheduler state machine (without any sub
+// state machines).
+func NewScheduler(
+	namespace, namespaceID, scheduleID string,
+	sched *schedule.Schedule,
+	patch *schedule.SchedulePatch,
+) *Scheduler {
+	var zero time.Time
+	return &Scheduler{
+		SchedulerInternal: &schedspb.SchedulerInternal{
+			State:    enumsspb.SCHEDULER2_STATE_RUNNING,
+			Schedule: sched,
+			Info: &schedule.ScheduleInfo{
+				ActionCount:         0,
+				MissedCatchupWindow: 0,
+				OverlapSkipped:      0,
+				BufferDropped:       0,
+				BufferSize:          0,
+				RunningWorkflows:    []*common.WorkflowExecution{},
+				RecentActions:       []*schedule.ScheduleActionResult{},
+				FutureActionTimes:   []*timestamppb.Timestamp{},
+				CreateTime:          timestamppb.Now(),
+				UpdateTime:          timestamppb.New(zero),
+			},
+			InitialPatch:  patch,
+			Namespace:     namespace,
+			NamespaceId:   namespaceID,
+			ScheduleId:    scheduleID,
+			ConflictToken: scheduler.InitialConflictToken,
+		},
+		cacheConflictToken: scheduler.InitialConflictToken,
+		compiledSpec:       nil,
+	}
+}
 
 // RegisterStateMachine registers state machine definitions with the HSM
 // registry. Should be called during dependency injection.
 func RegisterStateMachines(r *hsm.Registry) error {
-	if err := r.RegisterMachine(machineDefinition{}); err != nil {
+	if err := r.RegisterMachine(schedulerMachineDefinition{}); err != nil {
+		return err
+	}
+	if err := r.RegisterMachine(generatorMachineDefinition{}); err != nil {
+		return err
+	}
+	if err := r.RegisterMachine(executorMachineDefinition{}); err != nil {
 		return err
 	}
 	// TODO: add other state machines here
@@ -68,21 +113,22 @@ func (s Scheduler) SetState(state enumsspb.Scheduler2State) {
 }
 
 func (s Scheduler) RegenerateTasks(node *hsm.Node) ([]hsm.Task, error) {
+	// The top level scheduler has no tasks of its own.
 	return nil, nil
 }
 
-func (machineDefinition) Type() string {
+func (schedulerMachineDefinition) Type() string {
 	return SchedulerMachineType
 }
 
-func (machineDefinition) Serialize(state any) ([]byte, error) {
+func (schedulerMachineDefinition) Serialize(state any) ([]byte, error) {
 	if state, ok := state.(Scheduler); ok {
 		return proto.Marshal(state.SchedulerInternal)
 	}
 	return nil, fmt.Errorf("invalid scheduler state provided: %v", state)
 }
 
-func (machineDefinition) Deserialize(body []byte) (any, error) {
+func (schedulerMachineDefinition) Deserialize(body []byte) (any, error) {
 	state := &schedspb.SchedulerInternal{}
 	return Scheduler{
 		SchedulerInternal: state,
@@ -90,7 +136,7 @@ func (machineDefinition) Deserialize(body []byte) (any, error) {
 	}, proto.Unmarshal(body, state)
 }
 
-func (machineDefinition) CompareState(a any, b any) (int, error) {
+func (schedulerMachineDefinition) CompareState(a any, b any) (int, error) {
 	panic("TODO: CompareState not yet implemented for Scheduler")
 }
 
