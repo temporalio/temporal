@@ -316,7 +316,9 @@ func newTaskQueueConfig(tq *tqid.TaskQueue, config *Config, ns namespace.Name) *
 		GetUserDataMinWaitTime:     1 * time.Second,
 		GetUserDataReturnBudget:    returnEmptyTaskTimeBudget,
 		GetUserDataInitialRefresh:  ioTimeout,
-		GetUserDataRefresh:         config.GetUserDataLongPollTimeout, // this is just for testing, use same value as long poll
+		// use same value for GetUserDataRefresh as GetUserDataLongPollTimeout (both control
+		// how often we read from the source in the stady state)
+		GetUserDataRefresh: config.GetUserDataLongPollTimeout,
 		OutstandingTaskAppendsThreshold: func() int {
 			return config.OutstandingTaskAppendsThreshold(ns.String(), taskQueueName, taskType)
 		},
