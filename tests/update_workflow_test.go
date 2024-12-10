@@ -4862,6 +4862,106 @@ func (s *UpdateWorkflowSuite) TestUpdateWorkflow_ContinueAsNew_UpdateIsNotCarrie
   4 WorkflowTaskCompleted`, s.GetHistory(s.Namespace(), tv.WorkflowExecution()))
 }
 
+func (s *UpdateWorkflowSuite) TestUpdateWorkflow_EnforceMaxUpdates() {
+
+	// lower maximum total number of updates for testing purposes
+	s.OverrideDynamicConfig(dynamicconfig.WorkflowExecutionMaxTotalUpdates, 1)
+
+	s.Run("given an in-flight update, the next update is rate limited", func() {
+		tv := testvars.New(s.T())
+
+		tv = s.startWorkflow(tv)
+		_, err := s.TaskPoller.PollAndHandleWorkflowTask(tv, taskpoller.DrainWorkflowTask)
+		s.NoError(err)
+
+		// 1st update
+		shortCtx, cancel := context.WithTimeout(testcore.NewContext(), 1*time.Second)
+		defer cancel()
+		_, err = s.FrontendClient().UpdateWorkflowExecution(shortCtx, s.updateWorkflowRequest(tv,
+			&updatepb.WaitPolicy{LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ACCEPTED}, "1"))
+		s.ErrorContains(err, "deadline exceeded")
+
+		// 2nd update
+		_, err = s.FrontendClient().UpdateWorkflowExecution(testcore.NewContext(), s.updateWorkflowRequest(tv,
+			&updatepb.WaitPolicy{LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ACCEPTED}, "2"))
+		s.ErrorContains(err, "limit on number of total updates has been reached")
+	})
+
+	s.Run("given an accepted update, the next update is rate limited ", func() {
+		tv := testvars.New(s.T())
+
+		tv = s.startWorkflow(tv)
+		_, err := s.TaskPoller.PollAndHandleWorkflowTask(tv, taskpoller.DrainWorkflowTask)
+		s.NoError(err)
+
+		// 1st update
+		s.sendUpdate(testcore.NewContext(), tv, "1")
+		_, err = s.TaskPoller.PollAndHandleWorkflowTask(tv,
+			func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+				return &workflowservice.RespondWorkflowTaskCompletedRequest{
+					Messages: s.UpdateAcceptMessages(tv, task.Messages[0], "1"),
+				}, nil
+			})
+		s.NoError(err)
+
+		// 2nd update
+		_, err = s.FrontendClient().UpdateWorkflowExecution(testcore.NewContext(), s.updateWorkflowRequest(tv,
+			&updatepb.WaitPolicy{LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ACCEPTED}, "2"))
+		s.ErrorContains(err, "limit on number of total updates has been reached")
+	})
+
+	s.Run("given a completed update, the next update is rate limited ", func() {
+		tv := testvars.New(s.T())
+
+		tv = s.startWorkflow(tv)
+		_, err := s.TaskPoller.PollAndHandleWorkflowTask(tv, taskpoller.DrainWorkflowTask)
+		s.NoError(err)
+
+		// 1st update
+		s.sendUpdate(testcore.NewContext(), tv, "1")
+		_, err = s.TaskPoller.PollAndHandleWorkflowTask(tv,
+			func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+				return &workflowservice.RespondWorkflowTaskCompletedRequest{
+					Messages: s.UpdateAcceptCompleteMessages(tv, task.Messages[0], "1"),
+				}, nil
+			})
+		s.NoError(err)
+
+		// 2nd update
+		_, err = s.FrontendClient().UpdateWorkflowExecution(testcore.NewContext(), s.updateWorkflowRequest(tv,
+			&updatepb.WaitPolicy{LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ACCEPTED}, "2"))
+		s.ErrorContains(err, "limit on number of total updates has been reached")
+	})
+
+	s.Run("given a rejected update, the next update is *not* rate limited", func() {
+		tv := testvars.New(s.T())
+
+		tv = s.startWorkflow(tv)
+		_, err := s.TaskPoller.PollAndHandleWorkflowTask(tv, taskpoller.DrainWorkflowTask)
+		s.NoError(err)
+
+		// 1st update
+		s.sendUpdate(testcore.NewContext(), tv, "1")
+		_, err = s.TaskPoller.PollAndHandleWorkflowTask(tv,
+			func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+				return &workflowservice.RespondWorkflowTaskCompletedRequest{
+					Messages: s.UpdateRejectMessages(tv, task.Messages[0], "1"),
+				}, nil
+			})
+		s.NoError(err)
+
+		// 2nd update
+		s.sendUpdate(testcore.NewContext(), tv, "2")
+		_, err = s.TaskPoller.PollAndHandleWorkflowTask(tv,
+			func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+				return &workflowservice.RespondWorkflowTaskCompletedRequest{
+					Messages: s.UpdateAcceptCompleteMessages(tv, task.Messages[0], "2"),
+				}, nil
+			})
+		s.NoError(err)
+	})
+}
+
 func (s *UpdateWorkflowSuite) TestUpdateWithStart() {
 	type multiopsResponseErr struct {
 		response *workflowservice.ExecuteMultiOperationResponse
