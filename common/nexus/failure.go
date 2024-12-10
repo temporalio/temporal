@@ -108,26 +108,6 @@ func NexusFailureToAPIFailure(failure nexus.Failure, retryable bool) (*failurepb
 	return apiFailure, nil
 }
 
-func IsRetryableHandlerError(eType nexus.HandlerErrorType) bool {
-	switch eType {
-	case nexus.HandlerErrorTypeResourceExhausted,
-		nexus.HandlerErrorTypeInternal,
-		nexus.HandlerErrorTypeUnavailable,
-		nexus.HandlerErrorTypeUpstreamTimeout:
-		return true
-	case nexus.HandlerErrorTypeBadRequest,
-		nexus.HandlerErrorTypeUnauthenticated,
-		nexus.HandlerErrorTypeUnauthorized,
-		nexus.HandlerErrorTypeNotFound,
-		nexus.HandlerErrorTypeNotImplemented:
-		return false
-	default:
-		// Default to retryable in case other error types are added in the future.
-		// It's better to retry than unexpectedly fail.
-		return true
-	}
-}
-
 func UnsuccessfulOperationErrorToTemporalFailure(opErr *nexus.UnsuccessfulOperationError) (*failurepb.Failure, error) {
 	var nexusFailure nexus.Failure
 	failureErr, ok := opErr.Cause.(*nexus.FailureError)

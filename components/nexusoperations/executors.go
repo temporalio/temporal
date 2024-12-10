@@ -384,7 +384,7 @@ func (e taskExecutor) handleStartOperationError(env hsm.Environment, node *hsm.N
 	if errors.As(callErr, &opFailedErr) {
 		return handleUnsuccessfulOperationError(node, operation, opFailedErr, CompletionSourceResponse)
 	} else if errors.As(callErr, &handlerErr) {
-		if !commonnexus.IsRetryableHandlerError(handlerErr.Type) {
+		if !isRetryableHandlerError(handlerErr.Type) {
 			// The StartOperation request got an unexpected response that is not retryable, fail the operation.
 			// Although Failure is nullable, Nexus SDK is expected to always populate this field
 			return handleNonRetryableStartOperationError(env, node, operation, handlerErr)
@@ -593,7 +593,7 @@ func (e taskExecutor) saveCancelationResult(ctx context.Context, env hsm.Environ
 		return hsm.MachineTransition(n, func(c Cancelation) (hsm.TransitionOutput, error) {
 			if callErr != nil {
 				var handlerErr *nexus.HandlerError
-				isRetryable := !errors.Is(callErr, ErrOperationTimeoutBelowMin) && (!errors.As(callErr, &handlerErr) || commonnexus.IsRetryableHandlerError(handlerErr.Type))
+				isRetryable := !errors.Is(callErr, ErrOperationTimeoutBelowMin) && (!errors.As(callErr, &handlerErr) || isRetryableHandlerError(handlerErr.Type))
 				failure, err := callErrToFailure(callErr, isRetryable)
 				if err != nil {
 					return hsm.TransitionOutput{}, err
@@ -703,6 +703,26 @@ func cancelCallOutcomeTag(callCtx context.Context, callErr error) string {
 	return "successful"
 }
 
+func isRetryableHandlerError(eType nexus.HandlerErrorType) bool {
+	switch eType {
+	case nexus.HandlerErrorTypeResourceExhausted,
+		nexus.HandlerErrorTypeInternal,
+		nexus.HandlerErrorTypeUnavailable,
+		nexus.HandlerErrorTypeUpstreamTimeout:
+		return true
+	case nexus.HandlerErrorTypeBadRequest,
+		nexus.HandlerErrorTypeUnauthenticated,
+		nexus.HandlerErrorTypeUnauthorized,
+		nexus.HandlerErrorTypeNotFound,
+		nexus.HandlerErrorTypeNotImplemented:
+		return false
+	default:
+		// Default to retryable in case other error types are added in the future.
+		// It's better to retry than unexpectedly fail.
+		return true
+	}
+}
+
 func isDestinationDown(err error) bool {
 	var handlerError *nexus.HandlerError
 	var opFailedErr *nexus.UnsuccessfulOperationError
@@ -710,7 +730,7 @@ func isDestinationDown(err error) bool {
 		return false
 	}
 	if errors.As(err, &handlerError) {
-		return commonnexus.IsRetryableHandlerError(handlerError.Type)
+		return isRetryableHandlerError(handlerError.Type)
 	}
 	if errors.Is(err, ErrResponseBodyTooLarge) {
 		return false
