@@ -871,6 +871,10 @@ func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
 			}
 			return t.createFirstWorkflowTask(ctx, task.TargetNamespaceID, childExecution, parentClock, childClock)
 		}
+		// now if there was no child found after reset then it could mean one of the following.
+		// 1. The parent never got a chance to start the child. So we should go ahead and start one (below)
+		// 2. The child was started, but may be terminated from someone external.
+		// Since we cannot distinguish between the two, we will proceed to start a new instance of child and accept the result of that operation.
 	}
 
 	executionInfo := mutableState.GetExecutionInfo()
