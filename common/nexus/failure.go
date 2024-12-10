@@ -134,13 +134,24 @@ func UnsuccessfulOperationErrorToTemporalFailure(opErr *nexus.UnsuccessfulOperat
 	if ok {
 		nexusFailure = failureErr.Failure
 	} else if opErr.Cause != nil {
-		nexusFailure = nexus.Failure{
-			Message: opErr.Cause.Error(),
-		}
+		nexusFailure = nexus.Failure{Message: opErr.Cause.Error()}
+	} else {
+		nexusFailure = nexus.Failure{Message: "canceled"}
 	}
 	// Canceled must be translated into a CanceledFailure to match the SDK expectation.
-	// TODO: What if it's already a CanceledFailure, that should be possible?
 	if opErr.State == nexus.OperationStateCanceled {
+		if nexusFailure.Metadata != nil && nexusFailure.Metadata["type"] == failureTypeString {
+			temporalFailure, err := NexusFailureToAPIFailure(nexusFailure, false)
+			if err != nil {
+				return nil, err
+			}
+			if temporalFailure.GetCanceledFailureInfo() != nil {
+				// We already have a CanceledFailure, use it.
+				return temporalFailure, nil
+			}
+			// Fallback to encoding the Nexus failure into a Temporal canceled failure, we expect operations that end up
+			// as canceled to have a CanceledFailureInfo object.
+		}
 		payloads, err := nexusFailureMetadataToPayloads(nexusFailure)
 		if err != nil {
 			return nil, err
