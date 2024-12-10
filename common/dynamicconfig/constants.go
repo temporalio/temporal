@@ -2059,7 +2059,7 @@ where the user has set an explicit RetryPolicy, but not specified all the fields
 	)
 	AllowResetWithPendingChildren = NewNamespaceBoolSetting(
 		"history.allowResetWithPendingChildren",
-		false,
+		true,
 		`Allows resetting of workflows with pending children when set to true`,
 	)
 	HistoryMaxAutoResetPoints = NewNamespaceIntSetting(
