@@ -841,11 +841,9 @@ func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
 
 	// Note: childStarted flag above is computed from the parent's history. When this is TRUE it's guaranteed that the child was succesfully started.
 	// But if it's FALSE then the child *may or maynot* be started (ex: we failed to record ChildExecutionStarted event previously.)
-	// This is not an issue in the general flow since starting a child is an idempotent operation (guarded by childInfo.CreateRequestId)
-	// But in the case of resets, we overwrite childInfo.CreateRequestId with a newly generated ID. Hence we need special handling when we are
-	// in the reset run before we can attempt to start the child.
+	// Hence we need to check the child workflow ID and attempt to reconnect before proceeding to start a new instance of the child.
 	if mutableState.IsResetRun() {
-		childRunID, err := t.checkAndReconnectChild(ctx, mutableState, targetNamespaceEntry, attributes.WorkflowId)
+		childRunID, err := t.verifyChildWorkflow(ctx, mutableState, targetNamespaceEntry, attributes.WorkflowId)
 		if err != nil {
 			return err
 		}
@@ -874,7 +872,8 @@ func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
 		// now if there was no child found after reset then it could mean one of the following.
 		// 1. The parent never got a chance to start the child. So we should go ahead and start one (below)
 		// 2. The child was started, but may be terminated from someone external.
-		// Since we cannot distinguish between the two, we will proceed to start a new instance of child and accept the result of that operation.
+		// 3. There was a running workflow that is not related to the current run.
+		// In all these cases it's ok to proceed to start a new instance of child (below) and accept the result of that operation.
 	}
 
 	executionInfo := mutableState.GetExecutionInfo()
@@ -947,7 +946,9 @@ func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
 	}, parentClock, childClock)
 }
 
-func (t *transferQueueActiveTaskExecutor) checkAndReconnectChild(
+// verifyChildWorkflow describes the childWorkflowID and identifies its parent. It then checks if the current run was derived from that parent by comparing the OriginalRunID value.
+// It returns the child's runID if the checks pass. Empty runID is returned if the check doesn't pass.
+func (t *transferQueueActiveTaskExecutor) verifyChildWorkflow(
 	ctx context.Context,
 	// task *tasks.ResetWorkflowTask,
 	mutableState workflow.MutableState,
