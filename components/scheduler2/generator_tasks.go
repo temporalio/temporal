@@ -1,22 +1,26 @@
-package generator
+package scheduler2
 
 import (
 	"time"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
-	"go.temporal.io/server/components/scheduler2/common"
 	"go.temporal.io/server/service/history/hsm"
 )
 
 type (
-	BufferTask struct{}
+	BufferTask struct {
+		deadline time.Time
+	}
 
-	// Fired when the Generator should enter its run loop. The Generator will
-	// alternate between sleeping and buffering without an explicit/visible state
+	// Fired when the Generator should buffer actions. After buffering, another buffer
+	// task is usually created with a later deadline. The Generator will
+	// alternate between sleeping and buffering without an explicit state
 	// transition.
 	EventBuffer struct {
 		Node *hsm.Node
+
+		Deadline time.Time
 	}
 )
 
@@ -32,8 +36,8 @@ func (BufferTask) Type() string {
 	return TaskTypeBuffer
 }
 
-func (BufferTask) Deadline() time.Time {
-	return hsm.Immediate
+func (b BufferTask) Deadline() time.Time {
+	return b.deadline
 }
 
 func (BufferTask) Destination() string {
@@ -41,13 +45,13 @@ func (BufferTask) Destination() string {
 }
 
 func (BufferTask) Validate(_ *persistencespb.StateMachineRef, node *hsm.Node) error {
-	return common.ValidateTask(node, TransitionBuffer)
+	return ValidateTask(node, TransitionBuffer)
 }
 
 func (g Generator) tasks() ([]hsm.Task, error) {
 	switch g.State() { // nolint:exhaustive
 	case enumsspb.SCHEDULER_GENERATOR_STATE_BUFFERING:
-		return []hsm.Task{BufferTask{}}, nil
+		return []hsm.Task{BufferTask{deadline: g.NextInvocationTime.AsTime()}}, nil
 	default:
 		return nil, nil
 	}
