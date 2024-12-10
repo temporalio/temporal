@@ -356,6 +356,10 @@ func (n *Node) Child(path []Key) (*Node, error) {
 	return child.Child(rest)
 }
 
+func (n *Node) InvalidateCache() {
+	n.cache.dataLoaded = false
+}
+
 // AddChild adds an immediate child to a node, serializing the given data.
 // Returns [ErrStateMachineAlreadyExists] if a child with the given key already exists, [ErrNotRegistered] if the key's
 // type is not found in the node's state machine registry and serialization errors.

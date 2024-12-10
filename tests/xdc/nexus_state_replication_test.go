@@ -47,6 +47,7 @@ import (
 	"go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	sdkclient "go.temporal.io/sdk/client"
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/dynamicconfig"
 	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/nexus/nexustest"
@@ -62,7 +63,25 @@ type NexusStateReplicationSuite struct {
 
 func TestNexusStateReplicationTestSuite(t *testing.T) {
 	t.Parallel()
-	suite.Run(t, new(NexusStateReplicationSuite))
+	for _, tc := range []struct {
+		name                    string
+		enableTransitionHistory bool
+	}{
+		{
+			name:                    "DisableTransitionHistory",
+			enableTransitionHistory: false,
+		},
+		{
+			name:                    "EnableTransitionHistory",
+			enableTransitionHistory: true,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			s := &NexusStateReplicationSuite{}
+			s.enableTransitionHistory = tc.enableTransitionHistory
+			suite.Run(t, s)
+		})
+	}
 }
 
 func (s *NexusStateReplicationSuite) SetupSuite() {
@@ -73,7 +92,8 @@ func (s *NexusStateReplicationSuite) SetupSuite() {
 		dynamicconfig.RefreshNexusEndpointsMinWait.Key(): 1 * time.Millisecond,
 		callbacks.AllowedAddresses.Key():                 []any{map[string]any{"Pattern": "*", "AllowInsecure": true}},
 	}
-	s.setupSuite([]string{"nexus_state_replication_active", "nexus_state_replication_standby"})
+	suffix := "_" + common.GenerateRandomString(5)
+	s.setupSuite([]string{"nexus_state_replication_active" + suffix, "nexus_state_replication_standby" + suffix})
 }
 
 func (s *NexusStateReplicationSuite) SetupTest() {
