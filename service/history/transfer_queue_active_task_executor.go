@@ -852,7 +852,7 @@ func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
 		if childRunID != "" {
 			childExecution := &commonpb.WorkflowExecution{
 				WorkflowId: childInfo.StartedWorkflowId,
-				RunId:      childInfo.StartedRunId,
+				RunId:      childRunID,
 			}
 			childClock := childInfo.Clock
 			// Child execution is successfully started, record ChildExecutionStartedEvent in parent execution
@@ -968,12 +968,12 @@ func (t *transferQueueActiveTaskExecutor) checkAndReconnectChild(
 		return "", err
 	}
 
-	// Verify if the WorkflowIDs match first.
-	if response.WorkflowExecutionInfo.ParentExecution.WorkflowId != mutableState.GetExecutionInfo().WorkflowId {
-		return "", nil
-	}
 	if response.WorkflowExecutionInfo.ParentExecution == nil {
 		// The child doesn't have a parent. Maybe it was started by some client.
+		return "", nil
+	}
+	// Verify if the WorkflowIDs match first.
+	if response.WorkflowExecutionInfo.ParentExecution.WorkflowId != mutableState.GetExecutionInfo().WorkflowId {
 		return "", nil
 	}
 
