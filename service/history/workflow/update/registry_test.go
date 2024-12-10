@@ -317,47 +317,81 @@ func TestFindOrCreate(t *testing.T) {
 	})
 
 	t.Run("enforce total update limit", func(t *testing.T) {
-		var (
-			limit = 1
-			reg   = update.NewRegistry(
+		var limit = 1
+
+		newRegistryWithSingleInflightUpdate := func() (update.Registry, mockEventStore, *update.Update) {
+			t.Helper()
+
+			reg := update.NewRegistry(
 				emptyUpdateStore,
 				update.WithTotalLimit(
 					func() int { return limit },
 				),
 			)
-			evStore = mockEventStore{Controller: effect.Immediate(context.Background())}
-		)
 
-		// create an in-flight update #1
-		upd1, existed, err := reg.FindOrCreate(context.Background(), tv.UpdateID("1"))
-		require.NoError(t, err, "creating update #1 should have beeen allowed")
-		require.False(t, existed)
-		require.Equal(t, 1, reg.Len())
+			// create an in-flight update #1
+			upd1, existed, err := reg.FindOrCreate(context.Background(), tv.UpdateID("1"))
+			require.NoError(t, err, "creating update #1 should have beeen allowed")
+			require.False(t, existed)
+			require.Equal(t, 1, reg.Len())
+
+			evStore := mockEventStore{Controller: effect.Immediate(context.Background())}
+			mustAdmit(t, evStore, upd1)
+			require.Equal(t, 1, reg.Len())
+
+			return reg, evStore, upd1
+		}
 
 		t.Run("deny new update since it is exceeding the limit", func(t *testing.T) {
-			_, _, err = reg.FindOrCreate(context.Background(), tv.UpdateID("2"))
+			reg, _, _ := newRegistryWithSingleInflightUpdate()
+
+			_, _, err := reg.FindOrCreate(context.Background(), tv.UpdateID("2"))
+			var failedPrecon *serviceerror.FailedPrecondition
+			require.ErrorAs(t, err, &failedPrecon)
+			require.Equal(t, 1, reg.Len())
+		})
+
+		t.Run("rejecting 1st update now allows new update to be created", func(t *testing.T) {
+			reg, evStore, upd1 := newRegistryWithSingleInflightUpdate()
+			assertRejectUpdateInRegistry(t, reg, evStore, upd1)
+			require.Equal(t, 0, reg.Len())
+
+			_, existed, err := reg.FindOrCreate(context.Background(), tv.UpdateID("2"))
+			require.NoError(t, err, "update #2 should be created after the limit increase")
+			require.False(t, existed)
+			require.Equal(t, 1, reg.Len())
+		})
+
+		t.Run("accepting 1st update still denies new update to be created", func(t *testing.T) {
+			reg, evStore, upd1 := newRegistryWithSingleInflightUpdate()
+			mustAccept(t, evStore, upd1)
+
+			_, _, err := reg.FindOrCreate(context.Background(), tv.UpdateID("2"))
 			var failedPrecon *serviceerror.FailedPrecondition
 			require.ErrorAs(t, err, &failedPrecon)
 			require.Equal(t, 1, reg.Len())
 		})
 
 		t.Run("completing 1st update still denies new update to be created", func(t *testing.T) {
-			mustAdmit(t, evStore, upd1)
-			assertRejectUpdateInRegistry(t, reg, evStore, upd1)
+			reg, evStore, upd1 := newRegistryWithSingleInflightUpdate()
+			mustAccept(t, evStore, upd1)
+			assertCompleteUpdateInRegistry(t, reg, evStore, upd1)
+			require.Equal(t, 0, reg.Len())
 
-			_, existed, err = reg.FindOrCreate(context.Background(), tv.UpdateID("2"))
+			_, _, err := reg.FindOrCreate(context.Background(), tv.UpdateID("2"))
 			var failedPrecon *serviceerror.FailedPrecondition
 			require.ErrorAs(t, err, &failedPrecon)
 			require.Equal(t, 0, reg.Len())
 		})
 
 		t.Run("increasing limit allows new updated to be created", func(t *testing.T) {
+			reg, _, _ := newRegistryWithSingleInflightUpdate()
 			limit = 2
 
-			_, existed, err = reg.FindOrCreate(context.Background(), tv.UpdateID("2"))
+			_, existed, err := reg.FindOrCreate(context.Background(), tv.UpdateID("2"))
 			require.NoError(t, err, "update #2 should be created after the limit increase")
 			require.False(t, existed)
-			require.Equal(t, 1, reg.Len())
+			require.Equal(t, 2, reg.Len())
 		})
 	})
 }
