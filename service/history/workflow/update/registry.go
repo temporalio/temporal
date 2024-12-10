@@ -398,7 +398,8 @@ func (r *registry) checkTotalLimit() error {
 	if len(r.updates)+r.completedCount >= r.maxTotal() {
 		r.instrumentation.countTooMany()
 		return serviceerror.NewFailedPrecondition(
-			fmt.Sprintf("limit on number of total updates has been reached (%v)", r.maxTotal()),
+			fmt.Sprintf("The limit on the number of distinct updates in this workflow has been reached (%v). "+
+				"Make sure any duplicate updates share an Update ID so the server can deduplicate them, and consider rejecting updates that you aren't going to process", r.maxTotal()),
 		)
 	}
 	return nil
