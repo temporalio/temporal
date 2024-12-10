@@ -1,4 +1,4 @@
-package common
+package scheduler2
 
 import (
 	"time"
@@ -25,13 +25,14 @@ type (
 )
 
 var (
+	// TODO - fix namespaces after removal of prototype
 	CurrentTweakables = dynamicconfig.NewNamespaceTypedSetting(
-		"component.scheduler.tweakables",
+		"component.scheduler2.tweakables",
 		DefaultTweakables,
 		"A set of tweakable parameters for the V2 scheduler")
 
 	ExecutionTimeout = dynamicconfig.NewNamespaceDurationSetting(
-		"component.scheduler.executionTimeout",
+		"component.scheduler2.executionTimeout",
 		time.Second*10,
 		`ExecutionTimeout is the timeout for executing a single scheduler task.`,
 	)
