@@ -185,9 +185,9 @@ func (s *ActivityApiPauseClientTestSuite) TestActivityPauseApi_WhileRunning() {
 }
 
 func (s *ActivityApiPauseClientTestSuite) TestActivityPauseApi_WhileWaiting() {
-	// in this case pause happen when activity for in retry state
-	// make sure that activity is paused and then unpaused
-	// also check that activity will not be retried while unpaused
+	// In this case, pause happens when activity is in retry state.
+	// Make sure that activity is paused and then unpaused.
+	// Also check that activity will not be retried while unpaused.
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
