@@ -48,6 +48,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	sqliteplugin "go.temporal.io/server/common/persistence/sql/sqlplugin/sqlite"
+	"go.temporal.io/server/internal/freeport"
 	"go.temporal.io/server/schema/sqlite"
 	"go.temporal.io/server/temporal"
 	expmaps "golang.org/x/exp/maps"
@@ -96,7 +97,7 @@ type LiteServerConfig struct {
 	SearchAttributes map[string]enums.IndexedValueType
 }
 
-func (cfg *LiteServerConfig) apply(serverConfig *config.Config, provider *PortProvider) {
+func (cfg *LiteServerConfig) apply(serverConfig *config.Config) {
 	sqliteConfig := config.SQL{
 		PluginName:        sqliteplugin.PluginName,
 		ConnectAttributes: make(map[string]string),
@@ -117,12 +118,12 @@ func (cfg *LiteServerConfig) apply(serverConfig *config.Config, provider *PortPr
 	}
 
 	if cfg.FrontendPort == 0 {
-		cfg.FrontendPort = provider.MustGetFreePort()
+		cfg.FrontendPort = freeport.MustGetFreePort()
 	}
 	if cfg.MetricsPort == 0 {
-		cfg.MetricsPort = provider.MustGetFreePort()
+		cfg.MetricsPort = freeport.MustGetFreePort()
 	}
-	pprofPort := provider.MustGetFreePort()
+	pprofPort := freeport.MustGetFreePort()
 
 	serverConfig.Global.Membership = config.Membership{
 		MaxJoinDuration:  30 * time.Second,
@@ -160,10 +161,10 @@ func (cfg *LiteServerConfig) apply(serverConfig *config.Config, provider *PortPr
 		Policy: "noop",
 	}
 	serverConfig.Services = map[string]config.Service{
-		"frontend": cfg.mustGetService(0, provider),
-		"history":  cfg.mustGetService(1, provider),
-		"matching": cfg.mustGetService(2, provider),
-		"worker":   cfg.mustGetService(3, provider),
+		"frontend": cfg.mustGetService(0),
+		"history":  cfg.mustGetService(1),
+		"matching": cfg.mustGetService(2),
+		"worker":   cfg.mustGetService(3),
 	}
 	serverConfig.Archival = config.Archival{
 		History: config.HistoryArchival{
@@ -244,11 +245,7 @@ func NewLiteServer(liteConfig *LiteServerConfig, opts ...temporal.ServerOption) 
 		return nil, err
 	}
 
-	p := NewPortProvider()
-	liteConfig.apply(liteConfig.BaseConfig, p)
-	if err := p.Close(); err != nil {
-		return nil, err
-	}
+	liteConfig.apply(liteConfig.BaseConfig)
 
 	sqlConfig := liteConfig.BaseConfig.Persistence.DataStores[sqliteplugin.PluginName].SQL
 
@@ -379,11 +376,11 @@ func getAllowedPragmas() []string {
 	return allowedPragmaList
 }
 
-func (cfg *LiteServerConfig) mustGetService(frontendPortOffset int, provider *PortProvider) config.Service {
+func (cfg *LiteServerConfig) mustGetService(frontendPortOffset int) config.Service {
 	svc := config.Service{
 		RPC: config.RPC{
 			GRPCPort:        cfg.FrontendPort + frontendPortOffset,
-			MembershipPort:  provider.MustGetFreePort(),
+			MembershipPort:  freeport.MustGetFreePort(),
 			BindOnLocalHost: true,
 			BindOnIP:        "",
 		},
@@ -391,7 +388,7 @@ func (cfg *LiteServerConfig) mustGetService(frontendPortOffset int, provider *Po
 
 	// Assign any open port when configured to use dynamic ports
 	if frontendPortOffset != 0 {
-		svc.RPC.GRPCPort = provider.MustGetFreePort()
+		svc.RPC.GRPCPort = freeport.MustGetFreePort()
 	}
 
 	// Optionally bind frontend to IPv4 address

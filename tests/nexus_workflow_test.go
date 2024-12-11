@@ -87,7 +87,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationCancelation() {
 			return nil
 		},
 	}
-	listenAddr := nexustest.AllocListenAddress(s.T())
+	listenAddr := nexustest.AllocListenAddress()
 	nexustest.NewNexusServer(s.T(), listenAddr, h)
 
 	_, err := s.OperatorClient().CreateNexusEndpoint(ctx, &operatorservice.CreateNexusEndpointRequest{
@@ -212,7 +212,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationSyncCompletion() {
 			return &nexus.HandlerStartOperationResultSync[any]{Value: "result"}, nil
 		},
 	}
-	listenAddr := nexustest.AllocListenAddress(s.T())
+	listenAddr := nexustest.AllocListenAddress()
 	nexustest.NewNexusServer(s.T(), listenAddr, h)
 
 	_, err := s.OperatorClient().CreateNexusEndpoint(ctx, &operatorservice.CreateNexusEndpointRequest{
@@ -317,7 +317,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationSyncCompletion_LargePayload()
 			return &nexus.HandlerStartOperationResultSync[any]{Value: strings.Repeat("a", (2*1024*1024)-10)}, nil
 		},
 	}
-	listenAddr := nexustest.AllocListenAddress(s.T())
+	listenAddr := nexustest.AllocListenAddress()
 	nexustest.NewNexusServer(s.T(), listenAddr, h)
 
 	_, err := s.OperatorClient().CreateNexusEndpoint(ctx, &operatorservice.CreateNexusEndpointRequest{
@@ -485,7 +485,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletion() {
 			}, nil
 		},
 	}
-	listenAddr := nexustest.AllocListenAddress(s.T())
+	listenAddr := nexustest.AllocListenAddress()
 	nexustest.NewNexusServer(s.T(), listenAddr, h)
 
 	_, err = s.OperatorClient().CreateNexusEndpoint(ctx, &operatorservice.CreateNexusEndpointRequest{
@@ -951,7 +951,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncFailure() {
 			return &nexus.HandlerStartOperationResultAsync{OperationID: "test"}, nil
 		},
 	}
-	listenAddr := nexustest.AllocListenAddress(s.T())
+	listenAddr := nexustest.AllocListenAddress()
 	nexustest.NewNexusServer(s.T(), listenAddr, h)
 
 	_, err := s.OperatorClient().CreateNexusEndpoint(ctx, &operatorservice.CreateNexusEndpointRequest{
@@ -1369,7 +1369,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationCancelBeforeStarted_Cancelati
 			return nil
 		},
 	}
-	listenAddr := nexustest.AllocListenAddress(s.T())
+	listenAddr := nexustest.AllocListenAddress()
 	nexustest.NewNexusServer(s.T(), listenAddr, h)
 
 	_, err := s.OperatorClient().CreateNexusEndpoint(ctx, &operatorservice.CreateNexusEndpointRequest{
@@ -1485,7 +1485,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletionAfterReset() {
 			return &nexus.HandlerStartOperationResultAsync{OperationID: "test"}, nil
 		},
 	}
-	listenAddr := nexustest.AllocListenAddress(s.T())
+	listenAddr := nexustest.AllocListenAddress()
 	nexustest.NewNexusServer(s.T(), listenAddr, h)
 
 	_, err := s.OperatorClient().CreateNexusEndpoint(ctx, &operatorservice.CreateNexusEndpointRequest{

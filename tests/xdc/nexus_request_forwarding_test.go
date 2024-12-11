@@ -347,7 +347,7 @@ func (s *NexusRequestForwardingSuite) TestCompleteOperationForwardedFromStandbyT
 			return &nexus.HandlerStartOperationResultAsync{OperationID: "test"}, nil
 		},
 	}
-	listenAddr := nexustest.AllocListenAddress(s.T())
+	listenAddr := nexustest.AllocListenAddress()
 	nexustest.NewNexusServer(s.T(), listenAddr, h)
 
 	createEndpointReq := &operatorservice.CreateNexusEndpointRequest{
