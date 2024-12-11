@@ -2277,6 +2277,7 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionStartedEvent(
 	ms.executionInfo.WorkflowRunTimeout = event.GetWorkflowRunTimeout()
 	ms.executionInfo.WorkflowExecutionTimeout = event.GetWorkflowExecutionTimeout()
 	ms.executionInfo.DefaultWorkflowTaskTimeout = event.GetWorkflowTaskTimeout()
+	ms.executionInfo.OriginalExecutionRunId = event.GetOriginalExecutionRunId()
 
 	coll := callbacks.MachineCollection(ms.HSM())
 	for idx, cb := range event.GetCompletionCallbacks() {
@@ -5060,6 +5061,16 @@ func (ms *MutableStateImpl) RetryActivity(
 
 	// if activity is paused
 	if ai.Paused {
+		// need to update activity
+		if err := ms.UpdateActivity(ai.ScheduledEventId, func(activityInfo *persistencespb.ActivityInfo, _ MutableState) error {
+			activityInfo.StartedEventId = common.EmptyEventID
+			activityInfo.StartedTime = nil
+			activityInfo.RequestId = ""
+			return nil
+		}); err != nil {
+			return enumspb.RETRY_STATE_INTERNAL_SERVER_ERROR, err
+		}
+
 		// TODO: uncomment once RETRY_STATE_PAUSED is supported
 		// return enumspb.RETRY_STATE_PAUSED, nil
 		return enumspb.RETRY_STATE_IN_PROGRESS, nil
@@ -6523,12 +6534,6 @@ func (ms *MutableStateImpl) closeTransactionHandleWorkflowResetTask(
 		return nil
 	}
 
-	// only schedule reset task if current doesn't have childWFs.
-	// TODO: This will be removed once our reset allows childWFs
-	if len(ms.GetPendingChildExecutionInfos()) != 0 {
-		return nil
-	}
-
 	namespaceEntry, err := ms.shard.GetNamespaceRegistry().GetNamespaceByID(namespace.ID(ms.executionInfo.NamespaceId))
 	if err != nil {
 		return err
@@ -6886,7 +6891,6 @@ func (ms *MutableStateImpl) applyUpdatesToSubStateMachines(
 		if current != nil {
 			incoming.Clock = current.Clock
 		}
-		incoming.CreateRequestId = uuid.New()
 	}, nil)
 	if err != nil {
 		return err

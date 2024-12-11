@@ -31,6 +31,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/dgryski/go-farm"
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -141,6 +142,20 @@ func (s *DeploymentSuite) pollFromDeployment(ctx context.Context, taskQueue *tas
 	})
 }
 
+func (s *DeploymentSuite) pollActivityFromDeployment(ctx context.Context, taskQueue *taskqueuepb.TaskQueue,
+	deployment *deploymentpb.Deployment) {
+	_, _ = s.FrontendClient().PollActivityTaskQueue(ctx, &workflowservice.PollActivityTaskQueueRequest{
+		Namespace: s.Namespace(),
+		TaskQueue: taskQueue,
+		Identity:  "random",
+		WorkerVersionCapabilities: &commonpb.WorkerVersionCapabilities{
+			UseVersioning:        true,
+			BuildId:              deployment.BuildId,
+			DeploymentSeriesName: deployment.SeriesName,
+		},
+	})
+}
+
 func (s *DeploymentSuite) TestDescribeDeployment_RegisterTaskQueue() {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 	defer cancel()
@@ -188,26 +203,17 @@ func (s *DeploymentSuite) TestDescribeDeployment_RegisterTaskQueue() {
 func (s *DeploymentSuite) TestDescribeDeployment_RegisterTaskQueue_ConcurrentPollers() {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*15)
 	defer cancel()
+	tv := testvars.New(s)
+	d := tv.Deployment()
 
-	// presence of internally used delimiters (:) or escape
-	// characters shouldn't break functionality
-	seriesName := testcore.RandomizeStr("my-series|:|:")
-	buildID := testcore.RandomizeStr("bgt:|")
-
-	taskQueue := &taskqueuepb.TaskQueue{Name: "deployment-test", Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
-	workerDeployment := &deploymentpb.Deployment{
-		SeriesName: seriesName,
-		BuildId:    buildID,
-	}
-	numberOfDeployments := 1
-
-	root, err := tqid.PartitionFromProto(taskQueue, s.Namespace(), enumspb.TASK_QUEUE_TYPE_WORKFLOW)
+	root, err := tqid.PartitionFromProto(tv.TaskQueue(), s.Namespace(), enumspb.TASK_QUEUE_TYPE_WORKFLOW)
 	s.NoError(err)
 	// Making concurrent polls to 4 partitions, 3 polls to each
 	for p := 0; p < 4; p++ {
 		for i := 0; i < 3; i++ {
 			tq := &taskqueuepb.TaskQueue{Name: root.TaskQueue().NormalPartition(p).RpcName(), Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
-			s.pollFromDeployment(ctx, tq, workerDeployment)
+			go s.pollFromDeployment(ctx, tq, d)
+			go s.pollActivityFromDeployment(ctx, tq, d)
 		}
 	}
 
@@ -217,7 +223,7 @@ func (s *DeploymentSuite) TestDescribeDeployment_RegisterTaskQueue_ConcurrentPol
 
 		resp, err := s.FrontendClient().DescribeDeployment(ctx, &workflowservice.DescribeDeploymentRequest{
 			Namespace:  s.Namespace(),
-			Deployment: workerDeployment,
+			Deployment: d,
 		})
 		if !a.NoError(err) {
 			return
@@ -225,15 +231,13 @@ func (s *DeploymentSuite) TestDescribeDeployment_RegisterTaskQueue_ConcurrentPol
 		a.NotNil(resp.GetDeploymentInfo())
 		a.NotNil(resp.GetDeploymentInfo().GetDeployment())
 
-		a.Equal(seriesName, resp.GetDeploymentInfo().GetDeployment().GetSeriesName())
-		a.Equal(buildID, resp.GetDeploymentInfo().GetDeployment().GetBuildId())
+		a.True(d.Equal(resp.GetDeploymentInfo().GetDeployment()))
 
-		if !a.Equal(numberOfDeployments, len(resp.GetDeploymentInfo().GetTaskQueueInfos())) {
+		if !a.Equal(2, len(resp.GetDeploymentInfo().GetTaskQueueInfos())) {
 			return
 		}
-		a.Equal(taskQueue.Name, resp.GetDeploymentInfo().GetTaskQueueInfos()[0].Name)
+		a.Equal(tv.TaskQueue().GetName(), resp.GetDeploymentInfo().GetTaskQueueInfos()[0].Name)
 		a.Equal(false, resp.GetDeploymentInfo().GetIsCurrent())
-		// todo (Shivam) - please add a check for current time
 	}, time.Second*10, time.Millisecond*1000)
 }
 
@@ -1367,5 +1371,11 @@ func (s *DeploymentSuite) TestSetCurrent_UpdateMetadata() {
 // do not grow larger that DB column limit (currently as low as 272 chars).
 func (s *DeploymentSuite) Name() string {
 	fullName := s.T().Name()
-	return fullName[len(fullName)-30:]
+	if len(fullName) <= 30 {
+		return fullName
+	}
+	return fmt.Sprintf("%s-%08x",
+		fullName[len(fullName)-21:],
+		farm.Fingerprint32([]byte(fullName)),
+	)
 }

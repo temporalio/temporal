@@ -79,6 +79,7 @@ type (
 			resetReason string,
 			additionalReapplyEvents []*historypb.HistoryEvent,
 			resetReapplyExcludeTypes map[enumspb.ResetReapplyExcludeType]struct{},
+			allowResetWithPendingChildren bool,
 		) error
 	}
 
@@ -133,6 +134,7 @@ func (r *workflowResetterImpl) ResetWorkflow(
 	resetReason string,
 	additionalReapplyEvents []*historypb.HistoryEvent,
 	resetReapplyExcludeTypes map[enumspb.ResetReapplyExcludeType]struct{},
+	allowResetWithPendingChildren bool,
 ) (retError error) {
 
 	namespaceEntry, err := r.namespaceRegistry.GetNamespaceByID(namespaceID)
@@ -222,6 +224,7 @@ func (r *workflowResetterImpl) ResetWorkflow(
 		resetRequestID,
 		resetWorkflowVersion,
 		resetReason,
+		allowResetWithPendingChildren,
 	)
 	if err != nil {
 		return err
@@ -268,6 +271,7 @@ func (r *workflowResetterImpl) prepareResetWorkflow(
 	resetRequestID string,
 	resetWorkflowVersion int64,
 	resetReason string,
+	allowResetWithPendingChildren bool,
 ) (Workflow, error) {
 
 	resetWorkflow, err := r.replayResetWorkflow(
@@ -306,7 +310,7 @@ func (r *workflowResetterImpl) prepareResetWorkflow(
 		return nil, err
 	}
 
-	if len(resetMutableState.GetPendingChildExecutionInfos()) > 0 {
+	if !allowResetWithPendingChildren && len(resetMutableState.GetPendingChildExecutionInfos()) > 0 {
 		return nil, serviceerror.NewInvalidArgument("WorkflowResetter encountered pending child workflows.")
 	}
 
@@ -890,6 +894,22 @@ func reapplyEvents(
 			}
 			if _, err := mutableState.AddWorkflowExecutionCancelRequestedEvent(
 				request,
+			); err != nil {
+				return reappliedEvents, err
+			}
+			reappliedEvents = append(reappliedEvents, event)
+		case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TERMINATED:
+			if isReset || isDuplicate(event) {
+				continue
+			}
+			attr := event.GetWorkflowExecutionTerminatedEventAttributes()
+			if err := workflow.TerminateWorkflow(
+				mutableState,
+				attr.GetReason(),
+				attr.GetDetails(),
+				attr.GetIdentity(),
+				false,
+				event.Links,
 			); err != nil {
 				return reappliedEvents, err
 			}

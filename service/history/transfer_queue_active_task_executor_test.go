@@ -1030,6 +1030,94 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_NoParen
 	resp := s.transferQueueActiveTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
 	s.Nil(resp.ExecutionErr)
 }
+func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_ParentWasReset_HasManyChildren() {
+	execution := &commonpb.WorkflowExecution{
+		WorkflowId: "some random workflow ID",
+		RunId:      uuid.New(),
+	}
+	workflowType := "some random workflow type"
+	taskQueueName := "some random task queue"
+
+	mutableState := workflow.TestGlobalMutableState(s.mockShard, s.mockShard.GetEventsCache(), s.logger, s.version, execution.GetWorkflowId(), execution.GetRunId())
+	_, err := mutableState.AddWorkflowExecutionStartedEvent(
+		execution,
+		&historyservice.StartWorkflowExecutionRequest{
+			Attempt:     1,
+			NamespaceId: s.namespaceID.String(),
+			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
+				WorkflowType:             &commonpb.WorkflowType{Name: workflowType},
+				TaskQueue:                &taskqueuepb.TaskQueue{Name: taskQueueName},
+				WorkflowExecutionTimeout: durationpb.New(2 * time.Second),
+				WorkflowTaskTimeout:      durationpb.New(1 * time.Second),
+			},
+		},
+	)
+	s.Nil(err)
+
+	mutableState.GetExecutionInfo().ResetRunId = uuid.New() // indicate that the execution was reset.
+	wt := addWorkflowTaskScheduledEvent(mutableState)
+	event := addWorkflowTaskStartedEvent(mutableState, wt.ScheduledEventID, taskQueueName, uuid.New())
+	wt.StartedEventID = event.GetEventId()
+
+	commandType := enumspb.COMMAND_TYPE_START_CHILD_WORKFLOW_EXECUTION
+	parentClosePolicy := enumspb.PARENT_CLOSE_POLICY_TERMINATE
+	var commands []*commandpb.Command
+	for i := 0; i < 10; i++ {
+		commands = append(commands, &commandpb.Command{
+			CommandType: commandType,
+			Attributes: &commandpb.Command_StartChildWorkflowExecutionCommandAttributes{StartChildWorkflowExecutionCommandAttributes: &commandpb.StartChildWorkflowExecutionCommandAttributes{
+				WorkflowId: "child workflow" + convert.IntToString(i),
+				WorkflowType: &commonpb.WorkflowType{
+					Name: "child workflow type",
+				},
+				TaskQueue:         &taskqueuepb.TaskQueue{Name: taskQueueName},
+				Input:             payloads.EncodeString("random input"),
+				ParentClosePolicy: parentClosePolicy,
+			}},
+		})
+	}
+
+	event, _ = mutableState.AddWorkflowTaskCompletedEvent(wt, &workflowservice.RespondWorkflowTaskCompletedRequest{
+		Identity: "some random identity",
+		Commands: commands,
+	}, defaultWorkflowTaskCompletionLimits)
+
+	for i := 0; i < 10; i++ {
+		_, _, err = mutableState.AddStartChildWorkflowExecutionInitiatedEvent(event.GetEventId(), uuid.New(), &commandpb.StartChildWorkflowExecutionCommandAttributes{
+			WorkflowId: "child workflow" + convert.IntToString(i),
+			WorkflowType: &commonpb.WorkflowType{
+				Name: "child workflow type",
+			},
+			TaskQueue:         &taskqueuepb.TaskQueue{Name: taskQueueName},
+			Input:             payloads.EncodeString("random input"),
+			ParentClosePolicy: parentClosePolicy,
+		}, "child namespace1-ID")
+		s.Nil(err)
+	}
+
+	mutableState.FlushBufferedEvents()
+
+	taskID := s.mustGenerateTaskID()
+	event = addCompleteWorkflowEvent(mutableState, event.GetEventId(), nil)
+
+	transferTask := &tasks.CloseExecutionTask{
+		WorkflowKey: definition.NewWorkflowKey(
+			s.namespaceID.String(),
+			execution.GetWorkflowId(),
+			execution.GetRunId(),
+		),
+		Version:             s.version,
+		TaskID:              taskID,
+		VisibilityTimestamp: time.Now().UTC(),
+	}
+
+	persistenceMutableState := s.createPersistenceMutableState(mutableState, event.GetEventId(), event.GetVersion())
+	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
+	s.mockParentClosePolicyClient.EXPECT().SendParentClosePolicyRequest(gomock.Any(), gomock.Any()).Times(0) // parent close policies should not be processed.
+
+	resp := s.transferQueueActiveTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
+	s.Nil(resp.ExecutionErr)
+}
 
 func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_NoParent_HasManyAbandonedChildren() {
 	execution := &commonpb.WorkflowExecution{

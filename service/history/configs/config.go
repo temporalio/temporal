@@ -29,7 +29,6 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/retrypolicy"
-	schedulerhsm "go.temporal.io/server/components/scheduler"
 )
 
 // Config represents configuration for history service
@@ -61,11 +60,14 @@ type Config struct {
 	SuppressErrorSetSystemSearchAttribute dynamicconfig.BoolPropertyFnWithNamespaceFilter
 
 	EmitShardLagLog            dynamicconfig.BoolPropertyFn
-	MaxAutoResetPoints         dynamicconfig.IntPropertyFnWithNamespaceFilter
 	ThrottledLogRPS            dynamicconfig.IntPropertyFn
 	EnableStickyQuery          dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	ShutdownDrainDuration      dynamicconfig.DurationPropertyFn
 	StartupMembershipJoinDelay dynamicconfig.DurationPropertyFn
+
+	// Workflow reset related settings.
+	AllowResetWithPendingChildren dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	MaxAutoResetPoints            dynamicconfig.IntPropertyFnWithNamespaceFilter
 
 	// HistoryCache settings
 	// Change of these configs require shard restart
@@ -368,9 +370,6 @@ type Config struct {
 	WorkflowIdReuseMinimalInterval           dynamicconfig.DurationPropertyFnWithNamespaceFilter
 	EnableWorkflowIdReuseStartTimeValidation dynamicconfig.BoolPropertyFnWithNamespaceFilter
 
-	UseExperimentalHsmScheduler dynamicconfig.BoolPropertyFnWithNamespaceFilter
-	HsmSchedulerTweakables      dynamicconfig.TypedPropertyFnWithNamespaceFilter[schedulerhsm.Tweakables]
-
 	HealthPersistenceLatencyFailure dynamicconfig.FloatPropertyFn
 	HealthPersistenceErrorRatio     dynamicconfig.FloatPropertyFn
 
@@ -402,6 +401,7 @@ func NewConfig(
 		PersistenceQPSBurstRatio:             dynamicconfig.PersistenceQPSBurstRatio.Get(dc),
 		ShutdownDrainDuration:                dynamicconfig.HistoryShutdownDrainDuration.Get(dc),
 		StartupMembershipJoinDelay:           dynamicconfig.HistoryStartupMembershipJoinDelay.Get(dc),
+		AllowResetWithPendingChildren:        dynamicconfig.AllowResetWithPendingChildren.Get(dc),
 		MaxAutoResetPoints:                   dynamicconfig.HistoryMaxAutoResetPoints.Get(dc),
 		DefaultWorkflowTaskTimeout:           dynamicconfig.DefaultWorkflowTaskTimeout.Get(dc),
 
@@ -678,9 +678,6 @@ func NewConfig(
 		SendRawWorkflowHistory:                   dynamicconfig.SendRawWorkflowHistory.Get(dc),
 		WorkflowIdReuseMinimalInterval:           dynamicconfig.WorkflowIdReuseMinimalInterval.Get(dc),
 		EnableWorkflowIdReuseStartTimeValidation: dynamicconfig.EnableWorkflowIdReuseStartTimeValidation.Get(dc),
-
-		UseExperimentalHsmScheduler: schedulerhsm.UseExperimentalHsmScheduler.Get(dc),
-		HsmSchedulerTweakables:      schedulerhsm.CurrentTweakables.Get(dc),
 
 		HealthPersistenceLatencyFailure: dynamicconfig.HealthPersistenceLatencyFailure.Get(dc),
 		HealthPersistenceErrorRatio:     dynamicconfig.HealthPersistenceErrorRatio.Get(dc),
