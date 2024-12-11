@@ -5773,9 +5773,6 @@ func (ms *MutableStateImpl) closeTransactionTrackLastUpdateVersionedTransition(
 }
 
 func (ms *MutableStateImpl) closeTransactionHandleUnknownVersionedTransition() {
-	if len(ms.GetExecutionInfo().TransitionHistory) == 0 {
-		return
-	}
 	if len(ms.executionInfo.TransitionHistory) != 0 {
 		if CompareVersionedTransition(
 			ms.versionedTransitionInDB,
@@ -5793,8 +5790,11 @@ func (ms *MutableStateImpl) closeTransactionHandleUnknownVersionedTransition() {
 	}
 	// State changed but transition history not updated.
 	// We are in unknown versioned transition state, clear the transition history.
-	ms.executionInfo.PreviousTransitionHistory = ms.executionInfo.TransitionHistory
-	ms.executionInfo.LastTransitionHistoryBreakPoint = CopyVersionedTransition(ms.executionInfo.TransitionHistory[len(ms.executionInfo.TransitionHistory)-1])
+	if len(ms.executionInfo.TransitionHistory) != 0 {
+		ms.executionInfo.PreviousTransitionHistory = ms.executionInfo.TransitionHistory
+		ms.executionInfo.LastTransitionHistoryBreakPoint = CopyVersionedTransition(ms.executionInfo.TransitionHistory[len(ms.executionInfo.TransitionHistory)-1])
+	}
+
 	ms.executionInfo.TransitionHistory = nil
 
 	ms.executionInfo.SubStateMachineTombstoneBatches = nil

@@ -74,9 +74,6 @@ func SanitizeMutableState(
 	workflowMutableState.ExecutionInfo.StateMachineTimers = nil
 	workflowMutableState.ExecutionInfo.TaskGenerationShardClockTimestamp = common.EmptyEventTaskID
 
-	workflowMutableState.ExecutionInfo.LastTransitionHistoryBreakPoint = nil
-	workflowMutableState.ExecutionInfo.PreviousTransitionHistory = nil
-
 	rootNode := persistence.StateMachineNode{
 		Children: workflowMutableState.ExecutionInfo.SubStateMachinesByType,
 	}
