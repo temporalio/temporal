@@ -49,15 +49,16 @@ type Config struct {
 	PersistenceDynamicRateLimitingParams dynamicconfig.TypedPropertyFn[dynamicconfig.DynamicRateLimitingParams]
 	PersistenceQPSBurstRatio             dynamicconfig.FloatPropertyFn
 
-	VisibilityPersistenceMaxReadQPS       dynamicconfig.IntPropertyFn
-	VisibilityPersistenceMaxWriteQPS      dynamicconfig.IntPropertyFn
-	EnableReadFromSecondaryVisibility     dynamicconfig.BoolPropertyFnWithNamespaceFilter
-	VisibilityEnableShadowReadMode        dynamicconfig.BoolPropertyFn
-	SecondaryVisibilityWritingMode        dynamicconfig.StringPropertyFn
-	VisibilityDisableOrderByClause        dynamicconfig.BoolPropertyFnWithNamespaceFilter
-	VisibilityEnableManualPagination      dynamicconfig.BoolPropertyFnWithNamespaceFilter
-	VisibilityAllowList                   dynamicconfig.BoolPropertyFnWithNamespaceFilter
-	SuppressErrorSetSystemSearchAttribute dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	VisibilityPersistenceMaxReadQPS         dynamicconfig.IntPropertyFn
+	VisibilityPersistenceMaxWriteQPS        dynamicconfig.IntPropertyFn
+	VisibilityPersistenceSlowQueryThreshold dynamicconfig.DurationPropertyFn
+	EnableReadFromSecondaryVisibility       dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	VisibilityEnableShadowReadMode          dynamicconfig.BoolPropertyFn
+	SecondaryVisibilityWritingMode          dynamicconfig.StringPropertyFn
+	VisibilityDisableOrderByClause          dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	VisibilityEnableManualPagination        dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	VisibilityAllowList                     dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	SuppressErrorSetSystemSearchAttribute   dynamicconfig.BoolPropertyFnWithNamespaceFilter
 
 	EmitShardLagLog            dynamicconfig.BoolPropertyFn
 	ThrottledLogRPS            dynamicconfig.IntPropertyFn
@@ -405,15 +406,16 @@ func NewConfig(
 		MaxAutoResetPoints:                   dynamicconfig.HistoryMaxAutoResetPoints.Get(dc),
 		DefaultWorkflowTaskTimeout:           dynamicconfig.DefaultWorkflowTaskTimeout.Get(dc),
 
-		VisibilityPersistenceMaxReadQPS:       dynamicconfig.VisibilityPersistenceMaxReadQPS.Get(dc),
-		VisibilityPersistenceMaxWriteQPS:      dynamicconfig.VisibilityPersistenceMaxWriteQPS.Get(dc),
-		EnableReadFromSecondaryVisibility:     dynamicconfig.EnableReadFromSecondaryVisibility.Get(dc),
-		VisibilityEnableShadowReadMode:        dynamicconfig.VisibilityEnableShadowReadMode.Get(dc),
-		SecondaryVisibilityWritingMode:        dynamicconfig.SecondaryVisibilityWritingMode.Get(dc),
-		VisibilityDisableOrderByClause:        dynamicconfig.VisibilityDisableOrderByClause.Get(dc),
-		VisibilityEnableManualPagination:      dynamicconfig.VisibilityEnableManualPagination.Get(dc),
-		VisibilityAllowList:                   dynamicconfig.VisibilityAllowList.Get(dc),
-		SuppressErrorSetSystemSearchAttribute: dynamicconfig.SuppressErrorSetSystemSearchAttribute.Get(dc),
+		VisibilityPersistenceMaxReadQPS:         dynamicconfig.VisibilityPersistenceMaxReadQPS.Get(dc),
+		VisibilityPersistenceMaxWriteQPS:        dynamicconfig.VisibilityPersistenceMaxWriteQPS.Get(dc),
+		VisibilityPersistenceSlowQueryThreshold: dynamicconfig.VisibilityPersistenceSlowQueryThreshold.Get(dc),
+		EnableReadFromSecondaryVisibility:       dynamicconfig.EnableReadFromSecondaryVisibility.Get(dc),
+		VisibilityEnableShadowReadMode:          dynamicconfig.VisibilityEnableShadowReadMode.Get(dc),
+		SecondaryVisibilityWritingMode:          dynamicconfig.SecondaryVisibilityWritingMode.Get(dc),
+		VisibilityDisableOrderByClause:          dynamicconfig.VisibilityDisableOrderByClause.Get(dc),
+		VisibilityEnableManualPagination:        dynamicconfig.VisibilityEnableManualPagination.Get(dc),
+		VisibilityAllowList:                     dynamicconfig.VisibilityAllowList.Get(dc),
+		SuppressErrorSetSystemSearchAttribute:   dynamicconfig.SuppressErrorSetSystemSearchAttribute.Get(dc),
 
 		EmitShardLagLog: dynamicconfig.EmitShardLagLog.Get(dc),
 		// HistoryCacheLimitSizeBased should not change during runtime.

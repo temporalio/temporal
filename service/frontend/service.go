@@ -63,20 +63,22 @@ type Config struct {
 	PersistenceDynamicRateLimitingParams dynamicconfig.TypedPropertyFn[dynamicconfig.DynamicRateLimitingParams]
 	PersistenceQPSBurstRatio             dynamicconfig.FloatPropertyFn
 
-	VisibilityPersistenceMaxReadQPS       dynamicconfig.IntPropertyFn
-	VisibilityPersistenceMaxWriteQPS      dynamicconfig.IntPropertyFn
-	VisibilityMaxPageSize                 dynamicconfig.IntPropertyFnWithNamespaceFilter
-	EnableReadFromSecondaryVisibility     dynamicconfig.BoolPropertyFnWithNamespaceFilter
-	VisibilityEnableShadowReadMode        dynamicconfig.BoolPropertyFn
-	VisibilityDisableOrderByClause        dynamicconfig.BoolPropertyFnWithNamespaceFilter
-	VisibilityEnableManualPagination      dynamicconfig.BoolPropertyFnWithNamespaceFilter
-	VisibilityAllowList                   dynamicconfig.BoolPropertyFnWithNamespaceFilter
-	SuppressErrorSetSystemSearchAttribute dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	VisibilityPersistenceMaxReadQPS         dynamicconfig.IntPropertyFn
+	VisibilityPersistenceMaxWriteQPS        dynamicconfig.IntPropertyFn
+	VisibilityPersistenceSlowQueryThreshold dynamicconfig.DurationPropertyFn
+	VisibilityMaxPageSize                   dynamicconfig.IntPropertyFnWithNamespaceFilter
+	EnableReadFromSecondaryVisibility       dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	VisibilityEnableShadowReadMode          dynamicconfig.BoolPropertyFn
+	VisibilityDisableOrderByClause          dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	VisibilityEnableManualPagination        dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	VisibilityAllowList                     dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	SuppressErrorSetSystemSearchAttribute   dynamicconfig.BoolPropertyFnWithNamespaceFilter
 
-	HistoryMaxPageSize                                                dynamicconfig.IntPropertyFnWithNamespaceFilter
-	RPS                                                               dynamicconfig.IntPropertyFn
-	GlobalRPS                                                         dynamicconfig.IntPropertyFn
-	OperatorRPSRatio                                                  dynamicconfig.FloatPropertyFn
+	HistoryMaxPageSize dynamicconfig.IntPropertyFnWithNamespaceFilter
+	RPS                dynamicconfig.IntPropertyFn
+	GlobalRPS          dynamicconfig.IntPropertyFn
+	OperatorRPSRatio   dynamicconfig.FloatPropertyFn
+
 	NamespaceReplicationInducingAPIsRPS                               dynamicconfig.IntPropertyFn
 	MaxNamespaceRPSPerInstance                                        dynamicconfig.IntPropertyFnWithNamespaceFilter
 	MaxNamespaceBurstRatioPerInstance                                 dynamicconfig.FloatPropertyFnWithNamespaceFilter
@@ -239,15 +241,16 @@ func NewConfig(
 		PersistenceDynamicRateLimitingParams: dynamicconfig.FrontendPersistenceDynamicRateLimitingParams.Get(dc),
 		PersistenceQPSBurstRatio:             dynamicconfig.PersistenceQPSBurstRatio.Get(dc),
 
-		VisibilityPersistenceMaxReadQPS:       dynamicconfig.VisibilityPersistenceMaxReadQPS.Get(dc),
-		VisibilityPersistenceMaxWriteQPS:      dynamicconfig.VisibilityPersistenceMaxWriteQPS.Get(dc),
-		VisibilityMaxPageSize:                 dynamicconfig.FrontendVisibilityMaxPageSize.Get(dc),
-		EnableReadFromSecondaryVisibility:     dynamicconfig.EnableReadFromSecondaryVisibility.Get(dc),
-		VisibilityEnableShadowReadMode:        dynamicconfig.VisibilityEnableShadowReadMode.Get(dc),
-		VisibilityDisableOrderByClause:        dynamicconfig.VisibilityDisableOrderByClause.Get(dc),
-		VisibilityEnableManualPagination:      dynamicconfig.VisibilityEnableManualPagination.Get(dc),
-		VisibilityAllowList:                   dynamicconfig.VisibilityAllowList.Get(dc),
-		SuppressErrorSetSystemSearchAttribute: dynamicconfig.SuppressErrorSetSystemSearchAttribute.Get(dc),
+		VisibilityPersistenceMaxReadQPS:         dynamicconfig.VisibilityPersistenceMaxReadQPS.Get(dc),
+		VisibilityPersistenceMaxWriteQPS:        dynamicconfig.VisibilityPersistenceMaxWriteQPS.Get(dc),
+		VisibilityPersistenceSlowQueryThreshold: dynamicconfig.VisibilityPersistenceSlowQueryThreshold.Get(dc),
+		VisibilityMaxPageSize:                   dynamicconfig.FrontendVisibilityMaxPageSize.Get(dc),
+		EnableReadFromSecondaryVisibility:       dynamicconfig.EnableReadFromSecondaryVisibility.Get(dc),
+		VisibilityEnableShadowReadMode:          dynamicconfig.VisibilityEnableShadowReadMode.Get(dc),
+		VisibilityDisableOrderByClause:          dynamicconfig.VisibilityDisableOrderByClause.Get(dc),
+		VisibilityEnableManualPagination:        dynamicconfig.VisibilityEnableManualPagination.Get(dc),
+		VisibilityAllowList:                     dynamicconfig.VisibilityAllowList.Get(dc),
+		SuppressErrorSetSystemSearchAttribute:   dynamicconfig.SuppressErrorSetSystemSearchAttribute.Get(dc),
 
 		HistoryMaxPageSize:                  dynamicconfig.FrontendHistoryMaxPageSize.Get(dc),
 		RPS:                                 dynamicconfig.FrontendRPS.Get(dc),
