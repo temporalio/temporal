@@ -70,7 +70,25 @@ type (
 
 func TestFuncClustersTestSuite(t *testing.T) {
 	t.Parallel()
-	suite.Run(t, new(FunctionalClustersTestSuite))
+	for _, tc := range []struct {
+		name                    string
+		enableTransitionHistory bool
+	}{
+		{
+			name:                    "EnableTransitionHistory",
+			enableTransitionHistory: true,
+		},
+		{
+			name:                    "DisableTransitionHistory",
+			enableTransitionHistory: false,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			s := &FunctionalClustersTestSuite{}
+			s.enableTransitionHistory = tc.enableTransitionHistory
+			suite.Run(t, s)
+		})
+	}
 }
 
 func (s *FunctionalClustersTestSuite) SetupSuite() {
@@ -480,11 +498,11 @@ func (s *FunctionalClustersTestSuite) TestStickyWorkflowTaskFailover() {
 	client2 := s.cluster2.FrontendClient() // standby
 
 	// Start a workflow
-	id := "functional-sticky-workflow-task-workflow-failover-test"
-	wt := "functional-sticky-workflow-task-workflow-failover-test-type"
-	tq := "functional-sticky-workflow-task-workflow-failover-test-taskqueue"
-	stq1 := "functional-sticky-workflow-task-workflow-failover-test-taskqueue-sticky1"
-	stq2 := "functional-sticky-workflow-task-workflow-failover-test-taskqueue-sticky2"
+	id := "functional-sticky-workflow-task-workflow-failover-test-" + "TransitionHistory" + strconv.FormatBool(s.enableTransitionHistory)
+	wt := id + "-type"
+	tq := id + "-taskqueue"
+	stq1 := id + "-taskqueue-sticky1"
+	stq2 := id + "-taskqueue-sticky2"
 	identity1 := "worker1"
 	identity2 := "worker2"
 

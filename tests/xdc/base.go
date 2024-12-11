@@ -40,6 +40,7 @@ import (
 	"go.temporal.io/sdk/converter"
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
@@ -93,6 +94,10 @@ func (s *xdcBaseSuite) setupSuite(clusterNames []string, opts ...testcore.Option
 	params := testcore.ApplyTestClusterParams(opts)
 
 	s.clusterNames = clusterNames
+	for idx, clusterName := range s.clusterNames {
+		s.clusterNames[idx] = clusterName + "_" + common.GenerateRandomString(5)
+	}
+
 	if s.logger == nil {
 		s.logger = log.NewTestLogger()
 	}
