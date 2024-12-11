@@ -65,17 +65,17 @@ import (
 type (
 	streamBasedReplicationTestSuite struct {
 		xdcBaseSuite
-		controller              *gomock.Controller
-		namespaceName           string
-		namespaceID             string
-		serializer              serialization.Serializer
-		generator               test.Generator
-		once                    sync.Once
-		enableTransitionHistory bool
+		controller    *gomock.Controller
+		namespaceName string
+		namespaceID   string
+		serializer    serialization.Serializer
+		generator     test.Generator
+		once          sync.Once
 	}
 )
 
 func TestStreamBasedReplicationTestSuite(t *testing.T) {
+	t.Parallel()
 	for _, tc := range []struct {
 		name                    string
 		enableTransitionHistory bool
@@ -91,9 +91,9 @@ func TestStreamBasedReplicationTestSuite(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			s := &streamBasedReplicationTestSuite{
-				namespaceName:           "replication-test-" + common.GenerateRandomString(5),
-				enableTransitionHistory: tc.enableTransitionHistory,
+				namespaceName: "replication-test-" + common.GenerateRandomString(5),
 			}
+			s.enableTransitionHistory = tc.enableTransitionHistory
 			suite.Run(t, s)
 		})
 	}
@@ -106,7 +106,6 @@ func (s *streamBasedReplicationTestSuite) SetupSuite() {
 		dynamicconfig.EnableEagerNamespaceRefresher.Key():       true,
 		dynamicconfig.EnableReplicationTaskBatching.Key():       true,
 		dynamicconfig.EnableReplicateLocalGeneratedEvents.Key(): true,
-		dynamicconfig.EnableTransitionHistory.Key():             s.enableTransitionHistory,
 	}
 	s.logger = log.NewTestLogger()
 	s.serializer = serialization.NewSerializer()
