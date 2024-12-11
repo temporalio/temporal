@@ -105,12 +105,13 @@ type (
 		AdminNamespaceToPartitionDispatchRate          dynamicconfig.FloatPropertyFnWithNamespaceFilter
 		AdminNamespaceTaskqueueToPartitionDispatchRate dynamicconfig.FloatPropertyFnWithTaskQueueFilter
 
-		VisibilityPersistenceMaxReadQPS   dynamicconfig.IntPropertyFn
-		VisibilityPersistenceMaxWriteQPS  dynamicconfig.IntPropertyFn
-		EnableReadFromSecondaryVisibility dynamicconfig.BoolPropertyFnWithNamespaceFilter
-		VisibilityEnableShadowReadMode    dynamicconfig.BoolPropertyFn
-		VisibilityDisableOrderByClause    dynamicconfig.BoolPropertyFnWithNamespaceFilter
-		VisibilityEnableManualPagination  dynamicconfig.BoolPropertyFnWithNamespaceFilter
+		VisibilityPersistenceMaxReadQPS         dynamicconfig.IntPropertyFn
+		VisibilityPersistenceMaxWriteQPS        dynamicconfig.IntPropertyFn
+		VisibilityPersistenceSlowQueryThreshold dynamicconfig.DurationPropertyFn
+		EnableReadFromSecondaryVisibility       dynamicconfig.BoolPropertyFnWithNamespaceFilter
+		VisibilityEnableShadowReadMode          dynamicconfig.BoolPropertyFn
+		VisibilityDisableOrderByClause          dynamicconfig.BoolPropertyFnWithNamespaceFilter
+		VisibilityEnableManualPagination        dynamicconfig.BoolPropertyFnWithNamespaceFilter
 
 		LoadUserData dynamicconfig.BoolPropertyFnWithTaskQueueFilter
 
@@ -262,12 +263,13 @@ func NewConfig(
 		AdminNamespaceToPartitionDispatchRate:          dynamicconfig.AdminMatchingNamespaceToPartitionDispatchRate.Get(dc),
 		AdminNamespaceTaskqueueToPartitionDispatchRate: dynamicconfig.AdminMatchingNamespaceTaskqueueToPartitionDispatchRate.Get(dc),
 
-		VisibilityPersistenceMaxReadQPS:   dynamicconfig.VisibilityPersistenceMaxReadQPS.Get(dc),
-		VisibilityPersistenceMaxWriteQPS:  dynamicconfig.VisibilityPersistenceMaxWriteQPS.Get(dc),
-		EnableReadFromSecondaryVisibility: dynamicconfig.EnableReadFromSecondaryVisibility.Get(dc),
-		VisibilityEnableShadowReadMode:    dynamicconfig.VisibilityEnableShadowReadMode.Get(dc),
-		VisibilityDisableOrderByClause:    dynamicconfig.VisibilityDisableOrderByClause.Get(dc),
-		VisibilityEnableManualPagination:  dynamicconfig.VisibilityEnableManualPagination.Get(dc),
+		VisibilityPersistenceMaxReadQPS:         dynamicconfig.VisibilityPersistenceMaxReadQPS.Get(dc),
+		VisibilityPersistenceMaxWriteQPS:        dynamicconfig.VisibilityPersistenceMaxWriteQPS.Get(dc),
+		VisibilityPersistenceSlowQueryThreshold: dynamicconfig.VisibilityPersistenceSlowQueryThreshold.Get(dc),
+		EnableReadFromSecondaryVisibility:       dynamicconfig.EnableReadFromSecondaryVisibility.Get(dc),
+		VisibilityEnableShadowReadMode:          dynamicconfig.VisibilityEnableShadowReadMode.Get(dc),
+		VisibilityDisableOrderByClause:          dynamicconfig.VisibilityDisableOrderByClause.Get(dc),
+		VisibilityEnableManualPagination:        dynamicconfig.VisibilityEnableManualPagination.Get(dc),
 
 		ListNexusEndpointsLongPollTimeout: dynamicconfig.MatchingListNexusEndpointsLongPollTimeout.Get(dc),
 
