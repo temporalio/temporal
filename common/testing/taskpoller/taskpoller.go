@@ -105,10 +105,10 @@ func (p *TaskPoller) PollWorkflowTask(
 }
 
 // PollAndHandleWorkflowTask issues a PollWorkflowTaskQueueRequest to obtain a new workflow task,
-// invokes the handler with the task, and completes/fails the task accordingly.
+// invokes the handler with the task, and completes/fails the task accordingly. Is it a blocking call.
 // Any unspecified but required request and response fields are automatically generated using `tv`.
 // Returning an error from `handler` fails the task.
-// If no task is available, it returns NoTaskAvailable.
+// If no task is available, it returns `NoWorkflowTaskAvailable`.
 func (p *TaskPoller) PollAndHandleWorkflowTask(
 	tv *testvars.TestVars,
 	handler func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error),
@@ -120,9 +120,10 @@ func (p *TaskPoller) PollAndHandleWorkflowTask(
 }
 
 // HandleTask invokes the provided handler with the task poll result, and completes/fails the task accordingly.
+// Is it a blocking call.
 // Any unspecified but required request and response fields are automatically generated using `tv`.
 // Returning an error from `handler` fails the task.
-// If no task is available, it returns NoTaskAvailable.
+// If no task is available, it returns `NoWorkflowTaskAvailable`.
 func (p *workflowTaskPoller) HandleTask(
 	tv *testvars.TestVars,
 	handler func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error),
@@ -136,6 +137,7 @@ func (p *workflowTaskPoller) HandleTask(
 }
 
 // HandleWorkflowTask invokes the provided handler with the provided task, and completes/fails the task accordingly.
+// Is it a blocking call.
 // Any unspecified but required request and response fields are automatically generated using `tv`.
 // Returning an error from `handler` fails the task.
 func (p *TaskPoller) HandleWorkflowTask(
@@ -160,10 +162,10 @@ func (p *TaskPoller) PollActivityTask(
 }
 
 // PollAndHandleActivityTask issues a PollActivityTaskQueueRequest to obtain a new activity task,
-// invokes the handler with the task, and completes/fails the task accordingly.
+// invokes the handler with the task, and completes/fails the task accordingly. Is it a blocking call.
 // Any unspecified but required request and response fields are automatically generated using `tv`.
 // Returning an error from `handler` fails the task.
-// If no task is available, it returns NoTaskAvailable.
+// If no task is available, it returns `NoActivityTaskAvailable`.
 func (p *TaskPoller) PollAndHandleActivityTask(
 	tv *testvars.TestVars,
 	handler func(task *workflowservice.PollActivityTaskQueueResponse) (*workflowservice.RespondActivityTaskCompletedRequest, error),
@@ -175,6 +177,7 @@ func (p *TaskPoller) PollAndHandleActivityTask(
 }
 
 // HandleActivityTask invokes the provided handler with the provided task, and completes/fails the task accordingly.
+// Is it a blocking call.
 // Any unspecified but required request and response fields are automatically generated using `tv`.
 // Returning an error from `handler` fails the task.
 func (p *TaskPoller) HandleActivityTask(
@@ -192,9 +195,10 @@ func (p *TaskPoller) HandleActivityTask(
 }
 
 // HandleTask invokes the provided handler with the task poll result, and completes/fails the task accordingly.
+// Is it a blocking call.
 // Any unspecified but required request and response fields are automatically generated using `tv`.
 // Returning an error from `handler` fails the task.
-// If no task is available, it returns NoTaskAvailable.
+// If no task is available, it returns `NoActivityTaskAvailable`.
 func (p *activityTaskPoller) HandleTask(
 	tv *testvars.TestVars,
 	handler func(task *workflowservice.PollActivityTaskQueueResponse) (*workflowservice.RespondActivityTaskCompletedRequest, error),
