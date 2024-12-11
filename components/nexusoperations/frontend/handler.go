@@ -213,6 +213,8 @@ func (h *completionHandler) CompleteOperation(ctx context.Context, r *nexus.Comp
 	case nexus.OperationStateFailed, nexus.OperationStateCanceled:
 		failureErr, ok := r.Error.(*nexus.FailureError)
 		if !ok {
+			// This shouldn't happen as the Nexus SDK is always expected to convert Failures from the wire to
+			// FailureErrors.
 			logger.Error("result error is not a FailureError", tag.Error(err))
 			return nexus.HandlerErrorf(nexus.HandlerErrorTypeInternal, "internal server error")
 		}

@@ -39,7 +39,7 @@ require (
 	github.com/prometheus/common v0.60.0
 	github.com/robfig/cron/v3 v3.0.1
 	github.com/sony/gobreaker v1.0.0
-	github.com/stretchr/testify v1.9.0
+	github.com/stretchr/testify v1.10.0
 	github.com/temporalio/ringpop-go v0.0.0-20241119001152-e505ebd8f887
 	github.com/temporalio/sqlparser v0.0.0-20231115171017-f4060bcfa6cb
 	github.com/temporalio/tchannel-go v1.22.1-0.20240528171429-1db37fdea938
@@ -57,7 +57,7 @@ require (
 	go.opentelemetry.io/otel/sdk/metric v1.31.0
 	go.opentelemetry.io/otel/trace v1.31.0
 	go.temporal.io/api v1.43.0
-	go.temporal.io/sdk v1.30.1
+	go.temporal.io/sdk v1.31.0
 	go.temporal.io/version v0.3.0
 	go.uber.org/automaxprocs v1.5.3
 	go.uber.org/fx v1.22.0
@@ -154,5 +154,3 @@ require (
 	modernc.org/strutil v1.2.0 // indirect
 	modernc.org/token v1.1.0 // indirect
 )
-
-replace go.temporal.io/sdk => ../sdk-go

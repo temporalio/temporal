@@ -767,7 +767,7 @@ func callErrToFailure(callErr error, retryable bool) (*failurepb.Failure, error)
 		Message: callErr.Error(),
 		FailureInfo: &failurepb.Failure_ApplicationFailureInfo{
 			ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{
-				Type:         "UnexpectedError",
+				Type:         "CallError",
 				NonRetryable: !retryable,
 			},
 		},

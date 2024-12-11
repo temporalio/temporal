@@ -647,14 +647,35 @@ func (ms *MutableStateImpl) GetNexusCompletion(ctx context.Context) (nexus.Opera
 			Links:     []nexus.Link{startLink},
 		})
 	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TERMINATED:
-		// TODO: app error?
-		return nexus.NewOperationCompletionUnsuccessful(nexus.NewFailedOperationError(errors.New("operation terminated")), nexus.OperationCompletionUnsuccessfulOptions{
+		failure := &failurepb.Failure{
+			Message: "operation terminated",
+			FailureInfo: &failurepb.Failure_TerminatedFailureInfo{
+				TerminatedFailureInfo: &failurepb.TerminatedFailureInfo{},
+			},
+		}
+		f, err := commonnexus.APIFailureToNexusFailure(failure)
+		if err != nil {
+			return nil, err
+		}
+		return nexus.NewOperationCompletionUnsuccessful(nexus.NewFailedOperationError(&nexus.FailureError{Failure: f}), nexus.OperationCompletionUnsuccessfulOptions{
 			StartTime: ms.executionState.GetStartTime().AsTime(),
 			Links:     []nexus.Link{startLink},
 		})
 	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TIMED_OUT:
-		// TODO: app error?
-		return nexus.NewOperationCompletionUnsuccessful(nexus.NewFailedOperationError(errors.New("operation exceeded internal timeout")), nexus.OperationCompletionUnsuccessfulOptions{
+		failure := &failurepb.Failure{
+			Message: "operation exceeded internal timeout",
+			FailureInfo: &failurepb.Failure_TimeoutFailureInfo{
+				TimeoutFailureInfo: &failurepb.TimeoutFailureInfo{
+					// Not filling in timeout type and other information, it's not particularly interesting to a Nexus
+					// caller.
+				},
+			},
+		}
+		f, err := commonnexus.APIFailureToNexusFailure(failure)
+		if err != nil {
+			return nil, err
+		}
+		return nexus.NewOperationCompletionUnsuccessful(nexus.NewFailedOperationError(&nexus.FailureError{Failure: f}), nexus.OperationCompletionUnsuccessfulOptions{
 			StartTime: ms.executionState.GetStartTime().AsTime(),
 			Links:     []nexus.Link{startLink},
 		})
