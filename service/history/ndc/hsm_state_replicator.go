@@ -289,7 +289,7 @@ func (r *HSMStateReplicatorImpl) shouldDeleteNode(
 	sourceVersion := request.StateMachineNode.LastUpdateVersionedTransition.NamespaceFailoverVersion
 
 	// Must be same initial version and source strictly newer
-	if targetInitialVersion != sourceInitialVersion {
+	if targetInitialVersion > sourceInitialVersion {
 		return false, nil
 	}
 	if sourceVersion <= targetVersion {
