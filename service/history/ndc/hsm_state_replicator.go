@@ -292,7 +292,7 @@ func (r *HSMStateReplicatorImpl) shouldDeleteNode(
 	if targetInitialVersion > sourceInitialVersion {
 		return false, nil
 	}
-	if sourceVersion <= targetVersion {
+	if targetVersion > sourceVersion {
 		return false, nil
 	}
 
