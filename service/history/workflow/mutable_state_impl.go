@@ -6930,21 +6930,9 @@ func (ms *MutableStateImpl) applyUpdatesToStateMachineNodes(
 
 			key := incomingPath[len(incomingPath)-1]
 			parentInternalNode := parentNode.InternalRepr()
-			machines, ok := parentInternalNode.Children[key.Type]
-			if ok {
-				if _, ok = machines.MachinesById[key.ID]; ok {
-					if ok {
-						return fmt.Errorf("%w: %v", hsm.ErrStateMachineAlreadyExists, key)
-					}
-				}
-			}
 
-			internalNode := &persistencespb.StateMachineNode{
-				Children:                      make(map[string]*persistencespb.StateMachineMap),
-				Data:                          nodeMutation.Data,
-				InitialVersionedTransition:    nodeMutation.InitialVersionedTransition,
-				LastUpdateVersionedTransition: nodeMutation.LastUpdateVersionedTransition,
-				TransitionCount:               1,
+			internalNode = &persistencespb.StateMachineNode{
+				Children: make(map[string]*persistencespb.StateMachineMap),
 			}
 			children, ok := parentInternalNode.Children[key.Type]
 			if !ok {
@@ -6961,12 +6949,12 @@ func (ms *MutableStateImpl) applyUpdatesToStateMachineNodes(
 			if CompareVersionedTransition(nodeMutation.LastUpdateVersionedTransition, internalNode.LastUpdateVersionedTransition) == 0 {
 				continue
 			}
-			internalNode.Data = nodeMutation.Data
-			internalNode.InitialVersionedTransition = nodeMutation.InitialVersionedTransition
-			internalNode.LastUpdateVersionedTransition = nodeMutation.LastUpdateVersionedTransition
-			internalNode.TransitionCount++
 			node.InvalidateCache()
 		}
+		internalNode.Data = nodeMutation.Data
+		internalNode.InitialVersionedTransition = nodeMutation.InitialVersionedTransition
+		internalNode.LastUpdateVersionedTransition = nodeMutation.LastUpdateVersionedTransition
+		internalNode.TransitionCount++
 	}
 	return nil
 }
