@@ -172,13 +172,23 @@ func recordActivityTaskStarted(
 	// TODO (shahab): support independent activities. Independent activities do not need all
 	// the deployment validations and do not start workflow transition.
 
+	wfBehavior := mutableState.GetEffectiveVersioningBehavior()
 	wfDeployment := mutableState.GetEffectiveDeployment()
 	pollerDeployment := worker_versioning.DeploymentFromCapabilities(request.PollRequest.WorkerVersionCapabilities)
-	// Effective deployment of the workflow when History scheduled the WFT.
-	scheduledDeployment := request.GetScheduledDeployment()
+	// Effective behavior and deployment of the workflow when History scheduled the WFT.
+	scheduledBehavior := request.GetVersionDirective().GetBehavior()
+	if scheduledBehavior != wfBehavior &&
+		// Verisoning 3 pre-release (v1.26, Dec 2024) is not populating request.VersionDirective so
+		// we skip this check until a v1.28 if scheduledBehavior is unspecified.
+		// TODO (shahab): remove this line after v1.27 is released.
+		scheduledBehavior != enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED {
+		// This must be an AT scheduled before the workflow changes behavior. Matching can drop it.
+		return nil, false, serviceerrors.NewObsoleteMatchingTask("wrong directive behavior")
+	}
+	scheduledDeployment := request.GetVersionDirective().GetDeployment()
 	if scheduledDeployment == nil {
-		// Matching does not send the directive deployment when it's the same as poller's.
-		scheduledDeployment = pollerDeployment
+		// TODO: remove this once the ScheduledDeployment field is removed from proto
+		scheduledDeployment = request.GetScheduledDeployment()
 	}
 	if !scheduledDeployment.Equal(wfDeployment) {
 		// This must be an AT scheduled before the workflow transitions to the current
@@ -192,9 +202,11 @@ func recordActivityTaskStarted(
 		return nil, false, serviceerrors.NewActivityStartDuringTransition()
 	}
 
-	if !pollerDeployment.Equal(wfDeployment) {
-		// Task is redirected, see if this activity should start a transition on the workflow. The
-		// workflow transition happens only if the workflow TQ's current deployment is the same as
+	if !pollerDeployment.Equal(wfDeployment) &&
+		// Independent activities of pinned workflows are redirected. They should not start a transition on wf.
+		wfBehavior != enumspb.VERSIONING_BEHAVIOR_PINNED {
+		// AT of an unpinned workflow is redirected, see if a transition on the workflow should start.
+		// The workflow transition happens only if the workflow TQ's current deployment is the same as
 		// the poller deployment. Otherwise, it means the activity is independently versioned, we
 		// allow it to start without affecting the workflow.
 		wfTqCurrentDeployment, err := getTaskQueueCurrentDeployment(ctx,
@@ -211,6 +223,8 @@ func recordActivityTaskStarted(
 				if errors.Is(err, workflow.ErrPinnedWorkflowCannotTransition) {
 					// This must be a task from a time that the workflow was unpinned, but it's
 					// now pinned so can't transition. Matching can drop the task safely.
+					// TODO (shahab): remove this special error check because it is not
+					// expected to happen once scheduledBehavior is always populated. see TODOs above.
 					return nil, false, serviceerrors.NewObsoleteMatchingTask(err.Error())
 				}
 				return nil, false, err

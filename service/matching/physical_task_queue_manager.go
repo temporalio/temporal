@@ -411,7 +411,7 @@ func (c *physicalTaskQueueManagerImpl) ProcessSpooledTask(
 		// Don't try to set read level here because it may have been advanced already.
 		return nil
 	}
-	return c.partitionMgr.ProcessSpooledTask(ctx, task, c.queue.Version().BuildId())
+	return c.partitionMgr.ProcessSpooledTask(ctx, task, c.queue)
 }
 
 // DispatchQueryTask will dispatch query to local or remote poller. If forwarded then result or error is returned,
