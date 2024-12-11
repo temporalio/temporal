@@ -401,9 +401,9 @@ func TestGetNexusCompletion(t *testing.T) {
 			verifyCompletion: func(t *testing.T, completion nexus.OperationCompletion) {
 				success, ok := completion.(*nexus.OperationCompletionSuccessful)
 				require.True(t, ok)
-				require.Equal(t, "application/json", success.Header.Get("content-type"))
-				require.Equal(t, "1", success.Header.Get("content-length"))
-				buf, err := io.ReadAll(success.Body)
+				require.Equal(t, "application/json", success.Reader.Header.Get("type"))
+				require.Equal(t, "1", success.Reader.Header.Get("length"))
+				buf, err := io.ReadAll(success.Reader)
 				require.NoError(t, err)
 				require.Equal(t, []byte("3"), buf)
 			},

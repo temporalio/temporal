@@ -117,7 +117,7 @@ func ClientProviderFactory(
 			Transport: ResponseSizeLimiter{transport},
 		}, nil
 	})
-	return func(ctx context.Context, namespaceID string, entry *persistencespb.NexusEndpointEntry, service string) (*nexus.Client, error) {
+	return func(ctx context.Context, namespaceID string, entry *persistencespb.NexusEndpointEntry, service string) (*nexus.HTTPClient, error) {
 		var url string
 		var httpClient *http.Client
 		switch variant := entry.Endpoint.Spec.Target.Variant.(type) {
@@ -141,7 +141,7 @@ func ClientProviderFactory(
 				return httpClient.Do(r)
 			}
 		}
-		return nexus.NewClient(nexus.ClientOptions{
+		return nexus.NewHTTPClient(nexus.HTTPClientOptions{
 			BaseURL:    url,
 			Service:    service,
 			HTTPCaller: httpCaller,

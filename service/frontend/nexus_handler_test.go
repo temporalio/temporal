@@ -171,7 +171,7 @@ func TestNexusInterceptRequest_InvalidNamespaceState_ResultsInBadRequest(t *test
 	var handlerError *nexus.HandlerError
 	require.ErrorAs(t, err, &handlerError)
 	require.Equal(t, nexus.HandlerErrorTypeBadRequest, handlerError.Type)
-	require.Equal(t, "bad request", handlerError.Failure.Message)
+	require.Equal(t, "bad request", handlerError.Cause.Error())
 	mh := oc.metricsHandler.(*metricstest.CaptureHandler) //nolint:revive
 	capture := mh.StartCapture()
 	oc.metricsHandler.Counter("test").Record(1)
@@ -195,7 +195,7 @@ func TestNexusInterceptRequest_NamespaceConcurrencyLimited_ResultsInResourceExha
 	var handlerError *nexus.HandlerError
 	require.ErrorAs(t, err, &handlerError)
 	require.Equal(t, nexus.HandlerErrorTypeResourceExhausted, handlerError.Type)
-	require.Equal(t, "resource exhausted", handlerError.Failure.Message)
+	require.Equal(t, "resource exhausted", handlerError.Cause.Error())
 	mh := oc.metricsHandler.(*metricstest.CaptureHandler) //nolint:revive
 	capture := mh.StartCapture()
 	oc.metricsHandler.Counter("test").Record(1)
@@ -219,7 +219,7 @@ func TestNexusInterceptRequest_NamespaceRateLimited_ResultsInResourceExhausted(t
 	var handlerError *nexus.HandlerError
 	require.ErrorAs(t, err, &handlerError)
 	require.Equal(t, nexus.HandlerErrorTypeResourceExhausted, handlerError.Type)
-	require.Equal(t, "namespace rate limit exceeded", handlerError.Failure.Message)
+	require.Equal(t, "namespace rate limit exceeded", handlerError.Cause.Error())
 	mh := oc.metricsHandler.(*metricstest.CaptureHandler) //nolint:revive
 	capture := mh.StartCapture()
 	oc.metricsHandler.Counter("test").Record(1)
@@ -243,7 +243,7 @@ func TestNexusInterceptRequest_GlobalRateLimited_ResultsInResourceExhausted(t *t
 	var handlerError *nexus.HandlerError
 	require.ErrorAs(t, err, &handlerError)
 	require.Equal(t, nexus.HandlerErrorTypeResourceExhausted, handlerError.Type)
-	require.Equal(t, "service rate limit exceeded", handlerError.Failure.Message)
+	require.Equal(t, "service rate limit exceeded", handlerError.Cause.Error())
 	mh := oc.metricsHandler.(*metricstest.CaptureHandler) //nolint:revive
 	capture := mh.StartCapture()
 	oc.metricsHandler.Counter("test").Record(1)
