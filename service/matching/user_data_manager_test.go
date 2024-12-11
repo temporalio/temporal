@@ -26,8 +26,10 @@ package matching
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"math/rand"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -53,7 +55,7 @@ func createUserDataManager(
 	t *testing.T,
 	controller *gomock.Controller,
 	testOpts *tqmTestOpts,
-) *userDataManagerImpl {
+) (m *userDataManagerImpl) {
 	t.Helper()
 
 	logger := log.NewTestLogger()
@@ -62,7 +64,24 @@ func createUserDataManager(
 	mockNamespaceCache := namespace.NewMockRegistry(controller)
 	mockNamespaceCache.EXPECT().GetNamespaceByID(gomock.Any()).Return(&namespace.Namespace{}, nil).AnyTimes()
 	mockNamespaceCache.EXPECT().GetNamespaceName(gomock.Any()).Return(ns, nil).AnyTimes()
-	return newUserDataManager(tm, testOpts.matchingClientMock, testOpts.dbq.Partition(), newTaskQueueConfig(testOpts.dbq.Partition().TaskQueue(), testOpts.config, ns), logger, mockNamespaceCache)
+
+	var onFatalErr func(unloadCause)
+	if testOpts.expectUserDataError {
+		var fatalErrCalled atomic.Bool
+		onFatalErr = func(unloadCause) {
+			fatalErrCalled.Store(true)
+			m.Stop() // this would normally go through the engine+pm but just skip to Stop in test
+		}
+		t.Cleanup(func() {
+			if !fatalErrCalled.Load() {
+				t.Fatal("user data manager did not call onFatalErr")
+			}
+		})
+	} else {
+		onFatalErr = func(unloadCause) { t.Fatal("user data manager called onFatalErr") }
+	}
+
+	return newUserDataManager(tm, testOpts.matchingClientMock, onFatalErr, testOpts.dbq.Partition(), newTaskQueueConfig(testOpts.dbq.Partition().TaskQueue(), testOpts.config, ns), logger, mockNamespaceCache)
 }
 
 func TestUserData_LoadOnInit(t *testing.T) {
@@ -95,6 +114,132 @@ func TestUserData_LoadOnInit(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, data1, userData)
 	m.Stop()
+}
+
+func TestUserData_LoadOnInit_Refresh(t *testing.T) {
+	t.Parallel()
+
+	controller := gomock.NewController(t)
+	ctx := context.Background()
+	dbq := newTestUnversionedPhysicalQueueKey(defaultNamespaceId, defaultRootTqID, enumspb.TASK_QUEUE_TYPE_WORKFLOW, 0)
+	tqCfg := defaultTqmTestOpts(controller)
+	tqCfg.dbq = dbq
+	tqCfg.expectUserDataError = false
+
+	data1 := &persistencespb.VersionedTaskQueueUserData{
+		Version: 1,
+		Data:    mkUserData(1),
+	}
+
+	m := createUserDataManager(t, controller, tqCfg)
+	m.config.GetUserDataInitialRefresh = time.Millisecond
+	m.config.GetUserDataRefresh = dynamicconfig.GetDurationPropertyFn(time.Millisecond)
+	tm := m.store.(*testTaskManager)
+
+	require.NoError(t, m.store.UpdateTaskQueueUserData(context.Background(),
+		&persistence.UpdateTaskQueueUserDataRequest{
+			NamespaceID: defaultNamespaceId,
+			TaskQueue:   defaultRootTqID,
+			UserData:    data1,
+		}))
+	data1.Version++
+
+	m.Start()
+
+	require.NoError(t, m.WaitUntilInitialized(ctx))
+
+	// should be refreshing quickly
+	require.Eventually(t, func() bool {
+		return tm.getGetUserDataCount(dbq) >= 5
+	}, time.Second, time.Millisecond)
+
+	// should still have version 2
+	userData, _, err := m.GetUserData()
+	require.NoError(t, err)
+	require.Equal(t, data1, userData)
+
+	// pretend someone else managed to update data
+	data2 := &persistencespb.VersionedTaskQueueUserData{
+		Version: 2,
+		Data:    mkUserData(2),
+	}
+	require.NoError(t, m.store.UpdateTaskQueueUserData(context.Background(),
+		&persistence.UpdateTaskQueueUserDataRequest{
+			NamespaceID: defaultNamespaceId,
+			TaskQueue:   defaultRootTqID,
+			UserData:    data2,
+		}))
+	data2.Version++
+
+	// eventually it will notice and reload the data
+	require.Eventually(t, func() bool {
+		userData, _, err := m.GetUserData()
+		return err == nil && userData.Version == data2.Version
+	}, time.Second, time.Millisecond)
+
+	m.Stop()
+}
+
+func TestUserData_LoadOnInit_Refresh_Backwards(t *testing.T) {
+	t.Parallel()
+
+	controller := gomock.NewController(t)
+	ctx := context.Background()
+	dbq := newTestUnversionedPhysicalQueueKey(defaultNamespaceId, defaultRootTqID, enumspb.TASK_QUEUE_TYPE_WORKFLOW, 0)
+	tqCfg := defaultTqmTestOpts(controller)
+	tqCfg.dbq = dbq
+	tqCfg.expectUserDataError = true
+
+	data5 := &persistencespb.VersionedTaskQueueUserData{
+		Version: 5,
+		Data:    mkUserData(5),
+	}
+
+	m := createUserDataManager(t, controller, tqCfg)
+	m.config.GetUserDataInitialRefresh = time.Millisecond
+	m.config.GetUserDataRefresh = dynamicconfig.GetDurationPropertyFn(time.Millisecond)
+	tm := m.store.(*testTaskManager)
+
+	require.NoError(t, m.store.UpdateTaskQueueUserData(context.Background(),
+		&persistence.UpdateTaskQueueUserDataRequest{
+			NamespaceID: defaultNamespaceId,
+			TaskQueue:   defaultRootTqID,
+			UserData:    data5,
+		}))
+	data5.Version++
+
+	m.Start()
+
+	require.NoError(t, m.WaitUntilInitialized(ctx))
+
+	// should be refreshing quickly
+	require.Eventually(t, func() bool {
+		return tm.getGetUserDataCount(dbq) >= 5
+	}, time.Second, time.Millisecond)
+
+	// should still have version 6
+	userData, _, err := m.GetUserData()
+	require.NoError(t, err)
+	require.Equal(t, data5, userData)
+
+	// data in db has older version
+	data4 := &persistencespb.VersionedTaskQueueUserData{
+		Version: 4,
+		Data:    mkUserData(4),
+	}
+	require.NoError(t, m.store.UpdateTaskQueueUserData(context.Background(),
+		&persistence.UpdateTaskQueueUserDataRequest{
+			NamespaceID: defaultNamespaceId,
+			TaskQueue:   defaultRootTqID,
+			UserData:    data4,
+		}))
+	data4.Version++
+
+	// it should unload the task queue
+	require.Eventually(t, func() bool {
+		_, _, err := m.GetUserData()
+		return errors.Is(err, errTaskQueueClosed)
+	}, time.Second, time.Millisecond)
 }
 
 func TestUserData_LoadOnInit_OnlyOnceWhenNoData(t *testing.T) {
