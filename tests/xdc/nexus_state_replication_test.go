@@ -116,7 +116,7 @@ func (s *NexusStateReplicationSuite) TearDownSuite() {
 // 7. Fail back to cluster1.
 // 8. Complete the operation via callback on cluster1.
 // 9. Check that the operation completion triggers a workflow task when we poll on cluster1.
-// 10. Complete the workflowpb.
+// 10. Complete the workflow.
 func (s *NexusStateReplicationSuite) TestNexusOperationEventsReplicated() {
 	var callbackToken string
 	var publicCallbackUrl string

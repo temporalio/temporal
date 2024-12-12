@@ -519,7 +519,7 @@ func (s *Versioning3Suite) TestIndependentActivity_Unpinned() {
 func (s *Versioning3Suite) testIndependentActivity(behavior enumspb.VersioningBehavior) {
 	// This test starts a wf on wf-series. The workflow runs an activity that is sent to act-tq with
 	// workers on a different deployment series, act-series. We make sure that the activity is
-	// dispatched and processed properly without affecting versioning of the workflowpb. Note that it
+	// dispatched and processed properly without affecting versioning of the workflow. Note that it
 	// is not required for independent activities to use a different TQ name but in here we test the
 	// more common case where the TQ name is different.
 
