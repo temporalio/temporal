@@ -309,6 +309,21 @@ func (s *DeploymentSuite) verifyDeploymentListInfo(expectedDeploymentListInfo *d
 	return true
 }
 
+func (s *DeploymentSuite) listDeploymentsAll(ctx context.Context, request *workflowservice.ListDeploymentsRequest) ([]*deploymentpb.DeploymentListInfo, error) {
+	var resp *workflowservice.ListDeploymentsResponse
+	var err error
+	var deployments []*deploymentpb.DeploymentListInfo
+	for resp == nil || len(resp.NextPageToken) > 0 {
+		resp, err = s.FrontendClient().ListDeployments(ctx, request)
+		if err != nil {
+			return nil, err
+		}
+		deployments = append(deployments, resp.GetDeployments()...)
+		request.NextPageToken = resp.NextPageToken
+	}
+	return deployments, nil
+}
+
 // verifyDeployments does the following:
 // - makes a list deployments call with/without seriesFilter
 // - validates the response with expectedDeployments
@@ -318,25 +333,19 @@ func (s *DeploymentSuite) verifyDeployments(ctx context.Context, request *workfl
 	// list deployment call
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		a := assert.New(t)
-
-		resp, err := s.FrontendClient().ListDeployments(ctx, request)
+		actualDeployments, err := s.listDeploymentsAll(ctx, request)
 		a.NoError(err)
-		a.NotNil(resp)
-		if resp == nil {
-			return
-		}
-		a.NotNil(resp.GetDeployments())
-
+		a.NotNil(actualDeployments)
 		// check to stop eventuallyWithT from panicking since
 		// it collects all possible errors
-		if len(resp.GetDeployments()) < 1 {
+		if len(actualDeployments) < 1 {
 			return
 		}
 
 		for _, expectedDeploymentListInfo := range expectedDeployments {
 
 			deploymentListInfoValidated := false
-			for _, receivedDeploymentListInfo := range resp.GetDeployments() {
+			for _, receivedDeploymentListInfo := range actualDeployments {
 
 				deploymentListInfoValidated = deploymentListInfoValidated ||
 					s.verifyDeploymentListInfo(expectedDeploymentListInfo, receivedDeploymentListInfo)
@@ -349,7 +358,7 @@ func (s *DeploymentSuite) verifyDeployments(ctx context.Context, request *workfl
 // startDeploymentsAndValidateList does the following:
 // - starts deployment workflow(s)
 // - calls verifyDeployments which lists + validates Deployments
-func (s *DeploymentSuite) startDeploymentsAndValidateList(deploymentInfo []*deploymentpb.DeploymentListInfo, seriesFilter string) {
+func (s *DeploymentSuite) startDeploymentsAndValidateList(deploymentInfo []*deploymentpb.DeploymentListInfo, seriesFilter string, pageSize int32) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 	defer cancel()
 
@@ -363,6 +372,7 @@ func (s *DeploymentSuite) startDeploymentsAndValidateList(deploymentInfo []*depl
 	var expectedDeployments []*deploymentpb.DeploymentListInfo
 	request := &workflowservice.ListDeploymentsRequest{
 		Namespace: s.Namespace(),
+		PageSize:  pageSize,
 	}
 	if seriesFilter != "" {
 		request.SeriesName = seriesFilter
@@ -403,18 +413,23 @@ func (s *DeploymentSuite) buildDeploymentInfo(numberOfDeployments int) []*deploy
 
 func (s *DeploymentSuite) TestListDeployments_VerifySingleDeployment() {
 	deploymentInfo := s.buildDeploymentInfo(1)
-	s.startDeploymentsAndValidateList(deploymentInfo, "")
+	s.startDeploymentsAndValidateList(deploymentInfo, "", 0)
 }
 
-func (s *DeploymentSuite) TestListDeployments_MultipleDeployments() {
+func (s *DeploymentSuite) TestListDeployments_MultipleDeploymentsOnePage() {
 	deploymentInfo := s.buildDeploymentInfo(5)
-	s.startDeploymentsAndValidateList(deploymentInfo, "")
+	s.startDeploymentsAndValidateList(deploymentInfo, "", 0)
+}
+
+func (s *DeploymentSuite) TestListDeployments_MultipleDeploymentsMultiplePages() {
+	deploymentInfo := s.buildDeploymentInfo(5)
+	s.startDeploymentsAndValidateList(deploymentInfo, "", 2)
 }
 
 func (s *DeploymentSuite) TestListDeployments_MultipleDeployments_WithSeriesFilter() {
 	deploymentInfo := s.buildDeploymentInfo(2)
 	seriesFilter := deploymentInfo[0].Deployment.SeriesName
-	s.startDeploymentsAndValidateList(deploymentInfo, seriesFilter)
+	s.startDeploymentsAndValidateList(deploymentInfo, seriesFilter, 0)
 }
 
 // TODO Shivam - refactor the above test cases TestListDeployments_WithSeriesNameFilter + TestListDeployments_WithoutSeriesNameFilter
