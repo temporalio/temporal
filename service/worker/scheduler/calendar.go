@@ -239,8 +239,8 @@ Outer:
 
 func parseCalendarToStructured(cal *schedulepb.CalendarSpec) (*schedulepb.StructuredCalendarSpec, error) {
 	var errs []string
-	makeRangeOrNil := func(s, field, def string, min_val, max_val int, parseMode parseMode) []*schedulepb.Range {
-		r, err := makeRange(s, field, def, min_val, max_val, parseMode)
+	makeRangeOrNil := func(s, field, def string, minVal, maxVal int, parseMode parseMode) []*schedulepb.Range {
+		r, err := makeRange(s, field, def, minVal, maxVal, parseMode)
 		if err != nil {
 			errs = append(errs, err.Error())
 		}
@@ -419,7 +419,7 @@ func iterateRanges(ranges []*schedulepb.Range, f func(i int)) {
 // min and max are the complete range of expected values.
 //
 //revive:disable-next-line:cognitive-complexity
-func makeRange(s, field, def string, min_value, max_value int, parseMode parseMode) ([]*schedulepb.Range, error) {
+func makeRange(s, field, def string, minVal, maxVal int, parseMode parseMode) ([]*schedulepb.Range, error) {
 	s = strings.TrimSpace(s)
 	if s == "" {
 		s = def
@@ -448,22 +448,22 @@ func makeRange(s, field, def string, min_value, max_value int, parseMode parseMo
 			hasStep = true
 		}
 
-		start, end := min_value, max_value
+		start, end := minVal, maxVal
 		if part != "*" {
 			if strings.Contains(part, "-") {
 				rangeParts := strings.Split(part, "-")
 				if len(rangeParts) != 2 {
 					return nil, fmt.Errorf("%s has too many dashes", field)
 				}
-				if start, err = parseValue(rangeParts[0], min_value, max_value, parseMode); err != nil {
-					return nil, fmt.Errorf("%s Start is not in range [%d-%d]", field, min_value, max_value)
+				if start, err = parseValue(rangeParts[0], minVal, maxVal, parseMode); err != nil {
+					return nil, fmt.Errorf("%s Start is not in range [%d-%d]", field, minVal, maxVal)
 				}
-				if end, err = parseValue(rangeParts[1], start, max_value, parseMode); err != nil {
-					return nil, fmt.Errorf("%s End is before Start or not in range [%d-%d]", field, min_value, max_value)
+				if end, err = parseValue(rangeParts[1], start, maxVal, parseMode); err != nil {
+					return nil, fmt.Errorf("%s End is before Start or not in range [%d-%d]", field, minVal, maxVal)
 				}
 			} else {
-				if start, err = parseValue(part, min_value, max_value, parseMode); err != nil {
-					return nil, fmt.Errorf("%s is not in range [%d-%d]", field, min_value, max_value)
+				if start, err = parseValue(part, minVal, maxVal, parseMode); err != nil {
+					return nil, fmt.Errorf("%s is not in range [%d-%d]", field, minVal, maxVal)
 				}
 				if !hasStep {
 					// if / is present, a single value is treated as that value to the

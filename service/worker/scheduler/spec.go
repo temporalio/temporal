@@ -216,17 +216,17 @@ func canonicalizeSpec(spec *schedulepb.ScheduleSpec) (*schedulepb.ScheduleSpec, 
 func validateStructuredCalendar(scs *schedulepb.StructuredCalendarSpec) error {
 	var errs []string
 
-	checkRanges := func(ranges []*schedulepb.Range, field string, min_val, max_val int32) {
+	checkRanges := func(ranges []*schedulepb.Range, field string, minVal, maxVal int32) {
 		for _, r := range ranges {
 			if r == nil { // shouldn't happen
 				errs = append(errs, "range is nil")
 				continue
 			}
-			if r.Start < min_val || r.Start > max_val {
-				errs = append(errs, fmt.Sprintf("%s Start is not in range [%d-%d]", field, min_val, max_val))
+			if r.Start < minVal || r.Start > maxVal {
+				errs = append(errs, fmt.Sprintf("%s Start is not in range [%d-%d]", field, minVal, maxVal))
 			}
-			if r.End != 0 && (r.End < r.Start || r.End > max_val) {
-				errs = append(errs, fmt.Sprintf("%s End is before Start or not in range [%d-%d]", field, min_val, max_val))
+			if r.End != 0 && (r.End < r.Start || r.End > maxVal) {
+				errs = append(errs, fmt.Sprintf("%s End is before Start or not in range [%d-%d]", field, minVal, maxVal))
 			}
 			if r.Step < 0 {
 				errs = append(errs, fmt.Sprintf("%s has invalid Step", field))

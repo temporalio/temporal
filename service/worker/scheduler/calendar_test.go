@@ -317,15 +317,15 @@ func (s *calendarSuite) TestMakeMatcher() {
 }
 
 func (s *calendarSuite) TestMakeRange() {
-	check := func(str string, min_val, max_val int, parseMode parseMode, expected ...*schedulepb.Range) {
+	check := func(str string, minVal, maxVal int, parseMode parseMode, expected ...*schedulepb.Range) {
 		s.T().Helper()
-		ranges, err := makeRange(str, "Test", "", min_val, max_val, parseMode)
+		ranges, err := makeRange(str, "Test", "", minVal, maxVal, parseMode)
 		s.NoError(err)
 		s.EqualValues(expected, ranges)
 	}
-	checkErr := func(str string, min_val, max_val int, parseMode parseMode, expectedErr string) {
+	checkErr := func(str string, minVal, maxVal int, parseMode parseMode, expectedErr string) {
 		s.T().Helper()
-		_, err := makeRange(str, "Test", "", min_val, max_val, parseMode)
+		_, err := makeRange(str, "Test", "", minVal, maxVal, parseMode)
 		s.ErrorContains(err, expectedErr)
 	}
 
