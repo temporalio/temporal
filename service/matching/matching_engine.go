@@ -367,7 +367,7 @@ func (e *matchingEngineImpl) String() string {
 // rely on kind being the same for all calls now, but normalName was a later addition to the
 // protocol and is not always set consistently. normalName is only required when using
 // versioning, and SDKs that support versioning will always set it. The current server version
-// will also set it when adding tasks from historypb. So that particular inconsistency is okay.
+// will also set it when adding tasks from history. So that particular inconsistency is okay.
 func (e *matchingEngineImpl) getTaskQueuePartitionManager(
 	ctx context.Context,
 	partition tqid.Partition,
