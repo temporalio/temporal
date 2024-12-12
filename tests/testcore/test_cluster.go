@@ -63,7 +63,7 @@ import (
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/rpc/encryption"
 	"go.temporal.io/server/common/searchattribute"
-	"go.temporal.io/server/internal/temporalite"
+	"go.temporal.io/server/internal/freeport"
 	"go.temporal.io/server/temporal"
 	"go.temporal.io/server/tests/testutils"
 	"go.uber.org/fx"
@@ -209,16 +209,15 @@ func NewClusterWithPersistenceTestBaseFactory(t *testing.T, options *TestCluster
 	}
 
 	// allocate ports
-	pp := temporalite.NewPortProvider()
 	hostsByProtocolByService := map[transferProtocol]map[primitives.ServiceName]static.Hosts{
 		grpcProtocol: {
-			primitives.FrontendService: {All: makeAddresses(pp, options.FrontendConfig.NumFrontendHosts)},
-			primitives.MatchingService: {All: makeAddresses(pp, options.MatchingConfig.NumMatchingHosts)},
-			primitives.HistoryService:  {All: makeAddresses(pp, options.HistoryConfig.NumHistoryHosts)},
-			primitives.WorkerService:   {All: makeAddresses(pp, options.WorkerConfig.NumWorkers)},
+			primitives.FrontendService: {All: makeAddresses(options.FrontendConfig.NumFrontendHosts)},
+			primitives.MatchingService: {All: makeAddresses(options.MatchingConfig.NumMatchingHosts)},
+			primitives.HistoryService:  {All: makeAddresses(options.HistoryConfig.NumHistoryHosts)},
+			primitives.WorkerService:   {All: makeAddresses(options.WorkerConfig.NumWorkers)},
 		},
 		httpProtocol: {
-			primitives.FrontendService: {All: makeAddresses(pp, options.FrontendConfig.NumFrontendHosts)},
+			primitives.FrontendService: {All: makeAddresses(options.FrontendConfig.NumFrontendHosts)},
 		},
 	}
 	if err := pp.Close(); err != nil {
@@ -654,10 +653,10 @@ func createFixedTLSConfigProvider() (*encryption.FixedTLSConfigProvider, error) 
 	}, nil
 }
 
-func makeAddresses(pp *temporalite.PortProvider, count int) []string {
+func makeAddresses(count int) []string {
 	hosts := make([]string, count)
 	for i := range hosts {
-		hosts[i] = fmt.Sprintf("127.0.0.1:%d", pp.MustGetFreePort())
+		hosts[i] = fmt.Sprintf("127.0.0.1:%d", freeport.MustGetFreePort())
 	}
 	return hosts
 }
