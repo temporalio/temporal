@@ -444,6 +444,15 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
           ref: ${{ env.COMMIT }}
 
+      - name: Get Job ID from GH API
+        id: get-job-id
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          jobs=$(gh api repos/${{ github.repository }}/actions/runs/${{ github.run_id}}/attempts/${{ github.run_attempt }}/jobs)
+          job_id=$(echo $jobs | jq -r '.jobs[] | select(.runner_name=="${{ runner.name }}") | .id')
+          echo "job_id=$job_id" >> $GITHUB_OUTPUT
+
       - name: Start containerized dependencies
         if: ${{ toJson(matrix.containers) != '[]' && (inputs.run_single_functional_test != true || (inputs.run_single_functional_test == true && contains(fromJSON(needs.set-up-single-test.outputs.dbs), env.PERSISTENCE_DRIVER))) }}
         uses: hoverkraft-tech/compose-action@v2.0.1
@@ -492,7 +501,7 @@ jobs:
         uses: actions/upload-artifact@v4.4.3
         if: ${{ !cancelled() && !inputs.run_single_functional_test }}
         with:
-          name: junit-xml--${{github.run_id}}--${{github.job_id}}--${{github.run_attempt}}--${{matrix.runs-on}}--${{matrix.name}}--${{matrix.shard_index}}--functional-test
+          name: junit-xml--${{github.run_id}}--${{steps.get-job-id.outputs.job_id}}--${{github.run_attempt}}--${{matrix.runs-on}}--${{matrix.name}}--${{matrix.shard_index}}--functional-test
           path: .testoutput
           include-hidden-files: true
           retention-days: 28
@@ -599,7 +608,7 @@ jobs:
         uses: actions/upload-artifact@v4.4.3
         if: ${{ !cancelled() }}
         with:
-          name: junit-xml--${{github.run_id}}--${{github.job_id}}--${{github.run_attempt}}--${{matrix.name}}--functional-test-xdc
+          name: junit-xml--${{github.run_id}}--${{github.run_attempt}}--${{matrix.name}}--functional-test-xdc
           path: .testoutput
           include-hidden-files: true
           retention-days: 28
@@ -697,7 +706,7 @@ jobs:
         uses: actions/upload-artifact@v4.4.3
         if: ${{ !cancelled() }}
         with:
-          name: junit-xml--${{github.run_id}}--${{github.job_id}}--${{github.run_attempt}}--${{matrix.name}}--functional-test-ndc
+          name: junit-xml--${{github.run_id}}--${{github.run_attempt}}--${{matrix.name}}--functional-test-ndc
           path: .testoutput
           include-hidden-files: true
           retention-days: 28
