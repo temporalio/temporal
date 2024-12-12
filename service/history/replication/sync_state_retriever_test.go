@@ -232,11 +232,11 @@ func (s *syncWorkflowStateSuite) TestSyncWorkflowState_ReturnMutation() {
 func (s *syncWorkflowStateSuite) TestSyncWorkflowState_ReturnSnapshot() {
 	testCases := []struct {
 		name   string
-		infoFn func() (*history.VersionHistories, []*persistencespb.VersionedTransition, []*persistencespb.StateMachineTombstoneBatch)
+		infoFn func() (*history.VersionHistories, []*persistencespb.VersionedTransition, []*persistencespb.StateMachineTombstoneBatch, *persistencespb.VersionedTransition)
 	}{
 		{
 			name: "tombstone batch is empty",
-			infoFn: func() (*history.VersionHistories, []*persistencespb.VersionedTransition, []*persistencespb.StateMachineTombstoneBatch) {
+			infoFn: func() (*history.VersionHistories, []*persistencespb.VersionedTransition, []*persistencespb.StateMachineTombstoneBatch, *persistencespb.VersionedTransition) {
 				versionHistories := &history.VersionHistories{
 					CurrentVersionHistoryIndex: 0,
 					Histories: []*history.VersionHistory{
@@ -252,12 +252,12 @@ func (s *syncWorkflowStateSuite) TestSyncWorkflowState_ReturnSnapshot() {
 				return versionHistories, []*persistencespb.VersionedTransition{
 					{NamespaceFailoverVersion: 1, TransitionCount: 12},
 					{NamespaceFailoverVersion: 2, TransitionCount: 15},
-				}, nil
+				}, nil, nil
 			},
 		},
 		{
 			name: "tombstone batch is not empty",
-			infoFn: func() (*history.VersionHistories, []*persistencespb.VersionedTransition, []*persistencespb.StateMachineTombstoneBatch) {
+			infoFn: func() (*history.VersionHistories, []*persistencespb.VersionedTransition, []*persistencespb.StateMachineTombstoneBatch, *persistencespb.VersionedTransition) {
 				versionHistories := &history.VersionHistories{
 					CurrentVersionHistoryIndex: 0,
 					Histories: []*history.VersionHistory{
@@ -277,7 +277,32 @@ func (s *syncWorkflowStateSuite) TestSyncWorkflowState_ReturnSnapshot() {
 						{
 							VersionedTransition: &persistencespb.VersionedTransition{NamespaceFailoverVersion: 1, TransitionCount: 12},
 						},
-					}
+					}, nil
+			},
+		},
+		{
+			name: "tombstone batch is not empty, but target state transition is before break point",
+			infoFn: func() (*history.VersionHistories, []*persistencespb.VersionedTransition, []*persistencespb.StateMachineTombstoneBatch, *persistencespb.VersionedTransition) {
+				versionHistories := &history.VersionHistories{
+					CurrentVersionHistoryIndex: 0,
+					Histories: []*history.VersionHistory{
+						{
+							BranchToken: []byte("branchToken1"),
+							Items: []*history.VersionHistoryItem{
+								{EventId: 1, Version: 10},
+								{EventId: 2, Version: 13},
+							},
+						},
+					},
+				}
+				return versionHistories, []*persistencespb.VersionedTransition{
+						{NamespaceFailoverVersion: 1, TransitionCount: 13},
+						{NamespaceFailoverVersion: 2, TransitionCount: 15},
+					}, []*persistencespb.StateMachineTombstoneBatch{
+						{
+							VersionedTransition: &persistencespb.VersionedTransition{NamespaceFailoverVersion: 1, TransitionCount: 12},
+						},
+					}, &persistencespb.VersionedTransition{NamespaceFailoverVersion: 1, TransitionCount: 13}
 			},
 		},
 	}
@@ -290,11 +315,12 @@ func (s *syncWorkflowStateSuite) TestSyncWorkflowState_ReturnSnapshot() {
 				RunID:       s.execution.RunId,
 			}, locks.PriorityLow).Return(
 				api.NewWorkflowLease(nil, func(err error) {}, mu), nil)
-			versionHistories, transitions, tombstoneBatches := tc.infoFn()
+			versionHistories, transitions, tombstoneBatches, breakPoint := tc.infoFn()
 			executionInfo := &persistencespb.WorkflowExecutionInfo{
 				TransitionHistory:               transitions,
 				SubStateMachineTombstoneBatches: tombstoneBatches,
 				VersionHistories:                versionHistories,
+				LastTransitionHistoryBreakPoint: breakPoint,
 			}
 			mu.EXPECT().GetExecutionInfo().Return(executionInfo).AnyTimes()
 			mu.EXPECT().HasBufferedEvents().Return(false)
