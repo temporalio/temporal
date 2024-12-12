@@ -34,7 +34,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/suite"
 	enumspb "go.temporal.io/api/enums/v1"
-	workflowservicepb "go.temporal.io/api/workflowservice/v1"
+	workflowservice "go.temporal.io/api/workflowservice/v1"
 	sdkclient "go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
@@ -137,7 +137,7 @@ func (s *ActivityApiResetClientTestSuite) TestActivityResetApi_AfterRetry() {
 		assert.Greater(t, startedActivityCount.Load(), int32(1))
 	}, 5*time.Second, 200*time.Millisecond)
 
-	resetRequest := &workflowservicepb.ResetActivityByIdRequest{
+	resetRequest := &workflowservice.ResetActivityByIdRequest{
 		Namespace:  s.Namespace(),
 		WorkflowId: workflowRun.GetID(),
 		ActivityId: "activity-id",
@@ -213,7 +213,7 @@ func (s *ActivityApiResetClientTestSuite) TestActivityResetApi_WithRunningAndNoW
 	}, 5*time.Second, 200*time.Millisecond)
 
 	activityAboutToReset.Store(true)
-	resetRequest := &workflowservicepb.ResetActivityByIdRequest{
+	resetRequest := &workflowservice.ResetActivityByIdRequest{
 		Namespace:  s.Namespace(),
 		WorkflowId: workflowRun.GetID(),
 		ActivityId: "activity-id",
@@ -298,7 +298,7 @@ func (s *ActivityApiResetClientTestSuite) TestActivityResetApi_InRetry() {
 		assert.Equal(t, int32(1), startedActivityCount.Load())
 	}, 5*time.Second, 200*time.Millisecond)
 
-	resetRequest := &workflowservicepb.ResetActivityByIdRequest{
+	resetRequest := &workflowservice.ResetActivityByIdRequest{
 		Namespace:  s.Namespace(),
 		WorkflowId: workflowRun.GetID(),
 		ActivityId: "activity-id",
