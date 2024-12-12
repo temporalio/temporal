@@ -82,12 +82,6 @@ var (
 		BackoffCoefficient: 2,
 	}
 
-	ensureNoExecutionsStdVisibilityOptionsActivity = workflow.ActivityOptions{
-		RetryPolicy:            ensureNoExecutionsActivityRetryPolicy,
-		StartToCloseTimeout:    30 * time.Second,
-		ScheduleToCloseTimeout: 30 * time.Minute, // ~20 attempts
-	}
-
 	ensureNoExecutionsAdvVisibilityActivityOptions = workflow.ActivityOptions{
 		RetryPolicy:            ensureNoExecutionsActivityRetryPolicy,
 		StartToCloseTimeout:    30 * time.Second,
@@ -121,7 +115,7 @@ func ReclaimResourcesWorkflow(ctx workflow.Context, params ReclaimResourcesParam
 
 	var la *LocalActivities
 
-	// Step 0. This workflow is started right after namespace is marked as DELETED and renamed.
+	// Step 0. This workflow is started right after the namespace is marked as DELETED and renamed.
 	// Wait for namespace cache refresh to make sure no new executions are created.
 	err := workflow.Sleep(ctx, namespaceCacheRefreshDelay)
 	if err != nil {
@@ -134,7 +128,7 @@ func ReclaimResourcesWorkflow(ctx workflow.Context, params ReclaimResourcesParam
 		return result, err
 	}
 
-	// Step 2. Sleep before deleting namespace from database.
+	// Step 2. Sleep before deleting namespace from a database.
 	err = workflow.Sleep(ctx, params.NamespaceDeleteDelay)
 	if err != nil {
 		return result, fmt.Errorf("%w: %v", errors.ErrUnableToSleep, err)
