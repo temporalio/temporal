@@ -29,5 +29,5 @@ package debug
 const (
 	Enabled = false
 
-	TimeoutMultiplier = 100
+	TimeoutMultiplier = 1
 )

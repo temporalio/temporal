@@ -48,7 +48,6 @@ func Invoke(
 	shard shard.Context,
 	workflowConsistencyChecker api.WorkflowConsistencyChecker,
 ) (_ *historyservice.ResetWorkflowExecutionResponse, retError error) {
-	ctx = context.Background()
 	namespaceID := namespace.ID(resetRequest.GetNamespaceId())
 	err := api.ValidateNamespaceUUID(namespaceID)
 	if err != nil {
