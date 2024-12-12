@@ -46,7 +46,11 @@ import (
 func MustGetFreePort() int {
 	port, err := getFreePort("127.0.0.1")
 	if err != nil {
-		panic(fmt.Errorf("failed assigning ephemeral port: %w", err))
+		// try ipv6
+		port, err = getFreePort("[::1]")
+		if err != nil {
+			panic(fmt.Errorf("failed assigning ephemeral port: %w", err))
+		}
 	}
 	return port
 }
