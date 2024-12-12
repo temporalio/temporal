@@ -607,7 +607,7 @@ pollLoop:
 
 			// A non-sticky poll may get task for a workflow that has sticky still set in its mutable state after
 			// their sticky worker is dead for longer than 10s. In such case, we should set this to false so that
-			// we return full historypb.
+			// we return full history.
 			isStickyEnabled := taskQueueName == mutableStateResp.StickyTaskQueue.GetName()
 
 			hist, nextPageToken, err := e.getHistoryForQueryTask(ctx, namespaceID, task, isStickyEnabled)
