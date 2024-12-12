@@ -38,7 +38,7 @@ import (
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/server/api/adminservice/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
-	"go.temporal.io/server/api/history/v1"
+	historyspb "go.temporal.io/server/api/history/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/codec"
@@ -192,7 +192,7 @@ func AdminImportWorkflow(c *cli.Context, clientFactory ClientFactory) error {
 		return fmt.Errorf("unable to deserialize History data: %s", err)
 	}
 
-	versionHistory := &history.VersionHistory{}
+	versionHistory := &historyspb.VersionHistory{}
 	for _, historyBatch := range historyBatches {
 		for _, event := range historyBatch.Events {
 			item := versionhistory.NewVersionHistoryItem(event.EventId, event.Version)
@@ -427,12 +427,12 @@ func AdminListShardTasks(c *cli.Context, clientFactory ClientFactory, registry t
 	req := &adminservice.ListHistoryTasksRequest{
 		ShardId:  sid,
 		Category: int32(category.ID()),
-		TaskRange: &history.TaskRange{
-			InclusiveMinTaskKey: &history.TaskKey{
+		TaskRange: &historyspb.TaskRange{
+			InclusiveMinTaskKey: &historyspb.TaskKey{
 				FireTime: timestamppb.New(minFireTime),
 				TaskId:   c.Int64(FlagMinTaskID),
 			},
-			ExclusiveMaxTaskKey: &history.TaskKey{
+			ExclusiveMaxTaskKey: &historyspb.TaskKey{
 				FireTime: timestamppb.New(maxFireTime),
 				TaskId:   c.Int64(FlagMaxTaskID),
 			},

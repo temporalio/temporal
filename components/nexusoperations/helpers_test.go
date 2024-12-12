@@ -34,7 +34,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/sdk/converter"
-	"go.temporal.io/server/api/persistence/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/components/nexusoperations"
 	"go.temporal.io/server/service/history/hsm"
 	"go.temporal.io/server/service/history/hsm/hsmtest"
@@ -70,7 +70,7 @@ func newRoot(t *testing.T, backend *hsmtest.NodeBackend) *hsm.Node {
 	reg := hsm.NewRegistry()
 	require.NoError(t, workflow.RegisterStateMachine(reg))
 	require.NoError(t, nexusoperations.RegisterStateMachines(reg))
-	root, err := hsm.NewRoot(reg, workflow.StateMachineType, root{}, make(map[string]*persistence.StateMachineMap), backend)
+	root, err := hsm.NewRoot(reg, workflow.StateMachineType, root{}, make(map[string]*persistencespb.StateMachineMap), backend)
 	require.NoError(t, err)
 	return root
 }

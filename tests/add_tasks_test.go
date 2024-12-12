@@ -39,7 +39,7 @@ import (
 	"go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
 	"go.temporal.io/server/api/adminservice/v1"
-	enumspb "go.temporal.io/server/api/enums/v1"
+	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common/debug"
 	"go.temporal.io/server/common/persistence/serialization"
@@ -136,7 +136,7 @@ func (e *noopExecutor) Execute(ctx context.Context, executable queues.Executable
 func (e *noopExecutor) shouldExecute(task tasks.Task) bool {
 	suiteWorkflowID := e.suite.workflowID.Load()
 	return (suiteWorkflowID != nil && task.GetWorkflowID() != *suiteWorkflowID) ||
-		task.GetType() != enumspb.TASK_TYPE_TRANSFER_WORKFLOW_TASK ||
+		task.GetType() != enumsspb.TASK_TYPE_TRANSFER_WORKFLOW_TASK ||
 		!e.suite.shouldSkip.Load()
 }
 

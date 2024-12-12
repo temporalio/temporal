@@ -26,7 +26,7 @@ package workflow
 
 import (
 	commonpb "go.temporal.io/api/common/v1"
-	deploymentspb "go.temporal.io/api/deployment/v1"
+	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
@@ -208,7 +208,7 @@ func (mse MutableStateWithEffects) CanAddEvent() bool {
 //     UNSPECIFIED, it means the workflow is unversioned, so effective deployment will be nil.
 //
 // Note: Deployment objects are immutable, never change their fields.
-func GetEffectiveDeployment(versioningInfo *workflowpb.WorkflowExecutionVersioningInfo) *deploymentspb.Deployment {
+func GetEffectiveDeployment(versioningInfo *workflowpb.WorkflowExecutionVersioningInfo) *deploymentpb.Deployment {
 	if versioningInfo == nil {
 		return nil
 	} else if transition := versioningInfo.GetDeploymentTransition(); transition != nil {

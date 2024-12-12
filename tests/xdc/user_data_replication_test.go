@@ -39,7 +39,7 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	sdkclient "go.temporal.io/sdk/client"
 	"go.temporal.io/server/api/adminservice/v1"
-	"go.temporal.io/server/api/enums/v1"
+	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
@@ -543,7 +543,7 @@ func (s *UserDataReplicationTestSuite) TestUserDataTombstonesAreReplicated() {
 	numReplicationTasks := len(replicationResponse.GetMessages().ReplicationTasks)
 	task := replicationResponse.GetMessages().ReplicationTasks[numReplicationTasks-1]
 
-	s.Equal(enums.REPLICATION_TASK_TYPE_TASK_QUEUE_USER_DATA, task.TaskType)
+	s.Equal(enumsspb.REPLICATION_TASK_TYPE_TASK_QUEUE_USER_DATA, task.TaskType)
 	attrs := task.GetTaskQueueUserDataAttributes()
 	s.Equal(description.GetNamespaceInfo().Id, attrs.NamespaceId)
 	s.Equal(taskQueue, attrs.TaskQueueName)
@@ -574,7 +574,7 @@ func (s *UserDataReplicationTestSuite) TestUserDataTombstonesAreReplicated() {
 	numReplicationTasks = len(replicationResponse.GetMessages().ReplicationTasks)
 	task = replicationResponse.GetMessages().ReplicationTasks[numReplicationTasks-1]
 
-	s.Equal(enums.REPLICATION_TASK_TYPE_TASK_QUEUE_USER_DATA, task.TaskType)
+	s.Equal(enumsspb.REPLICATION_TASK_TYPE_TASK_QUEUE_USER_DATA, task.TaskType)
 	attrs = task.GetTaskQueueUserDataAttributes()
 	s.Equal(description.GetNamespaceInfo().Id, attrs.NamespaceId)
 	s.Equal(taskQueue, attrs.TaskQueueName)
@@ -617,7 +617,7 @@ func (s *UserDataReplicationTestSuite) TestUserDataTombstonesAreReplicated() {
 	numReplicationTasks = len(replicationResponse.GetMessages().ReplicationTasks)
 	task = replicationResponse.GetMessages().ReplicationTasks[numReplicationTasks-1]
 
-	s.Equal(enums.REPLICATION_TASK_TYPE_TASK_QUEUE_USER_DATA, task.TaskType)
+	s.Equal(enumsspb.REPLICATION_TASK_TYPE_TASK_QUEUE_USER_DATA, task.TaskType)
 	attrs = task.GetTaskQueueUserDataAttributes()
 	s.Equal(description.GetNamespaceInfo().Id, attrs.NamespaceId)
 	s.Equal(taskQueue, attrs.TaskQueueName)

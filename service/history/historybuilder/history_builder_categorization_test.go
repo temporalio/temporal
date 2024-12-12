@@ -34,7 +34,7 @@ import (
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
-	"go.temporal.io/server/api/workflow/v1"
+	workflowspb "go.temporal.io/server/api/workflow/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/log"
@@ -113,7 +113,7 @@ func TestHistoryBuilder_AddWorkflowExecutionStartedEvent(t *testing.T) {
 
 	t.Run("When ParentExecutionInfo is not nil should copy values to attributes", func(t *testing.T) {
 		hb := HistoryBuilder{}
-		parentInfo := &workflow.ParentExecutionInfo{Namespace: ns}
+		parentInfo := &workflowspb.ParentExecutionInfo{Namespace: ns}
 		startReq := &workflowservice.StartWorkflowExecutionRequest{}
 		req := &historyservice.StartWorkflowExecutionRequest{StartRequest: startReq, ParentExecutionInfo: parentInfo}
 
@@ -1223,7 +1223,7 @@ func (s *sutTestingAdapter) ResetHistoryBuilder() {
 }
 
 func (s *sutTestingAdapter) AddWorkflowExecutionStartedEvent(_ ...eventConfig) *historypb.HistoryEvent {
-	parentInfo := &workflow.ParentExecutionInfo{Namespace: "ns-1"}
+	parentInfo := &workflowspb.ParentExecutionInfo{Namespace: "ns-1"}
 	startReq := &workflowservice.StartWorkflowExecutionRequest{}
 	req := &historyservice.StartWorkflowExecutionRequest{StartRequest: startReq, ParentExecutionInfo: parentInfo}
 	return s.HistoryBuilder.AddWorkflowExecutionStartedEvent(s.today, req, nil, "prev-run-1", "first-run-1", "original-run-1")
