@@ -211,6 +211,22 @@ func (s *ActivityClientTestSuite) TestActivityScheduleToClose_FiredDuringActivit
 	s.True(activityFinishedAt.After(workflowFinishedAt))
 }
 
+/*
+	// verify activity timeout type
+	s.Error(executeActivityErr)
+	activityErr, ok := executeActivityErr.(*temporal.ActivityError)
+	s.True(ok)
+	s.Equal("Heartbeat", activityErr.ActivityID())
+	timeoutErr, ok := activityErr.Unwrap().(*temporal.TimeoutError)
+	s.True(ok)
+	s.Equal(enumspb.TIMEOUT_TYPE_HEARTBEAT, timeoutErr.TimeoutType())
+	s.True(timeoutErr.HasLastHeartbeatDetails())
+	var v int
+	s.NoError(timeoutErr.LastHeartbeatDetails(&v))
+	s.Equal(2, v)
+
+}*/
+
 func (s *ActivityClientTestSuite) Test_ActivityTimeouts() {
 	activityFn := func(ctx context.Context) error {
 		info := activity.GetInfo(ctx)
@@ -227,7 +243,7 @@ func (s *ActivityClientTestSuite) Test_ActivityTimeouts() {
 				// Since the entire activity will finish at 5s, there won't be
 				// any heartbeat timeout error.
 				// so here, we reduce the duration between two heartbeats, so that they are
-				// more likey be sent in the heartbeat batch at 1.6s
+				// more likely be sent in the heartbeat batch at 1.6s
 				// (basically increasing the room for delay in heartbeat goroutine from 0.1s to 1s)
 				for i := 0; i < 3; i++ {
 					activity.RecordHeartbeat(ctx, i)
@@ -240,7 +256,7 @@ func (s *ActivityClientTestSuite) Test_ActivityTimeouts() {
 		return nil
 	}
 
-	var err1, err2, err3, err4 error
+	var err1, err2, err3, err4, err5, err6 error
 	workflowFn := func(ctx workflow.Context) error {
 		noRetryPolicy := &temporal.RetryPolicy{
 			MaximumAttempts: 1, // disable retry
@@ -271,17 +287,33 @@ func (s *ActivityClientTestSuite) Test_ActivityTimeouts() {
 		f3 := workflow.ExecuteActivity(ctx3, activityFn)
 
 		ctx4 := workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
+			ActivityID:          "ScheduleToCloseNotSet",
+			StartToCloseTimeout: 2 * time.Second,
+			RetryPolicy:         noRetryPolicy,
+		})
+		f4 := workflow.ExecuteActivity(ctx4, activityFn)
+
+		ctx5 := workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
+			ActivityID:             "StartToCloseNotSet",
+			ScheduleToCloseTimeout: 2 * time.Second,
+			RetryPolicy:            noRetryPolicy,
+		})
+		f5 := workflow.ExecuteActivity(ctx5, activityFn)
+
+		ctx6 := workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
 			ActivityID:          "Heartbeat",
 			StartToCloseTimeout: 10 * time.Second,
 			HeartbeatTimeout:    1 * time.Second,
 			RetryPolicy:         noRetryPolicy,
 		})
-		f4 := workflow.ExecuteActivity(ctx4, activityFn)
+		f6 := workflow.ExecuteActivity(ctx6, activityFn)
 
 		err1 = f1.Get(ctx1, nil)
 		err2 = f2.Get(ctx2, nil)
 		err3 = f3.Get(ctx3, nil)
 		err4 = f4.Get(ctx4, nil)
+		err5 = f5.Get(ctx5, nil)
+		err6 = f6.Get(ctx6, nil)
 
 		return nil
 	}
@@ -289,9 +321,8 @@ func (s *ActivityClientTestSuite) Test_ActivityTimeouts() {
 	s.Worker().RegisterActivity(activityFn)
 	s.Worker().RegisterWorkflow(workflowFn)
 
-	id := "functional-test-activity-timeouts"
 	workflowOptions := sdkclient.StartWorkflowOptions{
-		ID:                 id,
+		ID:                 "functional-test-activity-timeouts",
 		TaskQueue:          s.TaskQueue(),
 		WorkflowRunTimeout: 20 * time.Second,
 	}
@@ -335,6 +366,23 @@ func (s *ActivityClientTestSuite) Test_ActivityTimeouts() {
 	s.Error(err4)
 	activityErr, ok = err4.(*temporal.ActivityError)
 	s.True(ok)
+	s.Equal("ScheduleToCloseNotSet", activityErr.ActivityID())
+	timeoutErr, ok = activityErr.Unwrap().(*temporal.TimeoutError)
+	s.True(ok)
+	s.Equal(enumspb.TIMEOUT_TYPE_START_TO_CLOSE, timeoutErr.TimeoutType())
+
+	s.Error(err5)
+	activityErr, ok = err5.(*temporal.ActivityError)
+	s.True(ok)
+	s.Equal("StartToCloseNotSet", activityErr.ActivityID())
+	timeoutErr, ok = activityErr.Unwrap().(*temporal.TimeoutError)
+	s.True(ok)
+	s.Equal(enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE, timeoutErr.TimeoutType())
+
+	// verify activity timeout type
+	s.Error(err6)
+	activityErr, ok = err6.(*temporal.ActivityError)
+	s.True(ok)
 	s.Equal("Heartbeat", activityErr.ActivityID())
 	timeoutErr, ok = activityErr.Unwrap().(*temporal.TimeoutError)
 	s.True(ok)
@@ -343,8 +391,6 @@ func (s *ActivityClientTestSuite) Test_ActivityTimeouts() {
 	var v int
 	s.NoError(timeoutErr.LastHeartbeatDetails(&v))
 	s.Equal(2, v)
-
-	// s.printHistory(id, workflowRun.GetRunID())
 }
 
 func (s *ActivityTestSuite) TestActivityHeartBeatWorkflow_Success() {
@@ -1491,3 +1537,109 @@ func (s *ActivityTestSuite) mockWorkflowWithErrorActivity(activityInfo chan<- ac
 	w.RegisterActivity(mockErrorActivity)
 	return w, wf
 }
+
+/*
+func (s *ActivityApiPauseClientTestSuite) TestActivityScheduleToCloseTimeout() {
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	s.initialRetryInterval = 1 * time.Second
+	s.activityRetryPolicy = &temporal.RetryPolicy{
+		InitialInterval:    s.initialRetryInterval,
+		BackoffCoefficient: 1,
+	}
+
+	var completedActivityCount atomic.Int32
+	activityWasReset := false
+	activityCompleteCn := make(chan struct{})
+
+	activityFunction := func() (string, error) {
+		completedActivityCount.Add(1)
+
+		if !activityWasReset {
+			activityErr := errors.New("bad-luck-please-retry")
+			return "", activityErr
+		}
+		s.WaitForChannel(ctx, activityCompleteCn)
+		return "done!", nil
+	}
+
+	workflowFn := s.makeWorkflowFunc(activityFunction)
+
+	s.Worker().RegisterWorkflow(workflowFn)
+	s.Worker().RegisterActivity(activityFunction)
+
+	workflowOptions := sdkclient.StartWorkflowOptions{
+		ID:        testcore.RandomizeStr("wf_id-" + s.T().Name()),
+		TaskQueue: s.TaskQueue(),
+	}
+
+	workflowRun, err := s.SdkClient().ExecuteWorkflow(ctx, workflowOptions, workflowFn)
+	s.NoError(err)
+
+	// wait for activity to start/fail few times
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		description, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
+		assert.NoError(t, err)
+		assert.Equal(t, 1, len(description.PendingActivities))
+		assert.Equal(t, int32(2), completedActivityCount.Load())
+	}, 5*time.Second, 100*time.Millisecond)
+
+	// pause activity
+	pauseRequest := &workflowservicepb.PauseActivityByIdRequest{
+		Namespace:  s.Namespace(),
+		WorkflowId: workflowRun.GetID(),
+		ActivityId: "activity-id",
+	}
+	resp, err := s.FrontendClient().PauseActivityById(ctx, pauseRequest)
+	s.NoError(err)
+	s.NotNil(resp)
+
+	// wait for activity to be in paused state and waiting for retry
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		description, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
+		assert.NoError(t, err)
+		assert.Equal(t, 1, len(description.PendingActivities))
+		assert.Equal(t, enumspb.PENDING_ACTIVITY_STATE_SCHEDULED, description.PendingActivities[0].State)
+		// also verify that the number of attempts was not reset
+		assert.True(t, description.PendingActivities[0].Attempt > 1)
+	}, 5*time.Second, 100*time.Millisecond)
+
+	activityWasReset = true
+
+	// unpause the activity with reset, and set noWait flag
+	unpauseRequest := &workflowservicepb.UnpauseActivityByIdRequest{
+		Namespace:  s.Namespace(),
+		WorkflowId: workflowRun.GetID(),
+		ActivityId: "activity-id",
+		Operation: &workflowservicepb.UnpauseActivityByIdRequest_Reset_{
+			Reset_: &workflowservicepb.UnpauseActivityByIdRequest_ResetOperation{
+				NoWait: true,
+			},
+		},
+	}
+	unpauseResp, err := s.FrontendClient().UnpauseActivityById(ctx, unpauseRequest)
+	s.NoError(err)
+	s.NotNil(unpauseResp)
+
+	// wait for activity to be running
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		description, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
+		assert.NoError(t, err)
+		assert.Equal(t, 1, len(description.PendingActivities))
+		assert.Equal(t, enumspb.PENDING_ACTIVITY_STATE_STARTED, description.PendingActivities[0].State)
+		// also verify that the number of attempts was reset
+		assert.Equal(t, int32(1), description.PendingActivities[0].Attempt)
+	}, 5*time.Second, 100*time.Millisecond)
+
+	// let activity finish
+	activityCompleteCn <- struct{}{}
+
+	// wait for workflow to finish
+	var out string
+	err = workflowRun.Get(ctx, &out)
+
+	s.NoError(err)
+}
+*/
