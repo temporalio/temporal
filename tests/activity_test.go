@@ -211,22 +211,6 @@ func (s *ActivityClientTestSuite) TestActivityScheduleToClose_FiredDuringActivit
 	s.True(activityFinishedAt.After(workflowFinishedAt))
 }
 
-/*
-	// verify activity timeout type
-	s.Error(executeActivityErr)
-	activityErr, ok := executeActivityErr.(*temporal.ActivityError)
-	s.True(ok)
-	s.Equal("Heartbeat", activityErr.ActivityID())
-	timeoutErr, ok := activityErr.Unwrap().(*temporal.TimeoutError)
-	s.True(ok)
-	s.Equal(enumspb.TIMEOUT_TYPE_HEARTBEAT, timeoutErr.TimeoutType())
-	s.True(timeoutErr.HasLastHeartbeatDetails())
-	var v int
-	s.NoError(timeoutErr.LastHeartbeatDetails(&v))
-	s.Equal(2, v)
-
-}*/
-
 func (s *ActivityClientTestSuite) Test_ActivityTimeouts() {
 	activityFn := func(ctx context.Context) error {
 		info := activity.GetInfo(ctx)
