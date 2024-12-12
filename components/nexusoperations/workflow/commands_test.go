@@ -448,7 +448,6 @@ func TestHandleScheduleCommand(t *testing.T) {
 		require.NotNil(t, child)
 		require.EqualExportedValues(t, userMetadata, event.UserMetadata)
 	})
-
 }
 
 func TestHandleCancelCommand(t *testing.T) {
@@ -492,7 +491,6 @@ func TestHandleCancelCommand(t *testing.T) {
 
 	t.Run("operation already completed", func(t *testing.T) {
 		tcx := newTestContext(t, defaultConfig)
-		tcx.ms.EXPECT().HasAnyBufferedEvent(gomock.Any()).Return(false)
 
 		err := tcx.scheduleHandler(context.Background(), tcx.ms, commandValidator{maxPayloadSize: 1}, 1, &commandpb.Command{
 			Attributes: &commandpb.Command_ScheduleNexusOperationCommandAttributes{
@@ -533,7 +531,6 @@ func TestHandleCancelCommand(t *testing.T) {
 
 	t.Run("operation already completed - completion buffered", func(t *testing.T) {
 		tcx := newTestContext(t, defaultConfig)
-		tcx.ms.EXPECT().HasAnyBufferedEvent(gomock.Any()).Return(true)
 
 		err := tcx.scheduleHandler(context.Background(), tcx.ms, commandValidator{maxPayloadSize: 1}, 1, &commandpb.Command{
 			Attributes: &commandpb.Command_ScheduleNexusOperationCommandAttributes{
@@ -565,10 +562,12 @@ func TestHandleCancelCommand(t *testing.T) {
 				},
 			},
 		})
-		require.NoError(t, err)
-		require.Equal(t, 2, len(tcx.history.Events)) // Only scheduled event should be recorded.
-		crAttrs := tcx.history.Events[1].GetNexusOperationCancelRequestedEventAttributes()
-		require.Equal(t, event.EventId, crAttrs.ScheduledEventId)
+		var failWFTErr workflow.FailWorkflowTaskError
+		require.ErrorAs(t, err, &failWFTErr)
+		require.False(t, failWFTErr.TerminateWorkflow)
+		require.Equal(t, enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_REQUEST_CANCEL_NEXUS_OPERATION_ATTRIBUTES, failWFTErr.Cause)
+		// No new event should be recorded since the node no longer exists
+		require.Equal(t, 1, len(tcx.history.Events))
 	})
 
 	t.Run("sets event attributes with UserMetadata and spawns cancelation child machine", func(t *testing.T) {
@@ -622,4 +621,135 @@ func TestHandleCancelCommand(t *testing.T) {
 		require.NotNil(t, child)
 		userMetadata = nil
 	})
+}
+
+func TestOperationNodeDeletionOnTerminalEvents(t *testing.T) {
+	scheduleOperation := func(t *testing.T, tcx testContext) (scheduledEvent *historypb.HistoryEvent, nodeID string) {
+		err := tcx.scheduleHandler(context.Background(), tcx.ms, commandValidator{maxPayloadSize: 100}, 1, &commandpb.Command{
+			Attributes: &commandpb.Command_ScheduleNexusOperationCommandAttributes{
+				ScheduleNexusOperationCommandAttributes: &commandpb.ScheduleNexusOperationCommandAttributes{
+					Endpoint:  "endpoint",
+					Service:   "service",
+					Operation: "op",
+				},
+			},
+		})
+		require.NoError(t, err)
+		require.Len(t, tcx.history.Events, 1)
+		scheduledEvent = tcx.history.Events[0]
+
+		coll := nexusoperations.MachineCollection(tcx.ms.HSM())
+		nodeID = strconv.FormatInt(scheduledEvent.EventId, 10)
+		_, err = coll.Node(nodeID)
+		require.NoError(t, err)
+		return
+	}
+
+	applyTerminalEventAndAssertDeletion := func(
+		t *testing.T,
+		tcx testContext,
+		scheduledEventID int64,
+		eventType enumspb.EventType,
+		eventAttr interface{},
+		def hsm.EventDefinition,
+	) {
+		coll := nexusoperations.MachineCollection(tcx.ms.HSM())
+		nodeID := strconv.FormatInt(scheduledEventID, 10)
+
+		event := &historypb.HistoryEvent{
+			Version:   1,
+			EventId:   scheduledEventID + 1,
+			EventType: eventType,
+			EventTime: timestamppb.Now(),
+		}
+
+		// Set the correct attributes field based on eventType
+		switch eventType {
+		case enumspb.EVENT_TYPE_NEXUS_OPERATION_COMPLETED:
+			event.Attributes = &historypb.HistoryEvent_NexusOperationCompletedEventAttributes{
+				NexusOperationCompletedEventAttributes: eventAttr.(*historypb.NexusOperationCompletedEventAttributes),
+			}
+		case enumspb.EVENT_TYPE_NEXUS_OPERATION_FAILED:
+			event.Attributes = &historypb.HistoryEvent_NexusOperationFailedEventAttributes{
+				NexusOperationFailedEventAttributes: eventAttr.(*historypb.NexusOperationFailedEventAttributes),
+			}
+		case enumspb.EVENT_TYPE_NEXUS_OPERATION_CANCELED:
+			event.Attributes = &historypb.HistoryEvent_NexusOperationCanceledEventAttributes{
+				NexusOperationCanceledEventAttributes: eventAttr.(*historypb.NexusOperationCanceledEventAttributes),
+			}
+		case enumspb.EVENT_TYPE_NEXUS_OPERATION_TIMED_OUT:
+			event.Attributes = &historypb.HistoryEvent_NexusOperationTimedOutEventAttributes{
+				NexusOperationTimedOutEventAttributes: eventAttr.(*historypb.NexusOperationTimedOutEventAttributes),
+			}
+		}
+
+		require.NoError(t, def.Apply(tcx.ms.HSM(), event))
+
+		_, err := coll.Node(nodeID)
+		require.Error(t, err, "node should be deleted after terminal event")
+
+		err = tcx.cancelHandler(context.Background(), tcx.ms, commandValidator{maxPayloadSize: 1}, 2, &commandpb.Command{
+			Attributes: &commandpb.Command_RequestCancelNexusOperationCommandAttributes{
+				RequestCancelNexusOperationCommandAttributes: &commandpb.RequestCancelNexusOperationCommandAttributes{
+					ScheduledEventId: scheduledEventID,
+				},
+			},
+		})
+		var failWFTErr workflow.FailWorkflowTaskError
+		require.ErrorAs(t, err, &failWFTErr)
+		require.Equal(t, enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_REQUEST_CANCEL_NEXUS_OPERATION_ATTRIBUTES, failWFTErr.Cause)
+		require.Len(t, tcx.history.Events, 1, "no new events after attempting to cancel a terminated operation")
+	}
+
+	cases := []struct {
+		name      string
+		eventType enumspb.EventType
+		eventAttr interface{}
+		eventDef  hsm.EventDefinition
+	}{
+		{
+			name:      "completed event deletes node",
+			eventType: enumspb.EVENT_TYPE_NEXUS_OPERATION_COMPLETED,
+			eventAttr: &historypb.NexusOperationCompletedEventAttributes{},
+			eventDef:  nexusoperations.CompletedEventDefinition{},
+		},
+		{
+			name:      "failed event deletes node",
+			eventType: enumspb.EVENT_TYPE_NEXUS_OPERATION_FAILED,
+			eventAttr: &historypb.NexusOperationFailedEventAttributes{},
+			eventDef:  nexusoperations.FailedEventDefinition{},
+		},
+		{
+			name:      "canceled event deletes node",
+			eventType: enumspb.EVENT_TYPE_NEXUS_OPERATION_CANCELED,
+			eventAttr: &historypb.NexusOperationCanceledEventAttributes{},
+			eventDef:  nexusoperations.CanceledEventDefinition{},
+		},
+		{
+			name:      "timed out event deletes node",
+			eventType: enumspb.EVENT_TYPE_NEXUS_OPERATION_TIMED_OUT,
+			eventAttr: &historypb.NexusOperationTimedOutEventAttributes{},
+			eventDef:  nexusoperations.TimedOutEventDefinition{},
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			tcx := newTestContext(t, defaultConfig)
+			scheduledEvent, _ := scheduleOperation(t, tcx)
+
+			switch a := tc.eventAttr.(type) {
+			case *historypb.NexusOperationCompletedEventAttributes:
+				a.ScheduledEventId = scheduledEvent.EventId
+			case *historypb.NexusOperationFailedEventAttributes:
+				a.ScheduledEventId = scheduledEvent.EventId
+			case *historypb.NexusOperationCanceledEventAttributes:
+				a.ScheduledEventId = scheduledEvent.EventId
+			case *historypb.NexusOperationTimedOutEventAttributes:
+				a.ScheduledEventId = scheduledEvent.EventId
+			}
+
+			applyTerminalEventAndAssertDeletion(t, tcx, scheduledEvent.EventId, tc.eventType, tc.eventAttr, tc.eventDef)
+		})
+	}
 }

@@ -112,10 +112,18 @@ func (d CompletedEventDefinition) IsWorkflowTaskTrigger() bool {
 
 func (d CompletedEventDefinition) Apply(root *hsm.Node, event *historypb.HistoryEvent) error {
 	return transitionOperation(root, event, func(node *hsm.Node, o Operation) (hsm.TransitionOutput, error) {
-		return TransitionSucceeded.Apply(o, EventSucceeded{
+		output, err := TransitionSucceeded.Apply(o, EventSucceeded{
 			Time: event.EventTime.AsTime(),
 			Node: node,
 		})
+		if err != nil {
+			return output, err
+		}
+
+		if err := root.DeleteChild(node.Key); err != nil {
+			return output, err
+		}
+		return output, nil
 	})
 }
 
@@ -142,11 +150,19 @@ func (d FailedEventDefinition) Type() enumspb.EventType {
 
 func (d FailedEventDefinition) Apply(root *hsm.Node, event *historypb.HistoryEvent) error {
 	return transitionOperation(root, event, func(node *hsm.Node, o Operation) (hsm.TransitionOutput, error) {
-		return TransitionFailed.Apply(o, EventFailed{
+		output, err := TransitionFailed.Apply(o, EventFailed{
 			Time:       event.EventTime.AsTime(),
 			Attributes: event.GetNexusOperationFailedEventAttributes(),
 			Node:       node,
 		})
+		if err != nil {
+			return output, err
+		}
+
+		if err := root.DeleteChild(node.Key); err != nil {
+			return output, err
+		}
+		return output, nil
 	})
 }
 
@@ -169,10 +185,18 @@ func (d CanceledEventDefinition) Type() enumspb.EventType {
 
 func (d CanceledEventDefinition) Apply(root *hsm.Node, event *historypb.HistoryEvent) error {
 	return transitionOperation(root, event, func(node *hsm.Node, o Operation) (hsm.TransitionOutput, error) {
-		return TransitionCanceled.Apply(o, EventCanceled{
+		output, err := TransitionCanceled.Apply(o, EventCanceled{
 			Time: event.EventTime.AsTime(),
 			Node: node,
 		})
+		if err != nil {
+			return output, err
+		}
+
+		if err := root.DeleteChild(node.Key); err != nil {
+			return output, err
+		}
+		return output, nil
 	})
 }
 
@@ -195,9 +219,17 @@ func (d TimedOutEventDefinition) Type() enumspb.EventType {
 
 func (d TimedOutEventDefinition) Apply(root *hsm.Node, event *historypb.HistoryEvent) error {
 	return transitionOperation(root, event, func(node *hsm.Node, o Operation) (hsm.TransitionOutput, error) {
-		return TransitionTimedOut.Apply(o, EventTimedOut{
+		output, err := TransitionTimedOut.Apply(o, EventTimedOut{
 			Node: node,
 		})
+		if err != nil {
+			return output, err
+		}
+
+		if err := root.DeleteChild(node.Key); err != nil {
+			return output, err
+		}
+		return output, nil
 	})
 }
 
