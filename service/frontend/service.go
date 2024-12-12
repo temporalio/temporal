@@ -50,7 +50,10 @@ import (
 	"google.golang.org/grpc/reflection"
 )
 
-var matchAny = regexp.MustCompile(".*")
+var (
+	matchAny     = regexp.MustCompile(".*")
+	matchNothing = regexp.MustCompile(".^")
+)
 
 // Config represents configuration for frontend service
 type Config struct {
@@ -207,6 +210,8 @@ type Config struct {
 	MaxCallbacksPerWorkflow dynamicconfig.IntPropertyFnWithNamespaceFilter
 	CallbackEndpointConfigs dynamicconfig.TypedPropertyFnWithNamespaceFilter[[]callbacks.AddressMatchRule]
 
+	NexusRequestHeadersBlacklist *dynamicconfig.GlobalCachedTypedValue[*regexp.Regexp]
+
 	LinkMaxSize        dynamicconfig.IntPropertyFnWithNamespaceFilter
 	MaxLinksPerRequest dynamicconfig.IntPropertyFnWithNamespaceFilter
 
@@ -334,6 +339,17 @@ func NewConfig(
 		CallbackURLMaxLength:                      dynamicconfig.FrontendCallbackURLMaxLength.Get(dc),
 		CallbackHeaderMaxSize:                     dynamicconfig.FrontendCallbackHeaderMaxSize.Get(dc),
 		MaxCallbacksPerWorkflow:                   dynamicconfig.MaxCallbacksPerWorkflow.Get(dc),
+
+		NexusRequestHeadersBlacklist: dynamicconfig.NewGlobalCachedTypedValue(
+			dc,
+			dynamicconfig.FrontendNexusRequestHeadersBlacklist,
+			func(patterns []string) (*regexp.Regexp, error) {
+				if len(patterns) == 0 {
+					return matchNothing, nil
+				}
+				return util.WildCardStringsToRegexp(patterns)
+			},
+		),
 
 		LinkMaxSize:        dynamicconfig.FrontendLinkMaxSize.Get(dc),
 		MaxLinksPerRequest: dynamicconfig.FrontendMaxLinksPerRequest.Get(dc),
