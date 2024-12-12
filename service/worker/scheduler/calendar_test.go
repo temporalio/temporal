@@ -31,7 +31,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	schedpb "go.temporal.io/api/schedule/v1"
+	schedulepb "go.temporal.io/api/schedule/v1"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 
@@ -48,7 +48,7 @@ func (s *calendarSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 }
 
-func (s *calendarSuite) mustCompileCalendarSpec(cal *schedpb.CalendarSpec, tz *time.Location) *compiledCalendar {
+func (s *calendarSuite) mustCompileCalendarSpec(cal *schedulepb.CalendarSpec, tz *time.Location) *compiledCalendar {
 	scs, err := parseCalendarToStructured(cal)
 	s.NoError(err)
 	s.NotNil(scs)
@@ -62,7 +62,7 @@ func (s *calendarSuite) TestCalendarMatch() {
 	s.NoError(err)
 
 	// default is midnight once a day
-	cc := s.mustCompileCalendarSpec(&schedpb.CalendarSpec{}, time.UTC)
+	cc := s.mustCompileCalendarSpec(&schedulepb.CalendarSpec{}, time.UTC)
 	s.True(cc.matches(time.Date(2022, time.March, 17, 0, 0, 0, 0, time.UTC)))
 	s.True(cc.matches(time.Date(2022, time.March, 18, 0, 0, 0, 0, time.UTC)))
 	s.False(cc.matches(time.Date(2022, time.March, 18, 5, 15, 0, 0, time.UTC)))
@@ -71,7 +71,7 @@ func (s *calendarSuite) TestCalendarMatch() {
 	s.False(cc.matches(time.Date(2022, time.March, 17, 0, 0, 0, 0, pacific)))
 	s.True(cc.matches(time.Date(2022, time.March, 17, 17, 0, 0, 0, pacific)))
 
-	cc = s.mustCompileCalendarSpec(&schedpb.CalendarSpec{
+	cc = s.mustCompileCalendarSpec(&schedulepb.CalendarSpec{
 		Minute: "5,9",
 		Hour:   "*/2",
 	}, time.UTC)
@@ -81,7 +81,7 @@ func (s *calendarSuite) TestCalendarMatch() {
 	s.True(cc.matches(time.Date(2022, time.March, 18, 3, 9, 0, 0, pacific)))
 	s.False(cc.matches(time.Date(2022, time.March, 18, 3, 9, 0, 0, time.UTC)))
 
-	cc = s.mustCompileCalendarSpec(&schedpb.CalendarSpec{
+	cc = s.mustCompileCalendarSpec(&schedulepb.CalendarSpec{
 		Second:     "55",
 		Minute:     "55",
 		Hour:       "5",
@@ -104,19 +104,19 @@ func (s *calendarSuite) TestCalendarMatch() {
 
 	// different sunday representations
 	for _, dow := range []string{"0", "7", "sun", "*", "0-3", "5-7", "5-7/2", "6-7", "2-7/5", "0-7/7", "0/7"} {
-		cc = s.mustCompileCalendarSpec(&schedpb.CalendarSpec{
+		cc = s.mustCompileCalendarSpec(&schedulepb.CalendarSpec{
 			DayOfWeek: dow,
 		}, time.UTC)
 		s.True(cc.matches(time.Date(2022, time.March, 6, 0, 0, 0, 0, time.UTC)), dow) // sunday
 	}
 	for _, dow := range []string{"*", "5-7", "6-7", "2/4", "2-7/4"} {
-		cc = s.mustCompileCalendarSpec(&schedpb.CalendarSpec{
+		cc = s.mustCompileCalendarSpec(&schedulepb.CalendarSpec{
 			DayOfWeek: dow,
 		}, time.UTC)
 		s.True(cc.matches(time.Date(2022, time.March, 5, 0, 0, 0, 0, time.UTC)), dow) // saturday
 	}
 	for _, dow := range []string{"0", "7", "sun", "5-7", "5-7/2", "6-7", "2-7/5", "0-7/7", "0/7"} {
-		cc = s.mustCompileCalendarSpec(&schedpb.CalendarSpec{
+		cc = s.mustCompileCalendarSpec(&schedulepb.CalendarSpec{
 			DayOfWeek: dow,
 		}, time.UTC)
 		s.False(cc.matches(time.Date(2022, time.March, 7, 0, 0, 0, 0, time.UTC)), dow) // monday
@@ -126,13 +126,13 @@ func (s *calendarSuite) TestCalendarMatch() {
 func (s *calendarSuite) TestParseCronString() {
 	scs, iv, tz, err := parseCronString("5,9 */2 * * *")
 	s.NoError(err)
-	s.Equal(&schedpb.StructuredCalendarSpec{
-		Second:     []*schedpb.Range{{Start: 0}},
-		Minute:     []*schedpb.Range{{Start: 5}, {Start: 9}},
-		Hour:       []*schedpb.Range{{Start: 0, End: 23, Step: 2}},
-		DayOfMonth: []*schedpb.Range{{Start: 1, End: 31}},
-		Month:      []*schedpb.Range{{Start: 1, End: 12}},
-		DayOfWeek:  []*schedpb.Range{{Start: 0, End: 6}},
+	s.Equal(&schedulepb.StructuredCalendarSpec{
+		Second:     []*schedulepb.Range{{Start: 0}},
+		Minute:     []*schedulepb.Range{{Start: 5}, {Start: 9}},
+		Hour:       []*schedulepb.Range{{Start: 0, End: 23, Step: 2}},
+		DayOfMonth: []*schedulepb.Range{{Start: 1, End: 31}},
+		Month:      []*schedulepb.Range{{Start: 1, End: 12}},
+		DayOfWeek:  []*schedulepb.Range{{Start: 0, End: 6}},
 	}, scs)
 	s.Nil(iv)
 	s.Equal("", tz)
@@ -142,13 +142,13 @@ func (s *calendarSuite) TestParseCronString() {
 
 	scs, iv, tz, err = parseCronString("CRON_TZ=US/Pacific 55 55,57 5 2/2 * wed-thurs *  # explanation")
 	s.NoError(err)
-	s.Equal(&schedpb.StructuredCalendarSpec{
-		Second:     []*schedpb.Range{{Start: 55}},
-		Minute:     []*schedpb.Range{{Start: 55}, {Start: 57}},
-		Hour:       []*schedpb.Range{{Start: 5}},
-		DayOfMonth: []*schedpb.Range{{Start: 2, End: 31, Step: 2}},
-		Month:      []*schedpb.Range{{Start: 1, End: 12}},
-		DayOfWeek:  []*schedpb.Range{{Start: 3, End: 4}},
+	s.Equal(&schedulepb.StructuredCalendarSpec{
+		Second:     []*schedulepb.Range{{Start: 55}},
+		Minute:     []*schedulepb.Range{{Start: 55}, {Start: 57}},
+		Hour:       []*schedulepb.Range{{Start: 5}},
+		DayOfMonth: []*schedulepb.Range{{Start: 2, End: 31, Step: 2}},
+		Month:      []*schedulepb.Range{{Start: 1, End: 12}},
+		DayOfWeek:  []*schedulepb.Range{{Start: 3, End: 4}},
 		Comment:    "explanation",
 	}, scs)
 	s.Nil(iv)
@@ -156,13 +156,13 @@ func (s *calendarSuite) TestParseCronString() {
 
 	scs, iv, tz, err = parseCronString("@monthly")
 	s.NoError(err)
-	s.Equal(&schedpb.StructuredCalendarSpec{
-		Second:     []*schedpb.Range{{Start: 0}},
-		Minute:     []*schedpb.Range{{Start: 0}},
-		Hour:       []*schedpb.Range{{Start: 0}},
-		DayOfMonth: []*schedpb.Range{{Start: 1}},
-		Month:      []*schedpb.Range{{Start: 1, End: 12}},
-		DayOfWeek:  []*schedpb.Range{{Start: 0, End: 6}},
+	s.Equal(&schedulepb.StructuredCalendarSpec{
+		Second:     []*schedulepb.Range{{Start: 0}},
+		Minute:     []*schedulepb.Range{{Start: 0}},
+		Hour:       []*schedulepb.Range{{Start: 0}},
+		DayOfMonth: []*schedulepb.Range{{Start: 1}},
+		Month:      []*schedulepb.Range{{Start: 1, End: 12}},
+		DayOfWeek:  []*schedulepb.Range{{Start: 0, End: 6}},
 	}, scs)
 	s.Nil(iv)
 	s.Equal("", tz)
@@ -170,7 +170,7 @@ func (s *calendarSuite) TestParseCronString() {
 	scs, iv, tz, err = parseCronString("@every 5d")
 	s.NoError(err)
 	s.Nil(scs)
-	s.Equal(&schedpb.IntervalSpec{
+	s.Equal(&schedulepb.IntervalSpec{
 		Interval: durationpb.New(5 * 24 * time.Hour),
 	}, iv)
 	s.Equal("", tz)
@@ -178,7 +178,7 @@ func (s *calendarSuite) TestParseCronString() {
 	scs, iv, tz, err = parseCronString("@every 5h/45m")
 	s.NoError(err)
 	s.Nil(scs)
-	s.Equal(&schedpb.IntervalSpec{
+	s.Equal(&schedulepb.IntervalSpec{
 		Interval: durationpb.New(5 * time.Hour),
 		Phase:    durationpb.New(45 * time.Minute),
 	}, iv)
@@ -189,7 +189,7 @@ func (s *calendarSuite) TestCalendarNextBasic() {
 	pacific, err := time.LoadLocation("US/Pacific")
 	s.NoError(err)
 
-	cc := s.mustCompileCalendarSpec(&schedpb.CalendarSpec{
+	cc := s.mustCompileCalendarSpec(&schedulepb.CalendarSpec{
 		Second:     "55",
 		Minute:     "55",
 		Hour:       "5",
@@ -273,7 +273,7 @@ func (s *calendarSuite) TestCalendarNextDST() {
 func (s *calendarSuite) TestCalendarDSTStartInRepeatedHourButNotEnd() {
 	loc, err := time.LoadLocation("Europe/London")
 	s.NoError(err)
-	cc := s.mustCompileCalendarSpec(&schedpb.CalendarSpec{
+	cc := s.mustCompileCalendarSpec(&schedulepb.CalendarSpec{
 		Second:     "0",
 		Minute:     "1",
 		Hour:       "0",
@@ -317,35 +317,35 @@ func (s *calendarSuite) TestMakeMatcher() {
 }
 
 func (s *calendarSuite) TestMakeRange() {
-	check := func(str string, min, max int, parseMode parseMode, expected ...*schedpb.Range) {
+	check := func(str string, min_val, max_val int, parseMode parseMode, expected ...*schedulepb.Range) {
 		s.T().Helper()
-		ranges, err := makeRange(str, "Test", "", min, max, parseMode)
+		ranges, err := makeRange(str, "Test", "", min_val, max_val, parseMode)
 		s.NoError(err)
 		s.EqualValues(expected, ranges)
 	}
-	checkErr := func(str string, min, max int, parseMode parseMode, expectedErr string) {
+	checkErr := func(str string, min_val, max_val int, parseMode parseMode, expectedErr string) {
 		s.T().Helper()
-		_, err := makeRange(str, "Test", "", min, max, parseMode)
+		_, err := makeRange(str, "Test", "", min_val, max_val, parseMode)
 		s.ErrorContains(err, expectedErr)
 	}
 
-	check("13", 0, 59, parseModeInt, &schedpb.Range{Start: 13})
+	check("13", 0, 59, parseModeInt, &schedulepb.Range{Start: 13})
 	checkErr("133", 0, 59, parseModeInt, "Test is not in range [0-59]")
-	check("Sept", 1, 12, parseModeMonth, &schedpb.Range{Start: 9})
-	check("13,18", 0, 59, parseModeInt, &schedpb.Range{Start: 13}, &schedpb.Range{Start: 18})
-	check("13,18,44", 0, 59, parseModeInt, &schedpb.Range{Start: 13}, &schedpb.Range{Start: 18}, &schedpb.Range{Start: 44})
+	check("Sept", 1, 12, parseModeMonth, &schedulepb.Range{Start: 9})
+	check("13,18", 0, 59, parseModeInt, &schedulepb.Range{Start: 13}, &schedulepb.Range{Start: 18})
+	check("13,18,44", 0, 59, parseModeInt, &schedulepb.Range{Start: 13}, &schedulepb.Range{Start: 18}, &schedulepb.Range{Start: 44})
 	checkErr("13,18,44,", 0, 59, parseModeInt, "Test is not in range") // not the most helpful error in this case but it has the field name
-	check("13-18", 0, 59, parseModeInt, &schedpb.Range{Start: 13, End: 18})
+	check("13-18", 0, 59, parseModeInt, &schedulepb.Range{Start: 13, End: 18})
 	checkErr("18-13", 0, 59, parseModeInt, "End is before Start")
 	checkErr("1,3,18-13", 0, 59, parseModeInt, "End is before Start")
-	check("2-5,7-9,11", 0, 59, parseModeInt, &schedpb.Range{Start: 2, End: 5}, &schedpb.Range{Start: 7, End: 9}, &schedpb.Range{Start: 11})
-	check("*", 5, 9, parseModeInt, &schedpb.Range{Start: 5, End: 9})
-	check("*/3", 5, 9, parseModeInt, &schedpb.Range{Start: 5, End: 9, Step: 3})
-	check("2/3", 0, 10, parseModeInt, &schedpb.Range{Start: 2, End: 10, Step: 3})
+	check("2-5,7-9,11", 0, 59, parseModeInt, &schedulepb.Range{Start: 2, End: 5}, &schedulepb.Range{Start: 7, End: 9}, &schedulepb.Range{Start: 11})
+	check("*", 5, 9, parseModeInt, &schedulepb.Range{Start: 5, End: 9})
+	check("*/3", 5, 9, parseModeInt, &schedulepb.Range{Start: 5, End: 9, Step: 3})
+	check("2/3", 0, 10, parseModeInt, &schedulepb.Range{Start: 2, End: 10, Step: 3})
 	checkErr("2/3/5", 0, 10, parseModeInt, "too many slashes")
-	check("2-6/3", 0, 10, parseModeInt, &schedpb.Range{Start: 2, End: 6, Step: 3})
-	check("2-6/4,7-8", 0, 10, parseModeInt, &schedpb.Range{Start: 2, End: 6, Step: 4}, &schedpb.Range{Start: 7, End: 8})
-	check("mon-Friday", 0, 7, parseModeDow, &schedpb.Range{Start: 1, End: 5})
+	check("2-6/3", 0, 10, parseModeInt, &schedulepb.Range{Start: 2, End: 6, Step: 3})
+	check("2-6/4,7-8", 0, 10, parseModeInt, &schedulepb.Range{Start: 2, End: 6, Step: 4}, &schedulepb.Range{Start: 7, End: 8})
+	check("mon-Friday", 0, 7, parseModeDow, &schedulepb.Range{Start: 1, End: 5})
 	checkErr("Fri-Tues", 0, 7, parseModeDow, "End is before Start")
 	checkErr("1-5-7", 0, 7, parseModeDow, "too many dashes")
 	checkErr("monday-", 0, 7, parseModeDow, "End is before Start")
@@ -415,7 +415,7 @@ func FuzzCalendar(f *testing.F) {
 		if err != nil {
 			return
 		}
-		cal := &schedpb.CalendarSpec{
+		cal := &schedulepb.CalendarSpec{
 			Second:     s,
 			Minute:     m,
 			Hour:       h,

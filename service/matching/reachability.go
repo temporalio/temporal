@@ -33,7 +33,7 @@ import (
 
 	"github.com/temporalio/sqlparser"
 	enumspb "go.temporal.io/api/enums/v1"
-	"go.temporal.io/server/api/clock/v1"
+	clockspb "go.temporal.io/server/api/clock/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/cache"
 	hlc "go.temporal.io/server/common/clock/hybrid_logical_clock"
@@ -201,7 +201,7 @@ func (rc *reachabilityCalculator) getBuildIdsOfInterest(
 	buildId string,
 	deletedRuleInclusionPeriod time.Duration) []string {
 
-	withinRuleInclusionPeriod := func(clk *clock.HybridLogicalClock) bool {
+	withinRuleInclusionPeriod := func(clk *clockspb.HybridLogicalClock) bool {
 		if clk == nil {
 			return true
 		}

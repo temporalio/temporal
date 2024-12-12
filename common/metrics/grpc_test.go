@@ -30,7 +30,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	metricspb "go.temporal.io/server/api/metrics/v1"
+	metricsspb "go.temporal.io/server/api/metrics/v1"
 	"go.temporal.io/server/common/log"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/grpc"
@@ -81,7 +81,7 @@ func (s *grpcSuite) TestMetadataMetricInjection() {
 							opts ...grpc.CallOption,
 						) error {
 							trailer := opts[0].(grpc.TrailerCallOption)
-							propagationContext := &metricspb.Baggage{CountersInt: make(map[string]int64)}
+							propagationContext := &metricsspb.Baggage{CountersInt: make(map[string]int64)}
 							propagationContext.CountersInt[anyMetricName] = 1234
 							data, err := propagationContext.Marshal()
 							if err != nil {
@@ -101,7 +101,7 @@ func (s *grpcSuite) TestMetadataMetricInjection() {
 			propagationContextBlobs := ssts.trailers[0].Get(metricsTrailerKey)
 			s.NotNil(propagationContextBlobs)
 			s.Equal(1, len(propagationContextBlobs))
-			baggage := &metricspb.Baggage{}
+			baggage := &metricsspb.Baggage{}
 			err = baggage.Unmarshal(([]byte)(propagationContextBlobs[0]))
 			s.Nil(err)
 			s.Equal(int64(1234), baggage.CountersInt[anyMetricName])
@@ -137,7 +137,7 @@ func (s *grpcSuite) TestMetadataMetricInjection_NoMetricPresent() {
 							opts ...grpc.CallOption,
 						) error {
 							trailer := opts[0].(grpc.TrailerCallOption)
-							propagationContext := &metricspb.Baggage{}
+							propagationContext := &metricsspb.Baggage{}
 							data, err := propagationContext.Marshal()
 							if err != nil {
 								s.Fail("failed to marshal values")
@@ -156,7 +156,7 @@ func (s *grpcSuite) TestMetadataMetricInjection_NoMetricPresent() {
 			propagationContextBlobs := ssts.trailers[0].Get(metricsTrailerKey)
 			s.NotNil(propagationContextBlobs)
 			s.Equal(1, len(propagationContextBlobs))
-			baggage := &metricspb.Baggage{}
+			baggage := &metricsspb.Baggage{}
 			err = baggage.Unmarshal(([]byte)(propagationContextBlobs[0]))
 			s.Nil(err)
 			s.Nil(baggage.CountersInt)

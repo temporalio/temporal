@@ -33,7 +33,7 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	commonpb "go.temporal.io/api/common/v1"
-	"go.temporal.io/api/enums/v1"
+	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/sdk/temporal"
@@ -270,14 +270,14 @@ func Test_DeleteExecutionsWorkflow_NoActivityMocks_ManyExecutions(t *testing.T) 
 	}).Return(&manager.ListWorkflowExecutionsResponse{
 		Executions: []*workflowpb.WorkflowExecutionInfo{
 			{
-				Status: enums.WORKFLOW_EXECUTION_STATUS_RUNNING,
+				Status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 				Execution: &commonpb.WorkflowExecution{
 					WorkflowId: "workflow-id-1",
 					RunId:      "run-id-1",
 				},
 			},
 			{
-				Status: enums.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+				Status: enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
 				Execution: &commonpb.WorkflowExecution{
 					WorkflowId: "workflow-id-2",
 					RunId:      "run-id-2",
@@ -297,14 +297,14 @@ func Test_DeleteExecutionsWorkflow_NoActivityMocks_ManyExecutions(t *testing.T) 
 	}).Return(&manager.ListWorkflowExecutionsResponse{
 		Executions: []*workflowpb.WorkflowExecutionInfo{
 			{
-				Status: enums.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+				Status: enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
 				Execution: &commonpb.WorkflowExecution{
 					WorkflowId: "workflow-id-1",
 					RunId:      "run-id-1",
 				},
 			},
 			{
-				Status: enums.WORKFLOW_EXECUTION_STATUS_RUNNING,
+				Status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 				Execution: &commonpb.WorkflowExecution{
 					WorkflowId: "workflow-id-2",
 					RunId:      "run-id-2",
@@ -371,14 +371,14 @@ func Test_DeleteExecutionsWorkflow_NoActivityMocks_HistoryClientError(t *testing
 	}).Return(&manager.ListWorkflowExecutionsResponse{
 		Executions: []*workflowpb.WorkflowExecutionInfo{
 			{
-				Status: enums.WORKFLOW_EXECUTION_STATUS_RUNNING,
+				Status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 				Execution: &commonpb.WorkflowExecution{
 					WorkflowId: "workflow-id-1",
 					RunId:      "run-id-1",
 				},
 			},
 			{
-				Status: enums.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+				Status: enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
 				Execution: &commonpb.WorkflowExecution{
 					WorkflowId: "workflow-id-2",
 					RunId:      "run-id-2",
@@ -398,14 +398,14 @@ func Test_DeleteExecutionsWorkflow_NoActivityMocks_HistoryClientError(t *testing
 	}).Return(&manager.ListWorkflowExecutionsResponse{
 		Executions: []*workflowpb.WorkflowExecutionInfo{
 			{
-				Status: enums.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+				Status: enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
 				Execution: &commonpb.WorkflowExecution{
 					WorkflowId: "workflow-id-1",
 					RunId:      "run-id-1",
 				},
 			},
 			{
-				Status: enums.WORKFLOW_EXECUTION_STATUS_RUNNING,
+				Status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 				Execution: &commonpb.WorkflowExecution{
 					WorkflowId: "workflow-id-2",
 					RunId:      "run-id-2",

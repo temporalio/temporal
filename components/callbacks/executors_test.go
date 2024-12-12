@@ -32,7 +32,7 @@ import (
 
 	"github.com/nexus-rpc/sdk-go/nexus"
 	"github.com/stretchr/testify/require"
-	"go.temporal.io/api/enums/v1"
+	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
@@ -348,7 +348,7 @@ func TestProcessInvocationTaskHsm_Outcomes(t *testing.T) {
 				require.Equal(t, "mywid", arg.WorkflowId)
 				require.Equal(t, "myrid", arg.RunId)
 				require.Equal(t, int64(42), arg.LastEvent.EventId)
-				require.Equal(t, enums.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED, arg.LastEvent.EventType)
+				require.Equal(t, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED, arg.LastEvent.EventType)
 
 				return &historyservice.InvokeStateMachineMethodResponse{}, tc.expectedError
 			}).Times(1)
@@ -451,7 +451,7 @@ func newMutableState(t *testing.T) mutableState {
 		RunId:       "myrid",
 		LastEvent: &historypb.HistoryEvent{
 			EventId:   42,
-			EventType: enums.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED,
+			EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED,
 		},
 	}
 	return mutableState{

@@ -40,7 +40,7 @@ import (
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/historyservicemock/v1"
-	persistencepb "go.temporal.io/server/api/persistence/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
@@ -101,16 +101,16 @@ var (
 	}
 
 	completeState = historyservice.DescribeMutableStateResponse{
-		DatabaseMutableState: &persistencepb.WorkflowMutableState{
-			ExecutionState: &persistencepb.WorkflowExecutionState{
+		DatabaseMutableState: &persistencespb.WorkflowMutableState{
+			ExecutionState: &persistencespb.WorkflowExecutionState{
 				State: enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
 			},
 		},
 	}
 
 	zombieState = historyservice.DescribeMutableStateResponse{
-		DatabaseMutableState: &persistencepb.WorkflowMutableState{
-			ExecutionState: &persistencepb.WorkflowExecutionState{
+		DatabaseMutableState: &persistencespb.WorkflowMutableState{
+			ExecutionState: &persistencespb.WorkflowExecutionState{
 				State: enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE,
 			},
 		},
@@ -589,23 +589,23 @@ func (s *activitiesSuite) Test_verifyReplicationTasksSkipRetention() {
 			NamespaceId: mockedNamespaceID,
 			Execution:   &execution1,
 		})).Return(&historyservice.DescribeMutableStateResponse{
-			DatabaseMutableState: &persistencepb.WorkflowMutableState{
-				ExecutionState: &persistencepb.WorkflowExecutionState{
+			DatabaseMutableState: &persistencespb.WorkflowMutableState{
+				ExecutionState: &persistencespb.WorkflowExecutionState{
 					State: enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
 				},
-				ExecutionInfo: &persistencepb.WorkflowExecutionInfo{
+				ExecutionInfo: &persistencespb.WorkflowExecutionInfo{
 					CloseTime: timestamppb.New(closeTime),
 				},
 			},
 		}, nil).Times(1)
 
 		ns := namespace.FromPersistentState(&persistence.GetNamespaceResponse{
-			Namespace: &persistencepb.NamespaceDetail{
-				Info: &persistencepb.NamespaceInfo{},
-				Config: &persistencepb.NamespaceConfig{
+			Namespace: &persistencespb.NamespaceDetail{
+				Info: &persistencespb.NamespaceInfo{},
+				Config: &persistencespb.NamespaceConfig{
 					Retention: durationpb.New(retention),
 				},
-				ReplicationConfig: &persistencepb.NamespaceReplicationConfig{},
+				ReplicationConfig: &persistencespb.NamespaceReplicationConfig{},
 			},
 		})
 

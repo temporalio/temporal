@@ -39,7 +39,7 @@ import (
 	"strings"
 	"time"
 
-	"go.temporal.io/api/enums/v1"
+	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/server/common/authorization"
 	"go.temporal.io/server/common/cluster"
@@ -94,7 +94,7 @@ type LiteServerConfig struct {
 	// DynamicConfig sets dynamic config values used by the server.
 	DynamicConfig dynamicconfig.StaticClient
 	// SearchAttributes adds custom search attributes to all namespaces created on Temporal start.
-	SearchAttributes map[string]enums.IndexedValueType
+	SearchAttributes map[string]enumspb.IndexedValueType
 }
 
 func (cfg *LiteServerConfig) apply(serverConfig *config.Config) {

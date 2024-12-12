@@ -36,7 +36,7 @@ import (
 	activitypb "go.temporal.io/api/activity/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
-	workflowservicepb "go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/api/workflowservice/v1"
 	sdkclient "go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
@@ -142,7 +142,7 @@ func (s *ActivityApiUpdateClientTestSuite) TestActivityUpdateApi_ChangeRetryInte
 		assert.Equal(t, int32(1), activityCompleted.Load())
 	}, 10*time.Second, 500*time.Millisecond)
 
-	updateRequest := &workflowservicepb.UpdateActivityOptionsByIdRequest{
+	updateRequest := &workflowservice.UpdateActivityOptionsByIdRequest{
 		Namespace:  s.Namespace(),
 		WorkflowId: workflowRun.GetID(),
 		ActivityId: "activity-id",
@@ -215,7 +215,7 @@ func (s *ActivityApiUpdateClientTestSuite) TestActivityUpdateApi_ChangeScheduleT
 	}, 2*time.Second, 200*time.Millisecond)
 
 	// update schedule_to_close_timeout
-	updateRequest := &workflowservicepb.UpdateActivityOptionsByIdRequest{
+	updateRequest := &workflowservice.UpdateActivityOptionsByIdRequest{
 		Namespace:  s.Namespace(),
 		WorkflowId: workflowRun.GetID(),
 		ActivityId: "activity-id",
@@ -298,7 +298,7 @@ func (s *ActivityApiUpdateClientTestSuite) TestActivityUpdateApi_ChangeScheduleT
 
 	// update schedule_to_close_timeout, make it longer
 	// also update retry policy interval, make it shorter
-	updateRequest := &workflowservicepb.UpdateActivityOptionsByIdRequest{
+	updateRequest := &workflowservice.UpdateActivityOptionsByIdRequest{
 		Namespace:  s.Namespace(),
 		WorkflowId: workflowRun.GetID(),
 		ActivityId: "activity-id",

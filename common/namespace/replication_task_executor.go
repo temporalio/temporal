@@ -357,14 +357,14 @@ func ConvertClusterReplicationConfigFromProto(
 }
 
 func convertFailoverHistoryToPersistenceProto(failoverHistory []*replicationpb.FailoverStatus) []*persistencespb.FailoverStatus {
-	var persistencePb []*persistencespb.FailoverStatus
+	var res []*persistencespb.FailoverStatus
 	for _, status := range failoverHistory {
-		persistencePb = append(persistencePb, &persistencespb.FailoverStatus{
+		res = append(res, &persistencespb.FailoverStatus{
 			FailoverTime:    status.GetFailoverTime(),
 			FailoverVersion: status.GetFailoverVersion(),
 		})
 	}
-	return persistencePb
+	return res
 }
 
 func (h *namespaceReplicationTaskExecutorImpl) validateNamespaceStatus(input enumspb.NamespaceState) error {
