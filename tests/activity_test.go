@@ -363,7 +363,6 @@ func (s *ActivityClientTestSuite) Test_ActivityTimeouts() {
 	s.True(ok)
 	s.Equal(enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE, timeoutErr.TimeoutType())
 
-	// verify activity timeout type
 	s.Error(err6)
 	activityErr, ok = err6.(*temporal.ActivityError)
 	s.True(ok)
