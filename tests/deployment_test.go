@@ -309,6 +309,25 @@ func (s *DeploymentSuite) verifyDeploymentListInfo(expectedDeploymentListInfo *d
 	return true
 }
 
+func (s *DeploymentSuite) listDeploymentsAllPages(ctx context.Context, request *workflowservice.ListDeploymentsRequest) ([]*deploymentpb.DeploymentListInfo, error) {
+	var resp *workflowservice.ListDeploymentsResponse
+	var err error
+	var deployments []*deploymentpb.DeploymentListInfo
+	for {
+		if resp == nil || len(resp.NextPageToken) > 0 {
+			resp, err = s.FrontendClient().ListDeployments(ctx, request)
+			if err != nil {
+				return nil, err
+			}
+			deployments = append(deployments, resp.GetDeployments()...)
+			request.NextPageToken = resp.NextPageToken
+		} else {
+			break
+		}
+	}
+	return deployments, nil
+}
+
 // verifyDeployments does the following:
 // - makes a list deployments call with/without seriesFilter
 // - validates the response with expectedDeployments
@@ -318,34 +337,8 @@ func (s *DeploymentSuite) verifyDeployments(ctx context.Context, request *workfl
 	// list deployment call
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		a := assert.New(t)
-
-		var actualDeployments []*deploymentpb.DeploymentListInfo
-		if request.PageSize > 0 && int(request.PageSize) < len(expectedDeployments) { // multiple list calls needed
-			var nextPageToken []byte
-			first := true
-			for {
-				if first || nextPageToken != nil {
-					first = false
-					resp, err := s.FrontendClient().ListDeployments(ctx, request)
-					a.NoError(err)
-					a.NotNil(resp)
-					if resp == nil {
-						return
-					}
-					actualDeployments = append(actualDeployments, resp.GetDeployments()...)
-					nextPageToken = resp.NextPageToken
-				}
-			}
-		} else {
-			resp, err := s.FrontendClient().ListDeployments(ctx, request)
-			a.NoError(err)
-			a.NotNil(resp)
-			if resp == nil {
-				return
-			}
-			actualDeployments = resp.GetDeployments()
-		}
-
+		actualDeployments, err := s.listDeploymentsAllPages(ctx, request)
+		a.NoError(err)
 		a.NotNil(actualDeployments)
 		// check to stop eventuallyWithT from panicking since
 		// it collects all possible errors
@@ -432,10 +425,10 @@ func (s *DeploymentSuite) TestListDeployments_MultipleDeploymentsOnePage() {
 	s.startDeploymentsAndValidateList(deploymentInfo, "", 0)
 }
 
-//func (s *DeploymentSuite) TestListDeployments_MultipleDeploymentsMultiplePages() {
-//	deploymentInfo := s.buildDeploymentInfo(5)
-//	s.startDeploymentsAndValidateList(deploymentInfo, "", 2)
-//}
+func (s *DeploymentSuite) TestListDeployments_MultipleDeploymentsMultiplePages() {
+	deploymentInfo := s.buildDeploymentInfo(5)
+	s.startDeploymentsAndValidateList(deploymentInfo, "", 2)
+}
 
 func (s *DeploymentSuite) TestListDeployments_MultipleDeployments_WithSeriesFilter() {
 	deploymentInfo := s.buildDeploymentInfo(2)
