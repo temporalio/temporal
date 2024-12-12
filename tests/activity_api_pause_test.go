@@ -32,7 +32,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/suite"
 	enumspb "go.temporal.io/api/enums/v1"
-	workflowservicepb "go.temporal.io/api/workflowservice/v1"
+	workflowservice "go.temporal.io/api/workflowservice/v1"
 	sdkclient "go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
@@ -133,7 +133,7 @@ func (s *ActivityApiPauseClientTestSuite) TestActivityPauseApi_WhileRunning() {
 	}, 10*time.Second, 500*time.Millisecond)
 
 	// pause activity
-	pauseRequest := &workflowservicepb.PauseActivityByIdRequest{
+	pauseRequest := &workflowservice.PauseActivityByIdRequest{
 		Namespace:  s.Namespace(),
 		WorkflowId: workflowRun.GetID(),
 		ActivityId: "activity-id",
@@ -161,12 +161,12 @@ func (s *ActivityApiPauseClientTestSuite) TestActivityPauseApi_WhileRunning() {
 	s.Equal(int32(1), description.PendingActivities[0].Attempt)
 
 	// unpause the activity
-	unpauseRequest := &workflowservicepb.UnpauseActivityByIdRequest{
+	unpauseRequest := &workflowservice.UnpauseActivityByIdRequest{
 		Namespace:  s.Namespace(),
 		WorkflowId: workflowRun.GetID(),
 		ActivityId: "activity-id",
-		Operation: &workflowservicepb.UnpauseActivityByIdRequest_Resume{
-			Resume: &workflowservicepb.UnpauseActivityByIdRequest_ResumeOperation{
+		Operation: &workflowservice.UnpauseActivityByIdRequest_Resume{
+			Resume: &workflowservice.UnpauseActivityByIdRequest_ResumeOperation{
 				NoWait: false,
 			},
 		},
@@ -229,7 +229,7 @@ func (s *ActivityApiPauseClientTestSuite) TestActivityPauseApi_WhileWaiting() {
 	}, 5*time.Second, 100*time.Millisecond)
 
 	// pause activity
-	pauseRequest := &workflowservicepb.PauseActivityByIdRequest{
+	pauseRequest := &workflowservice.PauseActivityByIdRequest{
 		Namespace:  s.Namespace(),
 		WorkflowId: workflowRun.GetID(),
 		ActivityId: "activity-id",
@@ -249,12 +249,12 @@ func (s *ActivityApiPauseClientTestSuite) TestActivityPauseApi_WhileWaiting() {
 	s.Equal(int32(2), description.PendingActivities[0].Attempt)
 
 	// unpause the activity
-	unpauseRequest := &workflowservicepb.UnpauseActivityByIdRequest{
+	unpauseRequest := &workflowservice.UnpauseActivityByIdRequest{
 		Namespace:  s.Namespace(),
 		WorkflowId: workflowRun.GetID(),
 		ActivityId: "activity-id",
-		Operation: &workflowservicepb.UnpauseActivityByIdRequest_Resume{
-			Resume: &workflowservicepb.UnpauseActivityByIdRequest_ResumeOperation{
+		Operation: &workflowservice.UnpauseActivityByIdRequest_Resume{
+			Resume: &workflowservice.UnpauseActivityByIdRequest_ResumeOperation{
 				NoWait: false,
 			},
 		},
@@ -321,7 +321,7 @@ func (s *ActivityApiPauseClientTestSuite) TestActivityPauseApi_WhileRetryNoWait(
 	}, 5*time.Second, 100*time.Millisecond)
 
 	// pause activity
-	pauseRequest := &workflowservicepb.PauseActivityByIdRequest{
+	pauseRequest := &workflowservice.PauseActivityByIdRequest{
 		Namespace:  s.Namespace(),
 		WorkflowId: workflowRun.GetID(),
 		ActivityId: "activity-id",
@@ -331,12 +331,12 @@ func (s *ActivityApiPauseClientTestSuite) TestActivityPauseApi_WhileRetryNoWait(
 	s.NotNil(resp)
 
 	// unpause the activity, and set noWait flag
-	unpauseRequest := &workflowservicepb.UnpauseActivityByIdRequest{
+	unpauseRequest := &workflowservice.UnpauseActivityByIdRequest{
 		Namespace:  s.Namespace(),
 		WorkflowId: workflowRun.GetID(),
 		ActivityId: "activity-id",
-		Operation: &workflowservicepb.UnpauseActivityByIdRequest_Resume{
-			Resume: &workflowservicepb.UnpauseActivityByIdRequest_ResumeOperation{
+		Operation: &workflowservice.UnpauseActivityByIdRequest_Resume{
+			Resume: &workflowservice.UnpauseActivityByIdRequest_ResumeOperation{
 				NoWait: true,
 			},
 		},
@@ -404,7 +404,7 @@ func (s *ActivityApiPauseClientTestSuite) TestActivityPauseApi_WithReset() {
 	}, 5*time.Second, 100*time.Millisecond)
 
 	// pause activity
-	pauseRequest := &workflowservicepb.PauseActivityByIdRequest{
+	pauseRequest := &workflowservice.PauseActivityByIdRequest{
 		Namespace:  s.Namespace(),
 		WorkflowId: workflowRun.GetID(),
 		ActivityId: "activity-id",
@@ -426,12 +426,12 @@ func (s *ActivityApiPauseClientTestSuite) TestActivityPauseApi_WithReset() {
 	activityWasReset = true
 
 	// unpause the activity with reset, and set noWait flag
-	unpauseRequest := &workflowservicepb.UnpauseActivityByIdRequest{
+	unpauseRequest := &workflowservice.UnpauseActivityByIdRequest{
 		Namespace:  s.Namespace(),
 		WorkflowId: workflowRun.GetID(),
 		ActivityId: "activity-id",
-		Operation: &workflowservicepb.UnpauseActivityByIdRequest_Reset_{
-			Reset_: &workflowservicepb.UnpauseActivityByIdRequest_ResetOperation{
+		Operation: &workflowservice.UnpauseActivityByIdRequest_Reset_{
+			Reset_: &workflowservice.UnpauseActivityByIdRequest_ResetOperation{
 				NoWait: true,
 			},
 		},
