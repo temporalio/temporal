@@ -1043,14 +1043,6 @@ func reapplyChildEvents(mutableState workflow.MutableState, event *historypb.His
 	return nil
 }
 
-// func reapplyVerifyPendingChild(mutableState workflow.MutableState, initEventID int64) bool {
-// 	ci, childExists := mutableState.GetChildExecutionInfo(initEventID)
-// 	if !childExists {
-// 		return nil
-// 	}
-// 	return nil, false
-// }
-
 func (r *workflowResetterImpl) getPaginationFn(
 	ctx context.Context,
 	firstEventID int64,
