@@ -826,6 +826,71 @@ func (s *workflowResetterSuite) TestReapplyWorkflowEvents() {
 	s.NoError(err)
 	s.Equal(newRunID, nextRunID)
 }
+func (s *workflowResetterSuite) TestReapplyEvents_WithPendingChildren() {
+	firstEventID := common.FirstEventID
+	nextEventID := int64(6)
+	branchToken := []byte("some random branch token")
+
+	newRunID := uuid.New()
+	event1 := &historypb.HistoryEvent{
+		EventId:    1,
+		EventType:  enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
+		Attributes: &historypb.HistoryEvent_WorkflowExecutionStartedEventAttributes{WorkflowExecutionStartedEventAttributes: &historypb.WorkflowExecutionStartedEventAttributes{}},
+	}
+	event2 := &historypb.HistoryEvent{
+		EventId:    2,
+		EventType:  enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED,
+		Attributes: &historypb.HistoryEvent_WorkflowTaskScheduledEventAttributes{WorkflowTaskScheduledEventAttributes: &historypb.WorkflowTaskScheduledEventAttributes{}},
+	}
+	event3 := &historypb.HistoryEvent{
+		EventId:    3,
+		EventType:  enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED,
+		Attributes: &historypb.HistoryEvent_WorkflowTaskStartedEventAttributes{WorkflowTaskStartedEventAttributes: &historypb.WorkflowTaskStartedEventAttributes{}},
+	}
+	event4 := &historypb.HistoryEvent{
+		EventId:    4,
+		EventType:  enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED,
+		Attributes: &historypb.HistoryEvent_WorkflowTaskCompletedEventAttributes{WorkflowTaskCompletedEventAttributes: &historypb.WorkflowTaskCompletedEventAttributes{}},
+	}
+	event5 := &historypb.HistoryEvent{
+		EventId:   5,
+		EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CONTINUED_AS_NEW,
+		Attributes: &historypb.HistoryEvent_WorkflowExecutionContinuedAsNewEventAttributes{WorkflowExecutionContinuedAsNewEventAttributes: &historypb.WorkflowExecutionContinuedAsNewEventAttributes{
+			NewExecutionRunId: newRunID,
+		}},
+	}
+	events := []*historypb.HistoryEvent{event1, event2, event3, event4, event5}
+	shardID := s.mockShard.GetShardID()
+	s.mockExecutionMgr.EXPECT().ReadHistoryBranchByBatch(gomock.Any(), &persistence.ReadHistoryBranchRequest{
+		BranchToken:   branchToken,
+		MinEventID:    firstEventID,
+		MaxEventID:    nextEventID,
+		PageSize:      defaultPageSize,
+		NextPageToken: nil,
+		ShardID:       shardID,
+	}).Return(&persistence.ReadHistoryBranchByBatchResponse{
+		History:       []*historypb.History{{Events: events}},
+		NextPageToken: nil,
+	}, nil)
+
+	mutableState := workflow.NewMockMutableState(s.controller)
+	smReg := hsm.NewRegistry()
+	s.NoError(workflow.RegisterStateMachine(smReg))
+	root, err := hsm.NewRoot(smReg, workflow.StateMachineType, nil, make(map[string]*persistencespb.StateMachineMap), nil)
+	s.NoError(err)
+	mutableState.EXPECT().HSM().Return(root).AnyTimes()
+
+	nextRunID, err := s.workflowResetter.reapplyEventsFromBranch(
+		context.Background(),
+		mutableState,
+		firstEventID,
+		nextEventID,
+		branchToken,
+		nil,
+	)
+	s.NoError(err)
+	s.Equal(newRunID, nextRunID)
+}
 
 func (s *workflowResetterSuite) TestReapplyEvents() {
 
