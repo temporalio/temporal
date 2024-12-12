@@ -314,16 +314,15 @@ func (s *DeploymentSuite) listDeploymentsAllPages(ctx context.Context, request *
 	var err error
 	var deployments []*deploymentpb.DeploymentListInfo
 	for {
-		if resp == nil || len(resp.NextPageToken) > 0 {
-			resp, err = s.FrontendClient().ListDeployments(ctx, request)
-			if err != nil {
-				return nil, err
-			}
-			deployments = append(deployments, resp.GetDeployments()...)
-			request.NextPageToken = resp.NextPageToken
-		} else {
+		if !(resp == nil || len(resp.NextPageToken) > 0) {
 			break
 		}
+		resp, err = s.FrontendClient().ListDeployments(ctx, request)
+		if err != nil {
+			return nil, err
+		}
+		deployments = append(deployments, resp.GetDeployments()...)
+		request.NextPageToken = resp.NextPageToken
 	}
 	return deployments, nil
 }
