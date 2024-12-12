@@ -64,6 +64,10 @@ func (t *Task) Destination() string {
 	return t.attrs.Destination
 }
 
+func (t *Task) Attempt() int32 {
+	return t.attrs.Attempt
+}
+
 func (t *Task) Validate(ref *persistencespb.StateMachineRef, node *hsm.Node) error {
 	if t.IsConcurrent {
 		return hsm.ValidateNotTransitioned(ref, node)

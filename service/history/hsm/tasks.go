@@ -55,6 +55,8 @@ type Task interface {
 	// If a destination is set, a task will be scheduled on the outbound queue.
 	// Currently Destination and Deadline are mutually exclusive.
 	Destination() string
+	// The attempt count for this task. Tasks may return 0 if the attempt count is not relevant for that task type.
+	Attempt() int32
 	// Validate checks if the task is still valid for processing for the current node state.
 	// Implementors may return [ErrStaleReference] or [consts.ErrWorkflowCompleted] if the task is no longer valid.
 	// A typical implementation may use [node.CheckRunning], [ValidateNotTransitioned], or check if the state of the
@@ -66,6 +68,7 @@ type Task interface {
 type TaskAttributes struct {
 	Deadline    time.Time
 	Destination string
+	Attempt     int32
 }
 
 // TaskSerializer provides type information and a serializer for a state machine.

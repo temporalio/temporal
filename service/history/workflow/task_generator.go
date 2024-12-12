@@ -899,9 +899,10 @@ func generateSubStateMachineTask(
 	}
 
 	taskInfo := &persistencespb.StateMachineTaskInfo{
-		Ref:  ref,
-		Type: task.Type(),
-		Data: data,
+		Ref:     ref,
+		Type:    task.Type(),
+		Data:    data,
+		Attempt: task.Attempt(),
 	}
 	// NOTE: at the moment deadline is mutually exclusive with destination.
 	// This will change when we add the outbound timer queue.

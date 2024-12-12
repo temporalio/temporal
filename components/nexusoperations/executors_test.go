@@ -316,7 +316,7 @@ func TestProcessInvocationTask(t *testing.T) {
 		},
 		{
 			name:                  "invocation timeout by request timeout",
-			requestTimeout:        2 * time.Millisecond,
+			requestTimeout:        10 * time.Millisecond,
 			schedToCloseTimeout:   time.Hour,
 			destinationDown:       true,
 			expectedMetricOutcome: "request-timeout",

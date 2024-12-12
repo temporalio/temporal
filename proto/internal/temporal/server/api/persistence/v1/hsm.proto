@@ -117,6 +117,8 @@ message StateMachineTaskInfo {
     string type = 2;
     // Opaque data attached to this task. May be nil. Deserialized by a registered TaskSerializer for this type.
     bytes data = 3;
+    // Task attempt count.
+    int32 attempt = 4;
 }
 
 // A group of state machine timer tasks for a given deadline, used for collapsing state machine timer tasks.

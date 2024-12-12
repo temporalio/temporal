@@ -124,6 +124,7 @@ func TestRegenerateTasks(t *testing.T) {
 				require.Equal(t, 2, len(tasks))
 				require.Equal(t, nexusoperations.TaskTypeInvocation, tasks[0].Type())
 				require.Equal(t, tasks[0].(nexusoperations.InvocationTask).EndpointName, "endpoint")
+				require.Equal(t, tasks[0].(nexusoperations.InvocationTask).Attempt(), int32(0))
 				require.Equal(t, nexusoperations.TaskTypeTimeout, tasks[1].Type())
 			},
 		},
@@ -221,6 +222,7 @@ func TestRetry(t *testing.T) {
 	require.Equal(t, 1, len(transitionOp.Output.Tasks))
 	invocationTask := transitionOp.Output.Tasks[0].(nexusoperations.InvocationTask) // nolint:revive
 	require.Equal(t, "endpoint", invocationTask.EndpointName)
+	require.Equal(t, int32(1), invocationTask.Attempt())
 	op, err = hsm.MachineData[nexusoperations.Operation](node)
 	require.NoError(t, err)
 	require.Equal(t, enumsspb.NEXUS_OPERATION_STATE_SCHEDULED, op.State())

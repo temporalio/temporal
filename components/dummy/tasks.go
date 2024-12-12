@@ -53,6 +53,10 @@ func (t ImmediateTask) Destination() string {
 	return t.destination
 }
 
+func (ImmediateTask) Attempt() int32 {
+	return 0
+}
+
 func (ImmediateTask) Validate(ref *persistencespb.StateMachineRef, node *hsm.Node) error {
 	return hsm.ValidateNotTransitioned(ref, node)
 }
@@ -84,6 +88,10 @@ func (t TimerTask) Deadline() time.Time {
 
 func (TimerTask) Destination() string {
 	return ""
+}
+
+func (TimerTask) Attempt() int32 {
+	return 0
 }
 
 func (t TimerTask) Validate(ref *persistencespb.StateMachineRef, node *hsm.Node) error {

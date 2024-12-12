@@ -59,6 +59,10 @@ func (TimeoutTask) Destination() string {
 	return ""
 }
 
+func (TimeoutTask) Attempt() int32 {
+	return 0
+}
+
 // Validate checks if the timeout task is still valid to execute for the given node state.
 func (t TimeoutTask) Validate(ref *persistencespb.StateMachineRef, node *hsm.Node) error {
 	if err := node.CheckRunning(); err != nil {
@@ -91,6 +95,7 @@ func (TimeoutTaskSerializer) Serialize(hsm.Task) ([]byte, error) {
 
 type InvocationTask struct {
 	EndpointName string
+	attempt      int32
 }
 
 var _ hsm.Task = InvocationTask{}
@@ -107,6 +112,10 @@ func (t InvocationTask) Destination() string {
 	return t.EndpointName
 }
 
+func (t InvocationTask) Attempt() int32 {
+	return t.attempt
+}
+
 func (InvocationTask) Validate(ref *persistencespb.StateMachineRef, node *hsm.Node) error {
 	if err := node.CheckRunning(); err != nil {
 		return err
@@ -117,7 +126,7 @@ func (InvocationTask) Validate(ref *persistencespb.StateMachineRef, node *hsm.No
 type InvocationTaskSerializer struct{}
 
 func (InvocationTaskSerializer) Deserialize(data []byte, attrs hsm.TaskAttributes) (hsm.Task, error) {
-	return InvocationTask{EndpointName: attrs.Destination}, nil
+	return InvocationTask{EndpointName: attrs.Destination, attempt: attrs.Attempt}, nil
 }
 
 func (InvocationTaskSerializer) Serialize(hsm.Task) ([]byte, error) {
@@ -142,6 +151,10 @@ func (t BackoffTask) Destination() string {
 	return ""
 }
 
+func (BackoffTask) Attempt() int32 {
+	return 0
+}
+
 func (t BackoffTask) Validate(_ *persistencespb.StateMachineRef, node *hsm.Node) error {
 	if err := node.CheckRunning(); err != nil {
 		return err
@@ -161,6 +174,7 @@ func (BackoffTaskSerializer) Serialize(hsm.Task) ([]byte, error) {
 
 type CancelationTask struct {
 	EndpointName string
+	attempt      int32
 }
 
 var _ hsm.Task = CancelationTask{}
@@ -177,6 +191,10 @@ func (t CancelationTask) Destination() string {
 	return t.EndpointName
 }
 
+func (t CancelationTask) Attempt() int32 {
+	return t.attempt
+}
+
 func (CancelationTask) Validate(ref *persistencespb.StateMachineRef, node *hsm.Node) error {
 	if err := node.CheckRunning(); err != nil {
 		return err
@@ -187,7 +205,7 @@ func (CancelationTask) Validate(ref *persistencespb.StateMachineRef, node *hsm.N
 type CancelationTaskSerializer struct{}
 
 func (CancelationTaskSerializer) Deserialize(data []byte, attrs hsm.TaskAttributes) (hsm.Task, error) {
-	return CancelationTask{EndpointName: attrs.Destination}, nil
+	return CancelationTask{EndpointName: attrs.Destination, attempt: attrs.Attempt}, nil
 }
 
 func (CancelationTaskSerializer) Serialize(hsm.Task) ([]byte, error) {
@@ -210,6 +228,10 @@ func (t CancelationBackoffTask) Deadline() time.Time {
 
 func (CancelationBackoffTask) Destination() string {
 	return ""
+}
+
+func (CancelationBackoffTask) Attempt() int32 {
+	return 0
 }
 
 func (CancelationBackoffTask) Validate(ref *persistencespb.StateMachineRef, node *hsm.Node) error {

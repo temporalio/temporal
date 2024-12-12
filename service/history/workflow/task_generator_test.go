@@ -436,8 +436,9 @@ func TestTaskGenerator_GenerateDirtySubStateMachineTasks(t *testing.T) {
 			},
 			MachineTransitionCount: 1,
 		},
-		Type: callbacks.TaskTypeInvocation,
-		Data: nil,
+		Type:    callbacks.TaskTypeInvocation,
+		Data:    nil,
+		Attempt: int32(0),
 	}, invocationTask.Info)
 
 	require.Equal(t, tests.WorkflowKey, backoffTask.WorkflowKey)

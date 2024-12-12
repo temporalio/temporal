@@ -59,6 +59,10 @@ func (t InvocationTask) Deadline() time.Time {
 	return hsm.Immediate
 }
 
+func (InvocationTask) Attempt() int32 {
+	return 0
+}
+
 func (InvocationTask) Validate(ref *persistencespb.StateMachineRef, node *hsm.Node) error {
 	return hsm.ValidateState[enumsspb.CallbackState, Callback](node, enumsspb.CALLBACK_STATE_SCHEDULED)
 }
@@ -85,6 +89,10 @@ func (BackoffTask) Type() string {
 
 func (t BackoffTask) Deadline() time.Time {
 	return t.deadline
+}
+
+func (BackoffTask) Attempt() int32 {
+	return 0
 }
 
 func (BackoffTask) Destination() string {
