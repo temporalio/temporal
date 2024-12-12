@@ -27,6 +27,7 @@ package deployment
 import (
 	"cmp"
 	"context"
+	"sync"
 
 	"go.temporal.io/sdk/activity"
 	deploymentspb "go.temporal.io/server/api/deployment/v1"
@@ -50,14 +51,18 @@ func (a *DeploymentActivities) StartDeploymentSeriesWorkflow(ctx context.Context
 	return a.deploymentClient.StartDeploymentSeries(ctx, a.namespace, input.SeriesName, identity, input.RequestId)
 }
 
-func (a *DeploymentActivities) SyncUserData(ctx context.Context, input *deploymentspb.SyncUserDataRequest) error {
+func (a *DeploymentActivities) SyncUserData(ctx context.Context, input *deploymentspb.SyncUserDataRequest) (*deploymentspb.SyncUserDataResponse, error) {
 	logger := activity.GetLogger(ctx)
 
 	errs := make(chan error)
+
+	var lock sync.Mutex
+	maxVersionByName := make(map[string]int64)
+
 	for _, sync := range input.Sync {
 		go func() {
 			logger.Info("syncing task queue userdata for deployment", "taskQueue", sync.Name, "type", sync.Type)
-			_, err := a.matchingClient.SyncDeploymentUserData(ctx, &matchingservice.SyncDeploymentUserDataRequest{
+			res, err := a.matchingClient.SyncDeploymentUserData(ctx, &matchingservice.SyncDeploymentUserDataRequest{
 				NamespaceId:   a.namespace.ID().String(),
 				TaskQueue:     sync.Name,
 				TaskQueueType: sync.Type,
@@ -66,6 +71,10 @@ func (a *DeploymentActivities) SyncUserData(ctx context.Context, input *deployme
 			})
 			if err != nil {
 				logger.Error("syncing task queue userdata", "taskQueue", sync.Name, "type", sync.Type, "error", err)
+			} else {
+				lock.Lock()
+				defer lock.Unlock()
+				maxVersionByName[sync.Name] = max(maxVersionByName[sync.Name], res.Version)
 			}
 			errs <- err
 		}()
@@ -75,9 +84,35 @@ func (a *DeploymentActivities) SyncUserData(ctx context.Context, input *deployme
 	for range input.Sync {
 		err = cmp.Or(err, <-errs)
 	}
+	if err != nil {
+		return nil, err
+	}
+	return &deploymentspb.SyncUserDataResponse{MaxVersionByName: maxVersionByName}, nil
+}
 
-	// TODO: it might be nice if we check propagation status and not return from here until
-	// it's propagated to all partitions
+func (a *DeploymentActivities) CheckUserDataPropagation(ctx context.Context, input *deploymentspb.CheckUserDataPropagationRequest) error {
+	logger := activity.GetLogger(ctx)
 
+	errs := make(chan error)
+
+	for name, version := range input.MaxVersionByName {
+		go func() {
+			logger.Info("waiting for userdata propagation", "taskQueue", name, "version", version)
+			_, err := a.matchingClient.CheckTaskQueueUserDataPropagation(ctx, &matchingservice.CheckTaskQueueUserDataPropagationRequest{
+				NamespaceId: a.namespace.ID().String(),
+				TaskQueue:   name,
+				Version:     version,
+			})
+			if err != nil {
+				logger.Error("waiting for userdata", "taskQueue", name, "type", version, "error", err)
+			}
+			errs <- err
+		}()
+	}
+
+	var err error
+	for range input.MaxVersionByName {
+		err = cmp.Or(err, <-errs)
+	}
 	return err
 }

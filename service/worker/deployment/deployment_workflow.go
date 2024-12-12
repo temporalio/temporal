@@ -205,6 +205,7 @@ func (d *DeploymentWorkflowRunner) handleRegisterWorker(ctx workflow.Context, ar
 
 	// sync to user data
 	activityCtx := workflow.WithActivityOptions(ctx, defaultActivityOptions)
+	var syncRes deploymentspb.SyncUserDataResponse
 	err = workflow.ExecuteActivity(activityCtx, d.a.SyncUserData, &deploymentspb.SyncUserDataRequest{
 		Deployment: d.State.Deployment,
 		Sync: []*deploymentspb.SyncUserDataRequest_SyncUserData{
@@ -214,6 +215,14 @@ func (d *DeploymentWorkflowRunner) handleRegisterWorker(ctx workflow.Context, ar
 				Data: d.dataWithTime(data),
 			},
 		},
+	}).Get(ctx, &syncRes)
+	if err != nil {
+		return err
+	}
+
+	// wait for propagation
+	err = workflow.ExecuteActivity(activityCtx, d.a.CheckUserDataPropagation, &deploymentspb.CheckUserDataPropagationRequest{
+		MaxVersionByName: syncRes.MaxVersionByName,
 	}).Get(ctx, nil)
 	if err != nil {
 		return err
@@ -302,9 +311,17 @@ func (d *DeploymentWorkflowRunner) handleSyncState(ctx workflow.Context, args *d
 			}
 		}
 		activityCtx := workflow.WithActivityOptions(ctx, defaultActivityOptions)
-		err = workflow.ExecuteActivity(activityCtx, d.a.SyncUserData, syncReq).Get(ctx, nil)
+		var syncRes deploymentspb.SyncUserDataResponse
+		err = workflow.ExecuteActivity(activityCtx, d.a.SyncUserData, syncReq).Get(ctx, &syncRes)
 		if err != nil {
 			// TODO: if this fails, should we roll back anything?
+			return nil, err
+		}
+		// wait for propagation
+		err = workflow.ExecuteActivity(activityCtx, d.a.CheckUserDataPropagation, &deploymentspb.CheckUserDataPropagationRequest{
+			MaxVersionByName: syncRes.MaxVersionByName,
+		}).Get(ctx, nil)
+		if err != nil {
 			return nil, err
 		}
 	}
