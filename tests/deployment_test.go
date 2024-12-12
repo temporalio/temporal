@@ -309,14 +309,11 @@ func (s *DeploymentSuite) verifyDeploymentListInfo(expectedDeploymentListInfo *d
 	return true
 }
 
-func (s *DeploymentSuite) listDeploymentsAllPages(ctx context.Context, request *workflowservice.ListDeploymentsRequest) ([]*deploymentpb.DeploymentListInfo, error) {
+func (s *DeploymentSuite) listDeploymentsAll(ctx context.Context, request *workflowservice.ListDeploymentsRequest) ([]*deploymentpb.DeploymentListInfo, error) {
 	var resp *workflowservice.ListDeploymentsResponse
 	var err error
 	var deployments []*deploymentpb.DeploymentListInfo
-	for {
-		if !(resp == nil || len(resp.NextPageToken) > 0) {
-			break
-		}
+	for resp == nil || len(resp.NextPageToken) > 0 {
 		resp, err = s.FrontendClient().ListDeployments(ctx, request)
 		if err != nil {
 			return nil, err
@@ -336,7 +333,7 @@ func (s *DeploymentSuite) verifyDeployments(ctx context.Context, request *workfl
 	// list deployment call
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		a := assert.New(t)
-		actualDeployments, err := s.listDeploymentsAllPages(ctx, request)
+		actualDeployments, err := s.listDeploymentsAll(ctx, request)
 		a.NoError(err)
 		a.NotNil(actualDeployments)
 		// check to stop eventuallyWithT from panicking since

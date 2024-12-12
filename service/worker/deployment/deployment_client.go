@@ -361,8 +361,8 @@ func (d *DeploymentClientImpl) ListDeployments(
 		return nil, nil, err
 	}
 
-	deployments := make([]*deploymentpb.DeploymentListInfo, 0)
-	for _, ex := range persistenceResp.Executions {
+	deployments := make([]*deploymentpb.DeploymentListInfo, len(persistenceResp.Executions))
+	for i, ex := range persistenceResp.Executions {
 		workflowMemo := DecodeDeploymentMemo(ex.GetMemo())
 
 		deploymentListInfo := &deploymentpb.DeploymentListInfo{
@@ -370,7 +370,7 @@ func (d *DeploymentClientImpl) ListDeployments(
 			CreateTime: workflowMemo.CreateTime,
 			IsCurrent:  workflowMemo.IsCurrentDeployment,
 		}
-		deployments = append(deployments, deploymentListInfo)
+		deployments[i] = deploymentListInfo
 	}
 
 	return deployments, persistenceResp.NextPageToken, nil
