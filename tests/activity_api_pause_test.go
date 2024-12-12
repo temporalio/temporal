@@ -127,7 +127,7 @@ func (s *ActivityApiPauseClientTestSuite) TestActivityPauseApi_WhileRunning() {
 		description, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
 		assert.NoError(t, err)
 		if err != nil {
-			assert.Equal(t, 1, len(description.PendingActivities))
+			assert.Len(t, description.PendingActivities, 1)
 			assert.Equal(t, int32(1), startedActivityCount.Load())
 		}
 	}, 10*time.Second, 500*time.Millisecond)
