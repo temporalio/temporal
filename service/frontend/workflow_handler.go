@@ -3215,7 +3215,7 @@ func (wh *WorkflowHandler) ListDeployments(
 		request.PageSize = maxPageSize
 	}
 
-	deployments, nextPageToken, err := wh.deploymentStoreClient.ListDeployments(ctx, namespaceEntry, request.SeriesName, request.NextPageToken)
+	deployments, nextPageToken, err := wh.deploymentStoreClient.ListDeployments(ctx, namespaceEntry, request.SeriesName, int(request.PageSize), request.NextPageToken)
 	if err != nil {
 		return nil, err
 	}
