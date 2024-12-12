@@ -956,18 +956,19 @@ func reapplyEvents(
 }
 
 func reapplyChildEvents(mutableState workflow.MutableState, event *historypb.HistoryEvent) error {
-	switch event.GetEventType() {
+	switch event.GetEventType() { // nolint:exhaustive
 	case enumspb.EVENT_TYPE_START_CHILD_WORKFLOW_EXECUTION_FAILED:
-		childEventAttributes := event.GetChildWorkflowExecutionFailedEventAttributes()
+		childEventAttributes := event.GetStartChildWorkflowExecutionFailedEventAttributes()
 		_, childExists := mutableState.GetChildExecutionInfo(childEventAttributes.GetInitiatedEventId())
 		if !childExists {
 			return nil
 		}
-		attributes := &historypb.WorkflowExecutionFailedEventAttributes{
-			Failure:    childEventAttributes.Failure,
-			RetryState: childEventAttributes.RetryState,
+		attributes := &historypb.StartChildWorkflowExecutionInitiatedEventAttributes{
+			WorkflowId:   childEventAttributes.WorkflowId,
+			WorkflowType: childEventAttributes.WorkflowType,
+			Control:      childEventAttributes.Control,
 		}
-		if _, err := mutableState.AddChildWorkflowExecutionFailedEvent(childEventAttributes.GetInitiatedEventId(), childEventAttributes.WorkflowExecution, attributes); err != nil {
+		if _, err := mutableState.AddStartChildWorkflowExecutionFailedEvent(childEventAttributes.GetInitiatedEventId(), childEventAttributes.Cause, attributes); err != nil {
 			return err
 		}
 
