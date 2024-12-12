@@ -978,7 +978,12 @@ func reapplyChildEvents(mutableState workflow.MutableState, event *historypb.His
 			return nil
 		}
 		childClock := ci.Clock
-		if _, err := mutableState.AddChildWorkflowExecutionStartedEvent(childEventAttributes.WorkflowExecution, childEventAttributes.WorkflowType, childEventAttributes.GetInitiatedEventId(), childEventAttributes.Header, childClock); err != nil {
+		if _, err := mutableState.AddChildWorkflowExecutionStartedEvent(
+			childEventAttributes.WorkflowExecution,
+			childEventAttributes.WorkflowType,
+			childEventAttributes.GetInitiatedEventId(),
+			childEventAttributes.Header,
+			childClock); err != nil {
 			return err
 		}
 	case enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_COMPLETED:
@@ -1039,6 +1044,8 @@ func reapplyChildEvents(mutableState workflow.MutableState, event *historypb.His
 		if _, err := mutableState.AddChildWorkflowExecutionTerminatedEvent(childEventAttributes.GetInitiatedEventId(), childEventAttributes.WorkflowExecution, nil); err != nil {
 			return err
 		}
+	default:
+		return nil
 	}
 	return nil
 }
