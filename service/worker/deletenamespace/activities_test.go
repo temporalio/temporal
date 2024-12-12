@@ -31,7 +31,6 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.uber.org/mock/gomock"
@@ -43,7 +42,6 @@ func Test_GenerateDeletedNamespaceNameActivity(t *testing.T) {
 
 	a := &localActivities{
 		metadataManager: metadataManager,
-		metricsHandler:  metrics.NoopMetricsHandler,
 		logger:          log.NewNoopLogger(),
 	}
 

@@ -543,9 +543,8 @@ const (
 	UnknownTaskScope = "UnknownTask"
 	// ParentClosePolicyProcessorScope is scope used by all metrics emitted by worker.ParentClosePolicyProcessor
 	ParentClosePolicyProcessorScope = "ParentClosePolicyProcessor"
-	DeleteNamespaceWorkflowScope    = "DeleteNamespaceWorkflow"
-	ReclaimResourcesWorkflowScope   = "ReclaimResourcesWorkflow"
-	DeleteExecutionsWorkflowScope   = "DeleteExecutionsWorkflow"
+
+	DeleteExecutionsWorkflowScope = "DeleteExecutionsWorkflow"
 )
 
 // History task type
@@ -1075,19 +1074,13 @@ var (
 	ScavengerValidationFailuresCount                = NewCounterDef("scavenger_validation_failures")
 	ScavengerValidationSkipsCount                   = NewCounterDef("scavenger_validation_skips")
 	AddSearchAttributesFailuresCount                = NewCounterDef("add_search_attributes_failures")
-	DeleteNamespaceSuccessCount                     = NewCounterDef("delete_namespace_success")
-	RenameNamespaceSuccessCount                     = NewCounterDef("rename_namespace_success")
-	DeleteExecutionsSuccessCount                    = NewCounterDef("delete_executions_success")
-	DeleteNamespaceFailuresCount                    = NewCounterDef("delete_namespace_failures")
-	UpdateNamespaceFailuresCount                    = NewCounterDef("update_namespace_failures")
-	RenameNamespaceFailuresCount                    = NewCounterDef("rename_namespace_failures")
-	ReadNamespaceFailuresCount                      = NewCounterDef("read_namespace_failures")
-	ListExecutionsFailuresCount                     = NewCounterDef("list_executions_failures")
-	CountExecutionsFailuresCount                    = NewCounterDef("count_executions_failures")
-	DeleteExecutionFailuresCount                    = NewCounterDef("delete_execution_failures")
-	DeleteExecutionNotFoundCount                    = NewCounterDef("delete_execution_not_found")
-	RateLimiterFailuresCount                        = NewCounterDef("rate_limiter_failures")
-	BatcherProcessorSuccess                         = NewCounterDef(
+
+	DeleteExecutionsSuccessCount    = NewCounterDef("delete_executions_success")
+	DeleteExecutionsFailureCount    = NewCounterDef("delete_executions_failure")
+	DeleteExecutionsNotFoundCount   = NewCounterDef("delete_executions_not_found")
+	DeleteExecutionRateLimitedCount = NewCounterDef("delete_executions_rate_limited")
+
+	BatcherProcessorSuccess = NewCounterDef(
 		"batcher_processor_requests",
 		WithDescription("The number of individual workflow execution tasks successfully processed by the batch request processor"),
 	)
