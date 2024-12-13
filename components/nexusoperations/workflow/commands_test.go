@@ -532,7 +532,7 @@ func TestHandleCancelCommand(t *testing.T) {
 		require.ErrorAs(t, err, &failWFTErr)
 		require.False(t, failWFTErr.TerminateWorkflow)
 		require.Equal(t, enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_REQUEST_CANCEL_NEXUS_OPERATION_ATTRIBUTES, failWFTErr.Cause)
-		require.Equal(t, 1, len(tcx.history.Events))
+		require.Equal(t, 1, len(tcx.history.Events)) // Only scheduled event should be recorded.
 	})
 
 	t.Run("operation already completed - completion buffered", func(t *testing.T) {
