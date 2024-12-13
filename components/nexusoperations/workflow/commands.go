@@ -214,31 +214,19 @@ func (ch *commandHandler) HandleCancelCommand(
 	nodeID := strconv.FormatInt(attrs.ScheduledEventId, 10)
 	_, err := coll.Node(nodeID)
 	if err != nil {
-		if errors.Is(err, hsm.ErrStateMachineNotFound) {
-			if ms.HasAnyBufferedEvent(makeNexusOperationTerminalEventFilter(attrs.ScheduledEventId)) {
-				// Allow cancelation if there are buffered terminal events
-				event := ms.AddHistoryEvent(enumspb.EVENT_TYPE_NEXUS_OPERATION_CANCEL_REQUESTED, func(he *historypb.HistoryEvent) {
-					he.Attributes = &historypb.HistoryEvent_NexusOperationCancelRequestedEventAttributes{
-						NexusOperationCancelRequestedEventAttributes: &historypb.NexusOperationCancelRequestedEventAttributes{
-							ScheduledEventId:             attrs.ScheduledEventId,
-							WorkflowTaskCompletedEventId: workflowTaskCompletedEventID,
-						},
-					}
-					he.UserMetadata = command.UserMetadata
-				})
-				return nexusoperations.CancelRequestedEventDefinition{}.Apply(ms.HSM(), event)
-			}
+		if errors.Is(err, hsm.ErrStateMachineNotFound) && !ms.HasAnyBufferedEvent(makeNexusOperationTerminalEventFilter(attrs.ScheduledEventId)) {
 			return workflow.FailWorkflowTaskError{
 				Cause:   enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_REQUEST_CANCEL_NEXUS_OPERATION_ATTRIBUTES,
-				Message: fmt.Sprintf("requested cancelation for a non-existing or already completed operation with scheduled event ID %d", attrs.ScheduledEventId),
+				Message: fmt.Sprintf("error looking up operation with scheduled event ID %d: %v", attrs.ScheduledEventId, err),
 			}
-		}
-		return workflow.FailWorkflowTaskError{
-			Cause:   enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_REQUEST_CANCEL_NEXUS_OPERATION_ATTRIBUTES,
-			Message: fmt.Sprintf("error looking up operation with scheduled event ID %d: %v", attrs.ScheduledEventId, err),
+		} else {
+			return err
 		}
 	}
 
+	// Always create the event even if there's a buffered completion to avoid breaking replay in the SDK.
+	// The event will be applied before the completion since buffered events are reordered and put at the end of the
+	// batch, after command events from the workflow task.
 	event := ms.AddHistoryEvent(enumspb.EVENT_TYPE_NEXUS_OPERATION_CANCEL_REQUESTED, func(he *historypb.HistoryEvent) {
 		he.Attributes = &historypb.HistoryEvent_NexusOperationCancelRequestedEventAttributes{
 			NexusOperationCancelRequestedEventAttributes: &historypb.NexusOperationCancelRequestedEventAttributes{
@@ -257,6 +245,9 @@ func (ch *commandHandler) HandleCancelCommand(
 			Cause:   enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_REQUEST_CANCEL_NEXUS_OPERATION_ATTRIBUTES,
 			Message: fmt.Sprintf("requested cancelation for operation with scheduled event ID %d that is already being canceled", attrs.ScheduledEventId),
 		}
+	} else if errors.Is(err, hsm.ErrStateMachineNotFound) {
+		// This may happen if there's a buffered completion. Ignore.
+		return nil
 	}
 
 	return err
