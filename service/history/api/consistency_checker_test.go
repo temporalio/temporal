@@ -34,7 +34,7 @@ import (
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
-	"go.temporal.io/server/api/clock/v1"
+	clockspb "go.temporal.io/server/api/clock/v1"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/namespace"
@@ -190,14 +190,14 @@ func (s *workflowConsistencyCheckerSuite) Test_clockConsistencyCheck() {
 	err := s.checker.clockConsistencyCheck(nil)
 	s.NoError(err)
 
-	reqClock := &clock.VectorClock{
+	reqClock := &clockspb.VectorClock{
 		ShardId:   1,
 		Clock:     10,
 		ClusterId: 1,
 	}
 
 	// not compatible - different shard id
-	differentShardClock := &clock.VectorClock{
+	differentShardClock := &clockspb.VectorClock{
 		ShardId:   2,
 		Clock:     1,
 		ClusterId: 1,
@@ -207,7 +207,7 @@ func (s *workflowConsistencyCheckerSuite) Test_clockConsistencyCheck() {
 	s.NoError(err)
 
 	// not compatible - different cluster id
-	differentClusterClock := &clock.VectorClock{
+	differentClusterClock := &clockspb.VectorClock{
 		ShardId:   1,
 		Clock:     1,
 		ClusterId: 2,
@@ -222,7 +222,7 @@ func (s *workflowConsistencyCheckerSuite) Test_clockConsistencyCheck() {
 	s.NoError(err)
 
 	// shard clock ahead
-	shardClock := &clock.VectorClock{
+	shardClock := &clockspb.VectorClock{
 		ShardId:   1,
 		Clock:     20,
 		ClusterId: 1,
@@ -232,7 +232,7 @@ func (s *workflowConsistencyCheckerSuite) Test_clockConsistencyCheck() {
 	s.NoError(err)
 
 	// shard clock behind
-	shardClock = &clock.VectorClock{
+	shardClock = &clockspb.VectorClock{
 		ShardId:   1,
 		Clock:     1,
 		ClusterId: 1,

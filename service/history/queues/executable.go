@@ -36,7 +36,7 @@ import (
 	"sync"
 	"time"
 
-	"go.temporal.io/api/enums/v1"
+	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
@@ -414,9 +414,9 @@ func (e *executableImpl) isExpectedRetryableError(err error) (isRetryable bool, 
 	var resourceExhaustedErr *serviceerror.ResourceExhausted
 	if errors.As(err, &resourceExhaustedErr) {
 		switch resourceExhaustedErr.Cause { //nolint:exhaustive
-		case enums.RESOURCE_EXHAUSTED_CAUSE_BUSY_WORKFLOW:
+		case enumspb.RESOURCE_EXHAUSTED_CAUSE_BUSY_WORKFLOW:
 			err = consts.ErrResourceExhaustedBusyWorkflow
-		case enums.RESOURCE_EXHAUSTED_CAUSE_APS_LIMIT:
+		case enumspb.RESOURCE_EXHAUSTED_CAUSE_APS_LIMIT:
 			err = consts.ErrResourceExhaustedAPSLimit
 			e.resourceExhaustedCount++
 		default:
@@ -841,7 +841,7 @@ func (e *CircuitBreakerExecutable) Execute() error {
 		return fmt.Errorf(
 			"%w: %w",
 			serviceerror.NewResourceExhausted(
-				enums.RESOURCE_EXHAUSTED_CAUSE_CIRCUIT_BREAKER_OPEN,
+				enumspb.RESOURCE_EXHAUSTED_CAUSE_CIRCUIT_BREAKER_OPEN,
 				"circuit breaker rejection",
 			),
 			err,

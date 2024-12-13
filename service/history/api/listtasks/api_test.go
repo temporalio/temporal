@@ -35,7 +35,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/api/adminservice/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
-	"go.temporal.io/server/api/history/v1"
+	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/testing/protoassert"
@@ -77,11 +77,11 @@ func (s *apiSuite) TestInvalidTaskCategory() {
 		Request: &adminservice.ListHistoryTasksRequest{
 			ShardId:  1,
 			Category: invalidCategoryID,
-			TaskRange: &history.TaskRange{
-				InclusiveMinTaskKey: &history.TaskKey{
+			TaskRange: &historyspb.TaskRange{
+				InclusiveMinTaskKey: &historyspb.TaskKey{
 					TaskId: 10,
 				},
-				ExclusiveMaxTaskKey: &history.TaskKey{
+				ExclusiveMaxTaskKey: &historyspb.TaskKey{
 					TaskId: 20,
 				},
 			},
@@ -107,12 +107,12 @@ func (s *apiSuite) TestInvalidTaskRange() {
 		Request: &adminservice.ListHistoryTasksRequest{
 			ShardId:  1,
 			Category: tasks.CategoryIDTransfer,
-			TaskRange: &history.TaskRange{
-				InclusiveMinTaskKey: &history.TaskKey{
+			TaskRange: &historyspb.TaskRange{
+				InclusiveMinTaskKey: &historyspb.TaskKey{
 					TaskId:   -1,
 					FireTime: timestamppb.New(time.Unix(0, 0)),
 				},
-				ExclusiveMaxTaskKey: &history.TaskKey{
+				ExclusiveMaxTaskKey: &historyspb.TaskKey{
 					TaskId:   20,
 					FireTime: timestamppb.New(time.Unix(0, 0)),
 				},
@@ -144,12 +144,12 @@ func (s *apiSuite) TestGetHistoryTasks() {
 		Request: &adminservice.ListHistoryTasksRequest{
 			ShardId:  1,
 			Category: tasks.CategoryIDTransfer,
-			TaskRange: &history.TaskRange{
-				InclusiveMinTaskKey: &history.TaskKey{
+			TaskRange: &historyspb.TaskRange{
+				InclusiveMinTaskKey: &historyspb.TaskKey{
 					TaskId:   minTaskID,
 					FireTime: timestamppb.New(time.Unix(0, 0)),
 				},
-				ExclusiveMaxTaskKey: &history.TaskKey{
+				ExclusiveMaxTaskKey: &historyspb.TaskKey{
 					TaskId:   maxTaskID,
 					FireTime: timestamppb.New(time.Unix(0, 0)),
 				},

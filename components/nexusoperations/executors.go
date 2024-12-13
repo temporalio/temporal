@@ -37,7 +37,7 @@ import (
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
-	"go.temporal.io/server/api/token/v1"
+	tokenspb "go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -169,7 +169,7 @@ func (e taskExecutor) executeInvocationTask(ctx context.Context, env hsm.Environ
 	smRef := common.CloneProto(ref.StateMachineRef)
 	smRef.MachineTransitionCount = 0
 
-	token, err := e.CallbackTokenGenerator.Tokenize(&token.NexusOperationCompletion{
+	token, err := e.CallbackTokenGenerator.Tokenize(&tokenspb.NexusOperationCompletion{
 		NamespaceId: ref.WorkflowKey.NamespaceID,
 		WorkflowId:  ref.WorkflowKey.WorkflowID,
 		RunId:       ref.WorkflowKey.RunID,

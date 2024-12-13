@@ -32,7 +32,7 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
-	"go.temporal.io/server/api/token/v1"
+	tokenspb "go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -50,7 +50,7 @@ func TestExtract(t *testing.T) {
 
 	tv := testvars.New(t)
 	tv = tv.WithRunID(tv.Any().RunID())
-	taskToken := token.Task{
+	taskToken := tokenspb.Task{
 		WorkflowId: tv.WorkflowID(),
 		RunId:      tv.RunID(),
 	}

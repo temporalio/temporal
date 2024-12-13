@@ -25,7 +25,7 @@
 package predicates
 
 import (
-	"go.temporal.io/server/api/enums/v1"
+	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 )
 
@@ -34,7 +34,7 @@ type (
 )
 
 var EmptyPredicateProtoSize = (&persistencespb.Predicate{
-	PredicateType: enums.PREDICATE_TYPE_EMPTY,
+	PredicateType: enumsspb.PREDICATE_TYPE_EMPTY,
 	Attributes: &persistencespb.Predicate_EmptyPredicateAttributes{
 		EmptyPredicateAttributes: &persistencespb.EmptyPredicateAttributes{},
 	},

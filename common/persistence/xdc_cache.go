@@ -31,7 +31,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	historypb "go.temporal.io/api/history/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
-	persistencepb "go.temporal.io/server/api/persistence/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	workflowspb "go.temporal.io/server/api/workflow/v1"
 	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/definition"
@@ -160,7 +160,7 @@ func (e *XDCCacheImpl) Get(key XDCCacheKey) (XDCCacheValue, bool) {
 }
 
 func GetXDCCacheValue(
-	executionInfo *persistencepb.WorkflowExecutionInfo,
+	executionInfo *persistencespb.WorkflowExecutionInfo,
 	eventID int64,
 	version int64,
 ) ([]*historyspb.VersionHistoryItem, []byte, *workflowspb.BaseExecutionInfo, error) {
