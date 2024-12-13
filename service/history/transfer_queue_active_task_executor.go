@@ -871,7 +871,7 @@ func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
 		}
 		// now if there was no child found after reset then it could mean one of the following.
 		// 1. The parent never got a chance to start the child. So we should go ahead and start one (below)
-		// 2. The child was started, but may be terminated from someone external.
+		// 2. The child was started, but may be terminated from someone external or timedout.
 		// 3. There was a running workflow that is not related to the current run.
 		// In all these cases it's ok to proceed to start a new instance of child (below) and accept the result of that operation.
 	}
@@ -950,7 +950,6 @@ func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
 // It returns the child's runID if the checks pass. Empty runID is returned if the check doesn't pass.
 func (t *transferQueueActiveTaskExecutor) verifyChildWorkflow(
 	ctx context.Context,
-	// task *tasks.ResetWorkflowTask,
 	mutableState workflow.MutableState,
 	childNamespace *namespace.Namespace,
 	childWorkflowID string,
