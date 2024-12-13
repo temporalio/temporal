@@ -40,6 +40,7 @@ import (
 	sdkpb "go.temporal.io/api/sdk/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
+	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/historyservicemock/v1"
@@ -2014,6 +2015,126 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessStartChildExecution_Su
 				IsFirstWorkflowTask: true,
 				ParentClock:         nil,
 				ChildClock:          childClock,
+			}, request)
+			cmpResult, err := vclock.Compare(currentShardClock, parentClock)
+			if err != nil {
+				return nil, err
+			}
+			s.NoError(err)
+			s.True(cmpResult <= 0)
+			return &historyservice.ScheduleWorkflowTaskResponse{}, nil
+		},
+	)
+
+	resp := s.transferQueueActiveTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
+	s.Nil(resp.ExecutionErr)
+}
+
+// TestProcessStartChildExecution_ResetSuccess tests that processStartChildExecution() in a reset run actually describes the child to assert parent-child relationship before 'reconnecting' and unpausing the child.
+func (s *transferQueueActiveTaskExecutorSuite) TestProcessStartChildExecution_ResetSuccess() {
+	workflowID := "TEST_WORKFLOW_ID"
+	execution := &commonpb.WorkflowExecution{
+		WorkflowId: workflowID,
+		RunId:      uuid.New(),
+	}
+	workflowType := "TEST_WORKFLOW_TYPE"
+	taskQueueName := "TEST_TASK_QUEUE"
+
+	childWorkflowID := "TEST_CHILD_WORKFLOW_ID"
+	childRunID := uuid.New()
+	childWorkflowType := "TEST_CHILD_WORKFLOW_TYPE"
+	childTaskQueueName := "TEST_CHILD_TASK_QUEUE"
+
+	originalExecutionRunID := "TEST_ORIGINAL_EXECUTION_RUN_ID"
+
+	mutableState := workflow.TestGlobalMutableState(s.mockShard, s.mockShard.GetEventsCache(), s.logger, s.version, execution.GetWorkflowId(), execution.GetRunId())
+	_, err := mutableState.AddWorkflowExecutionStartedEvent(
+		execution,
+		&historyservice.StartWorkflowExecutionRequest{
+			Attempt:     1,
+			NamespaceId: s.namespaceID.String(),
+			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
+				WorkflowId:               execution.WorkflowId,
+				WorkflowType:             &commonpb.WorkflowType{Name: workflowType},
+				TaskQueue:                &taskqueuepb.TaskQueue{Name: taskQueueName},
+				WorkflowExecutionTimeout: durationpb.New(2 * time.Second),
+				WorkflowTaskTimeout:      durationpb.New(1 * time.Second),
+			},
+		},
+	)
+	s.Nil(err)
+	mutableState.GetExecutionInfo().OriginalExecutionRunId = originalExecutionRunID
+
+	event, _ := addStartChildWorkflowExecutionInitiatedEvent(
+		mutableState,
+		1111,
+		uuid.New(),
+		s.childNamespace,
+		s.childNamespaceID,
+		childWorkflowID,
+		childWorkflowType,
+		childTaskQueueName,
+		nil,
+		1*time.Second,
+		1*time.Second,
+		1*time.Second,
+		enumspb.PARENT_CLOSE_POLICY_TERMINATE,
+	)
+
+	taskID := s.mustGenerateTaskID()
+	transferTask := &tasks.StartChildExecutionTask{
+		WorkflowKey: definition.NewWorkflowKey(
+			s.namespaceID.String(),
+			execution.GetWorkflowId(),
+			execution.GetRunId(),
+		),
+		Version:             s.version,
+		TargetNamespaceID:   tests.ChildNamespaceID.String(),
+		TargetWorkflowID:    childWorkflowID,
+		TaskID:              taskID,
+		InitiatedEventID:    event.GetEventId(),
+		VisibilityTimestamp: time.Now().UTC(),
+	}
+
+	persistenceMutableState := s.createPersistenceMutableState(mutableState, event.GetEventId(), event.GetVersion())
+	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
+	// Assert that child workflow describe is called.
+	// The child describe returns a mock parent whose originalExecutionRunID points to the same as the current reset run's originalExecutionRunID
+	s.mockHistoryClient.EXPECT().DescribeWorkflowExecution(
+		gomock.Any(),
+		&historyservice.DescribeWorkflowExecutionRequest{
+			NamespaceId: s.childNamespaceEntry.ID().String(),
+			Request: &workflowservice.DescribeWorkflowExecutionRequest{
+				Namespace: s.childNamespaceEntry.Name().String(),
+				Execution: &commonpb.WorkflowExecution{
+					WorkflowId: childWorkflowID,
+				},
+			},
+		},
+		gomock.Any(),
+	).Return(&historyservice.DescribeWorkflowExecutionResponse{
+		WorkflowExecutionInfo: &workflowpb.WorkflowExecutionInfo{
+			Execution: &commonpb.WorkflowExecution{WorkflowId: childWorkflowID, RunId: childRunID},
+			ParentExecution: &commonpb.WorkflowExecution{
+				WorkflowId: workflowID,
+				RunId:      originalExecutionRunID,
+			},
+		},
+	}, nil)
+	s.mockExecutionMgr.EXPECT().UpdateWorkflowExecution(gomock.Any(), gomock.Any()).Return(tests.UpdateWorkflowExecutionResponse, nil)
+	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(s.namespaceEntry.IsGlobalNamespace(), s.version).Return(cluster.TestCurrentClusterName).AnyTimes()
+	currentShardClock := s.mockShard.CurrentVectorClock()
+	s.mockHistoryClient.EXPECT().ScheduleWorkflowTask(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(_ context.Context, request *historyservice.ScheduleWorkflowTaskRequest, _ ...grpc.CallOption) (*historyservice.ScheduleWorkflowTaskResponse, error) {
+			parentClock := request.ParentClock
+			request.ParentClock = nil
+			s.Equal(&historyservice.ScheduleWorkflowTaskRequest{
+				NamespaceId: tests.ChildNamespaceID.String(),
+				WorkflowExecution: &commonpb.WorkflowExecution{
+					WorkflowId: childWorkflowID,
+					RunId:      childRunID,
+				},
+				IsFirstWorkflowTask: true,
 			}, request)
 			cmpResult, err := vclock.Compare(currentShardClock, parentClock)
 			if err != nil {

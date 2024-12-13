@@ -2769,6 +2769,20 @@ func (mr *MockMutableStateMockRecorder) IsDirty() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsDirty", reflect.TypeOf((*MockMutableState)(nil).IsDirty))
 }
 
+// IsResetRun mocks base method.
+func (m *MockMutableState) IsResetRun() bool {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "IsResetRun")
+	ret0, _ := ret[0].(bool)
+	return ret0
+}
+
+// IsResetRun indicates an expected call of IsResetRun.
+func (mr *MockMutableStateMockRecorder) IsResetRun() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsResetRun", reflect.TypeOf((*MockMutableState)(nil).IsResetRun))
+}
+
 // IsResourceDuplicated mocks base method.
 func (m *MockMutableState) IsResourceDuplicated(resourceDedupKey definition.DeduplicationID) bool {
 	m.ctrl.T.Helper()
