@@ -955,7 +955,10 @@ func reapplyEvents(
 	return reappliedEvents, nil
 }
 
-func reapplyChildEvents(mutableState workflow.MutableState, event *historypb.HistoryEvent) error {
+// reapplyChildEvents reapplies all child events except EVENT_TYPE_START_CHILD_WORKFLOW_EXECUTION_INITIATED.
+// This function is intended to pick up all the events for a child that was already initialized before the reset point.
+// Re-applying these events is needed to support reconnecting of the child with parent.
+func reapplyChildEvents(mutableState workflow.MutableState, event *historypb.HistoryEvent) error { // nolint:revive
 	switch event.GetEventType() { // nolint:exhaustive
 	case enumspb.EVENT_TYPE_START_CHILD_WORKFLOW_EXECUTION_FAILED:
 		childEventAttributes := event.GetStartChildWorkflowExecutionFailedEventAttributes()
@@ -1046,7 +1049,7 @@ func reapplyChildEvents(mutableState workflow.MutableState, event *historypb.His
 			return err
 		}
 	default:
-		return nil
+		return serviceerror.NewInternal(fmt.Sprintf("WorkflowResetter encountered an unexpected child event: [%s]", event.GetEventType().String()))
 	}
 	return nil
 }
