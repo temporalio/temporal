@@ -159,10 +159,12 @@ func (s *NexusRequestForwardingSuite) TestStartOperationForwardedFromStandbyToAc
 				var operationError *nexus.UnsuccessfulOperationError
 				require.ErrorAs(t, retErr, &operationError)
 				require.Equal(t, nexus.OperationStateFailed, operationError.State)
-				require.Equal(t, "deliberate test failure", operationError.Failure.Message)
-				require.Equal(t, map[string]string{"k": "v"}, operationError.Failure.Metadata)
+				require.Equal(t, "deliberate test failure", operationError.Cause.Error())
+				var failureError *nexus.FailureError
+				require.ErrorAs(t, operationError.Cause, &failureError)
+				require.Equal(t, map[string]string{"k": "v"}, failureError.Failure.Metadata)
 				var details string
-				err := json.Unmarshal(operationError.Failure.Details, &details)
+				err := json.Unmarshal(failureError.Failure.Details, &details)
 				require.NoError(t, err)
 				require.Equal(t, "details", details)
 				requireExpectedMetricsCaptured(t, activeSnap, ns, "StartNexusOperation", "operation_error")
@@ -183,7 +185,7 @@ func (s *NexusRequestForwardingSuite) TestStartOperationForwardedFromStandbyToAc
 				var handlerErr *nexus.HandlerError
 				require.ErrorAs(t, retErr, &handlerErr)
 				require.Equal(t, nexus.HandlerErrorTypeInternal, handlerErr.Type)
-				require.Equal(t, "deliberate internal failure", handlerErr.Failure.Message)
+				require.Equal(t, "deliberate internal failure", handlerErr.Cause.Error())
 				requireExpectedMetricsCaptured(t, activeSnap, ns, "StartNexusOperation", "handler_error")
 				requireExpectedMetricsCaptured(t, passiveSnap, ns, "StartNexusOperation", "forwarded_request_error")
 			},
@@ -203,7 +205,7 @@ func (s *NexusRequestForwardingSuite) TestStartOperationForwardedFromStandbyToAc
 				var handlerErr *nexus.HandlerError
 				require.ErrorAs(t, retErr, &handlerErr)
 				require.Equal(t, nexus.HandlerErrorTypeUnavailable, handlerErr.Type)
-				require.Equal(t, "cluster inactive", handlerErr.Failure.Message)
+				require.Equal(t, "cluster inactive", handlerErr.Cause.Error())
 				requireExpectedMetricsCaptured(t, passiveSnap, ns, "StartNexusOperation", "namespace_inactive_forwarding_disabled")
 			},
 		},
@@ -213,7 +215,7 @@ func (s *NexusRequestForwardingSuite) TestStartOperationForwardedFromStandbyToAc
 		tc := tc
 		s.T().Run(tc.name, func(t *testing.T) {
 			dispatchURL := fmt.Sprintf("http://%s/%s", s.cluster2.Host().FrontendHTTPAddress(), cnexus.RouteDispatchNexusTaskByNamespaceAndTaskQueue.Path(cnexus.NamespaceAndTaskQueue{Namespace: ns, TaskQueue: tc.taskQueue}))
-			nexusClient, err := nexus.NewClient(nexus.ClientOptions{BaseURL: dispatchURL, Service: "test-service"})
+			nexusClient, err := nexus.NewHTTPClient(nexus.HTTPClientOptions{BaseURL: dispatchURL, Service: "test-service"})
 			s.NoError(err)
 
 			activeMetricsHandler, ok := s.cluster1.Host().GetMetricsHandler().(*metricstest.CaptureHandler)
@@ -284,7 +286,7 @@ func (s *NexusRequestForwardingSuite) TestCancelOperationForwardedFromStandbyToA
 				var handlerErr *nexus.HandlerError
 				require.ErrorAs(t, retErr, &handlerErr)
 				require.Equal(t, nexus.HandlerErrorTypeInternal, handlerErr.Type)
-				require.Equal(t, "deliberate internal failure", handlerErr.Failure.Message)
+				require.Equal(t, "deliberate internal failure", handlerErr.Cause.Error())
 				requireExpectedMetricsCaptured(t, activeSnap, ns, "CancelNexusOperation", "handler_error")
 				requireExpectedMetricsCaptured(t, passiveSnap, ns, "CancelNexusOperation", "forwarded_request_error")
 			},
@@ -304,7 +306,7 @@ func (s *NexusRequestForwardingSuite) TestCancelOperationForwardedFromStandbyToA
 				var handlerErr *nexus.HandlerError
 				require.ErrorAs(t, retErr, &handlerErr)
 				require.Equal(t, nexus.HandlerErrorTypeUnavailable, handlerErr.Type)
-				require.Equal(t, "cluster inactive", handlerErr.Failure.Message)
+				require.Equal(t, "cluster inactive", handlerErr.Cause.Error())
 				requireExpectedMetricsCaptured(t, passiveSnap, ns, "CancelNexusOperation", "namespace_inactive_forwarding_disabled")
 			},
 		},
@@ -314,7 +316,7 @@ func (s *NexusRequestForwardingSuite) TestCancelOperationForwardedFromStandbyToA
 		tc := tc
 		s.T().Run(tc.name, func(t *testing.T) {
 			dispatchURL := fmt.Sprintf("http://%s/%s", s.cluster2.Host().FrontendHTTPAddress(), cnexus.RouteDispatchNexusTaskByNamespaceAndTaskQueue.Path(cnexus.NamespaceAndTaskQueue{Namespace: ns, TaskQueue: tc.taskQueue}))
-			nexusClient, err := nexus.NewClient(nexus.ClientOptions{BaseURL: dispatchURL, Service: "test-service"})
+			nexusClient, err := nexus.NewHTTPClient(nexus.HTTPClientOptions{BaseURL: dispatchURL, Service: "test-service"})
 			s.NoError(err)
 
 			activeMetricsHandler, ok := s.cluster1.Host().GetMetricsHandler().(*metricstest.CaptureHandler)

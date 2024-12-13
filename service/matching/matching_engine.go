@@ -1934,6 +1934,8 @@ pollLoop:
 
 		nexusReq := task.nexus.request.GetRequest()
 		nexusReq.Header[nexus.HeaderRequestTimeout] = time.Until(task.nexus.deadline).String()
+		// Java SDK currently expects the header in this form. We should be able to remove this duplication sometime mid 2025.
+		nexusReq.Header["Request-Timeout"] = time.Until(task.nexus.deadline).String()
 		if !task.nexus.operationDeadline.IsZero() {
 			nexusReq.Header[nexus.HeaderOperationTimeout] = commonnexus.FormatDuration(time.Until(task.nexus.operationDeadline))
 		}
