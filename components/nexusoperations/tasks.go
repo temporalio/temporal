@@ -23,6 +23,8 @@
 package nexusoperations
 
 import (
+	"encoding/binary"
+	"errors"
 	"fmt"
 	"time"
 
@@ -40,6 +42,8 @@ const (
 	TaskTypeCancelation        = "nexusoperations.Cancelation"
 	TaskTypeCancelationBackoff = "nexusoperations.CancelationBackoff"
 )
+
+var errSerializationCast = errors.New("cannot serialize HSM task. unable to cast to expected type")
 
 type TimeoutTask struct {
 	deadline time.Time
@@ -91,6 +95,7 @@ func (TimeoutTaskSerializer) Serialize(hsm.Task) ([]byte, error) {
 
 type InvocationTask struct {
 	EndpointName string
+	Attempt      int64
 }
 
 var _ hsm.Task = InvocationTask{}
@@ -117,11 +122,17 @@ func (InvocationTask) Validate(ref *persistencespb.StateMachineRef, node *hsm.No
 type InvocationTaskSerializer struct{}
 
 func (InvocationTaskSerializer) Deserialize(data []byte, attrs hsm.TaskAttributes) (hsm.Task, error) {
-	return InvocationTask{EndpointName: attrs.Destination}, nil
+	attempt, _ := binary.Varint(data)
+	return InvocationTask{EndpointName: attrs.Destination, Attempt: attempt}, nil
 }
 
-func (InvocationTaskSerializer) Serialize(hsm.Task) ([]byte, error) {
-	return nil, nil
+func (InvocationTaskSerializer) Serialize(task hsm.Task) ([]byte, error) {
+	invocation, ok := task.(InvocationTask)
+	if !ok {
+		return nil, fmt.Errorf("%w: nexusoperations.InvocationTask", errSerializationCast)
+	}
+	buf := make([]byte, binary.MaxVarintLen64)
+	return binary.AppendVarint(buf, invocation.Attempt), nil
 }
 
 type BackoffTask struct {
@@ -161,6 +172,7 @@ func (BackoffTaskSerializer) Serialize(hsm.Task) ([]byte, error) {
 
 type CancelationTask struct {
 	EndpointName string
+	Attempt      int64
 }
 
 var _ hsm.Task = CancelationTask{}
@@ -187,11 +199,17 @@ func (CancelationTask) Validate(ref *persistencespb.StateMachineRef, node *hsm.N
 type CancelationTaskSerializer struct{}
 
 func (CancelationTaskSerializer) Deserialize(data []byte, attrs hsm.TaskAttributes) (hsm.Task, error) {
-	return CancelationTask{EndpointName: attrs.Destination}, nil
+	attempt, _ := binary.Varint(data)
+	return CancelationTask{EndpointName: attrs.Destination, Attempt: attempt}, nil
 }
 
-func (CancelationTaskSerializer) Serialize(hsm.Task) ([]byte, error) {
-	return nil, nil
+func (CancelationTaskSerializer) Serialize(task hsm.Task) ([]byte, error) {
+	cancelation, ok := task.(CancelationTask)
+	if !ok {
+		return nil, fmt.Errorf("%w: nexusoperations.CancelationTask", errSerializationCast)
+	}
+	buf := make([]byte, binary.MaxVarintLen64)
+	return binary.AppendVarint(buf, cancelation.Attempt), nil
 }
 
 type CancelationBackoffTask struct {
