@@ -117,9 +117,8 @@ func UnsuccessfulOperationErrorToTemporalFailure(opErr *nexus.UnsuccessfulOperat
 		nexusFailure = failureErr.Failure
 	} else if opErr.Cause != nil {
 		nexusFailure = nexus.Failure{Message: opErr.Cause.Error()}
-	} else {
-		nexusFailure = nexus.Failure{Message: "canceled"}
 	}
+
 	// Canceled must be translated into a CanceledFailure to match the SDK expectation.
 	if opErr.State == nexus.OperationStateCanceled {
 		if nexusFailure.Metadata != nil && nexusFailure.Metadata["type"] == failureTypeString {
