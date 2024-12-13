@@ -157,6 +157,7 @@ func GrpcServerOptionsProvider(
 		grpcServerOptions,
 		grpc.ChainUnaryInterceptor(getUnaryInterceptors(params)...),
 		grpc.ChainStreamInterceptor(params.TelemetryInterceptor.StreamIntercept),
+		grpc.StreamInterceptor(interceptor.CustomErrorStreamInterceptor),
 	)
 }
 
