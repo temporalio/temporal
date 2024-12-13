@@ -209,29 +209,33 @@ func (ch *commandHandler) HandleCancelCommand(
 			Message: "empty CancelNexusOperationCommandAttributes",
 		}
 	}
+
 	coll := nexusoperations.MachineCollection(ms.HSM())
 	nodeID := strconv.FormatInt(attrs.ScheduledEventId, 10)
-	node, err := coll.Node(nodeID)
+	_, err := coll.Node(nodeID)
 	if err != nil {
 		if errors.Is(err, hsm.ErrStateMachineNotFound) {
+			if ms.HasAnyBufferedEvent(makeNexusOperationTerminalEventFilter(attrs.ScheduledEventId)) {
+				// Allow cancelation if there are buffered terminal events
+				event := ms.AddHistoryEvent(enumspb.EVENT_TYPE_NEXUS_OPERATION_CANCEL_REQUESTED, func(he *historypb.HistoryEvent) {
+					he.Attributes = &historypb.HistoryEvent_NexusOperationCancelRequestedEventAttributes{
+						NexusOperationCancelRequestedEventAttributes: &historypb.NexusOperationCancelRequestedEventAttributes{
+							ScheduledEventId:             attrs.ScheduledEventId,
+							WorkflowTaskCompletedEventId: workflowTaskCompletedEventID,
+						},
+					}
+					he.UserMetadata = command.UserMetadata
+				})
+				return nexusoperations.CancelRequestedEventDefinition{}.Apply(ms.HSM(), event)
+			}
 			return workflow.FailWorkflowTaskError{
 				Cause:   enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_REQUEST_CANCEL_NEXUS_OPERATION_ATTRIBUTES,
-				Message: fmt.Sprintf("requested cancelation for a nonexistent or terminated operation with scheduled event ID %d", attrs.ScheduledEventId),
+				Message: fmt.Sprintf("requested cancelation for a non-existing or already completed operation with scheduled event ID %d", attrs.ScheduledEventId),
 			}
 		}
-		return err
-	}
-
-	op, err := hsm.MachineData[nexusoperations.Operation](node)
-	if err != nil {
-		return err
-	}
-
-	// Operation exists but can't be canceled - must be in terminal state
-	if !nexusoperations.TransitionCanceled.Possible(op) {
 		return workflow.FailWorkflowTaskError{
 			Cause:   enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_REQUEST_CANCEL_NEXUS_OPERATION_ATTRIBUTES,
-			Message: fmt.Sprintf("requested cancelation for operation with scheduled event ID %d that has already terminated", attrs.ScheduledEventId),
+			Message: fmt.Sprintf("error looking up operation with scheduled event ID %d: %v", attrs.ScheduledEventId, err),
 		}
 	}
 
