@@ -560,7 +560,7 @@ func TestHandleCancelCommand(t *testing.T) {
 			},
 		})
 		require.NoError(t, err)
-		require.Equal(t, 2, len(tcx.history.Events))
+		require.Equal(t, 2, len(tcx.history.Events)) // Only scheduled event should be recorded.
 	})
 
 	t.Run("sets event attributes with UserMetadata and spawns cancelation child machine", func(t *testing.T) {
