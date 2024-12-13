@@ -444,22 +444,6 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
           ref: ${{ env.COMMIT }}
 
-      - name: Resolve job ID from workflow run, accounting for matrix strategy.
-        id: get_job_id
-        uses: actions/github-script@main
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          matrix: ${{ toJson(matrix) }}
-        with:
-          script: |
-            const { data: workflow_run } = await github.rest.actions.listJobsForWorkflowRun({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              run_id: context.runId
-            });
-            const matrix = JSON.parse(process.env.matrix);
-            const job_name = `${context.job}${matrix ? ` (${Object.values(matrix).join(", ")})` : ""}`;
-            return workflow_run.jobs.find((job) => job.name === job_name).id;
 
       - name: Start containerized dependencies
         if: ${{ toJson(matrix.containers) != '[]' && (inputs.run_single_functional_test != true || (inputs.run_single_functional_test == true && contains(fromJSON(needs.set-up-single-test.outputs.dbs), env.PERSISTENCE_DRIVER))) }}
@@ -503,6 +487,19 @@ jobs:
           check_annotations: false
           annotate_only: true
           skip_annotations: true
+
+      - name: Get job ID from workflow run
+        id: get_job_id
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+            set -e
+            job_id=$(GITHUB_TOKEN=${{ secrets.GITHUB_TOKEN }} ./develop/github/get-job-id-for-job-name ${{matrix.name}})
+            [ -n "$job_id" ] && [ "$job_id" != "null" ] || {
+              echo "Failed to determine job ID" 1>&2
+              exit 1
+            }
+            return job_id
 
       - name: Upload test results
         # Can't pin to major because the action linter doesn't recognize the include-hidden-files flag.
