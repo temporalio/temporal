@@ -32,7 +32,6 @@ import (
 	failurepb "go.temporal.io/api/failure/v1"
 	nexuspb "go.temporal.io/api/nexus/v1"
 	"go.temporal.io/api/serviceerror"
-	"go.temporal.io/server/common"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/encoding/protojson"
@@ -61,12 +60,15 @@ func NexusFailureToProtoFailure(failure nexus.Failure) *nexuspb.Failure {
 
 // APIFailureToNexusFailure converts an API proto Failure to a Nexus SDK Failure setting the metadata "type" field to
 // the proto fullname of the temporal API Failure message.
-// Always returns a non-nil value.
+// Mutates the failure temporarily, unsetting the Message field to avoid duplicating the information in the serialized
+// failure. Mutating was chosen over cloning for performance reasons since this function may be called frequently.
 func APIFailureToNexusFailure(failure *failurepb.Failure) (nexus.Failure, error) {
 	// Unset message so it's not serialized in the details.
-	failureCopy := common.CloneProto(failure)
-	failureCopy.Message = ""
-	data, err := protojson.Marshal(failureCopy)
+	var message string
+	message, failure.Message = failure.Message, ""
+	data, err := protojson.Marshal(failure)
+	failure.Message = message
+
 	if err != nil {
 		return nexus.Failure{}, err
 	}
