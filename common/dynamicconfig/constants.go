@@ -1178,6 +1178,11 @@ This can help reduce effects of task queue movement.`,
 		5*time.Minute-10*time.Second,
 		`MatchingGetUserDataLongPollTimeout is the max length of long polls for GetUserData calls between partitions.`,
 	)
+	MatchingGetUserDataRefresh = NewGlobalDurationSetting(
+		"matching.getUserDataRefresh",
+		5*time.Minute,
+		`MatchingGetUserDataRefresh is how often the user data owner refreshes data from persistence.`,
+	)
 	MatchingBacklogNegligibleAge = NewTaskQueueDurationSetting(
 		"matching.backlogNegligibleAge",
 		5*time.Second,
