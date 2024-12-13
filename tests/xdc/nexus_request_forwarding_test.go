@@ -160,9 +160,9 @@ func (s *NexusRequestForwardingSuite) TestStartOperationForwardedFromStandbyToAc
 				require.ErrorAs(t, retErr, &operationError)
 				require.Equal(t, nexus.OperationStateFailed, operationError.State)
 				require.Equal(t, "deliberate test failure", operationError.Cause.Error())
-				require.Equal(t, map[string]string{"k": "v"}, operationError.Cause.Error())
 				var failureError *nexus.FailureError
 				require.ErrorAs(t, operationError.Cause, &failureError)
+				require.Equal(t, map[string]string{"k": "v"}, failureError.Failure.Metadata)
 				var details string
 				err := json.Unmarshal(failureError.Failure.Details, &details)
 				require.NoError(t, err)
