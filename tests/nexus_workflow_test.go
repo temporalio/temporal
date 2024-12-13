@@ -188,6 +188,9 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationCancelation() {
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		desc, err := s.SdkClient().DescribeWorkflowExecution(ctx, run.GetID(), run.GetRunID())
 		assert.NoError(t, err)
+		if err != nil {
+			return
+		}
 		assert.Equal(t, 1, len(desc.PendingNexusOperations))
 		if len(desc.PendingNexusOperations) < 1 {
 			return
@@ -1868,7 +1871,13 @@ func (s *NexusWorkflowTestSuite) TestNexusSyncOperationErrorRehydration() {
 				require.EventuallyWithT(t, func(t *assert.CollectT) {
 					desc, err := s.SdkClient().DescribeWorkflowExecution(ctx, run.GetID(), run.GetRunID())
 					require.NoError(t, err)
+					if err != nil {
+						return
+					}
 					assert.Len(t, desc.PendingNexusOperations, 1)
+					if len(desc.PendingNexusOperations) != 1 {
+						return
+					}
 					f = desc.PendingNexusOperations[0].LastAttemptFailure
 					assert.NotNil(t, f)
 
