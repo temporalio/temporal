@@ -440,7 +440,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletion() {
 			},
 		},
 	}
-	handlerNexusLink := nexusoperations.ConvertLinkWorkflowEventToNexusLink(handlerLink)
+	handlerNexusLink := temporalnexus.ConvertLinkWorkflowEventToNexusLink(handlerLink)
 
 	h := nexustest.Handler{
 		OnStartOperation: func(
@@ -454,7 +454,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletion() {
 			s.Len(options.Links, 1)
 			var links []*commonpb.Link
 			for _, nexusLink := range options.Links {
-				link, err := nexusoperations.ConvertNexusLinkToLinkWorkflowEvent(nexusLink)
+				link, err := temporalnexus.ConvertNexusLinkToLinkWorkflowEvent(nexusLink)
 				s.NoError(err)
 				links = append(links, &commonpb.Link{
 					Variant: &commonpb.Link_WorkflowEvent_{
