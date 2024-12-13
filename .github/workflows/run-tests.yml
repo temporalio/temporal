@@ -491,7 +491,7 @@ jobs:
         id: get_job_id
         run: |
           set -euo pipefail
-          job_id=$(curl -L \
+          job_id=$(curl -L --fail \
             -H "Accept: application/vnd.github+json" \
             -H "Authorization: Bearer ${{secrets.GITHUB_TOKEN}}" \
             -H "X-GitHub-Api-Version: 2022-11-28" \
@@ -606,12 +606,24 @@ jobs:
           annotate_only: true
           skip_annotations: true
 
+      - name: Get job ID from workflow run
+        id: get_job_id
+        run: |
+          set -euo pipefail
+          job_id=$(curl -L --fail \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer ${{secrets.GITHUB_TOKEN}}" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/jobs" \
+            | jq "first(.jobs[] | select(.name | endswith(\"$job_name\")) | .id)")
+          echo "JOB_ID=${job_id}" >> "$GITHUB_OUTPUT"
+
       - name: Upload test results
         # Can't pin to major because the action linter doesn't recognize the include-hidden-files flag.
         uses: actions/upload-artifact@v4.4.3
         if: ${{ !cancelled() }}
         with:
-          name: junit-xml--${{github.run_id}}--${{github.run_attempt}}--${{matrix.name}}--functional-test-xdc
+          name: junit-xml--${{github.run_id}}--${{steps.get_job_id.outputs.JOB_ID}}--${{github.run_attempt}}--${{matrix.name}}--functional-test-xdc
           path: .testoutput
           include-hidden-files: true
           retention-days: 28
@@ -704,12 +716,24 @@ jobs:
         timeout-minutes: 15
         run: make functional-test-ndc-coverage
 
+      - name: Get job ID from workflow run
+        id: get_job_id
+        run: |
+          set -euo pipefail
+          job_id=$(curl -L --fail \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer ${{secrets.GITHUB_TOKEN}}" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/jobs" \
+            | jq "first(.jobs[] | select(.name | endswith(\"$job_name\")) | .id)")
+          echo "JOB_ID=${job_id}" >> "$GITHUB_OUTPUT"
+
       - name: Upload test results
         # Can't pin to major because the action linter doesn't recognize the include-hidden-files flag.
         uses: actions/upload-artifact@v4.4.3
         if: ${{ !cancelled() }}
         with:
-          name: junit-xml--${{github.run_id}}--${{github.run_attempt}}--${{matrix.name}}--functional-test-ndc
+          name: junit-xml--${{github.run_id}}--${{steps.get_job_id.outputs.JOB_ID}}--${{github.run_attempt}}--${{matrix.name}}--functional-test-ndc
           path: .testoutput
           include-hidden-files: true
           retention-days: 28
