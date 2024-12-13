@@ -588,7 +588,7 @@ func TestUserData_UpdateOnNonRootFails(t *testing.T) {
 	tqCfg := defaultTqmTestOpts(controller)
 	tqCfg.dbq = subTqId
 	subTq := createUserDataManager(t, controller, tqCfg)
-	err := subTq.UpdateUserData(ctx, UserDataUpdateOptions{}, func(data *persistencespb.TaskQueueUserData) (*persistencespb.TaskQueueUserData, bool, error) {
+	_, err := subTq.UpdateUserData(ctx, UserDataUpdateOptions{}, func(data *persistencespb.TaskQueueUserData) (*persistencespb.TaskQueueUserData, bool, error) {
 		return data, false, nil
 	})
 	require.Error(t, err)
@@ -598,7 +598,7 @@ func TestUserData_UpdateOnNonRootFails(t *testing.T) {
 	actTqCfg := defaultTqmTestOpts(controller)
 	actTqCfg.dbq = actTqId
 	actTq := createUserDataManager(t, controller, actTqCfg)
-	err = actTq.UpdateUserData(ctx, UserDataUpdateOptions{}, func(data *persistencespb.TaskQueueUserData) (*persistencespb.TaskQueueUserData, bool, error) {
+	_, err = actTq.UpdateUserData(ctx, UserDataUpdateOptions{}, func(data *persistencespb.TaskQueueUserData) (*persistencespb.TaskQueueUserData, bool, error) {
 		return data, false, nil
 	})
 	require.Error(t, err)
@@ -678,10 +678,11 @@ func TestUserData_Propagation(t *testing.T) {
 
 	const iters = 5
 	for iter := 0; iter < iters; iter++ {
-		err := managers[0].UpdateUserData(ctx, UserDataUpdateOptions{}, func(data *persistencespb.TaskQueueUserData) (*persistencespb.TaskQueueUserData, bool, error) {
+		newVersion, err := managers[0].UpdateUserData(ctx, UserDataUpdateOptions{}, func(data *persistencespb.TaskQueueUserData) (*persistencespb.TaskQueueUserData, bool, error) {
 			return data, false, nil
 		})
 		require.NoError(t, err)
+		require.Equal(t, int64(iter+1), newVersion)
 		start := time.Now()
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			for i := 1; i < N; i++ {
