@@ -138,12 +138,12 @@ message SyncUserDataRequest {
 
 // used as deployment workflow activity output:
 message SyncUserDataResponse {
-    map<string, int64> max_version_by_name = 1;
+    map<string, int64> task_queue_max_versions = 1;
 }
 
 // used as deployment workflow activity input:
 message CheckUserDataPropagationRequest {
-    map<string, int64> max_version_by_name = 1;
+    map<string, int64> task_queue_max_versions = 1;
 }
 
 // used as deployment series workflow update input:

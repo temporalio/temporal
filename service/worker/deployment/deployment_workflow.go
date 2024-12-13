@@ -222,7 +222,7 @@ func (d *DeploymentWorkflowRunner) handleRegisterWorker(ctx workflow.Context, ar
 
 	// wait for propagation
 	err = workflow.ExecuteActivity(activityCtx, d.a.CheckUserDataPropagation, &deploymentspb.CheckUserDataPropagationRequest{
-		MaxVersionByName: syncRes.MaxVersionByName,
+		TaskQueueMaxVersions: syncRes.TaskQueueMaxVersions,
 	}).Get(ctx, nil)
 	if err != nil {
 		return err
@@ -319,7 +319,7 @@ func (d *DeploymentWorkflowRunner) handleSyncState(ctx workflow.Context, args *d
 		}
 		// wait for propagation
 		err = workflow.ExecuteActivity(activityCtx, d.a.CheckUserDataPropagation, &deploymentspb.CheckUserDataPropagationRequest{
-			MaxVersionByName: syncRes.MaxVersionByName,
+			TaskQueueMaxVersions: syncRes.TaskQueueMaxVersions,
 		}).Get(ctx, nil)
 		if err != nil {
 			return nil, err

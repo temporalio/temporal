@@ -87,7 +87,7 @@ func (a *DeploymentActivities) SyncUserData(ctx context.Context, input *deployme
 	if err != nil {
 		return nil, err
 	}
-	return &deploymentspb.SyncUserDataResponse{MaxVersionByName: maxVersionByName}, nil
+	return &deploymentspb.SyncUserDataResponse{TaskQueueMaxVersions: maxVersionByName}, nil
 }
 
 func (a *DeploymentActivities) CheckUserDataPropagation(ctx context.Context, input *deploymentspb.CheckUserDataPropagationRequest) error {
@@ -95,7 +95,7 @@ func (a *DeploymentActivities) CheckUserDataPropagation(ctx context.Context, inp
 
 	errs := make(chan error)
 
-	for name, version := range input.MaxVersionByName {
+	for name, version := range input.TaskQueueMaxVersions {
 		go func() {
 			logger.Info("waiting for userdata propagation", "taskQueue", name, "version", version)
 			_, err := a.matchingClient.CheckTaskQueueUserDataPropagation(ctx, &matchingservice.CheckTaskQueueUserDataPropagationRequest{
@@ -111,7 +111,7 @@ func (a *DeploymentActivities) CheckUserDataPropagation(ctx context.Context, inp
 	}
 
 	var err error
-	for range input.MaxVersionByName {
+	for range input.TaskQueueMaxVersions {
 		err = cmp.Or(err, <-errs)
 	}
 	return err
