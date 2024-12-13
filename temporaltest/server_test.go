@@ -34,7 +34,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
-	"go.temporal.io/api/enums/v1"
+	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/operatorservice/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
@@ -156,7 +156,7 @@ func TestNewWorkerWithOptions(t *testing.T) {
 	}
 
 	// Verify that the Identity worker option was set.
-	resp, err := c.DescribeTaskQueue(ctx, "hello_world", enums.TASK_QUEUE_TYPE_WORKFLOW)
+	resp, err := c.DescribeTaskQueue(ctx, "hello_world", enumspb.TASK_QUEUE_TYPE_WORKFLOW)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -290,8 +290,8 @@ func TestSearchAttributeRegistration(t *testing.T) {
 
 	// Create a search attribute
 	if _, err := ts.GetDefaultClient().OperatorService().AddSearchAttributes(ctx, &operatorservice.AddSearchAttributesRequest{
-		SearchAttributes: map[string]enums.IndexedValueType{
-			testSearchAttr: enums.INDEXED_VALUE_TYPE_KEYWORD,
+		SearchAttributes: map[string]enumspb.IndexedValueType{
+			testSearchAttr: enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 		},
 		Namespace: ts.GetDefaultNamespace(),
 	}); err != nil {

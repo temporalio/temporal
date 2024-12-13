@@ -319,7 +319,7 @@ to process the Update response from the worker at the same time.
 ### Limits
 There are currently two limits: 
 - `history.maxInFlightUpdates`: maximum in-flight Updates (i.e., not completed Updates)
-- `history.maxTotalUpdates`: maximum total Updates per Workflow run
+- `history.maxTotalUpdates`: maximum total Updates per Workflow run (excludes rejections)
 
 There are two exceptions when the `maxInFlightUpdates` limit is ignored and can be exceeded:
 1. Update is resurrected (see "Update Resurrection" below).

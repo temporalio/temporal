@@ -37,7 +37,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
-	"go.temporal.io/api/sdk/v1"
+	sdkpb "go.temporal.io/api/sdk/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
@@ -1915,7 +1915,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessStartChildExecution_Su
 	childRunID := uuid.New()
 	childWorkflowType := "some random child workflow type"
 	childTaskQueueName := "some random child task queue"
-	userMetadata := &sdk.UserMetadata{
+	userMetadata := &sdkpb.UserMetadata{
 		Summary: &commonpb.Payload{
 			Metadata: map[string][]byte{"test_key": []byte(`test_val`)},
 			Data:     []byte(`Test summary Data`),
@@ -2867,7 +2867,7 @@ func (s *transferQueueActiveTaskExecutorSuite) createChildWorkflowExecutionReque
 	mutableState workflow.MutableState,
 	ci *persistencespb.ChildExecutionInfo,
 	rootExecutionInfo *workflowspb.RootExecutionInfo,
-	userMetadata *sdk.UserMetadata,
+	userMetadata *sdkpb.UserMetadata,
 ) *historyservice.StartWorkflowExecutionRequest {
 	event, err := mutableState.GetChildExecutionInitiatedEvent(context.Background(), task.InitiatedEventID)
 	s.NoError(err)

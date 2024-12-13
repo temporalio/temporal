@@ -34,7 +34,7 @@ import (
 	"github.com/stretchr/testify/suite"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
-	"go.temporal.io/api/workflow/v1"
+	workflowpb "go.temporal.io/api/workflow/v1"
 	archiverspb "go.temporal.io/server/api/archiver/v1"
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/archiver/gcloud/connector"
@@ -434,7 +434,7 @@ func (s *visibilityArchiverSuite) TestQuery_EmptyQuery_Pagination() {
 	}
 
 	limit := 10
-	executions := make(map[string]*workflow.WorkflowExecutionInfo, limit)
+	executions := make(map[string]*workflowpb.WorkflowExecutionInfo, limit)
 
 	numPages := 2
 	for i := 0; i < numPages; i++ {

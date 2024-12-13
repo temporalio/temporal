@@ -40,7 +40,7 @@ import (
 	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
-	"go.temporal.io/api/workflow/v1"
+	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	deploymentspb "go.temporal.io/server/api/deployment/v1"
 	"go.temporal.io/server/api/historyservice/v1"
@@ -558,8 +558,8 @@ func (s *Versioning3Suite) testIndependentActivity(behavior enumspb.VersioningBe
 	s.verifyWorkflowVersioning(tvWf, behavior, dWf, nil, nil)
 }
 
-func transitionTo(d *deploymentpb.Deployment) *workflow.DeploymentTransition {
-	return &workflow.DeploymentTransition{
+func transitionTo(d *deploymentpb.Deployment) *workflowpb.DeploymentTransition {
+	return &workflowpb.DeploymentTransition{
 		Deployment: d,
 	}
 }
@@ -608,8 +608,8 @@ func (s *Versioning3Suite) verifyWorkflowVersioning(
 	tv *testvars.TestVars,
 	behavior enumspb.VersioningBehavior,
 	deployment *deploymentpb.Deployment,
-	override *workflow.VersioningOverride,
-	transition *workflow.DeploymentTransition,
+	override *workflowpb.VersioningOverride,
+	transition *workflowpb.DeploymentTransition,
 ) {
 	dwf, err := s.FrontendClient().DescribeWorkflowExecution(
 		context.Background(), &workflowservice.DescribeWorkflowExecutionRequest{
@@ -724,7 +724,7 @@ func respondCompleteWorkflow(
 
 func (s *Versioning3Suite) startWorkflow(
 	tv *testvars.TestVars,
-	override *workflow.VersioningOverride,
+	override *workflowpb.VersioningOverride,
 ) *commonpb.WorkflowExecution {
 	id := tv.WorkflowID()
 	wt := "MyWfType"
@@ -976,6 +976,6 @@ func (s *Versioning3Suite) waitForDeploymentDataPropagation(
 	}, 10*time.Second, 100*time.Millisecond)
 }
 
-func makePinnedOverride(d *deploymentpb.Deployment) *workflow.VersioningOverride {
-	return &workflow.VersioningOverride{Behavior: vbPinned, Deployment: d}
+func makePinnedOverride(d *deploymentpb.Deployment) *workflowpb.VersioningOverride {
+	return &workflowpb.VersioningOverride{Behavior: vbPinned, Deployment: d}
 }

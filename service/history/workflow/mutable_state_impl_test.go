@@ -47,12 +47,12 @@ import (
 	updatepb "go.temporal.io/api/update/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
-	"go.temporal.io/server/api/clock/v1"
+	clockspb "go.temporal.io/server/api/clock/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
-	"go.temporal.io/server/api/taskqueue/v1"
+	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/definition"
@@ -338,7 +338,7 @@ func (s *mutableStateSuite) TestRedirectInfoValidation_Valid() {
 		tq,
 		"",
 		worker_versioning.StampFromBuildId("b2"),
-		&taskqueue.BuildIdRedirectInfo{AssignedBuildId: "b1"},
+		&taskqueuespb.BuildIdRedirectInfo{AssignedBuildId: "b1"},
 		false,
 	)
 	s.NoError(err)
@@ -361,7 +361,7 @@ func (s *mutableStateSuite) TestRedirectInfoValidation_Invalid() {
 		tq,
 		"",
 		worker_versioning.StampFromBuildId("b2"),
-		&taskqueue.BuildIdRedirectInfo{AssignedBuildId: "b0"},
+		&taskqueuespb.BuildIdRedirectInfo{AssignedBuildId: "b0"},
 		false,
 	)
 	expectedErr := &serviceerror2.ObsoleteDispatchBuildId{}
@@ -403,7 +403,7 @@ func (s *mutableStateSuite) TestRedirectInfoValidation_EmptyStamp() {
 		tq,
 		"",
 		nil,
-		&taskqueue.BuildIdRedirectInfo{AssignedBuildId: "b1"},
+		&taskqueuespb.BuildIdRedirectInfo{AssignedBuildId: "b1"},
 		false,
 	)
 	expectedErr := &serviceerror2.ObsoleteDispatchBuildId{}
@@ -1287,12 +1287,12 @@ func (s *mutableStateSuite) TestSanitizedMutableState() {
 	)
 
 	mutableState.executionInfo.LastFirstEventTxnId = txnID
-	mutableState.executionInfo.ParentClock = &clock.VectorClock{
+	mutableState.executionInfo.ParentClock = &clockspb.VectorClock{
 		ShardId: 1,
 		Clock:   1,
 	}
 	mutableState.pendingChildExecutionInfoIDs = map[int64]*persistencespb.ChildExecutionInfo{1: {
-		Clock: &clock.VectorClock{
+		Clock: &clockspb.VectorClock{
 			ShardId: 1,
 			Clock:   1,
 		},
@@ -2403,6 +2403,24 @@ func (s *mutableStateSuite) TestCloseTransactionUpdateTransition() {
 			},
 			versionedTransitionUpdated: true,
 		},
+		{
+			name: "CloseTransactionAsSnapshot, from unknown to enable",
+			dbStateMutationFn: func(dbState *persistencespb.WorkflowMutableState) {
+				dbState.BufferedEvents = nil
+			},
+			txFunc: func(ms MutableState) (*persistencespb.WorkflowExecutionInfo, error) {
+				ms.GetExecutionInfo().PreviousTransitionHistory = ms.GetExecutionInfo().TransitionHistory
+				ms.GetExecutionInfo().TransitionHistory = nil
+				completWorkflowTaskFn(ms)
+
+				mutation, _, err := ms.CloseTransactionAsSnapshot(TransactionPolicyActive)
+				if err != nil {
+					return nil, err
+				}
+				return mutation.ExecutionInfo, err
+			},
+			versionedTransitionUpdated: true,
+		},
 		// TODO: add a test for flushing buffered events using last event version.
 	}
 
@@ -2424,8 +2442,13 @@ func (s *mutableStateSuite) TestCloseTransactionUpdateTransition() {
 				namespaceEntry.FailoverVersion(),
 			).Return(cluster.TestCurrentClusterName).AnyTimes()
 			s.mockShard.Resource.ClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
+			var expectedTransitionHistory []*persistencespb.VersionedTransition
+			if s.mutableState.executionInfo.TransitionHistory == nil {
+				expectedTransitionHistory = CopyVersionedTransitions(s.mutableState.executionInfo.PreviousTransitionHistory)
+			} else {
+				expectedTransitionHistory = CopyVersionedTransitions(s.mutableState.executionInfo.TransitionHistory)
+			}
 
-			expectedTransitionHistory := CopyVersionedTransitions(s.mutableState.executionInfo.TransitionHistory)
 			if tc.versionedTransitionUpdated {
 				expectedTransitionHistory = UpdatedTransitionHistory(expectedTransitionHistory, namespaceEntry.FailoverVersion())
 			}
@@ -2946,9 +2969,8 @@ func (s *mutableStateSuite) TestCloseTransactionHandleUnknownVersionedTransition
 			s.mockShard.Resource.ClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 
 			s.NotNil(s.mutableState.executionInfo.TransitionHistory)
-
 			execInfo, err := tc.txFunc(s.mutableState)
-
+			s.NotNil(execInfo.PreviousTransitionHistory)
 			s.Nil(execInfo.TransitionHistory)
 			s.Nil(err)
 		})

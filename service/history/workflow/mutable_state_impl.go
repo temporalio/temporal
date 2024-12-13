@@ -54,7 +54,7 @@ import (
 	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
-	"go.temporal.io/server/api/taskqueue/v1"
+	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	tokenspb "go.temporal.io/server/api/token/v1"
 	workflowspb "go.temporal.io/server/api/workflow/v1"
 	"go.temporal.io/server/common"
@@ -653,7 +653,7 @@ func (ms *MutableStateImpl) GetNexusCompletion(ctx context.Context) (nexus.Opera
 	return nil, serviceerror.NewInternal(fmt.Sprintf("invalid workflow execution status: %v", ce.GetEventType()))
 }
 
-// GetHSMCallbackArg converts a workflow completion event into a [persistencepb.HSMCallbackArg].
+// GetHSMCallbackArg converts a workflow completion event into a [persistencespb.HSMCallbackArg].
 func (ms *MutableStateImpl) GetHSMCompletionCallbackArg(ctx context.Context) (*persistencespb.HSMCompletionCallbackArg, error) {
 	workflowKey := ms.GetWorkflowKey()
 	ce, err := ms.GetCompletionEvent(ctx)
@@ -2505,7 +2505,7 @@ func (ms *MutableStateImpl) AddWorkflowTaskStartedEvent(
 	taskQueue *taskqueuepb.TaskQueue,
 	identity string,
 	versioningStamp *commonpb.WorkerVersionStamp,
-	redirectInfo *taskqueue.BuildIdRedirectInfo,
+	redirectInfo *taskqueuespb.BuildIdRedirectInfo,
 	skipVersioningCheck bool,
 ) (*historypb.HistoryEvent, *WorkflowTaskInfo, error) {
 	opTag := tag.WorkflowActionWorkflowTaskStarted
@@ -2602,7 +2602,7 @@ func (ms *MutableStateImpl) addResetPointFromCompletion(
 // ObsoleteDispatchBuildId error will be returned.
 func (ms *MutableStateImpl) validateBuildIdRedirectInfo(
 	startedWorkerStamp *commonpb.WorkerVersionStamp,
-	redirectInfo *taskqueue.BuildIdRedirectInfo,
+	redirectInfo *taskqueuespb.BuildIdRedirectInfo,
 ) (int64, error) {
 	assignedBuildId := ms.GetAssignedBuildId()
 	redirectCounter := ms.GetExecutionInfo().GetBuildIdRedirectCounter()
@@ -3091,7 +3091,7 @@ func (ms *MutableStateImpl) AddActivityTaskStartedEvent(
 	identity string,
 	versioningStamp *commonpb.WorkerVersionStamp,
 	deployment *deploymentpb.Deployment,
-	redirectInfo *taskqueue.BuildIdRedirectInfo,
+	redirectInfo *taskqueuespb.BuildIdRedirectInfo,
 ) (*historypb.HistoryEvent, error) {
 	opTag := tag.WorkflowActionActivityTaskStarted
 	err := ms.checkMutability(opTag)
@@ -5067,6 +5067,16 @@ func (ms *MutableStateImpl) RetryActivity(
 
 	// if activity is paused
 	if ai.Paused {
+		// need to update activity
+		if err := ms.UpdateActivity(ai.ScheduledEventId, func(activityInfo *persistencespb.ActivityInfo, _ MutableState) error {
+			activityInfo.StartedEventId = common.EmptyEventID
+			activityInfo.StartedTime = nil
+			activityInfo.RequestId = ""
+			return nil
+		}); err != nil {
+			return enumspb.RETRY_STATE_INTERNAL_SERVER_ERROR, err
+		}
+
 		// TODO: uncomment once RETRY_STATE_PAUSED is supported
 		// return enumspb.RETRY_STATE_PAUSED, nil
 		return enumspb.RETRY_STATE_IN_PROGRESS, nil
@@ -5702,6 +5712,12 @@ func (ms *MutableStateImpl) closeTransactionUpdateTransitionHistory(
 		return nil
 	}
 
+	// handle disable then re-enable of transition history
+	if len(ms.executionInfo.TransitionHistory) == 0 && len(ms.executionInfo.PreviousTransitionHistory) != 0 {
+		ms.executionInfo.TransitionHistory = ms.executionInfo.PreviousTransitionHistory
+		ms.executionInfo.PreviousTransitionHistory = nil
+	}
+
 	ms.executionInfo.TransitionHistory = UpdatedTransitionHistory(
 		ms.executionInfo.TransitionHistory,
 		ms.GetCurrentVersion(),
@@ -5790,7 +5806,13 @@ func (ms *MutableStateImpl) closeTransactionHandleUnknownVersionedTransition() {
 	}
 	// State changed but transition history not updated.
 	// We are in unknown versioned transition state, clear the transition history.
+	if len(ms.executionInfo.TransitionHistory) != 0 {
+		ms.executionInfo.PreviousTransitionHistory = ms.executionInfo.TransitionHistory
+		ms.executionInfo.LastTransitionHistoryBreakPoint = CopyVersionedTransition(ms.executionInfo.TransitionHistory[len(ms.executionInfo.TransitionHistory)-1])
+	}
+
 	ms.executionInfo.TransitionHistory = nil
+
 	ms.executionInfo.SubStateMachineTombstoneBatches = nil
 	ms.totalTombstones = 0
 
@@ -6913,7 +6935,7 @@ func (ms *MutableStateImpl) applyUpdatesToStateMachineNodes(
 		for _, p := range nodeMutation.Path.Path {
 			incomingPath = append(incomingPath, hsm.Key{Type: p.Type, ID: p.Id})
 		}
-		currentNode, err := root.Child(incomingPath)
+		node, err := root.Child(incomingPath)
 		if err != nil {
 			if !errors.Is(err, hsm.ErrStateMachineNotFound) {
 				return err
@@ -6927,16 +6949,29 @@ func (ms *MutableStateImpl) applyUpdatesToStateMachineNodes(
 				// we don't have enough information to recreate all parents
 				return err
 			}
-			newNode, err := parentNode.AddChild(incomingPath[len(incomingPath)-1], nodeMutation.Data)
-			if err != nil {
-				return err
+
+			key := incomingPath[len(incomingPath)-1]
+			parentInternalNode := parentNode.InternalRepr()
+
+			internalNode = &persistencespb.StateMachineNode{
+				Children: make(map[string]*persistencespb.StateMachineMap),
 			}
-			internalNode = newNode.InternalRepr()
+			children, ok := parentInternalNode.Children[key.Type]
+			if !ok {
+				children = &persistencespb.StateMachineMap{MachinesById: make(map[string]*persistencespb.StateMachineNode)}
+				// Children may be nil if the map was empty and the proto message we serialized and deserialized.
+				if parentInternalNode.Children == nil {
+					parentInternalNode.Children = make(map[string]*persistencespb.StateMachineMap, 1)
+				}
+				parentInternalNode.Children[key.Type] = children
+			}
+			children.MachinesById[key.ID] = internalNode
 		} else {
-			internalNode = currentNode.InternalRepr()
+			internalNode = node.InternalRepr()
 			if CompareVersionedTransition(nodeMutation.LastUpdateVersionedTransition, internalNode.LastUpdateVersionedTransition) == 0 {
 				continue
 			}
+			node.InvalidateCache()
 		}
 		internalNode.Data = nodeMutation.Data
 		internalNode.InitialVersionedTransition = nodeMutation.InitialVersionedTransition

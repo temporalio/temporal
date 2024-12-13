@@ -276,6 +276,7 @@ func VisibilityManagerProvider(
 		serviceConfig.VisibilityPersistenceMaxReadQPS,
 		serviceConfig.VisibilityPersistenceMaxWriteQPS,
 		serviceConfig.OperatorRPSRatio,
+		serviceConfig.VisibilityPersistenceSlowQueryThreshold,
 		serviceConfig.EnableReadFromSecondaryVisibility,
 		serviceConfig.VisibilityEnableShadowReadMode,
 		serviceConfig.SecondaryVisibilityWritingMode,

@@ -35,7 +35,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	workflowpb "go.temporal.io/api/workflow/v1"
-	"go.temporal.io/server/api/persistence/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	carchiver "go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
@@ -43,7 +43,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
-	cpersistence "go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/service/history"
 	"go.temporal.io/server/service/history/archival"
@@ -370,18 +370,18 @@ func TestArchivalQueueTaskExecutor(t *testing.T) {
 			visibilityArchivalState := p.VisibilityConfig.NamespaceArchivalState
 
 			namespaceEntry := namespace.NewGlobalNamespaceForTest(
-				&persistence.NamespaceInfo{
+				&persistencespb.NamespaceInfo{
 					Id:   tests.NamespaceID.String(),
 					Name: tests.Namespace.String(),
 				},
-				&persistence.NamespaceConfig{
+				&persistencespb.NamespaceConfig{
 					Retention:               p.Retention,
 					HistoryArchivalState:    enumspb.ArchivalState(historyArchivalState),
 					HistoryArchivalUri:      p.HistoryURI,
 					VisibilityArchivalState: enumspb.ArchivalState(visibilityArchivalState),
 					VisibilityArchivalUri:   p.VisibilityURI,
 				},
-				&persistence.NamespaceReplicationConfig{
+				&persistencespb.NamespaceReplicationConfig{
 					ActiveClusterName: cluster.TestCurrentClusterName,
 					Clusters: []string{
 						cluster.TestCurrentClusterName,
@@ -427,14 +427,14 @@ func TestArchivalQueueTaskExecutor(t *testing.T) {
 					p.ExecutionDuration,
 					p.GetWorkflowExecutionDurationError,
 				).AnyTimes()
-				executionInfo := &persistence.WorkflowExecutionInfo{
+				executionInfo := &persistencespb.WorkflowExecutionInfo{
 					NamespaceId:                  tests.NamespaceID.String(),
 					ExecutionTime:                timestamppb.New(p.ExecutionTime),
 					CloseTime:                    timestamppb.New(p.CloseTime),
 					RelocatableAttributesRemoved: p.RelocatableAttributesRemoved,
 				}
 				mutableState.EXPECT().GetExecutionInfo().Return(executionInfo).AnyTimes()
-				executionState := &persistence.WorkflowExecutionState{
+				executionState := &persistencespb.WorkflowExecutionState{
 					State:     0,
 					Status:    0,
 					StartTime: timestamppb.New(p.StartTime),
@@ -455,7 +455,7 @@ func TestArchivalQueueTaskExecutor(t *testing.T) {
 							},
 						}
 						mutableState.EXPECT().PopTasks().Return(popTasks)
-						shardContext.EXPECT().AddTasks(gomock.Any(), &cpersistence.AddHistoryTasksRequest{
+						shardContext.EXPECT().AddTasks(gomock.Any(), &persistence.AddHistoryTasksRequest{
 							ShardID:     shardID,
 							NamespaceID: tests.NamespaceID.String(),
 							WorkflowID:  task.WorkflowID,

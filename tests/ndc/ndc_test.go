@@ -42,14 +42,14 @@ import (
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
-	"go.temporal.io/api/update/v1"
+	updatepb "go.temporal.io/api/update/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/api/adminservicemock/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/api/historyservice/v1"
-	"go.temporal.io/server/api/persistence/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/client/history"
 	"go.temporal.io/server/common"
@@ -477,13 +477,13 @@ func (s *NDCFunctionalTestSuite) TestReplicateWorkflowState_PartialReplicated() 
 	partialHistoryBatch := historyBatch[:1]
 	partialVersionHistory := s.eventBatchesToVersionHistory(nil, partialHistoryBatch)
 	versionHistory := s.eventBatchesToVersionHistory(nil, historyBatch)
-	workflowState := &persistence.WorkflowMutableState{
-		ExecutionState: &persistence.WorkflowExecutionState{
+	workflowState := &persistencespb.WorkflowMutableState{
+		ExecutionState: &persistencespb.WorkflowExecutionState{
 			State:  enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
 			Status: enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED,
 			RunId:  runID,
 		},
-		ExecutionInfo: &persistence.WorkflowExecutionInfo{
+		ExecutionInfo: &persistencespb.WorkflowExecutionInfo{
 			NamespaceId: s.namespaceID.String(),
 			WorkflowId:  workflowID,
 			VersionHistories: &historyspb.VersionHistories{
@@ -1555,12 +1555,12 @@ func (s *NDCFunctionalTestSuite) testEventsReapplyNonCurrentBranch(staleEventTyp
 		}}
 	} else if staleEventType == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ADMITTED {
 		staleBranch[0].Events[0].Attributes = &historypb.HistoryEvent_WorkflowExecutionUpdateAdmittedEventAttributes{WorkflowExecutionUpdateAdmittedEventAttributes: &historypb.WorkflowExecutionUpdateAdmittedEventAttributes{
-			Request: &update.Request{Input: &update.Input{Args: payloads.EncodeString("update-request-payload")}},
+			Request: &updatepb.Request{Input: &updatepb.Input{Args: payloads.EncodeString("update-request-payload")}},
 			Origin:  enumspb.UPDATE_ADMITTED_EVENT_ORIGIN_UNSPECIFIED,
 		}}
 	} else if staleEventType == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ACCEPTED {
 		staleBranch[0].Events[0].Attributes = &historypb.HistoryEvent_WorkflowExecutionUpdateAcceptedEventAttributes{WorkflowExecutionUpdateAcceptedEventAttributes: &historypb.WorkflowExecutionUpdateAcceptedEventAttributes{
-			AcceptedRequest: &update.Request{Input: &update.Input{Args: payloads.EncodeString("update-request-payload")}},
+			AcceptedRequest: &updatepb.Request{Input: &updatepb.Input{Args: payloads.EncodeString("update-request-payload")}},
 		}}
 	}
 	staleVersionHistory := s.eventBatchesToVersionHistory(versionhistory.CopyVersionHistory(versionHistory), staleBranch)
