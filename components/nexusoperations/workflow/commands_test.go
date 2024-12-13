@@ -656,8 +656,7 @@ func TestOperationNodeDeletionOnTerminalEvents(t *testing.T) {
 			EventTime: timestamppb.Now(),
 		}
 
-		// Set the correct attributes field based on eventType
-		switch eventType {
+		switch eventType { //nolint:exhaustive
 		case enumspb.EVENT_TYPE_NEXUS_OPERATION_COMPLETED:
 			event.Attributes = &historypb.HistoryEvent_NexusOperationCompletedEventAttributes{
 				NexusOperationCompletedEventAttributes: eventAttr.(*historypb.NexusOperationCompletedEventAttributes),
