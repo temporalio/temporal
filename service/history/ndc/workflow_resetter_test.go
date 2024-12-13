@@ -39,7 +39,7 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	updatepb "go.temporal.io/api/update/v1"
 	"go.temporal.io/api/workflowservice/v1"
-	"go.temporal.io/server/api/clock/v1"
+	clockspb "go.temporal.io/server/api/clock/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -832,7 +832,7 @@ func (s *workflowResetterSuite) TestReapplyWorkflowEvents() {
 // TestReapplyEvents_WithPendingChildren tests applying events related to child workflow.
 // It asserts that reapplyEvents() function checks mutableState.GetChildExecutionInfo() before applying the event.
 func (s *workflowResetterSuite) TestReapplyEvents_WithPendingChildren() {
-	testChildClock := &clock.VectorClock{ShardId: 1, Clock: 10, ClusterId: 1}
+	testChildClock := &clockspb.VectorClock{ShardId: 1, Clock: 10, ClusterId: 1}
 	testInitiatedEventID := int64(123)
 	testChildWFType := &commonpb.WorkflowType{Name: "TEST-CHILD-WF-TYPE"}
 	testChildWFExecution := &commonpb.WorkflowExecution{
