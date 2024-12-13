@@ -1772,7 +1772,7 @@ func (s *NexusWorkflowTestSuite) TestNexusSyncOperationErrorRehydration() {
 		}
 		return nil, nexus.HandlerErrorf(nexus.HandlerErrorTypeBadRequest, "unexpected outcome: %s", outcome)
 	})
-	svc.Register(op)
+	s.NoError(svc.Register(op))
 
 	callerWF := func(ctx workflow.Context, outcome string) (nexus.NoValue, error) {
 		c := workflow.NewNexusClient(endpointName, svc.Name)
@@ -1782,8 +1782,8 @@ func (s *NexusWorkflowTestSuite) TestNexusSyncOperationErrorRehydration() {
 
 	w.RegisterNexusService(svc)
 	w.RegisterWorkflow(callerWF)
-	w.Start()
-	defer w.Stop()
+	s.NoError(w.Start())
+	s.T().Cleanup(w.Stop)
 
 	cases := []struct {
 		outcome            string
@@ -1932,7 +1932,7 @@ func (s *NexusWorkflowTestSuite) TestNexusAsyncOperationErrorRehydration() {
 		}
 		return client.StartWorkflowOptions{ID: soo.RequestID, WorkflowExecutionTimeout: workflowExecutionTimeout}, nil
 	})
-	svc.Register(op)
+	s.NoError(svc.Register(op))
 
 	callerWF := func(ctx workflow.Context, outcome, action string) (nexus.NoValue, error) {
 		opCtx, cancel := workflow.WithCancel(ctx)
@@ -1972,8 +1972,8 @@ func (s *NexusWorkflowTestSuite) TestNexusAsyncOperationErrorRehydration() {
 	w.RegisterNexusService(svc)
 	w.RegisterWorkflow(callerWF)
 	w.RegisterWorkflow(handlerWF)
-	w.Start()
-	defer w.Stop()
+	s.NoError(w.Start())
+	s.T().Cleanup(w.Stop)
 
 	cases := []struct {
 		outcome, action    string
@@ -2087,8 +2087,8 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationSyncNexusFailure() {
 	}
 
 	w.RegisterWorkflow(callerWF)
-	w.Start()
-	defer w.Stop()
+	s.NoError(w.Start())
+	s.T().Cleanup(w.Stop)
 
 	run, err := s.SdkClient().ExecuteWorkflow(ctx, client.StartWorkflowOptions{
 		TaskQueue: taskQueue,
