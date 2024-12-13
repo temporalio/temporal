@@ -495,18 +495,14 @@ jobs:
         run: |
             set -e
             job_id=$(GITHUB_TOKEN=${{ secrets.GITHUB_TOKEN }} ./develop/github/get-job-id-for-job-name ${{matrix.name}})
-            [ -n "$job_id" ] && [ "$job_id" != "null" ] || {
-              echo "Failed to determine job ID" 1>&2
-              exit 1
-            }
-            return job_id
+            echo "JOB_ID=${job_id}" >> $GITHUB_OUTPUT          
 
       - name: Upload test results
         # Can't pin to major because the action linter doesn't recognize the include-hidden-files flag.
         uses: actions/upload-artifact@v4.4.3
         if: ${{ !cancelled() && !inputs.run_single_functional_test }}
         with:
-          name: junit-xml--${{github.run_id}}--${{steps.get_job_id.outputs.result}}--${{github.run_attempt}}--${{matrix.runs-on}}--${{matrix.name}}--${{matrix.shard_index}}--functional-test
+          name: junit-xml--${{github.run_id}}--${{steps.get_job_id.outputs.JOB_ID}}--${{github.run_attempt}}--${{matrix.runs-on}}--${{matrix.name}}--${{matrix.shard_index}}--functional-test
           path: .testoutput
           include-hidden-files: true
           retention-days: 28
