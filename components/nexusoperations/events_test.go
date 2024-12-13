@@ -144,15 +144,6 @@ func TestCherryPick(t *testing.T) {
 }
 
 func TestTerminalStatesDeletion(t *testing.T) {
-	setup := func(t *testing.T) (*hsm.Node, nexusoperations.Operation, int64) {
-		node := newOperationNode(t, &hsmtest.NodeBackend{}, mustNewScheduledEvent(time.Now(), time.Hour))
-		op, err := hsm.MachineData[nexusoperations.Operation](node)
-		require.NoError(t, err)
-		eventID, err := hsm.EventIDFromToken(op.ScheduledEventToken)
-		require.NoError(t, err)
-		return node, op, eventID
-	}
-
 	applyEventAndCheckDeletion := func(
 		t *testing.T,
 		node *hsm.Node,
@@ -234,7 +225,11 @@ func TestTerminalStatesDeletion(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			node, _, eventID := setup(t)
+			node := newOperationNode(t, &hsmtest.NodeBackend{}, mustNewScheduledEvent(time.Now(), time.Hour))
+			op, err := hsm.MachineData[nexusoperations.Operation](node)
+			require.NoError(t, err)
+			eventID, err := hsm.EventIDFromToken(op.ScheduledEventToken)
+			require.NoError(t, err)
 
 			// Update the event ID in attributes
 			switch a := tc.attributes.(type) {
