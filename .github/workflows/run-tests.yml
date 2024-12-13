@@ -490,7 +490,7 @@ jobs:
       - name: Get job ID from workflow run
         id: get_job_id
         run: |
-          set -e
+          set -eu
           job_id=$(curl -L \
             -H "Accept: application/vnd.github+json" \
             -H "Authorization: Bearer ${{secrets.GITHUB_TOKEN}}" \
@@ -609,7 +609,7 @@ jobs:
       - name: Get job ID from workflow run
         id: get_job_id
         run: |
-          set -e
+          set -eu
           job_id=$(curl -L \
             -H "Accept: application/vnd.github+json" \
             -H "Authorization: Bearer ${{secrets.GITHUB_TOKEN}}" \
@@ -719,7 +719,7 @@ jobs:
       - name: Get job ID from workflow run
         id: get_job_id
         run: |
-          set -e
+          set -eu
           job_id=$(curl -L \
             -H "Accept: application/vnd.github+json" \
             -H "Authorization: Bearer ${{secrets.GITHUB_TOKEN}}" \
