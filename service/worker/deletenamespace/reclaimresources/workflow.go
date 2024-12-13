@@ -73,8 +73,7 @@ var (
 	}
 
 	deleteExecutionsWorkflowOptions = workflow.ChildWorkflowOptions{
-		RetryPolicy:        retryPolicy,
-		WorkflowRunTimeout: 60 * time.Minute,
+		RetryPolicy: retryPolicy,
 	}
 
 	ensureNoExecutionsActivityRetryPolicy = &temporal.RetryPolicy{

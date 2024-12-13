@@ -26,6 +26,7 @@ package deleteexecutions
 
 import (
 	"context"
+	"time"
 
 	"go.temporal.io/api/serviceerror"
 	workflowpb "go.temporal.io/api/workflow/v1"
@@ -126,10 +127,29 @@ func (a *LocalActivities) GetNextPageTokenActivity(ctx context.Context, params G
 func (a *Activities) DeleteExecutionsActivity(ctx context.Context, params DeleteExecutionsActivityParams) (DeleteExecutionsActivityResult, error) {
 	ctx = headers.SetCallerName(ctx, params.Namespace.String())
 
-	rateLimiter := quotas.NewRateLimiter(float64(params.RPS), params.RPS)
+	progressCh := make(chan DeleteExecutionsActivityResult, 1)
+	defer func() { close(progressCh) }()
+
+	go func() {
+		heartbeatTicker := time.NewTicker(deleteWorkflowExecutionsActivityOptions.HeartbeatTimeout / 2)
+		defer heartbeatTicker.Stop()
+
+		var lastKnownProgress DeleteExecutionsActivityResult
+		for {
+			select {
+			case progress, chOpen := <-progressCh:
+				if !chOpen {
+					// Stop heartbeating when a channel is closed, i.e., activity is completed.
+					return
+				}
+				lastKnownProgress = progress
+			case <-heartbeatTicker.C:
+				activity.RecordHeartbeat(ctx, lastKnownProgress)
+			}
+		}
+	}()
 
 	var result DeleteExecutionsActivityResult
-
 	req := &manager.ListWorkflowExecutionsRequestV2{
 		NamespaceID:   params.NamespaceID,
 		Namespace:     params.Namespace,
@@ -143,6 +163,7 @@ func (a *Activities) DeleteExecutionsActivity(ctx context.Context, params Delete
 		a.logger.Error("Unable to list all workflow executions.", tag.WorkflowNamespace(params.Namespace.String()), tag.Error(err))
 		return result, err
 	}
+	rateLimiter := quotas.NewRateLimiter(float64(params.RPS), params.RPS)
 	for _, execution := range resp.Executions {
 		err = rateLimiter.Wait(ctx)
 		if err != nil {
@@ -175,11 +196,14 @@ func (a *Activities) DeleteExecutionsActivity(ctx context.Context, params Delete
 			metrics.DeleteExecutionFailuresCount.With(a.metricsHandler).Record(1)
 			a.logger.Error("Unable to delete workflow execution.", tag.WorkflowNamespace(params.Namespace.String()), tag.WorkflowID(execution.Execution.GetWorkflowId()), tag.WorkflowRunID(execution.Execution.GetRunId()), tag.Error(err))
 		}
-		activity.RecordHeartbeat(ctx, result)
 		select {
+		case progressCh <- result:
+			// Send the current result to heartbeat go routine.
 		case <-ctx.Done():
+			// Stop deletion on cancellation.
 			return result, ctx.Err()
 		default:
+			// Don't block deletion if a progress channel is full.
 		}
 	}
 	return result, nil
