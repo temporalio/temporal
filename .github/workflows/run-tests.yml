@@ -494,7 +494,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
             set -e
-            job_id=$(GITHUB_TOKEN=${{ secrets.GITHUB_TOKEN }} ./develop/github/get-job-id-for-job-name ${{matrix.name}})
+            job_id="$(GITHUB_TOKEN="${{ secrets.GITHUB_TOKEN }}" ./develop/github/get-job-id-for-job-name "${{matrix.name}}")"
             echo "JOB_ID=${job_id}" >> $GITHUB_OUTPUT          
 
       - name: Upload test results
