@@ -487,6 +487,12 @@ jobs:
           annotate_only: true
           skip_annotations: true
 
+      - name: Get job name
+        run: |
+          # Both work:
+          echo "Job name is $GITHUB_JOB"
+          echo "How about ${{ github.jobs[github.job].name }}"
+
       - name: Get job ID from workflow run
         id: get_job_id
         run: |
@@ -496,7 +502,7 @@ jobs:
             -H "Authorization: Bearer ${{secrets.GITHUB_TOKEN}}" \
             -H "X-GitHub-Api-Version: 2022-11-28" \
             "https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/jobs" \
-            | jq "first(.jobs[] | select(.name | endswith(\"${{matrix.name}}\")) | .id)")
+            | jq "first(.jobs[] | select(.name | endswith(\"$GITHUB_JOB\")) | .id)")
           echo "JOB_ID=${job_id}" >> "$GITHUB_OUTPUT"
 
       - name: Upload test results
