@@ -34,7 +34,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	"go.temporal.io/api/enums/v1"
+	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/backoff"
@@ -444,7 +444,7 @@ func (s *contextSuite) TestHandoverNamespace() {
 				cluster.TestCurrentClusterName,
 				cluster.TestAlternativeClusterName,
 			},
-			State: enums.REPLICATION_STATE_HANDOVER,
+			State: enumspb.REPLICATION_STATE_HANDOVER,
 		},
 		tests.Version,
 	)

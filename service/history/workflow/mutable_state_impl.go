@@ -54,7 +54,7 @@ import (
 	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
-	"go.temporal.io/server/api/taskqueue/v1"
+	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	tokenspb "go.temporal.io/server/api/token/v1"
 	workflowspb "go.temporal.io/server/api/workflow/v1"
 	"go.temporal.io/server/common"
@@ -653,7 +653,7 @@ func (ms *MutableStateImpl) GetNexusCompletion(ctx context.Context) (nexus.Opera
 	return nil, serviceerror.NewInternal(fmt.Sprintf("invalid workflow execution status: %v", ce.GetEventType()))
 }
 
-// GetHSMCallbackArg converts a workflow completion event into a [persistencepb.HSMCallbackArg].
+// GetHSMCallbackArg converts a workflow completion event into a [persistencespb.HSMCallbackArg].
 func (ms *MutableStateImpl) GetHSMCompletionCallbackArg(ctx context.Context) (*persistencespb.HSMCompletionCallbackArg, error) {
 	workflowKey := ms.GetWorkflowKey()
 	ce, err := ms.GetCompletionEvent(ctx)
@@ -2499,7 +2499,7 @@ func (ms *MutableStateImpl) AddWorkflowTaskStartedEvent(
 	taskQueue *taskqueuepb.TaskQueue,
 	identity string,
 	versioningStamp *commonpb.WorkerVersionStamp,
-	redirectInfo *taskqueue.BuildIdRedirectInfo,
+	redirectInfo *taskqueuespb.BuildIdRedirectInfo,
 	skipVersioningCheck bool,
 ) (*historypb.HistoryEvent, *WorkflowTaskInfo, error) {
 	opTag := tag.WorkflowActionWorkflowTaskStarted
@@ -2596,7 +2596,7 @@ func (ms *MutableStateImpl) addResetPointFromCompletion(
 // ObsoleteDispatchBuildId error will be returned.
 func (ms *MutableStateImpl) validateBuildIdRedirectInfo(
 	startedWorkerStamp *commonpb.WorkerVersionStamp,
-	redirectInfo *taskqueue.BuildIdRedirectInfo,
+	redirectInfo *taskqueuespb.BuildIdRedirectInfo,
 ) (int64, error) {
 	assignedBuildId := ms.GetAssignedBuildId()
 	redirectCounter := ms.GetExecutionInfo().GetBuildIdRedirectCounter()
@@ -3085,7 +3085,7 @@ func (ms *MutableStateImpl) AddActivityTaskStartedEvent(
 	identity string,
 	versioningStamp *commonpb.WorkerVersionStamp,
 	deployment *deploymentpb.Deployment,
-	redirectInfo *taskqueue.BuildIdRedirectInfo,
+	redirectInfo *taskqueuespb.BuildIdRedirectInfo,
 ) (*historypb.HistoryEvent, error) {
 	opTag := tag.WorkflowActionActivityTaskStarted
 	err := ms.checkMutability(opTag)

@@ -4,7 +4,8 @@ linters:
   enable:
     - errcheck
     - goimports
-    # - paralleltest # missing the call to method parallel, but testify does not seem to work well with parallel test: https://github.com/stretchr/testify/issues/187
+    - importas
+    #  - paralleltest # missing the call to method parallel, but testify does not seem to work well with parallel test: https://github.com/stretchr/testify/issues/187
     - revive # revive supersedes golint, which is now archived
     - staticcheck
     - govet
@@ -44,6 +45,21 @@ linters-settings:
         msg: "Please use require.Eventually or assert.Eventually instead unless you've no other option"
       - p: ^time\.After$
         msg: "time.After may leak resources. Use time.NewTimer instead."
+  importas:
+    # Enforce the aliases below.
+    no-unaliased: true
+    # Still allow aliases outside of the rules below.
+    no-extra-aliases: false
+    alias:
+      # no pb services (or their mocks) are aliased - must be at the top!
+      - pkg: go.temporal.io(/server)?/api/(\w+)service(mock)?/v1
+        alias: # ie no alias - this can only be specified once!
+      # public API pbs have a suffix
+      - pkg: go.temporal.io/api/(\w+)/v1
+        alias: ${1}pb
+      # internal server pbs have their own suffix to avoid naming conflicts
+      - pkg: go.temporal.io/server/api/(\w+)/v1
+        alias: ${1}spb
   revive:
     severity: error
     confidence: 0.8

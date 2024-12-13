@@ -31,11 +31,11 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	"go.temporal.io/api/common/v1"
+	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
-	persistencepb "go.temporal.io/server/api/persistence/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common/cluster"
@@ -153,7 +153,7 @@ func (s *executableVerifyVersionedTransitionTaskSuite) SetupTest() {
 				RunId:       s.runID,
 			},
 		},
-		VersionedTransition: &persistencepb.VersionedTransition{
+		VersionedTransition: &persistencespb.VersionedTransition{
 			NamespaceFailoverVersion: 3,
 			TransitionCount:          5,
 		},
@@ -190,7 +190,7 @@ func (s *executableVerifyVersionedTransitionTaskSuite) TestExecute_CurrentBranch
 				NewRunId:    s.newRunID,
 			},
 		},
-		VersionedTransition: &persistencepb.VersionedTransition{
+		VersionedTransition: &persistencespb.VersionedTransition{
 			NamespaceFailoverVersion: 3,
 			TransitionCount:          5,
 		},
@@ -202,9 +202,9 @@ func (s *executableVerifyVersionedTransitionTaskSuite) TestExecute_CurrentBranch
 	).AnyTimes()
 	mu := workflow.NewMockMutableState(s.controller)
 	mu.EXPECT().CloneToProto().Return(
-		&persistencepb.WorkflowMutableState{
-			ExecutionInfo: &persistencepb.WorkflowExecutionInfo{
-				TransitionHistory: []*persistencepb.VersionedTransition{
+		&persistencespb.WorkflowMutableState{
+			ExecutionInfo: &persistencespb.WorkflowExecutionInfo{
+				TransitionHistory: []*persistencespb.VersionedTransition{
 					{NamespaceFailoverVersion: 1, TransitionCount: 3},
 					{NamespaceFailoverVersion: 3, TransitionCount: 6},
 				},
@@ -215,7 +215,7 @@ func (s *executableVerifyVersionedTransitionTaskSuite) TestExecute_CurrentBranch
 
 	s.mockGetMutableState(s.namespaceID, s.workflowID, s.runID, mu, nil)
 	newRunMs := workflow.NewMockMutableState(s.controller)
-	newRunMs.EXPECT().CloneToProto().Return(&persistencepb.WorkflowMutableState{}).AnyTimes()
+	newRunMs.EXPECT().CloneToProto().Return(&persistencespb.WorkflowMutableState{}).AnyTimes()
 	s.mockGetMutableState(s.namespaceID, s.workflowID, s.newRunID, newRunMs, nil)
 
 	task := NewExecutableVerifyVersionedTransitionTask(
@@ -246,7 +246,7 @@ func (s *executableVerifyVersionedTransitionTaskSuite) TestExecute_CurrentBranch
 				NewRunId:    s.newRunID,
 			},
 		},
-		VersionedTransition: &persistencepb.VersionedTransition{
+		VersionedTransition: &persistencespb.VersionedTransition{
 			NamespaceFailoverVersion: 3,
 			TransitionCount:          5,
 		},
@@ -259,9 +259,9 @@ func (s *executableVerifyVersionedTransitionTaskSuite) TestExecute_CurrentBranch
 
 	mu := workflow.NewMockMutableState(s.controller)
 	mu.EXPECT().CloneToProto().Return(
-		&persistencepb.WorkflowMutableState{
-			ExecutionInfo: &persistencepb.WorkflowExecutionInfo{
-				TransitionHistory: []*persistencepb.VersionedTransition{
+		&persistencespb.WorkflowMutableState{
+			ExecutionInfo: &persistencespb.WorkflowExecutionInfo{
+				TransitionHistory: []*persistencespb.VersionedTransition{
 					{NamespaceFailoverVersion: 1, TransitionCount: 3},
 					{NamespaceFailoverVersion: 3, TransitionCount: 6},
 				},
@@ -306,7 +306,7 @@ func (s *executableVerifyVersionedTransitionTaskSuite) mockGetMutableState(
 		gomock.Any(),
 		shardContext,
 		namespace.ID(namespaceId),
-		&common.WorkflowExecution{
+		&commonpb.WorkflowExecution{
 			WorkflowId: workflowId,
 			RunId:      runId,
 		},
@@ -328,7 +328,7 @@ func (s *executableVerifyVersionedTransitionTaskSuite) TestExecute_CurrentBranch
 				NewRunId:    s.newRunID,
 			},
 		},
-		VersionedTransition: &persistencepb.VersionedTransition{
+		VersionedTransition: &persistencespb.VersionedTransition{
 			NamespaceFailoverVersion: 3,
 			TransitionCount:          7,
 		},
@@ -340,13 +340,13 @@ func (s *executableVerifyVersionedTransitionTaskSuite) TestExecute_CurrentBranch
 	).AnyTimes()
 
 	mu := workflow.NewMockMutableState(s.controller)
-	transitionHistory := []*persistencepb.VersionedTransition{
+	transitionHistory := []*persistencespb.VersionedTransition{
 		{NamespaceFailoverVersion: 1, TransitionCount: 3},
 		{NamespaceFailoverVersion: 3, TransitionCount: 6},
 	}
 	mu.EXPECT().CloneToProto().Return(
-		&persistencepb.WorkflowMutableState{
-			ExecutionInfo: &persistencepb.WorkflowExecutionInfo{
+		&persistencespb.WorkflowMutableState{
+			ExecutionInfo: &persistencespb.WorkflowExecutionInfo{
 				TransitionHistory: transitionHistory,
 			},
 			NextEventId: taskNextEvent,
@@ -390,7 +390,7 @@ func (s *executableVerifyVersionedTransitionTaskSuite) TestExecute_NonCurrentBra
 				},
 			},
 		},
-		VersionedTransition: &persistencepb.VersionedTransition{
+		VersionedTransition: &persistencespb.VersionedTransition{
 			NamespaceFailoverVersion: 1,
 			TransitionCount:          4,
 		},
@@ -403,9 +403,9 @@ func (s *executableVerifyVersionedTransitionTaskSuite) TestExecute_NonCurrentBra
 
 	mu := workflow.NewMockMutableState(s.controller)
 	mu.EXPECT().CloneToProto().Return(
-		&persistencepb.WorkflowMutableState{
-			ExecutionInfo: &persistencepb.WorkflowExecutionInfo{
-				TransitionHistory: []*persistencepb.VersionedTransition{
+		&persistencespb.WorkflowMutableState{
+			ExecutionInfo: &persistencespb.WorkflowExecutionInfo{
+				TransitionHistory: []*persistencespb.VersionedTransition{
 					{NamespaceFailoverVersion: 1, TransitionCount: 3},
 					{NamespaceFailoverVersion: 3, TransitionCount: 6},
 				},
@@ -442,7 +442,7 @@ func (s *executableVerifyVersionedTransitionTaskSuite) TestExecute_NonCurrentBra
 
 	s.mockGetMutableState(s.namespaceID, s.workflowID, s.runID, mu, nil)
 	newRunMs := workflow.NewMockMutableState(s.controller)
-	newRunMs.EXPECT().CloneToProto().Return(&persistencepb.WorkflowMutableState{}).AnyTimes()
+	newRunMs.EXPECT().CloneToProto().Return(&persistencespb.WorkflowMutableState{}).AnyTimes()
 	s.mockGetMutableState(s.namespaceID, s.workflowID, s.newRunID, newRunMs, nil)
 
 	task := NewExecutableVerifyVersionedTransitionTask(
@@ -479,7 +479,7 @@ func (s *executableVerifyVersionedTransitionTaskSuite) TestExecute_NonCurrentBra
 				},
 			},
 		},
-		VersionedTransition: &persistencepb.VersionedTransition{
+		VersionedTransition: &persistencespb.VersionedTransition{
 			NamespaceFailoverVersion: 1,
 			TransitionCount:          4,
 		},
@@ -492,9 +492,9 @@ func (s *executableVerifyVersionedTransitionTaskSuite) TestExecute_NonCurrentBra
 
 	mu := workflow.NewMockMutableState(s.controller)
 	mu.EXPECT().CloneToProto().Return(
-		&persistencepb.WorkflowMutableState{
-			ExecutionInfo: &persistencepb.WorkflowExecutionInfo{
-				TransitionHistory: []*persistencepb.VersionedTransition{
+		&persistencespb.WorkflowMutableState{
+			ExecutionInfo: &persistencespb.WorkflowExecutionInfo{
+				TransitionHistory: []*persistencespb.VersionedTransition{
 					{NamespaceFailoverVersion: 1, TransitionCount: 3},
 					{NamespaceFailoverVersion: 3, TransitionCount: 6},
 				},

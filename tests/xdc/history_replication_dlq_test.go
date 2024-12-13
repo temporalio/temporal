@@ -38,7 +38,7 @@ import (
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/suite"
 	"github.com/urfave/cli/v2"
-	"go.temporal.io/api/enums/v1"
+	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/temporalproto"
@@ -46,7 +46,7 @@ import (
 	sdkclient "go.temporal.io/sdk/client"
 	sdkworker "go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
-	enumspb "go.temporal.io/server/api/enums/v1"
+	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -384,7 +384,7 @@ func (s *historyReplicationDLQSuite) waitUntilReplicationTasksAreInDLQ(
 			firstEventID := request.ReplicationTaskInfo.FirstEventId
 			// nextEventID is exclusive.
 			nextEventID := request.ReplicationTaskInfo.NextEventId
-			if request.ReplicationTaskInfo.TaskType == enumspb.TASK_TYPE_REPLICATION_HISTORY || request.ReplicationTaskInfo.TaskType == enumspb.TASK_TYPE_REPLICATION_SYNC_VERSIONED_TRANSITION {
+			if request.ReplicationTaskInfo.TaskType == enumsspb.TASK_TYPE_REPLICATION_HISTORY || request.ReplicationTaskInfo.TaskType == enumsspb.TASK_TYPE_REPLICATION_SYNC_VERSIONED_TRANSITION {
 				// A single replication task could contain multiple events, so we need to mark all the event IDs that it
 				// spans as complete.
 				for eventID := firstEventID; eventID < nextEventID; eventID++ {
@@ -432,7 +432,7 @@ func (s *historyReplicationDLQSuite) waitUntilWorkflowReplicated(
 				historyEvents = append(historyEvents, events...)
 
 				for _, event := range events {
-					if event.GetEventType() == enums.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED {
+					if event.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED {
 						return historyEvents
 					}
 				}
@@ -448,7 +448,7 @@ func (s *historyReplicationDLQSuite) waitUntilWorkflowReplicated(
 					s.NoError(err)
 					historyEvents = append(historyEvents, e...)
 					for _, event := range e {
-						if event.GetEventType() == enums.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED {
+						if event.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED {
 							completed = true
 						}
 					}
@@ -525,9 +525,9 @@ func (s *historyReplicationDLQSuite) testReadTasks(
 		s.NotEmpty(replicationTasks)
 		task := replicationTasks[0].Payload
 		if s.enableTransitionHistory {
-			s.Equal(enumspb.TASK_TYPE_REPLICATION_SYNC_VERSIONED_TRANSITION, task.GetTaskType())
+			s.Equal(enumsspb.TASK_TYPE_REPLICATION_SYNC_VERSIONED_TRANSITION, task.GetTaskType())
 		} else {
-			s.Equal(enumspb.TASK_TYPE_REPLICATION_HISTORY, task.GetTaskType())
+			s.Equal(enumsspb.TASK_TYPE_REPLICATION_HISTORY, task.GetTaskType())
 		}
 		s.Equal(run.GetID(), task.WorkflowId)
 		s.Equal(run.GetRunID(), task.RunId)
@@ -547,7 +547,7 @@ func (s *historyReplicationDLQSuite) testReadTasks(
 		s.NoError(err)
 		s.NotEmpty(replicationTasks)
 		task := replicationTasks[0]
-		s.Equal(enumspb.REPLICATION_TASK_TYPE_HISTORY_V2_TASK, task.GetTaskType())
+		s.Equal(enumsspb.REPLICATION_TASK_TYPE_HISTORY_V2_TASK, task.GetTaskType())
 		historyTaskAttributes := task.GetHistoryTaskAttributes()
 		s.Equal(run.GetID(), historyTaskAttributes.GetWorkflowId())
 		s.Equal(run.GetRunID(), historyTaskAttributes.GetRunId())

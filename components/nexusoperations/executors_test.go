@@ -39,7 +39,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/sdk/converter"
 	enumsspb "go.temporal.io/server/api/enums/v1"
-	"go.temporal.io/server/api/persistence/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -57,10 +57,10 @@ import (
 	"go.uber.org/mock/gomock"
 )
 
-var endpointEntry = &persistence.NexusEndpointEntry{
+var endpointEntry = &persistencespb.NexusEndpointEntry{
 	Id: "enpdoint-id",
-	Endpoint: &persistence.NexusEndpoint{
-		Spec: &persistence.NexusEndpointSpec{
+	Endpoint: &persistencespb.NexusEndpoint{
+		Spec: &persistencespb.NexusEndpointSpec{
 			Name: "endpoint",
 		},
 	},
@@ -417,7 +417,7 @@ func TestProcessInvocationTask(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			ctrl := gomock.NewController(t)
-			listenAddr := nexustest.AllocListenAddress(t)
+			listenAddr := nexustest.AllocListenAddress()
 			h := handler{}
 			h.OnStartOperation = func(
 				ctx context.Context,
@@ -455,7 +455,7 @@ func TestProcessInvocationTask(t *testing.T) {
 			}
 			namespaceRegistry := namespace.NewMockRegistry(ctrl)
 			namespaceRegistry.EXPECT().GetNamespaceByID(namespace.ID("ns-id")).Return(
-				namespace.NewNamespaceForTest(&persistence.NamespaceInfo{Name: "ns-name"}, nil, false, nil, 0), nil)
+				namespace.NewNamespaceForTest(&persistencespb.NamespaceInfo{Name: "ns-name"}, nil, false, nil, 0), nil)
 
 			metricsHandler := metrics.NewMockHandler(ctrl)
 			if tc.expectedMetricOutcome != "" {
@@ -476,14 +476,14 @@ func TestProcessInvocationTask(t *testing.T) {
 			}
 
 			endpointReg := nexustest.FakeEndpointRegistry{
-				OnGetByID: func(ctx context.Context, endpointID string) (*persistence.NexusEndpointEntry, error) {
+				OnGetByID: func(ctx context.Context, endpointID string) (*persistencespb.NexusEndpointEntry, error) {
 					require.Equal(t, "endpoint-id", endpointID)
 					if tc.endpointNotFound {
 						return nil, serviceerror.NewNotFound("endpoint not found")
 					}
 					return endpointEntry, nil
 				},
-				OnGetByName: func(ctx context.Context, namespaceID namespace.ID, endpointName string) (*persistence.NexusEndpointEntry, error) {
+				OnGetByName: func(ctx context.Context, namespaceID namespace.ID, endpointName string) (*persistencespb.NexusEndpointEntry, error) {
 					require.Equal(t, "endpoint", endpointName)
 					require.Equal(t, "ns-id", namespaceID.String())
 					if tc.endpointNotFound {
@@ -508,7 +508,7 @@ func TestProcessInvocationTask(t *testing.T) {
 				MetricsHandler:         metricsHandler,
 				Logger:                 log.NewNoopLogger(),
 				EndpointRegistry:       endpointReg,
-				ClientProvider: func(ctx context.Context, namespaceID string, entry *persistence.NexusEndpointEntry, service string) (*nexus.Client, error) {
+				ClientProvider: func(ctx context.Context, namespaceID string, entry *persistencespb.NexusEndpointEntry, service string) (*nexus.Client, error) {
 					return nexus.NewClient(nexus.ClientOptions{
 						BaseURL:    "http://" + listenAddr,
 						Service:    service,
@@ -522,7 +522,7 @@ func TestProcessInvocationTask(t *testing.T) {
 				env,
 				hsm.Ref{
 					WorkflowKey:     definition.NewWorkflowKey("ns-id", "wf-id", "run-id"),
-					StateMachineRef: &persistence.StateMachineRef{},
+					StateMachineRef: &persistencespb.StateMachineRef{},
 				},
 				nexusoperations.InvocationTask{EndpointName: "endpoint-id"},
 			)
@@ -716,7 +716,7 @@ func TestProcessCancelationTask(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			ctrl := gomock.NewController(t)
-			listenAddr := nexustest.AllocListenAddress(t)
+			listenAddr := nexustest.AllocListenAddress()
 			h := handler{}
 			h.OnCancelOperation = tc.onCancelOperation
 			nexustest.NewNexusServer(t, listenAddr, h)
@@ -742,7 +742,7 @@ func TestProcessCancelationTask(t *testing.T) {
 			env := fakeEnv{node}
 			namespaceRegistry := namespace.NewMockRegistry(ctrl)
 			namespaceRegistry.EXPECT().GetNamespaceByID(namespace.ID("ns-id")).Return(
-				namespace.NewNamespaceForTest(&persistence.NamespaceInfo{Name: "ns-name"}, nil, false, nil, 0), nil)
+				namespace.NewNamespaceForTest(&persistencespb.NamespaceInfo{Name: "ns-name"}, nil, false, nil, 0), nil)
 
 			metricsHandler := metrics.NewMockHandler(ctrl)
 			if tc.expectedMetricOutcome != "" {
@@ -762,14 +762,14 @@ func TestProcessCancelationTask(t *testing.T) {
 					metrics.OutcomeTag(tc.expectedMetricOutcome))
 			}
 			endpointReg := nexustest.FakeEndpointRegistry{
-				OnGetByID: func(ctx context.Context, endpointID string) (*persistence.NexusEndpointEntry, error) {
+				OnGetByID: func(ctx context.Context, endpointID string) (*persistencespb.NexusEndpointEntry, error) {
 					require.Equal(t, "endpoint-id", endpointID)
 					if tc.endpointNotFound {
 						return nil, serviceerror.NewNotFound("endpoint not found")
 					}
 					return endpointEntry, nil
 				},
-				OnGetByName: func(ctx context.Context, namespaceID namespace.ID, endpointName string) (*persistence.NexusEndpointEntry, error) {
+				OnGetByName: func(ctx context.Context, namespaceID namespace.ID, endpointName string) (*persistencespb.NexusEndpointEntry, error) {
 					require.Equal(t, "endpoint", endpointName)
 					require.Equal(t, "ns-id", namespaceID.String())
 					if tc.endpointNotFound {
@@ -792,7 +792,7 @@ func TestProcessCancelationTask(t *testing.T) {
 				MetricsHandler:    metricsHandler,
 				Logger:            log.NewNoopLogger(),
 				EndpointRegistry:  endpointReg,
-				ClientProvider: func(ctx context.Context, namespaceID string, entry *persistence.NexusEndpointEntry, service string) (*nexus.Client, error) {
+				ClientProvider: func(ctx context.Context, namespaceID string, entry *persistencespb.NexusEndpointEntry, service string) (*nexus.Client, error) {
 					return nexus.NewClient(nexus.ClientOptions{
 						BaseURL:    "http://" + listenAddr,
 						Service:    service,
@@ -806,7 +806,7 @@ func TestProcessCancelationTask(t *testing.T) {
 				env,
 				hsm.Ref{
 					WorkflowKey:     definition.NewWorkflowKey("ns-id", "wf-id", "run-id"),
-					StateMachineRef: &persistence.StateMachineRef{},
+					StateMachineRef: &persistencespb.StateMachineRef{},
 				},
 				nexusoperations.CancelationTask{EndpointName: "endpoint-id"},
 			)
@@ -851,7 +851,7 @@ func TestProcessCancelationTask_OperationCompleted(t *testing.T) {
 	env := fakeEnv{node}
 	namespaceRegistry := namespace.NewMockRegistry(ctrl)
 	namespaceRegistry.EXPECT().GetNamespaceByID(namespace.ID("ns-id")).Return(
-		namespace.NewNamespaceForTest(&persistence.NamespaceInfo{Name: "ns-name"}, nil, false, nil, 0), nil)
+		namespace.NewNamespaceForTest(&persistencespb.NamespaceInfo{Name: "ns-name"}, nil, false, nil, 0), nil)
 
 	require.NoError(t, nexusoperations.RegisterExecutor(reg, nexusoperations.TaskExecutorOptions{
 		Config: &nexusoperations.Config{
@@ -863,11 +863,11 @@ func TestProcessCancelationTask_OperationCompleted(t *testing.T) {
 		},
 		NamespaceRegistry: namespaceRegistry,
 		EndpointRegistry: nexustest.FakeEndpointRegistry{
-			OnGetByID: func(ctx context.Context, endpointID string) (*persistence.NexusEndpointEntry, error) {
+			OnGetByID: func(ctx context.Context, endpointID string) (*persistencespb.NexusEndpointEntry, error) {
 				return endpointEntry, nil
 			},
 		},
-		ClientProvider: func(ctx context.Context, namespaceID string, entry *persistence.NexusEndpointEntry, service string) (*nexus.Client, error) {
+		ClientProvider: func(ctx context.Context, namespaceID string, entry *persistencespb.NexusEndpointEntry, service string) (*nexus.Client, error) {
 			return nil, serviceerror.NewInternal("shouldn't get here")
 		},
 	}))
@@ -877,7 +877,7 @@ func TestProcessCancelationTask_OperationCompleted(t *testing.T) {
 		env,
 		hsm.Ref{
 			WorkflowKey:     definition.NewWorkflowKey("ns-id", "wf-id", "run-id"),
-			StateMachineRef: &persistence.StateMachineRef{},
+			StateMachineRef: &persistencespb.StateMachineRef{},
 		},
 		nexusoperations.CancelationTask{EndpointName: "endpoint-name"},
 	)

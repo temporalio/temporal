@@ -31,7 +31,7 @@ import (
 
 	"github.com/pborman/uuid"
 	commonpb "go.temporal.io/api/common/v1"
-	"go.temporal.io/api/deployment/v1"
+	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	namespacepb "go.temporal.io/api/namespace/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
@@ -171,9 +171,9 @@ func (tv *TestVars) WithDeploymentSeries(series string, key ...string) *TestVars
 	return tv.cloneSet("deployment_series", key, series)
 }
 
-func (tv *TestVars) Deployment(key ...string) *deployment.Deployment {
+func (tv *TestVars) Deployment(key ...string) *deploymentpb.Deployment {
 	//revive:disable-next-line:unchecked-type-assertion
-	return &deployment.Deployment{
+	return &deploymentpb.Deployment{
 		SeriesName: tv.DeploymentSeries(key...),
 		BuildId:    tv.BuildId(key...),
 	}

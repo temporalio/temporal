@@ -35,8 +35,8 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
-	"go.temporal.io/server/api/history/v1"
-	persistencepb "go.temporal.io/server/api/persistence/v1"
+	historyspb "go.temporal.io/server/api/history/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common/cluster"
@@ -140,7 +140,7 @@ func (s *executableBackfillHistoryEventsTaskSuite) SetupTest() {
 				NamespaceId: uuid.NewString(),
 				WorkflowId:  uuid.NewString(),
 				RunId:       uuid.NewString(),
-				EventVersionHistory: []*history.VersionHistoryItem{{
+				EventVersionHistory: []*historyspb.VersionHistoryItem{{
 					EventId: s.nextEventID - 1,
 					Version: s.version,
 				}},
@@ -151,7 +151,7 @@ func (s *executableBackfillHistoryEventsTaskSuite) SetupTest() {
 				},
 			},
 		},
-		VersionedTransition: &persistencepb.VersionedTransition{
+		VersionedTransition: &persistencespb.VersionedTransition{
 			NamespaceFailoverVersion: 3,
 			TransitionCount:          5,
 		},

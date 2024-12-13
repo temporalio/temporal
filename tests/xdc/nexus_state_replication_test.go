@@ -44,7 +44,7 @@ import (
 	nexuspb "go.temporal.io/api/nexus/v1"
 	"go.temporal.io/api/operatorservice/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
-	"go.temporal.io/api/workflow/v1"
+	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	sdkclient "go.temporal.io/sdk/client"
 	"go.temporal.io/server/common"
@@ -134,7 +134,7 @@ func (s *NexusStateReplicationSuite) TestNexusOperationEventsReplicated() {
 			return &nexus.HandlerStartOperationResultAsync{OperationID: "test"}, nil
 		},
 	}
-	listenAddr := nexustest.AllocListenAddress(s.T())
+	listenAddr := nexustest.AllocListenAddress()
 	nexustest.NewNexusServer(s.T(), listenAddr, h)
 
 	ctx := testcore.NewContext()
@@ -287,7 +287,7 @@ func (s *NexusStateReplicationSuite) TestNexusOperationCancelationReplicated() {
 			return nil
 		},
 	}
-	listenAddr := nexustest.AllocListenAddress(s.T())
+	listenAddr := nexustest.AllocListenAddress()
 	nexustest.NewNexusServer(s.T(), listenAddr, h)
 
 	ctx := testcore.NewContext()
@@ -472,7 +472,7 @@ func (s *NexusStateReplicationSuite) TestNexusCallbackReplicated() {
 	s.waitCallback(ctx, sdkClient2, &commonpb.WorkflowExecution{
 		WorkflowId: tv.WorkflowID(),
 		RunId:      startResp.GetRunId(),
-	}, func(callback *workflow.CallbackInfo) bool {
+	}, func(callback *workflowpb.CallbackInfo) bool {
 		return callback.Attempt > 2
 	})
 
@@ -488,7 +488,7 @@ func (s *NexusStateReplicationSuite) TestNexusCallbackReplicated() {
 		s.waitCallback(ctx, sdkClient, &commonpb.WorkflowExecution{
 			WorkflowId: tv.WorkflowID(),
 			RunId:      startResp.GetRunId(),
-		}, func(callback *workflow.CallbackInfo) bool {
+		}, func(callback *workflowpb.CallbackInfo) bool {
 			return callback.State == enumspb.CALLBACK_STATE_SUCCEEDED
 		})
 	}
@@ -540,7 +540,7 @@ func (s *NexusStateReplicationSuite) waitCallback(
 	ctx context.Context,
 	sdkClient sdkclient.Client,
 	execution *commonpb.WorkflowExecution,
-	condition func(callback *workflow.CallbackInfo) bool,
+	condition func(callback *workflowpb.CallbackInfo) bool,
 ) {
 	s.Eventually(func() bool {
 		descResp, err := sdkClient.DescribeWorkflowExecution(ctx, execution.WorkflowId, execution.RunId)

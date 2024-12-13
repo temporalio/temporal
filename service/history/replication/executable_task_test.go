@@ -35,7 +35,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
-	"go.temporal.io/api/enums/v1"
+	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/api/adminservice/v1"
@@ -686,10 +686,10 @@ func (s *executableTaskSuite) TestBackFillEvents_Success() {
 	eventBatchOriginal2 := []*historypb.HistoryEvent{
 		{EventId: 21, Version: 12},
 	}
-	blogOriginal1, err := s.serializer.SerializeEvents(eventBatchOriginal1, enums.ENCODING_TYPE_PROTO3)
+	blogOriginal1, err := s.serializer.SerializeEvents(eventBatchOriginal1, enumspb.ENCODING_TYPE_PROTO3)
 	s.NoError(err)
 
-	blogOriginal2, err := s.serializer.SerializeEvents(eventBatchOriginal2, enums.ENCODING_TYPE_PROTO3)
+	blogOriginal2, err := s.serializer.SerializeEvents(eventBatchOriginal2, enumspb.ENCODING_TYPE_PROTO3)
 	s.NoError(err)
 	versionHistory := &historyspb.VersionHistory{
 		Items: []*historyspb.VersionHistoryItem{
@@ -707,7 +707,7 @@ func (s *executableTaskSuite) TestBackFillEvents_Success() {
 		{EventId: 1, Version: 12},
 		{EventId: 2, Version: 12},
 	}
-	blobNewRun, err := s.serializer.SerializeEvents(eventBatchNewRun, enums.ENCODING_TYPE_PROTO3)
+	blobNewRun, err := s.serializer.SerializeEvents(eventBatchNewRun, enumspb.ENCODING_TYPE_PROTO3)
 	s.NoError(err)
 	fetcherNewRun := collection.NewPagingIterator(func(paginationToken []byte) ([]*eventhandler.HistoryBatch, []byte, error) {
 		return []*eventhandler.HistoryBatch{
@@ -862,7 +862,7 @@ func (s *executableTaskSuite) TestGetNamespaceInfo_Deleted() {
 			Info: &persistencespb.NamespaceInfo{
 				Id:    namespaceID,
 				Name:  namespaceName,
-				State: enums.NAMESPACE_STATE_DELETED,
+				State: enumspb.NAMESPACE_STATE_DELETED,
 			},
 			Config: &persistencespb.NamespaceConfig{},
 			ReplicationConfig: &persistencespb.NamespaceReplicationConfig{

@@ -39,7 +39,7 @@ import (
 	"go.temporal.io/sdk/activity"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/server/api/historyservice/v1"
-	schedspb "go.temporal.io/server/api/schedule/v1"
+	schedulespb "go.temporal.io/server/api/schedule/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
@@ -87,7 +87,7 @@ var (
 
 func (e errFollow) Error() string { return string(e) }
 
-func (a *activities) StartWorkflow(ctx context.Context, req *schedspb.StartWorkflowRequest) (*schedspb.StartWorkflowResponse, error) {
+func (a *activities) StartWorkflow(ctx context.Context, req *schedulespb.StartWorkflowRequest) (*schedulespb.StartWorkflowResponse, error) {
 	if err := a.waitForRateLimiterPermission(req); err != nil {
 		return nil, err
 	}
@@ -103,13 +103,13 @@ func (a *activities) StartWorkflow(ctx context.Context, req *schedspb.StartWorkf
 	// exactly, but it's just informational so it's close enough.
 	now := time.Now()
 
-	return &schedspb.StartWorkflowResponse{
+	return &schedulespb.StartWorkflowResponse{
 		RunId:         res.RunId,
 		RealStartTime: timestamppb.New(now),
 	}, nil
 }
 
-func (a *activities) waitForRateLimiterPermission(req *schedspb.StartWorkflowRequest) error {
+func (a *activities) waitForRateLimiterPermission(req *schedulespb.StartWorkflowRequest) error {
 	if req.CompletedRateLimitSleep {
 		return nil
 	}
@@ -128,7 +128,7 @@ func (a *activities) waitForRateLimiterPermission(req *schedspb.StartWorkflowReq
 	return nil
 }
 
-func (a *activities) tryWatchWorkflow(ctx context.Context, req *schedspb.WatchWorkflowRequest) (*schedspb.WatchWorkflowResponse, error) {
+func (a *activities) tryWatchWorkflow(ctx context.Context, req *schedulespb.WatchWorkflowRequest) (*schedulespb.WatchWorkflowResponse, error) {
 	if req.LongPoll {
 		// make sure we return and heartbeat 5s before the timeout. this is only
 		// for long polls, for refreshes we just use the local activity timeout.
@@ -157,7 +157,7 @@ func (a *activities) tryWatchWorkflow(ctx context.Context, req *schedspb.WatchWo
 		switch err.(type) {
 		case *serviceerror.NotFound, *serviceerror.NamespaceNotFound:
 			// just turn this into a success, with unspecified status
-			return &schedspb.WatchWorkflowResponse{Status: enumspb.WORKFLOW_EXECUTION_STATUS_UNSPECIFIED}, nil
+			return &schedulespb.WatchWorkflowResponse{Status: enumspb.WORKFLOW_EXECUTION_STATUS_UNSPECIFIED}, nil
 		}
 		a.Logger.Error("error from PollMutableState", tag.Error(err), tag.WorkflowID(req.Execution.WorkflowId))
 		return nil, err
@@ -209,7 +209,7 @@ func (a *activities) tryWatchWorkflow(ctx context.Context, req *schedspb.WatchWo
 	return rb.Build(lastEvent)
 }
 
-func (a *activities) WatchWorkflow(ctx context.Context, req *schedspb.WatchWorkflowRequest) (*schedspb.WatchWorkflowResponse, error) {
+func (a *activities) WatchWorkflow(ctx context.Context, req *schedulespb.WatchWorkflowRequest) (*schedulespb.WatchWorkflowResponse, error) {
 	if !req.LongPoll {
 		// Go SDK currently doesn't set context timeout based on local activity
 		// StartToCloseTimeout if ScheduleToCloseTimeout is set, so add a timeout here.
@@ -236,7 +236,7 @@ func (a *activities) WatchWorkflow(ctx context.Context, req *schedspb.WatchWorkf
 	return nil, translateError(ctx.Err(), "WatchWorkflow")
 }
 
-func (a *activities) CancelWorkflow(ctx context.Context, req *schedspb.CancelWorkflowRequest) error {
+func (a *activities) CancelWorkflow(ctx context.Context, req *schedulespb.CancelWorkflowRequest) error {
 	// TODO: remove after https://github.com/temporalio/sdk-go/issues/1066
 	var cancel context.CancelFunc
 	ctx, cancel = context.WithTimeout(ctx, defaultLocalActivityOptions.StartToCloseTimeout)
@@ -259,7 +259,7 @@ func (a *activities) CancelWorkflow(ctx context.Context, req *schedspb.CancelWor
 	return translateError(err, "RequestCancelWorkflowExecution")
 }
 
-func (a *activities) TerminateWorkflow(ctx context.Context, req *schedspb.TerminateWorkflowRequest) error {
+func (a *activities) TerminateWorkflow(ctx context.Context, req *schedulespb.TerminateWorkflowRequest) error {
 	// TODO: remove after https://github.com/temporalio/sdk-go/issues/1066
 	var cancel context.CancelFunc
 	ctx, cancel = context.WithTimeout(ctx, defaultLocalActivityOptions.StartToCloseTimeout)
@@ -296,14 +296,14 @@ func translateError(err error, msgPrefix string) error {
 }
 
 type responseBuilder struct {
-	request        *schedspb.WatchWorkflowRequest
+	request        *schedulespb.WatchWorkflowRequest
 	workflowStatus enumspb.WorkflowExecutionStatus
 	logger         log.Logger
 	maxBlobSize    int
 }
 
 func newResponseBuilder(
-	request *schedspb.WatchWorkflowRequest,
+	request *schedulespb.WatchWorkflowRequest,
 	workflowStatus enumspb.WorkflowExecutionStatus,
 	logger log.Logger,
 	maxBlobSize int,
@@ -317,7 +317,7 @@ func newResponseBuilder(
 }
 
 //nolint:revive
-func (r responseBuilder) Build(event *historypb.HistoryEvent) (*schedspb.WatchWorkflowResponse, error) {
+func (r responseBuilder) Build(event *historypb.HistoryEvent) (*schedulespb.WatchWorkflowResponse, error) {
 	switch r.workflowStatus {
 	case enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING:
 		if r.request.LongPoll {
@@ -379,15 +379,15 @@ func (r responseBuilder) isTooBig(m proto.Message) bool {
 	return proto.Size(m) > r.maxBlobSize
 }
 
-func (r responseBuilder) makeResponse(result *commonpb.Payloads, failure *failurepb.Failure, closeTime *timestamppb.Timestamp) *schedspb.WatchWorkflowResponse {
-	res := &schedspb.WatchWorkflowResponse{
+func (r responseBuilder) makeResponse(result *commonpb.Payloads, failure *failurepb.Failure, closeTime *timestamppb.Timestamp) *schedulespb.WatchWorkflowResponse {
+	res := &schedulespb.WatchWorkflowResponse{
 		Status:    r.workflowStatus,
 		CloseTime: closeTime,
 	}
 	if result != nil {
-		res.ResultFailure = &schedspb.WatchWorkflowResponse_Result{Result: result}
+		res.ResultFailure = &schedulespb.WatchWorkflowResponse_Result{Result: result}
 	} else if failure != nil {
-		res.ResultFailure = &schedspb.WatchWorkflowResponse_Failure{Failure: failure}
+		res.ResultFailure = &schedulespb.WatchWorkflowResponse_Failure{Failure: failure}
 	}
 	return res
 }

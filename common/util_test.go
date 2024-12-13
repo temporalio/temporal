@@ -33,7 +33,7 @@ import (
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
 	enumspb "go.temporal.io/api/enums/v1"
-	"go.temporal.io/api/failure/v1"
+	failurepb "go.temporal.io/api/failure/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
@@ -594,7 +594,7 @@ func TestMergeProtoExcludingFields(t *testing.T) {
 // Tests that CreateHistoryStartWorkflowRequest doesn't mutate the request
 // parameter when creating a history request with payloads set.
 func TestCreateHistoryStartWorkflowRequestPayloads(t *testing.T) {
-	failurePayload := &failure.Failure{}
+	failurePayload := &failurepb.Failure{}
 	resultPayload := payloads.EncodeString("result")
 	startRequest := &workflowservice.StartWorkflowExecutionRequest{
 		Namespace:            uuid.New(),

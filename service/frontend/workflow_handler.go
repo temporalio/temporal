@@ -42,7 +42,7 @@ import (
 	filterpb "go.temporal.io/api/filter/v1"
 	historypb "go.temporal.io/api/history/v1"
 	querypb "go.temporal.io/api/query/v1"
-	schedpb "go.temporal.io/api/schedule/v1"
+	schedulepb "go.temporal.io/api/schedule/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	updatepb "go.temporal.io/api/update/v1"
@@ -50,8 +50,8 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
-	schedspb "go.temporal.io/server/api/schedule/v1"
-	"go.temporal.io/server/api/taskqueue/v1"
+	schedulespb "go.temporal.io/server/api/schedule/v1"
+	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	"go.temporal.io/server/client/frontend"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/archiver"
@@ -2651,7 +2651,7 @@ func (wh *WorkflowHandler) ShutdownWorker(ctx context.Context, request *workflow
 	// TODO: update poller info to indicate poller was shut down (pass identity/reason along)
 	_, err = wh.matchingClient.ForceUnloadTaskQueuePartition(ctx, &matchingservice.ForceUnloadTaskQueuePartitionRequest{
 		NamespaceId: namespaceId.String(),
-		TaskQueuePartition: &taskqueue.TaskQueuePartition{
+		TaskQueuePartition: &taskqueuespb.TaskQueuePartition{
 			TaskQueue:     request.GetStickyTaskQueue(),
 			TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW, // sticky task queues are always workflow queues
 		},
@@ -2996,7 +2996,7 @@ func (wh *WorkflowHandler) CreateSchedule(ctx context.Context, request *workflow
 	}
 
 	if request.Schedule == nil {
-		request.Schedule = &schedpb.Schedule{}
+		request.Schedule = &schedulepb.Schedule{}
 	}
 	err = wh.canonicalizeScheduleSpec(request.Schedule)
 	if err != nil {
@@ -3020,10 +3020,10 @@ func (wh *WorkflowHandler) CreateSchedule(ctx context.Context, request *workflow
 	// doesn't exceed the limit, the started workflows should be safe as well.
 
 	// Set up input to scheduler workflow
-	input := &schedspb.StartScheduleArgs{
+	input := &schedulespb.StartScheduleArgs{
 		Schedule:     request.Schedule,
 		InitialPatch: request.InitialPatch,
-		State: &schedspb.InternalState{
+		State: &schedulespb.InternalState{
 			Namespace:     namespaceName.String(),
 			NamespaceId:   namespaceID.String(),
 			ScheduleId:    request.ScheduleId,
@@ -3215,7 +3215,7 @@ func (wh *WorkflowHandler) ListDeployments(
 		request.PageSize = maxPageSize
 	}
 
-	deployments, nextPageToken, err := wh.deploymentStoreClient.ListDeployments(ctx, namespaceEntry, request.SeriesName, request.NextPageToken)
+	deployments, nextPageToken, err := wh.deploymentStoreClient.ListDeployments(ctx, namespaceEntry, request.SeriesName, int(request.PageSize), request.NextPageToken)
 	if err != nil {
 		return nil, err
 	}
@@ -3370,7 +3370,7 @@ func (wh *WorkflowHandler) DescribeSchedule(ctx context.Context, request *workfl
 		return nil, err
 	}
 
-	var queryResponse schedspb.DescribeResponse
+	var queryResponse schedulespb.DescribeResponse
 	err = payloads.Decode(res.GetResponse().GetQueryResult(), &queryResponse)
 	if err != nil {
 		return nil, err
@@ -3440,7 +3440,7 @@ func (wh *WorkflowHandler) DescribeSchedule(ctx context.Context, request *workfl
 }
 
 func (wh *WorkflowHandler) annotateSearchAttributesOfScheduledWorkflow(
-	queryResponse *schedspb.DescribeResponse,
+	queryResponse *schedulespb.DescribeResponse,
 	nsName string,
 ) error {
 	ei := wh.getScheduledWorkflowExecutionInfoFrom(queryResponse)
@@ -3456,10 +3456,10 @@ func (wh *WorkflowHandler) annotateSearchAttributesOfScheduledWorkflow(
 }
 
 func (wh *WorkflowHandler) getScheduledWorkflowExecutionInfoFrom(
-	queryResponse *schedspb.DescribeResponse,
+	queryResponse *schedulespb.DescribeResponse,
 ) *workflowpb.NewWorkflowExecutionInfo {
 	action := queryResponse.GetSchedule().GetAction().GetAction()
-	startWorkflowAction, ok := action.(*schedpb.ScheduleAction_StartWorkflow)
+	startWorkflowAction, ok := action.(*schedulepb.ScheduleAction_StartWorkflow)
 	if !ok {
 		return nil
 	}
@@ -3522,7 +3522,7 @@ func (wh *WorkflowHandler) UpdateSchedule(
 	}
 
 	if request.Schedule == nil {
-		request.Schedule = &schedpb.Schedule{}
+		request.Schedule = &schedulepb.Schedule{}
 	}
 	err = wh.canonicalizeScheduleSpec(request.Schedule)
 	if err != nil {
@@ -3544,7 +3544,7 @@ func (wh *WorkflowHandler) UpdateSchedule(
 		return nil, err
 	}
 
-	input := &schedspb.FullUpdateRequest{
+	input := &schedulespb.FullUpdateRequest{
 		Schedule:         request.Schedule,
 		SearchAttributes: request.SearchAttributes,
 	}
@@ -3819,14 +3819,14 @@ func (wh *WorkflowHandler) ListSchedules(
 		return nil, err
 	}
 
-	schedules := make([]*schedpb.ScheduleListEntry, len(persistenceResp.Executions))
+	schedules := make([]*schedulepb.ScheduleListEntry, len(persistenceResp.Executions))
 	for i, ex := range persistenceResp.Executions {
 		memo := ex.GetMemo()
 		info := wh.decodeScheduleListInfo(memo)
 		memo = wh.cleanScheduleMemo(memo)
 		workflowID := ex.GetExecution().GetWorkflowId()
 		scheduleID := strings.TrimPrefix(workflowID, scheduler.WorkflowIDPrefix)
-		schedules[i] = &schedpb.ScheduleListEntry{
+		schedules[i] = &schedulepb.ScheduleListEntry{
 			ScheduleId:       scheduleID,
 			Memo:             memo,
 			SearchAttributes: wh.cleanScheduleSearchAttributes(ex.GetSearchAttributes()),
@@ -5219,9 +5219,9 @@ func (wh *WorkflowHandler) validateWorkflowID(
 	return nil
 }
 
-func (wh *WorkflowHandler) canonicalizeScheduleSpec(schedule *schedpb.Schedule) error {
+func (wh *WorkflowHandler) canonicalizeScheduleSpec(schedule *schedulepb.Schedule) error {
 	if schedule.Spec == nil {
-		schedule.Spec = &schedpb.ScheduleSpec{}
+		schedule.Spec = &schedulepb.ScheduleSpec{}
 	}
 	compiledSpec, err := wh.scheduleSpecBuilder.NewCompiledSpec(schedule.Spec)
 	if err != nil {
@@ -5233,8 +5233,8 @@ func (wh *WorkflowHandler) canonicalizeScheduleSpec(schedule *schedpb.Schedule) 
 	return nil
 }
 
-func (wh *WorkflowHandler) decodeScheduleListInfo(memo *commonpb.Memo) *schedpb.ScheduleListInfo {
-	var listInfo schedpb.ScheduleListInfo
+func (wh *WorkflowHandler) decodeScheduleListInfo(memo *commonpb.Memo) *schedulepb.ScheduleListInfo {
+	var listInfo schedulepb.ScheduleListInfo
 	var listInfoBytes []byte
 	if p := memo.GetFields()[scheduler.MemoFieldInfo]; p == nil {
 		return nil
@@ -5288,7 +5288,7 @@ func (wh *WorkflowHandler) cleanScheduleMemo(memo *commonpb.Memo) *commonpb.Memo
 }
 
 // This mutates request (but idempotent so safe for retries)
-func (wh *WorkflowHandler) addInitialScheduleMemo(request *workflowservice.CreateScheduleRequest, args *schedspb.StartScheduleArgs) {
+func (wh *WorkflowHandler) addInitialScheduleMemo(request *workflowservice.CreateScheduleRequest, args *schedulespb.StartScheduleArgs) {
 	info := scheduler.GetListInfoFromStartArgs(args, time.Now().UTC(), wh.scheduleSpecBuilder)
 	// utf8validator: don't bother validating strings in info here because they all came from an rpc request
 	infoBytes, err := info.Marshal()

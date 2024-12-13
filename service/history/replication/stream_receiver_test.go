@@ -35,7 +35,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/api/adminservice/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
-	repicationpb "go.temporal.io/server/api/replication/v1"
+	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
@@ -173,7 +173,7 @@ func (s *streamReceiverSuite) TestAckMessage_SyncStatus_ReceiverModeSingleStack(
 	s.NoError(err)
 	s.Equal([]*adminservice.StreamWorkflowReplicationMessagesRequest{{
 		Attributes: &adminservice.StreamWorkflowReplicationMessagesRequest_SyncReplicationState{
-			SyncReplicationState: &repicationpb.SyncReplicationState{
+			SyncReplicationState: &replicationspb.SyncReplicationState{
 				InclusiveLowWatermark:     watermarkInfo.Watermark,
 				InclusiveLowWatermarkTime: timestamppb.New(watermarkInfo.Timestamp),
 			},
@@ -266,15 +266,15 @@ func (s *streamReceiverSuite) TestAckMessage_SyncStatus_ReceiverModeTieredStack(
 	s.NoError(err)
 	s.Equal([]*adminservice.StreamWorkflowReplicationMessagesRequest{{
 		Attributes: &adminservice.StreamWorkflowReplicationMessagesRequest_SyncReplicationState{
-			SyncReplicationState: &repicationpb.SyncReplicationState{
+			SyncReplicationState: &replicationspb.SyncReplicationState{
 				InclusiveLowWatermark:     highWatermarkInfo.Watermark,
 				InclusiveLowWatermarkTime: timestamppb.New(highWatermarkInfo.Timestamp),
-				HighPriorityState: &repicationpb.ReplicationState{
+				HighPriorityState: &replicationspb.ReplicationState{
 					InclusiveLowWatermark:     highWatermarkInfo.Watermark,
 					InclusiveLowWatermarkTime: timestamppb.New(highWatermarkInfo.Timestamp),
 					FlowControlCommand:        enumsspb.REPLICATION_FLOW_CONTROL_COMMAND_RESUME,
 				},
-				LowPriorityState: &repicationpb.ReplicationState{
+				LowPriorityState: &replicationspb.ReplicationState{
 					InclusiveLowWatermark:     lowWatermarkInfo.Watermark,
 					InclusiveLowWatermarkTime: timestamppb.New(lowWatermarkInfo.Timestamp),
 					FlowControlCommand:        enumsspb.REPLICATION_FLOW_CONTROL_COMMAND_PAUSE,
@@ -286,7 +286,7 @@ func (s *streamReceiverSuite) TestAckMessage_SyncStatus_ReceiverModeTieredStack(
 }
 
 func (s *streamReceiverSuite) TestProcessMessage_TrackSubmit_SingleStack() {
-	replicationTask := &repicationpb.ReplicationTask{
+	replicationTask := &replicationspb.ReplicationTask{
 		TaskType:       enumsspb.ReplicationTaskType(-1),
 		SourceTaskId:   rand.Int63(),
 		VisibilityTime: timestamppb.New(time.Unix(0, rand.Int63())),
@@ -295,8 +295,8 @@ func (s *streamReceiverSuite) TestProcessMessage_TrackSubmit_SingleStack() {
 	streamResp := StreamResp[*adminservice.StreamWorkflowReplicationMessagesResponse]{
 		Resp: &adminservice.StreamWorkflowReplicationMessagesResponse{
 			Attributes: &adminservice.StreamWorkflowReplicationMessagesResponse_Messages{
-				Messages: &repicationpb.WorkflowReplicationMessages{
-					ReplicationTasks:           []*repicationpb.ReplicationTask{replicationTask},
+				Messages: &replicationspb.WorkflowReplicationMessages{
+					ReplicationTasks:           []*replicationspb.ReplicationTask{replicationTask},
 					ExclusiveHighWatermark:     rand.Int63(),
 					ExclusiveHighWatermarkTime: timestamppb.New(time.Unix(0, rand.Int63())),
 				},
@@ -326,7 +326,7 @@ func (s *streamReceiverSuite) TestProcessMessage_TrackSubmit_SingleStack() {
 
 func (s *streamReceiverSuite) TestProcessMessage_TrackSubmit_SingleStack_ReceivedPrioritizedTask() {
 	s.streamReceiver.receiverMode = ReceiverModeSingleStack
-	replicationTask := &repicationpb.ReplicationTask{
+	replicationTask := &replicationspb.ReplicationTask{
 		TaskType:       enumsspb.ReplicationTaskType(-1),
 		SourceTaskId:   rand.Int63(),
 		VisibilityTime: timestamppb.New(time.Unix(0, rand.Int63())),
@@ -335,8 +335,8 @@ func (s *streamReceiverSuite) TestProcessMessage_TrackSubmit_SingleStack_Receive
 	streamResp := StreamResp[*adminservice.StreamWorkflowReplicationMessagesResponse]{
 		Resp: &adminservice.StreamWorkflowReplicationMessagesResponse{
 			Attributes: &adminservice.StreamWorkflowReplicationMessagesResponse_Messages{
-				Messages: &repicationpb.WorkflowReplicationMessages{
-					ReplicationTasks:           []*repicationpb.ReplicationTask{replicationTask},
+				Messages: &replicationspb.WorkflowReplicationMessages{
+					ReplicationTasks:           []*replicationspb.ReplicationTask{replicationTask},
 					ExclusiveHighWatermark:     rand.Int63(),
 					ExclusiveHighWatermarkTime: timestamppb.New(time.Unix(0, rand.Int63())),
 					Priority:                   enumsspb.TASK_PRIORITY_HIGH,
@@ -355,7 +355,7 @@ func (s *streamReceiverSuite) TestProcessMessage_TrackSubmit_SingleStack_Receive
 
 func (s *streamReceiverSuite) TestProcessMessage_TrackSubmit_TieredStack_ReceivedNonPrioritizedTask() {
 	s.streamReceiver.receiverMode = ReceiverModeTieredStack
-	replicationTask := &repicationpb.ReplicationTask{
+	replicationTask := &replicationspb.ReplicationTask{
 		TaskType:       enumsspb.ReplicationTaskType(-1),
 		SourceTaskId:   rand.Int63(),
 		VisibilityTime: timestamppb.New(time.Unix(0, rand.Int63())),
@@ -363,8 +363,8 @@ func (s *streamReceiverSuite) TestProcessMessage_TrackSubmit_TieredStack_Receive
 	streamResp := StreamResp[*adminservice.StreamWorkflowReplicationMessagesResponse]{
 		Resp: &adminservice.StreamWorkflowReplicationMessagesResponse{
 			Attributes: &adminservice.StreamWorkflowReplicationMessagesResponse_Messages{
-				Messages: &repicationpb.WorkflowReplicationMessages{
-					ReplicationTasks:           []*repicationpb.ReplicationTask{replicationTask},
+				Messages: &replicationspb.WorkflowReplicationMessages{
+					ReplicationTasks:           []*replicationspb.ReplicationTask{replicationTask},
 					ExclusiveHighWatermark:     rand.Int63(),
 					ExclusiveHighWatermarkTime: timestamppb.New(time.Unix(0, rand.Int63())),
 				},
@@ -381,7 +381,7 @@ func (s *streamReceiverSuite) TestProcessMessage_TrackSubmit_TieredStack_Receive
 }
 
 func (s *streamReceiverSuite) TestProcessMessage_TrackSubmit_TieredStack() {
-	replicationTask := &repicationpb.ReplicationTask{
+	replicationTask := &replicationspb.ReplicationTask{
 		TaskType:       enumsspb.ReplicationTaskType(-1),
 		SourceTaskId:   rand.Int63(),
 		VisibilityTime: timestamppb.New(time.Unix(0, rand.Int63())),
@@ -390,8 +390,8 @@ func (s *streamReceiverSuite) TestProcessMessage_TrackSubmit_TieredStack() {
 	streamResp1 := StreamResp[*adminservice.StreamWorkflowReplicationMessagesResponse]{
 		Resp: &adminservice.StreamWorkflowReplicationMessagesResponse{
 			Attributes: &adminservice.StreamWorkflowReplicationMessagesResponse_Messages{
-				Messages: &repicationpb.WorkflowReplicationMessages{
-					ReplicationTasks:           []*repicationpb.ReplicationTask{replicationTask},
+				Messages: &replicationspb.WorkflowReplicationMessages{
+					ReplicationTasks:           []*replicationspb.ReplicationTask{replicationTask},
 					ExclusiveHighWatermark:     rand.Int63(),
 					ExclusiveHighWatermarkTime: timestamppb.New(time.Unix(0, rand.Int63())),
 					Priority:                   enumsspb.TASK_PRIORITY_HIGH,
@@ -403,8 +403,8 @@ func (s *streamReceiverSuite) TestProcessMessage_TrackSubmit_TieredStack() {
 	streamResp2 := StreamResp[*adminservice.StreamWorkflowReplicationMessagesResponse]{
 		Resp: &adminservice.StreamWorkflowReplicationMessagesResponse{
 			Attributes: &adminservice.StreamWorkflowReplicationMessagesResponse_Messages{
-				Messages: &repicationpb.WorkflowReplicationMessages{
-					ReplicationTasks: []*repicationpb.ReplicationTask{
+				Messages: &replicationspb.WorkflowReplicationMessages{
+					ReplicationTasks: []*replicationspb.ReplicationTask{
 						{
 							TaskType:       enumsspb.ReplicationTaskType(-1),
 							SourceTaskId:   rand.Int63(),
