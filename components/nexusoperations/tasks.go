@@ -95,7 +95,7 @@ func (TimeoutTaskSerializer) Serialize(hsm.Task) ([]byte, error) {
 
 type InvocationTask struct {
 	EndpointName string
-	Attempt      int64
+	Attempt      int32
 }
 
 var _ hsm.Task = InvocationTask{}
@@ -123,7 +123,7 @@ type InvocationTaskSerializer struct{}
 
 func (InvocationTaskSerializer) Deserialize(data []byte, attrs hsm.TaskAttributes) (hsm.Task, error) {
 	attempt, _ := binary.Varint(data)
-	return InvocationTask{EndpointName: attrs.Destination, Attempt: attempt}, nil
+	return InvocationTask{EndpointName: attrs.Destination, Attempt: int32(attempt)}, nil
 }
 
 func (InvocationTaskSerializer) Serialize(task hsm.Task) ([]byte, error) {
@@ -131,8 +131,8 @@ func (InvocationTaskSerializer) Serialize(task hsm.Task) ([]byte, error) {
 	if !ok {
 		return nil, fmt.Errorf("%w: nexusoperations.InvocationTask", errSerializationCast)
 	}
-	buf := make([]byte, binary.MaxVarintLen64)
-	return binary.AppendVarint(buf, invocation.Attempt), nil
+	buf := make([]byte, binary.MaxVarintLen32)
+	return binary.AppendVarint(buf, int64(invocation.Attempt)), nil
 }
 
 type BackoffTask struct {
@@ -172,7 +172,7 @@ func (BackoffTaskSerializer) Serialize(hsm.Task) ([]byte, error) {
 
 type CancelationTask struct {
 	EndpointName string
-	Attempt      int64
+	Attempt      int32
 }
 
 var _ hsm.Task = CancelationTask{}
@@ -200,7 +200,7 @@ type CancelationTaskSerializer struct{}
 
 func (CancelationTaskSerializer) Deserialize(data []byte, attrs hsm.TaskAttributes) (hsm.Task, error) {
 	attempt, _ := binary.Varint(data)
-	return CancelationTask{EndpointName: attrs.Destination, Attempt: attempt}, nil
+	return CancelationTask{EndpointName: attrs.Destination, Attempt: int32(attempt)}, nil
 }
 
 func (CancelationTaskSerializer) Serialize(task hsm.Task) ([]byte, error) {
@@ -208,8 +208,8 @@ func (CancelationTaskSerializer) Serialize(task hsm.Task) ([]byte, error) {
 	if !ok {
 		return nil, fmt.Errorf("%w: nexusoperations.CancelationTask", errSerializationCast)
 	}
-	buf := make([]byte, binary.MaxVarintLen64)
-	return binary.AppendVarint(buf, cancelation.Attempt), nil
+	buf := make([]byte, binary.MaxVarintLen32)
+	return binary.AppendVarint(buf, int64(cancelation.Attempt)), nil
 }
 
 type CancelationBackoffTask struct {
