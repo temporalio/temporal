@@ -444,14 +444,22 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
           ref: ${{ env.COMMIT }}
 
-      - name: Get Job ID from GH API
-        id: get-job-id
+      - name: Resolve job ID from workflow run, accounting for matrix strategy.
+        id: get_job_id
+        uses: actions/github-script@main
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          jobs=$(gh api repos/${{ github.repository }}/actions/runs/${{ github.run_id}}/attempts/${{ github.run_attempt }}/jobs)
-          job_id=$(echo $jobs | jq -r '.jobs[] | select(.runner_name=="${{ runner.name }}") | .id')
-          echo "job_id=$job_id" >> $GITHUB_OUTPUT
+          matrix: ${{ toJson(matrix) }}
+        with:
+          script: |
+            const { data: workflow_run } = await github.rest.actions.listJobsForWorkflowRun({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              run_id: context.runId
+            });
+            const matrix = JSON.parse(process.env.matrix);
+            const job_name = `${context.job}${matrix ? ` (${Object.values(matrix).join(", ")})` : ""}`;
+            return workflow_run.jobs.find((job) => job.name === job_name).id;
 
       - name: Start containerized dependencies
         if: ${{ toJson(matrix.containers) != '[]' && (inputs.run_single_functional_test != true || (inputs.run_single_functional_test == true && contains(fromJSON(needs.set-up-single-test.outputs.dbs), env.PERSISTENCE_DRIVER))) }}
@@ -501,7 +509,7 @@ jobs:
         uses: actions/upload-artifact@v4.4.3
         if: ${{ !cancelled() && !inputs.run_single_functional_test }}
         with:
-          name: junit-xml--${{github.run_id}}--${{steps.get-job-id.outputs.job_id}}--${{github.run_attempt}}--${{matrix.runs-on}}--${{matrix.name}}--${{matrix.shard_index}}--functional-test
+          name: junit-xml--${{github.run_id}}--${{steps.get_job_id.outputs.result}}--${{github.run_attempt}}--${{matrix.runs-on}}--${{matrix.name}}--${{matrix.shard_index}}--functional-test
           path: .testoutput
           include-hidden-files: true
           retention-days: 28
