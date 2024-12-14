@@ -76,7 +76,7 @@ services:
     volumes:
       - ./grafana/provisioning/:/etc/grafana/provisioning/
   temporal-ui:
-    image: temporalio/ui:2.26.2
+    image: temporalio/ui:latest
     container_name: temporal-dev-ui
 
 networks:
