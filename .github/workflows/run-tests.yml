@@ -491,7 +491,7 @@ jobs:
         run: |
           echo "Job name is $GITHUB_JOB"
           echo "Matrix name is ${{matrix.name}}"
-          echo "Jithub.job name is ${{jithub.job}}"
+          echo "Github.job name is ${{github.job}}"
 
       - name: Get job ID from workflow run
         id: get_job_id
