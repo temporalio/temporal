@@ -492,17 +492,20 @@ jobs:
           echo "Job name is $GITHUB_JOB"
           echo "Matrix name is ${{matrix.name}}"
           echo "Github.job name is ${{github.job}}"
+          job_suffix="${{matrix.runs-on}}, ${{matrix.shard_index}}, ${{matrix.name}}"
+          echo "Job suffix is $job_suffix"
 
       - name: Get job ID from workflow run
         id: get_job_id
         run: |
           set -eu
+          job_suffix="${{matrix.runs-on}}, ${{matrix.shard_index}}, ${{matrix.name}}"
           job_id=$(curl -L \
             -H "Accept: application/vnd.github+json" \
             -H "Authorization: Bearer ${{secrets.GITHUB_TOKEN}}" \
             -H "X-GitHub-Api-Version: 2022-11-28" \
             "https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/jobs" \
-            | jq "first(.jobs[] | select(.name | endswith(\"$GITHUB_JOB\")) | .id)")
+            | jq "first(.jobs[] | select(.name | endswith(\"$job_suffix\")) | .id)")
           echo "JOB_ID=${job_id}" >> "$GITHUB_OUTPUT"
 
       - name: Upload test results
