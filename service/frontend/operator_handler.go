@@ -680,17 +680,13 @@ func (h *OperatorHandlerImpl) DeleteNamespace(
 		return nil, serviceerror.NewUnavailable(fmt.Sprintf(errUnableToStartWorkflowMessage, deletenamespace.WorkflowName, err))
 	}
 
-	scope := h.metricsHandler.WithTags(metrics.OperationTag(metrics.OperatorDeleteNamespaceScope))
-
 	// Wait for workflow to complete.
 	var wfResult deletenamespace.DeleteNamespaceWorkflowResult
 	err = run.Get(ctx, &wfResult)
 	if err != nil {
-		metrics.DeleteNamespaceWorkflowFailuresCount.With(scope).Record(1)
 		execution := &commonpb.WorkflowExecution{WorkflowId: deletenamespace.WorkflowName, RunId: run.GetRunID()}
 		return nil, serviceerror.NewSystemWorkflow(execution, err)
 	}
-	metrics.DeleteNamespaceWorkflowSuccessCount.With(scope).Record(1)
 
 	return &operatorservice.DeleteNamespaceResponse{
 		DeletedNamespace: wfResult.DeletedNamespace.String(),

@@ -668,8 +668,6 @@ var (
 	// Frontend
 	AddSearchAttributesWorkflowSuccessCount  = NewCounterDef("add_search_attributes_workflow_success")
 	AddSearchAttributesWorkflowFailuresCount = NewCounterDef("add_search_attributes_workflow_failure")
-	DeleteNamespaceWorkflowSuccessCount      = NewCounterDef("delete_namespace_workflow_success")
-	DeleteNamespaceWorkflowFailuresCount     = NewCounterDef("delete_namespace_workflow_failure")
 	VersionCheckSuccessCount                 = NewCounterDef("version_check_success")
 	VersionCheckFailedCount                  = NewCounterDef("version_check_failed")
 	VersionCheckRequestFailedCount           = NewCounterDef("version_check_request_failed")
