@@ -117,7 +117,7 @@ type (
 		LoadUserData dynamicconfig.BoolPropertyFnWithTaskQueueFilter
 
 		ListNexusEndpointsLongPollTimeout dynamicconfig.DurationPropertyFn
-		LoadNexusEndpointsRefresh         dynamicconfig.DurationPropertyFn
+		NexusEndpointsRefreshInterval     dynamicconfig.DurationPropertyFn
 
 		LogAllReqErrors dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	}
@@ -277,7 +277,7 @@ func NewConfig(
 		VisibilityEnableManualPagination:        dynamicconfig.VisibilityEnableManualPagination.Get(dc),
 
 		ListNexusEndpointsLongPollTimeout: dynamicconfig.MatchingListNexusEndpointsLongPollTimeout.Get(dc),
-		LoadNexusEndpointsRefresh:         dynamicconfig.MatchingLoadNexusEndpointsRefresh.Get(dc),
+		NexusEndpointsRefreshInterval:     dynamicconfig.MatchingNexusEndpointsRefreshInterval.Get(dc),
 
 		LogAllReqErrors: dynamicconfig.LogAllReqErrors.Get(dc),
 	}

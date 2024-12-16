@@ -159,10 +159,12 @@ func (s *sqlNexusEndpointStore) ListNexusEndpoints(
 			return p.ErrNexusTableVersionConflict
 		}
 
-		rows, err = tx.ListNexusEndpoints(ctx, &sqlplugin.ListNexusEndpointsRequest{
-			LastID: lastID,
-			Limit:  request.PageSize,
-		})
+		if request.PageSize > 0 {
+			rows, err = tx.ListNexusEndpoints(ctx, &sqlplugin.ListNexusEndpointsRequest{
+				LastID: lastID,
+				Limit:  request.PageSize,
+			})
+		}
 
 		return err
 	})

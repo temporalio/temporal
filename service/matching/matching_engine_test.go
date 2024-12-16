@@ -136,7 +136,7 @@ func createTestMatchingEngine(
 	mockServiceResolver.EXPECT().AddListener(gomock.Any(), gomock.Any()).AnyTimes()
 	mockServiceResolver.EXPECT().RemoveListener(gomock.Any()).AnyTimes()
 	mockNexusEndpointManager := persistence.NewMockNexusEndpointManager(controller)
-	mockNexusEndpointManager.EXPECT().ListNexusEndpoints(gomock.Any(), gomock.Any()).Return(&persistence.ListNexusEndpointsResponse{}).AnyTimes()
+	mockNexusEndpointManager.EXPECT().ListNexusEndpoints(gomock.Any(), gomock.Any()).Return(&persistence.ListNexusEndpointsResponse{}, nil).AnyTimes()
 	return newMatchingEngine(config, tm, mockHistoryClient, logger, namespaceRegistry, matchingClient, mockVisibilityManager, mockHostInfoProvider, mockServiceResolver, mockNexusEndpointManager)
 }
 
@@ -238,7 +238,7 @@ func newMatchingEngine(
 		clusterMeta:                   clustertest.NewMetadataForTest(cluster.NewTestClusterMetadataConfig(false, true)),
 		timeSource:                    clock.NewRealTimeSource(),
 		visibilityManager:             mockVisibilityManager,
-		nexusEndpointClient:           newEndpointClient(config.LoadNexusEndpointsRefresh, nexusEndpointManager),
+		nexusEndpointClient:           newEndpointClient(config.NexusEndpointsRefreshInterval, nexusEndpointManager),
 		nexusEndpointsOwnershipLostCh: make(chan struct{}),
 	}
 }
@@ -3404,14 +3404,14 @@ func (s *matchingEngineSuite) TestCheckNexusEndpointsOwnership() {
 
 func (s *matchingEngineSuite) TestNotifyNexusEndpointsOwnershipLost() {
 	ch := s.matchingEngine.nexusEndpointsOwnershipLostCh
-	s.matchingEngine.notifyIfNexusEndpointsOwnershipLost()
+	s.matchingEngine.notifyNexusEndpointsOwnershipChange()
 	select {
 	case <-ch:
 		s.Fail("expected nexusEndpointsOwnershipLost channel to not have been closed")
 	default:
 	}
 	s.hostInfoForResolver = membership.NewHostInfoFromAddress("other")
-	s.matchingEngine.notifyIfNexusEndpointsOwnershipLost()
+	s.matchingEngine.notifyNexusEndpointsOwnershipChange()
 	<-ch
 	// If the channel is unblocked the test passed.
 }

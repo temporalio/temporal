@@ -85,21 +85,21 @@ type (
 		endpointsByName     map[string]*persistencespb.NexusEndpointEntry
 		tableVersionChanged chan struct{}
 
-		refreshHandle        *goro.Handle
-		loadEndpointsRefresh dynamicconfig.DurationPropertyFn
+		refreshHandle            *goro.Handle
+		endpointsRefreshInterval dynamicconfig.DurationPropertyFn
 
 		persistence p.NexusEndpointManager
 	}
 )
 
 func newEndpointClient(
-	loadEndpointsRefresh dynamicconfig.DurationPropertyFn,
+	endpointsRefreshInterval dynamicconfig.DurationPropertyFn,
 	persistence p.NexusEndpointManager,
 ) *nexusEndpointClient {
 	return &nexusEndpointClient{
-		loadEndpointsRefresh: loadEndpointsRefresh,
-		persistence:          persistence,
-		tableVersionChanged:  make(chan struct{}),
+		endpointsRefreshInterval: endpointsRefreshInterval,
+		persistence:              persistence,
+		tableVersionChanged:      make(chan struct{}),
 	}
 }
 
@@ -373,7 +373,7 @@ func (m *nexusEndpointClient) resetCacheStateLocked() {
 }
 
 // notifyOwnershipChanged starts or stops a background routine which watches the Nexus endpoints table version for
-// changes. This is only expected to be called from matchingEngineImpl.notifyIfNexusEndpointsOwnershipLost()
+// changes. This is only expected to be called from matchingEngineImpl.notifyNexusEndpointsOwnershipChange()
 func (m *nexusEndpointClient) notifyOwnershipChanged(isOwner bool) {
 	oldIsOwner := m.isTableOwner.Swap(isOwner)
 	if isOwner && !oldIsOwner {
@@ -395,7 +395,7 @@ func (m *nexusEndpointClient) notifyOwnershipChanged(isOwner bool) {
 func (m *nexusEndpointClient) refreshTableVersion(ctx context.Context) error {
 	for ctx.Err() == nil {
 		m.checkTableVersion(ctx)
-		util.InterruptibleSleep(ctx, backoff.Jitter(m.loadEndpointsRefresh(), 0.2))
+		util.InterruptibleSleep(ctx, backoff.Jitter(m.endpointsRefreshInterval(), 0.2))
 	}
 	return ctx.Err()
 }

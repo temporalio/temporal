@@ -222,7 +222,7 @@ func NewEngine(
 		clusterMeta:                   clusterMeta,
 		timeSource:                    clock.NewRealTimeSource(), // No need to mock this at the moment
 		visibilityManager:             visibilityManager,
-		nexusEndpointClient:           newEndpointClient(config.LoadNexusEndpointsRefresh, nexusEndpointManager),
+		nexusEndpointClient:           newEndpointClient(config.NexusEndpointsRefreshInterval, nexusEndpointManager),
 		nexusEndpointsOwnershipLostCh: make(chan struct{}),
 		metricsHandler:                scopedMetricsHandler,
 		partitions:                    make(map[tqid.PartitionKey]taskQueuePartitionManager),
@@ -290,7 +290,7 @@ func (e *matchingEngineImpl) watchMembership() {
 			continue
 		}
 
-		e.notifyIfNexusEndpointsOwnershipLost()
+		e.notifyNexusEndpointsOwnershipChange()
 
 		// Check all our loaded partitions to see if we lost ownership of any of them.
 		e.partitionsLock.RLock()
@@ -2078,7 +2078,7 @@ func (e *matchingEngineImpl) checkNexusEndpointsOwnership() (bool, <-chan struct
 	return owner.Identity() == self, ch, nil
 }
 
-func (e *matchingEngineImpl) notifyIfNexusEndpointsOwnershipLost() {
+func (e *matchingEngineImpl) notifyNexusEndpointsOwnershipChange() {
 	// We don't care about the channel returned here. This method is ensured to only be called from the single
 	// watchMembership method and is the only way the channel may be replaced.
 	isOwner, _, err := e.checkNexusEndpointsOwnership()
