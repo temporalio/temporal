@@ -373,7 +373,7 @@ func (m *nexusEndpointClient) resetCacheStateLocked() {
 }
 
 // notifyOwnershipChanged starts or stops a background routine which watches the Nexus endpoints table version for
-// changes. This is not thread-safe and only expected to be called from matchingEngineImpl.notifyIfNexusEndpointsOwnershipLost()
+// changes. This is only expected to be called from matchingEngineImpl.notifyIfNexusEndpointsOwnershipLost()
 func (m *nexusEndpointClient) notifyOwnershipChanged(isOwner bool) {
 	oldIsOwner := m.isTableOwner.Swap(isOwner)
 	if isOwner && !oldIsOwner {
