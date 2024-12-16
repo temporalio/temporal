@@ -1284,7 +1284,7 @@ func (e *matchingEngineImpl) UpdateWorkerVersioningRules(
 	var getResp *matchingservice.GetWorkerVersioningRulesResponse
 	var maxUpstreamBuildIDs int
 
-	err = tqMgr.GetUserDataManager().UpdateUserData(ctx, updateOptions, func(data *persistencespb.TaskQueueUserData) (*persistencespb.TaskQueueUserData, bool, error) {
+	_, err = tqMgr.GetUserDataManager().UpdateUserData(ctx, updateOptions, func(data *persistencespb.TaskQueueUserData) (*persistencespb.TaskQueueUserData, bool, error) {
 		clk := data.GetClock()
 		if clk == nil {
 			clk = hlc.Zero(e.clusterMeta.GetClusterID())
@@ -1482,7 +1482,7 @@ func (e *matchingEngineImpl) UpdateWorkerBuildIdCompatibility(
 		updateOptions.KnownVersion = req.GetRemoveBuildIds().GetKnownUserDataVersion()
 	}
 
-	err = pm.GetUserDataManager().UpdateUserData(ctx, updateOptions, func(data *persistencespb.TaskQueueUserData) (*persistencespb.TaskQueueUserData, bool, error) {
+	_, err = pm.GetUserDataManager().UpdateUserData(ctx, updateOptions, func(data *persistencespb.TaskQueueUserData) (*persistencespb.TaskQueueUserData, bool, error) {
 		clk := data.GetClock()
 		if clk == nil {
 			tmp := hlc.Zero(e.clusterMeta.GetClusterID())
@@ -1537,7 +1537,7 @@ func (e *matchingEngineImpl) UpdateWorkerBuildIdCompatibility(
 	// Only clear tombstones after they have been replicated.
 	if operationCreatedTombstones {
 		opts := UserDataUpdateOptions{Source: "UpdateWorkerBuildIdCompatibility/clear-tombstones"}
-		err = pm.GetUserDataManager().UpdateUserData(ctx, opts, func(data *persistencespb.TaskQueueUserData) (*persistencespb.TaskQueueUserData, bool, error) {
+		_, err = pm.GetUserDataManager().UpdateUserData(ctx, opts, func(data *persistencespb.TaskQueueUserData) (*persistencespb.TaskQueueUserData, bool, error) {
 			updatedClock := hlc.Next(data.GetClock(), e.timeSource)
 			// Avoid mutation
 			ret := common.CloneProto(data)
@@ -1584,9 +1584,11 @@ func (e *matchingEngineImpl) GetTaskQueueUserData(
 	if err != nil {
 		return nil, err
 	}
-	pm, _, err := e.getTaskQueuePartitionManager(ctx, partition, true, loadCauseUserData)
+	pm, _, err := e.getTaskQueuePartitionManager(ctx, partition, !req.OnlyIfLoaded, loadCauseUserData)
 	if err != nil {
 		return nil, err
+	} else if pm == nil {
+		return nil, serviceerror.NewFailedPrecondition("partition was not loaded")
 	}
 	if req.WaitNewData {
 		// mark alive so that it doesn't unload while a child partition is doing a long poll
@@ -1614,7 +1616,7 @@ func (e *matchingEngineImpl) SyncDeploymentUserData(
 
 	updateOptions := UserDataUpdateOptions{Source: "SyncDeploymentUserData"}
 
-	err = tqMgr.GetUserDataManager().UpdateUserData(ctx, updateOptions, func(data *persistencespb.TaskQueueUserData) (*persistencespb.TaskQueueUserData, bool, error) {
+	version, err := tqMgr.GetUserDataManager().UpdateUserData(ctx, updateOptions, func(data *persistencespb.TaskQueueUserData) (*persistencespb.TaskQueueUserData, bool, error) {
 		clk := data.GetClock()
 		if clk == nil {
 			clk = hlc.Zero(e.clusterMeta.GetClusterID())
@@ -1655,7 +1657,7 @@ func (e *matchingEngineImpl) SyncDeploymentUserData(
 	if err != nil {
 		return nil, err
 	}
-	return &matchingservice.SyncDeploymentUserDataResponse{}, nil
+	return &matchingservice.SyncDeploymentUserDataResponse{Version: version}, nil
 }
 
 func (e *matchingEngineImpl) ApplyTaskQueueUserDataReplicationEvent(
@@ -1680,7 +1682,7 @@ func (e *matchingEngineImpl) ApplyTaskQueueUserDataReplicationEvent(
 		TaskQueueLimitPerBuildId: 0,
 		Source:                   "ApplyTaskQueueUserDataReplicationEvent",
 	}
-	err = pm.GetUserDataManager().UpdateUserData(ctx, updateOptions, func(current *persistencespb.TaskQueueUserData) (*persistencespb.TaskQueueUserData, bool, error) {
+	_, err = pm.GetUserDataManager().UpdateUserData(ctx, updateOptions, func(current *persistencespb.TaskQueueUserData) (*persistencespb.TaskQueueUserData, bool, error) {
 		mergedUserData := common.CloneProto(current)
 		currentVersioningData := current.GetVersioningData()
 		newVersioningData := req.GetUserData().GetVersioningData()
@@ -1825,6 +1827,34 @@ func (e *matchingEngineImpl) ReplicateTaskQueueUserData(ctx context.Context, req
 	})
 	return &matchingservice.ReplicateTaskQueueUserDataResponse{}, err
 
+}
+
+func (e *matchingEngineImpl) CheckTaskQueueUserDataPropagation(ctx context.Context, req *matchingservice.CheckTaskQueueUserDataPropagationRequest) (*matchingservice.CheckTaskQueueUserDataPropagationResponse, error) {
+	rootPartition, err := tqid.NormalPartitionFromRpcName(req.TaskQueue, req.NamespaceId, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
+	if err != nil {
+		return nil, err
+	}
+	pm, _, err := e.getTaskQueuePartitionManager(ctx, rootPartition, true, loadCauseOtherRead)
+	if err != nil {
+		return nil, err
+	}
+
+	nsName := pm.Namespace().Name().String()
+	tqName := rootPartition.TaskQueue().Name()
+	wfPartitions := max(
+		e.config.NumTaskqueueReadPartitions(nsName, tqName, enumspb.TASK_QUEUE_TYPE_WORKFLOW),
+		e.config.NumTaskqueueWritePartitions(nsName, tqName, enumspb.TASK_QUEUE_TYPE_WORKFLOW),
+	)
+	actPartitions := max(
+		e.config.NumTaskqueueReadPartitions(nsName, tqName, enumspb.TASK_QUEUE_TYPE_ACTIVITY),
+		e.config.NumTaskqueueWritePartitions(nsName, tqName, enumspb.TASK_QUEUE_TYPE_ACTIVITY),
+	)
+
+	err = pm.GetUserDataManager().CheckTaskQueueUserDataPropagation(ctx, req.Version, wfPartitions, actPartitions)
+	if err != nil {
+		return nil, err
+	}
+	return &matchingservice.CheckTaskQueueUserDataPropagationResponse{}, nil
 }
 
 // nexusResult is container for a response or error.

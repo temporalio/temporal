@@ -29,6 +29,7 @@ import (
 	"errors"
 	"fmt"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	enumspb "go.temporal.io/api/enums/v1"
@@ -66,9 +67,10 @@ type (
 		GetUserData() (*persistencespb.VersionedTaskQueueUserData, chan struct{}, error)
 		// UpdateUserData updates user data for this task queue and replicates across clusters if necessary.
 		// Extra care should be taken to avoid mutating the existing data in the update function.
-		UpdateUserData(ctx context.Context, options UserDataUpdateOptions, updateFn UserDataUpdateFunc) error
+		UpdateUserData(ctx context.Context, options UserDataUpdateOptions, updateFn UserDataUpdateFunc) (int64, error)
 		// Handles the maybe-long-poll GetUserData RPC.
 		HandleGetUserDataRequest(ctx context.Context, req *matchingservice.GetTaskQueueUserDataRequest) (*matchingservice.GetTaskQueueUserDataResponse, error)
+		CheckTaskQueueUserDataPropagation(context.Context, int64, int, int) error
 	}
 
 	UserDataUpdateOptions struct {
@@ -427,29 +429,29 @@ func (m *userDataManagerImpl) refreshUserDataFromDB(ctx context.Context) error {
 
 // UpdateUserData updates user data for this task queue and replicates across clusters if necessary.
 // Extra care should be taken to avoid mutating the existing data in the update function.
-func (m *userDataManagerImpl) UpdateUserData(ctx context.Context, options UserDataUpdateOptions, updateFn UserDataUpdateFunc) error {
+func (m *userDataManagerImpl) UpdateUserData(ctx context.Context, options UserDataUpdateOptions, updateFn UserDataUpdateFunc) (int64, error) {
 	if m.store == nil {
-		return errUserDataNoMutateNonRoot
+		return 0, errUserDataNoMutateNonRoot
 	}
 	if err := m.WaitUntilInitialized(ctx); err != nil {
-		return err
+		return 0, err
 	}
 	newData, shouldReplicate, err := m.updateUserData(ctx, updateFn, options)
-	if err == errUserDataUnmodified {
-		return nil
+	if errors.Is(err, errUserDataUnmodified) {
+		return newData.GetVersion(), nil
 	} else if err != nil {
-		return err
+		return 0, err
 	} else if !shouldReplicate {
-		return nil
+		return newData.GetVersion(), nil
 	}
 
 	// Only replicate if namespace is global and has at least 2 clusters registered.
 	ns, err := m.namespaceRegistry.GetNamespaceByID(namespace.ID(m.partition.NamespaceId()))
 	if err != nil {
-		return err
+		return 0, err
 	}
 	if ns.ReplicationPolicy() != namespace.ReplicationPolicyMultiCluster {
-		return nil
+		return newData.GetVersion(), nil
 	}
 
 	_, err = m.matchingClient.ReplicateTaskQueueUserData(ctx, &matchingservice.ReplicateTaskQueueUserDataRequest{
@@ -459,9 +461,9 @@ func (m *userDataManagerImpl) UpdateUserData(ctx context.Context, options UserDa
 	})
 	if err != nil {
 		m.logger.Error("Failed to publish a replication task after updating task queue user data", tag.Error(err))
-		return serviceerror.NewUnavailable("storing task queue user data succeeded but publishing to the namespace replication queue failed, please try again")
+		return 0, serviceerror.NewUnavailable("storing task queue user data succeeded but publishing to the namespace replication queue failed, please try again")
 	}
-	return err
+	return newData.GetVersion(), nil
 }
 
 // UpdateUserData allows callers to update user data (such as worker build IDs) for this task queue. The pointer passed
@@ -498,7 +500,7 @@ func (m *userDataManagerImpl) updateUserData(
 	}
 	updatedUserData, shouldReplicate, err := updateFn(preUpdateData)
 	if err == errUserDataUnmodified {
-		return nil, false, err
+		return userData, false, err
 	}
 	if err != nil {
 		m.logger.Error("user data update function failed", tag.Error(err), tag.NewStringTag("user-data-update-source", options.Source))
@@ -608,6 +610,69 @@ func (m *userDataManagerImpl) HandleGetUserDataRequest(
 		return resp, nil
 	}
 
+}
+
+func (m *userDataManagerImpl) CheckTaskQueueUserDataPropagation(
+	ctx context.Context,
+	version int64,
+	wfPartitions int,
+	actPartitions int,
+) error {
+	if m.store == nil {
+		return serviceerror.NewInvalidArgument("CheckTaskQueueUserDataPropagation must be called on root workflow task queue")
+	} else if version < 1 {
+		return serviceerror.NewInvalidArgument("CheckTaskQueueUserDataPropagation must wait for version >= 1")
+	}
+
+	complete := make(chan error)
+
+	var waitingForPartitions atomic.Int64
+	waitingForPartitions.Store(int64(wfPartitions - 1 + actPartitions))
+
+	policy := backoff.NewExponentialRetryPolicy(time.Second)
+
+	check := func(p int, tp enumspb.TaskQueueType) {
+		err := backoff.ThrottleRetryContext(ctx, func(ctx context.Context) error {
+			res, err := m.matchingClient.GetTaskQueueUserData(ctx, &matchingservice.GetTaskQueueUserDataRequest{
+				NamespaceId:              m.partition.NamespaceId(),
+				TaskQueue:                m.partition.TaskQueue().NormalPartition(p).RpcName(),
+				TaskQueueType:            tp,
+				LastKnownUserDataVersion: version - 1,
+				WaitNewData:              true,
+				OnlyIfLoaded:             true,
+			})
+			if err != nil {
+				var failed *serviceerror.FailedPrecondition
+				if errors.As(err, &failed) {
+					// this means the partition was not loaded, so skip it (if it loads, it will get the newest data)
+					err = nil
+				}
+				return err
+			} else if res.GetUserData().GetVersion() < version {
+				return serviceerror.NewUnavailable("retry")
+			}
+			return nil
+		}, policy, common.IsServiceClientTransientError)
+		if err == nil {
+			if waitingForPartitions.Add(-1) == 0 {
+				complete <- nil
+			}
+		}
+	}
+
+	for i := 1; i < wfPartitions; i++ {
+		go check(i, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
+	}
+	for i := 0; i < actPartitions; i++ {
+		go check(i, enumspb.TASK_QUEUE_TYPE_ACTIVITY)
+	}
+
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case err := <-complete:
+		return err
+	}
 }
 
 func (m *userDataManagerImpl) setUserDataForNonOwningPartition(userData *persistencespb.VersionedTaskQueueUserData) {
