@@ -93,15 +93,16 @@ type (
 	matchingEngineSuite struct {
 		suite.Suite
 		*require.Assertions
-		controller            *gomock.Controller
-		mockHistoryClient     *historyservicemock.MockHistoryServiceClient
-		mockMatchingClient    *matchingservicemock.MockMatchingServiceClient
-		ns                    *namespace.Namespace
-		mockNamespaceCache    *namespace.MockRegistry
-		mockVisibilityManager *manager.MockVisibilityManager
-		mockHostInfoProvider  *membership.MockHostInfoProvider
-		mockServiceResolver   *membership.MockServiceResolver
-		hostInfoForResolver   membership.HostInfo
+		controller               *gomock.Controller
+		mockHistoryClient        *historyservicemock.MockHistoryServiceClient
+		mockMatchingClient       *matchingservicemock.MockMatchingServiceClient
+		ns                       *namespace.Namespace
+		mockNamespaceCache       *namespace.MockRegistry
+		mockVisibilityManager    *manager.MockVisibilityManager
+		mockHostInfoProvider     *membership.MockHostInfoProvider
+		mockServiceResolver      *membership.MockServiceResolver
+		hostInfoForResolver      membership.HostInfo
+		mockNexusEndpointManager *persistence.MockNexusEndpointManager
 
 		matchingEngine *matchingEngineImpl
 		taskManager    *testTaskManager
@@ -134,7 +135,9 @@ func createTestMatchingEngine(
 	mockServiceResolver.EXPECT().Lookup(gomock.Any()).Return(hostInfo, nil).AnyTimes()
 	mockServiceResolver.EXPECT().AddListener(gomock.Any(), gomock.Any()).AnyTimes()
 	mockServiceResolver.EXPECT().RemoveListener(gomock.Any()).AnyTimes()
-	return newMatchingEngine(config, tm, mockHistoryClient, logger, namespaceRegistry, matchingClient, mockVisibilityManager, mockHostInfoProvider, mockServiceResolver)
+	mockNexusEndpointManager := persistence.NewMockNexusEndpointManager(controller)
+	mockNexusEndpointManager.EXPECT().ListNexusEndpoints(gomock.Any(), gomock.Any()).Return(&persistence.ListNexusEndpointsResponse{}).AnyTimes()
+	return newMatchingEngine(config, tm, mockHistoryClient, logger, namespaceRegistry, matchingClient, mockVisibilityManager, mockHostInfoProvider, mockServiceResolver, mockNexusEndpointManager)
 }
 
 func createMockNamespaceCache(controller *gomock.Controller, nsName namespace.Name) (*namespace.Namespace, *namespace.MockRegistry) {
@@ -186,6 +189,8 @@ func (s *matchingEngineSuite) SetupTest() {
 	}).AnyTimes()
 	s.mockServiceResolver.EXPECT().AddListener(gomock.Any(), gomock.Any()).AnyTimes()
 	s.mockServiceResolver.EXPECT().RemoveListener(gomock.Any()).AnyTimes()
+	s.mockNexusEndpointManager = persistence.NewMockNexusEndpointManager(s.controller)
+	s.mockNexusEndpointManager.EXPECT().ListNexusEndpoints(gomock.Any(), gomock.Any()).Return(&persistence.ListNexusEndpointsResponse{}, nil).AnyTimes()
 
 	s.matchingEngine = s.newMatchingEngine(defaultTestConfig(), s.taskManager)
 	s.matchingEngine.Start()
@@ -200,13 +205,14 @@ func (s *matchingEngineSuite) newMatchingEngine(
 	config *Config, taskMgr persistence.TaskManager,
 ) *matchingEngineImpl {
 	return newMatchingEngine(config, taskMgr, s.mockHistoryClient, s.logger, s.mockNamespaceCache, s.mockMatchingClient, s.mockVisibilityManager,
-		s.mockHostInfoProvider, s.mockServiceResolver)
+		s.mockHostInfoProvider, s.mockServiceResolver, s.mockNexusEndpointManager)
 }
 
 func newMatchingEngine(
 	config *Config, taskMgr persistence.TaskManager, mockHistoryClient historyservice.HistoryServiceClient,
 	logger log.Logger, mockNamespaceCache namespace.Registry, mockMatchingClient matchingservice.MatchingServiceClient,
-	mockVisibilityManager manager.VisibilityManager, mockHostInfoProvider membership.HostInfoProvider, mockServiceResolver membership.ServiceResolver,
+	mockVisibilityManager manager.VisibilityManager, mockHostInfoProvider membership.HostInfoProvider,
+	mockServiceResolver membership.ServiceResolver, nexusEndpointManager persistence.NexusEndpointManager,
 ) *matchingEngineImpl {
 	return &matchingEngineImpl{
 		taskManager:   taskMgr,
@@ -232,6 +238,7 @@ func newMatchingEngine(
 		clusterMeta:                   clustertest.NewMetadataForTest(cluster.NewTestClusterMetadataConfig(false, true)),
 		timeSource:                    clock.NewRealTimeSource(),
 		visibilityManager:             mockVisibilityManager,
+		nexusEndpointClient:           newEndpointClient(config.LoadNexusEndpointsRefresh, nexusEndpointManager),
 		nexusEndpointsOwnershipLostCh: make(chan struct{}),
 	}
 }
