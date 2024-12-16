@@ -73,8 +73,8 @@ func (a *DeploymentActivities) SyncUserData(ctx context.Context, input *deployme
 				logger.Error("syncing task queue userdata", "taskQueue", sync.Name, "type", sync.Type, "error", err)
 			} else {
 				lock.Lock()
-				defer lock.Unlock()
 				maxVersionByName[sync.Name] = max(maxVersionByName[sync.Name], res.Version)
+				lock.Unlock()
 			}
 			errs <- err
 		}()
