@@ -4298,7 +4298,10 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionUpdateAcceptedEvent(
 	if ms.executionInfo.UpdateInfos == nil {
 		ms.executionInfo.UpdateInfos = make(map[string]*persistencespb.UpdateInfo, 1)
 	}
-	updateID := attrs.GetAcceptedRequest().GetMeta().GetUpdateId()
+	// NOTE: `attrs.GetAcceptedRequest().GetMeta().GetUpdateId()` was used here before, but that is problematic
+	// in a reset/conflict resolution scenario where there is no `acceptedRequest` since the previously written
+	// UpdateAdmitted event already contains the Update payload.
+	updateID := attrs.GetProtocolInstanceId()
 	var sizeDelta int
 	if ui, ok := ms.executionInfo.UpdateInfos[updateID]; ok {
 		sizeBefore := ui.Size()
