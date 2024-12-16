@@ -902,7 +902,7 @@ used when the first cache layer has a miss. Requires server restart for change t
 	FrontendNexusRequestHeadersBlacklist = NewGlobalTypedSetting(
 		"frontend.nexusRequestHeadersBlacklist",
 		[]string(nil),
-		`Nexus request headers to be removed before it's sent to client's handler.
+		`Nexus request headers to be removed before being sent to a user handler.
 Wildcards (*) are expanded to allow any substring. By default blacklist is empty.`,
 	)
 	FrontendCallbackURLMaxLength = NewNamespaceIntSetting(

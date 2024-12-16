@@ -240,6 +240,7 @@ func (c *operationContext) interceptRequest(
 	// THIS MUST BE THE LAST STEP IN interceptRequest.
 	// Sanitize headers.
 	if request.GetRequest().GetHeader() != nil {
+		// Making a copy to ensure the original map is not modified as it might be used somewhere else.
 		sanitizedHeaders := make(map[string]string, len(request.Request.Header))
 		headersBlacklist := c.headersBlacklist.Get()
 		for name, value := range request.Request.Header {
