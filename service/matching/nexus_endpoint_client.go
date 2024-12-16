@@ -375,9 +375,9 @@ func (m *nexusEndpointClient) resetCacheStateLocked() {
 // notifyOwnershipChanged starts or stops a background routine which watches the Nexus endpoints table version for
 // changes. This is only expected to be called from matchingEngineImpl.notifyNexusEndpointsOwnershipChange()
 func (m *nexusEndpointClient) notifyOwnershipChanged(isOwner bool) {
-	m.refreshLock.Lock()
-	defer m.refreshLock.Unlock()
+	var oldHandle *goro.Handle
 
+	m.refreshLock.Lock()
 	if isOwner && m.refreshHandle == nil {
 		// Just acquired ownership. Start refresh loop on table version to catch any updates from previous owner.
 		backgroundCtx := headers.SetCallerInfo(
@@ -388,8 +388,14 @@ func (m *nexusEndpointClient) notifyOwnershipChanged(isOwner bool) {
 		m.refreshHandle.Go(m.refreshTableVersion)
 	} else if !isOwner && m.refreshHandle != nil {
 		// Just lost ownership. Stop table version refresh loop.
-		m.refreshHandle.Cancel()
+		oldHandle = m.refreshHandle
 		m.refreshHandle = nil
+	}
+	m.refreshLock.Unlock()
+
+	if oldHandle != nil {
+		oldHandle.Cancel()
+		<-oldHandle.Done()
 	}
 }
 
