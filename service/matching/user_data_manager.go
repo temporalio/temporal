@@ -95,6 +95,7 @@ type (
 	// All other partitions long-poll the latest user data from the owning partition.
 	userDataManagerImpl struct {
 		lock            sync.Mutex
+		onFatalErr      func(unloadCause)
 		partition       tqid.Partition
 		userData        *persistencespb.VersionedTaskQueueUserData
 		userDataChanged chan struct{}
@@ -120,23 +121,25 @@ var (
 	errUserDataNoMutateNonRoot = serviceerror.NewInvalidArgument("can only mutate user data on root workflow task queue")
 	errTaskQueueClosed         = serviceerror.NewUnavailable("task queue closed")
 	errUserDataUnmodified      = errors.New("sentinel error for unchanged user data")
+	errUserDataVersionMismatch = errors.New("user data version mismatch")
 )
 
 func newUserDataManager(
 	store persistence.TaskManager,
 	matchingClient matchingservice.MatchingServiceClient,
+	onFatalErr func(unloadCause),
 	partition tqid.Partition,
 	config *taskQueueConfig,
 	logger log.Logger,
 	registry namespace.Registry,
 ) *userDataManagerImpl {
-
 	m := &userDataManagerImpl{
-		logger:            logger,
+		onFatalErr:        onFatalErr,
 		partition:         partition,
+		userDataChanged:   make(chan struct{}),
 		config:            config,
 		namespaceRegistry: registry,
-		userDataChanged:   make(chan struct{}),
+		logger:            logger,
 		matchingClient:    matchingClient,
 		userDataReady:     future.NewFuture[struct{}](),
 	}
@@ -219,7 +222,20 @@ func (m *userDataManagerImpl) loadUserData(ctx context.Context) error {
 	ctx = m.callerInfoContext(ctx)
 	err := m.loadUserDataFromDB(ctx)
 	m.setUserDataState(userDataEnabled, err)
-	return nil
+
+	// At this point, it's possible that an old owner has updated user data after we read it.
+	// We should re-read it after a few seconds and then periodically after that to ensure that
+	// we notice if someone else has snuck in a write.
+	util.InterruptibleSleep(ctx, backoff.Jitter(m.config.GetUserDataInitialRefresh, 0.1))
+
+	for ctx.Err() == nil {
+		if err = m.refreshUserDataFromDB(ctx); errors.Is(err, errUserDataVersionMismatch) {
+			m.onFatalErr(unloadCauseConflict)
+		}
+		util.InterruptibleSleep(ctx, backoff.Jitter(m.config.GetUserDataRefresh(), 0.2))
+	}
+
+	return ctx.Err()
 }
 
 func (m *userDataManagerImpl) userDataFetchSource() (*tqid.NormalPartition, error) {
@@ -364,6 +380,49 @@ func (m *userDataManagerImpl) loadUserDataFromDB(ctx context.Context) error {
 	defer m.lock.Unlock()
 	m.setUserDataLocked(response.UserData)
 	m.logNewUserData("loaded user data from db", response.UserData)
+
+	return nil
+}
+
+// Checks if data in db has not been modified since we loaded/modified it.
+func (m *userDataManagerImpl) refreshUserDataFromDB(ctx context.Context) error {
+	// Lock here to ensure we're not in the middle of an update, otherwise we may incorrectly
+	// think the db has old data if we update between read and verify.
+	m.lock.Lock()
+	defer m.lock.Unlock()
+
+	response, err := m.store.GetTaskQueueUserData(ctx, &persistence.GetTaskQueueUserDataRequest{
+		NamespaceID: m.partition.NamespaceId(),
+		TaskQueue:   m.partition.TaskQueue().Name(),
+	})
+	if common.IsNotFoundError(err) {
+		response, err = &persistence.GetTaskQueueUserDataResponse{}, nil
+	}
+	if err != nil {
+		return err
+	}
+
+	if response.UserData.GetVersion() == m.userData.GetVersion() {
+		return nil
+	}
+
+	tags := []tag.Tag{
+		tag.UserDataVersion(response.UserData.GetVersion()),
+		tag.NewInt64("expected-user-data-version", m.userData.GetVersion()),
+		tag.Timestamp(hybrid_logical_clock.UTC(response.UserData.GetData().GetClock())),
+		tag.NewTimeTag("expected-user-data-timestamp", hybrid_logical_clock.UTC(m.userData.GetData().GetClock())),
+	}
+
+	if response.UserData.GetVersion() < m.userData.GetVersion() {
+		// We have newer data in memory than the db. This should only happen if the database
+		// went back in time. We should unload and start over.
+		m.logger.Error("user data version mismatch: db had older data; unloading", tags...)
+		return errUserDataVersionMismatch
+	}
+
+	// The db has newer data. We can just update to it.
+	m.setUserDataLocked(response.UserData)
+	m.logger.Warn("user data version mismatch: db had newer data; reloading", tags...)
 
 	return nil
 }

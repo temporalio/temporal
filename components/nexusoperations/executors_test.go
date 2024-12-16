@@ -25,8 +25,6 @@ package nexusoperations_test
 import (
 	"context"
 	"encoding/json"
-	"errors"
-	"fmt"
 	"testing"
 	"time"
 
@@ -38,6 +36,7 @@ import (
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/sdk/converter"
+	"go.temporal.io/sdk/temporalnexus"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/backoff"
@@ -98,7 +97,7 @@ func TestProcessInvocationTask(t *testing.T) {
 			},
 		},
 	}
-	handlerNexusLink := nexusoperations.ConvertLinkWorkflowEventToNexusLink(handlerLink)
+	handlerNexusLink := temporalnexus.ConvertLinkWorkflowEventToNexusLink(handlerLink)
 
 	cases := []struct {
 		name                       string
@@ -122,7 +121,7 @@ func TestProcessInvocationTask(t *testing.T) {
 				require.Len(t, options.Links, 1)
 				var links []*commonpb.Link
 				for _, nexusLink := range options.Links {
-					link, err := nexusoperations.ConvertNexusLinkToLinkWorkflowEvent(nexusLink)
+					link, err := temporalnexus.ConvertNexusLinkToLinkWorkflowEvent(nexusLink)
 					require.NoError(t, err)
 					links = append(links, &commonpb.Link{
 						Variant: &commonpb.Link_WorkflowEvent_{
@@ -212,10 +211,9 @@ func TestProcessInvocationTask(t *testing.T) {
 			requestTimeout:  time.Hour,
 			destinationDown: false,
 			onStartOperation: func(ctx context.Context, service, operation string, input *nexus.LazyValue, options nexus.StartOperationOptions) (nexus.HandlerStartOperationResult[any], error) {
-				return nil, &nexus.UnsuccessfulOperationError{
+				return nil, nexus.NewFailedOperationError(&nexus.FailureError{
 					Failure: nexus.Failure{Message: "operation failed from handler", Metadata: map[string]string{"encoding": "json/plain"}, Details: json.RawMessage("\"details\"")},
-					State:   nexus.OperationStateFailed,
-				}
+				})
 			},
 			expectedMetricOutcome: "operation-unsuccessful:failed",
 			checkOutcome: func(t *testing.T, op nexusoperations.Operation, events []*historypb.HistoryEvent) {
@@ -239,10 +237,10 @@ func TestProcessInvocationTask(t *testing.T) {
 							Message: "operation failed from handler",
 							FailureInfo: &failurepb.Failure_ApplicationFailureInfo{
 								ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{
-									Type: "NexusOperationFailure",
+									Type: "NexusFailure",
 									Details: &commonpb.Payloads{
 										Payloads: []*commonpb.Payload{
-											mustToPayload(t, "details"),
+											mustToPayload(t, nexus.Failure{Metadata: map[string]string{"encoding": "json/plain"}, Details: []byte(`"details"`)}),
 										},
 									},
 									NonRetryable: true,
@@ -259,10 +257,11 @@ func TestProcessInvocationTask(t *testing.T) {
 			requestTimeout:  time.Hour,
 			destinationDown: false,
 			onStartOperation: func(ctx context.Context, service, operation string, input *nexus.LazyValue, options nexus.StartOperationOptions) (nexus.HandlerStartOperationResult[any], error) {
-				return nil, &nexus.UnsuccessfulOperationError{
-					Failure: nexus.Failure{Message: "operation canceled from handler", Metadata: map[string]string{"encoding": "json/plain"}, Details: json.RawMessage("\"details\"")},
-					State:   nexus.OperationStateCanceled,
-				}
+				return nil, nexus.NewCanceledOperationError(
+					&nexus.FailureError{
+						Failure: nexus.Failure{Message: "operation canceled from handler", Metadata: map[string]string{"encoding": "json/plain"}, Details: json.RawMessage("\"details\"")},
+					},
+				)
 			},
 			expectedMetricOutcome: "operation-unsuccessful:canceled",
 			checkOutcome: func(t *testing.T, op nexusoperations.Operation, events []*historypb.HistoryEvent) {
@@ -288,7 +287,7 @@ func TestProcessInvocationTask(t *testing.T) {
 								CanceledFailureInfo: &failurepb.CanceledFailureInfo{
 									Details: &commonpb.Payloads{
 										Payloads: []*commonpb.Payload{
-											mustToPayload(t, "details"),
+											mustToPayload(t, nexus.Failure{Metadata: map[string]string{"encoding": "json/plain"}, Details: []byte(`"details"`)}),
 										},
 									},
 								},
@@ -309,7 +308,7 @@ func TestProcessInvocationTask(t *testing.T) {
 			expectedMetricOutcome: "handler-error:INTERNAL",
 			checkOutcome: func(t *testing.T, op nexusoperations.Operation, events []*historypb.HistoryEvent) {
 				require.Equal(t, enumsspb.NEXUS_OPERATION_STATE_BACKING_OFF, op.State())
-				require.NotNil(t, op.LastAttemptFailure.GetApplicationFailureInfo())
+				require.NotNil(t, op.LastAttemptFailure.GetNexusHandlerFailureInfo())
 				require.Equal(t, "handler error (INTERNAL): internal server error", op.LastAttemptFailure.Message)
 				require.Equal(t, 0, len(events))
 			},
@@ -371,7 +370,7 @@ func TestProcessInvocationTask(t *testing.T) {
 			checkOutcome: func(t *testing.T, op nexusoperations.Operation, events []*historypb.HistoryEvent) {
 				require.Equal(t, enumsspb.NEXUS_OPERATION_STATE_FAILED, op.State())
 				require.NotNil(t, op.LastAttemptFailure.GetApplicationFailureInfo())
-				require.Equal(t, "endpoint not registered", op.LastAttemptFailure.Message)
+				require.Equal(t, "handler error (NOT_FOUND): endpoint not registered", op.LastAttemptFailure.Message)
 				require.Equal(t, 1, len(events))
 			},
 		},
@@ -384,7 +383,7 @@ func TestProcessInvocationTask(t *testing.T) {
 			checkOutcome: func(t *testing.T, op nexusoperations.Operation, events []*historypb.HistoryEvent) {
 				require.Equal(t, enumsspb.NEXUS_OPERATION_STATE_FAILED, op.State())
 				require.NotNil(t, op.LastAttemptFailure.GetApplicationFailureInfo())
-				require.Equal(t, "endpoint not registered", op.LastAttemptFailure.Message)
+				require.Equal(t, "handler error (NOT_FOUND): endpoint not registered", op.LastAttemptFailure.Message)
 				require.Equal(t, 1, len(events))
 			},
 		},
@@ -508,8 +507,8 @@ func TestProcessInvocationTask(t *testing.T) {
 				MetricsHandler:         metricsHandler,
 				Logger:                 log.NewNoopLogger(),
 				EndpointRegistry:       endpointReg,
-				ClientProvider: func(ctx context.Context, namespaceID string, entry *persistencespb.NexusEndpointEntry, service string) (*nexus.Client, error) {
-					return nexus.NewClient(nexus.ClientOptions{
+				ClientProvider: func(ctx context.Context, namespaceID string, entry *persistencespb.NexusEndpointEntry, service string) (*nexus.HTTPClient, error) {
+					return nexus.NewHTTPClient(nexus.HTTPClientOptions{
 						BaseURL:    "http://" + listenAddr,
 						Service:    service,
 						Serializer: commonnexus.PayloadSerializer,
@@ -556,7 +555,7 @@ func TestProcessBackoffTask(t *testing.T) {
 		return nexusoperations.TransitionAttemptFailed.Apply(op, nexusoperations.EventAttemptFailed{
 			Node:        node,
 			Time:        time.Now(),
-			Err:         errors.New("test"),
+			Failure:     &failurepb.Failure{Message: "test"},
 			RetryPolicy: backoff.NewExponentialRetryPolicy(time.Second),
 		})
 	})
@@ -639,7 +638,7 @@ func TestProcessCancelationTask(t *testing.T) {
 			expectedMetricOutcome: "handler-error:NOT_FOUND",
 			checkOutcome: func(t *testing.T, c nexusoperations.Cancelation) {
 				require.Equal(t, enumspb.NEXUS_OPERATION_CANCELLATION_STATE_FAILED, c.State())
-				require.NotNil(t, c.LastAttemptFailure.GetApplicationFailureInfo())
+				require.NotNil(t, c.LastAttemptFailure.GetNexusHandlerFailureInfo())
 				require.Equal(t, "handler error (NOT_FOUND): operation not found", c.LastAttemptFailure.Message)
 			},
 		},
@@ -666,7 +665,7 @@ func TestProcessCancelationTask(t *testing.T) {
 			expectedMetricOutcome: "handler-error:INTERNAL",
 			checkOutcome: func(t *testing.T, c nexusoperations.Cancelation) {
 				require.Equal(t, enumspb.NEXUS_OPERATION_CANCELLATION_STATE_BACKING_OFF, c.State())
-				require.NotNil(t, c.LastAttemptFailure.GetApplicationFailureInfo())
+				require.NotNil(t, c.LastAttemptFailure.GetNexusHandlerFailureInfo())
 				require.Equal(t, "handler error (INTERNAL): internal server error", c.LastAttemptFailure.Message)
 			},
 		},
@@ -706,7 +705,7 @@ func TestProcessCancelationTask(t *testing.T) {
 			onCancelOperation: nil, // This should not be called if the endpoint is not found.
 			checkOutcome: func(t *testing.T, c nexusoperations.Cancelation) {
 				require.Equal(t, enumspb.NEXUS_OPERATION_CANCELLATION_STATE_FAILED, c.State())
-				require.NotNil(t, c.LastAttemptFailure.GetApplicationFailureInfo())
+				require.NotNil(t, c.LastAttemptFailure.GetNexusHandlerFailureInfo())
 				require.Equal(t, "handler error (NOT_FOUND): endpoint not registered", c.LastAttemptFailure.Message)
 			},
 		},
@@ -792,8 +791,8 @@ func TestProcessCancelationTask(t *testing.T) {
 				MetricsHandler:    metricsHandler,
 				Logger:            log.NewNoopLogger(),
 				EndpointRegistry:  endpointReg,
-				ClientProvider: func(ctx context.Context, namespaceID string, entry *persistencespb.NexusEndpointEntry, service string) (*nexus.Client, error) {
-					return nexus.NewClient(nexus.ClientOptions{
+				ClientProvider: func(ctx context.Context, namespaceID string, entry *persistencespb.NexusEndpointEntry, service string) (*nexus.HTTPClient, error) {
+					return nexus.NewHTTPClient(nexus.HTTPClientOptions{
 						BaseURL:    "http://" + listenAddr,
 						Service:    service,
 						Serializer: commonnexus.PayloadSerializer,
@@ -867,7 +866,7 @@ func TestProcessCancelationTask_OperationCompleted(t *testing.T) {
 				return endpointEntry, nil
 			},
 		},
-		ClientProvider: func(ctx context.Context, namespaceID string, entry *persistencespb.NexusEndpointEntry, service string) (*nexus.Client, error) {
+		ClientProvider: func(ctx context.Context, namespaceID string, entry *persistencespb.NexusEndpointEntry, service string) (*nexus.HTTPClient, error) {
 			return nil, serviceerror.NewInternal("shouldn't get here")
 		},
 	}))
@@ -907,7 +906,7 @@ func TestProcessCancelationBackoffTask(t *testing.T) {
 	err = hsm.MachineTransition(node, func(c nexusoperations.Cancelation) (hsm.TransitionOutput, error) {
 		return nexusoperations.TransitionCancelationAttemptFailed.Apply(c, nexusoperations.EventCancelationAttemptFailed{
 			Time:        time.Now(),
-			Err:         fmt.Errorf("test attempt failed"),
+			Failure:     &failurepb.Failure{Message: "test attempt failed"},
 			Node:        node,
 			RetryPolicy: backoff.NewExponentialRetryPolicy(time.Second),
 		})

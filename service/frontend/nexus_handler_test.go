@@ -25,6 +25,7 @@ package frontend
 import (
 	"context"
 	"errors"
+	"regexp"
 	"testing"
 	"time"
 
@@ -32,6 +33,7 @@ import (
 	"github.com/nexus-rpc/sdk-go/nexus"
 	"github.com/stretchr/testify/require"
 	enumspb "go.temporal.io/api/enums/v1"
+	nexuspb "go.temporal.io/api/nexus/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/api/matchingservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -48,6 +50,7 @@ import (
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/rpc/interceptor"
+	"go.temporal.io/server/common/util"
 )
 
 type mockAuthorizer struct{}
@@ -96,6 +99,7 @@ type contextOptions struct {
 	namespaceRateLimitAllow bool
 	rateLimitAllow          bool
 	redirectAllow           bool
+	headersBlacklist        []string
 }
 
 func newOperationContext(options contextOptions) *operationContext {
@@ -147,12 +151,47 @@ func newOperationContext(options contextOptions) *operationContext {
 			oc.apiName: 1,
 		},
 	)
-	oc.namespaceRateLimitInterceptor = interceptor.NewNamespaceRateLimitInterceptor(nil, mockRateLimiter{options.namespaceRateLimitAllow}, make(map[string]int))
-	oc.rateLimitInterceptor = interceptor.NewRateLimitInterceptor(mockRateLimiter{options.rateLimitAllow}, make(map[string]int))
+	oc.namespaceRateLimitInterceptor = interceptor.NewNamespaceRateLimitInterceptor(
+		nil,
+		mockRateLimiter{options.namespaceRateLimitAllow},
+		make(map[string]int),
+	)
+	oc.rateLimitInterceptor = interceptor.NewRateLimitInterceptor(
+		mockRateLimiter{options.rateLimitAllow},
+		make(map[string]int),
+	)
 
-	oc.clusterMetadata = clustertest.NewMetadataForTest(cluster.NewTestClusterMetadataConfig(true, !options.namespacePassive))
-	oc.forwardingEnabledForNamespace = dynamicconfig.GetBoolPropertyFnFilteredByNamespace(options.redirectAllow)
-	oc.redirectionInterceptor = interceptor.NewRedirection(nil, nil, config.DCRedirectionPolicy{Policy: interceptor.DCRedirectionPolicyAllAPIsForwarding}, oc.logger, nil, oc.metricsHandlerForInterceptors, clock.NewRealTimeSource(), oc.clusterMetadata)
+	oc.clusterMetadata = clustertest.NewMetadataForTest(
+		cluster.NewTestClusterMetadataConfig(true, !options.namespacePassive),
+	)
+	oc.forwardingEnabledForNamespace = dynamicconfig.GetBoolPropertyFnFilteredByNamespace(
+		options.redirectAllow,
+	)
+	oc.headersBlacklist = dynamicconfig.NewGlobalCachedTypedValue(
+		dynamicconfig.NewCollection(
+			&dynamicconfig.StaticClient{
+				dynamicconfig.FrontendNexusRequestHeadersBlacklist.Key(): options.headersBlacklist,
+			},
+			nil,
+		),
+		dynamicconfig.FrontendNexusRequestHeadersBlacklist,
+		func(patterns []string) (*regexp.Regexp, error) {
+			if len(patterns) == 0 {
+				return matchNothing, nil
+			}
+			return util.WildCardStringsToRegexp(patterns)
+		},
+	)
+	oc.redirectionInterceptor = interceptor.NewRedirection(
+		nil,
+		nil,
+		config.DCRedirectionPolicy{Policy: interceptor.DCRedirectionPolicyAllAPIsForwarding},
+		oc.logger,
+		nil,
+		oc.metricsHandlerForInterceptors,
+		clock.NewRealTimeSource(),
+		oc.clusterMetadata,
+	)
 
 	return oc
 }
@@ -171,7 +210,7 @@ func TestNexusInterceptRequest_InvalidNamespaceState_ResultsInBadRequest(t *test
 	var handlerError *nexus.HandlerError
 	require.ErrorAs(t, err, &handlerError)
 	require.Equal(t, nexus.HandlerErrorTypeBadRequest, handlerError.Type)
-	require.Equal(t, "bad request", handlerError.Failure.Message)
+	require.Equal(t, "bad request", handlerError.Cause.Error())
 	mh := oc.metricsHandler.(*metricstest.CaptureHandler) //nolint:revive
 	capture := mh.StartCapture()
 	oc.metricsHandler.Counter("test").Record(1)
@@ -195,7 +234,7 @@ func TestNexusInterceptRequest_NamespaceConcurrencyLimited_ResultsInResourceExha
 	var handlerError *nexus.HandlerError
 	require.ErrorAs(t, err, &handlerError)
 	require.Equal(t, nexus.HandlerErrorTypeResourceExhausted, handlerError.Type)
-	require.Equal(t, "resource exhausted", handlerError.Failure.Message)
+	require.Equal(t, "resource exhausted", handlerError.Cause.Error())
 	mh := oc.metricsHandler.(*metricstest.CaptureHandler) //nolint:revive
 	capture := mh.StartCapture()
 	oc.metricsHandler.Counter("test").Record(1)
@@ -219,7 +258,7 @@ func TestNexusInterceptRequest_NamespaceRateLimited_ResultsInResourceExhausted(t
 	var handlerError *nexus.HandlerError
 	require.ErrorAs(t, err, &handlerError)
 	require.Equal(t, nexus.HandlerErrorTypeResourceExhausted, handlerError.Type)
-	require.Equal(t, "namespace rate limit exceeded", handlerError.Failure.Message)
+	require.Equal(t, "namespace rate limit exceeded", handlerError.Cause.Error())
 	mh := oc.metricsHandler.(*metricstest.CaptureHandler) //nolint:revive
 	capture := mh.StartCapture()
 	oc.metricsHandler.Counter("test").Record(1)
@@ -243,7 +282,7 @@ func TestNexusInterceptRequest_GlobalRateLimited_ResultsInResourceExhausted(t *t
 	var handlerError *nexus.HandlerError
 	require.ErrorAs(t, err, &handlerError)
 	require.Equal(t, nexus.HandlerErrorTypeResourceExhausted, handlerError.Type)
-	require.Equal(t, "service rate limit exceeded", handlerError.Failure.Message)
+	require.Equal(t, "service rate limit exceeded", handlerError.Cause.Error())
 	mh := oc.metricsHandler.(*metricstest.CaptureHandler) //nolint:revive
 	capture := mh.StartCapture()
 	oc.metricsHandler.Counter("test").Record(1)
@@ -327,4 +366,33 @@ func TestNexusInterceptRequest_InvalidSDKVersion_ResultsInBadRequest(t *testing.
 	snap := capture.Snapshot()
 	require.Equal(t, 1, len(snap["test"]))
 	require.Equal(t, map[string]string{"outcome": "unsupported_client"}, snap["test"][0].Tags)
+}
+
+func TestNexusInterceptRequest_HeadersSanitization(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	var err error
+	oc := newOperationContext(contextOptions{
+		namespaceState:          enumspb.NAMESPACE_STATE_REGISTERED,
+		namespacePassive:        false,
+		quota:                   1,
+		namespaceRateLimitAllow: true,
+		rateLimitAllow:          true,
+		headersBlacklist:        []string{"delete-*", "remove-*"},
+	})
+	initialHeader := nexus.Header{
+		"ok-header":  "ok",
+		"delete-foo": "foo",
+		"delete-bar": "bar",
+		"remove-zzz": "zzz",
+	}
+	header := util.CloneMapNonNil(initialHeader)
+	ctx = oc.augmentContext(ctx, header)
+	request := &matchingservice.DispatchNexusTaskRequest{
+		Request: &nexuspb.Request{Header: header},
+	}
+	err = oc.interceptRequest(ctx, request, header)
+	require.NoError(t, err)
+	require.Equal(t, initialHeader, header)
+	require.Equal(t, map[string]string{"ok-header": "ok"}, request.Request.Header)
 }

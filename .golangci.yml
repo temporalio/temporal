@@ -27,7 +27,7 @@ issues:
       linters:
         - revive
     - path: _test\.go|tests/.+\.go
-      text: "dot-imports"  # helpful in tests
+      text: "(dot-imports|unchecked-type-assertion)"  # helpful in tests
       linters:
         - revive
     - path: ^tools\/.+\.go
