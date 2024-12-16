@@ -214,11 +214,14 @@ func (ch *commandHandler) HandleCancelCommand(
 	nodeID := strconv.FormatInt(attrs.ScheduledEventId, 10)
 	_, err := coll.Node(nodeID)
 	if err != nil {
-		if errors.Is(err, hsm.ErrStateMachineNotFound) && !ms.HasAnyBufferedEvent(makeNexusOperationTerminalEventFilter(attrs.ScheduledEventId)) {
-			return workflow.FailWorkflowTaskError{
-				Cause:   enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_REQUEST_CANCEL_NEXUS_OPERATION_ATTRIBUTES,
-				Message: fmt.Sprintf("error looking up operation with scheduled event ID %d: %v", attrs.ScheduledEventId, err),
+		if errors.Is(err, hsm.ErrStateMachineNotFound) {
+			if !ms.HasAnyBufferedEvent(makeNexusOperationTerminalEventFilter(attrs.ScheduledEventId)) {
+				return workflow.FailWorkflowTaskError{
+					Cause:   enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_REQUEST_CANCEL_NEXUS_OPERATION_ATTRIBUTES,
+					Message: fmt.Sprintf("requested cancelation for a non-existing operation with scheduled event ID of %d", attrs.ScheduledEventId),
+				}
 			}
+			// Fallthrough and apply the event, there's special logic that will handle state machine not found below.
 		} else {
 			return err
 		}
