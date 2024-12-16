@@ -220,12 +220,14 @@ func (d *DeploymentWorkflowRunner) handleRegisterWorker(ctx workflow.Context, ar
 		return err
 	}
 
-	// wait for propagation
-	err = workflow.ExecuteActivity(activityCtx, d.a.CheckUserDataPropagation, &deploymentspb.CheckUserDataPropagationRequest{
-		TaskQueueMaxVersions: syncRes.TaskQueueMaxVersions,
-	}).Get(ctx, nil)
-	if err != nil {
-		return err
+	if len(syncRes.TaskQueueMaxVersions) > 0 {
+		// wait for propagation
+		err = workflow.ExecuteActivity(activityCtx, d.a.CheckUserDataPropagation, &deploymentspb.CheckUserDataPropagationRequest{
+			TaskQueueMaxVersions: syncRes.TaskQueueMaxVersions,
+		}).Get(ctx, nil)
+		if err != nil {
+			return err
+		}
 	}
 
 	// if successful, add the task queue to the local state
@@ -317,12 +319,14 @@ func (d *DeploymentWorkflowRunner) handleSyncState(ctx workflow.Context, args *d
 			// TODO: if this fails, should we roll back anything?
 			return nil, err
 		}
-		// wait for propagation
-		err = workflow.ExecuteActivity(activityCtx, d.a.CheckUserDataPropagation, &deploymentspb.CheckUserDataPropagationRequest{
-			TaskQueueMaxVersions: syncRes.TaskQueueMaxVersions,
-		}).Get(ctx, nil)
-		if err != nil {
-			return nil, err
+		if len(syncRes.TaskQueueMaxVersions) > 0 {
+			// wait for propagation
+			err = workflow.ExecuteActivity(activityCtx, d.a.CheckUserDataPropagation, &deploymentspb.CheckUserDataPropagationRequest{
+				TaskQueueMaxVersions: syncRes.TaskQueueMaxVersions,
+			}).Get(ctx, nil)
+			if err != nil {
+				return nil, err
+			}
 		}
 	}
 
