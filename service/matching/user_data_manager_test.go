@@ -763,10 +763,10 @@ func TestUserData_CheckPropagation(t *testing.T) {
 		},
 	).AnyTimes()
 
-	defer time.Sleep(50 * time.Millisecond) // extra buffer to let goroutines exit after manager.Stop()
+	defer time.Sleep(50 * time.Millisecond) //nolint:forbidigo // extra buffer to let goroutines exit after manager.Stop()
 	for i := range managers {
 		managers[i].Start()
-		defer managers[i].Stop()
+		defer managers[i].Stop() //nolint:revive
 	}
 
 	newVersion, err := managers[0].UpdateUserData(ctx, UserDataUpdateOptions{}, func(data *persistencespb.TaskQueueUserData) (*persistencespb.TaskQueueUserData, bool, error) {
@@ -782,7 +782,7 @@ func TestUserData_CheckPropagation(t *testing.T) {
 	}()
 
 	// CheckTaskQueueUserDataPropagation should not return within 100ms
-	time.Sleep(100 * time.Millisecond)
+	time.Sleep(100 * time.Millisecond) //nolint:forbidigo // need to sleep for negative check
 	select {
 	case <-checkReturned:
 		t.Fatal("check should not have returned")
