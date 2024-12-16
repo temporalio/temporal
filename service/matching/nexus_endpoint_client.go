@@ -362,10 +362,6 @@ func (m *nexusEndpointClient) loadEndpoints(ctx context.Context) error {
 	}
 
 	m.hasLoadedEndpoints.Store(ctx.Err() == nil)
-	ch := m.tableVersionChanged
-	m.tableVersionChanged = make(chan struct{})
-	close(ch)
-
 	return ctx.Err()
 }
 
@@ -416,5 +412,8 @@ func (m *nexusEndpointClient) checkTableVersion(ctx context.Context) {
 	})
 	if err != nil || resp.TableVersion != m.tableVersion {
 		m.hasLoadedEndpoints.Store(false)
+		ch := m.tableVersionChanged
+		m.tableVersionChanged = make(chan struct{})
+		close(ch)
 	}
 }
