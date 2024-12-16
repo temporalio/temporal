@@ -76,6 +76,7 @@ type (
 	// will be detected by version conflicts and eventually settle through retries.
 	nexusEndpointClient struct {
 		hasLoadedEndpoints atomic.Bool
+		isTableOwner       atomic.Bool
 
 		sync.RWMutex        // protects tableVersion, endpoints, endpointsByID, endpointsByName, and tableVersionChanged
 		tableVersion        int64
@@ -374,7 +375,8 @@ func (m *nexusEndpointClient) resetCacheStateLocked() {
 // notifyOwnershipChanged starts or stops a background routine which watches the Nexus endpoints table version for
 // changes. This is not thread-safe and only expected to be called from matchingEngineImpl.notifyIfNexusEndpointsOwnershipLost()
 func (m *nexusEndpointClient) notifyOwnershipChanged(isOwner bool) {
-	if isOwner && m.refreshHandle == nil {
+	oldIsOwner := m.isTableOwner.Swap(isOwner)
+	if isOwner && !oldIsOwner {
 		// Just acquired ownership. Start refresh loop on table version to catch any updates from previous owner.
 		backgroundCtx := headers.SetCallerInfo(
 			context.Background(),
@@ -382,7 +384,7 @@ func (m *nexusEndpointClient) notifyOwnershipChanged(isOwner bool) {
 		)
 		m.refreshHandle = goro.NewHandle(backgroundCtx)
 		m.refreshHandle.Go(m.refreshTableVersion)
-	} else if !isOwner && m.refreshHandle != nil {
+	} else if !isOwner && oldIsOwner {
 		// Just lost ownership. Stop table version refresh loop.
 		m.refreshHandle.Cancel()
 		<-m.refreshHandle.Done()
