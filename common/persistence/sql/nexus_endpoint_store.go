@@ -160,6 +160,7 @@ func (s *sqlNexusEndpointStore) ListNexusEndpoints(
 		}
 
 		if request.PageSize > 0 {
+			// PageSize could be zero when fetching just the table version.
 			rows, err = tx.ListNexusEndpoints(ctx, &sqlplugin.ListNexusEndpointsRequest{
 				LastID: lastID,
 				Limit:  request.PageSize,
@@ -175,6 +176,7 @@ func (s *sqlNexusEndpointStore) ListNexusEndpoints(
 
 	var nextPageToken []byte
 	if len(rows) > 0 && len(rows) == request.PageSize {
+		// len(rows) could be zero when fetching just the table version.
 		nextPageToken, retErr = serializePageTokenJson(&listEndpointsNextPageToken{
 			LastID: rows[request.PageSize-1].ID,
 		})

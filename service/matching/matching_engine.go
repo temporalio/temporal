@@ -272,6 +272,8 @@ func (e *matchingEngineImpl) Stop() {
 	_ = e.serviceResolver.RemoveListener(e.listenerKey())
 	close(e.membershipChangedCh)
 
+	e.nexusEndpointClient.notifyOwnershipChanged(false)
+
 	for _, l := range e.getTaskQueuePartitions(math.MaxInt32) {
 		l.Stop(unloadCauseShuttingDown)
 	}

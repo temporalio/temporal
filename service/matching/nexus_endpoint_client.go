@@ -76,7 +76,6 @@ type (
 	// will be detected by version conflicts and eventually settle through retries.
 	nexusEndpointClient struct {
 		hasLoadedEndpoints atomic.Bool
-		isTableOwner       atomic.Bool
 
 		sync.RWMutex        // protects tableVersion, endpoints, endpointsByID, endpointsByName, and tableVersionChanged
 		tableVersion        int64
@@ -85,6 +84,7 @@ type (
 		endpointsByName     map[string]*persistencespb.NexusEndpointEntry
 		tableVersionChanged chan struct{}
 
+		refreshLock              sync.Mutex // protects refreshHandle which is updated whenever node gains/loses ownership
 		refreshHandle            *goro.Handle
 		endpointsRefreshInterval dynamicconfig.DurationPropertyFn
 
@@ -362,6 +362,10 @@ func (m *nexusEndpointClient) loadEndpoints(ctx context.Context) error {
 	}
 
 	m.hasLoadedEndpoints.Store(ctx.Err() == nil)
+	ch := m.tableVersionChanged
+	m.tableVersionChanged = make(chan struct{})
+	close(ch)
+
 	return ctx.Err()
 }
 
@@ -375,8 +379,10 @@ func (m *nexusEndpointClient) resetCacheStateLocked() {
 // notifyOwnershipChanged starts or stops a background routine which watches the Nexus endpoints table version for
 // changes. This is only expected to be called from matchingEngineImpl.notifyNexusEndpointsOwnershipChange()
 func (m *nexusEndpointClient) notifyOwnershipChanged(isOwner bool) {
-	oldIsOwner := m.isTableOwner.Swap(isOwner)
-	if isOwner && !oldIsOwner {
+	m.refreshLock.Lock()
+	defer m.refreshLock.Unlock()
+
+	if isOwner && m.refreshHandle == nil {
 		// Just acquired ownership. Start refresh loop on table version to catch any updates from previous owner.
 		backgroundCtx := headers.SetCallerInfo(
 			context.Background(),
@@ -384,10 +390,9 @@ func (m *nexusEndpointClient) notifyOwnershipChanged(isOwner bool) {
 		)
 		m.refreshHandle = goro.NewHandle(backgroundCtx)
 		m.refreshHandle.Go(m.refreshTableVersion)
-	} else if !isOwner && oldIsOwner {
+	} else if !isOwner && m.refreshHandle != nil {
 		// Just lost ownership. Stop table version refresh loop.
 		m.refreshHandle.Cancel()
-		<-m.refreshHandle.Done()
 		m.refreshHandle = nil
 	}
 }

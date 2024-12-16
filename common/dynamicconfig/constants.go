@@ -1226,8 +1226,7 @@ duration since last poll exceeds this threshold.`,
 	MatchingNexusEndpointsRefreshInterval = NewGlobalDurationSetting(
 		"matching.nexusEndpointsRefreshInterval",
 		10*time.Second,
-		`MatchingNexusEndpointsRefreshInterval is the time to wait between calls to check that the in-memory view of Nexus 
-endpoints matches the persisted state.`,
+		`Time to wait between calls to check that the in-memory view of Nexus endpoints matches the persisted state.`,
 	)
 	MatchingMembershipUnloadDelay = NewGlobalDurationSetting(
 		"matching.membershipUnloadDelay",
