@@ -899,6 +899,12 @@ used when the first cache layer has a miss. Requires server restart for change t
 		`The TTL of the Nexus endpoint registry's readthrough LRU cache - the cache is a secondary cache and is only
 used when the first cache layer has a miss. Requires server restart for change to be applied.`,
 	)
+	FrontendNexusRequestHeadersBlacklist = NewGlobalTypedSetting(
+		"frontend.nexusRequestHeadersBlacklist",
+		[]string(nil),
+		`Nexus request headers to be removed before being sent to a user handler.
+Wildcards (*) are expanded to allow any substring. By default blacklist is empty.`,
+	)
 	FrontendCallbackURLMaxLength = NewNamespaceIntSetting(
 		"frontend.callbackURLMaxLength",
 		1000,
