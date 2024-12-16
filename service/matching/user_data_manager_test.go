@@ -28,6 +28,7 @@ import (
 	"context"
 	"fmt"
 	"math/rand"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -45,6 +46,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/tqid"
+	"go.temporal.io/server/common/util"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/grpc"
 )
@@ -693,4 +695,110 @@ func TestUserData_Propagation(t *testing.T) {
 		}, 5*time.Second, 10*time.Millisecond, "failed to propagate")
 		t.Log("Propagation time:", time.Since(start))
 	}
+}
+
+func TestUserData_CheckPropagation(t *testing.T) {
+	t.Parallel()
+
+	const N = 7
+
+	ctx := context.Background()
+	controller := gomock.NewController(t)
+	opts := defaultTqmTestOpts(controller)
+
+	keys := make([]*PhysicalTaskQueueKey, N)
+	for i := range keys {
+		keys[i] = newTestUnversionedPhysicalQueueKey(defaultNamespaceId, defaultRootTqID, enumspb.TASK_QUEUE_TYPE_WORKFLOW, i)
+	}
+
+	managers := make([]*userDataManagerImpl, N)
+	var tm *testTaskManager
+	for i := range managers {
+		optsi := *opts // share config and mock client
+		optsi.dbq = keys[i]
+		managers[i] = createUserDataManager(t, controller, &optsi)
+		if i == 0 {
+			// only the root uses persistence
+			tm = managers[0].store.(*testTaskManager)
+		}
+		// use two levels
+		managers[i].config.ForwarderMaxChildrenPerNode = dynamicconfig.GetIntPropertyFn(3)
+		// override timeouts to run faster
+		managers[i].config.GetUserDataMinWaitTime = 5 * time.Millisecond
+		managers[i].config.GetUserDataRetryPolicy = backoff.NewConstantDelayRetryPolicy(5 * time.Millisecond)
+		managers[i].logger = log.With(managers[i].logger, tag.HostID(fmt.Sprintf("%d", i)))
+	}
+
+	type checkKey struct{}
+	ctxFromCheck := context.WithValue(ctx, checkKey{}, true)
+
+	var failing atomic.Bool
+	failing.Store(true)
+
+	// hook up "rpcs"
+	opts.matchingClientMock.EXPECT().GetTaskQueueUserData(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(ctx context.Context, req *matchingservice.GetTaskQueueUserDataRequest, opts ...grpc.CallOption) (*matchingservice.GetTaskQueueUserDataResponse, error) {
+			// inject failures for propagation rpcs but not check rpcs
+			if ctx.Value(checkKey{}) == nil && failing.Load() {
+				util.InterruptibleSleep(ctx, 10*time.Millisecond)
+				return nil, serviceerror.NewUnavailable("timeout")
+			}
+			p, err := tqid.NormalPartitionFromRpcName(req.TaskQueue, req.NamespaceId, req.TaskQueueType)
+			require.NoError(t, err)
+			require.Equal(t, enumspb.TASK_QUEUE_TYPE_WORKFLOW, p.TaskType())
+			res, err := managers[p.PartitionId()].HandleGetUserDataRequest(ctx, req)
+			return res, err
+		},
+	).AnyTimes()
+	opts.matchingClientMock.EXPECT().UpdateTaskQueueUserData(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(ctx context.Context, req *matchingservice.UpdateTaskQueueUserDataRequest, opts ...grpc.CallOption) (*matchingservice.UpdateTaskQueueUserDataResponse, error) {
+			err := tm.UpdateTaskQueueUserData(ctx, &persistence.UpdateTaskQueueUserDataRequest{
+				NamespaceID:     req.NamespaceId,
+				TaskQueue:       req.TaskQueue,
+				UserData:        req.UserData,
+				BuildIdsAdded:   req.BuildIdsAdded,
+				BuildIdsRemoved: req.BuildIdsRemoved,
+			})
+			return &matchingservice.UpdateTaskQueueUserDataResponse{}, err
+		},
+	).AnyTimes()
+
+	defer time.Sleep(50 * time.Millisecond) // extra buffer to let goroutines exit after manager.Stop()
+	for i := range managers {
+		managers[i].Start()
+		defer managers[i].Stop()
+	}
+
+	newVersion, err := managers[0].UpdateUserData(ctx, UserDataUpdateOptions{}, func(data *persistencespb.TaskQueueUserData) (*persistencespb.TaskQueueUserData, bool, error) {
+		return data, false, nil
+	})
+	require.NoError(t, err)
+	require.Equal(t, int64(1), newVersion)
+
+	checkReturned := make(chan error)
+	go func() {
+		// only check workflow, not activity partitions
+		checkReturned <- managers[0].CheckTaskQueueUserDataPropagation(ctxFromCheck, newVersion, N, 0)
+	}()
+
+	// CheckTaskQueueUserDataPropagation should not return within 100ms
+	time.Sleep(100 * time.Millisecond)
+	select {
+	case <-checkReturned:
+		t.Fatal("check should not have returned")
+	default:
+	}
+
+	// unblock propagation
+	failing.Store(false)
+
+	// CheckTaskQueueUserDataPropagation should return soon
+	require.Eventually(t, func() bool {
+		select {
+		case err := <-checkReturned:
+			return err == nil
+		default:
+			return false
+		}
+	}, 100*time.Millisecond, 5*time.Millisecond, "CheckTaskQueueUserDataPropagation did not return fast enough")
 }

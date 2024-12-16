@@ -184,7 +184,6 @@ func (s *DeploymentSuite) TestDescribeDeployment_RegisterTaskQueue() {
 			Deployment: workerDeployment,
 		})
 		a.NoError(err)
-		a.NotNil(resp.GetDeploymentInfo())
 		a.NotNil(resp.GetDeploymentInfo().GetDeployment())
 
 		a.Equal(seriesName, resp.GetDeploymentInfo().GetDeployment().GetSeriesName())
@@ -210,8 +209,8 @@ func (s *DeploymentSuite) TestDescribeDeployment_RegisterTaskQueue_ConcurrentPol
 	s.NoError(err)
 	// Making concurrent polls to 4 partitions, 3 polls to each
 	for p := 0; p < 4; p++ {
+		tq := &taskqueuepb.TaskQueue{Name: root.TaskQueue().NormalPartition(p).RpcName(), Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 		for i := 0; i < 3; i++ {
-			tq := &taskqueuepb.TaskQueue{Name: root.TaskQueue().NormalPartition(p).RpcName(), Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 			go s.pollFromDeployment(ctx, tq, d)
 			go s.pollActivityFromDeployment(ctx, tq, d)
 		}
@@ -228,7 +227,6 @@ func (s *DeploymentSuite) TestDescribeDeployment_RegisterTaskQueue_ConcurrentPol
 		if !a.NoError(err) {
 			return
 		}
-		a.NotNil(resp.GetDeploymentInfo())
 		a.NotNil(resp.GetDeploymentInfo().GetDeployment())
 
 		a.True(d.Equal(resp.GetDeploymentInfo().GetDeployment()))
@@ -565,9 +563,8 @@ func (s *DeploymentSuite) createDeploymentAndWaitForExist(
 			Deployment: deployment,
 		})
 		a.NoError(err)
-		a.NotNil(resp.GetDeploymentInfo())
 		a.NotNil(resp.GetDeploymentInfo().GetDeployment())
-	}, time.Second*5, time.Millisecond*200)
+	}, time.Second*5, time.Millisecond*100)
 }
 
 func (s *DeploymentSuite) TestUpdateWorkflowExecutionOptions_SetUnpinnedThenUnset() {
