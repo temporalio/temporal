@@ -23,16 +23,18 @@
 package nexusoperations
 
 import (
-	"encoding/binary"
 	"errors"
 	"fmt"
 	"time"
 
 	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/api/serviceerror"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/hsm"
+	"google.golang.org/protobuf/proto"
 )
 
 const (
@@ -122,17 +124,21 @@ func (InvocationTask) Validate(ref *persistencespb.StateMachineRef, node *hsm.No
 type InvocationTaskSerializer struct{}
 
 func (InvocationTaskSerializer) Deserialize(data []byte, attrs hsm.TaskAttributes) (hsm.Task, error) {
-	attempt, _ := binary.Varint(data)
-	return InvocationTask{EndpointName: attrs.Destination, Attempt: int32(attempt)}, nil
+	var info persistencespb.NexusInvocationTaskInfo
+	err := proto.Unmarshal(data, &info)
+	if err != nil {
+		return nil, serialization.NewDeserializationError(enumspb.ENCODING_TYPE_PROTO3, err)
+	}
+	return InvocationTask{EndpointName: attrs.Destination, Attempt: info.Attempt}, nil
 }
 
 func (InvocationTaskSerializer) Serialize(task hsm.Task) ([]byte, error) {
-	invocation, ok := task.(InvocationTask)
-	if !ok {
-		return nil, fmt.Errorf("%w: nexusoperations.InvocationTask", errSerializationCast)
+	switch task := task.(type) {
+	case *InvocationTask:
+		return proto.Marshal(&persistencespb.NexusInvocationTaskInfo{Attempt: task.Attempt})
+	default:
+		return nil, serviceerror.NewInternal(fmt.Sprintf("unknown HSM task type while serializing: %v", task))
 	}
-	buf := make([]byte, binary.MaxVarintLen32)
-	return binary.AppendVarint(buf, int64(invocation.Attempt)), nil
 }
 
 type BackoffTask struct {
@@ -199,17 +205,21 @@ func (CancelationTask) Validate(ref *persistencespb.StateMachineRef, node *hsm.N
 type CancelationTaskSerializer struct{}
 
 func (CancelationTaskSerializer) Deserialize(data []byte, attrs hsm.TaskAttributes) (hsm.Task, error) {
-	attempt, _ := binary.Varint(data)
-	return CancelationTask{EndpointName: attrs.Destination, Attempt: int32(attempt)}, nil
+	var info persistencespb.NexusCancelationTaskInfo
+	err := proto.Unmarshal(data, &info)
+	if err != nil {
+		return nil, serialization.NewDeserializationError(enumspb.ENCODING_TYPE_PROTO3, err)
+	}
+	return CancelationTask{EndpointName: attrs.Destination, Attempt: info.Attempt}, nil
 }
 
 func (CancelationTaskSerializer) Serialize(task hsm.Task) ([]byte, error) {
-	cancelation, ok := task.(CancelationTask)
-	if !ok {
-		return nil, fmt.Errorf("%w: nexusoperations.CancelationTask", errSerializationCast)
+	switch task := task.(type) {
+	case *CancelationTask:
+		return proto.Marshal(&persistencespb.NexusCancelationTaskInfo{Attempt: task.Attempt})
+	default:
+		return nil, serviceerror.NewInternal(fmt.Sprintf("unknown HSM task type while serializing: %v", task))
 	}
-	buf := make([]byte, binary.MaxVarintLen32)
-	return binary.AppendVarint(buf, int64(cancelation.Attempt)), nil
 }
 
 type CancelationBackoffTask struct {
