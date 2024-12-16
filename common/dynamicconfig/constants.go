@@ -1223,6 +1223,12 @@ duration since last poll exceeds this threshold.`,
 		5*time.Minute-10*time.Second,
 		`MatchingListNexusEndpointsLongPollTimeout is the max length of long polls for ListNexusEndpoints calls.`,
 	)
+	MatchingLoadNexusEndpointsRefresh = NewGlobalDurationSetting(
+		"matching.loadNexusEndpointsRefresh",
+		10*time.Second,
+		`MatchingLoadNexusEndpointsRefresh is the time to wait between calls to check that the in-memory view of Nexus 
+endpoints matches the persisted state.`,
+	)
 	MatchingMembershipUnloadDelay = NewGlobalDurationSetting(
 		"matching.membershipUnloadDelay",
 		500*time.Millisecond,

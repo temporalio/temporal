@@ -172,7 +172,7 @@ func (s *sqlNexusEndpointStore) ListNexusEndpoints(
 	}
 
 	var nextPageToken []byte
-	if len(rows) == request.PageSize {
+	if len(rows) > 0 && len(rows) == request.PageSize {
 		nextPageToken, retErr = serializePageTokenJson(&listEndpointsNextPageToken{
 			LastID: rows[request.PageSize-1].ID,
 		})

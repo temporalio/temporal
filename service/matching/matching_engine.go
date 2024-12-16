@@ -222,7 +222,7 @@ func NewEngine(
 		clusterMeta:                   clusterMeta,
 		timeSource:                    clock.NewRealTimeSource(), // No need to mock this at the moment
 		visibilityManager:             visibilityManager,
-		nexusEndpointClient:           newEndpointClient(nexusEndpointManager),
+		nexusEndpointClient:           newEndpointClient(config.LoadNexusEndpointsRefresh, nexusEndpointManager),
 		nexusEndpointsOwnershipLostCh: make(chan struct{}),
 		metricsHandler:                scopedMetricsHandler,
 		partitions:                    make(map[tqid.PartitionKey]taskQueuePartitionManager),
@@ -2023,7 +2023,7 @@ func (e *matchingEngineImpl) ListNexusEndpoints(ctx context.Context, request *ma
 	// Read API, verify table ownership via membership.
 	isOwner, ownershipLostCh, err := e.checkNexusEndpointsOwnership()
 	if err != nil {
-		e.logger.Error("Failed to check Nexus endpoints ownerhip", tag.Error(err))
+		e.logger.Error("Failed to check Nexus endpoints ownership", tag.Error(err))
 		return nil, serviceerror.NewFailedPrecondition(fmt.Sprintf("cannot verify ownership of Nexus endpoints table: %v", err))
 	}
 	if !isOwner {
@@ -2080,16 +2080,17 @@ func (e *matchingEngineImpl) checkNexusEndpointsOwnership() (bool, <-chan struct
 
 func (e *matchingEngineImpl) notifyIfNexusEndpointsOwnershipLost() {
 	// We don't care about the channel returned here. This method is ensured to only be called from the single
-	// watchMembership method and is the only way the channel may be replace.
+	// watchMembership method and is the only way the channel may be replaced.
 	isOwner, _, err := e.checkNexusEndpointsOwnership()
 	if err != nil {
-		e.logger.Error("Failed to check Nexus endpoints ownerhip", tag.Error(err))
+		e.logger.Error("Failed to check Nexus endpoints ownership", tag.Error(err))
 		return
 	}
 	if !isOwner {
 		close(e.nexusEndpointsOwnershipLostCh)
 		e.nexusEndpointsOwnershipLostCh = make(chan struct{})
 	}
+	e.nexusEndpointClient.notifyOwnershipChanged(isOwner)
 }
 
 func (e *matchingEngineImpl) getNamespaceUpdateLocks(namespaceId string) *namespaceUpdateLocks {
