@@ -484,7 +484,6 @@ jobs:
         id: get_job_id
         run: |
           set -eu
-          job_suffix="${{matrix.runs-on}}, ${{matrix.shard_index}}, ${{matrix.name}}"
           job_url="https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/jobs"
           echo "Job url is $job_url"
           job_id=$(curl -L \
