@@ -377,6 +377,8 @@ type Config struct {
 	BreakdownMetricsByTaskQueue dynamicconfig.BoolPropertyFnWithTaskQueueFilter
 
 	LogAllReqErrors dynamicconfig.BoolPropertyFnWithNamespaceFilter
+
+	ShouldFailReplicationTask dynamicconfig.BoolPropertyFn
 }
 
 // NewConfig returns new service config with default values
