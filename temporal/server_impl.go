@@ -102,7 +102,8 @@ func NewServerFxImpl(
 
 func (s *ServerImpl) Start(ctx context.Context) error {
 	s.logger.Info("Starting server for services", tag.Value(s.so.serviceNames))
-	s.logger.Debug(s.so.config.String())
+	// Using NewAnyTag on config (which is a fmt.Stringer) avoids marshaling unless it's needed.
+	s.logger.Debug("Using static config", tag.NewAnyTag("static-config", s.so.config))
 
 	if err := initSystemNamespaces(
 		ctx,

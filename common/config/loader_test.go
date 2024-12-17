@@ -40,15 +40,6 @@ type (
 		*require.Assertions
 		suite.Suite
 	}
-
-	itemsConfig struct {
-		Item1 string `yaml:"item1"`
-		Item2 string `yaml:"item2"`
-	}
-
-	testConfig struct {
-		Items itemsConfig `yaml:"items"`
-	}
 )
 
 func TestLoaderSuite(t *testing.T) {
@@ -71,11 +62,11 @@ func (s *LoaderSuite) TestBaseYaml() {
 
 	for _, env := range envs {
 		for _, zone := range zones {
-			var cfg testConfig
+			var cfg Config
 			err = Load(env, dir, zone, &cfg)
 			s.Nil(err)
-			s.Equal("hello__", cfg.Items.Item1)
-			s.Equal("world__", cfg.Items.Item2)
+			s.Equal("hello__", cfg.Log.Level)
+			s.Equal("world__", cfg.Log.Format)
 		}
 	}
 }
@@ -106,16 +97,16 @@ func (s *LoaderSuite) TestHierarchy() {
 	}
 
 	for _, tc := range testCases {
-		var cfg testConfig
+		var cfg Config
 		err := Load(tc.env, dir, tc.zone, &cfg)
 		s.Nil(err)
-		s.Equal(tc.item1, cfg.Items.Item1)
-		s.Equal(tc.item2, cfg.Items.Item2)
+		s.Equal(tc.item1, cfg.Log.Level)
+		s.Equal(tc.item2, cfg.Log.Format)
 	}
 }
 
 func (s *LoaderSuite) TestInvalidPath() {
-	var cfg testConfig
+	var cfg Config
 	err := Load("prod", "", "", &cfg)
 	s.NotNil(err)
 }
@@ -129,7 +120,12 @@ func buildConfig(env, zone string) string {
 	item1 := concat("hello", concat(env, zone))
 	item2 := concat("world", concat(env, zone))
 	return `
-    items:
-      item1: ` + item1 + `
-      item2: ` + item2
+    log:
+      level: ` + item1 + `
+      format: ` + item2 + `
+    # make validator happy:
+    persistence:
+      defaultStore: dummy
+      numHistoryShards: 10
+`
 }
