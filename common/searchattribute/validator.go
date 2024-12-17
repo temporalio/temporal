@@ -123,13 +123,13 @@ func (v *Validator) Validate(searchAttributes *commonpb.SearchAttributes, namesp
 		if err != nil {
 			if errors.Is(err, ErrInvalidName) {
 				return v.validationError(
-					"search attribute %s is not defined",
+					"search attribute %q is not defined",
 					saFieldName,
 					namespace,
 				)
 			}
 			return v.validationError(
-				fmt.Sprintf("unable to get %s search attribute type: %v", "%s", err),
+				fmt.Sprintf("unable to get %q search attribute type: %v", "%s", err),
 				saFieldName,
 				namespace,
 			)
@@ -143,7 +143,7 @@ func (v *Validator) Validate(searchAttributes *commonpb.SearchAttributes, namesp
 			}
 			return v.validationError(
 				fmt.Sprintf(
-					"invalid value for search attribute %s of type %s: %v",
+					"invalid value for search attribute %q of type %s: %v",
 					"%s",
 					saType,
 					invalidValue,
@@ -169,7 +169,7 @@ func (v *Validator) ValidateSize(searchAttributes *commonpb.SearchAttributes, na
 		if len(saPayload.GetData()) > v.searchAttributesSizeOfValueLimit(namespace) {
 			return v.validationError(
 				fmt.Sprintf(
-					"search attribute %s value size %d exceeds size limit %d",
+					"search attribute %q value size %d exceeds size limit %d",
 					"%s",
 					len(saPayload.GetData()),
 					v.searchAttributesSizeOfValueLimit(namespace),
