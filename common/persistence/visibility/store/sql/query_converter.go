@@ -670,13 +670,23 @@ func (c *QueryConverter) convertIsExpr(exprRef *sqlparser.Expr) error {
 	if !ok {
 		return query.NewConverterError("`%s` is not an 'IS' expression", sqlparser.String(*exprRef))
 	}
-	_, err := c.convertColName(&expr.Expr)
-	if err != nil {
-		return err
-	}
+
 	switch expr.Operator {
 	case sqlparser.IsNullStr, sqlparser.IsNotNullStr:
-		// no-op
+
+		// skip closeTime to avoid coalesce
+		if subExpr, ok := (expr.Expr).(*sqlparser.ColName); ok {
+			saAlias := strings.ReplaceAll(sqlparser.String(subExpr), "`", "")
+			if saAlias == searchattribute.CloseTime {
+				expr.Expr = closeTimeSaColName
+				return nil
+			}
+		}
+
+		_, err := c.convertColName(&expr.Expr)
+		if err != nil {
+			return err
+		}
 	default:
 		return query.NewConverterError(
 			"%s: 'IS' operator can only be used with 'NULL' or 'NOT NULL'",
