@@ -247,9 +247,6 @@ func (s *Versioning3Suite) testUnpinnedWorkflow(sticky bool) {
 			s.verifyWorkflowVersioning(tv, vbUnspecified, nil, nil, transitionTo(d))
 			return respondWftWithActivities(tv, tv, sticky, vbUnpinned, "5"), nil
 		})
-	// TODO (shahab): remove the waits once the following error is handled properly.
-	// "MultiOperation could not be executed: Start failed: Workflow was not started: StartReused"
-	s.waitForDeploymentDataPropagation(tv, tqTypeWf)
 
 	actCompleted := make(chan interface{})
 	s.pollActivityAndHandle(tv, actCompleted,
