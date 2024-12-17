@@ -222,7 +222,7 @@ func NewEngine(
 		clusterMeta:                   clusterMeta,
 		timeSource:                    clock.NewRealTimeSource(), // No need to mock this at the moment
 		visibilityManager:             visibilityManager,
-		nexusEndpointClient:           newEndpointClient(nexusEndpointManager),
+		nexusEndpointClient:           newEndpointClient(config.NexusEndpointsRefreshInterval, nexusEndpointManager),
 		nexusEndpointsOwnershipLostCh: make(chan struct{}),
 		metricsHandler:                scopedMetricsHandler,
 		partitions:                    make(map[tqid.PartitionKey]taskQueuePartitionManager),
@@ -272,6 +272,8 @@ func (e *matchingEngineImpl) Stop() {
 	_ = e.serviceResolver.RemoveListener(e.listenerKey())
 	close(e.membershipChangedCh)
 
+	e.nexusEndpointClient.notifyOwnershipChanged(false)
+
 	for _, l := range e.getTaskQueuePartitions(math.MaxInt32) {
 		l.Stop(unloadCauseShuttingDown)
 	}
@@ -290,7 +292,7 @@ func (e *matchingEngineImpl) watchMembership() {
 			continue
 		}
 
-		e.notifyIfNexusEndpointsOwnershipLost()
+		e.notifyNexusEndpointsOwnershipChange()
 
 		// Check all our loaded partitions to see if we lost ownership of any of them.
 		e.partitionsLock.RLock()
@@ -2023,7 +2025,7 @@ func (e *matchingEngineImpl) ListNexusEndpoints(ctx context.Context, request *ma
 	// Read API, verify table ownership via membership.
 	isOwner, ownershipLostCh, err := e.checkNexusEndpointsOwnership()
 	if err != nil {
-		e.logger.Error("Failed to check Nexus endpoints ownerhip", tag.Error(err))
+		e.logger.Error("Failed to check Nexus endpoints ownership", tag.Error(err))
 		return nil, serviceerror.NewFailedPrecondition(fmt.Sprintf("cannot verify ownership of Nexus endpoints table: %v", err))
 	}
 	if !isOwner {
@@ -2078,18 +2080,19 @@ func (e *matchingEngineImpl) checkNexusEndpointsOwnership() (bool, <-chan struct
 	return owner.Identity() == self, ch, nil
 }
 
-func (e *matchingEngineImpl) notifyIfNexusEndpointsOwnershipLost() {
+func (e *matchingEngineImpl) notifyNexusEndpointsOwnershipChange() {
 	// We don't care about the channel returned here. This method is ensured to only be called from the single
-	// watchMembership method and is the only way the channel may be replace.
+	// watchMembership method and is the only way the channel may be replaced.
 	isOwner, _, err := e.checkNexusEndpointsOwnership()
 	if err != nil {
-		e.logger.Error("Failed to check Nexus endpoints ownerhip", tag.Error(err))
+		e.logger.Error("Failed to check Nexus endpoints ownership", tag.Error(err))
 		return
 	}
 	if !isOwner {
 		close(e.nexusEndpointsOwnershipLostCh)
 		e.nexusEndpointsOwnershipLostCh = make(chan struct{})
 	}
+	e.nexusEndpointClient.notifyOwnershipChanged(isOwner)
 }
 
 func (e *matchingEngineImpl) getNamespaceUpdateLocks(namespaceId string) *namespaceUpdateLocks {
