@@ -130,6 +130,22 @@ func (a *Activities) DeleteExecutionsActivity(ctx context.Context, params Delete
 	progressCh := make(chan DeleteExecutionsActivityResult, 1)
 	defer func() { close(progressCh) }()
 
+	var result DeleteExecutionsActivityResult
+	if activity.HasHeartbeatDetails(ctx) {
+		var previousAttemptResult DeleteExecutionsActivityResult
+		if err := activity.GetHeartbeatDetails(ctx, &previousAttemptResult); err != nil {
+			// If heartbeat details can't be read, just log the error and continue because they are not important.
+			a.logger.Warn("Unable to get heartbeat details from previous attempt while deleting workflow executions.", tag.WorkflowNamespace(params.Namespace.String()), tag.Error(err))
+		} else {
+			// Carry over only success count because executions which gave error before,
+			// either will give an error again or will be successfully deleted.
+			// Errors shouldn't be double counted.
+			result.SuccessCount = previousAttemptResult.SuccessCount
+			// Send an initial result to heartbeat go routine.
+			progressCh <- result
+		}
+	}
+
 	go func() {
 		heartbeatTicker := time.NewTicker(deleteWorkflowExecutionsActivityOptions.HeartbeatTimeout / 2)
 		defer heartbeatTicker.Stop()
@@ -149,7 +165,6 @@ func (a *Activities) DeleteExecutionsActivity(ctx context.Context, params Delete
 		}
 	}()
 
-	var result DeleteExecutionsActivityResult
 	req := &manager.ListWorkflowExecutionsRequestV2{
 		NamespaceID:   params.NamespaceID,
 		Namespace:     params.Namespace,
