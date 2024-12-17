@@ -44,7 +44,7 @@ type handler struct {
 
 var _ slog.Handler = (*handler)(nil)
 
-// An interface that allows extracting an underlying slog logger.
+// SLogWrapper allows extracting an underlying slog logger.
 type SLogWrapper interface {
 	SLog() *slog.Logger
 }
