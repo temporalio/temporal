@@ -581,7 +581,8 @@ func (c *ContextImpl) UpdateWorkflowExecutionWithNew(
 			c.Clear()
 		}
 	}()
-
+	eventReapplyCandidates := c.MutableState.GetReapplyCandidateEvents()
+	var newEventsReapplyCandidates []*historypb.HistoryEvent
 	updateWorkflow, updateWorkflowEventsSeq, err := c.MutableState.CloseTransactionAsMutation(
 		updateWorkflowTransactionPolicy,
 	)
@@ -597,7 +598,7 @@ func (c *ContextImpl) UpdateWorkflowExecutionWithNew(
 				newContext.Clear()
 			}
 		}()
-
+		newEventsReapplyCandidates = newMutableState.GetReapplyCandidateEvents()
 		newWorkflow, newWorkflowEventsSeq, err = newMutableState.CloseTransactionAsSnapshot(
 			*newWorkflowTransactionPolicy,
 		)
@@ -612,15 +613,45 @@ func (c *ContextImpl) UpdateWorkflowExecutionWithNew(
 	); err != nil {
 		return err
 	}
-
-	if err := c.updateWorkflowExecutionEventReapply(
-		ctx,
-		shardContext,
-		updateMode,
-		updateWorkflowEventsSeq,
-		newWorkflowEventsSeq,
-	); err != nil {
-		return err
+	if len(updateWorkflowEventsSeq) != 0 || len(newWorkflowEventsSeq) != 0 {
+		if err := c.updateWorkflowExecutionEventReapply(
+			ctx,
+			shardContext,
+			updateMode,
+			updateWorkflowEventsSeq,
+			newWorkflowEventsSeq,
+		); err != nil {
+			return err
+		}
+	} else if len(eventReapplyCandidates) > 0 || len(newEventsReapplyCandidates) > 0 {
+		eventsToApply := []*persistence.WorkflowEvents{
+			{
+				NamespaceID: c.workflowKey.NamespaceID,
+				WorkflowID:  c.workflowKey.WorkflowID,
+				RunID:       c.workflowKey.RunID,
+				Events:      eventReapplyCandidates,
+			},
+		}
+		var newEventsToReapply []*persistence.WorkflowEvents
+		if len(newEventsReapplyCandidates) > 0 {
+			newEventsToReapply = []*persistence.WorkflowEvents{
+				{
+					NamespaceID: newContext.GetWorkflowKey().NamespaceID,
+					WorkflowID:  newContext.GetWorkflowKey().WorkflowID,
+					RunID:       newContext.GetWorkflowKey().RunID,
+					Events:      newEventsReapplyCandidates,
+				},
+			}
+		}
+		if err := c.updateWorkflowExecutionEventReapply(
+			ctx,
+			shardContext,
+			updateMode,
+			eventsToApply,
+			newEventsToReapply,
+		); err != nil {
+			return err
+		}
 	}
 
 	if _, _, err := NewTransaction(shardContext).UpdateWorkflowExecution(
