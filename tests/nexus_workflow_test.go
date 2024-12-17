@@ -2066,7 +2066,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationSyncNexusFailure() {
 			}
 		},
 	}
-	listenAddr := nexustest.AllocListenAddress()
+	listenAddr := nexustest.AllocListenAddress(s.T())
 	nexustest.NewNexusServer(s.T(), listenAddr, h)
 
 	_, err := s.OperatorClient().CreateNexusEndpoint(ctx, &operatorservice.CreateNexusEndpointRequest{

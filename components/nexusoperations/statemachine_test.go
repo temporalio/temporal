@@ -28,7 +28,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	enumspb "go.temporal.io/api/enums/v1"
-	"go.temporal.io/api/failure/v1"
+	failurepb "go.temporal.io/api/failure/v1"
 	historypb "go.temporal.io/api/history/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -259,7 +259,7 @@ func TestCompleteFromAttempt(t *testing.T) {
 					Node: node,
 					Time: time.Now(),
 					Attributes: &historypb.NexusOperationFailedEventAttributes{
-						Failure: &failure.Failure{
+						Failure: &failurepb.Failure{
 							Message: "test",
 						},
 					},
