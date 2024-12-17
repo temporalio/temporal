@@ -256,17 +256,21 @@ func (m *taskManagerImpl) GetTaskQueueUserData(ctx context.Context, request *Get
 
 // UpdateTaskQueueUserData implements TaskManager
 func (m *taskManagerImpl) UpdateTaskQueueUserData(ctx context.Context, request *UpdateTaskQueueUserDataRequest) error {
-	userData, err := m.serializer.TaskQueueUserDataToBlob(request.UserData.Data, enumspb.ENCODING_TYPE_PROTO3)
-	if err != nil {
-		return err
-	}
 	internalRequest := &InternalUpdateTaskQueueUserDataRequest{
-		NamespaceID:     request.NamespaceID,
-		TaskQueue:       request.TaskQueue,
-		Version:         request.UserData.Version,
-		UserData:        userData,
-		BuildIdsAdded:   request.BuildIdsAdded,
-		BuildIdsRemoved: request.BuildIdsRemoved,
+		NamespaceID: request.NamespaceID,
+		Updates:     make(map[string]*InternalSingleTaskQueueUserDataUpdate, len(request.Updates)),
+	}
+	for taskQueue, update := range request.Updates {
+		userData, err := m.serializer.TaskQueueUserDataToBlob(update.UserData.Data, enumspb.ENCODING_TYPE_PROTO3)
+		if err != nil {
+			return err
+		}
+		internalRequest.Updates[taskQueue] = &InternalSingleTaskQueueUserDataUpdate{
+			Version:         update.UserData.Version,
+			UserData:        userData,
+			BuildIdsAdded:   update.BuildIdsAdded,
+			BuildIdsRemoved: update.BuildIdsRemoved,
+		}
 	}
 	return m.taskStore.UpdateTaskQueueUserData(ctx, internalRequest)
 }

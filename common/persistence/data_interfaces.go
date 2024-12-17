@@ -523,10 +523,14 @@ type (
 		UserData *persistencespb.VersionedTaskQueueUserData
 	}
 
-	// UpdateTaskQueueUserDataRequest is the input type for the UpdateTaskQueueUserData API
+	// UpdateTaskQueueUserDataRequest is the input type for the UpdateTaskQueueUserData API.
+	// This updates user data for multiple task queues in one namespace.
 	UpdateTaskQueueUserDataRequest struct {
-		NamespaceID     string
-		TaskQueue       string
+		NamespaceID string
+		Updates     map[string]*SingleTaskQueueUserDataUpdate // key is task queue name
+	}
+
+	SingleTaskQueueUserDataUpdate struct {
 		UserData        *persistencespb.VersionedTaskQueueUserData
 		BuildIdsAdded   []string
 		BuildIdsRemoved []string

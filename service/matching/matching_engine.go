@@ -105,9 +105,15 @@ type (
 		forwardedFrom             string
 	}
 
-	namespaceUpdateLocks struct {
-		updateLock      sync.Mutex
-		replicationLock sync.Mutex
+	userDataChannelContext struct {
+		ch      chan *userDataUpdate
+		running atomic.Bool
+	}
+
+	userDataUpdate struct {
+		response  chan error
+		taskQueue string
+		update    persistence.SingleTaskQueueUserDataUpdate
 	}
 
 	gaugeMetrics struct {
@@ -160,10 +166,10 @@ type (
 		outstandingPollers collection.SyncMap[string, context.CancelFunc]
 		// Only set if global namespaces are enabled on the cluster.
 		namespaceReplicationQueue persistence.NamespaceReplicationQueue
-		// Disables concurrent task queue user data updates and replication requests (due to a cassandra limitation)
-		namespaceUpdateLockMap map[string]*namespaceUpdateLocks
-		// Serializes access to the per namespace lock map
-		namespaceUpdateLockMapLock sync.Mutex
+		// Lock to serialize replication queue updates.
+		replicationLock sync.Mutex
+		// Serialize and batch user data updates.
+		userDataUpdateChannels collection.SyncMap[string, *userDataChannelContext]
 		// Stores results of reachability queries to visibility
 		reachabilityCache reachabilityCache
 	}
@@ -237,7 +243,7 @@ func NewEngine(
 		nexusResults:              collection.NewSyncMap[string, chan *nexusResult](),
 		outstandingPollers:        collection.NewSyncMap[string, context.CancelFunc](),
 		namespaceReplicationQueue: namespaceReplicationQueue,
-		namespaceUpdateLockMap:    make(map[string]*namespaceUpdateLocks),
+		userDataUpdateChannels:    collection.NewSyncMap[string, *userDataChannelContext](),
 	}
 	e.reachabilityCache = newReachabilityCache(
 		metrics.NoopMetricsHandler,
@@ -1794,18 +1800,24 @@ func (e *matchingEngineImpl) ForceUnloadTaskQueuePartition(
 }
 
 func (e *matchingEngineImpl) UpdateTaskQueueUserData(ctx context.Context, request *matchingservice.UpdateTaskQueueUserDataRequest) (*matchingservice.UpdateTaskQueueUserDataResponse, error) {
-	locks := e.getNamespaceUpdateLocks(request.GetNamespaceId())
-	locks.updateLock.Lock()
-	defer locks.updateLock.Unlock()
+	response := make(chan error)
+	update := &userDataUpdate{
+		response:  response,
+		taskQueue: request.GetTaskQueue(),
+		update: persistence.SingleTaskQueueUserDataUpdate{
+			UserData:        request.UserData,
+			BuildIdsAdded:   request.BuildIdsAdded,
+			BuildIdsRemoved: request.BuildIdsRemoved,
+		},
+	}
 
-	err := e.taskManager.UpdateTaskQueueUserData(ctx, &persistence.UpdateTaskQueueUserDataRequest{
-		NamespaceID:     request.GetNamespaceId(),
-		TaskQueue:       request.GetTaskQueue(),
-		UserData:        request.GetUserData(),
-		BuildIdsAdded:   request.BuildIdsAdded,
-		BuildIdsRemoved: request.BuildIdsRemoved,
-	})
-	return &matchingservice.UpdateTaskQueueUserDataResponse{}, err
+	select {
+	case e.getUserDataUpdateChannel(request.GetNamespaceId()) <- update:
+		err := <-response
+		return &matchingservice.UpdateTaskQueueUserDataResponse{}, err
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
 }
 
 func (e *matchingEngineImpl) ReplicateTaskQueueUserData(ctx context.Context, request *matchingservice.ReplicateTaskQueueUserDataRequest) (*matchingservice.ReplicateTaskQueueUserDataResponse, error) {
@@ -1813,9 +1825,8 @@ func (e *matchingEngineImpl) ReplicateTaskQueueUserData(ctx context.Context, req
 		return &matchingservice.ReplicateTaskQueueUserDataResponse{}, nil
 	}
 
-	locks := e.getNamespaceUpdateLocks(request.GetNamespaceId())
-	locks.replicationLock.Lock()
-	defer locks.replicationLock.Unlock()
+	e.replicationLock.Lock()
+	defer e.replicationLock.Unlock()
 
 	err := e.namespaceReplicationQueue.Publish(ctx, &replicationspb.ReplicationTask{
 		TaskType: enumsspb.REPLICATION_TASK_TYPE_TASK_QUEUE_USER_DATA,
@@ -2125,15 +2136,69 @@ func (e *matchingEngineImpl) notifyNexusEndpointsOwnershipChange() {
 	e.nexusEndpointClient.notifyOwnershipChanged(isOwner)
 }
 
-func (e *matchingEngineImpl) getNamespaceUpdateLocks(namespaceId string) *namespaceUpdateLocks {
-	e.namespaceUpdateLockMapLock.Lock()
-	defer e.namespaceUpdateLockMapLock.Unlock()
-	locks, found := e.namespaceUpdateLockMap[namespaceId]
-	if !found {
-		locks = &namespaceUpdateLocks{}
-		e.namespaceUpdateLockMap[namespaceId] = locks
+func (e *matchingEngineImpl) getUserDataUpdateChannel(namespaceId string) chan *userDataUpdate {
+	channel, ok := e.userDataUpdateChannels.Get(namespaceId)
+	if !ok {
+		newCh := &userDataChannelContext{ch: make(chan (*userDataUpdate))}
+		channel, _ = e.userDataUpdateChannels.GetOrSet(namespaceId, newCh)
 	}
-	return locks
+	if channel.running.CompareAndSwap(false, true) {
+		go e.userDataUpdateLoop(namespaceId, channel)
+	}
+	return channel.ch
+}
+
+func (e *matchingEngineImpl) userDataUpdateLoop(namespaceId string, channel *userDataChannelContext) {
+	const maxUpdates = 100
+	const exitGoroutineAfter = time.Minute
+	const maxTotalWait = 1000 * time.Millisecond
+	const maxGap = 200 * time.Millisecond
+
+	defer channel.running.Store(false)
+
+	for {
+		var updates []*userDataUpdate
+
+		// wait for first update. if no updates after a while, exit the goroutine
+		select {
+		case update := <-channel.ch:
+			updates = append(updates, update)
+		case <-time.After(exitGoroutineAfter):
+			return
+		}
+
+		// try to add more updates. stop after a gap of maxGap, total time of maxTotalWait, or
+		// maxUpdates updates.
+		maxWaitC := time.After(maxTotalWait)
+	loop:
+		for len(updates) < maxUpdates {
+			select {
+			case update := <-channel.ch:
+				updates = append(updates, update)
+			case <-time.After(maxGap):
+				break loop
+			case <-maxWaitC:
+				break loop
+			}
+		}
+
+		updatesMap := make(map[string]*persistence.SingleTaskQueueUserDataUpdate, len(updates))
+		for _, update := range updates {
+			updatesMap[update.taskQueue] = &update.update
+		}
+
+		// now apply the batch of updates
+		ctx := context.TODO() // FIXME
+		err := e.taskManager.UpdateTaskQueueUserData(ctx, &persistence.UpdateTaskQueueUserDataRequest{
+			NamespaceID: namespaceId,
+			Updates:     updatesMap,
+		})
+
+		// send responses
+		for _, update := range updates {
+			update.response <- err
+		}
+	}
 }
 
 func (e *matchingEngineImpl) getHostInfo(partitionKey string) (string, error) {
