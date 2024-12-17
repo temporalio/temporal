@@ -31,6 +31,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/testsuite"
+	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/service/worker/deletenamespace/deleteexecutions"
 	"go.temporal.io/server/service/worker/deletenamespace/reclaimresources"
@@ -38,6 +39,7 @@ import (
 
 func Test_DeleteNamespaceWorkflow_ByName(t *testing.T) {
 	testSuite := &testsuite.WorkflowTestSuite{}
+	testSuite.SetLogger(log.NewSdkLogger(log.NewTestLogger()))
 	env := testSuite.NewTestWorkflowEnvironment()
 	var la *localActivities
 
@@ -81,6 +83,7 @@ func Test_DeleteNamespaceWorkflow_ByName(t *testing.T) {
 
 func Test_DeleteNamespaceWorkflow_ByID(t *testing.T) {
 	testSuite := &testsuite.WorkflowTestSuite{}
+	testSuite.SetLogger(log.NewSdkLogger(log.NewTestLogger()))
 	env := testSuite.NewTestWorkflowEnvironment()
 	var la *localActivities
 
@@ -123,6 +126,7 @@ func Test_DeleteNamespaceWorkflow_ByID(t *testing.T) {
 
 func Test_DeleteNamespaceWorkflow_ByNameAndID(t *testing.T) {
 	testSuite := &testsuite.WorkflowTestSuite{}
+	testSuite.SetLogger(log.NewSdkLogger(log.NewTestLogger()))
 	env := testSuite.NewTestWorkflowEnvironment()
 
 	// Delete by name and ID.
