@@ -50,6 +50,7 @@ type (
 	getNamespaceInfoResult struct {
 		NamespaceID namespace.ID
 		Namespace   namespace.Name
+		Clusters    []string
 	}
 )
 
@@ -85,6 +86,7 @@ func (a *localActivities) GetNamespaceInfoActivity(ctx context.Context, nsID nam
 	return getNamespaceInfoResult{
 		NamespaceID: namespace.ID(getNamespaceResponse.Namespace.Info.Id),
 		Namespace:   namespace.Name(getNamespaceResponse.Namespace.Info.Name),
+		Clusters:    getNamespaceResponse.Namespace.ReplicationConfig.Clusters,
 	}, nil
 }
 

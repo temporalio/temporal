@@ -40,6 +40,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	filterpb "go.temporal.io/api/filter/v1"
 	historypb "go.temporal.io/api/history/v1"
+	"go.temporal.io/api/operatorservice/v1"
 	querypb "go.temporal.io/api/query/v1"
 	replicationpb "go.temporal.io/api/replication/v1"
 	"go.temporal.io/api/serviceerror"
@@ -2920,6 +2921,32 @@ func (s *FunctionalClustersTestSuite) TestForceMigration_ResetWorkflow() {
 	}
 	verifyHistory(workflowID, run1.GetRunID())
 	verifyHistory(workflowID, resp.GetRunId())
+}
+
+func (s *FunctionalClustersTestSuite) TestDeleteNamespace() {
+	namespace := "test-namespace-for-fail-over-" + common.GenerateRandomString(5)
+	client1 := s.cluster1.FrontendClient() // active
+	regReq := &workflowservice.RegisterNamespaceRequest{
+		Namespace:                        namespace,
+		IsGlobalNamespace:                true,
+		Clusters:                         s.clusterReplicationConfig(),
+		ActiveClusterName:                s.clusterNames[0],
+		WorkflowExecutionRetentionPeriod: durationpb.New(7 * time.Hour * 24),
+	}
+	_, err := client1.RegisterNamespace(testcore.NewContext(), regReq)
+	s.NoError(err)
+	// Wait for namespace cache to pick the change
+	time.Sleep(cacheRefreshInterval) // nolint:forbidigo
+
+	resp, err := s.cluster1.OperatorClient().DeleteNamespace(
+		testcore.NewContext(),
+		&operatorservice.DeleteNamespaceRequest{
+			Namespace: namespace,
+		})
+	s.Error(err)
+	s.Nil(resp)
+	s.Contains(err.Error(), "is replicated in several clusters")
+	s.Contains(err.Error(), "remove all other cluster and retry")
 }
 
 func (s *FunctionalClustersTestSuite) getHistory(client workflowservice.WorkflowServiceClient, namespace string, execution *commonpb.WorkflowExecution) []*historypb.HistoryEvent {

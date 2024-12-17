@@ -137,3 +137,25 @@ func Test_DeleteNamespaceWorkflow_ByNameAndID(t *testing.T) {
 	var applicationErr *temporal.ApplicationError
 	require.ErrorAs(t, wfErr, &applicationErr)
 }
+
+func Test_DeleteReplicatedNamespace(t *testing.T) {
+	testSuite := &testsuite.WorkflowTestSuite{}
+	env := testSuite.NewTestWorkflowEnvironment()
+	var la *localActivities
+
+	env.OnActivity(la.GetNamespaceInfoActivity, mock.Anything, namespace.ID("namespace-id"), namespace.EmptyName).Return(
+		getNamespaceInfoResult{
+			NamespaceID: "namespace-id",
+			Namespace:   "namespace",
+			Clusters:    []string{"active", "passive"},
+		}, nil).Once()
+
+	env.ExecuteWorkflow(DeleteNamespaceWorkflow, DeleteNamespaceWorkflowParams{
+		NamespaceID: "namespace-id",
+	})
+
+	require.True(t, env.IsWorkflowCompleted())
+	err := env.GetWorkflowError()
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "namespace namespace is replicated in several clusters [active,passive]: remove all other cluster and retry")
+}

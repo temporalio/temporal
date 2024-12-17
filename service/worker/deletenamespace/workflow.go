@@ -26,6 +26,7 @@ package deletenamespace
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	enumspb "go.temporal.io/api/enums/v1"
@@ -124,10 +125,27 @@ func DeleteNamespaceWorkflow(ctx workflow.Context, params DeleteNamespaceWorkflo
 	var namespaceInfo getNamespaceInfoResult
 	err := workflow.ExecuteLocalActivity(ctx1, la.GetNamespaceInfoActivity, params.NamespaceID, params.Namespace).Get(ctx, &namespaceInfo)
 	if err != nil {
-		return result, temporal.NewNonRetryableApplicationError(fmt.Sprintf("namespace %s is not found", params.Namespace), "", err)
+		ns := params.Namespace.String()
+		if ns == "" {
+			ns = params.NamespaceID.String()
+		}
+		return result, temporal.NewNonRetryableApplicationError(fmt.Sprintf("namespace %s is not found", ns), "", err)
 	}
 	params.Namespace = namespaceInfo.Namespace
 	params.NamespaceID = namespaceInfo.NamespaceID
+
+	// Disable namespace deletion if namespace is replicate because:
+	//  - If namespace is passive in the current cluster, then WF executions will keep coming from
+	//    the active cluster and namespace will never be deleted (ReclaimResourcesWorkflow will fail).
+	//  - If namespace is active in the current cluster, then it technically can be deleted (and
+	//    in this case it will be deleted from this cluster only because delete operation is not replicated),
+	//    but this is confusing for the users, as they might expect that namespace is deleted from all clusters.
+	if len(namespaceInfo.Clusters) > 1 {
+		return result, temporal.NewNonRetryableApplicationError(fmt.Sprintf("namespace %s is replicated in several clusters [%s]: remove all other cluster and retry", params.Namespace, strings.Join(namespaceInfo.Clusters, ",")), "", nil)
+	}
+
+	// NOTE: there is very little chance that another cluster is added after the check above,
+	// but before namespace is marked as deleted below.
 
 	// Step 2. Mark namespace as deleted.
 	ctx2 := workflow.WithLocalActivityOptions(ctx, localActivityOptions)
