@@ -44,8 +44,17 @@ type handler struct {
 
 var _ slog.Handler = (*handler)(nil)
 
+// An interface that allows extracting an underlying slog logger.
+type SLogWrapper interface {
+	SLog() *slog.Logger
+}
+
 // NewSlogLogger creates an slog.Logger from a given logger.
 func NewSlogLogger(logger Logger) *slog.Logger {
+	// Try extracting and underlying slog logger (e.g. for Temporal CLI).
+	if sl, ok := logger.(SLogWrapper); ok {
+		return sl.SLog()
+	}
 	logger = withIncreasedSkip(logger, 3)
 	return slog.New(&handler{logger: logger, zapLogger: extractZapLogger(logger), group: "", tags: nil})
 }
@@ -89,7 +98,7 @@ func (h *handler) WithAttrs(attrs []slog.Attr) slog.Handler {
 	for _, attr := range attrs {
 		tags = append(tags, tag.NewZapTag(convertAttrToField(h.prependGroup(attr))))
 	}
-	return &handler{logger: h.logger, tags: tags, group: h.group}
+	return &handler{logger: h.logger, zapLogger: h.zapLogger, tags: tags, group: h.group}
 }
 
 // WithGroup implements slog.Handler.
@@ -98,7 +107,7 @@ func (h *handler) WithGroup(name string) slog.Handler {
 	if h.group != "" {
 		group = h.group + "." + name
 	}
-	return &handler{logger: h.logger, tags: h.tags, group: group}
+	return &handler{logger: h.logger, zapLogger: h.zapLogger, tags: h.tags, group: group}
 }
 
 func (h *handler) prependGroup(attr slog.Attr) slog.Attr {
@@ -136,7 +145,8 @@ func withIncreasedSkip(logger Logger, skip int) Logger {
 			logger: withIncreasedSkip(l.logger, skip),
 		}
 	}
-	return nil
+	// Default to not increasing the skip, it's better to have a logger than not having one.
+	return logger
 }
 
 // convertSlogToZapLevel maps slog Levels to zap Levels.
