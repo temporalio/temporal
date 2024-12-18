@@ -47,12 +47,8 @@ func NewExecutionsStillExistError(count int) error {
 	return temporal.NewApplicationError(fmt.Sprintf("%d executions are still exist", count), ExecutionsStillExistErrType, count)
 }
 
-func NewSomeExecutionsStillExistError() error {
-	return temporal.NewApplicationError("some executions are still exist", ExecutionsStillExistErrType)
-}
-
 func NewNoProgressError(count int) error {
-	return temporal.NewNonRetryableApplicationError(fmt.Sprintf("no progress were made: %d executions are still exist", count), NoProgressErrType, nil, count)
+	return temporal.NewNonRetryableApplicationError(fmt.Sprintf("no progress was made: %d executions are still exist", count), NoProgressErrType, nil, count)
 }
 
 func NewNotDeletedExecutionsStillExistError(count int) error {
