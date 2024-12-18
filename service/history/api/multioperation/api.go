@@ -247,6 +247,8 @@ func (ap *ApiImpl) processRunningWorkflow(
 		currentWorkflowLease.GetReleaseFn()(nil) // nil since nothing was modified
 		return nil, serviceerror.NewInvalidArgument("unhandled workflow id conflict policy: unspecified")
 	}
+	// still need to release the lease
+	currentWorkflowLease.GetReleaseFn()(nil)
 	return nil, serviceerror.NewInternal("unhandled workflow id conflict policy")
 }
 
