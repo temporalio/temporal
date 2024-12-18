@@ -473,11 +473,9 @@ jobs:
       - name: Get job ID from workflow run
         id: get_job_id
         run: |
-          set -eu
+          set -euo pipefail
           test_job_name="Functional test (${{matrix.runs-on}}, ${{matrix.shard_index}}, ${{matrix.name}})"
-          job_url="https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/jobs"
-          echo "Test job name is $test_job_name"
-          echo "Job url is $job_url"
+          job_url="https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/jobs?per_page=100"
           job_id=$(curl -L \
             -H "Accept: application/vnd.github+json" \
             -H "Authorization: Bearer ${{secrets.GITHUB_TOKEN}}" \
@@ -602,9 +600,7 @@ jobs:
         run: |
           set -euo pipefail
           test_job_name="Functional test xdc (${{matrix.name}})"
-          job_url="https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/jobs"
-          echo "Test job name is $test_job_name"
-          echo "Job url is $job_url"
+          job_url="https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/jobs?per_page=100"
           job_id=$(curl -L \
             -H "Accept: application/vnd.github+json" \
             -H "Authorization: Bearer ${{secrets.GITHUB_TOKEN}}" \
@@ -725,11 +721,9 @@ jobs:
       - name: Get job ID from workflow run
         id: get_job_id
         run: |
-          set -eu
+          set -euo pipefail
           test_job_name="Functional test ndc (${{matrix.name}})"
-          job_url="https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/jobs"
-          echo "Test job name is $test_job_name"
-          echo "Job url is $job_url"
+          job_url="https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/jobs?per_page=100"
           job_id=$(curl -L \
             -H "Accept: application/vnd.github+json" \
             -H "Authorization: Bearer ${{secrets.GITHUB_TOKEN}}" \
