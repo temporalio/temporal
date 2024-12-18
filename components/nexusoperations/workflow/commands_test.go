@@ -572,6 +572,8 @@ func TestHandleCancelCommand(t *testing.T) {
 		})
 		require.NoError(t, err)
 		require.Equal(t, 2, len(tcx.history.Events)) // Both scheduled and cancel requested events should be recorded
+		crAttrs := tcx.history.Events[1].GetNexusOperationCancelRequestedEventAttributes()
+		require.Equal(t, event.EventId, crAttrs.ScheduledEventId)
 	})
 
 	t.Run("sets event attributes with UserMetadata and spawns cancelation child machine", func(t *testing.T) {
