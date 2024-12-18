@@ -219,7 +219,6 @@ func (ch *commandHandler) HandleCancelCommand(
 				return workflow.FailWorkflowTaskError{
 					Cause:   enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_REQUEST_CANCEL_NEXUS_OPERATION_ATTRIBUTES,
 					Message: fmt.Sprintf("requested cancelation for a non-existing or already completed operation with scheduled event ID of %d", attrs.ScheduledEventId),
-
 				}
 			}
 			// Fallthrough and apply the event, there's special logic that will handle state machine not found below.
@@ -247,7 +246,7 @@ func (ch *commandHandler) HandleCancelCommand(
 	if errors.Is(err, hsm.ErrStateMachineAlreadyExists) {
 		return workflow.FailWorkflowTaskError{
 			Cause:   enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_REQUEST_CANCEL_NEXUS_OPERATION_ATTRIBUTES,
-			Message: fmt.Sprintf("requested cancelation for operation with scheduled event ID %d that is already being canceled", attrs.ScheduledEventId),
+			Message: fmt.Sprintf("cancelation was already requested for an operation with scheduled event ID %d", attrs.ScheduledEventId),
 		}
 	} else if errors.Is(err, hsm.ErrStateMachineNotFound) {
 		// This may happen if there's a buffered completion. Ignore.
