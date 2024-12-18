@@ -537,7 +537,7 @@ func TestHandleCancelCommand(t *testing.T) {
 
 	t.Run("operation already completed - completion buffered", func(t *testing.T) {
 		tcx := newTestContext(t, defaultConfig)
-		tcx.ms.EXPECT().HasAnyBufferedEvent(gomock.Any()).Return(true).AnyTimes() // Changed to AnyTimes()
+		tcx.ms.EXPECT().HasAnyBufferedEvent(gomock.Any()).Return(true)
 
 		err := tcx.scheduleHandler(context.Background(), tcx.ms, commandValidator{maxPayloadSize: 1}, 1, &commandpb.Command{
 			Attributes: &commandpb.Command_ScheduleNexusOperationCommandAttributes{
@@ -552,6 +552,17 @@ func TestHandleCancelCommand(t *testing.T) {
 		require.Equal(t, 1, len(tcx.history.Events))
 		event := tcx.history.Events[0]
 
+		err = nexusoperations.CompletedEventDefinition{}.Apply(tcx.ms.HSM(), &historypb.HistoryEvent{
+			EventId: event.EventId + 1,
+			Attributes: &historypb.HistoryEvent_NexusOperationCompletedEventAttributes{
+				NexusOperationCompletedEventAttributes: &historypb.NexusOperationCompletedEventAttributes{
+					ScheduledEventId: event.EventId,
+				},
+			},
+		})
+		require.NoError(t, err)
+
+		// Try to cancel - should succeed because there's a buffered completion
 		err = tcx.cancelHandler(context.Background(), tcx.ms, commandValidator{maxPayloadSize: 1}, 1, &commandpb.Command{
 			Attributes: &commandpb.Command_RequestCancelNexusOperationCommandAttributes{
 				RequestCancelNexusOperationCommandAttributes: &commandpb.RequestCancelNexusOperationCommandAttributes{
@@ -560,7 +571,7 @@ func TestHandleCancelCommand(t *testing.T) {
 			},
 		})
 		require.NoError(t, err)
-		require.Equal(t, 2, len(tcx.history.Events)) // Only scheduled event should be recorded.
+		require.Equal(t, 2, len(tcx.history.Events)) // Both scheduled and cancel requested events should be recorded
 	})
 
 	t.Run("sets event attributes with UserMetadata and spawns cancelation child machine", func(t *testing.T) {
