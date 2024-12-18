@@ -26,6 +26,7 @@ package matching
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -56,6 +57,7 @@ import (
 	hlc "go.temporal.io/server/common/clock/hybrid_logical_clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/collection"
+	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/membership"
@@ -111,7 +113,6 @@ type (
 	}
 
 	userDataUpdate struct {
-		response  chan error
 		taskQueue string
 		update    persistence.SingleTaskQueueUserDataUpdate
 	}
@@ -169,7 +170,7 @@ type (
 		// Lock to serialize replication queue updates.
 		replicationLock sync.Mutex
 		// Serialize and batch user data updates.
-		userDataUpdateChannels collection.SyncMap[string, *userDataChannelContext]
+		userDataUpdates collection.SyncMap[string, *util.BatchStream[*userDataUpdate, error]]
 		// Stores results of reachability queries to visibility
 		reachabilityCache reachabilityCache
 	}
@@ -243,7 +244,7 @@ func NewEngine(
 		nexusResults:              collection.NewSyncMap[string, chan *nexusResult](),
 		outstandingPollers:        collection.NewSyncMap[string, context.CancelFunc](),
 		namespaceReplicationQueue: namespaceReplicationQueue,
-		userDataUpdateChannels:    collection.NewSyncMap[string, *userDataChannelContext](),
+		userDataUpdates:           collection.NewSyncMap[string, *util.BatchStream[*userDataUpdate, error]](),
 	}
 	e.reachabilityCache = newReachabilityCache(
 		metrics.NoopMetricsHandler,
@@ -1800,24 +1801,17 @@ func (e *matchingEngineImpl) ForceUnloadTaskQueuePartition(
 }
 
 func (e *matchingEngineImpl) UpdateTaskQueueUserData(ctx context.Context, request *matchingservice.UpdateTaskQueueUserDataRequest) (*matchingservice.UpdateTaskQueueUserDataResponse, error) {
-	response := make(chan error)
-	update := &userDataUpdate{
-		response:  response,
+	namespaceId := request.NamespaceId
+	persistenceErr, ctxErr := e.getUserDataBatcher(namespaceId).Add(ctx, &userDataUpdate{
 		taskQueue: request.GetTaskQueue(),
 		update: persistence.SingleTaskQueueUserDataUpdate{
 			UserData:        request.UserData,
 			BuildIdsAdded:   request.BuildIdsAdded,
 			BuildIdsRemoved: request.BuildIdsRemoved,
 		},
-	}
-
-	select {
-	case e.getUserDataUpdateChannel(request.GetNamespaceId()) <- update:
-		err := <-response
-		return &matchingservice.UpdateTaskQueueUserDataResponse{}, err
-	case <-ctx.Done():
-		return nil, ctx.Err()
-	}
+	})
+	err := cmp.Or(ctxErr, persistenceErr)
+	return &matchingservice.UpdateTaskQueueUserDataResponse{}, err
 }
 
 func (e *matchingEngineImpl) ReplicateTaskQueueUserData(ctx context.Context, request *matchingservice.ReplicateTaskQueueUserDataRequest) (*matchingservice.ReplicateTaskQueueUserDataResponse, error) {
@@ -2136,69 +2130,41 @@ func (e *matchingEngineImpl) notifyNexusEndpointsOwnershipChange() {
 	e.nexusEndpointClient.notifyOwnershipChanged(isOwner)
 }
 
-func (e *matchingEngineImpl) getUserDataUpdateChannel(namespaceId string) chan *userDataUpdate {
-	channel, ok := e.userDataUpdateChannels.Get(namespaceId)
-	if !ok {
-		newCh := &userDataChannelContext{ch: make(chan (*userDataUpdate))}
-		channel, _ = e.userDataUpdateChannels.GetOrSet(namespaceId, newCh)
+func (e *matchingEngineImpl) getUserDataBatcher(namespaceId string) *util.BatchStream[*userDataUpdate, error] {
+	if stream, ok := e.userDataUpdates.Get(namespaceId); ok {
+		return stream
 	}
-	if channel.running.CompareAndSwap(false, true) {
-		go e.userDataUpdateLoop(namespaceId, channel)
+	fn := func(batch []*userDataUpdate) error {
+		return e.applyUserDataUpdateBatch(namespaceId, batch)
 	}
-	return channel.ch
+	opts := util.BatchStreamOptions{
+		MaxItems:     100,
+		IdleTime:     time.Minute,
+		MaxTotalWait: 1000 * time.Millisecond,
+		MaxGap:       200 * time.Millisecond,
+	}
+	newStream := util.NewBatchStream[*userDataUpdate, error](fn, opts)
+	stream, _ := e.userDataUpdates.GetOrSet(namespaceId, newStream)
+	return stream
 }
 
-func (e *matchingEngineImpl) userDataUpdateLoop(namespaceId string, channel *userDataChannelContext) {
-	const maxUpdates = 100
-	const exitGoroutineAfter = time.Minute
-	const maxTotalWait = 1000 * time.Millisecond
-	const maxGap = 200 * time.Millisecond
+func (e *matchingEngineImpl) applyUserDataUpdateBatch(namespaceId string, batch []*userDataUpdate) error {
+	ctx, cancel := context.WithTimeout(context.Background(), ioTimeout)
+	// TODO: should use namespace id here
+	ctx = headers.SetCallerInfo(ctx, headers.NewBackgroundCallerInfo(namespaceId))
+	defer cancel()
 
-	defer channel.running.Store(false)
-
-	for {
-		var updates []*userDataUpdate
-
-		// wait for first update. if no updates after a while, exit the goroutine
-		select {
-		case update := <-channel.ch:
-			updates = append(updates, update)
-		case <-time.After(exitGoroutineAfter):
-			return
-		}
-
-		// try to add more updates. stop after a gap of maxGap, total time of maxTotalWait, or
-		// maxUpdates updates.
-		maxWaitC := time.After(maxTotalWait)
-	loop:
-		for len(updates) < maxUpdates {
-			select {
-			case update := <-channel.ch:
-				updates = append(updates, update)
-			case <-time.After(maxGap):
-				break loop
-			case <-maxWaitC:
-				break loop
-			}
-		}
-
-		updatesMap := make(map[string]*persistence.SingleTaskQueueUserDataUpdate, len(updates))
-		for _, update := range updates {
-			updatesMap[update.taskQueue] = &update.update
-		}
-
-		// now apply the batch of updates
-		ctx := context.TODO() // FIXME
-		err := e.taskManager.UpdateTaskQueueUserData(ctx, &persistence.UpdateTaskQueueUserDataRequest{
-			NamespaceID: namespaceId,
-			Updates:     updatesMap,
-		})
-
-		// send responses
-		for _, update := range updates {
-			update.response <- err
-		}
+	// convert to map
+	updatesMap := make(map[string]*persistence.SingleTaskQueueUserDataUpdate)
+	for _, update := range batch {
+		updatesMap[update.taskQueue] = &update.update
 	}
+
+	// now apply the batch of updates
+	return e.taskManager.UpdateTaskQueueUserData(ctx, &persistence.UpdateTaskQueueUserDataRequest{
+		NamespaceID: namespaceId,
+		Updates:     updatesMap,
+	})
 }
 
 func (e *matchingEngineImpl) getHostInfo(partitionKey string) (string, error) {
