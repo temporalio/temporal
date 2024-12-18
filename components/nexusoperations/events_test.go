@@ -144,50 +144,6 @@ func TestCherryPick(t *testing.T) {
 }
 
 func TestTerminalStatesDeletion(t *testing.T) {
-	applyEventAndCheckDeletion := func(
-		t *testing.T,
-		node *hsm.Node,
-		eventID int64,
-		def hsm.EventDefinition,
-		attr interface{},
-	) {
-		event := &historypb.HistoryEvent{
-			EventTime: timestamppb.Now(),
-		}
-
-		switch d := def.(type) {
-		case nexusoperations.CompletedEventDefinition:
-			event.EventType = d.Type()
-			event.Attributes = &historypb.HistoryEvent_NexusOperationCompletedEventAttributes{
-				NexusOperationCompletedEventAttributes: attr.(*historypb.NexusOperationCompletedEventAttributes),
-			}
-		case nexusoperations.FailedEventDefinition:
-			event.EventType = d.Type()
-			event.Attributes = &historypb.HistoryEvent_NexusOperationFailedEventAttributes{
-				NexusOperationFailedEventAttributes: attr.(*historypb.NexusOperationFailedEventAttributes),
-			}
-		case nexusoperations.CanceledEventDefinition:
-			event.EventType = d.Type()
-			event.Attributes = &historypb.HistoryEvent_NexusOperationCanceledEventAttributes{
-				NexusOperationCanceledEventAttributes: attr.(*historypb.NexusOperationCanceledEventAttributes),
-			}
-		case nexusoperations.TimedOutEventDefinition:
-			event.EventType = d.Type()
-			event.Attributes = &historypb.HistoryEvent_NexusOperationTimedOutEventAttributes{
-				NexusOperationTimedOutEventAttributes: attr.(*historypb.NexusOperationTimedOutEventAttributes),
-			}
-		default:
-			t.Fatalf("unknown event definition type: %T", def)
-		}
-
-		err := def.Apply(node.Parent, event)
-		require.NoError(t, err)
-
-		coll := nexusoperations.MachineCollection(node.Parent)
-		_, err = coll.Node(strconv.FormatInt(eventID, 10))
-		require.ErrorIs(t, err, hsm.ErrStateMachineNotFound)
-	}
-
 	testCases := []struct {
 		name       string
 		def        hsm.EventDefinition
@@ -243,7 +199,41 @@ func TestTerminalStatesDeletion(t *testing.T) {
 				a.ScheduledEventId = eventID
 			}
 
-			applyEventAndCheckDeletion(t, node, eventID, tc.def, tc.attributes)
+			event := &historypb.HistoryEvent{
+				EventTime: timestamppb.Now(),
+			}
+
+			switch d := tc.def.(type) {
+			case nexusoperations.CompletedEventDefinition:
+				event.EventType = d.Type()
+				event.Attributes = &historypb.HistoryEvent_NexusOperationCompletedEventAttributes{
+					NexusOperationCompletedEventAttributes: tc.attributes.(*historypb.NexusOperationCompletedEventAttributes),
+				}
+			case nexusoperations.FailedEventDefinition:
+				event.EventType = d.Type()
+				event.Attributes = &historypb.HistoryEvent_NexusOperationFailedEventAttributes{
+					NexusOperationFailedEventAttributes: tc.attributes.(*historypb.NexusOperationFailedEventAttributes),
+				}
+			case nexusoperations.CanceledEventDefinition:
+				event.EventType = d.Type()
+				event.Attributes = &historypb.HistoryEvent_NexusOperationCanceledEventAttributes{
+					NexusOperationCanceledEventAttributes: tc.attributes.(*historypb.NexusOperationCanceledEventAttributes),
+				}
+			case nexusoperations.TimedOutEventDefinition:
+				event.EventType = d.Type()
+				event.Attributes = &historypb.HistoryEvent_NexusOperationTimedOutEventAttributes{
+					NexusOperationTimedOutEventAttributes: tc.attributes.(*historypb.NexusOperationTimedOutEventAttributes),
+				}
+			default:
+				t.Fatalf("unknown event definition type: %T", tc.def)
+			}
+
+			err = tc.def.Apply(node.Parent, event)
+			require.NoError(t, err)
+
+			coll := nexusoperations.MachineCollection(node.Parent)
+			_, err = coll.Node(strconv.FormatInt(eventID, 10))
+			require.ErrorIs(t, err, hsm.ErrStateMachineNotFound)
 		})
 	}
 }
