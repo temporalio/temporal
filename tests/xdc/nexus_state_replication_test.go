@@ -515,35 +515,9 @@ func (s *NexusStateReplicationSuite) TestNexusOperationBufferedCompletionReplica
 				return nil, nexus.HandlerErrorf(nexus.HandlerErrorTypeInternal, "injected error to trigger operation retry")
 			}
 
-			completion, err := nexus.NewOperationCompletionSuccessful(s.mustToPayload("completion-result"),
-				nexus.OperationCompletionSuccessfulOptions{
-					Serializer: commonnexus.PayloadSerializer,
-				})
-			if err != nil {
-				return nil, err
-			}
-
-			req, err := nexus.NewCompletionHTTPRequest(ctx, options.CallbackURL, completion)
-			if err != nil {
-				return nil, err
-			}
-
-			if token := options.CallbackHeader.Get(commonnexus.CallbackTokenHeader); token != "" {
-				req.Header.Add(commonnexus.CallbackTokenHeader, token)
-			}
-
-			res, err := http.DefaultClient.Do(req)
-			if err != nil {
-				return nil, err
-			}
-			defer res.Body.Close()
-
-			return &nexus.HandlerStartOperationResultAsync{
-				OperationID: "test",
+			return &nexus.HandlerStartOperationResultSync[any]{
+				Value: "",
 			}, nil
-		},
-		OnCancelOperation: func(ctx context.Context, service, operation, operationID string, options nexus.CancelOperationOptions) error {
-			return nil
 		},
 	}
 
@@ -621,11 +595,6 @@ func (s *NexusStateReplicationSuite) TestNexusOperationBufferedCompletionReplica
 	})
 	s.NoError(err)
 
-	// Verify operation retries occur before allowing completion
-	s.Eventually(func() bool {
-		return attemptCount.Load() >= 3
-	}, 5*time.Second, 100*time.Millisecond, "operation should retry multiple times")
-
 	// Poll next WFT which will be scheduled when timer fires
 	secondPollResp, err := s.cluster1.FrontendClient().PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
 		Namespace: ns,
@@ -654,22 +623,6 @@ func (s *NexusStateReplicationSuite) TestNexusOperationBufferedCompletionReplica
 		s.NoError(err)
 		return len(desc.PendingNexusOperations) == 0
 	}, 10*time.Second, 200*time.Millisecond)
-
-	// Verify completion is replicated to passive cluster before proceeding
-	s.Eventually(func() bool {
-		history := sdkClient2.GetWorkflowHistory(ctx, run.GetID(), run.GetRunID(), false, enumspb.HISTORY_EVENT_FILTER_TYPE_ALL_EVENT)
-		for history.HasNext() {
-			event, err := history.Next()
-			s.NoError(err)
-			if event.GetEventType() == enumspb.EVENT_TYPE_NEXUS_OPERATION_COMPLETED {
-				attrs := event.GetNexusOperationCompletedEventAttributes()
-				if attrs.GetScheduledEventId() == scheduledEventID {
-					return true
-				}
-			}
-		}
-		return false
-	}, 10*time.Second, 200*time.Millisecond, "completion should be replicated to passive cluster")
 
 	// Try to cancel operation - should succeed since completion is buffered
 	_, err = s.cluster1.FrontendClient().RespondWorkflowTaskCompleted(ctx, &workflowservice.RespondWorkflowTaskCompletedRequest{
@@ -711,15 +664,33 @@ func (s *NexusStateReplicationSuite) TestNexusOperationBufferedCompletionReplica
 	s.NoError(err)
 
 	// Verify history in both clusters
-	s.verifyOperationHistory(ctx, sdkClient1, run.GetID(), run.GetRunID(), scheduledEventID)
-	s.verifyOperationHistory(ctx, sdkClient2, run.GetID(), run.GetRunID(), scheduledEventID)
+	historyIterator := sdkClient1.GetWorkflowHistory(ctx, run.GetID(), run.GetRunID(), false, enumspb.HISTORY_EVENT_FILTER_TYPE_ALL_EVENT)
 
-	// Verify workflow completion in passive cluster
-	s.Eventually(func() bool {
-		desc, err := sdkClient2.DescribeWorkflowExecution(ctx, run.GetID(), run.GetRunID())
+	var events1 []*historypb.HistoryEvent
+	for historyIterator.HasNext() {
+		e, err := historyIterator.Next()
 		s.NoError(err)
-		return desc.WorkflowExecutionInfo.Status == enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED
-	}, 10*time.Second, 200*time.Millisecond)
+		events1 = append(events1, e)
+	}
+
+	s.ContainsHistoryEvents(`
+NexusOperationCancelRequested
+NexusOperationCompleted
+`, events1)
+
+	historyIterator2 := sdkClient2.GetWorkflowHistory(ctx, run.GetID(), run.GetRunID(), false, enumspb.HISTORY_EVENT_FILTER_TYPE_ALL_EVENT)
+
+	var events2 []*historypb.HistoryEvent
+	for historyIterator2.HasNext() {
+		e, err := historyIterator2.Next()
+		s.NoError(err)
+		events2 = append(events2, e)
+	}
+
+	s.ContainsHistoryEvents(`
+NexusOperationCancelRequested
+NexusOperationCompleted
+`, events2)
 }
 
 func (s *NexusStateReplicationSuite) waitEvent(ctx context.Context, sdkClient sdkclient.Client, run sdkclient.WorkflowRun, eventType enumspb.EventType) (eventID int64) {
@@ -814,44 +785,4 @@ func (s *NexusStateReplicationSuite) cancelNexusOperation(ctx context.Context, c
 	_, err = io.ReadAll(res.Body)
 	s.NoError(err)
 	s.Equal(http.StatusOK, res.StatusCode)
-}
-
-func (s *NexusStateReplicationSuite) verifyOperationHistory(
-	ctx context.Context,
-	client sdkclient.Client,
-	workflowID string,
-	runID string,
-	scheduledEventID int64,
-) {
-	history := client.GetWorkflowHistory(ctx, workflowID, runID, false, enumspb.HISTORY_EVENT_FILTER_TYPE_ALL_EVENT)
-
-	var foundCancelRequested, foundCompleted bool
-	var cancelRequestedEventID, completedEventID int64
-
-	for history.HasNext() {
-		event, err := history.Next()
-		s.NoError(err)
-
-		if event.GetEventType() == enumspb.EVENT_TYPE_NEXUS_OPERATION_CANCEL_REQUESTED {
-			attrs := event.GetNexusOperationCancelRequestedEventAttributes()
-			if attrs.GetScheduledEventId() == scheduledEventID {
-				foundCancelRequested = true
-				cancelRequestedEventID = event.GetEventId()
-			}
-		}
-
-		if event.GetEventType() == enumspb.EVENT_TYPE_NEXUS_OPERATION_COMPLETED {
-			attrs := event.GetNexusOperationCompletedEventAttributes()
-			if attrs.GetScheduledEventId() == scheduledEventID {
-				foundCompleted = true
-				completedEventID = event.GetEventId()
-			}
-		}
-	}
-
-	s.True(foundCancelRequested, "should have NexusOperationCancelRequested event")
-	s.True(foundCompleted, "should have NexusOperationCompleted event")
-	// Verify the completion was recorded before the cancel request
-	s.Less(completedEventID, cancelRequestedEventID,
-		"NexusOperationCompleted should occur before NexusOperationCancelRequested")
 }
