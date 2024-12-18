@@ -570,6 +570,9 @@ func (r *WorkflowStateReplicatorImpl) backFillEvents(
 		}
 		events = append(events, e)
 	}
+	if len(events) == 0 {
+		return nil
+	}
 	var newRunEvents []*historypb.HistoryEvent
 	var newRunID string
 	if newRunInfo != nil {
