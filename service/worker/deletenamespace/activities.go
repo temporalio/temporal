@@ -32,6 +32,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/sdk/temporal"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -41,8 +42,9 @@ import (
 
 type (
 	localActivities struct {
-		metadataManager persistence.MetadataManager
-		logger          log.Logger
+		metadataManager   persistence.MetadataManager
+		blockedNamespaces dynamicconfig.TypedPropertyFn[[]string]
+		logger            log.Logger
 	}
 
 	getNamespaceInfoResult struct {
@@ -50,15 +52,21 @@ type (
 		Namespace   namespace.Name
 		Clusters    []string
 	}
+
+	blockedNamespaces struct {
+		Names []string
+	}
 )
 
 func newLocalActivities(
 	metadataManager persistence.MetadataManager,
+	blockedNamespaces dynamicconfig.TypedPropertyFn[[]string],
 	logger log.Logger,
 ) *localActivities {
 	return &localActivities{
-		metadataManager: metadataManager,
-		logger:          logger,
+		metadataManager:   metadataManager,
+		blockedNamespaces: blockedNamespaces,
+		logger:            logger,
 	}
 }
 
@@ -84,6 +92,10 @@ func (a *localActivities) GetNamespaceInfoActivity(ctx context.Context, nsID nam
 		Namespace:   namespace.Name(getNamespaceResponse.Namespace.Info.Name),
 		Clusters:    getNamespaceResponse.Namespace.ReplicationConfig.Clusters,
 	}, nil
+}
+
+func (a *localActivities) GetBlockedNamespacesActivity(_ context.Context) (blockedNamespaces, error) {
+	return blockedNamespaces{Names: a.blockedNamespaces()}, nil
 }
 
 func (a *localActivities) MarkNamespaceDeletedActivity(ctx context.Context, nsName namespace.Name) error {

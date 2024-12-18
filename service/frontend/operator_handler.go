@@ -26,6 +26,7 @@ package frontend
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"maps"
 	"sync/atomic"
@@ -37,6 +38,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 	sdkclient "go.temporal.io/sdk/client"
+	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/server/api/adminservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	svc "go.temporal.io/server/client"
@@ -61,6 +63,7 @@ import (
 	"go.temporal.io/server/service/worker/addsearchattributes"
 	"go.temporal.io/server/service/worker/deletenamespace"
 	"go.temporal.io/server/service/worker/deletenamespace/deleteexecutions"
+	delns_errors "go.temporal.io/server/service/worker/deletenamespace/errors"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/health"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
@@ -610,10 +613,6 @@ func (h *OperatorHandlerImpl) DeleteNamespace(
 		return nil, errRequestNotSet
 	}
 
-	if request.GetNamespace() == primitives.SystemLocalNamespace || request.GetNamespaceId() == primitives.SystemNamespaceID {
-		return nil, errUnableDeleteSystemNamespace
-	}
-
 	if !h.config.AllowDeleteNamespaceIfNexusEndpointTarget() {
 		// Get the namespace name in case the request is to delete by ID so we can verify that this namespace is not
 		// associated with a Nexus endpoint.
@@ -684,8 +683,12 @@ func (h *OperatorHandlerImpl) DeleteNamespace(
 	var wfResult deletenamespace.DeleteNamespaceWorkflowResult
 	err = run.Get(ctx, &wfResult)
 	if err != nil {
-		execution := &commonpb.WorkflowExecution{WorkflowId: deletenamespace.WorkflowName, RunId: run.GetRunID()}
-		return nil, serviceerror.NewSystemWorkflow(execution, err)
+		// Special handling for validation errors. Convert them to InvalidArgument.
+		var appErr *temporal.ApplicationError
+		if errors.As(err, &appErr) && appErr.Type() == delns_errors.ValidationErrorErrType {
+			return nil, serviceerror.NewInvalidArgument(appErr.Message())
+		}
+		return nil, serviceerror.NewSystemWorkflow(&commonpb.WorkflowExecution{WorkflowId: deletenamespace.WorkflowName, RunId: run.GetRunID()}, err)
 	}
 
 	return &operatorservice.DeleteNamespaceResponse{
