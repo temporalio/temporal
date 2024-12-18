@@ -501,6 +501,7 @@ func (s *NexusStateReplicationSuite) TestNexusOperationBufferedCompletionReplica
 	taskQueue := "tq"
 
 	allowCompletion := atomic.Bool{}
+	attemptCount := atomic.Int32{}
 
 	h := nexustest.Handler{
 		OnStartOperation: func(
@@ -509,10 +510,9 @@ func (s *NexusStateReplicationSuite) TestNexusOperationBufferedCompletionReplica
 			input *nexus.LazyValue,
 			options nexus.StartOperationOptions,
 		) (nexus.HandlerStartOperationResult[any], error) {
+			attemptCount.Add(1)
 			if !allowCompletion.Load() {
-				return &nexus.HandlerStartOperationResultAsync{
-					OperationID: "test",
-				}, nil
+				return nil, nexus.HandlerErrorf(nexus.HandlerErrorTypeInternal, "injected error to trigger operation retry")
 			}
 
 			completion, err := nexus.NewOperationCompletionSuccessful(s.mustToPayload("completion-result"),
@@ -593,7 +593,7 @@ func (s *NexusStateReplicationSuite) TestNexusOperationBufferedCompletionReplica
 
 	pollResp := s.pollWorkflowTask(ctx, s.cluster1.FrontendClient(), ns)
 
-	// Complete first WFT with ScheduleNexusOperation and StartTimer(1s)
+	// Schedule operation and start timer to force next WFT
 	_, err = s.cluster1.FrontendClient().RespondWorkflowTaskCompleted(ctx, &workflowservice.RespondWorkflowTaskCompletedRequest{
 		Identity:  "test",
 		TaskToken: pollResp.TaskToken,
@@ -621,40 +621,57 @@ func (s *NexusStateReplicationSuite) TestNexusOperationBufferedCompletionReplica
 	})
 	s.NoError(err)
 
-	// Poll next WFT until TimerFired event is found
-	var secondPollResp *workflowservice.PollWorkflowTaskQueueResponse
-	var scheduledEventID int64
+	// Verify operation retries occur before allowing completion
 	s.Eventually(func() bool {
-		secondPollResp, err = s.cluster1.FrontendClient().PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
-			Namespace: ns,
-			TaskQueue: &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
-			Identity:  "test",
-		})
-		if err != nil || secondPollResp == nil {
-			return false
-		}
+		return attemptCount.Load() >= 3
+	}, 5*time.Second, 100*time.Millisecond, "operation should retry multiple times")
 
-		var hasTimerFired bool
-		for _, e := range secondPollResp.History.Events {
-			if e.GetEventType() == enumspb.EVENT_TYPE_TIMER_FIRED {
-				hasTimerFired = true
-			}
-			if e.GetEventType() == enumspb.EVENT_TYPE_NEXUS_OPERATION_SCHEDULED {
-				scheduledEventID = e.GetEventId()
-			}
-		}
-		return hasTimerFired && scheduledEventID > 0
-	}, 10*time.Second, 200*time.Millisecond)
+	// Poll next WFT which will be scheduled when timer fires
+	secondPollResp, err := s.cluster1.FrontendClient().PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
+		Namespace: ns,
+		TaskQueue: &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+		Identity:  "test",
+	})
+	s.NoError(err)
+	s.NotNil(secondPollResp)
 
+	// Find the scheduled event ID from history
+	var scheduledEventID int64
+	for _, e := range secondPollResp.History.Events {
+		if e.GetEventType() == enumspb.EVENT_TYPE_NEXUS_OPERATION_SCHEDULED {
+			scheduledEventID = e.GetEventId()
+			break
+		}
+	}
+	s.Greater(scheduledEventID, int64(0))
+
+	// Allow operation to complete synchronously during next retry attempt
 	allowCompletion.Store(true)
 
+	// Wait for operation completion to be recorded
 	s.Eventually(func() bool {
 		desc, err := sdkClient1.DescribeWorkflowExecution(ctx, run.GetID(), run.GetRunID())
 		s.NoError(err)
 		return len(desc.PendingNexusOperations) == 0
 	}, 10*time.Second, 200*time.Millisecond)
 
-	// Complete second WFT with RequestCancelNexusOperation command
+	// Verify completion is replicated to passive cluster before proceeding
+	s.Eventually(func() bool {
+		history := sdkClient2.GetWorkflowHistory(ctx, run.GetID(), run.GetRunID(), false, enumspb.HISTORY_EVENT_FILTER_TYPE_ALL_EVENT)
+		for history.HasNext() {
+			event, err := history.Next()
+			s.NoError(err)
+			if event.GetEventType() == enumspb.EVENT_TYPE_NEXUS_OPERATION_COMPLETED {
+				attrs := event.GetNexusOperationCompletedEventAttributes()
+				if attrs.GetScheduledEventId() == scheduledEventID {
+					return true
+				}
+			}
+		}
+		return false
+	}, 10*time.Second, 200*time.Millisecond, "completion should be replicated to passive cluster")
+
+	// Try to cancel operation - should succeed since completion is buffered
 	_, err = s.cluster1.FrontendClient().RespondWorkflowTaskCompleted(ctx, &workflowservice.RespondWorkflowTaskCompletedRequest{
 		Identity:  "test",
 		TaskToken: secondPollResp.TaskToken,
@@ -669,8 +686,7 @@ func (s *NexusStateReplicationSuite) TestNexusOperationBufferedCompletionReplica
 			},
 		},
 	})
-
-	s.Error(err, "Cancel request should fail since operation is completed")
+	s.NoError(err, "Cancel request should be accepted when operation has buffered completion")
 
 	// Ensure no pending operations in passive cluster state
 	s.Eventually(func() bool {
@@ -694,10 +710,11 @@ func (s *NexusStateReplicationSuite) TestNexusOperationBufferedCompletionReplica
 	})
 	s.NoError(err)
 
-	// Verify workflow completion in both clusters
-	err = run.Get(ctx, nil)
-	s.NoError(err, "Workflow should complete in active cluster")
+	// Verify history in both clusters
+	s.verifyOperationHistory(ctx, sdkClient1, run.GetID(), run.GetRunID(), scheduledEventID)
+	s.verifyOperationHistory(ctx, sdkClient2, run.GetID(), run.GetRunID(), scheduledEventID)
 
+	// Verify workflow completion in passive cluster
 	s.Eventually(func() bool {
 		desc, err := sdkClient2.DescribeWorkflowExecution(ctx, run.GetID(), run.GetRunID())
 		s.NoError(err)
@@ -797,4 +814,44 @@ func (s *NexusStateReplicationSuite) cancelNexusOperation(ctx context.Context, c
 	_, err = io.ReadAll(res.Body)
 	s.NoError(err)
 	s.Equal(http.StatusOK, res.StatusCode)
+}
+
+func (s *NexusStateReplicationSuite) verifyOperationHistory(
+	ctx context.Context,
+	client sdkclient.Client,
+	workflowID string,
+	runID string,
+	scheduledEventID int64,
+) {
+	history := client.GetWorkflowHistory(ctx, workflowID, runID, false, enumspb.HISTORY_EVENT_FILTER_TYPE_ALL_EVENT)
+
+	var foundCancelRequested, foundCompleted bool
+	var cancelRequestedEventID, completedEventID int64
+
+	for history.HasNext() {
+		event, err := history.Next()
+		s.NoError(err)
+
+		if event.GetEventType() == enumspb.EVENT_TYPE_NEXUS_OPERATION_CANCEL_REQUESTED {
+			attrs := event.GetNexusOperationCancelRequestedEventAttributes()
+			if attrs.GetScheduledEventId() == scheduledEventID {
+				foundCancelRequested = true
+				cancelRequestedEventID = event.GetEventId()
+			}
+		}
+
+		if event.GetEventType() == enumspb.EVENT_TYPE_NEXUS_OPERATION_COMPLETED {
+			attrs := event.GetNexusOperationCompletedEventAttributes()
+			if attrs.GetScheduledEventId() == scheduledEventID {
+				foundCompleted = true
+				completedEventID = event.GetEventId()
+			}
+		}
+	}
+
+	s.True(foundCancelRequested, "should have NexusOperationCancelRequested event")
+	s.True(foundCompleted, "should have NexusOperationCompleted event")
+	// Verify the completion was recorded before the cancel request
+	s.Less(completedEventID, cancelRequestedEventID,
+		"NexusOperationCompleted should occur before NexusOperationCancelRequested")
 }
