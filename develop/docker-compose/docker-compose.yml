@@ -59,7 +59,7 @@ services:
       - temporal-dev-network
   prometheus:
     # Use http://localhost:9090/ to access Prometheus.
-    image: prom/prometheus:v2.30.0
+    image: prom/prometheus:latest
     container_name: temporal-dev-prometheus
     command:
       - "--log.level=error"
@@ -69,14 +69,14 @@ services:
       - "--web.console.templates=/usr/share/prometheus/consoles"
   grafana:
     # Use http://localhost:3000/ to access Grafana (admin/admin).
-    image: grafana/grafana:9.1.4
+    image: grafana/grafana:latest
     container_name: temporal-dev-grafana
     depends_on:
       - prometheus
     volumes:
       - ./grafana/provisioning/:/etc/grafana/provisioning/
   temporal-ui:
-    image: temporalio/ui:2.26.2
+    image: temporalio/ui:latest
     container_name: temporal-dev-ui
 
 networks:
