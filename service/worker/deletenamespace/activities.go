@@ -124,12 +124,16 @@ func (a *localActivities) MarkNamespaceDeletedActivity(ctx context.Context, nsNa
 func (a *localActivities) GenerateDeletedNamespaceNameActivity(ctx context.Context, nsID namespace.ID, nsName namespace.Name) (namespace.Name, error) {
 	ctx = headers.SetCallerName(ctx, nsName.String())
 
+	logger := log.With(a.logger,
+		tag.WorkflowNamespace(nsName.String()),
+		tag.WorkflowNamespaceID(nsID.String()))
+
 	const initialSuffixLength = 5
 
 	for suffixLength := initialSuffixLength; suffixLength < len(nsID.String()); suffixLength++ { // Just in case. 5 chars from ID should be good enough.
 		suffix := fmt.Sprintf("-deleted-%s", nsID.String()[:suffixLength])
 		if strings.HasSuffix(nsName.String(), suffix) {
-			a.logger.Info("Namespace is already renamed for deletion")
+			logger.Info("Namespace is already renamed for deletion")
 			return nsName, nil
 		}
 		newName := fmt.Sprintf("%s%s", nsName, suffix)
@@ -139,12 +143,12 @@ func (a *localActivities) GenerateDeletedNamespaceNameActivity(ctx context.Conte
 		})
 		switch err.(type) {
 		case nil:
-			a.logger.Warn("Regenerate namespace name due to collision.", tag.WorkflowNamespace(nsName.String()), tag.WorkflowNamespace(newName))
+			logger.Warn("Regenerate namespace name due to collision.", tag.NewStringTag("wf-new-namespace", newName))
 		case *serviceerror.NamespaceNotFound:
-			a.logger.Info("Generated new name for deleted namespace.", tag.WorkflowNamespace(nsName.String()), tag.WorkflowNamespace(newName))
+			logger.Info("Generated new name for deleted namespace.", tag.NewStringTag("wf-new-namespace", newName))
 			return namespace.Name(newName), nil
 		default:
-			a.logger.Error("Unable to get namespace details.", tag.WorkflowNamespace(nsName.String()), tag.Error(err))
+			logger.Error("Unable to get namespace details.", tag.Error(err))
 			return namespace.EmptyName, err
 		}
 	}

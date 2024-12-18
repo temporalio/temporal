@@ -87,7 +87,7 @@ func NewActivities(
 	return &Activities{
 		visibilityManager: visibilityManager,
 		historyClient:     historyClient,
-		metricsHandler:    metricsHandler.WithTags(metrics.OperationTag(metrics.DeleteExecutionsWorkflowScope)),
+		metricsHandler:    metricsHandler,
 		logger:            logger,
 	}
 }
@@ -99,7 +99,7 @@ func NewLocalActivities(
 ) *LocalActivities {
 	return &LocalActivities{
 		visibilityManager: visibilityManager,
-		metricsHandler:    metricsHandler.WithTags(metrics.OperationTag(metrics.DeleteExecutionsWorkflowScope)),
+		metricsHandler:    metricsHandler,
 		logger:            logger,
 	}
 }
@@ -126,6 +126,9 @@ func (a *LocalActivities) GetNextPageTokenActivity(ctx context.Context, params G
 
 func (a *Activities) DeleteExecutionsActivity(ctx context.Context, params DeleteExecutionsActivityParams) (DeleteExecutionsActivityResult, error) {
 	ctx = headers.SetCallerName(ctx, params.Namespace.String())
+	logger := log.With(a.logger,
+		tag.WorkflowNamespace(params.Namespace.String()),
+		tag.WorkflowNamespaceID(params.NamespaceID.String()))
 
 	progressCh := make(chan DeleteExecutionsActivityResult, 1)
 	defer func() { close(progressCh) }()
@@ -135,7 +138,7 @@ func (a *Activities) DeleteExecutionsActivity(ctx context.Context, params Delete
 		var previousAttemptResult DeleteExecutionsActivityResult
 		if err := activity.GetHeartbeatDetails(ctx, &previousAttemptResult); err != nil {
 			// If heartbeat details can't be read, just log the error and continue because they are not important.
-			a.logger.Warn("Unable to get heartbeat details from previous attempt while deleting workflow executions.", tag.WorkflowNamespace(params.Namespace.String()), tag.Error(err))
+			logger.Warn("Unable to get heartbeat details from previous attempt while deleting workflow executions.", tag.Error(err))
 		} else {
 			// Carry over only success count because executions which gave error before,
 			// either will give an error again or will be successfully deleted.
@@ -174,15 +177,14 @@ func (a *Activities) DeleteExecutionsActivity(ctx context.Context, params Delete
 	}
 	resp, err := a.visibilityManager.ListWorkflowExecutions(ctx, req)
 	if err != nil {
-		a.logger.Error("Unable to list all workflow executions.", tag.WorkflowNamespace(params.Namespace.String()), tag.Error(err))
+		logger.Error("Unable to list all workflow executions.", tag.Error(err))
 		return result, err
 	}
 	rateLimiter := quotas.NewRateLimiter(float64(params.RPS), params.RPS)
 	for _, execution := range resp.Executions {
 		err = rateLimiter.Wait(ctx)
 		if err != nil {
-			metrics.DeleteExecutionRateLimitedCount.With(a.metricsHandler.WithTags(metrics.NamespaceTag(params.Namespace.String()))).Record(1)
-			a.logger.Error("Workflow executions delete rate limiter error.", tag.WorkflowNamespace(params.Namespace.String()), tag.Error(err))
+			logger.Error("Workflow executions delete rate limiter error.", tag.Error(err))
 			return result, fmt.Errorf("rate limiter error: %w", err)
 		}
 		_, err = a.historyClient.DeleteWorkflowExecution(ctx, &historyservice.DeleteWorkflowExecutionRequest{
@@ -196,19 +198,19 @@ func (a *Activities) DeleteExecutionsActivity(ctx context.Context, params Delete
 
 		case *serviceerror.NotFound:
 			metrics.DeleteExecutionsNotFoundCount.With(a.metricsHandler.WithTags(metrics.NamespaceTag(params.Namespace.String()))).Record(1)
-			a.logger.Info("Workflow execution exists in the visibility store but not in the main store.", tag.WorkflowNamespace(params.Namespace.String()), tag.WorkflowID(execution.Execution.GetWorkflowId()), tag.WorkflowRunID(execution.Execution.GetRunId()))
+			logger.Info("Workflow execution exists in the visibility store but not in the main store.", tag.WorkflowID(execution.Execution.GetWorkflowId()), tag.WorkflowRunID(execution.Execution.GetRunId()))
 			// The reasons why workflow execution doesn't exist in the main store, but exists in the visibility store might be:
 			// 1. Someone else deleted the workflow execution after the last ListWorkflowExecutions call but before historyClient.DeleteWorkflowExecution call.
 			// 2. Database is in inconsistent state: workflow execution was manually deleted from history store, but not from visibility store.
 			// To avoid continuously getting this workflow execution from visibility store, it needs to be deleted directly from visibility store.
-			s, e := a.deleteWorkflowExecutionFromVisibility(ctx, params.NamespaceID, params.Namespace, execution)
+			s, e := a.deleteWorkflowExecutionFromVisibility(ctx, params.NamespaceID, params.Namespace, execution, logger)
 			result.SuccessCount += s
 			result.ErrorCount += e
 
 		default:
 			result.ErrorCount++
 			metrics.DeleteExecutionsFailureCount.With(a.metricsHandler.WithTags(metrics.NamespaceTag(params.Namespace.String()))).Record(1)
-			a.logger.Error("Unable to delete workflow execution.", tag.WorkflowNamespace(params.Namespace.String()), tag.WorkflowID(execution.Execution.GetWorkflowId()), tag.WorkflowRunID(execution.Execution.GetRunId()), tag.Error(err))
+			logger.Error("Unable to delete workflow execution.", tag.WorkflowID(execution.Execution.GetWorkflowId()), tag.WorkflowRunID(execution.Execution.GetRunId()), tag.Error(err))
 		}
 		select {
 		case progressCh <- result:
@@ -228,9 +230,12 @@ func (a *Activities) deleteWorkflowExecutionFromVisibility(
 	nsID namespace.ID,
 	nsName namespace.Name,
 	execution *workflowpb.WorkflowExecutionInfo,
+	logger log.Logger,
 ) (successCount int, errorCount int) {
 
-	a.logger.Info("Deleting workflow execution from visibility.", tag.WorkflowNamespace(nsName.String()), tag.WorkflowID(execution.Execution.GetWorkflowId()), tag.WorkflowRunID(execution.Execution.GetRunId()))
+	logger = log.With(logger, tag.WorkflowID(execution.Execution.GetWorkflowId()), tag.WorkflowRunID(execution.Execution.GetRunId()))
+
+	logger.Info("Deleting workflow execution from visibility.")
 	_, err := a.historyClient.DeleteWorkflowVisibilityRecord(ctx, &historyservice.DeleteWorkflowVisibilityRecordRequest{
 		NamespaceId: nsID.String(),
 		Execution:   execution.GetExecution(),
@@ -239,15 +244,15 @@ func (a *Activities) deleteWorkflowExecutionFromVisibility(
 	case nil:
 		// Indicates that main and visibility stores were in inconsistent state.
 		metrics.DeleteExecutionsSuccessCount.With(a.metricsHandler.WithTags(metrics.NamespaceTag(nsName.String()))).Record(1)
-		a.logger.Info("Workflow execution deleted from visibility.", tag.WorkflowNamespace(nsName.String()), tag.WorkflowID(execution.Execution.GetWorkflowId()), tag.WorkflowRunID(execution.Execution.GetRunId()))
+		logger.Info("Workflow execution deleted from visibility.")
 		return 1, 0
 	case *serviceerror.NotFound:
 		// Indicates that someone else deleted workflow execution.
-		a.logger.Error("Workflow execution is not found in visibility store.", tag.WorkflowNamespace(nsName.String()), tag.WorkflowID(execution.Execution.GetWorkflowId()), tag.WorkflowRunID(execution.Execution.GetRunId()))
+		logger.Error("Workflow execution is not found in visibility store.")
 		return 0, 0
 	default:
 		metrics.DeleteExecutionsFailureCount.With(a.metricsHandler.WithTags(metrics.NamespaceTag(nsName.String()))).Record(1)
-		a.logger.Error("Unable to delete workflow execution from visibility store.", tag.WorkflowNamespace(nsName.String()), tag.WorkflowID(execution.Execution.GetWorkflowId()), tag.WorkflowRunID(execution.Execution.GetRunId()), tag.Error(err))
+		logger.Error("Unable to delete workflow execution from visibility store.", tag.Error(err))
 		return 0, 1
 	}
 }

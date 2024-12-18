@@ -83,6 +83,10 @@ func (a *LocalActivities) IsAdvancedVisibilityActivity(_ context.Context, _ name
 func (a *LocalActivities) CountExecutionsAdvVisibilityActivity(ctx context.Context, nsID namespace.ID, nsName namespace.Name) (int64, error) {
 	ctx = headers.SetCallerName(ctx, nsName.String())
 
+	logger := log.With(a.logger,
+		tag.WorkflowNamespace(nsName.String()),
+		tag.WorkflowNamespaceID(nsID.String()))
+
 	req := &manager.CountWorkflowExecutionsRequest{
 		NamespaceID: nsID,
 		Namespace:   nsName,
@@ -90,14 +94,14 @@ func (a *LocalActivities) CountExecutionsAdvVisibilityActivity(ctx context.Conte
 	}
 	resp, err := a.visibilityManager.CountWorkflowExecutions(ctx, req)
 	if err != nil {
-		a.logger.Error("Unable to count workflow executions.", tag.WorkflowNamespace(nsName.String()), tag.Error(err))
+		logger.Error("Unable to count workflow executions.", tag.Error(err))
 		return 0, err
 	}
 
 	if resp.Count > 0 {
-		a.logger.Info("There are some workflows in namespace.", tag.WorkflowNamespace(nsName.String()), tag.Counter(int(resp.Count)))
+		logger.Info("There are some workflows in namespace.", tag.Counter(int(resp.Count)))
 	} else {
-		a.logger.Info("There are no workflows in namespace.", tag.WorkflowNamespace(nsName.String()))
+		logger.Info("There are no workflows in namespace.")
 	}
 	return resp.Count, err
 }
@@ -105,6 +109,10 @@ func (a *LocalActivities) CountExecutionsAdvVisibilityActivity(ctx context.Conte
 func (a *Activities) EnsureNoExecutionsAdvVisibilityActivity(ctx context.Context, nsID namespace.ID, nsName namespace.Name, notDeletedCount int) error {
 	ctx = headers.SetCallerName(ctx, nsName.String())
 
+	logger := log.With(a.logger,
+		tag.WorkflowNamespace(nsName.String()),
+		tag.WorkflowNamespaceID(nsID.String()))
+
 	req := &manager.CountWorkflowExecutionsRequest{
 		NamespaceID: nsID,
 		Namespace:   nsName,
@@ -112,7 +120,7 @@ func (a *Activities) EnsureNoExecutionsAdvVisibilityActivity(ctx context.Context
 	}
 	resp, err := a.visibilityManager.CountWorkflowExecutions(ctx, req)
 	if err != nil {
-		a.logger.Error("Unable to count workflow executions.", tag.WorkflowNamespace(nsName.String()), tag.Error(err))
+		logger.Error("Unable to count workflow executions.", tag.Error(err))
 		return err
 	}
 
@@ -123,33 +131,37 @@ func (a *Activities) EnsureNoExecutionsAdvVisibilityActivity(ctx context.Context
 		if activity.HasHeartbeatDetails(ctx) && activityInfo.Attempt > 7 {
 			var previousAttemptCount int
 			if err := activity.GetHeartbeatDetails(ctx, &previousAttemptCount); err != nil {
-				a.logger.Error("Unable to get previous heartbeat details.", tag.WorkflowNamespace(nsName.String()), tag.Error(err))
+				logger.Error("Unable to get previous heartbeat details.", tag.Error(err))
 				return err
 			}
 			if count == previousAttemptCount {
 				// No progress was made. Something bad happened on the task processor side or new executions were created during deletion.
 				// Return non-retryable error and workflow will try to delete executions again.
-				a.logger.Warn("No progress was made.", tag.WorkflowNamespace(nsName.String()), tag.Attempt(activityInfo.Attempt), tag.Counter(count))
+				logger.Warn("No progress was made.", tag.Attempt(activityInfo.Attempt), tag.Counter(count))
 				return errors.NewNoProgressError(count)
 			}
 		}
 
-		a.logger.Warn("Some workflow executions still exist.", tag.WorkflowNamespace(nsName.String()), tag.Counter(count))
+		logger.Warn("Some workflow executions still exist.", tag.Counter(count))
 		activity.RecordHeartbeat(ctx, count)
 		return errors.NewExecutionsStillExistError(count)
 	}
 
 	if notDeletedCount > 0 {
-		a.logger.Warn("Some workflow executions were not deleted and still exist.", tag.WorkflowNamespace(nsName.String()), tag.Counter(notDeletedCount))
+		logger.Warn("Some workflow executions were not deleted and still exist.", tag.Counter(notDeletedCount))
 		return errors.NewNotDeletedExecutionsStillExistError(notDeletedCount)
 	}
 
-	a.logger.Info("All workflow executions are deleted successfully.", tag.WorkflowNamespace(nsName.String()))
+	logger.Info("All workflow executions are deleted successfully.")
 	return nil
 }
 
 func (a *LocalActivities) DeleteNamespaceActivity(ctx context.Context, nsID namespace.ID, nsName namespace.Name) error {
 	ctx = headers.SetCallerName(ctx, nsName.String())
+
+	logger := log.With(a.logger,
+		tag.WorkflowNamespace(nsName.String()),
+		tag.WorkflowNamespaceID(nsID.String()))
 
 	deleteNamespaceRequest := &persistence.DeleteNamespaceByNameRequest{
 		Name: nsName.String(),
@@ -157,10 +169,10 @@ func (a *LocalActivities) DeleteNamespaceActivity(ctx context.Context, nsID name
 
 	err := a.metadataManager.DeleteNamespaceByName(ctx, deleteNamespaceRequest)
 	if err != nil {
-		a.logger.Error("Unable to delete namespace from persistence.", tag.WorkflowNamespace(nsName.String()), tag.Error(err))
+		logger.Error("Unable to delete namespace from persistence.", tag.Error(err))
 		return err
 	}
 
-	a.logger.Info("Namespace is deleted.", tag.WorkflowNamespace(nsName.String()), tag.WorkflowNamespaceID(nsID.String()))
+	logger.Info("Namespace is deleted.")
 	return nil
 }

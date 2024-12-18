@@ -29,9 +29,11 @@ import (
 	"fmt"
 	"time"
 
+	"go.temporal.io/sdk/log"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/service/worker/deletenamespace/deleteexecutions"
 	"go.temporal.io/server/service/worker/deletenamespace/errors"
@@ -104,12 +106,32 @@ func validateParams(params *ReclaimResourcesParams) error {
 }
 
 func ReclaimResourcesWorkflow(ctx workflow.Context, params ReclaimResourcesParams) (ReclaimResourcesResult, error) {
-	logger := workflow.GetLogger(ctx)
-	logger.Info("Workflow started.", tag.WorkflowType(WorkflowName))
+	logger := log.With(
+		workflow.GetLogger(ctx),
+		tag.WorkflowType(WorkflowName),
+		tag.WorkflowNamespace(params.Namespace.String()),
+		tag.WorkflowNamespaceID(params.NamespaceID.String()))
+	logger.Info("Workflow started.")
 
+	var result ReclaimResourcesResult
 	if err := validateParams(&params); err != nil {
-		return ReclaimResourcesResult{}, err
+		return result, err
 	}
+
+	mh := workflow.GetMetricsHandler(ctx).WithTags(map[string]string{"namespace": params.Namespace.String()})
+	defer func() {
+		if result.NamespaceDeleted {
+			mh.Counter(metrics.ReclaimResourcesNamespaceDeleteSuccessCount.Name()).Inc(1)
+		} else {
+			mh.Counter(metrics.ReclaimResourcesNamespaceDeleteFailureCount.Name()).Inc(1)
+		}
+		if result.DeleteSuccessCount > 0 {
+			mh.Counter(metrics.ReclaimResourcesDeleteExecutionsSuccessCount.Name()).Inc(int64(result.DeleteSuccessCount))
+		}
+		if result.DeleteErrorCount > 0 {
+			mh.Counter(metrics.ReclaimResourcesDeleteExecutionsFailureCount.Name()).Inc(int64(result.DeleteErrorCount))
+		}
+	}()
 
 	ctx = workflow.WithTaskQueue(ctx, primitives.DeleteNamespaceActivityTQ)
 
@@ -119,11 +141,11 @@ func ReclaimResourcesWorkflow(ctx workflow.Context, params ReclaimResourcesParam
 	// Wait for namespace cache refresh to make sure no new executions are created.
 	err := workflow.Sleep(ctx, namespaceCacheRefreshDelay)
 	if err != nil {
-		return ReclaimResourcesResult{}, err
+		return result, err
 	}
 
 	// Step 1. Delete workflow executions.
-	result, err := deleteWorkflowExecutions(ctx, params)
+	result, err = deleteWorkflowExecutions(ctx, logger, params)
 	if err != nil {
 		return result, err
 	}
@@ -142,15 +164,14 @@ func ReclaimResourcesWorkflow(ctx workflow.Context, params ReclaimResourcesParam
 	}
 
 	result.NamespaceDeleted = true
-	logger.Info("Workflow finished successfully.", tag.WorkflowType(WorkflowName))
+	logger.Info("Workflow finished successfully.")
 	return result, nil
 }
 
-func deleteWorkflowExecutions(ctx workflow.Context, params ReclaimResourcesParams) (ReclaimResourcesResult, error) {
+func deleteWorkflowExecutions(ctx workflow.Context, logger log.Logger, params ReclaimResourcesParams) (ReclaimResourcesResult, error) {
 	var a *Activities
 	var la *LocalActivities
 
-	logger := workflow.GetLogger(ctx)
 	var result ReclaimResourcesResult
 
 	ctx1 := workflow.WithLocalActivityOptions(ctx, localActivityOptions)
@@ -183,7 +204,7 @@ func deleteWorkflowExecutions(ctx workflow.Context, params ReclaimResourcesParam
 	var der deleteexecutions.DeleteExecutionsResult
 	err = workflow.ExecuteChildWorkflow(ctx2, deleteexecutions.DeleteExecutionsWorkflow, params.DeleteExecutionsParams).Get(ctx, &der)
 	if err != nil {
-		logger.Error("Unable to execute child workflow.", tag.WorkflowType(deleteexecutions.WorkflowName), tag.Error(err))
+		logger.Error("Unable to execute child workflow.", tag.Error(err))
 		return result, fmt.Errorf("%w: %s: %v", errors.ErrUnableToExecuteChildWorkflow, deleteexecutions.WorkflowName, err)
 	}
 	result.DeleteSuccessCount = der.SuccessCount
@@ -202,7 +223,7 @@ func deleteWorkflowExecutions(ctx workflow.Context, params ReclaimResourcesParam
 					_ = appErr.Details(&notDeletedCount)
 					counterTag = tag.Counter(notDeletedCount)
 				}
-				logger.Info("Unable to delete workflow executions.", tag.WorkflowNamespace(params.Namespace.String()), counterTag)
+				logger.Info("Unable to delete workflow executions.", counterTag)
 				// appErr is not retryable. Convert it to retryable for the server to retry.
 				return result, temporal.NewApplicationError(appErr.Message(), appErr.Type(), notDeletedCount)
 			}

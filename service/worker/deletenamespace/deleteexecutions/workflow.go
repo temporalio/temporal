@@ -28,6 +28,7 @@ import (
 	"fmt"
 	"time"
 
+	"go.temporal.io/sdk/log"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
 	"go.temporal.io/server/common/log/tag"
@@ -93,8 +94,13 @@ func validateParams(params *DeleteExecutionsParams) error {
 }
 
 func DeleteExecutionsWorkflow(ctx workflow.Context, params DeleteExecutionsParams) (DeleteExecutionsResult, error) {
-	logger := workflow.GetLogger(ctx)
-	logger.Info("Workflow started.", tag.WorkflowType(WorkflowName))
+	logger := log.With(
+		workflow.GetLogger(ctx),
+		tag.WorkflowType(WorkflowName),
+		tag.WorkflowNamespace(params.Namespace.String()),
+		tag.WorkflowNamespaceID(params.NamespaceID.String()))
+
+	logger.Info("Workflow started.")
 	result := DeleteExecutionsResult{
 		SuccessCount: params.PreviousSuccessCount,
 		ErrorCount:   params.PreviousErrorCount,
@@ -179,9 +185,9 @@ func DeleteExecutionsWorkflow(ctx workflow.Context, params DeleteExecutionsParam
 	// If nextPageToken is nil then there are no more workflow executions to delete.
 	if nextPageToken == nil {
 		if result.ErrorCount == 0 {
-			logger.Info("Successfully deleted workflow executions.", tag.WorkflowNamespace(params.Namespace.String()), tag.DeletedExecutionsCount(result.SuccessCount))
+			logger.Info("Successfully deleted workflow executions.", tag.DeletedExecutionsCount(result.SuccessCount))
 		} else {
-			logger.Error("Finish deleting workflow executions with some errors.", tag.WorkflowNamespace(params.Namespace.String()), tag.DeletedExecutionsCount(result.SuccessCount), tag.DeletedExecutionsErrorCount(result.ErrorCount))
+			logger.Error("Finish deleting workflow executions with some errors.", tag.DeletedExecutionsCount(result.SuccessCount), tag.DeletedExecutionsErrorCount(result.ErrorCount))
 		}
 		return result, nil
 	}
@@ -194,6 +200,6 @@ func DeleteExecutionsWorkflow(ctx workflow.Context, params DeleteExecutionsParam
 	params.ContinueAsNewCount++
 	params.NextPageToken = nextPageToken
 
-	logger.Info("There are more workflows to delete. Continuing workflow as new.", tag.WorkflowType(WorkflowName), tag.WorkflowNamespace(params.Namespace.String()), tag.DeletedExecutionsCount(result.SuccessCount), tag.DeletedExecutionsErrorCount(result.ErrorCount), tag.Counter(params.ContinueAsNewCount))
+	logger.Info("There are more workflows to delete. Continuing workflow as new.", tag.DeletedExecutionsCount(result.SuccessCount), tag.DeletedExecutionsErrorCount(result.ErrorCount), tag.Counter(params.ContinueAsNewCount))
 	return result, workflow.NewContinueAsNewError(ctx, DeleteExecutionsWorkflow, params)
 }
