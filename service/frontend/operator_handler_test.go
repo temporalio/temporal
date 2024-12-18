@@ -57,7 +57,7 @@ import (
 	"go.temporal.io/server/common/testing/mocksdk"
 	"go.temporal.io/server/service/worker/addsearchattributes"
 	"go.temporal.io/server/service/worker/deletenamespace"
-	delns_errors "go.temporal.io/server/service/worker/deletenamespace/errors"
+	delnserrors "go.temporal.io/server/service/worker/deletenamespace/errors"
 	"go.uber.org/mock/gomock"
 	expmaps "golang.org/x/exp/maps"
 	"google.golang.org/grpc/health"
@@ -1230,7 +1230,7 @@ func (s *operatorHandlerSuite) Test_DeleteNamespace() {
 
 	// Workflow failed because of validation error (an attempt to delete system namespace).
 	mockRun2 := mocksdk.NewMockWorkflowRun(s.controller)
-	mockRun2.EXPECT().Get(gomock.Any(), gomock.Any()).Return(temporal.NewNonRetryableApplicationError("unable to delete system namespace", delns_errors.ValidationErrorErrType, nil, nil))
+	mockRun2.EXPECT().Get(gomock.Any(), gomock.Any()).Return(temporal.NewNonRetryableApplicationError("unable to delete system namespace", delnserrors.ValidationErrorErrType, nil, nil))
 	mockSdkClient.EXPECT().ExecuteWorkflow(gomock.Any(), gomock.Any(), "temporal-sys-delete-namespace-workflow", gomock.Any()).Return(mockRun2, nil)
 	resp, err = handler.DeleteNamespace(ctx, &operatorservice.DeleteNamespaceRequest{
 		Namespace: "temporal-system",

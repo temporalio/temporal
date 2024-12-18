@@ -63,7 +63,7 @@ import (
 	"go.temporal.io/server/service/worker/addsearchattributes"
 	"go.temporal.io/server/service/worker/deletenamespace"
 	"go.temporal.io/server/service/worker/deletenamespace/deleteexecutions"
-	delns_errors "go.temporal.io/server/service/worker/deletenamespace/errors"
+	delnserrors "go.temporal.io/server/service/worker/deletenamespace/errors"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/health"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
@@ -685,7 +685,7 @@ func (h *OperatorHandlerImpl) DeleteNamespace(
 	if err != nil {
 		// Special handling for validation errors. Convert them to InvalidArgument.
 		var appErr *temporal.ApplicationError
-		if errors.As(err, &appErr) && appErr.Type() == delns_errors.ValidationErrorErrType {
+		if errors.As(err, &appErr) && appErr.Type() == delnserrors.ValidationErrorErrType {
 			return nil, serviceerror.NewInvalidArgument(appErr.Message())
 		}
 		return nil, serviceerror.NewSystemWorkflow(&commonpb.WorkflowExecution{WorkflowId: deletenamespace.WorkflowName, RunId: run.GetRunID()}, err)
