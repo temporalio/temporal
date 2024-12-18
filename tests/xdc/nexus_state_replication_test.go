@@ -664,33 +664,19 @@ func (s *NexusStateReplicationSuite) TestNexusOperationBufferedCompletionReplica
 	s.NoError(err)
 
 	// Verify history in both clusters
-	historyIterator := sdkClient1.GetWorkflowHistory(ctx, run.GetID(), run.GetRunID(), false, enumspb.HISTORY_EVENT_FILTER_TYPE_ALL_EVENT)
-
-	var events1 []*historypb.HistoryEvent
-	for historyIterator.HasNext() {
-		e, err := historyIterator.Next()
-		s.NoError(err)
-		events1 = append(events1, e)
-	}
-
-	s.ContainsHistoryEvents(`
+	for _, sdkClient := range []sdkclient.Client{sdkClient1, sdkClient2} {
+		historyIterator := sdkClient.GetWorkflowHistory(ctx, run.GetID(), run.GetRunID(), false, enumspb.HISTORY_EVENT_FILTER_TYPE_ALL_EVENT)
+		var events []*historypb.HistoryEvent
+		for historyIterator.HasNext() {
+			e, err := historyIterator.Next()
+			s.NoError(err)
+			events = append(events, e)
+		}
+		s.ContainsHistoryEvents(`
 NexusOperationCancelRequested
 NexusOperationCompleted
-`, events1)
-
-	historyIterator2 := sdkClient2.GetWorkflowHistory(ctx, run.GetID(), run.GetRunID(), false, enumspb.HISTORY_EVENT_FILTER_TYPE_ALL_EVENT)
-
-	var events2 []*historypb.HistoryEvent
-	for historyIterator2.HasNext() {
-		e, err := historyIterator2.Next()
-		s.NoError(err)
-		events2 = append(events2, e)
+`, events)
 	}
-
-	s.ContainsHistoryEvents(`
-NexusOperationCancelRequested
-NexusOperationCompleted
-`, events2)
 }
 
 func (s *NexusStateReplicationSuite) waitEvent(ctx context.Context, sdkClient sdkclient.Client, run sdkclient.WorkflowRun, eventType enumspb.EventType) (eventID int64) {
