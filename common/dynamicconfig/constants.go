@@ -936,7 +936,7 @@ used when the first cache layer has a miss. Requires server restart for change t
 
 	FrontendEnableExecuteMultiOperation = NewNamespaceBoolSetting(
 		"frontend.enableExecuteMultiOperation",
-		false,
+		true,
 		`FrontendEnableExecuteMultiOperation enables the ExecuteMultiOperation API in the frontend.
 The API is under active development.`,
 	)
