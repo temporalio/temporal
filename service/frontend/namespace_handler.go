@@ -698,8 +698,8 @@ func (d *namespaceHandler) createResponse(
 
 		Capabilities: &namespacepb.NamespaceInfo_Capabilities{
 			EagerWorkflowStart: d.config.EnableEagerWorkflowStart(info.Name),
-			SyncUpdate:         d.config.EnableUpdateWorkflowExecution(info.Name),
-			AsyncUpdate:        d.config.EnableUpdateWorkflowExecutionAsyncAccepted(info.Name),
+			SyncUpdate:         true,
+			AsyncUpdate:        true,
 		},
 		SupportsSchedules: d.config.EnableSchedules(info.Name),
 	}

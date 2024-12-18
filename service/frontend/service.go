@@ -188,9 +188,6 @@ type Config struct {
 	MaxConcurrentBatchOperation     dynamicconfig.IntPropertyFnWithNamespaceFilter
 	MaxExecutionCountBatchOperation dynamicconfig.IntPropertyFnWithNamespaceFilter
 
-	EnableUpdateWorkflowExecution              dynamicconfig.BoolPropertyFnWithNamespaceFilter
-	EnableUpdateWorkflowExecutionAsyncAccepted dynamicconfig.BoolPropertyFnWithNamespaceFilter
-
 	EnableExecuteMultiOperation dynamicconfig.BoolPropertyFnWithNamespaceFilter
 
 	EnableWorkerVersioningData     dynamicconfig.BoolPropertyFnWithNamespaceFilter
@@ -321,9 +318,6 @@ func NewConfig(
 		MaxExecutionCountBatchOperation: dynamicconfig.FrontendMaxExecutionCountBatchOperationPerNamespace.Get(dc),
 
 		EnableExecuteMultiOperation: dynamicconfig.FrontendEnableExecuteMultiOperation.Get(dc),
-
-		EnableUpdateWorkflowExecution:              dynamicconfig.FrontendEnableUpdateWorkflowExecution.Get(dc),
-		EnableUpdateWorkflowExecutionAsyncAccepted: dynamicconfig.FrontendEnableUpdateWorkflowExecutionAsyncAccepted.Get(dc),
 
 		EnableWorkerVersioningData:     dynamicconfig.FrontendEnableWorkerVersioningDataAPIs.Get(dc),
 		EnableWorkerVersioningWorkflow: dynamicconfig.FrontendEnableWorkerVersioningWorkflowAPIs.Get(dc),

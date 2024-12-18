@@ -3907,18 +3907,13 @@ func (wh *WorkflowHandler) prepareUpdateWorkflowRequest(
 		request.WaitPolicy = &updatepb.WaitPolicy{}
 	}
 
-	if !wh.config.EnableUpdateWorkflowExecution(request.Namespace) {
-		return errUpdateWorkflowExecutionAPINotAllowed
-	}
-
 	enums.SetDefaultUpdateWorkflowExecutionLifecycleStage(&request.GetWaitPolicy().LifecycleStage)
 
 	if request.WaitPolicy.LifecycleStage == enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ADMITTED {
 		return errUpdateWorkflowExecutionAsyncAdmittedNotAllowed
 	}
 
-	if request.WaitPolicy.LifecycleStage == enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ACCEPTED &&
-		!wh.config.EnableUpdateWorkflowExecutionAsyncAccepted(request.Namespace) {
+	if request.WaitPolicy.LifecycleStage == enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ACCEPTED {
 		return errUpdateWorkflowExecutionAsyncAcceptedNotAllowed
 	}
 
@@ -3944,10 +3939,6 @@ func (wh *WorkflowHandler) PollWorkflowExecutionUpdate(
 	nsID, err := wh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
 	if err != nil {
 		return nil, err
-	}
-
-	if !wh.config.EnableUpdateWorkflowExecution(request.Namespace) {
-		return nil, errUpdateWorkflowExecutionAPINotAllowed
 	}
 
 	ctx, cancel := context.WithTimeout(ctx, frontend.DefaultLongPollTimeout)

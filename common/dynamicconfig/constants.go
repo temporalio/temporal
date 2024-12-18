@@ -940,24 +940,11 @@ used when the first cache layer has a miss. Requires server restart for change t
 		`FrontendEnableBatcher enables batcher-related RPCs in the frontend`,
 	)
 
-	FrontendEnableUpdateWorkflowExecution = NewNamespaceBoolSetting(
-		"frontend.enableUpdateWorkflowExecution",
-		true,
-		`FrontendEnableUpdateWorkflowExecution enables UpdateWorkflowExecution API in the frontend.`,
-	)
-
 	FrontendEnableExecuteMultiOperation = NewNamespaceBoolSetting(
 		"frontend.enableExecuteMultiOperation",
 		false,
 		`FrontendEnableExecuteMultiOperation enables the ExecuteMultiOperation API in the frontend.
 The API is under active development.`,
-	)
-
-	FrontendEnableUpdateWorkflowExecutionAsyncAccepted = NewNamespaceBoolSetting(
-		"frontend.enableUpdateWorkflowExecutionAsyncAccepted",
-		true,
-		`FrontendEnableUpdateWorkflowExecutionAsyncAccepted enables the UpdateWorkflowExecution API
-to allow waiting on the "Accepted" lifecycle stage.`,
 	)
 
 	FrontendEnableWorkerVersioningDataAPIs = NewNamespaceBoolSetting(
