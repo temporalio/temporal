@@ -45,7 +45,6 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/dynamicconfig"
-	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin/mysql"
 	"go.temporal.io/server/common/persistence/visibility"
@@ -1129,52 +1128,10 @@ func (s *operatorHandlerSuite) Test_DeleteNamespace() {
 	handler := s.handler
 	ctx := context.Background()
 
-	type test struct {
-		Name     string
-		Request  *operatorservice.DeleteNamespaceRequest
-		Expected error
-	}
-	// request validation tests
-	testCases := []test{
-		{
-			Name:     "nil request",
-			Request:  nil,
-			Expected: &serviceerror.InvalidArgument{Message: "Request is nil."},
-		},
-	}
-	for _, testCase := range testCases {
-		s.T().Run(testCase.Name, func(t *testing.T) {
-			resp, err := handler.DeleteNamespace(ctx, testCase.Request)
-			s.Equal(testCase.Expected, err)
-			s.Nil(resp)
-		})
-	}
-
-	// The "fake" namespace ID is associated with a Nexus endoint.
-	s.nexusEndpointPersistenceManager.EXPECT().ListNexusEndpoints(gomock.Any(), gomock.Any()).Return(&persistence.ListNexusEndpointsResponse{
-		Entries: []*persistencespb.NexusEndpointEntry{
-			{
-				Endpoint: &persistencespb.NexusEndpoint{
-					Spec: &persistencespb.NexusEndpointSpec{
-						Name: "test-endpoint",
-						Target: &persistencespb.NexusEndpointTarget{
-							Variant: &persistencespb.NexusEndpointTarget_Worker_{
-								Worker: &persistencespb.NexusEndpointTarget_Worker{
-									NamespaceId: "fake",
-								},
-							},
-						},
-					},
-				},
-			},
-		},
-	}, nil).AnyTimes()
-	// Map "fake" namespace ID to the "namespace-with-nexus-endpoint" name.
-	s.mockResource.NamespaceCache.EXPECT().GetNamespaceName(namespace.ID("fake")).
-		Return(namespace.Name("test-namespace"), nil).AnyTimes()
-	// Map "c13c01a7-3887-4eda-ba4b-9a07a6359e7e" namespace ID to the "test-namespace-deleted-ka2te" name.
-	s.mockResource.NamespaceCache.EXPECT().GetNamespaceName(namespace.ID("c13c01a7-3887-4eda-ba4b-9a07a6359e7e")).
-		Return(namespace.Name("test-namespace-deleted-ka2te"), nil).AnyTimes()
+	// Nil request.
+	resp, err := handler.DeleteNamespace(ctx, nil)
+	s.Equal(&serviceerror.InvalidArgument{Message: "Request is nil."}, err)
+	s.Nil(resp)
 
 	mockSdkClient := mocksdk.NewMockClient(s.controller)
 	s.mockResource.SDKClientFactory.EXPECT().GetSystemClient().Return(mockSdkClient).AnyTimes()
@@ -1185,27 +1142,11 @@ func (s *operatorHandlerSuite) Test_DeleteNamespace() {
 		DeleteNamespacePagesPerExecution:                    dynamicconfig.GetIntPropertyFn(78),
 		DeleteNamespaceConcurrentDeleteExecutionsActivities: dynamicconfig.GetIntPropertyFn(3),
 		DeleteNamespaceNamespaceDeleteDelay:                 dynamicconfig.GetDurationPropertyFn(22 * time.Hour),
-		AllowDeleteNamespaceIfNexusEndpointTarget:           dynamicconfig.GetBoolPropertyFn(false),
 	}
-
-	// Delete by name: Nexus endpoint associated.
-	_, err := handler.DeleteNamespace(ctx, &operatorservice.DeleteNamespaceRequest{
-		Namespace: "test-namespace",
-	})
-	s.ErrorContains(err, "cannot delete a namespace that is a target of a Nexus endpoint (test-endpoint)")
-
-	// Delete by ID: Nexus endpoint associated.
-	_, err = handler.DeleteNamespace(ctx, &operatorservice.DeleteNamespaceRequest{
-		NamespaceId: "fake",
-	})
-	s.ErrorContains(err, "cannot delete a namespace that is a target of a Nexus endpoint (test-endpoint)")
-
-	// Allow delete from now on.
-	handler.config.AllowDeleteNamespaceIfNexusEndpointTarget = dynamicconfig.GetBoolPropertyFn(true)
 
 	// Start workflow failed.
 	mockSdkClient.EXPECT().ExecuteWorkflow(gomock.Any(), gomock.Any(), "temporal-sys-delete-namespace-workflow", gomock.Any()).Return(nil, errors.New("start failed"))
-	resp, err := handler.DeleteNamespace(ctx, &operatorservice.DeleteNamespaceRequest{
+	resp, err = handler.DeleteNamespace(ctx, &operatorservice.DeleteNamespaceRequest{
 		Namespace: "test-namespace",
 	})
 	s.Error(err)

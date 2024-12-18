@@ -139,6 +139,16 @@ func validateNamespace(ctx workflow.Context, nsID namespace.ID, nsName namespace
 		return fmt.Errorf("%w: ValidateProtectedNamespacesActivity: %v", errors.ErrUnableToExecuteActivity, err)
 	}
 
+	ctx2 := workflow.WithLocalActivityOptions(ctx, localActivityOptions)
+	err = workflow.ExecuteLocalActivity(ctx2, la.ValidateNexusEndpointsActivity, nsID, nsName).Get(ctx, nil)
+	if err != nil {
+		var appErr *temporal.ApplicationError
+		if stderrors.As(err, &appErr) {
+			return appErr
+		}
+		return fmt.Errorf("%w: ValidateNexusEndpointsActivity: %v", errors.ErrUnableToExecuteActivity, err)
+	}
+
 	return nil
 }
 
@@ -176,7 +186,7 @@ func DeleteNamespaceWorkflow(ctx workflow.Context, params DeleteNamespaceWorkflo
 	params.NamespaceID = namespaceInfo.NamespaceID
 
 	// Step 1.1. Validate namespace.
-	if err := validateNamespace(ctx, params.NamespaceID, params.Namespace, namespaceInfo.Clusters); err != nil {
+	if err = validateNamespace(ctx, params.NamespaceID, params.Namespace, namespaceInfo.Clusters); err != nil {
 		return result, err
 	}
 
