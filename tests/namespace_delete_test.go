@@ -25,6 +25,7 @@
 package tests
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -50,6 +51,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/rpc"
+	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
@@ -544,4 +546,31 @@ func (s *namespaceTestSuite) checkTestShard() {
 		s.T().Skipf("Skipping %s in test shard %d/%d (it runs in %d)", s.T().Name(), index+1, total, testIndex+1)
 	}
 	s.T().Logf("Running %s in test shard %d/%d", s.T().Name(), index+1, total)
+}
+
+func (s *namespaceTestSuite) Test_NamespaceDelete_Blocked() {
+	ctx := context.Background()
+
+	tv := testvars.New(s.T())
+
+	_, err := s.frontendClient.RegisterNamespace(ctx, &workflowservice.RegisterNamespaceRequest{
+		Namespace:                        tv.NamespaceName().String(),
+		Description:                      tv.Any().String(),
+		WorkflowExecutionRetentionPeriod: tv.InfiniteTimeout(),
+		HistoryArchivalState:             enumspb.ARCHIVAL_STATE_DISABLED,
+		VisibilityArchivalState:          enumspb.ARCHIVAL_STATE_DISABLED,
+	})
+	s.NoError(err)
+
+	s.cluster.OverrideDynamicConfig(s.T(), dynamicconfig.DeleteNamespaceBlockedNamespaces, []string{tv.NamespaceName().String()})
+
+	delResp, err := s.operatorClient.DeleteNamespace(ctx, &operatorservice.DeleteNamespaceRequest{
+		Namespace: tv.NamespaceName().String(),
+	})
+	s.Error(err)
+	s.Nil(delResp)
+
+	var invalidArgErr *serviceerror.InvalidArgument
+	s.ErrorAs(err, &invalidArgErr)
+	s.Equal(fmt.Sprintf("namespace %s is blocked from deletion", tv.NamespaceName().String()), invalidArgErr.Message)
 }

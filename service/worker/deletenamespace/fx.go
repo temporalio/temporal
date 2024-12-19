@@ -51,6 +51,7 @@ type (
 		metadataManager   persistence.MetadataManager
 		historyClient     resource.HistoryClient
 		metricsHandler    metrics.Handler
+		blockedNamespaces dynamicconfig.TypedPropertyFn[[]string]
 		logger            log.Logger
 	}
 	componentParams struct {
@@ -75,6 +76,7 @@ func newComponent(
 		metadataManager:   params.MetadataManager,
 		historyClient:     params.HistoryClient,
 		metricsHandler:    params.MetricsHandler,
+		blockedNamespaces: dynamicconfig.DeleteNamespaceBlockedNamespaces.Get(params.DynamicCollection),
 		logger:            params.Logger,
 	}
 }
@@ -114,7 +116,7 @@ func (wc *deleteNamespaceComponent) DedicatedActivityWorkerOptions() *workercomm
 }
 
 func (wc *deleteNamespaceComponent) deleteNamespaceLocalActivities() *localActivities {
-	return newLocalActivities(wc.metadataManager, wc.logger)
+	return newLocalActivities(wc.metadataManager, wc.blockedNamespaces, wc.logger)
 }
 
 func (wc *deleteNamespaceComponent) reclaimResourcesActivities() *reclaimresources.Activities {
