@@ -65,6 +65,10 @@ type (
 		// DynamicConfigClient is the config for setting up the file based dynamic config client
 		// Filepath should be relative to the root directory
 		DynamicConfigClient *dynamicconfig.FileBasedClientConfig `yaml:"dynamicConfigClient"`
+		// If DynamicConfig is present, it is used as the dynamic config for the server (and
+		// reloaded periodically if dynamicConfigClient.pollInterval is set). This conflicts
+		// with dynamicConfigClient.filepath.
+		DynamicConfig any `yaml:"dynamicConfig"`
 		// NamespaceDefaults is the default config for every namespace
 		NamespaceDefaults NamespaceDefaults `yaml:"namespaceDefaults"`
 		// ExporterConfig allows the specification of process-wide OTEL exporters
