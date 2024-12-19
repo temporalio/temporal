@@ -104,9 +104,6 @@ func (a attempt) testCases() map[string]struct{} {
 	cases := make(map[string]struct{})
 
 	for _, suite := range a.suites.Suites {
-		if suite.Failures == 0 {
-			continue
-		}
 		for _, tc := range suite.Testcases {
 			cases[tc.Name] = struct{}{}
 		}
