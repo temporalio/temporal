@@ -32,6 +32,7 @@ import (
 	"math/rand"
 	"reflect"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -5906,7 +5907,70 @@ func (ms *MutableStateImpl) closeTransactionTrackTombstones(
 		return
 	}
 
+	// Get current versioned transition
+	transitionHistory := ms.executionInfo.TransitionHistory
+	currentVersionedTransition := transitionHistory[len(transitionHistory)-1]
+
+	// Track HSM node deletions
 	var tombstones []*persistencespb.StateMachineTombstone
+	if ms.stateMachineNode != nil {
+		opLog, err := ms.stateMachineNode.Outputs()
+		if err != nil {
+			ms.logger.Error("Failed to get HSM operation log", tag.Error(err))
+			return
+		}
+
+		for _, op := range opLog {
+			if deleteOp, ok := op.(hsm.DeleteOperation); ok {
+				path := deleteOp.Path()
+				if len(path) == 0 {
+					continue // Skip root deletion
+				}
+				key := path[len(path)-1]
+
+				// Create appropriate tombstone type based on path/key
+				var tombstone *persistencespb.StateMachineTombstone
+				switch key.Type {
+				case "Activity":
+					tombstone = &persistencespb.StateMachineTombstone{
+						StateMachineKey: &persistencespb.StateMachineTombstone_ActivityScheduledEventId{
+							ActivityScheduledEventId: ms.parseID(key.ID),
+						},
+					}
+				case "Timer":
+					tombstone = &persistencespb.StateMachineTombstone{
+						StateMachineKey: &persistencespb.StateMachineTombstone_TimerId{
+							TimerId: key.ID,
+						},
+					}
+				case "ChildExecution":
+					tombstone = &persistencespb.StateMachineTombstone{
+						StateMachineKey: &persistencespb.StateMachineTombstone_ChildExecutionInitiatedEventId{
+							ChildExecutionInitiatedEventId: ms.parseID(key.ID),
+						},
+					}
+				case "RequestCancel":
+					tombstone = &persistencespb.StateMachineTombstone{
+						StateMachineKey: &persistencespb.StateMachineTombstone_RequestCancelInitiatedEventId{
+							RequestCancelInitiatedEventId: ms.parseID(key.ID),
+						},
+					}
+				case "Signal":
+					tombstone = &persistencespb.StateMachineTombstone{
+						StateMachineKey: &persistencespb.StateMachineTombstone_SignalExternalInitiatedEventId{
+							SignalExternalInitiatedEventId: ms.parseID(key.ID),
+						},
+					}
+				}
+
+				if tombstone != nil {
+					tombstones = append(tombstones, tombstone)
+				}
+			}
+		}
+	}
+
+	// Add non-HSM tombstones from existing tracking
 	for scheduledEventID := range ms.deleteActivityInfos {
 		tombstones = append(tombstones, &persistencespb.StateMachineTombstone{
 			StateMachineKey: &persistencespb.StateMachineTombstone_ActivityScheduledEventId{
@@ -5949,7 +6013,7 @@ func (ms *MutableStateImpl) closeTransactionTrackTombstones(
 	// TODO: we don't delete updateInfo and StateMachine today. Track them here when we do.
 
 	tombstoneBatch := &persistencespb.StateMachineTombstoneBatch{
-		VersionedTransition:    ms.executionInfo.TransitionHistory[len(ms.executionInfo.TransitionHistory)-1],
+		VersionedTransition:    currentVersionedTransition,
 		StateMachineTombstones: tombstones,
 	}
 	// As an optimization, we only track the first empty tombstone batch. So we can know the start point of the tombstone batch
@@ -5959,6 +6023,15 @@ func (ms *MutableStateImpl) closeTransactionTrackTombstones(
 
 	ms.totalTombstones += len(tombstones)
 	ms.capTombstoneCount()
+}
+
+func (ms *MutableStateImpl) parseID(id string) int64 {
+	parsed, err := strconv.ParseInt(id, 10, 64)
+	if err != nil {
+		ms.logger.Error("Failed to parse ID", tag.Error(err))
+		return 0
+	}
+	return parsed
 }
 
 // capTombstoneCount limits the total number of tombstones stored in the mutable state.
