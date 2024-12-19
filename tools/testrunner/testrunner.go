@@ -100,6 +100,21 @@ func (a *attempt) recordResult(exitErr *exec.ExitError) error {
 	return nil
 }
 
+func (a attempt) testCases() map[string]struct{} {
+	cases := make(map[string]struct{})
+
+	for _, suite := range a.suites.Suites {
+		if suite.Failures == 0 {
+			continue
+		}
+		for _, tc := range suite.Testcases {
+			cases[tc.Name] = struct{}{}
+		}
+	}
+
+	return cases
+}
+
 func (a attempt) failures() []string {
 	root := node{children: make(map[string]node)}
 
@@ -244,8 +259,15 @@ func (r *runner) combineAttempts() junit.Testsuites {
 
 		// Just a sanity check for this tool since it's new and we want to make sure we actually rerun what we
 		// expect.
-		if attempt.suites.Tests != r.attempts[i-1].suites.Failures {
-			log.Fatalf("expected a rerun of all failures from the previous attempt, got (%d/%d)", attempt.suites.Tests, r.attempts[i-1].suites.Failures)
+		casesTested := attempt.testCases()
+		casesMissing := make([]string, 0)
+		for _, f := range r.attempts[i-1].failures() {
+			if _, ok := casesTested[f]; !ok {
+				casesMissing = append(casesMissing, f)
+			}
+		}
+		if len(casesMissing) > 0 {
+			log.Fatalf("expected a rerun of all failures from the previous attempt, missing: %v", casesMissing)
 		}
 
 		for _, suite := range attempt.suites.Suites {
