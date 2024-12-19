@@ -25,6 +25,7 @@
 package deletenamespace
 
 import (
+	stderrors "errors"
 	"fmt"
 	"strings"
 	"time"
@@ -107,6 +108,40 @@ func validateParams(params *DeleteNamespaceWorkflowParams) error {
 	return nil
 }
 
+func validateNamespace(ctx workflow.Context, nsID namespace.ID, nsName namespace.Name, nsClusters []string) error {
+
+	if nsName == primitives.SystemLocalNamespace || nsID == primitives.SystemNamespaceID {
+		return temporal.NewNonRetryableApplicationError("unable to delete system namespace", errors.ValidationErrorErrType, nil, nil)
+	}
+
+	// Disable namespace deletion if namespace is replicate because:
+	//  - If namespace is passive in the current cluster, then WF executions will keep coming from
+	//    the active cluster and namespace will never be deleted (ReclaimResourcesWorkflow will fail).
+	//  - If namespace is active in the current cluster, then it technically can be deleted (and
+	//    in this case it will be deleted from this cluster only because delete operation is not replicated),
+	//    but this is confusing for the users, as they might expect that namespace is deleted from all clusters.
+	if len(nsClusters) > 1 {
+		return temporal.NewNonRetryableApplicationError(fmt.Sprintf("namespace %s is replicated in several clusters [%s]: remove all other cluster and retry", nsName, strings.Join(nsClusters, ",")), errors.ValidationErrorErrType, nil)
+	}
+
+	// NOTE: there is very little chance that another cluster is added after the check above,
+	// but before namespace is marked as deleted below.
+
+	var la *localActivities
+
+	ctx1 := workflow.WithLocalActivityOptions(ctx, localActivityOptions)
+	err := workflow.ExecuteLocalActivity(ctx1, la.ValidateProtectedNamespacesActivity, nsName).Get(ctx, nil)
+	if err != nil {
+		var appErr *temporal.ApplicationError
+		if stderrors.As(err, &appErr) {
+			return appErr
+		}
+		return fmt.Errorf("%w: ValidateProtectedNamespacesActivity: %v", errors.ErrUnableToExecuteActivity, err)
+	}
+
+	return nil
+}
+
 func DeleteNamespaceWorkflow(ctx workflow.Context, params DeleteNamespaceWorkflowParams) (DeleteNamespaceWorkflowResult, error) {
 	logger := log.With(
 		workflow.GetLogger(ctx),
@@ -135,23 +170,15 @@ func DeleteNamespaceWorkflow(ctx workflow.Context, params DeleteNamespaceWorkflo
 		if ns == "" {
 			ns = params.NamespaceID.String()
 		}
-		return result, temporal.NewNonRetryableApplicationError(fmt.Sprintf("namespace %s is not found", ns), "", err)
+		return result, temporal.NewNonRetryableApplicationError(fmt.Sprintf("namespace %s is not found", ns), errors.ValidationErrorErrType, err)
 	}
 	params.Namespace = namespaceInfo.Namespace
 	params.NamespaceID = namespaceInfo.NamespaceID
 
-	// Disable namespace deletion if namespace is replicate because:
-	//  - If namespace is passive in the current cluster, then WF executions will keep coming from
-	//    the active cluster and namespace will never be deleted (ReclaimResourcesWorkflow will fail).
-	//  - If namespace is active in the current cluster, then it technically can be deleted (and
-	//    in this case it will be deleted from this cluster only because delete operation is not replicated),
-	//    but this is confusing for the users, as they might expect that namespace is deleted from all clusters.
-	if len(namespaceInfo.Clusters) > 1 {
-		return result, temporal.NewNonRetryableApplicationError(fmt.Sprintf("namespace %s is replicated in several clusters [%s]: remove all other cluster and retry", params.Namespace, strings.Join(namespaceInfo.Clusters, ",")), "", nil)
+	// Step 1.1. Validate namespace.
+	if err := validateNamespace(ctx, params.NamespaceID, params.Namespace, namespaceInfo.Clusters); err != nil {
+		return result, err
 	}
-
-	// NOTE: there is very little chance that another cluster is added after the check above,
-	// but before namespace is marked as deleted below.
 
 	// Step 2. Mark namespace as deleted.
 	ctx2 := workflow.WithLocalActivityOptions(ctx, localActivityOptions)
