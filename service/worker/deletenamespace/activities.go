@@ -27,6 +27,7 @@ package deletenamespace
 import (
 	"context"
 	"fmt"
+	"slices"
 	"strings"
 
 	enumspb "go.temporal.io/api/enums/v1"
@@ -38,6 +39,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/service/worker/deletenamespace/errors"
 )
 
 type (
@@ -90,8 +92,11 @@ func (a *localActivities) GetNamespaceInfoActivity(ctx context.Context, nsID nam
 	}, nil
 }
 
-func (a *localActivities) GetProtectedNamespacesActivity(_ context.Context) ([]string, error) {
-	return a.protectedNamespaces(), nil
+func (a *localActivities) ValidateProtectedNamespacesActivity(_ context.Context, nsName namespace.Name) error {
+	if slices.Contains(a.protectedNamespaces(), nsName.String()) {
+		return temporal.NewNonRetryableApplicationError(fmt.Sprintf("namespace %s is protected from deletion", nsName), errors.ValidationErrorErrType, nil, nil)
+	}
+	return nil
 }
 
 func (a *localActivities) MarkNamespaceDeletedActivity(ctx context.Context, nsName namespace.Name) error {

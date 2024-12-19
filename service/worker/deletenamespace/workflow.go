@@ -25,6 +25,7 @@
 package deletenamespace
 
 import (
+	stderrors "errors"
 	"fmt"
 	"strings"
 	"time"
@@ -129,15 +130,13 @@ func validateNamespace(ctx workflow.Context, nsID namespace.ID, nsName namespace
 	var la *localActivities
 
 	ctx1 := workflow.WithLocalActivityOptions(ctx, localActivityOptions)
-	var protectedNamespaces []string
-	err := workflow.ExecuteLocalActivity(ctx1, la.GetProtectedNamespacesActivity).Get(ctx, &protectedNamespaces)
+	err := workflow.ExecuteLocalActivity(ctx1, la.ValidateProtectedNamespacesActivity, nsName).Get(ctx, nil)
 	if err != nil {
-		return fmt.Errorf("%w: GetProtectedNamespacesActivity: %v", errors.ErrUnableToExecuteActivity, err)
-	}
-	for _, protectedNamespace := range protectedNamespaces {
-		if protectedNamespace == nsName.String() {
-			return temporal.NewNonRetryableApplicationError(fmt.Sprintf("namespace %s is protected from deletion", nsName), errors.ValidationErrorErrType, nil, nil)
+		var appErr *temporal.ApplicationError
+		if stderrors.As(err, &appErr) {
+			return appErr
 		}
+		return fmt.Errorf("%w: ValidateProtectedNamespacesActivity: %v", errors.ErrUnableToExecuteActivity, err)
 	}
 
 	return nil
