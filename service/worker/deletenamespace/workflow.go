@@ -26,9 +26,11 @@ package deletenamespace
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/sdk/log"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
 	"go.temporal.io/server/common/log/tag"
@@ -106,8 +108,13 @@ func validateParams(params *DeleteNamespaceWorkflowParams) error {
 }
 
 func DeleteNamespaceWorkflow(ctx workflow.Context, params DeleteNamespaceWorkflowParams) (DeleteNamespaceWorkflowResult, error) {
-	logger := workflow.GetLogger(ctx)
-	logger.Info("Workflow started.", tag.WorkflowType(WorkflowName))
+	logger := log.With(
+		workflow.GetLogger(ctx),
+		tag.WorkflowType(WorkflowName),
+		tag.WorkflowNamespace(params.Namespace.String()),
+		tag.WorkflowNamespaceID(params.NamespaceID.String()))
+
+	logger.Info("Workflow started.")
 
 	var result DeleteNamespaceWorkflowResult
 
@@ -124,10 +131,27 @@ func DeleteNamespaceWorkflow(ctx workflow.Context, params DeleteNamespaceWorkflo
 	var namespaceInfo getNamespaceInfoResult
 	err := workflow.ExecuteLocalActivity(ctx1, la.GetNamespaceInfoActivity, params.NamespaceID, params.Namespace).Get(ctx, &namespaceInfo)
 	if err != nil {
-		return result, temporal.NewNonRetryableApplicationError(fmt.Sprintf("namespace %s is not found", params.Namespace), "", err)
+		ns := params.Namespace.String()
+		if ns == "" {
+			ns = params.NamespaceID.String()
+		}
+		return result, temporal.NewNonRetryableApplicationError(fmt.Sprintf("namespace %s is not found", ns), "", err)
 	}
 	params.Namespace = namespaceInfo.Namespace
 	params.NamespaceID = namespaceInfo.NamespaceID
+
+	// Disable namespace deletion if namespace is replicate because:
+	//  - If namespace is passive in the current cluster, then WF executions will keep coming from
+	//    the active cluster and namespace will never be deleted (ReclaimResourcesWorkflow will fail).
+	//  - If namespace is active in the current cluster, then it technically can be deleted (and
+	//    in this case it will be deleted from this cluster only because delete operation is not replicated),
+	//    but this is confusing for the users, as they might expect that namespace is deleted from all clusters.
+	if len(namespaceInfo.Clusters) > 1 {
+		return result, temporal.NewNonRetryableApplicationError(fmt.Sprintf("namespace %s is replicated in several clusters [%s]: remove all other cluster and retry", params.Namespace, strings.Join(namespaceInfo.Clusters, ",")), "", nil)
+	}
+
+	// NOTE: there is very little chance that another cluster is added after the check above,
+	// but before namespace is marked as deleted below.
 
 	// Step 2. Mark namespace as deleted.
 	ctx2 := workflow.WithLocalActivityOptions(ctx, localActivityOptions)
@@ -165,11 +189,11 @@ func DeleteNamespaceWorkflow(ctx workflow.Context, params DeleteNamespaceWorkflo
 	})
 	var reclaimResourcesExecution workflow.Execution
 	if err := reclaimResourcesFuture.GetChildWorkflowExecution().Get(ctx, &reclaimResourcesExecution); err != nil {
-		logger.Error("Unable to execute child workflow.", tag.WorkflowType(reclaimresources.WorkflowName), tag.Error(err))
+		logger.Error("Unable to execute child workflow.", tag.Error(err))
 		return result, fmt.Errorf("%w: %s: %v", errors.ErrUnableToExecuteChildWorkflow, reclaimresources.WorkflowName, err)
 	}
-	logger.Info("Child workflow executed successfully.", tag.WorkflowType(reclaimresources.WorkflowName))
+	logger.Info("Child workflow executed successfully.", tag.NewStringTag("wf-child-type", reclaimresources.WorkflowName))
 
-	logger.Info("Workflow finished successfully.", tag.WorkflowType(WorkflowName))
+	logger.Info("Workflow finished successfully.")
 	return result, nil
 }

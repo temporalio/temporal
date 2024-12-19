@@ -954,7 +954,7 @@ Wildcards (*) are expanded to allow any substring. By default blacklist is empty
 
 	FrontendEnableExecuteMultiOperation = NewNamespaceBoolSetting(
 		"frontend.enableExecuteMultiOperation",
-		false,
+		true,
 		`FrontendEnableExecuteMultiOperation enables the ExecuteMultiOperation API in the frontend.
 The API is under active development.`,
 	)
@@ -1222,6 +1222,11 @@ duration since last poll exceeds this threshold.`,
 		"matching.listNexusEndpointsLongPollTimeout",
 		5*time.Minute-10*time.Second,
 		`MatchingListNexusEndpointsLongPollTimeout is the max length of long polls for ListNexusEndpoints calls.`,
+	)
+	MatchingNexusEndpointsRefreshInterval = NewGlobalDurationSetting(
+		"matching.nexusEndpointsRefreshInterval",
+		10*time.Second,
+		`Time to wait between calls to check that the in-memory view of Nexus endpoints matches the persisted state.`,
 	)
 	MatchingMembershipUnloadDelay = NewGlobalDurationSetting(
 		"matching.membershipUnloadDelay",
@@ -2292,7 +2297,7 @@ that task will be sent to DLQ.`,
 	)
 	ReplicationLowPriorityTaskParallelism = NewGlobalIntSetting(
 		"history.ReplicationLowPriorityTaskParallelism",
-		4,
+		1,
 		`ReplicationLowPriorityTaskParallelism is the number of executions' low priority replication tasks that can be processed in parallel`,
 	)
 

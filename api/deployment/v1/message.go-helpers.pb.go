@@ -473,6 +473,80 @@ func (this *SyncUserDataRequest) Equal(that interface{}) bool {
 	return proto.Equal(this, that1)
 }
 
+// Marshal an object of type SyncUserDataResponse to the protobuf v3 wire format
+func (val *SyncUserDataResponse) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type SyncUserDataResponse from the protobuf v3 wire format
+func (val *SyncUserDataResponse) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *SyncUserDataResponse) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two SyncUserDataResponse values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *SyncUserDataResponse) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *SyncUserDataResponse
+	switch t := that.(type) {
+	case *SyncUserDataResponse:
+		that1 = t
+	case SyncUserDataResponse:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
+// Marshal an object of type CheckUserDataPropagationRequest to the protobuf v3 wire format
+func (val *CheckUserDataPropagationRequest) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type CheckUserDataPropagationRequest from the protobuf v3 wire format
+func (val *CheckUserDataPropagationRequest) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *CheckUserDataPropagationRequest) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two CheckUserDataPropagationRequest values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *CheckUserDataPropagationRequest) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *CheckUserDataPropagationRequest
+	switch t := that.(type) {
+	case *CheckUserDataPropagationRequest:
+		that1 = t
+	case CheckUserDataPropagationRequest:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
 // Marshal an object of type SetCurrentDeploymentArgs to the protobuf v3 wire format
 func (val *SetCurrentDeploymentArgs) Marshal() ([]byte, error) {
 	return proto.Marshal(val)

@@ -26,6 +26,8 @@ package deleteexecutions
 
 import (
 	"context"
+	"fmt"
+	"time"
 
 	"go.temporal.io/api/serviceerror"
 	workflowpb "go.temporal.io/api/workflow/v1"
@@ -85,7 +87,7 @@ func NewActivities(
 	return &Activities{
 		visibilityManager: visibilityManager,
 		historyClient:     historyClient,
-		metricsHandler:    metricsHandler.WithTags(metrics.OperationTag(metrics.DeleteExecutionsWorkflowScope)),
+		metricsHandler:    metricsHandler,
 		logger:            logger,
 	}
 }
@@ -97,7 +99,7 @@ func NewLocalActivities(
 ) *LocalActivities {
 	return &LocalActivities{
 		visibilityManager: visibilityManager,
-		metricsHandler:    metricsHandler.WithTags(metrics.OperationTag(metrics.DeleteExecutionsWorkflowScope)),
+		metricsHandler:    metricsHandler,
 		logger:            logger,
 	}
 }
@@ -115,7 +117,6 @@ func (a *LocalActivities) GetNextPageTokenActivity(ctx context.Context, params G
 
 	resp, err := a.visibilityManager.ListWorkflowExecutions(ctx, req)
 	if err != nil {
-		metrics.ListExecutionsFailuresCount.With(a.metricsHandler).Record(1)
 		a.logger.Error("Unable to list all workflows to get next page token.", tag.WorkflowNamespace(params.Namespace.String()), tag.Error(err))
 		return nil, err
 	}
@@ -125,10 +126,47 @@ func (a *LocalActivities) GetNextPageTokenActivity(ctx context.Context, params G
 
 func (a *Activities) DeleteExecutionsActivity(ctx context.Context, params DeleteExecutionsActivityParams) (DeleteExecutionsActivityResult, error) {
 	ctx = headers.SetCallerName(ctx, params.Namespace.String())
+	logger := log.With(a.logger,
+		tag.WorkflowNamespace(params.Namespace.String()),
+		tag.WorkflowNamespaceID(params.NamespaceID.String()))
 
-	rateLimiter := quotas.NewRateLimiter(float64(params.RPS), params.RPS)
+	progressCh := make(chan DeleteExecutionsActivityResult, 1)
+	defer func() { close(progressCh) }()
 
 	var result DeleteExecutionsActivityResult
+	if activity.HasHeartbeatDetails(ctx) {
+		var previousAttemptResult DeleteExecutionsActivityResult
+		if err := activity.GetHeartbeatDetails(ctx, &previousAttemptResult); err != nil {
+			// If heartbeat details can't be read, just log the error and continue because they are not important.
+			logger.Warn("Unable to get heartbeat details from previous attempt while deleting workflow executions.", tag.Error(err))
+		} else {
+			// Carry over only success count because executions which gave error before,
+			// either will give an error again or will be successfully deleted.
+			// Errors shouldn't be double counted.
+			result.SuccessCount = previousAttemptResult.SuccessCount
+			// Send an initial result to heartbeat go routine.
+			progressCh <- result
+		}
+	}
+
+	go func() {
+		heartbeatTicker := time.NewTicker(deleteWorkflowExecutionsActivityOptions.HeartbeatTimeout / 2)
+		defer heartbeatTicker.Stop()
+
+		var lastKnownProgress DeleteExecutionsActivityResult
+		for {
+			select {
+			case progress, chOpen := <-progressCh:
+				if !chOpen {
+					// Stop heartbeating when a channel is closed, i.e., activity is completed.
+					return
+				}
+				lastKnownProgress = progress
+			case <-heartbeatTicker.C:
+				activity.RecordHeartbeat(ctx, lastKnownProgress)
+			}
+		}
+	}()
 
 	req := &manager.ListWorkflowExecutionsRequestV2{
 		NamespaceID:   params.NamespaceID,
@@ -139,16 +177,15 @@ func (a *Activities) DeleteExecutionsActivity(ctx context.Context, params Delete
 	}
 	resp, err := a.visibilityManager.ListWorkflowExecutions(ctx, req)
 	if err != nil {
-		metrics.ListExecutionsFailuresCount.With(a.metricsHandler).Record(1)
-		a.logger.Error("Unable to list all workflow executions.", tag.WorkflowNamespace(params.Namespace.String()), tag.Error(err))
+		logger.Error("Unable to list all workflow executions.", tag.Error(err))
 		return result, err
 	}
+	rateLimiter := quotas.NewRateLimiter(float64(params.RPS), params.RPS)
 	for _, execution := range resp.Executions {
 		err = rateLimiter.Wait(ctx)
 		if err != nil {
-			metrics.RateLimiterFailuresCount.With(a.metricsHandler).Record(1)
-			a.logger.Error("Workflow executions delete rate limiter error.", tag.WorkflowNamespace(params.Namespace.String()), tag.Error(err))
-			return result, err
+			logger.Error("Workflow executions delete rate limiter error.", tag.Error(err))
+			return result, fmt.Errorf("rate limiter error: %w", err)
 		}
 		_, err = a.historyClient.DeleteWorkflowExecution(ctx, &historyservice.DeleteWorkflowExecutionRequest{
 			NamespaceId:       params.NamespaceID.String(),
@@ -157,29 +194,32 @@ func (a *Activities) DeleteExecutionsActivity(ctx context.Context, params Delete
 		switch err.(type) {
 		case nil:
 			result.SuccessCount++
-			metrics.DeleteExecutionsSuccessCount.With(a.metricsHandler).Record(1)
+			metrics.DeleteExecutionsSuccessCount.With(a.metricsHandler.WithTags(metrics.NamespaceTag(params.Namespace.String()))).Record(1)
 
 		case *serviceerror.NotFound:
-			metrics.DeleteExecutionNotFoundCount.With(a.metricsHandler).Record(1)
-			a.logger.Info("Workflow execution is not found in history service.", tag.WorkflowNamespace(params.Namespace.String()), tag.WorkflowID(execution.Execution.GetWorkflowId()), tag.WorkflowRunID(execution.Execution.GetRunId()))
-			// The reasons why workflow execution doesn't exist in history service, but exists in visibility store might be:
-			// 1. The workflow execution was deleted by someone else after last ListWorkflowExecutions call but before historyClient.DeleteWorkflowExecution call.
+			metrics.DeleteExecutionsNotFoundCount.With(a.metricsHandler.WithTags(metrics.NamespaceTag(params.Namespace.String()))).Record(1)
+			logger.Info("Workflow execution exists in the visibility store but not in the main store.", tag.WorkflowID(execution.Execution.GetWorkflowId()), tag.WorkflowRunID(execution.Execution.GetRunId()))
+			// The reasons why workflow execution doesn't exist in the main store, but exists in the visibility store might be:
+			// 1. Someone else deleted the workflow execution after the last ListWorkflowExecutions call but before historyClient.DeleteWorkflowExecution call.
 			// 2. Database is in inconsistent state: workflow execution was manually deleted from history store, but not from visibility store.
 			// To avoid continuously getting this workflow execution from visibility store, it needs to be deleted directly from visibility store.
-			s, e := a.deleteWorkflowExecutionFromVisibility(ctx, params.NamespaceID, execution)
+			s, e := a.deleteWorkflowExecutionFromVisibility(ctx, params.NamespaceID, params.Namespace, execution, logger)
 			result.SuccessCount += s
 			result.ErrorCount += e
 
 		default:
 			result.ErrorCount++
-			metrics.DeleteExecutionFailuresCount.With(a.metricsHandler).Record(1)
-			a.logger.Error("Unable to delete workflow execution.", tag.WorkflowNamespace(params.Namespace.String()), tag.WorkflowID(execution.Execution.GetWorkflowId()), tag.WorkflowRunID(execution.Execution.GetRunId()), tag.Error(err))
+			metrics.DeleteExecutionsFailureCount.With(a.metricsHandler.WithTags(metrics.NamespaceTag(params.Namespace.String()))).Record(1)
+			logger.Error("Unable to delete workflow execution.", tag.WorkflowID(execution.Execution.GetWorkflowId()), tag.WorkflowRunID(execution.Execution.GetRunId()), tag.Error(err))
 		}
-		activity.RecordHeartbeat(ctx, result)
 		select {
+		case progressCh <- result:
+			// Send the current result to heartbeat go routine.
 		case <-ctx.Done():
+			// Stop deletion on cancellation.
 			return result, ctx.Err()
 		default:
+			// Don't block deletion if a progress channel is full.
 		}
 	}
 	return result, nil
@@ -187,28 +227,32 @@ func (a *Activities) DeleteExecutionsActivity(ctx context.Context, params Delete
 
 func (a *Activities) deleteWorkflowExecutionFromVisibility(
 	ctx context.Context,
-	namespaceID namespace.ID,
+	nsID namespace.ID,
+	nsName namespace.Name,
 	execution *workflowpb.WorkflowExecutionInfo,
+	logger log.Logger,
 ) (successCount int, errorCount int) {
 
-	a.logger.Info("Deleting workflow execution from visibility.", tag.WorkflowNamespaceID(namespaceID.String()), tag.WorkflowID(execution.Execution.GetWorkflowId()), tag.WorkflowRunID(execution.Execution.GetRunId()))
+	logger = log.With(logger, tag.WorkflowID(execution.Execution.GetWorkflowId()), tag.WorkflowRunID(execution.Execution.GetRunId()))
+
+	logger.Info("Deleting workflow execution from visibility.")
 	_, err := a.historyClient.DeleteWorkflowVisibilityRecord(ctx, &historyservice.DeleteWorkflowVisibilityRecordRequest{
-		NamespaceId: namespaceID.String(),
+		NamespaceId: nsID.String(),
 		Execution:   execution.GetExecution(),
 	})
 	switch err.(type) {
 	case nil:
 		// Indicates that main and visibility stores were in inconsistent state.
-		metrics.DeleteExecutionsSuccessCount.With(a.metricsHandler).Record(1)
-		a.logger.Info("Workflow execution deleted from visibility.", tag.WorkflowNamespaceID(namespaceID.String()), tag.WorkflowID(execution.Execution.GetWorkflowId()), tag.WorkflowRunID(execution.Execution.GetRunId()))
+		metrics.DeleteExecutionsSuccessCount.With(a.metricsHandler.WithTags(metrics.NamespaceTag(nsName.String()))).Record(1)
+		logger.Info("Workflow execution deleted from visibility.")
 		return 1, 0
 	case *serviceerror.NotFound:
-		// Indicates that workflow execution was deleted by someone else.
-		a.logger.Error("Workflow execution is not found in visibility store.", tag.WorkflowNamespaceID(namespaceID.String()), tag.WorkflowID(execution.Execution.GetWorkflowId()), tag.WorkflowRunID(execution.Execution.GetRunId()))
+		// Indicates that someone else deleted workflow execution.
+		logger.Error("Workflow execution is not found in visibility store.")
 		return 0, 0
 	default:
-		metrics.DeleteExecutionFailuresCount.With(a.metricsHandler).Record(1)
-		a.logger.Error("Unable to delete workflow execution from visibility store.", tag.WorkflowNamespaceID(namespaceID.String()), tag.WorkflowID(execution.Execution.GetWorkflowId()), tag.WorkflowRunID(execution.Execution.GetRunId()), tag.Error(err))
+		metrics.DeleteExecutionsFailureCount.With(a.metricsHandler.WithTags(metrics.NamespaceTag(nsName.String()))).Record(1)
+		logger.Error("Unable to delete workflow execution from visibility store.", tag.Error(err))
 		return 0, 1
 	}
 }

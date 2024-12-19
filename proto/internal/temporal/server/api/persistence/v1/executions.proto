@@ -429,6 +429,14 @@ message OutboundTaskInfo {
     StateMachineTaskInfo state_machine_info = 8;
 }
 
+message NexusInvocationTaskInfo {
+    int32 attempt = 1;
+}
+
+message NexusCancelationTaskInfo {
+    int32 attempt = 1;
+}
+
 // activity_map column
 message ActivityInfo {
     int64 version = 1;

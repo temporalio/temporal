@@ -5336,7 +5336,7 @@ func (s *UpdateWorkflowSuite) TestUpdateWithStart() {
 		errs := err.(*serviceerror.MultiOperationExecution).OperationErrors()
 		s.Len(errs, 2)
 		s.Equal("Operation was aborted.", errs[0].Error())
-		s.Contains(errs[1].Error(), "limit on number of total updates has been reached")
+		s.Contains(errs[1].Error(), "limit on the total number of distinct updates in this workflow has been reached")
 	})
 }
 

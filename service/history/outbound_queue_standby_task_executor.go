@@ -114,7 +114,7 @@ func (e *outboundQueueStandbyTaskExecutor) processTask(
 		return err
 	}
 
-	ref, _, err := stateMachineTask(e.shardContext, task)
+	ref, _, err := StateMachineTask(e.shardContext.StateMachineRegistry(), task)
 	if err != nil {
 		return err
 	}
