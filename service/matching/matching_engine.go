@@ -964,7 +964,7 @@ func (e *matchingEngineImpl) QueryWorkflow(
 		case enumspb.QUERY_RESULT_TYPE_ANSWERED:
 			return &matchingservice.QueryWorkflowResponse{QueryResult: workerResponse.GetCompletedRequest().GetQueryResult()}, nil
 		case enumspb.QUERY_RESULT_TYPE_FAILED:
-			return nil, serviceerror.NewQueryFailed(workerResponse.GetCompletedRequest().GetErrorMessage())
+			return nil, serviceerror.NewQueryFailedWithFailure(workerResponse.GetCompletedRequest().GetErrorMessage(), workerResponse.GetCompletedRequest().GetFailure())
 		default:
 			return nil, serviceerror.NewInternal("unknown query completed type")
 		}
