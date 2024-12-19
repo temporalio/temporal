@@ -26,44 +26,61 @@ import (
 	"context"
 	"sync/atomic"
 	"time"
+
+	"go.temporal.io/server/common/clock"
 )
 
-type BatchStream[T, R any] struct {
+type StreamBatcher[T, R any] struct {
 	fn      func([]T) R
-	opts    BatchStreamOptions
+	opts    StreamBatcherOptions
+	clock   clock.TimeSource
 	ch      chan batchPair[T, R]
 	running atomic.Bool
 }
 
 type batchPair[T, R any] struct {
 	resp chan R
-	t    T
+	item T
 }
 
-type BatchStreamOptions struct {
-	MaxItems     int
-	IdleTime     time.Duration
-	MaxTotalWait time.Duration
-	MaxGap       time.Duration
+type StreamBatcherOptions struct {
+	// MaxItems is the maximum number of items in a batch.
+	MaxItems int
+	// MinDelay is how long to wait for no more items to come in after any item before
+	// finishing the batch.
+	MinDelay time.Duration
+	// MaxDelay is the maximum time to wait after the first item in a batch before finishing
+	// the batch.
+	MaxDelay time.Duration
+	// IdleTime is the time after which the internal goroutine will exit, to avoid wasting
+	// resources on idle streams.
+	IdleTime time.Duration
 }
 
-// FIXME: more doc
-// fn must not hold on to the slice, it may be reused.
-func NewBatchStream[T, R any](fn func([]T) R, opts BatchStreamOptions) *BatchStream[T, R] {
-	return &BatchStream[T, R]{
-		fn:   fn,
-		opts: opts,
-		ch:   make(chan batchPair[T, R]),
+// NewStreamBatcher creates a StreamBatcher. It collects item passed to Add into slices, and
+// then calls `fn` on each batch.
+// fn will be called on batches of items in a single-threaded manner, and Add will block while
+// fn is running.
+func NewStreamBatcher[T, R any](fn func([]T) R, opts StreamBatcherOptions, clock clock.TimeSource) *StreamBatcher[T, R] {
+	return &StreamBatcher[T, R]{
+		fn:    fn,
+		opts:  opts,
+		clock: clock,
+		ch:    make(chan batchPair[T, R]),
 	}
 }
 
-func (s *BatchStream[T, R]) Add(ctx context.Context, t T) (R, error) {
+// Add adds an item to the stream and returns when it has been processed, or if the context is
+// canceled or times out. It returns two values: the value that the batch processor returned,
+// and a context error. Even if Add returns a context error, the item may still be processed in
+// the future!
+func (s *StreamBatcher[T, R]) Add(ctx context.Context, t T) (R, error) {
 	if s.running.CompareAndSwap(false, true) {
 		go s.loop()
 	}
 
 	resp := make(chan R)
-	pair := batchPair[T, R]{resp: resp, t: t}
+	pair := batchPair[T, R]{resp: resp, item: t}
 
 	select {
 	case s.ch <- pair:
@@ -81,7 +98,7 @@ func (s *BatchStream[T, R]) Add(ctx context.Context, t T) (R, error) {
 	}
 }
 
-func (s *BatchStream[T, R]) loop() {
+func (s *StreamBatcher[T, R]) loop() {
 	defer s.running.Store(false)
 
 	var items []T
@@ -92,24 +109,30 @@ func (s *BatchStream[T, R]) loop() {
 		items, resps = items[:0], resps[:0]
 
 		// wait for first item. if no item after a while, exit the goroutine
+		idleC, _ := s.clock.NewTimer(s.opts.IdleTime)
 		select {
 		case pair := <-s.ch:
-			items = append(items, pair.t)
+			items = append(items, pair.item)
 			resps = append(resps, pair.resp)
-		case <-time.After(s.opts.IdleTime):
+		case <-idleC:
+			// FIXME: what if Add does running CAS here and sees running, so sends on the
+			// channel, but then this returns.
+			// maybe we need to close a channel when we return so Add can select on that and
+			// try to start again?
 			return
 		}
 
 		// try to add more items. stop after a gap of MaxGap, total time of MaxTotalWait, or
 		// MaxItems items.
-		maxWaitC := time.After(s.opts.MaxTotalWait)
+		maxWaitC, _ := s.clock.NewTimer(s.opts.MaxDelay)
 	loop:
 		for len(items) < s.opts.MaxItems {
+			gapC, _ := s.clock.NewTimer(s.opts.MinDelay)
 			select {
 			case pair := <-s.ch:
-				items = append(items, pair.t)
+				items = append(items, pair.item)
 				resps = append(resps, pair.resp)
-			case <-time.After(s.opts.MaxGap):
+			case <-gapC:
 				break loop
 			case <-maxWaitC:
 				break loop

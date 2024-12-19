@@ -170,7 +170,7 @@ type (
 		// Lock to serialize replication queue updates.
 		replicationLock sync.Mutex
 		// Serialize and batch user data updates.
-		userDataUpdates collection.SyncMap[string, *util.BatchStream[*userDataUpdate, error]]
+		userDataUpdates collection.SyncMap[string, *util.StreamBatcher[*userDataUpdate, error]]
 		// Stores results of reachability queries to visibility
 		reachabilityCache reachabilityCache
 	}
@@ -244,7 +244,7 @@ func NewEngine(
 		nexusResults:              collection.NewSyncMap[string, chan *nexusResult](),
 		outstandingPollers:        collection.NewSyncMap[string, context.CancelFunc](),
 		namespaceReplicationQueue: namespaceReplicationQueue,
-		userDataUpdates:           collection.NewSyncMap[string, *util.BatchStream[*userDataUpdate, error]](),
+		userDataUpdates:           collection.NewSyncMap[string, *util.StreamBatcher[*userDataUpdate, error]](),
 	}
 	e.reachabilityCache = newReachabilityCache(
 		metrics.NoopMetricsHandler,
@@ -2130,20 +2130,20 @@ func (e *matchingEngineImpl) notifyNexusEndpointsOwnershipChange() {
 	e.nexusEndpointClient.notifyOwnershipChanged(isOwner)
 }
 
-func (e *matchingEngineImpl) getUserDataBatcher(namespaceId string) *util.BatchStream[*userDataUpdate, error] {
+func (e *matchingEngineImpl) getUserDataBatcher(namespaceId string) *util.StreamBatcher[*userDataUpdate, error] {
 	if stream, ok := e.userDataUpdates.Get(namespaceId); ok {
 		return stream
 	}
 	fn := func(batch []*userDataUpdate) error {
 		return e.applyUserDataUpdateBatch(namespaceId, batch)
 	}
-	opts := util.BatchStreamOptions{
-		MaxItems:     100,
-		IdleTime:     time.Minute,
-		MaxTotalWait: 1000 * time.Millisecond,
-		MaxGap:       200 * time.Millisecond,
+	opts := util.StreamBatcherOptions{
+		MaxItems: 100,
+		MinDelay: 200 * time.Millisecond,
+		MaxDelay: 1000 * time.Millisecond,
+		IdleTime: time.Minute,
 	}
-	newStream := util.NewBatchStream[*userDataUpdate, error](fn, opts)
+	newStream := util.NewStreamBatcher[*userDataUpdate, error](fn, opts)
 	stream, _ := e.userDataUpdates.GetOrSet(namespaceId, newStream)
 	return stream
 }
