@@ -79,7 +79,7 @@ func newOperationNode(t *testing.T, backend *hsmtest.NodeBackend, event *history
 	root := newRoot(t, backend)
 	token, err := hsm.GenerateEventLoadToken(event)
 	require.NoError(t, err)
-	node, err := nexusoperations.AddChild(root, fmt.Sprintf("%d", event.EventId), event, token, false)
+	node, err := nexusoperations.AddChild(root, fmt.Sprintf("%d", event.EventId), event, token)
 	require.NoError(t, err)
 	return node
 }
