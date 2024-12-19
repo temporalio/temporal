@@ -63,6 +63,7 @@ import (
 	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/telemetry"
+	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/common/utf8validator"
 	"go.uber.org/fx"
 	"google.golang.org/grpc"
@@ -129,6 +130,7 @@ var Module = fx.Options(
 	deadlock.Module,
 	config.Module,
 	utf8validator.Module,
+	testhooks.Module,
 	fx.Invoke(func(*utf8validator.Validator) {}), // force this to be constructed even if not referenced elsewhere
 )
 
@@ -227,6 +229,7 @@ func ClientFactoryProvider(
 	membershipMonitor membership.Monitor,
 	metricsHandler metrics.Handler,
 	dynamicCollection *dynamicconfig.Collection,
+	testHooks testhooks.TestHooks,
 	persistenceConfig *config.Persistence,
 	logger log.SnTaggedLogger,
 	throttledLogger log.ThrottledLogger,
@@ -236,6 +239,7 @@ func ClientFactoryProvider(
 		membershipMonitor,
 		metricsHandler,
 		dynamicCollection,
+		testHooks,
 		persistenceConfig.NumHistoryShards,
 		logger,
 		throttledLogger,
