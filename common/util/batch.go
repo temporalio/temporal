@@ -31,16 +31,19 @@ import (
 )
 
 type StreamBatcher[T, R any] struct {
-	fn      func([]T) R
-	opts    StreamBatcherOptions
-	clock   clock.TimeSource
-	ch      chan batchPair[T, R]
-	running atomic.Bool
+	fn    func([]T) R          // batch executor function
+	opts  StreamBatcherOptions // timing/size options
+	clock clock.TimeSource     // clock for testing
+	ch    chan batchPair[T, R] // channel for submitting items
+	// keeps track of goroutine state:
+	// if goroutine is not running, running == nil.
+	// if it is running, running points to a channel that will be closed when the goroutine exits.
+	running atomic.Pointer[chan struct{}]
 }
 
 type batchPair[T, R any] struct {
-	resp chan R
-	item T
+	resp chan R // response channel
+	item T      // item to add
 }
 
 type StreamBatcherOptions struct {
@@ -57,7 +60,7 @@ type StreamBatcherOptions struct {
 	IdleTime time.Duration
 }
 
-// NewStreamBatcher creates a StreamBatcher. It collects item passed to Add into slices, and
+// NewStreamBatcher creates a StreamBatcher. It collects items passed to Add into slices, and
 // then calls `fn` on each batch.
 // fn will be called on batches of items in a single-threaded manner, and Add will block while
 // fn is running.
@@ -75,31 +78,54 @@ func NewStreamBatcher[T, R any](fn func([]T) R, opts StreamBatcherOptions, clock
 // and a context error. Even if Add returns a context error, the item may still be processed in
 // the future!
 func (s *StreamBatcher[T, R]) Add(ctx context.Context, t T) (R, error) {
-	if s.running.CompareAndSwap(false, true) {
-		go s.loop()
-	}
-
 	resp := make(chan R)
 	pair := batchPair[T, R]{resp: resp, item: t}
 
-	select {
-	case s.ch <- pair:
-	case <-ctx.Done():
-		var zeroR R
-		return zeroR, ctx.Err()
-	}
+	for {
+		var runningC *chan struct{}
+		for {
+			runningC = s.running.Load()
+			if runningC == nil {
+				// goroutine is not running, try to start it
+				newRunningC := make(chan struct{})
+				if s.running.CompareAndSwap(nil, &newRunningC) {
+					// we were the first one to notice the nil, start it now
+					go s.loop(&newRunningC)
+				}
+				// if CompareAndSwap failed, someone else was calling Add at the same time and
+				// started the goroutine already. reload to get the new running channel.
+			}
+		}
 
-	select {
-	case r := <-resp:
-		return r, nil
-	case <-ctx.Done():
-		var zeroR R
-		return zeroR, ctx.Err()
+		select {
+		case <-(*runningC):
+			// we loaded a non-nil running channel, but it closed while we're waiting to
+			// submit. the goroutine must have just exited. try again.
+			continue
+		case s.ch <- pair:
+			select {
+			case r := <-resp:
+				return r, nil
+			case <-ctx.Done():
+				var zeroR R
+				return zeroR, ctx.Err()
+			}
+		case <-ctx.Done():
+			var zeroR R
+			return zeroR, ctx.Err()
+		}
 	}
 }
 
-func (s *StreamBatcher[T, R]) loop() {
-	defer s.running.Store(false)
+func (s *StreamBatcher[T, R]) loop(runningC *chan struct{}) {
+	defer func() {
+		// store nil so that Add knows it should start a goroutine
+		s.running.Store(nil)
+		// if Add loaded s.running after we decided to stop but before we Stored nil, so it
+		// thought we were running when we're not, then we need to wait it up so that can start
+		// us again.
+		close(*runningC)
+	}()
 
 	var items []T
 	var resps []chan R
@@ -115,10 +141,6 @@ func (s *StreamBatcher[T, R]) loop() {
 			items = append(items, pair.item)
 			resps = append(resps, pair.resp)
 		case <-idleC:
-			// FIXME: what if Add does running CAS here and sees running, so sends on the
-			// channel, but then this returns.
-			// maybe we need to close a channel when we return so Add can select on that and
-			// try to start again?
 			return
 		}
 
@@ -139,11 +161,12 @@ func (s *StreamBatcher[T, R]) loop() {
 			}
 		}
 
-		err := s.fn(items)
+		// process batch
+		r := s.fn(items)
 
 		// send responses
 		for _, resp := range resps {
-			resp <- err
+			resp <- r
 		}
 	}
 }
