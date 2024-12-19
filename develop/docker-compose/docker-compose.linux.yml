@@ -6,6 +6,10 @@ services:
       - ./prometheus-linux:/etc/prometheus
   grafana:
     network_mode: host
+  tempo:
+    depends_on:
+      - grafana
+    network_mode: host
   temporal-ui:
     environment:
       - TEMPORAL_ADDRESS=localhost:7233

@@ -74,6 +74,14 @@ STAMPDIR := .stamp
 export PATH := $(ROOT)/$(LOCALBIN):$(PATH)
 GOINSTALL := GOBIN=$(ROOT)/$(LOCALBIN) go install
 
+OTEL ?= false
+ifeq ($(OTEL),true)
+	export OTEL_BSP_SCHEDULE_DELAY=0
+	export OTEL_EXPORTER_OTLP_TRACES_INSECURE=true
+	export OTEL_TRACES_EXPORTER=otlp
+	export TEMPORAL_OTEL_DEBUG=true
+endif
+
 MODULE_ROOT := $(lastword $(shell grep -e "^module " go.mod))
 COLOR := "\e[1;36m%s\e[0m\n"
 RED :=   "\e[1;31m%s\e[0m\n"

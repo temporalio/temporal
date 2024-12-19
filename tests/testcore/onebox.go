@@ -38,7 +38,6 @@ import (
 	"testing"
 	"time"
 
-	otelsdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.temporal.io/api/operatorservice/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/adminservice/v1"
@@ -120,7 +119,6 @@ type (
 		esClient                         esclient.Client
 		mockAdminClient                  map[string]adminservice.AdminServiceClient
 		namespaceReplicationTaskExecutor namespace.ReplicationTaskExecutor
-		spanExporters                    []otelsdktrace.SpanExporter
 		tlsConfigProvider                *encryption.FixedTLSConfigProvider
 		captureMetricsHandler            *metricstest.CaptureHandler
 		hostsByProtocolByService         map[transferProtocol]map[primitives.ServiceName]static.Hosts
@@ -188,7 +186,6 @@ type (
 		ESClient                         esclient.Client
 		MockAdminClient                  map[string]adminservice.AdminServiceClient
 		NamespaceReplicationTaskExecutor namespace.ReplicationTaskExecutor
-		SpanExporters                    []otelsdktrace.SpanExporter
 		DynamicConfigOverrides           map[dynamicconfig.Key]interface{}
 		TLSConfigProvider                *encryption.FixedTLSConfigProvider
 		CaptureMetricsHandler            *metricstest.CaptureHandler
@@ -254,7 +251,6 @@ func newTemporal(t *testing.T, params *TemporalParams) *TemporalImpl {
 		workerConfig:                     params.WorkerConfig,
 		mockAdminClient:                  params.MockAdminClient,
 		namespaceReplicationTaskExecutor: params.NamespaceReplicationTaskExecutor,
-		spanExporters:                    params.SpanExporters,
 		tlsConfigProvider:                params.TLSConfigProvider,
 		captureMetricsHandler:            params.CaptureMetricsHandler,
 		dcClient:                         dynamicconfig.NewMemoryClient(),
@@ -415,7 +411,7 @@ func (c *TemporalImpl) startFrontend() {
 			fx.Provide(func() esclient.Client { return c.esClient }),
 			fx.Provide(c.GetTLSConfigProvider),
 			fx.Provide(c.GetTaskCategoryRegistry),
-			fx.Supply(c.spanExporters),
+			temporal.TraceExportModule,
 			temporal.ServiceTracingModule,
 			frontend.Module,
 			fx.Populate(&namespaceRegistry, &rpcFactory, &historyRawClient, &matchingRawClient, &grpcResolver),
@@ -486,9 +482,8 @@ func (c *TemporalImpl) startHistory() {
 			fx.Provide(func() esclient.Client { return c.esClient }),
 			fx.Provide(c.GetTLSConfigProvider),
 			fx.Provide(c.GetTaskCategoryRegistry),
-			fx.Supply(c.spanExporters),
+			temporal.TraceExportModule,
 			temporal.ServiceTracingModule,
-
 			history.QueueModule,
 			history.Module,
 			replication.Module,
@@ -539,7 +534,7 @@ func (c *TemporalImpl) startMatching() {
 			fx.Provide(c.GetTLSConfigProvider),
 			fx.Provide(resource.DefaultSnTaggedLoggerProvider),
 			fx.Provide(c.GetTaskCategoryRegistry),
-			fx.Supply(c.spanExporters),
+			temporal.TraceExportModule,
 			temporal.ServiceTracingModule,
 			matching.Module,
 			temporal.FxLogAdapter,
@@ -602,8 +597,6 @@ func (c *TemporalImpl) startWorker() {
 			fx.Provide(func() *esclient.Config { return c.esConfig }),
 			fx.Provide(c.GetTLSConfigProvider),
 			fx.Provide(c.GetTaskCategoryRegistry),
-			fx.Supply(c.spanExporters),
-			temporal.ServiceTracingModule,
 			worker.Module,
 			temporal.FxLogAdapter,
 			c.getFxOptionsForService(primitives.WorkerService),
