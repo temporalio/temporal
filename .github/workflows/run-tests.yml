@@ -476,6 +476,8 @@ jobs:
           set -eu
           test_job_name="Functional test (${{matrix.runs-on}}, ${{matrix.shard_index}}, ${{matrix.name}})"
           job_url="https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/jobs?per_page=100"
+          # curl or jq might silently fail, but we are okay with that.
+          # We don't want to fail the job if we can't get the job id.          
           job_id=$(curl -L \
             -H "Accept: application/vnd.github+json" \
             -H "Authorization: Bearer ${{secrets.GITHUB_TOKEN}}" \
@@ -483,7 +485,7 @@ jobs:
              "$job_url" \
             | jq "first(.jobs[] | select(.name == \"$test_job_name\") | .id)")
           echo "Job id is $job_id"
-          echo "JOB_ID=${job_id}" >> "$GITHUB_OUTPUT"
+          echo "JOB_ID=${job_id:-unknown}" >> "$GITHUB_OUTPUT"
 
       - name: Run functional test
         if: ${{ inputs.run_single_functional_test != true || (inputs.run_single_functional_test == true && contains(fromJSON(needs.set-up-single-test.outputs.dbs), env.PERSISTENCE_DRIVER)) }}
@@ -601,6 +603,8 @@ jobs:
           set -eu
           test_job_name="Functional test xdc (${{matrix.name}})"
           job_url="https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/jobs?per_page=100"
+          # curl or jq might silently fail, but we are okay with that.
+          # We don't want to fail the job if we can't get the job id.
           job_id=$(curl -L \
             -H "Accept: application/vnd.github+json" \
             -H "Authorization: Bearer ${{secrets.GITHUB_TOKEN}}" \
@@ -608,7 +612,7 @@ jobs:
              "$job_url" \
             | jq "first(.jobs[] | select(.name == \"$test_job_name\") | .id)")
           echo "Job id is $job_id"
-          echo "JOB_ID=${job_id}" >> "$GITHUB_OUTPUT"
+          echo "JOB_ID=${job_id-unknown}" >> "$GITHUB_OUTPUT"
 
       - name: Run functional test xdc
         timeout-minutes: 25   # update this to TEST_TIMEOUT+5 if you update the Makefile
@@ -724,6 +728,8 @@ jobs:
           set -eu
           test_job_name="Functional test ndc (${{matrix.name}})"
           job_url="https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/jobs?per_page=100"
+          # curl or jq might silently fail, but we are okay with that.
+          # We don't want to fail the job if we can't get the job id.
           job_id=$(curl -L \
             -H "Accept: application/vnd.github+json" \
             -H "Authorization: Bearer ${{secrets.GITHUB_TOKEN}}" \
@@ -731,7 +737,7 @@ jobs:
              "$job_url" \
             | jq "first(.jobs[] | select(.name == \"$test_job_name\") | .id)")
           echo "Job id is $job_id"
-          echo "JOB_ID=${job_id}" >> "$GITHUB_OUTPUT"
+          echo "JOB_ID=${job_id:-unknown}" >> "$GITHUB_OUTPUT"
 
       - name: Run functional test ndc
         timeout-minutes: 15
