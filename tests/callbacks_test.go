@@ -195,7 +195,6 @@ func (s *CallbacksSuite) TestWorkflowCallbacks_InvalidArgument() {
 }
 
 func (s *CallbacksSuite) TestWorkflowNexusCallbacks_CarriedOver() {
-	s.OverrideDynamicConfig(dynamicconfig.EnableNexus, true)
 	s.OverrideDynamicConfig(
 		callbacks.AllowedAddresses,
 		[]any{map[string]any{"Pattern": "*", "AllowInsecure": true}},
@@ -335,7 +334,6 @@ func (s *CallbacksSuite) TestWorkflowNexusCallbacks_CarriedOver() {
 }
 
 func (s *CallbacksSuite) TestNexusResetWorkflowWithCallback() {
-	s.OverrideDynamicConfig(dynamicconfig.EnableNexus, true)
 	s.OverrideDynamicConfig(
 		callbacks.AllowedAddresses,
 		[]any{map[string]any{"Pattern": "*", "AllowInsecure": true}},

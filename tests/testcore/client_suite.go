@@ -85,7 +85,6 @@ func (s *ClientFunctionalSuite) SetupSuite() {
 		dynamicconfig.FrontendEnableWorkerVersioningDataAPIs.Key():          true,
 		dynamicconfig.FrontendEnableWorkerVersioningWorkflowAPIs.Key():      true,
 		dynamicconfig.FrontendMaxConcurrentBatchOperationPerNamespace.Key(): ClientSuiteLimit,
-		dynamicconfig.EnableNexus.Key():                                     true,
 		dynamicconfig.RefreshNexusEndpointsMinWait.Key():                    1 * time.Millisecond,
 		callbacks.AllowedAddresses.Key():                                    []any{map[string]any{"Pattern": "*", "AllowInsecure": true}},
 	}
