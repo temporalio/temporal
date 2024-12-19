@@ -32,6 +32,7 @@ import (
 )
 
 const (
+	ValidationErrorErrType                = "ValidationError"
 	ExecutionsStillExistErrType           = "ExecutionsStillExist"
 	NoProgressErrType                     = "NoProgress"
 	NotDeletedExecutionsStillExistErrType = "NotDeletedExecutionsStillExist"

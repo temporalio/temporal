@@ -27,22 +27,26 @@ package deletenamespace
 import (
 	"context"
 	"fmt"
+	"slices"
 	"strings"
 
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/sdk/temporal"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/service/worker/deletenamespace/errors"
 )
 
 type (
 	localActivities struct {
-		metadataManager persistence.MetadataManager
-		logger          log.Logger
+		metadataManager     persistence.MetadataManager
+		protectedNamespaces dynamicconfig.TypedPropertyFn[[]string]
+		logger              log.Logger
 	}
 
 	getNamespaceInfoResult struct {
@@ -54,11 +58,13 @@ type (
 
 func newLocalActivities(
 	metadataManager persistence.MetadataManager,
+	protectedNamespaces dynamicconfig.TypedPropertyFn[[]string],
 	logger log.Logger,
 ) *localActivities {
 	return &localActivities{
-		metadataManager: metadataManager,
-		logger:          logger,
+		metadataManager:     metadataManager,
+		protectedNamespaces: protectedNamespaces,
+		logger:              logger,
 	}
 }
 
@@ -84,6 +90,13 @@ func (a *localActivities) GetNamespaceInfoActivity(ctx context.Context, nsID nam
 		Namespace:   namespace.Name(getNamespaceResponse.Namespace.Info.Name),
 		Clusters:    getNamespaceResponse.Namespace.ReplicationConfig.Clusters,
 	}, nil
+}
+
+func (a *localActivities) ValidateProtectedNamespacesActivity(_ context.Context, nsName namespace.Name) error {
+	if slices.Contains(a.protectedNamespaces(), nsName.String()) {
+		return temporal.NewNonRetryableApplicationError(fmt.Sprintf("namespace %s is protected from deletion", nsName), errors.ValidationErrorErrType, nil, nil)
+	}
+	return nil
 }
 
 func (a *localActivities) MarkNamespaceDeletedActivity(ctx context.Context, nsName namespace.Name) error {

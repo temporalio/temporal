@@ -5240,7 +5240,7 @@ func (s *UpdateWorkflowSuite) TestUpdateWithStart() {
 			tv := testvars.New(s.T())
 
 			// start and terminate workflow
-			_, err := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), startWorkflowReq(tv))
+			initialWorkflow, err := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), startWorkflowReq(tv))
 			s.NoError(err)
 
 			_, err = s.TaskPoller.PollAndHandleWorkflowTask(tv, taskpoller.DrainWorkflowTask)
@@ -5275,6 +5275,13 @@ func (s *UpdateWorkflowSuite) TestUpdateWithStart() {
 			updateRep := uwsRes.response.Responses[1].GetUpdateWorkflow()
 			s.True(startResp.Started)
 			s.EqualValues("success-result-of-"+tv.UpdateID("1"), testcore.DecodeString(s.T(), updateRep.GetOutcome().GetSuccess()))
+
+			// ensure terminated workflow is not locked by update-with-start
+			err = s.SendSignal(s.Namespace(), &commonpb.WorkflowExecution{
+				WorkflowId: tv.WorkflowID(),
+				RunId:      initialWorkflow.RunId,
+			}, tv.Any().String(), tv.Any().Payloads(), tv.Any().String())
+			s.ErrorContains(err, "workflow execution already completed")
 
 			// poll update to ensure same outcome is returned
 			pollRes, err := s.pollUpdate(tv, "1",
