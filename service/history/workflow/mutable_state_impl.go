@@ -218,6 +218,11 @@ type (
 		activityInfosUserDataUpdated map[int64]struct{}
 		timerInfosUserDataUpdated    map[string]struct{}
 
+		// in memory fields to track potential reapply events that needs to be reapplied during workflow update
+		// should only be used in the state based replication as state based replication does not have
+		// event inside history builder
+		reapplyEventsCandidate []*historypb.HistoryEvent
+
 		InsertTasks map[tasks.Category][]tasks.Task
 
 		speculativeWorkflowTaskTimeoutTask *tasks.WorkflowTaskTimeoutTask
@@ -309,6 +314,7 @@ func NewMutableState(
 		updateInfoUpdated:            make(map[string]struct{}),
 		timerInfosUserDataUpdated:    make(map[string]struct{}),
 		activityInfosUserDataUpdated: make(map[int64]struct{}),
+		reapplyEventsCandidate:       []*historypb.HistoryEvent{},
 
 		QueryRegistry: NewQueryRegistry(),
 
@@ -6128,6 +6134,7 @@ func (ms *MutableStateImpl) cleanupTransaction() error {
 	ms.updateInfoUpdated = make(map[string]struct{})
 	ms.timerInfosUserDataUpdated = make(map[string]struct{})
 	ms.activityInfosUserDataUpdated = make(map[int64]struct{})
+	ms.reapplyEventsCandidate = nil
 
 	ms.stateInDB = ms.executionState.State
 	ms.nextEventIDInDB = ms.GetNextEventID()
@@ -7395,4 +7402,20 @@ func (ms *MutableStateImpl) reschedulePendingActivities() error {
 	}
 
 	return nil
+}
+
+func (ms *MutableStateImpl) AddReapplyCandidateEvent(event *historypb.HistoryEvent) {
+	switch event.GetEventType() {
+	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED,
+		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ADMITTED,
+		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ACCEPTED,
+		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CANCEL_REQUESTED,
+		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TERMINATED:
+
+		ms.reapplyEventsCandidate = append(ms.reapplyEventsCandidate, event)
+	}
+}
+
+func (ms *MutableStateImpl) GetReapplyCandidateEvents() []*historypb.HistoryEvent {
+	return ms.reapplyEventsCandidate
 }

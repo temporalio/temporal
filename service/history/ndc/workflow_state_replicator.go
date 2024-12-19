@@ -695,6 +695,9 @@ func (r *WorkflowStateReplicatorImpl) getNewRunMutableState(
 	if isStateBased {
 		newRunMutableState.InitTransitionHistory()
 	}
+	for _, event := range newRunHistory {
+		newRunMutableState.AddReapplyCandidateEvent(event)
+	}
 
 	return newRunMutableState, nil
 }
@@ -811,6 +814,13 @@ func (r *WorkflowStateReplicatorImpl) bringLocalEventsUpToSourceCurrentBranch(
 			if err != nil {
 				return err
 			}
+			events, err := r.historySerializer.DeserializeEvents(historyBlob.rawHistory)
+			if err != nil {
+				return err
+			}
+			for _, event := range events {
+				localMutableState.AddReapplyCandidateEvent(event)
+			}
 			_, err = r.executionMgr.AppendRawHistoryNodes(ctx, &persistence.AppendRawHistoryNodesRequest{
 				ShardID:           r.shardContext.GetShardID(),
 				IsNewBranch:       isNewBranch,
@@ -830,6 +840,7 @@ func (r *WorkflowStateReplicatorImpl) bringLocalEventsUpToSourceCurrentBranch(
 			}
 			prevTxnID = txnID
 			isNewBranch = false
+
 			localMutableState.GetExecutionInfo().ExecutionStats.HistorySize += int64(len(historyBlob.rawHistory.Data))
 		}
 		return nil
@@ -855,6 +866,9 @@ func (r *WorkflowStateReplicatorImpl) bringLocalEventsUpToSourceCurrentBranch(
 		txnID, err := r.shardContext.GenerateTaskID()
 		if err != nil {
 			return err
+		}
+		for _, event := range events {
+			localMutableState.AddReapplyCandidateEvent(event)
 		}
 		_, err = r.executionMgr.AppendRawHistoryNodes(ctx, &persistence.AppendRawHistoryNodesRequest{
 			ShardID:           r.shardContext.GetShardID(),
